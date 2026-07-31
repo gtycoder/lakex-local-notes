@@ -1,0 +1,361 @@
+import { useCallback, useEffect, useRef, useState } from "react";
+import { ArrowLeft, Check, Files, ListTree, LoaderCircle, Pencil, Save, WifiOff } from "lucide-react";
+import { MobileLibrary } from "./components/MobileLibrary";
+import { ConfirmDelete, Sidebar } from "./components/Sidebar";
+import { LakeEditor } from "./features/editor/LakeEditor";
+import { MultiTabEditor, type TabInfo } from "./features/editor/MultiTabEditor";
+import { isDesktop, native } from "./lib/native";
+import { subtreeIds } from "./lib/tree";
+import type { NoteDocument, NoteSummary, SyncStatus, TreeNode, WorkspaceSnapshot } from "./lib/types";
+
+type SaveState = "idle" | "dirty" | "saving" | "saved" | "error";
+type MobilePage = "library" | "document";
+
+interface OpenTab {
+  noteId: string;
+  title: string;
+  content: string;
+  dirty: boolean;
+  lastAccessedAt: number;
+}
+
+export function App() {
+  const [workspace, setWorkspace] = useState<WorkspaceSnapshot | null>(null);
+  const [notes, setNotes] = useState<NoteSummary[]>([]);
+  const [treeNodes, setTreeNodes] = useState<TreeNode[]>([]);
+  const [openTabs, setOpenTabs] = useState<OpenTab[]>([]);
+  const [activeNoteId, setActiveNoteId] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
+  const [saveState, setSaveState] = useState<SaveState>("idle");
+  const [sync, setSync] = useState<SyncStatus>({ phase: "idle", message: "仅本地保存", lastSyncedAt: null, pendingChanges: 0 });
+  const [confirmDelete, setConfirmDelete] = useState<TreeNode | null>(null);
+  const [pendingRenameId, setPendingRenameId] = useState<string | null>(null);
+  const [mobileOpen, setMobileOpen] = useState(false);
+  const [mobilePage, setMobilePage] = useState<MobilePage>("library");
+  const [mobileEditing, setMobileEditing] = useState(false);
+  const [mobileTocOpen, setMobileTocOpen] = useState(false);
+  const [mobileActive, setMobileActive] = useState<NoteDocument | null>(null);
+  const [mobileDraftTitle, setMobileDraftTitle] = useState("");
+  const [mobileDraftContent, setMobileDraftContent] = useState("");
+  const [isMobile, setIsMobile] = useState(() => window.matchMedia("(max-width: 760px)").matches);
+  const [tocEnabled] = useState(true);
+  const [wideMode] = useState(true);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => localStorage.getItem("lake-notes-v1.sidebar") === "collapsed");
+  const [error, setError] = useState<string | null>(null);
+  const openTabsRef = useRef<OpenTab[]>([]);
+  const saveTimers = useRef<Map<string, number>>(new Map());
+
+  useEffect(() => { openTabsRef.current = openTabs; }, [openTabs]);
+
+  useEffect(() => {
+    return () => {
+      saveTimers.current.forEach((timer) => window.clearTimeout(timer));
+      saveTimers.current.clear();
+    };
+  }, []);
+
+  useEffect(() => {
+    const media = window.matchMedia("(max-width: 760px)");
+    const onChange = () => setIsMobile(media.matches);
+    media.addEventListener("change", onChange);
+    void native.bootstrap().then(async (snapshot) => {
+      setWorkspace(snapshot); setNotes(snapshot.notes); setSync(snapshot.sync);
+      setTreeNodes(await native.listTreeNodes());
+      const id = snapshot.lastOpenedNoteId ?? snapshot.notes[0]?.id;
+      if (id && !media.matches) await openNote(id);
+    }).catch((reason) => setError(String(reason)));
+    return () => { media.removeEventListener("change", onChange); };
+  }, []);
+
+  useEffect(() => {
+    const viewport = window.visualViewport;
+    if (!viewport) return;
+    const update = () => {
+      const inset = Math.max(0, window.innerHeight - viewport.height - viewport.offsetTop);
+      document.documentElement.style.setProperty("--keyboard-inset", `${inset}px`);
+      document.body.classList.toggle("keyboard-open", inset > 120);
+    };
+    update(); viewport.addEventListener("resize", update); viewport.addEventListener("scroll", update);
+    return () => { viewport.removeEventListener("resize", update); viewport.removeEventListener("scroll", update); document.body.classList.remove("keyboard-open"); };
+  }, []);
+
+  const persistTab = useCallback(async (noteId: string, title: string, content: string) => {
+    setSaveState("saving");
+    try {
+      const saved = await native.saveNote(noteId, title.trim() || "无标题", content);
+      setOpenTabs((tabs) => tabs.map((tab) => tab.noteId === noteId ? { ...tab, title: saved.title, content: saved.content, dirty: false } : tab));
+      setNotes((items) => items.map((item) => item.id === saved.id ? summaryOf(saved) : item));
+      setTreeNodes((items) => items.map((item) => item.noteFileId === saved.id || item.id === saved.id ? { ...item, title: saved.title, updatedAt: saved.updatedAt, syncState: saved.syncState } : item));
+      setSync((current) => ({ ...current, pendingChanges: Math.max(1, current.pendingChanges) }));
+      setSaveState("saved");
+    } catch (reason) {
+      const msg = String(reason);
+      if (msg.includes("NotFound") || msg.includes("not found")) return;
+      setSaveState("error"); setError(msg);
+    }
+  }, []);
+
+  const scheduleSave = useCallback((noteId: string, content: string) => {
+    setSaveState("dirty");
+    const existing = saveTimers.current.get(noteId);
+    if (existing) window.clearTimeout(existing);
+    const timer = window.setTimeout(() => {
+      saveTimers.current.delete(noteId);
+      const tab = openTabsRef.current.find((t) => t.noteId === noteId);
+      if (tab) void persistTab(noteId, tab.title, content);
+    }, 800);
+    saveTimers.current.set(noteId, timer);
+  }, [persistTab]);
+
+  async function openNote(id: string) {
+    const existing = openTabsRef.current.find((tab) => tab.noteId === id);
+    if (existing) {
+      setActiveNoteId(id);
+      setOpenTabs((tabs) => tabs.map((tab) =>
+        tab.noteId === id ? { ...tab, lastAccessedAt: Date.now() } : tab
+      ));
+      return;
+    }
+    try {
+      const note = await native.readNote(id);
+      if (openTabsRef.current.some((t) => t.noteId === id)) {
+        setActiveNoteId(id);
+        return;
+      }
+      const newTab: OpenTab = { noteId: note.id, title: note.title, content: note.content, dirty: false, lastAccessedAt: Date.now() };
+      const currentTabs = openTabsRef.current;
+      if (currentTabs.length >= 8) {
+        let evictIndex = 0;
+        for (let i = 1; i < currentTabs.length; i++) {
+          if (currentTabs[i].lastAccessedAt < currentTabs[evictIndex].lastAccessedAt) evictIndex = i;
+        }
+        const evicted = currentTabs[evictIndex];
+        if (evicted.dirty) await persistTab(evicted.noteId, evicted.title, evicted.content);
+        setOpenTabs((tabs) => {
+          const withoutEvicted = tabs.filter((t) => t.noteId !== evicted.noteId);
+          return withoutEvicted.some((t) => t.noteId === id) ? tabs : [...withoutEvicted, newTab];
+        });
+      } else {
+        setOpenTabs((tabs) => {
+          if (tabs.some((t) => t.noteId === id)) return tabs;
+          return [...tabs, newTab];
+        });
+      }
+      setActiveNoteId(id);
+    } catch (reason) { setError(String(reason)); }
+  }
+
+  async function openNoteMobile(id: string) {
+    try {
+      const note = await native.readNote(id);
+      setMobileActive(note); setMobileDraftTitle(note.title); setMobileDraftContent(note.content);
+      setMobilePage("document");
+    } catch (reason) { setError(String(reason)); }
+  }
+
+  async function closeTab(noteId: string) {
+    const tab = openTabsRef.current.find((t) => t.noteId === noteId);
+    if (!tab) return;
+    if (tab.dirty) await persistTab(noteId, tab.title, tab.content);
+    const refTabs = openTabsRef.current;
+    const closedIndex = refTabs.findIndex((t) => t.noteId === noteId);
+    if (closedIndex === -1) return;
+    let nextActiveId: string | null = null;
+    if (activeNoteId === noteId) {
+      const without = refTabs.filter((t) => t.noteId !== noteId);
+      const nextActive = without[Math.min(closedIndex, without.length - 1)];
+      nextActiveId = nextActive?.noteId ?? null;
+    }
+    setOpenTabs((tabs) => tabs.filter((t) => t.noteId !== noteId));
+    if (nextActiveId !== null) setActiveNoteId(nextActiveId);
+  }
+
+  const handleContentChange = useCallback((noteId: string, content: string) => {
+    setOpenTabs((tabs) => tabs.map((tab) => tab.noteId === noteId ? { ...tab, content, dirty: true } : tab));
+    scheduleSave(noteId, content);
+  }, [scheduleSave]);
+
+  async function createNoteIn(parentId: string | null) {
+    const note = parentId === null ? await native.createNote("无标题文档") : await native.createNoteIn(parentId, "无标题文档");
+    setNotes((items) => [...items, summaryOf(note)]);
+    setTreeNodes(await native.listTreeNodes());
+    if (isMobile) {
+      setMobileActive(note); setMobileDraftTitle(note.title); setMobileDraftContent(note.content);
+      setMobileOpen(false); setMobilePage("document"); setMobileEditing(true);
+    } else {
+      const newTab: OpenTab = { noteId: note.id, title: note.title, content: note.content, dirty: false, lastAccessedAt: Date.now() };
+      const currentTabs = openTabsRef.current;
+      if (currentTabs.length >= 8) {
+        let evictIndex = 0;
+        for (let i = 1; i < currentTabs.length; i++) {
+          if (currentTabs[i].lastAccessedAt < currentTabs[evictIndex].lastAccessedAt) evictIndex = i;
+        }
+        const evicted = currentTabs[evictIndex];
+        if (evicted.dirty) await persistTab(evicted.noteId, evicted.title, evicted.content);
+        setOpenTabs((tabs) => {
+          const withoutEvicted = tabs.filter((t) => t.noteId !== evicted.noteId);
+          return withoutEvicted.some((t) => t.noteId === note.id) ? tabs : [...withoutEvicted, newTab];
+        });
+      } else {
+        setOpenTabs((tabs) => [...tabs, newTab]);
+      }
+      setActiveNoteId(note.id);
+      setPendingRenameId(note.id);
+    }
+  }
+
+  async function createNote() {
+    const notebookId = treeNodes.find((node) => node.nodeType === "notebook")?.id ?? null;
+    await createNoteIn(notebookId);
+  }
+
+  async function createTreeItem(kind: "notebook" | "group" | "note", parentId: string | null, title?: string) {
+    try {
+      if (kind === "note") { await createNoteIn(parentId); return; }
+      const resolvedTitle = title?.trim();
+      if (!resolvedTitle) return;
+      if (kind === "notebook") await native.createNotebook(resolvedTitle);
+      else if (parentId) await native.createGroup(parentId, resolvedTitle);
+      setTreeNodes(await native.listTreeNodes());
+    } catch (reason) { setError(String(reason)); }
+  }
+
+  async function renameTreeNode(id: string, title: string) {
+    try {
+      const renamed = await native.renameTreeNode(id, title);
+      setTreeNodes((items) => items.map((item) => item.id === id ? renamed : item));
+      if (renamed.noteFileId) {
+        setNotes((items) => items.map((note) => note.id === renamed.noteFileId ? { ...note, title: renamed.title, updatedAt: renamed.updatedAt, syncState: "local" } : note));
+        setOpenTabs((tabs) => tabs.map((tab) => tab.noteId === renamed.noteFileId ? { ...tab, title: renamed.title } : tab));
+      }
+    } catch (reason) { setError(String(reason)); }
+  }
+
+  async function moveTreeNode(id: string, targetId: string, position: "before" | "inside" | "after") {
+    try {
+      const moving = treeNodes.find((node) => node.id === id);
+      const target = treeNodes.find((node) => node.id === targetId);
+      if (!moving || !target) return;
+      const parentId = position === "inside" ? target.id : target.parentId;
+      const sameParent = treeNodes.filter((node) => node.parentId === parentId && node.id !== id).sort((a, b) => a.sortOrder - b.sortOrder);
+      const orderedIds = position === "inside"
+        ? [...sameParent.map((node) => node.id), id]
+        : (() => {
+            const at = sameParent.findIndex((node) => node.id === targetId);
+            const insertAt = at < 0 ? sameParent.length : position === "after" ? at + 1 : at;
+            const next = [...sameParent.map((node) => node.id)];
+            next.splice(insertAt, 0, id);
+            return next;
+          })();
+      await native.moveTreeNode(id, parentId, orderedIds.indexOf(id));
+      await native.reorderTreeNodes(parentId, orderedIds);
+      setTreeNodes(await native.listTreeNodes());
+    } catch (reason) { setError(String(reason)); }
+  }
+
+  async function deleteTreeNode(id: string) {
+    try {
+      const removedNodeIds = subtreeIds(treeNodes, id);
+      const removedNoteIds = new Set(
+        treeNodes.filter((node) => removedNodeIds.has(node.id) && node.noteFileId).map((node) => node.noteFileId!)
+      );
+      removedNoteIds.forEach((noteId) => {
+        const timer = saveTimers.current.get(noteId);
+        if (timer) { window.clearTimeout(timer); saveTimers.current.delete(noteId); }
+      });
+      await native.deleteTreeNode(id);
+      const remaining = notes.filter((note) => !removedNoteIds.has(note.id));
+      setNotes(remaining);
+      setTreeNodes(await native.listTreeNodes());
+      const next = openTabsRef.current.filter((tab) => !removedNoteIds.has(tab.noteId));
+      setOpenTabs(next);
+      if (activeNoteId && removedNoteIds.has(activeNoteId)) {
+        setActiveNoteId(next[next.length - 1]?.noteId ?? null);
+      }
+    } catch (reason) { setError(String(reason)); }
+  }
+
+  function toggleSidebar() {
+    setSidebarCollapsed((current) => {
+      localStorage.setItem("lake-notes-v1.sidebar", current ? "expanded" : "collapsed");
+      return !current;
+    });
+  }
+
+  async function leaveMobileDocument() {
+    if (mobileActive && mobileDraftContent !== mobileActive.content) {
+      await persistTab(mobileActive.id, mobileDraftTitle, mobileDraftContent);
+    }
+    setMobileEditing(false); setMobileTocOpen(false); setMobileOpen(false); setMobilePage("library");
+  }
+
+  async function finishMobileEditing() {
+    if (mobileActive && mobileDraftContent !== mobileActive.content) {
+      await persistTab(mobileActive.id, mobileDraftTitle, mobileDraftContent);
+    }
+    setMobileEditing(false);
+  }
+
+  function handleTabChange(noteId: string) {
+    setActiveNoteId(noteId);
+    setOpenTabs((tabs) => tabs.map((tab) =>
+      tab.noteId === noteId ? { ...tab, lastAccessedAt: Date.now() } : tab
+    ));
+    const tab = openTabs.find((t) => t.noteId === noteId);
+    setSaveState(tab?.dirty ? "dirty" : "idle");
+  }
+
+  if (!workspace) return <main className="loading-screen"><LoaderCircle className="spin" /><span>正在打开本地知识库</span>{error && <small>{error}</small>}</main>;
+  if (isMobile && mobilePage === "library") return <>
+    <MobileLibrary notes={notes} search={search} sync={sync} onSearch={setSearch} onSelect={(id) => void openNoteMobile(id)} onCreate={() => void createNote()} />
+  </>;
+
+  const tabInfos: TabInfo[] = openTabs.map((tab) => ({ noteId: tab.noteId, title: tab.title, content: tab.content, dirty: tab.dirty }));
+
+  return (
+    <div className={`app-shell ${sidebarCollapsed ? "sidebar-collapsed" : ""} ${isMobile ? `mobile-document-page ${mobileEditing ? "mobile-editing" : "mobile-reading"}` : ""}`}>
+      <Sidebar nodes={treeNodes} activeId={activeNoteId ?? mobileActive?.id ?? null} search={search} mobileOpen={mobileOpen} collapsed={sidebarCollapsed} onSearch={setSearch} onSelect={(id) => void (isMobile ? openNoteMobile(id) : openNote(id))} onCreate={(kind, parentId, title) => void createTreeItem(kind, parentId, title)} onRename={(id, title) => void renameTreeNode(id, title)} onMoveNode={(id, targetId, position) => void moveTreeNode(id, targetId, position)} onRequestDelete={(node) => setConfirmDelete(node)} pendingRenameId={pendingRenameId} onPendingRenameConsumed={() => setPendingRenameId(null)} onToggleCollapse={toggleSidebar} onCloseMobile={() => setMobileOpen(false)} />
+      {mobileOpen && <div className="mobile-scrim" onClick={() => setMobileOpen(false)} />}
+      <main className="workspace">
+        {isMobile && <header className="topbar">
+          <div className="topbar-left">
+            <button className="icon-button mobile-only" onClick={() => void leaveMobileDocument()} title="返回文档列表"><ArrowLeft size={21} /></button>
+            {mobileActive
+              ? <input className="current-note-input" aria-label="文档名称" value={mobileDraftTitle} onChange={(event) => setMobileDraftTitle(event.target.value)} onBlur={() => { const title = mobileDraftTitle.trim(); if (title && mobileActive && title !== mobileActive.title) void renameTreeNode(mobileActive.id, title); else if (mobileActive) setMobileDraftTitle(mobileActive.title); }} onKeyDown={(event) => { if (event.key === "Enter") event.currentTarget.blur(); if (event.key === "Escape" && mobileActive) { setMobileDraftTitle(mobileActive.title); event.currentTarget.blur(); } }} />
+              : <span className="current-note">没有文档</span>}
+          </div>
+          <div className="topbar-actions">
+            {mobileEditing && <button className="icon-button mobile-done" onClick={() => void finishMobileEditing()} title="完成编辑"><Check size={21} /></button>}
+          </div>
+        </header>}
+        {error && <div className="error-banner"><span>{error}</span><button onClick={() => setError(null)}>关闭</button></div>}
+        {isMobile ? (
+          mobileActive ? <section className={`document-pane ${wideMode ? "wide-mode" : ""}`}>
+            <LakeEditor noteId={mobileActive.id} content={mobileEditing ? mobileDraftContent : mobileActive.content} mode={mobileEditing ? "editor" : "viewer"} tocEnabled={mobileTocOpen} onChange={(content) => setMobileDraftContent(content)} />
+            {!mobileEditing && <nav className="mobile-reader-actions">
+              <button onClick={() => setMobileEditing(true)}><Pencil size={20} /><span>编辑</span></button>
+              <button className={mobileTocOpen ? "selected" : ""} onClick={() => setMobileTocOpen((open) => !open)}><ListTree size={21} /><span>大纲</span></button>
+              <button onClick={() => setMobileOpen(true)}><Files size={20} /><span>切换</span></button>
+            </nav>}
+          </section> : <section className="empty-workspace"><h2>开始写第一篇笔记</h2><button className="primary-button" onClick={() => void createNote()}>新建文档</button></section>
+        ) : (
+          openTabs.length > 0 ? <section className={`document-pane ${wideMode ? "wide-mode" : ""}`}>
+            <MultiTabEditor
+              tabs={tabInfos}
+              activeNoteId={activeNoteId}
+              tocEnabled={tocEnabled}
+              onTabChange={handleTabChange}
+              onTabClose={closeTab}
+              onContentChange={handleContentChange}
+            />
+          </section> : <section className="empty-workspace"><h2>开始写第一篇笔记</h2><button className="primary-button" onClick={() => void createNote()}>新建文档</button></section>
+        )}
+        <footer className="statusbar"><span>{isDesktop() ? "Electron 本地仓库" : "浏览器演示仓库"}</span><span className={`save-label ${saveState}`}>{saveState === "saving" ? <LoaderCircle className="spin" size={12} /> : saveState === "dirty" ? <WifiOff size={12} /> : <Save size={12} />}{saveLabel(saveState)}</span><span>{sync.message}</span></footer>
+      </main>
+      {confirmDelete && <ConfirmDelete node={confirmDelete} onConfirm={() => { const id = confirmDelete.id; setConfirmDelete(null); void deleteTreeNode(id); }} onCancel={() => setConfirmDelete(null)} />}
+    </div>
+  );
+}
+
+const summaryOf = ({ content: _content, ...summary }: NoteDocument): NoteSummary => summary;
+const saveLabel = (state: SaveState) => ({ idle: "本地", dirty: "待保存", saving: "保存中", saved: "已保存", error: "保存失败" })[state];

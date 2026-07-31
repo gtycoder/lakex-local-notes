@@ -1,0 +1,378 @@
+import { useEffect, useRef, useState } from "react";
+import { BookOpen, ChevronRight, FilePlus2, FileText, FoldVertical, Folder, FolderPlus, Pencil, PanelLeft, Plus, Search, Trash2, X } from "lucide-react";
+import type { TreeNode, TreeNodeType } from "../lib/types";
+
+type CreateKind = "notebook" | "group" | "note";
+type DropPosition = "before" | "inside" | "after";
+
+interface SidebarProps {
+  nodes: TreeNode[];
+  activeId: string | null;
+  search: string;
+  mobileOpen: boolean;
+  collapsed: boolean;
+  onSearch: (value: string) => void;
+  onSelect: (id: string) => void;
+  onCreate: (kind: CreateKind, parentId: string | null, title?: string) => void;
+  onRename: (id: string, title: string) => void;
+  onMoveNode: (id: string, targetId: string, position: DropPosition) => void;
+  onRequestDelete: (node: TreeNode) => void;
+  pendingRenameId: string | null;
+  onPendingRenameConsumed: () => void;
+  onToggleCollapse: () => void;
+  onCloseMobile: () => void;
+}
+
+export function Sidebar(props: SidebarProps) {
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [contextId, setContextId] = useState<string | null>(null);
+  const [pendingCreate, setPendingCreate] = useState<{ kind: CreateKind; parentId: string | null } | null>(null);
+  const [newTitle, setNewTitle] = useState("");
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editingTitle, setEditingTitle] = useState("");
+  const [expanded, setExpanded] = useState<Set<string>>(() => autoExpanded(props.nodes));
+  const [draggingId, setDraggingId] = useState<string | null>(null);
+  const [dropTarget, setDropTarget] = useState<{ id: string; position: DropPosition } | null>(null);
+  const [contextMenu, setContextMenu] = useState<{ id: string; x: number; y: number } | null>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const dragRef = useRef<{ id: string; startX: number; startY: number; moved: boolean } | null>(null);
+  const suppressClickRef = useRef(false);
+  const prevNodeIds = useRef<Set<string>>(new Set());
+  const query = props.search.trim().toLocaleLowerCase();
+  const roots = childrenOf(props.nodes, null, query);
+
+  useEffect(() => {
+    // 只自动展开新出现的容器节点（笔记本/分组），不碰已有节点的展开状态
+    const prevIds = prevNodeIds.current;
+    const newContainerIds = props.nodes
+      .filter((n) => n.nodeType !== "note" && !prevIds.has(n.id))
+      .map((n) => n.id);
+    if (newContainerIds.length > 0) {
+      setExpanded((current) => {
+      const next = new Set(current);
+        newContainerIds.forEach((id) => next.add(id));
+      return next;
+    });
+    }
+    prevNodeIds.current = new Set(props.nodes.map((n) => n.id));
+}, [props.nodes]);
+
+  useEffect(() => {
+    const close = (event: MouseEvent) => {
+      if (!menuRef.current?.contains(event.target as Node)) setMenuOpen(false);
+      if (!(event.target as HTMLElement).closest("[data-context-menu]")) setContextMenu(null);
+    };
+    const closeContextMenu = (event: MouseEvent) => {
+      if (!(event.target as HTMLElement).closest("[data-context-menu]")) setContextMenu(null);
+    };
+    document.addEventListener("mousedown", close);
+    document.addEventListener("contextmenu", closeContextMenu);
+    return () => {
+      document.removeEventListener("mousedown", close);
+      document.removeEventListener("contextmenu", closeContextMenu);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!contextMenu) return;
+    const onKey = (event: KeyboardEvent) => { if (event.key === "Escape") setContextMenu(null); };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [contextMenu]);
+
+  useEffect(() => {
+    if (!props.pendingRenameId) return;
+    const target = props.nodes.find((node) => node.id === props.pendingRenameId);
+    if (!target) return;
+    setEditingId(target.id);
+    setEditingTitle(target.title);
+    props.onPendingRenameConsumed();
+  }, [props.pendingRenameId, props.nodes, props.onPendingRenameConsumed]);
+
+  useEffect(() => {
+    if (!draggingId) return;
+    const move = (event: PointerEvent) => {
+      const drag = dragRef.current;
+      if (!drag) return;
+      if (Math.hypot(event.clientX - drag.startX, event.clientY - drag.startY) > 5) drag.moved = true;
+      if (!drag.moved) return;
+      const row = document.elementFromPoint(event.clientX, event.clientY)?.closest<HTMLElement>("[data-tree-node-id]");
+      if (!row || row.dataset.treeNodeId === drag.id) { setDropTarget(null); return; }
+      const rect = row.getBoundingClientRect();
+      const ratio = (event.clientY - rect.top) / rect.height;
+      const position: DropPosition = ratio < .25 ? "before" : ratio > .75 ? "after" : "inside";
+      setDropTarget({ id: row.dataset.treeNodeId!, position });
+    };
+    const up = () => {
+      const drag = dragRef.current;
+      if (drag?.moved && dropTarget) {
+        suppressClickRef.current = true;
+        props.onMoveNode(drag.id, dropTarget.id, dropTarget.position);
+        window.setTimeout(() => { suppressClickRef.current = false; }, 0);
+      }
+      dragRef.current = null;
+      setDraggingId(null);
+      setDropTarget(null);
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up, { once: true });
+    return () => { window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", up); };
+  }, [draggingId, dropTarget, props]);
+
+  const context = props.nodes.find((node) => node.id === contextId)
+    ?? props.nodes.find((node) => node.id === props.activeId)
+    ?? props.nodes.find((node) => node.nodeType === "notebook")
+    ?? null;
+  const groupParent = context?.id ?? props.nodes.find((node) => node.nodeType === "notebook")?.id ?? null;
+  const noteParent = context?.id ?? props.nodes.find((node) => node.nodeType === "notebook")?.id ?? null;
+
+  const create = (kind: CreateKind) => {
+    setMenuOpen(false);
+    const parentId = kind === "notebook" ? null : kind === "group" ? groupParent : noteParent;
+    if (kind === "note") {
+      props.onCreate(kind, parentId);
+      if (parentId) setExpanded((current) => expandAncestors(current, props.nodes, parentId));
+    } else {
+      setPendingCreate({ kind, parentId });
+      setNewTitle(kind === "notebook" ? "新建笔记本" : "新建分组");
+      if (parentId) setExpanded((current) => expandAncestors(current, props.nodes, parentId));
+    }
+  };
+  const submitCreate = () => {
+    const title = newTitle.trim();
+    if (!pendingCreate || !title) return;
+    props.onCreate(pendingCreate.kind, pendingCreate.parentId, title);
+    setPendingCreate(null);
+    setNewTitle("");
+  };
+
+  const submitRename = () => {
+    const title = editingTitle.trim();
+    if (editingId && title) props.onRename(editingId, title);
+    setEditingId(null);
+    setEditingTitle("");
+  };
+
+  const beginRename = (node: TreeNode) => {
+    setEditingId(node.id);
+    setEditingTitle(node.title);
+  };
+
+  // 右键菜单：contextmenu 事件在桌面=右键、移动端=长按自动触发，无需手写长按定时器。
+  const openContext = (event: React.MouseEvent, node: TreeNode) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setContextId(node.id);
+    setContextMenu({ id: node.id, x: event.clientX, y: event.clientY });
+  };
+
+  const contextNode = props.nodes.find((node) => node.id === contextMenu?.id) ?? null;
+
+  const menuNewChild = (kind: "group" | "note") => {
+    if (!contextNode) return;
+    const parentId = contextNode.id;
+    if (kind === "note") { props.onCreate("note", parentId); setExpanded((current) => expandAncestors(current, props.nodes, parentId)); setContextMenu(null); return; }
+    setPendingCreate({ kind, parentId });
+    setNewTitle("新建分组");
+    setExpanded((current) => expandAncestors(current, props.nodes, parentId));
+    setContextMenu(null);
+  };
+
+  const menuRename = () => {
+    if (!contextNode) return;
+    beginRename(contextNode);
+    setContextMenu(null);
+  };
+
+  const menuDelete = () => {
+    if (!contextNode) return;
+    props.onRequestDelete(contextNode);
+    setContextMenu(null);
+  };
+
+  // depth 不再用于定位：缩进由 .tree-children margin-left + border-left 实现
+  const createField = (_depth: number) => pendingCreate && <div className="inline-create" style={{ marginLeft: 8 }}>
+    {pendingCreate.kind === "notebook" ? <BookOpen size={14} /> : <FolderPlus size={14} />}
+    <input autoFocus aria-label={pendingCreate.kind === "notebook" ? "笔记本名称" : "分组名称"} value={newTitle} onChange={(event) => setNewTitle(event.target.value)} onFocus={(event) => event.currentTarget.select()} onKeyDown={(event) => { if (event.key === "Enter") submitCreate(); if (event.key === "Escape") setPendingCreate(null); }} />
+    <button onClick={submitCreate}>创建</button>
+  </div>;
+
+  return (
+    <aside className={`sidebar ${props.collapsed ? "is-collapsed" : ""} ${props.mobileOpen ? "sidebar-open" : ""}`}>
+      <button className="icon-button mobile-only sidebar-mobile-close" onClick={props.onCloseMobile} title="关闭"><X size={18} /></button>
+      <button className="icon-button desktop-only sidebar-collapse-toggle" onClick={props.onToggleCollapse} title={props.collapsed ? "固定展开侧栏" : "收起侧栏"}><PanelLeft size={17} /></button>
+      <div className="search-box"><Search size={14} /><input value={props.search} onChange={(event) => props.onSearch(event.target.value)} placeholder="搜索" /></div>
+      <div className="list-heading">
+        <button className="icon-button collapse-all-btn" onClick={() => setExpanded(new Set())} title="全部收起" disabled={expanded.size === 0}><FoldVertical size={16} /></button>
+        <div className="create-menu-wrap" ref={menuRef}>
+          <button className={`icon-button create-btn ${menuOpen ? "selected" : ""}`} onClick={() => setMenuOpen((open) => !open)} title="新建"><Plus size={18} /></button>
+          {menuOpen && <div className="create-menu">
+            <button onClick={() => create("note")} disabled={!noteParent}><FilePlus2 size={16} /><span><strong>新建文档</strong><small>{context ? `在“${context.title}”下` : "选择笔记本后创建"}</small></span></button>
+            <button onClick={() => create("group")} disabled={!groupParent}><FolderPlus size={16} /><span><strong>新建分组</strong><small>{context ? `在“${context.title}”下` : "请先新建笔记本"}</small></span></button>
+            <button onClick={() => create("notebook")}><BookOpen size={16} /><span><strong>新建笔记本</strong><small>创建顶层笔记本</small></span></button>
+          </div>}
+        </div>
+      </div>
+      <nav className="note-list tree-list">
+        {pendingCreate?.kind === "notebook" && createField(0)}
+        {roots.map((node) => <TreeRow key={node.id} node={node} depth={0} nodes={props.nodes} query={query} activeId={props.activeId} contextId={context?.id ?? null} expanded={expanded} draggingId={draggingId} dropTarget={dropTarget} pendingCreate={pendingCreate} editingId={editingId} editingTitle={editingTitle} createField={createField} onEditingTitle={setEditingTitle} onSubmitRename={submitRename} onCancelRename={() => setEditingId(null)} onBeginRename={beginRename} onPointerDown={(event, id) => { if (event.button !== 0 || (event.target as HTMLElement).closest("input")) return; dragRef.current = { id, startX: event.clientX, startY: event.clientY, moved: false }; setDraggingId(id); }} consumeSuppressedClick={() => suppressClickRef.current} onContext={setContextId} onContextMenu={openContext} onToggle={(id) => setExpanded((current) => toggleSet(current, id))} onSelect={props.onSelect} />)}
+        {roots.length === 0 && <div className="empty-list">点击 + 新建第一个笔记本</div>}
+      </nav>
+      {contextMenu && contextNode && <ContextMenu node={contextNode} x={contextMenu.x} y={contextMenu.y} onNewChild={menuNewChild} onRename={menuRename} onDelete={menuDelete} onClose={() => setContextMenu(null)} />}
+    </aside>
+  );
+}
+
+interface TreeRowProps {
+  node: TreeNode;
+  depth: number;
+  nodes: TreeNode[];
+  query: string;
+  activeId: string | null;
+  contextId: string | null;
+  expanded: Set<string>;
+  draggingId: string | null;
+  dropTarget: { id: string; position: DropPosition } | null;
+  pendingCreate: { kind: CreateKind; parentId: string | null } | null;
+  editingId: string | null;
+  editingTitle: string;
+  createField: (depth: number) => React.ReactNode;
+  onEditingTitle: (title: string) => void;
+  onSubmitRename: () => void;
+  onCancelRename: () => void;
+  onBeginRename: (node: TreeNode) => void;
+  onPointerDown: (event: React.PointerEvent, id: string) => void;
+  consumeSuppressedClick: () => boolean;
+  onContext: (id: string) => void;
+  onContextMenu: (event: React.MouseEvent, node: TreeNode) => void;
+  onToggle: (id: string) => void;
+  onSelect: (id: string) => void;
+}
+
+function TreeRow(props: TreeRowProps) {
+  const children = childrenOf(props.nodes, props.node.id, props.query);
+  const expandable = children.length > 0 || props.node.nodeType !== "note";
+  const open = props.expanded.has(props.node.id) || Boolean(props.query);
+  const icon = nodeIcon(props.node.nodeType, open);
+
+  const dropPosition = props.dropTarget?.id === props.node.id ? props.dropTarget.position : null;
+
+  return <div className="tree-item">
+    <div
+      role="treeitem"
+      tabIndex={0}
+      data-tree-node-id={props.node.id}
+      className={`note-row tree-row type-${props.node.nodeType} ${props.node.id === props.activeId ? "active" : ""} ${props.node.id === props.contextId ? "context" : ""} ${props.draggingId === props.node.id ? "dragging" : ""} ${dropPosition ? `drop-${dropPosition}` : ""}`}
+      style={{ paddingLeft: 8 }}
+      onClick={() => {
+        if (props.consumeSuppressedClick()) return;
+        props.onContext(props.node.id);
+        if (props.node.nodeType === "note") props.onSelect(props.node.id);
+        else props.onToggle(props.node.id);
+      }}
+      onDoubleClick={(event) => { event.stopPropagation(); props.onBeginRename(props.node); }}
+      onKeyDown={(event) => { if (event.key === "Enter") props.node.nodeType === "note" ? props.onSelect(props.node.id) : props.onToggle(props.node.id); }}
+      onPointerDown={(event) => props.onPointerDown(event, props.node.id)}
+      onContextMenu={(event) => props.onContextMenu(event, props.node)}
+    >
+      <button type="button" className={`tree-chevron ${open && expandable ? "open" : ""}`} disabled={!expandable} onClick={(event) => { event.stopPropagation(); if (expandable) props.onToggle(props.node.id); }} aria-label={open ? "收起" : "展开"}>{expandable ? <ChevronRight size={14} /> : null}</button>
+      {icon}
+      <span className="note-row-copy">
+        {props.editingId === props.node.id
+          ? <input className="tree-rename-input" autoFocus aria-label="节点名称" value={props.editingTitle} onChange={(event) => props.onEditingTitle(event.target.value)} onClick={(event) => event.stopPropagation()} onFocus={(event) => event.currentTarget.select()} onBlur={props.onSubmitRename} onKeyDown={(event) => { event.stopPropagation(); if (event.key === "Enter") props.onSubmitRename(); if (event.key === "Escape") props.onCancelRename(); }} />
+          : <strong>{props.node.title}</strong>}
+      </span>
+      {props.node.nodeType === "note" ? <span className={`sync-dot ${props.node.syncState}`} /> : null}
+    </div>
+    {open && <div className="tree-children">
+      {props.pendingCreate?.parentId === props.node.id && props.createField(props.depth + 1)}
+      {children.map((child) => <TreeRow key={child.id} {...props} node={child} depth={props.depth + 1} />)}
+    </div>}
+  </div>;
+}
+
+function nodeIcon(type: TreeNodeType, open: boolean) {
+  if (type === "notebook") return <BookOpen size={17} />;
+  if (type === "group") return <Folder size={16} fill={open ? "currentColor" : "none"} />;
+  return <FileText size={16} />;
+}
+
+function childrenOf(nodes: TreeNode[], parentId: string | null, query: string): TreeNode[] {
+  return nodes.filter((node) => node.parentId === parentId).filter((node) => matches(node, nodes, query)).sort((a, b) => a.sortOrder - b.sortOrder);
+}
+
+function matches(node: TreeNode, nodes: TreeNode[], query: string): boolean {
+  if (!query || node.title.toLocaleLowerCase().includes(query)) return true;
+  return nodes.some((child) => child.parentId === node.id && matches(child, nodes, query));
+}
+
+function toggleSet(current: Set<string>, id: string): Set<string> {
+  const next = new Set(current);
+  next.has(id) ? next.delete(id) : next.add(id);
+  return next;
+}
+
+// 展开目标节点及其全部祖先，确保新创建的子节点可见
+function expandAncestors(current: Set<string>, nodes: TreeNode[], targetId: string): Set<string> {
+  const next = new Set(current);
+  let cursor = nodes.find((n) => n.id === targetId);
+  while (cursor) {
+    next.add(cursor.id);
+    cursor = cursor.parentId ? nodes.find((n) => n.id === cursor!.parentId) : undefined;
+  }
+  return next;
+}
+
+function autoExpanded(nodes: TreeNode[]): Set<string> {
+  // 默认展开笔记本和有子项的分组/文档，首帧即正确，避免 effect 回填闪烁。
+  const next = new Set<string>();
+  nodes.forEach((node) => {
+    if (node.nodeType !== "note" || nodes.some((child) => child.parentId === node.id)) next.add(node.id);
+  });
+  return next;
+}
+
+interface ContextMenuProps {
+  node: TreeNode;
+  x: number;
+  y: number;
+  onNewChild: (kind: "group" | "note") => void;
+  onRename: () => void;
+  onDelete: () => void;
+  onClose: () => void;
+}
+
+const ContextMenu = ({ node, x, y, onNewChild, onRename, onDelete, onClose }: ContextMenuProps) => {
+  const isNotebook = node.nodeType === "notebook";
+  // 视口边缘翻转，避免菜单溢出屏幕
+  const left = Math.min(x, window.innerWidth - 232);
+  const top = Math.min(y, window.innerHeight - 220);
+  return (
+    <div className="context-menu" style={{ left, top }} role="menu" data-context-menu>
+      <button role="menuitem" onClick={() => { onNewChild("note"); onClose(); }}><FilePlus2 size={15} /><span>新建文档</span></button>
+      {!isNotebook && <button role="menuitem" onClick={() => { onNewChild("group"); onClose(); }}><FolderPlus size={15} /><span>新建分组</span></button>}
+      <button role="menuitem" onClick={() => { onRename(); onClose(); }}><Pencil size={15} /><span>重命名</span></button>
+      <div className="context-menu-sep" />
+      <button role="menuitem" className="danger" onClick={() => { onDelete(); onClose(); }}><Trash2 size={15} /><span>删除</span></button>
+    </div>
+  );
+};
+
+interface ConfirmDeleteProps {
+  node: TreeNode;
+  onConfirm: () => void;
+  onCancel: () => void;
+}
+
+export const ConfirmDelete = ({ node, onConfirm, onCancel }: ConfirmDeleteProps) => (
+  <div className="modal-backdrop" onMouseDown={(event) => event.target === event.currentTarget && onCancel()}>
+    <section className="confirm-dialog" role="dialog" aria-modal="true">
+      <h3>删除“{node.title}”？</h3>
+      <p>将删除该节点及其所有子项。当前版本尚未提供回收站恢复，请确认不再需要这些内容。</p>
+      <footer>
+        <button className="secondary-button" onClick={onCancel}>取消</button>
+        <button className="primary-button danger-button" onClick={onConfirm}>删除</button>
+      </footer>
+    </section>
+  </div>
+);
