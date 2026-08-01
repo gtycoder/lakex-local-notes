@@ -3,6 +3,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { Store } from "./store.js";
 import { startAssetServer } from "./assetServer.js";
+import { testConnection, syncNow } from "./sync.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const isDev = !app.isPackaged;
@@ -57,6 +58,10 @@ function registerIpc() {
   handle("download_remote_resource", (url: string, noteId: string) => store.downloadRemoteResource(url, noteId));
   handle("list_orphan_assets", () => store.listOrphanAssets());
   handle("clean_orphan_assets", () => store.cleanOrphanAssets());
+  handle("get_s3_settings", () => store.getS3Settings());
+  handle("save_s3_settings", (settings: unknown) => store.saveS3Settings(settings as Parameters<Store["saveS3Settings"]>[0]));
+  handle("test_s3_connection", () => testConnection(store));
+  handle("sync_now", () => syncNow(store));
 }
 
 // Increase renderer memory limit for large documents with base64 images

@@ -38,6 +38,16 @@ interface ResourceUploadOutput {
 interface OrphanAsset {
   id: number; noteId: string; filename: string; filePath: string; size: number; mimeType: string; detectedAt: string;
 }
+interface S3Settings {
+  endpoint: string; region: string; bucket: string; prefix: string;
+  accessKeyId: string; secretAccessKey: string; forcePathStyle: boolean;
+}
+interface SyncNote {
+  id: string; title: string; parentId: string | null; sortOrder: number; updatedAt: string; isConflict: boolean;
+}
+interface RemoteAsset {
+  filename: string; size: number; hash: string;
+}
 
 function nowIso(): string {
   return new Date().toISOString();
@@ -98,6 +108,18 @@ export class Store {
         detected_at TEXT NOT NULL DEFAULT (datetime('now'))
       );
       CREATE UNIQUE INDEX IF NOT EXISTS idx_orphan_path ON orphan_assets(file_path);
+      CREATE TABLE IF NOT EXISTS sync_base (
+        note_id TEXT PRIMARY KEY,
+        content_hash TEXT NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS deleted_notes (
+        id TEXT PRIMARY KEY,
+        title TEXT NOT NULL,
+        parent_id TEXT,
+        sort_order INTEGER NOT NULL,
+        updated_at TEXT NOT NULL,
+        deleted_at TEXT NOT NULL
+      );
     `);
     const now = nowIso();
     this.db.prepare(`INSERT OR IGNORE INTO tree_nodes(id,workspace_id,parent_id,node_type,title,note_file_id,sort_order,created_at,updated_at,deleted_at,sync_state,is_conflict)
@@ -112,9 +134,21 @@ export class Store {
   private seed() {
     const count = this.db.prepare("SELECT COUNT(*) AS c FROM notes").get() as { c: number };
     if (count.c === 0) {
-      const note = this.createNote("欢迎来到 Lake Notes");
-      this.saveNote(note.id, note.title,
-        `<h1 id="welcome" class="ne-h1">欢迎来到 Lake Notes</h1><p id="welcome-body" class="ne-p">这是一个基于 Lake 编辑器的本地优先笔记应用（Electron 桌面端）。</p>`);
+      // 欢迎笔记用固定 id：全设备一致，S3 同步时不会产生重复
+      const id = "welcome-note";
+      const parent = DEFAULT_NOTEBOOK_ID;
+      const updatedAt = nowIso();
+      const sortOrder = this.nextSortOrder(parent);
+      const content =
+        `<h1 id="welcome" class="ne-h1">欢迎来到 Lake Notes</h1><p id="welcome-body" class="ne-p">这是一个基于 Lake 编辑器的本地优先笔记应用（Electron 桌面端）。</p>`;
+      const tx = this.db.transaction(() => {
+        this.db.prepare("INSERT INTO notes(id,title,parent_id,sort_order,updated_at,sync_state) VALUES(?,?,?,?,?,'local')")
+          .run(id, "欢迎来到 Lake Notes", parent, sortOrder, updatedAt);
+        this.db.prepare("INSERT INTO tree_nodes(id,workspace_id,parent_id,node_type,title,note_file_id,sort_order,created_at,updated_at,sync_state,is_conflict) VALUES(?,?,?,'note',?,?,?,?,?,'local',0)")
+          .run(id, DEFAULT_WORKSPACE_ID, parent, "欢迎来到 Lake Notes", id, sortOrder, updatedAt, updatedAt);
+        this.atomicWrite(this.notePath(id), content);
+      });
+      tx();
     }
   }
 
@@ -275,15 +309,23 @@ export class Store {
   deleteTreeNode(id: string) {
     // 硬删除（当前版本无回收站）：节点及其子节点从 DB 移除，
     // 笔记同时删除 .lake 文件、整个 note-assets/{noteId}/ 目录与孤儿记录
+    const now = nowIso();
     const ids = this.descendantIds(id);
     const tx = this.db.transaction(() => {
       const nodeStmt = this.db.prepare("SELECT note_file_id FROM tree_nodes WHERE id=?");
       const delNote = this.db.prepare("DELETE FROM notes WHERE id=?");
       const delNode = this.db.prepare("DELETE FROM tree_nodes WHERE id=?");
       const delOrphans = this.db.prepare("DELETE FROM orphan_assets WHERE note_id=?");
+      const tombstone = this.db.prepare(
+        "INSERT OR REPLACE INTO deleted_notes(id,title,parent_id,sort_order,updated_at,deleted_at) VALUES(?,?,?,?,?,?)"
+      );
+      const noteMeta = this.db.prepare("SELECT id,title,parent_id,sort_order,updated_at FROM notes WHERE id=?");
       for (const nid of ids) {
         const node = nodeStmt.get(nid) as { note_file_id: string | null } | undefined;
         if (node?.note_file_id) {
+          // 记录墓碑（同步用：防止云端把已删除笔记重新拉回来）
+          const meta = noteMeta.get(node.note_file_id) as { id: string; title: string; parent_id: string | null; sort_order: number; updated_at: string } | undefined;
+          if (meta) tombstone.run(meta.id, meta.title, meta.parent_id, meta.sort_order, meta.updated_at, now);
           fs.rmSync(this.notePath(node.note_file_id), { force: true });
           fs.rmSync(path.join(this.noteAssetsDir, node.note_file_id), { recursive: true, force: true });
           delOrphans.run(node.note_file_id);
@@ -392,6 +434,107 @@ export class Store {
     });
     tx();
     return { count, freedBytes };
+  }
+
+  // ===== S3 同步支持 =====
+
+  getS3Settings(): S3Settings | null {
+    const row = this.db.prepare("SELECT value FROM settings WHERE key='s3_settings'").get() as { value: string } | undefined;
+    if (!row) return null;
+    try {
+      const parsed = JSON.parse(row.value);
+      if (!parsed || typeof parsed.endpoint !== "string") return null;
+      return parsed as S3Settings;
+    } catch {
+      return null;
+    }
+  }
+
+  saveS3Settings(settings: S3Settings): void {
+    this.db.prepare("INSERT INTO settings(key,value) VALUES('s3_settings',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value")
+      .run(JSON.stringify(settings));
+  }
+
+  contentHash(id: string): string {
+    return crypto.createHash("sha256").update(fs.readFileSync(this.notePath(id))).digest("hex");
+  }
+
+  baseHash(id: string): string | null {
+    const row = this.db.prepare("SELECT content_hash FROM sync_base WHERE note_id=?").get(id) as { content_hash: string } | undefined;
+    return row?.content_hash ?? null;
+  }
+
+  setBaseHash(id: string, hash: string): void {
+    this.db.prepare("INSERT INTO sync_base(note_id,content_hash) VALUES(?,?) ON CONFLICT(note_id) DO UPDATE SET content_hash=excluded.content_hash")
+      .run(id, hash);
+  }
+
+  markSynced(id: string): void {
+    this.db.prepare("UPDATE notes SET sync_state='synced' WHERE id=?").run(id);
+  }
+
+  markSyncComplete(at: string): void {
+    this.db.prepare("INSERT INTO device_state(key,value) VALUES('last_synced_at',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value").run(at);
+  }
+
+  notePathFor(id: string): string {
+    return this.notePath(id);
+  }
+
+  noteAssetsPathFor(id: string): string {
+    return this.noteAssetsDirFor(id);
+  }
+
+  listNotesForSync(): SyncNote[] {
+    return this.db.prepare(
+      "SELECT id,title,parent_id,sort_order,updated_at,is_conflict FROM notes WHERE deleted_at IS NULL ORDER BY sort_order"
+    ).all().map((r: any) => ({
+      id: r.id, title: r.title, parentId: r.parent_id, sortOrder: r.sort_order,
+      updatedAt: r.updated_at, isConflict: !!r.is_conflict,
+    }));
+  }
+
+  listDeletedNotesForSync(): Array<{ id: string; title: string; parentId: string | null; sortOrder: number; updatedAt: string; deletedAt: string }> {
+    return this.db.prepare(
+      "SELECT id,title,parent_id,sort_order,updated_at,deleted_at FROM deleted_notes ORDER BY deleted_at"
+    ).all().map((r: any) => ({
+      id: r.id, title: r.title, parentId: r.parent_id, sortOrder: r.sort_order,
+      updatedAt: r.updated_at, deletedAt: r.deleted_at,
+    }));
+  }
+
+  /** 导入远程笔记：写 .lake + note-assets 资源 + upsert DB 记录 */
+  importRemoteNote(note: SyncNote & { contentHash: string }, content: Buffer, assets: Array<{ filename: string; bytes: Buffer }>): void {
+    const tx = this.db.transaction(() => {
+      // 写 .lake
+      fs.writeFileSync(this.notePath(note.id), content, "utf8");
+      // 写资源
+      if (assets.length > 0) {
+        const dir = this.noteAssetsDirFor(note.id);
+        fs.mkdirSync(dir, { recursive: true });
+        for (const asset of assets) {
+          fs.writeFileSync(path.join(dir, asset.filename), asset.bytes);
+        }
+      }
+      // upsert notes
+      this.db.prepare(
+        `INSERT INTO notes(id,title,parent_id,sort_order,updated_at,sync_state,is_conflict,deleted_at)
+         VALUES(?,?,?,?,?,'synced',?,NULL)
+         ON CONFLICT(id) DO UPDATE SET title=excluded.title,parent_id=excluded.parent_id,
+           sort_order=excluded.sort_order,updated_at=excluded.updated_at,
+           sync_state='synced',is_conflict=excluded.is_conflict,deleted_at=NULL`
+      ).run(note.id, note.title, note.parentId, note.sortOrder, note.updatedAt, note.isConflict ? 1 : 0);
+      // upsert tree_nodes（note 节点）
+      this.db.prepare(
+        `INSERT INTO tree_nodes(id,workspace_id,parent_id,node_type,title,note_file_id,sort_order,created_at,updated_at,deleted_at,sync_state,is_conflict)
+         VALUES(?,?,?,'note',?,?,?,?,?,NULL,'synced',?)
+         ON CONFLICT(id) DO UPDATE SET parent_id=excluded.parent_id,title=excluded.title,
+           sort_order=excluded.sort_order,updated_at=excluded.updated_at,
+           deleted_at=NULL,sync_state='synced',is_conflict=excluded.is_conflict`
+      ).run(note.id, DEFAULT_WORKSPACE_ID, note.parentId, note.title, note.id, note.sortOrder, note.updatedAt, note.updatedAt, note.isConflict ? 1 : 0);
+    });
+    tx();
+    void note.contentHash;
   }
 
   uploadResource(input: { bytes: number[]; filename: string }, noteId: string): ResourceUploadOutput {

@@ -24,6 +24,15 @@ export function SyncPanel({ open, onClose }: { open: boolean; onClose: () => voi
     try { await native.saveS3Settings(settings); setMessage("配置已保存在当前设备"); setStatus("ok"); }
     catch (error) { setMessage(String(error)); setStatus("error"); }
   };
+  const sync = async () => {
+    setStatus("busy"); setMessage("正在同步...");
+    try {
+      await native.saveS3Settings(settings);
+      const result = await native.syncNow();
+      setMessage(`同步完成：上传 ${result.uploaded}，下载 ${result.downloaded}，冲突 ${result.conflicts}`);
+      setStatus("ok");
+    } catch (error) { setMessage(String(error)); setStatus("error"); }
+  };
   return (
     <div className="modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
       <section className="sync-panel" role="dialog" aria-modal="true">
@@ -38,7 +47,7 @@ export function SyncPanel({ open, onClose }: { open: boolean; onClose: () => voi
           <label className="checkbox wide"><input type="checkbox" checked={settings.forcePathStyle} onChange={(e) => set("forcePathStyle", e.target.checked)} /><span>使用 Path-style URL</span></label>
         </div>
         {message && <div className={`connection-message ${status}`}>{status === "busy" ? <LoaderCircle className="spin" size={16} /> : status === "ok" ? <Check size={16} /> : null}{message}</div>}
-        <footer><button className="secondary-button" onClick={test} disabled={status === "busy"}>测试连接</button><button className="primary-button" onClick={save} disabled={status === "busy"}>保存配置</button></footer>
+        <footer><button className="secondary-button" onClick={test} disabled={status === "busy"}>测试连接</button><button className="secondary-button" onClick={save} disabled={status === "busy"}>保存配置</button><button className="primary-button" onClick={sync} disabled={status === "busy"}>立即同步</button></footer>
       </section>
     </div>
   );
