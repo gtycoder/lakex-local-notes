@@ -89,8 +89,8 @@ export function createLakeDocument(element: HTMLElement, mode: "viewer" | "edito
     input: {},
     defaultFontsize: 18,
     toc: { enable: tocEnabled },
-    codeblock: { codemirrorURL: "/vendor/lakex-doc/codemirror.js" },
-    math: { KaTexURL: "/vendor/lakex-doc/katex.min.js" },
+    codeblock: { codemirrorURL: "./vendor/lakex-doc/codemirror.js" },
+    math: { KaTexURL: ["./vendor/lakex-doc/katex.min.js", "https://gw.alipayobjects.com/os/lib/katex/0.16.8/dist/contrib/mhchem.min.js"] },
     image: {
       createUploadPromise: (request: unknown) => uploadLakeResource(request, noteId),
       // 本地资源服务器 URL 必须排除，否则 Lake 每次 setDocument 都会重新下载并上传本地图片

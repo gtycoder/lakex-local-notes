@@ -1,4 +1,4 @@
-import type { CleanOrphanResult, NoteDocument, OrphanAsset, ResourceUploadInput, ResourceUploadOutput, S3Settings, SyncResult, TreeNode, WorkspaceSnapshot } from "./types";
+import type { CleanOrphanResult, NoteDocument, OrphanAsset, ResourceUploadInput, ResourceUploadOutput, S3Settings, SyncProgress, SyncResult, SyncStatusInfo, TreeNode, WorkspaceSnapshot } from "./types";
 
 interface LakeNative {
   bootstrap(): Promise<WorkspaceSnapshot>;
@@ -22,6 +22,8 @@ interface LakeNative {
   saveS3Settings(settings: S3Settings): Promise<void>;
   testS3Connection(): Promise<string>;
   syncNow(): Promise<SyncResult>;
+  getSyncStatus(): Promise<SyncStatusInfo>;
+  onSyncProgress(callback: (progress: SyncProgress) => void): () => void;
 }
 
 declare global {
@@ -57,4 +59,6 @@ export const native = {
   saveS3Settings: (settings: S3Settings) => api().saveS3Settings(settings),
   testS3Connection: () => api().testS3Connection(),
   syncNow: () => api().syncNow(),
+  getSyncStatus: () => api().getSyncStatus(),
+  onSyncProgress: (callback: (progress: SyncProgress) => void) => api().onSyncProgress(callback),
 };

@@ -48,7 +48,11 @@
     "productName": "Lake Notes",
     "files": [
       "dist/**/*",
-      "dist-electron/**/*"
+      "dist-electron/**/*",
+      "electron/preload.cjs",
+      "!**/*.map",
+      "!node_modules/better-sqlite3/deps/**",
+      "!node_modules/better-sqlite3/build/Release/obj/**"
     ],
     "mac": {
       "category": "public.app-category.productivity",
@@ -56,6 +60,12 @@
         "dmg",
         "zip"
       ]
-    }
+    },
+    "directories": {
+      "output": "release"
+    },
+    "asarUnpack": [
+      "electron/preload.cjs"
+    ]
   }
 }

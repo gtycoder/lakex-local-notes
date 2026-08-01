@@ -556,9 +556,96 @@ Tauri 版曾尝试用自定义协议（类似 `lake-asset://`）加载本地图�
 **注意**：sharp 是新增原生依赖（`npm install sharp`）。electron-builder 打包时需确保包含。
 
 **验证**：CDP 模拟复制 webp 图 → 剪贴板 HTML 为 `data:image/png;base64,...` ✅；png/jpg 不受影响 ✅
+### 10.21 资源本地化：Lake 编辑器 CDN 依赖全量本地镜像（2026-08-01）
+
+**现状**：`lakex-editor-react-component@0.1.2`（ESM，无 window.Doc）已是最新，但其运行时仍会从 `gw.alipayobjects.com` CDN 加载 35 个资源（codemirror 7.1.27/7.1.3、katex 0.16.8 + mhchem、25 个 UI 图标 SVG、hitu 插图）。
+
+**本地化方案**（3 层）：
+1. **本地镜像**：35 个 CDN 文件已下载到 `public/vendor/cdn/`（保留原路径结构，Vite 构建时自动进 dist）。`katex.min.js`/`codemirror.js`(7.1.27) 与 CDN 版本 sha256 逐字节一致。
+2. **主进程重定向**：`electron/main.ts` 的 `registerCdnRedirect()` 用 `session.webRequest.onBeforeRequest` 把所有 `*://gw.alipayobjects.com/*` 请求重定向到 `http://127.0.0.1:19876/vendor/cdn/<path>`（asset server 新增 `/vendor/cdn/` 静态路由 + 无扩展名 MIME 嗅探 + CORS）。验证：打包版里 5 类 URL（svg/png/双编码中文名/7.1.3 codemirror/mhchem）全部 200。
+3. **相对路径**：`index.html` 的 `<script src="./vendor/...">` 和 `window.KITCHEN_URL`、`lakeRuntime.ts` 的 `codeblock.codemirrorURL`/`math.KaTexURL` 全部改为 `./vendor/...`（打包版 file:// 下绝对路径 `/vendor/...` 会指向系统根目录而失效）。
+
+**注意**：
+- 重定向 handler 不要 decodeURIComponent，asset server 统一 decode 一次即可（hitu 文件名是双编码 `%25E5...`，两次 decode 会 404）。
+- math 的 `KaTexURL` 传数组（katex + mhchem），插件对 string/array 都兼容。
+
+### 10.22 同步进度与结果 UI（2026-08-01）
+
+- `electron/sync.ts`：`syncNow(store, onProgress?)` 新增 `SyncProgress` 事件（connect/download/upload/manifest/done，download/upload 带 current/total）。
+- `electron/main.ts`：`sync_now` handler 通过 `event.sender.send("sync-progress", p)` 推送到渲染层；新增 `get_sync_status`（读 device_state 的 last_synced_at + last_sync_result）。
+- `preload`/`native.ts`：`onSyncProgress(cb)` 订阅（返回退订函数）、`getSyncStatus()`。
+- `SyncPanel.tsx`：进度条（百分比/indeterminate）+ 阶段文案 + 最近一次同步结果（上传/下载/冲突数、commit id）。
+- 端到端验证（真实七牛 + 独立临时工作区）：首轮 connect→upload→manifest→done；次轮带 download，增量幂等（0 上传 0 下载）。
+
+### 10.23 electron-builder 打包 dmg（2026-08-01）
+
+**产物**：`release/Lake Notes-0.1.0-arm64.dmg`（158MB）+ zip + blockmap（未签名，默认 Electron 图标）。
+
+**package.json build 配置**：
+```json
+"build": {
+  "appId": "com.lakenotes.electron",
+  "productName": "Lake Notes",
+  "directories": { "output": "release" },
+  "files": ["dist/**/*", "dist-electron/**/*", "electron/preload.cjs",
+            "!**/*.map", "!node_modules/better-sqlite3/deps/**", "!node_modules/better-sqlite3/build/Release/obj/**"],
+  "asarUnpack": ["electron/preload.cjs"],
+  "mac": { "category": "public.app-category.productivity", "target": ["dmg", "zip"] }
+}
+```
+
+**踩坑（按发生顺序）**：
+1. **preload 必须纯 JS**：曾把 TS 类型注解（`: (progress: unknown) => void`）写进 `electron/preload.cjs` → 打包版/开发版都报 `SyntaxError: Unexpected token ':'`（makeContextifyScript）。preload.cjs 里绝不能出现 TS 语法。
+2. **files 必须包含 electron/preload.cjs**：主进程用 `path.join(__dirname, "../electron/preload.cjs")` 引用，漏了就会「找不到 preload → lakeNative undefined → 页面空白」。
+3. **最终根因确认**：上述两个 SyntaxError 其实都是 preload.cjs 里的 TS 语法导致的（第 1 条的语法错误会以 sandbox_bundle 或 makeContextifyScript 两种面目出现，曾误判为沙箱/asar 冲突）。防御性保留了 `webPreferences.sandbox: false`（contextIsolation 仍开启）+ `asarUnpack: ["electron/preload.cjs"]` + 打包版 preload 直接指向 `app.asar.unpacked/electron/preload.cjs`，实测可用；若后续想简化可尝试仅用 asar 内路径 + 默认沙箱。
+4. **产物目录必须独立**：一开始输出目录用 `dist/`，导致上一轮的 dmg/zip/.app 被 `dist/**/*` 递归打进 asar（asar 膨胀到 1GB）。改 `directories.output: "release"`，并清掉 dist 里的旧产物。
+5. **vite 8（rolldown）需要 Node ≥ 20.12**：系统 node 18 跑 `vite build` 报 `styleText` 缺失。用 nvm 的 v24：`PATH="$HOME/.nvm/versions/node/v24.18.0/bin:$PATH" npm run dev`（dev 脚本同样受影响）。
+6. **asar CLI extract-file 会剥离目录**：`asar extract-file app.asar dist/index.html` 会把产物写到当前目录的 `index.html`（不是 dist/），曾覆盖根 index.html，用 `git checkout -- index.html` 恢复。
+
+**打包版冒烟验证**（CDP 9223 + 手写极简 ws 客户端）：lakeNative 23 个方法、真实笔记数据加载、CDN 重定向 5/5、getS3Settings/getSyncStatus 正常、控制台 0 报错。
+
 ## 十一、后续阶段（资源归一化落地之后）
 
+1. ~~S3 备份同步~~ ✅ 已实现（commit c57a3a4 + 898e7b9）；真实七牛配置见 10.20
+2. ~~electron-builder 打包 dmg~~ ✅ 已实现（见 10.23）；待办：应用图标（当前默认 Electron 图标）、代码签名/公证（当前未签名，首次打开需右键打开）
+3. 应用图标、窗口标题栏美化
+4. 测试文件迁移（5 个 `.test.ts`）
+5. 孤儿资源 UI（在设置面板中展示 orphan_assets 列表 + 清理按钮）
+
+
 1. S3 备份同步（`native.ts` 缺 4 个方法 + 后端逻辑）
+2. `electron-builder` 打包（dmg for macOS）
+3. 应用图标、窗口标题栏美化
+4. 测试文件迁移（5 个 `.test.ts`）
+5. 孤儿资源 UI（在设置面板中展示 orphan_assets 列表 + 清理按钮）
+
+### 10.20 七牛云 S3 配置坑：UnknownError（2026-08-01）
+
+**现象**：用户配置七牛云 S3 后测试连接报 `S3 连接失败: UnknownError`。
+
+**根因（AWS SDK 实测确认）**：
+- 报错根本不是网络问题，是 **Bucket 名不存在** → HeadBucket 404，七牛返回的 message 字面量就是 `UnknownError`，SDK name 为 `NotFound`。
+- 用户填的 Bucket `local-lake` 不存在；其账号下实际空间（ListBuckets 确认）：`image-store-hebei`、`joplin-s3-hebei`、`local-image-lake`、`local-lake-hebei`、`siyuan-qiniu-hebei`。正确的是 **`local-lake-hebei`**。
+- Region 必须是 **`cn-north-1`**（七牛华北-河北），不能填空间名。
+- 用户填的 Endpoint `https://local-lake-hebei.s3.cn-north-1.qiniucs.com` 是**该 bucket 专用的虚拟主机地址**，和 path-style 组合会出问题：
+  - 勾选 path-style → SDK 请求 `/local-lake-hebei/<key>` → 404
+  - 不勾 path-style → SDK 拼出 `local-lake-hebei.local-lake-hebei.s3...` → TLS 证书不匹配
+  - 正确做法：用**区域级 Endpoint** `https://s3.cn-north-1.qiniucs.com` + path-style
+
+**验证通过的配置**（HeadBucket + Put + Get 实测成功）：
+```
+Endpoint:   https://s3.cn-north-1.qiniucs.com
+Region:     cn-north-1
+Bucket:     local-lake-hebei
+Prefix:     lake-notes
+Path-style: ✅ 勾选
+```
+- AK/SK 本身有效（ListBuckets 成功）。
+- 结论：S3 兼容服务报 `UnknownError` 时，先怀疑 Bucket 名/Region 拼写，而不是网络。可先用 AWS SDK 跑 `ListBuckets` 确认账号下真实空间名。
+
+## 十一、后续阶段（资源归一化落地之后）
+
+1. ~~S3 备份同步~~ ✅ 已实现（commit c57a3a4 + 898e7b9）；真实七牛配置见 10.20
 2. `electron-builder` 打包（dmg for macOS）
 3. 应用图标、窗口标题栏美化
 4. 测试文件迁移（5 个 `.test.ts`）

@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="256px" height="256px" viewBox="0 0 256 256" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+    <title>icon/下拉</title>
+    <defs>
+        <rect id="path-1" x="0" y="0" width="256" height="256"></rect>
+    </defs>
+    <g id="控件" stroke="none" stroke-width="1" fill="none" fill-rule="evenodd">
+        <g id="icon/下拉">
+            <mask id="mask-2" fill="white">
+                <use xlink:href="#path-1"></use>
+            </mask>
+            <g id="蒙版"></g>
+            <path d="M181.100505,118.925269 L135,165.096083 C131.134007,168.967972 124.865993,168.967972 121,165.096083 L74.8994949,118.925269 C71.0335017,115.053379 71.0335017,108.775806 74.8994949,104.903917 C76.7560104,103.04457 79.2739856,102 81.8994949,102 L174.100505,102 C179.567845,102 184,106.438914 184,111.914593 C184,114.544106 182.95702,117.065922 181.100505,118.925269 Z" id="路径" fill="#8C8C8C" fill-rule="nonzero" mask="url(#mask-2)"></path>
+        </g>
+    </g>
+</svg>

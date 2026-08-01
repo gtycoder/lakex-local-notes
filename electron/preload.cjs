@@ -24,4 +24,10 @@ contextBridge.exposeInMainWorld("lakeNative", {
   saveS3Settings: (settings) => invoke("save_s3_settings", settings),
   testS3Connection: () => invoke("test_s3_connection"),
   syncNow: () => invoke("sync_now"),
+  getSyncStatus: () => invoke("get_sync_status"),
+  onSyncProgress: (callback) => {
+    const listener = (_event, progress) => callback(progress);
+    ipcRenderer.on("sync-progress", listener);
+    return () => { ipcRenderer.removeListener("sync-progress", listener); };
+  },
 });

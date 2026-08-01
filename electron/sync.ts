@@ -33,6 +33,14 @@ export interface SyncResult {
   manifestId: string; completedAt: string;
 }
 
+/** 同步进度事件（主进程 → 渲染进程） */
+export interface SyncProgress {
+  phase: "connect" | "download" | "upload" | "manifest" | "done";
+  current?: number;
+  total?: number;
+  message: string;
+}
+
 const MANIFEST_VERSION = 2;
 
 // ===== ObjectStore：S3 兼容客户端（七牛云等） =====
@@ -106,11 +114,13 @@ export async function testConnection(store: Store): Promise<string> {
   return "连接成功，Bucket 可访问";
 }
 
-export async function syncNow(store: Store): Promise<SyncResult> {
+export async function syncNow(store: Store, onProgress?: (p: SyncProgress) => void): Promise<SyncResult> {
   const settings = store.getS3Settings();
   if (!settings) throw new Error("请先保存 S3 配置");
   validate(settings);
   const remote = new ObjectStore(settings);
+  const report = (p: SyncProgress) => { try { onProgress?.(p); } catch { /* 渲染层已关闭 */ } };
+  report({ phase: "connect", message: "正在连接 S3..." });
   await remote.test();
 
   // 1. 读取远程清单
@@ -126,7 +136,11 @@ export async function syncNow(store: Store): Promise<SyncResult> {
   if (remoteManifest) {
     // 本地已删除笔记的墓碑（下载阶段生效：本地删除优先，不重新拉取）
     const tombstoned = new Set(store.listDeletedNotesForSync().map((d) => d.id));
+    const remoteTotal = remoteManifest.notes.length;
+    let remoteIndex = 0;
     for (const rn of remoteManifest.notes) {
+      remoteIndex += 1;
+      report({ phase: "download", current: remoteIndex, total: remoteTotal, message: rn.deleted ? "处理云端删除记录" : `检查远端笔记「${rn.title}」` });
       // 云端已删除：本地若有则删除（墓碑防重拉），不下载对象
       if (rn.deleted) {
         const exists = store.listNotesForSync().some((n) => n.id === rn.id);
@@ -190,7 +204,11 @@ export async function syncNow(store: Store): Promise<SyncResult> {
   let uploaded = 0;
   const manifestNotes: ManifestNote[] = [];
 
+  const localTotal = localNotes.length;
+  let localIndex = 0;
   for (const note of localNotes) {
+    localIndex += 1;
+    report({ phase: "upload", current: localIndex, total: localTotal, message: `上传笔记「${note.title}」` });
     const hash = store.contentHash(note.id);
     const assets: { filename: string; size: number; hash: string }[] = [];
     if (remoteHashes.get(note.id) !== hash) {
@@ -233,6 +251,7 @@ export async function syncNow(store: Store): Promise<SyncResult> {
   }
 
   // 4. 写新清单（commit + latest）
+  report({ phase: "manifest", message: "写入同步清单..." });
   manifestNotes.sort((a, b) => a.sortOrder - b.sortOrder);
   const commitId = crypto.randomUUID();
   const completedAt = new Date().toISOString();
@@ -251,9 +270,12 @@ export async function syncNow(store: Store): Promise<SyncResult> {
     store.setBaseHash(note.id, note.contentHash);
     store.markSynced(note.id);
   }
+  const result: SyncResult = { uploaded, downloaded, conflicts, manifestId: commitId, completedAt };
   store.markSyncComplete(completedAt);
+  store.recordSyncResult(JSON.stringify(result));
 
-  return { uploaded, downloaded, conflicts, manifestId: commitId, completedAt };
+  report({ phase: "done", message: "同步完成" });
+  return result;
 }
 
 // ===== 工具 =====

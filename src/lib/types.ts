@@ -64,6 +64,18 @@ export interface SyncResult {
   completedAt: string;
 }
 
+export interface SyncProgress {
+  phase: "connect" | "download" | "upload" | "manifest" | "done";
+  current?: number;
+  total?: number;
+  message: string;
+}
+
+export interface SyncStatusInfo {
+  lastSyncedAt: string | null;
+  lastResult: SyncResult | null;
+}
+
 export interface ImportedResource {
   resourceRef: string;
   name: string;

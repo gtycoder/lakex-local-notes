@@ -477,6 +477,18 @@ export class Store {
     this.db.prepare("INSERT INTO device_state(key,value) VALUES('last_synced_at',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value").run(at);
   }
 
+  recordSyncResult(json: string): void {
+    this.db.prepare("INSERT INTO device_state(key,value) VALUES('last_sync_result',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value").run(json);
+  }
+
+  getSyncStatus(): { lastSyncedAt: string | null; lastResult: Record<string, unknown> | null } {
+    const at = this.db.prepare("SELECT value FROM device_state WHERE key='last_synced_at'").get() as { value: string } | undefined;
+    const row = this.db.prepare("SELECT value FROM device_state WHERE key='last_sync_result'").get() as { value: string } | undefined;
+    let lastResult: Record<string, unknown> | null = null;
+    if (row) { try { lastResult = JSON.parse(row.value); } catch { lastResult = null; } }
+    return { lastSyncedAt: at?.value ?? null, lastResult };
+  }
+
   notePathFor(id: string): string {
     return this.notePath(id);
   }

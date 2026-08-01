@@ -124,6 +124,21 @@ button { cursor: pointer; }
 .sync-panel header { display: flex; align-items: center; justify-content: space-between; padding: 18px 20px; border-bottom: 1px solid #e8eaed; }.sync-panel header > div { display: flex; align-items: center; gap: 11px; color: #216e4e; }.sync-panel h2 { margin: 0; color: #242a31; font-size: 16px; }.sync-panel header p { margin: 3px 0 0; color: #8a919b; font-size: 11px; }
 .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; padding: 20px; }.form-grid label { display: flex; flex-direction: column; gap: 6px; color: #545d68; font-size: 11px; font-weight: 600; }.form-grid .wide { grid-column: 1 / -1; }.form-grid input[type="text"], .form-grid input[type="password"], .form-grid label > input:not([type="checkbox"]) { width: 100%; height: 36px; padding: 0 10px; border: 1px solid #d5d9de; border-radius: 5px; outline: 0; font-size: 12px; font-weight: 400; }.form-grid input:focus { border-color: #3d8064; box-shadow: 0 0 0 2px #dcece5; }
 .secret-field { display: flex; align-items: center; border: 1px solid #d5d9de; border-radius: 5px; }.secret-field:focus-within { border-color: #3d8064; box-shadow: 0 0 0 2px #dcece5; }.secret-field input { border: 0 !important; box-shadow: none !important; }.checkbox { flex-direction: row !important; align-items: center; font-weight: 400 !important; }.checkbox input { accent-color: #216e4e; }
+/* ===== 同步进度与最近结果（S3 同步面板） ===== */
+.sync-progress { margin: 0 20px 14px; padding: 12px 14px; border: 1px solid #dcece5; border-radius: 6px; background: #f4faf6; }
+.sync-progress-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; color: #256246; font-size: 12px; font-weight: 600; }
+.sync-progress-label { display: flex; align-items: center; gap: 7px; }
+.sync-progress-pct { font-variant-numeric: tabular-nums; }
+.sync-progress-track { height: 6px; margin-top: 9px; border-radius: 3px; background: #dcece5; overflow: hidden; }
+.sync-progress-bar { height: 100%; border-radius: 3px; background: linear-gradient(90deg, #3d8064, #216e4e); transition: width .25s ease; }
+.sync-progress-bar.indeterminate { width: 34% !important; animation: sync-indeterminate 1.2s ease-in-out infinite; }
+@keyframes sync-indeterminate { 0% { transform: translateX(-110%); } 100% { transform: translateX(320%); } }
+.sync-progress-message { margin-top: 8px; color: #616974; font-size: 11px; }
+.sync-last-result { margin: 0 20px 12px; padding: 10px 12px; border-radius: 6px; background: #f6f7f8; color: #545d68; font-size: 11px; }
+.sync-last-row { display: flex; align-items: center; gap: 7px; }
+.sync-last-row + .sync-last-row { margin-top: 5px; }
+.sync-last-counts { color: #256246; font-weight: 600; }
+.sync-last-manifest { margin-left: auto; color: #98a0aa; font-weight: 400; font-variant-numeric: tabular-nums; }
 .connection-message { display: flex; align-items: center; gap: 7px; margin: 0 20px; padding: 9px 10px; border-radius: 5px; color: #616974; background: #f3f4f6; font-size: 11px; }.connection-message.ok { color: #256246; background: #eaf5ef; }.connection-message.error { color: #a13d37; background: #fff0ee; }
 .sync-panel footer { display: flex; justify-content: flex-end; gap: 9px; padding: 16px 20px; border-top: 1px solid #e8eaed; }
 .spin { animation: spin 1s linear infinite; } @keyframes spin { to { transform: rotate(360deg); } }
