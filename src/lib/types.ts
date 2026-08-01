@@ -83,3 +83,18 @@ export interface ResourceUploadOutput {
   mimeType: string;
   size: number;
 }
+
+export interface OrphanAsset {
+  id: number;
+  noteId: string;
+  filename: string;
+  filePath: string;
+  size: number;
+  mimeType: string;
+  detectedAt: string;
+}
+
+export interface CleanOrphanResult {
+  count: number;
+  freedBytes: number;
+}

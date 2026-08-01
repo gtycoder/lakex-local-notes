@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 import { createLakeDocument, destroyLakeEditor, type LakeEditorInstance } from "./lakeRuntime";
-import { normalizeClipboardHtml } from "./clipboardHtml";
+import { normalizeClipboardHtml, upgradePastedHtml } from "./clipboardHtml";
 
 export interface EditorTabProps {
   noteId: string;
@@ -30,8 +30,18 @@ export function EditorTab({ noteId, content, visible, tocEnabled, onChange }: Ed
       event.clipboardData.setData("text/html", html);
       event.clipboardData.setData("text/plain", plainText);
       event.preventDefault();
+      event.stopImmediatePropagation();
     };
-    host.addEventListener("copy", copyHandler);
+    const pasteHandler = (event: ClipboardEvent) => {
+      const dt = event.clipboardData;
+      if (!dt) return;
+      const html = dt.getData("text/html");
+      if (!html) return;
+      const upgraded = upgradePastedHtml(html);
+      if (upgraded !== html) dt.setData("text/html", upgraded);
+    };
+    host.addEventListener("copy", copyHandler, true);
+    host.addEventListener("paste", pasteHandler, true);
 
     let editor: LakeEditorInstance | null = null;
     const initialContent = content;
@@ -49,7 +59,8 @@ export function EditorTab({ noteId, content, visible, tocEnabled, onChange }: Ed
     }
 
     return () => {
-      host.removeEventListener("copy", copyHandler);
+      host.removeEventListener("copy", copyHandler, true);
+      host.removeEventListener("paste", pasteHandler, true);
       destroyLakeEditor(editor);
       editorRef.current = null;
       host.replaceChildren();

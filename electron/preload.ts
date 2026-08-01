@@ -16,6 +16,8 @@ contextBridge.exposeInMainWorld("lakeNative", {
   moveTreeNode: (id: string, parentId: string | null, sortOrder: number) => invoke("move_tree_node", id, parentId, sortOrder),
   reorderTreeNodes: (parentId: string | null, orderedIds: string[]) => invoke("reorder_tree_nodes", parentId, orderedIds),
   deleteTreeNode: (id: string) => invoke("delete_tree_node", id),
-  uploadResource: (input: { bytes: number[]; filename: string }) => invoke("upload_resource", input),
-  downloadRemoteResource: (url: string) => invoke("download_remote_resource", url),
+  uploadResource: (input: { bytes: number[]; filename: string }, noteId: string) => invoke("upload_resource", input, noteId),
+  downloadRemoteResource: (url: string, noteId: string) => invoke("download_remote_resource", url, noteId),
+  listOrphanAssets: () => invoke("list_orphan_assets"),
+  cleanOrphanAssets: () => invoke("clean_orphan_assets"),
 });

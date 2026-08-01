@@ -1,4 +1,4 @@
-import type { NoteDocument, ResourceUploadInput, ResourceUploadOutput, TreeNode, WorkspaceSnapshot } from "./types";
+import type { CleanOrphanResult, NoteDocument, OrphanAsset, ResourceUploadInput, ResourceUploadOutput, TreeNode, WorkspaceSnapshot } from "./types";
 
 interface LakeNative {
   bootstrap(): Promise<WorkspaceSnapshot>;
@@ -14,8 +14,10 @@ interface LakeNative {
   moveTreeNode(id: string, parentId: string | null, sortOrder: number): Promise<TreeNode>;
   reorderTreeNodes(parentId: string | null, orderedIds: string[]): Promise<void>;
   deleteTreeNode(id: string): Promise<void>;
-  uploadResource(input: ResourceUploadInput): Promise<ResourceUploadOutput>;
-  downloadRemoteResource(url: string): Promise<ResourceUploadOutput>;
+  uploadResource(input: ResourceUploadInput, noteId: string): Promise<ResourceUploadOutput>;
+  downloadRemoteResource(url: string, noteId: string): Promise<ResourceUploadOutput>;
+  listOrphanAssets(): Promise<OrphanAsset[]>;
+  cleanOrphanAssets(): Promise<CleanOrphanResult>;
 }
 
 declare global {
@@ -43,6 +45,8 @@ export const native = {
   moveTreeNode: (id: string, parentId: string | null, sortOrder: number) => api().moveTreeNode(id, parentId, sortOrder),
   reorderTreeNodes: (parentId: string | null, orderedIds: string[]) => api().reorderTreeNodes(parentId, orderedIds),
   deleteTreeNode: (id: string) => api().deleteTreeNode(id),
-  uploadResource: (input: ResourceUploadInput) => api().uploadResource(input),
-  downloadRemoteResource: (url: string) => api().downloadRemoteResource(url),
+  uploadResource: (input: ResourceUploadInput, noteId: string) => api().uploadResource(input, noteId),
+  downloadRemoteResource: (url: string, noteId: string) => api().downloadRemoteResource(url, noteId),
+  listOrphanAssets: () => api().listOrphanAssets(),
+  cleanOrphanAssets: () => api().cleanOrphanAssets(),
 };

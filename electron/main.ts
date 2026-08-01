@@ -2,6 +2,7 @@ import { app, BrowserWindow, ipcMain } from "electron";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { Store } from "./store.js";
+import { startAssetServer } from "./assetServer.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const isDev = !app.isPackaged;
@@ -52,8 +53,10 @@ function registerIpc() {
   handle("move_tree_node", (id: string, parentId: string | null, sortOrder: number) => store.moveTreeNode(id, parentId, sortOrder));
   handle("reorder_tree_nodes", (parentId: string | null, orderedIds: string[]) => store.reorderTreeNodes(parentId, orderedIds));
   handle("delete_tree_node", (id: string) => store.deleteTreeNode(id));
-  handle("upload_resource", (input: { bytes: number[]; filename: string }) => store.uploadResource(input));
-  handle("download_remote_resource", (url: string) => store.downloadRemoteResource(url));
+  handle("upload_resource", (input: { bytes: number[]; filename: string }, noteId: string) => store.uploadResource(input, noteId));
+  handle("download_remote_resource", (url: string, noteId: string) => store.downloadRemoteResource(url, noteId));
+  handle("list_orphan_assets", () => store.listOrphanAssets());
+  handle("clean_orphan_assets", () => store.cleanOrphanAssets());
 }
 
 // Increase renderer memory limit for large documents with base64 images
@@ -61,6 +64,7 @@ app.commandLine.appendSwitch("js-flags", "--max-old-space-size=8192");
 
 app.whenReady().then(() => {
   store = new Store(workspaceRoot());
+  startAssetServer(path.join(workspaceRoot(), "note-assets"));
   registerIpc();
   createWindow();
 

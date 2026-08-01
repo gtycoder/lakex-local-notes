@@ -2,10 +2,19 @@ import Database from "better-sqlite3";
 import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
+import net from "node:net";
+import { net as electronNet } from "electron";
+import { ASSET_PORT } from "./assetServer.js";
 
 const DEFAULT_WORKSPACE_ID = "default";
 const DEFAULT_NOTEBOOK_ID = "notebook-personal";
 const MAX_IMAGE_BYTES = 25 * 1024 * 1024;
+// 下载外部图片的超时与请求头（移植自 Tauri 版 Rust 后端，见 lake-notes-tauri-poc/src-tauri/src/store.rs）
+const DOWNLOAD_TIMEOUT_MS = 30_000;
+// 知乎等 CDN 的防盗链 403 有波动性，重试可显著提高成功率
+const DOWNLOAD_MAX_ATTEMPTS = 3;
+const DOWNLOAD_USER_AGENT =
+  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36";
 
 export class AppError extends Error {
   constructor(public kind: "NotFound" | "InvalidInput" | "Internal", message: string) {
@@ -26,9 +35,16 @@ interface TreeNode {
 interface ResourceUploadOutput {
   url: string; resourceRef: string; filename: string; mimeType: string; size: number;
 }
+interface OrphanAsset {
+  id: number; noteId: string; filename: string; filePath: string; size: number; mimeType: string; detectedAt: string;
+}
 
 function nowIso(): string {
   return new Date().toISOString();
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 function uuid(): string {
@@ -38,10 +54,13 @@ function uuid(): string {
 export class Store {
   private db: Database.Database;
   private root: string;
+  private noteAssetsDir: string;
 
   constructor(root: string) {
     this.root = root;
+    this.noteAssetsDir = path.join(root, "note-assets");
     fs.mkdirSync(path.join(root, "notes"), { recursive: true });
+    fs.mkdirSync(this.noteAssetsDir, { recursive: true });
     this.db = new Database(path.join(root, "metadata.sqlite3"));
     this.db.pragma("journal_mode = WAL");
     this.db.pragma("foreign_keys = ON");
@@ -69,6 +88,16 @@ export class Store {
       );
       CREATE INDEX IF NOT EXISTS idx_tree_nodes_parent ON tree_nodes(workspace_id,parent_id,deleted_at,sort_order);
       CREATE INDEX IF NOT EXISTS idx_tree_nodes_note_file ON tree_nodes(note_file_id);
+      CREATE TABLE IF NOT EXISTS orphan_assets (
+        id          INTEGER PRIMARY KEY AUTOINCREMENT,
+        note_id     TEXT NOT NULL,
+        filename    TEXT NOT NULL,
+        file_path   TEXT NOT NULL,
+        size        INTEGER NOT NULL,
+        mime_type   TEXT NOT NULL,
+        detected_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_orphan_path ON orphan_assets(file_path);
     `);
     const now = nowIso();
     this.db.prepare(`INSERT OR IGNORE INTO tree_nodes(id,workspace_id,parent_id,node_type,title,note_file_id,sort_order,created_at,updated_at,deleted_at,sync_state,is_conflict)
@@ -223,6 +252,7 @@ export class Store {
       this.atomicWrite(p, content);
     });
     tx();
+    this.detectOrphans(id, content);
     return this.readNote(id);
   }
 
@@ -243,15 +273,23 @@ export class Store {
   }
 
   deleteTreeNode(id: string) {
-    const now = nowIso();
+    // 硬删除（当前版本无回收站）：节点及其子节点从 DB 移除，
+    // 笔记同时删除 .lake 文件、整个 note-assets/{noteId}/ 目录与孤儿记录
     const ids = this.descendantIds(id);
     const tx = this.db.transaction(() => {
-      const stmt = this.db.prepare("UPDATE tree_nodes SET deleted_at=?,sync_state='local' WHERE id=?");
-      const noteStmt = this.db.prepare("UPDATE notes SET deleted_at=?,sync_state='local' WHERE id=?");
+      const nodeStmt = this.db.prepare("SELECT note_file_id FROM tree_nodes WHERE id=?");
+      const delNote = this.db.prepare("DELETE FROM notes WHERE id=?");
+      const delNode = this.db.prepare("DELETE FROM tree_nodes WHERE id=?");
+      const delOrphans = this.db.prepare("DELETE FROM orphan_assets WHERE note_id=?");
       for (const nid of ids) {
-        stmt.run(now, nid);
-        const node = this.db.prepare("SELECT note_file_id FROM tree_nodes WHERE id=?").get(nid) as { note_file_id: string | null } | undefined;
-        if (node?.note_file_id) noteStmt.run(now, node.note_file_id);
+        const node = nodeStmt.get(nid) as { note_file_id: string | null } | undefined;
+        if (node?.note_file_id) {
+          fs.rmSync(this.notePath(node.note_file_id), { force: true });
+          fs.rmSync(path.join(this.noteAssetsDir, node.note_file_id), { recursive: true, force: true });
+          delOrphans.run(node.note_file_id);
+          delNote.run(node.note_file_id);
+        }
+        delNode.run(nid);
       }
     });
     tx();
@@ -279,22 +317,186 @@ export class Store {
     tx();
   }
 
-  uploadResource(input: { bytes: number[]; filename: string }): ResourceUploadOutput {
-    const bytes = Buffer.from(input.bytes);
-    return imageOutput(bytes, input.filename);
+  private noteAssetsDirFor(noteId: string): string {
+    if (!noteId || noteId === "." || noteId === ".." || noteId.includes("/") || noteId.includes("\\")) {
+      throw new AppError("InvalidInput", `无效的笔记 ID: ${noteId}`);
+    }
+    return path.join(this.noteAssetsDir, noteId);
   }
 
-  async downloadRemoteResource(url: string): Promise<ResourceUploadOutput> {
+  private assetUrl(noteId: string, filename: string): string {
+    return `http://127.0.0.1:${ASSET_PORT}/${noteId}/${filename}`;
+  }
+
+  private referencedFilenames(noteId: string, content: string): Set<string> {
+    // Lake 序列化图片时会把整条 URL 百分号编码后嵌进 data: URL（如
+    // value="data:%7B%22src%22%3A%22http%3A%2F%2F127.0.0.1%3A19876%2F...%22..."），
+    // 但文件名 {timestamp}_{random8}.ext 只含字母数字/下划线/点，编码后原样保留。
+    // 直接按文件名模式扫描：文件名全局唯一（时间戳+8位随机），且孤儿检测按笔记目录
+    // 隔离，因此匹配到的文件名即为该笔记被引用的资源。
+    const referenced = new Set<string>();
+    const re = /\d{13}_[0-9a-f]{8}\.(?:png|jpg|jpeg|gif|webp|avif)/g;
+    for (const m of content.matchAll(re)) referenced.add(m[0]);
+    return referenced;
+  }
+
+  private detectOrphans(noteId: string, content: string): void {
+    const dir = this.noteAssetsDirFor(noteId);
+    if (!fs.existsSync(dir)) return;
+    const diskSet = new Set(fs.readdirSync(dir));
+    const referencedSet = this.referencedFilenames(noteId, content);
+    const insert = this.db.prepare(
+      `INSERT OR IGNORE INTO orphan_assets(note_id, filename, file_path, size, mime_type)
+       VALUES(?,?,?,?,?)`
+    );
+    const unorphan = this.db.prepare("DELETE FROM orphan_assets WHERE note_id=? AND filename=?");
+    const tx = this.db.transaction(() => {
+      for (const filename of diskSet) {
+        if (referencedSet.has(filename)) {
+          unorphan.run(noteId, filename);
+        } else {
+          const stat = fs.statSync(path.join(dir, filename));
+          if (!stat.isFile()) continue;
+          insert.run(noteId, filename, `note-assets/${noteId}/${filename}`, stat.size, mimeTypeForFilename(filename));
+        }
+      }
+    });
+    tx();
+  }
+
+  listOrphanAssets(): OrphanAsset[] {
+    return this.db.prepare("SELECT * FROM orphan_assets ORDER BY detected_at DESC").all().map((r: any) => ({
+      id: r.id, noteId: r.note_id, filename: r.filename, filePath: r.file_path,
+      size: r.size, mimeType: r.mime_type, detectedAt: r.detected_at,
+    }));
+  }
+
+  cleanOrphanAssets(): { count: number; freedBytes: number } {
+    const rows = this.db.prepare("SELECT * FROM orphan_assets").all() as any[];
+    let count = 0;
+    let freedBytes = 0;
+    const tx = this.db.transaction(() => {
+      for (const row of rows) {
+        const fullPath = path.join(this.root, row.file_path);
+        try {
+          if (fs.existsSync(fullPath)) {
+            freedBytes += fs.statSync(fullPath).size;
+            fs.unlinkSync(fullPath);
+          }
+        } catch (error) {
+          console.warn("[store] 清理孤儿资源失败，跳过:", fullPath, error);
+        }
+        this.db.prepare("DELETE FROM orphan_assets WHERE id=?").run(row.id);
+        count++;
+      }
+    });
+    tx();
+    return { count, freedBytes };
+  }
+
+  uploadResource(input: { bytes: number[]; filename: string }, noteId: string): ResourceUploadOutput {
+    const bytes = Buffer.from(input.bytes);
+    return imageOutput(bytes, input.filename, this.noteAssetsDirFor(noteId), this.assetUrl.bind(this, noteId));
+  }
+
+  async downloadRemoteResource(url: string, noteId: string): Promise<ResourceUploadOutput> {
+    // 先校验 noteId 再做网络请求
+    const assetsDir = this.noteAssetsDirFor(noteId);
     const normalized = url.startsWith("//") ? `https:${url}` : url;
     const parsed = new URL(normalized);
     if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
       throw new AppError("InvalidInput", "图片地址仅支持 HTTP 或 HTTPS");
     }
-    const res = await fetch(normalized, { headers: { "User-Agent": "LakeNotes/1.0" } });
-    if (!res.ok) throw new AppError("Internal", `下载失败: ${res.status}`);
-    const buf = Buffer.from(await res.arrayBuffer());
-    return imageOutput(buf, path.basename(parsed.pathname) || "image");
+    // SSRF 防护（移植 Rust 版 validate_remote_image_url）：拒绝本机与私网地址
+    if (isBlockedHost(parsed.hostname)) {
+      throw new AppError("InvalidInput", "不允许下载本机或私网地址");
+    }
+    // 下载头（移植 Rust 版）：Referer 设为图片 URL 自身 + 浏览器 UA，绕过常见防盗链
+    // 403/网络错误带重试，应对图床 CDN 的波动性拒绝
+    let res: Response | null = null;
+    let lastError: unknown = null;
+    for (let attempt = 1; attempt <= DOWNLOAD_MAX_ATTEMPTS; attempt++) {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), DOWNLOAD_TIMEOUT_MS);
+      try {
+        // 用 Electron net.fetch（Chromium 网络栈）：与 Chrome 相同的 TLS 指纹，
+        // 可绕过知乎等 CDN 的 TLS 指纹检测（参照思源 createCustomTLSConfig 的思路）
+        res = await electronNet.fetch(normalized, {
+          headers: {
+            "User-Agent": DOWNLOAD_USER_AGENT,
+            "Referer": normalized,
+          },
+          redirect: "follow",
+          signal: controller.signal,
+        });
+        if (res.ok) break;
+        lastError = new AppError("Internal", `下载失败: ${res.status}`);
+        await res.body?.cancel().catch(() => undefined);
+      } catch (error) {
+        lastError = error instanceof Error && error.name === "AbortError"
+          ? new AppError("Internal", `下载超时（${DOWNLOAD_TIMEOUT_MS / 1000}s）`)
+          : new AppError("Internal", `网络错误: ${error instanceof Error ? error.message : String(error)}`);
+      } finally {
+        clearTimeout(timer);
+      }
+      if (attempt < DOWNLOAD_MAX_ATTEMPTS) await sleep(attempt * 500);
+    }
+    if (!res || !res.ok) {
+      throw lastError instanceof AppError ? lastError : new AppError("Internal", `下载失败: ${String(lastError)}`);
+    }
+    // content-length 预检查 + 流式读取限量（防大响应撑爆内存）
+    const declaredLength = res.headers.get("content-length");
+    if (declaredLength && Number(declaredLength) > MAX_IMAGE_BYTES) {
+      await res.body?.cancel().catch(() => undefined);
+      throw new AppError("InvalidInput", "图片超过 25 MiB");
+    }
+    const reader = res.body?.getReader();
+    if (!reader) throw new AppError("Internal", "响应无内容");
+    const chunks: Buffer[] = [];
+    let total = 0;
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      total += value.byteLength;
+      if (total > MAX_IMAGE_BYTES) {
+        await reader.cancel().catch(() => undefined);
+        throw new AppError("InvalidInput", "图片超过 25 MiB");
+      }
+      chunks.push(Buffer.from(value));
+    }
+    const buf = Buffer.concat(chunks);
+    return imageOutput(buf, path.basename(parsed.pathname) || "image", assetsDir, this.assetUrl.bind(this, noteId));
   }
+}
+
+/** SSRF 防护：判断 host 是否为本机/私网地址（移植 Rust 版 validate_remote_image_url） */
+function isBlockedHost(host: string): boolean {
+  const h = host.toLowerCase().replace(/^\[|\]$/g, "");
+  if (h === "localhost" || h.endsWith(".localhost")) return true;
+  const ipVersion = net.isIP(h);
+  if (ipVersion === 4) return isBlockedIPv4(h);
+  if (ipVersion === 6) return isBlockedIPv6(h);
+  return false; // 域名不做解析（避免异步 DNS 与误伤），仅拦截直接 IP
+}
+
+function isBlockedIPv4(ip: string): boolean {
+  const parts = ip.split(".").map(Number);
+  if (parts.length !== 4) return false;
+  const [a, b] = parts;
+  if (a === 0 || a === 10 || a === 127) return true;                       // 0/8 未指定、10/8、127/8 回环
+  if (a === 169 && b === 254) return true;                                 // 169.254/16 链路本地
+  if (a === 172 && b >= 16 && b <= 31) return true;                        // 172.16/12 私网
+  if (a === 192 && b === 168) return true;                                 // 192.168/16 私网
+  if (a >= 224) return true;                                               // 组播/保留
+  return false;
+}
+
+function isBlockedIPv6(ip: string): boolean {
+  const h = ip.toLowerCase();
+  if (h === "::" || h === "::1") return true;                              // 未指定/回环
+  if (h.startsWith("fc") || h.startsWith("fd")) return true;               // fc00::/7 唯一本地
+  if (/^fe[89ab]/.test(h)) return true;                                    // fe80::/10 链路本地
+  return false;
 }
 
 function sniffImageFormat(bytes: Buffer): { mimeType: string; extension: string } | null {
@@ -306,14 +508,32 @@ function sniffImageFormat(bytes: Buffer): { mimeType: string; extension: string 
   return null;
 }
 
-function imageOutput(bytes: Buffer, requestedFilename: string): ResourceUploadOutput {
+const MIME_FROM_EXT: Record<string, string> = {
+  ".png": "image/png",
+  ".jpg": "image/jpeg",
+  ".jpeg": "image/jpeg",
+  ".gif": "image/gif",
+  ".webp": "image/webp",
+  ".avif": "image/avif",
+  ".svg": "image/svg+xml",
+};
+
+function mimeTypeForFilename(filename: string): string {
+  return MIME_FROM_EXT[path.extname(filename).toLowerCase()] ?? "application/octet-stream";
+}
+
+function imageOutput(bytes: Buffer, _requestedFilename: string, noteAssetsDir: string, makeUrl: (filename: string) => string): ResourceUploadOutput {
   if (bytes.length === 0 || bytes.length > MAX_IMAGE_BYTES) {
     throw new AppError("InvalidInput", "图片为空或超过 25 MiB");
   }
   const format = sniffImageFormat(bytes);
   if (!format) throw new AppError("InvalidInput", "仅支持 PNG、JPEG、GIF、WebP 和 AVIF 图片");
-  const stem = path.parse(requestedFilename).name || "image";
-  const filename = `${stem}.${format.extension}`;
-  const url = `data:${format.mimeType};base64,${bytes.toString("base64")}`;
+  // 每次插入独立文件：{timestamp}_{random8}.ext，不做去重、零耦合
+  const uniqueId = `${Date.now()}_${crypto.randomBytes(4).toString("hex")}`;
+  const filename = `${uniqueId}.${format.extension}`;
+  fs.mkdirSync(noteAssetsDir, { recursive: true });
+  const filePath = path.join(noteAssetsDir, filename);
+  fs.writeFileSync(filePath, bytes);
+  const url = makeUrl(filename);
   return { resourceRef: url, url, filename, mimeType: format.mimeType, size: bytes.length };
 }

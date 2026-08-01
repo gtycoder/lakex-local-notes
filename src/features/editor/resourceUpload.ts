@@ -25,9 +25,9 @@ function getImageConverterPool(): WorkerPool {
   return imageConverterPool;
 }
 
-export async function uploadLakeResource(request: unknown): Promise<ResourceUploadOutput> {
+export async function uploadLakeResource(request: unknown, noteId: string): Promise<ResourceUploadOutput> {
   return uploadQueue.add(() =>
-    withRetry(() => performUpload(request), {
+    withRetry(() => performUpload(request, noteId), {
       maxRetries: 2,
       delayMs: 1000,
       backoffMultiplier: 2,
@@ -61,7 +61,7 @@ async function fileToBase64DataUrl(file: File): Promise<ResourceUploadOutput> {
   };
 }
 
-async function performUpload(request: unknown): Promise<ResourceUploadOutput> {
+async function performUpload(request: unknown, noteId: string): Promise<ResourceUploadOutput> {
   const normalized = request as LakeUploadRequest;
   const payload = request instanceof File ? request : normalized.data ?? normalized.file;
 
@@ -73,7 +73,7 @@ async function performUpload(request: unknown): Promise<ResourceUploadOutput> {
     }
     // Image files → existing image pipeline (with WebP conversion etc.)
     const input = normalizeImageInput(Array.from(new Uint8Array(await payload.arrayBuffer())), payload.name || "image");
-    return uploadWithWebpConversion(input);
+    return uploadWithWebpConversion(input, noteId);
   }
 
   // Already-local data URL: pasted base64 image from local clipboard
@@ -83,36 +83,40 @@ async function performUpload(request: unknown): Promise<ResourceUploadOutput> {
       return { url: payload, resourceRef: payload, filename: "attachment", mimeType: payload.split(";")[0].replace("data:", ""), size: 0 };
     }
     const input = dataUrlInput(payload);
-    return uploadWithWebpConversion(input);
+    return uploadWithWebpConversion(input, noteId);
   }
 
-  // External URL: download via fetch, fallback to Rust backend
+  // External URL: 优先走主进程下载（对齐 Tauri 版 Rust 后端——下载在原生层完成，
+  // 可带 Referer/浏览器 UA 绕过防盗链、无渲染进程 CORS 限制、有 SSRF 防护与大小限制），
+  // 失败时回退到渲染进程 fetch（例如主进程 SSRF 策略拒绝的本地/私网地址）。
   if (typeof payload === "string" && (payload.startsWith("http://") || payload.startsWith("https://"))) {
     try {
-      const resp = await fetch(payload);
-      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-      const contentType = resp.headers.get("content-type") || "";
-      const bytes = Array.from(new Uint8Array(await resp.arrayBuffer()));
-      const filename = new URL(payload).pathname.split("/").pop() || "file";
+      return await native.downloadRemoteResource(payload, noteId);
+    } catch (nativeError) {
+      try {
+        const resp = await fetch(payload);
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        const contentType = resp.headers.get("content-type") || "";
+        const bytes = Array.from(new Uint8Array(await resp.arrayBuffer()));
+        const filename = new URL(payload).pathname.split("/").pop() || "file";
 
-      // Non-image URL → base64 data URL
-      if (!contentType.startsWith("image/")) {
-        let binary = "";
-        for (let i = 0; i < bytes.length; i += 0x8000) {
-          binary += String.fromCharCode(...bytes.slice(i, i + 0x8000));
+        // Non-image URL → base64 data URL
+        if (!contentType.startsWith("image/")) {
+          let binary = "";
+          for (let i = 0; i < bytes.length; i += 0x8000) {
+            binary += String.fromCharCode(...bytes.slice(i, i + 0x8000));
+          }
+          const mime = contentType.split(";")[0] || "application/octet-stream";
+          const url = `data:${mime};base64,${btoa(binary)}`;
+          return { url, resourceRef: url, filename, mimeType: mime, size: bytes.length };
         }
-        const mime = contentType.split(";")[0] || "application/octet-stream";
-        const url = `data:${mime};base64,${btoa(binary)}`;
-        return { url, resourceRef: url, filename, mimeType: mime, size: bytes.length };
-      }
 
-      const input = normalizeImageInput(bytes, filename);
-      return uploadWithWebpConversion(input);
-    } catch (fetchError) {
-      return native.downloadRemoteResource(payload).catch((nativeError) => {
+        const input = normalizeImageInput(bytes, filename);
+        return uploadWithWebpConversion(input, noteId);
+      } catch (fetchError) {
         if (nativeError instanceof Error && nativeError.message.includes("浏览器模式")) throw nativeError;
         throw new Error(`资源下载失败：${String(nativeError || fetchError)}`);
-      });
+      }
     }
   }
 
@@ -126,7 +130,7 @@ function dataUrlInput(value: string): ResourceUploadInput {
   return normalizeImageInput(Array.from(binary, (character) => character.charCodeAt(0)), "image");
 }
 
-async function uploadWithWebpConversion(input: ResourceUploadInput): Promise<ResourceUploadOutput> {
+async function uploadWithWebpConversion(input: ResourceUploadInput, noteId: string): Promise<ResourceUploadOutput> {
   const format = sniffImageFormat(input.bytes);
   if (format && (format.mimeType === "image/webp" || format.mimeType === "image/avif")) {
     try {
@@ -136,13 +140,13 @@ async function uploadWithWebpConversion(input: ResourceUploadInput): Promise<Res
         bytes: pngBytes,
         filename: input.filename.replace(/\.[^./\\]+$/, ".png"),
       };
-      return native.uploadResource(pngInput);
+      return native.uploadResource(pngInput, noteId);
     } catch (error) {
       console.warn("Failed to convert image to PNG, uploading original:", error);
-      return native.uploadResource(input);
+      return native.uploadResource(input, noteId);
     }
   }
-  return native.uploadResource(input);
+  return native.uploadResource(input, noteId);
 }
 
 export function getUploadQueueStatus() {

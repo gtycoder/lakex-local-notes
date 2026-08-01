@@ -8,7 +8,7 @@ export default defineConfig({
     electron([
       {
         entry: "electron/main.ts",
-        vite: { build: { outDir: "dist-electron", rollupOptions: { external: ["better-sqlite3"] } } },
+        vite: { build: { outDir: "dist-electron", rollupOptions: { external: ["better-sqlite3", "sharp"] } } },
       },
     ]),
   ],

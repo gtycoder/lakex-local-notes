@@ -79,7 +79,7 @@ function ensureCustomCardIcons(config: Record<string, unknown>): void {
   document.body.prepend(svg);
 }
 
-export function createLakeDocument(element: HTMLElement, mode: "viewer" | "editor", onChange: () => void, tocEnabled: boolean, _noteId?: string): LakeEditorInstance {
+export function createLakeDocument(element: HTMLElement, mode: "viewer" | "editor", onChange: () => void, tocEnabled: boolean, noteId: string): LakeEditorInstance {
   const mount = document.createElement("div");
   mount.className = "lake-editor-mount ne-doc-major-editor";
   element.replaceChildren(mount);
@@ -92,11 +92,12 @@ export function createLakeDocument(element: HTMLElement, mode: "viewer" | "edito
     codeblock: { codemirrorURL: "/vendor/lakex-doc/codemirror.js" },
     math: { KaTexURL: "/vendor/lakex-doc/katex.min.js" },
     image: {
-      createUploadPromise: (request: unknown) => uploadLakeResource(request),
-      isCaptureImageURL: (url: string) => !url.startsWith("data:") && !url.startsWith("blob:"),
+      createUploadPromise: (request: unknown) => uploadLakeResource(request, noteId),
+      // 本地资源服务器 URL 必须排除，否则 Lake 每次 setDocument 都会重新下载并上传本地图片
+      isCaptureImageURL: (url: string) => !url.startsWith("data:") && !url.startsWith("blob:") && !url.startsWith("http://127.0.0.1:19876/"),
     },
     file: {
-      createUploadPromise: (request: unknown) => uploadLakeResource(request),
+      createUploadPromise: (request: unknown) => uploadLakeResource(request, noteId),
     },
     slash: {
       cardSelect: {

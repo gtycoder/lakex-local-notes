@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { AlertCircle } from "lucide-react";
 import { createLakeDocument, destroyLakeEditor, type LakeEditorInstance } from "./lakeRuntime";
-import { normalizeClipboardHtml } from "./clipboardHtml";
+import { normalizeClipboardHtml, upgradePastedHtml } from "./clipboardHtml";
 
 interface LakeEditorProps {
   noteId: string;
@@ -27,15 +27,23 @@ export function LakeEditor({ noteId, content, mode = "editor", tocEnabled, onCha
       if (!event.clipboardData || !selection || selection.isCollapsed || selection.rangeCount === 0) return;
       const range = selection.getRangeAt(0);
       if (!host.contains(range.commonAncestorContainer)) return;
-      
-      // Set clipboard data synchronously
       const plainText = selection.toString();
       const html = normalizeClipboardHtml(range.cloneContents(), document);
       event.clipboardData.setData("text/html", html);
       event.clipboardData.setData("text/plain", plainText);
       event.preventDefault();
+      event.stopImmediatePropagation();
     };
-    host.addEventListener("copy", copyRichSelection);
+    const pasteHandler = (event: ClipboardEvent) => {
+      const dt = event.clipboardData;
+      if (!dt) return;
+      const html = dt.getData("text/html");
+      if (!html) return;
+      const upgraded = upgradePastedHtml(html);
+      if (upgraded !== html) dt.setData("text/html", upgraded);
+    };
+    host.addEventListener("copy", copyRichSelection, true);
+    host.addEventListener("paste", pasteHandler, true);
 
     let editor: LakeEditorInstance | null = null;
     let setting = true;
@@ -51,7 +59,8 @@ export function LakeEditor({ noteId, content, mode = "editor", tocEnabled, onCha
       setError(reason instanceof Error ? reason.message : String(reason));
     }
     return () => {
-      host.removeEventListener("copy", copyRichSelection);
+      host.removeEventListener("copy", copyRichSelection, true);
+      host.removeEventListener("paste", pasteHandler, true);
       destroyLakeEditor(editor);
       editorRef.current = null;
       host.replaceChildren();
