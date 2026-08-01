@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ArrowLeft, Check, Files, ListTree, LoaderCircle, Pencil, Save, WifiOff } from "lucide-react";
+import { ArrowLeft, Check, Cloud, Files, ListTree, LoaderCircle, Pencil, Save, WifiOff } from "lucide-react";
 import { MobileLibrary } from "./components/MobileLibrary";
 import { ConfirmDelete, Sidebar } from "./components/Sidebar";
+import { SyncPanel } from "./components/SyncPanel";
 import { LakeEditor } from "./features/editor/LakeEditor";
 import { MultiTabEditor, type TabInfo } from "./features/editor/MultiTabEditor";
 import { isDesktop, native } from "./lib/native";
@@ -29,6 +30,7 @@ export function App() {
   const [saveState, setSaveState] = useState<SaveState>("idle");
   const [sync, setSync] = useState<SyncStatus>({ phase: "idle", message: "仅本地保存", lastSyncedAt: null, pendingChanges: 0 });
   const [confirmDelete, setConfirmDelete] = useState<TreeNode | null>(null);
+  const [syncPanelOpen, setSyncPanelOpen] = useState(false);
   const [pendingRenameId, setPendingRenameId] = useState<string | null>(null);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [mobilePage, setMobilePage] = useState<MobilePage>("library");
@@ -350,9 +352,10 @@ export function App() {
             />
           </section> : <section className="empty-workspace"><h2>开始写第一篇笔记</h2><button className="primary-button" onClick={() => void createNote()}>新建文档</button></section>
         )}
-        <footer className="statusbar"><span>{isDesktop() ? "Electron 本地仓库" : "浏览器演示仓库"}</span><span className={`save-label ${saveState}`}>{saveState === "saving" ? <LoaderCircle className="spin" size={12} /> : saveState === "dirty" ? <WifiOff size={12} /> : <Save size={12} />}{saveLabel(saveState)}</span><span>{sync.message}</span></footer>
+        <footer className="statusbar"><span>{isDesktop() ? "Electron 本地仓库" : "浏览器演示仓库"}</span><span className={`save-label ${saveState}`}>{saveState === "saving" ? <LoaderCircle className="spin" size={12} /> : saveState === "dirty" ? <WifiOff size={12} /> : <Save size={12} />}{saveLabel(saveState)}</span><button className="sync-button" onClick={() => setSyncPanelOpen(true)} title="S3 备份同步"><Cloud size={14} />{sync.message}</button></footer>
       </main>
       {confirmDelete && <ConfirmDelete node={confirmDelete} onConfirm={() => { const id = confirmDelete.id; setConfirmDelete(null); void deleteTreeNode(id); }} onCancel={() => setConfirmDelete(null)} />}
+      <SyncPanel open={syncPanelOpen} onClose={() => setSyncPanelOpen(false)} />
     </div>
   );
 }
