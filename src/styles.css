@@ -252,8 +252,11 @@ button { cursor: pointer; }
 .multi-tab-editor {
   display: flex;
   flex-direction: column;
-  min-height: 100%;
+  height: 100%;
+  min-height: 0;
   /* 虚拟渲染 + scrollNode：每个标签页独立滚动（见 .lake-editor-tab）。
+     必须用确定高度（height:100%），min-height 会让内容把容器撑高、
+     内部滚动失效（外层 .document-pane 已是 overflow:hidden 会裁剪）。
      overflow 保持 visible：Lake 的表格工具栏渲染在 .ne-inner-overlay-container
      （编辑器 DOM 的 absolute 子元素），overflow:hidden 会裁剪导致消失。 */
   overflow: visible;
