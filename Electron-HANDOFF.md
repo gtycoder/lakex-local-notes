@@ -74,6 +74,9 @@
 - 代码块粘贴：插入 300ms 内水合（2 行、CM6 完整）；历史卡壳卡片（之前粘贴的）重开后也被修复性水合
 - 首图仍 ~0.5-0.8s（无性能回退）；`npm test` 56 用例全绿
 
+**已收敛为正式实现**：清理 `[lake-perf]` console 探针、重试/轮询封顶、删除死代码；
+`VIRTUAL_RENDERING.enabled` 保持 true（实测收益稳定）。合回 audit 的决策见 §九 第 4 项。
+
 ### 本会话（后续）：Phase B 表格浮动工具栏 hover 修复（2026-08-02，实测验证）
 
 **根因**：Lake 卡片工具栏 overlay 的显隐监听挂在**卡片根节点**上（mouseenter → 显示 /
@@ -133,7 +136,7 @@ mouseleave → lazyCancel 300ms 后隐藏），工具栏渲染在卡片上方（
 | 阶段 B：S3 备份同步（七牛云） | ✅ 完成，真实同步验证通过 |
 | 打包发布：dmg | ✅ 完成并冒烟验证（未签名、默认图标） |
 | 阶段 C：代码审计 + 优化 + 单测 | 🚧 进行中（分支 `audit/code-optimization`；56 个 vitest 用例通过；本会话在其上加了性能埋点 + dev 脚本修复，commit `808b72d`~`db539db`） |
-| 大文档性能：virtualRendering 试验 | 🚧 **试验分支 `experiment/virtual-rendering`**：首图 3.5s→88ms、工具栏置顶、多标签滚动独立；TOC 三问题、代码块粘贴、**表格浮动工具栏 hover 全部已修复**；剩余：试验收敛合回 audit + max-view 后工具栏定位偏移 ~28px 次要边缘 |
+| 大文档性能：virtualRendering 试验 | 🚧 **试验分支 `experiment/virtual-rendering`**：首图 3.5s→88ms、工具栏置顶、多标签滚动独立；TOC 三问题、代码块粘贴、表格浮动工具栏 hover 全部已修复；**试验代码已收敛**（探针清理、重试/轮询封顶）；剩余：**合回 `audit/code-optimization` 决策** + max-view 后工具栏定位偏移 ~28px 次要边缘 |
 | 远程仓库 | ✅ 已推送 Gitee `master` 分支 |
 
 ### 2.2 仓库与分支
@@ -437,7 +440,7 @@ Path-style:  ✅ 勾选
 1. ~~Phase B（表格工具栏）~~ → **已修复**（hover 桥，见最新交接）；历史 `.ne-ui` sticky / `z-index:auto` 七件套 / overlay z-index 补丁保留未动（内部滚动布局下已不冲突，收敛时评估是否删除）
 2. ~~代码块粘贴不可见~~ → **已修复**（修复性水合，见最新交接）
 3. ~~TOC 高亮/点击定位~~ → **已修复**（自研跟随 + 校正，见最新交接）
-4. **试验收敛决策**：把 `VIRTUAL_RENDERING` 开关 + `refreshTocSidebar` 重试 + `setupTocScrollFollow`/`ensureCardsInViewHydrated` 收敛为正式实现（清理探针日志、收敛重试次数/轮询）；跑完 `VIRTUAL-RENDERING-TEST.md` 回归清单；再决策合回 `audit/code-optimization`（表格工具栏未解决前**不要上 main**）
+4. ~~试验收敛~~ → **已收敛**（本会话：清理 `[lake-perf]` console 探针噪音、`refreshTocSidebar` 重试收敛为 8 次/延时封顶 500ms、`setupTocScrollFollow` 轮询封顶 5s、删除死代码 `__disposeTocFollow`；保留 `window.__lakePerfReport` 排查工具与必要 error/warn）。回归清单关键项已跑通（TOC/表格工具栏/代码块粘贴/多标签/图片）。**剩余：决策合回 `audit/code-optimization`**（功能问题已全部解决，不再阻塞合回）
 5. **发布完善**：应用图标（icns）→ 代码签名 + 公证 → 重新打包；Gitee 默认分支切到 master
 6. **孤儿资源 UI**：SyncPanel/设置面板展示 orphan_assets 列表 + 清理按钮（IPC 已就绪）
 7. **自动化测试**：可补 Store 层 DB 用例（Node/Electron 双 ABI 方案）与 S3 配置校验

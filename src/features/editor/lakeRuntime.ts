@@ -193,18 +193,17 @@ if (typeof window !== "undefined") {
 }
 
 /**
- * 虚拟渲染试验（experiment/virtual-rendering 分支）
- * =================================================
- * 目的：验证 Lake 1.6.0+ 的 virtualRendering 能否解决「大文档首屏图片
- * hydration 被拖后 ~3.5s」的实测问题（107 个 codeblock 卡片时）。
+ * 虚拟渲染（正式实现，原 experiment/virtual-rendering 分支收敛）
+ * ==============================================================
+ * 背景：Lake 1.6.0+ 的 virtualRendering 解决「大文档首屏图片 hydration 被拖后
+ * ~3.5s」的实测问题（107 个 codeblock 卡片时，实测首图 3.5s→88ms）。
  *
  * 关键前提（来自 lakex-editor-react-component README + dist 反编译）：
- *  - scrollNode 必须指向真实滚动容器：本项目滚动容器是 .document-pane
+ *  - scrollNode 必须指向真实滚动容器：本项目经高度链修复后是 .ne-editor-wrap
  *    （body overflow:hidden，Lake 默认回退 document.scrollingElement/body 会拿错，
  *     导致虚拟渲染视口测量错误、TOC 高亮/跳转错位）
- *  - cardLazyInit = allowCardLazyInit 的配置键：视口外卡片懒初始化
- *
- * 回归清单见 VIRTUAL-RENDERING-TEST.md。试验结束合回主干前把 enabled 置 false 或删除本块。
+ *  - cardLazyInit = allowCardLazyInit 的配置键：视口外卡片懒初始化（配合
+ *    ensureCardsInViewHydrated 修复粘贴卡片卡壳）
  */
 const VIRTUAL_RENDERING = {
   enabled: true,
@@ -316,27 +315,6 @@ export function createLakeDocument(
   lakeMeasure("lake:create:openEditor", "lake:create:start", "lake:create:end");
   if (mode === "editor") {
     editor.on("contentchange", onChange);
-    // TOC 排错探针：内核 tocChange + engine 生命周期事件序列
-    try {
-      const kernelAny = (editor as any).kernel;
-      const engineAny = (editor as any).engine;
-      const tag = `[lake-perf:${noteId.slice(0, 8)}]`;
-      kernelAny?.onPluginEvent?.("tocChange", (data: any) => {
-        console.log(`${tag} kernel tocChange @${Math.round(performance.now())}ms, 条目=${Array.isArray(data) ? data.length : data}`);
-      });
-      for (const evt of ["document.destroy", "document.create"]) {
-        engineAny?.on?.(evt, () => console.log(`${tag} engine ${evt} @${Math.round(performance.now())}ms`));
-      }
-      let headingChanges = 0;
-      engineAny?.on?.("nodechange", (e: any) => {
-        const name = e?.node?.nodeName;
-        if (name === "H1" || name === "H2" || name === "H3" || name === "H4" || name === "H5") {
-          headingChanges++;
-          console.log(`${tag} nodechange heading(${name}) #${headingChanges} @${Math.round(performance.now())}ms`);
-        }
-      });
-      engineAny?.on?.("aftercontentchange", () => console.log(`${tag} engine aftercontentchange @${Math.round(performance.now())}ms`));
-    } catch { /* 忽略 */ }
     // 虚拟渲染下 Lake 原生 TOC watcher 的二分探测失效（视口外标题无 DOM），
     // 自研滚动跟随高亮 + 点击精确滚动；另有表格浮动工具栏 hover 桥。
     // 清理函数挂在 editor 上由 destroyLakeEditor 调。
@@ -364,7 +342,6 @@ export function createLakeDocument(
           nodeLength: d.m4,
           total: (d.m1 || 0) + (d.m2 || 0),
         };
-        console.log("[lake-perf] docInitPerf", lakeLastDocInitPerf);
       }
     });
   } catch { /* 非编辑器环境忽略 */ }
@@ -427,14 +404,21 @@ function setupCardToolbarHoverBridge(host: HTMLElement): () => void {
     }
   };
 
-  // 离开工具栏上下文（含移回卡片/移到外部）：补发合成 mouseleave 触发正常隐藏
+  // 离开工具栏上下文（含移回卡片/移到外部）：补发合成 mouseleave 触发正常隐藏。
+  // 注意：Lake 的卡片工具栏监听绑在卡片的 _rootNode 上——表格的 _rootNode 是
+  // ne-table-wrap（ne-table-hole 的子孙，而非 hole 本身），所以对跟踪到的卡片
+  // 及其 ne-table-wrap 子孙都补发，保证命中监听元素。
   const onMouseOut = (event: MouseEvent): void => {
     const target = event.target as Element | null;
     if (!target || !isToolbarContext(target)) return;
     const related = event.relatedTarget as Element | null;
     if (isToolbarContext(related)) return; // 工具栏内部移动（如进下拉菜单）
     if (lastCard?.isConnected) {
-      lastCard.dispatchEvent(new MouseEvent("mouseleave", { bubbles: false, cancelable: true, view: window }));
+      const fire = (el: Element): void => {
+        el.dispatchEvent(new MouseEvent("mouseleave", { bubbles: false, cancelable: true, view: window }));
+      };
+      fire(lastCard);
+      lastCard.querySelectorAll?.("ne-table-wrap").forEach(fire);
     }
     lastCard = null;
   };
@@ -586,8 +570,15 @@ function setupTocScrollFollow(
   };
 
   const tryBind = (): void => {
-    if (bind()) window.clearInterval(pollTimer);
+    if (bind()) {
+      window.clearInterval(pollTimer);
+      return;
+    }
+    // 轮询收敛：最多 20 次（250ms × 20 ≈ 5s）；后续由 tocChange 钩子重绑
+    pollCount += 1;
+    if (pollCount >= 20) window.clearInterval(pollTimer);
   };
+  let pollCount = 0;
 
   // 侧边栏创建时机晚于编辑器 ready（ready 早于 tocChange）；轮询 + tocChange 后重绑
   window.setTimeout(tryBind, 0);
@@ -607,10 +598,11 @@ function setupTocScrollFollow(
   };
 }
 
-/** 试验修复：Lake 编辑器 TOC 侧边栏创建时用空 toc 渲染（jI.render(GY, {toc: []})），
+/** 修复：Lake 编辑器 TOC 侧边栏创建时用空 toc 渲染（jI.render(GY, {toc: []})），
  * 若 ready 在 tocChange 之前触发，侧边栏永远不会被填充（打开文档时大纲为 0，
  * 编辑触发新 tocChange 后才出现）。setDocument 后调用一次，把最新 toc 数据
- * 同步进侧边栏，弥补这个加载时机缺口。 */
+ * 同步进侧边栏，弥补这个加载时机缺口。
+ * 重试收敛：最多 8 次，延时 200ms 起、封顶 500ms（侧边栏通常 ~600ms 内出现）。 */
 export function refreshTocSidebar(editor: LakeEditorInstance | null): void {
   // toc 数据权威来源是内核的 docExtraContent（TOC 管理器 setDocExtraContent({toc})）。
   // 通过内核官方事件总线重放 tocChange（与编辑触发路径一致），并重试直到条目出现。
@@ -620,18 +612,16 @@ export function refreshTocSidebar(editor: LakeEditorInstance | null): void {
       const anyEditor = editor as any;
       const kernel = anyEditor?.kernel;
       const tocData = kernel?.getDocExtraContent?.()?.toc;
-      const itemsBefore = document.querySelectorAll(".ne-toc-sidebar .ne-toc-item").length;
       if (kernel?.emitPluginEvent && Array.isArray(tocData) && tocData.length > 0) {
         kernel.emitPluginEvent("tocChange", tocData);
       }
       const itemsAfter = document.querySelectorAll(".ne-toc-sidebar .ne-toc-item").length;
-      console.log(`[lake-perf] refreshTocSidebar #${attempt}: data=${Array.isArray(tocData) ? tocData.length : tocData}, items ${itemsBefore}->${itemsAfter}`);
-      if (itemsAfter === 0 && attempt < 20) {
+      if (itemsAfter === 0 && attempt < 8) {
         attempt += 1;
-        setTimeout(tryOnce, 150 * attempt);
+        setTimeout(tryOnce, Math.min(200 * attempt, 500));
       }
     } catch (error) {
-      console.warn("[lake-perf] refreshTocSidebar failed", error);
+      console.warn("refreshTocSidebar failed", error);
     }
   };
   setTimeout(tryOnce, 0);
@@ -640,7 +630,6 @@ export function refreshTocSidebar(editor: LakeEditorInstance | null): void {
 export function destroyLakeEditor(editor: LakeEditorInstance | null): void {
   try {
     (editor as any)?.__disposeExtras?.();
-    (editor as any)?.__disposeTocFollow?.();
   } catch (error) {
     console.warn("Lake editor extras cleanup failed", error);
   }

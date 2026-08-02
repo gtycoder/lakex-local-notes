@@ -160,7 +160,12 @@ cardLazyInit: true,   // = allowCardLazyInit 的配置键：视口外卡片懒�
 - [ ] 多标签下隐藏标签的 TOC 高亮状态（切回时由 scroll/update 重算，需用户目测确认无感）
 - [ ] 表格 maximize（max-view）进出后工具栏定位偏移 ~28px（若用户介意再处理）
 
-## 备注
+## 备注（已收敛）
 
-- `setupTocScrollFollow` / `ensureCardsInViewHydrated` 是试验修复（依赖 Lake 内部 `_neRef._virtualNode`），
-  合并回主干前建议收敛：清理探针日志、收敛 `refreshTocSidebar` 重试与轮询次数、评估 `_neRef` 依赖的版本风险。
+- 试验代码已收敛为正式实现：`[lake-perf]` console 探针已清理（保留 `window.__lakePerfReport` 排查工具）、
+  `refreshTocSidebar` 重试收敛为 8 次/延时封顶 500ms、`setupTocScrollFollow` 轮询封顶 5s、
+  删除死代码 `__disposeTocFollow`；`VIRTUAL_RENDERING.enabled` 保持 true。
+- `setupTocScrollFollow` / `ensureCardsInViewHydrated` / `setupCardToolbarHoverBridge` 依赖 Lake 内部
+  `_neRef._virtualNode` 与 `ne-table-wrap`（表格卡片 `_rootNode`），合回前评估版本风险。
+- Phase B 桥的补发目标必须是卡片的 `_rootNode`（表格为 `ne-table-wrap` 而非 `ne-table-hole`），
+  否则离开工具栏路径不触发隐藏（实测踩坑，已修）。
