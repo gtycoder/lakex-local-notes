@@ -29,7 +29,7 @@
 
 ## ★ 最新交接（2026-08-02 会话）：大文档性能定位 + virtualRendering 试验
 
-> **本段写给零上下文的新会话**：本次会话解决了两件事——(A) 用实测数据定位了「大文档打开时图片裂 3-5 秒」的根因；(B) 在新分支 `experiment/virtual-rendering` 上开启 Lake 虚拟渲染并验证了大部分收益。**当前工作分支是 `experiment/virtual-rendering`，不是 main 也不是 audit。** 先读完本段再读 §八/九/十。
+> **本段写给零上下文的新会话**：本次会话共解决四件事——(A) 用实测数据定位了「大文档打开时图片裂 3-5 秒」的根因；(B) 在新分支 `experiment/virtual-rendering` 上开启 Lake 虚拟渲染并验证了大部分收益；(C) **修复了大纲（TOC）三问题：滚出视口消失 / 无高亮不跟随 / 点击定位不准，以及代码块粘贴后不可见**；(D) **Phase B 表格浮动工具栏 hover 消失**，并将试验代码收敛为正式实现。**当前工作分支是 `audit/code-optimization`（已合回，`experiment/virtual-rendering` 与之同指向 `4a76c76`），不是 main。** 先读完本段再读 §八/九/十。
 
 ### 任务目标（本会话）
 1. 用户报安装版 bug：关窗不退出后打开大文档，图片默认"裂的"、3-4s 后才开始加载
@@ -142,7 +142,7 @@ mouseleave → lazyCancel 300ms 后隐藏），工具栏渲染在卡片上方（
 ### 2.2 仓库与分支
 
 **本地仓库**：`/Users/admin/file/local-lake/lake-notes-electron`（独立 git 仓库）
-**当前分支**：`experiment/virtual-rendering`（本会话试验分支；**接下来应继续在此分支或按 §九 决策**）
+**当前分支**：`audit/code-optimization`（虚拟渲染试验已合回，与 `experiment/virtual-rendering` 同指向 `4a76c76`）
 **远程**（已配置 origin）：
 ```
 origin  https://gitee.com/gtycoder/local-lake.git
