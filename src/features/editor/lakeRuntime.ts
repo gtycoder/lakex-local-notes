@@ -466,6 +466,20 @@ function setupTocScrollFollow(
     sidebar.querySelectorAll(".ne-toc-item").forEach((el) => {
       el.classList.toggle("ne-toc-selected", (el as HTMLElement).dataset.id === id);
     });
+    // 长大纲跟随：把选中项滚到列表可视区（复刻 Lake GY._makeVisible 的居中逻辑）。
+    // Lake 原逻辑挂在自身 watcher 的 _reset 上，虚拟渲染下 watcher 失效永不触发，
+    // 自研高亮需要自己补这一段。
+    if (id) {
+      const scroller = sidebar.querySelector(".ne-toc-view-inner") as HTMLElement | null;
+      const item = scroller?.querySelector(`.ne-toc-item[data-id="${id}"]`) as HTMLElement | null;
+      if (scroller && item) {
+        const vp = scroller.getBoundingClientRect();
+        const r = item.getBoundingClientRect();
+        if (r.top <= vp.top + 10 || r.bottom >= vp.bottom - 10) {
+          scroller.scrollTop += r.top - (vp.top + vp.height / 2);
+        }
+      }
+    }
   };
 
   const update = (): void => {

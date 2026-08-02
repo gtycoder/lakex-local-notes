@@ -431,7 +431,7 @@ Path-style:  ✅ 勾选
 7. ~~孤儿资源无 UI~~ → **已做**：同步面板新增「未引用资源（孤儿）」区块（列表 + 总量 + 清理按钮，显示释放字节；IPC list/clean 已有，UI 补齐），实测端到端通过
 8. **npm 私有镜像不可达**：装新依赖必须显式用 npmmirror registry
 9. **远程仓库默认分支仍是 main（tauri）**：Gitee 后台可把默认分支切到 master
-10. ~~TOC 滚动高亮不跟随、点击定位不准~~ → **已修复**（本会话：自研 `setupTocScrollFollow` 滚动跟随 + 点击精确校正 + scrollNode 指向 `.ne-editor-wrap`；打开文档大纲约 600ms 出现由 `refreshTocSidebar` 补丁保留）
+10. ~~TOC 滚动高亮不跟随、点击定位不准~~ → **已修复**（本会话：自研 `setupTocScrollFollow` 滚动跟随 + 点击精确校正 + scrollNode 指向 `.ne-editor-wrap`；打开文档大纲约 600ms 出现由 `refreshTocSidebar` 补丁保留）。**长大纲列表跟随**也已修：`apply()` 复刻 Lake `GY._makeVisible` 居中滚动（原逻辑挂在其 watcher 的 `_reset` 上，虚拟渲染下 watcher 失效永不触发）
 11. ~~表格浮动工具栏 hover 消失~~ → **已修复**（Phase B：`setupCardToolbarHoverBridge` 捕获拦截 + 补发合成 mouseleave；见最新交接）← 遗留次要边缘：max-view 进出后工具栏定位偏移 ~28px（重开自愈）
 12. ~~代码块粘贴后默认不可见~~ → **已修复**（本会话：`ensureCardsInViewHydrated` 修复性水合，cardLazyInit 保留；根因是 Lake 可见性观察器作用在 hole 节点、`hole.$appear` 不传播到卡片 UI）
 13. ~~TOC 侧边栏异常尺寸~~ → **已随高度链修复自愈**（TOC 恒为视口高）
