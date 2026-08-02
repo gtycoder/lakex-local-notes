@@ -313,7 +313,7 @@ Path-style:  ✅ 勾选
 2. **默认 Electron 图标**：尚无应用图标
 3. **打包版与开发版共用 userData**（`lake-notes-electron`）：当前方便测试；正式发布需决策是否用 productName 隔离（避免用户数据目录名是 `lake-notes-electron`）
 4. **大文档性能**：已通过「图片文件化不进 V8 堆」+ `--max-old-space-size=8192` 缓解，但 `virtualRendering` 仍不可用（会破坏 TOC，见 §10 教训）
-5. **渲染包超大**：单 chunk 10MB（mermaid/d3/编辑器全部打进主 bundle），有代码分割优化空间
+5. **渲染包超大（已部分优化）**：画板已拆独立 chunk（drawnix 4.2MB），主 chunk 仍约 9.4MB（大头是 Lake 编辑器本体 + slate + react）；真正收益需编辑器懒加载（改异步创建，属 Lake 阶段，未动）
 6. **自动化测试刚起步**：已新增 56 个 vitest 用例（ssrf / sync 引擎 / clipboardHtml），`npm test` 全绿；Store 层 DB 用例待解决 ABI 问题（better-sqlite3 为 Electron ABI，纯 Node vitest 无法加载，sync 测试用 FakeStore + mock S3 规避）
 7. **孤儿资源无 UI**：IPC 已具备（list/clean），设置面板未做展示与清理按钮
 8. **npm 私有镜像不可达**：装新依赖必须显式用 npmmirror registry
