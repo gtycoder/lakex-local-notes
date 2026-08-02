@@ -172,6 +172,26 @@ if (typeof window !== "undefined") {
   };
 }
 
+/**
+ * 虚拟渲染试验（experiment/virtual-rendering 分支）
+ * =================================================
+ * 目的：验证 Lake 1.6.0+ 的 virtualRendering 能否解决「大文档首屏图片
+ * hydration 被拖后 ~3.5s」的实测问题（107 个 codeblock 卡片时）。
+ *
+ * 关键前提（来自 lakex-editor-react-component README + dist 反编译）：
+ *  - scrollNode 必须指向真实滚动容器：本项目滚动容器是 .document-pane
+ *    （body overflow:hidden，Lake 默认回退 document.scrollingElement/body 会拿错，
+ *     导致虚拟渲染视口测量错误、TOC 高亮/跳转错位）
+ *  - cardLazyInit = allowCardLazyInit 的配置键：视口外卡片懒初始化
+ *
+ * 回归清单见 VIRTUAL-RENDERING-TEST.md。试验结束合回主干前把 enabled 置 false 或删除本块。
+ */
+const VIRTUAL_RENDERING = {
+  enabled: true,
+  scrollContainerSelector: ".document-pane",
+  cardLazyInit: true,
+};
+
 export function createLakeDocument(element: HTMLElement, mode: "viewer" | "editor", onChange: () => void, tocEnabled: boolean, noteId: string): LakeEditorInstance {
   const mount = document.createElement("div");
   mount.className = "lake-editor-mount ne-doc-major-editor";
@@ -216,6 +236,16 @@ export function createLakeDocument(element: HTMLElement, mode: "viewer" | "edito
       },
     },
     customCard: { cards: [BoardCard] },
+    ...(VIRTUAL_RENDERING.enabled
+      ? {
+          virtualRendering: true,
+          scrollNode: () =>
+            (document.querySelector(VIRTUAL_RENDERING.scrollContainerSelector) as HTMLElement | null)
+            || document.scrollingElement
+            || document.body,
+          cardLazyInit: VIRTUAL_RENDERING.cardLazyInit,
+        }
+      : {}),
   };
 
   const mergedOptions = deepMerge(
