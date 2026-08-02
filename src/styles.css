@@ -134,6 +134,19 @@ button { cursor: pointer; }
 .sync-last-counts { color: #256246; font-weight: 600; }
 .sync-last-manifest { margin-left: auto; color: #98a0aa; font-weight: 400; font-variant-numeric: tabular-nums; }
 .connection-message { display: flex; align-items: center; gap: 7px; margin: 0 20px; padding: 9px 10px; border-radius: 5px; color: #616974; background: #f3f4f6; font-size: 11px; }.connection-message.ok { color: #256246; background: #eaf5ef; }.connection-message.error { color: #a13d37; background: #fff0ee; }
+
+/* ===== 孤儿资源（未引用附件）清理 ===== */
+.orphan-section { margin: 0 20px 14px; padding: 10px 12px; border: 1px solid #e5e8eb; border-radius: 6px; background: #fafbfc; font-size: 11px; }
+.orphan-header { display: flex; align-items: center; gap: 8px; color: #4a525c; font-weight: 600; }
+.orphan-header svg { flex-shrink: 0; }
+.orphan-summary { margin-left: auto; color: #8a919b; font-weight: 400; font-variant-numeric: tabular-nums; }
+.orphan-clean { height: 26px; margin-left: 8px; padding: 0 10px; font-size: 11px; }
+.orphan-list { max-height: 150px; margin: 8px 0 0; padding: 0; overflow-y: auto; list-style: none; }
+.orphan-list li { display: flex; align-items: center; gap: 10px; padding: 4px 2px; border-top: 1px solid #eef0f2; color: #545d68; }
+.orphan-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 210px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+.orphan-meta { margin-left: auto; flex-shrink: 0; color: #98a0aa; font-variant-numeric: tabular-nums; }
+.orphan-more { color: #8a919b; font-style: italic; }
+.orphan-message { margin-top: 8px; color: #256246; }
 .sync-panel footer { display: flex; justify-content: flex-end; gap: 9px; padding: 16px 20px; border-top: 1px solid #e8eaed; }
 .spin { animation: spin 1s linear infinite; } @keyframes spin { to { transform: rotate(360deg); } }
 .mobile-only { display: none; }.mobile-scrim { display: none; }

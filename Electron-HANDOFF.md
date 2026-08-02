@@ -428,7 +428,7 @@ Path-style:  ✅ 勾选
 4. **大文档性能**：已通过「图片文件化不进 V8 堆」+ `--max-old-space-size=8192` 缓解；`virtualRendering` 在 `experiment/virtual-rendering` 分支**试验可用**（首图 3.5s→88ms），但有遗留问题（见下 10-13）
 5. **渲染包超大（已部分优化）**：画板已拆独立 chunk（drawnix 4.2MB），主 chunk 仍约 9.4MB（大头是 Lake 编辑器本体 + slate + react）；真正收益需编辑器懒加载（改异步创建，属 Lake 阶段，未动）
 6. **自动化测试**：**82 个 vitest 用例全绿**（ssrf / sync 引擎 / clipboardHtml / **Store 层 DB 22 例** / **S3 配置校验 4 例**）。Store 层 DB 用例用**双 ABI 方案**落地：`test-node-abi/` 单独装 Node ABI 的 better-sqlite3（`scripts/setup-test-abi.sh` 一键复现），vitest `resolve.alias` 指过去；`vi.mock("electron")` 提供 safeStorage/net 替身；Store 的 DB/树/孤儿/S3 密钥加密/同步状态/导入全部覆盖
-7. **孤儿资源无 UI**：IPC 已具备（list/clean），设置面板未做展示与清理按钮
+7. ~~孤儿资源无 UI~~ → **已做**：同步面板新增「未引用资源（孤儿）」区块（列表 + 总量 + 清理按钮，显示释放字节；IPC list/clean 已有，UI 补齐），实测端到端通过
 8. **npm 私有镜像不可达**：装新依赖必须显式用 npmmirror registry
 9. **远程仓库默认分支仍是 main（tauri）**：Gitee 后台可把默认分支切到 master
 10. ~~TOC 滚动高亮不跟随、点击定位不准~~ → **已修复**（本会话：自研 `setupTocScrollFollow` 滚动跟随 + 点击精确校正 + scrollNode 指向 `.ne-editor-wrap`；打开文档大纲约 600ms 出现由 `refreshTocSidebar` 补丁保留）
@@ -446,7 +446,7 @@ Path-style:  ✅ 勾选
 3. ~~TOC 高亮/点击定位~~ → **已修复**（自研跟随 + 校正，见最新交接）
 4. ~~试验收敛~~ → **已收敛**（本会话：清理 `[lake-perf]` console 探针噪音、`refreshTocSidebar` 重试收敛为 8 次/延时封顶 500ms、`setupTocScrollFollow` 轮询封顶 5s、删除死代码 `__disposeTocFollow`；保留 `window.__lakePerfReport` 排查工具与必要 error/warn）。回归清单关键项已跑通（TOC/表格工具栏/代码块粘贴/多标签/图片）。**剩余：决策合回 `audit/code-optimization`**（功能问题已全部解决，不再阻塞合回）
 5. **发布完善**：应用图标（icns）→ 代码签名 + 公证 → 重新打包；Gitee 默认分支切到 master
-6. **孤儿资源 UI**：SyncPanel/设置面板展示 orphan_assets 列表 + 清理按钮（IPC 已就绪）
+6. ~~孤儿资源 UI~~ → **已完成**（同步面板孤儿区块，见 §八 7）
 7. ~~自动化测试~~ → **已补**：Store 层 DB 用例（双 ABI，`scripts/setup-test-abi.sh`）+ S3 配置校验，`npm test` 82 全绿
 8. **安卓端同步**：复用同步协议（manifests/objects/assets 布局已是跨端设计）
 9. **userData 隔离决策**（若正式分发）

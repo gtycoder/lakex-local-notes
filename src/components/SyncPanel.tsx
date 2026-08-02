@@ -1,7 +1,7 @@
-import { Check, Cloud, Eye, EyeOff, History, LoaderCircle, X } from "lucide-react";
+import { Archive, Check, Cloud, Eye, EyeOff, History, LoaderCircle, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { native } from "../lib/native";
-import type { S3Settings, SyncProgress, SyncStatusInfo } from "../lib/types";
+import type { OrphanAsset, S3Settings, SyncProgress, SyncStatusInfo } from "../lib/types";
 
 const defaults: S3Settings = { endpoint: "", region: "cn-east-1", bucket: "", prefix: "lake-notes", accessKeyId: "", secretAccessKey: "", forcePathStyle: false };
 
@@ -12,6 +12,12 @@ const PHASE_LABEL: Record<SyncProgress["phase"], string> = {
   manifest: "写入清单",
   done: "同步完成",
 };
+
+function formatBytes(n: number): string {
+  if (n >= 1048576) return `${(n / 1048576).toFixed(1)} MB`;
+  if (n >= 1024) return `${(n / 1024).toFixed(1)} KB`;
+  return `${n} B`;
+}
 
 function formatTime(iso: string | null): string {
   if (!iso) return "从未";
@@ -28,11 +34,15 @@ export function SyncPanel({ open, onClose }: { open: boolean; onClose: () => voi
   const [message, setMessage] = useState("");
   const [progress, setProgress] = useState<SyncProgress | null>(null);
   const [lastSync, setLastSync] = useState<SyncStatusInfo | null>(null);
+  const [orphans, setOrphans] = useState<OrphanAsset[]>([]);
+  const [orphanBusy, setOrphanBusy] = useState(false);
+  const [orphanMessage, setOrphanMessage] = useState("");
 
   useEffect(() => {
     if (!open) return;
     void native.getS3Settings().then((value) => value && setSettings(value)).catch(() => undefined);
     void native.getSyncStatus().then(setLastSync).catch(() => undefined);
+    void native.listOrphanAssets().then(setOrphans).catch(() => undefined);
   }, [open]);
 
   if (!open) return null;
@@ -76,6 +86,22 @@ export function SyncPanel({ open, onClose }: { open: boolean; onClose: () => voi
     }
   };
 
+  const cleanOrphans = async () => {
+    setOrphanBusy(true);
+    setOrphanMessage("");
+    try {
+      const result = await native.cleanOrphanAssets();
+      setOrphanMessage(`已清理 ${result.count} 个未引用资源，释放 ${formatBytes(result.freedBytes)}`);
+      setOrphans(await native.listOrphanAssets());
+    } catch (error) {
+      setOrphanMessage(String(error));
+    } finally {
+      setOrphanBusy(false);
+    }
+  };
+
+  const orphanTotalBytes = orphans.reduce((sum, o) => sum + o.size, 0);
+
   const progressPercent = progress && progress.current != null && progress.total
     ? Math.min(100, Math.round((progress.current / progress.total) * 100))
     : null;
@@ -96,6 +122,28 @@ export function SyncPanel({ open, onClose }: { open: boolean; onClose: () => voi
           <label className="wide">Access Key<input value={settings.accessKeyId} onChange={(e) => set("accessKeyId", e.target.value)} /></label>
           <label className="wide">Secret Key<span className="secret-field"><input type={showSecret ? "text" : "password"} value={settings.secretAccessKey} onChange={(e) => set("secretAccessKey", e.target.value)} /><button className="icon-button" onClick={() => setShowSecret(!showSecret)} title={showSecret ? "隐藏" : "显示"}>{showSecret ? <EyeOff size={17} /> : <Eye size={17} />}</button></span></label>
           <label className="checkbox wide"><input type="checkbox" checked={settings.forcePathStyle} onChange={(e) => set("forcePathStyle", e.target.checked)} /><span>使用 Path-style URL</span></label>
+        </div>
+
+        <div className="orphan-section">
+          <div className="orphan-header">
+            <span><Archive size={14} />未引用资源（孤儿）</span>
+            <span className="orphan-summary">{orphans.length > 0 ? `${orphans.length} 个 · ${formatBytes(orphanTotalBytes)}` : "无"}</span>
+            <button className="secondary-button orphan-clean" onClick={cleanOrphans} disabled={orphanBusy || orphans.length === 0}>
+              {orphanBusy ? "清理中..." : "清理"}
+            </button>
+          </div>
+          {orphans.length > 0 && (
+            <ul className="orphan-list">
+              {orphans.slice(0, 20).map((o) => (
+                <li key={o.id} title={`${o.filePath}（笔记 ${o.noteId}）`}>
+                  <span className="orphan-name">{o.filename}</span>
+                  <span className="orphan-meta">{formatBytes(o.size)} · {o.noteId.slice(0, 8)}</span>
+                </li>
+              ))}
+              {orphans.length > 20 && <li className="orphan-more">…共 {orphans.length} 个，清理前请确认无引用</li>}
+            </ul>
+          )}
+          {orphanMessage && <div className="orphan-message">{orphanMessage}</div>}
         </div>
 
         {progress && (
