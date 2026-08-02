@@ -97,6 +97,24 @@ function lakeMeasure(name: string, startMark: string, endMark: string): void {
   } catch { /* 忽略 */ }
 }
 
+/** 长任务（Long Tasks）观测：量化 setDocument 之后主线程的阻塞 */
+const lakeLongTasks: Array<{ start: number; duration: number }> = [];
+let lakeLongTaskObserver: PerformanceObserver | null = null;
+
+function ensureLakeLongTaskObserver(): void {
+  if (lakeLongTaskObserver || typeof PerformanceObserver === "undefined") return;
+  try {
+    lakeLongTaskObserver = new PerformanceObserver((list) => {
+      for (const entry of list.getEntries()) {
+        lakeLongTasks.push({ start: Math.round(entry.startTime), duration: Math.round(entry.duration) });
+      }
+    });
+    lakeLongTaskObserver.observe({ entryTypes: ["longtask"] });
+  } catch { /* 环境不支持则忽略 */ }
+}
+
+let lakeLastDocInitPerf: Record<string, unknown> | null = null;
+
 if (typeof window !== "undefined") {
   window.__lakePerfReport = () => {
     try {
@@ -113,6 +131,24 @@ if (typeof window !== "undefined") {
     } catch (error) {
       console.warn("__lakePerfReport failed", error);
     }
+    try {
+      if (lakeLongTasks.length) {
+        const total = lakeLongTasks.reduce((sum, t) => sum + t.duration, 0);
+        const last = lakeLongTasks[lakeLongTasks.length - 1];
+        console.group(`长任务（共 ${lakeLongTasks.length} 个，合计 ${total}ms，最后结束于 ${last ? last.start + last.duration + "ms" : "?"}）`);
+        console.table([...lakeLongTasks].sort((a, b) => a.start - b.start).map((t) => ({ start: `${t.start}ms`, duration: `${t.duration}ms` })));
+        console.groupEnd();
+      } else {
+        console.warn("未观测到长任务（可能尚未打开文档，或未在编辑器创建前启用观测）");
+      }
+      if (lakeLastDocInitPerf) {
+        console.group("Lake docInitPerf（parseTime/renderTime/nodeLength）");
+        console.table([lakeLastDocInitPerf]);
+        console.groupEnd();
+      } else {
+        console.log("尚未收到 Lake docInitPerf（若编辑器已打开，说明 monitorLog 订阅未生效）");
+      }
+    } catch { /* 忽略 */ }
     try {
       // 本地图片资源请求的实际发起时间（Resource Timing，回顾式，无需提前监听）
       const images = performance
@@ -190,6 +226,7 @@ export function createLakeDocument(element: HTMLElement, mode: "viewer" | "edito
   prepareCustomCards(mergedOptions);
   ensureCustomCardIcons(mergedOptions);
 
+  ensureLakeLongTaskObserver();
   lakeMark("lake:create:start");
   const editor = mode === "viewer"
     ? (Doc as any).createOpenViewer(mount, mergedOptions)
@@ -204,12 +241,13 @@ export function createLakeDocument(element: HTMLElement, mode: "viewer" | "edito
       const d = payload?.data;
       if (d && typeof d.m1 === "number" && typeof d.m2 === "number") {
         lakeMark("lake:render:completed");
-        console.debug("[lake-perf] docInitPerf", {
+        lakeLastDocInitPerf = {
           parseTime: d.m1,
           renderTime: d.m2,
           nodeLength: d.m4,
           total: (d.m1 || 0) + (d.m2 || 0),
-        });
+        };
+        console.log("[lake-perf] docInitPerf", lakeLastDocInitPerf);
       }
     });
   } catch { /* 非编辑器环境忽略 */ }
