@@ -97,7 +97,7 @@ function lakeMeasure(name: string, startMark: string, endMark: string): void {
   } catch { /* 忽略 */ }
 }
 
-if (typeof window !== "undefined" && !window.__lakePerfReport) {
+if (typeof window !== "undefined") {
   window.__lakePerfReport = () => {
     try {
       const measures = performance
@@ -113,6 +113,26 @@ if (typeof window !== "undefined" && !window.__lakePerfReport) {
     } catch (error) {
       console.warn("__lakePerfReport failed", error);
     }
+    try {
+      // 本地图片资源请求的实际发起时间（Resource Timing，回顾式，无需提前监听）
+      const images = performance
+        .getEntriesByType("resource")
+        .filter((e) => e.name.includes("127.0.0.1:19876/"))
+        .map((e) => ({
+          name: e.name.replace(/^http:\/\/127\.0\.0\.1:19876\//, "").slice(0, 64),
+          start: `${Math.round(e.startTime)}ms`,
+          duration: `${Math.round(e.duration)}ms`,
+        }))
+        .sort((a, b) => parseFloat(a.start) - parseFloat(b.start));
+      if (images.length) {
+        console.group("本地图片请求（按发起时间排序）");
+        console.table(images);
+        console.log(`首图发起: ${images[0].start}，共 ${images.length} 个请求，最后一个: ${images[images.length - 1].start}`);
+        console.groupEnd();
+      } else {
+        console.warn("未发现本地图片请求（文档可能没有图片，或尚未打开）");
+      }
+    } catch { /* 忽略 */ }
   };
 }
 
