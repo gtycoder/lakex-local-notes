@@ -3,7 +3,7 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { syncNow } from "./sync.js";
+import { syncNow, testConnection } from "./sync.js";
 import type { Store } from "./store.js";
 
 // ===== 内存 S3 mock（ObjectStore 依赖的 @aws-sdk/client-s3 命令子集） =====
@@ -280,5 +280,38 @@ describe("syncNow 增量同步", () => {
   it("未配置 S3 时直接报错", async () => {
     const store = new FakeStore();
     await expect(syncNow(store as unknown as Store)).rejects.toThrow("请先保存 S3 配置");
+  });
+});
+
+describe("S3 配置校验", () => {
+  it("testConnection 未保存配置时报错", async () => {
+    const store = new FakeStore();
+    await expect(testConnection(store as unknown as Store)).rejects.toThrow("请先保存 S3 配置");
+  });
+
+  it("endpoint/bucket/密钥任一为空都报同一错误", async () => {
+    const cases: Array<Partial<S3Settings>> = [
+      { ...SETTINGS, endpoint: "  " },
+      { ...SETTINGS, bucket: "" },
+      { ...SETTINGS, accessKeyId: " " },
+      { ...SETTINGS, secretAccessKey: "" },
+    ];
+    for (const patch of cases) {
+      const store = new FakeStore();
+      store.settings = { ...SETTINGS, ...patch };
+      await expect(testConnection(store as unknown as Store)).rejects.toThrow("Endpoint、Bucket 和访问密钥均不能为空");
+    }
+  });
+
+  it("syncNow 配置不完整时同样校验失败", async () => {
+    const store = new FakeStore();
+    store.settings = { ...SETTINGS, bucket: "" };
+    await expect(syncNow(store as unknown as Store)).rejects.toThrow("Endpoint、Bucket 和访问密钥均不能为空");
+  });
+
+  it("有效配置可通过校验并成功连接（mock S3）", async () => {
+    const store = new FakeStore();
+    store.settings = { ...SETTINGS };
+    await expect(testConnection(store as unknown as Store)).resolves.toContain("连接成功");
   });
 });

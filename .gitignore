@@ -4,3 +4,5 @@ dist-electron
 *.log
 .DS_Store
 release
+
+test-node-abi

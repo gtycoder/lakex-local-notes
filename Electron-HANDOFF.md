@@ -135,7 +135,7 @@ mouseleave → lazyCancel 300ms 后隐藏），工具栏渲染在卡片上方（
 | 阶段 A：资源归一化 + 第三方图片下载/复制修复 | ✅ 完成，用户验证通过 |
 | 阶段 B：S3 备份同步（七牛云） | ✅ 完成，真实同步验证通过 |
 | 打包发布：dmg | ✅ 完成并冒烟验证（未签名、默认图标） |
-| 阶段 C：代码审计 + 优化 + 单测 | 🚧 进行中（分支 `audit/code-optimization`；56 个 vitest 用例通过；本会话在其上加了性能埋点 + dev 脚本修复，commit `808b72d`~`db539db`） |
+| 阶段 C：代码审计 + 优化 + 单测 | 🚧 进行中（分支 `audit/code-optimization`；**82 个 vitest 用例通过**；虚拟渲染试验已合回 + Store DB/S3 校验测试补全） |
 | 大文档性能：virtualRendering 试验 | 🚧 **试验分支 `experiment/virtual-rendering`**：首图 3.5s→88ms、工具栏置顶、多标签滚动独立；TOC 三问题、代码块粘贴、表格浮动工具栏 hover 全部已修复；**试验代码已收敛**（探针清理、重试/轮询封顶）；剩余：**合回 `audit/code-optimization` 决策** + max-view 后工具栏定位偏移 ~28px 次要边缘 |
 | 远程仓库 | ✅ 已推送 Gitee `master` 分支 |
 
@@ -189,6 +189,10 @@ git push origin main:master   # Electron 正式版 → Gitee master
   npx @electron/rebuild -f -w better-sqlite3
   ```
   （或交给 electron-builder 打包时自动 rebuild）
+- **测试用 Node ABI**：`npm test`（vitest）需要单独的 Node ABI 构建，首次运行前：
+  ```bash
+  bash scripts/setup-test-abi.sh   # 装到 test-node-abi/（gitignore），vitest alias 自动指过去
+  ```
 
 ### 3.2 开发
 
@@ -423,7 +427,7 @@ Path-style:  ✅ 勾选
 3. **打包版与开发版共用 userData**（`lake-notes-electron`）：当前方便测试；正式发布需决策是否用 productName 隔离（避免用户数据目录名是 `lake-notes-electron`）
 4. **大文档性能**：已通过「图片文件化不进 V8 堆」+ `--max-old-space-size=8192` 缓解；`virtualRendering` 在 `experiment/virtual-rendering` 分支**试验可用**（首图 3.5s→88ms），但有遗留问题（见下 10-13）
 5. **渲染包超大（已部分优化）**：画板已拆独立 chunk（drawnix 4.2MB），主 chunk 仍约 9.4MB（大头是 Lake 编辑器本体 + slate + react）；真正收益需编辑器懒加载（改异步创建，属 Lake 阶段，未动）
-6. **自动化测试刚起步**：已新增 56 个 vitest 用例（ssrf / sync 引擎 / clipboardHtml），`npm test` 全绿；Store 层 DB 用例待解决 ABI 问题（better-sqlite3 为 Electron ABI，纯 Node vitest 无法加载，sync 测试用 FakeStore + mock S3 规避）
+6. **自动化测试**：**82 个 vitest 用例全绿**（ssrf / sync 引擎 / clipboardHtml / **Store 层 DB 22 例** / **S3 配置校验 4 例**）。Store 层 DB 用例用**双 ABI 方案**落地：`test-node-abi/` 单独装 Node ABI 的 better-sqlite3（`scripts/setup-test-abi.sh` 一键复现），vitest `resolve.alias` 指过去；`vi.mock("electron")` 提供 safeStorage/net 替身；Store 的 DB/树/孤儿/S3 密钥加密/同步状态/导入全部覆盖
 7. **孤儿资源无 UI**：IPC 已具备（list/clean），设置面板未做展示与清理按钮
 8. **npm 私有镜像不可达**：装新依赖必须显式用 npmmirror registry
 9. **远程仓库默认分支仍是 main（tauri）**：Gitee 后台可把默认分支切到 master
@@ -443,7 +447,7 @@ Path-style:  ✅ 勾选
 4. ~~试验收敛~~ → **已收敛**（本会话：清理 `[lake-perf]` console 探针噪音、`refreshTocSidebar` 重试收敛为 8 次/延时封顶 500ms、`setupTocScrollFollow` 轮询封顶 5s、删除死代码 `__disposeTocFollow`；保留 `window.__lakePerfReport` 排查工具与必要 error/warn）。回归清单关键项已跑通（TOC/表格工具栏/代码块粘贴/多标签/图片）。**剩余：决策合回 `audit/code-optimization`**（功能问题已全部解决，不再阻塞合回）
 5. **发布完善**：应用图标（icns）→ 代码签名 + 公证 → 重新打包；Gitee 默认分支切到 master
 6. **孤儿资源 UI**：SyncPanel/设置面板展示 orphan_assets 列表 + 清理按钮（IPC 已就绪）
-7. **自动化测试**：可补 Store 层 DB 用例（Node/Electron 双 ABI 方案）与 S3 配置校验
+7. ~~自动化测试~~ → **已补**：Store 层 DB 用例（双 ABI，`scripts/setup-test-abi.sh`）+ S3 配置校验，`npm test` 82 全绿
 8. **安卓端同步**：复用同步协议（manifests/objects/assets 布局已是跨端设计）
 9. **userData 隔离决策**（若正式分发）
 
