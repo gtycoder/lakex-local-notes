@@ -2,9 +2,10 @@
 
 本地优先的 Lake（语雀）编辑器笔记应用。**本文是项目的主交接文档入口。**
 
-> 给完全没有上下文的后续会话：先读 **docs/PROGRESS.md 的「★ 最新交接」**（最近一次会话
-> 的任务目标/已完成/当前问题/下一步/踩坑），再按需读下面的开发/架构/踩坑文档。
-> **当前主开发分支是 `master`**（Gitee 远程 master 已同步）。
+> 给完全没有上下文的后续会话：先读 **Electron-HANDOFF.md（交接入口/目录）**，再读
+> **docs/CODEX-GUIDE.md（Codex 自主开发指南）** 与 **docs/PROGRESS.md 的「★ 最新交接」**，
+> 然后按需读下面的开发/架构/踩坑文档。
+> **当前主开发分支是 `master`**（Gitee 远程 master 已同步，默认分支已切换）。
 
 ---
 
@@ -74,6 +75,8 @@ git push origin master:master
 
 | 文档 | 内容 | 新会话优先级 |
 |---|---|---|
+| **Electron-HANDOFF.md** | 交接入口/目录（本文） | **先读** |
+| **docs/CODEX-GUIDE.md** | Codex 自主开发指南（Playwright 驱动真实 Electron/Computer Use/浏览器） | **动手前必读** |
 | **docs/PROGRESS.md** | ★最新交接（最近会话全记录）、**经验总结（方法论/深层认识/工程实践）**、已完成（阶段 A/B/C/虚拟渲染）、当前问题、下一步计划 | **先读** |
 | docs/DEVELOPMENT.md | 环境要求、开发/构建/打包命令、测试（双 ABI）、依赖版本、提交历史 | 动手前读 |
 | docs/ARCHITECTURE.md | 进程结构、关键文件索引、图片数据流、数据与存储、S3 同步机制 | 改代码前读 |
