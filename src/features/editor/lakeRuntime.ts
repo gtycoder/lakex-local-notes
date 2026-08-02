@@ -347,24 +347,23 @@ export function createLakeDocument(
  * 编辑触发新 tocChange 后才出现）。setDocument 后调用一次，把最新 toc 数据
  * 同步进侧边栏，弥补这个加载时机缺口。 */
 export function refreshTocSidebar(editor: LakeEditorInstance | null): void {
-  // 直接调 _tocSidebar.update() 在「加载窗口期」不生效（React 视图未就绪），
-  // 改为通过内核官方事件总线重放 tocChange（与编辑触发路径一致），并重试。
+  // toc 数据权威来源是内核的 docExtraContent（TOC 管理器 setDocExtraContent({toc})）。
+  // 通过内核官方事件总线重放 tocChange（与编辑触发路径一致），并重试直到条目出现。
   let attempt = 0;
   const tryOnce = (): void => {
     try {
       const anyEditor = editor as any;
       const kernel = anyEditor?.kernel;
-      const plugins: any[] = anyEditor?.plugins || [];
-      const tocPlugin = plugins.find((p: any) => Array.isArray(p?._tocData));
-      const data = tocPlugin?._tocData;
+      const tocData = kernel?.getDocExtraContent?.()?.toc;
       const itemsBefore = document.querySelectorAll(".ne-toc-sidebar .ne-toc-item").length;
-      if (kernel?.emitPluginEvent && Array.isArray(data) && data.length > 0) {
-        kernel.emitPluginEvent("tocChange", data);
+      if (kernel?.emitPluginEvent && Array.isArray(tocData) && tocData.length > 0) {
+        kernel.emitPluginEvent("tocChange", tocData);
       }
       const itemsAfter = document.querySelectorAll(".ne-toc-sidebar .ne-toc-item").length;
-      console.log(`[lake-perf] refreshTocSidebar #${attempt}: data=${Array.isArray(data) ? data.length : data}, items ${itemsBefore}->${itemsAfter}`);
-      if (itemsAfter === 0 && attempt < 6) {
-        setTimeout(tryOnce, 150 * (attempt + 1));
+      console.log(`[lake-perf] refreshTocSidebar #${attempt}: data=${Array.isArray(tocData) ? tocData.length : tocData}, items ${itemsBefore}->${itemsAfter}`);
+      if (itemsAfter === 0 && attempt < 20) {
+        attempt += 1;
+        setTimeout(tryOnce, 150 * attempt);
       }
     } catch (error) {
       console.warn("[lake-perf] refreshTocSidebar failed", error);
