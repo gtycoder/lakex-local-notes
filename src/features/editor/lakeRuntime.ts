@@ -342,6 +342,21 @@ export function createLakeDocument(
   return editor;
 }
 
+/** 试验修复：Lake 编辑器 TOC 侧边栏创建时用空 toc 渲染（jI.render(GY, {toc: []})），
+ * 若 ready 在 tocChange 之前触发，侧边栏永远不会被填充（打开文档时大纲为 0，
+ * 编辑触发新 tocChange 后才出现）。setDocument 后调用一次，把最新 toc 数据
+ * 同步进侧边栏，弥补这个加载时机缺口。 */
+export function refreshTocSidebar(editor: LakeEditorInstance | null): void {
+  try {
+    const anyEditor = editor as any;
+    const plugins: any[] = anyEditor?.plugins || [];
+    const tocPlugin = plugins.find((p: any) => p?._tocData !== undefined && p?._tocSidebar);
+    if (tocPlugin?._tocSidebar?.update) {
+      tocPlugin._tocSidebar.update(tocPlugin._tocData);
+    }
+  } catch { /* 非编辑器环境忽略 */ }
+}
+
 export function destroyLakeEditor(editor: LakeEditorInstance | null): void {
   try {
     editor?.destroy?.();

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { AlertCircle } from "lucide-react";
-import { createLakeDocument, destroyLakeEditor, type LakeEditorInstance } from "./lakeRuntime";
+import { createLakeDocument, destroyLakeEditor, refreshTocSidebar, type LakeEditorInstance } from "./lakeRuntime";
 import { normalizeClipboardHtml, upgradePastedHtml } from "./clipboardHtml";
 
 interface LakeEditorProps {
@@ -52,6 +52,8 @@ export function LakeEditor({ noteId, content, mode = "editor", tocEnabled, onCha
         if (editor && !setting) onChangeRef.current(editor.getDocument("text/lake"));
       }, tocEnabled, noteId);
       editor.setDocument("text/lake", content);
+      // 试验修复：Lake TOC 侧边栏创建时用空 toc 渲染，补一次数据同步
+      setTimeout(() => refreshTocSidebar(editor), 0);
       setting = false;
       editorRef.current = editor;
       setError(null);
