@@ -6,7 +6,7 @@
   "main": "dist-electron/main.js",
   "type": "module",
   "scripts": {
-    "dev": "concurrently -k \"vite\" \"wait-on tcp:127.0.0.1:1421 && electron .\"",
+    "dev": "vite --host 127.0.0.1 --port 1421",
     "dev:vite": "vite --host 127.0.0.1 --port 1421",
     "dev:electron": "electron .",
     "build": "tsc --noEmit && vite build && electron-builder",
