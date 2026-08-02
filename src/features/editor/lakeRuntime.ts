@@ -197,6 +197,22 @@ export function createLakeDocument(element: HTMLElement, mode: "viewer" | "edito
   lakeMark("lake:create:end");
   lakeMeasure("lake:create:openEditor", "lake:create:start", "lake:create:end");
   if (mode === "editor") editor.on("contentchange", onChange);
+  // 订阅 Lake 内置性能监控：docInitPerf（code 55），直接给出异步渲染管线的
+  // parseTime / renderTime / nodeLength，用于量化 setDocument 之后的主线程耗时
+  try {
+    (editor as any).on?.("monitorLog", (payload: any) => {
+      const d = payload?.data;
+      if (d && typeof d.m1 === "number" && typeof d.m2 === "number") {
+        lakeMark("lake:render:completed");
+        console.debug("[lake-perf] docInitPerf", {
+          parseTime: d.m1,
+          renderTime: d.m2,
+          nodeLength: d.m4,
+          total: (d.m1 || 0) + (d.m2 || 0),
+        });
+      }
+    });
+  } catch { /* 非编辑器环境忽略 */ }
   return editor;
 }
 
