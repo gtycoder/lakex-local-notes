@@ -292,14 +292,26 @@ export function createLakeDocument(
   lakeMeasure("lake:create:openEditor", "lake:create:start", "lake:create:end");
   if (mode === "editor") {
     editor.on("contentchange", onChange);
-    // TOC 排错探针：看 tocChange / tocPinStatusChange 在打开文档时是否触发、数据大小
+    // TOC 排错探针：内核 tocChange + engine 生命周期事件序列
     try {
-      (editor as any).onPluginEvent?.("tocChange", (data: any) => {
-        console.log(`[lake-perf] tocChange @${Math.round(performance.now())}ms, 条目=${Array.isArray(data) ? data.length : data}`);
+      const kernelAny = (editor as any).kernel;
+      const engineAny = (editor as any).engine;
+      const tag = `[lake-perf:${noteId.slice(0, 8)}]`;
+      kernelAny?.onPluginEvent?.("tocChange", (data: any) => {
+        console.log(`${tag} kernel tocChange @${Math.round(performance.now())}ms, 条目=${Array.isArray(data) ? data.length : data}`);
       });
-      (editor as any).on?.("tocPinStatusChange", (data: any) => {
-        console.log(`[lake-perf] tocPinStatusChange @${Math.round(performance.now())}ms, data=${data}`);
+      for (const evt of ["document.destroy", "document.create"]) {
+        engineAny?.on?.(evt, () => console.log(`${tag} engine ${evt} @${Math.round(performance.now())}ms`));
+      }
+      let headingChanges = 0;
+      engineAny?.on?.("nodechange", (e: any) => {
+        const name = e?.node?.nodeName;
+        if (name === "H1" || name === "H2" || name === "H3" || name === "H4" || name === "H5") {
+          headingChanges++;
+          console.log(`${tag} nodechange heading(${name}) #${headingChanges} @${Math.round(performance.now())}ms`);
+        }
       });
+      engineAny?.on?.("aftercontentchange", () => console.log(`${tag} engine aftercontentchange @${Math.round(performance.now())}ms`));
     } catch { /* 忽略 */ }
   }
   // 订阅 Lake 内置性能监控：docInitPerf（code 55），直接给出异步渲染管线的
