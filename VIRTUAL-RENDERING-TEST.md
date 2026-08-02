@@ -129,3 +129,28 @@ cardLazyInit: true,   // = allowCardLazyInit 的配置键：视口外卡片懒�
 - [ ] 多标签：A 滚到中部 → 切 B → B 保持自己的位置；开新标签互不影响
 - [ ] TOC：滚动时高亮跟随；到文档中部 TOC 是否仍可见
 - [ ] 无回归：图片、画板、思维导图、代码块滚动出现、粘贴/复制
+
+---
+
+# 试验状态汇总（截至 2026-08-02 16:30）
+
+## ✅ 已解决
+
+| 项 | 方案 | 状态 |
+|---|---|---|
+| 大文档首屏图片 hydration 慢 3.5s | virtualRendering + cardLazyInit + scrollNode(.document-pane→per-tab) | ✅ 首图 +88ms |
+| 多标签滚动位置共享 | 每标签独立滚动容器（`.lake-editor-tab` overflow-y:auto）| ✅ |
+| 编辑器工具栏不置顶 | per-tab 固定高度滚动容器后 Lake 原生 sticky 生效 | ✅ |
+| TOC 打开时为 0（编辑后才出现） | setDocument 后 `refreshTocSidebar()`：内核 docExtraContent 取数 + 内核总线重放 tocChange + 重试 | ✅ 约 600ms 延迟，用户接受 |
+
+## ❓ 待验证 / ❌ 未解决
+
+- [ ] TOC 滚动高亮跟随（虚拟渲染下视口外标题无 DOM，`getBoundingClientRect` 定位可能失效）
+- [ ] 表格浮动工具栏 hover 消失（Phase B：z-index/sticky 链）
+- [ ] 代码块粘贴后默认不可见（需关闭再打开；疑似新卡片 hydration，可能和 cardLazyInit 相关）
+- [ ] TOC 侧边栏尺寸/定位（40px 宽、文档高、top 偏移）是否随条目渲染恢复正常，需用户目测确认
+
+## 备注
+
+- `refreshTocSidebar` 是加载窗口期补丁（内核 tocChange 在 setDocument 期间到达，
+  侧边栏创建时用空 toc 渲染且无后续更新）；合并回主干前建议收敛重试次数/日志。
