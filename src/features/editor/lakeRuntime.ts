@@ -338,10 +338,17 @@ export function createLakeDocument(
       engineAny?.on?.("aftercontentchange", () => console.log(`${tag} engine aftercontentchange @${Math.round(performance.now())}ms`));
     } catch { /* 忽略 */ }
     // 虚拟渲染下 Lake 原生 TOC watcher 的二分探测失效（视口外标题无 DOM），
-    // 自研滚动跟随高亮 + 点击精确滚动；清理函数挂在 editor 上由 destroyLakeEditor 调。
+    // 自研滚动跟随高亮 + 点击精确滚动；另有表格浮动工具栏 hover 桥。
+    // 清理函数挂在 editor 上由 destroyLakeEditor 调。
     try {
-      const dispose = setupTocScrollFollow(element, editor, () => resolveScrollNode(scrollNode));
-      (editor as any).__disposeTocFollow = dispose;
+      const disposes: Array<() => void> = [];
+      try { disposes.push(setupTocScrollFollow(element, editor, () => resolveScrollNode(scrollNode))); } catch { /* 忽略 */ }
+      try { disposes.push(setupCardToolbarHoverBridge(element)); } catch { /* 忽略 */ }
+      (editor as any).__disposeExtras = () => {
+        for (const dispose of disposes) {
+          try { dispose(); } catch { /* 忽略 */ }
+        }
+      };
     } catch { /* 非编辑器环境忽略 */ }
   }
   // 订阅 Lake 内置性能监控：docInitPerf（code 55），直接给出异步渲染管线的
@@ -382,6 +389,65 @@ function ensureCardsInViewHydrated(host: HTMLElement): void {
       }
     });
   } catch { /* 忽略 */ }
+}
+
+/** 修复：表格/卡片浮动工具栏 hover 消失。
+ * 根因：Lake 卡片工具栏 overlay 的显隐监听挂在卡片根节点上（mouseenter → 显示 /
+ * mouseleave → lazyCancel 300ms 后隐藏），工具栏渲染在卡片上方（placement top），
+ * 鼠标从卡片移到工具栏即触发卡片 mouseleave → 工具栏在到达前就被隐藏。
+ *
+ * 方案（两层）：
+ * 1. 拦截：mouseleave 不冒泡但有捕获阶段，document 捕获层先于目标监听器执行；
+ *    当真实 mouseleave 的目标是卡片、relatedTarget 在工具栏上下文（.ne-card-toolbar /
+ *    .ne-ui-boundary-popover / ne-overlay-tmp / 任何 overlay）时 stopImmediatePropagation，
+ *    阻止 Lake 排定隐藏 → 悬停工具栏期间工具栏保持。
+ * 2. 补发：指针离开工具栏上下文时，向最近停留的卡片补发一次合成 mouseleave
+ *    （untrusted 事件拦截器放行），让 Lake 正常延迟隐藏。
+ * 返回清理函数。 */
+function setupCardToolbarHoverBridge(host: HTMLElement): () => void {
+  let lastCard: Element | null = null;
+  const CARD_SELECTOR = "ne-card, ne-table-hole, ne-alert-hole, ne-container-hole";
+  const isToolbarContext = (el: Element | null): boolean =>
+    !!el?.closest?.(".ne-card-toolbar, .ne-ui-boundary-popover, ne-overlay-tmp, [data-event-boundary=\"overlay\"]");
+
+  // 记录指针最近停留的卡片（= 当前工具栏的关联卡片）
+  const onMouseOver = (event: MouseEvent): void => {
+    const target = event.target as Element | null;
+    if (!target || !host.contains(target)) return;
+    const card = target.closest?.(CARD_SELECTOR);
+    if (card) lastCard = card;
+  };
+
+  // 拦截：卡片 → 工具栏上下文的真实 mouseleave
+  const onMouseLeaveCapture = (event: MouseEvent): void => {
+    if (!event.isTrusted) return;
+    const target = event.target as Element | null;
+    if (target?.closest?.(CARD_SELECTOR) && isToolbarContext(event.relatedTarget as Element | null)) {
+      event.stopImmediatePropagation();
+    }
+  };
+
+  // 离开工具栏上下文（含移回卡片/移到外部）：补发合成 mouseleave 触发正常隐藏
+  const onMouseOut = (event: MouseEvent): void => {
+    const target = event.target as Element | null;
+    if (!target || !isToolbarContext(target)) return;
+    const related = event.relatedTarget as Element | null;
+    if (isToolbarContext(related)) return; // 工具栏内部移动（如进下拉菜单）
+    if (lastCard?.isConnected) {
+      lastCard.dispatchEvent(new MouseEvent("mouseleave", { bubbles: false, cancelable: true, view: window }));
+    }
+    lastCard = null;
+  };
+
+  document.addEventListener("mouseover", onMouseOver, true);
+  document.addEventListener("mouseleave", onMouseLeaveCapture, true);
+  document.addEventListener("mouseout", onMouseOut, true);
+  return () => {
+    document.removeEventListener("mouseover", onMouseOver, true);
+    document.removeEventListener("mouseleave", onMouseLeaveCapture, true);
+    document.removeEventListener("mouseout", onMouseOut, true);
+    lastCard = null;
+  };
 }
 
 /** 虚拟渲染下 Lake 原生 TOC watcher 失效（二分探测视口外标题无 DOM，永远 -1 不选中）。
@@ -573,9 +639,10 @@ export function refreshTocSidebar(editor: LakeEditorInstance | null): void {
 
 export function destroyLakeEditor(editor: LakeEditorInstance | null): void {
   try {
+    (editor as any)?.__disposeExtras?.();
     (editor as any)?.__disposeTocFollow?.();
   } catch (error) {
-    console.warn("Lake TOC follow cleanup failed", error);
+    console.warn("Lake editor extras cleanup failed", error);
   }
   try {
     editor?.destroy?.();

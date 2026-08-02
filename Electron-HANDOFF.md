@@ -74,6 +74,32 @@
 - 代码块粘贴：插入 300ms 内水合（2 行、CM6 完整）；历史卡壳卡片（之前粘贴的）重开后也被修复性水合
 - 首图仍 ~0.5-0.8s（无性能回退）；`npm test` 56 用例全绿
 
+### 本会话（后续）：Phase B 表格浮动工具栏 hover 修复（2026-08-02，实测验证）
+
+**根因**：Lake 卡片工具栏 overlay 的显隐监听挂在**卡片根节点**上（mouseenter → 显示 /
+mouseleave → lazyCancel 300ms 后隐藏），工具栏渲染在卡片上方（placement top + 2px），
+鼠标从卡片移到工具栏即触发卡片 mouseleave → 工具栏在用户到达前就被隐藏（实测移到
+工具栏 350ms 内消失）。
+
+**修复**（`setupCardToolbarHoverBridge`，lakeRuntime.ts）：
+1. 拦截：mouseleave 不冒泡但有捕获阶段，document 捕获层先于目标监听器执行；真实
+   mouseleave 目标是卡片、relatedTarget 在工具栏上下文（.ne-card-toolbar /
+   .ne-ui-boundary-popover / ne-overlay-tmp / [data-event-boundary=overlay]）时
+   `stopImmediatePropagation`，阻止 Lake 排定隐藏 → 悬停工具栏期间保持。
+2. 补发：指针离开工具栏上下文时，向最近停留的卡片补发合成 mouseleave（untrusted
+   事件拦截器放行），触发正常延迟隐藏。
+
+**实测验收**（Playwright 真实鼠标）：
+- 悬停表格 → 工具栏出现；移到工具栏停留 1100ms 不消失（修复前 350ms 内消失）
+- 移回表格保持、移出才隐藏（约 300ms 延迟）
+- 按钮可点击：maximize 进入/退出 max-view 正常、borderVisible 切换正常、点击后工具栏保持
+- 3 轮「表格↔工具栏」往返定位零漂移（gap 恒 0）
+- 回归：TOC 固定/高亮/回顶、代码块粘贴 300ms 水合、多标签正常，vitest 56 全绿
+
+**已知次要边缘**：表格点「最大化」（max-view）进入再退出后，该表格工具栏定位偏移约
+28px（不影响使用，重开文档自愈）。定位是 Lake boundary popover 在 max-view 切换后的
+既有行为，非 hover 桥引起（无 max-view 时零漂移），暂不处理。
+
 ### 当前问题（未解决，见 §八）
 1. ~~TOC 滚动高亮不跟随 / 点击定位不准~~ → **已修复**（见上）
 2. **表格浮动工具栏 hover 消失**（Phase B：z-index/sticky 链）
@@ -107,7 +133,7 @@
 | 阶段 B：S3 备份同步（七牛云） | ✅ 完成，真实同步验证通过 |
 | 打包发布：dmg | ✅ 完成并冒烟验证（未签名、默认图标） |
 | 阶段 C：代码审计 + 优化 + 单测 | 🚧 进行中（分支 `audit/code-optimization`；56 个 vitest 用例通过；本会话在其上加了性能埋点 + dev 脚本修复，commit `808b72d`~`db539db`） |
-| 大文档性能：virtualRendering 试验 | 🚧 **试验分支 `experiment/virtual-rendering`**：首图 3.5s→88ms、工具栏置顶、多标签滚动独立；TOC 固定/高亮跟随/点击定位、代码块粘贴**已修复**；**表格浮动工具栏 hover 未解决**（Phase B） |
+| 大文档性能：virtualRendering 试验 | 🚧 **试验分支 `experiment/virtual-rendering`**：首图 3.5s→88ms、工具栏置顶、多标签滚动独立；TOC 三问题、代码块粘贴、**表格浮动工具栏 hover 全部已修复**；剩余：试验收敛合回 audit + max-view 后工具栏定位偏移 ~28px 次要边缘 |
 | 远程仓库 | ✅ 已推送 Gitee `master` 分支 |
 
 ### 2.2 仓库与分支
@@ -399,7 +425,7 @@ Path-style:  ✅ 勾选
 8. **npm 私有镜像不可达**：装新依赖必须显式用 npmmirror registry
 9. **远程仓库默认分支仍是 main（tauri）**：Gitee 后台可把默认分支切到 master
 10. ~~TOC 滚动高亮不跟随、点击定位不准~~ → **已修复**（本会话：自研 `setupTocScrollFollow` 滚动跟随 + 点击精确校正 + scrollNode 指向 `.ne-editor-wrap`；打开文档大纲约 600ms 出现由 `refreshTocSidebar` 补丁保留）
-11. **表格浮动工具栏 hover 消失**（Phase A 已去掉 `display:none` 隐藏，剩 z-index/sticky 链问题，Phase B 处理）← **当前唯一未解决功能问题**
+11. ~~表格浮动工具栏 hover 消失~~ → **已修复**（Phase B：`setupCardToolbarHoverBridge` 捕获拦截 + 补发合成 mouseleave；见最新交接）← 遗留次要边缘：max-view 进出后工具栏定位偏移 ~28px（重开自愈）
 12. ~~代码块粘贴后默认不可见~~ → **已修复**（本会话：`ensureCardsInViewHydrated` 修复性水合，cardLazyInit 保留；根因是 Lake 可见性观察器作用在 hole 节点、`hole.$appear` 不传播到卡片 UI）
 13. ~~TOC 侧边栏异常尺寸~~ → **已随高度链修复自愈**（TOC 恒为视口高）
 
@@ -408,7 +434,7 @@ Path-style:  ✅ 勾选
 ## 九、下一步计划（建议顺序）
 
 **（虚拟渲染试验分支 `experiment/virtual-rendering` 优先，用户认可先做小测试）**
-1. **Phase B（表格工具栏）**：移除 `.ne-ui` 的 `position:sticky` 覆盖 + `z-index:auto` 七件套 + `.ne-inner-overlay-container z-index`，验证表格浮动工具栏 hover 是否恢复（历史 z-index 大战的收尾）← **唯一剩余功能问题**
+1. ~~Phase B（表格工具栏）~~ → **已修复**（hover 桥，见最新交接）；历史 `.ne-ui` sticky / `z-index:auto` 七件套 / overlay z-index 补丁保留未动（内部滚动布局下已不冲突，收敛时评估是否删除）
 2. ~~代码块粘贴不可见~~ → **已修复**（修复性水合，见最新交接）
 3. ~~TOC 高亮/点击定位~~ → **已修复**（自研跟随 + 校正，见最新交接）
 4. **试验收敛决策**：把 `VIRTUAL_RENDERING` 开关 + `refreshTocSidebar` 重试 + `setupTocScrollFollow`/`ensureCardsInViewHydrated` 收敛为正式实现（清理探针日志、收敛重试次数/轮询）；跑完 `VIRTUAL-RENDERING-TEST.md` 回归清单；再决策合回 `audit/code-optimization`（表格工具栏未解决前**不要上 main**）
