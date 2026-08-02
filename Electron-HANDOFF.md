@@ -1,7 +1,7 @@
 # Lake Notes Electron 交接文档
 
 > **本文是项目的唯一主交接文档。** 面向完全没有上下文的后续会话：请先完整读完本文，再修改任何代码。
-> 最后更新：2026-08-02（路线验证完成，正式版接入）
+> 最后更新：2026-08-02（本会话：大文档性能定位 + virtualRendering 试验，见下方「最新交接」）
 
 ---
 
@@ -27,6 +27,55 @@
 
 ---
 
+## ★ 最新交接（2026-08-02 会话）：大文档性能定位 + virtualRendering 试验
+
+> **本段写给零上下文的新会话**：本次会话解决了两件事——(A) 用实测数据定位了「大文档打开时图片裂 3-5 秒」的根因；(B) 在新分支 `experiment/virtual-rendering` 上开启 Lake 虚拟渲染并验证了大部分收益。**当前工作分支是 `experiment/virtual-rendering`，不是 main 也不是 audit。** 先读完本段再读 §八/九/十。
+
+### 任务目标（本会话）
+1. 用户报安装版 bug：关窗不退出后打开大文档，图片默认"裂的"、3-4s 后才开始加载
+2. 判断是性能问题还是数据/网络问题，找到根因并验证解决方案
+
+### 已完成（含实测数据）
+1. **排除了网络与主线程瓶颈**（全部实测）：
+   - 图片请求全部 200、无失败无重试（用户逐个核对）
+   - 大文档 HTML 解析仅 79ms（jsdom 实测 583KB → 1281 节点）
+   - Lake renderTime 仅 136-226ms（docInitPerf），Long Tasks 合计 <1s，主线程空闲
+   - **结论：3.5s 是"图片请求被延迟发起"**，根因是含 107 个 codeblock 卡片的文档里，卡片 UI 提交/hydration 被 Lake 调度推迟；纯图片文档（52 图）只要 70ms
+2. **性能埋点体系**（`lakeRuntime.ts`，仍保留在分支上，很好用）：
+   - `window.__lakePerfReport()`：measures/marks + Long Tasks + docInitPerf + 本地图片 Resource Timing + TOC 探测
+   - `EditorTab` 打印 `[lake-perf] tab visible`（标签可见性时间线）
+   - `createLakeDocument` 订阅内核 `tocChange` 打印 `[lake-perf:xxxx] kernel tocChange`
+3. **dev 脚本修复**（commit `3b7db20`）：`npm run dev` 之前会**启动两个 Electron**（vite-plugin-electron 自动拉起 + 脚本里手动 `electron .`）→ 单实例锁冲突 + ERR_FAILED 级联退出。已改为只跑 `vite`，由插件统一拉起。
+4. **virtualRendering 试验**（`experiment/virtual-rendering` 分支，13 个 commit）：
+   - `customOptions` 注入 `virtualRendering: true` + `scrollNode`（指向真实滚动容器）+ `cardLazyInit: true`（= allowCardLazyInit 配置键）
+   - **收益实测**：大文档首图从 3.5s → 88ms；滚动渐进加载不卡顿；**编辑器工具栏恢复置顶**；**多标签滚动位置独立**
+   - TOC 打开时为空（编辑后才出现）已修：`refreshTocSidebar()` 从 `kernel.getDocExtraContent().toc` 取数 + 内核总线重放 `tocChange` + 重试（约 600ms 延迟，用户接受）
+   - Phase A：删掉了 TOC `position:fixed`/`--toc-top` 和表格工具栏 `display:none` 等历史补丁，回归 Lake 原生
+   - Phase A.5：每标签页独立滚动容器（`.lake-editor-tab` overflow-y:auto）+ scrollNode 指向各自标签 → 解决多标签滚动共享
+
+### 当前问题（未解决，见 §八）
+1. **TOC 滚动高亮不跟随** + **点击定位不准**（虚拟渲染下视口外标题无 DOM，Lake 的 `getBoundingClientRect` 定位失效；滚动到可见区后 watcher 会重算，但高亮仍不跟随）
+2. **表格浮动工具栏 hover 消失**（Phase B：z-index/sticky 链）
+3. **代码块粘贴后默认不可见**（需折叠/展开一次才正常；疑似新卡片 hydration 与 cardLazyInit 相关）
+4. TOC 侧边栏在条目渲染前的异常尺寸（40px 宽/整文高/top 偏移）待确认是否自愈
+
+### 下一步计划（详细见 §九）
+1. **Phase B**：移除 `.ne-ui` sticky 覆盖 + `z-index:auto` 七件套 + overlay 层级 → 验证表格工具栏
+2. 排查代码块粘贴不可见（试 `cardLazyInit: false` 对照）
+3. TOC 高亮：研究 Lake 是否基于模型位置兜底；或对虚拟渲染下 off-screen 标题做占位
+4. 试验收敛：把 `VIRTUAL_RENDERING` 开关/`refreshTocSidebar` 重试收敛为正式实现，写清回归清单后决策合回 `audit/code-optimization`
+
+### 本会话踩过的坑（速览，细节见 §十 D）
+- scrollNode 必须指向**真实滚动容器**（body 是 overflow:hidden，Lake 默认回退 document.scrollingElement 会拿错）
+- 新建标签元素在编辑器创建时**尚未布局（clientHeight=0）**→ 虚拟渲染初始视口错乱（曾用读 offsetHeight 强制 reflow，但 TOC 根因不在此）
+- **TOC 侧边栏创建时用空 toc 渲染**、`ready` 早于 `tocChange` → 打开时大纲为 0（补丁见上）
+- **TOC 条目是 `div.ne-toc-item` 不是 `<a>`**（探针选择器坑）
+- 多标签共用 `.document-pane` 一个滚动容器 → 滚动位置共享；需每标签独立滚动容器
+- HMR 不会重建已创建的编辑器实例 → 测试新埋点必须 Cmd+R / 重启
+- `console.debug` 被 DevTools 默认过滤 → 埋点用 `console.log`
+
+---
+
 ## 二、当前状态与仓库
 
 ### 2.1 状态总览
@@ -37,13 +86,14 @@
 | 阶段 A：资源归一化 + 第三方图片下载/复制修复 | ✅ 完成，用户验证通过 |
 | 阶段 B：S3 备份同步（七牛云） | ✅ 完成，真实同步验证通过 |
 | 打包发布：dmg | ✅ 完成并冒烟验证（未签名、默认图标） |
-| 阶段 C：代码审计 + 优化 + 单测 | 🚧 进行中（本地分支 `audit/code-optimization`，2 commit；56 个 vitest 用例已通过） |
+| 阶段 C：代码审计 + 优化 + 单测 | 🚧 进行中（分支 `audit/code-optimization`；56 个 vitest 用例通过；本会话在其上加了性能埋点 + dev 脚本修复，commit `808b72d`~`db539db`） |
+| 大文档性能：virtualRendering 试验 | 🚧 **试验分支 `experiment/virtual-rendering`**：首图 3.5s→88ms、工具栏置顶、多标签滚动独立；TOC 高亮/点击定位、表格工具栏、代码块粘贴未解决 |
 | 远程仓库 | ✅ 已推送 Gitee `master` 分支 |
 
 ### 2.2 仓库与分支
 
 **本地仓库**：`/Users/admin/file/local-lake/lake-notes-electron`（独立 git 仓库）
-**当前分支**：`main`（工作区应保持干净）
+**当前分支**：`experiment/virtual-rendering`（本会话试验分支；**接下来应继续在此分支或按 §九 决策**）
 **远程**（已配置 origin）：
 ```
 origin  https://gitee.com/gtycoder/local-lake.git
@@ -52,7 +102,9 @@ origin  https://gitee.com/gtycoder/local-lake.git
 - `master` = Electron 正式版（最新 commit `74062e3`，本仓库 main 的镜像）
 - `main` = 旧 Tauri（trui）版，**保留未动**（正式版分支是 master；如需让 master 成为默认分支，需在 Gitee 后台设置）
 
-**本地分支**：`audit/code-optimization`（审计/优化工作分支，未推送：503742f 修复 + 4bf3728 测试）
+**本地分支**：
+- `audit/code-optimization`（审计/优化工作分支：503742f 修复、4bf3728 测试、808b72d~db539db 性能埋点 + dev 脚本修复）
+- `experiment/virtual-rendering`（**当前**，自 audit 分出：虚拟渲染试验，13 commit，详见「★ 最新交接」）
 **本地历史分支**（均已过时，勿基于它们开发）：`feature/electron`、`asset-server-poc`
 
 **推送方式**：本机 SSH key 未注册 Gitee，**必须用 HTTPS**（macOS 钥匙串已缓存凭据）：
@@ -242,6 +294,14 @@ Preload (electron/preload.cjs)：原生 CJS，contextBridge 暴露 window.lakeNa
 
 ---
 
+### 5.5 大文档性能定位 + 虚拟渲染试验（2026-08-02，分支 experiment/virtual-rendering）
+
+- 实测定位「大文档图片裂 3.5s」根因：非网络/主线程/渲染，而是 Lake 卡片 UI 提交/hydration 调度（107 codeblock 卡片时）
+- 虚拟渲染收益：首图 88ms、滚动渐进、工具栏置顶、多标签滚动独立
+- 详细数据、补丁、遗留问题见「★ 最新交接」段与 `VIRTUAL-RENDERING-TEST.md`
+
+---
+
 ## 六、数据与存储
 
 ### 6.1 本地目录结构
@@ -312,23 +372,31 @@ Path-style:  ✅ 勾选
 1. **应用未签名、未公证**：dmg 首次打开需右键 → 打开；分发前需 Developer ID 签名 + 公证
 2. **默认 Electron 图标**：尚无应用图标
 3. **打包版与开发版共用 userData**（`lake-notes-electron`）：当前方便测试；正式发布需决策是否用 productName 隔离（避免用户数据目录名是 `lake-notes-electron`）
-4. **大文档性能**：已通过「图片文件化不进 V8 堆」+ `--max-old-space-size=8192` 缓解，但 `virtualRendering` 仍不可用（会破坏 TOC，见 §10 教训）
+4. **大文档性能**：已通过「图片文件化不进 V8 堆」+ `--max-old-space-size=8192` 缓解；`virtualRendering` 在 `experiment/virtual-rendering` 分支**试验可用**（首图 3.5s→88ms），但有遗留问题（见下 10-13）
 5. **渲染包超大（已部分优化）**：画板已拆独立 chunk（drawnix 4.2MB），主 chunk 仍约 9.4MB（大头是 Lake 编辑器本体 + slate + react）；真正收益需编辑器懒加载（改异步创建，属 Lake 阶段，未动）
 6. **自动化测试刚起步**：已新增 56 个 vitest 用例（ssrf / sync 引擎 / clipboardHtml），`npm test` 全绿；Store 层 DB 用例待解决 ABI 问题（better-sqlite3 为 Electron ABI，纯 Node vitest 无法加载，sync 测试用 FakeStore + mock S3 规避）
 7. **孤儿资源无 UI**：IPC 已具备（list/clean），设置面板未做展示与清理按钮
 8. **npm 私有镜像不可达**：装新依赖必须显式用 npmmirror registry
 9. **远程仓库默认分支仍是 main（tauri）**：Gitee 后台可把默认分支切到 master
+10. **TOC 滚动高亮不跟随、点击定位不准**（虚拟渲染分支）：视口外标题无 DOM，`getBoundingClientRect` 定位失效；打开文档时大纲需约 600ms 才出现（`refreshTocSidebar` 补丁）
+11. **表格浮动工具栏 hover 消失**（Phase A 已去掉 `display:none` 隐藏，剩 z-index/sticky 链问题，Phase B 处理）
+12. **代码块粘贴后默认不可见**（需折叠/展开一次；疑似新卡片 hydration 与 `cardLazyInit` 相关）
+13. **TOC 侧边栏在条目渲染前的异常尺寸**（40px 宽 / 整文高 / top 偏移），条目渲染后是否自愈待确认
 
 ---
 
 ## 九、下一步计划（建议顺序）
 
-1. **发布完善**：应用图标（icns）→ 代码签名 + 公证（`Developer ID Application`）→ 重新打包；Gitee 默认分支切到 master
-2. **孤儿资源 UI**：SyncPanel/设置面板展示 orphan_assets 列表 + 清理按钮（IPC 已就绪）
-3. **自动化测试**：✅ 已补 56 个用例（SSRF/同步引擎/剪贴板清洗）；后续可补 Store 层 DB 用例（需 Node/Electron 双 ABI 构建方案）与 S3 配置校验
-4. **大文档性能**：在保证 TOC 正常的前提下再评估 virtualRendering / 代码分割 / 懒加载
-5. **安卓端同步**：同一套七牛配置，复用同步协议（manifests/objects/assets 布局已是跨端设计）
-6. **userData 隔离决策**（若正式分发）
+**（虚拟渲染试验分支 `experiment/virtual-rendering` 优先，用户认可先做小测试）**
+1. **Phase B（表格工具栏）**：移除 `.ne-ui` 的 `position:sticky` 覆盖 + `z-index:auto` 七件套 + `.ne-inner-overlay-container z-index`，验证表格浮动工具栏 hover 是否恢复（历史 z-index 大战的收尾）
+2. **代码块粘贴不可见**：对照 `cardLazyInit: false` 是否修复；不行再查虚拟渲染下新插入卡片的 hydration
+3. **TOC 高亮/点击定位**：研究 Lake 是否基于模型位置兜底，或对虚拟渲染 off-screen 标题做占位/模型换算
+4. **试验收敛决策**：把 `VIRTUAL_RENDERING` 开关 + `refreshTocSidebar` 重试收敛为正式实现；跑完 `VIRTUAL-RENDERING-TEST.md` 回归清单；再决策合回 `audit/code-optimization`（TOC/表格工具栏未解决前**不要上 main**）
+5. **发布完善**：应用图标（icns）→ 代码签名 + 公证 → 重新打包；Gitee 默认分支切到 master
+6. **孤儿资源 UI**：SyncPanel/设置面板展示 orphan_assets 列表 + 清理按钮（IPC 已就绪）
+7. **自动化测试**：可补 Store 层 DB 用例（Node/Electron 双 ABI 方案）与 S3 配置校验
+8. **安卓端同步**：复用同步协议（manifests/objects/assets 布局已是跨端设计）
+9. **userData 隔离决策**（若正式分发）
 
 ---
 
@@ -364,12 +432,21 @@ Path-style:  ✅ 勾选
 
 ### D. 编辑器与 CSS
 
-20. **性能优化破坏 TOC（最大教训）**：以下全部导致 TOC 失效并已回退：`content-visibility: auto`、`virtualRendering: true`、Tab 离屏销毁、MutationObserver 懒加载。**Lake 的 TOC 依赖完整 DOM 扫描，任何跳过/延迟/销毁 DOM 的优化都会破坏它。**
-21. **overflow 修改破坏 Lake 浮动 UI**：`.multi-tab-editor`/`.tab-panels` 设 overflow 会裁剪表格工具栏与 TOC 按钮。正确方案：不改 overflow，`.tab-bar` 用 `position: sticky; top: 0`。
+20. **性能优化破坏 TOC（历史教训，已被本会话部分推翻）**：历史上 `content-visibility: auto`、`virtualRendering`、Tab 离屏销毁、MutationObserver 懒加载都曾破坏 TOC。**但 2026-08-02 会话证明：`virtualRendering` + `scrollNode` 指对真实滚动容器 + setDocument 后重放 `tocChange`，TOC 可以工作**（打开时延迟 ~600ms 出现）。遗留：滚动高亮不跟随、点击定位不准（虚拟渲染下视口外标题无 DOM）。详见「★ 最新交接」。
+21. **overflow 修改影响 Lake 浮动 UI（已演进）**：`.multi-tab-editor`/`.tab-panels` 设 overflow 曾裁剪表格工具栏与 TOC 按钮（表格工具栏另有 z-index/sticky 链问题，Phase B 未完成）。**Phase A.5 之后每标签独立滚动容器（`.lake-editor-tab` overflow-y:auto）是可行的**——`.multi-tab-editor` 用 `height:100%`（确定高度）而非 `min-height`（否则内容撑高、内部滚动失效、外层裁剪导致无法滚动）。
 22. **`-webkit-app-region: drag` 原生层吃点击**：`pointer-events: none` 无效。`.tab-bar` 设 drag、`.tab-item` 设 no-drag。
 23. **CSS 修改铁律**：改前先 `diff lake-notes-tauri-poc/src/styles.css src/styles.css`；绝不加 `content-visibility`/`contain` 到引擎层。
 24. **Drawnix CSS 不能直接 import**：包的 exports 没导出 CSS。复制到 `src/vendor/` 从本地路径导入。
 25. **DefaultEditorConfig 必须递归深合并**：一层合并丢嵌套配置（`deepMerge` 已实现）。
+26. **scrollNode 必须指向真实滚动容器**（虚拟渲染/大纲定位前提）：本项目滚动容器是 `.document-pane`（桌面多标签后改为每个 `.lake-editor-tab`）；`body` 是 `overflow:hidden`，Lake 默认回退 `document.scrollingElement || document.body` 会拿错，导致视口测量/TOC 全乱。
+27. **新建标签元素在编辑器创建时尚未布局**：`useEffect` 同步阶段 `clientHeight=0`，虚拟渲染初始视口按 0 算 → 首屏/大纲异常。`scrollNode` 函数里读一次 `offsetHeight` 可强制 reflow（对 TOC 空数据不是根因，但对视口测量有影响）。
+28. **TOC 侧边栏创建时用空 toc 渲染（Lake 行为）**：`ready` 事件早于 `tocChange` 时侧边栏永远不会被填充 → 打开文档大纲为 0，编辑后才出现。补丁：`refreshTocSidebar()`（`kernel.getDocExtraContent().toc` 取权威数据 + `kernel.emitPluginEvent("tocChange", data)` 走官方路径重放 + 递增重试 ~600ms）。
+29. **TOC 条目是 `div.ne-toc-item`，不是 `<a>`**：探测/选择器用 `a` 会数出 0 造成误判。
+30. **多标签共用滚动容器 → 滚动位置共享**：`.document-pane` 包所有标签时，A 标签滚到中部，切 B 也在中部。解法：每标签独立滚动容器（`.lake-editor-tab` height:100% + overflow-y:auto，`tab-panels` grid 1fr 钉高度）。
+31. **`npm run dev` 会启动两个 Electron**：`vite-plugin-electron` 默认自动拉起 Electron，脚本里再 `wait-on && electron .` 就是双实例 → 单实例锁冲突 + ERR_FAILED。已修：dev 只跑 vite（commit 3b7db20）。
+32. **打包版卸载后 SingletonLock 残留**：`~/Library/Application Support/lake-notes-electron/SingletonLock|SingletonSocket|SingletonCookie` 残留会挡 dev 启动（"Failed to create SingletonLock: File exists"）。确认无进程后改名 `.stale-bak` 即可（沙箱禁 `rm -f`，用 mv）。
+33. **埋点/日志坑**：`console.debug` 被 DevTools 默认过滤（改用 `console.log`）；HMR 不重建已创建的编辑器实例（测新埋点必须 Cmd+R 或重启）；`editor.on("tocChange")` 收不到内核事件（要走 `editor.kernel.onPluginEvent`）。
+34. **docInitPerf 探针不生效**：monitorLog 走内核 emitter，`editor.on("monitorLog")` 收不到（facade 不转发）；本会话未修，非功能问题。
 
 ### E. 环境与工具
 
