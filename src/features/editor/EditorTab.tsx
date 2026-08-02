@@ -44,18 +44,25 @@ export function EditorTab({ noteId, content, visible, tocEnabled, onChange }: Ed
     host.addEventListener("paste", pasteHandler, true);
 
     let editor: LakeEditorInstance | null = null;
-    const initialContent = content;
+    // 与 LakeEditor 保持一致：setDocument 初始化期间也会触发 contentchange，
+    // 若此时回调里同步 getDocument() 会把整篇大文档（含图片/OCR JSON）序列化一遍，
+    // 在主线程上额外叠加耗时；用 setting 标志屏蔽初始化阶段的重复序列化。
+    let setting = true;
+    if (typeof performance !== "undefined") performance.mark("lake:tab-init:start");
     try {
       editor = createLakeDocument(host, "editor", () => {
-        if (!editor) return;
-        const current = editor.getDocument("text/lake");
-        if (current === initialContent) return;
-        onChangeRef.current(current);
+        if (editor && !setting) onChangeRef.current(editor.getDocument("text/lake"));
       }, tocEnabled, noteId);
       editor.setDocument("text/lake", content);
+      setting = false;
       editorRef.current = editor;
     } catch (reason) {
       console.error("Failed to create editor for tab", noteId, reason);
+    } finally {
+      if (typeof performance !== "undefined" && performance.getEntriesByName("lake:tab-init:start").length) {
+        performance.mark("lake:tab-init:end");
+        try { performance.measure("lake:tab-init:create+setDocument", "lake:tab-init:start", "lake:tab-init:end"); } catch { /* 忽略 */ }
+      }
     }
 
     return () => {

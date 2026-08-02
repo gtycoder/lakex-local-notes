@@ -79,6 +79,43 @@ function ensureCustomCardIcons(config: Record<string, unknown>): void {
   document.body.prepend(svg);
 }
 
+declare global {
+  interface Window {
+    /** 在 DevTools 控制台手动调用，输出最近一次编辑器初始化的耗时明细 */
+    __lakePerfReport?: () => void;
+  }
+}
+
+/** 性能埋点：默认只打 mark（开销极小），控制台执行 window.__lakePerfReport() 查看明细 */
+function lakeMark(name: string): void {
+  try { performance.mark(name); } catch { /* 非浏览器环境忽略 */ }
+}
+
+function lakeMeasure(name: string, startMark: string, endMark: string): void {
+  try {
+    if (performance.getEntriesByName(startMark).length) performance.measure(name, startMark, endMark);
+  } catch { /* 忽略 */ }
+}
+
+if (typeof window !== "undefined" && !window.__lakePerfReport) {
+  window.__lakePerfReport = () => {
+    try {
+      const measures = performance
+        .getEntriesByType("measure")
+        .filter((e) => e.name.startsWith("lake:"))
+        .map((e) => ({ name: e.name, duration: `${Math.round(e.duration)}ms`, start: `${Math.round(e.startTime)}ms` }));
+      console.table(measures);
+      const marks = performance
+        .getEntriesByType("mark")
+        .filter((m) => m.name.startsWith("lake:"))
+        .map((m) => ({ name: m.name, t: `${Math.round(m.startTime)}ms` }));
+      console.table(marks);
+    } catch (error) {
+      console.warn("__lakePerfReport failed", error);
+    }
+  };
+}
+
 export function createLakeDocument(element: HTMLElement, mode: "viewer" | "editor", onChange: () => void, tocEnabled: boolean, noteId: string): LakeEditorInstance {
   const mount = document.createElement("div");
   mount.className = "lake-editor-mount ne-doc-major-editor";
@@ -133,9 +170,12 @@ export function createLakeDocument(element: HTMLElement, mode: "viewer" | "edito
   prepareCustomCards(mergedOptions);
   ensureCustomCardIcons(mergedOptions);
 
+  lakeMark("lake:create:start");
   const editor = mode === "viewer"
     ? (Doc as any).createOpenViewer(mount, mergedOptions)
     : (Doc as any).createOpenEditor(mount, mergedOptions);
+  lakeMark("lake:create:end");
+  lakeMeasure("lake:create:openEditor", "lake:create:start", "lake:create:end");
   if (mode === "editor") editor.on("contentchange", onChange);
   return editor;
 }
