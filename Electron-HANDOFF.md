@@ -37,6 +37,7 @@
 | 阶段 A：资源归一化 + 第三方图片下载/复制修复 | ✅ 完成，用户验证通过 |
 | 阶段 B：S3 备份同步（七牛云） | ✅ 完成，真实同步验证通过 |
 | 打包发布：dmg | ✅ 完成并冒烟验证（未签名、默认图标） |
+| 阶段 C：代码审计 + 优化 + 单测 | 🚧 进行中（本地分支 `audit/code-optimization`，2 commit；56 个 vitest 用例已通过） |
 | 远程仓库 | ✅ 已推送 Gitee `master` 分支 |
 
 ### 2.2 仓库与分支
@@ -51,6 +52,7 @@ origin  https://gitee.com/gtycoder/local-lake.git
 - `master` = Electron 正式版（最新 commit `74062e3`，本仓库 main 的镜像）
 - `main` = 旧 Tauri（trui）版，**保留未动**（正式版分支是 master；如需让 master 成为默认分支，需在 Gitee 后台设置）
 
+**本地分支**：`audit/code-optimization`（审计/优化工作分支，未推送：503742f 修复 + 4bf3728 测试）
 **本地历史分支**（均已过时，勿基于它们开发）：`feature/electron`、`asset-server-poc`
 
 **推送方式**：本机 SSH key 未注册 Gitee，**必须用 HTTPS**（macOS 钥匙串已缓存凭据）：
@@ -209,7 +211,18 @@ Preload (electron/preload.cjs)：原生 CJS，contextBridge 暴露 window.lakeNa
 - 同步面板：状态栏入口 → 配置表单 + 测试连接 + 立即同步
 - **真实七牛同步验证通过**（本地 8 篇笔记 ↔ 云端 282 个对象逐字节一致）
 
-### 5.3 阶段 B 收尾：进度 UI + 资源本地化 + 打包 ✅（commit 74062e3）
+### 5.4 阶段 C：代码审计与优化（分支 audit/code-optimization，commit 503742f）🚧
+
+**审计范围**：`61ee469..HEAD` 全量（OCR delegate 模式 + 人工逐文件 4,250 行）。
+
+**修复要点**：
+- **安全**：SSRF 拦截 IPv4-mapped IPv6（`[::ffff:7f00:1]` 可绕过，已实测确认）；渲染层下载回退加 25MiB 流式上限；S3 Secret 改用 `safeStorage` 加密落盘（兼容旧明文）；IPC 增加 sender frame 校验
+- **健壮性**：asset server 全路由 try/catch（畸形 `%` 编码不再挂起连接）+ MIME 嗅探只读前 16 字节；WorkerPool worker 崩溃时拒绝 in-flight 任务（原 Promise 永不 settle）
+- **同步优化**：下载阶段消除 N+1 查询、资源并行下载；上传跳过云端同 hash 资源（增量零重传）；墓碑写入清单后剪除
+- **并发/生命周期**：单实例锁（dev 与打包版**不能同时运行**，共用 userData）+ sync 并发锁
+- **清理**：删除死代码 `electron/preload.ts`（与 preload.cjs 重复，未参与构建）；`importRemoteNote` 去掉未用参数
+
+**行为变化（注意）**：① 单实例锁 → 开 dev 前先退出打包版；② S3 Secret 下次保存时转加密存储，换机需重填。
 
 **同步进度/结果 UI**：
 - `syncNow(store, onProgress)` 新增 `SyncProgress` 事件：connect/download/upload/manifest/done（带 current/total）
@@ -301,7 +314,7 @@ Path-style:  ✅ 勾选
 3. **打包版与开发版共用 userData**（`lake-notes-electron`）：当前方便测试；正式发布需决策是否用 productName 隔离（避免用户数据目录名是 `lake-notes-electron`）
 4. **大文档性能**：已通过「图片文件化不进 V8 堆」+ `--max-old-space-size=8192` 缓解，但 `virtualRendering` 仍不可用（会破坏 TOC，见 §10 教训）
 5. **渲染包超大**：单 chunk 10MB（mermaid/d3/编辑器全部打进主 bundle），有代码分割优化空间
-6. **无自动化测试**：vitest 已配置但无测试文件（handoff 提过 5 个 `.test.ts` 待迁移）
+6. **自动化测试刚起步**：已新增 56 个 vitest 用例（ssrf / sync 引擎 / clipboardHtml），`npm test` 全绿；Store 层 DB 用例待解决 ABI 问题（better-sqlite3 为 Electron ABI，纯 Node vitest 无法加载，sync 测试用 FakeStore + mock S3 规避）
 7. **孤儿资源无 UI**：IPC 已具备（list/clean），设置面板未做展示与清理按钮
 8. **npm 私有镜像不可达**：装新依赖必须显式用 npmmirror registry
 9. **远程仓库默认分支仍是 main（tauri）**：Gitee 后台可把默认分支切到 master
@@ -312,7 +325,7 @@ Path-style:  ✅ 勾选
 
 1. **发布完善**：应用图标（icns）→ 代码签名 + 公证（`Developer ID Application`）→ 重新打包；Gitee 默认分支切到 master
 2. **孤儿资源 UI**：SyncPanel/设置面板展示 orphan_assets 列表 + 清理按钮（IPC 已就绪）
-3. **自动化测试**：把 `vitest` 测试用例迁移进来（重点：同步引擎、clipboardHtml 清洗、S3 配置校验）
+3. **自动化测试**：✅ 已补 56 个用例（SSRF/同步引擎/剪贴板清洗）；后续可补 Store 层 DB 用例（需 Node/Electron 双 ABI 构建方案）与 S3 配置校验
 4. **大文档性能**：在保证 TOC 正常的前提下再评估 virtualRendering / 代码分割 / 懒加载
 5. **安卓端同步**：同一套七牛配置，复用同步协议（manifests/objects/assets 布局已是跨端设计）
 6. **userData 隔离决策**（若正式分发）
@@ -371,6 +384,8 @@ Path-style:  ✅ 勾选
 31. **七牛报 `UnknownError` = Bucket 名不存在**（404 的字面 message）。先 `ListBuckets` 确认真实空间名，再排查网络。
 32. **Endpoint 必须是区域级地址**：bucket 专用虚拟主机地址（`local-lake-hebei.s3.cn-north-1.qiniucs.com`）+ path-style 会 404，不勾 path-style 会拼出双 bucket 域名导致 TLS 失败。用 `https://s3.cn-north-1.qiniucs.com` + path-style。
 33. **Region 填 `cn-north-1`**，不是空间名。
+34. **单实例锁（audit 新增）**：dev 与打包版共用 userData/SingletonLock，不能同时运行；开发前先退出打包版。
+35. **better-sqlite3 为 Electron ABI，纯 Node 的 vitest 无法 require**：同步引擎测试用 FakeStore + mock @aws-sdk/client-s3（`electron/sync.test.ts`）规避，勿直接 new Store() 写测试。
 
 ---
 
