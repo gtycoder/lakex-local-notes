@@ -118,6 +118,49 @@
 
 ---
 
+## 经验总结（2026-08-02 会话沉淀，方法论 > 技巧）
+
+### 方法论：永远实测，不猜
+- **Playwright 驱动真实 Electron 调试**：`_electron.launch({ executablePath, args:["."], cwd })`
+  直接起应用；主进程 `isDev = !app.isPackaged` 会去连 1421 dev server，用静态服务器
+  serve `dist/` 即可跑生产渲染层（含真实 IPC/asset server/DB）。
+- 流程：**先复现拿数据（DOM 几何/事件时序/控制台）→ 再反编译 Lake dist 确认机制 → 再改**。
+  本次所有"怪问题"（TOC 滚走、无高亮、粘贴空壳、工具栏消失）都是这样定位的；不要靠
+  读代码猜。
+- 逐元素派发实验定位监听归属：不确定某个事件监听挂在哪个元素时，对候选元素逐个派发
+  合成事件看谁生效（如表格工具栏的 mouseleave 监听最终定位到 `ne-table-wrap`）。
+
+### 深层认识：Lake 编辑器与虚拟渲染
+- **scrollNode 是虚拟渲染的命根子**：必须指向真实滚动容器（本项目高度链修复后是
+  `.ne-editor-wrap`）；`body overflow:hidden` 时 Lake 默认回退
+  `document.scrollingElement || document.body` 会拿错，视口测量/TOC 全乱。
+- **Lake 的 TOC watcher 与虚拟渲染不兼容，不要修**：`TWe._checkIndex` 二分探测标题
+  DOM（`querySelector('[id=...]')`），视口外标题无 DOM → 探测 null → 立即 -1 → 永远
+  不选中。用自研跟随覆盖（高亮 + 点击校正 + 列表 `_makeVisible` 复刻三件套）。
+- **Lake 内部对象要摸清归属再下手**（都靠反编译 + 实验确认）：
+  - 卡片工具栏显隐监听绑在卡片 `_rootNode`——表格是 `ne-table-wrap`（`ne-table-hole` 的子孙）
+  - 卡片水合要调**卡片**的 `_neRef._virtualNode.$appear()`（可见性观察器作用在 hole，
+    `hole.$appear` 不传播到卡片 UI）
+  - overlay 的 hover 状态只由卡片 mouseenter/mouseleave 驱动，工具栏渲染在卡片外
+    （placement top），鼠标一移过去就触发隐藏
+- **mouseleave 不冒泡但有捕获阶段**：document 捕获层先于目标监听器执行 →
+  `stopImmediatePropagation` 可拦截"卡片→工具栏"的隐藏事件（hover 桥的核心）。
+- **虚拟渲染滚动补偿**：滚动后 `wrap.scrollTop` 会因内容高度变化被 Lake 调整，定位元素
+  必须实时 `getBoundingClientRect`。
+
+### 工程实践
+- **双 ABI 测试**：Electron ABI 原生模块（better-sqlite3）在纯 Node 报
+  `NODE_MODULE_VERSION 1`。`test-node-abi/` 单独装 Node 构建 + vitest `resolve.alias`，
+  配合 `vi.mock("electron")`，Store 层终于可测（22 例）。
+- **探针收敛**：调试探针要收敛才能转正式——留 opt-in 工具（`window.__lakePerfReport`）、
+  删 console 噪音、重试/轮询封顶（`refreshTocSidebar` 8 次、轮询 5s）。
+- **数据安全**：e2e 测试写用户真实数据前先想好清理路径；`.lake` 是 HTML+URL 编码文本
+  （空格→%20），grep 要用编码后的模式，否则漏匹配。
+- **文档即交接**：每次会话结束把根因/方案/实测/坑写进交接文档；本次按类型拆分
+  （README + docs/*），新会话先读 PROGRESS.md 的 ★最新交接。
+
+---
+
 ## 已完成内容（历史）
 
 ### 5.1 阶段 A：资源归一化 + 第三方图片下载/复制修复 ✅（commit a703492）
