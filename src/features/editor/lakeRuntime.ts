@@ -150,13 +150,21 @@ if (typeof window !== "undefined") {
       }
       // TOC 探测：区分「侧边栏没创建 / 数据为空 / 数据有但 CSS 隐藏」
       try {
+        // TOC 条目渲染为 div.ne-toc-item（不是 <a>），并探测尺寸/定位判断是否「渲染了但看不见」
         const tocSidebar = document.querySelector(".ne-toc-sidebar, .ne-viewer-toc-sidebar");
-        const tocItems = tocSidebar ? tocSidebar.querySelectorAll("a").length : 0;
-        console.group("TOC 探测（打开文档后、编辑前跑一次；编辑后再跑一次对比）");
+        const tocItems = tocSidebar ? tocSidebar.querySelectorAll(".ne-toc-item").length : 0;
+        const tocAnchors = tocSidebar ? tocSidebar.querySelectorAll("a").length : 0;
+        const rect = tocSidebar ? tocSidebar.getBoundingClientRect() : null;
+        const cs = tocSidebar ? getComputedStyle(tocSidebar) : null;
+        console.group("TOC 探测（打开后跑一次；编辑后再跑一次对比）");
         console.table([{
           sidebar存在: !!tocSidebar,
-          侧边栏条目数: tocItems,
-          html片段: tocSidebar ? tocSidebar.innerHTML.slice(0, 160).replace(/\s+/g, " ") : "(无侧边栏)",
+          条目div数: tocItems,
+          条目a数: tocAnchors,
+          尺寸: rect ? `${Math.round(rect.width)}x${Math.round(rect.height)}` : "-",
+          display: cs?.display, visibility: cs?.visibility, opacity: cs?.opacity, position: cs?.position,
+          leftTop: rect ? `${Math.round(rect.left)},${Math.round(rect.top)}` : "-",
+          html片段: tocSidebar ? tocSidebar.innerHTML.slice(0, 120).replace(/\s+/g, " ") : "(无侧边栏)",
         }]);
         console.groupEnd();
       } catch { /* 忽略 */ }
