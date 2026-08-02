@@ -192,7 +192,14 @@ const VIRTUAL_RENDERING = {
   cardLazyInit: true,
 };
 
-export function createLakeDocument(element: HTMLElement, mode: "viewer" | "editor", onChange: () => void, tocEnabled: boolean, noteId: string): LakeEditorInstance {
+export function createLakeDocument(
+  element: HTMLElement,
+  mode: "viewer" | "editor",
+  onChange: () => void,
+  tocEnabled: boolean,
+  noteId: string,
+  scrollNode?: HTMLElement | null
+): LakeEditorInstance {
   const mount = document.createElement("div");
   mount.className = "lake-editor-mount ne-doc-major-editor";
   element.replaceChildren(mount);
@@ -240,7 +247,8 @@ export function createLakeDocument(element: HTMLElement, mode: "viewer" | "edito
       ? {
           virtualRendering: true,
           scrollNode: () =>
-            (document.querySelector(VIRTUAL_RENDERING.scrollContainerSelector) as HTMLElement | null)
+            scrollNode
+            || (document.querySelector(VIRTUAL_RENDERING.scrollContainerSelector) as HTMLElement | null)
             || document.scrollingElement
             || document.body,
           cardLazyInit: VIRTUAL_RENDERING.cardLazyInit,

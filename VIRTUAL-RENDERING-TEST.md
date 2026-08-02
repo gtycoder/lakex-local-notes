@@ -94,3 +94,38 @@ cardLazyInit: true,   // = allowCardLazyInit 的配置键：视口外卡片懒�
 - [ ] TOC 大纲：重新出现？位置/高亮/点击跳转是否正常（scrollNode 生效后原生定位）
 - [ ] 表格浮动工具栏：hover 表格后是否出现、可点击（若仍消失，见 z-index 链，Phase B）
 - [ ] 确认无回归：图片、画板、思维导图、多标签切换、粘贴/复制
+
+---
+
+# Phase A.5：每个标签页独立滚动容器（scrollNode 指到各自标签）
+
+> 用户反馈（Phase A 后）：
+> 1. TOC 能显示但不跟随滚动、到文档中部消失（内容滚走，TOC 跟着滚出视口）
+> 2. 多标签滚动位置共享（A 在中部 → 其他标签也在中部）
+> 3. 代码块粘贴后默认不可见（虚拟渲染新卡片 hydration 边界，待观察）
+>
+> 根因：`.document-pane` 是**所有标签共享的一个滚动容器**，编辑器内容超高、
+> 外层滚动 —— 与 Lake 原生形态（固定高度编辑器 + 内部滚动）不符，
+> TOC/工具栏的原生定位依赖的就是后者。
+
+## 本次改动
+
+1. CSS：
+   - `.document-pane:has(> .multi-tab-editor) { overflow: hidden }`（桌面多标签不再共享滚动）
+   - `.tab-panels { grid-template-rows: 1fr; min-height: 0; overflow: hidden }`
+   - `.lake-editor-tab { height: 100%; overflow-y: auto; overflow-x: hidden }`（每标签独立滚动）
+   - 移动端单编辑器路径不受影响（`:has` 只匹配桌面多标签）
+2. `createLakeDocument` 增加可选 `scrollNode` 参数；`EditorTab` 传入自己的 host（= 该标签的滚动容器）。
+   移动端 `LakeEditor` 不传，继续回退 `.document-pane`。
+
+## 预期
+
+- 多标签各自记住滚动位置
+- TOC 在标签内滚动容器里获得原生定位环境 → 高亮跟随、不滚出视口
+- 工具栏 sticky 原生行为也可能随之正常（Phase B 再确认）
+
+## 测试点
+
+- [ ] 多标签：A 滚到中部 → 切 B → B 保持自己的位置；开新标签互不影响
+- [ ] TOC：滚动时高亮跟随；到文档中部 TOC 是否仍可见
+- [ ] 无回归：图片、画板、思维导图、代码块滚动出现、粘贴/复制

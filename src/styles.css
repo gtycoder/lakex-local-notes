@@ -253,11 +253,13 @@ button { cursor: pointer; }
   display: flex;
   flex-direction: column;
   min-height: 100%;
-  /* overflow:visible — Lake's table toolbar renders inside
-     .ne-inner-overlay-container (absolute child of editor DOM).
-     overflow:hidden clips it, causing the toolbar to disappear. */
+  /* 虚拟渲染 + scrollNode：每个标签页独立滚动（见 .lake-editor-tab）。
+     overflow 保持 visible：Lake 的表格工具栏渲染在 .ne-inner-overlay-container
+     （编辑器 DOM 的 absolute 子元素），overflow:hidden 会裁剪导致消失。 */
   overflow: visible;
 }
+/* 多标签模式下 .document-pane 不再是共享滚动容器（否则所有标签共用一条滚动进度） */
+.document-pane:has(> .multi-tab-editor) { overflow: hidden; }
 
 .tab-bar {
   display: flex;
@@ -348,12 +350,18 @@ button { cursor: pointer; }
 .tab-panels {
   flex: 1;
   display: grid;
-  overflow: visible;
+  grid-template-rows: 1fr;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .lake-editor-tab {
   grid-area: 1 / 1;
   min-height: 0;
+  height: 100%;
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
 }
 
 /* ===== Fix: multi-tab layout overrides ===== */

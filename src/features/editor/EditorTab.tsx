@@ -58,7 +58,7 @@ export function EditorTab({ noteId, content, visible, tocEnabled, onChange }: Ed
     try {
       editor = createLakeDocument(host, "editor", () => {
         if (editor && !setting) onChangeRef.current(editor.getDocument("text/lake"));
-      }, tocEnabled, noteId);
+      }, tocEnabled, noteId, host);
       editor.setDocument("text/lake", content);
       setting = false;
       editorRef.current = editor;
