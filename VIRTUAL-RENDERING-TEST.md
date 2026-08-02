@@ -132,25 +132,27 @@ cardLazyInit: true,   // = allowCardLazyInit 的配置键：视口外卡片懒�
 
 ---
 
-# 试验状态汇总（截至 2026-08-02 16:30）
+# 试验状态汇总（截至 2026-08-02 18:30，TOC/粘贴问题修复后）
 
 ## ✅ 已解决
 
 | 项 | 方案 | 状态 |
 |---|---|---|
-| 大文档首屏图片 hydration 慢 3.5s | virtualRendering + cardLazyInit + scrollNode(.document-pane→per-tab) | ✅ 首图 +88ms |
-| 多标签滚动位置共享 | 每标签独立滚动容器（`.lake-editor-tab` overflow-y:auto）| ✅ |
-| 编辑器工具栏不置顶 | per-tab 固定高度滚动容器后 Lake 原生 sticky 生效 | ✅ |
-| TOC 打开时为 0（编辑后才出现） | setDocument 后 `refreshTocSidebar()`：内核 docExtraContent 取数 + 内核总线重放 tocChange + 重试 | ✅ 约 600ms 延迟，用户接受 |
+| 大文档首屏图片 hydration 慢 3.5s | virtualRendering + cardLazyInit + scrollNode | ✅ 首图 +88ms（本次回归：0.5-0.8s） |
+| 多标签滚动位置共享 | 每标签独立滚动容器（`.lake-editor-tab`）| ✅ |
+| 编辑器工具栏不置顶 | 高度链修复后 `.ne-editor-wrap` 内部滚动，工具栏天然置顶 | ✅ |
+| TOC 打开时为 0（编辑后才出现） | `refreshTocSidebar()` 内核取数 + 重放 tocChange + 重试 | ✅ 约 600ms 延迟，用户接受 |
+| **TOC 滚出视口消失** | 高度链修复：`.lake-editor-tab` overflow:hidden 外壳 + `.lake-editor-mount`/`.ne-editor` height:100% → `.ne-editor-wrap` 成为 Lake 原生内部滚动容器 | ✅ 任意滚动位置 TOC 固定 121→792 |
+| **TOC 高亮不跟随** | 自研 `setupTocScrollFollow`：遍历已渲染标题（虚拟渲染下视口外无 DOM，跳过），标题顶越过视口顶 → 高亮；回顶高亮第一标题；滚动后 80/250/500ms + tileRenderCompleted 重算 | ✅ 实测跟随 + 回顶正常 |
+| **TOC 点击定位不准** | 点击后 50/200ms 两次 `scrollTop += headingTop - vpTop` 精确校正 | ✅ 5 个深度条目偏差 0-4px |
+| **代码块粘贴后不可见** | `ensureCardsInViewHydrated`：contentchange/滚动/渲染批次后对视口内未 appear 的 `ne-card` 直接 `_neRef._virtualNode.$appear()`（Lake 观察器作用在 hole 上不传播，需修） | ✅ 粘贴 300ms 内水合；历史卡壳卡片重开也修复 |
 
 ## ❓ 待验证 / ❌ 未解决
 
-- [ ] TOC 滚动高亮跟随（虚拟渲染下视口外标题无 DOM，`getBoundingClientRect` 定位可能失效）
-- [ ] 表格浮动工具栏 hover 消失（Phase B：z-index/sticky 链）
-- [ ] 代码块粘贴后默认不可见（需关闭再打开；疑似新卡片 hydration，可能和 cardLazyInit 相关）
-- [ ] TOC 侧边栏尺寸/定位（40px 宽、文档高、top 偏移）是否随条目渲染恢复正常，需用户目测确认
+- [ ] 表格浮动工具栏 hover 消失（Phase B：z-index/sticky 链）← 唯一剩余功能问题
+- [ ] 多标签下隐藏标签的 TOC 高亮状态（切回时由 scroll/update 重算，需用户目测确认无感）
 
 ## 备注
 
-- `refreshTocSidebar` 是加载窗口期补丁（内核 tocChange 在 setDocument 期间到达，
-  侧边栏创建时用空 toc 渲染且无后续更新）；合并回主干前建议收敛重试次数/日志。
+- `setupTocScrollFollow` / `ensureCardsInViewHydrated` 是试验修复（依赖 Lake 内部 `_neRef._virtualNode`），
+  合并回主干前建议收敛：清理探针日志、收敛 `refreshTocSidebar` 重试与轮询次数、评估 `_neRef` 依赖的版本风险。

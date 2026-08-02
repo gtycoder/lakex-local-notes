@@ -53,17 +53,37 @@
    - Phase A：删掉了 TOC `position:fixed`/`--toc-top` 和表格工具栏 `display:none` 等历史补丁，回归 Lake 原生
    - Phase A.5：每标签页独立滚动容器（`.lake-editor-tab` overflow-y:auto）+ scrollNode 指向各自标签 → 解决多标签滚动共享
 
+### 本会话（后续）：TOC 三问题 + 代码块粘贴修复（2026-08-02，实测验证）
+
+**根因（全部实测/反编译定位）**：
+1. **大纲滚出视口**：高度链断裂——`.lake-editor-mount` 高度 auto 被内容撑高（实测 `.ne-editor-body` 高 5809px），TOC（`position:absolute; top:0; bottom:0` 钉在 `.ne-editor-body` 上）随内容滚出视口。Lake 原生滚动层 `.ne-editor-wrap`（`ne-layout-mode-* .ne-editor-wrap { height:100%; overflow-y:auto }`）从未生效。
+2. **无高亮/不跟随**：Lake TOC watcher 用**二分查找**探测标题 DOM（`querySelector('[id=...]').getBoundingClientRect()`），虚拟渲染下视口外标题无 DOM，中间探测项返回 null → 二分立即返回 -1，永远不选中。
+3. **点击定位不准**：Lake `_scrollTo` 把标题滚到滚动容器顶部，但旧布局下滚动容器在外层、工具栏 sticky 悬浮盖顶；且 cardLazyInit 邻近卡片占位高度导致偏差。
+4. **代码块粘贴不可见**：cardLazyInit 下插入的卡片**永远停留在未水合空壳**（80px 空 `.ne-codeblock-content`）——Lake 可见性观察器观察的是 hole 节点，`hole.$appear` 不会传播到卡片 UI；实测 `卡片._neRef._virtualNode.$appear()` 可立即水合。卡片在模型里（保存正常），只是不渲染。
+
+**修复（commit 待提交）**：
+1. **布局修复**（`src/styles.css`）：`.lake-editor-tab` 改 `overflow:hidden` 只做固定外壳；`.lake-editor-mount`/`.ne-editor` 补 `height:100%` 高度链 → Lake 规则生效，`.ne-editor-wrap` 成为真实内部滚动容器 → TOC 固定可见、工具栏天然置顶、点击定位数学恢复正确。
+2. **scrollNode 指向 `.ne-editor-wrap`**（`resolveScrollNode()`，仅 `.lake-editor-tab` 宿主启用内部滚动；移动端路径不变）。
+3. **自研 TOC 滚动跟随高亮 + 点击精确滚动**（`setupTocScrollFollow()`）：滚动/渲染批次完成后按文档序遍历**已渲染**标题，标题顶越过视口顶 → 高亮对应 `.ne-toc-item`（滚动回顶部时高亮第一个标题）；点击后在 50/200ms 做两次 `scrollTop += headingTop - vpTop` 精确校正。绕过 Lake 失效的二分 watcher。
+4. **修复性卡片水合**（`ensureCardsInViewHydrated()`）：contentchange/滚动/tileRenderCompleted 后，对视口内未 `isAppear` 的 `ne-card` 直接调 `_neRef._virtualNode.$appear()`。保留 cardLazyInit 性能收益，粘贴代码块 300ms 内立即可见。
+
+**实测验收**（Playwright 驱动真实 Electron）：
+- 大纲固定：任意滚动位置 `.ne-toc-sidebar` 保持 121→792（视口高）；滚动跟随高亮正确、回顶恢复第一标题
+- 点击定位：5 个不同深度条目落点偏差 0-4px
+- 多标签：滚动位置独立、各自 TOC 独立高亮
+- 代码块粘贴：插入 300ms 内水合（2 行、CM6 完整）；历史卡壳卡片（之前粘贴的）重开后也被修复性水合
+- 首图仍 ~0.5-0.8s（无性能回退）；`npm test` 56 用例全绿
+
 ### 当前问题（未解决，见 §八）
-1. **TOC 滚动高亮不跟随** + **点击定位不准**（虚拟渲染下视口外标题无 DOM，Lake 的 `getBoundingClientRect` 定位失效；滚动到可见区后 watcher 会重算，但高亮仍不跟随）
+1. ~~TOC 滚动高亮不跟随 / 点击定位不准~~ → **已修复**（见上）
 2. **表格浮动工具栏 hover 消失**（Phase B：z-index/sticky 链）
-3. **代码块粘贴后默认不可见**（需折叠/展开一次才正常；疑似新卡片 hydration 与 cardLazyInit 相关）
-4. TOC 侧边栏在条目渲染前的异常尺寸（40px 宽/整文高/top 偏移）待确认是否自愈
+3. ~~代码块粘贴后默认不可见~~ → **已修复**（修复性水合，cardLazyInit 保留）
+4. TOC 侧边栏在条目渲染前的异常尺寸（40px 宽/整文高/top 偏移）——已随高度链修复自愈（当前 TOC 恒为视口高 671px）
 
 ### 下一步计划（详细见 §九）
-1. **Phase B**：移除 `.ne-ui` sticky 覆盖 + `z-index:auto` 七件套 + overlay 层级 → 验证表格工具栏
-2. 排查代码块粘贴不可见（试 `cardLazyInit: false` 对照）
-3. TOC 高亮：研究 Lake 是否基于模型位置兜底；或对虚拟渲染下 off-screen 标题做占位
-4. 试验收敛：把 `VIRTUAL_RENDERING` 开关/`refreshTocSidebar` 重试收敛为正式实现，写清回归清单后决策合回 `audit/code-optimization`
+1. **Phase B**：移除 `.ne-ui` sticky 覆盖 + `z-index:auto` 七件套 + overlay 层级 → 验证表格浮动工具栏 hover（唯一剩余功能问题）
+2. 试验收敛：把 `VIRTUAL_RENDERING` 开关/`refreshTocSidebar` 重试/`setupTocScrollFollow`/`ensureCardsInViewHydrated` 收敛为正式实现（清理探针日志、收敛重试次数），跑完 `VIRTUAL-RENDERING-TEST.md` 回归清单后决策合回 `audit/code-optimization`
+3. TOC 高亮边缘场景观察：无标题段落区（如引言）滚动时高亮保持上一标题，用户可接受后再合回
 
 ### 本会话踩过的坑（速览，细节见 §十 D）
 - scrollNode 必须指向**真实滚动容器**（body 是 overflow:hidden，Lake 默认回退 document.scrollingElement 会拿错）
@@ -87,7 +107,7 @@
 | 阶段 B：S3 备份同步（七牛云） | ✅ 完成，真实同步验证通过 |
 | 打包发布：dmg | ✅ 完成并冒烟验证（未签名、默认图标） |
 | 阶段 C：代码审计 + 优化 + 单测 | 🚧 进行中（分支 `audit/code-optimization`；56 个 vitest 用例通过；本会话在其上加了性能埋点 + dev 脚本修复，commit `808b72d`~`db539db`） |
-| 大文档性能：virtualRendering 试验 | 🚧 **试验分支 `experiment/virtual-rendering`**：首图 3.5s→88ms、工具栏置顶、多标签滚动独立；TOC 高亮/点击定位、表格工具栏、代码块粘贴未解决 |
+| 大文档性能：virtualRendering 试验 | 🚧 **试验分支 `experiment/virtual-rendering`**：首图 3.5s→88ms、工具栏置顶、多标签滚动独立；TOC 固定/高亮跟随/点击定位、代码块粘贴**已修复**；**表格浮动工具栏 hover 未解决**（Phase B） |
 | 远程仓库 | ✅ 已推送 Gitee `master` 分支 |
 
 ### 2.2 仓库与分支
@@ -378,20 +398,20 @@ Path-style:  ✅ 勾选
 7. **孤儿资源无 UI**：IPC 已具备（list/clean），设置面板未做展示与清理按钮
 8. **npm 私有镜像不可达**：装新依赖必须显式用 npmmirror registry
 9. **远程仓库默认分支仍是 main（tauri）**：Gitee 后台可把默认分支切到 master
-10. **TOC 滚动高亮不跟随、点击定位不准**（虚拟渲染分支）：视口外标题无 DOM，`getBoundingClientRect` 定位失效；打开文档时大纲需约 600ms 才出现（`refreshTocSidebar` 补丁）
-11. **表格浮动工具栏 hover 消失**（Phase A 已去掉 `display:none` 隐藏，剩 z-index/sticky 链问题，Phase B 处理）
-12. **代码块粘贴后默认不可见**（需折叠/展开一次；疑似新卡片 hydration 与 `cardLazyInit` 相关）
-13. **TOC 侧边栏在条目渲染前的异常尺寸**（40px 宽 / 整文高 / top 偏移），条目渲染后是否自愈待确认
+10. ~~TOC 滚动高亮不跟随、点击定位不准~~ → **已修复**（本会话：自研 `setupTocScrollFollow` 滚动跟随 + 点击精确校正 + scrollNode 指向 `.ne-editor-wrap`；打开文档大纲约 600ms 出现由 `refreshTocSidebar` 补丁保留）
+11. **表格浮动工具栏 hover 消失**（Phase A 已去掉 `display:none` 隐藏，剩 z-index/sticky 链问题，Phase B 处理）← **当前唯一未解决功能问题**
+12. ~~代码块粘贴后默认不可见~~ → **已修复**（本会话：`ensureCardsInViewHydrated` 修复性水合，cardLazyInit 保留；根因是 Lake 可见性观察器作用在 hole 节点、`hole.$appear` 不传播到卡片 UI）
+13. ~~TOC 侧边栏异常尺寸~~ → **已随高度链修复自愈**（TOC 恒为视口高）
 
 ---
 
 ## 九、下一步计划（建议顺序）
 
 **（虚拟渲染试验分支 `experiment/virtual-rendering` 优先，用户认可先做小测试）**
-1. **Phase B（表格工具栏）**：移除 `.ne-ui` 的 `position:sticky` 覆盖 + `z-index:auto` 七件套 + `.ne-inner-overlay-container z-index`，验证表格浮动工具栏 hover 是否恢复（历史 z-index 大战的收尾）
-2. **代码块粘贴不可见**：对照 `cardLazyInit: false` 是否修复；不行再查虚拟渲染下新插入卡片的 hydration
-3. **TOC 高亮/点击定位**：研究 Lake 是否基于模型位置兜底，或对虚拟渲染 off-screen 标题做占位/模型换算
-4. **试验收敛决策**：把 `VIRTUAL_RENDERING` 开关 + `refreshTocSidebar` 重试收敛为正式实现；跑完 `VIRTUAL-RENDERING-TEST.md` 回归清单；再决策合回 `audit/code-optimization`（TOC/表格工具栏未解决前**不要上 main**）
+1. **Phase B（表格工具栏）**：移除 `.ne-ui` 的 `position:sticky` 覆盖 + `z-index:auto` 七件套 + `.ne-inner-overlay-container z-index`，验证表格浮动工具栏 hover 是否恢复（历史 z-index 大战的收尾）← **唯一剩余功能问题**
+2. ~~代码块粘贴不可见~~ → **已修复**（修复性水合，见最新交接）
+3. ~~TOC 高亮/点击定位~~ → **已修复**（自研跟随 + 校正，见最新交接）
+4. **试验收敛决策**：把 `VIRTUAL_RENDERING` 开关 + `refreshTocSidebar` 重试 + `setupTocScrollFollow`/`ensureCardsInViewHydrated` 收敛为正式实现（清理探针日志、收敛重试次数/轮询）；跑完 `VIRTUAL-RENDERING-TEST.md` 回归清单；再决策合回 `audit/code-optimization`（表格工具栏未解决前**不要上 main**）
 5. **发布完善**：应用图标（icns）→ 代码签名 + 公证 → 重新打包；Gitee 默认分支切到 master
 6. **孤儿资源 UI**：SyncPanel/设置面板展示 orphan_assets 列表 + 清理按钮（IPC 已就绪）
 7. **自动化测试**：可补 Store 层 DB 用例（Node/Electron 双 ABI 方案）与 S3 配置校验

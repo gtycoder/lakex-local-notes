@@ -362,8 +362,11 @@ button { cursor: pointer; }
   grid-area: 1 / 1;
   min-height: 0;
   height: 100%;
-  overflow-y: auto;
-  overflow-x: hidden;
+  /* 虚拟渲染 + TOC 固定定位：滚动层必须是 Lake 原生内部容器 .ne-editor-wrap。
+     TOC 侧边栏是 absolute 钉在 .ne-editor-body 上的，若外层 .lake-editor-tab
+     滚动，整个 body（含 TOC）会被滚出视口（现象：大纲只在顶部、到底消失）。
+     .lake-editor-tab 只做固定高度外壳，滚动交给 .ne-editor-wrap（见下高度链）。 */
+  overflow: hidden;
   overscroll-behavior: contain;
 }
 
@@ -373,6 +376,15 @@ button { cursor: pointer; }
    a large blank bar at the bottom. Override them here. */
 .lake-editor-tab .lake-editor-mount {
   min-height: auto;
+  /* 高度链（关键）：mount 填满标签 → .ne-editor 填满 mount →
+     .ne-editor-body 触发 Lake 规则 height:calc(100% - 50px) →
+     .ne-editor-wrap 触发 height:100%; overflow-y:auto 成为真实滚动容器。
+     此前 mount 高度 auto 被内容撑高，Lake 内部滚动从未生效。 */
+  height: 100%;
+}
+/* .ne-editor 填满 mount（body 的 calc(100% - 50px) 以它为参照） */
+.lake-editor-tab .lake-editor-mount .ne-editor {
+  height: 100%;
 }
 .lake-editor-tab {
   padding: 0;

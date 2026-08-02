@@ -212,6 +212,33 @@ const VIRTUAL_RENDERING = {
   cardLazyInit: true,
 };
 
+/**
+ * 解析虚拟渲染/大纲定位的真实滚动容器。
+ *
+ * 高度链修复后（styles.css .lake-editor-tab 高度链），真实滚动容器是 Lake 原生
+ * 的 `.ne-editor-wrap`（height:100% + overflow-y:auto）——TOC 侧边栏是 absolute
+ * 钉在 `.ne-editor-body` 上的，只有内部滚动时大纲才不会滚出视口，且
+ * scrollNode 的 getBoundingClientRect 才是正确的视口测量基准。
+ *
+ * 说明：
+ *  - 新建标签元素在编辑器创建时尚未布局（useEffect 同步阶段 clientHeight=0），
+ *    读 offsetHeight 强制同步布局，让高度落地后再交给 Lake；
+ *  - 仅 `.lake-editor-tab`（桌面多标签）启用内部滚动；移动端单编辑器路径
+ *    （无 scrollNode 参数）仍走外层 .document-pane，行为不变。
+ */
+function resolveScrollNode(scrollNode?: HTMLElement | null): HTMLElement {
+  const hostNode = (scrollNode
+    || (document.querySelector(VIRTUAL_RENDERING.scrollContainerSelector) as HTMLElement | null)
+    || document.scrollingElement
+    || document.body) as HTMLElement;
+  void hostNode.offsetHeight;
+  if (hostNode.classList?.contains("lake-editor-tab")) {
+    const wrap = hostNode.querySelector?.(".ne-editor-wrap") as HTMLElement | null;
+    if (wrap) return wrap;
+  }
+  return hostNode;
+}
+
 export function createLakeDocument(
   element: HTMLElement,
   mode: "viewer" | "editor",
@@ -266,18 +293,7 @@ export function createLakeDocument(
     ...(VIRTUAL_RENDERING.enabled
       ? {
           virtualRendering: true,
-          scrollNode: () => {
-            // 新建标签元素在编辑器创建时尚未布局（useEffect 同步阶段），
-            // clientHeight=0 会让虚拟渲染初始视口按 0 计算，导致 TOC 标题
-            // 收集错乱（打开时大纲为空，编辑后才出现）。读 offsetHeight
-            // 强制同步布局，让高度落地后再交给 Lake。
-            const node = (scrollNode
-              || (document.querySelector(VIRTUAL_RENDERING.scrollContainerSelector) as HTMLElement | null)
-              || document.scrollingElement
-              || document.body) as HTMLElement;
-            void node.offsetHeight;
-            return node;
-          },
+          scrollNode: () => resolveScrollNode(scrollNode),
           cardLazyInit: VIRTUAL_RENDERING.cardLazyInit,
         }
       : {}),
@@ -321,6 +337,12 @@ export function createLakeDocument(
       });
       engineAny?.on?.("aftercontentchange", () => console.log(`${tag} engine aftercontentchange @${Math.round(performance.now())}ms`));
     } catch { /* 忽略 */ }
+    // 虚拟渲染下 Lake 原生 TOC watcher 的二分探测失效（视口外标题无 DOM），
+    // 自研滚动跟随高亮 + 点击精确滚动；清理函数挂在 editor 上由 destroyLakeEditor 调。
+    try {
+      const dispose = setupTocScrollFollow(element, editor, () => resolveScrollNode(scrollNode));
+      (editor as any).__disposeTocFollow = dispose;
+    } catch { /* 非编辑器环境忽略 */ }
   }
   // 订阅 Lake 内置性能监控：docInitPerf（code 55），直接给出异步渲染管线的
   // parseTime / renderTime / nodeLength，用于量化 setDocument 之后的主线程耗时
@@ -340,6 +362,183 @@ export function createLakeDocument(
     });
   } catch { /* 非编辑器环境忽略 */ }
   return editor;
+}
+
+/** 虚拟渲染 + cardLazyInit 下，粘贴/新建的卡片可能永远停留在未水合的空壳
+ * （Lake 的可见性观察器观察的是 hole 节点，hole.$appear 不会传播到卡片 UI；
+ *  实测直接调用 卡片._neRef._virtualNode.$appear() 可立即水合）。
+ * 这里做修复性水合：contentchange / 滚动 / 渲染批次完成后，对视口内未 appear 的
+ * 卡片主动 $appear。保留 cardLazyInit 的懒加载收益，同时保证粘贴立即可见。 */
+function ensureCardsInViewHydrated(host: HTMLElement): void {
+  try {
+    const scroller = host.querySelector?.(".ne-editor-wrap") || host;
+    const vp = scroller.getBoundingClientRect();
+    host.querySelectorAll("ne-card").forEach((card) => {
+      const vn = (card as any)._neRef?._virtualNode;
+      if (!vn || vn.isAppear) return;
+      const r = card.getBoundingClientRect();
+      if (r.top < vp.bottom && r.bottom > vp.top && r.width > 0 && r.height > 0) {
+        vn.$appear();
+      }
+    });
+  } catch { /* 忽略 */ }
+}
+
+/** 虚拟渲染下 Lake 原生 TOC watcher 失效（二分探测视口外标题无 DOM，永远 -1 不选中）。
+ * 自研滚动跟随高亮 + 点击精确滚动：
+ *  - 高亮：滚动时按文档序遍历 toc 标题，取位于视口上 1/3 带内的最后（即当前）标题，
+ *    给对应 .ne-toc-item 加 ne-toc-selected（与 Lake 的 selected 状态同语义）。
+ *  - 点击：Lake 的 scrollByNodeId 负责渲染目标单元并初滚；cardLazyInit 下邻近卡片
+ *    是占位高度，首次定位会偏，这里在 50/200ms 做两次精确校正。
+ * 返回清理函数。 */
+function setupTocScrollFollow(
+  host: HTMLElement,
+  editor: LakeEditorInstance | null,
+  getScrollNode: () => HTMLElement
+): () => void {
+  let cleanup: (() => void) | null = null;
+  let sidebar: HTMLElement | null = null;
+  let activeId: string | null = null;
+  let pollTimer: number | undefined;
+  let scrollTimer: number | undefined;
+
+  const getTocIds = (): string[] => {
+    try {
+      const toc = (editor as any)?.kernel?.getDocExtraContent?.()?.toc;
+      return Array.isArray(toc) ? toc.map((t: any) => t?.id).filter(Boolean) : [];
+    } catch { return []; }
+  };
+
+  const apply = (id: string | null, force = false): void => {
+    if (!force && id === activeId) return;
+    activeId = id;
+    if (!sidebar) return;
+    sidebar.querySelectorAll(".ne-toc-item").forEach((el) => {
+      el.classList.toggle("ne-toc-selected", (el as HTMLElement).dataset.id === id);
+    });
+  };
+
+  const update = (): void => {
+    const scroller = getScrollNode();
+    const ids = getTocIds();
+    if (!ids.length) return;
+    const vpTop = scroller.getBoundingClientRect().top;
+    let current: string | null = null;
+    for (const id of ids) {
+      const el = host.querySelector(`[id="${id}"]`) as HTMLElement | null;
+      if (!el) continue; // 虚拟渲染：视口外标题无 DOM，跳过
+      const top = el.getBoundingClientRect().top;
+      // 标题顶部越过视口顶 → 成为当前小节（经典大纲语义）
+      if (top <= vpTop) current = id;
+      else break; // 标题按文档序递增，之后的都在下方
+    }
+    if (current !== null) apply(current);
+    // 文档开头是正文/引言（首个标题在视口之下）：回到顶部时高亮第一个标题，
+    // 避免残留滚动到底部的旧高亮
+    else if (scroller.scrollTop < 4) apply(ids[0]);
+  };
+
+  // 虚拟渲染是异步重建 DOM：滚动瞬间视口顶的标题可能还没渲染出来，
+  // 单次 update 会漏算。滚动后按 80/250/500ms 重算 + 每次渲染批次完成后重算。
+  const scheduleUpdate = (): void => {
+    window.clearTimeout(scrollTimer);
+    scrollTimer = window.setTimeout(update, 80);
+    window.setTimeout(update, 250);
+    window.setTimeout(update, 500);
+    // 滚动进入视口的懒卡片顺带水合（修复粘贴/懒初始化卡壳）
+    window.setTimeout(() => ensureCardsInViewHydrated(host), 120);
+    window.setTimeout(() => ensureCardsInViewHydrated(host), 400);
+  };
+
+  const correctScrollTo = (id: string): void => {
+    const el = host.querySelector(`[id="${id}"]`) as HTMLElement | null;
+    const scroller = getScrollNode();
+    if (!el || !scroller) return;
+    const delta = el.getBoundingClientRect().top - scroller.getBoundingClientRect().top;
+    if (Math.abs(delta) > 2) scroller.scrollTop += delta;
+  };
+
+  const onScroll = (): void => {
+    scheduleUpdate();
+  };
+
+  const onClick = (event: Event): void => {
+    const target = event.target as HTMLElement | null;
+    const item = target?.closest?.(".ne-toc-item") as HTMLElement | null;
+    const id = item?.getAttribute?.("data-id");
+    if (!id) return;
+    // Lake 的 item onClick（冒泡阶段）会先执行 scrollByNodeId 渲染目标单元并初滚；
+    // 懒卡片占位高度导致的偏差在渲染/水合稳定后校正两次。
+    window.setTimeout(() => correctScrollTo(id), 50);
+    window.setTimeout(() => correctScrollTo(id), 200);
+  };
+
+  const bind = (): boolean => {
+    const el = host.querySelector?.(".ne-toc-sidebar") as HTMLElement | null;
+    if (!el) return false;
+    if (el === sidebar && cleanup) return true;
+    if (cleanup) { cleanup(); cleanup = null; }
+    sidebar = el;
+    activeId = null;
+    const scroller = getScrollNode();
+    scroller.addEventListener("scroll", onScroll, { passive: true });
+    el.addEventListener("click", onClick, true);
+    const observer = new MutationObserver(() => apply(activeId, true));
+    observer.observe(el, { childList: true, subtree: true });
+    // contentchange（粘贴/编辑/插入卡片）：异步等卡片落位后水合 + 刷新高亮
+    let contentChangeTimer: number | undefined;
+    const onContentChange = (): void => {
+      window.clearTimeout(contentChangeTimer);
+      contentChangeTimer = window.setTimeout(() => {
+        ensureCardsInViewHydrated(host);
+        update();
+      }, 120);
+      window.setTimeout(ensureCardsInViewHydrated, 600);
+      window.setTimeout(ensureCardsInViewHydrated, 1500);
+    };
+    try { (editor as any)?.on?.("contentchange", onContentChange); } catch { /* 忽略 */ }
+    // 虚拟渲染每批重建完成后重算高亮（滚动瞬间视口顶标题可能尚未渲染）
+    let renderer = null;
+    try { renderer = (editor as any)?.renderer; } catch { /* 忽略 */ }
+    const onTileRender = (): void => { update(); ensureCardsInViewHydrated(host); };
+    renderer?.on?.("tileRenderCompleted", onTileRender);
+    renderer?.on?.("generalRenderCompleted", onTileRender);
+    cleanup = () => {
+      scroller.removeEventListener("scroll", onScroll);
+      el.removeEventListener("click", onClick, true);
+      try { (editor as any)?.off?.("contentchange", onContentChange); } catch { /* 忽略 */ }
+      window.clearTimeout(contentChangeTimer);
+      observer.disconnect();
+      renderer?.off?.("tileRenderCompleted", onTileRender);
+      renderer?.off?.("generalRenderCompleted", onTileRender);
+      window.clearTimeout(scrollTimer);
+      sidebar = null;
+      activeId = null;
+    };
+    window.setTimeout(update, 0);
+    return true;
+  };
+
+  const tryBind = (): void => {
+    if (bind()) window.clearInterval(pollTimer);
+  };
+
+  // 侧边栏创建时机晚于编辑器 ready（ready 早于 tocChange）；轮询 + tocChange 后重绑
+  window.setTimeout(tryBind, 0);
+  window.setTimeout(tryBind, 600);
+  pollTimer = window.setInterval(tryBind, 250);
+  try {
+    (editor as any)?.kernel?.onPluginEvent?.("tocChange", () => {
+      window.setTimeout(tryBind, 0);
+      window.setTimeout(() => apply(activeId, true), 60);
+    });
+  } catch { /* 忽略 */ }
+
+  return () => {
+    window.clearInterval(pollTimer);
+    window.clearTimeout(scrollTimer);
+    cleanup?.();
+  };
 }
 
 /** 试验修复：Lake 编辑器 TOC 侧边栏创建时用空 toc 渲染（jI.render(GY, {toc: []})），
@@ -373,6 +572,11 @@ export function refreshTocSidebar(editor: LakeEditorInstance | null): void {
 }
 
 export function destroyLakeEditor(editor: LakeEditorInstance | null): void {
+  try {
+    (editor as any)?.__disposeTocFollow?.();
+  } catch (error) {
+    console.warn("Lake TOC follow cleanup failed", error);
+  }
   try {
     editor?.destroy?.();
     if (!editor?.destroy) editor?.destory?.();
