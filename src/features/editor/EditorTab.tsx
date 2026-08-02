@@ -16,6 +16,12 @@ export function EditorTab({ noteId, content, visible, tocEnabled, onChange }: Ed
   const onChangeRef = useRef(onChange);
   onChangeRef.current = onChange;
 
+  // 性能排查探针：记录标签页可见性变化，用于对齐图片懒加载（IntersectionObserver）
+  // 与 display:none 容器的关系（显示：不可见容器内元素不会触发交叉回调）
+  useEffect(() => {
+    console.log(`[lake-perf] tab visible ${noteId.slice(0, 8)} visible=${visible} @${Math.round(performance.now())}ms`);
+  }, [noteId, visible]);
+
   useEffect(() => {
     const host = hostRef.current;
     if (!host) return;
