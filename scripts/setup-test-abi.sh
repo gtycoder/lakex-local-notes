@@ -2,7 +2,7 @@
 # 双 ABI 测试基建：为 vitest（Node ABI）单独装一份 better-sqlite3。
 # 仓库 node_modules 里的 better-sqlite3 是 Electron ABI（@electron/rebuild 后），
 # 纯 Node 的 vitest 无法 require（NODE_MODULE_VERSION 不匹配）。
-# 用法：bash scripts/setup-test-abi.sh  （需 Node ≥ 20.12，见 Electron-HANDOFF.md §3.1）
+# 用法：bash scripts/setup-test-abi.sh  （需 Node ≥ 20.12，见 docs/DEVELOPMENT.md §一）
 set -euo pipefail
 cd "$(dirname "$0")/.."
 

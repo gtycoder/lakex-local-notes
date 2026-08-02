@@ -62,7 +62,7 @@ cardLazyInit: true,   // = allowCardLazyInit 的配置键：视口外卡片懒�
 ## 试验结束
 
 - 结论 OK → 合回 `audit/code-optimization` 前把 `VIRTUAL_RENDERING.enabled` 置
-  false（或按结论再评估），并同步 Electron-HANDOFF.md
+  false（或按结论再评估），并同步 docs/PROGRESS.md
 - 结论 NG → 保留本分支 + 文档记录原因，回到 audit 分支
 
 ---
