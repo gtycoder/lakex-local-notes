@@ -148,6 +148,18 @@ if (typeof window !== "undefined") {
       } else {
         console.log("尚未收到 Lake docInitPerf（若编辑器已打开，说明 monitorLog 订阅未生效）");
       }
+      // TOC 探测：区分「侧边栏没创建 / 数据为空 / 数据有但 CSS 隐藏」
+      try {
+        const tocSidebar = document.querySelector(".ne-toc-sidebar, .ne-viewer-toc-sidebar");
+        const tocItems = tocSidebar ? tocSidebar.querySelectorAll("a").length : 0;
+        console.group("TOC 探测（打开文档后、编辑前跑一次；编辑后再跑一次对比）");
+        console.table([{
+          sidebar存在: !!tocSidebar,
+          侧边栏条目数: tocItems,
+          html片段: tocSidebar ? tocSidebar.innerHTML.slice(0, 160).replace(/\s+/g, " ") : "(无侧边栏)",
+        }]);
+        console.groupEnd();
+      } catch { /* 忽略 */ }
     } catch { /* 忽略 */ }
     try {
       // 本地图片资源请求的实际发起时间（Resource Timing，回顾式，无需提前监听）
