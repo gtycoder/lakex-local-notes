@@ -3,7 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
 import net from "node:net";
-import { net as electronNet } from "electron";
+import { net as electronNet, safeStorage } from "electron";
 import { ASSET_PORT } from "./assetServer.js";
 
 const DEFAULT_WORKSPACE_ID = "default";
@@ -442,17 +442,42 @@ export class Store {
     const row = this.db.prepare("SELECT value FROM settings WHERE key='s3_settings'").get() as { value: string } | undefined;
     if (!row) return null;
     try {
-      const parsed = JSON.parse(row.value);
+      const parsed = JSON.parse(row.value) as S3Settings;
       if (!parsed || typeof parsed.endpoint !== "string") return null;
-      return parsed as S3Settings;
+      if (typeof parsed.secretAccessKey === "string") parsed.secretAccessKey = this.decryptSecret(parsed.secretAccessKey);
+      return parsed;
     } catch {
       return null;
     }
   }
 
   saveS3Settings(settings: S3Settings): void {
+    // 密钥用 Electron safeStorage（macOS Keychain）加密落盘；不可用时退回明文
+    const stored = { ...settings, secretAccessKey: this.encryptSecret(settings.secretAccessKey) };
     this.db.prepare("INSERT INTO settings(key,value) VALUES('s3_settings',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value")
-      .run(JSON.stringify(settings));
+      .run(JSON.stringify(stored));
+  }
+
+  private encryptSecret(value: string): string {
+    try {
+      if (safeStorage.isEncryptionAvailable()) {
+        return `enc:v1:${safeStorage.encryptString(value).toString("base64")}`;
+      }
+    } catch (error) {
+      console.warn("[store] safeStorage 加密不可用，S3 Secret 将明文保存:", error);
+    }
+    return value;
+  }
+
+  private decryptSecret(value: string): string {
+    if (!value.startsWith("enc:v1:")) return value; // 旧版明文数据
+    try {
+      return safeStorage.decryptString(Buffer.from(value.slice("enc:v1:".length), "base64"));
+    } catch (error) {
+      // 密钥串丢失/换机：无法解密时返回空串，提示用户重新填写
+      console.warn("[store] S3 Secret 解密失败，请重新填写:", error);
+      return "";
+    }
   }
 
   contentHash(id: string): string {
@@ -479,6 +504,13 @@ export class Store {
 
   recordSyncResult(json: string): void {
     this.db.prepare("INSERT INTO device_state(key,value) VALUES('last_sync_result',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value").run(json);
+  }
+
+  /** 已写入同步清单的删除标记可安全剪除，避免 deleted_notes 无限累积 */
+  pruneTombstones(ids: string[]): void {
+    if (ids.length === 0) return;
+    const placeholders = ids.map(() => "?").join(",");
+    this.db.prepare(`DELETE FROM deleted_notes WHERE id IN (${placeholders})`).run(...ids);
   }
 
   getSyncStatus(): { lastSyncedAt: string | null; lastResult: Record<string, unknown> | null } {
@@ -516,7 +548,7 @@ export class Store {
   }
 
   /** 导入远程笔记：写 .lake + note-assets 资源 + upsert DB 记录 */
-  importRemoteNote(note: SyncNote & { contentHash: string }, content: Buffer, assets: Array<{ filename: string; bytes: Buffer }>): void {
+  importRemoteNote(note: SyncNote, content: Buffer, assets: Array<{ filename: string; bytes: Buffer }>): void {
     const tx = this.db.transaction(() => {
       // 写 .lake
       fs.writeFileSync(this.notePath(note.id), content, "utf8");
@@ -546,7 +578,6 @@ export class Store {
       ).run(note.id, DEFAULT_WORKSPACE_ID, note.parentId, note.title, note.id, note.sortOrder, note.updatedAt, note.updatedAt, note.isConflict ? 1 : 0);
     });
     tx();
-    void note.contentHash;
   }
 
   uploadResource(input: { bytes: number[]; filename: string }, noteId: string): ResourceUploadOutput {
@@ -651,6 +682,16 @@ function isBlockedIPv6(ip: string): boolean {
   if (h === "::" || h === "::1") return true;                              // 未指定/回环
   if (h.startsWith("fc") || h.startsWith("fd")) return true;               // fc00::/7 唯一本地
   if (/^fe[89ab]/.test(h)) return true;                                    // fe80::/10 链路本地
+  // IPv4-mapped IPv6（::ffff:127.0.0.1 或 ::ffff:7f00:1）：解析出内嵌 IPv4 后复用 IPv4 拦截，
+  // 否则 Chromium 会把 [::ffff:7f00:1] 连到 127.0.0.1，绕过 SSRF 防护
+  if (h.startsWith("::ffff:")) {
+    const embedded = h.slice("::ffff:".length);
+    if (embedded.includes(".")) return isBlockedIPv4(embedded);
+    const groups = embedded.split(":").filter(Boolean).map((g) => parseInt(g, 16));
+    if (groups.length === 2 && groups.every((g) => !Number.isNaN(g))) {
+      return isBlockedIPv4(`${(groups[0] >> 8) & 0xff}.${groups[0] & 0xff}.${(groups[1] >> 8) & 0xff}.${groups[1] & 0xff}`);
+    }
+  }
   return false;
 }
 

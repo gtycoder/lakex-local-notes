@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, session } from "electron";
+import { app, BrowserWindow, ipcMain, session, type WebFrameMain } from "electron";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { Store } from "./store.js";
@@ -64,9 +64,25 @@ async function createWindow() {
   }
 }
 
+/** IPC 只接受本应用页面（dev server / 打包 file://）发来的调用 */
+function isTrustedSenderFrame(frame: WebFrameMain | null): boolean {
+  if (!frame) return false;
+  try {
+    const url = frame.url;
+    if (url.startsWith("file://")) return true;
+    if (url.startsWith("http://127.0.0.1:") || url.startsWith("http://localhost:")) return true;
+    if (url.startsWith("devtools://") || url === "about:blank") return true;
+    return false;
+  } catch { return false; }
+}
+
 function registerIpc() {
+  let syncInFlight = false;
   const handle = (channel: string, fn: (...args: any[]) => any) => {
-    ipcMain.handle(channel, (_event, ...args) => fn(...args));
+    ipcMain.handle(channel, (event, ...args) => {
+      if (!isTrustedSenderFrame(event.senderFrame)) throw new Error("IPC 调用来源不受信任");
+      return fn(...args);
+    });
   };
 
   handle("bootstrap_workspace", () => store.bootstrap());
@@ -90,26 +106,43 @@ function registerIpc() {
   handle("save_s3_settings", (settings: unknown) => store.saveS3Settings(settings as Parameters<Store["saveS3Settings"]>[0]));
   handle("test_s3_connection", () => testConnection(store));
   // sync_now 需要携带进度事件（主进程 → 渲染进程）
-  ipcMain.handle("sync_now", (event) =>
-    syncNow(store, (progress) => { try { event.sender.send("sync-progress", progress); } catch { /* 窗口已关闭 */ } })
-  );
+  ipcMain.handle("sync_now", (event) => {
+    if (!isTrustedSenderFrame(event.senderFrame)) throw new Error("IPC 调用来源不受信任");
+    if (syncInFlight) throw new Error("同步正在进行中，请等待本次同步完成");
+    syncInFlight = true;
+    return syncNow(store, (progress) => { try { event.sender.send("sync-progress", progress); } catch { /* 窗口已关闭 */ } })
+      .finally(() => { syncInFlight = false; });
+  });
   handle("get_sync_status", () => store.getSyncStatus());
 }
 
 // Increase renderer memory limit for large documents with base64 images
 app.commandLine.appendSwitch("js-flags", "--max-old-space-size=8192");
 
-app.whenReady().then(() => {
-  store = new Store(workspaceRoot());
-  registerCdnRedirect();
-  startAssetServer(path.join(workspaceRoot(), "note-assets"), vendorCdnDir());
-  registerIpc();
-  createWindow();
-
-  app.on("activate", () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow();
+// 单实例锁：双开应用会并发写同一 SQLite 与 .lake 文件，存在丢失更新风险
+if (!app.requestSingleInstanceLock()) {
+  app.quit();
+} else {
+  app.on("second-instance", () => {
+    const win = BrowserWindow.getAllWindows()[0];
+    if (win) {
+      if (win.isMinimized()) win.restore();
+      win.focus();
+    }
   });
-});
+
+  app.whenReady().then(() => {
+    store = new Store(workspaceRoot());
+    registerCdnRedirect();
+    startAssetServer(path.join(workspaceRoot(), "note-assets"), vendorCdnDir());
+    registerIpc();
+    createWindow();
+
+    app.on("activate", () => {
+      if (BrowserWindow.getAllWindows().length === 0) createWindow();
+    });
+  });
+}
 
 app.on("window-all-closed", () => {
   if (process.platform !== "darwin") app.quit();

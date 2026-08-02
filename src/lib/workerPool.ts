@@ -9,6 +9,7 @@ interface WorkerTask {
   mimeType: string;
   resolve: (bytes: number[]) => void;
   reject: (error: Error) => void;
+  worker?: Worker;
 }
 
 interface WorkerState {
@@ -61,7 +62,20 @@ export class WorkerPool {
   }
 
   private handleWorkerError(event: ErrorEvent): void {
-    console.error("Worker error:", event.error);
+    console.error("Worker error:", event.message || event.error);
+    const failed = event.target;
+    const workerState = this.workers.find((w) => w.worker === failed);
+    if (workerState) {
+      workerState.busy = false;
+      // 拒绝该 worker 上所有 in-flight 任务，避免 Promise 永不 settle 导致界面挂死
+      for (const [id, task] of this.pendingTasks) {
+        if (task.worker === failed) {
+          this.pendingTasks.delete(id);
+          task.reject(new Error(`图片转换 worker 崩溃: ${event.message || "unknown error"}`));
+        }
+      }
+      this.processQueue();
+    }
   }
 
   /**
@@ -85,6 +99,7 @@ export class WorkerPool {
 
   private executeTask(workerState: WorkerState, task: WorkerTask): void {
     workerState.busy = true;
+    task.worker = workerState.worker;
     this.pendingTasks.set(task.id, task);
     workerState.worker.postMessage({
       id: task.id,
@@ -120,6 +135,8 @@ export class WorkerPool {
   terminate(): void {
     this.workers.forEach(w => w.worker.terminate());
     this.workers = [];
+    for (const task of this.pendingTasks.values()) task.reject(new Error("Worker pool terminated"));
+    this.pendingTasks.clear();
     this.queue.forEach(task => task.reject(new Error("Worker pool terminated")));
     this.queue = [];
   }

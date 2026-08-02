@@ -1,6 +1,6 @@
 import { native } from "../../lib/native";
 import type { ResourceUploadInput, ResourceUploadOutput } from "../../lib/types";
-import { normalizeImageInput, sniffImageFormat } from "./imageFormat";
+import { MAX_IMAGE_BYTES, normalizeImageInput, sniffImageFormat } from "./imageFormat";
 import { createConcurrencyQueue } from "../../lib/concurrency";
 import { withRetry } from "../../lib/retry";
 import { WorkerPool } from "../../lib/workerPool";
@@ -97,7 +97,27 @@ async function performUpload(request: unknown, noteId: string): Promise<Resource
         const resp = await fetch(payload);
         if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
         const contentType = resp.headers.get("content-type") || "";
-        const bytes = Array.from(new Uint8Array(await resp.arrayBuffer()));
+        // 与主进程一致：流式读取 + 25 MiB 上限，防止大响应撑爆渲染进程内存
+        const declaredLength = Number(resp.headers.get("content-length") || 0);
+        if (declaredLength > MAX_IMAGE_BYTES) throw new Error("资源超过 25 MiB");
+        const reader = resp.body?.getReader();
+        if (!reader) throw new Error("响应无内容");
+        const chunks: Uint8Array[] = [];
+        let total = 0;
+        for (;;) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          total += value.byteLength;
+          if (total > MAX_IMAGE_BYTES) {
+            await reader.cancel().catch(() => undefined);
+            throw new Error("资源超过 25 MiB");
+          }
+          chunks.push(value);
+        }
+        const merged = new Uint8Array(total);
+        let offset = 0;
+        for (const chunk of chunks) { merged.set(chunk, offset); offset += chunk.byteLength; }
+        const bytes = Array.from(merged);
         const filename = new URL(payload).pathname.split("/").pop() || "file";
 
         // Non-image URL → base64 data URL

@@ -136,6 +136,10 @@ export async function syncNow(store: Store, onProgress?: (p: SyncProgress) => vo
   if (remoteManifest) {
     // 本地已删除笔记的墓碑（下载阶段生效：本地删除优先，不重新拉取）
     const tombstoned = new Set(store.listDeletedNotesForSync().map((d) => d.id));
+    // 预建本地索引，避免循环内 N+1 查询
+    const localNotesAll = store.listNotesForSync();
+    const localById = new Map(localNotesAll.map((n) => [n.id, n]));
+    const localIdsAll = new Set(localNotesAll.map((n) => n.id));
     const remoteTotal = remoteManifest.notes.length;
     let remoteIndex = 0;
     for (const rn of remoteManifest.notes) {
@@ -143,13 +147,13 @@ export async function syncNow(store: Store, onProgress?: (p: SyncProgress) => vo
       report({ phase: "download", current: remoteIndex, total: remoteTotal, message: rn.deleted ? "处理云端删除记录" : `检查远端笔记「${rn.title}」` });
       // 云端已删除：本地若有则删除（墓碑防重拉），不下载对象
       if (rn.deleted) {
-        const exists = store.listNotesForSync().some((n) => n.id === rn.id);
+        const exists = localIdsAll.has(rn.id);
         if (exists) store.deleteTreeNode(rn.id);
         continue;
       }
       // 本地已删除而云端未标记：本地删除优先，跳过下载（上传阶段会标记 deleted）
       if (tombstoned.has(rn.id)) continue;
-      const local = store.listNotesForSync().find((n) => n.id === rn.id);
+      const local = localById.get(rn.id) ?? null;
       const localHash = local ? store.contentHash(local.id) : null;
       if (localHash === rn.contentHash) {
         store.setBaseHash(rn.id, rn.contentHash);
@@ -161,10 +165,10 @@ export async function syncNow(store: Store, onProgress?: (p: SyncProgress) => vo
       if (!lakeBytes) throw new Error(`清单引用的文档对象不存在: ${rn.contentHash}`);
       // 下载资源文件（manifest 里列出）
       const assets: { filename: string; bytes: Buffer }[] = [];
-      for (const asset of rn.assets || []) {
+      await Promise.all((rn.assets || []).map(async (asset) => {
         const bytes = await remote.getOptional(`assets/${rn.id}/${asset.filename}`);
         if (bytes) assets.push({ filename: asset.filename, bytes });
-      }
+      }));
       const base = store.baseHash(rn.id);
       const localChanged = localHash !== null && localHash !== base;
       const remoteChanged = rn.contentHash !== base;
@@ -173,7 +177,7 @@ export async function syncNow(store: Store, onProgress?: (p: SyncProgress) => vo
         const conflictId = crypto.randomUUID();
         const title = `${rn.title}（冲突副本 ${new Date().toISOString().slice(0, 10)}）`;
         store.importRemoteNote(
-          { id: conflictId, title, parentId: rn.parentId, sortOrder: rn.sortOrder + 1, updatedAt: rn.updatedAt, isConflict: true, contentHash: rn.contentHash },
+          { id: conflictId, title, parentId: rn.parentId, sortOrder: rn.sortOrder + 1, updatedAt: rn.updatedAt, isConflict: true },
           lakeBytes, assets
         );
         store.setBaseHash(conflictId, rn.contentHash);
@@ -183,7 +187,7 @@ export async function syncNow(store: Store, onProgress?: (p: SyncProgress) => vo
         continue;
       } else {
         store.importRemoteNote(
-          { id: rn.id, title: rn.title, parentId: rn.parentId, sortOrder: rn.sortOrder, updatedAt: rn.updatedAt, isConflict: rn.isConflict, contentHash: rn.contentHash },
+          { id: rn.id, title: rn.title, parentId: rn.parentId, sortOrder: rn.sortOrder, updatedAt: rn.updatedAt, isConflict: rn.isConflict },
           lakeBytes, assets
         );
         store.setBaseHash(rn.id, rn.contentHash);
@@ -200,6 +204,11 @@ export async function syncNow(store: Store, onProgress?: (p: SyncProgress) => vo
   const remoteById = new Map<string, ManifestNote>(
     (remoteManifest?.notes ?? []).map((n) => [n.id, n])
   );
+  // 远端清单已登记的资源 hash（filename 不可变 + 内容寻址，hash 一致即无需重传）
+  const remoteAssetHashes = new Map<string, string>();
+  for (const rn of remoteManifest?.notes ?? []) {
+    for (const a of rn.assets || []) remoteAssetHashes.set(`${rn.id}/${a.filename}`, a.hash);
+  }
   const orphans = new Set(store.listOrphanAssets().map((o) => `${o.noteId}/${o.filename}`));
   let uploaded = 0;
   const manifestNotes: ManifestNote[] = [];
@@ -224,8 +233,10 @@ export async function syncNow(store: Store, onProgress?: (p: SyncProgress) => vo
           if (!stat.isFile()) continue;
           if (orphans.has(`${note.id}/${filename}`)) continue;
           const bytes = fs.readFileSync(full);
+          const hash = sha256Hex(bytes);
+          assets.push({ filename, size: bytes.length, hash });
+          if (remoteAssetHashes.get(`${note.id}/${filename}`) === hash) continue;
           await remote.put(`assets/${note.id}/${filename}`, bytes, mimeTypeFor(filename));
-          assets.push({ filename, size: bytes.length, hash: sha256Hex(bytes) });
         }
       }
       uploaded += 1;
@@ -270,6 +281,8 @@ export async function syncNow(store: Store, onProgress?: (p: SyncProgress) => vo
     store.setBaseHash(note.id, note.contentHash);
     store.markSynced(note.id);
   }
+  // 已写入清单的 deleted 标记可安全剪除本地墓碑，避免 deleted_notes 无限累积
+  store.pruneTombstones(manifestNotes.filter((n) => n.deleted).map((n) => n.id));
   const result: SyncResult = { uploaded, downloaded, conflicts, manifestId: commitId, completedAt };
   store.markSyncComplete(completedAt);
   store.recordSyncResult(JSON.stringify(result));

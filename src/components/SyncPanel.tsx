@@ -31,8 +31,8 @@ export function SyncPanel({ open, onClose }: { open: boolean; onClose: () => voi
 
   useEffect(() => {
     if (!open) return;
-    void native.getS3Settings().then((value) => value && setSettings(value));
-    void native.getSyncStatus().then(setLastSync);
+    void native.getS3Settings().then((value) => value && setSettings(value)).catch(() => undefined);
+    void native.getSyncStatus().then(setLastSync).catch(() => undefined);
   }, [open]);
 
   if (!open) return null;

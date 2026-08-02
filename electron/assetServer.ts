@@ -29,6 +29,21 @@ function sniffMime(bytes: Buffer): string | null {
   return null;
 }
 
+/** 只读取文件头部 16 字节做 MIME 嗅探，避免整文件读入内存（vendor 资源可达 MB 级） */
+function sniffMimeFromFile(filePath: string): string | null {
+  let fd: number | undefined;
+  try {
+    fd = fs.openSync(filePath, "r");
+    const head = Buffer.alloc(16);
+    const read = fs.readSync(fd, head, 0, 16, 0);
+    return sniffMime(head.subarray(0, read));
+  } catch {
+    return null;
+  } finally {
+    if (fd !== undefined) fs.closeSync(fd);
+  }
+}
+
 function isSafeSegment(segment: string): boolean {
   return segment.length > 0 && segment !== "." && segment !== ".." && !segment.includes("/") && !segment.includes("\\");
 }
@@ -37,80 +52,86 @@ export function startAssetServer(noteAssetsDir: string, vendorCdnDir: string): h
   fs.mkdirSync(noteAssetsDir, { recursive: true });
 
   const server = http.createServer(async (req, res) => {
-    const parsed = new URL(req.url ?? "/", `http://127.0.0.1:${ASSET_PORT}`);
-    const urlPath = decodeURIComponent(parsed.pathname);
-    // Lake 编辑器 CDN 资源的本地镜像：/vendor/cdn/<path>（主进程 onBeforeRequest 重定向过来）
-    if (urlPath.startsWith("/vendor/cdn/")) {
-      const rel = urlPath.slice("/vendor/cdn/".length);
-      if (!rel || rel.split("/").some((seg) => seg === ".." || seg.includes("\\") || seg === "")) {
+    try {
+      const parsed = new URL(req.url ?? "/", `http://127.0.0.1:${ASSET_PORT}`);
+      // 畸形百分号编码（如 /%E0%A4%A）会让 decodeURIComponent 抛 URIError，统一兜底 400
+      const urlPath = decodeURIComponent(parsed.pathname);
+      // Lake 编辑器 CDN 资源的本地镜像：/vendor/cdn/<path>（主进程 onBeforeRequest 重定向过来）
+      if (urlPath.startsWith("/vendor/cdn/")) {
+        const rel = urlPath.slice("/vendor/cdn/".length);
+        if (!rel || rel.split("/").some((seg) => seg === ".." || seg.includes("\\") || seg === "")) {
+          res.writeHead(400); res.end("bad request"); return;
+        }
+        const vendorFile = path.join(vendorCdnDir, rel);
+        if (!fs.existsSync(vendorFile) || !fs.statSync(vendorFile).isFile()) {
+          res.writeHead(404); res.end("not found"); return;
+        }
+        const ext = path.extname(rel).toLowerCase();
+        let mime = MIME_MAP[ext];
+        if (!mime) {
+          mime = sniffMimeFromFile(vendorFile) ?? "application/octet-stream";
+        }
+        const stat = fs.statSync(vendorFile);
+        res.writeHead(200, {
+          "Content-Type": mime,
+          "Content-Length": stat.size,
+          "Cache-Control": "public, max-age=31536000, immutable",
+          "Access-Control-Allow-Origin": "*",
+        });
+        fs.createReadStream(vendorFile).pipe(res);
+        return;
+      }
+      // 资源归一化后的 URL 格式：/{noteId}/{filename}
+      const segments = urlPath.split("/").filter(Boolean);
+      if (segments.length !== 2 || !isSafeSegment(segments[0]) || !isSafeSegment(segments[1])) {
         res.writeHead(400); res.end("bad request"); return;
       }
-      const vendorFile = path.join(vendorCdnDir, rel);
-      if (!fs.existsSync(vendorFile) || !fs.statSync(vendorFile).isFile()) {
+      const [noteId, filename] = segments;
+      const filePath = path.join(noteAssetsDir, noteId, filename);
+      if (!fs.existsSync(filePath)) {
         res.writeHead(404); res.end("not found"); return;
       }
-      const ext = path.extname(rel).toLowerCase();
-      let mime = MIME_MAP[ext];
-      if (!mime) {
-        const head = fs.readFileSync(vendorFile).subarray(0, 16);
-        mime = sniffMime(head) ?? "application/octet-stream";
+
+      const ext = path.extname(filename).toLowerCase();
+      const mime = MIME_MAP[ext] ?? "application/octet-stream";
+
+      if (parsed.searchParams.get("base64") === "1") {
+        let buf = fs.readFileSync(filePath);
+        let outMime = mime;
+        // 微信等 macOS 原生应用不渲染 data:image/webp，复制到微信时统一转 PNG
+        // （参照 Tauri 版 uploadWithWebpConversion；sharp 基于 libvips 支持 WebP/AVIF 解码）
+        if (ext === ".webp" || ext === ".avif") {
+          try {
+            buf = await sharp(buf).png().toBuffer();
+            outMime = "image/png";
+          } catch (error) {
+            console.warn("[asset-server] webp→png 转换失败，返回原格式:", error);
+          }
+        }
+        const b64 = buf.toString("base64");
+        const body = `data:${outMime};base64,${b64}`;
+        res.writeHead(200, {
+          "Content-Type": "text/plain",
+          "Content-Length": Buffer.byteLength(body),
+          "Access-Control-Allow-Origin": "*",
+        });
+        res.end(body);
+        return;
       }
-      const stat = fs.statSync(vendorFile);
+
+      const stat = fs.statSync(filePath);
       res.writeHead(200, {
         "Content-Type": mime,
         "Content-Length": stat.size,
         "Cache-Control": "public, max-age=31536000, immutable",
         "Access-Control-Allow-Origin": "*",
       });
-      fs.createReadStream(vendorFile).pipe(res);
-      return;
+      fs.createReadStream(filePath).pipe(res);
+    } catch (error) {
+      console.warn("[asset-server] 请求处理失败:", req.url, error);
+      if (!res.headersSent) res.writeHead(400);
+      res.end("bad request");
     }
-    // 资源归一化后的 URL 格式：/{noteId}/{filename}
-    const segments = urlPath.split("/").filter(Boolean);
-    if (segments.length !== 2 || !isSafeSegment(segments[0]) || !isSafeSegment(segments[1])) {
-      res.writeHead(400); res.end("bad request"); return;
-    }
-    const [noteId, filename] = segments;
-    const filePath = path.join(noteAssetsDir, noteId, filename);
-    if (!fs.existsSync(filePath)) {
-      res.writeHead(404); res.end("not found"); return;
-    }
-
-    const ext = path.extname(filename).toLowerCase();
-    const mime = MIME_MAP[ext] ?? "application/octet-stream";
-
-    if (parsed.searchParams.get("base64") === "1") {
-      let buf = fs.readFileSync(filePath);
-      let outMime = mime;
-      // 微信等 macOS 原生应用不渲染 data:image/webp，复制到微信时统一转 PNG
-      // （参照 Tauri 版 uploadWithWebpConversion；sharp 基于 libvips 支持 WebP/AVIF 解码）
-      if (ext === ".webp" || ext === ".avif") {
-        try {
-          buf = await sharp(buf).png().toBuffer();
-          outMime = "image/png";
-        } catch (error) {
-          console.warn("[asset-server] webp→png 转换失败，返回原格式:", error);
-        }
-      }
-      const b64 = buf.toString("base64");
-      const body = `data:${outMime};base64,${b64}`;
-      res.writeHead(200, {
-        "Content-Type": "text/plain",
-        "Content-Length": Buffer.byteLength(body),
-        "Access-Control-Allow-Origin": "*",
-      });
-      res.end(body);
-      return;
-    }
-
-    const stat = fs.statSync(filePath);
-    res.writeHead(200, {
-      "Content-Type": mime,
-      "Content-Length": stat.size,
-      "Cache-Control": "public, max-age=31536000, immutable",
-      "Access-Control-Allow-Origin": "*",
-    });
-    fs.createReadStream(filePath).pipe(res);
   });
 
   server.listen(ASSET_PORT, "127.0.0.1", () => {
