@@ -290,7 +290,18 @@ export function createLakeDocument(
     : (Doc as any).createOpenEditor(mount, mergedOptions);
   lakeMark("lake:create:end");
   lakeMeasure("lake:create:openEditor", "lake:create:start", "lake:create:end");
-  if (mode === "editor") editor.on("contentchange", onChange);
+  if (mode === "editor") {
+    editor.on("contentchange", onChange);
+    // TOC 排错探针：看 tocChange / tocPinStatusChange 在打开文档时是否触发、数据大小
+    try {
+      (editor as any).onPluginEvent?.("tocChange", (data: any) => {
+        console.log(`[lake-perf] tocChange @${Math.round(performance.now())}ms, 条目=${Array.isArray(data) ? data.length : data}`);
+      });
+      (editor as any).on?.("tocPinStatusChange", (data: any) => {
+        console.log(`[lake-perf] tocPinStatusChange @${Math.round(performance.now())}ms, data=${data}`);
+      });
+    } catch { /* 忽略 */ }
+  }
   // 订阅 Lake 内置性能监控：docInitPerf（code 55），直接给出异步渲染管线的
   // parseTime / renderTime / nodeLength，用于量化 setDocument 之后的主线程耗时
   try {
