@@ -246,11 +246,18 @@ export function createLakeDocument(
     ...(VIRTUAL_RENDERING.enabled
       ? {
           virtualRendering: true,
-          scrollNode: () =>
-            scrollNode
-            || (document.querySelector(VIRTUAL_RENDERING.scrollContainerSelector) as HTMLElement | null)
-            || document.scrollingElement
-            || document.body,
+          scrollNode: () => {
+            // 新建标签元素在编辑器创建时尚未布局（useEffect 同步阶段），
+            // clientHeight=0 会让虚拟渲染初始视口按 0 计算，导致 TOC 标题
+            // 收集错乱（打开时大纲为空，编辑后才出现）。读 offsetHeight
+            // 强制同步布局，让高度落地后再交给 Lake。
+            const node = (scrollNode
+              || (document.querySelector(VIRTUAL_RENDERING.scrollContainerSelector) as HTMLElement | null)
+              || document.scrollingElement
+              || document.body) as HTMLElement;
+            void node.offsetHeight;
+            return node;
+          },
           cardLazyInit: VIRTUAL_RENDERING.cardLazyInit,
         }
       : {}),
