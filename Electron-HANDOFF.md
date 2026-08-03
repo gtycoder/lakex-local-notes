@@ -121,6 +121,50 @@
 
 ---
 
+## 参考资料解读经验（2026-08-03 沉淀：如何分析同类开源项目）
+
+> 本次解读了 4 个 Lake 相关仓库（lake-main / lake-editor-main / yuque-rich-text / am-editor），
+> 结论见 `docs/REFERENCE-REVIEW-2026-08-03.md`。以下是可复用的**方法**：
+
+### 1. 先判内核血缘，决定参考深度
+- **看依赖与内置资源**：项目用哪个内核？node_modules 里的 lakex 封装 vs 参考项目的 `media/editor/doc.umd.js`
+  （@alipay_lakex-doc）——**同内核（语雀系）的参考价值最高**：option/API 可直接拿来用（如
+  `paragraphSpacing`、`toc.enable`、`getDocument("text/markdown")`）。
+- **lake-main（lakelib 0.4.6）是不同代码线**（官方新版，模块化重写）：机制可对照（虚拟渲染/TOC/工具栏
+  的设计意图），但命名/API 不通用，**不能直接抄代码**。
+- **am-editor 完全不同内核**（contenteditable + 插件体系）：只借鉴设计（插件化架构、yjs 协同），
+  代码零复用。判断标准：**同内核 > 同 API 风格 > 纯设计参考**。
+
+### 2. 抓"可直接复用"的资产，而非只读结论
+- 参考项目的**编辑器初始化参数/配置项**是金矿（lake-editor-main 的 `src/webview/lake-preview/index.ts`：
+  `paragraphSpacing: 'relax'`、`toc: { enable }`、`defaultFontsize`、`formatLake`）——同内核直接可用。
+- 参考项目的**踩坑修复**（外部变更检测的 300ms 自保存过滤窗口、粘贴纯文本的实现路径）→ 直接启发
+  我们的实现方案。
+
+### 3. 验证 > 信任：源码说有，必须 Playwright 实测
+- 看源码确认 API 存在（`registerReader("text/markdown", ...)`）→ **必须起真实应用实测**
+  （`getDocument("text/markdown")` 输出质量、`editor.execCommand` 命令系统）。
+- 实测手段：**临时暴露编辑器实例**（`window.__lakeEditor = editor`）→ 调 API 验证 → 测后移除。
+- 多 tab 实测注意：`querySelector(".ne-engine")` 会取到第一个隐藏 host，必须按
+  `data-note-id`/`display` 精确定位（本次踩过）。
+
+### 4. 反推内核机制的三个技巧
+- **CSS 变量是主题正解**：发现 Lake 用 `--lakex-editor-*` 变量（默认未定义、运行时注入
+  `.lakex-default-theme`）→ 用更高优先级选择器在容器上覆盖变量，比逐选择器改样式可靠。
+- **看序列化标记而非标准标签**：斜体是 `ne-text[ne-italic="true"]`（em/i 会被解析转换）；
+  查自定义元素/属性比查标准 HTML 标签更能定位 Lake 的功能实现。
+- **命令系统**：`editor.execCommand` + 命令 ID（如 `getSelectionContent`）是 Lake 扩展入口，
+  比直接操作 DOM 更安全（DOM 操作会被 Lake 文档模型重建清除——纯文本粘贴的教训）。
+
+### 5. 产出要有"可执行性"
+- 每次解读输出：**功能差距清单 + 成本评估 + 建议实现顺序**（REFERENCE-REVIEW 的 P0/P1/P2 表），
+  让后续会话能直接按表执行，而不是重新读一遍参考仓库。
+
+### 6. 警惕参考项目自身的坑
+- lake-editor-main 的 `pasteAsPlainText` 依赖编辑器命令（我们的内核没有同命令）；formatLake 的正则
+  只在标签边界加换行（安全），但直接抄要验证目标内核的序列化格式是否兼容。
+- vscode 扩展的上下文（菜单/命令系统）与 Electron 应用不同，映射到我们场景时要重新评估实现路径。
+
 ## 项目历史背景（简）
 
 - **阶段 A**：资源归一化（图片本地化）、第三方图片下载（electronNet.fetch + Referer/UA）、粘贴拦截升级
