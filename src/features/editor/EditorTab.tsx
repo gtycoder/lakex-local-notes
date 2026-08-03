@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import { createLakeDocument, destroyLakeEditor, refreshTocSidebar, type LakeEditorInstance } from "./lakeRuntime";
+import { createLakeDocument, destroyLakeEditor, refreshTocSidebar, type LakeEditorInstance, type LakeEditorPrefs } from "./lakeRuntime";
 import { normalizeClipboardHtml, upgradePastedHtml } from "./clipboardHtml";
 
 export interface EditorTabProps {
@@ -8,9 +8,10 @@ export interface EditorTabProps {
   visible: boolean;
   tocEnabled: boolean;
   onChange: (content: string) => void;
+  prefs?: LakeEditorPrefs;
 }
 
-export function EditorTab({ noteId, content, visible, tocEnabled, onChange }: EditorTabProps) {
+export function EditorTab({ noteId, content, visible, tocEnabled, onChange, prefs }: EditorTabProps) {
   const hostRef = useRef<HTMLDivElement>(null);
   const editorRef = useRef<LakeEditorInstance | null>(null);
   const onChangeRef = useRef(onChange);
@@ -52,7 +53,7 @@ export function EditorTab({ noteId, content, visible, tocEnabled, onChange }: Ed
     try {
       editor = createLakeDocument(host, "editor", () => {
         if (editor && !setting) onChangeRef.current(editor.getDocument("text/lake"));
-      }, tocEnabled, noteId, host);
+      }, tocEnabled, noteId, host, prefs);
       editor.setDocument("text/lake", content);
       // 修复：Lake TOC 侧边栏创建时用空 toc 渲染，setDocument 后补一次数据同步
       setTimeout(() => refreshTocSidebar(editor, host), 0);
@@ -75,7 +76,7 @@ export function EditorTab({ noteId, content, visible, tocEnabled, onChange }: Ed
       host.replaceChildren();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [noteId]);
+  }, [noteId, tocEnabled, prefs?.fontSize, prefs?.showToolbar, prefs?.dark]);
 
   return (
     <div

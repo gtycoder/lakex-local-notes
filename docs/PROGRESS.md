@@ -199,8 +199,10 @@
 4. ~~userData 隔离~~ ✅ 已完成（dev= lake-notes-dev / 打包= lake-notes-electron）
 5. 渲染包优化（编辑器懒加载，属 Lake 阶段）；后续随 Lake 优化一起做
 7. **Lake 体验优化（参考评审见 `docs/REFERENCE-REVIEW-2026-08-03.md`）**：
-   同内核可直接借鉴——段间距/字号设置项、字数统计、深色模式、粘贴为纯文本、
-   TOC/工具栏显隐设置；未来——Markdown 互转、.lakebook 导入、外部变更检测
+   ✅ P0+P1 已完成（2026-08-03）——偏好设置面板（主题/字号/TOC/工具栏/段间距）、
+   字数统计、深色模式（跟随系统/亮/暗）、粘贴为纯文本（Cmd+Shift+V）；
+   待做——Markdown 互转（lake→md，用户想做）、外部变更检测（AI 生成场景）、
+   formatLake（保存格式化 .lake）、.lakebook 导入
 6. （可选）max-view 后工具栏定位偏移修复（用户已确认可做，待深入 Lake 内部定位）
 
 ### 本会话踩过的坑（速览，细节见 TROUBLESHOOTING.md）

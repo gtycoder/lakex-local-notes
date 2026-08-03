@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ArrowLeft, Check, Cloud, Files, ListTree, LoaderCircle, Pencil, Save, WifiOff } from "lucide-react";
+import { ArrowLeft, Check, Cloud, Files, ListTree, LoaderCircle, Pencil, Save, Settings as Settings2Icon, WifiOff } from "lucide-react";
 import { MobileLibrary } from "./components/MobileLibrary";
 import { ConfirmDelete, Sidebar } from "./components/Sidebar";
 import { SyncPanel } from "./components/SyncPanel";
 import { LakeEditor } from "./features/editor/LakeEditor";
 import { MultiTabEditor, type TabInfo } from "./features/editor/MultiTabEditor";
 import { isDesktop, native } from "./lib/native";
+import { loadSettings, resolvedTheme, saveSettings, subscribeSettings, isSystemDark, type AppSettings } from "./lib/settings";
+import { SettingsPanel } from "./components/SettingsPanel";
 import { subtreeIds } from "./lib/tree";
 import type { NoteDocument, NoteSummary, SyncStatus, TreeNode, WorkspaceSnapshot } from "./lib/types";
 
@@ -40,7 +42,10 @@ export function App() {
   const [mobileDraftTitle, setMobileDraftTitle] = useState("");
   const [mobileDraftContent, setMobileDraftContent] = useState("");
   const [isMobile, setIsMobile] = useState(() => window.matchMedia("(max-width: 760px)").matches);
-  const [tocEnabled] = useState(true);
+  const [settings, setSettings] = useState<AppSettings>(() => loadSettings());
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [systemDark, setSystemDark] = useState(() => isSystemDark());
+  const tocEnabled = settings.showToc;
   const [wideMode] = useState(true);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => localStorage.getItem("lake-notes-v1.sidebar") === "collapsed");
   const [error, setError] = useState<string | null>(null);
@@ -57,6 +62,27 @@ export function App() {
       saveTimers.current.forEach((timer) => window.clearTimeout(timer));
       saveTimers.current.clear();
     };
+  }, []);
+
+  useEffect(() => {
+    // 主题：应用到 html[data-theme]，监听系统深浅色变化
+    const applyTheme = () => {
+      const theme = resolvedTheme(loadSettings(), isSystemDark());
+      document.documentElement.dataset.theme = theme;
+    };
+    applyTheme();
+    const media = window.matchMedia("(prefers-color-scheme: dark)");
+    const onSystemChange = () => setSystemDark(media.matches);
+    media.addEventListener("change", onSystemChange);
+    return () => media.removeEventListener("change", onSystemChange);
+  }, []);
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = resolvedTheme(settings, systemDark);
+  }, [settings, systemDark]);
+
+  useEffect(() => {
+    return subscribeSettings((next) => setSettings(next));
   }, []);
 
   useEffect(() => {
@@ -356,6 +382,18 @@ export function App() {
     <MobileLibrary notes={notes} search={search} sync={sync} onSearch={setSearch} onSelect={(id) => void openNoteMobile(id)} onCreate={() => void createNote()} />
   </>;
 
+  // 字数统计：当前活动标签正文去标签后字数
+  const activeTab = openTabs.find((t) => t.noteId === activeNoteId);
+  const activeContent = activeTab?.content ?? mobileActive?.content ?? "";
+  const plainText = activeContent.replace(/<[^>]+>/g, "").replace(/&nbsp;/g, " ").replace(/&amp;/g, "&");
+  const wordCount = plainText.trim().length;
+  const wordCountLabel = wordCount > 0 ? `${wordCount} 字` : "";
+
+  const editorPrefs = {
+    fontSize: settings.fontSize,
+    showToolbar: settings.showToolbar,
+    dark: resolvedTheme(settings, systemDark) === "dark",
+  };
   const tabInfos: TabInfo[] = openTabs.map((tab) => ({ noteId: tab.noteId, title: tab.title, content: tab.content, dirty: tab.dirty }));
 
   return (
@@ -376,8 +414,8 @@ export function App() {
         </header>}
         {error && <div className="error-banner"><span>{error}</span><button onClick={() => setError(null)}>关闭</button></div>}
         {isMobile ? (
-          mobileActive ? <section className={`document-pane ${wideMode ? "wide-mode" : ""}`}>
-            <LakeEditor noteId={mobileActive.id} content={mobileEditing ? mobileDraftContent : mobileActive.content} mode={mobileEditing ? "editor" : "viewer"} tocEnabled={mobileTocOpen} onChange={(content) => setMobileDraftContent(content)} />
+          mobileActive ? <section className={`document-pane ${wideMode ? "wide-mode" : ""} ${settings.paragraphSpacing ? "paragraph-spacing" : ""}`}>
+            <LakeEditor noteId={mobileActive.id} content={mobileEditing ? mobileDraftContent : mobileActive.content} mode={mobileEditing ? "editor" : "viewer"} tocEnabled={mobileTocOpen} onChange={(content) => setMobileDraftContent(content)} prefs={editorPrefs} />
             {!mobileEditing && <nav className="mobile-reader-actions">
               <button onClick={() => setMobileEditing(true)}><Pencil size={20} /><span>编辑</span></button>
               <button className={mobileTocOpen ? "selected" : ""} onClick={() => setMobileTocOpen((open) => !open)}><ListTree size={21} /><span>大纲</span></button>
@@ -385,7 +423,7 @@ export function App() {
             </nav>}
           </section> : <section className="empty-workspace"><h2>开始写第一篇笔记</h2><button className="primary-button" onClick={() => void createNote()}>新建文档</button></section>
         ) : (
-          openTabs.length > 0 ? <section className={`document-pane ${wideMode ? "wide-mode" : ""}`}>
+          openTabs.length > 0 ? <section className={`document-pane ${wideMode ? "wide-mode" : ""} ${settings.paragraphSpacing ? "paragraph-spacing" : ""}`}>
             <MultiTabEditor
               tabs={tabInfos}
               activeNoteId={activeNoteId}
@@ -393,13 +431,21 @@ export function App() {
               onTabChange={handleTabChange}
               onTabClose={closeTab}
               onContentChange={handleContentChange}
+              prefs={editorPrefs}
             />
           </section> : <section className="empty-workspace"><h2>开始写第一篇笔记</h2><button className="primary-button" onClick={() => void createNote()}>新建文档</button></section>
         )}
-        <footer className="statusbar"><span>{isDesktop() ? "Electron 本地仓库" : "浏览器演示仓库"}</span><span className={`save-label ${saveState}`}>{saveState === "saving" ? <LoaderCircle className="spin" size={12} /> : saveState === "dirty" ? <WifiOff size={12} /> : <Save size={12} />}{saveLabel(saveState)}</span><button className="sync-button" onClick={() => setSyncPanelOpen(true)} title="S3 备份同步"><Cloud size={14} />{sync.message}</button></footer>
+        <footer className="statusbar">
+          <span>{isDesktop() ? "Electron 本地仓库" : "浏览器演示仓库"}</span>
+          <span className="statusbar-wordcount" title="当前文档字数">{wordCountLabel}</span>
+          <span className={`save-label ${saveState}`}>{saveState === "saving" ? <LoaderCircle className="spin" size={12} /> : saveState === "dirty" ? <WifiOff size={12} /> : <Save size={12} />}{saveLabel(saveState)}</span>
+          <button className="sync-button" onClick={() => setSyncPanelOpen(true)} title="S3 备份同步"><Cloud size={14} />{sync.message}</button>
+          <button className="statusbar-settings" onClick={() => setSettingsOpen(true)} title="偏好设置"><Settings2Icon size={13} /></button>
+        </footer>
       </main>
       {confirmDelete && <ConfirmDelete node={confirmDelete} onConfirm={() => { const id = confirmDelete.id; setConfirmDelete(null); void deleteTreeNode(id); }} onCancel={() => setConfirmDelete(null)} />}
       <SyncPanel open={syncPanelOpen} onClose={() => setSyncPanelOpen(false)} />
+      <SettingsPanel open={settingsOpen} settings={settings} onClose={() => setSettingsOpen(false)} onChange={(patch) => saveSettings(patch)} />
     </div>
   );
 }

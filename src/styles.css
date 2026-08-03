@@ -549,3 +549,82 @@ ne-card[data-card-name="codeblock"] .ne-card-resizer-mask {
 .board-card-wrapper--editor .drawnix {
   border-radius: 7px;
 }
+
+/* ===== 偏好设置面板 ===== */
+.settings-overlay { display: flex; position: fixed; inset: 0; z-index: 200; align-items: center; justify-content: center; background: #1f293340; }
+.settings-panel { width: 360px; max-width: calc(100vw - 32px); max-height: 80vh; overflow: auto; border: 1px solid #d8dde1; border-radius: 10px; background: #fff; box-shadow: 0 18px 50px #1f29334d; }
+.settings-header { display: flex; align-items: center; gap: 8px; height: 44px; padding: 0 14px; border-bottom: 1px solid #eceef0; color: #303641; font-size: 14px; font-weight: 600; }
+.settings-close { margin-left: auto; border: 0; background: transparent; color: #818894; font-size: 13px; }
+.settings-close:hover { color: #20242c; }
+.settings-body { padding: 12px 14px 16px; }
+.settings-group { margin-bottom: 14px; }
+.settings-group h4 { display: flex; align-items: center; gap: 6px; margin: 0 0 8px; color: #48515c; font-size: 12px; font-weight: 600; }
+.settings-row { display: flex; flex-wrap: wrap; gap: 6px; }
+.settings-choice { display: inline-flex; align-items: center; gap: 4px; min-width: 44px; height: 30px; padding: 0 10px; border: 1px solid #dfe2e7; border-radius: 6px; color: #48515c; background: #fff; font-size: 12px; }
+.settings-choice:hover { border-color: #3a8064; }
+.settings-choice.active { border-color: #28775a; color: #fff; background: #28775a; }
+.settings-toggle { display: flex; align-items: center; gap: 8px; height: 34px; color: #48515c; font-size: 13px; cursor: pointer; }
+.settings-toggle input { margin-left: auto; accent-color: #28775a; }
+.settings-hint { margin: 10px 0 0; color: #8a919b; font-size: 11px; }
+
+/* ===== 段间距（relax） ===== */
+.paragraph-spacing .lake-editor-mount .ne-p,
+.paragraph-spacing .lake-editor-mount .ne-block-quote { margin-top: 0.5em; margin-bottom: 0.5em; }
+.paragraph-spacing .lake-editor-mount .ne-editor-body { line-height: 1.85; }
+
+/* ===== 状态栏设置按钮/字数 ===== */
+.statusbar-settings { display: flex; align-items: center; justify-content: center; width: 28px; height: 22px; margin-left: 6px; border: 0; border-radius: 4px; color: #818894; background: transparent; }
+.statusbar-settings:hover { color: #20242c; background: #e9ebee; }
+.statusbar-wordcount { color: #8a919b; font-size: 11px; margin-right: auto; }
+
+/* ===== 深色模式（基础版：核心 UI + 编辑器） ===== */
+html[data-theme="dark"] { color-scheme: dark; }
+html[data-theme="dark"] body { background: #14171a; }
+html[data-theme="dark"] .app-shell { background: #1a1d21; }
+html[data-theme="dark"] .sidebar { background: #17191d; border-right-color: #2a2e33; }
+html[data-theme="dark"] .search-box { background: #22262b; border-color: #33383f; color: #8a919b; }
+html[data-theme="dark"] .search-box input { color: #d6dae0; }
+html[data-theme="dark"] .create-menu { background: #22262b; border-color: #33383f; box-shadow: 0 10px 28px #00000066; }
+html[data-theme="dark"] .create-menu > button { color: #b8bfc7; }
+html[data-theme="dark"] .create-menu > button:hover { background: #2c3138; }
+html[data-theme="dark"] .note-row { color: #9aa2ac; }
+html[data-theme="dark"] .note-row:hover { background: #23272c; }
+html[data-theme="dark"] .note-row.active { color: #e4e8ed; background: #2a2f35; }
+html[data-theme="dark"] .note-row-copy strong { color: #c9cfd6; }
+html[data-theme="dark"] .tree-row.type-notebook { color: #6fae8f; }
+html[data-theme="dark"] .tree-row.type-notebook .note-row-copy strong { color: #6fae8f; }
+html[data-theme="dark"] .tree-row.type-group { color: #8fa3b3; }
+html[data-theme="dark"] .tree-rename-input { background: #22262b; color: #d6dae0; border-color: #3a8064; }
+html[data-theme="dark"] .inline-create { background: #22262b; border-color: #2f4d40; }
+html[data-theme="dark"] .inline-create input { color: #d6dae0; }
+html[data-theme="dark"] .empty-list { color: #6b7280; }
+html[data-theme="dark"] .statusbar { background: #17191d; border-top-color: #2a2e33; }
+html[data-theme="dark"] .statusbar span, html[data-theme="dark"] .statusbar .sync-button { color: #9aa2ac; }
+html[data-theme="dark"] .statusbar-settings:hover { color: #e4e8ed; background: #2a2f35; }
+html[data-theme="dark"] .error-banner { background: #3a2020; color: #f0b9b5; }
+html[data-theme="dark"] .topbar { background: #17191d; border-bottom-color: #2a2e33; }
+html[data-theme="dark"] .topbar .current-note { color: #c9cfd6; }
+html[data-theme="dark"] .document-pane { background: #1a1d21; }
+html[data-theme="dark"] .tab-bar { background: #17191d; border-bottom-color: #2a2e33; }
+html[data-theme="dark"] .tab-item { color: #9aa2ac; }
+html[data-theme="dark"] .tab-item.active { color: #e4e8ed; background: #1a1d21; }
+html[data-theme="dark"] .tab-close:hover { background: #2a2f35; }
+html[data-theme="dark"] .settings-panel { background: #22262b; border-color: #33383f; }
+html[data-theme="dark"] .settings-header { border-bottom-color: #33383f; color: #e4e8ed; }
+html[data-theme="dark"] .settings-group h4 { color: #b8bfc7; }
+html[data-theme="dark"] .settings-choice { color: #b8bfc7; background: #2a2f35; border-color: #33383f; }
+html[data-theme="dark"] .settings-toggle { color: #b8bfc7; }
+html[data-theme="dark"] .settings-hint { color: #6b7280; }
+html[data-theme="dark"] .settings-close { color: #8a919b; }
+html[data-theme="dark"] .settings-close:hover { color: #e4e8ed; }
+/* 编辑器正文：基础暗色（Lake 内部细节保留原样，整体可读） */
+html[data-theme="dark"] .lake-editor .ne-editor-wrap { background: #1a1d21; }
+html[data-theme="dark"] .lake-editor .ne-editor-body { color: #d6dae0; }
+html[data-theme="dark"] .lake-editor .ne-h1, html[data-theme="dark"] .lake-editor .ne-h2,
+html[data-theme="dark"] .lake-editor .ne-h3, html[data-theme="dark"] .lake-editor .ne-h4 { color: #f0f3f6; }
+html[data-theme="dark"] .lake-editor .ne-p { color: #d6dae0; }
+html[data-theme="dark"] .lake-editor .ne-toc-view { background: #1a1d21; border-left-color: #2a2e33; }
+html[data-theme="dark"] .lake-editor .ne-toc-item { color: #9aa2ac; }
+html[data-theme="dark"] .lake-editor .ne-toc-item:hover { background: #23272c; }
+html[data-theme="dark"] .lake-editor .ne-toc-item.ne-toc-selected { color: #6fae8f; background: #1f2b26; }
+html[data-theme="dark"] .sync-panel { background: #22262b; color: #d6dae0; border-color: #33383f; }

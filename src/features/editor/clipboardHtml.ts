@@ -189,21 +189,51 @@ function findRealImageUrl(img: Element): string | null {
  * 让 Lake 读到的就是处理过的内容。
  */
 let pasteInterceptorInstalled = false;
+function escapeHtmlText(text: string): string {
+  return text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+/** Cmd/Ctrl+Shift+V：粘贴为纯文本（原生 DataTransfer 只读，沿用 getData patch 方案） */
+let pasteAsPlainTextArmed = false;
+
 export function installPasteInterceptor(): void {
   if (pasteInterceptorInstalled) return;
   pasteInterceptorInstalled = true;
+  // 记录 Cmd/Ctrl+Shift+V：keydown 置位，keyup/paste 后清除
+  document.addEventListener("keydown", (event: KeyboardEvent) => {
+    if (event.key.toLowerCase() === "v" && (event.metaKey || event.ctrlKey) && event.shiftKey) {
+      pasteAsPlainTextArmed = true;
+    }
+  }, true);
+  document.addEventListener("keyup", () => { pasteAsPlainTextArmed = false; }, true);
   document.addEventListener(
     "paste",
     (event: Event) => {
       const dt = (event as ClipboardEvent).clipboardData;
       if (!dt) return;
+      const armed = pasteAsPlainTextArmed;
+      pasteAsPlainTextArmed = false;
       const clipboardData = dt as unknown as { getData: (type: string) => string };
       const originalGetData = clipboardData.getData.bind(clipboardData);
       clipboardData.getData = (type: string): string => {
         const value = originalGetData(type);
-        if (type === "text/html" && value) {
-          const upgraded = upgradePastedHtml(value);
-          return upgraded || value;
+        if (type === "text/html") {
+          if (armed) {
+            // 纯文本模式：把 text/plain 包装成 <p> 段落
+            const text = originalGetData("text/plain") || "";
+            const paragraphs = text.split(/\n+/).map((line) => line.trim()).filter(Boolean);
+            if (paragraphs.length > 0) return paragraphs.map((line) => `<p>${escapeHtmlText(line)}</p>`).join("");
+            return "";
+          }
+          if (value) {
+            const upgraded = upgradePastedHtml(value);
+            return upgraded || value;
+          }
         }
         return value;
       };

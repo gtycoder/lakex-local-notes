@@ -238,22 +238,37 @@ function resolveScrollNode(scrollNode?: HTMLElement | null): HTMLElement {
   return hostNode;
 }
 
+export interface LakeEditorPrefs {
+  /** 正文字号（内核支持 12/13/14/15/16/19/22/24） */
+  fontSize?: number;
+  /** 显示编辑器工具栏 */
+  showToolbar?: boolean;
+  /** 暗色模式（尝试内核 dark，配合 CSS 覆盖） */
+  dark?: boolean;
+}
+
 export function createLakeDocument(
   element: HTMLElement,
   mode: "viewer" | "editor",
   onChange: () => void,
   tocEnabled: boolean,
   noteId: string,
-  scrollNode?: HTMLElement | null
+  scrollNode?: HTMLElement | null,
+  prefs?: LakeEditorPrefs
 ): LakeEditorInstance {
   const mount = document.createElement("div");
   mount.className = "lake-editor-mount ne-doc-major-editor";
   element.replaceChildren(mount);
 
+  const prefsSize = typeof prefs?.fontSize === "number" ? prefs.fontSize : 18;
+  const prefsDark = !!prefs?.dark;
   const customOptions: Record<string, unknown> = {
-    disabledPlugins: mode === "viewer" ? ["save", "toolbar", "emoji"] : ["save", "emoji"],
+    disabledPlugins: mode === "viewer"
+      ? ["save", "toolbar", "emoji"]
+      : ["save", "emoji", ...(prefs?.showToolbar === false ? ["toolbar"] : [])],
     input: {},
-    defaultFontsize: 18,
+    defaultFontsize: prefsSize,
+    dark: prefsDark,
     toc: { enable: tocEnabled },
     codeblock: { codemirrorURL: "./vendor/lakex-doc/codemirror.js" },
     math: { KaTexURL: ["./vendor/lakex-doc/katex.min.js", "https://gw.alipayobjects.com/os/lib/katex/0.16.8/dist/contrib/mhchem.min.js"] },

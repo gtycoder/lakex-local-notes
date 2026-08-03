@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef } from "react";
 import { X } from "lucide-react";
 import { EditorTab } from "./EditorTab";
+import type { LakeEditorPrefs } from "./lakeRuntime";
 
 export interface TabInfo {
   noteId: string;
@@ -16,6 +17,7 @@ interface MultiTabEditorProps {
   onTabChange: (noteId: string) => void;
   onTabClose: (noteId: string) => void;
   onContentChange: (noteId: string, content: string) => void;
+  prefs?: LakeEditorPrefs;
 }
 
 const MAX_TABS = 8;
@@ -27,6 +29,7 @@ export function MultiTabEditor({
   onTabChange,
   onTabClose,
   onContentChange,
+  prefs,
 }: MultiTabEditorProps) {
   const contentCache = useRef<Map<string, string>>(new Map());
 
@@ -88,6 +91,7 @@ export function MultiTabEditor({
             visible={tab.noteId === activeNoteId}
             tocEnabled={tocEnabled}
             onChange={(content) => handleChange(tab.noteId, content)}
+            prefs={prefs}
           />
         ))}
       </div>
