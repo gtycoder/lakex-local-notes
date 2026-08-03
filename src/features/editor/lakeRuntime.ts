@@ -322,6 +322,7 @@ export function createLakeDocument(
   const editor = mode === "viewer"
     ? (Doc as any).createOpenViewer(mount, mergedOptions)
     : (Doc as any).createOpenEditor(mount, mergedOptions);
+
   lakeMark("lake:create:end");
   lakeMeasure("lake:create:openEditor", "lake:create:start", "lake:create:end");
   if (mode === "editor") {

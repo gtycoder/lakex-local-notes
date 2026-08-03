@@ -203,7 +203,8 @@
    ⏸ **深色模式已回滚**（工具栏图标对比度差、成本高收益小，用户决定不做）；
    ⏸ **纯文本粘贴已回滚**（Cmd+Shift+V 在 Chromium 不触发 paste 事件；DOM 插入方案被
    Lake 内部文档模型重建清除——"粘贴文字很快消失"，需内核插入 API 才能真修，成本高，放弃）；
-   待做——Markdown 互转（lake→md，用户想做）、外部变更检测（AI 生成场景）、
+   待做——**Markdown 导出/导入**（调研完成见 `docs/MARKDOWN-EXPORT-REVIEW.md`：全文转 md 内核原生
+   已验证、成本极低；选区转 md + 右键框架成本中等）、外部变更检测（AI 生成场景）、
    formatLake（保存格式化 .lake）、.lakebook 导入
 6. （可选）max-view 后工具栏定位偏移修复（用户已确认可做，待深入 Lake 内部定位）
 
