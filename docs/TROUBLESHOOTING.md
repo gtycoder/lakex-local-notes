@@ -91,3 +91,14 @@
   （实测仍走真实 DNS）。每用例独立 spy 或用 `mockImplementation`。
 - **store.ts 大批量 Python 替换要小心索引边界**：用 `s.index("  }\\n\\n  uploadResource(")` 找方法结尾
   会命中前一个方法的结尾导致整段错位。改大文件优先 `git checkout` 恢复后重放补丁，或逐段验证。
+
+## I. 2026-08-03 中文斜体失效（font-synthesis）
+
+- **现象**：编辑器里斜体（Cmd+I / 工具栏 / em 标签）对中文不生效，英文正常。
+- **根因**：`styles.css` 的 `:root { font-synthesis: none }` 禁止浏览器合成缺失的字体样式。
+  中文字体（PingFang SC / Microsoft YaHei 等）没有 italic 变体，`none` 会禁止合成斜体 →
+  中文 `font-style: italic` 完全不倾斜；英文有斜体变体所以正常。
+- **修复**：`font-synthesis: style weight`（允许合成斜体 + 粗体）。
+- **验证**：同一行中文 normal vs italic 截图像素差异率 92.2%（合成斜体生效）。
+- **Lake 侧确认**：Lake 斜体用 `ne-text[ne-italic="true"]` 标记（不是 em/i），
+  CSS 有 `[ne-italic] { font-style: italic }`；`i`/`em` 标签会被 Lake 解析为 ne-italic。

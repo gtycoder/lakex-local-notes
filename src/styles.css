@@ -1,4 +1,5 @@
-:root { font-family: Inter, "SF Pro Text", "PingFang SC", "Microsoft YaHei", sans-serif; color: #20242c; background: #f4f5f7; font-synthesis: none; --topbar-height: 38px; --ease-out: cubic-bezier(0.23, 1, 0.32, 1); --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1); --dur-press: 140ms; --dur-enter: 120ms; --dur-drawer: 240ms; }
+:root { font-family: Inter, "SF Pro Text", "PingFang SC", "Microsoft YaHei", sans-serif; color: #20242c; background: #f4f5f7; /* font-synthesis 不能设 none：中文字体（PingFang SC 等）无斜体变体，none 会禁止合成斜体导致 italic 失效 */
+  font-synthesis: style weight; --topbar-height: 38px; --ease-out: cubic-bezier(0.23, 1, 0.32, 1); --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1); --dur-press: 140ms; --dur-enter: 120ms; --dur-drawer: 240ms; }
 * { box-sizing: border-box; }
 html, body, #root { width: 100%; height: 100%; }
 body { margin: 0; min-width: 320px; min-height: 100%; overflow: hidden; }
