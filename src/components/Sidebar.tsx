@@ -1,16 +1,20 @@
-import { useEffect, useRef, useState } from "react";
-import { BookOpen, ChevronRight, FilePlus2, FileText, FoldVertical, Folder, FolderPlus, Pencil, PanelLeft, Plus, Search, Trash2, X } from "lucide-react";
+import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent } from "react";
+import { BookOpen, ChevronRight, FilePlus2, FileText, FoldVertical, Folder, FolderPlus, PanelLeftClose, Pencil, Pin, Plus, Search, Trash2, X } from "lucide-react";
 import type { TreeNode, TreeNodeType } from "../lib/types";
 
 type CreateKind = "notebook" | "group" | "note";
 type DropPosition = "before" | "inside" | "after";
+export type SidebarMode = "docked" | "floating" | "collapsed";
 
 interface SidebarProps {
   nodes: TreeNode[];
   activeId: string | null;
   search: string;
   mobileOpen: boolean;
-  collapsed: boolean;
+  mode: SidebarMode;
+  width: number;
+  minWidth: number;
+  maxWidth: number;
   onSearch: (value: string) => void;
   onSelect: (id: string) => void;
   onCreate: (kind: CreateKind, parentId: string | null, title?: string) => void;
@@ -19,7 +23,11 @@ interface SidebarProps {
   onRequestDelete: (node: TreeNode) => void;
   pendingRenameId: string | null;
   onPendingRenameConsumed: () => void;
-  onToggleCollapse: () => void;
+  onTogglePin: () => void;
+  onCollapse: () => void;
+  onResizeActiveChange: (active: boolean) => void;
+  onWidthChange: (width: number) => void;
+  onWidthCommit: (width: number) => void;
   onCloseMobile: () => void;
 }
 
@@ -36,10 +44,54 @@ export function Sidebar(props: SidebarProps) {
   const [contextMenu, setContextMenu] = useState<{ id: string; x: number; y: number } | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const dragRef = useRef<{ id: string; startX: number; startY: number; moved: boolean } | null>(null);
+  const resizeRef = useRef<{ pointerId: number; startX: number; startWidth: number; currentWidth: number } | null>(null);
   const suppressClickRef = useRef(false);
   const prevNodeIds = useRef<Set<string>>(new Set());
   const query = props.search.trim().toLocaleLowerCase();
   const roots = childrenOf(props.nodes, null, query);
+
+  const rubberBandWidth = (width: number) => {
+    if (width < props.minWidth) return props.minWidth - (props.minWidth - width) * 0.16;
+    if (width > props.maxWidth) return props.maxWidth + (width - props.maxWidth) * 0.16;
+    return width;
+  };
+
+  const handleResizePointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (event.button !== 0) return;
+    event.preventDefault();
+    event.currentTarget.setPointerCapture(event.pointerId);
+    resizeRef.current = { pointerId: event.pointerId, startX: event.clientX, startWidth: props.width, currentWidth: props.width };
+    props.onResizeActiveChange(true);
+  };
+
+  const handleResizePointerMove = (event: ReactPointerEvent<HTMLDivElement>) => {
+    const resize = resizeRef.current;
+    if (!resize || resize.pointerId !== event.pointerId) return;
+    const next = rubberBandWidth(resize.startWidth + event.clientX - resize.startX);
+    resize.currentWidth = next;
+    props.onWidthChange(next);
+  };
+
+  const finishResize = (event: ReactPointerEvent<HTMLDivElement>) => {
+    const resize = resizeRef.current;
+    if (!resize || resize.pointerId !== event.pointerId) return;
+    resizeRef.current = null;
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
+    props.onResizeActiveChange(false);
+    props.onWidthCommit(resize.currentWidth);
+  };
+
+  const handleResizeKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+    let next = props.width;
+    const step = event.shiftKey ? 24 : 8;
+    if (event.key === "ArrowLeft") next -= step;
+    else if (event.key === "ArrowRight") next += step;
+    else if (event.key === "Home") next = props.minWidth;
+    else if (event.key === "End") next = props.maxWidth;
+    else return;
+    event.preventDefault();
+    props.onWidthCommit(next);
+  };
 
   useEffect(() => {
     // 只自动展开新出现的容器节点（笔记本/分组），不碰已有节点的展开状态
@@ -198,9 +250,15 @@ export function Sidebar(props: SidebarProps) {
   </div>;
 
   return (
-    <aside className={`sidebar ${props.collapsed ? "is-collapsed" : ""} ${props.mobileOpen ? "sidebar-open" : ""}`}>
+    <aside className={`sidebar sidebar-${props.mode} ${props.mobileOpen ? "sidebar-open" : ""}`}>
       <button className="icon-button mobile-only sidebar-mobile-close" onClick={props.onCloseMobile} title="关闭"><X size={18} /></button>
-      <button className="icon-button desktop-only sidebar-collapse-toggle" onClick={props.onToggleCollapse} title={props.collapsed ? "固定展开侧栏" : "收起侧栏"}><PanelLeft size={17} /></button>
+      <header className="sidebar-header desktop-only">
+        <div className="sidebar-heading-copy"><strong>资料库</strong><span>{props.mode === "docked" ? "常驻" : "悬浮"}</span></div>
+        <div className="sidebar-panel-controls">
+          <button className={`icon-button sidebar-pin ${props.mode === "docked" ? "selected" : ""}`} onClick={props.onTogglePin} title={props.mode === "docked" ? "切换为悬浮侧栏" : "固定侧栏"} aria-pressed={props.mode === "docked"}><Pin size={15} fill={props.mode === "docked" ? "currentColor" : "none"} /></button>
+          <button className="icon-button" onClick={props.onCollapse} title="收起资料库"><PanelLeftClose size={16} /></button>
+        </div>
+      </header>
       <div className="search-box"><Search size={14} /><input value={props.search} onChange={(event) => props.onSearch(event.target.value)} placeholder="搜索" /></div>
       <div className="list-heading">
         <button className="icon-button collapse-all-btn" onClick={() => setExpanded(new Set())} title="全部收起" disabled={expanded.size === 0}><FoldVertical size={16} /></button>
@@ -219,6 +277,7 @@ export function Sidebar(props: SidebarProps) {
         {roots.length === 0 && <div className="empty-list">点击 + 新建第一个笔记本</div>}
       </nav>
       {contextMenu && contextNode && <ContextMenu node={contextNode} x={contextMenu.x} y={contextMenu.y} onNewChild={menuNewChild} onRename={menuRename} onDelete={menuDelete} onClose={() => setContextMenu(null)} />}
+      <div className="sidebar-resize-handle desktop-only" role="separator" aria-label="调整资料库宽度" aria-orientation="vertical" aria-valuemin={props.minWidth} aria-valuemax={props.maxWidth} aria-valuenow={Math.round(props.width)} tabIndex={0} onPointerDown={handleResizePointerDown} onPointerMove={handleResizePointerMove} onPointerUp={finishResize} onPointerCancel={finishResize} onKeyDown={handleResizeKeyDown} />
     </aside>
   );
 }

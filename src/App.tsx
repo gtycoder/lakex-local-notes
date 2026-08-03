@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
 import { ArrowLeft, Check, Cloud, FileDown, Files, ListTree, LoaderCircle, Pencil, Save, Settings as Settings2Icon, WifiOff } from "lucide-react";
 import { MobileLibrary } from "./components/MobileLibrary";
-import { ConfirmDelete, Sidebar } from "./components/Sidebar";
+import { ConfirmDelete, Sidebar, type SidebarMode } from "./components/Sidebar";
 import { SyncPanel } from "./components/SyncPanel";
 import { LakeEditor } from "./features/editor/LakeEditor";
 import type { LakeEditorInstance } from "./features/editor/lakeRuntime";
@@ -14,6 +14,21 @@ import type { NoteDocument, NoteSummary, SyncStatus, TreeNode, WorkspaceSnapshot
 
 type SaveState = "idle" | "dirty" | "saving" | "saved" | "error";
 type MobilePage = "library" | "document";
+
+const SIDEBAR_DEFAULT_WIDTH = 252;
+const SIDEBAR_MIN_WIDTH = 210;
+const SIDEBAR_MAX_WIDTH = 330;
+
+function initialSidebarMode(): SidebarMode {
+  const stored = localStorage.getItem("lake-notes-v2.sidebar-mode");
+  if (stored === "docked" || stored === "floating" || stored === "collapsed") return stored;
+  return localStorage.getItem("lake-notes-v1.sidebar") === "collapsed" ? "collapsed" : "docked";
+}
+
+function initialSidebarWidth(): number {
+  const stored = Number(localStorage.getItem("lake-notes-v2.sidebar-width"));
+  return Number.isFinite(stored) ? Math.min(SIDEBAR_MAX_WIDTH, Math.max(SIDEBAR_MIN_WIDTH, stored)) : SIDEBAR_DEFAULT_WIDTH;
+}
 
 interface OpenTab {
   noteId: string;
@@ -47,7 +62,12 @@ export function App() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const tocEnabled = settings.showToc;
   const [wideMode] = useState(true);
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => localStorage.getItem("lake-notes-v1.sidebar") === "collapsed");
+  const [sidebarMode, setSidebarMode] = useState<SidebarMode>(initialSidebarMode);
+  const [lastOpenSidebarMode, setLastOpenSidebarMode] = useState<Exclude<SidebarMode, "collapsed">>(() =>
+    localStorage.getItem("lake-notes-v2.sidebar-last-open-mode") === "floating" ? "floating" : "docked"
+  );
+  const [sidebarWidth, setSidebarWidth] = useState(initialSidebarWidth);
+  const [sidebarResizing, setSidebarResizing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const openTabsRef = useRef<OpenTab[]>([]);
   const saveTimers = useRef<Map<string, number>>(new Map());
@@ -60,6 +80,14 @@ export function App() {
   const revisionRef = useRef<Map<string, number>>(new Map());
 
   useEffect(() => { openTabsRef.current = openTabs; }, [openTabs]);
+
+  useEffect(() => {
+    localStorage.setItem("lake-notes-v2.sidebar-mode", sidebarMode);
+    if (sidebarMode !== "collapsed") {
+      setLastOpenSidebarMode(sidebarMode);
+      localStorage.setItem("lake-notes-v2.sidebar-last-open-mode", sidebarMode);
+    }
+  }, [sidebarMode]);
 
   useEffect(() => {
     return () => {
@@ -352,10 +380,21 @@ export function App() {
   }
 
   function toggleSidebar() {
-    setSidebarCollapsed((current) => {
-      localStorage.setItem("lake-notes-v1.sidebar", current ? "expanded" : "collapsed");
-      return !current;
-    });
+    setSidebarMode((current) => current === "collapsed" ? lastOpenSidebarMode : "collapsed");
+  }
+
+  function toggleSidebarPin() {
+    setSidebarMode((current) => current === "docked" ? "floating" : "docked");
+  }
+
+  function updateSidebarWidth(width: number) {
+    setSidebarWidth(width);
+  }
+
+  function commitSidebarWidth(width: number) {
+    const clamped = Math.min(SIDEBAR_MAX_WIDTH, Math.max(SIDEBAR_MIN_WIDTH, width));
+    setSidebarWidth(clamped);
+    localStorage.setItem("lake-notes-v2.sidebar-width", String(Math.round(clamped)));
   }
 
   /** 审计 #8：移动端保存成功后同步 mobileActive/草稿，viewer 不再显示旧快照，
@@ -410,11 +449,22 @@ export function App() {
   };
   const tabInfos: TabInfo[] = openTabs.map((tab) => ({ noteId: tab.noteId, title: tab.title, content: tab.content, dirty: tab.dirty }));
 
+  const shellStyle = { "--sidebar-width": `${sidebarWidth}px` } as CSSProperties;
+
   return (
-    <div className={`app-shell ${sidebarCollapsed ? "sidebar-collapsed" : ""} ${isMobile ? `mobile-document-page ${mobileEditing ? "mobile-editing" : "mobile-reading"}` : ""}`}>
-      <Sidebar nodes={treeNodes} activeId={activeNoteId ?? mobileActive?.id ?? null} search={search} mobileOpen={mobileOpen} collapsed={sidebarCollapsed} onSearch={setSearch} onSelect={(id) => void (isMobile ? openNoteMobile(id) : openNote(id))} onCreate={(kind, parentId, title) => void createTreeItem(kind, parentId, title)} onRename={(id, title) => void renameTreeNode(id, title)} onMoveNode={(id, targetId, position) => void moveTreeNode(id, targetId, position)} onRequestDelete={(node) => setConfirmDelete(node)} pendingRenameId={pendingRenameId} onPendingRenameConsumed={() => setPendingRenameId(null)} onToggleCollapse={toggleSidebar} onCloseMobile={() => setMobileOpen(false)} />
+    <div className={`app-shell sidebar-${sidebarMode} ${sidebarResizing ? "sidebar-resizing" : ""} ${isMobile ? `mobile-document-page ${mobileEditing ? "mobile-editing" : "mobile-reading"}` : ""}`} style={shellStyle}>
+      <nav className="activity-rail desktop-only" aria-label="应用导航">
+        <div className="activity-rail-spacer" />
+        <button className={`activity-button ${sidebarMode !== "collapsed" ? "active" : ""}`} onClick={toggleSidebar} title={sidebarMode === "collapsed" ? "显示资料库" : "收起资料库"} aria-pressed={sidebarMode !== "collapsed"}><Files size={18} /></button>
+        <div className="activity-rail-fill" />
+        <button className="activity-button" onClick={() => setSyncPanelOpen(true)} title="S3 备份同步"><Cloud size={17} /></button>
+        <button className="activity-button" onClick={() => setSettingsOpen(true)} title="偏好设置"><Settings2Icon size={17} /></button>
+      </nav>
+      <Sidebar nodes={treeNodes} activeId={activeNoteId ?? mobileActive?.id ?? null} search={search} mobileOpen={mobileOpen} mode={sidebarMode} width={sidebarWidth} minWidth={SIDEBAR_MIN_WIDTH} maxWidth={SIDEBAR_MAX_WIDTH} onSearch={setSearch} onSelect={(id) => void (isMobile ? openNoteMobile(id) : openNote(id))} onCreate={(kind, parentId, title) => void createTreeItem(kind, parentId, title)} onRename={(id, title) => void renameTreeNode(id, title)} onMoveNode={(id, targetId, position) => void moveTreeNode(id, targetId, position)} onRequestDelete={(node) => setConfirmDelete(node)} pendingRenameId={pendingRenameId} onPendingRenameConsumed={() => setPendingRenameId(null)} onTogglePin={toggleSidebarPin} onCollapse={() => setSidebarMode("collapsed")} onResizeActiveChange={setSidebarResizing} onWidthChange={updateSidebarWidth} onWidthCommit={commitSidebarWidth} onCloseMobile={() => setMobileOpen(false)} />
       {mobileOpen && <div className="mobile-scrim" onClick={() => setMobileOpen(false)} />}
-      <main className="workspace">
+      <main className="workspace" onPointerDownCapture={(event) => {
+        if (!isMobile && sidebarMode === "floating" && (event.target as HTMLElement).closest(".document-pane, .empty-workspace")) setSidebarMode("collapsed");
+      }}>
         {isMobile && <header className="topbar">
           <div className="topbar-left">
             <button className="icon-button mobile-only" onClick={() => void leaveMobileDocument()} title="返回文档列表"><ArrowLeft size={21} /></button>

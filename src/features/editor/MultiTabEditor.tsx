@@ -81,7 +81,7 @@ export function MultiTabEditor({
           </button>
         ))}
         {tabs.length < MAX_TABS && (
-          <span className="tab-bar-hint">最多 {MAX_TABS} 个标签</span>
+          <span className="tab-bar-hint" title={`最多 ${MAX_TABS} 个标签`}>{tabs.length} / {MAX_TABS}</span>
         )}
       </div>
       <div className="tab-panels">
