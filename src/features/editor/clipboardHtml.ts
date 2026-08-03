@@ -198,19 +198,82 @@ function escapeHtmlText(text: string): string {
     .replace(/'/g, "&#39;");
 }
 
-/** Cmd/Ctrl+Shift+V：粘贴为纯文本（原生 DataTransfer 只读，沿用 getData patch 方案） */
+/** Cmd/Ctrl+Shift+V：粘贴为纯文本。
+ * 实测：Chromium（Electron）的 Cmd+Shift+V 不产生 paste 事件（无默认菜单项也不触发），
+ * execCommand("paste"/"insertHTML") 在 Lake 编辑器不可靠（被 Lake 重置或拒绝）。
+ * 正解：keydown 拦截（document 捕获，先于一切）→ 读剪贴板纯文本 →
+ * 在光标处直接插入 <p> 段落（contenteditable 标准机制）→ 派发 input 事件驱动 Lake 同步。
+ * 另保留 paste 事件补丁：若某环境仍触发 paste（armed 置位），同样转纯文本，双保险。 */
 let pasteAsPlainTextArmed = false;
+
+/** 判断焦点是否在 Lake 编辑器内 */
+function isFocusInLakeEditor(anchor: Node | null): boolean {
+  if (!anchor || !anchor.isConnected) return false;
+  const el = anchor instanceof Element ? anchor : anchor.parentElement;
+  return !!el?.closest(".lake-editor");
+}
+
+/** 在光标处插入多个纯文本段落（contenteditable 标准机制），派发 input 事件驱动 Lake 同步 */
+function insertPlainParagraphs(paragraphs: string[]): void {
+  const sel = window.getSelection();
+  if (!sel || !sel.rangeCount) return;
+  const doc = sel.anchorNode?.ownerDocument ?? document;
+  const host = sel.anchorNode instanceof Element
+    ? sel.anchorNode.closest(".ne-engine")
+    : sel.anchorNode?.parentElement?.closest(".ne-engine");
+  if (!host) return;
+  const range = sel.getRangeAt(0);
+  range.deleteContents();
+  let prev: HTMLElement | null = null;
+  for (const line of paragraphs) {
+    const p = doc.createElement("p");
+    p.textContent = line;
+    if (prev === null) {
+      range.insertNode(p);
+    } else {
+      const r = doc.createRange();
+      r.setStartAfter(prev);
+      r.collapse(true);
+      r.insertNode(p);
+    }
+    prev = p;
+  }
+  // 光标移到最后一个段落末尾
+  if (prev) {
+    const r = doc.createRange();
+    r.selectNodeContents(prev);
+    r.collapse(false);
+    sel.removeAllRanges();
+    sel.addRange(r);
+  }
+  host.dispatchEvent(new InputEvent("input", { bubbles: true, inputType: "insertParagraph", data: null }));
+}
+
+/** 读剪贴板纯文本并插入为段落（Cmd/Ctrl+Shift+V 自实现） */
+async function pastePlainTextFromClipboard(event: KeyboardEvent): Promise<void> {
+  // 仅当焦点在 Lake 编辑器内时处理
+  if (!isFocusInLakeEditor(window.getSelection()?.anchorNode ?? null)) return;
+  event.preventDefault();
+  event.stopImmediatePropagation();
+  try {
+    const text = await navigator.clipboard.readText();
+    const paragraphs = text.split(/\n+/).map((line) => line.trim()).filter(Boolean);
+    if (paragraphs.length === 0) return;
+    insertPlainParagraphs(paragraphs);
+  } catch { /* 剪贴板读取被拒（如未授权）时忽略 */ }
+}
 
 export function installPasteInterceptor(): void {
   if (pasteInterceptorInstalled) return;
   pasteInterceptorInstalled = true;
-  // 记录 Cmd/Ctrl+Shift+V：keydown 置位，keyup/paste 后清除
+  // 记录 Cmd/Ctrl+Shift+V：keydown 置位（供 paste 事件兜底）+ 自实现纯文本粘贴。
   document.addEventListener("keydown", (event: KeyboardEvent) => {
     if (event.key.toLowerCase() === "v" && (event.metaKey || event.ctrlKey) && event.shiftKey) {
       pasteAsPlainTextArmed = true;
+      window.setTimeout(() => { pasteAsPlainTextArmed = false; }, 1000);
+      void pastePlainTextFromClipboard(event);
     }
   }, true);
-  document.addEventListener("keyup", () => { pasteAsPlainTextArmed = false; }, true);
   document.addEventListener(
     "paste",
     (event: Event) => {

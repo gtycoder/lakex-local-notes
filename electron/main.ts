@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, session, shell, type WebFrameMain } from "electron";
+import { app, BrowserWindow, ipcMain, Menu, session, shell, type WebFrameMain } from "electron";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { MAX_IMAGE_BYTES, Store } from "./store.js";
@@ -112,6 +112,39 @@ function isTrustedSenderFrame(frame: WebFrameMain | null, sender: Electron.WebCo
   return isAppPageUrl(frame.url);
 }
 
+/** 自定义应用菜单：移除 Edit 菜单的「粘贴并匹配样式」（Paste and Match Style）。
+ * 该菜单项在 macOS 隐式绑定 Cmd+Shift+V，会截获按键走 pasteAndMatchStyle()，
+ * 绕过渲染层的 paste 事件拦截（我们自定义的「粘贴为纯文本」依赖 paste 事件）。
+ * 移除后 Cmd+Shift+V 落回 Chromium 标准 paste 事件流，由 clipboardHtml 拦截器处理。 */
+function buildApplicationMenu(): void {
+  const isDev = !app.isPackaged;
+  const template: Electron.MenuItemConstructorOptions[] = [
+    { role: "appMenu" },
+    { role: "fileMenu" },
+    {
+      label: "编辑",
+      submenu: [
+        { role: "undo" }, { role: "redo" }, { type: "separator" },
+        { role: "cut" }, { role: "copy" }, { role: "paste" },
+        { role: "delete" }, { type: "separator" }, { role: "selectAll" },
+      ],
+    },
+    {
+      label: "视图",
+      submenu: [
+        ...(isDev
+          ? [{ role: "reload" as const }, { role: "forceReload" as const }, { role: "toggleDevTools" as const }, { type: "separator" as const }]
+          : []),
+        { role: "resetZoom" }, { role: "zoomIn" }, { role: "zoomOut" },
+        { type: "separator" }, { role: "togglefullscreen" },
+      ],
+    },
+    { role: "windowMenu" },
+    { role: "help" },
+  ];
+  Menu.setApplicationMenu(Menu.buildFromTemplate(template));
+}
+
 function registerIpc() {
   let syncInFlight = false;
   const handle = (channel: string, fn: (...args: any[]) => any) => {
@@ -175,6 +208,7 @@ if (!app.requestSingleInstanceLock()) {
 
   app.whenReady().then(() => {
     store = new Store(workspaceRoot());
+    buildApplicationMenu();
     registerCdnRedirect();
     startAssetServer(path.join(workspaceRoot(), "note-assets"), vendorCdnDir());
     registerIpc();

@@ -628,3 +628,95 @@ html[data-theme="dark"] .lake-editor .ne-toc-item { color: #9aa2ac; }
 html[data-theme="dark"] .lake-editor .ne-toc-item:hover { background: #23272c; }
 html[data-theme="dark"] .lake-editor .ne-toc-item.ne-toc-selected { color: #6fae8f; background: #1f2b26; }
 html[data-theme="dark"] .sync-panel { background: #22262b; color: #d6dae0; border-color: #33383f; }
+
+/* ===== Lake 编辑器主题变量（--lakex-editor-*：Lake 官方 CSS 变量体系，默认未定义） ===== */
+:root {
+  --lakex-editor-background-primary: #ffffff;
+  --lakex-editor-background: #ffffff;
+  --lakex-editor-background-secondary: #f7f8fa;
+  --lakex-editor-background-tertiary: #f0f1f4;
+  --lakex-editor-background-focus: #ffffff;
+  --lakex-editor-text-body: #20242c;
+  --lakex-editor-text-color: #20242c;
+  --lakex-editor-text-caption: #8a919b;
+  --lakex-editor-text-disable: #c2c7ce;
+  --lakex-editor-text-danger: #c6534c;
+  --lakex-editor-border-primary: #e1e4e8;
+  --lakex-editor-border-secondary: #eceef0;
+  --lakex-editor-border-light: #f0f1f4;
+  --lakex-editor-code-background: #f6f8fa;
+  --lakex-editor-selection: rgba(40, 119, 90, 0.18);
+  --lakex-editor-icon-primary: #303641;
+  --lakex-editor-icon-secondary: #8a919b;
+  --lakex-editor-cursor: #20242c;
+  --lakex-editor-color-theme: #28775a;
+  --lakex-editor-color-theme-light: #dcece5;
+  --lakex-editor-color-black: #20242c;
+  --lakex-editor-color-white: #ffffff;
+  --lakex-editor-card-background-hover: #f0f1f4;
+  --lakex-editor-card-border-hover: #c9d5cf;
+  --lakex-editor-overlay-background-tertiary: #f0f1f4;
+}
+html[data-theme="dark"] {
+  --lakex-editor-background-primary: #1a1d21;
+  --lakex-editor-background: #17191d;
+  --lakex-editor-background-secondary: #22262b;
+  --lakex-editor-background-tertiary: #2a2f35;
+  --lakex-editor-background-focus: #1a1d21;
+  --lakex-editor-text-body: #d6dae0;
+  --lakex-editor-text-color: #d6dae0;
+  --lakex-editor-text-caption: #8a919b;
+  --lakex-editor-text-disable: #555c66;
+  --lakex-editor-text-danger: #e08a84;
+  --lakex-editor-border-primary: #33383f;
+  --lakex-editor-border-secondary: #2a2e33;
+  --lakex-editor-border-light: #2a2e33;
+  --lakex-editor-code-background: #23272c;
+  --lakex-editor-selection: rgba(111, 174, 143, 0.28);
+  --lakex-editor-icon-primary: #d6dae0;
+  --lakex-editor-icon-secondary: #8a919b;
+  --lakex-editor-cursor: #d6dae0;
+  --lakex-editor-color-theme: #6fae8f;
+  --lakex-editor-color-theme-light: #1f2b26;
+  --lakex-editor-color-black: #0c0e10;
+  --lakex-editor-color-white: #f0f3f6;
+  --lakex-editor-card-background-hover: #23272c;
+  --lakex-editor-card-border-hover: #3a8064;
+  --lakex-editor-overlay-background-tertiary: #2a2f35;
+}
+html[data-theme="dark"] .lake-editor .ne-editor {
+  --lakex-editor-background-primary: #1a1d21;
+  --lakex-editor-background: #17191d;
+  --lakex-editor-background-secondary: #22262b;
+  --lakex-editor-background-tertiary: #2a2f35;
+  --lakex-editor-background-focus: #1a1d21;
+  --lakex-editor-text-body: #d6dae0;
+  --lakex-editor-text-color: #d6dae0;
+  --lakex-editor-text-caption: #8a919b;
+  --lakex-editor-text-disable: #555c66;
+  --lakex-editor-text-danger: #e08a84;
+  --lakex-editor-border-primary: #33383f;
+  --lakex-editor-border-secondary: #2a2e33;
+  --lakex-editor-border-light: #2a2e33;
+  --lakex-editor-code-background: #23272c;
+  --lakex-editor-selection: rgba(111, 174, 143, 0.28);
+  --lakex-editor-icon-primary: #d6dae0;
+  --lakex-editor-icon-secondary: #8a919b;
+  --lakex-editor-cursor: #d6dae0;
+  --lakex-editor-color-theme: #6fae8f;
+  --lakex-editor-color-theme-light: #1f2b26;
+  --lakex-editor-color-black: #0c0e10;
+  --lakex-editor-color-white: #f0f3f6;
+  --lakex-editor-card-background-hover: #23272c;
+  --lakex-editor-card-border-hover: #3a8064;
+  --lakex-editor-overlay-background-tertiary: #2a2f35;
+  --lakex-editor-background-primary-hover: #2a2f35;
+  --lakex-editor-background-primary-hover-light: #23272c;
+}
+/* Lake 注入的 .lakex-default-theme 在 .ne-editor 上定义亮色变量（运行时 <style>）；
+   上面用更高优先级选择器在暗色下覆盖。antd 弹层（挂 body 下）用 Lake 官方暗色 class */
+body.lakex-dark-theme-dark .ant-dropdown-menu,
+body.lakex-dark-theme-dark .ant-popover-inner,
+body.lakex-dark-theme-dark .ant-select-dropdown { background-color: #22262b !important; color: #d6dae0 !important; }
+body.lakex-dark-theme-dark .ant-dropdown-menu-item { color: #d6dae0; }
+body.lakex-dark-theme-dark .ant-dropdown-menu-item:hover { background-color: #2a2f35; }

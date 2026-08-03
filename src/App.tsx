@@ -78,7 +78,10 @@ export function App() {
   }, []);
 
   useEffect(() => {
-    document.documentElement.dataset.theme = resolvedTheme(settings, systemDark);
+    const theme = resolvedTheme(settings, systemDark);
+    document.documentElement.dataset.theme = theme;
+    // Lake 官方暗色 class（body 级，作用于 antd 弹层/下拉等挂 body 的组件）
+    document.body.classList.toggle("lakex-dark-theme-dark", theme === "dark");
   }, [settings, systemDark]);
 
   useEffect(() => {
