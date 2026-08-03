@@ -46,6 +46,9 @@ export function App() {
   const [error, setError] = useState<string | null>(null);
   const openTabsRef = useRef<OpenTab[]>([]);
   const saveTimers = useRef<Map<string, number>>(new Map());
+  // 审计 #7：每篇笔记的编辑 revision——保存请求发出后若有新编辑（revision 增长），
+  // 旧响应不得覆盖最新草稿/清除 dirty
+  const revisionRef = useRef<Map<string, number>>(new Map());
 
   useEffect(() => { openTabsRef.current = openTabs; }, [openTabs]);
 
@@ -82,20 +85,46 @@ export function App() {
   }, []);
 
   const persistTab = useCallback(async (noteId: string, title: string, content: string) => {
+    // 审计 #7：保存时快照当前 revision；响应返回后仅当期间无新编辑才覆盖草稿/清除 dirty
+    const revision = revisionRef.current.get(noteId) ?? 0;
     setSaveState("saving");
     try {
       const saved = await native.saveNote(noteId, title.trim() || "无标题", content);
-      setOpenTabs((tabs) => tabs.map((tab) => tab.noteId === noteId ? { ...tab, title: saved.title, content: saved.content, dirty: false } : tab));
+      // 笔记摘要/树节点始终以服务端返回为准（磁盘已写入）
       setNotes((items) => items.map((item) => item.id === saved.id ? summaryOf(saved) : item));
       setTreeNodes((items) => items.map((item) => item.noteFileId === saved.id || item.id === saved.id ? { ...item, title: saved.title, updatedAt: saved.updatedAt, syncState: saved.syncState } : item));
       setSync((current) => ({ ...current, pendingChanges: Math.max(1, current.pendingChanges) }));
-      setSaveState("saved");
+      if (revisionRef.current.get(noteId) === revision) {
+        // 无新编辑：安全覆盖 + 清除 dirty
+        setOpenTabs((tabs) => tabs.map((tab) => tab.noteId === noteId ? { ...tab, title: saved.title, content: saved.content, dirty: false } : tab));
+        setSaveState("saved");
+      } else {
+        // 期间有新编辑：不覆盖草稿、不清除 dirty（磁盘为旧内容，等待下一次保存）
+        setSaveState("dirty");
+      }
     } catch (reason) {
       const msg = String(reason);
       if (msg.includes("NotFound") || msg.includes("not found")) return;
       setSaveState("error"); setError(msg);
     }
   }, []);
+
+  useEffect(() => {
+    // 审计 #23：窗口/应用关闭时若有未保存草稿，阻止关闭并提示（Electron 显示原生对话框）；
+    // 同时立即触发一次保存，尽量在用户留下期间落盘
+    const onBeforeUnload = (event: BeforeUnloadEvent) => {
+      const hasDirty = openTabsRef.current.some((tab) => tab.dirty)
+        || (mobileActive !== null && mobileDraftContent !== mobileActive.content);
+      if (!hasDirty) return;
+      for (const tab of openTabsRef.current) {
+        if (tab.dirty) void persistTab(tab.noteId, tab.title, tab.content);
+      }
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    window.addEventListener("beforeunload", onBeforeUnload);
+    return () => { window.removeEventListener("beforeunload", onBeforeUnload); };
+  }, [persistTab, mobileActive, mobileDraftContent]);
 
   const scheduleSave = useCallback((noteId: string, content: string) => {
     setSaveState("dirty");
@@ -124,6 +153,7 @@ export function App() {
         setActiveNoteId(id);
         return;
       }
+      revisionRef.current.set(note.id, 0);
       const newTab: OpenTab = { noteId: note.id, title: note.title, content: note.content, dirty: false, lastAccessedAt: Date.now() };
       const currentTabs = openTabsRef.current;
       if (currentTabs.length >= 8) {
@@ -173,6 +203,7 @@ export function App() {
   }
 
   const handleContentChange = useCallback((noteId: string, content: string) => {
+    revisionRef.current.set(noteId, (revisionRef.current.get(noteId) ?? 0) + 1);
     setOpenTabs((tabs) => tabs.map((tab) => tab.noteId === noteId ? { ...tab, content, dirty: true } : tab));
     scheduleSave(noteId, content);
   }, [scheduleSave]);
@@ -185,6 +216,7 @@ export function App() {
       setMobileActive(note); setMobileDraftTitle(note.title); setMobileDraftContent(note.content);
       setMobileOpen(false); setMobilePage("document"); setMobileEditing(true);
     } else {
+      revisionRef.current.set(note.id, 0);
       const newTab: OpenTab = { noteId: note.id, title: note.title, content: note.content, dirty: false, lastAccessedAt: Date.now() };
       const currentTabs = openTabsRef.current;
       if (currentTabs.length >= 8) {
@@ -249,8 +281,7 @@ export function App() {
             next.splice(insertAt, 0, id);
             return next;
           })();
-      await native.moveTreeNode(id, parentId, orderedIds.indexOf(id));
-      await native.reorderTreeNodes(parentId, orderedIds);
+      await native.moveTreeNodeOrdered(id, parentId, orderedIds);
       setTreeNodes(await native.listTreeNodes());
     } catch (reason) { setError(String(reason)); }
   }
@@ -264,6 +295,7 @@ export function App() {
       removedNoteIds.forEach((noteId) => {
         const timer = saveTimers.current.get(noteId);
         if (timer) { window.clearTimeout(timer); saveTimers.current.delete(noteId); }
+        revisionRef.current.delete(noteId);
       });
       await native.deleteTreeNode(id);
       const remaining = notes.filter((note) => !removedNoteIds.has(note.id));

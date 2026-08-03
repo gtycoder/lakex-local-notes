@@ -153,12 +153,41 @@ describe("目录树操作", () => {
     expect(() => store.moveTreeNode(a.id, c.id, 0)).toThrowError(/子节点/);
   });
 
-  it("reorderTreeNodes 更新顺序", () => {
+  it("reorderTreeNodes 更新顺序（须包含全部子节点）", () => {
     const n1 = store.createNote("一");
     const n2 = store.createNote("二");
-    store.reorderTreeNodes("notebook-personal", [n2.id, n1.id]);
+    // 完整列表（notebook 下还有 welcome-note）：逆序
+    const allIds = store.listTreeNodes().filter((n) => n.parentId === "notebook-personal").map((n) => n.id);
+    const reversed = [n2.id, n1.id, ...allIds.filter((id) => id !== n1.id && id !== n2.id)];
+    store.reorderTreeNodes("notebook-personal", reversed);
     const rows = store.listTreeNodes().filter((n) => n.nodeType === "note");
     expect(rows.findIndex((r) => r.id === n2.id)).toBeLessThan(rows.findIndex((r) => r.id === n1.id));
+  });
+
+  it("reorderTreeNodes 校验：重复/外部节点/遗漏都拒绝（审计#9）", () => {
+    const n1 = store.createNote("一");
+    const n2 = store.createNote("二");
+    const allIds = store.listTreeNodes().filter((n) => n.parentId === "notebook-personal").map((n) => n.id);
+    expect(() => store.reorderTreeNodes("notebook-personal", [n1.id, n1.id, ...allIds.filter((id) => id !== n1.id)])).toThrowError(/重复/);
+    const external = store.createNoteIn(store.createNotebook("另册").id, "外部").id;
+    const withExternal = [...allIds.filter((id) => id !== n2.id), external];
+    expect(() => store.reorderTreeNodes("notebook-personal", withExternal)).toThrowError(/不属于该父节点/);
+    expect(() => store.reorderTreeNodes("notebook-personal", [n1.id, n2.id])).toThrowError(/全部子节点/);
+  });
+
+  it("moveTreeNode/建组/建笔记拒绝破坏树结构（审计#9：note 不能作父、notebook 只能根层）", () => {
+    const note = store.createNote("叶子");
+    expect(() => store.createGroup(note.id, "组")).toThrowError(/笔记不能作为父节点/);
+    expect(() => store.createNoteIn(note.id, "子")).toThrowError(/笔记不能作为父节点/);
+    const nb = store.createNotebook("根本");
+    expect(() => store.moveTreeNode(nb.id, note.id, 0)).toThrowError(/笔记本只能位于根层/);
+    // note 移入 note：父节点类型校验生效
+    const note2 = store.createNote("另一片叶子");
+    expect(() => store.moveTreeNode(note.id, note2.id, 0)).toThrowError(/笔记不能作为父节点/);
+    const nb2 = store.createNotebook("根本2");
+    const group = store.createGroup(nb2.id, "组");
+    expect(() => store.moveTreeNode(nb.id, group.id, 0)).toThrowError(/笔记本只能位于根层/);
+    expect(() => store.moveTreeNode(note.id, null, 0)).toThrowError(/必须位于目录节点下/);
   });
 
   it("deleteTreeNode 递归删除 + 墓碑 + 清孤儿/资源目录", () => {
@@ -303,5 +332,78 @@ describe("同步状态 / 导入", () => {
     const out = store.uploadResource({ bytes: [...png], filename: "hello.png" }, id);
     expect(out.url).toContain(`127.0.0.1:19876/${id}/`);
     expect(fs.existsSync(path.join(dir, "note-assets", id, out.filename))).toBe(true);
+  });
+});
+
+describe("审计修复回归（#2/#3/#12/#17/#18）", () => {
+  it("moveTreeNodeOrdered 单次原子移动+重排（#18）", () => {
+    const nb = store.createNotebook("目标册");
+    const n1 = store.createNoteIn(nb.id, "一");
+    const n2 = store.createNoteIn(nb.id, "二");
+    const n3 = store.createNoteIn(nb.id, "三");
+    const orderedIds = [n3.id, n1.id, n2.id];
+    const moved = store.moveTreeNodeOrdered(n2.id, nb.id, orderedIds);
+    expect(moved.parentId).toBe(nb.id);
+    const rows = store.listTreeNodes().filter((n) => n.parentId === nb.id).sort((a, b) => a.sortOrder - b.sortOrder);
+    expect(rows.map((r) => r.id)).toEqual(orderedIds);
+  });
+
+  it("moveTreeNodeOrdered 复用树不变量校验（#9/#18）", () => {
+    const note = store.createNote("叶子");
+    const nb = store.createNotebook("册");
+    const other = store.createNotebook("另册");
+    const otherGroup = store.createGroup(other.id, "组");
+    // 笔记本移入 group → 笔记本只能位于根层（且 group 非其子孙，先过自身/子孙检查）
+    expect(() => store.moveTreeNodeOrdered(nb.id, otherGroup.id, [])).toThrowError(/笔记本只能位于根层/);
+    expect(() => store.moveTreeNodeOrdered(note.id, note.id, [note.id])).toThrowError(/不能移动到自身/);
+  });
+
+  it("cleanOrphanAssets：删除失败保留记录与计数（#12）", () => {
+    const note = store.createNote("孤儿");
+    const filename = assetFilename();
+    const assetDir = path.join(dir, "note-assets", note.id);
+    fs.mkdirSync(assetDir, { recursive: true });
+    fs.writeFileSync(path.join(assetDir, filename), "data");
+    store.saveNote(note.id, "孤儿", "<p>无引用</p>");
+    expect(store.listOrphanAssets().length).toBe(1);
+    // 把文件替换成目录 → unlinkSync 抛错 → 记录必须保留可重试
+    fs.rmSync(path.join(assetDir, filename));
+    fs.mkdirSync(path.join(assetDir, filename));
+    const r1 = store.cleanOrphanAssets();
+    expect(r1.count).toBe(0);
+    expect(store.listOrphanAssets().length).toBe(1);
+    // 恢复为可删文件 → 清理成功
+    fs.rmdirSync(path.join(assetDir, filename));
+    fs.writeFileSync(path.join(assetDir, filename), "data");
+    const r2 = store.cleanOrphanAssets();
+    expect(r2.count).toBe(1);
+    expect(store.listOrphanAssets().length).toBe(0);
+  });
+
+  it("importRemoteNote 拒绝恶意 note.id / asset.filename 且不写半成品（#3/#17）", () => {
+    const badNote = { id: "../../escape", title: "x", parentId: null, sortOrder: 0, updatedAt: "2026-08-02T00:00:00.000Z", isConflict: false };
+    expect(() => store.importRemoteNote(badNote, Buffer.from("<p>x</p>"), [])).toThrowError(/无效的笔记 ID/);
+    const goodNote = { id: "remote-ok", title: "x", parentId: null, sortOrder: 0, updatedAt: "2026-08-02T00:00:00.000Z", isConflict: false };
+    expect(() => store.importRemoteNote(goodNote, Buffer.from("<p>x</p>"), [{ filename: "../escape.png", bytes: Buffer.from("x") }])).toThrowError(/无效的资源文件名/);
+    expect(fs.existsSync(path.join(dir, "notes", "remote-ok.lake"))).toBe(false);
+    expect(fs.existsSync(path.join(dir, "note-assets", "remote-ok"))).toBe(false);
+    // 正常导入（staging 路径）仍可用
+    store.importRemoteNote(goodNote, Buffer.from("<p>x</p>"), [{ filename: "1234567890123_deadbeef.png", bytes: Buffer.from("x") }]);
+    expect(fs.existsSync(path.join(dir, "notes", "remote-ok.lake"))).toBe(true);
+    expect(fs.readFileSync(path.join(dir, "note-assets", "remote-ok", "1234567890123_deadbeef.png"), "utf8")).toBe("x");
+  });
+
+  it("rememberDeleted 学习远端删除（#2）", () => {
+    store.rememberDeleted({ id: "remote-gone", title: "远端已删", parentId: null, sortOrder: 0, updatedAt: "2026-08-02T00:00:00.000Z", isConflict: false }, "2026-08-02T01:00:00.000Z");
+    const list = store.listDeletedNotesForSync();
+    expect(list.some((d) => d.id === "remote-gone")).toBe(true);
+    expect(list.find((d) => d.id === "remote-gone")?.deletedAt).toBe("2026-08-02T01:00:00.000Z");
+  });
+
+  it("saveNote 对非法 id 拒绝（#17：notePath 校验下沉）", () => {
+    // saveNote 直接构造路径 → 命中 notePath 校验
+    expect(() => store.saveNote("../../evil", "t", "<p>x</p>")).toThrowError(/无效的笔记 ID/);
+    // readNote 先查 DB：不存在的 id 报 NotFound（不触发路径构造），不构成穿越
+    expect(() => store.readNote("../x")).toThrowError(/笔记不存在/);
   });
 });

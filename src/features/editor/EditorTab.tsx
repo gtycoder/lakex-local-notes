@@ -55,7 +55,7 @@ export function EditorTab({ noteId, content, visible, tocEnabled, onChange }: Ed
       }, tocEnabled, noteId, host);
       editor.setDocument("text/lake", content);
       // 修复：Lake TOC 侧边栏创建时用空 toc 渲染，setDocument 后补一次数据同步
-      setTimeout(() => refreshTocSidebar(editor), 0);
+      setTimeout(() => refreshTocSidebar(editor, host), 0);
       setting = false;
       editorRef.current = editor;
     } catch (reason) {

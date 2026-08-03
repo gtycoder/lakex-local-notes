@@ -74,3 +74,20 @@
 52. **Playwright 驱动 Electron 调试**：合成 `dispatchEvent` 不触发真实焦点（真实点击用 `page.mouse.click`）；node_repl 沙箱禁 `process`；electron 主进程 `isDev = !app.isPackaged` 会去连 1421 dev server——用静态服务器 serve `dist/` 即可跑生产渲染层。
 53. **虚拟渲染滚动补偿**：滚动后 `wrap.scrollTop` 会因内容高度变化被 Lake 调整（scroll 补偿），定位表格/元素要用**实时** `getBoundingClientRect`，不要缓存旧坐标。
 54. **e2e 测试残留**：测试里 `createNote` 被调两次会残留笔记/资源目录；每次测试后要验证清理（`listOrphanAssets` + 笔记文件数）。
+
+## H. 2026-08-03 代码审计修复踩坑
+
+- **Chromium `net.fetch` 的 `redirect:"manual"` 直接抛 "Redirect was cancelled"**：Electron 的
+  `net.fetch`（Chromium 网络栈）不支持手动重定向模式。要逐跳校验必须改用 **`net.request` +
+  `followRedirect:false`**（`redirect` 事件给目标 URL，`req.abort()` 后对新 URL 重新发请求）。
+- **`net.request` 的 Referer 必须每跳用"当前 URL 自身"**：固定用原始 URL 作 Referer 会被部分 CDN
+  （如 Google）客户端级拦截（`net::ERR_BLOCKED_BY_CLIENT`），自引用 Referer 则放行
+  （对齐 Rust 版"Referer=图片自身"防盗链策略）。
+- **DNS 感知 SSRF 校验**：`isBlockedHost` 只拦字面 IP；域名要 `dns.promises.lookup(host, {all:true,
+  verbatim:true})` 逐地址校验（localtest.me→127.0.0.1/::1 一测就中）。解析失败宁可拒绝。
+- **渲染层回退是安全黑洞**：主进程 SSRF 拒绝后渲染进程再 fetch 会把策略彻底绕开——安全错误
+  （InvalidInput/SSRF）绝不回退；Electron 下唯一下载路径是主进程。
+- **vitest `mockRestore()` 后重新 `mockResolvedValue` 不生效**：spy 恢复原实现后 re-mock 会被忽略
+  （实测仍走真实 DNS）。每用例独立 spy 或用 `mockImplementation`。
+- **store.ts 大批量 Python 替换要小心索引边界**：用 `s.index("  }\\n\\n  uploadResource(")` 找方法结尾
+  会命中前一个方法的结尾导致整段错位。改大文件优先 `git checkout` 恢复后重放补丁，或逐段验证。

@@ -12,6 +12,7 @@ interface LakeNative {
   renameTreeNode(id: string, title: string): Promise<TreeNode>;
   createNoteIn(parentId: string | null, title: string): Promise<NoteDocument>;
   moveTreeNode(id: string, parentId: string | null, sortOrder: number): Promise<TreeNode>;
+  moveTreeNodeOrdered(id: string, parentId: string | null, orderedIds: string[]): Promise<TreeNode>;
   reorderTreeNodes(parentId: string | null, orderedIds: string[]): Promise<void>;
   deleteTreeNode(id: string): Promise<void>;
   uploadResource(input: ResourceUploadInput, noteId: string): Promise<ResourceUploadOutput>;
@@ -49,6 +50,7 @@ export const native = {
   renameTreeNode: (id: string, title: string) => api().renameTreeNode(id, title),
   createNoteIn: (parentId: string | null, title: string) => api().createNoteIn(parentId, title),
   moveTreeNode: (id: string, parentId: string | null, sortOrder: number) => api().moveTreeNode(id, parentId, sortOrder),
+  moveTreeNodeOrdered: (id: string, parentId: string | null, orderedIds: string[]) => api().moveTreeNodeOrdered(id, parentId, orderedIds),
   reorderTreeNodes: (parentId: string | null, orderedIds: string[]) => api().reorderTreeNodes(parentId, orderedIds),
   deleteTreeNode: (id: string) => api().deleteTreeNode(id),
   uploadResource: (input: ResourceUploadInput, noteId: string) => api().uploadResource(input, noteId),

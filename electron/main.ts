@@ -1,14 +1,30 @@
-import { app, BrowserWindow, ipcMain, session, type WebFrameMain } from "electron";
+import { app, BrowserWindow, ipcMain, session, shell, type WebFrameMain } from "electron";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
-import { Store } from "./store.js";
+import { fileURLToPath, pathToFileURL } from "node:url";
+import { MAX_IMAGE_BYTES, Store } from "./store.js";
 import { startAssetServer, ASSET_PORT } from "./assetServer.js";
 import { testConnection, syncNow } from "./sync.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const isDev = !app.isPackaged;
+const DEV_SERVER_URL = "http://127.0.0.1:1421";
 
 let store: Store;
+
+/** 本应用创建的窗口 webContents 白名单（防导航到其他页面后仍调用 IPC） */
+const trustedWebContents = new Set<number>();
+
+/** 应用自身页面的 URL 判定：dev = 固定 dev server；prod = 打包 dist/index.html */
+function isAppPageUrl(url: string): boolean {
+  let parsed: URL;
+  try { parsed = new URL(url); } catch { return false; }
+  if (isDev) return parsed.origin === DEV_SERVER_URL;
+  if (parsed.protocol === "file:") {
+    const expected = pathToFileURL(path.join(__dirname, "../dist/index.html"));
+    return parsed.pathname === expected.pathname;
+  }
+  return false;
+}
 
 function workspaceRoot(): string {
   return path.join(app.getPath("userData"), "workspace-default");
@@ -57,30 +73,44 @@ async function createWindow() {
     },
   });
 
+  // 审计 #6：窗口导航与 window.open 全部受控——阻止导航到应用页之外的任何地址；
+  // 外链（http/https）交给系统浏览器打开，绝不进入应用窗口
+  trustedWebContents.add(win.webContents.id);
+  win.webContents.on("will-navigate", (event, url) => {
+    if (!isAppPageUrl(url)) event.preventDefault();
+  });
+  win.webContents.on("destroyed", () => { trustedWebContents.delete(win.webContents.id); });
+  win.webContents.setWindowOpenHandler(({ url }) => {
+    try {
+      const parsed = new URL(url);
+      if (parsed.protocol === "http:" || parsed.protocol === "https:") {
+        void shell.openExternal(url);
+      }
+    } catch { /* 非法 URL 忽略 */ }
+    return { action: "deny" };
+  });
+
   if (isDev) {
-    await win.loadURL("http://127.0.0.1:1421");
+    await win.loadURL(DEV_SERVER_URL);
   } else {
     await win.loadFile(path.join(__dirname, "../dist/index.html"));
   }
 }
 
-/** IPC 只接受本应用页面（dev server / 打包 file://）发来的调用 */
-function isTrustedSenderFrame(frame: WebFrameMain | null): boolean {
+/** IPC 只接受本应用窗口（精确 URL + webContents 白名单）发来的调用。
+ * 审计 #6：不再信任任意 file://、任意 localhost 端口、devtools://、about:blank——
+ * 页面被导航到恶意本地页后 preload 暴露的全量能力即失效。 */
+function isTrustedSenderFrame(frame: WebFrameMain | null, sender: Electron.WebContents): boolean {
   if (!frame) return false;
-  try {
-    const url = frame.url;
-    if (url.startsWith("file://")) return true;
-    if (url.startsWith("http://127.0.0.1:") || url.startsWith("http://localhost:")) return true;
-    if (url.startsWith("devtools://") || url === "about:blank") return true;
-    return false;
-  } catch { return false; }
+  if (!trustedWebContents.has(sender.id)) return false;
+  return isAppPageUrl(frame.url);
 }
 
 function registerIpc() {
   let syncInFlight = false;
   const handle = (channel: string, fn: (...args: any[]) => any) => {
     ipcMain.handle(channel, (event, ...args) => {
-      if (!isTrustedSenderFrame(event.senderFrame)) throw new Error("IPC 调用来源不受信任");
+      if (!isTrustedSenderFrame(event.senderFrame, event.sender)) throw new Error("IPC 调用来源不受信任");
       return fn(...args);
     });
   };
@@ -96,9 +126,15 @@ function registerIpc() {
   handle("rename_tree_node", (id: string, title: string) => store.renameTreeNode(id, title));
   handle("create_note_in", (parentId: string | null, title: string) => store.createNoteIn(parentId, title));
   handle("move_tree_node", (id: string, parentId: string | null, sortOrder: number) => store.moveTreeNode(id, parentId, sortOrder));
+  handle("move_tree_node_ordered", (id: string, parentId: string | null, orderedIds: string[]) => store.moveTreeNodeOrdered(id, parentId, orderedIds));
   handle("reorder_tree_nodes", (parentId: string | null, orderedIds: string[]) => store.reorderTreeNodes(parentId, orderedIds));
   handle("delete_tree_node", (id: string) => store.deleteTreeNode(id));
-  handle("upload_resource", (input: { bytes: number[]; filename: string }, noteId: string) => store.uploadResource(input, noteId));
+  handle("upload_resource", (input: { bytes: number[]; filename: string }, noteId: string) => {
+    // 审计 #21：IPC 输入侧预检（序列化已复制到主进程，先拦截超大数组再走 imageOutput）
+    if (!input || !Array.isArray(input.bytes)) throw new Error("资源数据无效");
+    if (input.bytes.length > MAX_IMAGE_BYTES) throw new Error("图片超过 25 MiB");
+    return store.uploadResource(input, noteId);
+  });
   handle("download_remote_resource", (url: string, noteId: string) => store.downloadRemoteResource(url, noteId));
   handle("list_orphan_assets", () => store.listOrphanAssets());
   handle("clean_orphan_assets", () => store.cleanOrphanAssets());
@@ -107,7 +143,7 @@ function registerIpc() {
   handle("test_s3_connection", () => testConnection(store));
   // sync_now 需要携带进度事件（主进程 → 渲染进程）
   ipcMain.handle("sync_now", (event) => {
-    if (!isTrustedSenderFrame(event.senderFrame)) throw new Error("IPC 调用来源不受信任");
+    if (!isTrustedSenderFrame(event.senderFrame, event.sender)) throw new Error("IPC 调用来源不受信任");
     if (syncInFlight) throw new Error("同步正在进行中，请等待本次同步完成");
     syncInFlight = true;
     return syncNow(store, (progress) => { try { event.sender.send("sync-progress", progress); } catch { /* 窗口已关闭 */ } })

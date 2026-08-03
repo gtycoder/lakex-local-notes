@@ -10,12 +10,16 @@ interface WorkerTask {
   resolve: (bytes: number[]) => void;
   reject: (error: Error) => void;
   worker?: Worker;
+  timeoutId?: number;
 }
 
 interface WorkerState {
   worker: Worker;
   busy: boolean;
 }
+
+/** 单任务超时：worker 卡死/无响应时保证 Promise 一定 settle（审计 #13） */
+const TASK_TIMEOUT_MS = 60_000;
 
 export class WorkerPool {
   private workers: WorkerState[] = [];
@@ -45,6 +49,7 @@ export class WorkerPool {
     
     if (task) {
       this.pendingTasks.delete(id);
+      if (task.timeoutId !== undefined) window.clearTimeout(task.timeoutId);
       
       if (success && bytes) {
         task.resolve(bytes);
@@ -61,21 +66,35 @@ export class WorkerPool {
     }
   }
 
-  private handleWorkerError(event: ErrorEvent): void {
-    console.error("Worker error:", event.message || event.error);
+  private handleWorkerError(event: ErrorEvent | { target: Worker; message?: string }): void {
+    const message = event.message || "unknown error";
+    console.error("Worker error:", message);
     const failed = event.target;
     const workerState = this.workers.find((w) => w.worker === failed);
     if (workerState) {
-      workerState.busy = false;
-      // 拒绝该 worker 上所有 in-flight 任务，避免 Promise 永不 settle 导致界面挂死
+      // 审计 #13：拒绝该 worker 上所有 in-flight 任务（Promise 不悬挂），
+      // 并 terminate + 替换崩溃 worker——绝不把后续任务再派给坏 worker
       for (const [id, task] of this.pendingTasks) {
         if (task.worker === failed) {
           this.pendingTasks.delete(id);
-          task.reject(new Error(`图片转换 worker 崩溃: ${event.message || "unknown error"}`));
+          if (task.timeoutId !== undefined) window.clearTimeout(task.timeoutId);
+          task.reject(new Error(`图片转换 worker 崩溃: ${message}`));
         }
       }
+      this.replaceWorker(workerState);
       this.processQueue();
     }
+  }
+
+  /** 销毁崩溃 worker 并创建替代实例（保持池大小） */
+  private replaceWorker(workerState: WorkerState): void {
+    try { workerState.worker.terminate(); } catch { /* 忽略 */ }
+    const idx = this.workers.indexOf(workerState);
+    if (idx === -1) return;
+    const replacement = this.workerFactory();
+    replacement.onmessage = this.handleWorkerMessage.bind(this);
+    replacement.onerror = this.handleWorkerError.bind(this);
+    this.workers[idx] = { worker: replacement, busy: false };
   }
 
   /**
@@ -101,11 +120,26 @@ export class WorkerPool {
     workerState.busy = true;
     task.worker = workerState.worker;
     this.pendingTasks.set(task.id, task);
-    workerState.worker.postMessage({
-      id: task.id,
-      bytes: task.bytes,
-      mimeType: task.mimeType
-    });
+    // 审计 #13：单任务超时——worker 卡死时 reject 并报废该 worker
+    task.timeoutId = window.setTimeout(() => {
+      if (!this.pendingTasks.has(task.id)) return;
+      this.pendingTasks.delete(task.id);
+      task.reject(new Error(`图片转换超时（${TASK_TIMEOUT_MS / 1000}s）`));
+      this.handleWorkerError({ target: workerState.worker, message: "task timeout" });
+    }, TASK_TIMEOUT_MS);
+    try {
+      workerState.worker.postMessage({
+        id: task.id,
+        bytes: task.bytes,
+        mimeType: task.mimeType
+      });
+    } catch (error) {
+      // 向已死 worker postMessage 会同步抛错：任务必须 settle，worker 必须替换
+      if (task.timeoutId !== undefined) window.clearTimeout(task.timeoutId);
+      this.pendingTasks.delete(task.id);
+      task.reject(new Error(`图片转换 worker 不可用: ${error instanceof Error ? error.message : String(error)}`));
+      this.handleWorkerError({ target: workerState.worker, message: "postMessage failed" });
+    }
   }
 
   private processQueue(): void {

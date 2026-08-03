@@ -126,9 +126,7 @@ export async function syncNow(store: Store, onProgress?: (p: SyncProgress) => vo
   // 1. 读取远程清单
   const manifestBytes = await remote.getOptional("manifests/latest.json");
   const remoteManifest: Manifest | null = manifestBytes ? JSON.parse(manifestBytes.toString("utf8")) : null;
-  if (remoteManifest && remoteManifest.version !== MANIFEST_VERSION) {
-    throw new Error(`清单版本不兼容（本地 ${MANIFEST_VERSION}，远端 ${remoteManifest.version}）`);
-  }
+  if (remoteManifest) validateManifest(remoteManifest);
 
   // 2. 下载阶段：远端有而本地缺失/不同的笔记
   let downloaded = 0;
@@ -145,10 +143,19 @@ export async function syncNow(store: Store, onProgress?: (p: SyncProgress) => vo
     for (const rn of remoteManifest.notes) {
       remoteIndex += 1;
       report({ phase: "download", current: remoteIndex, total: remoteTotal, message: rn.deleted ? "处理云端删除记录" : `检查远端笔记「${rn.title}」` });
-      // 云端已删除：本地若有则删除（墓碑防重拉），不下载对象
+      // 审计 #3：manifest 的 note.id / asset.filename 必须先做单路径段校验，
+      // 拒绝 ../、绝对路径、反斜杠等（写盘前 fail fast，避免任何写半成品）
+      if (!isSafeSegment(rn.id)) throw new Error(`清单包含无效的笔记 ID: ${rn.id}`);
+      for (const asset of rn.assets || []) {
+        if (!isSafeSegment(asset.filename)) throw new Error(`清单包含无效的资源文件名: ${rn.id}/${asset.filename}`);
+      }
+      // 云端已删除：本地若有则删除（墓碑防重拉），不下载对象；
+      // 本地没有也要留存墓碑（学到的删除），让本设备成为 deleted 标记的保管者，
+      // 避免删除方设备清空后标记丢失导致离线设备复活（审计 #2）
       if (rn.deleted) {
         const exists = localIdsAll.has(rn.id);
         if (exists) store.deleteTreeNode(rn.id);
+        else store.rememberDeleted(rn, rn.deletedAt ?? new Date().toISOString());
         continue;
       }
       // 本地已删除而云端未标记：本地删除优先，跳过下载（上传阶段会标记 deleted）
@@ -163,11 +170,19 @@ export async function syncNow(store: Store, onProgress?: (p: SyncProgress) => vo
       // 下载 .lake
       const lakeBytes = await remote.getOptional(`objects/${rn.contentHash}.lake`);
       if (!lakeBytes) throw new Error(`清单引用的文档对象不存在: ${rn.contentHash}`);
-      // 下载资源文件（manifest 里列出）
+      // 下载资源文件（manifest 里列出）；审计 #4：缺失对象必须中止导入，
+      // 下载后校验 size 与 sha256（远端损坏/被替换不静默接受）
       const assets: { filename: string; bytes: Buffer }[] = [];
       await Promise.all((rn.assets || []).map(async (asset) => {
         const bytes = await remote.getOptional(`assets/${rn.id}/${asset.filename}`);
-        if (bytes) assets.push({ filename: asset.filename, bytes });
+        if (!bytes) throw new Error(`清单引用的资源不存在: ${rn.id}/${asset.filename}`);
+        if (bytes.length !== asset.size) {
+          throw new Error(`资源大小不符: ${rn.id}/${asset.filename}（声明 ${asset.size}，实际 ${bytes.length}）`);
+        }
+        if (sha256Hex(bytes) !== asset.hash) {
+          throw new Error(`资源哈希不符: ${rn.id}/${asset.filename}（已损坏或被替换）`);
+        }
+        assets.push({ filename: asset.filename, bytes });
       }));
       const base = store.baseHash(rn.id);
       const localChanged = localHash !== null && localHash !== base;
@@ -201,9 +216,6 @@ export async function syncNow(store: Store, onProgress?: (p: SyncProgress) => vo
   const remoteHashes = new Map<string, string>(
     (remoteManifest?.notes ?? []).map((n) => [n.id, n.contentHash])
   );
-  const remoteById = new Map<string, ManifestNote>(
-    (remoteManifest?.notes ?? []).map((n) => [n.id, n])
-  );
   // 远端清单已登记的资源 hash（filename 不可变 + 内容寻址，hash 一致即无需重传）
   const remoteAssetHashes = new Map<string, string>();
   for (const rn of remoteManifest?.notes ?? []) {
@@ -219,26 +231,30 @@ export async function syncNow(store: Store, onProgress?: (p: SyncProgress) => vo
     localIndex += 1;
     report({ phase: "upload", current: localIndex, total: localTotal, message: `上传笔记「${note.title}」` });
     const hash = store.contentHash(note.id);
+    // 审计 #1：资源清单必须**每次同步都重扫**（正文 hash 未变时也要保留 assets），
+    // 否则第二份 manifest 会把带图笔记的资源列表清空，新设备无法恢复。
+    // 上传仍做增量：远端同 hash 资源跳过（remoteAssetHashes 对比），零重传不变。
     const assets: { filename: string; size: number; hash: string }[] = [];
+    const dir = store.noteAssetsPathFor(note.id);
+    if (fs.existsSync(dir)) {
+      for (const filename of fs.readdirSync(dir)) {
+        const full = path.join(dir, filename);
+        let stat: fs.Stats;
+        try { stat = fs.statSync(full); } catch { continue; }
+        if (!stat.isFile()) continue;
+        if (orphans.has(`${note.id}/${filename}`)) continue;
+        let bytes: Buffer;
+        try { bytes = fs.readFileSync(full); } catch { continue; }
+        const assetHash = sha256Hex(bytes);
+        assets.push({ filename, size: bytes.length, hash: assetHash });
+        if (remoteAssetHashes.get(`${note.id}/${filename}`) === assetHash) continue;
+        await remote.put(`assets/${note.id}/${filename}`, bytes, mimeTypeFor(filename));
+      }
+    }
     if (remoteHashes.get(note.id) !== hash) {
-      // 上传 .lake
+      // 上传 .lake（正文变化时）
       const lakeBytes = fs.readFileSync(store.notePathFor(note.id));
       await remote.put(`objects/${hash}.lake`, lakeBytes, "text/lake; charset=utf-8");
-      // 上传资源（跳过孤儿）
-      const dir = store.noteAssetsPathFor(note.id);
-      if (fs.existsSync(dir)) {
-        for (const filename of fs.readdirSync(dir)) {
-          const full = path.join(dir, filename);
-          const stat = fs.statSync(full);
-          if (!stat.isFile()) continue;
-          if (orphans.has(`${note.id}/${filename}`)) continue;
-          const bytes = fs.readFileSync(full);
-          const hash = sha256Hex(bytes);
-          assets.push({ filename, size: bytes.length, hash });
-          if (remoteAssetHashes.get(`${note.id}/${filename}`) === hash) continue;
-          await remote.put(`assets/${note.id}/${filename}`, bytes, mimeTypeFor(filename));
-        }
-      }
       uploaded += 1;
     }
     manifestNotes.push({
@@ -247,18 +263,20 @@ export async function syncNow(store: Store, onProgress?: (p: SyncProgress) => vo
     });
   }
 
-  // 3.5 墓碑：云端有而本地已删除的笔记 → 标记 deleted（不重新上传对象）
+  // 3.5 墓碑：本地已删除的笔记 → manifest 恒保留 deleted 标记（不重新上传对象）。
+  // 审计 #2：墓碑不能写完一次就剪除——长期离线设备上线时若 manifest 已无 deleted
+  // 标记，会把旧笔记当本地有效内容重新上传（删除复活）。墓碑/标记体积极小，
+  // 按 id 永久保留直到本地重建同名笔记（此时 localIds 命中，不再标记 deleted）。
   const localIds = new Set(localNotes.map((n) => n.id));
   for (const deleted of store.listDeletedNotesForSync()) {
-    if (remoteById.has(deleted.id) && !localIds.has(deleted.id)) {
-      manifestNotes.push({
-        id: deleted.id, title: deleted.title, parentId: deleted.parentId,
-        sortOrder: deleted.sortOrder, updatedAt: deleted.updatedAt,
-        contentHash: deleted.id, // 占位，deleted 标记不会下载对象
-        isConflict: false, assets: [],
-        deleted: true, deletedAt: deleted.deletedAt,
-      });
-    }
+    if (localIds.has(deleted.id)) continue;
+    manifestNotes.push({
+      id: deleted.id, title: deleted.title, parentId: deleted.parentId,
+      sortOrder: deleted.sortOrder, updatedAt: deleted.updatedAt,
+      contentHash: deleted.id, // 占位，deleted 标记不会下载对象
+      isConflict: false, assets: [],
+      deleted: true, deletedAt: deleted.deletedAt,
+    });
   }
 
   // 4. 写新清单（commit + latest）
@@ -281,8 +299,6 @@ export async function syncNow(store: Store, onProgress?: (p: SyncProgress) => vo
     store.setBaseHash(note.id, note.contentHash);
     store.markSynced(note.id);
   }
-  // 已写入清单的 deleted 标记可安全剪除本地墓碑，避免 deleted_notes 无限累积
-  store.pruneTombstones(manifestNotes.filter((n) => n.deleted).map((n) => n.id));
   const result: SyncResult = { uploaded, downloaded, conflicts, manifestId: commitId, completedAt };
   store.markSyncComplete(completedAt);
   store.recordSyncResult(JSON.stringify(result));
@@ -340,4 +356,41 @@ function mimeTypeFor(filename: string): string {
     ".svg": "image/svg+xml",
   };
   return map[ext] ?? "application/octet-stream";
+}
+
+/** 审计 #3/#19：远程 manifest 运行时 schema 校验（远程 JSON 不可信，不能直接断言类型） */
+function validateManifest(manifest: unknown): asserts manifest is Manifest {
+  if (!manifest || typeof manifest !== "object") throw new Error("清单格式无效：非对象");
+  const m = manifest as Partial<Manifest>;
+  if (m.version !== MANIFEST_VERSION) {
+    throw new Error(`清单版本不兼容（本地 ${MANIFEST_VERSION}，远端 ${String(m.version)}）`);
+  }
+  if (typeof m.workspaceId !== "string" || typeof m.commitId !== "string" || typeof m.createdAt !== "string") {
+    throw new Error("清单格式无效：workspaceId/commitId/createdAt 字段缺失");
+  }
+  if (!Array.isArray(m.notes)) throw new Error("清单格式无效：notes 不是数组");
+  for (const note of m.notes) {
+    if (!note || typeof note !== "object") throw new Error("清单格式无效：note 非对象");
+    const n = note as Partial<ManifestNote>;
+    if (typeof n.id !== "string" || typeof n.title !== "string" || typeof n.contentHash !== "string") {
+      throw new Error(`清单格式无效：note 缺少 id/title/contentHash（id=${String(n.id)}）`);
+    }
+    if (n.parentId !== null && typeof n.parentId !== "string") throw new Error("清单格式无效：parentId 非法");
+    if (typeof n.sortOrder !== "number" || typeof n.updatedAt !== "string") throw new Error("清单格式无效：sortOrder/updatedAt 非法");
+    if (n.assets !== undefined && !Array.isArray(n.assets)) throw new Error("清单格式无效：assets 非数组");
+    for (const asset of n.assets ?? []) {
+      if (!asset || typeof asset !== "object") throw new Error("清单格式无效：asset 非对象");
+      const a = asset as Partial<ManifestNote["assets"][number]>;
+      if (typeof a.filename !== "string" || typeof a.size !== "number" || typeof a.hash !== "string") {
+        throw new Error("清单格式无效：asset 缺少 filename/size/hash");
+      }
+    }
+    if (n.deleted !== undefined && typeof n.deleted !== "boolean") throw new Error("清单格式无效：deleted 非法");
+    if (n.deletedAt !== undefined && typeof n.deletedAt !== "string") throw new Error("清单格式无效：deletedAt 非法");
+  }
+}
+
+/** 安全单路径段：拒绝空、./.. 以及含 / 或 \\ 的字符串（防目录穿越） */
+function isSafeSegment(segment: string): boolean {
+  return segment.length > 0 && segment !== "." && segment !== ".." && !segment.includes("/") && !segment.includes("\\");
 }

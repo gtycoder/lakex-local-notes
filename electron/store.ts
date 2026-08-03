@@ -2,17 +2,18 @@ import Database from "better-sqlite3";
 import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
-import { net as electronNet, safeStorage } from "electron";
+import { net, safeStorage } from "electron";
 import { ASSET_PORT } from "./assetServer.js";
-import { isBlockedHost } from "./ssrf.js";
+import { assertSafeRemoteHost, SsrfError } from "./ssrf.js";
 
 const DEFAULT_WORKSPACE_ID = "default";
 const DEFAULT_NOTEBOOK_ID = "notebook-personal";
-const MAX_IMAGE_BYTES = 25 * 1024 * 1024;
+export const MAX_IMAGE_BYTES = 25 * 1024 * 1024;
 // 下载外部图片的超时与请求头（移植自 Tauri 版 Rust 后端，见 lake-notes-tauri-poc/src-tauri/src/store.rs）
 const DOWNLOAD_TIMEOUT_MS = 30_000;
 // 知乎等 CDN 的防盗链 403 有波动性，重试可显著提高成功率
 const DOWNLOAD_MAX_ATTEMPTS = 3;
+const DOWNLOAD_MAX_REDIRECTS = 5;
 const DOWNLOAD_USER_AGENT =
   "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36";
 
@@ -153,6 +154,11 @@ export class Store {
   }
 
   private notePath(id: string): string {
+    // 审计 #3/#17：校验下沉到路径构造本身——manifest（sync 导入）与 IPC（save/read）
+    // 的 id 都可能来自外部，必须保证是安全单路径段，否则 ../ 可逃逸工作区
+    if (!isSafePathSegment(id)) {
+      throw new AppError("InvalidInput", `无效的笔记 ID: ${id}`);
+    }
     return path.join(this.root, "notes", `${id}.lake`);
   }
 
@@ -173,6 +179,19 @@ export class Store {
     if (!parentId) return;
     const row = this.db.prepare("SELECT id FROM tree_nodes WHERE id=? AND deleted_at IS NULL").get(parentId);
     if (!row) throw new AppError("NotFound", `父节点不存在: ${parentId}`);
+  }
+
+  /** 审计 #9：树结构不变量——notebook 只能位于根层；note 不能有子节点；
+   * 只有 notebook/group 能作为 note/group 的父节点。 */
+  private assertParentCompatible(parentId: string | null, childType: string): void {
+    if (parentId === null) {
+      if (childType !== "notebook") throw new AppError("InvalidInput", "note/group 必须位于目录节点下");
+      return;
+    }
+    if (childType === "notebook") throw new AppError("InvalidInput", "笔记本只能位于根层");
+    const parent = this.db.prepare("SELECT node_type FROM tree_nodes WHERE id=? AND deleted_at IS NULL").get(parentId) as { node_type: string } | undefined;
+    if (!parent) throw new AppError("NotFound", `父节点不存在: ${parentId}`);
+    if (parent.node_type === "note") throw new AppError("InvalidInput", "笔记不能作为父节点");
   }
 
   private mapSummary(row: any): NoteSummary {
@@ -229,6 +248,7 @@ export class Store {
   createNoteIn(parentId: string | null, title: string): NoteDocument {
     const parent = parentId ?? DEFAULT_NOTEBOOK_ID;
     this.ensureParent(parent);
+    this.assertParentCompatible(parent, "note");
     const id = uuid();
     const updatedAt = nowIso();
     const sortOrder = this.nextSortOrder(parent);
@@ -255,6 +275,7 @@ export class Store {
 
   createGroup(parentId: string, title: string): TreeNode {
     this.ensureParent(parentId);
+    this.assertParentCompatible(parentId, "group");
     const id = uuid();
     const now = nowIso();
     const sortOrder = this.nextSortOrder(parentId);
@@ -286,7 +307,12 @@ export class Store {
       this.atomicWrite(p, content);
     });
     tx();
-    this.detectOrphans(id, content);
+    // 审计 #22：孤儿检测是后置维护任务，失败不应让已成功保存的笔记显示"保存失败"
+    try {
+      this.detectOrphans(id, content);
+    } catch (error) {
+      console.warn("[store] 孤儿资源检测失败（不影响保存）:", error);
+    }
     return this.readNote(id);
   }
 
@@ -308,9 +334,12 @@ export class Store {
 
   deleteTreeNode(id: string) {
     // 硬删除（当前版本无回收站）：节点及其子节点从 DB 移除，
-    // 笔记同时删除 .lake 文件、整个 note-assets/{noteId}/ 目录与孤儿记录
+    // 笔记同时删除 .lake 文件、整个 note-assets/{noteId}/ 目录与孤儿记录。
+    // 审计 #10：DB 事务先提交、文件后删——DB 失败可安全回滚（无引用失效）；
+    // 文件删除失败只留孤儿文件（孤儿清理可回收），绝不"DB 引用已删文件"或不可恢复丢失
     const now = nowIso();
     const ids = this.descendantIds(id);
+    const filesToRemove: Array<{ path: string; recursive: boolean }> = [];
     const tx = this.db.transaction(() => {
       const nodeStmt = this.db.prepare("SELECT note_file_id FROM tree_nodes WHERE id=?");
       const delNote = this.db.prepare("DELETE FROM notes WHERE id=?");
@@ -326,8 +355,8 @@ export class Store {
           // 记录墓碑（同步用：防止云端把已删除笔记重新拉回来）
           const meta = noteMeta.get(node.note_file_id) as { id: string; title: string; parent_id: string | null; sort_order: number; updated_at: string } | undefined;
           if (meta) tombstone.run(meta.id, meta.title, meta.parent_id, meta.sort_order, meta.updated_at, now);
-          fs.rmSync(this.notePath(node.note_file_id), { force: true });
-          fs.rmSync(path.join(this.noteAssetsDir, node.note_file_id), { recursive: true, force: true });
+          filesToRemove.push({ path: this.notePath(node.note_file_id), recursive: false });
+          filesToRemove.push({ path: path.join(this.noteAssetsDir, node.note_file_id), recursive: true });
           delOrphans.run(node.note_file_id);
           delNote.run(node.note_file_id);
         }
@@ -335,22 +364,76 @@ export class Store {
       }
     });
     tx();
+    for (const f of filesToRemove) {
+      try {
+        fs.rmSync(f.path, { force: true, recursive: f.recursive });
+      } catch (error) {
+        console.warn("[store] 删除笔记后清理文件失败，文件可能残留:", f.path, error);
+      }
+    }
   }
 
   moveTreeNode(id: string, parentId: string | null, sortOrder: number): TreeNode {
+    const moving = this.readTreeNode(id);
     if (parentId) {
       if (parentId === id) throw new AppError("InvalidInput", "不能移动到自身");
       const descendants = new Set(this.descendantIds(id));
       if (descendants.has(parentId)) throw new AppError("InvalidInput", "不能移动到子节点");
       this.ensureParent(parentId);
     }
+    this.assertParentCompatible(parentId, moving.nodeType);
     const now = nowIso();
     this.db.prepare("UPDATE tree_nodes SET parent_id=?,sort_order=?,updated_at=?,sync_state='local' WHERE id=? AND deleted_at IS NULL")
       .run(parentId, sortOrder, now, id);
     return this.readTreeNode(id);
   }
 
+  /** 审计 #18：移动 + 同级重排一次原子完成（前端两次 IPC 之间有崩溃窗口，
+   * 会造成 parent 已改但 sortOrder 未更新的不一致树）。校验复用 move/reorder 规则。 */
+  moveTreeNodeOrdered(id: string, parentId: string | null, orderedIds: string[]): TreeNode {
+    const moving = this.readTreeNode(id);
+    if (parentId) {
+      if (parentId === id) throw new AppError("InvalidInput", "不能移动到自身");
+      const descendants = new Set(this.descendantIds(id));
+      if (descendants.has(parentId)) throw new AppError("InvalidInput", "不能移动到子节点");
+      this.ensureParent(parentId);
+    }
+    this.assertParentCompatible(parentId, moving.nodeType);
+    if (new Set(orderedIds).size !== orderedIds.length) throw new AppError("InvalidInput", "重排列表包含重复节点");
+    const children = this.db.prepare(
+      "SELECT id FROM tree_nodes WHERE workspace_id=? AND parent_id=? AND deleted_at IS NULL"
+    ).all(DEFAULT_WORKSPACE_ID, parentId).map((r) => (r as { id: string }).id);
+    const childSet = new Set(children);
+    for (const childId of orderedIds) {
+      if (!childSet.has(childId)) throw new AppError("InvalidInput", `重排列表包含不属于该父节点的节点: ${childId}`);
+    }
+    if (orderedIds.length !== children.length) throw new AppError("InvalidInput", "重排列表必须包含该父节点的全部子节点");
+    const now = nowIso();
+    const tx = this.db.transaction(() => {
+      this.db.prepare("UPDATE tree_nodes SET parent_id=?,sort_order=?,updated_at=?,sync_state='local' WHERE id=? AND deleted_at IS NULL")
+        .run(parentId, orderedIds.indexOf(id), now, id);
+      const stmt = this.db.prepare("UPDATE tree_nodes SET sort_order=?,updated_at=?,sync_state='local' WHERE id=? AND deleted_at IS NULL");
+      orderedIds.forEach((childId, index) => stmt.run(index, now, childId));
+    });
+    tx();
+    return this.readTreeNode(id);
+  }
+
   reorderTreeNodes(parentId: string | null, orderedIds: string[]) {
+    // 审计 #9：事务内校验——无重复、无未知 id、集合与当前子节点完全一致（防漏排）
+    if (new Set(orderedIds).size !== orderedIds.length) {
+      throw new AppError("InvalidInput", "重排列表包含重复节点");
+    }
+    const children = this.db.prepare(
+      "SELECT id FROM tree_nodes WHERE workspace_id=? AND parent_id=? AND deleted_at IS NULL"
+    ).all(DEFAULT_WORKSPACE_ID, parentId).map((r) => (r as { id: string }).id);
+    const childSet = new Set(children);
+    for (const id of orderedIds) {
+      if (!childSet.has(id)) throw new AppError("InvalidInput", `重排列表包含不属于该父节点的节点: ${id}`);
+    }
+    if (orderedIds.length !== children.length) {
+      throw new AppError("InvalidInput", "重排列表必须包含该父节点的全部子节点");
+    }
     const now = nowIso();
     const tx = this.db.transaction(() => {
       const stmt = this.db.prepare("UPDATE tree_nodes SET sort_order=?,updated_at=?,sync_state='local' WHERE id=? AND deleted_at IS NULL");
@@ -360,7 +443,7 @@ export class Store {
   }
 
   private noteAssetsDirFor(noteId: string): string {
-    if (!noteId || noteId === "." || noteId === ".." || noteId.includes("/") || noteId.includes("\\")) {
+    if (!isSafePathSegment(noteId)) {
       throw new AppError("InvalidInput", `无效的笔记 ID: ${noteId}`);
     }
     return path.join(this.noteAssetsDir, noteId);
@@ -414,25 +497,23 @@ export class Store {
   }
 
   cleanOrphanAssets(): { count: number; freedBytes: number } {
+    // 审计 #12：仅当文件不存在或删除成功时才删除记录并计数；失败保留记录（UI 可重试）
     const rows = this.db.prepare("SELECT * FROM orphan_assets").all() as any[];
     let count = 0;
     let freedBytes = 0;
-    const tx = this.db.transaction(() => {
-      for (const row of rows) {
-        const fullPath = path.join(this.root, row.file_path);
-        try {
-          if (fs.existsSync(fullPath)) {
-            freedBytes += fs.statSync(fullPath).size;
-            fs.unlinkSync(fullPath);
-          }
-        } catch (error) {
-          console.warn("[store] 清理孤儿资源失败，跳过:", fullPath, error);
+    for (const row of rows) {
+      const fullPath = path.join(this.root, row.file_path);
+      try {
+        if (fs.existsSync(fullPath)) {
+          freedBytes += fs.statSync(fullPath).size;
+          fs.unlinkSync(fullPath);
         }
         this.db.prepare("DELETE FROM orphan_assets WHERE id=?").run(row.id);
         count++;
+      } catch (error) {
+        console.warn("[store] 清理孤儿资源失败，保留记录待重试:", fullPath, error);
       }
-    });
-    tx();
+    }
     return { count, freedBytes };
   }
 
@@ -538,6 +619,14 @@ export class Store {
     }));
   }
 
+  /** 记录"从云端学到的删除"（本设备从未持有该笔记）：与本地删除同语义，
+   * 防止 manifest 的 deleted 标记因设备清空/换机而丢失（审计 #2）。 */
+  rememberDeleted(note: SyncNote, deletedAt: string): void {
+    this.db.prepare(
+      "INSERT OR REPLACE INTO deleted_notes(id,title,parent_id,sort_order,updated_at,deleted_at) VALUES(?,?,?,?,?,?)"
+    ).run(note.id, note.title, note.parentId, note.sortOrder, note.updatedAt, deletedAt);
+  }
+
   listDeletedNotesForSync(): Array<{ id: string; title: string; parentId: string | null; sortOrder: number; updatedAt: string; deletedAt: string }> {
     return this.db.prepare(
       "SELECT id,title,parent_id,sort_order,updated_at,deleted_at FROM deleted_notes ORDER BY deleted_at"
@@ -549,35 +638,66 @@ export class Store {
 
   /** 导入远程笔记：写 .lake + note-assets 资源 + upsert DB 记录 */
   importRemoteNote(note: SyncNote, content: Buffer, assets: Array<{ filename: string; bytes: Buffer }>): void {
-    const tx = this.db.transaction(() => {
-      // 写 .lake
-      fs.writeFileSync(this.notePath(note.id), content, "utf8");
-      // 写资源
-      if (assets.length > 0) {
-        const dir = this.noteAssetsDirFor(note.id);
-        fs.mkdirSync(dir, { recursive: true });
+    // 审计 #3/#17：任何写操作前先校验全部目标路径段，拒绝恶意 manifest 的
+    // note.id / asset.filename（../、绝对路径、反斜杠、空段），防止写半成品
+    this.notePath(note.id);
+    for (const asset of assets) {
+      if (!isSafePathSegment(asset.filename)) {
+        throw new AppError("InvalidInput", `无效的资源文件名: ${asset.filename}`);
+      }
+    }
+    // 审计 #10：staging 写入——先写临时文件/临时目录，DB 事务成功后再原子落位；
+    // 任一环节失败都清理临时产物，绝不留下"DB 已回滚但文件已写入/覆盖"的半成品
+    const lakePath = this.notePath(note.id);
+    const lakeTmp = `${lakePath}.tmp-${process.pid}-${crypto.randomBytes(4).toString("hex")}`;
+    const assetDir = assets.length > 0 ? this.noteAssetsDirFor(note.id) : null;
+    const assetTmpDir = assetDir ? `${assetDir}.staging-${crypto.randomBytes(4).toString("hex")}` : null;
+    let moved = false;
+    try {
+      fs.writeFileSync(lakeTmp, content, "utf8");
+      if (assetTmpDir) {
+        fs.mkdirSync(assetTmpDir, { recursive: true });
         for (const asset of assets) {
-          fs.writeFileSync(path.join(dir, asset.filename), asset.bytes);
+          fs.writeFileSync(path.join(assetTmpDir, asset.filename), asset.bytes);
         }
       }
-      // upsert notes
-      this.db.prepare(
-        `INSERT INTO notes(id,title,parent_id,sort_order,updated_at,sync_state,is_conflict,deleted_at)
-         VALUES(?,?,?,?,?,'synced',?,NULL)
-         ON CONFLICT(id) DO UPDATE SET title=excluded.title,parent_id=excluded.parent_id,
-           sort_order=excluded.sort_order,updated_at=excluded.updated_at,
-           sync_state='synced',is_conflict=excluded.is_conflict,deleted_at=NULL`
-      ).run(note.id, note.title, note.parentId, note.sortOrder, note.updatedAt, note.isConflict ? 1 : 0);
-      // upsert tree_nodes（note 节点）
-      this.db.prepare(
-        `INSERT INTO tree_nodes(id,workspace_id,parent_id,node_type,title,note_file_id,sort_order,created_at,updated_at,deleted_at,sync_state,is_conflict)
-         VALUES(?,?,?,'note',?,?,?,?,?,NULL,'synced',?)
-         ON CONFLICT(id) DO UPDATE SET parent_id=excluded.parent_id,title=excluded.title,
-           sort_order=excluded.sort_order,updated_at=excluded.updated_at,
-           deleted_at=NULL,sync_state='synced',is_conflict=excluded.is_conflict`
-      ).run(note.id, DEFAULT_WORKSPACE_ID, note.parentId, note.title, note.id, note.sortOrder, note.updatedAt, note.updatedAt, note.isConflict ? 1 : 0);
-    });
-    tx();
+      const tx = this.db.transaction(() => {
+        // upsert notes
+        this.db.prepare(
+          `INSERT INTO notes(id,title,parent_id,sort_order,updated_at,sync_state,is_conflict,deleted_at)
+           VALUES(?,?,?,?,?,'synced',?,NULL)
+           ON CONFLICT(id) DO UPDATE SET title=excluded.title,parent_id=excluded.parent_id,
+             sort_order=excluded.sort_order,updated_at=excluded.updated_at,
+             sync_state='synced',is_conflict=excluded.is_conflict,deleted_at=NULL`
+        ).run(note.id, note.title, note.parentId, note.sortOrder, note.updatedAt, note.isConflict ? 1 : 0);
+        // upsert tree_nodes（note 节点）
+        this.db.prepare(
+          `INSERT INTO tree_nodes(id,workspace_id,parent_id,node_type,title,note_file_id,sort_order,created_at,updated_at,deleted_at,sync_state,is_conflict)
+           VALUES(?,?,?,'note',?,?,?,?,?,NULL,'synced',?)
+           ON CONFLICT(id) DO UPDATE SET parent_id=excluded.parent_id,title=excluded.title,
+             sort_order=excluded.sort_order,updated_at=excluded.updated_at,
+             deleted_at=NULL,sync_state='synced',is_conflict=excluded.is_conflict`
+        ).run(note.id, DEFAULT_WORKSPACE_ID, note.parentId, note.title, note.id, note.sortOrder, note.updatedAt, note.updatedAt, note.isConflict ? 1 : 0);
+      });
+      tx();
+      // DB 提交成功 → 原子落位
+      fs.mkdirSync(path.dirname(lakePath), { recursive: true });
+      fs.renameSync(lakeTmp, lakePath);
+      moved = true;
+      if (assetTmpDir && assetDir) {
+        fs.mkdirSync(assetDir, { recursive: true });
+        for (const asset of assets) {
+          fs.renameSync(path.join(assetTmpDir, asset.filename), path.join(assetDir, asset.filename));
+        }
+      }
+    } catch (error) {
+      try { fs.rmSync(lakeTmp, { force: true }); } catch { /* 忽略 */ }
+      if (assetTmpDir) { try { fs.rmSync(assetTmpDir, { recursive: true, force: true }); } catch { /* 忽略 */ } }
+      throw error;
+    } finally {
+      if (!moved) { try { fs.rmSync(lakeTmp, { force: true }); } catch { /* 忽略 */ } }
+      if (assetTmpDir && !moved) { try { fs.rmSync(assetTmpDir, { recursive: true, force: true }); } catch { /* 忽略 */ } }
+    }
   }
 
   uploadResource(input: { bytes: number[]; filename: string }, noteId: string): ResourceUploadOutput {
@@ -589,69 +709,112 @@ export class Store {
     // 先校验 noteId 再做网络请求
     const assetsDir = this.noteAssetsDirFor(noteId);
     const normalized = url.startsWith("//") ? `https:${url}` : url;
-    const parsed = new URL(normalized);
-    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
-      throw new AppError("InvalidInput", "图片地址仅支持 HTTP 或 HTTPS");
+    // 校验初始 URL 的协议（redirect 逐跳另有协议校验）
+    {
+      const parsed = new URL(normalized);
+      if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+        throw new AppError("InvalidInput", "图片地址仅支持 HTTP 或 HTTPS");
+      }
     }
-    // SSRF 防护（移植 Rust 版 validate_remote_image_url）：拒绝本机与私网地址
-    if (isBlockedHost(parsed.hostname)) {
-      throw new AppError("InvalidInput", "不允许下载本机或私网地址");
-    }
-    // 下载头（移植 Rust 版）：Referer 设为图片 URL 自身 + 浏览器 UA，绕过常见防盗链
-    // 403/网络错误带重试，应对图床 CDN 的波动性拒绝
-    let res: Response | null = null;
+    // 下载头（移植 Rust 版）：Referer 设为图片 URL 自身 + 浏览器 UA，绕过常见防盗链。
+    // 受控下载（net.request + followRedirect:false）：每跳校验协议 + DNS 解析
+    // （域名→私网/本机即拒），手工跟随重定向并逐跳重新校验（审计 #5。注：Chromium
+    // net.fetch 的 redirect:"manual" 会抛 "Redirect was cancelled"，故用 net.request）
     let lastError: unknown = null;
     for (let attempt = 1; attempt <= DOWNLOAD_MAX_ATTEMPTS; attempt++) {
-      const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), DOWNLOAD_TIMEOUT_MS);
       try {
-        // 用 Electron net.fetch（Chromium 网络栈）：与 Chrome 相同的 TLS 指纹，
-        // 可绕过知乎等 CDN 的 TLS 指纹检测（参照思源 createCustomTLSConfig 的思路）
-        res = await electronNet.fetch(normalized, {
-          headers: {
-            "User-Agent": DOWNLOAD_USER_AGENT,
-            "Referer": normalized,
-          },
-          redirect: "follow",
-          signal: controller.signal,
-        });
-        if (res.ok) break;
-        lastError = new AppError("Internal", `下载失败: ${res.status}`);
-        await res.body?.cancel().catch(() => undefined);
+        const { request, response, status } = await this.fetchControlled(normalized);
+        try {
+          if (status < 200 || status >= 300) {
+            request.abort();
+            throw new AppError("Internal", `下载失败: HTTP ${status}`);
+          }
+          // content-length 预检查 + 流式读取限量（防大响应撑爆内存）
+          const declared = response.headers["content-length"];
+          const declaredLength = Number(Array.isArray(declared) ? declared[0] : declared || 0);
+          if (declaredLength > MAX_IMAGE_BYTES) {
+            request.abort();
+            throw new AppError("InvalidInput", "图片超过 25 MiB");
+          }
+          const chunks: Buffer[] = [];
+          let total = 0;
+          for await (const chunk of response) {
+            total += chunk.length;
+            if (total > MAX_IMAGE_BYTES) {
+              request.abort();
+              throw new AppError("InvalidInput", "图片超过 25 MiB");
+            }
+            chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+          }
+          const buf = Buffer.concat(chunks);
+          return imageOutput(buf, path.basename(new URL(normalized).pathname) || "image", assetsDir, this.assetUrl.bind(this, noteId));
+        } finally {
+          request.abort(); // 流读完/出错后释放连接
+        }
       } catch (error) {
+        // 安全类拒绝（SSRF/格式/大小）不重试，直接抛出
+        if (error instanceof AppError && error.kind === "InvalidInput") throw error;
+        if (error instanceof SsrfError) throw new AppError("InvalidInput", error.message);
         lastError = error instanceof Error && error.name === "AbortError"
           ? new AppError("Internal", `下载超时（${DOWNLOAD_TIMEOUT_MS / 1000}s）`)
           : new AppError("Internal", `网络错误: ${error instanceof Error ? error.message : String(error)}`);
-      } finally {
-        clearTimeout(timer);
       }
       if (attempt < DOWNLOAD_MAX_ATTEMPTS) await sleep(attempt * 500);
     }
-    if (!res || !res.ok) {
-      throw lastError instanceof AppError ? lastError : new AppError("Internal", `下载失败: ${String(lastError)}`);
-    }
-    // content-length 预检查 + 流式读取限量（防大响应撑爆内存）
-    const declaredLength = res.headers.get("content-length");
-    if (declaredLength && Number(declaredLength) > MAX_IMAGE_BYTES) {
-      await res.body?.cancel().catch(() => undefined);
-      throw new AppError("InvalidInput", "图片超过 25 MiB");
-    }
-    const reader = res.body?.getReader();
-    if (!reader) throw new AppError("Internal", "响应无内容");
-    const chunks: Buffer[] = [];
-    let total = 0;
-    for (;;) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      total += value.byteLength;
-      if (total > MAX_IMAGE_BYTES) {
-        await reader.cancel().catch(() => undefined);
-        throw new AppError("InvalidInput", "图片超过 25 MiB");
+    throw lastError instanceof AppError ? lastError : new AppError("Internal", `下载失败: ${String(lastError)}`);
+  }
+
+  /** 受控下载：基于 net.request（Chromium 网络栈）逐跳（含重定向）校验协议 + 主机安全。
+   *  - followRedirect:false + redirect 事件手动跟随，每跳重新 assertSafeRemoteHost
+   *  - 重定向上限 DOWNLOAD_MAX_REDIRECTS，拒绝重定向环
+   */
+  private async fetchControlled(url: string): Promise<{ request: Electron.ClientRequest; response: NodeJS.ReadableStream & { headers: Record<string, string | string[] | undefined> }; status: number }> {
+    let current = url;
+    for (let hop = 0; ; hop++) {
+      const parsed = new URL(current);
+      if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+        throw new AppError("InvalidInput", "重定向目标仅支持 HTTP 或 HTTPS");
       }
-      chunks.push(Buffer.from(value));
+      await assertSafeRemoteHost(parsed.hostname);
+      const outcome = await new Promise<{ kind: "redirect"; url: string } | { kind: "response"; status: number; response: NodeJS.ReadableStream & { headers: Record<string, string | string[] | undefined> }; request: Electron.ClientRequest }>((resolve, reject) => {
+        // followRedirect 类型缺失（Electron 类型滞后），运行时受支持
+        const req = net.request({ url: current, followRedirect: false } as Electron.ClientRequestConstructorOptions & { followRedirect?: boolean });
+        req.setHeader("User-Agent", DOWNLOAD_USER_AGENT);
+        // 防盗链：每跳以"当前 URL 自身"为 Referer（对齐 Rust 版"Referer=图片自身"策略）。
+        // 不能固定原始 URL：外部 Referer 会被部分 CDN（如 Google）客户端级拦截
+        req.setHeader("Referer", current);
+        const timer = setTimeout(() => { req.abort(); reject(new Error("AbortError")); }, DOWNLOAD_TIMEOUT_MS);
+        let settled = false;
+        req.on("redirect", (_statusCode: number, _method: string, redirectUrl: string) => {
+          if (settled) return;
+          settled = true;
+          clearTimeout(timer);
+          req.abort();
+          resolve({ kind: "redirect", url: redirectUrl });
+        });
+        req.on("response", (response: Electron.IncomingMessage) => {
+          if (settled) return;
+          settled = true;
+          clearTimeout(timer);
+          resolve({ kind: "response", status: response.statusCode, response: response as never, request: req });
+        });
+        req.on("error", (error: Error) => {
+          if (settled) return;
+          settled = true;
+          clearTimeout(timer);
+          reject(error);
+        });
+        req.end();
+      });
+      if (outcome.kind === "redirect") {
+        if (hop >= DOWNLOAD_MAX_REDIRECTS) {
+          throw new AppError("Internal", `重定向次数过多: ${current}`);
+        }
+        current = outcome.url;
+        continue;
+      }
+      return { request: outcome.request, response: outcome.response, status: outcome.status };
     }
-    const buf = Buffer.concat(chunks);
-    return imageOutput(buf, path.basename(parsed.pathname) || "image", assetsDir, this.assetUrl.bind(this, noteId));
   }
 }
 
@@ -692,4 +855,9 @@ function imageOutput(bytes: Buffer, _requestedFilename: string, noteAssetsDir: s
   fs.writeFileSync(filePath, bytes);
   const url = makeUrl(filename);
   return { resourceRef: url, url, filename, mimeType: format.mimeType, size: bytes.length };
+}
+
+/** 安全单路径段校验：拒绝空、./..，以及含 / 或 \\ 的字符串（防目录穿越，审计 #3/#17） */
+function isSafePathSegment(segment: string): boolean {
+  return segment.length > 0 && segment !== "." && segment !== ".." && !segment.includes("/") && !segment.includes("\\");
 }

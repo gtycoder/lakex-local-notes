@@ -1,6 +1,6 @@
-import { native } from "../../lib/native";
+import { isDesktop, native } from "../../lib/native";
 import type { ResourceUploadInput, ResourceUploadOutput } from "../../lib/types";
-import { MAX_IMAGE_BYTES, normalizeImageInput, sniffImageFormat } from "./imageFormat";
+import { MAX_IMAGE_BYTES, imageDataUrl, normalizeImageInput, sniffImageFormat } from "./imageFormat";
 import { createConcurrencyQueue } from "../../lib/concurrency";
 import { withRetry } from "../../lib/retry";
 import { WorkerPool } from "../../lib/workerPool";
@@ -12,6 +12,15 @@ interface LakeUploadRequest {
 }
 
 const uploadQueue = createConcurrencyQueue(6);
+
+/** 审计 #14：非图片附件/Data URL 的统一上限（与图片一致），避免大文件全量进内存再 base64 内嵌 */
+const MAX_ATTACHMENT_BYTES = 25 * 1024 * 1024;
+
+/** base64 文本长度 → 解码字节数（在 atob/数组转换前预检，防止先复制多份内存再拒） */
+function decodedBase64Length(encoded: string): number {
+  const len = encoded.replace(/=+$/, "").length;
+  return Math.floor(len / 4) * 3 + (len % 4 === 2 ? 1 : len % 4 === 3 ? 2 : 0);
+}
 
 let imageConverterPool: WorkerPool | null = null;
 
@@ -44,6 +53,10 @@ function isImageFile(file: File): boolean {
 
 /** Convert a File to a base64 data URL (for non-image attachments) */
 async function fileToBase64DataUrl(file: File): Promise<ResourceUploadOutput> {
+  // 审计 #14：读入内存前先按 file.size 预检（非图片附件）
+  if (file.size > MAX_ATTACHMENT_BYTES) {
+    throw new Error(`附件超过 ${MAX_ATTACHMENT_BYTES / 1024 / 1024} MiB 上限`);
+  }
   const buffer = await file.arrayBuffer();
   const bytes = new Uint8Array(buffer);
   let binary = "";
@@ -78,66 +91,28 @@ async function performUpload(request: unknown, noteId: string): Promise<Resource
 
   // Already-local data URL: pasted base64 image from local clipboard
   if (typeof payload === "string" && payload.startsWith("data:")) {
-    // Non-image data URLs pass through as-is
+    // Non-image data URLs pass through as-is（审计 #14：先按 base64 长度预检）
     if (!payload.startsWith("data:image/")) {
-      return { url: payload, resourceRef: payload, filename: "attachment", mimeType: payload.split(";")[0].replace("data:", ""), size: 0 };
+      const [header, encoded = ""] = payload.split(",", 2);
+      if (decodedBase64Length(encoded) > MAX_ATTACHMENT_BYTES) {
+        throw new Error(`附件超过 ${MAX_ATTACHMENT_BYTES / 1024 / 1024} MiB 上限`);
+      }
+      return { url: payload, resourceRef: payload, filename: "attachment", mimeType: header.replace("data:", "").split(";")[0] || "application/octet-stream", size: decodedBase64Length(encoded) };
     }
     const input = dataUrlInput(payload);
     return uploadWithWebpConversion(input, noteId);
   }
 
-  // External URL: 优先走主进程下载（对齐 Tauri 版 Rust 后端——下载在原生层完成，
-  // 可带 Referer/浏览器 UA 绕过防盗链、无渲染进程 CORS 限制、有 SSRF 防护与大小限制），
-  // 失败时回退到渲染进程 fetch（例如主进程 SSRF 策略拒绝的本地/私网地址）。
+  // External URL：
+  // - Electron：主进程是唯一受控下载路径（SSRF 防护 + DNS 解析 + 逐跳重定向校验 +
+  //   25 MiB 上限 + Chromium TLS 指纹）。任何失败（含 SSRF 拒绝）都不回退到渲染层
+  //   fetch——那会明确绕过主进程安全策略（审计 #5）。
+  // - 浏览器演示模式（无原生桥）：尽力而为的直连，仍带大小限制与字面私网/本机拦截。
   if (typeof payload === "string" && (payload.startsWith("http://") || payload.startsWith("https://"))) {
-    try {
-      return await native.downloadRemoteResource(payload, noteId);
-    } catch (nativeError) {
-      try {
-        const resp = await fetch(payload);
-        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-        const contentType = resp.headers.get("content-type") || "";
-        // 与主进程一致：流式读取 + 25 MiB 上限，防止大响应撑爆渲染进程内存
-        const declaredLength = Number(resp.headers.get("content-length") || 0);
-        if (declaredLength > MAX_IMAGE_BYTES) throw new Error("资源超过 25 MiB");
-        const reader = resp.body?.getReader();
-        if (!reader) throw new Error("响应无内容");
-        const chunks: Uint8Array[] = [];
-        let total = 0;
-        for (;;) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          total += value.byteLength;
-          if (total > MAX_IMAGE_BYTES) {
-            await reader.cancel().catch(() => undefined);
-            throw new Error("资源超过 25 MiB");
-          }
-          chunks.push(value);
-        }
-        const merged = new Uint8Array(total);
-        let offset = 0;
-        for (const chunk of chunks) { merged.set(chunk, offset); offset += chunk.byteLength; }
-        const bytes = Array.from(merged);
-        const filename = new URL(payload).pathname.split("/").pop() || "file";
-
-        // Non-image URL → base64 data URL
-        if (!contentType.startsWith("image/")) {
-          let binary = "";
-          for (let i = 0; i < bytes.length; i += 0x8000) {
-            binary += String.fromCharCode(...bytes.slice(i, i + 0x8000));
-          }
-          const mime = contentType.split(";")[0] || "application/octet-stream";
-          const url = `data:${mime};base64,${btoa(binary)}`;
-          return { url, resourceRef: url, filename, mimeType: mime, size: bytes.length };
-        }
-
-        const input = normalizeImageInput(bytes, filename);
-        return uploadWithWebpConversion(input, noteId);
-      } catch (fetchError) {
-        if (nativeError instanceof Error && nativeError.message.includes("浏览器模式")) throw nativeError;
-        throw new Error(`资源下载失败：${String(nativeError || fetchError)}`);
-      }
+    if (isDesktop()) {
+      return native.downloadRemoteResource(payload, noteId);
     }
+    return downloadWithBrowserFetch(payload);
   }
 
   throw new Error("无法识别的上传内容");
@@ -146,6 +121,10 @@ async function performUpload(request: unknown, noteId: string): Promise<Resource
 function dataUrlInput(value: string): ResourceUploadInput {
   const [header, encoded = ""] = value.split(",", 2);
   if (!/^data:[^;]+;base64$/i.test(header)) throw new Error("图片 Data URL 格式无效");
+  // 审计 #14：atob/数组转换前预检解码长度（大 Data URL 不再先复制多份内存）
+  if (decodedBase64Length(encoded) > MAX_IMAGE_BYTES) {
+    throw new Error("图片超过 25 MiB");
+  }
   const binary = atob(encoded);
   return normalizeImageInput(Array.from(binary, (character) => character.charCodeAt(0)), "image");
 }
@@ -180,5 +159,90 @@ export function cleanupUploadResources(): void {
   if (imageConverterPool) {
     imageConverterPool.terminate();
     imageConverterPool = null;
+  }
+}
+
+const MAX_BROWSER_REDIRECTS = 5;
+
+/** 渲染层可用的字面 host 私网/本机校验（ssrf.ts 依赖 node:net，renderer 不可用） */
+function isBlockedLiteralHost(hostname: string): boolean {
+  const h = hostname.toLowerCase().replace(/^\[|\]$/g, "");
+  if (h === "localhost" || h.endsWith(".localhost")) return true;
+  // IPv6：未指定/回环、fc00::/7、fe80::/10、IPv4-mapped
+  if (h.includes(":")) {
+    if (h === "::" || h === "::1") return true;
+    if (h.startsWith("fc") || h.startsWith("fd") || /^fe[89ab]/.test(h)) return true;
+    if (h.startsWith("::ffff:")) return isBlockedLiteralHost(h.slice("::ffff:".length));
+    return false;
+  }
+  // IPv4：四段纯数字才做范围判断
+  const parts = h.split(".");
+  if (parts.length !== 4 || parts.some((p) => !/^\d+$/.test(p))) return false; // 域名不做解析
+  const nums = parts.map(Number);
+  if (nums.some((n) => n < 0 || n > 255)) return false;
+  const [a, b] = nums;
+  if (a === 0 || a === 10 || a === 127) return true;
+  if (a === 169 && b === 254) return true;
+  if (a === 172 && b >= 16 && b <= 31) return true;
+  if (a === 192 && b === 168) return true;
+  if (a >= 224) return true;
+  return false;
+}
+
+/** 浏览器演示模式下载：逐跳校验（协议 + 字面 host），流式限量 25 MiB */
+async function downloadWithBrowserFetch(initialUrl: string): Promise<ResourceUploadOutput> {
+  let current = initialUrl;
+  for (let hop = 0; ; hop++) {
+    let parsed: URL;
+    try { parsed = new URL(current); } catch { throw new Error("资源地址无效"); }
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") throw new Error("图片地址仅支持 HTTP 或 HTTPS");
+    if (isBlockedLiteralHost(parsed.hostname)) throw new Error("不允许下载本机或私网地址");
+    const resp = await fetch(current, { redirect: "manual" });
+    let next: string | null = null;
+    if (resp.type === "opaqueredirect") {
+      next = resp.url && resp.url !== current ? resp.url : null;
+    } else if (resp.status >= 300 && resp.status < 400) {
+      const location = resp.headers.get("location");
+      if (location) next = new URL(location, current).href;
+    }
+    if (next) {
+      if (hop >= MAX_BROWSER_REDIRECTS) throw new Error("重定向次数过多");
+      current = next;
+      continue;
+    }
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    const contentType = resp.headers.get("content-type") || "";
+    const declaredLength = Number(resp.headers.get("content-length") || 0);
+    if (declaredLength > MAX_IMAGE_BYTES) throw new Error("资源超过 25 MiB");
+    const reader = resp.body?.getReader();
+    if (!reader) throw new Error("响应无内容");
+    const chunks: Uint8Array[] = [];
+    let total = 0;
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      total += value.byteLength;
+      if (total > MAX_IMAGE_BYTES) {
+        await reader.cancel().catch(() => undefined);
+        throw new Error("资源超过 25 MiB");
+      }
+      chunks.push(value);
+    }
+    const merged = new Uint8Array(total);
+    let offset = 0;
+    for (const chunk of chunks) { merged.set(chunk, offset); offset += chunk.byteLength; }
+    const bytes = Array.from(merged);
+    const filename = new URL(initialUrl).pathname.split("/").pop() || "file";
+    if (!contentType.startsWith("image/")) {
+      let binary = "";
+      for (let i = 0; i < bytes.length; i += 0x8000) {
+        binary += String.fromCharCode(...bytes.slice(i, i + 0x8000));
+      }
+      const mime = contentType.split(";")[0] || "application/octet-stream";
+      const url = `data:${mime};base64,${btoa(binary)}`;
+      return { url, resourceRef: url, filename, mimeType: mime, size: bytes.length };
+    }
+    // 演示模式无原生层：校验图片格式后直接嵌入 data URL（不落盘）
+    return imageDataUrl(normalizeImageInput(bytes, filename));
   }
 }

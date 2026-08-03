@@ -14,6 +14,7 @@ contextBridge.exposeInMainWorld("lakeNative", {
   renameTreeNode: (id, title) => invoke("rename_tree_node", id, title),
   createNoteIn: (parentId, title) => invoke("create_note_in", parentId, title),
   moveTreeNode: (id, parentId, sortOrder) => invoke("move_tree_node", id, parentId, sortOrder),
+  moveTreeNodeOrdered: (id, parentId, orderedIds) => invoke("move_tree_node_ordered", id, parentId, orderedIds),
   reorderTreeNodes: (parentId, orderedIds) => invoke("reorder_tree_nodes", parentId, orderedIds),
   deleteTreeNode: (id) => invoke("delete_tree_node", id),
   uploadResource: (input, noteId) => invoke("upload_resource", input, noteId),

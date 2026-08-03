@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { isBlockedHost, isBlockedIPv4, isBlockedIPv6 } from "./ssrf.js";
 
 /** 从真实 URL 提取 hostname（含 WHATWG URL 规范化）后判定 */
@@ -81,5 +81,44 @@ describe("isBlockedHost + URL 规范化（SSRF 主入口）", () => {
   it("端口号不影响 host 判定", () => {
     expect(blockedFromUrl("http://192.168.1.1:8080/")).toBe(true);
     expect(blockedFromUrl("http://10.0.0.2:3000/x.png")).toBe(true);
+  });
+});
+
+// ===== assertSafeRemoteHost（DNS 感知校验，审计 #5） =====
+import dns from "node:dns";
+import { assertSafeRemoteHost, SsrfError } from "./ssrf.js";
+
+describe("assertSafeRemoteHost", () => {
+  it("字面 localhost / 私网 IP 直接拒绝（不查 DNS）", async () => {
+    const lookup = vi.spyOn(dns.promises, "lookup").mockImplementation((async () => [{ address: "1.2.3.4", family: 4 }]) as any);
+    await expect(assertSafeRemoteHost("localhost")).rejects.toThrow(SsrfError);
+    await expect(assertSafeRemoteHost("127.0.0.1")).rejects.toThrow(SsrfError);
+    await expect(assertSafeRemoteHost("[::1]")).rejects.toThrow(SsrfError);
+    expect(lookup).not.toHaveBeenCalled();
+    lookup.mockRestore();
+  });
+
+  it("域名解析到私网/回环/链路本地任一地址即拒绝", async () => {
+    const lookup = vi.spyOn(dns.promises, "lookup").mockImplementation((async () => [{ address: "93.184.216.34", family: 4 }, { address: "10.0.0.5", family: 4 }]) as never);
+    await expect(assertSafeRemoteHost("evil.example.com")).rejects.toThrow(/解析到本机或私网/);
+    lookup.mockRestore();
+  });
+
+  it("域名解析到公网地址放行", async () => {
+    const lookup = vi.spyOn(dns.promises, "lookup").mockImplementation((async () => [{ address: "93.184.216.34", family: 4 }, { address: "2606:2800:220:1:248:1893:25c8:1946", family: 6 }]) as never);
+    await expect(assertSafeRemoteHost("example.com")).resolves.toBeUndefined();
+    lookup.mockRestore();
+  });
+
+  it("域名解析失败拒绝（宁可误伤不放行）", async () => {
+    const lookup = vi.spyOn(dns.promises, "lookup").mockImplementation((async () => { throw new Error("ENOTFOUND"); }) as any);
+    await expect(assertSafeRemoteHost("nx.example.com")).rejects.toThrow(/解析失败/);
+    lookup.mockRestore();
+  });
+
+  it("域名解析结果为空拒绝", async () => {
+    const lookup = vi.spyOn(dns.promises, "lookup").mockImplementation((async () => []) as never);
+    await expect(assertSafeRemoteHost("empty.example.com")).rejects.toThrow(/解析为空/);
+    lookup.mockRestore();
   });
 });

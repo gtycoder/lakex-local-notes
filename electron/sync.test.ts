@@ -137,6 +137,9 @@ class FakeStore {
     }
     this.notes.set(note.id, { ...note });
   }
+  rememberDeleted(note: { id: string; title: string; parentId: string | null; sortOrder: number; updatedAt: string }, deletedAt: string) {
+    this.deleted.set(note.id, { id: note.id, title: note.title, parentId: note.parentId, sortOrder: note.sortOrder, updatedAt: note.updatedAt, deletedAt });
+  }
   deleteTreeNode(id: string) {
     const n = this.notes.get(id);
     if (n) {
@@ -227,7 +230,7 @@ describe("syncNow 增量同步", () => {
     expect(finalManifest.notes.find((n) => n.id === "n1")!.contentHash).toBe(store.contentHash("n1"));
   });
 
-  it("本地删除后云端标记 deleted 且墓碑被剪除（不重拉）", async () => {
+  it("本地删除后云端标记 deleted；墓碑保留且标记跨次同步持续（防复活）", async () => {
     const store = newStore();
     store.createNote("n1", "笔记A", "<p>a</p>");
     store.createNote("n2", "笔记B", "<p>b</p>");
@@ -240,8 +243,119 @@ describe("syncNow 增量同步", () => {
     expect(r.downloaded).toBe(0);
     const manifest = readManifest();
     expect(manifest.notes.find((n) => n.id === "n2")?.deleted).toBe(true);
-    expect(store.listDeletedNotesForSync()).toHaveLength(0); // 墓碑已剪除
+    // 墓碑不剪除：再同步一次，deleted 标记仍必须存在（离线设备上线时才能正确删除）
+    await syncNow(store as unknown as Store);
+    const manifest2 = readManifest();
+    expect(manifest2.notes.find((n) => n.id === "n2")?.deleted).toBe(true);
+    expect(store.listDeletedNotesForSync()).toHaveLength(1); // 墓碑保留
     expect(store.notes.has("n2")).toBe(false);
+  });
+
+  it("审计#1：正文未变化时连续同步，manifest 资源清单不丢失（修复 assets 清空）", async () => {
+    const store = newStore();
+    store.createNote("n1", "笔记A", "<p>a</p>");
+    store.addAsset("n1", "img1.png", Buffer.from("png-bytes", "utf8"));
+    await syncNow(store as unknown as Store);
+    expect(readManifest().notes[0].assets).toHaveLength(1);
+
+    // 正文不变，第二次同步：assets 必须仍在 manifest 中（旧实现会变 [])
+    await syncNow(store as unknown as Store);
+    const manifest = readManifest();
+    expect(manifest.notes[0].assets).toHaveLength(1);
+    expect(manifest.notes[0].assets[0]).toMatchObject({ filename: "img1.png", size: 9, hash: sha256("png-bytes") });
+  });
+
+  it("审计#2：设备A删除并多次同步后，离线设备C上线不复活已删笔记", async () => {
+    // 设备 A：创建并同步
+    const storeA = newStore();
+    storeA.createNote("n1", "笔记A", "<p>a</p>");
+    await syncNow(storeA as unknown as Store);
+    // 设备 B：同步到 n1
+    const storeB = newStore();
+    await syncNow(storeB as unknown as Store);
+    expect(storeB.notes.has("n1")).toBe(true);
+    // 设备 A：删除 + 同步两次（墓碑保留策略下 deleted 标记持续存在）
+    storeA.deleteTreeNode("n1");
+    await syncNow(storeA as unknown as Store);
+    await syncNow(storeA as unknown as Store);
+    expect(readManifest().notes.find((n) => n.id === "n1")?.deleted).toBe(true);
+    // 设备 C（离线后上线）：不得恢复 n1
+    const storeC = newStore();
+    await syncNow(storeC as unknown as Store);
+    expect(storeC.notes.has("n1")).toBe(false);
+    // C 同步后本地留存学到的墓碑，且 manifest 仍保留 deleted 标记（不复活）
+    expect(storeC.listDeletedNotesForSync()).toHaveLength(1);
+    expect(readManifest().notes.find((n) => n.id === "n1")?.deleted).toBe(true);
+    // A 设备清空（模拟重装）：C 仍持有墓碑，标记不丢
+    const storeA2 = newStore();
+    await syncNow(storeA2 as unknown as Store);
+    expect(storeA2.notes.has("n1")).toBe(false);
+  });
+
+  it("审计#3：恶意 manifest 的 note.id / asset.filename 目录穿越被拒绝", async () => {
+    const store = newStore();
+    store.createNote("n1", "笔记A", "<p>a</p>");
+    await syncNow(store as unknown as Store);
+
+    // 恶意 note.id（../ 逃逸）
+    const manifest = readManifest();
+    manifest.notes.push({
+      id: "../../evil", title: "evil", parentId: null, sortOrder: 1,
+      updatedAt: new Date().toISOString(), contentHash: sha256("<p>evil</p>"), isConflict: false,
+      assets: [],
+    });
+    writeManifest(manifest);
+    s3.bucket.set(key(`objects/${sha256("<p>evil</p>")}.lake`), Buffer.from("<p>evil</p>", "utf8"));
+    await expect(syncNow(store as unknown as Store)).rejects.toThrow(/无效的笔记 ID|无效的资源文件名|无效/);
+
+    // 恶意 asset.filename（../ 逃逸）
+    const manifest2 = readManifest();
+    manifest2.notes[0] = {
+      id: "evil2", title: "evil2", parentId: null, sortOrder: 1,
+      updatedAt: new Date().toISOString(), contentHash: sha256("<p>evil2</p>"), isConflict: false,
+      assets: [{ filename: "../../escape.png", size: 3, hash: sha256("abc") }],
+    };
+    writeManifest(manifest2);
+    s3.bucket.set(key(`objects/${sha256("<p>evil2</p>")}.lake`), Buffer.from("<p>evil2</p>", "utf8"));
+    s3.bucket.set(key("assets/evil2/../../escape.png"), Buffer.from("abc", "utf8"));
+    await expect(syncNow(store as unknown as Store)).rejects.toThrow(/无效的资源文件名/);
+  });
+
+  it("审计#4：清单声明的资源缺失/损坏时中止导入（不静默跳过）", async () => {
+    const store = newStore();
+    store.createNote("n1", "笔记A", "<p>a</p>");
+    await syncNow(store as unknown as Store);
+
+    // 声明资源但对象缺失
+    let manifest = readManifest();
+    manifest.notes[0] = {
+      id: "n2", title: "远端", parentId: null, sortOrder: 1,
+      updatedAt: new Date().toISOString(), contentHash: sha256("<p>remote</p>"), isConflict: false,
+      assets: [{ filename: "img.png", size: 3, hash: sha256("img") }],
+    };
+    writeManifest(manifest);
+    s3.bucket.set(key(`objects/${sha256("<p>remote</p>")}.lake`), Buffer.from("<p>remote</p>", "utf8"));
+    await expect(syncNow(store as unknown as Store)).rejects.toThrow(/资源不存在/);
+    expect(store.notes.has("n2")).toBe(false); // 未导入半成品
+
+    // 声明资源但内容损坏（hash 不符）
+    manifest = readManifest();
+    writeManifest(manifest);
+    s3.bucket.set(key("assets/n2/img.png"), Buffer.from("xxx", "utf8")); // size 3 但 hash 不符
+    await expect(syncNow(store as unknown as Store)).rejects.toThrow(/哈希不符/);
+    expect(store.notes.has("n2")).toBe(false);
+  });
+
+  it("审计#19：远程 manifest 结构非法时同步报错（不按任意 JSON 导入）", async () => {
+    const store = newStore();
+    store.createNote("n1", "笔记A", "<p>a</p>");
+    await syncNow(store as unknown as Store);
+
+    s3.bucket.set(key("manifests/latest.json"), Buffer.from(JSON.stringify({ version: 2, notes: "not-an-array" }), "utf8"));
+    await expect(syncNow(store as unknown as Store)).rejects.toThrow(/清单格式无效/);
+
+    s3.bucket.set(key("manifests/latest.json"), Buffer.from(JSON.stringify({ version: 99, workspaceId: "default", commitId: "c", createdAt: "t", notes: [] }), "utf8"));
+    await expect(syncNow(store as unknown as Store)).rejects.toThrow(/清单版本不兼容/);
   });
 
   it("云端标记 deleted 时本地删除该笔记", async () => {

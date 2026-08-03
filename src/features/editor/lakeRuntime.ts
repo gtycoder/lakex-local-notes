@@ -504,14 +504,24 @@ function setupTocScrollFollow(
 
   // 虚拟渲染是异步重建 DOM：滚动瞬间视口顶的标题可能还没渲染出来，
   // 单次 update 会漏算。滚动后按 80/250/500ms 重算 + 每次渲染批次完成后重算。
+  // 审计 #15：所有延迟定时器统一登记，destroy 时清理（避免销毁后回调空跑）
+  const pendingTimers = new Set<number>();
+  const later = (fn: () => void, ms: number): void => {
+    const id = window.setTimeout(() => { pendingTimers.delete(id); fn(); }, ms);
+    pendingTimers.add(id);
+  };
+  const clearPendingTimers = (): void => {
+    for (const id of pendingTimers) window.clearTimeout(id);
+    pendingTimers.clear();
+  };
   const scheduleUpdate = (): void => {
     window.clearTimeout(scrollTimer);
     scrollTimer = window.setTimeout(update, 80);
-    window.setTimeout(update, 250);
-    window.setTimeout(update, 500);
-    // 滚动进入视口的懒卡片顺带水合（修复粘贴/懒初始化卡壳）
-    window.setTimeout(() => ensureCardsInViewHydrated(host), 120);
-    window.setTimeout(() => ensureCardsInViewHydrated(host), 400);
+    // 虚拟渲染异步重建 DOM：延迟重算 + 视口内懒卡片水合（修复粘贴/懒初始化卡壳）
+    later(update, 250);
+    later(update, 500);
+    later(() => ensureCardsInViewHydrated(host), 120);
+    later(() => ensureCardsInViewHydrated(host), 400);
   };
 
   const correctScrollTo = (id: string): void => {
@@ -549,7 +559,9 @@ function setupTocScrollFollow(
     el.addEventListener("click", onClick, true);
     const observer = new MutationObserver(() => apply(activeId, true));
     observer.observe(el, { childList: true, subtree: true });
-    // contentchange（粘贴/编辑/插入卡片）：异步等卡片落位后水合 + 刷新高亮
+    // contentchange（粘贴/编辑/插入卡片）：异步等卡片落位后水合 + 刷新高亮。
+    // 审计 #15：600/1500ms 曾把裸函数传给 setTimeout → host 为 undefined →
+    // querySelectorAll 抛错被吞、水合重试完全失效；改箭头闭包并登记定时器。
     let contentChangeTimer: number | undefined;
     const onContentChange = (): void => {
       window.clearTimeout(contentChangeTimer);
@@ -557,8 +569,8 @@ function setupTocScrollFollow(
         ensureCardsInViewHydrated(host);
         update();
       }, 120);
-      window.setTimeout(ensureCardsInViewHydrated, 600);
-      window.setTimeout(ensureCardsInViewHydrated, 1500);
+      later(() => ensureCardsInViewHydrated(host), 600);
+      later(() => ensureCardsInViewHydrated(host), 1500);
     };
     try { (editor as any)?.on?.("contentchange", onContentChange); } catch { /* 忽略 */ }
     // 虚拟渲染每批重建完成后重算高亮（滚动瞬间视口顶标题可能尚未渲染）
@@ -572,6 +584,7 @@ function setupTocScrollFollow(
       el.removeEventListener("click", onClick, true);
       try { (editor as any)?.off?.("contentchange", onContentChange); } catch { /* 忽略 */ }
       window.clearTimeout(contentChangeTimer);
+      clearPendingTimers();
       observer.disconnect();
       renderer?.off?.("tileRenderCompleted", onTileRender);
       renderer?.off?.("generalRenderCompleted", onTileRender);
@@ -617,9 +630,12 @@ function setupTocScrollFollow(
  * 编辑触发新 tocChange 后才出现）。setDocument 后调用一次，把最新 toc 数据
  * 同步进侧边栏，弥补这个加载时机缺口。
  * 重试收敛：最多 8 次，延时 200ms 起、封顶 500ms（侧边栏通常 ~600ms 内出现）。 */
-export function refreshTocSidebar(editor: LakeEditorInstance | null): void {
+export function refreshTocSidebar(editor: LakeEditorInstance | null, host?: HTMLElement | null): void {
   // toc 数据权威来源是内核的 docExtraContent（TOC 管理器 setDocExtraContent({toc})）。
   // 通过内核官方事件总线重放 tocChange（与编辑触发路径一致），并重试直到条目出现。
+  // 审计 #15：条目计数限定在当前编辑器容器内——多标签下其他编辑器的 TOC 条目
+  // 会让本编辑器提前停止重试（第二个及后续标签偶发不显示大纲）。
+  const scope = host ?? document;
   let attempt = 0;
   const tryOnce = (): void => {
     try {
@@ -629,7 +645,7 @@ export function refreshTocSidebar(editor: LakeEditorInstance | null): void {
       if (kernel?.emitPluginEvent && Array.isArray(tocData) && tocData.length > 0) {
         kernel.emitPluginEvent("tocChange", tocData);
       }
-      const itemsAfter = document.querySelectorAll(".ne-toc-sidebar .ne-toc-item").length;
+      const itemsAfter = scope.querySelectorAll(".ne-toc-sidebar .ne-toc-item").length;
       if (itemsAfter === 0 && attempt < 8) {
         attempt += 1;
         setTimeout(tryOnce, Math.min(200 * attempt, 500));

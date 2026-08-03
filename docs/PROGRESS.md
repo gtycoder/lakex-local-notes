@@ -4,6 +4,94 @@
 
 ---
 
+## ★ 最新交接（2026-08-03 会话）：代码审计 15 项修复 + 安全加固（分支 `fix/audit-2026-08-03`）
+
+### 任务目标（本会话）
+
+1. 阅读 `docs/CODE-AUDIT-2026-08-03.md`（15 项问题 + 6 个复现重点），逐条独立核验并给出二次判断
+2. 参考 opus4.8 评审（已收到 1–14 条；第 15 条被截断，由我方补全）
+3. **在独立分支 `fix/audit-2026-08-03` 上修复**（未直接改 master），含新增风险条目 16–23
+4. 全部修复经 vitest（82→100 用例）+ Playwright 驱动真实 Electron 实测
+
+### 已完成（按审计条目）
+
+**第一梯队（数据一致 + 安全）**
+- **#1 同步清空资源清单（高）**：`sync.ts` 上传阶段资源清单改为**每次同步恒重扫**（正文 hash 未变也保留 assets），
+  上传仍增量（远端同 hash 跳过）。修复"带图笔记连续同步两次后 manifest 丢失资源"。
+- **#2 删除墓碑只保留一次同步（高）**：删除 `pruneTombstones` 调用；墓碑**永久保留**并恒写入 manifest；
+  下载到 deleted 标记时若本地无此笔记也 `rememberDeleted`（学习墓碑，设备可接力保管标记）。
+  三设备推演测试：A 删除+两次同步 → 离线 C 上线不复活；A 清空后 C 仍持有墓碑。
+- **#3/#17 manifest 目录穿越 + notePath 缺口（高）**：路径校验下沉——`notePath`/`noteAssetsDirFor`/`importRemoteNote`
+  统一 `isSafePathSegment`（拒绝空、`./..`、`/`、`\`）；manifest 增加**运行时 schema 校验**（`validateManifest`）；
+  sync 下载循环对 `rn.id`/`asset.filename` fail fast；`save_note`/`read_note` 的任意 id 不再能读写工作区外 `.lake`。
+- **#4 远端资源无完整性校验（高）**：下载资源缺失即中止导入（不再静默跳过）；下载后校验 `size` 与 sha256。
+- **#5 SSRF 可绕过（高，实测确认比报告更糟）**：`ssrf.ts` 新增 `assertSafeRemoteHost`（DNS 解析 A/AAAA，
+  任一地址命中本机/私网/链路本地/保留/组播即拒）；下载层改用 **`net.request` + `followRedirect:false`**
+  逐跳手工跟随 + 每跳重新校验（`net.fetch` 的 `redirect:"manual"` 在 Chromium 抛 "Redirect was cancelled"，
+  已实测）；**渲染层回退彻底移除**（原回退是刻意绕过主进程策略，`resourceUpload.ts:89-91` 注释为证）。
+  实测矩阵：直连公网 ✓、302 跟随 ✓、重定向到私网/域名解析到私网（localtest.me→127.0.0.1）全拒 ✓。
+- **#6 IPC 来源过宽 + 无导航拦截（高）**：`isTrustedSenderFrame` 改为**精确 URL + webContents 白名单**
+  （dev 仅 1421 origin；prod 仅打包 dist/index.html pathname）；不再信任任意 file://、任意 localhost、
+  devtools、about:blank；新增 `will-navigate` 拦截 + `setWindowOpenHandler` deny（外链交 `shell.openExternal`）。
+
+**第二梯队**
+- **#7 自动保存覆盖新编辑（中偏高）**：`App.tsx` 加每笔记 **revision 计数器**——保存请求发出后若期间有新编辑，
+  旧响应不覆盖草稿、不清除 dirty。
+- **#8 移动端旧快照（中低）**：判定为低影响（磁盘已正确保存，仅 viewer 陈旧 + 重复保存），未改（记录在案）。
+- **#9 树结构不变量（中）**：`assertParentCompatible`——notebook 只能根层、note 不能作父、group 只能挂
+  notebook/group；`reorderTreeNodes` 校验重复/归属/完整性（必须含全部子节点）。
+- **#10 FS 与 SQLite 非原子（中，删除路径高）**：`deleteTreeNode` 改 **DB 先提交、文件后删**（失败只留孤儿文件）；
+  `importRemoteNote` 改 **staging 写入**（临时文件/临时目录 → DB 成功 → 原子 rename；失败清理临时产物）。
+- **#12 孤儿删除失败仍报成功（低）**：仅删除成功/文件不存在才删记录并计数；失败保留记录可重试。
+- **#13 Worker 崩溃后复用（低，改写描述）**：崩溃 worker **terminate + 替换**（in-flight 已 reject）；
+  新增 **60s 单任务超时**（卡死也 settle + 报废 worker）；postMessage 抛错兜底。
+- **#14 附件/Data URL 解码前无大小上限（中低）**：非图片附件统一 25 MiB 上限（读入前预检 file.size）；
+  Data URL 按 base64 长度**解码前预检**（图片走 25 MiB，附件走 25 MiB）；图片路径原有上限保留。
+- **#15 TOC 延迟水合参数错误 + 全局 DOM（低）**：裸函数位置修正——`lakeRuntime.ts:560-561`
+  （onContentChange 600/1500ms）改箭头闭包传 host（513-514 原本正确，报告定位有误）；
+  定时器统一登记 `pendingTimers` 并在 cleanup 清理；`refreshTocSidebar` 条目计数限定 `host` 内
+  （多标签不再串扰）。实测双标签各自大纲 3/4 条正确。
+- **#16 资产服务无鉴权 + CORS `*`（中，新增）**：Origin 门控——非 CORS 请求放行；Origin 非
+  `http://127.0.0.1:1421`/`null`/`file://` 一律 403。实测恶意 Origin 403、应用页 fetch 200。
+- **#18 移动+重排两次 IPC 非原子（低，新增）**：新增 `move_tree_node_ordered`（单事务原子移动+重排），
+  App/preload/native 全部切换。
+- **#19 manifest 无 schema 校验（低，新增）**：随 #3 的 `validateManifest` 一并修复（notes 非数组/字段缺失/版本不兼容均报错）。
+- **#20 同步删除路径残留墓碑（低，新增）**：随 #2 一并修复（墓碑不再剪除 + 学习墓碑）。
+- **#21 `upload_resource` IPC 输入侧无大小限制（低，新增）**：main 层预检 bytes 数组 ≤ 25 MiB。
+- **#22 `detectOrphans` 事务外抛错误报保存失败（低，新增）**：saveNote 内 try/catch 隔离。
+- **#23 无 beforeunload 兜底（低，新增）**：窗口关闭时若有脏标签/移动端未保存草稿 → 阻止关闭 + 原生对话框
+  + 尽力 flush 一次保存。
+
+### 验证情况
+
+- **vitest**：82 → **100 用例全绿**（新增 18：sync 6、store 6、ssrf 5、树/重排 3 等，详见测试文件）
+- **tsc --noEmit**：通过
+- **Playwright 真实 Electron 实测**（`fix/audit-2026-08-03` 构建）：
+  - IPC 信任链（应用页正常调用 bootstrap/save）✓
+  - SSRF 矩阵 6 项全过（见上）✓；导航拦截（location.href 被 preventDefault、window.open 被 deny）✓
+  - 资产服务 CORS（恶意 Origin 403 / 应用页 200）✓；TOC 双标签各自大纲正确 ✓
+  - 测试数据（3 个临时笔记 + 4 个资源文件 + 墓碑）已全量清理并验证无残留
+
+### 行为变化（注意）
+
+1. **墓碑不再自动剪除**：`deleted_notes` 会持续累积（每删一篇笔记一行）；manifest 恒带 deleted 标记。
+   体积极小，换取"删除不可复活"的正确性。若未来需要回收，需引入版本向量/多设备确认。
+2. **IPC 来源收紧**：若未来新增 dev 端口或打包路径变化，需同步更新 `isAppPageUrl`；窗口被导航到
+   应用页之外（含本地文件）后 IPC 将拒绝。
+3. **外链行为**：笔记内 http/https 链接点击 → 系统浏览器打开（window.open 被 deny）。
+4. **`reorderTreeNodes` 要求完整子节点列表**：UI（App.moveTreeNode）已传完整列表；其他调用方需注意。
+5. **删除笔记 = 先删 DB 后删文件**：删除后文件清理失败会留下孤儿文件（由孤儿清理兜底），不再是"DB 引用已删文件"。
+
+### 下一步（建议）
+
+1. 合入 master 前：跑 `VIRTUAL-RENDERING-TEST.md` 回归清单（本次改了 lakeRuntime 定时器/TOC 范围）
+2. 打包版（.app）冒烟：导航拦截/资产 CORS/SSRF 在打包环境复测
+3. 移动端路径回归（scrollNode 回退分支 + TOC）
+4. 待办（未修，记录在案）：#8 移动端 viewer 旧快照（低）、#15 剩余 refreshTocSidebar 重试定时器未跟踪
+   （editor 销毁后最多再跑 8 次，已由 kernel 空值 try/catch 兜底）
+
+---
+
 ## ★ 最新交接（2026-08-02 会话）：虚拟渲染全链路修复 + 阶段 C 收尾 + 合入 master
 
 ### 任务目标（本会话）

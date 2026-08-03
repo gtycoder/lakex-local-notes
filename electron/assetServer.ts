@@ -51,8 +51,21 @@ function isSafeSegment(segment: string): boolean {
 export function startAssetServer(noteAssetsDir: string, vendorCdnDir: string): http.Server {
   fs.mkdirSync(noteAssetsDir, { recursive: true });
 
+  // 审计 #16：本地资源服务仅允许应用自身页面跨域读取（dev origin / file 页），
+  // 拒绝任意网站的 CORS 读取（恶意网页无法 fetch 笔记图片）。非 CORS 请求（<img>/
+  // 直接访问）不带 Origin，不构成可读数据泄露。
+  const isAllowedOrigin = (origin: string | undefined): boolean => {
+    if (!origin) return true; // 非 CORS 请求
+    return origin === "http://127.0.0.1:1421" || origin === "null" || origin.startsWith("file://");
+  };
+
   const server = http.createServer(async (req, res) => {
     try {
+      if (!isAllowedOrigin(req.headers.origin)) {
+        res.writeHead(403, { "Content-Type": "text/plain" });
+        res.end("forbidden origin");
+        return;
+      }
       const parsed = new URL(req.url ?? "/", `http://127.0.0.1:${ASSET_PORT}`);
       // 畸形百分号编码（如 /%E0%A4%A）会让 decodeURIComponent 抛 URIError，统一兜底 400
       const urlPath = decodeURIComponent(parsed.pathname);
