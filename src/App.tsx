@@ -6,7 +6,7 @@ import { SyncPanel } from "./components/SyncPanel";
 import { LakeEditor } from "./features/editor/LakeEditor";
 import { MultiTabEditor, type TabInfo } from "./features/editor/MultiTabEditor";
 import { isDesktop, native } from "./lib/native";
-import { loadSettings, resolvedTheme, saveSettings, subscribeSettings, isSystemDark, type AppSettings } from "./lib/settings";
+import { loadSettings, saveSettings, subscribeSettings, type AppSettings } from "./lib/settings";
 import { SettingsPanel } from "./components/SettingsPanel";
 import { subtreeIds } from "./lib/tree";
 import type { NoteDocument, NoteSummary, SyncStatus, TreeNode, WorkspaceSnapshot } from "./lib/types";
@@ -44,7 +44,6 @@ export function App() {
   const [isMobile, setIsMobile] = useState(() => window.matchMedia("(max-width: 760px)").matches);
   const [settings, setSettings] = useState<AppSettings>(() => loadSettings());
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [systemDark, setSystemDark] = useState(() => isSystemDark());
   const tocEnabled = settings.showToc;
   const [wideMode] = useState(true);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => localStorage.getItem("lake-notes-v1.sidebar") === "collapsed");
@@ -63,26 +62,6 @@ export function App() {
       saveTimers.current.clear();
     };
   }, []);
-
-  useEffect(() => {
-    // 主题：应用到 html[data-theme]，监听系统深浅色变化
-    const applyTheme = () => {
-      const theme = resolvedTheme(loadSettings(), isSystemDark());
-      document.documentElement.dataset.theme = theme;
-    };
-    applyTheme();
-    const media = window.matchMedia("(prefers-color-scheme: dark)");
-    const onSystemChange = () => setSystemDark(media.matches);
-    media.addEventListener("change", onSystemChange);
-    return () => media.removeEventListener("change", onSystemChange);
-  }, []);
-
-  useEffect(() => {
-    const theme = resolvedTheme(settings, systemDark);
-    document.documentElement.dataset.theme = theme;
-    // Lake 官方暗色 class（body 级，作用于 antd 弹层/下拉等挂 body 的组件）
-    document.body.classList.toggle("lakex-dark-theme-dark", theme === "dark");
-  }, [settings, systemDark]);
 
   useEffect(() => {
     return subscribeSettings((next) => setSettings(next));
@@ -395,7 +374,6 @@ export function App() {
   const editorPrefs = {
     fontSize: settings.fontSize,
     showToolbar: settings.showToolbar,
-    dark: resolvedTheme(settings, systemDark) === "dark",
   };
   const tabInfos: TabInfo[] = openTabs.map((tab) => ({ noteId: tab.noteId, title: tab.title, content: tab.content, dirty: tab.dirty }));
 

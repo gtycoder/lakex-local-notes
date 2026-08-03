@@ -68,7 +68,7 @@ export function LakeEditor({ noteId, content, mode = "editor", tocEnabled, onCha
       editorRef.current = null;
       host.replaceChildren();
     };
-  }, [noteId, mode, tocEnabled, prefs?.fontSize, prefs?.showToolbar, prefs?.dark]);
+  }, [noteId, mode, tocEnabled, prefs?.fontSize, prefs?.showToolbar]);
 
   if (error) {
     return <div className="editor-error"><AlertCircle size={18} /><span>{error}</span></div>;

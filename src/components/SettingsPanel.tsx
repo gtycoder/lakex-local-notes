@@ -1,5 +1,5 @@
-import { Moon, Settings, Sun, Monitor, Type, AlignLeft, ListTree, PanelTop } from "lucide-react";
-import { fontSizeOptions, type AppSettings, type ThemeMode } from "../lib/settings";
+import { Settings, Type, AlignLeft, ListTree, PanelTop } from "lucide-react";
+import { fontSizeOptions, type AppSettings } from "../lib/settings";
 
 interface SettingsPanelProps {
   open: boolean;
@@ -7,12 +7,6 @@ interface SettingsPanelProps {
   onClose: () => void;
   onChange: (patch: Partial<AppSettings>) => void;
 }
-
-const THEME_OPTIONS: Array<{ value: ThemeMode; label: string; icon: typeof Sun }> = [
-  { value: "system", label: "跟随系统", icon: Monitor },
-  { value: "light", label: "亮色", icon: Sun },
-  { value: "dark", label: "暗色", icon: Moon },
-];
 
 export function SettingsPanel({ open, settings, onClose, onChange }: SettingsPanelProps) {
   if (!open) return null;
@@ -25,22 +19,6 @@ export function SettingsPanel({ open, settings, onClose, onChange }: SettingsPan
           <button className="settings-close" onClick={onClose} aria-label="关闭">✕</button>
         </header>
         <div className="settings-body">
-          <section className="settings-group">
-            <h4><Monitor size={13} /> 主题</h4>
-            <div className="settings-row">
-              {THEME_OPTIONS.map((opt) => (
-                <button
-                  key={opt.value}
-                  className={`settings-choice ${settings.theme === opt.value ? "active" : ""}`}
-                  onClick={() => onChange({ theme: opt.value })}
-                >
-                  <opt.icon size={14} />
-                  {opt.label}
-                </button>
-              ))}
-            </div>
-          </section>
-
           <section className="settings-group">
             <h4><Type size={13} /> 正文字号</h4>
             <div className="settings-row">

@@ -2,11 +2,7 @@
  * 应用设置：本地偏好（localStorage 持久化，不参与同步）。
  * 参考 lake-editor-main 的配置项（paragraphSpacing/defaultFontsize/toc/toolbar）+ 深色模式。
  */
-export type ThemeMode = "system" | "light" | "dark";
-
 export interface AppSettings {
-  /** 主题：跟随系统 / 亮色 / 暗色 */
-  theme: ThemeMode;
   /** 正文默认字号（内核支持 12/13/14/15/16/19/22/24） */
   fontSize: number;
   /** 段间距（relax） */
@@ -18,7 +14,6 @@ export interface AppSettings {
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
-  theme: "system",
   fontSize: 18,
   paragraphSpacing: false,
   showToc: true,
@@ -54,16 +49,6 @@ export function saveSettings(patch: Partial<AppSettings>): AppSettings {
   try { localStorage.setItem(STORAGE_KEY, JSON.stringify(next)); } catch { /* 忽略 */ }
   notifySettingsChanged(next);
   return next;
-}
-
-/** 当前生效主题（考虑 system） */
-export function resolvedTheme(settings: AppSettings, systemDark: boolean): "light" | "dark" {
-  if (settings.theme === "system") return systemDark ? "dark" : "light";
-  return settings.theme;
-}
-
-export function isSystemDark(): boolean {
-  return typeof window !== "undefined" && window.matchMedia("(prefers-color-scheme: dark)").matches;
 }
 
 export function fontSizeOptions(): number[] {

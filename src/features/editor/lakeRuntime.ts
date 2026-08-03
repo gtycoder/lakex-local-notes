@@ -243,8 +243,6 @@ export interface LakeEditorPrefs {
   fontSize?: number;
   /** 显示编辑器工具栏 */
   showToolbar?: boolean;
-  /** 暗色模式（尝试内核 dark，配合 CSS 覆盖） */
-  dark?: boolean;
 }
 
 export function createLakeDocument(
@@ -261,14 +259,12 @@ export function createLakeDocument(
   element.replaceChildren(mount);
 
   const prefsSize = typeof prefs?.fontSize === "number" ? prefs.fontSize : 18;
-  const prefsDark = !!prefs?.dark;
   const customOptions: Record<string, unknown> = {
     disabledPlugins: mode === "viewer"
       ? ["save", "toolbar", "emoji"]
       : ["save", "emoji", ...(prefs?.showToolbar === false ? ["toolbar"] : [])],
     input: {},
     defaultFontsize: prefsSize,
-    dark: prefsDark,
     toc: { enable: tocEnabled },
     codeblock: { codemirrorURL: "./vendor/lakex-doc/codemirror.js" },
     math: { KaTexURL: ["./vendor/lakex-doc/katex.min.js", "https://gw.alipayobjects.com/os/lib/katex/0.16.8/dist/contrib/mhchem.min.js"] },

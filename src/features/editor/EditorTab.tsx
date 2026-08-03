@@ -76,7 +76,7 @@ export function EditorTab({ noteId, content, visible, tocEnabled, onChange, pref
       host.replaceChildren();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [noteId, tocEnabled, prefs?.fontSize, prefs?.showToolbar, prefs?.dark]);
+  }, [noteId, tocEnabled, prefs?.fontSize, prefs?.showToolbar]);
 
   return (
     <div
