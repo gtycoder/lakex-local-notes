@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent } from "react";
-import { BookOpen, ChevronRight, FilePlus2, FileText, FoldVertical, Folder, FolderPlus, PanelLeftClose, Pencil, Pin, Plus, Search, Trash2, X } from "lucide-react";
+import { BookOpen, ChevronRight, FilePlus2, FileText, FoldVertical, Folder, FolderPlus, Pencil, Plus, Search, Trash2, X } from "lucide-react";
 import type { TreeNode, TreeNodeType } from "../lib/types";
 
 type CreateKind = "notebook" | "group" | "note";
@@ -23,8 +23,8 @@ interface SidebarProps {
   onRequestDelete: (node: TreeNode) => void;
   pendingRenameId: string | null;
   onPendingRenameConsumed: () => void;
-  onTogglePin: () => void;
-  onCollapse: () => void;
+  onPreviewEnter: () => void;
+  onPreviewLeave: () => void;
   onResizeActiveChange: (active: boolean) => void;
   onWidthChange: (width: number) => void;
   onWidthCommit: (width: number) => void;
@@ -250,14 +250,10 @@ export function Sidebar(props: SidebarProps) {
   </div>;
 
   return (
-    <aside className={`sidebar sidebar-${props.mode} ${props.mobileOpen ? "sidebar-open" : ""}`}>
+    <aside className={`sidebar sidebar-${props.mode} ${props.mobileOpen ? "sidebar-open" : ""}`} onPointerEnter={props.onPreviewEnter} onPointerLeave={props.onPreviewLeave}>
       <button className="icon-button mobile-only sidebar-mobile-close" onClick={props.onCloseMobile} title="关闭"><X size={18} /></button>
       <header className="sidebar-header desktop-only">
-        <div className="sidebar-heading-copy"><strong>资料库</strong><span>{props.mode === "docked" ? "常驻" : "悬浮"}</span></div>
-        <div className="sidebar-panel-controls">
-          <button className={`icon-button sidebar-pin ${props.mode === "docked" ? "selected" : ""}`} onClick={props.onTogglePin} title={props.mode === "docked" ? "切换为悬浮侧栏" : "固定侧栏"} aria-pressed={props.mode === "docked"}><Pin size={15} fill={props.mode === "docked" ? "currentColor" : "none"} /></button>
-          <button className="icon-button" onClick={props.onCollapse} title="收起资料库"><PanelLeftClose size={16} /></button>
-        </div>
+        <div className="sidebar-heading-copy"><strong>资料库</strong></div>
       </header>
       <div className="search-box"><Search size={14} /><input value={props.search} onChange={(event) => props.onSearch(event.target.value)} placeholder="搜索" /></div>
       <div className="list-heading">

@@ -598,16 +598,17 @@ ne-card[data-card-name="codeblock"] .ne-card-resizer-mask {
   --shell-toolbar: rgba(250, 250, 251, 0.92);
   --shell-ease: cubic-bezier(.22, 1, .36, 1);
   --shell-radius: 10px;
+  --activity-rail-width: 44px;
 }
 
 @media (min-width: 761px) {
   .app-shell {
-    grid-template-columns: 48px var(--sidebar-width) minmax(0, 1fr);
+    grid-template-columns: var(--activity-rail-width) var(--sidebar-width) minmax(0, 1fr);
     background: #fff;
     transition: grid-template-columns 260ms var(--shell-ease);
   }
   .app-shell.sidebar-floating,
-  .app-shell.sidebar-collapsed { grid-template-columns: 48px 0 minmax(0, 1fr); }
+  .app-shell.sidebar-collapsed { grid-template-columns: var(--activity-rail-width) 0 minmax(0, 1fr); }
   .app-shell.sidebar-collapsed { transition-duration: 180ms; }
   .app-shell.sidebar-resizing { transition: none; }
 
@@ -619,10 +620,10 @@ ne-card[data-card-name="codeblock"] .ne-card-resizer-mask {
     grid-row: 1;
     flex-direction: column;
     align-items: center;
-    width: 48px;
-    min-width: 48px;
+    width: var(--activity-rail-width);
+    min-width: var(--activity-rail-width);
     height: 100%;
-    padding: 0 6px 7px;
+    padding: 0 5px 7px;
     border-right: 1px solid var(--shell-separator);
     background: rgba(239, 240, 242, 0.94);
     backdrop-filter: saturate(1.25) blur(24px);
@@ -633,12 +634,12 @@ ne-card[data-card-name="codeblock"] .ne-card-resizer-mask {
   .activity-button {
     display: grid;
     place-items: center;
-    width: 34px;
-    height: 34px;
+    width: 32px;
+    height: 32px;
     margin: 2px 0;
     padding: 0;
     border: 0;
-    border-radius: 9px;
+    border-radius: 8px;
     color: #747b85;
     background: transparent;
     transition: color 130ms ease-out, background-color 130ms ease-out, box-shadow 130ms ease-out, transform 90ms ease-out;
@@ -670,12 +671,21 @@ ne-card[data-card-name="codeblock"] .ne-card-resizer-mask {
     transition: opacity 180ms ease-out, transform 260ms var(--shell-ease), box-shadow 240ms ease-out;
   }
   .app-shell.sidebar-resizing .sidebar { transition: none; }
+  .sidebar::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    right: 0;
+    left: 0;
+    height: var(--topbar-height);
+    -webkit-app-region: drag;
+  }
   .sidebar.sidebar-floating,
   .sidebar.sidebar-collapsed {
     position: fixed;
     top: 0;
     bottom: 0;
-    left: 48px;
+    left: var(--activity-rail-width);
   }
   .sidebar.sidebar-floating {
     border-right-color: rgba(31, 35, 41, 0.12);
@@ -693,21 +703,16 @@ ne-card[data-card-name="codeblock"] .ne-card-resizer-mask {
     display: flex;
     align-items: center;
     gap: 8px;
-    flex: 0 0 42px;
-    min-height: 42px;
-    padding: 0 8px 0 12px;
+    flex: 0 0 38px;
+    min-height: 38px;
+    padding: 0 10px;
   }
   .sidebar-heading-copy { display: flex; align-items: baseline; gap: 7px; min-width: 0; }
   .sidebar-heading-copy strong { color: #353a42; font-size: 13px; font-weight: 630; letter-spacing: -.01em; }
   .sidebar-heading-copy span { color: var(--shell-text-tertiary); font-size: 10px; font-weight: 500; }
-  .sidebar-panel-controls { display: flex; gap: 1px; margin-left: auto; }
-  .sidebar-panel-controls .icon-button { width: 27px; height: 27px; border-radius: 7px; color: #747b85; }
-  .sidebar-panel-controls .icon-button:hover { color: #41474f; background: rgba(31, 35, 41, .065); }
-  .sidebar-panel-controls .sidebar-pin.selected { color: var(--shell-accent-strong); background: var(--shell-accent-soft); }
-
   .search-box {
     height: 31px;
-    margin: 2px 9px 7px;
+    margin: 1px 8px 6px;
     padding: 0 9px;
     border: 1px solid transparent;
     border-radius: 8px;
@@ -729,7 +734,7 @@ ne-card[data-card-name="codeblock"] .ne-card-resizer-mask {
   .statusbar button:focus-visible,
   .settings-panel button:focus-visible { outline: 3px solid rgba(47, 125, 94, .18); outline-offset: 1px; }
 
-  .note-list { padding: 0 7px 10px; }
+  .note-list { padding: 0 6px 10px; }
   .note-row,
   .tree-row {
     min-height: 31px;
@@ -779,14 +784,19 @@ ne-card[data-card-name="codeblock"] .ne-card-resizer-mask {
 
   .workspace { grid-column: 3; grid-row: 1; grid-template-rows: minmax(0, 1fr) 24px; }
   .tab-bar {
+    box-sizing: border-box;
     gap: 6px;
-    min-height: calc(var(--topbar-height) + 35px);
-    padding: var(--topbar-height) 10px 6px;
+    height: var(--topbar-height);
+    min-height: var(--topbar-height);
+    padding: 4px 10px;
     border-bottom-color: var(--shell-separator);
     background: var(--shell-toolbar);
     backdrop-filter: saturate(1.2) blur(20px);
     -webkit-backdrop-filter: saturate(1.2) blur(20px);
   }
+  /* When the library is not docked, reserve the traffic-light footprint inside the fused title bar. */
+  .app-shell.sidebar-floating .tab-bar,
+  .app-shell.sidebar-collapsed .tab-bar { padding-left: 30px; }
   .tab-item {
     max-width: 190px;
     height: 28px;
@@ -831,12 +841,11 @@ ne-card[data-card-name="codeblock"] .ne-card-resizer-mask {
   .statusbar-notice { flex: 0 1 auto; overflow: hidden; margin: 0; color: var(--shell-accent-strong); text-overflow: ellipsis; white-space: nowrap; transition: opacity 180ms ease-out, transform 180ms var(--shell-ease); }
   @starting-style { .statusbar-notice { opacity: 0; transform: translateY(4px); } }
   .save-label { flex: 0 0 auto; color: #858c96; }
-  .statusbar-export-md,
-  .sync-button,
-  .statusbar-settings {
+  .statusbar-export-md {
     flex: 0 0 auto;
     height: 20px;
     margin: 0;
+    padding: 0 7px;
     border: 1px solid rgba(31, 35, 41, .08);
     border-radius: 6px;
     color: #69717c;
@@ -844,15 +853,23 @@ ne-card[data-card-name="codeblock"] .ne-card-resizer-mask {
     box-shadow: 0 1px 1px rgba(31, 35, 41, .025);
     transition: color 130ms ease-out, background-color 130ms ease-out, border-color 130ms ease-out, transform 90ms ease-out;
   }
-  .statusbar-export-md { padding: 0 7px; }
-  .sync-button { max-width: 170px; padding: 0 8px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .statusbar-settings { width: 24px; }
-  .statusbar-export-md:hover,
-  .sync-button:hover,
-  .statusbar-settings:hover { color: var(--shell-accent-strong); border-color: rgba(47, 125, 94, .20); background: rgba(239, 247, 243, .92); }
-  .statusbar-export-md:active,
-  .sync-button:active,
-  .statusbar-settings:active { transform: scale(.965); }
+  .statusbar-export-md:hover { color: var(--shell-accent-strong); border-color: rgba(47, 125, 94, .20); background: rgba(239, 247, 243, .92); }
+  .statusbar-export-md:active { transform: scale(.965); }
+  .statusbar-sync {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    flex: 0 0 auto;
+    max-width: 190px;
+    overflow: hidden;
+    color: #8b929c;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .statusbar-sync svg { flex: 0 0 auto; }
+  .statusbar-sync.syncing { color: #557c6c; }
+  .statusbar-sync.success { color: var(--shell-accent-strong); }
+  .statusbar-sync.error { color: #b34b45; }
 }
 
 @keyframes shell-tree-reveal {

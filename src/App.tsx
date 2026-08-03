@@ -15,18 +15,18 @@ import type { NoteDocument, NoteSummary, SyncStatus, TreeNode, WorkspaceSnapshot
 type SaveState = "idle" | "dirty" | "saving" | "saved" | "error";
 type MobilePage = "library" | "document";
 
-const SIDEBAR_DEFAULT_WIDTH = 252;
-const SIDEBAR_MIN_WIDTH = 210;
-const SIDEBAR_MAX_WIDTH = 330;
+const SIDEBAR_DEFAULT_WIDTH = 224;
+const SIDEBAR_MIN_WIDTH = 188;
+const SIDEBAR_MAX_WIDTH = 300;
 
 function initialSidebarMode(): SidebarMode {
   const stored = localStorage.getItem("lake-notes-v2.sidebar-mode");
-  if (stored === "docked" || stored === "floating" || stored === "collapsed") return stored;
+  if (stored === "docked" || stored === "collapsed") return stored;
   return localStorage.getItem("lake-notes-v1.sidebar") === "collapsed" ? "collapsed" : "docked";
 }
 
 function initialSidebarWidth(): number {
-  const stored = Number(localStorage.getItem("lake-notes-v2.sidebar-width"));
+  const stored = Number(localStorage.getItem("lake-notes-v3.sidebar-width"));
   return Number.isFinite(stored) ? Math.min(SIDEBAR_MAX_WIDTH, Math.max(SIDEBAR_MIN_WIDTH, stored)) : SIDEBAR_DEFAULT_WIDTH;
 }
 
@@ -63,9 +63,6 @@ export function App() {
   const tocEnabled = settings.showToc;
   const [wideMode] = useState(true);
   const [sidebarMode, setSidebarMode] = useState<SidebarMode>(initialSidebarMode);
-  const [lastOpenSidebarMode, setLastOpenSidebarMode] = useState<Exclude<SidebarMode, "collapsed">>(() =>
-    localStorage.getItem("lake-notes-v2.sidebar-last-open-mode") === "floating" ? "floating" : "docked"
-  );
   const [sidebarWidth, setSidebarWidth] = useState(initialSidebarWidth);
   const [sidebarResizing, setSidebarResizing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -75,6 +72,7 @@ export function App() {
   const editorsRef = useRef<Map<string, LakeEditorInstance>>(new Map());
   const [notice, setNotice] = useState<string | null>(null);
   const noticeTimer = useRef<number | null>(null);
+  const sidebarPreviewTimer = useRef<number | null>(null);
   // 审计 #7：每篇笔记的编辑 revision——保存请求发出后若有新编辑（revision 增长），
   // 旧响应不得覆盖最新草稿/清除 dirty
   const revisionRef = useRef<Map<string, number>>(new Map());
@@ -82,17 +80,14 @@ export function App() {
   useEffect(() => { openTabsRef.current = openTabs; }, [openTabs]);
 
   useEffect(() => {
-    localStorage.setItem("lake-notes-v2.sidebar-mode", sidebarMode);
-    if (sidebarMode !== "collapsed") {
-      setLastOpenSidebarMode(sidebarMode);
-      localStorage.setItem("lake-notes-v2.sidebar-last-open-mode", sidebarMode);
-    }
+    if (sidebarMode !== "floating") localStorage.setItem("lake-notes-v2.sidebar-mode", sidebarMode);
   }, [sidebarMode]);
 
   useEffect(() => {
     return () => {
       saveTimers.current.forEach((timer) => window.clearTimeout(timer));
       saveTimers.current.clear();
+      if (sidebarPreviewTimer.current !== null) window.clearTimeout(sidebarPreviewTimer.current);
     };
   }, []);
 
@@ -379,12 +374,29 @@ export function App() {
     } catch (reason) { setError(String(reason)); }
   }
 
-  function toggleSidebar() {
-    setSidebarMode((current) => current === "collapsed" ? lastOpenSidebarMode : "collapsed");
+  function clearSidebarPreviewTimer() {
+    if (sidebarPreviewTimer.current !== null) {
+      window.clearTimeout(sidebarPreviewTimer.current);
+      sidebarPreviewTimer.current = null;
+    }
   }
 
-  function toggleSidebarPin() {
-    setSidebarMode((current) => current === "docked" ? "floating" : "docked");
+  function showSidebarPreview() {
+    clearSidebarPreviewTimer();
+    setSidebarMode((current) => current === "collapsed" ? "floating" : current);
+  }
+
+  function hideSidebarPreview() {
+    clearSidebarPreviewTimer();
+    sidebarPreviewTimer.current = window.setTimeout(() => {
+      setSidebarMode((current) => current === "floating" ? "collapsed" : current);
+      sidebarPreviewTimer.current = null;
+    }, 120);
+  }
+
+  function toggleSidebarDock() {
+    clearSidebarPreviewTimer();
+    setSidebarMode((current) => current === "docked" ? "collapsed" : "docked");
   }
 
   function updateSidebarWidth(width: number) {
@@ -394,7 +406,7 @@ export function App() {
   function commitSidebarWidth(width: number) {
     const clamped = Math.min(SIDEBAR_MAX_WIDTH, Math.max(SIDEBAR_MIN_WIDTH, width));
     setSidebarWidth(clamped);
-    localStorage.setItem("lake-notes-v2.sidebar-width", String(Math.round(clamped)));
+    localStorage.setItem("lake-notes-v3.sidebar-width", String(Math.round(clamped)));
   }
 
   /** 审计 #8：移动端保存成功后同步 mobileActive/草稿，viewer 不再显示旧快照，
@@ -455,12 +467,12 @@ export function App() {
     <div className={`app-shell sidebar-${sidebarMode} ${sidebarResizing ? "sidebar-resizing" : ""} ${isMobile ? `mobile-document-page ${mobileEditing ? "mobile-editing" : "mobile-reading"}` : ""}`} style={shellStyle}>
       <nav className="activity-rail desktop-only" aria-label="应用导航">
         <div className="activity-rail-spacer" />
-        <button className={`activity-button ${sidebarMode !== "collapsed" ? "active" : ""}`} onClick={toggleSidebar} title={sidebarMode === "collapsed" ? "显示资料库" : "收起资料库"} aria-pressed={sidebarMode !== "collapsed"}><Files size={18} /></button>
+        <button className={`activity-button ${sidebarMode === "docked" ? "active" : ""}`} onPointerEnter={showSidebarPreview} onPointerLeave={hideSidebarPreview} onClick={toggleSidebarDock} title={sidebarMode === "docked" ? "取消固定资料库" : "固定资料库"} aria-pressed={sidebarMode === "docked"}><Files size={17} /></button>
         <div className="activity-rail-fill" />
         <button className="activity-button" onClick={() => setSyncPanelOpen(true)} title="S3 备份同步"><Cloud size={17} /></button>
         <button className="activity-button" onClick={() => setSettingsOpen(true)} title="偏好设置"><Settings2Icon size={17} /></button>
       </nav>
-      <Sidebar nodes={treeNodes} activeId={activeNoteId ?? mobileActive?.id ?? null} search={search} mobileOpen={mobileOpen} mode={sidebarMode} width={sidebarWidth} minWidth={SIDEBAR_MIN_WIDTH} maxWidth={SIDEBAR_MAX_WIDTH} onSearch={setSearch} onSelect={(id) => void (isMobile ? openNoteMobile(id) : openNote(id))} onCreate={(kind, parentId, title) => void createTreeItem(kind, parentId, title)} onRename={(id, title) => void renameTreeNode(id, title)} onMoveNode={(id, targetId, position) => void moveTreeNode(id, targetId, position)} onRequestDelete={(node) => setConfirmDelete(node)} pendingRenameId={pendingRenameId} onPendingRenameConsumed={() => setPendingRenameId(null)} onTogglePin={toggleSidebarPin} onCollapse={() => setSidebarMode("collapsed")} onResizeActiveChange={setSidebarResizing} onWidthChange={updateSidebarWidth} onWidthCommit={commitSidebarWidth} onCloseMobile={() => setMobileOpen(false)} />
+      <Sidebar nodes={treeNodes} activeId={activeNoteId ?? mobileActive?.id ?? null} search={search} mobileOpen={mobileOpen} mode={sidebarMode} width={sidebarWidth} minWidth={SIDEBAR_MIN_WIDTH} maxWidth={SIDEBAR_MAX_WIDTH} onSearch={setSearch} onSelect={(id) => void (isMobile ? openNoteMobile(id) : openNote(id))} onCreate={(kind, parentId, title) => void createTreeItem(kind, parentId, title)} onRename={(id, title) => void renameTreeNode(id, title)} onMoveNode={(id, targetId, position) => void moveTreeNode(id, targetId, position)} onRequestDelete={(node) => setConfirmDelete(node)} pendingRenameId={pendingRenameId} onPendingRenameConsumed={() => setPendingRenameId(null)} onPreviewEnter={showSidebarPreview} onPreviewLeave={hideSidebarPreview} onResizeActiveChange={setSidebarResizing} onWidthChange={updateSidebarWidth} onWidthCommit={commitSidebarWidth} onCloseMobile={() => setMobileOpen(false)} />
       {mobileOpen && <div className="mobile-scrim" onClick={() => setMobileOpen(false)} />}
       <main className="workspace" onPointerDownCapture={(event) => {
         if (!isMobile && sidebarMode === "floating" && (event.target as HTMLElement).closest(".document-pane, .empty-workspace")) setSidebarMode("collapsed");
@@ -506,8 +518,7 @@ export function App() {
           {notice && <span className="statusbar-notice">{notice}</span>}
           <button className="statusbar-export-md" onClick={() => void exportMarkdown()} title="导出当前笔记为 Markdown（复制到剪贴板）"><FileDown size={13} /> MD</button>
           <span className={`save-label ${saveState}`}>{saveState === "saving" ? <LoaderCircle className="spin" size={12} /> : saveState === "dirty" ? <WifiOff size={12} /> : <Save size={12} />}{saveLabel(saveState)}</span>
-          <button className="sync-button" onClick={() => setSyncPanelOpen(true)} title="S3 备份同步"><Cloud size={14} />{sync.message}</button>
-          <button className="statusbar-settings" onClick={() => setSettingsOpen(true)} title="偏好设置"><Settings2Icon size={13} /></button>
+          <span className={`statusbar-sync ${sync.phase}`} title="S3 同步状态"><Cloud size={12} />{sync.message}</span>
         </footer>
       </main>
       {confirmDelete && <ConfirmDelete node={confirmDelete} onConfirm={() => { const id = confirmDelete.id; setConfirmDelete(null); void deleteTreeNode(id); }} onCancel={() => setConfirmDelete(null)} />}
