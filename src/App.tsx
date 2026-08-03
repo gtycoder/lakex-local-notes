@@ -102,6 +102,7 @@ export function App() {
         // 期间有新编辑：不覆盖草稿、不清除 dirty（磁盘为旧内容，等待下一次保存）
         setSaveState("dirty");
       }
+      return saved;
     } catch (reason) {
       const msg = String(reason);
       if (msg.includes("NotFound") || msg.includes("not found")) return;
@@ -316,16 +317,27 @@ export function App() {
     });
   }
 
+  /** 审计 #8：移动端保存成功后同步 mobileActive/草稿，viewer 不再显示旧快照，
+   * 离开时也不会因"仍有差异"而重复保存 */
+  async function persistMobile(active: NoteDocument) {
+    const saved = await persistTab(active.id, mobileDraftTitle, mobileDraftContent);
+    if (saved) {
+      setMobileActive(saved);
+      setMobileDraftTitle(saved.title);
+      setMobileDraftContent(saved.content);
+    }
+  }
+
   async function leaveMobileDocument() {
     if (mobileActive && mobileDraftContent !== mobileActive.content) {
-      await persistTab(mobileActive.id, mobileDraftTitle, mobileDraftContent);
+      await persistMobile(mobileActive);
     }
     setMobileEditing(false); setMobileTocOpen(false); setMobileOpen(false); setMobilePage("library");
   }
 
   async function finishMobileEditing() {
     if (mobileActive && mobileDraftContent !== mobileActive.content) {
-      await persistTab(mobileActive.id, mobileDraftTitle, mobileDraftContent);
+      await persistMobile(mobileActive);
     }
     setMobileEditing(false);
   }

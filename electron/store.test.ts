@@ -407,3 +407,50 @@ describe("审计修复回归（#2/#3/#12/#17/#18）", () => {
     expect(() => store.readNote("../x")).toThrowError(/笔记不存在/);
   });
 });
+
+describe("孤儿登记对账（写时登记/保存对账 + 导入对账）", () => {
+  it("uploadResource 写盘即登记孤儿；保存引用后撤销，不再引用重新登记", () => {
+    const { id } = makeNote();
+    const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==", "base64");
+    const out = store.uploadResource({ bytes: [...png], filename: "hello.png" }, id);
+    // 写盘瞬间已登记孤儿（正文尚未引用）——杜绝未登记就被同步上传的窄窗口
+    expect(store.listOrphanAssets().some((o) => o.noteId === id && o.filename === out.filename)).toBe(true);
+    // 保存时正文引用 → 撤销孤儿
+    store.saveNote(id, "t", `<p>引用 <img src="${out.url}"></p>`);
+    expect(store.listOrphanAssets().some((o) => o.noteId === id && o.filename === out.filename)).toBe(false);
+    // 不再引用 → 重新登记（回收站语义）
+    store.saveNote(id, "t", "<p>不再引用</p>");
+    expect(store.listOrphanAssets().some((o) => o.noteId === id && o.filename === out.filename)).toBe(true);
+  });
+
+  it("importRemoteNote 导入后按正文对账：远端已无的旧文件标记孤儿、被引用的撤销（#11）", () => {
+    const id = "import-reconcile";
+    const assetsDir = path.join(dir, "note-assets", id);
+    fs.mkdirSync(assetsDir, { recursive: true });
+    const keepName = "1785730251600_80768773.png";  // 匹配 referencedFilenames 模式
+    const staleName = "1785730251601_aaaa1111.png";
+    fs.writeFileSync(path.join(assetsDir, keepName), "keep");
+    fs.writeFileSync(path.join(assetsDir, staleName), "stale");
+    // 第一次导入：正文引用 keepName → keep 正常、stale 标记孤儿（远端已无）
+    store.importRemoteNote(
+      { id, title: "远端", parentId: null, sortOrder: 0, updatedAt: "2026-08-02T00:00:00.000Z", isConflict: false },
+      Buffer.from(`<p>引用 ${keepName}</p>`),
+      [{ filename: keepName, bytes: Buffer.from("keep") }]
+    );
+    let orphans = store.listOrphanAssets().filter((o) => o.noteId === id);
+    expect(orphans.some((o) => o.filename === staleName)).toBe(true);
+    expect(orphans.some((o) => o.filename === keepName)).toBe(false);
+    // 第二次导入：正文不再引用 keepName（远端集合缩小）→ keepName 也变孤儿
+    store.importRemoteNote(
+      { id, title: "远端2", parentId: null, sortOrder: 0, updatedAt: "2026-08-02T00:00:00.000Z", isConflict: false },
+      Buffer.from("<p>都不引用了</p>"),
+      []
+    );
+    orphans = store.listOrphanAssets().filter((o) => o.noteId === id);
+    expect(orphans.some((o) => o.filename === keepName)).toBe(true);
+    expect(orphans.some((o) => o.filename === staleName)).toBe(true);
+    // 文件仍在磁盘（回收站语义，不硬删）
+    expect(fs.existsSync(path.join(assetsDir, keepName))).toBe(true);
+    expect(fs.existsSync(path.join(assetsDir, staleName))).toBe(true);
+  });
+});

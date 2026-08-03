@@ -465,6 +465,20 @@ export class Store {
     return referenced;
   }
 
+  /** 写盘即登记孤儿（思源式"写时登记、保存时对账"）：
+   * 图片下载/插入落盘瞬间正文必然尚未引用它；先登记为孤儿，杜绝"未登记就被同步上传"
+   * 的窄窗口（S3 累积无用文件）。随后 saveNote 的 detectOrphans 会按正文引用撤销登记。 */
+  private registerOrphan(noteId: string, filename: string, size: number, mimeType: string): void {
+    try {
+      this.db.prepare(
+        `INSERT OR IGNORE INTO orphan_assets(note_id, filename, file_path, size, mime_type)
+         VALUES(?,?,?,?,?)`
+      ).run(noteId, filename, `note-assets/${noteId}/${filename}`, size, mimeType);
+    } catch (error) {
+      console.warn("[store] 孤儿登记失败（不影响主流程）:", error);
+    }
+  }
+
   private detectOrphans(noteId: string, content: string): void {
     const dir = this.noteAssetsDirFor(noteId);
     if (!fs.existsSync(dir)) return;
@@ -698,11 +712,23 @@ export class Store {
       if (!moved) { try { fs.rmSync(lakeTmp, { force: true }); } catch { /* 忽略 */ } }
       if (assetTmpDir && !moved) { try { fs.rmSync(assetTmpDir, { recursive: true, force: true }); } catch { /* 忽略 */ } }
     }
+    // 审计 #11：导入后按**正文引用**对账——远端资源集合缩小时，本地仍存在但正文不再
+    // 引用的旧文件标记为孤儿（保留在本地当回收站，不再上传，与远端保持一致）。
+    // 以正文为权威而非 manifest 列表，可自愈历史 #1 造成的 manifest 资源缺失
+    // （被引用的文件会被 unorphan 并重新进入同步）。
+    try {
+      this.detectOrphans(note.id, content.toString("utf8"));
+    } catch (error) {
+      console.warn("[store] 导入后孤儿对账失败（不影响导入）:", error);
+    }
   }
 
   uploadResource(input: { bytes: number[]; filename: string }, noteId: string): ResourceUploadOutput {
     const bytes = Buffer.from(input.bytes);
-    return imageOutput(bytes, input.filename, this.noteAssetsDirFor(noteId), this.assetUrl.bind(this, noteId));
+    const out = imageOutput(bytes, input.filename, this.noteAssetsDirFor(noteId), this.assetUrl.bind(this, noteId));
+    // 写盘即登记孤儿：插入瞬间正文尚未引用；saveNote 对账后撤销
+    this.registerOrphan(noteId, out.filename, out.size, out.mimeType);
+    return out;
   }
 
   async downloadRemoteResource(url: string, noteId: string): Promise<ResourceUploadOutput> {
@@ -747,7 +773,10 @@ export class Store {
             chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
           }
           const buf = Buffer.concat(chunks);
-          return imageOutput(buf, path.basename(new URL(normalized).pathname) || "image", assetsDir, this.assetUrl.bind(this, noteId));
+          const out = imageOutput(buf, path.basename(new URL(normalized).pathname) || "image", assetsDir, this.assetUrl.bind(this, noteId));
+          // 写盘即登记孤儿：下载落盘瞬间正文尚未引用；saveNote 对账后撤销
+          this.registerOrphan(noteId, out.filename, out.size, out.mimeType);
+          return out;
         } finally {
           request.abort(); // 流读完/出错后释放连接
         }

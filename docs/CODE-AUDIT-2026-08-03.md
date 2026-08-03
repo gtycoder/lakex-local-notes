@@ -567,10 +567,10 @@ parent 已改但 sortOrder 未更新的不一致树。建议合并为单个原�
 | 5 SSRF 可绕过 | 确认(高) | ✅ DNS 感知校验 + net.request 逐跳校验 + 移除渲染层回退 |
 | 6 IPC 来源过宽 + 无导航拦截 | 确认(高) | ✅ 精确 URL + webContents 白名单 + will-navigate/窗口拦截 |
 | 7 自动保存覆盖新编辑 | 确认(中偏高) | ✅ revision 保护 |
-| 8 移动端旧快照 | 确认(中低) | ⏸ 记录在案（磁盘正确，仅 viewer 陈旧 + 重复保存） |
+| 8 移动端旧快照 | 确认(中低) | ✅ persistMobile 同步 mobileActive/草稿 |
 | 9 树结构不变量 | 确认(中) | ✅ 类型不变量 + reorder 完整性校验 |
 | 10 FS 与 SQLite 非原子 | 确认(中/删除高) | ✅ 删除 DB-first + import staging |
-| 11 远端资源集合缩小不删本地旧文件 | 确认(中低) | ⏸ 未修（与 #1 联动缓解；需 staging 全量替换，成本高收益低） |
+| 11 远端资源集合缩小不删本地旧文件 | 确认(中低) | ✅ 导入后按正文引用对账标记孤儿（本地保留当回收站、不再上传） |
 | 12 孤儿删除失败仍报成功 | 确认(低) | ✅ 失败保留记录可重试 |
 | 13 Worker 崩溃后复用 | 降级(低) | ✅ terminate+替换 + 60s 超时 |
 | 14 附件/Data URL 无解码前上限 | 确认(中低) | ✅ 附件 25MiB + Data URL 解码前预检 |
@@ -584,5 +584,8 @@ parent 已改但 sortOrder 未更新的不一致树。建议合并为单个原�
 | 22 detectOrphans 事务外抛错 | 新增(低) | ✅ saveNote 隔离 |
 | 23 无 beforeunload 兜底 | 新增(低) | ✅ 脏标签阻止关闭 + 尽力 flush |
 
-**遗留（有意未修）**：#8（低，见上）、#11（中低，与 #1 修复联动缓解，staging 全量替换收益低）；
+**遗留（有意未修）**：S3 对象累积回收（GC）待立项（已同步图片删除后对象永久留存，需 manifest 墓碑 + 安全剪枝）；
 #15 中 refreshTocSidebar 的重试定时器未纳入统一清理（editor 销毁后最多空跑 8 次，有 try/catch 兜底）。
+
+> 补充（用户反馈后追加）：`uploadResource`/`downloadRemoteResource` 已改为**写盘即登记孤儿**（保存时按正文引用撤销），
+> 杜绝「未登记孤儿就被同步上传」导致的 S3 无用文件累积；`importRemoteNote` 导入后按正文引用对账（#11 修复）。
