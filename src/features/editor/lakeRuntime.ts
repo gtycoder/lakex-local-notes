@@ -407,10 +407,13 @@ function setupCardToolbarHoverBridge(host: HTMLElement): () => void {
     if (card) lastCard = card;
   };
 
-  // 拦截：卡片 → 工具栏上下文的真实 mouseleave
+  // 拦截：卡片 → 工具栏上下文的真实 mouseleave。
+  // 多 tab 隔离：document 捕获监听对所有实例生效，必须用 host.contains 限定只处理
+  // 本编辑器容器内的卡片事件——否则其他 tab 的实例也会拦截/干预本 tab 的工具栏行为
   const onMouseLeaveCapture = (event: MouseEvent): void => {
     if (!event.isTrusted) return;
     const target = event.target as Element | null;
+    if (!target || !host.contains(target)) return;
     if (target?.closest?.(CARD_SELECTOR) && isToolbarContext(event.relatedTarget as Element | null)) {
       event.stopImmediatePropagation();
     }

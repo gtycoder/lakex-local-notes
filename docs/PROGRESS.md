@@ -321,3 +321,22 @@
 - 实测定位「大文档图片裂 3.5s」根因：非网络/主线程/渲染，而是 Lake 卡片 UI 提交/hydration 调度（107 codeblock 卡片时）
 - 虚拟渲染收益：首图 88ms、滚动渐进、工具栏置顶、多标签滚动独立
 - 详细数据、补丁、遗留问题见上方「★ 最新交接」与 `VIRTUAL-RENDERING-TEST.md`
+
+### 多 Tab 隔离性评审（2026-08-03）
+
+**实测通过**（Playwright 双 tab）：
+- 内容隔离：各 tab 独立 editor host，切换时内容正确、隐藏 tab 内容保留
+- TOC 隔离：各 tab 独立 `.ne-toc-sidebar`（host 限定修复后无串扰）
+- 导出 MD：按当前活动 tab 的 editor 实例（editorsRef noteId → editor）
+- 设置全局一致：字号/段间距/TOC/工具栏 prefs 传给所有 EditorTab，切换同步重建
+- 关闭 tab：仅移除对应 host，不影响其他 tab
+
+**修复**：`setupCardToolbarHoverBridge` 的 `onMouseLeaveCapture` 补 host.contains 检查——
+document 捕获监听对所有实例生效，原先未限定 host，跨 tab 鼠标移动的极端场景下
+其他 tab 的实例会干预本 tab 的工具栏事件（理论风险，已修，与 onMouseOver 对齐）。
+
+**已知备注**：
+- 隐藏 tab 的 Lake 编辑器全量驻留内存（display:none 仍初始化，多标签即时切换的设计使然，最多 8 个）
+- `resolveScrollNode` 的全局回退分支（`document.querySelector(scrollContainerSelector)`）仅
+  scrollNode 缺失时触发，正常路径每实例传各自 host，无影响
+- 移动端 MD 导出依赖 viewer 实例的 getDocument（未验证，移动端低频使用，后续确认）
