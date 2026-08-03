@@ -7,6 +7,12 @@ import { testConnection, syncNow } from "./sync.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const isDev = !app.isPackaged;
+
+// 开发版与打包版隔离 userData：dev 用 lake-notes-dev（空库+种子），打包版用
+// lake-notes-electron（正式数据），避免测试数据互相污染。必须在 app ready 前设置。
+if (isDev) {
+  app.setPath("userData", path.join(app.getPath("appData"), "lake-notes-dev"));
+}
 const DEV_SERVER_URL = "http://127.0.0.1:1421";
 
 let store: Store;

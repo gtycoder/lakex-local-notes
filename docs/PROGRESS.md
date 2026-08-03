@@ -179,25 +179,26 @@
 ### 当前问题 / 已知限制
 
 1. **应用未签名、未公证**：dmg 首次打开需右键 → 打开；分发前需 Developer ID 签名 + 公证
-2. **默认 Electron 图标**：尚无应用图标
-3. **打包版与开发版共用 userData**（`lake-notes-electron`）：正式发布需决策是否用 productName 隔离
+   （教程见 `docs/RELEASE.md`，账号/证书认证工作由用户在 Apple Developer 侧完成）
+2. ~~默认 Electron 图标~~ ✅ 已加：`build/icon.icns`（湖蓝渐变 + 文档页 + 波浪，程序化设计，含全尺寸）
+3. ~~打包版与开发版共用 userData~~ ✅ 已隔离：dev 用 `lake-notes-dev`，打包版用 `lake-notes-electron`（main.ts）
 4. **渲染包超大（已部分优化）**：画板已拆独立 chunk（drawnix 4.2MB），主 chunk 仍约 9.4MB
    （Lake 编辑器本体 + slate + react）；真正收益需编辑器懒加载（属 Lake 阶段，未动）
-5. **远程仓库默认分支仍是 main（tauri）**：Gitee 后台可把默认分支切到 master
+5. ~~远程仓库默认分支仍是 main~~ ✅ 已切换：Gitee 默认分支 = master，main 已设为保护分支
 6. **表格 max-view 进出后工具栏定位偏移 ~28px**（重开自愈，不影响使用；Lake boundary
    popover 在 max-view 切换后的既有行为，非 hover 桥引起）
 7. **移动端/单编辑器路径未回归**：`resolveScrollNode` 仅 `.lake-editor-tab` 启用内部滚动；
-   移动端仍走外层 `.document-pane`，TOC 固定/跟随未验证
+   移动端仍走外层 `.document-pane`，TOC 固定/跟随未验证（待移动端阶段一并做）
 8. **npm 私有镜像不可达**：装新依赖必须显式用 npmmirror registry
 
 ### 下一步计划（建议顺序）
 
-1. **发布完善**：应用图标（icns）→ 代码签名 + 公证 → 重新打包；Gitee 默认分支切到 master
-2. **移动端/单编辑器路径回归**（scrollNode 回退分支 + TOC）
-3. **安卓端同步**：复用同步协议（manifests/objects/assets 布局已是跨端设计）
-4. **userData 隔离决策**（若正式分发）
-5. 渲染包优化（编辑器懒加载，属 Lake 阶段）
-6. （可选）max-view 后工具栏定位偏移修复
+1. **发布完善（进行中）**：图标 ✅ 已加；代码签名 + 公证 + 重新打包由用户按 `docs/RELEASE.md` 推进（需 Apple 认证）
+2. **移动端/单编辑器路径回归**（scrollNode 回退分支 + TOC）：待移动端阶段一并做
+3. **安卓端同步**：复用同步协议（manifests/objects/assets 布局已是跨端设计）；独立开发阶段
+4. ~~userData 隔离~~ ✅ 已完成（dev= lake-notes-dev / 打包= lake-notes-electron）
+5. 渲染包优化（编辑器懒加载，属 Lake 阶段）；后续随 Lake 优化一起做
+6. （可选）max-view 后工具栏定位偏移修复（用户已确认可做，待深入 Lake 内部定位）
 
 ### 本会话踩过的坑（速览，细节见 TROUBLESHOOTING.md）
 

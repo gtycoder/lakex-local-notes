@@ -60,13 +60,15 @@
       "target": [
         "dmg",
         "zip"
-      ]
+      ],
+      "icon": "build/icon.icns"
     },
     "directories": {
       "output": "release"
     },
     "asarUnpack": [
       "electron/preload.cjs"
-    ]
+    ],
+    "icon": "build/icon.png"
   }
 }
