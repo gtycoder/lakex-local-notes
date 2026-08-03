@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ArrowLeft, Check, Cloud, Files, ListTree, LoaderCircle, Pencil, Save, Settings as Settings2Icon, WifiOff } from "lucide-react";
+import { ArrowLeft, Check, Cloud, FileDown, Files, ListTree, LoaderCircle, Pencil, Save, Settings as Settings2Icon, WifiOff } from "lucide-react";
 import { MobileLibrary } from "./components/MobileLibrary";
 import { ConfirmDelete, Sidebar } from "./components/Sidebar";
 import { SyncPanel } from "./components/SyncPanel";
 import { LakeEditor } from "./features/editor/LakeEditor";
+import type { LakeEditorInstance } from "./features/editor/lakeRuntime";
 import { MultiTabEditor, type TabInfo } from "./features/editor/MultiTabEditor";
 import { isDesktop, native } from "./lib/native";
 import { loadSettings, saveSettings, subscribeSettings, type AppSettings } from "./lib/settings";
@@ -50,6 +51,10 @@ export function App() {
   const [error, setError] = useState<string | null>(null);
   const openTabsRef = useRef<OpenTab[]>([]);
   const saveTimers = useRef<Map<string, number>>(new Map());
+  // 已就绪的编辑器实例（noteId → editor），供导出 md 等场景使用
+  const editorsRef = useRef<Map<string, LakeEditorInstance>>(new Map());
+  const [notice, setNotice] = useState<string | null>(null);
+  const noticeTimer = useRef<number | null>(null);
   // 审计 #7：每篇笔记的编辑 revision——保存请求发出后若有新编辑（revision 增长），
   // 旧响应不得覆盖最新草稿/清除 dirty
   const revisionRef = useRef<Map<string, number>>(new Map());
@@ -210,6 +215,34 @@ export function App() {
     setOpenTabs((tabs) => tabs.filter((t) => t.noteId !== noteId));
     if (nextActiveId !== null) setActiveNoteId(nextActiveId);
   }
+
+  const showNotice = useCallback((text: string) => {
+    setNotice(text);
+    if (noticeTimer.current !== null) window.clearTimeout(noticeTimer.current);
+    noticeTimer.current = window.setTimeout(() => setNotice(null), 2200);
+  }, []);
+
+  /** 编辑器实例就绪回调：注册到 map，销毁时移除 */
+  const handleEditorReady = useCallback((noteId: string, editor: LakeEditorInstance | null) => {
+    if (editor) editorsRef.current.set(noteId, editor);
+    else editorsRef.current.delete(noteId);
+  }, []);
+
+  /** 全文导出 Markdown：Lake 内核原生支持（getDocument("text/markdown")），复制到剪贴板 */
+  const exportMarkdown = useCallback(async () => {
+    const id = activeNoteId ?? mobileActive?.id ?? null;
+    if (!id) { showNotice("没有打开的笔记"); return; }
+    const editor = editorsRef.current.get(id);
+    if (!editor || typeof (editor as any).getDocument !== "function") { showNotice("编辑器未就绪，请稍后再试"); return; }
+    try {
+      const md = String((editor as any).getDocument("text/markdown"));
+      if (!md.trim()) { showNotice("当前笔记内容为空"); return; }
+      await navigator.clipboard.writeText(md);
+      showNotice("已复制 Markdown（" + md.length + " 字符）");
+    } catch (reason) {
+      setError("导出 Markdown 失败: " + (reason instanceof Error ? reason.message : String(reason)));
+    }
+  }, [activeNoteId, mobileActive, showNotice]);
 
   const handleContentChange = useCallback((noteId: string, content: string) => {
     revisionRef.current.set(noteId, (revisionRef.current.get(noteId) ?? 0) + 1);
@@ -396,7 +429,7 @@ export function App() {
         {error && <div className="error-banner"><span>{error}</span><button onClick={() => setError(null)}>关闭</button></div>}
         {isMobile ? (
           mobileActive ? <section className={`document-pane ${wideMode ? "wide-mode" : ""} ${settings.paragraphSpacing ? "paragraph-spacing" : ""}`}>
-            <LakeEditor noteId={mobileActive.id} content={mobileEditing ? mobileDraftContent : mobileActive.content} mode={mobileEditing ? "editor" : "viewer"} tocEnabled={mobileTocOpen} onChange={(content) => setMobileDraftContent(content)} prefs={editorPrefs} />
+            <LakeEditor noteId={mobileActive.id} content={mobileEditing ? mobileDraftContent : mobileActive.content} mode={mobileEditing ? "editor" : "viewer"} tocEnabled={mobileTocOpen} onChange={(content) => setMobileDraftContent(content)} prefs={editorPrefs} onEditorReady={handleEditorReady} />
             {!mobileEditing && <nav className="mobile-reader-actions">
               <button onClick={() => setMobileEditing(true)}><Pencil size={20} /><span>编辑</span></button>
               <button className={mobileTocOpen ? "selected" : ""} onClick={() => setMobileTocOpen((open) => !open)}><ListTree size={21} /><span>大纲</span></button>
@@ -413,12 +446,15 @@ export function App() {
               onTabClose={closeTab}
               onContentChange={handleContentChange}
               prefs={editorPrefs}
+              onEditorReady={handleEditorReady}
             />
           </section> : <section className="empty-workspace"><h2>开始写第一篇笔记</h2><button className="primary-button" onClick={() => void createNote()}>新建文档</button></section>
         )}
         <footer className="statusbar">
           <span>{isDesktop() ? "Electron 本地仓库" : "浏览器演示仓库"}</span>
           <span className="statusbar-wordcount" title="当前文档字数">{wordCountLabel}</span>
+          {notice && <span className="statusbar-notice">{notice}</span>}
+          <button className="statusbar-export-md" onClick={() => void exportMarkdown()} title="导出当前笔记为 Markdown（复制到剪贴板）"><FileDown size={13} /> MD</button>
           <span className={`save-label ${saveState}`}>{saveState === "saving" ? <LoaderCircle className="spin" size={12} /> : saveState === "dirty" ? <WifiOff size={12} /> : <Save size={12} />}{saveLabel(saveState)}</span>
           <button className="sync-button" onClick={() => setSyncPanelOpen(true)} title="S3 备份同步"><Cloud size={14} />{sync.message}</button>
           <button className="statusbar-settings" onClick={() => setSettingsOpen(true)} title="偏好设置"><Settings2Icon size={13} /></button>

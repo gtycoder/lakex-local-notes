@@ -18,6 +18,7 @@ interface MultiTabEditorProps {
   onTabClose: (noteId: string) => void;
   onContentChange: (noteId: string, content: string) => void;
   prefs?: LakeEditorPrefs;
+  onEditorReady?: (noteId: string, editor: import("./lakeRuntime").LakeEditorInstance | null) => void;
 }
 
 const MAX_TABS = 8;
@@ -30,6 +31,7 @@ export function MultiTabEditor({
   onTabClose,
   onContentChange,
   prefs,
+  onEditorReady,
 }: MultiTabEditorProps) {
   const contentCache = useRef<Map<string, string>>(new Map());
 
@@ -92,6 +94,7 @@ export function MultiTabEditor({
             tocEnabled={tocEnabled}
             onChange={(content) => handleChange(tab.noteId, content)}
             prefs={prefs}
+            onEditorReady={onEditorReady}
           />
         ))}
       </div>

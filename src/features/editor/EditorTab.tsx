@@ -9,13 +9,17 @@ export interface EditorTabProps {
   tocEnabled: boolean;
   onChange: (content: string) => void;
   prefs?: LakeEditorPrefs;
+  /** 编辑器实例就绪回调（导出 md 等需要访问 editor 实例的场景） */
+  onEditorReady?: (noteId: string, editor: LakeEditorInstance | null) => void;
 }
 
-export function EditorTab({ noteId, content, visible, tocEnabled, onChange, prefs }: EditorTabProps) {
+export function EditorTab({ noteId, content, visible, tocEnabled, onChange, prefs, onEditorReady }: EditorTabProps) {
   const hostRef = useRef<HTMLDivElement>(null);
   const editorRef = useRef<LakeEditorInstance | null>(null);
   const onChangeRef = useRef(onChange);
+  const onEditorReadyRef = useRef(onEditorReady);
   onChangeRef.current = onChange;
+  onEditorReadyRef.current = onEditorReady;
 
   useEffect(() => {
     const host = hostRef.current;
@@ -59,6 +63,7 @@ export function EditorTab({ noteId, content, visible, tocEnabled, onChange, pref
       setTimeout(() => refreshTocSidebar(editor, host), 0);
       setting = false;
       editorRef.current = editor;
+      onEditorReadyRef.current?.(noteId, editor);
     } catch (reason) {
       console.error("Failed to create editor for tab", noteId, reason);
     } finally {
@@ -71,6 +76,7 @@ export function EditorTab({ noteId, content, visible, tocEnabled, onChange, pref
     return () => {
       host.removeEventListener("copy", copyHandler, true);
       host.removeEventListener("paste", pasteHandler, true);
+      onEditorReadyRef.current?.(noteId, null);
       destroyLakeEditor(editor);
       editorRef.current = null;
       host.replaceChildren();

@@ -10,14 +10,17 @@ interface LakeEditorProps {
   tocEnabled: boolean;
   onChange: (content: string) => void;
   prefs?: LakeEditorPrefs;
+  onEditorReady?: (noteId: string, editor: LakeEditorInstance | null) => void;
 }
 
-export function LakeEditor({ noteId, content, mode = "editor", tocEnabled, onChange, prefs }: LakeEditorProps) {
+export function LakeEditor({ noteId, content, mode = "editor", tocEnabled, onChange, prefs, onEditorReady }: LakeEditorProps) {
   const hostRef = useRef<HTMLDivElement>(null);
   const editorRef = useRef<LakeEditorInstance | null>(null);
   const onChangeRef = useRef(onChange);
+  const onEditorReadyRef = useRef(onEditorReady);
   const [error, setError] = useState<string | null>(null);
   onChangeRef.current = onChange;
+  onEditorReadyRef.current = onEditorReady;
 
   useEffect(() => {
     const host = hostRef.current;
@@ -57,6 +60,7 @@ export function LakeEditor({ noteId, content, mode = "editor", tocEnabled, onCha
       setTimeout(() => refreshTocSidebar(editor), 0);
       setting = false;
       editorRef.current = editor;
+      onEditorReadyRef.current?.(noteId, editor);
       setError(null);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : String(reason));
@@ -64,6 +68,7 @@ export function LakeEditor({ noteId, content, mode = "editor", tocEnabled, onCha
     return () => {
       host.removeEventListener("copy", copyRichSelection, true);
       host.removeEventListener("paste", pasteHandler, true);
+      onEditorReadyRef.current?.(noteId, null);
       destroyLakeEditor(editor);
       editorRef.current = null;
       host.replaceChildren();
