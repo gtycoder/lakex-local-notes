@@ -4,6 +4,42 @@
 
 ---
 
+## ★ 最新交接（2026-08-04）：小记 V1（独立时间线、转换与同步）✅
+
+> 状态：开发分支 `feat/quick-notes`，工作区改动**尚未提交**。完整规格见 [QUICK-NOTES-SPEC.md](./QUICK-NOTES-SPEC.md)。
+
+### 已完成
+
+- 桌面活动栏新增“小记”入口；小记工作台使用独立 React 卡片和 textarea，**没有修改或复用 Lake 编辑器内核**。
+- 验收细节已修正：活动栏“小记”入口采用 `Feather`（羽毛）图标；卡片“编辑小记”采用 `Pencil`（铅笔）图标，避免与手动“记下”的保存语义混淆。
+- 小记工作台补齐独立的桌面标题栏拖拽层；因为该页不渲染 Lake 标签栏，不能依赖标签栏提供 macOS `hiddenInset` 窗口拖拽区域。
+- 转换文本时每一个物理换行生成独立 Lake 段落（空行生成空段落），不再序列化为同一段中的 `<br />`；因此在 Lake 中再切换为有序/无序列表时，每行会成为独立列表项。
+- 已实现无标题、多行纯文本、图片（PNG/JPEG/GIF/WebP/AVIF）、图片拖放/粘贴/选择、手动“记下”、原地编辑、删除与 5 秒撤销。
+- 未保存内容不自动保存；离开小记工作台、取消草稿与关闭窗口都会确认，确认后丢弃 staging 草稿。
+- 独立本地空间：`quick-notes/metadata.sqlite3`、`items/*.qnote`、`assets/`、`staging/`；不写入 Lake 的 SQLite、`.lake`、`note-assets` 或搜索空间。
+- 已实现小记 → Lake 的单向转换：选择笔记本、固定标题 `未命名文档 · YYYY-MM-DD HH:mm`、创建于笔记本顶部、自动打开目标文档并移除源卡片。
+- `Store.createNoteInAtTopWithContent()` 已作为通用目录排序底层能力落地：同父级 `notes/tree_nodes` 排序在同一 SQLite 事务中同步后移，普通新建仍默认追加到底部。
+- 转换使用 journal 跨越两套 SQLite：图片先**复制**到 Lake 资源目录；目标创建并读取校验后才删除源小记。
+- S3 使用 `{prefix}/quick-notes/` 的独立 Manifest v1 / 对象 / 图片路径；主同步顺序为 Lake → 小记，小记失败不会使 Lake 成功变失败。
+- 已补充转换 tombstone 安全边界：目标 Lake 尚未成功同步时，源小记既不会被远端重新拉回，也不会从远端小记 Manifest 被提前遗漏；Lake 成功后才允许上传删除 tombstone。
+- 已将完整组合后的同步结果再次持久化，SyncPanel 重开后可显示小记同步状态或“Lake 已完成、小记失败”。
+
+### 验证
+
+- Vitest：`111/111` 通过（新增小记存储、转换、顶部排序、独立同步、删除 tombstone 与等待期保护覆盖）。
+- TypeScript：`npx tsc --noEmit` 通过。
+- Vite：`node node_modules/vite/bin/vite.js build` 通过。
+- `git diff --check` 通过。
+- 真实 Electron / Playwright：图文小记保存、卡片原地编辑、转为指定笔记本、目标文档顶部插入、Lake inline image 实际加载、编辑保存、重启持久化、源小记移除均通过；测试数据已从开发 userData 清理。
+
+### 继续工作时的注意事项
+
+1. 不要修改 `src/features/editor/LakeEditor.tsx`、`src/features/editor/EditorTab.tsx`、`src/features/editor/lakeRuntime.ts` 来实现小记。
+2. 不要把小记资源走普通 `/{noteId}/{filename}` 或 Lake Manifest v2；必须保留 `quick-notes/` 路由与 prefix 隔离。
+3. 不要为了“安全”把小记改为自动保存；产品决策是手动保存，放弃未保存内容可接受但需要确认。
+4. 真实 S3 凭据未在本轮重新跑；本轮对小记 S3 协议使用 mock 对象存储覆盖了上传、幂等、删除与转换等待期。若提供凭据，下一轮可补真实双端/冲突验收。
+5. V1 不做标签、统一搜索、富文本/列表/待办、附件、网页收藏与移动端入口，扩展前先更新规格。
+
 ## ★ 最新交接（2026-08-04）：多标签溢出与切换菜单 ✅
 
 ### 已完成

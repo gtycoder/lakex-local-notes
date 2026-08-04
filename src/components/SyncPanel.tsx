@@ -10,6 +10,7 @@ const PHASE_LABEL: Record<SyncProgress["phase"], string> = {
   download: "下载远端变更",
   upload: "上传本地变更",
   manifest: "写入清单",
+  "quick-notes": "同步小记",
   done: "同步完成",
 };
 
@@ -82,9 +83,14 @@ export function SyncPanel({ open, onClose, onSyncStatusChange }: SyncPanelProps)
       await native.saveS3Settings(settings);
       const result = await native.syncNow();
       setLastSync({ lastSyncedAt: result.completedAt, lastResult: result });
-      const resultMessage = `同步完成：上传 ${result.uploaded}，下载 ${result.downloaded}，冲突 ${result.conflicts}`;
+      const lakeMessage = `Lake：上传 ${result.uploaded}，下载 ${result.downloaded}，冲突 ${result.conflicts}`;
+      const quickMessage = result.quickNotes?.error
+        ? `；小记同步失败（Lake 已完成）`
+        : result.quickNotes ? `；小记：上传 ${result.quickNotes.uploaded}，下载 ${result.quickNotes.downloaded}，冲突 ${result.quickNotes.conflicts}` : "";
+      const resultMessage = `同步完成：${lakeMessage}${quickMessage}`;
       setMessage(resultMessage);
-      setStatus("ok");
+      // 小记失败是独立空间的局部错误；Lake 同步仍应明确展示成功。
+      setStatus(result.quickNotes?.error ? "error" : "ok");
       onSyncStatusChange?.({ phase: "success", message: resultMessage });
     } catch (error) {
       const errorMessage = String(error);

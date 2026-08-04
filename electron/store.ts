@@ -50,6 +50,12 @@ interface RemoteAsset {
   filename: string; size: number; hash: string;
 }
 
+/** 仅供主进程内部的小记转换调用。sourcePath 绝不来自渲染进程。 */
+export interface ImportedNoteAsset {
+  filename: string;
+  sourcePath: string;
+}
+
 function nowIso(): string {
   return new Date().toISOString();
 }
@@ -246,22 +252,92 @@ export class Store {
   }
 
   createNoteIn(parentId: string | null, title: string): NoteDocument {
+    const id = uuid();
+    return this.createNoteInWithContent(parentId, title, `<p id="${id}-body" class="ne-p"><br></p>`, [], id, "bottom");
+  }
+
+  /**
+   * 在指定目录的顶部创建正式笔记。它是目录排序的底层通用能力：未来普通“新建文档”
+   * 也可选择 top / bottom；小记转换仅是第一个使用者。
+   *
+   * sourcePath 只允许由主进程内部传入，先复制并验证目标资源，再写入元数据。若进程
+   * 在跨空间转换中断，调用方的 conversion journal 会负责识别并清理未登记的目标文件。
+   */
+  createNoteInAtTopWithContent(parentId: string, title: string, content: string, assets: ImportedNoteAsset[], id = uuid()): NoteDocument {
+    return this.createNoteInWithContent(parentId, title, content, assets, id, "top");
+  }
+
+  private createNoteInWithContent(
+    parentId: string | null,
+    title: string,
+    content: string,
+    assets: ImportedNoteAsset[],
+    id: string,
+    position: "top" | "bottom",
+  ): NoteDocument {
     const parent = parentId ?? DEFAULT_NOTEBOOK_ID;
     this.ensureParent(parent);
     this.assertParentCompatible(parent, "note");
-    const id = uuid();
+    if (!isSafePathSegment(id)) throw new AppError("InvalidInput", `无效的笔记 ID: ${id}`);
+    const normalizedTitle = title.trim() || "无标题文档";
     const updatedAt = nowIso();
-    const sortOrder = this.nextSortOrder(parent);
-    const content = `<p id="${id}-body" class="ne-p"><br></p>`;
-    const tx = this.db.transaction(() => {
-      this.db.prepare("INSERT INTO notes(id,title,parent_id,sort_order,updated_at,sync_state) VALUES(?,?,?,?,?,'local')")
-        .run(id, title, parent, sortOrder, updatedAt);
-      this.db.prepare("INSERT INTO tree_nodes(id,workspace_id,parent_id,node_type,title,note_file_id,sort_order,created_at,updated_at,sync_state,is_conflict) VALUES(?,?,?,'note',?,?,?,?,?,'local',0)")
-        .run(id, DEFAULT_WORKSPACE_ID, parent, title, id, sortOrder, updatedAt, updatedAt);
-      this.atomicWrite(this.notePath(id), content);
-    });
-    tx();
-    return { id, title, parentId: parent, sortOrder, updatedAt, syncState: "local", isConflict: false, content };
+    const sortOrder = position === "top" ? 0 : this.nextSortOrder(parent);
+    const targetAssetsDir = this.noteAssetsDirFor(id);
+    const targetNotePath = this.notePath(id);
+
+    // 资源副本先完整落盘；任何失败都在写数据库前回收，保证源小记绝不被影响。
+    try {
+      if (assets.length > 0) fs.mkdirSync(targetAssetsDir, { recursive: true });
+      for (const asset of assets) {
+        if (!isSafePathSegment(asset.filename)) throw new AppError("InvalidInput", `无效的资源文件名: ${asset.filename}`);
+        if (!fs.existsSync(asset.sourcePath) || !fs.statSync(asset.sourcePath).isFile()) {
+          throw new AppError("NotFound", `转换资源不存在: ${asset.filename}`);
+        }
+        const destination = path.join(targetAssetsDir, asset.filename);
+        if (fs.existsSync(destination)) throw new AppError("InvalidInput", `目标资源重名: ${asset.filename}`);
+        const temporary = `${destination}.tmp-${process.pid}`;
+        fs.copyFileSync(asset.sourcePath, temporary);
+        fs.renameSync(temporary, destination);
+      }
+      this.atomicWrite(targetNotePath, content);
+      const tx = this.db.transaction(() => {
+        if (position === "top") {
+          // 同一事务内挪开所有同级节点和笔记元数据，避免排序重叠与 IPC 中断窗口。
+          this.db.prepare("UPDATE tree_nodes SET sort_order=sort_order+1,updated_at=?,sync_state='local' WHERE workspace_id=? AND parent_id=? AND deleted_at IS NULL")
+            .run(updatedAt, DEFAULT_WORKSPACE_ID, parent);
+          this.db.prepare("UPDATE notes SET sort_order=sort_order+1,updated_at=?,sync_state='local' WHERE parent_id=? AND deleted_at IS NULL")
+            .run(updatedAt, parent);
+        }
+        this.db.prepare("INSERT INTO notes(id,title,parent_id,sort_order,updated_at,sync_state) VALUES(?,?,?,?,?,'local')")
+          .run(id, normalizedTitle, parent, sortOrder, updatedAt);
+        this.db.prepare("INSERT INTO tree_nodes(id,workspace_id,parent_id,node_type,title,note_file_id,sort_order,created_at,updated_at,sync_state,is_conflict) VALUES(?,?,?,'note',?,?,?,?,?,'local',0)")
+          .run(id, DEFAULT_WORKSPACE_ID, parent, normalizedTitle, id, sortOrder, updatedAt, updatedAt);
+      });
+      tx();
+    } catch (error) {
+      // 本地原子性边界：元数据未成功时回收目标半成品；若元数据已成功，绝不误删。
+      const exists = this.db.prepare("SELECT 1 FROM notes WHERE id=?").get(id);
+      if (!exists) {
+        try { fs.rmSync(targetNotePath, { force: true }); } catch { /* best effort */ }
+        try { fs.rmSync(targetAssetsDir, { force: true, recursive: true }); } catch { /* best effort */ }
+      }
+      throw error;
+    }
+    return { id, title: normalizedTitle, parentId: parent, sortOrder, updatedAt, syncState: "local", isConflict: false, content };
+  }
+
+  /** conversion journal 崩溃恢复使用：仅删除没有元数据登记的目标残留。 */
+  removeUntrackedNoteArtifacts(id: string): void {
+    if (!isSafePathSegment(id)) return;
+    const exists = this.db.prepare("SELECT 1 FROM notes WHERE id=? AND deleted_at IS NULL").get(id);
+    if (exists) return;
+    try { fs.rmSync(this.notePath(id), { force: true }); } catch { /* best effort */ }
+    try { fs.rmSync(this.noteAssetsDirFor(id), { force: true, recursive: true }); } catch { /* best effort */ }
+  }
+
+  hasNote(id: string): boolean {
+    if (!isSafePathSegment(id)) return false;
+    return !!this.db.prepare("SELECT 1 FROM notes WHERE id=? AND deleted_at IS NULL").get(id);
   }
 
   createNotebook(title: string): TreeNode {

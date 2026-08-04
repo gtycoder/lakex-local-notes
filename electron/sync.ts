@@ -10,7 +10,7 @@ import {
 import type { Store } from "./store.js";
 
 // ===== 类型 =====
-interface S3Settings {
+export interface S3Settings {
   endpoint: string; region: string; bucket: string; prefix: string;
   accessKeyId: string; secretAccessKey: string; forcePathStyle: boolean;
 }
@@ -28,14 +28,22 @@ interface Manifest {
   notes: ManifestNote[];
 }
 
+export interface QuickNotesSyncStatus {
+  uploaded: number; downloaded: number; conflicts: number;
+  completedAt: string;
+  error?: string;
+}
+
 export interface SyncResult {
   uploaded: number; downloaded: number; conflicts: number;
   manifestId: string; completedAt: string;
+  /** 小记是独立同步空间，失败不会否定 Lake 文档本身的同步结果。 */
+  quickNotes?: QuickNotesSyncStatus;
 }
 
 /** 同步进度事件（主进程 → 渲染进程） */
 export interface SyncProgress {
-  phase: "connect" | "download" | "upload" | "manifest" | "done";
+  phase: "connect" | "download" | "upload" | "manifest" | "quick-notes" | "done";
   current?: number;
   total?: number;
   message: string;
@@ -44,7 +52,7 @@ export interface SyncProgress {
 const MANIFEST_VERSION = 2;
 
 // ===== ObjectStore：S3 兼容客户端（七牛云等） =====
-class ObjectStore {
+export class ObjectStore {
   private client: S3Client;
   private bucket: string;
   private prefix: string;
@@ -108,7 +116,7 @@ class ObjectStore {
 export async function testConnection(store: Store): Promise<string> {
   const settings = store.getS3Settings();
   if (!settings) throw new Error("请先保存 S3 配置");
-  validate(settings);
+  validateS3Settings(settings);
   const remote = new ObjectStore(settings);
   await remote.test();
   return "连接成功，Bucket 可访问";
@@ -117,7 +125,7 @@ export async function testConnection(store: Store): Promise<string> {
 export async function syncNow(store: Store, onProgress?: (p: SyncProgress) => void): Promise<SyncResult> {
   const settings = store.getS3Settings();
   if (!settings) throw new Error("请先保存 S3 配置");
-  validate(settings);
+  validateS3Settings(settings);
   const remote = new ObjectStore(settings);
   const report = (p: SyncProgress) => { try { onProgress?.(p); } catch { /* 渲染层已关闭 */ } };
   report({ phase: "connect", message: "正在连接 S3..." });
@@ -323,7 +331,7 @@ function normalizeEndpoint(endpoint: string): string {
   return (scheme + rest).replace(/\/+$/, "");
 }
 
-function validate(settings: S3Settings): void {
+export function validateS3Settings(settings: S3Settings): void {
   if (!settings.endpoint.trim() || !settings.bucket.trim() || !settings.accessKeyId.trim() || !settings.secretAccessKey.trim()) {
     throw new Error("Endpoint、Bucket 和访问密钥均不能为空");
   }
@@ -344,11 +352,11 @@ function isNoSuchKey(error: unknown): boolean {
   return name === "NoSuchKey" || message.includes("NoSuchKey") || message.includes("404");
 }
 
-function sha256Hex(bytes: Buffer): string {
+export function sha256Hex(bytes: Buffer): string {
   return crypto.createHash("sha256").update(bytes).digest("hex");
 }
 
-function mimeTypeFor(filename: string): string {
+export function mimeTypeFor(filename: string): string {
   const ext = path.extname(filename).toLowerCase();
   const map: Record<string, string> = {
     ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
@@ -391,6 +399,6 @@ function validateManifest(manifest: unknown): asserts manifest is Manifest {
 }
 
 /** 安全单路径段：拒绝空、./.. 以及含 / 或 \\ 的字符串（防目录穿越） */
-function isSafeSegment(segment: string): boolean {
+export function isSafeSegment(segment: string): boolean {
   return segment.length > 0 && segment !== "." && segment !== ".." && !segment.includes("/") && !segment.includes("\\");
 }

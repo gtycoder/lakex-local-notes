@@ -26,6 +26,14 @@ contextBridge.exposeInMainWorld("lakeNative", {
   testS3Connection: () => invoke("test_s3_connection"),
   syncNow: () => invoke("sync_now"),
   getSyncStatus: () => invoke("get_sync_status"),
+  listQuickNotes: () => invoke("list_quick_notes"),
+  createQuickNote: (input) => invoke("create_quick_note", input),
+  updateQuickNote: (id, input) => invoke("update_quick_note", id, input),
+  deleteQuickNote: (id) => invoke("delete_quick_note", id),
+  stageQuickNoteImage: (draftId, input) => invoke("stage_quick_note_image", draftId, input),
+  discardQuickNoteDraft: (draftId) => invoke("discard_quick_note_draft", draftId),
+  discardStagedQuickNoteImage: (draftId, imageId) => invoke("discard_staged_quick_note_image", draftId, imageId),
+  convertQuickNote: (quickNoteId, notebookId) => invoke("convert_quick_note", quickNoteId, notebookId),
   onSyncProgress: (callback) => {
     const listener = (_event, progress) => callback(progress);
     ipcRenderer.on("sync-progress", listener);

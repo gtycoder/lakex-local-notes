@@ -48,8 +48,9 @@ function isSafeSegment(segment: string): boolean {
   return segment.length > 0 && segment !== "." && segment !== ".." && !segment.includes("/") && !segment.includes("\\");
 }
 
-export function startAssetServer(noteAssetsDir: string, vendorCdnDir: string): http.Server {
+export function startAssetServer(noteAssetsDir: string, vendorCdnDir: string, quickNotesDir?: string): http.Server {
   fs.mkdirSync(noteAssetsDir, { recursive: true });
+  if (quickNotesDir) fs.mkdirSync(quickNotesDir, { recursive: true });
 
   // 审计 #16：本地资源服务仅允许应用自身页面跨域读取（dev origin / file 页），
   // 拒绝任意网站的 CORS 读取（恶意网页无法 fetch 笔记图片）。非 CORS 请求（<img>/
@@ -94,14 +95,33 @@ export function startAssetServer(noteAssetsDir: string, vendorCdnDir: string): h
         fs.createReadStream(vendorFile).pipe(res);
         return;
       }
-      // 资源归一化后的 URL 格式：/{noteId}/{filename}
+      // 正式笔记资源：/{noteId}/{filename}
+      // 小记资源：/quick-notes/{quickNoteId}/{filename}
+      // 小记草稿资源：/quick-notes/staging/{draftId}/{filename}
+      // 以 URL 前缀分隔两个数据空间，不能让普通笔记路径误读小记图片。
       const segments = urlPath.split("/").filter(Boolean);
-      if (segments.length !== 2 || !isSafeSegment(segments[0]) || !isSafeSegment(segments[1])) {
-        res.writeHead(400); res.end("bad request"); return;
+      let filePath: string;
+      let filename: string;
+      if (segments[0] === "quick-notes") {
+        if (!quickNotesDir) { res.writeHead(404); res.end("not found"); return; }
+        if (segments.length === 3 && isSafeSegment(segments[1]) && isSafeSegment(segments[2])) {
+          filename = segments[2];
+          filePath = path.join(quickNotesDir, "assets", segments[1], filename);
+        } else if (segments.length === 4 && segments[1] === "staging" && isSafeSegment(segments[2]) && isSafeSegment(segments[3])) {
+          filename = segments[3];
+          filePath = path.join(quickNotesDir, "staging", segments[2], filename);
+        } else {
+          res.writeHead(400); res.end("bad request"); return;
+        }
+      } else {
+        if (segments.length !== 2 || !isSafeSegment(segments[0]) || !isSafeSegment(segments[1])) {
+          res.writeHead(400); res.end("bad request"); return;
+        }
+        const noteId = segments[0];
+        filename = segments[1];
+        filePath = path.join(noteAssetsDir, noteId, filename);
       }
-      const [noteId, filename] = segments;
-      const filePath = path.join(noteAssetsDir, noteId, filename);
-      if (!fs.existsSync(filePath)) {
+      if (!fs.existsSync(filePath) || !fs.statSync(filePath).isFile()) {
         res.writeHead(404); res.end("not found"); return;
       }
 

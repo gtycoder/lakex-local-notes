@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
-import { ArrowLeft, Check, Cloud, FileDown, Files, ListTree, LoaderCircle, Pencil, Save, Settings as Settings2Icon, WifiOff } from "lucide-react";
+import { ArrowLeft, Check, Cloud, FileDown, Files, ListTree, LoaderCircle, Feather, Pencil, Save, Settings as Settings2Icon, WifiOff } from "lucide-react";
 import { MobileLibrary } from "./components/MobileLibrary";
 import { ConfirmDelete, Sidebar, type SidebarMode } from "./components/Sidebar";
+import { QuickNotesWorkspace, type QuickNotesWorkspaceHandle } from "./components/QuickNotesWorkspace";
 import { SyncPanel } from "./components/SyncPanel";
 import { LakeEditor } from "./features/editor/LakeEditor";
 import type { LakeEditorInstance } from "./features/editor/lakeRuntime";
@@ -14,6 +15,7 @@ import type { NoteDocument, NoteSummary, SyncStatus, TreeNode, WorkspaceSnapshot
 
 type SaveState = "idle" | "dirty" | "saving" | "saved" | "error";
 type MobilePage = "library" | "document";
+type DesktopWorkspace = "library" | "quick-notes";
 
 const SIDEBAR_DEFAULT_WIDTH = 224;
 const SIDEBAR_MIN_WIDTH = 160;
@@ -65,8 +67,11 @@ export function App() {
   const [sidebarMode, setSidebarMode] = useState<SidebarMode>(initialSidebarMode);
   const [sidebarWidth, setSidebarWidth] = useState(initialSidebarWidth);
   const [sidebarResizing, setSidebarResizing] = useState(false);
+  const [desktopWorkspace, setDesktopWorkspace] = useState<DesktopWorkspace>("library");
+  const [quickNotesDirty, setQuickNotesDirty] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const openTabsRef = useRef<OpenTab[]>([]);
+  const quickNotesRef = useRef<QuickNotesWorkspaceHandle>(null);
   const saveTimers = useRef<Map<string, number>>(new Map());
   // 已就绪的编辑器实例（noteId → editor），供导出 md 等场景使用
   const editorsRef = useRef<Map<string, LakeEditorInstance>>(new Map());
@@ -165,7 +170,8 @@ export function App() {
     // 同时立即触发一次保存，尽量在用户留下期间落盘
     const onBeforeUnload = (event: BeforeUnloadEvent) => {
       const hasDirty = openTabsRef.current.some((tab) => tab.dirty)
-        || (mobileActive !== null && mobileDraftContent !== mobileActive.content);
+        || (mobileActive !== null && mobileDraftContent !== mobileActive.content)
+        || quickNotesDirty;
       if (!hasDirty) return;
       for (const tab of openTabsRef.current) {
         if (tab.dirty) void persistTab(tab.noteId, tab.title, tab.content);
@@ -175,7 +181,7 @@ export function App() {
     };
     window.addEventListener("beforeunload", onBeforeUnload);
     return () => { window.removeEventListener("beforeunload", onBeforeUnload); };
-  }, [persistTab, mobileActive, mobileDraftContent]);
+  }, [persistTab, mobileActive, mobileDraftContent, quickNotesDirty]);
 
   const scheduleSave = useCallback((noteId: string, content: string) => {
     setSaveState("dirty");
@@ -434,6 +440,23 @@ export function App() {
     setMobileEditing(false);
   }
 
+  async function switchDesktopWorkspace(next: DesktopWorkspace) {
+    if (next === desktopWorkspace) return;
+    if (desktopWorkspace === "quick-notes") {
+      const canLeave = await quickNotesRef.current?.confirmLeave() ?? true;
+      if (!canLeave) return;
+    }
+    setDesktopWorkspace(next);
+  }
+
+  async function handleQuickNoteConverted(note: NoteDocument) {
+    setNotes((items) => [summaryOf(note), ...items.filter((item) => item.id !== note.id)]);
+    try { setTreeNodes(await native.listTreeNodes()); }
+    catch (reason) { setError(String(reason)); }
+    setDesktopWorkspace("library");
+    await openNote(note.id);
+  }
+
   function handleTabChange(noteId: string) {
     setActiveNoteId(noteId);
     setOpenTabs((tabs) => tabs.map((tab) =>
@@ -464,17 +487,19 @@ export function App() {
   const shellStyle = { "--sidebar-width": `${sidebarWidth}px` } as CSSProperties;
 
   return (
-    <div className={`app-shell ${shellPlatformClass} sidebar-${sidebarMode} ${sidebarResizing ? "sidebar-resizing" : ""} ${isMobile ? `mobile-document-page ${mobileEditing ? "mobile-editing" : "mobile-reading"}` : ""}`} style={shellStyle}>
-      <nav className="activity-rail desktop-only" aria-label="应用导航" onPointerEnter={showSidebarPreview} onPointerLeave={hideSidebarPreview}>
+    <div className={`app-shell ${shellPlatformClass} sidebar-${sidebarMode} ${desktopWorkspace === "quick-notes" ? "quick-notes-active" : ""} ${sidebarResizing ? "sidebar-resizing" : ""} ${isMobile ? `mobile-document-page ${mobileEditing ? "mobile-editing" : "mobile-reading"}` : ""}`} style={shellStyle}>
+      <nav className="activity-rail desktop-only" aria-label="应用导航" onPointerEnter={desktopWorkspace === "library" ? showSidebarPreview : undefined} onPointerLeave={desktopWorkspace === "library" ? hideSidebarPreview : undefined}>
         <div className="activity-rail-spacer" />
-        <button className={`activity-button ${sidebarMode === "docked" ? "active" : ""}`} onClick={toggleSidebarDock} title={sidebarMode === "docked" ? "取消固定资料库" : "固定资料库"} aria-pressed={sidebarMode === "docked"}><Files size={16} /></button>
+        <button className={`activity-button ${desktopWorkspace === "library" && sidebarMode === "docked" ? "active" : ""}`} onClick={() => { if (desktopWorkspace === "library") toggleSidebarDock(); else void switchDesktopWorkspace("library"); }} title="资料库" aria-label="资料库"><Files size={16} /></button>
+        <button className={`activity-button ${desktopWorkspace === "quick-notes" ? "active" : ""}`} onClick={() => void switchDesktopWorkspace("quick-notes")} title="小记" aria-label="小记"><Feather size={16} /></button>
         <div className="activity-rail-fill" />
       </nav>
-      <Sidebar nodes={treeNodes} activeId={activeNoteId ?? mobileActive?.id ?? null} search={search} mobileOpen={mobileOpen} mode={sidebarMode} width={sidebarWidth} minWidth={SIDEBAR_MIN_WIDTH} maxWidth={SIDEBAR_MAX_WIDTH} onSearch={setSearch} onSelect={(id) => void (isMobile ? openNoteMobile(id) : openNote(id))} onCreate={(kind, parentId, title) => void createTreeItem(kind, parentId, title)} onRename={(id, title) => void renameTreeNode(id, title)} onMoveNode={(id, targetId, position) => void moveTreeNode(id, targetId, position)} onRequestDelete={(node) => setConfirmDelete(node)} pendingRenameId={pendingRenameId} onPendingRenameConsumed={() => setPendingRenameId(null)} onPreviewEnter={showSidebarPreview} onPreviewLeave={hideSidebarPreview} onResizeActiveChange={setSidebarResizing} onWidthChange={updateSidebarWidth} onWidthCommit={commitSidebarWidth} onCloseMobile={() => setMobileOpen(false)} />
+      {desktopWorkspace === "library" && <Sidebar nodes={treeNodes} activeId={activeNoteId ?? mobileActive?.id ?? null} search={search} mobileOpen={mobileOpen} mode={sidebarMode} width={sidebarWidth} minWidth={SIDEBAR_MIN_WIDTH} maxWidth={SIDEBAR_MAX_WIDTH} onSearch={setSearch} onSelect={(id) => void (isMobile ? openNoteMobile(id) : openNote(id))} onCreate={(kind, parentId, title) => void createTreeItem(kind, parentId, title)} onRename={(id, title) => void renameTreeNode(id, title)} onMoveNode={(id, targetId, position) => void moveTreeNode(id, targetId, position)} onRequestDelete={(node) => setConfirmDelete(node)} pendingRenameId={pendingRenameId} onPendingRenameConsumed={() => setPendingRenameId(null)} onPreviewEnter={showSidebarPreview} onPreviewLeave={hideSidebarPreview} onResizeActiveChange={setSidebarResizing} onWidthChange={updateSidebarWidth} onWidthCommit={commitSidebarWidth} onCloseMobile={() => setMobileOpen(false)} />}
       {mobileOpen && <div className="mobile-scrim" onClick={() => setMobileOpen(false)} />}
       <main className="workspace" onPointerDownCapture={(event) => {
         if (!isMobile && sidebarMode === "floating" && (event.target as HTMLElement).closest(".document-pane, .empty-workspace")) setSidebarMode("collapsed");
       }}>
+        {!isMobile && desktopWorkspace === "quick-notes" && <div className="quick-notes-titlebar" aria-hidden="true" />}
         {isMobile && <header className="topbar">
           <div className="topbar-left">
             <button className="icon-button mobile-only" onClick={() => void leaveMobileDocument()} title="返回文档列表"><ArrowLeft size={21} /></button>
@@ -496,6 +521,8 @@ export function App() {
               <button onClick={() => setMobileOpen(true)}><Files size={20} /><span>切换</span></button>
             </nav>}
           </section> : <section className="empty-workspace"><h2>开始写第一篇笔记</h2><button className="primary-button" onClick={() => void createNote()}>新建文档</button></section>
+        ) : desktopWorkspace === "quick-notes" ? (
+          <QuickNotesWorkspace ref={quickNotesRef} notebooks={treeNodes} onDirtyChange={setQuickNotesDirty} onConverted={(note) => void handleQuickNoteConverted(note)} />
         ) : (
           <section className={`document-pane ${wideMode ? "wide-mode" : ""} ${settings.paragraphSpacing ? "paragraph-spacing" : ""}`}>
             <MultiTabEditor
@@ -518,11 +545,13 @@ export function App() {
           </section>
         )}
         <footer className="statusbar">
-          <span>{isDesktop() ? "Electron 本地仓库" : "浏览器演示仓库"}</span>
-          <span className="statusbar-wordcount" title="当前文档字数">{wordCountLabel}</span>
-          {notice && <span className="statusbar-notice">{notice}</span>}
-          <button className="statusbar-export-md" onClick={() => void exportMarkdown()} title="导出当前笔记为 Markdown（复制到剪贴板）"><FileDown size={13} /> MD</button>
-          <span className={`save-label ${saveState}`}>{saveState === "saving" ? <LoaderCircle className="spin" size={12} /> : saveState === "dirty" ? <WifiOff size={12} /> : <Save size={12} />}{saveLabel(saveState)}</span>
+          <span>{desktopWorkspace === "quick-notes" ? "小记：本地时间线" : isDesktop() ? "Electron 本地仓库" : "浏览器演示仓库"}</span>
+          {desktopWorkspace === "library" && <>
+            <span className="statusbar-wordcount" title="当前文档字数">{wordCountLabel}</span>
+            {notice && <span className="statusbar-notice">{notice}</span>}
+            <button className="statusbar-export-md" onClick={() => void exportMarkdown()} title="导出当前笔记为 Markdown（复制到剪贴板）"><FileDown size={13} /> MD</button>
+            <span className={`save-label ${saveState}`}>{saveState === "saving" ? <LoaderCircle className="spin" size={12} /> : saveState === "dirty" ? <WifiOff size={12} /> : <Save size={12} />}{saveLabel(saveState)}</span>
+          </>}
           <span className={`statusbar-sync ${sync.phase}`} title="S3 同步状态"><Cloud size={12} />{sync.message}</span>
         </footer>
       </main>

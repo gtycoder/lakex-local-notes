@@ -454,3 +454,24 @@ describe("孤儿登记对账（写时登记/保存对账 + 导入对账）", () 
     expect(fs.existsSync(path.join(assetsDir, staleName))).toBe(true);
   });
 });
+
+describe("顶部插入底层能力", () => {
+  it("createNoteInAtTopWithContent 将新文档插入同级顶部，并保持 notes/tree_nodes 排序一致", () => {
+    const notebook = store.createNotebook("顶部排序测试");
+    const first = store.createNoteIn(notebook.id, "原第一篇");
+    const second = store.createNoteIn(notebook.id, "原第二篇");
+    const top = store.createNoteInAtTopWithContent(notebook.id, "新顶部", "<p class=\"ne-p\">top</p>", []);
+
+    const tree = store.listTreeNodes().filter((node) => node.parentId === notebook.id && node.nodeType === "note").sort((a, b) => a.sortOrder - b.sortOrder);
+    expect(tree.map((node) => node.id)).toEqual([top.id, first.id, second.id]);
+    expect(tree.map((node) => node.sortOrder)).toEqual([0, 1, 2]);
+    expect(store.readNote(top.id).content).toContain("top");
+
+    const db = new Database(path.join(dir, "metadata.sqlite3"), { readonly: true });
+    try {
+      const rows = db.prepare("SELECT id, sort_order FROM notes WHERE parent_id=? AND deleted_at IS NULL ORDER BY sort_order").all(notebook.id) as Array<{ id: string; sort_order: number }>;
+      expect(rows.map((row) => row.id)).toEqual([top.id, first.id, second.id]);
+      expect(rows.map((row) => row.sort_order)).toEqual([0, 1, 2]);
+    } finally { db.close(); }
+  });
+});

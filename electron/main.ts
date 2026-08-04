@@ -2,8 +2,11 @@ import { app, BrowserWindow, ipcMain, session, shell, type WebFrameMain } from "
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { MAX_IMAGE_BYTES, Store } from "./store.js";
+import { MAX_QUICK_NOTE_IMAGE_BYTES, QuickNotesStore } from "./quickNotes.js";
+import { convertQuickNoteToLake } from "./quickNoteConversion.js";
 import { startAssetServer, ASSET_PORT } from "./assetServer.js";
 import { testConnection, syncNow } from "./sync.js";
+import { syncQuickNotes } from "./quickNotesSync.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const isDev = !app.isPackaged;
@@ -16,6 +19,7 @@ if (isDev) {
 const DEV_SERVER_URL = "http://127.0.0.1:1421";
 
 let store: Store;
+let quickNotes: QuickNotesStore;
 
 /** 本应用创建的窗口 webContents 白名单（防导航到其他页面后仍调用 IPC） */
 const trustedWebContents = new Set<number>();
@@ -152,10 +156,42 @@ function registerIpc() {
     if (!isTrustedSenderFrame(event.senderFrame, event.sender)) throw new Error("IPC 调用来源不受信任");
     if (syncInFlight) throw new Error("同步正在进行中，请等待本次同步完成");
     syncInFlight = true;
-    return syncNow(store, (progress) => { try { event.sender.send("sync-progress", progress); } catch { /* 窗口已关闭 */ } })
-      .finally(() => { syncInFlight = false; });
+    return (async () => {
+      // 顺序是 Lake → 小记。Lake 成功后才允许转换源小记的删除 tombstone 同步出去；
+      // 小记空间独立，即使其失败也不能把 Lake 的成功同步变成失败。
+      const result = await syncNow(store, (progress) => { try { event.sender.send("sync-progress", progress); } catch { /* 窗口已关闭 */ } });
+      quickNotes.markTargetNotesSynced();
+      try {
+        const settings = store.getS3Settings();
+        if (!settings) throw new Error("请先保存 S3 配置");
+        const quick = await syncQuickNotes(quickNotes, settings, (progress) => { try { event.sender.send("sync-progress", progress); } catch { /* 窗口已关闭 */ } });
+        result.quickNotes = quick;
+      } catch (error) {
+        result.quickNotes = { uploaded: 0, downloaded: 0, conflicts: 0, completedAt: new Date().toISOString(), error: String(error) };
+        try { event.sender.send("sync-progress", { phase: "quick-notes", message: `小记同步失败：${String(error)}` }); } catch { /* 窗口已关闭 */ }
+      }
+      // syncNow() 先持久化 Lake 结果；小记阶段完成后覆盖 lastResult，
+      // 让下次打开同步面板仍能看到“小记失败但 Lake 已完成”等完整状态。
+      store.recordSyncResult(JSON.stringify(result));
+      try { event.sender.send("sync-progress", { phase: "done", message: "同步完成" }); } catch { /* 窗口已关闭 */ }
+      return result;
+    })().finally(() => { syncInFlight = false; });
   });
   handle("get_sync_status", () => store.getSyncStatus());
+
+  // 小记 IPC：完全独立于 Lake 文档 IPC，图片只进入 quick-notes/staging / assets 空间。
+  handle("list_quick_notes", () => quickNotes.listQuickNotes());
+  handle("create_quick_note", (input: { text: string; draftId: string; stagedImageIds: string[] }) => quickNotes.createQuickNote(input));
+  handle("update_quick_note", (id: string, input: { text: string; draftId: string; stagedImageIds: string[]; retainedImageIds?: string[] }) => quickNotes.updateQuickNote(id, input));
+  handle("delete_quick_note", (id: string) => quickNotes.deleteQuickNote(id));
+  handle("discard_quick_note_draft", (draftId: string) => quickNotes.discardDraft(draftId));
+  handle("discard_staged_quick_note_image", (draftId: string, imageId: string) => quickNotes.discardStagedImage(draftId, imageId));
+  handle("stage_quick_note_image", (draftId: string, input: { bytes: number[]; filename: string }) => {
+    if (!input || !Array.isArray(input.bytes)) throw new Error("图片数据无效");
+    if (input.bytes.length > MAX_QUICK_NOTE_IMAGE_BYTES) throw new Error("图片超过 25 MiB");
+    return quickNotes.stageImage(draftId, input);
+  });
+  handle("convert_quick_note", (quickNoteId: string, notebookId: string) => convertQuickNoteToLake(quickNotes, store, quickNoteId, notebookId));
 }
 
 // Increase renderer memory limit for large documents with base64 images
@@ -175,8 +211,10 @@ if (!app.requestSingleInstanceLock()) {
 
   app.whenReady().then(() => {
     store = new Store(workspaceRoot());
+    quickNotes = new QuickNotesStore(workspaceRoot());
+    quickNotes.recoverConversions((noteId) => store.hasNote(noteId), (noteId) => store.removeUntrackedNoteArtifacts(noteId));
     registerCdnRedirect();
-    startAssetServer(path.join(workspaceRoot(), "note-assets"), vendorCdnDir());
+    startAssetServer(path.join(workspaceRoot(), "note-assets"), vendorCdnDir(), path.join(workspaceRoot(), "quick-notes"));
     registerIpc();
     createWindow();
 

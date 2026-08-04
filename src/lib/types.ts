@@ -56,16 +56,26 @@ export interface SyncStatus {
   pendingChanges: number;
 }
 
+export interface QuickNotesSyncStatus {
+  uploaded: number;
+  downloaded: number;
+  conflicts: number;
+  completedAt: string;
+  error?: string;
+}
+
 export interface SyncResult {
   uploaded: number;
   downloaded: number;
   conflicts: number;
   manifestId: string;
   completedAt: string;
+  /** 小记失败不否定 Lake 同步成功。 */
+  quickNotes?: QuickNotesSyncStatus;
 }
 
 export interface SyncProgress {
-  phase: "connect" | "download" | "upload" | "manifest" | "done";
+  phase: "connect" | "download" | "upload" | "manifest" | "quick-notes" | "done";
   current?: number;
   total?: number;
   message: string;
@@ -109,4 +119,44 @@ export interface OrphanAsset {
 export interface CleanOrphanResult {
   count: number;
   freedBytes: number;
+}
+
+/** 小记独立内容空间（V1 仅文本 + 图片，不复用 Lake 文档格式）。 */
+export interface QuickNoteImage {
+  id: string;
+  filename: string;
+  mimeType: string;
+  width: number | null;
+  height: number | null;
+  size: number;
+  hash: string;
+  url?: string;
+}
+
+export interface QuickNoteContent {
+  version: number;
+  text: string;
+  images: QuickNoteImage[];
+}
+
+export interface QuickNoteSummary {
+  id: string;
+  createdAt: string;
+  updatedAt: string;
+  previewText: string;
+  imageCount: number;
+  contentHash: string;
+  syncState: "local" | "synced" | "conflict";
+  isConflict: boolean;
+}
+
+export interface QuickNoteDocument extends QuickNoteSummary {
+  content: QuickNoteContent;
+}
+
+export interface SaveQuickNoteInput {
+  text: string;
+  draftId: string;
+  stagedImageIds: string[];
+  retainedImageIds?: string[];
 }

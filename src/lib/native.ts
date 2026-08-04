@@ -1,4 +1,4 @@
-import type { CleanOrphanResult, NoteDocument, OrphanAsset, ResourceUploadInput, ResourceUploadOutput, S3Settings, SyncProgress, SyncResult, SyncStatusInfo, TreeNode, WorkspaceSnapshot } from "./types";
+import type { CleanOrphanResult, NoteDocument, OrphanAsset, QuickNoteDocument, QuickNoteImage, ResourceUploadInput, ResourceUploadOutput, S3Settings, SaveQuickNoteInput, SyncProgress, SyncResult, SyncStatusInfo, TreeNode, WorkspaceSnapshot } from "./types";
 
 interface LakeNative {
   bootstrap(): Promise<WorkspaceSnapshot>;
@@ -24,6 +24,14 @@ interface LakeNative {
   testS3Connection(): Promise<string>;
   syncNow(): Promise<SyncResult>;
   getSyncStatus(): Promise<SyncStatusInfo>;
+  listQuickNotes(): Promise<QuickNoteDocument[]>;
+  createQuickNote(input: SaveQuickNoteInput): Promise<QuickNoteDocument>;
+  updateQuickNote(id: string, input: SaveQuickNoteInput): Promise<QuickNoteDocument>;
+  deleteQuickNote(id: string): Promise<void>;
+  stageQuickNoteImage(draftId: string, input: { bytes: number[]; filename: string }): Promise<QuickNoteImage>;
+  discardQuickNoteDraft(draftId: string): Promise<void>;
+  discardStagedQuickNoteImage(draftId: string, imageId: string): Promise<void>;
+  convertQuickNote(quickNoteId: string, notebookId: string): Promise<NoteDocument>;
   onSyncProgress(callback: (progress: SyncProgress) => void): () => void;
 }
 
@@ -62,5 +70,13 @@ export const native = {
   testS3Connection: () => api().testS3Connection(),
   syncNow: () => api().syncNow(),
   getSyncStatus: () => api().getSyncStatus(),
+  listQuickNotes: () => api().listQuickNotes(),
+  createQuickNote: (input: SaveQuickNoteInput) => api().createQuickNote(input),
+  updateQuickNote: (id: string, input: SaveQuickNoteInput) => api().updateQuickNote(id, input),
+  deleteQuickNote: (id: string) => api().deleteQuickNote(id),
+  stageQuickNoteImage: (draftId: string, input: { bytes: number[]; filename: string }) => api().stageQuickNoteImage(draftId, input),
+  discardQuickNoteDraft: (draftId: string) => api().discardQuickNoteDraft(draftId),
+  discardStagedQuickNoteImage: (draftId: string, imageId: string) => api().discardStagedQuickNoteImage(draftId, imageId),
+  convertQuickNote: (quickNoteId: string, notebookId: string) => api().convertQuickNote(quickNoteId, notebookId),
   onSyncProgress: (callback: (progress: SyncProgress) => void) => api().onSyncProgress(callback),
 };

@@ -1,0 +1,570 @@
+import Database from "better-sqlite3";
+import fs from "node:fs";
+import path from "node:path";
+import crypto from "node:crypto";
+import sharp from "sharp";
+import { ASSET_PORT } from "./assetServer.js";
+import { AppError } from "./store.js";
+
+export const QUICK_NOTE_VERSION = 1;
+export const MAX_QUICK_NOTE_IMAGE_BYTES = 25 * 1024 * 1024;
+const MAX_QUICK_NOTE_TEXT_LENGTH = 200_000;
+
+export interface QuickNoteImage {
+  id: string;
+  filename: string;
+  mimeType: string;
+  width: number | null;
+  height: number | null;
+  size: number;
+  hash: string;
+  /** 仅 IPC 返回值携带；不会写进 .qnote。 */
+  url?: string;
+}
+
+export interface QuickNoteContent {
+  version: number;
+  text: string;
+  images: QuickNoteImage[];
+}
+
+export interface QuickNoteSummary {
+  id: string;
+  createdAt: string;
+  updatedAt: string;
+  previewText: string;
+  imageCount: number;
+  contentHash: string;
+  syncState: "local" | "synced" | "conflict";
+  isConflict: boolean;
+}
+
+export interface QuickNoteDocument extends QuickNoteSummary {
+  content: QuickNoteContent;
+}
+
+export interface QuickNoteImageInput {
+  bytes: number[];
+  filename: string;
+}
+
+export interface SaveQuickNoteInput {
+  text: string;
+  draftId: string;
+  stagedImageIds: string[];
+  retainedImageIds?: string[];
+}
+
+export interface QuickNoteDeleted {
+  id: string;
+  createdAt: string;
+  updatedAt: string;
+  deletedAt: string;
+  conversionTargetNoteId: string | null;
+  readyToSync: boolean;
+}
+
+export interface QuickNoteConversion {
+  sourceQuickNoteId: string;
+  targetNoteId: string;
+  targetNotebookId: string;
+  state: "prepared" | "target_created" | "source_deleted_waiting_sync" | "complete";
+  createdAt: string;
+  updatedAt: string;
+}
+
+interface StoredQuickNoteContent {
+  version: number;
+  text: string;
+  images: Omit<QuickNoteImage, "url">[];
+}
+
+function nowIso(): string { return new Date().toISOString(); }
+function uuid(): string { return crypto.randomUUID(); }
+function hash(bytes: Buffer | string): string { return crypto.createHash("sha256").update(bytes).digest("hex"); }
+function isSafeSegment(value: string): boolean {
+  return value.length > 0 && value !== "." && value !== ".." && !value.includes("/") && !value.includes("\\");
+}
+function isImageMime(value: string): boolean {
+  return ["image/png", "image/jpeg", "image/gif", "image/webp", "image/avif"].includes(value);
+}
+
+function sniffImageFormat(bytes: Buffer): { mimeType: string; extension: string } | null {
+  if (bytes.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))) return { mimeType: "image/png", extension: "png" };
+  if (bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) return { mimeType: "image/jpeg", extension: "jpg" };
+  if (bytes.subarray(0, 6).toString() === "GIF87a" || bytes.subarray(0, 6).toString() === "GIF89a") return { mimeType: "image/gif", extension: "gif" };
+  if (bytes.length >= 12 && bytes.subarray(0, 4).toString() === "RIFF" && bytes.subarray(8, 12).toString() === "WEBP") return { mimeType: "image/webp", extension: "webp" };
+  if (bytes.length >= 12 && bytes.subarray(4, 8).toString() === "ftyp" && ["avif", "avis"].includes(bytes.subarray(8, 12).toString())) return { mimeType: "image/avif", extension: "avif" };
+  return null;
+}
+
+function previewOf(text: string, imageCount: number): string {
+  const compact = text.replace(/\s+/g, " ").trim();
+  if (compact) return compact.slice(0, 120);
+  return imageCount > 0 ? "[图片]" : "";
+}
+
+function normalizedContent(text: string, images: Omit<QuickNoteImage, "url">[]): StoredQuickNoteContent {
+  if (typeof text !== "string") throw new AppError("InvalidInput", "小记正文必须是文本");
+  if (text.length > MAX_QUICK_NOTE_TEXT_LENGTH) throw new AppError("InvalidInput", "小记正文过长");
+  if (!text.trim() && images.length === 0) throw new AppError("InvalidInput", "请至少记录文字或一张图片");
+  return { version: QUICK_NOTE_VERSION, text, images };
+}
+
+/**
+ * 小记的本地数据空间。它不读取或写入既有 metadata.sqlite3 / notes / note-assets，
+ * 唯一跨空间动作由 main.ts 的转换协调器通过 conversion journal 显式编排。
+ */
+export class QuickNotesStore {
+  private db: Database.Database;
+  private root: string;
+  private itemsDir: string;
+  private assetsDir: string;
+  private stagingDir: string;
+
+  constructor(workspaceRoot: string) {
+    this.root = path.join(workspaceRoot, "quick-notes");
+    this.itemsDir = path.join(this.root, "items");
+    this.assetsDir = path.join(this.root, "assets");
+    this.stagingDir = path.join(this.root, "staging");
+    fs.mkdirSync(this.itemsDir, { recursive: true });
+    fs.mkdirSync(this.assetsDir, { recursive: true });
+    fs.mkdirSync(this.stagingDir, { recursive: true });
+    this.db = new Database(path.join(this.root, "metadata.sqlite3"));
+    this.db.pragma("journal_mode = WAL");
+    this.db.pragma("foreign_keys = ON");
+    this.migrate();
+  }
+
+  private migrate(): void {
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS quick_notes (
+        id TEXT PRIMARY KEY,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        preview_text TEXT NOT NULL,
+        image_count INTEGER NOT NULL,
+        content_hash TEXT NOT NULL,
+        sync_state TEXT NOT NULL DEFAULT 'local',
+        is_conflict INTEGER NOT NULL DEFAULT 0
+      );
+      CREATE TABLE IF NOT EXISTS quick_note_assets (
+        id TEXT PRIMARY KEY,
+        quick_note_id TEXT NOT NULL,
+        filename TEXT NOT NULL,
+        mime_type TEXT NOT NULL,
+        width INTEGER,
+        height INTEGER,
+        size INTEGER NOT NULL,
+        content_hash TEXT NOT NULL,
+        FOREIGN KEY (quick_note_id) REFERENCES quick_notes(id) ON DELETE CASCADE
+      );
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_quick_note_assets_file ON quick_note_assets(quick_note_id, filename);
+      CREATE TABLE IF NOT EXISTS quick_note_sync_base (
+        quick_note_id TEXT PRIMARY KEY,
+        content_hash TEXT NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS quick_note_deleted (
+        id TEXT PRIMARY KEY,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        deleted_at TEXT NOT NULL,
+        conversion_target_note_id TEXT,
+        ready_to_sync INTEGER NOT NULL DEFAULT 1
+      );
+      CREATE TABLE IF NOT EXISTS quick_note_conversions (
+        source_quick_note_id TEXT PRIMARY KEY,
+        target_note_id TEXT NOT NULL,
+        target_notebook_id TEXT NOT NULL,
+        state TEXT NOT NULL CHECK(state IN ('prepared','target_created','source_deleted_waiting_sync','complete')),
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+    `);
+  }
+
+  private itemPath(id: string): string {
+    if (!isSafeSegment(id)) throw new AppError("InvalidInput", `无效的小记 ID: ${id}`);
+    return path.join(this.itemsDir, `${id}.qnote`);
+  }
+
+  private assetDirFor(id: string): string {
+    if (!isSafeSegment(id)) throw new AppError("InvalidInput", `无效的小记 ID: ${id}`);
+    return path.join(this.assetsDir, id);
+  }
+
+  private stagingDirFor(draftId: string): string {
+    if (!isSafeSegment(draftId)) throw new AppError("InvalidInput", "无效的小记草稿会话");
+    return path.join(this.stagingDir, draftId);
+  }
+
+  private quickImageUrl(noteId: string, filename: string): string {
+    return `http://127.0.0.1:${ASSET_PORT}/quick-notes/${noteId}/${filename}`;
+  }
+
+  private stagingImageUrl(draftId: string, filename: string): string {
+    return `http://127.0.0.1:${ASSET_PORT}/quick-notes/staging/${draftId}/${filename}`;
+  }
+
+  private atomicWrite(filePath: string, bytes: string | Buffer): void {
+    const temporary = `${filePath}.tmp-${process.pid}`;
+    fs.writeFileSync(temporary, bytes);
+    fs.renameSync(temporary, filePath);
+  }
+
+  private readStoredContent(id: string): StoredQuickNoteContent {
+    let raw: unknown;
+    try { raw = JSON.parse(fs.readFileSync(this.itemPath(id), "utf8")); }
+    catch (error) { throw new AppError("Internal", `小记内容损坏: ${error instanceof Error ? error.message : String(error)}`); }
+    return this.validateStoredContent(raw);
+  }
+
+  private validateStoredContent(raw: unknown): StoredQuickNoteContent {
+    if (!raw || typeof raw !== "object") throw new AppError("InvalidInput", "小记内容格式无效");
+    const value = raw as Partial<StoredQuickNoteContent>;
+    if (value.version !== QUICK_NOTE_VERSION || typeof value.text !== "string" || !Array.isArray(value.images)) {
+      throw new AppError("InvalidInput", "小记内容版本或字段无效");
+    }
+    const seen = new Set<string>();
+    const images = value.images.map((image) => {
+      if (!image || typeof image !== "object") throw new AppError("InvalidInput", "小记图片字段无效");
+      const img = image as Partial<QuickNoteImage>;
+      if (typeof img.id !== "string" || !isSafeSegment(img.id) || seen.has(img.id) || typeof img.filename !== "string" || !isSafeSegment(img.filename)
+        || typeof img.mimeType !== "string" || !isImageMime(img.mimeType) || typeof img.size !== "number" || !Number.isSafeInteger(img.size) || img.size <= 0
+        || typeof img.hash !== "string" || !/^[a-f0-9]{64}$/.test(img.hash)) {
+        throw new AppError("InvalidInput", "小记图片元数据无效");
+      }
+      if (img.width !== null && img.width !== undefined && (!Number.isInteger(img.width) || img.width <= 0)) throw new AppError("InvalidInput", "图片宽度无效");
+      if (img.height !== null && img.height !== undefined && (!Number.isInteger(img.height) || img.height <= 0)) throw new AppError("InvalidInput", "图片高度无效");
+      seen.add(img.id);
+      return { id: img.id, filename: img.filename, mimeType: img.mimeType, width: img.width ?? null, height: img.height ?? null, size: img.size, hash: img.hash };
+    });
+    return normalizedContent(value.text, images);
+  }
+
+  private mapDocument(row: any, content: StoredQuickNoteContent): QuickNoteDocument {
+    const images = content.images.map((image) => ({ ...image, url: this.quickImageUrl(row.id, image.filename) }));
+    return {
+      id: row.id,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+      previewText: row.preview_text,
+      imageCount: row.image_count,
+      contentHash: row.content_hash,
+      syncState: row.sync_state,
+      isConflict: !!row.is_conflict,
+      content: { version: QUICK_NOTE_VERSION, text: content.text, images },
+    };
+  }
+
+  private readRow(id: string): any {
+    const row = this.db.prepare("SELECT * FROM quick_notes WHERE id=?").get(id);
+    if (!row) throw new AppError("NotFound", "小记不存在");
+    return row;
+  }
+
+  listQuickNotes(): QuickNoteDocument[] {
+    const rows = this.db.prepare("SELECT * FROM quick_notes ORDER BY created_at DESC").all() as any[];
+    return rows.map((row) => this.mapDocument(row, this.readStoredContent(row.id)));
+  }
+
+  readQuickNote(id: string): QuickNoteDocument {
+    const row = this.readRow(id);
+    return this.mapDocument(row, this.readStoredContent(id));
+  }
+
+  async stageImage(draftId: string, input: QuickNoteImageInput): Promise<QuickNoteImage> {
+    if (!input || !Array.isArray(input.bytes)) throw new AppError("InvalidInput", "图片数据无效");
+    if (input.bytes.length === 0 || input.bytes.length > MAX_QUICK_NOTE_IMAGE_BYTES) throw new AppError("InvalidInput", "图片为空或超过 25 MiB");
+    const bytes = Buffer.from(input.bytes);
+    const format = sniffImageFormat(bytes);
+    if (!format) throw new AppError("InvalidInput", "仅支持 PNG、JPEG、GIF、WebP 和 AVIF 图片");
+    const metadata = await sharp(bytes, { animated: true }).metadata().catch(() => null);
+    const id = uuid();
+    const filename = `${Date.now()}_${crypto.randomBytes(4).toString("hex")}.${format.extension}`;
+    const stagingDir = this.stagingDirFor(draftId);
+    fs.mkdirSync(stagingDir, { recursive: true });
+    const staged = {
+      id, filename, mimeType: format.mimeType, width: metadata?.width ?? null, height: metadata?.height ?? null,
+      size: bytes.length, hash: hash(bytes),
+    };
+    this.atomicWrite(path.join(stagingDir, filename), bytes);
+    this.atomicWrite(path.join(stagingDir, `.${id}.json`), JSON.stringify(staged));
+    return { ...staged, url: this.stagingImageUrl(draftId, filename) };
+  }
+
+  discardDraft(draftId: string): void {
+    fs.rmSync(this.stagingDirFor(draftId), { force: true, recursive: true });
+  }
+
+  createQuickNote(input: SaveQuickNoteInput): QuickNoteDocument {
+    const id = uuid();
+    const createdAt = nowIso();
+    return this.saveQuickNoteInternal(id, input, createdAt, createdAt, false);
+  }
+
+  updateQuickNote(id: string, input: SaveQuickNoteInput): QuickNoteDocument {
+    const previous = this.readRow(id);
+    return this.saveQuickNoteInternal(id, input, previous.created_at, nowIso(), true);
+  }
+
+  private saveQuickNoteInternal(id: string, input: SaveQuickNoteInput, createdAt: string, updatedAt: string, updating: boolean): QuickNoteDocument {
+    if (!input || typeof input.text !== "string" || typeof input.draftId !== "string" || !Array.isArray(input.stagedImageIds)) {
+      throw new AppError("InvalidInput", "小记保存参数无效");
+    }
+    if (new Set(input.stagedImageIds).size !== input.stagedImageIds.length) throw new AppError("InvalidInput", "图片列表包含重复项");
+    const oldContent = updating ? this.readStoredContent(id) : null;
+    const existing = oldContent?.images ?? [];
+    const retainedIds = input.retainedImageIds ?? existing.map((image) => image.id);
+    if (new Set(retainedIds).size !== retainedIds.length) throw new AppError("InvalidInput", "保留图片列表包含重复项");
+    const existingById = new Map(existing.map((image) => [image.id, image]));
+    const retained = retainedIds.map((assetId) => {
+      const image = existingById.get(assetId);
+      if (!image) throw new AppError("InvalidInput", "保留图片不属于当前小记");
+      return image;
+    });
+
+    const stagingDir = this.stagingDirFor(input.draftId);
+    const stagedMetadata = this.readStagedMetadata(stagingDir, input.stagedImageIds);
+    const content = normalizedContent(input.text, [...retained, ...stagedMetadata]);
+    const encoded = Buffer.from(`${JSON.stringify(content, null, 2)}\n`, "utf8");
+    const contentHash = hash(encoded);
+    const targetAssets = this.assetDirFor(id);
+    const removed = existing.filter((image) => !retainedIds.includes(image.id));
+
+    // 目标资源先复制/移动并写入临时内容，随后单 DB 事务更新索引；失败时保留源 staging，用户可重试。
+    fs.mkdirSync(targetAssets, { recursive: true });
+    const movedFiles: string[] = [];
+    try {
+      for (const image of stagedMetadata) {
+        const source = path.join(stagingDir, image.filename);
+        const destination = path.join(targetAssets, image.filename);
+        if (!fs.existsSync(source)) throw new AppError("NotFound", `暂存图片不存在: ${image.filename}`);
+        if (fs.existsSync(destination)) throw new AppError("InvalidInput", `图片文件名冲突: ${image.filename}`);
+        fs.renameSync(source, destination);
+        movedFiles.push(destination);
+      }
+      this.atomicWrite(this.itemPath(id), encoded);
+      const tx = this.db.transaction(() => {
+        if (updating) {
+          this.db.prepare("UPDATE quick_notes SET updated_at=?,preview_text=?,image_count=?,content_hash=?,sync_state='local',is_conflict=0 WHERE id=?")
+            .run(updatedAt, previewOf(content.text, content.images.length), content.images.length, contentHash, id);
+          this.db.prepare("DELETE FROM quick_note_assets WHERE quick_note_id=?").run(id);
+        } else {
+          this.db.prepare("INSERT INTO quick_notes(id,created_at,updated_at,preview_text,image_count,content_hash,sync_state,is_conflict) VALUES(?,?,?,?,?,?, 'local', 0)")
+            .run(id, createdAt, updatedAt, previewOf(content.text, content.images.length), content.images.length, contentHash);
+        }
+        const insert = this.db.prepare("INSERT INTO quick_note_assets(id,quick_note_id,filename,mime_type,width,height,size,content_hash) VALUES(?,?,?,?,?,?,?,?)");
+        for (const image of content.images) insert.run(image.id, id, image.filename, image.mimeType, image.width, image.height, image.size, image.hash);
+      });
+      tx();
+      for (const image of removed) {
+        try { fs.rmSync(path.join(targetAssets, image.filename), { force: true }); } catch { /* 后续手工清理，不影响已保存内容 */ }
+      }
+      // 保存完成后，已选资源均已移动到目标目录；其余暂存内容属于放弃的草稿，必须一并清除。
+      try { fs.rmSync(stagingDir, { force: true, recursive: true }); } catch { /* optional */ }
+    } catch (error) {
+      for (const destination of movedFiles) {
+        try {
+          const source = path.join(stagingDir, path.basename(destination));
+          if (!fs.existsSync(source)) fs.renameSync(destination, source);
+        } catch { /* best effort */ }
+      }
+      throw error;
+    }
+    return this.readQuickNote(id);
+  }
+
+  private readStagedMetadata(stagingDir: string, imageIds: string[]): Omit<QuickNoteImage, "url">[] {
+    // stagedImageIds encode no filename; renderer sends prior IPC return only. Persist a small sidecar would add state.
+    // To keep the API unforgeable, each stage writes a hidden metadata file alongside the image.
+    return imageIds.map((assetId) => {
+      if (!isSafeSegment(assetId)) throw new AppError("InvalidInput", "无效的暂存图片 ID");
+      const metaPath = path.join(stagingDir, `.${assetId}.json`);
+      let raw: unknown;
+      try { raw = JSON.parse(fs.readFileSync(metaPath, "utf8")); } catch { throw new AppError("NotFound", "暂存图片已失效，请重新添加"); }
+      const image = this.validateStoredContent({ version: QUICK_NOTE_VERSION, text: "x", images: [raw] }).images[0];
+      const imagePath = path.join(stagingDir, image.filename);
+      if (!fs.existsSync(imagePath)) throw new AppError("NotFound", "暂存图片文件不存在");
+      const bytes = fs.readFileSync(imagePath);
+      if (bytes.length !== image.size || hash(bytes) !== image.hash) throw new AppError("InvalidInput", "暂存图片校验失败");
+      return image;
+    });
+  }
+
+  /** 删除单张未保存暂存图片。 */
+  discardStagedImage(draftId: string, assetId: string): void {
+    if (!isSafeSegment(assetId)) return;
+    const dir = this.stagingDirFor(draftId);
+    const metaPath = path.join(dir, `.${assetId}.json`);
+    try {
+      const raw = JSON.parse(fs.readFileSync(metaPath, "utf8"));
+      const image = this.validateStoredContent({ version: QUICK_NOTE_VERSION, text: "x", images: [raw] }).images[0];
+      fs.rmSync(path.join(dir, image.filename), { force: true });
+    } catch { /* metadata/file may already be gone */ }
+    fs.rmSync(metaPath, { force: true });
+  }
+
+  deleteQuickNote(id: string): void {
+    const row = this.readRow(id);
+    this.deleteSourceAndRemember(row, null, true);
+  }
+
+  private deleteSourceAndRemember(row: any, conversionTargetNoteId: string | null, readyToSync: boolean): void {
+    const content = this.readStoredContent(row.id);
+    const deletedAt = nowIso();
+    const tx = this.db.transaction(() => {
+      this.db.prepare("INSERT OR REPLACE INTO quick_note_deleted(id,created_at,updated_at,deleted_at,conversion_target_note_id,ready_to_sync) VALUES(?,?,?,?,?,?)")
+        .run(row.id, row.created_at, row.updated_at, deletedAt, conversionTargetNoteId, readyToSync ? 1 : 0);
+      this.db.prepare("DELETE FROM quick_note_sync_base WHERE quick_note_id=?").run(row.id);
+      this.db.prepare("DELETE FROM quick_note_assets WHERE quick_note_id=?").run(row.id);
+      this.db.prepare("DELETE FROM quick_notes WHERE id=?").run(row.id);
+    });
+    tx();
+    try { fs.rmSync(this.itemPath(row.id), { force: true }); } catch { /* tombstone remains authoritative */ }
+    try { fs.rmSync(this.assetDirFor(row.id), { force: true, recursive: true }); } catch { /* tombstone remains authoritative */ }
+    // keep a reference so TypeScript and reviewers see content has been intentionally loaded before source removal.
+    void content;
+  }
+
+  beginConversion(sourceQuickNoteId: string, targetNoteId: string, targetNotebookId: string): QuickNoteDocument {
+    if (!isSafeSegment(targetNoteId) || !isSafeSegment(targetNotebookId)) throw new AppError("InvalidInput", "转换目标无效");
+    const source = this.readQuickNote(sourceQuickNoteId);
+    const now = nowIso();
+    this.db.prepare("INSERT OR REPLACE INTO quick_note_conversions(source_quick_note_id,target_note_id,target_notebook_id,state,created_at,updated_at) VALUES(?,?,?,?,COALESCE((SELECT created_at FROM quick_note_conversions WHERE source_quick_note_id=?),?),?)")
+      .run(sourceQuickNoteId, targetNoteId, targetNotebookId, "prepared", sourceQuickNoteId, now, now);
+    return source;
+  }
+
+  markConversionTargetCreated(sourceQuickNoteId: string): void {
+    const changed = this.db.prepare("UPDATE quick_note_conversions SET state='target_created',updated_at=? WHERE source_quick_note_id=? AND state='prepared'")
+      .run(nowIso(), sourceQuickNoteId).changes;
+    if (!changed) throw new AppError("Internal", "小记转换状态异常");
+  }
+
+  finalizeConversion(sourceQuickNoteId: string): void {
+    const conversion = this.db.prepare("SELECT * FROM quick_note_conversions WHERE source_quick_note_id=?").get(sourceQuickNoteId) as any;
+    if (!conversion) throw new AppError("NotFound", "小记转换记录不存在");
+    if (conversion.state === "complete" || conversion.state === "source_deleted_waiting_sync") return;
+    if (conversion.state !== "target_created") throw new AppError("Internal", "转换目标尚未验证");
+    const source = this.readRow(sourceQuickNoteId);
+    this.deleteSourceAndRemember(source, conversion.target_note_id, false);
+    this.db.prepare("UPDATE quick_note_conversions SET state='source_deleted_waiting_sync',updated_at=? WHERE source_quick_note_id=?")
+      .run(nowIso(), sourceQuickNoteId);
+  }
+
+  recoverConversions(noteExists: (noteId: string) => boolean, cleanupUntrackedTarget: (noteId: string) => void): void {
+    const rows = this.db.prepare("SELECT * FROM quick_note_conversions WHERE state IN ('prepared','target_created')").all() as any[];
+    for (const row of rows) {
+      if (noteExists(row.target_note_id)) {
+        if (row.state === "prepared") {
+          this.db.prepare("UPDATE quick_note_conversions SET state='target_created',updated_at=? WHERE source_quick_note_id=?").run(nowIso(), row.source_quick_note_id);
+        }
+        try { this.finalizeConversion(row.source_quick_note_id); }
+        catch (error) { console.warn("[quick-notes] 转换恢复未完成:", error); }
+      } else if (row.state === "prepared") {
+        cleanupUntrackedTarget(row.target_note_id);
+        this.db.prepare("DELETE FROM quick_note_conversions WHERE source_quick_note_id=?").run(row.source_quick_note_id);
+      }
+    }
+  }
+
+  markTargetNotesSynced(noteIds?: Set<string>): void {
+    const conversions = this.db.prepare("SELECT * FROM quick_note_conversions WHERE state='source_deleted_waiting_sync'").all() as any[];
+    const tx = this.db.transaction(() => {
+      for (const conversion of conversions) {
+        if (noteIds && !noteIds.has(conversion.target_note_id)) continue;
+        this.db.prepare("UPDATE quick_note_deleted SET ready_to_sync=1 WHERE id=? AND conversion_target_note_id=?")
+          .run(conversion.source_quick_note_id, conversion.target_note_id);
+        this.db.prepare("UPDATE quick_note_conversions SET state='complete',updated_at=? WHERE source_quick_note_id=?")
+          .run(nowIso(), conversion.source_quick_note_id);
+      }
+    });
+    tx();
+  }
+
+  // ===== Quick Note S3 sync adapter =====
+  listQuickNotesForSync(): QuickNoteDocument[] { return this.listQuickNotes(); }
+  quickNotePathFor(id: string): string { return this.itemPath(id); }
+  quickNoteAssetsPathFor(id: string): string { return this.assetDirFor(id); }
+  baseHash(id: string): string | null {
+    const row = this.db.prepare("SELECT content_hash FROM quick_note_sync_base WHERE quick_note_id=?").get(id) as { content_hash: string } | undefined;
+    return row?.content_hash ?? null;
+  }
+  setBaseHash(id: string, contentHash: string): void {
+    this.db.prepare("INSERT INTO quick_note_sync_base(quick_note_id,content_hash) VALUES(?,?) ON CONFLICT(quick_note_id) DO UPDATE SET content_hash=excluded.content_hash").run(id, contentHash);
+  }
+  markSynced(id: string): void { this.db.prepare("UPDATE quick_notes SET sync_state='synced' WHERE id=?").run(id); }
+  markLocal(id: string): void { this.db.prepare("UPDATE quick_notes SET sync_state='local' WHERE id=?").run(id); }
+  listDeletedForSync(): QuickNoteDeleted[] {
+    return this.db.prepare("SELECT * FROM quick_note_deleted WHERE ready_to_sync=1 ORDER BY deleted_at").all().map((row: any) => ({
+      id: row.id, createdAt: row.created_at, updatedAt: row.updated_at, deletedAt: row.deleted_at,
+      conversionTargetNoteId: row.conversion_target_note_id ?? null, readyToSync: !!row.ready_to_sync,
+    }));
+  }
+
+  /** 已删除、但尚不能同步出去的转换 tombstone。同步时必须保留远端原条目，
+   * 否则 Lake 尚未成功上传时可能既复活源小记又覆盖远端 manifest。 */
+  listDeferredDeletedForSync(): QuickNoteDeleted[] {
+    return this.db.prepare("SELECT * FROM quick_note_deleted WHERE ready_to_sync=0 ORDER BY deleted_at").all().map((row: any) => ({
+      id: row.id, createdAt: row.created_at, updatedAt: row.updated_at, deletedAt: row.deleted_at,
+      conversionTargetNoteId: row.conversion_target_note_id ?? null, readyToSync: !!row.ready_to_sync,
+    }));
+  }
+  hasDeleted(id: string): boolean { return !!this.db.prepare("SELECT 1 FROM quick_note_deleted WHERE id=?").get(id); }
+  deletedRecord(id: string): QuickNoteDeleted | null {
+    const row = this.db.prepare("SELECT * FROM quick_note_deleted WHERE id=?").get(id) as any;
+    return row ? { id: row.id, createdAt: row.created_at, updatedAt: row.updated_at, deletedAt: row.deleted_at, conversionTargetNoteId: row.conversion_target_note_id ?? null, readyToSync: !!row.ready_to_sync } : null;
+  }
+  rememberDeleted(item: { id: string; createdAt: string; updatedAt: string; deletedAt: string }): void {
+    if (!isSafeSegment(item.id)) throw new AppError("InvalidInput", "无效的小记删除记录");
+    this.db.prepare("INSERT OR IGNORE INTO quick_note_deleted(id,created_at,updated_at,deleted_at,conversion_target_note_id,ready_to_sync) VALUES(?,?,?,?,NULL,1)")
+      .run(item.id, item.createdAt, item.updatedAt, item.deletedAt);
+  }
+
+  importRemoteQuickNote(item: { id: string; createdAt: string; updatedAt: string; contentHash: string; isConflict: boolean }, contentBytes: Buffer, assets: { filename: string; bytes: Buffer }[]): void {
+    if (!isSafeSegment(item.id)) throw new AppError("InvalidInput", "远端小记 ID 无效");
+    if (hash(contentBytes) !== item.contentHash) throw new AppError("InvalidInput", "远端小记内容哈希不符");
+    const parsed = this.validateStoredContent(JSON.parse(contentBytes.toString("utf8")));
+    for (const image of parsed.images) {
+      const asset = assets.find((candidate) => candidate.filename === image.filename);
+      if (!asset || asset.bytes.length !== image.size || hash(asset.bytes) !== image.hash) throw new AppError("InvalidInput", `远端图片不完整: ${image.filename}`);
+    }
+    // 任何文件系统写入前完成路径校验，避免恶意 manifest 留下空目录或临时垃圾。
+    for (const asset of assets) {
+      if (!isSafeSegment(asset.filename)) throw new AppError("InvalidInput", "远端图片文件名无效");
+    }
+    const assetDir = this.assetDirFor(item.id);
+    const itemPath = this.itemPath(item.id);
+    fs.mkdirSync(assetDir, { recursive: true });
+    const temporary = `${assetDir}.incoming-${process.pid}-${crypto.randomBytes(3).toString("hex")}`;
+    fs.mkdirSync(temporary, { recursive: true });
+    try {
+      for (const asset of assets) {
+        this.atomicWrite(path.join(temporary, asset.filename), asset.bytes);
+      }
+      this.atomicWrite(itemPath, contentBytes);
+      const tx = this.db.transaction(() => {
+        this.db.prepare("INSERT INTO quick_notes(id,created_at,updated_at,preview_text,image_count,content_hash,sync_state,is_conflict) VALUES(?,?,?,?,?,?, 'synced', ?) ON CONFLICT(id) DO UPDATE SET created_at=excluded.created_at,updated_at=excluded.updated_at,preview_text=excluded.preview_text,image_count=excluded.image_count,content_hash=excluded.content_hash,sync_state='synced',is_conflict=excluded.is_conflict")
+          .run(item.id, item.createdAt, item.updatedAt, previewOf(parsed.text, parsed.images.length), parsed.images.length, item.contentHash, item.isConflict ? 1 : 0);
+        this.db.prepare("DELETE FROM quick_note_assets WHERE quick_note_id=?").run(item.id);
+        const insert = this.db.prepare("INSERT INTO quick_note_assets(id,quick_note_id,filename,mime_type,width,height,size,content_hash) VALUES(?,?,?,?,?,?,?,?)");
+        for (const image of parsed.images) insert.run(image.id, item.id, image.filename, image.mimeType, image.width, image.height, image.size, image.hash);
+      });
+      tx();
+      fs.rmSync(assetDir, { force: true, recursive: true });
+      fs.renameSync(temporary, assetDir);
+    } catch (error) {
+      try { fs.rmSync(temporary, { force: true, recursive: true }); } catch { /* best effort */ }
+      throw error;
+    }
+  }
+
+  /** 将有冲突的小记复制为新的、可见的时间线卡片，避免任何一侧内容被静默吞掉。 */
+  importRemoteConflictCopy(remote: { createdAt: string; updatedAt: string; contentHash: string }, contentBytes: Buffer, assets: { filename: string; bytes: Buffer }[]): string {
+    const newId = uuid();
+    this.importRemoteQuickNote({ id: newId, createdAt: remote.createdAt, updatedAt: remote.updatedAt, contentHash: remote.contentHash, isConflict: true }, contentBytes, assets);
+    this.markLocal(newId);
+    return newId;
+  }
+}
