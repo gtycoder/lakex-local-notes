@@ -582,3 +582,399 @@ ne-card[data-card-name="codeblock"] .ne-card-resizer-mask {
 .statusbar-export-md { display: flex; align-items: center; gap: 4px; height: 22px; margin-left: 6px; padding: 0 8px; border: 1px solid #dfe2e7; border-radius: 4px; color: #48515c; background: #fff; font-size: 11px; }
 .statusbar-export-md:hover { border-color: #3a8064; color: #28775a; background: #f3f8f5; }
 .statusbar-notice { color: #28775a; font-size: 11px; margin-right: 6px; }
+
+/* ===== Apple-style management shell (Lake editor internals intentionally untouched) ===== */
+:root {
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", system-ui, sans-serif;
+  font-optical-sizing: auto;
+  --shell-accent: #596cc1;
+  --shell-accent-strong: #4658a8;
+  --shell-accent-soft: #e6e9f7;
+  --shell-text: #242936;
+  --shell-text-secondary: #596174;
+  --shell-text-tertiary: #8b93a6;
+  --shell-separator: rgba(66, 75, 112, 0.16);
+  /* Use opaque, lightly blue-tinted surfaces so the library remains readable. */
+  --shell-material: #f3f4f8;
+  --shell-toolbar: #eceef6;
+  --shell-ease: cubic-bezier(.22, 1, .36, 1);
+  --shell-radius: 10px;
+  --activity-rail-width: 34px;
+}
+
+@media (min-width: 761px) {
+  .app-shell {
+    grid-template-columns: var(--activity-rail-width) var(--sidebar-width) minmax(0, 1fr);
+    background: #fff;
+    transition: grid-template-columns 260ms var(--shell-ease);
+  }
+  .app-shell.sidebar-floating,
+  .app-shell.sidebar-collapsed { grid-template-columns: var(--activity-rail-width) 0 minmax(0, 1fr); }
+  .app-shell.sidebar-collapsed { transition-duration: 180ms; }
+  .app-shell.sidebar-resizing { transition: none; }
+
+  .activity-rail {
+    display: flex;
+    position: relative;
+    z-index: 270;
+    grid-column: 1;
+    grid-row: 1;
+    flex-direction: column;
+    align-items: center;
+    align-self: end;
+    width: var(--activity-rail-width);
+    min-width: var(--activity-rail-width);
+    height: calc(100% - var(--topbar-height));
+    padding: 0 3px 6px;
+    border-right: 1px solid var(--shell-separator);
+    background: var(--shell-material);
+  }
+  .activity-rail-spacer { display: none; }
+  .activity-rail-fill { flex: 1; }
+  .activity-button {
+    display: grid;
+    place-items: center;
+    width: 28px;
+    height: 28px;
+    margin: 2px 0;
+    padding: 0;
+    border: 0;
+    border-radius: 7px;
+    color: #747b85;
+    background: transparent;
+    transition: color 130ms ease-out, background-color 130ms ease-out, box-shadow 130ms ease-out, transform 90ms ease-out;
+  }
+  .activity-button:hover { color: var(--shell-accent-strong); background: rgba(89, 108, 193, .12); }
+  .activity-button.active {
+    color: var(--shell-accent-strong);
+    background: var(--shell-accent-soft);
+    box-shadow: inset 0 0 0 1px rgba(47, 125, 94, 0.06);
+  }
+  .activity-button:active { transform: scale(.965); }
+  .activity-button:focus-visible { outline: 3px solid rgba(47, 125, 94, 0.18); outline-offset: 1px; }
+
+  .sidebar {
+    position: relative;
+    z-index: 250;
+    grid-column: 2;
+    grid-row: 1;
+    width: var(--sidebar-width);
+    align-self: end;
+    height: calc(100% - var(--topbar-height));
+    padding-top: 0;
+    overflow: visible;
+    border-right: 1px solid var(--shell-separator);
+    background: var(--shell-material);
+    opacity: 1;
+    transform: translateX(0);
+    transition: opacity 180ms ease-out, transform 260ms var(--shell-ease), box-shadow 240ms ease-out;
+  }
+  .app-shell.sidebar-resizing .sidebar { transition: none; }
+  .sidebar::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    right: 0;
+    left: 0;
+    height: var(--topbar-height);
+    -webkit-app-region: drag;
+  }
+  .sidebar.sidebar-floating,
+  .sidebar.sidebar-collapsed {
+    position: fixed;
+    top: var(--topbar-height);
+    bottom: 0;
+    left: var(--activity-rail-width);
+    padding-top: 0;
+  }
+  .sidebar.sidebar-floating {
+    border-right-color: rgba(66, 75, 112, .18);
+    border-radius: 0 14px 14px 0;
+    box-shadow: 18px 0 50px rgba(43, 50, 78, .16), 2px 0 7px rgba(43, 50, 78, .08);
+  }
+  .sidebar.sidebar-collapsed {
+    pointer-events: none;
+    opacity: 0;
+    transform: translateX(-18px);
+    box-shadow: none;
+    transition-duration: 180ms;
+  }
+
+  .sidebar-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex: 0 0 38px;
+    min-height: 38px;
+    padding: 0 10px;
+  }
+  .sidebar-heading-copy { display: flex; align-items: baseline; gap: 7px; min-width: 0; }
+  .sidebar-heading-copy strong { color: #353a42; font-size: 13px; font-weight: 630; letter-spacing: -.01em; }
+  .sidebar-heading-copy span { color: var(--shell-text-tertiary); font-size: 10px; font-weight: 500; }
+  .search-box {
+    height: 31px;
+    margin: 1px 8px 6px;
+    padding: 0 9px;
+    border: 1px solid transparent;
+    border-radius: 8px;
+    color: var(--shell-text-tertiary);
+    background: #ffffff;
+    box-shadow: inset 0 0 0 1px rgba(31, 35, 41, 0.055);
+    transition: background-color 150ms ease-out, border-color 150ms ease-out, box-shadow 150ms ease-out;
+  }
+  .search-box:focus-within {
+    border-color: rgba(89, 108, 193, .46);
+    background: #ffffff;
+    box-shadow: 0 0 0 3px rgba(89, 108, 193, .13);
+  }
+  .search-box input { color: var(--shell-text); font-size: 12.5px; }
+  .list-heading { height: 29px; padding: 0 8px 3px; }
+  .icon-button { border-radius: 8px; }
+  .icon-button:focus-visible,
+  .tab-item:focus-visible,
+  .statusbar button:focus-visible,
+  .settings-panel button:focus-visible { outline: 3px solid rgba(89, 108, 193, .22); outline-offset: 1px; }
+
+  .note-list { padding: 0 6px 10px; }
+  .note-row,
+  .tree-row {
+    min-height: 31px;
+    padding: 3px 7px;
+    border-radius: 8px;
+    color: var(--shell-text-secondary);
+    transition: background-color 120ms ease-out, color 120ms ease-out, box-shadow 120ms ease-out;
+  }
+  .note-row:hover { background: rgba(89, 108, 193, .08); }
+  .note-row.active {
+    color: var(--shell-text);
+    background: var(--shell-accent-soft);
+    box-shadow: inset 0 0 0 1px rgba(47, 125, 94, .055);
+  }
+  .note-row-copy strong { color: inherit; font-size: 13px; font-weight: 480; }
+  .tree-row.type-notebook { min-height: 33px; color: #3f4d47; }
+  .tree-row.type-notebook .note-row-copy strong { color: inherit; font-weight: 620; }
+  .tree-row.type-group .note-row-copy strong { font-weight: 560; }
+  .tree-children { border-left-color: rgba(31, 35, 41, .075); transform-origin: top; animation: shell-tree-reveal 180ms var(--shell-ease); }
+  .sync-dot { width: 4px; height: 4px; opacity: .9; }
+
+  .sidebar-resize-handle {
+    position: absolute;
+    z-index: 3;
+    top: var(--topbar-height);
+    right: -5px;
+    bottom: 0;
+    width: 10px;
+    cursor: col-resize;
+    touch-action: none;
+  }
+  .sidebar.sidebar-floating .sidebar-resize-handle,
+  .sidebar.sidebar-collapsed .sidebar-resize-handle { top: 0; }
+  .sidebar-resize-handle::after {
+    content: "";
+    position: absolute;
+    top: 42%;
+    right: 4px;
+    width: 2px;
+    height: 48px;
+    border-radius: 999px;
+    background: rgba(89, 108, 193, 0);
+    transform: translateY(-50%);
+    transition: background-color 130ms ease-out;
+  }
+  .sidebar-resize-handle:hover::after,
+  .sidebar-resize-handle:focus-visible::after { background: rgba(89, 108, 193, .48); }
+  .sidebar-resize-handle:focus-visible { outline: none; }
+
+  .workspace { grid-column: 3; grid-row: 1; grid-template-rows: minmax(0, 1fr) 24px; }
+
+  /* The tab strip is a window-level title bar. It must not inherit the
+     document column's x offset when the library is docked or previewed. */
+  .tab-bar {
+    position: fixed;
+    top: 0;
+    right: 0;
+    left: 0;
+    z-index: 400;
+    box-sizing: border-box;
+    display: flex;
+    gap: 6px;
+    width: 100%;
+    height: var(--topbar-height);
+    min-height: var(--topbar-height);
+    padding: 4px 10px;
+    border-bottom: 1px solid var(--shell-separator);
+    background: var(--shell-toolbar);
+    box-shadow: 0 1px 0 rgba(66, 75, 112, .05);
+    backdrop-filter: saturate(1.2) blur(20px);
+    -webkit-backdrop-filter: saturate(1.2) blur(20px);
+  }
+  .platform-mac .tab-bar {
+    padding-left: 82px;
+    -webkit-app-region: drag;
+  }
+  .platform-native-titlebar .tab-bar {
+    padding-left: 10px;
+    -webkit-app-region: no-drag;
+  }
+  .tabbar-actions {
+    display: flex;
+    align-items: center;
+    gap: 3px;
+    flex: 0 0 auto;
+    margin-left: 0;
+    padding-right: 5px;
+    -webkit-app-region: no-drag;
+  }
+  .tabbar-action {
+    display: grid;
+    place-items: center;
+    flex: 0 0 auto;
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    border: 0;
+    border-radius: 8px;
+    color: #626d91;
+    background: transparent;
+    -webkit-app-region: no-drag;
+    transition: color 130ms ease-out, background-color 130ms ease-out, transform 90ms ease-out;
+  }
+  .tabbar-action:hover { color: var(--shell-accent-strong); background: rgba(89, 108, 193, .12); }
+  .tabbar-action:active { transform: scale(.94); }
+  .tabbar-action:focus-visible { outline: 3px solid rgba(89, 108, 193, .22); outline-offset: 1px; }
+  /* The macOS traffic-light inset is platform-owned, not sidebar-owned.
+     Keeping it here prevents collapsed/floating modes from moving the tabs. */
+  .tab-panels {
+    box-sizing: border-box;
+    padding-top: var(--topbar-height);
+  }
+  .tab-item {
+    max-width: 190px;
+    height: 28px;
+    padding: 0 8px 0 11px;
+    border: 1px solid transparent;
+    border-radius: 9px;
+    color: #66708a;
+    background: rgba(255, 255, 255, .42);
+    font-size: 12px;
+    font-weight: 450;
+    box-shadow: none;
+    transition: color 130ms ease-out, background-color 130ms ease-out, border-color 130ms ease-out, box-shadow 130ms ease-out, transform 90ms ease-out;
+  }
+  .tab-item:hover { color: #46527e; background: rgba(255, 255, 255, .78); }
+  .tab-item:active { transform: scale(.98); }
+  .tab-item.active {
+    color: var(--shell-text);
+    border-color: rgba(89, 108, 193, .22);
+    background: #ffffff;
+    box-shadow: 0 1px 2px rgba(66, 75, 112, .10), 0 4px 12px rgba(66, 75, 112, .07);
+    font-weight: 520;
+  }
+  .tab-close { width: 17px; height: 17px; border-radius: 50%; }
+  .tab-item.active .tab-close { opacity: .38; }
+  .tab-close:hover { background: rgba(31, 35, 41, .09); }
+  .tab-bar-hint { margin-left: auto; padding: 0 5px; color: #8992ad; font-variant-numeric: tabular-nums; }
+
+  .statusbar {
+    gap: 10px;
+    min-width: 0;
+    height: 24px;
+    padding: 0 9px 0 12px;
+    border-top-color: var(--shell-separator);
+    color: #989ea7;
+    background: #f5f6fb;
+    font-size: 10px;
+    backdrop-filter: blur(18px);
+    -webkit-backdrop-filter: blur(18px);
+  }
+  .statusbar > span:first-child { flex: 0 1 auto; overflow: hidden; color: #a0a5ad; text-overflow: ellipsis; white-space: nowrap; }
+  .statusbar-wordcount { flex: 1 1 auto; min-width: 42px; margin-right: 0; color: #878e98; font-variant-numeric: tabular-nums; }
+  .statusbar-notice { flex: 0 1 auto; overflow: hidden; margin: 0; color: var(--shell-accent-strong); text-overflow: ellipsis; white-space: nowrap; transition: opacity 180ms ease-out, transform 180ms var(--shell-ease); }
+  @starting-style { .statusbar-notice { opacity: 0; transform: translateY(4px); } }
+  .save-label { flex: 0 0 auto; color: #858c96; }
+  .statusbar-export-md {
+    flex: 0 0 auto;
+    height: 20px;
+    margin: 0;
+    padding: 0 7px;
+    border: 1px solid rgba(31, 35, 41, .08);
+    border-radius: 6px;
+    color: #69717c;
+    background: rgba(255, 255, 255, .68);
+    box-shadow: 0 1px 1px rgba(31, 35, 41, .025);
+    transition: color 130ms ease-out, background-color 130ms ease-out, border-color 130ms ease-out, transform 90ms ease-out;
+  }
+  .statusbar-export-md:hover { color: var(--shell-accent-strong); border-color: rgba(89, 108, 193, .24); background: #eef0fb; }
+  .statusbar-export-md:active { transform: scale(.965); }
+  .statusbar-sync {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    flex: 0 0 auto;
+    max-width: 190px;
+    overflow: hidden;
+    color: #8b929c;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .statusbar-sync svg { flex: 0 0 auto; }
+  .statusbar-sync.syncing { color: #557c6c; }
+  .statusbar-sync.success { color: var(--shell-accent-strong); }
+  .statusbar-sync.error { color: #b34b45; }
+}
+
+@keyframes shell-tree-reveal {
+  from { opacity: 0; transform: translateY(-3px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* App-owned menus and dialogs share the shell material; Lake popovers are not targeted. */
+.create-menu,
+.context-menu {
+  border-color: rgba(31, 35, 41, .12);
+  border-radius: 10px;
+  background: rgba(253, 253, 254, .96);
+  box-shadow: 0 16px 44px rgba(24, 28, 34, .18), 0 2px 8px rgba(24, 28, 34, .07);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+}
+.create-menu > button,
+.context-menu > button { border-radius: 7px; }
+.create-menu > button:hover,
+.context-menu > button:hover { background: rgba(31, 35, 41, .06); }
+
+.modal-backdrop,
+.settings-overlay {
+  z-index: 400;
+  padding: 20px;
+  background: rgba(31, 35, 41, .24);
+  backdrop-filter: blur(8px) saturate(1.08);
+  -webkit-backdrop-filter: blur(8px) saturate(1.08);
+}
+.sync-panel,
+.settings-panel,
+.confirm-dialog {
+  border-color: rgba(31, 35, 41, .12);
+  border-radius: 14px;
+  box-shadow: 0 24px 70px rgba(23, 27, 33, .24), 0 2px 8px rgba(23, 27, 33, .08);
+}
+.sync-panel { max-height: calc(100dvh - 40px); overflow-y: auto; overscroll-behavior: contain; }
+.sync-panel header,
+.settings-header { background: rgba(250, 250, 251, .90); backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px); }
+.settings-panel { width: 388px; }
+.settings-header { height: 48px; padding: 0 16px; border-radius: 14px 14px 0 0; }
+.settings-close { display: grid; place-items: center; width: 24px; height: 24px; padding: 0; border-radius: 50%; }
+.settings-close:hover { background: rgba(31, 35, 41, .07); }
+.settings-body { padding: 15px 16px 17px; }
+.settings-choice { border-radius: 8px; transition: background-color 130ms ease-out, border-color 130ms ease-out, color 130ms ease-out, transform 90ms ease-out; }
+.settings-choice:active { transform: scale(.97); }
+
+@media (prefers-reduced-motion: reduce) {
+  .app-shell,
+  .sidebar,
+  .activity-button,
+  .tab-item,
+  .tree-children,
+  .statusbar-notice,
+  .settings-choice { animation: none !important; transition-duration: 1ms !important; }
+}
