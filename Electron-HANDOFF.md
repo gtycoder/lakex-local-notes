@@ -2,7 +2,7 @@
 
 > **给零上下文的新会话：先读本文，再读 `docs/CODEX-GUIDE.md`（Playwright 驱动真实 Electron
 > 实测是本项目的正确姿势），然后按需读 `docs/PROGRESS.md` / `docs/ARCHITECTURE.md` 等。**
-> 本文 = 文档索引 + **★ 最新交接（2026-08-03 会话）全记录**。修改代码前先读完相关文档。
+> 本文 = 文档索引 + **★ 最新交接（2026-08-04 Apple 风格管理外壳）全记录**。修改代码前先读完相关文档。
 
 ---
 
@@ -12,7 +12,289 @@
 **本地优先笔记应用**：`.lake` 文件存本地、SQLite 存元数据、S3 兼容备份同步、虚拟渲染优化大文档、
 资源归一化（图片本地化）、支持多标签编辑、全文导出 Markdown。
 
-## ★ 最新交接（2026-08-03 会话）：代码审计修复 + 体验优化 + MD 导出 + 发布准备
+## ★ 最新交接（2026-08-04）：思源式管理外壳 + Apple 风格界面原型
+
+> **当前工作的第一原则：用“思源式”的管理方式管理 Lake，但不改变 Lake 编辑器本身。**
+> 管理外壳可以重排、变窄、悬浮、增加克制动效；Lake 继续独立负责格式工具栏、正文、卡片、右侧大纲和虚拟渲染。
+
+### 0. 新会话先看这里
+
+- 项目目录：`/Users/admin/file/local-lake/lake-notes-electron`
+- 当前开发分支：`design/apple-shell-prototype`
+- master 基线：`d537428`（当前 master 未被本轮 UI 工作改动）
+- 本轮分支提交：
+  - `bc424ad feat: add Apple-style Lake management shell`
+  - `eafdf92 refine sidebar hover and titlebar layout`
+- 当前分支相对 master 只改了 4 个文件：
+  - `src/App.tsx`
+  - `src/components/Sidebar.tsx`
+  - `src/features/editor/MultiTabEditor.tsx`（仅很小的标签栏提示调整）
+  - `src/styles.css`
+- 本轮代码提交后工作区原本是干净的；本交接文档本身会形成新的文档改动/提交。
+- **不要直接切到 master 继续开发，也不要把分支合入 master。用户明确要求先在设计分支充分验证。**
+- 用户尚未对 2026-08-04 最终版本给出最后验收意见；下一会话应先让用户体验，再按反馈微调。
+
+### 1. 任务目标
+
+用户希望在保留所有已有功能的前提下，把应用管理层改造成更接近思源笔记和 macOS 原生应用的界面：
+
+1. 用思源式左侧管理结构包住 Lake 编辑器：左侧活动工具轨 + 可固定/可悬浮的资料库树。
+2. Lake 编辑器保持原生行为和样式，不因外壳或动效修改编辑器内部逻辑。
+3. 左侧不增加“最近”和“收藏”；资料库仍是既有笔记本/分组/文档树。
+4. 多标签使用轻量胶囊样式。
+5. Lake 原生格式工具栏必须常驻（除非用户在既有偏好设置中主动隐藏）。
+6. 底部状态栏必须保留字数、本地保存状态、同步状态、Markdown 导出等功能，但可以更薄、更克制。
+7. Apple 风格重点放在层级、材质、间距、反馈和可中断动效，不堆叠无意义动画。
+8. 所有 UI 原型和实现先在独立分支完成并由用户验证，未经验证不得改动 master。
+
+用户第二轮的明确反馈是：
+
+- 左侧活动栏和资料库都要进一步缩窄。
+- 悬浮资料库不应先点击：鼠标放到文档图标上就弹出；点击文档图标才表示固定/取消固定。
+- 资料库标题栏不再需要图钉和收起按钮。
+- 标签栏应融合进 macOS 窗口顶栏，像思源一样释放纵向编辑空间。
+- 左活动轨已有“同步”和“设置”入口，因此底栏不应再保留重复齿轮和同步按钮；但同步**状态文本**仍需保留。
+
+### 2. 不可破坏的产品与代码边界
+
+以下约束是用户反复确认过的，后续修改必须继续遵守：
+
+- 不修改 `src/features/editor/LakeEditor.tsx`。
+- 不修改 `src/features/editor/EditorTab.tsx`。
+- 不修改 `src/features/editor/lakeRuntime.ts`。
+- 不为外壳新增 `.ne-*`、`.lake-editor-*`、Slate、Board card 等 Lake 内部选择器覆盖。
+- 不把格式工具栏搬出 Lake，也不重写它的样式和交互。
+- 不改变 Lake 卡片、表格、代码块、TOC、虚拟渲染或滚动容器行为。
+- 外壳只负责：活动工具轨、资料库树、侧栏状态、多标签外观、设置/同步入口、底部状态栏和外壳级动效。
+- 移动端仍走原有 `MobileLibrary` / 文档阅读编辑流程，桌面外壳 CSS 以 `@media (min-width: 761px)` 隔离。
+- 动效必须支持 `prefers-reduced-motion`，并优先使用 `transform` / `opacity`。
+
+### 3. 已完成内容
+
+#### 3.1 第一轮：Apple 风格管理外壳（`bc424ad`）
+
+- 新增桌面左侧活动工具轨：
+  - 文档/资料库入口
+  - S3 云同步入口
+  - 偏好设置入口
+- 新增资料库三种内部状态：
+  - `docked`：常驻并占布局宽度
+  - `floating`：覆盖在编辑区上方，不挤压正文
+  - `collapsed`：隐藏，仅保留活动工具轨
+- 资料库支持拖拽调宽和键盘调宽，宽度持久化。
+- 资料库树、搜索、创建、重命名、拖拽移动、删除、同步圆点等原功能全部保留。
+- 多标签改成轻量胶囊形式，关闭按钮和未保存圆点保留。
+- 底部状态栏压缩为 24px，仍保留仓库说明、字数、通知、MD 导出、保存状态和同步状态。
+- 设置面板、同步面板、确认对话框和应用自有菜单统一为轻量半透明材质。
+- 加入克制的 hover、press、侧栏滑入、树节点展开和提示出现动效。
+- 侧栏宽度和模式使用 localStorage 持久化。
+- 加入 reduced-motion 降级。
+
+#### 3.2 第二轮：悬停资料库 + 融合顶栏（`eafdf92`）
+
+- 活动工具轨宽度从 48px 缩到 **44px**，按钮缩到 32px。
+- 资料库宽度范围调整为：
+  - 默认 224px
+  - 最小 188px
+  - 最大 300px
+- 使用新的宽度 key `lake-notes-v3.sidebar-width`，避免第一轮旧宽度（252/330）污染新默认值。
+- 侧栏固定状态只持久化 `docked` / `collapsed`；临时 `floating` 不写 localStorage。
+- 文档按钮交互改为：
+  - `pointerenter`：collapsed → floating
+  - 从按钮移入资料库：继续保持 floating
+  - 离开按钮和资料库：延迟 120ms 后 floating → collapsed
+  - 点击：非 docked → docked；docked → collapsed
+- 资料库标题栏删除图钉和收起按钮，只保留“资料库”标题。
+- 资料库标题栏高度从 42px 缩到 38px，搜索框和树列表横向留白同步收紧。
+- 标签栏从第一轮约 73px 压缩成单行 **38px**，直接占用隐藏标题栏区域，Lake 格式工具栏紧随其后。
+- collapsed/floating 时标签栏左侧额外留 30px，配合 44px 工具轨避开 macOS 交通灯区域。
+- 活动轨顶部保留 38px 拖动区；资料库顶部用伪元素提供 38px `-webkit-app-region: drag` 区。
+- 底栏删除可点击的同步按钮和设置齿轮：
+  - 同步入口只保留在左活动轨。
+  - 设置入口只保留在左活动轨。
+  - 底栏改为只读 `.statusbar-sync`，显示当前同步状态和错误/成功颜色。
+- Lake 格式工具栏、正文、卡片、右侧大纲均未改动。
+
+### 4. 已完成验证
+
+#### 4.1 自动检查
+
+在 Node 24 环境下已通过：
+
+```bash
+export PATH="$HOME/.nvm/versions/node/v24.18.0/bin:$PATH"
+export npm_config_registry=https://registry.npmmirror.com
+export npm_config_cache=/tmp/npm-cache-lake
+
+node node_modules/typescript/bin/tsc --noEmit
+node node_modules/vite/bin/vite.js build
+bash scripts/setup-test-abi.sh
+npx vitest run
+git diff --check
+```
+
+结果：
+
+- TypeScript 通过。
+- Vite 渲染层和 Electron 主进程构建通过。
+- Vitest **102/102** 通过。
+- 构建只有已有的大 chunk 警告，无新构建错误。
+- `git diff --check` 通过。
+
+保护性检查也通过：
+
+```bash
+git diff master...HEAD -- src/styles.css | grep -nE '^\+.*(\.ne-|lake-editor|slate-|board-card)'
+git diff master...HEAD --name-only | grep -E 'LakeEditor|EditorTab|lakeRuntime'
+```
+
+两项都应为空：没有新增 Lake 内部选择器，也没有改受保护的编辑器文件。
+
+#### 4.2 真实 Electron / Playwright 验证
+
+已用 Playwright 驱动真实 Electron 验证：
+
+- 1280×820：布局正常，无水平溢出。
+- 800×600：布局正常，无水平溢出；Lake 工具栏仍存在并可见。
+- 720×480：继续进入原有移动端文档列表，不被桌面外壳覆盖。
+- collapsed 状态悬停文档按钮会打开 floating 资料库。
+- 鼠标从按钮移动到资料库不会中途关闭。
+- 离开资料库后约 120ms 自动收起。
+- 点击文档按钮可固定；再次点击可取消固定。
+- floating 状态点击正文会收起。
+- 资料库内部旧图钉/收起控件数量为 0。
+- 底栏设置按钮和可点击同步按钮数量为 0。
+- 底栏只读同步状态存在，测试时文本为“仅本地保存”。
+- 标签栏实际高度为 38px。
+- Lake 原生格式工具栏仍存在。
+- 页面控制台无 error，Playwright `pageerror` 为空。
+
+验证截图（位于临时目录，机器重启后可能消失）：
+
+- `/tmp/lake-shell-refine-final.png`：1280×820 固定资料库最终状态
+- `/tmp/lake-shell-hover-panel.png`：悬停资料库状态
+- `/tmp/lake-shell-refine-800.png`：800×600
+- `/tmp/lake-shell-refine-720.png`：720×480 移动端回归
+- 第一轮最终图：`/tmp/lake-shell-final-verified.png`
+
+### 5. 当前问题 / 尚待确认
+
+1. **最重要：等待用户最终主观验收。** 代码和自动验证已完成，但用户还没有对第二轮最终窗口给出“可以合并”结论。不要自行合并 master。
+2. **原生交通灯和窗口拖动仍需用户肉眼确认。** Playwright 截图只截 webContents，不包含 macOS 红黄绿窗口按钮；CSS 计算确认顶部已留空间，`-webkit-app-region` 也为 `drag`，但 Playwright 合成鼠标拖动没有真的移动原生窗口，不能把这点写成完全验证。
+3. 资料库默认模式受 `lake-notes-v2.sidebar-mode` 影响。若用户上次退出时为 collapsed，下次仍会 collapsed；这是预期持久化，不是默认值失效。
+4. 第一轮的 `lake-notes-v2.sidebar-last-open-mode` 可能仍留在 localStorage，但第二轮已经不再读取，不影响行为。
+5. 侧栏 hover 只适用于桌面精确指针环境。当前事件使用 pointer enter/leave，移动端由媒体查询和原移动流程隔离；若未来支持触屏桌面，需要再定义触摸语义。
+6. 侧栏调宽功能仍保留。188px 很窄，长标题会省略；这是用户要求更窄后的预期，需要用户确认是否将默认值从 224px 再调小。
+7. 状态栏只读同步文本在窄窗口可能被压缩，当前 `max-width: 190px` 并省略；同步完整操作和详情在左侧云图标面板中。
+8. 本轮没有增加“最近”“收藏”，也没有改 Lake 工具栏；若用户后续提出相关要求，先确认是否违背当前产品原则。
+9. 写本文时曾有一个 Playwright 启动的 Electron 测试进程；下一会话不要假设它仍可用。先检查端口和项目进程，再决定复用或精确关闭。
+
+### 6. 下一步计划（按顺序）
+
+#### P0：继续用户验收，不合并 master
+
+1. 在 `design/apple-shell-prototype` 上启动开发版，让用户重点体验：
+   - 悬停是否太敏感或太迟钝（当前离开延迟 120ms）。
+   - 点击“固定/取消固定”的心智是否自然。
+   - 224px 默认资料库是否还需要缩窄。
+   - 38px 融合顶栏是否足够清晰。
+   - 红黄绿交通灯是否遮挡，标题栏空白区域是否能拖动窗口。
+   - 底栏信息密度是否合适。
+2. 若只是数值和视觉微调，继续只改 `App.tsx`、`Sidebar.tsx`、`styles.css`，不要碰 Lake 内核文件。
+3. 每轮改动后重复 102 项测试和真实 Electron 多尺寸检查。
+
+#### P1：确认后做一次专门的 UI 回归
+
+- 多标签达到 8 个时检查横向滚动和关闭按钮。
+- 长文档标题、中文/英文混排、未保存圆点、同步错误状态。
+- 侧栏拖到最小/最大宽度并重启，检查持久化。
+- 快速反复移入/移出文档图标，确认 timer 不残留、不闪烁。
+- floating 时操作搜索、树展开、右键菜单、拖拽节点，确认不会误收起。
+- 打开同步面板和设置面板，确认左侧入口完整替代底栏入口。
+- 用鼠标真实拖动标题栏区域，确认窗口可移动。
+
+#### P2：只有用户明确批准后才考虑合并
+
+- 先确保工作区干净、分支测试全绿。
+- 建议对 `master...design/apple-shell-prototype` 做一次代码审查。
+- 用户明确同意后再选择 merge/fast-forward；不要由新会话自行决定。
+- 合并后再更新本文和 `docs/PROGRESS.md`，记录最终交互方案。
+
+### 7. 如何启动给用户验证
+
+先检查运行状态，避免单实例锁：
+
+```bash
+cd /Users/admin/file/local-lake/lake-notes-electron
+export PATH="$HOME/.nvm/versions/node/v24.18.0/bin:$PATH"
+
+lsof -nP -iTCP:1421 -sTCP:LISTEN
+ps -axo pid=,ppid=,command= | grep '/Users/admin/file/local-lake/lake-notes-electron' | grep -v grep
+```
+
+常规开发启动：
+
+```bash
+npm run dev:vite
+# 另一个终端
+npm run dev:electron
+```
+
+若用 Playwright 做稳定的生产构建验证，按 `docs/CODEX-GUIDE.md`：
+
+1. `node node_modules/vite/bin/vite.js build`
+2. 用 Node REPL 静态 HTTP server 提供 `dist/` 到 `127.0.0.1:1421`
+3. `_electron.launch()` 启动项目 Electron
+4. 读取 DOM 几何、真实 mouse hover/click、截图
+
+**禁止使用 `pkill -f Electron`。** 只能根据完整项目路径或已确认 PID 精确关闭本项目 Electron，否则会误杀其他 Electron 应用。单实例锁存在时，第二个 Electron 可能立刻退出；先清理本项目旧实例再启动 Playwright。
+
+### 8. 本轮踩过的坑 / 可复用经验
+
+1. **悬浮侧栏不能只监听按钮。** 如果 button `pointerleave` 立即关闭，鼠标还没到 panel 就消失。正确做法是按钮和 `<aside>` 都绑定 enter/leave，并共享一个短延迟 timer。
+2. **floating 是瞬时预览状态，不能持久化。** 否则重启后直接得到覆盖层，用户会误以为布局坏了。只持久化 docked/collapsed。
+3. **点击发生前会先 pointerenter。** 点击按钮时当前状态可能已经从 collapsed 变成 floating，因此点击函数必须把“任何非 docked 状态”都转成 docked，而不能只写 collapsed → docked。
+4. **缩窄侧栏时要换 localStorage key。** 旧持久化宽度会把新默认值完全盖掉；第二轮使用 `lake-notes-v3.sidebar-width`。
+5. **活动轨宽度有多个耦合点。** grid 第一列、rail 自身 width/min-width、floating sidebar 的 `left` 必须使用同一个 CSS 变量；否则会出现悬浮层缝隙或覆盖。
+6. **hover 桥不能有物理缝隙。** floating panel 的 `left` 必须紧贴 rail 的右边缘；120ms 延迟只是容错，不能代替连续命中区域。
+7. **融合顶栏不能简单删除顶部 padding。** Electron 使用 `titleBarStyle: hiddenInset`，必须给交通灯和拖动区留空间；活动轨和资料库顶部 38px 不放交互按钮，标签栏在 collapsed/floating 时也要额外左内边距。
+8. **Playwright webContents 截图看不到原生交通灯。** 可以验证 DOM 几何和 app-region 计算值，但最终仍需用户在真实窗口肉眼确认原生按钮与拖动。
+9. **不要为了统一视觉覆盖 Lake 内部 CSS。** 本轮外壳所有新样式都应限制在 `.activity-*`、`.sidebar`、`.tab-*`、`.statusbar-*`、应用自有 modal/menu；格式工具栏发灰是 Lake 自己的视觉，不应擅自重画。
+10. **桌面 CSS 必须放在 `min-width: 761px`。** 720×480 会切换到完全不同的移动端 React 树；若把桌面布局写成全局规则，移动端会直接回归。
+11. **dev server 与 Electron 生命周期容易纠缠。** `vite` 可能拉起 Electron 子进程；停止终端时 Electron 会一起退出。做自动验证时用构建产物 + 静态 server 通常更可控。
+12. **单实例锁会让 Playwright 启动表现像随机失败。** 如果已有开发版 Electron，新的 `_electron.launch()` 可能 exit code 0 后立即关闭。先用完整项目路径检查进程，精确杀本项目实例。
+13. **不要把合成拖动未移动窗口当作 app-region 失效。** Playwright 对 macOS 原生窗口拖动支持有限；先检查 computed `-webkit-app-region: drag`，再由用户真实鼠标验证。
+14. **状态栏入口与状态是两回事。** 用户要求移除重复同步入口，但仍要求常驻同步状态，所以正确方案是左轨保留操作入口、底栏保留只读状态，而不是彻底删掉同步信息。
+15. **设计技能的使用边界：** `apple-design` 适合材质、空间一致性、可中断动效和 reduced-motion；`animation-vocabulary` 只适合给动效命名，不是实现规范；不要为了“Apple 感”添加不服务于层级和反馈的动画。
+
+### 9. 本轮关键实现位置
+
+- `src/App.tsx`
+  - `SIDEBAR_DEFAULT_WIDTH` / `MIN` / `MAX`
+  - `initialSidebarMode()` / `initialSidebarWidth()`
+  - `sidebarPreviewTimer`
+  - `showSidebarPreview()` / `hideSidebarPreview()` / `toggleSidebarDock()`
+  - 左活动轨按钮
+  - 底部 `.statusbar-sync`
+- `src/components/Sidebar.tsx`
+  - `SidebarMode`
+  - `onPreviewEnter` / `onPreviewLeave`
+  - `<aside>` 的 pointer enter/leave
+  - 资料库标题栏（无图钉/收起按钮）
+  - resize handle
+- `src/styles.css` 的 `/* ===== Apple-style management shell ... ===== */` 段
+  - `--activity-rail-width: 44px`
+  - 三列 app shell
+  - docked/floating/collapsed 几何与过渡
+  - 38px 融合标签栏
+  - 24px 状态栏与只读同步状态
+  - reduced-motion
+- `src/features/editor/MultiTabEditor.tsx`
+  - 标签胶囊渲染仍使用原组件；本轮没有改 EditorTab/LakeEditor。
+
+---
+
+## 历史交接（2026-08-03 会话）：代码审计修复 + 体验优化 + MD 导出 + 发布准备
 
 ### 任务目标（本会话）
 
