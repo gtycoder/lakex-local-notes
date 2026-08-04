@@ -905,9 +905,11 @@ ne-card[data-card-name="codeblock"] .ne-card-resizer-mask {
     padding-top: var(--topbar-height);
   }
   .tab-item {
-    flex: 0 1 clamp(104px, 15vw, 190px);
-    min-width: 104px;
-    max-width: 190px;
+    /* Short titles stay close to their intrinsic content width. Long titles
+       can still shrink and truncate at a stable upper bound. */
+    flex: 0 1 auto;
+    min-width: 0;
+    max-width: clamp(140px, 18vw, 190px);
     height: 28px;
     padding: 0 8px 0 11px;
     border: 1px solid transparent;
