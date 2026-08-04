@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef, type ReactNode } from "react";
 import { X } from "lucide-react";
 import { EditorTab } from "./EditorTab";
 import type { LakeEditorPrefs } from "./lakeRuntime";
@@ -19,6 +19,8 @@ interface MultiTabEditorProps {
   onContentChange: (noteId: string, content: string) => void;
   prefs?: LakeEditorPrefs;
   onEditorReady?: (noteId: string, editor: import("./lakeRuntime").LakeEditorInstance | null) => void;
+  topbarActions?: ReactNode;
+  emptyAction?: ReactNode;
 }
 
 const MAX_TABS = 8;
@@ -32,6 +34,8 @@ export function MultiTabEditor({
   onContentChange,
   prefs,
   onEditorReady,
+  topbarActions,
+  emptyAction,
 }: MultiTabEditorProps) {
   const contentCache = useRef<Map<string, string>>(new Map());
 
@@ -50,17 +54,10 @@ export function MultiTabEditor({
     }
   }, [tabs]);
 
-  if (tabs.length === 0) {
-    return (
-      <section className="empty-workspace">
-        <h2>开始写第一篇笔记</h2>
-      </section>
-    );
-  }
-
   return (
     <div className="multi-tab-editor">
       <div className="tab-bar">
+        {topbarActions && <div className="tabbar-actions">{topbarActions}</div>}
         {tabs.map((tab) => (
           <button
             key={tab.noteId}
@@ -85,7 +82,7 @@ export function MultiTabEditor({
         )}
       </div>
       <div className="tab-panels">
-        {tabs.map((tab) => (
+        {tabs.length === 0 ? <section className="empty-workspace"><h2>开始写第一篇笔记</h2>{emptyAction}</section> : tabs.map((tab) => (
           <EditorTab
             key={tab.noteId}
             noteId={tab.noteId}

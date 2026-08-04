@@ -587,18 +587,19 @@ ne-card[data-card-name="codeblock"] .ne-card-resizer-mask {
 :root {
   font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", system-ui, sans-serif;
   font-optical-sizing: auto;
-  --shell-accent: #2f7d5e;
-  --shell-accent-strong: #24684d;
-  --shell-accent-soft: rgba(47, 125, 94, 0.12);
-  --shell-text: #24272d;
-  --shell-text-secondary: #626873;
-  --shell-text-tertiary: #9299a3;
-  --shell-separator: rgba(31, 35, 41, 0.10);
-  --shell-material: rgba(245, 246, 247, 0.88);
-  --shell-toolbar: rgba(250, 250, 251, 0.92);
+  --shell-accent: #596cc1;
+  --shell-accent-strong: #4658a8;
+  --shell-accent-soft: #e6e9f7;
+  --shell-text: #242936;
+  --shell-text-secondary: #596174;
+  --shell-text-tertiary: #8b93a6;
+  --shell-separator: rgba(66, 75, 112, 0.16);
+  /* Use opaque, lightly blue-tinted surfaces so the library remains readable. */
+  --shell-material: #f3f4f8;
+  --shell-toolbar: #eceef6;
   --shell-ease: cubic-bezier(.22, 1, .36, 1);
   --shell-radius: 10px;
-  --activity-rail-width: 44px;
+  --activity-rail-width: 34px;
 }
 
 @media (min-width: 761px) {
@@ -620,31 +621,30 @@ ne-card[data-card-name="codeblock"] .ne-card-resizer-mask {
     grid-row: 1;
     flex-direction: column;
     align-items: center;
+    align-self: end;
     width: var(--activity-rail-width);
     min-width: var(--activity-rail-width);
-    height: 100%;
-    padding: 0 5px 7px;
+    height: calc(100% - var(--topbar-height));
+    padding: 0 3px 6px;
     border-right: 1px solid var(--shell-separator);
-    background: rgba(239, 240, 242, 0.94);
-    backdrop-filter: saturate(1.25) blur(24px);
-    -webkit-backdrop-filter: saturate(1.25) blur(24px);
+    background: var(--shell-material);
   }
-  .activity-rail-spacer { flex: 0 0 var(--topbar-height); width: 100%; -webkit-app-region: drag; }
+  .activity-rail-spacer { display: none; }
   .activity-rail-fill { flex: 1; }
   .activity-button {
     display: grid;
     place-items: center;
-    width: 32px;
-    height: 32px;
+    width: 28px;
+    height: 28px;
     margin: 2px 0;
     padding: 0;
     border: 0;
-    border-radius: 8px;
+    border-radius: 7px;
     color: #747b85;
     background: transparent;
     transition: color 130ms ease-out, background-color 130ms ease-out, box-shadow 130ms ease-out, transform 90ms ease-out;
   }
-  .activity-button:hover { color: #41474f; background: rgba(31, 35, 41, 0.065); }
+  .activity-button:hover { color: var(--shell-accent-strong); background: rgba(89, 108, 193, .12); }
   .activity-button.active {
     color: var(--shell-accent-strong);
     background: var(--shell-accent-soft);
@@ -659,13 +659,12 @@ ne-card[data-card-name="codeblock"] .ne-card-resizer-mask {
     grid-column: 2;
     grid-row: 1;
     width: var(--sidebar-width);
-    height: 100%;
-    padding-top: var(--topbar-height);
+    align-self: end;
+    height: calc(100% - var(--topbar-height));
+    padding-top: 0;
     overflow: visible;
     border-right: 1px solid var(--shell-separator);
     background: var(--shell-material);
-    backdrop-filter: saturate(1.3) blur(28px);
-    -webkit-backdrop-filter: saturate(1.3) blur(28px);
     opacity: 1;
     transform: translateX(0);
     transition: opacity 180ms ease-out, transform 260ms var(--shell-ease), box-shadow 240ms ease-out;
@@ -683,13 +682,15 @@ ne-card[data-card-name="codeblock"] .ne-card-resizer-mask {
   .sidebar.sidebar-floating,
   .sidebar.sidebar-collapsed {
     position: fixed;
-    top: 0;
+    top: var(--topbar-height);
     bottom: 0;
     left: var(--activity-rail-width);
+    padding-top: 0;
   }
   .sidebar.sidebar-floating {
-    border-right-color: rgba(31, 35, 41, 0.12);
-    box-shadow: 18px 0 50px rgba(29, 34, 40, 0.16), 2px 0 7px rgba(29, 34, 40, 0.07);
+    border-right-color: rgba(66, 75, 112, .18);
+    border-radius: 0 14px 14px 0;
+    box-shadow: 18px 0 50px rgba(43, 50, 78, .16), 2px 0 7px rgba(43, 50, 78, .08);
   }
   .sidebar.sidebar-collapsed {
     pointer-events: none;
@@ -717,14 +718,14 @@ ne-card[data-card-name="codeblock"] .ne-card-resizer-mask {
     border: 1px solid transparent;
     border-radius: 8px;
     color: var(--shell-text-tertiary);
-    background: rgba(255, 255, 255, 0.70);
+    background: #ffffff;
     box-shadow: inset 0 0 0 1px rgba(31, 35, 41, 0.055);
     transition: background-color 150ms ease-out, border-color 150ms ease-out, box-shadow 150ms ease-out;
   }
   .search-box:focus-within {
-    border-color: rgba(47, 125, 94, .46);
-    background: rgba(255, 255, 255, .96);
-    box-shadow: 0 0 0 3px rgba(47, 125, 94, .11);
+    border-color: rgba(89, 108, 193, .46);
+    background: #ffffff;
+    box-shadow: 0 0 0 3px rgba(89, 108, 193, .13);
   }
   .search-box input { color: var(--shell-text); font-size: 12.5px; }
   .list-heading { height: 29px; padding: 0 8px 3px; }
@@ -732,7 +733,7 @@ ne-card[data-card-name="codeblock"] .ne-card-resizer-mask {
   .icon-button:focus-visible,
   .tab-item:focus-visible,
   .statusbar button:focus-visible,
-  .settings-panel button:focus-visible { outline: 3px solid rgba(47, 125, 94, .18); outline-offset: 1px; }
+  .settings-panel button:focus-visible { outline: 3px solid rgba(89, 108, 193, .22); outline-offset: 1px; }
 
   .note-list { padding: 0 6px 10px; }
   .note-row,
@@ -743,7 +744,7 @@ ne-card[data-card-name="codeblock"] .ne-card-resizer-mask {
     color: var(--shell-text-secondary);
     transition: background-color 120ms ease-out, color 120ms ease-out, box-shadow 120ms ease-out;
   }
-  .note-row:hover { background: rgba(31, 35, 41, .055); }
+  .note-row:hover { background: rgba(89, 108, 193, .08); }
   .note-row.active {
     color: var(--shell-text);
     background: var(--shell-accent-soft);
@@ -766,6 +767,8 @@ ne-card[data-card-name="codeblock"] .ne-card-resizer-mask {
     cursor: col-resize;
     touch-action: none;
   }
+  .sidebar.sidebar-floating .sidebar-resize-handle,
+  .sidebar.sidebar-collapsed .sidebar-resize-handle { top: 0; }
   .sidebar-resize-handle::after {
     content: "";
     position: absolute;
@@ -774,55 +777,103 @@ ne-card[data-card-name="codeblock"] .ne-card-resizer-mask {
     width: 2px;
     height: 48px;
     border-radius: 999px;
-    background: rgba(47, 125, 94, 0);
+    background: rgba(89, 108, 193, 0);
     transform: translateY(-50%);
     transition: background-color 130ms ease-out;
   }
   .sidebar-resize-handle:hover::after,
-  .sidebar-resize-handle:focus-visible::after { background: rgba(47, 125, 94, .42); }
+  .sidebar-resize-handle:focus-visible::after { background: rgba(89, 108, 193, .48); }
   .sidebar-resize-handle:focus-visible { outline: none; }
 
   .workspace { grid-column: 3; grid-row: 1; grid-template-rows: minmax(0, 1fr) 24px; }
+
+  /* The tab strip is a window-level title bar. It must not inherit the
+     document column's x offset when the library is docked or previewed. */
   .tab-bar {
+    position: fixed;
+    top: 0;
+    right: 0;
+    left: 0;
+    z-index: 400;
     box-sizing: border-box;
+    display: flex;
     gap: 6px;
+    width: 100%;
     height: var(--topbar-height);
     min-height: var(--topbar-height);
     padding: 4px 10px;
-    border-bottom-color: var(--shell-separator);
+    border-bottom: 1px solid var(--shell-separator);
     background: var(--shell-toolbar);
+    box-shadow: 0 1px 0 rgba(66, 75, 112, .05);
     backdrop-filter: saturate(1.2) blur(20px);
     -webkit-backdrop-filter: saturate(1.2) blur(20px);
   }
-  /* When the library is not docked, reserve the traffic-light footprint inside the fused title bar. */
-  .app-shell.sidebar-floating .tab-bar,
-  .app-shell.sidebar-collapsed .tab-bar { padding-left: 30px; }
+  .platform-mac .tab-bar {
+    padding-left: 82px;
+    -webkit-app-region: drag;
+  }
+  .platform-native-titlebar .tab-bar {
+    padding-left: 10px;
+    -webkit-app-region: no-drag;
+  }
+  .tabbar-actions {
+    display: flex;
+    align-items: center;
+    gap: 3px;
+    flex: 0 0 auto;
+    margin-left: 0;
+    padding-right: 5px;
+    -webkit-app-region: no-drag;
+  }
+  .tabbar-action {
+    display: grid;
+    place-items: center;
+    flex: 0 0 auto;
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    border: 0;
+    border-radius: 8px;
+    color: #626d91;
+    background: transparent;
+    -webkit-app-region: no-drag;
+    transition: color 130ms ease-out, background-color 130ms ease-out, transform 90ms ease-out;
+  }
+  .tabbar-action:hover { color: var(--shell-accent-strong); background: rgba(89, 108, 193, .12); }
+  .tabbar-action:active { transform: scale(.94); }
+  .tabbar-action:focus-visible { outline: 3px solid rgba(89, 108, 193, .22); outline-offset: 1px; }
+  /* The macOS traffic-light inset is platform-owned, not sidebar-owned.
+     Keeping it here prevents collapsed/floating modes from moving the tabs. */
+  .tab-panels {
+    box-sizing: border-box;
+    padding-top: var(--topbar-height);
+  }
   .tab-item {
     max-width: 190px;
     height: 28px;
     padding: 0 8px 0 11px;
     border: 1px solid transparent;
-    border-radius: 999px;
-    color: #737a84;
-    background: rgba(255, 255, 255, .32);
+    border-radius: 9px;
+    color: #66708a;
+    background: rgba(255, 255, 255, .42);
     font-size: 12px;
     font-weight: 450;
     box-shadow: none;
     transition: color 130ms ease-out, background-color 130ms ease-out, border-color 130ms ease-out, box-shadow 130ms ease-out, transform 90ms ease-out;
   }
-  .tab-item:hover { color: #4e555f; background: rgba(255, 255, 255, .72); }
+  .tab-item:hover { color: #46527e; background: rgba(255, 255, 255, .78); }
   .tab-item:active { transform: scale(.98); }
   .tab-item.active {
     color: var(--shell-text);
-    border-color: rgba(31, 35, 41, .10);
-    background: rgba(255, 255, 255, .96);
-    box-shadow: 0 1px 2px rgba(31, 35, 41, .07), 0 4px 12px rgba(31, 35, 41, .045);
+    border-color: rgba(89, 108, 193, .22);
+    background: #ffffff;
+    box-shadow: 0 1px 2px rgba(66, 75, 112, .10), 0 4px 12px rgba(66, 75, 112, .07);
     font-weight: 520;
   }
   .tab-close { width: 17px; height: 17px; border-radius: 50%; }
   .tab-item.active .tab-close { opacity: .38; }
   .tab-close:hover { background: rgba(31, 35, 41, .09); }
-  .tab-bar-hint { margin-left: 2px; padding: 0 5px; color: #9aa0a8; font-variant-numeric: tabular-nums; }
+  .tab-bar-hint { margin-left: auto; padding: 0 5px; color: #8992ad; font-variant-numeric: tabular-nums; }
 
   .statusbar {
     gap: 10px;
@@ -831,7 +882,7 @@ ne-card[data-card-name="codeblock"] .ne-card-resizer-mask {
     padding: 0 9px 0 12px;
     border-top-color: var(--shell-separator);
     color: #989ea7;
-    background: rgba(249, 249, 250, .95);
+    background: #f5f6fb;
     font-size: 10px;
     backdrop-filter: blur(18px);
     -webkit-backdrop-filter: blur(18px);
@@ -853,7 +904,7 @@ ne-card[data-card-name="codeblock"] .ne-card-resizer-mask {
     box-shadow: 0 1px 1px rgba(31, 35, 41, .025);
     transition: color 130ms ease-out, background-color 130ms ease-out, border-color 130ms ease-out, transform 90ms ease-out;
   }
-  .statusbar-export-md:hover { color: var(--shell-accent-strong); border-color: rgba(47, 125, 94, .20); background: rgba(239, 247, 243, .92); }
+  .statusbar-export-md:hover { color: var(--shell-accent-strong); border-color: rgba(89, 108, 193, .24); background: #eef0fb; }
   .statusbar-export-md:active { transform: scale(.965); }
   .statusbar-sync {
     display: inline-flex;

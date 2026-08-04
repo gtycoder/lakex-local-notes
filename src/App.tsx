@@ -16,7 +16,7 @@ type SaveState = "idle" | "dirty" | "saving" | "saved" | "error";
 type MobilePage = "library" | "document";
 
 const SIDEBAR_DEFAULT_WIDTH = 224;
-const SIDEBAR_MIN_WIDTH = 188;
+const SIDEBAR_MIN_WIDTH = 160;
 const SIDEBAR_MAX_WIDTH = 300;
 
 function initialSidebarMode(): SidebarMode {
@@ -76,6 +76,7 @@ export function App() {
   // 审计 #7：每篇笔记的编辑 revision——保存请求发出后若有新编辑（revision 增长），
   // 旧响应不得覆盖最新草稿/清除 dirty
   const revisionRef = useRef<Map<string, number>>(new Map());
+  const shellPlatformClass = /Mac|iPhone|iPad/.test(navigator.platform) ? "platform-mac" : "platform-native-titlebar";
 
   useEffect(() => { openTabsRef.current = openTabs; }, [openTabs]);
 
@@ -464,13 +465,11 @@ export function App() {
   const shellStyle = { "--sidebar-width": `${sidebarWidth}px` } as CSSProperties;
 
   return (
-    <div className={`app-shell sidebar-${sidebarMode} ${sidebarResizing ? "sidebar-resizing" : ""} ${isMobile ? `mobile-document-page ${mobileEditing ? "mobile-editing" : "mobile-reading"}` : ""}`} style={shellStyle}>
-      <nav className="activity-rail desktop-only" aria-label="应用导航">
+    <div className={`app-shell ${shellPlatformClass} sidebar-${sidebarMode} ${sidebarResizing ? "sidebar-resizing" : ""} ${isMobile ? `mobile-document-page ${mobileEditing ? "mobile-editing" : "mobile-reading"}` : ""}`} style={shellStyle}>
+      <nav className="activity-rail desktop-only" aria-label="应用导航" onPointerEnter={showSidebarPreview} onPointerLeave={hideSidebarPreview}>
         <div className="activity-rail-spacer" />
-        <button className={`activity-button ${sidebarMode === "docked" ? "active" : ""}`} onPointerEnter={showSidebarPreview} onPointerLeave={hideSidebarPreview} onClick={toggleSidebarDock} title={sidebarMode === "docked" ? "取消固定资料库" : "固定资料库"} aria-pressed={sidebarMode === "docked"}><Files size={17} /></button>
+        <button className={`activity-button ${sidebarMode === "docked" ? "active" : ""}`} onClick={toggleSidebarDock} title={sidebarMode === "docked" ? "取消固定资料库" : "固定资料库"} aria-pressed={sidebarMode === "docked"}><Files size={16} /></button>
         <div className="activity-rail-fill" />
-        <button className="activity-button" onClick={() => setSyncPanelOpen(true)} title="S3 备份同步"><Cloud size={17} /></button>
-        <button className="activity-button" onClick={() => setSettingsOpen(true)} title="偏好设置"><Settings2Icon size={17} /></button>
       </nav>
       <Sidebar nodes={treeNodes} activeId={activeNoteId ?? mobileActive?.id ?? null} search={search} mobileOpen={mobileOpen} mode={sidebarMode} width={sidebarWidth} minWidth={SIDEBAR_MIN_WIDTH} maxWidth={SIDEBAR_MAX_WIDTH} onSearch={setSearch} onSelect={(id) => void (isMobile ? openNoteMobile(id) : openNote(id))} onCreate={(kind, parentId, title) => void createTreeItem(kind, parentId, title)} onRename={(id, title) => void renameTreeNode(id, title)} onMoveNode={(id, targetId, position) => void moveTreeNode(id, targetId, position)} onRequestDelete={(node) => setConfirmDelete(node)} pendingRenameId={pendingRenameId} onPendingRenameConsumed={() => setPendingRenameId(null)} onPreviewEnter={showSidebarPreview} onPreviewLeave={hideSidebarPreview} onResizeActiveChange={setSidebarResizing} onWidthChange={updateSidebarWidth} onWidthCommit={commitSidebarWidth} onCloseMobile={() => setMobileOpen(false)} />
       {mobileOpen && <div className="mobile-scrim" onClick={() => setMobileOpen(false)} />}
@@ -499,7 +498,7 @@ export function App() {
             </nav>}
           </section> : <section className="empty-workspace"><h2>开始写第一篇笔记</h2><button className="primary-button" onClick={() => void createNote()}>新建文档</button></section>
         ) : (
-          openTabs.length > 0 ? <section className={`document-pane ${wideMode ? "wide-mode" : ""} ${settings.paragraphSpacing ? "paragraph-spacing" : ""}`}>
+          <section className={`document-pane ${wideMode ? "wide-mode" : ""} ${settings.paragraphSpacing ? "paragraph-spacing" : ""}`}>
             <MultiTabEditor
               tabs={tabInfos}
               activeNoteId={activeNoteId}
@@ -509,8 +508,13 @@ export function App() {
               onContentChange={handleContentChange}
               prefs={editorPrefs}
               onEditorReady={handleEditorReady}
+              topbarActions={<>
+                <button className="tabbar-action" onClick={() => setSettingsOpen(true)} title="偏好设置"><Settings2Icon size={15} /></button>
+                <button className="tabbar-action" onClick={() => setSyncPanelOpen(true)} title="S3 备份同步"><Cloud size={15} /></button>
+              </>}
+              emptyAction={<button className="primary-button" onClick={() => void createNote()}>新建文档</button>}
             />
-          </section> : <section className="empty-workspace"><h2>开始写第一篇笔记</h2><button className="primary-button" onClick={() => void createNote()}>新建文档</button></section>
+          </section>
         )}
         <footer className="statusbar">
           <span>{isDesktop() ? "Electron 本地仓库" : "浏览器演示仓库"}</span>
