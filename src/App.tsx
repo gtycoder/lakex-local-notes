@@ -206,24 +206,10 @@ export function App() {
       }
       revisionRef.current.set(note.id, 0);
       const newTab: OpenTab = { noteId: note.id, title: note.title, content: note.content, dirty: false, lastAccessedAt: Date.now() };
-      const currentTabs = openTabsRef.current;
-      if (currentTabs.length >= 8) {
-        let evictIndex = 0;
-        for (let i = 1; i < currentTabs.length; i++) {
-          if (currentTabs[i].lastAccessedAt < currentTabs[evictIndex].lastAccessedAt) evictIndex = i;
-        }
-        const evicted = currentTabs[evictIndex];
-        if (evicted.dirty) await persistTab(evicted.noteId, evicted.title, evicted.content);
-        setOpenTabs((tabs) => {
-          const withoutEvicted = tabs.filter((t) => t.noteId !== evicted.noteId);
-          return withoutEvicted.some((t) => t.noteId === id) ? tabs : [...withoutEvicted, newTab];
-        });
-      } else {
-        setOpenTabs((tabs) => {
-          if (tabs.some((t) => t.noteId === id)) return tabs;
-          return [...tabs, newTab];
-        });
-      }
+      setOpenTabs((tabs) => {
+        if (tabs.some((t) => t.noteId === id)) return tabs;
+        return [...tabs, newTab];
+      });
       setActiveNoteId(id);
     } catch (reason) { setError(String(reason)); }
   }
