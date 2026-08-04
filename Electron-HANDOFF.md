@@ -18,7 +18,7 @@
 - 交接日期：2026-08-04
 - 本次目标：为 Electron 桌面端实现并验收 **小记 V1**；它是本地优先、无标题、手动保存、按创建时间倒序展示的临时时间线，而不是 Lake 文档或 Lake 编辑器的另一种皮肤。
 - 当前分支与基线：`master`。
-- 本轮已完成并推送：`410a570 feat: add isolated quick notes workspace`（`origin/master`）。
+- 功能实现提交：`410a570 feat: add isolated quick notes workspace`；本交接文档随后在 `master` 上补充并推送。
 
 ### 已确认的产品定位
 
