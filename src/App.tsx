@@ -110,6 +110,19 @@ export function App() {
   }, []);
 
   useEffect(() => {
+    if (!isDesktop()) return;
+    return native.onSyncProgress((progress) => {
+      const message = progress.message || (progress.phase === "done" ? "同步完成" : "同步中...");
+      setSync((current) => ({ ...current, phase: progress.phase === "done" ? "success" : "syncing", message }));
+      if (progress.phase === "done") {
+        void native.getSyncStatus().then((status) => {
+          setSync((current) => ({ ...current, phase: "success", message: "同步完成", lastSyncedAt: status.lastSyncedAt, pendingChanges: 0 }));
+        }).catch(() => undefined);
+      }
+    });
+  }, []);
+
+  useEffect(() => {
     const viewport = window.visualViewport;
     if (!viewport) return;
     const update = () => {
@@ -509,8 +522,10 @@ export function App() {
               prefs={editorPrefs}
               onEditorReady={handleEditorReady}
               topbarActions={<>
-                <button className="tabbar-action" onClick={() => setSettingsOpen(true)} title="偏好设置"><Settings2Icon size={15} /></button>
-                <button className="tabbar-action" onClick={() => setSyncPanelOpen(true)} title="S3 备份同步"><Cloud size={15} /></button>
+                <button className="tabbar-action" onClick={() => setSettingsOpen(true)} data-tooltip="打开偏好设置" aria-label="打开偏好设置"><Settings2Icon size={15} /></button>
+                <button className={`tabbar-action sync-tab-action ${sync.phase}`} onClick={() => setSyncPanelOpen(true)} data-tooltip={`云同步：${sync.message}`} aria-label={`云同步：${sync.message}`}>
+                  <span className="sync-icon-wrap"><Cloud size={15} /><span className="sync-state-dot" aria-hidden="true" /></span>
+                </button>
               </>}
               emptyAction={<button className="primary-button" onClick={() => void createNote()}>新建文档</button>}
             />
@@ -526,7 +541,7 @@ export function App() {
         </footer>
       </main>
       {confirmDelete && <ConfirmDelete node={confirmDelete} onConfirm={() => { const id = confirmDelete.id; setConfirmDelete(null); void deleteTreeNode(id); }} onCancel={() => setConfirmDelete(null)} />}
-      <SyncPanel open={syncPanelOpen} onClose={() => setSyncPanelOpen(false)} />
+      <SyncPanel open={syncPanelOpen} onClose={() => setSyncPanelOpen(false)} onSyncStatusChange={(status) => setSync((current) => ({ ...current, ...status }))} />
       <SettingsPanel open={settingsOpen} settings={settings} onClose={() => setSettingsOpen(false)} onChange={(patch) => saveSettings(patch)} />
     </div>
   );

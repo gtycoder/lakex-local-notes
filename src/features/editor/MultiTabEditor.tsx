@@ -58,16 +58,23 @@ export function MultiTabEditor({
     <div className="multi-tab-editor">
       <div className="tab-bar">
         {topbarActions && <div className="tabbar-actions">{topbarActions}</div>}
+        <div className="tab-items" role="tablist" aria-label="打开的文档">
         {tabs.map((tab) => (
           <button
             key={tab.noteId}
             className={`tab-item ${tab.noteId === activeNoteId ? "active" : ""}${tab.dirty ? " dirty" : ""}`}
             onClick={() => onTabChange(tab.noteId)}
-            title={tab.title}
+            title={tab.title || "无标题"}
+            aria-label={`切换到${tab.title || "无标题"}${tab.dirty ? "（有未保存更改）" : ""}`}
+            aria-selected={tab.noteId === activeNoteId}
+            role="tab"
           >
             <span className="tab-title">{tab.title || "无标题"}</span>
             <span
               className="tab-close"
+              role="button"
+              aria-label={`关闭${tab.title || "无标题"}`}
+              title={`关闭${tab.title || "无标题"}`}
               onClick={(event) => {
                 event.stopPropagation();
                 onTabClose(tab.noteId);
@@ -80,6 +87,7 @@ export function MultiTabEditor({
         {tabs.length < MAX_TABS && (
           <span className="tab-bar-hint" title={`最多 ${MAX_TABS} 个标签`}>{tabs.length} / {MAX_TABS}</span>
         )}
+        </div>
       </div>
       <div className="tab-panels">
         {tabs.length === 0 ? <section className="empty-workspace"><h2>开始写第一篇笔记</h2>{emptyAction}</section> : tabs.map((tab) => (

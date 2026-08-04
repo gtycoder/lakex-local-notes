@@ -800,6 +800,7 @@ ne-card[data-card-name="codeblock"] .ne-card-resizer-mask {
     gap: 6px;
     width: 100%;
     height: var(--topbar-height);
+    overflow: visible;
     min-height: var(--topbar-height);
     padding: 4px 10px;
     border-bottom: 1px solid var(--shell-separator);
@@ -825,6 +826,17 @@ ne-card[data-card-name="codeblock"] .ne-card-resizer-mask {
     padding-right: 5px;
     -webkit-app-region: no-drag;
   }
+  .tab-items {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow-x: auto;
+    overflow-y: visible;
+    scrollbar-width: none;
+  }
+  .tab-items::-webkit-scrollbar { display: none; }
   .tabbar-action {
     display: grid;
     place-items: center;
@@ -842,6 +854,50 @@ ne-card[data-card-name="codeblock"] .ne-card-resizer-mask {
   .tabbar-action:hover { color: var(--shell-accent-strong); background: rgba(89, 108, 193, .12); }
   .tabbar-action:active { transform: scale(.94); }
   .tabbar-action:focus-visible { outline: 3px solid rgba(89, 108, 193, .22); outline-offset: 1px; }
+  .tabbar-action[data-tooltip] { position: relative; }
+  .tabbar-action[data-tooltip]::after {
+    content: attr(data-tooltip);
+    position: absolute;
+    top: calc(100% + 9px);
+    left: 50%;
+    z-index: 20;
+    width: max-content;
+    max-width: 260px;
+    padding: 6px 9px;
+    border: 1px solid rgba(66, 75, 112, .16);
+    border-radius: 7px;
+    color: #f8f9ff;
+    background: #3f4868;
+    box-shadow: 0 7px 18px rgba(31, 37, 64, .18);
+    font-size: 11px;
+    font-weight: 500;
+    line-height: 1.25;
+    white-space: nowrap;
+    pointer-events: none;
+    opacity: 0;
+    transform: translate(-50%, -3px);
+    transition: opacity 140ms ease-out, transform 140ms var(--shell-ease);
+  }
+  .tabbar-action[data-tooltip]:hover::after,
+  .tabbar-action[data-tooltip]:focus-visible::after { opacity: 1; transform: translate(-50%, 0); }
+  .sync-icon-wrap { position: relative; display: grid; place-items: center; }
+  .sync-state-dot {
+    position: absolute;
+    right: -4px;
+    bottom: -3px;
+    width: 6px;
+    height: 6px;
+    border: 1px solid var(--shell-toolbar);
+    border-radius: 50%;
+    background: transparent;
+  }
+  .sync-tab-action.syncing { color: #5a72c7; }
+  .sync-tab-action.syncing svg { animation: shell-sync-pulse 1.25s ease-in-out infinite; }
+  .sync-tab-action.syncing .sync-state-dot { background: #5a72c7; animation: shell-sync-dot 1.25s ease-in-out infinite; }
+  .sync-tab-action.success { color: #3d8b6a; }
+  .sync-tab-action.success .sync-state-dot { background: #3d8b6a; }
+  .sync-tab-action.error { color: #c25558; }
+  .sync-tab-action.error .sync-state-dot { background: #c25558; }
   /* The macOS traffic-light inset is platform-owned, not sidebar-owned.
      Keeping it here prevents collapsed/floating modes from moving the tabs. */
   .tab-panels {
@@ -849,6 +905,8 @@ ne-card[data-card-name="codeblock"] .ne-card-resizer-mask {
     padding-top: var(--topbar-height);
   }
   .tab-item {
+    flex: 0 1 clamp(104px, 15vw, 190px);
+    min-width: 104px;
     max-width: 190px;
     height: 28px;
     padding: 0 8px 0 11px;
@@ -862,6 +920,7 @@ ne-card[data-card-name="codeblock"] .ne-card-resizer-mask {
     transition: color 130ms ease-out, background-color 130ms ease-out, border-color 130ms ease-out, box-shadow 130ms ease-out, transform 90ms ease-out;
   }
   .tab-item:hover { color: #46527e; background: rgba(255, 255, 255, .78); }
+  .tab-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
   .tab-item:active { transform: scale(.98); }
   .tab-item.active {
     color: var(--shell-text);
@@ -921,6 +980,15 @@ ne-card[data-card-name="codeblock"] .ne-card-resizer-mask {
   .statusbar-sync.syncing { color: #557c6c; }
   .statusbar-sync.success { color: var(--shell-accent-strong); }
   .statusbar-sync.error { color: #b34b45; }
+}
+
+@keyframes shell-sync-pulse {
+  0%, 100% { opacity: .62; transform: scale(.94); }
+  50% { opacity: 1; transform: scale(1.06); }
+}
+@keyframes shell-sync-dot {
+  0%, 100% { opacity: .45; transform: scale(.8); }
+  50% { opacity: 1; transform: scale(1.1); }
 }
 
 @keyframes shell-tree-reveal {

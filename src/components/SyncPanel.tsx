@@ -1,7 +1,7 @@
 import { Archive, Check, Cloud, Eye, EyeOff, History, LoaderCircle, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { native } from "../lib/native";
-import type { OrphanAsset, S3Settings, SyncProgress, SyncStatusInfo } from "../lib/types";
+import type { OrphanAsset, S3Settings, SyncProgress, SyncStatus, SyncStatusInfo } from "../lib/types";
 
 const defaults: S3Settings = { endpoint: "", region: "cn-east-1", bucket: "", prefix: "lake-notes", accessKeyId: "", secretAccessKey: "", forcePathStyle: false };
 
@@ -27,7 +27,13 @@ function formatTime(iso: string | null): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
 }
 
-export function SyncPanel({ open, onClose }: { open: boolean; onClose: () => void }) {
+interface SyncPanelProps {
+  open: boolean;
+  onClose: () => void;
+  onSyncStatusChange?: (status: Pick<SyncStatus, "phase" | "message">) => void;
+}
+
+export function SyncPanel({ open, onClose, onSyncStatusChange }: SyncPanelProps) {
   const [settings, setSettings] = useState(defaults);
   const [showSecret, setShowSecret] = useState(false);
   const [status, setStatus] = useState<"idle" | "busy" | "ok" | "error">("idle");
@@ -70,16 +76,21 @@ export function SyncPanel({ open, onClose }: { open: boolean; onClose: () => voi
   const sync = async () => {
     setStatus("busy");
     setProgress({ phase: "connect", message: "准备同步..." });
+    onSyncStatusChange?.({ phase: "syncing", message: "准备同步..." });
     const unsubscribe = native.onSyncProgress(setProgress);
     try {
       await native.saveS3Settings(settings);
       const result = await native.syncNow();
       setLastSync({ lastSyncedAt: result.completedAt, lastResult: result });
-      setMessage(`同步完成：上传 ${result.uploaded}，下载 ${result.downloaded}，冲突 ${result.conflicts}`);
+      const resultMessage = `同步完成：上传 ${result.uploaded}，下载 ${result.downloaded}，冲突 ${result.conflicts}`;
+      setMessage(resultMessage);
       setStatus("ok");
+      onSyncStatusChange?.({ phase: "success", message: resultMessage });
     } catch (error) {
-      setMessage(String(error));
+      const errorMessage = String(error);
+      setMessage(errorMessage);
       setStatus("error");
+      onSyncStatusChange?.({ phase: "error", message: errorMessage });
     } finally {
       unsubscribe();
       window.setTimeout(() => setProgress(null), 400);
