@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
-import { ChevronsDownUp, ChevronsUpDown, Focus, ListTree, Pin, Search } from "lucide-react";
+import { ChevronsDownUp, ChevronsUpDown, Focus, ListOrdered, ListTree, Pin, Search } from "lucide-react";
 import type { OutlineMode } from "./OutlineController";
 import { OutlineList } from "./OutlineList";
 import { getOutlineTab, getOutlineTabsVersion, subscribeOutlineTabs } from "./registry";
@@ -33,6 +33,8 @@ export function OutlineSidebar({ mode, activeNoteId, onTogglePin, onMouseEnter, 
   );
   const [filterDraft, setFilterDraft] = useState("");
   const filterTimer = useRef<number | null>(null);
+  const [levelMenuOpen, setLevelMenuOpen] = useState(false);
+  const levelMenuRef = useRef<HTMLDivElement>(null);
   void version;
   void controllerVersion;
 
@@ -46,6 +48,16 @@ export function OutlineSidebar({ mode, activeNoteId, onTogglePin, onMouseEnter, 
   useEffect(() => {
     handle?.refresh();
   }, [mode, handle]);
+
+  // 点击外部关闭「展开到级别」菜单
+  useEffect(() => {
+    if (!levelMenuOpen) return;
+    const onDown = (e: MouseEvent) => {
+      if (levelMenuRef.current && !levelMenuRef.current.contains(e.target as Node)) setLevelMenuOpen(false);
+    };
+    document.addEventListener("mousedown", onDown);
+    return () => document.removeEventListener("mousedown", onDown);
+  }, [levelMenuOpen]);
 
   // 筛选输入防抖写入 controller
   useEffect(() => {
@@ -92,6 +104,25 @@ export function OutlineSidebar({ mode, activeNoteId, onTogglePin, onMouseEnter, 
         >
           <ChevronsUpDown size={14} />
         </button>
+        <div className="outline-sidebar__level" ref={levelMenuRef}>
+          <button
+            className={`outline-sidebar__btn${levelMenuOpen ? " is-active" : ""}`}
+            title="展开到级别"
+            onClick={() => setLevelMenuOpen((v) => !v)}
+          >
+            <ListOrdered size={14} />
+          </button>
+          {levelMenuOpen && (
+            <div className="outline-sidebar__level-menu" role="menu">
+              <button role="menuitem" onClick={() => { controller?.expandAll(); setLevelMenuOpen(false); }}>全部展开</button>
+              {[1, 2, 3, 4, 5, 6].map((n) => (
+                <button key={n} role="menuitem" onClick={() => { controller?.expandToLevel(n); setLevelMenuOpen(false); }}>
+                  展开到 {n} 级
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
         <button
           className={`outline-sidebar__btn${pinned ? " is-active" : ""}`}
           title={pinned ? "取消固定（收起后 hover 右缘悬浮）" : "固定"}
