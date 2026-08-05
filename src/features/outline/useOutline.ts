@@ -5,7 +5,7 @@
  *  - 虚拟渲染分批重建后重算；
  *  - tab 隐藏时暂停滚动计算；卸载时全部清理。
  */
-import { useEffect, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import { OutlineController, type OutlineEntry } from "./OutlineController";
 import { resolveScrollNode, type LakeEditorInstance } from "../editor/lakeRuntime";
 
@@ -22,13 +22,17 @@ export function useOutline(
   host: HTMLElement | null,
   noteId: string,
   enabled: boolean,
-  /** 面板是否实际可见（控制滚动高亮计算；数据订阅不受影响） */
+  /** 标签是否可见（控制滚动高亮计算；数据订阅不受影响） */
   active: boolean
-): OutlineController {
+): { controller: OutlineController; refresh: () => void } {
   const controller = useMemo(() => new OutlineController(noteId), [noteId]);
+  const computeRef = useRef<() => void>(() => {});
 
   useEffect(() => {
-    if (!enabled || !editor || !host) return;
+    if (!enabled || !editor || !host) {
+      computeRef.current = () => {};
+      return;
+    }
     const kernel = (editor as any)?.kernel;
     if (!kernel) return;
 
@@ -89,6 +93,7 @@ export function useOutline(
         compute();
       });
     };
+    computeRef.current = compute;
 
     // 打开文档：toc 就绪晚于 ready，轮询直到有内容（≤ 40 次 × 200ms ≈ 8s）
     let attempts = 0;
@@ -152,8 +157,13 @@ export function useOutline(
       window.clearTimeout(contentTimer);
       for (const id of timers) window.clearTimeout(id);
       if (raf) cancelAnimationFrame(raf);
+      computeRef.current = () => {};
     };
   }, [editor, host, noteId, enabled, active, controller]);
 
-  return controller;
+  const refresh = useCallback(() => {
+    computeRef.current?.();
+  }, []);
+
+  return { controller, refresh };
 }

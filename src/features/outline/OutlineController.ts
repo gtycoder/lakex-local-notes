@@ -29,12 +29,12 @@ export interface OutlineNode {
 }
 
 /**
- * 面板形态：
- *  - docked：固定展开（钉在右侧）
- *  - rail：仅显示 40px 图标栏，hover 弹出悬浮大纲（floating 为瞬态）
- *  - hidden：完全隐藏（设置关闭时）
+ * 右侧栏形态（与左侧 Sidebar 对齐）：
+ *  - docked：固定展开
+ *  - floating：悬浮（活动轨 hover 预览）
+ *  - collapsed：收起（隐藏）
  */
-export type OutlineMode = "docked" | "rail" | "hidden";
+export type OutlineMode = "docked" | "floating" | "collapsed";
 
 export interface OutlineStorage {
   getItem(key: string): string | null;

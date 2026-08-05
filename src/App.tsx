@@ -7,6 +7,8 @@ import { SyncPanel } from "./components/SyncPanel";
 import { LakeEditor } from "./features/editor/LakeEditor";
 import type { LakeEditorInstance } from "./features/editor/lakeRuntime";
 import { MultiTabEditor, type TabInfo } from "./features/editor/MultiTabEditor";
+import { OutlineSidebar } from "./features/outline/OutlineSidebar";
+import type { OutlineMode } from "./features/outline/OutlineController";
 import { isDesktop, native } from "./lib/native";
 import { loadSettings, saveSettings, subscribeSettings, type AppSettings } from "./lib/settings";
 import { SettingsPanel } from "./components/SettingsPanel";
@@ -20,6 +22,13 @@ type DesktopWorkspace = "library" | "quick-notes";
 const SIDEBAR_DEFAULT_WIDTH = 224;
 const SIDEBAR_MIN_WIDTH = 160;
 const SIDEBAR_MAX_WIDTH = 300;
+const OUTLINE_SIDEBAR_WIDTH = 280;
+
+function initialOutlineMode(): OutlineMode {
+  const stored = localStorage.getItem("lake-notes-v2.outline-sidebar-mode");
+  if (stored === "docked" || stored === "collapsed") return stored;
+  return "docked";
+}
 
 function initialSidebarMode(): SidebarMode {
   const stored = localStorage.getItem("lake-notes-v2.sidebar-mode");
@@ -67,6 +76,7 @@ export function App() {
   const [sidebarMode, setSidebarMode] = useState<SidebarMode>(initialSidebarMode);
   const [sidebarWidth, setSidebarWidth] = useState(initialSidebarWidth);
   const [sidebarResizing, setSidebarResizing] = useState(false);
+  const [outlineMode, setOutlineMode] = useState<OutlineMode>(initialOutlineMode);
   const [desktopWorkspace, setDesktopWorkspace] = useState<DesktopWorkspace>("library");
   const [quickNotesDirty, setQuickNotesDirty] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -78,6 +88,7 @@ export function App() {
   const [notice, setNotice] = useState<string | null>(null);
   const noticeTimer = useRef<number | null>(null);
   const sidebarPreviewTimer = useRef<number | null>(null);
+  const outlinePreviewTimer = useRef<number | null>(null);
   // 审计 #7：每篇笔记的编辑 revision——保存请求发出后若有新编辑（revision 增长），
   // 旧响应不得覆盖最新草稿/清除 dirty
   const revisionRef = useRef<Map<string, number>>(new Map());
@@ -90,10 +101,15 @@ export function App() {
   }, [sidebarMode]);
 
   useEffect(() => {
+    if (outlineMode !== "floating") localStorage.setItem("lake-notes-v2.outline-sidebar-mode", outlineMode);
+  }, [outlineMode]);
+
+  useEffect(() => {
     return () => {
       saveTimers.current.forEach((timer) => window.clearTimeout(timer));
       saveTimers.current.clear();
       if (sidebarPreviewTimer.current !== null) window.clearTimeout(sidebarPreviewTimer.current);
+      if (outlinePreviewTimer.current !== null) window.clearTimeout(outlinePreviewTimer.current);
     };
   }, []);
 
@@ -405,6 +421,31 @@ export function App() {
     setSidebarMode((current) => current === "docked" ? "collapsed" : "docked");
   }
 
+  function clearOutlinePreviewTimer() {
+    if (outlinePreviewTimer.current !== null) {
+      window.clearTimeout(outlinePreviewTimer.current);
+      outlinePreviewTimer.current = null;
+    }
+  }
+
+  function showOutlinePreview() {
+    clearOutlinePreviewTimer();
+    setOutlineMode((current) => current === "collapsed" ? "floating" : current);
+  }
+
+  function hideOutlinePreview() {
+    clearOutlinePreviewTimer();
+    outlinePreviewTimer.current = window.setTimeout(() => {
+      setOutlineMode((current) => current === "floating" ? "collapsed" : current);
+      outlinePreviewTimer.current = null;
+    }, 120);
+  }
+
+  function toggleOutlineDock() {
+    clearOutlinePreviewTimer();
+    setOutlineMode((current) => current === "docked" ? "collapsed" : "docked");
+  }
+
   function updateSidebarWidth(width: number) {
     setSidebarWidth(width);
   }
@@ -484,10 +525,17 @@ export function App() {
   };
   const tabInfos: TabInfo[] = openTabs.map((tab) => ({ noteId: tab.noteId, title: tab.title, content: tab.content, dirty: tab.dirty }));
 
-  const shellStyle = { "--sidebar-width": `${sidebarWidth}px` } as CSSProperties;
+  const outlineRailVisible = tocEnabled && !isMobile && desktopWorkspace === "library";
+  const shellStyle = {
+    "--sidebar-width": `${sidebarWidth}px`,
+    "--sidebar-grid-w": sidebarMode === "docked" ? `${sidebarWidth}px` : "0px",
+    "--outline-rail-width": outlineRailVisible ? "34px" : "0px",
+    "--outline-sidebar-width": `${OUTLINE_SIDEBAR_WIDTH}px`,
+    "--outline-grid-w": outlineRailVisible && outlineMode === "docked" ? `${OUTLINE_SIDEBAR_WIDTH}px` : "0px",
+  } as CSSProperties;
 
   return (
-    <div className={`app-shell ${shellPlatformClass} sidebar-${sidebarMode} ${desktopWorkspace === "quick-notes" ? "quick-notes-active" : ""} ${sidebarResizing ? "sidebar-resizing" : ""} ${isMobile ? `mobile-document-page ${mobileEditing ? "mobile-editing" : "mobile-reading"}` : ""}`} style={shellStyle}>
+    <div className={`app-shell ${shellPlatformClass} sidebar-${sidebarMode} outline-${outlineMode} ${desktopWorkspace === "quick-notes" ? "quick-notes-active" : ""} ${sidebarResizing ? "sidebar-resizing" : ""} ${isMobile ? `mobile-document-page ${mobileEditing ? "mobile-editing" : "mobile-reading"}` : ""}`} style={shellStyle}>
       <nav className="activity-rail desktop-only" aria-label="应用导航" onPointerEnter={desktopWorkspace === "library" ? showSidebarPreview : undefined} onPointerLeave={desktopWorkspace === "library" ? hideSidebarPreview : undefined}>
         <div className="activity-rail-spacer" />
         <button className={`activity-button ${desktopWorkspace === "library" && sidebarMode === "docked" ? "active" : ""}`} onClick={() => { if (desktopWorkspace === "library") toggleSidebarDock(); else void switchDesktopWorkspace("library"); }} title="资料库" aria-label="资料库"><Files size={16} /></button>
@@ -555,6 +603,34 @@ export function App() {
           <span className={`statusbar-sync ${sync.phase}`} title="S3 同步状态"><Cloud size={12} />{sync.message}</span>
         </footer>
       </main>
+      {tocEnabled && !isMobile && desktopWorkspace === "library" && (
+        <>
+          <nav
+            className="activity-rail outline-activity-rail desktop-only"
+            aria-label="大纲"
+            onPointerEnter={showOutlinePreview}
+            onPointerLeave={hideOutlinePreview}
+          >
+            <div className="activity-rail-spacer" />
+            <button
+              className={`activity-button ${outlineMode === "docked" ? "active" : ""}`}
+              onClick={toggleOutlineDock}
+              title="大纲"
+              aria-label="大纲"
+            >
+              <ListTree size={16} />
+            </button>
+            <div className="activity-rail-fill" />
+          </nav>
+          <OutlineSidebar
+            mode={outlineMode}
+            activeNoteId={activeNoteId}
+            onToggleDock={toggleOutlineDock}
+            onPreviewEnter={showOutlinePreview}
+            onPreviewLeave={hideOutlinePreview}
+          />
+        </>
+      )}
       {confirmDelete && <ConfirmDelete node={confirmDelete} onConfirm={() => { const id = confirmDelete.id; setConfirmDelete(null); void deleteTreeNode(id); }} onCancel={() => setConfirmDelete(null)} />}
       <SyncPanel open={syncPanelOpen} onClose={() => setSyncPanelOpen(false)} onSyncStatusChange={(status) => setSync((current) => ({ ...current, ...status }))} />
       <SettingsPanel open={settingsOpen} settings={settings} onClose={() => setSettingsOpen(false)} onChange={(patch) => saveSettings(patch)} />

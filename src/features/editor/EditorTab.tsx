@@ -7,9 +7,7 @@ import {
   type LakeEditorPrefs,
 } from "./lakeRuntime";
 import { normalizeClipboardHtml, upgradePastedHtml } from "./clipboardHtml";
-import { OutlineMode } from "../outline/OutlineController";
-import { OutlinePanel } from "../outline/OutlinePanel";
-import { OutlineRail } from "../outline/OutlineRail";
+import { registerOutlineTab, unregisterOutlineTab } from "../outline/registry";
 import { useOutline } from "../outline/useOutline";
 
 export interface EditorTabProps {
@@ -36,83 +34,43 @@ export function EditorTab({ noteId, content, visible, tocEnabled, onChange, pref
   const editorMountRef = useRef<HTMLDivElement>(null);
   const editorRef = useRef<LakeEditorInstance | null>(null);
   const [editorState, setEditorState] = useState<LakeEditorInstance | null>(null);
-  // 大纲形态：rail（默认图标栏）/ docked（固定展开）/ hidden（设置关闭）
-  const [outlineMode, setOutlineMode] = useState<OutlineMode>(tocEnabled ? "rail" : "hidden");
-  // rail 模式下 hover 图标弹出的悬浮面板（瞬态）
-  const [outlineFloatOpen, setOutlineFloatOpen] = useState(false);
-  const hoverTimersRef = useRef<{ enter?: number; leave?: number }>({});
-  // 收起/取消固定后短暂抑制 hover 自动弹出（鼠标正停在图标位置，避免刚收起又弹开）
-  const hoverCooldownRef = useRef(0);
   const onChangeRef = useRef(onChange);
   const onEditorReadyRef = useRef(onEditorReady);
   onChangeRef.current = onChange;
   onEditorReadyRef.current = onEditorReady;
 
-  const belowToolbar = prefs?.showToolbar !== false;
-  const outlineShown = outlineMode === "docked" || (outlineMode === "rail" && outlineFloatOpen);
-  const controller = useOutline(editorState, hostRef.current, noteId, tocEnabled, visible && outlineShown);
+  const { controller, refresh } = useOutline(editorState, hostRef.current, noteId, tocEnabled, visible);
 
-  // 设置里关闭「显示文档大纲」时完全隐藏；重新打开回到 rail
+  const handleOutlineNavigate = (id: string): void => {
+    const editor = editorRef.current;
+    const host = hostRef.current;
+    if (!editor || !host) return;
+    // 折叠标题先展开（接管原生 tocPositionChange → headingUnfold 链路）
+    try {
+      (editor as any)?.renderer?.execCommand?.("headingUnfold", id);
+    } catch { /* 忽略 */ }
+    try {
+      (editor as any)?.renderer?.scrollByNodeId?.(id);
+    } catch { /* 忽略 */ }
+    // 懒卡片占位高度导致的偏差在渲染/水合稳定后校正两次
+    const scroller = resolveScrollNode(host);
+    const correct = (): void => {
+      const el = host.querySelector(`[id="${escapeId(id)}"]`) as HTMLElement | null;
+      if (!el || !scroller) return;
+      const delta = el.getBoundingClientRect().top - scroller.getBoundingClientRect().top;
+      if (Math.abs(delta) > 2) scroller.scrollTop += delta;
+    };
+    window.setTimeout(correct, 50);
+    window.setTimeout(correct, 200);
+  };
+
+  // 向全局注册表暴露本标签的大纲句柄（右侧栏读取 active tab 的句柄）
   useEffect(() => {
-    if (!tocEnabled) {
-      setOutlineMode("hidden");
-      setOutlineFloatOpen(false);
-    } else {
-      setOutlineMode((m) => (m === "hidden" ? "rail" : m));
-    }
-  }, [tocEnabled]);
+    registerOutlineTab(noteId, { controller, navigate: handleOutlineNavigate, refresh });
+    return () => unregisterOutlineTab(noteId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [noteId, controller, refresh]);
 
-  const clearHoverTimers = (): void => {
-    const t = hoverTimersRef.current;
-    if (t.enter !== undefined) window.clearTimeout(t.enter);
-    if (t.leave !== undefined) window.clearTimeout(t.leave);
-    t.enter = undefined;
-    t.leave = undefined;
-  };
-  useEffect(() => clearHoverTimers, []);
-
-  const armHoverCooldown = (): void => {
-    hoverCooldownRef.current = Date.now() + 800;
-  };
-  // rail：hover 图标 → 250ms 后弹出悬浮面板；移出 → 300ms 后收起
-  const onRailEnter = (): void => {
-    clearHoverTimers();
-    if (Date.now() < hoverCooldownRef.current) return;
-    hoverTimersRef.current.enter = window.setTimeout(() => setOutlineFloatOpen(true), 250);
-  };
-  const onRailLeave = (): void => {
-    clearHoverTimers();
-    hoverTimersRef.current.leave = window.setTimeout(() => setOutlineFloatOpen(false), 300);
-  };
-  // 点击图标：固定/取消固定
-  const onRailClick = (): void => {
-    clearHoverTimers();
-    setOutlineFloatOpen(false);
-    setOutlineMode((m) => (m === "docked" ? "rail" : "docked"));
-  };
-  // 悬浮面板：移入保持，移出后收起
-  const onPanelEnter = (): void => clearHoverTimers();
-  const onPanelLeave = (): void => {
-    clearHoverTimers();
-    hoverTimersRef.current.leave = window.setTimeout(() => setOutlineFloatOpen(false), 300);
-  };
-  const onPinToggle = (): void => {
-    clearHoverTimers();
-    setOutlineFloatOpen(false);
-    setOutlineMode((m) => {
-      if (m === "docked") {
-        armHoverCooldown();
-        return "rail";
-      }
-      return "docked";
-    });
-  };
-  const onPanelHide = (): void => {
-    clearHoverTimers();
-    setOutlineFloatOpen(false);
-    armHoverCooldown();
-    setOutlineMode("rail");
-  };
   useEffect(() => {
     const host = hostRef.current;
     let mount = editorMountRef.current;
@@ -193,29 +151,6 @@ export function EditorTab({ noteId, content, visible, tocEnabled, onChange, pref
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [noteId, tocEnabled, prefs?.fontSize, prefs?.showToolbar]);
 
-  const handleOutlineNavigate = (id: string): void => {
-    const editor = editorRef.current;
-    const host = hostRef.current;
-    if (!editor || !host) return;
-    // 折叠标题先展开（接管原生 tocPositionChange → headingUnfold 链路）
-    try {
-      (editor as any)?.renderer?.execCommand?.("headingUnfold", id);
-    } catch { /* 忽略 */ }
-    try {
-      (editor as any)?.renderer?.scrollByNodeId?.(id);
-    } catch { /* 忽略 */ }
-    // 懒卡片占位高度导致的偏差在渲染/水合稳定后校正两次
-    const scroller = resolveScrollNode(host);
-    const correct = (): void => {
-      const el = host.querySelector(`[id="${escapeId(id)}"]`) as HTMLElement | null;
-      if (!el || !scroller) return;
-      const delta = el.getBoundingClientRect().top - scroller.getBoundingClientRect().top;
-      if (Math.abs(delta) > 2) scroller.scrollTop += delta;
-    };
-    window.setTimeout(correct, 50);
-    window.setTimeout(correct, 200);
-  };
-
   return (
     <div
       ref={hostRef}
@@ -224,37 +159,6 @@ export function EditorTab({ noteId, content, visible, tocEnabled, onChange, pref
       data-note-id={noteId}
     >
       <div ref={editorMountRef} className="lake-editor-main" />
-      {outlineMode === "docked" && (
-        <OutlinePanel
-          controller={controller}
-          pinned
-          belowToolbar={belowToolbar}
-          onNavigate={handleOutlineNavigate}
-          onPin={onPinToggle}
-          onHide={onPanelHide}
-        />
-      )}
-      {outlineMode === "rail" && outlineFloatOpen && (
-        <OutlinePanel
-          controller={controller}
-          pinned={false}
-          belowToolbar={belowToolbar}
-          onNavigate={handleOutlineNavigate}
-          onPin={onPinToggle}
-          onHide={onPanelHide}
-          onMouseEnter={onPanelEnter}
-          onMouseLeave={onPanelLeave}
-        />
-      )}
-      {outlineMode === "rail" && !outlineFloatOpen && (
-        <OutlineRail
-          active={false}
-          belowToolbar={belowToolbar}
-          onMouseEnter={onRailEnter}
-          onMouseLeave={onRailLeave}
-          onClick={onRailClick}
-        />
-      )}
     </div>
   );
 }

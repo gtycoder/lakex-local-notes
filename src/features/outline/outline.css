@@ -1,9 +1,6 @@
-/* ===== 自建大纲（桌面多标签）：rail 图标栏 + 悬浮/固定面板 ===== */
+/* ===== 右侧大纲栏（与左侧 Sidebar 对称的 shell） ===== */
 
-.lake-editor-tab {
-  position: relative;
-}
-
+/* 编辑器挂载列：必须 flex:1 + min-width:0，否则内容最小宽度会把编辑器撑出主列 */
 .lake-editor-tab > .lake-editor-main {
   height: 100%;
   min-width: 0;
@@ -11,86 +8,133 @@
   flex: 1 1 auto;
 }
 
-/* ===== 面板通用 ===== */
-.outline-panel {
-  flex-shrink: 0;
-  width: 280px;
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  border-left: 1px solid var(--lakex-editor-border-light, rgba(0, 0, 0, 0.06));
-  background: var(--lakex-editor-background-primary, #fff);
-  font-size: 14px;
-  color: var(--lakex-editor-text-body, #333);
-  user-select: none;
+/* app-shell 网格加入右侧两列：outline 活动轨 + outline 侧栏 */
+.app-shell {
+  --outline-rail-width: 34px;
+  --outline-sidebar-width: 280px;
 }
 
-/* 工具栏开启时，docked 面板整体下移到工具栏之下（工具栏高 50px，flex 子项用 margin+height） */
-.outline-panel--docked.below-toolbar {
-  margin-top: 50px;
-  height: calc(100% - 50px);
+@media (min-width: 761px) {
+  .app-shell {
+    grid-template-columns:
+      var(--activity-rail-width) var(--sidebar-grid-w, var(--sidebar-width)) minmax(0, 1fr)
+      var(--outline-rail-width) var(--outline-grid-w, var(--outline-sidebar-width));
+  }
+  /* 左侧收起/悬浮时也要保留右侧两列（覆盖 styles.css 的 3 列写法） */
+  .app-shell.sidebar-floating,
+  .app-shell.sidebar-collapsed {
+    grid-template-columns:
+      var(--activity-rail-width) var(--sidebar-grid-w, var(--sidebar-width)) minmax(0, 1fr)
+      var(--outline-rail-width) var(--outline-grid-w, var(--outline-sidebar-width));
+  }
+
+  /* 右侧活动轨（镜像左侧 activity-rail） */
+  .outline-activity-rail {
+    grid-column: 4;
+    grid-row: 1;
+    display: flex;
+    position: relative;
+    z-index: 270;
+    flex-direction: column;
+    align-items: center;
+    align-self: end;
+    width: var(--outline-rail-width);
+    min-width: var(--outline-rail-width);
+    height: calc(100% - var(--topbar-height));
+    padding: 0 3px 6px;
+    border-right: none;
+    border-left: 1px solid var(--shell-separator);
+    background: var(--shell-material);
+  }
+
+  /* 右侧大纲栏（镜像左侧 .sidebar） */
+  .outline-sidebar {
+    position: relative;
+    z-index: 250;
+    grid-column: 5;
+    grid-row: 1;
+    display: flex;
+    flex-direction: column;
+    width: var(--outline-sidebar-width);
+    min-width: 0;
+    align-self: end;
+    height: calc(100% - var(--topbar-height));
+    overflow: visible;
+    border-left: 1px solid var(--shell-separator);
+    background: var(--shell-material);
+    opacity: 1;
+    transform: translateX(0);
+    transition: opacity 180ms ease-out, transform 260ms var(--shell-ease), box-shadow 240ms ease-out;
+  }
+  .app-shell.sidebar-resizing .outline-sidebar { transition: none; }
+
+  .outline-sidebar--floating {
+    position: fixed;
+    top: var(--topbar-height);
+    bottom: 0;
+    right: var(--outline-rail-width);
+    left: auto;
+    border-left-color: rgba(66, 75, 112, 0.18);
+    border-radius: 14px 0 0 14px;
+    box-shadow: -18px 0 50px rgba(43, 50, 78, 0.16), -2px 0 7px rgba(43, 50, 78, 0.08);
+  }
+  .outline-sidebar--collapsed {
+    pointer-events: none;
+    opacity: 0;
+    transform: translateX(18px);
+    box-shadow: none;
+    transition-duration: 180ms;
+  }
 }
 
-/* 悬浮面板：覆盖在正文之上，不挤压布局 */
-.outline-panel--floating {
-  position: absolute;
-  top: 0;
-  right: 0;
-  bottom: 0;
-  width: 280px;
-  /* 必须高于编辑器 sticky 工具栏（.ne-ui z-index:150），避免工具栏延伸到面板下方拦截点击 */
-  z-index: 200;
-  box-shadow: -6px 0 16px rgba(0, 0, 0, 0.08);
-  border-left: 1px solid var(--lakex-editor-border-light, rgba(0, 0, 0, 0.08));
-}
-.outline-panel--floating.below-toolbar {
-  top: 50px;
+/* 移动端不显示右侧栏 */
+@media (max-width: 760px) {
+  .outline-activity-rail,
+  .outline-sidebar { display: none; }
 }
 
-.outline-panel__header {
+/* ===== 侧栏内部 ===== */
+.outline-sidebar__header {
   display: flex;
   align-items: center;
-  gap: 4px;
-  height: 36px;
-  flex-shrink: 0;
-  padding: 0 8px 0 12px;
-  color: var(--lakex-editor-text-color, #1f2329);
-  border-bottom: 1px solid var(--lakex-editor-border-light, rgba(0, 0, 0, 0.06));
+  gap: 8px;
+  flex: 0 0 38px;
+  min-height: 38px;
+  padding: 0 10px;
+  border-bottom: 1px solid var(--shell-separator);
+  color: #353a42;
 }
 
-.outline-panel__title {
-  font-weight: 600;
+.outline-sidebar__title {
   font-size: 13px;
+  font-weight: 630;
+  letter-spacing: -0.01em;
 }
 
-.outline-panel__spacer {
+.outline-sidebar__spacer {
   flex: 1;
 }
 
-.outline-panel__btn {
+.outline-sidebar__collapse {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 24px;
-  height: 24px;
-  border: none;
-  border-radius: 6px;
-  background: transparent;
-  color: var(--lakex-editor-text-caption, #666);
-  cursor: pointer;
+  width: 26px;
+  height: 26px;
   padding: 0;
+  border: 0;
+  border-radius: 7px;
+  color: #747b85;
+  background: transparent;
+  cursor: pointer;
+  transition: color 130ms ease-out, background-color 130ms ease-out;
+}
+.outline-sidebar__collapse:hover {
+  color: var(--shell-accent-strong);
+  background: rgba(89, 108, 193, 0.12);
 }
 
-.outline-panel__btn:hover {
-  background: var(--lakex-editor-background-primary-hover-light, rgba(0, 0, 0, 0.06));
-}
-
-.outline-panel__btn.is-active {
-  color: var(--lakex-editor-color-theme, #4c8dff);
-}
-
-.outline-panel__body {
+.outline-list {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
@@ -100,53 +144,9 @@
 
 .outline-panel__empty {
   padding: 16px 12px;
-  color: var(--lakex-editor-text-caption, #999);
+  color: var(--shell-text-tertiary, #8a919c);
   font-size: 13px;
   text-align: center;
-}
-
-/* ===== rail 图标栏 ===== */
-.outline-rail {
-  position: absolute;
-  top: 0;
-  right: 0;
-  bottom: 0;
-  width: 40px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  padding-top: 6px;
-  z-index: 200;
-  /* 栏本身不拦截指针，只有图标按钮可交互，避免盖住正文右侧 */
-  pointer-events: none;
-}
-.outline-rail.below-toolbar {
-  top: 50px;
-}
-
-.outline-rail__btn {
-  pointer-events: auto;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 32px;
-  height: 32px;
-  border: none;
-  border-radius: 8px;
-  background: transparent;
-  color: var(--lakex-editor-text-caption, #666);
-  cursor: pointer;
-  padding: 0;
-}
-
-.outline-rail__btn:hover {
-  background: var(--lakex-editor-background-primary-hover-light, rgba(0, 0, 0, 0.08));
-  color: var(--lakex-editor-text-color, #1f2329);
-}
-
-.outline-rail__btn.is-active {
-  color: var(--lakex-editor-color-theme, #4c8dff);
-  background: var(--lakex-editor-background-primary-hover-light, rgba(0, 0, 0, 0.06));
 }
 
 /* ===== 条目 ===== */
@@ -159,15 +159,19 @@
   cursor: pointer;
   white-space: nowrap;
   border-left: 2px solid transparent;
+  color: var(--shell-text-secondary, #5c6470);
+  font-size: 13px;
+  transition: background-color 120ms ease-out, color 120ms ease-out;
 }
 
 .outline-item:hover {
-  background: var(--lakex-editor-background-primary-hover-light, rgba(0, 0, 0, 0.04));
+  background: rgba(89, 108, 193, 0.08);
 }
 
 .outline-item--selected {
-  border-left-color: var(--lakex-editor-color-theme, #4c8dff);
-  color: var(--lakex-editor-text-color, #1f2329);
+  border-left-color: var(--shell-accent-strong, #4c6fff);
+  color: var(--shell-text, #20242c);
+  background: var(--shell-accent-soft, rgba(89, 108, 193, 0.1));
   font-weight: 600;
 }
 
@@ -180,7 +184,7 @@
   flex-shrink: 0;
   border: none;
   background: transparent;
-  color: var(--lakex-editor-text-caption, #999);
+  color: var(--shell-text-tertiary, #8a919c);
   cursor: pointer;
   padding: 0;
   transition: transform 0.15s ease;
