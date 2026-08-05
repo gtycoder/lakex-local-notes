@@ -225,7 +225,7 @@ const VIRTUAL_RENDERING = {
  *  - 仅 `.lake-editor-tab`（桌面多标签）启用内部滚动；移动端单编辑器路径
  *    （无 scrollNode 参数）仍走外层 .document-pane，行为不变。
  */
-function resolveScrollNode(scrollNode?: HTMLElement | null): HTMLElement {
+export function resolveScrollNode(scrollNode?: HTMLElement | null): HTMLElement {
   const hostNode = (scrollNode
     || (document.querySelector(VIRTUAL_RENDERING.scrollContainerSelector) as HTMLElement | null)
     || document.scrollingElement
@@ -243,6 +243,12 @@ export interface LakeEditorPrefs {
   fontSize?: number;
   /** 显示编辑器工具栏 */
   showToolbar?: boolean;
+  /**
+   * 彻底禁用原生编辑 TOC 侧栏（桌面多标签自建大纲时置 true）。
+   * 仅关闭编辑模式 UI：内核 toc 数据与 tocChange 事件照常产生（详见 docs/OUTLINE-RESEARCH.md §9）。
+   * 移动端（LakeEditor）不传此字段，保持原生行为。
+   */
+  disableNativeToc?: boolean;
 }
 
 export function createLakeDocument(
@@ -265,7 +271,7 @@ export function createLakeDocument(
       : ["save", "emoji", ...(prefs?.showToolbar === false ? ["toolbar"] : [])],
     input: {},
     defaultFontsize: prefsSize,
-    toc: { enable: tocEnabled },
+    toc: { enable: mode === "viewer" ? tocEnabled : !!tocEnabled && !prefs?.disableNativeToc },
     codeblock: { codemirrorURL: "./vendor/lakex-doc/codemirror.js" },
     math: { KaTexURL: ["./vendor/lakex-doc/katex.min.js", "https://gw.alipayobjects.com/os/lib/katex/0.16.8/dist/contrib/mhchem.min.js"] },
     image: {
@@ -332,7 +338,9 @@ export function createLakeDocument(
     // 清理函数挂在 editor 上由 destroyLakeEditor 调。
     try {
       const disposes: Array<() => void> = [];
-      try { disposes.push(setupTocScrollFollow(element, editor, () => resolveScrollNode(scrollNode))); } catch { /* 忽略 */ }
+      if (!prefs?.disableNativeToc) {
+        try { disposes.push(setupTocScrollFollow(element, editor, () => resolveScrollNode(scrollNode))); } catch { /* 忽略 */ }
+      }
       try { disposes.push(setupCardToolbarHoverBridge(element)); } catch { /* 忽略 */ }
       (editor as any).__disposeExtras = () => {
         for (const dispose of disposes) {

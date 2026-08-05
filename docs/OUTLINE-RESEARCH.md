@@ -301,3 +301,56 @@ src/features/outline/
 2. 移动端（LakeEditor，含编辑与阅读模式）：**本轮不改**，原生 TOC 原样。
 3. 迁移优先：先做「原生观感」最小可用（架构 + 时序 + 多标签稳定），确认后再上子弹线/级别/动画等自定义（Phase 2）。
 4. 桌面编辑器模式：`disableNativeToc = true` → 原生侧栏彻底不创建；数据走内核 tocChange；自建面板渲染。
+
+---
+
+## 11. Phase 1 实现与真机验收记录（2026-08-05）
+
+### 11.1 已实现
+
+新增 `src/features/outline/`：
+
+| 文件 | 职责 |
+| --- | --- |
+| `OutlineController.ts` | 树构建（按 depth 嵌套）、折叠集合（按 noteId 持久化 localStorage）、选中态、展开到 N 级/全展开/全折叠/保持祖先展开；useSyncExternalStore 订阅 |
+| `OutlinePanel.tsx` | 自渲染右栏面板：docked / floating / hidden 三形态 + 头部按钮（固定/悬浮/隐藏）+ 隐藏态「大纲」重新打开把手；折叠箭头、层级缩进、选中高亮、选中项滚入可视区 |
+| `useOutline.ts` | 订阅内核 `tocChange` + 打开时轮询兜底；rAF 滚动高亮；虚拟渲染批次重建后重算；隐藏 tab 暂停计算；卸载全清理 |
+| `outline.css` | 面板样式；floating z-index=200（高于编辑器 sticky 工具栏 150，避免遮挡拦截点击） |
+| `OutlineController.test.ts` | 8 个单测（树构建/去重/折叠/选中保持/持久化/订阅） |
+
+改动：
+
+- `lakeRuntime.ts`：`LakeEditorPrefs.disableNativeToc`；编辑模式 `toc.enable = tocEnabled && !disableNativeToc`（viewer 不受影响）；禁用时跳过 `setupTocScrollFollow`；导出 `resolveScrollNode`。
+- `EditorTab.tsx`：拆出 `.lake-editor-main` 挂载点 + `OutlinePanel`；传 `disableNativeToc: true`；点击定位走 `renderer.execCommand("headingUnfold") + scrollByNodeId + 二次校正`；设置关闭「显示文档大纲」时面板隐藏。
+- `main.tsx`：引入 `outline.css`。
+- 移动端（`LakeEditor`）完全未动：原生 TOC 原样保留。
+
+### 11.2 真机验收（Playwright 驱动真实 Electron，dev userData）
+
+| 项目 | 结果 |
+| --- | --- |
+| 原生 `.ne-toc-sidebar` 是否创建 | **0 个**（彻底禁用，非隐藏） |
+| 自建面板 | docked 右栏 280px，正文随宽度收缩（985→705） |
+| 打开文档大纲出现耗时 | 约 **0.5s**（reload 后 543ms 内条目可见，远好于 ~3s） |
+| 折叠/展开 | 正常；折叠集合持久化（重启后仍折叠） |
+| 点击定位 | 精确（误差 0.09px）；折叠标题先展开再定位 |
+| 滚动高亮 | 随滚动跟随，回顶高亮首项 |
+| 编辑联动 | 输入 `# 第一章` / `## 第一节` 后大纲立即出现对应条目（无闪烁） |
+| 三形态 | 固定/悬浮/隐藏 + 重新打开把手全部可用 |
+| 悬浮遮挡 | 修复 z-index 后工具栏不再拦截面板头部点击 |
+| 多标签 | 2 tab 各自独立面板；折叠状态互不影响（切走再切回保持） |
+| 回归 | `npx tsc --noEmit`、`vitest` 119 全绿、`vite build`、`git diff --check` 通过 |
+
+### 11.3 测试数据清理
+
+- 测试笔记「大纲测试文档」与 welcome 笔记的改动全部随 dev userData 删除
+  （`/Users/admin/Library/Application Support/lake-notes-dev` 已整体删除，下一启动重建）；
+- 正式数据目录未触碰。
+
+### 11.4 已知差距（Phase 2 候选）
+
+- 大文档「内核 toc 计算耗时」仍是打开延迟的主导（本方案只消除了渲染链额外延迟）；
+- 面板工具栏（筛选/展开到级别/全展开）未做 UI（controller 已支持 API）；
+- 子弹线/级别徽标/滚动动画未做；
+- 悬浮态下编辑器工具栏右端按钮会被面板盖住（overlay 固有取舍，后续可加拖拽/半透明）；
+- 隐藏态重开入口是右缘把手，暂未接入设置面板。

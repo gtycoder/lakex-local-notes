@@ -1,6 +1,16 @@
-import { useEffect, useRef } from "react";
-import { createLakeDocument, destroyLakeEditor, refreshTocSidebar, type LakeEditorInstance, type LakeEditorPrefs } from "./lakeRuntime";
+import { useEffect, useRef, useState } from "react";
+import {
+  createLakeDocument,
+  destroyLakeEditor,
+  resolveScrollNode,
+  type LakeEditorInstance,
+  type LakeEditorPrefs,
+} from "./lakeRuntime";
 import { normalizeClipboardHtml, upgradePastedHtml } from "./clipboardHtml";
+import { ListTree } from "lucide-react";
+import type { OutlineMode } from "../outline/OutlineController";
+import { OutlinePanel } from "../outline/OutlinePanel";
+import { useOutline } from "../outline/useOutline";
 
 export interface EditorTabProps {
   noteId: string;
@@ -13,17 +23,36 @@ export interface EditorTabProps {
   onEditorReady?: (noteId: string, editor: LakeEditorInstance | null) => void;
 }
 
+function escapeId(id: string): string {
+  try {
+    return CSS.escape(id);
+  } catch {
+    return id.replace(/["\\]/g, "\\$&");
+  }
+}
+
 export function EditorTab({ noteId, content, visible, tocEnabled, onChange, prefs, onEditorReady }: EditorTabProps) {
   const hostRef = useRef<HTMLDivElement>(null);
+  const editorMountRef = useRef<HTMLDivElement>(null);
   const editorRef = useRef<LakeEditorInstance | null>(null);
+  const [editorState, setEditorState] = useState<LakeEditorInstance | null>(null);
+  const [outlineMode, setOutlineMode] = useState<OutlineMode>(tocEnabled ? "docked" : "hidden");
   const onChangeRef = useRef(onChange);
   const onEditorReadyRef = useRef(onEditorReady);
   onChangeRef.current = onChange;
   onEditorReadyRef.current = onEditorReady;
 
+  const controller = useOutline(editorState, hostRef.current, noteId, tocEnabled, visible);
+
+  // 设置里关闭「显示文档大纲」时隐藏面板（重新打开后保持用户当前形态）
+  useEffect(() => {
+    if (!tocEnabled) setOutlineMode("hidden");
+  }, [tocEnabled]);
+
   useEffect(() => {
     const host = hostRef.current;
-    if (!host) return;
+    const mount = editorMountRef.current;
+    if (!host || !mount) return;
 
     const copyHandler = (event: ClipboardEvent) => {
       const selection = window.getSelection();
@@ -55,14 +84,21 @@ export function EditorTab({ noteId, content, visible, tocEnabled, onChange, pref
     let setting = true;
     if (typeof performance !== "undefined") performance.mark("lake:tab-init:start");
     try {
-      editor = createLakeDocument(host, "editor", () => {
-        if (editor && !setting) onChangeRef.current(editor.getDocument("text/lake"));
-      }, tocEnabled, noteId, host, prefs);
+      editor = createLakeDocument(
+        mount,
+        "editor",
+        () => {
+          if (editor && !setting) onChangeRef.current(editor.getDocument("text/lake"));
+        },
+        tocEnabled,
+        noteId,
+        host,
+        { ...prefs, disableNativeToc: true }
+      );
       editor.setDocument("text/lake", content);
-      // 修复：Lake TOC 侧边栏创建时用空 toc 渲染，setDocument 后补一次数据同步
-      setTimeout(() => refreshTocSidebar(editor, host), 0);
       setting = false;
       editorRef.current = editor;
+      setEditorState(editor);
       onEditorReadyRef.current?.(noteId, editor);
     } catch (reason) {
       console.error("Failed to create editor for tab", noteId, reason);
@@ -79,17 +115,62 @@ export function EditorTab({ noteId, content, visible, tocEnabled, onChange, pref
       onEditorReadyRef.current?.(noteId, null);
       destroyLakeEditor(editor);
       editorRef.current = null;
+      setEditorState(null);
       host.replaceChildren();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [noteId, tocEnabled, prefs?.fontSize, prefs?.showToolbar]);
 
+  const handleOutlineNavigate = (id: string): void => {
+    const editor = editorRef.current;
+    const host = hostRef.current;
+    if (!editor || !host) return;
+    // 折叠标题先展开（接管原生 tocPositionChange → headingUnfold 链路）
+    try {
+      (editor as any)?.renderer?.execCommand?.("headingUnfold", id);
+    } catch { /* 忽略 */ }
+    try {
+      (editor as any)?.renderer?.scrollByNodeId?.(id);
+    } catch { /* 忽略 */ }
+    // 懒卡片占位高度导致的偏差在渲染/水合稳定后校正两次
+    const scroller = resolveScrollNode(host);
+    const correct = (): void => {
+      const el = host.querySelector(`[id="${escapeId(id)}"]`) as HTMLElement | null;
+      if (!el || !scroller) return;
+      const delta = el.getBoundingClientRect().top - scroller.getBoundingClientRect().top;
+      if (Math.abs(delta) > 2) scroller.scrollTop += delta;
+    };
+    window.setTimeout(correct, 50);
+    window.setTimeout(correct, 200);
+  };
+
   return (
     <div
       ref={hostRef}
       className="lake-editor lake-editor-tab"
-      style={{ display: visible ? "block" : "none", width: "100%" }}
+      style={{ display: visible ? "flex" : "none", width: "100%" }}
       data-note-id={noteId}
-    />
+    >
+      <div ref={editorMountRef} className="lake-editor-main" />
+      {outlineMode !== "hidden" ? (
+        <OutlinePanel
+          controller={controller}
+          mode={outlineMode}
+          onNavigate={handleOutlineNavigate}
+          onModeChange={setOutlineMode}
+        />
+      ) : (
+        tocEnabled && (
+          <button
+            className="outline-reopen-btn"
+            title="显示大纲"
+            onClick={() => setOutlineMode("docked")}
+          >
+            <ListTree size={14} />
+            <span>大纲</span>
+          </button>
+        )
+      )}
+    </div>
   );
 }
