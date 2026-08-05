@@ -1,12 +1,20 @@
 import { useLayoutEffect, useRef, useSyncExternalStore } from "react";
-import { ChevronRight, ListTree, MoveDiagonal, Pin, X } from "lucide-react";
-import { OutlineController, type OutlineMode, type OutlineNode } from "./OutlineController";
+import { ChevronRight, ListTree, Pin, X } from "lucide-react";
+import { OutlineController, type OutlineNode } from "./OutlineController";
 
 interface OutlinePanelProps {
   controller: OutlineController;
-  mode: Exclude<OutlineMode, "hidden">;
+  /** true = 固定（docked）；false = 悬浮（hover 弹出） */
+  pinned: boolean;
+  /** 工具栏开启时面板下移到工具栏之下 */
+  belowToolbar?: boolean;
   onNavigate: (id: string) => void;
-  onModeChange: (mode: OutlineMode) => void;
+  /** 固定/取消固定 */
+  onPin: () => void;
+  /** 收起（回到 rail） */
+  onHide: () => void;
+  onMouseEnter?: () => void;
+  onMouseLeave?: () => void;
 }
 
 function escapeId(id: string): string {
@@ -17,7 +25,16 @@ function escapeId(id: string): string {
   }
 }
 
-export function OutlinePanel({ controller, mode, onNavigate, onModeChange }: OutlinePanelProps) {
+export function OutlinePanel({
+  controller,
+  pinned,
+  belowToolbar,
+  onNavigate,
+  onPin,
+  onHide,
+  onMouseEnter,
+  onMouseLeave,
+}: OutlinePanelProps) {
   const version = useSyncExternalStore(controller.subscribe, controller.getVersion, controller.getVersion);
   const items = controller.getVisibleItems();
   const selectedId = controller.getSelectedId();
@@ -72,26 +89,23 @@ export function OutlinePanel({ controller, mode, onNavigate, onModeChange }: Out
   };
 
   return (
-    <div className={`outline-panel outline-panel--${mode}`}>
+    <div
+      className={`outline-panel outline-panel--${pinned ? "docked" : "floating"}${belowToolbar ? " below-toolbar" : ""}`}
+      onMouseEnter={onMouseEnter}
+      onMouseLeave={onMouseLeave}
+    >
       <div className="outline-panel__header">
         <ListTree size={14} />
         <span className="outline-panel__title">大纲</span>
         <span className="outline-panel__spacer" />
         <button
-          className={`outline-panel__btn${mode === "docked" ? " is-active" : ""}`}
-          title="固定"
-          onClick={() => onModeChange("docked")}
+          className={`outline-panel__btn${pinned ? " is-active" : ""}`}
+          title={pinned ? "取消固定" : "固定"}
+          onClick={onPin}
         >
           <Pin size={14} />
         </button>
-        <button
-          className={`outline-panel__btn${mode === "floating" ? " is-active" : ""}`}
-          title="悬浮"
-          onClick={() => onModeChange("floating")}
-        >
-          <MoveDiagonal size={14} />
-        </button>
-        <button className="outline-panel__btn" title="隐藏" onClick={() => onModeChange("hidden")}>
+        <button className="outline-panel__btn" title="收起大纲" onClick={onHide}>
           <X size={14} />
         </button>
       </div>

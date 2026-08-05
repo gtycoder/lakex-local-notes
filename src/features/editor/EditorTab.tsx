@@ -7,9 +7,9 @@ import {
   type LakeEditorPrefs,
 } from "./lakeRuntime";
 import { normalizeClipboardHtml, upgradePastedHtml } from "./clipboardHtml";
-import { ListTree } from "lucide-react";
-import type { OutlineMode } from "../outline/OutlineController";
+import { OutlineMode } from "../outline/OutlineController";
 import { OutlinePanel } from "../outline/OutlinePanel";
+import { OutlineRail } from "../outline/OutlineRail";
 import { useOutline } from "../outline/useOutline";
 
 export interface EditorTabProps {
@@ -36,19 +36,83 @@ export function EditorTab({ noteId, content, visible, tocEnabled, onChange, pref
   const editorMountRef = useRef<HTMLDivElement>(null);
   const editorRef = useRef<LakeEditorInstance | null>(null);
   const [editorState, setEditorState] = useState<LakeEditorInstance | null>(null);
-  const [outlineMode, setOutlineMode] = useState<OutlineMode>(tocEnabled ? "docked" : "hidden");
+  // 大纲形态：rail（默认图标栏）/ docked（固定展开）/ hidden（设置关闭）
+  const [outlineMode, setOutlineMode] = useState<OutlineMode>(tocEnabled ? "rail" : "hidden");
+  // rail 模式下 hover 图标弹出的悬浮面板（瞬态）
+  const [outlineFloatOpen, setOutlineFloatOpen] = useState(false);
+  const hoverTimersRef = useRef<{ enter?: number; leave?: number }>({});
+  // 收起/取消固定后短暂抑制 hover 自动弹出（鼠标正停在图标位置，避免刚收起又弹开）
+  const hoverCooldownRef = useRef(0);
   const onChangeRef = useRef(onChange);
   const onEditorReadyRef = useRef(onEditorReady);
   onChangeRef.current = onChange;
   onEditorReadyRef.current = onEditorReady;
 
-  const controller = useOutline(editorState, hostRef.current, noteId, tocEnabled, visible);
+  const belowToolbar = prefs?.showToolbar !== false;
+  const outlineShown = outlineMode === "docked" || (outlineMode === "rail" && outlineFloatOpen);
+  const controller = useOutline(editorState, hostRef.current, noteId, tocEnabled, visible && outlineShown);
 
-  // 设置里关闭「显示文档大纲」时隐藏面板（重新打开后保持用户当前形态）
+  // 设置里关闭「显示文档大纲」时完全隐藏；重新打开回到 rail
   useEffect(() => {
-    if (!tocEnabled) setOutlineMode("hidden");
+    if (!tocEnabled) {
+      setOutlineMode("hidden");
+      setOutlineFloatOpen(false);
+    } else {
+      setOutlineMode((m) => (m === "hidden" ? "rail" : m));
+    }
   }, [tocEnabled]);
 
+  const clearHoverTimers = (): void => {
+    const t = hoverTimersRef.current;
+    if (t.enter !== undefined) window.clearTimeout(t.enter);
+    if (t.leave !== undefined) window.clearTimeout(t.leave);
+    t.enter = undefined;
+    t.leave = undefined;
+  };
+  useEffect(() => clearHoverTimers, []);
+
+  const armHoverCooldown = (): void => {
+    hoverCooldownRef.current = Date.now() + 800;
+  };
+  // rail：hover 图标 → 250ms 后弹出悬浮面板；移出 → 300ms 后收起
+  const onRailEnter = (): void => {
+    clearHoverTimers();
+    if (Date.now() < hoverCooldownRef.current) return;
+    hoverTimersRef.current.enter = window.setTimeout(() => setOutlineFloatOpen(true), 250);
+  };
+  const onRailLeave = (): void => {
+    clearHoverTimers();
+    hoverTimersRef.current.leave = window.setTimeout(() => setOutlineFloatOpen(false), 300);
+  };
+  // 点击图标：固定/取消固定
+  const onRailClick = (): void => {
+    clearHoverTimers();
+    setOutlineFloatOpen(false);
+    setOutlineMode((m) => (m === "docked" ? "rail" : "docked"));
+  };
+  // 悬浮面板：移入保持，移出后收起
+  const onPanelEnter = (): void => clearHoverTimers();
+  const onPanelLeave = (): void => {
+    clearHoverTimers();
+    hoverTimersRef.current.leave = window.setTimeout(() => setOutlineFloatOpen(false), 300);
+  };
+  const onPinToggle = (): void => {
+    clearHoverTimers();
+    setOutlineFloatOpen(false);
+    setOutlineMode((m) => {
+      if (m === "docked") {
+        armHoverCooldown();
+        return "rail";
+      }
+      return "docked";
+    });
+  };
+  const onPanelHide = (): void => {
+    clearHoverTimers();
+    setOutlineFloatOpen(false);
+    armHoverCooldown();
+    setOutlineMode("rail");
+  };
   useEffect(() => {
     const host = hostRef.current;
     let mount = editorMountRef.current;
@@ -160,24 +224,36 @@ export function EditorTab({ noteId, content, visible, tocEnabled, onChange, pref
       data-note-id={noteId}
     >
       <div ref={editorMountRef} className="lake-editor-main" />
-      {outlineMode !== "hidden" ? (
+      {outlineMode === "docked" && (
         <OutlinePanel
           controller={controller}
-          mode={outlineMode}
+          pinned
+          belowToolbar={belowToolbar}
           onNavigate={handleOutlineNavigate}
-          onModeChange={setOutlineMode}
+          onPin={onPinToggle}
+          onHide={onPanelHide}
         />
-      ) : (
-        tocEnabled && (
-          <button
-            className="outline-reopen-btn"
-            title="显示大纲"
-            onClick={() => setOutlineMode("docked")}
-          >
-            <ListTree size={14} />
-            <span>大纲</span>
-          </button>
-        )
+      )}
+      {outlineMode === "rail" && outlineFloatOpen && (
+        <OutlinePanel
+          controller={controller}
+          pinned={false}
+          belowToolbar={belowToolbar}
+          onNavigate={handleOutlineNavigate}
+          onPin={onPinToggle}
+          onHide={onPanelHide}
+          onMouseEnter={onPanelEnter}
+          onMouseLeave={onPanelLeave}
+        />
+      )}
+      {outlineMode === "rail" && !outlineFloatOpen && (
+        <OutlineRail
+          active={false}
+          belowToolbar={belowToolbar}
+          onMouseEnter={onRailEnter}
+          onMouseLeave={onRailLeave}
+          onClick={onRailClick}
+        />
       )}
     </div>
   );

@@ -22,7 +22,8 @@ export function useOutline(
   host: HTMLElement | null,
   noteId: string,
   enabled: boolean,
-  visible: boolean
+  /** 面板是否实际可见（控制滚动高亮计算；数据订阅不受影响） */
+  active: boolean
 ): OutlineController {
   const controller = useMemo(() => new OutlineController(noteId), [noteId]);
 
@@ -55,7 +56,7 @@ export function useOutline(
     let raf = 0;
     let activeId: string | null = null;
     const compute = (): void => {
-      if (!visible) return;
+      if (!active) return;
       const scroller = resolveScrollNode(host);
       const items = controller.getVisibleItems();
       if (!items.length || !scroller) return;
@@ -152,7 +153,7 @@ export function useOutline(
       for (const id of timers) window.clearTimeout(id);
       if (raf) cancelAnimationFrame(raf);
     };
-  }, [editor, host, noteId, enabled, visible, controller]);
+  }, [editor, host, noteId, enabled, active, controller]);
 
   return controller;
 }

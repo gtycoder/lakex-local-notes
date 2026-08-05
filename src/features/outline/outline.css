@@ -1,4 +1,4 @@
-/* ===== 自建大纲面板（桌面多标签） ===== */
+/* ===== 自建大纲（桌面多标签）：rail 图标栏 + 悬浮/固定面板 ===== */
 
 .lake-editor-tab {
   position: relative;
@@ -11,6 +11,7 @@
   flex: 1 1 auto;
 }
 
+/* ===== 面板通用 ===== */
 .outline-panel {
   flex-shrink: 0;
   width: 280px;
@@ -25,39 +26,26 @@
   user-select: none;
 }
 
-/* 悬浮模式：覆盖在正文之上，不挤压布局 */
+/* 工具栏开启时，docked 面板整体下移到工具栏之下（工具栏高 50px，flex 子项用 margin+height） */
+.outline-panel--docked.below-toolbar {
+  margin-top: 50px;
+  height: calc(100% - 50px);
+}
+
+/* 悬浮面板：覆盖在正文之上，不挤压布局 */
 .outline-panel--floating {
   position: absolute;
   top: 0;
   right: 0;
   bottom: 0;
-  /* 必须高于编辑器 sticky 工具栏（.ne-ui z-index:150），否则工具栏延伸到面板下方会拦截点击 */
+  width: 280px;
+  /* 必须高于编辑器 sticky 工具栏（.ne-ui z-index:150），避免工具栏延伸到面板下方拦截点击 */
   z-index: 200;
   box-shadow: -6px 0 16px rgba(0, 0, 0, 0.08);
   border-left: 1px solid var(--lakex-editor-border-light, rgba(0, 0, 0, 0.08));
 }
-
-/* 隐藏态：右侧边缘的重新打开把手 */
-.outline-reopen-btn {
-  position: absolute;
-  top: 12px;
-  right: 0;
-  z-index: 200;
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  height: 30px;
-  padding: 0 8px 0 6px;
-  border: none;
-  border-radius: 6px 0 0 6px;
-  background: var(--lakex-editor-background-primary, #fff);
-  color: var(--lakex-editor-text-caption, #666);
-  font-size: 12px;
-  cursor: pointer;
-  box-shadow: -2px 0 6px rgba(0, 0, 0, 0.06);
-}
-.outline-reopen-btn:hover {
-  color: var(--lakex-editor-color-theme, #4c8dff);
+.outline-panel--floating.below-toolbar {
+  top: 50px;
 }
 
 .outline-panel__header {
@@ -117,6 +105,51 @@
   text-align: center;
 }
 
+/* ===== rail 图标栏 ===== */
+.outline-rail {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 40px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding-top: 6px;
+  z-index: 200;
+  /* 栏本身不拦截指针，只有图标按钮可交互，避免盖住正文右侧 */
+  pointer-events: none;
+}
+.outline-rail.below-toolbar {
+  top: 50px;
+}
+
+.outline-rail__btn {
+  pointer-events: auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--lakex-editor-text-caption, #666);
+  cursor: pointer;
+  padding: 0;
+}
+
+.outline-rail__btn:hover {
+  background: var(--lakex-editor-background-primary-hover-light, rgba(0, 0, 0, 0.08));
+  color: var(--lakex-editor-text-color, #1f2329);
+}
+
+.outline-rail__btn.is-active {
+  color: var(--lakex-editor-color-theme, #4c8dff);
+  background: var(--lakex-editor-background-primary-hover-light, rgba(0, 0, 0, 0.06));
+}
+
+/* ===== 条目 ===== */
 .outline-item {
   display: flex;
   align-items: center;
