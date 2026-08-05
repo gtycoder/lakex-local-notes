@@ -51,8 +51,12 @@ export function EditorTab({ noteId, content, visible, tocEnabled, onChange, pref
 
   useEffect(() => {
     const host = hostRef.current;
-    const mount = editorMountRef.current;
+    let mount = editorMountRef.current;
     if (!host || !mount) return;
+    // StrictMode 双次挂载/快速 HMR 时 mount 可能已被移出文档，重新挂回
+    if (!mount.isConnected) {
+      host.appendChild(mount);
+    }
 
     const copyHandler = (event: ClipboardEvent) => {
       const selection = window.getSelection();
@@ -116,7 +120,11 @@ export function EditorTab({ noteId, content, visible, tocEnabled, onChange, pref
       destroyLakeEditor(editor);
       editorRef.current = null;
       setEditorState(null);
-      host.replaceChildren();
+      // 只清空编辑器挂载点内部；不要 host.replaceChildren()——
+      // React.StrictMode 在 dev 会双次挂载 effect，第二次复用同一 mount 节点，
+      // 若把 .lake-editor-main 移出 DOM，会在脱离文档的节点上重建 Lake 编辑器
+      // （to-dom-range 断言：节点未连接）。
+      mount.replaceChildren();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [noteId, tocEnabled, prefs?.fontSize, prefs?.showToolbar]);
