@@ -124,3 +124,49 @@ describe("OutlineController", () => {
     expect(count).toBe(1);
   });
 });
+
+describe("OutlineController phase-2 features", () => {
+  it("filters visible items to matches + ancestors", () => {
+    const c = new OutlineController("doc-f", memoryStorage());
+    c.updateToc([
+      h("a", 1, 1, "第一章"),
+      h("a1", 2, 2, "第一节"),
+      h("a2", 2, 2, "第二节"),
+      h("b", 1, 1, "第二章"),
+    ]);
+    c.setFilterText("第二节");
+    expect(c.getVisibleItems().map((n) => n.id)).toEqual(["a", "a2"]);
+    c.setFilterText(""); // 清空恢复
+    expect(c.getVisibleItems().map((n) => n.id)).toEqual(["a", "a1", "a2", "b"]);
+  });
+
+  it("filter ignores collapse state (ancestors auto-expanded)", () => {
+    const c = new OutlineController("doc-g", memoryStorage());
+    c.updateToc([h("a", 1, 1, "第一章"), h("a1", 2, 2, "隐藏小节"), h("b", 1, 1, "第二章")]);
+    c.setCollapsed("a", true);
+    c.setFilterText("隐藏");
+    expect(c.getVisibleItems().map((n) => n.id)).toEqual(["a", "a1"]);
+  });
+
+  it("keepCurrentExpand persists via storage", () => {
+    const storage = memoryStorage();
+    const c1 = new OutlineController("doc-h", storage);
+    expect(c1.isKeepCurrentExpand()).toBe(false);
+    c1.setKeepCurrentExpand(true);
+    const c2 = new OutlineController("doc-h", storage);
+    expect(c2.isKeepCurrentExpand()).toBe(true);
+  });
+
+  it("scrollProgress clamps and notifies", () => {
+    const c = new OutlineController("doc-i", memoryStorage());
+    c.updateToc([h("a", 1, 1)]);
+    c.setScrollProgress(0.5);
+    expect(c.getScrollProgress()).toBeCloseTo(0.5);
+    c.setScrollProgress(1.5);
+    expect(c.getScrollProgress()).toBe(1);
+    c.setScrollProgress(-1);
+    expect(c.getScrollProgress()).toBe(0);
+    c.setScrollProgress(NaN);
+    expect(c.getScrollProgress()).toBe(0);
+  });
+});

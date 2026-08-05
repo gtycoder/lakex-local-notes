@@ -63,7 +63,11 @@ export function useOutline(
       if (!active) return;
       const scroller = resolveScrollNode(host);
       const items = controller.getVisibleItems();
-      if (!items.length || !scroller) return;
+      if (!scroller) return;
+      // 文档滚动进度（大纲滚动指示条）
+      const maxScroll = scroller.scrollHeight - scroller.clientHeight;
+      controller.setScrollProgress(maxScroll > 0 ? scroller.scrollTop / maxScroll : 0);
+      if (!items.length) return;
       const vpTop = scroller.getBoundingClientRect().top;
       let current: string | null = null;
       for (const item of items) {
@@ -83,6 +87,10 @@ export function useOutline(
       if (current !== null && current !== activeId) {
         activeId = current;
         controller.setSelected(current);
+        // 保持当前展开：自动展开选中项的祖先
+        if (controller.isKeepCurrentExpand()) {
+          controller.expandAncestorsOf(current);
+        }
       }
     };
 

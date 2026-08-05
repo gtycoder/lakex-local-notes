@@ -29,12 +29,12 @@ export interface OutlineNode {
 }
 
 /**
- * 右侧栏形态（与左侧 Sidebar 对齐）：
- *  - docked：固定展开
- *  - floating：悬浮（活动轨 hover 预览）
- *  - collapsed：收起（隐藏）
+ * 右侧栏形态：
+ *  - docked：固定常驻（默认，侧栏在最右边缘）
+ *  - floating：悬浮（收起后 hover 右缘触发）
+ *  - hidden：非固定时的静止态（仅显示右缘小标签，hover 触发悬浮）
  */
-export type OutlineMode = "docked" | "floating" | "collapsed";
+export type OutlineMode = "docked" | "floating" | "hidden";
 
 export interface OutlineStorage {
   getItem(key: string): string | null;
@@ -60,6 +60,10 @@ export class OutlineController {
   private nodeMap = new Map<string, OutlineNode>();
   private collapsedIds = new Set<string>();
   private selectedId: string | null = null;
+  private filterText = "";
+  private keepCurrentExpand = false;
+  private scrollProgress = 0;
+  private prefsStorageKey = "lake-notes:outline:prefs";
   private version = 0;
   private listeners = new Set<() => void>();
   private storage: OutlineStorage | null;
@@ -69,6 +73,7 @@ export class OutlineController {
     this.storageKey = storagePrefix + noteId;
     this.storage = storage === undefined ? defaultStorage() : storage;
     this.loadCollapsed();
+    this.loadPrefs();
   }
 
   // ---- 订阅（React useSyncExternalStore）----
@@ -256,8 +261,31 @@ export class OutlineController {
     this.emit();
   }
 
-  /** 当前可见条目（遵循折叠），文档序（前序）。 */
+  /** 当前可见条目（遵循折叠），文档序（前序）。筛选时只显示命中项及其祖先（自动展开）。 */
   getVisibleItems(): OutlineNode[] {
+    if (this.filterText) {
+      const matched = new Set<string>();
+      const mark = (node: OutlineNode): void => {
+        if (node.text.toLowerCase().includes(this.filterText)) {
+          matched.add(node.id);
+          let p = node.parentId;
+          while (p) {
+            matched.add(p);
+            p = this.nodeMap.get(p)?.parentId || null;
+          }
+        }
+        for (const child of node.children) mark(child);
+      };
+      for (const root of this.roots) mark(root);
+      const result: OutlineNode[] = [];
+      const visit = (node: OutlineNode): void => {
+        if (!matched.has(node.id)) return;
+        result.push(node);
+        for (const child of node.children) visit(child);
+      };
+      for (const root of this.roots) visit(root);
+      return result;
+    }
     const result: OutlineNode[] = [];
     const visit = (node: OutlineNode): void => {
       result.push(node);
@@ -267,6 +295,42 @@ export class OutlineController {
     };
     for (const root of this.roots) visit(root);
     return result;
+  }
+
+  // ---- 筛选 ----
+  setFilterText(text: string): void {
+    const t = text.trim().toLowerCase();
+    if (t === this.filterText) return;
+    this.filterText = t;
+    this.emit();
+  }
+
+  getFilterText(): string {
+    return this.filterText;
+  }
+
+  // ---- 保持当前展开 ----
+  setKeepCurrentExpand(value: boolean): void {
+    if (value === this.keepCurrentExpand) return;
+    this.keepCurrentExpand = value;
+    this.persistPrefs();
+    this.emit();
+  }
+
+  isKeepCurrentExpand(): boolean {
+    return this.keepCurrentExpand;
+  }
+
+  // ---- 文档滚动进度（0-1，供大纲滚动指示条）----
+  setScrollProgress(progress: number): void {
+    const v = Number.isFinite(progress) ? Math.max(0, Math.min(1, progress)) : 0;
+    if (Math.abs(v - this.scrollProgress) < 0.002) return;
+    this.scrollProgress = v;
+    this.emit();
+  }
+
+  getScrollProgress(): number {
+    return this.scrollProgress;
   }
 
   /** 保持当前选中：展开其所有祖先（思源 keepCurrentExpand 思路） */
@@ -324,6 +388,29 @@ export class OutlineController {
       } else {
         this.storage.setItem(this.storageKey, JSON.stringify([...this.collapsedIds]));
       }
+    } catch {
+      /* 持久化失败不影响运行 */
+    }
+  }
+
+  private loadPrefs(): void {
+    if (!this.storage) return;
+    try {
+      const raw = this.storage.getItem(this.prefsStorageKey);
+      if (!raw) return;
+      const parsed = JSON.parse(raw);
+      if (typeof parsed?.keepCurrentExpand === "boolean") {
+        this.keepCurrentExpand = parsed.keepCurrentExpand;
+      }
+    } catch {
+      this.storage.removeItem(this.prefsStorageKey);
+    }
+  }
+
+  private persistPrefs(): void {
+    if (!this.storage) return;
+    try {
+      this.storage.setItem(this.prefsStorageKey, JSON.stringify({ keepCurrentExpand: this.keepCurrentExpand }));
     } catch {
       /* 持久化失败不影响运行 */
     }

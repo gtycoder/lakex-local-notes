@@ -8,6 +8,7 @@ import { LakeEditor } from "./features/editor/LakeEditor";
 import type { LakeEditorInstance } from "./features/editor/lakeRuntime";
 import { MultiTabEditor, type TabInfo } from "./features/editor/MultiTabEditor";
 import { OutlineSidebar } from "./features/outline/OutlineSidebar";
+import { OutlineEdgeTab } from "./features/outline/OutlineEdgeTab";
 import type { OutlineMode } from "./features/outline/OutlineController";
 import { isDesktop, native } from "./lib/native";
 import { loadSettings, saveSettings, subscribeSettings, type AppSettings } from "./lib/settings";
@@ -26,7 +27,7 @@ const OUTLINE_SIDEBAR_WIDTH = 280;
 
 function initialOutlineMode(): OutlineMode {
   const stored = localStorage.getItem("lake-notes-v2.outline-sidebar-mode");
-  if (stored === "docked" || stored === "collapsed") return stored;
+  if (stored === "docked" || stored === "hidden") return stored;
   return "docked";
 }
 
@@ -430,20 +431,20 @@ export function App() {
 
   function showOutlinePreview() {
     clearOutlinePreviewTimer();
-    setOutlineMode((current) => current === "collapsed" ? "floating" : current);
+    setOutlineMode((current) => (current === "hidden" ? "floating" : current));
   }
 
   function hideOutlinePreview() {
     clearOutlinePreviewTimer();
     outlinePreviewTimer.current = window.setTimeout(() => {
-      setOutlineMode((current) => current === "floating" ? "collapsed" : current);
+      setOutlineMode((current) => (current === "floating" ? "hidden" : current));
       outlinePreviewTimer.current = null;
-    }, 120);
+    }, 150);
   }
 
-  function toggleOutlineDock() {
+  function toggleOutlinePin() {
     clearOutlinePreviewTimer();
-    setOutlineMode((current) => current === "docked" ? "collapsed" : "docked");
+    setOutlineMode((current) => (current === "docked" ? "hidden" : "docked"));
   }
 
   function updateSidebarWidth(width: number) {
@@ -525,13 +526,12 @@ export function App() {
   };
   const tabInfos: TabInfo[] = openTabs.map((tab) => ({ noteId: tab.noteId, title: tab.title, content: tab.content, dirty: tab.dirty }));
 
-  const outlineRailVisible = tocEnabled && !isMobile && desktopWorkspace === "library";
+  const outlineVisible = tocEnabled && !isMobile && desktopWorkspace === "library";
   const shellStyle = {
     "--sidebar-width": `${sidebarWidth}px`,
     "--sidebar-grid-w": sidebarMode === "docked" ? `${sidebarWidth}px` : "0px",
-    "--outline-rail-width": outlineRailVisible ? "34px" : "0px",
     "--outline-sidebar-width": `${OUTLINE_SIDEBAR_WIDTH}px`,
-    "--outline-grid-w": outlineRailVisible && outlineMode === "docked" ? `${OUTLINE_SIDEBAR_WIDTH}px` : "0px",
+    "--outline-grid-w": outlineVisible && outlineMode === "docked" ? `${OUTLINE_SIDEBAR_WIDTH}px` : "0px",
   } as CSSProperties;
 
   return (
@@ -603,33 +603,17 @@ export function App() {
           <span className={`statusbar-sync ${sync.phase}`} title="S3 同步状态"><Cloud size={12} />{sync.message}</span>
         </footer>
       </main>
-      {tocEnabled && !isMobile && desktopWorkspace === "library" && (
-        <>
-          <nav
-            className="activity-rail outline-activity-rail desktop-only"
-            aria-label="大纲"
-            onPointerEnter={showOutlinePreview}
-            onPointerLeave={hideOutlinePreview}
-          >
-            <div className="activity-rail-spacer" />
-            <button
-              className={`activity-button ${outlineMode === "docked" ? "active" : ""}`}
-              onClick={toggleOutlineDock}
-              title="大纲"
-              aria-label="大纲"
-            >
-              <ListTree size={16} />
-            </button>
-            <div className="activity-rail-fill" />
-          </nav>
-          <OutlineSidebar
-            mode={outlineMode}
-            activeNoteId={activeNoteId}
-            onToggleDock={toggleOutlineDock}
-            onPreviewEnter={showOutlinePreview}
-            onPreviewLeave={hideOutlinePreview}
-          />
-        </>
+      {outlineVisible && outlineMode === "hidden" && (
+        <OutlineEdgeTab onMouseEnter={showOutlinePreview} onMouseLeave={hideOutlinePreview} onClick={toggleOutlinePin} />
+      )}
+      {outlineVisible && outlineMode !== "hidden" && (
+        <OutlineSidebar
+          mode={outlineMode}
+          activeNoteId={activeNoteId}
+          onTogglePin={toggleOutlinePin}
+          onMouseEnter={outlineMode === "floating" ? showOutlinePreview : undefined}
+          onMouseLeave={outlineMode === "floating" ? hideOutlinePreview : undefined}
+        />
       )}
       {confirmDelete && <ConfirmDelete node={confirmDelete} onConfirm={() => { const id = confirmDelete.id; setConfirmDelete(null); void deleteTreeNode(id); }} onCancel={() => setConfirmDelete(null)} />}
       <SyncPanel open={syncPanelOpen} onClose={() => setSyncPanelOpen(false)} onSyncStatusChange={(status) => setSync((current) => ({ ...current, ...status }))} />

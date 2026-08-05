@@ -1,4 +1,4 @@
-/* ===== 右侧大纲栏（与左侧 Sidebar 对称的 shell） ===== */
+/* ===== 右侧大纲栏（常驻贴右边缘，无独立 rail） ===== */
 
 /* 编辑器挂载列：必须 flex:1 + min-width:0，否则内容最小宽度会把编辑器撑出主列 */
 .lake-editor-tab > .lake-editor-main {
@@ -8,9 +8,8 @@
   flex: 1 1 auto;
 }
 
-/* app-shell 网格加入右侧两列：outline 活动轨 + outline 侧栏 */
+/* app-shell 网格：左轨 | 左栏 | 主区 | 右侧大纲栏（最右） */
 .app-shell {
-  --outline-rail-width: 34px;
   --outline-sidebar-width: 280px;
 }
 
@@ -18,40 +17,20 @@
   .app-shell {
     grid-template-columns:
       var(--activity-rail-width) var(--sidebar-grid-w, var(--sidebar-width)) minmax(0, 1fr)
-      var(--outline-rail-width) var(--outline-grid-w, var(--outline-sidebar-width));
+      var(--outline-grid-w, var(--outline-sidebar-width));
   }
-  /* 左侧收起/悬浮时也要保留右侧两列（覆盖 styles.css 的 3 列写法） */
+  /* 左侧收起/悬浮时也要保留右侧列（覆盖 styles.css 的 3 列写法） */
   .app-shell.sidebar-floating,
   .app-shell.sidebar-collapsed {
     grid-template-columns:
       var(--activity-rail-width) var(--sidebar-grid-w, var(--sidebar-width)) minmax(0, 1fr)
-      var(--outline-rail-width) var(--outline-grid-w, var(--outline-sidebar-width));
+      var(--outline-grid-w, var(--outline-sidebar-width));
   }
 
-  /* 右侧活动轨（镜像左侧 activity-rail） */
-  .outline-activity-rail {
-    grid-column: 4;
-    grid-row: 1;
-    display: flex;
-    position: relative;
-    z-index: 270;
-    flex-direction: column;
-    align-items: center;
-    align-self: end;
-    width: var(--outline-rail-width);
-    min-width: var(--outline-rail-width);
-    height: calc(100% - var(--topbar-height));
-    padding: 0 3px 6px;
-    border-right: none;
-    border-left: 1px solid var(--shell-separator);
-    background: var(--shell-material);
-  }
-
-  /* 右侧大纲栏（镜像左侧 .sidebar） */
   .outline-sidebar {
     position: relative;
     z-index: 250;
-    grid-column: 5;
+    grid-column: 4;
     grid-row: 1;
     display: flex;
     flex-direction: column;
@@ -68,39 +47,58 @@
   }
   .app-shell.sidebar-resizing .outline-sidebar { transition: none; }
 
+  /* 悬浮：贴右边缘浮层（无 rail，直接贴窗口右缘） */
   .outline-sidebar--floating {
     position: fixed;
     top: var(--topbar-height);
     bottom: 0;
-    right: var(--outline-rail-width);
+    right: 0;
     left: auto;
     border-left-color: rgba(66, 75, 112, 0.18);
     border-radius: 14px 0 0 14px;
     box-shadow: -18px 0 50px rgba(43, 50, 78, 0.16), -2px 0 7px rgba(43, 50, 78, 0.08);
   }
-  .outline-sidebar--collapsed {
-    pointer-events: none;
-    opacity: 0;
-    transform: translateX(18px);
-    box-shadow: none;
-    transition-duration: 180ms;
-  }
 }
 
 /* 移动端不显示右侧栏 */
 @media (max-width: 760px) {
-  .outline-activity-rail,
-  .outline-sidebar { display: none; }
+  .outline-sidebar,
+  .outline-edge-tab { display: none; }
+}
+
+/* ===== 非固定态的右缘触发标签 ===== */
+.outline-edge-tab {
+  position: fixed;
+  top: calc(var(--topbar-height) + 12px);
+  right: 0;
+  z-index: 300;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 34px;
+  padding: 0 10px 0 8px;
+  border: 0;
+  border-radius: 8px 0 0 8px;
+  color: #747b85;
+  background: var(--shell-material);
+  font-size: 12px;
+  cursor: pointer;
+  box-shadow: -2px 0 8px rgba(31, 35, 41, 0.1);
+  transition: color 130ms ease-out, background-color 130ms ease-out;
+}
+.outline-edge-tab:hover {
+  color: var(--shell-accent-strong);
+  background: var(--shell-material);
 }
 
 /* ===== 侧栏内部 ===== */
 .outline-sidebar__header {
   display: flex;
   align-items: center;
-  gap: 8px;
-  flex: 0 0 38px;
-  min-height: 38px;
-  padding: 0 10px;
+  gap: 2px;
+  flex: 0 0 36px;
+  min-height: 36px;
+  padding: 0 8px 0 12px;
   border-bottom: 1px solid var(--shell-separator);
   color: #353a42;
 }
@@ -109,13 +107,14 @@
   font-size: 13px;
   font-weight: 630;
   letter-spacing: -0.01em;
+  margin-right: 4px;
 }
 
 .outline-sidebar__spacer {
   flex: 1;
 }
 
-.outline-sidebar__collapse {
+.outline-sidebar__btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -129,17 +128,58 @@
   cursor: pointer;
   transition: color 130ms ease-out, background-color 130ms ease-out;
 }
-.outline-sidebar__collapse:hover {
+.outline-sidebar__btn:hover {
   color: var(--shell-accent-strong);
   background: rgba(89, 108, 193, 0.12);
 }
+.outline-sidebar__btn.is-active {
+  color: var(--shell-accent-strong);
+  background: var(--shell-accent-soft, rgba(89, 108, 193, 0.1));
+}
+
+.outline-sidebar__filter {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 30px;
+  min-height: 30px;
+  padding: 0 10px;
+  color: var(--shell-text-tertiary, #8a919c);
+  border-bottom: 1px solid var(--shell-separator);
+}
+.outline-sidebar__filter-input {
+  flex: 1;
+  min-width: 0;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--shell-text, #20242c);
+  font-size: 12px;
+}
+.outline-sidebar__filter-input::placeholder {
+  color: var(--shell-text-tertiary, #8a919c);
+}
 
 .outline-list {
+  position: relative;
   flex: 1;
   min-height: 0;
   overflow-y: auto;
   overflow-x: hidden;
   padding: 6px 0;
+}
+
+.outline-list__progress {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 2px;
+  max-height: 100%;
+  background: var(--shell-accent-strong, #4c6fff);
+  opacity: 0.35;
+  pointer-events: none;
 }
 
 .outline-panel__empty {
@@ -151,27 +191,27 @@
 
 /* ===== 条目 ===== */
 .outline-item {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 2px;
   height: 26px;
-  padding-right: 12px;
+  padding-right: 10px;
   cursor: pointer;
   white-space: nowrap;
   border-left: 2px solid transparent;
   color: var(--shell-text-secondary, #5c6470);
   font-size: 13px;
-  transition: background-color 120ms ease-out, color 120ms ease-out;
+  transition: background-color 120ms ease-out, color 120ms ease-out, border-color 120ms ease-out;
 }
-
+/* 只用 background-color，避免盖掉内联的引导线（background-image） */
 .outline-item:hover {
-  background: rgba(89, 108, 193, 0.08);
+  background-color: rgba(89, 108, 193, 0.08);
 }
-
 .outline-item--selected {
   border-left-color: var(--shell-accent-strong, #4c6fff);
   color: var(--shell-text, #20242c);
-  background: var(--shell-accent-soft, rgba(89, 108, 193, 0.1));
+  background-color: var(--shell-accent-soft, rgba(89, 108, 193, 0.1));
   font-weight: 600;
 }
 
@@ -189,13 +229,19 @@
   padding: 0;
   transition: transform 0.15s ease;
 }
+.outline-item__fold.is-collapsed { transform: rotate(0deg); }
+.outline-item__fold:not(.is-collapsed) { transform: rotate(90deg); }
 
-.outline-item__fold.is-collapsed {
-  transform: rotate(0deg);
+.outline-item__dot {
+  flex-shrink: 0;
+  width: 5px;
+  height: 5px;
+  margin: 0 6px;
+  border-radius: 50%;
+  background: var(--shell-text-tertiary, #8a919c);
 }
-
-.outline-item__fold:not(.is-collapsed) {
-  transform: rotate(90deg);
+.outline-item--selected .outline-item__dot {
+  background: var(--shell-accent-strong, #4c6fff);
 }
 
 .outline-item__text {
@@ -203,4 +249,21 @@
   text-overflow: ellipsis;
   flex: 1;
   min-width: 0;
+}
+
+.outline-item__level {
+  flex-shrink: 0;
+  margin-left: 6px;
+  padding: 1px 5px;
+  border-radius: 5px;
+  color: var(--shell-text-tertiary, #8a919c);
+  background: rgba(66, 75, 112, 0.07);
+  font-size: 10px;
+  font-weight: 600;
+  opacity: 0;
+  transition: opacity 120ms ease-out;
+}
+.outline-item:hover .outline-item__level,
+.outline-item--selected .outline-item__level {
+  opacity: 1;
 }
