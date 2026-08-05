@@ -62,33 +62,7 @@
 
 /* 移动端不显示右侧栏 */
 @media (max-width: 760px) {
-  .outline-sidebar,
-  .outline-edge-tab { display: none; }
-}
-
-/* ===== 非固定态的右缘触发标签 ===== */
-.outline-edge-tab {
-  position: fixed;
-  top: calc(var(--topbar-height) + 12px);
-  right: 0;
-  z-index: 300;
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  height: 34px;
-  padding: 0 10px 0 8px;
-  border: 0;
-  border-radius: 8px 0 0 8px;
-  color: #747b85;
-  background: var(--shell-material);
-  font-size: 12px;
-  cursor: pointer;
-  box-shadow: -2px 0 8px rgba(31, 35, 41, 0.1);
-  transition: color 130ms ease-out, background-color 130ms ease-out;
-}
-.outline-edge-tab:hover {
-  color: var(--shell-accent-strong);
-  background: var(--shell-material);
+  .outline-sidebar { display: none; }
 }
 
 /* ===== 侧栏内部 ===== */

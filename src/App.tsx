@@ -8,7 +8,6 @@ import { LakeEditor } from "./features/editor/LakeEditor";
 import type { LakeEditorInstance } from "./features/editor/lakeRuntime";
 import { MultiTabEditor, type TabInfo } from "./features/editor/MultiTabEditor";
 import { OutlineSidebar } from "./features/outline/OutlineSidebar";
-import { OutlineEdgeTab } from "./features/outline/OutlineEdgeTab";
 import type { OutlineMode } from "./features/outline/OutlineController";
 import { isDesktop, native } from "./lib/native";
 import { loadSettings, saveSettings, subscribeSettings, type AppSettings } from "./lib/settings";
@@ -27,7 +26,7 @@ const OUTLINE_SIDEBAR_WIDTH = 280;
 
 function initialOutlineMode(): OutlineMode {
   const stored = localStorage.getItem("lake-notes-v2.outline-sidebar-mode");
-  if (stored === "docked" || stored === "hidden") return stored;
+  if (stored === "docked" || stored === "floating") return stored;
   return "docked";
 }
 
@@ -89,7 +88,6 @@ export function App() {
   const [notice, setNotice] = useState<string | null>(null);
   const noticeTimer = useRef<number | null>(null);
   const sidebarPreviewTimer = useRef<number | null>(null);
-  const outlinePreviewTimer = useRef<number | null>(null);
   // 审计 #7：每篇笔记的编辑 revision——保存请求发出后若有新编辑（revision 增长），
   // 旧响应不得覆盖最新草稿/清除 dirty
   const revisionRef = useRef<Map<string, number>>(new Map());
@@ -102,7 +100,7 @@ export function App() {
   }, [sidebarMode]);
 
   useEffect(() => {
-    if (outlineMode !== "floating") localStorage.setItem("lake-notes-v2.outline-sidebar-mode", outlineMode);
+    localStorage.setItem("lake-notes-v2.outline-sidebar-mode", outlineMode);
   }, [outlineMode]);
 
   useEffect(() => {
@@ -110,7 +108,6 @@ export function App() {
       saveTimers.current.forEach((timer) => window.clearTimeout(timer));
       saveTimers.current.clear();
       if (sidebarPreviewTimer.current !== null) window.clearTimeout(sidebarPreviewTimer.current);
-      if (outlinePreviewTimer.current !== null) window.clearTimeout(outlinePreviewTimer.current);
     };
   }, []);
 
@@ -422,29 +419,8 @@ export function App() {
     setSidebarMode((current) => current === "docked" ? "collapsed" : "docked");
   }
 
-  function clearOutlinePreviewTimer() {
-    if (outlinePreviewTimer.current !== null) {
-      window.clearTimeout(outlinePreviewTimer.current);
-      outlinePreviewTimer.current = null;
-    }
-  }
-
-  function showOutlinePreview() {
-    clearOutlinePreviewTimer();
-    setOutlineMode((current) => (current === "hidden" ? "floating" : current));
-  }
-
-  function hideOutlinePreview() {
-    clearOutlinePreviewTimer();
-    outlinePreviewTimer.current = window.setTimeout(() => {
-      setOutlineMode((current) => (current === "floating" ? "hidden" : current));
-      outlinePreviewTimer.current = null;
-    }, 150);
-  }
-
-  function toggleOutlinePin() {
-    clearOutlinePreviewTimer();
-    setOutlineMode((current) => (current === "docked" ? "hidden" : "docked"));
+  function toggleOutlineFloat() {
+    setOutlineMode((current) => (current === "docked" ? "floating" : "docked"));
   }
 
   function updateSidebarWidth(width: number) {
@@ -603,17 +579,8 @@ export function App() {
           <span className={`statusbar-sync ${sync.phase}`} title="S3 同步状态"><Cloud size={12} />{sync.message}</span>
         </footer>
       </main>
-      {outlineVisible && outlineMode === "hidden" && (
-        <OutlineEdgeTab onMouseEnter={showOutlinePreview} onMouseLeave={hideOutlinePreview} onClick={toggleOutlinePin} />
-      )}
-      {outlineVisible && outlineMode !== "hidden" && (
-        <OutlineSidebar
-          mode={outlineMode}
-          activeNoteId={activeNoteId}
-          onTogglePin={toggleOutlinePin}
-          onMouseEnter={outlineMode === "floating" ? showOutlinePreview : undefined}
-          onMouseLeave={outlineMode === "floating" ? hideOutlinePreview : undefined}
-        />
+      {outlineVisible && (
+        <OutlineSidebar mode={outlineMode} activeNoteId={activeNoteId} onToggleFloat={toggleOutlineFloat} />
       )}
       {confirmDelete && <ConfirmDelete node={confirmDelete} onConfirm={() => { const id = confirmDelete.id; setConfirmDelete(null); void deleteTreeNode(id); }} onCancel={() => setConfirmDelete(null)} />}
       <SyncPanel open={syncPanelOpen} onClose={() => setSyncPanelOpen(false)} onSyncStatusChange={(status) => setSync((current) => ({ ...current, ...status }))} />

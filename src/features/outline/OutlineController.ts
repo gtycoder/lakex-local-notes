@@ -29,12 +29,12 @@ export interface OutlineNode {
 }
 
 /**
- * 右侧栏形态：
+ * 右侧栏形态（启用时永远是完整侧栏，无小图标/隐藏态）：
  *  - docked：固定常驻（默认，侧栏在最右边缘）
- *  - floating：悬浮（收起后 hover 右缘触发）
- *  - hidden：非固定时的静止态（仅显示右缘小标签，hover 触发悬浮）
+ *  - floating：悬浮浮层（贴右缘覆盖正文，仍完整可见）
+ *  隐藏只通过设置开关「显示文档大纲」控制。
  */
-export type OutlineMode = "docked" | "floating" | "hidden";
+export type OutlineMode = "docked" | "floating";
 
 export interface OutlineStorage {
   getItem(key: string): string | null;

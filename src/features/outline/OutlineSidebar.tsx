@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
-import { ChevronsDownUp, ChevronsUpDown, Focus, ListOrdered, ListTree, Pin, Search } from "lucide-react";
+import { ChevronsDownUp, ChevronsUpDown, Focus, ListOrdered, ListTree, MoveDiagonal, Search } from "lucide-react";
 import type { OutlineMode } from "./OutlineController";
 import { OutlineList } from "./OutlineList";
 import { getOutlineTab, getOutlineTabsVersion, subscribeOutlineTabs } from "./registry";
@@ -12,16 +12,14 @@ function noopVersion(): number {
 }
 
 interface OutlineSidebarProps {
-  mode: Exclude<OutlineMode, "hidden">;
+  mode: OutlineMode;
   activeNoteId: string | null;
-  /** 固定 ↔ 悬浮（取消固定） */
-  onTogglePin: () => void;
-  onMouseEnter?: () => void;
-  onMouseLeave?: () => void;
+  /** 固定 ↔ 悬浮 */
+  onToggleFloat: () => void;
 }
 
 /** 右侧大纲栏（常驻/悬浮）；头部工具栏：筛选、展开/折叠全部、保持当前展开、固定 */
-export function OutlineSidebar({ mode, activeNoteId, onTogglePin, onMouseEnter, onMouseLeave }: OutlineSidebarProps) {
+export function OutlineSidebar({ mode, activeNoteId, onToggleFloat }: OutlineSidebarProps) {
   const version = useSyncExternalStore(subscribeOutlineTabs, getOutlineTabsVersion, getOutlineTabsVersion);
   const handle = getOutlineTab(activeNoteId);
   const controller = handle?.controller ?? null;
@@ -71,14 +69,8 @@ export function OutlineSidebar({ mode, activeNoteId, onTogglePin, onMouseEnter, 
     };
   }, [filterDraft, controller]);
 
-  const pinned = mode === "docked";
-
   return (
-    <aside
-      className={`outline-sidebar outline-sidebar--${mode}`}
-      onMouseEnter={onMouseEnter}
-      onMouseLeave={onMouseLeave}
-    >
+    <aside className={`outline-sidebar outline-sidebar--${mode}`}>
       <div className="outline-sidebar__header">
         <ListTree size={14} />
         <span className="outline-sidebar__title">大纲</span>
@@ -124,11 +116,11 @@ export function OutlineSidebar({ mode, activeNoteId, onTogglePin, onMouseEnter, 
           )}
         </div>
         <button
-          className={`outline-sidebar__btn${pinned ? " is-active" : ""}`}
-          title={pinned ? "取消固定（收起后 hover 右缘悬浮）" : "固定"}
-          onClick={onTogglePin}
+          className={`outline-sidebar__btn${mode === "floating" ? " is-active" : ""}`}
+          title={mode === "docked" ? "设为悬浮" : "固定"}
+          onClick={onToggleFloat}
         >
-          <Pin size={14} />
+          <MoveDiagonal size={14} />
         </button>
       </div>
       <div className="outline-sidebar__filter">
