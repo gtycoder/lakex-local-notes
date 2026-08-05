@@ -354,3 +354,32 @@ src/features/outline/
 - 子弹线/级别徽标/滚动动画未做；
 - 悬浮态下编辑器工具栏右端按钮会被面板盖住（overlay 固有取舍，后续可加拖拽/半透明）；
 - 隐藏态重开入口是右缘把手，暂未接入设置面板。
+
+---
+
+## 12. 设计变更：从「编辑器内图标栏」改为「右侧栏」（2026-08-05，提交 b411727）
+
+用户验证后确认：不要编辑器内的小图标（rail），要一个与左侧 Sidebar 完全对称的**右侧栏**。
+
+### 变更内容
+
+- 删除：编辑器内 `OutlineRail` 图标栏、hover 悬浮面板、冷却逻辑、`OutlinePanel`。
+- 新增：`OutlineSidebar`（docked / collapsed / floating 三态，镜像左侧 Sidebar）+ 右侧活动轨
+  （34px，镜像左侧 activity-rail）+ `OutlineList`（条目列表）+ `registry`（EditorTab 按 noteId
+  注册 controller/navigate/refresh，侧栏按 activeNoteId 读取）。
+- app-shell 网格增加右侧两列：`[outline-rail 34px][outline-sidebar 280px]`；宽度由
+  `--outline-grid-w` / `--outline-rail-width` 控制（隐藏/小记/移动端/设置关闭时折叠为 0）。
+- 工具栏完全不受影响：编辑器与工具栏都在主列，右侧栏是独立列。
+- 修复：`.lake-editor-main` 的 `flex:1 + min-width:0`（曾导致编辑器按内容最小宽度溢出主列）。
+
+### 交互（与左侧一致）
+
+- 右侧活动轨按钮：点击 固定↔收起；hover（收起态）→ 悬浮预览，移出恢复收起。
+- 侧栏头部折叠按钮：固定↔收起。设置「显示文档大纲」关闭 → 整栏隐藏。
+- 移动端不渲染右侧栏。
+
+### 真机验收
+
+- 布局：编辑器/工具栏 704px（主列）、右侧轨 34px、侧栏 280px，互不重叠。
+- docked/collapsed/floating（hover 预览）全部正常；多标签切换侧栏跟随活动标签；
+  折叠/导航/滚动高亮正常；设置开关、小记工作台无空列。
