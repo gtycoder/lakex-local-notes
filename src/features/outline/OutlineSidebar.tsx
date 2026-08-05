@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
-import { ChevronsDownUp, ChevronsUpDown, Focus, ListOrdered, ListTree, MoveDiagonal, Search } from "lucide-react";
+import { ChevronRight, ChevronsDownUp, ChevronsUpDown, Focus, ListOrdered, ListTree, Search } from "lucide-react";
 import type { OutlineMode } from "./OutlineController";
 import { OutlineList } from "./OutlineList";
 import { getOutlineTab, getOutlineTabsVersion, subscribeOutlineTabs } from "./registry";
@@ -14,12 +14,18 @@ function noopVersion(): number {
 interface OutlineSidebarProps {
   mode: OutlineMode;
   activeNoteId: string | null;
-  /** 固定 ↔ 悬浮 */
-  onToggleFloat: () => void;
+  /** 头部「收起大纲」→ collapsed */
+  onCollapse: () => void;
+  /** 窄条点击 → docked（常驻） */
+  onPin: () => void;
+  /** collapsed 窄条 hover → floating */
+  onPreviewEnter?: () => void;
+  /** floating 移出 → collapsed */
+  onPreviewLeave?: () => void;
 }
 
-/** 右侧大纲栏（常驻/悬浮）；头部工具栏：筛选、展开/折叠全部、保持当前展开、固定 */
-export function OutlineSidebar({ mode, activeNoteId, onToggleFloat }: OutlineSidebarProps) {
+/** 右侧大纲栏：docked 常驻面板 / collapsed 44px 窄条 / floating 悬停浮层 */
+export function OutlineSidebar({ mode, activeNoteId, onCollapse, onPin, onPreviewEnter, onPreviewLeave }: OutlineSidebarProps) {
   const version = useSyncExternalStore(subscribeOutlineTabs, getOutlineTabsVersion, getOutlineTabsVersion);
   const handle = getOutlineTab(activeNoteId);
   const controller = handle?.controller ?? null;
@@ -33,8 +39,14 @@ export function OutlineSidebar({ mode, activeNoteId, onToggleFloat }: OutlineSid
   const filterTimer = useRef<number | null>(null);
   const [levelMenuOpen, setLevelMenuOpen] = useState(false);
   const levelMenuRef = useRef<HTMLDivElement>(null);
+  const mountTimeRef = useRef(Date.now());
   void version;
   void controllerVersion;
+
+  // 进入收起态时重置 hover 冷却（窄条刚出现时光标可能正好在上面）
+  useEffect(() => {
+    if (mode === "collapsed") mountTimeRef.current = Date.now();
+  }, [mode]);
 
   const prevActiveRef = useRef<string | null>(null);
   useEffect(() => {
@@ -69,8 +81,32 @@ export function OutlineSidebar({ mode, activeNoteId, onToggleFloat }: OutlineSid
     };
   }, [filterDraft, controller]);
 
+  // 收起窄条：图标 + 竖排文字，hover 展开、点击常驻
+  if (mode === "collapsed") {
+    return (
+      <aside
+        className="outline-sidebar outline-sidebar--collapsed"
+        title="大纲"
+        onMouseEnter={() => {
+          // 收起瞬间光标可能正好在窄条上，短暂冷却避免立刻展开
+          if (Date.now() - mountTimeRef.current < 500) return;
+          onPreviewEnter?.();
+        }}
+        onMouseLeave={onPreviewLeave}
+        onClick={onPin}
+      >
+        <ListTree size={16} />
+        <span className="outline-sidebar__strip-label">大纲</span>
+      </aside>
+    );
+  }
+
   return (
-    <aside className={`outline-sidebar outline-sidebar--${mode}`}>
+    <aside
+      className={`outline-sidebar outline-sidebar--${mode}`}
+      onMouseEnter={mode === "floating" ? onPreviewEnter : undefined}
+      onMouseLeave={mode === "floating" ? onPreviewLeave : undefined}
+    >
       <div className="outline-sidebar__header">
         <ListTree size={14} />
         <span className="outline-sidebar__title">大纲</span>
@@ -115,12 +151,8 @@ export function OutlineSidebar({ mode, activeNoteId, onToggleFloat }: OutlineSid
             </div>
           )}
         </div>
-        <button
-          className={`outline-sidebar__btn${mode === "floating" ? " is-active" : ""}`}
-          title={mode === "docked" ? "设为悬浮" : "固定"}
-          onClick={onToggleFloat}
-        >
-          <MoveDiagonal size={14} />
+        <button className="outline-sidebar__btn" title="收起大纲" onClick={onCollapse}>
+          <ChevronRight size={14} />
         </button>
       </div>
       <div className="outline-sidebar__filter">

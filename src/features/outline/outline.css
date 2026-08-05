@@ -11,6 +11,7 @@
 /* app-shell 网格：左轨 | 左栏 | 主区 | 右侧大纲栏（最右） */
 .app-shell {
   --outline-sidebar-width: 280px;
+  --outline-collapsed-width: 44px;
 }
 
 @media (min-width: 761px) {
@@ -47,7 +48,7 @@
   }
   .app-shell.sidebar-resizing .outline-sidebar { transition: none; }
 
-  /* 悬浮：贴右边缘浮层（无 rail，直接贴窗口右缘） */
+  /* 悬浮：贴右缘浮层（悬停收起窄条触发，覆盖正文） */
   .outline-sidebar--floating {
     position: fixed;
     top: var(--topbar-height);
@@ -57,6 +58,26 @@
     border-left-color: rgba(66, 75, 112, 0.18);
     border-radius: 14px 0 0 14px;
     box-shadow: -18px 0 50px rgba(43, 50, 78, 0.16), -2px 0 7px rgba(43, 50, 78, 0.08);
+  }
+
+  /* 收起：44px 窄条（仍是最右一列），hover 由 JS 切换 floating，点击恢复 docked */
+  .outline-sidebar--collapsed {
+    width: var(--outline-collapsed-width, 44px);
+    min-width: 0;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 8px;
+    padding-top: 12px;
+    cursor: pointer;
+    color: var(--shell-text-secondary, #5c6470);
+  }
+  .outline-sidebar--collapsed:hover {
+    color: var(--shell-accent-strong, #4c6fff);
+  }
+  .outline-sidebar--collapsed .outline-sidebar__strip-label {
+    writing-mode: vertical-rl;
+    font-size: 12px;
+    letter-spacing: 0.12em;
   }
 }
 

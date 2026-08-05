@@ -23,10 +23,11 @@ const SIDEBAR_DEFAULT_WIDTH = 224;
 const SIDEBAR_MIN_WIDTH = 160;
 const SIDEBAR_MAX_WIDTH = 300;
 const OUTLINE_SIDEBAR_WIDTH = 280;
+const OUTLINE_COLLAPSED_WIDTH = 44;
 
 function initialOutlineMode(): OutlineMode {
   const stored = localStorage.getItem("lake-notes-v2.outline-sidebar-mode");
-  if (stored === "docked" || stored === "floating") return stored;
+  if (stored === "docked" || stored === "collapsed") return stored;
   return "docked";
 }
 
@@ -77,6 +78,7 @@ export function App() {
   const [sidebarWidth, setSidebarWidth] = useState(initialSidebarWidth);
   const [sidebarResizing, setSidebarResizing] = useState(false);
   const [outlineMode, setOutlineMode] = useState<OutlineMode>(initialOutlineMode);
+  const outlinePreviewTimer = useRef<number | null>(null);
   const [desktopWorkspace, setDesktopWorkspace] = useState<DesktopWorkspace>("library");
   const [quickNotesDirty, setQuickNotesDirty] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -100,7 +102,7 @@ export function App() {
   }, [sidebarMode]);
 
   useEffect(() => {
-    localStorage.setItem("lake-notes-v2.outline-sidebar-mode", outlineMode);
+    if (outlineMode !== "floating") localStorage.setItem("lake-notes-v2.outline-sidebar-mode", outlineMode);
   }, [outlineMode]);
 
   useEffect(() => {
@@ -108,6 +110,7 @@ export function App() {
       saveTimers.current.forEach((timer) => window.clearTimeout(timer));
       saveTimers.current.clear();
       if (sidebarPreviewTimer.current !== null) window.clearTimeout(sidebarPreviewTimer.current);
+      if (outlinePreviewTimer.current !== null) window.clearTimeout(outlinePreviewTimer.current);
     };
   }, []);
 
@@ -419,8 +422,36 @@ export function App() {
     setSidebarMode((current) => current === "docked" ? "collapsed" : "docked");
   }
 
-  function toggleOutlineFloat() {
-    setOutlineMode((current) => (current === "docked" ? "floating" : "docked"));
+  function clearOutlinePreviewTimer() {
+    if (outlinePreviewTimer.current !== null) {
+      window.clearTimeout(outlinePreviewTimer.current);
+      outlinePreviewTimer.current = null;
+    }
+  }
+
+  function showOutlinePreview() {
+    clearOutlinePreviewTimer();
+    setOutlineMode((current) => (current === "collapsed" ? "floating" : current));
+  }
+
+  function hideOutlinePreview() {
+    clearOutlinePreviewTimer();
+    outlinePreviewTimer.current = window.setTimeout(() => {
+      setOutlineMode((current) => (current === "floating" ? "collapsed" : current));
+      outlinePreviewTimer.current = null;
+    }, 150);
+  }
+
+  /** 头部「收起大纲」→ 收起为 44px 窄条 */
+  function collapseOutline() {
+    clearOutlinePreviewTimer();
+    setOutlineMode("collapsed");
+  }
+
+  /** 窄条点击 → 常驻（固定为完整面板） */
+  function pinOutline() {
+    clearOutlinePreviewTimer();
+    setOutlineMode("docked");
   }
 
   function updateSidebarWidth(width: number) {
@@ -507,7 +538,7 @@ export function App() {
     "--sidebar-width": `${sidebarWidth}px`,
     "--sidebar-grid-w": sidebarMode === "docked" ? `${sidebarWidth}px` : "0px",
     "--outline-sidebar-width": `${OUTLINE_SIDEBAR_WIDTH}px`,
-    "--outline-grid-w": outlineVisible && outlineMode === "docked" ? `${OUTLINE_SIDEBAR_WIDTH}px` : "0px",
+    "--outline-grid-w": outlineVisible ? (outlineMode === "docked" ? `${OUTLINE_SIDEBAR_WIDTH}px` : `${OUTLINE_COLLAPSED_WIDTH}px`) : "0px",
   } as CSSProperties;
 
   return (
@@ -580,7 +611,14 @@ export function App() {
         </footer>
       </main>
       {outlineVisible && (
-        <OutlineSidebar mode={outlineMode} activeNoteId={activeNoteId} onToggleFloat={toggleOutlineFloat} />
+        <OutlineSidebar
+          mode={outlineMode}
+          activeNoteId={activeNoteId}
+          onCollapse={collapseOutline}
+          onPin={pinOutline}
+          onPreviewEnter={showOutlinePreview}
+          onPreviewLeave={hideOutlinePreview}
+        />
       )}
       {confirmDelete && <ConfirmDelete node={confirmDelete} onConfirm={() => { const id = confirmDelete.id; setConfirmDelete(null); void deleteTreeNode(id); }} onCancel={() => setConfirmDelete(null)} />}
       <SyncPanel open={syncPanelOpen} onClose={() => setSyncPanelOpen(false)} onSyncStatusChange={(status) => setSync((current) => ({ ...current, ...status }))} />
