@@ -224,3 +224,80 @@ src/features/outline/
 8. 滚动：选中高亮跟随，回顶高亮第一个标题，长列表选中项滚入可视区。
 9. 深色模式/字号设置切换后样式正常。
 10. `npm test`、`npx tsc --noEmit`、`vite build`、`git diff --check` 全部通过。
+
+---
+
+## 8. 思源笔记（SiYuan）大纲实现借鉴（补充，2026-08-05）
+
+参考：`/Users/admin/file/local-lake/siyuan`（app/src/layout/dock/Outline.ts 1324 行 + app/src/util/Tree.ts）。
+
+### 8.1 思源大纲的产品形态（见用户提供的截图）
+
+- 大纲是**可停靠（dock）面板**：pin（固定）/ local（悬浮），可拖动改位置、可隐藏；工具栏有
+  筛选搜索、保持当前展开（keepCurrentExpand）、展开到 N 级（expandLevel）、全部展开/折叠。
+- 树形层级：H1→H2→… 缩进展示，标题前有图标，父项有展开箭头和**子项计数**，标题行尾可放操作图标。
+- 点击条目：定位到正文对应标题（折叠块先展开）；滚动/选中变化时高亮当前条目并自动滚入可视区。
+
+### 8.2 值得借鉴的技术点（与我们的方案对照）
+
+| 思源做法 | 我们的对照 |
+| --- | --- |
+| 大纲数据由块树派生（`/api/outline/getDocOutline` 返回 id/type/subtype/text/children 树） | 我们用内核 `getDocExtraContent().toc`（扁平 id/text/level/depth），自建树（等价） |
+| **事件驱动更新**：编辑器事务提交（savedoc）→ 重新拉取 → `update()` 重渲染；`update()` 先保存当前 `scrollTop` 与 `currentId`，重渲染后恢复 | tocChange 事件驱动；**必须保留选中 id + 大纲列表滚动位置**，这是"编辑不闪跳"的关键 |
+| **高亮确定优先用块模型**：`setCurrent` 从当前块沿块树向上找最近标题（无标题块时用 breadcrumb），而非 DOM 矩形二分 | 我们滚动高亮仍可位置探测，但**选中态优先取自内核当前节点/标题祖先**，虚拟渲染下更稳 |
+| 保持当前展开：高亮条目自动展开祖先 + 把条目滚到大纲可视区居中（`scrollTop += rect.top - (viewport.top + height/2)`） | 我们已复刻居中逻辑，继续保留并改为 state 驱动 |
+| 展开集合持久化（`expandIds` 存服务端；我们无服务端） | 展开集合按 noteId 存 localStorage |
+| 大纲工具栏（筛选/展开级别/全展开/保持当前） | Phase 2 逐项实现 |
+| 拖拽标题排序（`moveOutlineHeading` 事务） | Phase 3 可选；Lake 无现成 move-heading 事务，风险高，先不做 |
+
+### 8.3 与思源的差异（不能直接照搬）
+
+- 思源正文是自研块树（每个块有稳定 data-node-id + 块级 DOM），大纲点击 = 滚到块元素；
+  Lake 正文是文档模型 + 虚拟渲染，标题节点不一定有 DOM，定位必须走 `renderer.scrollByNodeId`。
+- 思源服务端能随时全量重算大纲；Lake 的 toc 数据由内核增量维护，我们只能消费它（不能改内核）。
+
+---
+
+## 9. 「彻底禁用原生编辑器大纲」的安全分析（补充）
+
+用户要求：禁用要彻底（不被渲染加载，不只是一行 CSS 隐藏），且不影响其他功能（如编辑器缩放、遮盖问题）。
+
+### 9.1 怎么做才叫「彻底禁用」
+
+- 编辑器模式传 `toc: { enable: false }`：`ZY.afterInit` 的 `if (this.option.isEnabled())` 直接短路，
+  **不会创建 `.ne-toc-sidebar`、不会挂载 React 的 GY 视图、不会建 watcher、不会注册 1s debounce 监听**。
+  这是"根本不渲染"，不是 display:none 隐藏。
+- **保留内核 TOC 管理器**：MA 无 PluginOption、永远运行，`getDocExtraContent().toc` 与 `tocChange` 照常。
+  （这是自建大纲的数据源，属于必要开销；它的工作是收集标题节点 Set + aftercontentchange 后算一次扁平数组，
+  不渲染任何 UI。）
+- **严禁** `disabledPlugins: ["toc"]`：kernel.ts 按 PluginName 过滤会把 MA 一起禁用 → 数据源消失。
+
+### 9.2 对其他功能的影响面（逐项核对）
+
+| 功能 | 影响 | 结论 |
+| --- | --- | --- |
+| 编辑器缩放（enterMaxView/leaveMaxView） | ZY 只在有侧栏时 close/open；无侧栏时为 no-op，不影响缩放本身 | 无影响 |
+| 正文布局/遮盖 | 无 `.ne-toc-sidebar`/`ne-normal-toc` 类 → Lake 始终走"无 toc"布局（`.ne-engine>*` 750px 居中），不再有 280px 边距突变；自建右栏由应用自己管理 z-index/pointer-events | 无影响（且更稳） |
+| 点击标题跳转/折叠联动 | 原生 `tocPositionChange` → heading 展开链路只由原生侧栏点击触发；我们自建面板点击时显式 `renderer.execCommand("headingUnfold", id)` + `scrollByNodeId(id)` 接管 | 需在 Phase 1 覆盖 |
+| 快捷键 `toggleTocView` | 该 command 仅在 enable 时注册；无侧栏时无入口触发 | 无影响 |
+| 移动端阅读模式 | 阅读器插件 `o8` 用独立 option（`reading`），不受编辑 mode `toc.enable` 影响；**保持移动端不动** | 无影响 |
+| 移动端编辑模式 | 与桌面共用 `createLakeDocument(editor)`；**必须加开关**：仅桌面多标签 EditorTab 传 `disableNativeToc`，LakeEditor（移动）维持现状 | 需在 Phase 1 区分 |
+| 调试日志 | lakeRuntime `__lakePerfReport` 里的「TOC 探测」会查不到 `.ne-toc-sidebar`（返回空），仅打印，无害；顺手更新探测目标即可 | 低 |
+
+### 9.3 清理点（移除即不渲染、不残留）
+
+- `EditorTab.tsx`：移除 `refreshTocSidebar` 调用，挂载 `OutlinePanel`。
+- `lakeRuntime.ts`：新增 `disableNativeToc` 选项（仅 EditorTab 传 true）；`setupTocScrollFollow` 不再绑定原生侧栏
+  （滚动高亮/点击逻辑迁移到 OutlineController/Panel）；`refreshTocSidebar` 删除或留作移动端不动。
+- `styles.css`：新增自建右栏布局；不需要再为原生 absolute 侧栏写兼容（高度链保留，`.ne-editor-wrap` 仍是滚动容器）。
+- 保留：高度链、`resolveScrollNode`、`setting` 标志、虚拟渲染配置（这些与正文渲染绑定，不能动）。
+
+---
+
+## 10. 修订后的 Phase 1 范围（含用户决策）
+
+1. 桌面多标签：自建右栏大纲，**三种形态：固定（docked）/ 悬浮（floating overlay）/ 隐藏（hidden）**。
+   现有功能全部保留（设置开关 showToc、每 tab 独立、滚动高亮、点击定位、列表跟随），形式可换。
+2. 移动端（LakeEditor，含编辑与阅读模式）：**本轮不改**，原生 TOC 原样。
+3. 迁移优先：先做「原生观感」最小可用（架构 + 时序 + 多标签稳定），确认后再上子弹线/级别/动画等自定义（Phase 2）。
+4. 桌面编辑器模式：`disableNativeToc = true` → 原生侧栏彻底不创建；数据走内核 tocChange；自建面板渲染。
