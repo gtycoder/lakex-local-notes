@@ -157,16 +157,4 @@ describe("OutlineController phase-2 features", () => {
     expect(c2.isKeepCurrentExpand()).toBe(true);
   });
 
-  it("scrollProgress clamps and notifies", () => {
-    const c = new OutlineController("doc-i", memoryStorage());
-    c.updateToc([h("a", 1, 1)]);
-    c.setScrollProgress(0.5);
-    expect(c.getScrollProgress()).toBeCloseTo(0.5);
-    c.setScrollProgress(1.5);
-    expect(c.getScrollProgress()).toBe(1);
-    c.setScrollProgress(-1);
-    expect(c.getScrollProgress()).toBe(0);
-    c.setScrollProgress(NaN);
-    expect(c.getScrollProgress()).toBe(0);
-  });
 });

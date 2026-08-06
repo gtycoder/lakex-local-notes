@@ -171,8 +171,20 @@ export function Sidebar(props: SidebarProps) {
     return () => { window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", up); };
   }, [draggingId, dropTarget, props]);
 
-  const context = props.nodes.find((node) => node.id === contextId)
-    ?? props.nodes.find((node) => node.id === props.activeId)
+  // 创建/上下文定位的“容器”：若解析到笔记，则上溯到最近的笔记本/分组，
+  // 否则主进程会拒绝“笔记不能作为父节点”。
+  const findContainerAncestor = (node: TreeNode | null | undefined): TreeNode | null => {
+    const byId = new Map(props.nodes.map((item) => [item.id, item]));
+    let current = node ?? null;
+    while (current && current.nodeType === "note") {
+      current = current.parentId ? byId.get(current.parentId) ?? null : null;
+    }
+    return current;
+  };
+  const context = findContainerAncestor(
+    props.nodes.find((node) => node.id === contextId)
+      ?? props.nodes.find((node) => node.id === props.activeId)
+  )
     ?? props.nodes.find((node) => node.nodeType === "notebook")
     ?? null;
   const groupParent = context?.id ?? props.nodes.find((node) => node.nodeType === "notebook")?.id ?? null;

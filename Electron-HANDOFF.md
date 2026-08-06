@@ -1,211 +1,260 @@
-# Lake Notes Electron — 会话交接（大纲自建系统 · 2026-08-05）
+# Lake Notes Electron — 会话交接（自建右侧大纲栏）
 
-> **读者：完全没有上下文的新会话。先读本文，再开始改代码。**
+> **写给零上下文的新会话。请先通读本文，再修改代码。**
 >
-> 本会话的核心工作：把桌面端多标签的 Lake 原生大纲，重写为**应用自有的右侧大纲栏系统**
-> （含数据管线、渲染、工具栏、子弹线/级别/滚动增强）。功能基本完成、可运行，但**右侧栏的
-> 「收起/悬停」交互仍未达到用户预期**（见 §4），交接时工作区停留在 `research/outline-system`
-> 分支。下一会话请先复现并解决 §4，再继续 §6 的计划。
+> 本轮已将桌面端 Lake 原生 TOC 的显示层替换为应用自有的右侧大纲系统，并完成用户最后确认的交互：
+> **右侧有常驻 34px activity rail；rail 悬停只打开大纲预览；仅 rail 内的大纲图标切换“固定 / 悬停”；悬停和固定状态都能独立拖拽右侧大纲宽度。**
+>
+> 当前没有已知 P0 阻塞。工作分支是 `research/outline-system`，最新实现和文档都还**未提交**，严禁直接丢弃工作区改动。
 
 ---
 
 ## 1. 当前快照
 
-| 项目 | 状态 |
+| 项目 | 当前状态 |
 | --- | --- |
 | 项目目录 | `/Users/admin/file/local-lake/lake-notes-electron` |
-| 分支 | `research/outline-system`（相对 `master` 领先 12 个提交，未合回） |
-| 基线 | `master` @ `69c3b74`（小记 V1 完成后的旧交接） |
-| 远程 | `origin = https://gitee.com/gtycoder/local-lake.git` |
-| Git 工作区 | `Electron-HANDOFF.md`（本文）+ 临时截图未提交；其余干净 |
-| 开发应用 | 可通过 `npm run dev` 启动（Node 24，见 §7）；当前已停止 |
-| 开发数据 | `/Users/admin/Library/Application Support/lake-notes-dev` **含用户测试内容，勿删** |
-| 正式数据 | **未触碰** `/Users/admin/Library/Application Support/lake-notes-electron` |
+| 分支 / HEAD | `research/outline-system` / `49f7273` |
+| 对比基线 | `master` / `69c3b74`（远程 `origin/master` 同此） |
+| Git 工作区 | 有未提交的大纲实现与交接文档改动；先 `git diff` 审阅，**不要 reset / checkout -- .** |
+| 开发数据 | `/Users/admin/Library/Application Support/lake-notes-dev`，含用户测试笔记，**绝不能删除** |
+| 正式数据 | `/Users/admin/Library/Application Support/lake-notes-electron`，本轮**未触碰，绝不能触碰** |
+| 开发服务 | 本会话最后通过 `npm run dev` 启动；Vite 为 `127.0.0.1:1421`，插件会自动拉起 Electron。新会话请自行确认进程状态，不要假定它仍存活。 |
 
-> 注意：`lake-notes-dev` 里有用户自己输入的测试笔记（欢迎笔记含"指数/集合竞价/盘口名词…"等
-> 多级标题，正是大纲测试数据）。**不要删除该目录**。
+> **2026-08-06 追加**：大纲样式已打磨（去圆点、级别标签前置分层、纯竖线分层配色、移除无功能头部图标）；大纲状态改为**单一全局变量**（`outlineMode` + `activeOutlineEmpty` + `outlineEmptyOverride`，见 `src/App.tsx`），无 per-tab 覆盖；无大纲文档自动悬浮。左侧 Sidebar 的“新建文档”父节点 fallback bug 已修。本轮改动已合入 master 并推送；后续样式优化（颜色自然分隔、动效）在新提交上进行。
 
 ---
 
-## 2. 任务目标（本会话）
+## 2. 任务目标
 
-用户原话拆解：
+### 原始目标
 
-1. 大纲存在 2 个问题：① 打开文档后大纲延迟 ~3s 出现、略有卡顿；② 各类修改大纲频繁出问题。
-2. 结合此前"单篇只读锁"的失败经验，决定对大纲做**深入研究并逐步重写**，目标是：
-   - 支持多标签（原生 absolute/fixed 大纲不适配）；
-   - 为后续自定义（子弹线、级别展示、滚动更明显）打基础；
-   - 长期为只读锁复用一套稳定的大纲（锁定时大纲不依赖 Viewer 原生 fixed 侧栏）。
-3. 用户对**右侧栏形态**的期望反复调整，最终期望（§4 详述）：常驻/收起/悬停都基于右侧边栏本身。
+1. 解决 Lake 原生 TOC 在桌面多标签、虚拟渲染下的时序/显示问题，建立稳定、可扩展的应用自有大纲。
+2. 大纲要支持层级引导线、标题级别、折叠、筛选、选中跟随、工具栏等定制能力，为后续“只读锁”复用。
+3. 右侧交互参照思源：
+   - 左右两侧一致的是**常驻 activity rail**，不是左右展开面板同宽；
+   - 右 rail 悬停时，大纲从 rail 左侧以 overlay 预览，不挤压编辑器；
+   - rail 内的大纲图标才负责固定 / 取消固定；整条 rail 需要保留给未来其它 activity button；
+   - 固定时右大纲占据 grid，编辑器宽度自适应；
+   - 右侧大纲和左侧资料库宽度分别持久化、互不影响；
+   - 悬停预览态和固定态都必须可拖拽改变右大纲宽度。
+4. 编辑器、目录和大纲的滚动条要作用于真正的滚动容器，默认窄、悬停加宽；删除与大纲滚动无关的假“正文进度竖线”。
 
 ---
 
 ## 3. 已完成内容
 
-### 3.1 机制研究（文档 `docs/OUTLINE-RESEARCH.md`，提交 81fd5e0 / 8a6046f）
+### 3.1 自建大纲架构
 
-- 当前大纲 = Lake 原生能力 + 我们 3 处应用层补丁（`refreshTocSidebar`、`setupTocScrollFollow`、`resolveScrollNode`+CSS 高度链）。
-- 内核 TOC 管理器（PluginName `toc`）**无 PluginOption、永远运行**：`toc:{enable:false}` 只关编辑侧栏 UI，
-  数据（`getDocExtraContent().toc`）与事件（`tocChange`）照常。
-- **禁用 `disabledPlugins:["toc"]` 会连内核数据一起禁用，禁止使用。**
-- 编辑侧栏 `tocChange` 处理是 **debounce 1000ms（leading，首次立即）**；阅读侧栏无 debounce。
-- 打开延迟 ~3s 主因：内核 toc 数据在 `setDocument` → `aftercontentchange` 后才计算（大文档+虚拟渲染最慢）；
-  原生侧栏先空后填；我们的轮询只是等待数据就绪。
-- 开源 lake-main（lakelib 0.4.6）**没有 TOC**，TOC 是语雀内部新增，只能以 node_modules 打包产物为权威参考。
-- 思源参考：`/Users/admin/file/local-lake/siyuan`（app/src/layout/dock/Outline.ts + util/Tree.ts）——
-  事件驱动更新、保留选中/滚动位置、块模型高亮、展开集合持久化、工具栏等可借鉴点已记录在文档 §8。
+当前核心目录：
 
-### 3.2 实现（提交 38e3a55 起）
-
-**架构（当前生效）**：
-
-```
+```text
 src/features/outline/
-  OutlineController.ts   # 数据/状态：树构建(按depth嵌套)、折叠集合(noteId 持久化)、
-                         #   选中、filterText、keepCurrentExpand、scrollProgress；useSyncExternalStore 订阅
-  OutlineList.tsx        # 渲染：层级引导线(子弹线)+叶子圆点、级别徽标 H1..H6、
-                         #   折叠、选中高亮、选中项滚入可视区(点击平滑)、滚动进度条
-  OutlineSidebar.tsx     # 侧栏外壳：docked(280)/collapsed(44窄条)/floating(悬停浮层)；
-                         #   头部工具栏：筛选、展开全部/折叠全部、展开到级别(1-6+全部)、
-                         #   保持当前展开(持久化)、收起大纲按钮
-  registry.ts            # EditorTab 按 noteId 注册 {controller,navigate,refresh}，侧栏按 activeNoteId 读取
-  useOutline.ts          # 订阅内核 tocChange + 打开轮询、rAF 滚动高亮、虚拟渲染批次后重算、
-                         #   tab 隐藏暂停、卸载全清理；返回 {controller, refresh}
-  outline.css
+  OutlineController.ts   # TOC 树、选中、折叠集合、筛选、展开状态与持久化
+  OutlineList.tsx        # 扁平可见列表渲染、层级线、H1-H6 徽标、选中滚动可见
+  OutlineSidebar.tsx     # 右 rail、悬停 overlay、固定态、工具栏、宽度拖拽
+  registry.ts            # EditorTab 依据 noteId 注册/获取当前大纲控制器
+  useOutline.ts          # 订阅 Lake tocChange、打开时刷新、滚动高亮、虚拟渲染批次处理
+  outline.css            # 右侧布局、overlay、resize handle、列表和滚动条样式
 ```
 
-- `lakeRuntime.ts`：`LakeEditorPrefs.disableNativeToc`（桌面 EditorTab 置 true → 原生侧栏彻底不创建）；
-  导出 `resolveScrollNode`。
-- `EditorTab.tsx`：编辑器挂载到 `.lake-editor-main`；注册大纲句柄；点击导航 =
-  `renderer.execCommand("headingUnfold",id)` + `renderer.scrollByNodeId(id)` + 50/200ms 两次校正。
-- `App.tsx`：`outlineMode`（docked/floating/collapsed）、app-shell 网格第 4 列 `--outline-grid-w`
-  （docked=280 / collapsed&floating=44 / 隐藏=0）、渲染 `OutlineSidebar`。
-- 移动端（`LakeEditor`）完全未动，仍用原生 TOC。
-- 测试：`src/features/outline/OutlineController.test.ts` 12 项；全项目 `npm test` = 123 全绿。
+- Lake 内核仍负责生成 TOC 数据与 `tocChange`；桌面端不再创建 Lake 原生 TOC 面板，而是由应用读取 TOC 数据渲染自己的组件。
+- `OutlineController` 支持按 depth 构树、标题级别、筛选、展开/折叠、展开至指定级别、保持当前标题祖先展开、每篇笔记的折叠状态持久化。
+- `OutlineList` 使用扁平可见项列表：有层级引导线、叶子圆点、H1–H6 徽标、当前标题高亮，当前项会滚入列表可视区域。
+- 桌面 `EditorTab` 通过 registry 注册当前 note 的 `{ controller, navigate, refresh }`，因此多标签之间不会串大纲。
 
-**功能现状**（真机 Playwright 已验证）：
-- 常驻 280px 侧栏贴最右边缘，正文收缩；收起 → 44px 窄条（仍是最右列）；点击窄条 → 常驻。
-- 悬停：hover 窄条 → **fixed 浮层**（right:0 覆盖正文，grid 列保持 44）→ 移出恢复收起。
-- 筛选/展开折叠/展开到级别/保持当前/子弹线/级别徽标/滚动进度条/折叠持久化全部可用。
-- 原生 `.ne-toc-sidebar` = 0（桌面编辑模式彻底不创建）；打开大纲 ~0.5s（小文档）。
+### 3.2 最终右侧栏交互与尺寸
 
----
+相关文件：
 
-## 4. 当前问题（最重要，下一会话先解决）
+```text
+src/App.tsx
+src/features/outline/OutlineSidebar.tsx
+src/features/outline/outline.css
+```
 
-### 4.1 用户对右侧栏形态的最终期望（2026-08-05 多次反馈归纳）
+已实现并已验收：
 
-用户参考的是**思源（SiYuan）右侧 dock 大纲**（截图参考：docs/OUTLINE-RESEARCH.md §8 与图例）：
-"常驻和悬停都是基于右侧边栏出来的"。
+- 左右常驻 activity rail 都为 **34px**。
+- 右侧收起（`collapsed`）时，grid 右列仅保留 34px rail；鼠标进入 rail 后，从 rail 左侧打开大纲 overlay，**不压缩正文**。
+- 右侧固定（`docked`）时，右大纲内容和 34px rail 共同参与 app grid；编辑器以可用宽度自适应。
+- **不可给 `.outline-sidebar__rail` 加 click handler。**rail 只负责 hover 触发。rail 内的 `.outline-sidebar__activity-button` 才能切换模式：
+  - `collapsed` 点击图标 → `docked`；
+  - `docked` 点击图标 → `collapsed`；
+  - 从固定切回悬停时会先清除 hover 状态，避免鼠标仍停在按钮上导致立刻重开。
+- 左右展开面板宽度完全独立：
+  - 左资料库：默认 `224px`、范围 `160–300`、key `lake-notes-v3.sidebar-width`；
+  - 右大纲内容：默认 `280px`、范围 `200–420`、key `lake-notes-v3.outline-sidebar-width`。
+- 右侧可从**大纲左边缘**拖动，向左变宽、向右变窄；带橡皮筋边界效果，松手后写回 localStorage。
+- 右侧 resize handle 有 keyboard 支持：`← / →` 每次 8px，`Shift + ← / →` 每次 24px，`Home / End` 到最小/最大值。
 
-- **右侧边栏 = 一个始终存在的列**：展开时 280px 完整面板；收起时 44px 窄条（仍是侧栏本身，不是悬浮标签）。
-- **悬停 = hover 收起窄条时，侧栏"原地展开"**成完整面板（覆盖正文、带阴影），而不是变成一个脱离侧栏的浮层。
-- **点击窄条 = 常驻**；头部「收起大纲」= 收起。
+### 3.3 最后修复：悬停态不能拖拽宽度
 
-### 4.2 当前实现与期望的差距
+用户最后反馈：右侧大纲在悬浮预览状态下不能拖拽变大/变小，左侧可以。
 
-当前 `floating` 态实现是 `position: fixed` 的**独立浮层**，同时 grid 列缩为 44px。
-用户最后一句反馈："大纲展开的时候我右侧边栏呢" —— 即悬停展开时，右侧的"侧栏列"不见了
-（只剩 44px 条 + 一个浮在正文上的面板），与"侧栏原地展开"的预期不符。
+已在 `src/features/outline/OutlineSidebar.tsx` 修复：
 
-**修复方向（未实现，供新会话参考）**：悬停展开应让**侧栏列本身**在 44→280 之间变化：
-- 方案 A（推荐，与左侧栏移动端 `.sidebar.is-collapsed:hover` 一致）：collapsed 时 grid 列保持 44，
-  悬停时该列 `width:280px; z-index 抬高; box-shadow` 覆盖正文（CSS transition），鼠标移出恢复 44。
-  即"侧栏原地膨胀"，不再用 fixed 浮层。
-- 方案 B：悬停时 grid 列直接变 280（正文收缩），移出回 44——会有布局跳动，不推荐。
-- 关键点：**无论哪种，展开的都是"右侧栏"本身**，视觉上始终贴右缘、无独立 rail、无边缘小标签。
+1. `handleResizePointerDown` 不再限制 `mode === "docked"`，仅接受鼠标主键，因此 docked 与 collapsed-hover overlay 都能开始拖动。
+2. resize handle 在 `mode === "docked" || railHovered` 时可聚焦；CSS 不再在 collapsed 状态禁用其 pointer events。
+3. 使用 `setPointerCapture()`，拖动期间由 `resizeRef` 标记进行中。
+4. 拖动过程中 `<aside>` 的 `onPointerLeave` 不再关闭 overlay，否则鼠标离开原始边界时会导致面板和把手消失。
+5. `pointerup/cancel` 后调用 `document.elementFromPoint(clientX, clientY)`：
+   - 若落点仍在 aside（大纲/rail）内，overlay 保持；
+   - 若落在编辑器外侧，恢复普通 hover 语义并收起。
 
-> 该交互是本会话唯一未闭环的问题。建议先起 dev 复现（收起 → hover 窄条看当前 fixed 浮层），
-> 再改成原地展开，真机验收后再继续 §6。
+**切勿还原以下错误实现：**
 
-### 4.3 其余已知差距（非阻塞）
+```ts
+if (event.button !== 0 || mode !== "docked") return;
+```
 
-- 大文档打开延迟的主导仍是**内核 toc 计算耗时**（自建大纲只消除了渲染链额外延迟，未加速内核）。
-- 侧栏宽度暂固定 280，未做拖拽调宽；悬浮态会盖住编辑器工具栏右端（overlay 固有取舍）。
-- 迷你地图（整篇滚动条+标题位置）未做；虚拟渲染下视口外标题无 DOM，做迷你地图需内核提供标题位置/估算高度。
+也不要在 resize 过程中无条件执行 `setRailHovered(false)`。
 
----
+### 3.4 滚动条与无效进度线清理
 
-## 5. 踩过的坑（务必记住，别重蹈）
+- 已删除 `.outline-list__progress` 及其 controller/scroll handler 状态。它不是大纲自身滚动条，只是不会随大纲滚动的“正文进度竖线”。
+- 真正滚动容器使用窄原生 scrollbar：
+  - 左侧资料库：`.note-list`；
+  - 右侧大纲：`.outline-list`；
+  - 编辑器：`.lake-editor-main .ne-editor-wrap`（以及阅读容器）。
+- 默认宽度 `3px`，鼠标进入滚动容器后 `6px`，thumb 更深。
 
-1. **React.StrictMode 在 dev 双次挂载 effect**：EditorTab cleanup 若用 `host.replaceChildren()`
-   会把 `.lake-editor-main` 移出 DOM，第二次 effect 在脱离文档的节点上重建 Lake 编辑器 →
-   `to-dom-range.ts:46` 断言 + 空白编辑器。**cleanup 只 `mount.replaceChildren()`**，且 effect 开头
-   若 `!mount.isConnected` 先 `host.appendChild(mount)`。（生产构建不双挂载，所以只看生产会漏。）
-2. **`disabledPlugins:["toc"]` 会连内核 TOC 数据一起禁用**，必须用 `toc:{enable:false}`。
-3. **收起/窄条刚出现时光标正好在上 → 立刻又展开**：需要"进入收起态时重置 500ms hover 冷却"
-   （`useEffect` 监听 mode 变化重置 `mountTimeRef`），不能只在组件挂载时记一次。
-4. **localStorage 的 removeItem + 立即 reload 有磁盘刷新竞态**（测试会读到旧值）：
-   测试初始状态用 `setItem` + 等 1.5s 再 reload，或直接靠 UI 点击驱动，别依赖"清 key 后 reload 就是默认值"。
-5. **Playwright（node_repl MCP）动态 `import("playwright")` 报 CJS 互操作错误**：
-   用 `createRequire("/Users/admin/file/local-lake/drawnix-develop/x.js")("playwright")` 加载
-   （兄弟项目 drawnix-develop 里有一份可用的 playwright）。
-6. **Node 版本**：vite 8 / vitest 需要 Node ≥20.12，本机默认是 v18（`/Users/admin/.nvm/versions/node/v18.20.8`），
-   必须 `export PATH="$HOME/.nvm/versions/node/v24.18.0/bin:$PATH"`。
-7. **面板在工具栏之下**：工具栏高 50px；docked 用 `margin-top:50px; height:calc(100% - 50px)`；
-   **不要**把 margin-top 规则写成对所有 below-toolbar 面板生效（会与 floating 的 `top:50px` 叠加成双偏移）。
-8. **`.lake-editor-main` 必须 `flex:1 + min-width:0`**，否则 Lake 内容最小宽度会把编辑器撑出主列
-   （真机实测编辑器 1109px 溢出 704px 主列，被右侧栏盖住）。
-9. **扁平可见列表 + 递归渲染 = 子项重复**：`getVisibleItems()` 已是前序扁平列表，渲染必须扁平，
-   不要再对 children 递归。
-10. **侧栏头部按钮的 is-active 要订阅 controller**（useSyncExternalStore on controller），
-    只订阅 registry 版本不会随 controller 变化刷新。
-11. **dev/打包版单实例锁 + 端口 1421**：测试前先 `lsof -ti tcp:1421 | xargs kill -9`，
-    清理进程只按 `lake-notes-electron` 精确匹配，禁止 `pkill -f Electron`。
-12. **删除笔记后 `device_state.last_opened_note_id` 残留** → 启动自动打开失败报
-    `read_note: 笔记不存在`：需直接改 `metadata.sqlite3` 的 device_state 表。
-13. 原生 TOC 的 `refreshTocSidebar`（重放 tocChange + 轮询）与 `setupTocScrollFollow`
-    是"修到能用"的补丁；桌面编辑模式已不创建原生侧栏，这些仅移动端/历史路径在用，别删错。
+### 3.5 文档与验证
 
----
+已更新：
 
-## 6. 下一步计划
+```text
+Electron-HANDOFF.md
+/docs/PROGRESS.md
+```
 
-1. **P0（下一会话第一件事）**：修复 §4 的悬停交互 —— 收起窄条 hover 时"侧栏原地展开"（方案 A），
-   真机验收（收起→hover→展开贴右缘→移出恢复；点击窄条常驻；头部收起）。
-2. **P1 打磨**：侧栏宽度拖拽调宽（参考左侧 Sidebar 的 resize-handle）；悬浮态工具栏右端遮挡取舍；
-   可选：迷你地图（需先解决虚拟渲染下标题位置数据）。
-3. **P2 只读锁前置评估（原 Phase 3）**：确认 Lake 是否有稳定动态只读 API（避免 Editor↔Viewer 重建）；
-   大纲已与应用 UI 解耦，锁定时可复用同一套大纲。届时再决定锁状态是否入 SQLite/S3（外围元数据、不改 `.lake` 正文、
-   小记不受影响、移动端不提供锁定）。
-4. 稳定后：把 `research/outline-system` 合回 `master`（先与最新 master 同步、跑全量回归）。
-
----
-
-## 7. 开发与验证速查
+本轮最终静态验证均通过：
 
 ```bash
-export PATH="$HOME/.nvm/versions/node/v24.18.0/bin:$PATH"   # Node 24（必须）
-cd /Users/admin/file/local-lake/lake-notes-electron
-npm run dev          # vite dev(1421) + Electron（vite-plugin-electron 自动拉起）
-npm test             # vitest（123 项）
+git diff --check
 npx tsc --noEmit
+npm test                         # 7 files / 122 tests passed
 node node_modules/vite/bin/vite.js build
 ```
 
-- 真实 GUI 验证：`docs/CODEX-GUIDE.md`（Playwright 驱动 Electron，模板可直接用；playwright 加载见 §5.5）。
-- 关键文件：`src/App.tsx`、`src/features/outline/*`、`src/features/editor/{EditorTab,lakeRuntime}.tsx/.ts`、
-  `src/styles.css`、`src/features/outline/outline.css`、`docs/OUTLINE-RESEARCH.md`。
-- 数据：dev = `lake-notes-dev`（勿删，含用户测试内容）；正式 = `lake-notes-electron`（勿动）。
+真实 Electron / Playwright 验证通过：
+
+- 收起态 hover rail 可显示 overlay；固定/收起图标只影响模式，rail 本身不点击切换；
+- 右大纲和左资料库宽度独立；
+- 悬停态真实鼠标将右大纲从 **233px** 拖到 **308px**；拖动中与松手后（指针仍在面板内）overlay 都保持；鼠标移到编辑器后 overlay 正常隐藏；
+- 宽度恢复写回 localStorage（测试结束时已将开发数据宽度还原为 `233px`）；
+- 编辑器和大纲 scrollbar 默认 3px、hover 6px。
 
 ---
 
-## 8. 本会话提交清单（research/outline-system，自 master 起）
+## 4. 当前问题 / 已知限制
 
-```text
-81fd5e0 docs: outline system deep-dive research (mechanism + root cause + plan)
-8a6046f docs: add siyuan reference study + native-toc-disable safety analysis
-38e3a55 feat(outline): app-owned outline panel for desktop multi-tab (Phase 1)
-b5ea748 fix(outline): keep editor mount node connected across StrictMode double-mount
-7749f26 feat(outline): rail icon bar with hover popup + toolbar offset (Plan A)   [已被后续取代]
-b411727 feat(outline): right sidebar mirroring left sidebar (docked/collapsed/floating) [已被取代]
-6882032 docs: record right-sidebar redesign (replaces in-editor rail)
-0a3c754 feat(outline): right sidebar at far edge + Phase 2 (guides/levels/toolbar/scroll)
-a389fa2 docs: record feedback fixes + Phase 2 progress
-bbc174c feat(outline): expand-to-level dropdown (1-6 + all) in sidebar toolbar
-1891701 fix(outline): right sidebar always present; remove edge tab / hidden state
-f6b9267 feat(outline): right sidebar docked/collapsed/floating based on the sidebar itself
+1. **无已知 P0/P1 阻塞。**当前大纲功能、右侧交互、悬停 resize 已完成；下一会话的首要工作应是用户手动验收或提交/合并前回归，而不是重写这一套交互。
+2. Lake 内核计算 TOC 本身仍可能在大文档、虚拟渲染条件下慢；自建系统消除了原生面板的额外时序/多标签问题，**但没有让内核 TOC 计算本身变快**。
+3. 悬停 overlay 覆盖编辑器右端工具栏是“覆盖而非挤压”的固有取舍；固定态没有此问题。若用户继续要求视觉打磨，应先拿截图确认预期，不要自行把 hover 改回占据 grid。
+4. 迷你地图/整篇标题位置概览未做。虚拟渲染下视口外标题 DOM 不存在，若要实现需要内核提供位置数据或设计估算策略。
+5. 工作区仍有未提交的实现改动。提交前应先查看完整 diff，确认没有把测试数据、临时 Vite 配置或无关文件带入提交。
+
+---
+
+## 5. 下一步计划
+
+### 若用户要继续验收/打磨大纲
+
+1. 用真实开发 Electron 按下面命令启动，优先手测：
+   - 右 rail hover 是否只预览、不挤压正文；
+   - 图标按钮是否能固定/取消固定；
+   - 悬停态和固定态均可拖动右大纲左边缘；
+   - 拖动后左侧资料库宽度不变化；
+   - 编辑器和大纲滚动条是否正确变窄/悬停变宽。
+2. 若还有交互问题，先读 `src/App.tsx` 的 grid 宽度管理和 `OutlineSidebar.tsx` 的 pointer/hover 管理；不要只改 CSS 猜问题。
+3. 若要调整宽度参数，同时审阅左侧资料库的边界和 storage key，保持“左右 rail 同为 34px、展开内容独立”的原则。
+
+### 若准备收尾合并
+
+1. 查看 `git diff`、`git diff --check`；不要覆盖现有未提交变更。
+2. 再执行 TypeScript、Vitest、Vite build 和真实 Electron smoke test。
+3. 以聚焦的提交保存本轮代码和文档；然后同步最新 `master`、解决冲突、完整回归后再将 `research/outline-system` 合回 `master`。
+
+### 后续可选功能
+
+- 评估 Lake 是否有稳定的动态只读 API，避免 Editor / Viewer 重建；自建大纲可为只读锁复用。
+- 在不破坏 hover overlay 语义的前提下优化右端工具栏遮挡。
+- 研究虚拟渲染下可行的大纲迷你地图。
+
+---
+
+## 6. 踩过的坑 / 不可破坏的约束
+
+1. **不要禁用 TOC 插件。**`disabledPlugins: ["toc"]` 会把内核 TOC 数据一起关掉。桌面端应使用 `toc: { enable: false }` 隐藏原生 UI，TOC 数据和 `tocChange` 仍可用。
+2. **不要把右 rail 做成整条可点击按钮。**`.outline-sidebar__rail` 只处理 hover，未来可以放多个 activity button；只有 `.outline-sidebar__activity-button` 切换大纲模式。
+3. **不要把左右展开面板宽度绑在一起。**一致的是左右 34px rail，不是左资料库和右大纲的内容宽度。
+4. **悬停 resize 需要 pointer capture + 拖动保护。**不得恢复 `mode !== "docked"` 的早退；`pointerleave` 在拖动中不能关闭 overlay；结束时再根据真实落点决定是否隐藏。
+5. **滚动条必须写到真实滚动元素。**编辑器是 `.ne-editor-wrap`，不是 `.lake-editor-main` 外壳；大纲是 `.outline-list`。不要重新加入静态正文进度竖线冒充大纲滚动条。
+6. **`.lake-editor-main` 要保留 `flex: 1` 和 `min-width: 0`。**缺失时 Lake 内容的最小宽度会撑破右侧固定态的编辑器列。
+7. **可见大纲列表已经是扁平前序列表。**`getVisibleItems()` 返回值不能递归 children 再渲染，否则子项重复。
+8. **工具栏 active 状态要订阅 controller。**只订阅 outline registry 的版本不会随着 `controller` 内部状态更新而刷新。
+9. **React StrictMode 在 dev 会双挂载 effect。**编辑器 cleanup 不能把 host/mount 从 DOM 拔掉；历史上 `host.replaceChildren()` 曾导致第二次挂载的 Lake 编辑器空白。保持 cleanup 只清理 mount 内容，并保留连接性防护。
+10. **Node 版本必须是 24。**本机默认 v18 不适合 Vite 8 / Vitest：
+    ```bash
+    export PATH="$HOME/.nvm/versions/node/v24.18.0/bin:$PATH"
+    ```
+11. **Vite 配置中的 electron 插件会自动拉起 Electron。**做 Playwright 隔离测试时，不要同时启动普通 `npm run dev` 的 Electron，否则单实例锁会让隔离 Electron 退出。绝不要使用 `pkill -f Electron`，机器上有其它 Electron 应用；只关闭/定位本项目的 PID。
+12. **localStorage 测试有写盘时序。**不要用 `removeItem()` 后立即 reload 来赌默认值；需要固定状态时显式 `setItem()`，再 reload/等待。当前右大纲 key 是 `lake-notes-v3.outline-sidebar-width`。
+13. **开发数据不可清理。**不得删除 `/Users/admin/Library/Application Support/lake-notes-dev`；更不得碰正式目录 `/Users/admin/Library/Application Support/lake-notes-electron`。
+14. **大纲状态是单一全局变量。**不要恢复 per-tab 覆盖模型；无大纲自动悬浮由 `activeOutlineEmpty` 驱动，空文档显式固定的豁免在切标签时清除。
+15. **清理测试笔记必须走 UI 删除**（写 tombstone）。直接改 SQLite 会被 S3 同步从远端拉回。
+
+---
+
+## 7. 开发、验证与关键路径速查
+
+### 启动开发应用
+
+```bash
+export PATH="$HOME/.nvm/versions/node/v24.18.0/bin:$PATH"
+cd /Users/admin/file/local-lake/lake-notes-electron
+npm run dev
 ```
 
-> `7749f26`（编辑器内图标栏）与 `b411727`（带独立 rail 的镜像侧栏）是用户否决的中间形态，
-> 只作历史参考，不要回退到那两版。
+`npm run dev` 会启动 Vite（`127.0.0.1:1421`）并由 `vite-plugin-electron` 自动启动开发 Electron。
+
+### 静态验证
+
+```bash
+export PATH="$HOME/.nvm/versions/node/v24.18.0/bin:$PATH"
+cd /Users/admin/file/local-lake/lake-notes-electron
+git diff --check
+npx tsc --noEmit
+npm test
+node node_modules/vite/bin/vite.js build
+```
+
+### 建议优先阅读的文件
+
+```text
+src/App.tsx
+src/features/outline/OutlineSidebar.tsx
+src/features/outline/outline.css
+src/features/outline/OutlineController.ts
+src/features/outline/OutlineList.tsx
+src/features/outline/useOutline.ts
+src/features/editor/EditorTab.tsx
+src/features/editor/lakeRuntime.ts
+docs/OUTLINE-RESEARCH.md
+docs/PROGRESS.md
+```
+
+### 分支历史（便于定位）
+
+```text
+49f7273 docs: session handoff for outline system work (goals/done/issues/next/pitfalls)
+f6b9267 feat(outline): right sidebar docked/collapsed/floating based on the sidebar itself
+1891701 fix(outline): right sidebar always present; remove edge tab / hidden state
+bbc174c feat(outline): expand-to-level dropdown (1-6 + all) in sidebar toolbar
+38e3a55 feat(outline): app-owned outline panel for desktop multi-tab (Phase 1)
+8a6046f docs: add siyuan reference study + native-toc-disable safety analysis
+81fd5e0 docs: outline system deep-dive research (mechanism + root cause + plan)
+```
+
+`7749f26`（编辑器内图标栏）和 `b411727`（旧镜像侧栏）是用户已否决的中间形态；不要以它们为目标回退。

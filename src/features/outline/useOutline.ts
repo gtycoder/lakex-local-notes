@@ -64,9 +64,6 @@ export function useOutline(
       const scroller = resolveScrollNode(host);
       const items = controller.getVisibleItems();
       if (!scroller) return;
-      // 文档滚动进度（大纲滚动指示条）
-      const maxScroll = scroller.scrollHeight - scroller.clientHeight;
-      controller.setScrollProgress(maxScroll > 0 ? scroller.scrollTop / maxScroll : 0);
       if (!items.length) return;
       const vpTop = scroller.getBoundingClientRect().top;
       let current: string | null = null;

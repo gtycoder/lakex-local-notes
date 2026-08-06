@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type CSSProperties } from "react";
 import { ArrowLeft, Check, Cloud, FileDown, Files, ListTree, LoaderCircle, Feather, Pencil, Save, Settings as Settings2Icon, WifiOff } from "lucide-react";
 import { MobileLibrary } from "./components/MobileLibrary";
 import { ConfirmDelete, Sidebar, type SidebarMode } from "./components/Sidebar";
@@ -9,6 +9,7 @@ import type { LakeEditorInstance } from "./features/editor/lakeRuntime";
 import { MultiTabEditor, type TabInfo } from "./features/editor/MultiTabEditor";
 import { OutlineSidebar } from "./features/outline/OutlineSidebar";
 import type { OutlineMode } from "./features/outline/OutlineController";
+import { getOutlineTab, getOutlineTabsVersion, subscribeOutlineTabs } from "./features/outline/registry";
 import { isDesktop, native } from "./lib/native";
 import { loadSettings, saveSettings, subscribeSettings, type AppSettings } from "./lib/settings";
 import { SettingsPanel } from "./components/SettingsPanel";
@@ -19,16 +20,21 @@ type SaveState = "idle" | "dirty" | "saving" | "saved" | "error";
 type MobilePage = "library" | "document";
 type DesktopWorkspace = "library" | "quick-notes";
 
+// 左侧资料库与右侧大纲面板各自维护宽度；两侧常驻 activity rail 才保持同宽。
 const SIDEBAR_DEFAULT_WIDTH = 224;
 const SIDEBAR_MIN_WIDTH = 160;
 const SIDEBAR_MAX_WIDTH = 300;
-const OUTLINE_SIDEBAR_WIDTH = 280;
-const OUTLINE_COLLAPSED_WIDTH = 44;
+const OUTLINE_SIDEBAR_DEFAULT_WIDTH = 280;
+const OUTLINE_SIDEBAR_MIN_WIDTH = 200;
+const OUTLINE_SIDEBAR_MAX_WIDTH = 420;
+// 与左侧 --activity-rail-width 对齐，右侧只为常驻 rail 预留同样的 34px。
+const OUTLINE_COLLAPSED_WIDTH = 34;
 
 function initialOutlineMode(): OutlineMode {
   const stored = localStorage.getItem("lake-notes-v2.outline-sidebar-mode");
   if (stored === "docked" || stored === "collapsed") return stored;
-  return "docked";
+  // 首次进入默认只显示常驻窄 rail；点击或悬停后再显示大纲面板。
+  return "collapsed";
 }
 
 function initialSidebarMode(): SidebarMode {
@@ -39,7 +45,16 @@ function initialSidebarMode(): SidebarMode {
 
 function initialSidebarWidth(): number {
   const stored = Number(localStorage.getItem("lake-notes-v3.sidebar-width"));
-  return Number.isFinite(stored) ? Math.min(SIDEBAR_MAX_WIDTH, Math.max(SIDEBAR_MIN_WIDTH, stored)) : SIDEBAR_DEFAULT_WIDTH;
+  return Number.isFinite(stored)
+    ? Math.min(SIDEBAR_MAX_WIDTH, Math.max(SIDEBAR_MIN_WIDTH, stored))
+    : SIDEBAR_DEFAULT_WIDTH;
+}
+
+function initialOutlineSidebarWidth(): number {
+  const stored = Number(localStorage.getItem("lake-notes-v3.outline-sidebar-width"));
+  return Number.isFinite(stored)
+    ? Math.min(OUTLINE_SIDEBAR_MAX_WIDTH, Math.max(OUTLINE_SIDEBAR_MIN_WIDTH, stored))
+    : OUTLINE_SIDEBAR_DEFAULT_WIDTH;
 }
 
 interface OpenTab {
@@ -77,8 +92,14 @@ export function App() {
   const [sidebarMode, setSidebarMode] = useState<SidebarMode>(initialSidebarMode);
   const [sidebarWidth, setSidebarWidth] = useState(initialSidebarWidth);
   const [sidebarResizing, setSidebarResizing] = useState(false);
+  // 全局唯一大纲状态（持久化）：所有“有大纲”的文档都遵循它；
+  // 仅当当前文档没有大纲时自动强制悬浮（除非用户在空文档上显式固定）。
   const [outlineMode, setOutlineMode] = useState<OutlineMode>(initialOutlineMode);
-  const outlinePreviewTimer = useRef<number | null>(null);
+  const [activeOutlineEmpty, setActiveOutlineEmpty] = useState(false);
+  const [outlineEmptyOverride, setOutlineEmptyOverride] = useState(false);
+  const outlineTabsVersion = useSyncExternalStore(subscribeOutlineTabs, getOutlineTabsVersion, getOutlineTabsVersion);
+  const [outlineSidebarWidth, setOutlineSidebarWidth] = useState(initialOutlineSidebarWidth);
+  const [outlineResizing, setOutlineResizing] = useState(false);
   const [desktopWorkspace, setDesktopWorkspace] = useState<DesktopWorkspace>("library");
   const [quickNotesDirty, setQuickNotesDirty] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -102,15 +123,18 @@ export function App() {
   }, [sidebarMode]);
 
   useEffect(() => {
-    if (outlineMode !== "floating") localStorage.setItem("lake-notes-v2.outline-sidebar-mode", outlineMode);
-  }, [outlineMode]);
+    localStorage.setItem("lake-notes-v3.sidebar-width", String(Math.round(sidebarWidth)));
+  }, [sidebarWidth]);
+
+  useEffect(() => {
+    localStorage.setItem("lake-notes-v3.outline-sidebar-width", String(Math.round(outlineSidebarWidth)));
+  }, [outlineSidebarWidth]);
 
   useEffect(() => {
     return () => {
       saveTimers.current.forEach((timer) => window.clearTimeout(timer));
       saveTimers.current.clear();
       if (sidebarPreviewTimer.current !== null) window.clearTimeout(sidebarPreviewTimer.current);
-      if (outlinePreviewTimer.current !== null) window.clearTimeout(outlinePreviewTimer.current);
     };
   }, []);
 
@@ -422,37 +446,35 @@ export function App() {
     setSidebarMode((current) => current === "docked" ? "collapsed" : "docked");
   }
 
-  function clearOutlinePreviewTimer() {
-    if (outlinePreviewTimer.current !== null) {
-      window.clearTimeout(outlinePreviewTimer.current);
-      outlinePreviewTimer.current = null;
-    }
+  /** 手动切换全局大纲状态；空文档上显式固定时给一次豁免。 */
+  function setOutlineModeForActive(mode: OutlineMode) {
+    setOutlineMode(mode);
+    localStorage.setItem("lake-notes-v2.outline-sidebar-mode", mode);
+    if (mode === "docked" && activeOutlineEmpty) setOutlineEmptyOverride(true);
+    else if (mode === "collapsed") setOutlineEmptyOverride(false);
   }
 
-  function showOutlinePreview() {
-    clearOutlinePreviewTimer();
-    setOutlineMode((current) => (current === "collapsed" ? "floating" : current));
-  }
-
-  function hideOutlinePreview() {
-    clearOutlinePreviewTimer();
-    outlinePreviewTimer.current = window.setTimeout(() => {
-      setOutlineMode((current) => (current === "floating" ? "collapsed" : current));
-      outlinePreviewTimer.current = null;
-    }, 150);
-  }
-
-  /** 头部「收起大纲」→ 收起为 44px 窄条 */
+  /** 右侧 activity button：悬停模式与固定模式之间切换。 */
   function collapseOutline() {
-    clearOutlinePreviewTimer();
-    setOutlineMode("collapsed");
+    setOutlineModeForActive("collapsed");
   }
 
-  /** 窄条点击 → 常驻（固定为完整面板） */
   function pinOutline() {
-    clearOutlinePreviewTimer();
-    setOutlineMode("docked");
+    setOutlineModeForActive("docked");
   }
+
+  // 跟踪当前文档是否为空大纲；切换标签时清除豁免、重新评估。
+  useEffect(() => {
+    setOutlineEmptyOverride(false);
+    const tabId = activeNoteId;
+    if (!tabId) { setActiveOutlineEmpty(false); return; }
+    const handle = getOutlineTab(tabId);
+    if (!handle) { setActiveOutlineEmpty(false); return; }
+    const evaluate = () => setActiveOutlineEmpty(handle.controller.getEntryCount() === 0);
+    evaluate();
+    return handle.controller.subscribe(evaluate);
+    // tabsVersion：新标签注册晚于 activeNoteId 变化时也要重新评估。
+  }, [activeNoteId, outlineTabsVersion]);
 
   function updateSidebarWidth(width: number) {
     setSidebarWidth(width);
@@ -462,6 +484,16 @@ export function App() {
     const clamped = Math.min(SIDEBAR_MAX_WIDTH, Math.max(SIDEBAR_MIN_WIDTH, width));
     setSidebarWidth(clamped);
     localStorage.setItem("lake-notes-v3.sidebar-width", String(Math.round(clamped)));
+  }
+
+  function updateOutlineSidebarWidth(width: number) {
+    setOutlineSidebarWidth(width);
+  }
+
+  function commitOutlineSidebarWidth(width: number) {
+    const clamped = Math.min(OUTLINE_SIDEBAR_MAX_WIDTH, Math.max(OUTLINE_SIDEBAR_MIN_WIDTH, width));
+    setOutlineSidebarWidth(clamped);
+    localStorage.setItem("lake-notes-v3.outline-sidebar-width", String(Math.round(clamped)));
   }
 
   /** 审计 #8：移动端保存成功后同步 mobileActive/草稿，viewer 不再显示旧快照，
@@ -534,15 +566,21 @@ export function App() {
   const tabInfos: TabInfo[] = openTabs.map((tab) => ({ noteId: tab.noteId, title: tab.title, content: tab.content, dirty: tab.dirty }));
 
   const outlineVisible = tocEnabled && !isMobile && desktopWorkspace === "library";
+  const effectiveOutlineMode: OutlineMode = activeOutlineEmpty && !outlineEmptyOverride ? "collapsed" : outlineMode;
   const shellStyle = {
     "--sidebar-width": `${sidebarWidth}px`,
     "--sidebar-grid-w": sidebarMode === "docked" ? `${sidebarWidth}px` : "0px",
-    "--outline-sidebar-width": `${OUTLINE_SIDEBAR_WIDTH}px`,
-    "--outline-grid-w": outlineVisible ? (outlineMode === "docked" ? `${OUTLINE_SIDEBAR_WIDTH}px` : `${OUTLINE_COLLAPSED_WIDTH}px`) : "0px",
+    // 目录与大纲的展开面板互不绑定；只有左右常驻 rail 都是 34px。
+    "--outline-sidebar-width": `${outlineSidebarWidth}px`,
+    "--outline-grid-w": outlineVisible
+      ? effectiveOutlineMode === "docked"
+        ? `${outlineSidebarWidth + OUTLINE_COLLAPSED_WIDTH}px`
+        : `${OUTLINE_COLLAPSED_WIDTH}px`
+      : "0px",
   } as CSSProperties;
 
   return (
-    <div className={`app-shell ${shellPlatformClass} sidebar-${sidebarMode} outline-${outlineMode} ${desktopWorkspace === "quick-notes" ? "quick-notes-active" : ""} ${sidebarResizing ? "sidebar-resizing" : ""} ${isMobile ? `mobile-document-page ${mobileEditing ? "mobile-editing" : "mobile-reading"}` : ""}`} style={shellStyle}>
+    <div className={`app-shell ${shellPlatformClass} sidebar-${sidebarMode} outline-${effectiveOutlineMode} ${desktopWorkspace === "quick-notes" ? "quick-notes-active" : ""} ${sidebarResizing ? "sidebar-resizing" : ""} ${outlineResizing ? "outline-resizing" : ""} ${isMobile ? `mobile-document-page ${mobileEditing ? "mobile-editing" : "mobile-reading"}` : ""}`} style={shellStyle}>
       <nav className="activity-rail desktop-only" aria-label="应用导航" onPointerEnter={desktopWorkspace === "library" ? showSidebarPreview : undefined} onPointerLeave={desktopWorkspace === "library" ? hideSidebarPreview : undefined}>
         <div className="activity-rail-spacer" />
         <button className={`activity-button ${desktopWorkspace === "library" && sidebarMode === "docked" ? "active" : ""}`} onClick={() => { if (desktopWorkspace === "library") toggleSidebarDock(); else void switchDesktopWorkspace("library"); }} title="资料库" aria-label="资料库"><Files size={16} /></button>
@@ -612,12 +650,16 @@ export function App() {
       </main>
       {outlineVisible && (
         <OutlineSidebar
-          mode={outlineMode}
+          mode={effectiveOutlineMode}
           activeNoteId={activeNoteId}
+          width={outlineSidebarWidth}
+          minWidth={OUTLINE_SIDEBAR_MIN_WIDTH}
+          maxWidth={OUTLINE_SIDEBAR_MAX_WIDTH}
           onCollapse={collapseOutline}
           onPin={pinOutline}
-          onPreviewEnter={showOutlinePreview}
-          onPreviewLeave={hideOutlinePreview}
+          onResizeActiveChange={setOutlineResizing}
+          onWidthChange={updateOutlineSidebarWidth}
+          onWidthCommit={commitOutlineSidebarWidth}
         />
       )}
       {confirmDelete && <ConfirmDelete node={confirmDelete} onConfirm={() => { const id = confirmDelete.id; setConfirmDelete(null); void deleteTreeNode(id); }} onCancel={() => setConfirmDelete(null)} />}

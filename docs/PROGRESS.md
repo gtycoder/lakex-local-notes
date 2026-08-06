@@ -1,5 +1,66 @@
 # 进度与交接
 
+## ★ 最新交接（2026-08-06）：大纲样式打磨 + 单一全局大纲状态 ✅
+
+### 本轮完成
+
+- 去掉标题前的圆点符号；叶子行以与折叠箭头同宽的占位槽保持同级文本对齐。
+- 标题级别以常驻标签展示在标题前：H1–H4 区分度足够（深靛/蓝/绿/琥珀），H5/H6 收敛灰调；整体保持低调不抢标题。
+- 子弹线改为纯竖线（无折线）：每个层级组一条贯穿整行的竖线，展开的父行补“箭头中心→行底”半段连接子列表；不同层级竖线使用与级别标签呼应的低调配色。
+- 移除大纲头部无功能的装饰图标（原 ListTree 标题图标）。
+- 大纲状态改为**单一全局变量**：所有“有大纲”的文档共用同一状态（固定/悬浮，持久化）；仅当当前文档没有大纲时自动强制悬浮。空文档上显式固定给一次豁免，切走即清除。
+- 顺带修复既有 bug：左侧“新建文档”在激活笔记时把笔记当父节点导致主进程拒绝（静默失败），现 fallback 上溯到最近的笔记本/分组。
+
+### 验证
+
+- 静态：`git diff --check`、`npx tsc --noEmit`、Vitest 122/122、Vite build 全通过。
+- 真实 Electron 场景验证（单一全局模型 10 步）：A 有大纲 docked → B 无大纲自动 collapsed → C 新开有大纲 docked → A 手动收起全局 collapsed（C 跟随）→ B 显式固定 docked（豁免）→ C docked → 回 B 豁免清除 collapsed。
+- 截图确认：纯竖线、分层配色、级别标签可读性。
+
+### 继续工作时注意
+
+1. 大纲模式只有一个全局变量 `outlineMode`（App.tsx）+ `activeOutlineEmpty` + `outlineEmptyOverride`；不要再引入 per-tab 覆盖。
+2. 竖线/标签配色集中在 `OutlineList.tsx` 的 `GUIDE_COLORS` 与 `outline.css` 的 `.outline-item__level--N`。
+3. 下一步方向（用户已确认）：整体样式向思源式“颜色自然分隔”演进，减少分隔线，适度动效；先出方案讨论再动手。
+
+---
+
+## ★ 交接（2026-08-05）：右侧大纲悬停态宽度拖拽修复 ✅
+
+### 本轮完成
+
+- 修复收起态 hover overlay 的右侧大纲无法调整宽度：`.outline-sidebar__resize-handle` 现同时支持固定态与悬停预览态拖拽。拖动期间借助 pointer capture 保持预览，不再因离开原始 `<aside>` 边界触发 `pointerleave` 而消失；松手后以 `elementFromPoint()` 根据真实落点恢复普通“移出即隐藏”行为。
+
+- 解除此前错误的左右展开面板宽度绑定：左侧资料库与右侧大纲分别维护独立宽度、独立拖拽和独立 localStorage。左侧默认 `224px`（160–300），右侧大纲内容默认 `280px`（200–420）。
+- “左右一致”现仅指常驻 activity rail：左、右 rail 都是 **34px**。右侧固定时总宽度为“右大纲内容 + 34px rail”，收起时只有 34px，不会挤压正文。
+- 右侧 rail 与大纲按钮职责拆开：整条 rail **只用于 hover 触发预览**；rail 内独立的大纲图标按钮才切换固定/悬停。rail 没有 click handler，并有 `rail-fill` 预留未来其它 activity button。
+- 收起态 hover rail 时，大纲从其左侧以 overlay 弹出；点击图标进入固定；固定态点击图标回收起。回收起会清掉 hover 状态，因此鼠标仍停在图标上不会立即重开。
+- 删除大纲头部“收起”按钮及大纲内无效的静态正文进度竖线；同时从 controller / scroll handler 移除该进度状态，避免编辑器滚动时触发无关的大纲重渲染。
+- 滚动条只应用于真实可滚动节点：资料库 `.note-list`、大纲 `.outline-list`、编辑器 `.lake-editor-main .ne-editor-wrap`（另含阅读容器）。默认 **3px**，鼠标进入该容器后为 **6px**，thumb 加深。
+
+### 当前验证
+
+- `git diff --check` ✅
+- TypeScript：`npx tsc --noEmit` ✅；Vitest：`122/122` ✅；Vite/Electron renderer build：`node node_modules/vite/bin/vite.js build` ✅。
+- 真实 Electron / Playwright ✅：
+  - 收起时左、右 rail 均为 34px；右侧 grid 仅 34px；hover 后大纲以 overlay 出现且正文宽度不变；
+  - 点击的是右 rail 内大纲图标，而不是 rail 本身：可收起 → 固定 → 收起，且不会瞬间重开；
+  - 固定时左侧资料库为 228px、右侧大纲内容为 276px、右 dock 总 310px；拖动右侧至 305px 后左侧仍为 228px，证明二者独立；
+  - 编辑器 `.ne-editor-wrap` 默认 scrollbar = 3px / hover = 6px；大纲 `.outline-list` 默认 = 3px / hover = 6px；`.outline-list__progress` 不存在；
+  - **本轮补测**：收起态 hover overlay 中真实鼠标将右侧大纲从 **233px 拖至 308px**，拖动中和松手后（指针仍在面板内）overlay 均保持显示；移至编辑器区域后正常收起，宽度写回 localStorage。
+
+### 继续工作时注意
+
+1. 不要再把左右**展开面板**宽度同步；只有常驻 rail 需保持相同的 34px。
+2. 不要给 `.outline-sidebar__rail` 加 click handler。模式切换只能由 `.outline-sidebar__activity-button` 触发；rail 可在后续放多个按钮。
+3. 编辑器滚动容器是 `.ne-editor-wrap`，不是 `.lake-editor-main` 外壳；大纲滚动容器是 `.outline-list`。不应重新增加与大纲自身滚动无关的静态进度竖线。
+4. `.lake-editor-main` 必须保持 `flex: 1` 与 `min-width: 0`，否则固定态右栏会让 Lake 内容撑破编辑器列。
+5. 悬停拖拽依赖 pointer capture；不可恢复 `mode !== "docked"` 的早退，也不可在 resize 期间无条件 `setRailHovered(false)`，否则 overlay 会在拖动时消失。
+6. 稳定后再与最新 `master` 同步、合并 `research/outline-system`。
+
+---
+
+
 > **给零上下文新会话：先读本文的「★ 最新交接」，再按需读 DEVELOPMENT / ARCHITECTURE / TROUBLESHOOTING。**
 
 ---

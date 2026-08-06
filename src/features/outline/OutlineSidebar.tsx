@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState, useSyncExternalStore } from "react";
-import { ChevronRight, ChevronsDownUp, ChevronsUpDown, Focus, ListOrdered, ListTree, Search } from "lucide-react";
+import { useEffect, useRef, useState, useSyncExternalStore, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent } from "react";
+import { ChevronsDownUp, ChevronsUpDown, Focus, ListOrdered, ListTree, Search } from "lucide-react";
 import type { OutlineMode } from "./OutlineController";
 import { OutlineList } from "./OutlineList";
 import { getOutlineTab, getOutlineTabsVersion, subscribeOutlineTabs } from "./registry";
@@ -14,18 +14,35 @@ function noopVersion(): number {
 interface OutlineSidebarProps {
   mode: OutlineMode;
   activeNoteId: string | null;
-  /** 头部「收起大纲」→ collapsed */
+  width: number;
+  minWidth: number;
+  maxWidth: number;
+  /** rail 在固定/悬停两态间切换 */
   onCollapse: () => void;
-  /** 窄条点击 → docked（常驻） */
   onPin: () => void;
-  /** collapsed 窄条 hover → floating */
-  onPreviewEnter?: () => void;
-  /** floating 移出 → collapsed */
-  onPreviewLeave?: () => void;
+  onResizeActiveChange: (active: boolean) => void;
+  onWidthChange: (width: number) => void;
+  onWidthCommit: (width: number) => void;
 }
 
-/** 右侧大纲栏：docked 常驻面板 / collapsed 44px 窄条 / floating 悬停浮层 */
-export function OutlineSidebar({ mode, activeNoteId, onCollapse, onPin, onPreviewEnter, onPreviewLeave }: OutlineSidebarProps) {
+/**
+ * 右侧大纲栏与左侧资料库遵循同一套布局：
+ * - 34px rail 永远占据窗口右缘；
+ * - 收起时悬停 rail，面板向左覆盖正文预览；
+ * - 点击 rail 内的大纲图标固定面板，面板和 rail 共同参与 grid，让编辑器宽度自适应。
+ */
+export function OutlineSidebar({
+  mode,
+  activeNoteId,
+  width,
+  minWidth,
+  maxWidth,
+  onCollapse,
+  onPin,
+  onResizeActiveChange,
+  onWidthChange,
+  onWidthCommit,
+}: OutlineSidebarProps) {
   const version = useSyncExternalStore(subscribeOutlineTabs, getOutlineTabsVersion, getOutlineTabsVersion);
   const handle = getOutlineTab(activeNoteId);
   const controller = handle?.controller ?? null;
@@ -38,15 +55,12 @@ export function OutlineSidebar({ mode, activeNoteId, onCollapse, onPin, onPrevie
   const [filterDraft, setFilterDraft] = useState("");
   const filterTimer = useRef<number | null>(null);
   const [levelMenuOpen, setLevelMenuOpen] = useState(false);
+  const [railHovered, setRailHovered] = useState(false);
   const levelMenuRef = useRef<HTMLDivElement>(null);
-  const mountTimeRef = useRef(Date.now());
+  const asideRef = useRef<HTMLElement>(null);
+  const resizeRef = useRef<{ pointerId: number; startX: number; startWidth: number; currentWidth: number } | null>(null);
   void version;
   void controllerVersion;
-
-  // 进入收起态时重置 hover 冷却（窄条刚出现时光标可能正好在上面）
-  useEffect(() => {
-    if (mode === "collapsed") mountTimeRef.current = Date.now();
-  }, [mode]);
 
   const prevActiveRef = useRef<string | null>(null);
   useEffect(() => {
@@ -81,95 +95,177 @@ export function OutlineSidebar({ mode, activeNoteId, onCollapse, onPin, onPrevie
     };
   }, [filterDraft, controller]);
 
-  // 收起窄条：图标 + 竖排文字，hover 展开、点击常驻
-  if (mode === "collapsed") {
-    return (
-      <aside
-        className="outline-sidebar outline-sidebar--collapsed"
-        title="大纲"
-        onMouseEnter={() => {
-          // 收起瞬间光标可能正好在窄条上，短暂冷却避免立刻展开
-          if (Date.now() - mountTimeRef.current < 500) return;
-          onPreviewEnter?.();
-        }}
-        onMouseLeave={onPreviewLeave}
-        onClick={onPin}
-      >
-        <ListTree size={16} />
-        <span className="outline-sidebar__strip-label">大纲</span>
-      </aside>
-    );
-  }
+  useEffect(() => {
+    // 从固定切回悬停时，当前 pointer 仍可能停在 rail 上；先清掉预览，
+    // 用户下一次移入时再正常显示，避免刚点击就立刻重新打开。
+    setRailHovered(false);
+  }, [mode]);
+
+  const rubberBandWidth = (nextWidth: number) => {
+    if (nextWidth < minWidth) return minWidth - (minWidth - nextWidth) * 0.16;
+    if (nextWidth > maxWidth) return maxWidth + (nextWidth - maxWidth) * 0.16;
+    return nextWidth;
+  };
+
+  const handleResizePointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
+    // 与左侧资料库一致：固定态和悬停预览态都可直接拖动面板左边缘。
+    // 收起且未悬停时内容/把手不可命中，因此不会误触。
+    if (event.button !== 0) return;
+    event.preventDefault();
+    event.stopPropagation();
+    event.currentTarget.setPointerCapture(event.pointerId);
+    resizeRef.current = { pointerId: event.pointerId, startX: event.clientX, startWidth: width, currentWidth: width };
+    onResizeActiveChange(true);
+  };
+
+  const handleResizePointerMove = (event: ReactPointerEvent<HTMLDivElement>) => {
+    const resize = resizeRef.current;
+    if (!resize || resize.pointerId !== event.pointerId) return;
+    // 右侧面板的拖拽边在左：向左拖动变宽，向右拖动变窄。
+    const next = rubberBandWidth(resize.startWidth + resize.startX - event.clientX);
+    resize.currentWidth = next;
+    onWidthChange(next);
+  };
+
+  const finishResize = (event: ReactPointerEvent<HTMLDivElement>) => {
+    const resize = resizeRef.current;
+    if (!resize || resize.pointerId !== event.pointerId) return;
+    const { clientX, clientY } = event;
+    resizeRef.current = null;
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
+    onResizeActiveChange(false);
+    onWidthCommit(resize.currentWidth);
+
+    // 拖拽时 pointer capture 会让指针暂时离开 aside；在此之前不能关闭预览。
+    // 松手后再根据真实落点同步，避免松在编辑器时悬浮面板一直停留。
+    if (mode === "collapsed") {
+      window.requestAnimationFrame(() => {
+        const target = document.elementFromPoint(clientX, clientY);
+        if (!asideRef.current?.contains(target)) setRailHovered(false);
+      });
+    }
+  };
+
+  const handleResizeKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+    let next = width;
+    const step = event.shiftKey ? 24 : 8;
+    if (event.key === "ArrowLeft") next += step;
+    else if (event.key === "ArrowRight") next -= step;
+    else if (event.key === "Home") next = minWidth;
+    else if (event.key === "End") next = maxWidth;
+    else return;
+    event.preventDefault();
+    const clamped = Math.min(maxWidth, Math.max(minWidth, next));
+    onWidthChange(clamped);
+    onWidthCommit(clamped);
+  };
+
+  const handleOutlineButtonClick = () => {
+    // 外层 rail 只负责悬停预览；这里的独立大纲按钮才负责固定 / 悬停切换。
+    if (mode === "collapsed") onPin();
+    else onCollapse();
+  };
 
   return (
     <aside
-      className={`outline-sidebar outline-sidebar--${mode}`}
-      onMouseEnter={mode === "floating" ? onPreviewEnter : undefined}
-      onMouseLeave={mode === "floating" ? onPreviewLeave : undefined}
+      ref={asideRef}
+      className={`outline-sidebar outline-sidebar--${mode}${railHovered ? " outline-sidebar--hovered" : ""}`}
+      onPointerEnter={() => { if (mode === "collapsed") setRailHovered(true); }}
+      onPointerLeave={() => {
+        // 悬浮预览同样可拖拽；拖动中交由 pointer capture 持续接收事件，
+        // 因此不能因为指针暂时离开原始边界就把面板隐藏掉。
+        if (!resizeRef.current) setRailHovered(false);
+      }}
     >
-      <div className="outline-sidebar__header">
-        <ListTree size={14} />
-        <span className="outline-sidebar__title">大纲</span>
-        <span className="outline-sidebar__spacer" />
+      <nav className="outline-sidebar__rail" aria-label="右侧工具栏">
         <button
-          className={`outline-sidebar__btn${controller?.isKeepCurrentExpand() ? " is-active" : ""}`}
-          title="保持当前展开（选中项自动展开祖先）"
-          onClick={() => controller?.setKeepCurrentExpand(!controller.isKeepCurrentExpand())}
+          type="button"
+          className={`outline-sidebar__activity-button${mode === "docked" ? " active" : ""}`}
+          title={mode === "collapsed" ? "固定大纲" : "取消固定大纲"}
+          aria-label={mode === "collapsed" ? "固定大纲" : "取消固定大纲，改为悬停"}
+          aria-pressed={mode === "docked"}
+          onClick={handleOutlineButtonClick}
         >
-          <Focus size={14} />
+          <ListTree size={16} />
         </button>
-        <button
-          className="outline-sidebar__btn"
-          title="展开全部"
-          onClick={() => controller?.expandAll()}
-        >
-          <ChevronsDownUp size={14} />
-        </button>
-        <button
-          className="outline-sidebar__btn"
-          title="折叠全部"
-          onClick={() => controller?.collapseAll()}
-        >
-          <ChevronsUpDown size={14} />
-        </button>
-        <div className="outline-sidebar__level" ref={levelMenuRef}>
+        <div className="outline-sidebar__rail-fill" />
+      </nav>
+
+      <div className="outline-sidebar__content">
+        <div className="outline-sidebar__header">
+          <span className="outline-sidebar__spacer" />
           <button
-            className={`outline-sidebar__btn${levelMenuOpen ? " is-active" : ""}`}
-            title="展开到级别"
-            onClick={() => setLevelMenuOpen((v) => !v)}
+            className={`outline-sidebar__btn${controller?.isKeepCurrentExpand() ? " is-active" : ""}`}
+            title="保持当前展开（选中项自动展开祖先）"
+            onClick={() => controller?.setKeepCurrentExpand(!controller.isKeepCurrentExpand())}
           >
-            <ListOrdered size={14} />
+            <Focus size={14} />
           </button>
-          {levelMenuOpen && (
-            <div className="outline-sidebar__level-menu" role="menu">
-              <button role="menuitem" onClick={() => { controller?.expandAll(); setLevelMenuOpen(false); }}>全部展开</button>
-              {[1, 2, 3, 4, 5, 6].map((n) => (
-                <button key={n} role="menuitem" onClick={() => { controller?.expandToLevel(n); setLevelMenuOpen(false); }}>
-                  展开到 {n} 级
-                </button>
-              ))}
-            </div>
-          )}
+          <button
+            className="outline-sidebar__btn"
+            title="展开全部"
+            onClick={() => controller?.expandAll()}
+          >
+            <ChevronsDownUp size={14} />
+          </button>
+          <button
+            className="outline-sidebar__btn"
+            title="折叠全部"
+            onClick={() => controller?.collapseAll()}
+          >
+            <ChevronsUpDown size={14} />
+          </button>
+          <div className="outline-sidebar__level" ref={levelMenuRef}>
+            <button
+              className={`outline-sidebar__btn${levelMenuOpen ? " is-active" : ""}`}
+              title="展开到级别"
+              onClick={() => setLevelMenuOpen((v) => !v)}
+            >
+              <ListOrdered size={14} />
+            </button>
+            {levelMenuOpen && (
+              <div className="outline-sidebar__level-menu" role="menu">
+                <button role="menuitem" onClick={() => { controller?.expandAll(); setLevelMenuOpen(false); }}>全部展开</button>
+                {[1, 2, 3, 4, 5, 6].map((n) => (
+                  <button key={n} role="menuitem" onClick={() => { controller?.expandToLevel(n); setLevelMenuOpen(false); }}>
+                    展开到 {n} 级
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
-        <button className="outline-sidebar__btn" title="收起大纲" onClick={onCollapse}>
-          <ChevronRight size={14} />
-        </button>
-      </div>
-      <div className="outline-sidebar__filter">
-        <Search size={12} />
-        <input
-          className="outline-sidebar__filter-input"
-          placeholder="筛选大纲"
-          value={filterDraft}
-          onChange={(e) => setFilterDraft(e.target.value)}
-          spellCheck={false}
+        <div className="outline-sidebar__filter">
+          <Search size={12} />
+          <input
+            className="outline-sidebar__filter-input"
+            placeholder="筛选大纲"
+            value={filterDraft}
+            onChange={(e) => setFilterDraft(e.target.value)}
+            spellCheck={false}
+          />
+        </div>
+        {controller ? (
+          <OutlineList controller={controller} onNavigate={(id) => handle?.navigate(id)} />
+        ) : (
+          <div className="outline-panel__empty">暂无大纲</div>
+        )}
+        <div
+          className="outline-sidebar__resize-handle"
+          role="separator"
+          aria-label="调整大纲宽度"
+          aria-orientation="vertical"
+          aria-valuemin={minWidth}
+          aria-valuemax={maxWidth}
+          aria-valuenow={Math.round(width)}
+          tabIndex={mode === "docked" || railHovered ? 0 : -1}
+          onPointerDown={handleResizePointerDown}
+          onPointerMove={handleResizePointerMove}
+          onPointerUp={finishResize}
+          onPointerCancel={finishResize}
+          onKeyDown={handleResizeKeyDown}
         />
       </div>
-      {controller ? (
-        <OutlineList controller={controller} onNavigate={(id) => handle?.navigate(id)} />
-      ) : (
-        <div className="outline-panel__empty">暂无大纲</div>
-      )}
     </aside>
   );
 }

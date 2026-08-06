@@ -29,12 +29,11 @@ export interface OutlineNode {
 }
 
 /**
- * 右侧栏形态（常驻/收起/悬停都基于右侧边栏本身，无独立 rail/浮动小标签）：
- *  - docked：常驻（280px 完整面板，默认）
- *  - collapsed：收起（44px 窄条，仍是最右一列；hover 展开悬停，点击恢复常驻）
- *  - floating：悬停（collapsed 窄条 hover 触发的展开浮层，贴右缘覆盖正文）
+ * 右侧栏形态：右侧 34px activity rail 始终常驻，rail 内的大纲按钮切换两态：
+ *  - docked：独立宽度的大纲面板 + rail 占据右侧 grid，编辑器自适应收缩。
+ *  - collapsed：仅保留 rail；hover rail 时，大纲面板从左侧以 overlay 预览。
  */
-export type OutlineMode = "docked" | "floating" | "collapsed";
+export type OutlineMode = "docked" | "collapsed";
 
 export interface OutlineStorage {
   getItem(key: string): string | null;
@@ -62,7 +61,6 @@ export class OutlineController {
   private selectedId: string | null = null;
   private filterText = "";
   private keepCurrentExpand = false;
-  private scrollProgress = 0;
   private prefsStorageKey = "lake-notes:outline:prefs";
   private version = 0;
   private listeners = new Set<() => void>();
@@ -173,6 +171,11 @@ export class OutlineController {
 
   getNode(id: string): OutlineNode | null {
     return this.nodeMap.get(id) || null;
+  }
+
+  /** 大纲条目总数（用于“无大纲则默认收起”等判定） */
+  getEntryCount(): number {
+    return this.nodeMap.size;
   }
 
   getSelectedId(): string | null {
@@ -321,17 +324,6 @@ export class OutlineController {
     return this.keepCurrentExpand;
   }
 
-  // ---- 文档滚动进度（0-1，供大纲滚动指示条）----
-  setScrollProgress(progress: number): void {
-    const v = Number.isFinite(progress) ? Math.max(0, Math.min(1, progress)) : 0;
-    if (Math.abs(v - this.scrollProgress) < 0.002) return;
-    this.scrollProgress = v;
-    this.emit();
-  }
-
-  getScrollProgress(): number {
-    return this.scrollProgress;
-  }
 
   /** 保持当前选中：展开其所有祖先（思源 keepCurrentExpand 思路） */
   expandAncestorsOf(id: string): boolean {
