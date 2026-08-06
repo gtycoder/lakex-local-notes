@@ -1259,3 +1259,61 @@ ne-card[data-card-name="codeblock"] .ne-card-resizer-mask {
 .quick-note-no-notebook { padding: 17px 12px; color: #848c9c; font-size: 12px; text-align: center; }
 .quick-note-convert-dialog footer { display: flex; justify-content: flex-end; margin-top: 14px; }
 @media (max-width: 760px) { .quick-notes-pane { padding: 22px 14px 30px; } }
+
+/* ===== 2026-08-06 视觉刷新：A 暖紫灰主调 + C 悬停微卡片 + 去分隔线 + 可读性 ===== */
+:root {
+  /* A：窗口级暖紫灰背景，区域靠颜色自然分隔 */
+  --shell-material: #eceaf1;
+  --shell-toolbar: #e7e5ee;
+  --shell-separator: rgba(52, 50, 74, 0.12);
+  --shell-card-shadow: 0 1px 2px rgba(40, 42, 66, .06), 0 10px 30px rgba(40, 42, 66, .08);
+  --shell-micro-card: 0 1px 2px rgba(40, 42, 66, .10), 0 0 0 1px rgba(40, 42, 66, .04);
+}
+
+@media (min-width: 761px) {
+  .app-shell { background: var(--shell-material); }
+
+  /* 去分隔线：rail / sidebar / 顶栏 / 状态栏全部靠颜色过渡 */
+  .activity-rail { border-right: 0; background: var(--shell-material); }
+  .sidebar { border-right: 0; background: var(--shell-material); }
+  .tab-bar {
+    border-bottom: 0;
+    box-shadow: none;
+    background: color-mix(in srgb, var(--shell-toolbar) 78%, transparent);
+  }
+  .statusbar { border-top: 0; background: transparent; }
+
+  /* C：悬停微卡片（白底 + 轻阴影，仅 transform/box-shadow，不动布局） */
+  .activity-button:hover,
+  .tabbar-action:hover {
+    color: var(--shell-accent-strong);
+    background: #fff;
+    box-shadow: var(--shell-micro-card);
+  }
+  .activity-button.active {
+    background: #fff;
+    box-shadow: var(--shell-micro-card);
+  }
+  .note-row:hover { background: rgba(255, 255, 255, .62); }
+  .note-row.active {
+    background: #fff;
+    box-shadow: var(--shell-micro-card);
+  }
+  .tab-item { background: rgba(255, 255, 255, .34); }
+  .tab-item:hover { background: rgba(255, 255, 255, .72); }
+
+
+  /* 可读性：正文行高/字距/段色，标题收紧字距 */
+  .lake-editor-mount .ne-engine,
+  .lake-editor-mount .ne-viewer-body {
+    line-height: 1.85;
+    letter-spacing: .012em;
+    color: #333a45;
+  }
+  .lake-editor-mount .ne-engine h1, .lake-editor-mount .ne-viewer-body h1,
+  .lake-editor-mount .ne-engine h2, .lake-editor-mount .ne-viewer-body h2,
+  .lake-editor-mount .ne-engine h3, .lake-editor-mount .ne-viewer-body h3 {
+    letter-spacing: -.015em;
+    color: #23272e;
+  }
+}
