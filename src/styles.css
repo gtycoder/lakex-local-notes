@@ -1317,3 +1317,63 @@ ne-card[data-card-name="codeblock"] .ne-card-resizer-mask {
     color: #23272e;
   }
 }
+
+/* ===== 2026-08-06 同步视觉：弹窗/小记/按钮统一到暖紫灰体系（仅配色） ===== */
+
+/* 主/次按钮：绿 → shell 强调色；次按钮白微卡 */
+.primary-button { border-color: var(--shell-accent-strong, #4658a8); background: var(--shell-accent-strong, #4658a8); }
+.primary-button:hover { background: #3a4a92; }
+.secondary-button { border-color: rgba(40, 42, 66, .14); color: #4a5165; background: #fff; }
+.secondary-button:hover { background: #f7f7fb; box-shadow: var(--shell-micro-card, 0 1px 2px rgba(40,42,66,.1)); }
+
+/* 同步/设置面板：去绿、去旧边框，融入 shell */
+.sync-panel header > div { color: var(--shell-accent-strong, #4658a8); }
+.sync-panel h2 { color: var(--shell-text, #242936); }
+.sync-panel header p { color: var(--shell-text-tertiary, #8b93a6); }
+.form-grid input, .secret-field { border-color: rgba(40, 42, 66, .14); border-radius: 8px; background: #fbfbfd; }
+.form-grid input:focus { border-color: rgba(89, 108, 193, .5); box-shadow: 0 0 0 3px rgba(89, 108, 193, .13); outline: 0; }
+.checkbox input { accent-color: var(--shell-accent-strong, #4658a8); }
+.sync-progress { border-color: rgba(89, 108, 193, .18); background: #f2f4fb; }
+.sync-progress-bar { background: linear-gradient(90deg, var(--shell-accent, #596cc1), var(--shell-accent-strong, #4658a8)); }
+.sync-progress-track { background: rgba(89, 108, 193, .16); }
+.connection-message.ok { color: #2f6b52; background: #eaf5ef; }
+.orphan-section { border-color: rgba(40, 42, 66, .1); background: #f8f8fb; }
+.orphan-list li { border-top-color: rgba(40, 42, 66, .07); }
+.sync-button { border-color: rgba(40, 42, 66, .14); color: #4a5165; background: #fff; }
+.sync-button:hover { background: #f7f7fb; }
+
+/* 状态栏同步状态色对齐 */
+.statusbar-sync.syncing { color: var(--shell-accent-strong, #4658a8); }
+.statusbar-sync.success { color: #3d8b6a; }
+.statusbar-sync.error { color: #c25558; }
+
+/* 小记工作台：冷蓝渐变 → 暖紫灰，与新 shell 同族 */
+@media (min-width: 761px) {
+  .quick-notes-pane {
+    background:
+      radial-gradient(circle at 84% 8%, rgba(122, 108, 190, .10), transparent 28rem),
+      linear-gradient(180deg, #f2f1f7 0%, var(--shell-material, #eceaf1) 100%);
+  }
+}
+.quick-notes-pane { color: #3b3f4c; }
+.quick-notes-eyebrow { color: #7a74a8; }
+.quick-notes-header h1 { color: #2e3140; }
+.quick-notes-header p { color: #7d7f8e; }
+.quick-notes-count { color: #5d5a86; background: rgba(122, 108, 190, .12); }
+.quick-note-composer, .quick-note-entry {
+  border-color: rgba(40, 42, 66, .09);
+  background: rgba(255, 255, 255, .92);
+  box-shadow: var(--shell-card-shadow, 0 1px 2px rgba(40,42,66,.06), 0 10px 30px rgba(40,42,66,.08));
+}
+.quick-note-composer textarea { color: #363a46; }
+.quick-note-image-button { color: #5d5a86; background: rgba(122, 108, 190, .12); }
+.quick-note-image-button:hover { background: rgba(122, 108, 190, .2); }
+.quick-note-entry time { color: #7d7f8e; }
+.quick-note-entry p { color: #3d4150; }
+.quick-note-card-actions button:hover { color: #5d5a86; background: rgba(122, 108, 190, .12); }
+.quick-notes-empty, .quick-notes-loading { border-color: rgba(92, 88, 130, .22); color: #8a8c9a; }
+.quick-note-convert-dialog { border-color: rgba(40, 42, 66, .12); }
+.quick-note-notebook-list { border-color: rgba(40, 42, 66, .1); }
+.quick-note-notebook-list button { border-bottom-color: rgba(40, 42, 66, .07); color: #4a4e5e; }
+.quick-note-notebook-list button:hover { background: #f5f4fa; color: #5d5a86; }
+.quick-notes-toast { background: #34364a; }
