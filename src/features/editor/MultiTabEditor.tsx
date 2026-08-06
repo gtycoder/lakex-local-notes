@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode, type PointerEvent as ReactPointerEvent } from "react";
 import { ChevronDown, X } from "lucide-react";
 import { EditorTab } from "./EditorTab";
 import type { LakeEditorPrefs } from "./lakeRuntime";
@@ -16,6 +16,8 @@ interface MultiTabEditorProps {
   tocEnabled: boolean;
   onTabChange: (noteId: string) => void;
   onTabClose: (noteId: string) => void;
+  /** 拖拽排序：给出新的 noteId 顺序 */
+  onTabsReorder?: (noteIds: string[]) => void;
   onContentChange: (noteId: string, content: string) => void;
   prefs?: LakeEditorPrefs;
   onEditorReady?: (noteId: string, editor: import("./lakeRuntime").LakeEditorInstance | null) => void;
@@ -29,6 +31,7 @@ export function MultiTabEditor({
   tocEnabled,
   onTabChange,
   onTabClose,
+  onTabsReorder,
   onContentChange,
   prefs,
   onEditorReady,
@@ -39,6 +42,80 @@ export function MultiTabEditor({
   const tabItemsRef = useRef<HTMLDivElement>(null);
   const switcherRef = useRef<HTMLDivElement>(null);
   const [tabMenuOpen, setTabMenuOpen] = useState(false);
+
+  // ---- 拖拽排序（pointer 事件，无外部依赖）----
+  const [draggingId, setDraggingId] = useState<string | null>(null);
+  const dragRef = useRef<{ id: string; startX: number; startY: number; active: boolean } | null>(null);
+  const suppressClickRef = useRef(false);
+  const flipRects = useRef<Map<string, number>>(new Map());
+
+  // FLIP：顺序变化时让标签从旧位置滑到新位置
+  useLayoutEffect(() => {
+    const strip = tabItemsRef.current;
+    if (!strip) return;
+    const els = [...strip.querySelectorAll<HTMLElement>(".tab-item")];
+    for (const el of els) {
+      const id = el.dataset.noteId;
+      if (!id) continue;
+      const prev = flipRects.current.get(id);
+      const next = el.getBoundingClientRect().left;
+      flipRects.current.set(id, next);
+      if (prev != null && Math.abs(prev - next) > 1) {
+        el.animate(
+          [{ transform: `translateX(${prev - next}px)` }, { transform: "translateX(0)" }],
+          { duration: 180, easing: "cubic-bezier(.22, 1, .36, 1)" }
+        );
+      }
+    }
+  }, [tabs.map((t) => t.noteId).join("|")]);
+
+  const beginTabDrag = (event: ReactPointerEvent<HTMLButtonElement>, noteId: string) => {
+    if (event.button !== 0 || !onTabsReorder) return;
+    if ((event.target as HTMLElement).closest(".tab-close")) return;
+    dragRef.current = { id: noteId, startX: event.clientX, startY: event.clientY, active: false };
+  };
+
+  const moveTabDrag = (event: ReactPointerEvent<HTMLButtonElement>) => {
+    const drag = dragRef.current;
+    if (!drag) return;
+    if (!drag.active) {
+      if (Math.hypot(event.clientX - drag.startX, event.clientY - drag.startY) < 6) return;
+      drag.active = true;
+      suppressClickRef.current = true;
+      setDraggingId(drag.id);
+    }
+    const strip = tabItemsRef.current;
+    if (!strip) return;
+    const els = [...strip.querySelectorAll<HTMLElement>(".tab-item")];
+    const order = els.map((el) => el.dataset.noteId ?? "");
+    const from = order.indexOf(drag.id);
+    // 以指针 x 与各标签中心比较，确定插入位置
+    let to = from;
+    for (let i = 0; i < order.length; i += 1) {
+      if (i === from) continue;
+      const r = els[i].getBoundingClientRect();
+      const center = r.left + r.width / 2;
+      if (i < from && event.clientX < center) { to = i; break; }
+      if (i > from && event.clientX > center) to = i;
+    }
+    if (to !== from) {
+      const next = [...order];
+      next.splice(from, 1);
+      next.splice(to, 0, drag.id);
+      onTabsReorder?.(next);
+    }
+  };
+
+  const endTabDrag = () => {
+    if (dragRef.current?.active) {
+      // 让 click 事件（切换标签）被抑制一次
+      window.setTimeout(() => { suppressClickRef.current = false; }, 0);
+    } else {
+      suppressClickRef.current = false;
+    }
+    dragRef.current = null;
+    setDraggingId(null);
+  };
 
   const handleChange = useCallback(
     (noteId: string, content: string) => {
@@ -90,8 +167,12 @@ export function MultiTabEditor({
             <button
               key={tab.noteId}
               data-note-id={tab.noteId}
-              className={`tab-item ${tab.noteId === activeNoteId ? "active" : ""}${tab.dirty ? " dirty" : ""}`}
-              onClick={() => onTabChange(tab.noteId)}
+              className={`tab-item ${tab.noteId === activeNoteId ? "active" : ""}${tab.dirty ? " dirty" : ""}${draggingId === tab.noteId ? " dragging" : ""}`}
+              onPointerDown={(e) => beginTabDrag(e, tab.noteId)}
+              onPointerMove={moveTabDrag}
+              onPointerUp={endTabDrag}
+              onPointerCancel={endTabDrag}
+              onClick={() => { if (suppressClickRef.current) return; onTabChange(tab.noteId); }}
               title={tab.title || "无标题"}
               aria-label={`切换到${tab.title || "无标题"}${tab.dirty ? "（有未保存更改）" : ""}`}
               aria-selected={tab.noteId === activeNoteId}

@@ -1377,3 +1377,14 @@ ne-card[data-card-name="codeblock"] .ne-card-resizer-mask {
 .quick-note-notebook-list button { border-bottom-color: rgba(40, 42, 66, .07); color: #4a4e5e; }
 .quick-note-notebook-list button:hover { background: #f5f4fa; color: #5d5a86; }
 .quick-notes-toast { background: #34364a; }
+
+/* ===== 2026-08-06 标签拖拽排序动效 ===== */
+.tab-item { cursor: default; }
+.tab-item.dragging {
+  cursor: grabbing;
+  background: #fff;
+  box-shadow: 0 2px 6px rgba(40, 42, 66, .16), 0 8px 22px rgba(40, 42, 66, .14);
+  transform: scale(1.03);
+  z-index: 5;
+  position: relative;
+}

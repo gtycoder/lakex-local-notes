@@ -486,6 +486,17 @@ export function App() {
     localStorage.setItem("lake-notes-v3.sidebar-width", String(Math.round(clamped)));
   }
 
+  /** 标签拖拽排序：按新顺序重排 openTabs（并同步 ref） */
+  function reorderTabs(noteIds: string[]) {
+    setOpenTabs((current) => {
+      const byId = new Map(current.map((tab) => [tab.noteId, tab]));
+      const next = noteIds.map((id) => byId.get(id)).filter((tab): tab is OpenTab => Boolean(tab));
+      // 保留未出现在拖拽列表里的标签（理论上不会发生）
+      for (const tab of current) if (!noteIds.includes(tab.noteId)) next.push(tab);
+      return next;
+    });
+  }
+
   function updateOutlineSidebarWidth(width: number) {
     setOutlineSidebarWidth(width);
   }
@@ -624,6 +635,7 @@ export function App() {
               tocEnabled={tocEnabled}
               onTabChange={handleTabChange}
               onTabClose={closeTab}
+              onTabsReorder={reorderTabs}
               onContentChange={handleContentChange}
               prefs={editorPrefs}
               onEditorReady={handleEditorReady}
