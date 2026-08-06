@@ -17,6 +17,8 @@ export interface EditorTabProps {
   tocEnabled: boolean;
   onChange: (content: string) => void;
   prefs?: LakeEditorPrefs;
+  /** 只读锁：true 时重建为 Lake 原生 Viewer（真只读，含画板/表格/代码块） */
+  locked?: boolean;
   /** 编辑器实例就绪回调（导出 md 等需要访问 editor 实例的场景） */
   onEditorReady?: (noteId: string, editor: LakeEditorInstance | null) => void;
 }
@@ -29,7 +31,7 @@ function escapeId(id: string): string {
   }
 }
 
-export function EditorTab({ noteId, content, visible, tocEnabled, onChange, prefs, onEditorReady }: EditorTabProps) {
+export function EditorTab({ noteId, content, visible, tocEnabled, onChange, prefs, locked, onEditorReady }: EditorTabProps) {
   const hostRef = useRef<HTMLDivElement>(null);
   const editorMountRef = useRef<HTMLDivElement>(null);
   const editorRef = useRef<LakeEditorInstance | null>(null);
@@ -103,6 +105,9 @@ export function EditorTab({ noteId, content, visible, tocEnabled, onChange, pref
     host.addEventListener("copy", copyHandler, true);
     host.addEventListener("paste", pasteHandler, true);
 
+    // 锁切换会重建实例：先记录滚动位置，重建后恢复，避免阅读位置丢失
+    const prevScroll = resolveScrollNode(host)?.scrollTop ?? 0;
+    const mode: "editor" | "viewer" = locked ? "viewer" : "editor";
     let editor: LakeEditorInstance | null = null;
     // 与 LakeEditor 保持一致：setDocument 初始化期间也会触发 contentchange，
     // 若此时回调里同步 getDocument() 会把整篇大文档（含图片/OCR JSON）序列化一遍，
@@ -112,7 +117,7 @@ export function EditorTab({ noteId, content, visible, tocEnabled, onChange, pref
     try {
       editor = createLakeDocument(
         mount,
-        "editor",
+        mode,
         () => {
           if (editor && !setting) onChangeRef.current(editor.getDocument("text/lake"));
         },
@@ -123,6 +128,9 @@ export function EditorTab({ noteId, content, visible, tocEnabled, onChange, pref
       );
       editor.setDocument("text/lake", content);
       setting = false;
+      // 恢复滚动位置（viewer/editor 行高一致，偏差可忽略）
+      const scroller = resolveScrollNode(host);
+      if (scroller && prevScroll > 0) scroller.scrollTop = prevScroll;
       editorRef.current = editor;
       setEditorState(editor);
       onEditorReadyRef.current?.(noteId, editor);
@@ -149,12 +157,12 @@ export function EditorTab({ noteId, content, visible, tocEnabled, onChange, pref
       mount.replaceChildren();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [noteId, tocEnabled, prefs?.fontSize, prefs?.showToolbar]);
+  }, [noteId, tocEnabled, prefs?.fontSize, prefs?.showToolbar, locked]);
 
   return (
     <div
       ref={hostRef}
-      className="lake-editor lake-editor-tab"
+      className={`lake-editor lake-editor-tab${locked ? " lake-locked" : ""}`}
       style={{ display: visible ? "flex" : "none", width: "100%" }}
       data-note-id={noteId}
     >

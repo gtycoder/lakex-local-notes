@@ -26,6 +26,8 @@ export class AppError extends Error {
 interface NoteSummary {
   id: string; title: string; parentId: string | null; sortOrder: number;
   updatedAt: string; syncState: string; isConflict: boolean;
+  isLocked?: boolean;
+  lockedAt?: string | null;
 }
 interface NoteDocument extends NoteSummary { content: string; }
 interface TreeNode {
@@ -45,6 +47,7 @@ interface S3Settings {
 }
 interface SyncNote {
   id: string; title: string; parentId: string | null; sortOrder: number; updatedAt: string; isConflict: boolean;
+  isLocked?: boolean; lockedAt?: string | null;
 }
 interface RemoteAsset {
   filename: string; size: number; hash: string;
@@ -128,6 +131,14 @@ export class Store {
         deleted_at TEXT NOT NULL
       );
     `);
+    // 锁状态列（v3 同步元数据）：旧库无列时补齐
+    const cols = this.db.prepare("PRAGMA table_info(notes)").all() as Array<{ name: string }>;
+    if (!cols.some((c) => c.name === "is_locked")) {
+      this.db.exec("ALTER TABLE notes ADD COLUMN is_locked INTEGER NOT NULL DEFAULT 0");
+    }
+    if (!cols.some((c) => c.name === "locked_at")) {
+      this.db.exec("ALTER TABLE notes ADD COLUMN locked_at TEXT");
+    }
     const now = nowIso();
     this.db.prepare(`INSERT OR IGNORE INTO tree_nodes(id,workspace_id,parent_id,node_type,title,note_file_id,sort_order,created_at,updated_at,deleted_at,sync_state,is_conflict)
       VALUES(?,?,?,?,?,NULL,0,?,?,NULL,'local',0)`).run(DEFAULT_NOTEBOOK_ID, DEFAULT_WORKSPACE_ID, null, "notebook", "个人笔记", now, now);
@@ -202,7 +213,8 @@ export class Store {
 
   private mapSummary(row: any): NoteSummary {
     return { id: row.id, title: row.title, parentId: row.parent_id, sortOrder: row.sort_order,
-      updatedAt: row.updated_at, syncState: row.sync_state, isConflict: !!row.is_conflict };
+      updatedAt: row.updated_at, syncState: row.sync_state, isConflict: !!row.is_conflict,
+      isLocked: !!row.is_locked, lockedAt: row.locked_at ?? null };
   }
 
   private mapTreeNode(row: any): TreeNode {
@@ -213,7 +225,7 @@ export class Store {
 
   bootstrap() {
     const notes = this.db.prepare(
-      "SELECT id,title,parent_id,sort_order,updated_at,sync_state,is_conflict FROM notes WHERE deleted_at IS NULL ORDER BY sort_order"
+      "SELECT id,title,parent_id,sort_order,updated_at,sync_state,is_conflict,is_locked,locked_at FROM notes WHERE deleted_at IS NULL ORDER BY sort_order"
     ).all().map((r) => this.mapSummary(r));
     const last = this.db.prepare("SELECT value FROM device_state WHERE key='last_opened_note_id'").get() as { value: string } | undefined;
     return {
@@ -239,7 +251,7 @@ export class Store {
 
   readNote(id: string): NoteDocument {
     const row = this.db.prepare(
-      "SELECT id,title,parent_id,sort_order,updated_at,sync_state,is_conflict FROM notes WHERE id=? AND deleted_at IS NULL"
+      "SELECT id,title,parent_id,sort_order,updated_at,sync_state,is_conflict,is_locked,locked_at FROM notes WHERE id=? AND deleted_at IS NULL"
     ).get(id);
     if (!row) throw new AppError("NotFound", `笔记不存在: ${id}`);
     const content = fs.readFileSync(this.notePath(id), "utf8");
@@ -665,6 +677,19 @@ export class Store {
       .run(id, hash);
   }
 
+  /** 只读锁：本地操作；不触碰正文/updated_at，锁同步走 manifest v3 独立字段 */
+  setNoteLocked(id: string, locked: boolean): void {
+    const now = new Date().toISOString();
+    this.db.prepare("UPDATE notes SET is_locked=?, locked_at=? WHERE id=? AND deleted_at IS NULL")
+      .run(locked ? 1 : 0, now, id);
+  }
+
+  /** 同步合并写入（远端锁状态按 lockedAt LWW 后由调用方判定） */
+  applyRemoteLock(id: string, locked: boolean, lockedAt: string | null): void {
+    this.db.prepare("UPDATE notes SET is_locked=?, locked_at=? WHERE id=? AND deleted_at IS NULL")
+      .run(locked ? 1 : 0, lockedAt, id);
+  }
+
   markSynced(id: string): void {
     this.db.prepare("UPDATE notes SET sync_state='synced' WHERE id=?").run(id);
   }
@@ -700,12 +725,20 @@ export class Store {
     return this.noteAssetsDirFor(id);
   }
 
+  /** 渲染层刷新用：全部笔记摘要（含锁状态） */
+  listNoteSummaries(): NoteSummary[] {
+    return this.db.prepare(
+      "SELECT id,title,parent_id,sort_order,updated_at,sync_state,is_conflict,is_locked,locked_at FROM notes WHERE deleted_at IS NULL ORDER BY sort_order"
+    ).all().map((r) => this.mapSummary(r));
+  }
+
   listNotesForSync(): SyncNote[] {
     return this.db.prepare(
-      "SELECT id,title,parent_id,sort_order,updated_at,is_conflict FROM notes WHERE deleted_at IS NULL ORDER BY sort_order"
+      "SELECT id,title,parent_id,sort_order,updated_at,is_conflict,is_locked,locked_at FROM notes WHERE deleted_at IS NULL ORDER BY sort_order"
     ).all().map((r: any) => ({
       id: r.id, title: r.title, parentId: r.parent_id, sortOrder: r.sort_order,
       updatedAt: r.updated_at, isConflict: !!r.is_conflict,
+      isLocked: !!r.is_locked, lockedAt: r.locked_at ?? null,
     }));
   }
 
@@ -754,12 +787,14 @@ export class Store {
       const tx = this.db.transaction(() => {
         // upsert notes
         this.db.prepare(
-          `INSERT INTO notes(id,title,parent_id,sort_order,updated_at,sync_state,is_conflict,deleted_at)
-           VALUES(?,?,?,?,?,'synced',?,NULL)
+          `INSERT INTO notes(id,title,parent_id,sort_order,updated_at,sync_state,is_conflict,deleted_at,is_locked,locked_at)
+           VALUES(?,?,?,?,?,'synced',?,NULL,?,?)
            ON CONFLICT(id) DO UPDATE SET title=excluded.title,parent_id=excluded.parent_id,
              sort_order=excluded.sort_order,updated_at=excluded.updated_at,
+             is_locked=excluded.is_locked,locked_at=excluded.locked_at,
              sync_state='synced',is_conflict=excluded.is_conflict,deleted_at=NULL`
-        ).run(note.id, note.title, note.parentId, note.sortOrder, note.updatedAt, note.isConflict ? 1 : 0);
+        ).run(note.id, note.title, note.parentId, note.sortOrder, note.updatedAt, note.isConflict ? 1 : 0,
+          note.isLocked ? 1 : 0, note.lockedAt ?? null);
         // upsert tree_nodes（note 节点）
         this.db.prepare(
           `INSERT INTO tree_nodes(id,workspace_id,parent_id,node_type,title,note_file_id,sort_order,created_at,updated_at,deleted_at,sync_state,is_conflict)

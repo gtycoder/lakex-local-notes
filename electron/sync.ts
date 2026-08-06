@@ -18,9 +18,22 @@ export interface S3Settings {
 interface ManifestNote {
   id: string; title: string; parentId: string | null; sortOrder: number;
   updatedAt: string; contentHash: string; isConflict: boolean;
+  /** v3：只读锁元数据（独立于正文哈希，按 lockedAt 字段级 LWW 合并） */
+  isLocked?: boolean;
+  lockedAt?: string | null;
   assets: { filename: string; size: number; hash: string }[];
   deleted?: boolean;
   deletedAt?: string;
+}
+
+/** 锁状态 LWW：时间戳新者胜；相同时间戳取“锁优先”（保守防误改）。返回胜出的 {locked, at}。 */
+function mergeLockState(localLocked: boolean, localAt: string | null, remoteLocked: boolean, remoteAt: string | null): { locked: boolean; at: string | null } {
+  if (!localAt && !remoteAt) return { locked: remoteLocked, at: remoteAt };
+  if (!localAt) return { locked: remoteLocked, at: remoteAt };
+  if (!remoteAt) return { locked: localLocked, at: localAt };
+  if (remoteAt > localAt) return { locked: remoteLocked, at: remoteAt };
+  if (remoteAt < localAt) return { locked: localLocked, at: localAt };
+  return { locked: localLocked || remoteLocked, at: localAt };
 }
 
 interface Manifest {
@@ -49,7 +62,7 @@ export interface SyncProgress {
   message: string;
 }
 
-const MANIFEST_VERSION = 2;
+const MANIFEST_VERSION = 3;
 
 // ===== ObjectStore：S3 兼容客户端（七牛云等） =====
 export class ObjectStore {
@@ -171,6 +184,16 @@ export async function syncNow(store: Store, onProgress?: (p: SyncProgress) => vo
       const local = localById.get(rn.id) ?? null;
       const localHash = local ? store.contentHash(local.id) : null;
       if (localHash === rn.contentHash) {
+        // 正文相同：锁状态作为独立元数据按 LWW 合并（锁变更不改正文哈希，
+        // 不能因哈希相等就跳过，否则远端锁状态永远下不来）
+        if (local) {
+          const localLocked = !!local.isLocked;
+          const remoteLocked = !!rn.isLocked;
+          if (localLocked !== remoteLocked) {
+            const merged = mergeLockState(localLocked, local.lockedAt ?? null, remoteLocked, rn.lockedAt ?? null);
+            store.applyRemoteLock(rn.id, merged.locked, merged.at);
+          }
+        }
         store.setBaseHash(rn.id, rn.contentHash);
         store.markSynced(rn.id);
         continue;
@@ -209,8 +232,13 @@ export async function syncNow(store: Store, onProgress?: (p: SyncProgress) => vo
         // 仅本地改过、远端未改：本地为准，交给上传阶段（不能下载覆盖本地修改）
         continue;
       } else {
+        // 正文下载后锁按 LWW 合并：本地刚改的锁不被远端旧状态覆盖
+        const merged = local
+          ? mergeLockState(!!local.isLocked, local.lockedAt ?? null, !!rn.isLocked, rn.lockedAt ?? null)
+          : { locked: !!rn.isLocked, at: rn.lockedAt ?? null };
         store.importRemoteNote(
-          { id: rn.id, title: rn.title, parentId: rn.parentId, sortOrder: rn.sortOrder, updatedAt: rn.updatedAt, isConflict: rn.isConflict },
+          { id: rn.id, title: rn.title, parentId: rn.parentId, sortOrder: rn.sortOrder, updatedAt: rn.updatedAt, isConflict: rn.isConflict,
+            isLocked: merged.locked, lockedAt: merged.at },
           lakeBytes, assets
         );
         store.setBaseHash(rn.id, rn.contentHash);
@@ -267,7 +295,8 @@ export async function syncNow(store: Store, onProgress?: (p: SyncProgress) => vo
     }
     manifestNotes.push({
       id: note.id, title: note.title, parentId: note.parentId, sortOrder: note.sortOrder,
-      updatedAt: note.updatedAt, contentHash: hash, isConflict: note.isConflict, assets,
+      updatedAt: note.updatedAt, contentHash: hash, isConflict: note.isConflict,
+      isLocked: !!note.isLocked, lockedAt: note.lockedAt ?? null, assets,
     });
   }
 
@@ -393,6 +422,8 @@ function validateManifest(manifest: unknown): asserts manifest is Manifest {
         throw new Error("清单格式无效：asset 缺少 filename/size/hash");
       }
     }
+    if (n.isLocked !== undefined && typeof n.isLocked !== "boolean") throw new Error("清单格式无效：isLocked 非法");
+    if (n.lockedAt !== undefined && n.lockedAt !== null && typeof n.lockedAt !== "string") throw new Error("清单格式无效：lockedAt 非法");
     if (n.deleted !== undefined && typeof n.deleted !== "boolean") throw new Error("清单格式无效：deleted 非法");
     if (n.deletedAt !== undefined && typeof n.deletedAt !== "string") throw new Error("清单格式无效：deletedAt 非法");
   }

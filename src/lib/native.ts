@@ -3,10 +3,12 @@ import type { CleanOrphanResult, NoteDocument, OrphanAsset, QuickNoteDocument, Q
 interface LakeNative {
   bootstrap(): Promise<WorkspaceSnapshot>;
   readNote(id: string): Promise<NoteDocument>;
+  setNoteLocked(id: string, locked: boolean): Promise<NoteDocument>;
   createNote(title: string): Promise<NoteDocument>;
   saveNote(id: string, title: string, content: string): Promise<NoteDocument>;
   deleteNote(id: string): Promise<void>;
   listTreeNodes(): Promise<TreeNode[]>;
+  listNoteSummaries(): Promise<import("./types").NoteSummary[]>;
   createNotebook(title: string): Promise<TreeNode>;
   createGroup(parentId: string, title: string): Promise<TreeNode>;
   renameTreeNode(id: string, title: string): Promise<TreeNode>;
@@ -49,10 +51,12 @@ function api(): LakeNative {
 export const native = {
   bootstrap: () => api().bootstrap(),
   readNote: (id: string) => api().readNote(id),
+  setNoteLocked: (id: string, locked: boolean) => api().setNoteLocked(id, locked),
   createNote: (title: string) => api().createNote(title),
   saveNote: (id: string, title: string, content: string) => api().saveNote(id, title, content),
   deleteNote: (id: string) => api().deleteNote(id),
   listTreeNodes: () => api().listTreeNodes(),
+  listNoteSummaries: () => api().listNoteSummaries(),
   createNotebook: (title: string) => api().createNotebook(title),
   createGroup: (parentId: string, title: string) => api().createGroup(parentId, title),
   renameTreeNode: (id: string, title: string) => api().renameTreeNode(id, title),

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type CSSProperties } from "react";
-import { ArrowLeft, Check, Cloud, FileDown, Files, ListTree, LoaderCircle, Feather, Pencil, Save, Settings as Settings2Icon, WifiOff } from "lucide-react";
+import { ArrowLeft, Check, Cloud, FileDown, Files, ListTree, LoaderCircle, Feather, Lock, LockOpen, Pencil, Save, Settings as Settings2Icon, WifiOff } from "lucide-react";
 import { MobileLibrary } from "./components/MobileLibrary";
 import { ConfirmDelete, Sidebar, type SidebarMode } from "./components/Sidebar";
 import { QuickNotesWorkspace, type QuickNotesWorkspaceHandle } from "./components/QuickNotesWorkspace";
@@ -164,6 +164,9 @@ export function App() {
         void native.getSyncStatus().then((status) => {
           setSync((current) => ({ ...current, phase: "success", message: "同步完成", lastSyncedAt: status.lastSyncedAt, pendingChanges: 0 }));
         }).catch(() => undefined);
+        // 锁状态等元数据可能随同步变化，刷新摘要与树
+        void native.listNoteSummaries().then((items) => setNotes(items)).catch(() => undefined);
+        void native.listTreeNodes().then(setTreeNodes).catch(() => undefined);
       }
     });
   }, []);
@@ -486,6 +489,23 @@ export function App() {
     localStorage.setItem("lake-notes-v3.sidebar-width", String(Math.round(clamped)));
   }
 
+  /** 只读锁切换：先保存脏草稿，再写 SQLite（锁状态经 manifest v3 同步） */
+  async function toggleNoteLock() {
+    const tabId = activeNoteId;
+    if (!tabId) return;
+    const summary = notes.find((n) => n.id === tabId);
+    if (!summary) return;
+    const next = !summary.isLocked;
+    const tab = openTabsRef.current.find((t) => t.noteId === tabId);
+    if (next && tab?.dirty) await persistTab(tabId, tab.title, tab.content);
+    try {
+      const updated = await native.setNoteLocked(tabId, next);
+      setNotes((items) => items.map((item) => (item.id === tabId ? { ...item, isLocked: updated.isLocked, lockedAt: updated.lockedAt } : item)));
+    } catch (reason) {
+      setError(String(reason));
+    }
+  }
+
   /** 标签拖拽排序：按新顺序重排 openTabs（并同步 ref） */
   function reorderTabs(noteIds: string[]) {
     setOpenTabs((current) => {
@@ -577,6 +597,8 @@ export function App() {
   const tabInfos: TabInfo[] = openTabs.map((tab) => ({ noteId: tab.noteId, title: tab.title, content: tab.content, dirty: tab.dirty }));
 
   const outlineVisible = tocEnabled && !isMobile && desktopWorkspace === "library";
+  // 只读锁：store 驱动（可同步），派生集合供多标签 viewer 重建
+  const lockedNoteIds = new Set(notes.filter((n) => n.isLocked).map((n) => n.id));
   const effectiveOutlineMode: OutlineMode = activeOutlineEmpty && !outlineEmptyOverride ? "collapsed" : outlineMode;
   const shellStyle = {
     "--sidebar-width": `${sidebarWidth}px`,
@@ -620,7 +642,7 @@ export function App() {
           mobileActive ? <section className={`document-pane ${wideMode ? "wide-mode" : ""} ${settings.paragraphSpacing ? "paragraph-spacing" : ""}`}>
             <LakeEditor noteId={mobileActive.id} content={mobileEditing ? mobileDraftContent : mobileActive.content} mode={mobileEditing ? "editor" : "viewer"} tocEnabled={mobileTocOpen} onChange={(content) => setMobileDraftContent(content)} prefs={editorPrefs} onEditorReady={handleEditorReady} />
             {!mobileEditing && <nav className="mobile-reader-actions">
-              <button onClick={() => setMobileEditing(true)}><Pencil size={20} /><span>编辑</span></button>
+              {!mobileActive.isLocked && <button onClick={() => setMobileEditing(true)}><Pencil size={20} /><span>编辑</span></button>}
               <button className={mobileTocOpen ? "selected" : ""} onClick={() => setMobileTocOpen((open) => !open)}><ListTree size={21} /><span>大纲</span></button>
               <button onClick={() => setMobileOpen(true)}><Files size={20} /><span>切换</span></button>
             </nav>}
@@ -636,6 +658,7 @@ export function App() {
               onTabChange={handleTabChange}
               onTabClose={closeTab}
               onTabsReorder={reorderTabs}
+              lockedNoteIds={lockedNoteIds}
               onContentChange={handleContentChange}
               prefs={editorPrefs}
               onEditorReady={handleEditorReady}
@@ -654,6 +677,18 @@ export function App() {
           {desktopWorkspace === "library" && <>
             <span className="statusbar-wordcount" title="当前文档字数">{wordCountLabel}</span>
             {notice && <span className="statusbar-notice">{notice}</span>}
+            {activeNoteId && (
+              <button
+                className={`statusbar-readonly${lockedNoteIds.has(activeNoteId) ? " locked" : ""}`}
+                onClick={() => void toggleNoteLock()}
+                title={lockedNoteIds.has(activeNoteId) ? "此文档已锁定，点击解锁" : "锁定此文档（只读）"}
+                aria-label={lockedNoteIds.has(activeNoteId) ? "解锁此文档" : "锁定此文档"}
+                aria-pressed={lockedNoteIds.has(activeNoteId)}
+              >
+                {lockedNoteIds.has(activeNoteId) ? <Lock size={12} /> : <LockOpen size={12} />}
+                <span>{lockedNoteIds.has(activeNoteId) ? "已锁定" : "锁定"}</span>
+              </button>
+            )}
             <button className="statusbar-export-md" onClick={() => void exportMarkdown()} title="导出当前笔记为 Markdown（复制到剪贴板）"><FileDown size={13} /> MD</button>
             <span className={`save-label ${saveState}`}>{saveState === "saving" ? <LoaderCircle className="spin" size={12} /> : saveState === "dirty" ? <WifiOff size={12} /> : <Save size={12} />}{saveLabel(saveState)}</span>
           </>}

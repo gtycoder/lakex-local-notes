@@ -130,7 +130,9 @@ function registerIpc() {
   handle("create_note", (title: string) => store.createNote(title));
   handle("save_note", (id: string, title: string, content: string) => store.saveNote(id, title, content));
   handle("delete_note", (id: string) => store.deleteNote(id));
+  handle("set_note_locked", (id: string, locked: boolean) => { store.setNoteLocked(id, locked); return store.readNote(id); });
   handle("list_tree_nodes", () => store.listTreeNodes());
+  handle("list_note_summaries", () => store.listNoteSummaries());
   handle("create_notebook", (title: string) => store.createNotebook(title));
   handle("create_group", (parentId: string, title: string) => store.createGroup(parentId, title));
   handle("rename_tree_node", (id: string, title: string) => store.renameTreeNode(id, title));

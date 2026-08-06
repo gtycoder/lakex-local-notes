@@ -55,6 +55,7 @@ interface ManifestNote {
   updatedAt: string; contentHash: string; isConflict: boolean;
   assets: { filename: string; size: number; hash: string }[];
   deleted?: boolean; deletedAt?: string;
+  isLocked?: boolean; lockedAt?: string | null;
 }
 interface Manifest {
   version: number; workspaceId: string; commitId: string; createdAt: string; notes: ManifestNote[];
@@ -79,7 +80,7 @@ function writeManifest(manifest: Manifest): void {
 // ===== FakeStore：实现 sync.ts 用到的 Store 子集（内存态 + 临时文件） =====
 class FakeStore {
   settings: S3Settings | null = null;
-  notes = new Map<string, { id: string; title: string; parentId: string | null; sortOrder: number; updatedAt: string; isConflict: boolean }>();
+  notes = new Map<string, { id: string; title: string; parentId: string | null; sortOrder: number; updatedAt: string; isConflict: boolean; isLocked?: boolean; lockedAt?: string | null }>();
   deleted = new Map<string, { id: string; title: string; parentId: string | null; sortOrder: number; updatedAt: string; deletedAt: string }>();
   baseHashes = new Map<string, string>();
   orphans = new Set<string>();
@@ -128,6 +129,18 @@ class FakeStore {
   baseHash(id: string) { return this.baseHashes.get(id) ?? null; }
   setBaseHash(id: string, hash: string) { this.baseHashes.set(id, hash); }
   markSynced() {}
+  setNoteLocked(id: string, locked: boolean) {
+    const n = this.notes.get(id);
+    if (!n) throw new Error(`笔记不存在: ${id}`);
+    n.isLocked = locked;
+    n.lockedAt = new Date().toISOString();
+  }
+  applyRemoteLock(id: string, locked: boolean, lockedAt: string | null) {
+    const n = this.notes.get(id);
+    if (!n) return;
+    n.isLocked = locked;
+    n.lockedAt = lockedAt;
+  }
   importRemoteNote(note: { id: string; title: string; parentId: string | null; sortOrder: number; updatedAt: string; isConflict: boolean }, content: Buffer, assets: { filename: string; bytes: Buffer }[]) {
     fs.writeFileSync(this.notePath(note.id), content, "utf8");
     if (assets.length > 0) {
@@ -173,7 +186,7 @@ describe("syncNow 增量同步", () => {
     expect(r1.conflicts).toBe(0);
     expect(s3.bucket.has(key(`objects/${store.contentHash("n1")}.lake`))).toBe(true);
     const manifest = readManifest();
-    expect(manifest.version).toBe(2);
+    expect(manifest.version).toBe(3);
     expect(manifest.notes).toHaveLength(1);
     expect(manifest.notes[0].contentHash).toBe(store.contentHash("n1"));
 
@@ -346,12 +359,35 @@ describe("syncNow 增量同步", () => {
     expect(store.notes.has("n2")).toBe(false);
   });
 
+  it("v3 锁同步：仅锁变更（正文哈希相同）也能下载合并；LWW 新者胜", async () => {
+    const store = newStore();
+    store.createNote("n1", "笔记A", "<p>hello</p>");
+    await syncNow(store as unknown as Store);
+
+    // 远端只改锁（正文哈希不变）：手工改写 manifest
+    const manifest = readManifest();
+    manifest.notes[0] = { ...manifest.notes[0], isLocked: true, lockedAt: "2030-01-01T00:00:00.000Z" };
+    s3.bucket.set(key("manifests/latest.json"), Buffer.from(JSON.stringify(manifest), "utf8"));
+    const r = await syncNow(store as unknown as Store);
+    expect(r.downloaded).toBe(0); // 正文未下载
+    expect(store.notes.get("n1")?.isLocked).toBe(true); // 锁已合并下来
+
+    // 本地更新解锁（时间戳新）→ 远端旧锁不覆盖本地
+    store.setNoteLocked("n1", false);
+    const localAt = store.notes.get("n1")!.lockedAt!;
+    manifest.notes[0] = { ...manifest.notes[0], isLocked: true, lockedAt: "2020-01-01T00:00:00.000Z" };
+    s3.bucket.set(key("manifests/latest.json"), Buffer.from(JSON.stringify(manifest), "utf8"));
+    await syncNow(store as unknown as Store);
+    expect(store.notes.get("n1")?.isLocked).toBe(false);
+    expect(store.notes.get("n1")?.lockedAt).toBe(localAt);
+  });
+
   it("审计#19：远程 manifest 结构非法时同步报错（不按任意 JSON 导入）", async () => {
     const store = newStore();
     store.createNote("n1", "笔记A", "<p>a</p>");
     await syncNow(store as unknown as Store);
 
-    s3.bucket.set(key("manifests/latest.json"), Buffer.from(JSON.stringify({ version: 2, notes: "not-an-array" }), "utf8"));
+    s3.bucket.set(key("manifests/latest.json"), Buffer.from(JSON.stringify({ version: 3, notes: "not-an-array" }), "utf8"));
     await expect(syncNow(store as unknown as Store)).rejects.toThrow(/清单格式无效/);
 
     s3.bucket.set(key("manifests/latest.json"), Buffer.from(JSON.stringify({ version: 99, workspaceId: "default", commitId: "c", createdAt: "t", notes: [] }), "utf8"));

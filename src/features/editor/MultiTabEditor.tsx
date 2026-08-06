@@ -18,6 +18,8 @@ interface MultiTabEditorProps {
   onTabClose: (noteId: string) => void;
   /** 拖拽排序：给出新的 noteId 顺序 */
   onTabsReorder?: (noteIds: string[]) => void;
+  /** 只读锁的 noteId 集合（驱动 EditorTab viewer 重建） */
+  lockedNoteIds?: ReadonlySet<string>;
   onContentChange: (noteId: string, content: string) => void;
   prefs?: LakeEditorPrefs;
   onEditorReady?: (noteId: string, editor: import("./lakeRuntime").LakeEditorInstance | null) => void;
@@ -32,6 +34,7 @@ export function MultiTabEditor({
   onTabChange,
   onTabClose,
   onTabsReorder,
+  lockedNoteIds,
   onContentChange,
   prefs,
   onEditorReady,
@@ -248,6 +251,7 @@ export function MultiTabEditor({
           <EditorTab
             key={tab.noteId}
             noteId={tab.noteId}
+            locked={lockedNoteIds?.has(tab.noteId) ?? false}
             content={contentCache.current.get(tab.noteId) ?? tab.content}
             visible={tab.noteId === activeNoteId}
             tocEnabled={tocEnabled}

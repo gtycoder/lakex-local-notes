@@ -6,6 +6,8 @@ export interface NoteSummary {
   updatedAt: string;
   syncState: "local" | "synced" | "conflict";
   isConflict: boolean;
+  isLocked?: boolean;
+  lockedAt?: string | null;
 }
 
 export interface NoteDocument extends NoteSummary {
