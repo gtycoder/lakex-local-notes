@@ -416,9 +416,15 @@ button { cursor: pointer; }
   max-height: 600px;
   overflow-y: auto;
   overflow-x: auto;
+  /* 空代码块也要有可点击/可编辑的空间，不能塌成细条。 */
+  min-height: 24px;
 }
 .ne-codeblock .CodeMirror {
   height: auto !important;
+  min-height: 24px;
+}
+.ne-codeblock .cm-editor {
+  min-height: 24px;
 }
 .ne-codeblock .CodeMirror-scroll {
   height: auto !important;
@@ -1410,3 +1416,17 @@ ne-card[data-card-name="codeblock"] .ne-card-resizer-mask {
 .statusbar-readonly.locked { color: var(--shell-accent-strong, #4658a8); background: var(--shell-accent-soft, #e6e9f7); border-color: rgba(89, 108, 193, .25); }
 /* 锁定标签：viewer 无工具栏；正文色略降暗示只读 */
 .lake-editor.lake-locked .ne-engine { color: #454b57; }
+
+/* 锁定态（原生 Viewer）几何对齐编辑态：
+   - .ne-viewer 作为滚动容器（编辑态是 .ne-editor-wrap），否则锁后无法滚动；
+   - .ne-viewer-body 内边距对齐 .ne-engine，避免正文贴边。 */
+@media (min-width: 761px) {
+  .lake-editor-tab .lake-editor-mount .ne-viewer {
+    height: 100%;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+  .lake-editor-tab .ne-viewer-body {
+    padding: 28px 56px 100px 40px;
+  }
+}

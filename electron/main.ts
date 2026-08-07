@@ -1,10 +1,12 @@
 import { app, BrowserWindow, ipcMain, session, shell, type WebFrameMain } from "electron";
+import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { MAX_IMAGE_BYTES, Store } from "./store.js";
 import { MAX_QUICK_NOTE_IMAGE_BYTES, QuickNotesStore } from "./quickNotes.js";
 import { convertQuickNoteToLake } from "./quickNoteConversion.js";
 import { startAssetServer, ASSET_PORT } from "./assetServer.js";
+import { resolveMirroredCdnRedirect } from "./cdnRedirect.js";
 import { testConnection, syncNow } from "./sync.js";
 import { syncQuickNotes } from "./quickNotesSync.js";
 
@@ -45,19 +47,21 @@ function vendorCdnDir(): string {
   return path.join(__dirname, "..", isDev ? "public" : "dist", "vendor", "cdn");
 }
 
-/** 资源本地化：把 Lake 编辑器运行时请求的 gw.alipayobjects.com CDN 重定向到本地 asset server */
+/**
+ * 资源本地化只接管已随应用镜像的 Lake 运行时资源。gw.alipayobjects.com 同时
+ * 承载用户粘贴图片，若按 host 全量重定向，未镜像的 /zos/skylark/... 会变成本地 404。
+ */
 function registerCdnRedirect() {
+  const mirrorRoot = vendorCdnDir();
   session.defaultSession.webRequest.onBeforeRequest(
     { urls: ["*://gw.alipayobjects.com/*"] },
     (details, callback) => {
-      try {
-        const u = new URL(details.url);
-        const rel = u.pathname.replace(/^\/+/, ""); // 保留原始编码，asset server 统一 decode 一次
-        if (!rel) { callback({ cancel: true }); return; }
-        callback({ redirectURL: "http://127.0.0.1:" + ASSET_PORT + "/vendor/cdn/" + rel });
-      } catch {
-        callback({ cancel: true });
-      }
+      const redirectURL = resolveMirroredCdnRedirect(details.url, ASSET_PORT, (relativePath) => {
+        const file = path.join(mirrorRoot, relativePath);
+        return fs.existsSync(file) && fs.statSync(file).isFile();
+      });
+      // 未镜像的资源保持原请求：例如用户粘贴的 gw /zos/skylark 图片。
+      callback(redirectURL ? { redirectURL } : {});
     }
   );
 }

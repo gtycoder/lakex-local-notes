@@ -50,14 +50,19 @@ export function LakeEditor({ noteId, content, mode = "editor", tocEnabled, onCha
     host.addEventListener("paste", pasteHandler, true);
 
     let editor: LakeEditorInstance | null = null;
+    let disposeTocRefresh: (() => void) | null = null;
+    let tocRefreshTimer: number | undefined;
     let setting = true;
     try {
       editor = createLakeDocument(host, mode, () => {
         if (editor && !setting) onChangeRef.current(editor.getDocument("text/lake"));
       }, tocEnabled, noteId, undefined, prefs);
       editor.setDocument("text/lake", content);
-      // 修复：Lake TOC 侧边栏创建时用空 toc 渲染，setDocument 后补一次数据同步
-      setTimeout(() => refreshTocSidebar(editor), 0);
+      // 修复：Lake TOC 侧边栏创建时用空 toc 渲染，setDocument 后补一次数据同步。
+      // 该补偿有重试定时器，必须跟随实例一起清理。
+      tocRefreshTimer = window.setTimeout(() => {
+        disposeTocRefresh = refreshTocSidebar(editor);
+      }, 0);
       setting = false;
       editorRef.current = editor;
       onEditorReadyRef.current?.(noteId, editor);
@@ -68,6 +73,8 @@ export function LakeEditor({ noteId, content, mode = "editor", tocEnabled, onCha
     return () => {
       host.removeEventListener("copy", copyRichSelection, true);
       host.removeEventListener("paste", pasteHandler, true);
+      window.clearTimeout(tocRefreshTimer);
+      disposeTocRefresh?.();
       onEditorReadyRef.current?.(noteId, null);
       destroyLakeEditor(editor);
       editorRef.current = null;
