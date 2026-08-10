@@ -188,7 +188,14 @@ export function App() {
     const revision = revisionRef.current.get(noteId) ?? 0;
     setSaveState("saving");
     try {
-      const saved = await native.saveNote(noteId, title.trim() || "无标题", content);
+      // M1：保存时由 Lake 内核生成 markdown/纯文本缓存，随正文同批落库
+      const editor = editorsRef.current.get(noteId);
+      const caches: { markdown: string | null; plain: string | null } = { markdown: null, plain: null };
+      if (editor && typeof (editor as any).getDocument === "function") {
+        try { caches.markdown = String((editor as any).getDocument("text/markdown")); } catch { /* 忽略 */ }
+        try { caches.plain = String((editor as any).getDocument("text/plain")); } catch { /* 忽略 */ }
+      }
+      const saved = await native.saveNote(noteId, title.trim() || "无标题", content, caches);
       // 笔记摘要/树节点始终以服务端返回为准（磁盘已写入）
       setNotes((items) => items.map((item) => item.id === saved.id ? summaryOf(saved) : item));
       setTreeNodes((items) => items.map((item) => item.noteFileId === saved.id || item.id === saved.id ? { ...item, title: saved.title, updatedAt: saved.updatedAt, syncState: saved.syncState } : item));
@@ -295,10 +302,20 @@ export function App() {
     noticeTimer.current = window.setTimeout(() => setNotice(null), 2200);
   }, []);
 
-  /** 编辑器实例就绪回调：注册到 map，销毁时移除 */
+  /** 编辑器实例就绪回调：注册到 map，销毁时移除；就绪时补写文本缓存（存量文档首次打开即有缓存） */
   const handleEditorReady = useCallback((noteId: string, editor: LakeEditorInstance | null) => {
-    if (editor) editorsRef.current.set(noteId, editor);
-    else editorsRef.current.delete(noteId);
+    if (editor) {
+      editorsRef.current.set(noteId, editor);
+      try {
+        if (typeof (editor as any).getDocument === "function") {
+          const markdown = String((editor as any).getDocument("text/markdown"));
+          const plain = String((editor as any).getDocument("text/plain"));
+          void native.updateNoteCaches(noteId, markdown, plain);
+        }
+      } catch { /* 非编辑态/Viewer 不支持时忽略 */ }
+    } else {
+      editorsRef.current.delete(noteId);
+    }
   }, []);
 
   /** 全文导出 Markdown：Lake 内核原生支持（getDocument("text/markdown")），复制到剪贴板 */

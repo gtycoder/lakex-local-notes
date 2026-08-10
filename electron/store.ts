@@ -139,6 +139,13 @@ export class Store {
     if (!cols.some((c) => c.name === "locked_at")) {
       this.db.exec("ALTER TABLE notes ADD COLUMN locked_at TEXT");
     }
+    // M1 文本缓存列：保存时由 Lake 内核生成的 markdown/纯文本（供导出资料包/复制MD/全文搜索）
+    if (!cols.some((c) => c.name === "md_cache")) {
+      this.db.exec("ALTER TABLE notes ADD COLUMN md_cache TEXT");
+    }
+    if (!cols.some((c) => c.name === "text_cache")) {
+      this.db.exec("ALTER TABLE notes ADD COLUMN text_cache TEXT");
+    }
     const now = nowIso();
     this.db.prepare(`INSERT OR IGNORE INTO tree_nodes(id,workspace_id,parent_id,node_type,title,note_file_id,sort_order,created_at,updated_at,deleted_at,sync_state,is_conflict)
       VALUES(?,?,?,?,?,NULL,0,?,?,NULL,'local',0)`).run(DEFAULT_NOTEBOOK_ID, DEFAULT_WORKSPACE_ID, null, "notebook", "个人笔记", now, now);
@@ -384,12 +391,18 @@ export class Store {
     return this.readTreeNode(id);
   }
 
-  saveNote(id: string, title: string, content: string): NoteDocument {
+  saveNote(id: string, title: string, content: string, caches?: { markdown?: string | null; plain?: string | null }): NoteDocument {
     const p = this.notePath(id);
     if (!fs.existsSync(p)) throw new AppError("NotFound", `笔记不存在: ${id}`);
     const updatedAt = nowIso();
     const tx = this.db.transaction(() => {
-      this.db.prepare("UPDATE notes SET title=?,updated_at=?,sync_state='local' WHERE id=? AND deleted_at IS NULL").run(title, updatedAt, id);
+      if (caches) {
+        // M1 文本缓存：与正文同事务落库，保证缓存与 .lake 一致
+        this.db.prepare("UPDATE notes SET title=?,updated_at=?,sync_state='local',md_cache=?,text_cache=? WHERE id=? AND deleted_at IS NULL")
+          .run(title, updatedAt, caches.markdown ?? null, caches.plain ?? null, id);
+      } else {
+        this.db.prepare("UPDATE notes SET title=?,updated_at=?,sync_state='local' WHERE id=? AND deleted_at IS NULL").run(title, updatedAt, id);
+      }
       this.db.prepare("UPDATE tree_nodes SET title=?,updated_at=?,sync_state='local' WHERE note_file_id=? AND deleted_at IS NULL").run(title, updatedAt, id);
       this.atomicWrite(p, content);
     });
@@ -401,6 +414,18 @@ export class Store {
       console.warn("[store] 孤儿资源检测失败（不影响保存）:", error);
     }
     return this.readNote(id);
+  }
+
+  /** M1：单独更新文本缓存（打开文档时补缓存用，不重写 .lake 正文） */
+  updateNoteCaches(id: string, markdown: string | null, plain: string | null): void {
+    this.db.prepare("UPDATE notes SET md_cache=?, text_cache=? WHERE id=?").run(markdown, plain, id);
+  }
+
+  /** M1：读取文本缓存（导出资料包 / 复制 Markdown 用） */
+  readNoteCaches(id: string): { markdown: string | null; plain: string | null } {
+    const row = this.db.prepare("SELECT md_cache, text_cache FROM notes WHERE id=?").get(id) as { md_cache: string | null; text_cache: string | null } | undefined;
+    if (!row) throw new AppError("NotFound", `笔记不存在: ${id}`);
+    return { markdown: row.md_cache, plain: row.text_cache };
   }
 
   deleteNote(id: string) {

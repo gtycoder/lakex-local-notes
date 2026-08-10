@@ -5,7 +5,8 @@ interface LakeNative {
   readNote(id: string): Promise<NoteDocument>;
   setNoteLocked(id: string, locked: boolean): Promise<NoteDocument>;
   createNote(title: string): Promise<NoteDocument>;
-  saveNote(id: string, title: string, content: string): Promise<NoteDocument>;
+  saveNote(id: string, title: string, content: string, caches?: { markdown?: string | null; plain?: string | null }): Promise<NoteDocument>;
+  updateNoteCaches(id: string, markdown: string | null, plain: string | null): Promise<void>;
   deleteNote(id: string): Promise<void>;
   listTreeNodes(): Promise<TreeNode[]>;
   listNoteSummaries(): Promise<import("./types").NoteSummary[]>;
@@ -53,7 +54,8 @@ export const native = {
   readNote: (id: string) => api().readNote(id),
   setNoteLocked: (id: string, locked: boolean) => api().setNoteLocked(id, locked),
   createNote: (title: string) => api().createNote(title),
-  saveNote: (id: string, title: string, content: string) => api().saveNote(id, title, content),
+  saveNote: (id: string, title: string, content: string, caches?: { markdown?: string | null; plain?: string | null }) => api().saveNote(id, title, content, caches),
+  updateNoteCaches: (id: string, markdown: string | null, plain: string | null) => api().updateNoteCaches(id, markdown, plain),
   deleteNote: (id: string) => api().deleteNote(id),
   listTreeNodes: () => api().listTreeNodes(),
   listNoteSummaries: () => api().listNoteSummaries(),

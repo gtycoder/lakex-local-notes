@@ -198,6 +198,23 @@ describe("目录树操作", () => {
     expect(() => store.moveTreeNode(group3.id, null, 0)).toThrowError(/必须位于目录节点下/);
   });
 
+  it("saveNote 写入文本缓存，updateNoteCaches/readNoteCaches 可单独读写", () => {
+    const note = store.createNote("缓存测试");
+    const saved = store.saveNote(note.id, "缓存测试", "<p>hello</p>", { markdown: "# hello\n", plain: "hello" });
+    expect(saved).toBeTruthy();
+    const caches = store.readNoteCaches(note.id);
+    expect(caches.markdown).toBe("# hello\n");
+    expect(caches.plain).toBe("hello");
+    // 不带缓存保存时不应清空已有缓存（老调用兼容）
+    store.saveNote(note.id, "缓存测试2", "<p>hi</p>");
+    expect(store.readNoteCaches(note.id).markdown).toBe("# hello\n");
+    // 单独更新缓存
+    store.updateNoteCaches(note.id, "# hi", "hi");
+    const c2 = store.readNoteCaches(note.id);
+    expect(c2.markdown).toBe("# hi");
+    expect(c2.plain).toBe("hi");
+  });
+
   it("deleteTreeNode 递归删除 + 墓碑 + 清孤儿/资源目录", () => {
     const nb = store.createNotebook("待删");
     const group = store.createGroup(nb.id, "组");

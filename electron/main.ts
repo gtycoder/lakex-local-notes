@@ -132,7 +132,10 @@ function registerIpc() {
   handle("bootstrap_workspace", () => store.bootstrap());
   handle("read_note", (id: string) => store.readNote(id));
   handle("create_note", (title: string) => store.createNote(title));
-  handle("save_note", (id: string, title: string, content: string) => store.saveNote(id, title, content));
+  handle("save_note", (id: string, title: string, content: string, caches?: { markdown?: string | null; plain?: string | null }) => store.saveNote(id, title, content, caches));
+  handle("update_note_caches", (id: string, markdown: string | null, plain: string | null) => {
+    store.updateNoteCaches(id, markdown ?? null, plain ?? null);
+  });
   handle("delete_note", (id: string) => store.deleteNote(id));
   handle("set_note_locked", (id: string, locked: boolean) => { store.setNoteLocked(id, locked); return store.readNote(id); });
   handle("list_tree_nodes", () => store.listTreeNodes());
