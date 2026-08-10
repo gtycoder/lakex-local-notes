@@ -175,19 +175,27 @@ describe("目录树操作", () => {
     expect(() => store.reorderTreeNodes("notebook-personal", [n1.id, n2.id])).toThrowError(/全部子节点/);
   });
 
-  it("moveTreeNode/建组/建笔记拒绝破坏树结构（审计#9：note 不能作父、notebook 只能根层）", () => {
-    const note = store.createNote("叶子");
-    expect(() => store.createGroup(note.id, "组")).toThrowError(/笔记不能作为父节点/);
-    expect(() => store.createNoteIn(note.id, "子")).toThrowError(/笔记不能作为父节点/);
+  it("moveTreeNode/建组/建笔记支持多层嵌套，notebook 仍只能位于根层", () => {
+    const note = store.createNote("文档");
+    // 文档可套分组/文档（多层嵌套）
+    const group = store.createGroup(note.id, "文档下的分组");
+    const childNote = store.createNoteIn(note.id, "文档下的文档");
+    expect(store.listTreeNodes().find((n) => n.id === group.id)?.parentId).toBe(note.id);
+    expect(store.listTreeNodes().find((n) => n.id === childNote.id)?.parentId).toBe(note.id);
+    // 分组可套文档/分组
+    const groupChild = store.createNoteIn(group.id, "分组下的文档");
+    const group2 = store.createGroup(group.id, "分组下的分组");
+    expect(store.listTreeNodes().find((n) => n.id === groupChild.id)?.parentId).toBe(group.id);
+    expect(store.listTreeNodes().find((n) => n.id === group2.id)?.parentId).toBe(group.id);
+    // notebook 只能位于根层
     const nb = store.createNotebook("根本");
-    expect(() => store.moveTreeNode(nb.id, note.id, 0)).toThrowError(/笔记本只能位于根层/);
-    // note 移入 note：父节点类型校验生效
-    const note2 = store.createNote("另一片叶子");
-    expect(() => store.moveTreeNode(note.id, note2.id, 0)).toThrowError(/笔记不能作为父节点/);
     const nb2 = store.createNotebook("根本2");
-    const group = store.createGroup(nb2.id, "组");
-    expect(() => store.moveTreeNode(nb.id, group.id, 0)).toThrowError(/笔记本只能位于根层/);
+    expect(() => store.moveTreeNode(nb.id, note.id, 0)).toThrowError(/笔记本只能位于根层/);
+    expect(() => store.moveTreeNode(nb.id, nb2.id, 0)).toThrowError(/笔记本只能位于根层/);
+    // note/group 不能位于根层
+    const group3 = store.createGroup(nb2.id, "组");
     expect(() => store.moveTreeNode(note.id, null, 0)).toThrowError(/必须位于目录节点下/);
+    expect(() => store.moveTreeNode(group3.id, null, 0)).toThrowError(/必须位于目录节点下/);
   });
 
   it("deleteTreeNode 递归删除 + 墓碑 + 清孤儿/资源目录", () => {

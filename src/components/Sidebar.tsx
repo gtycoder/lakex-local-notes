@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent } from "react";
+import { createPortal } from "react-dom";
 import { BookOpen, ChevronRight, FilePlus2, FileText, FoldVertical, Folder, FolderPlus, Pencil, Plus, Search, Trash2, X } from "lucide-react";
 import type { TreeNode, TreeNodeType } from "../lib/types";
 
@@ -171,20 +172,10 @@ export function Sidebar(props: SidebarProps) {
     return () => { window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", up); };
   }, [draggingId, dropTarget, props]);
 
-  // 创建/上下文定位的“容器”：若解析到笔记，则上溯到最近的笔记本/分组，
-  // 否则主进程会拒绝“笔记不能作为父节点”。
-  const findContainerAncestor = (node: TreeNode | null | undefined): TreeNode | null => {
-    const byId = new Map(props.nodes.map((item) => [item.id, item]));
-    let current = node ?? null;
-    while (current && current.nodeType === "note") {
-      current = current.parentId ? byId.get(current.parentId) ?? null : null;
-    }
-    return current;
-  };
-  const context = findContainerAncestor(
-    props.nodes.find((node) => node.id === contextId)
-      ?? props.nodes.find((node) => node.id === props.activeId)
-  )
+  // 创建/上下文定位：直接用当前选中/右键的节点作为父节点（支持多层嵌套，
+  // 文档也可作为父节点）；无选中时回退到第一个笔记本。
+  const context = props.nodes.find((node) => node.id === contextId)
+    ?? props.nodes.find((node) => node.id === props.activeId)
     ?? props.nodes.find((node) => node.nodeType === "notebook")
     ?? null;
   const groupParent = context?.id ?? props.nodes.find((node) => node.nodeType === "notebook")?.id ?? null;
@@ -234,6 +225,7 @@ export function Sidebar(props: SidebarProps) {
 
   const menuNewChild = (kind: "group" | "note") => {
     if (!contextNode) return;
+    // 支持多层嵌套：在目标节点下直接创建（文档也可包含分组/文档）。
     const parentId = contextNode.id;
     if (kind === "note") { props.onCreate("note", parentId); setExpanded((current) => expandAncestors(current, props.nodes, parentId)); setContextMenu(null); return; }
     setPendingCreate({ kind, parentId });
@@ -414,14 +406,17 @@ const ContextMenu = ({ node, x, y, onNewChild, onRename, onDelete, onClose }: Co
   // 视口边缘翻转，避免菜单溢出屏幕
   const left = Math.min(x, window.innerWidth - 232);
   const top = Math.min(y, window.innerHeight - 220);
-  return (
+  // Portal 到 body：侧边栏带 transform（含 translateX(0)）时，position: fixed 会退化为
+  // 相对侧边栏定位，导致菜单偏离光标右下；挂到 body 后恢复真正的视口固定定位。
+  return createPortal(
     <div className="context-menu" style={{ left, top }} role="menu" data-context-menu>
       <button role="menuitem" onClick={() => { onNewChild("note"); onClose(); }}><FilePlus2 size={15} /><span>新建文档</span></button>
       {!isNotebook && <button role="menuitem" onClick={() => { onNewChild("group"); onClose(); }}><FolderPlus size={15} /><span>新建分组</span></button>}
       <button role="menuitem" onClick={() => { onRename(); onClose(); }}><Pencil size={15} /><span>重命名</span></button>
       <div className="context-menu-sep" />
       <button role="menuitem" className="danger" onClick={() => { onDelete(); onClose(); }}><Trash2 size={15} /><span>删除</span></button>
-    </div>
+    </div>,
+    document.body
   );
 };
 

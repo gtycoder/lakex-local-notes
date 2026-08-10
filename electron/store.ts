@@ -198,17 +198,16 @@ export class Store {
     if (!row) throw new AppError("NotFound", `父节点不存在: ${parentId}`);
   }
 
-  /** 审计 #9：树结构不变量——notebook 只能位于根层；note 不能有子节点；
-   * 只有 notebook/group 能作为 note/group 的父节点。 */
+  /** 树结构不变量：notebook 只能位于根层；note/group 必须位于某个节点下。
+   * 支持多层嵌套：文档可包含分组/文档，分组可包含文档/分组（note/group 的父节点不限类型）。 */
   private assertParentCompatible(parentId: string | null, childType: string): void {
-    if (parentId === null) {
-      if (childType !== "notebook") throw new AppError("InvalidInput", "note/group 必须位于目录节点下");
+    if (childType === "notebook") {
+      if (parentId !== null) throw new AppError("InvalidInput", "笔记本只能位于根层");
       return;
     }
-    if (childType === "notebook") throw new AppError("InvalidInput", "笔记本只能位于根层");
+    if (parentId === null) throw new AppError("InvalidInput", "note/group 必须位于目录节点下");
     const parent = this.db.prepare("SELECT node_type FROM tree_nodes WHERE id=? AND deleted_at IS NULL").get(parentId) as { node_type: string } | undefined;
     if (!parent) throw new AppError("NotFound", `父节点不存在: ${parentId}`);
-    if (parent.node_type === "note") throw new AppError("InvalidInput", "笔记不能作为父节点");
   }
 
   private mapSummary(row: any): NoteSummary {

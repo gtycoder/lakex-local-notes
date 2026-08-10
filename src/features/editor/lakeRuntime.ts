@@ -291,9 +291,11 @@ export function createLakeDocument(
 
   const prefsSize = typeof prefs?.fontSize === "number" ? prefs.fontSize : 18;
   const customOptions: Record<string, unknown> = {
+    // 编辑态不禁用 emoji 插件：unicodeEmoji 卡片的表情选择器依赖其默认数据，
+    // 禁用后选择器渲染为空（0x0）。Viewer 仍保持纯只读。
     disabledPlugins: mode === "viewer"
       ? ["save", "toolbar", "emoji"]
-      : ["save", "emoji", ...(prefs?.showToolbar === false ? ["toolbar"] : [])],
+      : ["save", ...(prefs?.showToolbar === false ? ["toolbar"] : [])],
     input: {},
     defaultFontsize: prefsSize,
     toc: { enable: !!tocEnabled && !prefs?.disableNativeToc },
@@ -403,6 +405,17 @@ export function createLakeDocument(
       };
     } catch { /* 非编辑器环境忽略 */ }
   }
+  // 表情/公式卡片插入后自动打开选择器/编辑器（不依赖虚拟渲染开关）
+  if (mode === "editor") {
+    try {
+      const disposeAutoOpen = setupInsertedCardAutoOpen(element);
+      const prevDispose = (editor as any).__disposeExtras;
+      (editor as any).__disposeExtras = () => {
+        try { if (typeof prevDispose === "function") prevDispose(); } catch { /* ignore */ }
+        try { disposeAutoOpen(); } catch { /* ignore */ }
+      };
+    } catch { /* 非编辑器环境忽略 */ }
+  }
   // 订阅 Lake 内置性能监控：docInitPerf（code 55），直接给出异步渲染管线的
   // parseTime / renderTime / nodeLength，用于量化 setDocument 之后的主线程耗时
   try {
@@ -449,6 +462,108 @@ function ensureCardsInViewHydrated(host: HTMLElement, getScrollNode: () => HTMLE
  * 收到 $appear，继而 showCode / CodeMirror 不执行；关闭文档重开时 setDocument
  * 的水合路径又会掩盖该问题。
  */
+/** 表情（unicodeEmoji）/ 公式（math）卡片在 Slash 插入后，Lake 会把选区放进卡片并调用
+ * 卡片 view node 的 focus()（打开表情选择器 / 公式编辑器），但卡片 UI 是懒初始化的
+ * （_uiViewProxy 未就绪时 focus() 是空操作），且选区已停在卡片内导致后续点击不再触发
+ * focus——表现为“插入后出现方框，必须先点别处再点方框才能打开”。
+ * 这里在卡片 DOM 出现时若选区落在卡片内，对卡片 UI 控制器（_$cardUI.focus()）做有限重试，
+ * UI 就绪后即可直接弹出选择器/编辑器；点击方框时也直接触发，覆盖“第一次点击方框”的场景。
+ */
+function setupInsertedCardAutoOpen(host: HTMLElement): () => void {
+  const seen = new Set<string>();
+  let timer: number | undefined;
+  let disposed = false;
+
+  const isTargetCard = (el: Element): boolean => {
+    const name = (el as HTMLElement).dataset?.cardName || "";
+    return name === "unicodeEmoji" || name === "math";
+  };
+  const getController = (el: Element): any => {
+    try {
+      const inst = (el as any)._neRef?._virtualNode?._instance;
+      return inst?._$cardUI || inst?._ui || null;
+    } catch { return null; }
+  };
+  const selectionInside = (el: Element): boolean => {
+    try {
+      const sel = window.getSelection();
+      if (!sel || sel.rangeCount === 0) return false;
+      const node = sel.anchorNode;
+      if (!node) return false;
+      const container = node.nodeType === Node.TEXT_NODE ? node.parentElement : (node as Element);
+      return !!container && el.contains(container);
+    } catch { return false; }
+  };
+  const overlayOpened = (controller: any): boolean => {
+    try {
+      // 数学编辑器/表情选择器可能渲染到卡片外的 overlay 容器，做全局可见性检测
+      const editors = document.querySelectorAll('[data-testid="ne-math-editor"], .ne-math-editor');
+      for (const m of editors) {
+        const r = (m as HTMLElement).getBoundingClientRect();
+        if (r.width > 0 && r.height > 0) return true;
+      }
+      const ref = controller?.uiViewProxy?.getReactRef?.() || controller?._uiViewProxy?.getReactRef?.();
+      if (ref?._overlay) return true;
+    } catch { /* ignore */ }
+    return false;
+  };
+
+  const tryFocusCard = (el: Element, requireSelection: boolean): void => {
+    const id = (el as HTMLElement).id;
+    if (!id || seen.has(id)) return;
+    if (requireSelection && !selectionInside(el)) return;
+    seen.add(id);
+    let attempts = 0;
+    const tick = (): void => {
+      if (disposed) return;
+      const controller = getController(el);
+      if (controller) {
+        try { if (typeof controller.focus === "function") controller.focus(); } catch { /* ignore */ }
+        if (overlayOpened(controller)) return;
+      }
+      attempts++;
+      if (attempts < 12) timer = window.setTimeout(tick, 80);
+    };
+    tick();
+  };
+
+  const scan = (): void => {
+    if (disposed) return;
+    try {
+      host.querySelectorAll("ne-card").forEach((el) => {
+        if (!isTargetCard(el)) return;
+        // 插入后自动打开：要求选区落在卡片内，避免误开已加载/粘贴的旧卡片
+        tryFocusCard(el, true);
+      });
+    } catch { /* ignore */ }
+  };
+  const schedule = (): void => {
+    if (disposed) return;
+    if (timer !== undefined) window.clearTimeout(timer);
+    timer = window.setTimeout(scan, 60);
+  };
+  // 点击卡片方框时直接触发（含“第一次点击方框”）：不需要选区先落进卡片
+  const handleCardMouseDown = (event: MouseEvent): void => {
+    const target = event.target as HTMLElement | null;
+    if (!target || typeof target.closest !== "function") return;
+    const el = target.closest("ne-card");
+    if (!el || !host.contains(el)) return;
+    if (!isTargetCard(el)) return;
+    tryFocusCard(el, false);
+  };
+
+  const mo = new MutationObserver(schedule);
+  try { mo.observe(host, { childList: true, subtree: true }); } catch { /* ignore */ }
+  host.addEventListener("mousedown", handleCardMouseDown, true);
+  schedule();
+
+  return () => {
+    disposed = true;
+    if (timer !== undefined) window.clearTimeout(timer);
+    try { mo.disconnect(); } catch { /* ignore */ }
+    host.removeEventListener("mousedown", handleCardMouseDown, true);
+  };
+}
 function setupVisibleCardHydration(
   host: HTMLElement,
   editor: LakeEditorInstance | null,

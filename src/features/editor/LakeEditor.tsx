@@ -46,6 +46,17 @@ export function LakeEditor({ noteId, content, mode = "editor", tocEnabled, onCha
       const upgraded = upgradePastedHtml(html);
       if (upgraded !== html) dt.setData("text/html", upgraded);
     };
+    // 防失焦：表情框（.ne-card-unicode-emoji）和公式框（.ne-math-entry）刚插入后，
+    // mousedown 的浏览器默认行为会让编辑器失焦/折叠选区，导致 Lake 卡片第一次点击
+    // 无法被聚焦（选择器/编辑器面板不打开），必须点别处再点一次才生效。
+    // 在捕获阶段 preventDefault，保留编辑器选区，使卡片首次点击即可打开。
+    const preventCardBlur = (event: MouseEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (target && typeof target.closest === "function") {
+        if (target.closest(".ne-card-unicode-emoji, .ne-math-entry")) event.preventDefault();
+      }
+    };
+    host.addEventListener("mousedown", preventCardBlur, true);
     host.addEventListener("copy", copyRichSelection, true);
     host.addEventListener("paste", pasteHandler, true);
 
@@ -71,6 +82,7 @@ export function LakeEditor({ noteId, content, mode = "editor", tocEnabled, onCha
       setError(reason instanceof Error ? reason.message : String(reason));
     }
     return () => {
+      host.removeEventListener("mousedown", preventCardBlur, true);
       host.removeEventListener("copy", copyRichSelection, true);
       host.removeEventListener("paste", pasteHandler, true);
       window.clearTimeout(tocRefreshTimer);
