@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode, type PointerEvent as ReactPointerEvent } from "react";
-import { ChevronDown, ChevronsLeft, ChevronsRight, Pin, Save, X, XCircle, XOctagon } from "lucide-react";
+import { ChevronDown, ChevronsLeft, ChevronsRight, Pin, X, XCircle, XOctagon } from "lucide-react";
 import { createPortal } from "react-dom";
 import { EditorTab } from "./EditorTab";
 import type { LakeEditorPrefs } from "./lakeRuntime";
@@ -319,7 +319,6 @@ export function MultiTabEditor({
           canCloseOthers={tabs.length > 1}
           hasLeft={tabs.findIndex((t) => t.noteId === tabCtx.noteId) > 0}
           hasRight={tabs.findIndex((t) => t.noteId === tabCtx.noteId) < tabs.length - 1}
-          hasUnmodified={tabs.some((t) => !t.dirty)}
           onTogglePin={() => {
             setPinned((prev) => {
               const next = new Set(prev);
@@ -358,12 +357,6 @@ export function MultiTabEditor({
               if (!pinned.has(t.noteId)) onTabClose(t.noteId);
             }
           }}
-          onCloseUnmodified={() => {
-            // 思源「关闭未保存」：关闭所有未修改的标签（保留 dirty），跳过钉住
-            for (const t of tabs) {
-              if (!t.dirty && !pinned.has(t.noteId)) onTabClose(t.noteId);
-            }
-          }}
           onClose={() => setTabCtx(null)}
         />
       )}
@@ -381,27 +374,24 @@ interface TabContextMenuProps {
   onCloseLeft: () => void;
   onCloseRight: () => void;
   onCloseAll: () => void;
-  onCloseUnmodified: () => void;
   canCloseOthers: boolean;
   hasLeft: boolean;
   hasRight: boolean;
-  hasUnmodified: boolean;
   onClose: () => void;
 }
 
-const TabContextMenu = ({ x, y, pinned, onTogglePin, onCloseTab, onCloseOthers, onCloseLeft, onCloseRight, onCloseAll, onCloseUnmodified, canCloseOthers, hasLeft, hasRight, hasUnmodified, onClose }: TabContextMenuProps) => {
+const TabContextMenu = ({ x, y, pinned, onTogglePin, onCloseTab, onCloseOthers, onCloseLeft, onCloseRight, onCloseAll, canCloseOthers, hasLeft, hasRight, onClose }: TabContextMenuProps) => {
   const left = Math.min(x, window.innerWidth - 210);
-  const top = Math.min(y, window.innerHeight - 340);
+  const top = Math.min(y, window.innerHeight - 280);
   return createPortal(
     <div className="context-menu" style={{ left, top }} role="menu" data-context-menu>
-      <button role="menuitem" disabled={pinned} title={pinned ? "钉住的标签需先取消钉住才能关闭" : undefined} onClick={() => { onCloseTab(); onClose(); }}><X size={15} /><span>关闭</span></button>
+      <button role="menuitem" onClick={() => { onCloseTab(); onClose(); }}><X size={15} /><span>关闭</span></button>
       {canCloseOthers && <button role="menuitem" onClick={() => { onCloseOthers(); onClose(); }}><XCircle size={15} /><span>关闭其他</span></button>}
       {canCloseOthers && <button role="menuitem" onClick={() => { onCloseAll(); onClose(); }}><XOctagon size={15} /><span>关闭全部</span></button>}
-      {hasUnmodified && <button role="menuitem" onClick={() => { onCloseUnmodified(); onClose(); }}><Save size={15} /><span>关闭未保存</span></button>}
       {hasLeft && <button role="menuitem" onClick={() => { onCloseLeft(); onClose(); }}><ChevronsLeft size={15} /><span>关闭左侧</span></button>}
       {hasRight && <button role="menuitem" onClick={() => { onCloseRight(); onClose(); }}><ChevronsRight size={15} /><span>关闭右侧</span></button>}
       <div className="context-menu-sep" />
-      <button role="menuitem" onClick={() => { onTogglePin(); }}><Pin size={15} /><span>{pinned ? "取消钉住" : "钉住"}</span></button>
+      <button role="menuitem" onClick={() => { onTogglePin(); onClose(); }}><Pin size={15} /><span>{pinned ? "取消钉住" : "钉住"}</span></button>
     </div>,
     document.body
   );

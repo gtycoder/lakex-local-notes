@@ -318,8 +318,6 @@ button { cursor: pointer; }
   border: none;
   border-radius: 6px 6px 0 0;
   max-width: 186px;
-  min-height: 42px;
-  line-height: 22px;
   background: transparent;
   color: var(--text-secondary, #666);
   font-size: 13px;
