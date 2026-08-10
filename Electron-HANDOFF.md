@@ -1,6 +1,6 @@
 # Lake Notes Electron 会话交接文档
 
-> 写给完全没有上下文的新会话。开始工作前请先通读本文，再查看 `git status` 和最近提交。
+> 写给完全没有上下文的新会话。开始工作前请先通读本文，再查看 `git status`、`git log --oneline master..HEAD` 和 `docs/TODO.md`。
 >
 > 本文对应项目：`/Users/admin/file/local-lake/lake-notes-electron`
 
@@ -10,197 +10,182 @@
 | --- | --- |
 | 项目目录 | `/Users/admin/file/local-lake/lake-notes-electron` |
 | Git 远程 | `origin = https://gitee.com/gtycoder/local-lake.git` |
-| 分支 | `research/outline-system`（已推送 `origin/master` 至 `7be8955`） |
-| 最近提交 | `7be8955 fix: stabilize cards, locking, board scroll and remote images` |
-| 当前任务 | 多级嵌套、右键菜单定位、表情/公式块交互修复（**本轮 6 个文件尚未提交**） |
+| 当前分支 | `feat/desktop-2026-08`（桌面端功能迭代，从 `master` 分出；`master` 在 `6f36f38`） |
+| 最近提交 | `bfab934 style(icon): enlarge emoji icon picker panel (400x440)` |
+| 本轮范围 | M1 资料交付（缓存/导出/右键体系/tab 优化）+ M2 全文搜索 + M1.6 文档图标（20 个提交，见 §3 清单） |
+| 思源源码参考 | `/Users/admin/file/local-lake/siyuan`（页签/tab 交互参照它实现） |
 | Node | 必须优先使用 Node 24：`$HOME/.nvm/versions/node/v24.18.0/bin` |
 | 开发数据 | `/Users/admin/Library/Application Support/lake-notes-dev`，禁止删除或清理 |
 | 正式数据 | `/Users/admin/Library/Application Support/lake-notes-electron`，禁止触碰 |
 
 ### 绝对不能做的事情
 
-- 不要执行 `git reset`、`git checkout -- .`、`git clean -fd` 等会丢弃工作区的命令。
+- 不要执行 `git reset`、`git checkout -- .`、`git clean -fd` 等会丢弃工作区的命令（单文件恢复临时改动除外，如 `git diff` 确认后按文件恢复）。
 - 不要覆盖或删除其他未提交修改；先看 `git status` 和 `git diff`。
 - 不要修改 `node_modules`。
 - 不要删除或直接修改开发/正式用户数据目录（SQLite 只允许只读查询）。
-- 不要使用 `pkill -f Electron`；机器上还有 Trae、SiYuan、VS Code 等其他 Electron 应用。
+- 不要使用 `pkill -f Electron`；机器上还有 Trae、SiYuan、VS Code 等其他 Electron 应用（结束进程只能 kill 具体 PID）。
 - 清理测试笔记必须走应用 UI 删除流程，不能直接改 SQLite，否则可能被 S3 同步恢复。
 - 不要改 `lake-notes-dev` 里非自己创建的笔记内容；测试后要把自己插入的卡片/字符清理掉。
 
-## 2. 任务目标（本轮）
+## 2. 本轮任务目标（已完成）
 
-1. 资料库目录支持**多层嵌套**：文档下可建分组/文档，分组下可建文档/分组（此前 store 强制 note 不能作为父节点，右键文档的“新建文档/新建分组”会报 `笔记不能作为父节点`）。
-2. 右键菜单定位错位（出现在光标右下方），需要精确显示在光标处。
-3. 插入表情/公式后：**点“表情”直接弹出表情选择器**、点“公式”直接弹出公式编辑器，不再需要“先点一下方框、再点别处、再点方框”三步；同时“第一次点击方框”就能打开。
+1. **资料交付**：文档右键"导出"子菜单（Markdown 资料包 / HTML / 原生 Lake，Word/PDF 预留）；复制为 Markdown / 导出资料路径（本机 AI）；编辑器右键同样支持。
+2. **文本缓存落库**：保存时用 Lake 内核生成 markdown/plain 缓存，作为导出/搜索的文本源（**不做 .lake 解析器**，方案见 §4.1）。
+3. **全文搜索**：FTS5 trigram + 搜索面板（⇧⌘F / 侧边栏按钮），正文命中 + 高亮 + 短词标题回退。
+4. **文档图标**：tree_nodes.icon 列 + 点树节点图标换图标 + Lake emoji 资源分组选择器 + 同步进 manifest。
+5. **tab 优化**：钉住（移到最前、X 隐藏、批量关闭跳过、右键可直接关）、思源式右键菜单、宽度截断。
 
-## 3. 已完成内容
+## 3. 已完成内容（分支 `feat/desktop-2026-08`，20 个提交）
 
-### 3.1 多级嵌套（文档可作父节点）
+| 提交 | 内容 |
+| --- | --- |
+| `3bd5989` | M1.1 文本缓存落库：`notes` 表加 `md_cache`/`text_cache` 列；保存/打开时 Lake 内核 `getDocument("text/markdown" / "text/plain")` 生成缓存；IPC `update_note_caches` |
+| `fde0069` | 文档右键三件套：复制为 Markdown（读缓存）/ 导出资料包（MD+图片）/ 复制资料路径（本机 AI） |
+| `0f50672` | `cleanLakeMarkdown` 清洗 `<font>/<span>` 标签（跳过代码块）；导出选目录（`pick_export_dir` 对话框） |
+| `7c0dc74` | 导出原生 Lake：图片 URL → base64 内嵌（VS Code Lake 插件兼容），`store.exportNativeLake` |
+| `66875c3` | **收口导出**：`electron/export.ts` 统一 `exportNote(id, format, baseDir)`；右键"导出 ▸"二级子菜单（Markdown 资料包/HTML/原生 Lake，Word/PDF 禁用占位）；新增 `electron/mdToHtml.ts` Markdown→HTML 转换器；`store.exportHtmlNote` |
+| `cb1b5f8` | 编辑器右键（`EditorTab`）：导出▸子菜单 + 复制 MD + 复制路径（覆盖 Lake 默认右键，复制粘贴走快捷键） |
+| `d925a8a` | 多 tab 右键：钉住/关闭/关闭其他/关闭左侧/关闭右侧 |
+| `9e5a22b` | 侧边栏"定位到当前文档"：展开祖先 + 高亮 + 滚动 |
+| `1e82cb4` | 复制 MD/资料路径移入"导出 ▸"二级；钉住移到最前 + 关闭保护；tab 截断（186px） |
+| `cd0d52c` | 思源式 tab 菜单：条件显示（关闭其他/全部/左右仅在存在时）、**关闭全部也跳过 pinned**、pinned X 隐藏、菜单项点击后关闭 |
+| `ccde88a` | tab 高度改回原样；pinned 右键"关闭"直接可关（不禁用）；删除"关闭未保存" |
+| `256c563` / `620e9d0` | 去掉 tab min-width（短的自适应）；padding 12→8px（宽度观感仍未完全解决，见 TODO） |
+| `e1bb863` | M1.6 文档图标：`tree_nodes.icon` 列 + 右键"设置图标" + emoji 选择器 + TODO 清单 |
+| `0b0e230` | **M2 全文搜索**：`notes_fts` FTS5 trigram 表 + 索引同步（保存/打开/重命名/删除）+ `searchNotes`（≥3 字 FTS + highlight，1-2 字标题 LIKE 回退）+ `SearchPanel`（⇧⌘F，防注入转义 snippet） |
+| `a02de61` | icon 同步进 manifest（`ManifestNote.icon` 可选字段，向后兼容）；tab 显示自定义图标；emoji 选择器接入 Lake 表情资源（`src/lib/lakeEmojis.ts`，1421 个）+ 搜索框 |
+| `4d72cc9` | 图标选择器按 Lake 分组（`src/lib/lakeEmojiGroups.ts`，8 组 1055 个）；点树节点图标直接换图标；M4/M5 进 TODO |
+| `4d21d97` | 修复双份图标（TreeRow `{icon}` 渲染两处）；emoji 选择器加 backdrop 点击外部关闭（CDP 实测） |
+| `fc540f1` | **修复分组 tabs 被 flex 压扁**（3.4px→43.85px，见 §6 坑 #6） |
+| `bfab934` | 图标选择器放大到 400×440 |
 
-相关文件：
+**自动化验证**：`npx tsc --noEmit`、`npm test -- --run`（140 测试）、`node node_modules/vite/bin/vite.js build`、`git diff --check` 全绿。
 
-- `electron/store.ts`
-- `electron/store.test.ts`
-- `src/components/Sidebar.tsx`
+## 4. 关键架构（新会话必须理解）
 
-实现：
+### 4.1 文本缓存 = 导出/搜索的文本源（不做 .lake 解析器）
 
-- `assertParentCompatible` 放宽为：notebook 只能位于根层；note/group 必须位于某个节点下（**父节点类型不限**，note 也可以当父节点）。
-- `Sidebar` 的“创建上下文”直接用当前选中/右键的节点作父节点（不再上溯到最近的笔记本/分组）；右键菜单“新建文档/新建分组”也直接以目标节点为父节点。
-- 删除 `findContainerAncestor`（无残留引用）。
-- 树渲染/`subtreeIds`/`expandAncestors`/`autoExpanded` 本来就支持任意嵌套，无需改动。
-- 同步不感知层级（manifest 只同步 note 的 `parentId` 字符串），多级嵌套不破坏 S3 同步。
-- `store.test.ts` 对应测试更新为“支持多层嵌套，notebook 仍只能位于根层”。
+- `.lake` 是 Lake 私有 XML，正文在文件里不在 DB。**不做自研解析器**，改为：**保存时用 Lake 内核 `getDocument("text/markdown"/"text/plain")` 生成缓存**存 `notes.md_cache`/`text_cache` 列（`App.tsx` `persistTab` 里调编辑器实例；`handleEditorReady` 打开时补写）。
+- 搜索索引 FTS、导出资料包、复制 MD 全部消费缓存。
+- 图片不参与搜索；导出资料包时用**轻量正则**从 MD 里提取 `![](http://127.0.0.1:19876/{noteId}/{file})` → 复制到 `images/` + 改写相对引用（不需要解析 .lake 卡片）。
 
-### 3.2 右键菜单定位（Portal）
+### 4.2 收口导出（`electron/export.ts`）
 
-相关文件：
+- 统一入口 `exportNote(store, id, format, baseDir)`，`ExportFormat = "markdown" | "html" | "lake" | "docx" | "pdf"`（docx/pdf 未实现，抛"暂未实现"）。
+- markdown → `store.exportNotePackage`（MD + images/）；html → `store.exportHtmlNote`（`mdToHtml` 转换 + images/）；lake → `store.exportNativeLake`（图片 base64 内嵌）。
+- 右键菜单：文档右键（`Sidebar.tsx` ContextMenu）和编辑器右键（`EditorTab.tsx` EditorContextMenu）都是"**导出 ▸**"二级子菜单（Markdown 资料包 / Markdown 文本（复制）/ HTML / Word(禁用) / PDF(禁用) / 原生 Lake / 资料路径）。
+- `cleanLakeMarkdown`（`src/lib/markdownClean.ts`）：剥 font/span 标签、跳过代码块，生成缓存时调用。
 
-- `src/components/Sidebar.tsx`
-- `src/styles.css`
+### 4.3 全文搜索
 
-根因：桌面模式下 `.sidebar` 恒有 `transform: translateX(0)`，CSS 规定 `transform`（即使恒等变换）会让内部 `position: fixed` 退化为**相对侧边栏**定位，于是 `.context-menu` 整体偏移到光标右下（约 活动栏+顶栏 的距离）。
+- `notes_fts` FTS5 trigram（`title, body, note_id UNINDEXED`）；`rebuildSearchIndex()` 启动时全量重建；保存/打开/重命名/删除同步（`upsertFts`）。
+- `searchNotes(query, limit)`：≥3 字走 FTS `highlight(notes_fts, 1, '<mark>', '</mark>')`；1-2 字回退 `tree_nodes.title LIKE`。
+- `SearchPanel`（`src/components/SearchPanel.tsx`）：⇧⌘F 或侧边栏按钮打开，300ms 防抖，结果点击打开文档；snippet 渲染前 `sanitizeSnippet`（转义后只放行 `<mark>`，防注入）。
 
-修复：
+### 4.4 文档图标
 
-- `ContextMenu` 用 `createPortal(..., document.body)` 渲染，恢复真正的视口固定定位。
-- `.context-menu` 的 `z-index` 由 40 提到 600（避免被侧边栏 z-index:250 盖住）。
-- 点击外部关闭逻辑不变（document 层监听 `[data-context-menu]`）。
+- `tree_nodes.icon` 列（emoji 文本）；`setNodeIcon` IPC。
+- 同步：`ManifestNote.icon` 可选字段（v3 清单不升版本，旧清单无字段本地保持原样）；上传/下载/冲突副本/墓碑均带 icon。
+- 选择器：`EmojiIconPicker`（`Sidebar.tsx` 导出）——分组 tabs（`src/lib/lakeEmojiGroups.ts`，从 Lake bundle `MYe` 提取 8 组）+ 搜索 + 清除；`src/lib/lakeEmojis.ts` 是名称→字符全量（1421）。
+- 入口：点树节点图标（`tree-row-icon`，hover 提示"设置图标"）或右键"设置图标"。
+- tab 上显示文档自定义图标（`TabInfo.icon`，App 从 treeNodes 查）。
 
-### 3.3 表情/公式块：直接弹出选择器/编辑器
+### 4.5 tab 交互（参照思源 `/Users/admin/file/local-lake/siyuan` 实现）
 
-相关文件：
+- 钉住：移到最前（pinned 组在前，`onTabsReorder`）；X 按钮隐藏（`.tab-item.pinned .tab-close { display: none }`）；关闭其他/全部/左右**跳过 pinned**；右键菜单"关闭"**可直接关 pinned**（不禁用）；关闭后清理 pinned 记录。
+- 右键菜单：关闭 / 关闭其他（tabs>1）/ 关闭全部（tabs>1，跳过 pinned）/ 关闭左侧 / 关闭右侧（条件显示）→ 分隔 → 钉住/取消钉住。
+- 宽度：`max-width: 186px` 截断；`padding: 6px 8px`；**无 min-width**（短 tab 自适应）。
 
-- `src/features/editor/lakeRuntime.ts`
-- `src/features/editor/LakeEditor.tsx`
+## 5. 当前问题 / 状态
 
-#### 根因一：表情选择器空白（0×0 方框）
+- 图标选择器已放大（400×440）、分组 tabs 正常（实测高度 43.85px）。
+- **待用户确认**：图标选择器尺寸、tab 宽度观感（`padding 8px` 后关闭键仍觉有空间，见 TODO）。
+- 无已知 P0 阻塞；工作区干净（`git status` 无未提交）。
+- `docs/TODO.md` 记录了：tab 宽度/间距、Word/PDF 导出、2 字搜索回退（已实现）、Viewer 锁定态缓存、**M4 回收站/快照、M5 借鉴/流畅性（暂不实施）**。
 
-- 编辑态 `disabledPlugins` 里一直禁用了 `"emoji"` 插件（基线就如此）。
-- unicodeEmoji 卡片的选择器（`.ne-ui-unicode-emoji-panel`）依赖默认表情数据（8 组、1467 个表情），禁用后面板渲染成 0×0 空壳。
-- 修复：**编辑态不再禁用 `emoji` 插件**（Viewer 只读态仍禁用：`["save","toolbar","emoji"]`）。
+## 6. 踩过的坑（本会话新增，务必记住）
 
-#### 根因二：插入后不自动弹出
+1. **保存时用 Lake 内核生成文本缓存，不要自研 .lake 解析器**。`getDocument("text/markdown"/"text/plain")` 性能极好（563KB 大文档 13ms/4.6ms），且图片在 MD 里是 `![](http://127.0.0.1:19876/{noteId}/{file})` 本地 URL——导出资料包用正则提取即可，无需解析卡片结构。
+2. **Lake 导出 MD 会保留 `<font style="...">` / `<span>` 内联样式**（知乎抓取内容的颜色），需 `cleanLakeMarkdown` 剥标签（**跳过代码块**，用 ``` 分段处理，避免误伤代码块内字面量）。
+3. **html 图片正则捕获组贪婪陷阱**：`<img src="URL" alt="">` 里 `([^/]+)` 会贪婪吃进 `" alt="`，导致 filename 捕获错误 → 用 `[^/"\s]+`（不含引号/斜杠/空白）。
+4. **python heredoc 写 TS 代码时 `\\b` 会被转义成退格字符（0x08）**，正则静默失效（grep 输出显示为 `\b` 但 hexdump 是 08）。写正则后用 `hexdump -C` 抽查，或用 `chr(92)+'b'` 拼。**本会话此坑踩过两次（exportNativeLake 的 cardRe）。**
+5. **FTS5 trigram**：中文子串搜索可行（3 字以上）；`snippet()` 在 trigram 下不可用、用 `highlight()`；**1-2 字查不到**（trigram 最小 3 字符）→ 标题 LIKE 回退。MATCH 查询串要逐词加引号转义（`escapeFtsQuery`）。
+6. **flex column + 无 `flex: none` 会把子项压扁**：`.emoji-picker` 是 max-height 300px 的 flex column，1421 个表情让 grid 内容超高，search/tabs 被 flex 压缩——**分组 tabs 被压成 3.4px 高，肉眼"消失"**。修复：grid `flex: 1 1 auto; min-height: 0; overflow-y: auto`，search/tabs/clear `flex: none`。**教训：UI 验证要查元素高度/可见性，不只查存在性**（CDP `getBoundingClientRect` + computedStyle）。
+7. **验证真实 UI 用 CDP**：`./node_modules/.bin/electron --remote-debugging-port=9333 .`（**参数必须在 `.` 前面**），然后 `curl :9333/json` 拿 page ws，用 Node 全局 WebSocket 发 `Runtime.evaluate` 检查 DOM / 点击 / 截图。项目有单实例锁（`app.requestSingleInstanceLock`），**不能双开**；vite-plugin-electron 会自动拉一个无端口的 Electron 抢锁——调试时临时在 `vite.config.ts` 给 electron 项加 `onstart: () => {}` 禁用自动启动，**验证后必须恢复**。
+8. **vite dev server 会被 exec 会话回收杀掉**（nohup 也可能失效），调试时用长驻 tty 会话保持，或用 `npm run dev:vite` 后立刻起 Electron。
+9. **macOS 关窗口 ≠ 退出应用**（隐藏到 Dock），用户"重启"可能仍加载旧渲染代码；排查"改动没生效"先确认进程是否全新（`ps aux | grep "Electron \."`）。
+10. **思源 pinned tab 的 X 是隐藏不是禁用**（`.item--pin .item__close { display: none }`）；**关闭全部也跳过 pinned**；但右键"关闭"直接 `removeTab`（能关 pinned）。按用户定制：我们的右键"关闭"可直接关 pinned，X 隐藏，其余批量关闭跳过。
+11. **icon 同步**：`tree_nodes.icon` 不在 `notes` 表，`listNotesForSync` 要 JOIN tree_nodes 取 icon；manifest 加可选字段**不升版本**（`validateManifest` 检查 version === 3，旧清单无 icon 字段时本地保持原样）。
+12. **Lake emoji 资源提取**：全量映射是 bundle 里 `let dx={名称:字符}`（1421 唯一），分组是 `MYe = {组名: "😀.😃...".split(".")}`（Windows/Android 分支，8 组 1055 个）；用 `new Function("return " + 对象字符串)()` 解析，生成 `src/lib/lakeEmojis.ts` / `lakeEmojiGroups.ts`。
 
-- Slash 插入命令会把选区放进卡片并调用卡片 `focus()`（表情→`openOverlay()` 开选择器；公式→`rerender({focus:true})` 开编辑器）。
-- 但卡片 UI 是**懒初始化**的：`_uiViewProxy`/`_$cardUI` 未就绪时 `focus()` 是空操作；且选区已停在卡片内，导致之后点击不再触发 focus。
-- 修复：`lakeRuntime.ts` 新增 `setupInsertedCardAutoOpen(host)`（仅编辑态接入，随 `__disposeExtras` 释放）：
-  - 监听编辑器 DOM（MutationObserver，防抖 60ms）与卡片 mousedown（捕获阶段）；
-  - 命中 `ne-card[data-card-name="unicodeEmoji"|"math"]`：
-    - 插入后若 `window.getSelection()` 锚点落在卡片内 → 对 `card._neRef._virtualNode._instance._$cardUI.focus()` 做**有限重试**（最多 12 次 × 80ms），UI 就绪后自动弹出；
-    - 点击方框时直接触发（无需选区先落进卡片），覆盖“第一次点击方框无效”；
-  - `seen` 集合按卡片 id 去重，已打开的卡片不会重复弹（不干扰正常的关闭/切换/换表情）。
-- `LakeEditor.tsx`：编辑器宿主上加捕获阶段 `mousedown`，命中 `.ne-card-unicode-emoji, .ne-math-entry` 时 `preventDefault()`（防失焦，保住编辑器选区）。
+### 既有（保留，来自更早会话）
 
-已实测（真实 UI）：
+13. **不要禁用 `emoji` 插件**（unicodeEmoji 选择器数据依赖它）；不要禁用 `toc` 插件（用 `toc: { enable: false }`）。
+14. **不要全量重定向 `gw.alipayobjects.com`**（同时承载运行时 CDN 和用户图片，只按本地镜像存在性精确重定向）。
+15. **Viewer 和 Editor 的真实滚动容器不同**：编辑态 `.ne-editor-wrap`，锁定态 `.ne-viewer`；锁定态自定义卡片需兼容层注入最小主题结构。
+16. **React StrictMode 双挂载**：cleanup 不能把 host/mount 从 DOM 拔掉。
+17. **大 chunk 警告不是失败**；先区分 warning 与真正的类型/测试/运行时错误。
+18. **"关闭再打开后恢复"不等于已解决**（新建/初始化路径的水合可能没完成）。
 
-- `/` → 表情 → 选择器**直接弹出**，带完整内容（231 个表情、最近使用、搜索框）✅
-- `/` → 公式 → 插入“添加 TeX 公式”方框；公式编辑器自动弹出在测试时显示 0×0（疑似 DevTools 挤窄窗口 + 卡片在文档末尾的布局环境问题），**待用户在实际使用中确认**。
+## 7. 下一步计划
 
-## 4. 当前问题 / 当前状态
+1. 用户验证图标选择器尺寸（400×440）与 tab 宽度观感。
+2. `docs/TODO.md` 里的待办按需推进：
+   - tab 宽度/间距（短标签关闭键贴边问题，重新审视 flex/padding/gap）；
+   - Word/PDF 导出（走 `electron/export.ts` 收口 + `mdToHtml` 链路，PDF 可用 Electron `printToPDF`）；
+   - Viewer 锁定态文本缓存确认；
+   - **M4 回收站 + 历史快照**、**M5 思源借鉴（模板/日记/命令面板）+ 流畅性优化**（方案已讨论，暂缓）。
+3. 常规回归：导出三种格式、搜索（含 2 字）、图标设置/同步、tab 钉住交互、侧边栏定位。
 
-- 用户已确认：多级嵌套、右键菜单定位、表情直接弹出选择器均正常。
-- **待确认**：公式块插入后编辑器是否直接弹出（用户验证中）。
-- 无已知 P0 阻塞。
-- 自动化验证已通过：
-
-```text
-npx tsc --noEmit
-npm test -- --run        # 8 个测试文件 / 126 个测试通过
-node node_modules/vite/bin/vite.js build
-git diff --check
-```
-
-- 本轮改动（**未提交**）：
-
-```text
- M electron/store.test.ts
- M electron/store.ts
- M src/components/Sidebar.tsx
- M src/features/editor/LakeEditor.tsx
- M src/features/editor/lakeRuntime.ts
- M src/styles.css
-```
-
-## 5. 下一步计划
-
-1. 用户确认公式块自动弹出；若仍异常，优先检查：
-   - 数学编辑器 popover 渲染位置（`.ne-inner-overlay-container` / `.ne-ui-boundary-popover`）与卡片是否在视口内；
-   - `setupInsertedCardAutoOpen` 的 `overlayOpened()` 是否被 0×0 误判（`[data-testid="ne-math-editor"]` 需宽高 >0 才算打开）。
-2. 用户确认后提交并推送本轮改动（不要动 `origin/master` 已有提交，只在其上追加）。
-3. 常规回归：
-   - 多级嵌套：右键文档建分组/文档、分组建文档/分组、拖拽移动、删除子树；
-   - 右键菜单位置（侧边栏中部/底部、窗口边缘翻转）；
-   - 表情/公式插入与点击；
-   - 既有功能回归：锁定/解锁滚动位置、画板、代码块新建、图片下载、大纲。
-
-## 6. 踩过的坑
-
-### 本轮新增
-
-1. **不要禁用 `emoji` 插件。** unicodeEmoji 卡片的表情选择器数据依赖它；禁用后选择器渲染成 0×0 空壳，表现为“方框点了没反应”。`disabledPlugins: ["emoji"]` 只应保留在 Viewer。
-2. **卡片名在 `ne-card.dataset.cardName`，UI 控制器在 `_neRef._virtualNode._instance._$cardUI`。** `ne-card._neRef` 只是节点引用（无 `focus()`），直接对它调 `focus()` 是无效的。
-3. **卡片 UI 懒初始化**导致插入后 `focus()` 空操作（`_uiViewProxy`/`_$cardUI` 未就绪），且选区已停在卡片内使后续点击不再触发——需要“重试 focus 直到 UI 就绪”或“点击时直接触发”。
-4. **`.sidebar` 恒有 `transform: translateX(0)`**，会让内部 `position: fixed` 退化为相对侧边栏定位，弹层/菜单偏移到光标右下。弹层类 UI 应 `createPortal` 到 `document.body`。
-5. 拖动/键盘清理编辑器内容时，Backspace 计数与 DOM 结构不一定一一对应；清理测试残留后务必核对保存的 `.lake` 文件（`python3` 只读检查 `name="math"` / `name="unicodeEmoji"` 数量）。
-
-### 既有（保留）
-
-6. **不要全量重定向 `gw.alipayobjects.com`。** 它同时承载运行时 CDN 和用户图片；只能按本地镜像文件存在性精确重定向。
-7. **不要禁用 `toc` 插件。** 桌面端应使用 `toc: { enable: false }`，禁用插件会让 TOC 数据一起消失。
-8. **Viewer 不一定注入 `editor`。** 锁定态自定义卡片（如思维导图）需要兼容层注入最小主题结构。
-9. **Viewer 和 Editor 的真实滚动容器不同。** 编辑态 `.ne-editor-wrap`，锁定态 `.ne-viewer`。
-10. **画板新增元素不一定触发 Lake `contentchange`。** 需要 Drawnix `onChange` 路径派发 `lake-board-contentchange` 专属事件；恢复 scrollTop 不能每个 scroll/RAF 都写。
-11. **React StrictMode 会双挂载 effect。** cleanup 不能把 host/mount 从 DOM 拔掉。
-12. **不要用旧代码块资源。** 统一使用新版 Lake CodeMirror 7.1.3 镜像（`./vendor/cdn/as/g/larkgroup/lake-codemirror/7.1.3/CodeMirror.js`）。
-13. **不要删除用户数据目录来解决问题。** 单实例锁用正常关闭流程。
-14. **构建输出中的大 chunk 警告不是本轮失败。** 先区分 warning 与真正的类型/测试/运行时错误。
-15. **不要把“关闭再打开后恢复”误认为已解决。** 通常说明新建/初始化路径没完成卡片水合。
-
-## 7. 关键命令
-
-### 静态检查
+## 8. 关键命令
 
 ```bash
 export PATH="$HOME/.nvm/versions/node/v24.18.0/bin:$PATH"
 cd /Users/admin/file/local-lake/lake-notes-electron
 npx tsc --noEmit
-npm test -- --run
+npm test -- --run        # 140 个测试
 node node_modules/vite/bin/vite.js build
 git diff --check
 ```
 
-### 启动开发版
+启动开发版：
 
 ```bash
 export PATH="$HOME/.nvm/versions/node/v24.18.0/bin:$PATH"
 cd /Users/admin/file/local-lake/lake-notes-electron
-npm run dev
+npm run dev              # vite 1421 + vite-plugin-electron 自动拉起 dev Electron（lake-notes-dev）
 ```
 
-`npm run dev` 会启动 Vite `127.0.0.1:1421` 并由 vite-plugin-electron 拉起开发版 Electron；改动 `electron/*.ts` 主进程代码会自动重建重启，改动 `src/**` 渲染进程代码 HMR。
+CDP 调试启动（临时在 vite.config.ts 加 `onstart: () => {}` 后）：
 
-### 只读检查开发库
+```bash
+./node_modules/.bin/electron --remote-debugging-port=9333 .
+curl -s http://127.0.0.1:9333/json
+```
+
+只读检查开发库：
 
 ```bash
 DB="/Users/admin/Library/Application Support/lake-notes-dev/workspace-default/metadata.sqlite3"
-sqlite3 "file:${DB}?mode=ro" "SELECT id, parent_id, node_type, title FROM tree_nodes WHERE deleted_at IS NULL;"
+sqlite3 "$DB" "SELECT id, title, parent_id, node_type, icon FROM tree_nodes WHERE deleted_at IS NULL;"
 ```
 
-### 关键排查文件
+## 9. 关键排查文件
 
 ```text
-src/App.tsx
-src/components/Sidebar.tsx
-src/features/editor/MultiTabEditor.tsx
-src/features/editor/EditorTab.tsx
-src/features/editor/LakeEditor.tsx
-src/features/editor/lakeRuntime.ts
-src/features/editor/BoardCard.tsx
-src/features/editor/resourceUpload.ts
-electron/main.ts
-electron/store.ts
-electron/cdnRedirect.ts
-src/features/outline/
-src/styles.css
+src/App.tsx                       # 保存缓存生成(persistTab)、导出/搜索/图标回调、SearchPanel 集成
+src/components/Sidebar.tsx        # 树渲染、文档右键(ContextMenu+导出▸)、EmojiIconPicker、定位
+src/components/SearchPanel.tsx    # 全文搜索面板
+src/features/editor/EditorTab.tsx # 编辑器右键菜单(EditorContextMenu)
+src/features/editor/MultiTabEditor.tsx # tab 右键(TabContextMenu)、钉住逻辑
+src/features/editor/lakeRuntime.ts      # Lake 编辑器创建（不要动禁用插件清单）
+src/lib/markdownClean.ts          # MD 清洗
+src/lib/lakeEmojis.ts / lakeEmojiGroups.ts # Lake emoji 数据（自动生成）
+electron/export.ts                # 收口导出统一入口
+electron/mdToHtml.ts              # Markdown→HTML
+electron/store.ts                 # 缓存列、FTS、exportNotePackage/HtmlNote/NativeLake、setNodeIcon
+electron/sync.ts                  # manifest v3（含 icon 字段）
+electron/main.ts                  # IPC 注册
+docs/TODO.md                      # 待办
 ```
