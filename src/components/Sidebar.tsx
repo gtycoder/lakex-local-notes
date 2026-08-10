@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent } from "react";
 import { createPortal } from "react-dom";
-import { BookOpen, ChevronRight, ClipboardCopy, FilePlus2, FileText, FoldVertical, Folder, FolderPlus, Link2, Package, Pencil, Plus, Search, Trash2, X } from "lucide-react";
+import { BookOpen, ChevronRight, ClipboardCopy, FileDown, FilePlus2, FileText, FoldVertical, Folder, FolderPlus, Link2, Package, Pencil, Plus, Search, Trash2, X } from "lucide-react";
 import type { TreeNode, TreeNodeType } from "../lib/types";
 
 type CreateKind = "notebook" | "group" | "note";
@@ -24,6 +24,7 @@ interface SidebarProps {
   onRequestDelete: (node: TreeNode) => void;
   onCopyMarkdown: (node: TreeNode) => void;
   onExportPackage: (node: TreeNode) => void;
+  onExportNativeLake: (node: TreeNode) => void;
   onCopyPaths: (node: TreeNode) => void;
   pendingRenameId: string | null;
   onPendingRenameConsumed: () => void;
@@ -279,7 +280,7 @@ export function Sidebar(props: SidebarProps) {
         {roots.map((node) => <TreeRow key={node.id} node={node} depth={0} nodes={props.nodes} query={query} activeId={props.activeId} contextId={context?.id ?? null} expanded={expanded} draggingId={draggingId} dropTarget={dropTarget} pendingCreate={pendingCreate} editingId={editingId} editingTitle={editingTitle} createField={createField} onEditingTitle={setEditingTitle} onSubmitRename={submitRename} onCancelRename={() => setEditingId(null)} onBeginRename={beginRename} onPointerDown={(event, id) => { if (event.button !== 0 || (event.target as HTMLElement).closest("input")) return; dragRef.current = { id, startX: event.clientX, startY: event.clientY, moved: false }; setDraggingId(id); }} consumeSuppressedClick={() => suppressClickRef.current} onContext={setContextId} onContextMenu={openContext} onToggle={(id) => setExpanded((current) => toggleSet(current, id))} onSelect={props.onSelect} />)}
         {roots.length === 0 && <div className="empty-list">点击 + 新建第一个笔记本</div>}
       </nav>
-      {contextMenu && contextNode && <ContextMenu node={contextNode} x={contextMenu.x} y={contextMenu.y} onNewChild={menuNewChild} onRename={menuRename} onDelete={menuDelete} onCopyMarkdown={() => props.onCopyMarkdown(contextNode)} onExportPackage={() => props.onExportPackage(contextNode)} onCopyPaths={() => props.onCopyPaths(contextNode)} onClose={() => setContextMenu(null)} />}
+      {contextMenu && contextNode && <ContextMenu node={contextNode} x={contextMenu.x} y={contextMenu.y} onNewChild={menuNewChild} onRename={menuRename} onDelete={menuDelete} onCopyMarkdown={() => props.onCopyMarkdown(contextNode)} onExportPackage={() => props.onExportPackage(contextNode)} onExportNativeLake={() => props.onExportNativeLake(contextNode)} onCopyPaths={() => props.onCopyPaths(contextNode)} onClose={() => setContextMenu(null)} />}
       <div className="sidebar-resize-handle desktop-only" role="separator" aria-label="调整资料库宽度" aria-orientation="vertical" aria-valuemin={props.minWidth} aria-valuemax={props.maxWidth} aria-valuenow={Math.round(props.width)} tabIndex={0} onPointerDown={handleResizePointerDown} onPointerMove={handleResizePointerMove} onPointerUp={finishResize} onPointerCancel={finishResize} onKeyDown={handleResizeKeyDown} />
     </aside>
   );
@@ -403,11 +404,12 @@ interface ContextMenuProps {
   onDelete: () => void;
   onCopyMarkdown: () => void;
   onExportPackage: () => void;
+  onExportNativeLake: () => void;
   onCopyPaths: () => void;
   onClose: () => void;
 }
 
-const ContextMenu = ({ node, x, y, onNewChild, onRename, onDelete, onCopyMarkdown, onExportPackage, onCopyPaths, onClose }: ContextMenuProps) => {
+const ContextMenu = ({ node, x, y, onNewChild, onRename, onDelete, onCopyMarkdown, onExportPackage, onExportNativeLake, onCopyPaths, onClose }: ContextMenuProps) => {
   const isNotebook = node.nodeType === "notebook";
   // 视口边缘翻转，避免菜单溢出屏幕
   const left = Math.min(x, window.innerWidth - 232);
@@ -424,6 +426,7 @@ const ContextMenu = ({ node, x, y, onNewChild, onRename, onDelete, onCopyMarkdow
           <div className="context-menu-sep" />
           <button role="menuitem" onClick={() => { onCopyMarkdown(); onClose(); }}><ClipboardCopy size={15} /><span>复制为 Markdown</span></button>
           <button role="menuitem" onClick={() => { onExportPackage(); onClose(); }}><Package size={15} /><span>导出资料包（Markdown + 图片）</span></button>
+          <button role="menuitem" onClick={() => { onExportNativeLake(); onClose(); }}><FileDown size={15} /><span>导出原生 Lake（图片内嵌）</span></button>
           <button role="menuitem" onClick={() => { onCopyPaths(); onClose(); }}><Link2 size={15} /><span>复制资料路径（本机 AI）</span></button>
         </>
       )}

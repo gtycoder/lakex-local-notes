@@ -148,6 +148,7 @@ function registerIpc() {
     return result.canceled ? null : result.filePaths[0];
   });
   handle("export_note_package", (id: string, baseDir?: string) => store.exportNotePackage(id, baseDir));
+  handle("export_native_lake", (id: string, baseDir?: string) => store.exportNativeLake(id, baseDir));
   handle("delete_note", (id: string) => store.deleteNote(id));
   handle("set_note_locked", (id: string, locked: boolean) => { store.setNoteLocked(id, locked); return store.readNote(id); });
   handle("list_tree_nodes", () => store.listTreeNodes());

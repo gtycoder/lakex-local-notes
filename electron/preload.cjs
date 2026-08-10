@@ -12,6 +12,7 @@ contextBridge.exposeInMainWorld("lakeNative", {
   getNotePaths: (id) => invoke("get_note_paths", id),
   pickExportDir: () => invoke("pick_export_dir"),
   exportNotePackage: (id, baseDir) => invoke("export_note_package", id, baseDir),
+  exportNativeLake: (id, baseDir) => invoke("export_native_lake", id, baseDir),
   deleteNote: (id) => invoke("delete_note", id),
   setNoteLocked: (id, locked) => invoke("set_note_locked", id, locked),
   listTreeNodes: () => invoke("list_tree_nodes"),

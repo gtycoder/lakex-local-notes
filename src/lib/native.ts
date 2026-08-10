@@ -11,6 +11,7 @@ interface LakeNative {
   getNotePaths(id: string): Promise<{ title: string; lakePath: string; assetsDir: string }>;
   pickExportDir(): Promise<string | null>;
   exportNotePackage(id: string, baseDir?: string): Promise<{ exportDir: string; imageCount: number; skipped: number }>;
+  exportNativeLake(id: string, baseDir?: string): Promise<{ exportPath: string; imageCount: number; skipped: number; size: number }>;
   deleteNote(id: string): Promise<void>;
   listTreeNodes(): Promise<TreeNode[]>;
   listNoteSummaries(): Promise<import("./types").NoteSummary[]>;
@@ -64,6 +65,7 @@ export const native = {
   getNotePaths: (id: string) => api().getNotePaths(id),
   pickExportDir: () => api().pickExportDir(),
   exportNotePackage: (id: string, baseDir?: string) => api().exportNotePackage(id, baseDir),
+  exportNativeLake: (id: string, baseDir?: string) => api().exportNativeLake(id, baseDir),
   deleteNote: (id: string) => api().deleteNote(id),
   listTreeNodes: () => api().listTreeNodes(),
   listNoteSummaries: () => api().listNoteSummaries(),

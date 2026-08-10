@@ -430,6 +430,52 @@ export class Store {
   }
 
   /** M1：返回文档正文/图片目录的绝对路径（供“复制资料路径给本机 AI”） */
+  /**
+   * M1：导出原生 Lake 文档（图片 base64 内嵌，VS Code Lake 插件兼容）。
+   * 把 image card 的 src 从本地 assetServer URL 替换为 data:image/...;base64，其余结构原样保留。
+   */
+  exportNativeLake(id: string, baseDir?: string): { exportPath: string; imageCount: number; skipped: number; size: number } {
+    if (!isSafePathSegment(id)) throw new AppError("InvalidInput", `无效的笔记 ID: ${id}`);
+    const lakePath = this.notePath(id);
+    if (!fs.existsSync(lakePath)) throw new AppError("NotFound", `笔记不存在: ${id}`);
+    const lake = fs.readFileSync(lakePath, "utf8");
+    const titleRow = this.db.prepare("SELECT title FROM notes WHERE id=?").get(id) as { title: string } | undefined;
+    const title = sanitizeFileName(titleRow?.title ?? "未命名");
+    const base = baseDir ?? path.join(os.homedir(), "Desktop", "lake-notes-导出");
+    let exportDir = path.join(base, title);
+    let suffix = 2;
+    while (fs.existsSync(exportDir)) {
+      exportDir = path.join(base, `${title}-${suffix}`);
+      suffix++;
+    }
+    fs.mkdirSync(exportDir, { recursive: true });
+    const exportPath = path.join(exportDir, `${title}.lake`);
+    // image card: <card ... name="image" ... value="data:...">（value = "data:" + encodeURIComponent(JSON)）
+    const cardRe = /(<card\b[^>]*\bname="image"[^>]*\bvalue=")data:([^"]+)(")/g;
+    let imageCount = 0;
+    let skipped = 0;
+    const out = lake.replace(cardRe, (whole, prefix: string, encoded: string, suffixTag: string) => {
+      try {
+        const value = JSON.parse(decodeURIComponent(encoded)) as { src?: string };
+        const src = typeof value.src === "string" ? value.src : "";
+        const m = /^http:\/\/127\.0\.0\.1:19876\/([^/]+)\/([^/]+)$/.exec(src);
+        if (!m) { skipped++; return whole; } // 远程 URL 保持原样
+        const noteId = m[1];
+        const filename = m[2];
+        if (!isSafePathSegment(noteId) || !isSafePathSegment(filename)) { skipped++; return whole; }
+        const file = path.join(this.noteAssetsDir, noteId, filename);
+        if (!fs.existsSync(file)) { skipped++; return whole; }
+        const bytes = fs.readFileSync(file);
+        const mime = MIME_FROM_EXT[path.extname(filename).toLowerCase()] ?? "application/octet-stream";
+        value.src = `data:${mime};base64,${bytes.toString("base64")}`;
+        imageCount++;
+        return prefix + "data:" + encodeURIComponent(JSON.stringify(value)) + suffixTag;
+      } catch { skipped++; return whole; }
+    });
+    fs.writeFileSync(exportPath, out, "utf8");
+    return { exportPath, imageCount, skipped, size: out.length };
+  }
+
   getNotePaths(id: string): { title: string; lakePath: string; assetsDir: string } {
     if (!isSafePathSegment(id)) throw new AppError("InvalidInput", `无效的笔记 ID: ${id}`);
     const row = this.db.prepare("SELECT title FROM notes WHERE id=?").get(id) as { title: string } | undefined;

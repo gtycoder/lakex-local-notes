@@ -237,6 +237,29 @@ describe("目录树操作", () => {
     fs.rmSync(assetsDir, { recursive: true, force: true });
   });
 
+  it("exportNativeLake 把本地图片 src 内嵌为 base64，其余结构保留", () => {
+    const note = store.createNote("原生 Lake 导出");
+    const assetsDir = (store as any).noteAssetsDirFor(note.id);
+    fs.mkdirSync(assetsDir, { recursive: true });
+    const png = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10, 1, 2, 3]);
+    fs.writeFileSync(path.join(assetsDir, "a.png"), png);
+    // 构造含图片 card 的 lake 内容（value = "data:" + encodeURIComponent(JSON)）
+    const cardValue = { src: `http://127.0.0.1:19876/${note.id}/a.png`, taskId: "t1", width: 100, height: 50 };
+    const encoded = "data:" + encodeURIComponent(JSON.stringify(cardValue));
+    const lake = `<h1>标题</h1><p>正文</p><card type="inline" name="image" value="${encoded}"></card>`;
+    store.saveNote(note.id, "原生 Lake 导出", lake);
+    const base = fs.mkdtempSync(path.join(os.tmpdir(), "lake-nl-"));
+    const result = store.exportNativeLake(note.id, base);
+    expect(result.imageCount).toBe(1);
+    expect(result.skipped).toBe(0);
+    const out = fs.readFileSync(result.exportPath, "utf8");
+    expect(out).toContain(`src%22%3A%22data%3Aimage%2Fpng%3Bbase64%2C`); // src 已内嵌 base64
+    expect(out).not.toContain("127.0.0.1:19876");
+    expect(out).toContain("<h1>标题</h1>"); // 其余结构保留
+    fs.rmSync(base, { recursive: true, force: true });
+    fs.rmSync(assetsDir, { recursive: true, force: true });
+  });
+
   it("deleteTreeNode 递归删除 + 墓碑 + 清孤儿/资源目录", () => {
     const nb = store.createNotebook("待删");
     const group = store.createGroup(nb.id, "组");
