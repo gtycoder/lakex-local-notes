@@ -343,7 +343,6 @@ button { cursor: pointer; }
 }
 
 /* 未保存标记：Tab 标签上的小圆点 */
-.tab-item.pinned { flex: none; min-width: 42px; }
 .tab-item.pinned .tab-title { font-weight: 600; }
 .tab-item .tab-pin { flex: none; color: #9aa3ad; }
 .tab-item.pinned .tab-pin { color: #7c6f2f; }
