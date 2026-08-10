@@ -215,6 +215,28 @@ describe("目录树操作", () => {
     expect(c2.plain).toBe("hi");
   });
 
+  it("exportNotePackage 导出 Markdown + 复制图片 + 改写相对引用（缺失图跳过）", () => {
+    const note = store.createNote("资料包导出测试");
+    // 造一个真实图片文件到 note-assets/{noteId}/
+    const assetsDir = (store as any).noteAssetsDirFor(note.id);
+    fs.mkdirSync(assetsDir, { recursive: true });
+    fs.writeFileSync(path.join(assetsDir, "test.png"), Buffer.from([1, 2, 3, 4]));
+    const md = `# 标题\n\n![](http://127.0.0.1:19876/${note.id}/test.png)\n\n![](http://127.0.0.1:19876/${note.id}/missing.png)\n\n正文`;
+    store.saveNote(note.id, "资料包导出测试", "<p>正文</p>", { markdown: md, plain: "正文" });
+    const base = fs.mkdtempSync(path.join(os.tmpdir(), "lake-pkg-"));
+    const result = store.exportNotePackage(note.id, base);
+    expect(result.imageCount).toBe(1);
+    expect(result.skipped).toBe(1);
+    const index = fs.readFileSync(path.join(result.exportDir, "index.md"), "utf8");
+    expect(index).toContain("![](images/test.png)");
+    // 已复制图片改写为相对引用；缺失图片保留原 URL（v1 设计：不删除原引用）
+    expect(fs.existsSync(path.join(result.exportDir, "images", "test.png"))).toBe(true);
+    expect(fs.existsSync(path.join(result.exportDir, "images", "missing.png"))).toBe(false);
+    // 清理
+    fs.rmSync(base, { recursive: true, force: true });
+    fs.rmSync(assetsDir, { recursive: true, force: true });
+  });
+
   it("deleteTreeNode 递归删除 + 墓碑 + 清孤儿/资源目录", () => {
     const nb = store.createNotebook("待删");
     const group = store.createGroup(nb.id, "组");

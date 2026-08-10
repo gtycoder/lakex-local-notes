@@ -334,6 +334,47 @@ export function App() {
     }
   }, [activeNoteId, mobileActive, showNotice]);
 
+  /** M1：右键“复制为 Markdown”——读保存时生成的文本缓存，无需打开编辑器 */
+  const copyMarkdownFromCache = useCallback(async (node: TreeNode) => {
+    const noteId = node.noteFileId;
+    if (!noteId) { showNotice("该节点不是文档"); return; }
+    try {
+      const caches = await native.readNoteCaches(noteId);
+      if (!caches.markdown) { showNotice("该文档还没有文本缓存，请先打开并保存一次"); return; }
+      await navigator.clipboard.writeText(caches.markdown);
+      showNotice("已复制 Markdown（" + caches.markdown.length + " 字符）");
+    } catch (reason) {
+      setError("复制 Markdown 失败: " + (reason instanceof Error ? reason.message : String(reason)));
+    }
+  }, [showNotice]);
+
+  /** M1：右键“导出资料包”——主进程读缓存 MD + 复制图片到桌面 lake-notes-导出/{标题}/ */
+  const exportPackage = useCallback(async (node: TreeNode) => {
+    const noteId = node.noteFileId;
+    if (!noteId) { showNotice("该节点不是文档"); return; }
+    try {
+      const result = await native.exportNotePackage(noteId);
+      const skippedText = result.skipped > 0 ? `（${result.skipped} 张图片缺失已跳过）` : "";
+      showNotice(`已导出资料包到 ${result.exportDir}（${result.imageCount} 张图片${skippedText}）`);
+    } catch (reason) {
+      setError("导出资料包失败: " + (reason instanceof Error ? reason.message : String(reason)));
+    }
+  }, [showNotice]);
+
+  /** M1：右键“复制资料路径（本机 AI）”——标题 + .lake 绝对路径 + 图片目录绝对路径 */
+  const copyNotePaths = useCallback(async (node: TreeNode) => {
+    const noteId = node.noteFileId;
+    if (!noteId) { showNotice("该节点不是文档"); return; }
+    try {
+      const info = await native.getNotePaths(noteId);
+      const text = `标题：${info.title}\n正文：${info.lakePath}\n图片目录：${info.assetsDir}`;
+      await navigator.clipboard.writeText(text);
+      showNotice("已复制资料路径（本机 AI 可读）");
+    } catch (reason) {
+      setError("复制资料路径失败: " + (reason instanceof Error ? reason.message : String(reason)));
+    }
+  }, [showNotice]);
+
   const handleContentChange = useCallback((noteId: string, content: string) => {
     revisionRef.current.set(noteId, (revisionRef.current.get(noteId) ?? 0) + 1);
     setOpenTabs((tabs) => tabs.map((tab) => tab.noteId === noteId ? { ...tab, content, dirty: true } : tab));
@@ -637,7 +678,7 @@ export function App() {
         <button className={`activity-button ${desktopWorkspace === "quick-notes" ? "active" : ""}`} onClick={() => void switchDesktopWorkspace("quick-notes")} title="小记" aria-label="小记"><Feather size={16} /></button>
         <div className="activity-rail-fill" />
       </nav>
-      {desktopWorkspace === "library" && <Sidebar nodes={treeNodes} activeId={activeNoteId ?? mobileActive?.id ?? null} search={search} mobileOpen={mobileOpen} mode={sidebarMode} width={sidebarWidth} minWidth={SIDEBAR_MIN_WIDTH} maxWidth={SIDEBAR_MAX_WIDTH} onSearch={setSearch} onSelect={(id) => void (isMobile ? openNoteMobile(id) : openNote(id))} onCreate={(kind, parentId, title) => void createTreeItem(kind, parentId, title)} onRename={(id, title) => void renameTreeNode(id, title)} onMoveNode={(id, targetId, position) => void moveTreeNode(id, targetId, position)} onRequestDelete={(node) => setConfirmDelete(node)} pendingRenameId={pendingRenameId} onPendingRenameConsumed={() => setPendingRenameId(null)} onPreviewEnter={showSidebarPreview} onPreviewLeave={hideSidebarPreview} onResizeActiveChange={setSidebarResizing} onWidthChange={updateSidebarWidth} onWidthCommit={commitSidebarWidth} onCloseMobile={() => setMobileOpen(false)} />}
+      {desktopWorkspace === "library" && <Sidebar nodes={treeNodes} activeId={activeNoteId ?? mobileActive?.id ?? null} search={search} mobileOpen={mobileOpen} mode={sidebarMode} width={sidebarWidth} minWidth={SIDEBAR_MIN_WIDTH} maxWidth={SIDEBAR_MAX_WIDTH} onSearch={setSearch} onSelect={(id) => void (isMobile ? openNoteMobile(id) : openNote(id))} onCreate={(kind, parentId, title) => void createTreeItem(kind, parentId, title)} onRename={(id, title) => void renameTreeNode(id, title)} onMoveNode={(id, targetId, position) => void moveTreeNode(id, targetId, position)} onRequestDelete={(node) => setConfirmDelete(node)} onCopyMarkdown={(node) => void copyMarkdownFromCache(node)} onExportPackage={(node) => void exportPackage(node)} onCopyPaths={(node) => void copyNotePaths(node)} pendingRenameId={pendingRenameId} onPendingRenameConsumed={() => setPendingRenameId(null)} onPreviewEnter={showSidebarPreview} onPreviewLeave={hideSidebarPreview} onResizeActiveChange={setSidebarResizing} onWidthChange={updateSidebarWidth} onWidthCommit={commitSidebarWidth} onCloseMobile={() => setMobileOpen(false)} />}
       {mobileOpen && <div className="mobile-scrim" onClick={() => setMobileOpen(false)} />}
       <main className="workspace" onPointerDownCapture={(event) => {
         if (!isMobile && sidebarMode === "floating" && (event.target as HTMLElement).closest(".document-pane, .empty-workspace")) setSidebarMode("collapsed");

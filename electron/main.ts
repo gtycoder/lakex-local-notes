@@ -136,6 +136,9 @@ function registerIpc() {
   handle("update_note_caches", (id: string, markdown: string | null, plain: string | null) => {
     store.updateNoteCaches(id, markdown ?? null, plain ?? null);
   });
+  handle("read_note_caches", (id: string) => store.readNoteCaches(id));
+  handle("get_note_paths", (id: string) => store.getNotePaths(id));
+  handle("export_note_package", (id: string) => store.exportNotePackage(id));
   handle("delete_note", (id: string) => store.deleteNote(id));
   handle("set_note_locked", (id: string, locked: boolean) => { store.setNoteLocked(id, locked); return store.readNote(id); });
   handle("list_tree_nodes", () => store.listTreeNodes());

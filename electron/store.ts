@@ -2,6 +2,7 @@ import Database from "better-sqlite3";
 import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
+import os from "node:os";
 import { net, safeStorage } from "electron";
 import { ASSET_PORT } from "./assetServer.js";
 import { assertSafeRemoteHost, SsrfError } from "./ssrf.js";
@@ -426,6 +427,72 @@ export class Store {
     const row = this.db.prepare("SELECT md_cache, text_cache FROM notes WHERE id=?").get(id) as { md_cache: string | null; text_cache: string | null } | undefined;
     if (!row) throw new AppError("NotFound", `笔记不存在: ${id}`);
     return { markdown: row.md_cache, plain: row.text_cache };
+  }
+
+  /** M1：返回文档正文/图片目录的绝对路径（供“复制资料路径给本机 AI”） */
+  getNotePaths(id: string): { title: string; lakePath: string; assetsDir: string } {
+    if (!isSafePathSegment(id)) throw new AppError("InvalidInput", `无效的笔记 ID: ${id}`);
+    const row = this.db.prepare("SELECT title FROM notes WHERE id=?").get(id) as { title: string } | undefined;
+    if (!row) throw new AppError("NotFound", `笔记不存在: ${id}`);
+    return { title: row.title, lakePath: this.notePath(id), assetsDir: path.join(this.noteAssetsDir, id) };
+  }
+
+  /**
+   * M1：导出资料包（Markdown + 图片）到桌面 lake-notes-导出/{标题}/。
+   * 图片引用从 Lake 生成的 markdown 里以轻量正则提取（`![](http://127.0.0.1:19876/{noteId}/{filename})`），
+   * 复制到导出目录 images/ 并把 MD 改写为相对引用，产出自包含资料包。
+   */
+  exportNotePackage(id: string, baseDir?: string): { exportDir: string; imageCount: number; skipped: number } {
+    if (!isSafePathSegment(id)) throw new AppError("InvalidInput", `无效的笔记 ID: ${id}`);
+    const caches = this.readNoteCaches(id);
+    const markdown = caches.markdown ?? "";
+    if (!markdown.trim()) throw new AppError("InvalidInput", "该文档还没有文本缓存，请先打开并保存一次");
+    const titleRow = this.db.prepare("SELECT title FROM notes WHERE id=?").get(id) as { title: string } | undefined;
+    const title = sanitizeFileName(titleRow?.title ?? "未命名");
+    // 提取图片引用（仅处理本地 assetServer URL；远程 URL 保持原样）
+    const imgRe = /!\[[^\]]*\]\((http:\/\/127\.0\.0\.1:19876\/([^/)]+)\/([^/)]+))\)/g;
+    const unique: Array<{ url: string; noteId: string; filename: string }> = [];
+    const seen = new Set<string>();
+    let m: RegExpExecArray | null;
+    while ((m = imgRe.exec(markdown))) {
+      const url = m[1], noteId = m[2], filename = m[3];
+      if (!isSafePathSegment(noteId) || !isSafePathSegment(filename)) continue; // 防路径穿越
+      const key = `${noteId}/${filename}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      unique.push({ url, noteId, filename });
+    }
+    const base = baseDir ?? path.join(os.homedir(), "Desktop", "lake-notes-导出");
+    let exportDir = path.join(base, title);
+    let suffix = 2;
+    while (fs.existsSync(exportDir)) {
+      exportDir = path.join(base, `${title}-${suffix}`);
+      suffix++;
+    }
+    const imagesDir = path.join(exportDir, "images");
+    fs.mkdirSync(imagesDir, { recursive: true });
+    let imageCount = 0;
+    let skipped = 0;
+    let md = markdown;
+    for (const img of unique) {
+      const src = path.join(this.noteAssetsDir, img.noteId, img.filename);
+      let copied = false;
+      try {
+        if (fs.existsSync(src)) {
+          const dest = path.join(imagesDir, img.filename);
+          if (!fs.existsSync(dest)) fs.copyFileSync(src, dest);
+          copied = true;
+        }
+      } catch { /* 复制失败算跳过 */ }
+      if (copied) {
+        imageCount++;
+        md = md.split(img.url).join(`images/${img.filename}`);
+      } else {
+        skipped++;
+      }
+    }
+    fs.writeFileSync(path.join(exportDir, "index.md"), md, "utf8");
+    return { exportDir, imageCount, skipped };
   }
 
   deleteNote(id: string) {
@@ -1019,6 +1086,12 @@ function imageOutput(bytes: Buffer, _requestedFilename: string, noteAssetsDir: s
   fs.writeFileSync(filePath, bytes);
   const url = makeUrl(filename);
   return { resourceRef: url, url, filename, mimeType: format.mimeType, size: bytes.length };
+}
+
+/** M1：目录名清洗：去掉文件系统非法字符，空则回退“未命名” */
+function sanitizeFileName(name: string): string {
+  const cleaned = name.replace(/[\\/:*?"<>|]/g, "_").trim();
+  return cleaned || "未命名";
 }
 
 /** 安全单路径段校验：拒绝空、./..，以及含 / 或 \\ 的字符串（防目录穿越，审计 #3/#17） */
