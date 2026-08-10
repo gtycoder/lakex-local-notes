@@ -541,21 +541,21 @@ const EditorContextMenu = ({ x, y, exportOpen, onExportOpen, onCopyMarkdown, onE
   const submenuLeft = left + 232 + 230 <= window.innerWidth;
   return createPortal(
     <div className="context-menu" style={{ left, top }} role="menu" data-context-menu>
-      <button role="menuitem" onClick={() => { onCopyMarkdown(); onClose(); }}><ClipboardCopy size={15} /><span>复制为 Markdown</span></button>
       <div className="context-menu-item has-submenu" onMouseEnter={() => onExportOpen(true)} onMouseLeave={() => onExportOpen(false)}>
         <span className="context-menu-item-label"><Package size={15} /><span>导出</span></span><ChevronRight size={14} />
         {exportOpen && (
           <div className={`context-menu-submenu${submenuLeft ? "" : " open-left"}`} role="menu">
             <button role="menuitem" onClick={() => { onExport("markdown"); onClose(); }}>导出为 Markdown 资料包</button>
+            <button role="menuitem" onClick={() => { onCopyMarkdown(); onClose(); }}>导出为 Markdown 文本（复制）</button>
             <button role="menuitem" onClick={() => { onExport("html"); onClose(); }}>导出为 HTML</button>
             <button role="menuitem" disabled title="开发中">导出为 Word（开发中）</button>
             <button role="menuitem" disabled title="开发中">导出为 PDF（开发中）</button>
             <div className="context-menu-sep" />
-            <button role="menuitem" onClick={() => { onExport("lake"); onClose(); }}>导出原生 Lake（图片内嵌）</button>
+            <button role="menuitem" onClick={() => { onExport("lake"); onClose(); }}>导出为原生 Lake（图片内嵌）</button>
+            <button role="menuitem" onClick={() => { onCopyPaths(); onClose(); }}>导出资料路径（本机 AI）</button>
           </div>
         )}
       </div>
-      <button role="menuitem" onClick={() => { onCopyPaths(); onClose(); }}><Link2 size={15} /><span>复制资料路径（本机 AI）</span></button>
     </div>,
     document.body
   );

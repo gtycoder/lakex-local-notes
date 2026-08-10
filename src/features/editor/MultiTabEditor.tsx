@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode, type PointerEvent as ReactPointerEvent } from "react";
-import { ChevronDown, ChevronsLeft, ChevronsRight, Pin, X, XCircle } from "lucide-react";
+import { ChevronDown, ChevronsLeft, ChevronsRight, Pin, X, XCircle, XOctagon } from "lucide-react";
 import { createPortal } from "react-dom";
 import { EditorTab } from "./EditorTab";
 import type { LakeEditorPrefs } from "./lakeRuntime";
@@ -218,9 +218,10 @@ export function MultiTabEditor({
                 className="tab-close"
                 role="button"
                 aria-label={`关闭${tab.title || "无标题"}`}
-                title={`关闭${tab.title || "无标题"}`}
+                title={pinned.has(tab.noteId) ? "钉住的标签只能通过「关闭全部」关闭" : `关闭${tab.title || "无标题"}`}
                 onClick={(event) => {
                   event.stopPropagation();
+                  if (pinned.has(tab.noteId)) return; // 钉住的标签自身的关闭键不可用
                   onTabClose(tab.noteId);
                 }}
               >
@@ -306,22 +307,35 @@ export function MultiTabEditor({
               const next = new Set(prev);
               if (next.has(tabCtx.noteId)) next.delete(tabCtx.noteId);
               else next.add(tabCtx.noteId);
+              // 钉住组始终排在最前（思源式固定页签），其余保持原相对顺序
+              const ordered = [
+                ...tabs.filter((t) => next.has(t.noteId)).map((t) => t.noteId),
+                ...tabs.filter((t) => !next.has(t.noteId)).map((t) => t.noteId),
+              ];
+              onTabsReorder?.(ordered);
               return next;
             });
           }}
           onCloseTab={() => onTabClose(tabCtx.noteId)}
           onCloseOthers={() => {
             for (const t of tabs) {
-              if (t.noteId !== tabCtx.noteId) onTabClose(t.noteId);
+              if (t.noteId !== tabCtx.noteId && !pinned.has(t.noteId)) onTabClose(t.noteId);
             }
           }}
           onCloseLeft={() => {
             const idx = tabs.findIndex((t) => t.noteId === tabCtx.noteId);
-            for (const t of tabs.slice(0, idx)) onTabClose(t.noteId);
+            for (const t of tabs.slice(0, idx)) {
+              if (!pinned.has(t.noteId)) onTabClose(t.noteId);
+            }
           }}
           onCloseRight={() => {
             const idx = tabs.findIndex((t) => t.noteId === tabCtx.noteId);
-            for (const t of tabs.slice(idx + 1)) onTabClose(t.noteId);
+            for (const t of tabs.slice(idx + 1)) {
+              if (!pinned.has(t.noteId)) onTabClose(t.noteId);
+            }
+          }}
+          onCloseAll={() => {
+            for (const t of tabs) onTabClose(t.noteId);
           }}
           onClose={() => setTabCtx(null)}
         />
@@ -339,20 +353,22 @@ interface TabContextMenuProps {
   onCloseOthers: () => void;
   onCloseLeft: () => void;
   onCloseRight: () => void;
+  onCloseAll: () => void;
   onClose: () => void;
 }
 
-const TabContextMenu = ({ x, y, pinned, onTogglePin, onCloseTab, onCloseOthers, onCloseLeft, onCloseRight, onClose }: TabContextMenuProps) => {
+const TabContextMenu = ({ x, y, pinned, onTogglePin, onCloseTab, onCloseOthers, onCloseLeft, onCloseRight, onCloseAll, onClose }: TabContextMenuProps) => {
   const left = Math.min(x, window.innerWidth - 210);
-  const top = Math.min(y, window.innerHeight - 260);
+  const top = Math.min(y, window.innerHeight - 300);
   return createPortal(
     <div className="context-menu" style={{ left, top }} role="menu" data-context-menu>
       <button role="menuitem" onClick={() => { onTogglePin(); }}><Pin size={15} /><span>{pinned ? "取消钉住" : "钉住"}</span></button>
       <div className="context-menu-sep" />
-      <button role="menuitem" onClick={() => { onCloseTab(); onClose(); }}><X size={15} /><span>关闭</span></button>
+      <button role="menuitem" disabled={pinned} title={pinned ? "钉住的标签只能通过「关闭全部」关闭" : undefined} onClick={() => { onCloseTab(); onClose(); }}><X size={15} /><span>关闭</span></button>
       <button role="menuitem" onClick={() => { onCloseOthers(); onClose(); }}><XCircle size={15} /><span>关闭其他</span></button>
       <button role="menuitem" onClick={() => { onCloseLeft(); onClose(); }}><ChevronsLeft size={15} /><span>关闭左侧</span></button>
       <button role="menuitem" onClick={() => { onCloseRight(); onClose(); }}><ChevronsRight size={15} /><span>关闭右侧</span></button>
+      <button role="menuitem" onClick={() => { onCloseAll(); onClose(); }}><XOctagon size={15} /><span>关闭全部</span></button>
     </div>,
     document.body
   );
