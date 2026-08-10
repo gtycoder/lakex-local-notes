@@ -15,6 +15,7 @@ button { cursor: pointer; }
 .sidebar.is-collapsed:not(:hover) .inline-create,
 .sidebar.is-collapsed:not(:hover) .note-list,
 .sidebar.is-collapsed:not(:hover) .settings-link { visibility: hidden; opacity: 0; }
+.list-heading .locate-btn { margin-left: 6px; }
 .sidebar-mobile-close { position: absolute; top: 8px; right: 8px; z-index: 2; }
 .sidebar-collapse-toggle { margin: 6px 4px 6px 6px; width: 28px; height: 28px; }
 

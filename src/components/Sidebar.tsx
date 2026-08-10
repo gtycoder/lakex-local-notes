@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent } from "react";
 import { createPortal } from "react-dom";
-import { BookOpen, ChevronRight, ClipboardCopy, FilePlus2, FileText, FoldVertical, Folder, FolderPlus, Link2, Package, Pencil, Plus, Search, Trash2, X } from "lucide-react";
+import { BookOpen, ChevronRight, ClipboardCopy, FilePlus2, FileText, FoldVertical, Folder, FolderPlus, Link2, LocateFixed, Package, Pencil, Plus, Search, Trash2, X } from "lucide-react";
 import type { TreeNode, TreeNodeType } from "../lib/types";
 
 type CreateKind = "notebook" | "group" | "note";
@@ -47,6 +47,7 @@ export function Sidebar(props: SidebarProps) {
   const [dropTarget, setDropTarget] = useState<{ id: string; position: DropPosition } | null>(null);
   const [contextMenu, setContextMenu] = useState<{ id: string; x: number; y: number } | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
+  const treeRef = useRef<HTMLElement>(null);
   const dragRef = useRef<{ id: string; startX: number; startY: number; moved: boolean } | null>(null);
   const resizeRef = useRef<{ pointerId: number; startX: number; startWidth: number; currentWidth: number } | null>(null);
   const suppressClickRef = useRef(false);
@@ -226,6 +227,18 @@ export function Sidebar(props: SidebarProps) {
 
   const contextNode = props.nodes.find((node) => node.id === contextMenu?.id) ?? null;
 
+  /** M1.5：定位到当前打开的文档：展开祖先 + 高亮 + 滚动到可见 */
+  const locateActive = () => {
+    const id = props.activeId;
+    if (!id) return;
+    setExpanded((current) => expandAncestors(current, props.nodes, id));
+    // 展开是异步渲染，滚动等下一帧
+    window.setTimeout(() => {
+      const row = treeRef.current?.querySelector<HTMLElement>(`[data-tree-node-id="${CSS.escape(id)}"]`);
+      row?.scrollIntoView({ block: "nearest", inline: "nearest" });
+    }, 60);
+  };
+
   const menuNewChild = (kind: "group" | "note") => {
     if (!contextNode) return;
     // 支持多层嵌套：在目标节点下直接创建（文档也可包含分组/文档）。
@@ -265,6 +278,7 @@ export function Sidebar(props: SidebarProps) {
       <div className="search-box"><Search size={14} /><input value={props.search} onChange={(event) => props.onSearch(event.target.value)} placeholder="搜索" /></div>
       <div className="list-heading">
         <button className="icon-button collapse-all-btn" onClick={() => setExpanded(new Set())} title="全部收起" disabled={expanded.size === 0}><FoldVertical size={16} /></button>
+        <button className="icon-button locate-btn" onClick={locateActive} title="定位到当前文档" disabled={!props.activeId} aria-label="定位到当前文档"><LocateFixed size={16} /></button>
         <div className="create-menu-wrap" ref={menuRef}>
           <button className={`icon-button create-btn ${menuOpen ? "selected" : ""}`} onClick={() => setMenuOpen((open) => !open)} title="新建"><Plus size={18} /></button>
           {menuOpen && <div className="create-menu">
@@ -274,7 +288,7 @@ export function Sidebar(props: SidebarProps) {
           </div>}
         </div>
       </div>
-      <nav className="note-list tree-list">
+      <nav className="note-list tree-list" ref={treeRef}>
         {pendingCreate?.kind === "notebook" && createField(0)}
         {roots.map((node) => <TreeRow key={node.id} node={node} depth={0} nodes={props.nodes} query={query} activeId={props.activeId} contextId={context?.id ?? null} expanded={expanded} draggingId={draggingId} dropTarget={dropTarget} pendingCreate={pendingCreate} editingId={editingId} editingTitle={editingTitle} createField={createField} onEditingTitle={setEditingTitle} onSubmitRename={submitRename} onCancelRename={() => setEditingId(null)} onBeginRename={beginRename} onPointerDown={(event, id) => { if (event.button !== 0 || (event.target as HTMLElement).closest("input")) return; dragRef.current = { id, startX: event.clientX, startY: event.clientY, moved: false }; setDraggingId(id); }} consumeSuppressedClick={() => suppressClickRef.current} onContext={setContextId} onContextMenu={openContext} onToggle={(id) => setExpanded((current) => toggleSet(current, id))} onSelect={props.onSelect} />)}
         {roots.length === 0 && <div className="empty-list">点击 + 新建第一个笔记本</div>}
