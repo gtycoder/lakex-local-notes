@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode, type PointerEvent as ReactPointerEvent } from "react";
-import { ChevronDown, ChevronsLeft, ChevronsRight, Pin, X, XCircle, XOctagon } from "lucide-react";
+import { ChevronDown, ChevronsLeft, ChevronsRight, Pin, Save, X, XCircle, XOctagon } from "lucide-react";
 import { createPortal } from "react-dom";
 import { EditorTab } from "./EditorTab";
 import type { LakeEditorPrefs } from "./lakeRuntime";
@@ -145,6 +145,20 @@ export function MultiTabEditor({
     }
   }, [tabs]);
 
+  // tab 被关闭后清理 pinned 记录，避免重新打开同文档时残留钉住状态
+  useEffect(() => {
+    const activeIds = new Set(tabs.map((t) => t.noteId));
+    setPinned((prev) => {
+      let changed = false;
+      const next = new Set<string>();
+      for (const id of prev) {
+        if (activeIds.has(id)) next.add(id);
+        else changed = true;
+      }
+      return changed ? next : prev;
+    });
+  }, [tabs]);
+
   useEffect(() => {
     if (!tabCtx) return;
     const onPointerDown = (event: PointerEvent) => {
@@ -221,7 +235,7 @@ export function MultiTabEditor({
                 title={pinned.has(tab.noteId) ? "钉住的标签只能通过「关闭全部」关闭" : `关闭${tab.title || "无标题"}`}
                 onClick={(event) => {
                   event.stopPropagation();
-                  if (pinned.has(tab.noteId)) return; // 钉住的标签自身的关闭键不可用
+                  if (pinned.has(tab.noteId)) return; // 钉住标签的 X 由 CSS 隐藏（思源式）
                   onTabClose(tab.noteId);
                 }}
               >
@@ -302,6 +316,10 @@ export function MultiTabEditor({
           x={tabCtx.x}
           y={tabCtx.y}
           pinned={pinned.has(tabCtx.noteId)}
+          canCloseOthers={tabs.length > 1}
+          hasLeft={tabs.findIndex((t) => t.noteId === tabCtx.noteId) > 0}
+          hasRight={tabs.findIndex((t) => t.noteId === tabCtx.noteId) < tabs.length - 1}
+          hasUnmodified={tabs.some((t) => !t.dirty)}
           onTogglePin={() => {
             setPinned((prev) => {
               const next = new Set(prev);
@@ -335,7 +353,16 @@ export function MultiTabEditor({
             }
           }}
           onCloseAll={() => {
-            for (const t of tabs) onTabClose(t.noteId);
+            // 思源行为：关闭全部也跳过钉住的标签
+            for (const t of tabs) {
+              if (!pinned.has(t.noteId)) onTabClose(t.noteId);
+            }
+          }}
+          onCloseUnmodified={() => {
+            // 思源「关闭未保存」：关闭所有未修改的标签（保留 dirty），跳过钉住
+            for (const t of tabs) {
+              if (!t.dirty && !pinned.has(t.noteId)) onTabClose(t.noteId);
+            }
           }}
           onClose={() => setTabCtx(null)}
         />
@@ -354,21 +381,27 @@ interface TabContextMenuProps {
   onCloseLeft: () => void;
   onCloseRight: () => void;
   onCloseAll: () => void;
+  onCloseUnmodified: () => void;
+  canCloseOthers: boolean;
+  hasLeft: boolean;
+  hasRight: boolean;
+  hasUnmodified: boolean;
   onClose: () => void;
 }
 
-const TabContextMenu = ({ x, y, pinned, onTogglePin, onCloseTab, onCloseOthers, onCloseLeft, onCloseRight, onCloseAll, onClose }: TabContextMenuProps) => {
+const TabContextMenu = ({ x, y, pinned, onTogglePin, onCloseTab, onCloseOthers, onCloseLeft, onCloseRight, onCloseAll, onCloseUnmodified, canCloseOthers, hasLeft, hasRight, hasUnmodified, onClose }: TabContextMenuProps) => {
   const left = Math.min(x, window.innerWidth - 210);
-  const top = Math.min(y, window.innerHeight - 300);
+  const top = Math.min(y, window.innerHeight - 340);
   return createPortal(
     <div className="context-menu" style={{ left, top }} role="menu" data-context-menu>
-      <button role="menuitem" onClick={() => { onTogglePin(); }}><Pin size={15} /><span>{pinned ? "取消钉住" : "钉住"}</span></button>
+      <button role="menuitem" disabled={pinned} title={pinned ? "钉住的标签需先取消钉住才能关闭" : undefined} onClick={() => { onCloseTab(); onClose(); }}><X size={15} /><span>关闭</span></button>
+      {canCloseOthers && <button role="menuitem" onClick={() => { onCloseOthers(); onClose(); }}><XCircle size={15} /><span>关闭其他</span></button>}
+      {canCloseOthers && <button role="menuitem" onClick={() => { onCloseAll(); onClose(); }}><XOctagon size={15} /><span>关闭全部</span></button>}
+      {hasUnmodified && <button role="menuitem" onClick={() => { onCloseUnmodified(); onClose(); }}><Save size={15} /><span>关闭未保存</span></button>}
+      {hasLeft && <button role="menuitem" onClick={() => { onCloseLeft(); onClose(); }}><ChevronsLeft size={15} /><span>关闭左侧</span></button>}
+      {hasRight && <button role="menuitem" onClick={() => { onCloseRight(); onClose(); }}><ChevronsRight size={15} /><span>关闭右侧</span></button>}
       <div className="context-menu-sep" />
-      <button role="menuitem" disabled={pinned} title={pinned ? "钉住的标签只能通过「关闭全部」关闭" : undefined} onClick={() => { onCloseTab(); onClose(); }}><X size={15} /><span>关闭</span></button>
-      <button role="menuitem" onClick={() => { onCloseOthers(); onClose(); }}><XCircle size={15} /><span>关闭其他</span></button>
-      <button role="menuitem" onClick={() => { onCloseLeft(); onClose(); }}><ChevronsLeft size={15} /><span>关闭左侧</span></button>
-      <button role="menuitem" onClick={() => { onCloseRight(); onClose(); }}><ChevronsRight size={15} /><span>关闭右侧</span></button>
-      <button role="menuitem" onClick={() => { onCloseAll(); onClose(); }}><XOctagon size={15} /><span>关闭全部</span></button>
+      <button role="menuitem" onClick={() => { onTogglePin(); }}><Pin size={15} /><span>{pinned ? "取消钉住" : "钉住"}</span></button>
     </div>,
     document.body
   );

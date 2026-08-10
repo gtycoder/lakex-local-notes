@@ -317,13 +317,14 @@ button { cursor: pointer; }
   padding: 6px 12px;
   border: none;
   border-radius: 6px 6px 0 0;
-  max-width: 190px;
+  max-width: 186px;
+  min-height: 42px;
+  line-height: 22px;
   background: transparent;
   color: var(--text-secondary, #666);
   font-size: 13px;
   cursor: pointer;
   white-space: nowrap;
-  max-width: 180px;
   transition: background 0.15s, color 0.15s;
 }
 .tab-item:hover { background: rgba(0,0,0,0.04); }
@@ -339,13 +340,16 @@ button { cursor: pointer; }
 .tab-title {
   overflow: hidden;
   text-overflow: ellipsis;
- overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+  white-space: nowrap;
+  min-width: 0;
+}
 
 /* 未保存标记：Tab 标签上的小圆点 */
+.tab-item.pinned { flex: none; min-width: 42px; }
 .tab-item.pinned .tab-title { font-weight: 600; }
 .tab-item .tab-pin { flex: none; color: #9aa3ad; }
 .tab-item.pinned .tab-pin { color: #7c6f2f; }
-.tab-item.pinned .tab-close { opacity: 0.35; cursor: not-allowed; }
+.tab-item.pinned .tab-close { display: none; }
 .tab-item.dirty .tab-title::after {
   content: "";
   display: inline-block;
