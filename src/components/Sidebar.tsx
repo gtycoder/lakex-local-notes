@@ -361,7 +361,6 @@ function TreeRow(props: TreeRowProps) {
     >
       <span className="tree-row-icon" title="设置图标" onClick={(event) => { event.stopPropagation(); props.onIconClick?.(props.node, event); }}>{icon}</span>
       <button type="button" className={`tree-chevron ${open && expandable ? "open" : ""}`} disabled={!expandable} onClick={(event) => { event.stopPropagation(); if (expandable) props.onToggle(props.node.id); }} aria-label={open ? "收起" : "展开"}>{expandable ? <ChevronRight size={14} /> : null}</button>
-      {icon}
       <span className="note-row-copy">
         {props.editingId === props.node.id
           ? <input className="tree-rename-input" autoFocus aria-label="节点名称" value={props.editingTitle} onChange={(event) => props.onEditingTitle(event.target.value)} onClick={(event) => event.stopPropagation()} onFocus={(event) => event.currentTarget.select()} onBlur={props.onSubmitRename} onKeyDown={(event) => { event.stopPropagation(); if (event.key === "Enter") props.onSubmitRename(); if (event.key === "Escape") props.onCancelRename(); }} />
@@ -495,7 +494,7 @@ export const ConfirmDelete = ({ node, onConfirm, onCancel }: ConfirmDeleteProps)
 );
 
 /** M1.6：文档/分组自定义图标选择器（Lake unicodeEmoji 表情资源 + 分组 + 搜索 + 清除） */
-const EmojiIconPicker = ({ x, y, onPick, onClose }: { x: number; y: number; onPick: (icon: string | null) => void; onClose: () => void }) => {
+export const EmojiIconPicker = ({ x, y, onPick, onClose }: { x: number; y: number; onPick: (icon: string | null) => void; onClose: () => void }) => {
   const [filter, setFilter] = useState("");
   const [group, setGroup] = useState("全部");
   const q = filter.trim().toLowerCase();
@@ -508,23 +507,25 @@ const EmojiIconPicker = ({ x, y, onPick, onClose }: { x: number; y: number; onPi
   const left = Math.min(x, window.innerWidth - 360);
   const top = Math.min(y, window.innerHeight - 460);
   return createPortal(
-    <div className="emoji-picker" style={{ left, top }} data-context-menu>
-      <div className="emoji-picker-search">
-        <Search size={13} />
-        <input value={filter} onChange={(e) => setFilter(e.target.value)} placeholder="搜索表情（如 smile / 名称）" autoFocus />
+    <div className="emoji-picker-backdrop" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="emoji-picker" style={{ left, top }} data-context-menu>
+        <div className="emoji-picker-search">
+          <Search size={13} />
+          <input value={filter} onChange={(e) => setFilter(e.target.value)} placeholder="搜索表情（如 smile / 名称）" autoFocus />
+        </div>
+        <div className="emoji-picker-tabs">
+          {groupNames.map((g) => (
+            <button key={g} className={`emoji-picker-tab${g === group ? " active" : ""}`} onClick={() => setGroup(g)}>{g}</button>
+          ))}
+        </div>
+        <div className="emoji-picker-grid">
+          {list.map((e) => (
+            <button key={(e.name ?? "") + e.char} className="emoji-picker-cell" onClick={() => onPick(e.char)} title={e.name ?? e.char}>{e.char}</button>
+          ))}
+          {list.length === 0 && <div className="emoji-picker-empty">无匹配表情</div>}
+        </div>
+        <button className="emoji-picker-clear" onClick={() => onPick(null)}>清除图标</button>
       </div>
-      <div className="emoji-picker-tabs">
-        {groupNames.map((g) => (
-          <button key={g} className={`emoji-picker-tab${g === group ? " active" : ""}`} onClick={() => setGroup(g)}>{g}</button>
-        ))}
-      </div>
-      <div className="emoji-picker-grid">
-        {list.map((e) => (
-          <button key={(e.name ?? "") + e.char} className="emoji-picker-cell" onClick={() => onPick(e.char)} title={e.name ?? e.char}>{e.char}</button>
-        ))}
-        {list.length === 0 && <div className="emoji-picker-empty">无匹配表情</div>}
-      </div>
-      <button className="emoji-picker-clear" onClick={() => onPick(null)}>清除图标</button>
     </div>,
     document.body
   );

@@ -1449,6 +1449,7 @@ ne-card[data-card-name="codeblock"] .ne-card-resizer-mask {
 
 /* M1.6 自定义图标 + emoji 选择器 */
 .tree-node-custom-icon { font-size: 15px; line-height: 1; }
+.emoji-picker-backdrop { position: fixed; inset: 0; z-index: 699; }
 .emoji-picker { position: fixed; z-index: 700; width: 320px; max-height: 300px; padding: 8px; border: 1px solid #d8dde1; border-radius: 8px; background: #fff; box-shadow: 0 10px 28px #1f293329; display: flex; flex-direction: column; gap: 8px; }
 .tree-row-icon { display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; border-radius: 5px; cursor: pointer; flex: none; }
 .tree-row-icon:hover { background: rgba(0,0,0,0.06); }
