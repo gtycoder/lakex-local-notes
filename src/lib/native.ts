@@ -12,6 +12,7 @@ interface LakeNative {
   pickExportDir(): Promise<string | null>;
   exportNote(id: string, format: "markdown" | "html" | "lake" | "docx" | "pdf", baseDir?: string): Promise<{ format: string; exportPath: string; imageCount: number; skipped: number; size: number }>;
   setNodeIcon(id: string, icon: string | null): Promise<TreeNode>;
+  searchNotes(query: string, limit?: number): Promise<Array<{ id: string; title: string; snippet: string }>>;
   deleteNote(id: string): Promise<void>;
   listTreeNodes(): Promise<TreeNode[]>;
   listNoteSummaries(): Promise<import("./types").NoteSummary[]>;
@@ -66,6 +67,7 @@ export const native = {
   pickExportDir: () => api().pickExportDir(),
   exportNote: (id: string, format: "markdown" | "html" | "lake" | "docx" | "pdf", baseDir?: string) => api().exportNote(id, format, baseDir),
   setNodeIcon: (id: string, icon: string | null) => api().setNodeIcon(id, icon),
+  searchNotes: (query: string, limit?: number) => api().searchNotes(query, limit),
   deleteNote: (id: string) => api().deleteNote(id),
   listTreeNodes: () => api().listTreeNodes(),
   listNoteSummaries: () => api().listNoteSummaries(),

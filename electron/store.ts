@@ -88,6 +88,10 @@ export class Store {
     this.db.pragma("foreign_keys = ON");
     this.migrate();
     this.seed();
+    // M2：全量重建全文索引（幂等；文档量小，启动开销可忽略）
+    try { this.rebuildSearchIndex(); } catch (error) {
+      console.warn("[store] 全文索引重建失败（不影响使用）:", error);
+    }
   }
 
   private migrate() {
@@ -150,6 +154,8 @@ export class Store {
     if (!treeCols.some((c) => c.name === "icon")) {
       this.db.exec("ALTER TABLE tree_nodes ADD COLUMN icon TEXT");
     }
+    // M2 全文搜索：FTS5 trigram（中文子串友好）。note_id UNINDEXED 用于关联删除。
+    this.db.exec(`CREATE VIRTUAL TABLE IF NOT EXISTS notes_fts USING fts5(title, body, note_id UNINDEXED, tokenize='trigram')`);
     if (!cols.some((c) => c.name === "text_cache")) {
       this.db.exec("ALTER TABLE notes ADD COLUMN text_cache TEXT");
     }
@@ -393,6 +399,9 @@ export class Store {
       const changed = this.db.prepare("UPDATE tree_nodes SET title=?,updated_at=?,sync_state='local' WHERE id=? AND deleted_at IS NULL").run(trimmed, now, id).changes;
       if (changed === 0) throw new AppError("NotFound", `节点不存在: ${id}`);
       this.db.prepare("UPDATE notes SET title=?,updated_at=?,sync_state='local' WHERE id=(SELECT note_file_id FROM tree_nodes WHERE id=?) AND deleted_at IS NULL").run(trimmed, now, id);
+      // M2：重命名后同步全文索引标题
+      const node = this.db.prepare("SELECT note_file_id FROM tree_nodes WHERE id=?").get(id) as { note_file_id: string | null } | undefined;
+      if (node?.note_file_id) this.upsertFts(node.note_file_id, trimmed, null);
     });
     tx();
     return this.readTreeNode(id);
@@ -407,8 +416,11 @@ export class Store {
         // M1 文本缓存：与正文同事务落库，保证缓存与 .lake 一致
         this.db.prepare("UPDATE notes SET title=?,updated_at=?,sync_state='local',md_cache=?,text_cache=? WHERE id=? AND deleted_at IS NULL")
           .run(title, updatedAt, caches.markdown ?? null, caches.plain ?? null, id);
+        // M2：同步全文索引（正文用纯文本缓存）
+        this.upsertFts(id, title, caches.plain ?? "");
       } else {
         this.db.prepare("UPDATE notes SET title=?,updated_at=?,sync_state='local' WHERE id=? AND deleted_at IS NULL").run(title, updatedAt, id);
+        this.upsertFts(id, title, null);
       }
       this.db.prepare("UPDATE tree_nodes SET title=?,updated_at=?,sync_state='local' WHERE note_file_id=? AND deleted_at IS NULL").run(title, updatedAt, id);
       this.atomicWrite(p, content);
@@ -426,6 +438,8 @@ export class Store {
   /** M1：单独更新文本缓存（打开文档时补缓存用，不重写 .lake 正文） */
   updateNoteCaches(id: string, markdown: string | null, plain: string | null): void {
     this.db.prepare("UPDATE notes SET md_cache=?, text_cache=? WHERE id=?").run(markdown, plain, id);
+    const titleRow = this.db.prepare("SELECT title FROM notes WHERE id=?").get(id) as { title: string } | undefined;
+    this.upsertFts(id, titleRow?.title ?? "", plain ?? "");
   }
 
   /** M1：读取文本缓存（导出资料包 / 复制 Markdown 用） */
@@ -433,6 +447,52 @@ export class Store {
     const row = this.db.prepare("SELECT md_cache, text_cache FROM notes WHERE id=?").get(id) as { md_cache: string | null; text_cache: string | null } | undefined;
     if (!row) throw new AppError("NotFound", `笔记不存在: ${id}`);
     return { markdown: row.md_cache, plain: row.text_cache };
+  }
+
+  // ---- M2 全文搜索 ----
+
+  /** 同步单条笔记到 FTS 表（body 为空时仅索引标题） */
+  private upsertFts(id: string, title: string, body: string | null): void {
+    this.db.prepare("DELETE FROM notes_fts WHERE note_id=?").run(id);
+    this.db.prepare("INSERT INTO notes_fts(title, body, note_id) VALUES(?,?,?)").run(title, body ?? "", id);
+  }
+
+  /** 全量重建全文索引：所有未删除 note 的标题 + 已有纯文本缓存正文 */
+  rebuildSearchIndex(): void {
+    this.db.exec("DELETE FROM notes_fts");
+    const rows = this.db.prepare(`
+      SELECT t.note_file_id AS id, t.title, n.text_cache
+      FROM tree_nodes t LEFT JOIN notes n ON n.id = t.note_file_id
+      WHERE t.node_type = 'note' AND t.deleted_at IS NULL
+    `).all() as Array<{ id: string | null; title: string; text_cache: string | null }>;
+    const ins = this.db.prepare("INSERT INTO notes_fts(title, body, note_id) VALUES(?,?,?)");
+    this.db.transaction(() => {
+      for (const r of rows) {
+        if (!r.id) continue;
+        ins.run(r.title, r.text_cache ?? "", r.id);
+      }
+    })();
+  }
+
+  /**
+   * M2 全文搜索。≥3 字走 FTS5 trigram（中文子串命中 + highlight 高亮）；
+   * 1-2 字 trigram 匹配不到，回退标题 LIKE（文档量小可接受）。
+   */
+  searchNotes(query: string, limit = 30): Array<{ id: string; title: string; snippet: string }> {
+    const q = query.trim();
+    if (!q) return [];
+    if (q.length >= 3) {
+      const match = escapeFtsQuery(q);
+      const rows = this.db.prepare(
+        "SELECT note_id, title, highlight(notes_fts, 1, '<mark>', '</mark>') AS snippet FROM notes_fts WHERE notes_fts MATCH ? ORDER BY rank LIMIT ?"
+      ).all(match, limit) as Array<{ note_id: string; title: string; snippet: string }>;
+      return rows.map((r) => ({ id: r.note_id, title: r.title, snippet: r.snippet ?? "" }));
+    }
+    // 短查询回退：标题包含匹配
+    const rows = this.db.prepare(
+      "SELECT id, title, '' AS snippet FROM tree_nodes WHERE node_type='note' AND deleted_at IS NULL AND title LIKE ? ORDER BY sort_order LIMIT ?"
+    ).all(`%${q}%`, limit) as Array<{ id: string; title: string; snippet: string }>;
+    return rows.map((r) => ({ id: r.id, title: r.title, snippet: r.snippet ?? "" }));
   }
 
   /** M1：返回文档正文/图片目录的绝对路径（供“复制资料路径给本机 AI”） */
@@ -622,6 +682,7 @@ export class Store {
     const tx = this.db.transaction(() => {
       const nodeStmt = this.db.prepare("SELECT note_file_id FROM tree_nodes WHERE id=?");
       const delNote = this.db.prepare("DELETE FROM notes WHERE id=?");
+      const delFts = this.db.prepare("DELETE FROM notes_fts WHERE note_id=?");
       const delNode = this.db.prepare("DELETE FROM tree_nodes WHERE id=?");
       const delOrphans = this.db.prepare("DELETE FROM orphan_assets WHERE note_id=?");
       const tombstone = this.db.prepare(
@@ -637,6 +698,7 @@ export class Store {
           filesToRemove.push({ path: this.notePath(node.note_file_id), recursive: false });
           filesToRemove.push({ path: path.join(this.noteAssetsDir, node.note_file_id), recursive: true });
           delOrphans.run(node.note_file_id);
+          delFts.run(node.note_file_id);
           delNote.run(node.note_file_id);
         }
         delNode.run(nid);
@@ -1196,6 +1258,11 @@ function imageOutput(bytes: Buffer, _requestedFilename: string, noteAssetsDir: s
   fs.writeFileSync(filePath, bytes);
   const url = makeUrl(filename);
   return { resourceRef: url, url, filename, mimeType: format.mimeType, size: bytes.length };
+}
+
+/** M2：FTS MATCH 查询串转义——逐词加引号，避免特殊字符破坏查询语法 */
+function escapeFtsQuery(q: string): string {
+  return q.split(/\s+/).filter(Boolean).map((w) => `"${w.replace(/"/g, '""')}"`).join(" ");
 }
 
 /** M1：目录名清洗：去掉文件系统非法字符，空则回退“未命名” */

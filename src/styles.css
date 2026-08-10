@@ -1454,3 +1454,21 @@ ne-card[data-card-name="codeblock"] .ne-card-resizer-mask {
 .emoji-picker-cell:hover { background: #eef1f2; }
 .emoji-picker-clear { border: 0; border-radius: 5px; padding: 6px; background: #f2f3f5; color: #48515c; cursor: pointer; font-size: 12px; }
 .emoji-picker-clear:hover { background: #e7e9ec; }
+
+/* M2 全文搜索面板 */
+.search-panel-backdrop { position: fixed; inset: 0; z-index: 800; background: rgba(31, 35, 41, .18); display: flex; justify-content: center; align-items: flex-start; padding-top: 12vh; }
+.search-panel { width: 640px; max-width: calc(100vw - 48px); max-height: 70vh; display: flex; flex-direction: column; background: #fff; border: 1px solid #d8dde1; border-radius: 10px; box-shadow: 0 16px 48px #1f293329; overflow: hidden; }
+.search-panel-input-row { display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-bottom: 1px solid #eceff1; }
+.search-panel-input-row input { flex: 1; border: 0; outline: none; font-size: 14px; background: transparent; }
+.search-panel-search-icon { color: #8b929c; flex: none; }
+.search-panel-spinner { width: 14px; height: 14px; border: 2px solid #d8dde1; border-top-color: #5b6c8a; border-radius: 50%; animation: spin .7s linear infinite; flex: none; }
+.search-panel-close { display: flex; align-items: center; justify-content: center; width: 26px; height: 26px; border: 0; border-radius: 6px; background: transparent; color: #69717c; cursor: pointer; }
+.search-panel-close:hover { background: #eef1f2; }
+.search-panel-results { overflow-y: auto; padding: 6px; }
+.search-result { display: flex; flex-direction: column; align-items: flex-start; gap: 3px; width: 100%; padding: 8px 10px; border: 0; border-radius: 7px; background: transparent; text-align: left; cursor: pointer; }
+.search-result:hover { background: #eef1f2; }
+.search-result-title { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; color: #24292f; }
+.search-result-snippet { font-size: 12px; color: #57606a; line-height: 1.55; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.search-result-snippet mark { background: #ffe9a8; border-radius: 2px; padding: 0 1px; }
+.search-panel-empty { padding: 24px; text-align: center; color: #8b929c; font-size: 13px; }
+@keyframes spin { to { transform: rotate(360deg); } }

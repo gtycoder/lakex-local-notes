@@ -279,6 +279,27 @@ describe("目录树操作", () => {
     fs.rmSync(assetsDir, { recursive: true, force: true });
   });
 
+  it("全文搜索：正文 trigram 命中 + 高亮，标题 LIKE 回退，删除后消失", () => {
+    const note = store.createNote("搜索引擎笔记");
+    store.saveNote(note.id, "搜索引擎笔记", "<p>全文搜索与回收站方案</p>", { markdown: "# 搜索引擎笔记\n\n全文搜索与回收站方案", plain: "搜索引擎笔记\n全文搜索与回收站方案" });
+    // ≥3 字：trigram 命中正文
+    let r = store.searchNotes("回收站");
+    expect(r.some((x) => x.id === note.id)).toBe(true);
+    const hit = r.find((x) => x.id === note.id)!;
+    expect(hit.snippet).toContain("<mark>回收站</mark>");
+    // 标题命中
+    r = store.searchNotes("搜索引擎");
+    expect(r.some((x) => x.id === note.id)).toBe(true);
+    // 短查询（2 字）回退标题 LIKE
+    const n2 = store.createNote("快照测试文档");
+    r = store.searchNotes("快照");
+    expect(r.some((x) => x.id === n2.id)).toBe(true);
+    // 删除后不再命中
+    store.deleteTreeNode(n2.id);
+    r = store.searchNotes("快照");
+    expect(r.some((x) => x.id === n2.id)).toBe(false);
+  });
+
   it("deleteTreeNode 递归删除 + 墓碑 + 清孤儿/资源目录", () => {
     const nb = store.createNotebook("待删");
     const group = store.createGroup(nb.id, "组");

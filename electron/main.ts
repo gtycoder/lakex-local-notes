@@ -150,6 +150,7 @@ function registerIpc() {
   });
   handle("export_note", (id: string, format: ExportFormat, baseDir?: string) => exportNote(store, id, format, baseDir));
   handle("set_node_icon", (id: string, icon: string | null) => store.setNodeIcon(id, icon));
+  handle("search_notes", (query: string, limit?: number) => store.searchNotes(query, limit));
   handle("delete_note", (id: string) => store.deleteNote(id));
   handle("set_note_locked", (id: string, locked: boolean) => { store.setNoteLocked(id, locked); return store.readNote(id); });
   handle("list_tree_nodes", () => store.listTreeNodes());
