@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode, type PointerEvent as ReactPointerEvent } from "react";
-import { ChevronDown, X } from "lucide-react";
+import { ChevronDown, ChevronsLeft, ChevronsRight, Pin, X, XCircle } from "lucide-react";
+import { createPortal } from "react-dom";
 import { EditorTab } from "./EditorTab";
 import type { LakeEditorPrefs } from "./lakeRuntime";
 
@@ -52,6 +53,8 @@ export function MultiTabEditor({
   const tabItemsRef = useRef<HTMLDivElement>(null);
   const switcherRef = useRef<HTMLDivElement>(null);
   const [tabMenuOpen, setTabMenuOpen] = useState(false);
+  const [pinned, setPinned] = useState<Set<string>>(new Set());
+  const [tabCtx, setTabCtx] = useState<{ noteId: string; x: number; y: number } | null>(null);
 
   // ---- 拖拽排序（pointer 事件，无外部依赖）----
   const [draggingId, setDraggingId] = useState<string | null>(null);
@@ -143,6 +146,22 @@ export function MultiTabEditor({
   }, [tabs]);
 
   useEffect(() => {
+    if (!tabCtx) return;
+    const onPointerDown = (event: PointerEvent) => {
+      if (!(event.target as HTMLElement).closest("[data-context-menu]")) setTabCtx(null);
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setTabCtx(null);
+    };
+    document.addEventListener("pointerdown", onPointerDown);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [tabCtx]);
+
+  useEffect(() => {
     if (!tabMenuOpen) return;
     const onPointerDown = (event: PointerEvent) => {
       if (!(event.target instanceof Node) || !switcherRef.current?.contains(event.target)) setTabMenuOpen(false);
@@ -177,17 +196,23 @@ export function MultiTabEditor({
             <button
               key={tab.noteId}
               data-note-id={tab.noteId}
-              className={`tab-item ${tab.noteId === activeNoteId ? "active" : ""}${tab.dirty ? " dirty" : ""}${draggingId === tab.noteId ? " dragging" : ""}`}
+              className={`tab-item ${tab.noteId === activeNoteId ? "active" : ""}${tab.dirty ? " dirty" : ""}${draggingId === tab.noteId ? " dragging" : ""}${pinned.has(tab.noteId) ? " pinned" : ""}`}
               onPointerDown={(e) => beginTabDrag(e, tab.noteId)}
               onPointerMove={moveTabDrag}
               onPointerUp={endTabDrag}
               onPointerCancel={endTabDrag}
               onClick={() => { if (suppressClickRef.current) return; onTabChange(tab.noteId); }}
+              onContextMenu={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                setTabCtx({ noteId: tab.noteId, x: event.clientX, y: event.clientY });
+              }}
               title={tab.title || "无标题"}
               aria-label={`切换到${tab.title || "无标题"}${tab.dirty ? "（有未保存更改）" : ""}`}
               aria-selected={tab.noteId === activeNoteId}
               role="tab"
             >
+              {pinned.has(tab.noteId) && <Pin size={11} className="tab-pin" aria-hidden="true" />}
               <span className="tab-title">{tab.title || "无标题"}</span>
               <span
                 className="tab-close"
@@ -271,6 +296,64 @@ export function MultiTabEditor({
           />
         ))}
       </div>
+      {tabCtx && (
+        <TabContextMenu
+          x={tabCtx.x}
+          y={tabCtx.y}
+          pinned={pinned.has(tabCtx.noteId)}
+          onTogglePin={() => {
+            setPinned((prev) => {
+              const next = new Set(prev);
+              if (next.has(tabCtx.noteId)) next.delete(tabCtx.noteId);
+              else next.add(tabCtx.noteId);
+              return next;
+            });
+          }}
+          onCloseTab={() => onTabClose(tabCtx.noteId)}
+          onCloseOthers={() => {
+            for (const t of tabs) {
+              if (t.noteId !== tabCtx.noteId) onTabClose(t.noteId);
+            }
+          }}
+          onCloseLeft={() => {
+            const idx = tabs.findIndex((t) => t.noteId === tabCtx.noteId);
+            for (const t of tabs.slice(0, idx)) onTabClose(t.noteId);
+          }}
+          onCloseRight={() => {
+            const idx = tabs.findIndex((t) => t.noteId === tabCtx.noteId);
+            for (const t of tabs.slice(idx + 1)) onTabClose(t.noteId);
+          }}
+          onClose={() => setTabCtx(null)}
+        />
+      )}
     </div>
   );
 }
+
+interface TabContextMenuProps {
+  x: number;
+  y: number;
+  pinned: boolean;
+  onTogglePin: () => void;
+  onCloseTab: () => void;
+  onCloseOthers: () => void;
+  onCloseLeft: () => void;
+  onCloseRight: () => void;
+  onClose: () => void;
+}
+
+const TabContextMenu = ({ x, y, pinned, onTogglePin, onCloseTab, onCloseOthers, onCloseLeft, onCloseRight, onClose }: TabContextMenuProps) => {
+  const left = Math.min(x, window.innerWidth - 210);
+  const top = Math.min(y, window.innerHeight - 260);
+  return createPortal(
+    <div className="context-menu" style={{ left, top }} role="menu" data-context-menu>
+      <button role="menuitem" onClick={() => { onTogglePin(); }}><Pin size={15} /><span>{pinned ? "取消钉住" : "钉住"}</span></button>
+      <div className="context-menu-sep" />
+      <button role="menuitem" onClick={() => { onCloseTab(); onClose(); }}><X size={15} /><span>关闭</span></button>
+      <button role="menuitem" onClick={() => { onCloseOthers(); onClose(); }}><XCircle size={15} /><span>关闭其他</span></button>
+      <button role="menuitem" onClick={() => { onCloseLeft(); onClose(); }}><ChevronsLeft size={15} /><span>关闭左侧</span></button>
+      <button role="menuitem" onClick={() => { onCloseRight(); onClose(); }}><ChevronsRight size={15} /><span>关闭右侧</span></button>
+    </div>,
+    document.body
+  );
+};
