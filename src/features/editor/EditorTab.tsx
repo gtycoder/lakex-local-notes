@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+import { ChevronRight, ClipboardCopy, Link2, Package } from "lucide-react";
 import {
   createLakeDocument,
   destroyLakeEditor,
@@ -21,6 +23,10 @@ export interface EditorTabProps {
   locked?: boolean;
   /** 编辑器实例就绪回调（导出 md 等需要访问 editor 实例的场景） */
   onEditorReady?: (noteId: string, editor: LakeEditorInstance | null) => void;
+  /** 编辑器右键资料操作（M1.3） */
+  onEditorCopyMarkdown?: (noteId: string) => void;
+  onEditorExport?: (noteId: string, format: "markdown" | "html" | "lake") => void;
+  onEditorCopyPaths?: (noteId: string) => void;
 }
 
 function escapeId(id: string): string {
@@ -31,7 +37,7 @@ function escapeId(id: string): string {
   }
 }
 
-export function EditorTab({ noteId, content, visible, tocEnabled, onChange, prefs, locked, onEditorReady }: EditorTabProps) {
+export function EditorTab({ noteId, content, visible, tocEnabled, onChange, prefs, locked, onEditorReady, onEditorCopyMarkdown, onEditorExport, onEditorCopyPaths }: EditorTabProps) {
   const hostRef = useRef<HTMLDivElement>(null);
   const editorMountRef = useRef<HTMLDivElement>(null);
   const editorRef = useRef<LakeEditorInstance | null>(null);
@@ -56,6 +62,8 @@ export function EditorTab({ noteId, content, visible, tocEnabled, onChange, pref
   });
   const [editorState, setEditorState] = useState<LakeEditorInstance | null>(null);
   const [rebuildTick, setRebuildTick] = useState(0);
+  const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number } | null>(null);
+  const [exportOpen, setExportOpen] = useState(false);
   const onChangeRef = useRef(onChange);
   const onEditorReadyRef = useRef(onEditorReady);
   onChangeRef.current = onChange;
@@ -492,8 +500,63 @@ export function EditorTab({ noteId, content, visible, tocEnabled, onChange, pref
       className={`lake-editor lake-editor-tab${locked ? " lake-locked" : ""}`}
       style={{ display: visible ? "flex" : "none", width: "100%" }}
       data-note-id={noteId}
+      onContextMenu={(event) => {
+        // M1.3：编辑器右键 → 自定义资料操作菜单（覆盖 Lake 默认右键，复制/粘贴用快捷键）
+        event.preventDefault();
+        setExportOpen(false);
+        setCtxMenu({ x: event.clientX, y: event.clientY });
+      }}
     >
       <div ref={editorMountRef} className="lake-editor-main" />
+      {ctxMenu && (
+        <EditorContextMenu
+          x={ctxMenu.x}
+          y={ctxMenu.y}
+          exportOpen={exportOpen}
+          onExportOpen={setExportOpen}
+          onCopyMarkdown={() => onEditorCopyMarkdown?.(noteId)}
+          onExport={(format) => onEditorExport?.(noteId, format)}
+          onCopyPaths={() => onEditorCopyPaths?.(noteId)}
+          onClose={() => setCtxMenu(null)}
+        />
+      )}
     </div>
   );
 }
+
+interface EditorContextMenuProps {
+  x: number;
+  y: number;
+  exportOpen: boolean;
+  onExportOpen: (open: boolean) => void;
+  onCopyMarkdown: () => void;
+  onExport: (format: "markdown" | "html" | "lake") => void;
+  onCopyPaths: () => void;
+  onClose: () => void;
+}
+
+const EditorContextMenu = ({ x, y, exportOpen, onExportOpen, onCopyMarkdown, onExport, onCopyPaths, onClose }: EditorContextMenuProps) => {
+  const left = Math.min(x, window.innerWidth - 232);
+  const top = Math.min(y, window.innerHeight - 240);
+  const submenuLeft = left + 232 + 230 <= window.innerWidth;
+  return createPortal(
+    <div className="context-menu" style={{ left, top }} role="menu" data-context-menu>
+      <button role="menuitem" onClick={() => { onCopyMarkdown(); onClose(); }}><ClipboardCopy size={15} /><span>复制为 Markdown</span></button>
+      <div className="context-menu-item has-submenu" onMouseEnter={() => onExportOpen(true)} onMouseLeave={() => onExportOpen(false)}>
+        <span className="context-menu-item-label"><Package size={15} /><span>导出</span></span><ChevronRight size={14} />
+        {exportOpen && (
+          <div className={`context-menu-submenu${submenuLeft ? "" : " open-left"}`} role="menu">
+            <button role="menuitem" onClick={() => { onExport("markdown"); onClose(); }}>导出为 Markdown 资料包</button>
+            <button role="menuitem" onClick={() => { onExport("html"); onClose(); }}>导出为 HTML</button>
+            <button role="menuitem" disabled title="开发中">导出为 Word（开发中）</button>
+            <button role="menuitem" disabled title="开发中">导出为 PDF（开发中）</button>
+            <div className="context-menu-sep" />
+            <button role="menuitem" onClick={() => { onExport("lake"); onClose(); }}>导出原生 Lake（图片内嵌）</button>
+          </div>
+        )}
+      </div>
+      <button role="menuitem" onClick={() => { onCopyPaths(); onClose(); }}><Link2 size={15} /><span>复制资料路径（本机 AI）</span></button>
+    </div>,
+    document.body
+  );
+};

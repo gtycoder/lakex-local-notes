@@ -335,9 +335,8 @@ export function App() {
     }
   }, [activeNoteId, mobileActive, showNotice]);
 
-  /** M1：右键“复制为 Markdown”——读保存时生成的文本缓存，无需打开编辑器 */
-  const copyMarkdownFromCache = useCallback(async (node: TreeNode) => {
-    const noteId = node.noteFileId;
+  /** M1：复制为 Markdown（按 noteId）——读保存时生成的文本缓存，无需打开编辑器 */
+  const copyMarkdownById = useCallback(async (noteId: string | null) => {
     if (!noteId) { showNotice("该节点不是文档"); return; }
     try {
       const caches = await native.readNoteCaches(noteId);
@@ -349,9 +348,8 @@ export function App() {
     }
   }, [showNotice]);
 
-  /** M1：收口导出——右键「导出」子菜单所有格式统一入口（markdown/html/lake；word/pdf 待实现） */
-  const exportAs = useCallback(async (node: TreeNode, format: "markdown" | "html" | "lake") => {
-    const noteId = node.noteFileId;
+  /** M1：收口导出（按 noteId）——右键「导出」子菜单所有格式统一入口（markdown/html/lake；word/pdf 待实现） */
+  const exportNoteById = useCallback(async (noteId: string | null, format: "markdown" | "html" | "lake") => {
     if (!noteId) { showNotice("该节点不是文档"); return; }
     try {
       const dir = await native.pickExportDir();
@@ -370,9 +368,8 @@ export function App() {
     }
   }, [showNotice]);
 
-  /** M1：右键“复制资料路径（本机 AI）”——标题 + .lake 绝对路径 + 图片目录绝对路径 */
-  const copyNotePaths = useCallback(async (node: TreeNode) => {
-    const noteId = node.noteFileId;
+  /** M1：复制资料路径（按 noteId）——标题 + .lake 绝对路径 + 图片目录绝对路径 */
+  const copyPathsById = useCallback(async (noteId: string | null) => {
     if (!noteId) { showNotice("该节点不是文档"); return; }
     try {
       const info = await native.getNotePaths(noteId);
@@ -383,6 +380,11 @@ export function App() {
       setError("复制资料路径失败: " + (reason instanceof Error ? reason.message : String(reason)));
     }
   }, [showNotice]);
+
+  // 文档右键（TreeNode 版）包装
+  const copyMarkdownFromCache = useCallback((node: TreeNode) => void copyMarkdownById(node.noteFileId), [copyMarkdownById]);
+  const exportAs = useCallback((node: TreeNode, format: "markdown" | "html" | "lake") => void exportNoteById(node.noteFileId, format), [exportNoteById]);
+  const copyNotePaths = useCallback((node: TreeNode) => void copyPathsById(node.noteFileId), [copyPathsById]);
 
   const handleContentChange = useCallback((noteId: string, content: string) => {
     revisionRef.current.set(noteId, (revisionRef.current.get(noteId) ?? 0) + 1);
@@ -729,6 +731,9 @@ export function App() {
               onContentChange={handleContentChange}
               prefs={editorPrefs}
               onEditorReady={handleEditorReady}
+              onEditorCopyMarkdown={(noteId) => void copyMarkdownById(noteId)}
+              onEditorExport={(noteId, format) => void exportNoteById(noteId, format)}
+              onEditorCopyPaths={(noteId) => void copyPathsById(noteId)}
               topbarActions={<>
                 <button className="tabbar-action" onClick={() => setSettingsOpen(true)} data-tooltip="打开偏好设置" aria-label="打开偏好设置"><Settings2Icon size={15} /></button>
                 <button className={`tabbar-action sync-tab-action ${sync.phase}`} onClick={() => setSyncPanelOpen(true)} data-tooltip={`云同步：${sync.message}`} aria-label={`云同步：${sync.message}`}>

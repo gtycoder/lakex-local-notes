@@ -23,6 +23,10 @@ interface MultiTabEditorProps {
   onContentChange: (noteId: string, content: string) => void;
   prefs?: LakeEditorPrefs;
   onEditorReady?: (noteId: string, editor: import("./lakeRuntime").LakeEditorInstance | null) => void;
+  /** 编辑器右键资料操作（M1.3） */
+  onEditorCopyMarkdown?: (noteId: string) => void;
+  onEditorExport?: (noteId: string, format: "markdown" | "html" | "lake") => void;
+  onEditorCopyPaths?: (noteId: string) => void;
   topbarActions?: ReactNode;
   emptyAction?: ReactNode;
 }
@@ -38,6 +42,9 @@ export function MultiTabEditor({
   onContentChange,
   prefs,
   onEditorReady,
+  onEditorCopyMarkdown,
+  onEditorExport,
+  onEditorCopyPaths,
   topbarActions,
   emptyAction,
 }: MultiTabEditorProps) {
@@ -258,6 +265,9 @@ export function MultiTabEditor({
             onChange={(content) => handleChange(tab.noteId, content)}
             prefs={prefs}
             onEditorReady={onEditorReady}
+            onEditorCopyMarkdown={onEditorCopyMarkdown}
+            onEditorExport={onEditorExport}
+            onEditorCopyPaths={onEditorCopyPaths}
           />
         ))}
       </div>
