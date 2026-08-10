@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent } from "react";
 import { createPortal } from "react-dom";
 import { BookOpen, ChevronRight, ClipboardCopy, FilePlus2, FileText, FoldVertical, Folder, FolderPlus, Link2, LocateFixed, Package, Pencil, Plus, Search, SmilePlus, Trash2, X } from "lucide-react";
+import { LAKE_EMOJIS } from "../lib/lakeEmojis";
 import type { TreeNode, TreeNodeType } from "../lib/types";
 
 type CreateKind = "notebook" | "group" | "note";
@@ -490,22 +491,22 @@ export const ConfirmDelete = ({ node, onConfirm, onCancel }: ConfirmDeleteProps)
   </div>
 );
 
-/** M1.6：文档/分组自定义图标选择器（常用 emoji 网格 + 清除） */
-const EMOJI_ICONS = [
-  "📁", "📄", "🗂️", "📌", "⭐", "🔖", "📝", "💡", "🚀", "📚", "🎯", "🏷️", "✅", "❤️", "🌟", "🔥",
-  "🧠", "🗺️", "📊", "🎨", "🧪", "💰", "🎓", "🏠", "🛠️", "📅", "⏰", "☕", "🍀", "🌈", "🎵", "📷",
-  "💼", "🔒", "🔓", "⚡", "🎉", "📦", "🧩", "📎", "✏️", "🖊️", "📂", "📋", "📈", "📉", "📍", "🧭",
-  "🔍", "🔧", "🧰", "🗄️", "📇", "🎁", "🏆", "🧾", "🗓️", "⏱️", "📮", "🎬", "🎧", "🖼️", "🧮", "♟️",
-];
-
+/** M1.6：文档/分组自定义图标选择器（接入 Lake unicodeEmoji 表情资源 + 搜索 + 清除） */
 const EmojiIconPicker = ({ x, y, onPick, onClose }: { x: number; y: number; onPick: (icon: string | null) => void; onClose: () => void }) => {
-  const left = Math.min(x, window.innerWidth - 320);
-  const top = Math.min(y, window.innerHeight - 320);
+  const [filter, setFilter] = useState("");
+  const q = filter.trim().toLowerCase();
+  const list = q ? LAKE_EMOJIS.filter((e) => e.name.toLowerCase().includes(q) || e.char === filter.trim()) : LAKE_EMOJIS;
+  const left = Math.min(x, window.innerWidth - 340);
+  const top = Math.min(y, window.innerHeight - 420);
   return createPortal(
     <div className="emoji-picker" style={{ left, top }} data-context-menu>
+      <div className="emoji-picker-search">
+        <Search size={13} />
+        <input value={filter} onChange={(e) => setFilter(e.target.value)} placeholder="搜索表情（如 smile / 名称）" autoFocus />
+      </div>
       <div className="emoji-picker-grid">
-        {EMOJI_ICONS.map((e) => (
-          <button key={e} className="emoji-picker-cell" onClick={() => onPick(e)} title={e}>{e}</button>
+        {list.map((e) => (
+          <button key={e.name} className="emoji-picker-cell" onClick={() => onPick(e.char)} title={e.name}>{e.char}</button>
         ))}
       </div>
       <button className="emoji-picker-clear" onClick={() => onPick(null)}>清除图标</button>

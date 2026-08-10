@@ -345,6 +345,7 @@ button { cursor: pointer; }
 /* 未保存标记：Tab 标签上的小圆点 */
 .tab-item.pinned .tab-title { font-weight: 600; }
 .tab-item .tab-pin { flex: none; color: #9aa3ad; }
+.tab-item .tab-custom-icon { flex: none; font-size: 13px; line-height: 1; }
 .tab-item.pinned .tab-pin { color: #7c6f2f; }
 .tab-item.pinned .tab-close { display: none; }
 .tab-item.dirty .tab-title::after {
@@ -1449,6 +1450,8 @@ ne-card[data-card-name="codeblock"] .ne-card-resizer-mask {
 /* M1.6 自定义图标 + emoji 选择器 */
 .tree-node-custom-icon { font-size: 15px; line-height: 1; }
 .emoji-picker { position: fixed; z-index: 700; width: 320px; max-height: 300px; padding: 8px; border: 1px solid #d8dde1; border-radius: 8px; background: #fff; box-shadow: 0 10px 28px #1f293329; display: flex; flex-direction: column; gap: 8px; }
+.emoji-picker-search { display: flex; align-items: center; gap: 6px; padding: 4px 6px; border: 1px solid #d8dde1; border-radius: 6px; color: #8b929c; }
+.emoji-picker-search input { flex: 1; border: 0; outline: none; font-size: 12px; background: transparent; }
 .emoji-picker-grid { display: grid; grid-template-columns: repeat(8, 1fr); gap: 2px; overflow-y: auto; }
 .emoji-picker-cell { display: flex; align-items: center; justify-content: center; min-height: 30px; border: 0; border-radius: 5px; background: transparent; font-size: 16px; cursor: pointer; }
 .emoji-picker-cell:hover { background: #eef1f2; }

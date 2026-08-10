@@ -9,6 +9,8 @@ export interface TabInfo {
   title: string;
   content: string;
   dirty?: boolean;
+  /** 文档自定义图标（emoji） */
+  icon?: string | null;
 }
 
 interface MultiTabEditorProps {
@@ -227,6 +229,7 @@ export function MultiTabEditor({
               role="tab"
             >
               {pinned.has(tab.noteId) && <Pin size={11} className="tab-pin" aria-hidden="true" />}
+              {tab.icon && <span className="tab-custom-icon" aria-hidden="true">{tab.icon}</span>}
               <span className="tab-title">{tab.title || "无标题"}</span>
               <span
                 className="tab-close"

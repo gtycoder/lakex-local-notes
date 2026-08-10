@@ -21,6 +21,8 @@ interface ManifestNote {
   /** v3：只读锁元数据（独立于正文哈希，按 lockedAt 字段级 LWW 合并） */
   isLocked?: boolean;
   lockedAt?: string | null;
+  /** 文档自定义图标（可选字段，旧清单无此字段时本地保持原样） */
+  icon?: string | null;
   assets: { filename: string; size: number; hash: string }[];
   deleted?: boolean;
   deletedAt?: string;
@@ -223,7 +225,7 @@ export async function syncNow(store: Store, onProgress?: (p: SyncProgress) => vo
         const conflictId = crypto.randomUUID();
         const title = `${rn.title}（冲突副本 ${new Date().toISOString().slice(0, 10)}）`;
         store.importRemoteNote(
-          { id: conflictId, title, parentId: rn.parentId, sortOrder: rn.sortOrder + 1, updatedAt: rn.updatedAt, isConflict: true },
+          { id: conflictId, title, parentId: rn.parentId, sortOrder: rn.sortOrder + 1, updatedAt: rn.updatedAt, isConflict: true, icon: rn.icon ?? null },
           lakeBytes, assets
         );
         store.setBaseHash(conflictId, rn.contentHash);
@@ -238,7 +240,7 @@ export async function syncNow(store: Store, onProgress?: (p: SyncProgress) => vo
           : { locked: !!rn.isLocked, at: rn.lockedAt ?? null };
         store.importRemoteNote(
           { id: rn.id, title: rn.title, parentId: rn.parentId, sortOrder: rn.sortOrder, updatedAt: rn.updatedAt, isConflict: rn.isConflict,
-            isLocked: merged.locked, lockedAt: merged.at },
+            isLocked: merged.locked, lockedAt: merged.at, icon: rn.icon ?? null },
           lakeBytes, assets
         );
         store.setBaseHash(rn.id, rn.contentHash);
@@ -296,7 +298,7 @@ export async function syncNow(store: Store, onProgress?: (p: SyncProgress) => vo
     manifestNotes.push({
       id: note.id, title: note.title, parentId: note.parentId, sortOrder: note.sortOrder,
       updatedAt: note.updatedAt, contentHash: hash, isConflict: note.isConflict,
-      isLocked: !!note.isLocked, lockedAt: note.lockedAt ?? null, assets,
+      isLocked: !!note.isLocked, lockedAt: note.lockedAt ?? null, icon: note.icon ?? null, assets,
     });
   }
 

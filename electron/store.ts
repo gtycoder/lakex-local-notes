@@ -49,7 +49,7 @@ interface S3Settings {
 }
 interface SyncNote {
   id: string; title: string; parentId: string | null; sortOrder: number; updatedAt: string; isConflict: boolean;
-  isLocked?: boolean; lockedAt?: string | null;
+  isLocked?: boolean; lockedAt?: string | null; icon?: string | null;
 }
 interface RemoteAsset {
   filename: string; size: number; hash: string;
@@ -996,12 +996,15 @@ export class Store {
   }
 
   listNotesForSync(): SyncNote[] {
+    // icon 存于 tree_nodes，join 取出参与同步
     return this.db.prepare(
-      "SELECT id,title,parent_id,sort_order,updated_at,is_conflict,is_locked,locked_at FROM notes WHERE deleted_at IS NULL ORDER BY sort_order"
+      `SELECT n.id,n.title,n.parent_id,n.sort_order,n.updated_at,n.is_conflict,n.is_locked,n.locked_at,t.icon
+       FROM notes n LEFT JOIN tree_nodes t ON t.note_file_id = n.id
+       WHERE n.deleted_at IS NULL ORDER BY n.sort_order`
     ).all().map((r: any) => ({
       id: r.id, title: r.title, parentId: r.parent_id, sortOrder: r.sort_order,
       updatedAt: r.updated_at, isConflict: !!r.is_conflict,
-      isLocked: !!r.is_locked, lockedAt: r.locked_at ?? null,
+      isLocked: !!r.is_locked, lockedAt: r.locked_at ?? null, icon: r.icon ?? null,
     }));
   }
 
@@ -1060,12 +1063,12 @@ export class Store {
           note.isLocked ? 1 : 0, note.lockedAt ?? null);
         // upsert tree_nodes（note 节点）
         this.db.prepare(
-          `INSERT INTO tree_nodes(id,workspace_id,parent_id,node_type,title,note_file_id,sort_order,created_at,updated_at,deleted_at,sync_state,is_conflict)
-           VALUES(?,?,?,'note',?,?,?,?,?,NULL,'synced',?)
+          `INSERT INTO tree_nodes(id,workspace_id,parent_id,node_type,title,note_file_id,sort_order,created_at,updated_at,deleted_at,sync_state,is_conflict,icon)
+           VALUES(?,?,?,'note',?,?,?,?,?,NULL,'synced',?,?)
            ON CONFLICT(id) DO UPDATE SET parent_id=excluded.parent_id,title=excluded.title,
              sort_order=excluded.sort_order,updated_at=excluded.updated_at,
-             deleted_at=NULL,sync_state='synced',is_conflict=excluded.is_conflict`
-        ).run(note.id, DEFAULT_WORKSPACE_ID, note.parentId, note.title, note.id, note.sortOrder, note.updatedAt, note.updatedAt, note.isConflict ? 1 : 0);
+             deleted_at=NULL,sync_state='synced',is_conflict=excluded.is_conflict,icon=excluded.icon`
+        ).run(note.id, DEFAULT_WORKSPACE_ID, note.parentId, note.title, note.id, note.sortOrder, note.updatedAt, note.updatedAt, note.isConflict ? 1 : 0, note.icon ?? null);
       });
       tx();
       // DB 提交成功 → 原子落位

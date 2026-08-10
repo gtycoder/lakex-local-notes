@@ -689,7 +689,10 @@ export function App() {
     fontSize: settings.fontSize,
     showToolbar: settings.showToolbar,
   };
-  const tabInfos: TabInfo[] = openTabs.map((tab) => ({ noteId: tab.noteId, title: tab.title, content: tab.content, dirty: tab.dirty }));
+  const tabInfos: TabInfo[] = openTabs.map((tab) => ({
+    noteId: tab.noteId, title: tab.title, content: tab.content, dirty: tab.dirty,
+    icon: treeNodes.find((n) => n.noteFileId === tab.noteId)?.icon ?? null,
+  }));
 
   const outlineVisible = tocEnabled && !isMobile && desktopWorkspace === "library";
   // 只读锁：store 驱动（可同步），派生集合供多标签 viewer 重建
