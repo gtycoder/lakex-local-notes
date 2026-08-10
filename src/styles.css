@@ -1460,7 +1460,10 @@ ne-card[data-card-name="codeblock"] .ne-card-resizer-mask {
 .emoji-picker-empty { grid-column: 1 / -1; padding: 16px; text-align: center; color: #8b929c; font-size: 12px; }
 .emoji-picker-search { display: flex; align-items: center; gap: 6px; padding: 4px 6px; border: 1px solid #d8dde1; border-radius: 6px; color: #8b929c; }
 .emoji-picker-search input { flex: 1; border: 0; outline: none; font-size: 12px; background: transparent; }
-.emoji-picker-grid { display: grid; grid-template-columns: repeat(8, 1fr); gap: 2px; overflow-y: auto; }
+.emoji-picker-search { flex: none; }
+.emoji-picker-tabs { flex: none; }
+.emoji-picker-clear { flex: none; }
+.emoji-picker-grid { display: grid; grid-template-columns: repeat(8, 1fr); gap: 2px; overflow-y: auto; flex: 1 1 auto; min-height: 0; }
 .emoji-picker-cell { display: flex; align-items: center; justify-content: center; min-height: 30px; border: 0; border-radius: 5px; background: transparent; font-size: 16px; cursor: pointer; }
 .emoji-picker-cell:hover { background: #eef1f2; }
 .emoji-picker-clear { border: 0; border-radius: 5px; padding: 6px; background: #f2f3f5; color: #48515c; cursor: pointer; font-size: 12px; }
