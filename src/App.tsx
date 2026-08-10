@@ -10,6 +10,7 @@ import { MultiTabEditor, type TabInfo } from "./features/editor/MultiTabEditor";
 import { OutlineSidebar } from "./features/outline/OutlineSidebar";
 import type { OutlineMode } from "./features/outline/OutlineController";
 import { getOutlineTab, getOutlineTabsVersion, subscribeOutlineTabs } from "./features/outline/registry";
+import { cleanLakeMarkdown } from "./lib/markdownClean";
 import { isDesktop, native } from "./lib/native";
 import { loadSettings, saveSettings, subscribeSettings, type AppSettings } from "./lib/settings";
 import { SettingsPanel } from "./components/SettingsPanel";
@@ -192,7 +193,7 @@ export function App() {
       const editor = editorsRef.current.get(noteId);
       const caches: { markdown: string | null; plain: string | null } = { markdown: null, plain: null };
       if (editor && typeof (editor as any).getDocument === "function") {
-        try { caches.markdown = String((editor as any).getDocument("text/markdown")); } catch { /* 忽略 */ }
+        try { caches.markdown = cleanLakeMarkdown(String((editor as any).getDocument("text/markdown"))); } catch { /* 忽略 */ }
         try { caches.plain = String((editor as any).getDocument("text/plain")); } catch { /* 忽略 */ }
       }
       const saved = await native.saveNote(noteId, title.trim() || "无标题", content, caches);
@@ -308,7 +309,7 @@ export function App() {
       editorsRef.current.set(noteId, editor);
       try {
         if (typeof (editor as any).getDocument === "function") {
-          const markdown = String((editor as any).getDocument("text/markdown"));
+          const markdown = cleanLakeMarkdown(String((editor as any).getDocument("text/markdown")));
           const plain = String((editor as any).getDocument("text/plain"));
           void native.updateNoteCaches(noteId, markdown, plain);
         }
@@ -353,7 +354,9 @@ export function App() {
     const noteId = node.noteFileId;
     if (!noteId) { showNotice("该节点不是文档"); return; }
     try {
-      const result = await native.exportNotePackage(noteId);
+      const dir = await native.pickExportDir();
+      if (!dir) return; // 用户取消
+      const result = await native.exportNotePackage(noteId, dir);
       const skippedText = result.skipped > 0 ? `（${result.skipped} 张图片缺失已跳过）` : "";
       showNotice(`已导出资料包到 ${result.exportDir}（${result.imageCount} 张图片${skippedText}）`);
     } catch (reason) {

@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, session, shell, type WebFrameMain } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, session, shell, type WebFrameMain } from "electron";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -138,7 +138,16 @@ function registerIpc() {
   });
   handle("read_note_caches", (id: string) => store.readNoteCaches(id));
   handle("get_note_paths", (id: string) => store.getNotePaths(id));
-  handle("export_note_package", (id: string) => store.exportNotePackage(id));
+  handle("pick_export_dir", async () => {
+    const win = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0];
+    const result = await dialog.showOpenDialog(win, {
+      title: "选择导出位置",
+      buttonLabel: "导出到此目录",
+      properties: ["openDirectory", "createDirectory"],
+    });
+    return result.canceled ? null : result.filePaths[0];
+  });
+  handle("export_note_package", (id: string, baseDir?: string) => store.exportNotePackage(id, baseDir));
   handle("delete_note", (id: string) => store.deleteNote(id));
   handle("set_note_locked", (id: string, locked: boolean) => { store.setNoteLocked(id, locked); return store.readNote(id); });
   handle("list_tree_nodes", () => store.listTreeNodes());
