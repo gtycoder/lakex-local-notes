@@ -5,6 +5,7 @@ import crypto from "node:crypto";
 import os from "node:os";
 import { net, safeStorage } from "electron";
 import { ASSET_PORT } from "./assetServer.js";
+import { mdToHtml, wrapHtmlPage } from "./mdToHtml.js";
 import { assertSafeRemoteHost, SsrfError } from "./ssrf.js";
 
 const DEFAULT_WORKSPACE_ID = "default";
@@ -476,6 +477,54 @@ export class Store {
     return { exportPath, imageCount, skipped, size: out.length };
   }
 
+  /**
+   * M1：导出 HTML（收口导出的一环）：读缓存 Markdown → 轻量转 HTML →
+   * 复制本地图片到 images/ 并改写相对引用 → 写 {标题}/index.html。
+   */
+  exportHtmlNote(id: string, baseDir?: string): { exportPath: string; imageCount: number; skipped: number; size: number } {
+    if (!isSafePathSegment(id)) throw new AppError("InvalidInput", `无效的笔记 ID: ${id}`);
+    const caches = this.readNoteCaches(id);
+    const markdown = caches.markdown ?? "";
+    if (!markdown.trim()) throw new AppError("InvalidInput", "该文档还没有文本缓存，请先打开并保存一次");
+    const titleRow = this.db.prepare("SELECT title FROM notes WHERE id=?").get(id) as { title: string } | undefined;
+    const title = sanitizeFileName(titleRow?.title ?? "未命名");
+    const base = baseDir ?? path.join(os.homedir(), "Desktop", "lake-notes-导出");
+    let exportDir = path.join(base, title);
+    let suffix = 2;
+    while (fs.existsSync(exportDir)) {
+      exportDir = path.join(base, `${title}-${suffix}`);
+      suffix++;
+    }
+    const imagesDir = path.join(exportDir, "images");
+    fs.mkdirSync(imagesDir, { recursive: true });
+    let body = mdToHtml(markdown);
+    // 提取 <img src="http://127.0.0.1:19876/{noteId}/{file}"> 并复制 + 改写相对引用
+    const imgRe = /<img[^>]*src="(http:\/\/127\.0\.0\.1:19876\/([^/]+)\/([^/"\s]+))"/g;
+    const seen = new Set<string>();
+    let imageCount = 0;
+    let skipped = 0;
+    body = body.replace(imgRe, (whole: string, url: string, noteId: string, filename: string) => {
+      const key = `${noteId}/${filename}`;
+      if (seen.has(key)) return whole.replace(url, `images/${filename}`);
+      seen.add(key);
+      if (!isSafePathSegment(noteId) || !isSafePathSegment(filename)) { skipped++; return whole; }
+      const src = path.join(this.noteAssetsDir, noteId, filename);
+      try {
+        if (fs.existsSync(src)) {
+          const dest = path.join(imagesDir, filename);
+          if (!fs.existsSync(dest)) fs.copyFileSync(src, dest);
+          imageCount++;
+          return whole.replace(url, `images/${filename}`);
+        }
+      } catch { /* 复制失败算跳过 */ }
+      skipped++;
+      return whole;
+    });
+    const page = wrapHtmlPage(title, body);
+    fs.writeFileSync(path.join(exportDir, "index.html"), page, "utf8");
+    return { exportPath: path.join(exportDir, "index.html"), imageCount, skipped, size: page.length };
+  }
+
   getNotePaths(id: string): { title: string; lakePath: string; assetsDir: string } {
     if (!isSafePathSegment(id)) throw new AppError("InvalidInput", `无效的笔记 ID: ${id}`);
     const row = this.db.prepare("SELECT title FROM notes WHERE id=?").get(id) as { title: string } | undefined;
@@ -488,7 +537,7 @@ export class Store {
    * 图片引用从 Lake 生成的 markdown 里以轻量正则提取（`![](http://127.0.0.1:19876/{noteId}/{filename})`），
    * 复制到导出目录 images/ 并把 MD 改写为相对引用，产出自包含资料包。
    */
-  exportNotePackage(id: string, baseDir?: string): { exportDir: string; imageCount: number; skipped: number } {
+  exportNotePackage(id: string, baseDir?: string): { exportDir: string; imageCount: number; skipped: number; size: number } {
     if (!isSafePathSegment(id)) throw new AppError("InvalidInput", `无效的笔记 ID: ${id}`);
     const caches = this.readNoteCaches(id);
     const markdown = caches.markdown ?? "";
@@ -538,7 +587,7 @@ export class Store {
       }
     }
     fs.writeFileSync(path.join(exportDir, "index.md"), md, "utf8");
-    return { exportDir, imageCount, skipped };
+    return { exportDir, imageCount, skipped, size: md.length };
   }
 
   deleteNote(id: string) {
@@ -1135,7 +1184,7 @@ function imageOutput(bytes: Buffer, _requestedFilename: string, noteAssetsDir: s
 }
 
 /** M1：目录名清洗：去掉文件系统非法字符，空则回退“未命名” */
-function sanitizeFileName(name: string): string {
+export function sanitizeFileName(name: string): string {
   const cleaned = name.replace(/[\\/:*?"<>|]/g, "_").trim();
   return cleaned || "未命名";
 }

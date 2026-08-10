@@ -6,6 +6,7 @@ import { MAX_IMAGE_BYTES, Store } from "./store.js";
 import { MAX_QUICK_NOTE_IMAGE_BYTES, QuickNotesStore } from "./quickNotes.js";
 import { convertQuickNoteToLake } from "./quickNoteConversion.js";
 import { startAssetServer, ASSET_PORT } from "./assetServer.js";
+import { exportNote, type ExportFormat } from "./export.js";
 import { resolveMirroredCdnRedirect } from "./cdnRedirect.js";
 import { testConnection, syncNow } from "./sync.js";
 import { syncQuickNotes } from "./quickNotesSync.js";
@@ -147,8 +148,7 @@ function registerIpc() {
     });
     return result.canceled ? null : result.filePaths[0];
   });
-  handle("export_note_package", (id: string, baseDir?: string) => store.exportNotePackage(id, baseDir));
-  handle("export_native_lake", (id: string, baseDir?: string) => store.exportNativeLake(id, baseDir));
+  handle("export_note", (id: string, format: ExportFormat, baseDir?: string) => exportNote(store, id, format, baseDir));
   handle("delete_note", (id: string) => store.deleteNote(id));
   handle("set_note_locked", (id: string, locked: boolean) => { store.setNoteLocked(id, locked); return store.readNote(id); });
   handle("list_tree_nodes", () => store.listTreeNodes());

@@ -349,33 +349,24 @@ export function App() {
     }
   }, [showNotice]);
 
-  /** M1：右键“导出资料包”——主进程读缓存 MD + 复制图片到桌面 lake-notes-导出/{标题}/ */
-  const exportPackage = useCallback(async (node: TreeNode) => {
+  /** M1：收口导出——右键「导出」子菜单所有格式统一入口（markdown/html/lake；word/pdf 待实现） */
+  const exportAs = useCallback(async (node: TreeNode, format: "markdown" | "html" | "lake") => {
     const noteId = node.noteFileId;
     if (!noteId) { showNotice("该节点不是文档"); return; }
     try {
       const dir = await native.pickExportDir();
       if (!dir) return; // 用户取消
-      const result = await native.exportNotePackage(noteId, dir);
+      const result = await native.exportNote(noteId, format, dir);
       const skippedText = result.skipped > 0 ? `（${result.skipped} 张图片缺失已跳过）` : "";
-      showNotice(`已导出资料包到 ${result.exportDir}（${result.imageCount} 张图片${skippedText}）`);
+      if (format === "markdown") {
+        showNotice(`已导出 Markdown 资料包到 ${result.exportPath}（${result.imageCount} 张图片${skippedText}）`);
+      } else if (format === "html") {
+        showNotice(`已导出 HTML：${result.exportPath}（${result.imageCount} 张图片${skippedText}）`);
+      } else {
+        showNotice(`已导出原生 Lake：${result.exportPath}（${result.imageCount} 张图片内嵌${skippedText}）`);
+      }
     } catch (reason) {
-      setError("导出资料包失败: " + (reason instanceof Error ? reason.message : String(reason)));
-    }
-  }, [showNotice]);
-
-  /** M1：右键“导出原生 Lake（图片内嵌）”——选目录，输出 VS Code Lake 插件兼容的自包含 .lake */
-  const exportNativeLake = useCallback(async (node: TreeNode) => {
-    const noteId = node.noteFileId;
-    if (!noteId) { showNotice("该节点不是文档"); return; }
-    try {
-      const dir = await native.pickExportDir();
-      if (!dir) return;
-      const result = await native.exportNativeLake(noteId, dir);
-      const skippedText = result.skipped > 0 ? `（${result.skipped} 处远程/缺失图片未内嵌）` : "";
-      showNotice(`已导出原生 Lake：${result.exportPath}（${result.imageCount} 张图片内嵌${skippedText}）`);
-    } catch (reason) {
-      setError("导出原生 Lake 失败: " + (reason instanceof Error ? reason.message : String(reason)));
+      setError("导出失败: " + (reason instanceof Error ? reason.message : String(reason)));
     }
   }, [showNotice]);
 
@@ -696,7 +687,7 @@ export function App() {
         <button className={`activity-button ${desktopWorkspace === "quick-notes" ? "active" : ""}`} onClick={() => void switchDesktopWorkspace("quick-notes")} title="小记" aria-label="小记"><Feather size={16} /></button>
         <div className="activity-rail-fill" />
       </nav>
-      {desktopWorkspace === "library" && <Sidebar nodes={treeNodes} activeId={activeNoteId ?? mobileActive?.id ?? null} search={search} mobileOpen={mobileOpen} mode={sidebarMode} width={sidebarWidth} minWidth={SIDEBAR_MIN_WIDTH} maxWidth={SIDEBAR_MAX_WIDTH} onSearch={setSearch} onSelect={(id) => void (isMobile ? openNoteMobile(id) : openNote(id))} onCreate={(kind, parentId, title) => void createTreeItem(kind, parentId, title)} onRename={(id, title) => void renameTreeNode(id, title)} onMoveNode={(id, targetId, position) => void moveTreeNode(id, targetId, position)} onRequestDelete={(node) => setConfirmDelete(node)} onCopyMarkdown={(node) => void copyMarkdownFromCache(node)} onExportPackage={(node) => void exportPackage(node)} onExportNativeLake={(node) => void exportNativeLake(node)} onCopyPaths={(node) => void copyNotePaths(node)} pendingRenameId={pendingRenameId} onPendingRenameConsumed={() => setPendingRenameId(null)} onPreviewEnter={showSidebarPreview} onPreviewLeave={hideSidebarPreview} onResizeActiveChange={setSidebarResizing} onWidthChange={updateSidebarWidth} onWidthCommit={commitSidebarWidth} onCloseMobile={() => setMobileOpen(false)} />}
+      {desktopWorkspace === "library" && <Sidebar nodes={treeNodes} activeId={activeNoteId ?? mobileActive?.id ?? null} search={search} mobileOpen={mobileOpen} mode={sidebarMode} width={sidebarWidth} minWidth={SIDEBAR_MIN_WIDTH} maxWidth={SIDEBAR_MAX_WIDTH} onSearch={setSearch} onSelect={(id) => void (isMobile ? openNoteMobile(id) : openNote(id))} onCreate={(kind, parentId, title) => void createTreeItem(kind, parentId, title)} onRename={(id, title) => void renameTreeNode(id, title)} onMoveNode={(id, targetId, position) => void moveTreeNode(id, targetId, position)} onRequestDelete={(node) => setConfirmDelete(node)} onCopyMarkdown={(node) => void copyMarkdownFromCache(node)} onExportAs={(node, format) => void exportAs(node, format)} onCopyPaths={(node) => void copyNotePaths(node)} pendingRenameId={pendingRenameId} onPendingRenameConsumed={() => setPendingRenameId(null)} onPreviewEnter={showSidebarPreview} onPreviewLeave={hideSidebarPreview} onResizeActiveChange={setSidebarResizing} onWidthChange={updateSidebarWidth} onWidthCommit={commitSidebarWidth} onCloseMobile={() => setMobileOpen(false)} />}
       {mobileOpen && <div className="mobile-scrim" onClick={() => setMobileOpen(false)} />}
       <main className="workspace" onPointerDownCapture={(event) => {
         if (!isMobile && sidebarMode === "floating" && (event.target as HTMLElement).closest(".document-pane, .empty-workspace")) setSidebarMode("collapsed");

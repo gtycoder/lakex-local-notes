@@ -260,6 +260,25 @@ describe("目录树操作", () => {
     fs.rmSync(assetsDir, { recursive: true, force: true });
   });
 
+  it("exportHtmlNote 导出 HTML + 复制图片 + 改写相对引用", () => {
+    const note = store.createNote("HTML 导出测试");
+    const assetsDir = (store as any).noteAssetsDirFor(note.id);
+    fs.mkdirSync(assetsDir, { recursive: true });
+    fs.writeFileSync(path.join(assetsDir, "pic.png"), Buffer.from([1, 2, 3]));
+    const md = `# 标题\n\n![](http://127.0.0.1:19876/${note.id}/pic.png)\n\n正文`;
+    store.saveNote(note.id, "HTML 导出测试", "<p>正文</p>", { markdown: md, plain: "正文" });
+    const base = fs.mkdtempSync(path.join(os.tmpdir(), "lake-html-"));
+    const result = store.exportHtmlNote(note.id, base);
+    expect(result.imageCount).toBe(1);
+    const html = fs.readFileSync(result.exportPath, "utf8");
+    expect(html).toContain("<h1>标题</h1>");
+    expect(html).toContain("src=\"images/pic.png\"");
+    expect(html).not.toContain("127.0.0.1:19876");
+    expect(fs.existsSync(path.join(path.dirname(result.exportPath), "images", "pic.png"))).toBe(true);
+    fs.rmSync(base, { recursive: true, force: true });
+    fs.rmSync(assetsDir, { recursive: true, force: true });
+  });
+
   it("deleteTreeNode 递归删除 + 墓碑 + 清孤儿/资源目录", () => {
     const nb = store.createNotebook("待删");
     const group = store.createGroup(nb.id, "组");

@@ -229,6 +229,14 @@ button { cursor: pointer; }
 .context-menu > button { display: grid; grid-template-columns: 18px minmax(0, 1fr); align-items: center; gap: 9px; width: 100%; min-height: 36px; padding: 7px 8px; border: 0; border-radius: 5px; color: #48515c; background: transparent; text-align: left; font-size: 12px; }
 .context-menu > button:hover { background: #eef1f2; }
 .context-menu > button.danger { color: #b1433e; }
+.context-menu-item { display: flex; align-items: center; justify-content: space-between; width: 100%; min-height: 36px; padding: 7px 8px; border-radius: 5px; color: #48515c; cursor: pointer; font-size: 12px; position: relative; box-sizing: border-box; }
+.context-menu-item:hover { background: #eef1f2; }
+.context-menu-item-label { display: grid; grid-template-columns: 18px minmax(0, 1fr); align-items: center; gap: 9px; }
+.context-menu-submenu { position: absolute; top: -4px; left: 100%; margin-left: 2px; display: flex; flex-direction: column; width: 230px; padding: 5px; border: 1px solid #d8dde1; border-radius: 7px; background: #fff; box-shadow: 0 10px 28px #1f293329; z-index: 601; }
+.context-menu-submenu.open-left { left: auto; right: 100%; margin-left: 0; margin-right: 2px; }
+.context-menu-submenu > button { display: block; width: 100%; min-height: 34px; padding: 7px 10px; border: 0; border-radius: 5px; color: #48515c; background: transparent; text-align: left; font-size: 12px; white-space: nowrap; }
+.context-menu-submenu > button:hover:not(:disabled) { background: #eef1f2; }
+.context-menu-submenu > button:disabled { color: #b3bac2; cursor: not-allowed; }
 .context-menu > button.danger:hover { background: #fbe9e7; }
 .context-menu-sep { height: 1px; margin: 4px 0; background: #eceef1; }
 .context-menu { opacity: 1; transform: scale(1); }
