@@ -1450,6 +1450,13 @@ ne-card[data-card-name="codeblock"] .ne-card-resizer-mask {
 /* M1.6 自定义图标 + emoji 选择器 */
 .tree-node-custom-icon { font-size: 15px; line-height: 1; }
 .emoji-picker { position: fixed; z-index: 700; width: 320px; max-height: 300px; padding: 8px; border: 1px solid #d8dde1; border-radius: 8px; background: #fff; box-shadow: 0 10px 28px #1f293329; display: flex; flex-direction: column; gap: 8px; }
+.tree-row-icon { display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; border-radius: 5px; cursor: pointer; flex: none; }
+.tree-row-icon:hover { background: rgba(0,0,0,0.06); }
+.emoji-picker-tabs { display: flex; gap: 4px; overflow-x: auto; padding-bottom: 2px; }
+.emoji-picker-tab { flex: none; padding: 4px 10px; border: 0; border-radius: 999px; background: #f2f3f5; color: #48515c; font-size: 12px; cursor: pointer; white-space: nowrap; }
+.emoji-picker-tab:hover { background: #e7e9ec; }
+.emoji-picker-tab.active { background: #e4e9f7; color: #3a5bcd; font-weight: 600; }
+.emoji-picker-empty { grid-column: 1 / -1; padding: 16px; text-align: center; color: #8b929c; font-size: 12px; }
 .emoji-picker-search { display: flex; align-items: center; gap: 6px; padding: 4px 6px; border: 1px solid #d8dde1; border-radius: 6px; color: #8b929c; }
 .emoji-picker-search input { flex: 1; border: 0; outline: none; font-size: 12px; background: transparent; }
 .emoji-picker-grid { display: grid; grid-template-columns: repeat(8, 1fr); gap: 2px; overflow-y: auto; }

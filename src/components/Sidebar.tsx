@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, 
 import { createPortal } from "react-dom";
 import { BookOpen, ChevronRight, ClipboardCopy, FilePlus2, FileText, FoldVertical, Folder, FolderPlus, Link2, LocateFixed, Package, Pencil, Plus, Search, SmilePlus, Trash2, X } from "lucide-react";
 import { LAKE_EMOJIS } from "../lib/lakeEmojis";
+import { LAKE_EMOJI_GROUPS } from "../lib/lakeEmojiGroups";
 import type { TreeNode, TreeNodeType } from "../lib/types";
 
 type CreateKind = "notebook" | "group" | "note";
@@ -295,7 +296,7 @@ export function Sidebar(props: SidebarProps) {
       </div>
       <nav className="note-list tree-list" ref={treeRef}>
         {pendingCreate?.kind === "notebook" && createField(0)}
-        {roots.map((node) => <TreeRow key={node.id} node={node} depth={0} nodes={props.nodes} query={query} activeId={props.activeId} contextId={context?.id ?? null} expanded={expanded} draggingId={draggingId} dropTarget={dropTarget} pendingCreate={pendingCreate} editingId={editingId} editingTitle={editingTitle} createField={createField} onEditingTitle={setEditingTitle} onSubmitRename={submitRename} onCancelRename={() => setEditingId(null)} onBeginRename={beginRename} onPointerDown={(event, id) => { if (event.button !== 0 || (event.target as HTMLElement).closest("input")) return; dragRef.current = { id, startX: event.clientX, startY: event.clientY, moved: false }; setDraggingId(id); }} consumeSuppressedClick={() => suppressClickRef.current} onContext={setContextId} onContextMenu={openContext} onToggle={(id) => setExpanded((current) => toggleSet(current, id))} onSelect={props.onSelect} />)}
+        {roots.map((node) => <TreeRow key={node.id} node={node} depth={0} nodes={props.nodes} query={query} activeId={props.activeId} contextId={context?.id ?? null} expanded={expanded} draggingId={draggingId} dropTarget={dropTarget} pendingCreate={pendingCreate} editingId={editingId} editingTitle={editingTitle} createField={createField} onEditingTitle={setEditingTitle} onSubmitRename={submitRename} onCancelRename={() => setEditingId(null)} onBeginRename={beginRename} onPointerDown={(event, id) => { if (event.button !== 0 || (event.target as HTMLElement).closest("input")) return; dragRef.current = { id, startX: event.clientX, startY: event.clientY, moved: false }; setDraggingId(id); }} consumeSuppressedClick={() => suppressClickRef.current} onContext={setContextId} onContextMenu={openContext} onToggle={(id) => setExpanded((current) => toggleSet(current, id))} onSelect={props.onSelect} onIconClick={(node, event) => setIconPicker({ node, x: event.clientX, y: event.clientY })} />)}
         {roots.length === 0 && <div className="empty-list">点击 + 新建第一个笔记本</div>}
       </nav>
       {contextMenu && contextNode && <ContextMenu node={contextNode} x={contextMenu.x} y={contextMenu.y} onNewChild={menuNewChild} onRename={menuRename} onDelete={menuDelete} onCopyMarkdown={() => props.onCopyMarkdown(contextNode)} onExportAs={(format) => props.onExportAs(contextNode, format)} onCopyPaths={() => props.onCopyPaths(contextNode)} onSetIconRequest={() => setIconPicker({ node: contextNode, x: contextMenu!.x, y: contextMenu!.y })} onClose={() => setContextMenu(null)} />}
@@ -329,6 +330,7 @@ interface TreeRowProps {
   onContextMenu: (event: React.MouseEvent, node: TreeNode) => void;
   onToggle: (id: string) => void;
   onSelect: (id: string) => void;
+  onIconClick?: (node: TreeNode, event: React.MouseEvent) => void;
 }
 
 function TreeRow(props: TreeRowProps) {
@@ -357,6 +359,7 @@ function TreeRow(props: TreeRowProps) {
       onPointerDown={(event) => props.onPointerDown(event, props.node.id)}
       onContextMenu={(event) => props.onContextMenu(event, props.node)}
     >
+      <span className="tree-row-icon" title="设置图标" onClick={(event) => { event.stopPropagation(); props.onIconClick?.(props.node, event); }}>{icon}</span>
       <button type="button" className={`tree-chevron ${open && expandable ? "open" : ""}`} disabled={!expandable} onClick={(event) => { event.stopPropagation(); if (expandable) props.onToggle(props.node.id); }} aria-label={open ? "收起" : "展开"}>{expandable ? <ChevronRight size={14} /> : null}</button>
       {icon}
       <span className="note-row-copy">
@@ -491,23 +494,35 @@ export const ConfirmDelete = ({ node, onConfirm, onCancel }: ConfirmDeleteProps)
   </div>
 );
 
-/** M1.6：文档/分组自定义图标选择器（接入 Lake unicodeEmoji 表情资源 + 搜索 + 清除） */
+/** M1.6：文档/分组自定义图标选择器（Lake unicodeEmoji 表情资源 + 分组 + 搜索 + 清除） */
 const EmojiIconPicker = ({ x, y, onPick, onClose }: { x: number; y: number; onPick: (icon: string | null) => void; onClose: () => void }) => {
   const [filter, setFilter] = useState("");
+  const [group, setGroup] = useState("全部");
   const q = filter.trim().toLowerCase();
-  const list = q ? LAKE_EMOJIS.filter((e) => e.name.toLowerCase().includes(q) || e.char === filter.trim()) : LAKE_EMOJIS;
-  const left = Math.min(x, window.innerWidth - 340);
-  const top = Math.min(y, window.innerHeight - 420);
+  const groupNames = ["全部", ...LAKE_EMOJI_GROUPS.map((g) => g.name)];
+  const list: Array<{ char: string; name?: string }> = q
+    ? LAKE_EMOJIS.filter((e) => e.name.toLowerCase().includes(q) || e.char === filter.trim()).map((e) => ({ char: e.char, name: e.name }))
+    : group === "全部"
+      ? LAKE_EMOJIS.map((e) => ({ char: e.char, name: e.name }))
+      : (LAKE_EMOJI_GROUPS.find((g) => g.name === group)?.emojis ?? []).map((char) => ({ char }));
+  const left = Math.min(x, window.innerWidth - 360);
+  const top = Math.min(y, window.innerHeight - 460);
   return createPortal(
     <div className="emoji-picker" style={{ left, top }} data-context-menu>
       <div className="emoji-picker-search">
         <Search size={13} />
         <input value={filter} onChange={(e) => setFilter(e.target.value)} placeholder="搜索表情（如 smile / 名称）" autoFocus />
       </div>
+      <div className="emoji-picker-tabs">
+        {groupNames.map((g) => (
+          <button key={g} className={`emoji-picker-tab${g === group ? " active" : ""}`} onClick={() => setGroup(g)}>{g}</button>
+        ))}
+      </div>
       <div className="emoji-picker-grid">
         {list.map((e) => (
-          <button key={e.name} className="emoji-picker-cell" onClick={() => onPick(e.char)} title={e.name}>{e.char}</button>
+          <button key={(e.name ?? "") + e.char} className="emoji-picker-cell" onClick={() => onPick(e.char)} title={e.name ?? e.char}>{e.char}</button>
         ))}
+        {list.length === 0 && <div className="emoji-picker-empty">无匹配表情</div>}
       </div>
       <button className="emoji-picker-clear" onClick={() => onPick(null)}>清除图标</button>
     </div>,
