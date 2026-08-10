@@ -35,7 +35,7 @@ interface NoteDocument extends NoteSummary { content: string; }
 interface TreeNode {
   id: string; workspaceId: string; parentId: string | null; nodeType: string;
   title: string; noteFileId: string | null; sortOrder: number; createdAt: string;
-  updatedAt: string; syncState: string; isConflict: boolean;
+  updatedAt: string; syncState: string; isConflict: boolean; icon: string | null;
 }
 interface ResourceUploadOutput {
   url: string; resourceRef: string; filename: string; mimeType: string; size: number;
@@ -145,6 +145,11 @@ export class Store {
     if (!cols.some((c) => c.name === "md_cache")) {
       this.db.exec("ALTER TABLE notes ADD COLUMN md_cache TEXT");
     }
+    // M1.6 文档/分组自定义图标（本地化，不进 manifest）
+    const treeCols = this.db.prepare("PRAGMA table_info(tree_nodes)").all() as Array<{ name: string }>;
+    if (!treeCols.some((c) => c.name === "icon")) {
+      this.db.exec("ALTER TABLE tree_nodes ADD COLUMN icon TEXT");
+    }
     if (!cols.some((c) => c.name === "text_cache")) {
       this.db.exec("ALTER TABLE notes ADD COLUMN text_cache TEXT");
     }
@@ -228,7 +233,7 @@ export class Store {
   private mapTreeNode(row: any): TreeNode {
     return { id: row.id, workspaceId: row.workspace_id, parentId: row.parent_id, nodeType: row.node_type,
       title: row.title, noteFileId: row.note_file_id, sortOrder: row.sort_order, createdAt: row.created_at,
-      updatedAt: row.updated_at, syncState: row.sync_state, isConflict: !!row.is_conflict };
+      updatedAt: row.updated_at, syncState: row.sync_state, isConflict: !!row.is_conflict, icon: row.icon ?? null };
   }
 
   bootstrap() {
@@ -645,6 +650,16 @@ export class Store {
         console.warn("[store] 删除笔记后清理文件失败，文件可能残留:", f.path, error);
       }
     }
+  }
+
+  /** M1.6：设置/清除文档或分组的自定义图标（emoji，本地化） */
+  setNodeIcon(id: string, icon: string | null): TreeNode {
+    if (icon !== null && (typeof icon !== "string" || icon.length > 16)) {
+      throw new AppError("InvalidInput", "无效的图标");
+    }
+    const now = nowIso();
+    this.db.prepare("UPDATE tree_nodes SET icon=?, updated_at=?, sync_state='local' WHERE id=?").run(icon, now, id);
+    return this.readTreeNode(id);
   }
 
   moveTreeNode(id: string, parentId: string | null, sortOrder: number): TreeNode {

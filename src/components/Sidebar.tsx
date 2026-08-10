@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent } from "react";
 import { createPortal } from "react-dom";
-import { BookOpen, ChevronRight, ClipboardCopy, FilePlus2, FileText, FoldVertical, Folder, FolderPlus, Link2, LocateFixed, Package, Pencil, Plus, Search, Trash2, X } from "lucide-react";
+import { BookOpen, ChevronRight, ClipboardCopy, FilePlus2, FileText, FoldVertical, Folder, FolderPlus, Link2, LocateFixed, Package, Pencil, Plus, Search, SmilePlus, Trash2, X } from "lucide-react";
 import type { TreeNode, TreeNodeType } from "../lib/types";
 
 type CreateKind = "notebook" | "group" | "note";
@@ -25,6 +25,7 @@ interface SidebarProps {
   onCopyMarkdown: (node: TreeNode) => void;
   onExportAs: (node: TreeNode, format: "markdown" | "html" | "lake") => void;
   onCopyPaths: (node: TreeNode) => void;
+  onSetIcon: (node: TreeNode, icon: string | null) => void;
   pendingRenameId: string | null;
   onPendingRenameConsumed: () => void;
   onPreviewEnter: () => void;
@@ -46,6 +47,7 @@ export function Sidebar(props: SidebarProps) {
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [dropTarget, setDropTarget] = useState<{ id: string; position: DropPosition } | null>(null);
   const [contextMenu, setContextMenu] = useState<{ id: string; x: number; y: number } | null>(null);
+  const [iconPicker, setIconPicker] = useState<{ node: TreeNode; x: number; y: number } | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const treeRef = useRef<HTMLElement>(null);
   const dragRef = useRef<{ id: string; startX: number; startY: number; moved: boolean } | null>(null);
@@ -293,7 +295,8 @@ export function Sidebar(props: SidebarProps) {
         {roots.map((node) => <TreeRow key={node.id} node={node} depth={0} nodes={props.nodes} query={query} activeId={props.activeId} contextId={context?.id ?? null} expanded={expanded} draggingId={draggingId} dropTarget={dropTarget} pendingCreate={pendingCreate} editingId={editingId} editingTitle={editingTitle} createField={createField} onEditingTitle={setEditingTitle} onSubmitRename={submitRename} onCancelRename={() => setEditingId(null)} onBeginRename={beginRename} onPointerDown={(event, id) => { if (event.button !== 0 || (event.target as HTMLElement).closest("input")) return; dragRef.current = { id, startX: event.clientX, startY: event.clientY, moved: false }; setDraggingId(id); }} consumeSuppressedClick={() => suppressClickRef.current} onContext={setContextId} onContextMenu={openContext} onToggle={(id) => setExpanded((current) => toggleSet(current, id))} onSelect={props.onSelect} />)}
         {roots.length === 0 && <div className="empty-list">点击 + 新建第一个笔记本</div>}
       </nav>
-      {contextMenu && contextNode && <ContextMenu node={contextNode} x={contextMenu.x} y={contextMenu.y} onNewChild={menuNewChild} onRename={menuRename} onDelete={menuDelete} onCopyMarkdown={() => props.onCopyMarkdown(contextNode)} onExportAs={(format) => props.onExportAs(contextNode, format)} onCopyPaths={() => props.onCopyPaths(contextNode)} onClose={() => setContextMenu(null)} />}
+      {contextMenu && contextNode && <ContextMenu node={contextNode} x={contextMenu.x} y={contextMenu.y} onNewChild={menuNewChild} onRename={menuRename} onDelete={menuDelete} onCopyMarkdown={() => props.onCopyMarkdown(contextNode)} onExportAs={(format) => props.onExportAs(contextNode, format)} onCopyPaths={() => props.onCopyPaths(contextNode)} onSetIconRequest={() => setIconPicker({ node: contextNode, x: contextMenu!.x, y: contextMenu!.y })} onClose={() => setContextMenu(null)} />}
+      {iconPicker && <EmojiIconPicker x={iconPicker.x} y={iconPicker.y} onPick={(icon) => { props.onSetIcon(iconPicker.node, icon); setIconPicker(null); }} onClose={() => setIconPicker(null)} />}
       <div className="sidebar-resize-handle desktop-only" role="separator" aria-label="调整资料库宽度" aria-orientation="vertical" aria-valuemin={props.minWidth} aria-valuemax={props.maxWidth} aria-valuenow={Math.round(props.width)} tabIndex={0} onPointerDown={handleResizePointerDown} onPointerMove={handleResizePointerMove} onPointerUp={finishResize} onPointerCancel={finishResize} onKeyDown={handleResizeKeyDown} />
     </aside>
   );
@@ -329,7 +332,7 @@ function TreeRow(props: TreeRowProps) {
   const children = childrenOf(props.nodes, props.node.id, props.query);
   const expandable = children.length > 0 || props.node.nodeType !== "note";
   const open = props.expanded.has(props.node.id) || Boolean(props.query);
-  const icon = nodeIcon(props.node.nodeType, open);
+  const icon = nodeIcon(props.node.nodeType, open, props.node.icon);
 
   const dropPosition = props.dropTarget?.id === props.node.id ? props.dropTarget.position : null;
 
@@ -367,7 +370,8 @@ function TreeRow(props: TreeRowProps) {
   </div>;
 }
 
-function nodeIcon(type: TreeNodeType, open: boolean) {
+function nodeIcon(type: TreeNodeType, open: boolean, customIcon?: string | null) {
+  if (customIcon) return <span className="tree-node-custom-icon">{customIcon}</span>;
   if (type === "notebook") return <BookOpen size={17} />;
   if (type === "group") return <Folder size={16} fill={open ? "currentColor" : "none"} />;
   return <FileText size={16} />;
@@ -418,10 +422,11 @@ interface ContextMenuProps {
   onCopyMarkdown: () => void;
   onExportAs: (format: "markdown" | "html" | "lake") => void;
   onCopyPaths: () => void;
+  onSetIconRequest: () => void;
   onClose: () => void;
 }
 
-const ContextMenu = ({ node, x, y, onNewChild, onRename, onDelete, onCopyMarkdown, onExportAs, onCopyPaths, onClose }: ContextMenuProps) => {
+const ContextMenu = ({ node, x, y, onNewChild, onRename, onDelete, onCopyMarkdown, onExportAs, onCopyPaths, onSetIconRequest, onClose }: ContextMenuProps) => {
   const [exportOpen, setExportOpen] = useState(false);
   const isNotebook = node.nodeType === "notebook";
   // 视口边缘翻转，避免菜单溢出屏幕
@@ -436,6 +441,7 @@ const ContextMenu = ({ node, x, y, onNewChild, onRename, onDelete, onCopyMarkdow
       <button role="menuitem" onClick={() => { onNewChild("note"); onClose(); }}><FilePlus2 size={15} /><span>新建文档</span></button>
       {!isNotebook && <button role="menuitem" onClick={() => { onNewChild("group"); onClose(); }}><FolderPlus size={15} /><span>新建分组</span></button>}
       <button role="menuitem" onClick={() => { onRename(); onClose(); }}><Pencil size={15} /><span>重命名</span></button>
+      {node.nodeType !== "notebook" && <button role="menuitem" onClick={() => { onSetIconRequest(); onClose(); }}><SmilePlus size={15} /><span>设置图标</span></button>}
       {node.nodeType === "note" && (
         <>
           <div className="context-menu-sep" />
@@ -481,3 +487,27 @@ export const ConfirmDelete = ({ node, onConfirm, onCancel }: ConfirmDeleteProps)
     </section>
   </div>
 );
+
+/** M1.6：文档/分组自定义图标选择器（常用 emoji 网格 + 清除） */
+const EMOJI_ICONS = [
+  "📁", "📄", "🗂️", "📌", "⭐", "🔖", "📝", "💡", "🚀", "📚", "🎯", "🏷️", "✅", "❤️", "🌟", "🔥",
+  "🧠", "🗺️", "📊", "🎨", "🧪", "💰", "🎓", "🏠", "🛠️", "📅", "⏰", "☕", "🍀", "🌈", "🎵", "📷",
+  "💼", "🔒", "🔓", "⚡", "🎉", "📦", "🧩", "📎", "✏️", "🖊️", "📂", "📋", "📈", "📉", "📍", "🧭",
+  "🔍", "🔧", "🧰", "🗄️", "📇", "🎁", "🏆", "🧾", "🗓️", "⏱️", "📮", "🎬", "🎧", "🖼️", "🧮", "♟️",
+];
+
+const EmojiIconPicker = ({ x, y, onPick, onClose }: { x: number; y: number; onPick: (icon: string | null) => void; onClose: () => void }) => {
+  const left = Math.min(x, window.innerWidth - 320);
+  const top = Math.min(y, window.innerHeight - 320);
+  return createPortal(
+    <div className="emoji-picker" style={{ left, top }} data-context-menu>
+      <div className="emoji-picker-grid">
+        {EMOJI_ICONS.map((e) => (
+          <button key={e} className="emoji-picker-cell" onClick={() => onPick(e)} title={e}>{e}</button>
+        ))}
+      </div>
+      <button className="emoji-picker-clear" onClick={() => onPick(null)}>清除图标</button>
+    </div>,
+    document.body
+  );
+};

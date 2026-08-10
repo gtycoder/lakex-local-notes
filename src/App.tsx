@@ -381,6 +381,17 @@ export function App() {
     }
   }, [showNotice]);
 
+  /** M1.6：设置/清除文档或分组的自定义图标 */
+  const setNodeIcon = useCallback(async (node: TreeNode, icon: string | null) => {
+    try {
+      const updated = await native.setNodeIcon(node.id, icon);
+      setTreeNodes((items) => items.map((item) => item.id === updated.id ? updated : item));
+      showNotice(icon ? "已设置图标" : "已清除图标");
+    } catch (reason) {
+      setError("设置图标失败: " + (reason instanceof Error ? reason.message : String(reason)));
+    }
+  }, [showNotice]);
+
   // 文档右键（TreeNode 版）包装
   const copyMarkdownFromCache = useCallback((node: TreeNode) => void copyMarkdownById(node.noteFileId), [copyMarkdownById]);
   const exportAs = useCallback((node: TreeNode, format: "markdown" | "html" | "lake") => void exportNoteById(node.noteFileId, format), [exportNoteById]);
@@ -689,7 +700,7 @@ export function App() {
         <button className={`activity-button ${desktopWorkspace === "quick-notes" ? "active" : ""}`} onClick={() => void switchDesktopWorkspace("quick-notes")} title="小记" aria-label="小记"><Feather size={16} /></button>
         <div className="activity-rail-fill" />
       </nav>
-      {desktopWorkspace === "library" && <Sidebar nodes={treeNodes} activeId={activeNoteId ?? mobileActive?.id ?? null} search={search} mobileOpen={mobileOpen} mode={sidebarMode} width={sidebarWidth} minWidth={SIDEBAR_MIN_WIDTH} maxWidth={SIDEBAR_MAX_WIDTH} onSearch={setSearch} onSelect={(id) => void (isMobile ? openNoteMobile(id) : openNote(id))} onCreate={(kind, parentId, title) => void createTreeItem(kind, parentId, title)} onRename={(id, title) => void renameTreeNode(id, title)} onMoveNode={(id, targetId, position) => void moveTreeNode(id, targetId, position)} onRequestDelete={(node) => setConfirmDelete(node)} onCopyMarkdown={(node) => void copyMarkdownFromCache(node)} onExportAs={(node, format) => void exportAs(node, format)} onCopyPaths={(node) => void copyNotePaths(node)} pendingRenameId={pendingRenameId} onPendingRenameConsumed={() => setPendingRenameId(null)} onPreviewEnter={showSidebarPreview} onPreviewLeave={hideSidebarPreview} onResizeActiveChange={setSidebarResizing} onWidthChange={updateSidebarWidth} onWidthCommit={commitSidebarWidth} onCloseMobile={() => setMobileOpen(false)} />}
+      {desktopWorkspace === "library" && <Sidebar nodes={treeNodes} activeId={activeNoteId ?? mobileActive?.id ?? null} search={search} mobileOpen={mobileOpen} mode={sidebarMode} width={sidebarWidth} minWidth={SIDEBAR_MIN_WIDTH} maxWidth={SIDEBAR_MAX_WIDTH} onSearch={setSearch} onSelect={(id) => void (isMobile ? openNoteMobile(id) : openNote(id))} onCreate={(kind, parentId, title) => void createTreeItem(kind, parentId, title)} onRename={(id, title) => void renameTreeNode(id, title)} onMoveNode={(id, targetId, position) => void moveTreeNode(id, targetId, position)} onRequestDelete={(node) => setConfirmDelete(node)} onCopyMarkdown={(node) => void copyMarkdownFromCache(node)} onExportAs={(node, format) => void exportAs(node, format)} onCopyPaths={(node) => void copyNotePaths(node)} onSetIcon={(node, icon) => void setNodeIcon(node, icon)} pendingRenameId={pendingRenameId} onPendingRenameConsumed={() => setPendingRenameId(null)} onPreviewEnter={showSidebarPreview} onPreviewLeave={hideSidebarPreview} onResizeActiveChange={setSidebarResizing} onWidthChange={updateSidebarWidth} onWidthCommit={commitSidebarWidth} onCloseMobile={() => setMobileOpen(false)} />}
       {mobileOpen && <div className="mobile-scrim" onClick={() => setMobileOpen(false)} />}
       <main className="workspace" onPointerDownCapture={(event) => {
         if (!isMobile && sidebarMode === "floating" && (event.target as HTMLElement).closest(".document-pane, .empty-workspace")) setSidebarMode("collapsed");
