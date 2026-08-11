@@ -322,21 +322,87 @@ describe("目录树操作", () => {
     expect(r.some((x) => x.id === n2.id)).toBe(false);
   });
 
-  it("deleteTreeNode 递归删除 + 墓碑 + 清孤儿/资源目录", () => {
+  it("deleteTreeNode 软删除：树隐藏、文件保留、记墓碑（回收站本地）", () => {
     const nb = store.createNotebook("待删");
     const group = store.createGroup(nb.id, "组");
     const note = store.createNoteIn(group.id, "子笔记");
     const assetDir = path.join(dir, "note-assets", note.id);
     fs.mkdirSync(assetDir, { recursive: true });
     fs.writeFileSync(path.join(assetDir, "unused.png"), "x");
-    // 触发一次 saveNote 以登记孤儿
     store.saveNote(note.id, "子笔记", "<p>无引用</p>");
+    const lakePath = path.join(dir, "notes", `${note.id}.lake`);
+    expect(fs.existsSync(lakePath)).toBe(true);
 
     store.deleteTreeNode(nb.id);
+    // 树不再显示（软删除）
     expect(store.listTreeNodes().some((n) => n.id === nb.id)).toBe(false);
-    expect(fs.existsSync(path.join(dir, "notes", `${note.id}.lake`))).toBe(false);
-    expect(fs.existsSync(assetDir)).toBe(false);
+    expect(store.listTreeNodes().some((n) => n.id === note.id)).toBe(false);
+    // 文件保留（可恢复）
+    expect(fs.existsSync(lakePath)).toBe(true);
+    expect(fs.existsSync(assetDir)).toBe(true);
+    // 墓碑记录（同步传播删除，远端不复活）
     expect(store.listDeletedNotesForSync().some((d) => d.id === note.id)).toBe(true);
+    // 回收站列出
+    const trash = store.listTrash();
+    expect(trash.some((t) => t.id === nb.id && t.nodeType === "notebook")).toBe(true);
+    expect(trash.some((t) => t.id === note.id && t.nodeType === "note")).toBe(true);
+    // 软删除后同步不返回该笔记
+    expect(store.listNotesForSync().some((n) => n.id === note.id)).toBe(false);
+  });
+
+  it("回收站：恢复节点（本地复活，清墓碑，重新可同步）", () => {
+    const nb = store.createNotebook("待恢复");
+    const note = store.createNoteIn(nb.id, "子笔记");
+    store.saveNote(note.id, "子笔记", "<p>内容</p>");
+    const lakePath = path.join(dir, "notes", `${note.id}.lake`);
+
+    store.deleteTreeNode(nb.id);
+    expect(store.listNotesForSync().some((n) => n.id === note.id)).toBe(false);
+
+    // 恢复目录（子笔记一起恢复）
+    store.restoreTrashItem(nb.id);
+    expect(store.listTreeNodes().some((n) => n.id === nb.id)).toBe(true);
+    expect(store.listTreeNodes().some((n) => n.id === note.id)).toBe(true);
+    expect(fs.existsSync(lakePath)).toBe(true);
+    // 墓碑清除 → 恢复后进入同步列表
+    expect(store.listDeletedNotesForSync().some((d) => d.id === note.id)).toBe(false);
+    expect(store.listNotesForSync().some((n) => n.id === note.id)).toBe(true);
+    // 回收站已空
+    expect(store.listTrash().some((t) => t.id === nb.id)).toBe(false);
+  });
+
+  it("回收站：彻底删除（purge）删文件 + DB，墓碑保留", () => {
+    const nb = store.createNotebook("待彻底删");
+    const note = store.createNoteIn(nb.id, "子笔记");
+    store.saveNote(note.id, "子笔记", "<p>内容</p>");
+    const assetDir = path.join(dir, "note-assets", note.id);
+    fs.mkdirSync(assetDir, { recursive: true });
+    fs.writeFileSync(path.join(assetDir, "a.png"), "x");
+    const lakePath = path.join(dir, "notes", `${note.id}.lake`);
+
+    store.deleteTreeNode(nb.id);
+    // 彻底删除目录（含子笔记）
+    store.purgeTrashItem(nb.id);
+    expect(store.listTrash().some((t) => t.id === nb.id)).toBe(false);
+    expect(store.listTrash().some((t) => t.id === note.id)).toBe(false);
+    expect(fs.existsSync(lakePath)).toBe(false);
+    expect(fs.existsSync(assetDir)).toBe(false);
+    // 墓碑保留（远端不复活）
+    expect(store.listDeletedNotesForSync().some((d) => d.id === note.id)).toBe(true);
+  });
+
+  it("回收站：清空 emptyTrash 全部彻底删除", () => {
+    const nb1 = store.createNotebook("待清空1");
+    const n1 = store.createNoteIn(nb1.id, "n1");
+    const nb2 = store.createNotebook("待清空2");
+    const n2 = store.createNoteIn(nb2.id, "n2");
+    store.deleteTreeNode(nb1.id);
+    store.deleteTreeNode(nb2.id);
+    expect(store.listTrash().length).toBeGreaterThanOrEqual(4);
+    store.emptyTrash();
+    expect(store.listTrash().length).toBe(0);
+    expect(store.listDeletedNotesForSync().some((d) => d.id === n1.id)).toBe(true);
+    expect(store.listDeletedNotesForSync().some((d) => d.id === n2.id)).toBe(true);
   });
 });
 

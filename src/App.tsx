@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type CSSProperties } from "react";
-import { ArrowLeft, Check, Cloud, Files, ListTree, LoaderCircle, Feather, Lock, LockOpen, MoreHorizontal, Pencil, Save, Settings as Settings2Icon, WifiOff, X } from "lucide-react";
+import { ArrowLeft, Check, Cloud, Files, ListTree, LoaderCircle, Feather, Lock, LockOpen, MoreHorizontal, Pencil, Save, Settings as Settings2Icon, Trash2, WifiOff, X } from "lucide-react";
 import { MobileLibrary } from "./components/MobileLibrary";
 import { SearchPanel } from "./components/SearchPanel";
+import { TrashPanel } from "./components/TrashPanel";
 import { ConfirmDelete, Sidebar, type SidebarMode } from "./components/Sidebar";
 import { QuickNotesWorkspace, type QuickNotesWorkspaceHandle } from "./components/QuickNotesWorkspace";
 import { SyncPanel } from "./components/SyncPanel";
@@ -75,6 +76,7 @@ export function App() {
   const [activeNoteId, setActiveNoteId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [searchPanelOpen, setSearchPanelOpen] = useState(false);
+  const [trashOpen, setTrashOpen] = useState(false);
   const [searchPanelQuery, setSearchPanelQuery] = useState("");
   const [saveState, setSaveState] = useState<SaveState>("idle");
   const [statusMenuOpen, setStatusMenuOpen] = useState(false);
@@ -733,6 +735,7 @@ export function App() {
         <div className="activity-rail-spacer" />
         <button className={`activity-button ${desktopWorkspace === "library" && sidebarMode === "docked" ? "active" : ""}`} onClick={() => { if (desktopWorkspace === "library") toggleSidebarDock(); else void switchDesktopWorkspace("library"); }} title="资料库" aria-label="资料库"><Files size={16} /></button>
         <button className={`activity-button ${desktopWorkspace === "quick-notes" ? "active" : ""}`} onClick={() => void switchDesktopWorkspace("quick-notes")} title="小记" aria-label="小记"><Feather size={16} /></button>
+        <button className="activity-button" onClick={() => { setTrashOpen(true); }} title="回收站" aria-label="回收站"><Trash2 size={16} /></button>
         <div className="activity-rail-fill" />
       </nav>
       {desktopWorkspace === "library" && <Sidebar nodes={treeNodes} activeId={activeNoteId ?? mobileActive?.id ?? null} search={search} mobileOpen={mobileOpen} mode={sidebarMode} width={sidebarWidth} minWidth={SIDEBAR_MIN_WIDTH} maxWidth={SIDEBAR_MAX_WIDTH} onSearch={setSearch} onSelect={(id) => void (isMobile ? openNoteMobile(id) : openNote(id))} onCreate={(kind, parentId, title) => void createTreeItem(kind, parentId, title)} onRename={(id, title) => void renameTreeNode(id, title)} onMoveNode={(id, targetId, position) => void moveTreeNode(id, targetId, position)} onRequestDelete={(node) => setConfirmDelete(node)} onCopyMarkdown={(node) => void copyMarkdownFromCache(node)} onExportAs={(node, format) => void exportAs(node, format)} onCopyPaths={(node) => void copyNotePaths(node)} onSetIcon={(node, icon) => void setNodeIcon(node, icon)} onOpenSearch={(q) => { setSearchPanelQuery(q ?? ""); setSearchPanelOpen(true); }} pendingRenameId={pendingRenameId} onPendingRenameConsumed={() => setPendingRenameId(null)} onPreviewEnter={showSidebarPreview} onPreviewLeave={hideSidebarPreview} onResizeActiveChange={setSidebarResizing} onWidthChange={updateSidebarWidth} onWidthCommit={commitSidebarWidth} onCloseMobile={() => setMobileOpen(false)} />}
@@ -837,6 +840,7 @@ export function App() {
       )}
       {confirmDelete && <ConfirmDelete node={confirmDelete} onConfirm={() => { const id = confirmDelete.id; setConfirmDelete(null); void deleteTreeNode(id); }} onCancel={() => setConfirmDelete(null)} />}
       <SearchPanel open={searchPanelOpen} initialQuery={searchPanelQuery} onOpenNote={(id) => void openNote(id)} onClose={() => setSearchPanelOpen(false)} />
+      <TrashPanel open={trashOpen} onClose={() => setTrashOpen(false)} onRestored={() => { void native.listTreeNodes().then(setTreeNodes).catch(() => undefined); void native.listNoteSummaries().then(setNotes).catch(() => undefined); }} />
       <SyncPanel open={syncPanelOpen} onClose={() => setSyncPanelOpen(false)} onSyncStatusChange={(status) => setSync((current) => ({ ...current, ...status }))} />
       <SettingsPanel open={settingsOpen} settings={settings} onClose={() => setSettingsOpen(false)} onChange={(patch) => saveSettings(patch)} />
     </div>

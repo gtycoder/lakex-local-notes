@@ -25,6 +25,10 @@ interface LakeNative {
   moveTreeNodeOrdered(id: string, parentId: string | null, orderedIds: string[]): Promise<TreeNode>;
   reorderTreeNodes(parentId: string | null, orderedIds: string[]): Promise<void>;
   deleteTreeNode(id: string): Promise<void>;
+  listTrash(): Promise<Array<{ id: string; title: string; nodeType: string; noteFileId: string | null; parentId: string | null; deletedAt: string; updatedAt: string; hasFile: boolean }>>;
+  restoreTrash(id: string): Promise<void>;
+  purgeTrash(id: string): Promise<void>;
+  emptyTrash(): Promise<void>;
   uploadResource(input: ResourceUploadInput, noteId: string): Promise<ResourceUploadOutput>;
   downloadRemoteResource(url: string, noteId: string): Promise<ResourceUploadOutput>;
   listOrphanAssets(): Promise<OrphanAsset[]>;
@@ -81,6 +85,10 @@ export const native = {
   moveTreeNodeOrdered: (id: string, parentId: string | null, orderedIds: string[]) => api().moveTreeNodeOrdered(id, parentId, orderedIds),
   reorderTreeNodes: (parentId: string | null, orderedIds: string[]) => api().reorderTreeNodes(parentId, orderedIds),
   deleteTreeNode: (id: string) => api().deleteTreeNode(id),
+  listTrash: () => api().listTrash(),
+  restoreTrash: (id: string) => api().restoreTrash(id),
+  purgeTrash: (id: string) => api().purgeTrash(id),
+  emptyTrash: () => api().emptyTrash(),
   uploadResource: (input: ResourceUploadInput, noteId: string) => api().uploadResource(input, noteId),
   downloadRemoteResource: (url: string, noteId: string) => api().downloadRemoteResource(url, noteId),
   listOrphanAssets: () => api().listOrphanAssets(),

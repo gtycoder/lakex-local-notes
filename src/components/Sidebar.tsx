@@ -483,7 +483,7 @@ export const ConfirmDelete = ({ node, onConfirm, onCancel }: ConfirmDeleteProps)
   <div className="modal-backdrop" onMouseDown={(event) => event.target === event.currentTarget && onCancel()}>
     <section className="confirm-dialog" role="dialog" aria-modal="true">
       <h3>删除“{node.title}”？</h3>
-      <p>将删除该节点及其所有子项。当前版本尚未提供回收站恢复，请确认不再需要这些内容。</p>
+      <p>将删除该节点及其所有子项，移入本地回收站（可在回收站中恢复或彻底删除）。</p>
       <footer>
         <button className="secondary-button" onClick={onCancel}>取消</button>
         <button className="primary-button danger-button" onClick={onConfirm}>删除</button>

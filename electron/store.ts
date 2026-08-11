@@ -703,13 +703,110 @@ export class Store {
     return result;
   }
 
+  /**
+   * 软删除（回收站）：节点及其子节点标记 deleted_at，保留 .lake / 资源文件，
+   * 并记录同步墓碑（manifest 恒保留 deleted 标记，远端不会复活）。
+   * 回收站内容仅保存在本地、不参与同步；恢复后清墓碑并标记 local 重新上传。
+   * 审计 #10：DB 事务原子提交；文件保留（不删除），彻底删除走 purgeTrashItem。
+   */
   deleteTreeNode(id: string) {
-    // 硬删除（当前版本无回收站）：节点及其子节点从 DB 移除，
-    // 笔记同时删除 .lake 文件、整个 note-assets/{noteId}/ 目录与孤儿记录。
-    // 审计 #10：DB 事务先提交、文件后删——DB 失败可安全回滚（无引用失效）；
-    // 文件删除失败只留孤儿文件（孤儿清理可回收），绝不"DB 引用已删文件"或不可恢复丢失
     const now = nowIso();
     const ids = this.descendantIds(id);
+    const tx = this.db.transaction(() => {
+      const nodeStmt = this.db.prepare("SELECT note_file_id FROM tree_nodes WHERE id=?");
+      const noteMeta = this.db.prepare("SELECT id,title,parent_id,sort_order,updated_at FROM notes WHERE id=?");
+      const tombstone = this.db.prepare(
+        "INSERT OR REPLACE INTO deleted_notes(id,title,parent_id,sort_order,updated_at,deleted_at) VALUES(?,?,?,?,?,?)"
+      );
+      const softDelNote = this.db.prepare("UPDATE notes SET deleted_at=?, sync_state='deleted' WHERE id=? AND deleted_at IS NULL");
+      const softDelNode = this.db.prepare("UPDATE tree_nodes SET deleted_at=?, sync_state='deleted' WHERE id=? AND deleted_at IS NULL");
+      const delFts = this.db.prepare("DELETE FROM notes_fts WHERE note_id=?");
+      for (const nid of ids) {
+        const node = nodeStmt.get(nid) as { note_file_id: string | null } | undefined;
+        if (node?.note_file_id) {
+          // 记录墓碑（同步用：防止云端把已删除笔记重新拉回来）
+          const meta = noteMeta.get(node.note_file_id) as { id: string; title: string; parent_id: string | null; sort_order: number; updated_at: string } | undefined;
+          if (meta) tombstone.run(meta.id, meta.title, meta.parent_id, meta.sort_order, meta.updated_at, now);
+          softDelNote.run(now, node.note_file_id);
+          delFts.run(node.note_file_id);
+        }
+        softDelNode.run(now, nid);
+      }
+    });
+    tx();
+  }
+
+  /** 回收站：列出所有软删除的节点（含子项），按删除时间倒序 */
+  listTrash(): Array<{
+    id: string; title: string; nodeType: string; noteFileId: string | null;
+    parentId: string | null; deletedAt: string; updatedAt: string;
+    hasFile: boolean;
+  }> {
+    const rows = this.db.prepare(
+      `SELECT t.id,t.title,t.node_type,t.note_file_id,t.parent_id,t.deleted_at,t.updated_at,
+              CASE WHEN t.note_file_id IS NULL THEN 0 ELSE
+                (SELECT 1 FROM notes n WHERE n.id=t.note_file_id AND n.deleted_at IS NOT NULL)
+              END AS note_deleted
+       FROM tree_nodes t
+       WHERE t.deleted_at IS NOT NULL
+       ORDER BY t.deleted_at DESC`
+    ).all() as Array<{
+      id: string; title: string; node_type: string; note_file_id: string | null;
+      parent_id: string | null; deleted_at: string; updated_at: string; note_deleted: number;
+    }>;
+    return rows.map((r) => ({
+      id: r.id, title: r.title, nodeType: r.node_type, noteFileId: r.note_file_id,
+      parentId: r.parent_id, deletedAt: r.deleted_at, updatedAt: r.updated_at,
+      hasFile: !!r.note_file_id && r.note_deleted === 1,
+    }));
+  }
+
+  /** 恢复回收站节点（本地复活）：清 deleted_at、清墓碑、标 local 供同步上传。
+   * 若父目录也已删除，则恢复到根目录。 */
+  restoreTrashItem(id: string): void {
+    const node = this.db.prepare("SELECT * FROM tree_nodes WHERE id=? AND deleted_at IS NOT NULL").get(id) as
+      { note_file_id: string | null; parent_id: string | null } | undefined;
+    if (!node) throw new AppError("NotFound", `回收站节点不存在: ${id}`);
+    const now = nowIso();
+    const tx = this.db.transaction(() => {
+      // 父节点若仍被删除 → 恢复到根（避免挂到已删目录下）
+      let parentId = node.parent_id;
+      if (parentId) {
+        const parentAlive = this.db.prepare("SELECT 1 FROM tree_nodes WHERE id=? AND deleted_at IS NULL").get(parentId);
+        if (!parentAlive) parentId = null;
+      }
+      if (node.note_file_id) {
+        this.db.prepare("UPDATE notes SET deleted_at=NULL, updated_at=?, sync_state='local' WHERE id=?").run(now, node.note_file_id);
+        this.db.prepare("DELETE FROM deleted_notes WHERE id=?").run(node.note_file_id);
+        // 重建 FTS（正文缓存可能还在，优先用缓存）
+        const titleRow = this.db.prepare("SELECT title FROM notes WHERE id=?").get(node.note_file_id) as { title: string } | undefined;
+        const caches = this.readNoteCaches(node.note_file_id);
+        this.upsertFts(node.note_file_id, titleRow?.title ?? "", caches.plain ?? null);
+      }
+      this.db.prepare("UPDATE tree_nodes SET deleted_at=NULL, parent_id=?, updated_at=?, sync_state='local' WHERE id=?").run(parentId, now, id);
+      // 子节点（若有）一起恢复，并重建缓存/FTS
+      const children = this.db.prepare("SELECT id, note_file_id FROM tree_nodes WHERE parent_id=? AND deleted_at IS NOT NULL").all(id) as { id: string; note_file_id: string | null }[];
+      for (const c of children) {
+        this.db.prepare("UPDATE tree_nodes SET deleted_at=NULL, parent_id=?, updated_at=?, sync_state='local' WHERE id=?").run(id, now, c.id);
+        if (c.note_file_id) {
+          this.db.prepare("UPDATE notes SET deleted_at=NULL, updated_at=?, sync_state='local' WHERE id=?").run(now, c.note_file_id);
+          this.db.prepare("DELETE FROM deleted_notes WHERE id=?").run(c.note_file_id);
+          const titleRow = this.db.prepare("SELECT title FROM notes WHERE id=?").get(c.note_file_id) as { title: string } | undefined;
+          const caches = this.readNoteCaches(c.note_file_id);
+          this.upsertFts(c.note_file_id, titleRow?.title ?? "", caches.plain ?? null);
+        }
+      }
+    });
+    tx();
+  }
+
+  /** 彻底删除回收站节点（不可恢复）：删除 .lake / 资源文件 + DB 记录 + FTS。
+   * 墓碑保留（防止远端把已删除笔记重新拉回），与现有"墓碑永久保留"设计一致。 */
+  purgeTrashItem(id: string): void {
+    const node = this.db.prepare("SELECT * FROM tree_nodes WHERE id=? AND deleted_at IS NOT NULL").get(id) as
+      { note_file_id: string | null } | undefined;
+    if (!node) throw new AppError("NotFound", `回收站节点不存在: ${id}`);
+    const ids = this.descendantIdsIncludingDeleted(id);
     const filesToRemove: Array<{ path: string; recursive: boolean }> = [];
     const tx = this.db.transaction(() => {
       const nodeStmt = this.db.prepare("SELECT note_file_id FROM tree_nodes WHERE id=?");
@@ -717,33 +814,46 @@ export class Store {
       const delFts = this.db.prepare("DELETE FROM notes_fts WHERE note_id=?");
       const delNode = this.db.prepare("DELETE FROM tree_nodes WHERE id=?");
       const delOrphans = this.db.prepare("DELETE FROM orphan_assets WHERE note_id=?");
-      const tombstone = this.db.prepare(
-        "INSERT OR REPLACE INTO deleted_notes(id,title,parent_id,sort_order,updated_at,deleted_at) VALUES(?,?,?,?,?,?)"
-      );
-      const noteMeta = this.db.prepare("SELECT id,title,parent_id,sort_order,updated_at FROM notes WHERE id=?");
       for (const nid of ids) {
-        const node = nodeStmt.get(nid) as { note_file_id: string | null } | undefined;
-        if (node?.note_file_id) {
-          // 记录墓碑（同步用：防止云端把已删除笔记重新拉回来）
-          const meta = noteMeta.get(node.note_file_id) as { id: string; title: string; parent_id: string | null; sort_order: number; updated_at: string } | undefined;
-          if (meta) tombstone.run(meta.id, meta.title, meta.parent_id, meta.sort_order, meta.updated_at, now);
-          filesToRemove.push({ path: this.notePath(node.note_file_id), recursive: false });
-          filesToRemove.push({ path: path.join(this.noteAssetsDir, node.note_file_id), recursive: true });
-          delOrphans.run(node.note_file_id);
-          delFts.run(node.note_file_id);
-          delNote.run(node.note_file_id);
+        const n = nodeStmt.get(nid) as { note_file_id: string | null } | undefined;
+        if (n?.note_file_id) {
+          filesToRemove.push({ path: this.notePath(n.note_file_id), recursive: false });
+          filesToRemove.push({ path: path.join(this.noteAssetsDir, n.note_file_id), recursive: true });
+          delOrphans.run(n.note_file_id);
+          delFts.run(n.note_file_id);
+          delNote.run(n.note_file_id);
         }
         delNode.run(nid);
       }
     });
     tx();
     for (const f of filesToRemove) {
-      try {
-        fs.rmSync(f.path, { force: true, recursive: f.recursive });
-      } catch (error) {
-        console.warn("[store] 删除笔记后清理文件失败，文件可能残留:", f.path, error);
-      }
+      try { fs.rmSync(f.path, { force: true, recursive: f.recursive }); }
+      catch (error) { console.warn("[store] 彻底删除清理文件失败:", f.path, error); }
     }
+  }
+
+  /** 清空回收站：彻底删除所有软删除节点（墓碑保留）。
+   * 只 purge 顶级被删节点（无被删父节点），子项由递归删除连带覆盖，
+   * 避免重复 purge 已被父节点连带删除的子项。 */
+  emptyTrash(): void {
+    const items = this.listTrash();
+    const deletedIds = new Set(items.map((i) => i.id));
+    const topLevel = items.filter((i) => !i.parentId || !deletedIds.has(i.parentId));
+    for (const item of topLevel) this.purgeTrashItem(item.id);
+  }
+
+  /** 包含已删除节点的后代（用于彻底删除回收站子树） */
+  private descendantIdsIncludingDeleted(id: string): string[] {
+    const result: string[] = [];
+    const stack = [id];
+    while (stack.length) {
+      const cur = stack.pop()!;
+      result.push(cur);
+      const children = this.db.prepare("SELECT id FROM tree_nodes WHERE parent_id=?").all(cur) as { id: string }[];
+      for (const c of children) stack.push(c.id);
+    }
+    return result;
   }
 
   /** M1.6：设置/清除文档或分组的自定义图标（emoji，本地化） */

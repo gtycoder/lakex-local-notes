@@ -164,6 +164,10 @@ function registerIpc() {
   handle("move_tree_node_ordered", (id: string, parentId: string | null, orderedIds: string[]) => store.moveTreeNodeOrdered(id, parentId, orderedIds));
   handle("reorder_tree_nodes", (parentId: string | null, orderedIds: string[]) => store.reorderTreeNodes(parentId, orderedIds));
   handle("delete_tree_node", (id: string) => store.deleteTreeNode(id));
+  handle("list_trash", () => store.listTrash());
+  handle("restore_trash", (id: string) => store.restoreTrashItem(id));
+  handle("purge_trash", (id: string) => store.purgeTrashItem(id));
+  handle("empty_trash", () => store.emptyTrash());
   handle("upload_resource", (input: { bytes: number[]; filename: string }, noteId: string) => {
     // 审计 #21：IPC 输入侧预检（序列化已复制到主进程，先拦截超大数组再走 imageOutput）
     if (!input || !Array.isArray(input.bytes)) throw new Error("资源数据无效");
