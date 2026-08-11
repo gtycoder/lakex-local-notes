@@ -215,6 +215,28 @@ describe("目录树操作", () => {
     expect(c2.plain).toBe("hi");
   });
 
+  it("ensureNoteCaches：缓存缺失时从 .lake 磁盘兜底生成，已有缓存不覆盖", () => {
+    const note = store.createNote("锁定缓存");
+    // 初始无缓存（createNote 不写缓存）
+    expect(store.readNoteCaches(note.id).markdown).toBeNull();
+    // 写入 .lake 正文（模拟锁定前从未编辑保存，只有持久化正文）
+    const lakeHtml = '<p><span>锁定正文</span><a href="https://x.com">链接</a></p>';
+    fs.writeFileSync((store as any).notePath(note.id), lakeHtml, "utf8");
+    expect(store.ensureNoteCaches(note.id)).toBe(true);
+    const caches = store.readNoteCaches(note.id);
+    expect(caches.markdown).toBe("锁定正文链接");
+    expect(caches.plain).toBe("锁定正文链接");
+    // 已有缓存时不再覆盖（保持既有高质量缓存）
+    store.updateNoteCaches(note.id, "# 已有缓存", "已有缓存");
+    fs.writeFileSync((store as any).notePath(note.id), '<p>新正文</p>', "utf8");
+    expect(store.ensureNoteCaches(note.id)).toBe(false);
+    expect(store.readNoteCaches(note.id).markdown).toBe("# 已有缓存");
+    // 显式传 lakeContent 时用传入内容（不读盘）
+    store.updateNoteCaches(note.id, null, null);
+    expect(store.ensureNoteCaches(note.id, "<p>传入内容</p>")).toBe(true);
+    expect(store.readNoteCaches(note.id).plain).toBe("传入内容");
+  });
+
   it("exportNotePackage 导出 Markdown + 复制图片 + 改写相对引用（缺失图跳过）", () => {
     const note = store.createNote("资料包导出测试");
     // 造一个真实图片文件到 note-assets/{noteId}/
@@ -433,6 +455,39 @@ describe("同步状态 / 导入", () => {
     // 再导入一次（冲突副本场景）不报错
     store.importRemoteNote({ ...note, isConflict: true }, Buffer.from("<p>远程内容2</p>"), []);
     expect(store.listNotesForSync().find((n) => n.id === "remote-1")?.isConflict).toBe(true);
+  });
+
+  it("importRemoteNote 同步下载后即生成缓存+FTS（锁定+从未编辑的新设备也能搜到正文）", () => {
+    // 模拟新设备同步到一篇"锁定且从未编辑"的文档（同步带 isLocked，正文为 .lake）
+    const note = {
+      id: "remote-locked-1", title: "远程锁定文档", parentId: "notebook-personal", sortOrder: 6,
+      updatedAt: "2026-08-02T00:00:00.000Z", isConflict: false,
+      isLocked: true, lockedAt: "2026-08-02T00:00:00.000Z",
+    };
+    const lakeHtml = '<p><span>这篇文档的正文里有一个独特关键词：北斗七星阵</span></p>';
+    store.importRemoteNote(note, Buffer.from(lakeHtml), []);
+    // 1) 缓存已生成（无需打开/编辑）
+    const caches = store.readNoteCaches("remote-locked-1");
+    expect(caches.markdown).toBe("这篇文档的正文里有一个独特关键词：北斗七星阵");
+    expect(caches.plain).toBe("这篇文档的正文里有一个独特关键词：北斗七星阵");
+    // 2) 全文搜索直接命中正文（此前 body 为 null 会搜不到）
+    const hits = store.searchNotes("北斗七星阵");
+    expect(hits.some((h) => h.id === "remote-locked-1")).toBe(true);
+    // 3) 锁状态正确带下来
+    expect(store.listNotesForSync().find((n) => n.id === "remote-locked-1")?.isLocked).toBe(true);
+  });
+
+  it("rebuildSearchIndex 对无缓存文档从磁盘兜底生成缓存并重建 FTS", () => {
+    const { id } = makeNote();
+    // 模拟锁定态文档：只有 .lake 正文，无缓存（直接写文件，绕过 saveNote）
+    const lakeHtml = '<p><span>锁定正文兜底索引测试词汇：量子纠缠</span></p>';
+    fs.writeFileSync((store as any).notePath(id), lakeHtml, "utf8");
+    expect(store.readNoteCaches(id).plain).toBeNull();
+    store.rebuildSearchIndex();
+    // 兜底生成了缓存
+    expect(store.readNoteCaches(id).plain).toContain("量子纠缠");
+    // FTS 可搜到正文
+    expect(store.searchNotes("量子纠缠").some((h) => h.id === id)).toBe(true);
   });
 
   it("uploadResource 写入资源文件并返回 URL", () => {

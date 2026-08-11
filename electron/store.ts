@@ -6,6 +6,7 @@ import os from "node:os";
 import { net, safeStorage } from "electron";
 import { ASSET_PORT } from "./assetServer.js";
 import { mdToHtml, wrapHtmlPage } from "./mdToHtml.js";
+import { lakeHtmlToMarkdown, lakeHtmlToPlain } from "./lakeCaches.js";
 import { assertSafeRemoteHost, SsrfError } from "./ssrf.js";
 
 const DEFAULT_WORKSPACE_ID = "default";
@@ -442,6 +443,26 @@ export class Store {
     this.upsertFts(id, titleRow?.title ?? "", plain ?? "");
   }
 
+  /**
+   * 兜底补齐文本缓存：锁定态 Viewer 无法用内核 getDocument 生成缓存，
+   * 这里从磁盘 .lake 正文解析 md/text 缓存（不重写正文）。
+   * 已有缓存时不覆盖；传 lakeContent 则用它（避免重复读盘）。
+   * 返回是否写入了新缓存。
+   */
+  ensureNoteCaches(id: string, lakeContent?: string): boolean {
+    const caches = this.readNoteCaches(id);
+    if (caches.markdown && caches.plain) return false;
+    const content = lakeContent ?? (() => {
+      if (!fs.existsSync(this.notePath(id))) return "";
+      return fs.readFileSync(this.notePath(id), "utf8");
+    })();
+    const markdown = lakeHtmlToMarkdown(content);
+    const plain = lakeHtmlToPlain(content);
+    if (!markdown && !plain) return false;
+    this.updateNoteCaches(id, markdown, plain);
+    return true;
+  }
+
   /** M1：读取文本缓存（导出资料包 / 复制 Markdown 用） */
   readNoteCaches(id: string): { markdown: string | null; plain: string | null } {
     const row = this.db.prepare("SELECT md_cache, text_cache FROM notes WHERE id=?").get(id) as { md_cache: string | null; text_cache: string | null } | undefined;
@@ -458,6 +479,11 @@ export class Store {
   }
 
   /** 全量重建全文索引：所有未删除 note 的标题 + 已有纯文本缓存正文 */
+  /**
+   * 全量重建全文索引（幂等）。对无文本缓存的文档先从磁盘 .lake 兜底生成缓存
+   * （锁定态/同步下载未编辑的文档没有 md_cache/text_cache），再重建 FTS。
+   * 已有缓存不覆盖（保留编辑态 Lake 内核生成的高质量缓存）。
+   */
   rebuildSearchIndex(): void {
     this.db.exec("DELETE FROM notes_fts");
     const rows = this.db.prepare(`
@@ -466,12 +492,18 @@ export class Store {
       WHERE t.node_type = 'note' AND t.deleted_at IS NULL
     `).all() as Array<{ id: string | null; title: string; text_cache: string | null }>;
     const ins = this.db.prepare("INSERT INTO notes_fts(title, body, note_id) VALUES(?,?,?)");
-    this.db.transaction(() => {
+    const tx = this.db.transaction(() => {
       for (const r of rows) {
         if (!r.id) continue;
-        ins.run(r.title, r.text_cache ?? "", r.id);
+        // 无缓存 → 兜底从磁盘 .lake 生成（幂等；已有缓存不覆盖）
+        if (!r.text_cache) {
+          try { this.ensureNoteCaches(r.id); } catch { /* 兜底失败不阻断重建 */ }
+        }
+        const caches = this.readNoteCaches(r.id);
+        ins.run(r.title, caches.plain ?? "", r.id);
       }
-    })();
+    });
+    tx();
   }
 
   /**
@@ -1097,6 +1129,14 @@ export class Store {
       this.detectOrphans(note.id, content.toString("utf8"));
     } catch (error) {
       console.warn("[store] 导入后孤儿对账失败（不影响导入）:", error);
+    }
+    // 统一索引：同步下载的新文档立即生成文本缓存 + FTS 正文索引，
+    // 保证"锁定且从未编辑"的文档在新设备上也能被全文搜索/导出（无需打开/解锁）。
+    // ensureNoteCaches 幂等：已有缓存（编辑态 Lake 高质量缓存）不覆盖。
+    try {
+      this.ensureNoteCaches(note.id, content.toString("utf8"));
+    } catch (error) {
+      console.warn("[store] 导入后缓存生成失败（不影响导入）:", error);
     }
   }
 

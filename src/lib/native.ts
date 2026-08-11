@@ -8,6 +8,7 @@ interface LakeNative {
   saveNote(id: string, title: string, content: string, caches?: { markdown?: string | null; plain?: string | null }): Promise<NoteDocument>;
   updateNoteCaches(id: string, markdown: string | null, plain: string | null): Promise<void>;
   readNoteCaches(id: string): Promise<{ markdown: string | null; plain: string | null }>;
+  ensureNoteCaches(id: string, lakeContent?: string): Promise<boolean>;
   getNotePaths(id: string): Promise<{ title: string; lakePath: string; assetsDir: string }>;
   pickExportDir(): Promise<string | null>;
   exportNote(id: string, format: "markdown" | "html" | "lake" | "docx" | "pdf", baseDir?: string): Promise<{ format: string; exportPath: string; imageCount: number; skipped: number; size: number }>;
@@ -63,6 +64,7 @@ export const native = {
   saveNote: (id: string, title: string, content: string, caches?: { markdown?: string | null; plain?: string | null }) => api().saveNote(id, title, content, caches),
   updateNoteCaches: (id: string, markdown: string | null, plain: string | null) => api().updateNoteCaches(id, markdown, plain),
   readNoteCaches: (id: string) => api().readNoteCaches(id),
+  ensureNoteCaches: (id: string, lakeContent?: string) => api().ensureNoteCaches(id, lakeContent),
   getNotePaths: (id: string) => api().getNotePaths(id),
   pickExportDir: () => api().pickExportDir(),
   exportNote: (id: string, format: "markdown" | "html" | "lake" | "docx" | "pdf", baseDir?: string) => api().exportNote(id, format, baseDir),

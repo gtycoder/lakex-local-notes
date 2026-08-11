@@ -348,7 +348,10 @@ export function App() {
           const plain = String((editor as any).getDocument("text/plain"));
           void native.updateNoteCaches(noteId, markdown, plain);
         }
-      } catch { /* 非编辑态/Viewer 不支持时忽略 */ }
+      } catch {
+        // 锁定态 Viewer 不暴露 getDocument("text/markdown")：由主进程从磁盘 .lake 兜底补齐缓存
+        void native.ensureNoteCaches(noteId);
+      }
     } else {
       editorsRef.current.delete(noteId);
     }
@@ -598,6 +601,15 @@ export function App() {
     const next = !summary.isLocked;
     const tab = openTabsRef.current.find((t) => t.noteId === tabId);
     if (next && tab?.dirty) await persistTab(tabId, tab.title, tab.content);
+    // 锁定态 Viewer 无法用内核生成文本缓存；锁定前确保 md/text 缓存存在（已有则跳过）
+    if (next) {
+      try {
+        const caches = await native.readNoteCaches(tabId);
+        if (!caches.markdown || !caches.plain) {
+          await native.ensureNoteCaches(tabId);
+        }
+      } catch { /* 缓存兜底失败不阻断锁定 */ }
+    }
     try {
       const updated = await native.setNoteLocked(tabId, next);
       setNotes((items) => items.map((item) => (item.id === tabId ? { ...item, isLocked: updated.isLocked, lockedAt: updated.lockedAt } : item)));

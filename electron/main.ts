@@ -137,6 +137,7 @@ function registerIpc() {
   handle("update_note_caches", (id: string, markdown: string | null, plain: string | null) => {
     store.updateNoteCaches(id, markdown ?? null, plain ?? null);
   });
+  handle("ensure_note_caches", (id: string, lakeContent?: string) => store.ensureNoteCaches(id, lakeContent));
   handle("read_note_caches", (id: string) => store.readNoteCaches(id));
   handle("get_note_paths", (id: string) => store.getNotePaths(id));
   handle("pick_export_dir", async () => {
