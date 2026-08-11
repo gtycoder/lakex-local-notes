@@ -55,6 +55,28 @@ export function MultiTabEditor({
   const tabItemsRef = useRef<HTMLDivElement>(null);
   const switcherRef = useRef<HTMLDivElement>(null);
   const [tabMenuOpen, setTabMenuOpen] = useState(false);
+  const [tabMenuWidth, setTabMenuWidth] = useState<number>(() => {
+    const v = Number(localStorage.getItem("lake-notes-v3.tab-switcher-width"));
+    return Number.isFinite(v) && v >= 160 && v <= 440 ? v : 220;
+  });
+  const tabMenuWidthRef = useRef(tabMenuWidth);
+  const startTabMenuResize = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    const startX = event.clientX;
+    const startW = tabMenuWidthRef.current;
+    const onMove = (ev: PointerEvent) => {
+      const next = Math.min(440, Math.max(160, startW + (startX - ev.clientX)));
+      tabMenuWidthRef.current = next;
+      setTabMenuWidth(next);
+    };
+    const onUp = () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      localStorage.setItem("lake-notes-v3.tab-switcher-width", String(tabMenuWidthRef.current));
+    };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+  }, []);
   const [pinned, setPinned] = useState<Set<string>>(new Set());
   const [tabCtx, setTabCtx] = useState<{ noteId: string; x: number; y: number } | null>(null);
 
@@ -260,7 +282,8 @@ export function MultiTabEditor({
               <ChevronDown size={15} />
             </button>
             {tabMenuOpen && (
-              <div className="tab-switcher-menu" role="menu" aria-label="打开的标签">
+              <div className="tab-switcher-menu" role="menu" aria-label="打开的标签" style={{ width: tabMenuWidth }}>
+                <div className="tab-switcher-resize" onPointerDown={startTabMenuResize} title="拖动调整宽度" />
                 <div className="tab-switcher-heading">
                   <strong>打开的标签</strong>
                   <span>{tabs.length}</span>

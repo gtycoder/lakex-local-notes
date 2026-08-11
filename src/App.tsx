@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type CSSProperties } from "react";
-import { ArrowLeft, Check, Cloud, Files, ListTree, LoaderCircle, Feather, Lock, LockOpen, Pencil, Save, Settings as Settings2Icon, WifiOff } from "lucide-react";
+import { ArrowLeft, Check, Cloud, Files, ListTree, LoaderCircle, Feather, Lock, LockOpen, MoreHorizontal, Pencil, Save, Settings as Settings2Icon, WifiOff, X } from "lucide-react";
 import { MobileLibrary } from "./components/MobileLibrary";
 import { SearchPanel } from "./components/SearchPanel";
 import { ConfirmDelete, Sidebar, type SidebarMode } from "./components/Sidebar";
@@ -77,6 +77,26 @@ export function App() {
   const [searchPanelOpen, setSearchPanelOpen] = useState(false);
   const [searchPanelQuery, setSearchPanelQuery] = useState("");
   const [saveState, setSaveState] = useState<SaveState>("idle");
+  const [statusMenuOpen, setStatusMenuOpen] = useState(false);
+  useEffect(() => {
+    if (!statusMenuOpen) return;
+    const onPointerDown = (event: PointerEvent) => {
+      const menu = document.querySelector(".statusbar-menu");
+      const btn = document.querySelector(".statusbar-menu-btn");
+      if (menu && !menu.contains(event.target as Node) && btn && !btn.contains(event.target as Node)) {
+        setStatusMenuOpen(false);
+      }
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setStatusMenuOpen(false);
+    };
+    document.addEventListener("pointerdown", onPointerDown);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [statusMenuOpen]);
   const [sync, setSync] = useState<SyncStatus>({ phase: "idle", message: "仅本地保存", lastSyncedAt: null, pendingChanges: 0 });
   const [confirmDelete, setConfirmDelete] = useState<TreeNode | null>(null);
   const [syncPanelOpen, setSyncPanelOpen] = useState(false);
@@ -759,25 +779,34 @@ export function App() {
           </section>
         )}
         <footer className="statusbar">
-          <span>{desktopWorkspace === "quick-notes" ? "小记：本地时间线" : isDesktop() ? "Electron 本地仓库" : "浏览器演示仓库"}</span>
+          <span className="statusbar-repo">{desktopWorkspace === "quick-notes" ? "小记" : isDesktop() ? "Electron 本地仓库" : "浏览器演示仓库"}</span>
           {desktopWorkspace === "library" && <>
+            <span className="statusbar-divider" />
             <span className="statusbar-wordcount" title="当前文档字数">{wordCountLabel}</span>
-            {notice && <span className="statusbar-notice">{notice}</span>}
-            {activeNoteId && (
-              <button
-                className={`statusbar-readonly${lockedNoteIds.has(activeNoteId) ? " locked" : ""}`}
-                onClick={() => void toggleNoteLock()}
-                title={lockedNoteIds.has(activeNoteId) ? "此文档已锁定，点击解锁" : "锁定此文档（只读）"}
-                aria-label={lockedNoteIds.has(activeNoteId) ? "解锁此文档" : "锁定此文档"}
-                aria-pressed={lockedNoteIds.has(activeNoteId)}
-              >
-                {lockedNoteIds.has(activeNoteId) ? <Lock size={12} /> : <LockOpen size={12} />}
-                <span>{lockedNoteIds.has(activeNoteId) ? "已锁定" : "锁定"}</span>
-              </button>
+            {notice && <span className="statusbar-notice" title={notice}>{notice}</span>}
+            <span className={`save-label ${saveState}`} title="保存状态">{saveState === "saving" ? <LoaderCircle className="spin" size={11} /> : saveState === "dirty" ? <WifiOff size={11} /> : <Save size={11} />}{saveLabel(saveState)}</span>
+            <span className={`statusbar-sync ${sync.phase}`} title="S3 同步状态"><Cloud size={11} />{sync.message}</span>
+            <button
+              className={`statusbar-menu-btn${statusMenuOpen ? " open" : ""}`}
+              onClick={() => setStatusMenuOpen((open) => !open)}
+              aria-label="更多操作"
+              title="更多操作"
+            >
+              <MoreHorizontal size={14} />
+            </button>
+            {statusMenuOpen && (
+              <>
+                <div className="statusbar-menu" role="menu">
+                  {activeNoteId && (
+                    <button role="menuitem" onClick={() => { void toggleNoteLock(); setStatusMenuOpen(false); }}>
+                      {lockedNoteIds.has(activeNoteId) ? <Lock size={13} /> : <LockOpen size={13} />}
+                      <span>{lockedNoteIds.has(activeNoteId) ? "解锁当前文档" : "锁定当前文档（只读）"}</span>
+                    </button>
+                  )}
+                </div>
+              </>
             )}
-            <span className={`save-label ${saveState}`}>{saveState === "saving" ? <LoaderCircle className="spin" size={12} /> : saveState === "dirty" ? <WifiOff size={12} /> : <Save size={12} />}{saveLabel(saveState)}</span>
           </>}
-          <span className={`statusbar-sync ${sync.phase}`} title="S3 同步状态"><Cloud size={12} />{sync.message}</span>
         </footer>
       </main>
       {outlineVisible && (

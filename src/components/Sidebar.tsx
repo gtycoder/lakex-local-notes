@@ -503,8 +503,8 @@ export const EmojiIconPicker = ({ x, y, onPick, onClose }: { x: number; y: numbe
     : group === "全部"
       ? LAKE_EMOJIS.map((e) => ({ char: e.char, name: e.name }))
       : (LAKE_EMOJI_GROUPS.find((g) => g.name === group)?.emojis ?? []).map((char) => ({ char }));
-  const left = Math.max(8, Math.min(x, window.innerWidth - 528));
-  const top = Math.max(8, Math.min(y, window.innerHeight - 568));
+  const left = Math.max(8, Math.min(x, window.innerWidth - 558));
+  const top = Math.max(8, Math.min(y, window.innerHeight - 378));
   return createPortal(
     <div className="emoji-picker-backdrop" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <div className="emoji-picker" style={{ left, top }} data-context-menu>
