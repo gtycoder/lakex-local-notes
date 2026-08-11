@@ -539,8 +539,23 @@ const EditorContextMenu = ({ x, y, exportOpen, onExportOpen, onCopyMarkdown, onE
   const left = Math.min(x, window.innerWidth - 232);
   const top = Math.min(y, window.innerHeight - 240);
   const submenuLeft = left + 232 + 230 <= window.innerWidth;
+  const menuRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const onPointerDown = (event: PointerEvent) => {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) onClose();
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
+    };
+    document.addEventListener("pointerdown", onPointerDown);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [onClose]);
   return createPortal(
-    <div className="context-menu" style={{ left, top }} role="menu" data-context-menu>
+    <div ref={menuRef} className="context-menu" style={{ left, top }} role="menu" data-context-menu>
       <div className="context-menu-item has-submenu" onMouseEnter={() => onExportOpen(true)} onMouseLeave={() => onExportOpen(false)}>
         <span className="context-menu-item-label"><Package size={15} /><span>导出</span></span><ChevronRight size={14} />
         {exportOpen && (

@@ -36,10 +36,12 @@
     grid-column: 4;
     grid-row: 1;
     justify-self: stretch;
-    align-self: end;
+    align-self: stretch;
     width: 100%;
     min-width: 0;
-    height: calc(100% - var(--topbar-height));
+    /* 与 workspace 的正文行完全同高：顶部避开标题栏，底部避开状态栏。 */
+    height: auto;
+    margin: var(--topbar-height) 0 0;
     overflow: visible;
     background: var(--shell-material);
   }
@@ -75,7 +77,7 @@
   }
   .outline-sidebar__activity-button:hover {
     color: var(--shell-accent-strong);
-    background: rgba(89, 108, 193, .12);
+    background: rgba(53, 117, 240, .12);
   }
   .outline-sidebar__activity-button.active {
     color: var(--shell-accent-strong);
@@ -84,7 +86,7 @@
   }
   .outline-sidebar__activity-button:active { transform: scale(.965); }
   .outline-sidebar__activity-button:focus-visible {
-    outline: 3px solid rgba(47, 125, 94, .18);
+    outline: 3px solid rgba(53, 117, 240, .18);
     outline-offset: 1px;
   }
 
@@ -153,12 +155,12 @@
     width: 2px;
     height: 48px;
     border-radius: 999px;
-    background: rgba(89, 108, 193, 0);
+    background: rgba(53, 117, 240, 0);
     transform: translateY(-50%);
     transition: background-color 130ms ease-out;
   }
   .outline-sidebar__resize-handle:hover::after,
-  .outline-sidebar__resize-handle:focus-visible::after { background: rgba(89, 108, 193, .48); }
+  .outline-sidebar__resize-handle:focus-visible::after { background: rgba(53, 117, 240, .48); }
   .outline-sidebar__resize-handle:focus-visible { outline: none; }
   /* 收起且未悬停时父内容已不可命中；悬停预览时保留把手，行为与左侧浮层资料库一致。 */
 }
@@ -207,11 +209,11 @@
 }
 .outline-sidebar__btn:hover {
   color: var(--shell-accent-strong);
-  background: rgba(89, 108, 193, 0.12);
+  background: rgba(53, 117, 240, 0.12);
 }
 .outline-sidebar__btn.is-active {
   color: var(--shell-accent-strong);
-  background: var(--shell-accent-soft, rgba(89, 108, 193, 0.1));
+  background: var(--shell-accent-soft, rgba(53, 117, 240, 0.1));
 }
 
 .outline-sidebar__filter {
@@ -252,14 +254,16 @@
 .note-list,
 .outline-list,
 .lake-editor-main .ne-editor-wrap,
+.lake-editor-main .ne-viewer,
 .lake-editor-main .ne-viewer-wrap,
 .lake-editor-main .ne-viewer-body {
   scrollbar-width: thin;
-  scrollbar-color: rgba(90, 99, 112, .28) transparent;
+  scrollbar-color: rgba(0, 0, 0, .2) transparent;
 }
 .note-list::-webkit-scrollbar,
 .outline-list::-webkit-scrollbar,
 .lake-editor-main .ne-editor-wrap::-webkit-scrollbar,
+.lake-editor-main .ne-viewer::-webkit-scrollbar,
 .lake-editor-main .ne-viewer-wrap::-webkit-scrollbar,
 .lake-editor-main .ne-viewer-body::-webkit-scrollbar {
   width: 3px !important;
@@ -269,6 +273,7 @@
 .note-list:hover::-webkit-scrollbar,
 .outline-list:hover::-webkit-scrollbar,
 .lake-editor-main .ne-editor-wrap:hover::-webkit-scrollbar,
+.lake-editor-main .ne-viewer:hover::-webkit-scrollbar,
 .lake-editor-main .ne-viewer-wrap:hover::-webkit-scrollbar,
 .lake-editor-main .ne-viewer-body:hover::-webkit-scrollbar {
   width: 6px !important;
@@ -277,11 +282,13 @@
 .note-list::-webkit-scrollbar-track,
 .outline-list::-webkit-scrollbar-track,
 .lake-editor-main .ne-editor-wrap::-webkit-scrollbar-track,
+.lake-editor-main .ne-viewer::-webkit-scrollbar-track,
 .lake-editor-main .ne-viewer-wrap::-webkit-scrollbar-track,
 .lake-editor-main .ne-viewer-body::-webkit-scrollbar-track { background: transparent; }
 .note-list::-webkit-scrollbar-thumb,
 .outline-list::-webkit-scrollbar-thumb,
 .lake-editor-main .ne-editor-wrap::-webkit-scrollbar-thumb,
+.lake-editor-main .ne-viewer::-webkit-scrollbar-thumb,
 .lake-editor-main .ne-viewer-wrap::-webkit-scrollbar-thumb,
 .lake-editor-main .ne-viewer-body::-webkit-scrollbar-thumb {
   min-height: 24px;
@@ -292,6 +299,7 @@
 .note-list:hover::-webkit-scrollbar-thumb,
 .outline-list:hover::-webkit-scrollbar-thumb,
 .lake-editor-main .ne-editor-wrap:hover::-webkit-scrollbar-thumb,
+.lake-editor-main .ne-viewer:hover::-webkit-scrollbar-thumb,
 .lake-editor-main .ne-viewer-wrap:hover::-webkit-scrollbar-thumb,
 .lake-editor-main .ne-viewer-body:hover::-webkit-scrollbar-thumb { background: rgba(90, 99, 112, .48); }
 
@@ -323,8 +331,10 @@
   background-color: rgba(255, 255, 255, .62);
 }
 .outline-item--selected {
-  color: var(--shell-accent-strong, #4c6fff);
+  color: var(--shell-accent-strong, #3575f0);
   font-weight: 600;
+  background: var(--shell-accent-soft);
+  border-radius: 6px;
 }
 /* B：选中态用左侧圆角竖条标示，不铺整行底色 */
 .outline-item--selected::before {
@@ -369,7 +379,7 @@
   min-width: 0;
 }
 
-/* 级别标签：常驻；前四级区分度足够，H5/H6 收敛为灰调；整体保持可读但不抢标题 */
+/* 级别标签：前四级使用明显的蓝/黄/绿/紫区分，后续层级使用辅助色。 */
 .outline-item__level {
   flex-shrink: 0;
   margin-right: 6px;
@@ -382,12 +392,12 @@
   line-height: 15px;
   letter-spacing: 0.02em;
 }
-.outline-item__level--1 { color: #3d4fa1; background: rgba(63, 81, 181, 0.15); font-weight: 700; }
-.outline-item__level--2 { color: #2f6fbe; background: rgba(92, 124, 214, 0.13); }
-.outline-item__level--3 { color: #22746a; background: rgba(56, 145, 134, 0.13); }
-.outline-item__level--4 { color: #92642a; background: rgba(176, 128, 62, 0.13); }
-.outline-item__level--5 { color: #70508e; background: rgba(146, 100, 178, 0.12); font-weight: 500; }
-.outline-item__level--6 { color: #5a626e; background: rgba(100, 108, 120, 0.10); font-weight: 500; }
+.outline-item__level--1 { color: #a47716; background: rgba(224, 177, 45, 0.20); font-weight: 700; }
+.outline-item__level--2 { color: #21816d; background: rgba(56, 166, 134, 0.16); font-weight: 650; }
+.outline-item__level--3 { color: #8351a6; background: rgba(151, 99, 191, 0.16); font-weight: 650; }
+.outline-item__level--4 { color: #315fc4; background: rgba(63, 112, 214, 0.16); font-weight: 650; }
+.outline-item__level--5 { color: #c25b43; background: rgba(212, 112, 82, 0.14); font-weight: 550; }
+.outline-item__level--6 { color: #397f98; background: rgba(74, 151, 176, 0.14); font-weight: 550; }
 
 /* ===== 展开到级别菜单 ===== */
 .outline-sidebar__level {
@@ -423,5 +433,31 @@
 }
 .outline-sidebar__level-menu button:hover {
   color: var(--shell-text, #20242c);
-  background: rgba(89, 108, 193, 0.1);
+  background: rgba(53, 117, 240, 0.1);
+}
+
+/* ===== 三栏卡片布局：固定与悬浮大纲保持同一张白色面板 ===== */
+@media (min-width: 761px) {
+  .outline-sidebar__content,
+  .outline-sidebar--docked .outline-sidebar__content,
+  .outline-sidebar--collapsed .outline-sidebar__content,
+  .outline-sidebar--collapsed.outline-sidebar--hovered .outline-sidebar__content {
+    /* 与左侧固定目录保持同样的上下留白，形成清晰的三块卡片布局。 */
+    top: 0;
+    bottom: 0;
+    background: #fff;
+    border: 1px solid rgba(0, 0, 0, .08);
+    border-radius: 12px 0 0 12px;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, .05), 0 8px 22px rgba(0, 0, 0, .06);
+  }
+  .outline-sidebar--docked .outline-sidebar__content {
+    left: 4px;
+    right: var(--outline-collapsed-width);
+    width: auto;
+    min-width: 0;
+    border-radius: 12px 0 0 12px;
+  }
+  .outline-sidebar--collapsed .outline-sidebar__content {
+    border-right: 0;
+  }
 }

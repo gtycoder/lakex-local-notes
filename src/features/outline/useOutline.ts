@@ -59,35 +59,55 @@ export function useOutline(
     // 滚动高亮
     let raf = 0;
     let activeId: string | null = null;
+    let lastScrollTop = 0;
+    let hasScrollSample = false;
     const compute = (): void => {
       if (!active) return;
       const scroller = resolveScrollNode(host);
       const items = controller.getVisibleItems();
-      if (!scroller) return;
-      if (!items.length) return;
-      const vpTop = scroller.getBoundingClientRect().top;
-      let current: string | null = null;
-      for (const item of items) {
+      if (!scroller || !items.length) return;
+
+      const scrollTop = scroller.scrollTop;
+      const movingDown = hasScrollSample && scrollTop > lastScrollTop + 1;
+      const movingUp = hasScrollSample && scrollTop < lastScrollTop - 1;
+      lastScrollTop = scrollTop;
+      hasScrollSample = true;
+
+      // 使用视口上方约四分之一作为“当前章节线”，比卡在最顶边稳定，
+      // 也能避免 H2/H3 边界因虚拟渲染短暂缺少 DOM 而跳回 H1。
+      const vp = scroller.getBoundingClientRect();
+      const anchorTop = vp.top + Math.min(120, Math.max(48, vp.height * 0.24));
+      let candidate: string | null = null;
+      let candidateIndex = -1;
+      for (let i = 0; i < items.length; i += 1) {
+        const item = items[i];
         const el = host.querySelector(`[id="${escapeId(item.id)}"]`) as HTMLElement | null;
         if (!el) continue;
         const top = el.getBoundingClientRect().top;
-        if (top <= vpTop) {
-          current = item.id;
-        } else {
-          break;
+        // 不要因为一个虚拟节点暂时不存在就 break；后面的已渲染标题仍可能可用。
+        if (top <= anchorTop) {
+          candidate = item.id;
+          candidateIndex = i;
         }
       }
-      // 回到顶部（首个标题仍在视口之下）→ 高亮第一个标题
-      if (current === null && scroller.scrollTop < 4 && items.length > 0) {
-        current = items[0].id;
+
+      if (candidate === null && scrollTop < 4) {
+        candidate = items[0].id;
+        candidateIndex = 0;
       }
-      if (current !== null && current !== activeId) {
-        activeId = current;
-        controller.setSelected(current);
-        // 保持当前展开：自动展开选中项的祖先
-        if (controller.isKeepCurrentExpand()) {
-          controller.expandAncestorsOf(current);
-        }
+      if (candidate === null) return;
+
+      // 只在滚动方向允许的方向切换。这样向下滚过 H2/H3 边界时，
+      // 即使 H2/H3 的 DOM 正在异步重建，也不会瞬间回跳到更高层的 H1。
+      const activeIndex = activeId ? items.findIndex((item) => item.id === activeId) : -1;
+      if (activeIndex >= 0 && ((movingDown && candidateIndex < activeIndex) || (movingUp && candidateIndex > activeIndex))) {
+        return;
+      }
+
+      if (candidate !== activeId) {
+        activeId = candidate;
+        controller.setSelected(candidate);
+        if (controller.isKeepCurrentExpand()) controller.expandAncestorsOf(candidate);
       }
     };
 

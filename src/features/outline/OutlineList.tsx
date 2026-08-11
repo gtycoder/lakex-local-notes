@@ -15,9 +15,9 @@ function escapeId(id: string): string {
   }
 }
 
-const INDENT_STEP = 16;
-/** 层级竖线对齐其父级（depth = d-1）折叠箭头中心：8+(d-2)*16 + 箭头(18px)一半 */
-const GUIDE_X = 17;
+const INDENT_STEP = 10;
+/** 层级竖线对齐其父级（depth = d-1）折叠箭头中心。 */
+const GUIDE_X = 15;
 
 /** 不同层级的低调竖线配色（depth 2-6；depth 1 无竖线） */
 const GUIDE_COLORS = [

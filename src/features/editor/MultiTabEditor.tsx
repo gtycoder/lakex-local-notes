@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode, type PointerEvent as ReactPointerEvent } from "react";
-import { ChevronDown, ChevronsLeft, ChevronsRight, Pin, X, XCircle, XOctagon } from "lucide-react";
+import { ChevronDown, ChevronsLeft, ChevronsRight, FileText, Pin, X, XCircle, XOctagon } from "lucide-react";
 import { createPortal } from "react-dom";
 import { EditorTab } from "./EditorTab";
 import type { LakeEditorPrefs } from "./lakeRuntime";
@@ -169,10 +169,10 @@ export function MultiTabEditor({
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") setTabCtx(null);
     };
-    document.addEventListener("pointerdown", onPointerDown);
+    document.addEventListener("pointerdown", onPointerDown, true);
     document.addEventListener("keydown", onKeyDown);
     return () => {
-      document.removeEventListener("pointerdown", onPointerDown);
+      document.removeEventListener("pointerdown", onPointerDown, true);
       document.removeEventListener("keydown", onKeyDown);
     };
   }, [tabCtx]);
@@ -185,10 +185,10 @@ export function MultiTabEditor({
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") setTabMenuOpen(false);
     };
-    document.addEventListener("pointerdown", onPointerDown);
+    document.addEventListener("pointerdown", onPointerDown, true);
     document.addEventListener("keydown", onKeyDown);
     return () => {
-      document.removeEventListener("pointerdown", onPointerDown);
+      document.removeEventListener("pointerdown", onPointerDown, true);
       document.removeEventListener("keydown", onKeyDown);
     };
   }, [tabMenuOpen]);
@@ -277,6 +277,7 @@ export function MultiTabEditor({
                         onClick={() => selectTab(tab.noteId)}
                         title={tab.title || "无标题"}
                       >
+                        <span className="tab-switcher-icon" aria-hidden="true">{tab.icon ?? <FileText size={15} />}</span>
                         <span className="tab-switcher-status" aria-hidden="true">{tab.dirty ? "●" : ""}</span>
                         <span className="tab-switcher-title">{tab.title || "无标题"}</span>
                       </button>

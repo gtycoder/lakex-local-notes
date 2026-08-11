@@ -354,13 +354,12 @@ function TreeRow(props: TreeRowProps) {
         if (props.node.nodeType === "note") props.onSelect(props.node.id);
         else props.onToggle(props.node.id);
       }}
-      onDoubleClick={(event) => { event.stopPropagation(); props.onBeginRename(props.node); }}
       onKeyDown={(event) => { if (event.key === "Enter") props.node.nodeType === "note" ? props.onSelect(props.node.id) : props.onToggle(props.node.id); }}
       onPointerDown={(event) => props.onPointerDown(event, props.node.id)}
       onContextMenu={(event) => props.onContextMenu(event, props.node)}
     >
-      <span className="tree-row-icon" title="设置图标" onClick={(event) => { event.stopPropagation(); props.onIconClick?.(props.node, event); }}>{icon}</span>
       <button type="button" className={`tree-chevron ${open && expandable ? "open" : ""}`} disabled={!expandable} onClick={(event) => { event.stopPropagation(); if (expandable) props.onToggle(props.node.id); }} aria-label={open ? "收起" : "展开"}>{expandable ? <ChevronRight size={14} /> : null}</button>
+      <span className="tree-row-icon" title="设置图标" onClick={(event) => { event.stopPropagation(); props.onIconClick?.(props.node, event); }}>{icon}</span>
       <span className="note-row-copy">
         {props.editingId === props.node.id
           ? <input className="tree-rename-input" autoFocus aria-label="节点名称" value={props.editingTitle} onChange={(event) => props.onEditingTitle(event.target.value)} onClick={(event) => event.stopPropagation()} onFocus={(event) => event.currentTarget.select()} onBlur={props.onSubmitRename} onKeyDown={(event) => { event.stopPropagation(); if (event.key === "Enter") props.onSubmitRename(); if (event.key === "Escape") props.onCancelRename(); }} />
@@ -504,8 +503,8 @@ export const EmojiIconPicker = ({ x, y, onPick, onClose }: { x: number; y: numbe
     : group === "全部"
       ? LAKE_EMOJIS.map((e) => ({ char: e.char, name: e.name }))
       : (LAKE_EMOJI_GROUPS.find((g) => g.name === group)?.emojis ?? []).map((char) => ({ char }));
-  const left = Math.min(x, window.innerWidth - 420);
-  const top = Math.min(y, window.innerHeight - 500);
+  const left = Math.max(8, Math.min(x, window.innerWidth - 528));
+  const top = Math.max(8, Math.min(y, window.innerHeight - 568));
   return createPortal(
     <div className="emoji-picker-backdrop" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <div className="emoji-picker" style={{ left, top }} data-context-menu>

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type CSSProperties } from "react";
-import { ArrowLeft, Check, Cloud, FileDown, Files, ListTree, LoaderCircle, Feather, Lock, LockOpen, Pencil, Save, Settings as Settings2Icon, WifiOff } from "lucide-react";
+import { ArrowLeft, Check, Cloud, Files, ListTree, LoaderCircle, Feather, Lock, LockOpen, Pencil, Save, Settings as Settings2Icon, WifiOff } from "lucide-react";
 import { MobileLibrary } from "./components/MobileLibrary";
 import { SearchPanel } from "./components/SearchPanel";
 import { ConfirmDelete, Sidebar, type SidebarMode } from "./components/Sidebar";
@@ -335,21 +335,6 @@ export function App() {
   }, []);
 
   /** 全文导出 Markdown：Lake 内核原生支持（getDocument("text/markdown")），复制到剪贴板 */
-  const exportMarkdown = useCallback(async () => {
-    const id = activeNoteId ?? mobileActive?.id ?? null;
-    if (!id) { showNotice("没有打开的笔记"); return; }
-    const editor = editorsRef.current.get(id);
-    if (!editor || typeof (editor as any).getDocument !== "function") { showNotice("编辑器未就绪，请稍后再试"); return; }
-    try {
-      const md = String((editor as any).getDocument("text/markdown"));
-      if (!md.trim()) { showNotice("当前笔记内容为空"); return; }
-      await navigator.clipboard.writeText(md);
-      showNotice("已复制 Markdown（" + md.length + " 字符）");
-    } catch (reason) {
-      setError("导出 Markdown 失败: " + (reason instanceof Error ? reason.message : String(reason)));
-    }
-  }, [activeNoteId, mobileActive, showNotice]);
-
   /** M1：复制为 Markdown（按 noteId）——读保存时生成的文本缓存，无需打开编辑器 */
   const copyMarkdownById = useCallback(async (noteId: string | null) => {
     if (!noteId) { showNotice("该节点不是文档"); return; }
@@ -790,7 +775,6 @@ export function App() {
                 <span>{lockedNoteIds.has(activeNoteId) ? "已锁定" : "锁定"}</span>
               </button>
             )}
-            <button className="statusbar-export-md" onClick={() => void exportMarkdown()} title="导出当前笔记为 Markdown（复制到剪贴板）"><FileDown size={13} /> MD</button>
             <span className={`save-label ${saveState}`}>{saveState === "saving" ? <LoaderCircle className="spin" size={12} /> : saveState === "dirty" ? <WifiOff size={12} /> : <Save size={12} />}{saveLabel(saveState)}</span>
           </>}
           <span className={`statusbar-sync ${sync.phase}`} title="S3 同步状态"><Cloud size={12} />{sync.message}</span>
