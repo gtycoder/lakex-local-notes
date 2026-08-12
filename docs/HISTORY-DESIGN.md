@@ -24,22 +24,23 @@
 | 快照触发 | **定期 15 分钟**（只快照"15 分钟内保存过"的文档）+ 删除/冲突前 + 手动 |
 | 快照内容 | **正文 .lake 全量 + gzip**（不做结构化增量，lake 是扁平 HTML） |
 | 资源处理 | **不复制资源实体**；每快照记录**资源引用清单 refs_json**（不是复制图片） |
-| 保留策略 | **200 份/文档 为主 + 45 天兜底**（用户重新校准：单文档每日高频编辑约 2h → 8 份/天 → 200 份 ≈ 25 天窗口） |
+| 保留策略 | **100 份/文档 为主 + 30 天兜底**（主约束 100 份 ≈ 12.5 天窗口；低频文档/早锁定文档才到 30 天兜底） |
 | 清理时机 | **惰性**：创建新快照后检查超限即删最旧；启动时补一次兜底 |
 | 自动清理资源 | **历史未引用即物理删**（方案 A，用户确认） |
+| 恢复同步语义 | **用 `last_uploaded_hash` 判断远端是否本机传的**：本机传的→本地恢复版覆盖；他人改的→接受远端、本地入历史（P0-1，用户确认） |
+| 回收站彻底删除 | **软删除保留历史**（恢复后历史还在）；**彻底删除连历史快照+历史引用资源一起物理删**（用户确认） |
 | 同步 | 历史**纯本地**，不参与同步；恢复后走正常同步上传 |
 | 搜索 | 历史**不可搜索**，仅按文档查看 |
 | 手动清理 | 历史界面"清理历史备份"入口；全部清理放设置 |
 | 孤儿文件 tab | 文档右键历史面板内，**随历史删除动态重算**（顺序问题，见 §5） |
 | 快照时机边界 | **打开未编辑/只读打开关闭/锁切换重建 均不产生快照**（见 §6） |
 
-### 2.1 保留策略的推导（为什么是 200 份 + 45 天）
+### 2.1 保留策略的推导（100 份 + 30 天）
 
-- 用户真实场景：单文档**每天高频编辑约 2 小时**，15 分钟/次 → **约 8 份/天**（不是理论 96 份，只有 dirty 才快照）。
-- **50 份 ≈ 6 天窗口，15 天 ≈ 120 份**——原方案"15 天 + 50 份"矛盾（50 份先到，15 天被架空）。
-- **200 份 ≈ 25 天窗口**（贴合"半个月内找回"直觉），磁盘 ~11MB/文档（200 × 57KB 平均）。
-- **份数为主约束**：直接控制磁盘有界，不依赖"每天写几份"的假设；时间只做兜底防陈旧。
-- 极端大文档（147KB gz）200 份 ≈ 29MB/文档，可接受。
+- 用户场景：单文档**每天高频编辑约 2 小时**，15 分钟/次 → **约 8 份/天**；但**也可能编辑几次就锁定**（低频），此时 30 天兜底生效。
+- **100 份 ≈ 12.5 天窗口**（高频文档），磁盘 ~5.7MB/文档（100 × 57KB 平均）。
+- **30 天兜底**：低频文档/早锁定文档才触发（防陈旧快照）。
+- **份数为主约束**：直接控制磁盘有界；时间只做兜底。
 
 ## 3. 存储设计
 
@@ -68,7 +69,11 @@ CREATE TABLE IF NOT EXISTS note_history (
   size INTEGER NOT NULL,            -- gzip 后字节
   refs_json TEXT NOT NULL,          -- 该快照引用的资源文件名 JSON 数组（见 §4）
   ref_count INTEGER NOT NULL,       -- refs_json 长度（引用数，轻量索引/预估，不参与判定）
-  UNIQUE(note_id, content_hash)
+  -- 注意：不设 UNIQUE(note_id, content_hash)——恢复/回退场景同内容会再次出现，
+  -- UNIQUE 会让"恢复前留档"被静默跳过（P0-2，评审确认）。
+  -- 去重改为：同 hash 且 24h 内已有则跳过（防 15 分钟周期内连续写盘刷屏）；
+  -- 恢复动作强制写快照（即使同 hash，用 created_at 区分）。
+  UNIQUE(note_id, created_at)
 );
 CREATE INDEX idx_note_history_note ON note_history(note_id, created_at DESC);
 ```
@@ -109,7 +114,7 @@ function extractAssetRefs(content: string): Set<string> {
 | 删单个快照 | 读**剩余**快照 refs_json 合并 → + 当前正文引用 → 差集 = 孤儿 |
 | 删全部历史 | 历史引用集 = 空 → 仅当前正文引用 → 差集 = 孤儿 |
 | 自动清理（200份/45天） | 删旧快照后，对受影响文档重算（同上）→ 无引用资源立即物理删（方案 A） |
-| 彻底删除文档（purgeTrashItem） | 删文档前解析该文档全部历史 refs；被历史引用的资源保留，其余删 |
+| 彻底删除文档（purgeTrashItem） | **连历史一起物理删**：删 `history/{noteId}/` + `note_history` 记录 + 该文档所有资源（用户确认"彻底删除要彻底"） |
 | 同步 | 历史纯本地，不参与同步；被历史引用但当前不引用的资源仍在孤儿集合 → 不同步上传 |
 
 ### 性能实测
@@ -175,19 +180,25 @@ listNoteHistory(noteId: string): Array<{ id, createdAt, size, contentHash, refCo
 
 // 恢复
 restoreHistory(historyId: number): void
-  // 1) 恢复前：先 createHistorySnapshot(当前正文)（可反悔）
+  // 1) 恢复前：先 createHistorySnapshot(当前正文)（可反悔，强制写即使同 hash）
   // 2) 解压 gzip → 原子写回 notes/{noteId}.lake
   // 3) 更新 md_cache/text_cache（走 ensureNoteCaches）+ FTS
-  // 4) sync_state='local'（下次同步上传恢复版本）
+  // 4) 重新计算写盘正文 hash → setBaseHash(id, 新hash) + markSynced(id)
+  //    （恢复 = 本地与远端重新对齐到恢复版，不是"本地新修改"——P0-1）
+  // 5) sync_state='synced'（下次同步按 last_uploaded_hash 判定：远端是否本机传的）
 
 // 清理（手动，单快照）
 deleteHistory(historyId: number): void
   // 删文件 + DB 记录；调用方随后刷新孤儿列表（顺序见 §5）
 
+// 同步基线增强（P0-1）：恢复后判定"远端是否本机传的"
+setLastUploadedHash(id: string, hash: string): void   // sync.ts 上传成功后调用
+lastUploadedHash(id: string): string | null           // 读 last_uploaded_hash
+
 // 清理（惰性，保留策略）
 cleanupHistory(): void
-  // 1) 每文档超 200 份 → 删最旧
-  // 2) created_at < now-45d → 删
+  // 1) 每文档超 100 份 → 删最旧
+  // 2) created_at < now-30d → 删
   // 3) 删快照后：对受影响文档，解析"剩余历史 refs + 当前正文"，
   //    无引用资源立即物理删（方案 A）
   // 触发：创建快照后（惰性）+ 应用启动时兜底
@@ -219,9 +230,11 @@ cleanNoteOrphans(noteId: string, filenames?: string[]): { count, freedBytes }
 
 ## 10. 与现有机制的关系
 
-- **回收站**：`purgeTrashItem` 彻底删除时，被历史引用的资源保留（解析该文档历史 refs）。
+- **回收站**：
+  - **软删除**（进回收站）：历史**保留**（恢复文档后历史还在，用户可找回更早版本）。
+  - **彻底删除**（`purgeTrashItem`）：**连历史快照 + 历史引用的资源一起物理删**（彻底清除语义，用户确认）；删 `history/{noteId}/` 目录 + `note_history` 记录 + 被历史引用的资源 + .lake + note-assets + DB + FTS + 墓碑。
 - **孤儿机制**：`detectOrphans` 仍按"当前正文引用"判定孤儿（保存时，不查历史）；历史保护在**清理动作**时实时判定（不污染孤儿表）。
-- **同步**：历史目录不进 manifest；恢复后 sync_state='local' 上传。
+- **同步**：历史目录不进 manifest；恢复后 sync_base 重置到恢复版 hash + markSynced；同步冲突判定用 `last_uploaded_hash`（P0-1）。
 - **锁定缓存**：恢复走 `ensureNoteCaches` 兜底。
 
 ## 11. 风险与权衡
@@ -246,7 +259,7 @@ cleanNoteOrphans(noteId: string, filenames?: string[]): { count, freedBytes }
   - 创建文档 → 改内容 → 手动快照 → 历史列表出现
   - 删除历史 → 孤儿 tab 出现被解除引用的资源
   - 恢复历史 → 正文回滚 + 可搜索
-  - 彻底删除文档 → 被历史引用资源保留
+  - 彻底删除文档 → 历史快照 + 资源全部物理删；软删除 → 历史保留
   - 编辑 → 锁定 → 15 分钟后快照存在（锁定不阻止快照）
 
 ## 13. 实现顺序建议
