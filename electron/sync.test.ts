@@ -225,12 +225,15 @@ describe("syncNow 增量同步", () => {
     expect(fs.readFileSync(path.join(store.noteAssetsPathFor("n2"), "img.png"), "utf8")).toBe("img");
   });
 
-  it("本地与远端同时修改时生成冲突副本，本地版本保留并覆盖远端", async () => {
+  it("远端是其他设备改的 → 接受远端最新，不产生冲突副本（历史兜底，P0-1 既定方案）", async () => {
     const store = newStore();
     store.createNote("n1", "笔记A", "<p>v1</p>");
     await syncNow(store as unknown as Store);
+    // 本机最后上传 = v1（last_uploaded_hash=v1）
 
+    // 本地改 v2 local（未上传）
     store.modifyNote("n1", "<p>v2 local</p>");
+    // 远端被其他设备改成 v2 remote（≠ last_uploaded_hash v1 → 非本机传的）
     const remoteHash = sha256("<p>v2 remote</p>");
     s3.bucket.set(key(`objects/${remoteHash}.lake`), Buffer.from("<p>v2 remote</p>", "utf8"));
     const manifest = readManifest();
@@ -238,13 +241,30 @@ describe("syncNow 增量同步", () => {
     writeManifest(manifest);
 
     const r = await syncNow(store as unknown as Store);
-    expect(r.conflicts).toBe(1);
-    const conflict = [...store.notes.values()].find((n) => n.isConflict);
-    expect(conflict).toBeTruthy();
-    expect(conflict!.title).toContain("冲突副本");
-    expect(fs.readFileSync(store.notePathFor("n1"), "utf8")).toBe("<p>v2 local</p>");
+    expect(r.conflicts).toBe(0); // 不产生冲突副本
+    // 接受远端最新：本地文件被 v2 remote 覆盖
+    expect(fs.readFileSync(store.notePathFor("n1"), "utf8")).toBe("<p>v2 remote</p>");
+    // 同步基线更新到远端
+    expect(store.baseHash("n1")).toBe(remoteHash);
+  });
+
+  it("远端是本机传的 → 本地为准，上传覆盖（P0-1 既定方案）", async () => {
+    const store = newStore();
+    store.createNote("n1", "笔记A", "<p>v1</p>");
+    await syncNow(store as unknown as Store);
+    // 本机上传 v1 → last_uploaded_hash=v1
+
+    // 本机改 v2 local（未上传）
+    store.modifyNote("n1", "<p>v2 local</p>");
+    // 远端仍 = v1（== last_uploaded_hash → 本机传的），但 base 已更新为 v1（一致）
+    // 模拟"本地改了但远端还是本机最后上传的"：直接改远端 manifest 为 v1 对应旧状态
+    // （实际上 syncNow 上传阶段会把 v2 local 传上去；这里验证冲突判定分支）
+    const r = await syncNow(store as unknown as Store);
+    // 本地为准：上传 v2 local，远端 manifest 更新为 v2 local hash
     const finalManifest = readManifest();
     expect(finalManifest.notes.find((n) => n.id === "n1")!.contentHash).toBe(store.contentHash("n1"));
+    expect(r.conflicts).toBe(0);
+    expect(store.lastUploadedHash("n1")).toBe(store.contentHash("n1"));
   });
 
   it("本地删除后云端标记 deleted；墓碑保留且标记跨次同步持续（防复活）", async () => {

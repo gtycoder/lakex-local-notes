@@ -220,22 +220,44 @@ export async function syncNow(store: Store, onProgress?: (p: SyncProgress) => vo
       const base = store.baseHash(rn.id);
       const localChanged = localHash !== null && localHash !== base;
       const remoteChanged = rn.contentHash !== base;
-      // P0-1：恢复历史后 setBaseHash(恢复hash)，本地==基线 → localChanged=false，
-      // 远端变了则走 else 下载远端（接受最新，本地恢复前版本已在历史可找回）；
-      // 远端没变则本地恢复版生效（上传阶段覆盖）。last_uploaded_hash 列保留备查。
-      if (localChanged && remoteChanged) {
-        // 本地和远端都改过 → 冲突副本
-        const conflictId = crypto.randomUUID();
-        const title = `${rn.title}（冲突副本 ${new Date().toISOString().slice(0, 10)}）`;
+      // P0-1（既定方案）：以 last_uploaded_hash 判定"远端是否本机最后一次上传的版本"。
+      // - 远端 == 本机最后上传（本机传的）→ 本地为准（恢复版/新编辑），上传覆盖，不产生冲突副本；
+      // - 远端 != 本机最后上传（其他设备改的）→ 接受远端最新，本地当前内容已在历史（恢复留档/编辑前）
+      //   可找回，不产生冲突副本（历史已兜底）。
+      // 注意：last_uploaded_hash 每次本机上传成功都会更新，因此能准确反映"远端是不是我传的"。
+      const uploadedByUs = local !== null && rn.contentHash === store.lastUploadedHash(rn.id);
+      if (localHash === rn.contentHash) {
+        // 正文一致：锁状态按 LWW 合并（下面统一走 else 合并锁；此处直接继续）
+        // 落到 else 分支处理（远端=本地，走下载不会发生，但锁需要合并）
+        if (local) {
+          const localLocked = !!local.isLocked;
+          const remoteLocked = !!rn.isLocked;
+          if (localLocked !== remoteLocked) {
+            const merged = mergeLockState(localLocked, local.lockedAt ?? null, remoteLocked, rn.lockedAt ?? null);
+            store.applyRemoteLock(rn.id, merged.locked, merged.at);
+          }
+        }
+        store.setBaseHash(rn.id, rn.contentHash);
+        store.markSynced(rn.id);
+        continue;
+      } else if (uploadedByUs) {
+        // 远端是本机传的 + 本地有变化（恢复/新编辑）→ 本地为准，上传覆盖（不产生冲突副本）
+        store.setBaseHash(rn.id, localHash!);
+        store.markSynced(rn.id);
+        continue;
+      } else if (localChanged) {
+        // 远端是其他设备改的（或本机从未上传过该文档）→ 接受远端最新，
+        // 本地当前内容已被历史兜底（恢复动作留档 / 编辑前快照），不产生冲突副本
+        const merged = local
+          ? mergeLockState(!!local.isLocked, local.lockedAt ?? null, !!rn.isLocked, rn.lockedAt ?? null)
+          : { locked: !!rn.isLocked, at: rn.lockedAt ?? null };
         store.importRemoteNote(
-          { id: conflictId, title, parentId: rn.parentId, sortOrder: rn.sortOrder + 1, updatedAt: rn.updatedAt, isConflict: true, icon: rn.icon ?? null },
+          { id: rn.id, title: rn.title, parentId: rn.parentId, sortOrder: rn.sortOrder, updatedAt: rn.updatedAt, isConflict: false,
+            isLocked: merged.locked, lockedAt: merged.at, icon: rn.icon ?? null },
           lakeBytes, assets
         );
-        store.setBaseHash(conflictId, rn.contentHash);
-        conflicts += 1;
-      } else if (localChanged) {
-        // 仅本地改过、远端未改：本地为准，交给上传阶段（不能下载覆盖本地修改）
-        continue;
+        store.setBaseHash(rn.id, rn.contentHash);
+        downloaded += 1;
       } else {
         // 正文下载后锁按 LWW 合并：本地刚改的锁不被远端旧状态覆盖
         const merged = local
