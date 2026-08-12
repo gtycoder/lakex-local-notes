@@ -29,6 +29,13 @@ interface LakeNative {
   restoreTrash(id: string): Promise<void>;
   purgeTrash(id: string): Promise<void>;
   emptyTrash(): Promise<void>;
+  createHistorySnapshot(noteId: string, content?: string, force?: boolean): Promise<number | null>;
+  listNoteHistory(noteId: string): Promise<Array<{ id: number; createdAt: string; size: number; contentHash: string; refCount: number; filePath: string }>>;
+  restoreHistory(historyId: number): Promise<void>;
+  deleteHistory(historyId: number): Promise<void>;
+  cleanupHistory(): Promise<void>;
+  listNoteOrphans(noteId: string): Promise<Array<{ filename: string; size: number; mimeType: string; protectedByHistory: boolean }>>;
+  cleanNoteOrphans(noteId: string, filenames?: string[]): Promise<{ count: number; freedBytes: number }>;
   uploadResource(input: ResourceUploadInput, noteId: string): Promise<ResourceUploadOutput>;
   downloadRemoteResource(url: string, noteId: string): Promise<ResourceUploadOutput>;
   listOrphanAssets(): Promise<OrphanAsset[]>;
@@ -89,6 +96,13 @@ export const native = {
   restoreTrash: (id: string) => api().restoreTrash(id),
   purgeTrash: (id: string) => api().purgeTrash(id),
   emptyTrash: () => api().emptyTrash(),
+  createHistorySnapshot: (noteId: string, content?: string, force?: boolean) => api().createHistorySnapshot(noteId, content, force),
+  listNoteHistory: (noteId: string) => api().listNoteHistory(noteId),
+  restoreHistory: (historyId: number) => api().restoreHistory(historyId),
+  deleteHistory: (historyId: number) => api().deleteHistory(historyId),
+  cleanupHistory: () => api().cleanupHistory(),
+  listNoteOrphans: (noteId: string) => api().listNoteOrphans(noteId),
+  cleanNoteOrphans: (noteId: string, filenames?: string[]) => api().cleanNoteOrphans(noteId, filenames),
   uploadResource: (input: ResourceUploadInput, noteId: string) => api().uploadResource(input, noteId),
   downloadRemoteResource: (url: string, noteId: string) => api().downloadRemoteResource(url, noteId),
   listOrphanAssets: () => api().listOrphanAssets(),

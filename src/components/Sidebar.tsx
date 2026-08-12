@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent } from "react";
 import { createPortal } from "react-dom";
-import { BookOpen, ChevronRight, ClipboardCopy, FilePlus2, FileText, FoldVertical, Folder, FolderPlus, Link2, LocateFixed, Package, Pencil, Plus, Search, SmilePlus, Trash2, X } from "lucide-react";
+import { BookOpen, ChevronRight, ClipboardCopy, FilePlus2, FileText, FoldVertical, Folder, FolderPlus, History, Link2, LocateFixed, Package, Pencil, Plus, Search, SmilePlus, Trash2, X } from "lucide-react";
 import { LAKE_EMOJIS } from "../lib/lakeEmojis";
 import { LAKE_EMOJI_GROUPS } from "../lib/lakeEmojiGroups";
 import type { TreeNode, TreeNodeType } from "../lib/types";
@@ -28,6 +28,7 @@ interface SidebarProps {
   onExportAs: (node: TreeNode, format: "markdown" | "html" | "lake") => void;
   onCopyPaths: (node: TreeNode) => void;
   onSetIcon: (node: TreeNode, icon: string | null) => void;
+  onOpenHistory: (node: TreeNode) => void;
   onOpenSearch: (query?: string) => void;
   pendingRenameId: string | null;
   onPendingRenameConsumed: () => void;
@@ -299,7 +300,7 @@ export function Sidebar(props: SidebarProps) {
         {roots.map((node) => <TreeRow key={node.id} node={node} depth={0} nodes={props.nodes} query={query} activeId={props.activeId} contextId={context?.id ?? null} expanded={expanded} draggingId={draggingId} dropTarget={dropTarget} pendingCreate={pendingCreate} editingId={editingId} editingTitle={editingTitle} createField={createField} onEditingTitle={setEditingTitle} onSubmitRename={submitRename} onCancelRename={() => setEditingId(null)} onBeginRename={beginRename} onPointerDown={(event, id) => { if (event.button !== 0 || (event.target as HTMLElement).closest("input")) return; dragRef.current = { id, startX: event.clientX, startY: event.clientY, moved: false }; setDraggingId(id); }} consumeSuppressedClick={() => suppressClickRef.current} onContext={setContextId} onContextMenu={openContext} onToggle={(id) => setExpanded((current) => toggleSet(current, id))} onSelect={props.onSelect} onIconClick={(node, event) => setIconPicker({ node, x: event.clientX, y: event.clientY })} />)}
         {roots.length === 0 && <div className="empty-list">点击 + 新建第一个笔记本</div>}
       </nav>
-      {contextMenu && contextNode && <ContextMenu node={contextNode} x={contextMenu.x} y={contextMenu.y} onNewChild={menuNewChild} onRename={menuRename} onDelete={menuDelete} onCopyMarkdown={() => props.onCopyMarkdown(contextNode)} onExportAs={(format) => props.onExportAs(contextNode, format)} onCopyPaths={() => props.onCopyPaths(contextNode)} onSetIconRequest={() => setIconPicker({ node: contextNode, x: contextMenu!.x, y: contextMenu!.y })} onClose={() => setContextMenu(null)} />}
+      {contextMenu && contextNode && <ContextMenu node={contextNode} x={contextMenu.x} y={contextMenu.y} onNewChild={menuNewChild} onRename={menuRename} onDelete={menuDelete} onCopyMarkdown={() => props.onCopyMarkdown(contextNode)} onExportAs={(format) => props.onExportAs(contextNode, format)} onCopyPaths={() => props.onCopyPaths(contextNode)} onSetIconRequest={() => setIconPicker({ node: contextNode, x: contextMenu!.x, y: contextMenu!.y })} onOpenHistory={() => props.onOpenHistory(contextNode)} onClose={() => setContextMenu(null)} />}
       {iconPicker && <EmojiIconPicker x={iconPicker.x} y={iconPicker.y} onPick={(icon) => { props.onSetIcon(iconPicker.node, icon); setIconPicker(null); }} onClose={() => setIconPicker(null)} />}
       <div className="sidebar-resize-handle desktop-only" role="separator" aria-label="调整资料库宽度" aria-orientation="vertical" aria-valuemin={props.minWidth} aria-valuemax={props.maxWidth} aria-valuenow={Math.round(props.width)} tabIndex={0} onPointerDown={handleResizePointerDown} onPointerMove={handleResizePointerMove} onPointerUp={finishResize} onPointerCancel={finishResize} onKeyDown={handleResizeKeyDown} />
     </aside>
@@ -427,10 +428,11 @@ interface ContextMenuProps {
   onExportAs: (format: "markdown" | "html" | "lake") => void;
   onCopyPaths: () => void;
   onSetIconRequest: () => void;
+  onOpenHistory: () => void;
   onClose: () => void;
 }
 
-const ContextMenu = ({ node, x, y, onNewChild, onRename, onDelete, onCopyMarkdown, onExportAs, onCopyPaths, onSetIconRequest, onClose }: ContextMenuProps) => {
+const ContextMenu = ({ node, x, y, onNewChild, onRename, onDelete, onCopyMarkdown, onExportAs, onCopyPaths, onSetIconRequest, onOpenHistory, onClose }: ContextMenuProps) => {
   const [exportOpen, setExportOpen] = useState(false);
   const isNotebook = node.nodeType === "notebook";
   // 视口边缘翻转，避免菜单溢出屏幕
@@ -448,6 +450,7 @@ const ContextMenu = ({ node, x, y, onNewChild, onRename, onDelete, onCopyMarkdow
       {node.nodeType !== "notebook" && <button role="menuitem" onClick={() => { onSetIconRequest(); onClose(); }}><SmilePlus size={15} /><span>设置图标</span></button>}
       {node.nodeType === "note" && (
         <>
+          <button role="menuitem" onClick={() => { onOpenHistory(); onClose(); }}><History size={15} /><span>历史版本</span></button>
           <div className="context-menu-sep" />
           <div className="context-menu-item has-submenu" onMouseEnter={() => setExportOpen(true)} onMouseLeave={() => setExportOpen(false)}>
             <span className="context-menu-item-label"><Package size={15} /><span>导出</span></span><ChevronRight size={14} />

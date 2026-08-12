@@ -406,6 +406,133 @@ describe("目录树操作", () => {
   });
 });
 
+
+describe("文档历史（快照，纯本地）", () => {
+  it("createHistorySnapshot 创建 gzip 快照 + refs_json + hash 去重", () => {
+    const { id } = makeNote();
+    // 写入正文（含图片引用）
+    const content = '<p><span>正文</span><img src="http://127.0.0.1:19876/' + id + '/1786123456789_abc12345.png"></p>';
+    store.saveNote(id, "历史测试", content);
+    const sid = store.createHistorySnapshot(id);
+    expect(sid).toBeTruthy();
+    const list = store.listNoteHistory(id);
+    expect(list.length).toBe(1);
+    expect(list[0].refCount).toBe(1);
+    // refs_json 记录图片
+    expect(JSON.parse((store as any).db.prepare("SELECT refs_json FROM note_history WHERE id=?").get(list[0].id).refs_json)).toContain("1786123456789_abc12345.png");
+    // 同内容再快照 → 24h 防抖跳过
+    expect(store.createHistorySnapshot(id)).toBeNull();
+    // 不同内容 → 新快照
+    store.saveNote(id, "历史测试", "<p>新内容</p>");
+    expect(store.createHistorySnapshot(id)).toBeTruthy();
+    expect(store.listNoteHistory(id).length).toBe(2);
+  });
+
+  it("restoreHistory 恢复正文 + 更新缓存/FTS + 重置 sync_base（P0-1）", () => {
+    const { id } = makeNote();
+    store.saveNote(id, "历史测试", "<p>版本1 含独特词：北斗七星</p>");
+    store.createHistorySnapshot(id);
+    store.saveNote(id, "历史测试", "<p>版本2</p>");
+    store.createHistorySnapshot(id);
+    // 恢复版本1
+    const hist = store.listNoteHistory(id);
+    const v1 = hist[hist.length - 1]; // 最旧
+    store.restoreHistory(v1.id);
+    // 正文回滚
+    expect(store.readNote(id).content).toContain("版本1 含独特词：北斗七星");
+    // 缓存更新（可搜索）
+    expect(store.searchNotes("北斗七星").some((h) => h.id === id)).toBe(true);
+    // sync_base 重置到恢复版 hash（localChanged=false）
+    const newHash = store.contentHash(id);
+    expect(store.baseHash(id)).toBe(newHash);
+    expect(store.readNote(id).syncState).toBe("synced");
+    // 恢复前留档：版本2 在历史里（force 写）
+    const after = store.listNoteHistory(id);
+    expect(after.some((h) => h.contentHash !== v1.contentHash)).toBe(true);
+  });
+
+  it("deleteHistory 删除快照文件 + DB 记录", () => {
+    const { id } = makeNote();
+    store.saveNote(id, "历史测试", "<p>a</p>");
+    store.createHistorySnapshot(id);
+    store.saveNote(id, "历史测试", "<p>b</p>");
+    store.createHistorySnapshot(id);
+    const before = store.listNoteHistory(id);
+    expect(before.length).toBe(2);
+    store.deleteHistory(before[0].id); // 删最新
+    expect(store.listNoteHistory(id).length).toBe(1);
+    // 文件也删了
+    expect(fs.existsSync(path.join(dir, before[0].filePath))).toBe(false);
+  });
+
+  it("cleanupHistory 保留策略：超 100 份删最旧 / 30 天删", () => {
+    const { id } = makeNote();
+    store.saveNote(id, "历史测试", "<p>base</p>");
+    // 造 105 份快照（内容不同避免去重）
+    for (let i = 0; i < 105; i++) {
+      store.saveNote(id, "历史测试", `<p>内容${i}</p>`);
+      store.createHistorySnapshot(id);
+    }
+    expect(store.listNoteHistory(id).length).toBe(105);
+    store.cleanupHistory();
+    expect(store.listNoteHistory(id).length).toBeLessThanOrEqual(100);
+    // 30 天兜底：造一条旧快照
+    const oldContent = "<p>旧版本</p>";
+    const oldHash = crypto.createHash("sha256").update(oldContent).digest("hex");
+    const gz = (store as any).gzipContent(oldContent);
+    const oldPath = `history/${id}/2020-01-01-00-00-00-${oldHash.slice(0, 16)}.lake.gz`;
+    fs.mkdirSync(path.dirname(path.join(dir, oldPath)), { recursive: true });
+    fs.writeFileSync(path.join(dir, oldPath), gz);
+    (store as any).db.prepare("INSERT INTO note_history(note_id,file_path,content_hash,created_at,size,refs_json,ref_count) VALUES(?,?,?,?,?,?,?)")
+      .run(id, oldPath, oldHash, "2020-01-01T00:00:00.000Z", gz.length, "[]", 0);
+    store.cleanupHistory();
+    expect(store.listNoteHistory(id).some((h) => h.contentHash === oldHash)).toBe(false);
+  });
+
+  it("listNoteOrphans / cleanNoteOrphans：被历史引用保护，未引用可清", () => {
+    const { id } = makeNote();
+    const assetsDir = path.join(dir, "note-assets", id);
+    fs.mkdirSync(assetsDir, { recursive: true });
+    // 被历史引用的资源 + 未引用资源
+    const refName = "1786123456789_abc12345.png";
+    const orphanName = "1786123456789_def67890.png";
+    fs.writeFileSync(path.join(assetsDir, refName), "refdata");
+    fs.writeFileSync(path.join(assetsDir, orphanName), "orphandata");
+    // 正文只引用 refName，并做历史快照
+    store.saveNote(id, "历史测试", `<p><img src="http://127.0.0.1:19876/${id}/${refName}"></p>`);
+    store.createHistorySnapshot(id);
+    // 删除引用（正文不再引用 refName，但历史还引用）
+    store.saveNote(id, "历史测试", "<p>无图</p>");
+    const orphans = store.listNoteOrphans(id);
+    const refOrphan = orphans.find((o) => o.filename === refName);
+    const plainOrphan = orphans.find((o) => o.filename === orphanName);
+    expect(refOrphan?.protectedByHistory).toBe(true);   // 被历史保护
+    expect(plainOrphan?.protectedByHistory).toBe(false); // 未引用可清
+    // 清理未引用的
+    const r = store.cleanNoteOrphans(id, [orphanName]);
+    expect(r.count).toBe(1);
+    expect(fs.existsSync(path.join(assetsDir, orphanName))).toBe(false);
+    expect(fs.existsSync(path.join(assetsDir, refName))).toBe(true); // 历史保护保留
+    // 删历史后 refName 变未保护可清
+    const hist = store.listNoteHistory(id);
+    for (const h of hist) store.deleteHistory(h.id);
+    expect(store.listNoteOrphans(id).find((o) => o.filename === refName)?.protectedByHistory).toBe(false);
+  });
+
+  it("purgeTrashItem 彻底删除连历史快照一起物理删", () => {
+    const nb = store.createNotebook("待彻底删");
+    const note = store.createNoteIn(nb.id, "子笔记");
+    store.saveNote(note.id, "子笔记", "<p>内容</p>");
+    store.createHistorySnapshot(note.id);
+    expect(store.listNoteHistory(note.id).length).toBe(1);
+    store.deleteTreeNode(nb.id); // 软删除
+    expect(store.listNoteHistory(note.id).length).toBe(1); // 软删除保留历史
+    store.purgeTrashItem(nb.id); // 彻底删除
+    expect(store.listNoteHistory(note.id).length).toBe(0); // 历史也删了
+    expect(fs.existsSync(path.join(dir, "history", note.id))).toBe(false);
+  });
+});
+
 describe("孤儿资源", () => {
   it("未被引用的资源被登记，引用后撤销，清理时删除文件", () => {
     const { id } = makeNote();

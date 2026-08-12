@@ -220,6 +220,9 @@ export async function syncNow(store: Store, onProgress?: (p: SyncProgress) => vo
       const base = store.baseHash(rn.id);
       const localChanged = localHash !== null && localHash !== base;
       const remoteChanged = rn.contentHash !== base;
+      // P0-1：恢复历史后 setBaseHash(恢复hash)，本地==基线 → localChanged=false，
+      // 远端变了则走 else 下载远端（接受最新，本地恢复前版本已在历史可找回）；
+      // 远端没变则本地恢复版生效（上传阶段覆盖）。last_uploaded_hash 列保留备查。
       if (localChanged && remoteChanged) {
         // 本地和远端都改过 → 冲突副本
         const conflictId = crypto.randomUUID();
@@ -295,6 +298,9 @@ export async function syncNow(store: Store, onProgress?: (p: SyncProgress) => vo
       await remote.put(`objects/${hash}.lake`, lakeBytes, "text/lake; charset=utf-8");
       uploaded += 1;
     }
+    // P0-1：记录本机最后一次成功上传的正文 hash（无论正文是否变化都更新，
+    // 用于恢复后判定"远端是否本机传的"）
+    store.setLastUploadedHash(note.id, hash);
     manifestNotes.push({
       id: note.id, title: note.title, parentId: note.parentId, sortOrder: note.sortOrder,
       updatedAt: note.updatedAt, contentHash: hash, isConflict: note.isConflict,

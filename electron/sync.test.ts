@@ -83,6 +83,7 @@ class FakeStore {
   notes = new Map<string, { id: string; title: string; parentId: string | null; sortOrder: number; updatedAt: string; isConflict: boolean; isLocked?: boolean; lockedAt?: string | null }>();
   deleted = new Map<string, { id: string; title: string; parentId: string | null; sortOrder: number; updatedAt: string; deletedAt: string }>();
   baseHashes = new Map<string, string>();
+  lastUploadedHashes = new Map<string, string>();
   orphans = new Set<string>();
   syncedAt: string | null = null;
   lastResult: unknown = null;
@@ -128,6 +129,9 @@ class FakeStore {
   }
   baseHash(id: string) { return this.baseHashes.get(id) ?? null; }
   setBaseHash(id: string, hash: string) { this.baseHashes.set(id, hash); }
+  // P0-1：last_uploaded_hash（本机最后一次上传的 hash）
+  lastUploadedHash(id: string) { return this.lastUploadedHashes.get(id) ?? null; }
+  setLastUploadedHash(id: string, hash: string) { this.lastUploadedHashes.set(id, hash); }
   markSynced() {}
   setNoteLocked(id: string, locked: boolean) {
     const n = this.notes.get(id);

@@ -2,6 +2,7 @@ import Database from "better-sqlite3";
 import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
+import zlib from "node:zlib";
 import os from "node:os";
 import { net, safeStorage } from "electron";
 import { ASSET_PORT } from "./assetServer.js";
@@ -11,6 +12,18 @@ import { assertSafeRemoteHost, SsrfError } from "./ssrf.js";
 
 const DEFAULT_WORKSPACE_ID = "default";
 const DEFAULT_NOTEBOOK_ID = "notebook-personal";
+
+/**
+ * 从 Lake 正文（.lake HTML）提取引用的资源文件名。
+ * Lake 序列化图片时把 URL 百分号编码嵌进 data: URL，但文件名
+ * {13位时间戳}_{8位随机}.ext 只含字母数字/下划线/点，编码后原样保留。
+ * 文件名全局唯一（时间戳+随机），按笔记目录隔离，因此匹配到的即为该笔记引用的资源。
+ * 历史快照 refs_json 与孤儿判定共用此工具。
+ */
+export const ASSET_NAME_RE = /\d{13}_[0-9a-f]{8}\.(?:png|jpg|jpeg|gif|webp|avif)/g;
+export function extractAssetRefs(content: string): Set<string> {
+  return new Set([...content.matchAll(ASSET_NAME_RE)].map((m) => m[0]));
+}
 export const MAX_IMAGE_BYTES = 25 * 1024 * 1024;
 // 下载外部图片的超时与请求头（移植自 Tauri 版 Rust 后端，见 lake-notes-tauri-poc/src-tauri/src/store.rs）
 const DOWNLOAD_TIMEOUT_MS = 30_000;
@@ -137,6 +150,20 @@ export class Store {
         updated_at TEXT NOT NULL,
         deleted_at TEXT NOT NULL
       );
+      -- 文档历史快照（纯本地，不参与同步）。refs_json=该快照引用的资源文件名清单。
+      -- 不设 UNIQUE(note_id,content_hash)：恢复/回退同内容会再次出现，UNIQUE 会让
+      -- "恢复前留档"被静默跳过（P0-2）。去重改为 24h 时间窗口防抖 + 恢复强制写。
+      CREATE TABLE IF NOT EXISTS note_history (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        note_id TEXT NOT NULL,
+        file_path TEXT NOT NULL,
+        content_hash TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        size INTEGER NOT NULL,
+        refs_json TEXT NOT NULL,
+        ref_count INTEGER NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_note_history_note ON note_history(note_id, created_at DESC);
     `);
     // 锁状态列（v3 同步元数据）：旧库无列时补齐
     const cols = this.db.prepare("PRAGMA table_info(notes)").all() as Array<{ name: string }>;
@@ -159,6 +186,11 @@ export class Store {
     this.db.exec(`CREATE VIRTUAL TABLE IF NOT EXISTS notes_fts USING fts5(title, body, note_id UNINDEXED, tokenize='trigram')`);
     if (!cols.some((c) => c.name === "text_cache")) {
       this.db.exec("ALTER TABLE notes ADD COLUMN text_cache TEXT");
+    }
+    // P0-1：sync_base 记录"本机最后一次成功上传的 hash"，用于恢复后判定"远端是否本机传的"
+    const baseCols = this.db.prepare("PRAGMA table_info(sync_base)").all() as Array<{ name: string }>;
+    if (!baseCols.some((c) => c.name === "last_uploaded_hash")) {
+      this.db.exec("ALTER TABLE sync_base ADD COLUMN last_uploaded_hash TEXT");
     }
     const now = nowIso();
     this.db.prepare(`INSERT OR IGNORE INTO tree_nodes(id,workspace_id,parent_id,node_type,title,note_file_id,sort_order,created_at,updated_at,deleted_at,sync_state,is_conflict)
@@ -687,6 +719,207 @@ export class Store {
     return { exportDir, imageCount, skipped, size: md.length };
   }
 
+  // ===== 文档历史（快照，纯本地不参与同步） =====
+
+  /** 历史快照目录（相对 workspace root） */
+  private historyDir(): string {
+    return path.join(this.root, "history");
+  }
+
+  private historyNoteDir(noteId: string): string {
+    return path.join(this.historyDir(), noteId);
+  }
+
+  /** gzip 快照正文 → Buffer */
+  private gzipContent(content: string): Buffer {
+    return zlib.gzipSync(content, { level: 6 });
+  }
+
+  /** 读取历史快照正文（解压） */
+  private readHistoryContent(filePath: string): string {
+    return zlib.gunzipSync(fs.readFileSync(path.join(this.root, filePath))).toString("utf8");
+  }
+
+  /** 24h 内同 hash 是否已有快照（去重防抖，P0-2：不用 UNIQUE） */
+  private hasRecentDuplicate(noteId: string, hash: string): boolean {
+    const row = this.db.prepare(
+      "SELECT 1 FROM note_history WHERE note_id=? AND content_hash=? AND created_at > ? LIMIT 1"
+    ).get(noteId, hash, new Date(Date.now() - 24 * 3600 * 1000).toISOString());
+    return !!row;
+  }
+
+  /** 创建历史快照。content 缺省时读磁盘 .lake。
+   * 返回快照 id；同 hash 且 24h 内已有则跳过返回 null。 */
+  createHistorySnapshot(noteId: string, content?: string, force = false): number | null {
+    if (!isSafePathSegment(noteId)) throw new AppError("InvalidInput", `无效的笔记 ID: ${noteId}`);
+    const lakePath = this.notePath(noteId);
+    if (!fs.existsSync(lakePath)) return null;
+    const body = content ?? fs.readFileSync(lakePath, "utf8");
+    const hash = crypto.createHash("sha256").update(body).digest("hex");
+    // 恢复动作 force=true 强制写（即使同 hash，用 created_at 区分）；普通快照 24h 防抖
+    if (!force && this.hasRecentDuplicate(noteId, hash)) return null;
+    const refs = [...extractAssetRefs(body)];
+    const gz = this.gzipContent(body);
+    const ts = new Date().toISOString().replace(/[:T]/g, "-").slice(0, 19); // YYYY-MM-DD-HH-mm-ss
+    const filename = `${ts}-${hash.slice(0, 16)}.lake.gz`;
+    const relPath = `history/${noteId}/${filename}`;
+    const absPath = path.join(this.root, relPath);
+    fs.mkdirSync(path.dirname(absPath), { recursive: true });
+    fs.writeFileSync(absPath, gz);
+    // created_at 用单调时间：同毫秒内多条快照会撞（UNIQUE 已去，但排序需稳定），
+    // 若与上一条同毫秒则 +1ms，保证 ORDER BY created_at DESC 稳定（P2-4）。
+    let created = new Date().toISOString();
+    const lastRow = this.db.prepare("SELECT created_at FROM note_history WHERE note_id=? ORDER BY created_at DESC LIMIT 1").get(noteId) as { created_at: string } | undefined;
+    if (lastRow && created <= lastRow.created_at) {
+      created = new Date(new Date(lastRow.created_at).getTime() + 1).toISOString();
+    }
+    const info = this.db.prepare(
+      "INSERT INTO note_history(note_id,file_path,content_hash,created_at,size,refs_json,ref_count) VALUES(?,?,?,?,?,?,?)"
+    ).run(noteId, relPath, hash, created, gz.length, JSON.stringify(refs), refs.length);
+    return Number(info.lastInsertRowid);
+  }
+
+  /** 列出文档历史快照（新→旧） */
+  listNoteHistory(noteId: string): Array<{ id: number; createdAt: string; size: number; contentHash: string; refCount: number; filePath: string }> {
+    const rows = this.db.prepare(
+      "SELECT id,created_at,size,content_hash,ref_count,file_path FROM note_history WHERE note_id=? ORDER BY created_at DESC"
+    ).all(noteId) as Array<{ id: number; created_at: string; size: number; content_hash: string; ref_count: number; file_path: string }>;
+    return rows.map((r) => ({ id: r.id, createdAt: r.created_at, size: r.size, contentHash: r.content_hash, refCount: r.ref_count, filePath: r.file_path }));
+  }
+
+  /** 恢复历史版本。
+   * 1) 恢复前强制快照当前版本（可反悔，force=true 即使同 hash）
+   * 2) 解压写回 .lake + 更新缓存/FTS
+   * 3) 重算 hash → setBaseHash + markSynced（恢复=新基线，非本地新修改，P0-1）
+   */
+  restoreHistory(historyId: number): void {
+    const row = this.db.prepare("SELECT note_id,file_path FROM note_history WHERE id=?").get(historyId) as
+      { note_id: string; file_path: string } | undefined;
+    if (!row) throw new AppError("NotFound", `历史快照不存在: ${historyId}`);
+    const noteId = row.note_id;
+    if (!isSafePathSegment(noteId)) throw new AppError("InvalidInput", `无效的笔记 ID: ${noteId}`);
+    // 1) 恢复前留档
+    this.createHistorySnapshot(noteId, undefined, true);
+    // 2) 解压写回
+    const body = this.readHistoryContent(row.file_path);
+    this.atomicWrite(this.notePath(noteId), body);
+    // 3) 更新缓存/FTS（用恢复的正文）
+    const titleRow = this.db.prepare("SELECT title FROM notes WHERE id=?").get(noteId) as { title: string } | undefined;
+    if (titleRow) {
+      const markdown = lakeHtmlToMarkdown(body);
+      const plain = lakeHtmlToPlain(body);
+      this.updateNoteCaches(noteId, markdown, plain);
+    }
+    // 4) 同步基线：重算 hash + markSynced（恢复=新基线，不是"本地新修改"）
+    const newHash = crypto.createHash("sha256").update(body).digest("hex");
+    this.setBaseHash(noteId, newHash);
+    this.db.prepare("UPDATE notes SET sync_state='synced', updated_at=? WHERE id=?").run(new Date().toISOString(), noteId);
+  }
+
+  /** 手动删除单个历史快照（文件 + DB）。调用方随后刷新孤儿列表（顺序 §5）。 */
+  deleteHistory(historyId: number): void {
+    const row = this.db.prepare("SELECT file_path FROM note_history WHERE id=?").get(historyId) as { file_path: string } | undefined;
+    if (!row) throw new AppError("NotFound", `历史快照不存在: ${historyId}`);
+    this.db.prepare("DELETE FROM note_history WHERE id=?").run(historyId);
+    try { fs.rmSync(path.join(this.root, row.file_path), { force: true }); } catch { /* 忽略 */ }
+    // 若目录空则清理
+    this.pruneEmptyHistoryDirs();
+  }
+
+  /** 惰性清理：每文档超 100 份删最旧；created_at < 30 天删。
+   * 删除后对受影响文档重算引用，无引用资源物理删（方案 A）。 */
+  cleanupHistory(): void {
+    // 按文档处理
+    const notes = this.db.prepare("SELECT DISTINCT note_id FROM note_history").all() as Array<{ note_id: string }>;
+    for (const { note_id } of notes) {
+      const expired = this.db.prepare(
+        "SELECT id,file_path FROM note_history WHERE note_id=? AND (created_at < ? OR id IN (SELECT id FROM note_history WHERE note_id=? ORDER BY created_at DESC LIMIT -1 OFFSET 100))"
+      ).all(note_id, new Date(Date.now() - 30 * 24 * 3600 * 1000).toISOString(), note_id) as Array<{ id: number; file_path: string }>;
+      if (expired.length === 0) continue;
+      for (const e of expired) {
+        this.db.prepare("DELETE FROM note_history WHERE id=?").run(e.id);
+        try { fs.rmSync(path.join(this.root, e.file_path), { force: true }); } catch { /* 忽略 */ }
+      }
+      // 方案 A：清理后重算该文档引用，无引用资源物理删
+      this.cleanupUnreferencedAssetsForNote(note_id);
+    }
+    this.pruneEmptyHistoryDirs();
+  }
+
+  /** 清理某文档"当前正文不引用 + 无历史快照引用"的资源（方案 A / 手动清理共用） */
+  private cleanupUnreferencedAssetsForNote(noteId: string): void {
+    const dir = this.noteAssetsDirFor(noteId);
+    if (!fs.existsSync(dir)) return;
+    const disk = fs.readdirSync(dir);
+    if (disk.length === 0) return;
+    // 当前正文引用 + 所有历史 refs
+    const currentRefs = this.currentContentRefs(noteId);
+    const historyRefs = this.historyRefsForNote(noteId);
+    for (const f of disk) {
+      if (currentRefs.has(f) || historyRefs.has(f)) continue;
+      try { fs.rmSync(path.join(dir, f), { force: true }); } catch { /* 忽略 */ }
+    }
+  }
+
+  /** 当前正文引用的资源 */
+  private currentContentRefs(noteId: string): Set<string> {
+    const p = this.notePath(noteId);
+    if (!fs.existsSync(p)) return new Set();
+    return extractAssetRefs(fs.readFileSync(p, "utf8"));
+  }
+
+  /** 该文档所有历史快照 refs 合并（去重） */
+  private historyRefsForNote(noteId: string): Set<string> {
+    const rows = this.db.prepare("SELECT refs_json FROM note_history WHERE note_id=?").all(noteId) as Array<{ refs_json: string }>;
+    const all = new Set<string>();
+    for (const r of rows) {
+      try { for (const f of JSON.parse(r.refs_json) as string[]) all.add(f); } catch { /* 忽略 */ }
+    }
+    return all;
+  }
+
+  /** 文档级孤儿列表（实时）：磁盘文件 − (当前正文引用 ∪ 历史 refs) */
+  listNoteOrphans(noteId: string): Array<{ filename: string; size: number; mimeType: string; protectedByHistory: boolean }> {
+    const dir = this.noteAssetsDirFor(noteId);
+    if (!fs.existsSync(dir)) return [];
+    const currentRefs = this.currentContentRefs(noteId);
+    const historyRefs = this.historyRefsForNote(noteId);
+    const out: Array<{ filename: string; size: number; mimeType: string; protectedByHistory: boolean }> = [];
+    for (const f of fs.readdirSync(dir)) {
+      const full = path.join(dir, f);
+      const st = fs.statSync(full);
+      if (!st.isFile()) continue;
+      const inCurrent = currentRefs.has(f);
+      const inHistory = historyRefs.has(f);
+      if (inCurrent) continue; // 当前引用不是孤儿
+      out.push({ filename: f, size: st.size, mimeType: mimeTypeForFilename(f), protectedByHistory: inHistory });
+    }
+    return out;
+  }
+
+  /** 清理文档级孤儿：只删非 protectedByHistory 的文件（被历史引用的跳过）。
+   * filenames 缺省清全部可清。 */
+  cleanNoteOrphans(noteId: string, filenames?: string[]): { count: number; freedBytes: number } {
+    const orphans = this.listNoteOrphans(noteId);
+    const targets = orphans.filter((o) => !o.protectedByHistory && (!filenames || filenames.includes(o.filename)));
+    let count = 0, freed = 0;
+    for (const o of targets) {
+      const full = path.join(this.noteAssetsDirFor(noteId), o.filename);
+      try { freed += fs.statSync(full).size; fs.unlinkSync(full); count++; } catch { /* 忽略 */ }
+    }
+    return { count, freedBytes: freed };
+  }
+
+  /** 清理空的历史文档目录 */
+  private pruneEmptyHistoryDirs(): void {
+    const root = this.historyDir();
+    if (!fs.existsSync(root)) return;
+    for (const d of fs.readdirSync(root)) {
+      const p = path.join(root, d);
+      try { if (fs.statSync(p).isDirectory() && fs.readdirSync(p).length === 0) fs.rmdirSync(p); } catch { /* 忽略 */ }
+    }
+  }
+
   deleteNote(id: string) {
     this.deleteTreeNode(id);
   }
@@ -814,11 +1047,15 @@ export class Store {
       const delFts = this.db.prepare("DELETE FROM notes_fts WHERE note_id=?");
       const delNode = this.db.prepare("DELETE FROM tree_nodes WHERE id=?");
       const delOrphans = this.db.prepare("DELETE FROM orphan_assets WHERE note_id=?");
+      const delHistory = this.db.prepare("DELETE FROM note_history WHERE note_id=?");
       for (const nid of ids) {
         const n = nodeStmt.get(nid) as { note_file_id: string | null } | undefined;
         if (n?.note_file_id) {
           filesToRemove.push({ path: this.notePath(n.note_file_id), recursive: false });
           filesToRemove.push({ path: path.join(this.noteAssetsDir, n.note_file_id), recursive: true });
+          // 彻底删除 = 连历史快照 + 历史引用的资源一起物理删（用户确认）
+          filesToRemove.push({ path: this.historyNoteDir(n.note_file_id), recursive: true });
+          delHistory.run(n.note_file_id);
           delOrphans.run(n.note_file_id);
           delFts.run(n.note_file_id);
           delNote.run(n.note_file_id);
@@ -946,16 +1183,9 @@ export class Store {
     return `http://127.0.0.1:${ASSET_PORT}/${noteId}/${filename}`;
   }
 
+  /** 当前正文引用的资源文件名（复用公共 extractAssetRefs） */
   private referencedFilenames(noteId: string, content: string): Set<string> {
-    // Lake 序列化图片时会把整条 URL 百分号编码后嵌进 data: URL（如
-    // value="data:%7B%22src%22%3A%22http%3A%2F%2F127.0.0.1%3A19876%2F...%22..."），
-    // 但文件名 {timestamp}_{random8}.ext 只含字母数字/下划线/点，编码后原样保留。
-    // 直接按文件名模式扫描：文件名全局唯一（时间戳+8位随机），且孤儿检测按笔记目录
-    // 隔离，因此匹配到的文件名即为该笔记被引用的资源。
-    const referenced = new Set<string>();
-    const re = /\d{13}_[0-9a-f]{8}\.(?:png|jpg|jpeg|gif|webp|avif)/g;
-    for (const m of content.matchAll(re)) referenced.add(m[0]);
-    return referenced;
+    return extractAssetRefs(content);
   }
 
   /** 写盘即登记孤儿（思源式"写时登记、保存时对账"）：
@@ -1080,6 +1310,18 @@ export class Store {
   setBaseHash(id: string, hash: string): void {
     this.db.prepare("INSERT INTO sync_base(note_id,content_hash) VALUES(?,?) ON CONFLICT(note_id) DO UPDATE SET content_hash=excluded.content_hash")
       .run(id, hash);
+  }
+
+  /** P0-1：本机最后一次成功上传某文档的 hash（同步上传成功后调用） */
+  setLastUploadedHash(id: string, hash: string): void {
+    this.db.prepare("INSERT INTO sync_base(note_id,content_hash,last_uploaded_hash) VALUES(?,?,?) ON CONFLICT(note_id) DO UPDATE SET last_uploaded_hash=excluded.last_uploaded_hash")
+      .run(id, hash, hash);
+  }
+
+  /** P0-1：读本机最后一次上传的 hash（无则 null） */
+  lastUploadedHash(id: string): string | null {
+    const row = this.db.prepare("SELECT last_uploaded_hash FROM sync_base WHERE note_id=?").get(id) as { last_uploaded_hash: string | null } | undefined;
+    return row?.last_uploaded_hash ?? null;
   }
 
   /** 只读锁：本地操作；不触碰正文/updated_at，锁同步走 manifest v3 独立字段 */
