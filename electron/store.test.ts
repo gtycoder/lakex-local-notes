@@ -451,6 +451,25 @@ describe("文档历史（快照，纯本地）", () => {
     expect(after.some((h) => h.contentHash !== v1.contentHash)).toBe(true);
   });
 
+  it("restoreHistory 后 last_uploaded_hash 重置为恢复版 hash（P0-1 语义）", () => {
+    const { id } = makeNote();
+    store.saveNote(id, "历史测试", "<p>版本1</p>");
+    store.createHistorySnapshot(id);
+    store.saveNote(id, "历史测试", "<p>版本2</p>");
+    const v2hash = store.contentHash(id);
+    // 模拟本机上传过版本2
+    store.setBaseHash(id, v2hash);
+    store.setLastUploadedHash(id, v2hash);
+    // 恢复版本1
+    const hist = store.listNoteHistory(id);
+    const v1 = hist[hist.length - 1];
+    store.restoreHistory(v1.id);
+    const restoredHash = store.contentHash(id);
+    // 恢复后 base 与 last_uploaded_hash 都应指向恢复版（远端若是恢复前旧版=本机传的，本地为准）
+    expect(store.baseHash(id)).toBe(restoredHash);
+    expect(store.lastUploadedHash(id)).toBe(restoredHash);
+  });
+
   it("deleteHistory 删除快照文件 + DB 记录", () => {
     const { id } = makeNote();
     store.saveNote(id, "历史测试", "<p>a</p>");
@@ -517,6 +536,114 @@ describe("文档历史（快照，纯本地）", () => {
     const hist = store.listNoteHistory(id);
     for (const h of hist) store.deleteHistory(h.id);
     expect(store.listNoteOrphans(id).find((o) => o.filename === refName)?.protectedByHistory).toBe(false);
+  });
+
+  it("U1：saveNote 标记 dirty，flushHistorySnapshots 只快照 dirty 文档且清空", () => {
+    const { id } = makeNote();
+    const { id: id2 } = makeNote();
+    // 初始无快照
+    expect(store.listNoteHistory(id).length).toBe(0);
+    // saveNote 落盘后 dirty；flush 产生快照
+    store.saveNote(id, "历史测试", "<p>dirty 文档</p>");
+    expect(store.flushHistorySnapshots()).toBe(1);
+    expect(store.listNoteHistory(id).length).toBe(1);
+    // flush 后清空：无新保存则不再产生
+    expect(store.flushHistorySnapshots()).toBe(0);
+    expect(store.listNoteHistory(id).length).toBe(1);
+    // 两个文档都 dirty → flush 各快照一次
+    store.saveNote(id2, "历史测试", "<p>dirty2</p>");
+    store.saveNote(id, "历史测试", "<p>dirty1 again</p>");
+    expect(store.flushHistorySnapshots()).toBe(2);
+  });
+
+  it("U1：flushHistorySnapshots 对无 .lake 的文档安全跳过（不抛）", () => {
+    // 用 createNote 但立即删文件模拟异常
+    const note = store.createNote("无文件笔记");
+    fs.rmSync(path.join(dir, "notes", `${note.id}.lake`), { force: true });
+    store.markHistoryDirty(note.id);
+    expect(() => store.flushHistorySnapshots()).not.toThrow();
+  });
+
+  it("P2：detectOrphans 登记孤儿时并入历史 refs（被历史引用不登记孤儿）", () => {
+    const { id } = makeNote();
+    const assetsDir = path.join(dir, "note-assets", id);
+    fs.mkdirSync(assetsDir, { recursive: true });
+    const refName = "1786123456789_abc12345.png";
+    const orphanName = "1786123456789_def67890.png";
+    fs.writeFileSync(path.join(assetsDir, refName), "refdata");
+    fs.writeFileSync(path.join(assetsDir, orphanName), "orphandata");
+    // 正文引用 refName + 快照（历史引用 refName）
+    store.saveNote(id, "历史测试", `<p><img src="http://127.0.0.1:19876/${id}/${refName}"></p>`);
+    store.createHistorySnapshot(id);
+    // 删除正文对 refName 的引用并保存 → detectOrphans 执行
+    store.saveNote(id, "历史测试", "<p>无图</p>");
+    // refName 被历史引用 → 不登记孤儿；orphanName 未被引用 → 登记孤儿
+    const orphanRows = (store as any).db.prepare("SELECT filename FROM orphan_assets WHERE note_id=?").all(id) as Array<{ filename: string }>;
+    const filenames = orphanRows.map((r) => r.filename);
+    expect(filenames).not.toContain(refName);
+    expect(filenames).toContain(orphanName);
+    // 全局清理不误删被历史引用的资源
+    const before = fs.existsSync(path.join(assetsDir, refName));
+    store.cleanOrphanAssets();
+    expect(fs.existsSync(path.join(assetsDir, refName))).toBe(before);
+    expect(fs.existsSync(path.join(assetsDir, orphanName))).toBe(false);
+  });
+
+  it("P5：HistorySettings 读写 + cleanupHistory 用配置 + getHistoryStats", () => {
+    // 默认值
+    expect(store.getHistorySettings()).toEqual({ maxSnapshots: 100, retentionDays: 30, cleanupIntervalHours: 24, snapshotIntervalMinutes: 15 });
+    // 保存自定义
+    store.saveHistorySettings({ maxSnapshots: 3, retentionDays: 365, cleanupIntervalHours: 0, snapshotIntervalMinutes: 30 });
+    expect(store.getHistorySettings()).toEqual({ maxSnapshots: 3, retentionDays: 365, cleanupIntervalHours: 0, snapshotIntervalMinutes: 30 });
+    // 造 5 份快照 → cleanup 按 maxSnapshots=3 裁剪
+    const { id } = makeNote();
+    for (let i = 0; i < 5; i++) {
+      store.saveNote(id, "历史测试", `<p>c${i}</p>`);
+      store.createHistorySnapshot(id);
+    }
+    expect(store.listNoteHistory(id).length).toBe(5);
+    const r = store.cleanupHistory();
+    expect(r.deletedSnapshots).toBeGreaterThan(0);
+    expect(store.listNoteHistory(id).length).toBeLessThanOrEqual(3);
+    // 统计
+    const stats = store.getHistoryStats();
+    expect(stats.snapshotCount).toBe(store.listNoteHistory(id).length);
+    expect(stats.totalBytes).toBeGreaterThan(0);
+    // 清理结果记录
+    store.recordHistoryCleanup({ deletedSnapshots: 2, freedBytes: 10 });
+    const last = store.getLastHistoryCleanup();
+    expect(last?.deletedSnapshots).toBe(2);
+    expect(last?.freedBytes).toBe(10);
+  });
+
+  it("previewHistorySnapshot 解压快照返回纯文本；不存在的快照返回 null", () => {
+    const { id } = makeNote();
+    store.saveNote(id, "历史测试", "<p>预览内容 独特词预览AAA</p>");
+    const sid = store.createHistorySnapshot(id);
+    expect(sid).toBeTruthy();
+    const r = store.previewHistorySnapshot(sid!);
+    expect(r).toBeTruthy();
+    expect(r!.plain).toContain("预览内容 独特词预览AAA");
+    expect(r!.createdAt).toBeTruthy();
+    expect(store.previewHistorySnapshot(999999)).toBeNull();
+  });
+
+  it("previewNoteOrphan 图片返回 data URL，文本返回内容", () => {
+    const { id } = makeNote();
+    const assetsDir = path.join(dir, "note-assets", id);
+    fs.mkdirSync(assetsDir, { recursive: true });
+    const imgName = "1786123456789_abc12345.png";
+    const txtName = "1786123456789_def67890.txt";
+    fs.writeFileSync(path.join(assetsDir, imgName), Buffer.from("89504e470d0a1a0a", "hex"));
+    fs.writeFileSync(path.join(assetsDir, txtName), "hello text content");
+    const img = store.previewNoteOrphan(id, imgName);
+    expect(img?.kind).toBe("image");
+    expect(img?.data.startsWith("data:image/png;base64,")).toBe(true);
+    const txt = store.previewNoteOrphan(id, txtName);
+    expect(txt?.kind).toBe("text");
+    expect(txt?.data).toContain("hello text content");
+    // 不存在的返回 null
+    expect(store.previewNoteOrphan(id, "nope.png")).toBeNull();
   });
 
   it("purgeTrashItem 彻底删除连历史快照一起物理删", () => {

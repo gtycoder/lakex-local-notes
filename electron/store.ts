@@ -61,6 +61,23 @@ interface S3Settings {
   endpoint: string; region: string; bucket: string; prefix: string;
   accessKeyId: string; secretAccessKey: string; forcePathStyle: boolean;
 }
+
+/** 历史保留策略配置（P5，可配置；存 settings 表，纯本地） */
+export interface HistorySettings {
+  /** 每文档最多保留的快照份数（默认 100） */
+  maxSnapshots: number;
+  /** 快照保留天数兜底（默认 30） */
+  retentionDays: number;
+  /** 定期巡检清理间隔（小时，默认 24；0 = 关闭定期巡检） */
+  cleanupIntervalHours: number;
+  /** 自动快照间隔（分钟，默认 15；0 = 关闭自动快照） */
+  snapshotIntervalMinutes: number;
+}
+
+export interface HistoryCleanupResult {
+  deletedSnapshots: number;
+  freedBytes: number;
+}
 interface SyncNote {
   id: string; title: string; parentId: string | null; sortOrder: number; updatedAt: string; isConflict: boolean;
   isLocked?: boolean; lockedAt?: string | null; icon?: string | null;
@@ -91,6 +108,8 @@ export class Store {
   private db: Database.Database;
   private root: string;
   private noteAssetsDir: string;
+  /** 15 分钟自动快照的 dirty 集合（saveNote 落盘时标记，flush 后清空，内存态） */
+  private historyDirty = new Set<string>();
 
   constructor(root: string) {
     this.root = root;
@@ -465,7 +484,28 @@ export class Store {
     } catch (error) {
       console.warn("[store] 孤儿资源检测失败（不影响保存）:", error);
     }
+    // 15 分钟自动快照：落盘成功即标记 dirty（U1，dirty 由 saveNote 落盘驱动，与锁状态解耦）
+    this.historyDirty.add(id);
     return this.readNote(id);
+  }
+
+  /** 15 分钟自动快照：标记文档为"本周期内保存过"（saveNote 落盘时调用） */
+  markHistoryDirty(noteId: string): void {
+    this.historyDirty.add(noteId);
+  }
+
+  /** 15 分钟自动快照：把 dirty 集合中文档各快照一次（force=false 走 24h 防抖），然后清空。
+   * 返回实际创建的快照数。由主进程定时器调用。 */
+  flushHistorySnapshots(): number {
+    const pending = [...this.historyDirty];
+    this.historyDirty.clear();
+    let created = 0;
+    for (const noteId of pending) {
+      try {
+        if (this.createHistorySnapshot(noteId)) created++;
+      } catch { /* 单篇失败不阻断其余 */ }
+    }
+    return created;
   }
 
   /** M1：单独更新文本缓存（打开文档时补缓存用，不重写 .lake 正文） */
@@ -787,6 +827,41 @@ export class Store {
     return rows.map((r) => ({ id: r.id, createdAt: r.created_at, size: r.size, contentHash: r.content_hash, refCount: r.ref_count, filePath: r.file_path }));
   }
 
+  /** 快照预览：解压历史快照正文 → 纯文本（供 HistoryPanel 预览弹层）。
+   * 返回 null 表示快照不存在或解压失败。 */
+  previewHistorySnapshot(historyId: number): { plain: string; createdAt: string; contentHash: string } | null {
+    const row = this.db.prepare("SELECT note_id,file_path,created_at,content_hash FROM note_history WHERE id=?").get(historyId) as
+      { note_id: string; file_path: string; created_at: string; content_hash: string } | undefined;
+    if (!row) return null;
+    try {
+      const body = this.readHistoryContent(row.file_path);
+      return { plain: lakeHtmlToPlain(body), createdAt: row.created_at, contentHash: row.content_hash };
+    } catch {
+      return null;
+    }
+  }
+
+  /** 孤儿文件预览：读取 note-assets/{noteId}/{filename} 内容。
+   * 图片返回 base64 data URL；文本返回前 64KB；其他返回 null。 */
+  previewNoteOrphan(noteId: string, filename: string): { kind: "image" | "text"; data: string; size: number } | null {
+    if (!isSafePathSegment(noteId) || !isSafePathSegment(filename)) return null;
+    const full = path.join(this.noteAssetsDirFor(noteId), filename);
+    if (!fs.existsSync(full)) return null;
+    try {
+      const stat = fs.statSync(full);
+      const mime = mimeTypeForFilename(filename);
+      if (mime.startsWith("image/")) {
+        const buf = fs.readFileSync(full);
+        return { kind: "image", data: `data:${mime};base64,${buf.toString("base64")}`, size: stat.size };
+      }
+      const buf = fs.readFileSync(full);
+      const text = buf.toString("utf8").slice(0, 65536);
+      return { kind: "text", data: text, size: stat.size };
+    } catch {
+      return null;
+    }
+  }
+
   /** 恢复历史版本。
    * 1) 恢复前强制快照当前版本（可反悔，force=true 即使同 hash）
    * 2) 解压写回 .lake + 更新缓存/FTS
@@ -810,9 +885,13 @@ export class Store {
       const plain = lakeHtmlToPlain(body);
       this.updateNoteCaches(noteId, markdown, plain);
     }
-    // 4) 同步基线：重算 hash + markSynced（恢复=新基线，不是"本地新修改"）
+    // 4) 同步基线：重算 hash + markSynced + 更新 last_uploaded_hash（P0-1）。
+    // 恢复=新基线：base 指向恢复版（localChanged=false），同时 last_uploaded_hash 也要更新，
+    // 否则远端若仍是"恢复前本机最后上传的旧 hash"会被误判为本机传的而走"本地为准上传"，
+    // 语义与 P0-1（恢复后重新上传、远端他人改则接受远端）不一致。
     const newHash = crypto.createHash("sha256").update(body).digest("hex");
     this.setBaseHash(noteId, newHash);
+    this.setLastUploadedHash(noteId, newHash);
     this.db.prepare("UPDATE notes SET sync_state='synced', updated_at=? WHERE id=?").run(new Date().toISOString(), noteId);
   }
 
@@ -828,22 +907,40 @@ export class Store {
 
   /** 惰性清理：每文档超 100 份删最旧；created_at < 30 天删。
    * 删除后对受影响文档重算引用，无引用资源物理删（方案 A）。 */
-  cleanupHistory(): void {
+  cleanupHistory(): HistoryCleanupResult {
+    // P5：保留策略可配置（份数上限 + 天数兜底）
+    const cfg = this.getHistorySettings();
+    const cutoff = new Date(Date.now() - cfg.retentionDays * 24 * 3600 * 1000).toISOString();
+    const result: HistoryCleanupResult = { deletedSnapshots: 0, freedBytes: 0 };
     // 按文档处理
     const notes = this.db.prepare("SELECT DISTINCT note_id FROM note_history").all() as Array<{ note_id: string }>;
     for (const { note_id } of notes) {
       const expired = this.db.prepare(
-        "SELECT id,file_path FROM note_history WHERE note_id=? AND (created_at < ? OR id IN (SELECT id FROM note_history WHERE note_id=? ORDER BY created_at DESC LIMIT -1 OFFSET 100))"
-      ).all(note_id, new Date(Date.now() - 30 * 24 * 3600 * 1000).toISOString(), note_id) as Array<{ id: number; file_path: string }>;
+        "SELECT id,file_path FROM note_history WHERE note_id=? AND (created_at < ? OR id IN (SELECT id FROM note_history WHERE note_id=? ORDER BY created_at DESC LIMIT -1 OFFSET ?))"
+      ).all(note_id, cutoff, note_id, cfg.maxSnapshots) as Array<{ id: number; file_path: string }>;
       if (expired.length === 0) continue;
       for (const e of expired) {
         this.db.prepare("DELETE FROM note_history WHERE id=?").run(e.id);
-        try { fs.rmSync(path.join(this.root, e.file_path), { force: true }); } catch { /* 忽略 */ }
+        try {
+          const p = path.join(this.root, e.file_path);
+          result.freedBytes += fs.statSync(p).size;
+          fs.rmSync(p, { force: true });
+          result.deletedSnapshots++;
+        } catch { /* 忽略 */ }
       }
       // 方案 A：清理后重算该文档引用，无引用资源物理删
       this.cleanupUnreferencedAssetsForNote(note_id);
     }
     this.pruneEmptyHistoryDirs();
+    return result;
+  }
+
+  /** 历史占用统计（U6/P4：设置面板展示"快照总数 + 占用字节"） */
+  getHistoryStats(): { snapshotCount: number; totalBytes: number } {
+    const row = this.db.prepare(
+      "SELECT COUNT(*) AS c, COALESCE(SUM(size),0) AS bytes FROM note_history"
+    ).get() as { c: number; bytes: number };
+    return { snapshotCount: row.c, totalBytes: row.bytes };
   }
 
   /** 清理某文档"当前正文不引用 + 无历史快照引用"的资源（方案 A / 手动清理共用） */
@@ -1207,6 +1304,10 @@ export class Store {
     if (!fs.existsSync(dir)) return;
     const diskSet = new Set(fs.readdirSync(dir));
     const referencedSet = this.referencedFilenames(noteId, content);
+    // P2：孤儿登记并入"历史 refs"——被任何历史快照引用的资源不算孤儿，
+    // 保证全局 cleanOrphanAssets / 同步跳过上传 / 文档级 listNoteOrphans 三个消费者一致，
+    // 避免"本机 SyncPanel 全局清理误删历史引用资源 → 本机历史恢复裂图"。
+    const historyRefs = this.historyRefsForNote(noteId);
     const insert = this.db.prepare(
       `INSERT OR IGNORE INTO orphan_assets(note_id, filename, file_path, size, mime_type)
        VALUES(?,?,?,?,?)`
@@ -1214,7 +1315,7 @@ export class Store {
     const unorphan = this.db.prepare("DELETE FROM orphan_assets WHERE note_id=? AND filename=?");
     const tx = this.db.transaction(() => {
       for (const filename of diskSet) {
-        if (referencedSet.has(filename)) {
+        if (referencedSet.has(filename) || historyRefs.has(filename)) {
           unorphan.run(noteId, filename);
         } else {
           const stat = fs.statSync(path.join(dir, filename));
@@ -1267,6 +1368,29 @@ export class Store {
     } catch {
       return null;
     }
+  }
+
+  /** 历史保留策略配置（P5）：读取，缺省返回默认值 */
+  getHistorySettings(): HistorySettings {
+    const row = this.db.prepare("SELECT value FROM settings WHERE key='history_settings'").get() as { value: string } | undefined;
+    const def: HistorySettings = { maxSnapshots: 100, retentionDays: 30, cleanupIntervalHours: 24, snapshotIntervalMinutes: 15 };
+    if (!row) return def;
+    try {
+      const parsed = JSON.parse(row.value) as Partial<HistorySettings>;
+      return {
+        maxSnapshots: typeof parsed.maxSnapshots === "number" && parsed.maxSnapshots > 0 ? parsed.maxSnapshots : def.maxSnapshots,
+        retentionDays: typeof parsed.retentionDays === "number" && parsed.retentionDays > 0 ? parsed.retentionDays : def.retentionDays,
+        cleanupIntervalHours: typeof parsed.cleanupIntervalHours === "number" && parsed.cleanupIntervalHours >= 0 ? parsed.cleanupIntervalHours : def.cleanupIntervalHours,
+        snapshotIntervalMinutes: typeof parsed.snapshotIntervalMinutes === "number" && parsed.snapshotIntervalMinutes >= 0 ? parsed.snapshotIntervalMinutes : def.snapshotIntervalMinutes,
+      };
+    } catch {
+      return def;
+    }
+  }
+
+  saveHistorySettings(settings: HistorySettings): void {
+    this.db.prepare("INSERT INTO settings(key,value) VALUES('history_settings',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value")
+      .run(JSON.stringify(settings));
   }
 
   saveS3Settings(settings: S3Settings): void {
@@ -1347,6 +1471,19 @@ export class Store {
 
   recordSyncResult(json: string): void {
     this.db.prepare("INSERT INTO device_state(key,value) VALUES('last_sync_result',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value").run(json);
+  }
+
+  /** P4：记录最近一次历史清理结果（自动/手动），供设置面板展示与排查 */
+  recordHistoryCleanup(result: HistoryCleanupResult): void {
+    const payload = { at: new Date().toISOString(), ...result };
+    this.db.prepare("INSERT INTO device_state(key,value) VALUES('last_history_cleanup',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value")
+      .run(JSON.stringify(payload));
+  }
+
+  getLastHistoryCleanup(): { at: string; deletedSnapshots: number; freedBytes: number } | null {
+    const row = this.db.prepare("SELECT value FROM device_state WHERE key='last_history_cleanup'").get() as { value: string } | undefined;
+    if (!row) return null;
+    try { return JSON.parse(row.value); } catch { return null; }
   }
 
   /** 已写入同步清单的删除标记可安全剪除，避免 deleted_notes 无限累积 */

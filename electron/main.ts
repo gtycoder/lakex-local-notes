@@ -23,6 +23,8 @@ const DEV_SERVER_URL = "http://127.0.0.1:1421";
 
 let store: Store;
 let quickNotes: QuickNotesStore;
+/** 历史定时器重启函数（配置变更时调用，见 save_history_settings IPC） */
+let restartHistoryTimers: (() => void) | null = null;
 
 /** 本应用创建的窗口 webContents 白名单（防导航到其他页面后仍调用 IPC） */
 const trustedWebContents = new Set<number>();
@@ -173,7 +175,15 @@ function registerIpc() {
   handle("restore_history", (historyId: number) => store.restoreHistory(historyId));
   handle("delete_history", (historyId: number) => store.deleteHistory(historyId));
   handle("cleanup_history", () => store.cleanupHistory());
+  handle("get_history_settings", () => store.getHistorySettings());
+  handle("save_history_settings", (settings: unknown) => {
+    store.saveHistorySettings(settings as Parameters<Store["saveHistorySettings"]>[0]);
+    restartHistoryTimers?.();
+  });
+  handle("get_history_stats", () => store.getHistoryStats());
   handle("list_note_orphans", (noteId: string) => store.listNoteOrphans(noteId));
+  handle("preview_history_snapshot", (historyId: number) => store.previewHistorySnapshot(historyId));
+  handle("preview_note_orphan", (noteId: string, filename: string) => store.previewNoteOrphan(noteId, filename));
   handle("clean_note_orphans", (noteId: string, filenames?: string[]) => store.cleanNoteOrphans(noteId, filenames));
   handle("upload_resource", (input: { bytes: number[]; filename: string }, noteId: string) => {
     // 审计 #21：IPC 输入侧预检（序列化已复制到主进程，先拦截超大数组再走 imageOutput）
@@ -253,6 +263,41 @@ if (!app.requestSingleInstanceLock()) {
     startAssetServer(path.join(workspaceRoot(), "note-assets"), vendorCdnDir(), path.join(workspaceRoot(), "quick-notes"));
     registerIpc();
     createWindow();
+
+    // U1：自动快照（默认 15 分钟，间隔可配置）+ 启动兜底清理（P5 低频巡检）
+    // 启动兜底：清理一次过期快照（惰性清理在创建快照后也会触发，这里是兜底）
+    try {
+      const r = store.cleanupHistory();
+      store.recordHistoryCleanup(r);
+      if (r.deletedSnapshots > 0) console.log(`[history] 启动兜底清理：删除 ${r.deletedSnapshots} 份过期快照`);
+    } catch (error) { console.warn("[history] 启动兜底清理失败:", error); }
+    // 定时器管理：配置变更（设置面板保存）后重启定时器
+    let snapshotTimer: NodeJS.Timeout | null = null;
+    let cleanupTimer: NodeJS.Timeout | null = null;
+    const startHistoryTimers = () => {
+      if (snapshotTimer) { clearInterval(snapshotTimer); snapshotTimer = null; }
+      if (cleanupTimer) { clearInterval(cleanupTimer); cleanupTimer = null; }
+      const cfg = store.getHistorySettings();
+      if (cfg.snapshotIntervalMinutes > 0) {
+        snapshotTimer = setInterval(() => {
+          try {
+            const n = store.flushHistorySnapshots();
+            if (n > 0) console.log(`[history] 自动快照：创建 ${n} 份`);
+          } catch (error) { console.warn("[history] 自动快照失败:", error); }
+        }, cfg.snapshotIntervalMinutes * 60 * 1000);
+      }
+      if (cfg.cleanupIntervalHours > 0) {
+        cleanupTimer = setInterval(() => {
+          try {
+            const r = store.cleanupHistory();
+            store.recordHistoryCleanup(r);
+            if (r.deletedSnapshots > 0) console.log(`[history] 定期清理：删除 ${r.deletedSnapshots} 份过期快照`);
+          } catch (error) { console.warn("[history] 定期清理失败:", error); }
+        }, cfg.cleanupIntervalHours * 3600 * 1000);
+      }
+    };
+    startHistoryTimers();
+    restartHistoryTimers = startHistoryTimers;
 
     app.on("activate", () => {
       if (BrowserWindow.getAllWindows().length === 0) createWindow();

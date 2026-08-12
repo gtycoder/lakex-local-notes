@@ -18,13 +18,20 @@ export function HistoryPanel({ open, noteId, onClose, onRestored }: {
   open: boolean;
   noteId: string | null;
   onClose: () => void;
-  onRestored: () => void;
+  onRestored: (noteId: string) => void;
 }) {
   const [tab, setTab] = useState<Tab>("history");
   const [history, setHistory] = useState<HistoryItem[]>([]);
   const [orphans, setOrphans] = useState<NoteOrphan[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [preview, setPreview] = useState<{
+    kind: "history" | "orphan";
+    title: string;
+    text?: string;
+    imageData?: string;
+    size?: number;
+  } | null>(null);
 
   const refreshHistory = async () => {
     if (!noteId) return;
@@ -72,11 +79,11 @@ export function HistoryPanel({ open, noteId, onClose, onRestored }: {
   };
 
   const restore = async (historyId: number) => {
-    if (!window.confirm("恢复该版本会覆盖当前内容？当前版本会先存入历史。")) return;
+    if (!window.confirm("恢复该版本会覆盖当前内容（含只读/锁定文档）？当前版本会先存入历史。")) return;
     try {
       await native.restoreHistory(historyId);
       await refreshHistory();
-      onRestored();
+      if (noteId) onRestored(noteId);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     }
@@ -103,6 +110,35 @@ export function HistoryPanel({ open, noteId, onClose, onRestored }: {
     try {
       await native.cleanNoteOrphans(noteId, filename ? [filename] : undefined);
       await refreshOrphans();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    }
+  };
+
+  const previewHistory = async (h: HistoryItem) => {
+    try {
+      const r = await native.previewHistorySnapshot(h.id);
+      if (r) {
+        setPreview({ kind: "history", title: new Date(h.createdAt).toLocaleString(), text: r.plain, size: h.size });
+      } else {
+        setError("快照预览失败（文件可能已删除）");
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    }
+  };
+
+  const previewOrphanFile = async (o: NoteOrphan) => {
+    if (!noteId) return;
+    try {
+      const r = await native.previewNoteOrphan(noteId, o.filename);
+      if (r) {
+        setPreview(r.kind === "image"
+          ? { kind: "orphan", title: o.filename, imageData: r.data, size: r.size }
+          : { kind: "orphan", title: o.filename, text: r.data, size: r.size });
+      } else {
+        setError("文件预览失败（文件可能已删除）");
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     }
@@ -142,7 +178,7 @@ export function HistoryPanel({ open, noteId, onClose, onRestored }: {
             {!loading && history.length === 0 && <div className="history-empty">暂无历史快照</div>}
             {!loading && history.map((h) => (
               <div className="history-item" key={h.id}>
-                <div className="history-item-main">
+                <div className="history-item-main" onClick={() => void previewHistory(h)} title="点击预览快照">
                   <div className="history-item-time">{new Date(h.createdAt).toLocaleString()}</div>
                   <div className="history-item-meta">
                     {(h.size / 1024).toFixed(1)} KB · {h.refCount} 个资源 · {h.contentHash.slice(0, 8)}
@@ -167,7 +203,7 @@ export function HistoryPanel({ open, noteId, onClose, onRestored }: {
             {!loading && orphans.map((o) => (
               <div className="history-item" key={o.filename}>
                 <FileText size={14} className="history-item-icon" />
-                <div className="history-item-main">
+                <div className="history-item-main" onClick={() => void previewOrphanFile(o)} title="点击预览文件">
                   <div className="history-item-time">{o.filename}</div>
                   <div className="history-item-meta">
                     {(o.size / 1024).toFixed(1)} KB · {o.protectedByHistory ? "受历史保护" : "可清理"}
@@ -178,6 +214,22 @@ export function HistoryPanel({ open, noteId, onClose, onRestored }: {
                 )}
               </div>
             ))}
+          </div>
+        )}
+        {preview && (
+          <div className="history-preview-backdrop" onMouseDown={(e) => { if (e.target === e.currentTarget) setPreview(null); }}>
+            <div className="history-preview" role="dialog" aria-modal="true">
+              <header>
+                <span className="history-preview-title">{preview.kind === "history" ? "快照预览" : "文件预览"} · {preview.title}</span>
+                {preview.size !== undefined && <span className="history-preview-size">{(preview.size / 1024).toFixed(1)} KB</span>}
+                <button className="history-close" onClick={() => setPreview(null)} aria-label="关闭预览"><X size={16} /></button>
+              </header>
+              <div className="history-preview-body">
+                {preview.imageData
+                  ? <img src={preview.imageData} alt={preview.title} style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain" }} />
+                  : <pre className="history-preview-text">{preview.text ?? ""}</pre>}
+              </div>
+            </div>
           </div>
         )}
       </section>

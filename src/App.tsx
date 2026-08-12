@@ -67,6 +67,8 @@ interface OpenTab {
   content: string;
   dirty: boolean;
   lastAccessedAt: number;
+  /** P1：恢复历史后 bump，强制 EditorTab 重建（content 变化不会触发 Lake 实例重建） */
+  reloadKey?: number;
 }
 
 export function App() {
@@ -714,6 +716,7 @@ export function App() {
   const tabInfos: TabInfo[] = openTabs.map((tab) => ({
     noteId: tab.noteId, title: tab.title, content: tab.content, dirty: tab.dirty,
     icon: treeNodes.find((n) => n.noteFileId === tab.noteId)?.icon ?? null,
+    reloadKey: tab.reloadKey ?? 0,
   }));
 
   const outlineVisible = tocEnabled && !isMobile && desktopWorkspace === "library";
@@ -844,7 +847,22 @@ export function App() {
       {confirmDelete && <ConfirmDelete node={confirmDelete} onConfirm={() => { const id = confirmDelete.id; setConfirmDelete(null); void deleteTreeNode(id); }} onCancel={() => setConfirmDelete(null)} />}
       <SearchPanel open={searchPanelOpen} initialQuery={searchPanelQuery} onOpenNote={(id) => void openNote(id)} onClose={() => setSearchPanelOpen(false)} />
       <TrashPanel open={trashOpen} onClose={() => setTrashOpen(false)} onRestored={() => { void native.listTreeNodes().then(setTreeNodes).catch(() => undefined); void native.listNoteSummaries().then(setNotes).catch(() => undefined); }} />
-      <HistoryPanel open={historyOpen} noteId={historyNoteId} onClose={() => setHistoryOpen(false)} onRestored={() => { void native.listTreeNodes().then(setTreeNodes).catch(() => undefined); void native.listNoteSummaries().then(setNotes).catch(() => undefined); }} />
+      <HistoryPanel open={historyOpen} noteId={historyNoteId} onClose={() => setHistoryOpen(false)} onRestored={(restoredId) => {
+        void native.listTreeNodes().then(setTreeNodes).catch(() => undefined);
+        void native.listNoteSummaries().then(setNotes).catch(() => undefined);
+        // P1：恢复历史后若该文档正开在 tab 里，重载正文 + bump reloadKey 强制重建 Lake 实例。
+        // reloadKey 是 MultiTabEditor 里 EditorTab key 的一部分（{noteId}-{reloadKey}），
+        // bump 后 React 卸载旧实例、用恢复后的 content 重建新实例，保证编辑器显示恢复版。
+        void (async () => {
+          try {
+            const updated = await native.readNote(restoredId);
+            setOpenTabs((tabs) => tabs.map((tab) => tab.noteId === restoredId
+              ? { ...tab, title: updated.title, content: updated.content, dirty: false, reloadKey: (tab.reloadKey ?? 0) + 1 }
+              : tab));
+            revisionRef.current.set(restoredId, (revisionRef.current.get(restoredId) ?? 0) + 1);
+          } catch { /* 文档未打开或读取失败则跳过 */ }
+        })();
+      }} />
       <SyncPanel open={syncPanelOpen} onClose={() => setSyncPanelOpen(false)} onSyncStatusChange={(status) => setSync((current) => ({ ...current, ...status }))} />
       <SettingsPanel open={settingsOpen} settings={settings} onClose={() => setSettingsOpen(false)} onChange={(patch) => saveSettings(patch)} />
     </div>

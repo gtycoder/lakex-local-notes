@@ -11,6 +11,8 @@ export interface TabInfo {
   dirty?: boolean;
   /** 文档自定义图标（emoji） */
   icon?: string | null;
+  /** P1：恢复历史后 bump，强制 EditorTab 重建（key 的一部分） */
+  reloadKey?: number;
 }
 
 interface MultiTabEditorProps {
@@ -323,7 +325,7 @@ export function MultiTabEditor({
       <div className="tab-panels">
         {tabs.length === 0 ? <section className="empty-workspace"><h2>开始写第一篇笔记</h2>{emptyAction}</section> : tabs.map((tab) => (
           <EditorTab
-            key={tab.noteId}
+            key={`${tab.noteId}-${tab.reloadKey ?? 0}`}
             noteId={tab.noteId}
             locked={lockedNoteIds?.has(tab.noteId) ?? false}
             content={contentCache.current.get(tab.noteId) ?? tab.content}
