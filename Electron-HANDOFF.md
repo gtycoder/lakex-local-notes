@@ -1,6 +1,6 @@
 # Lake Notes Electron 会话交接文档
 
-> 写给完全没有上下文的新会话。开始工作前请先通读本文，再查看 `git status`、`git log --oneline master..HEAD`、`docs/TODO.md` 和 `docs/HISTORY-DESIGN.md`。
+> 写给完全没有上下文的新会话。开始工作前请先通读本文，再查看 `git status`、`git log --oneline master..HEAD`、`docs/TODO.md`、`docs/HISTORY-DESIGN.md`、`docs/HISTORY-DESIGN-REVIEW.md`。
 >
 > 本文对应项目：`/Users/admin/file/local-lake/lake-notes-electron`
 
@@ -10,17 +10,17 @@
 | --- | --- |
 | 项目目录 | `/Users/admin/file/local-lake/lake-notes-electron` |
 | Git 远程 | `origin = https://gitee.com/gtycoder/local-lake.git` |
-| 当前分支 | `fix/locked-viewer-text-cache`（含 2 个未合并提交，**未推 master**） |
-| 未合并提交 | `212763a`（锁定态缓存修复）、`f51379b`（软删除+本地回收站） |
-| 下一步主线 | **文档历史（快照）功能**，设计已定稿 `docs/HISTORY-DESIGN.md`，**待实现** |
-| 思源源码参考 | `/Users/admin/file/local-lake/siyuan`（历史/孤儿机制已调研，见设计文档） |
+| 当前分支 | `fix/locked-viewer-text-cache`（含 7 个未合并提交，**未推 master**） |
+| 未合并提交 | `212763a` 锁定缓存 / `f51379b` 回收站 / `b44e207`+`a923ce9`+`7982778` 历史设计 / `34797b3` 历史功能 / `fbef270` P0-1 / `6e70c97` 覆盖提醒 |
+| 待办 | **历史功能已实现，但用户尚未实际测试**，需新会话做完整验收 + 修复 |
+| 思源源码参考 | `/Users/admin/file/local-lake/siyuan`（历史/孤儿机制已调研） |
 | Node | 必须优先使用 Node 24：`$HOME/.nvm/versions/node/v24.18.0/bin` |
 | 开发数据 | `/Users/admin/Library/Application Support/lake-notes-dev`，禁止删除或清理 |
 | 正式数据 | `/Users/admin/Library/Application Support/lake-notes-electron`，禁止触碰 |
 
 ### 绝对不能做的事情
 
-- 不要执行 `git reset`、`git checkout -- .`、`git clean -fd` 等会丢弃工作区的命令（单文件恢复临时改动除外，如 `git diff` 确认后按文件恢复）。
+- 不要执行 `git reset`、`git checkout -- .`、`git clean -fd` 等会丢弃工作区的命令（单文件恢复临时改动除外）。
 - 不要覆盖或删除其他未提交修改；先看 `git status` 和 `git diff`。
 - 不要修改 `node_modules`。
 - 不要删除或直接修改开发/正式用户数据目录（SQLite 只允许只读查询）。
@@ -28,55 +28,52 @@
 - 清理测试笔记必须走应用 UI 删除流程，不能直接改 SQLite，否则可能被 S3 同步恢复。
 - **未验证的代码永远不推 master**：改动先切独立分支，验证通过（单测 + CDP）再合并/提交 master。
 
-## 2. 当前分支未合并内容（待验证/待评审）
+## 2. 当前分支未合并内容（需新会话验收）
 
 ### `212763a` 锁定态文本缓存修复
 - 问题：锁定态（Viewer）无法用 Lake 内核 `getDocument` 生成 md/text 缓存，锁定且从未编辑的文档（含新设备同步下载）在全文搜索/复制 Markdown/导出资料包时正文不可见。
-- 方案（统一索引入口，幂等"缺失才补"）：
-  - `electron/lakeCaches.ts`：Lake 正文(.lake HTML)→markdown/plain 兜底转换（段落/换行/链接/卡片文本保留，不执行卡片 JSON）
-  - `store.ensureNoteCaches`：缓存缺失时从磁盘 .lake 生成；已有不覆盖
-  - `importRemoteNote` 落位后、`rebuildSearchIndex`、`toggleNoteLock`、`handleEditorReady` 四处兜底
-  - `electron/preload.cjs`：暴露 `ensure_note_caches` IPC（**曾漏，修了真实 bug**）
-- 验证：单测 151 全绿、CDP 端到端通过（锁定+无缓存文档搜索正文命中且高亮）。
+- 方案：`electron/lakeCaches.ts`（Lake HTML→md/plain 兜底转换）+ `store.ensureNoteCaches`（幂等"缺失才补"）+ importRemoteNote/rebuildSearchIndex/toggleNoteLock/handleEditorReady 四处兜底 + preload 补 `ensure_note_caches` IPC。
+- 验证：单测 151 全绿、CDP 端到端通过。
 
 ### `f51379b` 软删除 + 本地回收站（不同步）
-- 方案：
-  - `deleteTreeNode` 改软删除：标 `deleted_at` + 保留文件 + 记同步墓碑（远端不复活）
-  - `listTrash` / `restoreTrashItem` / `purgeTrashItem` / `emptyTrash`
-  - 恢复 = 清墓碑 + sync_state='local'（重新上传）；彻底删除 = 删文件 + DB，墓碑保留
-  - IPC + preload + native 桥接；UI：活动栏回收站入口 + `TrashPanel.tsx` 毛玻璃弹层
-- 验证：单测 154 全绿、CDP 端到端通过。
+- `deleteTreeNode` 改软删除（标 `deleted_at` + 保留文件 + 记同步墓碑）；`listTrash`/`restoreTrashItem`/`purgeTrashItem`/`emptyTrash`；恢复=清墓碑+sync_state='local'（重新上传）；彻底删除=删文件+DB+墓碑保留。
+- UI：活动栏回收站入口 + `TrashPanel.tsx` 毛玻璃弹层。
+- 验证：单测 154 全绿、CDP 通过。
 
-> **注意**：历史功能（下一步）依赖 `purgeTrashItem`，实现时要接"历史引用保护"（见设计文档 §10）。
+### `34797b3` 文档历史（快照）功能 ★核心
+- `note_history` 表（refs_json/ref_count/单调 created_at）；`createHistorySnapshot`（gzip + 24h 防抖去重 + 恢复 force 写）；`restoreHistory`（恢复前留档 + 写回 + 缓存/FTS + 重置 sync_base）；`deleteHistory`/`cleanupHistory`（100 份/文档 + 30 天兜底，惰性）；`listNoteOrphans`/`cleanNoteOrphans`（实时解析，被历史引用保护）；`purgeTrashItem` 彻底删连历史一起删。
+- `extractAssetRefs` 公共工具（复用 `referencedFilenames` 正则）。
+- IPC 7 个新 channel + preload + native；UI `HistoryPanel.tsx` 两 tab（文档历史/文档孤儿文件）+ Sidebar 右键"历史版本"。
+- 验证：单测 160 全绿、CDP 端到端通过（快照/恢复/搜索/孤儿/彻底删）。
 
-## 3. 本轮任务目标（下一个会话的主线）
+### `fbef270` P0-1 恢复同步语义（用户既定方案）
+- 用 `last_uploaded_hash` 判定"远端是否本机传的"：
+  - 远端 == 本机最后上传 → 本地为准，上传覆盖（同端更新为主）
+  - 远端 != 本机最后上传（他人改的）→ **接受远端**，本地入历史（远端赢）
+- 不产生冲突副本（历史兜底取代）；`sync_base.last_uploaded_hash` 列 + `setLastUploadedHash`/`lastUploadedHash`。
 
-**实现文档历史（快照）功能**，完整规格见 `docs/HISTORY-DESIGN.md`（263 行，定稿 v2，已与用户充分讨论）。核心要点：
+### `6e70c97` 远端覆盖提醒
+- 接受远端前**强制给本地留历史快照**（不丢）；`SyncResult.supersededNotes` 记录被覆盖文档；SyncPanel 同步后 alert 提醒"远端修改已覆盖本地，本地修改已存入历史"。
 
-- 定期 15 分钟快照（只快照"15 分钟内保存过"的文档）+ 删除/冲突前 + 手动
-- 正文 .lake gzip 存 `history/{noteId}/{ts}-{hash}.lake.gz`，`note_history` 表 + hash 去重
-- 每快照记录 **refs_json**（引用资源清单）+ ref_count（引用数）；**不建计数表/账本表**，删快照/清孤儿时读剩余 refs 合并判定
-- 保留策略：**200 份/文档为主 + 45 天兜底**（用户校准：单文档每日高频编辑 ~2h → 8 份/天 → 200 份 ≈ 25 天窗口）；惰性清理（创建快照后检查）
-- 自动清理时**历史未引用资源立即物理删**（方案 A，用户确认）
-- **快照边界**：打开未编辑/只读打开关闭/锁切换重建 均不产生快照；**编辑后锁定 15 分钟内仍会产生快照**（dirty 由 saveNote 落盘驱动，与锁状态解耦）
-- 孤儿文件 tab 的**顺序**：默认先展示历史快照 tab，删快照后**立即重算**孤儿列表（避免漏删）
-- UI：文档右键"历史版本"→ HistoryPanel 两 tab（历史快照 / 文档孤儿文件）；全部清理放设置
-- 同步：历史纯本地；恢复后 sync_state='local' 重新上传
-- 性能实测：解压+解析 1.34ms/篇；全量清理 1000 文档×50 快照 ≈ 62ms，极端 10000 文档 ≈ 0.56s
+## 3. 当前问题 / 状态
 
-实现顺序见设计文档 §13（10 步）。单测 + CDP 验证后再考虑合并。
+- **历史功能已实现但用户未实际测试**（用户原话："我都没有测试，可能还有问题修改"）——**新会话首要任务：完整验收历史功能 + 修复发现的问题**。
+- **工作区干净**（仅 `Electron-HANDOFF.md.bak-*` 备份未跟踪，可忽略/删除）。
+- master 未动，7 个提交都在 `fix/locked-viewer-text-cache` 分支。
 
-## 4. 关键架构（保留，新会话必须理解）
+## 4. 关键架构（新会话必须理解）
 
 ### 4.1 进程结构
 
 ```
 Electron 主进程 (electron/main.ts)
 ├── Store (electron/store.ts)：Lake 正式笔记 better-sqlite3 + 文件系统
-├── QuickNotesStore (electron/quickNotes.ts)：小记专属（独立，历史不涉及）
+│     ├── 含历史（note_history/history/ 目录）、回收站（deleted_at/墓碑）、孤儿（orphan_assets）
+│     └── sync_base（content_hash 基线 + last_uploaded_hash）
+├── QuickNotesStore (electron/quickNotes.ts)：小记专属（独立）
 ├── assetServer (electron/assetServer.ts)：本地图片服务器 :19876
-├── sync (electron/sync.ts)：Lake Manifest v2 S3 同步
-└── IPC：Lake CRUD/tree/资源/S3
+├── sync (electron/sync.ts)：Lake Manifest v2 S3 同步（P0-1 last_uploaded_hash 冲突判定）
+└── IPC：Lake CRUD/tree/资源/S3/历史
 Preload (electron/preload.cjs)：contextBridge 暴露 window.lakeNative
 └── 渲染进程 (React + Lake 编辑器)
 ```
@@ -85,114 +82,107 @@ Preload (electron/preload.cjs)：contextBridge 暴露 window.lakeNative
 
 | 文件 | 说明 |
 |---|---|
-| `electron/store.ts` | Lake 后端：notes/tree_nodes/device_state/settings/orphan_assets/deleted_notes/sync_base + 文件；**历史功能主要改这里** |
-| `electron/sync.ts` | S3 同步（内容寻址 `objects/{hash}.lake`，只上传最新版；孤儿跳过） |
-| `electron/lakeCaches.ts` | Lake 正文→md/plain 兜底转换（上一会话新增） |
-| `electron/preload.cjs` | 原生 CJS，暴露 lakeNative（IPC 桥） |
-| `electron/main.ts` | IPC 注册、窗口、asset server |
-| `src/App.tsx` | 主应用（多 Tab、侧边栏、状态胶囊、活动栏含回收站入口） |
-| `src/components/Sidebar.tsx` | 树渲染、文档右键菜单（历史入口要加这里） |
-| `src/components/TrashPanel.tsx` | 回收站毛玻璃弹层（**HistoryPanel 仿此写**） |
-| `src/components/SearchPanel.tsx` | 搜索弹层（样式参考） |
-| `src/lib/native.ts` | 前端 IPC 封装 + 类型 |
-| `src/features/editor/lakeRuntime.ts` | Lake 编辑器创建（虚拟渲染/TOC/卡片水合） |
-| `src/styles.css` | 全部 UI 样式（毛玻璃弹窗族 `.trash-panel` 等） |
-| `docs/HISTORY-DESIGN.md` | **历史功能完整设计（下一会话的主文档）** |
+| `electron/store.ts` | Lake 后端：notes/tree_nodes/orphan_assets/deleted_notes/sync_base/**note_history**；历史/回收站/孤儿核心逻辑 |
+| `electron/sync.ts` | S3 同步（内容寻址、last_uploaded_hash 冲突判定、supersededNotes 提醒） |
+| `electron/lakeCaches.ts` | Lake 正文→md/plain 兜底转换 |
+| `electron/preload.cjs` | 原生 CJS 桥（IPC 三处之一） |
+| `electron/main.ts` | IPC 注册 |
+| `src/App.tsx` | 主应用（活动栏回收站入口、历史面板状态） |
+| `src/components/Sidebar.tsx` | 树渲染、文档右键（历史版本入口） |
+| `src/components/HistoryPanel.tsx` | 历史面板两 tab（文档历史/文档孤儿文件） |
+| `src/components/TrashPanel.tsx` | 回收站弹层 |
+| `src/components/SyncPanel.tsx` | 同步面板（含 supersededNotes 提醒） |
+| `src/lib/native.ts` | 前端 IPC 封装（IPC 三处之二） |
+| `src/lib/types.ts` | 共享类型（SyncResult.supersededNotes） |
+| `docs/HISTORY-DESIGN.md` | 历史功能设计（定稿 v2+评审修复） |
+| `docs/HISTORY-DESIGN-REVIEW.md` | 评审意见（P0-1/P0-2/P0-3 + P1×7 + P2×6） |
 
-### 4.3 资源管理（历史功能的关键依赖）
+### 4.3 资源管理（历史/孤儿关键）
 
-- 资源存 `note-assets/{noteId}/{filename}`（`{13位时间戳}_{8位随机}.{ext}`，文件名全局唯一）。
-- `referencedFilenames(noteId, content)`（`store.ts:949`）：正则 `\d{13}_[0-9a-f]{8}\.(?:png|jpg|jpeg|gif|webp|avif)` 从正文提取引用。
-- `orphan_assets` 表：未被正文引用的资源（`detectOrphans` 保存时对账；`cleanOrphanAssets` 清理）。
-- 同步上传时跳过孤儿（`sync.ts` 的 `orphans` Set）。
-- **历史功能要接这套机制**：被历史引用的资源不删（实时解析判定），自动清理时无引用物理删。
+- 资源存 `note-assets/{noteId}/{filename}`（`{13位时间戳}_{8位随机}.{ext}`，全局唯一）。
+- `extractAssetRefs`（`store.ts` 顶部公共函数）：正则 `\d{13}_[0-9a-f]{8}\.(?:png|jpg|jpeg|gif|webp|avif)` 从正文提取引用。
+- `orphan_assets` 表：未被正文引用的资源；`detectOrphans` 保存时对账；`cleanOrphanAssets` 全局清理（SyncPanel）。
+- `listNoteOrphans`/`cleanNoteOrphans`：文档级，实时解析（当前正文 + 历史 refs），被历史引用保护。
 
-### 4.4 思源历史机制（已调研，供对照）
+### 4.4 历史功能核心设计（速览）
 
-- 定时 10min + 操作触发，文件级快照到 `history/{ts}-{op}/`，30 天保留（`clearOutdatedHistoryDir`）。
-- 清理未引用资源 = **先复制进历史（HistoryOpClean）再物理删**（`RemoveUnusedAssets`）。
-- 我们的方案**更优**（资源不复制，实时解析引用），但保留了"历史未引用即删"语义。
+- 快照：定期 15 分钟（只快照"15 分钟内保存过"的文档）+ 删除/冲突前 + 手动。
+- 存储：`history/{noteId}/{ts}-{hash}.lake.gz` + `note_history` 表（refs_json/ref_count）。
+- 保留：100 份/文档 + 30 天兜底，惰性清理。
+- 资源：不复制，refs_json 记录引用；删历史后重算孤儿。
+- 恢复：重置 sync_base（P0-1）；恢复前强制留档。
+- 同步：历史纯本地；远端覆盖本地时强制留档 + supersededNotes 提醒。
 
-## 5. 当前问题 / 状态
+## 5. 下一步计划（新会话）
 
-- **工作区**：`docs/HISTORY-DESIGN.md` 未提交（新文件）；分支 2 个提交未合并。
-- **无未完成的中断工作**：上一会话的锁定缓存 + 回收站均已验证通过。
-- **下一步**：按 `docs/HISTORY-DESIGN.md` §13 实现历史功能。
-- **已知取舍**（用户已接受）：
-  - 编辑器内纯文本 emoji 保持 Lake 原生（不做放大，会污染 .lake）。
-  - 历史资源不复制 → 用户手动删 note-assets 文件（绕过应用）会导致回滚裂图（接受）。
+1. **验收历史功能**（首要）：用户尚未测试。按 `docs/HISTORY-DESIGN.md` §12 测试要点 + 真实 UI 操作：
+   - 创建文档 → 编辑 → 15 分钟/手动快照 → 历史列表 → 预览/恢复 → 孤儿清理 → 彻底删除
+   - 锁定/只读/编辑切换边界（不产生垃圾快照）
+   - 恢复后搜索/导出/同步状态
+2. **验收 P0-1**：`last_uploaded_hash` 冲突判定（单测已覆盖 2 场景，需真实同步验证——可配测试 S3 或 mock）。
+3. **验收回收站 + 锁定缓存**：确认无回归。
+4. **常规回归**：导出三格式、全文搜索（含 2 字）、图标、tab、侧栏/大纲、锁定切换。
+5. **后续待办**（docs/TODO.md）：
+   - Word/PDF 导出（`electron/export.ts` 已收口）
+   - 全文搜索 2 字以内回退
+   - **M5 流畅性优化**（用户强调重点工作：TreeRow memo、树虚拟化、保存 debounce、图片懒加载）
+6. **分支合并**：验收通过后，与用户确认合并 `fix/locked-viewer-text-cache` → master。
 
 ## 6. 踩过的坑（务必记住）
 
 ### 本会话新增
 
-1. **CDP 调试 Electron**：`./node_modules/.bin/electron --remote-debugging-port=9333 .`（参数必须在 `.` 前）；项目有单实例锁不能双开。
-2. **vite.config.ts 临时补丁**：CDP 调试时给 electron 插件项加 `onstart: () => {}` 禁用自动拉起 Electron（会抢锁/无 CDP），**验证后必须恢复**。当前分支此补丁已还原（`git status` 应无 vite.config.ts 改动）。
-3. **vite dev server 会被 exec 会话回收**：用长驻 tty 会话（`exec_command` tty=true）保持；nohup 后台启动 Electron 会被 macOS 回收（**必须前台 tty 启动**）。
-4. **CDP 截图超时**：Electron 窗口未激活时 `Page.captureScreenshot` 会挂起 → 先 `Page.setWebLifecycleState{state:"active"}` + `Emulation.setFocusEmulationEnabled{enabled:true}`。
-5. **Python 手写 WebSocket CDP 客户端有 bug**（帧解析/握手），**用 Node 原生 WebSocket**（Node 22+ 全局 `WebSocket`）写 CDP 脚本最稳。模板见 §8。
-6. **preload 桥漏方法**：`src/lib/native.ts` 声明了 `ensureNoteCaches` 但 `electron/preload.cjs` 没暴露 → 运行时 `native.xxx is not a function`。**每加一个 IPC 方法，要同步改 main.ts + preload.cjs + native.ts 三处**，用 §8 的 channel 对比脚本校验。
-7. **createPortal 括号闭合**：写弹层组件时 `createPortal(` 的 `, document.body)` 易漏，tsc 报"Expected 2-3 arguments, but got 1"。
-8. **window.confirm 类型**：项目里 `window.confirm` 类型声明要求 2-3 参数，用 `(window as any).confirm` 绕过。
-9. **emptyTrash 重复删**：`listTrash()` 快照里父子项都在，逐项 purge 会重复删已连带删除的子项 → 只 purge 顶级（无被删父节点的）。
-10. **`.lake` 是扁平 HTML**（`<p><span data-lake-id>…</span></p>`，卡片 `<card name=... value="data:JSON">`），**无块级结构，无法做结构化增量**——历史用全量 gzip。
+1. **CDP 调试 Electron**：`./node_modules/.bin/electron --remote-debugging-port=9333 .`（参数必须在 `.` 前）；单实例锁不能双开。
+2. **vite.config.ts 临时补丁**：CDP 调试时加 `onstart: () => {}` 禁自动拉起，**验证后必须还原**（当前已还原）。
+3. **vite dev server 会被 exec 会话回收**：用长驻 tty（`exec_command` tty=true）；nohup 后台 Electron 会被 macOS 回收（必须前台 tty）。
+4. **CDP 截图超时**：窗口未激活时 `Page.captureScreenshot` 挂起 → 先 `Page.setWebLifecycleState` + focus emulation。
+5. **Python 手写 WebSocket CDP 客户端有 bug**，用 **Node 原生 WebSocket**（Node 22+ 全局 `WebSocket`）写 CDP 脚本最稳（模板见 §8）。
+6. **preload 桥漏方法**：`src/lib/native.ts` 声明了但 `electron/preload.cjs` 没暴露 → 运行时 `native.xxx is not a function`。**每加 IPC 方法要同步改 main.ts + preload.cjs + native.ts 三处**，用 channel 对比脚本校验。
+7. **createPortal 括号闭合**：`createPortal(` 的 `, document.body)` 易漏，tsc 报 "Expected 2-3 arguments, but got 1"。
+8. **window.confirm 类型**：项目里 `window.confirm` 类型要求 2-3 参数，用 `(window as any).confirm`。
+9. **emptyTrash 重复删**：`listTrash()` 快照父子项都在，逐项 purge 会重复删 → 只 purge 顶级（无被删父节点的）。
+10. **`.lake` 是扁平 HTML**（`<p><span data-lake-id>…</span></p>`，卡片 `<card value="data:JSON">`），无块级结构，无法结构化增量——历史用全量 gzip。
+11. **gzip 解压性能无风险**：解压+解析 ~1.34ms/篇；全量 1000 文档×50 快照 ≈ 62ms。
+12. **UNIQUE(note_id, content_hash) 会让恢复前留档被跳过**（P0-2）→ 去 UNIQUE，24h 防抖 + 恢复 force 写。
+13. **created_at 单调**：同毫秒多条快照会撞/排序不稳定 → 若与上条同毫秒 +1ms。
+14. **sync 测试 FakeStore 需补方法**：加 `setLastUploadedHash`/`lastUploadedHash`/`createHistorySnapshot` 到 mock。
+15. **P0-1 曾误用保守 setBaseHash 方案**（因怕破坏冲突测试擅自降级）——**用户明确要 last_uploaded_hash 方案，最终已按既定方案修正**。教训：用户确认的方案不要擅自降级。
 
 ### 既有（保留，来自更早会话）
 
-11. **保存时用 Lake 内核生成文本缓存，不要自研 .lake 解析器**（`getDocument` 性能极好）。
-12. **Lake 导出 MD 会保留 `<font>/<span>` 内联样式**，需 `cleanLakeMarkdown` 剥标签（跳过代码块）。
-13. **html 图片正则捕获组贪婪陷阱**：用 `[^/"\s]+` 而非 `([^/]+)`。
-14. **FTS5 trigram**：1-2 字查不到，需标题 LIKE 回退；MATCH 查询串逐词加引号转义。
-15. **flex column + 无 `flex:none` 会把子项压扁**：滚动容器要 `flex:1 1 auto; min-height:0`，固定项 `flex:none`。
-16. **macOS 关窗口 ≠ 退出应用**（隐藏 Dock）；排查"改动没生效"先确认进程全新（`ps aux | grep "Electron \."`）。
-17. **思源 pinned tab 的 X 是隐藏不是禁用**；关闭全部跳过 pinned，右键"关闭"可直接关。
-18. **icon 同步**：`tree_nodes.icon` 不在 notes 表，`listNotesForSync` 要 JOIN tree_nodes；manifest 加可选字段不升版本。
-19. **Lake emoji 资源提取**：`src/lib/lakeEmojis.ts`/`lakeEmojiGroups.ts` 自动生成，勿手改。
-20. **React StrictMode 双挂载**：cleanup 不能把 host/mount 从 DOM 拔掉。
-21. **大 chunk 警告不是失败**；"关闭再打开后恢复"不等于已解决（水合路径要验证）。
+16. **保存时用 Lake 内核生成文本缓存，不要自研 .lake 解析器**（`getDocument` 性能极好）。
+17. **Lake 导出 MD 保留 `<font>/<span>` 内联样式**，需 `cleanLakeMarkdown` 剥标签（跳过代码块）。
+18. **html 图片正则贪婪陷阱**：用 `[^/"\s]+` 而非 `([^/]+)`。
+19. **FTS5 trigram**：1-2 字查不到，需标题 LIKE 回退。
+20. **flex column + 无 `flex:none` 子项压扁**：滚动容器 `flex:1 1 auto; min-height:0`，固定项 `flex:none`。
+21. **macOS 关窗口 ≠ 退出应用**；排查"改动没生效"先确认进程全新。
+22. **思源 pinned tab 的 X 是隐藏不是禁用**。
+23. **icon 同步**：`tree_nodes.icon` 不在 notes 表，`listNotesForSync` 要 JOIN tree_nodes。
+24. **React StrictMode 双挂载**：cleanup 不能把 host/mount 从 DOM 拔掉。
+25. **大 chunk 警告不是失败**。
 
-## 7. 下一步计划
-
-1. **实现文档历史**（主线）：按 `docs/HISTORY-DESIGN.md` §13 顺序：
-   - `note_history` 表 + 迁移 → `extractAssetRefs` 公共工具 → 快照 CRUD → 保留策略/自动清理 → 孤儿列表/清理 → `purgeTrashItem` 接历史保护 → IPC/preload/native → HistoryPanel UI → 单测 + CDP
-2. **常规回归**（动代码前/后）：导出三种格式、全文搜索（含 2 字）、图标设置/同步、tab 钉住/拖拽调宽、侧边栏/大纲折叠悬浮、锁定切换、回收站恢复/彻底删除。
-3. **待办（docs/TODO.md）**：
-   - Word / PDF 导出（`electron/export.ts` 已收口，PDF 可走 `printToPDF`）
-   - 全文搜索 2 字以内回退（trigram 最小 3 字符，需 LIKE 回退）
-   - **M5 借鉴与流畅性**（模板/日记挑 1-2 项；TreeRow memo、树虚拟化、保存 debounce、图片懒加载）——用户强调流畅性优化是重点工作。
-4. 未合并分支（`fix/locked-viewer-text-cache`）**待评审**：锁定缓存 + 回收站，验证充分后可考虑合并 master（先用户确认）。
-
-## 8. 关键命令
+## 7. 关键命令
 
 ```bash
 export PATH="$HOME/.nvm/versions/node/v24.18.0/bin:$PATH"
 cd /Users/admin/file/local-lake/lake-notes-electron
 npx tsc --noEmit
-npm test -- --run        # 154 个测试
+npm test -- --run        # 161 个测试
 node node_modules/vite/bin/vite.js build
 git diff --check
 ```
 
-启动开发版（vite dev 自动拉起 Electron）：
+启动开发版：`npm run dev`（vite 1421 + 自动拉起 Electron）。
+
+CDP 调试（前台 tty；先加 `onstart: () => {}` 临时补丁，验证后还原）：
 
 ```bash
-export PATH="$HOME/.nvm/versions/node/v24.18.0/bin:$PATH"
-cd /Users/admin/file/local-lake/lake-notes-electron
-npm run dev              # vite 1421 + vite-plugin-electron 自动拉起 dev Electron
-```
-
-CDP 调试启动（**必须前台 tty**；先在 vite.config.ts 加 `onstart: () => {}` 临时补丁禁自动拉起，验证后还原）：
-
-```bash
-# 终端 1（tty 长驻）：临时补丁后
 node node_modules/vite/bin/vite.js --host 127.0.0.1 --port 1421
-# 终端 2（tty 长驻）：
 ./node_modules/.bin/electron --remote-debugging-port=9333 .
-# 然后：
 curl -s http://127.0.0.1:9333/json | python3 -c "import json,sys; print([t for t in json.load(sys.stdin) if t['type']=='page'][0]['webSocketDebuggerUrl'])"
 ```
 
-Node CDP 脚本模板（最稳，Node 22+ 全局 WebSocket，存 /tmp/cdp.mjs）：
+Node CDP 脚本模板（存 /tmp/cdp.mjs，Node 22+ 全局 WebSocket）：
 
 ```js
 const ws = new WebSocket(process.argv[2]);
@@ -215,9 +205,7 @@ ws.onerror = (e) => { console.log("WS error", e.message); process.exit(1); };
 ws.onmessage = (ev) => { const d = JSON.parse(ev.data); if (d.id && pending.has(d.id)) { pending.get(d.id).resolve(d); pending.delete(d.id); } };
 ```
 
-用法：`node /tmp/cdp.mjs "ws://127.0.0.1:9333/devtools/page/XXXX" '(() => ({ ready: !!window.lakeNative, title: document.title }))()'`
-
-IPC channel 对比（加方法后校验 preload/main 一致）：
+IPC channel 对比：
 
 ```bash
 grep -o 'invoke("[a-z_]*"' electron/preload.cjs | sed 's/invoke("//;s/"//' | sort > /tmp/p.txt
@@ -229,24 +217,25 @@ comm -3 /tmp/p.txt /tmp/m.txt
 
 ```bash
 DB="/Users/admin/Library/Application Support/lake-notes-dev/workspace-default/metadata.sqlite3"
-sqlite3 "$DB" "SELECT id, title, parent_id, node_type, icon FROM tree_nodes WHERE deleted_at IS NULL;"
+sqlite3 "$DB" "SELECT id, title, deleted_at FROM tree_nodes;"
+sqlite3 "$DB" "SELECT note_id, created_at, size, ref_count FROM note_history ORDER BY created_at DESC LIMIT 20;"
 ```
 
-## 9. 关键排查文件
+## 8. 关键排查文件
 
 ```text
-docs/HISTORY-DESIGN.md             # ★ 历史功能完整设计（下一会话主文档）
-electron/store.ts                  # Lake 后端（历史/孤儿/回收站/缓存主要改这里）
-electron/lakeCaches.ts             # Lake 正文→md/plain 兜底（上一会话新增）
+docs/HISTORY-DESIGN.md             # 历史功能完整设计（含评审修复）
+docs/HISTORY-DESIGN-REVIEW.md      # 评审意见（P0/P1/P2）
+electron/store.ts                  # 历史/回收站/孤儿/缓存核心
+electron/sync.ts                   # S3 同步 + P0-1 冲突判定 + supersededNotes
+electron/lakeCaches.ts             # Lake→md/plain 兜底
+electron/preload.cjs               # IPC 桥
 electron/main.ts                   # IPC 注册
-electron/preload.cjs               # 原生 CJS 桥（IPC 三处之一）
-electron/sync.ts                   # S3 同步（孤儿跳过、内容寻址）
-src/App.tsx                        # 主应用（活动栏回收站入口、状态胶囊）
-src/components/Sidebar.tsx         # 树渲染、文档右键（历史入口加这里）
-src/components/TrashPanel.tsx      # 回收站弹层（HistoryPanel 仿此）
-src/components/SearchPanel.tsx     # 搜索弹层（样式参考）
-src/styles.css                     # 全部 UI 样式（毛玻璃弹窗族）
-src/lib/native.ts                  # 前端 IPC 封装（IPC 三处之二）
+src/components/HistoryPanel.tsx    # 历史面板（两 tab）
+src/components/TrashPanel.tsx      # 回收站面板
+src/components/SyncPanel.tsx       # 同步面板（superseded 提醒）
+src/App.tsx                        # 主应用（活动栏回收站、历史状态）
+src/lib/native.ts / types.ts       # IPC 封装 + 类型
 docs/TODO.md                       # 待办
 docs/ARCHITECTURE.md               # 架构总览
 ```
