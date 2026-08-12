@@ -137,12 +137,21 @@ const BoardCardEditor = React.forwardRef<HTMLDivElement, ICardProps<IBoardCardVa
               initialLanguage="zh"
               onChange={(data) => {
                 const before = getLakeScrollTop(guardRef.current || document.body);
-                updateCardValue({
-                  ...cardValue,
-                  elements: data.children,
-                  viewport: data.viewport,
-                  theme: data.theme,
-                });
+                // Drawnix 的 onChange 对"纯视口变化（平移/缩放画布）"也会触发，
+                // 且 data 里携带新的 viewport。viewport 是运行时视口状态，
+                // 不应持久化到卡片值（否则平移/缩放画布会触发 Lake contentchange
+                // → 保存 → 15 分钟自动快照，产生无意义快照）。思维导图无此问题
+                // 因为它的视口是内部状态不落盘。
+                // 修复：仅当 elements 真正变化（增删/移动/改内容）才 updateCardValue，
+                // 且不再持久化 viewport（初始 zoom 已在卡片值里，运行时变化忽略）。
+                const elementsChanged = JSON.stringify(data.children) !== JSON.stringify(cardValue.elements);
+                if (elementsChanged) {
+                  updateCardValue({
+                    ...cardValue,
+                    elements: data.children,
+                    theme: data.theme,
+                  });
+                }
                 notifyLakeBoardChange(guardRef.current || document.body, before);
               }}
             />
