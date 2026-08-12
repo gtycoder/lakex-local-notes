@@ -54,6 +54,8 @@ export interface SyncResult {
   manifestId: string; completedAt: string;
   /** 小记是独立同步空间，失败不会否定 Lake 文档本身的同步结果。 */
   quickNotes?: QuickNotesSyncStatus;
+  /** 本地修改被远端覆盖、已存入历史的文档（用于 UI 提醒） */
+  supersededNotes: Array<{ id: string; title: string }>;
 }
 
 /** 同步进度事件（主进程 → 渲染进程） */
@@ -154,6 +156,7 @@ export async function syncNow(store: Store, onProgress?: (p: SyncProgress) => vo
   // 2. 下载阶段：远端有而本地缺失/不同的笔记
   let downloaded = 0;
   let conflicts = 0;
+  const supersededNotes: Array<{ id: string; title: string }> = [];
   if (remoteManifest) {
     // 本地已删除笔记的墓碑（下载阶段生效：本地删除优先，不重新拉取）
     const tombstoned = new Set(store.listDeletedNotesForSync().map((d) => d.id));
@@ -247,7 +250,9 @@ export async function syncNow(store: Store, onProgress?: (p: SyncProgress) => vo
         continue;
       } else if (localChanged) {
         // 远端是其他设备改的（或本机从未上传过该文档）→ 接受远端最新，
-        // 本地当前内容已被历史兜底（恢复动作留档 / 编辑前快照），不产生冲突副本
+        // 本地当前内容**强制留快照**（确保不丢，即使未到 15 分钟周期）后入历史。
+        // 记录 supersededNotes 供 UI 提醒"远端修改已存入历史"。
+        try { store.createHistorySnapshot(rn.id, undefined, true); } catch { /* 留档失败不阻断同步 */ }
         const merged = local
           ? mergeLockState(!!local.isLocked, local.lockedAt ?? null, !!rn.isLocked, rn.lockedAt ?? null)
           : { locked: !!rn.isLocked, at: rn.lockedAt ?? null };
@@ -257,6 +262,7 @@ export async function syncNow(store: Store, onProgress?: (p: SyncProgress) => vo
           lakeBytes, assets
         );
         store.setBaseHash(rn.id, rn.contentHash);
+        supersededNotes.push({ id: rn.id, title: rn.title });
         downloaded += 1;
       } else {
         // 正文下载后锁按 LWW 合并：本地刚改的锁不被远端旧状态覆盖
@@ -366,7 +372,7 @@ export async function syncNow(store: Store, onProgress?: (p: SyncProgress) => vo
     store.setBaseHash(note.id, note.contentHash);
     store.markSynced(note.id);
   }
-  const result: SyncResult = { uploaded, downloaded, conflicts, manifestId: commitId, completedAt };
+  const result: SyncResult = { uploaded, downloaded, conflicts, manifestId: commitId, completedAt, supersededNotes };
   store.markSyncComplete(completedAt);
   store.recordSyncResult(JSON.stringify(result));
 

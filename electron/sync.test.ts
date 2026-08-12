@@ -84,6 +84,7 @@ class FakeStore {
   deleted = new Map<string, { id: string; title: string; parentId: string | null; sortOrder: number; updatedAt: string; deletedAt: string }>();
   baseHashes = new Map<string, string>();
   lastUploadedHashes = new Map<string, string>();
+  historySnapshots: string[] = [];
   orphans = new Set<string>();
   syncedAt: string | null = null;
   lastResult: unknown = null;
@@ -132,6 +133,12 @@ class FakeStore {
   // P0-1：last_uploaded_hash（本机最后一次上传的 hash）
   lastUploadedHash(id: string) { return this.lastUploadedHashes.get(id) ?? null; }
   setLastUploadedHash(id: string, hash: string) { this.lastUploadedHashes.set(id, hash); }
+  // 历史快照（sync 接受远端时强制留档；FakeStore 用内存记录）
+  createHistorySnapshot(noteId: string, _content?: string, _force?: boolean) {
+    this.historySnapshots = this.historySnapshots || [];
+    this.historySnapshots.push(noteId);
+    return this.historySnapshots.length;
+  }
   markSynced() {}
   setNoteLocked(id: string, locked: boolean) {
     const n = this.notes.get(id);
@@ -246,6 +253,9 @@ describe("syncNow 增量同步", () => {
     expect(fs.readFileSync(store.notePathFor("n1"), "utf8")).toBe("<p>v2 remote</p>");
     // 同步基线更新到远端
     expect(store.baseHash("n1")).toBe(remoteHash);
+    // 本地被覆盖前强制留档 + supersededNotes 记录（UI 提醒用）
+    expect(store.historySnapshots).toContain("n1");
+    expect(r.supersededNotes.some((n) => n.id === "n1")).toBe(true);
   });
 
   it("远端是本机传的 → 本地为准，上传覆盖（P0-1 既定方案）", async () => {

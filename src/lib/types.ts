@@ -74,6 +74,8 @@ export interface SyncResult {
   completedAt: string;
   /** 小记失败不否定 Lake 同步成功。 */
   quickNotes?: QuickNotesSyncStatus;
+  /** 本地修改被远端覆盖、已存入历史的文档（用于 UI 提醒） */
+  supersededNotes: Array<{ id: string; title: string }>;
 }
 
 export interface SyncProgress {

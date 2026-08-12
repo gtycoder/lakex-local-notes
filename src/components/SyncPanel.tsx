@@ -89,6 +89,13 @@ export function SyncPanel({ open, onClose, onSyncStatusChange }: SyncPanelProps)
         : result.quickNotes ? `；小记：上传 ${result.quickNotes.uploaded}，下载 ${result.quickNotes.downloaded}，冲突 ${result.quickNotes.conflicts}` : "";
       const resultMessage = `同步完成：${lakeMessage}${quickMessage}`;
       setMessage(resultMessage);
+      // 远端修改覆盖本地、已存入历史 → 提醒用户（跨设备场景）
+      if (result.supersededNotes && result.supersededNotes.length > 0) {
+        const titles = result.supersededNotes.slice(0, 5).map((n) => `「${n.title}」`).join("、");
+        const more = result.supersededNotes.length > 5 ? ` 等 ${result.supersededNotes.length} 篇` : "";
+        (window as any).alert(`检测到远端修改已覆盖本地：${titles}${more}。
+本地修改已存入该文档的历史版本，可在"历史版本"中找回。`);
+      }
       // 小记失败是独立空间的局部错误；Lake 同步仍应明确展示成功。
       setStatus(result.quickNotes?.error ? "error" : "ok");
       onSyncStatusChange?.({ phase: "success", message: resultMessage });
