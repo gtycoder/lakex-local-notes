@@ -162,6 +162,7 @@ export async function syncQuickNotes(
   log.quick.info(`[perf] quick download phase ${Date.now() - quickStart}ms (downloaded=${downloaded}, conflicts=${conflicts})`);
 
   const localItems = quickNotes.listQuickNotesForSync();
+  const remoteItemsById = new Map((remoteManifest?.items ?? []).map((item) => [item.id, item]));
   const remoteHashes = new Map<string, string>((remoteManifest?.items ?? []).filter((item) => !item.deleted).map((item) => [item.id, item.contentHash]));
   const remoteAssetHashes = new Map<string, string>();
   for (const item of remoteManifest?.items ?? []) {
@@ -176,6 +177,16 @@ export async function syncQuickNotes(
     const item = localItems[index];
     const itemUploadStart = Date.now();
     report({ phase: "quick-notes", current: index + 1, total: localItems.length, message: "上传本地小记" });
+    // 增量扫描优化（与 Lake 一致）：synced 且远端条目 hash 与本地索引一致 → 跳过 .qnote/图片读取，
+    // 复用远端 assets（正文未变 ⇒ 图片引用未变）。非 synced 路径保留"索引与内容不一致则抛错"完整性校验。
+    const remoteEntry = remoteItemsById.get(item.id);
+    if (item.syncState === "synced" && remoteEntry && !remoteEntry.deleted && remoteEntry.contentHash === item.contentHash) {
+      manifestItems.push({
+        id: item.id, createdAt: item.createdAt, updatedAt: item.updatedAt,
+        contentHash: item.contentHash, isConflict: item.isConflict, assets: remoteEntry.assets ?? [],
+      });
+      continue;
+    }
     const contentPath = quickNotes.quickNotePathFor(item.id);
     const content = fs.readFileSync(contentPath);
     const contentHash = sha256Hex(content);

@@ -7,6 +7,8 @@ import { useFloatingDialog } from "./useFloatingDialog";
 export interface TrashItem {
   id: string; title: string; nodeType: string; noteFileId: string | null;
   parentId: string | null; deletedAt: string; updatedAt: string; hasFile: boolean;
+  /** 收到其他设备 purge 墓碑后被抑制的本地副本（保留可恢复、不上传） */
+  purged?: boolean;
 }
 
 export function TrashPanel({ open, onClose, onRestored }: {
@@ -107,7 +109,7 @@ export function TrashPanel({ open, onClose, onRestored }: {
           <button className={`trash-tab ${tab === "docs" ? "active" : ""}`} onClick={() => setTab("docs")}>文档</button>
           <button className={`trash-tab ${tab === "quick" ? "active" : ""}`} onClick={() => setTab("quick")}>小记</button>
         </div>
-        <p className="trash-panel-hint">回收站仅保存在本地，不参与同步。恢复后的文档会重新参与同步。</p>
+        <p className="trash-panel-hint">回收站随云同步到所有设备。其他设备彻底删除的条目仍保留在本端（标"已彻底删除"），可恢复。</p>
         {error && <div className="trash-error">{error}</div>}
         <div className="trash-list" style={{ display: tab === "docs" ? undefined : "none" }}>
           {loading && <div className="trash-empty-hint">加载中…</div>}
@@ -119,6 +121,7 @@ export function TrashPanel({ open, onClose, onRestored }: {
                 <div className="trash-item-title">{item.title || "无标题"}</div>
                 <div className="trash-item-meta">
                   {item.nodeType === "note" ? "文档" : "目录"}
+                  {item.purged ? " · 已被其他设备彻底删除（可恢复）" : ""}
                   {item.noteFileId && item.hasFile ? "" : item.nodeType === "note" ? " · 正文已删" : ""}
                   {" · "}{new Date(item.deletedAt).toLocaleString()}
                 </div>

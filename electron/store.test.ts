@@ -350,7 +350,7 @@ describe("目录树操作", () => {
     expect(r.some((x) => x.id === n2.id)).toBe(false);
   });
 
-  it("deleteTreeNode 软删除：树隐藏、文件保留、记墓碑（回收站本地）", () => {
+  it("deleteTreeNode 软删除 = 移入回收站笔记本：树隐藏、文件保留、不写墓碑、进同步列表", () => {
     const nb = store.createNotebook("待删");
     const group = store.createGroup(nb.id, "组");
     const note = store.createNoteIn(group.id, "子笔记");
@@ -362,39 +362,51 @@ describe("目录树操作", () => {
     expect(fs.existsSync(lakePath)).toBe(true);
 
     store.deleteTreeNode(nb.id);
-    // 树不再显示（软删除）
+    // 树不再显示（trash 子树从侧栏排除）
     expect(store.listTreeNodes().some((n) => n.id === nb.id)).toBe(false);
     expect(store.listTreeNodes().some((n) => n.id === note.id)).toBe(false);
     // 文件保留（可恢复）
     expect(fs.existsSync(lakePath)).toBe(true);
     expect(fs.existsSync(assetDir)).toBe(true);
-    // 墓碑记录（同步传播删除，远端不复活）
-    expect(store.listDeletedNotesForSync().some((d) => d.id === note.id)).toBe(true);
-    // 回收站列出
+    // 软删不写墓碑（回收站条目是普通条目，移动即同步传播）
+    expect(store.listDeletedNotesForSync().some((d) => d.id === note.id)).toBe(false);
+    // 回收站列出：只列 trash 笔记本直接子节点（文件夹整体），子笔记不单独列
     const trash = store.listTrash();
     expect(trash.some((t) => t.id === nb.id && t.nodeType === "notebook")).toBe(true);
-    expect(trash.some((t) => t.id === note.id && t.nodeType === "note")).toBe(true);
-    // 软删除后同步不返回该笔记
-    expect(store.listNotesForSync().some((n) => n.id === note.id)).toBe(false);
+    expect(trash.some((t) => t.id === note.id)).toBe(false);
+    // 软删后仍进同步列表（回收站上云）：文件夹本身 parentId=trash + trashedAt
+    const syncNb = store.listNotesForSync(); // 文件夹不进 notes；断言子笔记仍在同步列表
+    const syncFolder = store.listFoldersForSync().find((f) => f.id === nb.id);
+    expect(syncFolder).toBeTruthy();
+    expect(syncFolder!.parentId).toBe("notebook-trash");
+    expect(syncFolder!.trashedAt).toBeTruthy();
+    // 子笔记在回收站内（传递），仍进同步列表
+    expect(syncNb.some((n) => n.id === note.id)).toBe(true);
+    // 回收站条目不出现在搜索
+    expect(store.searchNotes("无引用").some((x) => x.id === note.id)).toBe(false);
   });
 
-  it("回收站：恢复节点（本地复活，清墓碑，重新可同步）", () => {
+  it("回收站：恢复节点（移回原位置，清回收站字段，重新可同步）", () => {
     const nb = store.createNotebook("待恢复");
     const note = store.createNoteIn(nb.id, "子笔记");
     store.saveNote(note.id, "子笔记", "<p>内容</p>");
     const lakePath = path.join(dir, "notes", `${note.id}.lake`);
 
     store.deleteTreeNode(nb.id);
-    expect(store.listNotesForSync().some((n) => n.id === note.id)).toBe(false);
+    // 软删：在回收站，且仍在同步列表（回收站条目上云）
+    expect(store.listTrash().some((t) => t.id === nb.id)).toBe(true);
+    expect(store.listNotesForSync().some((n) => n.id === note.id)).toBe(true);
 
     // 恢复目录（子笔记一起恢复）
     store.restoreTrashItem(nb.id);
     expect(store.listTreeNodes().some((n) => n.id === nb.id)).toBe(true);
     expect(store.listTreeNodes().some((n) => n.id === note.id)).toBe(true);
     expect(fs.existsSync(lakePath)).toBe(true);
-    // 墓碑清除 → 恢复后进入同步列表
-    expect(store.listDeletedNotesForSync().some((d) => d.id === note.id)).toBe(false);
-    expect(store.listNotesForSync().some((n) => n.id === note.id)).toBe(true);
+    // 恢复后回收站字段清空，trashed_at 移除
+    const syncNote = store.listNotesForSync().find((n) => n.id === note.id)!;
+    expect(syncNote.parentId).toBe(nb.id);
+    expect(syncNote.trashedAt).toBeNull();
+    expect(syncNote.syncState).toBe("local");
     // 回收站已空
     expect(store.listTrash().some((t) => t.id === nb.id)).toBe(false);
   });
@@ -444,6 +456,30 @@ describe("目录树操作", () => {
     expect(store.listNoteHistory(other.id).length).toBe(1);
   });
 
+  it("回收站自动过期：trashed_at 超期条目自动 purge（默认 60 天可配）", () => {
+    const nb = store.createNotebook("待过期");
+    const note = store.createNoteIn(nb.id, "子笔记");
+    store.saveNote(note.id, "子笔记", "<p>内容</p>");
+    store.deleteTreeNode(nb.id);
+    // 人为把 trashed_at 改为 61 天前
+    const old = new Date(Date.now() - 61 * 24 * 3600 * 1000).toISOString();
+    (store as any).db.prepare("UPDATE tree_nodes SET trashed_at=? WHERE id=?").run(old, nb.id);
+    const purged = store.autoPurgeExpiredTrash(60);
+    expect(purged).toBe(1);
+    expect(store.listTrash().length).toBe(0);
+    // purge 后写墓碑（防复活 + M4 删云端前缀）
+    expect(store.listDeletedNotesForSync().some((d) => d.id === note.id)).toBe(true);
+    // 未超期（59 天）不 purge
+    const nb2 = store.createNotebook("未过期");
+    const note2 = store.createNoteIn(nb2.id, "n2");
+    store.saveNote(note2.id, "n2", "<p>x</p>");
+    store.deleteTreeNode(nb2.id);
+    const recent = new Date(Date.now() - 59 * 24 * 3600 * 1000).toISOString();
+    (store as any).db.prepare("UPDATE tree_nodes SET trashed_at=? WHERE id=?").run(recent, nb2.id);
+    expect(store.autoPurgeExpiredTrash(60)).toBe(0);
+    expect(store.listTrash().length).toBe(1);
+  });
+
   it("回收站：清空 emptyTrash 全部彻底删除", () => {
     const nb1 = store.createNotebook("待清空1");
     const n1 = store.createNoteIn(nb1.id, "n1");
@@ -451,11 +487,14 @@ describe("目录树操作", () => {
     const n2 = store.createNoteIn(nb2.id, "n2");
     store.deleteTreeNode(nb1.id);
     store.deleteTreeNode(nb2.id);
-    expect(store.listTrash().length).toBeGreaterThanOrEqual(4);
+    // 只列 trash 笔记本直接子节点（两个笔记本）
+    expect(store.listTrash().length).toBe(2);
     store.emptyTrash();
     expect(store.listTrash().length).toBe(0);
+    // purge 后写墓碑（防复活 + M4 删云端前缀）
     expect(store.listDeletedNotesForSync().some((d) => d.id === n1.id)).toBe(true);
     expect(store.listDeletedNotesForSync().some((d) => d.id === n2.id)).toBe(true);
+    expect(store.listPurgedNotesForSync().some((d) => d.id === n1.id)).toBe(true);
   });
 });
 
@@ -827,20 +866,30 @@ describe("同步状态 / 导入", () => {
     expect(status.lastResult).toEqual({ uploaded: 1 });
   });
 
-  it("pruneTombstones 剪除墓碑", () => {
+  it("pruneTombstones 剪除墓碑（墓碑仅 purge 产生；软删 = 移动无墓碑）", () => {
     const { id } = makeNote();
+    // 软删不写墓碑
     store.deleteNote(id);
+    expect(store.listDeletedNotesForSync().some((d) => d.id === id)).toBe(false);
+    // purge 写墓碑 → 可剪除
+    store.purgeTrashItem(id);
     expect(store.listDeletedNotesForSync().some((d) => d.id === id)).toBe(true);
     store.pruneTombstones([id]);
     expect(store.listDeletedNotesForSync().some((d) => d.id === id)).toBe(false);
     store.pruneTombstones([]); // 空数组安全
   });
 
-  it("listNotesForSync 只返回未删除笔记", () => {
+  it("listNotesForSync 返回未删除笔记（含回收站条目，它们上云）", () => {
     const { id } = makeNote();
     expect(store.listNotesForSync().some((n) => n.id === id)).toBe(true);
     store.deleteNote(id);
-    expect(store.listNotesForSync().some((n) => n.id === id)).toBe(false);
+    // 软删 = 移入回收站：仍在同步列表（parentId=notebook-trash）
+    const n = store.listNotesForSync().find((x) => x.id === id);
+    expect(n).toBeTruthy();
+    expect(n!.parentId).toBe("notebook-trash");
+    // purge 后从同步列表消失
+    store.purgeTrashItem(id);
+    expect(store.listNotesForSync().some((x) => x.id === id)).toBe(false);
   });
 
   it("importRemoteNote 写入文件 + 资源 + upsert（幂等）", () => {

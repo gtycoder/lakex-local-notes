@@ -462,7 +462,24 @@ if (!app.requestSingleInstanceLock()) {
       }
     };
     startGcTimer();
-    restartGcTimers = startGcTimer;
+
+    // 回收站自动过期（trashAutoPurgeDays 默认 60；0=关闭）。本地操作：启动即查一次 + 每天一次。
+    let trashTimer: NodeJS.Timeout | null = null;
+    const startTrashTimer = () => {
+      if (trashTimer) { clearInterval(trashTimer); trashTimer = null; }
+      const cfg = store.getS3GcSettings();
+      if (cfg.trashAutoPurgeDays <= 0) return;
+      const run = () => {
+        try {
+          const n = store.autoPurgeExpiredTrash(cfg.trashAutoPurgeDays);
+          if (n > 0) console.log(`[trash] 自动过期 purge ${n} 项（>${cfg.trashAutoPurgeDays} 天）`);
+        } catch (error) { console.warn("[trash] 自动过期失败:", error); }
+      };
+      run();
+      trashTimer = setInterval(run, 24 * 3600 * 1000);
+    };
+    startTrashTimer();
+    restartGcTimers = () => { startGcTimer(); startTrashTimer(); };
 
     app.on("activate", () => {
       if (BrowserWindow.getAllWindows().length === 0) createWindow();

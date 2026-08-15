@@ -268,7 +268,7 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
               <section className="settings-group">
                 <h4><Trash2 size={13} /> 回收站</h4>
                 {gcCfg && (
-                  <div className="settings-field"><span>自动清空提醒（天）</span><input type="number" min={0} max={365} value={gcCfg.trashAutoPurgeDays} onChange={(e) => saveGcCfg({ trashAutoPurgeDays: Math.max(0, Number(e.target.value) || 0) })} /></div>
+                  <div className="settings-field"><span>回收站自动过期（天，0=关闭）</span><input type="number" min={0} max={365} value={gcCfg.trashAutoPurgeDays} onChange={(e) => saveGcCfg({ trashAutoPurgeDays: Math.max(0, Number(e.target.value) || 0) })} /></div>
                 )}
                 <p className="settings-hint">回收站内容仅保存在本机；彻底删除会同时删除云端数据且不可撤销。</p>
               </section>

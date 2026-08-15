@@ -11,6 +11,7 @@ import {
   DeleteObjectCommand,
   DeleteObjectsCommand,
 } from "@aws-sdk/client-s3";
+import { TRASH_NOTEBOOK_ID } from "./store.js";
 import type { Store } from "./store.js";
 import { log } from "./logger.js";
 
@@ -31,6 +32,9 @@ interface ManifestNote {
   assets: { filename: string; size: number; hash: string }[];
   deleted?: boolean;
   deletedAt?: string;
+  /** 回收站条目：进入回收站时间（自动过期基准）与删除前父目录（恢复位置）。 */
+  trashedAt?: string | null;
+  deletedFromParentId?: string | null;
 }
 
 /** 锁状态 LWW：时间戳新者胜；相同时间戳取“锁优先”（保守防误改）。返回胜出的 {locked, at}。 */
@@ -48,6 +52,9 @@ interface ManifestFolder {
   sortOrder: number; nodeType: "notebook" | "group";
   icon: string | null;
   updatedAt: string;
+  /** 被删文件夹：进入回收站时间与删除前父目录（恢复位置）。 */
+  trashedAt?: string | null;
+  deletedFromParentId?: string | null;
 }
 
 interface Manifest {
@@ -293,7 +300,7 @@ export async function syncNow(store: Store, onProgress?: (p: SyncProgress) => vo
     const localById = new Map(localNotesAll.map((n) => [n.id, n]));
     const localIdsAll = new Set(localNotesAll.map((n) => n.id));
     // 先导入目录树，再导入笔记，保证文档的父 notebook/group 已存在。
-    const validParents = new Set<string>([store.defaultNotebookId()]);
+    const validParents = new Set<string>([store.defaultNotebookId(), TRASH_NOTEBOOK_ID]);
     for (const folder of remoteManifest.folders) {
       if (!isSafeSegment(folder.id)) throw new Error(`清单包含无效的目录 ID: ${folder.id}`);
       if (folder.parentId !== null && !isSafeSegment(folder.parentId)) throw new Error(`清单包含无效的目录 parentId: ${folder.parentId}`);
@@ -315,46 +322,22 @@ export async function syncNow(store: Store, onProgress?: (p: SyncProgress) => vo
       }
       // 目录树同步前的旧 manifest 可能没有 folders，父目录缺失时归到默认个人笔记本，避免文档"消失"。
       const effectiveParent = rn.parentId !== null && validParents.has(rn.parentId) ? rn.parentId : store.defaultNotebookId();
-      // 云端已删除：本地若有则删除（墓碑防重拉），不下载对象；
-      // 本地没有也要留存墓碑（学到的删除），让本设备成为 deleted 标记的保管者，
-      // 避免删除方设备清空后标记丢失导致离线设备复活（审计 #2）
+      // 云端 deleted = purge 墓碑（回收站笔记本重构后软删 = 移动，不再有软删墓碑，deleted:true 即 purge）。
+      // purge 不广播强制删除（用户决策）：本地有副本 → 保留并移入本地回收站标 purged（可恢复、不上传）；
+      // 本地无 → 留存墓碑（学到的删除，防离线设备把残留当新文档上传复活，审计 #2）。
       if (rn.deleted) {
         const local = localById.get(rn.id);
-        // 墓碑权威（目录强一致）：远端 deleted 是权威状态，本地编辑（无论新旧）都不抵抗——
-        // 被删前强制留档本地版本（与 superseded 同机制，数据不丢）。
-        // 唯一例外：显式恢复标记（restoreTrashItem 写入）→ local wins，上传阶段写回 active 并覆盖墓碑。
         if (local) {
+          // 显式恢复例外：本地已恢复（restoreTrashItem）→ 不应用 purge，上传阶段写回 active
           if (store.isRestorePending(rn.id)) {
-            log.sync.info(`[perf] download ${rn.id} tombstone-skip (restore pending) ${Date.now() - noteStart}ms`);
+            log.sync.info(`[perf] download ${rn.id} purge-skip (restore pending) ${Date.now() - noteStart}ms`);
             continue;
           }
-          // 墓碑权威：本地版本先强制留档（历史可找回），再尝试下载"删除前内容"（墓碑 contentHash，
-          // 容错：对象缺失/占位符则跳过），最后软删——回收站/恢复拿到的就是删除方的最新版。
-          store.createHistorySnapshot(rn.id, undefined, true);
-          try {
-            const lakeBytes = await remote.getOptional(objectKey(rn.id, rn.contentHash));
-            if (lakeBytes) fs.writeFileSync(store.notePathFor(rn.id), lakeBytes);
-            // list assets/{id}/ 前缀补全缺失资源：B 上次同步旧版时缺 A 删除前新增的资源，
-            // 下载到本地保证回收站/恢复 = 删除方完整版本（本地已有的跳过，正常情况 0 下载）。
-            const remoteAssets = await remote.list(`assets/${rn.id}/`);
-            const dir = store.noteAssetsPathFor(rn.id);
-            for (const a of remoteAssets) {
-              const filename = a.key.slice(`assets/${rn.id}/`.length);
-              if (!filename || filename.includes("/")) continue;
-              if (fs.existsSync(path.join(dir, filename))) continue;
-              const bytes = await remote.getOptional(`assets/${rn.id}/${filename}`);
-              if (!bytes) continue;
-              fs.mkdirSync(dir, { recursive: true });
-              fs.writeFileSync(path.join(dir, filename), bytes);
-            }
-          } catch (error) {
-            log.sync.warn(`[perf] download ${rn.id} tombstone content missing, skip`);
-          }
-          store.deleteTreeNode(rn.id);
-          log.sync.info(`[perf] download ${rn.id} remote-deleted → soft-delete applied (local archived) ${Date.now() - noteStart}ms`);
+          store.applyRemotePurge(rn.id);
+          log.sync.info(`[perf] download ${rn.id} remote-purged → local kept in trash (purged) ${Date.now() - noteStart}ms`);
         } else {
           store.rememberDeleted(rn, rn.deletedAt ?? new Date().toISOString());
-          log.sync.info(`[perf] download ${rn.id} remote-deleted → tombstone learned ${Date.now() - noteStart}ms`);
+          log.sync.info(`[perf] download ${rn.id} remote-purged → tombstone learned ${Date.now() - noteStart}ms`);
         }
         continue;
       }
@@ -374,6 +357,38 @@ export async function syncNow(store: Store, onProgress?: (p: SyncProgress) => vo
         } else {
           // 本地删除较新：本地删除优先，跳过下载（上传阶段会标记 deleted）。
           continue;
+        }
+      }
+      // TRASH-NOTEBOOK：回收站笔记本 vs 本地普通位置的交叉冲突
+      // (a) 远端已移入回收站（删除传播）而本地仍 active：删除压编辑（墓碑权威）——
+      //     本地编辑先强制留档再跟随移动；唯一例外是本地显式恢复（restore_pending_at）。
+      // (b) 远端已恢复（active）而本地在回收站：恢复 vs 删除按 updatedAt LWW。
+      const local0 = localById.get(rn.id) ?? null;
+      const localInTrash = local0 !== null && local0.parentId === TRASH_NOTEBOOK_ID;
+      const remoteInTrash = rn.parentId === TRASH_NOTEBOOK_ID;
+      if (local0 && localInTrash !== remoteInTrash) {
+        if (remoteInTrash) {
+          if (store.isRestorePending(rn.id)) {
+            log.sync.info(`[perf] download ${rn.id} trash-skip (restore pending) ${Date.now() - noteStart}ms`);
+            continue;
+          }
+          try { store.createHistorySnapshot(rn.id, undefined, false); } catch { /* 留档失败不阻断 */ }
+          store.applyRemoteMoveToTrash(rn.id, rn.trashedAt ?? rn.updatedAt, rn.deletedFromParentId ?? null);
+          supersededNotes.push({ id: rn.id, title: rn.title });
+          const moved = store.listNotesForSync().find((n) => n.id === rn.id) ?? null;
+          if (moved) localById.set(rn.id, moved);
+          log.sync.info(`[perf] download ${rn.id} remote-trashed → local moved to trash (edit archived) ${Date.now() - noteStart}ms`);
+        } else {
+          const trashedAt = local0.trashedAt ?? local0.updatedAt;
+          if (rn.updatedAt > trashedAt) {
+            store.applyRemoteRestore(rn.id, effectiveParent, rn.updatedAt);
+            const revived = store.listNotesForSync().find((n) => n.id === rn.id) ?? null;
+            if (revived) localById.set(rn.id, revived);
+            log.sync.info(`[perf] download ${rn.id} remote-restored → local trash revoked ${Date.now() - noteStart}ms`);
+          } else {
+            log.sync.info(`[perf] download ${rn.id} local-trash newer → keep trash ${Date.now() - noteStart}ms`);
+            continue;
+          }
         }
       }
       const local = localById.get(rn.id) ?? null;
@@ -516,6 +531,19 @@ export async function syncNow(store: Store, onProgress?: (p: SyncProgress) => vo
     // 增量扫描优化：synced 且远端条目 hash 与本地上次基线一致 → 本地无变更，
     // 直接复用缓存 hash + 远端 assets（正文未变 ⇒ 资源引用未变 ⇒ assets 一致），
     // 跳过 .lake 读取与资源扫描（9000+ 条笔记时每次同步省 ~2 万次文件 IO）。
+    // purged = 收到他端 purge 后保留的本地回收站副本：不上传（恢复 = 清 purged 后再上传）
+    if (note.syncState === "purged") {
+      continue;
+    }
+    // TRASH-NOTEBOOK：本地回收站条目 vs 远端已恢复（active 且更新）→ 本端删除让位（跟随恢复）
+    if (note.parentId === TRASH_NOTEBOOK_ID) {
+      const remoteActive = remoteNotesById.get(note.id);
+      if (remoteActive && !remoteActive.deleted && remoteActive.parentId !== TRASH_NOTEBOOK_ID
+          && remoteActive.updatedAt > (note.trashedAt ?? note.updatedAt)) {
+        log.sync.info(`[perf] upload ${note.id} trash-yield (remote restored newer)`);
+        continue;
+      }
+    }
     const remoteEntry = remoteNotesById.get(note.id);
     const cachedHash = store.baseHash(note.id);
     if (note.syncState === "synced" && cachedHash !== null && remoteEntry && !remoteEntry.deleted && remoteEntry.contentHash === cachedHash) {
@@ -524,6 +552,8 @@ export async function syncNow(store: Store, onProgress?: (p: SyncProgress) => vo
         updatedAt: note.updatedAt, contentHash: cachedHash, isConflict: note.isConflict,
         isLocked: !!note.isLocked, lockedAt: note.lockedAt ?? null, icon: note.icon ?? null,
         assets: remoteEntry.assets ?? [],
+        trashedAt: note.parentId === TRASH_NOTEBOOK_ID ? (remoteEntry.trashedAt ?? null) : undefined,
+        deletedFromParentId: note.parentId === TRASH_NOTEBOOK_ID ? (remoteEntry.deletedFromParentId ?? null) : undefined,
       });
       continue;
     }
@@ -570,6 +600,8 @@ export async function syncNow(store: Store, onProgress?: (p: SyncProgress) => vo
       id: note.id, title: note.title, parentId: note.parentId, sortOrder: note.sortOrder,
       updatedAt: note.updatedAt, contentHash: hash, isConflict: note.isConflict,
       isLocked: !!note.isLocked, lockedAt: note.lockedAt ?? null, icon: note.icon ?? null, assets,
+      trashedAt: note.parentId === TRASH_NOTEBOOK_ID ? (note.trashedAt ?? null) : undefined,
+      deletedFromParentId: note.parentId === TRASH_NOTEBOOK_ID ? (note.deletedFromParentId ?? null) : undefined,
     });
     log.sync.info(`[perf] upload ${note.id} ${note.title} ${Date.now() - noteUploadStart}ms (lake=${lakeUploaded ? `${lakeBytesLen}B` : "skip"}, assets=${pendingAssets.length})`);
   }
@@ -619,6 +651,8 @@ export async function syncNow(store: Store, onProgress?: (p: SyncProgress) => vo
   const manifestFolders: ManifestFolder[] = store.listFoldersForSync().map((f) => ({
     id: f.id, title: f.title, parentId: f.parentId, sortOrder: f.sortOrder, nodeType: f.nodeType,
     icon: f.icon, updatedAt: f.updatedAt,
+    trashedAt: f.parentId === TRASH_NOTEBOOK_ID ? (f.trashedAt ?? null) : undefined,
+    deletedFromParentId: f.parentId === TRASH_NOTEBOOK_ID ? (f.deletedFromParentId ?? null) : undefined,
   }));
   const commitId = crypto.randomUUID();
   const completedAt = new Date().toISOString();
@@ -814,16 +848,11 @@ export async function runDeepCleanup(store: Store, opts?: { dryRun?: boolean; ex
     ...(await remote.list("assets/")),
     ...(await remote.list("manifests/")),
   ];
-  // 软删笔记（回收站）的资源按前缀保护：墓碑不携带资源清单，无法逐个 keep；
-  // 软删笔记的整个 assets/{id}/ 前缀保留到 purge（purge 时 deletePrefix 全删）。
-  const softDeletedIds = new Set(latest.notes.filter((n) => n.deleted).map((n) => n.id));
+  // TRASH-NOTEBOOK：回收站条目是 active 条目（assets 在 manifest keep 集），不再需要前缀保护 hack；
+  // deleted 墓碑仅剩 purge 场景（其对象已由 M4 deletePrefix 删除）。
   const candidates = all
     .filter((item) => !keep.has(item.key))
     .filter((item) => Date.parse(item.lastModified) < cutoff)
-    .filter((item) => {
-      const m = item.key.match(/^assets\/([^/]+)\//);
-      return !(m && softDeletedIds.has(m[1]));
-    })
     .map((item) => item.key);
 
   if (dryRun || candidates.length === 0) {
@@ -938,6 +967,8 @@ function validateManifest(manifest: unknown): asserts manifest is Manifest {
     if (n.lockedAt !== undefined && n.lockedAt !== null && typeof n.lockedAt !== "string") throw new Error("清单格式无效：lockedAt 非法");
     if (n.deleted !== undefined && typeof n.deleted !== "boolean") throw new Error("清单格式无效：deleted 非法");
     if (n.deletedAt !== undefined && typeof n.deletedAt !== "string") throw new Error("清单格式无效：deletedAt 非法");
+    if (n.trashedAt !== undefined && n.trashedAt !== null && typeof n.trashedAt !== "string") throw new Error("清单格式无效：trashedAt 非法");
+    if (n.deletedFromParentId !== undefined && n.deletedFromParentId !== null && typeof n.deletedFromParentId !== "string") throw new Error("清单格式无效：deletedFromParentId 非法");
   }
   if (!Array.isArray(m.folders)) throw new Error("清单格式无效：folders 非数组");
   for (const folder of m.folders) {
@@ -948,6 +979,8 @@ function validateManifest(manifest: unknown): asserts manifest is Manifest {
     }
     if (f.parentId !== null && typeof f.parentId !== "string") throw new Error("清单格式无效：folder.parentId 非法");
     if (f.nodeType !== "notebook" && f.nodeType !== "group") throw new Error("清单格式无效：folder.nodeType 非法");
+    if (f.trashedAt !== undefined && f.trashedAt !== null && typeof f.trashedAt !== "string") throw new Error("清单格式无效：folder.trashedAt 非法");
+    if (f.deletedFromParentId !== undefined && f.deletedFromParentId !== null && typeof f.deletedFromParentId !== "string") throw new Error("清单格式无效：folder.deletedFromParentId 非法");
   }
 }
 

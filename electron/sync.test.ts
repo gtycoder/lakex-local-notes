@@ -83,6 +83,7 @@ interface ManifestNote {
   assets: { filename: string; size: number; hash: string }[];
   deleted?: boolean; deletedAt?: string;
   isLocked?: boolean; lockedAt?: string | null;
+  trashedAt?: string | null; deletedFromParentId?: string | null;
 }
 interface Manifest {
   version: number; workspaceId: string; commitId: string; createdAt: string; notes: ManifestNote[];
@@ -110,7 +111,7 @@ function writeManifest(manifest: Manifest): void {
 // ===== FakeStore：实现 sync.ts 用到的 Store 子集（内存态 + 临时文件） =====
 class FakeStore {
   settings: S3Settings | null = null;
-  notes = new Map<string, { id: string; title: string; parentId: string | null; sortOrder: number; updatedAt: string; syncState: string; isConflict: boolean; isLocked?: boolean; lockedAt?: string | null }>();
+  notes = new Map<string, { id: string; title: string; parentId: string | null; sortOrder: number; updatedAt: string; syncState: string; isConflict: boolean; isLocked?: boolean; lockedAt?: string | null; trashedAt?: string | null; deletedFromParentId?: string | null }>();
   /** 测试探针：contentHash（读 .lake）被调用的次数，用于断言"跳过扫描"生效。 */
   hashReads = 0;
   deleted = new Map<string, { id: string; title: string; parentId: string | null; sortOrder: number; updatedAt: string; deletedAt: string }>();
@@ -161,9 +162,17 @@ class FakeStore {
   importRemoteFolder(folder: { id: string; title: string; parentId: string | null; sortOrder: number; nodeType: "notebook" | "group"; icon: string | null; updatedAt: string }) { this.folders.set(folder.id, folder); }
   defaultNotebookId() { return "notebook-personal"; }
   hasTreeNode(id: string) { return id === "notebook-personal" || this.folders.has(id) || this.notes.has(id); }
-  applyRemoteNoteMeta(note: { id: string; title: string; parentId: string | null; sortOrder: number; updatedAt: string; isConflict: boolean }) {
+  applyRemoteNoteMeta(note: { id: string; title: string; parentId: string | null; sortOrder: number; updatedAt: string; isConflict: boolean; trashedAt?: string | null; deletedFromParentId?: string | null }) {
     const n = this.notes.get(note.id);
-    if (n) { n.title = note.title; n.parentId = note.parentId; n.sortOrder = note.sortOrder; n.updatedAt = note.updatedAt; n.isConflict = note.isConflict; }
+    if (n) {
+      n.title = note.title; n.parentId = note.parentId; n.sortOrder = note.sortOrder; n.updatedAt = note.updatedAt; n.isConflict = note.isConflict;
+      if (note.parentId === "notebook-trash") {
+        n.trashedAt = note.trashedAt ?? n.trashedAt ?? new Date().toISOString();
+        n.deletedFromParentId = note.deletedFromParentId ?? n.deletedFromParentId ?? null;
+      } else {
+        n.trashedAt = null; n.deletedFromParentId = null;
+      }
+    }
   }
   contentHash(id: string) { this.hashReads += 1; return crypto.createHash("sha256").update(fs.readFileSync(this.notePath(id))).digest("hex"); }
   notePathFor(id: string) { return this.notePath(id); }
@@ -230,43 +239,78 @@ class FakeStore {
     n.isLocked = locked;
     n.lockedAt = lockedAt;
   }
-  importRemoteNote(note: { id: string; title: string; parentId: string | null; sortOrder: number; updatedAt: string; isConflict: boolean }, content: Buffer, assets: { filename: string; bytes: Buffer }[]) {
+  importRemoteNote(note: { id: string; title: string; parentId: string | null; sortOrder: number; updatedAt: string; isConflict: boolean; trashedAt?: string | null; deletedFromParentId?: string | null }, content: Buffer, assets: { filename: string; bytes: Buffer }[]) {
     fs.writeFileSync(this.notePath(note.id), content, "utf8");
     if (assets.length > 0) {
       const dir = path.join(this.dir, "note-assets", note.id);
       fs.mkdirSync(dir, { recursive: true });
       for (const asset of assets) fs.writeFileSync(path.join(dir, asset.filename), asset.bytes);
     }
-    this.notes.set(note.id, { ...note, syncState: "synced" });
+    this.notes.set(note.id, { ...note, syncState: "synced", trashedAt: note.trashedAt ?? null, deletedFromParentId: note.deletedFromParentId ?? null });
   }
   rememberDeleted(note: { id: string; title: string; parentId: string | null; sortOrder: number; updatedAt: string }, deletedAt: string) {
     this.deleted.set(note.id, { id: note.id, title: note.title, parentId: note.parentId, sortOrder: note.sortOrder, updatedAt: note.updatedAt, deletedAt });
   }
+  /** 软删 = 移入回收站笔记本（真实 Store 的 deleteTreeNode 同语义：不写墓碑、保留文件）。 */
   deleteTreeNode(id: string) {
     const n = this.notes.get(id);
     if (n) {
-      // 与真实 Store 一致：删除时记录墓碑
+      n.deletedFromParentId = n.parentId;
+      n.parentId = "notebook-trash";
+      n.trashedAt = new Date().toISOString();
+      n.syncState = "local";
+    }
+  }
+  /** purge = 彻底删除 + 写墓碑（deleted_notes 带 purged_at）。 */
+  purgeTrashItem(id: string) {
+    const n = this.notes.get(id);
+    if (n) {
       this.deleted.set(id, { id, title: n.title, parentId: n.parentId, sortOrder: n.sortOrder, updatedAt: n.updatedAt, deletedAt: new Date().toISOString() });
+      this.purgedNotes.set(id, new Date().toISOString());
       this.notes.delete(id);
     }
-    // 真实 Store 软删保留 .lake / 资源文件（回收站可恢复 + 墓碑回写可读内容算真实 hash），
-    // 因此这里不再物理删除文件。
   }
-  /** 模拟真实 restoreTrashItem：从墓碑读回 + 写回内容 + 清墓碑 + 标 local 待上传。
-   * FakeStore 的 deleteTreeNode 会物理删除文件，因此需要显式提供恢复后的内容。 */
-  restoreTrashItem(id: string, content?: string) {
-    const d = this.deleted.get(id);
-    if (!d) throw new Error(`无墓碑: ${id}`);
-    // 优先读软删保留的 .lake（真实 Store 行为：恢复 = 回收站保留版本）；
-    // 无文件时才用调用方传入的 content 兜底。
-    let body = content;
-    if (body === undefined) {
-      try { body = fs.readFileSync(this.notePath(id), "utf8"); }
-      catch { body = `<p>${d.title}</p>`; }
+  /** 收到他端 purge 墓碑：保留副本并标 purged（不上传、可恢复）。 */
+  applyRemotePurge(id: string) {
+    const n = this.notes.get(id);
+    if (n) {
+      n.deletedFromParentId = n.deletedFromParentId ?? n.parentId;
+      n.parentId = "notebook-trash";
+      n.trashedAt = n.trashedAt ?? new Date().toISOString();
+      n.syncState = "purged";
     }
-    this.notes.set(id, { id, title: d.title, parentId: d.parentId, sortOrder: d.sortOrder, updatedAt: new Date().toISOString(), syncState: "local", isConflict: false });
-    fs.writeFileSync(this.notePath(id), body, "utf8");
-    this.deleted.delete(id);
+  }
+  /** 远端软删传播（删除压编辑）：移入回收站，标 local 待下载分支核对。 */
+  applyRemoteMoveToTrash(id: string, trashedAt: string | null, deletedFromParentId: string | null) {
+    const n = this.notes.get(id);
+    if (n) {
+      n.deletedFromParentId = n.deletedFromParentId ?? deletedFromParentId ?? n.parentId;
+      n.parentId = "notebook-trash";
+      n.trashedAt = n.trashedAt ?? trashedAt ?? new Date().toISOString();
+      n.syncState = "local";
+    }
+  }
+  /** 远端恢复传播：移出回收站，标 local。 */
+  applyRemoteRestore(id: string, parentId: string | null, updatedAt: string) {
+    const n = this.notes.get(id);
+    if (n) {
+      n.parentId = parentId;
+      n.trashedAt = null;
+      n.deletedFromParentId = null;
+      n.updatedAt = updatedAt;
+      n.syncState = "local";
+    }
+  }
+  /** 模拟真实 restoreTrashItem：从回收站移回原位置 + 写回内容 + 清回收站字段 + 显式恢复标记 + 标 local。 */
+  restoreTrashItem(id: string, content?: string) {
+    const n = this.notes.get(id);
+    if (!n) throw new Error(`回收站节点不存在: ${id}`);
+    if (content !== undefined) fs.writeFileSync(this.notePath(id), content, "utf8");
+    n.parentId = n.deletedFromParentId ?? null;
+    n.trashedAt = null;
+    n.deletedFromParentId = null;
+    n.updatedAt = new Date().toISOString();
+    n.syncState = "local";
     this.markRestorePending(id);
   }
   /** 模拟真实 revokeLocalDeletion：撤销本地删除墓碑（远端恢复较新，下载分支调用）。 */
@@ -400,25 +444,27 @@ describe("syncNow 增量同步", () => {
     expect(store.lastUploadedHash("n1")).toBe(store.contentHash("n1"));
   });
 
-  it("本地删除后云端标记 deleted；墓碑保留且标记跨次同步持续（防复活）", async () => {
+  it("本地删除后 manifest 条目移入回收站笔记本（parentId=trash），跨次同步持续", async () => {
     const store = newStore();
     store.createNote("n1", "笔记A", "<p>a</p>");
     store.createNote("n2", "笔记B", "<p>b</p>");
     await syncNow(store as unknown as Store);
 
     store.deleteTreeNode("n2");
-    expect(store.listDeletedNotesForSync()).toHaveLength(1);
+    expect(store.listDeletedNotesForSync()).toHaveLength(0); // 软删不写墓碑
 
     const r = await syncNow(store as unknown as Store);
     expect(r.downloaded).toBe(0);
     const manifest = readManifest();
-    expect(manifest.notes.find((n) => n.id === "n2")?.deleted).toBe(true);
-    // 墓碑不剪除：再同步一次，deleted 标记仍必须存在（离线设备上线时才能正确删除）
+    const n2 = manifest.notes.find((n) => n.id === "n2")!;
+    expect(n2.deleted).not.toBe(true);          // 不是墓碑
+    expect(n2.parentId).toBe("notebook-trash"); // 移入回收站笔记本
+    expect(n2.trashedAt).toBeTruthy();
+    // 跨次同步持续（回收站条目常驻 manifest，离线设备上线不会复活为普通笔记）
     await syncNow(store as unknown as Store);
     const manifest2 = readManifest();
-    expect(manifest2.notes.find((n) => n.id === "n2")?.deleted).toBe(true);
-    expect(store.listDeletedNotesForSync()).toHaveLength(1); // 墓碑保留
-    expect(store.notes.has("n2")).toBe(false);
+    expect(manifest2.notes.find((n) => n.id === "n2")?.parentId).toBe("notebook-trash");
+    expect(store.notes.has("n2")).toBe(true);   // 回收站条目仍在本地
   });
 
   it("审计#1：正文未变化时连续同步，manifest 资源清单不丢失（修复 assets 清空）", async () => {
@@ -435,7 +481,7 @@ describe("syncNow 增量同步", () => {
     expect(manifest.notes[0].assets[0]).toMatchObject({ filename: "img1.png", size: 9, hash: sha256("png-bytes") });
   });
 
-  it("审计#2：设备A删除并多次同步后，离线设备C上线不复活已删笔记", async () => {
+  it("审计#2：设备A删除并多次同步后，离线设备C上线不把已删笔记当普通文档复活", async () => {
     // 设备 A：创建并同步
     const storeA = newStore();
     storeA.createNote("n1", "笔记A", "<p>a</p>");
@@ -444,22 +490,22 @@ describe("syncNow 增量同步", () => {
     const storeB = newStore();
     await syncNow(storeB as unknown as Store);
     expect(storeB.notes.has("n1")).toBe(true);
-    // 设备 A：删除 + 同步两次（墓碑保留策略下 deleted 标记持续存在）
+    // 设备 A：删除（移入回收站）+ 同步两次（回收站条目持续存在）
     storeA.deleteTreeNode("n1");
     await syncNow(storeA as unknown as Store);
     await syncNow(storeA as unknown as Store);
-    expect(readManifest().notes.find((n) => n.id === "n1")?.deleted).toBe(true);
-    // 设备 C（离线后上线）：不得恢复 n1
+    expect(readManifest().notes.find((n) => n.id === "n1")?.parentId).toBe("notebook-trash");
+    // 设备 C（离线后上线）：n1 进入 C 的回收站（不是普通文档复活）
     const storeC = newStore();
     await syncNow(storeC as unknown as Store);
-    expect(storeC.notes.has("n1")).toBe(false);
-    // C 同步后本地留存学到的墓碑，且 manifest 仍保留 deleted 标记（不复活）
-    expect(storeC.listDeletedNotesForSync()).toHaveLength(1);
-    expect(readManifest().notes.find((n) => n.id === "n1")?.deleted).toBe(true);
-    // A 设备清空（模拟重装）：C 仍持有墓碑，标记不丢
+    expect(storeC.notes.has("n1")).toBe(true);
+    expect(storeC.listNotesForSync().find((n) => n.id === "n1")?.parentId).toBe("notebook-trash");
+    // manifest 持续保留 trash 条目（不复活为普通笔记）
+    expect(readManifest().notes.find((n) => n.id === "n1")?.parentId).toBe("notebook-trash");
+    // A 设备清空（模拟重装）：C 重新同步后仍保持回收站条目
     const storeA2 = newStore();
     await syncNow(storeA2 as unknown as Store);
-    expect(storeA2.notes.has("n1")).toBe(false);
+    expect(storeA2.listNotesForSync().find((n) => n.id === "n1")?.parentId).toBe("notebook-trash");
   });
 
   it("审计#3：恶意 manifest 的 note.id / asset.filename 目录穿越被拒绝", async () => {
@@ -551,7 +597,7 @@ describe("syncNow 增量同步", () => {
     await expect(syncNow(store as unknown as Store)).rejects.toThrow(/清单版本不兼容/);
   });
 
-  it("云端标记 deleted 时本地删除该笔记", async () => {
+  it("云端 deleted（purge 墓碑）不强制删除本地：保留副本标 purged（可恢复、不上传）", async () => {
     const store = newStore();
     store.createNote("n1", "笔记A", "<p>a</p>");
     store.createNote("n2", "笔记B", "<p>b</p>");
@@ -564,7 +610,10 @@ describe("syncNow 增量同步", () => {
     writeManifest(manifest);
 
     const r = await syncNow(store as unknown as Store);
-    expect(store.notes.has("n2")).toBe(false);
+    // n2 不被删除：保留本地副本，移入回收站并标 purged
+    expect(store.notes.has("n2")).toBe(true);
+    expect(store.notes.get("n2")!.syncState).toBe("purged");
+    expect(store.notes.get("n2")!.parentId).toBe("notebook-trash");
     expect(store.notes.has("n1")).toBe(true);
   });
 
@@ -664,265 +713,178 @@ describe("ObjectStore 扩展（M1）", () => {
 });
 
 
-describe("S3 GC v4 语义（M0/M2）", () => {
+describe("S3 GC v4 语义（M0/M2）— 回收站笔记本", () => {
   beforeEach(() => s3.reset());
 
-  it("远端墓碑不能删除本地已恢复且待上传的笔记（P0-1 回收站恢复）", async () => {
-    const store = newStore();
-    store.createNote("n1", "笔记A", "<p>a</p>");
-    await syncNow(store as unknown as Store);
-    // 远端写入 deleted 墓碑
-    const manifest = readManifest();
-    manifest.notes[0] = { ...manifest.notes[0], deleted: true, deletedAt: new Date().toISOString() };
-    writeManifest(manifest);
-
-    // 本地恢复：同内容 + 显式恢复标记（真实 restoreTrashItem 置 local + restore_pending_at）
-    store.markRestorePending("n1");
-    await syncNow(store as unknown as Store);
-
-    expect(store.notes.has("n1")).toBe(true);
-    const after = readManifest();
-    expect(after.notes.find((n) => n.id === "n1")?.deleted).not.toBe(true);
+  it("回收站上云 + 情况3：A 删除后，从未持有的 B 同步到回收站全文+资源并可恢复", async () => {
+    const storeA = newStore();
+    storeA.createNote("n1", "笔记A", "<p>v1</p>");
+    storeA.addAsset("n1", "1786735000000_a1b2c3d4.png", Buffer.from("img-bytes", "utf8"));
+    await syncNow(storeA as unknown as Store);
+    // 从未持有 n1 的全新设备 B（离线期间 A 删除）
+    const storeB = newStore();
+    storeA.deleteTreeNode("n1");
+    await syncNow(storeA as unknown as Store);
+    const trashEntry = readManifest().notes.find((n) => n.id === "n1")!;
+    expect(trashEntry.deleted).not.toBe(true);
+    expect(trashEntry.parentId).toBe("notebook-trash");
+    expect(trashEntry.assets).toHaveLength(1);   // 回收站条目携带资源清单
+    // B 同步：回收站条目（非墓碑）→ 全文+资源下载到 B 回收站
+    await syncNow(storeB as unknown as Store);
+    expect(storeB.notes.has("n1")).toBe(true);
+    expect(storeB.listNotesForSync().find((n) => n.id === "n1")?.parentId).toBe("notebook-trash");
+    expect(fs.existsSync(path.join(storeB.noteAssetsPathFor("n1"), "1786735000000_a1b2c3d4.png"))).toBe(true);
+    // B 恢复 = 删除方版本（含图）
+    storeB.restoreTrashItem("n1");
+    expect(storeB.contentHash("n1")).toBe(storeA.contentHash("n1"));
+    await syncNow(storeB as unknown as Store);
+    expect(readManifest().notes.find((n) => n.id === "n1")?.parentId).not.toBe("notebook-trash");
   });
 
-  it("墓碑权威：B 有未上传编辑（无恢复标记，即使晚于删除）→ 被 A 删除压掉，B 版本强制留档", async () => {
+  it("删除压编辑（墓碑权威）：A 删 B 编辑 → B 跟随删除 + 编辑留档 + 云端保持回收站", async () => {
     const storeA = newStore();
     storeA.createNote("n1", "笔记A", "<p>a</p>");
     await syncNow(storeA as unknown as Store);
     const storeB = newStore();
     await syncNow(storeB as unknown as Store);
     expect(storeB.notes.has("n1")).toBe(true);
-    // A 删除并同步（deletedAt 设为较早）
+    // A 删除并同步（回收站条目）
     const base = Date.now();
     storeA.deleteTreeNode("n1");
-    storeA.deleted.get("n1")!.deletedAt = new Date(base + 1000).toISOString();
     await syncNow(storeA as unknown as Store);
-    expect(readManifest().notes.find((n) => n.id === "n1")?.deleted).toBe(true);
-    // B 在删除之后编辑（普通编辑，无恢复标记）——时间晚于删除也不抵抗墓碑
+    expect(readManifest().notes.find((n) => n.id === "n1")?.parentId).toBe("notebook-trash");
+    // B 在删除后编辑（普通编辑，无恢复标记）——时间晚于删除也不抵抗删除
     storeB.modifyNote("n1", "<p>b-edit</p>");
     storeB.notes.get("n1")!.updatedAt = new Date(base + 2000).toISOString();
     storeB.markLocal("n1");
     const histBefore = storeB.historySnapshots.length;
-    await syncNow(storeB as unknown as Store);
-    // B 被删 + B 版本强制留档（历史可找回）
-    expect(storeB.notes.has("n1")).toBe(false);
-    expect(storeB.listDeletedNotesForSync()).toHaveLength(1);
+    const rb = await syncNow(storeB as unknown as Store);
+    // B 跟随删除：n1 进回收站（不复活为普通笔记）
+    expect(storeB.notes.has("n1")).toBe(true);
+    expect(storeB.listNotesForSync().find((n) => n.id === "n1")?.parentId).toBe("notebook-trash");
+    // B 编辑强制留档 + superseded 提示
     expect(storeB.historySnapshots.length).toBeGreaterThan(histBefore);
     expect(storeB.historySnapshots).toContain("n1");
-    // 云端保持 deleted（B 的编辑不复活删除）
-    expect(readManifest().notes.find((n) => n.id === "n1")?.deleted).toBe(true);
+    expect(rb.supersededNotes.some((n) => n.id === "n1")).toBe(true);
+    // 云端保持回收站条目（B 的编辑不复活删除）
+    expect(readManifest().notes.find((n) => n.id === "n1")?.parentId).toBe("notebook-trash");
   });
 
-  it("恢复标记：远端 deleted 不压本地显式恢复，B 上传 active 覆盖墓碑并清标记", async () => {
+  it("显式恢复例外：B 恢复 → 上传 active 覆盖回收站条目 → A 跟随恢复（多端恢复 LWW）", async () => {
     const storeA = newStore();
     storeA.createNote("n1", "笔记A", "<p>a</p>");
     await syncNow(storeA as unknown as Store);
     const storeB = newStore();
     await syncNow(storeB as unknown as Store);
-    // A 删除并同步
-    storeA.deleteTreeNode("n1");
-    await syncNow(storeA as unknown as Store);
-    expect(readManifest().notes.find((n) => n.id === "n1")?.deleted).toBe(true);
-    // B 学到删除
-    await syncNow(storeB as unknown as Store);
-    expect(storeB.notes.has("n1")).toBe(false);
-    // B 显式恢复（写恢复标记）并同步
-    storeB.restoreTrashItem("n1", "<p>restored</p>");
-    expect(storeB.isRestorePending("n1")).toBe(true);
-    await syncNow(storeB as unknown as Store);
-    // B 保留 + 云端恢复为 active + 恢复标记已清除
-    expect(storeB.notes.has("n1")).toBe(true);
-    expect(readManifest().notes.find((n) => n.id === "n1")?.deleted).not.toBe(true);
-    expect(storeB.isRestorePending("n1")).toBe(false);
-  });
-
-  it("墓碑携带删除前内容：A 编辑（未同步）后删除，B 同步后回收站/恢复为 A 最新编辑版", async () => {
-    const storeA = newStore();
-    storeA.createNote("n1", "笔记A", "<p>v1</p>");
-    await syncNow(storeA as unknown as Store);
-    const storeB = newStore();
-    await syncNow(storeB as unknown as Store);
-    // A 编辑（未同步）→ 删除 → 同步：墓碑应携带真实 hash + 上传对象
-    storeA.modifyNote("n1", "<p>A-edited</p>");
-    const aHash = storeA.contentHash("n1");
-    storeA.deleteTreeNode("n1");
-    await syncNow(storeA as unknown as Store);
-    const tomb = readManifest().notes.find((n) => n.id === "n1")!;
-    expect(tomb.deleted).toBe(true);
-    expect(tomb.contentHash).toBe(aHash);
-    expect(s3.bucket.has(key(`objects/n1-${aHash}.lake`))).toBe(true);
-    // B 同步：先拉到 A 编辑版再软删 → 回收站 .lake = A 编辑版
-    await syncNow(storeB as unknown as Store);
-    expect(storeB.notes.has("n1")).toBe(false);
-    expect(storeB.deleted.has("n1")).toBe(true);
-    expect(storeB.contentHash("n1")).toBe(aHash);
-    // B 恢复 = A 编辑版
-    storeB.restoreTrashItem("n1");
-    expect(storeB.contentHash("n1")).toBe(aHash);
-  });
-
-  it("本端 purge 后远端恢复：本端同步不崩，跟随恢复（行被删时 revoke 容错重建）", async () => {
-    const storeA = newStore();
-    storeA.createNote("n1", "笔记A", "<p>v1</p>");
-    await syncNow(storeA as unknown as Store);
-    const storeB = newStore();
-    await syncNow(storeB as unknown as Store);
-    // A 删除 + purge（墓碑保留 + 行彻底删除 + 标 purged）
     const base = Date.now();
     storeA.deleteTreeNode("n1");
+    storeA.notes.get("n1")!.trashedAt = new Date(base + 1000).toISOString();
+    await syncNow(storeA as unknown as Store);
+    // B 同步：n1 进 B 回收站
+    await syncNow(storeB as unknown as Store);
+    expect(storeB.listNotesForSync().find((n) => n.id === "n1")?.parentId).toBe("notebook-trash");
+    // B 显式恢复（写恢复标记）并同步 → 云端恢复为 active
+    storeB.restoreTrashItem("n1", "<p>a</p>");
+    expect(storeB.isRestorePending("n1")).toBe(true);
+    storeB.notes.get("n1")!.updatedAt = new Date(base + 2000).toISOString();
+    await syncNow(storeB as unknown as Store);
+    expect(storeB.notes.has("n1")).toBe(true);
+    expect(readManifest().notes.find((n) => n.id === "n1")?.parentId).not.toBe("notebook-trash");
+    expect(storeB.isRestorePending("n1")).toBe(false);
+    // A 再同步：跟随恢复（本地回收站条目被移出），B 不被再次删除
+    await syncNow(storeA as unknown as Store);
+    expect(storeA.listNotesForSync().find((n) => n.id === "n1")?.parentId).not.toBe("notebook-trash");
+    await syncNow(storeB as unknown as Store);
+    expect(storeB.listNotesForSync().find((n) => n.id === "n1")?.parentId).not.toBe("notebook-trash");
+    expect(readManifest().notes.find((n) => n.id === "n1")?.parentId).not.toBe("notebook-trash");
+  });
+
+  it("purge 不广播：A purge → B 保留副本标 purged（可恢复、不上传）；B 恢复 → 云端复活", async () => {
+    const storeA = newStore();
+    storeA.createNote("n1", "笔记A", "<p>v1</p>");
+    await syncNow(storeA as unknown as Store);
+    const storeB = newStore();
+    await syncNow(storeB as unknown as Store);
+    // A 删除（回收站）→ B 同步到回收站
+    storeA.deleteTreeNode("n1");
+    await syncNow(storeA as unknown as Store);
+    await syncNow(storeB as unknown as Store);
+    expect(storeB.listNotesForSync().find((n) => n.id === "n1")?.parentId).toBe("notebook-trash");
+    // A purge + 同步：manifest 移除条目 + 推 deleted 墓碑 + M4 删前缀
+    const base = Date.now();
+    storeA.purgeTrashItem("n1");
     storeA.deleted.get("n1")!.deletedAt = new Date(base + 1000).toISOString();
-    storeA.markPurged("n1");
     await syncNow(storeA as unknown as Store);
     expect(storeA.notes.has("n1")).toBe(false);
-    // B 学删 → 恢复（时间晚于 A 墓碑）→ 上传 active
+    expect(readManifest().notes.find((n) => n.id === "n1")?.deleted).toBe(true);
+    // B 同步：purge 不广播强制删除——保留副本标 purged（可恢复、不上传）
     await syncNow(storeB as unknown as Store);
-    expect(storeB.notes.has("n1")).toBe(false);
-    storeB.restoreTrashItem("n1", "<p>restored</p>");
+    expect(storeB.notes.has("n1")).toBe(true);
+    expect(storeB.notes.get("n1")!.syncState).toBe("purged");
+    // B 恢复（显式）→ 上传 active → 云端复活（恢复路子存在）
+    storeB.restoreTrashItem("n1", "<p>v1</p>");
     storeB.notes.get("n1")!.updatedAt = new Date(base + 2000).toISOString();
     await syncNow(storeB as unknown as Store);
     expect(readManifest().notes.find((n) => n.id === "n1")?.deleted).not.toBe(true);
-    // A 再同步：不应抛"笔记不存在"，跟随恢复（importRemoteNote 重建行）
+    // A 再同步：墓碑让位（远端恢复较新），跟随恢复
     await expect(syncNow(storeA as unknown as Store)).resolves.toBeTruthy();
     expect(storeA.notes.has("n1")).toBe(true);
     expect(storeA.listDeletedNotesForSync()).toHaveLength(0);
   });
 
-  it("墓碑携带删除前资源：软删资源被 GC keep 保护，深度清理不删，B 回收站为完整版", async () => {
+  it("purge 后先写墓碑再前缀删除对象/资源（M4）", async () => {
+    const store = newStore();
+    store.createNote("n1", "笔记A", "<p>a</p>");
+    store.addAsset("n1", "img.png", Buffer.from("img", "utf8"));
+    await syncNow(store as unknown as Store);
+    const h1 = store.contentHash("n1");
+    expect(s3.bucket.has(key(`objects/n1-${h1}.lake`))).toBe(true);
+    expect(s3.bucket.has(key("assets/n1/img.png"))).toBe(true);
+
+    store.deleteTreeNode("n1");
+    store.purgeTrashItem("n1");
+    await syncNow(store as unknown as Store);
+
+    expect(readManifest().notes.find((n) => n.id === "n1")?.deleted).toBe(true);
+    expect(s3.bucket.has(key(`objects/n1-${h1}.lake`))).toBe(false);
+    expect(s3.bucket.has(key("assets/n1/img.png"))).toBe(false);
+  });
+
+  it("GC：回收站条目 assets 在 manifest keep 集，深度清理不删（无需前缀保护 hack）", async () => {
     const storeA = newStore();
     storeA.createNote("n1", "笔记A", "<p>v1</p>");
     storeA.addAsset("n1", "1786735000000_a1b2c3d4.png", Buffer.from("img-bytes", "utf8"));
     await syncNow(storeA as unknown as Store);
-    const storeB = newStore();
-    await syncNow(storeB as unknown as Store);
-    expect(fs.existsSync(path.join(storeB.noteAssetsPathFor("n1"), "1786735000000_a1b2c3d4.png"))).toBe(true);
-    // A 删除 → 同步：墓碑 assets 应携带删除前资源
     storeA.deleteTreeNode("n1");
     await syncNow(storeA as unknown as Store);
-    const tomb = readManifest().notes.find((n) => n.id === "n1")!;
-    expect(tomb.deleted).toBe(true);
-    // 墓碑保持轻量：不携带资源列表（资源由 GC 软删前缀保护 + B 端 list 补全）
-    expect(tomb.assets).toHaveLength(0);
-    // B 同步：先下载删除前正文 + list 补全资源再软删 → B 回收站资源 = A 版（恢复不缺图）
-    await syncNow(storeB as unknown as Store);
-    expect(storeB.notes.has("n1")).toBe(false);
-    expect(fs.existsSync(path.join(storeB.noteAssetsPathFor("n1"), "1786735000000_a1b2c3d4.png"))).toBe(true);
-    // GC 软删前缀保护：深度清理预览不应把软删资源列为候选（否则回收站恢复后缺图）
+    const trashEntry = readManifest().notes.find((n) => n.id === "n1")!;
+    expect(trashEntry.parentId).toBe("notebook-trash");
+    expect(trashEntry.assets).toHaveLength(1); // 回收站条目携带资源清单 → 自然 keep
     const dc = await runDeepCleanup(storeA as unknown as Store, { dryRun: true });
     expect(dc.keys).not.toContain("assets/n1/1786735000000_a1b2c3d4.png");
   });
 
-  it("墓碑携带删除前内容：B 有编辑被删后，历史留档 B 版，回收站内容为 A 版", async () => {
+  it("恢复位置跨端一致：deletedFromParentId 上云，B 恢复回到原目录", async () => {
     const storeA = newStore();
-    storeA.createNote("n1", "笔记A", "<p>v1</p>");
+    storeA.folders.set("nb-1", { id: "nb-1", title: "笔记本", parentId: null, sortOrder: 0, nodeType: "notebook", icon: null, updatedAt: new Date().toISOString() });
+    storeA.createNote("n1", "笔记A", "<p>a</p>");
+    storeA.notes.get("n1")!.parentId = "nb-1";
     await syncNow(storeA as unknown as Store);
     const storeB = newStore();
     await syncNow(storeB as unknown as Store);
-    // A 编辑 v2 → 删除 → 同步（墓碑带 v2 hash）
-    storeA.modifyNote("n1", "<p>A-v2</p>");
-    const aHash = storeA.contentHash("n1");
+    // A 删除 n1（deletedFromParentId=nb-1）→ 同步 → B 同步
     storeA.deleteTreeNode("n1");
     await syncNow(storeA as unknown as Store);
-    // B 本地编辑 vB（未同步）→ 同步：被删 + B 版留档 + 回收站内容为 A 版
-    storeB.modifyNote("n1", "<p>B-edit</p>");
-    const bHash = storeB.contentHash("n1");
-    storeB.markLocal("n1");
+    const trashEntry = readManifest().notes.find((n) => n.id === "n1")!;
+    expect(trashEntry.parentId).toBe("notebook-trash");
+    expect(trashEntry.deletedFromParentId).toBe("nb-1");
     await syncNow(storeB as unknown as Store);
-    expect(storeB.notes.has("n1")).toBe(false);
-    expect(storeB.historySnapshots).toContain("n1"); // B 版强制留档
-    expect(storeB.contentHash("n1")).toBe(aHash);    // 回收站 .lake = A 版
-    expect(bHash).not.toBe(aHash);
-    // 恢复 = A 版（B 版在历史里可找回）
+    const bTrash = storeB.listNotesForSync().find((n) => n.id === "n1")!;
+    expect(bTrash.parentId).toBe("notebook-trash");
+    expect(bTrash.deletedFromParentId).toBe("nb-1");
+    // B 恢复 → 回到 nb-1（不是根）
     storeB.restoreTrashItem("n1");
-    expect(storeB.contentHash("n1")).toBe(aHash);
-  });
-
-  it("恢复标记清除后，后续删除可再次正常传播（不残留 local-wins）", async () => {
-    const storeA = newStore();
-    storeA.createNote("n1", "笔记A", "<p>a</p>");
-    await syncNow(storeA as unknown as Store);
-    const storeB = newStore();
-    await syncNow(storeB as unknown as Store);
-    // 第一轮：A 删 → B 学删 → B 恢复 → B 上传 active（标记清除）→ A 同步跟随恢复
-    // 时间轴：n1 创建(base-ε) < A 删除(base+1s) < B 恢复(base+2s)，保证 A 侧 revoke 判定稳定
-    const base = Date.now();
-    storeA.deleteTreeNode("n1");
-    storeA.deleted.get("n1")!.deletedAt = new Date(base + 1000).toISOString();
-    await syncNow(storeA as unknown as Store);
-    await syncNow(storeB as unknown as Store);
-    storeB.restoreTrashItem("n1", "<p>restored</p>");
-    storeB.notes.get("n1")!.updatedAt = new Date(base + 2000).toISOString();
-    await syncNow(storeB as unknown as Store);
-    expect(storeB.isRestorePending("n1")).toBe(false);
-    expect(readManifest().notes.find((n) => n.id === "n1")?.deleted).not.toBe(true);
-    await syncNow(storeA as unknown as Store);
-    expect(storeA.notes.has("n1")).toBe(true);
-    expect(storeA.listDeletedNotesForSync()).toHaveLength(0);
-    // 第二轮：A 再次删除（墓碑时间 base+3s 晚于 B 恢复 base+2s）→ B 再同步被删
-    //（恢复标记不残留，墓碑永胜仍生效）
-    storeA.deleteTreeNode("n1");
-    storeA.deleted.get("n1")!.deletedAt = new Date(base + 3000).toISOString();
-    await syncNow(storeA as unknown as Store);
-    expect(readManifest().notes.find((n) => n.id === "n1")?.deleted).toBe(true);
-    await syncNow(storeB as unknown as Store);
-    expect(storeB.notes.has("n1")).toBe(false);
-  });
-
-  it("A 删除 → B 学到删除 → B 恢复 → A 再同步应跟随恢复且墓碑让位 → B 不被再次删除（多端恢复 LWW）", async () => {
-    const storeA = newStore();
-    storeA.createNote("n1", "笔记A", "<p>a</p>");
-    await syncNow(storeA as unknown as Store);
-    // B 同步到 n1
-    const storeB = newStore();
-    await syncNow(storeB as unknown as Store);
-    expect(storeB.notes.has("n1")).toBe(true);
-    // A 删除并同步（墓碑 → 远端 deleted）。时间轴：n1 创建(T0) < 删除(T0+1s) < B 恢复(T0+2s)
-    const base = Date.now();
-    storeA.deleteTreeNode("n1");
-    storeA.deleted.get("n1")!.deletedAt = new Date(base + 1000).toISOString();
-    await syncNow(storeA as unknown as Store);
-    expect(readManifest().notes.find((n) => n.id === "n1")?.deleted).toBe(true);
-    // B 同步：学到删除
-    await syncNow(storeB as unknown as Store);
-    expect(storeB.notes.has("n1")).toBe(false);
-    expect(storeB.listDeletedNotesForSync()).toHaveLength(1);
-    // B 恢复并同步（远端恢复为 active，updatedAt = T0+2s > 墓碑删除时间 T0+1s）
-    storeB.restoreTrashItem("n1", "<p>a</p>");
-    storeB.notes.get("n1")!.updatedAt = new Date(base + 2000).toISOString();
-    await syncNow(storeB as unknown as Store);
-    expect(readManifest().notes.find((n) => n.id === "n1")?.deleted).not.toBe(true);
-    // A 再同步：应跟随恢复（不再"拉不到"），本地墓碑撤销
-    await syncNow(storeA as unknown as Store);
-    expect(storeA.notes.has("n1")).toBe(true);
-    expect(storeA.listDeletedNotesForSync()).toHaveLength(0);
-    // 云端保持 active：A 的墓碑让位，不回写覆盖恢复
-    expect(readManifest().notes.find((n) => n.id === "n1")?.deleted).not.toBe(true);
-    // B 再同步：不被再次删除
-    await syncNow(storeB as unknown as Store);
-    expect(storeB.notes.has("n1")).toBe(true);
-    expect(readManifest().notes.find((n) => n.id === "n1")?.deleted).not.toBe(true);
-  });
-
-  it("远端较旧的 active 不会误恢复本地较新的删除（删除 LWW 较新仍传播）", async () => {
-    const storeA = newStore();
-    storeA.createNote("n1", "笔记A", "<p>a</p>");
-    await syncNow(storeA as unknown as Store);
-    const storeB = newStore();
-    await syncNow(storeB as unknown as Store);
-    expect(storeB.notes.has("n1")).toBe(true);
-    // 时间轴：n1 创建(T0) < 远端 active updatedAt(T0+1s) < A 本地删除(T0+2s)
-    const base = Date.now();
-    const m = readManifest();
-    const note = m.notes.find((n) => n.id === "n1")!;
-    note.updatedAt = new Date(base + 1000).toISOString();
-    writeManifest(m);
-    storeA.deleteTreeNode("n1");
-    storeA.deleted.get("n1")!.deletedAt = new Date(base + 2000).toISOString();
-    // A 同步：下载分支不跟随（远端 updatedAt 较旧）→ 上传回写墓碑（本地删除较新）
-    await syncNow(storeA as unknown as Store);
-    expect(readManifest().notes.find((n) => n.id === "n1")?.deleted).toBe(true);
-    // B 同步：被较新的删除覆盖
-    await syncNow(storeB as unknown as Store);
-    expect(storeB.notes.has("n1")).toBe(false);
+    expect(storeB.notes.get("n1")!.parentId).toBe("nb-1");
   });
 
   it("编辑产生旧对象进 pending；恢复引用后 pending 撤销", async () => {
@@ -943,7 +905,6 @@ describe("S3 GC v4 语义（M0/M2）", () => {
     expect(store.gcPending.has(`objects/n1-${h2}.lake`)).toBe(true);
   });
 
-
   it("差集对账只删超窗且不在 keep 的 pending 键（M5）", async () => {
     const store = newStore();
     store.createNote("n1", "笔记A", "<p>v1</p>");
@@ -962,7 +923,6 @@ describe("S3 GC v4 语义（M0/M2）", () => {
     expect(s3.bucket.has(key(`objects/n1-${h1}.lake`))).toBe(true);
     expect(store.gcPending.has(`objects/n1-${h1}.lake`)).toBe(true);
   });
-
 
   it("深度清理 dry-run 列出候选但不删；执行后删除非 keep 键（M7）", async () => {
     const store = newStore();
@@ -985,7 +945,6 @@ describe("S3 GC v4 语义（M0/M2）", () => {
     expect(s3.bucket.has(key("manifests/latest.json"))).toBe(true);
   });
 
-
   it("深度清理保持子空间隔离：不删除 quick-notes/ 下的小记对象（空间隔离）", async () => {
     const store = newStore();
     store.createNote("n1", "笔记A", "<p>v1</p>");
@@ -1005,25 +964,6 @@ describe("S3 GC v4 语义（M0/M2）", () => {
     expect(s3.bucket.has(key("quick-notes/manifests/latest.json"))).toBe(true);
     expect(s3.bucket.has(key("quick-notes/objects/abc.qnote"))).toBe(true);
     expect(s3.bucket.has(key("quick-notes/assets/qn/img.png"))).toBe(true);
-  });
-
-
-  it("purge 后先写墓碑再前缀删除对象/资源（M4）", async () => {
-    const store = newStore();
-    store.createNote("n1", "笔记A", "<p>a</p>");
-    store.addAsset("n1", "img.png", Buffer.from("img", "utf8"));
-    await syncNow(store as unknown as Store);
-    const h1 = store.contentHash("n1");
-    expect(s3.bucket.has(key(`objects/n1-${h1}.lake`))).toBe(true);
-    expect(s3.bucket.has(key("assets/n1/img.png"))).toBe(true);
-
-    store.deleteTreeNode("n1");
-    store.markPurged("n1");
-    await syncNow(store as unknown as Store);
-
-    expect(readManifest().notes.find((n) => n.id === "n1")?.deleted).toBe(true);
-    expect(s3.bucket.has(key(`objects/n1-${h1}.lake`))).toBe(false);
-    expect(s3.bucket.has(key("assets/n1/img.png"))).toBe(false);
   });
 });
 

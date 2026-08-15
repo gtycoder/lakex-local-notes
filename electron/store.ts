@@ -13,6 +13,8 @@ import { log } from "./logger.js";
 
 const DEFAULT_WORKSPACE_ID = "default";
 const DEFAULT_NOTEBOOK_ID = "notebook-personal";
+/** 隐藏回收站笔记本（固定 ID，每端本地初始化、不同步 folder；软删 = 移入此处）。 */
+export const TRASH_NOTEBOOK_ID = "notebook-trash";
 
 /**
  * 从 Lake 正文（.lake HTML）提取引用的资源文件名。
@@ -104,6 +106,9 @@ interface SyncNote {
   /** 仅本地 listNotesForSync 提供；远端导入/元数据字面量可省略（视为非 synced，走全量路径）。 */
   syncState?: string; isConflict: boolean;
   isLocked?: boolean; lockedAt?: string | null; icon?: string | null;
+  /** 回收站条目：进入回收站时间（自动过期基准）与删除前父目录（恢复位置）。 */
+  trashedAt?: string | null;
+  deletedFromParentId?: string | null;
 }
 interface RemoteAsset {
   filename: string; size: number; hash: string;
@@ -311,9 +316,26 @@ export class Store {
     if (!cols.some((c) => c.name === "restore_pending_at")) {
       this.db.exec("ALTER TABLE notes ADD COLUMN restore_pending_at TEXT");
     }
+    // TRASH-NOTEBOOK：回收站笔记本重构（删除=移动）。trashed_at=进入回收站时间（自动过期基准），
+    // deleted_from_parent_id=删除前父目录（恢复位置，上云）。
+    if (!cols.some((c) => c.name === "trashed_at")) {
+      this.db.exec("ALTER TABLE notes ADD COLUMN trashed_at TEXT");
+    }
+    if (!cols.some((c) => c.name === "deleted_from_parent_id")) {
+      this.db.exec("ALTER TABLE notes ADD COLUMN deleted_from_parent_id TEXT");
+    }
+    if (!treeCols.some((c) => c.name === "trashed_at")) {
+      this.db.exec("ALTER TABLE tree_nodes ADD COLUMN trashed_at TEXT");
+    }
+    if (!treeCols.some((c) => c.name === "deleted_from_parent_id")) {
+      this.db.exec("ALTER TABLE tree_nodes ADD COLUMN deleted_from_parent_id TEXT");
+    }
     const now = nowIso();
     this.db.prepare(`INSERT OR IGNORE INTO tree_nodes(id,workspace_id,parent_id,node_type,title,note_file_id,sort_order,created_at,updated_at,deleted_at,sync_state,is_conflict)
       VALUES(?,?,?,?,?,NULL,0,?,?,NULL,'local',0)`).run(DEFAULT_NOTEBOOK_ID, DEFAULT_WORKSPACE_ID, null, "notebook", "个人笔记", now, now);
+    // 回收站笔记本：固定 ID 每端本地初始化；侧栏/搜索/同步 folder 全部排除（与默认笔记本同法）。
+    this.db.prepare(`INSERT OR IGNORE INTO tree_nodes(id,workspace_id,parent_id,node_type,title,note_file_id,sort_order,created_at,updated_at,deleted_at,sync_state,is_conflict)
+      VALUES(?,?,?,?,?,NULL,0,?,?,NULL,'synced',0)`).run(TRASH_NOTEBOOK_ID, DEFAULT_WORKSPACE_ID, null, "notebook", "回收站", now, now);
     // Migrate any notes not yet in tree_nodes
     this.db.prepare(`INSERT INTO tree_nodes(id,workspace_id,parent_id,node_type,title,note_file_id,sort_order,created_at,updated_at,deleted_at,sync_state,is_conflict)
       SELECT id,?,COALESCE(parent_id,?),'note',title,id,sort_order,updated_at,updated_at,deleted_at,sync_state,is_conflict
@@ -373,6 +395,9 @@ export class Store {
   /** 树结构不变量：notebook 只能位于根层；note/group 必须位于某个节点下。
    * 支持多层嵌套：文档可包含分组/文档，分组可包含文档/分组（note/group 的父节点不限类型）。 */
   private assertParentCompatible(parentId: string | null, childType: string): void {
+    if (parentId === TRASH_NOTEBOOK_ID) {
+      throw new AppError("InvalidInput", "回收站是隐藏笔记本，不能直接作为父目录（删除请走删除操作）");
+    }
     if (childType === "notebook") {
       if (parentId !== null) throw new AppError("InvalidInput", "笔记本只能位于根层");
       return;
@@ -396,8 +421,8 @@ export class Store {
 
   bootstrap() {
     const notes = this.db.prepare(
-      "SELECT id,title,parent_id,sort_order,updated_at,sync_state,is_conflict,is_locked,locked_at FROM notes WHERE deleted_at IS NULL ORDER BY sort_order"
-    ).all().map((r) => this.mapSummary(r));
+      "SELECT id,title,parent_id,sort_order,updated_at,sync_state,is_conflict,is_locked,locked_at FROM notes WHERE deleted_at IS NULL AND parent_id != ? ORDER BY sort_order"
+    ).all(TRASH_NOTEBOOK_ID).map((r) => this.mapSummary(r));
     const last = this.db.prepare("SELECT value FROM device_state WHERE key='last_opened_note_id'").get() as { value: string } | undefined;
     return {
       workspaceId: DEFAULT_WORKSPACE_ID,
@@ -408,10 +433,17 @@ export class Store {
     };
   }
 
+  /** 侧栏树：排除隐藏回收站笔记本及其全部后代（trash 子树只出现在回收站面板）。 */
   listTreeNodes(): TreeNode[] {
     return this.db.prepare(
-      "SELECT * FROM tree_nodes WHERE workspace_id=? AND deleted_at IS NULL ORDER BY sort_order"
-    ).all(DEFAULT_WORKSPACE_ID).map((r) => this.mapTreeNode(r));
+      `WITH RECURSIVE trash_ids(id) AS (
+         SELECT ? FROM tree_nodes WHERE id=?
+         UNION ALL SELECT t.id FROM tree_nodes t JOIN trash_ids ti ON t.parent_id=ti.id
+       )
+       SELECT t.* FROM tree_nodes t
+       WHERE t.workspace_id=? AND t.deleted_at IS NULL AND t.id NOT IN (SELECT id FROM trash_ids)
+       ORDER BY t.sort_order`
+    ).all(TRASH_NOTEBOOK_ID, TRASH_NOTEBOOK_ID, DEFAULT_WORKSPACE_ID).map((r) => this.mapTreeNode(r));
   }
 
   private readTreeNode(id: string): TreeNode {
@@ -435,10 +467,11 @@ export class Store {
    * - deleted=true：软删除（回收站/远端删除墓碑已应用）；
    * - 否则 updatedAt/title 任一变化即代表正文或元数据被远端更新过。 */
   getNoteDigest(id: string): { id: string; title: string; updatedAt: string; deleted: boolean } | null {
-    const row = this.db.prepare("SELECT id,title,updated_at,deleted_at FROM notes WHERE id=?").get(id) as
-      { id: string; title: string; updated_at: string; deleted_at: string | null } | undefined;
+    const row = this.db.prepare("SELECT id,title,updated_at,parent_id,sync_state FROM notes WHERE id=?").get(id) as
+      { id: string; title: string; updated_at: string; parent_id: string | null; sync_state: string } | undefined;
     if (!row) return null;
-    return { id: row.id, title: row.title, updatedAt: row.updated_at, deleted: row.deleted_at !== null };
+    // TRASH-NOTEBOOK：deleted = 移入回收站（parentId=trash）或收到他端 purge 被抑制（purged）
+    return { id: row.id, title: row.title, updatedAt: row.updated_at, deleted: row.parent_id === TRASH_NOTEBOOK_ID || row.sync_state === "purged" };
   }
 
   createNote(title: string): NoteDocument {
@@ -672,10 +705,14 @@ export class Store {
   rebuildSearchIndex(): void {
     this.db.exec("DELETE FROM notes_fts");
     const rows = this.db.prepare(`
+      WITH RECURSIVE trash_ids(id) AS (
+        SELECT ? FROM tree_nodes WHERE id=?
+        UNION ALL SELECT t.id FROM tree_nodes t JOIN trash_ids ti ON t.parent_id=ti.id
+      )
       SELECT t.note_file_id AS id, t.title, n.text_cache
       FROM tree_nodes t LEFT JOIN notes n ON n.id = t.note_file_id
-      WHERE t.node_type = 'note' AND t.deleted_at IS NULL
-    `).all() as Array<{ id: string | null; title: string; text_cache: string | null }>;
+      WHERE t.node_type = 'note' AND t.deleted_at IS NULL AND t.id NOT IN (SELECT id FROM trash_ids)
+    `).all(TRASH_NOTEBOOK_ID, TRASH_NOTEBOOK_ID) as Array<{ id: string | null; title: string; text_cache: string | null }>;
     const ins = this.db.prepare("INSERT INTO notes_fts(title, body, note_id) VALUES(?,?,?)");
     const tx = this.db.transaction(() => {
       for (const r of rows) {
@@ -707,8 +744,14 @@ export class Store {
     }
     // 短查询回退：标题包含匹配
     const rows = this.db.prepare(
-      "SELECT id, title, '' AS snippet FROM tree_nodes WHERE node_type='note' AND deleted_at IS NULL AND title LIKE ? ORDER BY sort_order LIMIT ?"
-    ).all(`%${q}%`, limit) as Array<{ id: string; title: string; snippet: string }>;
+      `WITH RECURSIVE trash_ids(id) AS (
+         SELECT ? FROM tree_nodes WHERE id=?
+         UNION ALL SELECT t.id FROM tree_nodes t JOIN trash_ids ti ON t.parent_id=ti.id
+       )
+       SELECT t.id, t.title, '' AS snippet FROM tree_nodes t
+       WHERE t.node_type='note' AND t.deleted_at IS NULL AND t.id NOT IN (SELECT id FROM trash_ids) AND t.title LIKE ?
+       ORDER BY t.sort_order LIMIT ?`
+    ).all(TRASH_NOTEBOOK_ID, TRASH_NOTEBOOK_ID, `%${q}%`, limit) as Array<{ id: string; title: string; snippet: string }>;
     return rows.map((r) => ({ id: r.id, title: r.title, snippet: r.snippet ?? "" }));
   }
 
@@ -1176,125 +1219,138 @@ export class Store {
     return result;
   }
 
+  /** 该节点子树内全部 note_file_id（含自身；含已删除节点，purge 用）。 */
+  private descendantNoteFileIds(id: string): string[] {
+    const ids = this.descendantIdsIncludingDeleted(id);
+    const out: string[] = [];
+    for (const nid of ids) {
+      const row = this.db.prepare("SELECT note_file_id FROM tree_nodes WHERE id=?").get(nid) as { note_file_id: string | null } | undefined;
+      if (row?.note_file_id) out.push(row.note_file_id);
+    }
+    return out;
+  }
+
   /**
-   * 软删除（回收站）：节点及其子节点标记 deleted_at，保留 .lake / 资源文件，
-   * 并记录同步墓碑（manifest 恒保留 deleted 标记，远端不会复活）。
-   * 回收站内容仅保存在本地、不参与同步；恢复后清墓碑并标记 local 重新上传。
-   * 审计 #10：DB 事务原子提交；文件保留（不删除），彻底删除走 purgeTrashItem。
+   * 软删除（回收站笔记本重构）：删除 = 把节点移入隐藏回收站笔记本（parentId=notebook-trash），
+   * 记录 trashed_at（进入回收站时间）+ deleted_from_parent_id（删除前父目录，恢复位置），标 local 待上传。
+   * 不递归子节点（子节点随父移动）、不写墓碑（回收站条目是普通条目，移动即同步传播）。
+   * 文件保留（.lake / 资源不删）；彻底删除走 purgeTrashItem。审计 #10：DB 事务原子提交。
    */
   deleteTreeNode(id: string) {
+    if (id === TRASH_NOTEBOOK_ID || id === DEFAULT_NOTEBOOK_ID) {
+      throw new AppError("InvalidInput", "不能删除默认/回收站笔记本");
+    }
+    const node = this.readTreeNode(id);
+    if (node.parentId === TRASH_NOTEBOOK_ID) return; // 已在回收站
     const now = nowIso();
-    const ids = this.descendantIds(id);
     const tx = this.db.transaction(() => {
-      const nodeStmt = this.db.prepare("SELECT note_file_id FROM tree_nodes WHERE id=?");
-      const noteMeta = this.db.prepare("SELECT id,title,parent_id,sort_order,updated_at FROM notes WHERE id=?");
-      const tombstone = this.db.prepare(
-        "INSERT INTO deleted_notes(id,title,parent_id,sort_order,updated_at,deleted_at) VALUES(?,?,?,?,?,?) " +
-        "ON CONFLICT(id) DO UPDATE SET title=excluded.title, parent_id=excluded.parent_id, sort_order=excluded.sort_order, updated_at=excluded.updated_at, deleted_at=excluded.deleted_at"
-      );
-      const softDelNote = this.db.prepare("UPDATE notes SET deleted_at=?, sync_state='deleted', restore_pending_at=NULL WHERE id=? AND deleted_at IS NULL");
-      const softDelNode = this.db.prepare("UPDATE tree_nodes SET deleted_at=?, sync_state='deleted' WHERE id=? AND deleted_at IS NULL");
-      const delFts = this.db.prepare("DELETE FROM notes_fts WHERE note_id=?");
-      for (const nid of ids) {
-        const node = nodeStmt.get(nid) as { note_file_id: string | null } | undefined;
-        if (node?.note_file_id) {
-          // 记录墓碑（同步用：防止云端把已删除笔记重新拉回来）
-          const meta = noteMeta.get(node.note_file_id) as { id: string; title: string; parent_id: string | null; sort_order: number; updated_at: string } | undefined;
-          if (meta) tombstone.run(meta.id, meta.title, meta.parent_id, meta.sort_order, meta.updated_at, now);
-          softDelNote.run(now, node.note_file_id);
-          delFts.run(node.note_file_id);
-        }
-        softDelNode.run(now, nid);
+      if (node.noteFileId) {
+        this.db.prepare(
+          "UPDATE notes SET parent_id=?,trashed_at=?,deleted_from_parent_id=?,updated_at=?,sync_state='local' WHERE id=? AND deleted_at IS NULL"
+        ).run(TRASH_NOTEBOOK_ID, now, node.parentId, now, node.noteFileId);
+      }
+      this.db.prepare(
+        "UPDATE tree_nodes SET parent_id=?,trashed_at=?,deleted_from_parent_id=?,updated_at=?,sync_state='local' WHERE id=? AND deleted_at IS NULL"
+      ).run(TRASH_NOTEBOOK_ID, now, node.parentId, now, id);
+      // 回收站条目不出现在搜索（子树整体移出 FTS，恢复时重建）
+      const noteIds = this.descendantNoteFileIds(id);
+      if (noteIds.length > 0) {
+        const ph = noteIds.map(() => "?").join(",");
+        this.db.prepare(`DELETE FROM notes_fts WHERE note_id IN (${ph})`).run(...noteIds);
       }
     });
     tx();
   }
 
-  /** 回收站：列出所有软删除的节点（含子项），按删除时间倒序 */
+  /** 回收站：trash 笔记本的直接子节点（文件夹整体显示，子节点随动），按进入回收站时间倒序。 */
   listTrash(): Array<{
     id: string; title: string; nodeType: string; noteFileId: string | null;
-    parentId: string | null; deletedAt: string; updatedAt: string;
-    hasFile: boolean;
+    parentId: string | null; deletedAt: string | null; updatedAt: string;
+    hasFile: boolean; purged: boolean;
   }> {
     const rows = this.db.prepare(
-      `SELECT t.id,t.title,t.node_type,t.note_file_id,t.parent_id,t.deleted_at,t.updated_at,
-              CASE WHEN t.note_file_id IS NULL THEN 0 ELSE
-                (SELECT 1 FROM notes n WHERE n.id=t.note_file_id AND n.deleted_at IS NOT NULL)
-              END AS note_deleted
+      `SELECT t.id,t.title,t.node_type,t.note_file_id,t.parent_id,t.trashed_at,t.updated_at,t.sync_state
        FROM tree_nodes t
-       WHERE t.deleted_at IS NOT NULL
-       ORDER BY t.deleted_at DESC`
-    ).all() as Array<{
+       WHERE t.parent_id=? AND t.deleted_at IS NULL
+       ORDER BY t.trashed_at DESC`
+    ).all(TRASH_NOTEBOOK_ID) as Array<{
       id: string; title: string; node_type: string; note_file_id: string | null;
-      parent_id: string | null; deleted_at: string; updated_at: string; note_deleted: number;
+      parent_id: string | null; trashed_at: string | null; updated_at: string; sync_state: string;
     }>;
     return rows.map((r) => ({
       id: r.id, title: r.title, nodeType: r.node_type, noteFileId: r.note_file_id,
-      parentId: r.parent_id, deletedAt: r.deleted_at, updatedAt: r.updated_at,
-      hasFile: !!r.note_file_id && r.note_deleted === 1,
+      parentId: r.parent_id, deletedAt: r.trashed_at, updatedAt: r.updated_at,
+      hasFile: !!r.note_file_id, purged: r.sync_state === "purged",
     }));
   }
 
-  /** M9：回收站自动清空提醒候选（仅提醒，绝不自动删）。只返回顶级、删除时间超过 N 天的条目。 */
+  /** M9：回收站自动过期候选（listTrash 已只含 trash 笔记本顶级条目）。 */
   listTrashReminder(days: number): Array<{ id: string; title: string; deletedAt: string }> {
     if (!Number.isFinite(days) || days <= 0) return [];
     const cutoff = new Date(Date.now() - days * 24 * 3600 * 1000).toISOString();
     const items = this.listTrash();
-    const deletedIds = new Set(items.map((i) => i.id));
     return items
-      .filter((i) => (!i.parentId || !deletedIds.has(i.parentId)) && i.deletedAt < cutoff)
-      .map((i) => ({ id: i.id, title: i.title, deletedAt: i.deletedAt }));
+      .filter((i) => !!i.deletedAt && i.deletedAt < cutoff)
+      .map((i) => ({ id: i.id, title: i.title, deletedAt: i.deletedAt! }));
   }
 
-  /** 恢复回收站节点（本地复活）：清 deleted_at、清墓碑、标 local 供同步上传。
-   * 若父目录也已删除，则恢复到根目录。 */
+  /** 回收站自动过期（TRASH-NOTEBOOK）：trashed_at 超过 N 天的 trash 顶级条目自动 purge。返回 purge 数。 */
+  autoPurgeExpiredTrash(days: number): number {
+    if (!Number.isFinite(days) || days <= 0) return 0;
+    const cutoff = new Date(Date.now() - days * 24 * 3600 * 1000).toISOString();
+    const rows = this.db.prepare(
+      "SELECT id FROM tree_nodes WHERE parent_id=? AND deleted_at IS NULL AND trashed_at IS NOT NULL AND trashed_at < ? ORDER BY trashed_at"
+    ).all(TRASH_NOTEBOOK_ID, cutoff) as Array<{ id: string }>;
+    for (const r of rows) this.purgeTrashItem(r.id);
+    return rows.length;
+  }
+
+  /** 恢复回收站节点：移回原位置（deleted_from_parent_id）；原父不存在/已被删/在回收站 → 默认笔记本。
+   * 无墓碑可压（回收站条目是普通条目），恢复 = 移出 + 标 local 待上传（LWW 由 updatedAt 承担）。 */
   restoreTrashItem(id: string): void {
-    const node = this.db.prepare("SELECT * FROM tree_nodes WHERE id=? AND deleted_at IS NOT NULL").get(id) as
-      { note_file_id: string | null; parent_id: string | null } | undefined;
+    const node = this.db.prepare("SELECT * FROM tree_nodes WHERE id=? AND parent_id=? AND deleted_at IS NULL").get(id, TRASH_NOTEBOOK_ID) as
+      { note_file_id: string | null; node_type: string; deleted_from_parent_id: string | null } | undefined;
     if (!node) throw new AppError("NotFound", `回收站节点不存在: ${id}`);
+    // 笔记本只能回根层（parentId=null）；note/group 回原位置，原父缺失/被删/在回收站 → 默认笔记本
+    const isNotebook = node.node_type === "notebook";
+    let parentId: string | null = isNotebook ? null : node.deleted_from_parent_id;
+    if (parentId === null || parentId === TRASH_NOTEBOOK_ID) {
+      parentId = isNotebook ? null : DEFAULT_NOTEBOOK_ID;
+    } else {
+      // 原父必须存在、未被删、且不在回收站内，否则回退默认笔记本
+      const parent = this.db.prepare(
+        "SELECT id FROM tree_nodes WHERE id=? AND deleted_at IS NULL AND parent_id != ?"
+      ).get(parentId, TRASH_NOTEBOOK_ID) as { id: string } | undefined;
+      if (!parent) parentId = DEFAULT_NOTEBOOK_ID;
+    }
     const now = nowIso();
     const tx = this.db.transaction(() => {
-      // 父节点若仍被删除 → 恢复到根（避免挂到已删目录下）
-      let parentId = node.parent_id;
-      if (parentId) {
-        const parentAlive = this.db.prepare("SELECT 1 FROM tree_nodes WHERE id=? AND deleted_at IS NULL").get(parentId);
-        if (!parentAlive) parentId = null;
-      }
       if (node.note_file_id) {
-        this.db.prepare("UPDATE notes SET deleted_at=NULL, updated_at=?, sync_state='local', restore_pending_at=? WHERE id=?").run(now, now, node.note_file_id);
-        this.db.prepare("DELETE FROM deleted_notes WHERE id=?").run(node.note_file_id);
-        // 重建 FTS（正文缓存可能还在，优先用缓存）
+        this.db.prepare(
+          "UPDATE notes SET parent_id=?,trashed_at=NULL,deleted_from_parent_id=NULL,updated_at=?,sync_state='local',restore_pending_at=? WHERE id=?"
+        ).run(parentId, now, now, node.note_file_id);
         const titleRow = this.db.prepare("SELECT title FROM notes WHERE id=?").get(node.note_file_id) as { title: string } | undefined;
         const caches = this.readNoteCaches(node.note_file_id);
         this.upsertFts(node.note_file_id, titleRow?.title ?? "", caches.plain ?? null);
       }
-      this.db.prepare("UPDATE tree_nodes SET deleted_at=NULL, parent_id=?, updated_at=?, sync_state='local' WHERE id=?").run(parentId, now, id);
-      // 子节点（若有）一起恢复，并重建缓存/FTS
-      const children = this.db.prepare("SELECT id, note_file_id FROM tree_nodes WHERE parent_id=? AND deleted_at IS NOT NULL").all(id) as { id: string; note_file_id: string | null }[];
-      for (const c of children) {
-        this.db.prepare("UPDATE tree_nodes SET deleted_at=NULL, parent_id=?, updated_at=?, sync_state='local' WHERE id=?").run(id, now, c.id);
-        if (c.note_file_id) {
-          this.db.prepare("UPDATE notes SET deleted_at=NULL, updated_at=?, sync_state='local', restore_pending_at=? WHERE id=?").run(now, now, c.note_file_id);
-          this.db.prepare("DELETE FROM deleted_notes WHERE id=?").run(c.note_file_id);
-          const titleRow = this.db.prepare("SELECT title FROM notes WHERE id=?").get(c.note_file_id) as { title: string } | undefined;
-          const caches = this.readNoteCaches(c.note_file_id);
-          this.upsertFts(c.note_file_id, titleRow?.title ?? "", caches.plain ?? null);
-        }
-      }
+      this.db.prepare(
+        "UPDATE tree_nodes SET parent_id=?,trashed_at=NULL,deleted_from_parent_id=NULL,updated_at=?,sync_state='local' WHERE id=?"
+      ).run(parentId, now, id);
     });
     tx();
   }
 
   /**
-   * 撤销本地删除（sync 下载分支在"远端恢复较新"时调用）：清 deleted_at、删墓碑、重建 FTS。
-   * 与 restoreTrashItem 不同：不设 sync_state='local'——远端为权威，随后由下载/对账流程
-   * 对齐并 markSynced（避免无谓回传）。
+   * 撤销本地删除（sync 下载分支在"远端恢复较新"时调用）：清 purge 墓碑；
+   * 若本地有"收到他端 purge 后保留的回收站副本（purged）"，解除抑制（后续由下载/对账对齐）。
+   * 与 restoreTrashItem 不同：不强制标 local——远端为权威，随后由下载/对账流程对齐并 markSynced。
    */
   revokeLocalDeletion(id: string): void {
     const now = nowIso();
     const tx = this.db.transaction(() => {
-      this.db.prepare("UPDATE notes SET deleted_at=NULL, updated_at=? WHERE id=?").run(now, id);
       this.db.prepare("DELETE FROM deleted_notes WHERE id=?").run(id);
+      this.db.prepare("UPDATE notes SET sync_state='local' WHERE id=? AND sync_state='purged'").run(id);
+      this.db.prepare("UPDATE tree_nodes SET sync_state='local' WHERE note_file_id=? AND sync_state='purged'").run(id);
       const titleRow = this.db.prepare("SELECT title FROM notes WHERE id=?").get(id) as { title: string } | undefined;
       // 容错：本端已 purge（行被彻底删除）时跳过缓存/FTS——行将由下载分支 importRemoteNote 重建，
       // 避免 readNoteCaches 对不存在的行抛"笔记不存在"导致同步中断（远端恢复传播场景）。
@@ -1302,29 +1358,34 @@ export class Store {
         const caches = this.readNoteCaches(id);
         this.upsertFts(id, titleRow.title, caches.plain ?? null);
       }
-      this.db.prepare("UPDATE tree_nodes SET deleted_at=NULL, updated_at=? WHERE note_file_id=?").run(now, id);
+      this.db.prepare("UPDATE tree_nodes SET updated_at=? WHERE note_file_id=?").run(now, id);
     });
     tx();
   }
 
-  /** 彻底删除回收站节点（不可恢复）：删除 .lake / 资源文件 + DB 记录 + FTS。
-   * 墓碑保留（防止远端把已删除笔记重新拉回），与现有"墓碑永久保留"设计一致。 */
+  /** 彻底删除回收站节点（不可恢复）：物理删子树 + 写 purge 墓碑（deleted_notes，带 purged_at）。
+   * 墓碑上云（deleted:true）防其他端被动复活；其他端收到后保留本地副本并标 purged（可恢复）。
+   * M4 前缀删除由同步侧按 listPurgedNotesForSync 执行。 */
   purgeTrashItem(id: string): void {
     const t0 = Date.now();
-    const node = this.db.prepare("SELECT * FROM tree_nodes WHERE id=? AND deleted_at IS NOT NULL").get(id) as
+    const node = this.db.prepare("SELECT * FROM tree_nodes WHERE id=? AND parent_id=? AND deleted_at IS NULL").get(id, TRASH_NOTEBOOK_ID) as
       { note_file_id: string | null } | undefined;
     if (!node) throw new AppError("NotFound", `回收站节点不存在: ${id}`);
     const ids = this.descendantIdsIncludingDeleted(id);
     const filesToRemove: Array<{ path: string; recursive: boolean }> = [];
+    const now = nowIso();
     const tx = this.db.transaction(() => {
       const nodeStmt = this.db.prepare("SELECT note_file_id FROM tree_nodes WHERE id=?");
+      const noteMeta = this.db.prepare("SELECT id,title,parent_id,sort_order,updated_at FROM notes WHERE id=?");
+      const tombstone = this.db.prepare(
+        "INSERT INTO deleted_notes(id,title,parent_id,sort_order,updated_at,deleted_at,purged_at) VALUES(?,?,?,?,?,?,?) " +
+        "ON CONFLICT(id) DO UPDATE SET title=excluded.title, parent_id=excluded.parent_id, sort_order=excluded.sort_order, updated_at=excluded.updated_at, deleted_at=excluded.deleted_at, purged_at=excluded.purged_at"
+      );
       const delNote = this.db.prepare("DELETE FROM notes WHERE id=?");
       const delFts = this.db.prepare("DELETE FROM notes_fts WHERE note_id=?");
       const delNode = this.db.prepare("DELETE FROM tree_nodes WHERE id=?");
       const delOrphans = this.db.prepare("DELETE FROM orphan_assets WHERE note_id=?");
       const delHistory = this.db.prepare("DELETE FROM note_history WHERE note_id=?");
-      const markPurged = this.db.prepare("UPDATE deleted_notes SET purged_at=? WHERE id=?");
-      const now = nowIso();
       for (const nid of ids) {
         const n = nodeStmt.get(nid) as { note_file_id: string | null } | undefined;
         if (n?.note_file_id) {
@@ -1332,11 +1393,12 @@ export class Store {
           filesToRemove.push({ path: path.join(this.noteAssetsDir, n.note_file_id), recursive: true });
           // 彻底删除 = 连历史快照 + 历史引用的资源一起物理删（用户确认）
           filesToRemove.push({ path: this.historyNoteDir(n.note_file_id), recursive: true });
+          const meta = noteMeta.get(n.note_file_id) as { id: string; title: string; parent_id: string | null; sort_order: number; updated_at: string } | undefined;
+          if (meta) tombstone.run(meta.id, meta.title, meta.parent_id, meta.sort_order, meta.updated_at, now, now);
           delHistory.run(n.note_file_id);
           delOrphans.run(n.note_file_id);
           delFts.run(n.note_file_id);
           delNote.run(n.note_file_id);
-          markPurged.run(now, n.note_file_id);
         }
         delNode.run(nid);
       }
@@ -1349,14 +1411,10 @@ export class Store {
     log.store.info(`[perf] purge ${id} ${Date.now() - t0}ms (files=${filesToRemove.length})`);
   }
 
-  /** 清空回收站：彻底删除所有软删除节点（墓碑保留）。
-   * 只 purge 顶级被删节点（无被删父节点），子项由递归删除连带覆盖，
-   * 避免重复 purge 已被父节点连带删除的子项。 */
+  /** 清空回收站：彻底删除 trash 笔记本的全部直接子节点（各写 purge 墓碑）。 */
   emptyTrash(): void {
     const items = this.listTrash();
-    const deletedIds = new Set(items.map((i) => i.id));
-    const topLevel = items.filter((i) => !i.parentId || !deletedIds.has(i.parentId));
-    for (const item of topLevel) this.purgeTrashItem(item.id);
+    for (const item of items) this.purgeTrashItem(item.id);
   }
 
   /** 包含已删除节点的后代（用于彻底删除回收站子树） */
@@ -1668,7 +1726,7 @@ export class Store {
 
   getS3GcSettings(): S3GcSettings {
     const row = this.db.prepare("SELECT value FROM settings WHERE key='s3_gc_settings'").get() as { value: string } | undefined;
-    const def: S3GcSettings = { gcRetentionDays: 7, gcIntervalHours: 24, trashAutoPurgeDays: 0 };
+    const def: S3GcSettings = { gcRetentionDays: 7, gcIntervalHours: 24, trashAutoPurgeDays: 60 };
     if (!row) return def;
     try {
       const parsed = JSON.parse(row.value) as Partial<S3GcSettings>;
@@ -1786,41 +1844,50 @@ export class Store {
   listNotesForSync(): SyncNote[] {
     // icon 存于 tree_nodes，join 取出参与同步
     return this.db.prepare(
-      `SELECT n.id,n.title,n.parent_id,n.sort_order,n.updated_at,n.sync_state,n.is_conflict,n.is_locked,n.locked_at,t.icon
+      `SELECT n.id,n.title,n.parent_id,n.sort_order,n.updated_at,n.sync_state,n.is_conflict,n.is_locked,n.locked_at,t.icon,n.trashed_at,n.deleted_from_parent_id
        FROM notes n LEFT JOIN tree_nodes t ON t.note_file_id = n.id
        WHERE n.deleted_at IS NULL ORDER BY n.sort_order`
     ).all().map((r: any) => ({
       id: r.id, title: r.title, parentId: r.parent_id, sortOrder: r.sort_order,
       updatedAt: r.updated_at, syncState: r.sync_state, isConflict: !!r.is_conflict,
       isLocked: !!r.is_locked, lockedAt: r.locked_at ?? null, icon: r.icon ?? null,
+      trashedAt: r.trashed_at ?? null, deletedFromParentId: r.deleted_from_parent_id ?? null,
     }));
   }
 
   /** 同步目录树：活动 notebook/group（不含默认个人笔记本，它两端都会本地初始化）。 */
-  listFoldersForSync(): Array<{ id: string; title: string; parentId: string | null; sortOrder: number; nodeType: "notebook" | "group"; icon: string | null; updatedAt: string }> {
+  listFoldersForSync(): Array<{ id: string; title: string; parentId: string | null; sortOrder: number; nodeType: "notebook" | "group"; icon: string | null; updatedAt: string; trashedAt?: string | null; deletedFromParentId?: string | null }> {
     return this.db.prepare(
-      "SELECT id,title,parent_id,sort_order,node_type,icon,updated_at FROM tree_nodes WHERE node_type IN ('notebook','group') AND deleted_at IS NULL AND id != ? ORDER BY sort_order"
-    ).all(DEFAULT_NOTEBOOK_ID).map((r: any) => ({
+      "SELECT id,title,parent_id,sort_order,node_type,icon,updated_at,trashed_at,deleted_from_parent_id FROM tree_nodes WHERE node_type IN ('notebook','group') AND deleted_at IS NULL AND id != ? AND id != ? ORDER BY sort_order"
+    ).all(DEFAULT_NOTEBOOK_ID, TRASH_NOTEBOOK_ID).map((r: any) => ({
       id: r.id, title: r.title, parentId: r.parent_id, sortOrder: r.sort_order, nodeType: r.node_type, icon: r.icon ?? null, updatedAt: r.updated_at,
+      trashedAt: r.trashed_at ?? null, deletedFromParentId: r.deleted_from_parent_id ?? null,
     }));
   }
 
-  /** 导入远端 notebook/group 节点：按 updatedAt 做 LWW，避免“本地非空优先”造成图标来回覆盖。 */
-  importRemoteFolder(folder: { id: string; title: string; parentId: string | null; sortOrder: number; nodeType: "notebook" | "group"; icon: string | null; updatedAt: string }): void {
+  /** 导入远端 notebook/group 节点：按 updatedAt 做 LWW，避免“本地非空优先”造成图标来回覆盖。
+   * 回收站笔记本本身本地初始化，不参与 folder 同步（忽略）。 */
+  importRemoteFolder(folder: { id: string; title: string; parentId: string | null; sortOrder: number; nodeType: "notebook" | "group"; icon: string | null; updatedAt: string; trashedAt?: string | null; deletedFromParentId?: string | null }): void {
+    if (folder.id === TRASH_NOTEBOOK_ID) return;
     const existing = this.db.prepare("SELECT title,parent_id,sort_order,node_type,icon,updated_at FROM tree_nodes WHERE id=?").get(folder.id) as
       { title: string; parent_id: string | null; sort_order: number; node_type: string; icon: string | null; updated_at: string } | undefined;
     if (!existing) {
       this.db.prepare(
-        `INSERT INTO tree_nodes(id,workspace_id,parent_id,node_type,title,note_file_id,sort_order,created_at,updated_at,deleted_at,sync_state,is_conflict,icon)
-         VALUES(?,?,?,?,?,NULL,?,?,?,NULL,'synced',0,?)`
-      ).run(folder.id, DEFAULT_WORKSPACE_ID, folder.parentId, folder.nodeType, folder.title, folder.sortOrder, folder.updatedAt, folder.updatedAt, folder.icon ?? null);
+        `INSERT INTO tree_nodes(id,workspace_id,parent_id,node_type,title,note_file_id,sort_order,created_at,updated_at,deleted_at,sync_state,is_conflict,icon,trashed_at,deleted_from_parent_id)
+         VALUES(?,?,?,?,?,NULL,?,?,?,NULL,'synced',0,?,?,?)`
+      ).run(folder.id, DEFAULT_WORKSPACE_ID, folder.parentId, folder.nodeType, folder.title, folder.sortOrder, folder.updatedAt, folder.updatedAt, folder.icon ?? null,
+        folder.parentId === TRASH_NOTEBOOK_ID ? (folder.trashedAt ?? null) : null,
+        folder.parentId === TRASH_NOTEBOOK_ID ? (folder.deletedFromParentId ?? null) : null);
       return;
     }
     // 远端更新更晚才覆盖；否则保留本地（本地可能是更新的编辑，等待下次上传）。
     if (folder.updatedAt > existing.updated_at) {
       this.db.prepare(
-        "UPDATE tree_nodes SET parent_id=?, title=?, sort_order=?, updated_at=?, icon=?, sync_state='synced', node_type=? WHERE id=?"
-      ).run(folder.parentId, folder.title, folder.sortOrder, folder.updatedAt, folder.icon ?? null, folder.nodeType, folder.id);
+        "UPDATE tree_nodes SET parent_id=?, title=?, sort_order=?, updated_at=?, icon=?, sync_state='synced', node_type=?, trashed_at=?, deleted_from_parent_id=? WHERE id=?"
+      ).run(folder.parentId, folder.title, folder.sortOrder, folder.updatedAt, folder.icon ?? null, folder.nodeType,
+        folder.parentId === TRASH_NOTEBOOK_ID ? (folder.trashedAt ?? null) : null,
+        folder.parentId === TRASH_NOTEBOOK_ID ? (folder.deletedFromParentId ?? null) : null,
+        folder.id);
     }
   }
 
@@ -1830,15 +1897,68 @@ export class Store {
     return !!this.db.prepare("SELECT 1 FROM tree_nodes WHERE id=? AND deleted_at IS NULL").get(id);
   }
 
-  /** 正文 hash 相同、仅元数据变化（标题/父目录/排序/图标）时的对账。 */
+  /** 正文 hash 相同、仅元数据变化（标题/父目录/排序/图标/回收站字段）时的对账。 */
   applyRemoteNoteMeta(note: SyncNote): void {
     const tx = this.db.transaction(() => {
-    this.db.prepare(
-      "UPDATE notes SET title=?, parent_id=?, sort_order=?, updated_at=?, is_conflict=? WHERE id=?"
-    ).run(note.title, note.parentId, note.sortOrder, note.updatedAt, note.isConflict ? 1 : 0, note.id);
-    this.db.prepare(
-      "UPDATE tree_nodes SET title=?, parent_id=?, sort_order=?, updated_at=?, icon=? WHERE note_file_id=?"
-    ).run(note.title, note.parentId, note.sortOrder, note.updatedAt, note.icon ?? null, note.id);
+      // 回收站条目：同步 trashed_at + deleted_from_parent_id；移出回收站（恢复传播）时清空。
+      const inTrash = note.parentId === TRASH_NOTEBOOK_ID;
+      const trashedAt = inTrash ? (note.trashedAt ?? new Date().toISOString()) : null;
+      const deletedFrom = inTrash ? (note.deletedFromParentId ?? null) : null;
+      this.db.prepare(
+        "UPDATE notes SET title=?, parent_id=?, sort_order=?, updated_at=?, is_conflict=?, trashed_at=?, deleted_from_parent_id=? WHERE id=?"
+      ).run(note.title, note.parentId, note.sortOrder, note.updatedAt, note.isConflict ? 1 : 0, trashedAt, deletedFrom, note.id);
+      this.db.prepare(
+        "UPDATE tree_nodes SET title=?, parent_id=?, sort_order=?, updated_at=?, icon=?, trashed_at=?, deleted_from_parent_id=? WHERE note_file_id=?"
+      ).run(note.title, note.parentId, note.sortOrder, note.updatedAt, note.icon ?? null, trashedAt, deletedFrom, note.id);
+    });
+    tx();
+  }
+
+  /** 远端把该笔记移入回收站（软删传播，删除压编辑）：本地 active → 移入回收站 + 标 local（由下载分支重新核对内容后 markSynced）。
+   * 与 applyRemotePurge 不同：这是正常回收站条目（上云），不抑制上传；本地编辑由调用方先留档。 */
+  applyRemoteMoveToTrash(id: string, trashedAt: string | null, deletedFromParentId: string | null): void {
+    const tx = this.db.transaction(() => {
+      this.db.prepare(
+        "UPDATE notes SET parent_id=?,trashed_at=COALESCE(trashed_at,?),deleted_from_parent_id=COALESCE(deleted_from_parent_id,?),updated_at=?,sync_state='local',restore_pending_at=NULL WHERE id=? AND deleted_at IS NULL"
+      ).run(TRASH_NOTEBOOK_ID, trashedAt, deletedFromParentId, trashedAt ?? nowIso(), id);
+      this.db.prepare(
+        "UPDATE tree_nodes SET parent_id=?,trashed_at=COALESCE(trashed_at,?),deleted_from_parent_id=COALESCE(deleted_from_parent_id,?),updated_at=?,sync_state='local' WHERE note_file_id=? AND deleted_at IS NULL"
+      ).run(TRASH_NOTEBOOK_ID, trashedAt, deletedFromParentId, trashedAt ?? nowIso(), id);
+      this.db.prepare("DELETE FROM notes_fts WHERE note_id=?").run(id);
+    });
+    tx();
+  }
+
+  /** 远端恢复该笔记（移出回收站传播）：本地 trash 条目 → 移回原位置 + 清回收站字段，标 local 待下载分支对齐。 */
+  applyRemoteRestore(id: string, parentId: string | null, updatedAt: string): void {
+    const tx = this.db.transaction(() => {
+      this.db.prepare(
+        "UPDATE notes SET parent_id=?,trashed_at=NULL,deleted_from_parent_id=NULL,updated_at=?,sync_state='local',restore_pending_at=NULL WHERE id=? AND deleted_at IS NULL"
+      ).run(parentId, updatedAt, id);
+      this.db.prepare(
+        "UPDATE tree_nodes SET parent_id=?,trashed_at=NULL,deleted_from_parent_id=NULL,updated_at=?,sync_state='local' WHERE note_file_id=? AND deleted_at IS NULL"
+      ).run(parentId, updatedAt, id);
+      const titleRow = this.db.prepare("SELECT title FROM notes WHERE id=?").get(id) as { title: string } | undefined;
+      if (titleRow) {
+        const caches = this.readNoteCaches(id);
+        this.upsertFts(id, titleRow.title, caches.plain ?? null);
+      }
+    });
+    tx();
+  }
+
+  /** 收到他端 purge 墓碑：把本地条目移入回收站并标 purged（保留可恢复、不上传）。
+   * 与软删不同——purge 不广播强制删除，其他端保留恢复路子。 */
+  applyRemotePurge(id: string): void {
+    const now = nowIso();
+    const tx = this.db.transaction(() => {
+      this.db.prepare(
+        "UPDATE notes SET parent_id=?,trashed_at=COALESCE(trashed_at,?),deleted_from_parent_id=COALESCE(deleted_from_parent_id,parent_id),updated_at=?,sync_state='purged' WHERE id=? AND deleted_at IS NULL"
+      ).run(TRASH_NOTEBOOK_ID, now, now, id);
+      this.db.prepare(
+        "UPDATE tree_nodes SET parent_id=?,trashed_at=COALESCE(trashed_at,?),deleted_from_parent_id=COALESCE(deleted_from_parent_id,parent_id),updated_at=?,sync_state='purged' WHERE note_file_id=? AND deleted_at IS NULL"
+      ).run(TRASH_NOTEBOOK_ID, now, now, id);
+      this.db.prepare("DELETE FROM notes_fts WHERE note_id=?").run(id);
     });
     tx();
   }
@@ -1905,24 +2025,30 @@ export class Store {
         }
       }
       const tx = this.db.transaction(() => {
-        // upsert notes
+        // upsert notes（含回收站字段：trashed_at / deleted_from_parent_id）
         this.db.prepare(
-          `INSERT INTO notes(id,title,parent_id,sort_order,updated_at,sync_state,is_conflict,deleted_at,is_locked,locked_at)
-           VALUES(?,?,?,?,?,'synced',?,NULL,?,?)
+          `INSERT INTO notes(id,title,parent_id,sort_order,updated_at,sync_state,is_conflict,deleted_at,is_locked,locked_at,trashed_at,deleted_from_parent_id)
+           VALUES(?,?,?,?,?,'synced',?,NULL,?,?,?,?)
            ON CONFLICT(id) DO UPDATE SET title=excluded.title,parent_id=excluded.parent_id,
              sort_order=excluded.sort_order,updated_at=excluded.updated_at,
              is_locked=excluded.is_locked,locked_at=excluded.locked_at,
-             sync_state='synced',is_conflict=excluded.is_conflict,deleted_at=NULL`
+             sync_state='synced',is_conflict=excluded.is_conflict,deleted_at=NULL,
+             trashed_at=excluded.trashed_at,deleted_from_parent_id=excluded.deleted_from_parent_id`
         ).run(note.id, note.title, note.parentId, note.sortOrder, note.updatedAt, note.isConflict ? 1 : 0,
-          note.isLocked ? 1 : 0, note.lockedAt ?? null);
+          note.isLocked ? 1 : 0, note.lockedAt ?? null,
+          note.parentId === TRASH_NOTEBOOK_ID ? (note.trashedAt ?? null) : null,
+          note.parentId === TRASH_NOTEBOOK_ID ? (note.deletedFromParentId ?? null) : null);
         // upsert tree_nodes（note 节点）
         this.db.prepare(
-          `INSERT INTO tree_nodes(id,workspace_id,parent_id,node_type,title,note_file_id,sort_order,created_at,updated_at,deleted_at,sync_state,is_conflict,icon)
-           VALUES(?,?,?,'note',?,?,?,?,?,NULL,'synced',?,?)
+          `INSERT INTO tree_nodes(id,workspace_id,parent_id,node_type,title,note_file_id,sort_order,created_at,updated_at,deleted_at,sync_state,is_conflict,icon,trashed_at,deleted_from_parent_id)
+           VALUES(?,?,?,'note',?,?,?,?,?,NULL,'synced',?,?,?,?)
            ON CONFLICT(id) DO UPDATE SET parent_id=excluded.parent_id,title=excluded.title,
              sort_order=excluded.sort_order,updated_at=excluded.updated_at,
-             deleted_at=NULL,sync_state='synced',is_conflict=excluded.is_conflict,icon=excluded.icon`
-        ).run(note.id, DEFAULT_WORKSPACE_ID, note.parentId, note.title, note.id, note.sortOrder, note.updatedAt, note.updatedAt, note.isConflict ? 1 : 0, note.icon ?? null);
+             deleted_at=NULL,sync_state='synced',is_conflict=excluded.is_conflict,icon=excluded.icon,
+             trashed_at=excluded.trashed_at,deleted_from_parent_id=excluded.deleted_from_parent_id`
+        ).run(note.id, DEFAULT_WORKSPACE_ID, note.parentId, note.title, note.id, note.sortOrder, note.updatedAt, note.updatedAt, note.isConflict ? 1 : 0, note.icon ?? null,
+          note.parentId === TRASH_NOTEBOOK_ID ? (note.trashedAt ?? null) : null,
+          note.parentId === TRASH_NOTEBOOK_ID ? (note.deletedFromParentId ?? null) : null);
       });
       tx();
       // DB 提交成功 → 原子落位

@@ -28,7 +28,7 @@ interface LakeNative {
   moveTreeNodeOrdered(id: string, parentId: string | null, orderedIds: string[]): Promise<TreeNode>;
   reorderTreeNodes(parentId: string | null, orderedIds: string[]): Promise<void>;
   deleteTreeNode(id: string): Promise<void>;
-  listTrash(): Promise<Array<{ id: string; title: string; nodeType: string; noteFileId: string | null; parentId: string | null; deletedAt: string; updatedAt: string; hasFile: boolean }>>;
+  listTrash(): Promise<Array<{ id: string; title: string; nodeType: string; noteFileId: string | null; parentId: string | null; deletedAt: string; updatedAt: string; hasFile: boolean; purged?: boolean }>>;
   restoreTrash(id: string): Promise<void>;
   purgeTrash(id: string): Promise<void>;
   emptyTrash(): Promise<void>;

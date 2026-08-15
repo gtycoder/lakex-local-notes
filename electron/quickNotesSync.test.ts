@@ -185,3 +185,33 @@ describe("小记独立 S3 同步", () => {
     expect(notes.hasNote(target.id)).toBe(true);
   });
 });
+
+describe("小记增量扫描（synced 跳过本地读文件）", () => {
+  it("已同步小记二次同步不读 .qnote（0 次文件路径访问），assets 复用远端", async () => {
+    store.createQuickNote({ text: "同步这条小记", draftId: crypto.randomUUID(), stagedImageIds: [] });
+    await syncQuickNotes(store, settings);
+    const first = readQuickManifest();
+    expect(first.items).toHaveLength(1);
+
+    const spy = vi.spyOn(QuickNotesStore.prototype, "quickNotePathFor");
+    const r2 = await syncQuickNotes(store, settings);
+    expect(spy).not.toHaveBeenCalled();   // synced + 远端一致 → 跳过 .qnote 读取
+    spy.mockRestore();
+    expect(r2.uploaded).toBe(0);
+    expect(readQuickManifest().items).toHaveLength(1);
+  });
+
+  it("编辑后（local）照常读取文件上传", async () => {
+    const note = store.createQuickNote({ text: "v1", draftId: crypto.randomUUID(), stagedImageIds: [] });
+    await syncQuickNotes(store, settings);
+    const beforeHash = readQuickManifest().items[0].contentHash;
+    // 编辑（updateQuickNote 会置 sync_state='local'）
+    store.updateQuickNote(note.id, { text: "v2-edited", draftId: crypto.randomUUID(), stagedImageIds: [], retainedImageIds: [] });
+    const spy = vi.spyOn(QuickNotesStore.prototype, "quickNotePathFor");
+    const r = await syncQuickNotes(store, settings);
+    expect(spy).toHaveBeenCalled();       // 有编辑 → 读文件
+    spy.mockRestore();
+    expect(r.uploaded).toBeGreaterThanOrEqual(1);
+    expect(readQuickManifest().items[0].contentHash).not.toBe(beforeHash); // 新 hash 已上传
+  });
+});
