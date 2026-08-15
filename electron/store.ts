@@ -2083,6 +2083,8 @@ export class Store {
         for (const asset of assets) {
           fs.renameSync(path.join(assetTmpDir, asset.filename), path.join(assetDir, asset.filename));
         }
+        // 重命名成功后移除空 staging 目录（否则 note-assets 下残留 .staging-* 空目录）
+        try { fs.rmdirSync(assetTmpDir); } catch { /* 目录非空或已不存在，忽略 */ }
       }
     } catch (error) {
       try { fs.rmSync(lakeTmp, { force: true }); } catch { /* 忽略 */ }
