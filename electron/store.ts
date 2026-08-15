@@ -1436,7 +1436,14 @@ export class Store {
       throw new AppError("InvalidInput", "无效的图标");
     }
     const now = nowIso();
-    this.db.prepare("UPDATE tree_nodes SET icon=?, updated_at=?, sync_state='local' WHERE id=?").run(icon, now, id);
+    const tx = this.db.transaction(() => {
+      this.db.prepare("UPDATE tree_nodes SET icon=?, updated_at=?, sync_state='local' WHERE id=?").run(icon, now, id);
+      // 图标存于 tree_nodes，但下载 meta 对账按 notes.sync_state 判断本地是否有 pending 改动；
+      // 不标记 notes 会被远端旧图标回滚。
+      this.db.prepare("UPDATE notes SET updated_at=?, sync_state='local' WHERE id=(SELECT note_file_id FROM tree_nodes WHERE id=?) AND deleted_at IS NULL")
+        .run(now, id);
+    });
+    tx();
     return this.readTreeNode(id);
   }
 
@@ -1450,8 +1457,16 @@ export class Store {
     }
     this.assertParentCompatible(parentId, moving.nodeType);
     const now = nowIso();
-    this.db.prepare("UPDATE tree_nodes SET parent_id=?,sort_order=?,updated_at=?,sync_state='local' WHERE id=? AND deleted_at IS NULL")
-      .run(parentId, sortOrder, now, id);
+    const tx = this.db.transaction(() => {
+      this.db.prepare("UPDATE tree_nodes SET parent_id=?,sort_order=?,updated_at=?,sync_state='local' WHERE id=? AND deleted_at IS NULL")
+        .run(parentId, sortOrder, now, id);
+      // 同步源是 notes 表：移动必须同步更新 notes（否则 manifest 携带过期 parentId，跨端移动不同步）
+      if (moving.noteFileId) {
+        this.db.prepare("UPDATE notes SET parent_id=?,sort_order=?,updated_at=?,sync_state='local' WHERE id=? AND deleted_at IS NULL")
+          .run(parentId, sortOrder, now, moving.noteFileId);
+      }
+    });
+    tx();
     return this.readTreeNode(id);
   }
 
@@ -1481,6 +1496,11 @@ export class Store {
         .run(parentId, orderedIds.indexOf(id), now, id);
       const stmt = this.db.prepare("UPDATE tree_nodes SET sort_order=?,updated_at=?,sync_state='local' WHERE id=? AND deleted_at IS NULL");
       orderedIds.forEach((childId, index) => stmt.run(index, now, childId));
+      // 同步更新 notes（parentId 对同级不变，重复写无害）
+      const noteStmt = this.db.prepare(
+        "UPDATE notes SET parent_id=?,sort_order=?,updated_at=?,sync_state='local' WHERE id=(SELECT note_file_id FROM tree_nodes WHERE id=?) AND deleted_at IS NULL"
+      );
+      orderedIds.forEach((childId, index) => noteStmt.run(parentId, index, now, childId));
     });
     tx();
     return this.readTreeNode(id);
@@ -1504,7 +1524,10 @@ export class Store {
     const now = nowIso();
     const tx = this.db.transaction(() => {
       const stmt = this.db.prepare("UPDATE tree_nodes SET sort_order=?,updated_at=?,sync_state='local' WHERE id=? AND deleted_at IS NULL");
-      orderedIds.forEach((id, index) => stmt.run(index, now, id));
+      const noteStmt = this.db.prepare(
+        "UPDATE notes SET sort_order=?,updated_at=?,sync_state='local' WHERE id=(SELECT note_file_id FROM tree_nodes WHERE id=?) AND deleted_at IS NULL"
+      );
+      orderedIds.forEach((id, index) => { stmt.run(index, now, id); noteStmt.run(index, now, id); });
     });
     tx();
   }

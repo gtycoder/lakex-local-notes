@@ -12,13 +12,13 @@
 
 Lake Notes 是**本地优先**笔记应用（Electron + React + better-sqlite3 + 语雀 Lake 内核），带 S3 同步（七牛 Kodo S3 兼容 API）。**本地是真相，S3 只是镜像。**
 
-**当前状态**：多端删除链路（软删 → 恢复 → purge → GC 对账 → 深度清理）已测试验收并**提交**到 `feat/s3-storage-rw-delete`（未合并 master）。GC 测试报告见 `docs/GC-TEST-REPORT.md`。
+**当前状态**：隐藏回收站笔记本重构（删除=移动语义，回收站上云/purge不广播/自动过期60天）已完成并**提交**到 `feat/trash-notebook`（自 experiment/manifest-gzip 切出，含 gzip + 增量扫描）。真实双端 A/B 验证 32 场景全过（2026-08-15）。GC 测试报告见 `docs/GC-TEST-REPORT.md`。
 
 **下一阶段主线（重构）**：**隐藏回收站笔记本重构（删除 = 移动语义）**——把删除从"墓碑特殊状态"改为"移入隐藏回收站笔记本"，统一同步逻辑，根治墓碑机制的补丁与缺陷。**完整方案、起因经过、原则、计划见 `docs/REFACTOR-TRASH-NOTEBOOK-HANDOFF.md`，独立分支实施。**
 
 **排期约定（用户明确）**：重构（隐藏回收站笔记本）之后，再启动 Electron 升级 33 → 42。
 
-当前分支：`feat/s3-storage-rw-delete`，**已提交、未合并 master**。重构另起独立分支（建议 `feat/trash-notebook`）。
+当前分支：`feat/trash-notebook`（重构 + gzip + 增量扫描，含 meta 同步修复），**已提交、未合并 master**。
 
 ---
 
@@ -27,7 +27,7 @@ Lake Notes 是**本地优先**笔记应用（Electron + React + better-sqlite3 +
 | 项目 | 信息 |
 | --- | --- |
 | 目录 | `/Users/admin/file/local-lake/lake-notes-electron` |
-| 分支 | `feat/s3-storage-rw-delete`（未合并） |
+| 分支 | `feat/trash-notebook`（重构分支，自 experiment/manifest-gzip 切出；含 gzip+增量扫描+隐藏回收站重构） |
 | 远程 | `origin = https://gitee.com/gtycoder/local-lake.git` |
 | Node | **必须优先 Node 24**：`$HOME/.nvm/versions/node/v24.18.0/bin` |
 | Electron | **33.4.11**（升级 42 已列入 TODO，排期在删除链路之后） |
@@ -178,7 +178,9 @@ scripts/
 ## 6. 踩过的坑（务必记住）
 
 ### 环境 / 进程
+0. **本机 Chromium GPU Helper 空转会卡死同步（2026-08-15 定位）**：GPU Helper 进程 99% CPU 空转（`fontations_ffi`）→ 渲染进程冻结 → 主进程 `webContents.send` mojo 背压 → 同步"卡死"（Lake 或 quick-sync 停在进度上报处，`_getActiveRequests()` 为空、主进程空闲）。**`--disable-gpu` 单独不够**，必须 `--disable-gpu --disable-gpu-compositing --disable-software-rasterizer --disable-gpu-sandbox`（已写入 multidev.sh）。这是既有问题，非重构引入（重构前基线 6e306de 同样复现）。
 1. **vite dev server 会被 exec 会话回收**：必须用长驻 tty（`exec_command tty=true`）启动；vite-plugin-electron 会自动拉起 electron，手动控端前临时给 `vite.config.ts` 的 electron 入口加 `onstart: () => {}`，验证完必须还原（`git status` 不应有 vite.config.ts 改动；`vite.config.ts.multidev-bak` 是脚本备份）。
+1.1 **启动 Electron 勿用 `| head -N` 管道**：head 退出后 stdout 管道断裂，electron-log 控制台传输层抛 `write EPIPE` 未捕获异常 → 弹 "A JavaScript error occurred in the main process"。用 `> file 2>&1` 重定向。
 2. **`onstart` 的澄清**：它只是禁 vite-plugin-electron 自动拉起，不是"实现多端"的关键；多端 = 独立 `LAKE_USER_DATA` + 独立 `LAKE_ASSET_PORT` + 手动前台起。
 3. **单实例锁按 userData 隔离**：不同 userData 可同时跑；同一 userData 第二实例直接 quit。资源端口 A=19876，B=19877。
 4. **multidev.sh 的 device-b 没设 `LAKE_ASSET_PORT`**：起 B 端要手动补环境变量；且本环境 nohup 起不了 electron，A/B 都要手动前台 `tty=true` 起。

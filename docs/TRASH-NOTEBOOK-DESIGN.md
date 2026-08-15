@@ -105,3 +105,22 @@ const TRASH_NOTEBOOK_ID = "notebook-trash";   // 与 DEFAULT_NOTEBOOK_ID 同层
 ## 7. 实施顺序
 
 store（schema/删除/恢复/purge/purged）→ sync（下载/上传/墓碑 LWW/GC）→ UI → 小记增量扫描 → 测试重写与新增 → 全量验证（tsc + 205 测试基线 + build + A/B 多端）
+
+---
+
+## 8. A/B 真机验证结论（2026-08-15，真实七牛双端）
+
+**32 个集成场景全过**（CDP 驱动真实 Electron A/B + 真实 S3）：
+
+- 删除链路：回收站上云 / 情况3（从未持有设备拉到回收站全文）/ 恢复传播 / purge 不广播（B 标 purged 保留）/ purged 恢复复活
+- 编辑器细节 × 同步：标题 / 移动 / 重命名组 / 图标 / 锁定 LWW / 冲突 superseded+留档 / 图片资源上传+GC pending / 历史引用保护
+- 小记：创建 / 图片 / 删除传播 / 本地恢复传播 / 转正式笔记（含源删除传播）
+- 大文档 1.37MB 同步 / 150 文档批量 / 反复编辑 / 120 快照+清理 / GC reconcile
+
+**真机发现并修复的既有 bug（meta 同步一致性）**：
+- `moveTreeNode`/`moveTreeNodeOrdered`/`reorderTreeNodes`/`setNodeIcon` 只改 `tree_nodes`、不同步 `notes` 表（同步源），导致移动/重排/图标跨端不同步、且被下载 meta 对账回滚。
+- 修复：这些操作同步更新 `notes`（parent_id/sort_order/updated_at/sync_state）；下载"正文未变"分支在本地 `sync_state='local'`（有 pending 元数据改动）时跳过 `applyRemoteNoteMeta`，本地优先、上传回写。
+- 回归测试：`moveTreeNode 同步更新 notes 表`、`setNodeIcon 标记 notes 为 local`。
+
+**环境坑（本机必须）**：Chromium GPU Helper 进程空转（99% CPU，`fontations_ffi`）会导致渲染进程冻结 → 主进程 `webContents.send` mojo 背压 → 同步卡死。`--disable-gpu` 单独不够，必须
+`--disable-gpu --disable-gpu-compositing --disable-software-rasterizer --disable-gpu-sandbox`（已写入 multidev.sh）。

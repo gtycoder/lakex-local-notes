@@ -407,7 +407,11 @@ export async function syncNow(store: Store, onProgress?: (p: SyncProgress) => vo
             store.applyRemoteLock(rn.id, merged.locked, merged.at);
           }
           // 标题/父目录/排序/图标也是元数据，正文未变时也要对账（否则文件夹调整不会同步）。
-          store.applyRemoteNoteMeta({ ...rn, parentId: effectiveParent });
+          // 但本地有未同步的元数据改动（sync_state='local'：移动/图标/重排等）时本地优先，
+          // 跳过远端对账，由上传阶段回写本地最新元数据（否则本地改动被远端旧值回滚）。
+          if (local.syncState !== "local") {
+            store.applyRemoteNoteMeta({ ...rn, parentId: effectiveParent });
+          }
         }
         store.setBaseHash(rn.id, rn.contentHash);
         store.markSynced(rn.id);

@@ -456,6 +456,32 @@ describe("目录树操作", () => {
     expect(store.listNoteHistory(other.id).length).toBe(1);
   });
 
+  it("moveTreeNode 同步更新 notes 表（同步源一致性，移动才能跨端传播）", () => {
+    const nb = store.createNotebook("移动目标");
+    const note = store.createNoteIn(nb.id, "移动前");
+    store.saveNote(note.id, "移动前", "<p>x</p>");
+    const nb2 = store.createNotebook("移动后");
+    store.moveTreeNode(note.id, nb2.id, 0);
+    const sync = store.listNotesForSync().find((n) => n.id === note.id)!;
+    expect(sync.parentId).toBe(nb2.id);   // notes.parent_id 已更新
+    expect(sync.sortOrder).toBe(0);
+    expect(sync.syncState).toBe("local"); // 待上传
+    // tree_nodes 同步
+    expect(store.listTreeNodes().find((t) => t.id === note.id)?.parentId).toBe(nb2.id);
+  });
+
+  it("setNodeIcon 标记 notes 为 local（下载 meta 对账不会回滚图标）", () => {
+    const note = store.createNote("图标");
+    store.saveNote(note.id, "图标", "<p>x</p>");
+    store.setNodeIcon(note.id, "📌");
+    const sync = store.listNotesForSync().find((n) => n.id === note.id)!;
+    expect(sync.syncState).toBe("local");
+    expect(sync.icon).toBe("📌");
+    // 下载对账路径（sync_state='synced' 的笔记才应用远端元数据）
+    store.markSynced(note.id);
+    expect(store.listNotesForSync().find((n) => n.id === note.id)?.syncState).toBe("synced");
+  });
+
   it("回收站自动过期：trashed_at 超期条目自动 purge（默认 60 天可配）", () => {
     const nb = store.createNotebook("待过期");
     const note = store.createNoteIn(nb.id, "子笔记");

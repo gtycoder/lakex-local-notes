@@ -54,20 +54,23 @@ start_vite() {
 }
 
 run_device() {
-  local name="$1" data_dir="$2" cdp="${3:-}" log="$4"
-  # 本应用固定监听 19876 作为本地资源服务器；两个设备同时跑会端口冲突导致主进程退出。
-  if command -v lsof >/dev/null 2>&1 && lsof -nP -iTCP:19876 -sTCP:LISTEN >/dev/null 2>&1; then
-    echo "检测到已有设备占用 19876；请先关闭当前设备（或先运行 $0 stop），再启动另一个设备。" >&2
+  local name="$1" data_dir="$2" cdp="${3:-}" log="$4" port="$5"
+  # 每个设备独立 LAKE_ASSET_PORT（A=19876 默认、B=19877），避免资源端口冲突导致主进程退出。
+  if command -v lsof >/dev/null 2>&1 && lsof -nP -iTCP:"$port" -sTCP:LISTEN >/dev/null 2>&1; then
+    echo "检测到已有进程占用 $port；请先关闭当前设备（或先运行 $0 stop），再启动另一个设备。" >&2
     exit 1
   fi
-  local args=(--disable-gpu)
+  # 本机 Chromium GPU 进程空转会导致渲染进程冻结/同步卡死：必须激进禁用 GPU
+  # （--disable-gpu 单独不够；曾导致 A/B 联调反复卡死，实测本组合可稳定运行）
+  local args=(--disable-gpu --disable-gpu-compositing --disable-software-rasterizer --disable-gpu-sandbox)
   [ -n "$cdp" ] && args+=(--remote-debugging-port="$cdp")
+  echo "starting ${name} (userData=${data_dir:-default}, assetPort=${port:-19876})"
+  # 本环境 nohup 起不了 electron：手动前台 tty 启动时请直接复制下方命令。
+  echo "  LAKE_USER_DATA="${data_dir}" LAKE_ASSET_PORT=$port ./node_modules/.bin/electron --disable-gpu ."
   if [ -n "$data_dir" ]; then
-    echo "starting ${name} (userData=${data_dir})"
-    LAKE_USER_DATA="$data_dir" nohup nohup ./node_modules/.bin/electron "${args[@]}" . >"$log" 2>&1 &
+    LAKE_USER_DATA="$data_dir" LAKE_ASSET_PORT="$port" nohup ./node_modules/.bin/electron "${args[@]}" . >"$log" 2>&1 &
   else
-    echo "starting ${name} (default dev userData)"
-    nohup ./node_modules/.bin/electron "${args[@]}" . >"$log" 2>&1 &
+    LAKE_ASSET_PORT="$port" nohup ./node_modules/.bin/electron "${args[@]}" . >"$log" 2>&1 &
   fi
   echo $! >> "$PID_FILE"
 }
