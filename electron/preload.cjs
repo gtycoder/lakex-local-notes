@@ -4,6 +4,7 @@ const invoke = (channel, ...args) => ipcRenderer.invoke(channel, ...args);
 
 contextBridge.exposeInMainWorld("lakeNative", {
   assetPort: Number(process.env.LAKE_ASSET_PORT) || 19876,
+  assetToken: process.env.LAKE_ASSET_TOKEN ?? "",
   bootstrap: () => invoke("bootstrap_workspace"),
   readNote: (id) => invoke("read_note", id),
   getNoteDigest: (id) => invoke("get_note_digest", id),

@@ -97,6 +97,10 @@ export interface SyncProgress {
 }
 
 const MANIFEST_VERSION = 4;
+/** 保留的 manifest commit 链长度（latest + 本 commit + 8 层 prev = 10 份）。
+ * prune / runGcReconcile / runDeepCleanup 三者必须一致，否则深度清理会在 7 天后
+ * 把「多留的容错份」删掉（用户验收 #3：留 10 份）。 */
+const MANIFEST_CHAIN_KEEP = 8;
 /** gzip 魔数（0x1f 0x8b）。JSON/PNG/JPEG 等实际内容不可能以此开头，可按魔数安全识别 gzip 对象。 */
 const GZIP_MAGIC = [0x1f, 0x8b];
 function isGzip(bytes: Buffer): boolean {
@@ -286,6 +290,22 @@ export async function syncNow(store: Store, onProgress?: (p: SyncProgress) => vo
   const remoteManifest: Manifest | null = manifestBytes ? JSON.parse(manifestBytes.toString("utf8")) : null;
   if (remoteManifest) validateManifest(remoteManifest);
 
+  // 零变更早退（性能）：远端 latest 的 commitId 与本设备上次成功读/写的相同，
+  // 且本地无待上传变更（notes 全 synced + 无新增 purge 墓碑）→ 整轮跳过，
+  // 不做 manifest 解析/逐条记账/重写上传（10k 条时从秒级降到 ~100ms，纯性能、语义等价）。
+  if (remoteManifest
+    && remoteManifest.commitId === store.getLastSeenCommitId()
+    && !store.hasLocalPendingNotes()
+    && store.tombstoneSignature() === store.getLastTombstoneSig()) {
+    log.sync.info(`[perf] zero-change sync skipped (commit=${remoteManifest.commitId.slice(0, 8)}, notes=${remoteManifest.notes.length})`);
+    return {
+      uploaded: 0, downloaded: 0, conflicts: 0,
+      manifestId: remoteManifest.commitId,
+      completedAt: new Date().toISOString(),
+      supersededNotes: [],
+    };
+  }
+
   // 2. 下载阶段：远端有而本地缺失/不同的笔记
   let downloaded = 0;
   let conflicts = 0;
@@ -299,6 +319,9 @@ export async function syncNow(store: Store, onProgress?: (p: SyncProgress) => vo
     const localNotesAll = store.listNotesForSync();
     const localById = new Map(localNotesAll.map((n) => [n.id, n]));
     const localIdsAll = new Set(localNotesAll.map((n) => n.id));
+    // 批量读取同步基线（baseHash / lastSyncedMetaAt / lastUploadedHash / syncState），
+    // 替代逐条 lastSyncedMetaAt 查询，并支撑 fast-path 记账去重（10k 条时省 ~4 万次写）。
+    const baseInfo = store.allSyncBaseInfo();
     // 先导入目录树，再导入笔记，保证文档的父 notebook/group 已存在。
     const validParents = new Set<string>([store.defaultNotebookId(), TRASH_NOTEBOOK_ID]);
     for (const folder of remoteManifest.folders) {
@@ -399,18 +422,34 @@ export async function syncNow(store: Store, onProgress?: (p: SyncProgress) => vo
       if (localHash === rn.contentHash) {
         // 正文相同：锁状态作为独立元数据按 LWW 合并（锁变更不改正文哈希，
         // 不能因哈希相等就跳过，否则远端锁状态永远下不来）
+        let metaApplied = false;
+        let lockApplied = false;
         if (local) {
           const localLocked = !!local.isLocked;
           const remoteLocked = !!rn.isLocked;
           if (localLocked !== remoteLocked) {
             const merged = mergeLockState(localLocked, local.lockedAt ?? null, remoteLocked, rn.lockedAt ?? null);
             store.applyRemoteLock(rn.id, merged.locked, merged.at);
+            lockApplied = true;
           }
           // 标题/父目录/排序/图标也是元数据，正文未变时也要对账（否则文件夹调整不会同步）。
-          // 但本地有未同步的元数据改动（sync_state='local'：移动/图标/重排等）时本地优先，
-          // 跳过远端对账，由上传阶段回写本地最新元数据（否则本地改动被远端旧值回滚）。
-          if (local.syncState !== "local") {
+          // 统一冲突语义（先同步者胜，与正文 baseHash、小记 baseHash 同构）：
+          // 以"本设备上次成功同步时该笔记的 updated_at"（lastSyncedMetaAt）为已确认版本——
+          // - 远端 updatedAt 新于已确认版本 → 远端是未确认的新变更（其他设备先提交）→ 应用远端
+          //   （A 先改先同步、B 后同步时，A 的图标胜出；本地 pending 的旧值不再覆盖云端新值）；
+          // - 否则远端是本设备已确认版本 → 保留本地续编/改名（不被远端旧值回滚），上传阶段回写。
+          const base = baseInfo.get(rn.id);
+          const lastMeta = base?.lastSyncedMetaAt ?? null;
+          if (lastMeta === null || rn.updatedAt > lastMeta) {
             store.applyRemoteNoteMeta({ ...rn, parentId: effectiveParent });
+            metaApplied = true;
+          }
+          // 记账去重：本地已 synced 且 base/meta 与远端一致、本次未应用任何远端变更 →
+          // 跳过 setBaseHash/markSynced（10k 条零变更时省约 4 万次 DB 写；语义等价）。
+          const alreadySynced = local.syncState === "synced" && base?.baseHash === rn.contentHash && base.lastSyncedMetaAt === local.updatedAt;
+          if (!metaApplied && !lockApplied && alreadySynced) {
+            log.sync.info(`[perf] download ${rn.id} unchanged (skip writes) ${Date.now() - noteStart}ms`);
+            continue;
           }
         }
         store.setBaseHash(rn.id, rn.contentHash);
@@ -461,8 +500,19 @@ export async function syncNow(store: Store, onProgress?: (p: SyncProgress) => vo
         store.setBaseHash(rn.id, rn.contentHash);
         store.markSynced(rn.id);
         continue;
-      } else if (uploadedByUs) {
-        // 远端是本机传的 + 本地有变化（恢复/新编辑）→ 本地为准，上传覆盖（不产生冲突副本）
+      } else if (uploadedByUs && local!.parentId !== TRASH_NOTEBOOK_ID) {
+        // 远端是本机传的 + 本地有变化（恢复/新编辑）→ 本地为准，上传覆盖（不产生冲突副本）。
+        // 排除回收站条目：A 删除、B 离线编辑时（删除压编辑），B 的编辑不得溜进回收站内容
+        // （B 可能把 A 的版本原样回推过导致 lastUploadedHash==远端，但回收站内容应以 A 删除的那版为准）。
+        store.setBaseHash(rn.id, localHash!);
+        store.markSynced(rn.id);
+        continue;
+      } else if (!remoteChanged && localChanged && local!.parentId !== TRASH_NOTEBOOK_ID) {
+        // 统一冲突语义（先同步者胜）：远端 == 本设备已确认基线（B 已同步过 A 的版本），
+        // 本地在其基础上续编 → 本地为准，上传覆盖（与小记"仅在本地变更则上传"一致；
+        // 此前该情况落入 localChanged 分支被远端覆盖，B 在 A 最新版上的续编会丢失）。
+        // 排除回收站条目：A 删除、B 离线编辑时（删除压编辑），本地编辑不得溜进回收站内容——
+        // 回收站内容应以 A 删除的那版为准（B 的编辑已由 trash-cross 分支强制留档进历史）。
         store.setBaseHash(rn.id, localHash!);
         store.markSynced(rn.id);
         continue;
@@ -673,6 +723,13 @@ export async function syncNow(store: Store, onProgress?: (p: SyncProgress) => vo
   await remote.put(`manifests/${commitId}.json`, manifestOutput, "application/json", { gzip: true });
   await remote.put("manifests/latest.json", manifestOutput, "application/json", { gzip: true });
   log.sync.info(`[perf] manifest ${commitId} ${Date.now() - manifestStart}ms (notes=${manifestNotes.length}, folders=${manifestFolders.length}, bytes=${manifestOutput.length}, prev=${manifest.prevCommitId ?? "none"})`);
+  // 验收 #3：每次同步后立即裁剪旧 manifest，只保留 latest + 3 份 commit 链（GC/清理引用上限），
+  // 避免只靠 7 天 retention 的深度清理，测试一小时就累积 30+ 份 commit json。
+  try {
+    await pruneOldManifests(remote, commitId, remoteManifest);
+  } catch (error) {
+    log.sync.warn(`[perf] manifest prune failed (non-fatal): ${String(error)}`);
+  }
 
   // P0-1 修正：lastUploadedHash 语义 = 已成功发布到 latest 的 hash，必须在 manifest 写成功后再更新。
   // 仅对 active 笔记更新；deleted 墓碑是占位 contentHash，绝不写入 sync_base/lastUploadedHash。
@@ -726,6 +783,9 @@ export async function syncNow(store: Store, onProgress?: (p: SyncProgress) => vo
   store.recordSyncResult(JSON.stringify(result));
 
   report({ phase: "done", message: "同步完成", supersededNotes });
+  // 零变更早退的基线：记录本次成功读/写的 commitId 与墓碑签名
+  store.setLastSeenCommitId(commitId);
+  store.setLastTombstoneSig(store.tombstoneSignature());
   log.sync.info(`[perf] syncNow done ${Date.now() - syncStart}ms (uploaded=${uploaded}, downloaded=${downloaded}, conflicts=${conflicts}, superseded=${supersededNotes.length})`);
   return result;
 }
@@ -762,10 +822,10 @@ export async function runGcReconcile(store: Store): Promise<GcReconcileResult> {
   const keep = new Set<string>();
   collectManifestRefs(latest, keep);
 
-  // prevCommitId 链最多 3 份 commit 的引用一并保留
+  // prevCommitId 链（与 prune / deep-cleanup 同一保留窗口）的引用一并保留
   let prev = latest.prevCommitId;
   let chain = 0;
-  while (prev && chain < 3) {
+  while (prev && chain < MANIFEST_CHAIN_KEEP) {
     const bytes = await remote.getOptional(`manifests/${prev}.json`);
     if (!bytes) break;
     const m = JSON.parse(bytes.toString("utf8")) as Manifest;
@@ -823,10 +883,10 @@ export async function runDeepCleanup(store: Store, opts?: { dryRun?: boolean; ex
   keep.add("manifests/latest.json");
   collectManifestRefs(latest, keep);
 
-  // commit 链（最多 3 份）
+  // commit 链（与 prune 同一保留窗口：latest + 本 commit + 8 层 prev = 10 份）
   let prev = latest.prevCommitId;
   let chain = 0;
-  while (prev && chain < 3) {
+  while (prev && chain < MANIFEST_CHAIN_KEEP) {
     keep.add(`manifests/${prev}.json`);
     const bytes = await remote.getOptional(`manifests/${prev}.json`);
     if (!bytes) break;
@@ -986,6 +1046,38 @@ function validateManifest(manifest: unknown): asserts manifest is Manifest {
     if (f.trashedAt !== undefined && f.trashedAt !== null && typeof f.trashedAt !== "string") throw new Error("清单格式无效：folder.trashedAt 非法");
     if (f.deletedFromParentId !== undefined && f.deletedFromParentId !== null && typeof f.deletedFromParentId !== "string") throw new Error("清单格式无效：folder.deletedFromParentId 非法");
   }
+}
+
+/**
+ * 验收 #3：裁剪 manifests/ 目录。保留 latest.json + 本设备刚写入的 commit + 沿 prevCommitId
+ * 链再向上 8 份（共 10 个文件；超出 GC/对账 3 份引用上限的旧 commit 仅作容错保留）。
+ * 只沿 latest 可达链裁剪：任何不在链上的 manifest 对 GC/对账均不可达，删除安全。
+ * 删除失败不阻断同步（下次同步再试）。
+ */
+async function pruneOldManifests(remote: ObjectStore, commitId: string, remoteManifest: Manifest | null): Promise<void> {
+  const all = (await remote.list("manifests/")).map((item) => item.key);
+  // 稳态 = latest + 本 commit + 沿 latest 链 8 层 prev，共 10 份（用户验收 #3：多留一些提高容错）；
+  // 无需裁剪时跳过链遍历（省 2 次 GET）。
+  if (all.length <= 10) return;
+  const keep = new Set<string>(["manifests/latest.json", `manifests/${commitId}.json`]);
+  let prev = remoteManifest?.commitId ?? null;
+  let chain = 0;
+  while (prev && chain < MANIFEST_CHAIN_KEEP) {
+    const key = `manifests/${prev}.json`;
+    keep.add(key);
+    try {
+      const bytes = await remote.getOptional(key);
+      if (!bytes) break;
+      const m = JSON.parse(bytes.toString("utf8")) as Manifest;
+      validateManifest(m);
+      prev = m.prevCommitId;
+    } catch { break; }
+    chain += 1;
+  }
+  const toDelete = all.filter((key) => !keep.has(key));
+  if (toDelete.length === 0) return;
+  await remote.deleteMany(toDelete);
+  log.sync.info(`[perf] manifest prune ${toDelete.length} old (kept=${keep.size})`);
 }
 
 /** 安全单路径段：拒绝空、./.. 以及含 / 或 \\ 的字符串（防目录穿越） */

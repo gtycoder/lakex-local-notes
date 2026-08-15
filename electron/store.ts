@@ -28,6 +28,9 @@ export function extractAssetRefs(content: string): Set<string> {
   return new Set([...content.matchAll(ASSET_NAME_RE)].map((m) => m[0]));
 }
 export const MAX_IMAGE_BYTES = 25 * 1024 * 1024;
+/** 解码后像素上限（50MP，如 8000x6250）：压缩图可小、像素可极大（解压炸弹），
+ * 上传/下载时用 sharp 读头部尺寸拦截，防渲染层/资产服务解码时 OOM。 */
+export const MAX_IMAGE_PIXELS = 50_000_000;
 // 下载外部图片的超时与请求头（移植自 Tauri 版 Rust 后端，见 lake-notes-tauri-poc/src-tauri/src/store.rs）
 const DOWNLOAD_TIMEOUT_MS = 30_000;
 // 知乎等 CDN 的防盗链 403 有波动性，重试可显著提高成功率
@@ -240,7 +243,8 @@ export class Store {
       CREATE UNIQUE INDEX IF NOT EXISTS idx_orphan_path ON orphan_assets(file_path);
       CREATE TABLE IF NOT EXISTS sync_base (
         note_id TEXT PRIMARY KEY,
-        content_hash TEXT NOT NULL
+        content_hash TEXT NOT NULL,
+        last_synced_meta_at TEXT
       );
       CREATE TABLE IF NOT EXISTS deleted_notes (
         id TEXT PRIMARY KEY,
@@ -306,6 +310,12 @@ export class Store {
     const baseCols = this.db.prepare("PRAGMA table_info(sync_base)").all() as Array<{ name: string }>;
     if (!baseCols.some((c) => c.name === "last_uploaded_hash")) {
       this.db.exec("ALTER TABLE sync_base ADD COLUMN last_uploaded_hash TEXT");
+    }
+    // 统一冲突语义（先同步者胜）：记录"本设备上次成功同步时该笔记的 updated_at"（元数据已确认版本）。
+    // 下载对账据此判定远端元数据是否"新于本设备已确认版本"：是 → 应用远端（先同步者胜）；
+    // 否 → 保留本地（在已确认基础上续编/改名不被远端旧值回滚）。与正文 baseHash、小记 baseHash 同构。
+    if (!baseCols.some((c) => c.name === "last_synced_meta_at")) {
+      this.db.exec("ALTER TABLE sync_base ADD COLUMN last_synced_meta_at TEXT");
     }
     const deletedCols = this.db.prepare("PRAGMA table_info(deleted_notes)").all() as Array<{ name: string }>;
     if (!deletedCols.some((c) => c.name === "purged_at")) {
@@ -588,6 +598,7 @@ export class Store {
   }
 
   renameTreeNode(id: string, title: string): TreeNode {
+    this.revivePurgedIfNeeded(id);
     const trimmed = title.trim();
     if (!trimmed) throw new AppError("InvalidInput", "名称不能为空");
     const now = nowIso();
@@ -606,6 +617,11 @@ export class Store {
   saveNote(id: string, title: string, content: string, caches?: { markdown?: string | null; plain?: string | null }): NoteDocument {
     const p = this.notePath(id);
     if (!fs.existsSync(p)) throw new AppError("NotFound", `笔记不存在: ${id}`);
+    // 审计（编辑即恢复）：编辑"他端已 purge、本端保留"的条目 = 隐式恢复（移出回收站 + restore_pending），
+    // 编辑内容作为恢复版上传；先把被删版本留档（否则编辑覆盖后丢失）。
+    if (this.revivePurgedIfNeeded(id)) {
+      try { this.createHistorySnapshot(id, undefined, true); } catch { /* 留档失败不阻断编辑 */ }
+    }
     const updatedAt = nowIso();
     const tx = this.db.transaction(() => {
       if (caches) {
@@ -1305,6 +1321,18 @@ export class Store {
     return rows.length;
   }
 
+  /** 审计（编辑即恢复）：编辑"他端已 purge、本端保留"（sync_state='purged'）的回收站条目时，
+   * 视为一次显式恢复：移出回收站 + restore_pending_at（D2 例外，后续编辑内容作为恢复版上传）。
+   * 返回是否发生了恢复。 */
+  revivePurgedIfNeeded(id: string): boolean {
+    const row = this.db.prepare(
+      "SELECT t.note_file_id FROM tree_nodes t JOIN notes n ON n.id = t.note_file_id WHERE t.id=? AND t.parent_id=? AND n.sync_state='purged' AND n.deleted_at IS NULL"
+    ).get(id, TRASH_NOTEBOOK_ID) as { note_file_id: string | null } | undefined;
+    if (!row?.note_file_id) return false;
+    this.restoreTrashItem(row.note_file_id);
+    return true;
+  }
+
   /** 恢复回收站节点：移回原位置（deleted_from_parent_id）；原父不存在/已被删/在回收站 → 默认笔记本。
    * 无墓碑可压（回收站条目是普通条目），恢复 = 移出 + 标 local 待上传（LWW 由 updatedAt 承担）。 */
   restoreTrashItem(id: string): void {
@@ -1317,9 +1345,11 @@ export class Store {
     if (parentId === null || parentId === TRASH_NOTEBOOK_ID) {
       parentId = isNotebook ? null : DEFAULT_NOTEBOOK_ID;
     } else {
-      // 原父必须存在、未被删、且不在回收站内，否则回退默认笔记本
+      // 原父必须存在、未被删、且不在回收站内，否则回退默认笔记本。
+      // 注意：根级笔记本 parent_id 为 NULL，`parent_id != ?` 会因 SQL 三值逻辑得 NULL 而漏判，
+      // 导致恢复到根级笔记本时误回退到默认笔记本（恢复位置错误）——必须显式允许 NULL。
       const parent = this.db.prepare(
-        "SELECT id FROM tree_nodes WHERE id=? AND deleted_at IS NULL AND parent_id != ?"
+        "SELECT id FROM tree_nodes WHERE id=? AND deleted_at IS NULL AND (parent_id IS NULL OR parent_id != ?)"
       ).get(parentId, TRASH_NOTEBOOK_ID) as { id: string } | undefined;
       if (!parent) parentId = DEFAULT_NOTEBOOK_ID;
     }
@@ -1436,6 +1466,7 @@ export class Store {
       throw new AppError("InvalidInput", "无效的图标");
     }
     const now = nowIso();
+    this.revivePurgedIfNeeded(id);
     const tx = this.db.transaction(() => {
       this.db.prepare("UPDATE tree_nodes SET icon=?, updated_at=?, sync_state='local' WHERE id=?").run(icon, now, id);
       // 图标存于 tree_nodes，但下载 meta 对账按 notes.sync_state 判断本地是否有 pending 改动；
@@ -1711,11 +1742,26 @@ export class Store {
     return row?.last_uploaded_hash ?? null;
   }
 
+  /** 统一冲突语义：读本设备"上次成功同步时该笔记的 updated_at"（元数据已确认版本；无则 null）。
+   * 下载对账：远端 updatedAt 新于它 → 远端是未确认的新变更（先同步者胜，应用远端）；
+   * 否则远端是本设备已确认版本（保留本地续编/改名，上传回写）。 */
+  lastSyncedMetaAt(id: string): string | null {
+    const row = this.db.prepare("SELECT last_synced_meta_at FROM sync_base WHERE note_id=?").get(id) as { last_synced_meta_at: string | null } | undefined;
+    return row?.last_synced_meta_at ?? null;
+  }
+
   /** 只读锁：本地操作；不触碰正文/updated_at，锁同步走 manifest v3 独立字段 */
   setNoteLocked(id: string, locked: boolean): void {
     const now = new Date().toISOString();
-    this.db.prepare("UPDATE notes SET is_locked=?, locked_at=? WHERE id=? AND deleted_at IS NULL")
-      .run(locked ? 1 : 0, now, id);
+    // 锁变更是待上传元数据（早退判定依赖 sync_state；状态栏也会如实显示"待上传"）。
+    // 对 purged（他端已删、本端保留）条目：锁定 = 一次隐式恢复。
+    this.revivePurgedIfNeeded(id);
+    const tx = this.db.transaction(() => {
+      this.db.prepare("UPDATE notes SET is_locked=?, locked_at=?, sync_state='local' WHERE id=? AND deleted_at IS NULL")
+        .run(locked ? 1 : 0, now, id);
+      this.db.prepare("UPDATE tree_nodes SET sync_state='local' WHERE note_file_id=? AND deleted_at IS NULL").run(id);
+    });
+    tx();
   }
 
   /** 同步合并写入（远端锁状态按 lockedAt LWW 后由调用方判定） */
@@ -1731,6 +1777,12 @@ export class Store {
       this.db.prepare("UPDATE notes SET sync_state='synced', restore_pending_at=NULL WHERE id=?").run(id);
       // 侧栏/状态栏读的是 tree_nodes.sync_state，必须同步置为 synced。
       this.db.prepare("UPDATE tree_nodes SET sync_state='synced' WHERE note_file_id=?").run(id);
+      // 统一冲突语义：记录本次成功同步时笔记的 updated_at（元数据已确认版本），供下次对账 LWW。
+      // 真实同步流中 sync_base 行已由 setBaseHash/setLastUploadedHash 创建，这里仅更新；
+      // 无行时（如单测直接调用）跳过，last_synced_meta_at 保持 null（远端视为未确认 → 应用远端）。
+      this.db.prepare(
+        "UPDATE sync_base SET last_synced_meta_at=(SELECT updated_at FROM notes WHERE id=?) WHERE note_id=?"
+      ).run(id, id);
     });
     tx();
   }
@@ -1878,11 +1930,12 @@ export class Store {
     }));
   }
 
-  /** 同步目录树：活动 notebook/group（不含默认个人笔记本，它两端都会本地初始化）。 */
+  /** 同步目录树：活动 notebook/group（含默认个人笔记本——两端本地初始化同 id，LWW 按 updatedAt 对齐，
+   * 仅排除回收站笔记本）。默认笔记本的图标/重命名等用户自定义会随 folder 同步跨端传播（验收 #1）。 */
   listFoldersForSync(): Array<{ id: string; title: string; parentId: string | null; sortOrder: number; nodeType: "notebook" | "group"; icon: string | null; updatedAt: string; trashedAt?: string | null; deletedFromParentId?: string | null }> {
     return this.db.prepare(
-      "SELECT id,title,parent_id,sort_order,node_type,icon,updated_at,trashed_at,deleted_from_parent_id FROM tree_nodes WHERE node_type IN ('notebook','group') AND deleted_at IS NULL AND id != ? AND id != ? ORDER BY sort_order"
-    ).all(DEFAULT_NOTEBOOK_ID, TRASH_NOTEBOOK_ID).map((r: any) => ({
+      "SELECT id,title,parent_id,sort_order,node_type,icon,updated_at,trashed_at,deleted_from_parent_id FROM tree_nodes WHERE node_type IN ('notebook','group') AND deleted_at IS NULL AND id != ? ORDER BY sort_order"
+    ).all(TRASH_NOTEBOOK_ID).map((r: any) => ({
       id: r.id, title: r.title, parentId: r.parent_id, sortOrder: r.sort_order, nodeType: r.node_type, icon: r.icon ?? null, updatedAt: r.updated_at,
       trashedAt: r.trashed_at ?? null, deletedFromParentId: r.deleted_from_parent_id ?? null,
     }));
@@ -1930,9 +1983,17 @@ export class Store {
       this.db.prepare(
         "UPDATE notes SET title=?, parent_id=?, sort_order=?, updated_at=?, is_conflict=?, trashed_at=?, deleted_from_parent_id=? WHERE id=?"
       ).run(note.title, note.parentId, note.sortOrder, note.updatedAt, note.isConflict ? 1 : 0, trashedAt, deletedFrom, note.id);
-      this.db.prepare(
-        "UPDATE tree_nodes SET title=?, parent_id=?, sort_order=?, updated_at=?, icon=?, trashed_at=?, deleted_from_parent_id=? WHERE note_file_id=?"
-      ).run(note.title, note.parentId, note.sortOrder, note.updatedAt, note.icon ?? null, trashedAt, deletedFrom, note.id);
+      // 旧清单无 icon 字段时保留本地图标（icon=undefined 是"未声明"，null 才是"显式清除"）；
+      // 否则旧客户端写出的 manifest 会把新端本地图标静默清掉（验收 #1 健壮性）。
+      if (note.icon !== undefined) {
+        this.db.prepare(
+          "UPDATE tree_nodes SET title=?, parent_id=?, sort_order=?, updated_at=?, icon=?, trashed_at=?, deleted_from_parent_id=? WHERE note_file_id=?"
+        ).run(note.title, note.parentId, note.sortOrder, note.updatedAt, note.icon ?? null, trashedAt, deletedFrom, note.id);
+      } else {
+        this.db.prepare(
+          "UPDATE tree_nodes SET title=?, parent_id=?, sort_order=?, updated_at=?, trashed_at=?, deleted_from_parent_id=? WHERE note_file_id=?"
+        ).run(note.title, note.parentId, note.sortOrder, note.updatedAt, trashedAt, deletedFrom, note.id);
+      }
     });
     tx();
   }
@@ -2009,6 +2070,45 @@ export class Store {
       id: r.id, title: r.title, parentId: r.parent_id, sortOrder: r.sort_order,
       updatedAt: r.updated_at, deletedAt: r.deleted_at,
     }));
+  }
+
+  /** 零变更早退：本设备上次成功读/写的 manifest commitId（device_state）。 */
+  getLastSeenCommitId(): string | null {
+    const row = this.db.prepare("SELECT value FROM device_state WHERE key='last_seen_commit_id'").get() as { value: string } | undefined;
+    return row?.value ?? null;
+  }
+  setLastSeenCommitId(commitId: string): void {
+    this.db.prepare("INSERT INTO device_state(key,value) VALUES('last_seen_commit_id',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value").run(commitId);
+  }
+
+  /** 本地上次同步时的墓碑签名（COUNT:MAX(deleted_at)），早退判定"是否新增了 purge"。 */
+  getLastTombstoneSig(): string {
+    const row = this.db.prepare("SELECT value FROM device_state WHERE key='last_tombstone_sig'").get() as { value: string } | undefined;
+    return row?.value ?? "";
+  }
+  setLastTombstoneSig(sig: string): void {
+    this.db.prepare("INSERT INTO device_state(key,value) VALUES('last_tombstone_sig',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value").run(sig);
+  }
+  tombstoneSignature(): string {
+    const row = this.db.prepare("SELECT COUNT(*) AS c, COALESCE(MAX(deleted_at),'') AS m FROM deleted_notes").get() as { c: number; m: string };
+    return `${row.c}:${row.m}`;
+  }
+
+  /** 是否有本地待上传变更（早退判定）：任何 notes 非 synced（含锁/元数据变更）。 */
+  hasLocalPendingNotes(): boolean {
+    const row = this.db.prepare("SELECT 1 FROM notes WHERE sync_state != 'synced' AND deleted_at IS NULL LIMIT 1").get();
+    return !!row;
+  }
+
+  /** 批量读取同步基线信息（一次性取回，替代逐条 lastSyncedMetaAt 查询 + 支撑记账去重）。 */
+  allSyncBaseInfo(): Map<string, { syncState: string; updatedAt: string; baseHash: string | null; lastSyncedMetaAt: string | null; lastUploadedHash: string | null }> {
+    const rows = this.db.prepare(
+      "SELECT n.id,n.sync_state,n.updated_at,s.content_hash,s.last_synced_meta_at,s.last_uploaded_hash FROM notes n LEFT JOIN sync_base s ON s.note_id=n.id WHERE n.deleted_at IS NULL"
+    ).all() as Array<{ id: string; sync_state: string; updated_at: string; content_hash: string | null; last_synced_meta_at: string | null; last_uploaded_hash: string | null }>;
+    return new Map(rows.map((r) => [r.id, {
+      syncState: r.sync_state, updatedAt: r.updated_at, baseHash: r.content_hash ?? null,
+      lastSyncedMetaAt: r.last_synced_meta_at ?? null, lastUploadedHash: r.last_uploaded_hash ?? null,
+    }]));
   }
 
   /** 已彻底删除（purge）的墓碑：下次同步需立即删 S3 前缀。 */
@@ -2114,8 +2214,9 @@ export class Store {
     log.store.info(`[perf] importRemoteNote ${note.id} ${Date.now() - t0}ms (lake=${content.length}B, assets=${assets.length})`);
   }
 
-  uploadResource(input: { bytes: number[]; filename: string }, noteId: string): ResourceUploadOutput {
+  async uploadResource(input: { bytes: number[]; filename: string }, noteId: string): Promise<ResourceUploadOutput> {
     const bytes = Buffer.from(input.bytes);
+    assertImageDimensions(bytes);
     const out = imageOutput(bytes, input.filename, this.noteAssetsDirFor(noteId), this.assetUrl.bind(this, noteId));
     // 写盘即登记孤儿：插入瞬间正文尚未引用；saveNote 对账后撤销
     this.registerOrphan(noteId, out.filename, out.size, out.mimeType);
@@ -2164,6 +2265,7 @@ export class Store {
             chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
           }
           const buf = Buffer.concat(chunks);
+          assertImageDimensions(buf);
           const out = imageOutput(buf, path.basename(new URL(normalized).pathname) || "image", assetsDir, this.assetUrl.bind(this, noteId));
           // 写盘即登记孤儿：下载落盘瞬间正文尚未引用；saveNote 对账后撤销
           this.registerOrphan(noteId, out.filename, out.size, out.mimeType);
@@ -2259,6 +2361,48 @@ const MIME_FROM_EXT: Record<string, string> = {
 
 function mimeTypeForFilename(filename: string): string {
   return MIME_FROM_EXT[path.extname(filename).toLowerCase()] ?? "application/octet-stream";
+}
+
+/** 自研图像头部尺寸解析（PNG/JPEG/GIF/WebP）：不依赖解码器、极小文件也能读到声明尺寸，
+ * 用于解码前拦截"像素炸弹"（压缩后很小、解码后巨大）。读不到声明尺寸则放行（后续格式嗅探兜底）。 */
+function readImageDimensions(bytes: Buffer): { width: number; height: number } | null {
+  // PNG：8 字节签名 + 长度(4) + "IHDR"(4) + 宽(4) + 高(4)
+  if (bytes.length >= 24 && bytes.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])) && bytes.subarray(12, 16).toString("ascii") === "IHDR") {
+    return { width: bytes.readUInt32BE(16), height: bytes.readUInt32BE(20) };
+  }
+  // JPEG：SOI 后扫 SOF0-SOF3/5-7/9-11/13-15 段（跳过 DHT C4 / JPG C8 / DAC CC），段内高(2)+宽(2)
+  if (bytes.length >= 4 && bytes[0] === 0xff && bytes[1] === 0xd8) {
+    let off = 2;
+    while (off + 4 <= bytes.length) {
+      if (bytes[off] !== 0xff) { off += 1; continue; }
+      const marker = bytes[off + 1];
+      if (marker === 0xd8 || marker === 0x01 || (marker >= 0xd0 && marker <= 0xd7)) { off += 2; continue; }
+      if (marker === 0xd9) break;
+      const len = bytes.readUInt16BE(off + 2);
+      if (len < 2 || off + 2 + len > bytes.length) break;
+      if ((marker >= 0xc0 && marker <= 0xc3) || (marker >= 0xc5 && marker <= 0xc7) || (marker >= 0xc9 && marker <= 0xcb) || (marker >= 0xcd && marker <= 0xcf)) {
+        return { height: bytes.readUInt16BE(off + 5), width: bytes.readUInt16BE(off + 7) };
+      }
+      off += 2 + len;
+    }
+  }
+  // GIF：签名 + 逻辑屏幕宽(2LE) + 高(2LE)
+  if (bytes.length >= 10 && (bytes.subarray(0, 6).toString("ascii") === "GIF87a" || bytes.subarray(0, 6).toString("ascii") === "GIF89a")) {
+    return { width: bytes.readUInt16LE(6), height: bytes.readUInt16LE(8) };
+  }
+  // WebP：RIFF(4)+size(4)+WEBP(4)+"VP8X"(4)+chunkSize(4)+flags(1)+rsv(3)+宽-1(3LE)+高-1(3LE)
+  if (bytes.length >= 30 && bytes.subarray(0, 4).toString("ascii") === "RIFF" && bytes.subarray(8, 12).toString("ascii") === "WEBP" && bytes.subarray(12, 16).toString("ascii") === "VP8X") {
+    return { width: bytes.readUIntLE(24, 3) + 1, height: bytes.readUIntLE(27, 3) + 1 };
+  }
+  return null;
+}
+
+/** 审计：超 50MP 即拒（防解压炸弹）。 */
+function assertImageDimensions(bytes: Buffer): void {
+  const dims = readImageDimensions(bytes);
+  if (dims && dims.width * dims.height > MAX_IMAGE_PIXELS) {
+    throw new AppError("InvalidInput", `图片尺寸过大（${dims.width}x${dims.height}），上限 ${MAX_IMAGE_PIXELS} 像素`);
+  }
 }
 
 function imageOutput(bytes: Buffer, _requestedFilename: string, noteAssetsDir: string, makeUrl: (filename: string) => string): ResourceUploadOutput {

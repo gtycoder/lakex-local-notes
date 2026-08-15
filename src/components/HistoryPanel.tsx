@@ -62,9 +62,17 @@ export function HistoryPanel({ open, noteId, onClose, onRestored }: {
     }
   };
 
-  // 打开时先刷新历史（默认 tab）；孤儿在切到孤儿 tab 时刷新
+  // 打开时先刷新历史（默认 tab）；孤儿在切到孤儿 tab 时刷新。
+  // 验收 #2：切换 note / 重新打开时必须清空上次的列表与预览状态（inline/preview），
+  // 否则弹窗残留上一次内容（"快照弹窗不清理、还弹出上一次的内容"）。
   useEffect(() => {
     if (open && noteId) {
+      setTab("history");
+      setHistory([]);
+      setOrphans([]);
+      setInline(null);
+      setPreview(null);
+      setError(null);
       void refreshHistory();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps

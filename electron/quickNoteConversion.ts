@@ -3,6 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { type ImportedNoteAsset, Store } from "./store.js";
 import { type QuickNoteDocument, QuickNotesStore } from "./quickNotes.js";
+import { ASSET_PORT } from "./assetServer.js";
 
 function escapeHtml(value: string): string {
   return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
@@ -33,7 +34,7 @@ export function quickNoteToLakeContent(targetNoteId: string, source: QuickNoteDo
   for (const image of source.content.images) {
     const cardId = lakeId();
     const paragraphId = lakeId();
-    const sourceUrl = `http://127.0.0.1:19876/${targetNoteId}/${image.filename}`;
+    const sourceUrl = `http://127.0.0.1:${ASSET_PORT}/${targetNoteId}/${image.filename}`;
     const cardValue = {
       src: sourceUrl,
       taskId: lakeId(),

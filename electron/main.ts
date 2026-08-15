@@ -1,4 +1,5 @@
 import { app, BrowserWindow, dialog, ipcMain, session, shell, type WebFrameMain } from "electron";
+import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -23,6 +24,15 @@ if (isDev) {
   app.setPath("userData", userDataOverride || path.join(app.getPath("appData"), "lake-notes-dev"));
 }
 const DEV_SERVER_URL = "http://127.0.0.1:1421";
+
+/**
+ * 资产服务器访问令牌（审计：防外部网页 CORS 读本地笔记图片）。
+ * 本地资源服务对"带 Origin 头的 CORS 请求"要求 ?token=<assetToken> 匹配；
+ * 打包版 file:// 页面与 dev 页面经 preload 拿到 token（src/lib/assetPort.ts），
+ * <img> 等非 CORS 请求不带 Origin 不受影响。token 每次启动随机，外部站点不可得。
+ */
+const assetToken = crypto.randomBytes(32).toString("hex");
+process.env.LAKE_ASSET_TOKEN = assetToken;
 
 let store: Store;
 let quickNotes: QuickNotesStore;
@@ -51,6 +61,9 @@ function broadcastSyncProgress(p: SyncProgress): void {
     try { win.webContents.send("sync-progress", p); } catch { /* 窗口已关闭 */ }
   }
 }
+
+/** 退出时若同步在途，置位并在同步结束后真正退出（避免中断上传/写盘） */
+let quitAfterSync = false;
 
 async function runFullSync(onProgress?: (p: SyncProgress) => void): Promise<SyncResult> {
   if (syncInFlight) throw new Error("同步正在进行中，请等待本次同步完成");
@@ -82,6 +95,11 @@ async function runFullSync(onProgress?: (p: SyncProgress) => void): Promise<Sync
     });
   } finally {
     syncInFlight = false;
+    // 审计：退出时等本轮同步完成再真正退出（before-quit 置位）
+    if (quitAfterSync) {
+      quitAfterSync = false;
+      app.quit();
+    }
   }
 }
 
@@ -378,7 +396,7 @@ if (!app.requestSingleInstanceLock()) {
     quickNotes = new QuickNotesStore(workspaceRoot());
     quickNotes.recoverConversions((noteId) => store.hasNote(noteId), (noteId) => store.removeUntrackedNoteArtifacts(noteId));
     registerCdnRedirect();
-    startAssetServer(path.join(workspaceRoot(), "note-assets"), vendorCdnDir(), path.join(workspaceRoot(), "quick-notes"));
+    startAssetServer(path.join(workspaceRoot(), "note-assets"), vendorCdnDir(), path.join(workspaceRoot(), "quick-notes"), assetToken);
     registerIpc();
     createWindow();
 
@@ -487,15 +505,23 @@ if (!app.requestSingleInstanceLock()) {
   });
 }
 
-// onOpenClose：退出前做一次同步（阻止退出 → 同步完成后真正退出）。
+// 退出前同步：onOpenClose 模式退出前做一次同步；任何模式只要同步在途都等它完成再退
+// （否则可能停在"对象已传、manifest 未写"的中间态）。
 let quittingForSync = false;
 app.on("before-quit", (event) => {
   if (quittingForSync || !store || !quickNotes) return;
   const cfg = store.getSyncSettings();
-  if (!cfg.enabled || cfg.autoMode !== "onOpenClose" || syncInFlight) return;
-  event.preventDefault();
-  quittingForSync = true;
-  void runFullSync().finally(() => app.quit());
+  if (!cfg.enabled) return;
+  if (syncInFlight) {
+    event.preventDefault();
+    quitAfterSync = true;
+    return;
+  }
+  if (cfg.autoMode === "onOpenClose") {
+    event.preventDefault();
+    quittingForSync = true;
+    void runFullSync().finally(() => app.quit());
+  }
 });
 
 app.on("window-all-closed", () => {

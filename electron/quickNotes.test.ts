@@ -77,6 +77,28 @@ describe("QuickNotesStore", () => {
     expect(fs.readdirSync(path.join(root, "quick-notes", "assets"))).toEqual([]);
   });
 
+  it("验收#4：冲突归档——本地版本以新 id 进回收站，原条目不动，恢复后为一条新小记", async () => {
+    const draftId = crypto.randomUUID();
+    const image = await quickNotes.stageImage(draftId, { bytes: [...PNG], filename: "clip.png" });
+    const note = quickNotes.createQuickNote({ text: "冲突本地版", draftId, stagedImageIds: [image.id] });
+    const archivedId = quickNotes.archiveLocalToTrash(note.id);
+
+    // 归档 = 新 id 的回收站条目：内容文件 + 资源文件都在，原条目不受影响
+    expect(archivedId).not.toBe(note.id);
+    expect(quickNotes.listQuickNoteTrash().map((i) => i.id)).toContain(archivedId);
+    expect(quickNotes.listQuickNotes().some((i) => i.id === note.id)).toBe(true);
+    expect(fs.existsSync(path.join(root, "quick-notes", "items", `${archivedId}.qnote`))).toBe(true);
+    expect(fs.existsSync(path.join(root, "quick-notes", "assets", archivedId, image.filename))).toBe(true);
+
+    // 恢复 = 一条新小记（新 id、内容一致、不再是冲突副本）
+    const restored = quickNotes.restoreQuickNote(archivedId);
+    expect(restored.id).toBe(archivedId);
+    expect(restored.content.text).toBe("冲突本地版");
+    expect(restored.isConflict).toBe(false);
+    expect(quickNotes.listQuickNoteTrash().map((i) => i.id)).not.toContain(archivedId);
+    expect(quickNotes.listQuickNotes().map((i) => i.id)).toContain(archivedId);
+  });
+
   it("删除创建小记 tombstone，转换 tombstone 在 Lake 同步成功前不会进入同步列表", () => {
     const ordinary = quickNotes.createQuickNote({ text: "将删除", draftId: crypto.randomUUID(), stagedImageIds: [] });
     quickNotes.deleteQuickNote(ordinary.id);
@@ -94,6 +116,17 @@ describe("QuickNotesStore", () => {
 });
 
 describe("小记回收站（M6）", () => {
+  it("审计：learned tombstone（他端 purge、本端从未持有）不进入回收站（无内容文件无法恢复）", () => {
+    const localId = quickNotes.createQuickNote({ text: "本地删除", draftId: crypto.randomUUID(), stagedImageIds: [] }).id;
+    quickNotes.deleteQuickNote(localId); // 本地软删：有内容文件
+    expect(quickNotes.listQuickNoteTrash().map((i) => i.id)).toContain(localId);
+    // 模拟收到他端 purge 墓碑、本端从未持有该小记（rememberDeleted 只写墓碑、无内容文件）
+    quickNotes.rememberDeleted({ id: "learned-tombstone-id", createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), deletedAt: new Date().toISOString() });
+    const trash = quickNotes.listQuickNoteTrash();
+    expect(trash.map((i) => i.id)).not.toContain("learned-tombstone-id");
+    expect(trash.map((i) => i.id)).toContain(localId);
+  });
+
   it("软删保留内容、可恢复；purge 后无法恢复且墓碑 purged_at 标记", () => {
     const id = quickNotes.createQuickNote({ text: "可恢复的小记", draftId: crypto.randomUUID(), stagedImageIds: [] }).id;
     quickNotes.deleteQuickNote(id);

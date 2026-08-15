@@ -5,3 +5,7 @@ export const ASSET_ORIGIN: string = (() => {
 })();
 
 export const LOCAL_ASSET_PREFIX = `${ASSET_ORIGIN}/`;
+
+/** 资产服务器访问令牌（preload 注入，每次启动随机）：CORS 拉取 ?base64=1 时需附带。 */
+export const ASSET_TOKEN: string =
+  (typeof window !== "undefined" && (window as { lakeNative?: { assetToken?: string } }).lakeNative?.assetToken) || "";

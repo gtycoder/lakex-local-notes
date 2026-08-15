@@ -145,9 +145,14 @@ export async function syncQuickNotes(
       const localChanged = local !== null && local.contentHash !== base;
       const remoteChanged = item.contentHash !== base;
       if (localChanged && remoteChanged) {
-        const conflictId = quickNotes.importRemoteConflictCopy(item, content, assets);
-        quickNotes.setBaseHash(conflictId, item.contentHash);
+        // 验收 #4（B 方案）：双端都改 → 远端覆盖本地；本地版本归档进回收站（新 id，恢复后为一条新小记）。
+        // 顺序：先归档本地（复制内容/资源到新 id），再让远端内容覆盖原条目。
+        quickNotes.archiveLocalToTrash(item.id);
+        quickNotes.importRemoteQuickNote(item, content, assets);
+        quickNotes.setBaseHash(item.id, item.contentHash);
         conflicts += 1;
+        downloaded += 1;
+        log.quick.info(`[perf] download ${item.id} conflict → remote wins, local archived to trash ${Date.now() - itemStart}ms (content=${content.length}B, assets=${assets.length})`);
       } else if (localChanged) {
         // 只在本地变更：上传阶段将其作为权威版本，不以下载覆盖。
         continue;

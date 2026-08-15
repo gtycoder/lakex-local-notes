@@ -165,6 +165,32 @@ describe("小记独立 S3 同步", () => {
     expect(sha256(fs.readFileSync(storeB.quickNotePathFor(note.id)))).toBe(aHash);
   });
 
+  it("验收#4：双端编辑冲突 → 远端覆盖本地，本地版本进回收站（新 id，恢复即新小记）", async () => {
+    const storeA = new QuickNotesStore(path.join(root, "a"));
+    const storeB = new QuickNotesStore(path.join(root, "b"));
+    // B 创建小记并同步（云端基线）
+    const note = storeB.createQuickNote({ text: "小记v1", draftId: crypto.randomUUID(), stagedImageIds: [] });
+    await syncQuickNotes(storeB, settings);
+    await syncQuickNotes(storeA, settings);
+    // 双端各自编辑（未同步）
+    storeA.updateQuickNote(note.id, { text: "A编辑版", draftId: crypto.randomUUID(), stagedImageIds: [] });
+    storeB.updateQuickNote(note.id, { text: "B编辑版", draftId: crypto.randomUUID(), stagedImageIds: [] });
+    // B 先同步（云端 = B 版）
+    await syncQuickNotes(storeB, settings);
+    // A 后同步：远端（B 版）覆盖本地（A 版），A 版进 A 回收站
+    const result = await syncQuickNotes(storeA, settings);
+    expect(result.conflicts).toBe(1);
+    expect(storeA.listQuickNotes().find((i) => i.id === note.id)!.content.text).toBe("B编辑版");
+    const trash = storeA.listQuickNoteTrash();
+    expect(trash.length).toBe(1);
+    const archivedId = trash[0].id;
+    expect(archivedId).not.toBe(note.id);
+    // 恢复 = 一条新小记，内容为 A 编辑版
+    const restored = storeA.restoreQuickNote(archivedId);
+    expect(restored.id).toBe(archivedId);
+    expect(restored.content.text).toBe("A编辑版");
+  });
+
   it("转换 tombstone 未被 Lake 放行前不复活源小记，也不提前从远端 manifest 删除", async () => {
     const { Store } = await import("./store.js");
     const { convertQuickNoteToLake } = await import("./quickNoteConversion.js");

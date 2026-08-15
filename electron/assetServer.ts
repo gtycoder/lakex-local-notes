@@ -48,7 +48,7 @@ function isSafeSegment(segment: string): boolean {
   return segment.length > 0 && segment !== "." && segment !== ".." && !segment.includes("/") && !segment.includes("\\");
 }
 
-export function startAssetServer(noteAssetsDir: string, vendorCdnDir: string, quickNotesDir?: string): http.Server {
+export function startAssetServer(noteAssetsDir: string, vendorCdnDir: string, quickNotesDir?: string, assetToken?: string): http.Server {
   fs.mkdirSync(noteAssetsDir, { recursive: true });
   if (quickNotesDir) fs.mkdirSync(quickNotesDir, { recursive: true });
 
@@ -99,6 +99,14 @@ export function startAssetServer(noteAssetsDir: string, vendorCdnDir: string, qu
       // 小记资源：/quick-notes/{quickNoteId}/{filename}
       // 小记草稿资源：/quick-notes/staging/{draftId}/{filename}
       // 以 URL 前缀分隔两个数据空间，不能让普通笔记路径误读小记图片。
+      // 审计：CORS 请求（带 Origin 头）访问正式资源必须带 ?token= 匹配启动令牌——
+      // 外部网页（含 sandbox iframe 的 Origin: null）没有令牌，无法跨源读取本地图片；
+      // <img> 等非 CORS 请求不带 Origin，不受影响（浏览器本就不允许跨源读 img 字节）。
+      if (req.headers.origin && assetToken && parsed.searchParams.get("token") !== assetToken) {
+        res.writeHead(403, { "Content-Type": "text/plain" });
+        res.end("forbidden: missing token");
+        return;
+      }
       const segments = urlPath.split("/").filter(Boolean);
       let filePath: string;
       let filename: string;
@@ -134,6 +142,11 @@ export function startAssetServer(noteAssetsDir: string, vendorCdnDir: string, qu
         // 微信等 macOS 原生应用不渲染 data:image/webp，复制到微信时统一转 PNG
         // （参照 Tauri 版 uploadWithWebpConversion；sharp 基于 libvips 支持 WebP/AVIF 解码）
         if (ext === ".webp" || ext === ".avif") {
+          // 审计：解码前校验像素上限，防手工替换成超大尺寸文件导致转换 OOM
+          const meta = await sharp(buf).metadata().catch(() => null);
+          if (meta?.width && meta?.height && meta.width * meta.height > 50_000_000) {
+            res.writeHead(400); res.end("image too large"); return;
+          }
           try {
             buf = await sharp(buf).png().toBuffer();
             outMime = "image/png";

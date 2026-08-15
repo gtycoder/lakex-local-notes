@@ -1032,7 +1032,7 @@ function cloudStatus(sync: SyncStatus, nodeSyncState: string, enabled: boolean):
   if (!enabled) return { label: "云同步关闭", cls: "disabled" };
   if (sync.phase === "syncing") return { label: "同步中", cls: "syncing" };
   if (sync.phase === "error") return { label: "同步失败", cls: "error" };
-  if (nodeSyncState === "local") return { label: "待云更新", cls: "pending" };
+  if (nodeSyncState === "local") return { label: "待上传", cls: "pending" };
   if (nodeSyncState === "conflict") return { label: "冲突", cls: "conflict" };
   if (nodeSyncState === "synced") return { label: "已同步", cls: "synced" };
   return { label: "未同步", cls: "idle" };

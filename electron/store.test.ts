@@ -3,6 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import crypto from "node:crypto";
+import zlib from "node:zlib";
 import Database from "better-sqlite3";
 import { Store, AppError, selectHistoryDrops, isoWeekKey } from "./store.js";
 
@@ -386,6 +387,25 @@ describe("目录树操作", () => {
     expect(store.searchNotes("无引用").some((x) => x.id === note.id)).toBe(false);
   });
 
+  it("审计（编辑即恢复）：编辑 purged 条目 = 隐式恢复（移出回收站 + restore_pending + 可上传）", () => {
+    const nb = store.createNotebook("目标册");
+    const note = store.createNoteIn(nb.id, "待编辑");
+    store.saveNote(note.id, "待编辑", "<p>v1</p>");
+    store.deleteTreeNode(note.id); // 进回收站
+    // 模拟"他端已 purge、本端保留"：标 purged（applyRemotePurge 的等价状态）
+    (store as any).db.prepare("UPDATE notes SET sync_state='purged' WHERE id=?").run(note.id);
+    (store as any).db.prepare("UPDATE tree_nodes SET sync_state='purged' WHERE id=?").run(note.id);
+    // 编辑 = 隐式恢复：移出回收站 + restore_pending + 内容落盘
+    store.saveNote(note.id, "待编辑", "<p>恢复后编辑版</p>");
+    const row = store.listNotesForSync().find((n) => n.id === note.id)!;
+    expect(row.parentId).toBe(nb.id); // 不在回收站
+    expect(row.trashedAt).toBeNull();
+    expect(row.deletedFromParentId).toBeNull();
+    expect(row.syncState).toBe("local");
+    expect((store as any).isRestorePending(note.id)).toBe(true);
+    expect(store.readNote(note.id).content).toContain("恢复后编辑版");
+  });
+
   it("回收站：恢复节点（移回原位置，清回收站字段，重新可同步）", () => {
     const nb = store.createNotebook("待恢复");
     const note = store.createNoteIn(nb.id, "子笔记");
@@ -480,6 +500,18 @@ describe("目录树操作", () => {
     // 下载对账路径（sync_state='synced' 的笔记才应用远端元数据）
     store.markSynced(note.id);
     expect(store.listNotesForSync().find((n) => n.id === note.id)?.syncState).toBe("synced");
+  });
+
+  it("验收#1：默认个人笔记本图标进入 folder 同步（LWW 跨端传播）", () => {
+    const before = store.listFoldersForSync().find((f) => f.id === "notebook-personal");
+    expect(before).toBeTruthy();
+    expect(before!.icon).toBeNull();
+    store.setNodeIcon("notebook-personal", "🎯");
+    const syncFolder = store.listFoldersForSync().find((f) => f.id === "notebook-personal");
+    expect(syncFolder).toBeTruthy();
+    expect(syncFolder!.icon).toBe("🎯");
+    // 回收站笔记本仍排除（本地初始化，不同步）
+    expect(store.listFoldersForSync().some((f) => f.id === "notebook-trash")).toBe(false);
   });
 
   it("回收站自动过期：trashed_at 超期条目自动 purge（默认 60 天可配）", () => {
@@ -963,13 +995,34 @@ describe("同步状态 / 导入", () => {
     expect(store.searchNotes("量子纠缠").some((h) => h.id === id)).toBe(true);
   });
 
-  it("uploadResource 写入资源文件并返回 URL", () => {
+  it("uploadResource 写入资源文件并返回 URL", async () => {
     const { id } = makeNote();
     // 1x1 透明 PNG（sniffImageFormat 校验魔数）
     const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==", "base64");
-    const out = store.uploadResource({ bytes: [...png], filename: "hello.png" }, id);
+    const out = await store.uploadResource({ bytes: [...png], filename: "hello.png" }, id);
     expect(out.url).toContain(`127.0.0.1:19876/${id}/`);
     expect(fs.existsSync(path.join(dir, "note-assets", id, out.filename))).toBe(true);
+  });
+
+  it("审计：uploadResource 拒绝解码后超 50MP 的图片（防解压炸弹）", async () => {
+    const { id } = makeNote();
+    // 构造合法 PNG：IHDR 声明 100000x100000（文件本身只有几十字节，带正确 CRC）
+    const crc32 = (buf: Buffer): number => zlib.crc32(buf) >>> 0;
+    const chunk = (type: string, data: Buffer): Buffer => {
+      const len = Buffer.alloc(4); len.writeUInt32BE(data.length, 0);
+      const typeBuf = Buffer.from(type, "ascii");
+      const crcBuf = Buffer.alloc(4); crcBuf.writeUInt32BE(crc32(Buffer.concat([typeBuf, data])), 0);
+      return Buffer.concat([len, typeBuf, data, crcBuf]);
+    };
+    const ihdr = Buffer.alloc(13);
+    ihdr.writeUInt32BE(100000, 0); ihdr.writeUInt32BE(100000, 4);
+    ihdr[8] = 8; ihdr[9] = 6; // 8bit RGBA
+    const bomb = Buffer.concat([
+      Buffer.from("89504e470d0a1a0a", "hex"),
+      chunk("IHDR", ihdr),
+      chunk("IEND", Buffer.alloc(0)),
+    ]);
+    await expect(store.uploadResource({ bytes: [...bomb], filename: "bomb.png" }, id)).rejects.toThrow(/尺寸过大/);
   });
 });
 
@@ -1047,10 +1100,10 @@ describe("审计修复回归（#2/#3/#12/#17/#18）", () => {
 });
 
 describe("孤儿登记对账（写时登记/保存对账 + 导入对账）", () => {
-  it("uploadResource 写盘即登记孤儿；保存引用后撤销，不再引用重新登记", () => {
+  it("uploadResource 写盘即登记孤儿；保存引用后撤销，不再引用重新登记", async () => {
     const { id } = makeNote();
     const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==", "base64");
-    const out = store.uploadResource({ bytes: [...png], filename: "hello.png" }, id);
+    const out = await store.uploadResource({ bytes: [...png], filename: "hello.png" }, id);
     // 写盘瞬间已登记孤儿（正文尚未引用）——杜绝未登记就被同步上传的窄窗口
     expect(store.listOrphanAssets().some((o) => o.noteId === id && o.filename === out.filename)).toBe(true);
     // 保存时正文引用 → 撤销孤儿

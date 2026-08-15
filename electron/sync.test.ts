@@ -83,10 +83,11 @@ interface ManifestNote {
   assets: { filename: string; size: number; hash: string }[];
   deleted?: boolean; deletedAt?: string;
   isLocked?: boolean; lockedAt?: string | null;
+  icon?: string | null;
   trashedAt?: string | null; deletedFromParentId?: string | null;
 }
 interface Manifest {
-  version: number; workspaceId: string; commitId: string; createdAt: string; notes: ManifestNote[];
+  version: number; workspaceId: string; commitId: string; prevCommitId: string | null; createdAt: string; notes: ManifestNote[];
 }
 
 const SETTINGS: S3Settings = {
@@ -105,18 +106,23 @@ function readManifest(): Manifest {
   return JSON.parse(maybeGunzip(raw).toString("utf8"));
 }
 function writeManifest(manifest: Manifest): void {
+  // 模拟"其他设备写入"：真实远端变更必然带新 commitId（零变更早退据此判定）
+  manifest.commitId = crypto.randomUUID();
   s3.bucket.set(key("manifests/latest.json"), Buffer.from(JSON.stringify(manifest), "utf8"));
 }
 
 // ===== FakeStore：实现 sync.ts 用到的 Store 子集（内存态 + 临时文件） =====
 class FakeStore {
   settings: S3Settings | null = null;
-  notes = new Map<string, { id: string; title: string; parentId: string | null; sortOrder: number; updatedAt: string; syncState: string; isConflict: boolean; isLocked?: boolean; lockedAt?: string | null; trashedAt?: string | null; deletedFromParentId?: string | null }>();
+  notes = new Map<string, { id: string; title: string; parentId: string | null; sortOrder: number; updatedAt: string; syncState: string; isConflict: boolean; isLocked?: boolean; lockedAt?: string | null; trashedAt?: string | null; deletedFromParentId?: string | null; icon?: string | null }>();
   /** 测试探针：contentHash（读 .lake）被调用的次数，用于断言"跳过扫描"生效。 */
   hashReads = 0;
   deleted = new Map<string, { id: string; title: string; parentId: string | null; sortOrder: number; updatedAt: string; deletedAt: string }>();
   baseHashes = new Map<string, string>();
   lastUploadedHashes = new Map<string, string>();
+  lastSyncedMetaAtMap = new Map<string, string>();
+  lastSeenCommitId: string | null = null;
+  lastTombstoneSig = "";
   pendingSync = new Set<string>();
   gcPending = new Map<string, string>();
   purgedNotes = new Map<string, string>();
@@ -136,7 +142,7 @@ class FakeStore {
   // ---- 测试辅助 ----
   createNote(id: string, title: string, content: string) {
     const updatedAt = new Date().toISOString();
-    this.notes.set(id, { id, title, parentId: null, sortOrder: this.notes.size, updatedAt, syncState: "local", isConflict: false });
+    this.notes.set(id, { id, title, parentId: null, sortOrder: this.notes.size, updatedAt, syncState: "local", isConflict: false, icon: null });
     fs.writeFileSync(this.notePath(id), content, "utf8");
   }
   modifyNote(id: string, content: string) {
@@ -145,6 +151,21 @@ class FakeStore {
     n.updatedAt = new Date().toISOString();
     n.syncState = "local";
     fs.writeFileSync(this.notePath(id), content, "utf8");
+  }
+  setIcon(id: string, icon: string | null, updatedAt = new Date().toISOString()) {
+    const n = this.notes.get(id);
+    if (!n) throw new Error(`笔记不存在: ${id}`);
+    n.icon = icon;
+    n.updatedAt = updatedAt;
+    n.syncState = "local";
+  }
+  /** 模拟真实 restoreHistory：写回快照正文 + 标 local，保持 base/lastUploaded 不动（P0-1 §5.2） */
+  restoreHistoryVersion(id: string, content: string) {
+    const n = this.notes.get(id);
+    if (!n) throw new Error(`笔记不存在: ${id}`);
+    fs.writeFileSync(this.notePath(id), content, "utf8");
+    n.updatedAt = new Date().toISOString();
+    n.syncState = "local";
   }
   addAsset(noteId: string, filename: string, bytes: Buffer) {
     const dir = path.join(this.dir, "note-assets", noteId);
@@ -162,10 +183,11 @@ class FakeStore {
   importRemoteFolder(folder: { id: string; title: string; parentId: string | null; sortOrder: number; nodeType: "notebook" | "group"; icon: string | null; updatedAt: string }) { this.folders.set(folder.id, folder); }
   defaultNotebookId() { return "notebook-personal"; }
   hasTreeNode(id: string) { return id === "notebook-personal" || this.folders.has(id) || this.notes.has(id); }
-  applyRemoteNoteMeta(note: { id: string; title: string; parentId: string | null; sortOrder: number; updatedAt: string; isConflict: boolean; trashedAt?: string | null; deletedFromParentId?: string | null }) {
+  applyRemoteNoteMeta(note: { id: string; title: string; parentId: string | null; sortOrder: number; updatedAt: string; isConflict: boolean; trashedAt?: string | null; deletedFromParentId?: string | null; icon?: string | null }) {
     const n = this.notes.get(note.id);
     if (n) {
       n.title = note.title; n.parentId = note.parentId; n.sortOrder = note.sortOrder; n.updatedAt = note.updatedAt; n.isConflict = note.isConflict;
+      if (note.icon !== undefined) n.icon = note.icon ?? null;
       if (note.parentId === "notebook-trash") {
         n.trashedAt = note.trashedAt ?? n.trashedAt ?? new Date().toISOString();
         n.deletedFromParentId = note.deletedFromParentId ?? n.deletedFromParentId ?? null;
@@ -188,6 +210,32 @@ class FakeStore {
   // P0-1：last_uploaded_hash（本机最后一次上传的 hash）
   lastUploadedHash(id: string) { return this.lastUploadedHashes.get(id) ?? null; }
   setLastUploadedHash(id: string, hash: string) { this.lastUploadedHashes.set(id, hash); }
+  lastSyncedMetaAt(id: string) { return this.lastSyncedMetaAtMap.get(id) ?? null; }
+  getLastSeenCommitId() { return this.lastSeenCommitId; }
+  setLastSeenCommitId(v: string) { this.lastSeenCommitId = v; }
+  getLastTombstoneSig() { return this.lastTombstoneSig; }
+  setLastTombstoneSig(v: string) { this.lastTombstoneSig = v; }
+  tombstoneSignature() {
+    let count = 0; let max = "";
+    for (const d of this.deleted.values()) { count += 1; if (d.deletedAt > max) max = d.deletedAt; }
+    return `${count}:${max}`;
+  }
+  hasLocalPendingNotes() {
+    for (const n of this.notes.values()) if (n.syncState !== "synced") return true;
+    return false;
+  }
+  allSyncBaseInfo() {
+    const out = new Map<string, { syncState: string; updatedAt: string; baseHash: string | null; lastSyncedMetaAt: string | null; lastUploadedHash: string | null }>();
+    for (const n of this.notes.values()) {
+      out.set(n.id, {
+        syncState: n.syncState, updatedAt: n.updatedAt,
+        baseHash: this.baseHashes.get(n.id) ?? null,
+        lastSyncedMetaAt: this.lastSyncedMetaAtMap.get(n.id) ?? null,
+        lastUploadedHash: this.lastUploadedHashes.get(n.id) ?? null,
+      });
+    }
+    return out;
+  }
   // 历史快照（sync 接受远端时强制留档；FakeStore 用内存记录）
   createHistorySnapshot(noteId: string, _content?: string, _force?: boolean) {
     this.historySnapshots = this.historySnapshots || [];
@@ -197,7 +245,7 @@ class FakeStore {
   markSynced(id?: string) {
     if (id) {
       this.pendingSync.delete(id); this.restorePending.delete(id);
-      const n = this.notes.get(id); if (n) n.syncState = "synced";
+      const n = this.notes.get(id); if (n) { n.syncState = "synced"; this.lastSyncedMetaAtMap.set(id, n.updatedAt); }
     }
   }
   isSyncPending(id: string) { return this.pendingSync.has(id); }
@@ -232,6 +280,7 @@ class FakeStore {
     if (!n) throw new Error(`笔记不存在: ${id}`);
     n.isLocked = locked;
     n.lockedAt = new Date().toISOString();
+    n.syncState = "local";
   }
   applyRemoteLock(id: string, locked: boolean, lockedAt: string | null) {
     const n = this.notes.get(id);
@@ -348,6 +397,139 @@ describe("syncNow 增量同步", () => {
     expect(r2.uploaded).toBe(0);
     expect(r2.downloaded).toBe(0);
     expect(r2.conflicts).toBe(0);
+  });
+
+  it("验收（性能）：零变更早退——二次同步不写新 manifest、不逐条记账", async () => {
+    const store = newStore();
+    store.createNote("n1", "笔记A", "<p>hello</p>");
+    await syncNow(store as unknown as Store);
+    const manifestsBefore = [...s3.bucket.keys()].filter((k) => k.startsWith(key("manifests/"))).length;
+    const r = await syncNow(store as unknown as Store);
+    expect(r.uploaded).toBe(0);
+    expect(r.downloaded).toBe(0);
+    // 早退：未写任何新 manifest（commit/latest 均未变）
+    const manifestsAfter = [...s3.bucket.keys()].filter((k) => k.startsWith(key("manifests/"))).length;
+    expect(manifestsAfter).toBe(manifestsBefore);
+    // 本地有变更 → 不早退，正常写入
+    store.modifyNote("n1", "<p>v2</p>");
+    const r3 = await syncNow(store as unknown as Store);
+    expect(r3.uploaded).toBeGreaterThan(0);
+    expect(readManifest().notes.find((n) => n.id === "n1")!.contentHash).toBe(store.contentHash("n1"));
+  });
+
+  it("验收#3：每次同步后裁剪旧 manifest，只保留 latest + 9 份 commit（共 10 个文件）", async () => {
+    const store = newStore();
+    store.createNote("n1", "笔记A", "<p>hello</p>");
+    await syncNow(store as unknown as Store);
+    // 12 次"有变更"的同步：零变更早退不会跳过（否则不写新 manifest，无法测裁剪）
+    for (let i = 1; i <= 12; i += 1) {
+      store.modifyNote("n1", `<p>v${i}</p>`);
+      await syncNow(store as unknown as Store);
+    }
+    const manifests = [...s3.bucket.keys()].filter((k) => k.startsWith(key("manifests/")));
+    expect(manifests).toContain(key("manifests/latest.json"));
+    expect(manifests.length).toBeLessThanOrEqual(10);
+    const commits = manifests.filter((k) => k !== key("manifests/latest.json"));
+    expect(commits.length).toBeLessThanOrEqual(9);
+    // 链完整性：latest 的 prevCommitId 链上 8 层都仍在云端（GC/对账引用可达）
+    const latest = readManifest();
+    const seen = new Set<string>([key("manifests/latest.json")]);
+    let prev = latest.prevCommitId;
+    let chain = 0;
+    while (prev && chain < 8) {
+      const commitKey = key(`manifests/${prev}.json`);
+      seen.add(commitKey);
+      expect(s3.bucket.has(commitKey)).toBe(true);
+      const bytes = s3.bucket.get(commitKey)!;
+      prev = JSON.parse(maybeGunzip(bytes).toString("utf8")).prevCommitId as string | null;
+      chain += 1;
+    }
+    // 保留的 commit 文件要么在 latest 链上（GC/对账引用），要么是刚写入的 latest.commitId（供下次写入作 prev）
+    for (const k of commits) {
+      const commitId = k.slice(key("manifests/").length, -".json".length);
+      expect(seen.has(k) || commitId === latest.commitId).toBe(true);
+    }
+  });
+
+  it("验收#1（统一先同步者胜）：先同步者的图标胜出、后同步者跟随；已确认后续编则本地胜", async () => {
+    const storeA = new FakeStore(); storeA.saveS3Settings(SETTINGS);
+    const storeB = new FakeStore(); storeB.saveS3Settings(SETTINGS);
+    storeA.createNote("n1", "测试11", "<p>x</p>");
+    await syncNow(storeA as unknown as Store);
+    await syncNow(storeB as unknown as Store);
+
+    // 场景1：A 先改先同步 → A 的图标胜出，B 后同步跟随（不再用编辑时间让 B 覆盖 A）
+    storeA.setIcon("n1", "🍇", "2030-01-01T00:00:01.000Z");
+    storeB.setIcon("n1", "🥔", "2030-01-01T00:00:02.000Z");
+    await syncNow(storeA as unknown as Store);
+    await syncNow(storeB as unknown as Store);
+    expect(readManifest().notes.find((n) => n.id === "n1")!.icon).toBe("🍇");
+    expect(storeA.listNotesForSync().find((n) => n.id === "n1")!.icon).toBe("🍇");
+    expect(storeB.listNotesForSync().find((n) => n.id === "n1")!.icon).toBe("🍇");
+
+    // 场景2：B 先改先同步 → B 的图标胜出，A 后同步跟随
+    storeA.setIcon("n1", "🚗", "2030-01-01T00:00:03.000Z");
+    storeB.setIcon("n1", "🚌", "2030-01-01T00:00:04.000Z");
+    await syncNow(storeB as unknown as Store);
+    await syncNow(storeA as unknown as Store);
+    expect(readManifest().notes.find((n) => n.id === "n1")!.icon).toBe("🚌");
+    expect(storeA.listNotesForSync().find((n) => n.id === "n1")!.icon).toBe("🚌");
+    expect(storeB.listNotesForSync().find((n) => n.id === "n1")!.icon).toBe("🚌");
+
+    // 场景3：B 已确认 A 的图标后再主动改 → B 胜（在已确认版本上续编，不被回滚）
+    storeA.setIcon("n1", "💎", "2030-01-01T00:00:05.000Z");
+    await syncNow(storeA as unknown as Store);
+    await syncNow(storeB as unknown as Store); // B 确认 💎
+    storeB.setIcon("n1", "💣", "2030-01-01T00:00:06.000Z");
+    await syncNow(storeB as unknown as Store);
+    await syncNow(storeA as unknown as Store);
+    expect(readManifest().notes.find((n) => n.id === "n1")!.icon).toBe("💣");
+    expect(storeA.listNotesForSync().find((n) => n.id === "n1")!.icon).toBe("💣");
+    expect(storeB.listNotesForSync().find((n) => n.id === "n1")!.icon).toBe("💣");
+  });
+
+  it("验收#1（统一先同步者胜·正文）：B 已同步 A 的版本后续编 → B 的编辑胜出，不被远端覆盖", async () => {
+    const storeA = new FakeStore(); storeA.saveS3Settings(SETTINGS);
+    const storeB = new FakeStore(); storeB.saveS3Settings(SETTINGS);
+    storeA.createNote("n1", "笔记A", "<p>v1</p>");
+    await syncNow(storeA as unknown as Store);
+    await syncNow(storeB as unknown as Store);
+    // A 编辑 v2 并提交；B 同步确认 v2（base=v2）
+    storeA.modifyNote("n1", "<p>v2</p>");
+    await syncNow(storeA as unknown as Store);
+    await syncNow(storeB as unknown as Store);
+    expect(storeB.baseHash("n1")).toBe(storeA.contentHash("n1"));
+    // B 在 v2 基础上续编 v3 并同步：远端==已确认基线 → 本地胜（此前会被 superseded 覆盖丢编辑）
+    const histBefore = storeB.historySnapshots.length;
+    storeB.modifyNote("n1", "<p>v3-b-continue</p>");
+    const rb = await syncNow(storeB as unknown as Store);
+    expect(rb.supersededNotes.some((n) => n.id === "n1")).toBe(false);
+    expect(storeB.historySnapshots.length).toBe(histBefore); // 未留档（本地没被覆盖）
+    expect(readManifest().notes.find((n) => n.id === "n1")!.contentHash).toBe(storeB.contentHash("n1"));
+    // A 再同步 → 跟随 B 的 v3
+    await syncNow(storeA as unknown as Store);
+    expect(storeA.contentHash("n1")).toBe(storeB.contentHash("n1"));
+  });
+
+  it("验收：历史回滚后同步 → 回滚版上传并跨端传播（本地胜，不被覆盖）", async () => {
+    const storeA = new FakeStore(); storeA.saveS3Settings(SETTINGS);
+    const storeB = new FakeStore(); storeB.saveS3Settings(SETTINGS);
+    storeA.createNote("n1", "笔记A", "<p>v1</p>");
+    await syncNow(storeA as unknown as Store);
+    await syncNow(storeB as unknown as Store);
+    // B 编辑 v2 并提交；A 同步确认 v2
+    storeB.modifyNote("n1", "<p>v2</p>");
+    await syncNow(storeB as unknown as Store);
+    await syncNow(storeA as unknown as Store);
+    expect(storeB.baseHash("n1")).toBe(storeB.contentHash("n1"));
+    // B 回滚历史到 v1 并同步：恢复版上传覆盖云端（不 superseded）
+    storeB.restoreHistoryVersion("n1", "<p>v1</p>");
+    const rb = await syncNow(storeB as unknown as Store);
+    expect(rb.supersededNotes.some((n) => n.id === "n1")).toBe(false);
+    expect(readManifest().notes.find((n) => n.id === "n1")!.contentHash).toBe(sha256("<p>v1</p>"));
+    // A 再同步 → 跟随回滚版 v1
+    await syncNow(storeA as unknown as Store);
+    expect(storeA.contentHash("n1")).toBe(sha256("<p>v1</p>"));
   });
 
   it("远端新增笔记时下载到本地（含 .lake 与资源）", async () => {
@@ -570,7 +752,7 @@ describe("syncNow 增量同步", () => {
     // 远端只改锁（正文哈希不变）：手工改写 manifest
     const manifest = readManifest();
     manifest.notes[0] = { ...manifest.notes[0], isLocked: true, lockedAt: "2030-01-01T00:00:00.000Z" };
-    s3.bucket.set(key("manifests/latest.json"), Buffer.from(JSON.stringify(manifest), "utf8"));
+    writeManifest(manifest);
     const r = await syncNow(store as unknown as Store);
     expect(r.downloaded).toBe(0); // 正文未下载
     expect(store.notes.get("n1")?.isLocked).toBe(true); // 锁已合并下来
@@ -579,7 +761,7 @@ describe("syncNow 增量同步", () => {
     store.setNoteLocked("n1", false);
     const localAt = store.notes.get("n1")!.lockedAt!;
     manifest.notes[0] = { ...manifest.notes[0], isLocked: true, lockedAt: "2020-01-01T00:00:00.000Z" };
-    s3.bucket.set(key("manifests/latest.json"), Buffer.from(JSON.stringify(manifest), "utf8"));
+    writeManifest(manifest);
     await syncNow(store as unknown as Store);
     expect(store.notes.get("n1")?.isLocked).toBe(false);
     expect(store.notes.get("n1")?.lockedAt).toBe(localAt);
@@ -768,6 +950,10 @@ describe("S3 GC v4 语义（M0/M2）— 回收站笔记本", () => {
     expect(rb.supersededNotes.some((n) => n.id === "n1")).toBe(true);
     // 云端保持回收站条目（B 的编辑不复活删除）
     expect(readManifest().notes.find((n) => n.id === "n1")?.parentId).toBe("notebook-trash");
+    // 删除压编辑：回收站内容以 A 删除的那版为准（B 的离线编辑不得溜进回收站内容）
+    const aHash = storeA.contentHash("n1");
+    expect(readManifest().notes.find((n) => n.id === "n1")!.contentHash).toBe(aHash);
+    expect(storeB.contentHash("n1")).toBe(aHash);
   });
 
   it("显式恢复例外：B 恢复 → 上传 active 覆盖回收站条目 → A 跟随恢复（多端恢复 LWW）", async () => {

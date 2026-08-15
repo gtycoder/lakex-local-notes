@@ -8,6 +8,8 @@ import { AppError } from "./store.js";
 
 export const QUICK_NOTE_VERSION = 1;
 export const MAX_QUICK_NOTE_IMAGE_BYTES = 25 * 1024 * 1024;
+/** 小记图片解码后像素上限（与 Lake 图片一致：50MP，防解压炸弹） */
+const MAX_QUICK_NOTE_IMAGE_PIXELS = 50_000_000;
 const MAX_QUICK_NOTE_TEXT_LENGTH = 200_000;
 
 export interface QuickNoteImage {
@@ -290,6 +292,9 @@ export class QuickNotesStore {
     const format = sniffImageFormat(bytes);
     if (!format) throw new AppError("InvalidInput", "仅支持 PNG、JPEG、GIF、WebP 和 AVIF 图片");
     const metadata = await sharp(bytes, { animated: true }).metadata().catch(() => null);
+    if (metadata?.width && metadata?.height && metadata.width * metadata.height > MAX_QUICK_NOTE_IMAGE_PIXELS) {
+      throw new AppError("InvalidInput", `图片尺寸过大（${metadata.width}x${metadata.height}），上限 ${MAX_QUICK_NOTE_IMAGE_PIXELS} 像素`);
+    }
     const id = uuid();
     const filename = `${Date.now()}_${crypto.randomBytes(4).toString("hex")}.${format.extension}`;
     const stagingDir = this.stagingDirFor(draftId);
@@ -420,11 +425,13 @@ export class QuickNotesStore {
     this.deleteSourceAndRemember(row, null, true, true);
   }
 
-  /** M6 小记回收站：用户删除的小记（不含转换 tombstone、不含已 purge）。 */
+  /** M6 小记回收站：用户删除的小记（不含转换 tombstone、不含已 purge）。
+   * 审计：过滤"学到删除的墓碑"（他端 purge 本端从未持有，只有墓碑没有内容文件）——
+   * 这类条目无法恢复（restoreQuickNote 会因缺文件报错），不应出现在回收站里制造假条目。 */
   listQuickNoteTrash(): Array<{ id: string; createdAt: string; updatedAt: string; deletedAt: string }> {
     return this.db.prepare(
       "SELECT id,created_at,updated_at,deleted_at FROM quick_note_deleted WHERE conversion_target_note_id IS NULL AND purged_at IS NULL ORDER BY deleted_at DESC"
-    ).all().map((r: any) => ({ id: r.id, createdAt: r.created_at, updatedAt: r.updated_at, deletedAt: r.deleted_at }));
+    ).all().filter((r: any) => fs.existsSync(this.itemPath(r.id))).map((r: any) => ({ id: r.id, createdAt: r.created_at, updatedAt: r.updated_at, deletedAt: r.deleted_at }));
   }
 
   /** M6 小记回收站恢复：从保留的本地内容文件读回，清墓碑并置 local 待上传。 */
@@ -634,11 +641,40 @@ export class QuickNotesStore {
     }
   }
 
-  /** 将有冲突的小记复制为新的、可见的时间线卡片，避免任何一侧内容被静默吞掉。 */
-  importRemoteConflictCopy(remote: { createdAt: string; updatedAt: string; contentHash: string }, contentBytes: Buffer, assets: { filename: string; bytes: Buffer }[]): string {
+  /** 冲突归档（验收 #4 定稿：B 方案——远端覆盖本地，本地版本进小记回收站，恢复后作为一条新小记）。
+   * 把本地小记复制为一条「新 id」的回收站条目：内容文件 + 资源文件保留，写墓碑（ready_to_sync=0，
+   * 纯本地归档，不向云端发布删除记录——其他端从未持有该 id，避免幽灵回收站条目）；
+   * 恢复 = restoreQuickNote(newId) → 一条全新小记。返回新 id。
+   * 调用方（sync 下载冲突分支）随后用远端内容覆盖原条目。 */
+  archiveLocalToTrash(id: string): string {
+    if (!isSafeSegment(id)) throw new AppError("InvalidInput", "无效的小记 ID");
+    const row = this.readRow(id);
     const newId = uuid();
-    this.importRemoteQuickNote({ id: newId, createdAt: remote.createdAt, updatedAt: remote.updatedAt, contentHash: remote.contentHash, isConflict: true }, contentBytes, assets);
-    this.markLocal(newId);
+    const now = nowIso();
+    // 内容复制到新 id：图片 id 重映射为新 uuid（原条目在冲突覆盖后仍持有相同 image id，
+    // 直接复用会在恢复/同步时撞 quick_note_assets.id 全局 UNIQUE；图片字节不变）。
+    const content = this.readStoredContent(id);
+    let body: Buffer;
+    if (content.images.length > 0) {
+      const remap = new Map(content.images.map((image) => [image.id, uuid()] as const));
+      const rewritten = { ...content, images: content.images.map((image) => ({ ...image, id: remap.get(image.id)! })) };
+      body = Buffer.from(`${JSON.stringify(rewritten, null, 2)}\n`, "utf8");
+    } else {
+      body = fs.readFileSync(this.itemPath(id));
+    }
+    fs.writeFileSync(this.itemPath(newId), body);
+    const srcAssets = this.assetDirFor(id);
+    const dstAssets = this.assetDirFor(newId);
+    if (fs.existsSync(srcAssets)) {
+      fs.mkdirSync(dstAssets, { recursive: true });
+      for (const filename of fs.readdirSync(srcAssets)) {
+        const src = path.join(srcAssets, filename);
+        if (!fs.statSync(src).isFile()) continue;
+        fs.copyFileSync(src, path.join(dstAssets, filename));
+      }
+    }
+    this.db.prepare("INSERT OR REPLACE INTO quick_note_deleted(id,created_at,updated_at,deleted_at,conversion_target_note_id,ready_to_sync) VALUES(?,?,?,?,NULL,0)")
+      .run(newId, row.created_at, row.updated_at, now);
     return newId;
   }
 }
