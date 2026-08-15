@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import crypto from "node:crypto";
+import zlib from "node:zlib";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -59,6 +60,16 @@ beforeEach(() => {
   store = new QuickNotesStore(root);
 });
 
+
+function maybeGunzip(bytes: Buffer): Buffer {
+  return bytes.length >= 2 && bytes[0] === 0x1f && bytes[1] === 0x8b ? zlib.gunzipSync(bytes) : bytes;
+}
+function readQuickManifest(): any {
+  const raw = s3.bucket.get(key("quick-notes/manifests/latest.json"));
+  if (!raw) throw new Error("测试前置失败：小记清单不存在");
+  return JSON.parse(maybeGunzip(raw).toString("utf8"));
+}
+
 describe("小记独立 S3 同步", () => {
   it("使用 quick-notes/ 独立 manifest/object 前缀，且不需要 Lake manifest", async () => {
     const note = store.createQuickNote({ text: "同步这条小记", draftId: crypto.randomUUID(), stagedImageIds: [] });
@@ -67,7 +78,7 @@ describe("小记独立 S3 同步", () => {
     expect(s3.bucket.has(key(`quick-notes/objects/${note.contentHash}.qnote`))).toBe(true);
     const manifestRaw = s3.bucket.get(key("quick-notes/manifests/latest.json"));
     expect(manifestRaw).toBeTruthy();
-    const manifest = JSON.parse(manifestRaw!.toString("utf8"));
+    const manifest = readQuickManifest();
     expect(manifest).toMatchObject({ version: 1, workspaceId: "default" });
     expect(manifest.items).toHaveLength(1);
     expect(manifest.items[0]).toMatchObject({ id: note.id, contentHash: note.contentHash });
@@ -84,7 +95,7 @@ describe("小记独立 S3 同步", () => {
     store.deleteQuickNote(note.id);
 
     await syncQuickNotes(store, settings);
-    const deletedManifest = JSON.parse(s3.bucket.get(key("quick-notes/manifests/latest.json"))!.toString("utf8"));
+    const deletedManifest = readQuickManifest();
     expect(deletedManifest.items).toEqual([expect.objectContaining({
       id: note.id,
       deleted: true,
@@ -105,7 +116,7 @@ describe("小记独立 S3 同步", () => {
     // A 删除并同步 → 云端 deleted
     storeA.deleteQuickNote(note.id);
     await syncQuickNotes(storeA, settings);
-    expect(JSON.parse(s3.bucket.get(key("quick-notes/manifests/latest.json"))!.toString("utf8"))
+    expect(readQuickManifest()
       .items.find((i: { id: string }) => i.id === note.id)?.deleted).toBe(true);
     // B 学到删除
     await syncQuickNotes(storeB, settings);
@@ -114,13 +125,13 @@ describe("小记独立 S3 同步", () => {
     await new Promise((r) => setTimeout(r, 10));
     storeB.restoreQuickNote(note.id);
     await syncQuickNotes(storeB, settings);
-    expect(JSON.parse(s3.bucket.get(key("quick-notes/manifests/latest.json"))!.toString("utf8"))
+    expect(readQuickManifest()
       .items.find((i: { id: string }) => i.id === note.id)?.deleted).not.toBe(true);
     // A 再同步：跟随恢复 + 墓碑撤销 + 不回写覆盖
     await syncQuickNotes(storeA, settings);
     expect(storeA.listQuickNotes().some((i) => i.id === note.id)).toBe(true);
     expect(storeA.listDeletedForSync().some((i) => i.id === note.id)).toBe(false);
-    expect(JSON.parse(s3.bucket.get(key("quick-notes/manifests/latest.json"))!.toString("utf8"))
+    expect(readQuickManifest()
       .items.find((i: { id: string }) => i.id === note.id)?.deleted).not.toBe(true);
     // B 再同步：不被再次删除
     await syncQuickNotes(storeB, settings);
@@ -140,7 +151,7 @@ describe("小记独立 S3 同步", () => {
     const aHash = sha256(fs.readFileSync(storeA.quickNotePathFor(note.id)));
     storeA.deleteQuickNote(note.id);
     await syncQuickNotes(storeA, settings);
-    const tomb = JSON.parse(s3.bucket.get(key("quick-notes/manifests/latest.json"))!.toString("utf8"))
+    const tomb = readQuickManifest()
       .items.find((i: { id: string }) => i.id === note.id);
     expect(tomb.deleted).toBe(true);
     expect(tomb.contentHash).toBe(aHash);
@@ -167,7 +178,7 @@ describe("小记独立 S3 同步", () => {
 
     await syncQuickNotes(store, settings);
     expect(store.listQuickNotes().some((item) => item.id === source.id)).toBe(false);
-    const manifest = JSON.parse(s3.bucket.get(key("quick-notes/manifests/latest.json"))!.toString("utf8"));
+    const manifest = readQuickManifest();
     expect(manifest.items).toHaveLength(1);
     expect(manifest.items[0]).toMatchObject({ id: source.id });
     expect(manifest.items[0]).not.toHaveProperty("deleted");

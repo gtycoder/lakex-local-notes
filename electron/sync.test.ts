@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import crypto from "node:crypto";
+import zlib from "node:zlib";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -94,10 +95,13 @@ const SETTINGS: S3Settings = {
 const key = (suffix: string) => `lake-notes/${suffix}`;
 const sha256 = (s: string) => crypto.createHash("sha256").update(s).digest("hex");
 
+function maybeGunzip(bytes: Buffer): Buffer {
+  return bytes.length >= 2 && bytes[0] === 0x1f && bytes[1] === 0x8b ? zlib.gunzipSync(bytes) : bytes;
+}
 function readManifest(): Manifest {
   const raw = s3.bucket.get(key("manifests/latest.json"));
   if (!raw) throw new Error("测试前置失败：远端清单不存在");
-  return JSON.parse(raw.toString("utf8"));
+  return JSON.parse(maybeGunzip(raw).toString("utf8"));
 }
 function writeManifest(manifest: Manifest): void {
   s3.bucket.set(key("manifests/latest.json"), Buffer.from(JSON.stringify(manifest), "utf8"));
@@ -106,7 +110,9 @@ function writeManifest(manifest: Manifest): void {
 // ===== FakeStore：实现 sync.ts 用到的 Store 子集（内存态 + 临时文件） =====
 class FakeStore {
   settings: S3Settings | null = null;
-  notes = new Map<string, { id: string; title: string; parentId: string | null; sortOrder: number; updatedAt: string; isConflict: boolean; isLocked?: boolean; lockedAt?: string | null }>();
+  notes = new Map<string, { id: string; title: string; parentId: string | null; sortOrder: number; updatedAt: string; syncState: string; isConflict: boolean; isLocked?: boolean; lockedAt?: string | null }>();
+  /** 测试探针：contentHash（读 .lake）被调用的次数，用于断言"跳过扫描"生效。 */
+  hashReads = 0;
   deleted = new Map<string, { id: string; title: string; parentId: string | null; sortOrder: number; updatedAt: string; deletedAt: string }>();
   baseHashes = new Map<string, string>();
   lastUploadedHashes = new Map<string, string>();
@@ -129,13 +135,14 @@ class FakeStore {
   // ---- 测试辅助 ----
   createNote(id: string, title: string, content: string) {
     const updatedAt = new Date().toISOString();
-    this.notes.set(id, { id, title, parentId: null, sortOrder: this.notes.size, updatedAt, isConflict: false });
+    this.notes.set(id, { id, title, parentId: null, sortOrder: this.notes.size, updatedAt, syncState: "local", isConflict: false });
     fs.writeFileSync(this.notePath(id), content, "utf8");
   }
   modifyNote(id: string, content: string) {
     const n = this.notes.get(id);
     if (!n) throw new Error(`笔记不存在: ${id}`);
     n.updatedAt = new Date().toISOString();
+    n.syncState = "local";
     fs.writeFileSync(this.notePath(id), content, "utf8");
   }
   addAsset(noteId: string, filename: string, bytes: Buffer) {
@@ -158,7 +165,7 @@ class FakeStore {
     const n = this.notes.get(note.id);
     if (n) { n.title = note.title; n.parentId = note.parentId; n.sortOrder = note.sortOrder; n.updatedAt = note.updatedAt; n.isConflict = note.isConflict; }
   }
-  contentHash(id: string) { return crypto.createHash("sha256").update(fs.readFileSync(this.notePath(id))).digest("hex"); }
+  contentHash(id: string) { this.hashReads += 1; return crypto.createHash("sha256").update(fs.readFileSync(this.notePath(id))).digest("hex"); }
   notePathFor(id: string) { return this.notePath(id); }
   noteAssetsPathFor(id: string) { return path.join(this.dir, "note-assets", id); }
   listOrphanAssets() {
@@ -178,7 +185,12 @@ class FakeStore {
     this.historySnapshots.push(noteId);
     return this.historySnapshots.length;
   }
-  markSynced(id?: string) { if (id) { this.pendingSync.delete(id); this.restorePending.delete(id); } }
+  markSynced(id?: string) {
+    if (id) {
+      this.pendingSync.delete(id); this.restorePending.delete(id);
+      const n = this.notes.get(id); if (n) n.syncState = "synced";
+    }
+  }
   isSyncPending(id: string) { return this.pendingSync.has(id); }
   markLocal(id: string) { this.pendingSync.add(id); }
   restorePending = new Set<string>();
@@ -225,7 +237,7 @@ class FakeStore {
       fs.mkdirSync(dir, { recursive: true });
       for (const asset of assets) fs.writeFileSync(path.join(dir, asset.filename), asset.bytes);
     }
-    this.notes.set(note.id, { ...note });
+    this.notes.set(note.id, { ...note, syncState: "synced" });
   }
   rememberDeleted(note: { id: string; title: string; parentId: string | null; sortOrder: number; updatedAt: string }, deletedAt: string) {
     this.deleted.set(note.id, { id: note.id, title: note.title, parentId: note.parentId, sortOrder: note.sortOrder, updatedAt: note.updatedAt, deletedAt });
@@ -252,7 +264,7 @@ class FakeStore {
       try { body = fs.readFileSync(this.notePath(id), "utf8"); }
       catch { body = `<p>${d.title}</p>`; }
     }
-    this.notes.set(id, { id, title: d.title, parentId: d.parentId, sortOrder: d.sortOrder, updatedAt: new Date().toISOString(), isConflict: false });
+    this.notes.set(id, { id, title: d.title, parentId: d.parentId, sortOrder: d.sortOrder, updatedAt: new Date().toISOString(), syncState: "local", isConflict: false });
     fs.writeFileSync(this.notePath(id), body, "utf8");
     this.deleted.delete(id);
     this.markRestorePending(id);
@@ -1012,5 +1024,100 @@ describe("S3 GC v4 语义（M0/M2）", () => {
     expect(readManifest().notes.find((n) => n.id === "n1")?.deleted).toBe(true);
     expect(s3.bucket.has(key(`objects/n1-${h1}.lake`))).toBe(false);
     expect(s3.bucket.has(key("assets/n1/img.png"))).toBe(false);
+  });
+});
+
+describe("manifest gzip（实验/manifest-gzip）", () => {
+  it("manifest 以 gzip 存储，体积小于原始，读取透明解压", async () => {
+    const storeA = newStore();
+    for (let i = 0; i < 50; i += 1) storeA.createNote(`n${i}`, `笔记${i}`, `<p>内容${i}</p>${i % 3 === 0 ? `<img src="assets/${i}.png">` : ""}`);
+    await syncNow(storeA as unknown as Store);
+    const stored = s3.bucket.get(key("manifests/latest.json"))!;
+    expect(stored.length >= 2 && stored[0] === 0x1f && stored[1] === 0x8b).toBe(true); // gzip 魔数
+    const raw = zlib.gunzipSync(stored);
+    expect(stored.length).toBeLessThan(raw.length);                                   // 压缩后更小
+    const manifest = readManifest();                                                  // 透明解压后可解析
+    expect(manifest.notes.length).toBe(50);
+    // commit 链同样 gzip
+    const commit = s3.bucket.get(key(`manifests/${manifest.commitId}.json`))!;
+    expect(commit[0] === 0x1f && commit[1] === 0x8b).toBe(true);
+    // 二次同步幂等：读回 gzip manifest 不报错
+    const r2 = await syncNow(storeA as unknown as Store);
+    expect(r2.downloaded).toBe(0);
+  });
+
+  it("普通对象（笔记正文/资源）不 gzip，保持原样", async () => {
+    const storeA = newStore();
+    storeA.createNote("n1", "笔记A", '<p>v1</p><img src="assets/a.png">');
+    await syncNow(storeA as unknown as Store);
+    for (const k of s3.bucket.keys()) {
+      if (k.includes("manifests/")) continue;
+      const b = s3.bucket.get(k)!;
+      expect(b.length >= 2 && b[0] === 0x1f && b[1] === 0x8b).toBe(false);
+    }
+  });
+});
+
+describe("增量扫描优化（synced 跳过本地读文件）", () => {
+  beforeEach(() => s3.reset());
+  it("二次同步未编辑笔记：0 次 .lake 读取，assets 复用远端清单", async () => {
+    const storeA = newStore();
+    storeA.createNote("n1", "笔记A", "<p>v1</p><img src=\"assets/a.png\">");
+    storeA.addAsset("n1", "a.png", Buffer.from("img", "utf8"));
+    await syncNow(storeA as unknown as Store);
+    const first = readManifest();
+    expect(first.notes[0].assets).toHaveLength(1);
+
+    storeA.hashReads = 0;
+    const r2 = await syncNow(storeA as unknown as Store);
+    expect(storeA.hashReads).toBe(0);            // 未编辑 → 不读 .lake
+    expect(r2.uploaded).toBe(0);
+    expect(r2.downloaded).toBe(0);
+    const m2 = readManifest();
+    expect(m2.notes[0].contentHash).toBe(storeA.baseHash("n1"));
+    expect(m2.notes[0].assets).toHaveLength(1);  // assets 从远端复用，不丢
+  });
+
+  it("编辑后（local）照常全量扫描并上传新 hash", async () => {
+    const storeA = newStore();
+    storeA.createNote("n1", "笔记A", "<p>v1</p>");
+    await syncNow(storeA as unknown as Store);
+    storeA.hashReads = 0;
+    storeA.modifyNote("n1", "<p>v2-edited</p>");
+    const r = await syncNow(storeA as unknown as Store);
+    expect(storeA.hashReads).toBeGreaterThan(0); // 有编辑 → 必须读文件
+    expect(r.uploaded).toBeGreaterThan(0);
+    expect(readManifest().notes.find((n) => n.id === "n1")!.contentHash).toBe(storeA.contentHash("n1"));
+  });
+
+  it("synced 但远端条目缺失 → 回退全量扫描重传", async () => {
+    const storeA = newStore();
+    storeA.createNote("n1", "笔记A", "<p>v1</p>");
+    await syncNow(storeA as unknown as Store);
+    storeA.hashReads = 0;
+    // 模拟远端清单被清空（如桶被重置）
+    const m = readManifest(); m.notes = [];
+    writeManifest(m);
+    await syncNow(storeA as unknown as Store);
+    expect(storeA.hashReads).toBeGreaterThan(0); // 远端缺失 → 回退扫描
+    expect(readManifest().notes.find((n) => n.id === "n1")).toBeTruthy();
+  });
+
+  it("跨设备：B 下载远端更新后同步，synced 笔记同样 0 读取", async () => {
+    const storeA = newStore();
+    storeA.createNote("n1", "笔记A", "<p>v1</p>");
+    await syncNow(storeA as unknown as Store);
+    // B 首次同步：无本地笔记，导入即 synced + 基线对齐 → 0 读取
+    const storeB = newStore();
+    await syncNow(storeB as unknown as Store);
+    expect(storeB.hashReads).toBe(0);
+    // A 编辑提交 → B 再同步：下载远端新版本，synced 本地用缓存基线，不读文件
+    storeA.modifyNote("n1", "<p>v2</p>");
+    await syncNow(storeA as unknown as Store);
+    storeB.hashReads = 0;
+    const rb = await syncNow(storeB as unknown as Store);
+    expect(rb.downloaded).toBe(1);
+    expect(storeB.hashReads).toBe(0);
+    expect(storeB.baseHash("n1")).toBe(storeA.contentHash("n1"));
   });
 });

@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import zlib from "node:zlib";
 import path from "node:path";
 import crypto from "node:crypto";
 import {
@@ -89,6 +90,12 @@ export interface SyncProgress {
 }
 
 const MANIFEST_VERSION = 4;
+/** gzip 魔数（0x1f 0x8b）。JSON/PNG/JPEG 等实际内容不可能以此开头，可按魔数安全识别 gzip 对象。 */
+const GZIP_MAGIC = [0x1f, 0x8b];
+function isGzip(bytes: Buffer): boolean {
+  return bytes.length >= 2 && bytes[0] === GZIP_MAGIC[0] && bytes[1] === GZIP_MAGIC[1];
+}
+
 const objectKey = (noteId: string, contentHash: string): string => `objects/${noteId}-${contentHash}.lake`;
 
 // ===== ObjectStore：S3 兼容客户端（七牛云等） =====
@@ -137,8 +144,10 @@ export class ObjectStore {
     try {
       const output = await this.client.send(new GetObjectCommand({ Bucket: this.bucket, Key: this.key(key) }));
       const bytes = output.Body ? Buffer.from(await output.Body.transformToByteArray()) : Buffer.alloc(0);
-      log.s3.info(`[perf] get ${key} ${Date.now() - t0}ms (${bytes.length}B)`);
-      return bytes;
+      // manifest 等 gzip 对象透明解压（按魔数识别；ContentEncoding 自动解压与原始字节两种响应均兼容）
+      const out = isGzip(bytes) ? zlib.gunzipSync(bytes) : bytes;
+      log.s3.info(`[perf] get ${key} ${Date.now() - t0}ms (${bytes.length}B${out !== bytes ? ` -> ${out.length}B gzip` : ""})`);
+      return out;
     } catch (error) {
       if (isNoSuchKey(error)) { log.s3.info(`[perf] get ${key} ${Date.now() - t0}ms MISS`); return null; }
       log.s3.warn(`[perf] get ${key} FAIL ${Date.now() - t0}ms: ${errorMessage(error)}`);
@@ -146,18 +155,25 @@ export class ObjectStore {
     }
   }
 
-  async put(key: string, bytes: Buffer, contentType: string, opts?: { cacheControl?: "no-cache" | "no-store" }): Promise<void> {
+  async put(key: string, bytes: Buffer, contentType: string, opts?: { cacheControl?: "no-cache" | "no-store"; gzip?: boolean }): Promise<void> {
     assertSafeKey(key);
     const t0 = Date.now();
+    let body = bytes;
+    const command: Record<string, unknown> = {
+      Bucket: this.bucket,
+      Key: this.key(key),
+      Body: body,
+      ContentType: contentType,
+      CacheControl: opts?.cacheControl ?? "no-cache",
+    };
+    if (opts?.gzip) {
+      body = zlib.gzipSync(bytes, { level: 9 });
+      command.Body = body;
+      command.ContentEncoding = "gzip";
+    }
     try {
-      await this.client.send(new PutObjectCommand({
-        Bucket: this.bucket,
-        Key: this.key(key),
-        Body: bytes,
-        ContentType: contentType,
-        CacheControl: opts?.cacheControl ?? "no-cache",
-      }));
-      log.s3.info(`[perf] put ${key} ${Date.now() - t0}ms (${bytes.length}B)`);
+      await this.client.send(new PutObjectCommand(command as never));
+      log.s3.info(`[perf] put ${key} ${Date.now() - t0}ms (${body.length}B${opts?.gzip ? ` gzip of ${bytes.length}B` : ""})`);
     } catch (error) {
       log.s3.warn(`[perf] put ${key} FAIL ${Date.now() - t0}ms: ${errorMessage(error)}`);
       throw new Error(`S3 上传失败 (${key}): ${errorMessage(error)}`);
@@ -361,7 +377,10 @@ export async function syncNow(store: Store, onProgress?: (p: SyncProgress) => vo
         }
       }
       const local = localById.get(rn.id) ?? null;
-      const localHash = local ? store.contentHash(local.id) : null;
+      // 增量扫描优化：synced 笔记信任"本地自上次同步后无写入"，直接用基线 hash 比对，
+      // 跳过 .lake 文件读取；local/异常状态仍读文件核对（out-of-band 外部改文件不在本期覆盖）。
+      const cachedBase = local && local.syncState === "synced" ? store.baseHash(local.id) : null;
+      const localHash = local ? (cachedBase ?? store.contentHash(local.id)) : null;
       if (localHash === rn.contentHash) {
         // 正文相同：锁状态作为独立元数据按 LWW 合并（锁变更不改正文哈希，
         // 不能因哈希相等就跳过，否则远端锁状态永远下不来）
@@ -482,6 +501,8 @@ export async function syncNow(store: Store, onProgress?: (p: SyncProgress) => vo
   for (const rn of remoteManifest?.notes ?? []) {
     for (const a of rn.assets || []) remoteAssetHashes.set(`${rn.id}/${a.filename}`, a.hash);
   }
+  // 远端条目 map（上传跳过判定 + 墓碑 LWW 复用；命名避开外层 ObjectStore 的 remote）
+  const remoteNotesById = new Map((remoteManifest?.notes ?? []).map((n) => [n.id, n]));
   let uploaded = 0;
   const manifestNotes: ManifestNote[] = [];
 
@@ -492,6 +513,20 @@ export async function syncNow(store: Store, onProgress?: (p: SyncProgress) => vo
     localIndex += 1;
     const noteUploadStart = Date.now();
     report({ phase: "upload", current: localIndex, total: localTotal, message: `上传笔记「${note.title}」` });
+    // 增量扫描优化：synced 且远端条目 hash 与本地上次基线一致 → 本地无变更，
+    // 直接复用缓存 hash + 远端 assets（正文未变 ⇒ 资源引用未变 ⇒ assets 一致），
+    // 跳过 .lake 读取与资源扫描（9000+ 条笔记时每次同步省 ~2 万次文件 IO）。
+    const remoteEntry = remoteNotesById.get(note.id);
+    const cachedHash = store.baseHash(note.id);
+    if (note.syncState === "synced" && cachedHash !== null && remoteEntry && !remoteEntry.deleted && remoteEntry.contentHash === cachedHash) {
+      manifestNotes.push({
+        id: note.id, title: note.title, parentId: note.parentId, sortOrder: note.sortOrder,
+        updatedAt: note.updatedAt, contentHash: cachedHash, isConflict: note.isConflict,
+        isLocked: !!note.isLocked, lockedAt: note.lockedAt ?? null, icon: note.icon ?? null,
+        assets: remoteEntry.assets ?? [],
+      });
+      continue;
+    }
     const hash = store.contentHash(note.id);
     // 审计 #1：资源清单必须**每次同步都重扫**（正文 hash 未变时也要保留 assets）。
     // §5.1：仅当前正文引用的资源有上传资格；历史引用资源不上传（本地保留，云端 B1 保留）。
@@ -545,13 +580,12 @@ export async function syncNow(store: Store, onProgress?: (p: SyncProgress) => vo
   // 标记，会把旧笔记当本地有效内容重新上传（删除复活）。墓碑/标记体积极小，
   // 按 id 永久保留直到本地重建同名笔记（此时 localIds 命中，不再标记 deleted）。
   const localIds = new Set(localNotes.map((n) => n.id));
-  const remoteById = new Map((remoteManifest?.notes ?? []).map((n) => [n.id, n]));
   for (const deleted of store.listDeletedNotesForSync()) {
     if (localIds.has(deleted.id)) continue;
     // 墓碑 vs 远端恢复 LWW：远端已是 active 且 updatedAt 晚于本墓碑删除时间 →
     // 其他设备恢复较新，墓碑让位（不回写覆盖，避免恢复被撤销）。
     // 反向（本墓碑删除较新）仍回写，保证离线设备删除能传播（审计 #2）。
-    const remoteNote = remoteById.get(deleted.id);
+    const remoteNote = remoteNotesById.get(deleted.id);
     if (remoteNote && !remoteNote.deleted && remoteNote.updatedAt > deleted.deletedAt) {
       log.sync.info(`[perf] upload ${deleted.id} tombstone-yield (remote restored newer)`);
       continue;
@@ -598,8 +632,8 @@ export async function syncNow(store: Store, onProgress?: (p: SyncProgress) => vo
     folders: manifestFolders,
   };
   const manifestOutput = Buffer.from(JSON.stringify(manifest, null, 2), "utf8");
-  await remote.put(`manifests/${commitId}.json`, manifestOutput, "application/json");
-  await remote.put("manifests/latest.json", manifestOutput, "application/json");
+  await remote.put(`manifests/${commitId}.json`, manifestOutput, "application/json", { gzip: true });
+  await remote.put("manifests/latest.json", manifestOutput, "application/json", { gzip: true });
   log.sync.info(`[perf] manifest ${commitId} ${Date.now() - manifestStart}ms (notes=${manifestNotes.length}, folders=${manifestFolders.length}, bytes=${manifestOutput.length}, prev=${manifest.prevCommitId ?? "none"})`);
 
   // P0-1 修正：lastUploadedHash 语义 = 已成功发布到 latest 的 hash，必须在 manifest 写成功后再更新。

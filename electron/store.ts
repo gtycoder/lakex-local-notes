@@ -100,7 +100,9 @@ export interface HistoryCleanupResult {
   freedBytes: number;
 }
 interface SyncNote {
-  id: string; title: string; parentId: string | null; sortOrder: number; updatedAt: string; isConflict: boolean;
+  id: string; title: string; parentId: string | null; sortOrder: number; updatedAt: string;
+  /** 仅本地 listNotesForSync 提供；远端导入/元数据字面量可省略（视为非 synced，走全量路径）。 */
+  syncState?: string; isConflict: boolean;
   isLocked?: boolean; lockedAt?: string | null; icon?: string | null;
 }
 interface RemoteAsset {
@@ -1784,12 +1786,12 @@ export class Store {
   listNotesForSync(): SyncNote[] {
     // icon 存于 tree_nodes，join 取出参与同步
     return this.db.prepare(
-      `SELECT n.id,n.title,n.parent_id,n.sort_order,n.updated_at,n.is_conflict,n.is_locked,n.locked_at,t.icon
+      `SELECT n.id,n.title,n.parent_id,n.sort_order,n.updated_at,n.sync_state,n.is_conflict,n.is_locked,n.locked_at,t.icon
        FROM notes n LEFT JOIN tree_nodes t ON t.note_file_id = n.id
        WHERE n.deleted_at IS NULL ORDER BY n.sort_order`
     ).all().map((r: any) => ({
       id: r.id, title: r.title, parentId: r.parent_id, sortOrder: r.sort_order,
-      updatedAt: r.updated_at, isConflict: !!r.is_conflict,
+      updatedAt: r.updated_at, syncState: r.sync_state, isConflict: !!r.is_conflict,
       isLocked: !!r.is_locked, lockedAt: r.locked_at ?? null, icon: r.icon ?? null,
     }));
   }

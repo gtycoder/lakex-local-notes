@@ -259,7 +259,7 @@ export async function syncQuickNotes(
   };
   report({ phase: "quick-notes", message: "写入小记同步清单…" });
   const manifestStart = Date.now();
-  await remote.put(manifestKey, Buffer.from(`${JSON.stringify(manifest, null, 2)}\n`, "utf8"), "application/json; charset=utf-8");
+  await remote.put(manifestKey, Buffer.from(`${JSON.stringify(manifest, null, 2)}\n`, "utf8"), "application/json; charset=utf-8", { gzip: true });
   log.quick.info(`[perf] quick manifest ${manifest.commitId} ${Date.now() - manifestStart}ms (items=${manifestItems.length})`);
 
   for (const item of localItems) {
