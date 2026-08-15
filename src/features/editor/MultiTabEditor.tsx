@@ -13,6 +13,8 @@ export interface TabInfo {
   icon?: string | null;
   /** P1：恢复历史后 bump，强制 EditorTab 重建（key 的一部分） */
   reloadKey?: number;
+  /** 远端已删除（软删/墓碑/purge）：tab 显示"已删除"标记，正文保留供复制/恢复。 */
+  deleted?: boolean;
 }
 
 interface MultiTabEditorProps {
@@ -54,6 +56,8 @@ export function MultiTabEditor({
   emptyAction,
 }: MultiTabEditorProps) {
   const contentCache = useRef<Map<string, string>>(new Map());
+  // 外部刷新（reloadKey 变化）时，必须丢弃 contentCache 里旧的编辑器内容，否则新实例仍用旧正文。
+  const reloadKeysRef = useRef<Map<string, number>>(new Map());
   const tabItemsRef = useRef<HTMLDivElement>(null);
   const switcherRef = useRef<HTMLDivElement>(null);
   const [tabMenuOpen, setTabMenuOpen] = useState(false);
@@ -164,6 +168,17 @@ export function MultiTabEditor({
     [onContentChange]
   );
 
+  /** 渲染期确定当前应喂给 EditorTab 的正文；reloadKey 变化时先清缓存再返回 tab.content。 */
+  const contentFor = (tab: TabInfo): string => {
+    const key = tab.reloadKey ?? 0;
+    const prev = reloadKeysRef.current.get(tab.noteId) ?? 0;
+    if (prev !== key) {
+      contentCache.current.delete(tab.noteId);
+      reloadKeysRef.current.set(tab.noteId, key);
+    }
+    return contentCache.current.get(tab.noteId) ?? tab.content;
+  };
+
   useEffect(() => {
     const activeIds = new Set(tabs.map((t) => t.noteId));
     for (const key of contentCache.current.keys()) {
@@ -236,7 +251,7 @@ export function MultiTabEditor({
             <button
               key={tab.noteId}
               data-note-id={tab.noteId}
-              className={`tab-item ${tab.noteId === activeNoteId ? "active" : ""}${tab.dirty ? " dirty" : ""}${draggingId === tab.noteId ? " dragging" : ""}${pinned.has(tab.noteId) ? " pinned" : ""}`}
+              className={`tab-item ${tab.noteId === activeNoteId ? "active" : ""}${tab.dirty ? " dirty" : ""}${tab.deleted ? " deleted" : ""}${draggingId === tab.noteId ? " dragging" : ""}${pinned.has(tab.noteId) ? " pinned" : ""}`}
               onPointerDown={(e) => beginTabDrag(e, tab.noteId)}
               onPointerMove={moveTabDrag}
               onPointerUp={endTabDrag}
@@ -248,13 +263,14 @@ export function MultiTabEditor({
                 setTabCtx({ noteId: tab.noteId, x: event.clientX, y: event.clientY });
               }}
               title={tab.title || "无标题"}
-              aria-label={`切换到${tab.title || "无标题"}${tab.dirty ? "（有未保存更改）" : ""}`}
+              aria-label={`切换到${tab.title || "无标题"}${tab.dirty ? "（有未保存更改）" : ""}${tab.deleted ? "（已删除）" : ""}`}
               aria-selected={tab.noteId === activeNoteId}
               role="tab"
             >
               {pinned.has(tab.noteId) && <Pin size={11} className="tab-pin" aria-hidden="true" />}
               {tab.icon && <span className="tab-custom-icon" aria-hidden="true">{tab.icon}</span>}
               <span className="tab-title">{tab.title || "无标题"}</span>
+              {tab.deleted && <span className="tab-deleted-badge" title="该文档已在其他设备删除，正文为删除前的最后内容">已删除</span>}
               <span
                 className="tab-close"
                 role="button"
@@ -294,7 +310,7 @@ export function MultiTabEditor({
                   {tabs.map((tab) => (
                     <div
                       key={tab.noteId}
-                      className={`tab-switcher-item ${tab.noteId === activeNoteId ? "active" : ""}`}
+                      className={`tab-switcher-item ${tab.noteId === activeNoteId ? "active" : ""}${tab.deleted ? " deleted" : ""}`}
                       role="menuitem"
                     >
                       <button
@@ -305,6 +321,7 @@ export function MultiTabEditor({
                         <span className="tab-switcher-icon" aria-hidden="true">{tab.icon ?? <FileText size={15} />}</span>
                         <span className="tab-switcher-status" aria-hidden="true">{tab.dirty ? "●" : ""}</span>
                         <span className="tab-switcher-title">{tab.title || "无标题"}</span>
+                        {tab.deleted && <span className="tab-deleted-badge" title="该文档已在其他设备删除，正文为删除前的最后内容">已删除</span>}
                       </button>
                       <button
                         className="tab-switcher-close"
@@ -328,7 +345,7 @@ export function MultiTabEditor({
             key={`${tab.noteId}-${tab.reloadKey ?? 0}`}
             noteId={tab.noteId}
             locked={lockedNoteIds?.has(tab.noteId) ?? false}
-            content={contentCache.current.get(tab.noteId) ?? tab.content}
+            content={contentFor(tab)}
             visible={tab.noteId === activeNoteId}
             tocEnabled={tocEnabled}
             onChange={(content) => handleChange(tab.noteId, content)}

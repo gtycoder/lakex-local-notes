@@ -37,6 +37,9 @@ function escapeId(id: string): string {
   }
 }
 
+/** 跨 remount（外部刷新/冲突重载）保留滚动位置；仅内存态，关闭应用后不保留。 */
+const scrollMemory = new Map<string, number>();
+
 export function EditorTab({ noteId, content, visible, tocEnabled, onChange, prefs, locked, onEditorReady, onEditorCopyMarkdown, onEditorExport, onEditorCopyPaths }: EditorTabProps) {
   const hostRef = useRef<HTMLDivElement>(null);
   const editorMountRef = useRef<HTMLDivElement>(null);
@@ -337,6 +340,7 @@ export function EditorTab({ noteId, content, visible, tocEnabled, onChange, pref
           const jumpedToTop = previous >= 100 && current < 50;
           previous = current;
           lastScrollTopRef.current = current;
+          scrollMemory.set(noteId, current);
           if (current >= 50) {
             stableScrollTopRef.current = current;
             window.clearTimeout(stableScrollCommitTimer);
@@ -389,7 +393,13 @@ export function EditorTab({ noteId, content, visible, tocEnabled, onChange, pref
     } finally {
       if (typeof performance !== "undefined" && performance.getEntriesByName("lake:tab-init:start").length) {
         performance.mark("lake:tab-init:end");
-        try { performance.measure("lake:tab-init:create+setDocument", "lake:tab-init:start", "lake:tab-init:end"); } catch { /* 忽略 */ }
+        try {
+          performance.measure("lake:tab-init:create+setDocument", "lake:tab-init:start", "lake:tab-init:end");
+          const entries = performance.getEntriesByName("lake:tab-init:create+setDocument");
+          const dur = entries.length ? Math.round(entries[entries.length - 1].duration) : 0;
+          // 渲染进程日志经主进程 console-message 转发落盘；tab 重建（同步刷新/冲突重载/恢复历史）的耗时参考指标。
+          console.log(`[editor-perf] init ${noteId} ${dur}ms mode=${mode}${locked ? " (locked)" : ""}`);
+        } catch { /* 忽略 */ }
       }
     }
 
@@ -493,6 +503,22 @@ export function EditorTab({ noteId, content, visible, tocEnabled, onChange, pref
     editorRef.current?.requestCardHydration?.();
     requestCodeblockHealRef.current();
   }, [visible]);
+
+  // 外部刷新/冲突重载会 remount EditorTab，恢复上次滚动位置，避免跳到顶部。
+  useEffect(() => {
+    if (!editorState) return;
+    const saved = scrollMemory.get(noteId);
+    if (!saved || saved <= 0) return;
+    const timer = window.setTimeout(() => {
+      const scroller = resolveScrollNode(hostRef.current);
+      if (scroller && scroller.isConnected) {
+        scroller.scrollTop = saved;
+        lastScrollTopRef.current = saved;
+        stableScrollTopRef.current = saved;
+      }
+    }, 250);
+    return () => window.clearTimeout(timer);
+  }, [editorState, noteId]);
 
   return (
     <div

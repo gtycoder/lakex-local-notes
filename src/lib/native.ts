@@ -1,8 +1,11 @@
-import type { CleanOrphanResult, NoteDocument, OrphanAsset, QuickNoteDocument, QuickNoteImage, ResourceUploadInput, ResourceUploadOutput, S3Settings, SaveQuickNoteInput, SyncProgress, SyncResult, SyncStatusInfo, TreeNode, WorkspaceSnapshot } from "./types";
+import type { CleanOrphanResult, DeepCleanupResult, NoteDigest, NoteDocument, OrphanAsset, QuickNoteDocument, QuickNoteImage, QuickNoteTrashItem, ResourceUploadInput, ResourceUploadOutput, S3GcLogItem, S3GcPendingItem, S3GcSettings, S3Settings, SaveQuickNoteInput, SyncProgress, SyncResult, SyncSettings, SyncStatusInfo, TreeNode, WorkspaceSnapshot } from "./types";
 
 interface LakeNative {
+  /** 本地资源服务器端口（可被 LAKE_ASSET_PORT 覆盖，多端同机双开用）。 */
+  assetPort: number;
   bootstrap(): Promise<WorkspaceSnapshot>;
   readNote(id: string): Promise<NoteDocument>;
+  getNoteDigest(id: string): Promise<NoteDigest | null>;
   setNoteLocked(id: string, locked: boolean): Promise<NoteDocument>;
   createNote(title: string): Promise<NoteDocument>;
   saveNote(id: string, title: string, content: string, caches?: { markdown?: string | null; plain?: string | null }): Promise<NoteDocument>;
@@ -48,6 +51,8 @@ interface LakeNative {
   getS3Settings(): Promise<S3Settings | null>;
   saveS3Settings(settings: S3Settings): Promise<void>;
   testS3Connection(): Promise<string>;
+  getSyncSettings(): Promise<SyncSettings>;
+  saveSyncSettings(settings: SyncSettings): Promise<SyncSettings>;
   syncNow(): Promise<SyncResult>;
   getSyncStatus(): Promise<SyncStatusInfo>;
   listQuickNotes(): Promise<QuickNoteDocument[]>;
@@ -58,6 +63,16 @@ interface LakeNative {
   discardQuickNoteDraft(draftId: string): Promise<void>;
   discardStagedQuickNoteImage(draftId: string, imageId: string): Promise<void>;
   convertQuickNote(quickNoteId: string, notebookId: string): Promise<NoteDocument>;
+  listQuickNoteTrash(): Promise<QuickNoteTrashItem[]>;
+  restoreQuickNote(id: string): Promise<QuickNoteDocument>;
+  purgeQuickNote(id: string): Promise<void>;
+  getS3GcSettings(): Promise<S3GcSettings>;
+  saveS3GcSettings(settings: S3GcSettings): Promise<void>;
+  listS3GcPending(): Promise<S3GcPendingItem[]>;
+  listS3GcLog(): Promise<S3GcLogItem[]>;
+  runS3GcReconcile(): Promise<{ deleted: number; kept: number }>;
+  runS3DeepCleanup(dryRun: boolean): Promise<DeepCleanupResult>;
+  getTrashReminder(): Promise<Array<{ id: string; title: string; deletedAt: string }>>;
   onSyncProgress(callback: (progress: SyncProgress) => void): () => void;
 }
 
@@ -75,6 +90,7 @@ function api(): LakeNative {
 export const native = {
   bootstrap: () => api().bootstrap(),
   readNote: (id: string) => api().readNote(id),
+  getNoteDigest: (id: string) => api().getNoteDigest(id),
   setNoteLocked: (id: string, locked: boolean) => api().setNoteLocked(id, locked),
   createNote: (title: string) => api().createNote(title),
   saveNote: (id: string, title: string, content: string, caches?: { markdown?: string | null; plain?: string | null }) => api().saveNote(id, title, content, caches),
@@ -120,6 +136,8 @@ export const native = {
   getS3Settings: () => api().getS3Settings(),
   saveS3Settings: (settings: S3Settings) => api().saveS3Settings(settings),
   testS3Connection: () => api().testS3Connection(),
+  getSyncSettings: () => api().getSyncSettings(),
+  saveSyncSettings: (settings: SyncSettings) => api().saveSyncSettings(settings),
   syncNow: () => api().syncNow(),
   getSyncStatus: () => api().getSyncStatus(),
   listQuickNotes: () => api().listQuickNotes(),
@@ -130,5 +148,15 @@ export const native = {
   discardQuickNoteDraft: (draftId: string) => api().discardQuickNoteDraft(draftId),
   discardStagedQuickNoteImage: (draftId: string, imageId: string) => api().discardStagedQuickNoteImage(draftId, imageId),
   convertQuickNote: (quickNoteId: string, notebookId: string) => api().convertQuickNote(quickNoteId, notebookId),
+  listQuickNoteTrash: () => api().listQuickNoteTrash(),
+  restoreQuickNote: (id: string) => api().restoreQuickNote(id),
+  purgeQuickNote: (id: string) => api().purgeQuickNote(id),
+  getS3GcSettings: () => api().getS3GcSettings(),
+  saveS3GcSettings: (settings: S3GcSettings) => api().saveS3GcSettings(settings),
+  listS3GcPending: () => api().listS3GcPending(),
+  listS3GcLog: () => api().listS3GcLog(),
+  runS3GcReconcile: () => api().runS3GcReconcile(),
+  runS3DeepCleanup: (dryRun: boolean) => api().runS3DeepCleanup(dryRun),
+  getTrashReminder: () => api().getTrashReminder(),
   onSyncProgress: (callback: (progress: SyncProgress) => void) => api().onSyncProgress(callback),
 };

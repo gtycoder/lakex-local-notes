@@ -170,7 +170,8 @@ export class QuickNotesStore {
         updated_at TEXT NOT NULL,
         deleted_at TEXT NOT NULL,
         conversion_target_note_id TEXT,
-        ready_to_sync INTEGER NOT NULL DEFAULT 1
+        ready_to_sync INTEGER NOT NULL DEFAULT 1,
+        purged_at TEXT
       );
       CREATE TABLE IF NOT EXISTS quick_note_conversions (
         source_quick_note_id TEXT PRIMARY KEY,
@@ -181,6 +182,15 @@ export class QuickNotesStore {
         updated_at TEXT NOT NULL
       );
     `);
+    const deletedCols = this.db.prepare("PRAGMA table_info(quick_note_deleted)").all() as Array<{ name: string }>;
+    if (!deletedCols.some((c) => c.name === "purged_at")) {
+      this.db.exec("ALTER TABLE quick_note_deleted ADD COLUMN purged_at TEXT");
+    }
+    // 恢复标记（墓碑权威的显式例外）：restoreQuickNote 写入，markSynced 清除。
+    const quickCols = this.db.prepare("PRAGMA table_info(quick_notes)").all() as Array<{ name: string }>;
+    if (!quickCols.some((c) => c.name === "restore_pending_at")) {
+      this.db.exec("ALTER TABLE quick_notes ADD COLUMN restore_pending_at TEXT");
+    }
   }
 
   private itemPath(id: string): string {
@@ -407,10 +417,64 @@ export class QuickNotesStore {
 
   deleteQuickNote(id: string): void {
     const row = this.readRow(id);
-    this.deleteSourceAndRemember(row, null, true);
+    this.deleteSourceAndRemember(row, null, true, true);
   }
 
-  private deleteSourceAndRemember(row: any, conversionTargetNoteId: string | null, readyToSync: boolean): void {
+  /** M6 小记回收站：用户删除的小记（不含转换 tombstone、不含已 purge）。 */
+  listQuickNoteTrash(): Array<{ id: string; createdAt: string; updatedAt: string; deletedAt: string }> {
+    return this.db.prepare(
+      "SELECT id,created_at,updated_at,deleted_at FROM quick_note_deleted WHERE conversion_target_note_id IS NULL AND purged_at IS NULL ORDER BY deleted_at DESC"
+    ).all().map((r: any) => ({ id: r.id, createdAt: r.created_at, updatedAt: r.updated_at, deletedAt: r.deleted_at }));
+  }
+
+  /** M6 小记回收站恢复：从保留的本地内容文件读回，清墓碑并置 local 待上传。 */
+  restoreQuickNote(id: string): QuickNoteDocument {
+    if (!isSafeSegment(id)) throw new AppError("InvalidInput", "无效的小记 ID");
+    const tomb = this.db.prepare(
+      "SELECT * FROM quick_note_deleted WHERE id=? AND conversion_target_note_id IS NULL AND purged_at IS NULL"
+    ).get(id) as any;
+    if (!tomb) throw new AppError("NotFound", "小记不在回收站");
+    const itemPath = this.itemPath(id);
+    if (!fs.existsSync(itemPath)) throw new AppError("NotFound", "小记内容文件已丢失，无法恢复");
+    const content = this.validateStoredContent(JSON.parse(fs.readFileSync(itemPath, "utf8")));
+    const encoded = Buffer.from(`${JSON.stringify(content, null, 2)}
+`, "utf8");
+    const contentHash = hash(encoded);
+    const tx = this.db.transaction(() => {
+      this.db.prepare("INSERT OR REPLACE INTO quick_notes(id,created_at,updated_at,preview_text,image_count,content_hash,sync_state,is_conflict,restore_pending_at) VALUES(?,?,?,?,?,?, 'local', 0, ?)")
+        .run(id, tomb.created_at, nowIso(), previewOf(content.text, content.images.length), content.images.length, contentHash, nowIso());
+      this.db.prepare("DELETE FROM quick_note_assets WHERE quick_note_id=?").run(id);
+      const insert = this.db.prepare("INSERT INTO quick_note_assets(id,quick_note_id,filename,mime_type,width,height,size,content_hash) VALUES(?,?,?,?,?,?,?,?)");
+      for (const image of content.images) insert.run(image.id, id, image.filename, image.mimeType, image.width, image.height, image.size, image.hash);
+      this.db.prepare("DELETE FROM quick_note_deleted WHERE id=?").run(id);
+    });
+    tx();
+    return this.readQuickNote(id);
+  }
+
+  /**
+   * 撤销本地删除（sync 下载分支在"远端恢复较新"时调用）：移除普通删除墓碑。
+   * 小记软删保留内容文件；恢复以远端为准（随后走下载/对账并 markSynced）。
+   * 转换墓碑（conversion_target_note_id 非空）与已 purge 的不在此列。
+   */
+  revokeLocalDeletion(id: string): void {
+    if (!isSafeSegment(id)) throw new AppError("InvalidInput", "无效的小记 ID");
+    this.db.prepare(
+      "DELETE FROM quick_note_deleted WHERE id=? AND conversion_target_note_id IS NULL AND purged_at IS NULL"
+    ).run(id);
+  }
+
+  /** M6 小记彻底删除：删除保留的本地文件并标记 purged_at（tombstone 保留供同步传播删除）。 */
+  purgeQuickNote(id: string): void {
+    if (!isSafeSegment(id)) throw new AppError("InvalidInput", "无效的小记 ID");
+    const tomb = this.db.prepare("SELECT * FROM quick_note_deleted WHERE id=?").get(id) as any;
+    if (!tomb) throw new AppError("NotFound", "小记不在回收站");
+    this.db.prepare("UPDATE quick_note_deleted SET purged_at=?,ready_to_sync=1 WHERE id=?").run(nowIso(), id);
+    try { fs.rmSync(this.itemPath(id), { force: true }); } catch { /* best effort */ }
+    try { fs.rmSync(this.assetDirFor(id), { force: true, recursive: true }); } catch { /* best effort */ }
+  }
+
+  private deleteSourceAndRemember(row: any, conversionTargetNoteId: string | null, readyToSync: boolean, keepFiles: boolean): void {
     const content = this.readStoredContent(row.id);
     const deletedAt = nowIso();
     const tx = this.db.transaction(() => {
@@ -421,8 +485,10 @@ export class QuickNotesStore {
       this.db.prepare("DELETE FROM quick_notes WHERE id=?").run(row.id);
     });
     tx();
-    try { fs.rmSync(this.itemPath(row.id), { force: true }); } catch { /* tombstone remains authoritative */ }
-    try { fs.rmSync(this.assetDirFor(row.id), { force: true, recursive: true }); } catch { /* tombstone remains authoritative */ }
+    if (!keepFiles) {
+      try { fs.rmSync(this.itemPath(row.id), { force: true }); } catch { /* tombstone remains authoritative */ }
+      try { fs.rmSync(this.assetDirFor(row.id), { force: true, recursive: true }); } catch { /* tombstone remains authoritative */ }
+    }
     // keep a reference so TypeScript and reviewers see content has been intentionally loaded before source removal.
     void content;
   }
@@ -448,7 +514,7 @@ export class QuickNotesStore {
     if (conversion.state === "complete" || conversion.state === "source_deleted_waiting_sync") return;
     if (conversion.state !== "target_created") throw new AppError("Internal", "转换目标尚未验证");
     const source = this.readRow(sourceQuickNoteId);
-    this.deleteSourceAndRemember(source, conversion.target_note_id, false);
+    this.deleteSourceAndRemember(source, conversion.target_note_id, false, false);
     this.db.prepare("UPDATE quick_note_conversions SET state='source_deleted_waiting_sync',updated_at=? WHERE source_quick_note_id=?")
       .run(nowIso(), sourceQuickNoteId);
   }
@@ -494,7 +560,15 @@ export class QuickNotesStore {
   setBaseHash(id: string, contentHash: string): void {
     this.db.prepare("INSERT INTO quick_note_sync_base(quick_note_id,content_hash) VALUES(?,?) ON CONFLICT(quick_note_id) DO UPDATE SET content_hash=excluded.content_hash").run(id, contentHash);
   }
-  markSynced(id: string): void { this.db.prepare("UPDATE quick_notes SET sync_state='synced' WHERE id=?").run(id); }
+  markSynced(id: string): void {
+    // restore_pending_at 一并清除：恢复已生效后残留标记会让本设备永远 local-wins（墓碑永胜被破坏）。
+    this.db.prepare("UPDATE quick_notes SET sync_state='synced', restore_pending_at=NULL WHERE id=?").run(id);
+  }
+
+  /** 是否处于"小记回收站恢复后待同步"状态（显式恢复标记）。 */
+  isRestorePending(id: string): boolean {
+    return !!this.db.prepare("SELECT 1 FROM quick_notes WHERE id=? AND restore_pending_at IS NOT NULL").get(id);
+  }
   markLocal(id: string): void { this.db.prepare("UPDATE quick_notes SET sync_state='local' WHERE id=?").run(id); }
   listDeletedForSync(): QuickNoteDeleted[] {
     return this.db.prepare("SELECT * FROM quick_note_deleted WHERE ready_to_sync=1 ORDER BY deleted_at").all().map((row: any) => ({

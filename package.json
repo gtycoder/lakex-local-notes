@@ -16,6 +16,7 @@
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1101.0",
     "better-sqlite3": "^11.3.0",
+    "electron-log": "^5.4.4",
     "lakex-drawnix": "^0.1.0",
     "lakex-drawnix-react-board": "^0.1.0",
     "lakex-drawnix-react-text": "^0.1.0",

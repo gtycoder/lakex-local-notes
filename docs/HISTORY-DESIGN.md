@@ -1,6 +1,6 @@
 # 文档历史（快照）设计 — 完整实现规格
 
-> 状态：**定稿 v2，待实现**（本会话已与用户充分讨论，下个会话按此实现）。
+> 状态：**已实现（v2 落地）**——本文档为该已上线功能的实现规格；2026-08-13 联立评审（S3-GC-DESIGN v4 §18）后：恢复语义已对齐 P0-1（§7/§10，与 S3-GC v4 §5.2 一致）；并纳入历史分层保留（M8，见 S3-GC-DESIGN §18.4）。
 > 目标：为 Lake Notes 增加"文档历史版本"能力（查看/恢复/清理），纯本地、不参与同步，资源按"refs 引用清单"管理。
 > 关联：依赖已完成的软删除+回收站（`f51379b`），历史功能要接 `purgeTrashItem`/孤儿机制。
 
@@ -113,7 +113,7 @@ function extractAssetRefs(content: string): Set<string> {
 | 创建快照 | 解析正文 → refs_json 存该快照引用清单 + ref_count |
 | 删单个快照 | 读**剩余**快照 refs_json 合并 → + 当前正文引用 → 差集 = 孤儿 |
 | 删全部历史 | 历史引用集 = 空 → 仅当前正文引用 → 差集 = 孤儿 |
-| 自动清理（200份/45天） | 删旧快照后，对受影响文档重算（同上）→ 无引用资源立即物理删（方案 A） |
+| 自动清理（100份/30天；v4 起分层，见 S3-GC §18.4） | 删旧快照后，对受影响文档重算（同上）→ 无引用资源立即物理删（方案 A） |
 | 彻底删除文档（purgeTrashItem） | **连历史一起物理删**：删 `history/{noteId}/` + `note_history` 记录 + 该文档所有资源（用户确认"彻底删除要彻底"） |
 | 同步 | 历史纯本地，不参与同步；被历史引用但当前不引用的资源仍在孤儿集合 → 不同步上传 |
 
@@ -183,9 +183,10 @@ restoreHistory(historyId: number): void
   // 1) 恢复前：先 createHistorySnapshot(当前正文)（可反悔，强制写即使同 hash）
   // 2) 解压 gzip → 原子写回 notes/{noteId}.lake
   // 3) 更新 md_cache/text_cache（走 ensureNoteCaches）+ FTS
-  // 4) 重新计算写盘正文 hash → setBaseHash(id, 新hash) + markSynced(id)
-  //    （恢复 = 本地与远端重新对齐到恢复版，不是"本地新修改"——P0-1）
-  // 5) sync_state='synced'（下次同步按 last_uploaded_hash 判定：远端是否本机传的）
+  // 4) 重新计算写盘正文 hash
+  // 5) 同步语义（P0-1，与 S3-GC v4 §5.2 一致）：不再 setBaseHash/setLastUploadedHash/markSynced；
+  //    保持恢复前 base/lastUploaded 值，notes+tree_nodes 双表 sync_state='local'，
+  //    下次同步上传覆盖（远端被他人改则接受远端、恢复版已入历史）
 
 // 清理（手动，单快照）
 deleteHistory(historyId: number): void
@@ -234,12 +235,12 @@ cleanNoteOrphans(noteId: string, filenames?: string[]): { count, freedBytes }
   - **软删除**（进回收站）：历史**保留**（恢复文档后历史还在，用户可找回更早版本）。
   - **彻底删除**（`purgeTrashItem`）：**连历史快照 + 历史引用的资源一起物理删**（彻底清除语义，用户确认）；删 `history/{noteId}/` 目录 + `note_history` 记录 + 被历史引用的资源 + .lake + note-assets + DB + FTS + 墓碑。
 - **孤儿机制**：`detectOrphans` 仍按"当前正文引用"判定孤儿（保存时，不查历史）；历史保护在**清理动作**时实时判定（不污染孤儿表）。
-- **同步**：历史目录不进 manifest；恢复后 sync_base 重置到恢复版 hash + markSynced；同步冲突判定用 `last_uploaded_hash`（P0-1）。
+- **同步**：历史目录不进 manifest；恢复后 **不再 setBaseHash/setLastUploadedHash/markSynced**，保持恢复前 base/lastUploaded 值、`sync_state='local'`（notes + tree_nodes 双表），由下次同步上传覆盖（P0-1，见 S3-GC-DESIGN v4 §5.2）；同步冲突判定用 `last_uploaded_hash`（P0-1）。
 - **锁定缓存**：恢复走 `ensureNoteCaches` 兜底。
 
 ## 11. 风险与权衡
 
-- **磁盘**：正文 gzip 20-30%，200 份/文档 ≈ 11MB（普通）/ 29MB（大文档），可控。
+- **磁盘**：正文 gzip 20-30%，100 份/文档 ≈ 5.7MB（普通，§2.1）/ 29MB（大文档），可控。
 - **资源**：不复制 → 回滚依赖"当前资源仍在"。用户**手动删** note-assets（绕过应用）→ 回滚裂图（接受，应用内不会删被历史引用的）。
 - **正则**：`referencedFilenames` 依赖文件名模式 `\d{13}_[0-9a-f]{8}\.{ext}`，若未来 lake 资源命名变化需同步更新。
 - **自动清理立即物理删**（方案 A）：历史未引用即删。若用户误删历史快照，资源立即消失（但剩余历史引用的不删）。接受。
@@ -249,7 +250,7 @@ cleanNoteOrphans(noteId: string, filenames?: string[]): { count, freedBytes }
 
 - 单测（`electron/store.test.ts`）：
   - 快照创建 + hash 去重（同内容不重复）
-  - 保留策略：200 份上限裁剪、45 天兜底
+  - 保留策略：100 份上限裁剪、30 天兜底
   - 恢复：写回 .lake + 缓存/FTS 更新 + sync_state='local'
   - refs 判定：孤儿列表含/不含被历史引用的资源
   - 自动清理：删快照后无引用资源物理删
@@ -268,7 +269,7 @@ cleanNoteOrphans(noteId: string, filenames?: string[]): { count, freedBytes }
 2. `extractAssetRefs` 提取为公共工具（`referencedFilenames` 复用）
 3. `createHistorySnapshot` / `listNoteHistory`（含 gzip、hash 去重、refs_json）
 4. `restoreHistory` / `deleteHistory`
-5. `cleanupHistory`（200份/45天 + 资源自动物理删，惰性触发）
+5. `cleanupHistory`（100份/30天 + 资源自动物理删，惰性触发；v4 起分层，见 S3-GC §18.4）
 6. `listNoteOrphans` / `cleanNoteOrphans`（实时解析）
 7. `purgeTrashItem` 接历史保护
 8. IPC / preload / native（三处同步）

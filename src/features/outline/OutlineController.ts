@@ -117,7 +117,9 @@ export class OutlineController {
         id: entry.id,
         text: entry.text ?? "",
         level: entry.level,
-        depth: Math.max(1, entry.depth || 1),
+        // 压缩深度理论上 ≤6（对应 h1-h6）；对异常/超大 depth 收敛到 6，
+        // 防止 computeGuides / indent 按外部数据做无界循环或生成超大样式串。
+        depth: Math.min(6, Math.max(1, entry.depth || 1)),
         parentId: null,
         children: [],
         hasChildren: false,

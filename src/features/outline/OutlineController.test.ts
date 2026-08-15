@@ -33,6 +33,20 @@ describe("OutlineController", () => {
     expect(c.getVisibleItems().map((n) => n.id)).toEqual(["a", "a1", "a1x", "a2", "b"]);
   });
 
+  it("clamps abnormal depth to 1..6", () => {
+    const c = new OutlineController("doc-clamp", memoryStorage());
+    c.updateToc([
+      h("a", 1, 9999, "A"),
+      h("a1", 2, -3, "A1"),
+      h("a2", 2, Number.NaN, "A2"),
+      h("a1x", 3, 4, "A1X"),
+    ]);
+    // 深度 9999 被收敛为 6；负数 / NaN 收敛为 1；正常 4 保持不变
+    const roots = c.getRootItems();
+    expect(roots.map((n) => n.depth)).toEqual([6, 1, 1]);
+    expect(roots[2].children[0].depth).toBe(4);
+  });
+
   it("dedupes repeated ids and tolerates empty input", () => {
     const c = new OutlineController("doc2", memoryStorage());
     c.updateToc([h("a", 1, 1), h("a", 1, 1), h("b", 2, 2)]);

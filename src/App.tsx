@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type CSSProperties } from "react";
-import { ArrowLeft, Check, Cloud, Files, ListTree, LoaderCircle, Feather, Lock, LockOpen, MoreHorizontal, Pencil, Save, Settings as Settings2Icon, Trash2, WifiOff, X } from "lucide-react";
+import { ArrowLeft, Check, Cloud, CloudOff, Files, ListTree, LoaderCircle, Feather, Lock, LockOpen, MoreHorizontal, Pencil, Save, Settings as Settings2Icon, Trash2, WifiOff, X } from "lucide-react";
 import { MobileLibrary } from "./components/MobileLibrary";
 import { SearchPanel } from "./components/SearchPanel";
 import { TrashPanel } from "./components/TrashPanel";
 import { HistoryPanel } from "./components/HistoryPanel";
 import { ConfirmDelete, Sidebar, type SidebarMode } from "./components/Sidebar";
 import { QuickNotesWorkspace, type QuickNotesWorkspaceHandle } from "./components/QuickNotesWorkspace";
-import { SyncPanel } from "./components/SyncPanel";
+import { SyncPanel, type SyncPanelHandle } from "./components/SyncPanel";
 import { LakeEditor } from "./features/editor/LakeEditor";
 import type { LakeEditorInstance } from "./features/editor/lakeRuntime";
 import { MultiTabEditor, type TabInfo } from "./features/editor/MultiTabEditor";
@@ -16,9 +16,9 @@ import { getOutlineTab, getOutlineTabsVersion, subscribeOutlineTabs } from "./fe
 import { cleanLakeMarkdown } from "./lib/markdownClean";
 import { isDesktop, native } from "./lib/native";
 import { loadSettings, saveSettings, subscribeSettings, type AppSettings } from "./lib/settings";
-import { SettingsPanel } from "./components/SettingsPanel";
+import { SettingsPanel, type SettingsCategory } from "./components/SettingsPanel";
 import { subtreeIds } from "./lib/tree";
-import type { NoteDocument, NoteSummary, SyncStatus, TreeNode, WorkspaceSnapshot } from "./lib/types";
+import type { NoteDigest, NoteDocument, NoteSummary, SyncStatus, TreeNode, WorkspaceSnapshot } from "./lib/types";
 
 type SaveState = "idle" | "dirty" | "saving" | "saved" | "error";
 type MobilePage = "library" | "document";
@@ -69,6 +69,16 @@ interface OpenTab {
   lastAccessedAt: number;
   /** P1：恢复历史后 bump，强制 EditorTab 重建（content 变化不会触发 Lake 实例重建） */
   reloadKey?: number;
+  /** 远端删除（软删/墓碑/purge）后标记，保留正文供复制/从回收站恢复；保存会被拦截。 */
+  deleted?: boolean;
+  /** 上次同步后记录的轻量状态摘要（title+updatedAt），用于跳过未变化的全量重载。 */
+  lastDigest?: { title: string; updatedAt: string } | null;
+}
+
+/** 状态栏提示：可选"点击动作"（查看历史/回收站）。 */
+interface NoticeState {
+  text: string;
+  action?: { label: string; onClick: () => void };
 }
 
 export function App() {
@@ -105,8 +115,10 @@ export function App() {
     };
   }, [statusMenuOpen]);
   const [sync, setSync] = useState<SyncStatus>({ phase: "idle", message: "仅本地保存", lastSyncedAt: null, pendingChanges: 0 });
+  const [cloudEnabled, setCloudEnabled] = useState(true);
   const [confirmDelete, setConfirmDelete] = useState<TreeNode | null>(null);
   const [syncPanelOpen, setSyncPanelOpen] = useState(false);
+  const syncPanelRef = useRef<SyncPanelHandle | null>(null);
   const [pendingRenameId, setPendingRenameId] = useState<string | null>(null);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [mobilePage, setMobilePage] = useState<MobilePage>("library");
@@ -118,6 +130,7 @@ export function App() {
   const [isMobile, setIsMobile] = useState(() => window.matchMedia("(max-width: 760px)").matches);
   const [settings, setSettings] = useState<AppSettings>(() => loadSettings());
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [settingsCategory, setSettingsCategory] = useState<SettingsCategory>("editor");
   const tocEnabled = settings.showToc;
   const [wideMode] = useState(true);
   const [sidebarMode, setSidebarMode] = useState<SidebarMode>(initialSidebarMode);
@@ -139,8 +152,10 @@ export function App() {
   const saveTimers = useRef<Map<string, number>>(new Map());
   // 已就绪的编辑器实例（noteId → editor），供导出 md 等场景使用
   const editorsRef = useRef<Map<string, LakeEditorInstance>>(new Map());
-  const [notice, setNotice] = useState<string | null>(null);
+  const [notice, setNotice] = useState<NoticeState | null>(null);
   const noticeTimer = useRef<number | null>(null);
+  const [syncSetupPrompt, setSyncSetupPrompt] = useState(false);
+  const syncSetupPromptTimer = useRef<number | null>(null);
   const sidebarPreviewTimer = useRef<number | null>(null);
   // 审计 #7：每篇笔记的编辑 revision——保存请求发出后若有新编辑（revision 增长），
   // 旧响应不得覆盖最新草稿/清除 dirty
@@ -166,6 +181,7 @@ export function App() {
       saveTimers.current.forEach((timer) => window.clearTimeout(timer));
       saveTimers.current.clear();
       if (sidebarPreviewTimer.current !== null) window.clearTimeout(sidebarPreviewTimer.current);
+      if (syncSetupPromptTimer.current !== null) window.clearTimeout(syncSetupPromptTimer.current);
     };
   }, []);
 
@@ -179,6 +195,7 @@ export function App() {
     media.addEventListener("change", onChange);
     void native.bootstrap().then(async (snapshot) => {
       setWorkspace(snapshot); setNotes(snapshot.notes); setSync(snapshot.sync);
+      void native.getSyncSettings().then((cfg) => setCloudEnabled(cfg.enabled)).catch(() => undefined);
       setTreeNodes(await native.listTreeNodes());
       const id = snapshot.lastOpenedNoteId ?? snapshot.notes[0]?.id;
       if (id && !media.matches) await openNote(id);
@@ -190,14 +207,84 @@ export function App() {
     if (!isDesktop()) return;
     return native.onSyncProgress((progress) => {
       const message = progress.message || (progress.phase === "done" ? "同步完成" : "同步中...");
-      setSync((current) => ({ ...current, phase: progress.phase === "done" ? "success" : "syncing", message }));
-      if (progress.phase === "done") {
+      setSync((current) => ({ ...current, phase: progress.error ? "error" : progress.phase === "done" ? "success" : "syncing", message }));
+      if (progress.phase === "done" && !progress.error) {
         void native.getSyncStatus().then((status) => {
           setSync((current) => ({ ...current, phase: "success", message: "同步完成", lastSyncedAt: status.lastSyncedAt, pendingChanges: 0 }));
         }).catch(() => undefined);
+        void native.getSyncSettings().then((cfg) => setCloudEnabled(cfg.enabled)).catch(() => undefined);
         // 锁状态等元数据可能随同步变化，刷新摘要与树
         void native.listNoteSummaries().then((items) => setNotes(items)).catch(() => undefined);
         void native.listTreeNodes().then(setTreeNodes).catch(() => undefined);
+        void quickNotesRef.current?.refresh();
+        // 同步下载会更新磁盘上的 .lake；已打开且无本地未保存修改的 tab 需要重载正文，
+        // 否则用户看不到另一端的最新内容（P0：自动同步后打开文档不刷新）。
+        // 若本地改动被远端覆盖（已存历史），即使 tab 是 dirty 也要强制重载为远端内容。
+        // 优化：先做轻量 digest 比对（只读 DB 行、不读正文文件），未变化的 tab 跳过全量
+        // readNote，避免每次同步都把所有打开文档重新读盘（历史快照恢复后上传卡顿的诱因之一）。
+        const supersededList = progress.supersededNotes ?? [];
+        const supersededIds = new Set(supersededList.map((n) => n.id));
+        // 渲染进程日志经主进程 console-message 转发落盘；[sync-tab] 前缀便于 grep。
+        const tabRefreshStart = performance.now();
+        console.log("[sync-tab] refresh start", JSON.stringify({ open: openTabsRef.current.length, superseded: supersededList.length }));
+        void (async () => {
+          const deletedIds: string[] = [];
+          let reloaded = 0;
+          let skipped = 0;
+          for (const tab of openTabsRef.current) {
+            const superseded = supersededIds.has(tab.noteId);
+            if (!superseded && tab.dirty) { skipped += 1; continue; }
+            const tabT0 = performance.now();
+            let digest: NoteDigest | null = null;
+            try { digest = await native.getNoteDigest(tab.noteId); } catch { continue; }
+            const digestMs = Math.round(performance.now() - tabT0);
+            // 远端已删除（软删/墓碑/purge）：标记 tab 提示用户，保留正文供复制/从回收站恢复。
+            if (!digest || digest.deleted) {
+              deletedIds.push(tab.noteId);
+              console.log("[sync-tab] tab", JSON.stringify({ noteId: tab.noteId, action: "deleted", digestMs, superseded }));
+              continue;
+            }
+            const last = tab.lastDigest;
+            if (!superseded && last && last.updatedAt === digest.updatedAt && last.title === digest.title) {
+              skipped += 1;
+              console.log("[sync-tab] tab", JSON.stringify({ noteId: tab.noteId, action: "skip-unchanged", digestMs }));
+              continue; // 正文/元数据未变化，无需重载
+            }
+            try {
+              const readT0 = performance.now();
+              const fresh = await native.readNote(tab.noteId);
+              const readMs = Math.round(performance.now() - readT0);
+              // 正文或标题任一变化才重载（标题变化不重建 Lake 实例，只更新标签文案）。
+              if (fresh && (superseded || fresh.content !== tab.content || fresh.title !== tab.title)) {
+                reloaded += 1;
+                console.log("[sync-tab] tab", JSON.stringify({ noteId: tab.noteId, action: superseded ? "reload-superseded" : "reload", digestMs, readMs, title: fresh.title }));
+                setOpenTabs((tabs) => tabs.map((t) => t.noteId === tab.noteId
+                  ? { ...t, title: fresh.title, content: fresh.content, dirty: false, reloadKey: (t.reloadKey ?? 0) + 1, lastDigest: { title: digest.title, updatedAt: digest.updatedAt } }
+                  : t));
+              } else {
+                skipped += 1;
+                console.log("[sync-tab] tab", JSON.stringify({ noteId: tab.noteId, action: "skip-content-equal", digestMs, readMs }));
+              }
+            } catch { /* 读取失败（已删除等）则跳过 */ }
+          }
+          console.log("[sync-tab] refresh done", JSON.stringify({ totalMs: Math.round(performance.now() - tabRefreshStart), open: openTabsRef.current.length, reloaded, deleted: deletedIds.length, skipped }));
+          if (deletedIds.length > 0) {
+            const deletedSet = new Set(deletedIds);
+            setOpenTabs((tabs) => tabs.map((t) => deletedSet.has(t.noteId) ? { ...t, deleted: true } : t));
+          }
+          // 合并提示：冲突覆盖 → 点击查看历史；仅远端删除 → 点击查看回收站。
+          if (supersededList.length > 0 || deletedIds.length > 0) {
+            const parts: string[] = [];
+            if (supersededList.length > 0) parts.push(`远端修改已覆盖本地 ${supersededList.length} 篇（已存历史）`);
+            if (deletedIds.length > 0) parts.push(`${deletedIds.length} 个打开的文档已被删除（已移入回收站）`);
+            const action: NoticeState["action"] = supersededList.length > 0
+              ? { label: "查看历史", onClick: () => { setHistoryNoteId(supersededList[0].id); setHistoryOpen(true); setNotice(null); } }
+              : { label: "查看回收站", onClick: () => { setTrashOpen(true); setNotice(null); } };
+            setNotice({ text: parts.join("；"), action });
+            if (noticeTimer.current !== null) window.clearTimeout(noticeTimer.current);
+            noticeTimer.current = window.setTimeout(() => setNotice(null), 8000);
+          }
+        })();
       }
     });
   }, []);
@@ -215,6 +302,9 @@ export function App() {
   }, []);
 
   const persistTab = useCallback(async (noteId: string, title: string, content: string) => {
+    // 远端已删除（标记 deleted）的文档不再保存：避免把内容写回已回收的笔记。
+    const openTab = openTabsRef.current.find((t) => t.noteId === noteId);
+    if (openTab?.deleted) return;
     // 审计 #7：保存时快照当前 revision；响应返回后仅当期间无新编辑才覆盖草稿/清除 dirty
     const revision = revisionRef.current.get(noteId) ?? 0;
     setSaveState("saving");
@@ -232,8 +322,8 @@ export function App() {
       setTreeNodes((items) => items.map((item) => item.noteFileId === saved.id || item.id === saved.id ? { ...item, title: saved.title, updatedAt: saved.updatedAt, syncState: saved.syncState } : item));
       setSync((current) => ({ ...current, pendingChanges: Math.max(1, current.pendingChanges) }));
       if (revisionRef.current.get(noteId) === revision) {
-        // 无新编辑：安全覆盖 + 清除 dirty
-        setOpenTabs((tabs) => tabs.map((tab) => tab.noteId === noteId ? { ...tab, title: saved.title, content: saved.content, dirty: false } : tab));
+        // 无新编辑：安全覆盖 + 清除 dirty；同时更新 lastDigest（本机已保存，远端未变时无需重载）
+        setOpenTabs((tabs) => tabs.map((tab) => tab.noteId === noteId ? { ...tab, title: saved.title, content: saved.content, dirty: false, lastDigest: { title: saved.title, updatedAt: saved.updatedAt } } : tab));
         setSaveState("saved");
       } else {
         // 期间有新编辑：不覆盖草稿、不清除 dirty（磁盘为旧内容，等待下一次保存）
@@ -292,6 +382,19 @@ export function App() {
   async function openNote(id: string) {
     const existing = openTabsRef.current.find((tab) => tab.noteId === id);
     if (existing) {
+      // 标签曾被标记"已删除"（远端删除）：文档可能已从回收站恢复，重新拉取最新内容刷新标签。
+      if (existing.deleted) {
+        try {
+          const t0 = performance.now();
+          const note = await native.readNote(id);
+          console.log("[sync-tab] openNote reload-deleted", JSON.stringify({ noteId: id, readMs: Math.round(performance.now() - t0) }));
+          if (openTabsRef.current.some((t) => t.noteId === id)) {
+            setOpenTabs((tabs) => tabs.map((tab) => tab.noteId === id
+              ? { ...tab, title: note.title, content: note.content, dirty: false, deleted: false, reloadKey: (tab.reloadKey ?? 0) + 1, lastDigest: { title: note.title, updatedAt: note.updatedAt } }
+              : tab));
+          }
+        } catch { /* 尚未恢复，保持标记 */ }
+      }
       setActiveNoteId(id);
       setOpenTabs((tabs) => tabs.map((tab) =>
         tab.noteId === id ? { ...tab, lastAccessedAt: Date.now() } : tab
@@ -340,10 +443,24 @@ export function App() {
   }
 
   const showNotice = useCallback((text: string) => {
-    setNotice(text);
+    setNotice({ text });
     if (noticeTimer.current !== null) window.clearTimeout(noticeTimer.current);
     noticeTimer.current = window.setTimeout(() => setNotice(null), 2200);
   }, []);
+
+  const showSyncSetupPrompt = useCallback(() => {
+    setSyncSetupPrompt(true);
+    if (syncSetupPromptTimer.current !== null) window.clearTimeout(syncSetupPromptTimer.current);
+    syncSetupPromptTimer.current = window.setTimeout(() => {
+      setSyncSetupPrompt(false);
+      syncSetupPromptTimer.current = null;
+    }, 7000);
+  }, []);
+
+  const handleSyncUnavailable = useCallback(() => {
+    setSyncPanelOpen(false);
+    showSyncSetupPrompt();
+  }, [showSyncSetupPrompt]);
 
   /** 编辑器实例就绪回调：注册到 map，销毁时移除；就绪时补写文本缓存（存量文档首次打开即有缓存） */
   const handleEditorReady = useCallback((noteId: string, editor: LakeEditorInstance | null) => {
@@ -708,13 +825,14 @@ export function App() {
   const plainText = activeContent.replace(/<[^>]+>/g, "").replace(/&nbsp;/g, " ").replace(/&amp;/g, "&");
   const wordCount = plainText.trim().length;
   const wordCountLabel = wordCount > 0 ? `${wordCount} 字` : "";
+  const activeNodeSyncState = activeNoteId ? (treeNodes.find((n) => n.noteFileId === activeNoteId)?.syncState ?? "synced") : "synced";
 
   const editorPrefs = {
     fontSize: settings.fontSize,
     showToolbar: settings.showToolbar,
   };
   const tabInfos: TabInfo[] = openTabs.map((tab) => ({
-    noteId: tab.noteId, title: tab.title, content: tab.content, dirty: tab.dirty,
+    noteId: tab.noteId, title: tab.title, content: tab.content, dirty: tab.dirty, deleted: tab.deleted,
     icon: treeNodes.find((n) => n.noteFileId === tab.noteId)?.icon ?? null,
     reloadKey: tab.reloadKey ?? 0,
   }));
@@ -741,8 +859,9 @@ export function App() {
         <div className="activity-rail-spacer" />
         <button className={`activity-button ${desktopWorkspace === "library" && sidebarMode === "docked" ? "active" : ""}`} onClick={() => { if (desktopWorkspace === "library") toggleSidebarDock(); else void switchDesktopWorkspace("library"); }} title="资料库" aria-label="资料库"><Files size={16} /></button>
         <button className={`activity-button ${desktopWorkspace === "quick-notes" ? "active" : ""}`} onClick={() => void switchDesktopWorkspace("quick-notes")} title="小记" aria-label="小记"><Feather size={16} /></button>
-        <button className="activity-button" onClick={() => { setTrashOpen(true); }} title="回收站" aria-label="回收站"><Trash2 size={16} /></button>
         <div className="activity-rail-fill" />
+        <button className="activity-button" onClick={() => { setTrashOpen(true); }} title="回收站" aria-label="回收站"><Trash2 size={16} /></button>
+        <button className="activity-button" onClick={() => { setSettingsCategory("editor"); setSettingsOpen(true); }} title="偏好设置" aria-label="偏好设置"><Settings2Icon size={16} /></button>
       </nav>
       {desktopWorkspace === "library" && <Sidebar nodes={treeNodes} activeId={activeNoteId ?? mobileActive?.id ?? null} search={search} mobileOpen={mobileOpen} mode={sidebarMode} width={sidebarWidth} minWidth={SIDEBAR_MIN_WIDTH} maxWidth={SIDEBAR_MAX_WIDTH} onSearch={setSearch} onSelect={(id) => void (isMobile ? openNoteMobile(id) : openNote(id))} onCreate={(kind, parentId, title) => void createTreeItem(kind, parentId, title)} onRename={(id, title) => void renameTreeNode(id, title)} onMoveNode={(id, targetId, position) => void moveTreeNode(id, targetId, position)} onRequestDelete={(node) => setConfirmDelete(node)} onCopyMarkdown={(node) => void copyMarkdownFromCache(node)} onExportAs={(node, format) => void exportAs(node, format)} onCopyPaths={(node) => void copyNotePaths(node)} onSetIcon={(node, icon) => void setNodeIcon(node, icon)} onOpenHistory={(node) => { setHistoryNoteId(node.noteFileId); setHistoryOpen(!!node.noteFileId); }} onOpenSearch={(q) => { setSearchPanelQuery(q ?? ""); setSearchPanelOpen(true); }} pendingRenameId={pendingRenameId} onPendingRenameConsumed={() => setPendingRenameId(null)} onPreviewEnter={showSidebarPreview} onPreviewLeave={hideSidebarPreview} onResizeActiveChange={setSidebarResizing} onWidthChange={updateSidebarWidth} onWidthCommit={commitSidebarWidth} onCloseMobile={() => setMobileOpen(false)} />}
       {mobileOpen && <div className="mobile-scrim" onClick={() => setMobileOpen(false)} />}
@@ -762,6 +881,14 @@ export function App() {
           </div>
         </header>}
         {error && <div className="error-banner"><span>{error}</span><button onClick={() => setError(null)}>关闭</button></div>}
+        {syncSetupPrompt && <div className="sync-setup-toast" role="alert">
+          <div className="sync-setup-toast-copy">
+            <span className="sync-setup-toast-icon"><CloudOff size={17} /></span>
+            <span><strong>尚未配置云同步</strong><small>请先配置 S3，完成后即可开始同步。</small></span>
+          </div>
+          <button className="sync-setup-toast-action" onClick={() => { setSyncSetupPrompt(false); setSettingsCategory("sync"); setSettingsOpen(true); }}>去配置</button>
+          <button className="sync-setup-toast-close" onClick={() => setSyncSetupPrompt(false)} aria-label="关闭提示"><X size={15} /></button>
+        </div>}
         {isMobile ? (
           mobileActive ? <section className={`document-pane ${wideMode ? "wide-mode" : ""} ${settings.paragraphSpacing ? "paragraph-spacing" : ""}`}>
             <LakeEditor noteId={mobileActive.id} content={mobileEditing ? mobileDraftContent : mobileActive.content} mode={mobileEditing ? "editor" : "viewer"} tocEnabled={mobileTocOpen} onChange={(content) => setMobileDraftContent(content)} prefs={editorPrefs} onEditorReady={handleEditorReady} />
@@ -790,8 +917,7 @@ export function App() {
               onEditorExport={(noteId, format) => void exportNoteById(noteId, format)}
               onEditorCopyPaths={(noteId) => void copyPathsById(noteId)}
               topbarActions={<>
-                <button className="tabbar-action" onClick={() => setSettingsOpen(true)} data-tooltip="打开偏好设置" aria-label="打开偏好设置"><Settings2Icon size={15} /></button>
-                <button className={`tabbar-action sync-tab-action ${sync.phase}`} onClick={() => setSyncPanelOpen(true)} data-tooltip={`云同步：${sync.message}`} aria-label={`云同步：${sync.message}`}>
+                <button className={`tabbar-action sync-tab-action ${sync.phase}`} onClick={() => { setSyncPanelOpen(true); void syncPanelRef.current?.sync(); }} data-tooltip={syncTooltip(sync)} aria-label={`立即同步：${sync.message}`} title="点击立即同步">
                   <span className="sync-icon-wrap"><Cloud size={15} /><span className="sync-state-dot" aria-hidden="true" /></span>
                 </button>
               </>}
@@ -804,9 +930,21 @@ export function App() {
           {desktopWorkspace === "library" && <>
             <span className="statusbar-divider" />
             <span className="statusbar-wordcount" title="当前文档字数">{wordCountLabel}</span>
-            {notice && <span className="statusbar-notice" title={notice}>{notice}</span>}
+            {notice && (notice.action ? (
+              <button
+                type="button"
+                className="statusbar-notice statusbar-notice-action"
+                title={notice.text}
+                onClick={notice.action.onClick}
+              >
+                <span>{notice.text}</span>
+                <span className="notice-action-label">{notice.action.label}</span>
+              </button>
+            ) : (
+              <span className="statusbar-notice" title={notice.text}>{notice.text}</span>
+            ))}
             <span className={`save-label ${saveState}`} title="保存状态">{saveState === "saving" ? <LoaderCircle className="spin" size={11} /> : saveState === "dirty" ? <WifiOff size={11} /> : <Save size={11} />}{saveLabel(saveState)}</span>
-            <span className={`statusbar-sync ${sync.phase}`} title="S3 同步状态"><Cloud size={11} />{sync.message}</span>
+            <span className={`statusbar-sync ${cloudStatus(sync, activeNodeSyncState, cloudEnabled).cls}`} title={cloudStatus(sync, activeNodeSyncState, cloudEnabled).label + (sync.message ? `：${sync.message}` : "")}><Cloud size={11} />{cloudStatus(sync, activeNodeSyncState, cloudEnabled).label}</span>
             <button
               className={`statusbar-menu-btn${statusMenuOpen ? " open" : ""}`}
               onClick={() => setStatusMenuOpen((open) => !open)}
@@ -846,7 +984,25 @@ export function App() {
       )}
       {confirmDelete && <ConfirmDelete node={confirmDelete} onConfirm={() => { const id = confirmDelete.id; setConfirmDelete(null); void deleteTreeNode(id); }} onCancel={() => setConfirmDelete(null)} />}
       <SearchPanel open={searchPanelOpen} initialQuery={searchPanelQuery} onOpenNote={(id) => void openNote(id)} onClose={() => setSearchPanelOpen(false)} />
-      <TrashPanel open={trashOpen} onClose={() => setTrashOpen(false)} onRestored={() => { void native.listTreeNodes().then(setTreeNodes).catch(() => undefined); void native.listNoteSummaries().then(setNotes).catch(() => undefined); }} />
+      <TrashPanel open={trashOpen} onClose={() => setTrashOpen(false)} onRestored={() => {
+        void native.listTreeNodes().then(setTreeNodes).catch(() => undefined);
+        void native.listNoteSummaries().then(setNotes).catch(() => undefined);
+        // 从回收站恢复后，若该文档正开在 tab 里且曾被标记"已删除"，重载正文并清除标记。
+        void (async () => {
+          const t0 = performance.now();
+          for (const tab of openTabsRef.current.filter((t) => t.deleted)) {
+            try {
+              const readT0 = performance.now();
+              const note = await native.readNote(tab.noteId);
+              console.log("[sync-tab] trash-restore reload", JSON.stringify({ noteId: tab.noteId, readMs: Math.round(performance.now() - readT0) }));
+              setOpenTabs((tabs) => tabs.map((t) => t.noteId === tab.noteId
+                ? { ...t, title: note.title, content: note.content, dirty: false, deleted: false, reloadKey: (t.reloadKey ?? 0) + 1, lastDigest: { title: note.title, updatedAt: note.updatedAt } }
+                : t));
+            } catch { /* 该文档未恢复或仍不存在，保持标记 */ }
+          }
+          console.log("[sync-tab] trash-restore done", JSON.stringify({ totalMs: Math.round(performance.now() - t0) }));
+        })();
+      }} />
       <HistoryPanel open={historyOpen} noteId={historyNoteId} onClose={() => setHistoryOpen(false)} onRestored={(restoredId) => {
         void native.listTreeNodes().then(setTreeNodes).catch(() => undefined);
         void native.listNoteSummaries().then(setNotes).catch(() => undefined);
@@ -855,7 +1011,9 @@ export function App() {
         // bump 后 React 卸载旧实例、用恢复后的 content 重建新实例，保证编辑器显示恢复版。
         void (async () => {
           try {
+            const t0 = performance.now();
             const updated = await native.readNote(restoredId);
+            console.log("[sync-tab] history-restore reload", JSON.stringify({ noteId: restoredId, readMs: Math.round(performance.now() - t0) }));
             setOpenTabs((tabs) => tabs.map((tab) => tab.noteId === restoredId
               ? { ...tab, title: updated.title, content: updated.content, dirty: false, reloadKey: (tab.reloadKey ?? 0) + 1 }
               : tab));
@@ -863,11 +1021,29 @@ export function App() {
           } catch { /* 文档未打开或读取失败则跳过 */ }
         })();
       }} />
-      <SyncPanel open={syncPanelOpen} onClose={() => setSyncPanelOpen(false)} onSyncStatusChange={(status) => setSync((current) => ({ ...current, ...status }))} />
-      <SettingsPanel open={settingsOpen} settings={settings} onClose={() => setSettingsOpen(false)} onChange={(patch) => saveSettings(patch)} />
+      <SyncPanel ref={syncPanelRef} open={syncPanelOpen} onClose={() => setSyncPanelOpen(false)} onSyncUnavailable={handleSyncUnavailable} onSyncStatusChange={(status) => setSync((current) => ({ ...current, ...status }))} />
+      <SettingsPanel open={settingsOpen} openCategory={settingsCategory} settings={settings} onClose={() => setSettingsOpen(false)} onChange={(patch) => saveSettings(patch)} />
     </div>
   );
 }
 
 const summaryOf = ({ content: _content, ...summary }: NoteDocument): NoteSummary => summary;
+function cloudStatus(sync: SyncStatus, nodeSyncState: string, enabled: boolean): { label: string; cls: string } {
+  if (!enabled) return { label: "云同步关闭", cls: "disabled" };
+  if (sync.phase === "syncing") return { label: "同步中", cls: "syncing" };
+  if (sync.phase === "error") return { label: "同步失败", cls: "error" };
+  if (nodeSyncState === "local") return { label: "待云更新", cls: "pending" };
+  if (nodeSyncState === "conflict") return { label: "冲突", cls: "conflict" };
+  if (nodeSyncState === "synced") return { label: "已同步", cls: "synced" };
+  return { label: "未同步", cls: "idle" };
+}
+
+const syncTooltip = (status: SyncStatus) => {
+  const last = status.lastSyncedAt ? new Date(status.lastSyncedAt) : null;
+  const lastText = last && !Number.isNaN(last.getTime())
+    ? `同步于 ${last.toLocaleString("zh-CN", { hour12: false })}`
+    : "尚未同步";
+  return `${lastText}\n${status.message}`;
+};
+
 const saveLabel = (state: SaveState) => ({ idle: "本地", dirty: "待保存", saving: "保存中", saved: "已保存", error: "保存失败" })[state];

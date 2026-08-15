@@ -4,7 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import crypto from "node:crypto";
 import Database from "better-sqlite3";
-import { Store, AppError } from "./store.js";
+import { Store, AppError, selectHistoryDrops, isoWeekKey } from "./store.js";
 
 // ===== electron mock（Store 模块加载即需要；DB 用例只用 safeStorage 的 S3 密钥加解密） =====
 const electronMock = vi.hoisted(() => {
@@ -102,6 +102,34 @@ describe("笔记创建 / 读取 / 保存", () => {
   it("readNote 不存在抛 NotFound", () => {
     expect(() => store.readNote("missing")).toThrowError(AppError);
     expect(() => store.readNote("missing")).toThrowError(/不存在/);
+  });
+
+  it("getNoteDigest 返回轻量状态：title/updatedAt 随保存变化，软删除后 deleted=true，purge 后返回 null", () => {
+    const { id } = makeNote();
+    const d1 = store.getNoteDigest(id);
+    expect(d1).not.toBeNull();
+    expect(d1!.id).toBe(id);
+    expect(d1!.deleted).toBe(false);
+    expect(d1!.title).toBe("测试笔记");
+
+    // 保存后 updatedAt/title 变化（正文变化不读文件也能感知）
+    const saved = store.saveNote(id, "改名", "<p>新内容</p>");
+    const d2 = store.getNoteDigest(id);
+    expect(d2!.title).toBe("改名");
+    expect(d2!.updatedAt).toBe(saved.updatedAt);
+
+    // 软删除 → deleted=true（正文/元数据仍在，仅标记）
+    store.deleteTreeNode(id);
+    const d3 = store.getNoteDigest(id);
+    expect(d3!.deleted).toBe(true);
+
+    // purge 彻底删除 → 返回 null
+    store.purgeTrashItem(id);
+    expect(store.getNoteDigest(id)).toBeNull();
+  });
+
+  it("getNoteDigest 不存在的笔记返回 null", () => {
+    expect(store.getNoteDigest("missing")).toBeNull();
   });
 
   it("saveNote 更新标题与内容（DB + 文件）", () => {
@@ -391,6 +419,31 @@ describe("目录树操作", () => {
     expect(store.listDeletedNotesForSync().some((d) => d.id === note.id)).toBe(true);
   });
 
+  it("purge 彻底删除文档时清空 note_history 行 + 磁盘 gzip 目录（表不膨胀）", () => {
+    const nb = store.createNotebook("待彻底删-带历史");
+    const note = store.createNoteIn(nb.id, "子笔记");
+    store.saveNote(note.id, "子笔记", "<p>v1</p>");
+    store.createHistorySnapshot(note.id); // 版本1 快照
+    store.saveNote(note.id, "子笔记", "<p>v2</p>");
+    store.createHistorySnapshot(note.id); // 版本2 快照
+    expect(store.listNoteHistory(note.id).length).toBe(2);
+    const histDir = path.join(dir, "history", note.id);
+    expect(fs.existsSync(histDir)).toBe(true);
+
+    store.deleteTreeNode(nb.id);
+    store.purgeTrashItem(nb.id);
+
+    // DB 行清空（避免 note_history 表随删除累积膨胀）
+    expect(store.listNoteHistory(note.id).length).toBe(0);
+    // 磁盘 gzip 目录一并物理删除
+    expect(fs.existsSync(histDir)).toBe(false);
+    // 其他文档的历史不受影响
+    const other = store.createNote("不受影响");
+    store.saveNote(other.id, "不受影响", "<p>keep</p>");
+    store.createHistorySnapshot(other.id);
+    expect(store.listNoteHistory(other.id).length).toBe(1);
+  });
+
   it("回收站：清空 emptyTrash 全部彻底删除", () => {
     const nb1 = store.createNotebook("待清空1");
     const n1 = store.createNoteIn(nb1.id, "n1");
@@ -428,6 +481,33 @@ describe("文档历史（快照，纯本地）", () => {
     expect(store.listNoteHistory(id).length).toBe(2);
   });
 
+  it("系统自动留档去重：24h 内同内容已有快照时，覆盖/恢复前留档不重复写；手动创建仍强制写", () => {
+    const { id } = makeNote();
+    store.saveNote(id, "历史测试", "<p>X</p>");
+    // 自动快照 X（force=false）
+    expect(store.createHistorySnapshot(id)).toBeTruthy();
+    expect(store.listNoteHistory(id).length).toBe(1);
+    // 云端覆盖留档（sync 现在用 force=false）：同 hash 24h 内已有 → 跳过，不产生第二份
+    expect(store.createHistorySnapshot(id, undefined, false)).toBeNull();
+    expect(store.listNoteHistory(id).length).toBe(1);
+    // 手动创建快照（HistoryPanel 传 force=true）：用户显式意图，同 hash 也写
+    expect(store.createHistorySnapshot(id, undefined, true)).toBeTruthy();
+    expect(store.listNoteHistory(id).length).toBe(2);
+  });
+
+  it("恢复前留档去重：当前内容 24h 内已有快照时恢复不新增重复", () => {
+    const { id } = makeNote();
+    store.saveNote(id, "历史测试", "<p>版本1</p>");
+    store.createHistorySnapshot(id); // 版本1 快照
+    store.saveNote(id, "历史测试", "<p>版本2</p>");
+    store.createHistorySnapshot(id); // 版本2 快照
+    const hist = store.listNoteHistory(id);
+    const v1 = hist[hist.length - 1]; // 最旧 = 版本1
+    store.restoreHistory(v1.id);
+    // 恢复前留档当前（版本2）：24h 内已有版本2 快照 → 去重，历史仍只有 2 份
+    expect(store.listNoteHistory(id).length).toBe(2);
+  });
+
   it("restoreHistory 恢复正文 + 更新缓存/FTS + 重置 sync_base（P0-1）", () => {
     const { id } = makeNote();
     store.saveNote(id, "历史测试", "<p>版本1 含独特词：北斗七星</p>");
@@ -442,11 +522,9 @@ describe("文档历史（快照，纯本地）", () => {
     expect(store.readNote(id).content).toContain("版本1 含独特词：北斗七星");
     // 缓存更新（可搜索）
     expect(store.searchNotes("北斗七星").some((h) => h.id === id)).toBe(true);
-    // sync_base 重置到恢复版 hash（localChanged=false）
-    const newHash = store.contentHash(id);
-    expect(store.baseHash(id)).toBe(newHash);
-    expect(store.readNote(id).syncState).toBe("synced");
-    // 恢复前留档：版本2 在历史里（force 写）
+    // P0-1（S3-GC v4 §5.2）：恢复后保持恢复前 base，仅标 local 待上传
+    expect(store.readNote(id).syncState).toBe("local");
+    // 恢复前留档：版本2 已在历史（去重后不新增重复快照，但版本2 快照本身可反悔）
     const after = store.listNoteHistory(id);
     expect(after.some((h) => h.contentHash !== v1.contentHash)).toBe(true);
   });
@@ -464,10 +542,10 @@ describe("文档历史（快照，纯本地）", () => {
     const hist = store.listNoteHistory(id);
     const v1 = hist[hist.length - 1];
     store.restoreHistory(v1.id);
-    const restoredHash = store.contentHash(id);
-    // 恢复后 base 与 last_uploaded_hash 都应指向恢复版（远端若是恢复前旧版=本机传的，本地为准）
-    expect(store.baseHash(id)).toBe(restoredHash);
-    expect(store.lastUploadedHash(id)).toBe(restoredHash);
+    // P0-1（S3-GC v4 §5.2）：恢复后保持恢复前 base/lastUploaded，仅标 local 待上传
+    expect(store.baseHash(id)).toBe(v2hash);
+    expect(store.lastUploadedHash(id)).toBe(v2hash);
+    expect(store.readNote(id).syncState).toBe("local");
   });
 
   it("deleteHistory 删除快照文件 + DB 记录", () => {
@@ -958,5 +1036,31 @@ describe("顶部插入底层能力", () => {
       expect(rows.map((row) => row.id)).toEqual([top.id, first.id, second.id]);
       expect(rows.map((row) => row.sort_order)).toEqual([0, 1, 2]);
     } finally { db.close(); }
+  });
+});
+
+describe("M8 历史分层保留判定", () => {
+  it("isoWeekKey 使用 ISO 周年（周一起始），跨年/跨月不漂移", () => {
+    expect(isoWeekKey(Date.parse("2026-01-01T00:00:00Z"))).toBe("2026-W01");
+    expect(isoWeekKey(Date.parse("2025-12-29T00:00:00Z"))).toBe("2026-W01");
+    expect(isoWeekKey(Date.parse("2026-01-05T00:00:00Z"))).toBe("2026-W02");
+    expect(isoWeekKey(Date.parse("2026-08-13T00:00:00Z"))).toBe("2026-W33");
+  });
+
+  it("近 24h 全留；硬上限 maxSnapshots 生效", () => {
+    const now = Date.now();
+    const ts = (ageMs: number) => new Date(now - ageMs).toISOString();
+    const list = [ts(0), ts(1000), ts(2 * 3600 * 1000), ts(26 * 3600 * 1000), ts(2 * 24 * 3600 * 1000)];
+    const drops = selectHistoryDrops(list, { maxSnapshots: 2, retentionDays: 30 });
+    expect(drops.size).toBe(3);
+  });
+
+  it("超过 retentionDays 的旧快照必删", () => {
+    const now = Date.now();
+    const old = new Date(now - 40 * 24 * 3600 * 1000).toISOString();
+    const recent = new Date(now - 1000).toISOString();
+    const drops = selectHistoryDrops([old, recent], { maxSnapshots: 100, retentionDays: 30 });
+    expect(drops.has(old)).toBe(true);
+    expect(drops.has(recent)).toBe(false);
   });
 });

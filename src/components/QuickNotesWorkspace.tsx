@@ -17,6 +17,8 @@ interface DraftState {
 export interface QuickNotesWorkspaceHandle {
   /** 返回 true 代表可以离开当前小记页面；false 代表用户选择继续编辑。 */
   confirmLeave(): Promise<boolean>;
+  /** 同步完成后刷新小记列表。 */
+  refresh(): Promise<void>;
 }
 
 interface QuickNotesWorkspaceProps {
@@ -55,6 +57,10 @@ export const QuickNotesWorkspace = forwardRef<QuickNotesWorkspaceHandle, QuickNo
   useEffect(() => { props.onDirtyChange(dirty); }, [dirty, props]);
 
   useImperativeHandle(ref, () => ({
+    async refresh() {
+      try { setItems(await native.listQuickNotes()); }
+      catch (reason) { setError(String(reason)); }
+    },
     async confirmLeave() {
       if (!dirty) return true;
       const discard = window.confirm("当前小记尚未保存。放弃本次编辑并离开？");

@@ -14,6 +14,15 @@ export interface NoteDocument extends NoteSummary {
   content: string;
 }
 
+/** 笔记的轻量状态摘要（同步后刷新打开 tab 用）。
+ * 只读 DB 行，不读正文文件；updatedAt/title 变化或 deleted 即表示需要全量拉取。 */
+export interface NoteDigest {
+  id: string;
+  title: string;
+  updatedAt: string;
+  deleted: boolean;
+}
+
 export type TreeNodeType = "notebook" | "group" | "note";
 
 export interface TreeNode {
@@ -39,6 +48,43 @@ export interface WorkspaceSnapshot {
   notes: NoteSummary[];
   lastOpenedNoteId: string | null;
   sync: SyncStatus;
+}
+
+export interface SyncSettings {
+  enabled: boolean;
+  autoMode: "interval" | "onOpenClose" | "manual";
+  autoIntervalMinutes: number;
+}
+
+export interface S3GcSettings {
+  gcRetentionDays: number;
+  gcIntervalHours: number;
+  trashAutoPurgeDays: number;
+}
+export interface S3GcPendingItem {
+  key: string;
+  markedAt: string;
+}
+export interface S3GcLogItem {
+  id: number;
+  ts: string;
+  action: string;
+  key: string;
+  reason: string;
+  commitId: string | null;
+  deviceId: string | null;
+  ok: boolean;
+}
+export interface DeepCleanupResult {
+  dryRun: boolean;
+  lake: { dryRun: boolean; candidateCount: number; deletedCount: number; keys: string[] };
+  quickNotes: { dryRun: boolean; candidateCount: number; deletedCount: number; keys: string[] };
+}
+export interface QuickNoteTrashItem {
+  id: string;
+  createdAt: string;
+  updatedAt: string;
+  deletedAt: string;
 }
 
 export interface S3Settings {
@@ -80,9 +126,17 @@ export interface SyncResult {
 
 export interface SyncProgress {
   phase: "connect" | "download" | "upload" | "manifest" | "quick-notes" | "done";
+  /** 主循环进度：笔记 / 小记条目 */
   current?: number;
   total?: number;
+  /** 资源（图片/附件）子进度，独立于主循环 */
+  assetCurrent?: number;
+  assetTotal?: number;
   message: string;
+  /** done 阶段附带：本地改动被远端覆盖、已存入历史的文档。 */
+  supersededNotes?: Array<{ id: string; title: string }>;
+  /** 同步失败时附带错误信息（自动同步失败也能让状态栏变为“同步失败”）。 */
+  error?: string;
 }
 
 export interface SyncStatusInfo {

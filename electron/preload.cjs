@@ -3,8 +3,10 @@ const { contextBridge, ipcRenderer } = require("electron");
 const invoke = (channel, ...args) => ipcRenderer.invoke(channel, ...args);
 
 contextBridge.exposeInMainWorld("lakeNative", {
+  assetPort: Number(process.env.LAKE_ASSET_PORT) || 19876,
   bootstrap: () => invoke("bootstrap_workspace"),
   readNote: (id) => invoke("read_note", id),
+  getNoteDigest: (id) => invoke("get_note_digest", id),
   createNote: (title) => invoke("create_note", title),
   saveNote: (id, title, content, caches) => invoke("save_note", id, title, content, caches),
   updateNoteCaches: (id, markdown, plain) => invoke("update_note_caches", id, markdown, plain),
@@ -50,6 +52,8 @@ contextBridge.exposeInMainWorld("lakeNative", {
   getS3Settings: () => invoke("get_s3_settings"),
   saveS3Settings: (settings) => invoke("save_s3_settings", settings),
   testS3Connection: () => invoke("test_s3_connection"),
+  getSyncSettings: () => invoke("get_sync_settings"),
+  saveSyncSettings: (settings) => invoke("save_sync_settings", settings),
   syncNow: () => invoke("sync_now"),
   getSyncStatus: () => invoke("get_sync_status"),
   listQuickNotes: () => invoke("list_quick_notes"),
@@ -60,6 +64,16 @@ contextBridge.exposeInMainWorld("lakeNative", {
   discardQuickNoteDraft: (draftId) => invoke("discard_quick_note_draft", draftId),
   discardStagedQuickNoteImage: (draftId, imageId) => invoke("discard_staged_quick_note_image", draftId, imageId),
   convertQuickNote: (quickNoteId, notebookId) => invoke("convert_quick_note", quickNoteId, notebookId),
+  listQuickNoteTrash: () => invoke("list_quick_note_trash"),
+  restoreQuickNote: (id) => invoke("restore_quick_note", id),
+  purgeQuickNote: (id) => invoke("purge_quick_note", id),
+  getS3GcSettings: () => invoke("get_s3_gc_settings"),
+  saveS3GcSettings: (settings) => invoke("save_s3_gc_settings", settings),
+  listS3GcPending: () => invoke("list_s3_gc_pending"),
+  listS3GcLog: () => invoke("list_s3_gc_log"),
+  runS3GcReconcile: () => invoke("run_s3_gc_reconcile"),
+  runS3DeepCleanup: (dryRun) => invoke("run_s3_deep_cleanup", dryRun),
+  getTrashReminder: () => invoke("get_trash_reminder"),
   onSyncProgress: (callback) => {
     const listener = (_event, progress) => callback(progress);
     ipcRenderer.on("sync-progress", listener);

@@ -1,196 +1,207 @@
-# Lake Notes Electron 会话交接文档
+# Lake Notes Electron 会话交接文档（多端删除链路已验收提交 + 重构交接）
 
-> 写给完全没有上下文的新会话。开始工作前请先通读本文，再查看 `git status`、`git log --oneline master..HEAD`、`docs/TODO.md`、`docs/HISTORY-DESIGN.md`、`docs/HISTORY-DESIGN-REVIEW.md`。
->
-> 本文对应项目：`/Users/admin/file/local-lake/lake-notes-electron`
+> 写给完全没有上下文的新会话。**开始工作前先通读本文**，再按需读：
+> `docs/REFACTOR-TRASH-NOTEBOOK-HANDOFF.md`（**重构方案交接，当前最重要**）、`AGENTS.md`（项目长期记忆）、`docs/S3-GC-DESIGN.md`（v4.1）、`docs/GC-TEST-REPORT.md`（GC 测试报告）、`docs/TODO.md`，
+> 对照代码：`electron/sync.ts`、`electron/store.ts`、`electron/quickNotesSync.ts`、`electron/logger.ts`、`electron/main.ts`、`src/App.tsx`、`src/components/*`、`src/features/editor/*`。
 
-## 0. 任务目标（长期主线）
+项目目录：`/Users/admin/file/local-lake/lake-notes-electron`
 
-**Lake Notes 是一个本地优先的笔记应用（Electron + React + better-sqlite3 + 语雀 Lake 编辑器内核），带 S3 同步。** 当前开发主线是"数据安全"三件套：**回收站（已完成）→ 文档历史/快照（已完成）→ S3 删除/垃圾回收（下一步，未完成）**。
+---
 
-> **重要：S3 删除（GC）是这个开发阶段的收尾。用户明确说"完全做完 S3 删除才能彻底结束这个开发"。** 这是下一个会话的核心任务，详见 §3。
+## 0. 任务目标
+
+Lake Notes 是**本地优先**笔记应用（Electron + React + better-sqlite3 + 语雀 Lake 内核），带 S3 同步（七牛 Kodo S3 兼容 API）。**本地是真相，S3 只是镜像。**
+
+**当前状态**：多端删除链路（软删 → 恢复 → purge → GC 对账 → 深度清理）已测试验收并**提交**到 `feat/s3-storage-rw-delete`（未合并 master）。GC 测试报告见 `docs/GC-TEST-REPORT.md`。
+
+**下一阶段主线（重构）**：**隐藏回收站笔记本重构（删除 = 移动语义）**——把删除从"墓碑特殊状态"改为"移入隐藏回收站笔记本"，统一同步逻辑，根治墓碑机制的补丁与缺陷。**完整方案、起因经过、原则、计划见 `docs/REFACTOR-TRASH-NOTEBOOK-HANDOFF.md`，独立分支实施。**
+
+**排期约定（用户明确）**：重构（隐藏回收站笔记本）之后，再启动 Electron 升级 33 → 42。
+
+当前分支：`feat/s3-storage-rw-delete`，**已提交、未合并 master**。重构另起独立分支（建议 `feat/trash-notebook`）。
 
 ---
 
 ## 1. 当前快照
 
-| 项目 | 当前信息 |
+| 项目 | 信息 |
 | --- | --- |
-| 项目目录 | `/Users/admin/file/local-lake/lake-notes-electron` |
-| Git 远程 | `origin = https://gitee.com/gtycoder/local-lake.git` |
-| 当前分支 | `fix/locked-viewer-text-cache`（含 12 个未合并提交，**未推 master，不要合并 master**） |
-| 分支提交 | `212763a` 锁定缓存 / `f51379b` 回收站 / `b44e207`+`a923ce9`+`7982778` 历史设计 / `34797b3` 历史功能 / `fbef270` P0-1 / `6e70c97` 覆盖提醒 / `2596362` 交接 / `b1a53a9` 历史增强 / `9ee90dd` 画板修复 |
-| 工作区 | 干净（仅 `Electron-HANDOFF.md.bak-*` 备份未跟踪，可忽略/删除） |
-| Node | 必须优先使用 Node 24：`$HOME/.nvm/versions/node/v24.18.0/bin`（否则 vitest 报 `styleText` 错误） |
-| 开发数据 | `/Users/admin/Library/Application Support/lake-notes-dev`，禁止删除或清理 |
-| 正式数据 | `/Users/admin/Library/Application Support/lake-notes-electron`，禁止触碰 |
+| 目录 | `/Users/admin/file/local-lake/lake-notes-electron` |
+| 分支 | `feat/s3-storage-rw-delete`（未合并） |
+| 远程 | `origin = https://gitee.com/gtycoder/local-lake.git` |
+| Node | **必须优先 Node 24**：`$HOME/.nvm/versions/node/v24.18.0/bin` |
+| Electron | **33.4.11**（升级 42 已列入 TODO，排期在删除链路之后） |
+| 基线 | `npx tsc --noEmit` 通过；`npm test -- --run` = **188 passed**；`node node_modules/vite/bin/vite.js build` 通过；`git diff --check` 干净 |
+| 开发数据 | `/Users/admin/Library/Application Support/lake-notes-dev`（可重建） |
+| 正式数据 | `/Users/admin/Library/Application Support/lake-notes-electron`（**禁止触碰**） |
+| 运行状态 | **项目已停止**（设备 A/B、vite 均已退出，multidev 残留已清） |
 
-### 绝对不能做的事情
+> ⚠️ 当前有 30+ 文件未提交（上一阶段 + 最近会话的全部改动）。**不要擅自提交/合并**，等用户验收。
 
-- 不要执行 `git reset`、`git checkout -- .`、`git clean -fd` 等会丢弃工作区的命令（单文件恢复临时改动除外，如 `git diff` 确认后按文件恢复）。
-- 不要覆盖或删除其他未提交修改；先看 `git status` 和 `git diff`。
-- 不要修改 `node_modules`。
-- 不要删除或直接修改开发/正式用户数据目录（SQLite 只允许只读查询）。
-- 不要使用 `pkill -f Electron`；机器上还有 Trae、SiYuan、VS Code 等其他 Electron 应用（结束进程只能 kill 具体 PID）。
-- 清理测试笔记必须走应用 UI 删除流程，不能直接改 SQLite，否则可能被 S3 同步恢复。
-- **未验证的代码永远不推 master**：改动先切独立分支，验证通过（单测 + CDP）再合并/提交 master。
+### 开发版固定 S3 配置（已写入 `electron/main.ts`，仅 dev 首次启动 seed）
+- Endpoint: `https://s3.cn-north-1.qiniucs.com`
+- Region: `cn-north-1`
+- Bucket: `local-lake-hebei`
+- 对象前缀: `lake-notes`
+- AK/SK: 已硬编码在 dev seed 中（**勿外泄**；仅 dev）
+- `forcePathStyle: false`（virtual-host，七牛证书要求）
 
----
-
-## 2. 已完成内容（分支上，均已验证）
-
-### 2.1 历史功能全家桶（本次会话核心成果）
-
-| 提交 | 内容 |
-| --- | --- |
-| `34797b3` | **文档历史（快照）核心**：`note_history` 表（refs_json/ref_count/单调 created_at）、`createHistorySnapshot`（gzip + 24h 防抖去重 + 恢复 force 写）、`restoreHistory`（恢复前留档 + 写回 + 缓存/FTS + 重置 sync_base）、`deleteHistory`/`cleanupHistory`（100 份/30 天，惰性）、`listNoteOrphans`/`cleanNoteOrphans`（实时解析，历史引用保护）、`purgeTrashItem` 彻底删连历史一起删；`extractAssetRefs` 公共工具；7 个 IPC + HistoryPanel 两 tab + Sidebar 右键"历史版本" |
-| `fbef270` | **P0-1 恢复同步语义**：`last_uploaded_hash` 判定"远端是否本机传的"——本机传→本地为准上传；他人改→接受远端+本地入历史（不产生冲突副本） |
-| `6e70c97` | **远端覆盖提醒**：接受远端前强制留快照；`supersededNotes` → SyncPanel alert |
-| `b1a53a9` | **历史增强**（本会话）：U1 15 分钟自动快照（saveNote 记 dirty + 主进程定时器，间隔可配置）；P1 恢复后 reloadKey 强制重建 tab；P2 detectOrphans 并入历史 refs（被历史引用资源不算孤儿）；P5 保留策略可配置（maxSnapshots/retentionDays/cleanupIntervalHours/snapshotIntervalMinutes 存 settings）；U6 设置面板历史区域（统计/清理/配置）；快照预览 + 孤儿预览（2 个新 IPC）；U5 锁定文档允许恢复+保持锁 |
-| `9ee90dd` | **画板视口修复**：Drawnix onChange 不再持久化 viewport，纯平移/缩放画布不再触发保存/快照（详见 §6 坑 26） |
-
-### 2.2 更早的已合并验证内容（同分支）
-
-- `212763a` 锁定态文本缓存（锁定/新同步文档也能搜索/导出）
-- `f51379b` 软删除 + 本地回收站（deleteTreeNode 标 deleted_at + 墓碑；listTrash/restore/purge/empty）
-
-### 2.3 验证状态
-
-- **单测 168 全绿**（`npm test -- --run`）
-- **tsc / vite build 通过**
-- **CDP 端到端**：快照/恢复/孤儿保护/保留策略/设置面板/预览/恢复后 tab 刷新/画板视口修复，全部实测通过
+> 用户最初给的 Endpoint 是 `https://local-lake-hebei.s3.cn-north-1.qiniucs.com`、Bucket `local-lake`，实测是 bucket/region 映射写反了；正确如上。
 
 ---
 
-## 3. 当前问题 / 状态
+## 2. 已完成内容
 
-### ★ 核心待办：S3 删除（垃圾回收）—— 未做，用户要求必须完成
+### 2.1 早期阶段（已在分支上，历史遗留）
+- S3 GC v4.1（M0–M9）：回收站恢复 vs 远端墓碑、ObjectStore 扩展（list/delete/deleteMany/deletePrefix/put）、manifest v4（prevCommitId 链、对象键 `objects/{noteId}-{contentHash}.lake`）、历史引用资源不上传、purge（先写 manifest 后 `deletePrefix`）、GC 对账（`s3_gc_pending`/`s3_gc_log`/`runGcReconcile`）、小记回收站 + 深度清理、Lake 深度清理（scoped 到 `objects/`+`assets/`+`manifests/`，不碰 `quick-notes/`）、历史分层 `selectHistoryDrops`、回收站提醒。
+- 文档历史/快照：15 分钟自动 + 手动 + 恢复前留档 + 孤儿清理（`note_history` 表 + `history/{noteId}/` 目录）。
 
-**现状**：S3 **只增不删**（内容寻址 + 墓碑设计）。
-- `ObjectStore` 只有 `get`/`put`，**没有 delete/DeleteObject**。
-- 删除文档/删正文图片后，远端 `objects/{hash}.lake`、`assets/{id}/{filename}` **永远保留**（manifest 不再引用，但对象不删）。
-- 存储随使用无限累积。已记入 `docs/TODO.md`（P3 条目）。
+### 2.2 多端联调 + 同步可用性（最近两个会话）
+#### S3 连接兼容
+- `ObjectStore.test()` 从 HeadBucket 改为 **ListObjectsV2**（七牛 HeadBucket 对存在的桶也返回 404/UnknownError）。
+- dev 首次启动自动写入上述 S3 配置。
 
-**用户意图**：需要 S3 垃圾回收——对比 manifest 引用，删除无引用的 objects/assets。**这是大工程**，需谨慎处理：
-- 多设备离线（删除方清空后，离线设备可能还在用旧对象）
-- 墓碑（deleted 标记不能丢）
-- 并发（GC 与上传竞争）
-- 建议单独设计评审后实施（可参考 `docs/HISTORY-DESIGN.md` 的资源引用思路）
+#### 同步进度与状态
+- `SyncProgress` 增加 `assetCurrent/assetTotal`（资源子进度）、`supersededNotes`、`error`。
+- Lake 上传/下载资源、小记上传/下载图片都上报子进度；`SyncPanel` 展示主进度 + 资源子进度 + 最后同步时间 + Lake/小记计数。
+- 状态栏统一云同步状态：云同步关闭 / 同步中 / 同步失败 / 待云更新 / 已同步 / 冲突（`src/App.tsx` 的 `cloudStatus`）。
+- `markSynced()` 同时更新 `notes.sync_state` 和 `tree_nodes.sync_state`（否则状态栏永远显示"待云更新"）。
 
-**设计参考**：用户认可的方向是"对比 manifest 引用删无引用对象"，但具体方案未定稿，需要新会话设计 + 与用户确认。
+#### 云同步开关 + 自动/手动同步
+- `SyncSettings { enabled, autoMode: "manual"|"interval"|"onOpenClose", autoIntervalMinutes }`，存本地 settings 表，**不上云**。
+- `enabled=false`：不跑 GC/自动/手动同步；关闭前做最后一次对齐（`runFullSync`），失败则保持开启并报错；重新开启后立即后台对齐一次。
+- 主进程 `runFullSync()`：Lake → 小记，`syncInFlight` 单飞 + `enqueueMaintenance` 串行；自动同步（interval / onOpenClose / 退出前）都走 `runFullSync`。
 
-### 其他已知问题（非阻塞）
+#### 目录树同步（重要）
+- manifest 增加**必填** `folders[]`：`{ id,title,parentId,sortOrder,nodeType:"notebook"|"group",icon,updatedAt }`。
+- 下载阶段先导入 folders，再导入 notes，保证父目录存在；正文相同但元数据变化时 `applyRemoteNoteMeta` 对账（标题/父目录/排序/图标）；文件夹 icon 用 `updatedAt` LWW。
 
-- **旧格式画板卡片不可编辑**：333/777 等旧文档的 board-card 是 `customBlock`+`customName="board-card"` 格式，编辑态被渲染成 **viewer（readonly）**，无法编辑。新格式 `name="board-card"` 正常。**未修复**（用户未要求，但可能影响旧数据）。
-- **同步未做跨设备实测**：P0-1 逻辑单测覆盖，但真实双设备 S3 验证等"手机端"或"S3 GC 一起做"。
-- **Word/PDF 导出**：`electron/export.ts` 已收口但 docx/pdf 未实现。
-- **全文搜索 2 字以内回退**：trigram 最小 3 字符，两字词需 LIKE 回退。
+#### 小记同步（quick notes）
+- `quick-notes/` 独立前缀，独立小记库 `quick-notes/metadata.sqlite3`，独立上传/下载图片子进度。
+
+### 2.3 最近会话新增（打开 tab 刷新增强 + 日志 + 冲突留档修复）
+
+#### 打开中 tab 的刷新增强（参考 VSCode lake-editor 插件的"外部变更检测"思路）
+- **远端删除检测**：新增 `store.getNoteDigest(id)` + IPC `get_note_digest`（`types.ts`/`main.ts`/`preload.cjs`/`native.ts` 四处同步）。同步 done 后 digest 为 null/purge 或 `deleted=true` → tab 标记 `deleted`（红字 + 删除线 + 徽标，正文保留），保存被拦截；回收站恢复/重新打开自动重载清除标记。
+- **冲突提示可点击**：notice 升级为 `NoticeState`（带 action 按钮），冲突 → "查看历史"，仅删除 → "查看回收站"。
+- **digest 预检**：同步后先比对 `title+updatedAt`（只读 DB 不读文件），未变化跳过全量 `readNote`；本地保存成功更新 `lastDigest`，减少无谓的 tab 全量重载。
+
+#### 统一日志系统（electron-log@5.4.4，新增依赖）
+- `electron/logger.ts`：scope 分类（sync/s3/history/gc/quick/store/renderer/perf），落盘 `userData/logs/lake-notes.log`（多端 LAKE_USER_DATA 隔离），5MB 轮转，格式 `[y-m-d h:i:s.ms] [level] (scope) text`。
+- 渲染层：main.ts `console-message` 转发（兼容 Electron 33 新式 `(event)` 签名）；逻辑埋点带 `[sync-tab]`/`[editor-perf]` 前缀。
+- 耗时统一 `[perf] <label> Xms` 格式。埋点覆盖：S3 每次调用、同步各 phase+每笔记、快照/恢复/purge/importRemoteNote、GC/深度清理、tab 刷新循环、EditorTab init。
+- vitest 自动静音（`process.versions.electron` 不存在时关 transports）。
+
+#### 冲突留档补漏（P0，A/B 联调发现）
+- 根因：sync.ts 下载分支中 `localChanged=false`（本地相对基线无改动）被远端覆盖走 else 分支直接接受、不留档 → A 上传后未编辑的版本被静默丢弃。
+- 修复：else 分支只要 `local` 存在就 `createHistorySnapshot(force)` + push superseded。
+- 回归测试："本地已同步但远端被其他设备改 → 接受远端 + 留档 + superseded"。
+
+#### 快照去重语义修正
+- 系统自动留档（云端覆盖 superseded、恢复前留档）改 `force=true` → `false`（24h 同 hash 去重，保留旧时间点 T1，不新建不改时间）；**手动创建快照保持 force=true**。
+- 安全：去重基于 note_history 表实时查，手动删掉后重建不丢。
+- 新增测试：覆盖留档去重 + 恢复前留档去重。
+
+#### 工具与性能实测
+- `scripts/s3-ls.mjs`：云端对象查看工具（`--note <id>` / `--prefix` / `--count` / `--json`）。
+- 性能实测：note_history 5 万行（1000×50）下 `hasRecentDuplicate` 走索引 `(note_id, created_at DESC)`，单次 **0.017ms**，1000 文档同时创建 ≈16ms，无需改。
+- purge 清理历史：确认 `purgeTrashItem` 已删 note_history 行 + `history/{noteId}/` 目录，补了回归测试。
+- SQLite 删行后表文件不物理缩小（空闲页自动复用，VACUUM 才回收）已向用户解释清楚。
 
 ---
 
-## 4. 关键架构（新会话必须理解）
+## 3. 当前问题
 
-### 4.1 进程结构
+1. **（未复现，待排查）历史快照恢复 → 上传 S3 卡 30s**：用户此前在 A/B 联调中提到过，本轮说"暂时没发现"。日志埋点已全部就绪，复现后 `grep '\[perf\]'` 两端日志定位。
+2. **（已修复，注意回归）冲突留档补漏**：见 2.3，A/B 联调发现的"被覆盖端不留档导致永久丢改动"已修复并加回归测试，多端删除测试时要顺带回归该场景。
+3. **（进行中）多端删除链路尚未完整测试**：用户正在规划，见下一步计划 §5.1。
+
+---
+
+## 4. 架构与关键代码地图
 
 ```
-Electron 主进程 (electron/main.ts)
-├── Store (electron/store.ts)：Lake 正式笔记 better-sqlite3 + 文件系统
-│     ├── 历史（note_history/history/ 目录 + 保留策略配置）
-│     ├── 回收站（deleted_at/墓碑）、孤儿（orphan_assets）
-│     └── sync_base（content_hash 基线 + last_uploaded_hash 私有标记）
-├── QuickNotesStore (electron/quickNotes.ts)：小记专属（独立）
-├── assetServer (electron/assetServer.ts)：本地图片服务器 :19876
-├── sync (electron/sync.ts)：Lake Manifest S3 同步（P0-1 last_uploaded_hash 冲突判定）
-└── IPC：Lake CRUD/tree/资源/S3/历史
-Preload (electron/preload.cjs)：contextBridge 暴露 window.lakeNative
-└── 渲染进程 (React + Lake 编辑器 + Drawnix 画板)
+electron/
+├── main.ts             # 窗口/生命周期/IPC handle/S3 seed/console-message 转发
+├── store.ts            # better-sqlite3 数据层（notes/tree_nodes/deleted_notes/note_history/sync_base…）
+├── sync.ts             # S3 同步核心（manifest/冲突四分支/superseded/GC 对账）
+├── quickNotesSync.ts   # 小记同步（quick-notes/ 前缀）
+├── logger.ts           # electron-log 封装（scope + [perf] 耗时）
+├── assetServer.ts      # 本地资源端口服务（LAKE_ASSET_PORT）
+└── preload.cjs         # IPC bridge（invoke 封装）
+src/
+├── App.tsx             # 状态栏 cloudStatus / 云同步开关 / 全局同步
+├── lib/native.ts       # IPC 类型安全封装（加方法必须同步改）
+├── lib/types.ts        # 共享类型（SyncProgress/NoticeState…）
+├── components/         # SyncPanel/SettingsPanel/TrashPanel/HistoryPanel/QuickNotesWorkspace
+├── features/editor/    # MultiTabEditor/EditorTab/lakeRuntime（tab 刷新/删除标记）
+└── styles.css
+scripts/
+├── multidev.sh         # 同机多端（A/B）启动脚本
+└── s3-ls.mjs           # 云端对象查看工具
 ```
 
-### 4.2 关键文件
+### 同步协议要点
+- 冲突判定四分支见 `sync.ts` 下载阶段；`baseHash + lastUploadedHash` 都在本地 `sync_base`，**绝不上 manifest**。
+- `supersededNotes`：本地改动被远端覆盖时，先强制 `createHistorySnapshot` 留档，再接受远端（见 2.3 P0 修复）。
+- `folders[]` 必填；手动同步只发回触发窗口；自动同步广播本进程所有窗口。
 
-| 文件 | 说明 |
-| --- | --- |
-| `electron/store.ts` | Lake 后端核心：notes/tree_nodes/orphan_assets/deleted_notes/sync_base/**note_history**；历史/回收站/孤儿/保留策略逻辑 |
-| `electron/sync.ts` | S3 同步（内容寻址、last_uploaded_hash 冲突判定、supersededNotes）—— **S3 GC 主要改这里** |
-| `electron/main.ts` | IPC 注册 + 15 分钟自动快照定时器 + 24h 清理巡检 + 启动兜底清理 |
-| `electron/preload.cjs` / `src/lib/native.ts` | IPC 桥（三处同步：main/preload/native，加方法必须三处都改） |
-| `src/components/HistoryPanel.tsx` | 历史面板两 tab + 快照/孤儿预览弹层 |
-| `src/components/SettingsPanel.tsx` | 设置面板（含历史区域：统计/清理/配置） |
-| `src/components/TrashPanel.tsx` / `SyncPanel.tsx` | 回收站 / 同步面板（superseded 提醒） |
-| `src/features/editor/BoardCard.tsx` | Drawnix 画板卡片（视口修复在此） |
-| `src/features/editor/EditorTab.tsx` | 编辑器 tab（contentchange → 保存链路、setting 屏蔽、reloadKey 重建） |
-| `docs/HISTORY-DESIGN.md` / `HISTORY-DESIGN-REVIEW.md` | 历史功能设计 + 评审 |
-| `docs/TODO.md` | 待办（含 P3 S3 GC 条目） |
-
-### 4.3 同步冲突判定（P0-1，必须理解）
-
-两个基线变量（都在本地 `sync_base` 表，**绝不进 manifest**）：
-- `baseHash`：本机最后一次同步对齐点
-- `lastUploadedHash`：本机最后一次成功上传的 hash（仅本机上传时更新，**纯本地私有**）
-
-判定（syncNow 下载阶段）：
-| 分支 | 条件 | 行为 | 留快照 | 提醒 |
-| --- | --- | --- | --- | --- |
-| ① 正文一致 | localHash==rn.contentHash | 合并锁 | 否 | 否 |
-| ② 本机传的 | uploadedByUs | 本地为准上传覆盖 | 否 | 否 |
-| ③ 真冲突 | !uploadedByUs && localChanged | 留快照→接受远端 | **是** | **是** |
-| ④ 远端更新无本地改动 | !uploadedByUs && !localChanged | 下载覆盖 | 否 | 否 |
-
-**硬性约束：`last_uploaded_hash` 绝不能写进 manifest / 上传 S3**（否则其他设备误判"远端是本机传的"→ P0-1 失效）。
-
-### 4.4 资源管理（历史/孤儿关键）
-
-- 资源存 `note-assets/{noteId}/{filename}`（`{13位时间戳}_{8位随机}.{ext}` 全局唯一）。
-- `extractAssetRefs`（store.ts 顶部公共函数）：正则 `\d{13}_[0-9a-f]{8}\.(?:png|jpg|jpeg|gif|webp|avif)` 从正文提取引用。
-- `orphan_assets` 表：未被**当前正文**引用的资源；`detectOrphans` 保存时对账（**已并入历史 refs**——被历史引用的不算孤儿，P2 修复）。
-- 同步上传跳过孤儿（`sync.ts` 的 `orphans` Set）——**注意：S3 GC 后这条语义要重新审视**。
+### 多端启动（同机）
+- 每个"设备"= 独立 `userData`（`LAKE_USER_DATA` 覆盖）+ 独立 `LAKE_ASSET_PORT` + 同一 S3 配置。
+- 单实例锁按 userData 隔离，不同 userData 可同时跑；同一 userData 第二实例直接 quit。
 
 ---
 
-## 5. 下一步计划（新会话）
+## 5. 下一步计划
 
-1. **★ S3 删除（GC）**（主线，用户要求必须做）：
-   - 设计：对比 manifest 引用，GC 无引用的 `objects/*` 和 `assets/*`
-   - 关键难点：多设备离线、墓碑、并发、与"孤儿跳过上传"语义的交互
-   - 建议先写设计文档（仿 HISTORY-DESIGN.md 流程）→ 用户确认 → 实现 → 单测 + CDP
-2. **常规回归**（动代码前/后）：导出三格式、全文搜索（含 2 字）、图标、tab、侧栏/大纲、锁定切换、回收站、历史面板。
-3. **待办（docs/TODO.md）**：Word/PDF 导出、搜索 2 字回退、M5 流畅性（TreeRow memo、树虚拟化、保存 debounce、图片懒加载）。
-4. **分支合并**：S3 GC 完成后，与用户确认合并 `fix/locked-viewer-text-cache` → master（**用户明确：S3 删除没做完不合并**）。
+### 5.1 多端删除链路完整测试（**当前最优先**，用户正在规划）
+链路：软删（文档/小记）→ 回收站恢复 → purge（云端立即删前缀）→ GC 对账（7 天窗口）→ 深度清理 → 小记删除。
+**四层验证**：
+1. **UI**：删除/恢复/清空回收站后的界面表现；
+2. **本地 DB + 文件**：`deleted_notes`/`tree_nodes`/`note_history`/`s3_gc_pending`/`s3_gc_log` + `history/{noteId}/` 目录 + 正文文件；
+3. **云端对象**：用 `scripts/s3-ls.mjs --count` 记录对象数变化（删前基线 → 删后 → purge 后 → GC 后）；
+4. **日志**：`grep -E '\[(s3|gc|sync)\]'` 两端日志核对流程执行时间。
+参考验证场景（A/B 两端）：A 编辑提交云 → B 同步 → 两端一致 → A 再编辑 → B 也编辑 → A 提交 → B 同步（被覆盖端留历史）→ B 恢复快照继续编辑提交 → A 同步应覆盖并留档（**重点回归 2.3 的 P0 修复**）。
+
+### 5.2 Electron 升级 33 → 42（删除链路验收之后）
+- 用户要求：**直接升级、不用过度、后续再详细评估方案**；已列入 `docs/TODO.md`。
+- 参考：思源 [issue #18392](https://github.com/siyuan-note/siyuan/issues/18392) 把 Electron 升到 v42.7.1（Chromium 148 / Node 24.15），可参考但**不照搬**。
+- 必做：better-sqlite3 按新 ABI 重编译、依赖兼容检查（electron-log、vite-plugin-electron 等）、全套回归（tsc + 188 测试 + build + 两端多端联调）。33→42 跨度大，建议分阶段小步升级并逐版回归。
+
+### 5.3 其余
+- 复现排查"历史快照恢复 → 上传 S3 卡 30s"（日志埋点已就绪）。
+- 继续多端联调、UI 细节微调。
+- 用户验收通过后，提交 `docs/S3-GC-DESIGN.md`、`HISTORY-DESIGN.md`、`TODO.md`、`Electron-HANDOFF.md` 及全部代码，再谈合并。
 
 ---
 
 ## 6. 踩过的坑（务必记住）
 
-### 本次会话新增（最高优先级）
+### 环境 / 进程
+1. **vite dev server 会被 exec 会话回收**：必须用长驻 tty（`exec_command tty=true`）启动；vite-plugin-electron 会自动拉起 electron，手动控端前临时给 `vite.config.ts` 的 electron 入口加 `onstart: () => {}`，验证完必须还原（`git status` 不应有 vite.config.ts 改动；`vite.config.ts.multidev-bak` 是脚本备份）。
+2. **`onstart` 的澄清**：它只是禁 vite-plugin-electron 自动拉起，不是"实现多端"的关键；多端 = 独立 `LAKE_USER_DATA` + 独立 `LAKE_ASSET_PORT` + 手动前台起。
+3. **单实例锁按 userData 隔离**：不同 userData 可同时跑；同一 userData 第二实例直接 quit。资源端口 A=19876，B=19877。
+4. **multidev.sh 的 device-b 没设 `LAKE_ASSET_PORT`**：起 B 端要手动补环境变量；且本环境 nohup 起不了 electron，A/B 都要手动前台 `tty=true` 起。
+5. **CDP 截图**：窗口未激活时先 `Emulation.setFocusEmulationEnabled{enabled:true}` + `Page.setWebLifecycleState{state:"active"}`；截图在 `result.data`。
+6. 结束 electron 只能 kill 具体 PID，**不要 `pkill -f Electron`**（机器上还有 Trae/SiYuan/VSCode 等 Electron）。
 
-1. **CDP 调试 Electron**：`./node_modules/.bin/electron --remote-debugging-port=9333 .`（参数必须在 `.` 前）；单实例锁不能双开。
-2. **vite.config.ts 临时补丁**：CDP 调试时给 electron 插件加 `onstart: () => {}` 禁自动拉起，**验证后必须还原**（`git status` 应无 vite.config.ts 改动）。
-3. **vite dev server 会被 exec 会话回收**：必须用长驻 tty（`exec_command` tty=true）启动；nohup 后台会被 macOS 回收（ERR_CONNECTION_REFUSED）。
-4. **CDP 截图超时**：窗口未激活时 `Page.captureScreenshot` 挂起 → 先 `Page.setWebLifecycleState{state:"active"}` + `Emulation.setFocusEmulationEnabled{enabled:true}`。
-5. **Python 手写 WebSocket CDP 客户端有 bug**，用 **Node 原生 WebSocket**（Node 22+ 全局 `WebSocket`）写 CDP 脚本最稳（模板见 §7）。
-6. **preload 桥漏方法**：加 IPC 必须同步改 main.ts + preload.cjs + native.ts 三处，用 channel 对比脚本校验（§7）。
-7. **window.confirm 类型**：项目里 `window.confirm` 类型要求 2-3 参数，用 `(window as any).confirm` 绕过。
-8. **emptyTrash 重复删**：`listTrash()` 快照父子项都在，逐项 purge 会重复删 → 只 purge 顶级（无被删父节点的）。
-9. **`.lake` 是扁平 HTML**（`<p><span data-lake-id>…</span></p>`，卡片 `<card value="data:JSON">`），无块级结构——历史用全量 gzip。
-10. **UNIQUE(note_id, content_hash) 会让恢复前留档被跳过**（P0-2）→ 去 UNIQUE，24h 防抖 + 恢复 force 写。
-11. **created_at 单调**：同毫秒多条快照会撞/排序不稳定 → 若与上条同毫秒 +1ms。
-12. **sync 测试 FakeStore 需补方法**：加 `setLastUploadedHash`/`lastUploadedHash`/`createHistorySnapshot` 到 mock。
-13. **P0-1 曾误用保守 setBaseHash 方案**（因怕破坏冲突测试擅自降级）——**用户明确要 last_uploaded_hash 方案，最终已按既定方案修正**。教训：用户确认的方案不要擅自降级。
-14. **P1 恢复后刷新 tab**：仅改 tab.content 不够，EditorTab 不因 content prop 重建 → 必须 bump `reloadKey`（MultiTabEditor 的 EditorTab `key={noteId}-{reloadKey}`）。**不要用"关闭重开"方案**（setTimeout 时 openTabsRef 未更新 → openNote 走"已存在"分支 → tab 丢失）。
-15. **历史恢复点错条目**：历史列表倒序，恢复前会自动留档（新快照插入），列表位置会变。测试时按 hash 找目标条目，别按 index。
-16. **画板卡片格式**：旧数据 `customBlock`+`customName="board-card"`（编辑态渲染成 viewer 只读），新格式 `name="board-card"`（可编辑）。造测试画板文档用新格式，或直接复制 333 文档的卡片。
-17. **Drawnix onChange 无条件触发**（含纯视口平移/缩放）→ 之前把 viewport 持久化导致平移画布触发保存/快照。修复：JSON 对比 elements 变化才 updateCardValue，**viewport 不落盘**。
-18. **画板测试**：旧文档（333/777）画板是 readonly/viewer，无法测真实拖拽；需新建文档插入画板（用 `customBlock`+`customName="board-card"` 格式）才有可编辑画板。
+### 七牛 S3
+7. **HeadBucket 不可用**：`ObjectStore.test()` 必须用 `ListObjectsV2`，否则永远报 `UnknownError`。
+8. **配置映射**：正确 Endpoint=`https://s3.cn-north-1.qiniucs.com`、Region=`cn-north-1`、Bucket=`local-lake-hebei`、`forcePathStyle=false`。用户最初给的 `local-lake-hebei.s3...` + Bucket `local-lake` 是错的。
 
-### 既有（保留，来自更早会话）
+### 同步 / UI
+9. **同步完成不刷新**：自动同步必须广播 `sync-progress`；否则打开 tab/状态栏/小记列表都不刷新。
+10. **`markSynced` 只改 notes 不够**：状态栏读 `tree_nodes.sync_state`，两处都要更新。
+11. **`contentCache` 会导致冲突后 tab 不刷新**：`reloadKey` 变化时先清缓存。
+12. **`purged_at` 会被 `rememberDeleted` 的 INSERT OR REPLACE 清空**：墓碑 upsert 要保留 `purged_at`；purge 成功后 `markPurgeSynced` 清掉。
+13. **文件夹图标用 `updatedAt` LWW**，不要用"本地非空优先"。
+14. **IPC 三处同步**：加方法必须改 `main.ts`(handle) + `preload.cjs`(invoke) + `src/lib/native.ts`(类型+封装)。
 
-19. **保存时用 Lake 内核生成文本缓存，不要自研 .lake 解析器**（`getDocument` 性能极好）。
-20. **Lake 导出 MD 保留 `<font>/<span>` 内联样式**，需 `cleanLakeMarkdown` 剥标签（跳过代码块）。
-21. **html 图片正则贪婪陷阱**：用 `[^/"\s]+` 而非 `([^/]+)`。
-22. **FTS5 trigram**：1-2 字查不到，需标题 LIKE 回退。
-23. **flex column + 无 `flex:none` 子项压扁**：滚动容器 `flex:1 1 auto; min-height:0`，固定项 `flex:none`。
-24. **macOS 关窗口 ≠ 退出应用**；排查"改动没生效"先确认进程全新（`ps aux | grep "Electron \."`）。
-25. **React StrictMode 双挂载**：cleanup 不能把 host/mount 从 DOM 拔掉。
+### 日志 / 构建
+15. **electron-log 必须 external**：`vite.config.ts` 的 electron 入口 `rollupOptions.external` 要写 `/^electron-log/`（子路径 `electron-log/main` 不会命中精确包名 `"electron-log"`）；否则 rolldown 把 CJS 包打进 ESM bundle，运行时报 `Calling require for "electron" in an environment that doesn't expose the require function`。
+16. **渲染进程日志靠 `console-message` 事件转发**：Electron 33 签名是 `(event)`（`event.message`），旧版是 `(event, level, message)`，logger 已兼容两者。
+17. **better-sqlite3 是 Electron ABI 编译**（Electron 内置 Node 20），系统 Node 24 跑不了；bench 等用 python3 sqlite3 代替。
+18. **vitest 下 electron-log 要静音**：`process.versions.electron` 不存在时关 transports，否则测试输出被刷屏。
 
 ---
 
@@ -200,78 +211,34 @@ Preload (electron/preload.cjs)：contextBridge 暴露 window.lakeNative
 export PATH="$HOME/.nvm/versions/node/v24.18.0/bin:$PATH"
 cd /Users/admin/file/local-lake/lake-notes-electron
 npx tsc --noEmit
-npm test -- --run        # 168 个测试
+npm test -- --run        # 188 个测试
 node node_modules/vite/bin/vite.js build
 git diff --check
+
+# 起多端（vite 必须 tty=true 长驻；electron 手动前台 tty=true）
+#   A: node_modules/.bin/electron --disable-gpu .
+#   B: LAKE_USER_DATA="$TMPDIR/lake-device-b" LAKE_ASSET_PORT=19877 node_modules/.bin/electron --disable-gpu .
+
+# 日志
+tail -f "$HOME/Library/Application Support/lake-notes-dev/logs/lake-notes.log"
+tail -f "$TMPDIR/lake-device-b/logs/lake-notes.log"
+grep '\[perf\]' "$HOME/Library/Application Support/lake-notes-dev/logs/lake-notes.log"   # 耗时定位
+
+# 云端对象验证
+node scripts/s3-ls.mjs --count
+node scripts/s3-ls.mjs --note <noteId>
+node scripts/s3-ls.mjs --prefix <prefix>
 ```
 
-启动开发版：`npm run dev`（vite 1421 + 自动拉起 Electron）。
-
-CDP 调试（前台 tty；先加 `onstart: () => {}` 临时补丁，验证后还原）：
-
-```bash
-# 终端 1（tty 长驻）
-node node_modules/vite/bin/vite.js --host 127.0.0.1 --port 1421
-# 终端 2（tty 长驻）
-./node_modules/.bin/electron --remote-debugging-port=9333 .
-# 获取 page WS
-curl -s http://127.0.0.1:9333/json | python3 -c "import json,sys; print([t['webSocketDebuggerUrl'] for t in json.load(sys.stdin) if t['type']=='page'][0])"
-```
-
-Node CDP 脚本模板（存 /tmp/cdp.mjs，Node 22+ 全局 WebSocket）：
-
-```js
-const ws = new WebSocket(process.argv[2]);
-let id = 0; const pending = new Map();
-function call(method, params = {}) {
-  return new Promise((resolve, reject) => {
-    const mid = ++id; pending.set(mid, { resolve, reject });
-    ws.send(JSON.stringify({ id: mid, method, params }));
-    setTimeout(() => { if (pending.has(mid)) { pending.delete(mid); reject(new Error("timeout " + method)); } }, 20000);
-  });
-}
-ws.onopen = async () => {
-  try {
-    const r = await call("Runtime.evaluate", { expression: process.argv[3], returnByValue: true, awaitPromise: true });
-    console.log(JSON.stringify(r.result, null, 1));
-  } catch (e) { console.log("ERR:", e.message); }
-  ws.close(); process.exit(0);
-};
-ws.onerror = (e) => { console.log("WS error", e.message); process.exit(1); };
-ws.onmessage = (ev) => { const d = JSON.parse(ev.data); if (d.id && pending.has(d.id)) { pending.get(d.id).resolve(d); pending.delete(d.id); } };
-```
-
-IPC channel 对比（加方法后校验 preload/main 一致）：
-
-```bash
-grep -o 'invoke("[a-z_]*"' electron/preload.cjs | sed 's/invoke("//;s/"//' | sort > /tmp/p.txt
-grep -o 'handle("[a-z_]*"' electron/main.ts | sed 's/handle("//;s/"//' | sort > /tmp/m.txt
-comm -3 /tmp/p.txt /tmp/m.txt
-```
-
-只读检查开发库：
-
+### 只读检查开发库
 ```bash
 DB="/Users/admin/Library/Application Support/lake-notes-dev/workspace-default/metadata.sqlite3"
-sqlite3 "$DB" "SELECT id, title, deleted_at FROM tree_nodes;"
-sqlite3 "$DB" "SELECT note_id, created_at, size, ref_count FROM note_history ORDER BY created_at DESC LIMIT 20;"
+sqlite3 "$DB" "SELECT id,title,node_type,parent_id,icon,sync_state,deleted_at FROM tree_nodes;"
+sqlite3 "$DB" "SELECT id,title,sync_state,deleted_at,updated_at FROM notes;"
+sqlite3 "$DB" "SELECT id,title,purged_at FROM deleted_notes;"
+sqlite3 "$DB" "SELECT key,marked_at FROM s3_gc_pending;"
+sqlite3 "$DB" "SELECT ts,action,reason,key FROM s3_gc_log ORDER BY id DESC LIMIT 20;"
+sqlite3 "$DB" "SELECT note_id,created_at,size FROM note_history ORDER BY created_at DESC LIMIT 20;"
+sqlite3 "$DB" "SELECT COUNT(*) FROM note_history;"
 ```
-
----
-
-## 8. 关键排查文件
-
-```text
-docs/HISTORY-DESIGN.md             # 历史功能完整设计
-docs/HISTORY-DESIGN-REVIEW.md      # 评审意见（P0/P1/P2）
-docs/TODO.md                       # 待办（含 P3 S3 GC）
-electron/store.ts                  # 历史/回收站/孤儿/缓存/保留策略核心
-electron/sync.ts                   # S3 同步 + P0-1 冲突判定（S3 GC 主战场）
-electron/lakeCaches.ts             # Lake→md/plain 兜底
-electron/main.ts                   # IPC 注册 + 自动快照定时器
-electron/preload.cjs / src/lib/native.ts / src/lib/types.ts  # IPC 桥三处
-src/components/HistoryPanel.tsx    # 历史面板（两 tab + 预览）
-src/components/SettingsPanel.tsx   # 设置（历史配置区）
-src/features/editor/BoardCard.tsx  # 画板卡片（视口修复）
-src/App.tsx                        # 主应用（tab 管理、reloadKey）
-```
+小记库：`.../workspace-default/quick-notes/metadata.sqlite3`。

@@ -9,6 +9,7 @@ import { ASSET_PORT } from "./assetServer.js";
 import { mdToHtml, wrapHtmlPage } from "./mdToHtml.js";
 import { lakeHtmlToMarkdown, lakeHtmlToPlain } from "./lakeCaches.js";
 import { assertSafeRemoteHost, SsrfError } from "./ssrf.js";
+import { log } from "./logger.js";
 
 const DEFAULT_WORKSPACE_ID = "default";
 const DEFAULT_NOTEBOOK_ID = "notebook-personal";
@@ -74,6 +75,26 @@ export interface HistorySettings {
   snapshotIntervalMinutes: number;
 }
 
+/** 云同步开关与自动/手动同步策略（v4，可配置；存 settings 表，纯本地） */
+export interface SyncSettings {
+  /** 云同步总开关：false 时完全不执行任何 S3 后台任务/同步（纯本地）。 */
+  enabled: boolean;
+  /** 自动同步模式：interval=按间隔；onOpenClose=仅在开启/关闭时；manual=完全手动。 */
+  autoMode: "interval" | "onOpenClose" | "manual";
+  /** autoMode=interval 时的间隔分钟数（>=1）。 */
+  autoIntervalMinutes: number;
+}
+
+/** S3 GC 保留策略配置（v4，可配置；存 settings 表，纯本地） */
+export interface S3GcSettings {
+  /** 待回收键保留窗口天数（默认 7） */
+  gcRetentionDays: number;
+  /** 定期对账周期小时数（默认 24） */
+  gcIntervalHours: number;
+  /** 回收站自动清空提醒天数（默认 0=关闭；仅提醒，不自动删） */
+  trashAutoPurgeDays: number;
+}
+
 export interface HistoryCleanupResult {
   deletedSnapshots: number;
   freedBytes: number;
@@ -98,6 +119,59 @@ function nowIso(): string {
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/** ISO 周年（周一起始）分桶键：用于「每周×30 天」分层保留。 */
+export function isoWeekKey(t: number): string {
+  const d = new Date(t);
+  const date = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
+  const day = date.getUTCDay() || 7; // 1(周一)..7(周日)
+  date.setUTCDate(date.getUTCDate() + 4 - day); // 移到该周周四
+  const yearStart = new Date(Date.UTC(date.getUTCFullYear(), 0, 1));
+  const week = Math.ceil(((date.getTime() - yearStart.getTime()) / 86400000 + 1) / 7);
+  return `${date.getUTCFullYear()}-W${String(week).padStart(2, "0")}`;
+}
+
+/** 历史分层保留判定（M8）：近 24h 全留 / 每日×7 天 / 每周×30 天 / 硬上限 maxSnapshots。
+ * 返回应删除的 created_at 集合。纯函数，便于单测。 */
+export function selectHistoryDrops(createdAtList: string[], cfg: { maxSnapshots: number; retentionDays: number }): Set<string> {
+  const now = Date.now();
+  const recent = 24 * 3600 * 1000;
+  const daily = 7 * 24 * 3600 * 1000;
+  const weekly = 30 * 24 * 3600 * 1000;
+  const cutoff = now - cfg.retentionDays * 24 * 3600 * 1000;
+  const sorted = [...createdAtList].sort();
+  const keep = new Set<string>();
+  const dayLatest = new Map<string, string>();
+  const weekLatest = new Map<string, string>();
+
+  for (const ts of sorted) {
+    const t = Date.parse(ts);
+    if (t >= now - recent) { keep.add(ts); continue; }
+    if (t >= now - daily) {
+      const day = new Date(t).toISOString().slice(0, 10);
+      const prev = dayLatest.get(day);
+      if (prev === undefined || ts > prev) { if (prev !== undefined) keep.delete(prev); dayLatest.set(day, ts); keep.add(ts); }
+      continue;
+    }
+    if (t >= now - weekly) {
+      const week = isoWeekKey(t);
+      const prev = weekLatest.get(week);
+      if (prev === undefined || ts > prev) { if (prev !== undefined) keep.delete(prev); weekLatest.set(week, ts); keep.add(ts); }
+      continue;
+    }
+    // 超出分层窗口：不主动 keep（是否兜底由 hard cap 决定）
+  }
+
+  // 硬上限：最多保留最新 maxSnapshots 份（0/负数视为至少 1，避免误删全部）
+  const cap = Math.max(1, cfg.maxSnapshots);
+  const capped = [...keep].sort().slice(-cap);
+  const finalKeep = new Set(capped);
+  const drops = new Set<string>();
+  for (const ts of sorted) {
+    if (!finalKeep.has(ts) || Date.parse(ts) < cutoff) drops.add(ts);
+  }
+  return drops;
 }
 
 function uuid(): string {
@@ -183,6 +257,21 @@ export class Store {
         ref_count INTEGER NOT NULL
       );
       CREATE INDEX IF NOT EXISTS idx_note_history_note ON note_history(note_id, created_at DESC);
+      -- S3 GC：待回收清单（提示/审计；删除依据 = 差集重算）与删除审计日志
+      CREATE TABLE IF NOT EXISTS s3_gc_pending (
+        key TEXT PRIMARY KEY,
+        marked_at TEXT NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS s3_gc_log (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        ts TEXT NOT NULL,
+        action TEXT NOT NULL,
+        key TEXT NOT NULL,
+        reason TEXT NOT NULL,
+        commit_id TEXT,
+        device_id TEXT,
+        ok INTEGER NOT NULL
+      );
     `);
     // 锁状态列（v3 同步元数据）：旧库无列时补齐
     const cols = this.db.prepare("PRAGMA table_info(notes)").all() as Array<{ name: string }>;
@@ -210,6 +299,15 @@ export class Store {
     const baseCols = this.db.prepare("PRAGMA table_info(sync_base)").all() as Array<{ name: string }>;
     if (!baseCols.some((c) => c.name === "last_uploaded_hash")) {
       this.db.exec("ALTER TABLE sync_base ADD COLUMN last_uploaded_hash TEXT");
+    }
+    const deletedCols = this.db.prepare("PRAGMA table_info(deleted_notes)").all() as Array<{ name: string }>;
+    if (!deletedCols.some((c) => c.name === "purged_at")) {
+      this.db.exec("ALTER TABLE deleted_notes ADD COLUMN purged_at TEXT");
+    }
+    // 恢复标记（墓碑权威的显式例外）：restoreTrashItem 写入，markSynced 清除。
+    // 同步下载分支据此区分"被动编辑"（跟随删除）与"主动恢复"（local wins）。
+    if (!cols.some((c) => c.name === "restore_pending_at")) {
+      this.db.exec("ALTER TABLE notes ADD COLUMN restore_pending_at TEXT");
     }
     const now = nowIso();
     this.db.prepare(`INSERT OR IGNORE INTO tree_nodes(id,workspace_id,parent_id,node_type,title,note_file_id,sort_order,created_at,updated_at,deleted_at,sync_state,is_conflict)
@@ -328,6 +426,17 @@ export class Store {
     const content = fs.readFileSync(this.notePath(id), "utf8");
     this.db.prepare("INSERT INTO device_state(key,value) VALUES('last_opened_note_id',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value").run(id);
     return { ...this.mapSummary(row), content };
+  }
+
+  /** 轻量状态摘要：只读 DB 行（不读正文文件），供渲染进程在同步后判断打开 tab 是否需重载。
+   * - 返回 null：笔记已被彻底删除（purge）或从未存在；
+   * - deleted=true：软删除（回收站/远端删除墓碑已应用）；
+   * - 否则 updatedAt/title 任一变化即代表正文或元数据被远端更新过。 */
+  getNoteDigest(id: string): { id: string; title: string; updatedAt: string; deleted: boolean } | null {
+    const row = this.db.prepare("SELECT id,title,updated_at,deleted_at FROM notes WHERE id=?").get(id) as
+      { id: string; title: string; updated_at: string; deleted_at: string | null } | undefined;
+    if (!row) return null;
+    return { id: row.id, title: row.title, updatedAt: row.updated_at, deleted: row.deleted_at !== null };
   }
 
   createNote(title: string): NoteDocument {
@@ -497,6 +606,7 @@ export class Store {
   /** 15 分钟自动快照：把 dirty 集合中文档各快照一次（force=false 走 24h 防抖），然后清空。
    * 返回实际创建的快照数。由主进程定时器调用。 */
   flushHistorySnapshots(): number {
+    const t0 = Date.now();
     const pending = [...this.historyDirty];
     this.historyDirty.clear();
     let created = 0;
@@ -505,6 +615,7 @@ export class Store {
         if (this.createHistorySnapshot(noteId)) created++;
       } catch { /* 单篇失败不阻断其余 */ }
     }
+    log.history.info(`[perf] flush-snapshots ${Date.now() - t0}ms (pending=${pending.length}, created=${created})`);
     return created;
   }
 
@@ -791,6 +902,7 @@ export class Store {
   /** 创建历史快照。content 缺省时读磁盘 .lake。
    * 返回快照 id；同 hash 且 24h 内已有则跳过返回 null。 */
   createHistorySnapshot(noteId: string, content?: string, force = false): number | null {
+    const t0 = Date.now();
     if (!isSafePathSegment(noteId)) throw new AppError("InvalidInput", `无效的笔记 ID: ${noteId}`);
     const lakePath = this.notePath(noteId);
     if (!fs.existsSync(lakePath)) return null;
@@ -816,7 +928,9 @@ export class Store {
     const info = this.db.prepare(
       "INSERT INTO note_history(note_id,file_path,content_hash,created_at,size,refs_json,ref_count) VALUES(?,?,?,?,?,?,?)"
     ).run(noteId, relPath, hash, created, gz.length, JSON.stringify(refs), refs.length);
-    return Number(info.lastInsertRowid);
+    const id = Number(info.lastInsertRowid);
+    log.history.info(`[perf] snapshot ${noteId} ${Date.now() - t0}ms id=${id}${force ? " force" : ""} (body=${body.length}B, gz=${gz.length}B, refs=${refs.length})`);
+    return id;
   }
 
   /** 列出文档历史快照（新→旧） */
@@ -868,13 +982,15 @@ export class Store {
    * 3) 重算 hash → setBaseHash + markSynced（恢复=新基线，非本地新修改，P0-1）
    */
   restoreHistory(historyId: number): void {
+    const t0 = Date.now();
     const row = this.db.prepare("SELECT note_id,file_path FROM note_history WHERE id=?").get(historyId) as
       { note_id: string; file_path: string } | undefined;
     if (!row) throw new AppError("NotFound", `历史快照不存在: ${historyId}`);
     const noteId = row.note_id;
     if (!isSafePathSegment(noteId)) throw new AppError("InvalidInput", `无效的笔记 ID: ${noteId}`);
-    // 1) 恢复前留档
-    this.createHistorySnapshot(noteId, undefined, true);
+    // 1) 恢复前留档（默认防抖：24h 内同内容已有快照则跳过，避免自动快照+覆盖留档产生重复；
+    //    若表里没有（含被手动删除）会重新写，可反悔保障不丢）
+    this.createHistorySnapshot(noteId, undefined, false);
     // 2) 解压写回
     const body = this.readHistoryContent(row.file_path);
     this.atomicWrite(this.notePath(noteId), body);
@@ -885,39 +1001,45 @@ export class Store {
       const plain = lakeHtmlToPlain(body);
       this.updateNoteCaches(noteId, markdown, plain);
     }
-    // 4) 同步基线：重算 hash + markSynced + 更新 last_uploaded_hash（P0-1）。
-    // 恢复=新基线：base 指向恢复版（localChanged=false），同时 last_uploaded_hash 也要更新，
-    // 否则远端若仍是"恢复前本机最后上传的旧 hash"会被误判为本机传的而走"本地为准上传"，
-    // 语义与 P0-1（恢复后重新上传、远端他人改则接受远端）不一致。
-    const newHash = crypto.createHash("sha256").update(body).digest("hex");
-    this.setBaseHash(noteId, newHash);
-    this.setLastUploadedHash(noteId, newHash);
-    this.db.prepare("UPDATE notes SET sync_state='synced', updated_at=? WHERE id=?").run(new Date().toISOString(), noteId);
+    // 4) 同步语义（P0-1，与 S3-GC v4 §5.2 一致）：恢复 = 本地写回 + 待上传。
+    // 不再 setBaseHash/setLastUploadedHash/markSynced；保持恢复前 base/lastUploaded，
+    // 下次同步上传覆盖（远端被他人改则接受远端、恢复版已入历史）。
+    const now = new Date().toISOString();
+    const tx = this.db.transaction(() => {
+      this.db.prepare("UPDATE notes SET sync_state='local', updated_at=? WHERE id=?").run(now, noteId);
+      this.db.prepare("UPDATE tree_nodes SET sync_state='local' WHERE id=?").run(noteId);
+    });
+    tx();
+    log.history.info(`[perf] restore ${noteId} from history#${historyId} ${Date.now() - t0}ms`);
   }
 
   /** 手动删除单个历史快照（文件 + DB）。调用方随后刷新孤儿列表（顺序 §5）。 */
   deleteHistory(historyId: number): void {
+    const t0 = Date.now();
     const row = this.db.prepare("SELECT file_path FROM note_history WHERE id=?").get(historyId) as { file_path: string } | undefined;
     if (!row) throw new AppError("NotFound", `历史快照不存在: ${historyId}`);
     this.db.prepare("DELETE FROM note_history WHERE id=?").run(historyId);
     try { fs.rmSync(path.join(this.root, row.file_path), { force: true }); } catch { /* 忽略 */ }
     // 若目录空则清理
     this.pruneEmptyHistoryDirs();
+    log.history.info(`[perf] delete-history ${historyId} ${Date.now() - t0}ms`);
   }
 
   /** 惰性清理：每文档超 100 份删最旧；created_at < 30 天删。
    * 删除后对受影响文档重算引用，无引用资源物理删（方案 A）。 */
   cleanupHistory(): HistoryCleanupResult {
-    // P5：保留策略可配置（份数上限 + 天数兜底）
+    const t0 = Date.now();
+    // P5 + M8：保留策略可配置（份数硬上限 + 天数兜底 + 分层保留判定）
     const cfg = this.getHistorySettings();
-    const cutoff = new Date(Date.now() - cfg.retentionDays * 24 * 3600 * 1000).toISOString();
     const result: HistoryCleanupResult = { deletedSnapshots: 0, freedBytes: 0 };
-    // 按文档处理
     const notes = this.db.prepare("SELECT DISTINCT note_id FROM note_history").all() as Array<{ note_id: string }>;
     for (const { note_id } of notes) {
-      const expired = this.db.prepare(
-        "SELECT id,file_path FROM note_history WHERE note_id=? AND (created_at < ? OR id IN (SELECT id FROM note_history WHERE note_id=? ORDER BY created_at DESC LIMIT -1 OFFSET ?))"
-      ).all(note_id, cutoff, note_id, cfg.maxSnapshots) as Array<{ id: number; file_path: string }>;
+      const rows = this.db.prepare(
+        "SELECT id,file_path,created_at FROM note_history WHERE note_id=? ORDER BY created_at ASC"
+      ).all(note_id) as Array<{ id: number; file_path: string; created_at: string }>;
+      if (rows.length === 0) continue;
+      const drops = selectHistoryDrops(rows.map((r) => r.created_at), { maxSnapshots: cfg.maxSnapshots, retentionDays: cfg.retentionDays });
+      const expired = rows.filter((r) => drops.has(r.created_at));
       if (expired.length === 0) continue;
       for (const e of expired) {
         this.db.prepare("DELETE FROM note_history WHERE id=?").run(e.id);
@@ -932,6 +1054,7 @@ export class Store {
       this.cleanupUnreferencedAssetsForNote(note_id);
     }
     this.pruneEmptyHistoryDirs();
+    log.history.info(`[perf] cleanup-history ${Date.now() - t0}ms (deleted=${result.deletedSnapshots}, freed=${result.freedBytes}B)`);
     return result;
   }
 
@@ -973,6 +1096,24 @@ export class Store {
       try { for (const f of JSON.parse(r.refs_json) as string[]) all.add(f); } catch { /* 忽略 */ }
     }
     return all;
+  }
+
+  /** 公共引用集（当前正文 ∪ 历史 refs）：历史/孤儿/S3 keep 三处复用，防漂移。 */
+  getProtectedRefs(noteId: string): Set<string> {
+    const current = this.currentContentRefs(noteId);
+    const history = this.historyRefsForNote(noteId);
+    for (const f of history) current.add(f);
+    return current;
+  }
+
+  /** 所有存在历史快照的 noteId（S3 GC keep 集历史引用保护用）。 */
+  listNoteIdsWithHistory(): string[] {
+    return this.db.prepare("SELECT DISTINCT note_id AS id FROM note_history").all().map((r: any) => r.id as string);
+  }
+
+  /** 当前正文引用集（上传资格判定用）。 */
+  getCurrentContentRefs(noteId: string): Set<string> {
+    return this.currentContentRefs(noteId);
   }
 
   /** 文档级孤儿列表（实时）：磁盘文件 − (当前正文引用 ∪ 历史 refs) */
@@ -1046,9 +1187,10 @@ export class Store {
       const nodeStmt = this.db.prepare("SELECT note_file_id FROM tree_nodes WHERE id=?");
       const noteMeta = this.db.prepare("SELECT id,title,parent_id,sort_order,updated_at FROM notes WHERE id=?");
       const tombstone = this.db.prepare(
-        "INSERT OR REPLACE INTO deleted_notes(id,title,parent_id,sort_order,updated_at,deleted_at) VALUES(?,?,?,?,?,?)"
+        "INSERT INTO deleted_notes(id,title,parent_id,sort_order,updated_at,deleted_at) VALUES(?,?,?,?,?,?) " +
+        "ON CONFLICT(id) DO UPDATE SET title=excluded.title, parent_id=excluded.parent_id, sort_order=excluded.sort_order, updated_at=excluded.updated_at, deleted_at=excluded.deleted_at"
       );
-      const softDelNote = this.db.prepare("UPDATE notes SET deleted_at=?, sync_state='deleted' WHERE id=? AND deleted_at IS NULL");
+      const softDelNote = this.db.prepare("UPDATE notes SET deleted_at=?, sync_state='deleted', restore_pending_at=NULL WHERE id=? AND deleted_at IS NULL");
       const softDelNode = this.db.prepare("UPDATE tree_nodes SET deleted_at=?, sync_state='deleted' WHERE id=? AND deleted_at IS NULL");
       const delFts = this.db.prepare("DELETE FROM notes_fts WHERE note_id=?");
       for (const nid of ids) {
@@ -1091,6 +1233,17 @@ export class Store {
     }));
   }
 
+  /** M9：回收站自动清空提醒候选（仅提醒，绝不自动删）。只返回顶级、删除时间超过 N 天的条目。 */
+  listTrashReminder(days: number): Array<{ id: string; title: string; deletedAt: string }> {
+    if (!Number.isFinite(days) || days <= 0) return [];
+    const cutoff = new Date(Date.now() - days * 24 * 3600 * 1000).toISOString();
+    const items = this.listTrash();
+    const deletedIds = new Set(items.map((i) => i.id));
+    return items
+      .filter((i) => (!i.parentId || !deletedIds.has(i.parentId)) && i.deletedAt < cutoff)
+      .map((i) => ({ id: i.id, title: i.title, deletedAt: i.deletedAt }));
+  }
+
   /** 恢复回收站节点（本地复活）：清 deleted_at、清墓碑、标 local 供同步上传。
    * 若父目录也已删除，则恢复到根目录。 */
   restoreTrashItem(id: string): void {
@@ -1106,7 +1259,7 @@ export class Store {
         if (!parentAlive) parentId = null;
       }
       if (node.note_file_id) {
-        this.db.prepare("UPDATE notes SET deleted_at=NULL, updated_at=?, sync_state='local' WHERE id=?").run(now, node.note_file_id);
+        this.db.prepare("UPDATE notes SET deleted_at=NULL, updated_at=?, sync_state='local', restore_pending_at=? WHERE id=?").run(now, now, node.note_file_id);
         this.db.prepare("DELETE FROM deleted_notes WHERE id=?").run(node.note_file_id);
         // 重建 FTS（正文缓存可能还在，优先用缓存）
         const titleRow = this.db.prepare("SELECT title FROM notes WHERE id=?").get(node.note_file_id) as { title: string } | undefined;
@@ -1119,7 +1272,7 @@ export class Store {
       for (const c of children) {
         this.db.prepare("UPDATE tree_nodes SET deleted_at=NULL, parent_id=?, updated_at=?, sync_state='local' WHERE id=?").run(id, now, c.id);
         if (c.note_file_id) {
-          this.db.prepare("UPDATE notes SET deleted_at=NULL, updated_at=?, sync_state='local' WHERE id=?").run(now, c.note_file_id);
+          this.db.prepare("UPDATE notes SET deleted_at=NULL, updated_at=?, sync_state='local', restore_pending_at=? WHERE id=?").run(now, now, c.note_file_id);
           this.db.prepare("DELETE FROM deleted_notes WHERE id=?").run(c.note_file_id);
           const titleRow = this.db.prepare("SELECT title FROM notes WHERE id=?").get(c.note_file_id) as { title: string } | undefined;
           const caches = this.readNoteCaches(c.note_file_id);
@@ -1130,9 +1283,32 @@ export class Store {
     tx();
   }
 
+  /**
+   * 撤销本地删除（sync 下载分支在"远端恢复较新"时调用）：清 deleted_at、删墓碑、重建 FTS。
+   * 与 restoreTrashItem 不同：不设 sync_state='local'——远端为权威，随后由下载/对账流程
+   * 对齐并 markSynced（避免无谓回传）。
+   */
+  revokeLocalDeletion(id: string): void {
+    const now = nowIso();
+    const tx = this.db.transaction(() => {
+      this.db.prepare("UPDATE notes SET deleted_at=NULL, updated_at=? WHERE id=?").run(now, id);
+      this.db.prepare("DELETE FROM deleted_notes WHERE id=?").run(id);
+      const titleRow = this.db.prepare("SELECT title FROM notes WHERE id=?").get(id) as { title: string } | undefined;
+      // 容错：本端已 purge（行被彻底删除）时跳过缓存/FTS——行将由下载分支 importRemoteNote 重建，
+      // 避免 readNoteCaches 对不存在的行抛"笔记不存在"导致同步中断（远端恢复传播场景）。
+      if (titleRow) {
+        const caches = this.readNoteCaches(id);
+        this.upsertFts(id, titleRow.title, caches.plain ?? null);
+      }
+      this.db.prepare("UPDATE tree_nodes SET deleted_at=NULL, updated_at=? WHERE note_file_id=?").run(now, id);
+    });
+    tx();
+  }
+
   /** 彻底删除回收站节点（不可恢复）：删除 .lake / 资源文件 + DB 记录 + FTS。
    * 墓碑保留（防止远端把已删除笔记重新拉回），与现有"墓碑永久保留"设计一致。 */
   purgeTrashItem(id: string): void {
+    const t0 = Date.now();
     const node = this.db.prepare("SELECT * FROM tree_nodes WHERE id=? AND deleted_at IS NOT NULL").get(id) as
       { note_file_id: string | null } | undefined;
     if (!node) throw new AppError("NotFound", `回收站节点不存在: ${id}`);
@@ -1145,6 +1321,8 @@ export class Store {
       const delNode = this.db.prepare("DELETE FROM tree_nodes WHERE id=?");
       const delOrphans = this.db.prepare("DELETE FROM orphan_assets WHERE note_id=?");
       const delHistory = this.db.prepare("DELETE FROM note_history WHERE note_id=?");
+      const markPurged = this.db.prepare("UPDATE deleted_notes SET purged_at=? WHERE id=?");
+      const now = nowIso();
       for (const nid of ids) {
         const n = nodeStmt.get(nid) as { note_file_id: string | null } | undefined;
         if (n?.note_file_id) {
@@ -1156,6 +1334,7 @@ export class Store {
           delOrphans.run(n.note_file_id);
           delFts.run(n.note_file_id);
           delNote.run(n.note_file_id);
+          markPurged.run(now, n.note_file_id);
         }
         delNode.run(nid);
       }
@@ -1165,6 +1344,7 @@ export class Store {
       try { fs.rmSync(f.path, { force: true, recursive: f.recursive }); }
       catch (error) { console.warn("[store] 彻底删除清理文件失败:", f.path, error); }
     }
+    log.store.info(`[perf] purge ${id} ${Date.now() - t0}ms (files=${filesToRemove.length})`);
   }
 
   /** 清空回收站：彻底删除所有软删除节点（墓碑保留）。
@@ -1462,7 +1642,92 @@ export class Store {
   }
 
   markSynced(id: string): void {
-    this.db.prepare("UPDATE notes SET sync_state='synced' WHERE id=?").run(id);
+    const tx = this.db.transaction(() => {
+      // restore_pending_at 一并清除：任何"变为 synced"的路径都代表恢复已生效或被远端采纳，
+      // 残留标记会让本设备永远 local-wins、压住后续墓碑（墓碑永胜被破坏）。
+      this.db.prepare("UPDATE notes SET sync_state='synced', restore_pending_at=NULL WHERE id=?").run(id);
+      // 侧栏/状态栏读的是 tree_nodes.sync_state，必须同步置为 synced。
+      this.db.prepare("UPDATE tree_nodes SET sync_state='synced' WHERE note_file_id=?").run(id);
+    });
+    tx();
+  }
+
+  /** 是否处于"回收站恢复后待同步"状态（显式恢复标记）。
+   * 墓碑权威下这是唯一允许 local-wins 抵抗远端删除的例外。 */
+  isRestorePending(id: string): boolean {
+    return !!this.db.prepare("SELECT 1 FROM notes WHERE id=? AND restore_pending_at IS NOT NULL").get(id);
+  }
+
+  /** 是否处于待上传/本地未对齐状态（sync_state != synced）。用于远端墓碑与本地恢复的 P0-1 判定。 */
+  isSyncPending(id: string): boolean {
+    const row = this.db.prepare("SELECT sync_state FROM notes WHERE id=?").get(id) as { sync_state: string } | undefined;
+    return row !== undefined && row.sync_state !== "synced";
+  }
+
+  getS3GcSettings(): S3GcSettings {
+    const row = this.db.prepare("SELECT value FROM settings WHERE key='s3_gc_settings'").get() as { value: string } | undefined;
+    const def: S3GcSettings = { gcRetentionDays: 7, gcIntervalHours: 24, trashAutoPurgeDays: 0 };
+    if (!row) return def;
+    try {
+      const parsed = JSON.parse(row.value) as Partial<S3GcSettings>;
+      return {
+        gcRetentionDays: typeof parsed.gcRetentionDays === "number" && parsed.gcRetentionDays >= 0 ? parsed.gcRetentionDays : def.gcRetentionDays,
+        gcIntervalHours: typeof parsed.gcIntervalHours === "number" && parsed.gcIntervalHours >= 0 ? parsed.gcIntervalHours : def.gcIntervalHours,
+        trashAutoPurgeDays: typeof parsed.trashAutoPurgeDays === "number" && parsed.trashAutoPurgeDays >= 0 ? parsed.trashAutoPurgeDays : def.trashAutoPurgeDays,
+      };
+    } catch {
+      return def;
+    }
+  }
+
+  saveS3GcSettings(settings: S3GcSettings): void {
+    this.db.prepare("INSERT INTO settings(key,value) VALUES('s3_gc_settings',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value")
+      .run(JSON.stringify(settings));
+  }
+
+  getSyncSettings(): SyncSettings {
+    const row = this.db.prepare("SELECT value FROM settings WHERE key='sync_settings'").get() as { value: string } | undefined;
+    const def: SyncSettings = { enabled: true, autoMode: "manual", autoIntervalMinutes: 15 };
+    if (!row) return def;
+    try {
+      const parsed = JSON.parse(row.value) as Partial<SyncSettings>;
+      return {
+        enabled: typeof parsed.enabled === "boolean" ? parsed.enabled : def.enabled,
+        autoMode: parsed.autoMode === "interval" || parsed.autoMode === "onOpenClose" || parsed.autoMode === "manual" ? parsed.autoMode : def.autoMode,
+        autoIntervalMinutes: typeof parsed.autoIntervalMinutes === "number" && parsed.autoIntervalMinutes >= 1 ? Math.floor(parsed.autoIntervalMinutes) : def.autoIntervalMinutes,
+      };
+    } catch {
+      return def;
+    }
+  }
+
+  saveSyncSettings(settings: SyncSettings): void {
+    this.db.prepare("INSERT INTO settings(key,value) VALUES('sync_settings',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value")
+      .run(JSON.stringify(settings));
+  }
+
+  addS3GcPending(key: string, markedAt: string = nowIso()): void {
+    this.db.prepare("INSERT INTO s3_gc_pending(key,marked_at) VALUES(?,?) ON CONFLICT(key) DO NOTHING").run(key, markedAt);
+  }
+
+  removeS3GcPending(keys: string[]): void {
+    if (keys.length === 0) return;
+    const placeholders = keys.map(() => "?").join(",");
+    this.db.prepare(`DELETE FROM s3_gc_pending WHERE key IN (${placeholders})`).run(...keys);
+  }
+
+  listS3GcPending(): Array<{ key: string; markedAt: string }> {
+    return this.db.prepare("SELECT key,marked_at AS markedAt FROM s3_gc_pending ORDER BY marked_at").all() as Array<{ key: string; markedAt: string }>;
+  }
+
+  recordS3GcLog(action: string, key: string, reason: string, commitId: string | null, deviceId: string | null, ok: boolean): void {
+    this.db.prepare("INSERT INTO s3_gc_log(ts,action,key,reason,commit_id,device_id,ok) VALUES(?,?,?,?,?,?,?)")
+      .run(nowIso(), action, key, reason, commitId, deviceId, ok ? 1 : 0);
+  }
+
+  listS3GcLog(): Array<{ id: number; ts: string; action: string; key: string; reason: string; commitId: string | null; deviceId: string | null; ok: boolean }> {
+    return this.db.prepare("SELECT id,ts,action,key,reason,commit_id AS commitId,device_id AS deviceId,ok FROM s3_gc_log ORDER BY id DESC LIMIT 500")
+      .all().map((r: any) => ({ ...r, ok: !!r.ok }));
   }
 
   markSyncComplete(at: string): void {
@@ -1529,12 +1794,67 @@ export class Store {
     }));
   }
 
+  /** 同步目录树：活动 notebook/group（不含默认个人笔记本，它两端都会本地初始化）。 */
+  listFoldersForSync(): Array<{ id: string; title: string; parentId: string | null; sortOrder: number; nodeType: "notebook" | "group"; icon: string | null; updatedAt: string }> {
+    return this.db.prepare(
+      "SELECT id,title,parent_id,sort_order,node_type,icon,updated_at FROM tree_nodes WHERE node_type IN ('notebook','group') AND deleted_at IS NULL AND id != ? ORDER BY sort_order"
+    ).all(DEFAULT_NOTEBOOK_ID).map((r: any) => ({
+      id: r.id, title: r.title, parentId: r.parent_id, sortOrder: r.sort_order, nodeType: r.node_type, icon: r.icon ?? null, updatedAt: r.updated_at,
+    }));
+  }
+
+  /** 导入远端 notebook/group 节点：按 updatedAt 做 LWW，避免“本地非空优先”造成图标来回覆盖。 */
+  importRemoteFolder(folder: { id: string; title: string; parentId: string | null; sortOrder: number; nodeType: "notebook" | "group"; icon: string | null; updatedAt: string }): void {
+    const existing = this.db.prepare("SELECT title,parent_id,sort_order,node_type,icon,updated_at FROM tree_nodes WHERE id=?").get(folder.id) as
+      { title: string; parent_id: string | null; sort_order: number; node_type: string; icon: string | null; updated_at: string } | undefined;
+    if (!existing) {
+      this.db.prepare(
+        `INSERT INTO tree_nodes(id,workspace_id,parent_id,node_type,title,note_file_id,sort_order,created_at,updated_at,deleted_at,sync_state,is_conflict,icon)
+         VALUES(?,?,?,?,?,NULL,?,?,?,NULL,'synced',0,?)`
+      ).run(folder.id, DEFAULT_WORKSPACE_ID, folder.parentId, folder.nodeType, folder.title, folder.sortOrder, folder.updatedAt, folder.updatedAt, folder.icon ?? null);
+      return;
+    }
+    // 远端更新更晚才覆盖；否则保留本地（本地可能是更新的编辑，等待下次上传）。
+    if (folder.updatedAt > existing.updated_at) {
+      this.db.prepare(
+        "UPDATE tree_nodes SET parent_id=?, title=?, sort_order=?, updated_at=?, icon=?, sync_state='synced', node_type=? WHERE id=?"
+      ).run(folder.parentId, folder.title, folder.sortOrder, folder.updatedAt, folder.icon ?? null, folder.nodeType, folder.id);
+    }
+  }
+
+  defaultNotebookId(): string { return DEFAULT_NOTEBOOK_ID; }
+
+  hasTreeNode(id: string): boolean {
+    return !!this.db.prepare("SELECT 1 FROM tree_nodes WHERE id=? AND deleted_at IS NULL").get(id);
+  }
+
+  /** 正文 hash 相同、仅元数据变化（标题/父目录/排序/图标）时的对账。 */
+  applyRemoteNoteMeta(note: SyncNote): void {
+    const tx = this.db.transaction(() => {
+    this.db.prepare(
+      "UPDATE notes SET title=?, parent_id=?, sort_order=?, updated_at=?, is_conflict=? WHERE id=?"
+    ).run(note.title, note.parentId, note.sortOrder, note.updatedAt, note.isConflict ? 1 : 0, note.id);
+    this.db.prepare(
+      "UPDATE tree_nodes SET title=?, parent_id=?, sort_order=?, updated_at=?, icon=? WHERE note_file_id=?"
+    ).run(note.title, note.parentId, note.sortOrder, note.updatedAt, note.icon ?? null, note.id);
+    });
+    tx();
+  }
+
   /** 记录"从云端学到的删除"（本设备从未持有该笔记）：与本地删除同语义，
    * 防止 manifest 的 deleted 标记因设备清空/换机而丢失（审计 #2）。 */
   rememberDeleted(note: SyncNote, deletedAt: string): void {
+    // 不用 INSERT OR REPLACE：purge 后该行已带 purged_at，若被远端墓碑重插会清空 purged_at，
+    // 导致 listPurgedNotesForSync 漏掉、S3 对象前缀永远不删。
     this.db.prepare(
-      "INSERT OR REPLACE INTO deleted_notes(id,title,parent_id,sort_order,updated_at,deleted_at) VALUES(?,?,?,?,?,?)"
+      "INSERT INTO deleted_notes(id,title,parent_id,sort_order,updated_at,deleted_at) VALUES(?,?,?,?,?,?) " +
+      "ON CONFLICT(id) DO UPDATE SET title=excluded.title, parent_id=excluded.parent_id, sort_order=excluded.sort_order, updated_at=excluded.updated_at, deleted_at=excluded.deleted_at"
     ).run(note.id, note.title, note.parentId, note.sortOrder, note.updatedAt, deletedAt);
+  }
+
+  /** purge 前缀删除成功后，清除 purged_at（保留墓碑，避免下次同步重复删前缀）。 */
+  markPurgeSynced(id: string): void {
+    this.db.prepare("UPDATE deleted_notes SET purged_at=NULL WHERE id=?").run(id);
   }
 
   listDeletedNotesForSync(): Array<{ id: string; title: string; parentId: string | null; sortOrder: number; updatedAt: string; deletedAt: string }> {
@@ -1546,8 +1866,19 @@ export class Store {
     }));
   }
 
+  /** 已彻底删除（purge）的墓碑：下次同步需立即删 S3 前缀。 */
+  listPurgedNotesForSync(): Array<{ id: string; title: string; parentId: string | null; sortOrder: number; updatedAt: string; deletedAt: string; purgedAt: string }> {
+    return this.db.prepare(
+      "SELECT id,title,parent_id,sort_order,updated_at,deleted_at,purged_at FROM deleted_notes WHERE purged_at IS NOT NULL ORDER BY purged_at"
+    ).all().map((r: any) => ({
+      id: r.id, title: r.title, parentId: r.parent_id, sortOrder: r.sort_order,
+      updatedAt: r.updated_at, deletedAt: r.deleted_at, purgedAt: r.purged_at,
+    }));
+  }
+
   /** 导入远程笔记：写 .lake + note-assets 资源 + upsert DB 记录 */
   importRemoteNote(note: SyncNote, content: Buffer, assets: Array<{ filename: string; bytes: Buffer }>): void {
+    const t0 = Date.now();
     // 审计 #3/#17：任何写操作前先校验全部目标路径段，拒绝恶意 manifest 的
     // note.id / asset.filename（../、绝对路径、反斜杠、空段），防止写半成品
     this.notePath(note.id);
@@ -1627,6 +1958,7 @@ export class Store {
     } catch (error) {
       console.warn("[store] 导入后缓存生成失败（不影响导入）:", error);
     }
+    log.store.info(`[perf] importRemoteNote ${note.id} ${Date.now() - t0}ms (lake=${content.length}B, assets=${assets.length})`);
   }
 
   uploadResource(input: { bytes: number[]; filename: string }, noteId: string): ResourceUploadOutput {

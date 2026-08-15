@@ -92,3 +92,21 @@ describe("QuickNotesStore", () => {
     expect(quickNotes.listDeletedForSync().map((item) => item.id)).toContain(source.id);
   });
 });
+
+describe("小记回收站（M6）", () => {
+  it("软删保留内容、可恢复；purge 后无法恢复且墓碑 purged_at 标记", () => {
+    const id = quickNotes.createQuickNote({ text: "可恢复的小记", draftId: crypto.randomUUID(), stagedImageIds: [] }).id;
+    quickNotes.deleteQuickNote(id);
+    expect(quickNotes.listQuickNoteTrash().map((i) => i.id)).toContain(id);
+
+    const restored = quickNotes.restoreQuickNote(id);
+    expect(restored.id).toBe(id);
+    expect(restored.content.text).toBe("可恢复的小记");
+    expect(quickNotes.listQuickNoteTrash().map((i) => i.id)).not.toContain(id);
+
+    quickNotes.deleteQuickNote(id);
+    quickNotes.purgeQuickNote(id);
+    expect(quickNotes.listQuickNoteTrash().map((i) => i.id)).not.toContain(id);
+    expect(() => quickNotes.restoreQuickNote(id)).toThrow();
+  });
+});

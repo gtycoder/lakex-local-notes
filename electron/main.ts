@@ -8,16 +8,19 @@ import { convertQuickNoteToLake } from "./quickNoteConversion.js";
 import { startAssetServer, ASSET_PORT } from "./assetServer.js";
 import { exportNote, type ExportFormat } from "./export.js";
 import { resolveMirroredCdnRedirect } from "./cdnRedirect.js";
-import { testConnection, syncNow } from "./sync.js";
-import { syncQuickNotes } from "./quickNotesSync.js";
+import { testConnection, syncNow, runGcReconcile, runDeepCleanup, type SyncResult, type SyncProgress } from "./sync.js";
+import { initLogger, log } from "./logger.js";
+import { syncQuickNotes, runQuickNotesDeepCleanup } from "./quickNotesSync.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const isDev = !app.isPackaged;
 
 // 开发版与打包版隔离 userData：dev 用 lake-notes-dev（空库+种子），打包版用
 // lake-notes-electron（正式数据），避免测试数据互相污染。必须在 app ready 前设置。
+// 本地多端测试：dev 下可用 LAKE_USER_DATA 覆盖 userData，模拟不同「设备」各自独立的本地库。
 if (isDev) {
-  app.setPath("userData", path.join(app.getPath("appData"), "lake-notes-dev"));
+  const userDataOverride = process.env.LAKE_USER_DATA?.trim();
+  app.setPath("userData", userDataOverride || path.join(app.getPath("appData"), "lake-notes-dev"));
 }
 const DEV_SERVER_URL = "http://127.0.0.1:1421";
 
@@ -25,6 +28,62 @@ let store: Store;
 let quickNotes: QuickNotesStore;
 /** 历史定时器重启函数（配置变更时调用，见 save_history_settings IPC） */
 let restartHistoryTimers: (() => void) | null = null;
+/** S3 GC 定时器重启函数（配置变更时调用，见 save_s3_gc_settings IPC） */
+let restartGcTimers: (() => void) | null = null;
+/** 自动同步定时器重启函数（配置变更时调用，见 save_sync_settings IPC） */
+let restartSyncTimers: (() => void) | null = null;
+/** 本机进程内串行队列：同步、GC、深度清理同一时刻只跑一个（v4.1 唯一必需互斥）。 */
+let maintenanceQueue: Promise<unknown> = Promise.resolve();
+function enqueueMaintenance<T>(task: () => Promise<T>): Promise<T> {
+  const run = maintenanceQueue.then(task, task);
+  maintenanceQueue = run.then(() => undefined, () => undefined);
+  return run;
+}
+
+/** 同步单飞保护：同一时刻只允许一个完整同步（手动 / 自动 / 开关触发共用）。 */
+let syncInFlight = false;
+
+/** 执行完整同步（Lake → 小记），与 GC/深度清理共用串行队列。 */
+/** 广播同步进度到本进程所有受信任窗口（自动同步/定时同步没有单一触发渲染层时用）。 */
+function broadcastSyncProgress(p: SyncProgress): void {
+  for (const win of BrowserWindow.getAllWindows()) {
+    if (!trustedWebContents.has(win.webContents.id)) continue;
+    try { win.webContents.send("sync-progress", p); } catch { /* 窗口已关闭 */ }
+  }
+}
+
+async function runFullSync(onProgress?: (p: SyncProgress) => void): Promise<SyncResult> {
+  if (syncInFlight) throw new Error("同步正在进行中，请等待本次同步完成");
+  syncInFlight = true;
+  const fullSyncStart = Date.now();
+  log.sync.info("[perf] runFullSync start");
+  try {
+    return await enqueueMaintenance(async () => {
+      // 手动同步：只发回触发它的渲染层；自动同步：广播给本进程所有窗口。
+      const report = (p: SyncProgress) => {
+        if (onProgress) { try { onProgress(p); } catch { /* 渲染层已关闭 */ } }
+        else { broadcastSyncProgress(p); }
+      };
+      const result = await syncNow(store, report);
+      quickNotes.markTargetNotesSynced();
+      try {
+        const settings = store.getS3Settings();
+        if (!settings) throw new Error("请先保存 S3 配置");
+        const quick = await syncQuickNotes(quickNotes, settings, report);
+        result.quickNotes = quick;
+      } catch (error) {
+        result.quickNotes = { uploaded: 0, downloaded: 0, conflicts: 0, completedAt: new Date().toISOString(), error: String(error) };
+        report({ phase: "quick-notes", message: `小记同步失败：${String(error)}` });
+      }
+      store.recordSyncResult(JSON.stringify(result));
+      report({ phase: "done", message: "同步完成", supersededNotes: result.supersededNotes });
+      log.sync.info(`[perf] runFullSync done ${Date.now() - fullSyncStart}ms (uploaded=${result.uploaded}, downloaded=${result.downloaded}, conflicts=${result.conflicts}, superseded=${result.supersededNotes.length}, quickNotes=${result.quickNotes?.error ? "error" : "ok"})`);
+      return result;
+    });
+  } finally {
+    syncInFlight = false;
+  }
+}
 
 /** 本应用创建的窗口 webContents 白名单（防导航到其他页面后仍调用 IPC） */
 const trustedWebContents = new Set<number>();
@@ -93,6 +152,19 @@ async function createWindow() {
   // 审计 #6：窗口导航与 window.open 全部受控——阻止导航到应用页之外的任何地址；
   // 外链（http/https）交给系统浏览器打开，绝不进入应用窗口
   trustedWebContents.add(win.webContents.id);
+  // 渲染进程日志统一落盘：console-message 转发到主进程 logger（scope=renderer）。
+  // Electron 33 事件签名：event 对象带 { level, message, lineNumber, sourceId }；
+  // 同时兼容旧式 (event, level, message) 回调。
+  win.webContents.on("console-message" as unknown as "console-message", (event: unknown, ...args: unknown[]) => {
+    const e = event as { message?: unknown };
+    const msg = typeof e?.message === "string"
+      ? e.message
+      : typeof args[1] === "string" ? args[1] : String(args[1] ?? "");
+    if (!msg) return;
+    // 过滤 DevTools 样式占位与空消息
+    if (msg.includes("%c") || msg.length > 4000) return;
+    log.renderer.info(msg);
+  });
   win.webContents.on("will-navigate", (event, url) => {
     if (!isAppPageUrl(url)) event.preventDefault();
   });
@@ -124,7 +196,6 @@ function isTrustedSenderFrame(frame: WebFrameMain | null, sender: Electron.WebCo
 }
 
 function registerIpc() {
-  let syncInFlight = false;
   const handle = (channel: string, fn: (...args: any[]) => any) => {
     ipcMain.handle(channel, (event, ...args) => {
       if (!isTrustedSenderFrame(event.senderFrame, event.sender)) throw new Error("IPC 调用来源不受信任");
@@ -134,6 +205,7 @@ function registerIpc() {
 
   handle("bootstrap_workspace", () => store.bootstrap());
   handle("read_note", (id: string) => store.readNote(id));
+  handle("get_note_digest", (id: string) => store.getNoteDigest(id));
   handle("create_note", (title: string) => store.createNote(title));
   handle("save_note", (id: string, title: string, content: string, caches?: { markdown?: string | null; plain?: string | null }) => store.saveNote(id, title, content, caches));
   handle("update_note_caches", (id: string, markdown: string | null, plain: string | null) => {
@@ -197,31 +269,60 @@ function registerIpc() {
   handle("get_s3_settings", () => store.getS3Settings());
   handle("save_s3_settings", (settings: unknown) => store.saveS3Settings(settings as Parameters<Store["saveS3Settings"]>[0]));
   handle("test_s3_connection", () => testConnection(store));
+  handle("get_s3_gc_settings", () => store.getS3GcSettings());
+  handle("get_trash_reminder", () => store.listTrashReminder(store.getS3GcSettings().trashAutoPurgeDays));
+  handle("save_s3_gc_settings", (settings: unknown) => {
+    store.saveS3GcSettings(settings as Parameters<Store["saveS3GcSettings"]>[0]);
+    restartGcTimers?.();
+  });
+  handle("get_sync_settings", () => store.getSyncSettings());
+  handle("save_sync_settings", async (settings: unknown) => {
+    const next = settings as Parameters<Store["saveSyncSettings"]>[0];
+    const prev = store.getSyncSettings();
+    if (prev.enabled && !next.enabled) {
+      // 关闭云同步前做一次最后对齐；失败则保持开启并抛出，UI 可提示重试。
+      try {
+        await runFullSync();
+      } catch (error) {
+        throw new Error(`关闭云同步前的最后对齐失败：${String(error)}`);
+      }
+    }
+    store.saveSyncSettings(next);
+    restartSyncTimers?.();
+    restartGcTimers?.();
+    if (!prev.enabled && next.enabled) {
+      // 重新开启后立即做一次对齐（后台执行，失败仅告警）。
+      void runFullSync().catch((error) => {
+        const msg = error instanceof Error ? error.message : String(error);
+        console.warn("[sync] 重新开启后的对齐失败:", msg);
+        broadcastSyncProgress({ phase: "done", message: "同步失败", error: msg });
+      });
+    }
+    return store.getSyncSettings();
+  });
+  handle("list_s3_gc_pending", () => store.listS3GcPending());
+  handle("list_s3_gc_log", () => store.listS3GcLog());
+  handle("run_s3_gc_reconcile", () => {
+    if (!store.getSyncSettings().enabled) throw new Error("云同步已关闭");
+    return enqueueMaintenance(() => runGcReconcile(store));
+  });
+  handle("run_s3_deep_cleanup", (dryRun: boolean) => {
+    if (!store.getSyncSettings().enabled) throw new Error("云同步已关闭");
+    return enqueueMaintenance(async () => {
+      const settings = store.getS3Settings();
+      if (!settings) throw new Error("请先保存 S3 配置");
+      const gcCfg = store.getS3GcSettings();
+      const lake = await runDeepCleanup(store, { dryRun: !!dryRun });
+      const quick = await runQuickNotesDeepCleanup(quickNotes, settings, { dryRun: !!dryRun, gcRetentionDays: gcCfg.gcRetentionDays });
+      return { dryRun: !!dryRun, lake, quickNotes: quick };
+    });
+  });
   // sync_now 需要携带进度事件（主进程 → 渲染进程）
   ipcMain.handle("sync_now", (event) => {
     if (!isTrustedSenderFrame(event.senderFrame, event.sender)) throw new Error("IPC 调用来源不受信任");
-    if (syncInFlight) throw new Error("同步正在进行中，请等待本次同步完成");
-    syncInFlight = true;
-    return (async () => {
-      // 顺序是 Lake → 小记。Lake 成功后才允许转换源小记的删除 tombstone 同步出去；
-      // 小记空间独立，即使其失败也不能把 Lake 的成功同步变成失败。
-      const result = await syncNow(store, (progress) => { try { event.sender.send("sync-progress", progress); } catch { /* 窗口已关闭 */ } });
-      quickNotes.markTargetNotesSynced();
-      try {
-        const settings = store.getS3Settings();
-        if (!settings) throw new Error("请先保存 S3 配置");
-        const quick = await syncQuickNotes(quickNotes, settings, (progress) => { try { event.sender.send("sync-progress", progress); } catch { /* 窗口已关闭 */ } });
-        result.quickNotes = quick;
-      } catch (error) {
-        result.quickNotes = { uploaded: 0, downloaded: 0, conflicts: 0, completedAt: new Date().toISOString(), error: String(error) };
-        try { event.sender.send("sync-progress", { phase: "quick-notes", message: `小记同步失败：${String(error)}` }); } catch { /* 窗口已关闭 */ }
-      }
-      // syncNow() 先持久化 Lake 结果；小记阶段完成后覆盖 lastResult，
-      // 让下次打开同步面板仍能看到“小记失败但 Lake 已完成”等完整状态。
-      store.recordSyncResult(JSON.stringify(result));
-      try { event.sender.send("sync-progress", { phase: "done", message: "同步完成" }); } catch { /* 窗口已关闭 */ }
-      return result;
-    })().finally(() => { syncInFlight = false; });
+    if (!store.getSyncSettings().enabled) throw new Error("云同步已关闭，请先在偏好设置中开启");
+    const send = (p: SyncProgress) => { try { event.sender.send("sync-progress", p); } catch { /* 窗口已关闭 */ } };
+    return runFullSync(send);
   });
   handle("get_sync_status", () => store.getSyncStatus());
 
@@ -230,6 +331,9 @@ function registerIpc() {
   handle("create_quick_note", (input: { text: string; draftId: string; stagedImageIds: string[] }) => quickNotes.createQuickNote(input));
   handle("update_quick_note", (id: string, input: { text: string; draftId: string; stagedImageIds: string[]; retainedImageIds?: string[] }) => quickNotes.updateQuickNote(id, input));
   handle("delete_quick_note", (id: string) => quickNotes.deleteQuickNote(id));
+  handle("list_quick_note_trash", () => quickNotes.listQuickNoteTrash());
+  handle("restore_quick_note", (id: string) => quickNotes.restoreQuickNote(id));
+  handle("purge_quick_note", (id: string) => quickNotes.purgeQuickNote(id));
   handle("discard_quick_note_draft", (draftId: string) => quickNotes.discardDraft(draftId));
   handle("discard_staged_quick_note_image", (draftId: string, imageId: string) => quickNotes.discardStagedImage(draftId, imageId));
   handle("stage_quick_note_image", (draftId: string, input: { bytes: number[]; filename: string }) => {
@@ -256,7 +360,21 @@ if (!app.requestSingleInstanceLock()) {
   });
 
   app.whenReady().then(() => {
+    initLogger();
+    log.app.info("app ready: initLogger done");
     store = new Store(workspaceRoot());
+    // 开发版固定 S3 配置（多端联调用）：首次启动（尚无配置）时写入；之后仍可在设置中修改。
+    if (isDev && !store.getS3Settings()) {
+      store.saveS3Settings({
+        endpoint: "https://s3.cn-north-1.qiniucs.com",
+        region: "cn-north-1",
+        bucket: "local-lake-hebei",
+        prefix: "lake-notes",
+        accessKeyId: "***REMOVED***",
+        secretAccessKey: "***REMOVED***",
+        forcePathStyle: false,
+      });
+    }
     quickNotes = new QuickNotesStore(workspaceRoot());
     quickNotes.recoverConversions((noteId) => store.hasNote(noteId), (noteId) => store.removeUntrackedNoteArtifacts(noteId));
     registerCdnRedirect();
@@ -299,11 +417,69 @@ if (!app.requestSingleInstanceLock()) {
     startHistoryTimers();
     restartHistoryTimers = startHistoryTimers;
 
+    // 自动同步（interval）定时器：仅在云同步开启且模式为 interval 时运行。
+    let syncTimer: NodeJS.Timeout | null = null;
+    const startSyncTimers = () => {
+      if (syncTimer) { clearInterval(syncTimer); syncTimer = null; }
+      const cfg = store.getSyncSettings();
+      if (!cfg.enabled || cfg.autoMode !== "interval" || cfg.autoIntervalMinutes < 1) return;
+      syncTimer = setInterval(() => {
+        void runFullSync().catch((error) => {
+          const msg = error instanceof Error ? error.message : String(error);
+          console.warn("[sync] 自动同步失败:", msg);
+          broadcastSyncProgress({ phase: "done", message: "同步失败", error: msg });
+        });
+      }, cfg.autoIntervalMinutes * 60 * 1000);
+    };
+    startSyncTimers();
+    restartSyncTimers = startSyncTimers;
+
+    // onOpenClose：应用就绪时对齐一次（失败仅告警）。
+    const syncCfgOpen = store.getSyncSettings();
+    if (syncCfgOpen.enabled && syncCfgOpen.autoMode === "onOpenClose") {
+      void runFullSync().catch((error) => {
+        const msg = error instanceof Error ? error.message : String(error);
+        console.warn("[sync] 开启同步失败:", msg);
+        broadcastSyncProgress({ phase: "done", message: "同步失败", error: msg });
+      });
+    }
+
+    // S3 GC 定期对账（gcIntervalHours 默认 24；0=关闭）。云同步关闭时不执行。
+    let gcTimer: NodeJS.Timeout | null = null;
+    const startGcTimer = () => {
+      if (gcTimer) { clearInterval(gcTimer); gcTimer = null; }
+      if (!store.getSyncSettings().enabled) return;
+      const gcCfg = store.getS3GcSettings();
+      if (gcCfg.gcIntervalHours > 0) {
+        gcTimer = setInterval(() => {
+          void enqueueMaintenance(async () => {
+            try {
+              const r = await runGcReconcile(store);
+              if (r.deleted > 0) console.log(`[s3-gc] 定期对账删除 ${r.deleted} 个过期对象`);
+            } catch (error) { console.warn("[s3-gc] 定期对账失败:", error); }
+          });
+        }, gcCfg.gcIntervalHours * 3600 * 1000);
+      }
+    };
+    startGcTimer();
+    restartGcTimers = startGcTimer;
+
     app.on("activate", () => {
       if (BrowserWindow.getAllWindows().length === 0) createWindow();
     });
   });
 }
+
+// onOpenClose：退出前做一次同步（阻止退出 → 同步完成后真正退出）。
+let quittingForSync = false;
+app.on("before-quit", (event) => {
+  if (quittingForSync || !store || !quickNotes) return;
+  const cfg = store.getSyncSettings();
+  if (!cfg.enabled || cfg.autoMode !== "onOpenClose" || syncInFlight) return;
+  event.preventDefault();
+  quittingForSync = true;
+  void runFullSync().finally(() => app.quit());
+});
 
 app.on("window-all-closed", () => {
   if (process.platform !== "darwin") app.quit();

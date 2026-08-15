@@ -17,7 +17,7 @@ const MIME_MAP: Record<string, string> = {
   ".json": "application/json",
 };
 
-export const ASSET_PORT = 19876;
+export const ASSET_PORT = Number(process.env.LAKE_ASSET_PORT) || 19876;
 
 function sniffMime(bytes: Buffer): string | null {
   const hex = bytes.subarray(0, 16).toString("hex");

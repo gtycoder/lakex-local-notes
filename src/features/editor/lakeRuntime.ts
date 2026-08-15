@@ -3,6 +3,7 @@ import { renderToString } from "react-dom/server";
 import { Doc, DefaultEditorConfig } from "lakex-editor-react-component";
 import { uploadLakeResource } from "./resourceUpload";
 import { BoardCard } from "./BoardCard";
+import { ASSET_ORIGIN } from "../../lib/assetPort";
 
 export interface LakeEditorInstance {
   setDocument(type: "text/lake", content: string): void;
@@ -193,9 +194,9 @@ if (typeof window !== "undefined") {
       // 本地图片资源请求的实际发起时间（Resource Timing，回顾式，无需提前监听）
       const images = performance
         .getEntriesByType("resource")
-        .filter((e) => e.name.includes("127.0.0.1:19876/"))
+        .filter((e) => e.name.includes(`${ASSET_ORIGIN}/`))
         .map((e) => ({
-          name: e.name.replace(/^http:\/\/127\.0\.0\.1:19876\//, "").slice(0, 64),
+          name: e.name.startsWith(`${ASSET_ORIGIN}/`) ? e.name.slice(ASSET_ORIGIN.length + 1).slice(0, 64) : e.name.slice(0, 64),
           start: `${Math.round(e.startTime)}ms`,
           duration: `${Math.round(e.duration)}ms`,
         }))
@@ -308,7 +309,7 @@ export function createLakeDocument(
     image: {
       createUploadPromise: (request: unknown) => uploadLakeResource(request, noteId),
       // 本地资源服务器 URL 必须排除，否则 Lake 每次 setDocument 都会重新下载并上传本地图片
-      isCaptureImageURL: (url: string) => !url.startsWith("data:") && !url.startsWith("blob:") && !url.startsWith("http://127.0.0.1:19876/"),
+      isCaptureImageURL: (url: string) => !url.startsWith("data:") && !url.startsWith("blob:") && !url.startsWith(`${ASSET_ORIGIN}/`),
     },
     file: {
       createUploadPromise: (request: unknown) => uploadLakeResource(request, noteId),

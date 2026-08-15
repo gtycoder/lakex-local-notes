@@ -132,6 +132,9 @@ button { cursor: pointer; }
 .sync-progress-bar.indeterminate { width: 34% !important; animation: sync-indeterminate 1.2s ease-in-out infinite; }
 @keyframes sync-indeterminate { 0% { transform: translateX(-110%); } 100% { transform: translateX(320%); } }
 .sync-progress-message { margin-top: 8px; color: #616974; font-size: 11px; }
+.sync-progress-sub { margin-top: 8px; padding-top: 8px; border-top: 1px dashed #d5e4dc; }
+.sync-progress-row--sub { color: #4d7a64; font-size: 11px; font-weight: 500; }
+.sync-progress-row--sub .sync-progress-track { margin-top: 6px; }
 .sync-last-result { margin: 0 20px 12px; padding: 10px 12px; border-radius: 6px; background: #f6f7f8; color: #545d68; font-size: 11px; }
 .sync-last-row { display: flex; align-items: center; gap: 7px; }
 .sync-last-row + .sync-last-row { margin-top: 5px; }
@@ -373,6 +376,20 @@ button { cursor: pointer; }
   flex-shrink: 0;
 }
 
+/* 远端删除标记：标签变灰 + 红色"已删除"徽标（正文保留，供复制/从回收站恢复） */
+.tab-item.deleted { color: #b91c1c; background: rgba(220, 38, 38, .06); }
+.tab-item.deleted .tab-title { text-decoration: line-through; opacity: .72; }
+.tab-item.deleted.active { background: rgba(220, 38, 38, .10); color: #b91c1c; box-shadow: inset 0 -1px 0 #ef4444; }
+.tab-deleted-badge {
+  flex: none;
+  padding: 0 4px;
+  border-radius: 3px;
+  background: rgba(220, 38, 38, .12);
+  color: #b91c1c;
+  font-size: 10px;
+  line-height: 1.5;
+}
+
 .tab-close {
   display: flex;
   align-items: center;
@@ -611,6 +628,19 @@ ne-card[data-card-name="codeblock"] .ne-card-resizer-mask {
 .statusbar-export-md { display: flex; align-items: center; gap: 4px; height: 22px; margin-left: 6px; padding: 0 8px; border: 1px solid #dfe2e7; border-radius: 4px; color: #48515c; background: #fff; font-size: 11px; }
 .statusbar-export-md:hover { border-color: #3a8064; color: #28775a; background: #f3f8f5; }
 .statusbar-notice { color: #28775a; font-size: 11px; margin-right: 6px; }
+.statusbar-notice-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-right: 6px;
+  padding: 0;
+  border: none;
+  background: none;
+  font: inherit;
+  cursor: pointer;
+}
+.statusbar-notice-action:hover { text-decoration: underline; }
+.notice-action-label { font-weight: 600; white-space: nowrap; }
 
 /* ===== Apple-style management shell (Lake editor internals intentionally untouched) ===== */
 :root {
@@ -1254,6 +1284,11 @@ ne-card[data-card-name="codeblock"] .ne-card-resizer-mask {
   .statusbar-sync.syncing { color: #557c6c; }
   .statusbar-sync.success { color: var(--shell-accent-strong); }
   .statusbar-sync.error { color: #b34b45; }
+  .statusbar-sync.pending { color: #a56b19; }
+  .statusbar-sync.synced { color: #557c6c; }
+  .statusbar-sync.conflict { color: #b1433e; }
+  .statusbar-sync.disabled { color: #98a0aa; }
+  .statusbar-sync.idle { color: #8b929c; }
 }
 
 @keyframes tab-switcher-pop {
@@ -1770,3 +1805,491 @@ ne-card[data-card-name="codeblock"] .ne-card-resizer-mask {
 .history-delete:hover { background: rgba(178, 94, 60, .08) !important; }
 .history-clean-all { margin: 0 10px 8px; color: #b25e3c !important; border-color: rgba(178, 94, 60, .18) !important; }
 .history-clean-all:hover { background: rgba(178, 94, 60, .08) !important; }
+
+/* S3 GC / 小记回收站（v4.1 后端接线 UI） */
+.quick-notes-header-actions { display: flex; align-items: center; gap: 8px; }
+.quick-notes-trash-button { padding: 5px 10px; border: 1px solid #e2e5ea; border-radius: 8px; background: #fff; color: #48515c; font-size: 12px; cursor: pointer; }
+.quick-notes-trash-panel { width: min(780px, 100%); margin: 0 auto 16px; padding: 12px; border: 1px solid #e2e5ea; border-radius: 12px; background: #fbfbfd; display: flex; flex-direction: column; gap: 8px; max-height: 240px; overflow: auto; }
+.quick-notes-trash-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 12px; color: #48515c; }
+.quick-notes-trash-row button { padding: 4px 8px; border: 1px solid #e2e5ea; border-radius: 6px; background: #fff; cursor: pointer; }
+.quick-notes-trash-row button.danger { color: #c2410c; border-color: #fed7aa; }
+
+/* 设置弹窗 v2：大、不透明、左导航右内容、可拖动调节 */
+.settings-panel-large { display: flex; flex-direction: column; overflow: hidden; background: #fbfbfd; border-radius: 14px; }
+.settings-layout { display: flex; flex: 1; min-height: 0; }
+.settings-nav { width: 168px; flex: 0 0 auto; padding: 12px 10px; border-right: 1px solid #eceef0; background: #f5f6f8; display: flex; flex-direction: column; gap: 4px; }
+.settings-nav-item { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border: 0; border-radius: 8px; background: transparent; color: #48515c; font-size: 13px; cursor: pointer; text-align: left; }
+.settings-nav-item:hover { background: rgba(31, 35, 41, .06); }
+.settings-nav-item.active { background: #fff; color: #20242c; box-shadow: 0 1px 4px rgba(31, 35, 41, .12); }
+.settings-content { flex: 1; min-width: 0; overflow: auto; padding: 16px 18px; }
+.settings-resize { position: absolute; right: 2px; bottom: 2px; width: 16px; height: 16px; cursor: nwse-resize; }
+.settings-resize::after { content: ""; position: absolute; right: 3px; bottom: 3px; width: 8px; height: 8px; border-right: 2px solid #b7bcc4; border-bottom: 2px solid #b7bcc4; }
+.settings-panel { position: relative; }
+
+/* 回收站 Tab（文档/小记） */
+.trash-tabs { display: flex; gap: 4px; padding: 0 14px 8px; }
+.trash-tab { padding: 6px 14px; border: 0; border-radius: 8px 8px 0 0; background: transparent; color: #6b7280; font-size: 13px; cursor: pointer; }
+.trash-tab.active { background: #fff; color: #20242c; box-shadow: 0 -1px 4px rgba(31, 35, 41, .08); }
+
+/* 小记页面：颜色过渡分层，减少线条 */
+.quick-notes-pane { background: linear-gradient(180deg, #f7f8fa 0%, #eef0f4 100%); }
+.quick-notes-pane .quick-note-composer { border: 0; box-shadow: 0 6px 22px rgba(31, 35, 41, .10); background: #fff; }
+.quick-notes-pane .quick-notes-empty { border: 0; background: rgba(255, 255, 255, .55); }
+.quick-note-entry { border: 0; background: transparent; box-shadow: none; }
+
+/* 历史弹窗 v2：放大 + 左目录右预览 */
+.history-panel { width: 860px; max-width: calc(100vw - 40px); height: min(640px, 84vh); min-height: 420px; }
+.history-split { display: flex; flex: 1 1 auto; min-height: 0; }
+.history-list-left { flex: 0 0 320px; border-right: 1px solid #eceff1; }
+.history-preview-inline { flex: 1 1 auto; min-width: 0; overflow: auto; padding: 12px 16px; }
+.history-preview-inline-title { font-size: 12px; color: #6b7280; margin-bottom: 8px; }
+
+/* ===== v2 UI 收紧：区域间距 / 细滚动条 / 顶栏融合 / 小记顶栏融合 ===== */
+@media (min-width: 761px) {
+  /* 相邻区域贴边，仅外侧圆角，缩短视觉间距 */
+  .workspace { border-radius: 10px 0 0 10px; border-right: 0; }
+  .outline-sidebar__content { border-radius: 0 10px 10px 0; border-left: 0; }
+
+  /* 顶栏恢复原有横向渐变（用户要求原样）；右侧大纲轨顶部取顶栏右端色，消除边界。
+     左侧 activity-rail / sidebar 保持原有 #e6e8ec 渐变，不做改动。 */
+  .tab-bar { background: linear-gradient(90deg, #e9e7f2 0%, #f4f4f7 55%, #fbfcfd 100%); }
+  .outline-sidebar { background: linear-gradient(180deg, #fbfcfd 0%, var(--shell-material) 200px); }
+
+  /* 小记：左轨颜色不变；小记内容用“视口固定”的横向渐变，与顶栏逐像素对齐融合，
+     再叠加纵向材质过渡。 */
+  .app-shell.quick-notes-active .workspace { border: 0; border-radius: 0; box-shadow: none; background: transparent; }
+  .app-shell.quick-notes-active .quick-notes-pane {
+    background:
+      linear-gradient(180deg, rgba(255,255,255,0) 0%, var(--shell-material) 240px),
+      linear-gradient(90deg, #e9e7f2 0%, #f4f4f7 55%, #fbfcfd 100%);
+    background-attachment: local, fixed;
+    padding-top: 8px;
+  }
+}
+
+.document-pane, .document-pane *, .lake-editor-mount, .lake-editor-mount * { scrollbar-width: thin !important; scrollbar-color: rgba(31,35,41,.25) transparent !important; }
+.document-pane::-webkit-scrollbar, .document-pane *::-webkit-scrollbar, .lake-editor-mount::-webkit-scrollbar, .lake-editor-mount *::-webkit-scrollbar { width: 6px !important; height: 6px !important; }
+.document-pane::-webkit-scrollbar-thumb, .document-pane *::-webkit-scrollbar-thumb, .lake-editor-mount::-webkit-scrollbar-thumb, .lake-editor-mount *::-webkit-scrollbar-thumb { background: rgba(31,35,41,.18) !important; border-radius: 3px !important; }
+.document-pane::-webkit-scrollbar:hover, .document-pane *::-webkit-scrollbar:hover, .lake-editor-mount::-webkit-scrollbar:hover, .lake-editor-mount *::-webkit-scrollbar:hover { width: 10px !important; height: 10px !important; }
+
+/* 细滚动条（思源式），hover 变粗 */
+* { scrollbar-width: thin; scrollbar-color: rgba(31, 35, 41, .22) transparent; }
+*::-webkit-scrollbar { width: 6px; height: 6px; }
+*::-webkit-scrollbar-track { background: transparent; }
+*::-webkit-scrollbar-thumb { background: rgba(31, 35, 41, .16); border-radius: 3px; }
+*::-webkit-scrollbar-thumb:hover { background: rgba(31, 35, 41, .34); }
+*::-webkit-scrollbar:hover { width: 10px; height: 10px; }
+
+/* 设置表单：思源式两列表单行（label 左、input 右，等宽对齐） */
+.settings-field { display: grid; grid-template-columns: 120px 1fr; align-items: center; gap: 12px; margin-bottom: 10px; }
+.settings-field > span { color: #48515c; font-size: 13px; }
+.settings-field select { width: 100%; height: 34px; padding: 0 10px; border: 1px solid #dfe2e7; border-radius: 6px; background: #fff; font-size: 13px; color: #20242c; outline: 0; }
+.settings-field input { width: 100%; height: 34px; padding: 0 10px; border: 1px solid #dfe2e7; border-radius: 6px; background: #fff; font-size: 13px; color: #20242c; outline: 0; }
+.settings-field input:focus { border-color: #2a5fd0; box-shadow: 0 0 0 2px rgba(42, 95, 208, .12); }
+
+/* 历史弹窗可拉伸 + 更高 */
+.history-panel { position: relative; }
+.history-panel .settings-resize { position: absolute; right: 2px; bottom: 2px; }
+
+/* ===== 2026-08-13 统一窗口材质 / 思源式浮动面板 ===== */
+:root {
+  --shell-unified-background: linear-gradient(180deg, #e6e8ec 0%, #f1f2f4 220px);
+  --shell-unified-topbar: linear-gradient(90deg, #e9e7f2 0%, #f4f4f7 55%, #fbfcfd 100%);
+  --floating-dialog-surface: rgba(253, 253, 254, .98);
+  --floating-dialog-border: rgba(31, 35, 41, .13);
+  --floating-dialog-shadow: 0 24px 70px rgba(23, 27, 33, .24), 0 2px 8px rgba(23, 27, 33, .08);
+}
+
+@media (min-width: 761px) {
+  /* 桌面壳层使用一块连续材质：不再把顶栏、资料库和正文画成三张卡片。 */
+  .app-shell,
+  .activity-rail,
+  .sidebar {
+    background: var(--shell-unified-background) !important;
+  }
+  .app-shell { border: 0; }
+  .activity-rail,
+  .sidebar,
+  .sidebar.sidebar-docked,
+  .sidebar.sidebar-floating {
+    border: 0 !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+  }
+  .sidebar.sidebar-docked {
+    margin: 0;
+    height: calc(100% - var(--topbar-height));
+  }
+  .workspace,
+  .document-pane,
+  .multi-tab-editor {
+    background: transparent !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+  }
+  .tab-bar,
+  .quick-notes-titlebar {
+    background: var(--shell-unified-topbar) !important;
+    border: 0 !important;
+    box-shadow: inset 0 -1px 0 rgba(31, 35, 41, .035) !important;
+  }
+  .outline-sidebar,
+  .outline-sidebar__content,
+  .outline-sidebar--docked .outline-sidebar__content,
+  .outline-sidebar--collapsed .outline-sidebar__content {
+    background: var(--shell-unified-background) !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+  }
+  .statusbar {
+    border: 0 !important;
+    background: transparent !important;
+    box-shadow: none !important;
+  }
+
+  /* 小记页保留与资料库相同的窄 rail 颜色，正文单独使用工作面背景。 */
+  .app-shell.quick-notes-active .activity-rail {
+    background: #e6e8ec !important;
+  }
+  .app-shell.quick-notes-active .quick-notes-pane {
+    background: linear-gradient(180deg, #f1f2f4 0%, #eef0f2 240px) !important;
+    background-attachment: local !important;
+  }
+}
+
+/* 三个大面板共用同一套：居中打开、可拖动、可拉伸、尺寸受视口约束。 */
+.settings-overlay,
+.history-panel-backdrop,
+.trash-panel-backdrop {
+  display: grid !important;
+  position: fixed !important;
+  z-index: 800 !important;
+  inset: 0 !important;
+  place-items: center !important;
+  padding: 16px !important;
+  background: rgba(31, 35, 41, .22) !important;
+  backdrop-filter: blur(7px) saturate(1.04) !important;
+  -webkit-backdrop-filter: blur(7px) saturate(1.04) !important;
+}
+
+.floating-dialog {
+  position: fixed !important;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  max-width: calc(100vw - 32px) !important;
+  max-height: calc(100vh - 32px) !important;
+  overflow: hidden;
+  border: 1px solid var(--floating-dialog-border) !important;
+  border-radius: 12px !important;
+  background: var(--floating-dialog-surface) !important;
+  box-shadow: var(--floating-dialog-shadow) !important;
+  animation: floating-dialog-enter 180ms var(--ease-out);
+}
+.floating-dialog-header {
+  flex: 0 0 auto;
+  cursor: move;
+  user-select: none;
+  touch-action: none;
+}
+.floating-dialog-header button,
+.floating-dialog-header input,
+.floating-dialog-header textarea,
+.floating-dialog-header select,
+.floating-dialog-header a {
+  -webkit-app-region: no-drag;
+}
+.floating-dialog-resize {
+  position: absolute;
+  right: 2px;
+  bottom: 2px;
+  z-index: 3;
+  width: 20px;
+  height: 20px;
+  cursor: nwse-resize;
+  touch-action: none;
+}
+.floating-dialog-resize::before,
+.floating-dialog-resize::after {
+  content: "";
+  position: absolute;
+  right: 4px;
+  bottom: 4px;
+  width: 9px;
+  height: 1px;
+  border-radius: 1px;
+  background: #aeb4bd;
+  transform: rotate(-45deg);
+  transform-origin: right center;
+}
+.floating-dialog-resize::after {
+  right: 3px;
+  bottom: 8px;
+  width: 6px;
+  opacity: .72;
+}
+.settings-panel-large,
+.history-panel,
+.trash-panel {
+  width: auto;
+  max-width: calc(100vw - 32px) !important;
+  max-height: calc(100vh - 32px) !important;
+}
+.settings-panel-large { min-width: 0; }
+.history-panel,
+.trash-panel { min-height: 0; }
+.settings-panel-large .settings-layout,
+.history-panel .history-split,
+.trash-panel > .trash-tabs,
+.trash-panel > .trash-panel-hint,
+.trash-panel > .trash-list,
+.trash-panel > .quick-notes-trash-panel {
+  min-height: 0;
+}
+.history-panel header,
+.trash-panel header,
+.settings-panel-large .settings-header {
+  flex: 0 0 auto;
+  background: rgba(250, 250, 251, .94) !important;
+  border-bottom: 1px solid rgba(31, 35, 41, .08) !important;
+}
+.history-panel header,
+.trash-panel header { cursor: move; user-select: none; touch-action: none; }
+.history-panel header button,
+.trash-panel header button,
+.settings-panel-large .settings-header button { cursor: pointer; }
+
+/* 同步 tooltip：参考思源的深色多行提示，不再被 nowrap 吃掉换行。 */
+@media (min-width: 761px) {
+  .sync-tab-action[data-tooltip]::after {
+    max-width: 310px;
+    padding: 8px 11px;
+    border: 0;
+    border-radius: 8px;
+    color: #f8f9ff;
+    background: #34333b;
+    box-shadow: 0 10px 26px rgba(31, 35, 41, .24);
+    font-size: 12px;
+    line-height: 1.45;
+    text-align: left;
+    white-space: pre-line;
+  }
+  .sync-tab-action[data-tooltip]::before {
+    content: "";
+    position: absolute;
+    top: calc(100% + 4px);
+    left: 50%;
+    z-index: 21;
+    width: 8px;
+    height: 8px;
+    background: #34333b;
+    opacity: 0;
+    transform: translate(-50%, -3px) rotate(45deg);
+    transition: opacity 140ms ease-out, transform 140ms var(--shell-ease);
+    pointer-events: none;
+  }
+  .sync-tab-action[data-tooltip]:hover::before,
+  .sync-tab-action[data-tooltip]:focus-visible::before {
+    opacity: 1;
+    transform: translate(-50%, 0) rotate(45deg);
+  }
+}
+
+@keyframes floating-dialog-enter {
+  from { opacity: 0; transform: translate(-50%, -50%) scale(.975); }
+  to { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+}
+
+@media (max-width: 760px) {
+  .settings-overlay,
+  .history-panel-backdrop,
+  .trash-panel-backdrop {
+    align-items: end !important;
+    padding: 12px 12px max(12px, env(safe-area-inset-bottom)) !important;
+  }
+  .floating-dialog {
+    position: relative !important;
+    inset: auto !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    max-height: calc(100dvh - 24px) !important;
+    transform: none !important;
+    animation: none;
+  }
+}
+
+/* ===== 2026-08-13 shell continuity pass =====
+ * The window chrome and the fixed rails share one painted surface.  The
+ * editor is intentionally the only opaque "room" opened from that surface.
+ * Keeping the base gradient on .app-shell (rather than repeating it on each
+ * column) prevents the top strip from breaking at the rail boundaries.
+ */
+@media (min-width: 761px) {
+  .app-shell {
+    position: relative;
+    isolation: isolate;
+    /*
+     * One material is painted for the whole desktop shell.  The topbar is
+     * not a separate strip anymore: the horizontal tint remains visible at
+     * the top, then eases into the rail background below it.  Because this
+     * layer belongs to the shell, the left/right fixed rails and the titlebar
+     * share the exact same pixels at their join.
+     */
+    background:
+      linear-gradient(
+        180deg,
+        rgba(255, 255, 255, 0) 0,
+        rgba(235, 236, 240, .08) 128px,
+        rgba(230, 232, 236, .48) 220px,
+        rgba(241, 242, 244, .94) 340px,
+        #f1f2f4 100%
+      ),
+      var(--shell-unified-topbar) !important;
+  }
+
+  .tab-bar,
+  .quick-notes-titlebar {
+    background: transparent !important;
+    border-bottom-color: transparent !important;
+    box-shadow: none !important;
+  }
+
+  .activity-rail,
+  .sidebar,
+  .sidebar.sidebar-docked,
+  .sidebar.sidebar-floating,
+  .outline-sidebar,
+  .outline-sidebar__content,
+  .outline-sidebar--docked .outline-sidebar__content,
+  .outline-sidebar--collapsed .outline-sidebar__content {
+    background: transparent !important;
+  }
+
+  .activity-rail,
+  .sidebar,
+  .outline-sidebar__rail {
+    border-color: rgba(31, 35, 41, .055) !important;
+  }
+
+  .workspace,
+  .document-pane,
+  .document-pane:has(> .multi-tab-editor) {
+    background: transparent !important;
+    border: 0 !important;
+    border-radius: 14px 0 0 0 !important;
+    box-shadow: none !important;
+    overflow: hidden;
+  }
+
+  .document-pane,
+  .document-pane:has(> .multi-tab-editor) {
+    background: #fff !important;
+  }
+
+  .tab-item.active {
+    background: rgba(255, 255, 255, .52) !important;
+    box-shadow: inset 0 -1px 0 rgba(255, 255, 255, .52) !important;
+  }
+
+  .app-shell.quick-notes-active .activity-rail {
+    background: #e6e8ec !important;
+  }
+
+  .app-shell.quick-notes-active .quick-notes-pane {
+    background: linear-gradient(180deg, #eef0f2 0%, #f1f2f4 240px) !important;
+  }
+}
+
+/* ===== 2026-08-13 floating panel surface correction =====
+ * The shell itself remains continuous, but an opened/floating directory or
+ * outline is a real work surface.  Do not let the shell transparency rule
+ * erase the white panel that is used by the docked variants. */
+@media (min-width: 761px) {
+  .sidebar.sidebar-docked,
+  .sidebar.sidebar-floating {
+    background: #fff !important;
+  }
+
+  .sidebar.sidebar-docked {
+    border: 1px solid rgba(0, 0, 0, .08) !important;
+    border-radius: 12px !important;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, .05), 0 8px 22px rgba(0, 0, 0, .06) !important;
+  }
+
+  .sidebar.sidebar-floating {
+    border-top: 1px solid rgba(0, 0, 0, .16) !important;
+    border-right: 1px solid rgba(0, 0, 0, .16) !important;
+    border-bottom: 1px solid rgba(0, 0, 0, .16) !important;
+    border-left: 0 !important;
+    border-radius: 0 14px 14px 0 !important;
+    box-shadow: 18px 0 50px rgba(43, 50, 78, .18), 2px 0 8px rgba(43, 50, 78, .08) !important;
+  }
+
+  .outline-sidebar--docked .outline-sidebar__content {
+    background: #fff !important;
+    border-top: 1px solid rgba(0, 0, 0, .08) !important;
+    border-right: 0 !important;
+    border-bottom: 1px solid rgba(0, 0, 0, .08) !important;
+    border-left: 1px solid rgba(0, 0, 0, .08) !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+  }
+
+  .outline-sidebar--collapsed.outline-sidebar--hovered .outline-sidebar__content {
+    background: #fff !important;
+    border: 1px solid rgba(0, 0, 0, .16) !important;
+    border-right: 0 !important;
+    border-radius: 14px 0 0 14px !important;
+    box-shadow: -18px 0 50px rgba(43, 50, 78, .18), -2px 0 8px rgba(43, 50, 78, .08) !important;
+  }
+}
+
+/* ===== 2026-08-13 fixed library panel bottom alignment =====
+ * A docked directory occupies the full shell height, just like its activity
+ * rail and floating preview.  The previous calc(100% - topbar) stopped it
+ * above the window/status area and left a visible bottom gap. */
+@media (min-width: 761px) {
+  .sidebar.sidebar-docked {
+    height: 100% !important;
+    margin-bottom: 0 !important;
+    align-self: stretch !important;
+  }
+}
+
+/* 未配置 S3 时的非阻塞操作提示：提供直接进入设置的入口，避免显示 IPC 原始错误。 */
+.sync-setup-toast {
+  display: flex;
+  position: fixed;
+  right: 18px;
+  bottom: 42px;
+  z-index: 700;
+  align-items: center;
+  gap: 12px;
+  width: min(390px, calc(100vw - 32px));
+  padding: 12px 12px 12px 14px;
+  border: 1px solid rgba(53, 117, 240, .18);
+  border-radius: 12px;
+  color: #25324a;
+  background: rgba(255, 255, 255, .98);
+  box-shadow: 0 14px 36px rgba(31, 43, 67, .18), 0 2px 8px rgba(31, 43, 67, .08);
+  animation: sync-setup-toast-in 180ms var(--shell-ease, cubic-bezier(.22, 1, .36, 1));
+}
+.sync-setup-toast-copy { display: flex; align-items: center; gap: 10px; min-width: 0; flex: 1; }
+.sync-setup-toast-copy > span:last-child { display: flex; min-width: 0; flex-direction: column; gap: 3px; }
+.sync-setup-toast-copy strong { color: #263652; font-size: 13px; font-weight: 650; }
+.sync-setup-toast-copy small { color: #737d8e; font-size: 11px; line-height: 1.4; }
+.sync-setup-toast-icon { display: grid; flex: 0 0 30px; place-items: center; width: 30px; height: 30px; border-radius: 9px; color: #3575f0; background: rgba(53, 117, 240, .11); }
+.sync-setup-toast-action { flex: 0 0 auto; height: 30px; padding: 0 11px; border: 0; border-radius: 7px; color: #fff; background: #3575f0; font-size: 12px; font-weight: 600; }
+.sync-setup-toast-action:hover { background: #2a5fd0; }
+.sync-setup-toast-close { display: grid; flex: 0 0 24px; place-items: center; width: 24px; height: 24px; padding: 0; border: 0; border-radius: 6px; color: #8a93a1; background: transparent; }
+.sync-setup-toast-close:hover { color: #39465b; background: #eef1f6; }
+@keyframes sync-setup-toast-in { from { opacity: 0; transform: translateY(7px) scale(.98); } to { opacity: 1; transform: translateY(0) scale(1); } }
+@media (max-width: 760px) {
+  .sync-setup-toast { right: 12px; bottom: calc(12px + env(safe-area-inset-bottom)); left: 12px; width: auto; }
+}

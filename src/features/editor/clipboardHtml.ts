@@ -110,7 +110,7 @@ function copySafeAttributes(source: Element, target: HTMLElement): void {
   if (style) target.setAttribute("style", style);
 }
 
-const LOCAL_ASSET_PREFIX = "http://127.0.0.1:19876/";
+import { LOCAL_ASSET_PREFIX } from "../../lib/assetPort";
 
 function assetUrlToDataUrlSync(url: string): string | null {
   if (!url.startsWith(LOCAL_ASSET_PREFIX)) return null;

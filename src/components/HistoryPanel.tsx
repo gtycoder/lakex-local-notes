@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { Camera, Clock, FileText, History, RotateCcw, Trash2, X } from "lucide-react";
 import { native } from "../lib/native";
+import { useFloatingDialog } from "./useFloatingDialog";
 
 export interface HistoryItem {
   id: number; createdAt: string; size: number; contentHash: string; refCount: number; filePath: string;
@@ -32,6 +33,8 @@ export function HistoryPanel({ open, noteId, onClose, onRestored }: {
     imageData?: string;
     size?: number;
   } | null>(null);
+  const [inline, setInline] = useState<{ title: string; text: string; size?: number } | null>(null);
+  const floating = useFloatingDialog({ initialSize: { w: 900, h: 640 }, minSize: { w: 680, h: 440 } });
 
   const refreshHistory = async () => {
     if (!noteId) return;
@@ -128,6 +131,16 @@ export function HistoryPanel({ open, noteId, onClose, onRestored }: {
     }
   };
 
+  const previewHistoryInline = async (h: HistoryItem) => {
+    try {
+      const r = await native.previewHistorySnapshot(h.id);
+      if (r) setInline({ title: new Date(h.createdAt).toLocaleString(), text: r.plain, size: h.size });
+      else setError("快照预览失败（文件可能已删除）");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    }
+  };
+
   const previewOrphanFile = async (o: NoteOrphan) => {
     if (!noteId) return;
     try {
@@ -146,9 +159,9 @@ export function HistoryPanel({ open, noteId, onClose, onRestored }: {
 
   if (!open || !noteId) return null;
   return createPortal(
-    <div className="history-panel-backdrop" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-      <section className="history-panel" role="dialog" aria-modal="true">
-        <header>
+    <div className="history-panel-backdrop" onMouseDown={(e) => { if (e.target === e.currentTarget && !floating.interactionRef.current) onClose(); }}>
+      <section ref={floating.panelRef} className="floating-dialog history-panel" style={floating.panelStyle} role="dialog" aria-modal="true">
+        <header className="floating-dialog-header" onPointerDown={floating.startDrag}>
           <div className="history-panel-title">
             <History size={17} />
             <h2>历史版本</h2>
@@ -173,23 +186,35 @@ export function HistoryPanel({ open, noteId, onClose, onRestored }: {
         </p>
         {error && <div className="history-error">{error}</div>}
         {tab === "history" ? (
-          <div className="history-list">
-            {loading && <div className="history-empty">加载中…</div>}
-            {!loading && history.length === 0 && <div className="history-empty">暂无历史快照</div>}
-            {!loading && history.map((h) => (
-              <div className="history-item" key={h.id}>
-                <div className="history-item-main" onClick={() => void previewHistory(h)} title="点击预览快照">
-                  <div className="history-item-time">{new Date(h.createdAt).toLocaleString()}</div>
-                  <div className="history-item-meta">
-                    {(h.size / 1024).toFixed(1)} KB · {h.refCount} 个资源 · {h.contentHash.slice(0, 8)}
+          <div className="history-split">
+            <div className="history-list history-list-left">
+              {loading && <div className="history-empty">加载中…</div>}
+              {!loading && history.length === 0 && <div className="history-empty">暂无历史快照</div>}
+              {!loading && history.map((h) => (
+                <div className="history-item" key={h.id}>
+                  <div className="history-item-main" onClick={() => void previewHistoryInline(h)} title="点击预览快照">
+                    <div className="history-item-time">{new Date(h.createdAt).toLocaleString()}</div>
+                    <div className="history-item-meta">
+                      {(h.size / 1024).toFixed(1)} KB · {h.refCount} 个资源 · {h.contentHash.slice(0, 8)}
+                    </div>
+                  </div>
+                  <div className="history-item-actions">
+                    <button className="history-restore" onClick={() => void restore(h.id)}><RotateCcw size={13} /> 恢复</button>
+                    <button className="history-delete" onClick={() => void removeHistory(h.id)}><Trash2 size={13} /></button>
                   </div>
                 </div>
-                <div className="history-item-actions">
-                  <button className="history-restore" onClick={() => void restore(h.id)}><RotateCcw size={13} /> 恢复</button>
-                  <button className="history-delete" onClick={() => void removeHistory(h.id)}><Trash2 size={13} /></button>
-                </div>
-              </div>
-            ))}
+              ))}
+            </div>
+            <div className="history-preview-inline">
+              {inline ? (
+                <>
+                  <div className="history-preview-inline-title">{inline.title}{inline.size !== undefined ? ` · ${(inline.size / 1024).toFixed(1)} KB` : ""}</div>
+                  <pre className="history-preview-text">{inline.text}</pre>
+                </>
+              ) : (
+                <div className="history-empty">选择左侧快照查看内容</div>
+              )}
+            </div>
           </div>
         ) : (
           <div className="history-list">
@@ -232,6 +257,7 @@ export function HistoryPanel({ open, noteId, onClose, onRestored }: {
             </div>
           </div>
         )}
+        <div className="floating-dialog-resize" onPointerDown={floating.startResize} title="拖动调整大小" />
       </section>
     </div>,
     document.body
