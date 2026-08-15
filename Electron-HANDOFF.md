@@ -1,246 +1,168 @@
-# Lake Notes Electron 会话交接文档（多端删除链路已验收提交 + 重构交接）
+# Lake Notes Electron 会话交接文档（隐藏回收站笔记本重构已合并 master）
 
 > 写给完全没有上下文的新会话。**开始工作前先通读本文**，再按需读：
-> `docs/REFACTOR-TRASH-NOTEBOOK-HANDOFF.md`（**重构方案交接，当前最重要**）、`AGENTS.md`（项目长期记忆）、`docs/S3-GC-DESIGN.md`（v4.1）、`docs/GC-TEST-REPORT.md`（GC 测试报告）、`docs/TODO.md`，
-> 对照代码：`electron/sync.ts`、`electron/store.ts`、`electron/quickNotesSync.ts`、`electron/logger.ts`、`electron/main.ts`、`src/App.tsx`、`src/components/*`、`src/features/editor/*`。
+> `AGENTS.md`（项目长期记忆/规则）、`docs/TRASH-NOTEBOOK-DESIGN.md`（重构设计定稿）、
+> `docs/REFACTOR-TRASH-NOTEBOOK-HANDOFF.md`（重构起因与方案交接）、`docs/S3-GC-DESIGN.md`（GC v4.1）、
+> `docs/QUICK-NOTES-SPEC.md`（小记规格）、`docs/PERFORMANCE-NEXT.md`（性能优化评估清单）、`docs/TODO.md`。
+> 对照代码：`electron/sync.ts`、`electron/store.ts`、`electron/quickNotesSync.ts`、`electron/main.ts`、`src/App.tsx`。
 
 项目目录：`/Users/admin/file/local-lake/lake-notes-electron`
 
 ---
 
-## 0. 任务目标
+## 0. 任务目标与当前状态
 
 Lake Notes 是**本地优先**笔记应用（Electron + React + better-sqlite3 + 语雀 Lake 内核），带 S3 同步（七牛 Kodo S3 兼容 API）。**本地是真相，S3 只是镜像。**
 
-**当前状态**：隐藏回收站笔记本重构（删除=移动语义，回收站上云/purge不广播/自动过期60天）已完成并**提交**到 `feat/trash-notebook`（自 experiment/manifest-gzip 切出，含 gzip + 增量扫描）。真实双端 A/B 验证 32 场景全过（2026-08-15）。GC 测试报告见 `docs/GC-TEST-REPORT.md`。
+**当前状态**：隐藏回收站笔记本重构（删除=移动语义，回收站上云 / purge 不广播 / 自动过期 60 天）**已完成并合并进 master**（2026-08-15）。多轮 A/B 真机验收 + 代码审计 + 性能优化全部落地。分支已清理（仅剩 master + backup/pre-reset-95dcaf2-20260806）。
 
-**下一阶段主线（重构）**：**隐藏回收站笔记本重构（删除 = 移动语义）**——把删除从"墓碑特殊状态"改为"移入隐藏回收站笔记本"，统一同步逻辑，根治墓碑机制的补丁与缺陷。**完整方案、起因经过、原则、计划见 `docs/REFACTOR-TRASH-NOTEBOOK-HANDOFF.md`，独立分支实施。**
-
-**排期约定（用户明确）**：重构（隐藏回收站笔记本）之后，再启动 Electron 升级 33 → 42。
-
-当前分支：`feat/trash-notebook`（重构 + gzip + 增量扫描，含 meta 同步修复），**已提交、未合并 master**。
-
----
-
-## 1. 当前快照
+**下一阶段主线**：Electron 33 → 42 升级（含 GPU 问题复验），然后按 `docs/PERFORMANCE-NEXT.md` 评估增量 manifest 等性能项。
 
 | 项目 | 信息 |
 | --- | --- |
 | 目录 | `/Users/admin/file/local-lake/lake-notes-electron` |
-| 分支 | `feat/trash-notebook`（重构分支，自 experiment/manifest-gzip 切出；含 gzip+增量扫描+隐藏回收站重构） |
-| 远程 | `origin = https://gitee.com/gtycoder/local-lake.git` |
+| 分支 | **master**（重构已合并；backup/pre-reset-95dcaf2-20260806 保留作回滚备份） |
+| 远程 | `origin = https://gitee.com/gtycoder/local-lake.git`（origin/HEAD=master；还有 origin/main 等旧远程分支未动） |
 | Node | **必须优先 Node 24**：`$HOME/.nvm/versions/node/v24.18.0/bin` |
-| Electron | **33.4.11**（升级 42 已列入 TODO，排期在删除链路之后） |
-| 基线 | `npx tsc --noEmit` 通过；`npm test -- --run` = **188 passed**；`node node_modules/vite/bin/vite.js build` 通过；`git diff --check` 干净 |
+| Electron | **33.4.11**（升级 42 已列入下一步） |
+| 基线 | `npx tsc --noEmit` 通过；`npm test -- --run` = **217 passed**；`node node_modules/vite/bin/vite.js build` 通过；`git diff --check` 干净 |
 | 开发数据 | `/Users/admin/Library/Application Support/lake-notes-dev`（可重建） |
 | 正式数据 | `/Users/admin/Library/Application Support/lake-notes-electron`（**禁止触碰**） |
-| 运行状态 | **项目已停止**（设备 A/B、vite 均已退出，multidev 残留已清） |
-
-> ⚠️ 当前有 30+ 文件未提交（上一阶段 + 最近会话的全部改动）。**不要擅自提交/合并**，等用户验收。
+| 运行状态 | **项目已停止**（A/B、vite 均已退出，multidev 残留已清） |
 
 ### 开发版固定 S3 配置（已写入 `electron/main.ts`，仅 dev 首次启动 seed）
-- Endpoint: `https://s3.cn-north-1.qiniucs.com`
-- Region: `cn-north-1`
-- Bucket: `local-lake-hebei`
-- 对象前缀: `lake-notes`
-- AK/SK: 已硬编码在 dev seed 中（**勿外泄**；仅 dev）
-- `forcePathStyle: false`（virtual-host，七牛证书要求）
-
-> 用户最初给的 Endpoint 是 `https://local-lake-hebei.s3.cn-north-1.qiniucs.com`、Bucket `local-lake`，实测是 bucket/region 映射写反了；正确如上。
+- Endpoint: `https://s3.cn-north-1.qiniucs.com`、Region: `cn-north-1`、Bucket: `local-lake-hebei`、前缀 `lake-notes`、`forcePathStyle: false`
+- AK/SK 硬编码在 `electron/main.ts` 与 `scripts/s3-ls.mjs` 默认值（**用户决定暂不处理**：git 私有，等全部收尾后统一轮换密钥 + 清 git 历史。见"当前问题"）
 
 ---
 
-## 2. 已完成内容
+## 1. 已完成内容
 
-### 2.1 早期阶段（已在分支上，历史遗留）
-- S3 GC v4.1（M0–M9）：回收站恢复 vs 远端墓碑、ObjectStore 扩展（list/delete/deleteMany/deletePrefix/put）、manifest v4（prevCommitId 链、对象键 `objects/{noteId}-{contentHash}.lake`）、历史引用资源不上传、purge（先写 manifest 后 `deletePrefix`）、GC 对账（`s3_gc_pending`/`s3_gc_log`/`runGcReconcile`）、小记回收站 + 深度清理、Lake 深度清理（scoped 到 `objects/`+`assets/`+`manifests/`，不碰 `quick-notes/`）、历史分层 `selectHistoryDrops`、回收站提醒。
-- 文档历史/快照：15 分钟自动 + 手动 + 恢复前留档 + 孤儿清理（`note_history` 表 + `history/{noteId}/` 目录）。
+### 1.1 隐藏回收站笔记本重构（本轮核心，已合并）
+- 删除 = 移入隐藏回收站笔记本（`parentId=notebook-trash`），`trashed_at`/`deleted_from_parent_id` 上云；恢复 = 移回原位置 + `restore_pending_at`；purge = 物理删 + 轻量墓碑（`deleted:true`），他端保留副本标 `purged`（可恢复、不上传）；自动过期 60 天（`trashAutoPurgeDays`，可配）。
+- 设计文档：`docs/TRASH-NOTEBOOK-DESIGN.md`（定稿）、`docs/REFACTOR-TRASH-NOTEBOOK-HANDOFF.md`（起因/方案）。
+- 软删路径统一（无软删墓碑、移动即同步、情况 3 自然解决、资源自然 keep）；复杂度集中在 purge 路径（D2 决策"不广播删除"的必然成本）。
 
-### 2.2 多端联调 + 同步可用性（最近两个会话）
-#### S3 连接兼容
-- `ObjectStore.test()` 从 HeadBucket 改为 **ListObjectsV2**（七牛 HeadBucket 对存在的桶也返回 404/UnknownError）。
-- dev 首次启动自动写入上述 S3 配置。
+### 1.2 统一冲突语义（先同步者胜）
+- 正文 / 元数据（图标/改名/排序/父目录）/ 小记三者**同构**：以"本设备已确认版本"为分界——
+  - 云端 != 已确认版本（别人先提交）→ 接受远端（文档进历史、小记进回收站、图标被覆盖）；
+  - 云端 == 已确认版本 + 本地续编/回滚历史/删除恢复/改名 → 本地胜、上传回写。
+- 元数据用 `sync_base.last_synced_meta_at`（markSynced 时记录 notes.updated_at）判定；正文用 baseHash；小记用 contentHash。删除/恢复的显式例外 = `restore_pending_at`。
+- **编辑 purged 条目 = 隐式恢复**（saveNote/setNodeIcon/renameTreeNode/setNoteLocked 触发，留档被删版本）。
 
-#### 同步进度与状态
-- `SyncProgress` 增加 `assetCurrent/assetTotal`（资源子进度）、`supersededNotes`、`error`。
-- Lake 上传/下载资源、小记上传/下载图片都上报子进度；`SyncPanel` 展示主进度 + 资源子进度 + 最后同步时间 + Lake/小记计数。
-- 状态栏统一云同步状态：云同步关闭 / 同步中 / 同步失败 / 待云更新 / 已同步 / 冲突（`src/App.tsx` 的 `cloudStatus`）。
-- `markSynced()` 同时更新 `notes.sync_state` 和 `tree_nodes.sync_state`（否则状态栏永远显示"待云更新"）。
+### 1.3 性能优化（已落地）
+- **零变更早退**：记录 `lastSeenCommitId` + 墓碑签名（`device_state`），远端未变且本地无 pending → 整轮跳过（10k 条零变更同步 ~200ms，不写 manifest）。
+- **fast-path 记账去重**：`store.allSyncBaseInfo()` 批量读基线（替代逐条 lastSyncedMetaAt 查询），已 synced 且 base/meta/锁一致 → 跳过 setBaseHash/markSynced/setLastUploadedHash（省 ~9 万次 DB 写/次）。
+- manifest gzip（此前已做，-87%）。详见 `docs/PERFORMANCE-NEXT.md`（含待评估项）。
 
-#### 云同步开关 + 自动/手动同步
-- `SyncSettings { enabled, autoMode: "manual"|"interval"|"onOpenClose", autoIntervalMinutes }`，存本地 settings 表，**不上云**。
-- `enabled=false`：不跑 GC/自动/手动同步；关闭前做最后一次对齐（`runFullSync`），失败则保持开启并报错；重新开启后立即后台对齐一次。
-- 主进程 `runFullSync()`：Lake → 小记，`syncInFlight` 单飞 + `enqueueMaintenance` 串行；自动同步（interval / onOpenClose / 退出前）都走 `runFullSync`。
+### 1.4 审计加固（本轮）
+- **资产服务器 CORS token 门禁**：带 Origin 的 CORS 请求须 `?token=` 匹配启动随机令牌（防外部网页/sandbox iframe 读本地图片）；`<img>` 非 CORS 不受影响。令牌经 `LAKE_ASSET_TOKEN` env → preload → `lakeNative.assetToken`。
+- **CSP**：index.html meta（`script-src 'self' 'unsafe-inline'`、`img-src`/`connect-src` 放行本地+http(s)、`font-src` 放行 `https://gw.alipayobjects.com`、`worker-src`、`object-src 'none'` 等）；实测零违规、编辑器正常。
+- **图片 50MP 像素上限**：自研头部尺寸解析（PNG/JPEG/GIF/WebP），上传/下载/粘贴/转换前拦截解压炸弹（不依赖 sharp 解码器，极小恶意文件也能识别）。
+- **小记回收站过滤无内容墓碑**（learned tombstone 不显示假条目）。
+- **before-quit 等待在途同步**（任何模式）。
+- **restoreTrashItem 根级笔记本恢复位置修复**：原父 `parent_id` 为 NULL 时 `parent_id != ?` 三值逻辑漏判 → 误回默认笔记本；修为 `(parent_id IS NULL OR parent_id != ?)`。
+- 修复：小记转正式笔记图片 URL 端口硬编码 19876 → `ASSET_PORT`；manifest 保留链与 GC 一致（`MANIFEST_CHAIN_KEEP=8`，latest + 9 commit = 10 份）；快照弹窗状态残留（HistoryPanel 打开/切 note 重置）；默认笔记本图标纳入 folder 同步（LWW）。
 
-#### 目录树同步（重要）
-- manifest 增加**必填** `folders[]`：`{ id,title,parentId,sortOrder,nodeType:"notebook"|"group",icon,updatedAt }`。
-- 下载阶段先导入 folders，再导入 notes，保证父目录存在；正文相同但元数据变化时 `applyRemoteNoteMeta` 对账（标题/父目录/排序/图标）；文件夹 icon 用 `updatedAt` LWW。
-
-#### 小记同步（quick notes）
-- `quick-notes/` 独立前缀，独立小记库 `quick-notes/metadata.sqlite3`，独立上传/下载图片子进度。
-
-### 2.3 最近会话新增（打开 tab 刷新增强 + 日志 + 冲突留档修复）
-
-#### 打开中 tab 的刷新增强（参考 VSCode lake-editor 插件的"外部变更检测"思路）
-- **远端删除检测**：新增 `store.getNoteDigest(id)` + IPC `get_note_digest`（`types.ts`/`main.ts`/`preload.cjs`/`native.ts` 四处同步）。同步 done 后 digest 为 null/purge 或 `deleted=true` → tab 标记 `deleted`（红字 + 删除线 + 徽标，正文保留），保存被拦截；回收站恢复/重新打开自动重载清除标记。
-- **冲突提示可点击**：notice 升级为 `NoticeState`（带 action 按钮），冲突 → "查看历史"，仅删除 → "查看回收站"。
-- **digest 预检**：同步后先比对 `title+updatedAt`（只读 DB 不读文件），未变化跳过全量 `readNote`；本地保存成功更新 `lastDigest`，减少无谓的 tab 全量重载。
-
-#### 统一日志系统（electron-log@5.4.4，新增依赖）
-- `electron/logger.ts`：scope 分类（sync/s3/history/gc/quick/store/renderer/perf），落盘 `userData/logs/lake-notes.log`（多端 LAKE_USER_DATA 隔离），5MB 轮转，格式 `[y-m-d h:i:s.ms] [level] (scope) text`。
-- 渲染层：main.ts `console-message` 转发（兼容 Electron 33 新式 `(event)` 签名）；逻辑埋点带 `[sync-tab]`/`[editor-perf]` 前缀。
-- 耗时统一 `[perf] <label> Xms` 格式。埋点覆盖：S3 每次调用、同步各 phase+每笔记、快照/恢复/purge/importRemoteNote、GC/深度清理、tab 刷新循环、EditorTab init。
-- vitest 自动静音（`process.versions.electron` 不存在时关 transports）。
-
-#### 冲突留档补漏（P0，A/B 联调发现）
-- 根因：sync.ts 下载分支中 `localChanged=false`（本地相对基线无改动）被远端覆盖走 else 分支直接接受、不留档 → A 上传后未编辑的版本被静默丢弃。
-- 修复：else 分支只要 `local` 存在就 `createHistorySnapshot(force)` + push superseded。
-- 回归测试："本地已同步但远端被其他设备改 → 接受远端 + 留档 + superseded"。
-
-#### 快照去重语义修正
-- 系统自动留档（云端覆盖 superseded、恢复前留档）改 `force=true` → `false`（24h 同 hash 去重，保留旧时间点 T1，不新建不改时间）；**手动创建快照保持 force=true**。
-- 安全：去重基于 note_history 表实时查，手动删掉后重建不丢。
-- 新增测试：覆盖留档去重 + 恢复前留档去重。
-
-#### 工具与性能实测
-- `scripts/s3-ls.mjs`：云端对象查看工具（`--note <id>` / `--prefix` / `--count` / `--json`）。
-- 性能实测：note_history 5 万行（1000×50）下 `hasRecentDuplicate` 走索引 `(note_id, created_at DESC)`，单次 **0.017ms**，1000 文档同时创建 ≈16ms，无需改。
-- purge 清理历史：确认 `purgeTrashItem` 已删 note_history 行 + `history/{noteId}/` 目录，补了回归测试。
-- SQLite 删行后表文件不物理缩小（空闲页自动复用，VACUUM 才回收）已向用户解释清楚。
+### 1.5 测试
+- **217 全绿**（含：先同步者胜三场景、正文续编、历史回滚同步、删除压编辑回收站内容断言、零变更早退、编辑即恢复、50MP 拒绝、幽灵条目过滤、manifest 10 份裁剪、默认笔记本图标等）。
+- 真机 A/B 多轮验收（32 场景 + 本轮回归）均通过；本轮修复全部实测（CSP 零违规、token 403/200、早退跳过+有变更不误跳、🛰️ 图标跨端）。
 
 ---
 
-## 3. 当前问题
+## 2. 当前问题 / 已知边界
 
-1. **（未复现，待排查）历史快照恢复 → 上传 S3 卡 30s**：用户此前在 A/B 联调中提到过，本轮说"暂时没发现"。日志埋点已全部就绪，复现后 `grep '\[perf\]'` 两端日志定位。
-2. **（已修复，注意回归）冲突留档补漏**：见 2.3，A/B 联调发现的"被覆盖端不留档导致永久丢改动"已修复并加回归测试，多端删除测试时要顺带回归该场景。
-3. **（进行中）多端删除链路尚未完整测试**：用户正在规划，见下一步计划 §5.1。
-
----
-
-## 4. 架构与关键代码地图
-
-```
-electron/
-├── main.ts             # 窗口/生命周期/IPC handle/S3 seed/console-message 转发
-├── store.ts            # better-sqlite3 数据层（notes/tree_nodes/deleted_notes/note_history/sync_base…）
-├── sync.ts             # S3 同步核心（manifest/冲突四分支/superseded/GC 对账）
-├── quickNotesSync.ts   # 小记同步（quick-notes/ 前缀）
-├── logger.ts           # electron-log 封装（scope + [perf] 耗时）
-├── assetServer.ts      # 本地资源端口服务（LAKE_ASSET_PORT）
-└── preload.cjs         # IPC bridge（invoke 封装）
-src/
-├── App.tsx             # 状态栏 cloudStatus / 云同步开关 / 全局同步
-├── lib/native.ts       # IPC 类型安全封装（加方法必须同步改）
-├── lib/types.ts        # 共享类型（SyncProgress/NoticeState…）
-├── components/         # SyncPanel/SettingsPanel/TrashPanel/HistoryPanel/QuickNotesWorkspace
-├── features/editor/    # MultiTabEditor/EditorTab/lakeRuntime（tab 刷新/删除标记）
-└── styles.css
-scripts/
-├── multidev.sh         # 同机多端（A/B）启动脚本
-└── s3-ls.mjs           # 云端对象查看工具
-```
-
-### 同步协议要点
-- 冲突判定四分支见 `sync.ts` 下载阶段；`baseHash + lastUploadedHash` 都在本地 `sync_base`，**绝不上 manifest**。
-- `supersededNotes`：本地改动被远端覆盖时，先强制 `createHistorySnapshot` 留档，再接受远端（见 2.3 P0 修复）。
-- `folders[]` 必填；手动同步只发回触发窗口；自动同步广播本进程所有窗口。
-
-### 多端启动（同机）
-- 每个"设备"= 独立 `userData`（`LAKE_USER_DATA` 覆盖）+ 独立 `LAKE_ASSET_PORT` + 同一 S3 配置。
-- 单实例锁按 userData 隔离，不同 userData 可同时跑；同一 userData 第二实例直接 quit。
+1. **AK/SK 硬编码**（`electron/main.ts` dev seed + `scripts/s3-ls.mjs` 默认值）：用户决定**暂不处理**（git 私有）；计划"全部收尾后统一轮换密钥 + 清理 git 历史"。**不要把凭据外泄/公开仓库。**
+2. **Electron 33 已 EOL**（Chromium 130，2025-04 停止支持）；macOS 26 上 GPU Helper 空转（fontations）→ 渲染冻结 → 同步背压卡死。已用 multidev.sh 4 参数禁用 GPU 绕过；**升级 42 后必须复验**（先裸启动，干净则只留 `--use-angle=metal`）。详见 §5 坑 0。
+3. **性能**：有变更时仍全量解析/上传 manifest（10k 条 ~1-3s 后台）；增量 manifest 待评估（`docs/PERFORMANCE-NEXT.md` 决策表）。
+4. **已知边界（低危，暂不处理）**：
+   - trash-yield 可能丢弃本地回收站条目的编辑（未留档）；
+   - 云端 manifest 损坏/含环 → fail-fast 整次同步中断（审计 #4 设计权衡）；
+   - 多端并发 purge/恢复存在"先读后写"竞态窗口（读到墓碑即兜住，低概率）；
+   - 小记 `archiveLocalToTrash`/learned tombstone 产生的墓碑会永久保留（体积小，可接受）。
+5. **App.tsx 1049 行 monolith**：可维护性优化（拆分）已列入低优先待办，未做。
 
 ---
 
-## 5. 下一步计划
+## 3. 下一步计划
 
-### 5.1 多端删除链路完整测试（**当前最优先**，用户正在规划）
-链路：软删（文档/小记）→ 回收站恢复 → purge（云端立即删前缀）→ GC 对账（7 天窗口）→ 深度清理 → 小记删除。
-**四层验证**：
-1. **UI**：删除/恢复/清空回收站后的界面表现；
-2. **本地 DB + 文件**：`deleted_notes`/`tree_nodes`/`note_history`/`s3_gc_pending`/`s3_gc_log` + `history/{noteId}/` 目录 + 正文文件；
-3. **云端对象**：用 `scripts/s3-ls.mjs --count` 记录对象数变化（删前基线 → 删后 → purge 后 → GC 后）；
-4. **日志**：`grep -E '\[(s3|gc|sync)\]'` 两端日志核对流程执行时间。
-参考验证场景（A/B 两端）：A 编辑提交云 → B 同步 → 两端一致 → A 再编辑 → B 也编辑 → A 提交 → B 同步（被覆盖端留历史）→ B 恢复快照继续编辑提交 → A 同步应覆盖并留档（**重点回归 2.3 的 P0 修复**）。
-
-### 5.2 Electron 升级 33 → 42（删除链路验收之后）
-- 用户要求：**直接升级、不用过度、后续再详细评估方案**；已列入 `docs/TODO.md`。
-- 参考：思源 [issue #18392](https://github.com/siyuan-note/siyuan/issues/18392) 把 Electron 升到 v42.7.1（Chromium 148 / Node 24.15），可参考但**不照搬**。
-- 必做：better-sqlite3 按新 ABI 重编译、依赖兼容检查（electron-log、vite-plugin-electron 等）、全套回归（tsc + 188 测试 + build + 两端多端联调）。33→42 跨度大，建议分阶段小步升级并逐版回归。
-
-### 5.3 其余
-- 复现排查"历史快照恢复 → 上传 S3 卡 30s"（日志埋点已就绪）。
-- 继续多端联调、UI 细节微调。
-- 用户验收通过后，提交 `docs/S3-GC-DESIGN.md`、`HISTORY-DESIGN.md`、`TODO.md`、`Electron-HANDOFF.md` 及全部代码，再谈合并。
+1. **Electron 33 → 42 升级**（当前最优先）：
+   - 必做：better-sqlite3 按新 ABI 重编译、依赖兼容检查（electron-log / vite-plugin-electron / sharp）、`tsc` + 217 测试 + build + A/B 真机回归。
+   - GPU：升级后先不带参数裸启动复现原场景；干净则删掉 multidev.sh 的 4 参数禁用组、只留 `--use-angle=metal`；仍复现则重新 sample（是否还在 fontations）。
+   - 顺带：补 CSP 验证（已有 meta，确认编辑器/字体/worker 在打包版正常）、复查 `sandbox: false` 能否恢复、`--max-old-space-size=8192` 是否下调。
+   - 参考：思源把 Electron 升到 v42.7.1（Chromium 148 / Node 24.15），可参考不照搬。
+2. **性能**：跑真实数据看单次同步耗时；>2 万条再评估增量 manifest（`docs/PERFORMANCE-NEXT.md` 决策表）。
+3. **凭据收尾**（用户明确推迟）：统一轮换七牛密钥 + 用 `git filter-repo` 清理含 AK/SK 的历史；改环境变量注入。
+4. 其余：App.tsx 拆分（可选）；小记"learned tombstone 防幽灵"已有（过滤回收站显示）；`Electron-HANDOFF.md.bak-*` / `hist-bench-tmp.mjs` 是遗留临时文件，可择机删除。
 
 ---
 
-## 6. 踩过的坑（务必记住）
-
-### 环境 / 进程
-0. **本机 Chromium GPU Helper 空转会卡死同步（2026-08-15 定位）**：GPU Helper 进程 99% CPU 空转（`fontations_ffi`）→ 渲染进程冻结 → 主进程 `webContents.send` mojo 背压 → 同步"卡死"（Lake 或 quick-sync 停在进度上报处，`_getActiveRequests()` 为空、主进程空闲）。**`--disable-gpu` 单独不够**，必须 `--disable-gpu --disable-gpu-compositing --disable-software-rasterizer --disable-gpu-sandbox`（已写入 multidev.sh）。这是既有问题，非重构引入（重构前基线 6e306de 同样复现）。
-1. **vite dev server 会被 exec 会话回收**：必须用长驻 tty（`exec_command tty=true`）启动；vite-plugin-electron 会自动拉起 electron，手动控端前临时给 `vite.config.ts` 的 electron 入口加 `onstart: () => {}`，验证完必须还原（`git status` 不应有 vite.config.ts 改动；`vite.config.ts.multidev-bak` 是脚本备份）。
-1.1 **启动 Electron 勿用 `| head -N` 管道**：head 退出后 stdout 管道断裂，electron-log 控制台传输层抛 `write EPIPE` 未捕获异常 → 弹 "A JavaScript error occurred in the main process"。用 `> file 2>&1` 重定向。
-2. **`onstart` 的澄清**：它只是禁 vite-plugin-electron 自动拉起，不是"实现多端"的关键；多端 = 独立 `LAKE_USER_DATA` + 独立 `LAKE_ASSET_PORT` + 手动前台起。
-3. **单实例锁按 userData 隔离**：不同 userData 可同时跑；同一 userData 第二实例直接 quit。资源端口 A=19876，B=19877。
-4. **multidev.sh 的 device-b 没设 `LAKE_ASSET_PORT`**：起 B 端要手动补环境变量；且本环境 nohup 起不了 electron，A/B 都要手动前台 `tty=true` 起。
-5. **CDP 截图**：窗口未激活时先 `Emulation.setFocusEmulationEnabled{enabled:true}` + `Page.setWebLifecycleState{state:"active"}`；截图在 `result.data`。
-6. 结束 electron 只能 kill 具体 PID，**不要 `pkill -f Electron`**（机器上还有 Trae/SiYuan/VSCode 等 Electron）。
-
-### 七牛 S3
-7. **HeadBucket 不可用**：`ObjectStore.test()` 必须用 `ListObjectsV2`，否则永远报 `UnknownError`。
-8. **配置映射**：正确 Endpoint=`https://s3.cn-north-1.qiniucs.com`、Region=`cn-north-1`、Bucket=`local-lake-hebei`、`forcePathStyle=false`。用户最初给的 `local-lake-hebei.s3...` + Bucket `local-lake` 是错的。
-
-### 同步 / UI
-9. **同步完成不刷新**：自动同步必须广播 `sync-progress`；否则打开 tab/状态栏/小记列表都不刷新。
-10. **`markSynced` 只改 notes 不够**：状态栏读 `tree_nodes.sync_state`，两处都要更新。
-11. **`contentCache` 会导致冲突后 tab 不刷新**：`reloadKey` 变化时先清缓存。
-12. **`purged_at` 会被 `rememberDeleted` 的 INSERT OR REPLACE 清空**：墓碑 upsert 要保留 `purged_at`；purge 成功后 `markPurgeSynced` 清掉。
-13. **文件夹图标用 `updatedAt` LWW**，不要用"本地非空优先"。
-14. **IPC 三处同步**：加方法必须改 `main.ts`(handle) + `preload.cjs`(invoke) + `src/lib/native.ts`(类型+封装)。
-
-### 日志 / 构建
-15. **electron-log 必须 external**：`vite.config.ts` 的 electron 入口 `rollupOptions.external` 要写 `/^electron-log/`（子路径 `electron-log/main` 不会命中精确包名 `"electron-log"`）；否则 rolldown 把 CJS 包打进 ESM bundle，运行时报 `Calling require for "electron" in an environment that doesn't expose the require function`。
-16. **渲染进程日志靠 `console-message` 事件转发**：Electron 33 签名是 `(event)`（`event.message`），旧版是 `(event, level, message)`，logger 已兼容两者。
-17. **better-sqlite3 是 Electron ABI 编译**（Electron 内置 Node 20），系统 Node 24 跑不了；bench 等用 python3 sqlite3 代替。
-18. **vitest 下 electron-log 要静音**：`process.versions.electron` 不存在时关 transports，否则测试输出被刷屏。
-
----
-
-## 7. 关键命令
+## 4. 关键命令（多端联调 / 验证）
 
 ```bash
 export PATH="$HOME/.nvm/versions/node/v24.18.0/bin:$PATH"
 cd /Users/admin/file/local-lake/lake-notes-electron
+
+# 测试 / 构建
+npm test -- --run
 npx tsc --noEmit
-npm test -- --run        # 188 个测试
 node node_modules/vite/bin/vite.js build
-git diff --check
 
-# 起多端（vite 必须 tty=true 长驻；electron 手动前台 tty=true）
-#   A: node_modules/.bin/electron --disable-gpu .
-#   B: LAKE_USER_DATA="$TMPDIR/lake-device-b" LAKE_ASSET_PORT=19877 node_modules/.bin/electron --disable-gpu .
+# A/B 多端（脚本：vite / device-a / device-b / stop）
+./scripts/multidev.sh vite        # 临时禁用 electron 自动拉起（结束会自动还原 vite.config.ts）
+./scripts/multidev.sh device-a    # A：默认 dev userData，CDP 9222，资源端口 19876
+./scripts/multidev.sh device-b    # B：$TMPDIR/lake-device-b，CDP 9223，资源端口 19877
+./scripts/multidev.sh stop
 
-# 日志
-tail -f "$HOME/Library/Application Support/lake-notes-dev/logs/lake-notes.log"
-tail -f "$TMPDIR/lake-device-b/logs/lake-notes.log"
-grep '\[perf\]' "$HOME/Library/Application Support/lake-notes-dev/logs/lake-notes.log"   # 耗时定位
+# 手动前台起（本环境 nohup 起不了 electron，必须 tty 长驻）：
+# A: ./node_modules/.bin/electron --disable-gpu --disable-gpu-compositing --disable-software-rasterizer --disable-gpu-sandbox --remote-debugging-port=9222 .
+# B: LAKE_USER_DATA="$TMPDIR/lake-device-b" LAKE_ASSET_PORT=19877 ./node_modules/.bin/electron --disable-gpu ... --remote-debugging-port=9223 .
 
-# 云端对象验证
-node scripts/s3-ls.mjs --count
-node scripts/s3-ls.mjs --note <noteId>
-node scripts/s3-ls.mjs --prefix <prefix>
+# CDP 驱动渲染层：node /tmp/lake-cdp-eval.mjs <port> "<async expression>"（window.lakeNative.*）
+# 只读 DB：python3 sqlite3（better-sqlite3 是 Electron ABI，系统 Node 跑不了）
+#   开发 A：/Users/admin/Library/Application Support/lake-notes-dev/workspace-default/metadata.sqlite3
+#   B：$TMPDIR/lake-device-b/workspace-default/metadata.sqlite3（小记：quick-notes/metadata.sqlite3）
+# 云端对象：node scripts/s3-ls.mjs --count | --prefix manifests/ | --note <id>
 ```
 
-### 只读检查开发库
-```bash
-DB="/Users/admin/Library/Application Support/lake-notes-dev/workspace-default/metadata.sqlite3"
-sqlite3 "$DB" "SELECT id,title,node_type,parent_id,icon,sync_state,deleted_at FROM tree_nodes;"
-sqlite3 "$DB" "SELECT id,title,sync_state,deleted_at,updated_at FROM notes;"
-sqlite3 "$DB" "SELECT id,title,purged_at FROM deleted_notes;"
-sqlite3 "$DB" "SELECT key,marked_at FROM s3_gc_pending;"
-sqlite3 "$DB" "SELECT ts,action,reason,key FROM s3_gc_log ORDER BY id DESC LIMIT 20;"
-sqlite3 "$DB" "SELECT note_id,created_at,size FROM note_history ORDER BY created_at DESC LIMIT 20;"
-sqlite3 "$DB" "SELECT COUNT(*) FROM note_history;"
-```
-小记库：`.../workspace-default/quick-notes/metadata.sqlite3`。
+---
+
+## 5. 踩过的坑（务必记住）
+
+### 环境 / 进程
+0. **Chromium GPU Helper 空转会卡死同步（macOS 26）**：GPU 进程 99% CPU 空转（`fontations_ffi`）→ 渲染冻结 → 主进程 `webContents.send` mojo 背压 → 同步"卡死"。`--disable-gpu` 单独不够，必须 `--disable-gpu --disable-gpu-compositing --disable-software-rasterizer --disable-gpu-sandbox`（已写入 multidev.sh）。非重构引入（基线同样复现）。
+1. **vite dev server 会被 exec 会话回收**：必须长驻 tty（`exec_command tty=true`）；`nohup ... &` 在本环境随会话退出被回收。vite-plugin-electron 自动拉起 electron 时临时给 `vite.config.ts` 的 electron 入口加 `onstart: () => {}`，验证完必须还原（`vite.config.ts.multidev-bak` 是脚本备份；**勿提交 onstart 补丁**）。
+2. **启动 Electron 勿用 `| head -N` 管道**：head 退出后 stdout 管道断裂，electron-log 控制台传输层抛 `write EPIPE` 未捕获异常 → "A JavaScript error occurred in the main process"。用 `> file 2>&1` 重定向。
+3. **结束 electron 只能 kill 具体 PID**，**不要 `pkill -f Electron`**（机器上还有 Trae/SiYuan/VSCode 等）。
+4. **单实例锁按 userData 隔离**：不同 userData 可同时跑；同一 userData 第二实例直接 quit。A=19876，B=19877（LAKE_ASSET_PORT）。
+5. **CDP 截图/操作**：窗口未激活时先 `Emulation.setFocusEmulationEnabled{enabled:true}` + `Page.setWebLifecycleState{state:"active"}`；截图在 `result.data`。
+6. **fetch 测试资产服务器会被 CORS 拦**（403/404 响应无 ACAO 头 → 浏览器 "Failed to fetch"）；验证 token 门禁用 curl（带 Origin 头），别用页面 fetch。
+
+### 七牛 S3
+7. **HeadBucket 不可用**：`ObjectStore.test()` 必须用 `ListObjectsV2`，否则永远 `UnknownError`。
+8. **配置映射**：正确 Endpoint=`https://s3.cn-north-1.qiniucs.com`、Region=`cn-north-1`、Bucket=`local-lake-hebei`、`forcePathStyle=false`。用户最初给的 `local-lake-hebei.s3...` + Bucket `local-lake` 是错的。
+9. **manifest 保留 10 份**（`MANIFEST_CHAIN_KEEP=8`，latest + 9 commit）：prune / runGcReconcile / runDeepCleanup 三处链长必须一致，否则深度清理 7 天后会把多留的容错份删掉。
+
+### 同步 / 冲突
+10. **零变更早退**依赖：`device_state.last_seen_commit_id` + 墓碑签名（COUNT:MAX(deleted_at)）；`setNoteLocked` 必须标 `sync_state='local'`（否则锁变更被早退漏掉）。**测试里手工改写 manifest 必须换 commitId**（`writeManifest` 助手已自动换）。
+11. **先同步者胜**：判定用"已确认版本"（lastSyncedMetaAt / baseHash），不是"谁写的"也不是"编辑时间"；B 已确认 A 的版本后主动改 → B 胜（场景3）；否则 A 先改先同步 → A 胜。
+12. **删除压编辑**：A 删 B 离线编辑 → B 跟随删除 + 编辑进历史；**回收站内容以 A 删除的版本为准**（uploadedByUs / 续编分支都要加 `local.parentId !== TRASH_NOTEBOOK_ID` 守卫，否则 B 的编辑溜进回收站内容）。
+13. **restoreTrashItem 原父校验**：根级笔记本 parent_id 为 NULL，SQL 必须 `(parent_id IS NULL OR parent_id != ?)`，否则误回退默认笔记本。
+14. **purged 条目编辑 = 隐式恢复**：saveNote/setNodeIcon/renameTreeNode/setNoteLocked 需先 `revivePurgedIfNeeded`（移出回收站 + restore_pending + 留档），否则悄悄复活且无恢复标记。
+15. **小记冲突（B 方案）**：远端覆盖本地，本地版本以新 id 进回收站（`archiveLocalToTrash` 复制内容+重映射图片 id），恢复即新小记；`quick_note_assets.id` 全局 UNIQUE，冲突副本/归档必须重映射图片 id 否则 UNIQUE 崩溃。
+16. **markSynced 三处**：notes + tree_nodes + sync_base.last_synced_meta_at（后者 UPDATE-only，无行跳过）。
+17. **IPC 三处同步**：main.ts(handle) + preload.cjs(invoke) + src/lib/native.ts(类型+封装)；资产 token 在 preload `assetToken` + src/lib/assetPort.ts `ASSET_TOKEN`。
+
+### 其他
+18. **更好用的小工具**：`node scripts/s3-ls.mjs` 查看云端；`/tmp/lake-cdp-eval.mjs` 驱动渲染层；python3 sqlite3 只读查库。
+19. **临时文件**：`Electron-HANDOFF.md.bak-*`、`hist-bench-tmp.mjs` 是遗留，勿提交、可择机删。
+20. **assets 端口硬编码**曾出现在 quickNoteConversion（19876）→ 已改 `ASSET_PORT`；新增 URL 拼接一律用 `src/lib/assetPort.ts` 的 `ASSET_ORIGIN`/`LOCAL_ASSET_PREFIX`。
+
+---
+
+## 6. 沟通要点（与用户）
+
+- 用户重视权衡与数据；喜欢深入讨论设计，给方案要附真实场景和后果，可大胆反驳。
+- 已定稿语义（**不要重新争论**）：本地是真相、目录强一致、墓碑权威（删除压编辑）、恢复是唯一显式例外、先同步者胜、开发版不考虑数据兼容、小记不备份。
+- 性能问题用户非常关注（"产品要流畅不卡顿"）：先给数据/量级，再给方案；`docs/PERFORMANCE-NEXT.md` 的决策表等用户逐条勾选。
+- 凭据：AK/SK 暂不处理（用户明确）；不要外泄。
