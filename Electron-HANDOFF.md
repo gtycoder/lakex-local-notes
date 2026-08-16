@@ -16,7 +16,7 @@ Lake Notes 是**本地优先**笔记应用（Electron + React + better-sqlite3 +
 
 **当前状态**：隐藏回收站笔记本重构（删除=移动语义，回收站上云 / purge 不广播 / 自动过期 60 天）**已完成并合并进 master**（2026-08-15）。多轮 A/B 真机验收 + 代码审计 + 性能优化全部落地。分支已清理（仅剩 master + backup/pre-reset-95dcaf2-20260806）。
 
-**下一阶段主线**：Electron 33 → 42 升级（含 GPU 问题复验），然后按 `docs/PERFORMANCE-NEXT.md` 评估增量 manifest 等性能项。
+**下一阶段主线**：**Electron 33 → 43.4.0 升级已完成**（2026-08-16，分支 `feat/electron-43-upgrade`，含 better-sqlite3 13.x N-API 迁移 + GPU 裸启动复验通过），然后按 `docs/PERFORMANCE-NEXT.md` 评估增量 manifest 等性能项。
 
 | 项目 | 信息 |
 | --- | --- |
@@ -24,7 +24,7 @@ Lake Notes 是**本地优先**笔记应用（Electron + React + better-sqlite3 +
 | 分支 | **master**（重构已合并；backup/pre-reset-95dcaf2-20260806 保留作回滚备份） |
 | 远程 | `origin = https://gitee.com/gtycoder/local-lake.git`（origin/HEAD=master；还有 origin/main 等旧远程分支未动） |
 | Node | **必须优先 Node 24**：`$HOME/.nvm/versions/node/v24.18.0/bin` |
-| Electron | **33.4.11**（升级 42 已列入下一步） |
+| Electron | **43.4.0**（2026-08-16 升级完成；GPU 问题已修复，见 §5 坑 0） |
 | 基线 | `npx tsc --noEmit` 通过；`npm test -- --run` = **217 passed**；`node node_modules/vite/bin/vite.js build` 通过；`git diff --check` 干净 |
 | 开发数据 | `/Users/admin/Library/Application Support/lake-notes-dev`（可重建） |
 | 正式数据 | `/Users/admin/Library/Application Support/lake-notes-electron`（**禁止触碰**） |
@@ -73,7 +73,7 @@ Lake Notes 是**本地优先**笔记应用（Electron + React + better-sqlite3 +
 ## 2. 当前问题 / 已知边界
 
 1. **AK/SK 硬编码**（`electron/main.ts` dev seed + `scripts/s3-ls.mjs` 默认值）：用户决定**暂不处理**（git 私有）；计划"全部收尾后统一轮换密钥 + 清理 git 历史"。**不要把凭据外泄/公开仓库。**
-2. **Electron 33 已 EOL**（Chromium 130，2025-04 停止支持）；macOS 26 上 GPU Helper 空转（fontations）→ 渲染冻结 → 同步背压卡死。已用 multidev.sh 4 参数禁用 GPU 绕过；**升级 42 后必须复验**（先裸启动，干净则只留 `--use-angle=metal`）。详见 §5 坑 0。
+2. **Electron 33 已 EOL + macOS 26 GPU 空转 → 已解决（2026-08-16 升级 43.4.0）**：裸启动实测 GPU Helper ~2% CPU、渲染正常（2094 元素 + 编辑器初始化），fontations 空转未复现；multidev.sh 已改为仅 `--use-angle=metal`。43 EOL 2027-01-05，届时 43 → 44/45 为同 Node 大版本小升级，成本低。详见 §5 坑 0。
 3. **性能**：有变更时仍全量解析/上传 manifest（10k 条 ~1-3s 后台）；增量 manifest 待评估（`docs/PERFORMANCE-NEXT.md` 决策表）。
 4. **已知边界（低危，暂不处理）**：
    - trash-yield 可能丢弃本地回收站条目的编辑（未留档）；
@@ -86,11 +86,10 @@ Lake Notes 是**本地优先**笔记应用（Electron + React + better-sqlite3 +
 
 ## 3. 下一步计划
 
-1. **Electron 33 → 42 升级**（当前最优先）：
-   - 必做：better-sqlite3 按新 ABI 重编译、依赖兼容检查（electron-log / vite-plugin-electron / sharp）、`tsc` + 217 测试 + build + A/B 真机回归。
-   - GPU：升级后先不带参数裸启动复现原场景；干净则删掉 multidev.sh 的 4 参数禁用组、只留 `--use-angle=metal`；仍复现则重新 sample（是否还在 fontations）。
-   - 顺带：补 CSP 验证（已有 meta，确认编辑器/字体/worker 在打包版正常）、复查 `sandbox: false` 能否恢复、`--max-old-space-size=8192` 是否下调。
-   - 参考：思源把 Electron 升到 v42.7.1（Chromium 148 / Node 24.15），可参考不照搬。
+1. **Electron 33 → 43.4.0 升级（已完成 2026-08-16，分支 feat/electron-43-upgrade）**：
+   - 结果：electron `^43.4.0` + better-sqlite3 `^13.0.3`（**N-API 单二进制，无需 rebuild**，双 ABI 基建 setup-test-abi.sh / vitest alias 已删除）；electron-log / vite-plugin-electron / sharp 均兼容；`tsc` + 217 测试 + vite build 全绿；GPU 裸启动复验通过（§5 坑 0）。
+   - 遗留可选项（未做）：打包版 CSP 验证、复查 `sandbox: false` 能否恢复、`--max-old-space-size=8192` 是否下调。
+   - 参考：思源 v42.7.1 / VSCode 1.132（42.7.1）均未上 43；本项目因 42 EOL（2026-10-20）太近，直接选当前 stable 43.4.0。
 2. **性能**：跑真实数据看单次同步耗时；>2 万条再评估增量 manifest（`docs/PERFORMANCE-NEXT.md` 决策表）。
 3. **凭据收尾**（用户明确推迟）：统一轮换七牛密钥 + 用 `git filter-repo` 清理含 AK/SK 的历史；改环境变量注入。
 4. 其余：App.tsx 拆分（可选）；小记"learned tombstone 防幽灵"已有（过滤回收站显示）；`Electron-HANDOFF.md.bak-*` / `hist-bench-tmp.mjs` 是遗留临时文件，可择机删除。
@@ -115,8 +114,8 @@ node node_modules/vite/bin/vite.js build
 ./scripts/multidev.sh stop
 
 # 手动前台起（本环境 nohup 起不了 electron，必须 tty 长驻）：
-# A: ./node_modules/.bin/electron --disable-gpu --disable-gpu-compositing --disable-software-rasterizer --disable-gpu-sandbox --remote-debugging-port=9222 .
-# B: LAKE_USER_DATA="$TMPDIR/lake-device-b" LAKE_ASSET_PORT=19877 ./node_modules/.bin/electron --disable-gpu ... --remote-debugging-port=9223 .
+# A: ./node_modules/.bin/electron --use-angle=metal --remote-debugging-port=9222 .
+# B: LAKE_USER_DATA="$TMPDIR/lake-device-b" LAKE_ASSET_PORT=19877 ./node_modules/.bin/electron --use-angle=metal --remote-debugging-port=9223 .
 
 # CDP 驱动渲染层：node /tmp/lake-cdp-eval.mjs <port> "<async expression>"（window.lakeNative.*）
 # 只读 DB：python3 sqlite3（better-sqlite3 是 Electron ABI，系统 Node 跑不了）
@@ -130,7 +129,7 @@ node node_modules/vite/bin/vite.js build
 ## 5. 踩过的坑（务必记住）
 
 ### 环境 / 进程
-0. **Chromium GPU Helper 空转会卡死同步（macOS 26）**：GPU 进程 99% CPU 空转（`fontations_ffi`）→ 渲染冻结 → 主进程 `webContents.send` mojo 背压 → 同步"卡死"。`--disable-gpu` 单独不够，必须 `--disable-gpu --disable-gpu-compositing --disable-software-rasterizer --disable-gpu-sandbox`（已写入 multidev.sh）。非重构引入（基线同样复现）。
+0. **Chromium GPU Helper 空转会卡死同步（macOS 26）→ 已随 43.4.0 升级解决**：Electron 33 上 GPU 进程 99% CPU 空转（`fontations_ffi`）→ 渲染冻结 → 主进程 `webContents.send` mojo 背压 → 同步"卡死"。`--disable-gpu` 单独不够，必须 4 参数禁用组。**43.4.0 裸启动实测不再复现**（GPU Helper ~2% CPU、真实数据渲染正常），multidev.sh 已改为仅 `--use-angle=metal`。若未来版本复发，回退到 4 参数禁用组。
 1. **vite dev server 会被 exec 会话回收**：必须长驻 tty（`exec_command tty=true`）；`nohup ... &` 在本环境随会话退出被回收。vite-plugin-electron 自动拉起 electron 时临时给 `vite.config.ts` 的 electron 入口加 `onstart: () => {}`，验证完必须还原（`vite.config.ts.multidev-bak` 是脚本备份；**勿提交 onstart 补丁**）。
 2. **启动 Electron 勿用 `| head -N` 管道**：head 退出后 stdout 管道断裂，electron-log 控制台传输层抛 `write EPIPE` 未捕获异常 → "A JavaScript error occurred in the main process"。用 `> file 2>&1` 重定向。
 3. **结束 electron 只能 kill 具体 PID**，**不要 `pkill -f Electron`**（机器上还有 Trae/SiYuan/VSCode 等）。

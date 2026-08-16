@@ -60,13 +60,14 @@ run_device() {
     echo "检测到已有进程占用 $port；请先关闭当前设备（或先运行 $0 stop），再启动另一个设备。" >&2
     exit 1
   fi
-  # 本机 Chromium GPU 进程空转会导致渲染进程冻结/同步卡死：必须激进禁用 GPU
-  # （--disable-gpu 单独不够；曾导致 A/B 联调反复卡死，实测本组合可稳定运行）
-  local args=(--disable-gpu --disable-gpu-compositing --disable-software-rasterizer --disable-gpu-sandbox)
+  # Electron 43 起本机 Chromium GPU 空转（fontations_ffi → 渲染冻结）已修复
+  # （2026-08-16 裸启动实测：无任何禁用参数，GPU Helper ~2% CPU、渲染正常）。
+  # 不再激进禁用 GPU，仅显式使用 Metal 后端。
+  local args=(--use-angle=metal)
   [ -n "$cdp" ] && args+=(--remote-debugging-port="$cdp")
   echo "starting ${name} (userData=${data_dir:-default}, assetPort=${port:-19876})"
   # 本环境 nohup 起不了 electron：手动前台 tty 启动时请直接复制下方命令。
-  echo "  LAKE_USER_DATA="${data_dir}" LAKE_ASSET_PORT=$port ./node_modules/.bin/electron --disable-gpu ."
+  echo "  LAKE_USER_DATA="${data_dir}" LAKE_ASSET_PORT=$port ./node_modules/.bin/electron --use-angle=metal ."
   if [ -n "$data_dir" ]; then
     LAKE_USER_DATA="$data_dir" LAKE_ASSET_PORT="$port" nohup ./node_modules/.bin/electron "${args[@]}" . >"$log" 2>&1 &
   else

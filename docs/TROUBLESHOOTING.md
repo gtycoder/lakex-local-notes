@@ -69,7 +69,7 @@
 47. **表格卡片 `_rootNode` 是 `ne-table-wrap` 不是 `ne-table-hole`**：卡片工具栏 overlay 的 mouseenter/mouseleave 监听绑在 `_rootNode`（表格为 `ne-table-wrap`，hole 的**子孙**）上；补发合成事件必须命中 `_rootNode`，只发到 hole 无效。
 48. **表格工具栏 hover 消失机制**：overlay 的 `hovered` 状态只由卡片根节点的 mouseenter/mouseleave 驱动，工具栏渲染在卡片外（上方），鼠标一移过去就触发 mouseleave → 300ms lazyCancel 隐藏。解法：`mouseleave` 不冒泡但有**捕获阶段**，document 捕获层先于目标监听器；目标为卡片且 relatedTarget 在工具栏上下文（`.ne-card-toolbar` / `.ne-ui-boundary-popover` / `ne-overlay-tmp` / `[data-event-boundary=overlay]`）时 `stopImmediatePropagation`；离开工具栏时补发合成 mouseleave（untrusted 放行）触发正常隐藏。
 49. **卡片水合与 `$appear`**：cardLazyInit 下新插入的卡片可能永远停在空壳——Lake 可见性观察器作用在 hole 节点，`hole.$appear` 不传播到卡片 UI；直接调 `卡片._neRef._virtualNode.$appear()` 可立即水合（`ensureCardsInViewHydrated`）。
-50. **双 ABI 测试基建**：Electron ABI 的 better-sqlite3 在纯 Node 报 `NODE_MODULE_VERSION 1`；`test-node-abi/` 单独装 Node 构建 + vitest `resolve.alias`。`electron/store.ts` 模块加载即 import `electron`，测试必须 `vi.mock("electron")`。
+50. **双 ABI 测试基建（已废弃）**：Electron ABI 的 better-sqlite3 在纯 Node 报 `NODE_MODULE_VERSION 1`；旧方案用 `test-node-abi/` 单独装 Node 构建 + vitest `resolve.alias`。**better-sqlite3 13.x 起为 N-API 单二进制，Node/Electron 通用，已无需此基建**。`electron/store.ts` 模块加载即 import `electron`，测试仍需 `vi.mock("electron")`。
 51. **grep .lake 内容坑**：.lake 是 HTML+URL 编码文本，空格等字符被编码（`const real` → `const%20real%20%3D%201`），直接 grep 原串会漏匹配。排查用编码后的模式或解码后再查。
 52. **Playwright 驱动 Electron 调试**：合成 `dispatchEvent` 不触发真实焦点（真实点击用 `page.mouse.click`）；node_repl 沙箱禁 `process`；electron 主进程 `isDev = !app.isPackaged` 会去连 1421 dev server——用静态服务器 serve `dist/` 即可跑生产渲染层。
 53. **虚拟渲染滚动补偿**：滚动后 `wrap.scrollTop` 会因内容高度变化被 Lake 调整（scroll 补偿），定位表格/元素要用**实时** `getBoundingClientRect`，不要缓存旧坐标。

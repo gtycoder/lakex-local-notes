@@ -12,16 +12,8 @@
   export npm_config_registry=https://registry.npmmirror.com
   export npm_config_cache=/tmp/npm-cache-lake
   ```
-- **better-sqlite3** 安装后必须重编译到 Electron ABI：
-  ```bash
-  npx @electron/rebuild -f -w better-sqlite3
-  ```
-  （或交给 electron-builder 打包时自动 rebuild）
-- **测试用 Node ABI**：`npm test`（vitest）需要单独的 Node ABI 构建（仓库内 node_modules
-  是 Electron ABI，`@electron/rebuild` 后 Node 无法加载）。首次运行测试前：
-  ```bash
-  bash scripts/setup-test-abi.sh   # 装到 test-node-abi/（gitignore），vitest alias 自动指过去
-  ```
+- **better-sqlite3 13.x（N-API）**：单二进制同时兼容 Node 与 Electron，**无需 @electron/rebuild**，
+  不再有双 ABI 问题（Electron 升级后无需重编译）。
 
 ## 二、开发
 
@@ -67,19 +59,18 @@ PATH="$HOME/.nvm/versions/node/v24.18.0/bin:$PATH" node node_modules/vite/bin/vi
 PATH="$HOME/.nvm/versions/node/v24.18.0/bin:$PATH" npm test   # vitest run，82 用例
 ```
 - 测试文件：`electron/{ssrf,sync,store}.test.ts` + `src/features/editor/clipboardHtml.test.ts`
-- **双 ABI 方案**：`test-node-abi/` 单独装 Node ABI 的 better-sqlite3（`scripts/setup-test-abi.sh`），
-  `vitest.config.ts` 用 `resolve.alias` 把 `better-sqlite3` 指过去；`electron/store.test.ts` 里
-  `vi.mock("electron")` 提供 safeStorage/net 替身（store.ts 模块加载即 import electron）
+- better-sqlite3 13.x 为 N-API 单二进制，vitest 直接用仓库内构建，无需双 ABI 基建；
+  `electron/store.test.ts` 里 `vi.mock("electron")` 提供 safeStorage/net 替身（store.ts 模块加载即 import electron）
 - Store 层测试用真实 SQLite 临时目录 + 另开只读连接验证落盘内容（如 S3 密钥是否 `enc:v1:`）
 
 ## 五、关键版本与依赖
 
 | 依赖 | 版本 | 备注 |
 |---|---|---|
-| electron | 33.4.11 | ^33.0.0 |
+| electron | 43.4.0 | ^43.4.0 |
 | electron-builder | 25.1.8 | devDependency |
 | vite / rolldown | 8.1.5 | 需 Node ≥ 20.12 |
-| better-sqlite3 | 11.3.0 | 原生，需 rebuild |
+| better-sqlite3 | 13.0.3 | N-API 单二进制，无需 rebuild |
 | sharp | 0.35.3 | 原生，webp→png |
 | @aws-sdk/client-s3 | 3.1101.0 | S3 同步 |
 | lakex-editor-react-component | 0.1.2 | Lake 编辑器 ESM |

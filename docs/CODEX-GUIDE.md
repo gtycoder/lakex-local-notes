@@ -117,6 +117,5 @@ export PATH="$HOME/.nvm/versions/node/v24.18.0/bin:$PATH"   # Node 24（vite 8 �
 export npm_config_registry=https://registry.npmmirror.com   # npm 私有镜像不可达
 export npm_config_cache=/tmp/npm-cache-lake
 node node_modules/vite/bin/vite.js build                    # 构建渲染层+主进程
-npx vitest run                                              # 测试（先 bash scripts/setup-test-abi.sh）
-bash scripts/setup-test-abi.sh                              # 装 Node ABI better-sqlite3（测试用）
+npx vitest run                                              # 测试（better-sqlite3 13.x N-API，无需双 ABI 基建）
 ```
