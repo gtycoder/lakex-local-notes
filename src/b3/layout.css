@@ -35,22 +35,33 @@
     border-bottom: 1px solid var(--b3-theme-background-light) !important;
   }
 
-  /* 修复标签栏：styles.css 曾把它 fixed 到顶部 0-38（被顶栏盖住导致"多 tab 消失"）。
-   * 改为在文档区顶部 sticky（顶栏下方 38+），正常显示标签。 */
+  /* 标签栏：与顶栏融合成一条（0-38 全宽）——左侧工作空间/云/外观/更多，多 tab 在其右侧 */
   .tab-bar {
-    position: sticky !important;
+    position: fixed !important;
     top: 0 !important;
-    right: auto !important;
-    left: auto !important;
-    height: auto !important;
+    right: 0 !important;
+    left: 0 !important;
+    height: var(--topbar-height) !important;
     min-height: 0 !important;
-    width: 100% !important;
-    padding: 0 8px 4px !important;
-    z-index: 200 !important;
-    -webkit-app-region: no-drag !important;
+    width: auto !important;
+    padding: 0 8px !important;
+    z-index: 400 !important;
     box-shadow: none !important;
     backdrop-filter: none !important;
     -webkit-backdrop-filter: none !important;
+  }
+  /* 顶栏左侧元素：工作空间/云/外观/更多，不参与拖拽 */
+  .tabbar-leading {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    flex: 0 0 auto;
+    -webkit-app-region: no-drag;
+  }
+  /* 多 tab：填充顶栏右侧 */
+  .tab-items {
+    flex: 1 1 auto !important;
+    min-width: 0;
   }
 
   /* 标签项：思源 layout-tab-bar .item 观感 */
@@ -143,21 +154,9 @@
   border-color: var(--b3-theme-surface-lighter) !important;
 }
 
-/* ── 顶栏（思源 #toolbar）：满宽 38px，透明、交通灯区，工作空间/云同步/前进后退/拖拽/模式/更多 ── */
-.toolbar {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  z-index: 400;
-  display: flex;
-  align-items: center;
-  gap: 2px;
-  height: var(--topbar-height);
-  padding: 0 8px;
-  /* 思源顶栏区 = 灰底（body 背景）；顶部带细微渐变（材质感，上浅下灰，随主题） */
-  background: linear-gradient(180deg, color-mix(in srgb, var(--b3-theme-background) 45%, var(--b3-body-background)) 0%, var(--b3-body-background) 100%);
-  -webkit-app-region: drag;
+/* ── 融合顶栏渐变（材质感：上浅下灰，随主题）── */
+.tab-bar {
+  background: linear-gradient(180deg, color-mix(in srgb, var(--b3-theme-background) 45%, var(--b3-body-background)) 0%, var(--b3-body-background) 100%) !important;
 }
 .toolbar__item {
   display: inline-flex;
@@ -178,7 +177,6 @@
 .toolbar__item:hover { background-color: var(--b3-list-hover); color: var(--b3-theme-on-background); }
 .toolbar__item:disabled { opacity: .38; cursor: not-allowed; }
 .toolbar__item .toolbar__text { max-width: 160px; overflow: hidden; text-overflow: ellipsis; }
-.toolbar__drag { flex: 1; min-width: 40px; height: 100%; }
 .toolbar__item--first { margin-left: var(--b3-toolbar-left-mac, 74px); }
 .toolbar__sync.syncing svg { animation: spin 1s linear infinite; }
 .toolbar__sync.error { color: var(--b3-theme-error); }

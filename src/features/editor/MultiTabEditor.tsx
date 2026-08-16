@@ -34,7 +34,8 @@ interface MultiTabEditorProps {
   onEditorCopyMarkdown?: (noteId: string) => void;
   onEditorExport?: (noteId: string, format: "markdown" | "html" | "lake") => void;
   onEditorCopyPaths?: (noteId: string) => void;
-  topbarActions?: ReactNode;
+  /** 顶栏左侧元素（工作空间/云同步/外观/更多），渲染在标签左侧，与多 tab 融合成一条顶栏 */
+  topbarLeading?: ReactNode;
   emptyAction?: ReactNode;
   /** 正文顶部路径（思源 protyle-breadcrumb），插在标签栏与编辑器之间 */
   breadcrumb?: ReactNode;
@@ -54,7 +55,7 @@ export function MultiTabEditor({
   onEditorCopyMarkdown,
   onEditorExport,
   onEditorCopyPaths,
-  topbarActions,
+  topbarLeading,
   emptyAction,
   breadcrumb,
 }: MultiTabEditorProps) {
@@ -248,7 +249,7 @@ export function MultiTabEditor({
   return (
     <div className="multi-tab-editor">
       <div className="tab-bar">
-        {topbarActions && <div className="tabbar-actions">{topbarActions}</div>}
+        {topbarLeading && <div className="tabbar-leading">{topbarLeading}</div>}
         <div className="tab-items" ref={tabItemsRef} role="tablist" aria-label="打开的文档">
           {tabs.map((tab) => (
             <button
