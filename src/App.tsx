@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type CSSProperties } from "react";
-import { ArrowLeft, Check, Cloud, CloudOff, Files, ListTree, LoaderCircle, Feather, Lock, LockOpen, MoreHorizontal, Pencil, Save, Settings as Settings2Icon, Trash2, WifiOff, X } from "lucide-react";
+import { ArrowLeft, ArrowRight, Check, ChevronDown, Cloud, CloudOff, Files, ListTree, LoaderCircle, Feather, Lock, LockOpen, Moon, MoreHorizontal, Pencil, Save, Settings as Settings2Icon, Sun, Trash2, WifiOff, X } from "lucide-react";
 import { MobileLibrary } from "./components/MobileLibrary";
 import { withViewTransition } from "./lib/viewTransition";
 import { SearchPanel } from "./components/SearchPanel";
@@ -97,6 +97,14 @@ export function App() {
   const [searchPanelQuery, setSearchPanelQuery] = useState("");
   const [saveState, setSaveState] = useState<SaveState>("idle");
   const [statusMenuOpen, setStatusMenuOpen] = useState(false);
+  /** 顶栏「工作空间」名：取 S3 prefix（未配置时显示本地占位） */
+  const [workspaceName, setWorkspaceName] = useState("本地工作空间");
+  /** 顶栏前进/后退：笔记访问历史 */
+  const visitHistoryRef = useRef<string[]>([]);
+  const visitIndexRef = useRef(-1);
+  const suppressVisitRef = useRef(false);
+  const canGoBack = visitIndexRef.current > 0;
+  const canGoForward = visitIndexRef.current < visitHistoryRef.current.length - 1;
   useEffect(() => {
     if (!statusMenuOpen) return;
     const onPointerDown = (event: PointerEvent) => {
@@ -189,6 +197,13 @@ export function App() {
 
   useEffect(() => {
     return subscribeSettings((next) => setSettings(next));
+  }, []);
+
+  // 顶栏工作空间名：用 S3 prefix（思源对应「工作空间」）
+  useEffect(() => {
+    void native.getS3Settings().then((s3) => {
+      if (s3?.prefix) setWorkspaceName(s3.prefix);
+    }).catch(() => undefined);
   }, []);
 
   // 主题与自定义 CSS：设置变化即应用（data-theme 驱动 b3 令牌切换；首帧前已由 main.tsx 预应用）
@@ -388,6 +403,17 @@ export function App() {
   }, [persistTab]);
 
   async function openNote(id: string) {
+    // 顶栏前进/后退用：记录访问历史（后退/前进导航时抑制）
+    if (!suppressVisitRef.current) {
+      const h = visitHistoryRef.current;
+      if (h[visitIndexRef.current] !== id) {
+        h.length = visitIndexRef.current + 1;
+        h.push(id);
+        visitIndexRef.current = h.length - 1;
+      }
+    } else {
+      suppressVisitRef.current = false;
+    }
     const existing = openTabsRef.current.find((tab) => tab.noteId === id);
     if (existing) {
       // 标签曾被标记"已删除"（远端删除）：文档可能已从回收站恢复，重新拉取最新内容刷新标签。
@@ -813,6 +839,16 @@ export function App() {
     await openNote(note.id);
   }
 
+  /** 顶栏前进/后退：按访问历史切换笔记 */
+  function navigateHistory(dir: -1 | 1) {
+    const h = visitHistoryRef.current;
+    const idx = visitIndexRef.current + dir;
+    if (idx < 0 || idx >= h.length) return;
+    visitIndexRef.current = idx;
+    suppressVisitRef.current = true;
+    void openNote(h[idx]);
+  }
+
   function handleTabChange(noteId: string) {
     withViewTransition(() => {
       setActiveNoteId(noteId);
@@ -865,6 +901,21 @@ export function App() {
 
   return (
     <div className={`app-shell ${shellPlatformClass} sidebar-${sidebarMode} outline-${effectiveOutlineMode} ${desktopWorkspace === "quick-notes" ? "quick-notes-active" : ""} ${sidebarResizing ? "sidebar-resizing" : ""} ${outlineResizing ? "outline-resizing" : ""} ${isMobile ? `mobile-document-page ${mobileEditing ? "mobile-editing" : "mobile-reading"}` : ""}`} style={shellStyle}>
+      <header className="toolbar desktop-only" aria-label="顶栏">
+        <button className="toolbar__item toolbar__item--first" onClick={() => { setSettingsCategory("appearance"); setSettingsOpen(true); }} title="工作空间（点击打开设置）" aria-label="工作空间">
+          <span className="toolbar__text">{workspaceName}</span><ChevronDown size={13} />
+        </button>
+        <button className={`toolbar__item toolbar__sync ${sync.phase}`} onClick={() => { setSyncPanelOpen(true); void syncPanelRef.current?.sync(); }} title={syncTooltip(sync)} aria-label={`云同步：${sync.message}`}>
+          <Cloud size={15} />
+        </button>
+        <button className="toolbar__item" onClick={() => navigateHistory(-1)} disabled={!canGoBack} title="后退" aria-label="后退"><ArrowLeft size={15} /></button>
+        <button className="toolbar__item" onClick={() => navigateHistory(1)} disabled={!canGoForward} title="前进" aria-label="前进"><ArrowRight size={15} /></button>
+        <div className="toolbar__drag" />
+        <button className="toolbar__item" onClick={() => saveSettings({ theme: settings.theme === "dark" ? "light" : "dark" })} title="外观模式（浅色/深色）" aria-label="外观模式">
+          {settings.theme === "dark" ? <Sun size={15} /> : <Moon size={15} />}
+        </button>
+        <button className="toolbar__item" onClick={() => setStatusMenuOpen(true)} title="更多" aria-label="更多"><MoreHorizontal size={15} /></button>
+      </header>
       <nav className="activity-rail desktop-only" aria-label="应用导航" onPointerEnter={desktopWorkspace === "library" ? showSidebarPreview : undefined} onPointerLeave={desktopWorkspace === "library" ? hideSidebarPreview : undefined}>
         <div className="activity-rail-spacer" />
         <button className={`activity-button ${desktopWorkspace === "library" && sidebarMode === "docked" ? "active" : ""}`} onClick={() => { if (desktopWorkspace === "library") toggleSidebarDock(); else void switchDesktopWorkspace("library"); }} title="资料库" aria-label="资料库"><Files size={16} /></button>

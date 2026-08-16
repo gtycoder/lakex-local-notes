@@ -93,3 +93,42 @@
   background: var(--b3-theme-background) !important;
   border-color: var(--b3-theme-surface-lighter) !important;
 }
+
+/* ── 顶栏（思源 #toolbar）：满宽 38px，透明、交通灯区，工作空间/云同步/前进后退/拖拽/模式/更多 ── */
+.toolbar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 400;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  height: var(--topbar-height);
+  padding: 0 8px;
+  background: transparent;
+  -webkit-app-region: drag;
+}
+.toolbar__item {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 26px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: var(--b3-border-radius);
+  color: var(--b3-theme-on-surface);
+  background: transparent;
+  cursor: pointer;
+  white-space: nowrap;
+  font-size: 12px;
+  -webkit-app-region: no-drag;
+  transition: background-color 130ms ease-out, color 130ms ease-out;
+}
+.toolbar__item:hover { background-color: var(--b3-list-hover); color: var(--b3-theme-on-background); }
+.toolbar__item:disabled { opacity: .38; cursor: not-allowed; }
+.toolbar__item .toolbar__text { max-width: 160px; overflow: hidden; text-overflow: ellipsis; }
+.toolbar__drag { flex: 1; min-width: 40px; height: 100%; }
+.toolbar__item--first { margin-left: var(--b3-toolbar-left-mac, 74px); }
+.toolbar__sync.syncing svg { animation: spin 1s linear infinite; }
+.toolbar__sync.error { color: var(--b3-theme-error); }
