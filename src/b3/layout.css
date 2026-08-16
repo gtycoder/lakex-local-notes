@@ -44,7 +44,6 @@
     height: var(--topbar-height) !important;
     min-height: 0 !important;
     width: auto !important;
-    padding: 0 8px !important;
     z-index: 400 !important;
     box-shadow: none !important;
     backdrop-filter: none !important;
