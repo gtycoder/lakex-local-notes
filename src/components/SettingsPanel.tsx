@@ -1,11 +1,11 @@
 import { useEffect, useState } from "react";
-import { AlignLeft, Cloud, History, Info, ListTree, PanelTop, Settings, Trash2, Type } from "lucide-react";
+import { AlignLeft, Cloud, History, Info, ListTree, Monitor, Moon, PanelTop, Settings, Sun, Trash2, Type } from "lucide-react";
 import { fontSizeOptions, type AppSettings } from "../lib/settings";
 import { native } from "../lib/native";
 import type { S3Settings, SyncSettings } from "../lib/types";
 import { useFloatingDialog } from "./useFloatingDialog";
 
-export type SettingsCategory = "editor" | "history" | "sync" | "trash" | "about";
+export type SettingsCategory = "editor" | "appearance" | "history" | "sync" | "trash" | "about";
 
 interface SettingsPanelProps {
   open: boolean;
@@ -132,6 +132,7 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
 
   const nav: Array<{ id: SettingsCategory; label: string; icon: React.ReactNode }> = [
     { id: "editor", label: "编辑器", icon: <Type size={15} /> },
+    { id: "appearance", label: "外观", icon: <Monitor size={15} /> },
     { id: "history", label: "文档与历史", icon: <History size={15} /> },
     { id: "sync", label: "云端与同步", icon: <Cloud size={15} /> },
     { id: "trash", label: "回收站", icon: <Trash2 size={15} /> },
@@ -170,6 +171,29 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
                   <label className="settings-toggle"><AlignLeft size={13} /><span>段间距（更宽松的段落留白）</span><input type="checkbox" checked={settings.paragraphSpacing} onChange={(e) => onChange({ paragraphSpacing: e.target.checked })} /></label>
                   <label className="settings-toggle"><ListTree size={13} /><span>显示文档大纲（TOC）</span><input type="checkbox" checked={settings.showToc} onChange={(e) => onChange({ showToc: e.target.checked })} /></label>
                   <label className="settings-toggle"><PanelTop size={13} /><span>显示编辑器工具栏</span><input type="checkbox" checked={settings.showToolbar} onChange={(e) => onChange({ showToolbar: e.target.checked })} /></label>
+                </section>
+              </>
+            )}
+
+            {category === "appearance" && (
+              <>
+                <section className="settings-group">
+                  <h4><Monitor size={13} /> 主题</h4>
+                  <div className="settings-row">
+                    <button className={`settings-choice ${settings.theme === "light" ? "active" : ""}`} onClick={() => onChange({ theme: "light" })}><Sun size={13} /> 浅色（思源 daylight）</button>
+                    <button className={`settings-choice ${settings.theme === "dark" ? "active" : ""}`} onClick={() => onChange({ theme: "dark" })}><Moon size={13} /> 深色（思源 midnight）</button>
+                  </div>
+                </section>
+                <section className="settings-group">
+                  <h4><Type size={13} /> 自定义 UI（代码片段）</h4>
+                  <p className="settings-hint">粘贴 CSS 立即生效（对应思源「外观 → 代码片段」）。深色主题下可用 <code>[data-theme=&quot;dark&quot;]</code> 前缀覆盖。存于本地，不同步。</p>
+                  <textarea
+                    className="settings-custom-css"
+                    spellCheck={false}
+                    placeholder={"/* 例：把主色换成你自己的 */\n:root { --b3-theme-primary: #ff5722; }"}
+                    value={settings.customCss}
+                    onChange={(e) => onChange({ customCss: e.target.value })}
+                  />
                 </section>
               </>
             )}

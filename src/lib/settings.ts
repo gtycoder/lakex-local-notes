@@ -2,6 +2,8 @@
  * 应用设置：本地偏好（localStorage 持久化，不参与同步）。
  * 参考 lake-editor-main 的配置项（paragraphSpacing/defaultFontsize/toc/toolbar）+ 深色模式。
  */
+export type ThemeMode = "light" | "dark";
+
 export interface AppSettings {
   /** 正文默认字号（内核支持 12/13/14/15/16/19/22/24） */
   fontSize: number;
@@ -11,6 +13,10 @@ export interface AppSettings {
   showToc: boolean;
   /** 显示编辑器工具栏 */
   showToolbar: boolean;
+  /** 主题：light=思源 daylight / dark=思源 midnight */
+  theme: ThemeMode;
+  /** 自定义 CSS（思源「代码片段」式自定义 UI；data-theme=dark 下也可覆盖） */
+  customCss: string;
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -18,6 +24,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   paragraphSpacing: false,
   showToc: true,
   showToolbar: true,
+  theme: "light",
+  customCss: "",
 };
 
 const STORAGE_KEY = "lake-notes-v1.settings";

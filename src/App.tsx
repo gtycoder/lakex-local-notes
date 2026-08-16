@@ -17,6 +17,7 @@ import { getOutlineTab, getOutlineTabsVersion, subscribeOutlineTabs } from "./fe
 import { cleanLakeMarkdown } from "./lib/markdownClean";
 import { isDesktop, native } from "./lib/native";
 import { loadSettings, saveSettings, subscribeSettings, type AppSettings } from "./lib/settings";
+import { applyTheme, applyCustomCss } from "./lib/theme";
 import { SettingsPanel, type SettingsCategory } from "./components/SettingsPanel";
 import { subtreeIds } from "./lib/tree";
 import type { NoteDigest, NoteDocument, NoteSummary, SyncStatus, TreeNode, WorkspaceSnapshot } from "./lib/types";
@@ -189,6 +190,12 @@ export function App() {
   useEffect(() => {
     return subscribeSettings((next) => setSettings(next));
   }, []);
+
+  // 主题与自定义 CSS：设置变化即应用（data-theme 驱动 b3 令牌切换；首帧前已由 main.tsx 预应用）
+  useEffect(() => {
+    applyTheme(settings.theme);
+    applyCustomCss(settings.customCss);
+  }, [settings.theme, settings.customCss]);
 
   useEffect(() => {
     const media = window.matchMedia("(max-width: 760px)");
