@@ -1005,20 +1005,16 @@ export function App() {
               topbarTrailing={topBarTrailing}
               breadcrumb={activePath.length > 0 ? (
                 <nav className="protyle-breadcrumb" aria-label="文档路径">
-                  {activePath.map((n, i) => (
-                    <span key={n.id} className={`protyle-breadcrumb__item${i === activePath.length - 1 ? " protyle-breadcrumb__item--doc" : ""}`}>
-                      {i > 0 && <ChevronRight size={12} />}
-                      {n.title || "无标题"}
-                    </span>
-                  ))}
+                  {/* 只保留笔记本名（目录路径不重要，顶部有文档名） */}
+                  <span className="protyle-breadcrumb__item protyle-breadcrumb__item--notebook">{activePath[0].title || "无标题"}</span>
                   {headingPath.length > 0 && (
                     <>
                       <span className="protyle-breadcrumb__divider" aria-hidden="true"><ChevronRight size={12} /></span>
                       <span className="protyle-breadcrumb__outline" aria-label="大纲位置">
                         {headingPath.map((hn, i) => (
-                          <span key={hn.id} className={`protyle-breadcrumb__item protyle-breadcrumb__item--heading${i === headingPath.length - 1 ? " protyle-breadcrumb__item--current" : ""}`}>
+                          <span key={hn.id} className={`protyle-breadcrumb__item${i === headingPath.length - 1 ? " protyle-breadcrumb__item--current" : ""}`}>
                             {i > 0 && <ChevronRight size={12} />}
-                            <span className="protyle-breadcrumb__level">H{hn.level}</span>
+                            <span className="protyle-breadcrumb__h">H{hn.level}</span>
                             {hn.text}
                           </span>
                         ))}

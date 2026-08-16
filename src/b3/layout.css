@@ -251,9 +251,10 @@
 }
 .top-menu > button span { min-width: 0; }
 
-/* ── 面包屑：目录路径 vs 大纲路径（可区分）── */
-.protyle-breadcrumb__item--doc {
+/* ── 面包屑：笔记本名 + 大纲（H1xxx 纯文本标识大纲，无特殊样式）── */
+.protyle-breadcrumb__item--notebook {
   color: var(--b3-theme-on-background);
+  font-weight: 500;
 }
 .protyle-breadcrumb__divider {
   display: inline-flex;
@@ -267,22 +268,11 @@
   gap: 2px;
   min-width: 0;
 }
-.protyle-breadcrumb__item--heading {
-  padding: 1px 5px;
-  border-radius: var(--b3-border-radius);
-  color: var(--b3-theme-primary);
-  background: var(--b3-theme-primary-lightest);
-}
-.protyle-breadcrumb__item--heading .protyle-breadcrumb__level {
+.protyle-breadcrumb__h {
   margin-right: 3px;
-  padding: 0 4px;
-  border-radius: 3px;
-  font-size: 10px;
-  font-weight: 700;
-  color: var(--b3-theme-on-primary);
-  background: var(--b3-theme-primary-light);
+  font-weight: 600;
+  color: var(--b3-theme-on-surface);
 }
-.protyle-breadcrumb__item--heading.protyle-breadcrumb__item--current {
+.protyle-breadcrumb__item--current {
   color: var(--b3-theme-on-background);
-  background: var(--b3-theme-primary-lighter);
 }
