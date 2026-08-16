@@ -297,3 +297,19 @@
   border-radius: var(--b3-border-radius-b) !important;
   box-shadow: var(--b3-dialog-shadow) !important;
 }
+
+/* ── 同步状态点 → b3 语义色令牌（success/error/secondary）── */
+.sync-dot.synced,
+.sync-tab-action.success .sync-state-dot {
+  background: var(--b3-theme-success) !important;
+}
+.sync-dot.conflict,
+.sync-tab-action.error .sync-state-dot {
+  background: var(--b3-theme-error) !important;
+}
+.sync-dot.local {
+  background: var(--b3-theme-secondary) !important;
+}
+.sync-tab-action.syncing .sync-state-dot {
+  background: var(--b3-theme-primary) !important;
+}
