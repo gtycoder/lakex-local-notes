@@ -267,3 +267,31 @@
 .settings-toggle input {
   accent-color: var(--b3-theme-primary);
 }
+
+/* ── 标签页（思源：灰栏 + 白底激活 + 顶部主色指示线）── */
+.tab-bar {
+  background: var(--b3-theme-surface) !important;
+  border-bottom-color: var(--b3-border-color) !important;
+}
+.tab-item:hover {
+  background-color: var(--b3-list-hover) !important;
+}
+.tab-item.active {
+  background: var(--b3-theme-background) !important;
+  color: var(--b3-theme-on-background) !important;
+  box-shadow: inset 0 2px 0 var(--b3-theme-primary) !important;
+}
+.tab-item.dirty .tab-title::after {
+  background: var(--b3-theme-primary) !important;
+}
+.tab-item.deleted,
+.tab-item.deleted.active {
+  color: var(--b3-theme-error) !important;
+  background: var(--b3-card-error-background) !important;
+}
+.tab-switcher-menu {
+  background: var(--b3-menu-background) !important;
+  border: 1px solid var(--b3-theme-surface-lighter) !important;
+  border-radius: var(--b3-border-radius-b) !important;
+  box-shadow: var(--b3-dialog-shadow) !important;
+}
