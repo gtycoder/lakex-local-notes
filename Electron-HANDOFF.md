@@ -18,9 +18,11 @@ Lake Notes 是**本地优先**笔记应用（Electron + React + better-sqlite3 +
 
 **下一阶段主线**：**Electron 33 → 43.4.0 升级已完成**（2026-08-16，分支 `feat/electron-43-upgrade`，含 better-sqlite3 13.x N-API 迁移 + GPU 裸启动复验通过），然后按 `docs/PERFORMANCE-NEXT.md` 评估增量 manifest 等性能项。
 
-**UI 重做（复刻思源前端，2026-08-16 起）**：视觉层移植基本完成——b3 令牌（daylight/midnight 原文）、
-思源组件 scss 整目录复用、壳层/按钮/弹窗/菜单/标签页/树全部迁移、双主题（含 Lake 编辑器深色变量覆盖）、
-自定义 CSS snippets、scroll-driven animations（阅读进度条/大纲渐显）。详见 `docs/SIYUAN-UI-PORT.md`。
+**UI 重做（复刻思源前端，2026-08-16 起）**：**视觉层移植已完成**——b3 令牌（daylight/midnight 原文）、
+思源组件 scss 整目录复用、顶栏（工作空间=S3 prefix/云同步/前进后退/外观/更多）、整体布局
+（灰底+白色一体卡片+无连接线）、浮动 dock（半高带 112/82）、标签页思源激活态、编辑器面包屑、
+全宽底部状态栏、双主题（含 Lake 编辑器深色变量覆盖）、自定义 CSS snippets、scroll-driven animations。
+活动轨 42px 对齐思源 .dock；CSP 放行 KaTeX CDN + 本地资产镜像（公式字体正常）。详见 `docs/SIYUAN-UI-PORT.md`。
 
 | 项目 | 信息 |
 | --- | --- |
