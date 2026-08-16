@@ -97,20 +97,25 @@ export function App() {
   const [searchPanelQuery, setSearchPanelQuery] = useState("");
   const [saveState, setSaveState] = useState<SaveState>("idle");
   const [topMenuOpen, setTopMenuOpen] = useState(false);
+  /** 工作空间（lake-notes）下拉：偏好设置/回收站 */
+  const [workspaceMenuOpen, setWorkspaceMenuOpen] = useState(false);
   /** 顶栏「工作空间」名：取 S3 prefix（未配置时显示本地占位） */
   const [workspaceName, setWorkspaceName] = useState("本地工作空间");
 
+  // 顶栏两个下拉（工作空间菜单 / 更多文档操作）：外部点击或 Escape 关闭
   useEffect(() => {
-    if (!topMenuOpen) return;
+    if (!topMenuOpen && !workspaceMenuOpen) return;
     const onPointerDown = (event: PointerEvent) => {
-      const menu = document.querySelector(".top-menu");
-      const btn = document.querySelector(".toolbar__item[aria-label=\"更多\"]");
-      if (menu && !menu.contains(event.target as Node) && btn && !btn.contains(event.target as Node)) {
-        setTopMenuOpen(false);
-      }
+      const target = event.target as Node;
+      const moreMenu = document.querySelector(".top-menu--more");
+      const moreBtn = document.querySelector(".toolbar__item[aria-label=\"更多\"]");
+      const wsMenu = document.querySelector(".top-menu--workspace");
+      const wsBtn = document.querySelector(".toolbar__item[aria-label=\"工作空间\"]");
+      if (moreMenu && !moreMenu.contains(target) && moreBtn && !moreBtn.contains(target)) setTopMenuOpen(false);
+      if (wsMenu && !wsMenu.contains(target) && wsBtn && !wsBtn.contains(target)) setWorkspaceMenuOpen(false);
     };
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setTopMenuOpen(false);
+      if (event.key === "Escape") { setTopMenuOpen(false); setWorkspaceMenuOpen(false); }
     };
     document.addEventListener("pointerdown", onPointerDown);
     document.addEventListener("keydown", onKeyDown);
@@ -118,7 +123,7 @@ export function App() {
       document.removeEventListener("pointerdown", onPointerDown);
       document.removeEventListener("keydown", onKeyDown);
     };
-  }, [topMenuOpen]);
+  }, [topMenuOpen, workspaceMenuOpen]);
   const [sync, setSync] = useState<SyncStatus>({ phase: "idle", message: "仅本地保存", lastSyncedAt: null, pendingChanges: 0 });
   const [cloudEnabled, setCloudEnabled] = useState(true);
   const [confirmDelete, setConfirmDelete] = useState<TreeNode | null>(null);
@@ -885,23 +890,35 @@ export function App() {
   const lockedNoteIds = new Set(notes.filter((n) => n.isLocked).map((n) => n.id));
 
   // 融合顶栏左侧按钮（工作空间/云同步/外观/更多）：库视图并入多 tab 顶栏，小记视图单独渲染
-  const topBarItems = (
+  // 顶栏左侧：工作空间（下拉：设置/回收站）+ 云同步
+  const topBarLeading = (
     <>
-      <button className="toolbar__item" onClick={() => { setSettingsCategory("appearance"); setSettingsOpen(true); }} title="工作空间（点击打开设置）" aria-label="工作空间">
-        <span className="toolbar__text">{workspaceName}</span><ChevronDown size={13} />
-      </button>
+      <div className="toolbar__menu-wrap">
+        <button className="toolbar__item" onClick={() => { setWorkspaceMenuOpen((o) => !o); setTopMenuOpen(false); }} title="工作空间" aria-label="工作空间">
+          <span className="toolbar__text">{workspaceName}</span><ChevronDown size={13} />
+        </button>
+        {workspaceMenuOpen && (
+          <div className="top-menu top-menu--workspace" role="menu" aria-label="工作空间">
+            <button role="menuitem" onClick={() => { setSettingsCategory("editor"); setSettingsOpen(true); setWorkspaceMenuOpen(false); }}><Settings2Icon size={15} />偏好设置</button>
+            <button role="menuitem" onClick={() => { setTrashOpen(true); setWorkspaceMenuOpen(false); }}><Trash2 size={15} />回收站</button>
+          </div>
+        )}
+      </div>
       <button className={`toolbar__item toolbar__sync ${sync.phase}`} onClick={() => { setSyncPanelOpen(true); void syncPanelRef.current?.sync(); }} title={syncTooltip(sync)} aria-label={`云同步：${sync.message}`}>
         <Cloud size={15} />
       </button>
+    </>
+  );
+  // 顶栏最右侧：外观模式 + 更多（文档操作，目前仅加锁，后续扩展）
+  const topBarTrailing = (
+    <>
       <button className="toolbar__item" onClick={() => saveSettings({ theme: settings.theme === "dark" ? "light" : "dark" })} title="外观模式（浅色/深色）" aria-label="外观模式">
         {settings.theme === "dark" ? <Sun size={15} /> : <Moon size={15} />}
       </button>
       <div className="toolbar__menu-wrap">
-        <button className="toolbar__item" onClick={() => setTopMenuOpen((o) => !o)} title="更多" aria-label="更多"><MoreHorizontal size={15} /></button>
+        <button className="toolbar__item" onClick={() => { setTopMenuOpen((o) => !o); setWorkspaceMenuOpen(false); }} title="更多" aria-label="更多"><MoreHorizontal size={15} /></button>
         {topMenuOpen && (
-          <div className="top-menu" role="menu" aria-label="更多操作">
-            <button role="menuitem" onClick={() => { setSettingsCategory("editor"); setSettingsOpen(true); setTopMenuOpen(false); }}><Settings2Icon size={15} />偏好设置</button>
-            <button role="menuitem" onClick={() => { setTrashOpen(true); setTopMenuOpen(false); }}><Trash2 size={15} />回收站</button>
+          <div className="top-menu top-menu--more" role="menu" aria-label="文档操作">
             {activeNoteId && (
               <button role="menuitem" onClick={() => { void toggleNoteLock(); setTopMenuOpen(false); }}>
                 {lockedNoteIds.has(activeNoteId) ? <Lock size={15} /> : <LockOpen size={15} />}
@@ -972,7 +989,8 @@ export function App() {
         ) : desktopWorkspace === "quick-notes" ? (
           <>
             <header className="tab-bar desktop-only" aria-label="顶栏">
-              <div className="tabbar-leading">{topBarItems}</div>
+              <div className="tabbar-leading">{topBarLeading}</div>
+              <div className="tabbar-trailing">{topBarTrailing}</div>
             </header>
             <QuickNotesWorkspace ref={quickNotesRef} notebooks={treeNodes} onDirtyChange={setQuickNotesDirty} onConverted={(note) => void handleQuickNoteConverted(note)} />
           </>
@@ -983,7 +1001,8 @@ export function App() {
               tabs={tabInfos}
               activeNoteId={activeNoteId}
               tocEnabled={tocEnabled}
-              topbarLeading={topBarItems}
+              topbarLeading={topBarLeading}
+              topbarTrailing={topBarTrailing}
               breadcrumb={activePath.length > 0 ? (
                 <nav className="protyle-breadcrumb" aria-label="文档路径">
                   {activePath.map((n, i) => (

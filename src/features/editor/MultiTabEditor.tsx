@@ -34,8 +34,10 @@ interface MultiTabEditorProps {
   onEditorCopyMarkdown?: (noteId: string) => void;
   onEditorExport?: (noteId: string, format: "markdown" | "html" | "lake") => void;
   onEditorCopyPaths?: (noteId: string) => void;
-  /** 顶栏左侧元素（工作空间/云同步/外观/更多），渲染在标签左侧，与多 tab 融合成一条顶栏 */
+  /** 顶栏左侧元素（工作空间/云同步），渲染在标签左侧，与多 tab 融合成一条顶栏 */
   topbarLeading?: ReactNode;
+  /** 顶栏右侧元素（外观/更多），渲染在标签最右侧 */
+  topbarTrailing?: ReactNode;
   emptyAction?: ReactNode;
   /** 正文顶部路径（思源 protyle-breadcrumb），插在标签栏与编辑器之间 */
   breadcrumb?: ReactNode;
@@ -56,6 +58,7 @@ export function MultiTabEditor({
   onEditorExport,
   onEditorCopyPaths,
   topbarLeading,
+  topbarTrailing,
   emptyAction,
   breadcrumb,
 }: MultiTabEditorProps) {
@@ -291,6 +294,7 @@ export function MultiTabEditor({
             </button>
           ))}
         </div>
+        {topbarTrailing && <div className="tabbar-trailing">{topbarTrailing}</div>}
         {tabs.length > 0 && (
           <div className="tab-switcher-wrap" ref={switcherRef}>
             <button

@@ -7,9 +7,9 @@
  * - 浮动 dock：top:112px / bottom:82px、外侧圆角 + --b3-dock-shadow-color 阴影。 */
 
 @media (min-width: 761px) {
-  /* 壳层：灰底 */
+  /* 壳层：整窗渐变（顶部略浅 → body 灰），顶栏与左右固定轨透明共享同一背景 → 完全融合 */
   .app-shell {
-    background: var(--b3-body-background) !important;
+    background: linear-gradient(180deg, color-mix(in srgb, var(--b3-theme-background) 45%, var(--b3-body-background)) 0%, var(--b3-body-background) 160px) !important;
   }
 
   /* 左右活动轨：透明、满高、无边框，与顶部一体（内容仍在标题栏下方） */
@@ -35,7 +35,8 @@
     border-bottom: 1px solid var(--b3-theme-background-light) !important;
   }
 
-  /* 标签栏：与顶栏融合成一条（0-38 全宽）——左侧工作空间/云/外观/更多，多 tab 在其右侧 */
+  /* 标签栏：与顶栏融合成一条（0-38 全宽）——左侧工作空间/云/外观/更多，多 tab 在其右侧；
+   * 背景透明，与左右固定轨共享壳层渐变，真正一体 */
   .tab-bar {
     position: fixed !important;
     top: 0 !important;
@@ -44,13 +45,22 @@
     height: var(--topbar-height) !important;
     min-height: 0 !important;
     width: auto !important;
+    background: transparent !important;
     z-index: 400 !important;
     box-shadow: none !important;
     backdrop-filter: none !important;
     -webkit-backdrop-filter: none !important;
   }
-  /* 顶栏左侧元素：工作空间/云/外观/更多，不参与拖拽 */
+  /* 顶栏左侧元素：工作空间（下拉）/云同步，不参与拖拽 */
   .tabbar-leading {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    flex: 0 0 auto;
+    -webkit-app-region: no-drag;
+  }
+  /* 顶栏最右侧元素：外观/更多（文档操作） */
+  .tabbar-trailing {
     display: flex;
     align-items: center;
     gap: 2px;
@@ -147,16 +157,12 @@
 /* 深色：dock/标签栏卡片跟随主题（覆盖 styles.css 的 #fff !important 与浅色表面） */
 [data-theme="dark"] .sidebar.sidebar-docked,
 [data-theme="dark"] .sidebar.sidebar-floating,
-[data-theme="dark"] .outline-sidebar__content,
-[data-theme="dark"] .tab-bar {
+[data-theme="dark"] .outline-sidebar__content {
   background: var(--b3-theme-background) !important;
   border-color: var(--b3-theme-surface-lighter) !important;
 }
 
-/* ── 融合顶栏渐变（材质感：上浅下灰，随主题）── */
-.tab-bar {
-  background: linear-gradient(180deg, color-mix(in srgb, var(--b3-theme-background) 45%, var(--b3-body-background)) 0%, var(--b3-body-background) 100%) !important;
-}
+
 .toolbar__item {
   display: inline-flex;
   align-items: center;
