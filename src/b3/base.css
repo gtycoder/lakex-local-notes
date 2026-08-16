@@ -1,0 +1,78 @@
+/* ── Lake Notes 复刻思源：基础接线（把应用骨架映射到 --b3-* 令牌）──
+ * 作为覆盖层加载在 styles.css 之后：先整体换色，组件细节在后续阶段逐个迁移。 */
+
+:root {
+  /* Lake Notes 侧派生变量（基于 b3 令牌，供旧组件渐进迁移） */
+  --ln-primary: var(--b3-theme-primary);
+  --ln-primary-hover: #2a5fd0;              /* 思源按钮 hover 近似 */
+  --ln-on-background: var(--b3-theme-on-background);
+  --ln-on-surface: var(--b3-theme-on-surface);
+  --ln-border: var(--b3-border-color);
+  --ln-radius: var(--b3-border-radius);
+  --ln-sidebar-bg: var(--b3-theme-surface);
+  --ln-surface-hover: var(--b3-list-hover);
+}
+
+body {
+  background: var(--b3-body-background);
+  color: var(--b3-theme-on-background);
+  font-family: var(--b3-font-family);
+  font-size: var(--b3-font-size, 14px);
+}
+
+/* 应用骨架：侧栏/文档区/状态栏/活动轨 */
+.app-shell {
+  background: var(--b3-body-background);
+}
+.sidebar {
+  background: var(--b3-theme-surface);
+  border-right-color: var(--b3-border-color);
+}
+.document-pane {
+  background: var(--b3-theme-background);
+  color: var(--b3-theme-on-background);
+}
+.statusbar {
+  background: var(--b3-theme-surface);
+  border-top-color: var(--b3-border-color);
+  color: var(--b3-theme-on-surface);
+}
+.activity-rail {
+  background: var(--b3-theme-surface);
+  border-right-color: var(--b3-border-color);
+}
+
+/* 滚动条（思源风格：细滚动条 + b3 颜色） */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--b3-scroll-color) transparent;
+}
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--b3-scroll-color);
+  border-radius: 5px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+::-webkit-scrollbar-thumb:hover {
+  background-color: var(--b3-theme-on-surface-light);
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* 文本选区（思源主题色系） */
+::selection {
+  background: var(--b3-theme-primary-light);
+  color: var(--b3-theme-on-background);
+}
+
+/* 焦点/选中主色统一走 b3 primary */
+.search-box:focus-within,
+.current-note-input:focus {
+  border-color: var(--b3-theme-primary) !important;
+  box-shadow: 0 0 0 2px var(--b3-theme-primary-lightest) !important;
+}

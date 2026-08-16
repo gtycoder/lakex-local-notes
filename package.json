@@ -39,6 +39,7 @@
     "electron": "^43.4.0",
     "electron-builder": "^25.0.0",
     "jsdom": "^30.0.1",
+    "sass": "^1.102.0",
     "typescript": "5.9.3",
     "vite": "latest",
     "vite-plugin-electron": "^0.28.0",
