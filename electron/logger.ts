@@ -74,6 +74,16 @@ export function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
+let heapPeakBytes = 0;
+/** 记录主进程 V8 堆峰值（仅新峰值时输出），用于评估 --max-old-space-size 是否可下调。 */
+export function logHeapPeak(label: string): void {
+  const mem = process.memoryUsage();
+  if (mem.heapUsed > heapPeakBytes) {
+    heapPeakBytes = mem.heapUsed;
+    log.perf.info(`[heap] ${label} peak ${(mem.heapUsed / 1048576).toFixed(1)}MB (rss ${(mem.rss / 1048576).toFixed(1)}MB)`);
+  }
+}
+
 // 非 Electron 环境（vitest）：electron-log 默认 console transport 会打满测试输出，关掉。
 if (!isElectronMain) {
   try {

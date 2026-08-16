@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type CSSProperties } from "react";
 import { ArrowLeft, Check, Cloud, CloudOff, Files, ListTree, LoaderCircle, Feather, Lock, LockOpen, MoreHorizontal, Pencil, Save, Settings as Settings2Icon, Trash2, WifiOff, X } from "lucide-react";
 import { MobileLibrary } from "./components/MobileLibrary";
+import { withViewTransition } from "./lib/viewTransition";
 import { SearchPanel } from "./components/SearchPanel";
 import { TrashPanel } from "./components/TrashPanel";
 import { HistoryPanel } from "./components/HistoryPanel";
@@ -806,10 +807,12 @@ export function App() {
   }
 
   function handleTabChange(noteId: string) {
-    setActiveNoteId(noteId);
-    setOpenTabs((tabs) => tabs.map((tab) =>
-      tab.noteId === noteId ? { ...tab, lastAccessedAt: Date.now() } : tab
-    ));
+    withViewTransition(() => {
+      setActiveNoteId(noteId);
+      setOpenTabs((tabs) => tabs.map((tab) =>
+        tab.noteId === noteId ? { ...tab, lastAccessedAt: Date.now() } : tab
+      ));
+    });
     const tab = openTabs.find((t) => t.noteId === noteId);
     setSaveState(tab?.dirty ? "dirty" : "idle");
   }

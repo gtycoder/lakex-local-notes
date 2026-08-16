@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, ipcMain, session, shell, type WebFrameMain } from "electron";
+import { app, BrowserWindow, crashReporter, dialog, ipcMain, session, shell, type WebFrameMain } from "electron";
 import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
@@ -10,7 +10,7 @@ import { startAssetServer, ASSET_PORT } from "./assetServer.js";
 import { exportNote, type ExportFormat } from "./export.js";
 import { resolveMirroredCdnRedirect } from "./cdnRedirect.js";
 import { testConnection, syncNow, runGcReconcile, runDeepCleanup, type SyncResult, type SyncProgress } from "./sync.js";
-import { initLogger, log } from "./logger.js";
+import { initLogger, log, logHeapPeak } from "./logger.js";
 import { syncQuickNotes, runQuickNotesDeepCleanup } from "./quickNotesSync.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -96,6 +96,7 @@ async function runFullSync(onProgress?: (p: SyncProgress) => void): Promise<Sync
       store.recordSyncResult(JSON.stringify(result));
       report({ phase: "done", message: "同步完成", supersededNotes: result.supersededNotes });
       log.sync.info(`[perf] runFullSync done ${Date.now() - fullSyncStart}ms (uploaded=${result.uploaded}, downloaded=${result.downloaded}, conflicts=${result.conflicts}, superseded=${result.supersededNotes.length}, quickNotes=${result.quickNotes?.error ? "error" : "ok"})`);
+      logHeapPeak("sync");
       return result;
     });
   } finally {
@@ -200,6 +201,26 @@ async function createWindow() {
       }
     } catch { /* 非法 URL 忽略 */ }
     return { action: "deny" };
+  });
+
+  // 崩溃自动恢复：渲染进程异常退出（非 clean-exit）短暂延迟后 reload；
+  // 30s 内连续崩溃超过 3 次则停止自动恢复（避免崩溃循环），留档待查。
+  let rendererCrashCount = 0;
+  let lastRendererCrashAt = 0;
+  win.webContents.on("render-process-gone", (_event, details) => {
+    if (details.reason === "clean-exit") return;
+    const now = Date.now();
+    if (now - lastRendererCrashAt > 30_000) rendererCrashCount = 0;
+    lastRendererCrashAt = now;
+    rendererCrashCount += 1;
+    log.app.warn(`[crash] render-process-gone reason=${details.reason} exitCode=${details.exitCode} count=${rendererCrashCount}`);
+    if (rendererCrashCount > 3) {
+      log.app.error("[crash] 连续崩溃超过 3 次，停止自动恢复，请检查日志/Crashpad 转储");
+      return;
+    }
+    setTimeout(() => {
+      try { if (!win.isDestroyed()) win.webContents.reload(); } catch { /* 窗口已销毁 */ }
+    }, 800);
   });
 
   if (isDev) {
@@ -368,9 +389,20 @@ function registerIpc() {
 }
 
 // Increase renderer memory limit for large documents with base64 images
-app.commandLine.appendSwitch("js-flags", "--max-old-space-size=8192");
+// 主进程 V8 堆上限 4GB（此前 8GB）：heap 峰值由 [heap] perf 日志实测（见 logHeapPeak），大库同步如需更多再上调。
+app.commandLine.appendSwitch("js-flags", "--max-old-space-size=4096");
 
 // 单实例锁：双开应用会并发写同一 SQLite 与 .lake 文件，存在丢失更新风险
+// 崩溃转储本地留档（不自动上传）：Electron 43 起 renderer OOM 崩溃报告带 JS 堆栈，
+// 便于诊断「大纲展开到 X 级」等偶发崩溃（dumps 在 userData/Crashpad）。
+crashReporter.start({ submitURL: "http://127.0.0.1:0/", uploadToServer: false, compress: true });
+
+// 子进程（GPU/网络/utility 等）异常退出留档，便于定位渲染/同步卡死根因。
+app.on("child-process-gone", (_event, details) => {
+  if (details.reason === "clean-exit") return;
+  log.app.warn(`[crash] child-process-gone type=${details.type} reason=${details.reason} exitCode=${details.exitCode}${details.serviceName ? ` service=${details.serviceName}` : ""}`);
+});
+
 if (!app.requestSingleInstanceLock()) {
   app.quit();
 } else {
@@ -404,6 +436,7 @@ if (!app.requestSingleInstanceLock()) {
     startAssetServer(path.join(workspaceRoot(), "note-assets"), vendorCdnDir(), path.join(workspaceRoot(), "quick-notes"), assetToken);
     registerIpc();
     createWindow();
+    logHeapPeak("startup");
 
     // U1：自动快照（默认 15 分钟，间隔可配置）+ 启动兜底清理（P5 低频巡检）
     // 启动兜底：清理一次过期快照（惰性清理在创建快照后也会触发，这里是兜底）

@@ -2293,3 +2293,38 @@ ne-card[data-card-name="codeblock"] .ne-card-resizer-mask {
 @media (max-width: 760px) {
   .sync-setup-toast { right: 12px; bottom: calc(12px + env(safe-area-inset-bottom)); left: 12px; width: auto; }
 }
+
+/* ── 性能与过渡（Electron 43 / Chromium 150 新能力落地） ── */
+
+/* 树长列表：跳过视口外行的渲染（content-visibility） */
+.tree-row {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 32px;
+}
+
+/* 切换标签页：仅文档区做淡入淡出过渡，避免整页闪烁 */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation: none;
+}
+.document-pane {
+  view-transition-name: note-pane;
+}
+::view-transition-old(note-pane) {
+  animation: 110ms ease-in both vt-fade-out;
+}
+::view-transition-new(note-pane) {
+  animation: 160ms ease-out both vt-fade-in;
+}
+@keyframes vt-fade-out { to { opacity: 0; } }
+@keyframes vt-fade-in { from { opacity: 0; } }
+
+/* UI 标题断行均衡（仅面板/页头，不作用于编辑器正文） */
+.history-panel h2,
+.trash-panel h2,
+.sync-panel header h2,
+.settings-panel h2,
+.quick-notes-header h1,
+.mobile-library-header h1 {
+  text-wrap: balance;
+}

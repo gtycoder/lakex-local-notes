@@ -461,3 +461,9 @@
     border-right: 0;
   }
 }
+
+/* 大纲长列表：跳过视口外行的渲染（content-visibility） */
+.outline-item {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 26px;
+}
