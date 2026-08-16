@@ -65,8 +65,13 @@
     border-radius: 0 0 0 var(--b3-border-radius-b) !important;
   }
 
-  /* 状态栏：不透明灰底（思源底部灰条，盖住延伸的白色文档区）、无顶线 */
+  /* 状态栏：思源全宽底部灰条——回到 workspace 两行网格的第 2 行（28px），
+   * 取消原"右下浮动胶囊"（absolute;right:10px;bottom:6px），文档区在第 1 行自然收口 */
   .statusbar {
+    position: static !important;
+    right: auto !important;
+    bottom: auto !important;
+    width: auto !important;
     background: var(--b3-body-background) !important;
     border-top: 0 !important;
   }
