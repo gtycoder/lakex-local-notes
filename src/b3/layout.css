@@ -219,10 +219,11 @@
   -webkit-app-region: no-drag;
 }
 .top-menu {
-  position: absolute;
-  top: calc(100% + 6px);
-  right: 0;
-  z-index: 500;
+  /* fixed + 内联坐标：逃离 document-pane 的 overflow 裁剪（顶栏左侧下拉在文档区之外会被裁掉） */
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 1000;
   display: flex;
   flex-direction: column;
   min-width: 170px;
@@ -250,6 +251,7 @@
   color: var(--b3-theme-on-background);
 }
 .top-menu > button span { min-width: 0; }
+
 
 /* ── 面包屑：笔记本名 + 大纲（H1xxx 纯文本标识大纲，无特殊样式）── */
 .protyle-breadcrumb__item--notebook {

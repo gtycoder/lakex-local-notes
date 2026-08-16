@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type CSSProperties } from "react";
+import { createPortal } from "react-dom";
 import { ArrowLeft, Check, ChevronDown, ChevronRight, Cloud, CloudOff, Files, ListTree, LoaderCircle, Feather, Lock, LockOpen, Moon, MoreHorizontal, Pencil, Save, Settings as Settings2Icon, Sun, Trash2, WifiOff, X } from "lucide-react";
 import { MobileLibrary } from "./components/MobileLibrary";
 import { withViewTransition } from "./lib/viewTransition";
@@ -99,6 +100,9 @@ export function App() {
   const [topMenuOpen, setTopMenuOpen] = useState(false);
   /** 工作空间（lake-notes）下拉：偏好设置/回收站 */
   const [workspaceMenuOpen, setWorkspaceMenuOpen] = useState(false);
+  /** 顶栏两个下拉的触发容器 ref（定位 fixed 菜单用） */
+  const wsMenuWrapRef = useRef<HTMLDivElement>(null);
+  const moreMenuWrapRef = useRef<HTMLDivElement>(null);
   /** 顶栏「工作空间」名：取 S3 prefix（未配置时显示本地占位） */
   const [workspaceName, setWorkspaceName] = useState("本地工作空间");
 
@@ -893,16 +897,11 @@ export function App() {
   // 顶栏左侧：工作空间（下拉：设置/回收站）+ 云同步
   const topBarLeading = (
     <>
-      <div className="toolbar__menu-wrap">
+      <div className="toolbar__menu-wrap" ref={wsMenuWrapRef}>
         <button className="toolbar__item" onClick={() => { setWorkspaceMenuOpen((o) => !o); setTopMenuOpen(false); }} title="工作空间" aria-label="工作空间">
           <span className="toolbar__text">{workspaceName}</span><ChevronDown size={13} />
         </button>
-        {workspaceMenuOpen && (
-          <div className="top-menu top-menu--workspace" role="menu" aria-label="工作空间">
-            <button role="menuitem" onClick={() => { setSettingsCategory("editor"); setSettingsOpen(true); setWorkspaceMenuOpen(false); }}><Settings2Icon size={15} />偏好设置</button>
-            <button role="menuitem" onClick={() => { setTrashOpen(true); setWorkspaceMenuOpen(false); }}><Trash2 size={15} />回收站</button>
-          </div>
-        )}
+
       </div>
       <button className={`toolbar__item toolbar__sync ${sync.phase}`} onClick={() => { setSyncPanelOpen(true); void syncPanelRef.current?.sync(); }} title={syncTooltip(sync)} aria-label={`云同步：${sync.message}`}>
         <Cloud size={15} />
@@ -915,18 +914,9 @@ export function App() {
       <button className="toolbar__item" onClick={() => saveSettings({ theme: settings.theme === "dark" ? "light" : "dark" })} title="外观模式（浅色/深色）" aria-label="外观模式">
         {settings.theme === "dark" ? <Sun size={15} /> : <Moon size={15} />}
       </button>
-      <div className="toolbar__menu-wrap">
+      <div className="toolbar__menu-wrap" ref={moreMenuWrapRef}>
         <button className="toolbar__item" onClick={() => { setTopMenuOpen((o) => !o); setWorkspaceMenuOpen(false); }} title="更多" aria-label="更多"><MoreHorizontal size={15} /></button>
-        {topMenuOpen && (
-          <div className="top-menu top-menu--more" role="menu" aria-label="文档操作">
-            {activeNoteId && (
-              <button role="menuitem" onClick={() => { void toggleNoteLock(); setTopMenuOpen(false); }}>
-                {lockedNoteIds.has(activeNoteId) ? <Lock size={15} /> : <LockOpen size={15} />}
-                <span>{lockedNoteIds.has(activeNoteId) ? "解锁当前文档" : "锁定当前文档（只读）"}</span>
-              </button>
-            )}
-          </div>
-        )}
+
       </div>
     </>
   );
@@ -1077,6 +1067,27 @@ export function App() {
         />
       )}
       {confirmDelete && <ConfirmDelete node={confirmDelete} onConfirm={() => { const id = confirmDelete.id; setConfirmDelete(null); void deleteTreeNode(id); }} onCancel={() => setConfirmDelete(null)} />}
+      {/* 顶栏下拉用 portal 渲染到 body 根部，避免被 app-shell 内部堆叠上下文/overflow 覆盖 */}
+      {workspaceMenuOpen && createPortal(
+        <div className="top-menu top-menu--workspace" role="menu" aria-label="工作空间"
+          style={{ top: (wsMenuWrapRef.current?.getBoundingClientRect().bottom ?? 38) + 6, left: wsMenuWrapRef.current?.getBoundingClientRect().left ?? 82 }}>
+          <button role="menuitem" onClick={() => { setSettingsCategory("editor"); setSettingsOpen(true); setWorkspaceMenuOpen(false); }}><Settings2Icon size={15} />偏好设置</button>
+          <button role="menuitem" onClick={() => { setTrashOpen(true); setWorkspaceMenuOpen(false); }}><Trash2 size={15} />回收站</button>
+        </div>,
+        document.body,
+      )}
+      {topMenuOpen && createPortal(
+        <div className="top-menu top-menu--more" role="menu" aria-label="文档操作"
+          style={{ top: (moreMenuWrapRef.current?.getBoundingClientRect().bottom ?? 38) + 6, left: (moreMenuWrapRef.current?.getBoundingClientRect().right ?? 1280) - 180 }}>
+          {activeNoteId && (
+            <button role="menuitem" onClick={() => { void toggleNoteLock(); setTopMenuOpen(false); }}>
+              {lockedNoteIds.has(activeNoteId) ? <Lock size={15} /> : <LockOpen size={15} />}
+              <span>{lockedNoteIds.has(activeNoteId) ? "解锁当前文档" : "锁定当前文档（只读）"}</span>
+            </button>
+          )}
+        </div>,
+        document.body,
+      )}
       <SearchPanel open={searchPanelOpen} initialQuery={searchPanelQuery} onOpenNote={(id) => void openNote(id)} onClose={() => setSearchPanelOpen(false)} />
       <TrashPanel open={trashOpen} onClose={() => setTrashOpen(false)} onRestored={() => {
         void native.listTreeNodes().then(setTreeNodes).catch(() => undefined);
