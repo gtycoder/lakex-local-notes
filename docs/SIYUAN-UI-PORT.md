@@ -55,7 +55,9 @@
 1. [x] 设计文档 + 令牌层（daylight/midnight 原文引入）
 2. [x] 通用基础接线：body/应用背景/字体/滚动条/文本色 换用 `--b3-*`（含覆盖壳层 !important）
 3. [x] 核心组件样式移植：按钮(→b3-button)/弹窗/菜单/列表/表单/开关/工具提示/绿色清零
-4. [x] 布局对齐：壳层灰底、标签页（灰栏+顶部主色指示线）、状态栏、活动轨
+4. [x] 布局对齐（思源整体模型）：灰底 + 白色一体卡片无连接线；活动轨满高透明；
+   标签页思源激活态（浅蓝底+主色内边框）；状态栏全宽底部灰条；顶栏思源 #toolbar
+   （工作空间S3 prefix/云同步/前进后退/外观/更多）；编辑器面包屑 protyle-breadcrumb
 5. [x] 双主题切换（data-theme=dark，含编辑器 --lakex-* 变量覆盖）+ 自定义 snippets（外观设置）
 6. [x] scroll-driven animations（阅读进度条 scroll() + 大纲/小记渐显 view()）
 7. [x] text-wrap: balance（面板标题）；pretty 可在 UI 微调时补
