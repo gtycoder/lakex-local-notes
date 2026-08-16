@@ -1,0 +1,53 @@
+/* ── 布局对齐思源 dock：固定从顶栏下开始、浮动为半高悬浮带 ──
+ * 思源几何（_layout.scss）：浮动 dock top:112px / bottom:82px、position:fixed、
+ * 外侧圆角 + --b3-dock-shadow-color 阴影、transform/opacity 过渡。
+ * 固定 dock 始终位于顶栏（含标签栏）下方，不覆盖 tab。 */
+
+@media (min-width: 761px) {
+  /* 左侧固定目录：从顶栏下方开始，不覆盖 tab/顶栏 */
+  .sidebar.sidebar-docked {
+    margin: var(--topbar-height) 4px 0 0 !important;
+    height: calc(100% - var(--topbar-height)) !important;
+    align-self: stretch !important;
+  }
+
+  /* 左侧浮动：思源半高悬浮带（悬停活动轨出现）
+   * 注意：height 必须显式给出（height:auto + bottom 会导致浏览器忽略 top、按 bottom+内容高锚定）。 */
+  .sidebar.sidebar-floating {
+    position: fixed !important;
+    top: 112px !important;
+    bottom: 82px !important;
+    left: var(--activity-rail-width) !important;
+    right: auto !important;
+    height: calc(100vh - 194px) !important;
+    border-radius: 0 var(--b3-border-radius-b) var(--b3-border-radius-b) 0 !important;
+    box-shadow: 8px 0 24px var(--b3-dock-shadow-color) !important;
+    transition: transform .2s cubic-bezier(0, 0, .2, 1) 0ms, opacity .3s cubic-bezier(0, 0, .2, 1) 0ms !important;
+  }
+
+  /* 右侧浮动（大纲 hover）：思源半高悬浮带 */
+  .outline-sidebar--collapsed.outline-sidebar--hovered .outline-sidebar__content {
+    position: fixed !important;
+    top: 112px !important;
+    bottom: 82px !important;
+    right: var(--outline-collapsed-width) !important;
+    left: auto !important;
+    width: var(--outline-sidebar-width, 280px) !important;
+    height: calc(100vh - 194px) !important;
+    min-width: 0 !important;
+    border-radius: var(--b3-border-radius-b) 0 0 var(--b3-border-radius-b) !important;
+    box-shadow: -8px 0 24px var(--b3-dock-shadow-color) !important;
+    border: 1px solid var(--b3-theme-surface-lighter) !important;
+    border-right: 0 !important;
+    background: var(--b3-theme-surface) !important;
+    transition: transform .2s cubic-bezier(0, 0, .2, 1) 0ms, opacity .3s cubic-bezier(0, 0, .2, 1) 0ms !important;
+  }
+}
+
+/* 深色：dock 卡片背景跟随主题（styles.css 有 #fff !important 强制） */
+[data-theme="dark"] .sidebar.sidebar-docked,
+[data-theme="dark"] .sidebar.sidebar-floating,
+[data-theme="dark"] .outline-sidebar__content {
+  background: var(--b3-theme-surface) !important;
+  border-color: var(--b3-theme-surface-lighter) !important;
+}

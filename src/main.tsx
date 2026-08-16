@@ -15,6 +15,7 @@ import "./b3/components.css";
 import "./b3/siyuan.scss";
 import "./b3/dark.css";
 import "./b3/animations.css";
+import "./b3/layout.css";
 
 // 首帧前应用主题，避免闪烁（App 挂载后的 settings 订阅会继续跟随变化）
 applyTheme(loadSettings().theme);
