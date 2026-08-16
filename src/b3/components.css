@@ -33,6 +33,8 @@
   border-radius: var(--b3-border-radius-b);
   box-shadow: var(--b3-dialog-shadow);
   padding: 8px 0;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
 }
 .context-menu > button,
 .context-menu-item,
