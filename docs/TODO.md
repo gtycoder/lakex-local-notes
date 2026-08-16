@@ -1,5 +1,29 @@
 # 待办清单
 
+## UI 重做：复刻思源前端（2026-08-16 立项；Electron 43 升级测试完成后启动）
+
+> 目标：Lake Notes 界面「完全复刻」思源笔记（用户非常喜欢思源 UI/样式，且思源支持自定义 UI）。
+> 参考代码（本机）：`/Users/admin/file/local-lake/siyuan-master`（v3.8.0，Electron 42.7.1）。
+> **重要结论（已研究）**：思源前端是自研框架（`layout/Model` + WebSocket 连 Go kernel + protyle 块编辑器），
+> 与 Lake Notes 的 React 18 + Lake 编辑器架构不兼容——**只移植「视觉层」（设计令牌 + 组件样式 + 布局结构），
+> 不抄代码架构**；编辑器保留 Lake，只改外框样式。
+> **License 注意**：思源为 **AGPL-3.0**。移植样式需在项目里保留署名/NOTICE（私有使用无碍，若分发需合规）。
+
+- [ ] **设计令牌移植**：把思源 `--b3-*` 变量体系（appearance/themes/daylight/theme.css：主色 #3575f0、
+      表面色/文字色/圆角/滚动条/列表 hover/工具栏色等）移植到 `src/styles.css`，替换现有硬编码色值。
+- [ ] **组件样式移植**：按需移植思源 `app/src/assets/scss/component/`（button/dialog/menu/list/form/select/
+      switch/slider/tooltips/typography/snackbar）到 Lake Notes 对应 React 组件（用类名映射，不抄 TS）。
+- [ ] **布局对齐思源**：dock 布局（左侧文件树/大纲/标签 dock、顶部工具栏、状态栏、标签页）——
+      参考 `app/src/layout/dock/` 与 `app/src/layout/{topBar,status,Tab}.ts` 的结构，用 React 重排。
+- [ ] **双主题**：daylight + midnight 亮/暗主题切换（对应思源 appearance/themes）。
+- [ ] **自定义 UI**：CSS 变量 + 自定义 snippets 入口（对应思源「外观 → 代码片段」，支持用户改 UI；插件系统不做）。
+- [ ] **scroll-driven animations（思源风格动效，Electron 43/Chromium 150 Baseline）**：
+      - 长文档阅读进度条（`animation-timeline: scroll(root)`）；
+      - 树/大纲/列表条目滚入视口渐显（`animation-timeline: view()` + `animation-range: entry 0% entry 100%`）；
+      - 大纲「跟随滚动」当前标题高亮/强调；
+      - 面板/侧栏收起展开过渡。
+- [ ] **text-wrap: balance / pretty** 全面应用到短标题与段落排版（UI 重做时顺手做）。
+
 ## 视觉/体验
 - [x] **多标签（tab）宽度与间距**：关闭键固定在 tab 最右侧；短标签保持内容自适应，长标签继续封顶截断。
 - [ ] Word / PDF 导出：收口导出已预留（`electron/export.ts` 的 `docx`/`pdf`），待实现（可走 HTML → docx/PDF 链路）。
