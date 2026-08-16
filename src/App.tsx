@@ -900,7 +900,7 @@ export function App() {
               <button className={mobileTocOpen ? "selected" : ""} onClick={() => setMobileTocOpen((open) => !open)}><ListTree size={21} /><span>大纲</span></button>
               <button onClick={() => setMobileOpen(true)}><Files size={20} /><span>切换</span></button>
             </nav>}
-          </section> : <section className="empty-workspace"><h2>开始写第一篇笔记</h2><button className="primary-button" onClick={() => void createNote()}>新建文档</button></section>
+          </section> : <section className="empty-workspace"><h2>开始写第一篇笔记</h2><button className="b3-button" onClick={() => void createNote()}>新建文档</button></section>
         ) : desktopWorkspace === "quick-notes" ? (
           <QuickNotesWorkspace ref={quickNotesRef} notebooks={treeNodes} onDirtyChange={setQuickNotesDirty} onConverted={(note) => void handleQuickNoteConverted(note)} />
         ) : (
@@ -924,7 +924,7 @@ export function App() {
                   <span className="sync-icon-wrap"><Cloud size={15} /><span className="sync-state-dot" aria-hidden="true" /></span>
                 </button>
               </>}
-              emptyAction={<button className="primary-button" onClick={() => void createNote()}>新建文档</button>}
+              emptyAction={<button className="b3-button" onClick={() => void createNote()}>新建文档</button>}
             />
           </section>
         )}

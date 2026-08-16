@@ -488,8 +488,8 @@ export const ConfirmDelete = ({ node, onConfirm, onCancel }: ConfirmDeleteProps)
       <h3>删除“{node.title}”？</h3>
       <p>将删除该节点及其所有子项，移入本地回收站（可在回收站中恢复或彻底删除）。</p>
       <footer>
-        <button className="secondary-button" onClick={onCancel}>取消</button>
-        <button className="primary-button danger-button" onClick={onConfirm}>删除</button>
+        <button className="b3-button b3-button--cancel" onClick={onCancel}>取消</button>
+        <button className="b3-button danger-button" onClick={onConfirm}>删除</button>
       </footer>
     </section>
   </div>

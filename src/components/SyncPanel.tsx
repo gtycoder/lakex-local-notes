@@ -164,7 +164,7 @@ export const SyncPanel = forwardRef<SyncPanelHandle, SyncPanelProps>(function Sy
 
         {message && <div className={`connection-message ${status}`}>{status === "busy" ? <LoaderCircle className="spin" size={16} /> : status === "ok" ? <Check size={16} /> : null}{message}</div>}
         <footer>
-          <button className="primary-button" onClick={sync} disabled={busy}>{busy ? "同步中..." : "立即同步"}</button>
+          <button className="b3-button" onClick={sync} disabled={busy}>{busy ? "同步中..." : "立即同步"}</button>
         </footer>
       </section>
     </div>

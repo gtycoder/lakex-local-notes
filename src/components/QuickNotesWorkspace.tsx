@@ -231,7 +231,7 @@ export const QuickNotesWorkspace = forwardRef<QuickNotesWorkspaceHandle, QuickNo
           {notebooks.map((notebook) => <button key={notebook.id} disabled={saving} onClick={() => void convert(notebook.id)}><FilePlus2 size={16} /><span>{notebook.title}</span></button>)}
           {notebooks.length === 0 && <span className="quick-note-no-notebook">请先在资料库中新建一个笔记本。</span>}
         </div>
-        <footer><button className="secondary-button" disabled={saving} onClick={() => setConvertItem(null)}>取消</button></footer>
+        <footer><button className="b3-button b3-button--cancel" disabled={saving} onClick={() => setConvertItem(null)}>取消</button></footer>
       </section>
     </div>}
   </section>;
@@ -267,8 +267,8 @@ function QuickNoteComposer({ draft, saving, onChange, onAddFiles, onRemoveImage,
       <label className="quick-note-image-button" title="添加图片"><ImagePlus size={17} /><input ref={inputRef} type="file" accept="image/png,image/jpeg,image/gif,image/webp,image/avif" multiple onChange={(event) => { if (event.target.files) onAddFiles(event.target.files); event.currentTarget.value = ""; }} /></label>
       <span>可拖入或粘贴图片</span>
       <div className="quick-note-action-spacer" />
-      <button className="secondary-button" disabled={saving} onClick={onCancel}>取消</button>
-      <button className="primary-button" disabled={saving} onClick={onSave}>{saving ? <LoaderCircle className="spin" size={15} /> : <Check size={15} />}{saving ? "保存中" : "记下"}</button>
+      <button className="b3-button b3-button--cancel" disabled={saving} onClick={onCancel}>取消</button>
+      <button className="b3-button" disabled={saving} onClick={onSave}>{saving ? <LoaderCircle className="spin" size={15} /> : <Check size={15} />}{saving ? "保存中" : "记下"}</button>
     </footer>
   </div>;
 }

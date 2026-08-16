@@ -7,31 +7,7 @@
   --floating-dialog-shadow: var(--b3-dialog-shadow);
 }
 
-/* ── 按钮（思源 b3-button）── */
-.primary-button {
-  border: 0;
-  background-color: var(--b3-theme-primary);
-  color: var(--b3-theme-on-primary);
-  border-radius: var(--b3-border-radius);
-  box-shadow: none;
-}
-.primary-button:hover {
-  background-color: var(--b3-theme-primary);
-  box-shadow: var(--b3-button-shadow);
-}
-.primary-button:active {
-  box-shadow: var(--b3-button-active-shadow);
-}
-.secondary-button {
-  border: 0;
-  color: var(--b3-theme-on-surface);
-  background: transparent;
-  border-radius: var(--b3-border-radius);
-}
-.secondary-button:hover {
-  background-color: var(--b3-list-hover);
-  color: var(--b3-theme-on-background);
-}
+/* ── 按钮：primary/secondary 已迁移为 .b3-button / .b3-button--cancel（见 siyuan.scss）── */
 .icon-button {
   color: var(--b3-theme-on-surface);
   border-radius: var(--b3-border-radius);

@@ -78,7 +78,7 @@ button { cursor: pointer; }
 .current-note-input:hover { border-color: #dfe3e6; background: #fafafa; }
 .current-note-input:focus { border-color: #73a28e; background: #fff; box-shadow: 0 0 0 2px #e2eee9; }
 .muted-icon { color: #959ca6; }.icon-button { display: inline-grid; place-items: center; flex: 0 0 auto; width: 32px; height: 32px; padding: 0; border: 0; border-radius: 5px; color: #626a75; background: transparent; }
-.icon-button:hover { background: #eceef1; }.danger-hover:hover { color: #b1433e; background: #fbe9e7; }.icon-button, .primary-button, .secondary-button, .mobile-create-button, .mobile-note-row, .sync-button { transition: transform var(--dur-press) var(--ease-out); }.icon-button:active, .primary-button:active, .secondary-button:active, .mobile-create-button:active, .mobile-note-row:active { transform: scale(0.97); }
+.icon-button:hover { background: #eceef1; }.danger-hover:hover { color: #b1433e; background: #fbe9e7; }.icon-button, .mobile-create-button, .mobile-note-row, .sync-button { transition: transform var(--dur-press) var(--ease-out); }.icon-button:active, .mobile-create-button:active, .mobile-note-row:active { transform: scale(0.97); }
 .save-label { display: flex; align-items: center; gap: 5px; color: #8b929c; font-size: 11px; white-space: nowrap; }.save-label.error { color: #b1433e; }.save-label.dirty { color: #a56b19; }
 .sync-button { display: flex; align-items: center; gap: 6px; height: 32px; padding: 0 10px; border: 1px solid #d8dde1; border-radius: 5px; color: #3d6554; background: #fff; font-size: 11px; }
 .sync-button:hover { background: #f1f7f4; }.sync-button:disabled { cursor: wait; opacity: .7; }
@@ -116,7 +116,7 @@ button { cursor: pointer; }
 .statusbar { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 0 14px; border-top: 1px solid #eceef1; color: #969ca5; background: #fafafa; font-size: 10px; }
 .error-banner { display: flex; position: fixed; top: 50%; left: 50%; z-index: 600; align-items: center; gap: 12px; width: min(560px, calc(100vw - 32px)); max-width: calc(100vw - 32px); padding: 12px 14px; border: 1px solid #e6c2bd; border-radius: 10px; color: #923f38; background: #fff4f2; font-size: 12px; box-shadow: 0 18px 48px rgba(80, 35, 30, .18); transform: translate(-50%, -50%); transition: transform var(--dur-enter) var(--ease-out), opacity var(--dur-enter) var(--ease-out); }.error-banner button { border: 0; color: inherit; background: transparent; }
 .empty-workspace, .loading-screen { display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 14px; color: #68717c; }.loading-screen { height: 100vh; }.loading-screen small { color: #b1433e; }
-.primary-button, .secondary-button { min-height: 36px; padding: 0 16px; border-radius: 5px; font-weight: 600; }.primary-button { border: 1px solid #216e4e; color: white; background: #216e4e; }.primary-button:hover { background: #195c40; }.secondary-button { border: 1px solid #ccd2d8; color: #414953; background: white; }
+
 .modal-backdrop { display: grid; position: fixed; z-index: 30; inset: 0; place-items: center; padding: 20px; background: #20242c55; transition: opacity var(--dur-drawer) var(--ease-out); }
 .sync-panel { width: min(560px, 100%); border: 1px solid #dadde2; border-radius: 8px; background: white; box-shadow: 0 20px 60px #1d252d33; transition: transform var(--dur-drawer) var(--ease-out), opacity var(--dur-drawer) var(--ease-out); }
 .sync-panel header { display: flex; align-items: center; justify-content: space-between; padding: 18px 20px; border-bottom: 1px solid #e8eaed; }.sync-panel header > div { display: flex; align-items: center; gap: 11px; color: #216e4e; }.sync-panel h2 { margin: 0; color: #242a31; font-size: 16px; }.sync-panel header p { margin: 3px 0 0; color: #8a919b; font-size: 11px; }
@@ -1404,7 +1404,7 @@ ne-card[data-card-name="codeblock"] .ne-card-resizer-mask {
 .quick-note-composer textarea::placeholder { color: #a2a9b6; }
 .quick-note-composer-actions { display: flex; align-items: center; gap: 8px; margin-top: 10px; color: #939bab; font-size: 11px; }
 .quick-note-action-spacer { flex: 1; }
-.quick-note-composer-actions .primary-button, .quick-note-composer-actions .secondary-button, .quick-note-convert-dialog .secondary-button { min-height: 28px; padding: 0 10px; border-radius: 7px; font-size: 12px; }
+.quick-note-composer-actions .b3-button, .quick-note-composer-actions .b3-button--cancel, .quick-note-convert-dialog .b3-button--cancel { min-height: 28px; padding: 0 10px; border-radius: 7px; font-size: 12px; }
 .quick-note-image-button { display: grid; place-items: center; width: 28px; height: 28px; border-radius: 7px; color: #3575f0; background: rgba(53, 117, 240, .1); cursor: pointer; }
 .quick-note-image-button:hover { background: rgba(53, 117, 240, .17); }
 .quick-note-image-button input { display: none; }
@@ -1556,10 +1556,7 @@ ne-card[data-card-name="codeblock"] .ne-card-resizer-mask {
 /* ===== 2026-08-06 同步视觉：弹窗/小记/按钮统一到暖紫灰体系（仅配色） ===== */
 
 /* 主/次按钮：绿 → shell 强调色；次按钮白微卡 */
-.primary-button { border-color: var(--shell-accent-strong, #2a5fd0); background: var(--shell-accent-strong, #2a5fd0); }
-.primary-button:hover { background: #2a5fd0; }
-.secondary-button { border-color: rgba(0, 0, 0, .14); color: #4a5165; background: #fff; }
-.secondary-button:hover { background: #f7f7fb; box-shadow: var(--shell-micro-card, 0 1px 2px rgba(40,42,66,.1)); }
+
 
 /* 同步/设置面板：去绿、去旧边框，融入 shell */
 .sync-panel header > div { color: var(--shell-accent-strong, #2a5fd0); }
