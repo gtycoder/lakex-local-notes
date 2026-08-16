@@ -313,3 +313,9 @@
 .sync-tab-action.syncing .sync-state-dot {
   background: var(--b3-theme-primary) !important;
 }
+
+/* ── 精度修正：树行圆角对齐思源 b3-list-item（--b3-border-radius=6px，原 8px）── */
+.tree-row,
+.note-row {
+  border-radius: var(--b3-border-radius) !important;
+}
