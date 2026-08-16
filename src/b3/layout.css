@@ -28,6 +28,25 @@
     border-bottom: 1px solid var(--b3-theme-background-light) !important;
   }
 
+  /* 标签项：思源 layout-tab-bar .item 观感 */
+  .tab-item {
+    color: var(--b3-theme-on-surface) !important;
+    border-radius: var(--b3-border-radius) !important;
+    min-height: 29px !important;
+    line-height: 22px !important;
+    margin: 6px 4px !important;
+    padding: 0 8px !important;
+    max-width: 186px !important;
+  }
+  .tab-item:hover {
+    background-color: var(--b3-list-hover) !important;
+  }
+  .tab-item.active {
+    color: var(--b3-theme-on-background) !important;
+    background-color: var(--b3-theme-primary-lightest) !important;
+    box-shadow: 0 0 0 1px var(--b3-theme-primary-lighter) inset !important;
+  }
+
   /* 左侧固定目录：白色卡片、无强边框/阴影、顶部与标签栏一体、右侧 4px 灰缝 */
   .sidebar.sidebar-docked {
     background: var(--b3-theme-background) !important;
