@@ -883,6 +883,36 @@ export function App() {
   const outlineVisible = tocEnabled && !isMobile && desktopWorkspace === "library";
   // 只读锁：store 驱动（可同步），派生集合供多标签 viewer 重建
   const lockedNoteIds = new Set(notes.filter((n) => n.isLocked).map((n) => n.id));
+
+  // 融合顶栏左侧按钮（工作空间/云同步/外观/更多）：库视图并入多 tab 顶栏，小记视图单独渲染
+  const topBarItems = (
+    <>
+      <button className="toolbar__item" onClick={() => { setSettingsCategory("appearance"); setSettingsOpen(true); }} title="工作空间（点击打开设置）" aria-label="工作空间">
+        <span className="toolbar__text">{workspaceName}</span><ChevronDown size={13} />
+      </button>
+      <button className={`toolbar__item toolbar__sync ${sync.phase}`} onClick={() => { setSyncPanelOpen(true); void syncPanelRef.current?.sync(); }} title={syncTooltip(sync)} aria-label={`云同步：${sync.message}`}>
+        <Cloud size={15} />
+      </button>
+      <button className="toolbar__item" onClick={() => saveSettings({ theme: settings.theme === "dark" ? "light" : "dark" })} title="外观模式（浅色/深色）" aria-label="外观模式">
+        {settings.theme === "dark" ? <Sun size={15} /> : <Moon size={15} />}
+      </button>
+      <div className="toolbar__menu-wrap">
+        <button className="toolbar__item" onClick={() => setTopMenuOpen((o) => !o)} title="更多" aria-label="更多"><MoreHorizontal size={15} /></button>
+        {topMenuOpen && (
+          <div className="top-menu" role="menu" aria-label="更多操作">
+            <button role="menuitem" onClick={() => { setSettingsCategory("editor"); setSettingsOpen(true); setTopMenuOpen(false); }}><Settings2Icon size={15} />偏好设置</button>
+            <button role="menuitem" onClick={() => { setTrashOpen(true); setTopMenuOpen(false); }}><Trash2 size={15} />回收站</button>
+            {activeNoteId && (
+              <button role="menuitem" onClick={() => { void toggleNoteLock(); setTopMenuOpen(false); }}>
+                {lockedNoteIds.has(activeNoteId) ? <Lock size={15} /> : <LockOpen size={15} />}
+                <span>{lockedNoteIds.has(activeNoteId) ? "解锁当前文档" : "锁定当前文档（只读）"}</span>
+              </button>
+            )}
+          </div>
+        )}
+      </div>
+    </>
+  );
   const effectiveOutlineMode: OutlineMode = activeOutlineEmpty && !outlineEmptyOverride ? "collapsed" : outlineMode;
   const shellStyle = {
     "--sidebar-width": `${sidebarWidth}px`,
@@ -940,7 +970,12 @@ export function App() {
             </nav>}
           </section> : <section className="empty-workspace"><h2>开始写第一篇笔记</h2><button className="b3-button" onClick={() => void createNote()}>新建文档</button></section>
         ) : desktopWorkspace === "quick-notes" ? (
-          <QuickNotesWorkspace ref={quickNotesRef} notebooks={treeNodes} onDirtyChange={setQuickNotesDirty} onConverted={(note) => void handleQuickNoteConverted(note)} />
+          <>
+            <header className="tab-bar desktop-only" aria-label="顶栏">
+              <div className="tabbar-leading">{topBarItems}</div>
+            </header>
+            <QuickNotesWorkspace ref={quickNotesRef} notebooks={treeNodes} onDirtyChange={setQuickNotesDirty} onConverted={(note) => void handleQuickNoteConverted(note)} />
+          </>
         ) : (
           <section className={`document-pane ${wideMode ? "wide-mode" : ""} ${settings.paragraphSpacing ? "paragraph-spacing" : ""}`}>
             <div className="read-progress" aria-hidden="true" />
@@ -948,32 +983,7 @@ export function App() {
               tabs={tabInfos}
               activeNoteId={activeNoteId}
               tocEnabled={tocEnabled}
-              topbarLeading={<>
-                <button className="toolbar__item" onClick={() => { setSettingsCategory("appearance"); setSettingsOpen(true); }} title="工作空间（点击打开设置）" aria-label="工作空间">
-                  <span className="toolbar__text">{workspaceName}</span><ChevronDown size={13} />
-                </button>
-                <button className={`toolbar__item toolbar__sync ${sync.phase}`} onClick={() => { setSyncPanelOpen(true); void syncPanelRef.current?.sync(); }} title={syncTooltip(sync)} aria-label={`云同步：${sync.message}`}>
-                  <Cloud size={15} />
-                </button>
-                <button className="toolbar__item" onClick={() => saveSettings({ theme: settings.theme === "dark" ? "light" : "dark" })} title="外观模式（浅色/深色）" aria-label="外观模式">
-                  {settings.theme === "dark" ? <Sun size={15} /> : <Moon size={15} />}
-                </button>
-                <div className="toolbar__menu-wrap">
-                  <button className="toolbar__item" onClick={() => setTopMenuOpen((o) => !o)} title="更多" aria-label="更多"><MoreHorizontal size={15} /></button>
-                  {topMenuOpen && (
-                    <div className="top-menu" role="menu" aria-label="更多操作">
-                      <button role="menuitem" onClick={() => { setSettingsCategory("editor"); setSettingsOpen(true); setTopMenuOpen(false); }}><Settings2Icon size={15} />偏好设置</button>
-                      <button role="menuitem" onClick={() => { setTrashOpen(true); setTopMenuOpen(false); }}><Trash2 size={15} />回收站</button>
-                      {activeNoteId && (
-                        <button role="menuitem" onClick={() => { void toggleNoteLock(); setTopMenuOpen(false); }}>
-                          {lockedNoteIds.has(activeNoteId) ? <Lock size={15} /> : <LockOpen size={15} />}
-                          <span>{lockedNoteIds.has(activeNoteId) ? "解锁当前文档" : "锁定当前文档（只读）"}</span>
-                        </button>
-                      )}
-                    </div>
-                  )}
-                </div>
-              </>}
+              topbarLeading={topBarItems}
               breadcrumb={activePath.length > 0 ? (
                 <nav className="protyle-breadcrumb" aria-label="文档路径">
                   {activePath.map((n, i) => (
