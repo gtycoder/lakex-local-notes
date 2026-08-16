@@ -65,9 +65,9 @@
     border-radius: 0 0 0 var(--b3-border-radius-b) !important;
   }
 
-  /* 状态栏：透明无顶线 */
+  /* 状态栏：不透明灰底（思源底部灰条，盖住延伸的白色文档区）、无顶线 */
   .statusbar {
-    background: transparent !important;
+    background: var(--b3-body-background) !important;
     border-top: 0 !important;
   }
 
@@ -125,7 +125,8 @@
   gap: 2px;
   height: var(--topbar-height);
   padding: 0 8px;
-  background: transparent;
+  /* 思源顶栏区 = 灰底（body 背景）；不透明以盖住下方标签栏白底 */
+  background: var(--b3-body-background);
   -webkit-app-region: drag;
 }
 .toolbar__item {
