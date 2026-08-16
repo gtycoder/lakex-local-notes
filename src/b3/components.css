@@ -216,3 +216,54 @@
 .checkbox input {
   accent-color: var(--b3-theme-primary);
 }
+
+/* ── 残留绿色系 → 思源蓝（全面清零 #216e4e/#28775a 等）── */
+.inline-create button:hover,
+.mode-toggle.selected,
+.sync-button,
+.statusbar-export-md:hover,
+.statusbar-notice {
+  color: var(--b3-theme-primary) !important;
+}
+.mode-toggle.selected {
+  background-color: var(--b3-theme-primary-lightest) !important;
+}
+.sync-button {
+  border-color: var(--b3-theme-primary-light) !important;
+  background: var(--b3-theme-background) !important;
+}
+.sync-button:hover {
+  background: var(--b3-theme-primary-lightest) !important;
+}
+
+.tree-row.type-notebook,
+.tree-row.type-notebook .note-row-copy strong {
+  color: var(--b3-theme-on-surface) !important;
+}
+
+/* 同步进度（思源主色） */
+.sync-progress-bar {
+  background: var(--b3-theme-primary) !important;
+}
+.sync-progress-track {
+  background: var(--b3-theme-primary-lightest) !important;
+}
+
+/* 移动端 */
+.mobile-library-header span,
+.mobile-done,
+.mobile-reader-actions button.selected {
+  color: var(--b3-theme-primary) !important;
+}
+.mobile-note-icon {
+  background: var(--b3-theme-primary-lightest) !important;
+  color: var(--b3-theme-primary) !important;
+}
+.mobile-create-button {
+  border: 0 !important;
+  background: var(--b3-theme-primary) !important;
+  color: var(--b3-theme-on-primary) !important;
+}
+.settings-toggle input {
+  accent-color: var(--b3-theme-primary);
+}
