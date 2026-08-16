@@ -13,10 +13,17 @@
   }
 
   /* 左右活动轨：透明、满高、无边框，与顶部一体（内容仍在标题栏下方） */
-  .activity-rail,
-  .outline-sidebar__rail {
+  .activity-rail {
     margin-top: 0 !important;
     padding-top: var(--topbar-height) !important;
+    background: transparent !important;
+    border-right: 0 !important;
+    border-left: 0 !important;
+  }
+  /* 大纲轨：图标位置不动（不额外加 padding-top——大纲侧栏本身已从顶栏下方开始） */
+  .outline-sidebar__rail {
+    margin-top: 0 !important;
+    padding-top: 0 !important;
     background: transparent !important;
     border-right: 0 !important;
     border-left: 0 !important;
@@ -26,6 +33,24 @@
   .tab-bar {
     background: var(--b3-theme-background) !important;
     border-bottom: 1px solid var(--b3-theme-background-light) !important;
+  }
+
+  /* 修复标签栏：styles.css 曾把它 fixed 到顶部 0-38（被顶栏盖住导致"多 tab 消失"）。
+   * 改为在文档区顶部 sticky（顶栏下方 38+），正常显示标签。 */
+  .tab-bar {
+    position: sticky !important;
+    top: 0 !important;
+    right: auto !important;
+    left: auto !important;
+    height: auto !important;
+    min-height: 0 !important;
+    width: 100% !important;
+    padding: 0 8px 4px !important;
+    z-index: 200 !important;
+    -webkit-app-region: no-drag !important;
+    box-shadow: none !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
   }
 
   /* 标签项：思源 layout-tab-bar .item 观感 */
@@ -130,8 +155,8 @@
   gap: 2px;
   height: var(--topbar-height);
   padding: 0 8px;
-  /* 思源顶栏区 = 灰底（body 背景）；不透明以盖住下方标签栏白底 */
-  background: var(--b3-body-background);
+  /* 思源顶栏区 = 灰底（body 背景）；顶部带细微渐变（材质感，上浅下灰，随主题） */
+  background: linear-gradient(180deg, color-mix(in srgb, var(--b3-theme-background) 45%, var(--b3-body-background)) 0%, var(--b3-body-background) 100%);
   -webkit-app-region: drag;
 }
 .toolbar__item {
@@ -184,3 +209,77 @@
 }
 .protyle-breadcrumb__item:hover { color: var(--b3-theme-on-background); }
 .protyle-breadcrumb__item--current { color: var(--b3-theme-on-background); font-weight: 500; }
+
+/* ── 顶栏「更多」下拉菜单（思源 b3-menu）── */
+.toolbar__menu-wrap {
+  position: relative;
+  -webkit-app-region: no-drag;
+}
+.top-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 500;
+  display: flex;
+  flex-direction: column;
+  min-width: 170px;
+  padding: 8px 0;
+  border: 1px solid var(--b3-theme-surface-lighter);
+  border-radius: var(--b3-border-radius-b);
+  background: var(--b3-menu-background);
+  box-shadow: var(--b3-dialog-shadow);
+  font-size: 13px;
+}
+.top-menu > button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 32px;
+  padding: 4px 14px;
+  border: 0;
+  color: var(--b3-theme-on-surface);
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+}
+.top-menu > button:hover {
+  background-color: var(--b3-list-hover);
+  color: var(--b3-theme-on-background);
+}
+.top-menu > button span { min-width: 0; }
+
+/* ── 面包屑：目录路径 vs 大纲路径（可区分）── */
+.protyle-breadcrumb__item--doc {
+  color: var(--b3-theme-on-background);
+}
+.protyle-breadcrumb__divider {
+  display: inline-flex;
+  align-items: center;
+  margin: 0 2px;
+  color: var(--b3-theme-on-surface-lighter);
+}
+.protyle-breadcrumb__outline {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+}
+.protyle-breadcrumb__item--heading {
+  padding: 1px 5px;
+  border-radius: var(--b3-border-radius);
+  color: var(--b3-theme-primary);
+  background: var(--b3-theme-primary-lightest);
+}
+.protyle-breadcrumb__item--heading .protyle-breadcrumb__level {
+  margin-right: 3px;
+  padding: 0 4px;
+  border-radius: 3px;
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--b3-theme-on-primary);
+  background: var(--b3-theme-primary-light);
+}
+.protyle-breadcrumb__item--heading.protyle-breadcrumb__item--current {
+  color: var(--b3-theme-on-background);
+  background: var(--b3-theme-primary-lighter);
+}

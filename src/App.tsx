@@ -96,7 +96,7 @@ export function App() {
   const [historyNoteId, setHistoryNoteId] = useState<string | null>(null);
   const [searchPanelQuery, setSearchPanelQuery] = useState("");
   const [saveState, setSaveState] = useState<SaveState>("idle");
-  const [statusMenuOpen, setStatusMenuOpen] = useState(false);
+  const [topMenuOpen, setTopMenuOpen] = useState(false);
   /** 顶栏「工作空间」名：取 S3 prefix（未配置时显示本地占位） */
   const [workspaceName, setWorkspaceName] = useState("本地工作空间");
   /** 顶栏前进/后退：笔记访问历史 */
@@ -106,16 +106,16 @@ export function App() {
   const canGoBack = visitIndexRef.current > 0;
   const canGoForward = visitIndexRef.current < visitHistoryRef.current.length - 1;
   useEffect(() => {
-    if (!statusMenuOpen) return;
+    if (!topMenuOpen) return;
     const onPointerDown = (event: PointerEvent) => {
-      const menu = document.querySelector(".statusbar-menu");
-      const btn = document.querySelector(".statusbar-menu-btn");
+      const menu = document.querySelector(".top-menu");
+      const btn = document.querySelector(".toolbar__item[aria-label=\"更多\"]");
       if (menu && !menu.contains(event.target as Node) && btn && !btn.contains(event.target as Node)) {
-        setStatusMenuOpen(false);
+        setTopMenuOpen(false);
       }
     };
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setStatusMenuOpen(false);
+      if (event.key === "Escape") setTopMenuOpen(false);
     };
     document.addEventListener("pointerdown", onPointerDown);
     document.addEventListener("keydown", onKeyDown);
@@ -123,7 +123,7 @@ export function App() {
       document.removeEventListener("pointerdown", onPointerDown);
       document.removeEventListener("keydown", onKeyDown);
     };
-  }, [statusMenuOpen]);
+  }, [topMenuOpen]);
   const [sync, setSync] = useState<SyncStatus>({ phase: "idle", message: "仅本地保存", lastSyncedAt: null, pendingChanges: 0 });
   const [cloudEnabled, setCloudEnabled] = useState(true);
   const [confirmDelete, setConfirmDelete] = useState<TreeNode | null>(null);
@@ -205,6 +205,14 @@ export function App() {
       if (s3?.prefix) setWorkspaceName(s3.prefix);
     }).catch(() => undefined);
   }, []);
+
+  // 面包屑大纲路径：订阅活动文档大纲变化（滚动切换标题时刷新）
+  const [, forceOutlineRender] = useState(0);
+  useEffect(() => {
+    const handle = getOutlineTab(activeNoteId);
+    if (!handle) return;
+    return handle.controller.subscribe(() => forceOutlineRender((v) => v + 1));
+  }, [activeNoteId, outlineTabsVersion]);
 
   // 主题与自定义 CSS：设置变化即应用（data-theme 驱动 b3 令牌切换；首帧前已由 main.tsx 预应用）
   useEffect(() => {
@@ -879,6 +887,19 @@ export function App() {
   };
   // 编辑器面包屑：活动文档路径（思源 protyle-breadcrumb）
   const activePath = activeNoteId ? treeNodePath(treeNodes, activeNoteId) : [];
+  // 大纲路径：从当前滚动标题沿 parentId 上溯（H1→H2→…），与目录路径可区分
+  const headingPath: Array<{ id: string; level: number; text: string }> = (() => {
+    const handle = getOutlineTab(activeNoteId);
+    const selectedId = handle?.controller.getSelectedId() ?? null;
+    if (!handle || !selectedId) return [];
+    const path: Array<{ id: string; level: number; text: string }> = [];
+    let node = handle.controller.getNode(selectedId);
+    while (node) {
+      path.unshift({ id: node.id, level: node.level, text: node.text });
+      node = node.parentId ? handle.controller.getNode(node.parentId) : null;
+    }
+    return path;
+  })();
   const tabInfos: TabInfo[] = openTabs.map((tab) => ({
     noteId: tab.noteId, title: tab.title, content: tab.content, dirty: tab.dirty, deleted: tab.deleted,
     icon: treeNodes.find((n) => n.noteFileId === tab.noteId)?.icon ?? null,
@@ -916,15 +937,27 @@ export function App() {
         <button className="toolbar__item" onClick={() => saveSettings({ theme: settings.theme === "dark" ? "light" : "dark" })} title="外观模式（浅色/深色）" aria-label="外观模式">
           {settings.theme === "dark" ? <Sun size={15} /> : <Moon size={15} />}
         </button>
-        <button className="toolbar__item" onClick={() => setStatusMenuOpen(true)} title="更多" aria-label="更多"><MoreHorizontal size={15} /></button>
+        <div className="toolbar__menu-wrap">
+          <button className="toolbar__item" onClick={() => setTopMenuOpen((o) => !o)} title="更多" aria-label="更多"><MoreHorizontal size={15} /></button>
+          {topMenuOpen && (
+            <div className="top-menu" role="menu" aria-label="更多操作">
+              <button role="menuitem" onClick={() => { setSettingsCategory("editor"); setSettingsOpen(true); setTopMenuOpen(false); }}><Settings2Icon size={15} />偏好设置</button>
+              <button role="menuitem" onClick={() => { setTrashOpen(true); setTopMenuOpen(false); }}><Trash2 size={15} />回收站</button>
+              {activeNoteId && (
+                <button role="menuitem" onClick={() => { void toggleNoteLock(); setTopMenuOpen(false); }}>
+                  {lockedNoteIds.has(activeNoteId) ? <Lock size={15} /> : <LockOpen size={15} />}
+                  <span>{lockedNoteIds.has(activeNoteId) ? "解锁当前文档" : "锁定当前文档（只读）"}</span>
+                </button>
+              )}
+            </div>
+          )}
+        </div>
       </header>
       <nav className="activity-rail desktop-only" aria-label="应用导航" onPointerEnter={desktopWorkspace === "library" ? showSidebarPreview : undefined} onPointerLeave={desktopWorkspace === "library" ? hideSidebarPreview : undefined}>
         <div className="activity-rail-spacer" />
         <button className={`activity-button ${desktopWorkspace === "library" && sidebarMode === "docked" ? "active" : ""}`} onClick={() => { if (desktopWorkspace === "library") toggleSidebarDock(); else void switchDesktopWorkspace("library"); }} title="资料库" aria-label="资料库"><Files size={16} /></button>
         <button className={`activity-button ${desktopWorkspace === "quick-notes" ? "active" : ""}`} onClick={() => void switchDesktopWorkspace("quick-notes")} title="小记" aria-label="小记"><Feather size={16} /></button>
         <div className="activity-rail-fill" />
-        <button className="activity-button" onClick={() => { setTrashOpen(true); }} title="回收站" aria-label="回收站"><Trash2 size={16} /></button>
-        <button className="activity-button" onClick={() => { setSettingsCategory("editor"); setSettingsOpen(true); }} title="偏好设置" aria-label="偏好设置"><Settings2Icon size={16} /></button>
       </nav>
       {desktopWorkspace === "library" && <Sidebar nodes={treeNodes} activeId={activeNoteId ?? mobileActive?.id ?? null} search={search} mobileOpen={mobileOpen} mode={sidebarMode} width={sidebarWidth} minWidth={SIDEBAR_MIN_WIDTH} maxWidth={SIDEBAR_MAX_WIDTH} onSearch={setSearch} onSelect={(id) => void (isMobile ? openNoteMobile(id) : openNote(id))} onCreate={(kind, parentId, title) => void createTreeItem(kind, parentId, title)} onRename={(id, title) => void renameTreeNode(id, title)} onMoveNode={(id, targetId, position) => void moveTreeNode(id, targetId, position)} onRequestDelete={(node) => setConfirmDelete(node)} onCopyMarkdown={(node) => void copyMarkdownFromCache(node)} onExportAs={(node, format) => void exportAs(node, format)} onCopyPaths={(node) => void copyNotePaths(node)} onSetIcon={(node, icon) => void setNodeIcon(node, icon)} onOpenHistory={(node) => { setHistoryNoteId(node.noteFileId); setHistoryOpen(!!node.noteFileId); }} onOpenSearch={(q) => { setSearchPanelQuery(q ?? ""); setSearchPanelOpen(true); }} pendingRenameId={pendingRenameId} onPendingRenameConsumed={() => setPendingRenameId(null)} onPreviewEnter={showSidebarPreview} onPreviewLeave={hideSidebarPreview} onResizeActiveChange={setSidebarResizing} onWidthChange={updateSidebarWidth} onWidthCommit={commitSidebarWidth} onCloseMobile={() => setMobileOpen(false)} />}
       {mobileOpen && <div className="mobile-scrim" onClick={() => setMobileOpen(false)} />}
@@ -973,11 +1006,25 @@ export function App() {
               breadcrumb={activePath.length > 0 ? (
                 <nav className="protyle-breadcrumb" aria-label="文档路径">
                   {activePath.map((n, i) => (
-                    <span key={n.id} className={`protyle-breadcrumb__item${i === activePath.length - 1 ? " protyle-breadcrumb__item--current" : ""}`}>
+                    <span key={n.id} className={`protyle-breadcrumb__item${i === activePath.length - 1 ? " protyle-breadcrumb__item--doc" : ""}`}>
                       {i > 0 && <ChevronRight size={12} />}
                       {n.title || "无标题"}
                     </span>
                   ))}
+                  {headingPath.length > 0 && (
+                    <>
+                      <span className="protyle-breadcrumb__divider" aria-hidden="true"><ChevronRight size={12} /></span>
+                      <span className="protyle-breadcrumb__outline" aria-label="大纲位置">
+                        {headingPath.map((hn, i) => (
+                          <span key={hn.id} className={`protyle-breadcrumb__item protyle-breadcrumb__item--heading${i === headingPath.length - 1 ? " protyle-breadcrumb__item--current" : ""}`}>
+                            {i > 0 && <ChevronRight size={12} />}
+                            <span className="protyle-breadcrumb__level">H{hn.level}</span>
+                            {hn.text}
+                          </span>
+                        ))}
+                      </span>
+                    </>
+                  )}
                 </nav>
               ) : undefined}
               onTabChange={handleTabChange}
@@ -1019,26 +1066,7 @@ export function App() {
             ))}
             <span className={`save-label ${saveState}`} title="保存状态">{saveState === "saving" ? <LoaderCircle className="spin" size={11} /> : saveState === "dirty" ? <WifiOff size={11} /> : <Save size={11} />}{saveLabel(saveState)}</span>
             <span className={`statusbar-sync ${cloudStatus(sync, activeNodeSyncState, cloudEnabled).cls}`} title={cloudStatus(sync, activeNodeSyncState, cloudEnabled).label + (sync.message ? `：${sync.message}` : "")}><Cloud size={11} />{cloudStatus(sync, activeNodeSyncState, cloudEnabled).label}</span>
-            <button
-              className={`statusbar-menu-btn${statusMenuOpen ? " open" : ""}`}
-              onClick={() => setStatusMenuOpen((open) => !open)}
-              aria-label="更多操作"
-              title="更多操作"
-            >
-              <MoreHorizontal size={14} />
-            </button>
-            {statusMenuOpen && (
-              <>
-                <div className="statusbar-menu" role="menu">
-                  {activeNoteId && (
-                    <button role="menuitem" onClick={() => { void toggleNoteLock(); setStatusMenuOpen(false); }}>
-                      {lockedNoteIds.has(activeNoteId) ? <Lock size={13} /> : <LockOpen size={13} />}
-                      <span>{lockedNoteIds.has(activeNoteId) ? "解锁当前文档" : "锁定当前文档（只读）"}</span>
-                    </button>
-                  )}
-                </div>
-              </>
-            )}
+
           </>}
         </footer>
       </main>
