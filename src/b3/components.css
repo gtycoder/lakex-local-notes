@@ -106,3 +106,111 @@
 .sync-tab-action[data-tooltip]::before {
   background: var(--b3-tooltips-background);
 }
+
+/* ── 弹窗/面板：遮罩、容器、标题、关闭钮（思源 b3-dialog 观感）── */
+.settings-overlay,
+.search-panel-backdrop,
+.trash-panel-backdrop,
+.history-panel-backdrop {
+  background: var(--b3-mask-background) !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+.search-panel,
+.sync-panel {
+  background: var(--b3-theme-surface);
+  border: 1px solid var(--b3-theme-surface-lighter);
+  border-radius: var(--b3-border-radius-b);
+  box-shadow: var(--b3-dialog-shadow);
+}
+
+.floating-dialog-header,
+.settings-header,
+.sync-panel header {
+  color: var(--b3-theme-on-background);
+  border-bottom: 1px solid var(--b3-theme-surface-lighter);
+}
+.settings-header,
+.settings-panel-large .settings-header {
+  background: var(--b3-theme-surface) !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+.sync-panel header {
+  background: var(--b3-theme-surface) !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+.sync-panel header > div {
+  color: var(--b3-theme-primary);
+}
+.sync-panel h2,
+.trash-panel-title h2,
+.history-panel-title h2 {
+  color: var(--b3-theme-on-background);
+}
+
+.settings-close,
+.search-panel-close,
+.trash-close,
+.history-close {
+  color: var(--b3-theme-on-surface);
+  opacity: .68;
+}
+.settings-close:hover,
+.search-panel-close:hover,
+.trash-close:hover,
+.history-close:hover {
+  color: var(--b3-theme-on-background);
+  opacity: 1;
+  background: var(--b3-list-hover);
+}
+
+/* 面板内列表项（思源 b3-list） */
+.search-result:hover {
+  background-color: var(--b3-list-hover);
+}
+.search-result-title {
+  color: var(--b3-theme-on-background);
+}
+.search-result-snippet {
+  color: var(--b3-theme-on-surface);
+}
+.settings-nav-item:hover {
+  background-color: var(--b3-list-hover);
+}
+.settings-nav-item.active {
+  background-color: var(--b3-theme-primary-lightest);
+  color: var(--b3-theme-primary);
+}
+.settings-choice {
+  border-color: var(--b3-border-color);
+  color: var(--b3-theme-on-surface);
+  background: var(--b3-theme-background);
+}
+.settings-choice:hover {
+  border-color: var(--b3-theme-primary);
+}
+.settings-choice.active {
+  border-color: var(--b3-theme-primary);
+  color: var(--b3-theme-on-primary);
+  background: var(--b3-theme-primary);
+}
+
+/* 表单输入（思源 b3-text-field） */
+.form-grid input[type="text"],
+.form-grid input[type="password"],
+.form-grid label > input:not([type="checkbox"]),
+.secret-field {
+  border-color: var(--b3-border-color);
+  border-radius: var(--b3-border-radius);
+}
+.form-grid input:focus,
+.secret-field:focus-within {
+  border-color: var(--b3-theme-primary);
+  box-shadow: 0 0 0 2px var(--b3-theme-primary-lightest);
+}
+.checkbox input {
+  accent-color: var(--b3-theme-primary);
+}
