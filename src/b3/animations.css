@@ -1,0 +1,41 @@
+/* ── scroll-driven animations（Electron 43 / Chromium 150 Baseline）──
+ * 阅读进度条 + 列表条目滚入视口渐显；尊重 prefers-reduced-motion。 */
+
+/* 长文档阅读进度条：跟随 .document-pane 滚动进度 */
+.read-progress {
+  position: sticky;
+  top: 0;
+  z-index: 250;
+  height: 2px;
+  background: var(--b3-theme-primary);
+  transform-origin: 0 50%;
+  pointer-events: none;
+  animation: b3-read-progress linear both;
+  animation-timeline: scroll(nearest);
+}
+@keyframes b3-read-progress {
+  from { transform: scaleX(0); }
+  to { transform: scaleX(1); }
+}
+
+/* 大纲/列表条目滚入视口渐显 */
+@supports (animation-timeline: view()) {
+  .outline-item,
+  .quick-note-card {
+    animation: b3-view-fade-in linear both;
+    animation-timeline: view();
+    animation-range: entry 0% entry 100%;
+  }
+}
+@keyframes b3-view-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .read-progress,
+  .outline-item,
+  .quick-note-card {
+    animation: none !important;
+  }
+}

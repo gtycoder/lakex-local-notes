@@ -1,48 +1,49 @@
 /* ── 深色主题：data-theme="dark" → 思源 midnight 令牌（应用骨架已由 b3 令牌接管）──
  * 这里额外覆盖 Lake 编辑器的 --lakex-editor-* 变量，使编辑区跟随深色。 */
 
-[data-theme="dark"] .lake-editor-mount {
-  --lakex-editor-background: #1e1e1e;
-  --lakex-editor-background-primary: #2c2c2c;
-  --lakex-editor-background-foreground: #2c2c2c;
-  --lakex-editor-background-secondary: #232323;
-  --lakex-editor-background-tertiary: #2a2a2a;
-  --lakex-editor-background-focus: #2c2c2c;
-  --lakex-editor-background-primary-hover: #3a3a3a;
-  --lakex-editor-background-primary-hover-light: #333333;
-  --lakex-editor-border-light: #3a3a3a;
-  --lakex-editor-border-primary: #484848;
-  --lakex-editor-border-secondary: #3a3a3a;
-  --lakex-editor-card-background-hover: #2c2c2c;
-  --lakex-editor-card-border-hover: #484848;
-  --lakex-editor-card-border-selected: var(--b3-theme-primary);
-  --lakex-editor-code-background: rgba(255, 255, 255, .06);
-  --lakex-editor-column-background-highlight: rgba(255, 255, 255, .04);
-  --lakex-editor-cursor: var(--b3-theme-primary);
-  --lakex-editor-selection: rgba(53, 117, 240, .32);
-  --lakex-editor-table-bar-active: var(--b3-theme-primary);
-  --lakex-editor-table-scrollbar-thumb: var(--b3-scroll-color);
-  --lakex-editor-text-body: #dadada;
-  --lakex-editor-text-caption: #9aa0a6;
-  --lakex-editor-text-color: #dadada;
-  --lakex-editor-text-danger: #d23f31;
-  --lakex-editor-text-disable: #545454;
-  --lakex-editor-text-link: #4285f4;
-  --lakex-editor-text-link-hover: #5a95f5;
-  --lakex-editor-icon-primary: #dadada;
-  --lakex-editor-icon-secondary: #9aa0a6;
-  --lakex-editor-overlay-background-tertiary: #2c2c2c;
-  --lakex-editor-color-black: #dadada;
-  --lakex-editor-color-black-f05: rgba(218, 218, 218, .05);
-  --lakex-editor-color-black-f08: rgba(218, 218, 218, .08);
-  --lakex-editor-color-black-f12: rgba(218, 218, 218, .12);
-  --lakex-editor-color-black-f30: rgba(218, 218, 218, .30);
-  --lakex-editor-color-black-f65: rgba(218, 218, 218, .65);
-  --lakex-editor-color-theme: var(--b3-theme-primary);
-  --lakex-editor-color-theme-light: var(--b3-theme-primary-light);
-  --lakex-editor-color-white: #1e1e1e;
-  --lakex-editor-color-white-f60: rgba(30, 30, 30, .60);
-  --lakex-editor-color-white-f90: rgba(30, 30, 30, .90);
+[data-theme="dark"] .lake-editor-mount,
+[data-theme="dark"] .lakex-default-theme {
+  --lakex-editor-background: #1e1e1e !important;
+  --lakex-editor-background-primary: #2c2c2c !important;
+  --lakex-editor-background-foreground: #2c2c2c !important;
+  --lakex-editor-background-secondary: #232323 !important;
+  --lakex-editor-background-tertiary: #2a2a2a !important;
+  --lakex-editor-background-focus: #2c2c2c !important;
+  --lakex-editor-background-primary-hover: #3a3a3a !important;
+  --lakex-editor-background-primary-hover-light: #333333 !important;
+  --lakex-editor-border-light: #3a3a3a !important;
+  --lakex-editor-border-primary: #484848 !important;
+  --lakex-editor-border-secondary: #3a3a3a !important;
+  --lakex-editor-card-background-hover: #2c2c2c !important;
+  --lakex-editor-card-border-hover: #484848 !important;
+  --lakex-editor-card-border-selected: var(--b3-theme-primary) !important;
+  --lakex-editor-code-background: rgba(255, 255, 255, .06) !important;
+  --lakex-editor-column-background-highlight: rgba(255, 255, 255, .04) !important;
+  --lakex-editor-cursor: var(--b3-theme-primary) !important;
+  --lakex-editor-selection: rgba(53, 117, 240, .32) !important;
+  --lakex-editor-table-bar-active: var(--b3-theme-primary) !important;
+  --lakex-editor-table-scrollbar-thumb: var(--b3-scroll-color) !important;
+  --lakex-editor-text-body: #dadada !important;
+  --lakex-editor-text-caption: #9aa0a6 !important;
+  --lakex-editor-text-color: #dadada !important;
+  --lakex-editor-text-danger: #d23f31 !important;
+  --lakex-editor-text-disable: #545454 !important;
+  --lakex-editor-text-link: #4285f4 !important;
+  --lakex-editor-text-link-hover: #5a95f5 !important;
+  --lakex-editor-icon-primary: #dadada !important;
+  --lakex-editor-icon-secondary: #9aa0a6 !important;
+  --lakex-editor-overlay-background-tertiary: #2c2c2c !important;
+  --lakex-editor-color-black: #dadada !important;
+  --lakex-editor-color-black-f05: rgba(218, 218, 218, .05) !important;
+  --lakex-editor-color-black-f08: rgba(218, 218, 218, .08) !important;
+  --lakex-editor-color-black-f12: rgba(218, 218, 218, .12) !important;
+  --lakex-editor-color-black-f30: rgba(218, 218, 218, .30) !important;
+  --lakex-editor-color-black-f65: rgba(218, 218, 218, .65) !important;
+  --lakex-editor-color-theme: var(--b3-theme-primary) !important;
+  --lakex-editor-color-theme-light: var(--b3-theme-primary-light) !important;
+  --lakex-editor-color-white: #1e1e1e !important;
+  --lakex-editor-color-white-f60: rgba(30, 30, 30, .60) !important;
+  --lakex-editor-color-white-f90: rgba(30, 30, 30, .90) !important;
 }
 
 [data-theme="dark"] .document-pane {

@@ -912,6 +912,7 @@ export function App() {
           <QuickNotesWorkspace ref={quickNotesRef} notebooks={treeNodes} onDirtyChange={setQuickNotesDirty} onConverted={(note) => void handleQuickNoteConverted(note)} />
         ) : (
           <section className={`document-pane ${wideMode ? "wide-mode" : ""} ${settings.paragraphSpacing ? "paragraph-spacing" : ""}`}>
+            <div className="read-progress" aria-hidden="true" />
             <MultiTabEditor
               tabs={tabInfos}
               activeNoteId={activeNoteId}
