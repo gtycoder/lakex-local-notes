@@ -1,14 +1,55 @@
-/* ── 布局对齐思源 dock：固定从顶栏下开始、浮动为半高悬浮带 ──
- * 思源几何（_layout.scss）：浮动 dock top:112px / bottom:82px、position:fixed、
- * 外侧圆角 + --b3-dock-shadow-color 阴影、transform/opacity 过渡。
- * 固定 dock 始终位于顶栏（含标签栏）下方，不覆盖 tab。 */
+/* ── 布局对齐思源（整体模型）：灰底 + 白色一体卡片 + 无连接线 ──
+ * 思源事实（_layout.scss + theme.css）：
+ * - .layout__dockl/dockr/center 均为 --b3-theme-background 白底 + border-radius-b，
+ *   彼此间只有 --b3-layout-space(4px) 灰缝，无边框线；
+ * - 标签栏同白底 + 极淡底边线（--b3-theme-background-light）；
+ * - 左右 dock 栏（活动轨）透明、满高，与顶部一体；
+ * - 浮动 dock：top:112px / bottom:82px、外侧圆角 + --b3-dock-shadow-color 阴影。 */
 
 @media (min-width: 761px) {
-  /* 左侧固定目录：从顶栏下方开始，不覆盖 tab/顶栏 */
+  /* 壳层：灰底 */
+  .app-shell {
+    background: var(--b3-body-background) !important;
+  }
+
+  /* 左右活动轨：透明、满高、无边框，与顶部一体（内容仍在标题栏下方） */
+  .activity-rail,
+  .outline-sidebar__rail {
+    margin-top: 0 !important;
+    padding-top: var(--topbar-height) !important;
+    background: transparent !important;
+    border-right: 0 !important;
+    border-left: 0 !important;
+  }
+
+  /* 标签栏：白底顶条 + 极淡底边线（思源 layout-tab-bar），与下方 dock 一体 */
+  .tab-bar {
+    background: var(--b3-theme-background) !important;
+    border-bottom: 1px solid var(--b3-theme-background-light) !important;
+  }
+
+  /* 左侧固定目录：白色卡片、无强边框/阴影、顶部与标签栏一体、右侧 4px 灰缝 */
   .sidebar.sidebar-docked {
-    margin: var(--topbar-height) 4px 0 0 !important;
-    height: calc(100% - var(--topbar-height)) !important;
-    align-self: stretch !important;
+    background: var(--b3-theme-background) !important;
+    border: 0 !important;
+    box-shadow: none !important;
+    border-radius: 0 0 var(--b3-border-radius-b) var(--b3-border-radius-b) !important;
+    margin: var(--topbar-height) 4px 4px 0 !important;
+    height: calc(100% - var(--topbar-height) - 4px) !important;
+  }
+
+  /* 右侧大纲固定：白色卡片、无边框/阴影、左侧 4px 灰缝 */
+  .outline-sidebar--docked .outline-sidebar__content {
+    background: var(--b3-theme-background) !important;
+    border: 0 !important;
+    box-shadow: none !important;
+    border-radius: 0 0 0 var(--b3-border-radius-b) !important;
+  }
+
+  /* 状态栏：透明无顶线 */
+  .statusbar {
+    background: transparent !important;
+    border-top: 0 !important;
   }
 
   /* 左侧浮动：思源半高悬浮带（悬停活动轨出现）
@@ -20,6 +61,7 @@
     left: var(--activity-rail-width) !important;
     right: auto !important;
     height: calc(100vh - 194px) !important;
+    background: var(--b3-theme-background) !important;
     border-radius: 0 var(--b3-border-radius-b) var(--b3-border-radius-b) 0 !important;
     box-shadow: 8px 0 24px var(--b3-dock-shadow-color) !important;
     transition: transform .2s cubic-bezier(0, 0, .2, 1) 0ms, opacity .3s cubic-bezier(0, 0, .2, 1) 0ms !important;
@@ -35,19 +77,19 @@
     width: var(--outline-sidebar-width, 280px) !important;
     height: calc(100vh - 194px) !important;
     min-width: 0 !important;
+    background: var(--b3-theme-background) !important;
     border-radius: var(--b3-border-radius-b) 0 0 var(--b3-border-radius-b) !important;
     box-shadow: -8px 0 24px var(--b3-dock-shadow-color) !important;
-    border: 1px solid var(--b3-theme-surface-lighter) !important;
-    border-right: 0 !important;
-    background: var(--b3-theme-surface) !important;
+    border: 0 !important;
     transition: transform .2s cubic-bezier(0, 0, .2, 1) 0ms, opacity .3s cubic-bezier(0, 0, .2, 1) 0ms !important;
   }
 }
 
-/* 深色：dock 卡片背景跟随主题（styles.css 有 #fff !important 强制） */
+/* 深色：dock/标签栏卡片跟随主题（覆盖 styles.css 的 #fff !important 与浅色表面） */
 [data-theme="dark"] .sidebar.sidebar-docked,
 [data-theme="dark"] .sidebar.sidebar-floating,
-[data-theme="dark"] .outline-sidebar__content {
-  background: var(--b3-theme-surface) !important;
+[data-theme="dark"] .outline-sidebar__content,
+[data-theme="dark"] .tab-bar {
+  background: var(--b3-theme-background) !important;
   border-color: var(--b3-theme-surface-lighter) !important;
 }
