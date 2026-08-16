@@ -49,3 +49,46 @@
 [data-theme="dark"] .document-pane {
   background: var(--b3-theme-background) !important;
 }
+
+/* ── 深色边界修复（审计发现）：html 背景 / 表单控件 / tab-switcher / 小记 ── */
+:root {
+  background: var(--b3-body-background);
+}
+
+[data-theme="dark"] input[type="text"],
+[data-theme="dark"] input[type="password"],
+[data-theme="dark"] input:not([type="checkbox"]):not([type="radio"]),
+[data-theme="dark"] select,
+[data-theme="dark"] textarea,
+[data-theme="dark"] .secret-field {
+  background: var(--b3-theme-background) !important;
+  color: var(--b3-theme-on-background) !important;
+  border-color: var(--b3-border-color) !important;
+}
+[data-theme="dark"] .secret-field input {
+  background: transparent !important;
+}
+
+[data-theme="dark"] .tab-switcher {
+  background: transparent !important;
+  color: var(--b3-theme-on-surface) !important;
+}
+
+[data-theme="dark"] .quick-note-composer,
+[data-theme="dark"] .quick-note-entry {
+  background: var(--b3-theme-surface) !important;
+  border-color: var(--b3-border-color) !important;
+  box-shadow: var(--b3-dialog-shadow) !important;
+}
+[data-theme="dark"] .quick-note-composer textarea {
+  background: transparent !important;
+  color: var(--b3-theme-on-background) !important;
+}
+[data-theme="dark"] .quick-note-image-grid img,
+[data-theme="dark"] .quick-note-saved-images img {
+  background: var(--b3-theme-surface-lighter) !important;
+}
+[data-theme="dark"] .quick-note-conflict {
+  background: var(--b3-card-warning-background) !important;
+  color: var(--b3-card-warning-color) !important;
+}
