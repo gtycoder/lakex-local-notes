@@ -157,3 +157,30 @@
 .toolbar__item--first { margin-left: var(--b3-toolbar-left-mac, 74px); }
 .toolbar__sync.syncing svg { animation: spin 1s linear infinite; }
 .toolbar__sync.error { color: var(--b3-theme-error); }
+
+
+/* ── 编辑器面包屑（思源 protyle-breadcrumb）── */
+.protyle-breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  padding: 0 16px;
+  min-height: 36px;
+  flex-shrink: 0;
+  background: var(--b3-theme-background);
+  color: var(--b3-theme-on-surface);
+  font-size: 13px;
+  border-bottom: 1px solid var(--b3-theme-surface-lighter);
+}
+.protyle-breadcrumb__item {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: pointer;
+}
+.protyle-breadcrumb__item:hover { color: var(--b3-theme-on-background); }
+.protyle-breadcrumb__item--current { color: var(--b3-theme-on-background); font-weight: 500; }

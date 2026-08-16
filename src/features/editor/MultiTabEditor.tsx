@@ -36,6 +36,8 @@ interface MultiTabEditorProps {
   onEditorCopyPaths?: (noteId: string) => void;
   topbarActions?: ReactNode;
   emptyAction?: ReactNode;
+  /** 正文顶部路径（思源 protyle-breadcrumb），插在标签栏与编辑器之间 */
+  breadcrumb?: ReactNode;
 }
 
 export function MultiTabEditor({
@@ -54,6 +56,7 @@ export function MultiTabEditor({
   onEditorCopyPaths,
   topbarActions,
   emptyAction,
+  breadcrumb,
 }: MultiTabEditorProps) {
   const contentCache = useRef<Map<string, string>>(new Map());
   // 外部刷新（reloadKey 变化）时，必须丢弃 contentCache 里旧的编辑器内容，否则新实例仍用旧正文。
@@ -339,6 +342,7 @@ export function MultiTabEditor({
           </div>
         )}
       </div>
+      {breadcrumb}
       <div className="tab-panels">
         {tabs.length === 0 ? <section className="empty-workspace"><h2>开始写第一篇笔记</h2>{emptyAction}</section> : tabs.map((tab) => (
           <EditorTab

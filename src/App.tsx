@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type CSSProperties } from "react";
-import { ArrowLeft, ArrowRight, Check, ChevronDown, Cloud, CloudOff, Files, ListTree, LoaderCircle, Feather, Lock, LockOpen, Moon, MoreHorizontal, Pencil, Save, Settings as Settings2Icon, Sun, Trash2, WifiOff, X } from "lucide-react";
+import { ArrowLeft, ArrowRight, Check, ChevronDown, ChevronRight, Cloud, CloudOff, Files, ListTree, LoaderCircle, Feather, Lock, LockOpen, Moon, MoreHorizontal, Pencil, Save, Settings as Settings2Icon, Sun, Trash2, WifiOff, X } from "lucide-react";
 import { MobileLibrary } from "./components/MobileLibrary";
 import { withViewTransition } from "./lib/viewTransition";
 import { SearchPanel } from "./components/SearchPanel";
@@ -877,6 +877,8 @@ export function App() {
     fontSize: settings.fontSize,
     showToolbar: settings.showToolbar,
   };
+  // 编辑器面包屑：活动文档路径（思源 protyle-breadcrumb）
+  const activePath = activeNoteId ? treeNodePath(treeNodes, activeNoteId) : [];
   const tabInfos: TabInfo[] = openTabs.map((tab) => ({
     noteId: tab.noteId, title: tab.title, content: tab.content, dirty: tab.dirty, deleted: tab.deleted,
     icon: treeNodes.find((n) => n.noteFileId === tab.noteId)?.icon ?? null,
@@ -968,6 +970,16 @@ export function App() {
               tabs={tabInfos}
               activeNoteId={activeNoteId}
               tocEnabled={tocEnabled}
+              breadcrumb={activePath.length > 0 ? (
+                <nav className="protyle-breadcrumb" aria-label="文档路径">
+                  {activePath.map((n, i) => (
+                    <span key={n.id} className={`protyle-breadcrumb__item${i === activePath.length - 1 ? " protyle-breadcrumb__item--current" : ""}`}>
+                      {i > 0 && <ChevronRight size={12} />}
+                      {n.title || "无标题"}
+                    </span>
+                  ))}
+                </nav>
+              ) : undefined}
               onTabChange={handleTabChange}
               onTabClose={closeTab}
               onTabsReorder={reorderTabs}
@@ -1087,6 +1099,17 @@ export function App() {
       <SettingsPanel open={settingsOpen} openCategory={settingsCategory} settings={settings} onClose={() => setSettingsOpen(false)} onChange={(patch) => saveSettings(patch)} />
     </div>
   );
+}
+
+/** 思源式面包屑：从树节点沿 parentId 上溯到根，得到 [笔记本, 分组…, 文档] 路径 */
+function treeNodePath(nodes: TreeNode[], noteId: string): TreeNode[] {
+  const byId = new Map(nodes.map((n) => [n.id, n]));
+  const start = nodes.find((n) => n.noteFileId === noteId);
+  if (!start) return [];
+  const path: TreeNode[] = [];
+  let cur: TreeNode | undefined = start;
+  while (cur) { path.unshift(cur); cur = cur.parentId ? byId.get(cur.parentId) : undefined; }
+  return path;
 }
 
 const summaryOf = ({ content: _content, ...summary }: NoteDocument): NoteSummary => summary;
