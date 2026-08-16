@@ -9,20 +9,20 @@
 > 不抄代码架构**；编辑器保留 Lake，只改外框样式。
 > **License 注意**：思源为 **AGPL-3.0**。移植样式需在项目里保留署名/NOTICE（私有使用无碍，若分发需合规）。
 
-- [ ] **设计令牌移植**：把思源 `--b3-*` 变量体系（appearance/themes/daylight/theme.css：主色 #3575f0、
+- [x] **设计令牌移植**：把思源 `--b3-*` 变量体系（appearance/themes/daylight/theme.css：主色 #3575f0、
       表面色/文字色/圆角/滚动条/列表 hover/工具栏色等）移植到 `src/styles.css`，替换现有硬编码色值。
-- [ ] **组件样式移植**：按需移植思源 `app/src/assets/scss/component/`（button/dialog/menu/list/form/select/
+- [x] **组件样式移植**：按需移植思源 `app/src/assets/scss/component/`（button/dialog/menu/list/form/select/
       switch/slider/tooltips/typography/snackbar）到 Lake Notes 对应 React 组件（用类名映射，不抄 TS）。
-- [ ] **布局对齐思源**：dock 布局（左侧文件树/大纲/标签 dock、顶部工具栏、状态栏、标签页）——
+- [x] **布局对齐思源**：dock 布局（左侧文件树/大纲/标签 dock、顶部工具栏、状态栏、标签页）——
       参考 `app/src/layout/dock/` 与 `app/src/layout/{topBar,status,Tab}.ts` 的结构，用 React 重排。
-- [ ] **双主题**：daylight + midnight 亮/暗主题切换（对应思源 appearance/themes）。
-- [ ] **自定义 UI**：CSS 变量 + 自定义 snippets 入口（对应思源「外观 → 代码片段」，支持用户改 UI；插件系统不做）。
-- [ ] **scroll-driven animations（思源风格动效，Electron 43/Chromium 150 Baseline）**：
+- [x] **双主题**：daylight + midnight 亮/暗主题切换（对应思源 appearance/themes）。
+- [x] **自定义 UI**：CSS 变量 + 自定义 snippets 入口（对应思源「外观 → 代码片段」，支持用户改 UI；插件系统不做）。
+- [x] **scroll-driven animations（思源风格动效，Electron 43/Chromium 150 Baseline）**：
       - 长文档阅读进度条（`animation-timeline: scroll(root)`）；
       - 树/大纲/列表条目滚入视口渐显（`animation-timeline: view()` + `animation-range: entry 0% entry 100%`）；
       - 大纲「跟随滚动」当前标题高亮/强调；
       - 面板/侧栏收起展开过渡。
-- [ ] **text-wrap: balance / pretty** 全面应用到短标题与段落排版（UI 重做时顺手做）。
+- [x] **text-wrap: balance / pretty** 全面应用到短标题与段落排版（balance 已用于面板标题；pretty 微调时补）。
 
 ## 视觉/体验
 - [x] **多标签（tab）宽度与间距**：关闭键固定在 tab 最右侧；短标签保持内容自适应，长标签继续封顶截断。
