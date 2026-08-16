@@ -980,6 +980,7 @@ export function App() {
           <>
             <header className="tab-bar desktop-only" aria-label="顶栏">
               <div className="tabbar-leading">{topBarLeading}</div>
+              <div className="tabbar-spacer" />
               <div className="tabbar-trailing">{topBarTrailing}</div>
             </header>
             <QuickNotesWorkspace ref={quickNotesRef} notebooks={treeNodes} onDirtyChange={setQuickNotesDirty} onConverted={(note) => void handleQuickNoteConverted(note)} />

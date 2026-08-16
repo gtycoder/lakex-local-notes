@@ -59,6 +59,11 @@
     flex: 0 0 auto;
     -webkit-app-region: no-drag;
   }
+  /* 顶栏中部撑开：让最右侧元素（外观/更多）贴右（小记视图无 tab 时同样一致） */
+  .tabbar-spacer {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
   /* 顶栏最右侧元素：外观/更多（文档操作） */
   .tabbar-trailing {
     display: flex;
