@@ -16,13 +16,18 @@ import { syncQuickNotes, runQuickNotesDeepCleanup } from "./quickNotesSync.js";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const isDev = !app.isPackaged;
 
-// 开发版与打包版隔离 userData：dev 用 lake-notes-dev（空库+种子），打包版用
-// lake-notes-electron（正式数据），避免测试数据互相污染。必须在 app ready 前设置。
-// 本地多端测试：dev 下可用 LAKE_USER_DATA 覆盖 userData，模拟不同「设备」各自独立的本地库。
-if (isDev) {
-  const userDataOverride = process.env.LAKE_USER_DATA?.trim();
-  app.setPath("userData", userDataOverride || path.join(app.getPath("appData"), "lake-notes-dev"));
-}
+// userData 隔离（必须在 app ready 前设置）：
+// - dev 默认 lake-notes-dev（空库+种子），打包版默认 lake-notes-electron（正式数据）；
+// - 两者路径不同、单实例锁各自独立，可同时运行。
+// - 任意模式可用 LAKE_USER_DATA 覆盖：dev 模拟多「设备」，打包版隔离测试（避免触碰正式数据）。
+const userDataOverride = process.env.LAKE_USER_DATA?.trim();
+app.setPath(
+  "userData",
+  userDataOverride ||
+    (isDev
+      ? path.join(app.getPath("appData"), "lake-notes-dev")
+      : path.join(app.getPath("appData"), "lake-notes-electron")),
+);
 const DEV_SERVER_URL = "http://127.0.0.1:1421";
 
 /**

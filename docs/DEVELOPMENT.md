@@ -31,7 +31,8 @@ PATH="$HOME/.nvm/versions/node/v24.18.0/bin:$PATH" npm run dev
 kill $(ps aux | grep "lake-notes-electron" | grep -v grep | awk '{print $2}')
 ```
 
-**dev 与打包版共用单实例锁**（userData/SingletonLock），不能同时运行；开发前先退出打包版。
+**dev 与打包版 userData 隔离**（dev=`lake-notes-dev`，打包版=`lake-notes-electron`），单实例锁按
+userData 各自独立，**可同时运行**；同一 userData 内第二实例会被单实例锁直接退出。
 
 ## 三、构建与打包
 
@@ -50,8 +51,14 @@ PATH="$HOME/.nvm/versions/node/v24.18.0/bin:$PATH" node node_modules/vite/bin/vi
 **打包版注意事项**：
 - 未签名/未公证：首次打开需右键 → 打开（或系统设置 → 隐私与安全性）
 - 默认 Electron 图标（尚未做应用图标）
-- 打包版与开发版**共用同一 userData**（`~/Library/Application Support/lake-notes-electron/`），
-  测试方便，正式发布前需决策是否隔离
+- **userData 隔离**：dev 用 `~/Library/Application Support/lake-notes-dev`（可重建），打包版默认
+  `~/Library/Application Support/lake-notes-electron`（正式数据，**禁止随意触碰**）。
+- **打包版测试隔离**（避免打开正式数据）：任意模式都支持 `LAKE_USER_DATA` 覆盖，例如：
+  ```bash
+  LAKE_USER_DATA="$HOME/Library/Application Support/lake-notes-test" \
+    "release/mac-arm64/Lake Notes.app/Contents/MacOS/Lake Notes"
+  ```
+  不设 `LAKE_USER_DATA` 时打包版才走正式数据路径。
 
 ## 四、测试
 

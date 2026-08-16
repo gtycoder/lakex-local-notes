@@ -28,6 +28,7 @@ Lake Notes 是**本地优先**笔记应用（Electron + React + better-sqlite3 +
 | 基线 | `npx tsc --noEmit` 通过；`npm test -- --run` = **217 passed**；`node node_modules/vite/bin/vite.js build` 通过；`git diff --check` 干净 |
 | 开发数据 | `/Users/admin/Library/Application Support/lake-notes-dev`（可重建） |
 | 正式数据 | `/Users/admin/Library/Application Support/lake-notes-electron`（**禁止触碰**） |
+| 打包版测试隔离 | 任意模式可用 `LAKE_USER_DATA` 覆盖 userData（打包版默认走正式数据，**测试打包版务必覆盖**，避免触碰正式数据）；dev/打包版路径不同，可同时运行 |
 | 运行状态 | **项目已停止**（A/B、vite 均已退出，multidev 残留已清） |
 
 ### 开发版固定 S3 配置（已写入 `electron/main.ts`，仅 dev 首次启动 seed）
