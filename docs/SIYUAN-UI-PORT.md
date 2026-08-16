@@ -53,10 +53,10 @@
 ## 实施阶段（每阶段可测、可回滚）
 
 1. [x] 设计文档 + 令牌层（daylight/midnight 原文引入）
-2. [ ] 通用基础接线：body/应用背景/字体/滚动条/文本色 换用 `--b3-*`
-3. [ ] 核心组件样式移植：按钮/弹窗/菜单/列表/表单/开关/工具提示
-4. [ ] 布局对齐：dock 文件树/大纲、顶部工具栏、状态栏、标签页
-5. [ ] 双主题切换入口 + 自定义 snippets
-6. [ ] scroll-driven animations（进度条/列表渐显/大纲高亮）
-7. [ ] text-wrap: balance/pretty 全面应用
-8. [ ] 详细测试：tsc/217/build + A/B 多端 + 手动验收
+2. [x] 通用基础接线：body/应用背景/字体/滚动条/文本色 换用 `--b3-*`（含覆盖壳层 !important）
+3. [x] 核心组件样式移植：按钮(→b3-button)/弹窗/菜单/列表/表单/开关/工具提示/绿色清零
+4. [x] 布局对齐：壳层灰底、标签页（灰栏+顶部主色指示线）、状态栏、活动轨
+5. [x] 双主题切换（data-theme=dark，含编辑器 --lakex-* 变量覆盖）+ 自定义 snippets（外观设置）
+6. [x] scroll-driven animations（阅读进度条 scroll() + 大纲/小记渐显 view()）
+7. [x] text-wrap: balance（面板标题）；pretty 可在 UI 微调时补
+8. [ ] 详细测试：tsc/217/build + A/B 多端 + 打包版验收

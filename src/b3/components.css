@@ -27,7 +27,9 @@
 /* ── 菜单（思源 b3-menu）── */
 .context-menu,
 .context-menu-submenu,
-.statusbar-menu {
+.statusbar-menu,
+.create-menu,
+.tab-switcher-menu {
   background: var(--b3-menu-background);
   border: 1px solid var(--b3-theme-surface-lighter);
   border-radius: var(--b3-border-radius-b);
