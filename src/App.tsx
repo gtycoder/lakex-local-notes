@@ -487,7 +487,7 @@ export function App() {
     setSyncToast(data);
     if (syncToastTimer.current !== null) window.clearTimeout(syncToastTimer.current);
     if (data.kind !== "busy") {
-      const ms = data.kind === "ok" ? 2600 : data.kind === "error" ? 4500 : 7000;
+      const ms = data.kind === "ok" ? 4000 : data.kind === "error" ? 6000 : 8000;
       syncToastTimer.current = window.setTimeout(() => {
         setSyncToast(null);
         setSyncProgress(null);
