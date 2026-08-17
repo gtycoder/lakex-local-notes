@@ -298,3 +298,32 @@
 .protyle-breadcrumb__item--current {
   color: var(--b3-theme-on-background);
 }
+
+/* ── 面包屑最右侧「更多」按钮（对齐思源 protyle-breadcrumb 尾部操作区）── */
+.protyle-breadcrumb__more {
+  margin-left: auto;
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
+}
+.protyle-breadcrumb__more-btn {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--b3-border-radius);
+  color: var(--b3-theme-on-surface);
+  background: transparent;
+  cursor: pointer;
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
+  transition: color 130ms ease-out, background-color 130ms ease-out;
+}
+.protyle-breadcrumb__more-btn:hover {
+  color: var(--b3-theme-on-background);
+  background: var(--b3-list-hover);
+}

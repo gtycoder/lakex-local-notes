@@ -103,6 +103,7 @@ export function App() {
   /** 顶栏两个下拉的触发容器 ref（定位 fixed 菜单用） */
   const wsMenuWrapRef = useRef<HTMLDivElement>(null);
   const moreMenuWrapRef = useRef<HTMLDivElement>(null);
+  const syncBtnRef = useRef<HTMLButtonElement>(null);
   /** 顶栏「工作空间」名：取 S3 prefix（未配置时显示本地占位） */
   const [workspaceName, setWorkspaceName] = useState("本地工作空间");
 
@@ -950,22 +951,16 @@ export function App() {
         </button>
 
       </div>
-      <button className={`toolbar__item toolbar__sync ${sync.phase}`} onClick={() => { void runSync(); }} title={syncTooltip(sync)} aria-label={`云同步：${sync.message}`}>
+      <button ref={syncBtnRef} className={`toolbar__item toolbar__sync ${sync.phase}`} onClick={() => { void runSync(); }} title={syncTooltip(sync)} aria-label={`云同步：${sync.message}`}>
         <Cloud size={15} />
       </button>
     </>
   );
   // 顶栏最右侧：外观模式 + 更多（文档操作，目前仅加锁，后续扩展）
   const topBarTrailing = (
-    <>
-      <button className="toolbar__item" onClick={() => saveSettings({ theme: settings.theme === "dark" ? "light" : "dark" })} title="外观模式（浅色/深色）" aria-label="外观模式">
-        {settings.theme === "dark" ? <Sun size={15} /> : <Moon size={15} />}
-      </button>
-      <div className="toolbar__menu-wrap" ref={moreMenuWrapRef}>
-        <button className="toolbar__item" onClick={() => { setTopMenuOpen((o) => !o); setWorkspaceMenuOpen(false); }} title="更多" aria-label="更多"><MoreHorizontal size={15} /></button>
-
-      </div>
-    </>
+    <button className="toolbar__item" onClick={() => saveSettings({ theme: settings.theme === "dark" ? "light" : "dark" })} title="外观模式（浅色/深色）" aria-label="外观模式">
+      {settings.theme === "dark" ? <Sun size={15} /> : <Moon size={15} />}
+    </button>
   );
   const effectiveOutlineMode: OutlineMode = activeOutlineEmpty && !outlineEmptyOverride ? "collapsed" : outlineMode;
   const shellStyle = {
@@ -1051,6 +1046,9 @@ export function App() {
                       </span>
                     </>
                   )}
+                  <div className="toolbar__menu-wrap protyle-breadcrumb__more" ref={moreMenuWrapRef}>
+                    <button className="toolbar__item protyle-breadcrumb__more-btn" onClick={() => { setTopMenuOpen((o) => !o); setWorkspaceMenuOpen(false); }} title="更多" aria-label="更多"><MoreHorizontal size={15} /></button>
+                  </div>
                 </nav>
               ) : undefined}
               onTabChange={handleTabChange}
@@ -1072,6 +1070,9 @@ export function App() {
           <span className="statusbar-repo">{desktopWorkspace === "quick-notes" ? "小记" : isDesktop() ? "Electron 本地仓库" : "浏览器演示仓库"}</span>
           {desktopWorkspace === "library" && <>
             <span className="statusbar-divider" />
+            {activeNoteId && lockedNoteIds.has(activeNoteId) && (
+              <span className="statusbar-lock" title="当前文档已锁定（只读）"><Lock size={11} />已锁定</span>
+            )}
             <span className="statusbar-wordcount" title="当前文档字数">{wordCountLabel}</span>
             {imageCountLabel && <span className="statusbar-imagecount" title="当前文档图片数">{imageCountLabel}</span>}
             {notice && (notice.action ? (
@@ -1167,7 +1168,7 @@ export function App() {
           } catch { /* 文档未打开或读取失败则跳过 */ }
         })();
       }} />
-      {syncToast && <SyncToast data={syncToast} onClose={() => { setSyncToast(null); setSyncProgress(null); }} />}
+      {syncToast && <SyncToast data={syncToast} onClose={() => { setSyncToast(null); setSyncProgress(null); }} anchorRect={syncBtnRef.current?.getBoundingClientRect()} />}
       <SettingsPanel open={settingsOpen} openCategory={settingsCategory} settings={settings} onClose={() => setSettingsOpen(false)} onChange={(patch) => saveSettings(patch)} />
     </div>
   );

@@ -618,6 +618,7 @@ ne-card[data-card-name="codeblock"] .ne-card-resizer-mask {
 .statusbar-settings:hover { color: #20242c; background: #e9ebee; }
 .statusbar-wordcount { color: #8a919b; font-size: 11px; margin-right: auto; }
 .statusbar-imagecount { color: #8a919b; font-size: 11px; margin-left: 14px; }
+.statusbar-lock { display: inline-flex; align-items: center; gap: 4px; flex: 0 0 auto; color: var(--b3-theme-on-surface); font-size: 11px; white-space: nowrap; }
 
 /* ===== 导出 Markdown 按钮 + 提示 ===== */
 .statusbar-export-md { display: flex; align-items: center; gap: 4px; height: 22px; margin-left: 6px; padding: 0 8px; border: 1px solid #dfe2e7; border-radius: 4px; color: #48515c; background: #fff; font-size: 11px; }
@@ -1247,6 +1248,7 @@ ne-card[data-card-name="codeblock"] .ne-card-resizer-mask {
   .statusbar > span:first-child { flex: 0 1 auto; overflow: hidden; color: #a0a5ad; text-overflow: ellipsis; white-space: nowrap; }
   .statusbar-wordcount { flex: 1 1 auto; min-width: 42px; margin-right: 0; color: #878e98; font-variant-numeric: tabular-nums; }
   .statusbar-imagecount { flex: 0 0 auto; margin-left: 0; color: #878e98; font-variant-numeric: tabular-nums; }
+  .statusbar-lock { flex: 0 0 auto; color: #878e98; font-variant-numeric: tabular-nums; }
   .statusbar-notice { flex: 0 1 auto; overflow: hidden; margin: 0; color: var(--shell-accent-strong); text-overflow: ellipsis; white-space: nowrap; transition: opacity 180ms ease-out, transform 180ms var(--shell-ease); }
   @starting-style { .statusbar-notice { opacity: 0; transform: translateY(4px); } }
   .save-label { flex: 0 0 auto; color: #858c96; }

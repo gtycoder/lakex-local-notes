@@ -1,3 +1,4 @@
+import type { CSSProperties } from "react";
 import { Check, Cloud, CloudOff, LoaderCircle, TriangleAlert, X } from "lucide-react";
 import type { SyncProgress } from "../lib/types";
 
@@ -28,13 +29,18 @@ function formatPercent(current?: number, total?: number): number | null {
   return Math.min(100, Math.round((current / total) * 100));
 }
 
-export function SyncToast({ data, onClose }: { data: SyncToastData; onClose: () => void }) {
+export function SyncToast({ data, onClose, anchorRect }: { data: SyncToastData; onClose: () => void; anchorRect?: DOMRect | null }) {
   const progress = data.progress;
   const mainPct = progress ? formatPercent(progress.current, progress.total) : null;
   const assetPct = progress ? formatPercent(progress.assetCurrent, progress.assetTotal) : null;
 
+  // 有锚点时：在触发按钮（云同步）正下方弹出（思源式原位反馈）
+  const anchorStyle: CSSProperties = anchorRect
+    ? { position: "fixed", top: Math.round(anchorRect.bottom + 6), left: Math.max(8, Math.min(Math.round(anchorRect.left), window.innerWidth - 380)), right: "auto", bottom: "auto" }
+    : {};
+
   return (
-    <div className="sync-toast" role="status" aria-live="polite">
+    <div className="sync-toast" role="status" aria-live="polite" style={anchorStyle}>
       <div className={`sync-toast-icon sync-toast-icon--${data.kind}`}>
         {data.kind === "busy" ? <LoaderCircle className="spin" size={17} /> : data.kind === "ok" ? <Check size={17} /> : data.kind === "error" ? <TriangleAlert size={17} /> : <CloudOff size={17} />}
       </div>
