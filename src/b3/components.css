@@ -319,3 +319,99 @@
 .note-row {
   border-radius: var(--b3-border-radius) !important;
 }
+
+/* ── 同步状态小悬浮窗（思源观感：小卡片 + 主色进度条 + 自动消失）── */
+.sync-toast {
+  display: flex;
+  position: fixed;
+  right: 16px;
+  bottom: 44px;
+  z-index: 760;
+  align-items: flex-start;
+  gap: 11px;
+  width: min(360px, calc(100vw - 32px));
+  padding: 12px 12px 12px 14px;
+  border: 1px solid var(--b3-theme-surface-lighter);
+  border-radius: var(--b3-border-radius-b);
+  color: var(--b3-theme-on-background);
+  background: var(--b3-theme-surface);
+  box-shadow: var(--b3-dialog-shadow);
+  animation: sync-toast-in 180ms var(--b3-transition);
+}
+@keyframes sync-toast-in {
+  from { opacity: 0; transform: translateY(8px) scale(.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+.sync-toast-icon {
+  display: grid;
+  flex: 0 0 30px;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
+}
+.sync-toast-icon--busy { color: var(--b3-theme-primary); background: var(--b3-theme-primary-lightest); }
+.sync-toast-icon--ok { color: var(--b3-theme-primary); background: var(--b3-theme-primary-lightest); }
+.sync-toast-icon--error { color: var(--b3-theme-error); background: color-mix(in srgb, var(--b3-theme-error) 12%, transparent); }
+.sync-toast-icon--unavailable { color: var(--b3-theme-on-surface); background: var(--b3-theme-surface-lighter); }
+.sync-toast-body { display: flex; flex: 1 1 auto; min-width: 0; flex-direction: column; gap: 4px; }
+.sync-toast-title { font-size: 13px; font-weight: 600; color: var(--b3-theme-on-background); }
+.sync-toast-msg { font-size: 12px; line-height: 1.5; color: var(--b3-theme-on-surface); word-break: break-word; }
+.sync-toast-detail {
+  margin-top: 2px;
+  padding: 6px 8px;
+  border-radius: var(--b3-border-radius);
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--b3-theme-on-surface);
+  background: var(--b3-theme-surface-lighter);
+}
+.sync-toast-close {
+  display: grid;
+  flex: 0 0 22px;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  color: var(--b3-theme-on-surface);
+  background: transparent;
+  opacity: .68;
+  cursor: pointer;
+}
+.sync-toast-close:hover { color: var(--b3-theme-on-background); opacity: 1; background: var(--b3-list-hover); }
+
+/* 进度条：始终用主色（蓝），任何状态不用红色 */
+.sync-toast-progress { margin-top: 3px; }
+.sync-toast-progress-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 11px;
+  color: var(--b3-theme-on-surface);
+}
+.sync-toast-track {
+  height: 5px;
+  margin-top: 5px;
+  border-radius: 3px;
+  background: var(--b3-theme-primary-lightest);
+  overflow: hidden;
+}
+.sync-toast-bar {
+  height: 100%;
+  border-radius: 3px;
+  background: var(--b3-theme-primary);
+  transition: width .25s ease;
+}
+.sync-toast-bar.indeterminate {
+  width: 34% !important;
+  animation: sync-indeterminate 1.2s ease-in-out infinite;
+}
+.sync-toast-sub { margin-top: 4px; font-size: 11px; color: var(--b3-theme-on-surface); }
+.sync-toast-action { margin-top: 4px; align-self: flex-start; }
+
+@media (max-width: 760px) {
+  .sync-toast { right: 12px; bottom: calc(12px + env(safe-area-inset-bottom)); left: 12px; width: auto; }
+}

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type CSSProperties } from "react";
 import { createPortal } from "react-dom";
-import { ArrowLeft, Check, ChevronDown, ChevronRight, Cloud, CloudOff, Files, ListTree, LoaderCircle, Feather, Lock, LockOpen, Moon, MoreHorizontal, Pencil, Save, Settings as Settings2Icon, Sun, Trash2, WifiOff, X } from "lucide-react";
+import { ArrowLeft, Check, ChevronDown, ChevronRight, Cloud, Files, ListTree, LoaderCircle, Feather, Lock, LockOpen, Moon, MoreHorizontal, Pencil, Save, Settings as Settings2Icon, Sun, Trash2, WifiOff } from "lucide-react";
 import { MobileLibrary } from "./components/MobileLibrary";
 import { withViewTransition } from "./lib/viewTransition";
 import { SearchPanel } from "./components/SearchPanel";
@@ -8,7 +8,7 @@ import { TrashPanel } from "./components/TrashPanel";
 import { HistoryPanel } from "./components/HistoryPanel";
 import { ConfirmDelete, Sidebar, type SidebarMode } from "./components/Sidebar";
 import { QuickNotesWorkspace, type QuickNotesWorkspaceHandle } from "./components/QuickNotesWorkspace";
-import { SyncPanel, type SyncPanelHandle } from "./components/SyncPanel";
+import { SyncToast, type SyncToastData } from "./components/SyncToast";
 import { LakeEditor } from "./features/editor/LakeEditor";
 import type { LakeEditorInstance } from "./features/editor/lakeRuntime";
 import { MultiTabEditor, type TabInfo } from "./features/editor/MultiTabEditor";
@@ -21,7 +21,7 @@ import { loadSettings, saveSettings, subscribeSettings, type AppSettings } from 
 import { applyTheme, applyCustomCss } from "./lib/theme";
 import { SettingsPanel, type SettingsCategory } from "./components/SettingsPanel";
 import { subtreeIds } from "./lib/tree";
-import type { NoteDigest, NoteDocument, NoteSummary, SyncStatus, TreeNode, WorkspaceSnapshot } from "./lib/types";
+import type { NoteDigest, NoteDocument, NoteSummary, SyncProgress, SyncStatus, TreeNode, WorkspaceSnapshot } from "./lib/types";
 
 type SaveState = "idle" | "dirty" | "saving" | "saved" | "error";
 type MobilePage = "library" | "document";
@@ -131,8 +131,9 @@ export function App() {
   const [sync, setSync] = useState<SyncStatus>({ phase: "idle", message: "仅本地保存", lastSyncedAt: null, pendingChanges: 0 });
   const [cloudEnabled, setCloudEnabled] = useState(true);
   const [confirmDelete, setConfirmDelete] = useState<TreeNode | null>(null);
-  const [syncPanelOpen, setSyncPanelOpen] = useState(false);
-  const syncPanelRef = useRef<SyncPanelHandle | null>(null);
+  const [syncToast, setSyncToast] = useState<SyncToastData | null>(null);
+  const [syncProgress, setSyncProgress] = useState<SyncProgress | null>(null);
+  const syncToastTimer = useRef<number | null>(null);
   const [pendingRenameId, setPendingRenameId] = useState<string | null>(null);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [mobilePage, setMobilePage] = useState<MobilePage>("library");
@@ -168,8 +169,6 @@ export function App() {
   const editorsRef = useRef<Map<string, LakeEditorInstance>>(new Map());
   const [notice, setNotice] = useState<NoticeState | null>(null);
   const noticeTimer = useRef<number | null>(null);
-  const [syncSetupPrompt, setSyncSetupPrompt] = useState(false);
-  const syncSetupPromptTimer = useRef<number | null>(null);
   const sidebarPreviewTimer = useRef<number | null>(null);
   // 审计 #7：每篇笔记的编辑 revision——保存请求发出后若有新编辑（revision 增长），
   // 旧响应不得覆盖最新草稿/清除 dirty
@@ -195,7 +194,6 @@ export function App() {
       saveTimers.current.forEach((timer) => window.clearTimeout(timer));
       saveTimers.current.clear();
       if (sidebarPreviewTimer.current !== null) window.clearTimeout(sidebarPreviewTimer.current);
-      if (syncSetupPromptTimer.current !== null) window.clearTimeout(syncSetupPromptTimer.current);
     };
   }, []);
 
@@ -483,19 +481,65 @@ export function App() {
     noticeTimer.current = window.setTimeout(() => setNotice(null), 2200);
   }, []);
 
-  const showSyncSetupPrompt = useCallback(() => {
-    setSyncSetupPrompt(true);
-    if (syncSetupPromptTimer.current !== null) window.clearTimeout(syncSetupPromptTimer.current);
-    syncSetupPromptTimer.current = window.setTimeout(() => {
-      setSyncSetupPrompt(false);
-      syncSetupPromptTimer.current = null;
-    }, 7000);
+  /** 云同步：点顶栏云按钮直接开始，小悬浮窗展示状态并自动消失（不再弹带按钮的大弹窗） */
+  const showSyncToast = useCallback((data: SyncToastData) => {
+    setSyncToast(data);
+    if (syncToastTimer.current !== null) window.clearTimeout(syncToastTimer.current);
+    if (data.kind !== "busy") {
+      const ms = data.kind === "ok" ? 2600 : data.kind === "error" ? 4500 : 7000;
+      syncToastTimer.current = window.setTimeout(() => {
+        setSyncToast(null);
+        setSyncProgress(null);
+        syncToastTimer.current = null;
+      }, ms);
+    }
   }, []);
 
-  const handleSyncUnavailable = useCallback(() => {
-    setSyncPanelOpen(false);
-    showSyncSetupPrompt();
-  }, [showSyncSetupPrompt]);
+  const runSync = useCallback(async () => {
+    setSyncProgress(null);
+    showSyncToast({ kind: "busy", title: "正在同步", message: "准备同步...", progress: { phase: "connect", message: "准备同步..." } });
+    const unsubscribe = native.onSyncProgress((progress) => {
+      setSyncProgress(progress);
+      if (progress.error) {
+        setSync((current) => ({ ...current, phase: "error", message: progress.error || "同步失败" }));
+        showSyncToast({ kind: "error", title: "同步失败", message: progress.error || "同步失败" });
+        return;
+      }
+      setSync((current) => ({ ...current, phase: "syncing", message: progress.message }));
+      setSyncToast((current) => current && current.kind === "busy" ? { ...current, progress, message: progress.message } : current);
+    });
+    try {
+      const settings = await native.getS3Settings();
+      if (!settings) {
+        setSync((current) => ({ ...current, phase: "idle", message: "尚未配置云同步" }));
+        showSyncToast({ kind: "unavailable", title: "尚未配置云同步", message: "请先配置 S3，完成后即可开始同步。", onConfigure: () => { setSettingsCategory("sync"); setSettingsOpen(true); } });
+        return;
+      }
+      const result = await native.syncNow();
+      const lakeMessage = `Lake：上传 ${result.uploaded}，下载 ${result.downloaded}，冲突 ${result.conflicts}`;
+      const quickMessage = result.quickNotes?.error
+        ? "；小记同步失败（Lake 已完成）"
+        : result.quickNotes ? `；小记：上传 ${result.quickNotes.uploaded}，下载 ${result.quickNotes.downloaded}，冲突 ${result.quickNotes.conflicts}` : "";
+      const resultMessage = `同步完成：${lakeMessage}${quickMessage}`;
+      const superseded = result.supersededNotes && result.supersededNotes.length > 0
+        ? `远端修改已覆盖本地 ${result.supersededNotes.length} 篇（${result.supersededNotes.slice(0, 3).map((n) => `「${n.title}」`).join("、")}${result.supersededNotes.length > 3 ? " 等" : ""}），本地修改已存入该文档的历史版本。`
+        : "";
+      setSync((current) => ({ ...current, phase: result.quickNotes?.error ? "error" : "success", message: resultMessage, lastSyncedAt: result.completedAt, pendingChanges: 0 }));
+      showSyncToast({ kind: result.quickNotes?.error ? "error" : "ok", title: "同步完成", message: `${lakeMessage}${quickMessage}`, detail: superseded || undefined });
+    } catch (error) {
+      const rawMessage = String(error);
+      if (rawMessage.includes("请先保存 S3 配置")) {
+        setSync((current) => ({ ...current, phase: "idle", message: "尚未配置云同步" }));
+        showSyncToast({ kind: "unavailable", title: "尚未配置云同步", message: "请先配置 S3，完成后即可开始同步。", onConfigure: () => { setSettingsCategory("sync"); setSettingsOpen(true); } });
+      } else {
+        const errorMessage = "同步失败，请检查网络或 S3 配置";
+        setSync((current) => ({ ...current, phase: "error", message: errorMessage }));
+        showSyncToast({ kind: "error", title: "同步失败", message: errorMessage });
+      }
+    } finally {
+      unsubscribe();
+    }
+  }, [showSyncToast]);
 
   /** 编辑器实例就绪回调：注册到 map，销毁时移除；就绪时补写文本缓存（存量文档首次打开即有缓存） */
   const handleEditorReady = useCallback((noteId: string, editor: LakeEditorInstance | null) => {
@@ -862,6 +906,9 @@ export function App() {
   const plainText = activeContent.replace(/<[^>]+>/g, "").replace(/&nbsp;/g, " ").replace(/&amp;/g, "&");
   const wordCount = plainText.trim().length;
   const wordCountLabel = wordCount > 0 ? `${wordCount} 字` : "";
+  // 图片统计：当前文档 Lake 正文中的 image card 数（思源状态栏同款：仅 >0 时显示）
+  const imageCount = (activeContent.match(/<card\b[^>]*\bname="image"[^>]*>/g) || []).length;
+  const imageCountLabel = imageCount > 0 ? `图片 ${imageCount}` : "";
   const activeNodeSyncState = activeNoteId ? (treeNodes.find((n) => n.noteFileId === activeNoteId)?.syncState ?? "synced") : "synced";
 
   const editorPrefs = {
@@ -903,7 +950,7 @@ export function App() {
         </button>
 
       </div>
-      <button className={`toolbar__item toolbar__sync ${sync.phase}`} onClick={() => { setSyncPanelOpen(true); void syncPanelRef.current?.sync(); }} title={syncTooltip(sync)} aria-label={`云同步：${sync.message}`}>
+      <button className={`toolbar__item toolbar__sync ${sync.phase}`} onClick={() => { void runSync(); }} title={syncTooltip(sync)} aria-label={`云同步：${sync.message}`}>
         <Cloud size={15} />
       </button>
     </>
@@ -959,14 +1006,6 @@ export function App() {
           </div>
         </header>}
         {error && <div className="error-banner"><span>{error}</span><button onClick={() => setError(null)}>关闭</button></div>}
-        {syncSetupPrompt && <div className="sync-setup-toast" role="alert">
-          <div className="sync-setup-toast-copy">
-            <span className="sync-setup-toast-icon"><CloudOff size={17} /></span>
-            <span><strong>尚未配置云同步</strong><small>请先配置 S3，完成后即可开始同步。</small></span>
-          </div>
-          <button className="sync-setup-toast-action" onClick={() => { setSyncSetupPrompt(false); setSettingsCategory("sync"); setSettingsOpen(true); }}>去配置</button>
-          <button className="sync-setup-toast-close" onClick={() => setSyncSetupPrompt(false)} aria-label="关闭提示"><X size={15} /></button>
-        </div>}
         {isMobile ? (
           mobileActive ? <section className={`document-pane ${wideMode ? "wide-mode" : ""} ${settings.paragraphSpacing ? "paragraph-spacing" : ""}`}>
             <LakeEditor noteId={mobileActive.id} content={mobileEditing ? mobileDraftContent : mobileActive.content} mode={mobileEditing ? "editor" : "viewer"} tocEnabled={mobileTocOpen} onChange={(content) => setMobileDraftContent(content)} prefs={editorPrefs} onEditorReady={handleEditorReady} />
@@ -1034,6 +1073,7 @@ export function App() {
           {desktopWorkspace === "library" && <>
             <span className="statusbar-divider" />
             <span className="statusbar-wordcount" title="当前文档字数">{wordCountLabel}</span>
+            {imageCountLabel && <span className="statusbar-imagecount" title="当前文档图片数">{imageCountLabel}</span>}
             {notice && (notice.action ? (
               <button
                 type="button"
@@ -1127,7 +1167,7 @@ export function App() {
           } catch { /* 文档未打开或读取失败则跳过 */ }
         })();
       }} />
-      <SyncPanel ref={syncPanelRef} open={syncPanelOpen} onClose={() => setSyncPanelOpen(false)} onSyncUnavailable={handleSyncUnavailable} onSyncStatusChange={(status) => setSync((current) => ({ ...current, ...status }))} />
+      {syncToast && <SyncToast data={syncToast} onClose={() => { setSyncToast(null); setSyncProgress(null); }} />}
       <SettingsPanel open={settingsOpen} openCategory={settingsCategory} settings={settings} onClose={() => setSettingsOpen(false)} onChange={(patch) => saveSettings(patch)} />
     </div>
   );

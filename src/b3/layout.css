@@ -46,6 +46,7 @@
     min-height: 0 !important;
     width: auto !important;
     background: transparent !important;
+    border-bottom: 0 !important;
     z-index: 400 !important;
     box-shadow: none !important;
     backdrop-filter: none !important;
@@ -97,14 +98,14 @@
     box-shadow: 0 0 0 1px var(--b3-theme-primary-lighter) inset !important;
   }
 
-  /* 左侧固定目录：白色卡片、无强边框/阴影、顶部与标签栏一体、右侧 4px 灰缝 */
+  /* 左侧固定目录：白色卡片、无强边框/阴影、顶部留 4px 灰缝（圆角可见，思源卡片从灰底"抠出"）、右侧 4px 灰缝 */
   .sidebar.sidebar-docked {
     background: var(--b3-theme-background) !important;
     border: 0 !important;
     box-shadow: none !important;
-    border-radius: 0 0 var(--b3-border-radius-b) var(--b3-border-radius-b) !important;
-    margin: var(--topbar-height) 4px 4px 0 !important;
-    height: calc(100% - var(--topbar-height) - 4px) !important;
+    border-radius: var(--b3-border-radius-b) !important;
+    margin: calc(var(--topbar-height) + 4px) 4px 4px 0 !important;
+    height: calc(100% - var(--topbar-height) - 8px) !important;
   }
 
   /* 右侧大纲固定：白色卡片、无边框/阴影、左侧 4px 灰缝 */
@@ -112,7 +113,21 @@
     background: var(--b3-theme-background) !important;
     border: 0 !important;
     box-shadow: none !important;
-    border-radius: 0 0 0 var(--b3-border-radius-b) !important;
+    border-radius: var(--b3-border-radius-b) !important;
+  }
+
+  /* 中间文档卡片：顶部两个圆角与左右 dock 卡片一致（思源 .layout__center 四角圆角），
+   * 顶部与顶栏的拼接不再出现直角"连接线" */
+  .workspace,
+  .document-pane,
+  .document-pane:has(> .multi-tab-editor) {
+    border-radius: var(--b3-border-radius-b) var(--b3-border-radius-b) 0 0 !important;
+  }
+  /* 小记视图本身无卡片边框/圆角设计，保持直角融合 */
+  .app-shell.quick-notes-active .workspace,
+  .app-shell.quick-notes-active .document-pane,
+  .app-shell.quick-notes-active .document-pane:has(> .multi-tab-editor) {
+    border-radius: 0 !important;
   }
 
   /* 状态栏：思源全宽底部灰条——回到 workspace 两行网格的第 2 行（28px），
