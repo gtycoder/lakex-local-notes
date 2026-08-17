@@ -1,174 +1,185 @@
-# Lake Notes Electron 会话交接文档（隐藏回收站笔记本重构已合并 master）
+# Lake Notes Electron 会话交接文档（UI 复刻思源 + 7 项反馈处理中）
 
-> 写给完全没有上下文的新会话。**开始工作前先通读本文**，再按需读：
-> `AGENTS.md`（项目长期记忆/规则）、`docs/TRASH-NOTEBOOK-DESIGN.md`（重构设计定稿）、
-> `docs/REFACTOR-TRASH-NOTEBOOK-HANDOFF.md`（重构起因与方案交接）、`docs/S3-GC-DESIGN.md`（GC v4.1）、
-> `docs/QUICK-NOTES-SPEC.md`（小记规格）、`docs/PERFORMANCE-NEXT.md`（性能优化评估清单）、`docs/TODO.md`。
-> 对照代码：`electron/sync.ts`、`electron/store.ts`、`electron/quickNotesSync.ts`、`electron/main.ts`、`src/App.tsx`。
+> 写给**完全没有上下文的新会话**。开工前先通读本文，再按需读：
+> `AGENTS.md`（项目长期记忆/规则）、`docs/SIYUAN-UI-PORT.md`（思源 UI 移植记录）、
+> `docs/PERFORMANCE-NEXT.md`（性能评估）、`docs/TRASH-NOTEBOOK-DESIGN.md`（同步语义定稿）、`docs/TODO.md`。
+> 对照代码：`src/App.tsx`、`src/b3/layout.css`、`src/b3/components.css`、`src/components/SyncToast.tsx`、
+> `electron/main.ts`、`electron/sync.ts`、`electron/store.ts`。
 
-项目目录：`/Users/admin/file/local-lake/lake-notes-electron`
+项目目录：`/Users/admin/file/local-lake/lake-notes-electron`（思源源码：`/Users/admin/file/local-lake/siyuan-master`，v3.8.0，AGPL-3.0，已保留署名）
 
 ---
 
 ## 0. 任务目标与当前状态
 
-Lake Notes 是**本地优先**笔记应用（Electron + React + better-sqlite3 + 语雀 Lake 内核），带 S3 同步（七牛 Kodo S3 兼容 API）。**本地是真相，S3 只是镜像。**
+Lake Notes 是**本地优先**笔记应用（Electron + React + better-sqlite3 + 语雀 Lake 内核），带 S3 同步（七牛 Kodo，`https://s3.cn-north-1.qiniucs.com`，Bucket `local-lake-hebei`，前缀 `lake-notes`）。**本地是真相，S3 只是镜像。**
 
-**当前状态**：隐藏回收站笔记本重构（删除=移动语义，回收站上云 / purge 不广播 / 自动过期 60 天）**已完成并合并进 master**（2026-08-15）。多轮 A/B 真机验收 + 代码审计 + 性能优化全部落地。分支已清理（仅剩 master + backup/pre-reset-95dcaf2-20260806）。
+**总体目标（用户原话）**：**UI 要完完全全复刻思源笔记**——可见的布局、样式、动效、窗口形式全部和思源一模一样，直接复用/抄袭思源源码（`siyuan-master`，v3.8.0）是可行且被认可的方向；同时要稳定流畅（Electron 43.4.0，性能优化持续做）。
 
-**下一阶段主线**：**Electron 33 → 43.4.0 升级已完成**（2026-08-16，分支 `feat/electron-43-upgrade`，含 better-sqlite3 13.x N-API 迁移 + GPU 裸启动复验通过），然后按 `docs/PERFORMANCE-NEXT.md` 评估增量 manifest 等性能项。
+**当前状态**：
+- 分支：**`feat/electron-43-upgrade`**（所有工作在此单分支，领先 master ~36+ 提交，可干净 fast-forward）。
+- **已完成为【未提交】**（全部 CDP/真机复测通过）：① 顶栏/左右固定栏融合——**本轮发现并修复真正根因**（圆角被 styles.css 覆盖 + 无灰缝），像素级验证 12px 圆角可见；② 云同步 UI 重构（SyncToast）；③ 反馈 2 偏好设置可点击；④ 反馈 6 状态栏图片统计（`图片 N`）；⑤ 反馈 7 弹窗 b3 令牌审计（含毛玻璃跟随主题修复）。
+- **待用户真机验收**：反馈 1/2/3/4/5（代码层面已复测 OK，等用户真机确认）。
+- 开发数据：`~/Library/Application Support/lake-notes-dev`（**可重建**，已清掉一条测试残留自定义 CSS）。正式数据：`~/Library/Application Support/lake-notes-electron`（**禁止触碰**）。
+- 基线：`npx tsc --noEmit` 通过；`npm test -- --run` = **217 passed**（本轮刚跑过，全绿）；vite build 通过；`git diff --check` 干净。
+- **vite.config.ts 已还原**（onstart 调试补丁已移除，== HEAD）。
 
-**UI 重做（复刻思源前端，2026-08-16 起）**：**视觉层移植已完成**——b3 令牌（daylight/midnight 原文）、
-思源组件 scss 整目录复用、顶栏（工作空间=S3 prefix/云同步/前进后退/外观/更多）、整体布局
-（灰底+白色一体卡片+无连接线）、浮动 dock（半高带 112/82）、标签页思源激活态、编辑器面包屑、
-全宽底部状态栏、双主题（含 Lake 编辑器深色变量覆盖）、自定义 CSS snippets、scroll-driven animations。
-活动轨 42px 对齐思源 .dock；CSP 放行 KaTeX CDN + 本地资产镜像（公式字体正常）。详见 `docs/SIYUAN-UI-PORT.md`。
-
-| 项目 | 信息 |
-| --- | --- |
-| 目录 | `/Users/admin/file/local-lake/lake-notes-electron` |
-| 分支 | **master**（重构已合并；backup/pre-reset-95dcaf2-20260806 保留作回滚备份） |
-| 远程 | `origin = https://gitee.com/gtycoder/local-lake.git`（origin/HEAD=master；还有 origin/main 等旧远程分支未动） |
-| Node | **必须优先 Node 24**：`$HOME/.nvm/versions/node/v24.18.0/bin` |
-| Electron | **43.4.0**（2026-08-16 升级完成；GPU 问题已修复，见 §5 坑 0） |
-| 基线 | `npx tsc --noEmit` 通过；`npm test -- --run` = **217 passed**；`node node_modules/vite/bin/vite.js build` 通过；`git diff --check` 干净 |
-| 开发数据 | `/Users/admin/Library/Application Support/lake-notes-dev`（可重建） |
-| 正式数据 | `/Users/admin/Library/Application Support/lake-notes-electron`（**禁止触碰**） |
-| 打包版测试隔离 | 任意模式可用 `LAKE_USER_DATA` 覆盖 userData（打包版默认走正式数据，**测试打包版务必覆盖**，避免触碰正式数据）；dev/打包版路径不同，可同时运行 |
-| 运行状态 | **项目已停止**（A/B、vite 均已退出，multidev 残留已清） |
-
-### 开发版固定 S3 配置（已写入 `electron/main.ts`，仅 dev 首次启动 seed）
-- Endpoint: `https://s3.cn-north-1.qiniucs.com`、Region: `cn-north-1`、Bucket: `local-lake-hebei`、前缀 `lake-notes`、`forcePathStyle: false`
-- AK/SK 硬编码在 `electron/main.ts` 与 `scripts/s3-ls.mjs` 默认值（**用户决定暂不处理**：git 私有，等全部收尾后统一轮换密钥 + 清 git 历史。见"当前问题"）
+### 关键约束
+- **Node 只用临时 PATH**：`export PATH="$HOME/.nvm/versions/node/v24.18.0/bin:$PATH"`；**不要动全局/公司 Node 18**（CDP 脚本 `WebSocket` 在 Node 18 下不可用，必须 Node 24）。
+- **启动命令**（用户常用，本项目仍有效）：
+  ```bash
+  export PATH="$HOME/.nvm/versions/node/v24.18.0/bin:$PATH"
+  cd /Users/admin/file/local-lake/lake-notes-electron
+  npm run dev   # vite + 自动拉起 electron
+  # 端口被占时：lsof -ti tcp:1421 | xargs kill -9
+  ```
+- 杀 electron 用**具体 PID**，不要 `pkill -f Electron`（机器上还有 Trae/SiYuan/VSCode 等）。
+- 测试打包版务必用 `LAKE_USER_DATA` 覆盖 userData（打包版默认走正式数据）。
 
 ---
 
 ## 1. 已完成内容
 
-### 1.1 隐藏回收站笔记本重构（本轮核心，已合并）
-- 删除 = 移入隐藏回收站笔记本（`parentId=notebook-trash`），`trashed_at`/`deleted_from_parent_id` 上云；恢复 = 移回原位置 + `restore_pending_at`；purge = 物理删 + 轻量墓碑（`deleted:true`），他端保留副本标 `purged`（可恢复、不上传）；自动过期 60 天（`trashAutoPurgeDays`，可配）。
-- 设计文档：`docs/TRASH-NOTEBOOK-DESIGN.md`（定稿）、`docs/REFACTOR-TRASH-NOTEBOOK-HANDOFF.md`（起因/方案）。
-- 软删路径统一（无软删墓碑、移动即同步、情况 3 自然解决、资源自然 keep）；复杂度集中在 purge 路径（D2 决策"不广播删除"的必然成本）。
+### 1.1 历史主线（已提交，勿重做）
+- **Electron 33 → 43.4.0**（`^43.4.0`）+ better-sqlite3 `^13.0.3`（N-API 单二进制，双 ABI 基建已删）。GPU 裸启动复验通过。43 EOL 2027-01-05。
+- **性能/稳定**：render-process-gone 自动恢复、堆峰值实测后 `--max-old-space-size=4096`、View Transitions、content-visibility、阅读进度条、零变更同步早退、fast-path 记账去重、manifest gzip。
+- **同步语义（定稿，勿重争）**：本地是真相、先同步者胜、删除压编辑（编辑进历史/回收站）、purged 条目编辑=隐式恢复、小记冲突 B 方案。
+- **审计加固**：资产服务器 CORS token 门禁、CSP 零违规、50MP 图片上限、before-quit 等待同步等。
+- 测试：217 全绿（含冲突三场景、回收站、零变更早退等）。
 
-### 1.2 统一冲突语义（先同步者胜）
-- 正文 / 元数据（图标/改名/排序/父目录）/ 小记三者**同构**：以"本设备已确认版本"为分界——
-  - 云端 != 已确认版本（别人先提交）→ 接受远端（文档进历史、小记进回收站、图标被覆盖）；
-  - 云端 == 已确认版本 + 本地续编/回滚历史/删除恢复/改名 → 本地胜、上传回写。
-- 元数据用 `sync_base.last_synced_meta_at`（markSynced 时记录 notes.updated_at）判定；正文用 baseHash；小记用 contentHash。删除/恢复的显式例外 = `restore_pending_at`。
-- **编辑 purged 条目 = 隐式恢复**（saveNote/setNodeIcon/renameTreeNode/setNoteLocked 触发，留档被删版本）。
+### 1.2 思源 UI 移植（已提交，核心成果）
+- b3 令牌：`src/b3/theme-daylight.css`、`theme-midnight.css`（思源原文）；思源组件 scss 整目录复用 `src/b3/siyuan/`。
+- 顶栏融合：`[交通灯82][工作空间▾(设置/回收站)][☁云][多tab弹性][🌙外观][⋯(锁定)]`（MultiTabEditor 的 tab-bar + topbarLeading/topbarTrailing 槽）；前进/后退已移除；小记与笔记顶栏一致。
+- 下拉用 **React portal 渲染到 body 根部**（否则被 document-pane overflow + app-shell isolation 裁掉）——见 `src/App.tsx` 的 `createPortal`。
+- 面包屑：只留笔记本名 + 大纲纯文本 `H1xxx`；标签页思源激活态；浮动 dock 半高（top:112/bottom:82）；状态栏全宽底部灰条；活动轨 42px。
+- 双主题（含 Lake 编辑器 `--lakex-*` 变量覆盖，打在 `.lakex-default-theme`）；自定义 CSS snippets；字体 JetBrainsMono 已复制到 `public/appearance/fonts/`（OTS 解析错误已修）。
+- 布局模型（用户认可的方向）：**整窗灰底（`--b3-body-background` 渐变），白色卡片（sidebar / 文档区 / outline）像"从背景抠出来"，卡片间 4px 灰缝 + 圆角**。参考思源 `_layout.scss` + daylight `theme.css`。
 
-### 1.3 性能优化（已落地）
-- **零变更早退**：记录 `lastSeenCommitId` + 墓碑签名（`device_state`），远端未变且本地无 pending → 整轮跳过（10k 条零变更同步 ~200ms，不写 manifest）。
-- **fast-path 记账去重**：`store.allSyncBaseInfo()` 批量读基线（替代逐条 lastSyncedMetaAt 查询），已 synced 且 base/meta/锁一致 → 跳过 setBaseHash/markSynced/setLastUploadedHash（省 ~9 万次 DB 写/次）。
-- manifest gzip（此前已做，-87%）。详见 `docs/PERFORMANCE-NEXT.md`（含待评估项）。
+### 1.3 思源参考要点（复刻时对照）
+- 思源真实窗口：`/Applications/SiYuan.app`（用户本机开着 v3.8.0）；截图参考 `siyuan-master/screenshots/feature0.png`。
+- 思源结构事实（像素分析得出）：工具栏约 36-38px、灰底横向渐变；下方白卡全部**四角圆角**（`--b3-border-radius-b=12px`）、顶部与工具栏衔接处无边框线；卡片之间/窗口边缘 4px 灰缝。
+- 思源工具栏按钮不参与拖拽；多 tab 在顶栏右侧；状态栏在整窗底部。
 
-### 1.4 审计加固（本轮）
-- **资产服务器 CORS token 门禁**：带 Origin 的 CORS 请求须 `?token=` 匹配启动随机令牌（防外部网页/sandbox iframe 读本地图片）；`<img>` 非 CORS 不受影响。令牌经 `LAKE_ASSET_TOKEN` env → preload → `lakeNative.assetToken`。
-- **CSP**：index.html meta（`script-src 'self' 'unsafe-inline'`、`img-src`/`connect-src` 放行本地+http(s)、`font-src` 放行 `https://gw.alipayobjects.com`、`worker-src`、`object-src 'none'` 等）；实测零违规、编辑器正常。
-- **图片 50MP 像素上限**：自研头部尺寸解析（PNG/JPEG/GIF/WebP），上传/下载/粘贴/转换前拦截解压炸弹（不依赖 sharp 解码器，极小恶意文件也能识别）。
-- **小记回收站过滤无内容墓碑**（learned tombstone 不显示假条目）。
-- **before-quit 等待在途同步**（任何模式）。
-- **restoreTrashItem 根级笔记本恢复位置修复**：原父 `parent_id` 为 NULL 时 `parent_id != ?` 三值逻辑漏判 → 误回默认笔记本；修为 `(parent_id IS NULL OR parent_id != ?)`。
-- 修复：小记转正式笔记图片 URL 端口硬编码 19876 → `ASSET_PORT`；manifest 保留链与 GC 一致（`MANIFEST_CHAIN_KEEP=8`，latest + 9 commit = 10 份）；快照弹窗状态残留（HistoryPanel 打开/切 note 重置）；默认笔记本图标纳入 folder 同步（LWW）。
-
-### 1.5 测试
-- **217 全绿**（含：先同步者胜三场景、正文续编、历史回滚同步、删除压编辑回收站内容断言、零变更早退、编辑即恢复、50MP 拒绝、幽灵条目过滤、manifest 10 份裁剪、默认笔记本图标等）。
-- 真机 A/B 多轮验收（32 场景 + 本轮回归）均通过；本轮修复全部实测（CSP 零违规、token 403/200、早退跳过+有变更不误跳、🛰️ 图标跨端）。
-
----
-
-## 2. 当前问题 / 已知边界
-
-1. **AK/SK 硬编码**（`electron/main.ts` dev seed + `scripts/s3-ls.mjs` 默认值）：用户决定**暂不处理**（git 私有）；计划"全部收尾后统一轮换密钥 + 清理 git 历史"。**不要把凭据外泄/公开仓库。**
-2. **Electron 33 已 EOL + macOS 26 GPU 空转 → 已解决（2026-08-16 升级 43.4.0）**：裸启动实测 GPU Helper ~2% CPU、渲染正常（2094 元素 + 编辑器初始化），fontations 空转未复现；multidev.sh 已改为仅 `--use-angle=metal`。43 EOL 2027-01-05，届时 43 → 44/45 为同 Node 大版本小升级，成本低。详见 §5 坑 0。
-3. **性能**：有变更时仍全量解析/上传 manifest（10k 条 ~1-3s 后台）；增量 manifest 待评估（`docs/PERFORMANCE-NEXT.md` 决策表）。
-4. **已知边界（低危，暂不处理）**：
-   - trash-yield 可能丢弃本地回收站条目的编辑（未留档）；
-   - 云端 manifest 损坏/含环 → fail-fast 整次同步中断（审计 #4 设计权衡）；
-   - 多端并发 purge/恢复存在"先读后写"竞态窗口（读到墓碑即兜住，低概率）；
-   - 小记 `archiveLocalToTrash`/learned tombstone 产生的墓碑会永久保留（体积小，可接受）。
-5. **App.tsx 1049 行 monolith**：可维护性优化（拆分）已列入低优先待办，未做。
+### 1.4 本轮已完成（**未提交**，反馈 1/3/4/5）
+1. **顶栏与左右固定栏融合（反馈 1）** — 改动 `src/b3/layout.css`：
+   - `.tab-bar`（fixed 那条）加 `border-bottom: 0 !important`——原来继承第一条规则的 `1px solid var(--b3-theme-background-light)`（#dfe0e1），在顶栏底边画出一条全宽深灰线，就是用户说的"非常明显的连接线"。
+   - `.sidebar.sidebar-docked` 与 `.outline-sidebar--docked .outline-sidebar__content` 改为四角圆角 `var(--b3-border-radius-b)`（原来是 `0 0 12px 12px` / 底部圆角，顶角直角）。
+   - `.workspace` / `.document-pane` / `.document-pane:has(> .multi-tab-editor)` 改为 `border-radius: 12px 12px 0 0`（顶部两角圆角，底部保持现状——用户说底部融合已经很好）；小记视图例外恢复 `0`。
+   - 验证：CDP 截图 + 像素块平均，暗色/亮色下顶栏→卡片过渡平滑、无深色线；DOM 计算样式确认 border-bottom 0、radius 12px。
+2. **云同步 UI 重构（反馈 3/4/5）**：
+   - 新增 `src/components/SyncToast.tsx`（小悬浮窗：busy 主色进度条 + 完成/失败/未配置三种状态 + 详情 + 自动消失）；样式追加在 `src/b3/components.css`（`.sync-toast*`，进度条永远 `var(--b3-theme-primary)` 蓝色，不用红）。
+   - `src/App.tsx`：删除 SyncPanel 大弹窗（`src/components/SyncPanel.tsx` 已删除）；新增 `runSync()` + `showSyncToast()`（ok 2.6s / error 4.5s / 未配置 7s 自动消失）；点顶栏云按钮 = 直接同步 + 弹小窗。
+   - **冲突/覆盖弹窗（反馈 5）**：原来 `window.alert("检测到远端修改已覆盖本地…")` 改为同步完成 toast 的 `detail` 展示（非阻塞、自动消失）。
+   - **红色进度条根因（反馈 3）**：开发数据 localStorage `lake-notes-v1.settings.customCss` 里有一条**测试残留** `:root { --b3-theme-primary: #ff5722; }`（橙色），导致所有主色元素（含同步进度条）变橙红。已在 dev 数据里清掉并 reload 验证回蓝（`#3575f0`）。**这不是代码 bug**，是 dev 数据残留；真实 app 若用户没写自定义 CSS 不受影响。
 
 ---
 
-## 3. 下一步计划
+## 2. 当前问题 / 7 项反馈逐项状态
 
-1. **Electron 33 → 43.4.0 升级（已完成 2026-08-16，分支 feat/electron-43-upgrade）**：
-   - 结果：electron `^43.4.0` + better-sqlite3 `^13.0.3`（**N-API 单二进制，无需 rebuild**，双 ABI 基建 setup-test-abi.sh / vitest alias 已删除）；electron-log / vite-plugin-electron / sharp 均兼容；`tsc` + 217 测试 + vite build 全绿；GPU 裸启动复验通过（§5 坑 0）。
-   - 遗留可选项（未做）：打包版 CSP 验证、复查 `sandbox: false` 能否恢复、`--max-old-space-size=8192` 是否下调。
-   - 参考：思源 v42.7.1 / VSCode 1.132（42.7.1）均未上 43；本项目因 42 EOL（2026-10-20）太近，直接选当前 stable 43.4.0。
-2. **性能**：跑真实数据看单次同步耗时；>2 万条再评估增量 manifest（`docs/PERFORMANCE-NEXT.md` 决策表）。
-3. **凭据收尾**（用户明确推迟）：统一轮换七牛密钥 + 用 `git filter-repo` 清理含 AK/SK 的历史；改环境变量注入。
-4. 其余：App.tsx 拆分（可选）；小记"learned tombstone 防幽灵"已有（过滤回收站显示）；`Electron-HANDOFF.md.bak-*` / `hist-bench-tmp.mjs` 是遗留临时文件，可择机删除。
+用户最近一次反馈（原话摘要），**按此逐项核对**：
 
----
+| # | 反馈 | 状态 | 说明 |
+| --- | --- | --- | --- |
+| 1 | 顶栏和左右固定栏融合仍有明显连接线，思源像一整块背景抠出区域；底栏融合好且有圆角 | ✅ 已修（未提交） | **本轮发现真正根因**：layout.css 的 12px 圆角被 styles.css 后加载规则覆盖（1908 行 sidebar `border-radius:0`、2165 行 workspace `14px 0 0 0`、844 行 workspace `border:1px`）→ 视觉上圆角从未生效、顶栏底有灰白跳变线。**修复**：① workspace/document-pane 顶部两角改 `--b3-border-radius-b`(12px)；② sidebar/outline 保留四角圆角；③ workspace 去 border；④ sidebar/workspace 顶部加 4px 灰缝（margin `calc(topbar+4px)`）让圆角可见。**像素级验证**：左上/右上角 12px 圆弧（灰→白平滑渐变）、顶栏底部 4px 灰缝、无横向分割线；暗色同样验证。**待用户真机确认**。 |
+| 2 | 偏好设置无法点击 | ✅ CDP 复测通过 | 库视图 + 小记视图都验证：工作空间▾ → 偏好设置能正常打开 SettingsPanel。**待用户真机鼠标确认**（CDP 不能完全等同真机指针）。 |
+| 3 | 云同步进度条不要红色 | ✅ 已改（未提交） | 进度条固定 `--b3-theme-primary` 蓝（实测 rgb(53,117,240)），任何状态不用红。 |
+| 4 | 点击云同步直接开始，弹小悬浮窗展示状态、自动消失，不要大弹窗按钮 | ✅ 已改（未提交） | SyncToast 替代 SyncPanel。**CDP 验证**：点云按钮直接同步 + toast 自动消失（ok 2.6s / error 4.5s / 未配置 7s）。 |
+| 5 | 云端/本地冲突后"本地进历史"弹窗突兀，参考思源 | ✅ 已改（未提交） | window.alert → toast detail。思源本身不做阻塞弹窗，冲突文档进历史列表，符合。 |
+| 6 | 状态栏添加图片统计（共多少张图片等） | ✅ 已实现（未提交） | 状态栏加 `图片 N`（当前文档 image card 数，思源同款口径，仅 >0 显示）。**已验证**：含 107 图文档显示 `图片 107`。数据来源：`activeContent` 正则统计 `<card name="image">`。 |
+| 7 | 很多弹窗还不是思源样式，需继续审计 | ✅ 已审计（未提交） | 12+ 类弹窗硬编码颜色 → b3 令牌：搜索面板、右键菜单(context-menu)、新建菜单(create-menu)、emoji picker、删除确认(confirm-dialog)、小记转文档(quick-note-convert-dialog)、历史面板(history-panel)、回收站(trash-panel)、设置面板内部(settings-nav/field)、小记页面卡片(composer/entry/empty)、modal-backdrop/settings-overlay 遮罩。**关键修复**：弹窗统一毛玻璃表面（styles.css "苹果风"批量规则）从硬编码 `rgba(255,255,255,.74)` 改为 `color-mix(var(--b3-theme-surface)…)` —— 修复暗色下弹窗仍为半透明白底的问题。清理 `.sync-panel`/`.sync-setup-toast` 死代码。**双主题 CDP 计算样式验证 + VisionPower 视觉确认**（亮 #f6f6f6 / 暗 #2c2c2c 自动适配，无白底突兀）。 |
 
-## 4. 关键命令（多端联调 / 验证）
+### 本轮新增改动文件（未提交）
+- `src/App.tsx`：状态栏图片统计（`imageCountLabel` + `.statusbar-imagecount`）。
+- `src/styles.css`：12+ 类弹窗/菜单/小记卡片硬编码色 → b3 令牌；**毛玻璃表面跟随主题**；清理 `.sync-panel`/`.sync-setup-toast` 死代码。
+- `src/b3/layout.css`、`src/b3/components.css`、`src/components/SyncToast.tsx`：上一轮反馈 1/3/4/5（未提交，见 §1.4）。
+- `src/components/SyncPanel.tsx`：已删除（被 SyncToast 替代）。
 
-```bash
-export PATH="$HOME/.nvm/versions/node/v24.18.0/bin:$PATH"
-cd /Users/admin/file/local-lake/lake-notes-electron
-
-# 测试 / 构建
-npm test -- --run
-npx tsc --noEmit
-node node_modules/vite/bin/vite.js build
-
-# A/B 多端（脚本：vite / device-a / device-b / stop）
-./scripts/multidev.sh vite        # 临时禁用 electron 自动拉起（结束会自动还原 vite.config.ts）
-./scripts/multidev.sh device-a    # A：默认 dev userData，CDP 9222，资源端口 19876
-./scripts/multidev.sh device-b    # B：$TMPDIR/lake-device-b，CDP 9223，资源端口 19877
-./scripts/multidev.sh stop
-
-# 手动前台起（本环境 nohup 起不了 electron，必须 tty 长驻）：
-# A: ./node_modules/.bin/electron --use-angle=metal --remote-debugging-port=9222 .
-# B: LAKE_USER_DATA="$TMPDIR/lake-device-b" LAKE_ASSET_PORT=19877 ./node_modules/.bin/electron --use-angle=metal --remote-debugging-port=9223 .
-
-# CDP 驱动渲染层：node /tmp/lake-cdp-eval.mjs <port> "<async expression>"（window.lakeNative.*）
-# 只读 DB：python3 sqlite3（better-sqlite3 是 Electron ABI，系统 Node 跑不了）
-#   开发 A：/Users/admin/Library/Application Support/lake-notes-dev/workspace-default/metadata.sqlite3
-#   B：$TMPDIR/lake-device-b/workspace-default/metadata.sqlite3（小记：quick-notes/metadata.sqlite3）
-# 云端对象：node scripts/s3-ls.mjs --count | --prefix manifests/ | --note <id>
-```
+### 其他已知边界（长期）
+- AK/SK 硬编码在 `electron/main.ts` dev seed + `scripts/s3-ls.mjs`；**用户明确推迟**，统一收尾时轮换 + `git filter-repo` 清历史。**不要外泄/公开仓库。**
+- 编辑器正文排版由 Lake 内核渲染，与思源 protyle 不同（重写成本高，用户已知并接受）。
+- 有变更时仍全量解析/上传 manifest（10k 条 ~1-3s）；增量 manifest 待评估（`docs/PERFORMANCE-NEXT.md`）。
+- App.tsx ~1100 行 monolith，拆分列入低优先待办。
+- 小记"learned tombstone"墓碑永久保留（体积小，可接受）。
 
 ---
 
-## 5. 踩过的坑（务必记住）
+## 3. 下一步计划（按优先级）
 
-### 环境 / 进程
-0. **Chromium GPU Helper 空转会卡死同步（macOS 26）→ 已随 43.4.0 升级解决**：Electron 33 上 GPU 进程 99% CPU 空转（`fontations_ffi`）→ 渲染冻结 → 主进程 `webContents.send` mojo 背压 → 同步"卡死"。`--disable-gpu` 单独不够，必须 4 参数禁用组。**43.4.0 裸启动实测不再复现**（GPU Helper ~2% CPU、真实数据渲染正常），multidev.sh 已改为仅 `--use-angle=metal`。若未来版本复发，回退到 4 参数禁用组。
-1. **vite dev server 会被 exec 会话回收**：必须长驻 tty（`exec_command tty=true`）；`nohup ... &` 在本环境随会话退出被回收。vite-plugin-electron 自动拉起 electron 时临时给 `vite.config.ts` 的 electron 入口加 `onstart: () => {}`，验证完必须还原（`vite.config.ts.multidev-bak` 是脚本备份；**勿提交 onstart 补丁**）。
-2. **启动 Electron 勿用 `| head -N` 管道**：head 退出后 stdout 管道断裂，electron-log 控制台传输层抛 `write EPIPE` 未捕获异常 → "A JavaScript error occurred in the main process"。用 `> file 2>&1` 重定向。
-3. **结束 electron 只能 kill 具体 PID**，**不要 `pkill -f Electron`**（机器上还有 Trae/SiYuan/VSCode 等）。
-4. **单实例锁按 userData 隔离**：不同 userData 可同时跑；同一 userData 第二实例直接 quit。A=19876，B=19877（LAKE_ASSET_PORT）。
-5. **CDP 截图/操作**：窗口未激活时先 `Emulation.setFocusEmulationEnabled{enabled:true}` + `Page.setWebLifecycleState{state:"active"}`；截图在 `result.data`。
-6. **fetch 测试资产服务器会被 CORS 拦**（403/404 响应无 ACAO 头 → 浏览器 "Failed to fetch"）；验证 token 门禁用 curl（带 Origin 头），别用页面 fetch。
-
-### 七牛 S3
-7. **HeadBucket 不可用**：`ObjectStore.test()` 必须用 `ListObjectsV2`，否则永远 `UnknownError`。
-8. **配置映射**：正确 Endpoint=`https://s3.cn-north-1.qiniucs.com`、Region=`cn-north-1`、Bucket=`local-lake-hebei`、`forcePathStyle=false`。用户最初给的 `local-lake-hebei.s3...` + Bucket `local-lake` 是错的。
-9. **manifest 保留 10 份**（`MANIFEST_CHAIN_KEEP=8`，latest + 9 commit）：prune / runGcReconcile / runDeepCleanup 三处链长必须一致，否则深度清理 7 天后会把多留的容错份删掉。
-
-### 同步 / 冲突
-10. **零变更早退**依赖：`device_state.last_seen_commit_id` + 墓碑签名（COUNT:MAX(deleted_at)）；`setNoteLocked` 必须标 `sync_state='local'`（否则锁变更被早退漏掉）。**测试里手工改写 manifest 必须换 commitId**（`writeManifest` 助手已自动换）。
-11. **先同步者胜**：判定用"已确认版本"（lastSyncedMetaAt / baseHash），不是"谁写的"也不是"编辑时间"；B 已确认 A 的版本后主动改 → B 胜（场景3）；否则 A 先改先同步 → A 胜。
-12. **删除压编辑**：A 删 B 离线编辑 → B 跟随删除 + 编辑进历史；**回收站内容以 A 删除的版本为准**（uploadedByUs / 续编分支都要加 `local.parentId !== TRASH_NOTEBOOK_ID` 守卫，否则 B 的编辑溜进回收站内容）。
-13. **restoreTrashItem 原父校验**：根级笔记本 parent_id 为 NULL，SQL 必须 `(parent_id IS NULL OR parent_id != ?)`，否则误回退默认笔记本。
-14. **purged 条目编辑 = 隐式恢复**：saveNote/setNodeIcon/renameTreeNode/setNoteLocked 需先 `revivePurgedIfNeeded`（移出回收站 + restore_pending + 留档），否则悄悄复活且无恢复标记。
-15. **小记冲突（B 方案）**：远端覆盖本地，本地版本以新 id 进回收站（`archiveLocalToTrash` 复制内容+重映射图片 id），恢复即新小记；`quick_note_assets.id` 全局 UNIQUE，冲突副本/归档必须重映射图片 id 否则 UNIQUE 崩溃。
-16. **markSynced 三处**：notes + tree_nodes + sync_base.last_synced_meta_at（后者 UPDATE-only，无行跳过）。
-17. **IPC 三处同步**：main.ts(handle) + preload.cjs(invoke) + src/lib/native.ts(类型+封装)；资产 token 在 preload `assetToken` + src/lib/assetPort.ts `ASSET_TOKEN`。
-
-### 其他
-18. **更好用的小工具**：`node scripts/s3-ls.mjs` 查看云端；`/tmp/lake-cdp-eval.mjs` 驱动渲染层；python3 sqlite3 只读查库。
-19. **临时文件**：`Electron-HANDOFF.md.bak-*`、`hist-bench-tmp.mjs` 是遗留，勿提交、可择机删。
-20. **assets 端口硬编码**曾出现在 quickNoteConversion（19876）→ 已改 `ASSET_PORT`；新增 URL 拼接一律用 `src/lib/assetPort.ts` 的 `ASSET_ORIGIN`/`LOCAL_ASSET_PREFIX`。
+1. **收尾本轮回滚/提交**：
+   - 还原 `vite.config.ts`（`cp /tmp/vite.config.ts.bak vite.config.ts`，备份==HEAD；恢复被误删的 drawnix 注释）；确认 `git status` 只剩预期文件：`M src/App.tsx`、`M src/b3/components.css`、`M src/b3/layout.css`、`D src/components/SyncPanel.tsx`、`?? src/components/SyncToast.tsx`。
+   - 复验：tsc + 217 测试 + `node node_modules/vite/bin/vite.js build` + 手动过一遍同步 toast。
+   - **不要自主推 master**——合并/推送等用户确认（之前约定：单分支干完，用户复测后统一处理）。
+2. **反馈 2 复测**：小记视图 + 真机鼠标点 偏好设置；同时把所有下拉/弹窗的真机点击过一遍。
+3. **反馈 6 状态栏图片统计**：先确认口径（当前文档 vs 全库），再实现。
+4. **反馈 7 弹窗审计**：逐个对照思源 `b3-dialog`/`b3-menu` 样式改（历史/回收站/搜索/删除确认/emoji/设置/S3 同步配置等）。
+5. **性能**：跑真实数据看单次同步耗时；>2 万条再评估增量 manifest。
+6. **凭据收尾**（用户推迟，最后统一做）。
+7. 遗留临时文件可删：`Electron-HANDOFF.md.bak-*`、`hist-bench-tmp.mjs`。
 
 ---
 
-## 6. 沟通要点（与用户）
+## 4. 开发工作流 / 调试工具（必读）
 
-- 用户重视权衡与数据；喜欢深入讨论设计，给方案要附真实场景和后果，可大胆反驳。
-- 已定稿语义（**不要重新争论**）：本地是真相、目录强一致、墓碑权威（删除压编辑）、恢复是唯一显式例外、先同步者胜、开发版不考虑数据兼容、小记不备份。
-- 性能问题用户非常关注（"产品要流畅不卡顿"）：先给数据/量级，再给方案；`docs/PERFORMANCE-NEXT.md` 的决策表等用户逐条勾选。
+- 启动：见 §0 命令。`npm run dev` 需 **tty 长驻**（exec 会话），`nohup ... &` 会被环境回收。
+- **CDP 驱动渲染层**（强烈推荐，本轮全靠它）：
+  - `node /tmp/lake-cdp-eval2.mjs <port> "<expr>" [timeoutMs]`（Runtime.evaluate，须 Node 24）
+  - `node /tmp/lake-cdp-shot2.mjs <port> <out.png>`（截图）
+  - 端口：`9222`（远程调试）。**当前 vite/electron 仍在运行**（端口 1421 / 9222 / electron PID ~49900）；新会话可直接连，或先 `lsof -ti tcp:1421,9222 | xargs kill -9` 重启。
+  - 截图是 2x（DPR=2），像素采样记得 `*2`；浅色背景有 subpixel 抗锯齿噪点，判断颜色用**块平均**（20x20），别单点采样。
+- **真实窗口截屏**：`screencapture -x -l<窗口id>`（用 python3 + Quartz 查 `kCGWindowNumber`）；注意 macOS 对窗口截图可能有缓存，渲染层变化以 CDP 截图为准。
+- **像素/几何分析**：`node -e` + `sharp`（项目 node_modules 里有）。
+- **云端查看**：`node scripts/s3-ls.mjs`。
+- **dev 数据**：`~/Library/Application Support/lake-notes-dev`，localStorage 里 `lake-notes-v1.settings`（主题/自定义 CSS/字号）；`metadata.sqlite3` 用 python3 sqlite3 只读查。
+- 常用 CDP 注入：点按钮 `.click()`、`document.elementFromPoint(x,y)`、`getComputedStyle`、`location.reload()`。
+
+---
+
+## 5. 测试要点
+
+- 基线：`npx tsc --noEmit`、`npm test -- --run`（217）、`node node_modules/vite/bin/vite.js build`、`git diff --check`。
+- UI 改动后手动清单：亮/暗双主题都过一遍；库视图 + 小记视图；顶栏两个下拉（工作空间/更多）；云同步 toast（busy/ok/error/未配置四种态 + 自动消失）；设置面板每个 tab；浮动 dock（悬停活动轨/大纲轨）；多 tab 打开/关闭/拖拽；状态栏。
+- 回归重点（同步语义勿破坏）：先同步者胜、删除压编辑、回收站、小记冲突、零变更早退、purged 隐式恢复。
+
+---
+
+## 6. 踩过的坑（新会话必看）
+
+### 环境/流程
+1. **vite.config.ts 的 onstart 补丁必须还原**：本轮为拿 CDP 端口临时加了
+   `onstart(args) { args.startup([".", "--no-sandbox", "--remote-debugging-port=9222"]); }`。
+   `git diff` 里还有一处**误删的 drawnix 注释**（用 `cat > vite.config.ts` 重写时丢了）。
+   还原：`cp /tmp/vite.config.ts.bak vite.config.ts`（该备份 == git HEAD）。**勿提交 onstart 补丁。**
+2. **CDP 脚本要 Node 24**：Node 18 无全局 `WebSocket`，报 `ReferenceError: WebSocket is not defined`。
+3. **nohup 会被回收**：electron/vite 必须放 tty 长驻会话；`nohup ... &` 随 exec 会话退出被杀。
+4. **杀 electron 用具体 PID，不要 pkill -f**（Trae/SiYuan/VSCode 都是 Electron）。
+5. **启动 electron 勿用 `| head` 管道**：stdout 断裂 → electron-log `write EPIPE` 未捕获 → 主进程报 JS error。
+6. **单实例锁按 userData 隔离**：同一 userData 第二个实例直接 quit。
+7. **dev 数据可重建**：乱改坏了就删 `~/Library/Application Support/lake-notes-dev`；正式数据（`lake-notes-electron`）永不碰。
+8. **不要在 dev localStorage 里留自定义 CSS 测试残留**（本轮就因此把主色变成橙红，用户以为进度条 bug）。
+9. **测试打包版必须 `LAKE_USER_DATA` 覆盖**，否则写正式数据。
+
+### UI / CSS（本轮经验）
+10. **连接线来源**：`.tab-bar` 第一条规则设了 `border-bottom: 1px solid var(--b3-theme-background-light)`（#dfe0e1），fixed 那条没覆盖 → 顶栏底边一条全宽深灰线。改任何"融合"类样式，先查 border/box-shadow 是否被旧规则残留。
+11. **styles.css 有大量历史迭代规则**（`!important` 乱战），b3/*.css 是"权威层"（后加载 + `!important`）；改布局优先改 `src/b3/layout.css`，并在 DOM 用 `getComputedStyle` 验证最终生效值。
+12. **`.top-menu` 下拉必须 portal 到 body**（`createPortal`），否则被 document-pane overflow / app-shell `isolation: isolate` 裁掉/盖住。
+13. **思源布局模型**：整窗灰底 + 白色圆角卡片（四角 12px）+ 4px 灰缝；顶栏透明融入灰底；不要给顶栏画边框线。
+14. **浅色 UI 像素判断用块平均**：subpixel 抗锯齿让单点采样出现红/绿/蓝噪点（灰底上采样到 121,114,255 之类），别被误导。
+
+### 同步/存储（历史沉淀）
+15. **HeadBucket 不可用**：`ObjectStore.test()` 必须用 `ListObjectsV2`。
+16. manifest 保留 10 份（`MANIFEST_CHAIN_KEEP=8`）：prune / runGcReconcile / runDeepCleanup 三处链长必须一致。
+17. **零变更早退**依赖 `device_state.last_seen_commit_id` + 墓碑签名；`setNoteLocked` 必须标 `sync_state='local'`。
+18. **markSynced 三处**：notes + tree_nodes + sync_base.last_synced_meta_at。
+19. **IPC 三处同步**：main.ts(handle) + preload.cjs(invoke) + src/lib/native.ts(类型+封装)。
+20. 新增 URL 拼接一律用 `src/lib/assetPort.ts` 的 `ASSET_ORIGIN`/`LOCAL_ASSET_PREFIX`（asset 端口不硬编码）。
+
+---
+
+## 7. 沟通要点（与用户）
+
+- 用户重视权衡与数据；给方案要附真实场景和后果，可大胆反驳。
+- 已定稿语义（**不要重新争论**）：本地是真相、目录强一致、墓碑权威、先同步者胜、开发版不考虑数据兼容、小记不备份。
+- 性能用户非常关注（"产品要流畅不卡顿"）：先给数据/量级再给方案。
+- 用户认可"直接复用/抄袭思源前端代码"，方向是**所有可见 UI 与思源一致**；涉及 AGPL-3.0 的思源代码已保留署名。
+- 用户习惯：功能做完后要自己**手动全量测试一遍**；测试完才打新包。给用户测之前先自测到"能直接上手验收"。
 - 凭据：AK/SK 暂不处理（用户明确）；不要外泄。
