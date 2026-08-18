@@ -1360,22 +1360,6 @@ ne-card[data-card-name="codeblock"] .ne-card-resizer-mask {
 /* ===== 小记工作台：独立于 Lake 编辑器，不覆盖任何 .ne-* / .lake-editor-* 选择器 ===== */
 @media (min-width: 761px) {
   .app-shell.quick-notes-active { grid-template-columns: var(--activity-rail-width) 0 minmax(0, 1fr); }
-  /* Quick notes does not render the Lake tab strip. Keep a real, window-wide
-     drag surface in its place so the hidden macOS title bar remains draggable. */
-  .quick-notes-titlebar {
-    position: fixed;
-    z-index: 400;
-    top: 0;
-    right: 0;
-    left: 0;
-    height: var(--topbar-height);
-    border-bottom: 1px solid var(--shell-separator);
-    background: linear-gradient(90deg, #e9e7f2 0%, #f4f4f7 55%, #fbfcfd 100%);
-    box-shadow: 0 1px 0 rgba(0, 0, 0, .05);
-    backdrop-filter: saturate(1.2) blur(20px);
-    -webkit-backdrop-filter: saturate(1.2) blur(20px);
-    -webkit-app-region: drag;
-  }
   .quick-notes-pane {
     min-width: 0;
     overflow: auto;
@@ -1422,8 +1406,8 @@ ne-card[data-card-name="codeblock"] .ne-card-resizer-mask {
 .quick-note-card-actions button.danger:hover { color: var(--b3-theme-error); background: color-mix(in srgb, var(--b3-theme-error) 10%, transparent); }
 .quick-note-conflict { padding: 2px 6px; border-radius: 999px; color: #aa6e20; background: #fff3d7; font-size: 10px; }
 .quick-note-entry.conflict { border-color: rgba(211, 160, 68, .38); }
-.quick-notes-toast { position: fixed; z-index: 45; right: 24px; bottom: 24px; display: flex; align-items: center; gap: 12px; padding: 10px 11px 10px 13px; border-radius: 11px; color: #f5f6fc; background: #343b4e; box-shadow: 0 12px 35px rgba(31, 38, 60, .25); font-size: 12px; }
-.quick-notes-toast button { display: inline-flex; align-items: center; gap: 4px; border: 0; color: #cbd4ff; background: transparent; cursor: pointer; font-size: 12px; }
+.quick-notes-toast { position: fixed; z-index: 760; top: calc(var(--topbar-height) + 12px); right: 24px; display: flex; align-items: center; gap: 12px; min-height: 40px; padding: 10px 12px 10px 14px; border: 1px solid color-mix(in srgb, var(--b3-theme-primary) 28%, var(--b3-theme-surface-lighter)); border-left: 3px solid var(--b3-theme-primary); border-radius: var(--b3-border-radius-b); color: var(--b3-theme-on-background); background: var(--b3-theme-surface); box-shadow: 0 14px 34px rgba(31, 38, 60, .22), 0 2px 8px rgba(31, 38, 60, .08); font-size: 12px; }
+.quick-notes-toast button { display: inline-flex; align-items: center; gap: 4px; border: 0; color: var(--b3-theme-primary); background: transparent; cursor: pointer; font-size: 12px; font-weight: 650; }
 .quick-note-convert-dialog { width: min(390px, 100%); padding: 20px; border: 1px solid var(--b3-theme-surface-lighter); border-radius: var(--b3-border-radius-b); background: var(--b3-theme-surface); box-shadow: var(--b3-dialog-shadow); }
 .quick-note-convert-dialog h3 { margin: 0; color: var(--b3-theme-on-background); font-size: 17px; }
 .quick-note-convert-dialog p { margin: 8px 0 15px; color: var(--b3-theme-on-surface); font-size: 12px; line-height: 1.55; }
@@ -1597,7 +1581,7 @@ ne-card[data-card-name="codeblock"] .ne-card-resizer-mask {
 .quick-note-notebook-list { border-color: rgba(0, 0, 0, .1); }
 .quick-note-notebook-list button { border-bottom-color: rgba(0, 0, 0, .07); color: #4a4e5e; }
 .quick-note-notebook-list button:hover { background: #f5f4fa; color: #5d5a86; }
-.quick-notes-toast { background: #34364a; }
+.quick-notes-toast { background: var(--b3-theme-surface); }
 
 /* ===== 2026-08-06 标签拖拽排序动效 ===== */
 .tab-item { cursor: default; }
@@ -1918,8 +1902,7 @@ ne-card[data-card-name="codeblock"] .ne-card-resizer-mask {
     border-radius: 0 !important;
     box-shadow: none !important;
   }
-  .tab-bar,
-  .quick-notes-titlebar {
+  .tab-bar {
     background: var(--shell-unified-topbar) !important;
     border: 0 !important;
     box-shadow: inset 0 -1px 0 rgba(31, 35, 41, .035) !important;
@@ -2142,8 +2125,7 @@ ne-card[data-card-name="codeblock"] .ne-card-resizer-mask {
       var(--shell-unified-topbar) !important;
   }
 
-  .tab-bar,
-  .quick-notes-titlebar {
+  .tab-bar {
     background: transparent !important;
     border-bottom-color: transparent !important;
     box-shadow: none !important;
@@ -2283,4 +2265,54 @@ ne-card[data-card-name="codeblock"] .ne-card-resizer-mask {
 .quick-notes-header h1,
 .mobile-library-header h1 {
   text-wrap: balance;
+}
+
+/* 工作空间菜单位于窗口级顶栏下方；打开时禁用侧栏的原生命中，
+ * 避免 macOS/Electron 合成层在菜单与 sidebar-header 重叠处抢走物理鼠标事件。 */
+@media (min-width: 761px) {
+  .app-shell.workspace-menu-open .sidebar,
+  .app-shell.workspace-menu-open .activity-rail {
+    pointer-events: none;
+  }
+}
+
+@media (min-width: 761px) {
+  .app-shell.workspace-menu-open .sidebar::before {
+    -webkit-app-region: no-drag;
+    pointer-events: none;
+  }
+}
+
+/* ===== 小记：复用笔记空间的“抠出编辑区”壳层 =====
+ * 小记与笔记共用同一窗口骨架：顶栏/活动轨/底栏直接透出壳层材质，
+ * 中间内容单独开一块白色工作面，并在顶部留下 4px 灰缝和圆角。 */
+@media (min-width: 761px) {
+  .app-shell.quick-notes-active .activity-rail {
+    background: transparent !important;
+    border: 0 !important;
+  }
+
+  .app-shell.quick-notes-active .workspace {
+    grid-template-rows: minmax(0, 1fr) 28px !important;
+    margin: calc(var(--topbar-height) + 4px) 0 4px !important;
+    background: transparent !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+    overflow: hidden !important;
+  }
+
+  .app-shell.quick-notes-active .quick-notes-pane {
+    min-height: 0;
+    padding-top: 28px;
+    background: var(--b3-theme-background) !important;
+    border-radius: var(--b3-border-radius-b) var(--b3-border-radius-b) 0 0;
+    background-attachment: initial !important;
+  }
+
+  .app-shell.quick-notes-active .statusbar {
+    background: transparent !important;
+    border: 0 !important;
+    box-shadow: none !important;
+  }
 }

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useSyncExternalStore, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent } from "react";
-import { ChevronsDownUp, ChevronsUpDown, Focus, ListOrdered, ListTree, Search } from "lucide-react";
+import { ChevronsDownUp, ChevronsUpDown, Focus, ListOrdered, Search } from "lucide-react";
 import type { OutlineMode } from "./OutlineController";
 import { OutlineList } from "./OutlineList";
 import { getOutlineTab, getOutlineTabsVersion, subscribeOutlineTabs } from "./registry";
@@ -17,7 +17,7 @@ interface OutlineSidebarProps {
   width: number;
   minWidth: number;
   maxWidth: number;
-  /** rail 在固定/悬停两态间切换 */
+  /** rail 顶部的无图标命中区，保留固定/悬停切换能力 */
   onCollapse: () => void;
   onPin: () => void;
   onResizeActiveChange: (active: boolean) => void;
@@ -29,7 +29,7 @@ interface OutlineSidebarProps {
  * 右侧大纲栏与左侧资料库遵循同一套布局：
  * - 34px rail 永远占据窗口右缘；
  * - 收起时悬停 rail，面板向左覆盖正文预览；
- * - 点击 rail 内的大纲图标固定面板，面板和 rail 共同参与 grid，让编辑器宽度自适应。
+ * - rail 只保留悬停热区，面板和 rail 共同参与 grid，让编辑器宽度自适应。
  */
 export function OutlineSidebar({
   mode,
@@ -160,8 +160,8 @@ export function OutlineSidebar({
     onWidthCommit(clamped);
   };
 
+
   const handleOutlineButtonClick = () => {
-    // 外层 rail 只负责悬停预览；这里的独立大纲按钮才负责固定 / 悬停切换。
     if (mode === "collapsed") onPin();
     else onCollapse();
   };
@@ -177,17 +177,16 @@ export function OutlineSidebar({
         if (!resizeRef.current) setRailHovered(false);
       }}
     >
+      {/* 右侧 rail 保留无图标命中区，避免恢复“右上角大纲图标”后失去固定/悬停切换能力。 */}
       <nav className="outline-sidebar__rail" aria-label="右侧工具栏">
         <button
           type="button"
-          className={`outline-sidebar__activity-button${mode === "docked" ? " active" : ""}`}
+          className="outline-sidebar__activity-button outline-sidebar__activity-button--ghost"
           title={mode === "collapsed" ? "固定大纲" : "取消固定大纲"}
           aria-label={mode === "collapsed" ? "固定大纲" : "取消固定大纲，改为悬停"}
           aria-pressed={mode === "docked"}
           onClick={handleOutlineButtonClick}
-        >
-          <ListTree size={16} />
-        </button>
+        />
         <div className="outline-sidebar__rail-fill" />
       </nav>
 

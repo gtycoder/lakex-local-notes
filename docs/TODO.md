@@ -40,6 +40,11 @@
 - [x] **M4 数据安全**：回收站（软删除 + 本地回收站 + 同步墓碑）+ 文档历史/快照（15 分钟自动 + 手动 + 恢复/孤儿清理）已实现。
 - [x] **P3：S3 对象垃圾回收（存储膨胀治理）**——已实现（`feat/s3-storage-rw-delete`，见 `docs/S3-GC-DESIGN.md` v4.1）：待回收清单 + 保留窗口（默认 7 天）+ 定期/手动对账（差集删除，默认 24h）+ 深度清理（Lake + 小记、孤儿兜底）+ purge 立即删 + 历史引用保护 + 审计日志；设置面板「云端回收（S3 GC）」三入口（立即对账 / 深度清理预览 / 执行深度清理）。设计经外部 AI 评审 + 用户确认（2026-08-13）。剩余“附件功能”另列于“视觉/体验”。
 - [x] **Electron 升级 33 → 43.4.0（2026-08-16）**：直接升级、不做过度适配。better-sqlite3 升到 **13.x（N-API 单二进制，无需 rebuild）**，双 ABI 基建删除；依赖兼容（electron-log/vite-plugin-electron/sharp）通过；tsc + 217 测试 + build 全绿；**GPU 空转问题裸启动复验通过**（multidev.sh 改 `--use-angle=metal`）。分支 `feat/electron-43-upgrade`。
+- [ ] **移动端复用专项（2026-08-18 分批执行）**：不再为了缩短 Store 行数继续拆普通笔记写事务；**Quick Notes M1 模型/校验/序列化层已完成（232 测试）**，下一步整理查询层，再根据移动端真实需求实现文件层和平台 adapter。评估见 `docs/MOBILE-REUSE-ARCHITECTURE-ASSESSMENT-2026-08-18.md`。
+- [x] **思源机制借鉴优化（2026-08-18 第一轮已完成）**：已完成 SearchPanel 旧请求保护、per-note 保存队列、树索引/TreeRow memo、布局提交式持久化、History/Quick Notes/Trash/同步 tab reload 版本保护、Escape/reduced-motion 审计以及本地资源 CORS 预加载修复。树虚拟化、退出 flush/ack、通用 TaskManager 按停止条件暂缓。方案与实施记录见 `docs/SIYUAN-OPTIMIZATION-BACKLOG-2026-08-18.md`。
+
+- [ ] **Store 分批重构（2026-08-17 立项）**：桌面端存储/同步/快照/回收站核心功能已基本稳定，Store 重构的长期收益较高；**Batch 3B 只读查询/纯函数抽取、Batch 4A SearchRepository、Batch 4B History/Trash 只读层、Batch 4C Asset 只读层、Batch 4D-1 NoteQueries、Batch 4D-2 NoteMetadataRepository、Batch 4D-3A 图片纯函数拆分、Batch 4D-3B-1 正文保存、Batch 4D-3B-2 资源协调器、Batch 4D-3B-3 远程导入已完成**，下一步按领域逐批迁移。严禁一次性改事务边界；每批都跑 227+ 测试及删除/恢复/同步回归。计划见 `docs/REFACTOR-PLAN-2026-08-17.md`。
+- [ ] **依赖后续维护（暂缓）**：`@types/better-sqlite3` `7.6.13 → 9.6.0` 可单独升级验证；Electron、better-sqlite3、Lake 编辑器当前已是最新稳定版本，不重复升级。
 
 ## 已排入待办（暂不实施）
 - [x] **隐藏回收站笔记本重构（删除=移动语义）**——**已完成并合并 master（2026-08-15）**。设计见 `docs/TRASH-NOTEBOOK-DESIGN.md`；含统一冲突语义（先同步者胜）、零变更早退、审计加固（资产 token/CSP/图片像素上限等），217 测试全绿。性能后续见 `docs/PERFORMANCE-NEXT.md`。

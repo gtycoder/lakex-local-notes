@@ -9,7 +9,7 @@
  *   node scripts/s3-ls.mjs --count             # 只统计数量
  *   node scripts/s3-ls.mjs --json              # 输出 JSON（便于 grep 键）
  *
- * 环境变量可覆盖（默认取 main.ts 的 dev seed）：
+ * 配置全部来自环境变量（不会内置共享凭据）：
  *   S3_ENDPOINT S3_REGION S3_BUCKET S3_PREFIX S3_AK S3_SK
  */
 import { S3Client, ListObjectsV2Command } from "@aws-sdk/client-s3";
@@ -19,9 +19,14 @@ const cfg = {
   region: process.env.S3_REGION || "cn-north-1",
   bucket: process.env.S3_BUCKET || "local-lake-hebei",
   prefix: process.env.S3_PREFIX || "lake-notes",
-  accessKeyId: process.env.S3_AK || "***REMOVED***",
-  secretAccessKey: process.env.S3_SK || "***REMOVED***",
+  accessKeyId: process.env.S3_AK?.trim() || "",
+  secretAccessKey: process.env.S3_SK?.trim() || "",
 };
+
+if (!cfg.accessKeyId || !cfg.secretAccessKey) {
+  console.error("缺少 S3 凭据：请设置 S3_AK 和 S3_SK 环境变量。");
+  process.exit(1);
+}
 
 const args = process.argv.slice(2);
 const opt = (name) => {

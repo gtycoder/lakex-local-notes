@@ -1,17 +1,21 @@
-import { app, BrowserWindow, crashReporter, dialog, ipcMain, session, shell, type WebFrameMain } from "electron";
+import { app, BrowserWindow, crashReporter, session, shell, type WebFrameMain } from "electron";
 import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { MAX_IMAGE_BYTES, Store } from "./store.js";
-import { MAX_QUICK_NOTE_IMAGE_BYTES, QuickNotesStore } from "./quickNotes.js";
-import { convertQuickNoteToLake } from "./quickNoteConversion.js";
+import { Store } from "./store.js";
+import { QuickNotesStore } from "./quickNotes.js";
 import { startAssetServer, ASSET_PORT } from "./assetServer.js";
-import { exportNote, type ExportFormat } from "./export.js";
 import { resolveMirroredCdnRedirect } from "./cdnRedirect.js";
 import { testConnection, syncNow, runGcReconcile, runDeepCleanup, type SyncResult, type SyncProgress } from "./sync.js";
 import { initLogger, log, logHeapPeak } from "./logger.js";
-import { syncQuickNotes, runQuickNotesDeepCleanup } from "./quickNotesSync.js";
+import { syncQuickNotes } from "./quickNotesSync.js";
+import { readDevS3Settings } from "./devConfig.js";
+import { createIpcRegistrar } from "./ipc/registrar.js";
+import { registerNotesIpc } from "./ipc/registerNotes.js";
+import { registerHistoryIpc } from "./ipc/registerHistory.js";
+import { registerSyncIpc } from "./ipc/registerSync.js";
+import { registerQuickNotesIpc } from "./ipc/registerQuickNotes.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const isDev = !app.isPackaged;
@@ -152,6 +156,35 @@ function registerCdnRedirect() {
   );
 }
 
+/**
+ * Lake 会为部分图片预加载请求临时追加 `crossOrigin=true`，不会保留正文中的
+ * 查询参数。主进程在受信任窗口发出的本地资源请求上补回当前启动 token，
+ * 这样既保持正文 URL 稳定，又不让 CORS 预加载被资源服务器拒绝。
+ */
+function registerAssetTokenRedirect() {
+  session.defaultSession.webRequest.onBeforeRequest(
+    { urls: [`http://127.0.0.1:${ASSET_PORT}/*`] },
+    (details, callback) => {
+      if (details.webContentsId === undefined || !trustedWebContents.has(details.webContentsId)) {
+        callback({});
+        return;
+      }
+      try {
+        const url = new URL(details.url);
+        if (url.searchParams.get("token") !== assetToken) {
+          url.searchParams.set("token", assetToken);
+          callback({ redirectURL: url.toString() });
+          return;
+        }
+      } catch {
+        // 非法 URL 交给资源服务器按原有规则处理。
+      }
+      callback({});
+    },
+  );
+}
+
+
 async function createWindow() {
   const win = new BrowserWindow({
     width: 1280,
@@ -239,153 +272,23 @@ function isTrustedSenderFrame(frame: WebFrameMain | null, sender: Electron.WebCo
   return isAppPageUrl(frame.url);
 }
 
-function registerIpc() {
-  const handle = (channel: string, fn: (...args: any[]) => any) => {
-    ipcMain.handle(channel, (event, ...args) => {
-      if (!isTrustedSenderFrame(event.senderFrame, event.sender)) throw new Error("IPC 调用来源不受信任");
-      return fn(...args);
-    });
-  };
-
-  handle("bootstrap_workspace", () => store.bootstrap());
-  handle("read_note", (id: string) => store.readNote(id));
-  handle("get_note_digest", (id: string) => store.getNoteDigest(id));
-  handle("create_note", (title: string) => store.createNote(title));
-  handle("save_note", (id: string, title: string, content: string, caches?: { markdown?: string | null; plain?: string | null }) => store.saveNote(id, title, content, caches));
-  handle("update_note_caches", (id: string, markdown: string | null, plain: string | null) => {
-    store.updateNoteCaches(id, markdown ?? null, plain ?? null);
-  });
-  handle("ensure_note_caches", (id: string, lakeContent?: string) => store.ensureNoteCaches(id, lakeContent));
-  handle("read_note_caches", (id: string) => store.readNoteCaches(id));
-  handle("get_note_paths", (id: string) => store.getNotePaths(id));
-  handle("pick_export_dir", async () => {
-    const win = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0];
-    const result = await dialog.showOpenDialog(win, {
-      title: "选择导出位置",
-      buttonLabel: "导出到此目录",
-      properties: ["openDirectory", "createDirectory"],
-    });
-    return result.canceled ? null : result.filePaths[0];
-  });
-  handle("export_note", (id: string, format: ExportFormat, baseDir?: string) => exportNote(store, id, format, baseDir));
-  handle("set_node_icon", (id: string, icon: string | null) => store.setNodeIcon(id, icon));
-  handle("search_notes", (query: string, limit?: number) => store.searchNotes(query, limit));
-  handle("delete_note", (id: string) => store.deleteNote(id));
-  handle("set_note_locked", (id: string, locked: boolean) => { store.setNoteLocked(id, locked); return store.readNote(id); });
-  handle("list_tree_nodes", () => store.listTreeNodes());
-  handle("list_note_summaries", () => store.listNoteSummaries());
-  handle("create_notebook", (title: string) => store.createNotebook(title));
-  handle("create_group", (parentId: string, title: string) => store.createGroup(parentId, title));
-  handle("rename_tree_node", (id: string, title: string) => store.renameTreeNode(id, title));
-  handle("create_note_in", (parentId: string | null, title: string) => store.createNoteIn(parentId, title));
-  handle("move_tree_node", (id: string, parentId: string | null, sortOrder: number) => store.moveTreeNode(id, parentId, sortOrder));
-  handle("move_tree_node_ordered", (id: string, parentId: string | null, orderedIds: string[]) => store.moveTreeNodeOrdered(id, parentId, orderedIds));
-  handle("reorder_tree_nodes", (parentId: string | null, orderedIds: string[]) => store.reorderTreeNodes(parentId, orderedIds));
-  handle("delete_tree_node", (id: string) => store.deleteTreeNode(id));
-  handle("list_trash", () => store.listTrash());
-  handle("restore_trash", (id: string) => store.restoreTrashItem(id));
-  handle("purge_trash", (id: string) => store.purgeTrashItem(id));
-  handle("empty_trash", () => store.emptyTrash());
-  handle("create_history_snapshot", (noteId: string, content?: string, force?: boolean) => store.createHistorySnapshot(noteId, content, force));
-  handle("list_note_history", (noteId: string) => store.listNoteHistory(noteId));
-  handle("restore_history", (historyId: number) => store.restoreHistory(historyId));
-  handle("delete_history", (historyId: number) => store.deleteHistory(historyId));
-  handle("cleanup_history", () => store.cleanupHistory());
-  handle("get_history_settings", () => store.getHistorySettings());
-  handle("save_history_settings", (settings: unknown) => {
-    store.saveHistorySettings(settings as Parameters<Store["saveHistorySettings"]>[0]);
-    restartHistoryTimers?.();
-  });
-  handle("get_history_stats", () => store.getHistoryStats());
-  handle("list_note_orphans", (noteId: string) => store.listNoteOrphans(noteId));
-  handle("preview_history_snapshot", (historyId: number) => store.previewHistorySnapshot(historyId));
-  handle("preview_note_orphan", (noteId: string, filename: string) => store.previewNoteOrphan(noteId, filename));
-  handle("clean_note_orphans", (noteId: string, filenames?: string[]) => store.cleanNoteOrphans(noteId, filenames));
-  handle("upload_resource", (input: { bytes: number[]; filename: string }, noteId: string) => {
-    // 审计 #21：IPC 输入侧预检（序列化已复制到主进程，先拦截超大数组再走 imageOutput）
-    if (!input || !Array.isArray(input.bytes)) throw new Error("资源数据无效");
-    if (input.bytes.length > MAX_IMAGE_BYTES) throw new Error("图片超过 25 MiB");
-    return store.uploadResource(input, noteId);
-  });
-  handle("download_remote_resource", (url: string, noteId: string) => store.downloadRemoteResource(url, noteId));
-  handle("list_orphan_assets", () => store.listOrphanAssets());
-  handle("clean_orphan_assets", () => store.cleanOrphanAssets());
-  handle("get_s3_settings", () => store.getS3Settings());
-  handle("save_s3_settings", (settings: unknown) => store.saveS3Settings(settings as Parameters<Store["saveS3Settings"]>[0]));
-  handle("test_s3_connection", () => testConnection(store));
-  handle("get_s3_gc_settings", () => store.getS3GcSettings());
-  handle("get_trash_reminder", () => store.listTrashReminder(store.getS3GcSettings().trashAutoPurgeDays));
-  handle("save_s3_gc_settings", (settings: unknown) => {
-    store.saveS3GcSettings(settings as Parameters<Store["saveS3GcSettings"]>[0]);
-    restartGcTimers?.();
-  });
-  handle("get_sync_settings", () => store.getSyncSettings());
-  handle("save_sync_settings", async (settings: unknown) => {
-    const next = settings as Parameters<Store["saveSyncSettings"]>[0];
-    const prev = store.getSyncSettings();
-    if (prev.enabled && !next.enabled) {
-      // 关闭云同步前做一次最后对齐；失败则保持开启并抛出，UI 可提示重试。
-      try {
-        await runFullSync();
-      } catch (error) {
-        throw new Error(`关闭云同步前的最后对齐失败：${String(error)}`);
-      }
-    }
-    store.saveSyncSettings(next);
-    restartSyncTimers?.();
-    restartGcTimers?.();
-    if (!prev.enabled && next.enabled) {
-      // 重新开启后立即做一次对齐（后台执行，失败仅告警）。
-      void runFullSync().catch((error) => {
-        const msg = error instanceof Error ? error.message : String(error);
-        console.warn("[sync] 重新开启后的对齐失败:", msg);
-        broadcastSyncProgress({ phase: "done", message: "同步失败", error: msg });
-      });
-    }
-    return store.getSyncSettings();
-  });
-  handle("list_s3_gc_pending", () => store.listS3GcPending());
-  handle("list_s3_gc_log", () => store.listS3GcLog());
-  handle("run_s3_gc_reconcile", () => {
-    if (!store.getSyncSettings().enabled) throw new Error("云同步已关闭");
-    return enqueueMaintenance(() => runGcReconcile(store));
-  });
-  handle("run_s3_deep_cleanup", (dryRun: boolean) => {
-    if (!store.getSyncSettings().enabled) throw new Error("云同步已关闭");
-    return enqueueMaintenance(async () => {
-      const settings = store.getS3Settings();
-      if (!settings) throw new Error("请先保存 S3 配置");
-      const gcCfg = store.getS3GcSettings();
-      const lake = await runDeepCleanup(store, { dryRun: !!dryRun });
-      const quick = await runQuickNotesDeepCleanup(quickNotes, settings, { dryRun: !!dryRun, gcRetentionDays: gcCfg.gcRetentionDays });
-      return { dryRun: !!dryRun, lake, quickNotes: quick };
-    });
-  });
-  // sync_now 需要携带进度事件（主进程 → 渲染进程）
-  ipcMain.handle("sync_now", (event) => {
+function registerIpc(): void {
+  const ipc = createIpcRegistrar((event) => {
     if (!isTrustedSenderFrame(event.senderFrame, event.sender)) throw new Error("IPC 调用来源不受信任");
-    if (!store.getSyncSettings().enabled) throw new Error("云同步已关闭，请先在偏好设置中开启");
-    const send = (p: SyncProgress) => { try { event.sender.send("sync-progress", p); } catch { /* 窗口已关闭 */ } };
-    return runFullSync(send);
   });
-  handle("get_sync_status", () => store.getSyncStatus());
 
-  // 小记 IPC：完全独立于 Lake 文档 IPC，图片只进入 quick-notes/staging / assets 空间。
-  handle("list_quick_notes", () => quickNotes.listQuickNotes());
-  handle("create_quick_note", (input: { text: string; draftId: string; stagedImageIds: string[] }) => quickNotes.createQuickNote(input));
-  handle("update_quick_note", (id: string, input: { text: string; draftId: string; stagedImageIds: string[]; retainedImageIds?: string[] }) => quickNotes.updateQuickNote(id, input));
-  handle("delete_quick_note", (id: string) => quickNotes.deleteQuickNote(id));
-  handle("list_quick_note_trash", () => quickNotes.listQuickNoteTrash());
-  handle("restore_quick_note", (id: string) => quickNotes.restoreQuickNote(id));
-  handle("purge_quick_note", (id: string) => quickNotes.purgeQuickNote(id));
-  handle("discard_quick_note_draft", (draftId: string) => quickNotes.discardDraft(draftId));
-  handle("discard_staged_quick_note_image", (draftId: string, imageId: string) => quickNotes.discardStagedImage(draftId, imageId));
-  handle("stage_quick_note_image", (draftId: string, input: { bytes: number[]; filename: string }) => {
-    if (!input || !Array.isArray(input.bytes)) throw new Error("图片数据无效");
-    if (input.bytes.length > MAX_QUICK_NOTE_IMAGE_BYTES) throw new Error("图片超过 25 MiB");
-    return quickNotes.stageImage(draftId, input);
+  registerNotesIpc(ipc, store);
+  registerHistoryIpc(ipc, store, () => restartHistoryTimers?.());
+  registerSyncIpc(ipc, {
+    store,
+    quickNotes,
+    runFullSync,
+    enqueueMaintenance,
+    broadcastSyncProgress,
+    restartGcTimers: () => restartGcTimers?.(),
+    restartSyncTimers: () => restartSyncTimers?.(),
   });
-  handle("convert_quick_note", (quickNoteId: string, notebookId: string) => convertQuickNoteToLake(quickNotes, store, quickNoteId, notebookId));
+  registerQuickNotesIpc(ipc, quickNotes, store);
 }
 
 // Increase renderer memory limit for large documents with base64 images
@@ -418,21 +321,17 @@ if (!app.requestSingleInstanceLock()) {
     initLogger();
     log.app.info("app ready: initLogger done");
     store = new Store(workspaceRoot());
-    // 开发版固定 S3 配置（多端联调用）：首次启动（尚无配置）时写入；之后仍可在设置中修改。
+    // 开发版可选 S3 seed（多端联调用）：凭据只从环境变量读取；
+    // 没有配置时保持纯本地模式，不把共享密钥打进源码或新开发数据。
     if (isDev && !store.getS3Settings()) {
-      store.saveS3Settings({
-        endpoint: "https://s3.cn-north-1.qiniucs.com",
-        region: "cn-north-1",
-        bucket: "local-lake-hebei",
-        prefix: "lake-notes",
-        accessKeyId: "***REMOVED***",
-        secretAccessKey: "***REMOVED***",
-        forcePathStyle: false,
-      });
+      const devS3Settings = readDevS3Settings();
+      if (devS3Settings) store.saveS3Settings(devS3Settings);
+      else log.app.info("dev S3 seed skipped: credentials are not configured");
     }
     quickNotes = new QuickNotesStore(workspaceRoot());
     quickNotes.recoverConversions((noteId) => store.hasNote(noteId), (noteId) => store.removeUntrackedNoteArtifacts(noteId));
     registerCdnRedirect();
+    registerAssetTokenRedirect();
     startAssetServer(path.join(workspaceRoot(), "note-assets"), vendorCdnDir(), path.join(workspaceRoot(), "quick-notes"), assetToken);
     registerIpc();
     createWindow();

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { FileText, Search, X } from "lucide-react";
 import { native } from "../lib/native";
+import { createRequestVersion } from "../lib/requestVersion";
 
 interface SearchResult { id: string; title: string; snippet: string }
 
@@ -26,6 +27,7 @@ export function SearchPanel({ open, initialQuery, onOpenNote, onClose }: {
   const [searching, setSearching] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const timerRef = useRef<number | undefined>(undefined);
+  const requestVersionRef = useRef(createRequestVersion());
 
   useEffect(() => {
     if (open) {
@@ -35,21 +37,44 @@ export function SearchPanel({ open, initialQuery, onOpenNote, onClose }: {
   }, [open, initialQuery]);
 
   useEffect(() => {
-    if (!open) return;
+    // 每次 query/open 状态变化都让之前的异步搜索失效；这不能取消 IPC，
+    // 但可以保证旧结果和旧 loading 状态不会提交到当前面板。
+    const version = requestVersionRef.current.next();
+    if (!open) {
+      setSearching(false);
+      return () => {
+        requestVersionRef.current.invalidate();
+      };
+    }
+
     const q = query.trim();
-    if (!q) { setResults([]); setSearching(false); return; }
+    if (!q) {
+      setResults([]);
+      setSearching(false);
+      return () => {
+        requestVersionRef.current.invalidate();
+      };
+    }
+
     setSearching(true);
     if (timerRef.current !== undefined) window.clearTimeout(timerRef.current);
     timerRef.current = window.setTimeout(async () => {
       try {
-        setResults(await native.searchNotes(q, 50));
+        const nextResults = await native.searchNotes(q, 50);
+        if (requestVersionRef.current.isCurrent(version)) setResults(nextResults);
       } catch {
-        setResults([]);
+        if (requestVersionRef.current.isCurrent(version)) setResults([]);
+      } finally {
+        if (requestVersionRef.current.isCurrent(version)) setSearching(false);
       }
-      setSearching(false);
     }, 300);
+
     return () => {
-      if (timerRef.current !== undefined) window.clearTimeout(timerRef.current);
+      if (timerRef.current !== undefined) {
+        window.clearTimeout(timerRef.current);
+        timerRef.current = undefined;
+      }
+      requestVersionRef.current.invalidate();
     };
   }, [query, open]);
 

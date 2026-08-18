@@ -1,6 +1,7 @@
 import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import { Check, FilePlus2, ImagePlus, Feather, LoaderCircle, Pencil, RotateCcw, Trash2, X } from "lucide-react";
 import { native } from "../lib/native";
+import { createRequestVersion } from "../lib/requestVersion";
 import type { NoteDocument, QuickNoteDocument, QuickNoteImage, TreeNode } from "../lib/types";
 
 interface DraftImage {
@@ -31,6 +32,7 @@ const newDraft = (): DraftState => ({ id: crypto.randomUUID(), text: "", images:
 const hasDraftContent = (draft: DraftState) => draft.text.trim().length > 0 || draft.images.length > 0;
 
 export const QuickNotesWorkspace = forwardRef<QuickNotesWorkspaceHandle, QuickNotesWorkspaceProps>(function QuickNotesWorkspace(props, ref) {
+  const { notebooks: notebookNodes, onConverted, onDirtyChange } = props;
   const [items, setItems] = useState<QuickNoteDocument[]>([]);
   const [createDraft, setCreateDraft] = useState<DraftState>(() => newDraft());
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -42,24 +44,39 @@ export const QuickNotesWorkspace = forwardRef<QuickNotesWorkspaceHandle, QuickNo
   const [convertItem, setConvertItem] = useState<QuickNoteDocument | null>(null);
   const deleteTimer = useRef<number | null>(null);
   const fileInputs = useRef<Map<string, HTMLInputElement>>(new Map());
+  const listVersionRef = useRef(createRequestVersion());
 
   const activeDraft = editingDraft ?? createDraft;
   const activeIsEditing = editingDraft !== null;
   const dirty = hasDraftContent(createDraft) || (editingDraft !== null && hasDraftContent(editingDraft));
 
+  async function refreshItems(showLoading = false) {
+    const version = listVersionRef.current.next();
+    if (showLoading) setLoading(true);
+    try {
+      const nextItems = await native.listQuickNotes();
+      if (listVersionRef.current.isCurrent(version)) setItems(nextItems);
+    } catch (reason) {
+      if (listVersionRef.current.isCurrent(version)) setError(String(reason));
+    } finally {
+      if (listVersionRef.current.isCurrent(version) && showLoading) setLoading(false);
+    }
+  }
+
   useEffect(() => {
-    void native.listQuickNotes().then((notes) => setItems(notes)).catch((reason) => setError(String(reason))).finally(() => setLoading(false));
+    void refreshItems(true);
     return () => {
+      listVersionRef.current.invalidate();
       if (deleteTimer.current !== null) window.clearTimeout(deleteTimer.current);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  useEffect(() => { props.onDirtyChange(dirty); }, [dirty, props]);
+  useEffect(() => { onDirtyChange(dirty); }, [dirty, onDirtyChange]);
 
   useImperativeHandle(ref, () => ({
     async refresh() {
-      try { setItems(await native.listQuickNotes()); }
-      catch (reason) { setError(String(reason)); }
+      await refreshItems();
     },
     async confirmLeave() {
       if (!dirty) return true;
@@ -70,7 +87,9 @@ export const QuickNotesWorkspace = forwardRef<QuickNotesWorkspaceHandle, QuickNo
     },
   }));
 
-  const notebooks = useMemo(() => props.notebooks.filter((node) => node.nodeType === "notebook").sort((a, b) => a.sortOrder - b.sortOrder), [props.notebooks]);
+  const notebooks = useMemo(() => notebookNodes
+    .filter((node) => node.nodeType === "notebook")
+    .sort((a, b) => a.sortOrder - b.sortOrder), [notebookNodes]);
 
   function updateActiveDraft(patch: Partial<DraftState>) {
     if (activeIsEditing) setEditingDraft((current) => current ? { ...current, ...patch } : current);
@@ -118,6 +137,7 @@ export const QuickNotesWorkspace = forwardRef<QuickNotesWorkspaceHandle, QuickNo
       const saved = activeIsEditing && editingId
         ? await native.updateQuickNote(editingId, { text: draft.text, draftId: draft.id, stagedImageIds, retainedImageIds })
         : await native.createQuickNote({ text: draft.text, draftId: draft.id, stagedImageIds });
+      listVersionRef.current.invalidate();
       setItems((current) => {
         const without = current.filter((item) => item.id !== saved.id);
         return [saved, ...without].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
@@ -159,6 +179,7 @@ export const QuickNotesWorkspace = forwardRef<QuickNotesWorkspaceHandle, QuickNo
     if (pendingDelete) return;
     if (editingId === item.id) { setEditingId(null); setEditingDraft(null); }
     setPendingDelete(item);
+    listVersionRef.current.invalidate();
     setItems((current) => current.filter((candidate) => candidate.id !== item.id));
     if (deleteTimer.current !== null) window.clearTimeout(deleteTimer.current);
     deleteTimer.current = window.setTimeout(() => {
@@ -174,6 +195,7 @@ export const QuickNotesWorkspace = forwardRef<QuickNotesWorkspaceHandle, QuickNo
     if (!pendingDelete) return;
     if (deleteTimer.current !== null) window.clearTimeout(deleteTimer.current);
     deleteTimer.current = null;
+    listVersionRef.current.invalidate();
     setItems((current) => [pendingDelete, ...current].sort((a, b) => b.createdAt.localeCompare(a.createdAt)));
     setPendingDelete(null);
   }
@@ -183,9 +205,10 @@ export const QuickNotesWorkspace = forwardRef<QuickNotesWorkspaceHandle, QuickNo
     setSaving(true); setError(null);
     try {
       const note = await native.convertQuickNote(convertItem.id, notebookId);
+      listVersionRef.current.invalidate();
       setItems((current) => current.filter((item) => item.id !== convertItem.id));
       setConvertItem(null);
-      props.onConverted(note);
+      onConverted(note);
     } catch (reason) { setError(`转换为正式笔记失败：${String(reason)}`); }
     finally { setSaving(false); }
   }
@@ -222,7 +245,7 @@ export const QuickNotesWorkspace = forwardRef<QuickNotesWorkspaceHandle, QuickNo
           : <QuickNoteCard key={item.id} item={item} deletePending={pendingDelete !== null} onEdit={() => void startEditing(item)} onDelete={() => scheduleDelete(item)} onConvert={() => setConvertItem(item)} />)
       }
     </div>
-    {pendingDelete && <div className="quick-notes-toast"><span>已删除一条小记</span><button onClick={undoDelete}><RotateCcw size={14} />撤销</button></div>}
+    {pendingDelete && <div className="quick-notes-toast" role="status" aria-live="polite"><span>已删除一条小记</span><button onClick={undoDelete}><RotateCcw size={14} />撤销</button></div>}
     {convertItem && <div className="modal-backdrop" onMouseDown={(event) => event.target === event.currentTarget && !saving && setConvertItem(null)}>
       <section className="quick-note-convert-dialog" role="dialog" aria-modal="true" aria-labelledby="quick-note-convert-title">
         <h3 id="quick-note-convert-title">转为正式笔记</h3>

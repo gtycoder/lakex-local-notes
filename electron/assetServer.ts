@@ -29,19 +29,44 @@ function sniffMime(bytes: Buffer): string | null {
   return null;
 }
 
-/** 只读取文件头部 16 字节做 MIME 嗅探，避免整文件读入内存（vendor 资源可达 MB 级） */
-function sniffMimeFromFile(filePath: string): string | null {
-  let fd: number | undefined;
+/** 只读取文件头部 16 字节做 MIME 嗅探，避免整文件读入内存（vendor 资源可达 MB 级）。 */
+async function sniffMimeFromFile(filePath: string): Promise<string | null> {
+  let handle: fs.promises.FileHandle | undefined;
   try {
-    fd = fs.openSync(filePath, "r");
+    handle = await fs.promises.open(filePath, "r");
     const head = Buffer.alloc(16);
-    const read = fs.readSync(fd, head, 0, 16, 0);
-    return sniffMime(head.subarray(0, read));
+    const { bytesRead } = await handle.read(head, 0, 16, 0);
+    return sniffMime(head.subarray(0, bytesRead));
   } catch {
     return null;
   } finally {
-    if (fd !== undefined) fs.closeSync(fd);
+    await handle?.close().catch(() => undefined);
   }
+}
+
+async function statFile(filePath: string): Promise<fs.Stats | null> {
+  try {
+    const stat = await fs.promises.stat(filePath);
+    return stat.isFile() ? stat : null;
+  } catch {
+    return null;
+  }
+}
+
+function streamFile(
+  res: http.ServerResponse,
+  filePath: string,
+  stat: fs.Stats,
+  headers: Record<string, string>,
+): void {
+  res.writeHead(200, { ...headers, "Content-Length": String(stat.size) });
+  const stream = fs.createReadStream(filePath);
+  stream.on("error", (error) => {
+    console.warn("[asset-server] 文件流读取失败:", filePath, error);
+    if (!res.headersSent) res.writeHead(404);
+    res.destroy();
+  });
+  stream.pipe(res);
 }
 
 function isSafeSegment(segment: string): boolean {
@@ -77,22 +102,17 @@ export function startAssetServer(noteAssetsDir: string, vendorCdnDir: string, qu
           res.writeHead(400); res.end("bad request"); return;
         }
         const vendorFile = path.join(vendorCdnDir, rel);
-        if (!fs.existsSync(vendorFile) || !fs.statSync(vendorFile).isFile()) {
+        const stat = await statFile(vendorFile);
+        if (!stat) {
           res.writeHead(404); res.end("not found"); return;
         }
         const ext = path.extname(rel).toLowerCase();
-        let mime = MIME_MAP[ext];
-        if (!mime) {
-          mime = sniffMimeFromFile(vendorFile) ?? "application/octet-stream";
-        }
-        const stat = fs.statSync(vendorFile);
-        res.writeHead(200, {
+        const mime = MIME_MAP[ext] ?? await sniffMimeFromFile(vendorFile) ?? "application/octet-stream";
+        streamFile(res, vendorFile, stat, {
           "Content-Type": mime,
-          "Content-Length": stat.size,
           "Cache-Control": "public, max-age=31536000, immutable",
           "Access-Control-Allow-Origin": "*",
         });
-        fs.createReadStream(vendorFile).pipe(res);
         return;
       }
       // 正式笔记资源：/{noteId}/{filename}
@@ -129,7 +149,8 @@ export function startAssetServer(noteAssetsDir: string, vendorCdnDir: string, qu
         filename = segments[1];
         filePath = path.join(noteAssetsDir, noteId, filename);
       }
-      if (!fs.existsSync(filePath) || !fs.statSync(filePath).isFile()) {
+      const stat = await statFile(filePath);
+      if (!stat) {
         res.writeHead(404); res.end("not found"); return;
       }
 
@@ -137,7 +158,7 @@ export function startAssetServer(noteAssetsDir: string, vendorCdnDir: string, qu
       const mime = MIME_MAP[ext] ?? "application/octet-stream";
 
       if (parsed.searchParams.get("base64") === "1") {
-        let buf = fs.readFileSync(filePath);
+        let buf = await fs.promises.readFile(filePath);
         let outMime = mime;
         // 微信等 macOS 原生应用不渲染 data:image/webp，复制到微信时统一转 PNG
         // （参照 Tauri 版 uploadWithWebpConversion；sharp 基于 libvips 支持 WebP/AVIF 解码）
@@ -165,14 +186,11 @@ export function startAssetServer(noteAssetsDir: string, vendorCdnDir: string, qu
         return;
       }
 
-      const stat = fs.statSync(filePath);
-      res.writeHead(200, {
+      streamFile(res, filePath, stat, {
         "Content-Type": mime,
-        "Content-Length": stat.size,
         "Cache-Control": "public, max-age=31536000, immutable",
         "Access-Control-Allow-Origin": "*",
       });
-      fs.createReadStream(filePath).pipe(res);
     } catch (error) {
       console.warn("[asset-server] 请求处理失败:", req.url, error);
       if (!res.headersSent) res.writeHead(400);

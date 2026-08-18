@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { AlertCircle } from "lucide-react";
 import { createLakeDocument, destroyLakeEditor, refreshTocSidebar, type LakeEditorInstance, type LakeEditorPrefs } from "./lakeRuntime";
 import { normalizeClipboardHtml, upgradePastedHtml } from "./clipboardHtml";
+import { addAssetAccessToken, stripAssetAccessToken } from "../../lib/assetPort";
 
 interface LakeEditorProps {
   noteId: string;
@@ -66,9 +67,9 @@ export function LakeEditor({ noteId, content, mode = "editor", tocEnabled, onCha
     let setting = true;
     try {
       editor = createLakeDocument(host, mode, () => {
-        if (editor && !setting) onChangeRef.current(editor.getDocument("text/lake"));
+        if (editor && !setting) onChangeRef.current(stripAssetAccessToken(editor.getDocument("text/lake")));
       }, tocEnabled, noteId, undefined, prefs);
-      editor.setDocument("text/lake", content);
+      editor.setDocument("text/lake", addAssetAccessToken(content));
       // 修复：Lake TOC 侧边栏创建时用空 toc 渲染，setDocument 后补一次数据同步。
       // 该补偿有重试定时器，必须跟随实例一起清理。
       tocRefreshTimer = window.setTimeout(() => {

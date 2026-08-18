@@ -9,6 +9,7 @@ import {
   type LakeEditorPrefs,
 } from "./lakeRuntime";
 import { normalizeClipboardHtml, upgradePastedHtml } from "./clipboardHtml";
+import { addAssetAccessToken, stripAssetAccessToken } from "../../lib/assetPort";
 import { registerOutlineTab, unregisterOutlineTab } from "../outline/registry";
 import { useOutline } from "../outline/useOutline";
 
@@ -287,7 +288,7 @@ export function EditorTab({ noteId, content, visible, tocEnabled, onChange, pref
         mode,
         () => {
           if (editor && !setting) {
-            const next = editor.getDocument("text/lake");
+            const next = stripAssetAccessToken(editor.getDocument("text/lake"));
             latestDocumentRef.current = next;
             onChangeRef.current(next);
             // 画板元素通过键盘 Delete/Backspace 删除，可能没有新的 pointerdown；
@@ -308,7 +309,7 @@ export function EditorTab({ noteId, content, visible, tocEnabled, onChange, pref
       );
       // 自愈重建时优先使用当前实例最后一次回调拿到的文档，避免 React prop
       // 尚未回流时把刚输入的内容覆盖掉；切换 noteId 时该 ref 已在上面重置。
-      editor.setDocument("text/lake", latestDocumentRef.current);
+      editor.setDocument("text/lake", addAssetAccessToken(latestDocumentRef.current));
       // Viewer 的卡片水合订阅在 setDocument 前就已建立；这里再主动请求一次，
       // 确保锁定态首次加载的画板不会只在空文档布局阶段执行水合。
       editor.requestCardHydration?.();
@@ -408,6 +409,13 @@ export function EditorTab({ noteId, content, visible, tocEnabled, onChange, pref
     // 这是对新建 Slash 代码块异常的兜底，不再像旧方案那样发现任意代码块就重建。
     const heal = healStateRef.current;
     heal.pending = false;
+    let healDeferredUntilBlur = false;
+    const hasEditorInteraction = (): boolean => {
+      const active = document.activeElement;
+      if (active && host.contains(active)) return true;
+      const selection = document.getSelection();
+      return !!selection && selection.rangeCount > 0 && (host.contains(selection.anchorNode) || host.contains(selection.focusNode));
+    };
     const countBrokenCodeblocks = (): number => {
       if (locked || !visibleRef.current) return 0;
       return [...host.querySelectorAll(".ne-codeblock")].filter((el) => {
@@ -421,6 +429,12 @@ export function EditorTab({ noteId, content, visible, tocEnabled, onChange, pref
     const runHealCheck = (): void => {
       heal.timer = undefined;
       if (locked || !visibleRef.current || !editorRef.current || heal.stopped || heal.pending) return;
+      if (hasEditorInteraction()) {
+        // 重建会销毁当前 Lake 实例并丢失刚建立的焦点/选区。
+        // 新建代码块时先让用户完成标题/正文输入，失焦后再做一次水合兜底。
+        healDeferredUntilBlur = true;
+        return;
+      }
       const broken = countBrokenCodeblocks();
       if (broken === 0) {
         heal.lastBroken = -1;
@@ -449,10 +463,16 @@ export function EditorTab({ noteId, content, visible, tocEnabled, onChange, pref
       heal.timer = window.setTimeout(runHealCheck, delay);
     };
     requestCodeblockHealRef.current = scheduleHealCheck;
+    const onEditorFocusOut = (): void => {
+      if (!healDeferredUntilBlur || hasEditorInteraction()) return;
+      healDeferredUntilBlur = false;
+      scheduleHealCheck(80);
+    };
     const healObserver = typeof MutationObserver === "undefined" ? null : new MutationObserver(() => {
       queueBoardScrollerBind();
       if (visibleRef.current && !locked) scheduleHealCheck();
     });
+    host.addEventListener("focusout", onEditorFocusOut, true);
     healObserver?.observe(host, { childList: true, subtree: true });
     scheduleHealCheck(900);
 
@@ -479,6 +499,8 @@ export function EditorTab({ noteId, content, visible, tocEnabled, onChange, pref
         requestCodeblockHealRef.current = () => undefined;
       }
       healObserver?.disconnect();
+      host.removeEventListener("focusout", onEditorFocusOut, true);
+      healDeferredUntilBlur = false;
       window.clearTimeout(heal.timer);
       heal.timer = undefined;
       host.removeEventListener("copy", copyHandler, true);

@@ -1,7 +1,8 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Camera, Clock, FileText, History, RotateCcw, Trash2, X } from "lucide-react";
 import { native } from "../lib/native";
+import { createRequestVersion } from "../lib/requestVersion";
 import { useFloatingDialog } from "./useFloatingDialog";
 
 export interface HistoryItem {
@@ -35,30 +36,36 @@ export function HistoryPanel({ open, noteId, onClose, onRestored }: {
   } | null>(null);
   const [inline, setInline] = useState<{ title: string; text: string; size?: number } | null>(null);
   const floating = useFloatingDialog({ initialSize: { w: 900, h: 640 }, minSize: { w: 680, h: 440 } });
+  const dataVersionRef = useRef(createRequestVersion());
+  const previewVersionRef = useRef(createRequestVersion());
 
   const refreshHistory = async () => {
     if (!noteId) return;
+    const version = dataVersionRef.current.next();
     setLoading(true);
     setError(null);
     try {
-      setHistory(await native.listNoteHistory(noteId));
+      const nextHistory = await native.listNoteHistory(noteId);
+      if (dataVersionRef.current.isCurrent(version)) setHistory(nextHistory);
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      if (dataVersionRef.current.isCurrent(version)) setError(e instanceof Error ? e.message : String(e));
     } finally {
-      setLoading(false);
+      if (dataVersionRef.current.isCurrent(version)) setLoading(false);
     }
   };
 
   const refreshOrphans = async () => {
     if (!noteId) return;
+    const version = dataVersionRef.current.next();
     setLoading(true);
     setError(null);
     try {
-      setOrphans(await native.listNoteOrphans(noteId));
+      const nextOrphans = await native.listNoteOrphans(noteId);
+      if (dataVersionRef.current.isCurrent(version)) setOrphans(nextOrphans);
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      if (dataVersionRef.current.isCurrent(version)) setError(e instanceof Error ? e.message : String(e));
     } finally {
-      setLoading(false);
+      if (dataVersionRef.current.isCurrent(version)) setLoading(false);
     }
   };
 
@@ -66,6 +73,18 @@ export function HistoryPanel({ open, noteId, onClose, onRestored }: {
   // 验收 #2：切换 note / 重新打开时必须清空上次的列表与预览状态（inline/preview），
   // 否则弹窗残留上一次内容（"快照弹窗不清理、还弹出上一次的内容"）。
   useEffect(() => {
+    if (!open) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && !floating.interactionRef.current) onClose();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [open, onClose, floating.interactionRef]);
+
+  useEffect(() => {
+    // 切换文档、关闭弹窗或重新打开时，之前的列表/预览请求都不得再提交。
+    dataVersionRef.current.invalidate();
+    previewVersionRef.current.invalidate();
     if (open && noteId) {
       setTab("history");
       setHistory([]);
@@ -75,6 +94,10 @@ export function HistoryPanel({ open, noteId, onClose, onRestored }: {
       setError(null);
       void refreshHistory();
     }
+    return () => {
+      dataVersionRef.current.invalidate();
+      previewVersionRef.current.invalidate();
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, noteId]);
 
@@ -127,32 +150,38 @@ export function HistoryPanel({ open, noteId, onClose, onRestored }: {
   };
 
   const previewHistory = async (h: HistoryItem) => {
+    const version = previewVersionRef.current.next();
     try {
       const r = await native.previewHistorySnapshot(h.id);
+      if (!previewVersionRef.current.isCurrent(version)) return;
       if (r) {
         setPreview({ kind: "history", title: new Date(h.createdAt).toLocaleString(), text: r.plain, size: h.size });
       } else {
         setError("快照预览失败（文件可能已删除）");
       }
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      if (previewVersionRef.current.isCurrent(version)) setError(e instanceof Error ? e.message : String(e));
     }
   };
 
   const previewHistoryInline = async (h: HistoryItem) => {
+    const version = previewVersionRef.current.next();
     try {
       const r = await native.previewHistorySnapshot(h.id);
+      if (!previewVersionRef.current.isCurrent(version)) return;
       if (r) setInline({ title: new Date(h.createdAt).toLocaleString(), text: r.plain, size: h.size });
       else setError("快照预览失败（文件可能已删除）");
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      if (previewVersionRef.current.isCurrent(version)) setError(e instanceof Error ? e.message : String(e));
     }
   };
 
   const previewOrphanFile = async (o: NoteOrphan) => {
     if (!noteId) return;
+    const version = previewVersionRef.current.next();
     try {
       const r = await native.previewNoteOrphan(noteId, o.filename);
+      if (!previewVersionRef.current.isCurrent(version)) return;
       if (r) {
         setPreview(r.kind === "image"
           ? { kind: "orphan", title: o.filename, imageData: r.data, size: r.size }
@@ -161,7 +190,7 @@ export function HistoryPanel({ open, noteId, onClose, onRestored }: {
         setError("文件预览失败（文件可能已删除）");
       }
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      if (previewVersionRef.current.isCurrent(version)) setError(e instanceof Error ? e.message : String(e));
     }
   };
 

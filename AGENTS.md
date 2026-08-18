@@ -8,15 +8,15 @@
 Lake Notes 是**本地优先**笔记应用（Electron + React + better-sqlite3 + 语雀 Lake 内核），带 S3 同步（七牛 Kodo S3 兼容 API）。**本地是真相，S3 只是镜像。**
 
 - 目录：`/Users/admin/file/local-lake/lake-notes-electron`
-- 当前分支：`feat/s3-storage-rw-delete`（**未合并 master，用户未验收不合并、不擅自提交**）
+- 当前分支：`feat/electron-43-upgrade`（**用户未验收不合并、不擅自提交**）
 - Node：**必须优先 Node 24**：`$HOME/.nvm/versions/node/v24.18.0/bin`
-- Electron：33.4.11（升级 42 已列入 TODO，**排期在删除链路验收之后**）
+- Electron：43.4.0；better-sqlite3 13.x（Electron 43 升级已完成）
 
 ## 2. 当前阶段目标与排期
 
-- **当前焦点：多端删除链路完整测试**（软删 → 恢复 → purge → GC 对账 → 深度清理 → 小记删除），四层验证：UI / 本地 DB+文件 / 云端对象（`scripts/s3-ls.mjs`）/ 两端日志。
-- 删除链路验收之后：Electron 升级 33 → 42（直接升级、不过度适配）。
-- 验收通过后：提交 `docs/S3-GC-DESIGN.md`、`HISTORY-DESIGN.md`、`TODO.md`、`Electron-HANDOFF.md` 及全部代码，再谈合并。
+- **当前焦点：代码审计与可维护性优化**（安全、IPC、资源服务、同步/存储边界、渲染层职责和测试覆盖）。
+- 删除/恢复链路与 Electron 43 升级均已完成历史验收，后续改动仍须保持现有同步语义和 217+ 测试基线。
+- 代码审计先修 Critical/Warning，再按模块拆分大文件；不在没有测试护栏的情况下进行大规模架构重写。
 
 ## 3. 核心设计原则（用户反复强调，务必遵守）
 

@@ -21,8 +21,9 @@ Lake Notes 是**本地优先**笔记应用（Electron + React + better-sqlite3 +
 - **最新已完成（已提交 `822f987` / `94b0163`）**：① 状态栏锁标志（锁定文档显示"已锁定"）；② 顶栏三个点移到面包屑最右侧（对齐思源 protyle-breadcrumb）；③ 云同步小弹窗跟随云按钮位置弹出（anchor）；④ 云同步弹窗显示时长延长（ok 4s / error 6s / unavailable 8s）。
 - **重要背景**：此前尝试修"偏好设置在笔记页面无法点击"时做了多轮改动（settings-overlay 避开顶栏、菜单 z-index 9999 等），**反而把顶栏/小记/状态栏布局搞乱**，用户要求**回滚到 `eb9b2c5`**（第一轮 7 项反馈完成、用户认可的状态）。**当前代码已回滚，不再包含那些有问题的改动**。
 - 开发数据：`~/Library/Application Support/lake-notes-dev`（**可重建**）。正式数据：`~/Library/Application Support/lake-notes-electron`（**禁止触碰**）。
-- 基线：`npx tsc --noEmit` 通过；`npm test -- --run` = **217 passed**；vite build 通过；`git diff --check` 干净。
+- 基线：`npx tsc --noEmit` 通过；`npm test -- --run` = **227 passed**；Vite 8.2.1 build 通过；`git diff --check` 干净。
 - **vite.config.ts 已还原**（== HEAD，无调试补丁）。
+- **当前工作区有未提交的代码审计/低风险重构改动**：IPC 已按领域拆分，`App.tsx` 已抽取 `DesktopStatusBar`，资源服务已改异步 I/O；详见 `docs/CODE-AUDIT-2026-08-17.md` 和 `docs/REFACTOR-PLAN-2026-08-17.md`。
 
 ### 关键约束
 - **Node 只用临时 PATH**：`export PATH="$HOME/.nvm/versions/node/v24.18.0/bin:$PATH"`；**不要动全局/公司 Node 18**（CDP 脚本 `WebSocket` 在 Node 18 下不可用，必须 Node 24）。
@@ -46,7 +47,7 @@ Lake Notes 是**本地优先**笔记应用（Electron + React + better-sqlite3 +
 - **性能/稳定**：render-process-gone 自动恢复、`--max-old-space-size=4096`、View Transitions、content-visibility、阅读进度条、零变更同步早退、fast-path 记账去重、manifest gzip。
 - **同步语义（定稿，勿重争）**：本地是真相、先同步者胜、删除压编辑、purged 条目编辑=隐式恢复、小记冲突 B 方案。
 - **审计加固**：资产服务器 CORS token 门禁、CSP 零违规、50MP 图片上限、before-quit 等待同步。
-- 测试：217 全绿（含冲突三场景、回收站、零变更早退等）。
+- 测试：核心同步/回收站基线全绿；当前完整测试基线为 224（含冲突三场景、回收站、零变更早退、Store 工具边界）。
 
 ### 1.2 第一轮 7 项反馈（已提交 `f8869f0` + `eb9b2c5`，用户认可）
 | # | 反馈 | 处理 |
@@ -92,7 +93,59 @@ Lake Notes 是**本地优先**笔记应用（Electron + React + better-sqlite3 +
 ### 待办（长期）
 - 反馈 6/7 残留（第一轮已处理，若用户有新反馈再跟进）。
 - 性能：增量 manifest 评估（>2 万条再考虑）。
-- 凭据收尾（AK/SK 硬编码，用户推迟，最后统一轮换 + git filter-repo）。
+- **Batch 3B 已完成**：Store 只读查询/纯函数抽取；当前测试基线 224 个。
+- **Batch 4A 已完成**：全文搜索领域模块拆分。
+- **Batch 4B 已完成**：历史只读查询和回收站只读查询模块拆分。
+- **Batch 4C 已完成**：资源引用/保护集和孤儿资源只读查询拆分。
+- **Batch 4D-1 已完成**：笔记/目录只读查询拆分。
+- **Batch 4D-2 已完成**：笔记目录/元数据写入模块拆分。
+- **Batch 4D-3A 已完成**：共享图片格式/尺寸纯函数拆分。
+- **Batch 4D-3B-1 已完成**：正文保存协调器拆分。
+- **Batch 4D-3B-2 已完成**：资源上传/远程下载协调器拆分。
+- **Batch 4D-3B-3 已完成**：远程笔记导入协调器拆分。
+- **Quick Notes M1 已完成**：模型类型、内容校验、序列化、preview 和 image MIME 策略移到 `src/lib/quickNoteModel.ts`。
+- **Quick Notes M2 已完成**：新增 `electron/quickNotesQueries.ts`，隔离列表、单条读取、回收站和同步墓碑只读查询；当前测试基线仍为 232 个。
+- **凭据历史清理暂缓**：当前为私库，暂不执行 `git filter-repo`；七牛 AK/SK 轮换仍需后续单独处理。
+- **后续重心转向移动端**：桌面端核心功能、同步、快照、回收站和 UI 主线已基本完成；桌面端后续以低风险维护和审计为主。
+- **移动端复用整理评估（2026-08-18）**：继续按“移动端复用边界”整理，不再为了缩短 Store 行数而拆分。Quick Notes M1 纯模型层和 M2 只读查询层已完成；已核对 Tauri Android POC，但其中尚无 Quick Notes 调用方，M3 文件层暂缓；历史/回收站先定义共享契约，图片先共享纯策略、保留平台 I/O adapter。完整评估见 `docs/MOBILE-REUSE-ARCHITECTURE-ASSESSMENT-2026-08-18.md`。
+- **思源机制借鉴待办（2026-08-18）**：优先借鉴“按对象串行队列、旧请求 version/abort、视口窗口化、可中断动画、提交时持久化”这些机制；不复制思源架构。建议先做 SearchPanel version guard 和 per-note save queue，再做树/大纲性能优化。完整方案见 `docs/SIYUAN-OPTIMIZATION-BACKLOG-2026-08-18.md`。
+
+### 2.1 代码重构与依赖升级决策（2026-08-17）
+
+#### Store 重构：建议做，但必须分批
+
+当前判断：**Store 重构的收益较高，适合在移动端主线全面展开前先做基础整理，但不适合一次性“大拆类”。**
+
+原因：
+- `electron/store.ts` 约 2,400+ 行，已经同时承载笔记 CRUD、SQLite schema/migration、历史快照、回收站、资源、搜索、导出和同步适配。
+- 桌面端核心业务语义已基本稳定，继续扩展桌面功能的频率下降；现在整理存储边界，后续移动端复用同一套 IPC/存储能力时收益更高。
+- 但 Store 直接关联事务边界、文件落盘顺序、同步状态和删除/恢复语义，完整领域拆分风险为中高。
+
+已定计划：
+1. **Batch 3A（已完成）**：SQLite row 类型收窄、低风险纯函数/边界整理，不移动写事务。
+2. **Batch 3B（已完成）**：抽取 `electron/storeUtils.ts`（资源引用、ISO 周、历史保留、文件名/路径校验）和 `electron/storeQueries.ts`（只读 note digest 查询）；新增边界测试，保持写入和事务原样。
+3. **Batch 4A（已完成）**：先拆出 `electron/searchRepository.ts`，隔离 FTS upsert、索引重建和搜索查询；Store 仍保留兼容 wrapper，未改变缓存回调、FTS SQL 和事务行为。
+4. **Batch 4B（已完成）**：拆出 `electron/historyRepository.ts` 的历史只读查询，以及 `electron/trashRepository.ts` 的回收站只读查询；Store 保留兼容 wrapper，未移动恢复、删除、purge 写事务。
+5. **Batch 4C（已完成）**：拆出 `electron/assetRepository.ts` 的资源引用、历史保护集、孤儿资源只读查询；Store 保留 wrapper，未移动资源清理/上传写事务。
+6. **Batch 4D-1/4D-2/4D-3 已完成**：笔记查询、元数据、正文保存、资源和远程导入均已按小批次拆分；Store 当前约 1,785 行。
+7. **后续暂停跨领域 Store 重构**：桌面端核心存储能力已完成整理，后续优先移动端；只有出现明确复用或维护需求时，再评估新的领域拆分。
+8. 不在移动端功能开发高峰期进行 Store 的跨领域大迁移；移动端先复用稳定的存储/IPC 契约。
+
+#### 依赖升级：先记录，暂不继续升级
+
+当前已确认：
+- Electron：`43.4.0` 已是公开 registry 最新稳定版；`44.0.0-beta` 不升级。
+- better-sqlite3：`13.0.3` 已是最新。
+- Lake 编辑器：`lakex-editor-react-component@0.1.2`、`lakex-drawnix@0.1.0`、`lakex-drawnix-react-board@0.1.0`、`lakex-drawnix-react-text@0.1.0` 均已是最新，没有可升级版本。
+- 已完成低风险更新：`@aws-sdk/client-s3` `3.1101.0 → 3.1111.0`，Vite `8.1.5 → 8.2.1`。
+
+后续依赖优化项（**暂不做**）：
+- `@types/better-sqlite3`：`7.6.13 → 9.6.0`。两版类型声明文件实际一致，发布时间相差约 483.5 天；主要是 TypeScript 支持元数据更新。收益低到中、风险低，之后可单独升级验证。
+- `electron-builder`、`vite-plugin-electron`：涉及打包链，单独评估。
+- React 19、Slate 全家升级、TypeScript 7、lucide-react 主版本升级：暂缓，需专项兼容性评估。
+- drawnix/Lake 传递依赖中的 Mermaid/DOMPurify/UUID 安全告警：当前没有安全自动修复方案，不执行 `npm audit fix --force`。
+
+完整批次计划：`docs/REFACTOR-PLAN-2026-08-17.md`；代码审计：`docs/CODE-AUDIT-2026-08-17.md`；正文/资源写入拆分影响评估：`docs/STORE-CONTENT-REFACTOR-IMPACT-2026-08-17.md`。
 
 ---
 
@@ -139,7 +192,7 @@ Lake Notes 是**本地优先**笔记应用（Electron + React + better-sqlite3 +
 
 ## 5. 测试要点
 
-- 基线：`npx tsc --noEmit`、`npm test -- --run`（217）、`node node_modules/vite/bin/vite.js build`、`git diff --check`。
+- 基线：`npx tsc --noEmit`、`npm test -- --run`（227）、`node node_modules/vite/bin/vite.js build`、`git diff --check`。
 - UI 改动后手动清单：亮/暗双主题都过一遍；库视图 + 小记视图；顶栏两个下拉（工作空间/更多）；云同步 toast（busy/ok/error/未配置四态 + 自动消失）；设置面板每个 tab；锁定文档状态栏锁标志；面包屑更多按钮；浮动 dock；多 tab；状态栏。
 - 回归重点（同步语义勿破坏）：先同步者胜、删除压编辑、回收站、小记冲突、零变更早退、purged 隐式恢复。
 
@@ -153,3 +206,392 @@ Lake Notes 是**本地优先**笔记应用（Electron + React + better-sqlite3 +
 - 用户习惯：功能做完后要自己**手动全量测试一遍**；测试完才打新包。给用户测之前先自测到"能直接上手验收"。
 - **用户对反复失败的修复很敏感**（偏好设置问题多轮未果导致布局回归），**不要在大改动上反复试探**；改 UI 前先确认当前认可状态 + 提交基线，小步改动、每步验证。
 - 凭据：AK/SK 暂不处理（用户明确）；不要外泄。
+
+---
+
+## 2026-08-18 思源机制优化实施补充（后续会话先读）
+
+本轮已根据 `/Users/admin/file/local-lake/siyuan-master` 的思源 3.8.0 源码完成第一轮流程、性能和可靠性优化。详细方案与停止条件见：
+
+```text
+/Users/admin/file/local-lake/lake-notes-electron/docs/SIYUAN-OPTIMIZATION-BACKLOG-2026-08-18.md
+```
+
+### 本轮已完成
+
+- `src/components/SearchPanel.tsx`：请求版本保护，旧搜索结果和旧 loading 不再覆盖当前请求。
+- `src/lib/keyedAsyncQueue.ts` + `src/App.tsx`：按 noteId 串行保存，跨文档并行；保留 debounce/revision/IPC/Store 语义。
+- `src/lib/treeIndex.ts` + `src/components/Sidebar.tsx`：树索引、搜索可见集合、TreeRow memo。
+- `src/App.tsx`：Sidebar/Outline 宽度拖动改为提交时持久化，卸载时补合法值。
+- History/Quick Notes/Trash/同步 tab reload：统一使用 `src/lib/requestVersion.ts` 做异步结果有效性保护。
+- HistoryPanel/TrashPanel：Escape 关闭；`src/b3/animations.css`：reduced-motion 覆盖新增动效。
+- `src/lib/assetPort.ts`、编辑器和 `electron/main.ts`：本地资源 CORS 预加载 token 修复；token 不写入正文/缓存。
+
+### 当前验证基线（2026 年 8 月 18 日）
+
+必须使用 Node 24：
+
+```bash
+export PATH="$HOME/.nvm/versions/node/v24.18.0/bin:$PATH"
+```
+
+验证结果：
+
+```text
+19 个测试文件
+241 个测试全部通过
+npx tsc --noEmit 通过
+Vite/Electron build 通过
+git diff --check 通过
+```
+
+运行时使用的是可重建开发数据：
+
+```text
+~/Library/Application Support/lake-notes-dev
+```
+
+已通过 CDP 做无截图 smoke test：搜索打开/输入/结果/关闭、小记工作区切换、本地图片加载、页面 reload；未捕获 CORS、Unhandled 或 JavaScript exception。
+
+### 本轮明确暂缓
+
+- 树虚拟化：开发库当前只有 19 个 tree node，没有达到 2,000 可见行阈值；不要为了“像思源”提前引入复杂虚拟列表。
+- renderer → main 退出 flush/ack：先保持现有 beforeunload + 主进程同步等待，除非能复现确认退出后的异步保存丢失。
+- 全局 TaskManager、动态设置表单、复杂动画控制器：没有足够真实调用方或可复现问题，不要抽象。
+
+### 运行与清理注意
+
+- 开发服务必须用 TTY 长驻；本轮调试可能使用过 `npm run dev:vite`、独立静态服务器和 CDP。
+- 不要使用 `pkill -f Electron`；只杀本项目的具体 PID。
+- 调试完成后确认没有遗留本项目 Electron/Vite/Python server 进程；不要触碰正式数据目录。
+
+---
+
+## 2026-08-18 编辑器小问题修复补充
+
+### 本轮用户反馈与处理
+
+1. **新建代码块标题首次输入被打断**
+   - 关联文件：`src/features/editor/EditorTab.tsx`。
+   - 根因：代码块自愈检测在新卡片刚创建、用户仍持有编辑器焦点时触发 `rebuildTick`，销毁并重建 Lake 实例，导致标题输入框/选区被打断。
+   - 处理：检测到编辑器仍有 active element 或 selection 时暂缓重建；在 `focusout` 后再补一次 heal 检查，保留原有坏代码块自愈能力。
+
+2. **高亮块悬浮工具栏闪烁、颜色点击偶发失效**
+   - 关联文件：`src/features/editor/lakeRuntime.ts`。
+   - 原有 hover bridge 对卡片离开/进入 overlay 的判断没有把 Lake 主浮动工具栏和 Ant 下拉层统一视为 toolbar context。
+   - 处理：补充 `.ne-ui-toolbar`、`.ant-dropdown`、`.ant-select-dropdown` 等上下文，使高亮块颜色/类型弹出层在 mouseleave/mouseout 往返中不被提前隐藏。
+
+3. **删除小记撤销提示被状态栏盖住**
+   - 关联文件：`src/components/QuickNotesWorkspace.tsx`、`src/styles.css`、`src/b3/components.css`。
+   - Quick Notes undo toast 和同步 toast 统一移到右上区域；提高 z-index、增加左侧主色标记、边框和阴影；撤销按钮改为主题主色并增加可读性。
+   - 当前 toast 的运行时位置为 `top: 50px`、`z-index: 760`，不会再被状态栏覆盖。
+
+4. **GIF/WebP 动图存储与播放**
+   - 关联文件：`src/features/editor/resourceUpload.ts`、`electron/resourceRepository.ts`、`src/features/editor/imageFormat.ts`。
+   - 远程下载后端始终按实际文件 magic bytes 判断格式；GIF 保存为 `.gif`，WebP 保存为 `.webp`，不会仅依据 URL 后缀改名。
+   - 修复本地 File/Data URL 上传路径：不再把 WebP/AVIF 先光栅化成 PNG，避免动画 WebP 丢失动画帧。
+   - 复制到不支持 WebP/AVIF 的外部应用时，仍由 `electron/assetServer.ts?base64=1` 做临时 PNG 转换；这不影响笔记本地存储格式。
+   - 如果用户粘贴的是知乎 `.jpg` 预览 URL，而服务器实际返回的也是 JPEG，应用无法从 JPEG 还原动画；必须拿到站点提供的原始 GIF/动画 WebP URL。暂不加入站点专用 URL 猜测，避免重复下载、误抓取或绕过站点策略。
+
+### 本轮验证基线
+
+```text
+21 个测试文件
+243 个测试全部通过
+npx tsc --noEmit 通过
+Vite/Electron build 通过
+git diff --check 通过
+```
+
+新增/强化测试：
+
+```text
+src/features/editor/imageFormat.test.ts
+electron/resourceRepository.test.ts
+```
+
+使用开发数据做了 Electron/CDP 检查：
+
+- 删除小记撤销 toast：右上、`z-index: 760`、未被状态栏覆盖；
+- 搜索面板打开和 Escape 关闭正常；
+- 本地图片正常加载；
+- 高亮块可正常创建，DOM/编辑器未出现本轮修改导致的新增异常。
+
+### 运行时已知独立问题
+
+开发数据中包含 Drawnix/思维导图内容；在 Electron 开发/HMR 环境打开相关文档时仍可能看到 Lake 依赖内部的：
+
+```text
+Cannot read properties of undefined (reading '__defineMacro')
+```
+
+该错误来自 Drawnix/mindmap 运行时路径，与本轮代码块焦点、高亮块 hover、toast 和图片格式改动无直接调用关系；生产静态构建 smoke 在打开包含思维导图的开发文档时也能观察到同一既有错误。后续如继续审计编辑器，可单独建立 Drawnix 错误边界和 mindmap 兼容性任务。
+
+---
+
+## 2026-08-18 高亮块间隙复现与最终修复补充
+
+用户进一步确认了稳定复现路径：鼠标从高亮块移动到颜色/工具栏区域时，只要经过中间空隙，浮动工具栏就会消失；如果直接落到色块上则正常。
+
+### 最终处理
+
+文件：
+
+```text
+/Users/admin/file/local-lake/lake-notes-electron/src/features/editor/lakeRuntime.ts
+```
+
+`setupCardToolbarHoverBridge` 已从“只看 relatedTarget 是否已经在 toolbar 内”改为带过渡缓冲的 hover 状态桥：
+
+- 卡片离开时不立即把 mouseleave 交给 Lake；
+- 增加约 650ms 的 gap grace period；
+- 鼠标进入 `.ne-ui-toolbar`、`.ne-card-toolbar`、`.ne-ui-boundary-popover`、Ant 下拉层等上下文时取消隐藏计时器；
+- 真正离开卡片和工具栏后，才补发正常的合成 mouseleave；
+- 保留 `ne-alert-hole` 高亮块支持；
+- 处理颜色块之间、卡片与工具栏之间的物理空隙。
+
+这次修改后在开发窗口中用相同的“先移动到空隙、再进入颜色区”的路径验证，当前表现已稳定。
+
+### Drawnix / mindmap 额外修复
+
+文件：
+
+```text
+/Users/admin/file/local-lake/lake-notes-electron/src/features/editor/lakeRuntime.ts
+```
+
+将数学脚本从外部 URL 改为应用内随包镜像：
+
+```text
+./vendor/cdn/os/lib/katex/0.16.8/dist/katex.min.js
+./vendor/cdn/os/lib/katex/0.16.8/dist/contrib/mhchem.min.js
+```
+
+避免外链脚本加载顺序和全局 `katex.__defineMacro` 不存在导致包含公式/思维导图内容的文档报错。
+
+### 最新验证
+
+```text
+21 个测试文件
+243 个测试全部通过
+npx tsc --noEmit 通过
+Vite/Electron build 通过
+git diff --check 通过
+```
+
+调试用的 CDP/Vite/Electron 进程已清理，`vite.config.ts` 已恢复为无调试端口版本。
+
+---
+
+# 会话收尾交接（2026-08-18）
+
+> 本节是本次长会话的最终状态摘要。新会话应先读完整文档，再以当前代码和 Git 状态为准，不要根据旧章节中的历史测试数字判断当前状态。
+
+## 一、最终任务目标
+
+本次任务围绕 Lake Notes Electron 的代码审计、Store/IPC 拆分、移动端复用准备、思源 3.8.0 机制借鉴和编辑器稳定性优化展开，最终要求：
+
+- 保持本地优先、SQLite/文件为真相、S3 为镜像的既定语义；
+- 不破坏同步、墓碑、回收站、历史快照和小记冲突协议；
+- 借鉴思源的可靠机制，而不是复制 Go kernel/WebSocket 架构；
+- 每批改动都做定向测试、完整测试和构建验证；
+- 最后提交全部工作，合并到 `master` 并推送远程。
+
+## 二、本次已完成内容
+
+### 2.1 Store、IPC 和移动端准备
+
+已完成并准备随本次提交进入 master：
+
+- Store 只读查询/纯函数基础层；
+- `SearchRepository`；
+- `HistoryRepository`、`TrashRepository`；
+- `AssetRepository`；
+- `NoteQueries`；
+- `NoteMetadataRepository`；
+- 图片格式/尺寸纯函数；
+- 正文保存、资源上传/远程下载、远程笔记导入协调器；
+- Quick Notes M1/M2 模型、校验、序列化和查询层；
+- IPC registrar 及 Notes/History/Sync/Quick Notes 分域注册；
+- `DesktopStatusBar` 抽取；
+- 资源服务异步 I/O；
+- Electron 43.4.0、better-sqlite3 13.x 基线；
+- 必要的 AWS SDK、Vite 依赖升级。
+
+Quick Notes M3 文件 staging 跨端抽象暂缓，原因是移动端 POC 尚未有真实 Quick Notes 页面和调用 API。
+
+### 2.2 思源机制借鉴优化
+
+已完成：
+
+- SearchPanel 请求版本保护；
+- 按 `noteId` 串行保存队列；
+- Sidebar parent → children 树索引；
+- TreeRow memo 和主要回调稳定；
+- Sidebar/Outline 宽度提交式 localStorage 持久化；
+- History/Orphan/Trash/Quick Notes 列表刷新版本保护；
+- History 快照/孤儿文件预览版本保护；
+- 同步、历史恢复、回收站恢复后的 tab reload 版本保护；
+- HistoryPanel/TrashPanel Escape 关闭；
+- reduced-motion 动效覆盖；
+- 本地资源 CORS 预加载 token 修复。
+
+有意暂缓：
+
+- 树虚拟化：开发数据当前只有 19 个 tree node，没有达到复杂虚拟列表阈值；
+- renderer → main 退出 flush/ack：尚未复现确认退出后的异步保存丢失；
+- 全局 TaskManager、动态设置表单和复杂动画控制器：没有足够真实调用方。
+
+方案记录：
+
+```text
+/Users/admin/file/local-lake/lake-notes-electron/docs/SIYUAN-OPTIMIZATION-BACKLOG-2026-08-18.md
+```
+
+### 2.3 本轮编辑器问题修复
+
+#### 代码块首次创建焦点
+
+文件：
+
+```text
+/Users/admin/file/local-lake/lake-notes-electron/src/features/editor/EditorTab.tsx
+```
+
+- 保留真正坏代码块的旧自愈重建能力；
+- 用户仍在编辑器内输入时不重建；
+- focusout 后再次检查；
+- 仍没有 CodeMirror/CM editor 的可见坏代码块才进入重建；
+- 连续重建无改善时停止，避免死循环；
+- 重建优先使用 `latestDocumentRef`，避免 React prop 滞后覆盖最新内容。
+
+#### 高亮块悬浮工具栏
+
+文件：
+
+```text
+/Users/admin/file/local-lake/lake-notes-electron/src/features/editor/lakeRuntime.ts
+```
+
+已针对真实复现的“卡片和颜色/工具栏之间存在空隙时 toolbar 消失”修复：
+
+- 卡片离开时不立即把 mouseleave 交给 Lake；
+- 增加约 650ms gap grace period；
+- 进入 `.ne-ui-toolbar`、`.ne-card-toolbar`、`.ne-ui-boundary-popover`、Ant 下拉层时取消隐藏计时；
+- 真正离开卡片和 toolbar 后才补发正常 mouseleave；
+- 高亮块 `ne-alert-hole` 保持在桥接范围内。
+
+#### 右下角弹出提示
+
+删除小记撤销 toast 和同步 toast fallback 已统一移到右上区域：
+
+```text
+/Users/admin/file/local-lake/lake-notes-electron/src/components/QuickNotesWorkspace.tsx
+/Users/admin/file/local-lake/lake-notes-electron/src/styles.css
+/Users/admin/file/local-lake/lake-notes-electron/src/b3/components.css
+```
+
+删除小记 toast 当前使用高层级、左侧主色标记、边框和阴影，不再被状态栏盖住。
+
+#### GIF/WebP
+
+- 远程下载按实际 magic bytes 保存格式；
+- GIF 保存为 `.gif`；
+- WebP 保存为 `.webp`；
+- 本地 File/Data URL 上传不再把 WebP/AVIF 转成 PNG；
+- clipboard 导出到不支持 WebP/AVIF 的外部应用时仍可临时转换 PNG；
+- 如果用户提供的是站点 JPEG 预览图，无法从 JPEG 还原动画，必须重新提供原始 GIF/动画 WebP 地址。
+
+#### Drawnix/mindmap 与 KaTeX
+
+文件：
+
+```text
+/Users/admin/file/local-lake/lake-notes-electron/src/features/editor/lakeRuntime.ts
+```
+
+数学脚本已从外链改为应用内镜像：
+
+```text
+./vendor/cdn/os/lib/katex/0.16.8/dist/katex.min.js
+./vendor/cdn/os/lib/katex/0.16.8/dist/contrib/mhchem.min.js
+```
+
+目的是避免 `katex.__defineMacro` 因外链加载顺序、外部网络或全局对象未就绪而报错。
+
+## 三、当前问题和验证边界
+
+### 已知的非阻断问题
+
+开发数据中包含 Drawnix/思维导图内容。此前在开发/HMR 或相关文档初始化时观察到：
+
+```text
+Cannot read properties of undefined (reading '__defineMacro')
+```
+
+已改为本地 KaTeX/mhchem 镜像；提交前需要新会话继续用全新 Electron 进程打开包含公式/思维导图的文档确认是否彻底消失。如果仍存在，应在 Drawnix 卡片边界增加错误隔离，不要让单个 mindmap 错误影响整个编辑器。
+
+### 构建 warning
+
+当前 build 仍有既有 warning：
+
+- `index.html` vendor CodeMirror 脚本不是 module；
+- JetBrainsMono 字体保持运行时路径；
+- 主 bundle 超过 500 kB。
+
+这些不是 TypeScript、测试或构建失败。
+
+## 四、最终测试基线
+
+必须使用 Node 24：
+
+```bash
+export PATH="$HOME/.nvm/versions/node/v24.18.0/bin:$PATH"
+```
+
+最终通过：
+
+```text
+21 个测试文件
+243 个测试全部通过
+npx tsc --noEmit
+Vite/Electron build
+git diff --check
+```
+
+开发数据路径：
+
+```text
+/Users/admin/Library/Application Support/lake-notes-dev
+```
+
+正式数据路径，禁止触碰：
+
+```text
+/Users/admin/Library/Application Support/lake-notes-electron
+```
+
+## 五、下一步计划
+
+提交并合并完成后，后续新会话按以下顺序继续：
+
+1. 用全新 Electron 进程打开含公式/思维导图的文档，确认 `__defineMacro` 是否彻底消失；
+2. 用真实物理鼠标复测高亮块“卡片 → 空隙 → 颜色工具栏”的路径；
+3. 复测新建代码块标题第一次输入、失焦后重建和多个代码块连续创建；
+4. 如果稳定，再考虑是否需要提交单独的 Drawnix 错误边界；
+5. 移动端继续复用 Quick Notes/History/Trash/Asset DTO 和 service contract；
+6. 暂不引入树虚拟化和全局 TaskManager，除非真实数据和测量证明需要。
+
+## 六、踩过的坑
+
+- 不要使用 `pkill -f Electron`，机器上有 SiYuan、Trae、VSCode 等其他 Electron；
+- CDP 合成鼠标和真实 macOS 物理鼠标的 hit-test 不完全一致，不能仅凭 CDP 正常就判定物理鼠标问题已解决；
+- 调试 CDP 时临时修改过 `vite.config.ts`，提交前必须恢复；当前已恢复；
+- `npm run dev` 必须使用 TTY 长驻，`nohup` 会被环境回收；
+- `document-pane`、portal、`isolation`、`-webkit-app-region` 会造成真实鼠标和合成层命中差异；
+- 不要在用户仍有编辑焦点时重建 Lake 编辑器；
+- 不要在卡片和浮动工具栏之间的物理空隙里立即触发 hide；
+- 不要把 WebP/AVIF 为了 clipboard 兼容而直接转换后写入笔记存储；
+- 用户粘贴的 JPEG 预览图不能靠应用恢复动画，必须拿到原始动画资源地址；
+- 任何新增 IPC 都必须同步修改 main handler、preload 和 `src/lib/native.ts`；
+- 事务边界和同步语义不能为了抽象或减少行数而改变。

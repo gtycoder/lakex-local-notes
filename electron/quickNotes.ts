@@ -4,113 +4,42 @@ import path from "node:path";
 import crypto from "node:crypto";
 import sharp from "sharp";
 import { ASSET_PORT } from "./assetServer.js";
-import { AppError } from "./store.js";
+import { AppError } from "./storeErrors.js";
+import { sniffImageFormat } from "./imageUtils.js";
+import {
+  QUICK_NOTE_VERSION,
+  normalizeQuickNoteContent,
+  parseQuickNoteContent,
+  previewQuickNote,
+  serializeQuickNoteContent,
+  validateQuickNoteContent,
+  QuickNoteModelError,
+  type StoredQuickNoteContent,
+} from "./quickNoteModel.js";
+import type { QuickNoteDeleted, QuickNoteDocument, QuickNoteImage, QuickNoteImageInput, SaveQuickNoteInput } from "./quickNoteTypes.js";
+import { QuickNotesQueries, type QuickNoteConversionRow, type QuickNoteDeletedRow, type QuickNoteRow } from "./quickNotesQueries.js";
 
-export const QUICK_NOTE_VERSION = 1;
+export { QUICK_NOTE_VERSION, MAX_QUICK_NOTE_TEXT_LENGTH } from "./quickNoteModel.js";
+export type { QuickNoteContent, QuickNoteConversion, QuickNoteDeleted, QuickNoteDocument, QuickNoteImage, QuickNoteImageInput, QuickNoteSummary, SaveQuickNoteInput } from "./quickNoteTypes.js";
+export type { StoredQuickNoteContent } from "./quickNoteModel.js";
+
 export const MAX_QUICK_NOTE_IMAGE_BYTES = 25 * 1024 * 1024;
 /** 小记图片解码后像素上限（与 Lake 图片一致：50MP，防解压炸弹） */
 const MAX_QUICK_NOTE_IMAGE_PIXELS = 50_000_000;
-const MAX_QUICK_NOTE_TEXT_LENGTH = 200_000;
-
-export interface QuickNoteImage {
-  id: string;
-  filename: string;
-  mimeType: string;
-  width: number | null;
-  height: number | null;
-  size: number;
-  hash: string;
-  /** 仅 IPC 返回值携带；不会写进 .qnote。 */
-  url?: string;
-}
-
-export interface QuickNoteContent {
-  version: number;
-  text: string;
-  images: QuickNoteImage[];
-}
-
-export interface QuickNoteSummary {
-  id: string;
-  createdAt: string;
-  updatedAt: string;
-  previewText: string;
-  imageCount: number;
-  contentHash: string;
-  syncState: "local" | "synced" | "conflict";
-  isConflict: boolean;
-}
-
-export interface QuickNoteDocument extends QuickNoteSummary {
-  content: QuickNoteContent;
-}
-
-export interface QuickNoteImageInput {
-  bytes: number[];
-  filename: string;
-}
-
-export interface SaveQuickNoteInput {
-  text: string;
-  draftId: string;
-  stagedImageIds: string[];
-  retainedImageIds?: string[];
-}
-
-export interface QuickNoteDeleted {
-  id: string;
-  createdAt: string;
-  updatedAt: string;
-  deletedAt: string;
-  conversionTargetNoteId: string | null;
-  readyToSync: boolean;
-}
-
-export interface QuickNoteConversion {
-  sourceQuickNoteId: string;
-  targetNoteId: string;
-  targetNotebookId: string;
-  state: "prepared" | "target_created" | "source_deleted_waiting_sync" | "complete";
-  createdAt: string;
-  updatedAt: string;
-}
-
-interface StoredQuickNoteContent {
-  version: number;
-  text: string;
-  images: Omit<QuickNoteImage, "url">[];
-}
 
 function nowIso(): string { return new Date().toISOString(); }
 function uuid(): string { return crypto.randomUUID(); }
 function hash(bytes: Buffer | string): string { return crypto.createHash("sha256").update(bytes).digest("hex"); }
+
+function toStoreValidation<T>(operation: () => T): T {
+  try { return operation(); }
+  catch (error) {
+    if (error instanceof QuickNoteModelError) throw new AppError(error.kind, error.message);
+    throw error;
+  }
+}
 function isSafeSegment(value: string): boolean {
   return value.length > 0 && value !== "." && value !== ".." && !value.includes("/") && !value.includes("\\");
-}
-function isImageMime(value: string): boolean {
-  return ["image/png", "image/jpeg", "image/gif", "image/webp", "image/avif"].includes(value);
-}
-
-function sniffImageFormat(bytes: Buffer): { mimeType: string; extension: string } | null {
-  if (bytes.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))) return { mimeType: "image/png", extension: "png" };
-  if (bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) return { mimeType: "image/jpeg", extension: "jpg" };
-  if (bytes.subarray(0, 6).toString() === "GIF87a" || bytes.subarray(0, 6).toString() === "GIF89a") return { mimeType: "image/gif", extension: "gif" };
-  if (bytes.length >= 12 && bytes.subarray(0, 4).toString() === "RIFF" && bytes.subarray(8, 12).toString() === "WEBP") return { mimeType: "image/webp", extension: "webp" };
-  if (bytes.length >= 12 && bytes.subarray(4, 8).toString() === "ftyp" && ["avif", "avis"].includes(bytes.subarray(8, 12).toString())) return { mimeType: "image/avif", extension: "avif" };
-  return null;
-}
-
-function previewOf(text: string, imageCount: number): string {
-  const compact = text.replace(/\s+/g, " ").trim();
-  if (compact) return compact.slice(0, 120);
-  return imageCount > 0 ? "[图片]" : "";
-}
-
-function normalizedContent(text: string, images: Omit<QuickNoteImage, "url">[]): StoredQuickNoteContent {
-  if (typeof text !== "string") throw new AppError("InvalidInput", "小记正文必须是文本");
-  if (text.length > MAX_QUICK_NOTE_TEXT_LENGTH) throw new AppError("InvalidInput", "小记正文过长");
-  if (!text.trim() && images.length === 0) throw new AppError("InvalidInput", "请至少记录文字或一张图片");
-  return { version: QUICK_NOTE_VERSION, text, images };
 }
 
 /**
@@ -123,6 +52,7 @@ export class QuickNotesStore {
   private itemsDir: string;
   private assetsDir: string;
   private stagingDir: string;
+  private queries: QuickNotesQueries;
 
   constructor(workspaceRoot: string) {
     this.root = path.join(workspaceRoot, "quick-notes");
@@ -136,6 +66,11 @@ export class QuickNotesStore {
     this.db.pragma("journal_mode = WAL");
     this.db.pragma("foreign_keys = ON");
     this.migrate();
+    this.queries = new QuickNotesQueries({
+      db: this.db,
+      itemPath: (id) => this.itemPath(id),
+      imageUrl: (noteId, filename) => this.quickImageUrl(noteId, filename),
+    });
   }
 
   private migrate(): void {
@@ -225,64 +160,27 @@ export class QuickNotesStore {
   }
 
   private readStoredContent(id: string): StoredQuickNoteContent {
-    let raw: unknown;
-    try { raw = JSON.parse(fs.readFileSync(this.itemPath(id), "utf8")); }
-    catch (error) { throw new AppError("Internal", `小记内容损坏: ${error instanceof Error ? error.message : String(error)}`); }
-    return this.validateStoredContent(raw);
+    return this.queries.readStoredContent(id);
   }
 
   private validateStoredContent(raw: unknown): StoredQuickNoteContent {
-    if (!raw || typeof raw !== "object") throw new AppError("InvalidInput", "小记内容格式无效");
-    const value = raw as Partial<StoredQuickNoteContent>;
-    if (value.version !== QUICK_NOTE_VERSION || typeof value.text !== "string" || !Array.isArray(value.images)) {
-      throw new AppError("InvalidInput", "小记内容版本或字段无效");
-    }
-    const seen = new Set<string>();
-    const images = value.images.map((image) => {
-      if (!image || typeof image !== "object") throw new AppError("InvalidInput", "小记图片字段无效");
-      const img = image as Partial<QuickNoteImage>;
-      if (typeof img.id !== "string" || !isSafeSegment(img.id) || seen.has(img.id) || typeof img.filename !== "string" || !isSafeSegment(img.filename)
-        || typeof img.mimeType !== "string" || !isImageMime(img.mimeType) || typeof img.size !== "number" || !Number.isSafeInteger(img.size) || img.size <= 0
-        || typeof img.hash !== "string" || !/^[a-f0-9]{64}$/.test(img.hash)) {
-        throw new AppError("InvalidInput", "小记图片元数据无效");
-      }
-      if (img.width !== null && img.width !== undefined && (!Number.isInteger(img.width) || img.width <= 0)) throw new AppError("InvalidInput", "图片宽度无效");
-      if (img.height !== null && img.height !== undefined && (!Number.isInteger(img.height) || img.height <= 0)) throw new AppError("InvalidInput", "图片高度无效");
-      seen.add(img.id);
-      return { id: img.id, filename: img.filename, mimeType: img.mimeType, width: img.width ?? null, height: img.height ?? null, size: img.size, hash: img.hash };
-    });
-    return normalizedContent(value.text, images);
+    return toStoreValidation(() => validateQuickNoteContent(raw));
   }
 
-  private mapDocument(row: any, content: StoredQuickNoteContent): QuickNoteDocument {
-    const images = content.images.map((image) => ({ ...image, url: this.quickImageUrl(row.id, image.filename) }));
-    return {
-      id: row.id,
-      createdAt: row.created_at,
-      updatedAt: row.updated_at,
-      previewText: row.preview_text,
-      imageCount: row.image_count,
-      contentHash: row.content_hash,
-      syncState: row.sync_state,
-      isConflict: !!row.is_conflict,
-      content: { version: QUICK_NOTE_VERSION, text: content.text, images },
-    };
+  private mapDocument(row: QuickNoteRow, content: StoredQuickNoteContent): QuickNoteDocument {
+    return this.queries.mapDocument(row, content);
   }
 
-  private readRow(id: string): any {
-    const row = this.db.prepare("SELECT * FROM quick_notes WHERE id=?").get(id);
-    if (!row) throw new AppError("NotFound", "小记不存在");
-    return row;
+  private readRow(id: string): QuickNoteRow {
+    return this.queries.readRow(id);
   }
 
   listQuickNotes(): QuickNoteDocument[] {
-    const rows = this.db.prepare("SELECT * FROM quick_notes ORDER BY created_at DESC").all() as any[];
-    return rows.map((row) => this.mapDocument(row, this.readStoredContent(row.id)));
+    return this.queries.list();
   }
 
   readQuickNote(id: string): QuickNoteDocument {
-    const row = this.readRow(id);
-    return this.mapDocument(row, this.readStoredContent(id));
+    return this.queries.read(id);
   }
 
   async stageImage(draftId: string, input: QuickNoteImageInput): Promise<QuickNoteImage> {
@@ -341,8 +239,8 @@ export class QuickNotesStore {
 
     const stagingDir = this.stagingDirFor(input.draftId);
     const stagedMetadata = this.readStagedMetadata(stagingDir, input.stagedImageIds);
-    const content = normalizedContent(input.text, [...retained, ...stagedMetadata]);
-    const encoded = Buffer.from(`${JSON.stringify(content, null, 2)}\n`, "utf8");
+    const content = toStoreValidation(() => normalizeQuickNoteContent(input.text, [...retained, ...stagedMetadata]));
+    const encoded = Buffer.from(serializeQuickNoteContent(content), "utf8");
     const contentHash = hash(encoded);
     const targetAssets = this.assetDirFor(id);
     const removed = existing.filter((image) => !retainedIds.includes(image.id));
@@ -363,11 +261,11 @@ export class QuickNotesStore {
       const tx = this.db.transaction(() => {
         if (updating) {
           this.db.prepare("UPDATE quick_notes SET updated_at=?,preview_text=?,image_count=?,content_hash=?,sync_state='local',is_conflict=0 WHERE id=?")
-            .run(updatedAt, previewOf(content.text, content.images.length), content.images.length, contentHash, id);
+            .run(updatedAt, previewQuickNote(content.text, content.images.length), content.images.length, contentHash, id);
           this.db.prepare("DELETE FROM quick_note_assets WHERE quick_note_id=?").run(id);
         } else {
           this.db.prepare("INSERT INTO quick_notes(id,created_at,updated_at,preview_text,image_count,content_hash,sync_state,is_conflict) VALUES(?,?,?,?,?,?, 'local', 0)")
-            .run(id, createdAt, updatedAt, previewOf(content.text, content.images.length), content.images.length, contentHash);
+            .run(id, createdAt, updatedAt, previewQuickNote(content.text, content.images.length), content.images.length, contentHash);
         }
         const insert = this.db.prepare("INSERT INTO quick_note_assets(id,quick_note_id,filename,mime_type,width,height,size,content_hash) VALUES(?,?,?,?,?,?,?,?)");
         for (const image of content.images) insert.run(image.id, id, image.filename, image.mimeType, image.width, image.height, image.size, image.hash);
@@ -397,7 +295,7 @@ export class QuickNotesStore {
       if (!isSafeSegment(assetId)) throw new AppError("InvalidInput", "无效的暂存图片 ID");
       const metaPath = path.join(stagingDir, `.${assetId}.json`);
       let raw: unknown;
-      try { raw = JSON.parse(fs.readFileSync(metaPath, "utf8")); } catch { throw new AppError("NotFound", "暂存图片已失效，请重新添加"); }
+      try { raw = parseQuickNoteContent(fs.readFileSync(metaPath, "utf8")); } catch { throw new AppError("NotFound", "暂存图片已失效，请重新添加"); }
       const image = this.validateStoredContent({ version: QUICK_NOTE_VERSION, text: "x", images: [raw] }).images[0];
       const imagePath = path.join(stagingDir, image.filename);
       if (!fs.existsSync(imagePath)) throw new AppError("NotFound", "暂存图片文件不存在");
@@ -413,7 +311,7 @@ export class QuickNotesStore {
     const dir = this.stagingDirFor(draftId);
     const metaPath = path.join(dir, `.${assetId}.json`);
     try {
-      const raw = JSON.parse(fs.readFileSync(metaPath, "utf8"));
+      const raw = parseQuickNoteContent(fs.readFileSync(metaPath, "utf8"));
       const image = this.validateStoredContent({ version: QUICK_NOTE_VERSION, text: "x", images: [raw] }).images[0];
       fs.rmSync(path.join(dir, image.filename), { force: true });
     } catch { /* metadata/file may already be gone */ }
@@ -425,13 +323,9 @@ export class QuickNotesStore {
     this.deleteSourceAndRemember(row, null, true, true);
   }
 
-  /** M6 小记回收站：用户删除的小记（不含转换 tombstone、不含已 purge）。
-   * 审计：过滤"学到删除的墓碑"（他端 purge 本端从未持有，只有墓碑没有内容文件）——
-   * 这类条目无法恢复（restoreQuickNote 会因缺文件报错），不应出现在回收站里制造假条目。 */
+  /** 小记回收站只读查询。 */
   listQuickNoteTrash(): Array<{ id: string; createdAt: string; updatedAt: string; deletedAt: string }> {
-    return this.db.prepare(
-      "SELECT id,created_at,updated_at,deleted_at FROM quick_note_deleted WHERE conversion_target_note_id IS NULL AND purged_at IS NULL ORDER BY deleted_at DESC"
-    ).all().filter((r: any) => fs.existsSync(this.itemPath(r.id))).map((r: any) => ({ id: r.id, createdAt: r.created_at, updatedAt: r.updated_at, deletedAt: r.deleted_at }));
+    return this.queries.listTrash();
   }
 
   /** M6 小记回收站恢复：从保留的本地内容文件读回，清墓碑并置 local 待上传。 */
@@ -439,7 +333,7 @@ export class QuickNotesStore {
     if (!isSafeSegment(id)) throw new AppError("InvalidInput", "无效的小记 ID");
     const tomb = this.db.prepare(
       "SELECT * FROM quick_note_deleted WHERE id=? AND conversion_target_note_id IS NULL AND purged_at IS NULL"
-    ).get(id) as any;
+    ).get(id) as QuickNoteDeletedRow | undefined;
     if (!tomb) throw new AppError("NotFound", "小记不在回收站");
     const itemPath = this.itemPath(id);
     if (!fs.existsSync(itemPath)) throw new AppError("NotFound", "小记内容文件已丢失，无法恢复");
@@ -449,7 +343,7 @@ export class QuickNotesStore {
     const contentHash = hash(encoded);
     const tx = this.db.transaction(() => {
       this.db.prepare("INSERT OR REPLACE INTO quick_notes(id,created_at,updated_at,preview_text,image_count,content_hash,sync_state,is_conflict,restore_pending_at) VALUES(?,?,?,?,?,?, 'local', 0, ?)")
-        .run(id, tomb.created_at, nowIso(), previewOf(content.text, content.images.length), content.images.length, contentHash, nowIso());
+        .run(id, tomb.created_at, nowIso(), previewQuickNote(content.text, content.images.length), content.images.length, contentHash, nowIso());
       this.db.prepare("DELETE FROM quick_note_assets WHERE quick_note_id=?").run(id);
       const insert = this.db.prepare("INSERT INTO quick_note_assets(id,quick_note_id,filename,mime_type,width,height,size,content_hash) VALUES(?,?,?,?,?,?,?,?)");
       for (const image of content.images) insert.run(image.id, id, image.filename, image.mimeType, image.width, image.height, image.size, image.hash);
@@ -474,7 +368,7 @@ export class QuickNotesStore {
   /** M6 小记彻底删除：删除保留的本地文件并标记 purged_at（tombstone 保留供同步传播删除）。 */
   purgeQuickNote(id: string): void {
     if (!isSafeSegment(id)) throw new AppError("InvalidInput", "无效的小记 ID");
-    const tomb = this.db.prepare("SELECT * FROM quick_note_deleted WHERE id=?").get(id) as any;
+    const tomb = this.db.prepare("SELECT * FROM quick_note_deleted WHERE id=?").get(id) as QuickNoteDeletedRow | undefined;
     if (!tomb) throw new AppError("NotFound", "小记不在回收站");
     this.db.prepare("UPDATE quick_note_deleted SET purged_at=?,ready_to_sync=1 WHERE id=?").run(nowIso(), id);
     try { fs.rmSync(this.itemPath(id), { force: true }); } catch { /* best effort */ }
@@ -516,7 +410,7 @@ export class QuickNotesStore {
   }
 
   finalizeConversion(sourceQuickNoteId: string): void {
-    const conversion = this.db.prepare("SELECT * FROM quick_note_conversions WHERE source_quick_note_id=?").get(sourceQuickNoteId) as any;
+    const conversion = this.db.prepare("SELECT * FROM quick_note_conversions WHERE source_quick_note_id=?").get(sourceQuickNoteId) as QuickNoteConversionRow | undefined;
     if (!conversion) throw new AppError("NotFound", "小记转换记录不存在");
     if (conversion.state === "complete" || conversion.state === "source_deleted_waiting_sync") return;
     if (conversion.state !== "target_created") throw new AppError("Internal", "转换目标尚未验证");
@@ -527,7 +421,7 @@ export class QuickNotesStore {
   }
 
   recoverConversions(noteExists: (noteId: string) => boolean, cleanupUntrackedTarget: (noteId: string) => void): void {
-    const rows = this.db.prepare("SELECT * FROM quick_note_conversions WHERE state IN ('prepared','target_created')").all() as any[];
+    const rows = this.db.prepare("SELECT * FROM quick_note_conversions WHERE state IN ('prepared','target_created')").all() as QuickNoteConversionRow[];
     for (const row of rows) {
       if (noteExists(row.target_note_id)) {
         if (row.state === "prepared") {
@@ -543,7 +437,7 @@ export class QuickNotesStore {
   }
 
   markTargetNotesSynced(noteIds?: Set<string>): void {
-    const conversions = this.db.prepare("SELECT * FROM quick_note_conversions WHERE state='source_deleted_waiting_sync'").all() as any[];
+    const conversions = this.db.prepare("SELECT * FROM quick_note_conversions WHERE state='source_deleted_waiting_sync'").all() as QuickNoteConversionRow[];
     const tx = this.db.transaction(() => {
       for (const conversion of conversions) {
         if (noteIds && !noteIds.has(conversion.target_note_id)) continue;
@@ -574,29 +468,20 @@ export class QuickNotesStore {
 
   /** 是否处于"小记回收站恢复后待同步"状态（显式恢复标记）。 */
   isRestorePending(id: string): boolean {
-    return !!this.db.prepare("SELECT 1 FROM quick_notes WHERE id=? AND restore_pending_at IS NOT NULL").get(id);
+    return this.queries.isRestorePending(id);
   }
   markLocal(id: string): void { this.db.prepare("UPDATE quick_notes SET sync_state='local' WHERE id=?").run(id); }
   listDeletedForSync(): QuickNoteDeleted[] {
-    return this.db.prepare("SELECT * FROM quick_note_deleted WHERE ready_to_sync=1 ORDER BY deleted_at").all().map((row: any) => ({
-      id: row.id, createdAt: row.created_at, updatedAt: row.updated_at, deletedAt: row.deleted_at,
-      conversionTargetNoteId: row.conversion_target_note_id ?? null, readyToSync: !!row.ready_to_sync,
-    }));
+    return this.queries.listDeletedForSync();
   }
 
-  /** 已删除、但尚不能同步出去的转换 tombstone。同步时必须保留远端原条目，
-   * 否则 Lake 尚未成功上传时可能既复活源小记又覆盖远端 manifest。 */
+  /** 已删除、但尚不能同步出去的转换 tombstone。 */
   listDeferredDeletedForSync(): QuickNoteDeleted[] {
-    return this.db.prepare("SELECT * FROM quick_note_deleted WHERE ready_to_sync=0 ORDER BY deleted_at").all().map((row: any) => ({
-      id: row.id, createdAt: row.created_at, updatedAt: row.updated_at, deletedAt: row.deleted_at,
-      conversionTargetNoteId: row.conversion_target_note_id ?? null, readyToSync: !!row.ready_to_sync,
-    }));
+    return this.queries.listDeferredDeletedForSync();
   }
-  hasDeleted(id: string): boolean { return !!this.db.prepare("SELECT 1 FROM quick_note_deleted WHERE id=?").get(id); }
-  deletedRecord(id: string): QuickNoteDeleted | null {
-    const row = this.db.prepare("SELECT * FROM quick_note_deleted WHERE id=?").get(id) as any;
-    return row ? { id: row.id, createdAt: row.created_at, updatedAt: row.updated_at, deletedAt: row.deleted_at, conversionTargetNoteId: row.conversion_target_note_id ?? null, readyToSync: !!row.ready_to_sync } : null;
-  }
+
+  hasDeleted(id: string): boolean { return this.queries.hasDeleted(id); }
+  deletedRecord(id: string): QuickNoteDeleted | null { return this.queries.deletedRecord(id); }
   rememberDeleted(item: { id: string; createdAt: string; updatedAt: string; deletedAt: string }): void {
     if (!isSafeSegment(item.id)) throw new AppError("InvalidInput", "无效的小记删除记录");
     this.db.prepare("INSERT OR IGNORE INTO quick_note_deleted(id,created_at,updated_at,deleted_at,conversion_target_note_id,ready_to_sync) VALUES(?,?,?,?,NULL,1)")
@@ -606,7 +491,7 @@ export class QuickNotesStore {
   importRemoteQuickNote(item: { id: string; createdAt: string; updatedAt: string; contentHash: string; isConflict: boolean }, contentBytes: Buffer, assets: { filename: string; bytes: Buffer }[]): void {
     if (!isSafeSegment(item.id)) throw new AppError("InvalidInput", "远端小记 ID 无效");
     if (hash(contentBytes) !== item.contentHash) throw new AppError("InvalidInput", "远端小记内容哈希不符");
-    const parsed = this.validateStoredContent(JSON.parse(contentBytes.toString("utf8")));
+    const parsed = this.validateStoredContent(parseQuickNoteContent(contentBytes.toString("utf8")));
     for (const image of parsed.images) {
       const asset = assets.find((candidate) => candidate.filename === image.filename);
       if (!asset || asset.bytes.length !== image.size || hash(asset.bytes) !== image.hash) throw new AppError("InvalidInput", `远端图片不完整: ${image.filename}`);
@@ -627,7 +512,7 @@ export class QuickNotesStore {
       this.atomicWrite(itemPath, contentBytes);
       const tx = this.db.transaction(() => {
         this.db.prepare("INSERT INTO quick_notes(id,created_at,updated_at,preview_text,image_count,content_hash,sync_state,is_conflict) VALUES(?,?,?,?,?,?, 'synced', ?) ON CONFLICT(id) DO UPDATE SET created_at=excluded.created_at,updated_at=excluded.updated_at,preview_text=excluded.preview_text,image_count=excluded.image_count,content_hash=excluded.content_hash,sync_state='synced',is_conflict=excluded.is_conflict")
-          .run(item.id, item.createdAt, item.updatedAt, previewOf(parsed.text, parsed.images.length), parsed.images.length, item.contentHash, item.isConflict ? 1 : 0);
+          .run(item.id, item.createdAt, item.updatedAt, previewQuickNote(parsed.text, parsed.images.length), parsed.images.length, item.contentHash, item.isConflict ? 1 : 0);
         this.db.prepare("DELETE FROM quick_note_assets WHERE quick_note_id=?").run(item.id);
         const insert = this.db.prepare("INSERT INTO quick_note_assets(id,quick_note_id,filename,mime_type,width,height,size,content_hash) VALUES(?,?,?,?,?,?,?,?)");
         for (const image of parsed.images) insert.run(image.id, item.id, image.filename, image.mimeType, image.width, image.height, image.size, image.hash);

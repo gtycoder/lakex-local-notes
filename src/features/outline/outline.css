@@ -89,6 +89,19 @@
     outline: 3px solid rgba(53, 117, 240, .18);
     outline-offset: 1px;
   }
+  /* 产品要求隐藏右上角大纲图标，但保留无障碍/物理鼠标命中区。 */
+  .outline-sidebar__activity-button--ghost {
+    color: transparent !important;
+    background: transparent !important;
+    box-shadow: none !important;
+    opacity: 0;
+  }
+  .outline-sidebar__activity-button--ghost:hover,
+  .outline-sidebar__activity-button--ghost.active {
+    color: transparent !important;
+    background: transparent !important;
+    box-shadow: none !important;
+  }
 
   /* 内容始终锚定 rail 左侧。收起时覆盖正文；固定时参与 grid，编辑器自行收缩。 */
   .outline-sidebar__content {

@@ -1,9 +1,8 @@
 import { isDesktop, native } from "../../lib/native";
 import type { ResourceUploadInput, ResourceUploadOutput } from "../../lib/types";
-import { MAX_IMAGE_BYTES, imageDataUrl, normalizeImageInput, sniffImageFormat } from "./imageFormat";
+import { MAX_IMAGE_BYTES, imageDataUrl, normalizeImageInput } from "./imageFormat";
 import { createConcurrencyQueue } from "../../lib/concurrency";
 import { withRetry } from "../../lib/retry";
-import { WorkerPool } from "../../lib/workerPool";
 
 interface LakeUploadRequest {
   type?: "url" | "file" | "base64";
@@ -20,18 +19,6 @@ const MAX_ATTACHMENT_BYTES = 25 * 1024 * 1024;
 function decodedBase64Length(encoded: string): number {
   const len = encoded.replace(/=+$/, "").length;
   return Math.floor(len / 4) * 3 + (len % 4 === 2 ? 1 : len % 4 === 3 ? 2 : 0);
-}
-
-let imageConverterPool: WorkerPool | null = null;
-
-function getImageConverterPool(): WorkerPool {
-  if (!imageConverterPool) {
-    imageConverterPool = new WorkerPool(
-      () => new Worker(new URL("../../lib/imageConverter.worker.ts", import.meta.url), { type: "module" }),
-      4
-    );
-  }
-  return imageConverterPool;
 }
 
 export async function uploadLakeResource(request: unknown, noteId: string): Promise<ResourceUploadOutput> {
@@ -84,9 +71,9 @@ async function performUpload(request: unknown, noteId: string): Promise<Resource
     if (!isImageFile(payload)) {
       return fileToBase64DataUrl(payload);
     }
-    // Image files → existing image pipeline (with WebP conversion etc.)
+    // Image files → preserve the detected source format (including animated GIF/WebP)
     const input = normalizeImageInput(Array.from(new Uint8Array(await payload.arrayBuffer())), payload.name || "image");
-    return uploadWithWebpConversion(input, noteId);
+    return uploadWithOriginalFormat(input, noteId);
   }
 
   // Already-local data URL: pasted base64 image from local clipboard
@@ -100,7 +87,7 @@ async function performUpload(request: unknown, noteId: string): Promise<Resource
       return { url: payload, resourceRef: payload, filename: "attachment", mimeType: header.replace("data:", "").split(";")[0] || "application/octet-stream", size: decodedBase64Length(encoded) };
     }
     const input = dataUrlInput(payload);
-    return uploadWithWebpConversion(input, noteId);
+    return uploadWithOriginalFormat(input, noteId);
   }
 
   // External URL：
@@ -129,37 +116,19 @@ function dataUrlInput(value: string): ResourceUploadInput {
   return normalizeImageInput(Array.from(binary, (character) => character.charCodeAt(0)), "image");
 }
 
-async function uploadWithWebpConversion(input: ResourceUploadInput, noteId: string): Promise<ResourceUploadOutput> {
-  const format = sniffImageFormat(input.bytes);
-  if (format && (format.mimeType === "image/webp" || format.mimeType === "image/avif")) {
-    try {
-      const pool = getImageConverterPool();
-      const pngBytes = await pool.convertToPng(input.bytes, format.mimeType);
-      const pngInput: ResourceUploadInput = {
-        bytes: pngBytes,
-        filename: input.filename.replace(/\.[^./\\]+$/, ".png"),
-      };
-      return native.uploadResource(pngInput, noteId);
-    } catch (error) {
-      console.warn("Failed to convert image to PNG, uploading original:", error);
-      return native.uploadResource(input, noteId);
-    }
-  }
+async function uploadWithOriginalFormat(input: ResourceUploadInput, noteId: string): Promise<ResourceUploadOutput> {
+  // Do not rasterize WebP/AVIF here: an animated WebP/GIF must remain animated.
+  // PNG conversion is still intentionally kept in electron/assetServer.ts for
+  // clipboard export to applications that cannot consume WebP/AVIF data URLs.
   return native.uploadResource(input, noteId);
 }
 
 export function getUploadQueueStatus() {
-  return {
-    uploadQueue: uploadQueue.status,
-    workerPool: imageConverterPool?.status ?? null,
-  };
+  return { uploadQueue: uploadQueue.status, workerPool: null };
 }
 
 export function cleanupUploadResources(): void {
-  if (imageConverterPool) {
-    imageConverterPool.terminate();
-    imageConverterPool = null;
-  }
+  // Kept as a compatibility no-op for callers from the previous converter path.
 }
 
 const MAX_BROWSER_REDIRECTS = 5;

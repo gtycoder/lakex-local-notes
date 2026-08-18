@@ -6,3 +6,8 @@ dist-electron
 release
 
 test-node-abi
+
+# Local development credentials (never commit real values)
+.env
+.env.*
+!.env.example

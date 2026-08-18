@@ -1,7 +1,8 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Folder, FileText, RotateCcw, Trash2, Trash, X } from "lucide-react";
 import { native } from "../lib/native";
+import { createRequestVersion } from "../lib/requestVersion";
 import { useFloatingDialog } from "./useFloatingDialog";
 
 export interface TrashItem {
@@ -23,27 +24,52 @@ export function TrashPanel({ open, onClose, onRestored }: {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const floating = useFloatingDialog({ initialSize: { w: 900, h: 600 }, minSize: { w: 660, h: 420 } });
+  const docsVersionRef = useRef(createRequestVersion());
+  const quickVersionRef = useRef(createRequestVersion());
 
   const refresh = async () => {
+    const version = docsVersionRef.current.next();
     setLoading(true);
     setError(null);
     try {
-      setItems(await native.listTrash());
+      const nextItems = await native.listTrash();
+      if (docsVersionRef.current.isCurrent(version)) setItems(nextItems);
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      if (docsVersionRef.current.isCurrent(version)) setError(e instanceof Error ? e.message : String(e));
     } finally {
-      setLoading(false);
+      if (docsVersionRef.current.isCurrent(version)) setLoading(false);
     }
   };
 
   const refreshQuick = async () => {
-    try { setQuickItems(await native.listQuickNoteTrash()); }
-    catch (e) { setError(e instanceof Error ? e.message : String(e)); }
+    const version = quickVersionRef.current.next();
+    try {
+      const nextItems = await native.listQuickNoteTrash();
+      if (quickVersionRef.current.isCurrent(version)) setQuickItems(nextItems);
+    } catch (e) {
+      if (quickVersionRef.current.isCurrent(version)) setError(e instanceof Error ? e.message : String(e));
+    }
   };
 
   useEffect(() => {
+    docsVersionRef.current.invalidate();
+    quickVersionRef.current.invalidate();
     if (open) { void refresh(); void refreshQuick(); }
+    return () => {
+      docsVersionRef.current.invalidate();
+      quickVersionRef.current.invalidate();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && !floating.interactionRef.current) onClose();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [open, onClose, floating.interactionRef]);
 
   const restoreQuick = async (id: string) => {
     try { await native.restoreQuickNote(id); await refreshQuick(); }

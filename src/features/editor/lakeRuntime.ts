@@ -305,7 +305,14 @@ export function createLakeDocument(
       // 在 Slash 新建代码块时可能只留下空壳而没有可编辑实例。
       codemirrorURL: "./vendor/cdn/as/g/larkgroup/lake-codemirror/7.1.3/CodeMirror.js",
     },
-    math: { KaTexURL: ["./vendor/lakex-doc/katex.min.js", "https://gw.alipayobjects.com/os/lib/katex/0.16.8/dist/contrib/mhchem.min.js"] },
+    math: {
+      // 统一使用随应用镜像的 KaTeX 0.16.8 与 mhchem，避免外链脚本加载顺序/全局
+      // `katex.__defineMacro` 不存在导致包含公式或思维导图文档出现运行时异常。
+      KaTexURL: [
+        "./vendor/cdn/os/lib/katex/0.16.8/dist/katex.min.js",
+        "./vendor/cdn/os/lib/katex/0.16.8/dist/contrib/mhchem.min.js",
+      ],
+    },
     image: {
       createUploadPromise: (request: unknown) => uploadLakeResource(request, noteId),
       // 本地资源服务器 URL 必须排除，否则 Lake 每次 setDocument 都会重新下载并上传本地图片
@@ -664,47 +671,85 @@ function setupVisibleCardHydration(
  * 返回清理函数。 */
 function setupCardToolbarHoverBridge(host: HTMLElement): () => void {
   let lastCard: Element | null = null;
+  let pointerInToolbar = false;
+  let hideTimer: number | undefined;
+  const HIDE_GRACE_MS = 650;
   const CARD_SELECTOR = "ne-card, ne-table-hole, ne-alert-hole, ne-container-hole";
   const isToolbarContext = (el: Element | null): boolean =>
-    !!el?.closest?.(".ne-card-toolbar, .ne-ui-boundary-popover, ne-overlay-tmp, [data-event-boundary=\"overlay\"]");
-
-  // 记录指针最近停留的卡片（= 当前工具栏的关联卡片）
-  const onMouseOver = (event: MouseEvent): void => {
-    const target = event.target as Element | null;
-    if (!target || !host.contains(target)) return;
-    const card = target.closest?.(CARD_SELECTOR);
-    if (card) lastCard = card;
+    !!el?.closest?.(
+      ".ne-card-toolbar, .ne-ui-toolbar, .ne-ui-boundary-popover, ne-overlay-tmp, .ant-dropdown, .ant-select-dropdown, .ant-popover, [data-event-boundary=\"overlay\"]",
+    );
+  const clearHide = (): void => {
+    if (hideTimer !== undefined) {
+      window.clearTimeout(hideTimer);
+      hideTimer = undefined;
+    }
+  };
+  const visibleToolbarExists = (): boolean => {
+    const selectors = ".ne-card-toolbar, .ne-ui-toolbar, .ne-ui-boundary-popover, ne-overlay-tmp, .ant-dropdown, .ant-select-dropdown, .ant-popover";
+    return [...document.querySelectorAll<HTMLElement>(selectors)].some((el) => {
+      const rect = el.getBoundingClientRect();
+      const style = getComputedStyle(el);
+      return rect.width > 0 && rect.height > 0 && style.display !== "none" && style.visibility !== "hidden";
+    });
+  };
+  const fireLeave = (card: Element): void => {
+    const fire = (el: Element): void => {
+      el.dispatchEvent(new MouseEvent("mouseleave", { bubbles: false, cancelable: true, view: window }));
+    };
+    fire(card);
+    card.querySelectorAll?.("ne-table-wrap").forEach(fire);
+  };
+  const scheduleHide = (card: Element | null): void => {
+    if (!card?.isConnected) return;
+    clearHide();
+    hideTimer = window.setTimeout(() => {
+      hideTimer = undefined;
+      // The pointer may cross a small physical gap between a card and its
+      // toolbar. Keep Lake alive during the grace period; only synthesize the
+      // normal leave after the pointer stayed outside both contexts.
+      if (card.matches(":hover") || pointerInToolbar) return;
+      fireLeave(card);
+      if (lastCard === card) lastCard = null;
+    }, HIDE_GRACE_MS);
   };
 
-  // 拦截：卡片 → 工具栏上下文的真实 mouseleave。
-  // 多 tab 隔离：document 捕获监听对所有实例生效，必须用 host.contains 限定只处理
-  // 本编辑器容器内的卡片事件——否则其他 tab 的实例也会拦截/干预本 tab 的工具栏行为
-  const onMouseLeaveCapture = (event: MouseEvent): void => {
-    if (!event.isTrusted) return;
+  const onMouseOver = (event: MouseEvent): void => {
     const target = event.target as Element | null;
-    if (!target || !host.contains(target)) return;
-    if (target?.closest?.(CARD_SELECTOR) && isToolbarContext(event.relatedTarget as Element | null)) {
-      event.stopImmediatePropagation();
+    if (!target) return;
+    if (isToolbarContext(target)) {
+      pointerInToolbar = true;
+      clearHide();
+      return;
+    }
+    pointerInToolbar = false;
+    if (!host.contains(target)) return;
+    const card = target.closest?.(CARD_SELECTOR);
+    if (card) {
+      lastCard = card;
+      clearHide();
     }
   };
 
-  // 离开工具栏上下文（含移回卡片/移到外部）：补发合成 mouseleave 触发正常隐藏。
-  // 注意：Lake 的卡片工具栏监听绑在卡片的 _rootNode 上——表格的 _rootNode 是
-  // ne-table-wrap（ne-table-hole 的子孙，而非 hole 本身），所以对跟踪到的卡片
-  // 及其 ne-table-wrap 子孙都补发，保证命中监听元素。
+  // Keep Lake's own hide timer from starting while the pointer is crossing the
+  // gap toward a toolbar. The delayed synthetic leave below handles the true
+  // exit path and is intentionally tolerant of a few hundred ms of travel.
+  const onMouseLeaveCapture = (event: MouseEvent): void => {
+    if (!event.isTrusted) return;
+    const target = event.target as Element | null;
+    const card = target?.closest?.(CARD_SELECTOR);
+    if (!target || !card || !host.contains(target) || !visibleToolbarExists()) return;
+    event.stopImmediatePropagation();
+    scheduleHide(card);
+  };
+
   const onMouseOut = (event: MouseEvent): void => {
     const target = event.target as Element | null;
     if (!target || !isToolbarContext(target)) return;
     const related = event.relatedTarget as Element | null;
-    if (isToolbarContext(related)) return; // 工具栏内部移动（如进下拉菜单）
-    if (lastCard?.isConnected) {
-      const fire = (el: Element): void => {
-        el.dispatchEvent(new MouseEvent("mouseleave", { bubbles: false, cancelable: true, view: window }));
-      };
-      fire(lastCard);
-      lastCard.querySelectorAll?.("ne-table-wrap").forEach(fire);
-    }
-    lastCard = null;
+    if (isToolbarContext(related)) return;
+    pointerInToolbar = false;
+    scheduleHide(lastCard);
   };
 
   document.addEventListener("mouseover", onMouseOver, true);
@@ -714,6 +759,8 @@ function setupCardToolbarHoverBridge(host: HTMLElement): () => void {
     document.removeEventListener("mouseover", onMouseOver, true);
     document.removeEventListener("mouseleave", onMouseLeaveCapture, true);
     document.removeEventListener("mouseout", onMouseOut, true);
+    clearHide();
+    pointerInToolbar = false;
     lastCard = null;
   };
 }

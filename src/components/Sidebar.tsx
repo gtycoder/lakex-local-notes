@@ -1,9 +1,10 @@
-import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent } from "react";
 import { createPortal } from "react-dom";
 import { BookOpen, ChevronRight, ClipboardCopy, FilePlus2, FileText, FoldVertical, Folder, FolderPlus, History, Link2, LocateFixed, Package, Pencil, Plus, Search, SmilePlus, Trash2, X } from "lucide-react";
 import { LAKE_EMOJIS } from "../lib/lakeEmojis";
 import { LAKE_EMOJI_GROUPS } from "../lib/lakeEmojiGroups";
 import type { TreeNode, TreeNodeType } from "../lib/types";
+import { buildTreeIndex, type TreeIndex } from "../lib/treeIndex";
 
 type CreateKind = "notebook" | "group" | "note";
 type DropPosition = "before" | "inside" | "after";
@@ -59,7 +60,8 @@ export function Sidebar(props: SidebarProps) {
   const suppressClickRef = useRef(false);
   const prevNodeIds = useRef<Set<string>>(new Set());
   const query = props.search.trim().toLocaleLowerCase();
-  const roots = childrenOf(props.nodes, null, query);
+  const treeIndex = useMemo(() => buildTreeIndex(props.nodes, query), [props.nodes, query]);
+  const roots = (treeIndex.childrenByParent.get(null) ?? []).filter((node) => treeIndex.visibleIds.has(node.id));
 
   const rubberBandWidth = (width: number) => {
     if (width < props.minWidth) return props.minWidth - (props.minWidth - width) * 0.16;
@@ -203,33 +205,33 @@ export function Sidebar(props: SidebarProps) {
       if (parentId) setExpanded((current) => expandAncestors(current, props.nodes, parentId));
     }
   };
-  const submitCreate = () => {
+  const submitCreate = useCallback(() => {
     const title = newTitle.trim();
     if (!pendingCreate || !title) return;
     props.onCreate(pendingCreate.kind, pendingCreate.parentId, title);
     setPendingCreate(null);
     setNewTitle("");
-  };
+  }, [newTitle, pendingCreate, props.onCreate]);
 
-  const submitRename = () => {
+  const submitRename = useCallback(() => {
     const title = editingTitle.trim();
     if (editingId && title) props.onRename(editingId, title);
     setEditingId(null);
     setEditingTitle("");
-  };
+  }, [editingId, editingTitle, props.onRename]);
 
-  const beginRename = (node: TreeNode) => {
+  const beginRename = useCallback((node: TreeNode) => {
     setEditingId(node.id);
     setEditingTitle(node.title);
-  };
+  }, []);
 
   // 右键菜单：contextmenu 事件在桌面=右键、移动端=长按自动触发，无需手写长按定时器。
-  const openContext = (event: React.MouseEvent, node: TreeNode) => {
+  const openContext = useCallback((event: React.MouseEvent, node: TreeNode) => {
     event.preventDefault();
     event.stopPropagation();
     setContextId(node.id);
     setContextMenu({ id: node.id, x: event.clientX, y: event.clientY });
-  };
+  }, []);
 
   const contextNode = props.nodes.find((node) => node.id === contextMenu?.id) ?? null;
 
@@ -269,11 +271,48 @@ export function Sidebar(props: SidebarProps) {
   };
 
   // depth 不再用于定位：缩进由 .tree-children margin-left + border-left 实现
-  const createField = (_depth: number) => pendingCreate && <div className="inline-create" style={{ marginLeft: 8 }}>
+  const createField = useCallback((_depth: number) => pendingCreate && <div className="inline-create" style={{ marginLeft: 8 }}>
     {pendingCreate.kind === "notebook" ? <BookOpen size={14} /> : <FolderPlus size={14} />}
     <input autoFocus aria-label={pendingCreate.kind === "notebook" ? "笔记本名称" : "分组名称"} value={newTitle} onChange={(event) => setNewTitle(event.target.value)} onFocus={(event) => event.currentTarget.select()} onKeyDown={(event) => { if (event.key === "Enter") submitCreate(); if (event.key === "Escape") setPendingCreate(null); }} />
     <button onClick={submitCreate}>创建</button>
-  </div>;
+  </div>, [newTitle, pendingCreate, submitCreate]);
+
+  const beginTreeDrag = useCallback((event: React.PointerEvent, id: string) => {
+    if (event.button !== 0 || (event.target as HTMLElement).closest("input")) return;
+    dragRef.current = { id, startX: event.clientX, startY: event.clientY, moved: false };
+    setDraggingId(id);
+  }, []);
+  const toggleNode = useCallback((id: string) => setExpanded((current) => toggleSet(current, id)), []);
+  const setContextNode = useCallback((id: string) => setContextId(id), []);
+  const consumeSuppressedClick = useCallback(() => suppressClickRef.current, []);
+  const setTreeIcon = useCallback((node: TreeNode, event: React.MouseEvent) => {
+    setIconPicker({ node, x: event.clientX, y: event.clientY });
+  }, []);
+  const cancelRename = useCallback(() => setEditingId(null), []);
+  const treeRowProps = {
+    treeIndex,
+    query,
+    activeId: props.activeId,
+    contextId: context?.id ?? null,
+    expanded,
+    draggingId,
+    dropTarget,
+    pendingCreate,
+    editingId,
+    editingTitle,
+    createField,
+    onEditingTitle: setEditingTitle,
+    onSubmitRename: submitRename,
+    onCancelRename: cancelRename,
+    onBeginRename: beginRename,
+    onPointerDown: beginTreeDrag,
+    consumeSuppressedClick,
+    onContext: setContextNode,
+    onContextMenu: openContext,
+    onToggle: toggleNode,
+    onSelect: props.onSelect,
+    onIconClick: setTreeIcon,
+  };
 
   return (
     <aside className={`sidebar sidebar-${props.mode} ${props.mobileOpen ? "sidebar-open" : ""}`} onPointerEnter={props.onPreviewEnter} onPointerLeave={props.onPreviewLeave}>
@@ -297,7 +336,7 @@ export function Sidebar(props: SidebarProps) {
       </div>
       <nav className="note-list tree-list" ref={treeRef}>
         {pendingCreate?.kind === "notebook" && createField(0)}
-        {roots.map((node) => <TreeRow key={node.id} node={node} depth={0} nodes={props.nodes} query={query} activeId={props.activeId} contextId={context?.id ?? null} expanded={expanded} draggingId={draggingId} dropTarget={dropTarget} pendingCreate={pendingCreate} editingId={editingId} editingTitle={editingTitle} createField={createField} onEditingTitle={setEditingTitle} onSubmitRename={submitRename} onCancelRename={() => setEditingId(null)} onBeginRename={beginRename} onPointerDown={(event, id) => { if (event.button !== 0 || (event.target as HTMLElement).closest("input")) return; dragRef.current = { id, startX: event.clientX, startY: event.clientY, moved: false }; setDraggingId(id); }} consumeSuppressedClick={() => suppressClickRef.current} onContext={setContextId} onContextMenu={openContext} onToggle={(id) => setExpanded((current) => toggleSet(current, id))} onSelect={props.onSelect} onIconClick={(node, event) => setIconPicker({ node, x: event.clientX, y: event.clientY })} />)}
+        {roots.map((node) => <TreeRow key={node.id} node={node} depth={0} {...treeRowProps} />)}
         {roots.length === 0 && <div className="empty-list">点击 + 新建第一个笔记本</div>}
       </nav>
       {contextMenu && contextNode && <ContextMenu node={contextNode} x={contextMenu.x} y={contextMenu.y} onNewChild={menuNewChild} onRename={menuRename} onDelete={menuDelete} onCopyMarkdown={() => props.onCopyMarkdown(contextNode)} onExportAs={(format) => props.onExportAs(contextNode, format)} onCopyPaths={() => props.onCopyPaths(contextNode)} onSetIconRequest={() => setIconPicker({ node: contextNode, x: contextMenu!.x, y: contextMenu!.y })} onOpenHistory={() => props.onOpenHistory(contextNode)} onClose={() => setContextMenu(null)} />}
@@ -310,7 +349,7 @@ export function Sidebar(props: SidebarProps) {
 interface TreeRowProps {
   node: TreeNode;
   depth: number;
-  nodes: TreeNode[];
+  treeIndex: TreeIndex;
   query: string;
   activeId: string | null;
   contextId: string | null;
@@ -334,8 +373,8 @@ interface TreeRowProps {
   onIconClick?: (node: TreeNode, event: React.MouseEvent) => void;
 }
 
-function TreeRow(props: TreeRowProps) {
-  const children = childrenOf(props.nodes, props.node.id, props.query);
+const TreeRow = memo(function TreeRow(props: TreeRowProps) {
+  const children = (props.treeIndex.childrenByParent.get(props.node.id) ?? []).filter((node) => props.treeIndex.visibleIds.has(node.id));
   const expandable = children.length > 0 || props.node.nodeType !== "note";
   const open = props.expanded.has(props.node.id) || Boolean(props.query);
   const icon = nodeIcon(props.node.nodeType, open, props.node.icon);
@@ -373,22 +412,13 @@ function TreeRow(props: TreeRowProps) {
       {children.map((child) => <TreeRow key={child.id} {...props} node={child} depth={props.depth + 1} />)}
     </div>}
   </div>;
-}
+});
 
 function nodeIcon(type: TreeNodeType, open: boolean, customIcon?: string | null) {
   if (customIcon) return <span className="tree-node-custom-icon">{customIcon}</span>;
   if (type === "notebook") return <BookOpen size={17} />;
   if (type === "group") return <Folder size={16} fill={open ? "currentColor" : "none"} />;
   return <FileText size={16} />;
-}
-
-function childrenOf(nodes: TreeNode[], parentId: string | null, query: string): TreeNode[] {
-  return nodes.filter((node) => node.parentId === parentId).filter((node) => matches(node, nodes, query)).sort((a, b) => a.sortOrder - b.sortOrder);
-}
-
-function matches(node: TreeNode, nodes: TreeNode[], query: string): boolean {
-  if (!query || node.title.toLocaleLowerCase().includes(query)) return true;
-  return nodes.some((child) => child.parentId === node.id && matches(child, nodes, query));
 }
 
 function toggleSet(current: Set<string>, id: string): Set<string> {

@@ -20,7 +20,7 @@
     border-right: 0 !important;
     border-left: 0 !important;
   }
-  /* 大纲轨：图标位置不动（不额外加 padding-top——大纲侧栏本身已从顶栏下方开始） */
+  /* 大纲轨：不额外加 padding-top——大纲侧栏本身已从顶栏下方开始；视觉图标由产品要求隐藏。 */
   .outline-sidebar__rail {
     margin-top: 0 !important;
     padding-top: 0 !important;
@@ -326,4 +326,11 @@
 .protyle-breadcrumb__more-btn:hover {
   color: var(--b3-theme-on-background);
   background: var(--b3-list-hover);
+}
+
+/* Portal 菜单脱离 tab-bar 后，必须显式声明为可交互区；否则 macOS 无边框窗口
+ * 可能把与侧栏标题拖拽区重叠的菜单当作窗口拖动命中。 */
+.top-menu {
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
 }

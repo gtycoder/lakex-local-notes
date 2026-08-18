@@ -35,7 +35,15 @@
 @media (prefers-reduced-motion: reduce) {
   .read-progress,
   .outline-item,
-  .quick-note-card {
+  .quick-note-card,
+  .sync-toast,
+  .sync-toast-bar.indeterminate,
+  .toolbar__sync.syncing svg,
+  .spin {
     animation: none !important;
+  }
+
+  .sync-toast-bar {
+    transition: none !important;
   }
 }

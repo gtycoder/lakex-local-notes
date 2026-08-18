@@ -14,7 +14,7 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@aws-sdk/client-s3": "^3.1101.0",
+    "@aws-sdk/client-s3": "^3.1111.0",
     "better-sqlite3": "^13.0.3",
     "electron-log": "^5.4.4",
     "lakex-drawnix": "^0.1.0",
@@ -41,7 +41,7 @@
     "jsdom": "^30.0.1",
     "sass": "^1.102.0",
     "typescript": "5.9.3",
-    "vite": "latest",
+    "vite": "^8.2.1",
     "vite-plugin-electron": "^0.28.0",
     "vitest": "latest",
     "wait-on": "^8.0.0"

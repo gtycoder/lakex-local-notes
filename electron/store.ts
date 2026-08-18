@@ -4,65 +4,40 @@ import path from "node:path";
 import crypto from "node:crypto";
 import zlib from "node:zlib";
 import os from "node:os";
-import { net, safeStorage } from "electron";
+import { safeStorage } from "electron";
 import { ASSET_PORT } from "./assetServer.js";
 import { mdToHtml, wrapHtmlPage } from "./mdToHtml.js";
 import { lakeHtmlToMarkdown, lakeHtmlToPlain } from "./lakeCaches.js";
 import { assertSafeRemoteHost, SsrfError } from "./ssrf.js";
 import { log } from "./logger.js";
+import { AppError } from "./storeErrors.js";
+import { extractAssetRefs, isSafePathSegment, sanitizeFileName, selectHistoryDrops } from "./storeUtils.js";
+import { readNoteDigest, type NoteDigest } from "./storeQueries.js";
+import { SearchRepository, type SearchResult } from "./searchRepository.js";
+import { HistoryRepository, type HistorySnapshotPreview, type HistorySnapshotSummary } from "./historyRepository.js";
+import { TrashRepository, type TrashItem, type TrashReminderItem } from "./trashRepository.js";
+import { AssetRepository, type OrphanAsset, type OrphanAssetRow } from "./assetRepository.js";
+import { NoteQueries, type NoteSummary, type SummaryRow, type SyncFolder, type SyncNote, type TreeNode, type TreeNodeRow } from "./noteQueries.js";
+import { NoteMetadataRepository } from "./noteMetadataRepository.js";
+import { NoteContentRepository, type NoteCacheInput } from "./noteContentRepository.js";
+import { mimeTypeForFilename } from "./imageUtils.js";
+import { ResourceRepository } from "./resourceRepository.js";
+import { RemoteImportRepository } from "./remoteImportRepository.js";
+import { MAX_IMAGE_BYTES, MAX_IMAGE_PIXELS } from "./storeLimits.js";
+import type { ResourceUploadOutput } from "./storeTypes.js";
+
+export { ASSET_NAME_RE, extractAssetRefs, isoWeekKey, selectHistoryDrops, sanitizeFileName } from "./storeUtils.js";
 
 const DEFAULT_WORKSPACE_ID = "default";
 const DEFAULT_NOTEBOOK_ID = "notebook-personal";
 /** 隐藏回收站笔记本（固定 ID，每端本地初始化、不同步 folder；软删 = 移入此处）。 */
 export const TRASH_NOTEBOOK_ID = "notebook-trash";
 
-/**
- * 从 Lake 正文（.lake HTML）提取引用的资源文件名。
- * Lake 序列化图片时把 URL 百分号编码嵌进 data: URL，但文件名
- * {13位时间戳}_{8位随机}.ext 只含字母数字/下划线/点，编码后原样保留。
- * 文件名全局唯一（时间戳+随机），按笔记目录隔离，因此匹配到的即为该笔记引用的资源。
- * 历史快照 refs_json 与孤儿判定共用此工具。
- */
-export const ASSET_NAME_RE = /\d{13}_[0-9a-f]{8}\.(?:png|jpg|jpeg|gif|webp|avif)/g;
-export function extractAssetRefs(content: string): Set<string> {
-  return new Set([...content.matchAll(ASSET_NAME_RE)].map((m) => m[0]));
-}
-export const MAX_IMAGE_BYTES = 25 * 1024 * 1024;
-/** 解码后像素上限（50MP，如 8000x6250）：压缩图可小、像素可极大（解压炸弹），
- * 上传/下载时用 sharp 读头部尺寸拦截，防渲染层/资产服务解码时 OOM。 */
-export const MAX_IMAGE_PIXELS = 50_000_000;
-// 下载外部图片的超时与请求头（移植自 Tauri 版 Rust 后端，见 lake-notes-tauri-poc/src-tauri/src/store.rs）
-const DOWNLOAD_TIMEOUT_MS = 30_000;
-// 知乎等 CDN 的防盗链 403 有波动性，重试可显著提高成功率
-const DOWNLOAD_MAX_ATTEMPTS = 3;
-const DOWNLOAD_MAX_REDIRECTS = 5;
-const DOWNLOAD_USER_AGENT =
-  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36";
+export { MAX_IMAGE_BYTES, MAX_IMAGE_PIXELS } from "./storeLimits.js";
 
-export class AppError extends Error {
-  constructor(public kind: "NotFound" | "InvalidInput" | "Internal", message: string) {
-    super(message);
-  }
-}
+export { AppError } from "./storeErrors.js";
 
-interface NoteSummary {
-  id: string; title: string; parentId: string | null; sortOrder: number;
-  updatedAt: string; syncState: string; isConflict: boolean;
-  isLocked?: boolean;
-  lockedAt?: string | null;
-}
 interface NoteDocument extends NoteSummary { content: string; }
-interface TreeNode {
-  id: string; workspaceId: string; parentId: string | null; nodeType: string;
-  title: string; noteFileId: string | null; sortOrder: number; createdAt: string;
-  updatedAt: string; syncState: string; isConflict: boolean; icon: string | null;
-}
-interface ResourceUploadOutput {
-  url: string; resourceRef: string; filename: string; mimeType: string; size: number;
-}
-interface OrphanAsset {
-  id: number; noteId: string; filename: string; filePath: string; size: number; mimeType: string; detectedAt: string;
-}
 interface S3Settings {
   endpoint: string; region: string; bucket: string; prefix: string;
   accessKeyId: string; secretAccessKey: string; forcePathStyle: boolean;
@@ -104,15 +79,6 @@ export interface HistoryCleanupResult {
   deletedSnapshots: number;
   freedBytes: number;
 }
-interface SyncNote {
-  id: string; title: string; parentId: string | null; sortOrder: number; updatedAt: string;
-  /** 仅本地 listNotesForSync 提供；远端导入/元数据字面量可省略（视为非 synced，走全量路径）。 */
-  syncState?: string; isConflict: boolean;
-  isLocked?: boolean; lockedAt?: string | null; icon?: string | null;
-  /** 回收站条目：进入回收站时间（自动过期基准）与删除前父目录（恢复位置）。 */
-  trashedAt?: string | null;
-  deletedFromParentId?: string | null;
-}
 interface RemoteAsset {
   filename: string; size: number; hash: string;
 }
@@ -131,59 +97,6 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-/** ISO 周年（周一起始）分桶键：用于「每周×30 天」分层保留。 */
-export function isoWeekKey(t: number): string {
-  const d = new Date(t);
-  const date = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
-  const day = date.getUTCDay() || 7; // 1(周一)..7(周日)
-  date.setUTCDate(date.getUTCDate() + 4 - day); // 移到该周周四
-  const yearStart = new Date(Date.UTC(date.getUTCFullYear(), 0, 1));
-  const week = Math.ceil(((date.getTime() - yearStart.getTime()) / 86400000 + 1) / 7);
-  return `${date.getUTCFullYear()}-W${String(week).padStart(2, "0")}`;
-}
-
-/** 历史分层保留判定（M8）：近 24h 全留 / 每日×7 天 / 每周×30 天 / 硬上限 maxSnapshots。
- * 返回应删除的 created_at 集合。纯函数，便于单测。 */
-export function selectHistoryDrops(createdAtList: string[], cfg: { maxSnapshots: number; retentionDays: number }): Set<string> {
-  const now = Date.now();
-  const recent = 24 * 3600 * 1000;
-  const daily = 7 * 24 * 3600 * 1000;
-  const weekly = 30 * 24 * 3600 * 1000;
-  const cutoff = now - cfg.retentionDays * 24 * 3600 * 1000;
-  const sorted = [...createdAtList].sort();
-  const keep = new Set<string>();
-  const dayLatest = new Map<string, string>();
-  const weekLatest = new Map<string, string>();
-
-  for (const ts of sorted) {
-    const t = Date.parse(ts);
-    if (t >= now - recent) { keep.add(ts); continue; }
-    if (t >= now - daily) {
-      const day = new Date(t).toISOString().slice(0, 10);
-      const prev = dayLatest.get(day);
-      if (prev === undefined || ts > prev) { if (prev !== undefined) keep.delete(prev); dayLatest.set(day, ts); keep.add(ts); }
-      continue;
-    }
-    if (t >= now - weekly) {
-      const week = isoWeekKey(t);
-      const prev = weekLatest.get(week);
-      if (prev === undefined || ts > prev) { if (prev !== undefined) keep.delete(prev); weekLatest.set(week, ts); keep.add(ts); }
-      continue;
-    }
-    // 超出分层窗口：不主动 keep（是否兜底由 hard cap 决定）
-  }
-
-  // 硬上限：最多保留最新 maxSnapshots 份（0/负数视为至少 1，避免误删全部）
-  const cap = Math.max(1, cfg.maxSnapshots);
-  const capped = [...keep].sort().slice(-cap);
-  const finalKeep = new Set(capped);
-  const drops = new Set<string>();
-  for (const ts of sorted) {
-    if (!finalKeep.has(ts) || Date.parse(ts) < cutoff) drops.add(ts);
-  }
-  return drops;
-}
-
 function uuid(): string {
   return crypto.randomUUID();
 }
@@ -194,6 +107,15 @@ export class Store {
   private noteAssetsDir: string;
   /** 15 分钟自动快照的 dirty 集合（saveNote 落盘时标记，flush 后清空，内存态） */
   private historyDirty = new Set<string>();
+  private searchRepository: SearchRepository;
+  private historyRepository: HistoryRepository;
+  private trashRepository: TrashRepository;
+  private assetRepository: AssetRepository;
+  private noteQueries: NoteQueries;
+  private noteMetadata: NoteMetadataRepository;
+  private noteContent: NoteContentRepository;
+  private resourceRepository: ResourceRepository;
+  private remoteImport: RemoteImportRepository;
 
   constructor(root: string) {
     this.root = root;
@@ -204,9 +126,63 @@ export class Store {
     this.db.pragma("journal_mode = WAL");
     this.db.pragma("foreign_keys = ON");
     this.migrate();
+    this.historyRepository = new HistoryRepository(this.db, this.root);
+    this.trashRepository = new TrashRepository(this.db, TRASH_NOTEBOOK_ID);
+    this.noteQueries = new NoteQueries(this.db, DEFAULT_WORKSPACE_ID, TRASH_NOTEBOOK_ID);
+    this.noteMetadata = new NoteMetadataRepository({
+      db: this.db,
+      workspaceId: DEFAULT_WORKSPACE_ID,
+      trashNotebookId: TRASH_NOTEBOOK_ID,
+      uuid,
+      nowIso,
+      nextSortOrder: (parentId) => this.nextSortOrder(parentId),
+      ensureParent: (parentId) => this.ensureParent(parentId),
+      assertParentCompatible: (parentId, childType) => this.assertParentCompatible(parentId, childType),
+      descendantIds: (id) => this.descendantIds(id),
+      readTreeNode: (id) => this.readTreeNode(id),
+      revivePurgedIfNeeded: (id) => this.revivePurgedIfNeeded(id),
+      upsertSearch: (noteId, title, body) => this.searchRepository.upsert(noteId, title, body),
+    });
+    this.noteContent = new NoteContentRepository({
+      db: this.db,
+      notePathFor: (noteId) => this.notePath(noteId),
+      atomicWrite: (filePath, content) => this.atomicWrite(filePath, content),
+      revivePurgedIfNeeded: (noteId) => this.revivePurgedIfNeeded(noteId),
+      createHistorySnapshot: (noteId, content, force) => this.createHistorySnapshot(noteId, content, force),
+      upsertSearch: (noteId, title, body) => this.searchRepository.upsert(noteId, title, body),
+      detectOrphans: (noteId, content) => this.detectOrphans(noteId, content),
+      markHistoryDirty: (noteId) => this.markHistoryDirty(noteId),
+    });
+    this.resourceRepository = new ResourceRepository({
+      noteAssetsDirFor: (noteId) => this.noteAssetsDirFor(noteId),
+      assetUrl: (noteId, filename) => this.assetUrl(noteId, filename),
+      registerOrphan: (noteId, filename, size, mimeType) => this.registerOrphan(noteId, filename, size, mimeType),
+    });
+    this.remoteImport = new RemoteImportRepository({
+      db: this.db,
+      workspaceId: DEFAULT_WORKSPACE_ID,
+      trashNotebookId: TRASH_NOTEBOOK_ID,
+      notePathFor: (noteId) => this.notePath(noteId),
+      assetDirFor: (noteId) => this.noteAssetsDirFor(noteId),
+      isSafeSegment: isSafePathSegment,
+      detectOrphans: (noteId, content) => this.detectOrphans(noteId, content),
+      ensureNoteCaches: (noteId, content) => this.ensureNoteCaches(noteId, content),
+      logImport: (noteId, bytes, assetCount, startedAt) => log.store.info(`[perf] importRemoteNote ${noteId} ${Date.now() - startedAt}ms (lake=${bytes}B, assets=${assetCount})`),
+    });
+    this.assetRepository = new AssetRepository({
+      db: this.db,
+      notePathFor: (noteId) => this.notePath(noteId),
+      extractAssetRefs,
+    });
+    this.searchRepository = new SearchRepository({
+      db: this.db,
+      trashNotebookId: TRASH_NOTEBOOK_ID,
+      ensureNoteCaches: (noteId) => this.ensureNoteCaches(noteId),
+      readNoteCaches: (noteId) => this.readNoteCaches(noteId),
+    });
     this.seed();
     // M2：全量重建全文索引（幂等；文档量小，启动开销可忽略）
-    try { this.rebuildSearchIndex(); } catch (error) {
+    try { this.searchRepository.rebuild(); } catch (error) {
       console.warn("[store] 全文索引重建失败（不影响使用）:", error);
     }
   }
@@ -417,22 +393,10 @@ export class Store {
     if (!parent) throw new AppError("NotFound", `父节点不存在: ${parentId}`);
   }
 
-  private mapSummary(row: any): NoteSummary {
-    return { id: row.id, title: row.title, parentId: row.parent_id, sortOrder: row.sort_order,
-      updatedAt: row.updated_at, syncState: row.sync_state, isConflict: !!row.is_conflict,
-      isLocked: !!row.is_locked, lockedAt: row.locked_at ?? null };
-  }
-
-  private mapTreeNode(row: any): TreeNode {
-    return { id: row.id, workspaceId: row.workspace_id, parentId: row.parent_id, nodeType: row.node_type,
-      title: row.title, noteFileId: row.note_file_id, sortOrder: row.sort_order, createdAt: row.created_at,
-      updatedAt: row.updated_at, syncState: row.sync_state, isConflict: !!row.is_conflict, icon: row.icon ?? null };
-  }
-
   bootstrap() {
     const notes = this.db.prepare(
       "SELECT id,title,parent_id,sort_order,updated_at,sync_state,is_conflict,is_locked,locked_at FROM notes WHERE deleted_at IS NULL AND parent_id != ? ORDER BY sort_order"
-    ).all(TRASH_NOTEBOOK_ID).map((r) => this.mapSummary(r));
+    ).all(TRASH_NOTEBOOK_ID).map((r) => this.noteQueries.mapSummary(r as SummaryRow));
     const last = this.db.prepare("SELECT value FROM device_state WHERE key='last_opened_note_id'").get() as { value: string } | undefined;
     return {
       workspaceId: DEFAULT_WORKSPACE_ID,
@@ -445,21 +409,13 @@ export class Store {
 
   /** 侧栏树：排除隐藏回收站笔记本及其全部后代（trash 子树只出现在回收站面板）。 */
   listTreeNodes(): TreeNode[] {
-    return this.db.prepare(
-      `WITH RECURSIVE trash_ids(id) AS (
-         SELECT ? FROM tree_nodes WHERE id=?
-         UNION ALL SELECT t.id FROM tree_nodes t JOIN trash_ids ti ON t.parent_id=ti.id
-       )
-       SELECT t.* FROM tree_nodes t
-       WHERE t.workspace_id=? AND t.deleted_at IS NULL AND t.id NOT IN (SELECT id FROM trash_ids)
-       ORDER BY t.sort_order`
-    ).all(TRASH_NOTEBOOK_ID, TRASH_NOTEBOOK_ID, DEFAULT_WORKSPACE_ID).map((r) => this.mapTreeNode(r));
+    return this.noteQueries.listTreeNodes();
   }
 
   private readTreeNode(id: string): TreeNode {
     const row = this.db.prepare("SELECT * FROM tree_nodes WHERE id=? AND deleted_at IS NULL").get(id);
     if (!row) throw new AppError("NotFound", `节点不存在: ${id}`);
-    return this.mapTreeNode(row);
+    return this.noteQueries.mapTreeNode(row as TreeNodeRow);
   }
 
   readNote(id: string): NoteDocument {
@@ -469,19 +425,15 @@ export class Store {
     if (!row) throw new AppError("NotFound", `笔记不存在: ${id}`);
     const content = fs.readFileSync(this.notePath(id), "utf8");
     this.db.prepare("INSERT INTO device_state(key,value) VALUES('last_opened_note_id',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value").run(id);
-    return { ...this.mapSummary(row), content };
+    return { ...this.noteQueries.mapSummary(row as SummaryRow), content };
   }
 
   /** 轻量状态摘要：只读 DB 行（不读正文文件），供渲染进程在同步后判断打开 tab 是否需重载。
    * - 返回 null：笔记已被彻底删除（purge）或从未存在；
    * - deleted=true：软删除（回收站/远端删除墓碑已应用）；
    * - 否则 updatedAt/title 任一变化即代表正文或元数据被远端更新过。 */
-  getNoteDigest(id: string): { id: string; title: string; updatedAt: string; deleted: boolean } | null {
-    const row = this.db.prepare("SELECT id,title,updated_at,parent_id,sync_state FROM notes WHERE id=?").get(id) as
-      { id: string; title: string; updated_at: string; parent_id: string | null; sync_state: string } | undefined;
-    if (!row) return null;
-    // TRASH-NOTEBOOK：deleted = 移入回收站（parentId=trash）或收到他端 purge 被抑制（purged）
-    return { id: row.id, title: row.title, updatedAt: row.updated_at, deleted: row.parent_id === TRASH_NOTEBOOK_ID || row.sync_state === "purged" };
+  getNoteDigest(id: string): NoteDigest | null {
+    return readNoteDigest(this.db, id, TRASH_NOTEBOOK_ID);
   }
 
   createNote(title: string): NoteDocument {
@@ -578,74 +530,19 @@ export class Store {
   }
 
   createNotebook(title: string): TreeNode {
-    const id = uuid();
-    const now = nowIso();
-    const sortOrder = this.nextSortOrder(null);
-    this.db.prepare("INSERT INTO tree_nodes(id,workspace_id,parent_id,node_type,title,note_file_id,sort_order,created_at,updated_at,sync_state,is_conflict) VALUES(?,?,NULL,'notebook',?,NULL,?,?,?,'local',0)")
-      .run(id, DEFAULT_WORKSPACE_ID, title, sortOrder, now, now);
-    return this.readTreeNode(id);
+    return this.noteMetadata.createNotebook(title);
   }
 
   createGroup(parentId: string, title: string): TreeNode {
-    this.ensureParent(parentId);
-    this.assertParentCompatible(parentId, "group");
-    const id = uuid();
-    const now = nowIso();
-    const sortOrder = this.nextSortOrder(parentId);
-    this.db.prepare("INSERT INTO tree_nodes(id,workspace_id,parent_id,node_type,title,note_file_id,sort_order,created_at,updated_at,sync_state,is_conflict) VALUES(?,?,?,'group',?,NULL,?,?,?,'local',0)")
-      .run(id, DEFAULT_WORKSPACE_ID, parentId, title, sortOrder, now, now);
-    return this.readTreeNode(id);
+    return this.noteMetadata.createGroup(parentId, title);
   }
 
   renameTreeNode(id: string, title: string): TreeNode {
-    this.revivePurgedIfNeeded(id);
-    const trimmed = title.trim();
-    if (!trimmed) throw new AppError("InvalidInput", "名称不能为空");
-    const now = nowIso();
-    const tx = this.db.transaction(() => {
-      const changed = this.db.prepare("UPDATE tree_nodes SET title=?,updated_at=?,sync_state='local' WHERE id=? AND deleted_at IS NULL").run(trimmed, now, id).changes;
-      if (changed === 0) throw new AppError("NotFound", `节点不存在: ${id}`);
-      this.db.prepare("UPDATE notes SET title=?,updated_at=?,sync_state='local' WHERE id=(SELECT note_file_id FROM tree_nodes WHERE id=?) AND deleted_at IS NULL").run(trimmed, now, id);
-      // M2：重命名后同步全文索引标题
-      const node = this.db.prepare("SELECT note_file_id FROM tree_nodes WHERE id=?").get(id) as { note_file_id: string | null } | undefined;
-      if (node?.note_file_id) this.upsertFts(node.note_file_id, trimmed, null);
-    });
-    tx();
-    return this.readTreeNode(id);
+    return this.noteMetadata.renameTreeNode(id, title);
   }
 
-  saveNote(id: string, title: string, content: string, caches?: { markdown?: string | null; plain?: string | null }): NoteDocument {
-    const p = this.notePath(id);
-    if (!fs.existsSync(p)) throw new AppError("NotFound", `笔记不存在: ${id}`);
-    // 审计（编辑即恢复）：编辑"他端已 purge、本端保留"的条目 = 隐式恢复（移出回收站 + restore_pending），
-    // 编辑内容作为恢复版上传；先把被删版本留档（否则编辑覆盖后丢失）。
-    if (this.revivePurgedIfNeeded(id)) {
-      try { this.createHistorySnapshot(id, undefined, true); } catch { /* 留档失败不阻断编辑 */ }
-    }
-    const updatedAt = nowIso();
-    const tx = this.db.transaction(() => {
-      if (caches) {
-        // M1 文本缓存：与正文同事务落库，保证缓存与 .lake 一致
-        this.db.prepare("UPDATE notes SET title=?,updated_at=?,sync_state='local',md_cache=?,text_cache=? WHERE id=? AND deleted_at IS NULL")
-          .run(title, updatedAt, caches.markdown ?? null, caches.plain ?? null, id);
-        // M2：同步全文索引（正文用纯文本缓存）
-        this.upsertFts(id, title, caches.plain ?? "");
-      } else {
-        this.db.prepare("UPDATE notes SET title=?,updated_at=?,sync_state='local' WHERE id=? AND deleted_at IS NULL").run(title, updatedAt, id);
-        this.upsertFts(id, title, null);
-      }
-      this.db.prepare("UPDATE tree_nodes SET title=?,updated_at=?,sync_state='local' WHERE note_file_id=? AND deleted_at IS NULL").run(title, updatedAt, id);
-      this.atomicWrite(p, content);
-    });
-    tx();
-    // 审计 #22：孤儿检测是后置维护任务，失败不应让已成功保存的笔记显示"保存失败"
-    try {
-      this.detectOrphans(id, content);
-    } catch (error) {
-      console.warn("[store] 孤儿资源检测失败（不影响保存）:", error);
-    }
-    // 15 分钟自动快照：落盘成功即标记 dirty（U1，dirty 由 saveNote 落盘驱动，与锁状态解耦）
-    this.historyDirty.add(id);
+  saveNote(id: string, title: string, content: string, caches?: NoteCacheInput): NoteDocument {
+    this.noteContent.save(id, title, content, caches);
     return this.readNote(id);
   }
 
@@ -674,7 +571,7 @@ export class Store {
   updateNoteCaches(id: string, markdown: string | null, plain: string | null): void {
     this.db.prepare("UPDATE notes SET md_cache=?, text_cache=? WHERE id=?").run(markdown, plain, id);
     const titleRow = this.db.prepare("SELECT title FROM notes WHERE id=?").get(id) as { title: string } | undefined;
-    this.upsertFts(id, titleRow?.title ?? "", plain ?? "");
+    this.searchRepository.upsert(id, titleRow?.title ?? "", plain ?? "");
   }
 
   /**
@@ -706,69 +603,14 @@ export class Store {
 
   // ---- M2 全文搜索 ----
 
-  /** 同步单条笔记到 FTS 表（body 为空时仅索引标题） */
-  private upsertFts(id: string, title: string, body: string | null): void {
-    this.db.prepare("DELETE FROM notes_fts WHERE note_id=?").run(id);
-    this.db.prepare("INSERT INTO notes_fts(title, body, note_id) VALUES(?,?,?)").run(title, body ?? "", id);
-  }
-
-  /** 全量重建全文索引：所有未删除 note 的标题 + 已有纯文本缓存正文 */
-  /**
-   * 全量重建全文索引（幂等）。对无文本缓存的文档先从磁盘 .lake 兜底生成缓存
-   * （锁定态/同步下载未编辑的文档没有 md_cache/text_cache），再重建 FTS。
-   * 已有缓存不覆盖（保留编辑态 Lake 内核生成的高质量缓存）。
-   */
+  /** Rebuild the full-text index without exposing repository internals to callers. */
   rebuildSearchIndex(): void {
-    this.db.exec("DELETE FROM notes_fts");
-    const rows = this.db.prepare(`
-      WITH RECURSIVE trash_ids(id) AS (
-        SELECT ? FROM tree_nodes WHERE id=?
-        UNION ALL SELECT t.id FROM tree_nodes t JOIN trash_ids ti ON t.parent_id=ti.id
-      )
-      SELECT t.note_file_id AS id, t.title, n.text_cache
-      FROM tree_nodes t LEFT JOIN notes n ON n.id = t.note_file_id
-      WHERE t.node_type = 'note' AND t.deleted_at IS NULL AND t.id NOT IN (SELECT id FROM trash_ids)
-    `).all(TRASH_NOTEBOOK_ID, TRASH_NOTEBOOK_ID) as Array<{ id: string | null; title: string; text_cache: string | null }>;
-    const ins = this.db.prepare("INSERT INTO notes_fts(title, body, note_id) VALUES(?,?,?)");
-    const tx = this.db.transaction(() => {
-      for (const r of rows) {
-        if (!r.id) continue;
-        // 无缓存 → 兜底从磁盘 .lake 生成（幂等；已有缓存不覆盖）
-        if (!r.text_cache) {
-          try { this.ensureNoteCaches(r.id); } catch { /* 兜底失败不阻断重建 */ }
-        }
-        const caches = this.readNoteCaches(r.id);
-        ins.run(r.title, caches.plain ?? "", r.id);
-      }
-    });
-    tx();
+    this.searchRepository.rebuild();
   }
 
-  /**
-   * M2 全文搜索。≥3 字走 FTS5 trigram（中文子串命中 + highlight 高亮）；
-   * 1-2 字 trigram 匹配不到，回退标题 LIKE（文档量小可接受）。
-   */
-  searchNotes(query: string, limit = 30): Array<{ id: string; title: string; snippet: string }> {
-    const q = query.trim();
-    if (!q) return [];
-    if (q.length >= 3) {
-      const match = escapeFtsQuery(q);
-      const rows = this.db.prepare(
-        "SELECT note_id, title, highlight(notes_fts, 1, '<mark>', '</mark>') AS snippet FROM notes_fts WHERE notes_fts MATCH ? ORDER BY rank LIMIT ?"
-      ).all(match, limit) as Array<{ note_id: string; title: string; snippet: string }>;
-      return rows.map((r) => ({ id: r.note_id, title: r.title, snippet: r.snippet ?? "" }));
-    }
-    // 短查询回退：标题包含匹配
-    const rows = this.db.prepare(
-      `WITH RECURSIVE trash_ids(id) AS (
-         SELECT ? FROM tree_nodes WHERE id=?
-         UNION ALL SELECT t.id FROM tree_nodes t JOIN trash_ids ti ON t.parent_id=ti.id
-       )
-       SELECT t.id, t.title, '' AS snippet FROM tree_nodes t
-       WHERE t.node_type='note' AND t.deleted_at IS NULL AND t.id NOT IN (SELECT id FROM trash_ids) AND t.title LIKE ?
-       ORDER BY t.sort_order LIMIT ?`
-    ).all(TRASH_NOTEBOOK_ID, TRASH_NOTEBOOK_ID, `%${q}%`, limit) as Array<{ id: string; title: string; snippet: string }>;
-    return rows.map((r) => ({ id: r.id, title: r.title, snippet: r.snippet ?? "" }));
+  /** Search notes through FTS5, with the existing short-query title fallback. */
+  searchNotes(query: string, limit = 30): SearchResult[] {
+    return this.searchRepository.search(query, limit);
   }
 
   /** M1：返回文档正文/图片目录的绝对路径（供“复制资料路径给本机 AI”） */
@@ -808,7 +650,7 @@ export class Store {
         const file = path.join(this.noteAssetsDir, noteId, filename);
         if (!fs.existsSync(file)) { skipped++; return whole; }
         const bytes = fs.readFileSync(file);
-        const mime = MIME_FROM_EXT[path.extname(filename).toLowerCase()] ?? "application/octet-stream";
+        const mime = mimeTypeForFilename(filename);
         value.src = `data:${mime};base64,${bytes.toString("base64")}`;
         imageCount++;
         return prefix + "data:" + encodeURIComponent(JSON.stringify(value)) + suffixTag;
@@ -994,26 +836,14 @@ export class Store {
     return id;
   }
 
-  /** 列出文档历史快照（新→旧） */
-  listNoteHistory(noteId: string): Array<{ id: number; createdAt: string; size: number; contentHash: string; refCount: number; filePath: string }> {
-    const rows = this.db.prepare(
-      "SELECT id,created_at,size,content_hash,ref_count,file_path FROM note_history WHERE note_id=? ORDER BY created_at DESC"
-    ).all(noteId) as Array<{ id: number; created_at: string; size: number; content_hash: string; ref_count: number; file_path: string }>;
-    return rows.map((r) => ({ id: r.id, createdAt: r.created_at, size: r.size, contentHash: r.content_hash, refCount: r.ref_count, filePath: r.file_path }));
+  /** 列出文档历史快照（新→旧）。 */
+  listNoteHistory(noteId: string): HistorySnapshotSummary[] {
+    return this.historyRepository.listForNote(noteId);
   }
 
-  /** 快照预览：解压历史快照正文 → 纯文本（供 HistoryPanel 预览弹层）。
-   * 返回 null 表示快照不存在或解压失败。 */
-  previewHistorySnapshot(historyId: number): { plain: string; createdAt: string; contentHash: string } | null {
-    const row = this.db.prepare("SELECT note_id,file_path,created_at,content_hash FROM note_history WHERE id=?").get(historyId) as
-      { note_id: string; file_path: string; created_at: string; content_hash: string } | undefined;
-    if (!row) return null;
-    try {
-      const body = this.readHistoryContent(row.file_path);
-      return { plain: lakeHtmlToPlain(body), createdAt: row.created_at, contentHash: row.content_hash };
-    } catch {
-      return null;
-    }
+  /** 快照预览：解压历史快照正文 → 纯文本。 */
+  previewHistorySnapshot(historyId: number): HistorySnapshotPreview | null {
+    return this.historyRepository.preview(historyId);
   }
 
   /** 孤儿文件预览：读取 note-assets/{noteId}/{filename} 内容。
@@ -1119,70 +949,45 @@ export class Store {
     return result;
   }
 
-  /** 历史占用统计（U6/P4：设置面板展示"快照总数 + 占用字节"） */
+  /** 历史占用统计（U6/P4：设置面板展示"快照总数 + 占用字节"）。 */
   getHistoryStats(): { snapshotCount: number; totalBytes: number } {
-    const row = this.db.prepare(
-      "SELECT COUNT(*) AS c, COALESCE(SUM(size),0) AS bytes FROM note_history"
-    ).get() as { c: number; bytes: number };
-    return { snapshotCount: row.c, totalBytes: row.bytes };
+    return this.historyRepository.stats();
   }
 
-  /** 清理某文档"当前正文不引用 + 无历史快照引用"的资源（方案 A / 手动清理共用） */
+  /** 清理某文档"当前正文不引用 + 无历史快照引用"的资源。 */
   private cleanupUnreferencedAssetsForNote(noteId: string): void {
     const dir = this.noteAssetsDirFor(noteId);
     if (!fs.existsSync(dir)) return;
     const disk = fs.readdirSync(dir);
     if (disk.length === 0) return;
-    // 当前正文引用 + 所有历史 refs
-    const currentRefs = this.currentContentRefs(noteId);
-    const historyRefs = this.historyRefsForNote(noteId);
-    for (const f of disk) {
-      if (currentRefs.has(f) || historyRefs.has(f)) continue;
-      try { fs.rmSync(path.join(dir, f), { force: true }); } catch { /* 忽略 */ }
+    const protectedRefs = this.assetRepository.getProtectedRefs(noteId);
+    for (const filename of disk) {
+      if (protectedRefs.has(filename)) continue;
+      try { fs.rmSync(path.join(dir, filename), { force: true }); } catch { /* 忽略 */ }
     }
   }
 
-  /** 当前正文引用的资源 */
-  private currentContentRefs(noteId: string): Set<string> {
-    const p = this.notePath(noteId);
-    if (!fs.existsSync(p)) return new Set();
-    return extractAssetRefs(fs.readFileSync(p, "utf8"));
-  }
-
-  /** 该文档所有历史快照 refs 合并（去重） */
-  private historyRefsForNote(noteId: string): Set<string> {
-    const rows = this.db.prepare("SELECT refs_json FROM note_history WHERE note_id=?").all(noteId) as Array<{ refs_json: string }>;
-    const all = new Set<string>();
-    for (const r of rows) {
-      try { for (const f of JSON.parse(r.refs_json) as string[]) all.add(f); } catch { /* 忽略 */ }
-    }
-    return all;
-  }
-
-  /** 公共引用集（当前正文 ∪ 历史 refs）：历史/孤儿/S3 keep 三处复用，防漂移。 */
+  /** 公共引用集（当前正文 ∪ 历史 refs）：历史/孤儿/S3 keep 三处复用。 */
   getProtectedRefs(noteId: string): Set<string> {
-    const current = this.currentContentRefs(noteId);
-    const history = this.historyRefsForNote(noteId);
-    for (const f of history) current.add(f);
-    return current;
+    return this.assetRepository.getProtectedRefs(noteId);
   }
 
   /** 所有存在历史快照的 noteId（S3 GC keep 集历史引用保护用）。 */
   listNoteIdsWithHistory(): string[] {
-    return this.db.prepare("SELECT DISTINCT note_id AS id FROM note_history").all().map((r: any) => r.id as string);
+    return this.assetRepository.listNoteIdsWithHistory();
   }
 
   /** 当前正文引用集（上传资格判定用）。 */
   getCurrentContentRefs(noteId: string): Set<string> {
-    return this.currentContentRefs(noteId);
+    return this.assetRepository.getCurrentContentRefs(noteId);
   }
 
   /** 文档级孤儿列表（实时）：磁盘文件 − (当前正文引用 ∪ 历史 refs) */
   listNoteOrphans(noteId: string): Array<{ filename: string; size: number; mimeType: string; protectedByHistory: boolean }> {
     const dir = this.noteAssetsDirFor(noteId);
     if (!fs.existsSync(dir)) return [];
-    const currentRefs = this.currentContentRefs(noteId);
-    const historyRefs = this.historyRefsForNote(noteId);
+    const currentRefs = this.assetRepository.getCurrentContentRefs(noteId);
+    const historyRefs = this.assetRepository.getHistoryRefs(noteId);
     const out: Array<{ filename: string; size: number; mimeType: string; protectedByHistory: boolean }> = [];
     for (const f of fs.readdirSync(dir)) {
       const full = path.join(dir, f);
@@ -1278,36 +1083,14 @@ export class Store {
     tx();
   }
 
-  /** 回收站：trash 笔记本的直接子节点（文件夹整体显示，子节点随动），按进入回收站时间倒序。 */
-  listTrash(): Array<{
-    id: string; title: string; nodeType: string; noteFileId: string | null;
-    parentId: string | null; deletedAt: string | null; updatedAt: string;
-    hasFile: boolean; purged: boolean;
-  }> {
-    const rows = this.db.prepare(
-      `SELECT t.id,t.title,t.node_type,t.note_file_id,t.parent_id,t.trashed_at,t.updated_at,t.sync_state
-       FROM tree_nodes t
-       WHERE t.parent_id=? AND t.deleted_at IS NULL
-       ORDER BY t.trashed_at DESC`
-    ).all(TRASH_NOTEBOOK_ID) as Array<{
-      id: string; title: string; node_type: string; note_file_id: string | null;
-      parent_id: string | null; trashed_at: string | null; updated_at: string; sync_state: string;
-    }>;
-    return rows.map((r) => ({
-      id: r.id, title: r.title, nodeType: r.node_type, noteFileId: r.note_file_id,
-      parentId: r.parent_id, deletedAt: r.trashed_at, updatedAt: r.updated_at,
-      hasFile: !!r.note_file_id, purged: r.sync_state === "purged",
-    }));
+  /** 回收站：trash 笔记本的直接子节点（文件夹整体显示，子节点随动）。 */
+  listTrash(): TrashItem[] {
+    return this.trashRepository.list();
   }
 
-  /** M9：回收站自动过期候选（listTrash 已只含 trash 笔记本顶级条目）。 */
-  listTrashReminder(days: number): Array<{ id: string; title: string; deletedAt: string }> {
-    if (!Number.isFinite(days) || days <= 0) return [];
-    const cutoff = new Date(Date.now() - days * 24 * 3600 * 1000).toISOString();
-    const items = this.listTrash();
-    return items
-      .filter((i) => !!i.deletedAt && i.deletedAt < cutoff)
-      .map((i) => ({ id: i.id, title: i.title, deletedAt: i.deletedAt! }));
+  /** M9：回收站自动过期候选。 */
+  listTrashReminder(days: number): TrashReminderItem[] {
+    return this.trashRepository.listReminder(days);
   }
 
   /** 回收站自动过期（TRASH-NOTEBOOK）：trashed_at 超过 N 天的 trash 顶级条目自动 purge。返回 purge 数。 */
@@ -1361,7 +1144,7 @@ export class Store {
         ).run(parentId, now, now, node.note_file_id);
         const titleRow = this.db.prepare("SELECT title FROM notes WHERE id=?").get(node.note_file_id) as { title: string } | undefined;
         const caches = this.readNoteCaches(node.note_file_id);
-        this.upsertFts(node.note_file_id, titleRow?.title ?? "", caches.plain ?? null);
+        this.searchRepository.upsert(node.note_file_id, titleRow?.title ?? "", caches.plain ?? null);
       }
       this.db.prepare(
         "UPDATE tree_nodes SET parent_id=?,trashed_at=NULL,deleted_from_parent_id=NULL,updated_at=?,sync_state='local' WHERE id=?"
@@ -1386,7 +1169,7 @@ export class Store {
       // 避免 readNoteCaches 对不存在的行抛"笔记不存在"导致同步中断（远端恢复传播场景）。
       if (titleRow) {
         const caches = this.readNoteCaches(id);
-        this.upsertFts(id, titleRow.title, caches.plain ?? null);
+        this.searchRepository.upsert(id, titleRow.title, caches.plain ?? null);
       }
       this.db.prepare("UPDATE tree_nodes SET updated_at=? WHERE note_file_id=?").run(now, id);
     });
@@ -1462,105 +1245,20 @@ export class Store {
 
   /** M1.6：设置/清除文档或分组的自定义图标（emoji，本地化） */
   setNodeIcon(id: string, icon: string | null): TreeNode {
-    if (icon !== null && (typeof icon !== "string" || icon.length > 16)) {
-      throw new AppError("InvalidInput", "无效的图标");
-    }
-    const now = nowIso();
-    this.revivePurgedIfNeeded(id);
-    const tx = this.db.transaction(() => {
-      this.db.prepare("UPDATE tree_nodes SET icon=?, updated_at=?, sync_state='local' WHERE id=?").run(icon, now, id);
-      // 图标存于 tree_nodes，但下载 meta 对账按 notes.sync_state 判断本地是否有 pending 改动；
-      // 不标记 notes 会被远端旧图标回滚。
-      this.db.prepare("UPDATE notes SET updated_at=?, sync_state='local' WHERE id=(SELECT note_file_id FROM tree_nodes WHERE id=?) AND deleted_at IS NULL")
-        .run(now, id);
-    });
-    tx();
-    return this.readTreeNode(id);
+    return this.noteMetadata.setNodeIcon(id, icon);
   }
 
   moveTreeNode(id: string, parentId: string | null, sortOrder: number): TreeNode {
-    const moving = this.readTreeNode(id);
-    if (parentId) {
-      if (parentId === id) throw new AppError("InvalidInput", "不能移动到自身");
-      const descendants = new Set(this.descendantIds(id));
-      if (descendants.has(parentId)) throw new AppError("InvalidInput", "不能移动到子节点");
-      this.ensureParent(parentId);
-    }
-    this.assertParentCompatible(parentId, moving.nodeType);
-    const now = nowIso();
-    const tx = this.db.transaction(() => {
-      this.db.prepare("UPDATE tree_nodes SET parent_id=?,sort_order=?,updated_at=?,sync_state='local' WHERE id=? AND deleted_at IS NULL")
-        .run(parentId, sortOrder, now, id);
-      // 同步源是 notes 表：移动必须同步更新 notes（否则 manifest 携带过期 parentId，跨端移动不同步）
-      if (moving.noteFileId) {
-        this.db.prepare("UPDATE notes SET parent_id=?,sort_order=?,updated_at=?,sync_state='local' WHERE id=? AND deleted_at IS NULL")
-          .run(parentId, sortOrder, now, moving.noteFileId);
-      }
-    });
-    tx();
-    return this.readTreeNode(id);
+    return this.noteMetadata.moveTreeNode(id, parentId, sortOrder);
   }
 
-  /** 审计 #18：移动 + 同级重排一次原子完成（前端两次 IPC 之间有崩溃窗口，
-   * 会造成 parent 已改但 sortOrder 未更新的不一致树）。校验复用 move/reorder 规则。 */
+  /** 审计 #18：移动 + 同级重排一次原子完成。 */
   moveTreeNodeOrdered(id: string, parentId: string | null, orderedIds: string[]): TreeNode {
-    const moving = this.readTreeNode(id);
-    if (parentId) {
-      if (parentId === id) throw new AppError("InvalidInput", "不能移动到自身");
-      const descendants = new Set(this.descendantIds(id));
-      if (descendants.has(parentId)) throw new AppError("InvalidInput", "不能移动到子节点");
-      this.ensureParent(parentId);
-    }
-    this.assertParentCompatible(parentId, moving.nodeType);
-    if (new Set(orderedIds).size !== orderedIds.length) throw new AppError("InvalidInput", "重排列表包含重复节点");
-    const children = this.db.prepare(
-      "SELECT id FROM tree_nodes WHERE workspace_id=? AND parent_id=? AND deleted_at IS NULL"
-    ).all(DEFAULT_WORKSPACE_ID, parentId).map((r) => (r as { id: string }).id);
-    const childSet = new Set(children);
-    for (const childId of orderedIds) {
-      if (!childSet.has(childId)) throw new AppError("InvalidInput", `重排列表包含不属于该父节点的节点: ${childId}`);
-    }
-    if (orderedIds.length !== children.length) throw new AppError("InvalidInput", "重排列表必须包含该父节点的全部子节点");
-    const now = nowIso();
-    const tx = this.db.transaction(() => {
-      this.db.prepare("UPDATE tree_nodes SET parent_id=?,sort_order=?,updated_at=?,sync_state='local' WHERE id=? AND deleted_at IS NULL")
-        .run(parentId, orderedIds.indexOf(id), now, id);
-      const stmt = this.db.prepare("UPDATE tree_nodes SET sort_order=?,updated_at=?,sync_state='local' WHERE id=? AND deleted_at IS NULL");
-      orderedIds.forEach((childId, index) => stmt.run(index, now, childId));
-      // 同步更新 notes（parentId 对同级不变，重复写无害）
-      const noteStmt = this.db.prepare(
-        "UPDATE notes SET parent_id=?,sort_order=?,updated_at=?,sync_state='local' WHERE id=(SELECT note_file_id FROM tree_nodes WHERE id=?) AND deleted_at IS NULL"
-      );
-      orderedIds.forEach((childId, index) => noteStmt.run(parentId, index, now, childId));
-    });
-    tx();
-    return this.readTreeNode(id);
+    return this.noteMetadata.moveTreeNodeOrdered(id, parentId, orderedIds);
   }
 
-  reorderTreeNodes(parentId: string | null, orderedIds: string[]) {
-    // 审计 #9：事务内校验——无重复、无未知 id、集合与当前子节点完全一致（防漏排）
-    if (new Set(orderedIds).size !== orderedIds.length) {
-      throw new AppError("InvalidInput", "重排列表包含重复节点");
-    }
-    const children = this.db.prepare(
-      "SELECT id FROM tree_nodes WHERE workspace_id=? AND parent_id=? AND deleted_at IS NULL"
-    ).all(DEFAULT_WORKSPACE_ID, parentId).map((r) => (r as { id: string }).id);
-    const childSet = new Set(children);
-    for (const id of orderedIds) {
-      if (!childSet.has(id)) throw new AppError("InvalidInput", `重排列表包含不属于该父节点的节点: ${id}`);
-    }
-    if (orderedIds.length !== children.length) {
-      throw new AppError("InvalidInput", "重排列表必须包含该父节点的全部子节点");
-    }
-    const now = nowIso();
-    const tx = this.db.transaction(() => {
-      const stmt = this.db.prepare("UPDATE tree_nodes SET sort_order=?,updated_at=?,sync_state='local' WHERE id=? AND deleted_at IS NULL");
-      const noteStmt = this.db.prepare(
-        "UPDATE notes SET sort_order=?,updated_at=?,sync_state='local' WHERE id=(SELECT note_file_id FROM tree_nodes WHERE id=?) AND deleted_at IS NULL"
-      );
-      orderedIds.forEach((id, index) => { stmt.run(index, now, id); noteStmt.run(index, now, id); });
-    });
-    tx();
+  reorderTreeNodes(parentId: string | null, orderedIds: string[]): void {
+    this.noteMetadata.reorderTreeNodes(parentId, orderedIds);
   }
 
   private noteAssetsDirFor(noteId: string): string {
@@ -1601,7 +1299,7 @@ export class Store {
     // P2：孤儿登记并入"历史 refs"——被任何历史快照引用的资源不算孤儿，
     // 保证全局 cleanOrphanAssets / 同步跳过上传 / 文档级 listNoteOrphans 三个消费者一致，
     // 避免"本机 SyncPanel 全局清理误删历史引用资源 → 本机历史恢复裂图"。
-    const historyRefs = this.historyRefsForNote(noteId);
+    const historyRefs = this.assetRepository.getHistoryRefs(noteId);
     const insert = this.db.prepare(
       `INSERT OR IGNORE INTO orphan_assets(note_id, filename, file_path, size, mime_type)
        VALUES(?,?,?,?,?)`
@@ -1622,15 +1320,12 @@ export class Store {
   }
 
   listOrphanAssets(): OrphanAsset[] {
-    return this.db.prepare("SELECT * FROM orphan_assets ORDER BY detected_at DESC").all().map((r: any) => ({
-      id: r.id, noteId: r.note_id, filename: r.filename, filePath: r.file_path,
-      size: r.size, mimeType: r.mime_type, detectedAt: r.detected_at,
-    }));
+    return this.assetRepository.listOrphanAssets();
   }
 
   cleanOrphanAssets(): { count: number; freedBytes: number } {
     // 审计 #12：仅当文件不存在或删除成功时才删除记录并计数；失败保留记录（UI 可重试）
-    const rows = this.db.prepare("SELECT * FROM orphan_assets").all() as any[];
+    const rows = this.db.prepare("SELECT * FROM orphan_assets").all() as OrphanAssetRow[];
     let count = 0;
     let freedBytes = 0;
     for (const row of rows) {
@@ -1752,22 +1447,12 @@ export class Store {
 
   /** 只读锁：本地操作；不触碰正文/updated_at，锁同步走 manifest v3 独立字段 */
   setNoteLocked(id: string, locked: boolean): void {
-    const now = new Date().toISOString();
-    // 锁变更是待上传元数据（早退判定依赖 sync_state；状态栏也会如实显示"待上传"）。
-    // 对 purged（他端已删、本端保留）条目：锁定 = 一次隐式恢复。
-    this.revivePurgedIfNeeded(id);
-    const tx = this.db.transaction(() => {
-      this.db.prepare("UPDATE notes SET is_locked=?, locked_at=?, sync_state='local' WHERE id=? AND deleted_at IS NULL")
-        .run(locked ? 1 : 0, now, id);
-      this.db.prepare("UPDATE tree_nodes SET sync_state='local' WHERE note_file_id=? AND deleted_at IS NULL").run(id);
-    });
-    tx();
+    this.noteMetadata.setNoteLocked(id, locked);
   }
 
-  /** 同步合并写入（远端锁状态按 lockedAt LWW 后由调用方判定） */
+  /** 同步合并写入（远端锁状态按 lockedAt LWW 后由调用方判定）。 */
   applyRemoteLock(id: string, locked: boolean, lockedAt: string | null): void {
-    this.db.prepare("UPDATE notes SET is_locked=?, locked_at=? WHERE id=? AND deleted_at IS NULL")
-      .run(locked ? 1 : 0, lockedAt, id);
+    this.noteMetadata.applyRemoteLock(id, locked, lockedAt);
   }
 
   markSynced(id: string): void {
@@ -1909,68 +1594,31 @@ export class Store {
     return this.noteAssetsDirFor(id);
   }
 
-  /** 渲染层刷新用：全部笔记摘要（含锁状态） */
+  /** 渲染层刷新用：全部笔记摘要（含锁状态）。 */
   listNoteSummaries(): NoteSummary[] {
-    return this.db.prepare(
-      "SELECT id,title,parent_id,sort_order,updated_at,sync_state,is_conflict,is_locked,locked_at FROM notes WHERE deleted_at IS NULL ORDER BY sort_order"
-    ).all().map((r) => this.mapSummary(r));
+    return this.noteQueries.listNoteSummaries();
   }
 
   listNotesForSync(): SyncNote[] {
-    // icon 存于 tree_nodes，join 取出参与同步
-    return this.db.prepare(
-      `SELECT n.id,n.title,n.parent_id,n.sort_order,n.updated_at,n.sync_state,n.is_conflict,n.is_locked,n.locked_at,t.icon,n.trashed_at,n.deleted_from_parent_id
-       FROM notes n LEFT JOIN tree_nodes t ON t.note_file_id = n.id
-       WHERE n.deleted_at IS NULL ORDER BY n.sort_order`
-    ).all().map((r: any) => ({
-      id: r.id, title: r.title, parentId: r.parent_id, sortOrder: r.sort_order,
-      updatedAt: r.updated_at, syncState: r.sync_state, isConflict: !!r.is_conflict,
-      isLocked: !!r.is_locked, lockedAt: r.locked_at ?? null, icon: r.icon ?? null,
-      trashedAt: r.trashed_at ?? null, deletedFromParentId: r.deleted_from_parent_id ?? null,
-    }));
+    return this.noteQueries.listNotesForSync();
   }
 
-  /** 同步目录树：活动 notebook/group（含默认个人笔记本——两端本地初始化同 id，LWW 按 updatedAt 对齐，
-   * 仅排除回收站笔记本）。默认笔记本的图标/重命名等用户自定义会随 folder 同步跨端传播（验收 #1）。 */
-  listFoldersForSync(): Array<{ id: string; title: string; parentId: string | null; sortOrder: number; nodeType: "notebook" | "group"; icon: string | null; updatedAt: string; trashedAt?: string | null; deletedFromParentId?: string | null }> {
-    return this.db.prepare(
-      "SELECT id,title,parent_id,sort_order,node_type,icon,updated_at,trashed_at,deleted_from_parent_id FROM tree_nodes WHERE node_type IN ('notebook','group') AND deleted_at IS NULL AND id != ? ORDER BY sort_order"
-    ).all(TRASH_NOTEBOOK_ID).map((r: any) => ({
-      id: r.id, title: r.title, parentId: r.parent_id, sortOrder: r.sort_order, nodeType: r.node_type, icon: r.icon ?? null, updatedAt: r.updated_at,
-      trashedAt: r.trashed_at ?? null, deletedFromParentId: r.deleted_from_parent_id ?? null,
-    }));
+  /** 同步目录树：活动 notebook/group（不包含隐藏回收站笔记本）。 */
+  listFoldersForSync(): SyncFolder[] {
+    return this.noteQueries.listFoldersForSync();
   }
 
-  /** 导入远端 notebook/group 节点：按 updatedAt 做 LWW，避免“本地非空优先”造成图标来回覆盖。
-   * 回收站笔记本本身本地初始化，不参与 folder 同步（忽略）。 */
-  importRemoteFolder(folder: { id: string; title: string; parentId: string | null; sortOrder: number; nodeType: "notebook" | "group"; icon: string | null; updatedAt: string; trashedAt?: string | null; deletedFromParentId?: string | null }): void {
-    if (folder.id === TRASH_NOTEBOOK_ID) return;
-    const existing = this.db.prepare("SELECT title,parent_id,sort_order,node_type,icon,updated_at FROM tree_nodes WHERE id=?").get(folder.id) as
-      { title: string; parent_id: string | null; sort_order: number; node_type: string; icon: string | null; updated_at: string } | undefined;
-    if (!existing) {
-      this.db.prepare(
-        `INSERT INTO tree_nodes(id,workspace_id,parent_id,node_type,title,note_file_id,sort_order,created_at,updated_at,deleted_at,sync_state,is_conflict,icon,trashed_at,deleted_from_parent_id)
-         VALUES(?,?,?,?,?,NULL,?,?,?,NULL,'synced',0,?,?,?)`
-      ).run(folder.id, DEFAULT_WORKSPACE_ID, folder.parentId, folder.nodeType, folder.title, folder.sortOrder, folder.updatedAt, folder.updatedAt, folder.icon ?? null,
-        folder.parentId === TRASH_NOTEBOOK_ID ? (folder.trashedAt ?? null) : null,
-        folder.parentId === TRASH_NOTEBOOK_ID ? (folder.deletedFromParentId ?? null) : null);
-      return;
-    }
-    // 远端更新更晚才覆盖；否则保留本地（本地可能是更新的编辑，等待下次上传）。
-    if (folder.updatedAt > existing.updated_at) {
-      this.db.prepare(
-        "UPDATE tree_nodes SET parent_id=?, title=?, sort_order=?, updated_at=?, icon=?, sync_state='synced', node_type=?, trashed_at=?, deleted_from_parent_id=? WHERE id=?"
-      ).run(folder.parentId, folder.title, folder.sortOrder, folder.updatedAt, folder.icon ?? null, folder.nodeType,
-        folder.parentId === TRASH_NOTEBOOK_ID ? (folder.trashedAt ?? null) : null,
-        folder.parentId === TRASH_NOTEBOOK_ID ? (folder.deletedFromParentId ?? null) : null,
-        folder.id);
-    }
+  /** 导入远端 notebook/group 节点。 */
+  importRemoteFolder(folder: SyncFolder): void {
+    this.noteMetadata.importRemoteFolder(folder);
   }
 
-  defaultNotebookId(): string { return DEFAULT_NOTEBOOK_ID; }
+  defaultNotebookId(): string {
+    return this.noteMetadata.defaultNotebookId();
+  }
 
   hasTreeNode(id: string): boolean {
-    return !!this.db.prepare("SELECT 1 FROM tree_nodes WHERE id=? AND deleted_at IS NULL").get(id);
+    return this.noteMetadata.hasTreeNode(id);
   }
 
   /** 正文 hash 相同、仅元数据变化（标题/父目录/排序/图标/回收站字段）时的对账。 */
@@ -2025,7 +1673,7 @@ export class Store {
       const titleRow = this.db.prepare("SELECT title FROM notes WHERE id=?").get(id) as { title: string } | undefined;
       if (titleRow) {
         const caches = this.readNoteCaches(id);
-        this.upsertFts(id, titleRow.title, caches.plain ?? null);
+        this.searchRepository.upsert(id, titleRow.title, caches.plain ?? null);
       }
     });
     tx();
@@ -2121,318 +1769,17 @@ export class Store {
     }));
   }
 
-  /** 导入远程笔记：写 .lake + note-assets 资源 + upsert DB 记录 */
+  /** 导入远程笔记：写 .lake + note-assets 资源 + upsert DB 记录。 */
   importRemoteNote(note: SyncNote, content: Buffer, assets: Array<{ filename: string; bytes: Buffer }>): void {
-    const t0 = Date.now();
-    // 审计 #3/#17：任何写操作前先校验全部目标路径段，拒绝恶意 manifest 的
-    // note.id / asset.filename（../、绝对路径、反斜杠、空段），防止写半成品
-    this.notePath(note.id);
-    for (const asset of assets) {
-      if (!isSafePathSegment(asset.filename)) {
-        throw new AppError("InvalidInput", `无效的资源文件名: ${asset.filename}`);
-      }
-    }
-    // 审计 #10：staging 写入——先写临时文件/临时目录，DB 事务成功后再原子落位；
-    // 任一环节失败都清理临时产物，绝不留下"DB 已回滚但文件已写入/覆盖"的半成品
-    const lakePath = this.notePath(note.id);
-    const lakeTmp = `${lakePath}.tmp-${process.pid}-${crypto.randomBytes(4).toString("hex")}`;
-    const assetDir = assets.length > 0 ? this.noteAssetsDirFor(note.id) : null;
-    const assetTmpDir = assetDir ? `${assetDir}.staging-${crypto.randomBytes(4).toString("hex")}` : null;
-    let moved = false;
-    try {
-      fs.writeFileSync(lakeTmp, content, "utf8");
-      if (assetTmpDir) {
-        fs.mkdirSync(assetTmpDir, { recursive: true });
-        for (const asset of assets) {
-          fs.writeFileSync(path.join(assetTmpDir, asset.filename), asset.bytes);
-        }
-      }
-      const tx = this.db.transaction(() => {
-        // upsert notes（含回收站字段：trashed_at / deleted_from_parent_id）
-        this.db.prepare(
-          `INSERT INTO notes(id,title,parent_id,sort_order,updated_at,sync_state,is_conflict,deleted_at,is_locked,locked_at,trashed_at,deleted_from_parent_id)
-           VALUES(?,?,?,?,?,'synced',?,NULL,?,?,?,?)
-           ON CONFLICT(id) DO UPDATE SET title=excluded.title,parent_id=excluded.parent_id,
-             sort_order=excluded.sort_order,updated_at=excluded.updated_at,
-             is_locked=excluded.is_locked,locked_at=excluded.locked_at,
-             sync_state='synced',is_conflict=excluded.is_conflict,deleted_at=NULL,
-             trashed_at=excluded.trashed_at,deleted_from_parent_id=excluded.deleted_from_parent_id`
-        ).run(note.id, note.title, note.parentId, note.sortOrder, note.updatedAt, note.isConflict ? 1 : 0,
-          note.isLocked ? 1 : 0, note.lockedAt ?? null,
-          note.parentId === TRASH_NOTEBOOK_ID ? (note.trashedAt ?? null) : null,
-          note.parentId === TRASH_NOTEBOOK_ID ? (note.deletedFromParentId ?? null) : null);
-        // upsert tree_nodes（note 节点）
-        this.db.prepare(
-          `INSERT INTO tree_nodes(id,workspace_id,parent_id,node_type,title,note_file_id,sort_order,created_at,updated_at,deleted_at,sync_state,is_conflict,icon,trashed_at,deleted_from_parent_id)
-           VALUES(?,?,?,'note',?,?,?,?,?,NULL,'synced',?,?,?,?)
-           ON CONFLICT(id) DO UPDATE SET parent_id=excluded.parent_id,title=excluded.title,
-             sort_order=excluded.sort_order,updated_at=excluded.updated_at,
-             deleted_at=NULL,sync_state='synced',is_conflict=excluded.is_conflict,icon=excluded.icon,
-             trashed_at=excluded.trashed_at,deleted_from_parent_id=excluded.deleted_from_parent_id`
-        ).run(note.id, DEFAULT_WORKSPACE_ID, note.parentId, note.title, note.id, note.sortOrder, note.updatedAt, note.updatedAt, note.isConflict ? 1 : 0, note.icon ?? null,
-          note.parentId === TRASH_NOTEBOOK_ID ? (note.trashedAt ?? null) : null,
-          note.parentId === TRASH_NOTEBOOK_ID ? (note.deletedFromParentId ?? null) : null);
-      });
-      tx();
-      // DB 提交成功 → 原子落位
-      fs.mkdirSync(path.dirname(lakePath), { recursive: true });
-      fs.renameSync(lakeTmp, lakePath);
-      moved = true;
-      if (assetTmpDir && assetDir) {
-        fs.mkdirSync(assetDir, { recursive: true });
-        for (const asset of assets) {
-          fs.renameSync(path.join(assetTmpDir, asset.filename), path.join(assetDir, asset.filename));
-        }
-        // 重命名成功后移除空 staging 目录（否则 note-assets 下残留 .staging-* 空目录）
-        try { fs.rmdirSync(assetTmpDir); } catch { /* 目录非空或已不存在，忽略 */ }
-      }
-    } catch (error) {
-      try { fs.rmSync(lakeTmp, { force: true }); } catch { /* 忽略 */ }
-      if (assetTmpDir) { try { fs.rmSync(assetTmpDir, { recursive: true, force: true }); } catch { /* 忽略 */ } }
-      throw error;
-    } finally {
-      if (!moved) { try { fs.rmSync(lakeTmp, { force: true }); } catch { /* 忽略 */ } }
-      if (assetTmpDir && !moved) { try { fs.rmSync(assetTmpDir, { recursive: true, force: true }); } catch { /* 忽略 */ } }
-    }
-    // 审计 #11：导入后按**正文引用**对账——远端资源集合缩小时，本地仍存在但正文不再
-    // 引用的旧文件标记为孤儿（保留在本地当回收站，不再上传，与远端保持一致）。
-    // 以正文为权威而非 manifest 列表，可自愈历史 #1 造成的 manifest 资源缺失
-    // （被引用的文件会被 unorphan 并重新进入同步）。
-    try {
-      this.detectOrphans(note.id, content.toString("utf8"));
-    } catch (error) {
-      console.warn("[store] 导入后孤儿对账失败（不影响导入）:", error);
-    }
-    // 统一索引：同步下载的新文档立即生成文本缓存 + FTS 正文索引，
-    // 保证"锁定且从未编辑"的文档在新设备上也能被全文搜索/导出（无需打开/解锁）。
-    // ensureNoteCaches 幂等：已有缓存（编辑态 Lake 高质量缓存）不覆盖。
-    try {
-      this.ensureNoteCaches(note.id, content.toString("utf8"));
-    } catch (error) {
-      console.warn("[store] 导入后缓存生成失败（不影响导入）:", error);
-    }
-    log.store.info(`[perf] importRemoteNote ${note.id} ${Date.now() - t0}ms (lake=${content.length}B, assets=${assets.length})`);
+    this.remoteImport.importNote(note, content, assets);
   }
 
   async uploadResource(input: { bytes: number[]; filename: string }, noteId: string): Promise<ResourceUploadOutput> {
-    const bytes = Buffer.from(input.bytes);
-    assertImageDimensions(bytes);
-    const out = imageOutput(bytes, input.filename, this.noteAssetsDirFor(noteId), this.assetUrl.bind(this, noteId));
-    // 写盘即登记孤儿：插入瞬间正文尚未引用；saveNote 对账后撤销
-    this.registerOrphan(noteId, out.filename, out.size, out.mimeType);
-    return out;
+    return this.resourceRepository.upload(input, noteId);
   }
 
   async downloadRemoteResource(url: string, noteId: string): Promise<ResourceUploadOutput> {
-    // 先校验 noteId 再做网络请求
-    const assetsDir = this.noteAssetsDirFor(noteId);
-    const normalized = url.startsWith("//") ? `https:${url}` : url;
-    // 校验初始 URL 的协议（redirect 逐跳另有协议校验）
-    {
-      const parsed = new URL(normalized);
-      if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
-        throw new AppError("InvalidInput", "图片地址仅支持 HTTP 或 HTTPS");
-      }
-    }
-    // 下载头（移植 Rust 版）：Referer 设为图片 URL 自身 + 浏览器 UA，绕过常见防盗链。
-    // 受控下载（net.request + followRedirect:false）：每跳校验协议 + DNS 解析
-    // （域名→私网/本机即拒），手工跟随重定向并逐跳重新校验（审计 #5。注：Chromium
-    // net.fetch 的 redirect:"manual" 会抛 "Redirect was cancelled"，故用 net.request）
-    let lastError: unknown = null;
-    for (let attempt = 1; attempt <= DOWNLOAD_MAX_ATTEMPTS; attempt++) {
-      try {
-        const { request, response, status } = await this.fetchControlled(normalized);
-        try {
-          if (status < 200 || status >= 300) {
-            request.abort();
-            throw new AppError("Internal", `下载失败: HTTP ${status}`);
-          }
-          // content-length 预检查 + 流式读取限量（防大响应撑爆内存）
-          const declared = response.headers["content-length"];
-          const declaredLength = Number(Array.isArray(declared) ? declared[0] : declared || 0);
-          if (declaredLength > MAX_IMAGE_BYTES) {
-            request.abort();
-            throw new AppError("InvalidInput", "图片超过 25 MiB");
-          }
-          const chunks: Buffer[] = [];
-          let total = 0;
-          for await (const chunk of response) {
-            total += chunk.length;
-            if (total > MAX_IMAGE_BYTES) {
-              request.abort();
-              throw new AppError("InvalidInput", "图片超过 25 MiB");
-            }
-            chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
-          }
-          const buf = Buffer.concat(chunks);
-          assertImageDimensions(buf);
-          const out = imageOutput(buf, path.basename(new URL(normalized).pathname) || "image", assetsDir, this.assetUrl.bind(this, noteId));
-          // 写盘即登记孤儿：下载落盘瞬间正文尚未引用；saveNote 对账后撤销
-          this.registerOrphan(noteId, out.filename, out.size, out.mimeType);
-          return out;
-        } finally {
-          request.abort(); // 流读完/出错后释放连接
-        }
-      } catch (error) {
-        // 安全类拒绝（SSRF/格式/大小）不重试，直接抛出
-        if (error instanceof AppError && error.kind === "InvalidInput") throw error;
-        if (error instanceof SsrfError) throw new AppError("InvalidInput", error.message);
-        lastError = error instanceof Error && error.name === "AbortError"
-          ? new AppError("Internal", `下载超时（${DOWNLOAD_TIMEOUT_MS / 1000}s）`)
-          : new AppError("Internal", `网络错误: ${error instanceof Error ? error.message : String(error)}`);
-      }
-      if (attempt < DOWNLOAD_MAX_ATTEMPTS) await sleep(attempt * 500);
-    }
-    throw lastError instanceof AppError ? lastError : new AppError("Internal", `下载失败: ${String(lastError)}`);
+    return this.resourceRepository.downloadRemote(url, noteId);
   }
 
-  /** 受控下载：基于 net.request（Chromium 网络栈）逐跳（含重定向）校验协议 + 主机安全。
-   *  - followRedirect:false + redirect 事件手动跟随，每跳重新 assertSafeRemoteHost
-   *  - 重定向上限 DOWNLOAD_MAX_REDIRECTS，拒绝重定向环
-   */
-  private async fetchControlled(url: string): Promise<{ request: Electron.ClientRequest; response: NodeJS.ReadableStream & { headers: Record<string, string | string[] | undefined> }; status: number }> {
-    let current = url;
-    for (let hop = 0; ; hop++) {
-      const parsed = new URL(current);
-      if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
-        throw new AppError("InvalidInput", "重定向目标仅支持 HTTP 或 HTTPS");
-      }
-      await assertSafeRemoteHost(parsed.hostname);
-      const outcome = await new Promise<{ kind: "redirect"; url: string } | { kind: "response"; status: number; response: NodeJS.ReadableStream & { headers: Record<string, string | string[] | undefined> }; request: Electron.ClientRequest }>((resolve, reject) => {
-        // followRedirect 类型缺失（Electron 类型滞后），运行时受支持
-        const req = net.request({ url: current, followRedirect: false } as Electron.ClientRequestConstructorOptions & { followRedirect?: boolean });
-        req.setHeader("User-Agent", DOWNLOAD_USER_AGENT);
-        // 防盗链：每跳以"当前 URL 自身"为 Referer（对齐 Rust 版"Referer=图片自身"策略）。
-        // 不能固定原始 URL：外部 Referer 会被部分 CDN（如 Google）客户端级拦截
-        req.setHeader("Referer", current);
-        const timer = setTimeout(() => { req.abort(); reject(new Error("AbortError")); }, DOWNLOAD_TIMEOUT_MS);
-        let settled = false;
-        req.on("redirect", (_statusCode: number, _method: string, redirectUrl: string) => {
-          if (settled) return;
-          settled = true;
-          clearTimeout(timer);
-          req.abort();
-          resolve({ kind: "redirect", url: redirectUrl });
-        });
-        req.on("response", (response: Electron.IncomingMessage) => {
-          if (settled) return;
-          settled = true;
-          clearTimeout(timer);
-          resolve({ kind: "response", status: response.statusCode, response: response as never, request: req });
-        });
-        req.on("error", (error: Error) => {
-          if (settled) return;
-          settled = true;
-          clearTimeout(timer);
-          reject(error);
-        });
-        req.end();
-      });
-      if (outcome.kind === "redirect") {
-        if (hop >= DOWNLOAD_MAX_REDIRECTS) {
-          throw new AppError("Internal", `重定向次数过多: ${current}`);
-        }
-        current = outcome.url;
-        continue;
-      }
-      return { request: outcome.request, response: outcome.response, status: outcome.status };
-    }
-  }
-}
-
-function sniffImageFormat(bytes: Buffer): { mimeType: string; extension: string } | null {
-  if (bytes.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))) return { mimeType: "image/png", extension: "png" };
-  if (bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) return { mimeType: "image/jpeg", extension: "jpg" };
-  if (bytes.subarray(0, 6).toString() === "GIF87a" || bytes.subarray(0, 6).toString() === "GIF89a") return { mimeType: "image/gif", extension: "gif" };
-  if (bytes.length >= 12 && bytes.subarray(0, 4).toString() === "RIFF" && bytes.subarray(8, 12).toString() === "WEBP") return { mimeType: "image/webp", extension: "webp" };
-  if (bytes.length >= 12 && bytes.subarray(4, 8).toString() === "ftyp" && ["avif", "avis"].includes(bytes.subarray(8, 12).toString())) return { mimeType: "image/avif", extension: "avif" };
-  return null;
-}
-
-const MIME_FROM_EXT: Record<string, string> = {
-  ".png": "image/png",
-  ".jpg": "image/jpeg",
-  ".jpeg": "image/jpeg",
-  ".gif": "image/gif",
-  ".webp": "image/webp",
-  ".avif": "image/avif",
-  ".svg": "image/svg+xml",
-};
-
-function mimeTypeForFilename(filename: string): string {
-  return MIME_FROM_EXT[path.extname(filename).toLowerCase()] ?? "application/octet-stream";
-}
-
-/** 自研图像头部尺寸解析（PNG/JPEG/GIF/WebP）：不依赖解码器、极小文件也能读到声明尺寸，
- * 用于解码前拦截"像素炸弹"（压缩后很小、解码后巨大）。读不到声明尺寸则放行（后续格式嗅探兜底）。 */
-function readImageDimensions(bytes: Buffer): { width: number; height: number } | null {
-  // PNG：8 字节签名 + 长度(4) + "IHDR"(4) + 宽(4) + 高(4)
-  if (bytes.length >= 24 && bytes.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])) && bytes.subarray(12, 16).toString("ascii") === "IHDR") {
-    return { width: bytes.readUInt32BE(16), height: bytes.readUInt32BE(20) };
-  }
-  // JPEG：SOI 后扫 SOF0-SOF3/5-7/9-11/13-15 段（跳过 DHT C4 / JPG C8 / DAC CC），段内高(2)+宽(2)
-  if (bytes.length >= 4 && bytes[0] === 0xff && bytes[1] === 0xd8) {
-    let off = 2;
-    while (off + 4 <= bytes.length) {
-      if (bytes[off] !== 0xff) { off += 1; continue; }
-      const marker = bytes[off + 1];
-      if (marker === 0xd8 || marker === 0x01 || (marker >= 0xd0 && marker <= 0xd7)) { off += 2; continue; }
-      if (marker === 0xd9) break;
-      const len = bytes.readUInt16BE(off + 2);
-      if (len < 2 || off + 2 + len > bytes.length) break;
-      if ((marker >= 0xc0 && marker <= 0xc3) || (marker >= 0xc5 && marker <= 0xc7) || (marker >= 0xc9 && marker <= 0xcb) || (marker >= 0xcd && marker <= 0xcf)) {
-        return { height: bytes.readUInt16BE(off + 5), width: bytes.readUInt16BE(off + 7) };
-      }
-      off += 2 + len;
-    }
-  }
-  // GIF：签名 + 逻辑屏幕宽(2LE) + 高(2LE)
-  if (bytes.length >= 10 && (bytes.subarray(0, 6).toString("ascii") === "GIF87a" || bytes.subarray(0, 6).toString("ascii") === "GIF89a")) {
-    return { width: bytes.readUInt16LE(6), height: bytes.readUInt16LE(8) };
-  }
-  // WebP：RIFF(4)+size(4)+WEBP(4)+"VP8X"(4)+chunkSize(4)+flags(1)+rsv(3)+宽-1(3LE)+高-1(3LE)
-  if (bytes.length >= 30 && bytes.subarray(0, 4).toString("ascii") === "RIFF" && bytes.subarray(8, 12).toString("ascii") === "WEBP" && bytes.subarray(12, 16).toString("ascii") === "VP8X") {
-    return { width: bytes.readUIntLE(24, 3) + 1, height: bytes.readUIntLE(27, 3) + 1 };
-  }
-  return null;
-}
-
-/** 审计：超 50MP 即拒（防解压炸弹）。 */
-function assertImageDimensions(bytes: Buffer): void {
-  const dims = readImageDimensions(bytes);
-  if (dims && dims.width * dims.height > MAX_IMAGE_PIXELS) {
-    throw new AppError("InvalidInput", `图片尺寸过大（${dims.width}x${dims.height}），上限 ${MAX_IMAGE_PIXELS} 像素`);
-  }
-}
-
-function imageOutput(bytes: Buffer, _requestedFilename: string, noteAssetsDir: string, makeUrl: (filename: string) => string): ResourceUploadOutput {
-  if (bytes.length === 0 || bytes.length > MAX_IMAGE_BYTES) {
-    throw new AppError("InvalidInput", "图片为空或超过 25 MiB");
-  }
-  const format = sniffImageFormat(bytes);
-  if (!format) throw new AppError("InvalidInput", "仅支持 PNG、JPEG、GIF、WebP 和 AVIF 图片");
-  // 每次插入独立文件：{timestamp}_{random8}.ext，不做去重、零耦合
-  const uniqueId = `${Date.now()}_${crypto.randomBytes(4).toString("hex")}`;
-  const filename = `${uniqueId}.${format.extension}`;
-  fs.mkdirSync(noteAssetsDir, { recursive: true });
-  const filePath = path.join(noteAssetsDir, filename);
-  fs.writeFileSync(filePath, bytes);
-  const url = makeUrl(filename);
-  return { resourceRef: url, url, filename, mimeType: format.mimeType, size: bytes.length };
-}
-
-/** M2：FTS MATCH 查询串转义——逐词加引号，避免特殊字符破坏查询语法 */
-function escapeFtsQuery(q: string): string {
-  return q.split(/\s+/).filter(Boolean).map((w) => `"${w.replace(/"/g, '""')}"`).join(" ");
-}
-
-/** M1：目录名清洗：去掉文件系统非法字符，空则回退“未命名” */
-export function sanitizeFileName(name: string): string {
-  const cleaned = name.replace(/[\\/:*?"<>|]/g, "_").trim();
-  return cleaned || "未命名";
-}
-
-/** 安全单路径段校验：拒绝空、./..，以及含 / 或 \\ 的字符串（防目录穿越，审计 #3/#17） */
-function isSafePathSegment(segment: string): boolean {
-  return segment.length > 0 && segment !== "." && segment !== ".." && !segment.includes("/") && !segment.includes("\\");
 }
