@@ -9,6 +9,7 @@ import { HistoryPanel } from "./components/HistoryPanel";
 import { ConfirmDelete, Sidebar, type SidebarMode } from "./components/Sidebar";
 import { QuickNotesWorkspace, type QuickNotesWorkspaceHandle } from "./components/QuickNotesWorkspace";
 import { SyncToast, type SyncToastData } from "./components/SyncToast";
+import { SyncStatusPopover } from "./components/SyncStatusPopover";
 import { DesktopStatusBar } from "./components/DesktopStatusBar";
 import { LakeEditor } from "./features/editor/LakeEditor";
 import { clearScrollMemory } from "./features/editor/EditorTab";
@@ -104,6 +105,8 @@ export function App() {
   const [historyNoteId, setHistoryNoteId] = useState<string | null>(null);
   const [searchPanelQuery, setSearchPanelQuery] = useState("");
   const [saveState, setSaveState] = useState<SaveState>("idle");
+  const [lastSavedAt, setLastSavedAt] = useState<string | null>(null);
+  const [conflictSnapshotNotice, setConflictSnapshotNotice] = useState<{ count: number; text: string } | null>(null);
   const [topMenuOpen, setTopMenuOpen] = useState(false);
   /** 工作空间（lake-notes）下拉：偏好设置/回收站 */
   const [workspaceMenuOpen, setWorkspaceMenuOpen] = useState(false);
@@ -428,6 +431,7 @@ export function App() {
         if (revisionRef.current.get(noteId) === revision) {
           // 无新编辑：安全覆盖 + 清除 dirty；同时更新 lastDigest（本机已保存，远端未变时无需重载）
           setOpenTabs((tabs) => tabs.map((tab) => tab.noteId === noteId ? { ...tab, title: saved.title, content: saved.content, dirty: false, lastDigest: { title: saved.title, updatedAt: saved.updatedAt } } : tab));
+          setLastSavedAt(new Date().toISOString());
           setSaveState("saved");
         } else {
           // 期间有新编辑：不覆盖草稿、不清除 dirty（磁盘为旧内容，等待下一次保存）
@@ -635,6 +639,10 @@ export function App() {
         ? `远端修改已覆盖本地 ${result.supersededNotes.length} 篇（${result.supersededNotes.slice(0, 3).map((n) => `「${n.title}」`).join("、")}${result.supersededNotes.length > 3 ? " 等" : ""}），本地修改已存入该文档的历史版本。`
         : "";
       setSync((current) => ({ ...current, phase: result.quickNotes?.error ? "error" : "success", message: resultMessage, lastSyncedAt: result.completedAt, pendingChanges: 0 }));
+      if (superseded) {
+        setConflictSnapshotNotice({ count: result.supersededNotes.length, text: "检测到远端版本差异，已保留历史快照" });
+        window.setTimeout(() => setConflictSnapshotNotice(null), 12000);
+      }
       showSyncToast({ kind: result.quickNotes?.error ? "error" : "ok", title: "同步完成", message: `${lakeMessage}${quickMessage}`, detail: superseded || undefined });
     } catch (error) {
       const rawMessage = String(error);
@@ -1093,9 +1101,22 @@ export function App() {
         </button>
 
       </div>
-      <button ref={syncBtnRef} className={`toolbar__item toolbar__sync ${sync.phase}`} onClick={() => { void runSync(); }} title={syncTooltip(sync)} aria-label={`云同步：${sync.message}`}>
-        <Cloud size={15} />
-      </button>
+      <SyncStatusPopover
+        buttonRef={syncBtnRef}
+        sync={sync}
+        saveState={saveState}
+        saveLabel={saveLabel(saveState)}
+        pendingDocuments={notes.filter((note) => note.syncState === "local").length}
+        pendingResources={Math.max(0, sync.pendingChanges - notes.filter((note) => note.syncState === "local").length)}
+        dirtyTabCount={openTabs.filter((tab) => tab.dirty).length}
+        lastSavedAt={lastSavedAt}
+        cloudEnabled={cloudEnabled}
+        conflictSnapshotCount={conflictSnapshotNotice?.count ?? 0}
+        conflictSnapshotText={conflictSnapshotNotice?.text ?? null}
+        onSync={() => { void runSync(); }}
+        onOpenSettings={() => { setSettingsCategory("sync"); setSettingsOpen(true); }}
+        onOpenHistory={() => { if (activeNoteId) { setHistoryNoteId(activeNoteId); setHistoryOpen(true); } }}
+      />
     </>
   );
   // 顶栏最右侧：外观模式 + 更多（文档操作，目前仅加锁，后续扩展）

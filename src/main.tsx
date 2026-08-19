@@ -18,6 +18,7 @@ import "./b3/animations.css";
 import "./b3/layout.css";
 import "./styles/tokens.css";
 import "./styles/shell.css";
+import "./styles/overlays.css";
 
 // 首帧前应用主题，避免闪烁（App 挂载后的 settings 订阅会继续跟随变化）
 applyTheme(loadSettings().theme);
