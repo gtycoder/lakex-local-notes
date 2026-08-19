@@ -434,3 +434,14 @@
   content-visibility: auto;
   contain-intrinsic-size: auto 26px;
 }
+
+/* Lake semantic outline layer: preserves existing rail trigger geometry and dock behavior. */
+.outline-sidebar__content,
+.outline-sidebar__panel { color: var(--lake-text); background: var(--lake-panel); border-color: var(--lake-border); }
+.outline-sidebar__header,
+.outline-sidebar__toolbar { color: var(--lake-text-secondary); border-color: var(--lake-border); }
+.outline-sidebar__filter-input { color: var(--lake-text); background: var(--lake-canvas); border-color: var(--lake-border); }
+.outline-item { color: var(--lake-text-secondary); }
+.outline-item:hover,
+.outline-item--selected { color: var(--lake-text); background: var(--lake-accent-soft); }
+.outline-item--selected { box-shadow: inset 3px 0 var(--lake-accent); }
