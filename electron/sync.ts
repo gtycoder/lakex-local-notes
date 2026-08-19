@@ -5,8 +5,10 @@ import crypto from "node:crypto";
 import {
   S3Client,
   GetObjectCommand,
+  type GetObjectCommandOutput,
   PutObjectCommand,
   ListObjectsV2Command,
+  type ListObjectsV2CommandOutput,
   DeleteObjectCommand,
   DeleteObjectsCommand,
 } from "@aws-sdk/client-s3";
@@ -96,6 +98,12 @@ export interface SyncProgress {
 }
 
 const MANIFEST_VERSION = 4;
+/** 单次 S3 请求超时（连接/首字节/整体）。避免网络黑洞让同步无限挂起、
+ *  进而把 before-quit 的“等同步完成再退出”变成无法退出。 */
+const S3_REQUEST_TIMEOUT_MS = 30_000;
+/** W-6：Get/Put 大对象（25MiB 图片/正文）传输超时放宽到 120s——
+ *  <1MB/s 弱网下 30s 会误杀传输并触发无效重试（元数据小命令仍走 30s）。 */
+const S3_TRANSFER_TIMEOUT_MS = 120_000;
 /** 保留的 manifest commit 链长度（latest + 本 commit + 8 层 prev = 10 份）。
  * prune / runGcReconcile / runDeepCleanup 三者必须一致，否则深度清理会在 7 天后
  * 把「多留的容错份」删掉（用户验收 #3：留 10 份）。 */
@@ -168,7 +176,7 @@ export class ObjectStore {
     try {
       // 七牛 Kodo S3 兼容层不支持 HeadBucket（对存在的桶也会返回 404/UnknownError），
       // 改用 ListObjectsV2 探测连接与桶存在性。
-      await this.client.send(new ListObjectsV2Command({ Bucket: this.bucket, MaxKeys: 1 }));
+      await this.send(new ListObjectsV2Command({ Bucket: this.bucket, MaxKeys: 1 }));
       log.s3.info(`[perf] test ${Date.now() - t0}ms ok`);
     } catch (error) {
       log.s3.warn(`[perf] test FAIL ${Date.now() - t0}ms: ${errorMessage(error)}`);
@@ -180,7 +188,7 @@ export class ObjectStore {
     assertSafeKey(key);
     const t0 = Date.now();
     try {
-      const output = await this.client.send(new GetObjectCommand({ Bucket: this.bucket, Key: this.key(key) }));
+      const output = await this.send<GetObjectCommandOutput>(new GetObjectCommand({ Bucket: this.bucket, Key: this.key(key) }));
       const bytes = output.Body ? Buffer.from(await output.Body.transformToByteArray()) : Buffer.alloc(0);
       // manifest 等 gzip 对象透明解压（按魔数识别；ContentEncoding 自动解压与原始字节两种响应均兼容）
       const out = isGzip(bytes) ? zlib.gunzipSync(bytes) : bytes;
@@ -210,7 +218,7 @@ export class ObjectStore {
       command.ContentEncoding = "gzip";
     }
     try {
-      await this.client.send(new PutObjectCommand(command as never));
+      await this.send(new PutObjectCommand(command as never));
       log.s3.info(`[perf] put ${key} ${Date.now() - t0}ms (${body.length}B${opts?.gzip ? ` gzip of ${bytes.length}B` : ""})`);
     } catch (error) {
       log.s3.warn(`[perf] put ${key} FAIL ${Date.now() - t0}ms: ${errorMessage(error)}`);
@@ -227,7 +235,7 @@ export class ObjectStore {
     let pages = 0;
     do {
       pages += 1;
-      const output = await this.client.send(new ListObjectsV2Command({
+      const output = await this.send<ListObjectsV2CommandOutput>(new ListObjectsV2Command({
         Bucket: this.bucket,
         Prefix: fullPrefix,
         ContinuationToken: continuationToken,
@@ -246,7 +254,7 @@ export class ObjectStore {
     assertSafeKey(key);
     const t0 = Date.now();
     try {
-      await this.client.send(new DeleteObjectCommand({ Bucket: this.bucket, Key: this.key(key) }));
+      await this.send(new DeleteObjectCommand({ Bucket: this.bucket, Key: this.key(key) }));
       log.s3.info(`[perf] delete ${key} ${Date.now() - t0}ms`);
     } catch (error) {
       if (isNoSuchKey(error)) return;
@@ -261,7 +269,7 @@ export class ObjectStore {
     for (const chunk of chunkArray(keys, 1000)) {
       for (const k of chunk) assertSafeKey(k);
       try {
-        await this.client.send(new DeleteObjectsCommand({
+        await this.send(new DeleteObjectsCommand({
           Bucket: this.bucket,
           Delete: { Objects: chunk.map((k) => ({ Key: this.key(k) })), Quiet: true },
         }));
@@ -281,6 +289,19 @@ export class ObjectStore {
     await this.deleteMany(keys);
     log.s3.info(`[perf] deletePrefix ${prefix} ${Date.now() - t0}ms (${keys.length} keys)`);
     return keys.length;
+  }
+
+  /** 统一带超时发送命令：超时通过 AbortSignal 中断底层请求（NodeHttpHandler 支持）。
+   *  Get/Put 走大对象超时（W-6），其余元数据命令走短超时。 */
+  private async send<T>(command: any): Promise<T> {
+    const isTransfer = command instanceof GetObjectCommand || command instanceof PutObjectCommand;
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), isTransfer ? S3_TRANSFER_TIMEOUT_MS : S3_REQUEST_TIMEOUT_MS);
+    try {
+      return await this.client.send(command, { abortSignal: controller.signal }) as T;
+    } finally {
+      clearTimeout(timer);
+    }
   }
 
   private unkey(full: string): string {

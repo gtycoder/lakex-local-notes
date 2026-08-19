@@ -73,6 +73,27 @@ function broadcastSyncProgress(p: SyncProgress): void {
 
 /** 退出时若同步在途，置位并在同步结束后真正退出（避免中断上传/写盘） */
 let quitAfterSync = false;
+/** 退出兜底：同步卡死（网络黑洞等）超过上限后强制退出，不再等待。 */
+const QUIT_SYNC_DEADLINE_MS = 60_000;
+let quitDeadlineTimer: NodeJS.Timeout | null = null;
+let forceQuit = false;
+
+function scheduleQuitDeadline(): void {
+  if (quitDeadlineTimer) return;
+  quitDeadlineTimer = setTimeout(() => {
+    quitDeadlineTimer = null;
+    forceQuit = true;
+    log.app.warn("[quit] 等待同步超时，强制退出");
+    app.quit();
+  }, QUIT_SYNC_DEADLINE_MS);
+}
+
+function clearQuitDeadline(): void {
+  if (quitDeadlineTimer) {
+    clearTimeout(quitDeadlineTimer);
+    quitDeadlineTimer = null;
+  }
+}
 
 async function runFullSync(onProgress?: (p: SyncProgress) => void): Promise<SyncResult> {
   if (syncInFlight) throw new Error("同步正在进行中，请等待本次同步完成");
@@ -105,6 +126,7 @@ async function runFullSync(onProgress?: (p: SyncProgress) => void): Promise<Sync
     });
   } finally {
     syncInFlight = false;
+    clearQuitDeadline();
     // 审计：退出时等本轮同步完成再真正退出（before-quit 置位）
     if (quitAfterSync) {
       quitAfterSync = false;
@@ -446,18 +468,23 @@ if (!app.requestSingleInstanceLock()) {
 // （否则可能停在"对象已传、manifest 未写"的中间态）。
 let quittingForSync = false;
 app.on("before-quit", (event) => {
-  if (quittingForSync || !store || !quickNotes) return;
+  if (forceQuit || quittingForSync || !store || !quickNotes) return;
   const cfg = store.getSyncSettings();
   if (!cfg.enabled) return;
   if (syncInFlight) {
     event.preventDefault();
     quitAfterSync = true;
+    scheduleQuitDeadline();
     return;
   }
   if (cfg.autoMode === "onOpenClose") {
     event.preventDefault();
     quittingForSync = true;
-    void runFullSync().finally(() => app.quit());
+    scheduleQuitDeadline();
+    void runFullSync().finally(() => {
+      clearQuitDeadline();
+      app.quit();
+    });
   }
 });
 
