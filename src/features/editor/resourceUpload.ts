@@ -123,14 +123,6 @@ async function uploadWithOriginalFormat(input: ResourceUploadInput, noteId: stri
   return native.uploadResource(input, noteId);
 }
 
-export function getUploadQueueStatus() {
-  return { uploadQueue: uploadQueue.status, workerPool: null };
-}
-
-export function cleanupUploadResources(): void {
-  // Kept as a compatibility no-op for callers from the previous converter path.
-}
-
 const MAX_BROWSER_REDIRECTS = 5;
 
 /** 渲染层可用的字面 host 私网/本机校验（ssrf.ts 依赖 node:net，renderer 不可用） */

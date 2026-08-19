@@ -17,6 +17,8 @@ export interface AppSettings {
   theme: ThemeMode;
   /** 自定义 CSS（思源「代码片段」式自定义 UI；data-theme=dark 下也可覆盖） */
   customCss: string;
+  /** 最大同时打开标签数（0=不限；超限自动关闭最旧标签，当前标签与钉住标签除外）。 */
+  maxOpenTabs: number;
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -26,10 +28,13 @@ export const DEFAULT_SETTINGS: AppSettings = {
   showToolbar: true,
   theme: "light",
   customCss: "",
+  maxOpenTabs: 8,
 };
 
 const STORAGE_KEY = "lake-notes-v1.settings";
 const FONT_SIZES = [12, 13, 14, 15, 16, 19, 22, 24];
+/** 设置面板提供的上限档位；不在档位内的历史/异常值归一到默认档。 */
+const MAX_OPEN_TAB_OPTIONS = [0, 4, 6, 8, 12, 16, 24];
 
 let cached: AppSettings | null = null;
 
@@ -43,6 +48,9 @@ export function loadSettings(): AppSettings {
         ...DEFAULT_SETTINGS,
         ...parsed,
         fontSize: FONT_SIZES.includes(parsed.fontSize ?? -1) ? (parsed.fontSize as number) : DEFAULT_SETTINGS.fontSize,
+        maxOpenTabs: MAX_OPEN_TAB_OPTIONS.includes(parsed.maxOpenTabs as number)
+          ? (parsed.maxOpenTabs as number)
+          : DEFAULT_SETTINGS.maxOpenTabs,
       };
       return cached;
     }

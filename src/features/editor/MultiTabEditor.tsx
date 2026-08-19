@@ -1,8 +1,10 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode, type PointerEvent as ReactPointerEvent } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type PointerEvent as ReactPointerEvent } from "react";
 import { ChevronDown, ChevronsLeft, ChevronsRight, FileText, Pin, X, XCircle, XOctagon } from "lucide-react";
 import { createPortal } from "react-dom";
 import { EditorTab } from "./EditorTab";
 import type { LakeEditorPrefs } from "./lakeRuntime";
+
+const EMPTY_PINNED: ReadonlySet<string> = new Set();
 
 export interface TabInfo {
   noteId: string;
@@ -27,6 +29,10 @@ interface MultiTabEditorProps {
   onTabsReorder?: (noteIds: string[]) => void;
   /** 只读锁的 noteId 集合（驱动 EditorTab viewer 重建） */
   lockedNoteIds?: ReadonlySet<string>;
+  /** 钉住的标签（由上层持有，保证关闭/自动淘汰时能感知钉住状态）。 */
+  pinnedNoteIds?: ReadonlySet<string>;
+  /** 切换标签钉住状态（由上层更新状态）。 */
+  onTogglePin?: (noteId: string) => void;
   onContentChange: (noteId: string, content: string) => void;
   prefs?: LakeEditorPrefs;
   onEditorReady?: (noteId: string, editor: import("./lakeRuntime").LakeEditorInstance | null) => void;
@@ -51,6 +57,8 @@ export function MultiTabEditor({
   onTabClose,
   onTabsReorder,
   lockedNoteIds,
+  pinnedNoteIds,
+  onTogglePin,
   onContentChange,
   prefs,
   onEditorReady,
@@ -67,6 +75,10 @@ export function MultiTabEditor({
   const reloadKeysRef = useRef<Map<string, number>>(new Map());
   const tabItemsRef = useRef<HTMLDivElement>(null);
   const switcherRef = useRef<HTMLDivElement>(null);
+  /** tab 切换按钮（portal 弹窗的 fixed 定位锚点） */
+  const switcherButtonRef = useRef<HTMLButtonElement>(null);
+  /** portal 弹窗自身（外点关闭判定需要包含它） */
+  const tabMenuRef = useRef<HTMLDivElement>(null);
   const [tabMenuOpen, setTabMenuOpen] = useState(false);
   const [tabMenuWidth, setTabMenuWidth] = useState<number>(() => {
     const v = Number(localStorage.getItem("lake-notes-v3.tab-switcher-width"));
@@ -90,7 +102,26 @@ export function MultiTabEditor({
     window.addEventListener("pointermove", onMove);
     window.addEventListener("pointerup", onUp);
   }, []);
-  const [pinned, setPinned] = useState<Set<string>>(new Set());
+
+  /** portal 弹窗锚定在切换按钮正下方（fixed，脱离 .tab-bar 层叠上下文）。 */
+  const tabMenuStyle = useMemo((): React.CSSProperties | undefined => {
+    if (!tabMenuOpen) return undefined;
+    const anchor = switcherButtonRef.current?.getBoundingClientRect();
+    if (!anchor) return undefined;
+    return {
+      position: "fixed",
+      top: anchor.bottom + 8,
+      right: Math.max(8, window.innerWidth - anchor.right),
+      width: tabMenuWidth,
+      maxHeight: `min(470px, calc(100vh - ${anchor.bottom + 8}px - 16px))`,
+    };
+  }, [tabMenuOpen, tabMenuWidth]);
+
+  const tabMenuAnchor = useMemo(
+    () => <span aria-hidden="true" style={{ position: "fixed", left: -9999, top: 0, width: 1, height: 1 }} />,
+    []
+  );
+  const pinned = pinnedNoteIds ?? EMPTY_PINNED;
   const [tabCtx, setTabCtx] = useState<{ noteId: string; x: number; y: number } | null>(null);
 
   // ---- 拖拽排序（pointer 事件，无外部依赖）----
@@ -193,20 +224,6 @@ export function MultiTabEditor({
     }
   }, [tabs]);
 
-  // tab 被关闭后清理 pinned 记录，避免重新打开同文档时残留钉住状态
-  useEffect(() => {
-    const activeIds = new Set(tabs.map((t) => t.noteId));
-    setPinned((prev) => {
-      let changed = false;
-      const next = new Set<string>();
-      for (const id of prev) {
-        if (activeIds.has(id)) next.add(id);
-        else changed = true;
-      }
-      return changed ? next : prev;
-    });
-  }, [tabs]);
-
   useEffect(() => {
     if (!tabCtx) return;
     const onPointerDown = (event: PointerEvent) => {
@@ -226,7 +243,11 @@ export function MultiTabEditor({
   useEffect(() => {
     if (!tabMenuOpen) return;
     const onPointerDown = (event: PointerEvent) => {
-      if (!(event.target instanceof Node) || !switcherRef.current?.contains(event.target)) setTabMenuOpen(false);
+      const target = event.target;
+      if (!(target instanceof Node)) return;
+      if (switcherRef.current?.contains(target)) return;
+      if (tabMenuRef.current?.contains(target)) return;
+      setTabMenuOpen(false);
     };
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") setTabMenuOpen(false);
@@ -241,8 +262,33 @@ export function MultiTabEditor({
 
   useEffect(() => {
     const activeTab = tabItemsRef.current?.querySelector<HTMLElement>(`[data-note-id="${CSS.escape(activeNoteId ?? "")}"]`);
-    activeTab?.scrollIntoView({ block: "nearest", inline: "nearest" });
+    activeTab?.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "nearest" });
   }, [activeNoteId, tabs.length]);
+
+  /** 鼠标没有横向滚轮时，用垂直滚轮驱动顶部 tab 的横向滚动。
+   * 触控板产生的 deltaX 保持原生行为；原生非 passive listener 才能安全 preventDefault。 */
+  const handleTabWheel = useCallback((event: WheelEvent) => {
+    const strip = tabItemsRef.current;
+    if (!strip) return;
+    const maxScrollLeft = strip.scrollWidth - strip.clientWidth;
+    if (maxScrollLeft <= 0) return;
+
+    const delta = Math.abs(event.deltaX) >= Math.abs(event.deltaY) ? event.deltaX : event.deltaY;
+    if (!delta) return;
+
+    const nextScrollLeft = Math.max(0, Math.min(maxScrollLeft, strip.scrollLeft + delta));
+    if (nextScrollLeft === strip.scrollLeft) return;
+
+    event.preventDefault();
+    strip.scrollLeft = nextScrollLeft;
+  }, []);
+
+  useEffect(() => {
+    const strip = tabItemsRef.current;
+    if (!strip) return;
+    strip.addEventListener("wheel", handleTabWheel, { passive: false });
+    return () => strip.removeEventListener("wheel", handleTabWheel);
+  }, [handleTabWheel]);
 
   const selectTab = (noteId: string) => {
     onTabChange(noteId);
@@ -298,6 +344,7 @@ export function MultiTabEditor({
         {tabs.length > 0 && (
           <div className="tab-switcher-wrap" ref={switcherRef}>
             <button
+              ref={switcherButtonRef}
               className={`tab-switcher ${tabMenuOpen ? "open" : ""}`}
               onClick={() => setTabMenuOpen((open) => !open)}
               aria-label={`切换标签，共 ${tabs.length} 个`}
@@ -306,9 +353,10 @@ export function MultiTabEditor({
               data-tooltip={`切换标签（${tabs.length}）`}
             >
               <ChevronDown size={15} />
+              {tabMenuAnchor}
             </button>
-            {tabMenuOpen && (
-              <div className="tab-switcher-menu" role="menu" aria-label="打开的标签" style={{ width: tabMenuWidth }}>
+            {tabMenuOpen && createPortal(
+              <div ref={tabMenuRef} className="tab-switcher-menu" role="menu" aria-label="打开的标签" style={tabMenuStyle}>
                 <div className="tab-switcher-resize" onPointerDown={startTabMenuResize} title="拖动调整宽度" />
                 <div className="tab-switcher-heading">
                   <strong>打开的标签</strong>
@@ -342,7 +390,8 @@ export function MultiTabEditor({
                     </div>
                   ))}
                 </div>
-              </div>
+              </div>,
+              document.body
             )}
           </div>
         )}
@@ -375,18 +424,16 @@ export function MultiTabEditor({
           hasLeft={tabs.findIndex((t) => t.noteId === tabCtx.noteId) > 0}
           hasRight={tabs.findIndex((t) => t.noteId === tabCtx.noteId) < tabs.length - 1}
           onTogglePin={() => {
-            setPinned((prev) => {
-              const next = new Set(prev);
-              if (next.has(tabCtx.noteId)) next.delete(tabCtx.noteId);
-              else next.add(tabCtx.noteId);
-              // 钉住组始终排在最前（思源式固定页签），其余保持原相对顺序
-              const ordered = [
-                ...tabs.filter((t) => next.has(t.noteId)).map((t) => t.noteId),
-                ...tabs.filter((t) => !next.has(t.noteId)).map((t) => t.noteId),
-              ];
-              onTabsReorder?.(ordered);
-              return next;
-            });
+            const next = new Set(pinned);
+            if (next.has(tabCtx.noteId)) next.delete(tabCtx.noteId);
+            else next.add(tabCtx.noteId);
+            // 钉住组始终排在最前（思源式固定页签），其余保持原相对顺序
+            const ordered = [
+              ...tabs.filter((t) => next.has(t.noteId)).map((t) => t.noteId),
+              ...tabs.filter((t) => !next.has(t.noteId)).map((t) => t.noteId),
+            ];
+            onTabsReorder?.(ordered);
+            onTogglePin?.(tabCtx.noteId);
           }}
           onCloseTab={() => onTabClose(tabCtx.noteId)}
           onCloseOthers={() => {

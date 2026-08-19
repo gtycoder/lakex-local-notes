@@ -11,13 +11,16 @@ import { QuickNotesWorkspace, type QuickNotesWorkspaceHandle } from "./component
 import { SyncToast, type SyncToastData } from "./components/SyncToast";
 import { DesktopStatusBar } from "./components/DesktopStatusBar";
 import { LakeEditor } from "./features/editor/LakeEditor";
+import { clearScrollMemory } from "./features/editor/EditorTab";
 import type { LakeEditorInstance } from "./features/editor/lakeRuntime";
 import { MultiTabEditor, type TabInfo } from "./features/editor/MultiTabEditor";
+import { selectEvictionIds, trimTabsToLimit } from "./lib/tabLimit";
 import { OutlineSidebar } from "./features/outline/OutlineSidebar";
 import type { OutlineMode } from "./features/outline/OutlineController";
 import { getOutlineTab, getOutlineTabsVersion, subscribeOutlineTabs } from "./features/outline/registry";
 import { cleanLakeMarkdown } from "./lib/markdownClean";
 import { KeyedAsyncQueue } from "./lib/keyedAsyncQueue";
+import { computeDocStats, type DocStats } from "./lib/docStats";
 import { createRequestVersion } from "./lib/requestVersion";
 import { stripAssetAccessToken } from "./lib/assetPort";
 import { isDesktop, native } from "./lib/native";
@@ -149,6 +152,7 @@ export function App() {
   const [mobileDraftContent, setMobileDraftContent] = useState("");
   const [isMobile, setIsMobile] = useState(() => window.matchMedia("(max-width: 760px)").matches);
   const [settings, setSettings] = useState<AppSettings>(() => loadSettings());
+  const [pinnedNoteIds, setPinnedNoteIds] = useState<Set<string>>(() => new Set());
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsCategory, setSettingsCategory] = useState<SettingsCategory>("editor");
   const tocEnabled = settings.showToc;
@@ -161,6 +165,7 @@ export function App() {
   const [outlineMode, setOutlineMode] = useState<OutlineMode>(initialOutlineMode);
   const [activeOutlineEmpty, setActiveOutlineEmpty] = useState(false);
   const [outlineEmptyOverride, setOutlineEmptyOverride] = useState(false);
+  const [outlineSwitching, setOutlineSwitching] = useState(false);
   const outlineTabsVersion = useSyncExternalStore(subscribeOutlineTabs, getOutlineTabsVersion, getOutlineTabsVersion);
   const [outlineSidebarWidth, setOutlineSidebarWidth] = useState(initialOutlineSidebarWidth);
   const [outlineResizing, setOutlineResizing] = useState(false);
@@ -186,6 +191,37 @@ export function App() {
 
   useEffect(() => { openTabsRef.current = openTabs; }, [openTabs]);
 
+  // W-2-A：字数/图片统计状态（hooks 必须在早退之前声明）。
+  // 切换/重载文档立即计算；打字输入走 300ms debounce。
+  const [docStats, setDocStats] = useState<DocStats>({ wordCount: 0, imageCount: 0 });
+  const statsTimerRef = useRef<number | null>(null);
+  const statsKeyRef = useRef("");
+  useEffect(() => {
+    const tab = openTabs.find((t) => t.noteId === activeNoteId);
+    const content = tab?.content ?? mobileActive?.content ?? "";
+    const key = activeNoteId
+      ? `tab:${activeNoteId}:${tab?.reloadKey ?? 0}`
+      : `mobile:${mobileActive?.id ?? "none"}`;
+    if (statsKeyRef.current !== key) {
+      // 文档切换/重载：立即更新状态栏，不引入感知延迟
+      statsKeyRef.current = key;
+      setDocStats(computeDocStats(content));
+      return;
+    }
+    // 正文变化（打字）：debounce 后再算，避免大文档每按键全量正则
+    if (statsTimerRef.current !== null) window.clearTimeout(statsTimerRef.current);
+    statsTimerRef.current = window.setTimeout(() => {
+      statsTimerRef.current = null;
+      setDocStats(computeDocStats(content));
+    }, 300);
+    return () => {
+      if (statsTimerRef.current !== null) {
+        window.clearTimeout(statsTimerRef.current);
+        statsTimerRef.current = null;
+      }
+    };
+  }, [openTabs, activeNoteId, mobileActive]);
+
   useEffect(() => {
     if (sidebarMode !== "floating") localStorage.setItem("lake-notes-v2.sidebar-mode", sidebarMode);
   }, [sidebarMode]);
@@ -204,6 +240,29 @@ export function App() {
 
   useEffect(() => {
     return subscribeSettings((next) => setSettings(next));
+  }, []);
+
+  // 钉住状态由 App 持有：自动淘汰/关闭后可感知并清理残留，淘汰逻辑能保护钉住标签。
+  useEffect(() => {
+    const activeIds = new Set(openTabs.map((t) => t.noteId));
+    setPinnedNoteIds((prev) => {
+      let changed = false;
+      const next = new Set<string>();
+      for (const id of prev) {
+        if (activeIds.has(id)) next.add(id);
+        else changed = true;
+      }
+      return changed ? next : prev;
+    });
+  }, [openTabs]);
+
+  const handleTogglePin = useCallback((noteId: string) => {
+    setPinnedNoteIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(noteId)) next.delete(noteId);
+      else next.add(noteId);
+      return next;
+    });
   }, []);
 
   // 顶栏工作空间名：用 S3 prefix（思源对应「工作空间」）
@@ -384,6 +443,18 @@ export function App() {
     });
   }, []);
 
+  /** 超限自动淘汰：返回被关闭的 noteId 列表（dirty 内容先持久化，绝不淘汰当前激活标签）。 */
+  const evictTabsForLimit = useCallback(async (nextTabs: OpenTab[], openedId: string): Promise<string[]> => {
+    const limit = settings.maxOpenTabs;
+    if (limit <= 0) return [];
+    const evictedIds = selectEvictionIds(nextTabs, { limit, activeNoteId: openedId, pinnedNoteIds });
+    for (const id of evictedIds) {
+      const tab = openTabsRef.current.find((t) => t.noteId === id);
+      if (tab?.dirty) await persistTab(id, tab.title, tab.content);
+    }
+    return evictedIds;
+  }, [settings.maxOpenTabs, pinnedNoteIds, persistTab]);
+
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if ((event.metaKey || event.ctrlKey) && event.shiftKey && event.key.toLowerCase() === "f") {
@@ -432,7 +503,13 @@ export function App() {
     saveTimers.current.set(noteId, timer);
   }, [persistTab]);
 
-  async function openNote(id: string) {
+  const showNotice = useCallback((text: string) => {
+    setNotice({ text });
+    if (noticeTimer.current !== null) window.clearTimeout(noticeTimer.current);
+    noticeTimer.current = window.setTimeout(() => setNotice(null), 2200);
+  }, []);
+
+  const openNote = useCallback(async (id: string) => {
     const existing = openTabsRef.current.find((tab) => tab.noteId === id);
     if (existing) {
       // 标签曾被标记"已删除"（远端删除）：文档可能已从回收站恢复，重新拉取最新内容刷新标签。
@@ -462,25 +539,39 @@ export function App() {
       }
       revisionRef.current.set(note.id, 0);
       const newTab: OpenTab = { noteId: note.id, title: note.title, content: note.content, dirty: false, lastAccessedAt: Date.now() };
+      const nextForEvict = openTabsRef.current.some((t) => t.noteId === id)
+        ? openTabsRef.current
+        : [...openTabsRef.current, newTab];
+      const evictedIds = await evictTabsForLimit(nextForEvict, id);
       setOpenTabs((tabs) => {
-        if (tabs.some((t) => t.noteId === id)) return tabs;
-        return [...tabs, newTab];
+        const base = tabs.some((t) => t.noteId === id) ? tabs : [...tabs, newTab];
+        // 更新器内再次封顶：并发打开时以最新已提交状态为准，杜绝旧 ref 竞态超限。
+        return trimTabsToLimit(base, { limit: settings.maxOpenTabs, activeNoteId: id, pinnedNoteIds });
       });
+      if (evictedIds.length > 0) {
+        setPinnedNoteIds((prev) => {
+          const next = new Set(prev);
+          for (const ev of evictedIds) next.delete(ev);
+          return next.size === prev.size ? prev : next;
+        });
+        showNotice(`已自动关闭最旧的标签（上限 ${settings.maxOpenTabs}）`);
+      }
       setActiveNoteId(id);
     } catch (reason) { setError(String(reason)); }
-  }
+  }, [evictTabsForLimit, settings.maxOpenTabs, pinnedNoteIds, showNotice]);
 
-  async function openNoteMobile(id: string) {
+  const openNoteMobile = useCallback(async (id: string) => {
     try {
       const note = await native.readNote(id);
       setMobileActive(note); setMobileDraftTitle(note.title); setMobileDraftContent(note.content);
       setMobilePage("document");
     } catch (reason) { setError(String(reason)); }
-  }
+  }, []);
 
   async function closeTab(noteId: string) {
     const tab = openTabsRef.current.find((t) => t.noteId === noteId);
     if (!tab) return;
+    clearScrollMemory(noteId);
     const pendingTimer = saveTimers.current.get(noteId);
     if (pendingTimer !== undefined) {
       window.clearTimeout(pendingTimer);
@@ -499,12 +590,6 @@ export function App() {
     setOpenTabs((tabs) => tabs.filter((t) => t.noteId !== noteId));
     if (nextActiveId !== null) setActiveNoteId(nextActiveId);
   }
-
-  const showNotice = useCallback((text: string) => {
-    setNotice({ text });
-    if (noticeTimer.current !== null) window.clearTimeout(noticeTimer.current);
-    noticeTimer.current = window.setTimeout(() => setNotice(null), 2200);
-  }, []);
 
   /** 云同步：点顶栏云按钮直接开始，小悬浮窗展示状态并自动消失（不再弹带按钮的大弹窗） */
   const showSyncToast = useCallback((data: SyncToastData) => {
@@ -664,20 +749,18 @@ export function App() {
     } else {
       revisionRef.current.set(note.id, 0);
       const newTab: OpenTab = { noteId: note.id, title: note.title, content: note.content, dirty: false, lastAccessedAt: Date.now() };
-      const currentTabs = openTabsRef.current;
-      if (currentTabs.length >= 8) {
-        let evictIndex = 0;
-        for (let i = 1; i < currentTabs.length; i++) {
-          if (currentTabs[i].lastAccessedAt < currentTabs[evictIndex].lastAccessedAt) evictIndex = i;
-        }
-        const evicted = currentTabs[evictIndex];
-        if (evicted.dirty) await persistTab(evicted.noteId, evicted.title, evicted.content);
-        setOpenTabs((tabs) => {
-          const withoutEvicted = tabs.filter((t) => t.noteId !== evicted.noteId);
-          return withoutEvicted.some((t) => t.noteId === note.id) ? tabs : [...withoutEvicted, newTab];
+      const evictedIds = await evictTabsForLimit([...openTabsRef.current, newTab], note.id);
+      setOpenTabs((tabs) => {
+        const base = tabs.some((t) => t.noteId === note.id) ? tabs : [...tabs, newTab];
+        return trimTabsToLimit(base, { limit: settings.maxOpenTabs, activeNoteId: note.id, pinnedNoteIds });
+      });
+      if (evictedIds.length > 0) {
+        setPinnedNoteIds((prev) => {
+          const next = new Set(prev);
+          for (const ev of evictedIds) next.delete(ev);
+          return next.size === prev.size ? prev : next;
         });
-      } else {
-        setOpenTabs((tabs) => [...tabs, newTab]);
+        showNotice(`已自动关闭最旧的标签（上限 ${settings.maxOpenTabs}）`);
       }
       setActiveNoteId(note.id);
       setPendingRenameId(note.id);
@@ -689,7 +772,7 @@ export function App() {
     await createNoteIn(notebookId);
   }
 
-  async function createTreeItem(kind: "notebook" | "group" | "note", parentId: string | null, title?: string) {
+  const createTreeItem = useCallback(async (kind: "notebook" | "group" | "note", parentId: string | null, title?: string) => {
     try {
       if (kind === "note") { await createNoteIn(parentId); return; }
       const resolvedTitle = title?.trim();
@@ -698,9 +781,9 @@ export function App() {
       else if (parentId) await native.createGroup(parentId, resolvedTitle);
       setTreeNodes(await native.listTreeNodes());
     } catch (reason) { setError(String(reason)); }
-  }
+  }, []);
 
-  async function renameTreeNode(id: string, title: string) {
+  const renameTreeNode = useCallback(async (id: string, title: string) => {
     try {
       const renamed = await native.renameTreeNode(id, title);
       setTreeNodes((items) => items.map((item) => item.id === id ? renamed : item));
@@ -709,9 +792,9 @@ export function App() {
         setOpenTabs((tabs) => tabs.map((tab) => tab.noteId === renamed.noteFileId ? { ...tab, title: renamed.title } : tab));
       }
     } catch (reason) { setError(String(reason)); }
-  }
+  }, []);
 
-  async function moveTreeNode(id: string, targetId: string, position: "before" | "inside" | "after") {
+  const moveTreeNode = useCallback(async (id: string, targetId: string, position: "before" | "inside" | "after") => {
     try {
       const moving = treeNodes.find((node) => node.id === id);
       const target = treeNodes.find((node) => node.id === targetId);
@@ -730,7 +813,36 @@ export function App() {
       await native.moveTreeNodeOrdered(id, parentId, orderedIds);
       setTreeNodes(await native.listTreeNodes());
     } catch (reason) { setError(String(reason)); }
-  }
+  }, [treeNodes]);
+
+  // W-2-B：传给 Sidebar 的回调全部稳定化——App 每次渲染（含打字触发的 openTabs 变化）
+  // 不再产生新引用，配合 memo(Sidebar) 让树行渲染彻底跳过按键路径。
+  const sidebarSelect = useCallback((id: string) => {
+    void (isMobile ? openNoteMobile(id) : openNote(id));
+  }, [isMobile, openNoteMobile, openNote]);
+  const sidebarCreate = useCallback((kind: "notebook" | "group" | "note", parentId: string | null, title?: string) => {
+    void createTreeItem(kind, parentId, title);
+  }, [createTreeItem]);
+  const sidebarRename = useCallback((id: string, title: string) => {
+    void renameTreeNode(id, title);
+  }, [renameTreeNode]);
+  const sidebarMove = useCallback((id: string, targetId: string, position: "before" | "inside" | "after") => {
+    void moveTreeNode(id, targetId, position);
+  }, [moveTreeNode]);
+  const sidebarRequestDelete = useCallback((node: TreeNode) => setConfirmDelete(node), []);
+  const sidebarSetIcon = useCallback((node: TreeNode, icon: string | null) => {
+    void setNodeIcon(node, icon);
+  }, [setNodeIcon]);
+  const sidebarOpenHistory = useCallback((node: TreeNode) => {
+    setHistoryNoteId(node.noteFileId);
+    setHistoryOpen(!!node.noteFileId);
+  }, []);
+  const sidebarOpenSearch = useCallback((q?: string) => {
+    setSearchPanelQuery(q ?? "");
+    setSearchPanelOpen(true);
+  }, []);
+  const sidebarPendingRenameConsumed = useCallback(() => setPendingRenameId(null), []);
+  const sidebarCloseMobile = useCallback(() => setMobileOpen(false), []);
 
   async function deleteTreeNode(id: string) {
     try {
@@ -742,6 +854,7 @@ export function App() {
         const timer = saveTimers.current.get(noteId);
         if (timer) { window.clearTimeout(timer); saveTimers.current.delete(noteId); }
         revisionRef.current.delete(noteId);
+        clearScrollMemory(noteId);
       });
       await native.deleteTreeNode(id);
       const remaining = notes.filter((note) => !removedNoteIds.has(note.id));
@@ -755,30 +868,30 @@ export function App() {
     } catch (reason) { setError(String(reason)); }
   }
 
-  function clearSidebarPreviewTimer() {
+  const clearSidebarPreviewTimer = useCallback(() => {
     if (sidebarPreviewTimer.current !== null) {
       window.clearTimeout(sidebarPreviewTimer.current);
       sidebarPreviewTimer.current = null;
     }
-  }
+  }, []);
 
-  function showSidebarPreview() {
+  const showSidebarPreview = useCallback(() => {
     clearSidebarPreviewTimer();
     setSidebarMode((current) => current === "collapsed" ? "floating" : current);
-  }
+  }, [clearSidebarPreviewTimer]);
 
-  function hideSidebarPreview() {
+  const hideSidebarPreview = useCallback(() => {
     clearSidebarPreviewTimer();
     sidebarPreviewTimer.current = window.setTimeout(() => {
       setSidebarMode((current) => current === "floating" ? "collapsed" : current);
       sidebarPreviewTimer.current = null;
     }, 120);
-  }
+  }, [clearSidebarPreviewTimer]);
 
-  function toggleSidebarDock() {
+  const toggleSidebarDock = useCallback(() => {
     clearSidebarPreviewTimer();
     setSidebarMode((current) => current === "docked" ? "collapsed" : "docked");
-  }
+  }, [clearSidebarPreviewTimer]);
 
   /** 手动切换全局大纲状态；空文档上显式固定时给一次豁免。 */
   function setOutlineModeForActive(mode: OutlineMode) {
@@ -797,6 +910,14 @@ export function App() {
     setOutlineModeForActive("docked");
   }
 
+  // 切换标签时，大纲数据会在编辑器注册后异步更新；期间禁止壳层 grid 动画，
+  // 避免“旧列宽 → 新列宽”与正文淡入同时发生，造成 tab 切换时主区横向抖动。
+  useEffect(() => {
+    setOutlineSwitching(true);
+    const timer = window.setTimeout(() => setOutlineSwitching(false), 360);
+    return () => window.clearTimeout(timer);
+  }, [activeNoteId]);
+
   // 跟踪当前文档是否为空大纲；切换标签时清除豁免、重新评估。
   useEffect(() => {
     setOutlineEmptyOverride(false);
@@ -810,15 +931,15 @@ export function App() {
     // tabsVersion：新标签注册晚于 activeNoteId 变化时也要重新评估。
   }, [activeNoteId, outlineTabsVersion]);
 
-  function updateSidebarWidth(width: number) {
+  const updateSidebarWidth = useCallback((width: number) => {
     setSidebarWidth(width);
-  }
+  }, []);
 
-  function commitSidebarWidth(width: number) {
+  const commitSidebarWidth = useCallback((width: number) => {
     const clamped = Math.min(SIDEBAR_MAX_WIDTH, Math.max(SIDEBAR_MIN_WIDTH, width));
     setSidebarWidth(clamped);
     localStorage.setItem("lake-notes-v3.sidebar-width", String(Math.round(clamped)));
-  }
+  }, []);
 
   /** 只读锁切换：先保存脏草稿，再写 SQLite（锁状态经 manifest v3 同步） */
   async function toggleNoteLock() {
@@ -925,15 +1046,11 @@ export function App() {
     <MobileLibrary notes={notes} search={search} sync={sync} onSearch={setSearch} onSelect={(id) => void openNoteMobile(id)} onCreate={() => void createNote()} />
   </>;
 
-  // 字数统计：当前活动标签正文去标签后字数
+  // 字数/图片统计（W-2-A）：从渲染体移出，避免每次按键对整篇正文跑两次 O(n) 正则。
   const activeTab = openTabs.find((t) => t.noteId === activeNoteId);
   const activeContent = activeTab?.content ?? mobileActive?.content ?? "";
-  const plainText = activeContent.replace(/<[^>]+>/g, "").replace(/&nbsp;/g, " ").replace(/&amp;/g, "&");
-  const wordCount = plainText.trim().length;
-  const wordCountLabel = wordCount > 0 ? `${wordCount} 字` : "";
-  // 图片统计：当前文档 Lake 正文中的 image card 数（思源状态栏同款：仅 >0 时显示）
-  const imageCount = (activeContent.match(/<card\b[^>]*\bname="image"[^>]*>/g) || []).length;
-  const imageCountLabel = imageCount > 0 ? `图片 ${imageCount}` : "";
+  const wordCountLabel = docStats.wordCount > 0 ? `${docStats.wordCount} 字` : "";
+  const imageCountLabel = docStats.imageCount > 0 ? `图片 ${docStats.imageCount}` : "";
   const activeNodeSyncState = activeNoteId ? (treeNodes.find((n) => n.noteFileId === activeNoteId)?.syncState ?? "synced") : "synced";
   const syncIndicator = cloudStatus(sync, activeNodeSyncState, cloudEnabled);
 
@@ -1001,14 +1118,14 @@ export function App() {
   } as CSSProperties;
 
   return (
-    <div className={`app-shell ${shellPlatformClass} sidebar-${sidebarMode} outline-${effectiveOutlineMode} ${workspaceMenuOpen ? "workspace-menu-open" : ""} ${desktopWorkspace === "quick-notes" ? "quick-notes-active" : ""} ${sidebarResizing ? "sidebar-resizing" : ""} ${outlineResizing ? "outline-resizing" : ""} ${isMobile ? `mobile-document-page ${mobileEditing ? "mobile-editing" : "mobile-reading"}` : ""}`} style={shellStyle}>
+    <div className={`app-shell ${shellPlatformClass} sidebar-${sidebarMode} outline-${effectiveOutlineMode} ${workspaceMenuOpen ? "workspace-menu-open" : ""} ${desktopWorkspace === "quick-notes" ? "quick-notes-active" : ""} ${sidebarResizing ? "sidebar-resizing" : ""} ${outlineResizing ? "outline-resizing" : ""} ${outlineSwitching ? "outline-switching" : ""} ${isMobile ? `mobile-document-page ${mobileEditing ? "mobile-editing" : "mobile-reading"}` : ""}`} style={shellStyle}>
       <nav className="activity-rail desktop-only" aria-label="应用导航" onPointerEnter={desktopWorkspace === "library" ? showSidebarPreview : undefined} onPointerLeave={desktopWorkspace === "library" ? hideSidebarPreview : undefined}>
         <div className="activity-rail-spacer" />
         <button className={`activity-button ${desktopWorkspace === "library" && sidebarMode === "docked" ? "active" : ""}`} onClick={() => { if (desktopWorkspace === "library") toggleSidebarDock(); else void switchDesktopWorkspace("library"); }} title="资料库" aria-label="资料库"><Files size={16} /></button>
         <button className={`activity-button ${desktopWorkspace === "quick-notes" ? "active" : ""}`} onClick={() => void switchDesktopWorkspace("quick-notes")} title="小记" aria-label="小记"><Feather size={16} /></button>
         <div className="activity-rail-fill" />
       </nav>
-      {desktopWorkspace === "library" && <Sidebar nodes={treeNodes} activeId={activeNoteId ?? mobileActive?.id ?? null} search={search} mobileOpen={mobileOpen} mode={sidebarMode} width={sidebarWidth} minWidth={SIDEBAR_MIN_WIDTH} maxWidth={SIDEBAR_MAX_WIDTH} onSearch={setSearch} onSelect={(id) => void (isMobile ? openNoteMobile(id) : openNote(id))} onCreate={(kind, parentId, title) => void createTreeItem(kind, parentId, title)} onRename={(id, title) => void renameTreeNode(id, title)} onMoveNode={(id, targetId, position) => void moveTreeNode(id, targetId, position)} onRequestDelete={(node) => setConfirmDelete(node)} onCopyMarkdown={(node) => void copyMarkdownFromCache(node)} onExportAs={(node, format) => void exportAs(node, format)} onCopyPaths={(node) => void copyNotePaths(node)} onSetIcon={(node, icon) => void setNodeIcon(node, icon)} onOpenHistory={(node) => { setHistoryNoteId(node.noteFileId); setHistoryOpen(!!node.noteFileId); }} onOpenSearch={(q) => { setSearchPanelQuery(q ?? ""); setSearchPanelOpen(true); }} pendingRenameId={pendingRenameId} onPendingRenameConsumed={() => setPendingRenameId(null)} onPreviewEnter={showSidebarPreview} onPreviewLeave={hideSidebarPreview} onResizeActiveChange={setSidebarResizing} onWidthChange={updateSidebarWidth} onWidthCommit={commitSidebarWidth} onCloseMobile={() => setMobileOpen(false)} />}
+      {desktopWorkspace === "library" && <Sidebar nodes={treeNodes} activeId={activeNoteId ?? mobileActive?.id ?? null} search={search} mobileOpen={mobileOpen} mode={sidebarMode} width={sidebarWidth} minWidth={SIDEBAR_MIN_WIDTH} maxWidth={SIDEBAR_MAX_WIDTH} onSearch={setSearch} onSelect={sidebarSelect} onCreate={sidebarCreate} onRename={sidebarRename} onMoveNode={sidebarMove} onRequestDelete={sidebarRequestDelete} onCopyMarkdown={copyMarkdownFromCache} onExportAs={exportAs} onCopyPaths={copyNotePaths} onSetIcon={sidebarSetIcon} onOpenHistory={sidebarOpenHistory} onOpenSearch={sidebarOpenSearch} pendingRenameId={pendingRenameId} onPendingRenameConsumed={sidebarPendingRenameConsumed} onPreviewEnter={showSidebarPreview} onPreviewLeave={hideSidebarPreview} onResizeActiveChange={setSidebarResizing} onWidthChange={updateSidebarWidth} onWidthCommit={commitSidebarWidth} onCloseMobile={sidebarCloseMobile} />}
       {mobileOpen && <div className="mobile-scrim" onClick={() => setMobileOpen(false)} />}
       <main className="workspace" onPointerDownCapture={(event) => {
         if (!isMobile && sidebarMode === "floating" && (event.target as HTMLElement).closest(".document-pane, .empty-workspace")) setSidebarMode("collapsed");
@@ -1079,6 +1196,8 @@ export function App() {
               onTabClose={closeTab}
               onTabsReorder={reorderTabs}
               lockedNoteIds={lockedNoteIds}
+              pinnedNoteIds={pinnedNoteIds}
+              onTogglePin={handleTogglePin}
               onContentChange={handleContentChange}
               prefs={editorPrefs}
               onEditorReady={handleEditorReady}

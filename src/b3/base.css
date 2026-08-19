@@ -62,28 +62,6 @@ body {
   }
 }
 
-/* 滚动条（思源风格：细滚动条 + b3 颜色） */
-* {
-  scrollbar-width: thin;
-  scrollbar-color: var(--b3-scroll-color) transparent;
-}
-::-webkit-scrollbar {
-  width: 10px;
-  height: 10px;
-}
-::-webkit-scrollbar-thumb {
-  background: var(--b3-scroll-color);
-  border-radius: 5px;
-  border: 2px solid transparent;
-  background-clip: content-box;
-}
-::-webkit-scrollbar-thumb:hover {
-  background-color: var(--b3-theme-on-surface-light);
-}
-::-webkit-scrollbar-track {
-  background: transparent;
-}
-
 /* 文本选区（思源主题色系） */
 ::selection {
   background: var(--b3-theme-primary-light);

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { AlignLeft, Cloud, History, Info, ListTree, Monitor, Moon, PanelTop, Settings, Sun, Trash2, Type } from "lucide-react";
+import { AlignLeft, Cloud, Files, History, Info, ListTree, Monitor, Moon, PanelTop, Settings, Sun, Trash2, Type } from "lucide-react";
 import { fontSizeOptions, type AppSettings } from "../lib/settings";
 import { native } from "../lib/native";
 import type { S3Settings, SyncSettings } from "../lib/types";
@@ -34,7 +34,6 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
   const [histBusy, setHistBusy] = useState(false);
 
   const [s3, setS3] = useState<S3Settings>(S3_DEFAULTS);
-  const [showSecret, setShowSecret] = useState(false);
   const [gcCfg, setGcCfg] = useState<{ gcRetentionDays: number; gcIntervalHours: number; trashAutoPurgeDays: number } | null>(null);
   const [gcPending, setGcPending] = useState<number>(0);
   const [gcLog, setGcLog] = useState<Array<{ id: number; ts: string; action: string; key: string; reason: string; ok: boolean }>>([]);
@@ -172,6 +171,24 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
                   <label className="settings-toggle"><ListTree size={13} /><span>显示文档大纲（TOC）</span><input type="checkbox" checked={settings.showToc} onChange={(e) => onChange({ showToc: e.target.checked })} /></label>
                   <label className="settings-toggle"><PanelTop size={13} /><span>显示编辑器工具栏</span><input type="checkbox" checked={settings.showToolbar} onChange={(e) => onChange({ showToolbar: e.target.checked })} /></label>
                 </section>
+                <section className="settings-group">
+                  <h4><Files size={13} /> 标签页</h4>
+                  <div className="settings-row">
+                    <div className="settings-field">
+                      <span>最大同时打开标签数</span>
+                      <select value={settings.maxOpenTabs} onChange={(e) => onChange({ maxOpenTabs: Number(e.target.value) })} aria-label="最大同时打开标签数">
+                        <option value={0}>不限</option>
+                        <option value={4}>4 个</option>
+                        <option value={6}>6 个</option>
+                        <option value={8}>8 个</option>
+                        <option value={12}>12 个</option>
+                        <option value={16}>16 个</option>
+                        <option value={24}>24 个</option>
+                      </select>
+                    </div>
+                  </div>
+                  <p className="settings-hint">超过上限时自动关闭最旧的标签（当前编辑的标签与钉住的标签除外），未保存内容会自动保存。</p>
+                </section>
               </>
             )}
 
@@ -253,7 +270,7 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
                   <h4><Cloud size={13} /> S3 连接（凭据仅保存在当前设备）</h4>
                   <div className="settings-field"><span>Endpoint</span><input type="text" value={s3.endpoint} placeholder="https://s3-cn-east-1.qiniucs.com" onChange={(e) => setS3Field("endpoint", e.target.value)} /></div>
                   <div className="settings-field"><span>Access Key</span><input type="text" value={s3.accessKeyId} onChange={(e) => setS3Field("accessKeyId", e.target.value)} /></div>
-                  <div className="settings-field"><span>Secret Key</span><input type={showSecret ? "text" : "password"} value={s3.secretAccessKey} onChange={(e) => setS3Field("secretAccessKey", e.target.value)} /></div>
+                  <div className="settings-field"><span>Secret Key</span><input type="password" value={s3.secretAccessKey} placeholder="留空或保持 ******** 表示沿用已保存密钥" onChange={(e) => setS3Field("secretAccessKey", e.target.value)} /></div>
                   <div className="settings-field"><span>Bucket</span><input type="text" value={s3.bucket} onChange={(e) => setS3Field("bucket", e.target.value)} /></div>
                   <div className="settings-field"><span>Region</span><input type="text" value={s3.region} onChange={(e) => setS3Field("region", e.target.value)} /></div>
                   <div className="settings-field"><span>对象前缀</span><input type="text" value={s3.prefix} onChange={(e) => setS3Field("prefix", e.target.value)} /></div>
@@ -261,7 +278,6 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
                   <div className="settings-row" style={{ gap: 6 }}>
                     <button className="settings-choice" onClick={() => void testS3()}>测试连接</button>
                     <button className="settings-choice" onClick={() => void saveS3()}>保存配置</button>
-                    <button className="settings-choice" onClick={() => setShowSecret(!showSecret)}>{showSecret ? "隐藏密钥" : "显示密钥"}</button>
                   </div>
                 </section>
                 <section className="settings-group">

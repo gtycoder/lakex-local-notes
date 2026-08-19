@@ -89,20 +89,6 @@
     outline: 3px solid rgba(53, 117, 240, .18);
     outline-offset: 1px;
   }
-  /* 产品要求隐藏右上角大纲图标，但保留无障碍/物理鼠标命中区。 */
-  .outline-sidebar__activity-button--ghost {
-    color: transparent !important;
-    background: transparent !important;
-    box-shadow: none !important;
-    opacity: 0;
-  }
-  .outline-sidebar__activity-button--ghost:hover,
-  .outline-sidebar__activity-button--ghost.active {
-    color: transparent !important;
-    background: transparent !important;
-    box-shadow: none !important;
-  }
-
   /* 内容始终锚定 rail 左侧。收起时覆盖正文；固定时参与 grid，编辑器自行收缩。 */
   .outline-sidebar__content {
     position: absolute;
@@ -263,59 +249,7 @@
   padding: 6px 0;
 }
 
-/* 思源式滚动条：只作用于真实滚动容器。默认 3px，进入该容器后为 6px。 */
-.note-list,
-.outline-list,
-.lake-editor-main .ne-editor-wrap,
-.lake-editor-main .ne-viewer,
-.lake-editor-main .ne-viewer-wrap,
-.lake-editor-main .ne-viewer-body {
-  scrollbar-width: thin;
-  scrollbar-color: rgba(0, 0, 0, .2) transparent;
-}
-.note-list::-webkit-scrollbar,
-.outline-list::-webkit-scrollbar,
-.lake-editor-main .ne-editor-wrap::-webkit-scrollbar,
-.lake-editor-main .ne-viewer::-webkit-scrollbar,
-.lake-editor-main .ne-viewer-wrap::-webkit-scrollbar,
-.lake-editor-main .ne-viewer-body::-webkit-scrollbar {
-  width: 3px !important;
-  height: 3px !important;
-  background: transparent;
-}
-.note-list:hover::-webkit-scrollbar,
-.outline-list:hover::-webkit-scrollbar,
-.lake-editor-main .ne-editor-wrap:hover::-webkit-scrollbar,
-.lake-editor-main .ne-viewer:hover::-webkit-scrollbar,
-.lake-editor-main .ne-viewer-wrap:hover::-webkit-scrollbar,
-.lake-editor-main .ne-viewer-body:hover::-webkit-scrollbar {
-  width: 6px !important;
-  height: 6px !important;
-}
-.note-list::-webkit-scrollbar-track,
-.outline-list::-webkit-scrollbar-track,
-.lake-editor-main .ne-editor-wrap::-webkit-scrollbar-track,
-.lake-editor-main .ne-viewer::-webkit-scrollbar-track,
-.lake-editor-main .ne-viewer-wrap::-webkit-scrollbar-track,
-.lake-editor-main .ne-viewer-body::-webkit-scrollbar-track { background: transparent; }
-.note-list::-webkit-scrollbar-thumb,
-.outline-list::-webkit-scrollbar-thumb,
-.lake-editor-main .ne-editor-wrap::-webkit-scrollbar-thumb,
-.lake-editor-main .ne-viewer::-webkit-scrollbar-thumb,
-.lake-editor-main .ne-viewer-wrap::-webkit-scrollbar-thumb,
-.lake-editor-main .ne-viewer-body::-webkit-scrollbar-thumb {
-  min-height: 24px;
-  border: 0;
-  border-radius: 999px;
-  background: rgba(90, 99, 112, .25);
-}
-.note-list:hover::-webkit-scrollbar-thumb,
-.outline-list:hover::-webkit-scrollbar-thumb,
-.lake-editor-main .ne-editor-wrap:hover::-webkit-scrollbar-thumb,
-.lake-editor-main .ne-viewer:hover::-webkit-scrollbar-thumb,
-.lake-editor-main .ne-viewer-wrap:hover::-webkit-scrollbar-thumb,
-.lake-editor-main .ne-viewer-body:hover::-webkit-scrollbar-thumb { background: rgba(90, 99, 112, .48); }
-
+/* 滚动条外观统一由 src/b3/layout.css 的最终层集中控制。 */
 
 .outline-panel__empty {
   padding: 16px 12px;

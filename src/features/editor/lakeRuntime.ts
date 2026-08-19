@@ -5,6 +5,31 @@ import { uploadLakeResource } from "./resourceUpload";
 import { BoardCard } from "./BoardCard";
 import { ASSET_ORIGIN } from "../../lib/assetPort";
 
+/** 与下方 math.KaTexURL 保持同一份相对路径，供预注入脚本去重匹配。 */
+const LAKE_KATEX_SCRIPT = "./vendor/cdn/os/lib/katex/0.16.8/dist/katex.min.js";
+const LAKE_MHCHEM_SCRIPT = "./vendor/cdn/os/lib/katex/0.16.8/dist/contrib/mhchem.min.js";
+
+/**
+ * 按 katex → mhchem 顺序把本地镜像脚本注入 <body>。
+ * 动态脚本默认 async=true，执行顺序无保证；显式 async=false 后经典脚本
+ * 按插入顺序执行，保证 mhchem 运行时 window.katex 一定已就绪。
+ * 复用 Lake gJ 的 loaded/error 属性协议，避免其再次注入或等待永不触发的 load 事件。
+ */
+function injectKatexScriptsInOrder(): void {
+  if (typeof document === "undefined") return;
+  const ensure = (src: string): void => {
+    if (document.querySelector(`script[src="${src}"]`)) return;
+    const el = document.createElement("script");
+    el.src = src;
+    el.async = false;
+    el.addEventListener("load", () => el.setAttribute("loaded", "true"), { once: true });
+    el.addEventListener("error", () => el.setAttribute("error", "true"), { once: true });
+    document.body.appendChild(el);
+  };
+  ensure(LAKE_KATEX_SCRIPT);
+  ensure(LAKE_MHCHEM_SCRIPT);
+}
+
 export interface LakeEditorInstance {
   setDocument(type: "text/lake", content: string): void;
   getDocument(type: "text/lake"): string;
@@ -70,16 +95,101 @@ function prepareCustomCards(config: Record<string, unknown>): void {
     const isMindmap = cfg.name === "mindmap-card"
       || cfg.name === "custom-mindmap-card"
       || cfg.slash?.mainSearch === "/mindmap";
-    const viewerComponent = isMindmap && cfg.viewerComponent
-      ? ((Viewer: any) => (props: any) => {
-          const editor = props.editor?.theme?.currentThemeSchema
-            ? props.editor
-            : { theme: { currentThemeSchema: { colorScheme: "auto" } } };
-          return React.createElement(Viewer, { ...props, editor });
-        })(cfg.viewerComponent)
-      : cfg.viewerComponent;
-    return { ...cfg, ...(viewerComponent ? { viewerComponent } : {}), slash };
+    // Drawnix/mindmap 运行时在渲染阶段抛错时，不能让单个卡片拖垮整个编辑器：
+    // 编辑态和锁定态组件都包一层错误边界，保留卡片骨架并给出可读提示。
+    const cardName = String(cfg.name || "card");
+    const viewerComponent = cfg.viewerComponent
+      ? withCardBoundary(
+          isMindmap
+            ? React.forwardRef((props: any, ref: any) => {
+                const editor = props.editor?.theme?.currentThemeSchema
+                  ? props.editor
+                  : { theme: { currentThemeSchema: { colorScheme: "auto" } } };
+                return React.createElement(cfg.viewerComponent as any, { ...props, editor, ref });
+              })
+            : (cfg.viewerComponent as any),
+          cardName
+        )
+      : undefined;
+    const editorComponent = isMindmap && cfg.editorComponent
+      ? withCardBoundary(cfg.editorComponent as any, cardName)
+      : cfg.editorComponent;
+    return {
+      ...cfg,
+      ...(viewerComponent ? { viewerComponent } : {}),
+      ...(editorComponent ? { editorComponent } : {}),
+      slash,
+    };
   });
+}
+
+interface CardErrorBoundaryProps {
+  cardName: string;
+  children?: React.ReactNode;
+}
+
+interface CardErrorBoundaryState {
+  error: Error | null;
+}
+
+/** 单卡错误边界：Drawnix/mindmap 渲染异常只降级该卡片，不影响编辑器其它内容。 */
+class CardErrorBoundary extends React.Component<CardErrorBoundaryProps, CardErrorBoundaryState> {
+  constructor(props: CardErrorBoundaryProps) {
+    super(props);
+    this.state = { error: null };
+  }
+
+  static getDerivedStateFromError(error: Error): CardErrorBoundaryState {
+    return { error };
+  }
+
+  componentDidCatch(error: Error, errorInfo: React.ErrorInfo): void {
+    console.error(`[card-error] ${this.props.cardName} render failed:`, error, errorInfo);
+  }
+
+  render(): React.ReactNode {
+    if (this.state.error) {
+      return React.createElement(
+        "div",
+        {
+          className: "ne-card-error-fallback",
+          style: {
+            padding: 16,
+            margin: 8,
+            border: "1px solid var(--b3-theme-border-light, rgba(128,128,128,0.25))",
+            borderRadius: 8,
+            background: "var(--b3-theme-surface, transparent)",
+            color: "var(--b3-theme-on-surface, inherit)",
+            fontSize: 13,
+          },
+        },
+        React.createElement("div", null, `卡片渲染失败（${this.props.cardName}）`),
+        React.createElement(
+          "div",
+          { style: { opacity: 0.7, marginTop: 4, wordBreak: "break-all" } },
+          this.state.error.message
+        )
+      );
+    }
+    return this.props.children;
+  }
+}
+
+function withCardBoundary(
+  Comp: React.ComponentType<Record<string, unknown>>,
+  cardName: string
+): React.ComponentType<Record<string, unknown>> {
+  const Wrapped = React.forwardRef<unknown, Record<string, unknown>>((props, ref) =>
+    React.createElement(
+      CardErrorBoundary,
+      { cardName },
+      React.createElement(Comp as React.ComponentType<Record<string, unknown> & { ref?: unknown }>, {
+        ...props,
+        ref,
+      })
+    )
+  );
+  return Wrapped as unknown as React.ComponentType<Record<string, unknown>>;
 }
 
 /** Render customCard icon SVG symbols into document.body */
@@ -308,10 +418,7 @@ export function createLakeDocument(
     math: {
       // 统一使用随应用镜像的 KaTeX 0.16.8 与 mhchem，避免外链脚本加载顺序/全局
       // `katex.__defineMacro` 不存在导致包含公式或思维导图文档出现运行时异常。
-      KaTexURL: [
-        "./vendor/cdn/os/lib/katex/0.16.8/dist/katex.min.js",
-        "./vendor/cdn/os/lib/katex/0.16.8/dist/contrib/mhchem.min.js",
-      ],
+      KaTexURL: [LAKE_KATEX_SCRIPT, LAKE_MHCHEM_SCRIPT],
     },
     image: {
       createUploadPromise: (request: unknown) => uploadLakeResource(request, noteId),
@@ -371,6 +478,12 @@ export function createLakeDocument(
 
   ensureLakeLongTaskObserver();
   lakeMark("lake:create:start");
+  // Lake 的 gJ 注入的是默认 async 的动态 <script>，katex/mhchem 并行加载时
+  // 执行顺序无保证；mhchem 抢先运行时 window.katex 尚未就绪就会抛
+  // "Cannot read properties of undefined (reading '__defineMacro')"。
+  // 这里在编辑器创建前按顺序预注入（async=false 强制经典脚本顺序执行），
+  // Lake 稍后通过 script[src] 去重复用，不再重复注入。
+  injectKatexScriptsInOrder();
   const editor = mode === "viewer"
     ? (Doc as any).createOpenViewer(mount, mergedOptions)
     : (Doc as any).createOpenEditor(mount, mergedOptions);

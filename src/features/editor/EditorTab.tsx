@@ -41,6 +41,11 @@ function escapeId(id: string): string {
 /** 跨 remount（外部刷新/冲突重载）保留滚动位置；仅内存态，关闭应用后不保留。 */
 const scrollMemory = new Map<string, number>();
 
+/** Info 项：tab 关闭时清理滚动记忆条目，防长会话缓慢累积（remount 不受影响）。 */
+export function clearScrollMemory(noteId: string): void {
+  scrollMemory.delete(noteId);
+}
+
 export function EditorTab({ noteId, content, visible, tocEnabled, onChange, prefs, locked, onEditorReady, onEditorCopyMarkdown, onEditorExport, onEditorCopyPaths }: EditorTabProps) {
   const hostRef = useRef<HTMLDivElement>(null);
   const editorMountRef = useRef<HTMLDivElement>(null);

@@ -85,9 +85,9 @@
     border-radius: var(--b3-border-radius) !important;
     min-height: 29px !important;
     line-height: 22px !important;
-    margin: 6px 4px !important;
+    margin: 6px 0 !important;
     padding: 0 8px !important;
-    max-width: 186px !important;
+    /* 标题完整展示：不限制标签宽度（顶栏占满时横向滚动 + 垂直 tab 兜底） */
   }
   .tab-item:hover {
     background-color: var(--b3-list-hover) !important;
@@ -333,4 +333,183 @@
 .top-menu {
   -webkit-app-region: no-drag;
   app-region: no-drag;
+}
+
+/* ── 长列表/多标签布局收口（2026-08-19） ───────────────────────────────
+ * 顶部 tab 的滚动只允许发生在 .tab-items 内；tab-bar 自身不能成为滚动层。
+ * 目录栏同理：sidebar 是固定视口，note-list 才是唯一垂直滚动层。
+ * 这样长 tab/长目录不会把壳层撑高，也不会把底部状态栏推出窗口。 */
+@media (min-width: 761px) {
+  .tab-bar {
+    overflow: visible !important;
+  }
+
+  .tab-items {
+    align-self: stretch;
+    height: 100%;
+    min-height: 0;
+    overflow-x: auto !important;
+    overflow-y: hidden !important;
+  }
+  .sidebar.sidebar-docked,
+  .sidebar.sidebar-floating {
+    min-height: 0 !important;
+    overflow: hidden !important;
+  }
+  .sidebar.sidebar-docked {
+    height: calc(100% - var(--topbar-height) - 8px) !important;
+  }
+  .sidebar .note-list {
+    flex: 1 1 0% !important;
+    min-height: 0 !important;
+    max-height: 100% !important;
+    overflow-x: hidden !important;
+    overflow-y: auto !important;
+  }
+}
+
+/* ── 统一滚动条最终规则（2026-08-19） ─────────────────────────────────
+ * 仅这一处定义最终 scrollbar 外观，避免 base/styles/vendor 规则互相覆盖。
+ * WebKit 用 10px 轨道 + content-box 背景：默认内容区只有 2px；
+ * hover 时透明边框从 4px 缩到 1px，视觉上才增粗。顶部 tab 是唯一例外：
+ * 保留可滚动能力，但完全隐藏滚动条。
+ */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--b3-scroll-color) transparent;
+}
+
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+*::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+  box-sizing: border-box;
+  border: 4px solid transparent;
+  border-radius: var(--b3-border-radius);
+  background-color: var(--b3-scroll-color);
+  background-clip: content-box;
+  box-shadow: none;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  border-width: 1px;
+}
+
+@media (min-width: 761px) {
+  /* 顶栏本身绝不成为滚动层；否则 macOS 可能绘制顶部横向条。 */
+  .tab-bar {
+    overflow: hidden !important;
+  }
+
+  /* tab 之间只留 1px；横向滚动仍由原生 overflow + Wheel listener 提供。 */
+  .tab-items {
+    gap: 1px !important;
+    align-self: stretch;
+    height: 100%;
+    min-height: 0;
+    overflow-x: auto !important;
+    overflow-y: hidden !important;
+    scrollbar-width: none !important;
+    -ms-overflow-style: none;
+  }
+
+  .tab-items::-webkit-scrollbar,
+  .tab-items::-webkit-scrollbar-track,
+  .tab-items::-webkit-scrollbar-thumb {
+    display: none !important;
+    width: 0 !important;
+    height: 0 !important;
+  }
+
+  .tab-item .tab-close {
+    position: static;
+    flex: 0 0 17px;
+    width: 17px;
+    min-width: 17px;
+    height: 17px;
+    margin-left: 2px;
+    transform: none;
+  }
+
+  /* 其它 Electron 内容滚动条：默认 1px CSS（Retina 截图约 2 个物理像素）。 */
+  .app-shell *::-webkit-scrollbar {
+    width: 1px !important;
+    height: 1px !important;
+  }
+  .app-shell *::-webkit-scrollbar-track {
+    background: transparent !important;
+  }
+  .app-shell *::-webkit-scrollbar-thumb {
+    box-sizing: border-box !important;
+    border: 4px solid transparent !important;
+    border-radius: var(--b3-border-radius) !important;
+    background-color: var(--b3-scroll-color) !important;
+    background-clip: content-box !important;
+    box-shadow: none !important;
+  }
+  .app-shell *::-webkit-scrollbar-thumb:hover {
+    border-width: 1px !important;
+  }
+}
+
+/* ── 真实滚动容器的最终细线宽度（2026-08-19） ────────────────────────
+ * .app-shell * 的通用规则只负责基础外观；目录、大纲、编辑器这些真实滚动层
+ * 必须显式缩窄，否则 Chromium 会把 10px 轨道直接绘成粗条。Retina 截图
+ * 会按 2x 像素显示，因此 CSS 1px 约等于截图中的 2px。 */
+@media (min-width: 761px) {
+  .app-shell .note-list::-webkit-scrollbar,
+  .app-shell .outline-list::-webkit-scrollbar,
+  .app-shell .ne-editor-wrap::-webkit-scrollbar,
+  .app-shell .ne-viewer::-webkit-scrollbar,
+  .app-shell .ne-viewer-wrap::-webkit-scrollbar,
+  .app-shell .ne-viewer-body::-webkit-scrollbar {
+    width: 1px !important;
+    height: 1px !important;
+  }
+
+  .app-shell .note-list::-webkit-scrollbar-thumb,
+  .app-shell .outline-list::-webkit-scrollbar-thumb,
+  .app-shell .ne-editor-wrap::-webkit-scrollbar-thumb,
+  .app-shell .ne-viewer::-webkit-scrollbar-thumb,
+  .app-shell .ne-viewer-wrap::-webkit-scrollbar-thumb,
+  .app-shell .ne-viewer-body::-webkit-scrollbar-thumb {
+    box-sizing: border-box !important;
+    min-height: 18px;
+    border: 0 !important;
+    border-radius: 999px !important;
+    background: color-mix(in srgb, var(--b3-scroll-color) 72%, transparent) !important;
+    background-clip: border-box !important;
+    box-shadow: none !important;
+  }
+
+  .app-shell .note-list:hover::-webkit-scrollbar,
+  .app-shell .outline-list:hover::-webkit-scrollbar,
+  .app-shell .ne-editor-wrap:hover::-webkit-scrollbar,
+  .app-shell .ne-viewer:hover::-webkit-scrollbar,
+  .app-shell .ne-viewer-wrap:hover::-webkit-scrollbar,
+  .app-shell .ne-viewer-body:hover::-webkit-scrollbar {
+    width: 2px !important;
+    height: 2px !important;
+  }
+}
+
+
+/* 大纲随当前文档自动隐藏/显示时禁止 grid 动画；稳定后恢复普通布局行为。 */
+@media (min-width: 761px) {
+  .app-shell.outline-switching {
+    transition: none !important;
+  }
+  .app-shell.outline-switching .document-pane {
+    view-transition-name: none;
+  }
 }

@@ -41,7 +41,7 @@ interface SidebarProps {
   onCloseMobile: () => void;
 }
 
-export function Sidebar(props: SidebarProps) {
+export const Sidebar = memo(function Sidebar(props: SidebarProps) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [contextId, setContextId] = useState<string | null>(null);
   const [pendingCreate, setPendingCreate] = useState<{ kind: CreateKind; parentId: string | null } | null>(null);
@@ -182,7 +182,7 @@ export function Sidebar(props: SidebarProps) {
     window.addEventListener("pointermove", move);
     window.addEventListener("pointerup", up, { once: true });
     return () => { window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", up); };
-  }, [draggingId, dropTarget, props]);
+  }, [draggingId, dropTarget, props.onMoveNode]);
 
   // 创建/上下文定位：直接用当前选中/右键的节点作为父节点（支持多层嵌套，
   // 文档也可作为父节点）；无选中时回退到第一个笔记本。
@@ -289,7 +289,8 @@ export function Sidebar(props: SidebarProps) {
     setIconPicker({ node, x: event.clientX, y: event.clientY });
   }, []);
   const cancelRename = useCallback(() => setEditingId(null), []);
-  const treeRowProps = {
+  // W-2-B：聚合对象 useMemo 化——props 稳定后 TreeRow memo 才能在按键路径命中
+  const treeRowProps = useMemo(() => ({
     treeIndex,
     query,
     activeId: props.activeId,
@@ -312,7 +313,7 @@ export function Sidebar(props: SidebarProps) {
     onToggle: toggleNode,
     onSelect: props.onSelect,
     onIconClick: setTreeIcon,
-  };
+  }), [treeIndex, query, props.activeId, context?.id ?? null, expanded, draggingId, dropTarget, pendingCreate, editingId, editingTitle, createField, submitRename, cancelRename, beginRename, beginTreeDrag, setContextNode, openContext, toggleNode, props.onSelect, setTreeIcon]);
 
   return (
     <aside className={`sidebar sidebar-${props.mode} ${props.mobileOpen ? "sidebar-open" : ""}`} onPointerEnter={props.onPreviewEnter} onPointerLeave={props.onPreviewLeave}>
@@ -344,7 +345,7 @@ export function Sidebar(props: SidebarProps) {
       <div className="sidebar-resize-handle desktop-only" role="separator" aria-label="调整资料库宽度" aria-orientation="vertical" aria-valuemin={props.minWidth} aria-valuemax={props.maxWidth} aria-valuenow={Math.round(props.width)} tabIndex={0} onPointerDown={handleResizePointerDown} onPointerMove={handleResizePointerMove} onPointerUp={finishResize} onPointerCancel={finishResize} onKeyDown={handleResizeKeyDown} />
     </aside>
   );
-}
+});
 
 interface TreeRowProps {
   node: TreeNode;

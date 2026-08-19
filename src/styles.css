@@ -296,9 +296,8 @@ button { cursor: pointer; }
   padding-top: var(--topbar-height);
   border-bottom: 1px solid var(--border-color, #e5e5e5);
   background: var(--sidebar-bg, #fafafa);
-  overflow-x: auto;
+  overflow: hidden;
   flex-shrink: 0;
-  scrollbar-width: none;
   -webkit-app-region: drag;
   position: sticky;
   top: 0;
@@ -309,8 +308,6 @@ button { cursor: pointer; }
 .tab-bar .tab-switcher {
   -webkit-app-region: no-drag;
 }
-.tab-bar::-webkit-scrollbar { display: none; }
-
 .tab-item {
   display: flex;
   align-items: center;
@@ -318,7 +315,10 @@ button { cursor: pointer; }
   padding: 6px 8px;
   border: none;
   border-radius: 6px 6px 0 0;
-  max-width: 186px;
+  /* 顶栏占满时不再收缩 tab（flex:0 0 auto 保持内容宽度）；
+     单个超长标题封顶 200px，省略部分用悬停 title 展示完整名称 */
+  flex: 0 0 auto;
+  max-width: 200px;
   background: transparent;
   color: var(--text-secondary, #666);
   font-size: 13px;
@@ -337,6 +337,7 @@ button { cursor: pointer; }
 }
 
 .tab-title {
+  /* 未超 240px 时完整展示；超长时省略，悬停 title 显示完整名称 */
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -973,12 +974,10 @@ ne-card[data-card-name="codeblock"] .ne-card-resizer-mask {
     padding-top: 0;
   }
   .tab-item {
-    /* Keep short tabs intrinsic while letting the close control stay at the
-       far edge whenever the tab is constrained by its max width. */
     position: relative;
-    flex: 0 1 auto;
-    min-width: 0;
-    max-width: clamp(140px, 18vw, 190px);
+    /* 不收缩：每个标签按标题内容固有宽度展示，超长标题封顶省略 */
+    flex: 0 0 auto;
+    max-width: 200px;
     height: 28px;
     padding: 0 4px 0 8px;
     border: 1px solid transparent;
@@ -991,7 +990,7 @@ ne-card[data-card-name="codeblock"] .ne-card-resizer-mask {
     transition: color 130ms ease-out, background-color 130ms ease-out, border-color 130ms ease-out, box-shadow 130ms ease-out, transform 90ms ease-out;
   }
   .tab-item:hover { color: #46527e; background: rgba(255, 255, 255, .78); }
-  .tab-title { flex: 1 1 auto; min-width: 0; padding-right: 21px; overflow: hidden; text-overflow: ellipsis; }
+  .tab-title { min-width: 0; }
   .tab-item:active { transform: scale(.98); }
   .tab-item.active {
     color: var(--shell-text);
@@ -1053,9 +1052,9 @@ ne-card[data-card-name="codeblock"] .ne-card-resizer-mask {
   .tab-switcher[data-tooltip]:hover::after,
   .tab-switcher[data-tooltip]:focus-visible::after { opacity: 1; transform: translateY(0); }
   .tab-switcher-menu {
-    position: absolute;
-    top: calc(100% + 8px);
-    right: 0;
+    /* portal 渲染到 document.body，脱离 .tab-bar（sticky+z-index:200）层叠上下文；
+       fixed + z-index:500 保证弹窗始终在大纲 rail（z-index:250）之上。 */
+    position: fixed;
     z-index: 500;
     max-width: calc(100vw - 24px);
     display: flex;
@@ -1842,18 +1841,6 @@ ne-card[data-card-name="codeblock"] .ne-card-resizer-mask {
   }
 }
 
-.document-pane, .document-pane *, .lake-editor-mount, .lake-editor-mount * { scrollbar-width: thin !important; scrollbar-color: rgba(31,35,41,.25) transparent !important; }
-.document-pane::-webkit-scrollbar, .document-pane *::-webkit-scrollbar, .lake-editor-mount::-webkit-scrollbar, .lake-editor-mount *::-webkit-scrollbar { width: 6px !important; height: 6px !important; }
-.document-pane::-webkit-scrollbar-thumb, .document-pane *::-webkit-scrollbar-thumb, .lake-editor-mount::-webkit-scrollbar-thumb, .lake-editor-mount *::-webkit-scrollbar-thumb { background: rgba(31,35,41,.18) !important; border-radius: 3px !important; }
-.document-pane::-webkit-scrollbar:hover, .document-pane *::-webkit-scrollbar:hover, .lake-editor-mount::-webkit-scrollbar:hover, .lake-editor-mount *::-webkit-scrollbar:hover { width: 10px !important; height: 10px !important; }
-
-/* 细滚动条（思源式），hover 变粗 */
-* { scrollbar-width: thin; scrollbar-color: rgba(31, 35, 41, .22) transparent; }
-*::-webkit-scrollbar { width: 6px; height: 6px; }
-*::-webkit-scrollbar-track { background: transparent; }
-*::-webkit-scrollbar-thumb { background: rgba(31, 35, 41, .16); border-radius: 3px; }
-*::-webkit-scrollbar-thumb:hover { background: rgba(31, 35, 41, .34); }
-*::-webkit-scrollbar:hover { width: 10px; height: 10px; }
 
 /* 设置表单：思源式两列表单行（label 左、input 右，等宽对齐） */
 .settings-field { display: grid; grid-template-columns: 120px 1fr; align-items: center; gap: 12px; margin-bottom: 10px; }
