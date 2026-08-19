@@ -12,14 +12,34 @@ function escapeHtml(text: string): string {
     .replace(/"/g, "&quot;");
 }
 
+/** 链接协议白名单：仅允许 http/https/mailto 或无协议相对地址；拒绝 javascript:/data:/file: 等。 */
+function isSafeLinkUrl(url: string): boolean {
+  if (/^\/\//.test(url)) return false; // 协议相对（file:// 导出环境下解析异常）
+  if (!/^[a-z][a-z0-9+.-]*:/i.test(url)) return true; // 无协议 → 相对地址
+  return /^(https?:|mailto:)/i.test(url);
+}
+
+/** 图片协议白名单：仅允许 http/https、data:image/ 或无协议相对地址。 */
+function isSafeImageUrl(url: string): boolean {
+  if (/^\/\//.test(url)) return false;
+  if (!/^[a-z][a-z0-9+.-]*:/i.test(url)) return true;
+  return /^(https?:|data:image\/)/i.test(url);
+}
+
 /** 行内转换：**bold** *italic* `code` [text](url) ![alt](url) */
 function inline(text: string): string {
   // 先转义 HTML 特殊字符，再用占位符保护已生成的标签
   let s = escapeHtml(text);
   // 图片 ![alt](url)
-  s = s.replace(/!\[([^\]]*)\]\(([^)\s]+)\)/g, (_m, alt: string, url: string) => `<img src="${url}" alt="${alt}" />`);
+  s = s.replace(/!\[([^\]]*)\]\(([^)\s]+)\)/g, (_m, alt: string, url: string) => {
+    if (!isSafeImageUrl(url)) return ""; // 危险协议直接丢弃该图片
+    return `<img src="${url}" alt="${alt}" />`;
+  });
   // 链接 [text](url)
-  s = s.replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, (_m, label: string, url: string) => `<a href="${url}">${label}</a>`);
+  s = s.replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, (_m, label: string, url: string) => {
+    if (!isSafeLinkUrl(url)) return label; // 危险协议降级为纯文本（不生成可点击链接）
+    return `<a href="${url}">${label}</a>`;
+  });
   // 粗体
   s = s.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
   // 斜体

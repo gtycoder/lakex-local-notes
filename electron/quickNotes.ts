@@ -1,4 +1,5 @@
 import Database from "better-sqlite3";
+import { isSafePathSegment as isSafeSegment } from "./storeUtils.js";
 import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
@@ -37,9 +38,6 @@ function toStoreValidation<T>(operation: () => T): T {
     if (error instanceof QuickNoteModelError) throw new AppError(error.kind, error.message);
     throw error;
   }
-}
-function isSafeSegment(value: string): boolean {
-  return value.length > 0 && value !== "." && value !== ".." && !value.includes("/") && !value.includes("\\");
 }
 
 /**

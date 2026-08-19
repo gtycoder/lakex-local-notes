@@ -2,6 +2,7 @@ import http from "node:http";
 import fs from "node:fs";
 import path from "node:path";
 import sharp from "sharp";
+import { isSafePathSegment as isSafeSegment } from "./storeUtils.js";
 
 const MIME_MAP: Record<string, string> = {
   ".png": "image/png",
@@ -69,9 +70,6 @@ function streamFile(
   stream.pipe(res);
 }
 
-function isSafeSegment(segment: string): boolean {
-  return segment.length > 0 && segment !== "." && segment !== ".." && !segment.includes("/") && !segment.includes("\\");
-}
 
 export function startAssetServer(noteAssetsDir: string, vendorCdnDir: string, quickNotesDir?: string, assetToken?: string): http.Server {
   fs.mkdirSync(noteAssetsDir, { recursive: true });

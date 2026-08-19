@@ -38,11 +38,13 @@ interface ManifestNote {
   deletedFromParentId?: string | null;
 }
 
-/** 锁状态 LWW：时间戳新者胜；相同时间戳取“锁优先”（保守防误改）。返回胜出的 {locked, at}。 */
+/** 锁状态 LWW：时间戳新者胜；相同时间戳取“锁优先”（保守防误改）。返回胜出的 {locked, at}。
+ *  Info：无时间戳一侧让位给有时间戳一侧（双方都无则远端胜，保持原语义）。 */
 function mergeLockState(localLocked: boolean, localAt: string | null, remoteLocked: boolean, remoteAt: string | null): { locked: boolean; at: string | null } {
-  if (!localAt && !remoteAt) return { locked: remoteLocked, at: remoteAt };
-  if (!localAt) return { locked: remoteLocked, at: remoteAt };
-  if (!remoteAt) return { locked: localLocked, at: localAt };
+  if (!localAt || !remoteAt) {
+    if (!localAt && !remoteAt) return { locked: remoteLocked, at: null };
+    return localAt ? { locked: localLocked, at: localAt } : { locked: remoteLocked, at: remoteAt };
+  }
   if (remoteAt > localAt) return { locked: remoteLocked, at: remoteAt };
   if (remoteAt < localAt) return { locked: localLocked, at: localAt };
   return { locked: localLocked || remoteLocked, at: localAt };
@@ -1129,7 +1131,7 @@ async function pruneOldManifests(remote: ObjectStore, commitId: string, remoteMa
   log.sync.info(`[perf] manifest prune ${toDelete.length} old (kept=${keep.size})`);
 }
 
-/** 安全单路径段：拒绝空、./.. 以及含 / 或 \\ 的字符串（防目录穿越） */
-export function isSafeSegment(segment: string): boolean {
-  return segment.length > 0 && segment !== "." && segment !== ".." && !segment.includes("/") && !segment.includes("\\");
-}
+/** 安全单路径段（防目录穿越）：实现收敛到 storeUtils 单点（Info 项），保留导出名。 */
+export { isSafePathSegment as isSafeSegment } from "./storeUtils.js";
+import { isSafePathSegment } from "./storeUtils.js";
+const isSafeSegment = isSafePathSegment;

@@ -1,6 +1,14 @@
 import { BrowserWindow, dialog } from "electron";
 import { MAX_IMAGE_BYTES, Store } from "../store.js";
 import { exportNote, type ExportFormat } from "../export.js";
+import {
+  IpcInputError,
+  assertContentBytes,
+  assertIcon,
+  assertOptionalContentBytes,
+  assertTitle,
+  clampSearchLimit,
+} from "../ipcLimits.js";
 import type { IpcRegistrar } from "./registrar.js";
 
 interface ResourceUploadInput {
@@ -9,15 +17,21 @@ interface ResourceUploadInput {
 }
 
 export function registerNotesIpc(ipc: IpcRegistrar, store: Store): void {
+  /** 导出目录白名单：只接受本进程 pick_export_dir 系统选择框的返回值。 */
+  let lastPickedExportDir: string | null = null;
+
   ipc.handle("bootstrap_workspace", () => store.bootstrap());
   ipc.handle("read_note", (id: string) => store.readNote(id));
   ipc.handle("get_note_digest", (id: string) => store.getNoteDigest(id));
-  ipc.handle("create_note", (title: string) => store.createNote(title));
-  ipc.handle("save_note", (id: string, title: string, content: string, caches?: { markdown?: string | null; plain?: string | null }) => store.saveNote(id, title, content, caches));
-  ipc.handle("update_note_caches", (id: string, markdown: string | null, plain: string | null) => {
-    store.updateNoteCaches(id, markdown ?? null, plain ?? null);
+  ipc.handle("create_note", (title: unknown) => store.createNote(assertTitle(title)));
+  ipc.handle("save_note", (id: string, title: unknown, content: unknown, caches?: { markdown?: string | null; plain?: string | null }) =>
+    store.saveNote(id, assertTitle(title), assertContentBytes(content), caches));
+  ipc.handle("update_note_caches", (id: string, markdown: unknown, plain: unknown) => {
+    // W-4：缓存文本同样可能达正文量级，统一走 32MiB 上限
+    store.updateNoteCaches(id, assertOptionalContentBytes(markdown), assertOptionalContentBytes(plain));
   });
-  ipc.handle("ensure_note_caches", (id: string, lakeContent?: string) => store.ensureNoteCaches(id, lakeContent));
+  ipc.handle("ensure_note_caches", (id: string, lakeContent?: unknown) =>
+    store.ensureNoteCaches(id, assertOptionalContentBytes(lakeContent) ?? undefined));
   ipc.handle("read_note_caches", (id: string) => store.readNoteCaches(id));
   ipc.handle("get_note_paths", (id: string) => store.getNotePaths(id));
   ipc.handle("pick_export_dir", async () => {
@@ -27,19 +41,29 @@ export function registerNotesIpc(ipc: IpcRegistrar, store: Store): void {
       buttonLabel: "导出到此目录",
       properties: ["openDirectory", "createDirectory"],
     });
-    return result.canceled ? null : result.filePaths[0];
+    lastPickedExportDir = result.canceled ? null : (result.filePaths[0] ?? null);
+    return lastPickedExportDir;
   });
-  ipc.handle("export_note", (id: string, format: ExportFormat, baseDir?: string) => exportNote(store, id, format, baseDir));
-  ipc.handle("set_node_icon", (id: string, icon: string | null) => store.setNodeIcon(id, icon));
-  ipc.handle("search_notes", (query: string, limit?: number) => store.searchNotes(query, limit));
+  ipc.handle("export_note", (id: string, format: ExportFormat, baseDir?: string) => {
+    // 防渲染层任意路径写入：导出目录必须来自本进程的系统选择框。
+    if (baseDir !== undefined && baseDir !== null && baseDir !== lastPickedExportDir) {
+      throw new IpcInputError("导出目录无效：请先通过系统选择框选择目录");
+    }
+    return exportNote(store, id, format, baseDir ?? undefined);
+  });
+  ipc.handle("set_node_icon", (id: string, icon: unknown) => store.setNodeIcon(id, assertIcon(icon)));
+  ipc.handle("search_notes", (query: unknown, limit?: unknown) => {
+    if (typeof query !== "string") throw new IpcInputError("搜索词格式无效");
+    return store.searchNotes(query, clampSearchLimit(limit));
+  });
   ipc.handle("delete_note", (id: string) => store.deleteNote(id));
   ipc.handle("set_note_locked", (id: string, locked: boolean) => { store.setNoteLocked(id, locked); return store.readNote(id); });
   ipc.handle("list_tree_nodes", () => store.listTreeNodes());
   ipc.handle("list_note_summaries", () => store.listNoteSummaries());
-  ipc.handle("create_notebook", (title: string) => store.createNotebook(title));
-  ipc.handle("create_group", (parentId: string, title: string) => store.createGroup(parentId, title));
-  ipc.handle("rename_tree_node", (id: string, title: string) => store.renameTreeNode(id, title));
-  ipc.handle("create_note_in", (parentId: string | null, title: string) => store.createNoteIn(parentId, title));
+  ipc.handle("create_notebook", (title: unknown) => store.createNotebook(assertTitle(title)));
+  ipc.handle("create_group", (parentId: string, title: unknown) => store.createGroup(parentId, assertTitle(title)));
+  ipc.handle("rename_tree_node", (id: string, title: unknown) => store.renameTreeNode(id, assertTitle(title)));
+  ipc.handle("create_note_in", (parentId: string | null, title: unknown) => store.createNoteIn(parentId, assertTitle(title)));
   ipc.handle("move_tree_node", (id: string, parentId: string | null, sortOrder: number) => store.moveTreeNode(id, parentId, sortOrder));
   ipc.handle("move_tree_node_ordered", (id: string, parentId: string | null, orderedIds: string[]) => store.moveTreeNodeOrdered(id, parentId, orderedIds));
   ipc.handle("reorder_tree_nodes", (parentId: string | null, orderedIds: string[]) => store.reorderTreeNodes(parentId, orderedIds));
