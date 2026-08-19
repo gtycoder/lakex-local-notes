@@ -299,7 +299,18 @@ async function downloadAssets(remote: ObjectStore, item: ManifestItem, onProgres
   return assets;
 }
 
-function parseManifest(bytes: Buffer): QuickNotesManifest {
+/** 小记清单护栏（与 Lake parseLakeManifest 同构，W-13）：字节/条目上限防异常清单打爆同步。 */
+const MAX_QUICK_MANIFEST_BYTES = 10 * 1024 * 1024;
+const MAX_QUICK_MANIFEST_ITEMS = 100_000;
+
+export function parseManifest(
+  bytes: Buffer,
+  limits: { maxBytes?: number; maxItems?: number } = {},
+): QuickNotesManifest {
+  const maxBytes = limits.maxBytes ?? MAX_QUICK_MANIFEST_BYTES;
+  if (bytes.length > maxBytes) {
+    throw new Error(`小记同步清单过大（${bytes.length} 字节 > ${maxBytes}），拒绝加载`);
+  }
   let manifest: unknown;
   try { manifest = JSON.parse(bytes.toString("utf8")); }
   catch { throw new Error("小记同步清单不是合法 JSON"); }
@@ -307,6 +318,9 @@ function parseManifest(bytes: Buffer): QuickNotesManifest {
   const value = manifest as Partial<QuickNotesManifest>;
   if (value.version !== MANIFEST_VERSION || typeof value.workspaceId !== "string" || typeof value.commitId !== "string" || typeof value.createdAt !== "string" || !Array.isArray(value.items)) {
     throw new Error("小记同步清单版本或字段不兼容");
+  }
+  if (value.items.length > (limits.maxItems ?? MAX_QUICK_MANIFEST_ITEMS)) {
+    throw new Error(`小记同步清单条目过多（${value.items.length}），拒绝加载`);
   }
   for (const item of value.items) validateRemoteItem(item as ManifestItem);
   return value as QuickNotesManifest;

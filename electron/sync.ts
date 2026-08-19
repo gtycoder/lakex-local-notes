@@ -4,7 +4,6 @@ import path from "node:path";
 import crypto from "node:crypto";
 import {
   S3Client,
-  HeadBucketCommand,
   GetObjectCommand,
   PutObjectCommand,
   ListObjectsV2Command,
@@ -101,6 +100,34 @@ const MANIFEST_VERSION = 4;
  * prune / runGcReconcile / runDeepCleanup 三者必须一致，否则深度清理会在 7 天后
  * 把「多留的容错份」删掉（用户验收 #3：留 10 份）。 */
 const MANIFEST_CHAIN_KEEP = 8;
+/**
+ * 清单加载护栏（W-13）：manifest 是同步的第一个解析对象，且在零变更早退之前。
+ * 异常/恶意清单（投毒、版本 bug、gzip 炸弹）不得打爆主进程：
+ * - 字节上限：parseLakeManifest 在 JSON.parse 之前检查解压后体积，
+ *   框死 gzip 炸弹与异常膨胀清单的内存占用；
+ * - 条目数上限：validateManifest 内拒绝畸形数组，避免后续 O(n) 校验耗资源。
+ * 上限取值依据：1 万条笔记清单约 3-5MB 未压缩；20 万条 ≈ 60MB，宽裕一个数量级。
+ */
+const MAX_MANIFEST_BYTES = 20 * 1024 * 1024;
+const MAX_MANIFEST_NOTES = 200_000;
+const MAX_MANIFEST_FOLDERS = 50_000;
+
+/** 解析并校验 Lake 清单：字节上限 → JSON.parse → 结构/条目校验。上限可注入（测试用）。 */
+export function parseLakeManifest(
+  bytes: Buffer,
+  limits: { maxBytes?: number; maxNotes?: number; maxFolders?: number } = {},
+): Manifest {
+  const maxBytes = limits.maxBytes ?? MAX_MANIFEST_BYTES;
+  if (bytes.length > maxBytes) {
+    throw new Error(`清单过大（${bytes.length} 字节 > ${maxBytes}），拒绝加载`);
+  }
+  let parsed: unknown;
+  try { parsed = JSON.parse(bytes.toString("utf8")); }
+  catch { throw new Error("同步清单不是合法 JSON"); }
+  validateManifest(parsed, { maxNotes: limits.maxNotes ?? MAX_MANIFEST_NOTES, maxFolders: limits.maxFolders ?? MAX_MANIFEST_FOLDERS });
+  return parsed;
+}
+
 /** gzip 魔数（0x1f 0x8b）。JSON/PNG/JPEG 等实际内容不可能以此开头，可按魔数安全识别 gzip 对象。 */
 const GZIP_MAGIC = [0x1f, 0x8b];
 function isGzip(bytes: Buffer): boolean {
@@ -287,8 +314,7 @@ export async function syncNow(store: Store, onProgress?: (p: SyncProgress) => vo
 
   // 1. 读取远程清单
   const manifestBytes = await remote.getOptional("manifests/latest.json");
-  const remoteManifest: Manifest | null = manifestBytes ? JSON.parse(manifestBytes.toString("utf8")) : null;
-  if (remoteManifest) validateManifest(remoteManifest);
+  const remoteManifest: Manifest | null = manifestBytes ? parseLakeManifest(manifestBytes) : null;
 
   // 零变更早退（性能）：远端 latest 的 commitId 与本设备上次成功读/写的相同，
   // 且本地无待上传变更（notes 全 synced + 无新增 purge 墓碑）→ 整轮跳过，
@@ -462,8 +488,8 @@ export async function syncNow(store: Store, onProgress?: (p: SyncProgress) => vo
       if (!lakeBytes) throw new Error(`清单引用的文档对象不存在: ${rn.contentHash}`);
       // 下载资源文件（manifest 里列出）；审计 #4：缺失对象必须中止导入，
       // 下载后校验 size 与 sha256（远端损坏/被替换不静默接受）
-      const assets: { filename: string; bytes: Buffer }[] = [];
       const assetList = rn.assets || [];
+      const assets: { filename: string; bytes: Buffer }[] = [];
       for (let ai = 0; ai < assetList.length; ai += 1) {
         const asset = assetList[ai];
         report({ phase: "download", current: remoteIndex, total: remoteTotal, assetCurrent: ai + 1, assetTotal: assetList.length, message: rn.deleted ? "处理云端删除记录" : `检查远端笔记「${rn.title}」` });
@@ -816,8 +842,8 @@ export async function runGcReconcile(store: Store): Promise<GcReconcileResult> {
 
   const latestBytes = await remote.getOptional("manifests/latest.json");
   if (!latestBytes) { log.gc.info(`[perf] gc-reconcile done ${Date.now() - gcStart}ms (no manifest)`); return { deleted: 0, kept: 0 }; }
-  const latest = JSON.parse(latestBytes.toString("utf8")) as Manifest;
-  validateManifest(latest);
+  const latest = parseLakeManifest(latestBytes);
+
 
   const keep = new Set<string>();
   collectManifestRefs(latest, keep);
@@ -828,8 +854,8 @@ export async function runGcReconcile(store: Store): Promise<GcReconcileResult> {
   while (prev && chain < MANIFEST_CHAIN_KEEP) {
     const bytes = await remote.getOptional(`manifests/${prev}.json`);
     if (!bytes) break;
-    const m = JSON.parse(bytes.toString("utf8")) as Manifest;
-    validateManifest(m);
+    const m = parseLakeManifest(bytes);
+
     collectManifestRefs(m, keep);
     prev = m.prevCommitId;
     chain += 1;
@@ -875,8 +901,8 @@ export async function runDeepCleanup(store: Store, opts?: { dryRun?: boolean; ex
 
   const latestBytes = await remote.getOptional("manifests/latest.json");
   if (!latestBytes) { log.gc.info(`[perf] deep-cleanup done ${Date.now() - deepStart}ms (no manifest)`); return { dryRun, candidateCount: 0, deletedCount: 0, keys: [] }; }
-  const latest = JSON.parse(latestBytes.toString("utf8")) as Manifest;
-  validateManifest(latest);
+  const latest = parseLakeManifest(latestBytes);
+
 
   const keep = new Set<string>(extraKeep);
   // 元数据 keep：manifest 文件本身
@@ -890,8 +916,8 @@ export async function runDeepCleanup(store: Store, opts?: { dryRun?: boolean; ex
     keep.add(`manifests/${prev}.json`);
     const bytes = await remote.getOptional(`manifests/${prev}.json`);
     if (!bytes) break;
-    const m = JSON.parse(bytes.toString("utf8")) as Manifest;
-    validateManifest(m);
+    const m = parseLakeManifest(bytes);
+
     collectManifestRefs(m, keep);
     prev = m.prevCommitId;
     chain += 1;
@@ -993,7 +1019,7 @@ function chunkArray<T>(items: T[], size: number): T[][] {
 }
 
 /** 审计 #3/#19：远程 manifest 运行时 schema 校验（远程 JSON 不可信，不能直接断言类型） */
-function validateManifest(manifest: unknown): asserts manifest is Manifest {
+function validateManifest(manifest: unknown, limits: { maxNotes: number; maxFolders: number }): asserts manifest is Manifest {
   if (!manifest || typeof manifest !== "object") throw new Error("清单格式无效：非对象");
   const m = manifest as Partial<Manifest>;
   if (m.version !== MANIFEST_VERSION) {
@@ -1006,6 +1032,7 @@ function validateManifest(manifest: unknown): asserts manifest is Manifest {
     throw new Error("清单格式无效：prevCommitId 非法");
   }
   if (!Array.isArray(m.notes)) throw new Error("清单格式无效：notes 不是数组");
+  if (m.notes.length > limits.maxNotes) throw new Error(`清单条目过多（${m.notes.length} > ${limits.maxNotes}），拒绝加载`);
   for (const note of m.notes) {
     if (!note || typeof note !== "object") throw new Error("清单格式无效：note 非对象");
     const n = note as Partial<ManifestNote>;
@@ -1035,6 +1062,7 @@ function validateManifest(manifest: unknown): asserts manifest is Manifest {
     if (n.deletedFromParentId !== undefined && n.deletedFromParentId !== null && typeof n.deletedFromParentId !== "string") throw new Error("清单格式无效：deletedFromParentId 非法");
   }
   if (!Array.isArray(m.folders)) throw new Error("清单格式无效：folders 非数组");
+  if (m.folders.length > limits.maxFolders) throw new Error(`清单目录条目过多（${m.folders.length} > ${limits.maxFolders}），拒绝加载`);
   for (const folder of m.folders) {
     if (!folder || typeof folder !== "object") throw new Error("清单格式无效：folder 非对象");
     const f = folder as Partial<ManifestFolder>;
@@ -1068,8 +1096,8 @@ async function pruneOldManifests(remote: ObjectStore, commitId: string, remoteMa
     try {
       const bytes = await remote.getOptional(key);
       if (!bytes) break;
-      const m = JSON.parse(bytes.toString("utf8")) as Manifest;
-      validateManifest(m);
+      const m = parseLakeManifest(bytes);
+
       prev = m.prevCommitId;
     } catch { break; }
     chain += 1;

@@ -4,7 +4,7 @@ import zlib from "node:zlib";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { syncNow, testConnection, ObjectStore, runGcReconcile, runDeepCleanup } from "./sync.js";
+import { syncNow, testConnection, ObjectStore, runGcReconcile, runDeepCleanup, parseLakeManifest } from "./sync.js";
 import type { Store } from "./store.js";
 
 // ===== 内存 S3 mock（ObjectStore 依赖的 @aws-sdk/client-s3 命令子集） =====
@@ -1245,5 +1245,50 @@ describe("增量扫描优化（synced 跳过本地读文件）", () => {
     expect(rb.downloaded).toBe(1);
     expect(storeB.hashReads).toBe(0);
     expect(storeB.baseHash("n1")).toBe(storeA.contentHash("n1"));
+  });
+});
+
+// ===== W-13：清单加载护栏（字节/条目上限） =====
+describe("parseLakeManifest 清单护栏", () => {
+  function validManifest(notesCount: number, foldersCount: number): Record<string, unknown> {
+    const notes: Array<Record<string, unknown>> = [];
+    for (let i = 0; i < notesCount; i++) {
+      notes.push({
+        id: `n${i}`, title: `note${i}`, parentId: "notebook-default", sortOrder: i,
+        updatedAt: "2026-01-01T00:00:00.000Z", contentHash: "a".repeat(64), isConflict: false, assets: [],
+      });
+    }
+    const folders: Array<Record<string, unknown>> = [];
+    for (let i = 0; i < foldersCount; i++) {
+      folders.push({
+        id: `f${i}`, title: `folder${i}`, parentId: null, sortOrder: i,
+        nodeType: "notebook", icon: null, updatedAt: "2026-01-01T00:00:00.000Z",
+      });
+    }
+    return {
+      version: 4, workspaceId: "default", commitId: "c1", prevCommitId: null,
+      createdAt: "2026-01-01T00:00:00.000Z", notes, folders,
+    };
+  }
+
+  it("合法清单正常解析", () => {
+    const m = parseLakeManifest(Buffer.from(JSON.stringify(validManifest(2, 1)), "utf8"));
+    expect(m.notes.length).toBe(2);
+    expect(m.folders.length).toBe(1);
+  });
+
+  it("字节超限（gzip 炸弹/异常膨胀）在解析前被拒", () => {
+    const bytes = Buffer.from(JSON.stringify(validManifest(1, 0)), "utf8");
+    expect(() => parseLakeManifest(bytes, { maxBytes: 10 })).toThrow(/清单过大/);
+  });
+
+  it("notes 条目超限被拒", () => {
+    const bytes = Buffer.from(JSON.stringify(validManifest(5, 0)), "utf8");
+    expect(() => parseLakeManifest(bytes, { maxNotes: 3 })).toThrow(/清单条目过多/);
+  });
+
+  it("folders 条目超限被拒", () => {
+    const bytes = Buffer.from(JSON.stringify(validManifest(0, 5)), "utf8");
+    expect(() => parseLakeManifest(bytes, { maxFolders: 3 })).toThrow(/清单目录条目过多/);
   });
 });

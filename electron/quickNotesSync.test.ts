@@ -5,7 +5,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { QuickNotesStore } from "./quickNotes.js";
-import { syncQuickNotes } from "./quickNotesSync.js";
+import { syncQuickNotes, parseManifest } from "./quickNotesSync.js";
 
 const electronMock = vi.hoisted(() => ({ secrets: new Map<string, string>() }));
 vi.mock("electron", () => ({
@@ -239,5 +239,27 @@ describe("小记增量扫描（synced 跳过本地读文件）", () => {
     spy.mockRestore();
     expect(r.uploaded).toBeGreaterThanOrEqual(1);
     expect(readQuickManifest().items[0].contentHash).not.toBe(beforeHash); // 新 hash 已上传
+  });
+});
+
+// ===== W-13：小记清单护栏（字节/条目上限） =====
+describe("parseManifest 小记清单护栏", () => {
+  const valid = (items: Array<Record<string, unknown>>) => ({
+    version: 1, workspaceId: "default", commitId: "c1", createdAt: "2026-01-01T00:00:00.000Z", items,
+  });
+
+  it("合法空清单正常解析", () => {
+    const m = parseManifest(Buffer.from(JSON.stringify(valid([])), "utf8"));
+    expect(m.items.length).toBe(0);
+  });
+
+  it("字节超限被拒", () => {
+    const bytes = Buffer.from(JSON.stringify(valid([])), "utf8");
+    expect(() => parseManifest(bytes, { maxBytes: 10 })).toThrow(/清单过大/);
+  });
+
+  it("条目超限被拒（不逐条校验即拒绝）", () => {
+    const bytes = Buffer.from(JSON.stringify(valid([{}, {}, {}])), "utf8");
+    expect(() => parseManifest(bytes, { maxItems: 2 })).toThrow(/条目过多/);
   });
 });
