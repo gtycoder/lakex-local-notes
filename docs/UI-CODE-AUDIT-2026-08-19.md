@@ -87,7 +87,7 @@ Lake 原生编辑器工具栏保持原样；新增能力全部位于应用壳层
 2. 旧的硬编码 shell 色值仍存在于 legacy CSS；本轮只把新逻辑迁移到 semantic token。
 3. 同步顶部状态和底部状态栏存在一定信息重复，后续可在用户实测后决定是否收敛底部文本。
 4. `SearchPanel` 还没有完整的 React DOM 交互测试框架，当前依赖纯函数测试、IPC 仓储测试和真实 Electron 验证。
-5. `⌘K` 物理键盘事件需要在真实 macOS 窗口中继续做一次人工验证；CDP 的 DOM/事件验证已完成。
+5. `⌘K` 已在真实 Electron 窗口通过 Computer Use + CDP 验证；Focus Mode 仍需要解锁 Mac 后做一次物理键盘复核。
 
 ## 不应做的重构
 
