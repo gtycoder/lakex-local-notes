@@ -113,12 +113,12 @@ export class SearchRepository {
            SELECT ? FROM tree_nodes WHERE id=?
            UNION ALL SELECT t.id FROM tree_nodes t JOIN trash_ids ti ON t.parent_id=ti.id
          )
-         SELECT f.note_id AS id, t.title, f.body, t.updated_at, parent.title AS parent_title
-         FROM notes_fts f
-         JOIN tree_nodes t ON t.note_file_id=f.note_id
+         SELECT t.id, t.title, COALESCE(f.body, '') AS body, t.updated_at, parent.title AS parent_title
+         FROM tree_nodes t
+         LEFT JOIN notes_fts f ON f.note_id=t.note_file_id
          LEFT JOIN tree_nodes parent ON parent.id=t.parent_id
          WHERE t.node_type='note' AND t.deleted_at IS NULL AND t.id NOT IN (SELECT id FROM trash_ids)
-           AND (f.title LIKE ? ESCAPE '\\' OR f.body LIKE ? ESCAPE '\\')
+           AND (t.title LIKE ? ESCAPE '\\' OR COALESCE(f.body, '') LIKE ? ESCAPE '\\')
          ORDER BY CASE WHEN t.title = ? THEN 0 WHEN t.title LIKE ? ESCAPE '\\' THEN 1 WHEN t.title LIKE ? ESCAPE '\\' THEN 2 ELSE 3 END, t.updated_at DESC LIMIT ?`
       ).all(this.trashNotebookId, this.trashNotebookId, `%${escapedLike}%`, `%${escapedLike}%`, normalizedQuery, `${escapedLike}%`, `%${escapedLike}%`, limit) as LikeSearchResultRow[];
       return rows.map((row) => {
