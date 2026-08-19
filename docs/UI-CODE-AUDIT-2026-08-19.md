@@ -102,3 +102,18 @@ Lake 原生编辑器工具栏保持原样；新增能力全部位于应用壳层
 - Dark screenshot: `/tmp/lake-notes-ui-system-dark.png`
 - Sync popover: `/tmp/lake-notes-ui-system-sync.png`
 - Final CDP health: 1280×820, 2,098 DOM nodes, 27 Lake toolbar buttons, 2 KaTeX scripts, 0 console errors.
+
+## Follow-up pass: 2026-08-19 21:xx
+
+- Focus Mode now remains reversible from the existing breadcrumb “更多” menu; the hidden outline rail no longer steals the top-right menu hit area.
+- Workspace label is intentionally shortened to `本地空间`.
+- Sync control is now icon-only with a small pending-count badge; detailed text remains in the click Popover and accessible label.
+- Added a fixed, read-only shortcut reference category in Settings.
+- Outline floating preview now has a bounded vertical surface (`top/bottom: 72px`) rather than occupying the whole right column.
+- Removed the rail-to-panel pointer dead zone by making the trigger cover the full collapsed rail width and adding a short leave grace period. The panel can now be entered and outline items clicked without disappearing.
+- Scrollbar ownership remains centralized in `src/b3/layout.css`; no new competing scrollbar skin was added. The outline list uses `overflow: auto` and `overscroll-behavior: contain` only.
+
+Evidence:
+- `/tmp/lake-notes-outline-hover-fixed.png`
+- `/tmp/lake-notes-ui-iteration-final.png`
+- Real DOM geometry: floating outline `x=1048, y=110, w=200, h=638`; hidden state `pointer-events: none`; hovered state `pointer-events: auto`.
