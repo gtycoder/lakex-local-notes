@@ -1,4 +1,4 @@
-import { app, BrowserWindow, crashReporter, session, shell, type WebFrameMain } from "electron";
+import { app, BrowserWindow, crashReporter, screen, session, shell, type WebFrameMain } from "electron";
 import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
@@ -16,6 +16,7 @@ import { registerNotesIpc } from "./ipc/registerNotes.js";
 import { registerHistoryIpc } from "./ipc/registerHistory.js";
 import { registerSyncIpc } from "./ipc/registerSync.js";
 import { registerQuickNotesIpc } from "./ipc/registerQuickNotes.js";
+import { clampWindowState, readWindowState, writeWindowState } from "./windowState.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const isDev = !app.isPackaged;
@@ -206,9 +207,14 @@ function registerAssetTokenRedirect() {
 
 
 async function createWindow() {
+  const windowStatePath = path.join(app.getPath("userData"), "window-state.json");
+  const workArea = screen.getPrimaryDisplay().workArea;
+  const restored = clampWindowState(readWindowState(windowStatePath), workArea);
   const win = new BrowserWindow({
-    width: 1280,
-    height: 820,
+    x: restored.x,
+    y: restored.y,
+    width: restored.width,
+    height: restored.height,
     minWidth: 720,
     minHeight: 480,
     titleBarStyle: process.platform === "darwin" ? "hiddenInset" : "default",
@@ -225,6 +231,28 @@ async function createWindow() {
       sandbox: false,
     },
   });
+
+  const persistWindowState = () => {
+    if (win.isDestroyed()) return;
+    const bounds = win.getNormalBounds();
+    writeWindowState(windowStatePath, {
+      x: bounds.x,
+      y: bounds.y,
+      width: bounds.width,
+      height: bounds.height,
+      maximized: win.isMaximized(),
+      fullscreen: win.isFullScreen(),
+    });
+  };
+  win.on("resize", persistWindowState);
+  win.on("move", persistWindowState);
+  win.on("maximize", persistWindowState);
+  win.on("unmaximize", persistWindowState);
+  win.on("enter-full-screen", persistWindowState);
+  win.on("leave-full-screen", persistWindowState);
+  win.on("close", persistWindowState);
+  if (restored.maximized) win.maximize();
+  if (restored.fullscreen) win.setFullScreen(true);
 
   // 审计 #6：窗口导航与 window.open 全部受控——阻止导航到应用页之外的任何地址；
   // 外链（http/https）交给系统浏览器打开，绝不进入应用窗口

@@ -59,3 +59,16 @@
     transition: none !important;
   }
 }
+
+@media (min-width: 761px) {
+  .app-shell.focus-mode { grid-template-columns: 0 0 minmax(0, 1fr); }
+  .app-shell.focus-mode .activity-rail,
+  .app-shell.focus-mode .sidebar,
+  .app-shell.focus-mode .outline-sidebar,
+  .app-shell.focus-mode .statusbar {
+    opacity: 0;
+    pointer-events: none;
+  }
+  .app-shell.focus-mode .workspace { grid-column: 3; }
+  .app-shell.focus-mode .document-pane { border-radius: 0 !important; }
+}

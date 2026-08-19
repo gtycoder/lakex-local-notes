@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type CSSProperties } from "react";
 import { createPortal } from "react-dom";
-import { ArrowLeft, Check, ChevronDown, ChevronRight, Cloud, Files, ListTree, LoaderCircle, Feather, Lock, LockOpen, Moon, MoreHorizontal, Pencil, Settings as Settings2Icon, Sun, Trash2 } from "lucide-react";
+import { ArrowLeft, Check, ChevronDown, ChevronRight, Cloud, Files, ListTree, LoaderCircle, Feather, Lock, LockOpen, Moon, MoreHorizontal, Pencil, Focus, Settings as Settings2Icon, Sun, Trash2 } from "lucide-react";
 import { MobileLibrary } from "./components/MobileLibrary";
 import { withViewTransition } from "./lib/viewTransition";
 import { SearchPanel } from "./components/SearchPanel";
@@ -110,6 +110,7 @@ export function App() {
   const [topMenuOpen, setTopMenuOpen] = useState(false);
   /** 工作空间（lake-notes）下拉：偏好设置/回收站 */
   const [workspaceMenuOpen, setWorkspaceMenuOpen] = useState(false);
+  const [focusMode, setFocusMode] = useState(false);
   /** 顶栏两个下拉的触发容器 ref（定位 fixed 菜单用） */
   const wsMenuWrapRef = useRef<HTMLDivElement>(null);
   const moreMenuWrapRef = useRef<HTMLDivElement>(null);
@@ -130,6 +131,13 @@ export function App() {
       if (wsMenu && !wsMenu.contains(target) && wsBtn && !wsBtn.contains(target)) setWorkspaceMenuOpen(false);
     };
     const onKeyDown = (event: KeyboardEvent) => {
+      if (event.metaKey && event.shiftKey && event.key === "Enter") {
+        event.preventDefault();
+        setFocusMode((value) => !value);
+        setTopMenuOpen(false);
+        setWorkspaceMenuOpen(false);
+        return;
+      }
       if (event.metaKey && event.key.toLowerCase() === "k") {
         event.preventDefault();
         setSearchPanelQuery("");
@@ -1158,7 +1166,7 @@ export function App() {
   } as CSSProperties;
 
   return (
-    <div className={`app-shell ${shellPlatformClass} sidebar-${sidebarMode} outline-${effectiveOutlineMode} ${workspaceMenuOpen ? "workspace-menu-open" : ""} ${desktopWorkspace === "quick-notes" ? "quick-notes-active" : ""} ${sidebarResizing ? "sidebar-resizing" : ""} ${outlineResizing ? "outline-resizing" : ""} ${outlineSwitching ? "outline-switching" : ""} ${isMobile ? `mobile-document-page ${mobileEditing ? "mobile-editing" : "mobile-reading"}` : ""}`} style={shellStyle}>
+    <div className={`app-shell ${shellPlatformClass} sidebar-${sidebarMode} outline-${effectiveOutlineMode} ${workspaceMenuOpen ? "workspace-menu-open" : ""} ${focusMode ? "focus-mode" : ""} ${desktopWorkspace === "quick-notes" ? "quick-notes-active" : ""} ${sidebarResizing ? "sidebar-resizing" : ""} ${outlineResizing ? "outline-resizing" : ""} ${outlineSwitching ? "outline-switching" : ""} ${isMobile ? `mobile-document-page ${mobileEditing ? "mobile-editing" : "mobile-reading"}` : ""}`} style={shellStyle}>
       <nav className="activity-rail desktop-only" aria-label="应用导航" onPointerEnter={desktopWorkspace === "library" ? showSidebarPreview : undefined} onPointerLeave={desktopWorkspace === "library" ? hideSidebarPreview : undefined}>
         <div className="activity-rail-spacer" />
         <button className={`activity-button ${desktopWorkspace === "library" && sidebarMode === "docked" ? "active" : ""}`} onClick={() => { if (desktopWorkspace === "library") toggleSidebarDock(); else void switchDesktopWorkspace("library"); }} title="资料库" aria-label="资料库"><Files size={16} /></button>
@@ -1292,6 +1300,9 @@ export function App() {
       {topMenuOpen && createPortal(
         <div className="top-menu top-menu--more" role="menu" aria-label="文档操作"
           style={{ top: (moreMenuWrapRef.current?.getBoundingClientRect().bottom ?? 38) + 6, left: (moreMenuWrapRef.current?.getBoundingClientRect().right ?? 1280) - 180 }}>
+          <button role="menuitem" onClick={() => { setFocusMode((value) => !value); setTopMenuOpen(false); }}>
+            <Focus size={15} /><span>{focusMode ? "退出专注模式" : "进入专注模式"}<small>⌘⇧Enter</small></span>
+          </button>
           {activeNoteId && (
             <button role="menuitem" onClick={() => { void toggleNoteLock(); setTopMenuOpen(false); }}>
               {lockedNoteIds.has(activeNoteId) ? <Lock size={15} /> : <LockOpen size={15} />}
