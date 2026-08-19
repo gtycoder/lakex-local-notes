@@ -88,7 +88,7 @@ export function SyncStatusPopover({
           <section className="sync-status-section">
             <h3>本地状态</h3>
             <dl>
-              <div><dt>保存状态</dt><dd>{saveLabel}</dd></div>
+              <div><dt>保存状态</dt><dd>{model.localLabel}</dd></div>
               <div><dt>最近保存</dt><dd>{formatTime(lastSavedAt)}</dd></div>
               <div><dt>未保存标签</dt><dd>{dirtyTabCount}</dd></div>
             </dl>
