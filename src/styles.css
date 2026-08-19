@@ -2233,7 +2233,9 @@ ne-card[data-card-name="codeblock"] .ne-card-resizer-mask {
 ::view-transition-new(root) {
   animation: none;
 }
-.document-pane {
+.tab-panels {
+  /* 仅正文面板参与 tab 切换的淡入淡出；顶栏 .tab-bar 在 .multi-tab-editor 内但不在 .tab-panels 内，
+     因此切换标签时顶栏不再跟着闪烁。 */
   view-transition-name: note-pane;
 }
 ::view-transition-old(note-pane) {

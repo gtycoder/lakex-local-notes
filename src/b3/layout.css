@@ -504,11 +504,10 @@
 }
 
 
-/* 大纲随当前文档自动隐藏/显示时禁止 grid 动画；稳定后恢复普通布局行为。 */
+/* 大纲随当前文档自动隐藏/显示：保留 grid 过渡动画（260ms），
+   让右侧大纲列宽变化平滑收起/展开，避免 tab 切换时正文区瞬间跳变。
+   View Transition 已收窄到 .tab-panels（正文面板），与 grid 动画互不冲突。 */
 @media (min-width: 761px) {
-  .app-shell.outline-switching {
-    transition: none !important;
-  }
   .app-shell.outline-switching .document-pane {
     view-transition-name: none;
   }
