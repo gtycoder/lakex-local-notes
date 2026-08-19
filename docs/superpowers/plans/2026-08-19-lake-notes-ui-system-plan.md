@@ -160,4 +160,7 @@
 
 ## Verification gates
 
+Figma Make generation is intentionally excluded from this implementation pass by user decision; the local SVG/HTML board is optional reference only.
+
+
 Do not claim completion until every acceptance criterion in `docs/superpowers/specs/2026-08-19-lake-notes-ui-system-design.md` has current evidence. The final report must distinguish implemented, verified, and intentionally unchanged behavior.
