@@ -9,6 +9,8 @@ export default defineConfig({
       {
         entry: "electron/main.ts",
         vite: { build: { outDir: "dist-electron", rollupOptions: { external: ["better-sqlite3", "sharp", /^electron-log/, /^@aws-sdk\//, /^@smithy\//] } } },
+        // DEBUG-ONLY: enable CDP remote debugging; revert before commit
+        onstart: async ({ startup }) => { await startup([".", "--remote-debugging-port=9222"]); },
       },
     ]),
   ],
