@@ -2,6 +2,7 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { type S3Settings, ObjectStore, isSafeSegment, mimeTypeFor, sha256Hex, validateS3Settings } from "./sync.js";
+import { ASSET_TRANSFER_CONCURRENCY, runPool } from "./asyncPool.js";
 import { log } from "./logger.js";
 import { type QuickNoteImage, QuickNotesStore } from "./quickNotes.js";
 
@@ -208,11 +209,11 @@ export async function syncQuickNotes(
         pendingAssets.push({ filename: asset.filename, bytes, mimeType: asset.mimeType || mimeTypeFor(asset.filename) });
       }
     }
-    for (let ai = 0; ai < pendingAssets.length; ai += 1) {
-      report({ phase: "quick-notes", current: index + 1, total: localItems.length, assetCurrent: ai + 1, assetTotal: pendingAssets.length, message: "上传本地小记" });
-      const pending = pendingAssets[ai];
+    let uploadDone = 0;
+    await runPool(pendingAssets, ASSET_TRANSFER_CONCURRENCY, async (pending) => {
+      report({ phase: "quick-notes", current: index + 1, total: localItems.length, assetCurrent: ++uploadDone, assetTotal: pendingAssets.length, message: "上传本地小记" });
       await remote.put(assetKey(item.id, pending.filename), pending.bytes, pending.mimeType);
-    }
+    });
     let contentUploaded = false;
     if (remoteHashes.get(item.id) !== contentHash) {
       await remote.put(objectKey(contentHash), content, "application/json; charset=utf-8");
@@ -287,15 +288,14 @@ export async function syncQuickNotes(
 }
 
 async function downloadAssets(remote: ObjectStore, item: ManifestItem, onProgress?: (assetCurrent: number, assetTotal: number) => void): Promise<Array<{ filename: string; bytes: Buffer }>> {
-  const assets: Array<{ filename: string; bytes: Buffer }> = [];
-  for (let i = 0; i < item.assets.length; i += 1) {
-    const asset = item.assets[i];
-    onProgress?.(i + 1, item.assets.length);
+  let done = 0;
+  const assets = await runPool(item.assets, ASSET_TRANSFER_CONCURRENCY, async (asset) => {
+    onProgress?.(++done, item.assets.length);
     const bytes = await remote.getOptional(assetKey(item.id, asset.filename));
     if (!bytes) throw new Error(`小记清单引用的图片不存在: ${item.id}/${asset.filename}`);
     if (bytes.length !== asset.size || sha256Hex(bytes) !== asset.hash) throw new Error(`小记图片校验失败: ${item.id}/${asset.filename}`);
-    assets.push({ filename: asset.filename, bytes });
-  }
+    return { filename: asset.filename, bytes };
+  });
   return assets;
 }
 

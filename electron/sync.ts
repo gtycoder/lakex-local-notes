@@ -15,6 +15,7 @@ import {
 import { TRASH_NOTEBOOK_ID } from "./store.js";
 import type { Store } from "./store.js";
 import { log } from "./logger.js";
+import { ASSET_TRANSFER_CONCURRENCY, runPool } from "./asyncPool.js";
 
 // ===== 类型 =====
 export interface S3Settings {
@@ -512,10 +513,9 @@ export async function syncNow(store: Store, onProgress?: (p: SyncProgress) => vo
       // 下载资源文件（manifest 里列出）；审计 #4：缺失对象必须中止导入，
       // 下载后校验 size 与 sha256（远端损坏/被替换不静默接受）
       const assetList = rn.assets || [];
-      const assets: { filename: string; bytes: Buffer }[] = [];
-      for (let ai = 0; ai < assetList.length; ai += 1) {
-        const asset = assetList[ai];
-        report({ phase: "download", current: remoteIndex, total: remoteTotal, assetCurrent: ai + 1, assetTotal: assetList.length, message: rn.deleted ? "处理云端删除记录" : `检查远端笔记「${rn.title}」` });
+      let assetDone = 0;
+      const assets = await runPool(assetList, ASSET_TRANSFER_CONCURRENCY, async (asset) => {
+        report({ phase: "download", current: remoteIndex, total: remoteTotal, assetCurrent: ++assetDone, assetTotal: assetList.length, message: rn.deleted ? "处理云端删除记录" : `检查远端笔记「${rn.title}」` });
         const bytes = await remote.getOptional(`assets/${rn.id}/${asset.filename}`);
         if (!bytes) throw new Error(`清单引用的资源不存在: ${rn.id}/${asset.filename}`);
         if (bytes.length !== asset.size) {
@@ -524,8 +524,8 @@ export async function syncNow(store: Store, onProgress?: (p: SyncProgress) => vo
         if (sha256Hex(bytes) !== asset.hash) {
           throw new Error(`资源哈希不符: ${rn.id}/${asset.filename}（已损坏或被替换）`);
         }
-        assets.push({ filename: asset.filename, bytes });
-      }
+        return { filename: asset.filename, bytes };
+      });
       const base = store.baseHash(rn.id);
       const localChanged = localHash !== null && localHash !== base;
       const remoteChanged = rn.contentHash !== base;
@@ -684,11 +684,11 @@ export async function syncNow(store: Store, onProgress?: (p: SyncProgress) => vo
       }
     }
     // 上传资源（子进度，独立于笔记主进度）
-    for (let ai = 0; ai < pendingAssets.length; ai += 1) {
-      report({ phase: "upload", current: localIndex, total: localTotal, assetCurrent: ai + 1, assetTotal: pendingAssets.length, message: `上传笔记「${note.title}」` });
-      const pending = pendingAssets[ai];
+    let uploadDone = 0;
+    await runPool(pendingAssets, ASSET_TRANSFER_CONCURRENCY, async (pending) => {
+      report({ phase: "upload", current: localIndex, total: localTotal, assetCurrent: ++uploadDone, assetTotal: pendingAssets.length, message: `上传笔记「${note.title}」` });
       await remote.put(`assets/${note.id}/${pending.filename}`, pending.bytes, mimeTypeFor(pending.filename));
-    }
+    });
     let lakeUploaded = false;
     let lakeBytesLen = 0;
     if (remoteHashes.get(note.id) !== hash) {
