@@ -595,3 +595,171 @@ git diff --check
 - 用户粘贴的 JPEG 预览图不能靠应用恢复动画，必须拿到原始动画资源地址；
 - 任何新增 IPC 都必须同步修改 main handler、preload 和 `src/lib/native.ts`；
 - 事务边界和同步语义不能为了抽象或减少行数而改变。
+
+---
+
+## 附：分支对比审计报告（verify/remote-master-80e8b76 ↔ backup/pre-reset-master-20260819）
+
+> 只读审计，未改动/未合并任何代码。生成时间：2026-08-19。
+> 对比对象：`verify/remote-master-80e8b76`（= origin/master 80e8b76，远端基线）
+> 与 `backup/pre-reset-master-20260819`（= 本地废弃前全量快照，含 5 个提交 + 未提交工作区）。
+> 6 个提交：`6d25944` 审计五项+资源并发 / `726e9b6` W-13+W-2 / `f355d78` 审计二批 / `b576dea` 依赖复查 / `738064b` 交接文档 / `9de5f88` 工作区快照。
+> 差异：46 文件，+1862 / -1016（剔除 HANDOFF 后约 44 文件）。
+
+### 0. 核心结论
+
+1. 本次审计**没有找到确定导致「编辑器渲染慢」的回归点**；UI 侧大部分是防卡顿优化（debounce、memo、稳定回调），反而应比远端快。
+2. 「图片下载慢」最可疑的候选已重新排序（依据最新证据，见第 3 节）：主进程下载实现两分支零 diff，CSP connect-src 不影响图片下载；最可疑改为 **CDN 重定向/资产服务器响应链路** 与 **同步资源并发/超时对 UI 线程的占用**，但需真实运行对照确认（用户正在验证远端分支，正好可对照）。
+3. 暂存分支相对远端删除 `src/lib/workerPool.ts` 是**安全死代码清理**（远端该文件 177 行零调用），不是图片慢的根因。
+4. 存储侧新增 S3 超时、manifest 护栏、4 并发资源传输是**实质性优化**，建议逐步合并，但要注意小记下载的失败语义变化。
+
+### 1. 存储改动（建议优先、风险低）
+
+#### 1.1 S3 请求超时（W-6）——低风险，建议合并
+- 新增 `S3_REQUEST_TIMEOUT_MS=30s`、`S3_TRANSFER_TIMEOUT_MS=120s`（大对象放宽），ObjectStore.send 用 AbortController 兜底。
+- 远端无任何超时，网络黑洞会无限挂起；此改动解决「同步卡死/退出卡死」，正向。
+- 观察项：`testConnection`/清单小命令 30s，七牛 Kodo 慢时可能误报，可实测。
+
+#### 1.2 manifest 字节/条目护栏（W-13）——低风险，建议合并
+- `parseLakeManifest`：20MiB 字节上限 + 20 万笔记/5 万目录；小记清单 10MiB + 10 万条目。
+- 防 gzip 炸弹/投毒清单打爆主进程，纯增量保护，兼容现有清单。
+
+#### 1.3 资源上传/下载 4 并发（asyncPool）——低风险，建议合并（含一条语义注意）
+- Lake 下载：`runPool(assetList, 4)`；上传：`runPool(pendingAssets, 4)`；小记上传/下载同。
+- 远端是逐条串行（每条 await S3 往返），4 并发在网络往返主导时显著提速；不会造成 DB 并发问题（资源写盘仍在主流程内按顺序应用）。
+- 语义注意：`runPool` 任一失败会停止领取新任务并抛错，**小记 `downloadAssets` 从「逐条失败也继续攒数组」变为「任一失败立即中止」**——更安全，但行为变化需知晓。
+- 上传失败语义：Lake 上传本身主循环已有中止；小记上传同样从 continue 变为中止，需回归小记同步。
+
+#### 1.4 CDN 重定向内存索引（W-5）——低风险，建议合并
+- 启动时一次性 `scanMirroredCdnFiles` 扫 vendor cdn 目录建 Set，回调内纯内存判断，替代每请求 `existsSync + statSync`（同步 I/O 阻塞主进程）。
+- 纯优化，无行为变化；若 vendor 目录在运行时被外部改动，新文件不会即时出现在索引（目录随包固定，可接受）。
+
+#### 1.5 S3 Secret 掩码（W-14）——低风险，建议合并
+- `get_s3_settings` 不再返回明文 secret，渲染层显示 `********`；保存时掩码不变则沿用旧值。
+- 已附 CDP 验证记录；注意：**掩码保存后若想换新密钥，必须输入新值，留 `********` 不会改密钥**。
+
+#### 1.6 IPC 入参校验（W-4/W-10/W-3 等）——低风险，建议合并
+- 正文/缓存 32MiB 上限、标题/图标长度、search limit 封顶、S3/同步/历史配置收窄、导出目录白名单、mdToHtml 协议白名单。
+- 均为纵深防御，纯增量；唯一行为影响：超过 32MiB 的正文会拒绝保存（正常不会触发）。
+
+#### 1.7 退出同步兜底（QUIT_SYNC_DEADLINE 60s）——低风险，建议合并
+- before-quit 等同步完成时加 60s 强退兜底，避免网络黑洞导致无法退出。
+- 注意与 1.1 的 30s/120s 超时协同：单次大文件 120s 可能超过退出 60s 兜底，弱网下大文件传输时退出会被强杀，属预期取舍。
+
+#### 1.8 测试新增/调整——建议一并合并
+- assetServer 14 用例、asyncPool、ipcLimits、docStats、tabLimit 等；同步/小记/导出测试适配。
+- 覆盖主要新逻辑，可独立合并。
+
+#### 1.9 轻微观察（不阻塞）
+- `sync.ts` 中 `isSafeSegment` 的导入存在两行冗余（`export { ... }` 后又 `import` + `const`），可清理为单一导入。
+- `sync.diff` 中若干 `JSON.parse→parseLakeManifest` 替换后留下空行/双空行，纯格式。
+
+### 2. UI 改动（建议按功能点单独验收，风险中等）
+
+#### 2.1 标签钉住/上限/淘汰（tabLimit + App + MultiTabEditor + SettingsPanel）——建议合并
+- 新增 `maxOpenTabs`（默认 8）、钉住组置顶、LRU 淘汰保护当前/钉住。
+- App 持有 pinnedNoteIds，替代 MultiTabEditor 内部 state，关闭/淘汰时清理残留。
+- 纯前端状态逻辑，有单测；合并后需验收：钉住、自动淘汰、设置面板档位。
+
+#### 2.2 顶部 tab 不收缩 + 200px 上限 + 悬停 title + 隐藏滚动条——建议合并（但注意滚动条争议）
+- 备份分支 CSS：`flex:0 0 auto`、`max-width:200px`、`.tab-items` 横向滚动 + 滚动条隐藏、wheel 监听水平滚动。
+- 之前会话对「顶栏滚动条是否真的隐藏」有争议，需要截图验收：极窄窗口下多 tab 是否出现原生横向滚动条。
+- 风险：CSS `!important` 与 scrollbar 统一规则较多，若验收 OK 可合并；若滚动条仍出现需调整（不要简单加 overflow:hidden 到滚动容器，会禁用滚动）。
+
+#### 2.3 弹窗 portal 层级修复 + 大纲图标恢复——建议合并
+- tab 切换弹窗从绝对定位改为 `createPortal` 到 body + fixed 定位，脱离 tab-bar/大纲 rail 层叠上下文，解决被大纲遮挡。
+- OutlineSidebar rail 图标从透明 ghost 恢复为可见按钮。
+- 纯 UI 修复，建议连同 2.2 一起验收（弹窗定位依赖 switcherButton rect）。
+
+#### 2.4 字数/图片统计 debounce（W-2-A）——建议合并
+- 从「每次渲染对整篇正文跑两次 O(n) 正则」改为：切换/重载立即算，输入 300ms debounce。
+- 纯优化，方向正确。注意 `computeDocStats` 每 300ms 仍会对整篇 Lake HTML 做 3 次 replace + 1 次 match；32MiB 上限下极端文档可能仍有单次几十 ms，可后续考虑增量/缓存，但通常无感。
+
+#### 2.5 Sidebar 回调稳定化 + memo（W-2-B）——建议合并
+- App 的 sidebar 回调全部 useCallback 化，Sidebar memo，treeRowProps useMemo。
+- 减少按键路径下侧边栏整树重渲染，纯优化。注意 Sidebar 的 `useMemo` 依赖列表较长且含 `context?.id ?? null`，若后续新增 props 需同步维护依赖。
+
+#### 2.6 KaTeX/mhchem 预注入顺序 + 卡片错误边界——建议合并
+- `injectKatexScriptsInOrder` 在创建编辑器前按 katex→mhchem 顺序注入本地脚本（async=false），修复 `katex.__defineMacro` 竞态。
+- Drawnix/mindmap 卡片包错误边界，渲染异常只降级单卡。
+- 合并后必须回归：含公式/思维导图文档打开（此前验证项）。注意：预注入脚本与 Lake 的 script 去重协议（loaded/error 属性）耦合，若 Lake 版本升级需复查。
+
+#### 2.7 滚动条全局样式统一（base/layout/styles/outline 大改）——风险中等，建议单独验收
+- 删除多个重复 scrollbar 规则，统一收口到 layout.css；编辑区滚动条 1px、tab 隐藏。
+- 这是本轮争议集中点，且涉及大量 CSS 删除/改写，**务必在真实窗口截图验收**（普通列表、大纲、编辑区、菜单、tab）。
+- 若验收不符合预期，此文件可暂缓合并，不影响其它功能点。
+
+#### 2.8 其它小 UI 项
+- `clearScrollMemory`：关闭/删除 tab 时清理滚动记忆 Map，防长会话累积。建议合并。
+- tab 切换 `scrollIntoView` 加 smooth：纯体验，可留可去。
+- outline 切换 360ms 禁用 grid 动画：防抖动，低风险。
+- `SettingsPanel` 移除 S3 明文显示开关：随 W-14 一起。
+- `EditorTab` 无实际行为差异（仅导出函数）。
+- `App.tsx` 大量 useCallback 稳定化：方向正确；注意 `moveTreeNode` 依赖 `[treeNodes]`，`sidebarMove` 依赖 `moveTreeNode`，树变化时回调仍会重建，属预期。
+
+#### 2.9 UI 侧未发现与「渲染慢」直接相关的回归
+- 唯一理论性注意：App 每次内容变化都会重渲染，新增的 docStats effect、pinnedNoteIds effect、outlineSwitching effect 均非高开销；Sidebar memo 反而减少重渲染。
+- 若真实渲染慢，优先怀疑 **CSP** 或 **运行时外部脚本**（见下），而非这些状态逻辑。
+
+### 3. 图片下载慢/编辑器渲染慢：最可疑排序（依据运行证据修正）
+
+#### 3.0 已排除的嫌疑（证据确凿）
+- **主进程图片下载实现**：`electron/resourceRepository.ts`（含 `downloadRemote`、30s 超时、3 次重试、SSRF、25MiB/50MP 上限）在两个分支 **零 diff** → 图片下载慢不是下载实现本身造成。
+- **渲染层上传队列**：`src/lib/concurrency.ts`（6 并发队列）两边一致；`src/features/editor/resourceUpload.ts` 仅删除两个无调用桩。
+- **Worker 池删除**：远端 `src/lib/workerPool.ts` 177 行零调用，删除安全，不是根因。
+- **CSP connect-src 收窄**：渲染层唯一外部 `fetch` 在 `downloadWithBrowserFetch`（浏览器演示模式）；桌面端图片下载走 `native.downloadRemoteResource` → 主进程 `net.request`，**不经过 renderer CSP**。`clipboardHtml` 的 XHR 只打本地 assetServer。因此 `connect-src http: https: → http://127.0.0.1:*` 不会导致图片下载慢。
+- **CSP script-src 收窄**：vendor 静态资源全量扫描仅发现 `www.w3.org`（SVG 命名空间，非网络请求），**没有任何外部 CDN 域名**；且 `dist/index.html` 已验证 `__LAKE_CSP_SCRIPT_EXTRA__` 占位被替换为空、无残留。本地镜像脚本可正常加载。
+
+#### 3.1 最可疑 #1：CDN 重定向（gw.alipayobjects.com）首次命中时机
+- 暂存分支改为启动时 `scanMirroredCdnFiles` 一次性扫 vendor 目录建 Set，替代每请求 `existsSync+statSync`。方向是优化（去掉同步 I/O）。
+- **风险点**：若 vendor 目录含符号链接/大小写差异/启动时未就绪，Set 里漏掉文件，则 Lake 运行时请求该文件时**不会重定向到本地**，会直连 `gw.alipayobjects.com`（CSP script-src 已不允许该域名 → 被拦；或网络慢 → 表现为渲染/图片慢）。
+- **验证**：真实打开含公式/思维导图/图片的文档，DevTools Network 看是否有 `gw.alipayobjects.com` 请求未 302 到 `127.0.0.1:19876`；Console 是否有 CSP violation。
+- **建议**：保留 W-5 优化，但对比两份 `scanMirroredCdnFiles` 结果与 Lake 实际请求路径，确认 Set 覆盖完整；必要时保留原 `existsSync` 兜底（仅对未命中项）。
+
+#### 3.2 最可疑 #2：同步资源 4 并发 + S3 超时对主进程/UI 的占用
+- 暂存分支 `runPool(assetList, 4)` 并发下载/上传资源，远端逐条串行。并发提升吞吐，但 4 个 S3 流同时在主进程传输 25MiB 级对象时，`getOptional` 内部 `Buffer.from(await Body.transformToByteArray())` 与 sha256 校验会占用主进程事件循环 → 打开文档/图片渲染时可能感觉变慢。
+- 同时新增 S3 30s/120s abort 定时器；极端弱网下多个 120s 传输并存，主进程被拖住。
+- **建议**：并发数 4 是合理默认，但可在同步进行时观察 `log.sync` 的 `[perf] get/put` 耗时；若确认与 UI 卡顿相关，可降为 2 或把资源传输移入独立 worker 线程（后续优化）。
+
+#### 3.3 最可疑 #3：KaTeX/mhchem 预注入与卡片错误边界
+- `injectKatexScriptsInOrder` 在每次 `createLakeDocument` 前检查并注入两个本地脚本（async=false 顺序执行）。脚本已在 DOM 时跳过。
+- **风险**：若 `document.querySelector` 的 src 与 Lake 实际加载的 src 不一致（大小写/路径变体），会重复注入；Lake 后续通过 `script[src]` 去重可能不识别 → 重复下载/重复执行 → 打开含公式文档变慢。
+- **验证**：DevTools 看 `<script src="./vendor/cdn/os/lib/katex/...">` 是否只出现一次；Console 是否重复 `__defineMacro` 报错。
+- **建议**：保留错误边界（纯防御）；预注入若验证重复可改为在 Lake 注入后只等 load，不做主动注入。
+
+#### 3.4 最可疑 #4：UI 状态链路（较低）
+- 新增 `docStats` effect 依赖 `[openTabs, activeNoteId, mobileActive]`，`openTabs` 每次内容变化都是**新数组** → 每次按键 effect 重跑，但内部 `statsKeyRef` 相同则 debounce 300ms，不立即算 → 可接受。
+- `pinnedNoteIds`/`outlineSwitching` effect 依赖 `openTabs`/`activeNoteId`，每次内容变化重跑，都是 O(n) 级轻量。
+- 若真实渲染慢，**优先按 3.1/3.2 排查，这些 UI 状态属于低频嫌疑**。
+
+#### 3.5 明确下一步（只读验证清单）
+1. 真实窗口打开含公式/思维导图/多图文档，DevTools Network 过滤 `gw.alipayobjects.com`，确认是否全部 302 到本地；Console 确认无 CSP violation。
+2. 同步进行时观察 `log.sync [perf]`，确认资源并发是否与 UI 卡顿时段重合。
+3. 打开含公式文档，确认 katex/mhchem 脚本只注入一次。
+4. 对照远端基线（旧 CSP + 串行下载）同文档的打开速度与网络面板。
+
+### 4. 待办/下一步
+
+1. 用户正在 `verify/remote-master-80e8b76` 验证远端基线（当前无改动、无合并）。
+2. 远端基线验证通过后，决定本地 master 处置（重置到 origin/master 或其它）。
+3. 存储改动（第 1 节）可按批从备份分支 cherry-pick/手摘，先跑 `npm test`（基线 263 测试；备份分支新增后约 297 测试）。
+4. UI 改动（第 2 节）按功能点单独验收，其中 2.7 滚动条、3（CDN 重定向/CSP 运行验证）必须真实窗口截图/控制台验证。
+5. 合并时保留 `vite.config.ts` 的 cspScriptExtraPlugin 与 `public/vendor/lakex-doc/kitchen-url.js`（互为配套）。
+
+### 5. 踩坑/经验补充（供新会话）
+
+- 之前会话反复被「顶栏滚动条是否隐藏」卡住：以真实窗口 CDP 截图 + 计算样式为准，不要只看 CSS 断言。
+- CSP 修改必须同时检查 index.html 占位替换产物与 DevTools Console，不能只改 meta 就收工。已确认 dist 无占位残留；connect-src 收窄不影响主进程图片下载，重点验证 gw 域名是否被 CDN 重定向覆盖。
+- `workerPool.ts` 是死代码，删除安全；但 `imageConverter.worker.ts` 里还有同名 `convertToPng`，别混淆。
+- 资源并发 4 与退出 60s 兜底并存：弱网大文件传输时退出可能强杀，属预期，但验收时注意。
+- 小记 `downloadAssets` 失败语义从「跳过继续」变「中止」，同步回归要覆盖小记图片缺失场景。
+
+---
+
+## 2026-08-19 master 合并完成（后续会话先读）
+
+> 详见 `docs/MERGE-2026-08-19.md`。要点：
+> - master 已重置并推送远程 = `9e51119`，包含 UI 合集 + 五批存储改动 + W-3/死代码清理，297 测试全绿。
+> - **CSP 收紧已明确搁置**（index.html / kitchen-url.js / vite.config 未合并），理由见上述文档 §四。
+> - 备份分支已推送 `origin/backup/pre-reset-master-20260819`。
+> - 本地与云端数据已全部清空，从零测试中。
