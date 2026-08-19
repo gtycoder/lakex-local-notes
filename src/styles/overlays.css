@@ -36,3 +36,14 @@
 .sync-status-settings:hover { color: var(--lake-accent); background: var(--lake-accent-soft); }
 @keyframes lake-popover-in { from { opacity: 0; transform: translateY(-4px) scale(.985); } to { opacity: 1; transform: translateY(0) scale(1); } }
 @keyframes lake-status-pulse { 50% { opacity: .42; } }
+
+.search-command-panel { width: min(680px, calc(100vw - 32px)); max-height: min(620px, calc(100vh - 96px)); }
+.search-panel-help { padding: 7px 14px 5px; color: var(--lake-text-tertiary); font-size: 10px; }
+.search-result.active { background: var(--lake-accent-soft); }
+.search-result-title small { margin-left: auto; color: var(--lake-text-tertiary); font-size: 10px; font-weight: 500; }
+.search-result-meta { color: var(--lake-text-tertiary); font-size: 10px; }
+.search-panel-empty { display: grid; justify-items: center; gap: 4px; padding: 34px 20px; color: var(--lake-text-secondary); }
+.search-panel-empty span { font-size: 12px; }
+.search-panel-empty small { color: var(--lake-text-tertiary); font-size: 10px; }
+.search-panel-empty--idle { padding: 56px 20px; }
+.search-panel-empty--idle svg { color: var(--lake-text-tertiary); }

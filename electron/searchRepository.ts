@@ -4,6 +4,9 @@ export interface SearchResult {
   id: string;
   title: string;
   snippet: string;
+  matchType: "title" | "body";
+  updatedAt: string;
+  parentTitle: string | null;
 }
 
 interface SearchRepositoryDeps {
@@ -22,13 +25,18 @@ interface SearchIndexRow {
 interface SearchResultRow {
   note_id: string;
   title: string;
-  snippet: string | null;
+  title_snippet: string | null;
+  body_snippet: string | null;
+  updated_at: string;
+  parent_title: string | null;
+  title_match: number;
 }
 
 interface ShortSearchResultRow {
   id: string;
   title: string;
-  snippet: string | null;
+  updated_at: string;
+  parent_title: string | null;
 }
 
 /** FTS5 ownership is isolated here; note persistence remains in Store. */
@@ -78,24 +86,51 @@ export class SearchRepository {
   search(query: string, limit = 30): SearchResult[] {
     const normalizedQuery = query.trim();
     if (!normalizedQuery) return [];
-    if (normalizedQuery.length >= 3) {
-      const match = escapeFtsQuery(normalizedQuery);
+    if ([...normalizedQuery].length === 1) {
       const rows = this.db.prepare(
-        "SELECT note_id, title, highlight(notes_fts, 1, '<mark>', '</mark>') AS snippet FROM notes_fts WHERE notes_fts MATCH ? ORDER BY rank LIMIT ?"
-      ).all(match, limit) as SearchResultRow[];
-      return rows.map((row) => ({ id: row.note_id, title: row.title, snippet: row.snippet ?? "" }));
+        `WITH RECURSIVE trash_ids(id) AS (
+           SELECT ? FROM tree_nodes WHERE id=?
+           UNION ALL SELECT t.id FROM tree_nodes t JOIN trash_ids ti ON t.parent_id=ti.id
+         )
+         SELECT t.id, t.title, t.updated_at, parent.title AS parent_title
+         FROM tree_nodes t LEFT JOIN tree_nodes parent ON parent.id=t.parent_id
+         WHERE t.node_type='note' AND t.deleted_at IS NULL AND t.id NOT IN (SELECT id FROM trash_ids) AND t.title LIKE ?
+         ORDER BY CASE WHEN t.title = ? THEN 0 WHEN t.title LIKE ? THEN 1 ELSE 2 END, t.updated_at DESC LIMIT ?`
+      ).all(this.trashNotebookId, this.trashNotebookId, `%${normalizedQuery}%`, normalizedQuery, `${normalizedQuery}%`, limit) as ShortSearchResultRow[];
+      return rows.map((row) => ({ id: row.id, title: row.title, snippet: "", matchType: "title", updatedAt: row.updated_at, parentTitle: row.parent_title }));
     }
 
+    const match = escapeFtsQuery(normalizedQuery);
+    const titleContains = `%${normalizedQuery}%`;
+    const titlePrefix = `${normalizedQuery}%`;
     const rows = this.db.prepare(
       `WITH RECURSIVE trash_ids(id) AS (
          SELECT ? FROM tree_nodes WHERE id=?
          UNION ALL SELECT t.id FROM tree_nodes t JOIN trash_ids ti ON t.parent_id=ti.id
        )
-       SELECT t.id, t.title, '' AS snippet FROM tree_nodes t
-       WHERE t.node_type='note' AND t.deleted_at IS NULL AND t.id NOT IN (SELECT id FROM trash_ids) AND t.title LIKE ?
-       ORDER BY t.sort_order LIMIT ?`
-    ).all(this.trashNotebookId, this.trashNotebookId, `%${normalizedQuery}%`, limit) as ShortSearchResultRow[];
-    return rows.map((row) => ({ id: row.id, title: row.title, snippet: row.snippet ?? "" }));
+       SELECT f.note_id, t.title,
+              highlight(notes_fts, 0, '<mark>', '</mark>') AS title_snippet,
+              highlight(notes_fts, 1, '<mark>', '</mark>') AS body_snippet,
+              t.updated_at,
+              parent.title AS parent_title,
+              CASE WHEN t.title = ? THEN 0 WHEN t.title LIKE ? THEN 1 WHEN t.title LIKE ? THEN 2 ELSE 3 END AS title_match
+       FROM notes_fts f
+       JOIN tree_nodes t ON t.note_file_id=f.note_id
+       LEFT JOIN tree_nodes parent ON parent.id=t.parent_id
+       WHERE notes_fts MATCH ? AND t.node_type='note' AND t.deleted_at IS NULL AND t.id NOT IN (SELECT id FROM trash_ids)
+       ORDER BY title_match, rank, t.updated_at DESC LIMIT ?`
+    ).all(this.trashNotebookId, this.trashNotebookId, normalizedQuery, titlePrefix, titleContains, match, limit) as SearchResultRow[];
+    return rows.map((row) => {
+      const fromTitle = row.title_match < 3;
+      return {
+        id: row.note_id,
+        title: row.title,
+        snippet: fromTitle ? (row.title_snippet ?? row.body_snippet ?? "") : (row.body_snippet ?? row.title_snippet ?? ""),
+        matchType: fromTitle ? "title" : "body",
+        updatedAt: row.updated_at,
+        parentTitle: row.parent_title,
+      };
+    });
   }
 }
 

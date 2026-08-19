@@ -12,7 +12,7 @@ import { SyncToast, type SyncToastData } from "./components/SyncToast";
 import { SyncStatusPopover } from "./components/SyncStatusPopover";
 import { DesktopStatusBar } from "./components/DesktopStatusBar";
 import { LakeEditor } from "./features/editor/LakeEditor";
-import { clearScrollMemory } from "./features/editor/EditorTab";
+import { clearScrollMemory, locateEditorSearchHit } from "./features/editor/EditorTab";
 import type { LakeEditorInstance } from "./features/editor/lakeRuntime";
 import { MultiTabEditor, type TabInfo } from "./features/editor/MultiTabEditor";
 import { selectEvictionIds, trimTabsToLimit } from "./lib/tabLimit";
@@ -130,6 +130,14 @@ export function App() {
       if (wsMenu && !wsMenu.contains(target) && wsBtn && !wsBtn.contains(target)) setWorkspaceMenuOpen(false);
     };
     const onKeyDown = (event: KeyboardEvent) => {
+      if (event.metaKey && event.key.toLowerCase() === "k") {
+        event.preventDefault();
+        setSearchPanelQuery("");
+        setSearchPanelOpen(true);
+        setTopMenuOpen(false);
+        setWorkspaceMenuOpen(false);
+        return;
+      }
       if (event.key === "Escape") { setTopMenuOpen(false); setWorkspaceMenuOpen(false); }
     };
     document.addEventListener("pointerdown", onPointerDown);
@@ -513,7 +521,16 @@ export function App() {
     noticeTimer.current = window.setTimeout(() => setNotice(null), 2200);
   }, []);
 
-  const openNote = useCallback(async (id: string) => {
+  const openNote = useCallback(async (id: string, locateQuery = "", _newTab = false) => {
+    const locate = () => {
+      if (!locateQuery) return;
+      let attempts = 0;
+      const tryLocate = () => {
+        if (locateEditorSearchHit(id, locateQuery) || attempts++ >= 8) return;
+        window.setTimeout(tryLocate, 120);
+      };
+      window.setTimeout(tryLocate, 180);
+    };
     const existing = openTabsRef.current.find((tab) => tab.noteId === id);
     if (existing) {
       // 标签曾被标记"已删除"（远端删除）：文档可能已从回收站恢复，重新拉取最新内容刷新标签。
@@ -533,6 +550,7 @@ export function App() {
       setOpenTabs((tabs) => tabs.map((tab) =>
         tab.noteId === id ? { ...tab, lastAccessedAt: Date.now() } : tab
       ));
+      locate();
       return;
     }
     try {
@@ -561,6 +579,7 @@ export function App() {
         showNotice(`已自动关闭最旧的标签（上限 ${settings.maxOpenTabs}）`);
       }
       setActiveNoteId(id);
+      locate();
     } catch (reason) { setError(String(reason)); }
   }, [evictTabsForLimit, settings.maxOpenTabs, pinnedNoteIds, showNotice]);
 
@@ -1282,7 +1301,7 @@ export function App() {
         </div>,
         document.body,
       )}
-      <SearchPanel open={searchPanelOpen} initialQuery={searchPanelQuery} onOpenNote={(id) => void openNote(id)} onClose={() => setSearchPanelOpen(false)} />
+      <SearchPanel open={searchPanelOpen} initialQuery={searchPanelQuery} onOpenNote={(id, query, newTab) => void openNote(id, query, newTab)} onClose={() => setSearchPanelOpen(false)} />
       <TrashPanel open={trashOpen} onClose={() => setTrashOpen(false)} onRestored={() => {
         void native.listTreeNodes().then(setTreeNodes).catch(() => undefined);
         void native.listNoteSummaries().then(setNotes).catch(() => undefined);
