@@ -47,3 +47,8 @@
 .search-panel-empty small { color: var(--lake-text-tertiary); font-size: 10px; }
 .search-panel-empty--idle { padding: 56px 20px; }
 .search-panel-empty--idle svg { color: var(--lake-text-tertiary); }
+
+.settings-nav-search { display: flex; align-items: center; gap: 6px; margin: 0 8px 10px; padding: 0 8px; min-height: 30px; border: 1px solid var(--lake-border); border-radius: 7px; color: var(--lake-text-tertiary); background: var(--lake-canvas); }
+.settings-nav-search:focus-within { border-color: var(--lake-accent); box-shadow: 0 0 0 2px var(--lake-accent-soft); }
+.settings-nav-search input { min-width: 0; width: 100%; border: 0; outline: 0; color: var(--lake-text); background: transparent; font-size: 11px; }
+.settings-nav-empty { display: block; padding: 14px 10px; color: var(--lake-text-tertiary); font-size: 11px; text-align: center; }

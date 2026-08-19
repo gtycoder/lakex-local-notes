@@ -1,0 +1,21 @@
+/* Quick Notes keeps its independent workspace identity while sharing shell semantics. */
+.quick-notes-pane { color: var(--lake-text); background: var(--lake-shell); }
+.quick-notes-eyebrow { color: color-mix(in srgb, var(--lake-accent) 64%, var(--lake-text-secondary)); }
+.quick-notes-header h1 { color: var(--lake-text); }
+.quick-notes-header p { color: var(--lake-text-secondary); }
+.quick-notes-count { color: var(--lake-accent); background: var(--lake-accent-soft); }
+.quick-note-composer,
+.quick-note-entry { border-color: var(--lake-border); background: var(--lake-panel); box-shadow: var(--lake-shadow-soft); }
+.quick-note-composer textarea,
+.quick-note-entry p { color: var(--lake-text); }
+.quick-note-image-button { color: var(--lake-accent); background: var(--lake-accent-soft); }
+.quick-note-image-button:hover { background: color-mix(in srgb, var(--lake-accent) 18%, transparent); }
+.quick-note-entry time { color: var(--lake-text-tertiary); }
+.quick-note-card-actions button:hover { color: var(--lake-accent); background: var(--lake-accent-soft); }
+.quick-notes-empty,
+.quick-notes-loading { border-color: var(--lake-border); color: var(--lake-text-secondary); background: color-mix(in srgb, var(--lake-panel) 86%, transparent); }
+.quick-note-convert-dialog,
+.quick-note-notebook-list { border-color: var(--lake-border); background: var(--lake-panel); }
+.quick-note-notebook-list button { border-bottom-color: var(--lake-border); color: var(--lake-text-secondary); }
+.quick-note-notebook-list button:hover { background: var(--lake-accent-soft); color: var(--lake-accent); }
+.quick-note-no-notebook { color: var(--lake-text-tertiary); }

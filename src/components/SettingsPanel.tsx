@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
-import { AlignLeft, Cloud, Files, History, Info, ListTree, Monitor, Moon, PanelTop, Settings, Sun, Trash2, Type } from "lucide-react";
+import { AlignLeft, Cloud, Files, History, Info, ListTree, Monitor, Moon, PanelTop, Search, Settings, Sun, Trash2, Type } from "lucide-react";
 import { fontSizeOptions, type AppSettings } from "../lib/settings";
 import { native } from "../lib/native";
 import type { S3Settings, SyncSettings } from "../lib/types";
 import { useFloatingDialog } from "./useFloatingDialog";
+import { filterSettingsNav } from "./settingsSearch";
 
 export type SettingsCategory = "editor" | "appearance" | "history" | "sync" | "trash" | "about";
 
@@ -26,6 +27,7 @@ function formatBytes(n: number): string {
 
 export function SettingsPanel({ open, settings, onClose, onChange, openCategory = "editor" }: SettingsPanelProps) {
   const [category, setCategory] = useState<SettingsCategory>(openCategory);
+  const [navQuery, setNavQuery] = useState("");
   const floating = useFloatingDialog({ initialSize: { w: 840, h: 600 }, minSize: { w: 620, h: 420 } });
 
   const [stats, setStats] = useState<{ snapshotCount: number; totalBytes: number } | null>(null);
@@ -129,14 +131,15 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
     finally { setGcBusy(false); }
   };
 
-  const nav: Array<{ id: SettingsCategory; label: string; icon: React.ReactNode }> = [
-    { id: "editor", label: "编辑器", icon: <Type size={15} /> },
-    { id: "appearance", label: "外观", icon: <Monitor size={15} /> },
-    { id: "history", label: "文档与历史", icon: <History size={15} /> },
-    { id: "sync", label: "云端与同步", icon: <Cloud size={15} /> },
-    { id: "trash", label: "回收站", icon: <Trash2 size={15} /> },
-    { id: "about", label: "关于", icon: <Info size={15} /> },
+  const nav = [
+    { id: "editor" as const, label: "编辑器", keywords: "字号 段间距 大纲 工具栏 标签页" , icon: <Type size={15} /> },
+    { id: "appearance" as const, label: "外观", keywords: "浅色 深色 主题 CSS 代码片段", icon: <Monitor size={15} /> },
+    { id: "history" as const, label: "文档与历史", keywords: "快照 保留 清理", icon: <History size={15} /> },
+    { id: "sync" as const, label: "云端与同步", keywords: "S3 上传 下载 资源 云端", icon: <Cloud size={15} /> },
+    { id: "trash" as const, label: "回收站", keywords: "删除 恢复 清空", icon: <Trash2 size={15} /> },
+    { id: "about" as const, label: "关于", keywords: "版本", icon: <Info size={15} /> },
   ];
+  const visibleNav = filterSettingsNav(nav, navQuery);
 
   return (
     <div className="settings-overlay" onMouseDown={(event) => { if (event.target === event.currentTarget && !floating.interactionRef.current) onClose(); }}>
@@ -148,11 +151,13 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
         </header>
         <div className="settings-layout">
           <nav className="settings-nav">
-            {nav.map((item) => (
+            <label className="settings-nav-search"><Search size={14} /><input value={navQuery} onChange={(event) => setNavQuery(event.target.value)} placeholder="搜索设置" aria-label="搜索设置" /></label>
+            {visibleNav.map((item) => (
               <button key={item.id} className={`settings-nav-item ${category === item.id ? "active" : ""}`} onClick={() => setCategory(item.id)}>
                 {item.icon}<span>{item.label}</span>
               </button>
             ))}
+            {visibleNav.length === 0 && <span className="settings-nav-empty">没有匹配的设置</span>}
           </nav>
           <div className="settings-content">
             {category === "editor" && (
