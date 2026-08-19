@@ -148,10 +148,10 @@ export function App() {
       if (event.key === "Escape") { setTopMenuOpen(false); setWorkspaceMenuOpen(false); }
     };
     if (topMenuOpen || workspaceMenuOpen) document.addEventListener("pointerdown", onPointerDown);
-    document.addEventListener("keydown", onKeyDown);
+    document.addEventListener("keydown", onKeyDown, true);
     return () => {
       if (topMenuOpen || workspaceMenuOpen) document.removeEventListener("pointerdown", onPointerDown);
-      document.removeEventListener("keydown", onKeyDown);
+      document.removeEventListener("keydown", onKeyDown, true);
     };
   }, [topMenuOpen, workspaceMenuOpen]);
   const [sync, setSync] = useState<SyncStatus>({ phase: "idle", message: "仅本地保存", lastSyncedAt: null, pendingChanges: 0 });
