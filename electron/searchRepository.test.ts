@@ -12,6 +12,7 @@ function makeRepo() {
     ["n-exact", "Lake", "Lake", "2026-08-19T10:00:00Z"],
     ["n-prefix", "Lake Notes", "Lake Notes app", "2026-08-19T09:00:00Z"],
     ["n-body", "个人笔记", "这里讨论 Lake 编辑器性能", "2026-08-19T11:00:00Z"],
+    ["n-cn-body", "技术记录", "欢迎使用 Lake 编辑器", "2026-08-19T12:00:00Z"],
     ["n-one", "同步", "云端镜像", "2026-08-19T08:00:00Z"],
   ];
   const insertNode = db.prepare("INSERT INTO tree_nodes(id,note_file_id,title,parent_id,node_type,deleted_at,updated_at,sort_order) VALUES(?,?,?,?,?,?,?,?)");
@@ -33,9 +34,15 @@ describe("SearchRepository title/body search", () => {
 
   it("searches two characters in title and body with title ranking", () => {
     const { repo } = makeRepo();
+    expect(repo.search("欢迎").find((row) => row.id === "n-cn-body")).toMatchObject({ matchType: "body" });
+  });
+
+  it("searches two characters in title and body with title ranking", () => {
+    const { repo } = makeRepo();
     const rows = repo.search("Lake");
-    expect(rows.map((row) => row.id)).toEqual(["n-exact", "n-prefix", "n-body"]);
+    expect(rows.slice(0, 2).map((row) => row.id)).toEqual(["n-exact", "n-prefix"]);
+    expect(rows.some((row) => row.id === "n-body" && row.matchType === "body")).toBe(true);
     expect(rows[0]).toMatchObject({ matchType: "title", updatedAt: "2026-08-19T10:00:00Z" });
-    expect(rows[2].matchType).toBe("body");
+    expect(rows.find((row) => row.id === "n-body")?.matchType).toBe("body");
   });
 });

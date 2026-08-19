@@ -120,7 +120,6 @@ export function App() {
 
   // 顶栏两个下拉（工作空间菜单 / 更多文档操作）：外部点击或 Escape 关闭
   useEffect(() => {
-    if (!topMenuOpen && !workspaceMenuOpen) return;
     const onPointerDown = (event: PointerEvent) => {
       const target = event.target as Node;
       const moreMenu = document.querySelector(".top-menu--more");
@@ -148,10 +147,10 @@ export function App() {
       }
       if (event.key === "Escape") { setTopMenuOpen(false); setWorkspaceMenuOpen(false); }
     };
-    document.addEventListener("pointerdown", onPointerDown);
+    if (topMenuOpen || workspaceMenuOpen) document.addEventListener("pointerdown", onPointerDown);
     document.addEventListener("keydown", onKeyDown);
     return () => {
-      document.removeEventListener("pointerdown", onPointerDown);
+      if (topMenuOpen || workspaceMenuOpen) document.removeEventListener("pointerdown", onPointerDown);
       document.removeEventListener("keydown", onKeyDown);
     };
   }, [topMenuOpen, workspaceMenuOpen]);

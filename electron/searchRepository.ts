@@ -39,6 +39,10 @@ interface ShortSearchResultRow {
   parent_title: string | null;
 }
 
+interface LikeSearchResultRow extends ShortSearchResultRow {
+  body: string;
+}
+
 /** FTS5 ownership is isolated here; note persistence remains in Store. */
 export class SearchRepository {
   private readonly db: Database.Database;
@@ -86,7 +90,9 @@ export class SearchRepository {
   search(query: string, limit = 30): SearchResult[] {
     const normalizedQuery = query.trim();
     if (!normalizedQuery) return [];
-    if ([...normalizedQuery].length === 1) {
+    const queryLength = [...normalizedQuery].length;
+    if (queryLength === 1) {
+      const escapedLike = escapeLikeQuery(normalizedQuery);
       const rows = this.db.prepare(
         `WITH RECURSIVE trash_ids(id) AS (
            SELECT ? FROM tree_nodes WHERE id=?
@@ -96,8 +102,29 @@ export class SearchRepository {
          FROM tree_nodes t LEFT JOIN tree_nodes parent ON parent.id=t.parent_id
          WHERE t.node_type='note' AND t.deleted_at IS NULL AND t.id NOT IN (SELECT id FROM trash_ids) AND t.title LIKE ?
          ORDER BY CASE WHEN t.title = ? THEN 0 WHEN t.title LIKE ? THEN 1 ELSE 2 END, t.updated_at DESC LIMIT ?`
-      ).all(this.trashNotebookId, this.trashNotebookId, `%${normalizedQuery}%`, normalizedQuery, `${normalizedQuery}%`, limit) as ShortSearchResultRow[];
+      ).all(this.trashNotebookId, this.trashNotebookId, `%${escapedLike}%`, normalizedQuery, `${escapedLike}%`, limit) as ShortSearchResultRow[];
       return rows.map((row) => ({ id: row.id, title: row.title, snippet: "", matchType: "title", updatedAt: row.updated_at, parentTitle: row.parent_title }));
+    }
+
+    if (queryLength === 2) {
+      const escapedLike = escapeLikeQuery(normalizedQuery);
+      const rows = this.db.prepare(
+        `WITH RECURSIVE trash_ids(id) AS (
+           SELECT ? FROM tree_nodes WHERE id=?
+           UNION ALL SELECT t.id FROM tree_nodes t JOIN trash_ids ti ON t.parent_id=ti.id
+         )
+         SELECT f.note_id AS id, t.title, f.body, t.updated_at, parent.title AS parent_title
+         FROM notes_fts f
+         JOIN tree_nodes t ON t.note_file_id=f.note_id
+         LEFT JOIN tree_nodes parent ON parent.id=t.parent_id
+         WHERE t.node_type='note' AND t.deleted_at IS NULL AND t.id NOT IN (SELECT id FROM trash_ids)
+           AND (f.title LIKE ? ESCAPE '\\' OR f.body LIKE ? ESCAPE '\\')
+         ORDER BY CASE WHEN t.title = ? THEN 0 WHEN t.title LIKE ? ESCAPE '\\' THEN 1 WHEN t.title LIKE ? ESCAPE '\\' THEN 2 ELSE 3 END, t.updated_at DESC LIMIT ?`
+      ).all(this.trashNotebookId, this.trashNotebookId, `%${escapedLike}%`, `%${escapedLike}%`, normalizedQuery, `${escapedLike}%`, `%${escapedLike}%`, limit) as LikeSearchResultRow[];
+      return rows.map((row) => {
+        const titleMatch = row.title.toLocaleLowerCase().includes(normalizedQuery.toLocaleLowerCase());
+        return { id: row.id, title: row.title, snippet: titleMatch ? highlightSnippet(row.title, normalizedQuery) : highlightSnippet(row.body, normalizedQuery), matchType: titleMatch ? "title" : "body", updatedAt: row.updated_at, parentTitle: row.parent_title };
+      });
     }
 
     const match = escapeFtsQuery(normalizedQuery);
@@ -137,4 +164,18 @@ export class SearchRepository {
 /** Escape FTS5 syntax while preserving whitespace-separated search terms. */
 function escapeFtsQuery(query: string): string {
   return query.split(/\s+/).filter(Boolean).map((word) => `"${word.replace(/"/g, '""')}"`).join(" ");
+}
+
+function escapeLikeQuery(query: string): string {
+  return query.replace(/[\\%_]/g, "\\$&");
+}
+
+function highlightSnippet(text: string, query: string): string {
+  const index = text.toLocaleLowerCase().indexOf(query.toLocaleLowerCase());
+  if (index < 0) return text.slice(0, 160);
+  const start = Math.max(0, index - 64);
+  const end = Math.min(text.length, index + query.length + 96);
+  const prefix = start > 0 ? "…" : "";
+  const suffix = end < text.length ? "…" : "";
+  return `${prefix}${text.slice(start, index)}<mark>${text.slice(index, index + query.length)}</mark>${text.slice(index + query.length, end)}${suffix}`;
 }

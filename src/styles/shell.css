@@ -1,7 +1,7 @@
 /* Product shell aliases. Lake's native editor toolbar remains untouched. */
 :root {
   color: var(--lake-text);
-  background: var(--lake-shell);
+  background: var(--lake-shell) !important;
 }
 
 .app-shell {
@@ -26,18 +26,18 @@
 .floating-dialog,
 .settings-panel,
 .search-panel {
-  background: var(--lake-panel);
+  background: var(--lake-panel) !important;
   color: var(--lake-text);
 }
 
 .document-pane .lake-editor-mount {
-  background: var(--lake-canvas);
+  background: var(--lake-canvas) !important;
   color: var(--lake-text);
 }
 
 .statusbar,
 .tab-bar {
-  background: color-mix(in srgb, var(--lake-shell) 94%, var(--lake-panel));
+  background: color-mix(in srgb, var(--lake-shell) 94%, var(--lake-panel)) !important;
   color: var(--lake-text-secondary);
 }
 
@@ -71,4 +71,42 @@
   }
   .app-shell.focus-mode .workspace { grid-column: 3; }
   .app-shell.focus-mode .document-pane { border-radius: 0 !important; }
+}
+
+/* B3 dark selectors use higher specificity; these aliases intentionally win only for the shell surfaces. */
+html[data-theme="dark"] .sidebar.sidebar-docked,
+html[data-theme="dark"] .sidebar.sidebar-floating,
+html[data-theme="dark"] .document-pane,
+html[data-theme="dark"] .outline-sidebar__content,
+html[data-theme="dark"] .floating-dialog,
+html[data-theme="dark"] .settings-panel,
+html[data-theme="dark"] .search-panel {
+  background: var(--lake-panel) !important;
+  border-color: var(--lake-border) !important;
+}
+html[data-theme="dark"] .document-pane .lake-editor,
+html[data-theme="dark"] .document-pane .lake-editor-main {
+  background: var(--lake-canvas) !important;
+}
+html[data-theme="dark"] .statusbar,
+html[data-theme="dark"] .tab-bar {
+  background: var(--lake-shell) !important;
+}
+
+html[data-theme="dark"] .document-pane .ne-engine,
+html[data-theme="dark"] .document-pane .ne-engine > ne-h1,
+html[data-theme="dark"] .document-pane .ne-engine > ne-h2,
+html[data-theme="dark"] .document-pane .ne-engine > ne-h3,
+html[data-theme="dark"] .document-pane .ne-engine > ne-h4,
+html[data-theme="dark"] .document-pane .ne-engine > ne-h5,
+html[data-theme="dark"] .document-pane .ne-engine > ne-h6,
+html[data-theme="dark"] .document-pane .ne-engine > ne-p,
+html[data-theme="dark"] .document-pane .ne-engine > ne-p ne-text,
+html[data-theme="dark"] .document-pane .ne-engine > ne-h1 ne-heading-content,
+html[data-theme="dark"] .document-pane .ne-engine > ne-h2 ne-heading-content,
+html[data-theme="dark"] .document-pane .ne-engine > ne-h3 ne-heading-content,
+html[data-theme="dark"] .document-pane .ne-engine > ne-h4 ne-heading-content,
+html[data-theme="dark"] .document-pane .ne-engine > ne-h5 ne-heading-content,
+html[data-theme="dark"] .document-pane .ne-engine > ne-h6 ne-heading-content {
+  color: var(--lake-text) !important;
 }
