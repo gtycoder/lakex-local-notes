@@ -56,6 +56,7 @@ export function OutlineSidebar({
   const filterTimer = useRef<number | null>(null);
   const [levelMenuOpen, setLevelMenuOpen] = useState(false);
   const [railHovered, setRailHovered] = useState(false);
+  const hideHoverTimerRef = useRef<number | null>(null);
   const levelMenuRef = useRef<HTMLDivElement>(null);
   const asideRef = useRef<HTMLElement>(null);
   const resizeRef = useRef<{ pointerId: number; startX: number; startWidth: number; currentWidth: number } | null>(null);
@@ -99,7 +100,24 @@ export function OutlineSidebar({
     // 从固定切回悬停时，当前 pointer 仍可能停在 rail 上；先清掉预览，
     // 用户下一次移入时再正常显示，避免刚点击就立刻重新打开。
     setRailHovered(false);
+    if (hideHoverTimerRef.current !== null) window.clearTimeout(hideHoverTimerRef.current);
+    hideHoverTimerRef.current = null;
   }, [mode]);
+
+  const cancelHoverHide = () => {
+    if (hideHoverTimerRef.current !== null) window.clearTimeout(hideHoverTimerRef.current);
+    hideHoverTimerRef.current = null;
+  };
+  const scheduleHoverHide = () => {
+    if (mode !== "collapsed" || resizeRef.current) return;
+    cancelHoverHide();
+    // 面板是 rail 的视觉溢出区域，不属于 aside 的 layout box；延迟隐藏让
+    // pointer 从触发 rail 移入大纲内容时不会先触发 aside pointerleave 把面板卸掉。
+    hideHoverTimerRef.current = window.setTimeout(() => {
+      hideHoverTimerRef.current = null;
+      setRailHovered(false);
+    }, 120);
+  };
 
   const rubberBandWidth = (nextWidth: number) => {
     if (nextWidth < minWidth) return minWidth - (minWidth - nextWidth) * 0.16;
@@ -170,11 +188,8 @@ export function OutlineSidebar({
     <aside
       ref={asideRef}
       className={`outline-sidebar outline-sidebar--${mode}${railHovered ? " outline-sidebar--hovered" : ""}`}
-      onPointerLeave={() => {
-        // 悬浮预览同样可拖拽；拖动中交由 pointer capture 持续接收事件，
-        // 因此不能因为指针暂时离开原始边界就把面板隐藏掉。
-        if (!resizeRef.current) setRailHovered(false);
-      }}
+      onPointerLeave={scheduleHoverHide}
+      onPointerEnter={cancelHoverHide}
     >
       {/* 右侧 rail 顶部图标按钮：收起/固定大纲切换。 */}
       <nav className="outline-sidebar__rail" aria-label="右侧工具栏">
@@ -192,11 +207,12 @@ export function OutlineSidebar({
         {/* 独立触发区：只有右侧窄条感应鼠标进入（rail 视觉宽度与其解耦）。 */}
         <div
           className="outline-sidebar__trigger"
-          onPointerEnter={() => { if (mode === "collapsed") setRailHovered(true); }}
+          onPointerEnter={() => { cancelHoverHide(); if (mode === "collapsed") setRailHovered(true); }}
+          onPointerLeave={scheduleHoverHide}
         />
       </nav>
 
-      <div className="outline-sidebar__content">
+      <div className="outline-sidebar__content" onPointerEnter={() => { cancelHoverHide(); if (mode === "collapsed") setRailHovered(true); }} onPointerLeave={scheduleHoverHide}>
         <div className="outline-sidebar__header">
           <span className="outline-sidebar__spacer" />
           <button

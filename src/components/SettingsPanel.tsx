@@ -1,12 +1,12 @@
 import { useEffect, useState } from "react";
-import { AlignLeft, Cloud, Files, History, Info, ListTree, Monitor, Moon, PanelTop, Search, Settings, Sun, Trash2, Type } from "lucide-react";
+import { AlignLeft, Cloud, Files, History, Info, Keyboard, ListTree, Monitor, Moon, PanelTop, Search, Settings, Sun, Trash2, Type } from "lucide-react";
 import { fontSizeOptions, type AppSettings } from "../lib/settings";
 import { native } from "../lib/native";
 import type { S3Settings, SyncSettings } from "../lib/types";
 import { useFloatingDialog } from "./useFloatingDialog";
 import { filterSettingsNav } from "./settingsSearch";
 
-export type SettingsCategory = "editor" | "appearance" | "history" | "sync" | "trash" | "about";
+export type SettingsCategory = "editor" | "appearance" | "shortcuts" | "history" | "sync" | "trash" | "about";
 
 interface SettingsPanelProps {
   open: boolean;
@@ -134,6 +134,7 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
   const nav = [
     { id: "editor" as const, label: "编辑器", keywords: "字号 段间距 大纲 工具栏 标签页" , icon: <Type size={15} /> },
     { id: "appearance" as const, label: "外观", keywords: "浅色 深色 主题 CSS 代码片段", icon: <Monitor size={15} /> },
+    { id: "shortcuts" as const, label: "快捷键", keywords: "快捷键 搜索 专注模式 键盘", icon: <Keyboard size={15} /> },
     { id: "history" as const, label: "文档与历史", keywords: "快照 保留 清理", icon: <History size={15} /> },
     { id: "sync" as const, label: "云端与同步", keywords: "S3 上传 下载 资源 云端", icon: <Cloud size={15} /> },
     { id: "trash" as const, label: "回收站", keywords: "删除 恢复 清空", icon: <Trash2 size={15} /> },
@@ -216,6 +217,23 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
                     value={settings.customCss}
                     onChange={(e) => onChange({ customCss: e.target.value })}
                   />
+                </section>
+              </>
+            )}
+
+            {category === "shortcuts" && (
+              <>
+                <section className="settings-group">
+                  <h4><Keyboard size={13} /> 快捷键</h4>
+                  <p className="settings-hint">当前版本先展示固定快捷键，暂不支持自定义。</p>
+                  <div className="shortcut-list" aria-label="快捷键列表">
+                    <div className="shortcut-row"><kbd>⌘K</kbd><span>打开全局搜索（标题和正文）</span></div>
+                    <div className="shortcut-row"><kbd>⌘⇧Enter</kbd><span>进入或退出专注模式</span></div>
+                    <div className="shortcut-row"><kbd>↑ / ↓</kbd><span>在搜索结果中移动</span></div>
+                    <div className="shortcut-row"><kbd>Enter</kbd><span>打开搜索结果并定位命中</span></div>
+                    <div className="shortcut-row"><kbd>⌘Enter</kbd><span>在新标签打开并定位命中</span></div>
+                    <div className="shortcut-row"><kbd>Esc</kbd><span>关闭当前菜单或浮层</span></div>
+                  </div>
                 </section>
               </>
             )}

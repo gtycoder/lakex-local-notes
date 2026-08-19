@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type MutableRefObject } from "react";
-import { Check, ChevronDown, Cloud, CloudOff, History, LoaderCircle, Settings2, TriangleAlert, UploadCloud } from "lucide-react";
+import { Check, Cloud, CloudOff, History, LoaderCircle, Settings2, TriangleAlert, UploadCloud } from "lucide-react";
 import type { SyncStatus } from "../lib/types";
 import { buildSyncStatusModel, type SyncStatusModelInput } from "./syncStatusModel";
 
@@ -76,8 +76,8 @@ export function SyncStatusPopover({
         aria-haspopup="dialog"
       >
         <span className="sync-status-icon" aria-hidden="true">{icon}</span>
-        <span className="sync-status-copy"><span>{model.localLabel}</span>{model.pendingTotal > 0 && <strong>待上传 {model.pendingTotal}</strong>}</span>
-        <ChevronDown size={12} aria-hidden="true" />
+        {model.pendingTotal > 0 && <span className="sync-status-count" aria-hidden="true">{model.pendingTotal > 99 ? "99+" : model.pendingTotal}</span>}
+        <span className="sync-status-visually-hidden">{model.localLabel}，{model.statusLabel}</span>
       </button>
       {open && (
         <div ref={popoverRef} className="sync-status-popover" role="dialog" aria-label="本地与云端同步状态" style={style}>

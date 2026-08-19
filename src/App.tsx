@@ -116,7 +116,7 @@ export function App() {
   const moreMenuWrapRef = useRef<HTMLDivElement>(null);
   const syncBtnRef = useRef<HTMLButtonElement>(null);
   /** 顶栏「工作空间」名：取 S3 prefix（未配置时显示本地占位） */
-  const [workspaceName, setWorkspaceName] = useState("本地工作空间");
+  const workspaceName = "本地空间";
 
   // 顶栏两个下拉（工作空间菜单 / 更多文档操作）：外部点击或 Escape 关闭
   useEffect(() => {
@@ -283,12 +283,6 @@ export function App() {
     });
   }, []);
 
-  // 顶栏工作空间名：用 S3 prefix（思源对应「工作空间」）
-  useEffect(() => {
-    void native.getS3Settings().then((s3) => {
-      if (s3?.prefix) setWorkspaceName(s3.prefix);
-    }).catch(() => undefined);
-  }, []);
 
   // 面包屑大纲路径：订阅活动文档大纲变化（滚动切换标题时刷新）
   const [, forceOutlineRender] = useState(0);
@@ -1299,7 +1293,7 @@ export function App() {
       {topMenuOpen && createPortal(
         <div className="top-menu top-menu--more" role="menu" aria-label="文档操作"
           style={{ top: (moreMenuWrapRef.current?.getBoundingClientRect().bottom ?? 38) + 6, left: (moreMenuWrapRef.current?.getBoundingClientRect().right ?? 1280) - 180 }}>
-          <button role="menuitem" onClick={() => { setFocusMode((value) => !value); setTopMenuOpen(false); }}>
+          <button role="menuitem" aria-checked={focusMode} onClick={() => { setFocusMode((value) => !value); setTopMenuOpen(false); }}>
             <Focus size={15} /><span>{focusMode ? "退出专注模式" : "进入专注模式"}<small>⌘⇧Enter</small></span>
           </button>
           {activeNoteId && (

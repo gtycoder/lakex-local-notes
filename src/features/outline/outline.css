@@ -445,3 +445,37 @@
 .outline-item:hover,
 .outline-item--selected { color: var(--lake-text); background: var(--lake-accent-soft); }
 .outline-item--selected { box-shadow: inset 3px 0 var(--lake-accent); }
+
+/* Floating outline: keep the preview inside a bounded dock instead of growing to
+   the full app column, and let pointer travel from rail to content without a
+   leave/re-enter race. */
+@media (min-width: 761px) {
+  .outline-sidebar--collapsed .outline-sidebar__content,
+  .outline-sidebar--collapsed.outline-sidebar--hovered .outline-sidebar__content {
+    top: 72px;
+    bottom: 72px;
+    height: auto;
+    max-height: calc(100% - 144px);
+    transition: opacity 180ms var(--lake-ease-standard), transform 180ms var(--lake-ease-standard), visibility 180ms linear, box-shadow 180ms ease-out;
+  }
+  .outline-sidebar--collapsed:not(.outline-sidebar--hovered) .outline-sidebar__content {
+    pointer-events: none;
+  }
+  .outline-sidebar--collapsed.outline-sidebar--hovered .outline-sidebar__content,
+  .outline-sidebar--collapsed.outline-sidebar--hovered .outline-sidebar__content * {
+    pointer-events: auto;
+  }
+  .outline-sidebar__content .outline-list {
+    min-height: 0;
+    overflow: auto;
+    overscroll-behavior: contain;
+  }
+  .outline-sidebar__rail,
+  .outline-sidebar__trigger,
+  .outline-sidebar__content,
+  .outline-sidebar__content .outline-item,
+  .outline-sidebar__content .outline-item__fold {
+    -webkit-user-select: none;
+    user-select: none;
+  }
+}

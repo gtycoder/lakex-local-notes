@@ -1,10 +1,10 @@
 
 .sync-status-control { position: relative; display: inline-flex; }
-.sync-status-button { min-width: 132px; max-width: 190px; gap: 5px; }
+.sync-status-button { position: relative; width: 30px; min-width: 30px; height: 28px; padding: 0; gap: 0; justify-content: center; }
 .sync-status-button .sync-status-icon { display: inline-flex; flex: 0 0 auto; }
-.sync-status-button .sync-status-copy { display: inline-flex; min-width: 0; align-items: baseline; gap: 5px; overflow: hidden; }
-.sync-status-button .sync-status-copy > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.sync-status-button .sync-status-copy strong { flex: 0 0 auto; color: var(--lake-sync-pending); font-size: 10px; font-weight: 650; }
+.sync-status-button:hover .sync-status-icon { transform: translateY(-.5px); }
+.sync-status-count { position: absolute; top: 1px; right: 0; min-width: 13px; height: 13px; padding: 0 3px; border: 2px solid var(--lake-shell); border-radius: 999px; color: #fff; background: var(--lake-sync-pending); font-size: 8px; font-weight: 700; line-height: 9px; text-align: center; }
+.sync-status-visually-hidden { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
 .sync-status-button.pending { color: var(--lake-sync-pending); }
 .sync-status-button.synced { color: var(--lake-sync-success); }
 .sync-status-button.error { color: var(--lake-error); }
@@ -52,3 +52,9 @@
 .settings-nav-search:focus-within { border-color: var(--lake-accent); box-shadow: 0 0 0 2px var(--lake-accent-soft); }
 .settings-nav-search input { min-width: 0; width: 100%; border: 0; outline: 0; color: var(--lake-text); background: transparent; font-size: 11px; }
 .settings-nav-empty { display: block; padding: 14px 10px; color: var(--lake-text-tertiary); font-size: 11px; text-align: center; }
+
+.shortcut-list { display: grid; gap: 2px; margin-top: 10px; border: 1px solid var(--lake-border); border-radius: 9px; overflow: hidden; }
+.shortcut-row { display: grid; grid-template-columns: 94px minmax(0, 1fr); align-items: center; gap: 12px; min-height: 40px; padding: 0 10px; color: var(--lake-text-secondary); background: var(--lake-panel); }
+.shortcut-row + .shortcut-row { border-top: 1px solid color-mix(in srgb, var(--lake-border) 72%, transparent); }
+.shortcut-row kbd { justify-self: start; min-width: 58px; padding: 3px 7px; border: 1px solid var(--lake-border); border-bottom-width: 2px; border-radius: 5px; color: var(--lake-text); background: var(--lake-canvas); font: 11px/1.2 ui-monospace, SFMono-Regular, Menlo, monospace; text-align: center; }
+.shortcut-row span { font-size: 12px; }
