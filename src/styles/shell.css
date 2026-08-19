@@ -1,0 +1,61 @@
+/* Product shell aliases. Lake's native editor toolbar remains untouched. */
+:root {
+  color: var(--lake-text);
+  background: var(--lake-shell);
+}
+
+.app-shell {
+  color: var(--lake-text);
+  background: var(--lake-shell);
+  transition: grid-template-columns var(--lake-motion-panel) var(--lake-ease-standard);
+}
+
+.sidebar,
+.document-pane,
+.quick-notes-pane,
+.outline-sidebar__content,
+.floating-dialog,
+.settings-panel,
+.search-panel {
+  border-color: var(--lake-border);
+}
+
+.sidebar,
+.document-pane,
+.outline-sidebar__content,
+.floating-dialog,
+.settings-panel,
+.search-panel {
+  background: var(--lake-panel);
+  color: var(--lake-text);
+}
+
+.document-pane .lake-editor-mount {
+  background: var(--lake-canvas);
+  color: var(--lake-text);
+}
+
+.statusbar,
+.tab-bar {
+  background: color-mix(in srgb, var(--lake-shell) 94%, var(--lake-panel));
+  color: var(--lake-text-secondary);
+}
+
+[data-theme="dark"] .sidebar,
+[data-theme="dark"] .document-pane,
+[data-theme="dark"] .outline-sidebar__content,
+[data-theme="dark"] .floating-dialog,
+[data-theme="dark"] .settings-panel,
+[data-theme="dark"] .search-panel {
+  border-color: var(--lake-border);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-shell,
+  .sidebar,
+  .outline-sidebar,
+  .tab-item,
+  .floating-dialog {
+    transition: none !important;
+  }
+}
