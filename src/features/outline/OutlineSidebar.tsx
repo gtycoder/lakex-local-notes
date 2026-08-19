@@ -170,7 +170,6 @@ export function OutlineSidebar({
     <aside
       ref={asideRef}
       className={`outline-sidebar outline-sidebar--${mode}${railHovered ? " outline-sidebar--hovered" : ""}`}
-      onPointerEnter={() => { if (mode === "collapsed") setRailHovered(true); }}
       onPointerLeave={() => {
         // 悬浮预览同样可拖拽；拖动中交由 pointer capture 持续接收事件，
         // 因此不能因为指针暂时离开原始边界就把面板隐藏掉。
@@ -190,6 +189,11 @@ export function OutlineSidebar({
           <ListTree size={16} />
         </button>
         <div className="outline-sidebar__rail-fill" />
+        {/* 独立触发区：只有右侧窄条感应鼠标进入（rail 视觉宽度与其解耦）。 */}
+        <div
+          className="outline-sidebar__trigger"
+          onPointerEnter={() => { if (mode === "collapsed") setRailHovered(true); }}
+        />
       </nav>
 
       <div className="outline-sidebar__content">

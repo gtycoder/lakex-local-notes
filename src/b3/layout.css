@@ -182,7 +182,6 @@
   border-color: var(--b3-theme-surface-lighter) !important;
 }
 
-
 .toolbar__item {
   display: inline-flex;
   align-items: center;
@@ -205,7 +204,6 @@
 .toolbar__item--first { margin-left: var(--b3-toolbar-left-mac, 74px); }
 .toolbar__sync.syncing svg { animation: spin 1s linear infinite; }
 .toolbar__sync.error { color: var(--b3-theme-error); }
-
 
 /* ── 编辑器面包屑（思源 protyle-breadcrumb）── */
 .protyle-breadcrumb {
@@ -271,7 +269,6 @@
   color: var(--b3-theme-on-background);
 }
 .top-menu > button span { min-width: 0; }
-
 
 /* ── 面包屑：笔记本名 + 大纲（H1xxx 纯文本标识大纲，无特殊样式）── */
 .protyle-breadcrumb__item--notebook {
@@ -368,147 +365,30 @@
   }
 }
 
-/* ── 统一滚动条最终规则（2026-08-19） ─────────────────────────────────
- * 仅这一处定义最终 scrollbar 外观，避免 base/styles/vendor 规则互相覆盖。
- * WebKit 用 10px 轨道 + content-box 背景：默认内容区只有 2px；
- * hover 时透明边框从 4px 缩到 1px，视觉上才增粗。顶部 tab 是唯一例外：
- * 保留可滚动能力，但完全隐藏滚动条。
- */
-* {
-  scrollbar-width: thin;
-  scrollbar-color: var(--b3-scroll-color) transparent;
-}
-
-*::-webkit-scrollbar {
-  width: 10px;
-  height: 10px;
-}
-
-*::-webkit-scrollbar-corner {
-  background: transparent;
-}
-
-*::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-*::-webkit-scrollbar-thumb {
-  box-sizing: border-box;
-  border: 4px solid transparent;
-  border-radius: var(--b3-border-radius);
-  background-color: var(--b3-scroll-color);
-  background-clip: content-box;
-  box-shadow: none;
-}
-
-*::-webkit-scrollbar-thumb:hover {
-  border-width: 1px;
-}
-
-@media (min-width: 761px) {
-  /* 顶栏本身绝不成为滚动层；否则 macOS 可能绘制顶部横向条。 */
-  .tab-bar {
-    overflow: hidden !important;
-  }
-
-  /* tab 之间只留 1px；横向滚动仍由原生 overflow + Wheel listener 提供。 */
-  .tab-items {
-    gap: 1px !important;
-    align-self: stretch;
-    height: 100%;
-    min-height: 0;
-    overflow-x: auto !important;
-    overflow-y: hidden !important;
-    scrollbar-width: none !important;
-    -ms-overflow-style: none;
-  }
-
-  .tab-items::-webkit-scrollbar,
-  .tab-items::-webkit-scrollbar-track,
-  .tab-items::-webkit-scrollbar-thumb {
-    display: none !important;
-    width: 0 !important;
-    height: 0 !important;
-  }
-
-  .tab-item .tab-close {
-    position: static;
-    flex: 0 0 17px;
-    width: 17px;
-    min-width: 17px;
-    height: 17px;
-    margin-left: 2px;
-    transform: none;
-  }
-
-  /* 其它 Electron 内容滚动条：默认 1px CSS（Retina 截图约 2 个物理像素）。 */
-  .app-shell *::-webkit-scrollbar {
-    width: 1px !important;
-    height: 1px !important;
-  }
-  .app-shell *::-webkit-scrollbar-track {
-    background: transparent !important;
-  }
-  .app-shell *::-webkit-scrollbar-thumb {
-    box-sizing: border-box !important;
-    border: 4px solid transparent !important;
-    border-radius: var(--b3-border-radius) !important;
-    background-color: var(--b3-scroll-color) !important;
-    background-clip: content-box !important;
-    box-shadow: none !important;
-  }
-  .app-shell *::-webkit-scrollbar-thumb:hover {
-    border-width: 1px !important;
-  }
-}
-
-/* ── 真实滚动容器的最终细线宽度（2026-08-19） ────────────────────────
- * .app-shell * 的通用规则只负责基础外观；目录、大纲、编辑器这些真实滚动层
- * 必须显式缩窄，否则 Chromium 会把 10px 轨道直接绘成粗条。Retina 截图
- * 会按 2x 像素显示，因此 CSS 1px 约等于截图中的 2px。 */
-@media (min-width: 761px) {
-  .app-shell .note-list::-webkit-scrollbar,
-  .app-shell .outline-list::-webkit-scrollbar,
-  .app-shell .ne-editor-wrap::-webkit-scrollbar,
-  .app-shell .ne-viewer::-webkit-scrollbar,
-  .app-shell .ne-viewer-wrap::-webkit-scrollbar,
-  .app-shell .ne-viewer-body::-webkit-scrollbar {
-    width: 1px !important;
-    height: 1px !important;
-  }
-
-  .app-shell .note-list::-webkit-scrollbar-thumb,
-  .app-shell .outline-list::-webkit-scrollbar-thumb,
-  .app-shell .ne-editor-wrap::-webkit-scrollbar-thumb,
-  .app-shell .ne-viewer::-webkit-scrollbar-thumb,
-  .app-shell .ne-viewer-wrap::-webkit-scrollbar-thumb,
-  .app-shell .ne-viewer-body::-webkit-scrollbar-thumb {
-    box-sizing: border-box !important;
-    min-height: 18px;
-    border: 0 !important;
-    border-radius: 999px !important;
-    background: color-mix(in srgb, var(--b3-scroll-color) 72%, transparent) !important;
-    background-clip: border-box !important;
-    box-shadow: none !important;
-  }
-
-  .app-shell .note-list:hover::-webkit-scrollbar,
-  .app-shell .outline-list:hover::-webkit-scrollbar,
-  .app-shell .ne-editor-wrap:hover::-webkit-scrollbar,
-  .app-shell .ne-viewer:hover::-webkit-scrollbar,
-  .app-shell .ne-viewer-wrap:hover::-webkit-scrollbar,
-  .app-shell .ne-viewer-body:hover::-webkit-scrollbar {
-    width: 2px !important;
-    height: 2px !important;
-  }
-}
-
-
 /* 大纲随当前文档自动隐藏/显示：保留 grid 过渡动画（260ms），
    让右侧大纲列宽变化平滑收起/展开，避免 tab 切换时正文区瞬间跳变。
    View Transition 已收窄到 .tab-panels（正文面板），与 grid 动画互不冲突。 */
 @media (min-width: 761px) {
   .app-shell.outline-switching .document-pane {
     view-transition-name: none;
+  }
+}
+
+/* ── 滚动条（2026-08-19） ───────────────────────────────────────────
+ * 仅保留 thumb 最短 64px（超长文档下可点击）与基础 10px 轨道。
+ * hover 增宽逻辑已移除（用户反馈触发区有两段、体验不佳）。
+ */
+::-webkit-scrollbar-thumb {
+  min-height: 64px;
+}
+@media (min-width: 761px) {
+  .ne-editor-wrap::-webkit-scrollbar,
+  .note-list::-webkit-scrollbar,
+  .outline-list::-webkit-scrollbar,
+  .ne-viewer::-webkit-scrollbar,
+  .ne-viewer-wrap::-webkit-scrollbar,
+  .ne-viewer-body::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
   }
 }

@@ -60,8 +60,28 @@
     min-width: var(--outline-collapsed-width);
     padding: 0 3px 6px;
     background: linear-gradient(180deg, #f7f8fa 0%, var(--shell-material) 160px);
+    /* 视觉 rail 保持原宽度；但溢出到滚动条轨道区域的左侧部分不拦截指针，
+       让鼠标能 hover 到编辑器滚动条（否则滚动条变粗触发区只剩 2px）。 */
+    pointer-events: none;
+  }
+  .outline-sidebar__rail .outline-sidebar__activity-button,
+  .outline-sidebar__rail .outline-sidebar__trigger {
+    pointer-events: auto;
   }
   .outline-sidebar__rail-fill { flex: 1; }
+
+  /* 悬浮触发层：rail 视觉保持原宽度（--outline-collapsed-width），
+     但只有右侧窄条（独立于 rail 视觉宽度）负责感应鼠标进入。
+     解决「鼠标未到 rail 就触发悬浮」——触发区与视觉 rail 解耦。 */
+  .outline-sidebar__trigger {
+    position: absolute;
+    z-index: 3;
+    /* 顶部避开 activity-button（约 32px），按钮区域点击优先，不触发悬浮 */
+    top: 36px;
+    right: 0;
+    bottom: 0;
+    width: var(--outline-hover-trigger-width, 28px);
+  }
   .outline-sidebar__activity-button {
     display: grid;
     place-items: center;
@@ -105,7 +125,7 @@
     background: var(--shell-material);
     opacity: 1;
     transform: translateX(0);
-    transition: opacity 140ms ease-out, transform 180ms var(--shell-ease), box-shadow 180ms ease-out, border-radius 180ms var(--shell-ease);
+    transition: opacity 260ms var(--shell-ease), transform 260ms var(--shell-ease), visibility 260ms, box-shadow 260ms ease-out, border-radius 260ms var(--shell-ease);
   }
 
   /* 收起：悬停整条 rail 后才以浮层方式预览，不挤压正文。 */
