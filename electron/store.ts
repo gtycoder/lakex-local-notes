@@ -101,6 +101,20 @@ function uuid(): string {
   return crypto.randomUUID();
 }
 
+/**
+ * W-3：资产服务器 URL 提取正则工厂。端口跟随 ASSET_PORT（LAKE_ASSET_PORT 可覆盖，
+ * 多端同机双开），此前硬编码 19876 会在端口覆盖时让导出静默丢失全部图片。
+ */
+export function localAssetLakeSrcRe(port: number): RegExp {
+  return new RegExp(`^http://127\\.0\\.0\\.1:${port}/([^/]+)/([^/]+)$`);
+}
+export function localAssetHtmlImgRe(port: number): RegExp {
+  return new RegExp(`<img[^>]*src="(http://127\\.0\\.0\\.1:${port}/([^/]+)/([^/"\\s]+))"`, "g");
+}
+export function localAssetMdImgRe(port: number): RegExp {
+  return new RegExp(`!\\[[^\\]]*\\]\\((http://127\\.0\\.0\\.1:${port}/([^/)]+)/([^/)]+))\\)`, "g");
+}
+
 export class Store {
   private db: Database.Database;
   private root: string;
@@ -642,7 +656,7 @@ export class Store {
       try {
         const value = JSON.parse(decodeURIComponent(encoded)) as { src?: string };
         const src = typeof value.src === "string" ? value.src : "";
-        const m = /^http:\/\/127\.0\.0\.1:19876\/([^/]+)\/([^/]+)$/.exec(src);
+        const m = localAssetLakeSrcRe(ASSET_PORT).exec(src);
         if (!m) { skipped++; return whole; } // 远程 URL 保持原样
         const noteId = m[1];
         const filename = m[2];
@@ -681,8 +695,8 @@ export class Store {
     const imagesDir = path.join(exportDir, "images");
     fs.mkdirSync(imagesDir, { recursive: true });
     let body = mdToHtml(markdown);
-    // 提取 <img src="http://127.0.0.1:19876/{noteId}/{file}"> 并复制 + 改写相对引用
-    const imgRe = /<img[^>]*src="(http:\/\/127\.0\.0\.1:19876\/([^/]+)\/([^/"\s]+))"/g;
+    // 提取 <img src="http://127.0.0.1:{ASSET_PORT}/{noteId}/{file}"> 并复制 + 改写相对引用
+    const imgRe = localAssetHtmlImgRe(ASSET_PORT);
     const seen = new Set<string>();
     let imageCount = 0;
     let skipped = 0;
@@ -728,7 +742,7 @@ export class Store {
     const titleRow = this.db.prepare("SELECT title FROM notes WHERE id=?").get(id) as { title: string } | undefined;
     const title = sanitizeFileName(titleRow?.title ?? "未命名");
     // 提取图片引用（仅处理本地 assetServer URL；远程 URL 保持原样）
-    const imgRe = /!\[[^\]]*\]\((http:\/\/127\.0\.0\.1:19876\/([^/)]+)\/([^/)]+))\)/g;
+    const imgRe = localAssetMdImgRe(ASSET_PORT);
     const unique: Array<{ url: string; noteId: string; filename: string }> = [];
     const seen = new Set<string>();
     let m: RegExpExecArray | null;

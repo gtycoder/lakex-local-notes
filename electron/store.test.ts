@@ -1192,3 +1192,26 @@ describe("M8 历史分层保留判定", () => {
     expect(drops.has(recent)).toBe(false);
   });
 });
+
+// ===== W-3：资产 URL 提取正则工厂（端口跟随 ASSET_PORT） =====
+describe("localAsset*Re 正则工厂", () => {
+  it("默认端口 19876 匹配 lake src / html img / markdown img", async () => {
+    const { localAssetLakeSrcRe, localAssetHtmlImgRe, localAssetMdImgRe } = await import("./store.js");
+    expect(localAssetLakeSrcRe(19876).exec("http://127.0.0.1:19876/n1/a.png")?.[2]).toBe("a.png");
+    expect(localAssetHtmlImgRe(19876).exec('<img src="http://127.0.0.1:19876/n1/a.png">')?.[2]).toBe("n1");
+    expect(localAssetMdImgRe(19876).exec("![](http://127.0.0.1:19876/n1/a.png)")?.[3]).toBe("a.png");
+  });
+
+  it("自定义端口（LAKE_ASSET_PORT 覆盖场景）也能匹配，不再静默丢图", async () => {
+    const { localAssetLakeSrcRe, localAssetMdImgRe } = await import("./store.js");
+    expect(localAssetLakeSrcRe(19877).exec("http://127.0.0.1:19877/n1/a.png")?.[1]).toBe("n1");
+    expect(localAssetMdImgRe(19877).exec("![](http://127.0.0.1:19877/n1/a.png)")?.[2]).toBe("n1");
+    // 默认端口正则不匹配其他端口的 URL（不误吞）
+    expect(localAssetLakeSrcRe(19876).exec("http://127.0.0.1:19877/n1/a.png")).toBeNull();
+  });
+
+  it("远程 URL 不匹配（保持原样）", async () => {
+    const { localAssetLakeSrcRe } = await import("./store.js");
+    expect(localAssetLakeSrcRe(19876).exec("https://example.com/n1/a.png")).toBeNull();
+  });
+});
