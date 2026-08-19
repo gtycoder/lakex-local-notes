@@ -6,7 +6,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { Store } from "./store.js";
 import { QuickNotesStore } from "./quickNotes.js";
 import { startAssetServer, ASSET_PORT } from "./assetServer.js";
-import { resolveMirroredCdnRedirect } from "./cdnRedirect.js";
+import { resolveMirroredCdnRedirect, scanMirroredCdnFiles } from "./cdnRedirect.js";
 import { testConnection, syncNow, runGcReconcile, runDeepCleanup, type SyncResult, type SyncProgress } from "./sync.js";
 import { initLogger, log, logHeapPeak } from "./logger.js";
 import { syncQuickNotes } from "./quickNotesSync.js";
@@ -164,14 +164,12 @@ function vendorCdnDir(): string {
  * 承载用户粘贴图片，若按 host 全量重定向，未镜像的 /zos/skylark/... 会变成本地 404。
  */
 function registerCdnRedirect() {
-  const mirrorRoot = vendorCdnDir();
+  // W-5：镜像清单启动时一次性读入内存（目录随包固定），回调内零 I/O。
+  const mirrored = scanMirroredCdnFiles(vendorCdnDir());
   session.defaultSession.webRequest.onBeforeRequest(
     { urls: ["*://gw.alipayobjects.com/*"] },
     (details, callback) => {
-      const redirectURL = resolveMirroredCdnRedirect(details.url, ASSET_PORT, (relativePath) => {
-        const file = path.join(mirrorRoot, relativePath);
-        return fs.existsSync(file) && fs.statSync(file).isFile();
-      });
+      const redirectURL = resolveMirroredCdnRedirect(details.url, ASSET_PORT, (relativePath) => mirrored.has(relativePath));
       // 未镜像的资源保持原请求：例如用户粘贴的 gw /zos/skylark 图片。
       callback(redirectURL ? { redirectURL } : {});
     }

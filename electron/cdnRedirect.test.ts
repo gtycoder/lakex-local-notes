@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { resolveMirroredCdnRedirect } from "./cdnRedirect.js";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { resolveMirroredCdnRedirect, scanMirroredCdnFiles } from "./cdnRedirect.js";
 
 const mirrored = new Set([
   "os/lib/katex/0.16.8/dist/contrib/mhchem.min.js",
@@ -28,5 +31,21 @@ describe("resolveMirroredCdnRedirect", () => {
     expect(resolveMirroredCdnRedirect("https://cdn.nlark.com/yuque/0/a.png", 19876, lookup)).toBeNull();
     expect(resolveMirroredCdnRedirect("https://gw.alipayobjects.com/zos/unknown/a.png", 19876, lookup)).toBeNull();
     expect(resolveMirroredCdnRedirect("https://gw.alipayobjects.com/%2e%2e/secret", 19876, lookup)).toBeNull();
+  });
+});
+
+// ===== W-5：镜像目录一次性扫描 =====
+describe("scanMirroredCdnFiles (W-5)", () => {
+  it("递归扫描出相对路径集合（/ 分隔），空/缺失目录返回空集", () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "lake-cdn-scan-"));
+    fs.mkdirSync(path.join(root, "a/b"), { recursive: true });
+    fs.writeFileSync(path.join(root, "a/b/f.js"), "x");
+    fs.writeFileSync(path.join(root, "top.css"), "y");
+    const files = scanMirroredCdnFiles(root);
+    expect(files.has("a/b/f.js")).toBe(true);
+    expect(files.has("top.css")).toBe(true);
+    expect(files.size).toBe(2);
+    expect(scanMirroredCdnFiles(path.join(root, "missing")).size).toBe(0);
+    fs.rmSync(root, { recursive: true, force: true });
   });
 });
