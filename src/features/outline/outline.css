@@ -80,7 +80,8 @@
     top: 36px;
     right: 0;
     bottom: 0;
-    width: var(--outline-hover-trigger-width, 28px);
+    /* Cover the full rail column so the path from rail → floating panel has no dead gap. */
+    width: var(--outline-collapsed-width);
   }
   .outline-sidebar__activity-button {
     display: grid;
