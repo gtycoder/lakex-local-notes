@@ -56,7 +56,10 @@ const baseline = await evaluate(`JSON.stringify({
 await screenshot("01-baseline");
 
 await evaluate(`document.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', metaKey: true, bubbles: true, cancelable: true }))`);
-await wait(500);
+for (let attempt = 0; attempt < 12; attempt += 1) {
+  if (await evaluate(`document.activeElement?.matches('.search-command-panel input')`)) break;
+  await wait(80);
+}
 const search = await evaluate(`JSON.stringify({ open: Boolean(document.querySelector('.search-command-panel')), focused: document.activeElement?.matches('.search-command-panel input'), dialogLabel: document.querySelector('.search-command-panel')?.getAttribute('aria-label') || '', inputDescription: document.querySelector('.search-command-panel input')?.getAttribute('aria-describedby') || '' })`);
 await screenshot("02-search");
 await evaluate(`(()=>{document.querySelector('.search-panel-close')?.click(); return true})()`);
