@@ -43,6 +43,7 @@
 - `npm run test:ui`：通过；验证普通文本不加载 Drawnix JS、状态条、设置、同步 Popover、rail 38px。
 - `npm run test:drawnix`：通过；验证动态 Drawnix card 首次渲染。
 - `npm run test:packaged`：通过；覆盖 packaged 普通 UI、设置和 Drawnix first-use。
+- `npm run benchmark:tabs`：通过（packaged，临时 24 标签上限）：8 tabs 约 303ms，24 tabs 约 521ms；24 个 editor / engine，约 5,872 DOM 节点，当前不触发自动淘汰。
 - `npm run benchmark:workspace`：通过（基准机）：
   - 1,001 notes：约 227ms 创建
   - 10,000 resources + 25 MiB：约 708ms 写入
@@ -56,7 +57,7 @@
 3. 增加剩余同步故障注入：DB commit/rename 进程中断、manifest 上传中断、S3 网络中断、WAL checkpoint 失败、资源半成品下载；远程导入 rename 故障已覆盖。
 4. `test:packaged:full` 已覆盖窗口 bounds 重启恢复和 renderer crash/draft recovery；还需持续观察 GPU/network service 真实异常。
 5. 继续统一 renderer 错误展示和可访问性；VoiceOver / focus / reduced-motion 实机回归。
-6. 大资料库虚拟列表、后台 tab 生命周期和低频面板加载做真实 benchmark 后再决定。
+6. 大资料库虚拟列表、后台 tab 生命周期和低频面板加载继续观察；当前 24 tabs 小文档基准通过，但仍不提前引入后台卸载复杂性。
 
 ## Explicitly not doing
 
