@@ -968,6 +968,24 @@ describe("同步状态 / 导入", () => {
     expect(store.listNotesForSync().find((n) => n.id === "remote-1")?.isConflict).toBe(true);
   });
 
+  it("故障注入：远程导入 DB transaction 失败时清理正文和资源 staging", () => {
+    const note = { id: "remote-db-failure", title: "远程 DB 失败", parentId: "notebook-personal", sortOrder: 8, updatedAt: "2026-08-02T00:00:00.000Z", isConflict: false };
+    const assetName = "1234567890123_deadbeef.png";
+    const db = (store as any).db;
+    const transactionSpy = vi.spyOn(db, "transaction").mockImplementation(() => {
+      throw new Error("injected DB transaction failure");
+    });
+    try {
+      expect(() => store.importRemoteNote(note, Buffer.from("<p>DB 失败</p>"), [{ filename: assetName, bytes: Buffer.from("asset") }]))
+        .toThrow("injected DB transaction failure");
+      expect(fs.existsSync(path.join(dir, "notes", `${note.id}.lake`))).toBe(false);
+      expect(fs.existsSync(path.join(dir, "note-assets", note.id))).toBe(false);
+      expect(store.listNotesForSync().some((item) => item.id === note.id)).toBe(false);
+    } finally {
+      transactionSpy.mockRestore();
+    }
+  });
+
   it("故障注入：远程正文 rename 失败时不应留下已同步但无文件的 DB 记录", () => {
     const note = { id: "remote-rename-failure", title: "远程失败", parentId: "notebook-personal", sortOrder: 7, updatedAt: "2026-08-02T00:00:00.000Z", isConflict: false };
     const originalRename = fs.renameSync;

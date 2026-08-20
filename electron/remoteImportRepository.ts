@@ -98,6 +98,9 @@ export class RemoteImportRepository {
     } catch (error) {
       // DB 尚未提交时，回滚所有已经落盘的临时/目标文件；保留旧正文备份。
       for (const file of movedAssetPaths) { try { fs.rmSync(file, { force: true }); } catch { /* best effort */ } }
+      if (assetDir) {
+        try { if (fs.existsSync(assetDir) && fs.readdirSync(assetDir).length === 0) fs.rmdirSync(assetDir); } catch { /* best effort */ }
+      }
       if (lakePlaced) { try { fs.rmSync(lakePath, { force: true }); } catch { /* best effort */ } }
       if (previousLakeBackedUp && fs.existsSync(lakeBackup)) {
         try { fs.renameSync(lakeBackup, lakePath); } catch { /* best effort */ }
