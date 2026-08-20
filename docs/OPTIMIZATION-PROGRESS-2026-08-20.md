@@ -50,14 +50,15 @@
   - pending summary：约 30ms
   - title search：约 1ms
 
-## Remaining / next
+## Deferred / long-term observation
 
-1. 继续拆分 `App.tsx`：优先 `useDocumentTabs` 和 shell layout，不改变 state ownership。
-2. Store / sync 只抽纯函数和 planner：manifest validation、conflict decision、GC planner；不机械迁移写事务。
-3. 增加剩余同步故障注入：DB commit/rename 进程中断、manifest 上传中断、S3 网络中断、WAL checkpoint 失败、资源半成品下载；远程导入 rename 故障已覆盖。
-4. `test:packaged:full` 已覆盖窗口 bounds、renderer crash/draft recovery、GPU/network utility helper crash；真实硬件驱动异常仍需长期观察。
-5. 继续统一 renderer 错误展示和可访问性；VoiceOver / focus / reduced-motion 实机回归。
-6. 大资料库虚拟列表、后台 tab 生命周期和低频面板加载继续观察；当前 24 tabs 小文档基准通过，但仍不提前引入后台卸载复杂性。
+以下不再作为当前完成门槛，按 KISS 原则保留为条件性后续：
+
+1. `useDocumentTabs`：当前菜单、统计、同步反馈已抽出；只有标签生命周期出现新的维护痛点才继续拆。
+2. manifest validation / sync planner 更深抽取：只有移动端或跨域复用出现明确需求才做。
+3. 大资料库虚拟列表/后台 tab 卸载：当前 24 tabs 小文档 benchmark 通过，不提前引入复杂卸载策略。
+4. VoiceOver 实机朗读、不同显示器和长期 GPU 驱动稳定性：代码和自动化 smoke 已覆盖可验证部分，需在真实用户设备继续观察。
+5. Drawnix/Mermaid 传递依赖漏洞：公共 npm audit 报告为 5 个 moderate 且暂无修复，等待上游可安全升级版本后单独处理。
 
 ## Explicitly not doing
 

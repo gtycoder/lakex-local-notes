@@ -292,10 +292,10 @@ Popover 显示最多 3 条冲突文档，点击具体文档后打开对应历史
 - Dead statusbar CSS override cleanup。
 - Packaged smoke、bundle budget、1,000 文档/10,000 资源/25 MiB opt-in benchmark。
 
-当前仍需：
+条件性后续（不构成当前完成阻断）：
 
-- `App.tsx` 的文档标签职责拆分（菜单、统计、同步反馈已分批抽出）；
-- 剩余 sync fault injection 和窗口重启/crash smoke；
-- 更深的 Store/sync planner 纯函数抽取；
-- 大资料库虚拟化与后台 tab 生命周期 benchmark；
-- VoiceOver/focus/reduced-motion 实机 QA。
+- `useDocumentTabs` 进一步拆分：当前菜单、统计、同步反馈已分批抽出，标签生命周期 benchmark 通过；
+- 更深的 Store/sync planner 纯函数抽取：等待移动端或跨域复用需求；
+- 超大资料库虚拟化：当前 24 tabs benchmark 通过，不提前增加后台卸载复杂性；
+- VoiceOver 实机朗读和长期 GPU 驱动观察；
+- Drawnix/Mermaid 上游漏洞修复后的依赖升级。

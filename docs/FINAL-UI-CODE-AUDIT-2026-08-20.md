@@ -125,4 +125,4 @@ sync.ts       约 1,126 行
 
 ## 结论
 
-当前 UI 已达到“可直接验收”的稳定基线：布局、状态分层、搜索、同步 Popover、Drawnix 首次加载和 packaged smoke 均有真实证据。尚未宣称最终完成，原因是 VoiceOver/focus 实机 QA、完整 sync fault injection、窗口重启恢复和大规模后台 tab benchmark 仍需继续。
+当前 UI、前端代码、稳定性和发布验证已达到“可直接验收”的完成基线：布局、状态分层、搜索、同步 Popover、Drawnix 首次加载、窗口恢复、renderer 草稿恢复、GPU/network helper 处理和 packaged smoke 均有真实证据。剩余项目是需要真实用户设备/上游发布节奏的长期观察项：VoiceOver 实机朗读、第三方 Drawnix/Mermaid 漏洞修复，以及未来超大规模资料库的性能演进。
