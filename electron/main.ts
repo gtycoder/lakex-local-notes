@@ -13,6 +13,7 @@ import { syncQuickNotes } from "./quickNotesSync.js";
 import { readDevS3Settings } from "./devConfig.js";
 import { createIpcRegistrar } from "./ipc/registrar.js";
 import { registerNotesIpc } from "./ipc/registerNotes.js";
+import { DraftJournal } from "./draftJournal.js";
 import { registerHistoryIpc } from "./ipc/registerHistory.js";
 import { registerSyncIpc } from "./ipc/registerSync.js";
 import { registerQuickNotesIpc } from "./ipc/registerQuickNotes.js";
@@ -46,6 +47,7 @@ process.env.LAKE_ASSET_TOKEN = assetToken;
 
 let store: Store;
 let quickNotes: QuickNotesStore;
+let drafts: DraftJournal;
 /** 历史定时器重启函数（配置变更时调用，见 save_history_settings IPC） */
 let restartHistoryTimers: (() => void) | null = null;
 /** S3 GC 定时器重启函数（配置变更时调用，见 save_s3_gc_settings IPC） */
@@ -325,7 +327,7 @@ function registerIpc(): void {
     if (!isTrustedSenderFrame(event.senderFrame, event.sender)) throw new Error("IPC 调用来源不受信任");
   });
 
-  registerNotesIpc(ipc, store);
+  registerNotesIpc(ipc, store, drafts);
   registerHistoryIpc(ipc, store, () => restartHistoryTimers?.());
   registerSyncIpc(ipc, {
     store,
@@ -377,6 +379,7 @@ if (!app.requestSingleInstanceLock()) {
       else log.app.info("dev S3 seed skipped: credentials are not configured");
     }
     quickNotes = new QuickNotesStore(workspaceRoot());
+    drafts = new DraftJournal(path.join(workspaceRoot(), "draft-journal"));
     quickNotes.recoverConversions((noteId) => store.hasNote(noteId), (noteId) => store.removeUntrackedNoteArtifacts(noteId));
     registerCdnRedirect();
     registerAssetTokenRedirect();

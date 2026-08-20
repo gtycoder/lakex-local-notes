@@ -10,6 +10,7 @@ import { ConfirmDelete, Sidebar, type SidebarMode } from "./components/Sidebar";
 import { QuickNotesWorkspace, type QuickNotesWorkspaceHandle } from "./components/QuickNotesWorkspace";
 import { SyncToast, type SyncToastData } from "./components/SyncToast";
 import { SyncStatusPopover } from "./components/SyncStatusPopover";
+import { DraftRecoveryDialog } from "./components/DraftRecoveryDialog";
 import { DesktopStatusBar } from "./components/DesktopStatusBar";
 import { getDocumentStatus } from "./components/documentStatusModel";
 import { LakeEditor } from "./features/editor/LakeEditor";
@@ -33,7 +34,7 @@ import { subtreeIds } from "./lib/tree";
 import { DOCK_GUTTER, FIXED_RAIL_WIDTH } from "./lib/layoutMetrics";
 import { OUTLINE_HOVER_TRIGGER_WIDTH, OUTLINE_SCROLLBAR_CLEARANCE } from "./features/outline/outlineInteraction";
 import { shouldCollapseSidebarOnHoverLeave } from "./components/sidebarInteraction";
-import type { NoteDigest, NoteDocument, NoteSummary, SyncPendingSummary, SyncProgress, SyncStatus, TreeNode, WorkspaceSnapshot } from "./lib/types";
+import type { DraftJournalEntry, NoteDigest, NoteDocument, NoteSummary, SyncPendingSummary, SyncProgress, SyncStatus, TreeNode, WorkspaceSnapshot } from "./lib/types";
 
 const SIDEBAR_HOVER_HIDE_DELAY_MS = 120;
 
@@ -164,6 +165,7 @@ export function App() {
   const [cloudEnabled, setCloudEnabled] = useState(true);
   const [cloudConfigured, setCloudConfigured] = useState(false);
   const [pendingSummary, setPendingSummary] = useState<SyncPendingSummary>({ documents: 0, resources: 0, quickNotes: 0, total: 0, generatedAt: "" });
+  const [draftEntries, setDraftEntries] = useState<DraftJournalEntry[]>([]);
   const [confirmDelete, setConfirmDelete] = useState<TreeNode | null>(null);
   const [syncToast, setSyncToast] = useState<SyncToastData | null>(null);
   const [syncProgress, setSyncProgress] = useState<SyncProgress | null>(null);
@@ -323,6 +325,7 @@ export function App() {
       void native.getSyncSettings().then((cfg) => setCloudEnabled(cfg.enabled)).catch(() => undefined);
       void native.getS3Settings().then((cfg) => setCloudConfigured(Boolean(cfg))).catch(() => undefined);
       void native.getSyncPendingSummary().then(setPendingSummary).catch(() => undefined);
+      void native.listDraftJournals().then(setDraftEntries).catch(() => undefined);
       setTreeNodes(await native.listTreeNodes());
       const id = snapshot.lastOpenedNoteId ?? snapshot.notes[0]?.id;
       if (id && !media.matches) await openNote(id);
@@ -467,6 +470,8 @@ export function App() {
         if (revisionRef.current.get(noteId) === revision) {
           // 无新编辑：安全覆盖 + 清除 dirty；同时更新 lastDigest（本机已保存，远端未变时无需重载）
           setOpenTabs((tabs) => tabs.map((tab) => tab.noteId === noteId ? { ...tab, title: saved.title, content: saved.content, dirty: false, lastDigest: { title: saved.title, updatedAt: saved.updatedAt } } : tab));
+          void native.deleteDraftJournal(noteId).catch(() => undefined);
+          setDraftEntries((entries) => entries.filter((entry) => entry.noteId !== noteId));
           setLastSavedAt(new Date().toISOString());
           setSaveState("saved");
         } else {
@@ -619,6 +624,21 @@ export function App() {
       setMobilePage("document");
     } catch (reason) { setError(String(reason)); }
   }, []);
+
+  const restoreDraft = useCallback(async (entry: DraftJournalEntry) => {
+    await openNote(entry.noteId);
+    setOpenTabs((tabs) => tabs.map((tab) => tab.noteId === entry.noteId ? { ...tab, title: entry.title || tab.title, content: entry.content, dirty: true, reloadKey: (tab.reloadKey ?? 0) + 1 } : tab));
+    setActiveNoteId(entry.noteId);
+    setDraftEntries((entries) => entries.filter((item) => item.noteId !== entry.noteId));
+    setSaveState("dirty");
+    scheduleSave(entry.noteId, entry.content);
+  }, [openNote, scheduleSave]);
+
+  const discardDraft = useCallback((noteId: string) => {
+    void native.deleteDraftJournal(noteId).catch(() => undefined);
+    setDraftEntries((entries) => entries.filter((entry) => entry.noteId !== noteId));
+  }, []);
+
 
   async function closeTab(noteId: string) {
     const tab = openTabsRef.current.find((t) => t.noteId === noteId);
@@ -794,6 +814,8 @@ export function App() {
   const handleContentChange = useCallback((noteId: string, content: string) => {
     revisionRef.current.set(noteId, (revisionRef.current.get(noteId) ?? 0) + 1);
     setOpenTabs((tabs) => tabs.map((tab) => tab.noteId === noteId ? { ...tab, content, dirty: true } : tab));
+    const title = openTabsRef.current.find((tab) => tab.noteId === noteId)?.title ?? "无标题";
+    void native.saveDraftJournal({ noteId, title, content, updatedAt: new Date().toISOString() }).catch(() => undefined);
     scheduleSave(noteId, content);
   }, [scheduleSave]);
 
@@ -1358,6 +1380,7 @@ export function App() {
         </div>,
         document.body,
       )}
+      <DraftRecoveryDialog entries={draftEntries} onRestore={(entry) => void restoreDraft(entry)} onDiscard={discardDraft} onClose={() => setDraftEntries([])} />
       <SearchPanel open={searchPanelOpen} initialQuery={searchPanelQuery} onOpenNote={(id, query, newTab) => void openNote(id, query, newTab)} onClose={() => setSearchPanelOpen(false)} />
       <TrashPanel open={trashOpen} onClose={() => setTrashOpen(false)} onRestored={() => {
         void native.listTreeNodes().then(setTreeNodes).catch(() => undefined);

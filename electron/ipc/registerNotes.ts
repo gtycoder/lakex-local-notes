@@ -1,4 +1,5 @@
 import { BrowserWindow, dialog } from "electron";
+import type { DraftJournal } from "../draftJournal.js";
 import { MAX_IMAGE_BYTES, Store } from "../store.js";
 import { exportNote, type ExportFormat } from "../export.js";
 import {
@@ -16,7 +17,7 @@ interface ResourceUploadInput {
   filename: string;
 }
 
-export function registerNotesIpc(ipc: IpcRegistrar, store: Store): void {
+export function registerNotesIpc(ipc: IpcRegistrar, store: Store, drafts: DraftJournal): void {
   /** 导出目录白名单：只接受本进程 pick_export_dir 系统选择框的返回值。 */
   let lastPickedExportDir: string | null = null;
 
@@ -33,6 +34,14 @@ export function registerNotesIpc(ipc: IpcRegistrar, store: Store): void {
   ipc.handle("ensure_note_caches", (id: string, lakeContent?: unknown) =>
     store.ensureNoteCaches(id, assertOptionalContentBytes(lakeContent) ?? undefined));
   ipc.handle("read_note_caches", (id: string) => store.readNoteCaches(id));
+  ipc.handle("list_draft_journals", () => drafts.list());
+  ipc.handle("save_draft_journal", (entry: unknown) => {
+    if (!entry || typeof entry !== "object") throw new IpcInputError("草稿格式无效");
+    const value = entry as Record<string, unknown>;
+    if (typeof value.noteId !== "string" || typeof value.title !== "string" || typeof value.content !== "string" || typeof value.updatedAt !== "string") throw new IpcInputError("草稿字段无效");
+    drafts.write({ noteId: value.noteId, title: value.title, content: value.content, updatedAt: value.updatedAt });
+  });
+  ipc.handle("delete_draft_journal", (id: string) => drafts.remove(id));
   ipc.handle("get_note_paths", (id: string) => store.getNotePaths(id));
   ipc.handle("pick_export_dir", async () => {
     const win = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0];

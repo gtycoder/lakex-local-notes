@@ -1,4 +1,4 @@
-import type { CleanOrphanResult, DeepCleanupResult, NoteDigest, NoteDocument, OrphanAsset, QuickNoteDocument, QuickNoteImage, QuickNoteTrashItem, ResourceUploadInput, ResourceUploadOutput, S3GcLogItem, S3GcPendingItem, S3GcSettings, S3Settings, SaveQuickNoteInput, SyncProgress, SyncResult, SyncSettings, SyncStatusInfo, TreeNode, WorkspaceSnapshot } from "./types";
+import type { CleanOrphanResult, DeepCleanupResult, DraftJournalEntry, NoteDigest, NoteDocument, OrphanAsset, QuickNoteDocument, QuickNoteImage, QuickNoteTrashItem, ResourceUploadInput, ResourceUploadOutput, S3GcLogItem, S3GcPendingItem, S3GcSettings, S3Settings, SaveQuickNoteInput, SyncProgress, SyncResult, SyncSettings, SyncStatusInfo, TreeNode, WorkspaceSnapshot } from "./types";
 
 interface LakeNative {
   /** 本地资源服务器端口（可被 LAKE_ASSET_PORT 覆盖，多端同机双开用）。 */
@@ -11,6 +11,9 @@ interface LakeNative {
   saveNote(id: string, title: string, content: string, caches?: { markdown?: string | null; plain?: string | null }): Promise<NoteDocument>;
   updateNoteCaches(id: string, markdown: string | null, plain: string | null): Promise<void>;
   readNoteCaches(id: string): Promise<{ markdown: string | null; plain: string | null }>;
+  listDraftJournals(): Promise<DraftJournalEntry[]>;
+  saveDraftJournal(entry: DraftJournalEntry): Promise<void>;
+  deleteDraftJournal(noteId: string): Promise<void>;
   ensureNoteCaches(id: string, lakeContent?: string): Promise<boolean>;
   getNotePaths(id: string): Promise<{ title: string; lakePath: string; assetsDir: string }>;
   pickExportDir(): Promise<string | null>;
@@ -97,6 +100,9 @@ export const native = {
   saveNote: (id: string, title: string, content: string, caches?: { markdown?: string | null; plain?: string | null }) => api().saveNote(id, title, content, caches),
   updateNoteCaches: (id: string, markdown: string | null, plain: string | null) => api().updateNoteCaches(id, markdown, plain),
   readNoteCaches: (id: string) => api().readNoteCaches(id),
+  listDraftJournals: () => api().listDraftJournals(),
+  saveDraftJournal: (entry: DraftJournalEntry) => api().saveDraftJournal(entry),
+  deleteDraftJournal: (noteId: string) => api().deleteDraftJournal(noteId),
   ensureNoteCaches: (id: string, lakeContent?: string) => api().ensureNoteCaches(id, lakeContent),
   getNotePaths: (id: string) => api().getNotePaths(id),
   pickExportDir: () => api().pickExportDir(),
