@@ -1,8 +1,10 @@
-import "../../vendor/drawnix.css";
-import "../../vendor/drawnix-react-board.css";
-import "../../vendor/drawnix-react-text.css";
 import React, { lazy, Suspense, useEffect, useRef } from "react";
 const LazyDrawnix = lazy(async () => {
+  await Promise.all([
+    import("../../vendor/drawnix.css"),
+    import("../../vendor/drawnix-react-board.css"),
+    import("../../vendor/drawnix-react-text.css"),
+  ]);
   const module = await import("lakex-drawnix");
   return { default: module.Drawnix };
 });
