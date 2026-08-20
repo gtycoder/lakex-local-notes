@@ -12,6 +12,6 @@ describe("outline hover hitbox contract", () => {
   });
 
   it("keeps a short rail-to-panel grace period", () => {
-    expect(OUTLINE_HOVER_HIDE_DELAY_MS).toBe(420);
+    expect(OUTLINE_HOVER_HIDE_DELAY_MS).toBe(120);
   });
 });
