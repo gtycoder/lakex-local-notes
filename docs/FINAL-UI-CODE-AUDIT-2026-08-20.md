@@ -93,7 +93,7 @@ npm run benchmark:workspace
 
 ### 已完成
 
-- `App.tsx` 已分批抽出 `useTopMenus`、`useDocumentStats`、`useSyncController`。
+- `App.tsx` 已分批抽出 `useTopMenus`、`useDocumentStats`、`useSyncController`、`useDocumentTabs`。
 - IPC 错误统一为可识别 code，并兼容 Electron/contextBridge 对 Error 自定义字段的丢失。
 - 设置面板 Hook 顺序错误已修复。
 - 失效 `lastOpenedNoteId` 启动回退已补齐。

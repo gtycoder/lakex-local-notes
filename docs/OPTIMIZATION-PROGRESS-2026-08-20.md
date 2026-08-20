@@ -24,10 +24,11 @@
 11. 设置面板 Hook 顺序修复；启动时失效的 `lastOpenedNoteId` 自动回退到仍存在的文档。
 12. `useTopMenus`：将顶栏菜单状态和 outside-click 行为从 `App.tsx` 抽出。
 13. `useDocumentStats`：抽出字数/图片统计和稳定 debounce；`useSyncController`：抽出用户触发同步反馈循环。
-14. `mergeLockState` 抽为独立同步决策纯函数并补单测。
-15. 清理失效的旧 statusbar CSS 覆盖，保留当前文档状态条专用样式。
-15. 添加 opt-in workspace capacity benchmark：1,000 文档、10,000 资源、25 MiB 单资源。
-16. 远程导入先落文件后提交 DB；rename 故障注入不会留下已同步但缺正文的记录。
+14. `useDocumentTabs`：抽出切换、关闭、拖拽排序，保留 App state ownership。
+15. `mergeLockState` 抽为独立同步决策纯函数并补单测。
+16. 清理失效的旧 statusbar CSS 覆盖，保留当前文档状态条专用样式。
+17. 添加 opt-in workspace capacity benchmark：1,000 文档、10,000 资源、25 MiB 单资源。
+18. 远程导入先落文件后提交 DB；rename 故障注入不会留下已同步但缺正文的记录。
 18. Packaged smoke：设置面板、普通 UI、Drawnix 首次使用均覆盖；packaged 使用独立 `LAKE_ASSET_PORT`，避免与 dev 资源服务冲突。
 
 ## Current quality gates
