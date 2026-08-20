@@ -294,8 +294,8 @@ Popover 显示最多 3 条冲突文档，点击具体文档后打开对应历史
 
 当前仍需：
 
-- `App.tsx` 的同步反馈/文档标签职责拆分；
-- sync fault injection 和窗口重启/crash smoke；
+- `App.tsx` 的文档标签职责拆分（菜单、统计、同步反馈已分批抽出）；
+- 剩余 sync fault injection 和窗口重启/crash smoke；
 - 更深的 Store/sync planner 纯函数抽取；
 - 大资料库虚拟化与后台 tab 生命周期 benchmark；
 - VoiceOver/focus/reduced-motion 实机 QA。

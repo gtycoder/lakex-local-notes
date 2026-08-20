@@ -23,15 +23,17 @@
 10. IPC error envelope：`NOT_FOUND`、`INVALID_INPUT`、`NOT_CONFIGURED`、`INTERNAL`；兼容 Electron/contextBridge 丢失自定义 Error 字段的消息前缀解析。
 11. 设置面板 Hook 顺序修复；启动时失效的 `lastOpenedNoteId` 自动回退到仍存在的文档。
 12. `useTopMenus`：将顶栏菜单状态和 outside-click 行为从 `App.tsx` 抽出。
-13. 清理失效的旧 statusbar CSS 覆盖，保留当前文档状态条专用样式。
-14. 添加 opt-in workspace capacity benchmark：1,000 文档、10,000 资源、25 MiB 单资源。
-15. Packaged smoke：设置面板、普通 UI、Drawnix 首次使用均覆盖；packaged 使用独立 `LAKE_ASSET_PORT`，避免与 dev 资源服务冲突。
+13. `useDocumentStats`：抽出字数/图片统计和稳定 debounce；`useSyncController`：抽出用户触发同步反馈循环。
+14. 清理失效的旧 statusbar CSS 覆盖，保留当前文档状态条专用样式。
+15. 添加 opt-in workspace capacity benchmark：1,000 文档、10,000 资源、25 MiB 单资源。
+16. 远程导入先落文件后提交 DB；rename 故障注入不会留下已同步但缺正文的记录。
+17. Packaged smoke：设置面板、普通 UI、Drawnix 首次使用均覆盖；packaged 使用独立 `LAKE_ASSET_PORT`，避免与 dev 资源服务冲突。
 
 ## Current quality gates
 
 最近一次验证：
 
-- `npm test -- --run`：40 个测试文件，328 passed，1 个 opt-in benchmark skipped。
+- `npm test -- --run`：41 个测试文件，331 passed，1 个 opt-in benchmark skipped。
 - `npx tsc --noEmit`：通过。
 - `npm run check:bundle`：通过。
   - app JS gzip 约 2.58 MB / 2.9 MB budget
@@ -48,9 +50,9 @@
 
 ## Remaining / next
 
-1. 继续拆分 `App.tsx`：优先 `useSyncFeedback`、`useDocumentTabs`，不改变 state ownership。
+1. 继续拆分 `App.tsx`：优先 `useDocumentTabs` 和 shell layout，不改变 state ownership。
 2. Store / sync 只抽纯函数和 planner：manifest validation、conflict decision、GC planner；不机械迁移写事务。
-3. 增加同步故障注入：DB commit/rename 间断电、manifest 上传中断、S3 网络中断、WAL checkpoint 失败、资源半成品下载。
+3. 增加剩余同步故障注入：DB commit/rename 进程中断、manifest 上传中断、S3 网络中断、WAL checkpoint 失败、资源半成品下载；远程导入 rename 故障已覆盖。
 4. 完善 packaged smoke 的窗口 bounds 重启恢复和 crash/restart 覆盖。
 5. 继续统一 renderer 错误展示和可访问性；VoiceOver / focus / reduced-motion 实机回归。
 6. 大资料库虚拟列表、后台 tab 生命周期和低频面板加载做真实 benchmark 后再决定。
