@@ -118,6 +118,7 @@ export function App() {
   const [saveState, setSaveState] = useState<SaveState>("idle");
   const [lastSavedAt, setLastSavedAt] = useState<string | null>(null);
   const [conflictSnapshotNotice, setConflictSnapshotNotice] = useState<Array<{ noteId: string; title: string }>>([]);
+  const [activeHistoryCount, setActiveHistoryCount] = useState(0);
   const { topMenuOpen, setTopMenuOpen, workspaceMenuOpen, setWorkspaceMenuOpen, closeMenus } = useTopMenus();
   const [focusMode, setFocusMode] = useState(false);
   /** 顶栏两个下拉的触发容器 ref（定位 fixed 菜单用） */
@@ -194,6 +195,17 @@ export function App() {
   useEffect(() => { openTabsRef.current = openTabs; }, [openTabs]);
 
   const docStats = useDocumentStats(openTabs, activeNoteId, mobileActive?.id ?? null, mobileActive?.content ?? "");
+
+  // 顶栏冲突提醒可以在 12 秒后消失，但当前文档的“历史 N”是持久事实，
+  // 不能随着 toast 消失；切换文档/打开历史面板时重新读取本地快照数量。
+  useEffect(() => {
+    if (!activeNoteId) { setActiveHistoryCount(0); return; }
+    let alive = true;
+    void native.listNoteHistory(activeNoteId)
+      .then((items) => { if (alive) setActiveHistoryCount(items.length); })
+      .catch(() => { if (alive) setActiveHistoryCount(0); });
+    return () => { alive = false; };
+  }, [activeNoteId, conflictSnapshotNotice.length, historyOpen]);
 
   useEffect(() => {
     if (sidebarMode !== "floating") localStorage.setItem("lake-notes-v2.sidebar-mode", sidebarMode);
@@ -1304,7 +1316,7 @@ export function App() {
             hasCloudConfig: cloudConfigured,
             syncState: activeNodeSyncState as "local" | "synced" | "conflict",
             saveState,
-            historyCount: activeNoteId ? conflictSnapshotNotice.filter((item) => item.noteId === activeNoteId).length : 0,
+            historyCount: activeHistoryCount,
           })}
         />
       </main>
