@@ -532,6 +532,12 @@ app.on("before-quit", (event) => {
   }
 });
 
+app.on("will-quit", () => {
+  // Best-effort checkpoint after any onOpenClose sync has settled. This keeps
+  // the metadata DB/WAL bounded without making shutdown depend on it.
+  try { store?.checkpointWal(); } catch { /* app is already exiting */ }
+});
+
 app.on("window-all-closed", () => {
   if (process.platform !== "darwin") app.quit();
 });

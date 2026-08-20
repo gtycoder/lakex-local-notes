@@ -618,6 +618,11 @@ export class Store {
   // ---- M2 全文搜索 ----
 
   /** Rebuild the full-text index without exposing repository internals to callers. */
+  checkpointWal(): void {
+    try { this.db.pragma("wal_checkpoint(TRUNCATE)"); }
+    catch (error) { log.store.warn(`[store] WAL checkpoint failed: ${error instanceof Error ? error.message : String(error)}`); }
+  }
+
   checkIntegrity(): { ok: boolean; integrity: string; foreignKeyErrors: number } {
     const row = this.db.prepare("PRAGMA integrity_check").get() as { integrity_check?: string } | undefined;
     const foreignKeyErrors = this.db.prepare("PRAGMA foreign_key_check").all().length;
