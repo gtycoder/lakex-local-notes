@@ -16,6 +16,14 @@ const child = spawn(appPath, [`--remote-debugging-port=${port}`], {
   },
   stdio: "ignore",
 });
+async function waitForExit(process, timeoutMs = 10_000) {
+  if (process.exitCode !== null) return true;
+  const exited = await Promise.race([
+    new Promise((resolve) => process.once("exit", () => resolve(true))),
+    new Promise((resolve) => setTimeout(() => resolve(false), timeoutMs)),
+  ]);
+  return exited === true;
+}
 async function waitForCdp() {
   const deadline = Date.now() + 45_000;
   while (Date.now() < deadline) {
@@ -41,4 +49,12 @@ try {
   }
 } finally {
   child.kill("SIGTERM");
+  const exited = await waitForExit(child);
+  if (!exited) {
+    child.kill("SIGKILL");
+    await waitForExit(child, 2_000);
+  }
+  // Give LaunchServices/System Events a moment to release the old packaged app
+  // before the next native-window smoke launches the same bundle identifier.
+  await new Promise((resolve) => setTimeout(resolve, 500));
 }
