@@ -97,7 +97,7 @@ npm run benchmark:workspace
 - IPC 错误统一为可识别 code，并兼容 Electron/contextBridge 对 Error 自定义字段的丢失。
 - 设置面板 Hook 顺序错误已修复。
 - 失效 `lastOpenedNoteId` 启动回退已补齐。
-- 草稿 journal 生命周期、远程导入 rename 故障、同步锁决策均有测试护栏。
+- 草稿 journal 生命周期、远程导入 rename/DB transaction 故障、资源原子写入、同步锁决策均有测试护栏。
 - 旧 statusbar CSS 覆盖清理，底部状态条仅由专用样式负责。
 - Drawnix 通过动态 JS/CSS 加载，并有真实 board fixture 验证。
 

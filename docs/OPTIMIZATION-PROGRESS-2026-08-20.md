@@ -34,7 +34,7 @@
 
 最近一次验证：
 
-- `npm test -- --run`：41 个测试文件，331 passed，1 个 opt-in benchmark skipped。
+- `npm test -- --run`：41 个测试文件，334 passed，1 个 opt-in benchmark skipped。
 - `npx tsc --noEmit`：通过。
 - `npm run check:bundle`：通过。
   - app JS gzip 约 2.58 MB / 2.9 MB budget
