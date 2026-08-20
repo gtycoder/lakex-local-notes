@@ -49,3 +49,10 @@
 - Settings search jumps into a unique matching category.
 - Search no longer exposes an unimplemented second-tab promise.
 - Draft journal writes are debounced to avoid one IPC/file write per keystroke.
+
+## Latest quality gates
+
+- `npm run test:ui` now produces baseline/search/sync screenshots and confirms no Drawnix/Plait JS is requested by ordinary text startup.
+- `npm run check:bundle` enforces current budgets: app JS 2.9MB gzip, Drawnix JS 1.4MB gzip, CSS 2MB gzip.
+- Sync history overwrite notices are restored from the persisted last sync result on startup.
+- Draft journal writes are debounced to 450ms; successful document saves delete the journal entry.
