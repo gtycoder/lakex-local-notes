@@ -1155,8 +1155,6 @@ export function App() {
   // 字数/图片统计（W-2-A）：从渲染体移出，避免每次按键对整篇正文跑两次 O(n) 正则。
   const activeTab = openTabs.find((t) => t.noteId === activeNoteId);
   const activeContent = activeTab?.content ?? mobileActive?.content ?? "";
-  const wordCountLabel = docStats.wordCount > 0 ? `${docStats.wordCount} 字` : "";
-  const imageCountLabel = docStats.imageCount > 0 ? `图片 ${docStats.imageCount}` : "";
   const activeNodeSyncState = activeNoteId ? (treeNodes.find((n) => n.noteFileId === activeNoteId)?.syncState ?? "synced") : "synced";
   const syncIndicator = cloudStatus(sync, activeNodeSyncState, cloudEnabled);
 
@@ -1333,11 +1331,9 @@ export function App() {
         )}
         <DesktopStatusBar
           showDocumentStats={desktopWorkspace === "library"}
-          locked={activeNoteId !== null && lockedNoteIds.has(activeNoteId)}
-          wordCountLabel={wordCountLabel}
-          imageCountLabel={imageCountLabel}
+          wordCount={docStats.wordCount}
+          imageCount={docStats.imageCount}
           notice={notice}
-          saveState={saveState}
           documentStatus={getDocumentStatus({
             hasCloudConfig: cloudConfigured,
             syncState: activeNodeSyncState as "local" | "synced" | "conflict",

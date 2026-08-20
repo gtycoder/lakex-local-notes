@@ -1,5 +1,5 @@
-import { AlertTriangle, CheckCircle2, History, Lock, LoaderCircle, Save, Upload, WifiOff } from "lucide-react";
-import type { DocumentStatusModel, LocalSaveState } from "./documentStatusModel";
+import { AlertTriangle, CheckCircle2, History, LoaderCircle, Save, Upload, WifiOff } from "lucide-react";
+import type { DocumentStatusModel } from "./documentStatusModel";
 
 export interface StatusBarNotice {
   text: string;
@@ -8,11 +8,9 @@ export interface StatusBarNotice {
 
 export interface DesktopStatusBarProps {
   showDocumentStats: boolean;
-  locked: boolean;
-  wordCountLabel: string;
-  imageCountLabel: string;
+  wordCount: number;
+  imageCount: number;
   notice: StatusBarNotice | null;
-  saveState: LocalSaveState;
   documentStatus: DocumentStatusModel;
 }
 
@@ -29,22 +27,26 @@ function StatusIcon({ status }: { status: DocumentStatusModel }) {
   }
 }
 
-export function DesktopStatusBar({ showDocumentStats, locked, wordCountLabel, imageCountLabel, notice, documentStatus }: DesktopStatusBarProps) {
+export function DesktopStatusBar({ showDocumentStats, wordCount, imageCount, notice, documentStatus }: DesktopStatusBarProps) {
   if (!showDocumentStats) return null;
   return (
-    <footer className="statusbar document-statusbar" aria-label="当前文档状态">
-      <div className="document-statusbar-stats" aria-label="文档统计">
-        <span>字数 {wordCountLabel.replace(/\s*字$/, "") || "0"}</span>
-        <span>图片 {imageCountLabel.replace(/^图片\s*/, "") || "0"}</span>
-      </div>
-      <div className="document-statusbar-notice" aria-live="polite">
-        {notice && <span title={notice.text}>{notice.text}</span>}
-      </div>
-      <div className={`document-statusbar-state ${documentStatus.kind}`} title={documentStatus.label}>
-        {locked && <span className="document-statusbar-locked"><Lock size={12} />只读</span>}
-        <span className="document-statusbar-status-icon" aria-hidden="true"><StatusIcon status={documentStatus} /></span>
-        <span>{documentStatus.label}</span>
-      </div>
-    </footer>
+    <>
+      <footer className="statusbar document-statusbar" aria-label="当前文档状态">
+        <div className="document-statusbar-stats" aria-label="文档统计">
+          <span>字数 {Math.max(0, wordCount)}</span>
+          <span>图片 {Math.max(0, imageCount)}</span>
+        </div>
+        <div className={`document-statusbar-state ${documentStatus.kind}`} title={documentStatus.label} aria-label={documentStatus.label}>
+          <span className="document-statusbar-status-icon" aria-hidden="true"><StatusIcon status={documentStatus} /></span>
+          <span>{documentStatus.label}</span>
+        </div>
+      </footer>
+      {notice && (
+        <div className="document-notice-toast" role="status" aria-live="polite">
+          <span>{notice.text}</span>
+          {notice.action && <button type="button" onClick={notice.action.onClick}>{notice.action.label}</button>}
+        </div>
+      )}
+    </>
   );
 }
