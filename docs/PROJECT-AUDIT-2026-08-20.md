@@ -276,3 +276,23 @@ Popover 显示最多 3 条冲突文档，点击具体文档后打开对应历史
 - 不一次性重写 `Store` 或整个 `src/styles.css`；
 - 不在没有故障注入测试前更改墓碑/冲突语义；
 - 不为了 bundle 数字牺牲编辑器初始化稳定性。
+
+## Implementation progress after audit
+
+### Completed batches
+
+- Floating current-document status bar: simple `字数 N / 图片 N` plus current-document state. Top bar continues to own workspace/global sync state.
+- Authoritative pending summary: main process computes pending documents, referenced resources and Quick Notes counts; renderer no longer estimates resources by subtracting counts.
+- Conflict history targeting: sync Popover lists affected document titles and opens the selected document's history instead of assuming the currently active document.
+- Renderer crash draft journal: atomic local draft files, recovery dialog, restore/discard actions, delete-on-success.
+- SQLite integrity check: startup `PRAGMA integrity_check` + `foreign_key_check`, with an explicit warning before continuing after failure.
+- Drawnix lazy loading: Drawnix JS is now loaded through `React.lazy` and is absent from ordinary text-editor resource timing; only its CSS assets are present before a board is used.
+- Layout/motion contracts: shared rail/gutter/trigger/clearance and motion tokens are now explicit CSS/TS contracts.
+
+### Fresh verification
+
+- 37 test files / 320 passed
+- TypeScript passed
+- Vite build passed
+- Ordinary editor runtime resource timing: no Drawnix/Plait JS, only Drawnix CSS
+- Current document status bar runtime geometry: single workspace row and bottom overlay with scrollbar clearance
