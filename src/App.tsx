@@ -12,6 +12,7 @@ import { SyncToast, type SyncToastData } from "./components/SyncToast";
 import { SyncStatusPopover } from "./components/SyncStatusPopover";
 import { DraftRecoveryDialog } from "./components/DraftRecoveryDialog";
 import { useWindowShortcuts } from "./hooks/useWindowShortcuts";
+import { useTopMenus } from "./hooks/useTopMenus";
 import { DesktopStatusBar } from "./components/DesktopStatusBar";
 import { getDocumentStatus } from "./components/documentStatusModel";
 import { LakeEditor } from "./features/editor/LakeEditor";
@@ -116,9 +117,7 @@ export function App() {
   const [saveState, setSaveState] = useState<SaveState>("idle");
   const [lastSavedAt, setLastSavedAt] = useState<string | null>(null);
   const [conflictSnapshotNotice, setConflictSnapshotNotice] = useState<Array<{ noteId: string; title: string }>>([]);
-  const [topMenuOpen, setTopMenuOpen] = useState(false);
-  /** 工作空间（lake-notes）下拉：偏好设置/回收站 */
-  const [workspaceMenuOpen, setWorkspaceMenuOpen] = useState(false);
+  const { topMenuOpen, setTopMenuOpen, workspaceMenuOpen, setWorkspaceMenuOpen, closeMenus } = useTopMenus();
   const [focusMode, setFocusMode] = useState(false);
   /** 顶栏两个下拉的触发容器 ref（定位 fixed 菜单用） */
   const wsMenuWrapRef = useRef<HTMLDivElement>(null);
@@ -127,26 +126,10 @@ export function App() {
   /** 顶栏「工作空间」名：取 S3 prefix（未配置时显示本地占位） */
   const workspaceName = "本地空间";
 
-  // 顶栏下拉（工作空间 / 更多文档操作）：外部点击关闭。
-  useEffect(() => {
-    if (!topMenuOpen && !workspaceMenuOpen) return;
-    const onPointerDown = (event: PointerEvent) => {
-      const target = event.target as Node;
-      const moreMenu = document.querySelector(".top-menu--more");
-      const moreBtn = document.querySelector(".toolbar__item[aria-label=\"更多\"]");
-      const wsMenu = document.querySelector(".top-menu--workspace");
-      const wsBtn = document.querySelector(".toolbar__item[aria-label=\"工作空间\"]");
-      if (moreMenu && !moreMenu.contains(target) && moreBtn && !moreBtn.contains(target)) setTopMenuOpen(false);
-      if (wsMenu && !wsMenu.contains(target) && wsBtn && !wsBtn.contains(target)) setWorkspaceMenuOpen(false);
-    };
-    document.addEventListener("pointerdown", onPointerDown);
-    return () => document.removeEventListener("pointerdown", onPointerDown);
-  }, [topMenuOpen, workspaceMenuOpen]);
-
   useWindowShortcuts({
-    onOpenSearch: () => { setSearchPanelQuery(""); setSearchPanelOpen(true); setTopMenuOpen(false); setWorkspaceMenuOpen(false); },
-    onToggleFocus: () => { setFocusMode((value) => !value); setTopMenuOpen(false); setWorkspaceMenuOpen(false); },
-    onEscape: () => { setTopMenuOpen(false); setWorkspaceMenuOpen(false); },
+    onOpenSearch: () => { setSearchPanelQuery(""); setSearchPanelOpen(true); closeMenus(); },
+    onToggleFocus: () => { setFocusMode((value) => !value); closeMenus(); },
+    onEscape: closeMenus,
   });
   const [sync, setSync] = useState<SyncStatus>({ phase: "idle", message: "仅本地保存", lastSyncedAt: null, pendingChanges: 0 });
   const [cloudEnabled, setCloudEnabled] = useState(true);
