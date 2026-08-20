@@ -141,6 +141,10 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
     { id: "about" as const, label: "关于", keywords: "版本", icon: <Info size={15} /> },
   ];
   const visibleNav = filterSettingsNav(nav, navQuery);
+  useEffect(() => {
+    if (!navQuery.trim() || visibleNav.length !== 1 || visibleNav[0].id === category) return;
+    setCategory(visibleNav[0].id);
+  }, [navQuery, category, visibleNav.map((item) => item.id).join("|")]);
 
   return (
     <div className="settings-overlay" onMouseDown={(event) => { if (event.target === event.currentTarget && !floating.interactionRef.current) onClose(); }}>
