@@ -178,6 +178,8 @@ export function App() {
   const tocEnabled = settings.showToc;
   const [wideMode] = useState(true);
   const [sidebarMode, setSidebarMode] = useState<SidebarMode>(initialSidebarMode);
+  const sidebarModeRef = useRef<SidebarMode>(sidebarMode);
+  sidebarModeRef.current = sidebarMode;
   const [sidebarWidth, setSidebarWidth] = useState(initialSidebarWidth);
   const [sidebarResizing, setSidebarResizing] = useState(false);
   // 全局唯一大纲状态（持久化）：所有“有大纲”的文档都遵循它；
@@ -919,7 +921,7 @@ export function App() {
   const hideSidebarPreview = useCallback(() => {
     clearSidebarPreviewTimer();
     sidebarPreviewTimer.current = window.setTimeout(() => {
-      setSidebarMode((current) => current === "floating" ? "collapsed" : current);
+      setSidebarMode("collapsed");
       sidebarPreviewTimer.current = null;
     }, SIDEBAR_HOVER_HIDE_DELAY_MS);
   }, [clearSidebarPreviewTimer]);
