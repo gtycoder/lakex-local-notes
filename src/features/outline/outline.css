@@ -78,10 +78,11 @@
     z-index: 3;
     /* 顶部避开 activity-button（约 32px），按钮区域点击优先，不触发悬浮 */
     top: 36px;
-    right: 0;
+    right: 16px;
     bottom: 0;
-    /* Cover the full rail column so the path from rail → floating panel has no dead gap. */
-    width: var(--outline-collapsed-width);
+    /* Keep the trigger on the far-right edge only. The editor scrollbar sits to
+       its left and must remain usable without opening the outline. */
+    width: var(--outline-hover-trigger-width, 14px);
   }
   .outline-sidebar__activity-button {
     display: grid;

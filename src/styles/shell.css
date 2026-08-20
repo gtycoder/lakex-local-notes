@@ -120,3 +120,13 @@ html[data-theme="dark"] .document-pane .ne-engine > ne-h6 ne-heading-content {
     pointer-events: none !important;
   }
 }
+
+
+/* The floating panel must stop before the editor's 10px scrollbar track.
+   Otherwise the panel itself becomes the hit target and the user cannot grab
+   the scrollbar after the outline opens. */
+@media (min-width: 761px) {
+  .outline-sidebar--collapsed.outline-sidebar--hovered .outline-sidebar__content {
+    right: calc(var(--outline-collapsed-width) + 10px) !important;
+  }
+}
