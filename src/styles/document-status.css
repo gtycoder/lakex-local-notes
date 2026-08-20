@@ -18,10 +18,10 @@
   min-height: 26px;
   padding: 0 9px;
   border: 1px solid color-mix(in srgb, var(--lake-border) 80%, transparent);
-  border-radius: 8px;
+  border-radius: var(--lake-shell-radius, 8px);
   color: var(--lake-text-tertiary);
   background: color-mix(in srgb, var(--lake-panel) 92%, transparent);
-  box-shadow: 0 3px 12px rgba(25, 35, 52, .08);
+  box-shadow: var(--lake-shadow-soft);
   backdrop-filter: blur(10px) saturate(1.04);
   pointer-events: none;
   font-size: 10px;
