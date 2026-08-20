@@ -27,6 +27,7 @@ import { cleanLakeMarkdown } from "./lib/markdownClean";
 import { KeyedAsyncQueue } from "./lib/keyedAsyncQueue";
 import { useDocumentStats } from "./hooks/useDocumentStats";
 import { useSyncController } from "./hooks/useSyncController";
+import { useDocumentTabs } from "./hooks/useDocumentTabs";
 import { createRequestVersion } from "./lib/requestVersion";
 import { stripAssetAccessToken } from "./lib/assetPort";
 import { isDesktop, native } from "./lib/native";
@@ -660,29 +661,16 @@ export function App() {
     setDraftEntries((entries) => entries.filter((entry) => entry.noteId !== noteId));
   }, []);
 
-
-  async function closeTab(noteId: string) {
-    const tab = openTabsRef.current.find((t) => t.noteId === noteId);
-    if (!tab) return;
-    clearScrollMemory(noteId);
-    const pendingTimer = saveTimers.current.get(noteId);
-    if (pendingTimer !== undefined) {
-      window.clearTimeout(pendingTimer);
-      saveTimers.current.delete(noteId);
-    }
-    if (tab.dirty) await persistTab(noteId, tab.title, tab.content);
-    const refTabs = openTabsRef.current;
-    const closedIndex = refTabs.findIndex((t) => t.noteId === noteId);
-    if (closedIndex === -1) return;
-    let nextActiveId: string | null = null;
-    if (activeNoteId === noteId) {
-      const without = refTabs.filter((t) => t.noteId !== noteId);
-      const nextActive = without[Math.min(closedIndex, without.length - 1)];
-      nextActiveId = nextActive?.noteId ?? null;
-    }
-    setOpenTabs((tabs) => tabs.filter((t) => t.noteId !== noteId));
-    if (nextActiveId !== null) setActiveNoteId(nextActiveId);
-  }
+  const { handleTabChange, reorderTabs, closeTab } = useDocumentTabs<OpenTab>({
+    tabsRef: openTabsRef,
+    activeNoteId,
+    setTabs: setOpenTabs,
+    setActiveNoteId,
+    setSaveState,
+    saveTimers,
+    persistTab,
+    clearScrollMemory,
+  });
 
   /** 云同步：点顶栏云按钮直接开始，小悬浮窗展示状态并自动消失（不再弹带按钮的大弹窗） */
   const showSyncToast = useCallback((data: SyncToastData) => {
@@ -1051,17 +1039,6 @@ export function App() {
     }
   }
 
-  /** 标签拖拽排序：按新顺序重排 openTabs（并同步 ref） */
-  function reorderTabs(noteIds: string[]) {
-    setOpenTabs((current) => {
-      const byId = new Map(current.map((tab) => [tab.noteId, tab]));
-      const next = noteIds.map((id) => byId.get(id)).filter((tab): tab is OpenTab => Boolean(tab));
-      // 保留未出现在拖拽列表里的标签（理论上不会发生）
-      for (const tab of current) if (!noteIds.includes(tab.noteId)) next.push(tab);
-      return next;
-    });
-  }
-
   function updateOutlineSidebarWidth(width: number) {
     setOutlineSidebarWidth(width);
   }
@@ -1114,17 +1091,6 @@ export function App() {
     await openNote(note.id);
   }
 
-  function handleTabChange(noteId: string) {
-    withViewTransition(() => {
-      setActiveNoteId(noteId);
-      setOpenTabs((tabs) => tabs.map((tab) =>
-        tab.noteId === noteId ? { ...tab, lastAccessedAt: Date.now() } : tab
-      ));
-    });
-    const tab = openTabs.find((t) => t.noteId === noteId);
-    setSaveState(tab?.dirty ? "dirty" : "idle");
-  }
-
   if (!workspace) return <main className="loading-screen"><LoaderCircle className="spin" /><span>正在打开本地知识库</span>{error && <small>{error}</small>}</main>;
   if (isMobile && mobilePage === "library") return <>
     <MobileLibrary notes={notes} search={search} sync={sync} onSearch={setSearch} onSelect={(id) => void openNoteMobile(id)} onCreate={() => void createNote()} />
@@ -1132,7 +1098,6 @@ export function App() {
 
   // 字数/图片统计（W-2-A）：从渲染体移出，避免每次按键对整篇正文跑两次 O(n) 正则。
   const activeTab = openTabs.find((t) => t.noteId === activeNoteId);
-  const activeContent = activeTab?.content ?? mobileActive?.content ?? "";
   const activeNodeSyncState = activeNoteId ? (treeNodes.find((n) => n.noteFileId === activeNoteId)?.syncState ?? "synced") : "synced";
   const syncIndicator = cloudStatus(sync, activeNodeSyncState, cloudEnabled);
 
