@@ -11,6 +11,7 @@ import { QuickNotesWorkspace, type QuickNotesWorkspaceHandle } from "./component
 import { SyncToast, type SyncToastData } from "./components/SyncToast";
 import { SyncStatusPopover } from "./components/SyncStatusPopover";
 import { DraftRecoveryDialog } from "./components/DraftRecoveryDialog";
+import { useWindowShortcuts } from "./hooks/useWindowShortcuts";
 import { DesktopStatusBar } from "./components/DesktopStatusBar";
 import { getDocumentStatus } from "./components/documentStatusModel";
 import { LakeEditor } from "./features/editor/LakeEditor";
@@ -125,8 +126,9 @@ export function App() {
   /** 顶栏「工作空间」名：取 S3 prefix（未配置时显示本地占位） */
   const workspaceName = "本地空间";
 
-  // 顶栏两个下拉（工作空间菜单 / 更多文档操作）：外部点击或 Escape 关闭
+  // 顶栏下拉（工作空间 / 更多文档操作）：外部点击关闭。
   useEffect(() => {
+    if (!topMenuOpen && !workspaceMenuOpen) return;
     const onPointerDown = (event: PointerEvent) => {
       const target = event.target as Node;
       const moreMenu = document.querySelector(".top-menu--more");
@@ -136,31 +138,15 @@ export function App() {
       if (moreMenu && !moreMenu.contains(target) && moreBtn && !moreBtn.contains(target)) setTopMenuOpen(false);
       if (wsMenu && !wsMenu.contains(target) && wsBtn && !wsBtn.contains(target)) setWorkspaceMenuOpen(false);
     };
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.metaKey && event.shiftKey && event.key === "Enter") {
-        event.preventDefault();
-        setFocusMode((value) => !value);
-        setTopMenuOpen(false);
-        setWorkspaceMenuOpen(false);
-        return;
-      }
-      if (event.metaKey && event.key.toLowerCase() === "k") {
-        event.preventDefault();
-        setSearchPanelQuery("");
-        setSearchPanelOpen(true);
-        setTopMenuOpen(false);
-        setWorkspaceMenuOpen(false);
-        return;
-      }
-      if (event.key === "Escape") { setTopMenuOpen(false); setWorkspaceMenuOpen(false); }
-    };
-    if (topMenuOpen || workspaceMenuOpen) document.addEventListener("pointerdown", onPointerDown);
-    document.addEventListener("keydown", onKeyDown, true);
-    return () => {
-      if (topMenuOpen || workspaceMenuOpen) document.removeEventListener("pointerdown", onPointerDown);
-      document.removeEventListener("keydown", onKeyDown, true);
-    };
+    document.addEventListener("pointerdown", onPointerDown);
+    return () => document.removeEventListener("pointerdown", onPointerDown);
   }, [topMenuOpen, workspaceMenuOpen]);
+
+  useWindowShortcuts({
+    onOpenSearch: () => { setSearchPanelQuery(""); setSearchPanelOpen(true); setTopMenuOpen(false); setWorkspaceMenuOpen(false); },
+    onToggleFocus: () => { setFocusMode((value) => !value); setTopMenuOpen(false); setWorkspaceMenuOpen(false); },
+    onEscape: () => { setTopMenuOpen(false); setWorkspaceMenuOpen(false); },
+  });
   const [sync, setSync] = useState<SyncStatus>({ phase: "idle", message: "仅本地保存", lastSyncedAt: null, pendingChanges: 0 });
   const [cloudEnabled, setCloudEnabled] = useState(true);
   const [cloudConfigured, setCloudConfigured] = useState(false);
