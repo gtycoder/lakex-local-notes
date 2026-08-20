@@ -178,8 +178,6 @@ export function App() {
   const tocEnabled = settings.showToc;
   const [wideMode] = useState(true);
   const [sidebarMode, setSidebarMode] = useState<SidebarMode>(initialSidebarMode);
-  const sidebarModeRef = useRef<SidebarMode>(sidebarMode);
-  sidebarModeRef.current = sidebarMode;
   const [sidebarWidth, setSidebarWidth] = useState(initialSidebarWidth);
   const [sidebarResizing, setSidebarResizing] = useState(false);
   // 全局唯一大纲状态（持久化）：所有“有大纲”的文档都遵循它；
@@ -919,12 +917,15 @@ export function App() {
   }, [clearSidebarPreviewTimer]);
 
   const hideSidebarPreview = useCallback(() => {
-    clearSidebarPreviewTimer();
+    // Do not restart the grace period on every pointerleave/pointermove event.
+    // Re-arming here made the floating panel appear to linger for seconds when
+    // the pointer crossed the rail/panel boundary repeatedly.
+    if (sidebarPreviewTimer.current !== null) return;
     sidebarPreviewTimer.current = window.setTimeout(() => {
       setSidebarMode("collapsed");
       sidebarPreviewTimer.current = null;
     }, SIDEBAR_HOVER_HIDE_DELAY_MS);
-  }, [clearSidebarPreviewTimer]);
+  }, []);
 
   useEffect(() => {
     if (sidebarMode !== "floating") return;
