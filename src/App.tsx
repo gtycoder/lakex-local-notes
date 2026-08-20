@@ -28,6 +28,7 @@ import { computeDocStats, type DocStats } from "./lib/docStats";
 import { createRequestVersion } from "./lib/requestVersion";
 import { stripAssetAccessToken } from "./lib/assetPort";
 import { isDesktop, native } from "./lib/native";
+import { getNativeErrorCode, getNativeErrorMessage } from "./lib/nativeErrors";
 import { loadSettings, saveSettings, subscribeSettings, type AppSettings } from "./lib/settings";
 import { applyTheme, applyCustomCss } from "./lib/theme";
 import { SettingsPanel, type SettingsCategory } from "./components/SettingsPanel";
@@ -498,9 +499,8 @@ export function App() {
         }
         return saved;
       } catch (reason) {
-        const msg = String(reason);
-        if (msg.includes("NotFound") || msg.includes("not found")) return;
-        setSaveState("error"); setError(msg);
+        if (getNativeErrorCode(reason) === "NOT_FOUND") return;
+        setSaveState("error"); setError(getNativeErrorMessage(reason));
       }
 
     });
@@ -756,8 +756,7 @@ export function App() {
       }
       showSyncToast({ kind: result.quickNotes?.error ? "error" : "ok", title: "同步完成", message: `${lakeMessage}${quickMessage}`, detail: superseded || undefined });
     } catch (error) {
-      const rawMessage = String(error);
-      if (rawMessage.includes("请先保存 S3 配置")) {
+      if (getNativeErrorCode(error) === "NOT_CONFIGURED") {
         setSync((current) => ({ ...current, phase: "idle", message: "尚未配置云同步" }));
         showSyncToast({ kind: "unavailable", title: "尚未配置云同步", message: "请先配置 S3，完成后即可开始同步。", onConfigure: () => { setSettingsCategory("sync"); setSettingsOpen(true); } });
       } else {

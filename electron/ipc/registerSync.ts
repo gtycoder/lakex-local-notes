@@ -3,6 +3,7 @@ import type { QuickNotesStore } from "../quickNotes.js";
 import type { Store } from "../store.js";
 import { runDeepCleanup, runGcReconcile, testConnection, type SyncProgress } from "../sync.js";
 import { runQuickNotesDeepCleanup } from "../quickNotesSync.js";
+import { AppError } from "../storeErrors.js";
 import { IpcInputError } from "../ipcLimits.js";
 import type { IpcRegistrar } from "./registrar.js";
 
@@ -120,14 +121,14 @@ export function registerSyncIpc(ipc: IpcRegistrar, deps: SyncIpcDeps): void {
   ipc.handle("list_s3_gc_pending", () => store.listS3GcPending());
   ipc.handle("list_s3_gc_log", () => store.listS3GcLog());
   ipc.handle("run_s3_gc_reconcile", () => {
-    if (!store.getSyncSettings().enabled) throw new Error("云同步已关闭");
+    if (!store.getSyncSettings().enabled) throw new AppError("NotConfigured", "云同步已关闭");
     return enqueueMaintenance(() => runGcReconcile(store));
   });
   ipc.handle("run_s3_deep_cleanup", (dryRun: boolean) => {
-    if (!store.getSyncSettings().enabled) throw new Error("云同步已关闭");
+    if (!store.getSyncSettings().enabled) throw new AppError("NotConfigured", "云同步已关闭");
     return enqueueMaintenance(async () => {
       const settings = store.getS3Settings();
-      if (!settings) throw new Error("请先保存 S3 配置");
+      if (!settings) throw new AppError("NotConfigured", "请先保存 S3 配置");
       const gcSettings = store.getS3GcSettings();
       const lake = await runDeepCleanup(store, { dryRun: !!dryRun });
       const quick = await runQuickNotesDeepCleanup(quickNotes, settings, { dryRun: !!dryRun, gcRetentionDays: gcSettings.gcRetentionDays });
@@ -135,7 +136,7 @@ export function registerSyncIpc(ipc: IpcRegistrar, deps: SyncIpcDeps): void {
     });
   });
   ipc.handleEvent("sync_now", (event: IpcMainInvokeEvent) => {
-    if (!store.getSyncSettings().enabled) throw new Error("云同步已关闭，请先在偏好设置中开启");
+    if (!store.getSyncSettings().enabled) throw new AppError("NotConfigured", "云同步已关闭，请先在偏好设置中开启");
     const send = (progress: SyncProgress) => {
       try { event.sender.send("sync-progress", progress); } catch { /* 窗口已关闭 */ }
     };
