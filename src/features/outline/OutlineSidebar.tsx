@@ -120,6 +120,28 @@ export function OutlineSidebar({
     }, OUTLINE_HOVER_HIDE_DELAY_MS);
   };
 
+  // Hover is a union of three explicit rectangles: trigger, bridge and panel.
+  // Do not rely on aside pointerleave: the floating panel intentionally extends
+  // outside the aside layout box, and that caused the old scrollbar/panel race.
+  useEffect(() => {
+    if (mode !== "collapsed" || !railHovered) return;
+    const onPointerMove = (event: PointerEvent) => {
+      const point = { x: event.clientX, y: event.clientY };
+      const inside = [
+        ".outline-sidebar__trigger",
+        ".outline-sidebar__bridge",
+        ".outline-sidebar__content",
+      ].some((selector) => {
+        const rect = document.querySelector<HTMLElement>(selector)?.getBoundingClientRect();
+        return Boolean(rect && point.x >= rect.left && point.x <= rect.right && point.y >= rect.top && point.y <= rect.bottom);
+      });
+      if (inside) cancelHoverHide();
+      else scheduleHoverHide();
+    };
+    window.addEventListener("pointermove", onPointerMove, true);
+    return () => window.removeEventListener("pointermove", onPointerMove, true);
+  }, [mode, railHovered]);
+
   const rubberBandWidth = (nextWidth: number) => {
     if (nextWidth < minWidth) return minWidth - (minWidth - nextWidth) * 0.16;
     if (nextWidth > maxWidth) return maxWidth + (nextWidth - maxWidth) * 0.16;
@@ -189,7 +211,6 @@ export function OutlineSidebar({
     <aside
       ref={asideRef}
       className={`outline-sidebar outline-sidebar--${mode}${railHovered ? " outline-sidebar--hovered" : ""}`}
-      onPointerLeave={scheduleHoverHide}
       onPointerEnter={cancelHoverHide}
     >
       {/* 右侧 rail 顶部图标按钮：收起/固定大纲切换。 */}
@@ -210,11 +231,10 @@ export function OutlineSidebar({
         <div
           className="outline-sidebar__trigger"
           onPointerEnter={() => { cancelHoverHide(); if (mode === "collapsed") setRailHovered(true); }}
-          onPointerLeave={scheduleHoverHide}
         />
       </nav>
 
-      <div className="outline-sidebar__content" onPointerEnter={() => { cancelHoverHide(); if (mode === "collapsed") setRailHovered(true); }} onPointerLeave={scheduleHoverHide}>
+      <div className="outline-sidebar__content" onPointerEnter={() => { cancelHoverHide(); if (mode === "collapsed") setRailHovered(true); }}>
         <div className="outline-sidebar__header">
           <span className="outline-sidebar__spacer" />
           <button
