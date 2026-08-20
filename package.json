@@ -18,7 +18,8 @@
     "test:drawnix": "node scripts/e2e-drawnix-smoke.mjs",
     "benchmark:workspace": "LAKE_RUN_BENCHMARK=1 vitest run electron/workspace.benchmark.test.ts --reporter=verbose",
     "test:window-state": "node scripts/e2e-window-state-smoke.mjs",
-    "test:renderer-recovery": "node scripts/e2e-renderer-recovery-smoke.mjs"
+    "test:renderer-recovery": "node scripts/e2e-renderer-recovery-smoke.mjs",
+    "test:packaged:full": "npm run test:packaged && npm run test:window-state && npm run test:renderer-recovery"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1111.0",

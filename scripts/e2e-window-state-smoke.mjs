@@ -29,24 +29,35 @@ async function appleScript(script) {
 }
 async function getBounds() {
   const output = await appleScript(`tell application id "com.lakenotes.electron" to activate
+ delay 0.15
  tell application "System Events"
-   tell process "Lake Notes"
-     set p to position of window 1
-     set s to size of window 1
-     return (item 1 of p as text) & "," & (item 2 of p as text) & "," & (item 1 of s as text) & "," & (item 2 of s as text)
-   end tell
+   set frontProcess to first process whose frontmost is true
+   set p to position of window 1 of frontProcess
+   set s to size of window 1 of frontProcess
+   return (item 1 of p as text) & "," & (item 2 of p as text) & "," & (item 1 of s as text) & "," & (item 2 of s as text)
  end tell`);
   const [x, y, width, height] = output.split(",").map(Number);
   if (![x, y, width, height].every(Number.isFinite)) throw new Error(`无法读取窗口 bounds: ${output}`);
   return { x, y, width, height };
 }
+async function waitForNativeWindow() {
+  const deadline = Date.now() + 15_000;
+  let lastError = null;
+  while (Date.now() < deadline) {
+    try { return await getBounds(); }
+    catch (error) { lastError = error; }
+    await new Promise((resolve) => setTimeout(resolve, 300));
+  }
+  throw lastError || new Error("原生窗口未出现");
+}
 async function setBounds(bounds) {
+
   await appleScript(`tell application id "com.lakenotes.electron" to activate
+ delay 0.15
  tell application "System Events"
-   tell process "Lake Notes"
-     set position of window 1 to {${bounds.x}, ${bounds.y}}
-     set size of window 1 to {${bounds.width}, ${bounds.height}}
-   end tell
+   set frontProcess to first process whose frontmost is true
+   set position of window 1 of frontProcess to {${bounds.x}, ${bounds.y}}
+   set size of window 1 of frontProcess to {${bounds.width}, ${bounds.height}}
  end tell`);
 }
 async function waitForCdp() {
@@ -79,6 +90,7 @@ let second = null;
 try {
   first = launch();
   await waitForCdp();
+  await waitForNativeWindow();
   await setBounds(expected);
   const actualBeforeQuit = await getBounds();
   await quitApp();
@@ -86,6 +98,7 @@ try {
   const persisted = JSON.parse(readFileSync(path.join(dataDir, "window-state.json"), "utf8"));
   second = launch();
   await waitForCdp();
+  await waitForNativeWindow();
   const actualAfterRestart = await getBounds();
   const normalize = (value) => ({ x: value.x, y: value.y, width: value.width, height: value.height });
   const result = { expected, actualBeforeQuit, persisted: normalize(persisted), actualAfterRestart };

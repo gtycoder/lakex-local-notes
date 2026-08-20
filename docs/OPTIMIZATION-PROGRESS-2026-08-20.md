@@ -54,7 +54,7 @@
 1. 继续拆分 `App.tsx`：优先 `useDocumentTabs` 和 shell layout，不改变 state ownership。
 2. Store / sync 只抽纯函数和 planner：manifest validation、conflict decision、GC planner；不机械迁移写事务。
 3. 增加剩余同步故障注入：DB commit/rename 进程中断、manifest 上传中断、S3 网络中断、WAL checkpoint 失败、资源半成品下载；远程导入 rename 故障已覆盖。
-4. 完善 packaged smoke 的窗口 bounds 重启恢复和 crash/restart 覆盖。
+4. `test:packaged:full` 已覆盖窗口 bounds 重启恢复和 renderer crash/draft recovery；还需持续观察 GPU/network service 真实异常。
 5. 继续统一 renderer 错误展示和可访问性；VoiceOver / focus / reduced-motion 实机回归。
 6. 大资料库虚拟列表、后台 tab 生命周期和低频面板加载做真实 benchmark 后再决定。
 
