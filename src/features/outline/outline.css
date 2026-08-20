@@ -46,6 +46,18 @@
     background: var(--shell-material);
   }
 
+  /* Four pixels connect the rail to the panel after the scrollbar track. It
+     keeps the pointer path alive without covering the editor scrollbar. */
+  .outline-sidebar__bridge {
+    position: absolute;
+    z-index: 4;
+    top: 36px;
+    left: 0;
+    bottom: 0;
+    width: 4px;
+    pointer-events: none;
+  }
+
   /* 这是一整条 activity rail，只负责 hover 预览；可继续容纳其它按钮。 */
   .outline-sidebar__rail {
     position: absolute;
@@ -78,9 +90,11 @@
     z-index: 3;
     /* 顶部避开 activity-button（约 32px），按钮区域点击优先，不触发悬浮 */
     top: 36px;
-    right: 0;
     bottom: 0;
-    width: var(--outline-hover-trigger-width, 28px);
+    /* Most of the 38px rail is a trigger; only the editor-side safety band is
+       excluded so the scrollbar remains directly operable. */
+    right: 0;
+    width: var(--outline-hover-trigger-width, 25px);
   }
   .outline-sidebar__activity-button {
     display: grid;
@@ -433,4 +447,60 @@
 .outline-item {
   content-visibility: auto;
   contain-intrinsic-size: auto 26px;
+}
+
+/* Lake semantic outline layer: preserves existing rail trigger geometry and dock behavior. */
+.outline-sidebar__content,
+.outline-sidebar__panel { color: var(--lake-text); background: var(--lake-panel); border-color: var(--lake-border); }
+.outline-sidebar__header,
+.outline-sidebar__toolbar { color: var(--lake-text-secondary); border-color: var(--lake-border); }
+.outline-sidebar__filter-input { color: var(--lake-text); background: var(--lake-canvas); border-color: var(--lake-border); }
+.outline-item { color: var(--lake-text-secondary); }
+.outline-item:hover,
+.outline-item--selected { color: var(--lake-text); background: var(--lake-accent-soft); }
+.outline-item--selected { box-shadow: inset 3px 0 var(--lake-accent); }
+
+/* Floating outline: keep the preview inside a bounded dock instead of growing to
+   the full app column, and let pointer travel from rail to content without a
+   leave/re-enter race. */
+@media (min-width: 761px) {
+  .outline-sidebar--collapsed .outline-sidebar__content,
+  .outline-sidebar--collapsed.outline-sidebar--hovered .outline-sidebar__content {
+    top: 72px;
+    bottom: 72px;
+    height: auto;
+    max-height: calc(100% - 144px);
+    transition: opacity 180ms var(--lake-ease-standard), transform 180ms var(--lake-ease-standard), visibility 180ms linear, box-shadow 180ms ease-out;
+  }
+  .outline-sidebar--collapsed:not(.outline-sidebar--hovered) .outline-sidebar__content {
+    pointer-events: none;
+  }
+  .outline-sidebar--collapsed.outline-sidebar--hovered .outline-sidebar__content,
+  .outline-sidebar--collapsed.outline-sidebar--hovered .outline-sidebar__content * {
+    pointer-events: auto;
+  }
+  .outline-sidebar__content .outline-list {
+    min-height: 0;
+    overflow: auto;
+    overscroll-behavior: contain;
+  }
+  .outline-sidebar__rail,
+  .outline-sidebar__trigger,
+  .outline-sidebar__content,
+  .outline-sidebar__content .outline-item,
+  .outline-sidebar__content .outline-item__fold {
+    -webkit-user-select: none;
+    user-select: none;
+  }
+}
+
+@media (min-width: 761px) {
+  /* The panel becomes interactive as soon as the trigger is entered; delaying
+     opacity made the panel visually present but not reliably hit-testable. */
+  .outline-sidebar--collapsed.outline-sidebar--hovered .outline-sidebar__content {
+    opacity: 1 !important;
+    visibility: visible !important;
+    pointer-events: auto !important;
+    transform: translateX(0) !important;
+  }
 }

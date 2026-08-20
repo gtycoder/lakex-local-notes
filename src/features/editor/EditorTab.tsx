@@ -46,6 +46,24 @@ export function clearScrollMemory(noteId: string): void {
   scrollMemory.delete(noteId);
 }
 
+/** Locate the first visible body occurrence for global search without changing Lake's editor API. */
+export function locateEditorSearchHit(noteId: string, query: string): boolean {
+  const host = document.querySelector<HTMLElement>(`.lake-editor-tab[data-note-id="${escapeId(noteId)}"]`);
+  if (!host || !query.trim()) return false;
+  const needle = query.trim().toLocaleLowerCase();
+  const walker = document.createTreeWalker(host, NodeFilter.SHOW_TEXT);
+  let node: Text | null = null;
+  while ((node = walker.nextNode() as Text | null)) {
+    if ((node.nodeValue ?? "").toLocaleLowerCase().includes(needle)) break;
+  }
+  if (!node?.parentElement) return false;
+  const target = node.parentElement.closest<HTMLElement>("[data-node-id], .ne-p, .ne-h, .ne-block, p, h1, h2, h3, h4, h5, h6") ?? node.parentElement;
+  target.classList.add("lake-search-hit-target");
+  target.scrollIntoView({ block: "center", behavior: "smooth" });
+  window.setTimeout(() => target.classList.remove("lake-search-hit-target"), 1800);
+  return true;
+}
+
 export function EditorTab({ noteId, content, visible, tocEnabled, onChange, prefs, locked, onEditorReady, onEditorCopyMarkdown, onEditorExport, onEditorCopyPaths }: EditorTabProps) {
   const hostRef = useRef<HTMLDivElement>(null);
   const editorMountRef = useRef<HTMLDivElement>(null);

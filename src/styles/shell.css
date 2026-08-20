@@ -1,0 +1,170 @@
+/* Product shell aliases. Lake's native editor toolbar remains untouched. */
+:root {
+  color: var(--lake-text);
+  background: var(--lake-shell) !important;
+}
+
+.app-shell {
+  color: var(--lake-text);
+  background: var(--lake-shell);
+  transition: grid-template-columns var(--lake-motion-panel) var(--lake-ease-standard);
+}
+
+.sidebar,
+.document-pane,
+.quick-notes-pane,
+.outline-sidebar__content,
+.floating-dialog,
+.settings-panel,
+.search-panel {
+  border-color: var(--lake-border);
+}
+
+.sidebar,
+.document-pane,
+.outline-sidebar__content,
+.floating-dialog,
+.settings-panel,
+.search-panel {
+  background: var(--lake-panel) !important;
+  color: var(--lake-text);
+}
+
+.document-pane .lake-editor-mount {
+  background: var(--lake-canvas) !important;
+  color: var(--lake-text);
+}
+
+.statusbar,
+.tab-bar {
+  background: color-mix(in srgb, var(--lake-shell) 94%, var(--lake-panel)) !important;
+  color: var(--lake-text-secondary);
+}
+
+[data-theme="dark"] .sidebar,
+[data-theme="dark"] .document-pane,
+[data-theme="dark"] .outline-sidebar__content,
+[data-theme="dark"] .floating-dialog,
+[data-theme="dark"] .settings-panel,
+[data-theme="dark"] .search-panel {
+  border-color: var(--lake-border);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-shell,
+  .sidebar,
+  .outline-sidebar,
+  .tab-item,
+  .floating-dialog {
+    transition: none !important;
+  }
+}
+
+@media (min-width: 761px) {
+  .app-shell.focus-mode { grid-template-columns: 0 0 minmax(0, 1fr); }
+  .app-shell.focus-mode .activity-rail,
+  .app-shell.focus-mode .sidebar,
+  .app-shell.focus-mode .outline-sidebar,
+  .app-shell.focus-mode .statusbar {
+    opacity: 0;
+    pointer-events: none;
+  }
+  .app-shell.focus-mode .workspace { grid-column: 3; }
+  .app-shell.focus-mode .document-pane { border-radius: 0 !important; }
+}
+
+/* B3 dark selectors use higher specificity; these aliases intentionally win only for the shell surfaces. */
+html[data-theme="dark"] .sidebar.sidebar-docked,
+html[data-theme="dark"] .sidebar.sidebar-floating,
+html[data-theme="dark"] .document-pane,
+html[data-theme="dark"] .outline-sidebar__content,
+html[data-theme="dark"] .floating-dialog,
+html[data-theme="dark"] .settings-panel,
+html[data-theme="dark"] .search-panel {
+  background: var(--lake-panel) !important;
+  border-color: var(--lake-border) !important;
+}
+html[data-theme="dark"] .document-pane .lake-editor,
+html[data-theme="dark"] .document-pane .lake-editor-main {
+  background: var(--lake-canvas) !important;
+}
+html[data-theme="dark"] .statusbar,
+html[data-theme="dark"] .tab-bar {
+  background: var(--lake-shell) !important;
+}
+
+html[data-theme="dark"] .document-pane .ne-engine,
+html[data-theme="dark"] .document-pane .ne-engine > ne-h1,
+html[data-theme="dark"] .document-pane .ne-engine > ne-h2,
+html[data-theme="dark"] .document-pane .ne-engine > ne-h3,
+html[data-theme="dark"] .document-pane .ne-engine > ne-h4,
+html[data-theme="dark"] .document-pane .ne-engine > ne-h5,
+html[data-theme="dark"] .document-pane .ne-engine > ne-h6,
+html[data-theme="dark"] .document-pane .ne-engine > ne-p,
+html[data-theme="dark"] .document-pane .ne-engine > ne-p ne-text,
+html[data-theme="dark"] .document-pane .ne-engine > ne-h1 ne-heading-content,
+html[data-theme="dark"] .document-pane .ne-engine > ne-h2 ne-heading-content,
+html[data-theme="dark"] .document-pane .ne-engine > ne-h3 ne-heading-content,
+html[data-theme="dark"] .document-pane .ne-engine > ne-h4 ne-heading-content,
+html[data-theme="dark"] .document-pane .ne-engine > ne-h5 ne-heading-content,
+html[data-theme="dark"] .document-pane .ne-engine > ne-h6 ne-heading-content {
+  color: var(--lake-text) !important;
+}
+
+/* Focus mode keeps the document breadcrumb/menu usable. The collapsed outline
+   rail is visually hidden too; its child hitbox must not steal the top-right
+   menu click while opacity is being animated. */
+@media (min-width: 761px) {
+  .app-shell.focus-mode .outline-sidebar,
+  .app-shell.focus-mode .outline-sidebar * {
+    pointer-events: none !important;
+  }
+}
+
+
+/* The floating panel must stop before the editor's 10px scrollbar track.
+   Otherwise the panel itself becomes the hit target and the user cannot grab
+   the scrollbar after the outline opens. */
+@media (min-width: 761px) {
+  .outline-sidebar--collapsed.outline-sidebar--hovered .outline-sidebar__content {
+    right: calc(var(--outline-collapsed-width) + var(--outline-scrollbar-clearance, 13px)) !important;
+  }
+}
+
+
+@media (min-width: 761px) {
+  /* Match the outline's bounded floating dock. The previous full-height fixed
+     sidebar made the panel appear to grow when it was leaving. */
+  .sidebar.sidebar-floating,
+  .sidebar.sidebar-collapsed {
+    top: 72px !important;
+    bottom: 72px !important;
+    height: calc(100vh - 144px) !important;
+    max-height: calc(100vh - 144px) !important;
+    overflow: hidden !important;
+    transition: opacity 120ms ease-out, transform 120ms var(--lake-ease-standard), box-shadow 120ms ease-out !important;
+  }
+}
+
+@media (min-width: 761px) {
+  .sidebar.sidebar-floating {
+    opacity: 1 !important;
+    transform: translateX(0) !important;
+    pointer-events: auto !important;
+  }
+}
+
+@media (min-width: 761px) {
+  /* Showing the library preview is immediate; only the collapse is animated.
+     This prevents the pointer from repeatedly crossing a moving panel edge. */
+  .sidebar.sidebar-floating {
+    opacity: 1 !important;
+    transform: none !important;
+    transition: none !important;
+  }
+  .sidebar.sidebar-collapsed {
+    opacity: 0 !important;
+    transform: translateX(-12px) !important;
+    transition: opacity 120ms ease-out, transform 120ms var(--lake-ease-standard) !important;
+  }
+}

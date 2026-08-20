@@ -1,0 +1,60 @@
+
+.sync-status-control { position: relative; display: inline-flex; }
+.sync-status-button { position: relative; width: 30px; min-width: 30px; height: 28px; padding: 0; gap: 0; justify-content: center; }
+.sync-status-button .sync-status-icon { display: inline-flex; flex: 0 0 auto; }
+.sync-status-button:hover .sync-status-icon { transform: translateY(-.5px); }
+.sync-status-count { position: absolute; top: 1px; right: 0; min-width: 13px; height: 13px; padding: 0 3px; border: 2px solid var(--lake-shell); border-radius: 999px; color: #fff; background: var(--lake-sync-pending); font-size: 8px; font-weight: 700; line-height: 9px; text-align: center; }
+.sync-status-visually-hidden { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+.sync-status-button.pending { color: var(--lake-sync-pending); }
+.sync-status-button.synced { color: var(--lake-sync-success); }
+.sync-status-button.error { color: var(--lake-error); }
+.sync-status-button.disabled { color: var(--lake-text-tertiary); }
+.sync-status-popover { position: fixed; z-index: 780; width: min(320px, calc(100vw - 16px)); padding: 14px; border: 1px solid var(--lake-border); border-radius: 12px; color: var(--lake-text); background: var(--lake-panel); box-shadow: var(--lake-shadow-panel); animation: lake-popover-in var(--lake-motion-fast) var(--lake-ease-standard) both; }
+.sync-status-popover-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; padding-bottom: 10px; border-bottom: 1px solid var(--lake-border); }
+.sync-status-popover-header div { display: grid; gap: 2px; }
+.sync-status-popover-header strong { font-size: 14px; }
+.sync-status-popover-header span { color: var(--lake-text-secondary); font-size: 11px; }
+.sync-status-dot { width: 8px; height: 8px; margin-top: 5px; border-radius: 50%; background: var(--lake-text-tertiary); }
+.sync-status-dot.pending { background: var(--lake-sync-pending); }
+.sync-status-dot.synced { background: var(--lake-sync-success); }
+.sync-status-dot.syncing { background: var(--lake-accent); animation: lake-status-pulse 1.2s ease-in-out infinite; }
+.sync-status-dot.error { background: var(--lake-error); }
+.sync-status-section { padding: 11px 0 0; }
+.sync-status-section h3 { margin: 0 0 6px; color: var(--lake-text-secondary); font-size: 11px; font-weight: 650; }
+.sync-status-section dl { display: grid; gap: 5px; margin: 0; }
+.sync-status-section dl > div { display: flex; justify-content: space-between; gap: 12px; font-size: 12px; }
+.sync-status-section dt { color: var(--lake-text-secondary); }
+.sync-status-section dd { margin: 0; color: var(--lake-text); font-variant-numeric: tabular-nums; text-align: right; }
+.sync-status-history-note { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: start; gap: 8px; margin-top: 12px; padding: 9px; border-radius: 8px; color: var(--lake-sync-pending); background: color-mix(in srgb, var(--lake-sync-pending) 12%, transparent); font-size: 11px; }
+.sync-status-history-note div { display: grid; gap: 2px; }
+.sync-status-history-note strong { font-size: 11px; }
+.sync-status-history-note span { color: var(--lake-text-secondary); line-height: 1.4; }
+.sync-status-history-note button { border: 0; color: var(--lake-accent); background: transparent; font-size: 11px; font-weight: 650; white-space: nowrap; cursor: pointer; }
+.sync-status-actions { display: flex; align-items: center; gap: 8px; margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--lake-border); }
+.sync-status-actions .b3-button { display: inline-flex; align-items: center; gap: 5px; min-height: 30px; }
+.sync-status-settings { display: inline-flex; align-items: center; gap: 4px; min-height: 30px; padding: 0 7px; border: 0; border-radius: 6px; color: var(--lake-text-secondary); background: transparent; font-size: 11px; cursor: pointer; }
+.sync-status-settings:hover { color: var(--lake-accent); background: var(--lake-accent-soft); }
+@keyframes lake-popover-in { from { opacity: 0; transform: translateY(-4px) scale(.985); } to { opacity: 1; transform: translateY(0) scale(1); } }
+@keyframes lake-status-pulse { 50% { opacity: .42; } }
+
+.search-command-panel { width: min(680px, calc(100vw - 32px)); max-height: min(620px, calc(100vh - 96px)); }
+.search-panel-help { padding: 7px 14px 5px; color: var(--lake-text-tertiary); font-size: 10px; }
+.search-result.active { background: var(--lake-accent-soft); }
+.search-result-title small { margin-left: auto; color: var(--lake-text-tertiary); font-size: 10px; font-weight: 500; }
+.search-result-meta { color: var(--lake-text-tertiary); font-size: 10px; }
+.search-panel-empty { display: grid; justify-items: center; gap: 4px; padding: 34px 20px; color: var(--lake-text-secondary); }
+.search-panel-empty span { font-size: 12px; }
+.search-panel-empty small { color: var(--lake-text-tertiary); font-size: 10px; }
+.search-panel-empty--idle { padding: 56px 20px; }
+.search-panel-empty--idle svg { color: var(--lake-text-tertiary); }
+
+.settings-nav-search { display: flex; align-items: center; gap: 6px; margin: 0 8px 10px; padding: 0 8px; min-height: 30px; border: 1px solid var(--lake-border); border-radius: 7px; color: var(--lake-text-tertiary); background: var(--lake-canvas); }
+.settings-nav-search:focus-within { border-color: var(--lake-accent); box-shadow: 0 0 0 2px var(--lake-accent-soft); }
+.settings-nav-search input { min-width: 0; width: 100%; border: 0; outline: 0; color: var(--lake-text); background: transparent; font-size: 11px; }
+.settings-nav-empty { display: block; padding: 14px 10px; color: var(--lake-text-tertiary); font-size: 11px; text-align: center; }
+
+.shortcut-list { display: grid; gap: 2px; margin-top: 10px; border: 1px solid var(--lake-border); border-radius: 9px; overflow: hidden; }
+.shortcut-row { display: grid; grid-template-columns: 94px minmax(0, 1fr); align-items: center; gap: 12px; min-height: 40px; padding: 0 10px; color: var(--lake-text-secondary); background: var(--lake-panel); }
+.shortcut-row + .shortcut-row { border-top: 1px solid color-mix(in srgb, var(--lake-border) 72%, transparent); }
+.shortcut-row kbd { justify-self: start; min-width: 58px; padding: 3px 7px; border: 1px solid var(--lake-border); border-bottom-width: 2px; border-radius: 5px; color: var(--lake-text); background: var(--lake-canvas); font: 11px/1.2 ui-monospace, SFMono-Regular, Menlo, monospace; text-align: center; }
+.shortcut-row span { font-size: 12px; }

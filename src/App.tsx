@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type CSSProperties } from "react";
 import { createPortal } from "react-dom";
-import { ArrowLeft, Check, ChevronDown, ChevronRight, Cloud, Files, ListTree, LoaderCircle, Feather, Lock, LockOpen, Moon, MoreHorizontal, Pencil, Settings as Settings2Icon, Sun, Trash2 } from "lucide-react";
+import { ArrowLeft, Check, ChevronDown, ChevronRight, Cloud, Files, ListTree, LoaderCircle, Feather, Lock, LockOpen, Moon, MoreHorizontal, Pencil, Focus, Settings as Settings2Icon, Sun, Trash2 } from "lucide-react";
 import { MobileLibrary } from "./components/MobileLibrary";
 import { withViewTransition } from "./lib/viewTransition";
 import { SearchPanel } from "./components/SearchPanel";
@@ -9,9 +9,10 @@ import { HistoryPanel } from "./components/HistoryPanel";
 import { ConfirmDelete, Sidebar, type SidebarMode } from "./components/Sidebar";
 import { QuickNotesWorkspace, type QuickNotesWorkspaceHandle } from "./components/QuickNotesWorkspace";
 import { SyncToast, type SyncToastData } from "./components/SyncToast";
+import { SyncStatusPopover } from "./components/SyncStatusPopover";
 import { DesktopStatusBar } from "./components/DesktopStatusBar";
 import { LakeEditor } from "./features/editor/LakeEditor";
-import { clearScrollMemory } from "./features/editor/EditorTab";
+import { clearScrollMemory, locateEditorSearchHit } from "./features/editor/EditorTab";
 import type { LakeEditorInstance } from "./features/editor/lakeRuntime";
 import { MultiTabEditor, type TabInfo } from "./features/editor/MultiTabEditor";
 import { selectEvictionIds, trimTabsToLimit } from "./lib/tabLimit";
@@ -28,7 +29,12 @@ import { loadSettings, saveSettings, subscribeSettings, type AppSettings } from 
 import { applyTheme, applyCustomCss } from "./lib/theme";
 import { SettingsPanel, type SettingsCategory } from "./components/SettingsPanel";
 import { subtreeIds } from "./lib/tree";
+import { DOCK_GUTTER, FIXED_RAIL_WIDTH } from "./lib/layoutMetrics";
+import { OUTLINE_HOVER_TRIGGER_WIDTH, OUTLINE_SCROLLBAR_CLEARANCE } from "./features/outline/outlineInteraction";
+import { shouldCollapseSidebarOnHoverLeave } from "./components/sidebarInteraction";
 import type { NoteDigest, NoteDocument, NoteSummary, SyncProgress, SyncStatus, TreeNode, WorkspaceSnapshot } from "./lib/types";
+
+const SIDEBAR_HOVER_HIDE_DELAY_MS = 120;
 
 type SaveState = "idle" | "dirty" | "saving" | "saved" | "error";
 type MobilePage = "library" | "document";
@@ -41,8 +47,8 @@ const SIDEBAR_MAX_WIDTH = 300;
 const OUTLINE_SIDEBAR_DEFAULT_WIDTH = 280;
 const OUTLINE_SIDEBAR_MIN_WIDTH = 200;
 const OUTLINE_SIDEBAR_MAX_WIDTH = 420;
-// 与左侧 --activity-rail-width 对齐，右侧只为常驻 rail 预留同样的 34px。
-const OUTLINE_COLLAPSED_WIDTH = 34;
+// 左右桌面固定 rail 共用同一宽度，避免视觉 rail 与 grid 列错位。
+const OUTLINE_COLLAPSED_WIDTH = FIXED_RAIL_WIDTH;
 
 function initialOutlineMode(): OutlineMode {
   const stored = localStorage.getItem("lake-notes-v2.outline-sidebar-mode");
@@ -104,19 +110,21 @@ export function App() {
   const [historyNoteId, setHistoryNoteId] = useState<string | null>(null);
   const [searchPanelQuery, setSearchPanelQuery] = useState("");
   const [saveState, setSaveState] = useState<SaveState>("idle");
+  const [lastSavedAt, setLastSavedAt] = useState<string | null>(null);
+  const [conflictSnapshotNotice, setConflictSnapshotNotice] = useState<{ count: number; text: string } | null>(null);
   const [topMenuOpen, setTopMenuOpen] = useState(false);
   /** 工作空间（lake-notes）下拉：偏好设置/回收站 */
   const [workspaceMenuOpen, setWorkspaceMenuOpen] = useState(false);
+  const [focusMode, setFocusMode] = useState(false);
   /** 顶栏两个下拉的触发容器 ref（定位 fixed 菜单用） */
   const wsMenuWrapRef = useRef<HTMLDivElement>(null);
   const moreMenuWrapRef = useRef<HTMLDivElement>(null);
   const syncBtnRef = useRef<HTMLButtonElement>(null);
   /** 顶栏「工作空间」名：取 S3 prefix（未配置时显示本地占位） */
-  const [workspaceName, setWorkspaceName] = useState("本地工作空间");
+  const workspaceName = "本地空间";
 
   // 顶栏两个下拉（工作空间菜单 / 更多文档操作）：外部点击或 Escape 关闭
   useEffect(() => {
-    if (!topMenuOpen && !workspaceMenuOpen) return;
     const onPointerDown = (event: PointerEvent) => {
       const target = event.target as Node;
       const moreMenu = document.querySelector(".top-menu--more");
@@ -127,13 +135,28 @@ export function App() {
       if (wsMenu && !wsMenu.contains(target) && wsBtn && !wsBtn.contains(target)) setWorkspaceMenuOpen(false);
     };
     const onKeyDown = (event: KeyboardEvent) => {
+      if (event.metaKey && event.shiftKey && event.key === "Enter") {
+        event.preventDefault();
+        setFocusMode((value) => !value);
+        setTopMenuOpen(false);
+        setWorkspaceMenuOpen(false);
+        return;
+      }
+      if (event.metaKey && event.key.toLowerCase() === "k") {
+        event.preventDefault();
+        setSearchPanelQuery("");
+        setSearchPanelOpen(true);
+        setTopMenuOpen(false);
+        setWorkspaceMenuOpen(false);
+        return;
+      }
       if (event.key === "Escape") { setTopMenuOpen(false); setWorkspaceMenuOpen(false); }
     };
-    document.addEventListener("pointerdown", onPointerDown);
-    document.addEventListener("keydown", onKeyDown);
+    if (topMenuOpen || workspaceMenuOpen) document.addEventListener("pointerdown", onPointerDown);
+    document.addEventListener("keydown", onKeyDown, true);
     return () => {
-      document.removeEventListener("pointerdown", onPointerDown);
-      document.removeEventListener("keydown", onKeyDown);
+      if (topMenuOpen || workspaceMenuOpen) document.removeEventListener("pointerdown", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown, true);
     };
   }, [topMenuOpen, workspaceMenuOpen]);
   const [sync, setSync] = useState<SyncStatus>({ phase: "idle", message: "仅本地保存", lastSyncedAt: null, pendingChanges: 0 });
@@ -158,6 +181,8 @@ export function App() {
   const tocEnabled = settings.showToc;
   const [wideMode] = useState(true);
   const [sidebarMode, setSidebarMode] = useState<SidebarMode>(initialSidebarMode);
+  const sidebarModeRef = useRef<SidebarMode>(sidebarMode);
+  sidebarModeRef.current = sidebarMode;
   const [sidebarWidth, setSidebarWidth] = useState(initialSidebarWidth);
   const [sidebarResizing, setSidebarResizing] = useState(false);
   // 全局唯一大纲状态（持久化）：所有“有大纲”的文档都遵循它；
@@ -227,6 +252,12 @@ export function App() {
   }, [sidebarMode]);
 
   useEffect(() => {
+    if (sidebarMode !== "docked") return;
+    const target = outlineSidebarWidth + 4;
+    setSidebarWidth((current) => Math.abs(current - target) < 1 ? current : target);
+  }, [sidebarMode, outlineSidebarWidth]);
+
+  useEffect(() => {
     return () => {
       saveTimers.current.forEach((timer) => window.clearTimeout(timer));
       saveTimers.current.clear();
@@ -265,12 +296,6 @@ export function App() {
     });
   }, []);
 
-  // 顶栏工作空间名：用 S3 prefix（思源对应「工作空间」）
-  useEffect(() => {
-    void native.getS3Settings().then((s3) => {
-      if (s3?.prefix) setWorkspaceName(s3.prefix);
-    }).catch(() => undefined);
-  }, []);
 
   // 面包屑大纲路径：订阅活动文档大纲变化（滚动切换标题时刷新）
   const [, forceOutlineRender] = useState(0);
@@ -428,6 +453,7 @@ export function App() {
         if (revisionRef.current.get(noteId) === revision) {
           // 无新编辑：安全覆盖 + 清除 dirty；同时更新 lastDigest（本机已保存，远端未变时无需重载）
           setOpenTabs((tabs) => tabs.map((tab) => tab.noteId === noteId ? { ...tab, title: saved.title, content: saved.content, dirty: false, lastDigest: { title: saved.title, updatedAt: saved.updatedAt } } : tab));
+          setLastSavedAt(new Date().toISOString());
           setSaveState("saved");
         } else {
           // 期间有新编辑：不覆盖草稿、不清除 dirty（磁盘为旧内容，等待下一次保存）
@@ -509,7 +535,16 @@ export function App() {
     noticeTimer.current = window.setTimeout(() => setNotice(null), 2200);
   }, []);
 
-  const openNote = useCallback(async (id: string) => {
+  const openNote = useCallback(async (id: string, locateQuery = "", _newTab = false) => {
+    const locate = () => {
+      if (!locateQuery) return;
+      let attempts = 0;
+      const tryLocate = () => {
+        if (locateEditorSearchHit(id, locateQuery) || attempts++ >= 8) return;
+        window.setTimeout(tryLocate, 120);
+      };
+      window.setTimeout(tryLocate, 180);
+    };
     const existing = openTabsRef.current.find((tab) => tab.noteId === id);
     if (existing) {
       // 标签曾被标记"已删除"（远端删除）：文档可能已从回收站恢复，重新拉取最新内容刷新标签。
@@ -529,6 +564,7 @@ export function App() {
       setOpenTabs((tabs) => tabs.map((tab) =>
         tab.noteId === id ? { ...tab, lastAccessedAt: Date.now() } : tab
       ));
+      locate();
       return;
     }
     try {
@@ -557,6 +593,7 @@ export function App() {
         showNotice(`已自动关闭最旧的标签（上限 ${settings.maxOpenTabs}）`);
       }
       setActiveNoteId(id);
+      locate();
     } catch (reason) { setError(String(reason)); }
   }, [evictTabsForLimit, settings.maxOpenTabs, pinnedNoteIds, showNotice]);
 
@@ -635,6 +672,10 @@ export function App() {
         ? `远端修改已覆盖本地 ${result.supersededNotes.length} 篇（${result.supersededNotes.slice(0, 3).map((n) => `「${n.title}」`).join("、")}${result.supersededNotes.length > 3 ? " 等" : ""}），本地修改已存入该文档的历史版本。`
         : "";
       setSync((current) => ({ ...current, phase: result.quickNotes?.error ? "error" : "success", message: resultMessage, lastSyncedAt: result.completedAt, pendingChanges: 0 }));
+      if (superseded) {
+        setConflictSnapshotNotice({ count: result.supersededNotes.length, text: "检测到远端版本差异，已保留历史快照" });
+        window.setTimeout(() => setConflictSnapshotNotice(null), 12000);
+      }
       showSyncToast({ kind: result.quickNotes?.error ? "error" : "ok", title: "同步完成", message: `${lakeMessage}${quickMessage}`, detail: superseded || undefined });
     } catch (error) {
       const rawMessage = String(error);
@@ -881,12 +922,33 @@ export function App() {
   }, [clearSidebarPreviewTimer]);
 
   const hideSidebarPreview = useCallback(() => {
-    clearSidebarPreviewTimer();
+    // A docked sidebar is a user-selected persistent state. Pointer leaving it
+    // must never route through the floating-preview collapse path.
+    if (!shouldCollapseSidebarOnHoverLeave(sidebarModeRef.current)) return;
+    // Do not restart the grace period on every pointerleave/pointermove event.
+    if (sidebarPreviewTimer.current !== null) return;
     sidebarPreviewTimer.current = window.setTimeout(() => {
-      setSidebarMode((current) => current === "floating" ? "collapsed" : current);
+      if (shouldCollapseSidebarOnHoverLeave(sidebarModeRef.current)) setSidebarMode("collapsed");
       sidebarPreviewTimer.current = null;
-    }, 120);
-  }, [clearSidebarPreviewTimer]);
+    }, SIDEBAR_HOVER_HIDE_DELAY_MS);
+  }, []);
+
+  useEffect(() => {
+    if (sidebarMode !== "floating") return;
+    const isInside = (x: number, y: number, selector: string) => {
+      const rect = document.querySelector<HTMLElement>(selector)?.getBoundingClientRect();
+      return Boolean(rect && x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom);
+    };
+    const onPointerMove = (event: PointerEvent) => {
+      if (isInside(event.clientX, event.clientY, ".activity-rail") || isInside(event.clientX, event.clientY, ".sidebar")) {
+        clearSidebarPreviewTimer();
+      } else {
+        hideSidebarPreview();
+      }
+    };
+    window.addEventListener("pointermove", onPointerMove, true);
+    return () => window.removeEventListener("pointermove", onPointerMove, true);
+  }, [sidebarMode, clearSidebarPreviewTimer, hideSidebarPreview]);
 
   const toggleSidebarDock = useCallback(() => {
     clearSidebarPreviewTimer();
@@ -1093,9 +1155,22 @@ export function App() {
         </button>
 
       </div>
-      <button ref={syncBtnRef} className={`toolbar__item toolbar__sync ${sync.phase}`} onClick={() => { void runSync(); }} title={syncTooltip(sync)} aria-label={`云同步：${sync.message}`}>
-        <Cloud size={15} />
-      </button>
+      <SyncStatusPopover
+        buttonRef={syncBtnRef}
+        sync={sync}
+        saveState={saveState}
+        saveLabel={saveLabel(saveState)}
+        pendingDocuments={notes.filter((note) => note.syncState === "local").length}
+        pendingResources={Math.max(0, sync.pendingChanges - notes.filter((note) => note.syncState === "local").length)}
+        dirtyTabCount={openTabs.filter((tab) => tab.dirty).length}
+        lastSavedAt={lastSavedAt}
+        cloudEnabled={cloudEnabled}
+        conflictSnapshotCount={conflictSnapshotNotice?.count ?? 0}
+        conflictSnapshotText={conflictSnapshotNotice?.text ?? null}
+        onSync={() => { void runSync(); }}
+        onOpenSettings={() => { setSettingsCategory("sync"); setSettingsOpen(true); }}
+        onOpenHistory={() => { if (activeNoteId) { setHistoryNoteId(activeNoteId); setHistoryOpen(true); } }}
+      />
     </>
   );
   // 顶栏最右侧：外观模式 + 更多（文档操作，目前仅加锁，后续扩展）
@@ -1110,15 +1185,17 @@ export function App() {
     "--sidebar-grid-w": sidebarMode === "docked" ? `${sidebarWidth}px` : "0px",
     // 目录与大纲的展开面板互不绑定；只有左右常驻 rail 都是 34px。
     "--outline-sidebar-width": `${outlineSidebarWidth}px`,
+    "--outline-hover-trigger-width": `${OUTLINE_HOVER_TRIGGER_WIDTH}px`,
+    "--outline-scrollbar-clearance": `${OUTLINE_SCROLLBAR_CLEARANCE}px`,
     "--outline-grid-w": outlineVisible
       ? effectiveOutlineMode === "docked"
-        ? `${outlineSidebarWidth + OUTLINE_COLLAPSED_WIDTH}px`
+        ? `${outlineSidebarWidth + OUTLINE_COLLAPSED_WIDTH + DOCK_GUTTER}px`
         : `${OUTLINE_COLLAPSED_WIDTH}px`
       : "0px",
   } as CSSProperties;
 
   return (
-    <div className={`app-shell ${shellPlatformClass} sidebar-${sidebarMode} outline-${effectiveOutlineMode} ${workspaceMenuOpen ? "workspace-menu-open" : ""} ${desktopWorkspace === "quick-notes" ? "quick-notes-active" : ""} ${sidebarResizing ? "sidebar-resizing" : ""} ${outlineResizing ? "outline-resizing" : ""} ${outlineSwitching ? "outline-switching" : ""} ${isMobile ? `mobile-document-page ${mobileEditing ? "mobile-editing" : "mobile-reading"}` : ""}`} style={shellStyle}>
+    <div className={`app-shell ${shellPlatformClass} sidebar-${sidebarMode} outline-${effectiveOutlineMode} ${workspaceMenuOpen ? "workspace-menu-open" : ""} ${focusMode ? "focus-mode" : ""} ${desktopWorkspace === "quick-notes" ? "quick-notes-active" : ""} ${sidebarResizing ? "sidebar-resizing" : ""} ${outlineResizing ? "outline-resizing" : ""} ${outlineSwitching ? "outline-switching" : ""} ${isMobile ? `mobile-document-page ${mobileEditing ? "mobile-editing" : "mobile-reading"}` : ""}`} style={shellStyle}>
       <nav className="activity-rail desktop-only" aria-label="应用导航" onPointerEnter={desktopWorkspace === "library" ? showSidebarPreview : undefined} onPointerLeave={desktopWorkspace === "library" ? hideSidebarPreview : undefined}>
         <div className="activity-rail-spacer" />
         <button className={`activity-button ${desktopWorkspace === "library" && sidebarMode === "docked" ? "active" : ""}`} onClick={() => { if (desktopWorkspace === "library") toggleSidebarDock(); else void switchDesktopWorkspace("library"); }} title="资料库" aria-label="资料库"><Files size={16} /></button>
@@ -1252,6 +1329,9 @@ export function App() {
       {topMenuOpen && createPortal(
         <div className="top-menu top-menu--more" role="menu" aria-label="文档操作"
           style={{ top: (moreMenuWrapRef.current?.getBoundingClientRect().bottom ?? 38) + 6, left: (moreMenuWrapRef.current?.getBoundingClientRect().right ?? 1280) - 180 }}>
+          <button role="menuitem" aria-checked={focusMode} onClick={() => { setFocusMode((value) => !value); setTopMenuOpen(false); }}>
+            <Focus size={15} /><span>{focusMode ? "退出专注模式" : "进入专注模式"}<small>⌘⇧Enter</small></span>
+          </button>
           {activeNoteId && (
             <button role="menuitem" onClick={() => { void toggleNoteLock(); setTopMenuOpen(false); }}>
               {lockedNoteIds.has(activeNoteId) ? <Lock size={15} /> : <LockOpen size={15} />}
@@ -1261,7 +1341,7 @@ export function App() {
         </div>,
         document.body,
       )}
-      <SearchPanel open={searchPanelOpen} initialQuery={searchPanelQuery} onOpenNote={(id) => void openNote(id)} onClose={() => setSearchPanelOpen(false)} />
+      <SearchPanel open={searchPanelOpen} initialQuery={searchPanelQuery} onOpenNote={(id, query, newTab) => void openNote(id, query, newTab)} onClose={() => setSearchPanelOpen(false)} />
       <TrashPanel open={trashOpen} onClose={() => setTrashOpen(false)} onRestored={() => {
         void native.listTreeNodes().then(setTreeNodes).catch(() => undefined);
         void native.listNoteSummaries().then(setNotes).catch(() => undefined);

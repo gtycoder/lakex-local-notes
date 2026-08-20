@@ -16,7 +16,7 @@ interface LakeNative {
   pickExportDir(): Promise<string | null>;
   exportNote(id: string, format: "markdown" | "html" | "lake" | "docx" | "pdf", baseDir?: string): Promise<{ format: string; exportPath: string; imageCount: number; skipped: number; size: number }>;
   setNodeIcon(id: string, icon: string | null): Promise<TreeNode>;
-  searchNotes(query: string, limit?: number): Promise<Array<{ id: string; title: string; snippet: string }>>;
+  searchNotes(query: string, limit?: number): Promise<Array<{ id: string; title: string; snippet: string; matchType: "title" | "body"; updatedAt?: string; parentTitle?: string | null }>>;
   deleteNote(id: string): Promise<void>;
   listTreeNodes(): Promise<TreeNode[]>;
   listNoteSummaries(): Promise<import("./types").NoteSummary[]>;
