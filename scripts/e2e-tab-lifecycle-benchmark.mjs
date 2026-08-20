@@ -38,7 +38,20 @@ function send(method, params = {}) { return new Promise((resolve) => { const req
 async function evaluate(expression) { const result = await send("Runtime.evaluate", { expression, returnByValue: true, awaitPromise: true }); if (result.result?.exceptionDetails) throw new Error(result.result.exceptionDetails.text || "evaluate failed"); return result.result?.result?.value; }
 async function wait(ms) { await new Promise((resolve) => setTimeout(resolve, ms)); }
 async function waitFor(expression, timeout = 20_000) { const started = Date.now(); while (Date.now() - started < timeout) { if (await evaluate(expression)) return; await wait(100); } throw new Error(`等待超时: ${expression}`); }
-async function quit() { try { await evaluate('window.close()'); } catch {} try { child?.kill("SIGTERM"); } catch {} }
+async function waitForExit(process, timeoutMs = 10_000) {
+  if (process.exitCode !== null) return true;
+  return await Promise.race([
+    new Promise((resolve) => process.once("exit", () => resolve(true))),
+    new Promise((resolve) => setTimeout(() => resolve(false), timeoutMs)),
+  ]);
+}
+async function quit() {
+  try { await evaluate('window.close()'); } catch {}
+  try { child?.kill("SIGTERM"); } catch {}
+  const exited = await waitForExit(child);
+  if (!exited) { try { child?.kill("SIGKILL"); } catch {} await waitForExit(child, 2_000); }
+  await new Promise((resolve) => setTimeout(resolve, 500));
+}
 
 const counts = [8, 24];
 let noteIds = [];
