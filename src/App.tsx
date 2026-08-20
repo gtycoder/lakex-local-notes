@@ -112,7 +112,7 @@ export function App() {
   const [searchPanelQuery, setSearchPanelQuery] = useState("");
   const [saveState, setSaveState] = useState<SaveState>("idle");
   const [lastSavedAt, setLastSavedAt] = useState<string | null>(null);
-  const [conflictSnapshotNotice, setConflictSnapshotNotice] = useState<{ count: number; text: string } | null>(null);
+  const [conflictSnapshotNotice, setConflictSnapshotNotice] = useState<Array<{ noteId: string; title: string }>>([]);
   const [topMenuOpen, setTopMenuOpen] = useState(false);
   /** 工作空间（lake-notes）下拉：偏好设置/回收站 */
   const [workspaceMenuOpen, setWorkspaceMenuOpen] = useState(false);
@@ -350,6 +350,10 @@ export function App() {
         // 优化：先做轻量 digest 比对（只读 DB 行、不读正文文件），未变化的 tab 跳过全量
         // readNote，避免每次同步都把所有打开文档重新读盘（历史快照恢复后上传卡顿的诱因之一）。
         const supersededList = progress.supersededNotes ?? [];
+        if (supersededList.length > 0) {
+          setConflictSnapshotNotice(supersededList.map((item) => ({ noteId: item.id, title: item.title })));
+          window.setTimeout(() => setConflictSnapshotNotice([]), 12000);
+        }
         const supersededIds = new Set(supersededList.map((n) => n.id));
         // 渲染进程日志经主进程 console-message 转发落盘；[sync-tab] 前缀便于 grep。
         const tabRefreshStart = performance.now();
@@ -685,9 +689,9 @@ export function App() {
         : "";
       setSync((current) => ({ ...current, phase: result.quickNotes?.error ? "error" : "success", message: resultMessage, lastSyncedAt: result.completedAt, pendingChanges: 0 }));
       refreshPendingSummary();
-      if (superseded) {
-        setConflictSnapshotNotice({ count: result.supersededNotes.length, text: "检测到远端版本差异，已保留历史快照" });
-        window.setTimeout(() => setConflictSnapshotNotice(null), 12000);
+      if (result.supersededNotes.length > 0) {
+        setConflictSnapshotNotice(result.supersededNotes.map((item) => ({ noteId: item.id, title: item.title })));
+        window.setTimeout(() => setConflictSnapshotNotice([]), 12000);
       }
       showSyncToast({ kind: result.quickNotes?.error ? "error" : "ok", title: "同步完成", message: `${lakeMessage}${quickMessage}`, detail: superseded || undefined });
     } catch (error) {
@@ -1179,11 +1183,11 @@ export function App() {
         dirtyTabCount={openTabs.filter((tab) => tab.dirty).length}
         lastSavedAt={lastSavedAt}
         cloudEnabled={cloudEnabled}
-        conflictSnapshotCount={conflictSnapshotNotice?.count ?? 0}
-        conflictSnapshotText={conflictSnapshotNotice?.text ?? null}
+        conflictSnapshots={conflictSnapshotNotice}
+        conflictSnapshotText={conflictSnapshotNotice.length > 0 ? "检测到远端版本差异，已保留历史快照" : null}
         onSync={() => { void runSync(); }}
         onOpenSettings={() => { setSettingsCategory("sync"); setSettingsOpen(true); }}
-        onOpenHistory={() => { if (activeNoteId) { setHistoryNoteId(activeNoteId); setHistoryOpen(true); } }}
+        onOpenHistory={(noteId) => { setHistoryNoteId(noteId); setHistoryOpen(true); }}
       />
     </>
   );
@@ -1311,7 +1315,7 @@ export function App() {
             hasCloudConfig: cloudConfigured,
             syncState: activeNodeSyncState as "local" | "synced" | "conflict",
             saveState,
-            historyCount: conflictSnapshotNotice?.count ?? 0,
+            historyCount: activeNoteId ? conflictSnapshotNotice.filter((item) => item.noteId === activeNoteId).length : 0,
           })}
         />
       </main>

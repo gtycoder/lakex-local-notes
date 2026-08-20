@@ -16,11 +16,11 @@ export interface SyncStatusPopoverProps {
   dirtyTabCount: number;
   lastSavedAt: string | null;
   cloudEnabled: boolean;
-  conflictSnapshotCount?: number;
+  conflictSnapshots?: Array<{ noteId: string; title: string }>;
   conflictSnapshotText?: string | null;
   onSync: () => void;
   onOpenSettings: () => void;
-  onOpenHistory?: () => void;
+  onOpenHistory?: (noteId: string) => void;
 }
 
 function formatTime(value: string | null): string {
@@ -40,7 +40,7 @@ export function SyncStatusPopover({
   dirtyTabCount,
   lastSavedAt,
   cloudEnabled,
-  conflictSnapshotCount = 0,
+  conflictSnapshots = [],
   conflictSnapshotText,
   onSync,
   onOpenSettings,
@@ -48,7 +48,7 @@ export function SyncStatusPopover({
 }: SyncStatusPopoverProps) {
   const [open, setOpen] = useState(false);
   const popoverRef = useRef<HTMLDivElement | null>(null);
-  const model = buildSyncStatusModel({ sync, saveState, saveLabel, pendingDocuments, pendingResources, pendingQuickNotes, dirtyTabCount, lastSavedAt, cloudEnabled, conflictSnapshotCount });
+  const model = buildSyncStatusModel({ sync, saveState, saveLabel, pendingDocuments, pendingResources, pendingQuickNotes, dirtyTabCount, lastSavedAt, cloudEnabled, conflictSnapshotCount: conflictSnapshots.length });
 
   useEffect(() => {
     if (!open) return;
@@ -104,11 +104,18 @@ export function SyncStatusPopover({
               <div><dt>待上传小记</dt><dd>{pendingQuickNotes}</dd></div>
             </dl>
           </section>
-          {conflictSnapshotText && (
+          {conflictSnapshots.length > 0 && (
             <section className="sync-status-history-note" role="status">
               <History size={14} aria-hidden="true" />
-              <div><strong>已保留历史快照</strong><span>{conflictSnapshotText}</span></div>
-              {onOpenHistory && <button type="button" onClick={onOpenHistory}>查看历史</button>}
+              <div>
+                <strong>已保留历史快照 · {conflictSnapshots.length}</strong>
+                <span>{conflictSnapshotText ?? "检测到远端版本差异，已保留历史快照"}</span>
+                <div className="sync-status-history-list">
+                  {conflictSnapshots.slice(0, 3).map((item) => (
+                    <button key={item.noteId} type="button" onClick={() => onOpenHistory?.(item.noteId)}>{item.title || "无标题"} · 查看历史</button>
+                  ))}
+                </div>
+              </div>
             </section>
           )}
           <footer className="sync-status-actions">

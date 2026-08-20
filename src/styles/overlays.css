@@ -58,3 +58,6 @@
 .shortcut-row + .shortcut-row { border-top: 1px solid color-mix(in srgb, var(--lake-border) 72%, transparent); }
 .shortcut-row kbd { justify-self: start; min-width: 58px; padding: 3px 7px; border: 1px solid var(--lake-border); border-bottom-width: 2px; border-radius: 5px; color: var(--lake-text); background: var(--lake-canvas); font: 11px/1.2 ui-monospace, SFMono-Regular, Menlo, monospace; text-align: center; }
 .shortcut-row span { font-size: 12px; }
+
+.sync-status-history-list { display: grid; gap: 2px; margin-top: 5px; }
+.sync-status-history-list button { padding: 0; overflow: hidden; color: var(--lake-accent); text-align: left; text-overflow: ellipsis; }
