@@ -110,8 +110,7 @@ export function OutlineSidebar({
     hideHoverTimerRef.current = null;
   };
   const scheduleHoverHide = () => {
-    if (mode !== "collapsed" || resizeRef.current) return;
-    cancelHoverHide();
+    if (mode !== "collapsed" || resizeRef.current || hideHoverTimerRef.current !== null) return;
     // 面板是 rail 的视觉溢出区域，不属于 aside 的 layout box；延迟隐藏让
     // pointer 从触发 rail 移入大纲内容时不会先触发 aside pointerleave 把面板卸掉。
     hideHoverTimerRef.current = window.setTimeout(() => {
