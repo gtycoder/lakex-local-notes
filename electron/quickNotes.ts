@@ -449,6 +449,11 @@ export class QuickNotesStore {
   }
 
   // ===== Quick Note S3 sync adapter =====
+  getPendingSyncSummary(): { items: number; resources: number } {
+    const row = this.db.prepare("SELECT COUNT(*) AS items, COALESCE(SUM(image_count), 0) AS resources FROM quick_notes WHERE sync_state != 'synced'").get() as { items: number; resources: number };
+    const deleted = this.db.prepare("SELECT COUNT(*) AS items FROM quick_note_deleted WHERE ready_to_sync=1").get() as { items: number };
+    return { items: row.items + deleted.items, resources: row.resources };
+  }
   listQuickNotesForSync(): QuickNoteDocument[] { return this.listQuickNotes(); }
   quickNotePathFor(id: string): string { return this.itemPath(id); }
   quickNoteAssetsPathFor(id: string): string { return this.assetDirFor(id); }

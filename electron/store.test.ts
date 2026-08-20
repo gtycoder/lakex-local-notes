@@ -1215,3 +1215,16 @@ describe("localAsset*Re 正则工厂", () => {
     expect(localAssetLakeSrcRe(19876).exec("https://example.com/n1/a.png")).toBeNull();
   });
 });
+
+describe("同步待处理摘要", () => {
+  it("returns pending document and referenced resource counts from local facts", () => {
+    const note = store.createNote("待同步摘要");
+    const filename = assetFilename();
+    const content = `<p><img src="http://127.0.0.1:19876/${note.id}/${filename}"></p>`;
+    store.saveNote(note.id, note.title, content, { plain: "摘要", markdown: content });
+    const summary = store.getSyncPendingSummary();
+    expect(summary.documents).toBeGreaterThanOrEqual(1);
+    expect(summary.resources).toBeGreaterThanOrEqual(1);
+    expect(summary.generatedAt).toMatch(/T/);
+  });
+});

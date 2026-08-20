@@ -1756,6 +1756,17 @@ export class Store {
     return `${row.c}:${row.m}`;
   }
 
+  getSyncPendingSummary(): { documents: number; resources: number; generatedAt: string } {
+    const pendingRows = this.noteQueries.listNotesForSync().filter((note) => note.syncState !== "synced");
+    let resources = 0;
+    for (const note of pendingRows) {
+      try { resources += extractAssetRefs(fs.readFileSync(this.notePath(note.id), "utf8")).size; }
+      catch { /* missing/corrupt content is reported by sync itself; summary stays best-effort */ }
+    }
+    const tombstones = (this.db.prepare("SELECT COUNT(*) AS count FROM deleted_notes").get() as { count: number }).count;
+    return { documents: pendingRows.length + tombstones, resources, generatedAt: nowIso() };
+  }
+
   /** 是否有本地待上传变更（早退判定）：任何 notes 非 synced（含锁/元数据变更）。 */
   hasLocalPendingNotes(): boolean {
     const row = this.db.prepare("SELECT 1 FROM notes WHERE sync_state != 'synced' AND deleted_at IS NULL LIMIT 1").get();

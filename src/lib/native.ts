@@ -55,6 +55,7 @@ interface LakeNative {
   saveSyncSettings(settings: SyncSettings): Promise<SyncSettings>;
   syncNow(): Promise<SyncResult>;
   getSyncStatus(): Promise<SyncStatusInfo>;
+  getSyncPendingSummary(): Promise<import("./types").SyncPendingSummary>;
   listQuickNotes(): Promise<QuickNoteDocument[]>;
   createQuickNote(input: SaveQuickNoteInput): Promise<QuickNoteDocument>;
   updateQuickNote(id: string, input: SaveQuickNoteInput): Promise<QuickNoteDocument>;
@@ -140,6 +141,7 @@ export const native = {
   saveSyncSettings: (settings: SyncSettings) => api().saveSyncSettings(settings),
   syncNow: () => api().syncNow(),
   getSyncStatus: () => api().getSyncStatus(),
+  getSyncPendingSummary: () => api().getSyncPendingSummary(),
   listQuickNotes: () => api().listQuickNotes(),
   createQuickNote: (input: SaveQuickNoteInput) => api().createQuickNote(input),
   updateQuickNote: (id: string, input: SaveQuickNoteInput) => api().updateQuickNote(id, input),

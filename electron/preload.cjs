@@ -57,6 +57,7 @@ contextBridge.exposeInMainWorld("lakeNative", {
   saveSyncSettings: (settings) => invoke("save_sync_settings", settings),
   syncNow: () => invoke("sync_now"),
   getSyncStatus: () => invoke("get_sync_status"),
+  getSyncPendingSummary: () => invoke("get_sync_pending_summary"),
   listQuickNotes: () => invoke("list_quick_notes"),
   createQuickNote: (input) => invoke("create_quick_note", input),
   updateQuickNote: (id, input) => invoke("update_quick_note", id, input),

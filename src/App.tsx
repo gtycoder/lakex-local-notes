@@ -33,7 +33,7 @@ import { subtreeIds } from "./lib/tree";
 import { DOCK_GUTTER, FIXED_RAIL_WIDTH } from "./lib/layoutMetrics";
 import { OUTLINE_HOVER_TRIGGER_WIDTH, OUTLINE_SCROLLBAR_CLEARANCE } from "./features/outline/outlineInteraction";
 import { shouldCollapseSidebarOnHoverLeave } from "./components/sidebarInteraction";
-import type { NoteDigest, NoteDocument, NoteSummary, SyncProgress, SyncStatus, TreeNode, WorkspaceSnapshot } from "./lib/types";
+import type { NoteDigest, NoteDocument, NoteSummary, SyncPendingSummary, SyncProgress, SyncStatus, TreeNode, WorkspaceSnapshot } from "./lib/types";
 
 const SIDEBAR_HOVER_HIDE_DELAY_MS = 120;
 
@@ -163,6 +163,7 @@ export function App() {
   const [sync, setSync] = useState<SyncStatus>({ phase: "idle", message: "仅本地保存", lastSyncedAt: null, pendingChanges: 0 });
   const [cloudEnabled, setCloudEnabled] = useState(true);
   const [cloudConfigured, setCloudConfigured] = useState(false);
+  const [pendingSummary, setPendingSummary] = useState<SyncPendingSummary>({ documents: 0, resources: 0, quickNotes: 0, total: 0, generatedAt: "" });
   const [confirmDelete, setConfirmDelete] = useState<TreeNode | null>(null);
   const [syncToast, setSyncToast] = useState<SyncToastData | null>(null);
   const [syncProgress, setSyncProgress] = useState<SyncProgress | null>(null);
@@ -321,6 +322,7 @@ export function App() {
       setWorkspace(snapshot); setNotes(snapshot.notes); setSync(snapshot.sync);
       void native.getSyncSettings().then((cfg) => setCloudEnabled(cfg.enabled)).catch(() => undefined);
       void native.getS3Settings().then((cfg) => setCloudConfigured(Boolean(cfg))).catch(() => undefined);
+      void native.getSyncPendingSummary().then(setPendingSummary).catch(() => undefined);
       setTreeNodes(await native.listTreeNodes());
       const id = snapshot.lastOpenedNoteId ?? snapshot.notes[0]?.id;
       if (id && !media.matches) await openNote(id);
@@ -432,6 +434,10 @@ export function App() {
     return () => { viewport.removeEventListener("resize", update); viewport.removeEventListener("scroll", update); document.body.classList.remove("keyboard-open"); };
   }, []);
 
+  const refreshPendingSummary = useCallback(() => {
+    void native.getSyncPendingSummary().then(setPendingSummary).catch(() => undefined);
+  }, []);
+
   const persistTab = useCallback((noteId: string, title: string, content: string) => {
     return saveQueueRef.current.run(noteId, async () => {
       // 远端已删除（标记 deleted）的文档不再保存：避免把内容写回已回收的笔记。
@@ -453,6 +459,7 @@ export function App() {
         setNotes((items) => items.map((item) => item.id === saved.id ? summaryOf(saved) : item));
         setTreeNodes((items) => items.map((item) => item.noteFileId === saved.id || item.id === saved.id ? { ...item, title: saved.title, updatedAt: saved.updatedAt, syncState: saved.syncState } : item));
         setSync((current) => ({ ...current, pendingChanges: Math.max(1, current.pendingChanges) }));
+        refreshPendingSummary();
         if (revisionRef.current.get(noteId) === revision) {
           // 无新编辑：安全覆盖 + 清除 dirty；同时更新 lastDigest（本机已保存，远端未变时无需重载）
           setOpenTabs((tabs) => tabs.map((tab) => tab.noteId === noteId ? { ...tab, title: saved.title, content: saved.content, dirty: false, lastDigest: { title: saved.title, updatedAt: saved.updatedAt } } : tab));
@@ -470,7 +477,7 @@ export function App() {
       }
 
     });
-  }, []);
+  }, [refreshPendingSummary]);
 
   /** 超限自动淘汰：返回被关闭的 noteId 列表（dirty 内容先持久化，绝不淘汰当前激活标签）。 */
   const evictTabsForLimit = useCallback(async (nextTabs: OpenTab[], openedId: string): Promise<string[]> => {
@@ -537,6 +544,7 @@ export function App() {
     if (noticeTimer.current !== null) window.clearTimeout(noticeTimer.current);
     noticeTimer.current = window.setTimeout(() => setNotice(null), 2200);
   }, []);
+
 
   const openNote = useCallback(async (id: string, locateQuery = "", _newTab = false) => {
     const locate = () => {
@@ -676,6 +684,7 @@ export function App() {
         ? `远端修改已覆盖本地 ${result.supersededNotes.length} 篇（${result.supersededNotes.slice(0, 3).map((n) => `「${n.title}」`).join("、")}${result.supersededNotes.length > 3 ? " 等" : ""}），本地修改已存入该文档的历史版本。`
         : "";
       setSync((current) => ({ ...current, phase: result.quickNotes?.error ? "error" : "success", message: resultMessage, lastSyncedAt: result.completedAt, pendingChanges: 0 }));
+      refreshPendingSummary();
       if (superseded) {
         setConflictSnapshotNotice({ count: result.supersededNotes.length, text: "检测到远端版本差异，已保留历史快照" });
         window.setTimeout(() => setConflictSnapshotNotice(null), 12000);
@@ -1164,8 +1173,9 @@ export function App() {
         sync={sync}
         saveState={saveState}
         saveLabel={saveLabel(saveState)}
-        pendingDocuments={notes.filter((note) => note.syncState === "local").length}
-        pendingResources={Math.max(0, sync.pendingChanges - notes.filter((note) => note.syncState === "local").length)}
+        pendingDocuments={pendingSummary.documents}
+        pendingResources={pendingSummary.resources}
+        pendingQuickNotes={pendingSummary.quickNotes}
         dirtyTabCount={openTabs.filter((tab) => tab.dirty).length}
         lastSavedAt={lastSavedAt}
         cloudEnabled={cloudEnabled}

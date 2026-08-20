@@ -142,4 +142,10 @@ export function registerSyncIpc(ipc: IpcRegistrar, deps: SyncIpcDeps): void {
     return runFullSync(send);
   });
   ipc.handle("get_sync_status", () => store.getSyncStatus());
+  ipc.handle("get_sync_pending_summary", () => {
+    const lake = store.getSyncPendingSummary();
+    const quick = quickNotes.getPendingSyncSummary();
+    const summary = { documents: lake.documents, resources: lake.resources + quick.resources, quickNotes: quick.items, generatedAt: new Date().toISOString() };
+    return { ...summary, total: summary.documents + summary.resources + summary.quickNotes };
+  });
 }

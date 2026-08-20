@@ -104,6 +104,14 @@ export interface SyncStatus {
   pendingChanges: number;
 }
 
+export interface SyncPendingSummary {
+  documents: number;
+  resources: number;
+  quickNotes: number;
+  total: number;
+  generatedAt: string;
+}
+
 export interface QuickNotesSyncStatus {
   uploaded: number;
   downloaded: number;

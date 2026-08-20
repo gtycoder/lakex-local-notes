@@ -12,6 +12,7 @@ export interface SyncStatusPopoverProps {
   saveLabel: string;
   pendingDocuments: number;
   pendingResources: number;
+  pendingQuickNotes?: number;
   dirtyTabCount: number;
   lastSavedAt: string | null;
   cloudEnabled: boolean;
@@ -35,6 +36,7 @@ export function SyncStatusPopover({
   saveLabel,
   pendingDocuments,
   pendingResources,
+  pendingQuickNotes = 0,
   dirtyTabCount,
   lastSavedAt,
   cloudEnabled,
@@ -46,7 +48,7 @@ export function SyncStatusPopover({
 }: SyncStatusPopoverProps) {
   const [open, setOpen] = useState(false);
   const popoverRef = useRef<HTMLDivElement | null>(null);
-  const model = buildSyncStatusModel({ sync, saveState, saveLabel, pendingDocuments, pendingResources, dirtyTabCount, lastSavedAt, cloudEnabled, conflictSnapshotCount });
+  const model = buildSyncStatusModel({ sync, saveState, saveLabel, pendingDocuments, pendingResources, pendingQuickNotes, dirtyTabCount, lastSavedAt, cloudEnabled, conflictSnapshotCount });
 
   useEffect(() => {
     if (!open) return;
@@ -99,6 +101,7 @@ export function SyncStatusPopover({
               <div><dt>上次同步</dt><dd>{formatTime(sync.lastSyncedAt)}</dd></div>
               <div><dt>待上传文档</dt><dd>{pendingDocuments}</dd></div>
               <div><dt>待上传资源</dt><dd>{pendingResources}</dd></div>
+              <div><dt>待上传小记</dt><dd>{pendingQuickNotes}</dd></div>
             </dl>
           </section>
           {conflictSnapshotText && (
