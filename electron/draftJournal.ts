@@ -18,6 +18,7 @@ export class DraftJournal {
 
   write(entry: DraftJournalEntry): void {
     if (!isSafePathSegment(entry.noteId)) throw new Error("草稿文档 ID 无效");
+    if (typeof entry.title !== "string" || entry.title.length > 500) throw new Error("草稿标题无效");
     if (Buffer.byteLength(entry.content, "utf8") > MAX_DRAFT_BYTES) throw new Error("草稿超过 32 MiB");
     const file = this.filePath(entry.noteId);
     const temp = `${file}.${process.pid}.tmp`;

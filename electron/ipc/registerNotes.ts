@@ -38,8 +38,10 @@ export function registerNotesIpc(ipc: IpcRegistrar, store: Store, drafts: DraftJ
   ipc.handle("save_draft_journal", (entry: unknown) => {
     if (!entry || typeof entry !== "object") throw new IpcInputError("草稿格式无效");
     const value = entry as Record<string, unknown>;
-    if (typeof value.noteId !== "string" || typeof value.title !== "string" || typeof value.content !== "string" || typeof value.updatedAt !== "string") throw new IpcInputError("草稿字段无效");
-    drafts.write({ noteId: value.noteId, title: value.title, content: value.content, updatedAt: value.updatedAt });
+    if (typeof value.noteId !== "string" || typeof value.updatedAt !== "string") throw new IpcInputError("草稿字段无效");
+    const updatedAt = new Date(value.updatedAt);
+    if (Number.isNaN(updatedAt.getTime())) throw new IpcInputError("草稿时间无效");
+    drafts.write({ noteId: value.noteId, title: assertTitle(value.title ?? "无标题"), content: assertContentBytes(value.content), updatedAt: updatedAt.toISOString() });
   });
   ipc.handle("delete_draft_journal", (id: string) => drafts.remove(id));
   ipc.handle("get_note_paths", (id: string) => store.getNotePaths(id));
