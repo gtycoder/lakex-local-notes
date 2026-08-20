@@ -279,20 +279,23 @@ Popover 显示最多 3 条冲突文档，点击具体文档后打开对应历史
 
 ## Implementation progress after audit
 
-### Completed batches
+已完成并通过当前质量门禁：
 
-- Floating current-document status bar: simple `字数 N / 图片 N` plus current-document state. Top bar continues to own workspace/global sync state.
-- Authoritative pending summary: main process computes pending documents, referenced resources and Quick Notes counts; renderer no longer estimates resources by subtracting counts.
-- Conflict history targeting: sync Popover lists affected document titles and opens the selected document's history instead of assuming the currently active document.
-- Renderer crash draft journal: atomic local draft files, recovery dialog, restore/discard actions, delete-on-success.
-- SQLite integrity check: startup `PRAGMA integrity_check` + `foreign_key_check`, with an explicit warning before continuing after failure.
-- Drawnix lazy loading: Drawnix JS is now loaded through `React.lazy` and is absent from ordinary text-editor resource timing; only its CSS assets are present before a board is used.
-- Layout/motion contracts: shared rail/gutter/trigger/clearance and motion tokens are now explicit CSS/TS contracts.
+- 当前文档浮动状态条：只显示字数/图片统计和当前文档状态，冲突历史显示 `已同步 · 历史 N`。
+- 主进程 authoritative pending summary，覆盖文档、资源、小记和墓碑计数。
+- 冲突历史目标文档化。
+- 草稿 journal 原子写入、校验、debounce、恢复/丢弃、删除与退出生命周期。
+- SQLite integrity check、WAL checkpoint。
+- Drawnix lazy JS/CSS 加载与开发/packaged first-use fixture。
+- IPC stable error envelope 和 renderer 错误 code 解析。
+- Settings hook order、stale lastOpened fallback、top menu hook。
+- Dead statusbar CSS override cleanup。
+- Packaged smoke、bundle budget、1,000 文档/10,000 资源/25 MiB opt-in benchmark。
 
-### Fresh verification
+当前仍需：
 
-- 37 test files / 320 passed
-- TypeScript passed
-- Vite build passed
-- Ordinary editor runtime resource timing: no Drawnix/Plait JS, only Drawnix CSS
-- Current document status bar runtime geometry: single workspace row and bottom overlay with scrollbar clearance
+- `App.tsx` 的同步反馈/文档标签职责拆分；
+- sync fault injection 和窗口重启/crash smoke；
+- 更深的 Store/sync planner 纯函数抽取；
+- 大资料库虚拟化与后台 tab 生命周期 benchmark；
+- VoiceOver/focus/reduced-motion 实机 QA。

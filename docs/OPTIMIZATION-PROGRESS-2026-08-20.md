@@ -1,58 +1,64 @@
 # Lake Notes Optimization Progress
 
+日期：2026-08-20
+
 ## User decisions
 
-- Top bar keeps `本地空间` and global sync state.
-- Bottom status is current-document only: simple word/image counts and a compact status label.
-- Conflict history is highlighted as `已同步 · 历史 N` after the remote version wins and the local version is saved to history.
-- Lake native editor toolbar remains unchanged.
+- 顶栏保留 `本地空间` 和全局同步状态。
+- 底部状态只代表当前文档，保持简单：`字数 N`、`图片 N`、当前文档状态。
+- 远端覆盖本地时，本地版本进入历史；处理完成后突出显示 `已同步 · 历史 N`。
+- Lake 原生编辑器工具栏不改动。
 
 ## Completed
 
-1. UI shell / rail / outline hover and scrollbar safety.
-2. Floating current-document status bar.
-3. Authoritative sync pending summary.
-4. Document-targeted conflict history notices.
-5. Renderer crash draft journal and recovery dialog.
-6. SQLite integrity check at startup.
-7. Drawnix lazy JS loading.
-8. Layout and motion contracts.
+1. UI shell / rail / outline hover and scrollbar safety；左右固定 rail 统一为 38px。
+2. Floating current-document status bar：不占 workspace grid row，空文档也稳定显示 `字数 0 / 图片 0`。
+3. `已同步 · 历史 N` 状态使用高亮胶囊样式；通知移到独立短暂 toast，不污染底部纯状态条。
+4. Authoritative sync pending summary：主进程返回文档、资源、小记数量，含删除墓碑。
+5. Document-targeted conflict history notices。
+6. Renderer crash draft journal：原子写入、校验、debounce、恢复/丢弃、删除文档/清空回收站清理、关闭前 best-effort flush。
+7. SQLite integrity check at startup and WAL checkpoint on quit。
+8. Drawnix lazy JS/CSS loading，普通文本路径不加载 Drawnix JS。
+9. Real first-use Drawnix fixture：开发版与 packaged 版都验证了 card DOM、Plait board、动态 CSS 和非 fallback 状态。
+10. IPC error envelope：`NOT_FOUND`、`INVALID_INPUT`、`NOT_CONFIGURED`、`INTERNAL`；兼容 Electron/contextBridge 丢失自定义 Error 字段的消息前缀解析。
+11. 设置面板 Hook 顺序修复；启动时失效的 `lastOpenedNoteId` 自动回退到仍存在的文档。
+12. `useTopMenus`：将顶栏菜单状态和 outside-click 行为从 `App.tsx` 抽出。
+13. 清理失效的旧 statusbar CSS 覆盖，保留当前文档状态条专用样式。
+14. 添加 opt-in workspace capacity benchmark：1,000 文档、10,000 资源、25 MiB 单资源。
+15. Packaged smoke：设置面板、普通 UI、Drawnix 首次使用均覆盖；packaged 使用独立 `LAKE_ASSET_PORT`，避免与 dev 资源服务冲突。
 
-## In progress / next
+## Current quality gates
 
-1. Split global App concerns into domain hooks without behavior changes.
-2. Complete IPC error codes and remove renderer string matching.
-3. Add packaged Electron smoke test and resource timing budget.
-4. Add sync fault injection / WAL checkpoint / large dataset benchmarks.
-5. Finish CSS legacy override cleanup.
-6. Verify Drawnix first-use import with a real board fixture.
+最近一次验证：
 
-## Additional completed work
+- `npm test -- --run`：40 个测试文件，328 passed，1 个 opt-in benchmark skipped。
+- `npx tsc --noEmit`：通过。
+- `npm run check:bundle`：通过。
+  - app JS gzip 约 2.58 MB / 2.9 MB budget
+  - Drawnix JS gzip 约 1.24 MB / 1.4 MB budget
+  - app CSS gzip 约 181 KB / 2 MB budget
+- `npm run test:ui`：通过；验证普通文本不加载 Drawnix JS、状态条、设置、同步 Popover、rail 38px。
+- `npm run test:drawnix`：通过；验证动态 Drawnix card 首次渲染。
+- `npm run test:packaged`：通过；覆盖 packaged 普通 UI、设置和 Drawnix first-use。
+- `npm run benchmark:workspace`：通过（基准机）：
+  - 1,001 notes：约 227ms 创建
+  - 10,000 resources + 25 MiB：约 708ms 写入
+  - pending summary：约 30ms
+  - title search：约 1ms
 
-- Current-document status bar now floats over the editor and only shows `字数 N / 图片 N` plus the document-level state.
-- Pending sync counts are produced by main-process facts (documents, referenced resources, Quick Notes), not renderer arithmetic.
-- Snapshot notices carry note IDs/titles and open the correct document history.
-- Draft journal recovery is wired through atomic files and a restore/discard dialog.
-- Startup SQLite integrity and foreign-key checks are recorded; WAL is checkpointed best-effort on quit.
-- Drawnix board JS is lazy-loaded; ordinary text editor smoke reports no Drawnix/Plait JS resources.
-- App-level shortcuts are centralized in `useWindowShortcuts`.
-- Settings search jumps to a unique matching category.
-- Search no longer advertises a fake second tab instance for `⌘Enter`; an already-open note is activated.
-- Repeatable `npm run test:ui` smoke script covers baseline, `⌘K`, sync Popover, rail widths and Drawnix JS resource timing.
+## Remaining / next
 
-## Current batch additions
+1. 继续拆分 `App.tsx`：优先 `useSyncFeedback`、`useDocumentTabs`，不改变 state ownership。
+2. Store / sync 只抽纯函数和 planner：manifest validation、conflict decision、GC planner；不机械迁移写事务。
+3. 增加同步故障注入：DB commit/rename 间断电、manifest 上传中断、S3 网络中断、WAL checkpoint 失败、资源半成品下载。
+4. 完善 packaged smoke 的窗口 bounds 重启恢复和 crash/restart 覆盖。
+5. 继续统一 renderer 错误展示和可访问性；VoiceOver / focus / reduced-motion 实机回归。
+6. 大资料库虚拟列表、后台 tab 生命周期和低频面板加载做真实 benchmark 后再决定。
 
-- SQLite startup integrity check and best-effort WAL checkpoint on quit.
-- Stable IPC error codes are preserved through preload (`NOT_FOUND`, `INVALID_INPUT`, `INTERNAL`).
-- Repeatable `npm run test:ui` smoke now verifies baseline shell, `⌘K` focus, sync Popover and absence of Drawnix/Plait JS resources in ordinary text-editor startup.
-- `useWindowShortcuts` centralizes app-level capture-phase keyboard handling.
-- Settings search jumps into a unique matching category.
-- Search no longer exposes an unimplemented second-tab promise.
-- Draft journal writes are debounced to avoid one IPC/file write per keystroke.
+## Explicitly not doing
 
-## Latest quality gates
-
-- `npm run test:ui` now produces baseline/search/sync screenshots and confirms no Drawnix/Plait JS is requested by ordinary text startup.
-- `npm run check:bundle` enforces current budgets: app JS 2.9MB gzip, Drawnix JS 1.4MB gzip, CSS 2MB gzip.
-- Sync history overwrite notices are restored from the persisted last sync result on startup.
-- Draft journal writes are debounced to 450ms; successful document saves delete the journal entry.
+- 不改 Lake 原生工具栏。
+- 不增加最近编辑视图。
+- 不自动修改新文档标题。
+- 不做冲突合并；远端胜出，本地冲突版本进入历史快照。
+- 不重新引入滚动条 hover 增宽。
