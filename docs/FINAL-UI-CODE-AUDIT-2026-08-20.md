@@ -117,6 +117,12 @@ sync.ts       约 1,126 行
 3. 剩余故障注入与 packaged restart；
 4. 大资料库虚拟化和后台 tab 生命周期 benchmark。
 
+## 依赖安全审计
+
+`npm audit --registry=https://registry.npmjs.org --omit=dev --audit-level=high` 当前报告 5 个 moderate 传递依赖问题：来自 Drawnix/Mermaid 链的 `dompurify` 和 `uuid`，报告标记为 `No fix available`。本轮没有强行升级 Drawnix/Mermaid：它们属于编辑器/画板运行时，升级可能破坏按需加载和内容兼容；后续应在上游发布修复后单独升级并回归。
+
+原公司 registry 的 audit endpoint 返回 HTTP 500，因此最终结果以公共 npm registry 的报告为准。
+
 ## 结论
 
 当前 UI 已达到“可直接验收”的稳定基线：布局、状态分层、搜索、同步 Popover、Drawnix 首次加载和 packaged smoke 均有真实证据。尚未宣称最终完成，原因是 VoiceOver/focus 实机 QA、完整 sync fault injection、窗口重启恢复和大规模后台 tab benchmark 仍需继续。
