@@ -50,6 +50,8 @@ try {
   await evaluate(`(()=>{ const current=JSON.parse(localStorage.getItem("lake-notes-v1.settings")||"{}"); localStorage.setItem("lake-notes-v1.settings", JSON.stringify({...current, maxOpenTabs:24})); location.reload(); return true; })()`);
   await waitFor('document.querySelectorAll("[data-tree-node-id]").length > 10');
   await wait(500);
+  await evaluate('document.querySelector(".tab-item .tab-close")?.click(); true');
+  await wait(200);
   const results = [];
   for (const count of counts) {
     const started = Date.now();
