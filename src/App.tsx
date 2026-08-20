@@ -313,6 +313,10 @@ export function App() {
       setWorkspace(snapshot); setNotes(snapshot.notes); setSync(snapshot.sync);
       void native.getSyncSettings().then((cfg) => setCloudEnabled(cfg.enabled)).catch(() => undefined);
       void native.getS3Settings().then((cfg) => setCloudConfigured(Boolean(cfg))).catch(() => undefined);
+      void native.getSyncStatus().then((info) => {
+        const superseded = info.lastResult?.supersededNotes ?? [];
+        if (superseded.length > 0) setConflictSnapshotNotice(superseded.map((item) => ({ noteId: item.id, title: item.title })));
+      }).catch(() => undefined);
       void native.getSyncPendingSummary().then(setPendingSummary).catch(() => undefined);
       void native.listDraftJournals().then(setDraftEntries).catch(() => undefined);
       setTreeNodes(await native.listTreeNodes());
