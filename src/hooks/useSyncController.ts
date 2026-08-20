@@ -3,7 +3,7 @@ import { native } from "../lib/native";
 import { getNativeErrorCode } from "../lib/nativeErrors";
 import type { SettingsCategory } from "../components/SettingsPanel";
 import type { SyncToastData } from "../components/SyncToast";
-import type { SyncProgress, SyncStatus, SyncPendingSummary } from "../lib/types";
+import type { SyncProgress, SyncStatus } from "../lib/types";
 
 interface SyncControllerInput {
   setSync: Dispatch<SetStateAction<SyncStatus>>;
