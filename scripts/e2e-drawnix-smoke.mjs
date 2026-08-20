@@ -90,6 +90,7 @@ try {
     await evaluate(`(async()=>{
       try { await window.lakeNative.deleteNote(${JSON.stringify(fixtureId)}); } catch {}
       try { const items = await window.lakeNative.listTrash(); const item = items.find(x => x.noteFileId === ${JSON.stringify(fixtureId)}); if (item) await window.lakeNative.purgeTrash(item.id); } catch {}
+      try { location.reload(); } catch {}
       return true;
     })()`).catch(() => undefined);
   }
