@@ -26,3 +26,16 @@
 4. Add sync fault injection / WAL checkpoint / large dataset benchmarks.
 5. Finish CSS legacy override cleanup.
 6. Verify Drawnix first-use import with a real board fixture.
+
+## Additional completed work
+
+- Current-document status bar now floats over the editor and only shows `字数 N / 图片 N` plus the document-level state.
+- Pending sync counts are produced by main-process facts (documents, referenced resources, Quick Notes), not renderer arithmetic.
+- Snapshot notices carry note IDs/titles and open the correct document history.
+- Draft journal recovery is wired through atomic files and a restore/discard dialog.
+- Startup SQLite integrity and foreign-key checks are recorded; WAL is checkpointed best-effort on quit.
+- Drawnix board JS is lazy-loaded; ordinary text editor smoke reports no Drawnix/Plait JS resources.
+- App-level shortcuts are centralized in `useWindowShortcuts`.
+- Settings search jumps to a unique matching category.
+- Search no longer advertises a fake second tab instance for `⌘Enter`; an already-open note is activated.
+- Repeatable `npm run test:ui` smoke script covers baseline, `⌘K`, sync Popover, rail widths and Drawnix JS resource timing.
