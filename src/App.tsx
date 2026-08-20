@@ -1381,7 +1381,7 @@ export function App() {
         document.body,
       )}
       <DraftRecoveryDialog entries={draftEntries} onRestore={(entry) => void restoreDraft(entry)} onDiscard={discardDraft} onClose={() => setDraftEntries([])} />
-      <SearchPanel open={searchPanelOpen} initialQuery={searchPanelQuery} onOpenNote={(id, query, newTab) => void openNote(id, query, newTab)} onClose={() => setSearchPanelOpen(false)} />
+      <SearchPanel open={searchPanelOpen} initialQuery={searchPanelQuery} onOpenNote={(id, query) => void openNote(id, query)} onClose={() => setSearchPanelOpen(false)} />
       <TrashPanel open={trashOpen} onClose={() => setTrashOpen(false)} onRestored={() => {
         void native.listTreeNodes().then(setTreeNodes).catch(() => undefined);
         void native.listNoteSummaries().then(setNotes).catch(() => undefined);
