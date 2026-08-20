@@ -493,3 +493,14 @@
     user-select: none;
   }
 }
+
+@media (min-width: 761px) {
+  /* The panel becomes interactive as soon as the trigger is entered; delaying
+     opacity made the panel visually present but not reliably hit-testable. */
+  .outline-sidebar--collapsed.outline-sidebar--hovered .outline-sidebar__content {
+    opacity: 1 !important;
+    visibility: visible !important;
+    pointer-events: auto !important;
+    transform: translateX(0) !important;
+  }
+}
