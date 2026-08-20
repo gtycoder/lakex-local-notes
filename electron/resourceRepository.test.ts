@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { ResourceRepository } from "./resourceRepository";
 
 const tempRoots: string[] = [];
@@ -31,5 +31,29 @@ describe("ResourceRepository image format preservation", () => {
     expect(webpOutput.mimeType).toBe("image/webp");
     expect(fs.readFileSync(path.join(root, "note", gifOutput.filename))).toEqual(gif);
     expect(fs.readFileSync(path.join(root, "note", webpOutput.filename))).toEqual(webp);
+  });
+});
+
+describe("ResourceRepository atomic writes", () => {
+  it("does not leave a partial asset when the final rename fails", () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "lake-resource-atomic-test-"));
+    tempRoots.push(root);
+    const repo = new ResourceRepository({
+      noteAssetsDirFor: (noteId) => path.join(root, noteId),
+      assetUrl: (noteId, filename) => `http://127.0.0.1:19876/${noteId}/${filename}`,
+      registerOrphan: () => undefined,
+    });
+    const originalRename = fs.renameSync;
+    const renameSpy = vi.spyOn(fs, "renameSync").mockImplementation(((from: fs.PathLike, to: fs.PathLike) => {
+      if (String(to).startsWith(path.join(root, "note"))) throw new Error("injected asset rename failure");
+      return originalRename(from, to);
+    }) as typeof fs.renameSync);
+    try {
+      expect(() => repo.upload({ bytes: [...Buffer.concat([Buffer.from("GIF89a", "ascii"), Buffer.alloc(8)])], filename: "image.gif" }, "note"))
+        .toThrow("injected asset rename failure");
+      expect(fs.readdirSync(path.join(root, "note"))).toEqual([]);
+    } finally {
+      renameSpy.mockRestore();
+    }
   });
 });

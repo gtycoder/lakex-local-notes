@@ -151,7 +151,15 @@ function imageOutput(bytes: Buffer, _requestedFilename: string, assetsDir: strin
   if (!format) throw new AppError("InvalidInput", "仅支持 PNG、JPEG、GIF、WebP 和 AVIF 图片");
   const filename = `${Date.now()}_${crypto.randomBytes(4).toString("hex")}.${format.extension}`;
   fs.mkdirSync(assetsDir, { recursive: true });
-  fs.writeFileSync(path.join(assetsDir, filename), bytes);
+  const destination = path.join(assetsDir, filename);
+  const temporary = `${destination}.tmp-${process.pid}-${crypto.randomBytes(4).toString("hex")}`;
+  try {
+    fs.writeFileSync(temporary, bytes);
+    fs.renameSync(temporary, destination);
+  } catch (error) {
+    try { fs.rmSync(temporary, { force: true }); } catch { /* best effort */ }
+    throw error;
+  }
   const url = makeUrl(filename);
   return { resourceRef: url, url, filename, mimeType: format.mimeType, size: bytes.length };
 }
