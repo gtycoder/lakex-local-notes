@@ -20,7 +20,13 @@ socket.onmessage = (event) => {
   if (message.id && pending.has(message.id)) { pending.get(message.id)(message); pending.delete(message.id); }
 };
 function send(method, params = {}) { return new Promise((resolve) => { const requestId = ++id; pending.set(requestId, resolve); socket.send(JSON.stringify({ id: requestId, method, params })); }); }
-async function evaluate(expression) { const result = await send("Runtime.evaluate", { expression, returnByValue: true, awaitPromise: true }); return result.result?.result?.value; }
+async function evaluate(expression) {
+  const result = await send("Runtime.evaluate", { expression, returnByValue: true, awaitPromise: true });
+  if (result.result?.exceptionDetails) throw new Error(result.result.exceptionDetails.text || "Runtime.evaluate failed");
+  const value = result.result?.result?.value;
+  if (value === undefined) throw new Error("Runtime.evaluate returned undefined");
+  return value;
+}
 async function screenshot(name) { const result = await send("Page.captureScreenshot", { format: "png", fromSurface: true }); await fs.writeFile(`${outputDir}/${name}.png`, Buffer.from(result.result.data, "base64")); }
 async function wait(ms) { await new Promise((resolve) => setTimeout(resolve, ms)); }
 
@@ -34,7 +40,7 @@ const baseline = await evaluate(`JSON.stringify({
   viewport: { width: innerWidth, height: innerHeight, dpr: devicePixelRatio },
   nodes: document.querySelectorAll('*').length,
   toolbarButtons: document.querySelectorAll('.ne-ui-toolbar button').length,
-  drawnixJs: performance.getEntriesByType('resource').map(e => e.name).filter(n => /drawnix|plait/i.test(n) && /\.js(?:$|\?)/i.test(n)),
+  drawnixJs: performance.getEntriesByType('resource').map(e => e.name).filter(n => /drawnix|plait/i.test(n) && (n.endsWith('.js') || n.includes('.js?'))),
   status: document.querySelector('.document-statusbar')?.innerText || '',
   workspace: document.querySelector('[aria-label="工作空间"]')?.innerText || '',
   railWidths: {
@@ -51,11 +57,11 @@ await screenshot("02-search");
 await evaluate(`document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }))`);
 await wait(150);
 
-await evaluate(`document.querySelector('.sync-status-button')?.click()`);
+await evaluate(`(()=>{document.querySelector('.sync-status-button')?.click(); return true})()`);
 await wait(200);
 const sync = await evaluate(`JSON.stringify({ open: Boolean(document.querySelector('.sync-status-popover')), text: document.querySelector('.sync-status-popover')?.innerText || '' })`);
 await screenshot("03-sync-popover");
-await evaluate(`document.querySelector('.sync-status-button')?.click()`);
+await evaluate(`(()=>{document.querySelector('.sync-status-button')?.click(); return true})()`);
 
 const result = { baseline: JSON.parse(baseline), search: JSON.parse(search), sync: JSON.parse(sync) };
 await fs.writeFile(`${outputDir}/result.json`, JSON.stringify(result, null, 2));
