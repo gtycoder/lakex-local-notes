@@ -2,12 +2,14 @@
 .workspace { position: relative; grid-template-rows: minmax(0, 1fr); }
 .document-statusbar {
   grid-row: 1;
-  grid-column: 1;
-  position: absolute;
+  grid-column: 1 / -1;
+  position: absolute !important;
   z-index: 180;
-  right: 16px;
-  bottom: 8px;
-  left: 12px;
+  right: 16px !important;
+  width: auto !important;
+  top: auto !important;
+  bottom: 8px !important;
+  left: 12px !important;
   display: grid;
   grid-template-columns: minmax(0, auto) minmax(0, 1fr) auto;
   align-items: center;
