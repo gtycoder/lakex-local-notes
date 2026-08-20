@@ -253,6 +253,10 @@ export function App() {
     return () => {
       saveTimers.current.forEach((timer) => window.clearTimeout(timer));
       saveTimers.current.clear();
+      for (const tab of openTabsRef.current) {
+        if (!tab.dirty) continue;
+        void native.saveDraftJournal({ noteId: tab.noteId, title: tab.title, content: tab.content, updatedAt: new Date().toISOString() }).catch(() => undefined);
+      }
       draftTimers.current.forEach((timer) => window.clearTimeout(timer));
       draftTimers.current.clear();
       if (sidebarPreviewTimer.current !== null) window.clearTimeout(sidebarPreviewTimer.current);
@@ -318,7 +322,13 @@ export function App() {
         if (superseded.length > 0) setConflictSnapshotNotice(superseded.map((item) => ({ noteId: item.id, title: item.title })));
       }).catch(() => undefined);
       void native.getSyncPendingSummary().then(setPendingSummary).catch(() => undefined);
-      void native.listDraftJournals().then(setDraftEntries).catch(() => undefined);
+      void native.listDraftJournals().then((entries) => {
+        // 启动时不展示已经被删除的文档草稿：删除文档是明确的用户操作，草稿不应绕过回收站重新出现。
+        const liveIds = new Set(snapshot.notes.map((note) => note.id));
+        const orphaned = entries.filter((entry) => !liveIds.has(entry.noteId));
+        setDraftEntries(entries.filter((entry) => liveIds.has(entry.noteId)));
+        void Promise.all(orphaned.map((entry) => native.deleteDraftJournal(entry.noteId).catch(() => undefined)));
+      }).catch(() => undefined);
       setTreeNodes(await native.listTreeNodes());
       const id = snapshot.lastOpenedNoteId ?? snapshot.notes[0]?.id;
       if (id && !media.matches) await openNote(id);
@@ -438,6 +448,19 @@ export function App() {
     void native.getSyncPendingSummary().then(setPendingSummary).catch(() => undefined);
   }, []);
 
+  const refreshDraftEntries = useCallback(async () => {
+    try {
+      const [entries, summaries] = await Promise.all([native.listDraftJournals(), native.listNoteSummaries()]);
+      const liveIds = new Set(summaries.map((note) => note.id));
+      const valid = entries.filter((entry) => liveIds.has(entry.noteId));
+      setDraftEntries(valid);
+      const orphaned = entries.filter((entry) => !liveIds.has(entry.noteId));
+      await Promise.all(orphaned.map((entry) => native.deleteDraftJournal(entry.noteId).catch(() => undefined)));
+    } catch {
+      // 草稿恢复是 best-effort，不能阻塞回收站/主界面的正常操作。
+    }
+  }, []);
+
   const persistTab = useCallback((noteId: string, title: string, content: string) => {
     return saveQueueRef.current.run(noteId, async () => {
       // 远端已删除（标记 deleted）的文档不再保存：避免把内容写回已回收的笔记。
@@ -522,6 +545,13 @@ export function App() {
           window.clearTimeout(pendingTimer);
           saveTimers.current.delete(tab.noteId);
         }
+        const draftTimer = draftTimers.current.get(tab.noteId);
+        if (draftTimer !== undefined) {
+          window.clearTimeout(draftTimer);
+          draftTimers.current.delete(tab.noteId);
+        }
+        // beforeunload 无法等待 IPC；先 best-effort 落一份草稿，再尝试正式保存。
+        void native.saveDraftJournal({ noteId: tab.noteId, title: tab.title, content: tab.content, updatedAt: new Date().toISOString() }).catch(() => undefined);
         void persistTab(tab.noteId, tab.title, tab.content);
       }
       event.preventDefault();
@@ -631,13 +661,19 @@ export function App() {
   }, []);
 
   const restoreDraft = useCallback(async (entry: DraftJournalEntry) => {
+    // 先确认正式文档仍存在。否则不能从恢复对话框中静默移除草稿，让用户误以为恢复成功。
+    try { await native.readNote(entry.noteId); }
+    catch {
+      showNotice("草稿对应的文档已不存在；草稿仍保留，可手动丢弃。");
+      return;
+    }
     await openNote(entry.noteId);
     setOpenTabs((tabs) => tabs.map((tab) => tab.noteId === entry.noteId ? { ...tab, title: entry.title || tab.title, content: entry.content, dirty: true, reloadKey: (tab.reloadKey ?? 0) + 1 } : tab));
     setActiveNoteId(entry.noteId);
     setDraftEntries((entries) => entries.filter((item) => item.noteId !== entry.noteId));
     setSaveState("dirty");
     scheduleSave(entry.noteId, entry.content);
-  }, [openNote, scheduleSave]);
+  }, [openNote, scheduleSave, showNotice]);
 
   const discardDraft = useCallback((noteId: string) => {
     void native.deleteDraftJournal(noteId).catch(() => undefined);
@@ -942,6 +978,8 @@ export function App() {
         clearScrollMemory(noteId);
       });
       await native.deleteTreeNode(id);
+      await Promise.all([...removedNoteIds].map((noteId) => native.deleteDraftJournal(noteId).catch(() => undefined)));
+      setDraftEntries((entries) => entries.filter((entry) => !removedNoteIds.has(entry.noteId)));
       const remaining = notes.filter((note) => !removedNoteIds.has(note.id));
       setNotes(remaining);
       setTreeNodes(await native.listTreeNodes());
@@ -1383,7 +1421,8 @@ export function App() {
       )}
       <DraftRecoveryDialog entries={draftEntries} onRestore={(entry) => void restoreDraft(entry)} onDiscard={discardDraft} onClose={() => setDraftEntries([])} />
       <SearchPanel open={searchPanelOpen} initialQuery={searchPanelQuery} onOpenNote={(id, query) => void openNote(id, query)} onClose={() => setSearchPanelOpen(false)} />
-      <TrashPanel open={trashOpen} onClose={() => setTrashOpen(false)} onRestored={() => {
+      <TrashPanel open={trashOpen} onClose={() => setTrashOpen(false)} onChanged={() => void refreshDraftEntries()} onRestored={() => {
+        void refreshDraftEntries();
         void native.listTreeNodes().then(setTreeNodes).catch(() => undefined);
         void native.listNoteSummaries().then(setNotes).catch(() => undefined);
         // 从回收站恢复后，若该文档正开在 tab 里且曾被标记"已删除"，重载正文并清除标记。

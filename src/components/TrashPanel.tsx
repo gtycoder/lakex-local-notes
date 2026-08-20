@@ -12,9 +12,11 @@ export interface TrashItem {
   purged?: boolean;
 }
 
-export function TrashPanel({ open, onClose, onRestored }: {
+export function TrashPanel({ open, onClose, onChanged, onRestored }: {
   open: boolean;
   onClose: () => void;
+  /** 彻底删除/清空后通知外部清理与文档关联的本地草稿。 */
+  onChanged?: () => void;
   /** 恢复/删除后通知外部刷新树 */
   onRestored: () => void;
 }) {
@@ -96,6 +98,7 @@ export function TrashPanel({ open, onClose, onRestored }: {
     try {
       await native.purgeTrash(id);
       await refresh();
+      onChanged?.();
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     }
@@ -107,6 +110,7 @@ export function TrashPanel({ open, onClose, onRestored }: {
     try {
       await native.emptyTrash();
       await refresh();
+      onChanged?.();
       onRestored();
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));

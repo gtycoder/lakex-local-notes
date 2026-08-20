@@ -14,4 +14,14 @@ describe("DraftJournal", () => {
     journal.remove("note-b");
     expect(journal.list().map((entry) => entry.noteId)).toEqual(["note-a"]);
   });
+
+  it("rejects unsafe payloads and ignores malformed journal files", () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "lake-draft-journal-invalid-"));
+    const journal = new DraftJournal(root);
+    expect(() => journal.write({ noteId: "../escape", title: "x", content: "x", updatedAt: "2026-08-20T10:00:00Z" })).toThrow();
+    expect(() => journal.write({ noteId: "note-a", title: "x".repeat(501), content: "x", updatedAt: "2026-08-20T10:00:00Z" })).toThrow();
+    expect(() => journal.write({ noteId: "note-a", title: "x", content: "x", updatedAt: "not-a-date" })).toThrow();
+    fs.writeFileSync(path.join(root, "broken.json"), JSON.stringify({ noteId: "broken", title: 42, content: "x", updatedAt: "not-a-date" }));
+    expect(journal.list()).toEqual([]);
+  });
 });
