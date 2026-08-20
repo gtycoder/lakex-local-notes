@@ -33,9 +33,6 @@ async function wait(ms) { await new Promise((resolve) => setTimeout(resolve, ms)
 await send("Runtime.enable");
 await send("Page.enable");
 await send("Page.bringToFront");
-const windowTarget = await send("Browser.getWindowForTarget");
-const windowId = windowTarget.result?.windowId;
-const windowBounds = windowId === undefined ? null : (await send("Browser.getWindowBounds", { windowId })).result?.bounds ?? null;
 await wait(1200);
 // 每次从一个普通文本文档开始，避免上一轮 Drawnix smoke 的临时文档
 // 留在同一个 renderer 后污染“普通启动不加载 Drawnix JS”的资源断言。
@@ -46,7 +43,6 @@ const baseline = await evaluate(`JSON.stringify({
   title: document.title,
   theme: document.documentElement.dataset.theme,
   viewport: { width: innerWidth, height: innerHeight, dpr: devicePixelRatio },
-  windowBounds: ${JSON.stringify(windowBounds)},
   nodes: document.querySelectorAll('*').length,
   toolbarButtons: document.querySelectorAll('.ne-ui-toolbar button').length,
   drawnixJs: performance.getEntriesByType('resource').map(e => e.name).filter(n => /drawnix|plait/i.test(n) && (n.endsWith('.js') || n.includes('.js?'))),
