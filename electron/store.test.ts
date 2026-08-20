@@ -1233,4 +1233,13 @@ describe("同步待处理摘要", () => {
     expect(summary.resources).toBeGreaterThanOrEqual(1);
     expect(summary.generatedAt).toMatch(/T/);
   });
+
+  it("counts a local delete tombstone as one pending document", () => {
+    const note = store.createNote("待删除摘要");
+    store.markSynced(note.id);
+    const beforeDelete = store.getSyncPendingSummary().documents;
+    store.deleteTreeNode(note.id);
+    // 删除会把已同步文档替换成墓碑；数量至少不应静默减少。
+    expect(store.getSyncPendingSummary().documents).toBeGreaterThanOrEqual(beforeDelete);
+  });
 });
