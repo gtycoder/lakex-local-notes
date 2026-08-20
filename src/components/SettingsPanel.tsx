@@ -150,8 +150,8 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
 
   return (
     <div className="settings-overlay" onMouseDown={(event) => { if (event.target === event.currentTarget && !floating.interactionRef.current) onClose(); }}>
-      <div ref={floating.panelRef} className="floating-dialog settings-panel settings-panel-large" style={floating.panelStyle} onClick={(e) => e.stopPropagation()}>
-        <header className="settings-header floating-dialog-header" onPointerDown={floating.startDrag}>
+      <div ref={floating.panelRef} className="floating-dialog settings-panel settings-panel-large" style={floating.panelStyle} role="dialog" aria-modal="true" aria-labelledby="settings-panel-title" onClick={(e) => e.stopPropagation()}>
+        <header id="settings-panel-title" className="settings-header floating-dialog-header" onPointerDown={floating.startDrag}>
           <Settings size={16} />
           <span>偏好设置</span>
           <button className="settings-close" onClick={onClose} aria-label="关闭">✕</button>
