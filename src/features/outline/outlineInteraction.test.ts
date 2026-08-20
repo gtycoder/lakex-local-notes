@@ -8,7 +8,7 @@ describe("outline hover hitbox contract", () => {
   });
 
   it("keeps the editor scrollbar outside the floating panel", () => {
-    expect(OUTLINE_SCROLLBAR_CLEARANCE).toBe(10);
+    expect(OUTLINE_SCROLLBAR_CLEARANCE).toBe(12);
   });
 
   it("keeps a short rail-to-panel grace period", () => {

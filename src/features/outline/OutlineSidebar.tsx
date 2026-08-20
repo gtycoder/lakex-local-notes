@@ -3,6 +3,7 @@ import { ChevronsDownUp, ChevronsUpDown, Focus, ListOrdered, ListTree, Search } 
 import type { OutlineMode } from "./OutlineController";
 import { OutlineList } from "./OutlineList";
 import { getOutlineTab, getOutlineTabsVersion, subscribeOutlineTabs } from "./registry";
+import { OUTLINE_HOVER_HIDE_DELAY_MS } from "./outlineInteraction";
 
 function noopSubscribe(): () => void {
   return () => {};
@@ -116,7 +117,7 @@ export function OutlineSidebar({
     hideHoverTimerRef.current = window.setTimeout(() => {
       hideHoverTimerRef.current = null;
       setRailHovered(false);
-    }, 120);
+    }, OUTLINE_HOVER_HIDE_DELAY_MS);
   };
 
   const rubberBandWidth = (nextWidth: number) => {
