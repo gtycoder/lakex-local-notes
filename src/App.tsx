@@ -31,6 +31,8 @@ import { SettingsPanel, type SettingsCategory } from "./components/SettingsPanel
 import { subtreeIds } from "./lib/tree";
 import type { NoteDigest, NoteDocument, NoteSummary, SyncProgress, SyncStatus, TreeNode, WorkspaceSnapshot } from "./lib/types";
 
+const SIDEBAR_HOVER_HIDE_DELAY_MS = 120;
+
 type SaveState = "idle" | "dirty" | "saving" | "saved" | "error";
 type MobilePage = "library" | "document";
 type DesktopWorkspace = "library" | "quick-notes";
@@ -243,6 +245,12 @@ export function App() {
   useEffect(() => {
     if (sidebarMode !== "floating") localStorage.setItem("lake-notes-v2.sidebar-mode", sidebarMode);
   }, [sidebarMode]);
+
+  useEffect(() => {
+    if (sidebarMode !== "docked") return;
+    const target = outlineSidebarWidth + 4;
+    setSidebarWidth((current) => Math.abs(current - target) < 1 ? current : target);
+  }, [sidebarMode, outlineSidebarWidth]);
 
   useEffect(() => {
     return () => {
@@ -913,8 +921,25 @@ export function App() {
     sidebarPreviewTimer.current = window.setTimeout(() => {
       setSidebarMode((current) => current === "floating" ? "collapsed" : current);
       sidebarPreviewTimer.current = null;
-    }, 120);
+    }, SIDEBAR_HOVER_HIDE_DELAY_MS);
   }, [clearSidebarPreviewTimer]);
+
+  useEffect(() => {
+    if (sidebarMode !== "floating") return;
+    const isInside = (x: number, y: number, selector: string) => {
+      const rect = document.querySelector<HTMLElement>(selector)?.getBoundingClientRect();
+      return Boolean(rect && x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom);
+    };
+    const onPointerMove = (event: PointerEvent) => {
+      if (isInside(event.clientX, event.clientY, ".activity-rail") || isInside(event.clientX, event.clientY, ".sidebar")) {
+        clearSidebarPreviewTimer();
+      } else {
+        hideSidebarPreview();
+      }
+    };
+    window.addEventListener("pointermove", onPointerMove, true);
+    return () => window.removeEventListener("pointermove", onPointerMove, true);
+  }, [sidebarMode, clearSidebarPreviewTimer, hideSidebarPreview]);
 
   const toggleSidebarDock = useCallback(() => {
     clearSidebarPreviewTimer();
