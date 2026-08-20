@@ -130,3 +130,18 @@ html[data-theme="dark"] .document-pane .ne-engine > ne-h6 ne-heading-content {
     right: calc(var(--outline-collapsed-width) + 14px) !important;
   }
 }
+
+
+@media (min-width: 761px) {
+  /* Match the outline's bounded floating dock. The previous full-height fixed
+     sidebar made the panel appear to grow when it was leaving. */
+  .sidebar.sidebar-floating,
+  .sidebar.sidebar-collapsed {
+    top: 72px !important;
+    bottom: 72px !important;
+    height: calc(100vh - 144px) !important;
+    max-height: calc(100vh - 144px) !important;
+    overflow: hidden !important;
+    transition: opacity 120ms ease-out, transform 120ms var(--lake-ease-standard), box-shadow 120ms ease-out !important;
+  }
+}
