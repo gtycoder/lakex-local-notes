@@ -968,6 +968,23 @@ describe("同步状态 / 导入", () => {
     expect(store.listNotesForSync().find((n) => n.id === "remote-1")?.isConflict).toBe(true);
   });
 
+  it("故障注入：远程正文 rename 失败时不应留下已同步但无文件的 DB 记录", () => {
+    const note = { id: "remote-rename-failure", title: "远程失败", parentId: "notebook-personal", sortOrder: 7, updatedAt: "2026-08-02T00:00:00.000Z", isConflict: false };
+    const originalRename = fs.renameSync;
+    const renameSpy = vi.spyOn(fs, "renameSync").mockImplementation(((from: fs.PathLike, to: fs.PathLike) => {
+      if (String(from).includes("remote-rename-failure.lake.tmp-")) throw new Error("injected rename failure");
+      return originalRename(from, to);
+    }) as typeof fs.renameSync);
+    try {
+      expect(() => store.importRemoteNote(note, Buffer.from("<p>失败注入</p>"), [])).toThrow("injected rename failure");
+      expect(() => store.readNote(note.id)).toThrow(/不存在/);
+      expect(store.listNotesForSync().some((item) => item.id === note.id)).toBe(false);
+      expect(fs.existsSync(path.join(dir, "notes", `${note.id}.lake`))).toBe(false);
+    } finally {
+      renameSpy.mockRestore();
+    }
+  });
+
   it("importRemoteNote 同步下载后即生成缓存+FTS（锁定+从未编辑的新设备也能搜到正文）", () => {
     // 模拟新设备同步到一篇"锁定且从未编辑"的文档（同步带 isLocked，正文为 .lake）
     const note = {
