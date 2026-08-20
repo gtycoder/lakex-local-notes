@@ -145,3 +145,11 @@ html[data-theme="dark"] .document-pane .ne-engine > ne-h6 ne-heading-content {
     transition: opacity 120ms ease-out, transform 120ms var(--lake-ease-standard), box-shadow 120ms ease-out !important;
   }
 }
+
+@media (min-width: 761px) {
+  .sidebar.sidebar-floating {
+    opacity: 1 !important;
+    transform: translateX(0) !important;
+    pointer-events: auto !important;
+  }
+}
