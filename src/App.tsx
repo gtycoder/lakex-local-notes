@@ -29,6 +29,7 @@ import { loadSettings, saveSettings, subscribeSettings, type AppSettings } from 
 import { applyTheme, applyCustomCss } from "./lib/theme";
 import { SettingsPanel, type SettingsCategory } from "./components/SettingsPanel";
 import { subtreeIds } from "./lib/tree";
+import { DOCK_GUTTER, FIXED_RAIL_WIDTH } from "./lib/layoutMetrics";
 import type { NoteDigest, NoteDocument, NoteSummary, SyncProgress, SyncStatus, TreeNode, WorkspaceSnapshot } from "./lib/types";
 
 const SIDEBAR_HOVER_HIDE_DELAY_MS = 120;
@@ -44,8 +45,8 @@ const SIDEBAR_MAX_WIDTH = 300;
 const OUTLINE_SIDEBAR_DEFAULT_WIDTH = 280;
 const OUTLINE_SIDEBAR_MIN_WIDTH = 200;
 const OUTLINE_SIDEBAR_MAX_WIDTH = 420;
-// 与左侧 --activity-rail-width 对齐，右侧只为常驻 rail 预留同样的 34px。
-const OUTLINE_COLLAPSED_WIDTH = 34;
+// 左右桌面固定 rail 共用同一宽度，避免视觉 rail 与 grid 列错位。
+const OUTLINE_COLLAPSED_WIDTH = FIXED_RAIL_WIDTH;
 
 function initialOutlineMode(): OutlineMode {
   const stored = localStorage.getItem("lake-notes-v2.outline-sidebar-mode");
@@ -1181,7 +1182,7 @@ export function App() {
     "--outline-sidebar-width": `${outlineSidebarWidth}px`,
     "--outline-grid-w": outlineVisible
       ? effectiveOutlineMode === "docked"
-        ? `${outlineSidebarWidth + OUTLINE_COLLAPSED_WIDTH}px`
+        ? `${outlineSidebarWidth + OUTLINE_COLLAPSED_WIDTH + DOCK_GUTTER}px`
         : `${OUTLINE_COLLAPSED_WIDTH}px`
       : "0px",
   } as CSSProperties;
