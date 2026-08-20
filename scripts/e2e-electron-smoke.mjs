@@ -59,7 +59,7 @@ await evaluate(`document.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', 
 await wait(500);
 const search = await evaluate(`JSON.stringify({ open: Boolean(document.querySelector('.search-command-panel')), focused: document.activeElement?.matches('.search-command-panel input') })`);
 await screenshot("02-search");
-await evaluate(`document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }))`);
+await evaluate(`(()=>{document.querySelector('.search-panel-close')?.click(); return true})()`);
 await wait(150);
 
 await evaluate(`(()=>{document.querySelector('.sync-status-button')?.click(); return true})()`);
