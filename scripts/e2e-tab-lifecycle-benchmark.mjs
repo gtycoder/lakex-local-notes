@@ -46,7 +46,8 @@ async function waitForExit(process, timeoutMs = 10_000) {
   ]);
 }
 async function quit() {
-  try { await evaluate('window.close()'); } catch {}
+  // Kill the owned child directly; awaiting Runtime.evaluate(window.close()) can
+  // hang forever while the renderer is tearing down.
   try { child?.kill("SIGTERM"); } catch {}
   const exited = await waitForExit(child);
   if (!exited) { try { child?.kill("SIGKILL"); } catch {} await waitForExit(child, 2_000); }
