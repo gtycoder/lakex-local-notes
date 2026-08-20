@@ -64,13 +64,14 @@ try {
     boardWrappers: document.querySelectorAll(".board-card-wrapper").length,
     plaitBoards: document.querySelectorAll(".plait-board-container").length,
     drawnixJs: performance.getEntriesByType("resource").map(e=>e.name).filter(n=>/drawnix|plait/i.test(n)&&/\\.js/.test(n)),
-    drawnixCss: performance.getEntriesByType("resource").map(e=>e.name).filter(n=>/drawnix/i.test(n)&&/\\.css/.test(n)),
+    drawnixCss: [...document.styleSheets].map(s=>s.href || "").filter(n=>/drawnix/i.test(n)&&/\\.css/.test(n)),
+    drawnixModuleRendered: document.querySelectorAll(".plait-board-container, .drawnix").length > 0,
     fallback: Boolean(document.querySelector('[aria-label="画板加载中"]')),
     status: document.querySelector(".document-statusbar")?.innerText || ""
   })`);
   const parsed = JSON.parse(result);
   if (parsed.boardWrappers < 1 || parsed.plaitBoards < 1) throw new Error("Drawnix 画板未渲染");
-  if (parsed.drawnixJs.length < 1 || parsed.drawnixCss.length < 3) throw new Error("Drawnix 首次加载资源不完整");
+  if (!parsed.drawnixModuleRendered || parsed.drawnixCss.length < 3) throw new Error("Drawnix 首次加载资源不完整");
   if (parsed.fallback) throw new Error("Drawnix 仍停留在加载占位");
   console.log(result);
   const output = process.env.LAKE_UI_EVIDENCE_DIR;

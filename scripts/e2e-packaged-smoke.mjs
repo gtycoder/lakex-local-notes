@@ -7,7 +7,13 @@ const appPath = process.env.LAKE_PACKAGED_EXECUTABLE || path.resolve("release/ma
 const port = Number(process.env.LAKE_CDP_PORT || 9333);
 if (!existsSync(appPath)) throw new Error(`找不到 packaged executable: ${appPath}`);
 const child = spawn(appPath, [`--remote-debugging-port=${port}`], {
-  env: { ...process.env, LAKE_USER_DATA: process.env.LAKE_USER_DATA || path.join("/tmp", "lake-notes-packaged-smoke-data") },
+  env: {
+    ...process.env,
+    LAKE_USER_DATA: process.env.LAKE_USER_DATA || path.join("/tmp", "lake-notes-packaged-smoke-data"),
+    // Dev Electron 通常占用 19876；packaged smoke 使用独立资源端口，避免
+    // 启动阶段 listen EADDRINUSE 阻塞主进程并让 CDP 看起来“无响应”。
+    LAKE_ASSET_PORT: process.env.LAKE_ASSET_PORT || "29876",
+  },
   stdio: "ignore",
 });
 const deadline = Date.now() + 45_000;
