@@ -126,15 +126,22 @@ export function OutlineSidebar({
     if (mode !== "collapsed" || !railHovered) return;
     const onPointerMove = (event: PointerEvent) => {
       const point = { x: event.clientX, y: event.clientY };
-      const inside = [
+      const rects = [
         ".outline-sidebar__trigger",
         ".outline-sidebar__bridge",
         ".outline-sidebar__content",
-      ].some((selector) => {
-        const rect = document.querySelector<HTMLElement>(selector)?.getBoundingClientRect();
-        return Boolean(rect && point.x >= rect.left && point.x <= rect.right && point.y >= rect.top && point.y <= rect.bottom);
-      });
-      if (inside) cancelHoverHide();
+      ].map((selector) => document.querySelector<HTMLElement>(selector)?.getBoundingClientRect()).filter(Boolean) as DOMRect[];
+      const inside = rects.some((rect) => point.x >= rect.left && point.x <= rect.right && point.y >= rect.top && point.y <= rect.bottom);
+      // While the panel is open, keep the transition corridor alive. It is not
+      // a hit target, so the scrollbar remains directly operable, but moving
+      // from the 25px trigger into the panel cannot race the hide timer.
+      const panel = rects[2];
+      const trigger = rects[0];
+      const inCorridor = panel && trigger
+        && point.x > panel.right && point.x < trigger.left
+        && point.y >= Math.max(panel.top, trigger.top)
+        && point.y <= Math.min(panel.bottom, trigger.bottom);
+      if (inside || inCorridor) cancelHoverHide();
       else scheduleHoverHide();
     };
     window.addEventListener("pointermove", onPointerMove, true);

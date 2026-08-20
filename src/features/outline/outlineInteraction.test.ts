@@ -3,12 +3,12 @@ import { OUTLINE_HOVER_HIDE_DELAY_MS, OUTLINE_HOVER_TRIGGER_WIDTH, OUTLINE_SCROL
 
 describe("outline hover hitbox contract", () => {
   it("keeps the trigger narrower than the editor scrollbar track", () => {
-    expect(OUTLINE_HOVER_TRIGGER_WIDTH).toBeLessThanOrEqual(14);
-    expect(OUTLINE_HOVER_TRIGGER_WIDTH).toBeGreaterThanOrEqual(12);
+    expect(OUTLINE_HOVER_TRIGGER_WIDTH).toBeLessThanOrEqual(25);
+    expect(OUTLINE_HOVER_TRIGGER_WIDTH).toBeGreaterThanOrEqual(24);
   });
 
   it("keeps the editor scrollbar outside the floating panel", () => {
-    expect(OUTLINE_SCROLLBAR_CLEARANCE).toBe(14);
+    expect(OUTLINE_SCROLLBAR_CLEARANCE).toBe(13);
   });
 
   it("keeps a short rail-to-panel grace period", () => {

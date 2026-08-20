@@ -655,7 +655,7 @@ ne-card[data-card-name="codeblock"] .ne-card-resizer-mask {
   --shell-toolbar: #f1f2f4;
   --shell-ease: cubic-bezier(.22, 1, .36, 1);
   --shell-radius: 8px;
-  --activity-rail-width: 40px; /* 左右固定 rail 共用宽度 */
+  --activity-rail-width: 38px; /* 左右固定 rail 共用宽度 */
 }
 
 @media (min-width: 761px) {

@@ -55,7 +55,7 @@
     left: 0;
     bottom: 0;
     width: 4px;
-    pointer-events: auto;
+    pointer-events: none;
   }
 
   /* 这是一整条 activity rail，只负责 hover 预览；可继续容纳其它按钮。 */
@@ -90,11 +90,11 @@
     z-index: 3;
     /* 顶部避开 activity-button（约 32px），按钮区域点击优先，不触发悬浮 */
     top: 36px;
-    right: 16px;
     bottom: 0;
-    /* Keep the trigger on the far-right edge only. The editor scrollbar sits to
-       its left and must remain usable without opening the outline. */
-    width: var(--outline-hover-trigger-width, 14px);
+    /* Most of the 38px rail is a trigger; only the editor-side safety band is
+       excluded so the scrollbar remains directly operable. */
+    right: 0;
+    width: var(--outline-hover-trigger-width, 25px);
   }
   .outline-sidebar__activity-button {
     display: grid;

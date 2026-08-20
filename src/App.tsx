@@ -30,6 +30,7 @@ import { applyTheme, applyCustomCss } from "./lib/theme";
 import { SettingsPanel, type SettingsCategory } from "./components/SettingsPanel";
 import { subtreeIds } from "./lib/tree";
 import { DOCK_GUTTER, FIXED_RAIL_WIDTH } from "./lib/layoutMetrics";
+import { OUTLINE_HOVER_TRIGGER_WIDTH, OUTLINE_SCROLLBAR_CLEARANCE } from "./features/outline/outlineInteraction";
 import type { NoteDigest, NoteDocument, NoteSummary, SyncProgress, SyncStatus, TreeNode, WorkspaceSnapshot } from "./lib/types";
 
 const SIDEBAR_HOVER_HIDE_DELAY_MS = 120;
@@ -1180,6 +1181,8 @@ export function App() {
     "--sidebar-grid-w": sidebarMode === "docked" ? `${sidebarWidth}px` : "0px",
     // 目录与大纲的展开面板互不绑定；只有左右常驻 rail 都是 34px。
     "--outline-sidebar-width": `${outlineSidebarWidth}px`,
+    "--outline-hover-trigger-width": `${OUTLINE_HOVER_TRIGGER_WIDTH}px`,
+    "--outline-scrollbar-clearance": `${OUTLINE_SCROLLBAR_CLEARANCE}px`,
     "--outline-grid-w": outlineVisible
       ? effectiveOutlineMode === "docked"
         ? `${outlineSidebarWidth + OUTLINE_COLLAPSED_WIDTH + DOCK_GUTTER}px`
