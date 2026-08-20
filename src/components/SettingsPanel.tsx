@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { AlignLeft, Cloud, Files, History, Info, Keyboard, ListTree, Monitor, Moon, PanelTop, Search, Settings, Sun, Trash2, Type } from "lucide-react";
 import { fontSizeOptions, type AppSettings } from "../lib/settings";
 import { native } from "../lib/native";
@@ -29,6 +29,7 @@ function formatBytes(n: number): string {
 export function SettingsPanel({ open, settings, onClose, onChange, openCategory = "editor" }: SettingsPanelProps) {
   const [category, setCategory] = useState<SettingsCategory>(openCategory);
   const [navQuery, setNavQuery] = useState("");
+  const navSearchRef = useRef<HTMLInputElement>(null);
   const floating = useFloatingDialog({ initialSize: { w: 840, h: 600 }, minSize: { w: 620, h: 420 } });
 
   const [stats, setStats] = useState<{ snapshotCount: number; totalBytes: number } | null>(null);
@@ -56,6 +57,12 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
     void native.listS3GcPending().then((items) => setGcPending(items.length)).catch(() => undefined);
     void native.listS3GcLog().then(setGcLog).catch(() => undefined);
   }, [open, openCategory]);
+
+  useEffect(() => {
+    if (!open) return;
+    const focusTimer = window.setTimeout(() => navSearchRef.current?.focus(), 30);
+    return () => window.clearTimeout(focusTimer);
+  }, [open]);
 
   const nav = [
     { id: "editor" as const, label: "编辑器", keywords: "字号 段间距 大纲 工具栏 标签页" , icon: <Type size={15} /> },
@@ -158,7 +165,7 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
         </header>
         <div className="settings-layout">
           <nav className="settings-nav">
-            <label className="settings-nav-search"><Search size={14} /><input value={navQuery} onChange={(event) => setNavQuery(event.target.value)} placeholder="搜索设置" aria-label="搜索设置" /></label>
+            <label className="settings-nav-search"><Search size={14} /><input ref={navSearchRef} autoFocus value={navQuery} onChange={(event) => setNavQuery(event.target.value)} placeholder="搜索设置" aria-label="搜索设置" /></label>
             {visibleNav.map((item) => (
               <button key={item.id} className={`settings-nav-item ${category === item.id ? "active" : ""}`} onClick={() => setCategory(item.id)}>
                 {item.icon}<span>{item.label}</span>

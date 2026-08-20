@@ -72,8 +72,8 @@ await evaluate(`(()=>{document.querySelector('[aria-label="工作空间"]')?.cli
 await wait(120);
 const workspaceMenu = await evaluate(`JSON.stringify({ open: Boolean(document.querySelector('.top-menu--workspace')), items: [...document.querySelectorAll('.top-menu--workspace button')].map(x=>x.innerText) })`);
 await evaluate(`(()=>{ const item = [...document.querySelectorAll('.top-menu--workspace button')].find(x => x.innerText.includes('偏好设置')); item?.click(); return true })()`);
-await wait(250);
-const settings = await evaluate(`JSON.stringify({ open: Boolean(document.querySelector('.settings-overlay')), title: document.querySelector('.settings-header span')?.innerText || '', role: document.querySelector('.settings-panel')?.getAttribute('role') || '', labelledBy: document.querySelector('.settings-panel')?.getAttribute('aria-labelledby') || '' })`);
+await wait(600);
+const settings = await evaluate(`JSON.stringify({ open: Boolean(document.querySelector('.settings-overlay')), title: document.querySelector('.settings-header span')?.innerText || '', role: document.querySelector('.settings-panel')?.getAttribute('role') || '', labelledBy: document.querySelector('.settings-panel')?.getAttribute('aria-labelledby') || '', focused: document.activeElement?.matches('.settings-nav-search input') })`);
 await evaluate(`(()=>{document.querySelector('.settings-close, .settings-panel [aria-label="关闭"]')?.click(); return true})()`);
 
 const result = { baseline: JSON.parse(baseline), search: JSON.parse(search), sync: JSON.parse(sync), workspaceMenu: JSON.parse(workspaceMenu), settings: JSON.parse(settings) };
@@ -82,7 +82,7 @@ if (result.baseline.drawnixJs.length !== 0) throw new Error("普通文本启动�
 if (!result.baseline.status.includes("字数") || !result.baseline.status.includes("图片")) throw new Error("底部文档状态条缺少统计");
 if (!result.settings.open || result.settings.title !== "偏好设置") throw new Error("设置面板未能打开");
 if (result.search.dialogLabel !== "搜索标题和正文" || !result.search.inputDescription) throw new Error("搜索浮层无完整无障碍标记");
-if (result.settings.role !== "dialog" || result.settings.labelledBy !== "settings-panel-title") throw new Error("设置面板无完整 dialog 标记");
+if (result.settings.role !== "dialog" || result.settings.labelledBy !== "settings-panel-title" || !result.settings.focused) throw new Error("设置面板无完整 dialog/focus 标记");
 await fs.writeFile(`${outputDir}/result.json`, JSON.stringify(result, null, 2));
 console.log(JSON.stringify(result, null, 2));
 socket.close();
