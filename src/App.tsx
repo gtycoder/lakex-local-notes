@@ -25,7 +25,7 @@ import type { OutlineMode } from "./features/outline/OutlineController";
 import { getOutlineTab, getOutlineTabsVersion, subscribeOutlineTabs } from "./features/outline/registry";
 import { cleanLakeMarkdown } from "./lib/markdownClean";
 import { KeyedAsyncQueue } from "./lib/keyedAsyncQueue";
-import { computeDocStats, type DocStats } from "./lib/docStats";
+import { useDocumentStats } from "./hooks/useDocumentStats";
 import { createRequestVersion } from "./lib/requestVersion";
 import { stripAssetAccessToken } from "./lib/assetPort";
 import { isDesktop, native } from "./lib/native";
@@ -192,36 +192,7 @@ export function App() {
 
   useEffect(() => { openTabsRef.current = openTabs; }, [openTabs]);
 
-  // W-2-A：字数/图片统计状态（hooks 必须在早退之前声明）。
-  // 切换/重载文档立即计算；打字输入走 300ms debounce。
-  const [docStats, setDocStats] = useState<DocStats>({ wordCount: 0, imageCount: 0 });
-  const statsTimerRef = useRef<number | null>(null);
-  const statsKeyRef = useRef("");
-  useEffect(() => {
-    const tab = openTabs.find((t) => t.noteId === activeNoteId);
-    const content = tab?.content ?? mobileActive?.content ?? "";
-    const key = activeNoteId
-      ? `tab:${activeNoteId}:${tab?.reloadKey ?? 0}`
-      : `mobile:${mobileActive?.id ?? "none"}`;
-    if (statsKeyRef.current !== key) {
-      // 文档切换/重载：立即更新状态栏，不引入感知延迟
-      statsKeyRef.current = key;
-      setDocStats(computeDocStats(content));
-      return;
-    }
-    // 正文变化（打字）：debounce 后再算，避免大文档每按键全量正则
-    if (statsTimerRef.current !== null) window.clearTimeout(statsTimerRef.current);
-    statsTimerRef.current = window.setTimeout(() => {
-      statsTimerRef.current = null;
-      setDocStats(computeDocStats(content));
-    }, 300);
-    return () => {
-      if (statsTimerRef.current !== null) {
-        window.clearTimeout(statsTimerRef.current);
-        statsTimerRef.current = null;
-      }
-    };
-  }, [openTabs, activeNoteId, mobileActive]);
+  const docStats = useDocumentStats(openTabs, activeNoteId, mobileActive ? { id: mobileActive.id, content: mobileActive.content } : null);
 
   useEffect(() => {
     if (sidebarMode !== "floating") localStorage.setItem("lake-notes-v2.sidebar-mode", sidebarMode);
