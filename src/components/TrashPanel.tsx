@@ -4,6 +4,7 @@ import { Folder, FileText, RotateCcw, Trash2, Trash, X } from "lucide-react";
 import { native } from "../lib/native";
 import { createRequestVersion } from "../lib/requestVersion";
 import { useFloatingDialog } from "./useFloatingDialog";
+import { getNativeErrorMessage } from "../lib/nativeErrors";
 
 export interface TrashItem {
   id: string; title: string; nodeType: string; noteFileId: string | null;
@@ -37,7 +38,7 @@ export function TrashPanel({ open, onClose, onChanged, onRestored }: {
       const nextItems = await native.listTrash();
       if (docsVersionRef.current.isCurrent(version)) setItems(nextItems);
     } catch (e) {
-      if (docsVersionRef.current.isCurrent(version)) setError(e instanceof Error ? e.message : String(e));
+      if (docsVersionRef.current.isCurrent(version)) setError(getNativeErrorMessage(e));
     } finally {
       if (docsVersionRef.current.isCurrent(version)) setLoading(false);
     }
@@ -49,7 +50,7 @@ export function TrashPanel({ open, onClose, onChanged, onRestored }: {
       const nextItems = await native.listQuickNoteTrash();
       if (quickVersionRef.current.isCurrent(version)) setQuickItems(nextItems);
     } catch (e) {
-      if (quickVersionRef.current.isCurrent(version)) setError(e instanceof Error ? e.message : String(e));
+      if (quickVersionRef.current.isCurrent(version)) setError(getNativeErrorMessage(e));
     }
   };
 
@@ -75,12 +76,12 @@ export function TrashPanel({ open, onClose, onChanged, onRestored }: {
 
   const restoreQuick = async (id: string) => {
     try { await native.restoreQuickNote(id); await refreshQuick(); }
-    catch (e) { setError(e instanceof Error ? e.message : String(e)); }
+    catch (e) { setError(getNativeErrorMessage(e)); }
   };
   const purgeQuick = async (id: string) => {
     if (!(window as any).confirm("彻底删除后不可恢复，确定删除？")) return;
     try { await native.purgeQuickNote(id); await refreshQuick(); }
-    catch (e) { setError(e instanceof Error ? e.message : String(e)); }
+    catch (e) { setError(getNativeErrorMessage(e)); }
   };
 
   const restore = async (id: string) => {
@@ -89,7 +90,7 @@ export function TrashPanel({ open, onClose, onChanged, onRestored }: {
       await refresh();
       onRestored();
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(getNativeErrorMessage(e));
     }
   };
 
@@ -100,7 +101,7 @@ export function TrashPanel({ open, onClose, onChanged, onRestored }: {
       await refresh();
       onChanged?.();
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(getNativeErrorMessage(e));
     }
   };
 
@@ -113,7 +114,7 @@ export function TrashPanel({ open, onClose, onChanged, onRestored }: {
       onChanged?.();
       onRestored();
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(getNativeErrorMessage(e));
     }
   };
 

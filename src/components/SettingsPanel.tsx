@@ -5,6 +5,7 @@ import { native } from "../lib/native";
 import type { S3Settings, SyncSettings } from "../lib/types";
 import { useFloatingDialog } from "./useFloatingDialog";
 import { filterSettingsNav } from "./settingsSearch";
+import { getNativeErrorMessage } from "../lib/nativeErrors";
 
 export type SettingsCategory = "editor" | "appearance" | "shortcuts" | "history" | "sync" | "trash" | "about";
 
@@ -56,6 +57,22 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
     void native.listS3GcLog().then(setGcLog).catch(() => undefined);
   }, [open, openCategory]);
 
+  const nav = [
+    { id: "editor" as const, label: "编辑器", keywords: "字号 段间距 大纲 工具栏 标签页" , icon: <Type size={15} /> },
+    { id: "appearance" as const, label: "外观", keywords: "浅色 深色 主题 CSS 代码片段", icon: <Monitor size={15} /> },
+    { id: "shortcuts" as const, label: "快捷键", keywords: "快捷键 搜索 专注模式 键盘", icon: <Keyboard size={15} /> },
+    { id: "history" as const, label: "文档与历史", keywords: "快照 保留 清理", icon: <History size={15} /> },
+    { id: "sync" as const, label: "云端与同步", keywords: "S3 上传 下载 资源 云端", icon: <Cloud size={15} /> },
+    { id: "trash" as const, label: "回收站", keywords: "删除 恢复 清空", icon: <Trash2 size={15} /> },
+    { id: "about" as const, label: "关于", keywords: "版本", icon: <Info size={15} /> },
+  ];
+  const visibleNav = filterSettingsNav(nav, navQuery);
+  useEffect(() => {
+    if (!navQuery.trim() || visibleNav.length !== 1 || visibleNav[0].id === category) return;
+    setCategory(visibleNav[0].id);
+  }, [navQuery, category, visibleNav.map((item) => item.id).join("|")]);
+
+
   if (!open) return null;
 
   const saveHistCfg = (patch: Partial<NonNullable<typeof histCfg>>) => {
@@ -72,7 +89,7 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
       const r = await native.cleanupHistory();
       setStats(await native.getHistoryStats());
       setHistMsg(r.deletedSnapshots > 0 ? `已清理 ${r.deletedSnapshots} 份过期快照` : "无过期快照");
-    } catch (e) { setHistMsg(e instanceof Error ? e.message : String(e)); }
+    } catch (e) { setHistMsg(getNativeErrorMessage(e)); }
     finally { setHistBusy(false); }
   };
 
@@ -80,12 +97,12 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
   const saveS3 = async () => {
     setSyncMsg(null);
     try { await native.saveS3Settings(s3); setSyncMsg("S3 配置已保存在当前设备"); }
-    catch (e) { setSyncMsg(e instanceof Error ? e.message : String(e)); }
+    catch (e) { setSyncMsg(getNativeErrorMessage(e)); }
   };
   const testS3 = async () => {
     setSyncMsg("正在连接...");
     try { await native.saveS3Settings(s3); setSyncMsg(await native.testS3Connection()); }
-    catch (e) { setSyncMsg(e instanceof Error ? e.message : String(e)); }
+    catch (e) { setSyncMsg(getNativeErrorMessage(e)); }
   };
 
   const saveSyncCfg = async (patch: Partial<SyncSettings>) => {
@@ -97,7 +114,7 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
       setSyncCfg(saved);
       setSyncMsg(saved.enabled ? "同步策略已保存" : "云同步已关闭（已完成最后一次对齐）");
     } catch (e) {
-      setSyncMsg(e instanceof Error ? e.message : String(e));
+      setSyncMsg(getNativeErrorMessage(e));
       void native.getSyncSettings().then(setSyncCfg).catch(() => undefined);
     } finally {
       setSyncCfgBusy(false);
@@ -117,7 +134,7 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
       const r = await native.runS3DeepCleanup(dryRun);
       setGcPending(await native.listS3GcPending().then((i) => i.length).catch(() => 0));
       setSyncMsg(dryRun ? `预览：可清理 Lake ${r.lake.candidateCount} 个、小记 ${r.quickNotes.candidateCount} 个` : `已清理：Lake ${r.lake.deletedCount} 个、小记 ${r.quickNotes.deletedCount} 个`);
-    } catch (e) { setSyncMsg(e instanceof Error ? e.message : String(e)); }
+    } catch (e) { setSyncMsg(getNativeErrorMessage(e)); }
     finally { setGcBusy(false); }
   };
   const runReconcile = async () => {
@@ -127,24 +144,9 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
       const r = await native.runS3GcReconcile();
       setGcPending(await native.listS3GcPending().then((i) => i.length).catch(() => 0));
       setSyncMsg(r.deleted > 0 ? `已删除 ${r.deleted} 个过期对象` : "无到期对象");
-    } catch (e) { setSyncMsg(e instanceof Error ? e.message : String(e)); }
+    } catch (e) { setSyncMsg(getNativeErrorMessage(e)); }
     finally { setGcBusy(false); }
   };
-
-  const nav = [
-    { id: "editor" as const, label: "编辑器", keywords: "字号 段间距 大纲 工具栏 标签页" , icon: <Type size={15} /> },
-    { id: "appearance" as const, label: "外观", keywords: "浅色 深色 主题 CSS 代码片段", icon: <Monitor size={15} /> },
-    { id: "shortcuts" as const, label: "快捷键", keywords: "快捷键 搜索 专注模式 键盘", icon: <Keyboard size={15} /> },
-    { id: "history" as const, label: "文档与历史", keywords: "快照 保留 清理", icon: <History size={15} /> },
-    { id: "sync" as const, label: "云端与同步", keywords: "S3 上传 下载 资源 云端", icon: <Cloud size={15} /> },
-    { id: "trash" as const, label: "回收站", keywords: "删除 恢复 清空", icon: <Trash2 size={15} /> },
-    { id: "about" as const, label: "关于", keywords: "版本", icon: <Info size={15} /> },
-  ];
-  const visibleNav = filterSettingsNav(nav, navQuery);
-  useEffect(() => {
-    if (!navQuery.trim() || visibleNav.length !== 1 || visibleNav[0].id === category) return;
-    setCategory(visibleNav[0].id);
-  }, [navQuery, category, visibleNav.map((item) => item.id).join("|")]);
 
   return (
     <div className="settings-overlay" onMouseDown={(event) => { if (event.target === event.currentTarget && !floating.interactionRef.current) onClose(); }}>

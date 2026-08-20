@@ -3,6 +3,7 @@ import { AlertCircle } from "lucide-react";
 import { createLakeDocument, destroyLakeEditor, refreshTocSidebar, type LakeEditorInstance, type LakeEditorPrefs } from "./lakeRuntime";
 import { normalizeClipboardHtml, upgradePastedHtml } from "./clipboardHtml";
 import { addAssetAccessToken, stripAssetAccessToken } from "../../lib/assetPort";
+import { getNativeErrorMessage } from "../../lib/nativeErrors";
 
 interface LakeEditorProps {
   noteId: string;
@@ -80,7 +81,7 @@ export function LakeEditor({ noteId, content, mode = "editor", tocEnabled, onCha
       onEditorReadyRef.current?.(noteId, editor);
       setError(null);
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : String(reason));
+      setError(getNativeErrorMessage(reason));
     }
     return () => {
       host.removeEventListener("mousedown", preventCardBlur, true);

@@ -332,8 +332,17 @@ export function App() {
       }).catch(() => undefined);
       setTreeNodes(await native.listTreeNodes());
       const id = snapshot.lastOpenedNoteId ?? snapshot.notes[0]?.id;
-      if (id && !media.matches) await openNote(id);
-    }).catch((reason) => setError(String(reason)));
+      if (id && !media.matches) {
+        const opened = await openNote(id);
+        if (!opened) {
+          // lastOpenedNoteId 可能指向已 purge 的旧文档；启动不能停在错误页，
+          // 回退到第一个仍存在的文档，若资料库为空则保持空状态。
+          setError(null);
+          const fallback = snapshot.notes.find((note) => note.id !== id)?.id;
+          if (fallback) await openNote(fallback);
+        }
+      }
+    }).catch((reason) => setError(getNativeErrorMessage(reason)));
     return () => { media.removeEventListener("change", onChange); };
   }, []);
 
@@ -590,7 +599,7 @@ export function App() {
   }, []);
 
 
-  const openNote = useCallback(async (id: string, locateQuery = "", _newTab = false) => {
+  const openNote = useCallback(async (id: string, locateQuery = "", _newTab = false): Promise<boolean> => {
     const locate = () => {
       if (!locateQuery) return;
       let attempts = 0;
@@ -620,13 +629,13 @@ export function App() {
         tab.noteId === id ? { ...tab, lastAccessedAt: Date.now() } : tab
       ));
       locate();
-      return;
+      return true;
     }
     try {
       const note = await native.readNote(id);
       if (openTabsRef.current.some((t) => t.noteId === id)) {
         setActiveNoteId(id);
-        return;
+        return true;
       }
       revisionRef.current.set(note.id, 0);
       const newTab: OpenTab = { noteId: note.id, title: note.title, content: note.content, dirty: false, lastAccessedAt: Date.now() };
@@ -649,7 +658,11 @@ export function App() {
       }
       setActiveNoteId(id);
       locate();
-    } catch (reason) { setError(String(reason)); }
+      return true;
+    } catch (reason) {
+      setError(getNativeErrorMessage(reason));
+      return false;
+    }
   }, [evictTabsForLimit, settings.maxOpenTabs, pinnedNoteIds, showNotice]);
 
   const openNoteMobile = useCallback(async (id: string) => {
@@ -657,7 +670,7 @@ export function App() {
       const note = await native.readNote(id);
       setMobileActive(note); setMobileDraftTitle(note.title); setMobileDraftContent(note.content);
       setMobilePage("document");
-    } catch (reason) { setError(String(reason)); }
+    } catch (reason) { setError(getNativeErrorMessage(reason)); }
   }, []);
 
   const restoreDraft = useCallback(async (entry: DraftJournalEntry) => {
@@ -798,7 +811,7 @@ export function App() {
       await navigator.clipboard.writeText(caches.markdown);
       showNotice("已复制 Markdown（" + caches.markdown.length + " 字符）");
     } catch (reason) {
-      setError("复制 Markdown 失败: " + (reason instanceof Error ? reason.message : String(reason)));
+      setError("复制 Markdown 失败: " + (getNativeErrorMessage(reason)));
     }
   }, [showNotice]);
 
@@ -818,7 +831,7 @@ export function App() {
         showNotice(`已导出原生 Lake：${result.exportPath}（${result.imageCount} 张图片内嵌${skippedText}）`);
       }
     } catch (reason) {
-      setError("导出失败: " + (reason instanceof Error ? reason.message : String(reason)));
+      setError("导出失败: " + (getNativeErrorMessage(reason)));
     }
   }, [showNotice]);
 
@@ -831,7 +844,7 @@ export function App() {
       await navigator.clipboard.writeText(text);
       showNotice("已复制资料路径（本机 AI 可读）");
     } catch (reason) {
-      setError("复制资料路径失败: " + (reason instanceof Error ? reason.message : String(reason)));
+      setError("复制资料路径失败: " + (getNativeErrorMessage(reason)));
     }
   }, [showNotice]);
 
@@ -842,7 +855,7 @@ export function App() {
       setTreeNodes((items) => items.map((item) => item.id === updated.id ? updated : item));
       showNotice(icon ? "已设置图标" : "已清除图标");
     } catch (reason) {
-      setError("设置图标失败: " + (reason instanceof Error ? reason.message : String(reason)));
+      setError("设置图标失败: " + (getNativeErrorMessage(reason)));
     }
   }, [showNotice]);
 
@@ -900,7 +913,7 @@ export function App() {
       if (kind === "notebook") await native.createNotebook(resolvedTitle);
       else if (parentId) await native.createGroup(parentId, resolvedTitle);
       setTreeNodes(await native.listTreeNodes());
-    } catch (reason) { setError(String(reason)); }
+    } catch (reason) { setError(getNativeErrorMessage(reason)); }
   }, []);
 
   const renameTreeNode = useCallback(async (id: string, title: string) => {
@@ -911,7 +924,7 @@ export function App() {
         setNotes((items) => items.map((note) => note.id === renamed.noteFileId ? { ...note, title: renamed.title, updatedAt: renamed.updatedAt, syncState: "local" } : note));
         setOpenTabs((tabs) => tabs.map((tab) => tab.noteId === renamed.noteFileId ? { ...tab, title: renamed.title } : tab));
       }
-    } catch (reason) { setError(String(reason)); }
+    } catch (reason) { setError(getNativeErrorMessage(reason)); }
   }, []);
 
   const moveTreeNode = useCallback(async (id: string, targetId: string, position: "before" | "inside" | "after") => {
@@ -932,7 +945,7 @@ export function App() {
           })();
       await native.moveTreeNodeOrdered(id, parentId, orderedIds);
       setTreeNodes(await native.listTreeNodes());
-    } catch (reason) { setError(String(reason)); }
+    } catch (reason) { setError(getNativeErrorMessage(reason)); }
   }, [treeNodes]);
 
   // W-2-B：传给 Sidebar 的回调全部稳定化——App 每次渲染（含打字触发的 openTabs 变化）
@@ -987,7 +1000,7 @@ export function App() {
       if (activeNoteId && removedNoteIds.has(activeNoteId)) {
         setActiveNoteId(next[next.length - 1]?.noteId ?? null);
       }
-    } catch (reason) { setError(String(reason)); }
+    } catch (reason) { setError(getNativeErrorMessage(reason)); }
   }
 
   const clearSidebarPreviewTimer = useCallback(() => {
@@ -1106,7 +1119,7 @@ export function App() {
       const updated = await native.setNoteLocked(tabId, next);
       setNotes((items) => items.map((item) => (item.id === tabId ? { ...item, isLocked: updated.isLocked, lockedAt: updated.lockedAt } : item)));
     } catch (reason) {
-      setError(String(reason));
+      setError(getNativeErrorMessage(reason));
     }
   }
 
@@ -1168,7 +1181,7 @@ export function App() {
   async function handleQuickNoteConverted(note: NoteDocument) {
     setNotes((items) => [summaryOf(note), ...items.filter((item) => item.id !== note.id)]);
     try { setTreeNodes(await native.listTreeNodes()); }
-    catch (reason) { setError(String(reason)); }
+    catch (reason) { setError(getNativeErrorMessage(reason)); }
     setDesktopWorkspace("library");
     await openNote(note.id);
   }

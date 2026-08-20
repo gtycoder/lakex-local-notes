@@ -3,6 +3,7 @@ import { Check, FilePlus2, ImagePlus, Feather, LoaderCircle, Pencil, RotateCcw, 
 import { native } from "../lib/native";
 import { createRequestVersion } from "../lib/requestVersion";
 import type { NoteDocument, QuickNoteDocument, QuickNoteImage, TreeNode } from "../lib/types";
+import { getNativeErrorMessage } from "../lib/nativeErrors";
 
 interface DraftImage {
   image: QuickNoteImage;
@@ -57,7 +58,7 @@ export const QuickNotesWorkspace = forwardRef<QuickNotesWorkspaceHandle, QuickNo
       const nextItems = await native.listQuickNotes();
       if (listVersionRef.current.isCurrent(version)) setItems(nextItems);
     } catch (reason) {
-      if (listVersionRef.current.isCurrent(version)) setError(String(reason));
+      if (listVersionRef.current.isCurrent(version)) setError(getNativeErrorMessage(reason));
     } finally {
       if (listVersionRef.current.isCurrent(version) && showLoading) setLoading(false);
     }
@@ -117,7 +118,7 @@ export const QuickNotesWorkspace = forwardRef<QuickNotesWorkspaceHandle, QuickNo
       if (editingDraft?.id === draft.id) setEditingDraft((current) => current ? { ...current, images: [...current.images, ...staged.map((image) => ({ image, source: "staged" as const }))] } : current);
       else if (createDraft.id === draft.id) setCreateDraft((current) => ({ ...current, images: [...current.images, ...staged.map((image) => ({ image, source: "staged" as const }))] }));
       else await native.discardQuickNoteDraft(draft.id);
-    } catch (reason) { setError(`添加图片失败：${String(reason)}`); }
+    } catch (reason) { setError(`添加图片失败：${getNativeErrorMessage(reason)}`); }
   }
 
   async function removeImage(draft: DraftState, draftImage: DraftImage) {
@@ -144,7 +145,7 @@ export const QuickNotesWorkspace = forwardRef<QuickNotesWorkspaceHandle, QuickNo
       });
       if (activeIsEditing) { setEditingId(null); setEditingDraft(null); }
       else setCreateDraft(newDraft());
-    } catch (reason) { setError(`保存小记失败：${String(reason)}`); }
+    } catch (reason) { setError(`保存小记失败：${getNativeErrorMessage(reason)}`); }
     finally { setSaving(false); }
   }
 
@@ -185,7 +186,7 @@ export const QuickNotesWorkspace = forwardRef<QuickNotesWorkspaceHandle, QuickNo
     deleteTimer.current = window.setTimeout(() => {
       deleteTimer.current = null;
       void native.deleteQuickNote(item.id).catch((reason) => {
-        setError(`删除小记失败：${String(reason)}`);
+        setError(`删除小记失败：${getNativeErrorMessage(reason)}`);
         setItems((current) => [item, ...current].sort((a, b) => b.createdAt.localeCompare(a.createdAt)));
       }).finally(() => setPendingDelete(null));
     }, 5000);
@@ -209,7 +210,7 @@ export const QuickNotesWorkspace = forwardRef<QuickNotesWorkspaceHandle, QuickNo
       setItems((current) => current.filter((item) => item.id !== convertItem.id));
       setConvertItem(null);
       onConverted(note);
-    } catch (reason) { setError(`转换为正式笔记失败：${String(reason)}`); }
+    } catch (reason) { setError(`转换为正式笔记失败：${getNativeErrorMessage(reason)}`); }
     finally { setSaving(false); }
   }
 

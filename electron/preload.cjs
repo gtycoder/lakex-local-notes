@@ -1,9 +1,25 @@
 const { contextBridge, ipcRenderer } = require("electron");
 
+const IPC_ERROR_MARKER = "__LAKE_IPC_ERROR__";
+const parseIpcError = (rawMessage) => {
+  const marker = rawMessage.lastIndexOf(IPC_ERROR_MARKER);
+  if (marker >= 0) {
+    try {
+      const payload = JSON.parse(rawMessage.slice(marker + IPC_ERROR_MARKER.length));
+      if (payload && typeof payload.message === "string" && payload.code) return payload;
+    } catch { /* fall through to the prefix fallback */ }
+  }
+  const match = rawMessage.match(/\[LAKE_IPC_CODE:(NOT_FOUND|INVALID_INPUT|NOT_CONFIGURED|INTERNAL)\]\s*([\s\S]*?)(?:\s+__LAKE_IPC_ERROR__.*)?$/);
+  return match ? { name: "IpcError", message: match[2], code: match[1] } : null;
+};
 const invoke = (channel, ...args) => ipcRenderer.invoke(channel, ...args).catch((raw) => {
-  const error = new Error(typeof raw?.message === "string" ? raw.message : String(raw));
-  error.name = typeof raw?.name === "string" ? raw.name : "IpcError";
-  if (raw?.code) Object.defineProperty(error, "code", { value: raw.code, enumerable: true });
+  const rawMessage = typeof raw?.message === "string" ? raw.message : String(raw);
+  const payload = parseIpcError(rawMessage);
+  const code = payload?.code || raw?.code;
+  const message = typeof payload?.message === "string" ? payload.message : rawMessage;
+  const error = new Error(code ? `[LAKE_IPC_CODE:${code}] ${message}` : message);
+  error.name = typeof payload?.name === "string" ? payload.name : (typeof raw?.name === "string" ? raw.name : "IpcError");
+  if (code) Object.defineProperty(error, "code", { value: code, enumerable: true });
   throw error;
 });
 

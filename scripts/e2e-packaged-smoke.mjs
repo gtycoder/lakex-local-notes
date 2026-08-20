@@ -21,12 +21,12 @@ if (!ready) {
   throw new Error(`packaged CDP 在 ${port} 未就绪`);
 }
 try {
-  const result = spawn(process.execPath, ["scripts/e2e-electron-smoke.mjs"], {
-    env: { ...process.env, LAKE_CDP_PORT: String(port), LAKE_UI_EVIDENCE_DIR: process.env.LAKE_UI_EVIDENCE_DIR || "/tmp/lake-packaged-smoke" },
-    stdio: "inherit",
-  });
-  const exitCode = await new Promise((resolve) => result.on("exit", (code) => resolve(code ?? 1)));
-  if (exitCode !== 0) process.exitCode = exitCode;
+  const smokeEnv = { ...process.env, LAKE_CDP_PORT: String(port), LAKE_UI_EVIDENCE_DIR: process.env.LAKE_UI_EVIDENCE_DIR || "/tmp/lake-packaged-smoke" };
+  for (const script of ["scripts/e2e-electron-smoke.mjs", "scripts/e2e-drawnix-smoke.mjs"]) {
+    const result = spawn(process.execPath, [script], { env: smokeEnv, stdio: "inherit" });
+    const exitCode = await new Promise((resolve) => result.on("exit", (code) => resolve(code ?? 1)));
+    if (exitCode !== 0) { process.exitCode = exitCode; break; }
+  }
 } finally {
   child.kill("SIGTERM");
 }

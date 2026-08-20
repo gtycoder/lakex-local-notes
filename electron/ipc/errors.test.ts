@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { IpcInputError } from "../ipcLimits";
 import { AppError } from "../storeErrors";
-import { toIpcErrorPayload } from "./errors";
+import { encodeIpcError, parseIpcError, toIpcErrorPayload } from "./errors";
 
 describe("IPC error payloads", () => {
   it("preserves domain error codes", () => {
@@ -23,5 +23,11 @@ describe("IPC error payloads", () => {
     expect(toIpcErrorPayload({ message: "坏请求", code: "INVALID_INPUT", secret: "do not serialize" })).toEqual({
       name: "IpcError", message: "坏请求", code: "INVALID_INPUT",
     });
+  });
+
+  it("encodes the envelope in an Error for Electron invoke serialization", () => {
+    const encoded = encodeIpcError(new AppError("NotConfigured", "尚未配置云同步"));
+    expect(parseIpcError(encoded.message)).toMatchObject({ code: "NOT_CONFIGURED", message: "尚未配置云同步" });
+    expect(parseIpcError("Error invoking remote method 'read_note': [LAKE_IPC_CODE:NOT_FOUND] 笔记不存在")).toMatchObject({ code: "NOT_FOUND", message: "笔记不存在" });
   });
 });

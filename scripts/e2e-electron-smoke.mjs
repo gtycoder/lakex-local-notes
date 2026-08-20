@@ -34,6 +34,11 @@ await send("Runtime.enable");
 await send("Page.enable");
 await send("Page.bringToFront");
 await wait(1200);
+// 每次从一个普通文本文档开始，避免上一轮 Drawnix smoke 的临时文档
+// 留在同一个 renderer 后污染“普通启动不加载 Drawnix JS”的资源断言。
+await evaluate(`(()=>{ document.querySelector('[data-tree-node-id="welcome-note"]')?.click(); return true; })()`);
+await wait(500);
+await evaluate(`performance.clearResourceTimings(); true`);
 const baseline = await evaluate(`JSON.stringify({
   title: document.title,
   theme: document.documentElement.dataset.theme,
@@ -63,7 +68,19 @@ const sync = await evaluate(`JSON.stringify({ open: Boolean(document.querySelect
 await screenshot("03-sync-popover");
 await evaluate(`(()=>{document.querySelector('.sync-status-button')?.click(); return true})()`);
 
-const result = { baseline: JSON.parse(baseline), search: JSON.parse(search), sync: JSON.parse(sync) };
+await evaluate(`(()=>{document.querySelector('[aria-label="工作空间"]')?.click(); return true})()`);
+await wait(120);
+const workspaceMenu = await evaluate(`JSON.stringify({ open: Boolean(document.querySelector('.top-menu--workspace')), items: [...document.querySelectorAll('.top-menu--workspace button')].map(x=>x.innerText) })`);
+await evaluate(`(()=>{ const item = [...document.querySelectorAll('.top-menu--workspace button')].find(x => x.innerText.includes('偏好设置')); item?.click(); return true })()`);
+await wait(250);
+const settings = await evaluate(`JSON.stringify({ open: Boolean(document.querySelector('.settings-overlay')), title: document.querySelector('.settings-header span')?.innerText || '' })`);
+await evaluate(`(()=>{document.querySelector('.settings-close, .settings-panel [aria-label="关闭"]')?.click(); return true})()`);
+
+const result = { baseline: JSON.parse(baseline), search: JSON.parse(search), sync: JSON.parse(sync), workspaceMenu: JSON.parse(workspaceMenu), settings: JSON.parse(settings) };
+if (result.baseline.railWidths.left !== 38 || result.baseline.railWidths.right !== 38) throw new Error("固定 rail 宽度契约失败");
+if (result.baseline.drawnixJs.length !== 0) throw new Error("普通文本启动不应加载 Drawnix JS");
+if (!result.baseline.status.includes("字数") || !result.baseline.status.includes("图片")) throw new Error("底部文档状态条缺少统计");
+if (!result.settings.open || result.settings.title !== "偏好设置") throw new Error("设置面板未能打开");
 await fs.writeFile(`${outputDir}/result.json`, JSON.stringify(result, null, 2));
 console.log(JSON.stringify(result, null, 2));
 socket.close();
