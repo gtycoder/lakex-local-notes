@@ -7,23 +7,18 @@ interface StatsTab {
   reloadKey?: number;
 }
 
-interface MobileStatsDocument {
-  id: string;
-  content: string;
-}
-
 /** Debounced current-document statistics kept separate from the App shell state. */
-export function useDocumentStats(tabs: StatsTab[], activeNoteId: string | null, mobileDocument: MobileStatsDocument | null): DocStats {
+export function useDocumentStats(tabs: StatsTab[], activeNoteId: string | null, mobileDocumentId: string | null, mobileContent: string): DocStats {
   const [stats, setStats] = useState<DocStats>({ wordCount: 0, imageCount: 0 });
   const timerRef = useRef<number | null>(null);
   const keyRef = useRef("");
 
   useEffect(() => {
     const tab = tabs.find((item) => item.noteId === activeNoteId);
-    const content = tab?.content ?? mobileDocument?.content ?? "";
+    const content = tab?.content ?? mobileContent;
     const key = activeNoteId
       ? `tab:${activeNoteId}:${tab?.reloadKey ?? 0}`
-      : `mobile:${mobileDocument?.id ?? "none"}`;
+      : `mobile:${mobileDocumentId ?? "none"}`;
     if (keyRef.current !== key) {
       keyRef.current = key;
       setStats(computeDocStats(content));
@@ -40,7 +35,7 @@ export function useDocumentStats(tabs: StatsTab[], activeNoteId: string | null, 
         timerRef.current = null;
       }
     };
-  }, [tabs, activeNoteId, mobileDocument]);
+  }, [tabs, activeNoteId, mobileDocumentId, mobileContent]);
 
   return stats;
 }

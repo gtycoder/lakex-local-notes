@@ -192,7 +192,7 @@ export function App() {
 
   useEffect(() => { openTabsRef.current = openTabs; }, [openTabs]);
 
-  const docStats = useDocumentStats(openTabs, activeNoteId, mobileActive ? { id: mobileActive.id, content: mobileActive.content } : null);
+  const docStats = useDocumentStats(openTabs, activeNoteId, mobileActive?.id ?? null, mobileActive?.content ?? "");
 
   useEffect(() => {
     if (sidebarMode !== "floating") localStorage.setItem("lake-notes-v2.sidebar-mode", sidebarMode);
