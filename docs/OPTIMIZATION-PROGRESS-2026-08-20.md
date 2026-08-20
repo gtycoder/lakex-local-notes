@@ -39,3 +39,13 @@
 - Settings search jumps to a unique matching category.
 - Search no longer advertises a fake second tab instance for `⌘Enter`; an already-open note is activated.
 - Repeatable `npm run test:ui` smoke script covers baseline, `⌘K`, sync Popover, rail widths and Drawnix JS resource timing.
+
+## Current batch additions
+
+- SQLite startup integrity check and best-effort WAL checkpoint on quit.
+- Stable IPC error codes are preserved through preload (`NOT_FOUND`, `INVALID_INPUT`, `INTERNAL`).
+- Repeatable `npm run test:ui` smoke now verifies baseline shell, `⌘K` focus, sync Popover and absence of Drawnix/Plait JS resources in ordinary text-editor startup.
+- `useWindowShortcuts` centralizes app-level capture-phase keyboard handling.
+- Settings search jumps into a unique matching category.
+- Search no longer exposes an unimplemented second-tab promise.
+- Draft journal writes are debounced to avoid one IPC/file write per keystroke.
