@@ -16,16 +16,22 @@ const child = spawn(appPath, [`--remote-debugging-port=${port}`], {
   },
   stdio: "ignore",
 });
-const deadline = Date.now() + 45_000;
-let ready = false;
-while (Date.now() < deadline) {
-  try { const response = await fetch(`http://127.0.0.1:${port}/json/list`); if (response.ok) { ready = true; break; } } catch { /* wait */ }
-  await new Promise((resolve) => setTimeout(resolve, 500));
-}
-if (!ready) {
-  child.kill("SIGTERM");
+async function waitForCdp() {
+  const deadline = Date.now() + 45_000;
+  while (Date.now() < deadline) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 2_000);
+    try {
+      const response = await fetch(`http://127.0.0.1:${port}/json/list`, { signal: controller.signal });
+      if (response.ok) return;
+    } catch { /* wait */ }
+    finally { clearTimeout(timer); }
+    await new Promise((resolve) => setTimeout(resolve, 500));
+  }
   throw new Error(`packaged CDP 在 ${port} 未就绪`);
 }
+await waitForCdp();
+
 try {
   const smokeEnv = { ...process.env, LAKE_CDP_PORT: String(port), LAKE_UI_EVIDENCE_DIR: process.env.LAKE_UI_EVIDENCE_DIR || "/tmp/lake-packaged-smoke" };
   for (const script of ["scripts/e2e-electron-smoke.mjs", "scripts/e2e-drawnix-smoke.mjs"]) {
