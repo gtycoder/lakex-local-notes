@@ -127,6 +127,6 @@ html[data-theme="dark"] .document-pane .ne-engine > ne-h6 ne-heading-content {
    the scrollbar after the outline opens. */
 @media (min-width: 761px) {
   .outline-sidebar--collapsed.outline-sidebar--hovered .outline-sidebar__content {
-    right: calc(var(--outline-collapsed-width) + 12px) !important;
+    right: calc(var(--outline-collapsed-width) + 14px) !important;
   }
 }

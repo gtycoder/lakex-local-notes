@@ -193,6 +193,7 @@ export function OutlineSidebar({
       onPointerEnter={cancelHoverHide}
     >
       {/* 右侧 rail 顶部图标按钮：收起/固定大纲切换。 */}
+      <div className="outline-sidebar__bridge" onPointerEnter={cancelHoverHide} onPointerLeave={scheduleHoverHide} aria-hidden="true" />
       <nav className="outline-sidebar__rail" aria-label="右侧工具栏">
         <button
           type="button"

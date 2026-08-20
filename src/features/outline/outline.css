@@ -46,6 +46,18 @@
     background: var(--shell-material);
   }
 
+  /* Four pixels connect the rail to the panel after the scrollbar track. It
+     keeps the pointer path alive without covering the editor scrollbar. */
+  .outline-sidebar__bridge {
+    position: absolute;
+    z-index: 4;
+    top: 36px;
+    left: 0;
+    bottom: 0;
+    width: 4px;
+    pointer-events: auto;
+  }
+
   /* 这是一整条 activity rail，只负责 hover 预览；可继续容纳其它按钮。 */
   .outline-sidebar__rail {
     position: absolute;
