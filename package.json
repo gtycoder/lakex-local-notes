@@ -11,7 +11,8 @@
     "dev:electron": "electron .",
     "build": "tsc --noEmit && vite build && electron-builder",
     "preview": "vite preview",
-    "test": "vitest run"
+    "test": "vitest run",
+    "test:ui": "node scripts/e2e-electron-smoke.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1111.0",
