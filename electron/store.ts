@@ -618,6 +618,13 @@ export class Store {
   // ---- M2 全文搜索 ----
 
   /** Rebuild the full-text index without exposing repository internals to callers. */
+  checkIntegrity(): { ok: boolean; integrity: string; foreignKeyErrors: number } {
+    const row = this.db.prepare("PRAGMA integrity_check").get() as { integrity_check?: string } | undefined;
+    const foreignKeyErrors = this.db.prepare("PRAGMA foreign_key_check").all().length;
+    const integrity = row?.integrity_check ?? "unknown";
+    return { ok: integrity === "ok" && foreignKeyErrors === 0, integrity, foreignKeyErrors };
+  }
+
   rebuildSearchIndex(): void {
     this.searchRepository.rebuild();
   }

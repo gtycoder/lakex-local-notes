@@ -65,6 +65,12 @@ function assetFilename(): string {
 
 // ===== 测试 =====
 
+describe("Store 完整性检查", () => {
+  it("returns healthy for a newly initialized database", () => {
+    expect(store.checkIntegrity()).toEqual({ ok: true, integrity: "ok", foreignKeyErrors: 0 });
+  });
+});
+
 describe("Store 初始化 / bootstrap", () => {
   it("初始化后种子数据：个人笔记本 + 欢迎笔记", () => {
     const boot = store.bootstrap();

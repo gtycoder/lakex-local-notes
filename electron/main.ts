@@ -1,4 +1,4 @@
-import { app, BrowserWindow, crashReporter, screen, session, shell, type WebFrameMain } from "electron";
+import { app, BrowserWindow, crashReporter, dialog, screen, session, shell, type WebFrameMain } from "electron";
 import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
@@ -371,6 +371,21 @@ if (!app.requestSingleInstanceLock()) {
     initLogger();
     log.app.info("app ready: initLogger done");
     store = new Store(workspaceRoot());
+    const integrity = store.checkIntegrity();
+    if (!integrity.ok) {
+      const detail = `integrity_check=${integrity.integrity}，foreign_key_errors=${integrity.foreignKeyErrors}`;
+      log.app.error(`[store] database integrity check failed: ${detail}`);
+      const choice = dialog.showMessageBoxSync({
+        type: "error",
+        title: "本地数据需要检查",
+        message: "本地数据库完整性检查未通过。",
+        detail: `${detail}\n\n继续打开可能导致后续写入风险；建议先备份用户数据。`,
+        buttons: ["退出", "继续打开"],
+        defaultId: 0,
+        cancelId: 0,
+      });
+      if (choice === 0) { app.quit(); return; }
+    }
     // 开发版可选 S3 seed（多端联调用）：凭据只从环境变量读取；
     // 没有配置时保持纯本地模式，不把共享密钥打进源码或新开发数据。
     if (isDev && !store.getS3Settings()) {
