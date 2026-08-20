@@ -48,7 +48,7 @@
 
 # P1：建议优先处理
 
-## P1-1 同步状态的“待上传数量”还不是完全可信的领域事实
+## P1-1 同步状态的“待上传数量”还不是完全可信的领域事实（已完成）
 
 位置：`src/App.tsx`、`src/components/SyncStatusPopover.tsx`、`src/components/syncStatusModel.ts`。
 
@@ -79,7 +79,7 @@ interface SyncPendingSummary {
 
 UI 只展示主进程事实，不再在 React 层做减法推断。
 
-## P1-2 冲突快照提醒没有携带明确的文档目标
+## P1-2 冲突快照提醒没有携带明确的文档目标（已完成）
 
 当前 `SyncStatusPopover` 的“查看历史”回调使用当前活动文档，而冲突可能发生在其他文档。
 
@@ -93,7 +93,7 @@ Array<{ noteId: string; title: string; snapshotCount: number }>
 
 Popover 显示最多 3 条冲突文档，点击具体文档后打开对应历史，而不是依赖 `activeNoteId`。
 
-## P1-3 搜索 `newTab` 参数目前没有真正改变打开策略
+## P1-3 搜索 `newTab` 参数目前没有真正改变打开策略（已完成：当前策略明确为切换已有标签）
 
 位置：`src/App.tsx:openNote`。
 
@@ -108,7 +108,7 @@ Popover 显示最多 3 条冲突文档，点击具体文档后打开对应历史
 
 推荐当前阶段采用第一种：不支持同文档多实例，但修正文案和测试，避免隐式假功能。
 
-## P1-4 渲染进程崩溃后的未保存草稿恢复仍不完整
+## P1-4 渲染进程崩溃后的未保存草稿恢复仍不完整（已完成并有 packaged smoke）
 
 `electron/main.ts` 有 `render-process-gone` 自动 reload，但 renderer 崩溃时内存中的 dirty tab 可能丢失。
 
@@ -122,7 +122,7 @@ Popover 显示最多 3 条冲突文档，点击具体文档后打开对应历史
 
 这是本地优先产品最重要的可靠性增强之一。
 
-## P1-5 CSS 覆盖层仍然过厚
+## P1-5 CSS 覆盖层仍然过厚（部分完成，继续治理）
 
 当前约 490 处 `!important`、45 个 media query、885 个颜色字面量/rgba。`src/styles.css` 仍有大量历史补丁，与 `src/styles/shell.css`、`src/features/outline/outline.css`、B3 CSS 共同覆盖同一批选择器。
 
@@ -141,7 +141,7 @@ Popover 显示最多 3 条冲突文档，点击具体文档后打开对应历史
 
 不要一次重写所有 B3 样式，也不要改 `src/b3/siyuan/**` 原始移植层。
 
-## P1-6 首屏 bundle 过大
+## P1-6 首屏 bundle 过大（Drawnix 已按需加载，入口仍需长期治理）
 
 当前构建：
 
@@ -157,7 +157,7 @@ Popover 显示最多 3 条冲突文档，点击具体文档后打开对应历史
 - 先建立资源加载冒烟测试，再做拆包；
 - 不要直接对 Lake editor 做动态 import，先确认初始化和切换标签生命周期。
 
-## P1-7 真实 UI 测试仍主要依赖临时 CDP 脚本
+## P1-7 真实 UI 测试仍主要依赖临时 CDP 脚本（已完成可重复 smoke）
 
 当前 314 个测试主要是 domain/store/search 单测；UI 的真实窗口验证脚本在 `/tmp`，没有进入可重复的项目测试命令。
 

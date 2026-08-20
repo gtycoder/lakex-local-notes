@@ -77,7 +77,7 @@ npm run benchmark:workspace
 
 已通过代码检查：
 
-- 关键弹窗有 `role=dialog`、`aria-modal` 和 label。
+- 关键弹窗有 `role=dialog`、`aria-modal` 和 label；设置面板已补齐 `aria-labelledby` 和首次打开焦点。
 - 搜索结果使用 `role=listbox/option`。
 - 底部状态条使用 `aria-label`，状态变化可读。
 - `prefers-reduced-motion` 已覆盖 shell、浮层、状态条和 Drawnix 外层。
