@@ -1,8 +1,15 @@
 import "../../vendor/drawnix.css";
 import "../../vendor/drawnix-react-board.css";
 import "../../vendor/drawnix-react-text.css";
-import React, { useEffect, useRef } from "react";
-import { Drawnix } from "lakex-drawnix";
+import React, { lazy, Suspense, useEffect, useRef } from "react";
+const LazyDrawnix = lazy(async () => {
+  const module = await import("lakex-drawnix");
+  return { default: module.Drawnix };
+});
+
+function DrawnixFallback() {
+  return <div className="board-card-loading" aria-label="画板加载中">正在加载画板…</div>;
+}
 import { CardResizer, type ICardProps } from "lakex-editor-react-component";
 import type { PlaitElement, Viewport, PlaitTheme, PlaitBoard } from "@plait/core";
 
@@ -130,7 +137,7 @@ const BoardCardEditor = React.forwardRef<HTMLDivElement, ICardProps<IBoardCardVa
             min={200}
             onResize={(height) => updateCardValue({ ...cardValue, cardHeight: height })}
           >
-            <Drawnix
+            <Suspense fallback={<DrawnixFallback />}><LazyDrawnix
               value={elements}
               viewport={cardValue.viewport}
               theme={cardValue.theme}
@@ -155,6 +162,7 @@ const BoardCardEditor = React.forwardRef<HTMLDivElement, ICardProps<IBoardCardVa
                 notifyLakeBoardChange(guardRef.current || document.body, before);
               }}
             />
+            </Suspense>
           </CardResizer>
         </div>
       </div>
@@ -174,12 +182,13 @@ const BoardCardViewer = React.forwardRef<HTMLDivElement, ICardProps<IBoardCardVa
         className="board-card-wrapper board-card-wrapper--viewer"
         style={{ width: "100%", height: cardHeight, minHeight: 200, border: "1px solid var(--ne-color-border, #e5e5e5)", borderRadius: 8 }}
       >
-        <Drawnix
+        <Suspense fallback={<DrawnixFallback />}><LazyDrawnix
           value={elements}
           viewport={cardValue.viewport}
           theme={cardValue.theme}
           afterInit={(board: PlaitBoard) => { board.options.readonly = true; }}
         />
+        </Suspense>
       </div>
     );
   }
