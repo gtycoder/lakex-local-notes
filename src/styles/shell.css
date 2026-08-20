@@ -153,3 +153,18 @@ html[data-theme="dark"] .document-pane .ne-engine > ne-h6 ne-heading-content {
     pointer-events: auto !important;
   }
 }
+
+@media (min-width: 761px) {
+  /* Showing the library preview is immediate; only the collapse is animated.
+     This prevents the pointer from repeatedly crossing a moving panel edge. */
+  .sidebar.sidebar-floating {
+    opacity: 1 !important;
+    transform: none !important;
+    transition: none !important;
+  }
+  .sidebar.sidebar-collapsed {
+    opacity: 0 !important;
+    transform: translateX(-12px) !important;
+    transition: opacity 120ms ease-out, transform 120ms var(--lake-ease-standard) !important;
+  }
+}
