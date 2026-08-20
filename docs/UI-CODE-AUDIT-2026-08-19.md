@@ -117,3 +117,7 @@ Evidence:
 - `/tmp/lake-notes-outline-hover-fixed.png`
 - `/tmp/lake-notes-ui-iteration-final.png`
 - Real DOM geometry: floating outline `x=1048, y=110, w=200, h=638`; hidden state `pointer-events: none`; hovered state `pointer-events: auto`.
+
+## 2026-08-20 panel follow-up
+
+The left library preview had the same class of issue as the outline: a full-height fixed surface and repeated timer re-arming could make the panel appear to grow or linger. The shell now gives both sides the same bounded vertical geometry and short one-shot hide behavior. The fixed left panel is synchronized to the outline panel width through the existing 4px shell gutter rather than maintaining two unrelated defaults.
