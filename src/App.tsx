@@ -191,6 +191,7 @@ export function App() {
   const openTabsRef = useRef<OpenTab[]>([]);
   const quickNotesRef = useRef<QuickNotesWorkspaceHandle>(null);
   const saveTimers = useRef<Map<string, number>>(new Map());
+  const draftTimers = useRef<Map<string, number>>(new Map());
   const saveQueueRef = useRef(new KeyedAsyncQueue());
   const tabReloadVersionRef = useRef(createRequestVersion());
   const layoutWidthsRef = useRef({ sidebar: sidebarWidth, outline: outlineSidebarWidth });
@@ -252,6 +253,8 @@ export function App() {
     return () => {
       saveTimers.current.forEach((timer) => window.clearTimeout(timer));
       saveTimers.current.clear();
+      draftTimers.current.forEach((timer) => window.clearTimeout(timer));
+      draftTimers.current.clear();
       if (sidebarPreviewTimer.current !== null) window.clearTimeout(sidebarPreviewTimer.current);
       // 拖动过程只更新视觉状态；卸载时补一次合法的最终布局提交。
       const widths = layoutWidthsRef.current;
@@ -456,6 +459,8 @@ export function App() {
         if (revisionRef.current.get(noteId) === revision) {
           // 无新编辑：安全覆盖 + 清除 dirty；同时更新 lastDigest（本机已保存，远端未变时无需重载）
           setOpenTabs((tabs) => tabs.map((tab) => tab.noteId === noteId ? { ...tab, title: saved.title, content: saved.content, dirty: false, lastDigest: { title: saved.title, updatedAt: saved.updatedAt } } : tab));
+          const draftTimer = draftTimers.current.get(noteId);
+          if (draftTimer !== undefined) { window.clearTimeout(draftTimer); draftTimers.current.delete(noteId); }
           void native.deleteDraftJournal(noteId).catch(() => undefined);
           setDraftEntries((entries) => entries.filter((entry) => entry.noteId !== noteId));
           setLastSavedAt(new Date().toISOString());
@@ -521,6 +526,16 @@ export function App() {
     window.addEventListener("beforeunload", onBeforeUnload);
     return () => { window.removeEventListener("beforeunload", onBeforeUnload); };
   }, [persistTab, mobileActive, mobileDraftContent, quickNotesDirty]);
+
+  const scheduleDraftJournal = useCallback((noteId: string, title: string, content: string) => {
+    const existing = draftTimers.current.get(noteId);
+    if (existing !== undefined) window.clearTimeout(existing);
+    const timer = window.setTimeout(() => {
+      draftTimers.current.delete(noteId);
+      void native.saveDraftJournal({ noteId, title, content, updatedAt: new Date().toISOString() }).catch(() => undefined);
+    }, 450);
+    draftTimers.current.set(noteId, timer);
+  }, []);
 
   const scheduleSave = useCallback((noteId: string, content: string) => {
     setSaveState("dirty");
@@ -801,9 +816,9 @@ export function App() {
     revisionRef.current.set(noteId, (revisionRef.current.get(noteId) ?? 0) + 1);
     setOpenTabs((tabs) => tabs.map((tab) => tab.noteId === noteId ? { ...tab, content, dirty: true } : tab));
     const title = openTabsRef.current.find((tab) => tab.noteId === noteId)?.title ?? "无标题";
-    void native.saveDraftJournal({ noteId, title, content, updatedAt: new Date().toISOString() }).catch(() => undefined);
+    scheduleDraftJournal(noteId, title, content);
     scheduleSave(noteId, content);
-  }, [scheduleSave]);
+  }, [scheduleDraftJournal, scheduleSave]);
 
   async function createNoteIn(parentId: string | null) {
     const note = parentId === null ? await native.createNote("无标题文档") : await native.createNoteIn(parentId, "无标题文档");
