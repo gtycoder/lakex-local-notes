@@ -1,6 +1,11 @@
 const { contextBridge, ipcRenderer } = require("electron");
 
-const invoke = (channel, ...args) => ipcRenderer.invoke(channel, ...args);
+const invoke = (channel, ...args) => ipcRenderer.invoke(channel, ...args).catch((raw) => {
+  const error = new Error(typeof raw?.message === "string" ? raw.message : String(raw));
+  error.name = typeof raw?.name === "string" ? raw.name : "IpcError";
+  if (raw?.code) Object.defineProperty(error, "code", { value: raw.code, enumerable: true });
+  throw error;
+});
 
 contextBridge.exposeInMainWorld("lakeNative", {
   assetPort: Number(process.env.LAKE_ASSET_PORT) || 19876,
