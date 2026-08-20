@@ -58,13 +58,17 @@ try {
   await wait(1200);
   await evaluate(`(()=>{ const el = document.querySelector('[data-note-id="${fixtureId}"]'); if (el && !el.classList.contains("active")) el.click(); return true; })()`);
   await waitFor(`document.querySelector('[data-note-id="${fixtureId}"]')?.classList.contains("active") || document.querySelector(".board-card-wrapper")`);
-  await waitFor(`document.querySelectorAll(".board-card-wrapper, .plait-board-container").length > 0`);
+  await waitFor(`document.querySelectorAll(".board-card-wrapper").length > 0 && document.querySelectorAll(".plait-board-container").length > 0`);
+  await wait(300);
   const result = await evaluate(`JSON.stringify({
     fixtureId: ${JSON.stringify(fixtureId)},
     boardWrappers: document.querySelectorAll(".board-card-wrapper").length,
     plaitBoards: document.querySelectorAll(".plait-board-container").length,
     drawnixJs: performance.getEntriesByType("resource").map(e=>e.name).filter(n=>/drawnix|plait/i.test(n)&&/\\.js/.test(n)),
-    drawnixCss: [...document.styleSheets].map(s=>s.href || "").filter(n=>/drawnix/i.test(n)&&/\\.css/.test(n)),
+    drawnixCss: [...new Set([
+      ...[...document.styleSheets].map(s=>s.href || ""),
+      ...performance.getEntriesByType("resource").map(e=>e.name),
+    ])].filter(n=>/drawnix/i.test(n)&&/\.css/.test(n)),
     drawnixModuleRendered: document.querySelectorAll(".plait-board-container, .drawnix").length > 0,
     fallback: Boolean(document.querySelector('[aria-label="画板加载中"]')),
     status: document.querySelector(".document-statusbar")?.innerText || ""

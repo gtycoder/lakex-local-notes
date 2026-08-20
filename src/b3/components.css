@@ -27,7 +27,6 @@
 /* ── 菜单（思源 b3-menu）── */
 .context-menu,
 .context-menu-submenu,
-.statusbar-menu,
 .create-menu,
 .tab-switcher-menu {
   background: var(--b3-menu-background);
@@ -223,9 +222,7 @@
 /* ── 残留绿色系 → 思源蓝（全面清零 #216e4e/#28775a 等）── */
 .inline-create button:hover,
 .mode-toggle.selected,
-.sync-button,
-.statusbar-export-md:hover,
-.statusbar-notice {
+.sync-button {
   color: var(--b3-theme-primary) !important;
 }
 .mode-toggle.selected {

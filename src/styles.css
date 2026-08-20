@@ -113,7 +113,7 @@ button { cursor: pointer; }
   .lake-editor-mount .ne-engine { padding-left: 40px; padding-right: 56px; }
 }
 .editor-error { display: flex; align-items: center; gap: 8px; max-width: 776px; margin: 20px auto; padding: 12px; border: 1px solid #edc9c5; border-radius: 6px; color: #a63f39; background: #fff5f4; font-size: 13px; }
-.statusbar { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 0 14px; border-top: 1px solid #eceef1; color: #969ca5; background: #fafafa; font-size: 10px; }
+/* legacy statusbar rules removed; current-document status lives in styles/document-status.css */
 .error-banner { display: flex; position: fixed; top: 50%; left: 50%; z-index: 600; align-items: center; gap: 12px; width: min(560px, calc(100vw - 32px)); max-width: calc(100vw - 32px); padding: 12px 14px; border: 1px solid #e6c2bd; border-radius: 10px; color: #923f38; background: #fff4f2; font-size: 12px; box-shadow: 0 18px 48px rgba(80, 35, 30, .18); transform: translate(-50%, -50%); transition: transform var(--dur-enter) var(--ease-out), opacity var(--dur-enter) var(--ease-out); }.error-banner button { border: 0; color: inherit; background: transparent; }
 .empty-workspace, .loading-screen { display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 14px; color: #68717c; }.loading-screen { height: 100vh; }.loading-screen small { color: #b1433e; }
 
@@ -613,31 +613,6 @@ ne-card[data-card-name="codeblock"] .ne-card-resizer-mask {
 .paragraph-spacing .lake-editor-mount .ne-p,
 .paragraph-spacing .lake-editor-mount .ne-block-quote { margin-top: 0.5em; margin-bottom: 0.5em; }
 .paragraph-spacing .lake-editor-mount .ne-editor-body { line-height: 1.85; }
-
-/* ===== 状态栏设置按钮/字数 ===== */
-.statusbar-settings { display: flex; align-items: center; justify-content: center; width: 28px; height: 22px; margin-left: 6px; border: 0; border-radius: 4px; color: #818894; background: transparent; }
-.statusbar-settings:hover { color: #20242c; background: #e9ebee; }
-.statusbar-wordcount { color: #8a919b; font-size: 11px; margin-right: auto; }
-.statusbar-imagecount { color: #8a919b; font-size: 11px; margin-left: 14px; }
-.statusbar-lock { display: inline-flex; align-items: center; gap: 4px; flex: 0 0 auto; color: var(--b3-theme-on-surface); font-size: 11px; white-space: nowrap; }
-
-/* ===== 导出 Markdown 按钮 + 提示 ===== */
-.statusbar-export-md { display: flex; align-items: center; gap: 4px; height: 22px; margin-left: 6px; padding: 0 8px; border: 1px solid #dfe2e7; border-radius: 4px; color: #48515c; background: #fff; font-size: 11px; }
-.statusbar-export-md:hover { border-color: #3a8064; color: #28775a; background: #f3f8f5; }
-.statusbar-notice { color: #28775a; font-size: 11px; margin-right: 6px; }
-.statusbar-notice-action {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  margin-right: 6px;
-  padding: 0;
-  border: none;
-  background: none;
-  font: inherit;
-  cursor: pointer;
-}
-.statusbar-notice-action:hover { text-decoration: underline; }
-.notice-action-label { font-weight: 600; white-space: nowrap; }
 
 /* ===== Apple-style management shell (Lake editor internals intentionally untouched) ===== */
 :root {
@@ -1169,122 +1144,6 @@ ne-card[data-card-name="codeblock"] .ne-card-resizer-mask {
   .tab-switcher-close:focus-visible { opacity: .7; }
   .tab-switcher-close:hover { color: #b34b45; background: rgba(194, 85, 88, .11); opacity: 1; }
 
-  .statusbar {
-    position: absolute;
-    right: 10px;
-    bottom: 6px;
-    z-index: 200;
-    gap: 8px;
-    justify-content: flex-start;
-    width: max-content;
-    max-width: calc(100vw - 24px);
-    min-width: 0;
-    height: 28px;
-    padding: 0 6px 0 12px;
-    border: 1px solid rgba(0, 0, 0, .08);
-    border-radius: 999px;
-    color: #6b7280;
-    background: rgba(255, 255, 255, .60);
-    box-shadow: 0 2px 6px rgba(0, 0, 0, .05), 0 12px 28px rgba(0, 0, 0, .08);
-    backdrop-filter: blur(20px) saturate(1.1);
-    -webkit-backdrop-filter: blur(20px) saturate(1.1);
-    font-size: 10px;
-  }
-  .statusbar-repo { flex: 0 0 auto; font-weight: 600; color: #4b5563; white-space: nowrap; }
-  .statusbar-divider { flex: 0 0 auto; width: 1px; height: 12px; margin: 0 2px; background: rgba(0, 0, 0, .10); }
-  .statusbar-wordcount { flex: 0 0 auto; white-space: nowrap; }
-  .statusbar-notice { flex: 0 1 auto; max-width: 220px; overflow: hidden; color: #d29042; text-overflow: ellipsis; white-space: nowrap; }
-  .statusbar-sync { display: inline-flex; align-items: center; gap: 4px; flex: 0 0 auto; white-space: nowrap; }
-  .statusbar-menu-btn {
-    display: grid;
-    place-items: center;
-    flex: 0 0 auto;
-    width: 22px;
-    height: 22px;
-    margin-left: 2px;
-    padding: 0;
-    border: 0;
-    border-radius: 999px;
-    color: #6b7280;
-    background: transparent;
-    cursor: pointer;
-    -webkit-app-region: no-drag;
-    transition: color 130ms ease-out, background-color 130ms ease-out;
-  }
-  .statusbar-menu-btn:hover,
-  .statusbar-menu-btn.open { color: var(--shell-accent-strong); background: var(--shell-accent-soft); }
-  .statusbar-backdrop { position: fixed; inset: 0; z-index: 340; }
-  .statusbar-menu {
-    position: absolute;
-    right: 4px;
-    bottom: calc(100% + 8px);
-    z-index: 350;
-    display: flex;
-    flex-direction: column;
-    min-width: 200px;
-    padding: 6px;
-    border: 1px solid rgba(0, 0, 0, .10);
-    border-radius: 12px;
-    background: rgba(255, 255, 255, .97);
-    box-shadow: 0 16px 44px rgba(0, 0, 0, .16), 0 2px 8px rgba(0, 0, 0, .06);
-    backdrop-filter: blur(20px);
-    -webkit-backdrop-filter: blur(20px);
-  }
-  .statusbar-menu button {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 7px 9px;
-    border: 0;
-    border-radius: 8px;
-    color: #3c4350;
-    background: transparent;
-    font-size: 12px;
-    text-align: left;
-    cursor: pointer;
-  }
-  .statusbar-menu button:hover { background: var(--shell-accent-soft); color: var(--shell-accent-strong); }
-  .statusbar > span:first-child { flex: 0 1 auto; overflow: hidden; color: #a0a5ad; text-overflow: ellipsis; white-space: nowrap; }
-  .statusbar-wordcount { flex: 1 1 auto; min-width: 42px; margin-right: 0; color: #878e98; font-variant-numeric: tabular-nums; }
-  .statusbar-imagecount { flex: 0 0 auto; margin-left: 0; color: #878e98; font-variant-numeric: tabular-nums; }
-  .statusbar-lock { flex: 0 0 auto; color: #878e98; font-variant-numeric: tabular-nums; }
-  .statusbar-notice { flex: 0 1 auto; overflow: hidden; margin: 0; color: var(--shell-accent-strong); text-overflow: ellipsis; white-space: nowrap; transition: opacity 180ms ease-out, transform 180ms var(--shell-ease); }
-  @starting-style { .statusbar-notice { opacity: 0; transform: translateY(4px); } }
-  .save-label { flex: 0 0 auto; color: #858c96; }
-  .statusbar-export-md {
-    flex: 0 0 auto;
-    height: 20px;
-    margin: 0;
-    padding: 0 7px;
-    border: 1px solid rgba(31, 35, 41, .08);
-    border-radius: 6px;
-    color: #69717c;
-    background: rgba(255, 255, 255, .68);
-    box-shadow: 0 1px 1px rgba(31, 35, 41, .025);
-    transition: color 130ms ease-out, background-color 130ms ease-out, border-color 130ms ease-out, transform 90ms ease-out;
-  }
-  .statusbar-export-md:hover { color: var(--shell-accent-strong); border-color: rgba(53, 117, 240, .24); background: #eef0fb; }
-  .statusbar-export-md:active { transform: scale(.965); }
-  .statusbar-sync {
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    flex: 0 0 auto;
-    max-width: 190px;
-    overflow: hidden;
-    color: #8b929c;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-  .statusbar-sync svg { flex: 0 0 auto; }
-  .statusbar-sync.syncing { color: #557c6c; }
-  .statusbar-sync.success { color: var(--shell-accent-strong); }
-  .statusbar-sync.error { color: #b34b45; }
-  .statusbar-sync.pending { color: #a56b19; }
-  .statusbar-sync.synced { color: #557c6c; }
-  .statusbar-sync.conflict { color: #b1433e; }
-  .statusbar-sync.disabled { color: #98a0aa; }
-  .statusbar-sync.idle { color: #8b929c; }
 }
 
 @keyframes tab-switcher-pop {
@@ -1352,7 +1211,6 @@ ne-card[data-card-name="codeblock"] .ne-card-resizer-mask {
   .tab-switcher,
   .tab-switcher-menu,
   .tree-children,
-  .statusbar-notice,
   .settings-choice { animation: none !important; transition-duration: 1ms !important; }
 }
 
@@ -1438,11 +1296,6 @@ ne-card[data-card-name="codeblock"] .ne-card-resizer-mask {
     border-bottom: 0;
     box-shadow: none;
     background: linear-gradient(90deg, #e9e7f2 0%, #f4f4f7 55%, #fbfcfd 100%);
-  }
-  .statusbar {
-    border: 1px solid rgba(0, 0, 0, .08);
-    background: rgba(255, 255, 255, .60);
-    box-shadow: 0 2px 6px rgba(0, 0, 0, .05), 0 12px 28px rgba(0, 0, 0, .08);
   }
 
   /* C：悬停微卡片（白底 + 轻阴影，仅 transform/box-shadow，不动布局） */
@@ -1548,11 +1401,6 @@ ne-card[data-card-name="codeblock"] .ne-card-resizer-mask {
 .sync-button { border-color: rgba(0, 0, 0, .14); color: #4a5165; background: #fff; }
 .sync-button:hover { background: #f7f7fb; }
 
-/* 状态栏同步状态色对齐 */
-.statusbar-sync.syncing { color: var(--shell-accent-strong, #2a5fd0); }
-.statusbar-sync.success { color: #3d8b6a; }
-.statusbar-sync.error { color: #c25558; }
-
 /* 小记工作台：与主界面同族的中性渐变 */
 @media (min-width: 761px) {
   .quick-notes-pane {
@@ -1594,24 +1442,6 @@ ne-card[data-card-name="codeblock"] .ne-card-resizer-mask {
 }
 
 /* ===== 2026-08-06 只读锁（原生 Viewer）===== */
-/* 状态栏锁按钮 */
-.statusbar-readonly {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  height: 20px;
-  margin-left: 6px;
-  padding: 0 7px;
-  border: 1px solid transparent;
-  border-radius: 5px;
-  color: #969ca5;
-  background: transparent;
-  font-size: 10px;
-  cursor: pointer;
-  transition: color 130ms ease-out, background-color 130ms ease-out, border-color 130ms ease-out;
-}
-.statusbar-readonly:hover { color: var(--shell-accent-strong, #2a5fd0); background: rgba(53, 117, 240, .1); }
-.statusbar-readonly.locked { color: var(--shell-accent-strong, #2a5fd0); background: var(--shell-accent-soft, #e6e9f7); border-color: rgba(53, 117, 240, .25); }
 /* 锁定标签：viewer 无工具栏；正文色略降暗示只读 */
 .lake-editor.lake-locked .ne-engine { color: #454b57; }
 
@@ -1695,8 +1525,7 @@ ne-card[data-card-name="codeblock"] .ne-card-resizer-mask {
 /* 菜单类 */
 .create-menu,
 .context-menu,
-.tab-switcher-menu,
-.statusbar-menu {
+.tab-switcher-menu {
   background: color-mix(in srgb, var(--b3-theme-surface) 72%, transparent);
   border: 1px solid color-mix(in srgb, var(--b3-theme-surface-lighter) 55%, transparent);
   border-radius: var(--b3-border-radius-b);
