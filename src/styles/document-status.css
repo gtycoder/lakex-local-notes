@@ -1,0 +1,52 @@
+
+.workspace { position: relative; grid-template-rows: minmax(0, 1fr); }
+.document-statusbar {
+  grid-row: 1;
+  grid-column: 1;
+  position: absolute;
+  z-index: 180;
+  right: 16px;
+  bottom: 8px;
+  left: 12px;
+  display: grid;
+  grid-template-columns: minmax(0, auto) minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  height: 26px;
+  min-height: 26px;
+  padding: 0 9px;
+  border: 1px solid color-mix(in srgb, var(--lake-border) 80%, transparent);
+  border-radius: 8px;
+  color: var(--lake-text-tertiary);
+  background: color-mix(in srgb, var(--lake-panel) 92%, transparent);
+  box-shadow: 0 3px 12px rgba(25, 35, 52, .08);
+  backdrop-filter: blur(10px) saturate(1.04);
+  pointer-events: none;
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+.document-statusbar-stats,
+.document-statusbar-state,
+.document-statusbar-notice { min-width: 0; display: flex; align-items: center; gap: 7px; }
+.document-statusbar-stats { gap: 10px; white-space: nowrap; }
+.document-statusbar-notice { justify-content: center; overflow: hidden; color: var(--lake-text-secondary); }
+.document-statusbar-notice span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.document-statusbar-state { justify-content: flex-end; color: var(--lake-text-secondary); white-space: nowrap; }
+.document-statusbar-state.local-only { color: var(--lake-text-tertiary); }
+.document-statusbar-state.pending,
+.document-statusbar-state.dirty { color: var(--lake-sync-pending); }
+.document-statusbar-state.synced,
+.document-statusbar-state.synced-history { color: var(--lake-sync-success); }
+.document-statusbar-state.conflict,
+.document-statusbar-state.save-error { color: var(--lake-error); }
+.document-statusbar-state.saving { color: var(--lake-accent); }
+.document-statusbar-status-icon,
+.document-statusbar-locked { display: inline-flex; align-items: center; gap: 4px; }
+.document-statusbar-locked { color: var(--lake-text-secondary); }
+@media (max-width: 760px) {
+  .document-statusbar { right: 8px; bottom: calc(8px + env(safe-area-inset-bottom)); left: 8px; }
+  .document-statusbar-notice { display: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .document-statusbar { backdrop-filter: none; transition: none; }
+}

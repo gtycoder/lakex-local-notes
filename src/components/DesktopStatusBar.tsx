@@ -1,6 +1,5 @@
-import { Cloud, LoaderCircle, Lock, Save, WifiOff } from "lucide-react";
-
-type SaveState = "idle" | "dirty" | "saving" | "saved" | "error";
+import { AlertTriangle, CheckCircle2, History, Lock, LoaderCircle, Save, Upload, WifiOff } from "lucide-react";
+import type { DocumentStatusModel, LocalSaveState } from "./documentStatusModel";
 
 export interface StatusBarNotice {
   text: string;
@@ -8,59 +7,44 @@ export interface StatusBarNotice {
 }
 
 export interface DesktopStatusBarProps {
-  repositoryLabel: string;
   showDocumentStats: boolean;
   locked: boolean;
   wordCountLabel: string;
   imageCountLabel: string;
   notice: StatusBarNotice | null;
-  saveState: SaveState;
-  saveLabel: string;
-  sync: { cls: string; label: string; title: string };
+  saveState: LocalSaveState;
+  documentStatus: DocumentStatusModel;
 }
 
-export function DesktopStatusBar({
-  repositoryLabel,
-  showDocumentStats,
-  locked,
-  wordCountLabel,
-  imageCountLabel,
-  notice,
-  saveState,
-  saveLabel,
-  sync,
-}: DesktopStatusBarProps) {
+function StatusIcon({ status }: { status: DocumentStatusModel }) {
+  switch (status.kind) {
+    case "saving": return <LoaderCircle className="spin" size={12} />;
+    case "dirty": return <Save size={12} />;
+    case "save-error": return <AlertTriangle size={12} />;
+    case "local-only": return <WifiOff size={12} />;
+    case "pending": return <Upload size={12} />;
+    case "conflict": return <AlertTriangle size={12} />;
+    case "synced-history": return <History size={12} />;
+    case "synced": return <CheckCircle2 size={12} />;
+  }
+}
+
+export function DesktopStatusBar({ showDocumentStats, locked, wordCountLabel, imageCountLabel, notice, documentStatus }: DesktopStatusBarProps) {
+  if (!showDocumentStats) return null;
   return (
-    <footer className="statusbar">
-      <span className="statusbar-repo">{repositoryLabel}</span>
-      {showDocumentStats && (
-        <>
-          <span className="statusbar-divider" />
-          {locked && (
-            <span className="statusbar-lock" title="当前文档已锁定（只读）"><Lock size={11} />已锁定</span>
-          )}
-          <span className="statusbar-wordcount" title="当前文档字数">{wordCountLabel}</span>
-          {imageCountLabel && <span className="statusbar-imagecount" title="当前文档图片数">{imageCountLabel}</span>}
-          {notice && (notice.action ? (
-            <button
-              type="button"
-              className="statusbar-notice statusbar-notice-action"
-              title={notice.text}
-              onClick={notice.action.onClick}
-            >
-              <span>{notice.text}</span>
-              <span className="notice-action-label">{notice.action.label}</span>
-            </button>
-          ) : (
-            <span className="statusbar-notice" title={notice.text}>{notice.text}</span>
-          ))}
-          <span className={`save-label ${saveState}`} title="保存状态">
-            {saveState === "saving" ? <LoaderCircle className="spin" size={11} /> : saveState === "dirty" ? <WifiOff size={11} /> : <Save size={11} />}
-            {saveLabel}
-          </span>
-          <span className={`statusbar-sync ${sync.cls}`} title={sync.title}><Cloud size={11} />{sync.label}</span>
-        </>
-      )}
+    <footer className="statusbar document-statusbar" aria-label="当前文档状态">
+      <div className="document-statusbar-stats" aria-label="文档统计">
+        <span>字数 {wordCountLabel.replace(/\s*字$/, "") || "0"}</span>
+        <span>图片 {imageCountLabel.replace(/^图片\s*/, "") || "0"}</span>
+      </div>
+      <div className="document-statusbar-notice" aria-live="polite">
+        {notice && <span title={notice.text}>{notice.text}</span>}
+      </div>
+      <div className={`document-statusbar-state ${documentStatus.kind}`} title={documentStatus.label}>
+        {locked && <span className="document-statusbar-locked"><Lock size={12} />只读</span>}
+        <span className="document-statusbar-status-icon" aria-hidden="true"><StatusIcon status={documentStatus} /></span>
+        <span>{documentStatus.label}</span>
+      </div>
     </footer>
   );
 }

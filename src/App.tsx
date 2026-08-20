@@ -11,6 +11,7 @@ import { QuickNotesWorkspace, type QuickNotesWorkspaceHandle } from "./component
 import { SyncToast, type SyncToastData } from "./components/SyncToast";
 import { SyncStatusPopover } from "./components/SyncStatusPopover";
 import { DesktopStatusBar } from "./components/DesktopStatusBar";
+import { getDocumentStatus } from "./components/documentStatusModel";
 import { LakeEditor } from "./features/editor/LakeEditor";
 import { clearScrollMemory, locateEditorSearchHit } from "./features/editor/EditorTab";
 import type { LakeEditorInstance } from "./features/editor/lakeRuntime";
@@ -161,6 +162,7 @@ export function App() {
   }, [topMenuOpen, workspaceMenuOpen]);
   const [sync, setSync] = useState<SyncStatus>({ phase: "idle", message: "仅本地保存", lastSyncedAt: null, pendingChanges: 0 });
   const [cloudEnabled, setCloudEnabled] = useState(true);
+  const [cloudConfigured, setCloudConfigured] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState<TreeNode | null>(null);
   const [syncToast, setSyncToast] = useState<SyncToastData | null>(null);
   const [syncProgress, setSyncProgress] = useState<SyncProgress | null>(null);
@@ -318,6 +320,7 @@ export function App() {
     void native.bootstrap().then(async (snapshot) => {
       setWorkspace(snapshot); setNotes(snapshot.notes); setSync(snapshot.sync);
       void native.getSyncSettings().then((cfg) => setCloudEnabled(cfg.enabled)).catch(() => undefined);
+      void native.getS3Settings().then((cfg) => setCloudConfigured(Boolean(cfg))).catch(() => undefined);
       setTreeNodes(await native.listTreeNodes());
       const id = snapshot.lastOpenedNoteId ?? snapshot.notes[0]?.id;
       if (id && !media.matches) await openNote(id);
@@ -657,6 +660,7 @@ export function App() {
     });
     try {
       const settings = await native.getS3Settings();
+      setCloudConfigured(Boolean(settings));
       if (!settings) {
         setSync((current) => ({ ...current, phase: "idle", message: "尚未配置云同步" }));
         showSyncToast({ kind: "unavailable", title: "尚未配置云同步", message: "请先配置 S3，完成后即可开始同步。", onConfigure: () => { setSettingsCategory("sync"); setSettingsOpen(true); } });
@@ -1287,19 +1291,18 @@ export function App() {
           </section>
         )}
         <DesktopStatusBar
-          repositoryLabel={desktopWorkspace === "quick-notes" ? "小记" : isDesktop() ? "Electron 本地仓库" : "浏览器演示仓库"}
           showDocumentStats={desktopWorkspace === "library"}
           locked={activeNoteId !== null && lockedNoteIds.has(activeNoteId)}
           wordCountLabel={wordCountLabel}
           imageCountLabel={imageCountLabel}
           notice={notice}
           saveState={saveState}
-          saveLabel={saveLabel(saveState)}
-          sync={{
-            cls: syncIndicator.cls,
-            label: syncIndicator.label,
-            title: syncIndicator.label + (sync.message ? `：${sync.message}` : ""),
-          }}
+          documentStatus={getDocumentStatus({
+            hasCloudConfig: cloudConfigured,
+            syncState: activeNodeSyncState as "local" | "synced" | "conflict",
+            saveState,
+            historyCount: conflictSnapshotNotice?.count ?? 0,
+          })}
         />
       </main>
       {outlineVisible && (
