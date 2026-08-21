@@ -249,6 +249,67 @@ describe("R4：import_remote 4 态 journal 恢复（V5 §5.4）", () => {
     expect(c).toBe(0);
   });
 
+
+describe("R9：recoverConversions 崩溃恢复（V5 §4，四组状态×目标存在性）", () => {
+  function qnDb() { return new Database(path.join(root, "quick-notes", "metadata.sqlite3")); }
+  function insertConv(db: Database.Database, sourceId: string, targetId: string, state: string) {
+    const now = new Date().toISOString();
+    db.prepare("INSERT INTO quick_note_conversions(source_quick_note_id,target_note_id,target_notebook_id,state,created_at,updated_at) VALUES(?,?,?,?,?,?)")
+      .run(sourceId, targetId, "nb", state, now, now);
+  }
+  function convState(sourceId: string): string | undefined {
+    const db = qnDb();
+    const row = db.prepare("SELECT state FROM quick_note_conversions WHERE source_quick_note_id=?").get(sourceId) as { state: string } | undefined;
+    db.close();
+    return row?.state;
+  }
+
+  it("prepared + 目标存在 → 提升 target_created 并 finalize（源删、journal 推进）", () => {
+    const source = quickNotes.createQuickNote({ text: "转换源1", draftId: crypto.randomUUID(), stagedImageIds: [] });
+    const db = qnDb();
+    insertConv(db, source.id, "target-1", "prepared");
+    db.close();
+    const cleanup = vi.fn();
+    quickNotes.recoverConversions(() => true, cleanup); // 目标存在
+    expect(quickNotes.listQuickNotes().some((n) => n.id === source.id)).toBe(false); // 源已删
+    expect(convState(source.id)).toBe("source_deleted_waiting_sync"); // journal 推进
+    expect(cleanup).not.toHaveBeenCalled();
+  });
+
+  it("prepared + 目标缺失 → cleanupUntrackedTarget 调用 + journal 删除", () => {
+    const source = quickNotes.createQuickNote({ text: "转换源2", draftId: crypto.randomUUID(), stagedImageIds: [] });
+    const db = qnDb();
+    insertConv(db, source.id, "target-ghost", "prepared");
+    db.close();
+    const cleanup = vi.fn();
+    quickNotes.recoverConversions(() => false, cleanup); // 目标缺失
+    expect(cleanup).toHaveBeenCalledWith("target-ghost");
+    expect(convState(source.id)).toBeUndefined(); // journal 删除
+    expect(quickNotes.listQuickNotes().some((n) => n.id === source.id)).toBe(true); // 源保留
+  });
+
+  it("target_created + 目标存在 → finalize（源删、journal 推进）", () => {
+    const source = quickNotes.createQuickNote({ text: "转换源3", draftId: crypto.randomUUID(), stagedImageIds: [] });
+    const db = qnDb();
+    insertConv(db, source.id, "target-3", "target_created");
+    db.close();
+    quickNotes.recoverConversions(() => true, vi.fn());
+    expect(quickNotes.listQuickNotes().some((n) => n.id === source.id)).toBe(false);
+    expect(convState(source.id)).toBe("source_deleted_waiting_sync");
+  });
+
+  it("target_created + 目标缺失 → 无动作（journal 与源保留，待后续恢复）", () => {
+    const source = quickNotes.createQuickNote({ text: "转换源4", draftId: crypto.randomUUID(), stagedImageIds: [] });
+    const db = qnDb();
+    insertConv(db, source.id, "target-4", "target_created");
+    db.close();
+    const cleanup = vi.fn();
+    quickNotes.recoverConversions(() => false, cleanup);
+    expect(convState(source.id)).toBe("target_created"); // journal 保留
+    expect(quickNotes.listQuickNotes().some((n) => n.id === source.id)).toBe(true); // 源保留
+    expect(cleanup).not.toHaveBeenCalled();
+  });
+});
   it("promote 幂等：目标已是新内容 → 恢复重跑不破坏", () => {
     const { item, body } = makeItem("幂等测试");
     quickNotes.importRemoteQuickNote(item, body, []); // promote 已完成

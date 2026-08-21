@@ -100,8 +100,8 @@ export class SearchRepository {
          )
          SELECT t.id, t.title, t.updated_at, parent.title AS parent_title
          FROM tree_nodes t LEFT JOIN tree_nodes parent ON parent.id=t.parent_id
-         WHERE t.node_type='note' AND t.deleted_at IS NULL AND t.id NOT IN (SELECT id FROM trash_ids) AND t.title LIKE ?
-         ORDER BY CASE WHEN t.title = ? THEN 0 WHEN t.title LIKE ? THEN 1 ELSE 2 END, t.updated_at DESC LIMIT ?`
+         WHERE t.node_type='note' AND t.deleted_at IS NULL AND t.id NOT IN (SELECT id FROM trash_ids) AND t.title LIKE ? ESCAPE '\\'
+         ORDER BY CASE WHEN t.title = ? THEN 0 WHEN t.title LIKE ? ESCAPE '\\' THEN 1 ELSE 2 END, t.updated_at DESC LIMIT ?`
       ).all(this.trashNotebookId, this.trashNotebookId, `%${escapedLike}%`, normalizedQuery, `${escapedLike}%`, limit) as ShortSearchResultRow[];
       return rows.map((row) => ({ id: row.id, title: row.title, snippet: "", matchType: "title", updatedAt: row.updated_at, parentTitle: row.parent_title }));
     }
