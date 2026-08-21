@@ -135,6 +135,13 @@ sync.ts       约 1,126 行
 /tmp/settings-new.png
 ```
 
+## 2026-08-21 follow-up verification
+
+- Tab 切换动画已缩短到 55/85ms，保留 reduced-motion 分支。
+- 资料库顶部控件已通过真实 pointer/CDP 验证：固定态搜索可获得焦点，悬浮态移入搜索/按钮区域不会收起。
+- 拖拽验证记录：source 行出现 `dragging`，目标行出现 `drop-after`，释放后交给原有 moveTreeNodeOrdered 逻辑。
+- 最新 packaged full smoke 仍通过：window state、普通 UI、Drawnix、renderer recovery、GPU/network helper recovery。
+
 ## 依赖安全审计
 
 `npm audit --registry=https://registry.npmjs.org --omit=dev --audit-level=high` 当前报告 5 个 moderate 传递依赖问题：来自 Drawnix/Mermaid 链的 `dompurify` 和 `uuid`，报告标记为 `No fix available`。本轮没有强行升级 Drawnix/Mermaid：它们属于编辑器/画板运行时，升级可能破坏按需加载和内容兼容；后续应在上游发布修复后单独升级并回归。

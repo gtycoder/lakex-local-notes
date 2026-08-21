@@ -41,6 +41,13 @@
 - 提升全局 secondary/tertiary 文本和 Lake 正文对比度，保持字号和 Lake 原生工具栏不变。
 - UI smoke 增加设置面板无障碍标记、设置搜索聚焦和自定义 UI 已删除断言。
 
+## 2026-08-21 follow-up refinement
+
+- Tab 切换 View Transition 缩短为 old 55ms / new 85ms；大纲切换保护窗口缩短到 220ms，减少“像卡顿一样”的等待感。
+- 修复资料库顶部控件命中：`.sidebar::before` 原生窗口拖拽伪层改为 `pointer-events: none`，固定态搜索/四按钮可点击；悬浮态 pointer 进入工具栏不会触发收起。
+- 资料库拖拽保留思源式轻量插入线/灰色目标态，并通过真实 CDP 鼠标移动验证 `dragging/drop-after` 类命中。
+- 设置面板、外观自定义 UI 删除、状态条和字体对比度优化已与本批一起通过 dev/packaged smoke。
+
 ## Current quality gates
 
 最近一次验证：
