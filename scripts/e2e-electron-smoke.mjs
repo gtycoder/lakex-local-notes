@@ -50,7 +50,7 @@ const baseline = await evaluate(`JSON.stringify({
   workspace: document.querySelector('[aria-label="工作空间"]')?.innerText || '',
   railWidths: {
     left: document.querySelector('.activity-rail')?.getBoundingClientRect().width,
-    right: document.querySelector('.outline-sidebar')?.getBoundingClientRect().width,
+    right: document.querySelector('.outline-sidebar__rail')?.getBoundingClientRect().width ?? document.querySelector('.outline-sidebar')?.getBoundingClientRect().width,
   }
 })`);
 await screenshot("01-baseline");
