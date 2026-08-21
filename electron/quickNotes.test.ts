@@ -152,3 +152,49 @@ describe("小记回收站（M6）", () => {
     expect(() => quickNotes.restoreQuickNote(id)).toThrow();
   });
 });
+describe("R3：save staging 恢复（V5 §5.3）", () => {
+  const stagingRoot = () => path.join(root, "quick-notes", "staging");
+  const itemPathFor = (id: string) => path.join(root, "quick-notes", "items", `${id}.qnote`);
+  const hashOf = (buf: Buffer) => crypto.createHash("sha256").update(buf).digest("hex");
+
+  it("DB 已提交 + staging 残留 → 新实例启动恢复补 promote，并清理 staging", () => {
+    const saved = quickNotes.createQuickNote({ text: "恢复测试", draftId: crypto.randomUUID(), stagedImageIds: [] });
+    const itemPath = itemPathFor(saved.id);
+    const body = fs.readFileSync(itemPath); // 已 promote 的正文
+    const contentHash = hashOf(body);
+    // 模拟「DB 提交后 promote 前崩溃」：删正式正文，留 staging（content.qnote + meta.json）
+    fs.rmSync(itemPath, { force: true });
+    const opDir = path.join(stagingRoot(), crypto.randomUUID());
+    fs.mkdirSync(opDir, { recursive: true });
+    fs.writeFileSync(path.join(opDir, "content.qnote"), body);
+    fs.writeFileSync(path.join(opDir, "meta.json"), JSON.stringify({ operationId: "x", quickNoteId: saved.id, contentHash, assetFilenames: [], createdAt: new Date().toISOString(), state: "prepared" }));
+    const quickNotes2 = new QuickNotesStore(root); // 构造触发 recoverStagedSaves
+    expect(fs.existsSync(itemPath)).toBe(true); // 补 promote
+    expect(fs.existsSync(opDir)).toBe(false);   // staging 清理
+    expect(quickNotes2.listQuickNotes().some((n) => n.id === saved.id)).toBe(true);
+  });
+
+  it("DB 未提交 + staging 残留 → 新实例清理 staging（不误补 promote）", () => {
+    const opDir = path.join(stagingRoot(), crypto.randomUUID());
+    fs.mkdirSync(opDir, { recursive: true });
+    fs.writeFileSync(path.join(opDir, "content.qnote"), "x");
+    fs.writeFileSync(path.join(opDir, "meta.json"), JSON.stringify({ operationId: "x", quickNoteId: "ghost-note", contentHash: "deadbeef", assetFilenames: [], createdAt: new Date().toISOString(), state: "prepared" }));
+    new QuickNotesStore(root);
+    expect(fs.existsSync(opDir)).toBe(false); // 未提交 → 删
+  });
+
+  it("staging 不完整（缺正文）→ 保留待查、不误删不误 promote", () => {
+    const saved = quickNotes.createQuickNote({ text: "不完整测试", draftId: crypto.randomUUID(), stagedImageIds: [] });
+    const itemPath = itemPathFor(saved.id);
+    const body = fs.readFileSync(itemPath);
+    const contentHash = hashOf(body);
+    fs.rmSync(itemPath, { force: true });
+    const opDir = path.join(stagingRoot(), crypto.randomUUID());
+    fs.mkdirSync(opDir, { recursive: true });
+    // 有 meta 无 content.qnote（不完整）
+    fs.writeFileSync(path.join(opDir, "meta.json"), JSON.stringify({ operationId: "x", quickNoteId: saved.id, contentHash, assetFilenames: [], createdAt: new Date().toISOString(), state: "prepared" }));
+    new QuickNotesStore(root);
+    expect(fs.existsSync(opDir)).toBe(true);      // 保留待查
+    expect(fs.existsSync(itemPath)).toBe(false);  // 未误 promote
+  });
+});

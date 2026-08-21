@@ -25,6 +25,9 @@ export type { QuickNoteContent, QuickNoteConversion, QuickNoteDeleted, QuickNote
 export type { StoredQuickNoteContent } from "./quickNoteModel.js";
 
 export const MAX_QUICK_NOTE_IMAGE_BYTES = 25 * 1024 * 1024;
+/** V5 §5.3：save 轻量 staging 文件约定（staging/{draftId}/ 内） */
+const SAVE_BODY_FILE = "content.qnote";
+const SAVE_META_FILE = "meta.json";
 /** 小记图片解码后像素上限（与 Lake 图片一致：50MP，防解压炸弹） */
 const MAX_QUICK_NOTE_IMAGE_PIXELS = 50_000_000;
 
@@ -64,6 +67,7 @@ export class QuickNotesStore {
     this.db.pragma("journal_mode = WAL");
     this.db.pragma("foreign_keys = ON");
     this.migrate();
+    this.recoverStagedSaves();
     this.queries = new QuickNotesQueries({
       db: this.db,
       itemPath: (id) => this.itemPath(id),
@@ -243,48 +247,86 @@ export class QuickNotesStore {
     const targetAssets = this.assetDirFor(id);
     const removed = existing.filter((image) => !retainedIds.includes(image.id));
 
-    // 目标资源先复制/移动并写入临时内容，随后单 DB 事务更新索引；失败时保留源 staging，用户可重试。
-    fs.mkdirSync(targetAssets, { recursive: true });
-    const movedFiles: string[] = [];
-    try {
-      for (const image of stagedMetadata) {
-        const source = path.join(stagingDir, image.filename);
-        const destination = path.join(targetAssets, image.filename);
-        if (!fs.existsSync(source)) throw new AppError("NotFound", `暂存图片不存在: ${image.filename}`);
-        if (fs.existsSync(destination)) throw new AppError("InvalidInput", `图片文件名冲突: ${image.filename}`);
-        fs.renameSync(source, destination);
-        movedFiles.push(destination);
+    // V5 §5.3：staging 全量组装 → DB 事务提交 → 原子 promote（文件绝不先于 DB 落正式路径；
+    // DB 失败时正式路径保持旧内容 + 旧索引一致，staging 残留由启动恢复清理）。
+    // 组装前确保 staging 目录存在（无图片保存时 draft 目录可能不存在）
+    fs.mkdirSync(stagingDir, { recursive: true });
+    const stagedBodyPath = path.join(stagingDir, SAVE_BODY_FILE);
+    this.atomicWrite(stagedBodyPath, encoded);
+    const assetFilenames = stagedMetadata.map((image) => image.filename);
+    this.atomicWrite(path.join(stagingDir, SAVE_META_FILE), JSON.stringify({
+      operationId: input.draftId, quickNoteId: id, contentHash,
+      assetFilenames, createdAt, state: "prepared",
+    }));
+    // DB 事务（只更新索引，不碰正式路径）
+    const tx = this.db.transaction(() => {
+      if (updating) {
+        this.db.prepare("UPDATE quick_notes SET updated_at=?,preview_text=?,image_count=?,content_hash=?,sync_state='local',is_conflict=0 WHERE id=?")
+          .run(updatedAt, previewQuickNote(content.text, content.images.length), content.images.length, contentHash, id);
+        this.db.prepare("DELETE FROM quick_note_assets WHERE quick_note_id=?").run(id);
+      } else {
+        this.db.prepare("INSERT INTO quick_notes(id,created_at,updated_at,preview_text,image_count,content_hash,sync_state,is_conflict) VALUES(?,?,?,?,?,?, 'local', 0)")
+          .run(id, createdAt, updatedAt, previewQuickNote(content.text, content.images.length), content.images.length, contentHash);
       }
-      this.atomicWrite(this.itemPath(id), encoded);
-      const tx = this.db.transaction(() => {
-        if (updating) {
-          this.db.prepare("UPDATE quick_notes SET updated_at=?,preview_text=?,image_count=?,content_hash=?,sync_state='local',is_conflict=0 WHERE id=?")
-            .run(updatedAt, previewQuickNote(content.text, content.images.length), content.images.length, contentHash, id);
-          this.db.prepare("DELETE FROM quick_note_assets WHERE quick_note_id=?").run(id);
-        } else {
-          this.db.prepare("INSERT INTO quick_notes(id,created_at,updated_at,preview_text,image_count,content_hash,sync_state,is_conflict) VALUES(?,?,?,?,?,?, 'local', 0)")
-            .run(id, createdAt, updatedAt, previewQuickNote(content.text, content.images.length), content.images.length, contentHash);
-        }
-        const insert = this.db.prepare("INSERT INTO quick_note_assets(id,quick_note_id,filename,mime_type,width,height,size,content_hash) VALUES(?,?,?,?,?,?,?,?)");
-        for (const image of content.images) insert.run(image.id, id, image.filename, image.mimeType, image.width, image.height, image.size, image.hash);
-      });
-      tx();
-      for (const image of removed) {
-        try { fs.rmSync(path.join(targetAssets, image.filename), { force: true }); } catch { /* 后续手工清理，不影响已保存内容 */ }
-      }
-      // 保存完成后，已选资源均已移动到目标目录；其余暂存内容属于放弃的草稿，必须一并清除。
-      try { fs.rmSync(stagingDir, { force: true, recursive: true }); } catch { /* optional */ }
-    } catch (error) {
-      for (const destination of movedFiles) {
-        try {
-          const source = path.join(stagingDir, path.basename(destination));
-          if (!fs.existsSync(source)) fs.renameSync(destination, source);
-        } catch { /* best effort */ }
-      }
-      throw error;
+      const insert = this.db.prepare("INSERT INTO quick_note_assets(id,quick_note_id,filename,mime_type,width,height,size,content_hash) VALUES(?,?,?,?,?,?,?,?)");
+      for (const image of content.images) insert.run(image.id, id, image.filename, image.mimeType, image.width, image.height, image.size, image.hash);
+    });
+    tx();
+    // DB 已提交 → promote（正文 rename 原子；图片逐个 rename）
+    this.promoteStagedSave(stagingDir, id, contentHash, assetFilenames);
+    // promote 成功后清理：removed 旧图 + staging 全部（崩溃在清理前 → 孤儿残留无害，下次可清）
+    for (const image of removed) {
+      try { fs.rmSync(path.join(targetAssets, image.filename), { force: true }); } catch { /* 后续手工清理 */ }
     }
+    try { fs.rmSync(stagingDir, { force: true, recursive: true }); } catch { /* optional */ }
     return this.readQuickNote(id);
   }
+
+  /** V5 §5.3：把 staging 组装好的内容 promote 到正式路径（DB 已提交后调用，幂等）。
+   * 正文 rename 原子覆盖；图片逐个 rename（目标已存在则覆盖，内容寻址同 hash 幂等）。
+   * 图片缺失：DB 已提交不可回滚（先提交为确定），记录并跳过（正文仍可用，缺图 UI 显示缺失）。 */
+  private promoteStagedSave(stagingDir: string, id: string, _contentHash: string, assetFilenames: string[]): void {
+    const bodySrc = path.join(stagingDir, SAVE_BODY_FILE);
+    if (!fs.existsSync(bodySrc)) throw new AppError("Internal", `staging 缺少正文文件: ${stagingDir}`);
+    fs.renameSync(bodySrc, this.itemPath(id));
+    fs.mkdirSync(this.assetDirFor(id), { recursive: true });
+    for (const filename of assetFilenames) {
+      const src = path.join(stagingDir, filename);
+      if (!fs.existsSync(src)) { console.warn(`[quick] promote 缺图（DB 已提交，跳过）: ${id}/${filename}`); continue; }
+      fs.renameSync(src, path.join(this.assetDirFor(id), filename));
+    }
+  }
+
+  /** V5 §5.3 启动恢复：扫描 staging 残留，按 DB content_hash 判定（先提交为确定 → 只补做不撤销）。
+   * DB == staging contentHash → 已提交 → 补 promote；否则未提交 → 删 staging；meta 损坏 → 保留待查。 */
+  private recoverStagedSaves(): void {
+    if (!fs.existsSync(this.stagingDir)) return;
+    for (const entry of fs.readdirSync(this.stagingDir)) {
+      const dir = path.join(this.stagingDir, entry);
+      if (!fs.statSync(dir).isDirectory()) continue;
+      const metaPath = path.join(dir, SAVE_META_FILE);
+      if (!fs.existsSync(metaPath)) continue; // 无 meta：遗留 draft 或未知，保留（无法判断）
+      try {
+        const meta = JSON.parse(fs.readFileSync(metaPath, "utf8")) as { quickNoteId: string; contentHash: string; assetFilenames?: string[]; state?: string };
+        const row = this.db.prepare("SELECT content_hash FROM quick_notes WHERE id=?").get(meta.quickNoteId) as { content_hash: string } | undefined;
+        if (row && row.content_hash === meta.contentHash) {
+          try {
+            this.promoteStagedSave(dir, meta.quickNoteId, meta.contentHash, meta.assetFilenames ?? []);
+            fs.rmSync(dir, { force: true, recursive: true });
+            console.info(`[quick][recover] save promote 完成: ${meta.quickNoteId}`);
+          } catch (error) {
+            console.warn(`[quick][recover] save promote 失败（保留 staging 待查）: ${meta.quickNoteId} ${String(error)}`);
+          }
+        } else {
+          fs.rmSync(dir, { force: true, recursive: true });
+          console.info(`[quick][recover] save 未提交，清理 staging: ${meta.quickNoteId ?? entry}`);
+        }
+      } catch (error) {
+        console.warn(`[quick][recover] staging meta 损坏，保留待查: ${dir} ${String(error)}`);
+      }
+    }
+  }
+
 
   private readStagedMetadata(stagingDir: string, imageIds: string[]): Omit<QuickNoteImage, "url">[] {
     // stagedImageIds encode no filename; renderer sends prior IPC return only. Persist a small sidecar would add state.
