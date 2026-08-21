@@ -1,6 +1,7 @@
 node_modules
 dist
 dist-electron
+!vendor/npm/lakex-editor-react-component/dist/
 *.log
 .DS_Store
 release

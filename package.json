@@ -23,7 +23,8 @@
     "benchmark:tabs": "node scripts/e2e-tab-lifecycle-benchmark.mjs",
     "test:service-crash": "node scripts/e2e-service-crash-smoke.mjs",
     "test:sidebar-interaction": "node scripts/e2e-sidebar-interaction-smoke.mjs",
-    "test:tab-switch": "node scripts/e2e-tab-switch-smoke.mjs"
+    "test:tab-switch": "node scripts/e2e-tab-switch-smoke.mjs",
+    "postinstall": "patch-package --patch-dir vendor/npm/lakex-editor-react-component/patches"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1111.0",
@@ -32,7 +33,7 @@
     "lakex-drawnix": "^0.1.0",
     "lakex-drawnix-react-board": "^0.1.0",
     "lakex-drawnix-react-text": "^0.1.0",
-    "lakex-editor-react-component": "^0.1.2",
+    "lakex-editor-react-component": "file:./vendor/npm/lakex-editor-react-component",
     "lucide-react": "^0.468.0",
     "react": "18.3.1",
     "react-dom": "18.3.1",
@@ -56,7 +57,8 @@
     "vite": "^8.2.1",
     "vite-plugin-electron": "^0.28.0",
     "vitest": "^4.1.10",
-    "wait-on": "^8.0.0"
+    "wait-on": "^8.0.0",
+    "patch-package": "^8.0.0"
   },
   "build": {
     "appId": "com.lakenotes.electron",
