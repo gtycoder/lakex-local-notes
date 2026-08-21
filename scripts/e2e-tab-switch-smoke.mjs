@@ -33,6 +33,20 @@ await send("Runtime.enable");
 await send("Page.enable");
 await send("Page.bringToFront");
 await waitFor('document.readyState === "complete" && Boolean(window.lakeNative)');
+await evaluate(`(()=>{ const input=document.querySelector('.search-box input'); if(!input)return false; const setter=Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set; setter.call(input,''); input.dispatchEvent(new Event('input',{bubbles:true})); input.dispatchEvent(new Event('change',{bubbles:true})); return true; })()`);
+await wait(200);
+if (!(await evaluate('document.querySelectorAll("[data-tree-node-id].type-note").length >= 2'))) {
+  const activity = await evaluate('document.querySelectorAll(".activity-button")[0]?.getBoundingClientRect()?.toJSON()');
+  if (activity) {
+    const x = activity.x + activity.width / 2;
+    const y = activity.y + activity.height / 2;
+    await send("Input.dispatchMouseEvent", { type: "mouseMoved", x, y });
+    await send("Input.dispatchMouseEvent", { type: "mousePressed", x, y, button: "left", clickCount: 1 });
+    await send("Input.dispatchMouseEvent", { type: "mouseReleased", x, y, button: "left", clickCount: 1 });
+  }
+  await wait(300);
+  await evaluate(`document.querySelector('[data-tree-node-id="notebook-personal"]')?.click(); true`);
+}
 await waitFor('document.querySelectorAll("[data-tree-node-id].type-note").length >= 2');
 const ids = await evaluate(`JSON.stringify([...document.querySelectorAll('[data-tree-node-id].type-note')].slice(0,2).map(row=>row.dataset.treeNodeId))`);
 const noteIds = JSON.parse(ids);
