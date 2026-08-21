@@ -1,179 +1,121 @@
 # Lake Notes Electron 会话交接文档
 
-> 写给**完全没有上下文的新会话**。开工前先通读本文，再按需读：
-> `AGENTS.md`（项目长期记忆/规则）、`docs/MERGE-2026-08-19.md`（8-19 合并说明）、
-> `docs/SIYUAN-UI-PORT.md`（思源 UI 移植记录）、`docs/PERFORMANCE-NEXT.md`（性能评估）、
-> `docs/TODO.md`（待办清单）。
-> 对照代码：`src/App.tsx`、`src/b3/layout.css`、`src/features/outline/outline.css`、
-> `src/features/editor/MultiTabEditor.tsx`、`electron/main.ts`、`electron/sync.ts`。
-
-项目目录：`/Users/admin/file/local-lake/lake-notes-electron`（思源源码：`/Users/admin/file/local-lake/siyuan-master`，v3.8.0，AGPL-3.0，已保留署名）
+> 更新时间：2026-08-21（V5 Phase 0 收尾合并）｜ 写给：完全没有上下文的新会话
+> 开工前必读：本文件 + `AGENTS.md`（项目长期记忆/规则）+ `docs/SYNC-PROTOCOL.md`（同步协议）+ 外部 `/Users/admin/file/local-lake/lake-notes-refactor-plan-v5-2026-08-21.md`（当前有效执行方案）。
+> 代码基线：`master` @ `e138555`（已推送 gitee `gtycoder/local-lake`），测试基线 358 passed。
 
 ---
 
-## 0. 任务目标与当前状态
+## 0. 项目是什么
 
-Lake Notes 是**本地优先**笔记应用（Electron + React + better-sqlite3 + 语雀 Lake 内核），带 S3 同步（七牛 Kodo，`https://s3.cn-north-1.qiniucs.com`，Bucket `local-lake-hebei`，前缀 `lake-notes`）。**本地是真相，S3 只是镜像。**
+- 本地优先笔记应用：Electron + React + better-sqlite3 + 语雀 Lake 内核 + 七牛 S3 同步。
+- **本地是真相，S3 只是镜像**；单用户、无并发提交、先提交云端者胜（产品前提，见 SYNC-PROTOCOL.md）。
+- 删除/恢复语义已定稿：墓碑权威（删除压编辑）+ 恢复是唯一显式例外 + **小记不备份**——不要重新争论。
 
-**总体目标（用户原话）**：**UI 要完完全全复刻思源笔记**——可见的布局、样式、动效、窗口形式全部和思源一模一样，直接复用/抄袭思源源码（`siyuan-master`，v3.8.0）是可行且被认可的方向；同时要稳定流畅（Electron 43.4.0，性能优化持续做）。
+## 1. 任务目标（当前主线）
 
-**当前状态（2026-08-19 会话收尾）**：
-- 分支：**`master`**（本地=远程 `origin/master` = `13dd306`），工作区干净。
-- 测试基线：**297 passed**（26 测试文件）、`npx tsc --noEmit` ✅、`vite build` ✅、`git diff --check` ✅。
-- **vite.config.ts 保留了 CDP 调试参数**（`onstart: startup([".", "--remote-debugging-port=9222"])`）——用户明确要求保留，后续调试直接用。
-- 开发数据：`~/Library/Application Support/lake-notes-dev`（**可重建**；本会话多次清空，当前可能已重建）。
-- 正式数据：`~/Library/Application Support/lake-notes-electron`（**已按用户要求删除**——2026-08-19 用户要求"全部清空"，云端 S3 也已清空为 0 对象，无备份）。
+重构分两条线（V5 方案）：
+1. **Phase 0 正确性与安全止血** —— **已完成**（本次合入 master 的 10 个提交）；
+2. **移动端打基础**（Phase 1-4：lake-core 纯逻辑抽取 / 适配器注入点 / 契约接口 / 渲染层 hook）—— **尚未开始**，这是用户确认的目标主线。
 
-### 关键约束
-- **Node 只用临时 PATH**：`export PATH="$HOME/.nvm/versions/node/v24.18.0/bin:$PATH"`；**不要动全局/公司 Node 18**（CDP 脚本 `WebSocket` 在 Node 18 下不可用，必须 Node 24）。
-- **启动命令**（dev，带 CDP）：
-  ```bash
-  export PATH="$HOME/.nvm/versions/node/v24.18.0/bin:$PATH"
-  cd /Users/admin/file/local-lake/lake-notes-electron
-  export LAKE_USER_DATA="$HOME/Library/Application Support/lake-notes-dev"
-  npm run dev   # vite + 自动拉起 electron（vite.config 已带 --remote-debugging-port=9222）
-  # 端口被占时：lsof -ti tcp:1421,9222,19876 | xargs kill -9
-  ```
-- **dev 必须用 tty 长驻会话**（exec 的 tty:true），`nohup ... &` 会被环境回收。
-- 杀 electron 用**具体 PID**，不要 `pkill -f Electron`（机器上还有 Trae/SiYuan/VSCode 等）。
-- CDP 调试工具：`/tmp/lake-cdp-eval2.mjs <port> "<expr>"`（Runtime.evaluate）、`/tmp/lake-cdp-shot2.mjs <port> <out.png>`（截图）——脚本需要 Node 24。
+移动端：**近期启动**，但技术栈未定（Tauri 2 路线已实验并否决）；Tauri POC 在 `/Users/admin/file/local-lake/lake-notes-tauri-poc`（含移动端 UI 雏形 `src/App.tsx` + `MobileLibrary.tsx`，用户可能在找某个 HTML 雏形）。
 
----
+## 2. 分支与提交状态
 
-## 1. 本会话（2026-08-19）已完成内容
-
-### 1.1 存储改动五批合并（已合入 master）
-从 `backup/pre-reset-master-20260819` 按批 cherry-pick/手摘合并，每批独立提交+测试：
-
-| 批 | 提交 | 内容 |
-|---|---|---|
-| 1 | f1eab65 | W-13 manifest 字节/条目护栏（Lake 20MiB/20万条 + 小记 10MiB/10万条） |
-| 2 | 274299f | W-6 S3 请求/传输超时（30s/120s AbortSignal）+ 退出同步 60s 兜底 |
-| 3 | d8b1a09 | W-5 CDN 重定向内存索引（启动扫描 vendor 建 Set，回调零 I/O） |
-| 4 | ea29074 | W-14 IPC 入参校验（正文 32MiB/标题 500/图标 64/搜索 200）+ S3 Secret 掩码 + mdToHtml 协议白名单 + isSafeSegment 收敛 |
-| 5 | d05c57a | 资源上传/下载 4 并发（asyncPool，Lake + 小记） |
-| 6 | 9e51119 | W-3 资产 URL 正则端口跟随 ASSET_PORT + 锁依赖版本 + 删 workerPool 死代码 |
-
-### 1.2 滚动条问题（重要：多轮反复，最终方案）
-**最终状态（用户认可，已合入 master `13dd306`）**：
-- **移除全部自定义滚动条外观**（1px/2px/4px/8px 方案全部回退），保留**系统默认 10px 轨道**。
-- 仅保留 `::-webkit-scrollbar-thumb { min-height: 64px }`（超长文档 thumb 不缩到几像素，可点击）。
-- **hover 增宽逻辑已移除**（用户反馈触发区"有两段"、体验差，去掉后稳定）。
-
-**反复过程（教训）**：
-1. 最初尝试思源式细条（border 4px + inset shadow + hover 变粗）——**Electron 43/Chromium 150 不生效**（thumb 不可见/满宽，border 动态变化被忽略）。
-2. 改 4px/8px 轨道方案——用户觉得"还不如原来的"。
-3. 回退到系统默认 + thumb min-height 28→48→64px。
-4. 加 hover 增宽（容器 hover 10→15px）——用户反馈触发区太大（整个编辑器 hover 就变粗）。
-5. 收窄到右缘 44px（JS mousemove 判定）——用户反馈"有两段加粗逻辑，一段离得远一段贴边缘"。
-6. **最终：全部移除 hover 增宽，只留 min-height 64px**。
-
-### 1.3 大纲悬浮触发区（已合入 master `13dd306`）
-**问题**：大纲悬浮模式（collapsed + hover rail）时，rail 视觉 42px 但触发区域太宽，"还没碰到 rail 就弹出"。
-
-**最终方案**：
-- **rail 视觉保持 42px**（`--outline-collapsed-width: var(--activity-rail-width)`，对齐思源 .dock）。
-- **新增 `.outline-sidebar__trigger` 独立触发层**（rail 内右侧 28px，可配 `--outline-hover-trigger-width`）——只有它触发悬浮（`onPointerEnter`），rail 左侧 14px 不误触发。
-- **rail 溢出部分 `pointer-events: none`**（视觉保留，不拦截编辑器滚动条 hover）；`activity-button` 和 `trigger` 恢复 `pointer-events: auto`。
-- 触发层 `top: 36px` 避开顶部 activity-button。
-
-**关键文件**：`src/features/outline/OutlineSidebar.tsx`、`src/features/outline/outline.css`。
-
-### 1.4 大纲动画节奏统一（已合入 master）
-- `outline.css`：content 过渡从 `opacity 140ms + transform 180ms` 统一为 **260ms shell-ease**（与 app-shell grid 列宽 260ms 同步），并加 `visibility 260ms`（收起时淡出后隐藏、展开时立即显示）。
-- 配合 tab 切换闪烁修复（View Transition 收窄到 `.tab-panels`，见下）。
-
-### 1.5 前置会话遗留（已在 master，勿重做）
-- **tab 切换闪烁修复**（`c26fe07` + merge `a162db2`）：`view-transition-name: note-pane` 从 `.document-pane` 移到 `.tab-panels`（顶栏不再参与淡入淡出）；`outline-switching` 期间保留 grid 过渡（260ms 平滑收起/展开）。
-- Electron 33→43.4.0、性能/稳定、同步语义定稿、审计加固、第一轮 7 项反馈等（见旧文档 §1，均已在 master 历史）。
-
-### 1.6 数据清空（用户要求）
-- 本地：`lake-notes-dev`/`lake-notes-electron`/`lake-notes-test`/`com.lakenotes.poc`/`lake-notes-tauri-poc`（Caches+WebKit）/`com.lakenotes.electron.plist` 全部删除。
-- 云端：S3 `lake-notes/` 前缀 383 个对象全部删除，复核 0。
-- **注意**：正式数据无备份；dev 数据会在启动时自动重建（含种子内容）。
-
----
-
-## 2. 当前分支与远程
-
-```
-origin/master = 本地 master = 13dd306
-提交线（最近）：
-13dd306 fix(ui): 大纲悬浮触发区独立 28px + rail 溢出穿透 + 滚动条清理（thumb 最短 64px）
-a162db2 merge: fix(ui) tab 切换闪烁（View Transition 收窄 + 大纲平滑过渡）
-c26fe07 fix(ui): tab 切换闪烁
-00af00f docs: 2026-08-19 master 合并说明
-9e51119 ~ f1eab65 （五批存储改动）
-5314d3f feat(ui): UI 改进合集（tab/弹窗/统计/大纲/滚动条）
-80e8b76 feat: finalize audit refactor and editor stability fixes
+```text
+master（本地=远程 gitee origin/master）= e138555，工作区干净
+历史分支 hardening/sync-correctness 已合并，可删除
+stash@{0}：Codex 版 Electron-HANDOFF.md（旧交接，保留备用，非本任务内容）
 ```
 
-远程分支：`origin/master`（=13dd306）、`origin/backup/pre-reset-master-20260819`（9de5f88 废弃前快照）、`origin/main`（34752f6 早期 baseline，无关）。
+**10 个提交内容**（均为本次 Phase 0 工作）：
 
-**本地已清理**：`verify/remote-master-80e8b76`、`verify/ui-issues`、`feat/electron-43-upgrade`、`backup/pre-reset-master-20260819`、`backup/pre-reset-95dcaf2-20260806` 均已删除。后者的 9 个独有提交已打包到 `/tmp/lake-git-backup/pre-reset-95dcaf2-20260806.bundle`（如需恢复可 `git bundle unbundle`）。
+| 提交 | 内容 |
+|---|---|
+| 41d942a | §5.1 group-only 早退判定 + markFolderSynced 归位；§5.2 本地同步快照保护（markSyncedIfUnchanged） |
+| 1e2e764 | §5.3 Quick Notes save 轻量 staging + meta.json 恢复 |
+| 49b3e0c | §5.4 import_remote 4 态 journal + 启动恢复 |
+| 93ecbe2 | §5.5 远端对象缺失 B 方案（跳过+warnings）+ 墓碑原子写 |
+| 7df3441 | §5.6 S3 单对象上限 / endpoint https / CDP 端口覆盖 / multidev 修正；§5.7 FTS 启动耗时日志 |
+| bc91888 | R8 FTS 转义（含修 1 字符 LIKE 缺 ESCAPE）+ R9 recoverConversions 四组测试 |
+| 18d41a1 | SYNC-PROTOCOL.md 协议定稿 + ARCHITECTURE.md v2→v4 漂移修正 |
+| 6730e8a | CSP 收紧（dev/prod 双 CSP）+ **195 个 alipay 资源全本地化**（真机验证：CSP 零违规） |
+| e138555 | 轻量 vendor lakex（闭源依赖固化 + 项目 postinstall 打 mindmap 补丁） |
 
----
+**质量门槛全过**：tsc / 358 tests（原 334 +24）/ build / git diff --check / 3 个 UI smoke（test:ui / sidebar / tab-switch）。
 
-## 3. 当前问题 / 已知边界
+## 3. 当前问题与风险
 
-### 3.1 CSP 收紧——明确搁置（未合并）
-- 内容：`index.html` 的 script-src 收紧（去 `unsafe-inline`/gw CDN）、connect-src 收窄、`kitchen-url.js` 配套、vite.config `cspScriptExtraPlugin`。
-- **为什么搁置**：非刚需（纯安全纵深防御）；收紧后若 W-5 CDN 重定向未覆盖完整，资源会被 CSP 直接拦死（公式/图片坏）而非变慢；需要真实窗口验证后才可合并。
-- 后续决定点：若 W-5 覆盖完整验证通过可单独合并；若不完整应给 W-5 加 `existsSync` 兜底，**而非收紧 CSP**。
+1. **未做项**：R10（CANCELLED 不弹 toast，依赖 Phase 3 错误码）；Phase 1-4 全部；customCard 原型卡片；移动端。
+2. **双 React（18 + 19 via @xiangfa/mindmap）/ 双 mermaid**：登记为已知风险，不强行升级（V5 红线）。
+3. **lakex 闭源冻结**（0.1.2，2026-07-21 后无更新）：已 vendor 固化 + 资源本地化，防 registry 撤包；若未来要深度定制编辑器，先验证 `LakexEditorConfig.customCard` 扩展点（做新卡片不需要 fork）。
+4. **FTS 启动耗时**：store.ts:199 已加耗时日志，尚未按 100/1000/5000/10000 篇梯度实测（§5.7）。
+5. **同步语义**：单写者前提（无 Manifest CAS）、对象缺失 B 方案（跳过+warnings，损坏仍拒绝）——详见 SYNC-PROTOCOL.md，不要重新争论。
 
-### 3.2 渲染慢根因排查（HANDOFF 旧 §3，未完成）
-最可疑排序（需真实运行对照验证）：
-1. **CDN 重定向首次命中**（gw.alipayobjects.com 是否全部 302 到 127.0.0.1:19876）；
-2. **同步 4 并发 + S3 超时对主进程/UI 占用**（弱网大文件时）；
-3. **KaTeX/mhchem 预注入**（是否重复注入）。
-验证清单：DevTools Network 过滤 gw.alipayobjects.com、Console 无 CSP violation、katex 脚本只注入一次。
+## 4. 下一步计划（按序）
 
-### 3.3 编辑器相关待验证（前置会话遗留）
-- `__defineMacro` 报错是否彻底消失（KaTeX 已改本地镜像，需全新进程验证）。
-- 高亮块"卡片→空隙→颜色工具栏"物理鼠标复测（CDP 合成鼠标不经过 macOS hit-test）。
-- 代码块首次创建焦点/失焦重建。
+1. **Phase 1：lake-core 纯逻辑抽取**（零风险，桌面行为零变化）——V5 §6 清单（tree/tabLimit/concurrency/quickNoteModel/同步决策纯函数等 + check-core-boundaries.mjs 边界检查）；
+2. **customCard 原型卡片**（验证 Lake 扩展点够不够用，决定是否完整 fork lakex）；
+3. **Phase 2-4**（适配器注入点 / 契约接口 / App hook 拆分）；
+4. **R10 + 错误码**（Phase 3）；
+5. **移动端**（技术栈确定后：pnpm workspace 建议此时切换、lake-core 共享、WebView 复用 bundle 则 vendor lakex 就绪）。
 
-### 3.4 大纲/滚动条已知边界
-- 滚动条当前为系统默认 10px + thumb min-height 64px，**无 hover 增宽**（用户接受现状）。
-- 大纲悬浮触发区 = rail 右侧 28px 独立层（用户认可）。
-- 大纲 docked 时切换 tab 大纲列宽 260ms 平滑过渡（用户认可）。
+**分支策略**：用户原则「未验收不合并」——大改动在独立分支，质量门槛全过 + 用户确认后才合 master；不要擅自提交/推送。
 
----
+## 5. 踩过的坑（本会话经验，最值得继承）
 
-## 4. 下一步计划
+1. **npm 11 `allow-scripts` 默认阻止依赖 postinstall**：lakex 的 postinstall（patch-package 修补 mindmap `disableAutoFit`）会被静默跳过——必须项目级 `postinstall: patch-package --patch-dir vendor/npm/lakex-editor-react-component/patches` 显式接管（已验证全新安装自动打补丁）。
+2. **`.gitignore` 的 `dist` 规则会忽略 vendor 包内 dist**：vendor 化的包要加 `!vendor/npm/lakex-editor-react-component/dist/` 例外，否则 23M 编辑器代码不入库、新环境崩溃。
+3. **CSP 收紧暴露隐藏外链**：Lake 编辑器 CSS/JS 内有 195 个 `gw.alipayobjects.com` 引用（60 字体 + 135 图标，未镜像）——已全下载到 `public/vendor/lakex/alipay/`，vite 插件 `lakexAlipayLocal`（vite.config.ts）在 dev/build 统一重写 URL。
+4. **vite 插件 transform 对 JS 模块 id 带 `?v=` query**：`id.endsWith(".js")` 不匹配带 query 的 id——先 `id.split("?")[0]` 再判断扩展名。
+5. **CSP 配置不能放 `.env`**（被 gitignore 忽略）：用 vite 插件 `transformIndexHtml` 按 `ctx.mode` 注入 dev/prod 双 CSP。
+6. **npm file: 依赖是符号链接**：`node_modules/lakex → ../vendor/npm/lakex`，改 vendor 即生效（单一来源）。
+7. **快照保护必须比对锁字段**：`applyRemoteLock`/`setNoteLocked` 不改 `notes.updated_at`——只用 updated_at 条件会漏锁变更，metadata 比对需含 isLocked/lockedAt（§5.2）。
+8. **对象缺失「缺失」vs「损坏」区分**：缺失（对象不存在）→ 跳过 + warnings（B 方案）；损坏（size/sha256 不符）→ 仍中止。
+9. **Quick Notes journal 4 态**（prepared→db_committed→files_promoted→completed）：先提交为确定 → 恢复只补做不撤销，无 rolled_back。
+10. **group 归位是早退修复的必配**：个人笔记本初始 sync_state='local'，group-only 早退查询上线后必须 markFolderSynced 归位，否则永不早退。
+11. **多行提交信息**用 `git commit -F file`（命令行 -m 多行易出错）。
+12. **改 TS 代码里的长字符串/模板**用 write 写脚本文件再执行（run_code 内嵌数组易踩引号/反引号解析坑）。
 
-1. **渲染慢验证**（见 3.2）：真实窗口打开含公式/思维导图/多图文档，Network + Console 验证 CDN 重定向与 CSP。
-2. **编辑器稳定性复测**（见 3.3）：`__defineMacro`、高亮块 hover、代码块焦点。
-3. **CSP 决策**（见 3.1）：验证 W-5 覆盖后决定是否合并。
-4. 长期 TODO（`docs/TODO.md`）：Word/PDF 导出、附件功能（分片上传/懒下载）、全文搜索 2 字回退、Store 重构后续批次、移动端复用、大纲"展开到 X 级"偶发崩溃观察。
+## 6. 环境与命令
 
----
+```bash
+# Node 24（不要动全局/公司 Node 18）
+export PATH="$HOME/.nvm/versions/node/v24.18.0/bin:$PATH"
 
-## 5. 踩过的坑 / 经验（本会话新增）
+# 开发实例（带 CDP，真机验证用）
+cd /Users/admin/file/local-lake/lake-notes-electron
+export LAKE_USER_DATA="$HOME/Library/Application Support/lake-notes-dev"
+export LAKE_CDP_PORT=9222
+npm run dev   # vite 拉起 electron
 
-### 滚动条（血泪）
-1. **Chromium 150 不支持 `::-webkit-scrollbar-thumb:hover` 的 border/box-shadow 动态变化**——思源式"hover 变粗"（border 4px→1px）在此环境失效（实测 border 恒 4px）。不要再用这个技巧。
-2. `::-webkit-scrollbar` 的 `background-color`/`background-clip` 自定义也不可靠（只设部分属性时其余用默认）。
-3. 滚动条 hover 触发别用"容器 hover"（范围太大），也别用 JS 全局判定（易出"两段"），**当前干脆不 hover 变粗**。
-4. `getComputedStyle(el, '::-webkit-scrollbar-thumb')` 能读默认值，但 **`:hover` 伪元素读不到**（需真实鼠标 + 截图验证）。
+# 质量门槛（每阶段合并前）
+npm test -- --run  /  npx tsc --noEmit  /  node node_modules/vite/bin/vite.js build  /  git diff --check
+LAKE_CDP_PORT=9222 npm run test:ui   # 依赖活体 dev 实例
+LAKE_CDP_PORT=9222 npm run test:sidebar-interaction
+LAKE_CDP_PORT=9222 npm run test:tab-switch
 
-### 大纲悬浮
-5. **rail 视觉宽度与 grid 列宽要一致**：`--outline-collapsed-width` 继承 `--activity-rail-width`(42px) 时，rail 会超出 grid 列(34px) 8px，导致"没碰到 rail 就触发悬浮"。解法是**独立触发层**（rail 内右侧窄条），而不是改 rail 宽度。
-6. **rail 溢出部分要 `pointer-events: none`**，否则遮挡编辑器滚动条 hover（"滚动条只在左侧生效"的假象）。
-7. 合成 JS 事件（`dispatchEvent`）不触发 React 合成事件（React 17+ 挂 root）；验证交互用 CDP `Input.dispatchMouseEvent` 真实鼠标。
+# CDP 检查脚本（本会话建的）
+node /tmp/cdp-csp.mjs        # CSP 违规 + 资源清单
+node /tmp/cdp-final2.mjs     # reload 后零违规验证
+```
 
-### 环境/流程
-8. 本机 Electron 进程常残留（dev 崩溃后 vite 可能还在）：启动前 `lsof -ti tcp:1421,9222,19876 | xargs kill -9`。
-9. `node -e` 顶层 `await` 在 CJS 下不可用，用 `.mjs` 脚本或 `--input-type=module`。
-10. 像素扫描（sharp）在内容复杂文档上不可靠（文字/图片干扰），优先用 `getComputedStyle`/真实鼠标/截图+VisionPower。
-11. **改 UI 前先确认用户当前认可的状态**；用户对反复失败的修复很敏感，小步改动、每步验证。**大改/反复试探前先 commit 或 revert 到位**（本会话滚动条多轮反复，最终靠"全部移除"收场）。
+- 数据：开发 `~/Library/Application Support/lake-notes-dev`（可重建）；正式 `lake-notes-electron`（禁碰）。
+- 杀进程用具体 PID，禁 `pkill -f Electron`（机器有 Trae/SiYuan/VSCode）。
+- 远程：gitee `gtycoder/local-lake`。
 
----
+## 7. 关键文档索引
 
-## 6. 沟通要点（与用户）
+```text
+/Users/admin/file/local-lake/lake-notes-refactor-plan-v5-2026-08-21.md   ★ 唯一有效执行方案（综合所有审计/GPT 意见）
+/Users/admin/file/local-lake/lake-notes-audit-2026-08-21.md              8 领域问题清单
+/Users/admin/file/local-lake/lake-notes-scope-review-2026-08-21.md      过度设计裁决（场景约束）
+/Users/admin/file/local-lake/lake-notes-gpt-review-verdict-2026-08-21.md  GPT 64 条意见处置总表
+/Users/admin/file/local-lake/_archive/                                  历史方案/复核原文
+docs/SYNC-PROTOCOL.md                                                   同步协议定稿（本 repo）
+AGENTS.md                                                              项目长期记忆/规则
+```
 
-- 用户重视权衡与数据；给方案要附真实场景和后果，可大胆反驳。
-- 已定稿语义（**不要重新争论**）：本地是真相、目录强一致、墓碑权威、先同步者胜、开发版不考虑数据兼容、小记不备份。
-- 用户认可"直接复用/抄袭思源前端代码"，方向是**所有可见 UI 与思源一致**；涉及 AGPL-3.0 的思源代码已保留署名。
-- 用户习惯：功能做完后要自己**手动全量测试一遍**；测试完才打新包。给用户测之前先自测到"能直接上手验收"。
-- 凭据：AK/SK 曾出现在仓库历史（C-001，用户接受风险暂不轮换）；不要外泄。S3 凭据可从 Codex 历史日志提取（本会话用于清空云端），但不要打印完整值。
+## 8. 记录
+
+本交接取代 Codex 版（其内容 stash 于 stash@{0} 备用）。Phase 0 全部完成并合入 master，测试基线 358。
