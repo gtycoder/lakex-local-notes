@@ -4,7 +4,8 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="theme-color" content="#f5f6f8" />
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' http://127.0.0.1:* https://gw.alipayobjects.com https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' http://127.0.0.1:* https://gw.alipayobjects.com https://cdn.jsdelivr.net; img-src 'self' data: blob: http: https:; font-src 'self' data: http://127.0.0.1:* https://gw.alipayobjects.com https://cdn.jsdelivr.net; connect-src 'self' http: https: ws://127.0.0.1:1421 http://127.0.0.1:*; media-src 'self' data: blob:; worker-src 'self' blob:; object-src 'none'; base-uri 'none'; form-action 'none'" />
+    <!-- V5 §5.6：dev/prod 双 CSP，由 vite 插件 lakexAlipayLocal.transformIndexHtml 按 mode 注入（无 .env 依赖）；全部资源本地化 -->
+    <meta http-equiv="Content-Security-Policy" content="%VITE_CSP%" />
     <title>Lake Notes</title>
   </head>
   <body>

@@ -1,9 +1,57 @@
-import { defineConfig } from "vite";
+import { defineConfig, type Plugin } from "vite";
 import react from "@vitejs/plugin-react";
 import electron from "vite-plugin-electron";
 
+/** V5 §5.6 全本地化：lakex 编辑器 CSS/JS 内 gw.alipayobjects.com 资源（字体/图标 SVG/动态加载脚本）
+ * 已本地镜像：public/vendor/lakex/alipay/（字体/图标）+ vendor/cdn/（katex/CodeMirror，复用现有本地）。
+ * dev/build 统一重写为本地绝对路径，CSP 不再放行外部域。 */
+const ALIPAY_JS_REUSE: Record<string, string> = {
+  // 动态加载脚本 → 复用 index.html/vendor 已在用的本地文件
+  "https://gw.alipayobjects.com/as/g/larkgroup/lake-codemirror/7.1.3/CodeMirror.js": "/vendor/cdn/as/g/larkgroup/lake-codemirror/7.1.3/CodeMirror.js",
+  "https://gw.alipayobjects.com/render/p/yuyan_v/180020010000005484/7.1.27/CodeMirror.js": "/vendor/cdn/as/g/larkgroup/lake-codemirror/7.1.3/CodeMirror.js",
+  "https://gw.alipayobjects.com/os/lib/katex/0.16.8/dist/katex.min.js": "/vendor/cdn/os/lib/katex/0.16.8/dist/katex.min.js",
+  "https://gw.alipayobjects.com/os/lib/katex/0.16.8/dist/contrib/mhchem.min.js": "/vendor/cdn/os/lib/katex/0.16.8/dist/contrib/mhchem.min.js",
+};
+/** V5 §5.6：dev/prod 双 CSP（构建期注入，避免 .env 依赖）。
+ * dev：vite/react-refresh 内联 preamble 需要 unsafe-inline；
+ * prod：script-src 无 unsafe-inline，内联 KITCHEN_URL 脚本用 sha256 hash 放行。
+ * 全部资源已本地化（public/vendor/lakex/alipay/ + vendor/cdn/），不放行任何外部域。 */
+const DEV_CSP = "default-src 'self'; script-src 'self' 'unsafe-inline' http://127.0.0.1:*; style-src 'self' 'unsafe-inline' http://127.0.0.1:*; img-src 'self' data: blob: http://127.0.0.1:*; font-src 'self' data: http://127.0.0.1:*; connect-src 'self' http://127.0.0.1:* ws://127.0.0.1:1421; media-src 'self' data: blob:; worker-src 'self' blob:; object-src 'none'; base-uri 'none'; form-action 'none'";
+const PROD_CSP = "default-src 'self'; script-src 'self' 'sha256-r1Dc4EBzntnjCYkAEc8BC4xSaA3dOE5dL5hlL2pG/6s='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: http://127.0.0.1:*; font-src 'self' data: http://127.0.0.1:*; connect-src 'self' http://127.0.0.1:*; media-src 'self' data: blob:; worker-src 'self' blob:; object-src 'none'; base-uri 'none'; form-action 'none'";
+
+function lakexAlipayLocal(): Plugin {
+  return {
+    name: "lakex-alipay-local",
+    enforce: "pre",
+    transformIndexHtml(html, ctx) {
+      const csp = ctx.mode === "development" ? DEV_CSP : PROD_CSP;
+      return html.replace('<meta http-equiv="Content-Security-Policy" content="%VITE_CSP%" />', `<meta http-equiv="Content-Security-Policy" content="${csp}" />`);
+    },
+    transform(code, id) {
+      if (!id.includes("lakex-editor-react-component")) return;
+      // JS 模块 id 带 ?v= query，先剥离再判扩展名
+      const cleanId = id.split("?")[0];
+      if (cleanId.endsWith(".css")) {
+        return code.replace(/url\(https:\/\/gw\.alipayobjects\.com\/[^)]+\)/g, (m) => {
+          const name = m.slice(4, -1).split("/").pop()!;
+          return `url(/vendor/lakex/alipay/${name})`;
+        });
+      }
+      if (cleanId.endsWith(".js") || cleanId.endsWith(".mjs")) {
+        return code.replace(/https:\/\/gw\.alipayobjects\.com\/[^"'`\s)]+/g, (m) => {
+          const reuse = ALIPAY_JS_REUSE[m];
+          if (reuse) return reuse;
+          const name = m.split("/").pop()!;
+          return `/vendor/lakex/alipay/${name}`;
+        });
+      }
+    },
+  };
+}
+
 export default defineConfig({
   plugins: [
+    lakexAlipayLocal(),
     react(),
     electron([
       {
@@ -21,6 +69,8 @@ export default defineConfig({
     },
   },
   clearScreen: false,
+  // lakex CSS 含 alipay 外部 URL，需走源码 transform（lakexAlipayLocal）本地化 → 排除依赖预构建
+  optimizeDeps: { exclude: ["lakex-editor-react-component"] },
   server: { host: "127.0.0.1", port: 1421, strictPort: true },
   build: {
     target: "chrome120",
