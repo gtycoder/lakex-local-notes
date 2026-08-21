@@ -2054,10 +2054,10 @@ ne-card[data-card-name="codeblock"] .ne-card-resizer-mask {
   view-transition-name: note-pane;
 }
 ::view-transition-old(note-pane) {
-  animation: 110ms ease-in both vt-fade-out;
+  animation: 55ms ease-in both vt-fade-out;
 }
 ::view-transition-new(note-pane) {
-  animation: 160ms ease-out both vt-fade-in;
+  animation: 85ms ease-out both vt-fade-in;
 }
 @keyframes vt-fade-out { to { opacity: 0; } }
 @keyframes vt-fade-in { from { opacity: 0; } }

@@ -136,3 +136,9 @@
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--lake-text) 8%, transparent) !important;
   transform: none;
 }
+
+/* The sidebar owns the window drag strip only as a visual region. Its pseudo
+   overlay must never win hit-testing over the first row of controls. */
+@media (min-width: 761px) {
+  .sidebar::before { pointer-events: none !important; -webkit-app-region: no-drag; }
+}

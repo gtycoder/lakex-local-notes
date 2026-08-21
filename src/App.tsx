@@ -985,7 +985,7 @@ export function App() {
   // 避免“旧列宽 → 新列宽”与正文淡入同时发生，造成 tab 切换时主区横向抖动。
   useEffect(() => {
     setOutlineSwitching(true);
-    const timer = window.setTimeout(() => setOutlineSwitching(false), 360);
+    const timer = window.setTimeout(() => setOutlineSwitching(false), 220);
     return () => window.clearTimeout(timer);
   }, [activeNoteId]);
 
