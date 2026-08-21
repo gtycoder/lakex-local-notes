@@ -54,7 +54,7 @@
 - `npm run test:ui`：通过；验证普通文本不加载 Drawnix JS、状态条、设置、同步 Popover、rail 38px。
 - `npm run test:drawnix`：通过；验证动态 Drawnix card 首次渲染。
 - `npm run test:packaged`：通过；覆盖 packaged 普通 UI、设置和 Drawnix first-use。
-- `npm run benchmark:tabs`：通过（packaged，临时 24 标签上限）：8 tabs 约 227ms，24 tabs 约 541ms；24 个 editor / engine，约 5,936 DOM 节点，当前不触发自动淘汰。
+- `npm run benchmark:tabs`：通过（packaged，临时 24 标签上限）：8 tabs 约 398ms，24 tabs 约 787ms；24 个 editor / engine，约 5,840 DOM 节点，当前不触发自动淘汰。
 - `npm run benchmark:workspace`：通过（基准机）：
   - 1,001 notes：约 227ms 创建
   - 10,000 resources + 25 MiB：约 708ms 写入
