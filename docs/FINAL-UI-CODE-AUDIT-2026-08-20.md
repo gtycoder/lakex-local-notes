@@ -141,6 +141,7 @@ sync.ts       约 1,126 行
 - 资料库顶部控件已通过真实 pointer/CDP 验证：固定态搜索可获得焦点，悬浮态移入搜索/按钮区域不会收起。
 - 拖拽验证记录：source 行出现 `dragging`，目标行出现 `drop-after`，释放后交给原有 moveTreeNodeOrdered 逻辑。
 - 最新 packaged full smoke 仍通过：window state、普通 UI、Drawnix、renderer recovery、GPU/network helper recovery。
+- `test:sidebar-interaction` 通过真实 CDP 鼠标：固定资料库搜索获得焦点、4 个操作按钮存在并可命中，悬浮工具栏命中后仍保持 floating，tab 快速动画规则存在。
 
 ## 依赖安全审计
 

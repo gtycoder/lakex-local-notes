@@ -40,6 +40,7 @@
 - 资料库拖拽反馈改为轻量灰色目标态、插入线和 lifted source，减少蓝色边框噪音。
 - 提升全局 secondary/tertiary 文本和 Lake 正文对比度，保持字号和 Lake 原生工具栏不变。
 - UI smoke 增加设置面板无障碍标记、设置搜索聚焦和自定义 UI 已删除断言。
+- 新增 `test:sidebar-interaction`：真实鼠标验证固定资料库搜索/四按钮、悬浮工具栏命中和 tab 快速动画契约。
 
 ## 2026-08-21 follow-up refinement
 
