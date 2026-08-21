@@ -11,7 +11,8 @@ import type { Store } from "./store.js";
 const s3 = vi.hoisted(() => ({
   bucket: new Map<string, Buffer>(),
   puts: [] as string[],
-  reset() { this.bucket.clear(); this.puts.length = 0; },
+  failCommand: "" as string,
+  reset() { this.bucket.clear(); this.puts.length = 0; this.failCommand = ""; },
 }));
 
 vi.mock("@aws-sdk/client-s3", () => {
@@ -26,6 +27,9 @@ vi.mock("@aws-sdk/client-s3", () => {
   class DeleteObjectsCommand extends S3Command {}
   class S3Client {
     async send(command: S3Command) {
+      if (s3.failCommand && command.constructor.name === s3.failCommand) {
+        throw new Error(`injected S3 failure: ${s3.failCommand}`);
+      }
       if (command instanceof HeadBucketCommand) return {};
       if (command instanceof GetObjectCommand) {
         const key = command.input.Key as string;
@@ -379,6 +383,16 @@ function newStore(): FakeStore {
 
 describe("syncNow 增量同步", () => {
   beforeEach(() => s3.reset());
+
+  it("故障注入：manifest 上传中断时同步失败，不把本地笔记误标为 synced", async () => {
+    const store = new FakeStore();
+    store.settings = SETTINGS;
+    store.createNote("fault-manifest", "故障注入", "<p>本地内容</p>");
+    s3.failCommand = "PutObjectCommand";
+    await expect(syncNow(store as unknown as Store)).rejects.toThrow(/injected S3 failure/);
+    expect(store.notes.get("fault-manifest")?.syncState).toBe("local");
+    expect(s3.bucket.has(key("manifests/latest.json"))).toBe(false);
+  });
 
   it("首次同步上传本地笔记并写入清单；二次同步幂等（0/0）", async () => {
     const store = newStore();

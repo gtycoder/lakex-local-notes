@@ -4,6 +4,7 @@ import { Camera, Clock, FileText, History, RotateCcw, Trash2, X } from "lucide-r
 import { native } from "../lib/native";
 import { createRequestVersion } from "../lib/requestVersion";
 import { useFloatingDialog } from "./useFloatingDialog";
+import { getNativeErrorMessage } from "../lib/nativeErrors";
 
 export interface HistoryItem {
   id: number; createdAt: string; size: number; contentHash: string; refCount: number; filePath: string;
@@ -48,7 +49,7 @@ export function HistoryPanel({ open, noteId, onClose, onRestored }: {
       const nextHistory = await native.listNoteHistory(noteId);
       if (dataVersionRef.current.isCurrent(version)) setHistory(nextHistory);
     } catch (e) {
-      if (dataVersionRef.current.isCurrent(version)) setError(e instanceof Error ? e.message : String(e));
+      if (dataVersionRef.current.isCurrent(version)) setError(getNativeErrorMessage(e));
     } finally {
       if (dataVersionRef.current.isCurrent(version)) setLoading(false);
     }
@@ -63,7 +64,7 @@ export function HistoryPanel({ open, noteId, onClose, onRestored }: {
       const nextOrphans = await native.listNoteOrphans(noteId);
       if (dataVersionRef.current.isCurrent(version)) setOrphans(nextOrphans);
     } catch (e) {
-      if (dataVersionRef.current.isCurrent(version)) setError(e instanceof Error ? e.message : String(e));
+      if (dataVersionRef.current.isCurrent(version)) setError(getNativeErrorMessage(e));
     } finally {
       if (dataVersionRef.current.isCurrent(version)) setLoading(false);
     }
@@ -108,7 +109,7 @@ export function HistoryPanel({ open, noteId, onClose, onRestored }: {
       if (sid === null) setError("当前内容与最近快照相同，未创建");
       await refreshHistory();
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(getNativeErrorMessage(e));
     }
   };
 
@@ -119,7 +120,7 @@ export function HistoryPanel({ open, noteId, onClose, onRestored }: {
       await refreshHistory();
       if (noteId) onRestored(noteId);
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(getNativeErrorMessage(e));
     }
   };
 
@@ -130,7 +131,7 @@ export function HistoryPanel({ open, noteId, onClose, onRestored }: {
       // 顺序：删历史后立即重算孤儿（被删快照解除引用的资源此刻进入孤儿列表）
       await refreshOrphans();
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(getNativeErrorMessage(e));
     }
   };
 
@@ -145,7 +146,7 @@ export function HistoryPanel({ open, noteId, onClose, onRestored }: {
       await native.cleanNoteOrphans(noteId, filename ? [filename] : undefined);
       await refreshOrphans();
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(getNativeErrorMessage(e));
     }
   };
 
@@ -160,7 +161,7 @@ export function HistoryPanel({ open, noteId, onClose, onRestored }: {
         setError("快照预览失败（文件可能已删除）");
       }
     } catch (e) {
-      if (previewVersionRef.current.isCurrent(version)) setError(e instanceof Error ? e.message : String(e));
+      if (previewVersionRef.current.isCurrent(version)) setError(getNativeErrorMessage(e));
     }
   };
 
@@ -172,7 +173,7 @@ export function HistoryPanel({ open, noteId, onClose, onRestored }: {
       if (r) setInline({ title: new Date(h.createdAt).toLocaleString(), text: r.plain, size: h.size });
       else setError("快照预览失败（文件可能已删除）");
     } catch (e) {
-      if (previewVersionRef.current.isCurrent(version)) setError(e instanceof Error ? e.message : String(e));
+      if (previewVersionRef.current.isCurrent(version)) setError(getNativeErrorMessage(e));
     }
   };
 
@@ -190,7 +191,7 @@ export function HistoryPanel({ open, noteId, onClose, onRestored }: {
         setError("文件预览失败（文件可能已删除）");
       }
     } catch (e) {
-      if (previewVersionRef.current.isCurrent(version)) setError(e instanceof Error ? e.message : String(e));
+      if (previewVersionRef.current.isCurrent(version)) setError(getNativeErrorMessage(e));
     }
   };
 

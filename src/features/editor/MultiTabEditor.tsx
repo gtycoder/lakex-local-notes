@@ -323,6 +323,7 @@ export function MultiTabEditor({
               {pinned.has(tab.noteId) && <Pin size={11} className="tab-pin" aria-hidden="true" />}
               {tab.icon && <span className="tab-custom-icon" aria-hidden="true">{tab.icon}</span>}
               <span className="tab-title">{tab.title || "无标题"}</span>
+              {tab.dirty && <span className="tab-dirty-dot" aria-label="有未保存更改" />}
               {tab.deleted && <span className="tab-deleted-badge" title="该文档已在其他设备删除，正文为删除前的最后内容">已删除</span>}
               <span
                 className="tab-close"

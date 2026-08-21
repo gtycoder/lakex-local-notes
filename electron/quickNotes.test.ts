@@ -29,6 +29,15 @@ beforeEach(() => {
 });
 
 describe("QuickNotesStore", () => {
+  it("pending 摘要按未同步小记和图片事实计数，删除后保留 tombstone 计数", async () => {
+    const draftId = crypto.randomUUID();
+    const image = await quickNotes.stageImage(draftId, { bytes: [...PNG], filename: "summary.png" });
+    const note = quickNotes.createQuickNote({ text: "待同步摘要", draftId, stagedImageIds: [image.id] });
+    expect(quickNotes.getPendingSyncSummary()).toEqual({ items: 1, resources: 1 });
+    quickNotes.deleteQuickNote(note.id);
+    expect(quickNotes.getPendingSyncSummary()).toEqual({ items: 1, resources: 0 });
+  });
+
   it("无标题文字小记保存为独立 .qnote，并按时间线读取", () => {
     const saved = quickNotes.createQuickNote({ text: "临时想法\n第二行", draftId: crypto.randomUUID(), stagedImageIds: [] });
     expect(saved.content.text).toBe("临时想法\n第二行");

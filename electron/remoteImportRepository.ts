@@ -39,11 +39,34 @@ export class RemoteImportRepository {
     const lakeTmp = `${lakePath}.tmp-${process.pid}-${crypto.randomBytes(4).toString("hex")}`;
     const assetTmpDir = assetDir ? `${assetDir}.staging-${crypto.randomBytes(4).toString("hex")}` : null;
     let moved = false;
+    let lakePlaced = false;
+    let previousLakeBackedUp = false;
+    const lakeBackup = `${lakePath}.previous-${process.pid}-${crypto.randomBytes(4).toString("hex")}`;
+    const movedAssetPaths: string[] = [];
     try {
+      // 先完成文件落盘，再提交 DB。这样 rename 故障不会留下“DB 已 synced、正文文件不存在”的半状态。
       fs.writeFileSync(lakeTmp, content, "utf8");
       if (assetTmpDir) {
         fs.mkdirSync(assetTmpDir, { recursive: true });
         for (const asset of assets) fs.writeFileSync(path.join(assetTmpDir, asset.filename), asset.bytes);
+      }
+
+      fs.mkdirSync(path.dirname(lakePath), { recursive: true });
+      if (fs.existsSync(lakePath)) {
+        fs.renameSync(lakePath, lakeBackup);
+        previousLakeBackedUp = true;
+      }
+      fs.renameSync(lakeTmp, lakePath);
+      lakePlaced = true;
+
+      if (assetTmpDir && assetDir) {
+        fs.mkdirSync(assetDir, { recursive: true });
+        for (const asset of assets) {
+          const destination = path.join(assetDir, asset.filename);
+          fs.renameSync(path.join(assetTmpDir, asset.filename), destination);
+          movedAssetPaths.push(destination);
+        }
+        try { fs.rmdirSync(assetTmpDir); } catch { /* staging cleanup is best effort */ }
       }
 
       const transaction = this.deps.db.transaction(() => {
@@ -70,22 +93,29 @@ export class RemoteImportRepository {
         ).run(note.id, this.deps.workspaceId, note.parentId, note.title, note.id, note.sortOrder, note.updatedAt, note.updatedAt, note.isConflict ? 1 : 0, note.icon ?? null, trashedAt, deletedFrom);
       });
       transaction();
-
-      fs.mkdirSync(path.dirname(lakePath), { recursive: true });
-      fs.renameSync(lakeTmp, lakePath);
+      if (previousLakeBackedUp) { try { fs.rmSync(lakeBackup, { force: true }); } catch { /* best effort */ } }
       moved = true;
-      if (assetTmpDir && assetDir) {
-        fs.mkdirSync(assetDir, { recursive: true });
-        for (const asset of assets) fs.renameSync(path.join(assetTmpDir, asset.filename), path.join(assetDir, asset.filename));
-        try { fs.rmdirSync(assetTmpDir); } catch { /* staging cleanup is best effort */ }
-      }
     } catch (error) {
+      // DB 尚未提交时，回滚所有已经落盘的临时/目标文件；保留旧正文备份。
+      for (const file of movedAssetPaths) { try { fs.rmSync(file, { force: true }); } catch { /* best effort */ } }
+      if (assetDir) {
+        try { if (fs.existsSync(assetDir) && fs.readdirSync(assetDir).length === 0) fs.rmdirSync(assetDir); } catch { /* best effort */ }
+      }
+      if (lakePlaced) { try { fs.rmSync(lakePath, { force: true }); } catch { /* best effort */ } }
+      if (previousLakeBackedUp && fs.existsSync(lakeBackup)) {
+        try { fs.renameSync(lakeBackup, lakePath); } catch { /* best effort */ }
+      }
       try { fs.rmSync(lakeTmp, { force: true }); } catch { /* best effort */ }
       if (assetTmpDir) { try { fs.rmSync(assetTmpDir, { recursive: true, force: true }); } catch { /* best effort */ } }
       throw error;
     } finally {
-      if (!moved) { try { fs.rmSync(lakeTmp, { force: true }); } catch { /* best effort */ } }
-      if (assetTmpDir && !moved) { try { fs.rmSync(assetTmpDir, { recursive: true, force: true }); } catch { /* best effort */ } }
+      if (!moved) {
+        try { fs.rmSync(lakeTmp, { force: true }); } catch { /* best effort */ }
+        if (assetTmpDir) { try { fs.rmSync(assetTmpDir, { recursive: true, force: true }); } catch { /* best effort */ } }
+      }
+      if (previousLakeBackedUp && fs.existsSync(lakeBackup)) {
+        try { fs.rmSync(lakeBackup, { force: true }); } catch { /* best effort */ }
+      }
     }
 
     const text = content.toString("utf8");

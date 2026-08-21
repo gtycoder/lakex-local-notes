@@ -25,6 +25,7 @@ export interface HistorySettingsInput {
 }
 
 export class IpcInputError extends Error {
+  readonly code = "INVALID_INPUT" as const;
   constructor(message: string) {
     super(message);
     this.name = "IpcInputError";

@@ -94,7 +94,7 @@
     /* Most of the 38px rail is a trigger; only the editor-side safety band is
        excluded so the scrollbar remains directly operable. */
     right: 0;
-    width: var(--outline-hover-trigger-width, 25px);
+    width: var(--lake-outline-trigger-width, 25px);
   }
   .outline-sidebar__activity-button {
     display: grid;
@@ -466,8 +466,8 @@
 @media (min-width: 761px) {
   .outline-sidebar--collapsed .outline-sidebar__content,
   .outline-sidebar--collapsed.outline-sidebar--hovered .outline-sidebar__content {
-    top: 72px;
-    bottom: 72px;
+    top: var(--lake-floating-panel-top, 72px);
+    bottom: var(--lake-floating-panel-bottom, 72px);
     height: auto;
     max-height: calc(100% - 144px);
     transition: opacity 180ms var(--lake-ease-standard), transform 180ms var(--lake-ease-standard), visibility 180ms linear, box-shadow 180ms ease-out;

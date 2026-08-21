@@ -16,6 +16,7 @@ import { TRASH_NOTEBOOK_ID } from "./store.js";
 import type { Store } from "./store.js";
 import { log } from "./logger.js";
 import { ASSET_TRANSFER_CONCURRENCY, runPool } from "./asyncPool.js";
+import { mergeLockState } from "./syncDecision.js";
 
 // ===== 类型 =====
 export interface S3Settings {
@@ -37,18 +38,6 @@ interface ManifestNote {
   /** 回收站条目：进入回收站时间（自动过期基准）与删除前父目录（恢复位置）。 */
   trashedAt?: string | null;
   deletedFromParentId?: string | null;
-}
-
-/** 锁状态 LWW：时间戳新者胜；相同时间戳取“锁优先”（保守防误改）。返回胜出的 {locked, at}。
- *  Info：无时间戳一侧让位给有时间戳一侧（双方都无则远端胜，保持原语义）。 */
-function mergeLockState(localLocked: boolean, localAt: string | null, remoteLocked: boolean, remoteAt: string | null): { locked: boolean; at: string | null } {
-  if (!localAt || !remoteAt) {
-    if (!localAt && !remoteAt) return { locked: remoteLocked, at: null };
-    return localAt ? { locked: localLocked, at: localAt } : { locked: remoteLocked, at: remoteAt };
-  }
-  if (remoteAt > localAt) return { locked: remoteLocked, at: remoteAt };
-  if (remoteAt < localAt) return { locked: localLocked, at: localAt };
-  return { locked: localLocked || remoteLocked, at: localAt };
 }
 
 interface ManifestFolder {

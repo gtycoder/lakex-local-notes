@@ -10,7 +10,11 @@ import { ConfirmDelete, Sidebar, type SidebarMode } from "./components/Sidebar";
 import { QuickNotesWorkspace, type QuickNotesWorkspaceHandle } from "./components/QuickNotesWorkspace";
 import { SyncToast, type SyncToastData } from "./components/SyncToast";
 import { SyncStatusPopover } from "./components/SyncStatusPopover";
+import { DraftRecoveryDialog } from "./components/DraftRecoveryDialog";
+import { useWindowShortcuts } from "./hooks/useWindowShortcuts";
+import { useTopMenus } from "./hooks/useTopMenus";
 import { DesktopStatusBar } from "./components/DesktopStatusBar";
+import { getDocumentStatus } from "./components/documentStatusModel";
 import { LakeEditor } from "./features/editor/LakeEditor";
 import { clearScrollMemory, locateEditorSearchHit } from "./features/editor/EditorTab";
 import type { LakeEditorInstance } from "./features/editor/lakeRuntime";
@@ -21,18 +25,21 @@ import type { OutlineMode } from "./features/outline/OutlineController";
 import { getOutlineTab, getOutlineTabsVersion, subscribeOutlineTabs } from "./features/outline/registry";
 import { cleanLakeMarkdown } from "./lib/markdownClean";
 import { KeyedAsyncQueue } from "./lib/keyedAsyncQueue";
-import { computeDocStats, type DocStats } from "./lib/docStats";
+import { useDocumentStats } from "./hooks/useDocumentStats";
+import { useSyncController } from "./hooks/useSyncController";
+import { useDocumentTabs } from "./hooks/useDocumentTabs";
 import { createRequestVersion } from "./lib/requestVersion";
 import { stripAssetAccessToken } from "./lib/assetPort";
 import { isDesktop, native } from "./lib/native";
+import { getNativeErrorCode, getNativeErrorMessage } from "./lib/nativeErrors";
 import { loadSettings, saveSettings, subscribeSettings, type AppSettings } from "./lib/settings";
-import { applyTheme, applyCustomCss } from "./lib/theme";
+import { applyTheme } from "./lib/theme";
 import { SettingsPanel, type SettingsCategory } from "./components/SettingsPanel";
 import { subtreeIds } from "./lib/tree";
 import { DOCK_GUTTER, FIXED_RAIL_WIDTH } from "./lib/layoutMetrics";
 import { OUTLINE_HOVER_TRIGGER_WIDTH, OUTLINE_SCROLLBAR_CLEARANCE } from "./features/outline/outlineInteraction";
 import { shouldCollapseSidebarOnHoverLeave } from "./components/sidebarInteraction";
-import type { NoteDigest, NoteDocument, NoteSummary, SyncProgress, SyncStatus, TreeNode, WorkspaceSnapshot } from "./lib/types";
+import type { DraftJournalEntry, NoteDigest, NoteDocument, NoteSummary, SyncPendingSummary, SyncProgress, SyncStatus, TreeNode, WorkspaceSnapshot } from "./lib/types";
 
 const SIDEBAR_HOVER_HIDE_DELAY_MS = 120;
 
@@ -111,10 +118,9 @@ export function App() {
   const [searchPanelQuery, setSearchPanelQuery] = useState("");
   const [saveState, setSaveState] = useState<SaveState>("idle");
   const [lastSavedAt, setLastSavedAt] = useState<string | null>(null);
-  const [conflictSnapshotNotice, setConflictSnapshotNotice] = useState<{ count: number; text: string } | null>(null);
-  const [topMenuOpen, setTopMenuOpen] = useState(false);
-  /** 工作空间（lake-notes）下拉：偏好设置/回收站 */
-  const [workspaceMenuOpen, setWorkspaceMenuOpen] = useState(false);
+  const [conflictSnapshotNotice, setConflictSnapshotNotice] = useState<Array<{ noteId: string; title: string }>>([]);
+  const [activeHistoryCount, setActiveHistoryCount] = useState(0);
+  const { topMenuOpen, setTopMenuOpen, workspaceMenuOpen, setWorkspaceMenuOpen, closeMenus } = useTopMenus();
   const [focusMode, setFocusMode] = useState(false);
   /** 顶栏两个下拉的触发容器 ref（定位 fixed 菜单用） */
   const wsMenuWrapRef = useRef<HTMLDivElement>(null);
@@ -123,44 +129,16 @@ export function App() {
   /** 顶栏「工作空间」名：取 S3 prefix（未配置时显示本地占位） */
   const workspaceName = "本地空间";
 
-  // 顶栏两个下拉（工作空间菜单 / 更多文档操作）：外部点击或 Escape 关闭
-  useEffect(() => {
-    const onPointerDown = (event: PointerEvent) => {
-      const target = event.target as Node;
-      const moreMenu = document.querySelector(".top-menu--more");
-      const moreBtn = document.querySelector(".toolbar__item[aria-label=\"更多\"]");
-      const wsMenu = document.querySelector(".top-menu--workspace");
-      const wsBtn = document.querySelector(".toolbar__item[aria-label=\"工作空间\"]");
-      if (moreMenu && !moreMenu.contains(target) && moreBtn && !moreBtn.contains(target)) setTopMenuOpen(false);
-      if (wsMenu && !wsMenu.contains(target) && wsBtn && !wsBtn.contains(target)) setWorkspaceMenuOpen(false);
-    };
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.metaKey && event.shiftKey && event.key === "Enter") {
-        event.preventDefault();
-        setFocusMode((value) => !value);
-        setTopMenuOpen(false);
-        setWorkspaceMenuOpen(false);
-        return;
-      }
-      if (event.metaKey && event.key.toLowerCase() === "k") {
-        event.preventDefault();
-        setSearchPanelQuery("");
-        setSearchPanelOpen(true);
-        setTopMenuOpen(false);
-        setWorkspaceMenuOpen(false);
-        return;
-      }
-      if (event.key === "Escape") { setTopMenuOpen(false); setWorkspaceMenuOpen(false); }
-    };
-    if (topMenuOpen || workspaceMenuOpen) document.addEventListener("pointerdown", onPointerDown);
-    document.addEventListener("keydown", onKeyDown, true);
-    return () => {
-      if (topMenuOpen || workspaceMenuOpen) document.removeEventListener("pointerdown", onPointerDown);
-      document.removeEventListener("keydown", onKeyDown, true);
-    };
-  }, [topMenuOpen, workspaceMenuOpen]);
+  useWindowShortcuts({
+    onOpenSearch: () => { setSearchPanelQuery(""); setSearchPanelOpen(true); closeMenus(); },
+    onToggleFocus: () => { setFocusMode((value) => !value); closeMenus(); },
+    onEscape: closeMenus,
+  });
   const [sync, setSync] = useState<SyncStatus>({ phase: "idle", message: "仅本地保存", lastSyncedAt: null, pendingChanges: 0 });
   const [cloudEnabled, setCloudEnabled] = useState(true);
+  const [cloudConfigured, setCloudConfigured] = useState(false);
+  const [pendingSummary, setPendingSummary] = useState<SyncPendingSummary>({ documents: 0, resources: 0, quickNotes: 0, total: 0, generatedAt: "" });
+  const [draftEntries, setDraftEntries] = useState<DraftJournalEntry[]>([]);
   const [confirmDelete, setConfirmDelete] = useState<TreeNode | null>(null);
   const [syncToast, setSyncToast] = useState<SyncToastData | null>(null);
   const [syncProgress, setSyncProgress] = useState<SyncProgress | null>(null);
@@ -200,6 +178,7 @@ export function App() {
   const openTabsRef = useRef<OpenTab[]>([]);
   const quickNotesRef = useRef<QuickNotesWorkspaceHandle>(null);
   const saveTimers = useRef<Map<string, number>>(new Map());
+  const draftTimers = useRef<Map<string, number>>(new Map());
   const saveQueueRef = useRef(new KeyedAsyncQueue());
   const tabReloadVersionRef = useRef(createRequestVersion());
   const layoutWidthsRef = useRef({ sidebar: sidebarWidth, outline: outlineSidebarWidth });
@@ -216,36 +195,18 @@ export function App() {
 
   useEffect(() => { openTabsRef.current = openTabs; }, [openTabs]);
 
-  // W-2-A：字数/图片统计状态（hooks 必须在早退之前声明）。
-  // 切换/重载文档立即计算；打字输入走 300ms debounce。
-  const [docStats, setDocStats] = useState<DocStats>({ wordCount: 0, imageCount: 0 });
-  const statsTimerRef = useRef<number | null>(null);
-  const statsKeyRef = useRef("");
+  const docStats = useDocumentStats(openTabs, activeNoteId, mobileActive?.id ?? null, mobileActive?.content ?? "");
+
+  // 顶栏冲突提醒可以在 12 秒后消失，但当前文档的“历史 N”是持久事实，
+  // 不能随着 toast 消失；切换文档/打开历史面板时重新读取本地快照数量。
   useEffect(() => {
-    const tab = openTabs.find((t) => t.noteId === activeNoteId);
-    const content = tab?.content ?? mobileActive?.content ?? "";
-    const key = activeNoteId
-      ? `tab:${activeNoteId}:${tab?.reloadKey ?? 0}`
-      : `mobile:${mobileActive?.id ?? "none"}`;
-    if (statsKeyRef.current !== key) {
-      // 文档切换/重载：立即更新状态栏，不引入感知延迟
-      statsKeyRef.current = key;
-      setDocStats(computeDocStats(content));
-      return;
-    }
-    // 正文变化（打字）：debounce 后再算，避免大文档每按键全量正则
-    if (statsTimerRef.current !== null) window.clearTimeout(statsTimerRef.current);
-    statsTimerRef.current = window.setTimeout(() => {
-      statsTimerRef.current = null;
-      setDocStats(computeDocStats(content));
-    }, 300);
-    return () => {
-      if (statsTimerRef.current !== null) {
-        window.clearTimeout(statsTimerRef.current);
-        statsTimerRef.current = null;
-      }
-    };
-  }, [openTabs, activeNoteId, mobileActive]);
+    if (!activeNoteId) { setActiveHistoryCount(0); return; }
+    let alive = true;
+    void native.listNoteHistory(activeNoteId)
+      .then((items) => { if (alive) setActiveHistoryCount(items.length); })
+      .catch(() => { if (alive) setActiveHistoryCount(0); });
+    return () => { alive = false; };
+  }, [activeNoteId, conflictSnapshotNotice.length, historyOpen]);
 
   useEffect(() => {
     if (sidebarMode !== "floating") localStorage.setItem("lake-notes-v2.sidebar-mode", sidebarMode);
@@ -261,6 +222,12 @@ export function App() {
     return () => {
       saveTimers.current.forEach((timer) => window.clearTimeout(timer));
       saveTimers.current.clear();
+      for (const tab of openTabsRef.current) {
+        if (!tab.dirty) continue;
+        void native.saveDraftJournal({ noteId: tab.noteId, title: tab.title, content: tab.content, updatedAt: new Date().toISOString() }).catch(() => undefined);
+      }
+      draftTimers.current.forEach((timer) => window.clearTimeout(timer));
+      draftTimers.current.clear();
       if (sidebarPreviewTimer.current !== null) window.clearTimeout(sidebarPreviewTimer.current);
       // 拖动过程只更新视觉状态；卸载时补一次合法的最终布局提交。
       const widths = layoutWidthsRef.current;
@@ -308,8 +275,7 @@ export function App() {
   // 主题与自定义 CSS：设置变化即应用（data-theme 驱动 b3 令牌切换；首帧前已由 main.tsx 预应用）
   useEffect(() => {
     applyTheme(settings.theme);
-    applyCustomCss(settings.customCss);
-  }, [settings.theme, settings.customCss]);
+  }, [settings.theme]);
 
   useEffect(() => {
     const media = window.matchMedia("(max-width: 760px)");
@@ -318,10 +284,32 @@ export function App() {
     void native.bootstrap().then(async (snapshot) => {
       setWorkspace(snapshot); setNotes(snapshot.notes); setSync(snapshot.sync);
       void native.getSyncSettings().then((cfg) => setCloudEnabled(cfg.enabled)).catch(() => undefined);
+      void native.getS3Settings().then((cfg) => setCloudConfigured(Boolean(cfg))).catch(() => undefined);
+      void native.getSyncStatus().then((info) => {
+        const superseded = info.lastResult?.supersededNotes ?? [];
+        if (superseded.length > 0) setConflictSnapshotNotice(superseded.map((item) => ({ noteId: item.id, title: item.title })));
+      }).catch(() => undefined);
+      void native.getSyncPendingSummary().then(setPendingSummary).catch(() => undefined);
+      void native.listDraftJournals().then((entries) => {
+        // 启动时不展示已经被删除的文档草稿：删除文档是明确的用户操作，草稿不应绕过回收站重新出现。
+        const liveIds = new Set(snapshot.notes.map((note) => note.id));
+        const orphaned = entries.filter((entry) => !liveIds.has(entry.noteId));
+        setDraftEntries(entries.filter((entry) => liveIds.has(entry.noteId)));
+        void Promise.all(orphaned.map((entry) => native.deleteDraftJournal(entry.noteId).catch(() => undefined)));
+      }).catch(() => undefined);
       setTreeNodes(await native.listTreeNodes());
       const id = snapshot.lastOpenedNoteId ?? snapshot.notes[0]?.id;
-      if (id && !media.matches) await openNote(id);
-    }).catch((reason) => setError(String(reason)));
+      if (id && !media.matches) {
+        const opened = await openNote(id);
+        if (!opened) {
+          // lastOpenedNoteId 可能指向已 purge 的旧文档；启动不能停在错误页，
+          // 回退到第一个仍存在的文档，若资料库为空则保持空状态。
+          setError(null);
+          const fallback = snapshot.notes.find((note) => note.id !== id)?.id;
+          if (fallback) await openNote(fallback);
+        }
+      }
+    }).catch((reason) => setError(getNativeErrorMessage(reason)));
     return () => { media.removeEventListener("change", onChange); };
   }, []);
 
@@ -345,6 +333,10 @@ export function App() {
         // 优化：先做轻量 digest 比对（只读 DB 行、不读正文文件），未变化的 tab 跳过全量
         // readNote，避免每次同步都把所有打开文档重新读盘（历史快照恢复后上传卡顿的诱因之一）。
         const supersededList = progress.supersededNotes ?? [];
+        if (supersededList.length > 0) {
+          setConflictSnapshotNotice(supersededList.map((item) => ({ noteId: item.id, title: item.title })));
+          window.setTimeout(() => setConflictSnapshotNotice([]), 12000);
+        }
         const supersededIds = new Set(supersededList.map((n) => n.id));
         // 渲染进程日志经主进程 console-message 转发落盘；[sync-tab] 前缀便于 grep。
         const tabRefreshStart = performance.now();
@@ -429,6 +421,23 @@ export function App() {
     return () => { viewport.removeEventListener("resize", update); viewport.removeEventListener("scroll", update); document.body.classList.remove("keyboard-open"); };
   }, []);
 
+  const refreshPendingSummary = useCallback(() => {
+    void native.getSyncPendingSummary().then(setPendingSummary).catch(() => undefined);
+  }, []);
+
+  const refreshDraftEntries = useCallback(async () => {
+    try {
+      const [entries, summaries] = await Promise.all([native.listDraftJournals(), native.listNoteSummaries()]);
+      const liveIds = new Set(summaries.map((note) => note.id));
+      const valid = entries.filter((entry) => liveIds.has(entry.noteId));
+      setDraftEntries(valid);
+      const orphaned = entries.filter((entry) => !liveIds.has(entry.noteId));
+      await Promise.all(orphaned.map((entry) => native.deleteDraftJournal(entry.noteId).catch(() => undefined)));
+    } catch {
+      // 草稿恢复是 best-effort，不能阻塞回收站/主界面的正常操作。
+    }
+  }, []);
+
   const persistTab = useCallback((noteId: string, title: string, content: string) => {
     return saveQueueRef.current.run(noteId, async () => {
       // 远端已删除（标记 deleted）的文档不再保存：避免把内容写回已回收的笔记。
@@ -450,9 +459,14 @@ export function App() {
         setNotes((items) => items.map((item) => item.id === saved.id ? summaryOf(saved) : item));
         setTreeNodes((items) => items.map((item) => item.noteFileId === saved.id || item.id === saved.id ? { ...item, title: saved.title, updatedAt: saved.updatedAt, syncState: saved.syncState } : item));
         setSync((current) => ({ ...current, pendingChanges: Math.max(1, current.pendingChanges) }));
+        refreshPendingSummary();
         if (revisionRef.current.get(noteId) === revision) {
           // 无新编辑：安全覆盖 + 清除 dirty；同时更新 lastDigest（本机已保存，远端未变时无需重载）
           setOpenTabs((tabs) => tabs.map((tab) => tab.noteId === noteId ? { ...tab, title: saved.title, content: saved.content, dirty: false, lastDigest: { title: saved.title, updatedAt: saved.updatedAt } } : tab));
+          const draftTimer = draftTimers.current.get(noteId);
+          if (draftTimer !== undefined) { window.clearTimeout(draftTimer); draftTimers.current.delete(noteId); }
+          void native.deleteDraftJournal(noteId).catch(() => undefined);
+          setDraftEntries((entries) => entries.filter((entry) => entry.noteId !== noteId));
           setLastSavedAt(new Date().toISOString());
           setSaveState("saved");
         } else {
@@ -461,13 +475,12 @@ export function App() {
         }
         return saved;
       } catch (reason) {
-        const msg = String(reason);
-        if (msg.includes("NotFound") || msg.includes("not found")) return;
-        setSaveState("error"); setError(msg);
+        if (getNativeErrorCode(reason) === "NOT_FOUND") return;
+        setSaveState("error"); setError(getNativeErrorMessage(reason));
       }
 
     });
-  }, []);
+  }, [refreshPendingSummary]);
 
   /** 超限自动淘汰：返回被关闭的 noteId 列表（dirty 内容先持久化，绝不淘汰当前激活标签）。 */
   const evictTabsForLimit = useCallback(async (nextTabs: OpenTab[], openedId: string): Promise<string[]> => {
@@ -508,6 +521,13 @@ export function App() {
           window.clearTimeout(pendingTimer);
           saveTimers.current.delete(tab.noteId);
         }
+        const draftTimer = draftTimers.current.get(tab.noteId);
+        if (draftTimer !== undefined) {
+          window.clearTimeout(draftTimer);
+          draftTimers.current.delete(tab.noteId);
+        }
+        // beforeunload 无法等待 IPC；先 best-effort 落一份草稿，再尝试正式保存。
+        void native.saveDraftJournal({ noteId: tab.noteId, title: tab.title, content: tab.content, updatedAt: new Date().toISOString() }).catch(() => undefined);
         void persistTab(tab.noteId, tab.title, tab.content);
       }
       event.preventDefault();
@@ -516,6 +536,16 @@ export function App() {
     window.addEventListener("beforeunload", onBeforeUnload);
     return () => { window.removeEventListener("beforeunload", onBeforeUnload); };
   }, [persistTab, mobileActive, mobileDraftContent, quickNotesDirty]);
+
+  const scheduleDraftJournal = useCallback((noteId: string, title: string, content: string) => {
+    const existing = draftTimers.current.get(noteId);
+    if (existing !== undefined) window.clearTimeout(existing);
+    const timer = window.setTimeout(() => {
+      draftTimers.current.delete(noteId);
+      void native.saveDraftJournal({ noteId, title, content, updatedAt: new Date().toISOString() }).catch(() => undefined);
+    }, 450);
+    draftTimers.current.set(noteId, timer);
+  }, []);
 
   const scheduleSave = useCallback((noteId: string, content: string) => {
     setSaveState("dirty");
@@ -535,7 +565,8 @@ export function App() {
     noticeTimer.current = window.setTimeout(() => setNotice(null), 2200);
   }, []);
 
-  const openNote = useCallback(async (id: string, locateQuery = "", _newTab = false) => {
+
+  const openNote = useCallback(async (id: string, locateQuery = "", _newTab = false): Promise<boolean> => {
     const locate = () => {
       if (!locateQuery) return;
       let attempts = 0;
@@ -565,13 +596,13 @@ export function App() {
         tab.noteId === id ? { ...tab, lastAccessedAt: Date.now() } : tab
       ));
       locate();
-      return;
+      return true;
     }
     try {
       const note = await native.readNote(id);
       if (openTabsRef.current.some((t) => t.noteId === id)) {
         setActiveNoteId(id);
-        return;
+        return true;
       }
       revisionRef.current.set(note.id, 0);
       const newTab: OpenTab = { noteId: note.id, title: note.title, content: note.content, dirty: false, lastAccessedAt: Date.now() };
@@ -594,7 +625,11 @@ export function App() {
       }
       setActiveNoteId(id);
       locate();
-    } catch (reason) { setError(String(reason)); }
+      return true;
+    } catch (reason) {
+      setError(getNativeErrorMessage(reason));
+      return false;
+    }
   }, [evictTabsForLimit, settings.maxOpenTabs, pinnedNoteIds, showNotice]);
 
   const openNoteMobile = useCallback(async (id: string) => {
@@ -602,31 +637,39 @@ export function App() {
       const note = await native.readNote(id);
       setMobileActive(note); setMobileDraftTitle(note.title); setMobileDraftContent(note.content);
       setMobilePage("document");
-    } catch (reason) { setError(String(reason)); }
+    } catch (reason) { setError(getNativeErrorMessage(reason)); }
   }, []);
 
-  async function closeTab(noteId: string) {
-    const tab = openTabsRef.current.find((t) => t.noteId === noteId);
-    if (!tab) return;
-    clearScrollMemory(noteId);
-    const pendingTimer = saveTimers.current.get(noteId);
-    if (pendingTimer !== undefined) {
-      window.clearTimeout(pendingTimer);
-      saveTimers.current.delete(noteId);
+  const restoreDraft = useCallback(async (entry: DraftJournalEntry) => {
+    // 先确认正式文档仍存在。否则不能从恢复对话框中静默移除草稿，让用户误以为恢复成功。
+    try { await native.readNote(entry.noteId); }
+    catch {
+      showNotice("草稿对应的文档已不存在；草稿仍保留，可手动丢弃。");
+      return;
     }
-    if (tab.dirty) await persistTab(noteId, tab.title, tab.content);
-    const refTabs = openTabsRef.current;
-    const closedIndex = refTabs.findIndex((t) => t.noteId === noteId);
-    if (closedIndex === -1) return;
-    let nextActiveId: string | null = null;
-    if (activeNoteId === noteId) {
-      const without = refTabs.filter((t) => t.noteId !== noteId);
-      const nextActive = without[Math.min(closedIndex, without.length - 1)];
-      nextActiveId = nextActive?.noteId ?? null;
-    }
-    setOpenTabs((tabs) => tabs.filter((t) => t.noteId !== noteId));
-    if (nextActiveId !== null) setActiveNoteId(nextActiveId);
-  }
+    await openNote(entry.noteId);
+    setOpenTabs((tabs) => tabs.map((tab) => tab.noteId === entry.noteId ? { ...tab, title: entry.title || tab.title, content: entry.content, dirty: true, reloadKey: (tab.reloadKey ?? 0) + 1 } : tab));
+    setActiveNoteId(entry.noteId);
+    setDraftEntries((entries) => entries.filter((item) => item.noteId !== entry.noteId));
+    setSaveState("dirty");
+    scheduleSave(entry.noteId, entry.content);
+  }, [openNote, scheduleSave, showNotice]);
+
+  const discardDraft = useCallback((noteId: string) => {
+    void native.deleteDraftJournal(noteId).catch(() => undefined);
+    setDraftEntries((entries) => entries.filter((entry) => entry.noteId !== noteId));
+  }, []);
+
+  const { handleTabChange, reorderTabs, closeTab } = useDocumentTabs<OpenTab>({
+    tabsRef: openTabsRef,
+    activeNoteId,
+    setTabs: setOpenTabs,
+    setActiveNoteId,
+    setSaveState,
+    saveTimers,
+    persistTab,
+    clearScrollMemory,
+  });
 
   /** 云同步：点顶栏云按钮直接开始，小悬浮窗展示状态并自动消失（不再弹带按钮的大弹窗） */
   const showSyncToast = useCallback((data: SyncToastData) => {
@@ -642,55 +685,17 @@ export function App() {
     }
   }, []);
 
-  const runSync = useCallback(async () => {
-    setSyncProgress(null);
-    showSyncToast({ kind: "busy", title: "正在同步", message: "准备同步...", progress: { phase: "connect", message: "准备同步..." } });
-    const unsubscribe = native.onSyncProgress((progress) => {
-      setSyncProgress(progress);
-      if (progress.error) {
-        setSync((current) => ({ ...current, phase: "error", message: progress.error || "同步失败" }));
-        showSyncToast({ kind: "error", title: "同步失败", message: progress.error || "同步失败" });
-        return;
-      }
-      setSync((current) => ({ ...current, phase: "syncing", message: progress.message }));
-      setSyncToast((current) => current && current.kind === "busy" ? { ...current, progress, message: progress.message } : current);
-    });
-    try {
-      const settings = await native.getS3Settings();
-      if (!settings) {
-        setSync((current) => ({ ...current, phase: "idle", message: "尚未配置云同步" }));
-        showSyncToast({ kind: "unavailable", title: "尚未配置云同步", message: "请先配置 S3，完成后即可开始同步。", onConfigure: () => { setSettingsCategory("sync"); setSettingsOpen(true); } });
-        return;
-      }
-      const result = await native.syncNow();
-      const lakeMessage = `Lake：上传 ${result.uploaded}，下载 ${result.downloaded}，冲突 ${result.conflicts}`;
-      const quickMessage = result.quickNotes?.error
-        ? "；小记同步失败（Lake 已完成）"
-        : result.quickNotes ? `；小记：上传 ${result.quickNotes.uploaded}，下载 ${result.quickNotes.downloaded}，冲突 ${result.quickNotes.conflicts}` : "";
-      const resultMessage = `同步完成：${lakeMessage}${quickMessage}`;
-      const superseded = result.supersededNotes && result.supersededNotes.length > 0
-        ? `远端修改已覆盖本地 ${result.supersededNotes.length} 篇（${result.supersededNotes.slice(0, 3).map((n) => `「${n.title}」`).join("、")}${result.supersededNotes.length > 3 ? " 等" : ""}），本地修改已存入该文档的历史版本。`
-        : "";
-      setSync((current) => ({ ...current, phase: result.quickNotes?.error ? "error" : "success", message: resultMessage, lastSyncedAt: result.completedAt, pendingChanges: 0 }));
-      if (superseded) {
-        setConflictSnapshotNotice({ count: result.supersededNotes.length, text: "检测到远端版本差异，已保留历史快照" });
-        window.setTimeout(() => setConflictSnapshotNotice(null), 12000);
-      }
-      showSyncToast({ kind: result.quickNotes?.error ? "error" : "ok", title: "同步完成", message: `${lakeMessage}${quickMessage}`, detail: superseded || undefined });
-    } catch (error) {
-      const rawMessage = String(error);
-      if (rawMessage.includes("请先保存 S3 配置")) {
-        setSync((current) => ({ ...current, phase: "idle", message: "尚未配置云同步" }));
-        showSyncToast({ kind: "unavailable", title: "尚未配置云同步", message: "请先配置 S3，完成后即可开始同步。", onConfigure: () => { setSettingsCategory("sync"); setSettingsOpen(true); } });
-      } else {
-        const errorMessage = "同步失败，请检查网络或 S3 配置";
-        setSync((current) => ({ ...current, phase: "error", message: errorMessage }));
-        showSyncToast({ kind: "error", title: "同步失败", message: errorMessage });
-      }
-    } finally {
-      unsubscribe();
-    }
-  }, [showSyncToast]);
+  const runSync = useSyncController({
+    setSync,
+    setCloudConfigured,
+    setSyncProgress,
+    setSyncToast,
+    setConflictSnapshotNotice,
+    setSettingsCategory,
+    setSettingsOpen,
+    showSyncToast,
+    refreshPendingSummary,
+  });
 
   /** 编辑器实例就绪回调：注册到 map，销毁时移除；就绪时补写文本缓存（存量文档首次打开即有缓存） */
   const handleEditorReady = useCallback((noteId: string, editor: LakeEditorInstance | null) => {
@@ -721,7 +726,7 @@ export function App() {
       await navigator.clipboard.writeText(caches.markdown);
       showNotice("已复制 Markdown（" + caches.markdown.length + " 字符）");
     } catch (reason) {
-      setError("复制 Markdown 失败: " + (reason instanceof Error ? reason.message : String(reason)));
+      setError("复制 Markdown 失败: " + (getNativeErrorMessage(reason)));
     }
   }, [showNotice]);
 
@@ -741,7 +746,7 @@ export function App() {
         showNotice(`已导出原生 Lake：${result.exportPath}（${result.imageCount} 张图片内嵌${skippedText}）`);
       }
     } catch (reason) {
-      setError("导出失败: " + (reason instanceof Error ? reason.message : String(reason)));
+      setError("导出失败: " + (getNativeErrorMessage(reason)));
     }
   }, [showNotice]);
 
@@ -754,7 +759,7 @@ export function App() {
       await navigator.clipboard.writeText(text);
       showNotice("已复制资料路径（本机 AI 可读）");
     } catch (reason) {
-      setError("复制资料路径失败: " + (reason instanceof Error ? reason.message : String(reason)));
+      setError("复制资料路径失败: " + (getNativeErrorMessage(reason)));
     }
   }, [showNotice]);
 
@@ -765,7 +770,7 @@ export function App() {
       setTreeNodes((items) => items.map((item) => item.id === updated.id ? updated : item));
       showNotice(icon ? "已设置图标" : "已清除图标");
     } catch (reason) {
-      setError("设置图标失败: " + (reason instanceof Error ? reason.message : String(reason)));
+      setError("设置图标失败: " + (getNativeErrorMessage(reason)));
     }
   }, [showNotice]);
 
@@ -777,8 +782,10 @@ export function App() {
   const handleContentChange = useCallback((noteId: string, content: string) => {
     revisionRef.current.set(noteId, (revisionRef.current.get(noteId) ?? 0) + 1);
     setOpenTabs((tabs) => tabs.map((tab) => tab.noteId === noteId ? { ...tab, content, dirty: true } : tab));
+    const title = openTabsRef.current.find((tab) => tab.noteId === noteId)?.title ?? "无标题";
+    scheduleDraftJournal(noteId, title, content);
     scheduleSave(noteId, content);
-  }, [scheduleSave]);
+  }, [scheduleDraftJournal, scheduleSave]);
 
   async function createNoteIn(parentId: string | null) {
     const note = parentId === null ? await native.createNote("无标题文档") : await native.createNoteIn(parentId, "无标题文档");
@@ -821,7 +828,7 @@ export function App() {
       if (kind === "notebook") await native.createNotebook(resolvedTitle);
       else if (parentId) await native.createGroup(parentId, resolvedTitle);
       setTreeNodes(await native.listTreeNodes());
-    } catch (reason) { setError(String(reason)); }
+    } catch (reason) { setError(getNativeErrorMessage(reason)); }
   }, []);
 
   const renameTreeNode = useCallback(async (id: string, title: string) => {
@@ -832,7 +839,7 @@ export function App() {
         setNotes((items) => items.map((note) => note.id === renamed.noteFileId ? { ...note, title: renamed.title, updatedAt: renamed.updatedAt, syncState: "local" } : note));
         setOpenTabs((tabs) => tabs.map((tab) => tab.noteId === renamed.noteFileId ? { ...tab, title: renamed.title } : tab));
       }
-    } catch (reason) { setError(String(reason)); }
+    } catch (reason) { setError(getNativeErrorMessage(reason)); }
   }, []);
 
   const moveTreeNode = useCallback(async (id: string, targetId: string, position: "before" | "inside" | "after") => {
@@ -853,7 +860,7 @@ export function App() {
           })();
       await native.moveTreeNodeOrdered(id, parentId, orderedIds);
       setTreeNodes(await native.listTreeNodes());
-    } catch (reason) { setError(String(reason)); }
+    } catch (reason) { setError(getNativeErrorMessage(reason)); }
   }, [treeNodes]);
 
   // W-2-B：传给 Sidebar 的回调全部稳定化——App 每次渲染（含打字触发的 openTabs 变化）
@@ -898,6 +905,8 @@ export function App() {
         clearScrollMemory(noteId);
       });
       await native.deleteTreeNode(id);
+      await Promise.all([...removedNoteIds].map((noteId) => native.deleteDraftJournal(noteId).catch(() => undefined)));
+      setDraftEntries((entries) => entries.filter((entry) => !removedNoteIds.has(entry.noteId)));
       const remaining = notes.filter((note) => !removedNoteIds.has(note.id));
       setNotes(remaining);
       setTreeNodes(await native.listTreeNodes());
@@ -906,7 +915,7 @@ export function App() {
       if (activeNoteId && removedNoteIds.has(activeNoteId)) {
         setActiveNoteId(next[next.length - 1]?.noteId ?? null);
       }
-    } catch (reason) { setError(String(reason)); }
+    } catch (reason) { setError(getNativeErrorMessage(reason)); }
   }
 
   const clearSidebarPreviewTimer = useCallback(() => {
@@ -976,7 +985,7 @@ export function App() {
   // 避免“旧列宽 → 新列宽”与正文淡入同时发生，造成 tab 切换时主区横向抖动。
   useEffect(() => {
     setOutlineSwitching(true);
-    const timer = window.setTimeout(() => setOutlineSwitching(false), 360);
+    const timer = window.setTimeout(() => setOutlineSwitching(false), 220);
     return () => window.clearTimeout(timer);
   }, [activeNoteId]);
 
@@ -1025,19 +1034,8 @@ export function App() {
       const updated = await native.setNoteLocked(tabId, next);
       setNotes((items) => items.map((item) => (item.id === tabId ? { ...item, isLocked: updated.isLocked, lockedAt: updated.lockedAt } : item)));
     } catch (reason) {
-      setError(String(reason));
+      setError(getNativeErrorMessage(reason));
     }
-  }
-
-  /** 标签拖拽排序：按新顺序重排 openTabs（并同步 ref） */
-  function reorderTabs(noteIds: string[]) {
-    setOpenTabs((current) => {
-      const byId = new Map(current.map((tab) => [tab.noteId, tab]));
-      const next = noteIds.map((id) => byId.get(id)).filter((tab): tab is OpenTab => Boolean(tab));
-      // 保留未出现在拖拽列表里的标签（理论上不会发生）
-      for (const tab of current) if (!noteIds.includes(tab.noteId)) next.push(tab);
-      return next;
-    });
   }
 
   function updateOutlineSidebarWidth(width: number) {
@@ -1087,20 +1085,9 @@ export function App() {
   async function handleQuickNoteConverted(note: NoteDocument) {
     setNotes((items) => [summaryOf(note), ...items.filter((item) => item.id !== note.id)]);
     try { setTreeNodes(await native.listTreeNodes()); }
-    catch (reason) { setError(String(reason)); }
+    catch (reason) { setError(getNativeErrorMessage(reason)); }
     setDesktopWorkspace("library");
     await openNote(note.id);
-  }
-
-  function handleTabChange(noteId: string) {
-    withViewTransition(() => {
-      setActiveNoteId(noteId);
-      setOpenTabs((tabs) => tabs.map((tab) =>
-        tab.noteId === noteId ? { ...tab, lastAccessedAt: Date.now() } : tab
-      ));
-    });
-    const tab = openTabs.find((t) => t.noteId === noteId);
-    setSaveState(tab?.dirty ? "dirty" : "idle");
   }
 
   if (!workspace) return <main className="loading-screen"><LoaderCircle className="spin" /><span>正在打开本地知识库</span>{error && <small>{error}</small>}</main>;
@@ -1110,9 +1097,6 @@ export function App() {
 
   // 字数/图片统计（W-2-A）：从渲染体移出，避免每次按键对整篇正文跑两次 O(n) 正则。
   const activeTab = openTabs.find((t) => t.noteId === activeNoteId);
-  const activeContent = activeTab?.content ?? mobileActive?.content ?? "";
-  const wordCountLabel = docStats.wordCount > 0 ? `${docStats.wordCount} 字` : "";
-  const imageCountLabel = docStats.imageCount > 0 ? `图片 ${docStats.imageCount}` : "";
   const activeNodeSyncState = activeNoteId ? (treeNodes.find((n) => n.noteFileId === activeNoteId)?.syncState ?? "synced") : "synced";
   const syncIndicator = cloudStatus(sync, activeNodeSyncState, cloudEnabled);
 
@@ -1160,16 +1144,17 @@ export function App() {
         sync={sync}
         saveState={saveState}
         saveLabel={saveLabel(saveState)}
-        pendingDocuments={notes.filter((note) => note.syncState === "local").length}
-        pendingResources={Math.max(0, sync.pendingChanges - notes.filter((note) => note.syncState === "local").length)}
+        pendingDocuments={pendingSummary.documents}
+        pendingResources={pendingSummary.resources}
+        pendingQuickNotes={pendingSummary.quickNotes}
         dirtyTabCount={openTabs.filter((tab) => tab.dirty).length}
         lastSavedAt={lastSavedAt}
         cloudEnabled={cloudEnabled}
-        conflictSnapshotCount={conflictSnapshotNotice?.count ?? 0}
-        conflictSnapshotText={conflictSnapshotNotice?.text ?? null}
+        conflictSnapshots={conflictSnapshotNotice}
+        conflictSnapshotText={conflictSnapshotNotice.length > 0 ? "检测到远端版本差异，已保留历史快照" : null}
         onSync={() => { void runSync(); }}
         onOpenSettings={() => { setSettingsCategory("sync"); setSettingsOpen(true); }}
-        onOpenHistory={() => { if (activeNoteId) { setHistoryNoteId(activeNoteId); setHistoryOpen(true); } }}
+        onOpenHistory={(noteId) => { setHistoryNoteId(noteId); setHistoryOpen(true); }}
       />
     </>
   );
@@ -1287,19 +1272,16 @@ export function App() {
           </section>
         )}
         <DesktopStatusBar
-          repositoryLabel={desktopWorkspace === "quick-notes" ? "小记" : isDesktop() ? "Electron 本地仓库" : "浏览器演示仓库"}
           showDocumentStats={desktopWorkspace === "library"}
-          locked={activeNoteId !== null && lockedNoteIds.has(activeNoteId)}
-          wordCountLabel={wordCountLabel}
-          imageCountLabel={imageCountLabel}
+          wordCount={docStats.wordCount}
+          imageCount={docStats.imageCount}
           notice={notice}
-          saveState={saveState}
-          saveLabel={saveLabel(saveState)}
-          sync={{
-            cls: syncIndicator.cls,
-            label: syncIndicator.label,
-            title: syncIndicator.label + (sync.message ? `：${sync.message}` : ""),
-          }}
+          documentStatus={getDocumentStatus({
+            hasCloudConfig: cloudConfigured,
+            syncState: activeNodeSyncState as "local" | "synced" | "conflict",
+            saveState,
+            historyCount: activeHistoryCount,
+          })}
         />
       </main>
       {outlineVisible && (
@@ -1341,8 +1323,10 @@ export function App() {
         </div>,
         document.body,
       )}
-      <SearchPanel open={searchPanelOpen} initialQuery={searchPanelQuery} onOpenNote={(id, query, newTab) => void openNote(id, query, newTab)} onClose={() => setSearchPanelOpen(false)} />
-      <TrashPanel open={trashOpen} onClose={() => setTrashOpen(false)} onRestored={() => {
+      <DraftRecoveryDialog entries={draftEntries} onRestore={(entry) => void restoreDraft(entry)} onDiscard={discardDraft} onClose={() => setDraftEntries([])} />
+      <SearchPanel open={searchPanelOpen} initialQuery={searchPanelQuery} onOpenNote={(id, query) => void openNote(id, query)} onClose={() => setSearchPanelOpen(false)} />
+      <TrashPanel open={trashOpen} onClose={() => setTrashOpen(false)} onChanged={() => void refreshDraftEntries()} onRestored={() => {
+        void refreshDraftEntries();
         void native.listTreeNodes().then(setTreeNodes).catch(() => undefined);
         void native.listNoteSummaries().then(setNotes).catch(() => undefined);
         // 从回收站恢复后，若该文档正开在 tab 里且曾被标记"已删除"，重载正文并清除标记。

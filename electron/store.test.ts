@@ -65,6 +65,12 @@ function assetFilename(): string {
 
 // ===== 测试 =====
 
+describe("Store 完整性检查", () => {
+  it("returns healthy for a newly initialized database", () => {
+    expect(store.checkIntegrity()).toEqual({ ok: true, integrity: "ok", foreignKeyErrors: 0 });
+  });
+});
+
 describe("Store 初始化 / bootstrap", () => {
   it("初始化后种子数据：个人笔记本 + 欢迎笔记", () => {
     const boot = store.bootstrap();
@@ -962,6 +968,41 @@ describe("同步状态 / 导入", () => {
     expect(store.listNotesForSync().find((n) => n.id === "remote-1")?.isConflict).toBe(true);
   });
 
+  it("故障注入：远程导入 DB transaction 失败时清理正文和资源 staging", () => {
+    const note = { id: "remote-db-failure", title: "远程 DB 失败", parentId: "notebook-personal", sortOrder: 8, updatedAt: "2026-08-02T00:00:00.000Z", isConflict: false };
+    const assetName = "1234567890123_deadbeef.png";
+    const db = (store as any).db;
+    const transactionSpy = vi.spyOn(db, "transaction").mockImplementation(() => {
+      throw new Error("injected DB transaction failure");
+    });
+    try {
+      expect(() => store.importRemoteNote(note, Buffer.from("<p>DB 失败</p>"), [{ filename: assetName, bytes: Buffer.from("asset") }]))
+        .toThrow("injected DB transaction failure");
+      expect(fs.existsSync(path.join(dir, "notes", `${note.id}.lake`))).toBe(false);
+      expect(fs.existsSync(path.join(dir, "note-assets", note.id))).toBe(false);
+      expect(store.listNotesForSync().some((item) => item.id === note.id)).toBe(false);
+    } finally {
+      transactionSpy.mockRestore();
+    }
+  });
+
+  it("故障注入：远程正文 rename 失败时不应留下已同步但无文件的 DB 记录", () => {
+    const note = { id: "remote-rename-failure", title: "远程失败", parentId: "notebook-personal", sortOrder: 7, updatedAt: "2026-08-02T00:00:00.000Z", isConflict: false };
+    const originalRename = fs.renameSync;
+    const renameSpy = vi.spyOn(fs, "renameSync").mockImplementation(((from: fs.PathLike, to: fs.PathLike) => {
+      if (String(from).includes("remote-rename-failure.lake.tmp-")) throw new Error("injected rename failure");
+      return originalRename(from, to);
+    }) as typeof fs.renameSync);
+    try {
+      expect(() => store.importRemoteNote(note, Buffer.from("<p>失败注入</p>"), [])).toThrow("injected rename failure");
+      expect(() => store.readNote(note.id)).toThrow(/不存在/);
+      expect(store.listNotesForSync().some((item) => item.id === note.id)).toBe(false);
+      expect(fs.existsSync(path.join(dir, "notes", `${note.id}.lake`))).toBe(false);
+    } finally {
+      renameSpy.mockRestore();
+    }
+  });
+
   it("importRemoteNote 同步下载后即生成缓存+FTS（锁定+从未编辑的新设备也能搜到正文）", () => {
     // 模拟新设备同步到一篇"锁定且从未编辑"的文档（同步带 isLocked，正文为 .lake）
     const note = {
@@ -1213,5 +1254,27 @@ describe("localAsset*Re 正则工厂", () => {
   it("远程 URL 不匹配（保持原样）", async () => {
     const { localAssetLakeSrcRe } = await import("./store.js");
     expect(localAssetLakeSrcRe(19876).exec("https://example.com/n1/a.png")).toBeNull();
+  });
+});
+
+describe("同步待处理摘要", () => {
+  it("returns pending document and referenced resource counts from local facts", () => {
+    const note = store.createNote("待同步摘要");
+    const filename = assetFilename();
+    const content = `<p><img src="http://127.0.0.1:19876/${note.id}/${filename}"></p>`;
+    store.saveNote(note.id, note.title, content, { plain: "摘要", markdown: content });
+    const summary = store.getSyncPendingSummary();
+    expect(summary.documents).toBeGreaterThanOrEqual(1);
+    expect(summary.resources).toBeGreaterThanOrEqual(1);
+    expect(summary.generatedAt).toMatch(/T/);
+  });
+
+  it("counts a local delete tombstone as one pending document", () => {
+    const note = store.createNote("待删除摘要");
+    store.markSynced(note.id);
+    const beforeDelete = store.getSyncPendingSummary().documents;
+    store.deleteTreeNode(note.id);
+    // 删除会把已同步文档替换成墓碑；数量至少不应静默减少。
+    expect(store.getSyncPendingSummary().documents).toBeGreaterThanOrEqual(beforeDelete);
   });
 });

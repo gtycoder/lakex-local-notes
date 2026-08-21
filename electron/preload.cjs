@@ -1,6 +1,27 @@
 const { contextBridge, ipcRenderer } = require("electron");
 
-const invoke = (channel, ...args) => ipcRenderer.invoke(channel, ...args);
+const IPC_ERROR_MARKER = "__LAKE_IPC_ERROR__";
+const parseIpcError = (rawMessage) => {
+  const marker = rawMessage.lastIndexOf(IPC_ERROR_MARKER);
+  if (marker >= 0) {
+    try {
+      const payload = JSON.parse(rawMessage.slice(marker + IPC_ERROR_MARKER.length));
+      if (payload && typeof payload.message === "string" && payload.code) return payload;
+    } catch { /* fall through to the prefix fallback */ }
+  }
+  const match = rawMessage.match(/\[LAKE_IPC_CODE:(NOT_FOUND|INVALID_INPUT|NOT_CONFIGURED|INTERNAL)\]\s*([\s\S]*?)(?:\s+__LAKE_IPC_ERROR__.*)?$/);
+  return match ? { name: "IpcError", message: match[2], code: match[1] } : null;
+};
+const invoke = (channel, ...args) => ipcRenderer.invoke(channel, ...args).catch((raw) => {
+  const rawMessage = typeof raw?.message === "string" ? raw.message : String(raw);
+  const payload = parseIpcError(rawMessage);
+  const code = payload?.code || raw?.code;
+  const message = typeof payload?.message === "string" ? payload.message : rawMessage;
+  const error = new Error(code ? `[LAKE_IPC_CODE:${code}] ${message}` : message);
+  error.name = typeof payload?.name === "string" ? payload.name : (typeof raw?.name === "string" ? raw.name : "IpcError");
+  if (code) Object.defineProperty(error, "code", { value: code, enumerable: true });
+  throw error;
+});
 
 contextBridge.exposeInMainWorld("lakeNative", {
   assetPort: Number(process.env.LAKE_ASSET_PORT) || 19876,
@@ -12,6 +33,9 @@ contextBridge.exposeInMainWorld("lakeNative", {
   saveNote: (id, title, content, caches) => invoke("save_note", id, title, content, caches),
   updateNoteCaches: (id, markdown, plain) => invoke("update_note_caches", id, markdown, plain),
   readNoteCaches: (id) => invoke("read_note_caches", id),
+  listDraftJournals: () => invoke("list_draft_journals"),
+  saveDraftJournal: (entry) => invoke("save_draft_journal", entry),
+  deleteDraftJournal: (id) => invoke("delete_draft_journal", id),
   ensureNoteCaches: (id, lakeContent) => invoke("ensure_note_caches", id, lakeContent),
   getNotePaths: (id) => invoke("get_note_paths", id),
   pickExportDir: () => invoke("pick_export_dir"),
@@ -57,6 +81,7 @@ contextBridge.exposeInMainWorld("lakeNative", {
   saveSyncSettings: (settings) => invoke("save_sync_settings", settings),
   syncNow: () => invoke("sync_now"),
   getSyncStatus: () => invoke("get_sync_status"),
+  getSyncPendingSummary: () => invoke("get_sync_pending_summary"),
   listQuickNotes: () => invoke("list_quick_notes"),
   createQuickNote: (input) => invoke("create_quick_note", input),
   updateQuickNote: (id, input) => invoke("update_quick_note", id, input),

@@ -6,3 +6,5 @@
   animation: lake-search-hit-pulse 900ms ease-in-out 2;
 }
 @keyframes lake-search-hit-pulse { 50% { background: color-mix(in srgb, var(--lake-accent) 10%, transparent); } }
+
+.board-card-loading { display: grid; place-items: center; min-height: 200px; color: var(--lake-text-tertiary); background: color-mix(in srgb, var(--lake-panel) 88%, transparent); font-size: 12px; }

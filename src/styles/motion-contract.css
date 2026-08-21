@@ -1,0 +1,20 @@
+:root {
+  --lake-motion-fast: 120ms;
+  --lake-motion-standard: 180ms;
+  --lake-motion-panel: 260ms;
+  --lake-ease-standard: cubic-bezier(.22, 1, .36, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-shell,
+  .sidebar,
+  .outline-sidebar,
+  .outline-sidebar__content,
+  .tab-item,
+  .document-statusbar,
+  .sync-status-popover,
+  .floating-dialog {
+    animation: none !important;
+    transition: none !important;
+  }
+}

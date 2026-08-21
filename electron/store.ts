@@ -618,6 +618,18 @@ export class Store {
   // ---- M2 全文搜索 ----
 
   /** Rebuild the full-text index without exposing repository internals to callers. */
+  checkpointWal(): void {
+    try { this.db.pragma("wal_checkpoint(TRUNCATE)"); }
+    catch (error) { log.store.warn(`[store] WAL checkpoint failed: ${error instanceof Error ? error.message : String(error)}`); }
+  }
+
+  checkIntegrity(): { ok: boolean; integrity: string; foreignKeyErrors: number } {
+    const row = this.db.prepare("PRAGMA integrity_check").get() as { integrity_check?: string } | undefined;
+    const foreignKeyErrors = this.db.prepare("PRAGMA foreign_key_check").all().length;
+    const integrity = row?.integrity_check ?? "unknown";
+    return { ok: integrity === "ok" && foreignKeyErrors === 0, integrity, foreignKeyErrors };
+  }
+
   rebuildSearchIndex(): void {
     this.searchRepository.rebuild();
   }
@@ -1754,6 +1766,17 @@ export class Store {
   tombstoneSignature(): string {
     const row = this.db.prepare("SELECT COUNT(*) AS c, COALESCE(MAX(deleted_at),'') AS m FROM deleted_notes").get() as { c: number; m: string };
     return `${row.c}:${row.m}`;
+  }
+
+  getSyncPendingSummary(): { documents: number; resources: number; generatedAt: string } {
+    const pendingRows = this.noteQueries.listNotesForSync().filter((note) => note.syncState !== "synced");
+    let resources = 0;
+    for (const note of pendingRows) {
+      try { resources += extractAssetRefs(fs.readFileSync(this.notePath(note.id), "utf8")).size; }
+      catch { /* missing/corrupt content is reported by sync itself; summary stays best-effort */ }
+    }
+    const tombstones = (this.db.prepare("SELECT COUNT(*) AS count FROM deleted_notes").get() as { count: number }).count;
+    return { documents: pendingRows.length + tombstones, resources, generatedAt: nowIso() };
   }
 
   /** 是否有本地待上传变更（早退判定）：任何 notes 非 synced（含锁/元数据变更）。 */
