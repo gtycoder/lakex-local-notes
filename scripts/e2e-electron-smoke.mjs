@@ -80,15 +80,17 @@ for (let attempt = 0; attempt < 12; attempt += 1) {
   await wait(80);
 }
 const settings = await evaluate(`JSON.stringify({ open: Boolean(document.querySelector('.settings-overlay')), title: document.querySelector('.settings-header span')?.innerText || '', role: document.querySelector('.settings-panel')?.getAttribute('role') || '', labelledBy: document.querySelector('.settings-panel')?.getAttribute('aria-labelledby') || '', focused: document.activeElement?.matches('.settings-nav-search input') })`);
+const appearance = await evaluate(`(()=>{ const item=[...document.querySelectorAll('.settings-nav-item')].find(x=>x.innerText.trim()==='外观'); item?.click(); return JSON.stringify({customUi:document.body.innerText.includes('自定义 UI'), codeSnippet:document.body.innerText.includes('代码片段'), themeButtons:document.querySelectorAll('.settings-choice').length}); })()`);
 await evaluate(`(()=>{document.querySelector('.settings-close, .settings-panel [aria-label="关闭"]')?.click(); return true})()`);
 
-const result = { baseline: JSON.parse(baseline), search: JSON.parse(search), sync: JSON.parse(sync), workspaceMenu: JSON.parse(workspaceMenu), settings: JSON.parse(settings) };
+const result = { baseline: JSON.parse(baseline), search: JSON.parse(search), sync: JSON.parse(sync), workspaceMenu: JSON.parse(workspaceMenu), settings: JSON.parse(settings), appearance: JSON.parse(appearance) };
 if (result.baseline.railWidths.left !== 38 || result.baseline.railWidths.right !== 38) throw new Error("固定 rail 宽度契约失败");
 if (result.baseline.drawnixJs.length !== 0) throw new Error("普通文本启动不应加载 Drawnix JS");
 if (!result.baseline.status.includes("字数") || !result.baseline.status.includes("图片")) throw new Error("底部文档状态条缺少统计");
 if (!result.settings.open || result.settings.title !== "偏好设置") throw new Error("设置面板未能打开");
 if (result.search.dialogLabel !== "搜索标题和正文" || !result.search.inputDescription) throw new Error("搜索浮层无完整无障碍标记");
 if (result.settings.role !== "dialog" || result.settings.labelledBy !== "settings-panel-title" || !result.settings.focused) throw new Error("设置面板无完整 dialog/focus 标记");
+if (result.appearance.customUi || result.appearance.codeSnippet) throw new Error("外观设置仍暴露自定义 UI 代码片段");
 await fs.writeFile(`${outputDir}/result.json`, JSON.stringify(result, null, 2));
 console.log(JSON.stringify(result, null, 2));
 socket.close();
