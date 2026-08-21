@@ -104,7 +104,13 @@ export async function syncQuickNotes(
           // .qnote，再软删——回收站/恢复拿到的是删除方最新版。小记不备份本地版本（云端为主）。
           try {
             const content = await remote.getOptional(objectKey(item.contentHash));
-            if (content) fs.writeFileSync(quickNotes.quickNotePathFor(item.id), content);
+            if (content) {
+              // V5 §5.5：墓碑内容原子写（写临时 + rename，防崩溃半写文件）
+              const target = quickNotes.quickNotePathFor(item.id);
+              const temporary = `${target}.tmp-${process.pid}`;
+              fs.writeFileSync(temporary, content);
+              fs.renameSync(temporary, target);
+            }
           } catch (error) {
             log.quick.warn(`[perf] download ${item.id} tombstone content missing, skip`);
           }
@@ -137,7 +143,11 @@ export async function syncQuickNotes(
       }
 
       const content = await remote.getOptional(objectKey(item.contentHash));
-      if (!content) throw new Error(`小记清单引用的内容对象不存在: ${item.id}`);
+      if (!content) {
+        // V5 §5.5 B 方案：小记内容对象缺失 → 跳过该条目 + 日志，不覆盖本地（本地优先，下轮重试）
+        log.quick.warn(`[download] ${item.id} 远端小记内容缺失，跳过（本地不覆盖）`);
+        continue;
+      }
       if (sha256Hex(content) !== item.contentHash) throw new Error(`小记内容哈希不符: ${item.id}`);
       const assets = await downloadAssets(remote, item, (assetCurrent, assetTotal) => {
         report({ phase: "quick-notes", current: index + 1, total: remoteManifest.items.length, assetCurrent, assetTotal, message: "检查云端小记" });

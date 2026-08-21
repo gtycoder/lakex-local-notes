@@ -263,3 +263,25 @@ describe("parseManifest 小记清单护栏", () => {
     expect(() => parseManifest(bytes, { maxItems: 2 })).toThrow(/条目过多/);
   });
 });
+// ===== R7：小记远程删除语义（V5 §5.5：墓碑权威 + 小记不备份，锁定既定语义） =====
+describe("R7：小记远程删除语义", () => {
+  it("B 已编辑（未同步）+ A 删除 → B 跟随删除，本地编辑不备份（无归档副本）", async () => {
+    const storeA = new QuickNotesStore(path.join(root, "a"));
+    const storeB = new QuickNotesStore(path.join(root, "b"));
+    const note = storeA.createQuickNote({ text: "原始内容", draftId: crypto.randomUUID(), stagedImageIds: [] });
+    await syncQuickNotes(storeA, settings);
+    await syncQuickNotes(storeB, settings); // B 拉到
+    expect(storeB.listQuickNotes().some((i) => i.id === note.id)).toBe(true);
+    // B 本地编辑（未同步）——小记不备份语义：此编辑不产生任何保留副本
+    storeB.updateQuickNote(note.id, { text: "B 的本地编辑", draftId: crypto.randomUUID(), stagedImageIds: [], retainedImageIds: [] });
+    // A 删除并同步 → 云端墓碑（携带删除前内容）
+    storeA.deleteQuickNote(note.id);
+    await syncQuickNotes(storeA, settings);
+    // B 同步 → 墓碑权威：跟随删除
+    await syncQuickNotes(storeB, settings);
+    expect(storeB.listQuickNotes().some((i) => i.id === note.id)).toBe(false); // 跟随删除
+    // 不备份：B 回收站只应有 note.id 本身（删除前内容=A 版），没有「B 编辑版」的 ghost 新 id 归档
+    const trashIds = storeB.listQuickNoteTrash().map((i) => i.id);
+    expect(trashIds).toEqual([note.id]);
+  });
+});

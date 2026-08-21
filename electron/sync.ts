@@ -92,6 +92,15 @@ export interface SyncResult {
   quickNotes?: QuickNotesSyncStatus;
   /** 本地修改被远端覆盖、已存入历史的文档（用于 UI 提醒） */
   supersededNotes: Array<{ id: string; title: string }>;
+  /** V5 §5.5：远端对象缺失（B 方案——跳过受影响条目、不覆盖本地、其余继续；manifest 损坏仍中止） */
+  warnings?: Array<{ kind: "remote_incomplete" | "asset_missing"; noteId?: string }>;
+}
+
+export type SyncWarning = NonNullable<SyncResult["warnings"]>[number];
+
+/** V5 §5.5：资源缺失哨兵（runPool 回调内不能 continue 外层循环，用异常传递到外层捕获） */
+class AssetMissingError extends Error {
+  constructor(public filename: string) { super(`asset missing: ${filename}`); }
 }
 
 /** 同步进度事件（主进程 → 渲染进程） */
@@ -370,6 +379,7 @@ export async function syncNow(store: Store, onProgress?: (p: SyncProgress) => vo
   let downloaded = 0;
   let conflicts = 0;
   const supersededNotes: Array<{ id: string; title: string }> = [];
+  const warnings: SyncWarning[] = [];
   if (remoteManifest) {
     // 本地已删除笔记的墓碑（下载阶段生效）：id -> deletedAt。
     // 删除 vs 远端恢复按时间 LWW（last-writer-wins）：远端 active 且 updatedAt 晚于
@@ -519,15 +529,23 @@ export async function syncNow(store: Store, onProgress?: (p: SyncProgress) => vo
       }
       // 下载 .lake
       const lakeBytes = await remote.getOptional(objectKey(rn.id, rn.contentHash));
-      if (!lakeBytes) throw new Error(`清单引用的文档对象不存在: ${rn.contentHash}`);
+      if (!lakeBytes) {
+        // V5 §5.5 B 方案：正文对象缺失 → 跳过该条目 + warning，不覆盖本地，其余同步继续
+        //（manifest 本身损坏/不可解析仍整轮中止——那是协议级问题，跳过无意义）
+        warnings.push({ kind: "remote_incomplete", noteId: rn.id });
+        log.sync.warn(`[download] ${rn.id} 远端正文对象缺失，跳过（本地不覆盖）`);
+        continue;
+      }
       // 下载资源文件（manifest 里列出）；审计 #4：缺失对象必须中止导入，
       // 下载后校验 size 与 sha256（远端损坏/被替换不静默接受）
       const assetList = rn.assets || [];
       let assetDone = 0;
-      const assets = await runPool(assetList, ASSET_TRANSFER_CONCURRENCY, async (asset) => {
+      let assets: { filename: string; bytes: Buffer }[];
+      try {
+        assets = await runPool(assetList, ASSET_TRANSFER_CONCURRENCY, async (asset) => {
         report({ phase: "download", current: remoteIndex, total: remoteTotal, assetCurrent: ++assetDone, assetTotal: assetList.length, message: rn.deleted ? "处理云端删除记录" : `检查远端笔记「${rn.title}」` });
         const bytes = await remote.getOptional(`assets/${rn.id}/${asset.filename}`);
-        if (!bytes) throw new Error(`清单引用的资源不存在: ${rn.id}/${asset.filename}`);
+        if (!bytes) throw new AssetMissingError(asset.filename);
         if (bytes.length !== asset.size) {
           throw new Error(`资源大小不符: ${rn.id}/${asset.filename}（声明 ${asset.size}，实际 ${bytes.length}）`);
         }
@@ -535,7 +553,16 @@ export async function syncNow(store: Store, onProgress?: (p: SyncProgress) => vo
           throw new Error(`资源哈希不符: ${rn.id}/${asset.filename}（已损坏或被替换）`);
         }
         return { filename: asset.filename, bytes };
-      });
+        });
+      } catch (error) {
+        if (error instanceof AssetMissingError) {
+          // V5 §5.5 B 方案：资源对象缺失 → 跳过该条目 + warning（不导入、不覆盖本地）
+          warnings.push({ kind: "asset_missing", noteId: rn.id });
+          log.sync.warn(`[download] ${rn.id} 远端资源缺失: ${error.filename}，跳过本条目`);
+          continue;
+        }
+        throw error;
+      }
       const base = store.baseHash(rn.id);
       const localChanged = localHash !== null && localHash !== base;
       const remoteChanged = rn.contentHash !== base;
@@ -848,7 +875,7 @@ export async function syncNow(store: Store, onProgress?: (p: SyncProgress) => vo
     log.sync.info(`[perf] purge ${note.id} ${Date.now() - purgeStart}ms (objects=${objs}, assets=${assets})`);
   }
 
-  const result: SyncResult = { uploaded, downloaded, conflicts, manifestId: commitId, completedAt, supersededNotes };
+  const result: SyncResult = { uploaded, downloaded, conflicts, manifestId: commitId, completedAt, supersededNotes, warnings: warnings.length > 0 ? warnings : undefined };
   store.markSyncComplete(completedAt);
   store.recordSyncResult(JSON.stringify(result));
 

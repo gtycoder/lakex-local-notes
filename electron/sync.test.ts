@@ -747,12 +747,12 @@ describe("syncNow 增量同步", () => {
     await expect(syncNow(store as unknown as Store)).rejects.toThrow(/无效的资源文件名/);
   });
 
-  it("审计#4：清单声明的资源缺失/损坏时中止导入（不静默跳过）", async () => {
+  it("V5 §5.5 审计#4：资源缺失 → B 方案跳过+warnings；损坏 → 仍中止；正文缺失 → remote_incomplete", async () => {
     const store = newStore();
     store.createNote("n1", "笔记A", "<p>a</p>");
     await syncNow(store as unknown as Store);
 
-    // 声明资源但对象缺失
+    // 声明资源但对象缺失 → B 方案：跳过该条目 + warnings（asset_missing），不导入、不覆盖
     let manifest = readManifest();
     manifest.notes[0] = {
       id: "n2", title: "远端", parentId: null, sortOrder: 1,
@@ -761,15 +761,40 @@ describe("syncNow 增量同步", () => {
     };
     writeManifest(manifest);
     s3.bucket.set(key(`objects/n2-${sha256("<p>remote</p>")}.lake`), Buffer.from("<p>remote</p>", "utf8"));
-    await expect(syncNow(store as unknown as Store)).rejects.toThrow(/资源不存在/);
+    const r1 = await syncNow(store as unknown as Store);
+    expect(r1.warnings).toEqual([{ kind: "asset_missing", noteId: "n2" }]);
     expect(store.notes.has("n2")).toBe(false); // 未导入半成品
 
-    // 声明资源但内容损坏（hash 不符）
+    // 基线：第一轮 syncNow 已重建 manifest（跳过 n2），无缺失时 warnings 应为 undefined
+    const rBase = await syncNow(store as unknown as Store);
+    expect(rBase.warnings).toBeUndefined();
+
+    // 声明资源但内容损坏（hash 不符）→ 仍中止（损坏拒绝，不静默接受）
+    // 注：第一轮 syncNow 上传阶段会重建 manifest（未导入的 n2 不在其中），需重新构造条目
     manifest = readManifest();
+    manifest.notes.push({
+      id: "n2", title: "远端", parentId: null, sortOrder: 1,
+      updatedAt: new Date().toISOString(), contentHash: sha256("<p>remote</p>"), isConflict: false,
+      assets: [{ filename: "img.png", size: 3, hash: sha256("img") }],
+    });
     writeManifest(manifest);
     s3.bucket.set(key("assets/n2/img.png"), Buffer.from("xxx", "utf8")); // size 3 但 hash 不符
     await expect(syncNow(store as unknown as Store)).rejects.toThrow(/哈希不符/);
     expect(store.notes.has("n2")).toBe(false);
+
+    // 正文对象缺失 → B 方案：跳过 + warnings（remote_incomplete），不覆盖本地
+    //（损坏场景 reject 未重建 manifest，先清掉残留的 n2 条目）
+    manifest = readManifest();
+    manifest.notes = manifest.notes.filter((n) => n.id !== "n2");
+    manifest.notes.push({
+      id: "n3", title: "缺失正文", parentId: null, sortOrder: 1,
+      updatedAt: new Date().toISOString(), contentHash: sha256("<p>gone</p>"), isConflict: false, assets: [],
+    });
+    writeManifest(manifest);
+    // 不写 objects/n3-...lake（对象缺失）
+    const r3 = await syncNow(store as unknown as Store);
+    expect(r3.warnings).toEqual([{ kind: "remote_incomplete", noteId: "n3" }]);
+    expect(store.notes.has("n3")).toBe(false); // 未导入
   });
 
   it("v3 锁同步：仅锁变更（正文哈希相同）也能下载合并；LWW 新者胜", async () => {
