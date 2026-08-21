@@ -81,6 +81,23 @@ async function quitApp() {
   try { child?.kill("SIGTERM"); } catch { /* best effort */ }
 }
 
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/** 清理容错：SIGTERM 后应用可能仍在写目录，rmSync 重试若干次再放弃（ENOTEMPTY 竞态）。 */
+async function rmSyncRetry(dir, attempts = 20, delayMs = 250) {
+  for (let i = 0; i < attempts; i += 1) {
+    try {
+      rmSync(dir, { recursive: true, force: true });
+      return;
+    } catch (error) {
+      if (i === attempts - 1) throw error;
+      await sleep(delayMs);
+    }
+  }
+}
+
 let noteId;
 try {
   child = spawn(appPath, [`--remote-debugging-port=${port}`, "--disable-gpu"], {
@@ -113,5 +130,5 @@ try {
     }
   } catch { /* cleanup is best effort */ }
   await quitApp();
-  rmSync(dataDir, { recursive: true, force: true });
+  await rmSyncRetry(dataDir);
 }

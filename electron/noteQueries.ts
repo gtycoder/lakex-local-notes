@@ -1,4 +1,4 @@
-import type Database from "better-sqlite3";
+import type { DbLike } from "../src/core/dbLike.js";
 
 export interface NoteSummary {
   id: string;
@@ -112,7 +112,7 @@ interface SyncFolderRow {
 /** Read-only note/tree queries; metadata and content writes remain in Store. */
 export class NoteQueries {
   constructor(
-    private readonly db: Database.Database,
+    private readonly db: DbLike,
     private readonly workspaceId: string,
     private readonly trashNotebookId: string,
   ) {}

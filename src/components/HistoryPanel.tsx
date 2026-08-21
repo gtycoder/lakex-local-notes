@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Camera, Clock, FileText, History, RotateCcw, Trash2, X } from "lucide-react";
 import { native } from "../lib/native";
-import { createRequestVersion } from "../lib/requestVersion";
+import { createRequestVersion } from "../core/requestVersion";
 import { useFloatingDialog } from "./useFloatingDialog";
 import { getNativeErrorMessage } from "../lib/nativeErrors";
 
@@ -147,21 +147,6 @@ export function HistoryPanel({ open, noteId, onClose, onRestored }: {
       await refreshOrphans();
     } catch (e) {
       setError(getNativeErrorMessage(e));
-    }
-  };
-
-  const previewHistory = async (h: HistoryItem) => {
-    const version = previewVersionRef.current.next();
-    try {
-      const r = await native.previewHistorySnapshot(h.id);
-      if (!previewVersionRef.current.isCurrent(version)) return;
-      if (r) {
-        setPreview({ kind: "history", title: new Date(h.createdAt).toLocaleString(), text: r.plain, size: h.size });
-      } else {
-        setError("快照预览失败（文件可能已删除）");
-      }
-    } catch (e) {
-      if (previewVersionRef.current.isCurrent(version)) setError(getNativeErrorMessage(e));
     }
   };
 

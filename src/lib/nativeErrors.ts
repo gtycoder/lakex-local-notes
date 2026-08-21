@@ -1,11 +1,13 @@
-export type NativeErrorCode = "NOT_FOUND" | "INVALID_INPUT" | "NOT_CONFIGURED" | "INTERNAL";
+/** 跨端错误码（V5 Phase 3）：基础 4 码 + 增量 CONFLICT / NETWORK_TIMEOUT / CANCELLED。 */
+export type NativeErrorCode = "NOT_FOUND" | "INVALID_INPUT" | "NOT_CONFIGURED" | "INTERNAL" | "CONFLICT" | "NETWORK_TIMEOUT" | "CANCELLED";
 
-const CODE_PREFIX = /^\[LAKE_IPC_CODE:(NOT_FOUND|INVALID_INPUT|NOT_CONFIGURED|INTERNAL)\]\s*/;
+const CODE_PREFIX = /^\[LAKE_IPC_CODE:(NOT_FOUND|INVALID_INPUT|NOT_CONFIGURED|INTERNAL|CONFLICT|NETWORK_TIMEOUT|CANCELLED)\]\s*/;
+const ALL_CODES = new Set<NativeErrorCode>(["NOT_FOUND", "INVALID_INPUT", "NOT_CONFIGURED", "INTERNAL", "CONFLICT", "NETWORK_TIMEOUT", "CANCELLED"]);
 
 export function getNativeErrorCode(error: unknown): NativeErrorCode | null {
   if (!error || typeof error !== "object") return null;
   const code = (error as { code?: unknown }).code;
-  if (code === "NOT_FOUND" || code === "INVALID_INPUT" || code === "NOT_CONFIGURED" || code === "INTERNAL") return code;
+  if (typeof code === "string" && ALL_CODES.has(code as NativeErrorCode)) return code as NativeErrorCode;
   const message = error instanceof Error ? error.message : "";
   return message.match(CODE_PREFIX)?.[1] as NativeErrorCode | null;
 }

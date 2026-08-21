@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { clampWindowState, DEFAULT_WINDOW_STATE, type WindowState } from "./windowState";
+import { clampWindowState, type WindowState } from "./windowState";
 
 describe("window state", () => {
   it("clamps restored bounds into the display work area", () => {

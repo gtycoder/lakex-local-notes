@@ -1,7 +1,7 @@
 import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import { Check, FilePlus2, ImagePlus, Feather, LoaderCircle, Pencil, RotateCcw, Trash2, X } from "lucide-react";
 import { native } from "../lib/native";
-import { createRequestVersion } from "../lib/requestVersion";
+import { createRequestVersion } from "../core/requestVersion";
 import type { NoteDocument, QuickNoteDocument, QuickNoteImage, TreeNode } from "../lib/types";
 import { getNativeErrorMessage } from "../lib/nativeErrors";
 
@@ -91,11 +91,6 @@ export const QuickNotesWorkspace = forwardRef<QuickNotesWorkspaceHandle, QuickNo
   const notebooks = useMemo(() => notebookNodes
     .filter((node) => node.nodeType === "notebook")
     .sort((a, b) => a.sortOrder - b.sortOrder), [notebookNodes]);
-
-  function updateActiveDraft(patch: Partial<DraftState>) {
-    if (activeIsEditing) setEditingDraft((current) => current ? { ...current, ...patch } : current);
-    else setCreateDraft((current) => ({ ...current, ...patch }));
-  }
 
   async function discardAllDrafts() {
     const draftIds = [createDraft.id, editingDraft?.id].filter((value): value is string => !!value);

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { ChevronRight, ClipboardCopy, Link2, Package } from "lucide-react";
+import { ChevronRight, Package } from "lucide-react";
 import {
   createLakeDocument,
   destroyLakeEditor,

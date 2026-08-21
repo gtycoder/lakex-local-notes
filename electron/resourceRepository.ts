@@ -1,29 +1,40 @@
-import { net } from "electron";
+/**
+ * 资源（图片）上传/下载仓储（V5 Phase 2）：
+ * 不再直接依赖 electron net —— 下载经注入的 HttpFetcher（默认 createPinnedHttpFetcher：
+ * node:http/https + 连接层钉死已校验 DNS 地址，SSRF TOCTOU 修复）。
+ * SSRF 逐跳校验由 fetcher 在连接层执行；此处保留体积/尺寸/格式校验与错误映射。
+ */
 import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
 import type { ResourceUploadOutput } from "./storeTypes.js";
 import { AppError } from "./storeErrors.js";
-import { assertSafeRemoteHost, SsrfError } from "./ssrf.js";
+import { SsrfError } from "./ssrf.js";
 import { MAX_IMAGE_BYTES, MAX_IMAGE_PIXELS } from "./storeLimits.js";
 import { readImageDimensions, sniffImageFormat } from "./imageUtils.js";
+import type { HttpFetcher } from "../src/core/httpFetcher.js";
+import { createPinnedHttpFetcher } from "./httpFetcher.js";
 
 const DOWNLOAD_TIMEOUT_MS = 30_000;
 const DOWNLOAD_MAX_ATTEMPTS = 3;
 const DOWNLOAD_MAX_REDIRECTS = 5;
 const DOWNLOAD_USER_AGENT = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36";
 
-type ControlledResponse = NodeJS.ReadableStream & { headers: Record<string, string | string[] | undefined> };
-
 interface ResourceRepositoryDeps {
   noteAssetsDirFor(noteId: string): string;
   assetUrl(noteId: string, filename: string): string;
   registerOrphan(noteId: string, filename: string, size: number, mimeType: string): void;
+  /** V5 Phase 2：HTTP 注入点；缺省 = createPinnedHttpFetcher()。 */
+  fetcher?: HttpFetcher;
 }
 
 /** Owns image upload/download I/O while Store keeps the public compatibility wrapper. */
 export class ResourceRepository {
-  constructor(private readonly deps: ResourceRepositoryDeps) {}
+  private readonly fetcher: HttpFetcher;
+
+  constructor(private readonly deps: ResourceRepositoryDeps) {
+    this.fetcher = deps.fetcher ?? createPinnedHttpFetcher();
+  }
 
   upload(input: { bytes: number[]; filename: string }, noteId: string): ResourceUploadOutput {
     const bytes = Buffer.from(input.bytes);
@@ -44,35 +55,40 @@ export class ResourceRepository {
     let lastError: unknown = null;
     for (let attempt = 1; attempt <= DOWNLOAD_MAX_ATTEMPTS; attempt++) {
       try {
-        const { request, response, status } = await this.fetchControlled(normalized);
+        const response = await this.fetcher.fetch(normalized, {
+          timeoutMs: DOWNLOAD_TIMEOUT_MS,
+          maxRedirects: DOWNLOAD_MAX_REDIRECTS,
+          userAgent: DOWNLOAD_USER_AGENT,
+          referer: normalized,
+        });
         try {
-          if (status < 200 || status >= 300) {
-            request.abort();
-            throw new AppError("Internal", `下载失败: HTTP ${status}`);
+          if (response.status < 200 || response.status >= 300) {
+            response.abort();
+            throw new AppError("Internal", `下载失败: HTTP ${response.status}`);
           }
           const declared = response.headers["content-length"];
           const declaredLength = Number(Array.isArray(declared) ? declared[0] : declared || 0);
           if (declaredLength > MAX_IMAGE_BYTES) {
-            request.abort();
+            response.abort();
             throw new AppError("InvalidInput", "图片超过 25 MiB");
           }
-          const chunks: Buffer[] = [];
+          const chunks: Uint8Array[] = [];
           let total = 0;
-          for await (const chunk of response) {
+          for await (const chunk of response.body) {
             total += chunk.length;
             if (total > MAX_IMAGE_BYTES) {
-              request.abort();
+              response.abort();
               throw new AppError("InvalidInput", "图片超过 25 MiB");
             }
-            chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+            chunks.push(chunk);
           }
-          const bytes = Buffer.concat(chunks);
+          const bytes = Buffer.concat(chunks as Buffer[]);
           assertImageDimensions(bytes);
           const output = imageOutput(bytes, path.basename(new URL(normalized).pathname) || "image", assetsDir, (filename) => this.deps.assetUrl(noteId, filename));
           this.deps.registerOrphan(noteId, output.filename, output.size, output.mimeType);
           return output;
         } finally {
-          request.abort();
+          response.abort();
         }
       } catch (error) {
         if (error instanceof AppError && error.kind === "InvalidInput") throw error;
@@ -84,53 +100,6 @@ export class ResourceRepository {
       if (attempt < DOWNLOAD_MAX_ATTEMPTS) await sleep(attempt * 500);
     }
     throw lastError instanceof AppError ? lastError : new AppError("Internal", `下载失败: ${String(lastError)}`);
-  }
-
-  private async fetchControlled(url: string): Promise<{ request: Electron.ClientRequest; response: ControlledResponse; status: number }> {
-    let current = url;
-    for (let hop = 0; ; hop++) {
-      const parsed = new URL(current);
-      if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
-        throw new AppError("InvalidInput", "重定向目标仅支持 HTTP 或 HTTPS");
-      }
-      await assertSafeRemoteHost(parsed.hostname);
-      const outcome = await new Promise<
-        | { kind: "redirect"; url: string }
-        | { kind: "response"; status: number; response: ControlledResponse; request: Electron.ClientRequest }
-      >((resolve, reject) => {
-        const request = net.request({ url: current, followRedirect: false } as Electron.ClientRequestConstructorOptions & { followRedirect?: boolean });
-        request.setHeader("User-Agent", DOWNLOAD_USER_AGENT);
-        request.setHeader("Referer", current);
-        const timer = setTimeout(() => { request.abort(); reject(new Error("AbortError")); }, DOWNLOAD_TIMEOUT_MS);
-        let settled = false;
-        request.on("redirect", (_statusCode: number, _method: string, redirectUrl: string) => {
-          if (settled) return;
-          settled = true;
-          clearTimeout(timer);
-          request.abort();
-          resolve({ kind: "redirect", url: redirectUrl });
-        });
-        request.on("response", (response: Electron.IncomingMessage) => {
-          if (settled) return;
-          settled = true;
-          clearTimeout(timer);
-          resolve({ kind: "response", status: response.statusCode, response: response as never, request });
-        });
-        request.on("error", (error: Error) => {
-          if (settled) return;
-          settled = true;
-          clearTimeout(timer);
-          reject(error);
-        });
-        request.end();
-      });
-      if (outcome.kind === "redirect") {
-        if (hop >= DOWNLOAD_MAX_REDIRECTS) throw new AppError("Internal", `重定向次数过多: ${current}`);
-        current = outcome.url;
-        continue;
-      }
-      return { request: outcome.request, response: outcome.response, status: outcome.status };
-    }
   }
 }
 

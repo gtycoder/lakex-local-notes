@@ -6,6 +6,7 @@ import crypto from "node:crypto";
 import zlib from "node:zlib";
 import Database from "better-sqlite3";
 import { Store, AppError, selectHistoryDrops, isoWeekKey } from "./store.js";
+import { createSafeStorageSecretCipher } from "./secretCipher.js";
 
 // ===== electron mock（Store 模块加载即需要；DB 用例只用 safeStorage 的 S3 密钥加解密） =====
 const electronMock = vi.hoisted(() => {
@@ -39,7 +40,7 @@ beforeEach(() => {
   dir = fs.mkdtempSync(path.join(os.tmpdir(), "lake-store-test-"));
   electronMock.secrets.clear();
   electronMock.setEncryptionAvailable(true);
-  store = new Store(dir);
+  store = new Store(dir, createSafeStorageSecretCipher());
 });
 
 /** 另开连接直读 Store 的 SQLite（验证落盘内容，如 S3 密钥是否加密） */

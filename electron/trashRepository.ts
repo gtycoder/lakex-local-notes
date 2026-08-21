@@ -1,4 +1,4 @@
-import type Database from "better-sqlite3";
+import type { DbLike } from "../src/core/dbLike.js";
 
 export interface TrashItem {
   id: string;
@@ -31,7 +31,7 @@ interface TrashRow {
 
 /** Read-only trash queries; restore/purge writes remain in Store for now. */
 export class TrashRepository {
-  constructor(private readonly db: Database.Database, private readonly trashNotebookId: string) {}
+  constructor(private readonly db: DbLike, private readonly trashNotebookId: string) {}
 
   list(): TrashItem[] {
     const rows = this.db.prepare(

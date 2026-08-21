@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { QuickNoteModelError } from "../src/lib/quickNoteModel";
+import { QuickNoteModelError } from "./quickNoteModel";
 import {
   MAX_QUICK_NOTE_TEXT_LENGTH,
   normalizeQuickNoteContent,
@@ -7,7 +7,7 @@ import {
   previewQuickNote,
   serializeQuickNoteContent,
   validateQuickNoteContent,
-} from "../src/lib/quickNoteModel";
+} from "./quickNoteModel";
 
 const image = {
   id: "img-1",

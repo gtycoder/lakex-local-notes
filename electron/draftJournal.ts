@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import { isSafePathSegment } from "./storeUtils.js";
+import { isSafePathSegment } from "../src/core/storeUtils.js";
 
 const MAX_DRAFT_BYTES = 32 * 1024 * 1024;
 

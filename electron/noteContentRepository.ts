@@ -1,4 +1,4 @@
-import type Database from "better-sqlite3";
+import type { DbLike } from "../src/core/dbLike.js";
 import fs from "node:fs";
 import { AppError } from "./storeErrors.js";
 
@@ -8,7 +8,7 @@ export interface NoteCacheInput {
 }
 
 interface NoteContentRepositoryDeps {
-  db: Database.Database;
+  db: DbLike;
   notePathFor(noteId: string): string;
   atomicWrite(filePath: string, content: string): void;
   revivePurgedIfNeeded(noteId: string): boolean;

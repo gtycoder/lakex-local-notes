@@ -30,6 +30,25 @@ export const DEFAULT_SETTINGS: AppSettings = {
 
 const STORAGE_KEY = "lake-notes-v1.settings";
 const FONT_SIZES = [12, 13, 14, 15, 16, 19, 22, 24];
+
+/** V5 Phase 2：设置持久化注入点（桌面默认 = localStorage；移动端可注入 AsyncStorage 等）。 */
+export interface SettingsStorage {
+  getItem(key: string): string | null;
+  setItem(key: string, value: string): void;
+}
+
+function localStorageStorage(): SettingsStorage {
+  return {
+    getItem: (key) => localStorage.getItem(key),
+    setItem: (key, value) => localStorage.setItem(key, value),
+  };
+}
+
+let storage: SettingsStorage = localStorageStorage();
+
+export function setSettingsStorage(next: SettingsStorage): void {
+  storage = next;
+}
 /** 设置面板提供的上限档位；不在档位内的历史/异常值归一到默认档。 */
 const MAX_OPEN_TAB_OPTIONS = [0, 4, 6, 8, 12, 16, 24];
 
@@ -38,7 +57,7 @@ let cached: AppSettings | null = null;
 export function loadSettings(): AppSettings {
   if (cached) return cached;
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const raw = storage.getItem(STORAGE_KEY);
     if (raw) {
       const parsed = JSON.parse(raw) as Partial<AppSettings>;
       cached = {
@@ -61,7 +80,7 @@ export function loadSettings(): AppSettings {
 export function saveSettings(patch: Partial<AppSettings>): AppSettings {
   const next = { ...loadSettings(), ...patch };
   cached = next;
-  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(next)); } catch { /* 忽略 */ }
+  try { storage.setItem(STORAGE_KEY, JSON.stringify(next)); } catch { /* 忽略 */ }
   notifySettingsChanged(next);
   return next;
 }

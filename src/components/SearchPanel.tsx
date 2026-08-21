@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { FileText, Search, X } from "lucide-react";
 import { native } from "../lib/native";
-import { createRequestVersion } from "../lib/requestVersion";
+import { createRequestVersion } from "../core/requestVersion";
 import { initialSearchIndex, nextSearchIndex } from "./searchNavigation";
 
 interface SearchResult {

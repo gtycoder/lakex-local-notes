@@ -1,14 +1,13 @@
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type CSSProperties } from "react";
 import { createPortal } from "react-dom";
-import { ArrowLeft, Check, ChevronDown, ChevronRight, Cloud, Files, ListTree, LoaderCircle, Feather, Lock, LockOpen, Moon, MoreHorizontal, Pencil, Focus, Settings as Settings2Icon, Sun, Trash2 } from "lucide-react";
+import { ArrowLeft, Check, ChevronDown, ChevronRight, Files, ListTree, LoaderCircle, Feather, Lock, LockOpen, Moon, MoreHorizontal, Pencil, Focus, Settings as Settings2Icon, Sun, Trash2 } from "lucide-react";
 import { MobileLibrary } from "./components/MobileLibrary";
-import { withViewTransition } from "./lib/viewTransition";
 import { SearchPanel } from "./components/SearchPanel";
 import { TrashPanel } from "./components/TrashPanel";
 import { HistoryPanel } from "./components/HistoryPanel";
 import { ConfirmDelete, Sidebar, type SidebarMode } from "./components/Sidebar";
 import { QuickNotesWorkspace, type QuickNotesWorkspaceHandle } from "./components/QuickNotesWorkspace";
-import { SyncToast, type SyncToastData } from "./components/SyncToast";
+import { SyncToast } from "./components/SyncToast";
 import { SyncStatusPopover } from "./components/SyncStatusPopover";
 import { DraftRecoveryDialog } from "./components/DraftRecoveryDialog";
 import { useWindowShortcuts } from "./hooks/useWindowShortcuts";
@@ -19,23 +18,27 @@ import { LakeEditor } from "./features/editor/LakeEditor";
 import { clearScrollMemory, locateEditorSearchHit } from "./features/editor/EditorTab";
 import type { LakeEditorInstance } from "./features/editor/lakeRuntime";
 import { MultiTabEditor, type TabInfo } from "./features/editor/MultiTabEditor";
-import { selectEvictionIds, trimTabsToLimit } from "./lib/tabLimit";
+import { selectEvictionIds, trimTabsToLimit } from "./core/tabLimit";
 import { OutlineSidebar } from "./features/outline/OutlineSidebar";
 import type { OutlineMode } from "./features/outline/OutlineController";
 import { getOutlineTab, getOutlineTabsVersion, subscribeOutlineTabs } from "./features/outline/registry";
-import { cleanLakeMarkdown } from "./lib/markdownClean";
-import { KeyedAsyncQueue } from "./lib/keyedAsyncQueue";
+import { cleanLakeMarkdown } from "./core/markdownClean";
+
 import { useDocumentStats } from "./hooks/useDocumentStats";
+import { useSavePipeline } from "./hooks/useSavePipeline";
+import { useSyncShell } from "./hooks/useSyncShell";
+import { useMobileDocumentSession } from "./hooks/useMobileDocumentSession";
 import { useSyncController } from "./hooks/useSyncController";
 import { useDocumentTabs } from "./hooks/useDocumentTabs";
-import { createRequestVersion } from "./lib/requestVersion";
+import { createRequestVersion } from "./core/requestVersion";
 import { stripAssetAccessToken } from "./lib/assetPort";
 import { isDesktop, native } from "./lib/native";
-import { getNativeErrorCode, getNativeErrorMessage } from "./lib/nativeErrors";
+import { getNativeErrorMessage } from "./lib/nativeErrors";
 import { loadSettings, saveSettings, subscribeSettings, type AppSettings } from "./lib/settings";
 import { applyTheme } from "./lib/theme";
 import { SettingsPanel, type SettingsCategory } from "./components/SettingsPanel";
-import { subtreeIds } from "./lib/tree";
+import { subtreeIds } from "./core/tree";
+import { planTabReload } from "./core/planTabReload";
 import { DOCK_GUTTER, FIXED_RAIL_WIDTH } from "./lib/layoutMetrics";
 import { OUTLINE_HOVER_TRIGGER_WIDTH, OUTLINE_SCROLLBAR_CLEARANCE } from "./features/outline/outlineInteraction";
 import { shouldCollapseSidebarOnHoverLeave } from "./components/sidebarInteraction";
@@ -44,7 +47,6 @@ import type { DraftJournalEntry, NoteDigest, NoteDocument, NoteSummary, SyncPend
 const SIDEBAR_HOVER_HIDE_DELAY_MS = 120;
 
 type SaveState = "idle" | "dirty" | "saving" | "saved" | "error";
-type MobilePage = "library" | "document";
 type DesktopWorkspace = "library" | "quick-notes";
 
 // 左侧资料库与右侧大纲面板各自维护宽度；两侧常驻 activity rail 才保持同宽。
@@ -116,8 +118,6 @@ export function App() {
   const [historyOpen, setHistoryOpen] = useState(false);
   const [historyNoteId, setHistoryNoteId] = useState<string | null>(null);
   const [searchPanelQuery, setSearchPanelQuery] = useState("");
-  const [saveState, setSaveState] = useState<SaveState>("idle");
-  const [lastSavedAt, setLastSavedAt] = useState<string | null>(null);
   const [conflictSnapshotNotice, setConflictSnapshotNotice] = useState<Array<{ noteId: string; title: string }>>([]);
   const [activeHistoryCount, setActiveHistoryCount] = useState(0);
   const { topMenuOpen, setTopMenuOpen, workspaceMenuOpen, setWorkspaceMenuOpen, closeMenus } = useTopMenus();
@@ -140,17 +140,19 @@ export function App() {
   const [pendingSummary, setPendingSummary] = useState<SyncPendingSummary>({ documents: 0, resources: 0, quickNotes: 0, total: 0, generatedAt: "" });
   const [draftEntries, setDraftEntries] = useState<DraftJournalEntry[]>([]);
   const [confirmDelete, setConfirmDelete] = useState<TreeNode | null>(null);
-  const [syncToast, setSyncToast] = useState<SyncToastData | null>(null);
-  const [syncProgress, setSyncProgress] = useState<SyncProgress | null>(null);
-  const syncToastTimer = useRef<number | null>(null);
+  const [, setSyncProgress] = useState<SyncProgress | null>(null);
+  const handleSyncToastAutoHide = useCallback(() => setSyncProgress(null), []);
+  const { syncToast, setSyncToast, showSyncToast } = useSyncShell(handleSyncToastAutoHide);
   const [pendingRenameId, setPendingRenameId] = useState<string | null>(null);
-  const [mobileOpen, setMobileOpen] = useState(false);
-  const [mobilePage, setMobilePage] = useState<MobilePage>("library");
-  const [mobileEditing, setMobileEditing] = useState(false);
-  const [mobileTocOpen, setMobileTocOpen] = useState(false);
-  const [mobileActive, setMobileActive] = useState<NoteDocument | null>(null);
-  const [mobileDraftTitle, setMobileDraftTitle] = useState("");
-  const [mobileDraftContent, setMobileDraftContent] = useState("");
+  const {
+    mobileOpen, setMobileOpen,
+    mobilePage, setMobilePage,
+    mobileEditing, setMobileEditing,
+    mobileTocOpen, setMobileTocOpen,
+    mobileActive, setMobileActive,
+    mobileDraftTitle, setMobileDraftTitle,
+    mobileDraftContent, setMobileDraftContent,
+  } = useMobileDocumentSession();
   const [isMobile, setIsMobile] = useState(() => window.matchMedia("(max-width: 760px)").matches);
   const [settings, setSettings] = useState<AppSettings>(() => loadSettings());
   const [pinnedNoteIds, setPinnedNoteIds] = useState<Set<string>>(() => new Set());
@@ -177,9 +179,6 @@ export function App() {
   const [error, setError] = useState<string | null>(null);
   const openTabsRef = useRef<OpenTab[]>([]);
   const quickNotesRef = useRef<QuickNotesWorkspaceHandle>(null);
-  const saveTimers = useRef<Map<string, number>>(new Map());
-  const draftTimers = useRef<Map<string, number>>(new Map());
-  const saveQueueRef = useRef(new KeyedAsyncQueue());
   const tabReloadVersionRef = useRef(createRequestVersion());
   const layoutWidthsRef = useRef({ sidebar: sidebarWidth, outline: outlineSidebarWidth });
   layoutWidthsRef.current = { sidebar: sidebarWidth, outline: outlineSidebarWidth };
@@ -188,9 +187,49 @@ export function App() {
   const [notice, setNotice] = useState<NoticeState | null>(null);
   const noticeTimer = useRef<number | null>(null);
   const sidebarPreviewTimer = useRef<number | null>(null);
+  // V5 Phase 4：保存管线（串行队列 + 防抖定时器 + revision 竞态保护）收拢到 useSavePipeline。
   // 审计 #7：每篇笔记的编辑 revision——保存请求发出后若有新编辑（revision 增长），
-  // 旧响应不得覆盖最新草稿/清除 dirty
-  const revisionRef = useRef<Map<string, number>>(new Map());
+  // 旧响应不得覆盖最新草稿/清除 dirty。
+  // V5 Phase 4：保存管线回调 useCallback 化——persistTab 依赖稳定，避免每次渲染重建（打字路径抖动收敛）。
+  const refreshPendingSummaryRef = useRef<() => void>(() => undefined);
+  const handleNoteSaved = useCallback((saved: NoteDocument) => {
+    setNotes((items) => items.map((item) => item.id === saved.id ? summaryOf(saved) : item));
+    setTreeNodes((items) => items.map((item) => item.noteFileId === saved.id || item.id === saved.id ? { ...item, title: saved.title, updatedAt: saved.updatedAt, syncState: saved.syncState } : item));
+    setSync((current) => ({ ...current, pendingChanges: Math.max(1, current.pendingChanges) }));
+    refreshPendingSummaryRef.current();
+  }, [setNotes, setTreeNodes, setSync]);
+  const handleOpenTabsApplied = useCallback((saved: NoteDocument) => {
+    setOpenTabs((tabs) => tabs.map((tab) => tab.noteId === saved.id ? { ...tab, title: saved.title, content: saved.content, dirty: false, lastDigest: { title: saved.title, updatedAt: saved.updatedAt } } : tab));
+  }, [setOpenTabs]);
+  const handleDraftCleared = useCallback((noteId: string) => {
+    void native.deleteDraftJournal(noteId).catch(() => undefined);
+    setDraftEntries((entries) => entries.filter((entry) => entry.noteId !== noteId));
+  }, [setDraftEntries]);
+  const handleSaveError = useCallback((message: string) => setError(message), [setError]);
+  const handleGetOpenTab = useCallback((noteId: string) => openTabsRef.current.find((t) => t.noteId === noteId), []);
+  const handleGetEditorCaches = useCallback((noteId: string) => {
+    const editor = editorsRef.current.get(noteId);
+    const caches: { markdown: string | null; plain: string | null } = { markdown: null, plain: null };
+    if (editor && typeof (editor as any).getDocument === "function") {
+      try { caches.markdown = cleanLakeMarkdown(stripAssetAccessToken(String((editor as any).getDocument("text/markdown")))); } catch { /* 忽略 */ }
+      try { caches.plain = stripAssetAccessToken(String((editor as any).getDocument("text/plain"))); } catch { /* 忽略 */ }
+    }
+    return caches;
+  }, []);
+
+  const {
+    saveState, setSaveState, lastSavedAt,
+    persistTab, scheduleSave, scheduleDraftJournal,
+    bumpRevision, resetRevision, clearNote, flushTimers,
+    saveTimers, draftTimers,
+  } = useSavePipeline({
+    onNoteSaved: handleNoteSaved,
+    onOpenTabsApplied: handleOpenTabsApplied,
+    onDraftCleared: handleDraftCleared,
+    onError: handleSaveError,
+    getOpenTab: handleGetOpenTab,
+    getEditorCaches: handleGetEditorCaches,
+  });
   const shellPlatformClass = /Mac|iPhone|iPad/.test(navigator.platform) ? "platform-mac" : "platform-native-titlebar";
 
   useEffect(() => { openTabsRef.current = openTabs; }, [openTabs]);
@@ -220,8 +259,7 @@ export function App() {
 
   useEffect(() => {
     return () => {
-      saveTimers.current.forEach((timer) => window.clearTimeout(timer));
-      saveTimers.current.clear();
+      flushTimers();
       for (const tab of openTabsRef.current) {
         if (!tab.dirty) continue;
         void native.saveDraftJournal({ noteId: tab.noteId, title: tab.title, content: tab.content, updatedAt: new Date().toISOString() }).catch(() => undefined);
@@ -357,15 +395,24 @@ export function App() {
             if (!tabReloadVersionRef.current.isCurrent(reloadVersion)) return;
             const digestMs = Math.round(performance.now() - tabT0);
             // 远端已删除（软删/墓碑/purge）：标记 tab 提示用户，保留正文供复制/从回收站恢复。
+            // 前置检查同时让 TS 收窄 digest 非空（reload 分支无需非空断言）。
             if (!digest || digest.deleted) {
               deletedIds.push(tab.noteId);
               console.log("[sync-tab] tab", JSON.stringify({ noteId: tab.noteId, action: "deleted", digestMs, superseded }));
               continue;
             }
-            const last = tab.lastDigest;
-            if (!superseded && last && last.updatedAt === digest.updatedAt && last.title === digest.title) {
+            // V5 Phase 4：digest 阶段决策收敛到纯函数 planTabReload（unchanged-skip / reload）。
+            const plan = planTabReload({
+              digest,
+              lastDigest: tab.lastDigest ?? null,
+              tabDirty: tab.dirty,
+              superseded,
+            });
+            // deleted 分支由上方前置检查处理（digest 非空非 deleted 时 plan 不返回 deleted），此处兜底防御。
+            if (plan.action === "deleted") continue;
+            if (plan.action === "skip") {
               skipped += 1;
-              console.log("[sync-tab] tab", JSON.stringify({ noteId: tab.noteId, action: "skip-unchanged", digestMs }));
+              console.log("[sync-tab] tab", JSON.stringify({ noteId: tab.noteId, action: plan.reason === "dirty-pending" ? "skip-dirty" : "skip-unchanged", digestMs }));
               continue; // 正文/元数据未变化，无需重载
             }
             try {
@@ -424,6 +471,7 @@ export function App() {
   const refreshPendingSummary = useCallback(() => {
     void native.getSyncPendingSummary().then(setPendingSummary).catch(() => undefined);
   }, []);
+  refreshPendingSummaryRef.current = refreshPendingSummary;
 
   const refreshDraftEntries = useCallback(async () => {
     try {
@@ -438,49 +486,8 @@ export function App() {
     }
   }, []);
 
-  const persistTab = useCallback((noteId: string, title: string, content: string) => {
-    return saveQueueRef.current.run(noteId, async () => {
-      // 远端已删除（标记 deleted）的文档不再保存：避免把内容写回已回收的笔记。
-      const openTab = openTabsRef.current.find((t) => t.noteId === noteId);
-      if (openTab?.deleted) return;
-      // 审计 #7：保存时快照当前 revision；响应返回后仅当期间无新编辑才覆盖草稿/清除 dirty
-      const revision = revisionRef.current.get(noteId) ?? 0;
-      setSaveState("saving");
-      try {
-        // M1：保存时由 Lake 内核生成 markdown/纯文本缓存，随正文同批落库
-        const editor = editorsRef.current.get(noteId);
-        const caches: { markdown: string | null; plain: string | null } = { markdown: null, plain: null };
-        if (editor && typeof (editor as any).getDocument === "function") {
-          try { caches.markdown = cleanLakeMarkdown(stripAssetAccessToken(String((editor as any).getDocument("text/markdown")))); } catch { /* 忽略 */ }
-          try { caches.plain = stripAssetAccessToken(String((editor as any).getDocument("text/plain"))); } catch { /* 忽略 */ }
-        }
-        const saved = await native.saveNote(noteId, title.trim() || "无标题", content, caches);
-        // 笔记摘要/树节点始终以服务端返回为准（磁盘已写入）
-        setNotes((items) => items.map((item) => item.id === saved.id ? summaryOf(saved) : item));
-        setTreeNodes((items) => items.map((item) => item.noteFileId === saved.id || item.id === saved.id ? { ...item, title: saved.title, updatedAt: saved.updatedAt, syncState: saved.syncState } : item));
-        setSync((current) => ({ ...current, pendingChanges: Math.max(1, current.pendingChanges) }));
-        refreshPendingSummary();
-        if (revisionRef.current.get(noteId) === revision) {
-          // 无新编辑：安全覆盖 + 清除 dirty；同时更新 lastDigest（本机已保存，远端未变时无需重载）
-          setOpenTabs((tabs) => tabs.map((tab) => tab.noteId === noteId ? { ...tab, title: saved.title, content: saved.content, dirty: false, lastDigest: { title: saved.title, updatedAt: saved.updatedAt } } : tab));
-          const draftTimer = draftTimers.current.get(noteId);
-          if (draftTimer !== undefined) { window.clearTimeout(draftTimer); draftTimers.current.delete(noteId); }
-          void native.deleteDraftJournal(noteId).catch(() => undefined);
-          setDraftEntries((entries) => entries.filter((entry) => entry.noteId !== noteId));
-          setLastSavedAt(new Date().toISOString());
-          setSaveState("saved");
-        } else {
-          // 期间有新编辑：不覆盖草稿、不清除 dirty（磁盘为旧内容，等待下一次保存）
-          setSaveState("dirty");
-        }
-        return saved;
-      } catch (reason) {
-        if (getNativeErrorCode(reason) === "NOT_FOUND") return;
-        setSaveState("error"); setError(getNativeErrorMessage(reason));
-      }
+  // 保存管线已收拢到 useSavePipeline（persistTab 由 hook 提供）
 
-    });
-  }, [refreshPendingSummary]);
 
   /** 超限自动淘汰：返回被关闭的 noteId 列表（dirty 内容先持久化，绝不淘汰当前激活标签）。 */
   const evictTabsForLimit = useCallback(async (nextTabs: OpenTab[], openedId: string): Promise<string[]> => {
@@ -490,6 +497,8 @@ export function App() {
     for (const id of evictedIds) {
       const tab = openTabsRef.current.find((t) => t.noteId === id);
       if (tab?.dirty) await persistTab(id, tab.title, tab.content);
+      // V5 Phase 4：淘汰路径同步清理滚动记忆（避免残留导致下次打开位置错乱）
+      clearScrollMemory(id);
     }
     return evictedIds;
   }, [settings.maxOpenTabs, pinnedNoteIds, persistTab]);
@@ -537,27 +546,7 @@ export function App() {
     return () => { window.removeEventListener("beforeunload", onBeforeUnload); };
   }, [persistTab, mobileActive, mobileDraftContent, quickNotesDirty]);
 
-  const scheduleDraftJournal = useCallback((noteId: string, title: string, content: string) => {
-    const existing = draftTimers.current.get(noteId);
-    if (existing !== undefined) window.clearTimeout(existing);
-    const timer = window.setTimeout(() => {
-      draftTimers.current.delete(noteId);
-      void native.saveDraftJournal({ noteId, title, content, updatedAt: new Date().toISOString() }).catch(() => undefined);
-    }, 450);
-    draftTimers.current.set(noteId, timer);
-  }, []);
-
-  const scheduleSave = useCallback((noteId: string, content: string) => {
-    setSaveState("dirty");
-    const existing = saveTimers.current.get(noteId);
-    if (existing) window.clearTimeout(existing);
-    const timer = window.setTimeout(() => {
-      saveTimers.current.delete(noteId);
-      const tab = openTabsRef.current.find((t) => t.noteId === noteId);
-      if (tab) void persistTab(noteId, tab.title, content);
-    }, 800);
-    saveTimers.current.set(noteId, timer);
-  }, [persistTab]);
+  // scheduleDraftJournal / scheduleSave 已收拢到 useSavePipeline（hook 提供）
 
   const showNotice = useCallback((text: string) => {
     setNotice({ text });
@@ -604,7 +593,7 @@ export function App() {
         setActiveNoteId(id);
         return true;
       }
-      revisionRef.current.set(note.id, 0);
+      resetRevision(note.id, 0);
       const newTab: OpenTab = { noteId: note.id, title: note.title, content: note.content, dirty: false, lastAccessedAt: Date.now() };
       const nextForEvict = openTabsRef.current.some((t) => t.noteId === id)
         ? openTabsRef.current
@@ -671,20 +660,7 @@ export function App() {
     clearScrollMemory,
   });
 
-  /** 云同步：点顶栏云按钮直接开始，小悬浮窗展示状态并自动消失（不再弹带按钮的大弹窗） */
-  const showSyncToast = useCallback((data: SyncToastData) => {
-    setSyncToast(data);
-    if (syncToastTimer.current !== null) window.clearTimeout(syncToastTimer.current);
-    if (data.kind !== "busy") {
-      const ms = data.kind === "ok" ? 4000 : data.kind === "error" ? 6000 : 8000;
-      syncToastTimer.current = window.setTimeout(() => {
-        setSyncToast(null);
-        setSyncProgress(null);
-        syncToastTimer.current = null;
-      }, ms);
-    }
-  }, []);
-
+  // 云同步 toast 壳已收拢到 useSyncShell（busy 常驻，ok/error/其他自动消失）
   const runSync = useSyncController({
     setSync,
     setCloudConfigured,
@@ -780,7 +756,7 @@ export function App() {
   const copyNotePaths = useCallback((node: TreeNode) => void copyPathsById(node.noteFileId), [copyPathsById]);
 
   const handleContentChange = useCallback((noteId: string, content: string) => {
-    revisionRef.current.set(noteId, (revisionRef.current.get(noteId) ?? 0) + 1);
+    bumpRevision(noteId);
     setOpenTabs((tabs) => tabs.map((tab) => tab.noteId === noteId ? { ...tab, content, dirty: true } : tab));
     const title = openTabsRef.current.find((tab) => tab.noteId === noteId)?.title ?? "无标题";
     scheduleDraftJournal(noteId, title, content);
@@ -795,7 +771,7 @@ export function App() {
       setMobileActive(note); setMobileDraftTitle(note.title); setMobileDraftContent(note.content);
       setMobileOpen(false); setMobilePage("document"); setMobileEditing(true);
     } else {
-      revisionRef.current.set(note.id, 0);
+      resetRevision(note.id, 0);
       const newTab: OpenTab = { noteId: note.id, title: note.title, content: note.content, dirty: false, lastAccessedAt: Date.now() };
       const evictedIds = await evictTabsForLimit([...openTabsRef.current, newTab], note.id);
       setOpenTabs((tabs) => {
@@ -899,9 +875,7 @@ export function App() {
         treeNodes.filter((node) => removedNodeIds.has(node.id) && node.noteFileId).map((node) => node.noteFileId!)
       );
       removedNoteIds.forEach((noteId) => {
-        const timer = saveTimers.current.get(noteId);
-        if (timer) { window.clearTimeout(timer); saveTimers.current.delete(noteId); }
-        revisionRef.current.delete(noteId);
+        clearNote(noteId);
         clearScrollMemory(noteId);
       });
       await native.deleteTreeNode(id);
@@ -1096,9 +1070,7 @@ export function App() {
   </>;
 
   // 字数/图片统计（W-2-A）：从渲染体移出，避免每次按键对整篇正文跑两次 O(n) 正则。
-  const activeTab = openTabs.find((t) => t.noteId === activeNoteId);
   const activeNodeSyncState = activeNoteId ? (treeNodes.find((n) => n.noteFileId === activeNoteId)?.syncState ?? "synced") : "synced";
-  const syncIndicator = cloudStatus(sync, activeNodeSyncState, cloudEnabled);
 
   const editorPrefs = {
     fontSize: settings.fontSize,
@@ -1364,7 +1336,7 @@ export function App() {
             setOpenTabs((tabs) => tabs.map((tab) => tab.noteId === restoredId
               ? { ...tab, title: updated.title, content: updated.content, dirty: false, reloadKey: (tab.reloadKey ?? 0) + 1 }
               : tab));
-            revisionRef.current.set(restoredId, (revisionRef.current.get(restoredId) ?? 0) + 1);
+            bumpRevision(restoredId);
           } catch { /* 文档未打开或读取失败则跳过 */ }
         })();
       }} />
@@ -1386,22 +1358,4 @@ function treeNodePath(nodes: TreeNode[], noteId: string): TreeNode[] {
 }
 
 const summaryOf = ({ content: _content, ...summary }: NoteDocument): NoteSummary => summary;
-function cloudStatus(sync: SyncStatus, nodeSyncState: string, enabled: boolean): { label: string; cls: string } {
-  if (!enabled) return { label: "云同步关闭", cls: "disabled" };
-  if (sync.phase === "syncing") return { label: "同步中", cls: "syncing" };
-  if (sync.phase === "error") return { label: "同步失败", cls: "error" };
-  if (nodeSyncState === "local") return { label: "待上传", cls: "pending" };
-  if (nodeSyncState === "conflict") return { label: "冲突", cls: "conflict" };
-  if (nodeSyncState === "synced") return { label: "已同步", cls: "synced" };
-  return { label: "未同步", cls: "idle" };
-}
-
-const syncTooltip = (status: SyncStatus) => {
-  const last = status.lastSyncedAt ? new Date(status.lastSyncedAt) : null;
-  const lastText = last && !Number.isNaN(last.getTime())
-    ? `同步于 ${last.toLocaleString("zh-CN", { hour12: false })}`
-    : "尚未同步";
-  return `${lastText}\n${status.message}`;
-};
-
 const saveLabel = (state: SaveState) => ({ idle: "本地", dirty: "待保存", saving: "保存中", saved: "已保存", error: "保存失败" })[state];

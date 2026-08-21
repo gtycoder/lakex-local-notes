@@ -2,7 +2,7 @@ import http from "node:http";
 import fs from "node:fs";
 import path from "node:path";
 import sharp from "sharp";
-import { isSafePathSegment as isSafeSegment } from "./storeUtils.js";
+import { isSafePathSegment as isSafeSegment } from "../src/core/storeUtils.js";
 
 const MIME_MAP: Record<string, string> = {
   ".png": "image/png",

@@ -2,31 +2,17 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { type S3Settings, ObjectStore, isSafeSegment, mimeTypeFor, sha256Hex, validateS3Settings } from "./sync.js";
+import { reconcileQuickNote } from "../src/core/quickNoteReconcile.js";
+import { decideUpload } from "../src/core/decideUpload.js";
+import type { ManifestItem, QuickNotesManifest } from "../src/core/manifestTypes.js";
 import { ASSET_TRANSFER_CONCURRENCY, runPool } from "./asyncPool.js";
-import { log } from "./logger.js";
-import { type QuickNoteImage, QuickNotesStore } from "./quickNotes.js";
+
+import { QuickNotesStore } from "./quickNotes.js";
 
 const MANIFEST_VERSION = 1;
 const ROOT = "quick-notes";
 
-interface ManifestItem {
-  id: string;
-  createdAt: string;
-  updatedAt: string;
-  contentHash: string;
-  isConflict: boolean;
-  assets: Array<Pick<QuickNoteImage, "id" | "filename" | "mimeType" | "width" | "height" | "size" | "hash">>;
-  deleted?: boolean;
-  deletedAt?: string;
-}
-
-interface QuickNotesManifest {
-  version: number;
-  workspaceId: string;
-  commitId: string;
-  createdAt: string;
-  items: ManifestItem[];
-}
+// Manifest 系列类型已外移至 src/core/manifestTypes.ts（lake-core，V5 Phase 1）。
 
 export interface QuickNotesSyncResult {
   uploaded: number;
@@ -61,14 +47,14 @@ export async function syncQuickNotes(
   onProgress?: (progress: QuickNotesSyncProgress) => void,
 ): Promise<QuickNotesSyncResult> {
   const quickStart = Date.now();
-  log.quick.info("[perf] quick-sync start");
+  quickNotes.logScopes.quick.info("[perf] quick-sync start");
   validateS3Settings(settings);
-  const remote = new ObjectStore(settings);
+  const remote = new ObjectStore(settings, quickNotes.logScopes);
   const report = (progress: QuickNotesSyncProgress) => { try { onProgress?.(progress); } catch { /* renderer closed */ } };
   report({ phase: "quick-notes", message: "正在同步小记…" });
   const connectStart = Date.now();
   await remote.test();
-  log.quick.info(`[perf] quick connect ${Date.now() - connectStart}ms`);
+  quickNotes.logScopes.quick.info(`[perf] quick connect ${Date.now() - connectStart}ms`);
 
   const rawManifest = await remote.getOptional(manifestKey, { maxBytes: MAX_QUICK_MANIFEST_BYTES });
   const remoteManifest: QuickNotesManifest | null = rawManifest ? parseManifest(rawManifest) : null;
@@ -97,7 +83,7 @@ export async function syncQuickNotes(
           // 墓碑权威（与 Lake 一致）：远端 deleted 是权威状态，本地编辑（无论新旧）都不抵抗；
           // 唯一例外是显式恢复标记（restoreQuickNote 写入）→ local wins，上传阶段写回 active 覆盖墓碑。
           if (quickNotes.isRestorePending(item.id)) {
-            log.quick.info(`[perf] download ${item.id} tombstone-skip (restore pending) ${Date.now() - itemStart}ms`);
+            quickNotes.logScopes.quick.info(`[perf] download ${item.id} tombstone-skip (restore pending) ${Date.now() - itemStart}ms`);
             continue;
           }
           // 墓碑权威：先尝试下载删除前内容（墓碑 contentHash，容错：占位符/缺失则跳过）覆盖本地
@@ -112,13 +98,13 @@ export async function syncQuickNotes(
               fs.renameSync(temporary, target);
             }
           } catch (error) {
-            log.quick.warn(`[perf] download ${item.id} tombstone content missing, skip`);
+            quickNotes.logScopes.quick.warn(`[perf] download ${item.id} tombstone content missing, skip`);
           }
           quickNotes.deleteQuickNote(item.id);
         } else {
           quickNotes.rememberDeleted({ id: item.id, createdAt: item.createdAt, updatedAt: item.updatedAt, deletedAt: item.deletedAt ?? new Date().toISOString() });
         }
-        log.quick.info(`[perf] download ${item.id} deleted ${Date.now() - itemStart}ms`);
+        quickNotes.logScopes.quick.info(`[perf] download ${item.id} deleted ${Date.now() - itemStart}ms`);
         continue;
       }
       if (deferredDeletedIds.has(item.id)) continue;
@@ -128,7 +114,7 @@ export async function syncQuickNotes(
       if (tombAt !== undefined) {
         if (item.updatedAt > tombAt) {
           quickNotes.revokeLocalDeletion(item.id);
-          log.quick.info(`[perf] download ${item.id} remote-restored → local tombstone revoked ${Date.now() - itemStart}ms`);
+          quickNotes.logScopes.quick.info(`[perf] download ${item.id} remote-restored → local tombstone revoked ${Date.now() - itemStart}ms`);
         } else {
           continue;
         }
@@ -138,24 +124,28 @@ export async function syncQuickNotes(
       if (local?.contentHash === item.contentHash) {
         quickNotes.setBaseHash(item.id, item.contentHash);
         quickNotes.markSynced(item.id);
-        log.quick.info(`[perf] download ${item.id} unchanged ${Date.now() - itemStart}ms`);
+        quickNotes.logScopes.quick.info(`[perf] download ${item.id} unchanged ${Date.now() - itemStart}ms`);
         continue;
       }
 
       const content = await remote.getOptional(objectKey(item.contentHash), { maxBytes: MAX_QUICK_NOTE_BYTES });
       if (!content) {
         // V5 §5.5 B 方案：小记内容对象缺失 → 跳过该条目 + 日志，不覆盖本地（本地优先，下轮重试）
-        log.quick.warn(`[download] ${item.id} 远端小记内容缺失，跳过（本地不覆盖）`);
+        quickNotes.logScopes.quick.warn(`[download] ${item.id} 远端小记内容缺失，跳过（本地不覆盖）`);
         continue;
       }
       if (sha256Hex(content) !== item.contentHash) throw new Error(`小记内容哈希不符: ${item.id}`);
       const assets = await downloadAssets(remote, item, (assetCurrent, assetTotal) => {
         report({ phase: "quick-notes", current: index + 1, total: remoteManifest.items.length, assetCurrent, assetTotal, message: "检查云端小记" });
       });
-      const base = quickNotes.baseHash(item.id);
-      const localChanged = local !== null && local.contentHash !== base;
-      const remoteChanged = item.contentHash !== base;
-      if (localChanged && remoteChanged) {
+      // 决策收敛到纯函数 reconcileQuickNote（lake-core，V5 Phase 1）。
+      // 前提：正文相同（local.contentHash===item.contentHash）在上层已走 unchanged 分支 continue。
+      const action = reconcileQuickNote({
+        baseHash: quickNotes.baseHash(item.id),
+        localHash: local !== null ? local.contentHash : null,
+        remoteHash: item.contentHash,
+      });
+      if (action.kind === "conflict") {
         // 验收 #4（B 方案）：双端都改 → 远端覆盖本地；本地版本归档进回收站（新 id，恢复后为一条新小记）。
         // 顺序：先归档本地（复制内容/资源到新 id），再让远端内容覆盖原条目。
         quickNotes.archiveLocalToTrash(item.id);
@@ -163,19 +153,19 @@ export async function syncQuickNotes(
         quickNotes.setBaseHash(item.id, item.contentHash);
         conflicts += 1;
         downloaded += 1;
-        log.quick.info(`[perf] download ${item.id} conflict → remote wins, local archived to trash ${Date.now() - itemStart}ms (content=${content.length}B, assets=${assets.length})`);
-      } else if (localChanged) {
+        quickNotes.logScopes.quick.info(`[perf] download ${item.id} conflict → remote wins, local archived to trash ${Date.now() - itemStart}ms (content=${content.length}B, assets=${assets.length})`);
+      } else if (action.kind === "local-wins") {
         // 只在本地变更：上传阶段将其作为权威版本，不以下载覆盖。
         continue;
       } else {
         quickNotes.importRemoteQuickNote(item, content, assets);
         quickNotes.setBaseHash(item.id, item.contentHash);
         downloaded += 1;
-        log.quick.info(`[perf] download ${item.id} new-content ${Date.now() - itemStart}ms (content=${content.length}B, assets=${assets.length})`);
+        quickNotes.logScopes.quick.info(`[perf] download ${item.id} new-content ${Date.now() - itemStart}ms (content=${content.length}B, assets=${assets.length})`);
       }
     }
   }
-  log.quick.info(`[perf] quick download phase ${Date.now() - quickStart}ms (downloaded=${downloaded}, conflicts=${conflicts})`);
+  quickNotes.logScopes.quick.info(`[perf] quick download phase ${Date.now() - quickStart}ms (downloaded=${downloaded}, conflicts=${conflicts})`);
 
   const localItems = quickNotes.listQuickNotesForSync();
   const remoteItemsById = new Map((remoteManifest?.items ?? []).map((item) => [item.id, item]));
@@ -196,10 +186,18 @@ export async function syncQuickNotes(
     // 增量扫描优化（与 Lake 一致）：synced 且远端条目 hash 与本地索引一致 → 跳过 .qnote/图片读取，
     // 复用远端 assets（正文未变 ⇒ 图片引用未变）。非 synced 路径保留"索引与内容不一致则抛错"完整性校验。
     const remoteEntry = remoteItemsById.get(item.id);
-    if (item.syncState === "synced" && remoteEntry && !remoteEntry.deleted && remoteEntry.contentHash === item.contentHash) {
+    if (decideUpload({
+      syncState: item.syncState,
+      // synced 条目 base 与 contentHash 已对齐（上传完成时 setBaseHash）；快路径判定以此代替读盘。
+      baseHash: item.contentHash,
+      remoteContentHash: remoteEntry !== undefined && !remoteEntry.deleted ? remoteEntry.contentHash : null,
+      remoteDeleted: remoteEntry?.deleted ?? false,
+    }) === "skip-fast") {
+      // skip-fast 保证远端条目存在且未删除（decideUpload 输入映射等价于原条件）
+      const entry = remoteEntry!;
       manifestItems.push({
         id: item.id, createdAt: item.createdAt, updatedAt: item.updatedAt,
-        contentHash: item.contentHash, isConflict: item.isConflict, assets: remoteEntry.assets ?? [],
+        contentHash: item.contentHash, isConflict: item.isConflict, assets: entry.assets ?? [],
       });
       continue;
     }
@@ -231,9 +229,9 @@ export async function syncQuickNotes(
       contentUploaded = true;
     }
     manifestItems.push({ id: item.id, createdAt: item.createdAt, updatedAt: item.updatedAt, contentHash, isConflict: item.isConflict, assets });
-    log.quick.info(`[perf] upload ${item.id} ${Date.now() - itemUploadStart}ms (content=${contentUploaded ? `${content.length}B` : "skip"}, assets=${pendingAssets.length})`);
+    quickNotes.logScopes.quick.info(`[perf] upload ${item.id} ${Date.now() - itemUploadStart}ms (content=${contentUploaded ? `${content.length}B` : "skip"}, assets=${pendingAssets.length})`);
   }
-  log.quick.info(`[perf] quick upload phase ${Date.now() - uploadStart}ms (uploaded=${uploaded})`);
+  quickNotes.logScopes.quick.info(`[perf] quick upload phase ${Date.now() - uploadStart}ms (uploaded=${uploaded})`);
 
   const localIds = new Set(localItems.map((item) => item.id));
   const readyDeleted = quickNotes.listDeletedForSync();
@@ -252,7 +250,7 @@ export async function syncQuickNotes(
       tombHash = sha256Hex(content);
       await remote.put(objectKey(tombHash), content, "application/json; charset=utf-8");
     } catch (error) {
-      log.quick.warn(`[perf] upload ${deleted.id} tombstone content unreadable, placeholder fallback`);
+      quickNotes.logScopes.quick.warn(`[perf] upload ${deleted.id} tombstone content unreadable, placeholder fallback`);
     }
     manifestItems.push({
       id: deleted.id,
@@ -287,13 +285,13 @@ export async function syncQuickNotes(
   report({ phase: "quick-notes", message: "写入小记同步清单…" });
   const manifestStart = Date.now();
   await remote.put(manifestKey, Buffer.from(`${JSON.stringify(manifest, null, 2)}\n`, "utf8"), "application/json; charset=utf-8", { gzip: true });
-  log.quick.info(`[perf] quick manifest ${manifest.commitId} ${Date.now() - manifestStart}ms (items=${manifestItems.length})`);
+  quickNotes.logScopes.quick.info(`[perf] quick manifest ${manifest.commitId} ${Date.now() - manifestStart}ms (items=${manifestItems.length})`);
 
   for (const item of localItems) {
     quickNotes.setBaseHash(item.id, item.contentHash);
     quickNotes.markSynced(item.id);
   }
-  log.quick.info(`[perf] quick-sync done ${Date.now() - quickStart}ms (uploaded=${uploaded}, downloaded=${downloaded}, conflicts=${conflicts})`);
+  quickNotes.logScopes.quick.info(`[perf] quick-sync done ${Date.now() - quickStart}ms (uploaded=${uploaded}, downloaded=${downloaded}, conflicts=${conflicts})`);
   return { uploaded, downloaded, conflicts, manifestId: manifest.commitId, completedAt };
 }
 
@@ -364,12 +362,12 @@ export interface QuickNotesCleanupResult {
 export async function runQuickNotesDeepCleanup(quickNotes: QuickNotesStore, settings: S3Settings, opts?: { dryRun?: boolean; gcRetentionDays?: number }): Promise<QuickNotesCleanupResult> {
   const deepStart = Date.now();
   validateS3Settings(settings);
-  const remote = new ObjectStore(settings);
+  const remote = new ObjectStore(settings, quickNotes.logScopes);
   const dryRun = opts?.dryRun ?? false;
   const gcRetentionDays = opts?.gcRetentionDays ?? 7;
 
   const raw = await remote.getOptional(manifestKey, { maxBytes: MAX_QUICK_MANIFEST_BYTES });
-  if (!raw) { log.quick.info(`[perf] quick-deep-cleanup done ${Date.now() - deepStart}ms (no manifest)`); return { dryRun, candidateCount: 0, deletedCount: 0, keys: [] }; }
+  if (!raw) { quickNotes.logScopes.quick.info(`[perf] quick-deep-cleanup done ${Date.now() - deepStart}ms (no manifest)`); return { dryRun, candidateCount: 0, deletedCount: 0, keys: [] }; }
   const manifest = parseManifest(raw);
   const keep = new Set<string>([manifestKey]);
 
@@ -390,10 +388,10 @@ export async function runQuickNotesDeepCleanup(quickNotes: QuickNotesStore, sett
     .map((item) => item.key);
 
   if (dryRun || candidates.length === 0) {
-    log.quick.info(`[perf] quick-deep-cleanup done ${Date.now() - deepStart}ms (dryRun=${dryRun}, candidates=${candidates.length}, deleted=0)`);
+    quickNotes.logScopes.quick.info(`[perf] quick-deep-cleanup done ${Date.now() - deepStart}ms (dryRun=${dryRun}, candidates=${candidates.length}, deleted=0)`);
     return { dryRun, candidateCount: candidates.length, deletedCount: 0, keys: candidates };
   }
   await remote.deleteMany(candidates);
-  log.quick.info(`[perf] quick-deep-cleanup done ${Date.now() - deepStart}ms (dryRun=${dryRun}, candidates=${candidates.length}, deleted=${candidates.length})`);
+  quickNotes.logScopes.quick.info(`[perf] quick-deep-cleanup done ${Date.now() - deepStart}ms (dryRun=${dryRun}, candidates=${candidates.length}, deleted=${candidates.length})`);
   return { dryRun, candidateCount: candidates.length, deletedCount: candidates.length, keys: candidates };
 }

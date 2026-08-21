@@ -1,4 +1,4 @@
-import type Database from "better-sqlite3";
+import type { DbLike } from "../src/core/dbLike.js";
 import fs from "node:fs";
 import path from "node:path";
 import zlib from "node:zlib";
@@ -36,7 +36,7 @@ interface HistoryPreviewRow {
 
 /** Read-only history access; snapshot creation/deletion remains in Store. */
 export class HistoryRepository {
-  constructor(private readonly db: Database.Database, private readonly root: string) {}
+  constructor(private readonly db: DbLike, private readonly root: string) {}
 
   listForNote(noteId: string): HistorySnapshotSummary[] {
     const rows = this.db.prepare(

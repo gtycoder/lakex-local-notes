@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { computeDocStats } from "./docStats";
+import { computeDocStats } from "./docStats.js";
 
 describe("computeDocStats", () => {
   it("空内容 → 0/0", () => {

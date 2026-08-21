@@ -1,8 +1,8 @@
-import type Database from "better-sqlite3";
+import type { DbLike } from "../src/core/dbLike.js";
 import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
-import type { SyncNote, SyncFolder } from "./noteQueries.js";
+import type { SyncNote } from "./noteQueries.js";
 import { AppError } from "./storeErrors.js";
 
 interface RemoteAsset {
@@ -11,7 +11,7 @@ interface RemoteAsset {
 }
 
 interface RemoteImportDeps {
-  db: Database.Database;
+  db: DbLike;
   workspaceId: string;
   trashNotebookId: string;
   notePathFor(noteId: string): string;

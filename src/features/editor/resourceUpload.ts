@@ -1,8 +1,8 @@
 import { isDesktop, native } from "../../lib/native";
 import type { ResourceUploadInput, ResourceUploadOutput } from "../../lib/types";
 import { MAX_IMAGE_BYTES, imageDataUrl, normalizeImageInput } from "./imageFormat";
-import { createConcurrencyQueue } from "../../lib/concurrency";
-import { withRetry } from "../../lib/retry";
+import { createConcurrencyQueue } from "../../core/concurrency";
+import { withRetry } from "../../core/retry";
 
 interface LakeUploadRequest {
   type?: "url" | "file" | "base64";

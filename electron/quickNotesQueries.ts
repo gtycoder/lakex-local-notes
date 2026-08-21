@@ -1,8 +1,8 @@
-import Database from "better-sqlite3";
+import type { DbLike } from "../src/core/dbLike.js";
 import fs from "node:fs";
 import type { QuickNoteDocument, QuickNoteSummary, QuickNoteDeleted } from "./quickNoteTypes.js";
 import { AppError } from "./storeErrors.js";
-import { parseQuickNoteContent, validateQuickNoteContent, type StoredQuickNoteContent } from "../src/lib/quickNoteModel.js";
+import { parseQuickNoteContent, validateQuickNoteContent, type StoredQuickNoteContent } from "../src/core/quickNoteModel.js";
 
 export interface QuickNoteRow {
   id: string;
@@ -36,7 +36,7 @@ export interface QuickNoteConversionRow {
 }
 
 interface QuickNotesQueryDeps {
-  db: Database.Database;
+  db: DbLike;
   itemPath(id: string): string;
   imageUrl(noteId: string, filename: string): string;
 }

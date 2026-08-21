@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { selectEvictionIds, trimTabsToLimit } from "./tabLimit";
+import { selectEvictionIds, trimTabsToLimit } from "./tabLimit.js";
 
 const tabs = [
   { noteId: "a", lastAccessedAt: 100 },

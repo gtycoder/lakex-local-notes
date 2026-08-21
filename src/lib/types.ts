@@ -4,7 +4,7 @@ export interface NoteSummary {
   parentId: string | null;
   sortOrder: number;
   updatedAt: string;
-  syncState: "local" | "synced" | "conflict";
+  syncState: "local" | "synced" | "conflict" | "purged";
   isConflict: boolean;
   isLocked?: boolean;
   lockedAt?: string | null;

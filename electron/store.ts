@@ -4,14 +4,12 @@ import path from "node:path";
 import crypto from "node:crypto";
 import zlib from "node:zlib";
 import os from "node:os";
-import { safeStorage } from "electron";
 import { ASSET_PORT } from "./assetServer.js";
-import { mdToHtml, wrapHtmlPage } from "./mdToHtml.js";
+import { mdToHtml, wrapHtmlPage } from "../src/core/mdToHtml.js";
 import { lakeHtmlToMarkdown, lakeHtmlToPlain } from "./lakeCaches.js";
-import { assertSafeRemoteHost, SsrfError } from "./ssrf.js";
-import { log } from "./logger.js";
+import { createSilentLoggerScopes, type LoggerScopes } from "../src/core/logger.js";
 import { AppError } from "./storeErrors.js";
-import { extractAssetRefs, isSafePathSegment, sanitizeFileName, selectHistoryDrops } from "./storeUtils.js";
+import { extractAssetRefs, isSafePathSegment, sanitizeFileName, selectHistoryDrops } from "../src/core/storeUtils.js";
 import { readNoteDigest, type NoteDigest } from "./storeQueries.js";
 import { SearchRepository, type SearchResult } from "./searchRepository.js";
 import { HistoryRepository, type HistorySnapshotPreview, type HistorySnapshotSummary } from "./historyRepository.js";
@@ -21,12 +19,13 @@ import { NoteQueries, type NoteSummary, type SummaryRow, type SyncFolder, type S
 import { NoteMetadataRepository } from "./noteMetadataRepository.js";
 import { NoteContentRepository, type NoteCacheInput } from "./noteContentRepository.js";
 import { mimeTypeForFilename } from "./imageUtils.js";
+import { createPlaintextSecretCipher, type SecretCipher } from "../src/core/secretCipher.js";
+import type { DbLike } from "../src/core/dbLike.js";
 import { ResourceRepository } from "./resourceRepository.js";
 import { RemoteImportRepository } from "./remoteImportRepository.js";
-import { MAX_IMAGE_BYTES, MAX_IMAGE_PIXELS } from "./storeLimits.js";
 import type { ResourceUploadOutput } from "./storeTypes.js";
 
-export { ASSET_NAME_RE, extractAssetRefs, isoWeekKey, selectHistoryDrops, sanitizeFileName } from "./storeUtils.js";
+export { ASSET_NAME_RE, extractAssetRefs, isoWeekKey, selectHistoryDrops, sanitizeFileName } from "../src/core/storeUtils.js";
 
 const DEFAULT_WORKSPACE_ID = "default";
 const DEFAULT_NOTEBOOK_ID = "notebook-personal";
@@ -79,10 +78,6 @@ export interface HistoryCleanupResult {
   deletedSnapshots: number;
   freedBytes: number;
 }
-interface RemoteAsset {
-  filename: string; size: number; hash: string;
-}
-
 /** 仅供主进程内部的小记转换调用。sourcePath 绝不来自渲染进程。 */
 export interface ImportedNoteAsset {
   filename: string;
@@ -91,10 +86,6 @@ export interface ImportedNoteAsset {
 
 function nowIso(): string {
   return new Date().toISOString();
-}
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 function uuid(): string {
@@ -116,7 +107,7 @@ export function localAssetMdImgRe(port: number): RegExp {
 }
 
 export class Store {
-  private db: Database.Database;
+  private db: DbLike;
   private root: string;
   private noteAssetsDir: string;
   /** 15 分钟自动快照的 dirty 集合（saveNote 落盘时标记，flush 后清空，内存态） */
@@ -130,9 +121,15 @@ export class Store {
   private noteContent: NoteContentRepository;
   private resourceRepository: ResourceRepository;
   private remoteImport: RemoteImportRepository;
+  /** V5 Phase 2：密钥加解密注入点（桌面默认 = safeStorage，由 main.ts 装配） */
+  private secretCipher: SecretCipher;
+  /** V5 Phase 2：日志注入点（桌面默认 = electron-log，由 main.ts 装配；sync/quickNotes 经此读取） */
+  readonly logScopes: LoggerScopes;
 
-  constructor(root: string) {
+  constructor(root: string, secretCipher: SecretCipher = createPlaintextSecretCipher(), logScopes: LoggerScopes = createSilentLoggerScopes()) {
     this.root = root;
+    this.secretCipher = secretCipher;
+    this.logScopes = logScopes;
     this.noteAssetsDir = path.join(root, "note-assets");
     fs.mkdirSync(path.join(root, "notes"), { recursive: true });
     fs.mkdirSync(this.noteAssetsDir, { recursive: true });
@@ -181,7 +178,7 @@ export class Store {
       isSafeSegment: isSafePathSegment,
       detectOrphans: (noteId, content) => this.detectOrphans(noteId, content),
       ensureNoteCaches: (noteId, content) => this.ensureNoteCaches(noteId, content),
-      logImport: (noteId, bytes, assetCount, startedAt) => log.store.info(`[perf] importRemoteNote ${noteId} ${Date.now() - startedAt}ms (lake=${bytes}B, assets=${assetCount})`),
+      logImport: (noteId, bytes, assetCount, startedAt) => this.logScopes.store.info(`[perf] importRemoteNote ${noteId} ${Date.now() - startedAt}ms (lake=${bytes}B, assets=${assetCount})`),
     });
     this.assetRepository = new AssetRepository({
       db: this.db,
@@ -580,7 +577,7 @@ export class Store {
         if (this.createHistorySnapshot(noteId)) created++;
       } catch { /* 单篇失败不阻断其余 */ }
     }
-    log.history.info(`[perf] flush-snapshots ${Date.now() - t0}ms (pending=${pending.length}, created=${created})`);
+    this.logScopes.history.info(`[perf] flush-snapshots ${Date.now() - t0}ms (pending=${pending.length}, created=${created})`);
     return created;
   }
 
@@ -623,7 +620,7 @@ export class Store {
   /** Rebuild the full-text index without exposing repository internals to callers. */
   checkpointWal(): void {
     try { this.db.pragma("wal_checkpoint(TRUNCATE)"); }
-    catch (error) { log.store.warn(`[store] WAL checkpoint failed: ${error instanceof Error ? error.message : String(error)}`); }
+    catch (error) { this.logScopes.store.warn(`[store] WAL checkpoint failed: ${error instanceof Error ? error.message : String(error)}`); }
   }
 
   checkIntegrity(): { ok: boolean; integrity: string; foreignKeyErrors: number } {
@@ -861,7 +858,7 @@ export class Store {
       "INSERT INTO note_history(note_id,file_path,content_hash,created_at,size,refs_json,ref_count) VALUES(?,?,?,?,?,?,?)"
     ).run(noteId, relPath, hash, created, gz.length, JSON.stringify(refs), refs.length);
     const id = Number(info.lastInsertRowid);
-    log.history.info(`[perf] snapshot ${noteId} ${Date.now() - t0}ms id=${id}${force ? " force" : ""} (body=${body.length}B, gz=${gz.length}B, refs=${refs.length})`);
+    this.logScopes.history.info(`[perf] snapshot ${noteId} ${Date.now() - t0}ms id=${id}${force ? " force" : ""} (body=${body.length}B, gz=${gz.length}B, refs=${refs.length})`);
     return id;
   }
 
@@ -930,7 +927,7 @@ export class Store {
       this.db.prepare("UPDATE tree_nodes SET sync_state='local' WHERE id=?").run(noteId);
     });
     tx();
-    log.history.info(`[perf] restore ${noteId} from history#${historyId} ${Date.now() - t0}ms`);
+    this.logScopes.history.info(`[perf] restore ${noteId} from history#${historyId} ${Date.now() - t0}ms`);
   }
 
   /** 手动删除单个历史快照（文件 + DB）。调用方随后刷新孤儿列表（顺序 §5）。 */
@@ -942,7 +939,7 @@ export class Store {
     try { fs.rmSync(path.join(this.root, row.file_path), { force: true }); } catch { /* 忽略 */ }
     // 若目录空则清理
     this.pruneEmptyHistoryDirs();
-    log.history.info(`[perf] delete-history ${historyId} ${Date.now() - t0}ms`);
+    this.logScopes.history.info(`[perf] delete-history ${historyId} ${Date.now() - t0}ms`);
   }
 
   /** 惰性清理：每文档超 100 份删最旧；created_at < 30 天删。
@@ -974,7 +971,7 @@ export class Store {
       this.cleanupUnreferencedAssetsForNote(note_id);
     }
     this.pruneEmptyHistoryDirs();
-    log.history.info(`[perf] cleanup-history ${Date.now() - t0}ms (deleted=${result.deletedSnapshots}, freed=${result.freedBytes}B)`);
+    this.logScopes.history.info(`[perf] cleanup-history ${Date.now() - t0}ms (deleted=${result.deletedSnapshots}, freed=${result.freedBytes}B)`);
     return result;
   }
 
@@ -1250,7 +1247,7 @@ export class Store {
       try { fs.rmSync(f.path, { force: true, recursive: f.recursive }); }
       catch (error) { console.warn("[store] 彻底删除清理文件失败:", f.path, error); }
     }
-    log.store.info(`[perf] purge ${id} ${Date.now() - t0}ms (files=${filesToRemove.length})`);
+    this.logScopes.store.info(`[perf] purge ${id} ${Date.now() - t0}ms (files=${filesToRemove.length})`);
   }
 
   /** 清空回收站：彻底删除 trash 笔记本的全部直接子节点（各写 purge 墓碑）。 */
@@ -1302,7 +1299,7 @@ export class Store {
   }
 
   /** 当前正文引用的资源文件名（复用公共 extractAssetRefs） */
-  private referencedFilenames(noteId: string, content: string): Set<string> {
+  private referencedFilenames(content: string): Set<string> {
     return extractAssetRefs(content);
   }
 
@@ -1324,7 +1321,7 @@ export class Store {
     const dir = this.noteAssetsDirFor(noteId);
     if (!fs.existsSync(dir)) return;
     const diskSet = new Set(fs.readdirSync(dir));
-    const referencedSet = this.referencedFilenames(noteId, content);
+    const referencedSet = this.referencedFilenames(content);
     // P2：孤儿登记并入"历史 refs"——被任何历史快照引用的资源不算孤儿，
     // 保证全局 cleanOrphanAssets / 同步跳过上传 / 文档级 listNoteOrphans 三个消费者一致，
     // 避免"本机 SyncPanel 全局清理误删历史引用资源 → 本机历史恢复裂图"。
@@ -1419,25 +1416,11 @@ export class Store {
   }
 
   private encryptSecret(value: string): string {
-    try {
-      if (safeStorage.isEncryptionAvailable()) {
-        return `enc:v1:${safeStorage.encryptString(value).toString("base64")}`;
-      }
-    } catch (error) {
-      console.warn("[store] safeStorage 加密不可用，S3 Secret 将明文保存:", error);
-    }
-    return value;
+    return this.secretCipher.encrypt(value);
   }
 
   private decryptSecret(value: string): string {
-    if (!value.startsWith("enc:v1:")) return value; // 旧版明文数据
-    try {
-      return safeStorage.decryptString(Buffer.from(value.slice("enc:v1:".length), "base64"));
-    } catch (error) {
-      // 密钥串丢失/换机：无法解密时返回空串，提示用户重新填写
-      console.warn("[store] S3 Secret 解密失败，请重新填写:", error);
-      return "";
-    }
+    return this.secretCipher.decrypt(value);
   }
 
   contentHash(id: string): string {

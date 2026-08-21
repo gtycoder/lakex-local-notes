@@ -1,13 +1,13 @@
 import { app, BrowserWindow, crashReporter, dialog, screen, session, shell, type WebFrameMain } from "electron";
 import crypto from "node:crypto";
-import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { Store } from "./store.js";
+import { createSafeStorageSecretCipher } from "./secretCipher.js";
 import { QuickNotesStore } from "./quickNotes.js";
 import { startAssetServer, ASSET_PORT } from "./assetServer.js";
 import { resolveMirroredCdnRedirect, scanMirroredCdnFiles } from "./cdnRedirect.js";
-import { testConnection, syncNow, runGcReconcile, runDeepCleanup, type SyncResult, type SyncProgress } from "./sync.js";
+import { syncNow, runGcReconcile, type SyncResult, type SyncProgress } from "./sync.js";
 import { initLogger, log, logHeapPeak } from "./logger.js";
 import { syncQuickNotes } from "./quickNotesSync.js";
 import { readDevS3Settings } from "./devConfig.js";
@@ -370,7 +370,7 @@ if (!app.requestSingleInstanceLock()) {
   app.whenReady().then(() => {
     initLogger();
     log.app.info("app ready: initLogger done");
-    store = new Store(workspaceRoot());
+    store = new Store(workspaceRoot(), createSafeStorageSecretCipher(), log);
     const integrity = store.checkIntegrity();
     if (!integrity.ok) {
       const detail = `integrity_check=${integrity.integrity}，foreign_key_errors=${integrity.foreignKeyErrors}`;
@@ -393,7 +393,7 @@ if (!app.requestSingleInstanceLock()) {
       if (devS3Settings) store.saveS3Settings(devS3Settings);
       else log.app.info("dev S3 seed skipped: credentials are not configured");
     }
-    quickNotes = new QuickNotesStore(workspaceRoot());
+    quickNotes = new QuickNotesStore(workspaceRoot(), log);
     drafts = new DraftJournal(path.join(workspaceRoot(), "draft-journal"));
     quickNotes.recoverConversions((noteId) => store.hasNote(noteId), (noteId) => store.removeUntrackedNoteArtifacts(noteId));
     registerCdnRedirect();

@@ -1,4 +1,4 @@
-import type Database from "better-sqlite3";
+import type { DbLike } from "../src/core/dbLike.js";
 
 export interface SearchResult {
   id: string;
@@ -10,7 +10,7 @@ export interface SearchResult {
 }
 
 interface SearchRepositoryDeps {
-  db: Database.Database;
+  db: DbLike;
   trashNotebookId: string;
   ensureNoteCaches(noteId: string): boolean;
   readNoteCaches(noteId: string): { markdown: string | null; plain: string | null };
@@ -45,7 +45,7 @@ interface LikeSearchResultRow extends ShortSearchResultRow {
 
 /** FTS5 ownership is isolated here; note persistence remains in Store. */
 export class SearchRepository {
-  private readonly db: Database.Database;
+  private readonly db: DbLike;
   private readonly trashNotebookId: string;
   private readonly ensureNoteCaches: SearchRepositoryDeps["ensureNoteCaches"];
   private readonly readNoteCaches: SearchRepositoryDeps["readNoteCaches"];

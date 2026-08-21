@@ -1,5 +1,7 @@
 import Database from "better-sqlite3";
-import { isSafePathSegment as isSafeSegment } from "./storeUtils.js";
+import { isSafePathSegment as isSafeSegment } from "../src/core/storeUtils.js";
+import { createSilentLoggerScopes, type LoggerScopes } from "../src/core/logger.js";
+import type { DbLike } from "../src/core/dbLike.js";
 import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
@@ -48,14 +50,17 @@ function toStoreValidation<T>(operation: () => T): T {
  * 唯一跨空间动作由 main.ts 的转换协调器通过 conversion journal 显式编排。
  */
 export class QuickNotesStore {
-  private db: Database.Database;
+  private db: DbLike;
   private root: string;
   private itemsDir: string;
   private assetsDir: string;
   private stagingDir: string;
   private queries: QuickNotesQueries;
+  /** V5 Phase 2：日志注入点（桌面默认 = electron-log，由 main.ts 装配；quickNotesSync 经此读取） */
+  readonly logScopes: LoggerScopes;
 
-  constructor(workspaceRoot: string) {
+  constructor(workspaceRoot: string, logScopes: LoggerScopes = createSilentLoggerScopes()) {
+    this.logScopes = logScopes;
     this.root = path.join(workspaceRoot, "quick-notes");
     this.itemsDir = path.join(this.root, "items");
     this.assetsDir = path.join(this.root, "assets");
@@ -183,10 +188,6 @@ export class QuickNotesStore {
 
   private validateStoredContent(raw: unknown): StoredQuickNoteContent {
     return toStoreValidation(() => validateQuickNoteContent(raw));
-  }
-
-  private mapDocument(row: QuickNoteRow, content: StoredQuickNoteContent): QuickNoteDocument {
-    return this.queries.mapDocument(row, content);
   }
 
   private readRow(id: string): QuickNoteRow {

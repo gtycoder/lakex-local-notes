@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createRequestVersion } from "./requestVersion";
+import { createRequestVersion } from "./requestVersion.js";
 
 describe("createRequestVersion", () => {
   it("returns increasing versions and recognizes only the latest one", () => {

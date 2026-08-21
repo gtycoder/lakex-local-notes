@@ -1,4 +1,4 @@
-import type Database from "better-sqlite3";
+import type { DbLike } from "../src/core/dbLike.js";
 import fs from "node:fs";
 
 export interface OrphanAsset {
@@ -22,14 +22,14 @@ export interface OrphanAssetRow {
 }
 
 interface AssetRepositoryDeps {
-  db: Database.Database;
+  db: DbLike;
   notePathFor(noteId: string): string;
   extractAssetRefs(content: string): Set<string>;
 }
 
 /** Read-only asset reference/orphan queries; cleanup and upload writes remain in Store. */
 export class AssetRepository {
-  private readonly db: Database.Database;
+  private readonly db: DbLike;
   private readonly notePathFor: AssetRepositoryDeps["notePathFor"];
   private readonly extractAssetRefs: AssetRepositoryDeps["extractAssetRefs"];
 

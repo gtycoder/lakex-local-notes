@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { cleanLakeMarkdown } from "./markdownClean";
+import { cleanLakeMarkdown } from "./markdownClean.js";
 
 describe("cleanLakeMarkdown", () => {
   it("剥掉 font/span 标签并保留内部文本", () => {

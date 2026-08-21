@@ -1,4 +1,4 @@
-import type Database from "better-sqlite3";
+import type { DbLike } from "../src/core/dbLike.js";
 
 export interface NoteDigest {
   id: string;
@@ -16,7 +16,7 @@ interface NoteDigestRow {
 }
 
 /** Read only the metadata needed to decide whether an open tab must reload. */
-export function readNoteDigest(db: Database.Database, noteId: string, trashNotebookId: string): NoteDigest | null {
+export function readNoteDigest(db: DbLike, noteId: string, trashNotebookId: string): NoteDigest | null {
   const row = db.prepare("SELECT id,title,updated_at,parent_id,sync_state FROM notes WHERE id=?").get(noteId) as NoteDigestRow | undefined;
   if (!row) return null;
   return {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { KeyedAsyncQueue } from "./keyedAsyncQueue";
+import { KeyedAsyncQueue } from "./keyedAsyncQueue.js";
 
 function deferred<T>() {
   let resolve!: (value: T | PromiseLike<T>) => void;

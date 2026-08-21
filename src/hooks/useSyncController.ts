@@ -68,6 +68,11 @@ export function useSyncController({
       }
       showSyncToast({ kind: result.quickNotes?.error ? "error" : "ok", title: "同步完成", message: `${lakeMessage}${quickMessage}`, detail: superseded || undefined });
     } catch (error) {
+      // V5 Phase 3：CANCELLED（用户取消同步）不弹 toast，仅归位 idle 状态
+      if (getNativeErrorCode(error) === "CANCELLED") {
+        setSync((current) => ({ ...current, phase: "idle", message: "同步已取消" }));
+        return;
+      }
       if (getNativeErrorCode(error) === "NOT_CONFIGURED") {
         setSync((current) => ({ ...current, phase: "idle", message: "尚未配置云同步" }));
         showSyncToast({ kind: "unavailable", title: "尚未配置云同步", message: "请先配置 S3，完成后即可开始同步。", onConfigure: () => { setSettingsCategory("sync"); setSettingsOpen(true); } });

@@ -5,6 +5,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { syncNow, testConnection, ObjectStore, runGcReconcile, runDeepCleanup, parseLakeManifest, validateS3Settings } from "./sync.js";
+import { createSilentLoggerScopes, type LoggerScopes } from "../src/core/logger.js";
 import type { Store } from "./store.js";
 
 // ===== 内存 S3 mock（ObjectStore 依赖的 @aws-sdk/client-s3 命令子集） =====
@@ -117,6 +118,8 @@ function writeManifest(manifest: Manifest): void {
 
 // ===== FakeStore：实现 sync.ts 用到的 Store 子集（内存态 + 临时文件） =====
 class FakeStore {
+  /** V5 Phase 2：日志注入点（测试用静默实现） */
+  logScopes: LoggerScopes = createSilentLoggerScopes();
   settings: S3Settings | null = null;
   notes = new Map<string, { id: string; title: string; parentId: string | null; sortOrder: number; updatedAt: string; syncState: string; isConflict: boolean; isLocked?: boolean; lockedAt?: string | null; trashedAt?: string | null; deletedFromParentId?: string | null; icon?: string | null }>();
   /** 测试探针：contentHash（读 .lake）被调用的次数，用于断言"跳过扫描"生效。 */
@@ -601,7 +604,8 @@ describe("syncNow 增量同步", () => {
     writeManifest(manifest);
 
     const r = await syncNow(store as unknown as Store);
-    expect(r.conflicts).toBe(0); // 不产生冲突副本
+    // V5 Phase 1：conflicts 死账已改为 supersededNotes.length 别名（本场景 1 条 superseded）
+    expect(r.conflicts).toBe(r.supersededNotes.length); // 不产生冲突副本（isConflict=false）
     // 接受远端最新：本地文件被 v2 remote 覆盖
     expect(fs.readFileSync(store.notePathFor("n1"), "utf8")).toBe("<p>v2 remote</p>");
     // 同步基线更新到远端
@@ -625,7 +629,7 @@ describe("syncNow 增量同步", () => {
     writeManifest(manifest);
 
     const r = await syncNow(store as unknown as Store);
-    expect(r.conflicts).toBe(0);
+    expect(r.conflicts).toBe(r.supersededNotes.length); // V5 Phase 1：conflicts = supersededNotes.length 别名
     // 接受远端最新：本地文件被 v2 remote 覆盖
     expect(fs.readFileSync(store.notePathFor("n1"), "utf8")).toBe("<p>v2 remote</p>");
     expect(store.baseHash("n1")).toBe(remoteHash);
@@ -844,7 +848,7 @@ describe("syncNow 增量同步", () => {
     n2.deletedAt = new Date().toISOString();
     writeManifest(manifest);
 
-    const r = await syncNow(store as unknown as Store);
+    await syncNow(store as unknown as Store);
     // n2 不被删除：保留本地副本，移入回收站并标 purged
     expect(store.notes.has("n2")).toBe(true);
     expect(store.notes.get("n2")!.syncState).toBe("purged");

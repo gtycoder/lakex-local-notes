@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Folder, FileText, RotateCcw, Trash2, Trash, X } from "lucide-react";
 import { native } from "../lib/native";
-import { createRequestVersion } from "../lib/requestVersion";
+import { createRequestVersion } from "../core/requestVersion";
 import { useFloatingDialog } from "./useFloatingDialog";
 import { getNativeErrorMessage } from "../lib/nativeErrors";
 

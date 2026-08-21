@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { computeDocStats, type DocStats } from "../lib/docStats";
+import { computeDocStats, type DocStats } from "../core/docStats";
 
 interface StatsTab {
   noteId: string;

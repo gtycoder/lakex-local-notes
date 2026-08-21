@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { mergeLockState } from "./syncDecision";
+import { mergeLockState } from "./syncDecision.js";
 
 describe("sync lock decision", () => {
   it("uses the timestamped side when the other side has no timestamp", () => {

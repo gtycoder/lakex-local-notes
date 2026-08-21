@@ -16,14 +16,15 @@
 
 重构分两条线（V5 方案）：
 1. **Phase 0 正确性与安全止血** —— **已完成**（本次合入 master 的 10 个提交）；
-2. **移动端打基础**（Phase 1-4：lake-core 纯逻辑抽取 / 适配器注入点 / 契约接口 / 渲染层 hook）—— **尚未开始**，这是用户确认的目标主线。
+2. **移动端打基础**（Phase 1-4：lake-core 纯逻辑抽取 / 适配器注入点 / 契约接口 / 渲染层 hook）—— **Phase 1 进行中**（分支 `refactor/lake-core`，工作区未提交，见 §2/§4），这是用户确认的目标主线。
 
 移动端：**近期启动**，但技术栈未定（Tauri 2 路线已实验并否决）；Tauri POC 在 `/Users/admin/file/local-lake/lake-notes-tauri-poc`（含移动端 UI 雏形 `src/App.tsx` + `MobileLibrary.tsx`，用户可能在找某个 HTML 雏形）。
 
 ## 2. 分支与提交状态
 
 ```text
-master（本地=远程 gitee origin/master）= e138555，工作区干净
+master（本地=远程 gitee origin/master）= e138555 + ce8c049（交接文档提交），工作区干净
+refactor/lake-core（Phase 1 分支，已建，工作区含未提交改动——**未验收不合并、不擅自提交**）
 历史分支 hardening/sync-correctness 已合并，可删除
 stash@{0}：Codex 版 Electron-HANDOFF.md（旧交接，保留备用，非本任务内容）
 ```
@@ -54,11 +55,17 @@ stash@{0}：Codex 版 Electron-HANDOFF.md（旧交接，保留备用，非本任
 
 ## 4. 下一步计划（按序）
 
-1. **Phase 1：lake-core 纯逻辑抽取**（零风险，桌面行为零变化）——V5 §6 清单（tree/tabLimit/concurrency/quickNoteModel/同步决策纯函数等 + check-core-boundaries.mjs 边界检查）；
+1. **Phase 1：lake-core 纯逻辑抽取**（零风险，桌面行为零变化）——**已完成（refactor/lake-core 分支，未提交）**：纯模块迁移 src/core/（Manifest 类型外移 + re-export 垫片）、reconcileLakeNote/reconcileQuickNote/decideUpload 纯函数 + 表驱动测试、同步死代码清理（不可达分支/localIdsAll/conflicts 别名/supersededNotes 去重）、check-core-boundaries.mjs + check-css-metrics.mjs；**全部质量门槛绿**（tsc / 379 测试 / vite build / diff check / test:ui / sidebar / tab-switch）。
 2. **customCard 原型卡片**（验证 Lake 扩展点够不够用，决定是否完整 fork lakex）；
-3. **Phase 2-4**（适配器注入点 / 契约接口 / App hook 拆分）；
-4. **R10 + 错误码**（Phase 3）；
-5. **移动端**（技术栈确定后：pnpm workspace 建议此时切换、lake-core 共享、WebView 复用 bundle 则 vendor lakex 就绪）。
+3. **Phase 2（适配器注入点）——已完成（refactor/lake-core，未提交）**：类型收敛（syncState 'purged'、双源 re-export、imageUtils Uint8Array、ipcLimits 移 src/core）+ 5 个注入点全落地——SecretCipher（store.ts）、Logger（store/sync/quickNotes 经 store.logScopes/quickNotes.logScopes，main.ts 装配 electron-log）、HttpFetcher（resourceRepository，node:http/https 连接层钉死 DNS 修复 SSRF TOCTOU，8 个新测试）、DbLike（9 个 Repository + storeQueries + store/quickNotes 共 400+ db 引用接口化，better-sqlite3 结构兼容）、SettingsStorage（settings.ts）；验收：store/sync/resourceRepository/quickNotes 的 electron import 清零、387 测试绿、tsc/build/diff/边界检查/UI smoke 全绿。
+4. **Phase 3（契约接口）——已完成（refactor/lake-core）**：`src/core/services.ts` 五服务契约（NoteService/QuickNoteService/TrashService/AssetService/SyncService + DTO）+ `src/lib/services.ts` 桌面适配器（createNativeServices，字段映射：createNote 父目录语义/saveNoteContent+renameNote 拆分/uploadResource 参数顺序）+ 错误码增量 CONFLICT/NETWORK_TIMEOUT/CANCELLED（nativeErrors+storeErrors，CANCELLED 不弹 toast 守卫）+ DTO 映射测试 5 例；**IPC 零改动**（preload.cjs/electron/ipc 未动，native.ts 仅接口 export）。Phase 4 渲染层可移植性同分支（已并入，见下）；
+5. **Phase 4（渲染层可移植性）——已完成（refactor/lake-core）**：`planTabReload` 纯函数（digest→reload/deleted/skip，8 表驱动测试，接入 App 同步刷新循环）、`EditorDocumentAdapter`/`EditorViewportAdapter` 窄端口（src/core/editorHost.ts）、`useMobileDocumentSession`（7 个 mobile 状态收拢）、`useSavePipeline`（保存管线收拢 + `SavePipelineCore` 纯类可单测 5 例）、`useSyncShell`（toast 壳）、淘汰路径 clearScrollMemory；打字路径 memo/隐藏 tab observer 经核查已满足（tab 栏 O(tabs) 直渲、EditorTab visibleRef+unmount 断开）。407 测试全绿。
+6. **R10（CANCELLED 不弹 toast）**：错误码已就绪，守卫已加（useSyncController catch）；取消同步的 UI 入口/主进程 abort 待移动端同步 UX 确认后补（sync.ts 现仅请求级超时 abort）。
+7. **移动端**（技术栈确定后：pnpm workspace 建议此时切换、lake-core 共享、WebView 复用 bundle 则 vendor lakex 就绪）。
+
+**自检/质量清理（2026-08-22，二轮）**：全仓库 noUnusedLocals+noUnusedParameters 清零（清 13 处基线未用：main.ts fs/testConnection/runDeepCleanup、noteMetadataRepository SyncNote、quickNotes mapDocument、remoteImportRepository SyncFolder、sync.test r、windowState.test DEFAULT_WINDOW_STATE、HistoryPanel previewHistory、QuickNotesWorkspace updateActiveDraft、Sidebar ClipboardCopy+Link2、SyncToast Cloud、EditorTab ClipboardCopy+Link2）；dbLike.transaction 保持 any（泛型/非泛型均被 TS 方差限制或调用方返回模式阻断，已注释实测依据）；services.test 桩改 Proxy（~90 行→10 行，未覆盖方法行为与原桩等价）；planTabReload 调用点前置 deleted 检查 + TS 窄化（去掉 digest! 断言）。**上轮：**修复 useSavePipeline 适配器缺陷（quickNotes.create/update 的 draftId staging 会话透传，原 draftId:"" 会在桌面 isSafeSegment 校验抛错）；App 侧保存管线回调 useCallback 化 + refreshPendingSummary 经 ref 中转（消除打字路径每渲染重建抖动）；清理本轮引入的 5 处未用符号 + 基线遗留 13 处（App.tsx Cloud/withViewTransition/cloudStatus/activeTab/syncIndicator/syncTooltip、store.ts ssrf/storeLimits 导入/RemoteAsset/sleep/referencedFilenames 参数、sync.ts prevById）；已知剩余基线未用（main.ts fs/testConnection/runDeepCleanup 等 13 处，均在未改动文件，可后续顺手清理）。408 测试绿。
+
+**打包验证（2026-08-22）**：`npm run build`（tsc+vite+electron-builder，DMG/zip 产出）✅；`test:packaged` ✅ / `test:service-crash` ✅ / `test:renderer-recovery` ✅（已加固脚本清理 rmSync 重试，修复 ENOTEMPTY 竞态）/ `test:window-state` ⚠️ 需 macOS「辅助功能」权限（osascript/System Events -1719，环境权限，非代码问题——用户授权后可自行跑）。
 
 **分支策略**：用户原则「未验收不合并」——大改动在独立分支，质量门槛全过 + 用户确认后才合 master；不要擅自提交/推送。
 

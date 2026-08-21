@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { extractAssetRefs, isSafePathSegment, sanitizeFileName, selectHistoryDrops } from "./storeUtils";
+import { extractAssetRefs, isSafePathSegment, sanitizeFileName, selectHistoryDrops } from "./storeUtils.js";
 
 describe("storeUtils", () => {
   it("extracts unique Lake asset references without matching unrelated filenames", () => {

@@ -4,18 +4,12 @@ export type {
   QuickNoteDocument,
   QuickNoteImage,
   QuickNoteSummary,
+  SaveQuickNoteInput,
 } from "../src/lib/types.js";
 
 export interface QuickNoteImageInput {
   bytes: number[];
   filename: string;
-}
-
-export interface SaveQuickNoteInput {
-  text: string;
-  draftId: string;
-  stagedImageIds: string[];
-  retainedImageIds?: string[];
 }
 
 export interface QuickNoteDeleted {

@@ -1,9 +1,9 @@
-import type Database from "better-sqlite3";
+import type { DbLike } from "../src/core/dbLike.js";
 import { AppError } from "./storeErrors.js";
-import type { SyncFolder, SyncNote, TreeNode } from "./noteQueries.js";
+import type { SyncFolder, TreeNode } from "./noteQueries.js";
 
 interface MetadataRepositoryDeps {
-  db: Database.Database;
+  db: DbLike;
   workspaceId: string;
   trashNotebookId: string;
   uuid(): string;
@@ -32,7 +32,7 @@ interface ExistingFolderRow {
 
 /** Metadata writes only; note content, assets, history, and sync content stay in Store. */
 export class NoteMetadataRepository {
-  private readonly db: Database.Database;
+  private readonly db: DbLike;
   private readonly workspaceId: string;
   private readonly trashNotebookId: string;
   private readonly deps: MetadataRepositoryDeps;
