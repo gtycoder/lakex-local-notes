@@ -142,6 +142,7 @@ sync.ts       约 1,126 行
 - 拖拽验证记录：source 行出现 `dragging`，目标行出现 `drop-after`，释放后交给原有 moveTreeNodeOrdered 逻辑。
 - 最新 packaged full smoke 仍通过：window state、普通 UI、Drawnix、renderer recovery、GPU/network helper recovery。
 - `test:sidebar-interaction` 通过真实 CDP 鼠标：固定资料库搜索获得焦点、4 个操作按钮存在并可命中，悬浮工具栏命中后仍保持 floating，tab 快速动画规则存在。
+- `test:tab-switch` 通过真实文档切换：当前运行时切换耗时约 9–52ms，快速动画 CSS 规则存在。
 
 ## 依赖安全审计
 
