@@ -70,7 +70,7 @@ export async function syncQuickNotes(
   await remote.test();
   log.quick.info(`[perf] quick connect ${Date.now() - connectStart}ms`);
 
-  const rawManifest = await remote.getOptional(manifestKey);
+  const rawManifest = await remote.getOptional(manifestKey, { maxBytes: MAX_QUICK_MANIFEST_BYTES });
   const remoteManifest: QuickNotesManifest | null = rawManifest ? parseManifest(rawManifest) : null;
   let downloaded = 0;
   let conflicts = 0;
@@ -103,7 +103,7 @@ export async function syncQuickNotes(
           // 墓碑权威：先尝试下载删除前内容（墓碑 contentHash，容错：占位符/缺失则跳过）覆盖本地
           // .qnote，再软删——回收站/恢复拿到的是删除方最新版。小记不备份本地版本（云端为主）。
           try {
-            const content = await remote.getOptional(objectKey(item.contentHash));
+            const content = await remote.getOptional(objectKey(item.contentHash), { maxBytes: MAX_QUICK_NOTE_BYTES });
             if (content) {
               // V5 §5.5：墓碑内容原子写（写临时 + rename，防崩溃半写文件）
               const target = quickNotes.quickNotePathFor(item.id);
@@ -142,7 +142,7 @@ export async function syncQuickNotes(
         continue;
       }
 
-      const content = await remote.getOptional(objectKey(item.contentHash));
+      const content = await remote.getOptional(objectKey(item.contentHash), { maxBytes: MAX_QUICK_NOTE_BYTES });
       if (!content) {
         // V5 §5.5 B 方案：小记内容对象缺失 → 跳过该条目 + 日志，不覆盖本地（本地优先，下轮重试）
         log.quick.warn(`[download] ${item.id} 远端小记内容缺失，跳过（本地不覆盖）`);
@@ -311,6 +311,8 @@ async function downloadAssets(remote: ObjectStore, item: ManifestItem, onProgres
 
 /** 小记清单护栏（与 Lake parseLakeManifest 同构，W-13）：字节/条目上限防异常清单打爆同步。 */
 const MAX_QUICK_MANIFEST_BYTES = 10 * 1024 * 1024;
+/** V5 §5.6：小记正文单对象上限（投毒防护） */
+const MAX_QUICK_NOTE_BYTES = 64 * 1024 * 1024;
 const MAX_QUICK_MANIFEST_ITEMS = 100_000;
 
 export function parseManifest(
@@ -366,7 +368,7 @@ export async function runQuickNotesDeepCleanup(quickNotes: QuickNotesStore, sett
   const dryRun = opts?.dryRun ?? false;
   const gcRetentionDays = opts?.gcRetentionDays ?? 7;
 
-  const raw = await remote.getOptional(manifestKey);
+  const raw = await remote.getOptional(manifestKey, { maxBytes: MAX_QUICK_MANIFEST_BYTES });
   if (!raw) { log.quick.info(`[perf] quick-deep-cleanup done ${Date.now() - deepStart}ms (no manifest)`); return { dryRun, candidateCount: 0, deletedCount: 0, keys: [] }; }
   const manifest = parseManifest(raw);
   const keep = new Set<string>([manifestKey]);

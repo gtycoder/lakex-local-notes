@@ -17,6 +17,7 @@ import type { Store } from "./store.js";
 import { log } from "./logger.js";
 import { ASSET_TRANSFER_CONCURRENCY, runPool } from "./asyncPool.js";
 import { mergeLockState } from "./syncDecision.js";
+import { MAX_IMAGE_BYTES } from "./storeLimits.js";
 
 /** V5 §5.2：构造 markSyncedIfUnchanged 快照——「对账/上传后本地应为的状态」。
  * - metaApplied：远端 meta 已应用（applyRemoteNoteMeta 写入了 rn 的值）→ 用远端；否则本地原值
@@ -139,6 +140,8 @@ const MANIFEST_CHAIN_KEEP = 8;
  * 上限取值依据：1 万条笔记清单约 3-5MB 未压缩；20 万条 ≈ 60MB，宽裕一个数量级。
  */
 const MAX_MANIFEST_BYTES = 20 * 1024 * 1024;
+/** V5 §5.6：远端正文单对象上限（投毒防护；与 IPC 32MiB 不同，S3 侧放宽） */
+const MAX_REMOTE_NOTE_BYTES = 64 * 1024 * 1024;
 const MAX_MANIFEST_NOTES = 200_000;
 const MAX_MANIFEST_FOLDERS = 50_000;
 
@@ -206,7 +209,8 @@ export class ObjectStore {
     }
   }
 
-  async getOptional(key: string): Promise<Buffer | null> {
+  /** V5 §5.6：getOptional 支持按用途单对象上限（maxBytes 对解压后字节生效，防投毒 OOM） */
+  async getOptional(key: string, opts?: { maxBytes?: number }): Promise<Buffer | null> {
     assertSafeKey(key);
     const t0 = Date.now();
     try {
@@ -214,6 +218,9 @@ export class ObjectStore {
       const bytes = output.Body ? Buffer.from(await output.Body.transformToByteArray()) : Buffer.alloc(0);
       // manifest 等 gzip 对象透明解压（按魔数识别；ContentEncoding 自动解压与原始字节两种响应均兼容）
       const out = isGzip(bytes) ? zlib.gunzipSync(bytes) : bytes;
+      if (opts?.maxBytes !== undefined && out.length > opts.maxBytes) {
+        throw new Error(`S3 对象过大 (${key}): ${out.length}B > ${opts.maxBytes}B`);
+      }
       log.s3.info(`[perf] get ${key} ${Date.now() - t0}ms (${bytes.length}B${out !== bytes ? ` -> ${out.length}B gzip` : ""})`);
       return out;
     } catch (error) {
@@ -356,7 +363,7 @@ export async function syncNow(store: Store, onProgress?: (p: SyncProgress) => vo
   log.sync.info(`[perf] connect ${Date.now() - connectStart}ms`);
 
   // 1. 读取远程清单
-  const manifestBytes = await remote.getOptional("manifests/latest.json");
+  const manifestBytes = await remote.getOptional("manifests/latest.json", { maxBytes: MAX_MANIFEST_BYTES });
   const remoteManifest: Manifest | null = manifestBytes ? parseLakeManifest(manifestBytes) : null;
 
   // 零变更早退（性能）：远端 latest 的 commitId 与本设备上次成功读/写的相同，
@@ -528,7 +535,7 @@ export async function syncNow(store: Store, onProgress?: (p: SyncProgress) => vo
         continue;
       }
       // 下载 .lake
-      const lakeBytes = await remote.getOptional(objectKey(rn.id, rn.contentHash));
+      const lakeBytes = await remote.getOptional(objectKey(rn.id, rn.contentHash), { maxBytes: MAX_REMOTE_NOTE_BYTES });
       if (!lakeBytes) {
         // V5 §5.5 B 方案：正文对象缺失 → 跳过该条目 + warning，不覆盖本地，其余同步继续
         //（manifest 本身损坏/不可解析仍整轮中止——那是协议级问题，跳过无意义）
@@ -544,7 +551,7 @@ export async function syncNow(store: Store, onProgress?: (p: SyncProgress) => vo
       try {
         assets = await runPool(assetList, ASSET_TRANSFER_CONCURRENCY, async (asset) => {
         report({ phase: "download", current: remoteIndex, total: remoteTotal, assetCurrent: ++assetDone, assetTotal: assetList.length, message: rn.deleted ? "处理云端删除记录" : `检查远端笔记「${rn.title}」` });
-        const bytes = await remote.getOptional(`assets/${rn.id}/${asset.filename}`);
+        const bytes = await remote.getOptional(`assets/${rn.id}/${asset.filename}`, { maxBytes: MAX_IMAGE_BYTES });
         if (!bytes) throw new AssetMissingError(asset.filename);
         if (bytes.length !== asset.size) {
           throw new Error(`资源大小不符: ${rn.id}/${asset.filename}（声明 ${asset.size}，实际 ${bytes.length}）`);
@@ -911,7 +918,7 @@ export async function runGcReconcile(store: Store): Promise<GcReconcileResult> {
   validateS3Settings(settings);
   const remote = new ObjectStore(settings);
 
-  const latestBytes = await remote.getOptional("manifests/latest.json");
+  const latestBytes = await remote.getOptional("manifests/latest.json", { maxBytes: MAX_MANIFEST_BYTES });
   if (!latestBytes) { log.gc.info(`[perf] gc-reconcile done ${Date.now() - gcStart}ms (no manifest)`); return { deleted: 0, kept: 0 }; }
   const latest = parseLakeManifest(latestBytes);
 
@@ -923,7 +930,7 @@ export async function runGcReconcile(store: Store): Promise<GcReconcileResult> {
   let prev = latest.prevCommitId;
   let chain = 0;
   while (prev && chain < MANIFEST_CHAIN_KEEP) {
-    const bytes = await remote.getOptional(`manifests/${prev}.json`);
+    const bytes = await remote.getOptional(`manifests/${prev}.json`, { maxBytes: MAX_MANIFEST_BYTES });
     if (!bytes) break;
     const m = parseLakeManifest(bytes);
 
@@ -970,7 +977,7 @@ export async function runDeepCleanup(store: Store, opts?: { dryRun?: boolean; ex
   const dryRun = opts?.dryRun ?? false;
   const extraKeep = opts?.extraKeep ?? new Set<string>();
 
-  const latestBytes = await remote.getOptional("manifests/latest.json");
+  const latestBytes = await remote.getOptional("manifests/latest.json", { maxBytes: MAX_MANIFEST_BYTES });
   if (!latestBytes) { log.gc.info(`[perf] deep-cleanup done ${Date.now() - deepStart}ms (no manifest)`); return { dryRun, candidateCount: 0, deletedCount: 0, keys: [] }; }
   const latest = parseLakeManifest(latestBytes);
 
@@ -985,7 +992,7 @@ export async function runDeepCleanup(store: Store, opts?: { dryRun?: boolean; ex
   let chain = 0;
   while (prev && chain < MANIFEST_CHAIN_KEEP) {
     keep.add(`manifests/${prev}.json`);
-    const bytes = await remote.getOptional(`manifests/${prev}.json`);
+    const bytes = await remote.getOptional(`manifests/${prev}.json`, { maxBytes: MAX_MANIFEST_BYTES });
     if (!bytes) break;
     const m = parseLakeManifest(bytes);
 
@@ -1045,6 +1052,13 @@ function normalizeEndpoint(endpoint: string): string {
 export function validateS3Settings(settings: S3Settings): void {
   if (!settings.endpoint.trim() || !settings.bucket.trim() || !settings.accessKeyId.trim() || !settings.secretAccessKey.trim()) {
     throw new Error("Endpoint、Bucket 和访问密钥均不能为空");
+  }
+  // V5 §5.6：强制 https（localhost/127.0.0.1 开发例外；防签名请求重放到明文端）
+  let parsed: URL;
+  try { parsed = new URL(normalizeEndpoint(settings.endpoint)); } catch { throw new Error("S3 Endpoint 不是合法 URL"); }
+  const isLocal = parsed.hostname === "localhost" || parsed.hostname === "127.0.0.1" || parsed.hostname === "::1";
+  if (parsed.protocol !== "https:" && !isLocal) {
+    throw new Error("S3 Endpoint 必须使用 HTTPS（本地开发可用 http://localhost）");
   }
 }
 

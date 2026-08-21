@@ -27,7 +27,8 @@ cd "$ROOT"
 patch_vite_onstart() {
   if [ -f "$VITE_CFG_BAK" ]; then return; fi
   cp "$VITE_CFG" "$VITE_CFG_BAK"
-  node -e 'const fs=require("fs");const p=process.argv[1];let s=fs.readFileSync(p,"utf8");if(!s.includes("onstart")){s=s.replace(`entry: "electron/main.ts",`,`entry: "electron/main.ts",\n        onstart: () => {},`);fs.writeFileSync(p,s);}' "$VITE_CFG"
+  # 修正（V5 §5.6）：正则替换 onstart 行为空——旧逻辑「缺失才插入」在已有 onstart 时是空操作，多端流程静默失效
+  node -e 'const fs=require("fs");const p=process.argv[1];let s=fs.readFileSync(p,"utf8");s=s.replace(/onstart:\s*async\s*\(\{ startup \}\)\s*=>\s*\{[\s\S]*?\},\s*\n/, "");fs.writeFileSync(p,s);' "$VITE_CFG"
 }
 
 restore_vite_onstart() {

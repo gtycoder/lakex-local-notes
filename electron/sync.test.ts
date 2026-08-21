@@ -4,7 +4,7 @@ import zlib from "node:zlib";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { syncNow, testConnection, ObjectStore, runGcReconcile, runDeepCleanup, parseLakeManifest } from "./sync.js";
+import { syncNow, testConnection, ObjectStore, runGcReconcile, runDeepCleanup, parseLakeManifest, validateS3Settings } from "./sync.js";
 import type { Store } from "./store.js";
 
 // ===== 内存 S3 mock（ObjectStore 依赖的 @aws-sdk/client-s3 命令子集） =====
@@ -1343,5 +1343,21 @@ describe("parseLakeManifest 清单护栏", () => {
   it("folders 条目超限被拒", () => {
     const bytes = Buffer.from(JSON.stringify(validManifest(0, 5)), "utf8");
     expect(() => parseLakeManifest(bytes, { maxFolders: 3 })).toThrow(/清单目录条目过多/);
+  });
+});
+
+describe("validateS3Settings endpoint 校验（V5 §5.6）", () => {
+  const base: S3Settings = { endpoint: "https://s3.example.com", region: "test", bucket: "b", prefix: "p", accessKeyId: "ak", secretAccessKey: "sk", forcePathStyle: true };
+  it("https endpoint 通过", () => {
+    expect(() => validateS3Settings({ ...base })).not.toThrow();
+  });
+  it("http 非 local → 拒绝（签名重放防护）", () => {
+    expect(() => validateS3Settings({ ...base, endpoint: "http://s3.example.com" })).toThrow(/HTTPS/);
+  });
+  it("http://localhost 开发例外通过", () => {
+    expect(() => validateS3Settings({ ...base, endpoint: "http://localhost:9000" })).not.toThrow();
+  });
+  it("非法 URL → 拒绝", () => {
+    expect(() => validateS3Settings({ ...base, endpoint: "://bad" })).toThrow();
   });
 });

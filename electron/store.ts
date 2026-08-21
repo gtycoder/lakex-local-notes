@@ -196,9 +196,12 @@ export class Store {
     });
     this.seed();
     // M2：全量重建全文索引（幂等；文档量小，启动开销可忽略）
+    // V5 §5.7：启动耗时实测（100/1000/5000/10000 篇梯度；显著慢再考虑按需重建）
+    const ftsStart = Date.now();
     try { this.searchRepository.rebuild(); } catch (error) {
       console.warn("[store] 全文索引重建失败（不影响使用）:", error);
     }
+    console.info(`[perf] FTS rebuild ${Date.now() - ftsStart}ms`);
   }
 
   private migrate() {

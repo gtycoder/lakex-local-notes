@@ -9,8 +9,8 @@ export default defineConfig({
       {
         entry: "electron/main.ts",
         vite: { build: { outDir: "dist-electron", rollupOptions: { external: ["better-sqlite3", "sharp", /^electron-log/, /^@aws-sdk\//, /^@smithy\//] } } },
-        // DEBUG-ONLY: enable CDP remote debugging; revert before commit
-        onstart: async ({ startup }) => { await startup([".", "--remote-debugging-port=9222"]); },
+        // CDP 调试：LAKE_CDP_PORT 覆盖端口（默认 9222；开发调试保留，packaged 产物不带此参数）
+        onstart: async ({ startup }) => { await startup([".", `--remote-debugging-port=${process.env.LAKE_CDP_PORT ?? "9222"}`]); },
       },
     ]),
   ],
