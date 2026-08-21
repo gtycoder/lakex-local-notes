@@ -117,6 +117,24 @@ sync.ts       约 1,126 行
 3. 剩余故障注入与 packaged restart；
 4. 大资料库虚拟化和后台 tab 生命周期 benchmark。
 
+## 2026-08-21 UI refinement evidence
+
+本批完成并通过 dev UI smoke：
+
+- tab close 槽位独立，dirty dot 不再与 close 控件争抢空间；
+- 状态条默认短条，消息出现时向左扩展且有最大宽度；
+- 设置面板改为宽松卡片布局，外观分类只保留 daylight/midnight；
+- 资料库标题移除，搜索和四个按钮合并为一行；
+- 拖拽目标使用灰色行态/插入线，和大纲按钮保持相同的微动效语言；
+- 正文和全局辅助文本对比度略有提升。
+
+截图证据仍使用：
+
+```text
+/tmp/lake-notes-ui-smoke/01-baseline.png
+/tmp/settings-new.png
+```
+
 ## 依赖安全审计
 
 `npm audit --registry=https://registry.npmjs.org --omit=dev --audit-level=high` 当前报告 5 个 moderate 传递依赖问题：来自 Drawnix/Mermaid 链的 `dompurify` 和 `uuid`，报告标记为 `No fix available`。本轮没有强行升级 Drawnix/Mermaid：它们属于编辑器/画板运行时，升级可能破坏按需加载和内容兼容；后续应在上游发布修复后单独升级并回归。
