@@ -142,3 +142,11 @@
 @media (min-width: 761px) {
   .sidebar::before { pointer-events: none !important; -webkit-app-region: no-drag; }
 }
+
+/* A docked library must settle to its full grid track immediately. Keeping the
+   grid transition active while the panel is already docked can leave Chromium
+   in a zero-width interpolated track, which makes the visible toolbar miss hit
+   testing. Collapse remains animated; re-open is deliberately deterministic. */
+@media (min-width: 761px) {
+  .app-shell.sidebar-docked { transition: none !important; }
+}
