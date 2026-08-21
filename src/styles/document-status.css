@@ -98,3 +98,31 @@
 @media (prefers-reduced-motion: reduce) {
   .document-notice-toast { backdrop-filter: none; }
 }
+
+/* Compact by default; transient left-side messages expand the pill up to a safe cap. */
+.document-statusbar {
+  right: 12px !important;
+  left: auto !important;
+  width: max-content !important;
+  max-width: min(720px, calc(100% - 24px));
+  min-width: 190px;
+  grid-template-columns: minmax(0, auto) auto;
+  gap: 10px;
+}
+.document-statusbar-message {
+  display: none;
+  min-width: 0;
+  max-width: min(360px, 42vw);
+  overflow: hidden;
+  color: var(--lake-text-secondary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.document-statusbar.has-message .document-statusbar-message { display: block; }
+.document-statusbar-fixed { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.document-statusbar-stats { flex: 0 0 auto; }
+.document-statusbar-state { flex: 0 0 auto; }
+@media (max-width: 760px) {
+  .document-statusbar { right: 8px !important; max-width: calc(100% - 16px); min-width: 176px; }
+  .document-statusbar-message { max-width: 34vw; }
+}

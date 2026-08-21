@@ -318,11 +318,9 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
   return (
     <aside className={`sidebar sidebar-${props.mode} ${props.mobileOpen ? "sidebar-open" : ""}`} onPointerEnter={props.onPreviewEnter} onPointerLeave={props.onPreviewLeave}>
       <button className="icon-button mobile-only sidebar-mobile-close" onClick={props.onCloseMobile} title="关闭"><X size={18} /></button>
-      <header className="sidebar-header desktop-only">
-        <div className="sidebar-heading-copy"><strong>资料库</strong></div>
-      </header>
-      <div className="search-box"><Search size={14} /><input value={props.search} onChange={(event) => props.onSearch(event.target.value)} placeholder="搜索" /></div>
-      <div className="list-heading">
+      <div className="sidebar-toolbar-row desktop-only">
+        <div className="search-box"><Search size={14} /><input value={props.search} onChange={(event) => props.onSearch(event.target.value)} placeholder="搜索" /></div>
+        <div className="list-heading">
         <button className="icon-button collapse-all-btn" onClick={() => setExpanded(new Set())} title="全部收起" disabled={expanded.size === 0}><FoldVertical size={16} /></button>
         <button className="icon-button locate-btn" onClick={locateActive} title="定位到当前文档" disabled={!props.activeId} aria-label="定位到当前文档"><LocateFixed size={16} /></button>
         <button className="icon-button fulltext-btn" onClick={() => props.onOpenSearch(props.search)} title="全文搜索（⇧⌘F）" aria-label="全文搜索"><Search size={16} /></button>
@@ -334,6 +332,7 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
             <button onClick={() => create("notebook")}><BookOpen size={16} /><span><strong>新建笔记本</strong><small>创建顶层笔记本</small></span></button>
           </div>}
         </div>
+      </div>
       </div>
       <nav className="note-list tree-list" ref={treeRef}>
         {pendingCreate?.kind === "notebook" && createField(0)}

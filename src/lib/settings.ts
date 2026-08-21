@@ -15,8 +15,6 @@ export interface AppSettings {
   showToolbar: boolean;
   /** 主题：light=思源 daylight / dark=思源 midnight */
   theme: ThemeMode;
-  /** 自定义 CSS（思源「代码片段」式自定义 UI；data-theme=dark 下也可覆盖） */
-  customCss: string;
   /** 最大同时打开标签数（0=不限；超限自动关闭最旧标签，当前标签与钉住标签除外）。 */
   maxOpenTabs: number;
 }
@@ -27,7 +25,6 @@ export const DEFAULT_SETTINGS: AppSettings = {
   showToc: true,
   showToolbar: true,
   theme: "light",
-  customCss: "",
   maxOpenTabs: 8,
 };
 
@@ -45,9 +42,11 @@ export function loadSettings(): AppSettings {
     if (raw) {
       const parsed = JSON.parse(raw) as Partial<AppSettings>;
       cached = {
-        ...DEFAULT_SETTINGS,
-        ...parsed,
         fontSize: FONT_SIZES.includes(parsed.fontSize ?? -1) ? (parsed.fontSize as number) : DEFAULT_SETTINGS.fontSize,
+        paragraphSpacing: parsed.paragraphSpacing === true,
+        showToc: parsed.showToc !== false,
+        showToolbar: parsed.showToolbar !== false,
+        theme: parsed.theme === "dark" ? "dark" : "light",
         maxOpenTabs: MAX_OPEN_TAB_OPTIONS.includes(parsed.maxOpenTabs as number)
           ? (parsed.maxOpenTabs as number)
           : DEFAULT_SETTINGS.maxOpenTabs,

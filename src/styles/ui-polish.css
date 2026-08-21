@@ -1,0 +1,138 @@
+/* Tab close controls must own their layout slot; never overlay title or dirty dot. */
+.tab-item .tab-title { flex: 1 1 auto; min-width: 0; }
+.tab-item .tab-dirty-dot {
+  flex: 0 0 7px;
+  width: 7px;
+  height: 7px;
+  margin-left: 1px;
+  border-radius: 50%;
+  background: var(--lake-sync-pending, #d29042);
+}
+.tab-item .tab-close {
+  position: static !important;
+  flex: 0 0 18px !important;
+  width: 18px !important;
+  height: 18px !important;
+  margin-left: 2px !important;
+  transform: none !important;
+  opacity: 0;
+}
+.tab-item:hover .tab-close,
+.tab-item .tab-close:focus-visible { opacity: .58; }
+.tab-item .tab-close:hover { opacity: 1 !important; }
+
+/* Sidebar toolbar mirrors the compact outline header controls. */
+.sidebar-toolbar-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 9px 8px 6px;
+}
+.sidebar-toolbar-row .search-box {
+  flex: 1 1 auto;
+  min-width: 72px;
+  margin: 0;
+  height: 28px;
+}
+.sidebar-toolbar-row .list-heading {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 1px;
+  height: 28px;
+  padding: 0;
+}
+.sidebar-toolbar-row .list-heading .icon-button {
+  width: 22px;
+  height: 24px;
+  padding: 0;
+  border-radius: 7px;
+  color: var(--lake-text-tertiary);
+  transition: color 130ms ease-out, background-color 130ms ease-out, transform 90ms ease-out;
+}
+.sidebar-toolbar-row .list-heading .icon-button:hover:not(:disabled) {
+  color: var(--lake-accent-strong, var(--lake-accent));
+  background: var(--lake-accent-soft);
+}
+.sidebar-toolbar-row .list-heading .icon-button:active:not(:disabled) { transform: scale(.96); }
+.sidebar-toolbar-row .list-heading .icon-button:disabled { opacity: .35; }
+.sidebar-toolbar-row .list-heading .locate-btn { margin-left: 0; }
+
+/* Drag feedback: a soft lifted row plus a clear insertion guide, matching outline motion. */
+.tree-row.dragging {
+  position: relative;
+  z-index: 5;
+  opacity: .92;
+  color: var(--lake-text);
+  background: var(--lake-panel) !important;
+  box-shadow: 0 5px 16px color-mix(in srgb, var(--lake-text) 14%, transparent), 0 0 0 1px color-mix(in srgb, var(--lake-accent) 30%, transparent) !important;
+  transform: scale(1.012);
+  transition: transform 120ms var(--lake-ease-standard), box-shadow 120ms var(--lake-ease-standard), opacity 120ms ease-out;
+}
+.tree-row.drop-before,
+.tree-row.drop-after {
+  box-shadow: none !important;
+}
+.tree-row.drop-before::before,
+.tree-row.drop-after::after {
+  content: "";
+  position: absolute;
+  right: 8px;
+  left: 8px;
+  height: 2px;
+  border-radius: 999px;
+  background: var(--lake-accent);
+  box-shadow: 0 0 0 3px var(--lake-accent-soft);
+  pointer-events: none;
+}
+.tree-row.drop-before::before { top: -1px; }
+.tree-row.drop-after::after { bottom: -1px; }
+.tree-row.drop-inside {
+  color: var(--lake-text);
+  background: var(--lake-accent-soft) !important;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--lake-accent) 62%, transparent) !important;
+  transform: scale(1.006);
+}
+@media (prefers-reduced-motion: reduce) {
+  .tab-item .tab-close,
+  .tree-row.dragging,
+  .tree-row.drop-inside { transition: none !important; transform: none !important; }
+}
+
+/* Slightly stronger neutral text for long reading sessions; Lake native content
+   inherits these values without changing its toolbar or typography scale. */
+:root {
+  --lake-text-secondary: #5d6877;
+  --lake-text-tertiary: #7d8897;
+}
+.document-pane .lake-editor-mount .ne-engine,
+.document-pane .lake-editor-mount .ne-viewer-body {
+  color: var(--lake-text) !important;
+}
+.document-pane .lake-editor-mount .ne-engine ne-text,
+.document-pane .lake-editor-mount .ne-viewer-body ne-text {
+  color: inherit !important;
+}
+.document-pane .lake-editor-mount .ne-engine h1,
+.document-pane .lake-editor-mount .ne-engine h2,
+.document-pane .lake-editor-mount .ne-engine h3,
+.document-pane .lake-editor-mount .ne-viewer-body h1,
+.document-pane .lake-editor-mount .ne-viewer-body h2,
+.document-pane .lake-editor-mount .ne-viewer-body h3 {
+  color: var(--lake-text) !important;
+}
+[data-theme="dark"] {
+  --lake-text-secondary: #b8c1cf;
+  --lake-text-tertiary: #929cad;
+}
+.tree-row.dragging {
+  opacity: .42;
+  background: transparent !important;
+  box-shadow: none !important;
+  transform: none;
+}
+.tree-row.drop-inside {
+  background: color-mix(in srgb, var(--lake-text) 8%, transparent) !important;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--lake-text) 8%, transparent) !important;
+  transform: none;
+}

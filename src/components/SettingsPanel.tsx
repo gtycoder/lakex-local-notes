@@ -66,7 +66,7 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
 
   const nav = [
     { id: "editor" as const, label: "编辑器", keywords: "字号 段间距 大纲 工具栏 标签页" , icon: <Type size={15} /> },
-    { id: "appearance" as const, label: "外观", keywords: "浅色 深色 主题 CSS 代码片段", icon: <Monitor size={15} /> },
+    { id: "appearance" as const, label: "外观", keywords: "浅色 深色 主题", icon: <Monitor size={15} /> },
     { id: "shortcuts" as const, label: "快捷键", keywords: "快捷键 搜索 专注模式 键盘", icon: <Keyboard size={15} /> },
     { id: "history" as const, label: "文档与历史", keywords: "快照 保留 清理", icon: <History size={15} /> },
     { id: "sync" as const, label: "云端与同步", keywords: "S3 上传 下载 资源 云端", icon: <Cloud size={15} /> },
@@ -220,17 +220,7 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
                     <button className={`settings-choice ${settings.theme === "dark" ? "active" : ""}`} onClick={() => onChange({ theme: "dark" })}><Moon size={13} /> 深色（思源 midnight）</button>
                   </div>
                 </section>
-                <section className="settings-group">
-                  <h4><Type size={13} /> 自定义 UI（代码片段）</h4>
-                  <p className="settings-hint">粘贴 CSS 立即生效（对应思源「外观 → 代码片段」）。深色主题下可用 <code>[data-theme=&quot;dark&quot;]</code> 前缀覆盖。存于本地，不同步。</p>
-                  <textarea
-                    className="settings-custom-css"
-                    spellCheck={false}
-                    placeholder={"/* 例：把主色换成你自己的 */\n:root { --b3-theme-primary: #ff5722; }"}
-                    value={settings.customCss}
-                    onChange={(e) => onChange({ customCss: e.target.value })}
-                  />
-                </section>
+
               </>
             )}
 

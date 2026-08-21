@@ -359,17 +359,6 @@ button { cursor: pointer; }
   background: var(--shell-accent-soft);
   border-color: rgba(53, 117, 240, .35);
 }
-.tab-item.dirty .tab-title::after {
-  content: "";
-  display: inline-block;
-  width: 7px;
-  height: 7px;
-  min-width: 7px;
-  border-radius: 50%;
-  background: #f0ad4e;
-  margin-left: 5px;
-  flex-shrink: 0;
-}
 
 /* 远端删除标记：标签变灰 + 红色"已删除"徽标（正文保留，供复制/从回收站恢复） */
 .tab-item.deleted { color: #b91c1c; background: rgba(220, 38, 38, .06); }
@@ -1618,9 +1607,6 @@ ne-card[data-card-name="codeblock"] .ne-card-resizer-mask {
 .settings-layout { display: flex; flex: 1; min-height: 0; }
 .settings-hint { margin: 0 0 8px; color: var(--b3-theme-on-surface, #5f6368); font-size: 12px; line-height: 1.6; }
 .settings-hint code { padding: 1px 4px; border-radius: 4px; background: var(--b3-theme-primary-lightest, rgba(53,117,240,.12)); font-size: 11px; }
-.settings-custom-css { display: block; width: 100%; min-height: 180px; padding: 10px 12px; border: 1px solid var(--b3-border-color, #d8dde1); border-radius: var(--b3-border-radius, 6px); outline: 0; color: var(--b3-theme-on-background, #20242c); background: var(--b3-theme-background, #fff); font: 12px/1.6 var(--b3-font-family-code, monospace); resize: vertical; }
-.settings-custom-css:focus { border-color: var(--b3-theme-primary, #3575f0); box-shadow: 0 0 0 2px var(--b3-theme-primary-lightest, rgba(53,117,240,.12)); }
-.settings-nav { width: 168px; flex: 0 0 auto; padding: 12px 10px; border-right: 1px solid var(--b3-theme-surface-lighter); background: color-mix(in srgb, var(--b3-theme-surface) 96%, transparent); display: flex; flex-direction: column; gap: 4px; }
 .settings-nav-item { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border: 0; border-radius: var(--b3-border-radius); background: transparent; color: var(--b3-theme-on-surface); font-size: 13px; cursor: pointer; text-align: left; }
 .settings-nav-item:hover { background: var(--b3-list-hover); }
 .settings-nav-item.active { background: var(--b3-theme-surface); color: var(--b3-theme-on-background); box-shadow: 0 1px 4px var(--b3-dock-shadow-color, rgba(31, 35, 41, .12)); }

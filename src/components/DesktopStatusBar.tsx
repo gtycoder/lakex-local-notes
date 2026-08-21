@@ -31,14 +31,19 @@ export function DesktopStatusBar({ showDocumentStats, wordCount, imageCount, not
   if (!showDocumentStats) return null;
   return (
     <>
-      <footer className="statusbar document-statusbar" aria-label="当前文档状态">
-        <div className="document-statusbar-stats" aria-label="文档统计">
-          <span>字数 {Math.max(0, wordCount)}</span>
-          <span>图片 {Math.max(0, imageCount)}</span>
+      <footer className={`statusbar document-statusbar${notice ? " has-message" : ""}`} aria-label="当前文档状态">
+        <div className="document-statusbar-message" aria-live="polite">
+          {notice?.text || ""}
         </div>
-        <div className={`document-statusbar-state ${documentStatus.kind}`} title={documentStatus.label} aria-label={documentStatus.label}>
-          <span className="document-statusbar-status-icon" aria-hidden="true"><StatusIcon status={documentStatus} /></span>
-          <span>{documentStatus.label}</span>
+        <div className="document-statusbar-fixed">
+          <div className="document-statusbar-stats" aria-label="文档统计">
+            <span>字数 {Math.max(0, wordCount)}</span>
+            <span>图片 {Math.max(0, imageCount)}</span>
+          </div>
+          <div className={`document-statusbar-state ${documentStatus.kind}`} title={documentStatus.label} aria-label={documentStatus.label}>
+            <span className="document-statusbar-status-icon" aria-hidden="true"><StatusIcon status={documentStatus} /></span>
+            <span>{documentStatus.label}</span>
+          </div>
         </div>
       </footer>
       {notice && (

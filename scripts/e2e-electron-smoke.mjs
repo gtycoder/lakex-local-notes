@@ -75,7 +75,10 @@ await evaluate(`(()=>{document.querySelector('[aria-label="工作空间"]')?.cli
 await wait(120);
 const workspaceMenu = await evaluate(`JSON.stringify({ open: Boolean(document.querySelector('.top-menu--workspace')), items: [...document.querySelectorAll('.top-menu--workspace button')].map(x=>x.innerText) })`);
 await evaluate(`(()=>{ const item = [...document.querySelectorAll('.top-menu--workspace button')].find(x => x.innerText.includes('偏好设置')); item?.click(); return true })()`);
-await wait(600);
+for (let attempt = 0; attempt < 12; attempt += 1) {
+  if (await evaluate(`document.activeElement?.matches('.settings-nav-search input')`)) break;
+  await wait(80);
+}
 const settings = await evaluate(`JSON.stringify({ open: Boolean(document.querySelector('.settings-overlay')), title: document.querySelector('.settings-header span')?.innerText || '', role: document.querySelector('.settings-panel')?.getAttribute('role') || '', labelledBy: document.querySelector('.settings-panel')?.getAttribute('aria-labelledby') || '', focused: document.activeElement?.matches('.settings-nav-search input') })`);
 await evaluate(`(()=>{document.querySelector('.settings-close, .settings-panel [aria-label="关闭"]')?.click(); return true})()`);
 
