@@ -432,7 +432,7 @@ export class QuickNotesStore {
     try { fs.rmSync(this.assetDirFor(id), { force: true, recursive: true }); } catch { /* best effort */ }
   }
 
-  private deleteSourceAndRemember(row: any, conversionTargetNoteId: string | null, readyToSync: boolean, keepFiles: boolean): void {
+  private deleteSourceAndRemember(row: QuickNoteRow, conversionTargetNoteId: string | null, readyToSync: boolean, keepFiles: boolean): void {
     const content = this.readStoredContent(row.id);
     const deletedAt = nowIso();
     const tx = this.db.transaction(() => {

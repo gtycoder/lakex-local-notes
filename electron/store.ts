@@ -1602,7 +1602,7 @@ export class Store {
 
   listS3GcLog(): Array<{ id: number; ts: string; action: string; key: string; reason: string; commitId: string | null; deviceId: string | null; ok: boolean }> {
     return this.db.prepare("SELECT id,ts,action,key,reason,commit_id AS commitId,device_id AS deviceId,ok FROM s3_gc_log ORDER BY id DESC LIMIT 500")
-      .all().map((r: any) => ({ ...r, ok: !!r.ok }));
+      .all().map((value) => { const r = value as { id: number; ts: string; action: string; key: string; reason: string; commitId: string | null; deviceId: string | null; ok: unknown }; return { ...r, ok: !!r.ok }; });
   }
 
   markSyncComplete(at: string): void {
@@ -1769,10 +1769,13 @@ export class Store {
   listDeletedNotesForSync(): Array<{ id: string; title: string; parentId: string | null; sortOrder: number; updatedAt: string; deletedAt: string }> {
     return this.db.prepare(
       "SELECT id,title,parent_id,sort_order,updated_at,deleted_at FROM deleted_notes ORDER BY deleted_at"
-    ).all().map((r: any) => ({
-      id: r.id, title: r.title, parentId: r.parent_id, sortOrder: r.sort_order,
-      updatedAt: r.updated_at, deletedAt: r.deleted_at,
-    }));
+    ).all().map((value) => {
+      const r = value as { id: string; title: string; parent_id: string | null; sort_order: number; updated_at: string; deleted_at: string };
+      return {
+        id: r.id, title: r.title, parentId: r.parent_id, sortOrder: r.sort_order,
+        updatedAt: r.updated_at, deletedAt: r.deleted_at,
+      };
+    });
   }
 
   /** 零变更早退：本设备上次成功读/写的 manifest commitId（device_state）。 */
@@ -1835,10 +1838,13 @@ export class Store {
   listPurgedNotesForSync(): Array<{ id: string; title: string; parentId: string | null; sortOrder: number; updatedAt: string; deletedAt: string; purgedAt: string }> {
     return this.db.prepare(
       "SELECT id,title,parent_id,sort_order,updated_at,deleted_at,purged_at FROM deleted_notes WHERE purged_at IS NOT NULL ORDER BY purged_at"
-    ).all().map((r: any) => ({
-      id: r.id, title: r.title, parentId: r.parent_id, sortOrder: r.sort_order,
-      updatedAt: r.updated_at, deletedAt: r.deleted_at, purgedAt: r.purged_at,
-    }));
+    ).all().map((value) => {
+      const r = value as { id: string; title: string; parent_id: string | null; sort_order: number; updated_at: string; deleted_at: string; purged_at: string };
+      return {
+        id: r.id, title: r.title, parentId: r.parent_id, sortOrder: r.sort_order,
+        updatedAt: r.updated_at, deletedAt: r.deleted_at, purgedAt: r.purged_at,
+      };
+    });
   }
 
   /** 导入远程笔记：写 .lake + note-assets 资源 + upsert DB 记录。 */

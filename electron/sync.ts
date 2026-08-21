@@ -7,6 +7,7 @@ import {
   GetObjectCommand,
   type GetObjectCommandOutput,
   PutObjectCommand,
+  type PutObjectCommandInput,
   ListObjectsV2Command,
   type ListObjectsV2CommandOutput,
   DeleteObjectCommand,
@@ -207,7 +208,7 @@ export class ObjectStore {
     assertSafeKey(key);
     const t0 = Date.now();
     let body = bytes;
-    const command: Record<string, unknown> = {
+    const command: PutObjectCommandInput = {
       Bucket: this.bucket,
       Key: this.key(key),
       Body: body,
@@ -220,7 +221,7 @@ export class ObjectStore {
       command.ContentEncoding = "gzip";
     }
     try {
-      await this.send(new PutObjectCommand(command as never));
+      await this.send(new PutObjectCommand(command));
       this.log.s3.info(`[perf] put ${key} ${Date.now() - t0}ms (${body.length}B${opts?.gzip ? ` gzip of ${bytes.length}B` : ""})`);
     } catch (error) {
       this.log.s3.warn(`[perf] put ${key} FAIL ${Date.now() - t0}ms: ${errorMessage(error)}`);
@@ -295,12 +296,13 @@ export class ObjectStore {
 
   /** 统一带超时发送命令：超时通过 AbortSignal 中断底层请求（NodeHttpHandler 支持）。
    *  Get/Put 走大对象超时（W-6），其余元数据命令走短超时。 */
-  private async send<T>(command: any): Promise<T> {
+  private async send<T>(command: GetObjectCommand | PutObjectCommand | ListObjectsV2Command | DeleteObjectCommand | DeleteObjectsCommand): Promise<T> {
     const isTransfer = command instanceof GetObjectCommand || command instanceof PutObjectCommand;
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), isTransfer ? S3_TRANSFER_TIMEOUT_MS : S3_REQUEST_TIMEOUT_MS);
     try {
-      return await this.client.send(command, { abortSignal: controller.signal }) as T;
+      // AWS SDK client.send 不接受命令联合类型（已知 TS 痛点）：调用点类型已约束，这里集中一处断言。
+      return await this.client.send(command as never, { abortSignal: controller.signal }) as T;
     } finally {
       clearTimeout(timer);
     }

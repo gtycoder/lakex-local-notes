@@ -408,7 +408,7 @@ if (!app.requestSingleInstanceLock()) {
     try {
       const r = store.cleanupHistory();
       store.recordHistoryCleanup(r);
-      if (r.deletedSnapshots > 0) console.log(`[history] 启动兜底清理：删除 ${r.deletedSnapshots} 份过期快照`);
+      if (r.deletedSnapshots > 0) log.history.info(`[history] 启动兜底清理：删除 ${r.deletedSnapshots} 份过期快照`);
     } catch (error) { console.warn("[history] 启动兜底清理失败:", error); }
     // 定时器管理：配置变更（设置面板保存）后重启定时器
     let snapshotTimer: NodeJS.Timeout | null = null;
@@ -421,7 +421,7 @@ if (!app.requestSingleInstanceLock()) {
         snapshotTimer = setInterval(() => {
           try {
             const n = store.flushHistorySnapshots();
-            if (n > 0) console.log(`[history] 自动快照：创建 ${n} 份`);
+            if (n > 0) log.history.info(`[history] 自动快照：创建 ${n} 份`);
           } catch (error) { console.warn("[history] 自动快照失败:", error); }
         }, cfg.snapshotIntervalMinutes * 60 * 1000);
       }
@@ -430,7 +430,7 @@ if (!app.requestSingleInstanceLock()) {
           try {
             const r = store.cleanupHistory();
             store.recordHistoryCleanup(r);
-            if (r.deletedSnapshots > 0) console.log(`[history] 定期清理：删除 ${r.deletedSnapshots} 份过期快照`);
+            if (r.deletedSnapshots > 0) log.history.info(`[history] 定期清理：删除 ${r.deletedSnapshots} 份过期快照`);
           } catch (error) { console.warn("[history] 定期清理失败:", error); }
         }, cfg.cleanupIntervalHours * 3600 * 1000);
       }
@@ -476,7 +476,7 @@ if (!app.requestSingleInstanceLock()) {
           void enqueueMaintenance(async () => {
             try {
               const r = await runGcReconcile(store);
-              if (r.deleted > 0) console.log(`[s3-gc] 定期对账删除 ${r.deleted} 个过期对象`);
+              if (r.deleted > 0) log.gc.info(`[s3-gc] 定期对账删除 ${r.deleted} 个过期对象`);
             } catch (error) { console.warn("[s3-gc] 定期对账失败:", error); }
           });
         }, gcCfg.gcIntervalHours * 3600 * 1000);
@@ -493,7 +493,7 @@ if (!app.requestSingleInstanceLock()) {
       const run = () => {
         try {
           const n = store.autoPurgeExpiredTrash(cfg.trashAutoPurgeDays);
-          if (n > 0) console.log(`[trash] 自动过期 purge ${n} 项（>${cfg.trashAutoPurgeDays} 天）`);
+          if (n > 0) log.trash.info(`[trash] 自动过期 purge ${n} 项（>${cfg.trashAutoPurgeDays} 天）`);
         } catch (error) { console.warn("[trash] 自动过期失败:", error); }
       };
       run();

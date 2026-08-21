@@ -7,7 +7,7 @@
  */
 import { useCallback, useEffect, useMemo, useRef } from "react";
 import { OutlineController, type OutlineEntry } from "./OutlineController";
-import { resolveScrollNode, type LakeEditorInstance } from "../editor/lakeRuntime";
+import { lakeBridge, resolveScrollNode, type LakeEditorInstance, type LakeKernelBridge } from "../editor/lakeRuntime";
 
 function escapeId(id: string): string {
   try {
@@ -33,7 +33,7 @@ export function useOutline(
       computeRef.current = () => {};
       return;
     }
-    const kernel = (editor as any)?.kernel;
+    const kernel = lakeBridge(editor).kernel;
     if (!kernel) return;
 
     const timers = new Set<number>();
@@ -146,7 +146,7 @@ export function useOutline(
       contentTimer = window.setTimeout(readToc, 200);
     };
     try {
-      (editor as any)?.on?.("contentchange", onContent);
+      lakeBridge(editor).on?.("contentchange", onContent);
     } catch {
       /* 忽略 */
     }
@@ -155,9 +155,9 @@ export function useOutline(
     scroller.addEventListener("scroll", onScroll, { passive: true });
 
     // 虚拟渲染分批重建后重算高亮
-    let renderer: any = null;
+    let renderer: LakeKernelBridge["renderer"] = undefined;
     try {
-      renderer = (editor as any)?.renderer;
+      renderer = lakeBridge(editor).renderer;
     } catch {
       /* 忽略 */
     }
@@ -172,7 +172,7 @@ export function useOutline(
         /* 忽略 */
       }
       try {
-        (editor as any)?.off?.("contentchange", onContent);
+        lakeBridge(editor).off?.("contentchange", onContent);
       } catch {
         /* 忽略 */
       }

@@ -32,13 +32,38 @@ function injectKatexScriptsInOrder(): void {
 
 export interface LakeEditorInstance {
   setDocument(type: "text/lake", content: string): void;
-  getDocument(type: "text/lake"): string;
+  /** 锁定态 Viewer 可能不完整支持 markdown/plain（调用方需 typeof 守卫 + try/catch）。 */
+  getDocument(type: "text/lake" | "text/markdown" | "text/plain"): string;
   on(event: string, listener: () => void): void;
   off?: (event: string, listener: () => void) => void;
   destroy?: () => void;
   destory?: () => void;
   /** 请求对当前可见卡片执行一次懒初始化水合。 */
   requestCardHydration?: () => void;
+}
+
+/**
+ * Lake 内核运行时桥接（闭源 lakex 无类型声明）：kernel/renderer/事件系统集中在此声明，
+ * 调用方经 lakeBridge(editor) 访问，避免散落的 (editor as any)（PROJECT-AUDIT 建议收敛）。
+ */
+export interface LakeKernelBridge {
+  kernel?: {
+    getDocExtraContent?(): { toc?: unknown };
+    onPluginEvent?(event: string, listener: () => void): (() => void) | undefined;
+  };
+  renderer?: {
+    execCommand?(name: string, ...args: unknown[]): unknown;
+    scrollByNodeId?(id: string): unknown;
+    on?(event: string, listener: () => void): unknown;
+    off?(event: string, listener: () => void): unknown;
+  };
+  on?(event: string, listener: () => void): unknown;
+  off?(event: string, listener: () => void): unknown;
+}
+
+/** 类型安全的 Lake 内核桥接访问器（内部一次性断言，调用点不再出现 as any）。 */
+export function lakeBridge(editor: LakeEditorInstance | undefined): LakeKernelBridge {
+  return (editor ?? {}) as unknown as LakeKernelBridge;
 }
 
 /** Deep merge: defaults ← overrides */

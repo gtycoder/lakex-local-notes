@@ -79,6 +79,21 @@ function initialSidebarWidth(): number {
     : SIDEBAR_DEFAULT_WIDTH;
 }
 
+/** 从编辑器实例读取派生缓存（markdown/plain）；无 getDocument（Viewer 锁定态）返回 null。
+ * 单字段独立 try/catch（markdown/plain 各自失败不影响另一个），调用方决定兜底策略。 */
+function readEditorDocumentCaches(editor: LakeEditorInstance | undefined): { markdown: string | null; plain: string | null } | null {
+  if (!editor || typeof editor.getDocument !== "function") return null;
+  const caches: { markdown: string | null; plain: string | null } = { markdown: null, plain: null };
+  try { caches.markdown = cleanLakeMarkdown(stripAssetAccessToken(editor.getDocument("text/markdown"))); } catch { /* 忽略 */ }
+  try { caches.plain = stripAssetAccessToken(editor.getDocument("text/plain")); } catch { /* 忽略 */ }
+  return caches;
+}
+
+// ---- 状态更新器（setX(items => items.map(...)) 模式的公共抽取；保持各调用点语义逐字等价） ----
+const replaceTreeNode = (node: TreeNode) => (items: TreeNode[]) => items.map((item) => item.id === node.id ? node : item);
+const patchNoteById = (id: string, patch: Partial<NoteSummary>) => (items: NoteSummary[]) => items.map((item) => item.id === id ? { ...item, ...patch } : item);
+const patchTabById = (noteId: string, patch: Partial<OpenTab>) => (tabs: OpenTab[]) => tabs.map((tab) => tab.noteId === noteId ? { ...tab, ...patch } : tab);
+
 function initialOutlineSidebarWidth(): number {
   const stored = Number(localStorage.getItem("lake-notes-v3.outline-sidebar-width"));
   return Number.isFinite(stored)
@@ -193,13 +208,13 @@ export function App() {
   // V5 Phase 4：保存管线回调 useCallback 化——persistTab 依赖稳定，避免每次渲染重建（打字路径抖动收敛）。
   const refreshPendingSummaryRef = useRef<() => void>(() => undefined);
   const handleNoteSaved = useCallback((saved: NoteDocument) => {
-    setNotes((items) => items.map((item) => item.id === saved.id ? summaryOf(saved) : item));
+    setNotes(patchNoteById(saved.id, summaryOf(saved)));
     setTreeNodes((items) => items.map((item) => item.noteFileId === saved.id || item.id === saved.id ? { ...item, title: saved.title, updatedAt: saved.updatedAt, syncState: saved.syncState } : item));
     setSync((current) => ({ ...current, pendingChanges: Math.max(1, current.pendingChanges) }));
     refreshPendingSummaryRef.current();
   }, [setNotes, setTreeNodes, setSync]);
   const handleOpenTabsApplied = useCallback((saved: NoteDocument) => {
-    setOpenTabs((tabs) => tabs.map((tab) => tab.noteId === saved.id ? { ...tab, title: saved.title, content: saved.content, dirty: false, lastDigest: { title: saved.title, updatedAt: saved.updatedAt } } : tab));
+    setOpenTabs(patchTabById(saved.id, { title: saved.title, content: saved.content, dirty: false, lastDigest: { title: saved.title, updatedAt: saved.updatedAt } }));
   }, [setOpenTabs]);
   const handleDraftCleared = useCallback((noteId: string) => {
     void native.deleteDraftJournal(noteId).catch(() => undefined);
@@ -208,13 +223,7 @@ export function App() {
   const handleSaveError = useCallback((message: string) => setError(message), [setError]);
   const handleGetOpenTab = useCallback((noteId: string) => openTabsRef.current.find((t) => t.noteId === noteId), []);
   const handleGetEditorCaches = useCallback((noteId: string) => {
-    const editor = editorsRef.current.get(noteId);
-    const caches: { markdown: string | null; plain: string | null } = { markdown: null, plain: null };
-    if (editor && typeof (editor as any).getDocument === "function") {
-      try { caches.markdown = cleanLakeMarkdown(stripAssetAccessToken(String((editor as any).getDocument("text/markdown")))); } catch { /* 忽略 */ }
-      try { caches.plain = stripAssetAccessToken(String((editor as any).getDocument("text/plain"))); } catch { /* 忽略 */ }
-    }
-    return caches;
+    return readEditorDocumentCaches(editorsRef.current.get(noteId)) ?? { markdown: null, plain: null };
   }, []);
 
   const {
@@ -678,9 +687,9 @@ export function App() {
     if (editor) {
       editorsRef.current.set(noteId, editor);
       try {
-        if (typeof (editor as any).getDocument === "function") {
-          const markdown = cleanLakeMarkdown(stripAssetAccessToken(String((editor as any).getDocument("text/markdown"))));
-          const plain = stripAssetAccessToken(String((editor as any).getDocument("text/plain")));
+        if (typeof editor.getDocument === "function") {
+          const markdown = cleanLakeMarkdown(stripAssetAccessToken(editor.getDocument("text/markdown")));
+          const plain = stripAssetAccessToken(editor.getDocument("text/plain"));
           void native.updateNoteCaches(noteId, markdown, plain);
         }
       } catch {
@@ -743,7 +752,7 @@ export function App() {
   const setNodeIcon = useCallback(async (node: TreeNode, icon: string | null) => {
     try {
       const updated = await native.setNodeIcon(node.id, icon);
-      setTreeNodes((items) => items.map((item) => item.id === updated.id ? updated : item));
+      setTreeNodes(replaceTreeNode(updated));
       showNotice(icon ? "已设置图标" : "已清除图标");
     } catch (reason) {
       setError("设置图标失败: " + (getNativeErrorMessage(reason)));
@@ -810,10 +819,10 @@ export function App() {
   const renameTreeNode = useCallback(async (id: string, title: string) => {
     try {
       const renamed = await native.renameTreeNode(id, title);
-      setTreeNodes((items) => items.map((item) => item.id === id ? renamed : item));
+      setTreeNodes(replaceTreeNode(renamed));
       if (renamed.noteFileId) {
-        setNotes((items) => items.map((note) => note.id === renamed.noteFileId ? { ...note, title: renamed.title, updatedAt: renamed.updatedAt, syncState: "local" } : note));
-        setOpenTabs((tabs) => tabs.map((tab) => tab.noteId === renamed.noteFileId ? { ...tab, title: renamed.title } : tab));
+        setNotes(patchNoteById(renamed.noteFileId, { title: renamed.title, updatedAt: renamed.updatedAt, syncState: "local" }));
+        setOpenTabs(patchTabById(renamed.noteFileId, { title: renamed.title }));
       }
     } catch (reason) { setError(getNativeErrorMessage(reason)); }
   }, []);
@@ -1006,7 +1015,7 @@ export function App() {
     }
     try {
       const updated = await native.setNoteLocked(tabId, next);
-      setNotes((items) => items.map((item) => (item.id === tabId ? { ...item, isLocked: updated.isLocked, lockedAt: updated.lockedAt } : item)));
+      setNotes(patchNoteById(tabId, { isLocked: updated.isLocked, lockedAt: updated.lockedAt }));
     } catch (reason) {
       setError(getNativeErrorMessage(reason));
     }

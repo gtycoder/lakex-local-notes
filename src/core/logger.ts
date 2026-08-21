@@ -18,6 +18,7 @@ export interface LoggerScopes {
   quick: Logger;
   history: Logger;
   gc: Logger;
+  trash: Logger;
   store: Logger;
   renderer: Logger;
   perf: Logger;
@@ -29,5 +30,5 @@ export function createSilentLogger(): Logger {
 
 export function createSilentLoggerScopes(): LoggerScopes {
   const silent = createSilentLogger();
-  return { app: silent, sync: silent, s3: silent, quick: silent, history: silent, gc: silent, store: silent, renderer: silent, perf: silent };
+  return { app: silent, sync: silent, s3: silent, quick: silent, history: silent, gc: silent, trash: silent, store: silent, renderer: silent, perf: silent };
 }

@@ -79,7 +79,7 @@ export function TrashPanel({ open, onClose, onChanged, onRestored }: {
     catch (e) { setError(getNativeErrorMessage(e)); }
   };
   const purgeQuick = async (id: string) => {
-    if (!(window as any).confirm("彻底删除后不可恢复，确定删除？")) return;
+    if (!window.confirm("彻底删除后不可恢复，确定删除？")) return;
     try { await native.purgeQuickNote(id); await refreshQuick(); }
     catch (e) { setError(getNativeErrorMessage(e)); }
   };
@@ -95,7 +95,7 @@ export function TrashPanel({ open, onClose, onChanged, onRestored }: {
   };
 
   const purge = async (id: string) => {
-    if (!(window as any).confirm("彻底删除后不可恢复，确定删除？")) return;
+    if (!window.confirm("彻底删除后不可恢复，确定删除？")) return;
     try {
       await native.purgeTrash(id);
       await refresh();
@@ -107,7 +107,7 @@ export function TrashPanel({ open, onClose, onChanged, onRestored }: {
 
   const empty = async () => {
     if (items.length === 0) return;
-    if (!(window as any).confirm(`清空回收站（${items.length} 项）？此操作不可恢复。`)) return;
+    if (!window.confirm(`清空回收站（${items.length} 项）？此操作不可恢复。`)) return;
     try {
       await native.emptyTrash();
       await refresh();

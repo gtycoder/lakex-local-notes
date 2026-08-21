@@ -39,6 +39,7 @@ export const log = {
   quick: electronLog.scope("quick"),
   history: electronLog.scope("history"),
   gc: electronLog.scope("gc"),
+  trash: electronLog.scope("trash"),
   store: electronLog.scope("store"),
   renderer: electronLog.scope("renderer"),
   perf: electronLog.scope("perf"),

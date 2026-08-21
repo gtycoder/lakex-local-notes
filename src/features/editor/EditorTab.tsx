@@ -4,6 +4,7 @@ import { ChevronRight, Package } from "lucide-react";
 import {
   createLakeDocument,
   destroyLakeEditor,
+  lakeBridge,
   resolveScrollNode,
   type LakeEditorInstance,
   type LakeEditorPrefs,
@@ -105,10 +106,10 @@ export function EditorTab({ noteId, content, visible, tocEnabled, onChange, pref
     if (!editor || !host) return;
     // 折叠标题先展开（接管原生 tocPositionChange → headingUnfold 链路）
     try {
-      (editor as any)?.renderer?.execCommand?.("headingUnfold", id);
+      lakeBridge(editor).renderer?.execCommand?.("headingUnfold", id);
     } catch { /* 忽略 */ }
     try {
-      (editor as any)?.renderer?.scrollByNodeId?.(id);
+      lakeBridge(editor).renderer?.scrollByNodeId?.(id);
     } catch { /* 忽略 */ }
     // 懒卡片占位高度导致的偏差在渲染/水合稳定后校正两次
     const scroller = resolveScrollNode(host);
