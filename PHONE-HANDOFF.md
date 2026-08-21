@@ -71,6 +71,34 @@
   7. 上传方向（粘贴新图）：canonical 生成统一 19876 形态 + FS 存储 + 同步上传，POC 后置
 - **存储**：图片字节 → Capacitor Filesystem（目录 `note-assets/{noteId}/{file}` 与桌面一致）；不用 sql.js BLOB（全库 export 爆炸）。
 
+### 3.1 移动端可直接使用的共享资产（已合入 master）
+
+以下 3 项已在 master（本次合并），移动端 worktree merge master 后可用：
+
+| 资产 | 位置 | 用途 | 用法 |
+| --- | --- | --- | --- |
+| **AssetUrlResolver** | src/core/assetUrl.ts（+13 测试） | 解析 canonical URL（http 形态）→ 结构化引用 | parseLocalAssetUrl(url) → {space, noteId, filename}；isLocalAssetUrl(url) 判断是否本地图片 |
+| **协议白名单探针** | electron/lakeProtocolProbe.test.ts（15 测试） | Lake 内核协议白名单证据（lake-asset:// 被拒、blob:/data: 放行） | 仅证据参考，无需调用 |
+| **协议调研报告** | docs/RESEARCH-LIGHTWEIGHT-PROTOCOL-2026-08-22.md | blob 方案全程实测证据（渲染/不污染/零网络） | 文档参考 |
+
+**移动端 blob 注入的关键调用**（伪代码）:
+
+```ts
+// 打开文档渲染前：遍历内容里的 canonical URL → 读本地字节 → blob
+import { parseLocalAssetUrl } from "../../core/assetUrl";
+
+async function resolveAssetToBlob(canonicalUrl: string): Promise<string | null> {
+  const ref = parseLocalAssetUrl(canonicalUrl);      // http://127.0.0.1:19876/{noteId}/{file} → {noteId, filename}
+  if (!ref) return null;                              // 非本地图片（远程 URL）原样
+  const bytes = await fs.readFile(`note-assets/${ref.noteId}/${ref.filename}`); // Capacitor Filesystem
+  if (!bytes) return null;                            // 缺失 → 占位
+  return URL.createObjectURL(new Blob([bytes]));      // blob URL → setDisplayUrl 注入
+}
+```
+
+> **注意**：canonical 是逻辑端口约定（19876），移动端**绝不能真请求 127.0.0.1**——用 parseLocalAssetUrl 解析后从本地 FS 读字节，仅此用途。
+
+
 ## 4. 存储机制统一（当前主线，术语对照）
 
 | 概念 | 共享层（src/core） | 桌面 adapter（待做） | 移动端 adapter（已有） |
