@@ -60,16 +60,27 @@ await wait(120);
 const fixedHit = await evaluate(`(()=>{ const input=document.querySelector('.sidebar-docked .search-box input'); const r=input?.getBoundingClientRect(); const hit=r ? document.elementFromPoint(r.x+r.width/2,r.y+r.height/2) : null; input?.focus(); return { hitInput: hit === input || Boolean(hit?.closest('.search-box')) }; })()`);
 await send("Input.insertText", { text: "pointer" });
 const fixedSearch = await evaluate(`JSON.stringify({ mode: document.querySelector('.app-shell')?.className || '', value: document.querySelector('.sidebar-docked .search-box input')?.value || '', focused: document.activeElement === document.querySelector('.sidebar-docked .search-box input'), pointer: getComputedStyle(document.querySelector('.sidebar-docked .search-box input')).pointerEvents, hitInput: ${JSON.stringify(fixedHit.hitInput)} })`);
-await evaluate(`(()=>{ const input=document.querySelector('.sidebar-docked .search-box input'); if(input){ input.focus(); input.value=''; input.dispatchEvent(new InputEvent('input',{bubbles:true,inputType:'deleteContentBackward'})); } return true; })()`);
+// Clear through real keyboard input so React state is cleared as well, not just the DOM value.
+await send("Input.dispatchKeyEvent", { type: "keyDown", key: "a", code: "KeyA", modifiers: 4, windowsVirtualKeyCode: 65 });
+await send("Input.dispatchKeyEvent", { type: "keyUp", key: "a", code: "KeyA", modifiers: 4 });
+await send("Input.dispatchKeyEvent", { type: "keyDown", key: "Backspace", code: "Backspace" });
+await send("Input.dispatchKeyEvent", { type: "keyUp", key: "Backspace", code: "Backspace" });
+await wait(180);
 
-const fixedButtons = await evaluate(`JSON.stringify([...document.querySelectorAll('.sidebar-docked .sidebar-toolbar-row .list-heading button')].map((button)=>({ title: button.title, rect: button.getBoundingClientRect().toJSON(), disabled: button.disabled })))`);
-for (const button of JSON.parse(fixedButtons).slice(0, 3)) {
-  if (!button.disabled) await clickRect(button.rect);
+const fixedButtons = await evaluate(`JSON.stringify([...document.querySelectorAll('.sidebar-docked .sidebar-toolbar-row > .list-heading > button, .sidebar-docked .sidebar-toolbar-row > .list-heading > .create-menu-wrap > .create-btn')].map((button)=>({ title: button.title, rect: button.getBoundingClientRect().toJSON(), disabled: button.disabled })))`);
+for (const button of JSON.parse(fixedButtons)) {
+  if (button.disabled) continue;
+  await clickRect(button.rect);
+  if (button.title.includes('全文搜索')) {
+    await wait(120);
+    await evaluate(`document.querySelector('.search-panel-close')?.click(); true`);
+    await wait(120);
+  }
 }
-const createRect = await evaluate(`document.querySelector('.sidebar-docked .create-btn')?.getBoundingClientRect()?.toJSON()`);
-if (createRect) await clickRect(createRect);
 await wait(80);
-const fixedButtonsResult = await evaluate(`JSON.stringify({ buttons: [...document.querySelectorAll('.sidebar-docked .sidebar-toolbar-row .list-heading button')].map(b=>({title:b.title,rect:b.getBoundingClientRect().toJSON()})), mode: document.querySelector('.app-shell')?.className || '', menu: Boolean(document.querySelector('.create-menu')), toolbar: Boolean(document.querySelector('.sidebar-toolbar-row')) })`);
+await evaluate(`document.querySelector('.create-menu-wrap > button')?.click(); true`);
+await wait(80);
+const fixedButtonsResult = await evaluate(`JSON.stringify({ buttons: [...document.querySelectorAll('.sidebar-docked .sidebar-toolbar-row > .list-heading > button, .sidebar-docked .sidebar-toolbar-row > .list-heading > .create-menu-wrap > .create-btn')].map(b=>({title:b.title,rect:b.getBoundingClientRect().toJSON()})), mode: document.querySelector('.app-shell')?.className || '', menu: Boolean(document.querySelector('.create-menu')), toolbar: Boolean(document.querySelector('.sidebar-toolbar-row')) })`);
 await evaluate(`document.querySelector('.create-menu-wrap > button')?.click(); true`);
 
 // Switch to collapsed, enter the rail, then move into toolbar: it must remain floating.
@@ -100,4 +111,6 @@ if (!result.fixed.mode.includes('sidebar-docked') || !result.fixed.value.include
 if (!result.fixedButtons.mode.includes('sidebar-docked') || result.fixedButtons.buttons.length !== 4) throw new Error("固定资料库按钮未命中");
 if (!result.floating.mode.includes('sidebar-floating') || !result.floating.hitToolbar) throw new Error("悬浮资料库顶部命中或生命周期失败");
 if (result.transition.name !== 'note-pane' || !result.transition.fastOld || !result.transition.fastNew) throw new Error("tab 切换快速动画契约缺失");
+await evaluate("location.reload(); true");
+await wait(400);
 socket.close();
