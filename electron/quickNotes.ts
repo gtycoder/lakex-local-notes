@@ -68,6 +68,7 @@ export class QuickNotesStore {
     this.db.pragma("foreign_keys = ON");
     this.migrate();
     this.recoverStagedSaves();
+    this.recoverImports();
     this.queries = new QuickNotesQueries({
       db: this.db,
       itemPath: (id) => this.itemPath(id),
@@ -119,6 +120,21 @@ export class QuickNotesStore {
         state TEXT NOT NULL CHECK(state IN ('prepared','target_created','source_deleted_waiting_sync','complete')),
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS quick_note_file_ops (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        operation_type TEXT NOT NULL,
+        quick_note_id TEXT NOT NULL,
+        old_content_path TEXT,
+        new_content_path TEXT,
+        old_assets_path TEXT,
+        new_assets_path TEXT,
+        staging_key TEXT,
+        content_hash TEXT,
+        state TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        error_message TEXT
       );
     `);
     const deletedCols = this.db.prepare("PRAGMA table_info(quick_note_deleted)").all() as Array<{ name: string }>;
@@ -533,6 +549,7 @@ export class QuickNotesStore {
       .run(item.id, item.createdAt, item.updatedAt, item.deletedAt);
   }
 
+  /** 远端小记导入（V5 §5.4：4 态 journal 驱动） */
   importRemoteQuickNote(item: { id: string; createdAt: string; updatedAt: string; contentHash: string; isConflict: boolean }, contentBytes: Buffer, assets: { filename: string; bytes: Buffer }[]): void {
     if (!isSafeSegment(item.id)) throw new AppError("InvalidInput", "远端小记 ID 无效");
     if (hash(contentBytes) !== item.contentHash) throw new AppError("InvalidInput", "远端小记内容哈希不符");
@@ -541,35 +558,93 @@ export class QuickNotesStore {
       const asset = assets.find((candidate) => candidate.filename === image.filename);
       if (!asset || asset.bytes.length !== image.size || hash(asset.bytes) !== image.hash) throw new AppError("InvalidInput", `远端图片不完整: ${image.filename}`);
     }
-    // 任何文件系统写入前完成路径校验，避免恶意 manifest 留下空目录或临时垃圾。
     for (const asset of assets) {
       if (!isSafeSegment(asset.filename)) throw new AppError("InvalidInput", "远端图片文件名无效");
     }
     const assetDir = this.assetDirFor(item.id);
     const itemPath = this.itemPath(item.id);
-    fs.mkdirSync(assetDir, { recursive: true });
-    const temporary = `${assetDir}.incoming-${process.pid}-${crypto.randomBytes(3).toString("hex")}`;
+    const opId = uuid();
+    const stagingKey = `import-${opId}`;
+    const temporary = path.join(this.stagingDir, stagingKey);
+    const oldAssetsBackup = `${assetDir}.bak-${opId}`;
     fs.mkdirSync(temporary, { recursive: true });
+    for (const asset of assets) {
+      this.atomicWrite(path.join(temporary, asset.filename), asset.bytes);
+    }
+    this.atomicWrite(path.join(temporary, SAVE_BODY_FILE), contentBytes);
+    const now = nowIso();
+    const journalId = Number(this.db.prepare(
+      "INSERT INTO quick_note_file_ops(operation_type,quick_note_id,old_content_path,new_content_path,old_assets_path,new_assets_path,staging_key,content_hash,state,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)"
+    ).run("import_remote", item.id, itemPath, path.join(temporary, SAVE_BODY_FILE), oldAssetsBackup, assetDir, stagingKey, item.contentHash, "prepared", now, now).lastInsertRowid);
     try {
-      for (const asset of assets) {
-        this.atomicWrite(path.join(temporary, asset.filename), asset.bytes);
-      }
-      this.atomicWrite(itemPath, contentBytes);
       const tx = this.db.transaction(() => {
-        this.db.prepare("INSERT INTO quick_notes(id,created_at,updated_at,preview_text,image_count,content_hash,sync_state,is_conflict) VALUES(?,?,?,?,?,?, 'synced', ?) ON CONFLICT(id) DO UPDATE SET created_at=excluded.created_at,updated_at=excluded.updated_at,preview_text=excluded.preview_text,image_count=excluded.image_count,content_hash=excluded.content_hash,sync_state='synced',is_conflict=excluded.is_conflict")
-          .run(item.id, item.createdAt, item.updatedAt, previewQuickNote(parsed.text, parsed.images.length), parsed.images.length, item.contentHash, item.isConflict ? 1 : 0);
+        this.db.prepare("INSERT INTO quick_notes(id,created_at,updated_at,preview_text,image_count,content_hash,sync_state,is_conflict) VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET created_at=excluded.created_at,updated_at=excluded.updated_at,preview_text=excluded.preview_text,image_count=excluded.image_count,content_hash=excluded.content_hash,sync_state='synced',is_conflict=excluded.is_conflict")
+          .run(item.id, item.createdAt, item.updatedAt, previewQuickNote(parsed.text, parsed.images.length), parsed.images.length, item.contentHash, "synced", item.isConflict ? 1 : 0);
         this.db.prepare("DELETE FROM quick_note_assets WHERE quick_note_id=?").run(item.id);
         const insert = this.db.prepare("INSERT INTO quick_note_assets(id,quick_note_id,filename,mime_type,width,height,size,content_hash) VALUES(?,?,?,?,?,?,?,?)");
         for (const image of parsed.images) insert.run(image.id, item.id, image.filename, image.mimeType, image.width, image.height, image.size, image.hash);
+        this.db.prepare("UPDATE quick_note_file_ops SET state=?, updated_at=? WHERE id=?").run("db_committed", now, journalId);
       });
       tx();
-      fs.rmSync(assetDir, { force: true, recursive: true });
-      fs.renameSync(temporary, assetDir);
     } catch (error) {
+      this.db.prepare("DELETE FROM quick_note_file_ops WHERE id=?").run(journalId);
       try { fs.rmSync(temporary, { force: true, recursive: true }); } catch { /* best effort */ }
       throw error;
     }
+    this.promoteImport(temporary, itemPath, assetDir, oldAssetsBackup, journalId, now);
   }
+
+  /** V5 §5.4 promote：正文 rename 原子；目录替换带幂等判断。 */
+  private promoteImport(temporary: string, itemPath: string, assetDir: string, oldAssetsBackup: string, journalId: number, now: string): void {
+    try {
+      const bodySrc = path.join(temporary, SAVE_BODY_FILE);
+      if (fs.existsSync(bodySrc)) fs.renameSync(bodySrc, itemPath);
+      const files = fs.readdirSync(temporary).filter((f) => f !== SAVE_BODY_FILE && !f.startsWith("."));
+      const alreadyPromoted = files.every((f) => fs.existsSync(path.join(assetDir, f)));
+      if (!alreadyPromoted) {
+        if (fs.existsSync(assetDir)) {
+          if (fs.existsSync(oldAssetsBackup)) fs.rmSync(oldAssetsBackup, { force: true, recursive: true });
+          fs.renameSync(assetDir, oldAssetsBackup);
+        }
+        fs.mkdirSync(path.dirname(assetDir), { recursive: true });
+        fs.renameSync(temporary, assetDir);
+      }
+      this.db.prepare("UPDATE quick_note_file_ops SET state=?, updated_at=? WHERE id=?").run("files_promoted", now, journalId);
+    } catch (error) {
+      this.db.prepare("UPDATE quick_note_file_ops SET error_message=?, updated_at=? WHERE id=?").run(String(error), now, journalId);
+      throw error;
+    }
+    try { fs.rmSync(oldAssetsBackup, { force: true, recursive: true }); } catch { /* best effort */ }
+    try { fs.rmSync(temporary, { force: true, recursive: true }); } catch { /* best effort */ }
+    this.db.prepare("DELETE FROM quick_note_file_ops WHERE id=?").run(journalId);
+  }
+
+  /** V5 §5.4 启动恢复：未完成 import journal 按状态补做。 */
+  private recoverImports(): void {
+    type Row = { id: number; quick_note_id: string; old_assets_path: string | null; staging_key: string | null; state: string };
+    const rows = this.db.prepare("SELECT id,quick_note_id,old_assets_path,staging_key,state FROM quick_note_file_ops WHERE state IN (?,?,?)").all("prepared", "db_committed", "files_promoted") as Row[];
+    for (const row of rows) {
+      try {
+        const temporary = row.staging_key ? path.join(this.stagingDir, row.staging_key) : null;
+        if (row.state === "prepared") {
+          if (temporary) { try { fs.rmSync(temporary, { force: true, recursive: true }); } catch { /* best effort */ } }
+          this.db.prepare("DELETE FROM quick_note_file_ops WHERE id=?").run(row.id);
+        } else if (row.state === "db_committed") {
+          const assetDir = this.assetDirFor(row.quick_note_id);
+          const oldBackup = row.old_assets_path ?? `${assetDir}.bak-recover`;
+          if (!temporary) throw new Error("staging_key 缺失");
+          this.promoteImport(temporary, this.itemPath(row.quick_note_id), assetDir, oldBackup, row.id, nowIso());
+        } else if (row.state === "files_promoted") {
+          if (row.old_assets_path) { try { fs.rmSync(row.old_assets_path, { force: true, recursive: true }); } catch { /* best effort */ } }
+          if (temporary) { try { fs.rmSync(temporary, { force: true, recursive: true }); } catch { /* best effort */ } }
+          this.db.prepare("DELETE FROM quick_note_file_ops WHERE id=?").run(row.id);
+        }
+      } catch (error) {
+        console.warn(`[quick][recover] import 恢复失败: ${row.quick_note_id} ${String(error)}`);
+      }
+    }
+  }
+
 
   /** 冲突归档（验收 #4 定稿：B 方案——远端覆盖本地，本地版本进小记回收站，恢复后作为一条新小记）。
    * 把本地小记复制为一条「新 id」的回收站条目：内容文件 + 资源文件保留，写墓碑（ready_to_sync=0，

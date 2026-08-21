@@ -3,6 +3,7 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import Database from "better-sqlite3";
 import { QuickNotesStore } from "./quickNotes.js";
 import { convertQuickNoteToLake } from "./quickNoteConversion.js";
 import { Store } from "./store.js";
@@ -196,5 +197,71 @@ describe("R3：save staging 恢复（V5 §5.3）", () => {
     new QuickNotesStore(root);
     expect(fs.existsSync(opDir)).toBe(true);      // 保留待查
     expect(fs.existsSync(itemPath)).toBe(false);  // 未误 promote
+  });
+});
+describe("R4：import_remote 4 态 journal 恢复（V5 §5.4）", () => {
+  function rawQnDb() { return new Database(path.join(root, "quick-notes", "metadata.sqlite3")); }
+  function makeItem(text: string) {
+    const body = Buffer.from(JSON.stringify({ version: 1, text, images: [] }), "utf8");
+    return { item: { id: crypto.randomUUID(), createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), contentHash: crypto.createHash("sha256").update(body).digest("hex"), isConflict: false }, body };
+  }
+  function insertJournal(db: Database.Database, id: string, itemPath: string, stagingDir: string, stagingKey: string, contentHash: string, state: string) {
+    const now = new Date().toISOString();
+    db.prepare("INSERT INTO quick_note_file_ops(operation_type,quick_note_id,old_content_path,new_content_path,old_assets_path,new_assets_path,staging_key,content_hash,state,created_at,updated_at) VALUES('import_remote',?,?,?,?,?,?,?,?,?,?)")
+      .run(id, itemPath, path.join(stagingDir, "content.qnote"), `${path.join(root, "quick-notes", "assets", id)}.bak-x`, path.join(root, "quick-notes", "assets", id), stagingKey, contentHash, state, now, now);
+  }
+
+  it("db_committed 残留 → 新实例补 promote：正文恢复、staging 与 journal 清理", () => {
+    const { item, body } = makeItem("远程内容");
+    quickNotes.importRemoteQuickNote(item, body, []); // 正常导入建行
+    const itemPath = path.join(root, "quick-notes", "items", `${item.id}.qnote`);
+    fs.rmSync(itemPath, { force: true }); // 模拟「DB 已提交但 promote 未完成」
+    const opId = crypto.randomUUID();
+    const stagingDir = path.join(root, "quick-notes", "staging", `import-${opId}`);
+    fs.mkdirSync(stagingDir, { recursive: true });
+    fs.writeFileSync(path.join(stagingDir, "content.qnote"), body);
+    const db = rawQnDb();
+    insertJournal(db, item.id, itemPath, stagingDir, `import-${opId}`, item.contentHash, "db_committed");
+    db.close();
+    new QuickNotesStore(root); // 构造触发 recoverImports
+    expect(fs.existsSync(itemPath)).toBe(true);
+    expect(fs.readFileSync(itemPath).toString()).toBe(body.toString());
+    expect(fs.existsSync(stagingDir)).toBe(false);
+    const db2 = rawQnDb();
+    const c = (db2.prepare("SELECT COUNT(*) c FROM quick_note_file_ops").get() as { c: number }).c;
+    db2.close();
+    expect(c).toBe(0);
+  });
+
+  it("prepared 残留（DB 未提交）→ 新实例清理 staging + journal", () => {
+    const opId = crypto.randomUUID();
+    const stagingDir = path.join(root, "quick-notes", "staging", `import-${opId}`);
+    fs.mkdirSync(stagingDir, { recursive: true });
+    fs.writeFileSync(path.join(stagingDir, "content.qnote"), "x");
+    const db = rawQnDb();
+    insertJournal(db, "ghost-note", "/tmp/none", stagingDir, `import-${opId}`, "deadbeef", "prepared");
+    db.close();
+    new QuickNotesStore(root);
+    expect(fs.existsSync(stagingDir)).toBe(false);
+    const db2 = rawQnDb();
+    const c = (db2.prepare("SELECT COUNT(*) c FROM quick_note_file_ops").get() as { c: number }).c;
+    db2.close();
+    expect(c).toBe(0);
+  });
+
+  it("promote 幂等：目标已是新内容 → 恢复重跑不破坏", () => {
+    const { item, body } = makeItem("幂等测试");
+    quickNotes.importRemoteQuickNote(item, body, []); // promote 已完成
+    const itemPath = path.join(root, "quick-notes", "items", `${item.id}.qnote`);
+    const originalBody = fs.readFileSync(itemPath);
+    const opId = crypto.randomUUID();
+    const stagingDir = path.join(root, "quick-notes", "staging", `import-${opId}`);
+    fs.mkdirSync(stagingDir, { recursive: true });
+    fs.writeFileSync(path.join(stagingDir, "content.qnote"), body);
+    const db = rawQnDb();
+    insertJournal(db, item.id, itemPath, stagingDir, `import-${opId}`, item.contentHash, "db_committed");
+    db.close();
+    new QuickNotesStore(root);
+    expect(fs.readFileSync(itemPath).toString()).toBe(originalBody.toString()); // 未破坏
   });
 });
