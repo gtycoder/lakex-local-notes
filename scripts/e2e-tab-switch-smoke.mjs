@@ -21,6 +21,9 @@ async function evaluate(expression) {
   return result.result?.result?.value;
 }
 async function wait(ms) { await new Promise((resolve) => setTimeout(resolve, ms)); }
+async function key(type, keyValue, code, modifiers = 0) {
+  await send("Input.dispatchKeyEvent", { type, key: keyValue, code, modifiers, windowsVirtualKeyCode: keyValue.length === 1 ? keyValue.charCodeAt(0) : undefined });
+}
 async function waitFor(expression, timeout = 12_000) {
   const started = Date.now();
   while (Date.now() - started < timeout) {
@@ -33,8 +36,21 @@ await send("Runtime.enable");
 await send("Page.enable");
 await send("Page.bringToFront");
 await waitFor('document.readyState === "complete" && Boolean(window.lakeNative)');
-await evaluate(`(()=>{ const input=document.querySelector('.search-box input'); if(!input)return false; const setter=Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set; setter.call(input,''); input.dispatchEvent(new Event('input',{bubbles:true})); input.dispatchEvent(new Event('change',{bubbles:true})); return true; })()`);
-await wait(200);
+const searchInput = await evaluate(`document.querySelector('.search-box input')?.getBoundingClientRect()?.toJSON()`);
+if (searchInput) {
+  const x = searchInput.x + searchInput.width / 2;
+  const y = searchInput.y + searchInput.height / 2;
+  await send("Input.dispatchMouseEvent", { type: "mouseMoved", x, y });
+  await send("Input.dispatchMouseEvent", { type: "mousePressed", x, y, button: "left", clickCount: 1 });
+  await send("Input.dispatchMouseEvent", { type: "mouseReleased", x, y, button: "left", clickCount: 1 });
+  await key("keyDown", "a", "KeyA", 4);
+  await key("keyUp", "a", "KeyA", 4);
+  await key("keyDown", "Backspace", "Backspace");
+  await key("keyUp", "Backspace", "Backspace");
+}
+await wait(300);
+await evaluate(`(()=>{ document.querySelectorAll('[data-tree-node-id].type-notebook, [data-tree-node-id].type-group').forEach((row)=>{ if(!row.querySelector('.tree-chevron.open')) row.click(); }); return true; })()`);
+await wait(300);
 if (!(await evaluate('document.querySelectorAll("[data-tree-node-id].type-note").length >= 2'))) {
   const activity = await evaluate('document.querySelectorAll(".activity-button")[0]?.getBoundingClientRect()?.toJSON()');
   if (activity) {
