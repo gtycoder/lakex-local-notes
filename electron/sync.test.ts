@@ -185,6 +185,11 @@ class FakeStore {
   folders = new Map<string, { id: string; title: string; parentId: string | null; sortOrder: number; nodeType: "notebook" | "group"; icon: string | null; updatedAt: string }>();
   listFoldersForSync() { return [...this.folders.values()]; }
   importRemoteFolder(folder: { id: string; title: string; parentId: string | null; sortOrder: number; nodeType: "notebook" | "group"; icon: string | null; updatedAt: string }) { this.folders.set(folder.id, folder); }
+  markFolderSynced(id: string, expectedUpdatedAt: string) {
+    const f = this.folders.get(id);
+    if (!f || f.updatedAt !== expectedUpdatedAt) return false;
+    return true;
+  }
   defaultNotebookId() { return "notebook-personal"; }
   hasTreeNode(id: string) { return id === "notebook-personal" || this.folders.has(id) || this.notes.has(id); }
   applyRemoteNoteMeta(note: { id: string; title: string; parentId: string | null; sortOrder: number; updatedAt: string; isConflict: boolean; trashedAt?: string | null; deletedFromParentId?: string | null; icon?: string | null }) {
@@ -251,6 +256,15 @@ class FakeStore {
       this.pendingSync.delete(id); this.restorePending.delete(id);
       const n = this.notes.get(id); if (n) { n.syncState = "synced"; this.lastSyncedMetaAtMap.set(id, n.updatedAt); }
     }
+  }
+  /** V5 §5.2 简化模拟：仅以 updatedAt 为条件（FakeStore 无真实磁盘正文/元数据一致性，够覆盖同步测试场景） */
+  markSyncedIfUnchanged(id: string, expected: { contentHash: string; updatedAt: string; title: string; parentId: string | null; sortOrder: number; isLocked: boolean; lockedAt: string | null; icon: string | null }) {
+    const n = this.notes.get(id);
+    if (!n || n.updatedAt !== expected.updatedAt) return false;
+    n.syncState = "synced";
+    this.pendingSync.delete(id); this.restorePending.delete(id);
+    this.lastSyncedMetaAtMap.set(id, n.updatedAt);
+    return true;
   }
   isSyncPending(id: string) { return this.pendingSync.has(id); }
   markLocal(id: string) { this.pendingSync.add(id); }

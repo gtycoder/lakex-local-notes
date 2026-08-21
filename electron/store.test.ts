@@ -1278,3 +1278,75 @@ describe("同步待处理摘要", () => {
     expect(store.getSyncPendingSummary().documents).toBeGreaterThanOrEqual(beforeDelete);
   });
 });
+// ===== R1/R2 红测试（V5 §4，Phase -1 测试护栏；修复前应失败） =====
+
+describe("R1：零变更早退 group-only 判定（红测试：现状 hasLocalPendingNotes 只查 notes，漏检 group）", () => {
+  /** 基线：把全部笔记与目录置 synced，模拟「已同步完成」状态。
+   * 注意：个人笔记本初始化就是 local（store.ts:335），新 group 查询会命中它——
+   * 这恰好证明 markFolderSynced 归位是必配项；基线用 listFoldersForSync + markFolderSynced 归位。 */
+  function syncedBaseline() {
+    for (const n of store.listNotesForSync()) store.markSynced(n.id);
+    for (const f of store.listFoldersForSync()) store.markFolderSynced(f.id, f.updatedAt);
+    expect(store.hasLocalPendingNotes()).toBe(false); // 基线确认
+  }
+
+  it("纯 group 改名后 hasLocalPendingNotes() 应为 true（现状返回 false → 漏检）", () => {
+    syncedBaseline();
+    const nb = store.listTreeNodes().find((n) => n.nodeType === "notebook")!;
+    const group = store.createGroup(nb.id, "项目A");
+    // 纯目录改动：renameTreeNode 只写 tree_nodes.sync_state='local'，notes 侧是空更新（group 无 note_file_id）
+    store.renameTreeNode(group.id, "项目B");
+    expect(store.hasLocalPendingNotes()).toBe(true);
+  });
+
+  it("纯 group 图标变化后 hasLocalPendingNotes() 应为 true（现状返回 false → 漏检）", () => {
+    syncedBaseline();
+    const nb = store.listTreeNodes().find((n) => n.nodeType === "notebook")!;
+    const group = store.createGroup(nb.id, "项目A");
+    store.setNodeIcon(group.id, "🚀");
+    expect(store.hasLocalPendingNotes()).toBe(true);
+  });
+});
+
+describe("R2：本地同步快照保护（V5 §5.2，markSyncedIfUnchanged）", () => {
+  function snapshotOf(noteId: string): {
+    contentHash: string; updatedAt: string; title: string; parentId: string | null;
+    sortOrder: number; isLocked: boolean; lockedAt: string | null; icon: string | null;
+  } {
+    const n = store.listNotesForSync().find((x) => x.id === noteId)!;
+    return {
+      contentHash: store.contentHash(noteId), updatedAt: n.updatedAt, title: n.title,
+      parentId: n.parentId, sortOrder: n.sortOrder, isLocked: !!n.isLocked,
+      lockedAt: n.lockedAt ?? null, icon: n.icon ?? null,
+    };
+  }
+
+  it("上传期间编辑正文 → 不标 synced、保持 local 下轮重传", async () => {
+    const note = store.createNote("竞态笔记");
+    store.saveNote(note.id, "竞态笔记", "<p>v1</p>");
+    const snapshot = snapshotOf(note.id); // 同步开始快照
+    await new Promise((r) => setTimeout(r, 5)); // 推进时间避免同毫秒 updated_at 撞车
+    store.saveNote(note.id, "竞态笔记改", "<p>v2</p>"); // 上传期间编辑
+    const ok = store.markSyncedIfUnchanged(note.id, snapshot);
+    expect(ok).toBe(false);
+    expect(store.listNotesForSync().find((n) => n.id === note.id)!.syncState).toBe("local");
+  });
+
+  it("上传期间改标题 → 不标 synced", async () => {
+    const note = store.createNote("标题竞态");
+    store.saveNote(note.id, "标题竞态", "<p>v1</p>");
+    const snapshot = snapshotOf(note.id);
+    await new Promise((r) => setTimeout(r, 5));
+    store.renameTreeNode(note.id, "标题改了"); // meta 编辑
+    expect(store.markSyncedIfUnchanged(note.id, snapshot)).toBe(false);
+    expect(store.listNotesForSync().find((n) => n.id === note.id)!.syncState).toBe("local");
+  });
+
+  it("未编辑 → 标 synced 并归位 tree_nodes", () => {
+    const note = store.createNote("正常笔记");
+    store.saveNote(note.id, "正常笔记", "<p>v1</p>");
+    const snapshot = snapshotOf(note.id);
+    expect(store.markSyncedIfUnchanged(note.id, snapshot)).toBe(true);
+    expect(store.listNotesForSync().find((n) => n.id === note.id)!.syncState).toBe("synced");
+  });
+});

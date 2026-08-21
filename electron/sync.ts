@@ -18,6 +18,27 @@ import { log } from "./logger.js";
 import { ASSET_TRANSFER_CONCURRENCY, runPool } from "./asyncPool.js";
 import { mergeLockState } from "./syncDecision.js";
 
+/** V5 §5.2：构造 markSyncedIfUnchanged 快照——「对账/上传后本地应为的状态」。
+ * - metaApplied：远端 meta 已应用（applyRemoteNoteMeta 写入了 rn 的值）→ 用远端；否则本地原值
+ * - 锁：始终以 mergeLockState 合并后的值为准（applyRemoteLock/setNoteLocked 不改 updated_at，
+ *   锁变更只能靠 metadata 字段比对检测，不能用 updated_at 条件覆盖） */
+function syncSnapshot(local: {
+  title: string; parentId: string | null; sortOrder: number; updatedAt: string;
+  isLocked?: boolean; lockedAt?: string | null; icon?: string | null;
+}, localHash: string, rn: ManifestNote, metaApplied: boolean, effectiveParent: string | null) {
+  const merged = mergeLockState(!!local.isLocked, local.lockedAt ?? null, !!rn.isLocked, rn.lockedAt ?? null);
+  return {
+    contentHash: localHash,
+    updatedAt: metaApplied ? rn.updatedAt : local.updatedAt,
+    title: metaApplied ? rn.title : local.title,
+    parentId: metaApplied ? effectiveParent : local.parentId,
+    sortOrder: metaApplied ? rn.sortOrder : local.sortOrder,
+    isLocked: merged.locked,
+    lockedAt: merged.at,
+    icon: metaApplied ? (rn.icon ?? null) : (local.icon ?? null),
+  };
+}
+
 // ===== 类型 =====
 export interface S3Settings {
   endpoint: string; region: string; bucket: string; prefix: string;
@@ -492,7 +513,7 @@ export async function syncNow(store: Store, onProgress?: (p: SyncProgress) => vo
           }
         }
         store.setBaseHash(rn.id, rn.contentHash);
-        store.markSynced(rn.id);
+        store.markSyncedIfUnchanged(rn.id, syncSnapshot(local!, localHash, rn, metaApplied, effectiveParent));
         log.sync.info(`[perf] download ${rn.id} unchanged (meta LWW) ${Date.now() - noteStart}ms`);
         continue;
       }
@@ -536,14 +557,14 @@ export async function syncNow(store: Store, onProgress?: (p: SyncProgress) => vo
           }
         }
         store.setBaseHash(rn.id, rn.contentHash);
-        store.markSynced(rn.id);
+        store.markSyncedIfUnchanged(rn.id, syncSnapshot(local!, localHash, rn, false, effectiveParent));
         continue;
       } else if (uploadedByUs && local!.parentId !== TRASH_NOTEBOOK_ID) {
         // 远端是本机传的 + 本地有变化（恢复/新编辑）→ 本地为准，上传覆盖（不产生冲突副本）。
         // 排除回收站条目：A 删除、B 离线编辑时（删除压编辑），B 的编辑不得溜进回收站内容
         // （B 可能把 A 的版本原样回推过导致 lastUploadedHash==远端，但回收站内容应以 A 删除的那版为准）。
         store.setBaseHash(rn.id, localHash!);
-        store.markSynced(rn.id);
+        store.markSyncedIfUnchanged(rn.id, syncSnapshot(local!, localHash!, rn, false, effectiveParent));
         continue;
       } else if (!remoteChanged && localChanged && local!.parentId !== TRASH_NOTEBOOK_ID) {
         // 统一冲突语义（先同步者胜）：远端 == 本设备已确认基线（B 已同步过 A 的版本），
@@ -552,7 +573,7 @@ export async function syncNow(store: Store, onProgress?: (p: SyncProgress) => vo
         // 排除回收站条目：A 删除、B 离线编辑时（删除压编辑），本地编辑不得溜进回收站内容——
         // 回收站内容应以 A 删除的那版为准（B 的编辑已由 trash-cross 分支强制留档进历史）。
         store.setBaseHash(rn.id, localHash!);
-        store.markSynced(rn.id);
+        store.markSyncedIfUnchanged(rn.id, syncSnapshot(local!, localHash!, rn, false, effectiveParent));
         continue;
       } else if (localChanged) {
         // 远端是其他设备改的（或本机从未上传过该文档）→ 接受远端最新，
@@ -775,7 +796,18 @@ export async function syncNow(store: Store, onProgress?: (p: SyncProgress) => vo
     if (note.deleted) continue;
     store.setLastUploadedHash(note.id, note.contentHash);
     store.setBaseHash(note.id, note.contentHash);
-    store.markSynced(note.id);
+    // V5 §5.2：快照 = 上传循环现算的 hash + manifest note 字段；同步期间编辑 → 不标，下轮重传
+    store.markSyncedIfUnchanged(note.id, {
+      contentHash: note.contentHash,
+      updatedAt: note.updatedAt,
+      title: note.title, parentId: note.parentId, sortOrder: note.sortOrder,
+      isLocked: !!note.isLocked, lockedAt: note.lockedAt ?? null, icon: note.icon ?? null,
+    });
+  }
+  // V5 §5.1：folder 条件归位（latest 已发布成功后；用构建 manifest 时的 updatedAt 快照，
+  // 同步期间本地再改 group 则 updated_at 变化 → 不归位，保持 local 下轮重传）。
+  for (const f of manifestFolders) {
+    store.markFolderSynced(f.id, f.updatedAt);
   }
 
   // 4.5 标记回收 + 撤销（v4 差集模型：只标记，不立即删）

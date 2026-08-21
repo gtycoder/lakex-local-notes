@@ -1481,6 +1481,38 @@ export class Store {
     this.noteMetadata.applyRemoteLock(id, locked, lockedAt);
   }
 
+  /** 本地同步快照保护（V5 §5.2）：上传/对账结束后，仅当本地状态与快照一致才标记 synced。
+   * - 事务外重读磁盘正文 hash（覆盖「上传全程的正文编辑」）；
+   * - 事务内重读 metadata 比对（覆盖 title/parent/sort/lock/icon——锁变更不改 updated_at，必须比对字段）；
+   * - 条件更新 updated_at（meta 编辑最后防线；changes=0 → 快照后又有编辑 → 不标）。
+   * 任一不一致 → 保持 sync_state='local'，下次同步重传。
+   * 这是单设备内快照比对，不是分布式 CAS；updated_at 无严格单调，同毫秒残留后果=延迟非丢失。 */
+  markSyncedIfUnchanged(noteId: string, expected: {
+    contentHash: string; updatedAt: string; title: string; parentId: string | null;
+    sortOrder: number; isLocked: boolean; lockedAt: string | null; icon: string | null;
+  }): boolean {
+    // 1) 事务外：重读磁盘正文 hash（正文在 .lake 文件，DB 事务管不到磁盘）
+    if (this.contentHash(noteId) !== expected.contentHash) return false;
+    return this.db.transaction(() => {
+      // 2) metadata 比对（锁变更不改 updated_at，必须显式比对字段）
+      const meta = this.db.prepare(
+        "SELECT n.title,n.parent_id,n.sort_order,n.is_locked,n.locked_at,t.icon FROM notes n LEFT JOIN tree_nodes t ON t.note_file_id=n.id WHERE n.id=? AND n.deleted_at IS NULL"
+      ).get(noteId) as { title: string; parent_id: string | null; sort_order: number; is_locked: number; locked_at: string | null; icon: string | null } | undefined;
+      if (!meta) return false;
+      if (meta.title !== expected.title || meta.parent_id !== expected.parentId || meta.sort_order !== expected.sortOrder ||
+          !!meta.is_locked !== expected.isLocked || (meta.locked_at ?? null) !== expected.lockedAt || (meta.icon ?? null) !== expected.icon) return false;
+      // 3) 条件更新（快照后 meta 编辑的最后防线）
+      const info = this.db.prepare(
+        "UPDATE notes SET sync_state='synced', restore_pending_at=NULL WHERE id=? AND updated_at=?"
+      ).run(noteId, expected.updatedAt);
+      if (info.changes === 0) return false;
+      // 4) 归位 + 记录元数据已确认版本（与原 markSynced 语义一致）
+      this.db.prepare("UPDATE tree_nodes SET sync_state='synced' WHERE note_file_id=?").run(noteId);
+      this.db.prepare("UPDATE sync_base SET last_synced_meta_at=? WHERE note_id=?").run(expected.updatedAt, noteId);
+      return true;
+    })();
+  }
+
   markSynced(id: string): void {
     const tx = this.db.transaction(() => {
       // restore_pending_at 一并清除：任何"变为 synced"的路径都代表恢复已生效或被远端采纳，
@@ -1496,6 +1528,17 @@ export class Store {
       ).run(id, id);
     });
     tx();
+  }
+
+  /** 目录/分组归位（V5 §5.1）：folder 无独立对象上传（只进 manifest.folders），
+   * latest 发布成功后按构建 manifest 时的 updatedAt 快照条件归位，
+   * 防同步期间本地再改 group 被误标（与 markSyncedIfUnchanged 同构）。
+   * 只作用于无 note_file_id 的 group/notebook 节点；返回是否归位成功。 */
+  markFolderSynced(id: string, expectedUpdatedAt: string): boolean {
+    const info = this.db.prepare(
+      "UPDATE tree_nodes SET sync_state='synced' WHERE id=? AND updated_at=? AND note_file_id IS NULL"
+    ).run(id, expectedUpdatedAt);
+    return info.changes > 0;
   }
 
   /** 是否处于"回收站恢复后待同步"状态（显式恢复标记）。
@@ -1779,10 +1822,16 @@ export class Store {
     return { documents: pendingRows.length + tombstones, resources, generatedAt: nowIso() };
   }
 
-  /** 是否有本地待上传变更（早退判定）：任何 notes 非 synced（含锁/元数据变更）。 */
+  /** 是否有本地待上传变更（早退判定）：notes 非 synced（含锁/元数据变更）或纯目录/分组改动（V5 §5.1）。
+   * group/notebook 节点无 note_file_id，rename/icon/reorder 只写 tree_nodes；
+   * 排除回收站笔记本：固定节点不进 manifest.folders（listFoldersForSync 排除），其 local 状态不应阻塞早退。 */
   hasLocalPendingNotes(): boolean {
-    const row = this.db.prepare("SELECT 1 FROM notes WHERE sync_state != 'synced' AND deleted_at IS NULL LIMIT 1").get();
-    return !!row;
+    const noteRow = this.db.prepare("SELECT 1 FROM notes WHERE sync_state != 'synced' AND deleted_at IS NULL LIMIT 1").get();
+    if (noteRow) return true;
+    const groupRow = this.db.prepare(
+      "SELECT 1 FROM tree_nodes WHERE sync_state != 'synced' AND note_file_id IS NULL AND id != ? LIMIT 1"
+    ).get(TRASH_NOTEBOOK_ID);
+    return !!groupRow;
   }
 
   /** 批量读取同步基线信息（一次性取回，替代逐条 lastSyncedMetaAt 查询 + 支撑记账去重）。 */
