@@ -15,6 +15,8 @@ export interface HistorySnapshotSummary {
 
 export interface HistorySnapshotPreview {
   plain: string;
+  /** Lake 原文 HTML（viewer 渲染预览用，保留图片/代码块/公式等样式） */
+  html: string;
   createdAt: string;
   contentHash: string;
 }
@@ -57,7 +59,7 @@ export class HistoryRepository {
     if (!row) return null;
     try {
       const body = zlib.gunzipSync(fs.readFileSync(path.join(this.root, row.file_path))).toString("utf8");
-      return { plain: lakeHtmlToPlain(body), createdAt: row.created_at, contentHash: row.content_hash };
+      return { plain: lakeHtmlToPlain(body), html: body, createdAt: row.created_at, contentHash: row.content_hash };
     } catch {
       return null;
     }

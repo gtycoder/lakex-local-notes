@@ -13,7 +13,7 @@ import { extractAssetRefs, isSafePathSegment, sanitizeFileName, selectHistoryDro
 import { readNoteDigest, type NoteDigest } from "./storeQueries.js";
 import { SearchRepository, type SearchResult } from "./searchRepository.js";
 import { HistoryRepository, type HistorySnapshotPreview, type HistorySnapshotSummary } from "./historyRepository.js";
-import { TrashRepository, type TrashItem, type TrashReminderItem } from "./trashRepository.js";
+import { TrashRepository, type TrashItem, type TrashReminderItem } from "../src/core/trashRepository.js";
 import { AssetRepository, type OrphanAsset, type OrphanAssetRow } from "./assetRepository.js";
 import { NoteQueries, type NoteSummary, type SummaryRow, type SyncFolder, type SyncNote, type TreeNode, type TreeNodeRow } from "./noteQueries.js";
 import { NoteMetadataRepository } from "./noteMetadataRepository.js";
@@ -1207,8 +1207,16 @@ export class Store {
    * M4 前缀删除由同步侧按 listPurgedNotesForSync 执行。 */
   purgeTrashItem(id: string): void {
     const t0 = Date.now();
-    const node = this.db.prepare("SELECT * FROM tree_nodes WHERE id=? AND parent_id=? AND deleted_at IS NULL").get(id, TRASH_NOTEBOOK_ID) as
-      { note_file_id: string | null } | undefined;
+    // 回收站树内任意节点可 purge（含嵌套分组/文档子树；根或子树节点均可）。
+    // 校验：节点必须在回收站笔记本子树内（根 = parent_id=trash，子树 = 祖先链含 trash）。
+    const node = this.db.prepare(
+      `WITH RECURSIVE trash_ancestors(id) AS (
+         SELECT ? UNION ALL
+         SELECT t.parent_id FROM tree_nodes t JOIN trash_ancestors ta ON t.id=ta.id
+       )
+       SELECT t.id,t.note_file_id FROM tree_nodes t
+       WHERE t.id=? AND t.deleted_at IS NULL AND (SELECT COUNT(*) FROM trash_ancestors WHERE id=?)>0`
+    ).get(id, id, TRASH_NOTEBOOK_ID) as { id: string; note_file_id: string | null } | undefined;
     if (!node) throw new AppError("NotFound", `回收站节点不存在: ${id}`);
     const ids = this.descendantIdsIncludingDeleted(id);
     const filesToRemove: Array<{ path: string; recursive: boolean }> = [];
@@ -1250,9 +1258,12 @@ export class Store {
     this.logScopes.store.info(`[perf] purge ${id} ${Date.now() - t0}ms (files=${filesToRemove.length})`);
   }
 
-  /** 清空回收站：彻底删除 trash 笔记本的全部直接子节点（各写 purge 墓碑）。 */
+  /** 清空回收站：彻底删除 trash 笔记本的全部根节点（各 purge 连带子树，写 purge 墓碑）。
+   * 只遍历根（parent_id=trash），避免整棵子树重复 purge。 */
   emptyTrash(): void {
-    const items = this.listTrash();
+    const items = this.db.prepare(
+      "SELECT id FROM tree_nodes WHERE parent_id=? AND deleted_at IS NULL"
+    ).all(TRASH_NOTEBOOK_ID) as Array<{ id: string }>;
     for (const item of items) this.purgeTrashItem(item.id);
   }
 

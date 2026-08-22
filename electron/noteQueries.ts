@@ -1,3 +1,4 @@
+import { rowToLocalState } from "../src/core/syncDecisions.js";
 import type { DbLike } from "../src/core/dbLike.js";
 
 export interface NoteSummary {
@@ -174,20 +175,8 @@ export class NoteQueries {
        FROM notes n LEFT JOIN tree_nodes t ON t.note_file_id = n.id
        WHERE n.deleted_at IS NULL ORDER BY n.sort_order`
     ).all() as SyncNoteRow[];
-    return rows.map((row) => ({
-      id: row.id,
-      title: row.title,
-      parentId: row.parent_id,
-      sortOrder: row.sort_order,
-      updatedAt: row.updated_at,
-      syncState: row.sync_state,
-      isConflict: !!row.is_conflict,
-      isLocked: !!row.is_locked,
-      lockedAt: row.locked_at ?? null,
-      icon: row.icon ?? null,
-      trashedAt: row.trashed_at ?? null,
-      deletedFromParentId: row.deleted_from_parent_id ?? null,
-    }));
+    // Step B G5：行映射统一走 core rowToLocalState（两端同一映射，避免"同一状态两种解读"）
+    return rows.map((row) => rowToLocalState(row));
   }
 
   listFoldersForSync(): SyncFolder[] {

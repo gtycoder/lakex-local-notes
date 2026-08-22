@@ -1,4 +1,5 @@
 import type { CleanOrphanResult, DeepCleanupResult, DraftJournalEntry, NoteDigest, NoteDocument, OrphanAsset, QuickNoteDocument, QuickNoteImage, QuickNoteTrashItem, ResourceUploadInput, ResourceUploadOutput, S3GcLogItem, S3GcPendingItem, S3GcSettings, S3Settings, SaveQuickNoteInput, SyncProgress, SyncResult, SyncSettings, SyncStatusInfo, TreeNode, WorkspaceSnapshot } from "./types";
+import type { TrashItem } from "../core/trashRepository";
 
 export interface LakeNative {
   /** 本地资源服务器端口（可被 LAKE_ASSET_PORT 覆盖，多端同机双开用）。 */
@@ -31,7 +32,7 @@ export interface LakeNative {
   moveTreeNodeOrdered(id: string, parentId: string | null, orderedIds: string[]): Promise<TreeNode>;
   reorderTreeNodes(parentId: string | null, orderedIds: string[]): Promise<void>;
   deleteTreeNode(id: string): Promise<void>;
-  listTrash(): Promise<Array<{ id: string; title: string; nodeType: string; noteFileId: string | null; parentId: string | null; deletedAt: string; updatedAt: string; hasFile: boolean; purged?: boolean }>>;
+  listTrash(): Promise<TrashItem[]>;
   restoreTrash(id: string): Promise<void>;
   purgeTrash(id: string): Promise<void>;
   emptyTrash(): Promise<void>;
@@ -44,7 +45,7 @@ export interface LakeNative {
   saveHistorySettings(settings: { maxSnapshots: number; retentionDays: number; cleanupIntervalHours: number; snapshotIntervalMinutes: number }): Promise<void>;
   getHistoryStats(): Promise<{ snapshotCount: number; totalBytes: number }>;
   listNoteOrphans(noteId: string): Promise<Array<{ filename: string; size: number; mimeType: string; protectedByHistory: boolean }>>;
-  previewHistorySnapshot(historyId: number): Promise<{ plain: string; createdAt: string; contentHash: string } | null>;
+  previewHistorySnapshot(historyId: number): Promise<{ plain: string; html: string; createdAt: string; contentHash: string } | null>;
   previewNoteOrphan(noteId: string, filename: string): Promise<{ kind: "image" | "text"; data: string; size: number } | null>;
   cleanNoteOrphans(noteId: string, filenames?: string[]): Promise<{ count: number; freedBytes: number }>;
   uploadResource(input: ResourceUploadInput, noteId: string): Promise<ResourceUploadOutput>;

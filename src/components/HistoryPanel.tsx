@@ -5,6 +5,8 @@ import { native } from "../lib/native";
 import { createRequestVersion } from "../core/requestVersion";
 import { useFloatingDialog } from "./useFloatingDialog";
 import { getNativeErrorMessage } from "../lib/nativeErrors";
+import { createLakeDocument, destroyLakeEditor, type LakeEditorInstance } from "../features/editor/lakeRuntime";
+import { addAssetAccessToken } from "../lib/assetPort";
 
 export interface HistoryItem {
   id: number; createdAt: string; size: number; contentHash: string; refCount: number; filePath: string;
@@ -35,7 +37,9 @@ export function HistoryPanel({ open, noteId, onClose, onRestored }: {
     imageData?: string;
     size?: number;
   } | null>(null);
-  const [inline, setInline] = useState<{ title: string; text: string; size?: number } | null>(null);
+  const [inline, setInline] = useState<{ title: string; html: string; size?: number } | null>(null);
+  const previewHostRef = useRef<HTMLDivElement>(null);
+  const viewerRef = useRef<LakeEditorInstance | null>(null);
   const floating = useFloatingDialog({ initialSize: { w: 900, h: 640 }, minSize: { w: 680, h: 440 } });
   const dataVersionRef = useRef(createRequestVersion());
   const previewVersionRef = useRef(createRequestVersion());
@@ -155,12 +159,36 @@ export function HistoryPanel({ open, noteId, onClose, onRestored }: {
     try {
       const r = await native.previewHistorySnapshot(h.id);
       if (!previewVersionRef.current.isCurrent(version)) return;
-      if (r) setInline({ title: new Date(h.createdAt).toLocaleString(), text: r.plain, size: h.size });
+      if (r) setInline({ title: new Date(h.createdAt).toLocaleString(), html: r.html, size: h.size });
       else setError("快照预览失败（文件可能已删除）");
     } catch (e) {
       if (previewVersionRef.current.isCurrent(version)) setError(getNativeErrorMessage(e));
     }
   };
+
+  // 选中的历史快照 → Lake viewer 渲染（完整样式；只读，不创建编辑器对象）
+  useEffect(() => {
+    const host = previewHostRef.current;
+    if (!host || !inline || !noteId) {
+      if (viewerRef.current) { destroyLakeEditor(viewerRef.current); viewerRef.current = null; }
+      return;
+    }
+    let disposed = false;
+    let viewer: LakeEditorInstance | null = null;
+    try {
+      viewer = createLakeDocument(host, "viewer", () => {}, false, noteId, host, { disableNativeToc: true });
+      viewerRef.current = viewer;
+      viewer.setDocument("text/lake", addAssetAccessToken(inline.html));
+      viewer.requestCardHydration?.();
+    } catch (e) {
+      if (!disposed) setError(getNativeErrorMessage(e));
+    }
+    return () => {
+      disposed = true;
+      if (viewer) { try { destroyLakeEditor(viewer); } catch { /* ignore */ } }
+      if (viewerRef.current === viewer) viewerRef.current = null;
+    };
+  }, [inline?.title, noteId]);
 
   const previewOrphanFile = async (o: NoteOrphan) => {
     if (!noteId) return;
@@ -232,7 +260,7 @@ export function HistoryPanel({ open, noteId, onClose, onRestored }: {
               {inline ? (
                 <>
                   <div className="history-preview-inline-title">{inline.title}{inline.size !== undefined ? ` · ${(inline.size / 1024).toFixed(1)} KB` : ""}</div>
-                  <pre className="history-preview-text">{inline.text}</pre>
+                  <div className="history-preview-viewer" ref={previewHostRef} />
                 </>
               ) : (
                 <div className="history-empty">选择左侧快照查看内容</div>

@@ -52,8 +52,8 @@ function quickNoteToDto(item: {
   };
 }
 
-function trashItemToDto(item: { id: string; title: string; deletedAt: string }): TrashItemDto {
-  return { id: item.id, title: item.title, deletedAt: item.deletedAt };
+function trashItemToDto(item: { id: string; title: string; deletedAt: string | null }): TrashItemDto {
+  return { id: item.id, title: item.title, deletedAt: item.deletedAt ?? "" };
 }
 
 function assetToDto(asset: { url: string; filename: string; mimeType: string; size: number }): UploadedAssetDto {

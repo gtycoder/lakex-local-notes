@@ -197,3 +197,27 @@ Step A（14 函数，含 objectKey）→ Step B（6 判定 + G1 条目 + G2 记�
 - H3 assets 进端口契约（与图片方案 lake-asset/blob 联动，待图片方案落地）
 - H4 folders 导入/发布（移动端）
 - G3 superseded 移动端历史表
+
+## 11. 双端 AB 真实验证通过（2026-08-22）
+
+**方式**：两个真实 Electron 实例（A=dev userData/19876/9222，B=$TMPDIR/lake-device-b/19877/9223）+ 真实七牛 S3（独立前缀 ab-test-verify）+ CDP 驱动 + DB 断言。
+
+| 场景 | 结果 |
+|---|---|
+| A 新建 → A 同步 → B 同步 → **B 数据库拉到**（元数据+正文） | ✅ |
+| A 删除（右键+确认）→ A 同步 → B 同步 → **B 数据库进回收站**（删除传播） | ✅ |
+
+**验证意义**：重构后（语义载体在 core、执行在各自端）的真实双设备同步语义正确——与集成测试（6 场景 mock S3）互为印证。
+
+**脚本**：`scripts/ab-verify.sh`（vite preview + 双实例 + 配置注入 + 清理）+ `scripts/ab-verify.mjs`（CDP 驱动 + DB 断言）。
+
+**环境踩坑（record）**：
+1. vite dev server 被 exec 会话回收（无 tty）→ 用 `vite preview`（静态服务 dist，无 electron 插件）规避
+2. electron bin 缺失（allow-scripts）→ 从主仓库复制 `dist/Electron.app`
+3. S3 配置注入必须**在 electron 启动前**（清数据后重注入；App 读 DB settings）
+4. "新建文档"在未选笔记本时 disabled → 先点笔记本
+5. 删除有确认对话框（`.confirm-dialog .danger-button`）
+6. 同步是后台异步 → 需等完成后才进行下一步（避免 B 拉旧 manifest 的时序竞态）
+7. manifest 是 gzip → 云端检查需解压
+
+**清理**：ab-test-* 测试前缀 22 对象已删；lake-notes 生产前缀未动；dev 数据已清空重建。

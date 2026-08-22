@@ -125,7 +125,11 @@ export class NoteMetadataRepository {
     }
     this.deps.assertParentCompatible(parentId, moving.nodeType);
     const children = this.childrenOf(parentId);
-    this.validateOrder(orderedIds, children);
+    // 跨父移动：目标父节点的现有子列表 children 尚不含被移动的 id，
+    // 前端 orderedIds = 目标父现有子节点（排除 id）+ 插入位置的 id。
+    // 校验允许集合 = children ∪ {id}（同父重排时 id 已在 children 内，等价于原校验）。
+    const allowed = children.includes(id) ? children : [...children, id];
+    this.validateOrder(orderedIds, allowed);
     const now = this.deps.nowIso();
     const transaction = this.db.transaction(() => {
       this.db.prepare("UPDATE tree_nodes SET parent_id=?,sort_order=?,updated_at=?,sync_state='local' WHERE id=? AND deleted_at IS NULL")
