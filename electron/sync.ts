@@ -13,7 +13,6 @@ import {
   DeleteObjectCommand,
   DeleteObjectsCommand,
 } from "@aws-sdk/client-s3";
-import { TRASH_NOTEBOOK_ID } from "./store.js";
 import type { Store } from "./store.js";
 import { createSilentLoggerScopes, type LoggerScopes } from "../src/core/logger.js";
 import { ASSET_TRANSFER_CONCURRENCY, runPool } from "./asyncPool.js";
@@ -33,7 +32,7 @@ import { MAX_IMAGE_BYTES } from "./storeLimits.js";
 import { isSafePathSegment as isSafeSegment } from "../src/core/storeUtils.js";
 import { decidePurge, decideLocalTombstone, decideTrashCross, decideMetaApply,
   decideTrashYield, decideTombstoneYield, buildUploadEntry, buildTombstoneEntry, computeBookkeeping,
-  TRASH_NOTEBOOK_ID as TRASH_NOTEBOOK_ID_CORE } from "../src/core/syncDecisions.js";
+  TRASH_NOTEBOOK_ID } from "../src/core/syncDecisions.js";
 
 // ===== 类型 =====
 // Manifest 系列类型已外移至 src/core/manifestTypes.ts（lake-core，V5 Phase 1）。
@@ -283,13 +282,17 @@ export async function testConnection(store: Store): Promise<string> {
   return "连接成功，Bucket 可访问";
 }
 
-export async function syncNow(store: Store, onProgress?: (p: SyncProgress) => void): Promise<SyncResult> {
+export async function syncNow(
+  store: Store,
+  onProgress?: (p: SyncProgress) => void,
+  createRemote: (settings: S3Settings, logScopes: LoggerScopes) => ObjectStore = (s, l) => new ObjectStore(s, l),
+): Promise<SyncResult> {
   const syncStart = Date.now();
   store.logScopes.sync.info("[perf] syncNow start");
   const settings = store.getS3Settings();
   if (!settings) throw new Error("请先保存 S3 配置");
   validateS3Settings(settings);
-  const remote = new ObjectStore(settings, store.logScopes);
+  const remote = createRemote(settings, store.logScopes);
   const report = (p: SyncProgress) => { try { onProgress?.(p); } catch { /* 渲染层已关闭 */ } };
   report({ phase: "connect", message: "正在连接 S3..." });
   const connectStart = Date.now();
