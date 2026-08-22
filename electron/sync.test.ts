@@ -615,7 +615,7 @@ describe("syncNow 增量同步", () => {
     expect(r.supersededNotes.some((n) => n.id === "n1")).toBe(true);
   });
 
-  it("本地已同步（相对基线无改动）但远端被其他设备改 → 接受远端，当前版本也强制留档 + superseded", async () => {
+  it("本地已同步（相对基线无改动）但远端被其他设备改 → 接受远端，正常更新不留档（superseded=false）", async () => {
     const store = newStore();
     store.createNote("n1", "笔记A", "<p>v1</p>");
     await syncNow(store as unknown as Store);
@@ -633,10 +633,11 @@ describe("syncNow 增量同步", () => {
     // 接受远端最新：本地文件被 v2 remote 覆盖
     expect(fs.readFileSync(store.notePathFor("n1"), "utf8")).toBe("<p>v2 remote</p>");
     expect(store.baseHash("n1")).toBe(remoteHash);
-    // 关键：即使本地相对基线无改动（A 上传后未再编辑），被覆盖前也必须留档 + 提示 superseded，
-    // 否则 A 的当前版本（v1）被静默丢弃（A/B 联调发现：恢复快照→他端同步覆盖→本地丢改动）
-    expect(store.historySnapshots).toContain("n1");
-    expect(r.supersededNotes.some((n) => n.id === "n1")).toBe(true);
+    // 2026-08-22 修正（双端联调发现原逻辑缺陷）：本地相对基线无改动（无私有编辑）→ 正常同步更新，
+    // 不强制留档/不报 superseded（协议 §4.2 留档针对"本地编辑被覆盖"；此场景本地仅跟随他端更新）。
+    // 原逻辑 superseded: localHash !== null（过度保护）已修正为 false。
+    expect(store.historySnapshots).not.toContain("n1");
+    expect(r.supersededNotes.some((n) => n.id === "n1")).toBe(false);
   });
 
   it("远端是本机传的 → 本地为准，上传覆盖（P0-1 既定方案）", async () => {

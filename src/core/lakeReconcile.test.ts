@@ -46,14 +46,14 @@ const cases: Array<{ name: string; input: Parameters<typeof reconcileLakeNote>[0
     expect: { kind: "remote-wins", superseded: false, isConflictFromRemote: true },
   },
   {
-    name: "本地未编辑（localHash==base，本地行存在）→ remote-wins(superseded)",
+    name: "本地未编辑（localHash==base，本地行存在）→ remote-wins(非 superseded，无私有编辑不留档)",
     input: { baseHash: "A", localHash: "A", remoteHash: "C", lastUploadedHash: "A", localInTrash: false },
-    expect: { kind: "remote-wins", superseded: true, isConflictFromRemote: true },
+    expect: { kind: "remote-wins", superseded: false, isConflictFromRemote: true },
   },
   {
-    name: "本地在回收站且未编辑（本地行存在）→ remote-wins(superseded)",
+    name: "本地在回收站且未编辑（本地行存在）→ remote-wins(非 superseded)",
     input: { baseHash: "A", localHash: "A", remoteHash: "C", lastUploadedHash: "A", localInTrash: true },
-    expect: { kind: "remote-wins", superseded: true, isConflictFromRemote: true },
+    expect: { kind: "remote-wins", superseded: false, isConflictFromRemote: true },
   },
 ];
 

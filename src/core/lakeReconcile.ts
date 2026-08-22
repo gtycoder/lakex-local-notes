@@ -47,5 +47,8 @@ export function reconcileLakeNote(input: LakeReconcileInput): LakeReconcileActio
     return { kind: "remote-wins", superseded: true, isConflictFromRemote: false };
   }
   // 本地相对基线无变化（或本地无此笔记）且远端是其他设备改的 → 接受远端。
-  return { kind: "remote-wins", superseded: localHash !== null, isConflictFromRemote: true };
+  // superseded 语义 = 「本地编辑被远端覆盖才强制留档」（协议 §4.2）：
+  // localChanged=false 时本地无私有编辑，被覆盖的只是已确认的基线版本（云端/他处仍有），无需留档。
+  // （修复：B 无改动仅同步 A 的更新时不再误存快照——2026-08-22 双端验证发现）
+  return { kind: "remote-wins", superseded: false, isConflictFromRemote: true };
 }

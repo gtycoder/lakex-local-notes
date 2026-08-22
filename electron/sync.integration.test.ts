@@ -159,6 +159,27 @@ describe("双设备同步（Step A/B 拆分后语义验证）", () => {
     } finally { cleanup([A, B]); }
   });
 
+  it("B 无改动接受 A 更新：正常同步更新，不留档不报 superseded（修正原逻辑缺陷 2026-08-22）", async () => {
+    const s3 = new MockS3();
+    const remote = (s: S3Settings, l: LoggerScopes) => s3 as unknown as ObjectStore;
+    const A = makeDevice();
+    const B = makeDevice();
+    try {
+      const note = A.store.createNote("原始");
+      await syncNow(A.store, undefined, remote);
+      await syncNow(B.store, undefined, remote); // B 拉到 v1（无编辑）
+      // A 更新 v2
+      A.store.saveNote(note.id, "A 更新后", "<p>v2 内容</p>");
+      await syncNow(A.store, undefined, remote);
+      // B 同步接受 v2（B 本地无编辑，仅跟随）
+      const resultB = await syncNow(B.store, undefined, remote);
+      // 修正：B 无私有编辑 → 不存快照、不报 superseded（原逻辑 localHash!==null 误报）
+      expect(resultB.supersededNotes.some((n) => n.id === note.id)).toBe(false);
+      // B 内容已更新为 v2
+      expect(B.store.readNote(note.id).content).toBe("<p>v2 内容</p>");
+    } finally { cleanup([A, B]); }
+  });
+
   it("墓碑学习：B 离线时 A 删除 → B 上线同步不复活删除（防复活）", async () => {
     const s3 = new MockS3();
     const remote = (s: S3Settings, l: LoggerScopes) => s3 as unknown as ObjectStore;
