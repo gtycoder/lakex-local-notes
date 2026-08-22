@@ -517,6 +517,11 @@ export async function syncNow(
         localHash,
         remoteHash: rn.contentHash,
         lastUploadedHash: local !== null ? store.lastUploadedHash(rn.id) : null,
+        // 时间维度（先同步者胜，与元数据 LWW 同构）：远端 updatedAt vs 本设备已确认版本
+        // lastSyncedMetaAt——其他设备回滚/恢复历史会重新上传同 hash 但 updatedAt 更新的版本，
+        // 仅凭 hash 会误判"本机传的"（2026-08-22 二修）。
+        remoteUpdatedAt: rn.updatedAt,
+        lastSyncedMetaAt: baseInfo.get(rn.id)?.lastSyncedMetaAt ?? null,
         localInTrash: local !== null && local.parentId === TRASH_NOTEBOOK_ID,
       });
       if (action.kind === "local-wins") {
@@ -567,6 +572,10 @@ export async function syncNow(
   const remoteNotesById = new Map((remoteManifest?.notes ?? []).map((n) => [n.id, n]));
   let uploaded = 0;
   const manifestNotes: ManifestNote[] = [];
+  /** 本机真正发布过内容的笔记 id（skip-fast 纯跟随/镜像的不计入——
+   *  lastUploadedHash 语义 = 本机最后一次上传的 hash，只有本机发布过内容才更新，
+   *  否则下载跟随的版本会被误判为"本机编辑成果"导致误留档）。 */
+  const locallyUploadedIds = new Set<string>();
 
   const uploadStart = Date.now();
   const localTotal = localNotes.length;
@@ -604,6 +613,7 @@ export async function syncNow(
       manifestNotes.push(buildUploadEntry({ note, contentHash: base, assets: entry.assets ?? [], trashedAt: entry.trashedAt ?? null, deletedFromParentId: entry.deletedFromParentId ?? null }));
       continue;
     }
+    locallyUploadedIds.add(note.id);
     const hash = store.contentHash(note.id);
     // 审计 #1：资源清单必须**每次同步都重扫**（正文 hash 未变时也要保留 assets）。
     // §5.1：仅当前正文引用的资源有上传资格；历史引用资源不上传（本地保留，云端 B1 保留）。
@@ -713,9 +723,15 @@ export async function syncNow(
   }
 
   // P0-1 修正：lastUploadedHash 语义 = 已成功发布到 latest 的 hash，必须在 manifest 写成功后再更新。
-  // 仅对 active 笔记更新；deleted 墓碑是占位 contentHash，绝不写入 sync_base/lastUploadedHash（Step B：computeBookkeeping）。
+  // 仅对"本机真正发布过内容"的笔记更新（locallyUploadedIds）；skip-fast 纯跟随/镜像的条目
+  // （本机只是下载了他端的版本、从未上传过）绝不写入 lastUploadedHash——否则他端版本会被误判为
+  // "本机编辑成果"，导致本机无编辑时被覆盖也误留档（2026-08-22 二修：A 上传 A1 后 B 恢复历史
+  // 续编上传 B2，A 接受 B2 时应留档 A1，但 B 端此前 lastUploadedHash 被污染的同类场景会误留档）。
+  // deleted 墓碑是占位 contentHash，绝不写入 sync_base/lastUploadedHash（Step B：computeBookkeeping）。
   for (const item of computeBookkeeping(manifestNotes)) {
-    store.setLastUploadedHash(item.id, item.contentHash);
+    if (locallyUploadedIds.has(item.id)) {
+      store.setLastUploadedHash(item.id, item.contentHash);
+    }
     store.setBaseHash(item.id, item.contentHash);
     // V5 §5.2：快照 = 上传循环现算的 hash + manifest note 字段；同步期间编辑 → 不标，下轮重传
     store.markSyncedIfUnchanged(item.id, item.snapshot);

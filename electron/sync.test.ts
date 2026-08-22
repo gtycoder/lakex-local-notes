@@ -615,11 +615,12 @@ describe("syncNow 增量同步", () => {
     expect(r.supersededNotes.some((n) => n.id === "n1")).toBe(true);
   });
 
-  it("本地已同步（相对基线无改动）但远端被其他设备改 → 接受远端，正常更新不留档（superseded=false）", async () => {
+  it("本地已同步但本机上传过该版本（本机是作者）被其他设备覆盖 → 接受远端 + 强制留档（superseded）", async () => {
     const store = newStore();
     store.createNote("n1", "笔记A", "<p>v1</p>");
     await syncNow(store as unknown as Store);
     // 本机上传 v1：last_uploaded_hash=v1、base=v1；本地此后没有任何编辑（localChanged=false）
+    // 但 v1 是本机编辑成果（lastUploadedHash==localHash）→ 被远端覆盖必须留档（§4.2）
 
     // 远端被其他设备改成 v2 remote（≠ last_uploaded_hash v1 → 非本机传的）
     const remoteHash = sha256("<p>v2 remote</p>");
@@ -633,10 +634,33 @@ describe("syncNow 增量同步", () => {
     // 接受远端最新：本地文件被 v2 remote 覆盖
     expect(fs.readFileSync(store.notePathFor("n1"), "utf8")).toBe("<p>v2 remote</p>");
     expect(store.baseHash("n1")).toBe(remoteHash);
-    // 2026-08-22 修正（双端联调发现原逻辑缺陷）：本地相对基线无改动（无私有编辑）→ 正常同步更新，
-    // 不强制留档/不报 superseded（协议 §4.2 留档针对"本地编辑被覆盖"；此场景本地仅跟随他端更新）。
-    // 原逻辑 superseded: localHash !== null（过度保护）已修正为 false。
-    expect(store.historySnapshots).not.toContain("n1");
+    // 2026-08-22 二修（用户验收发现）：本机上传过该版本（lastUploadedHash==localHash）说明本机是作者，
+    // 被其他设备版本覆盖时必须留档——否则本机历史丢失自己的编辑（A 上传 A1 后 B 恢复历史续编覆盖 A1 的场景）。
+    // 仅"本机从未上传/从未编辑（lastUploadedHash=null）"的纯跟随场景才不留档。
+    expect(store.historySnapshots).toContain("n1");
+    expect(r.supersededNotes.some((n) => n.id === "n1")).toBe(true);
+  });
+
+  it("本地已同步且本机从未上传过该笔记（纯跟随他端更新）→ 接受远端，不留档（superseded=false）", async () => {
+    // A 创建并上传 v1；B 仅下载（从未上传，last_uploaded_hash=null）
+    const storeA = new FakeStore(); storeA.saveS3Settings(SETTINGS);
+    const storeB = new FakeStore(); storeB.saveS3Settings(SETTINGS);
+    storeA.createNote("n1", "笔记A", "<p>v1</p>");
+    await syncNow(storeA as unknown as Store);
+    await syncNow(storeB as unknown as Store);
+    expect(storeB.lastUploadedHash("n1")).toBeNull(); // B 从未上传
+
+    // A 更新为 v2 remote（非 B 上传的）
+    storeA.modifyNote("n1", "<p>v2 remote</p>");
+    await syncNow(storeA as unknown as Store);
+
+    const r = await syncNow(storeB as unknown as Store);
+    expect(r.conflicts).toBe(r.supersededNotes.length);
+    // B 接受远端最新
+    expect(fs.readFileSync(storeB.notePathFor("n1"), "utf8")).toBe("<p>v2 remote</p>");
+    expect(storeB.baseHash("n1")).toBe(storeA.contentHash("n1"));
+    // B 从未上传（无本机编辑成果）→ 正常跟随更新，不留档
+    expect(storeB.historySnapshots).not.toContain("n1");
     expect(r.supersededNotes.some((n) => n.id === "n1")).toBe(false);
   });
 

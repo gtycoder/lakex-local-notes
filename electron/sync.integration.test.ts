@@ -9,10 +9,13 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import zlib from "node:zlib";
+import crypto from "node:crypto";
 import { Store } from "./store.js";
 import { syncNow, type ObjectStore, type S3Settings } from "./sync.js";
 import type { LoggerScopes } from "../src/core/logger.js";
 import { TRASH_NOTEBOOK_ID } from "../src/core/syncDecisions.js";
+
+const sha256 = (s: string) => crypto.createHash("sha256").update(s).digest("hex");
 
 const S3_CFG: S3Settings = {
   endpoint: "https://s3.example.com", region: "cn-north-1", bucket: "test-bucket",
@@ -177,6 +180,42 @@ describe("双设备同步（Step A/B 拆分后语义验证）", () => {
       expect(resultB.supersededNotes.some((n) => n.id === note.id)).toBe(false);
       // B 内容已更新为 v2
       expect(B.store.readNote(note.id).content).toBe("<p>v2 内容</p>");
+    } finally { cleanup([A, B]); }
+  });
+
+  it("A 上传过 A1（本机是作者）后被 B 恢复历史续编版本覆盖 → A 接受 B2 且强制留档（2026-08-22 二修）", async () => {
+    const s3 = new MockS3();
+    const remote = (s: S3Settings, l: LoggerScopes) => s3 as unknown as ObjectStore;
+    const A = makeDevice();
+    const B = makeDevice();
+    try {
+      const note = A.store.createNote("555");
+      await syncNow(A.store, undefined, remote);
+      await syncNow(B.store, undefined, remote); // 两端都有 v1
+      // A 编辑并上传 A1（A 是作者：lastUploadedHash=A1）
+      A.store.saveNote(note.id, "A 编辑", "<p>A1</p>");
+      await syncNow(A.store, undefined, remote);
+      // B 编辑 B1 并同步 → B 接受 A1（B 被覆盖留档 B1），B 内容变为 A1
+      B.store.saveNote(note.id, "B 编辑", "<p>B1</p>");
+      const resultB = await syncNow(B.store, undefined, remote);
+      expect(resultB.supersededNotes.some((n) => n.id === note.id)).toBe(true);
+      expect(B.store.readNote(note.id).content).toBe("<p>A1</p>");
+      // B 恢复历史（恢复 B1 内容）→ 续编 B2 → 同步上传（B 恢复后 updatedAt 更新）
+      const bHist = B.store.listNoteHistory(note.id);
+      const b1Hist = bHist.find((h) => h.contentHash === B.store.contentHash(note.id)); // 当前内容 A1 的历史
+      // 恢复历史：写回快照正文（B1 的旧版本在 note_history 里，恢复最近的非当前版本）
+      const target = bHist.find((h) => h.contentHash !== B.store.contentHash(note.id));
+      expect(target).toBeTruthy();
+      B.store.restoreHistory(target!.id);
+      B.store.saveNote(note.id, "B 续编", "<p>B2</p>");
+      await syncNow(B.store, undefined, remote); // B 上传 B2
+      // A 同步：接受 B2，且 A 本地上传过的 A1 被覆盖 → 强制留档 + superseded
+      const resultA = await syncNow(A.store, undefined, remote);
+      expect(resultA.supersededNotes.some((n) => n.id === note.id)).toBe(true);
+      expect(A.store.readNote(note.id).content).toBe("<p>B2</p>");
+      // A 历史里能找到被覆盖前的 A1（留档兜底，A 的编辑不丢）
+      const aHist = A.store.listNoteHistory(note.id);
+      expect(aHist.some((h) => h.contentHash === sha256("<p>A1</p>"))).toBe(true);
     } finally { cleanup([A, B]); }
   });
 
