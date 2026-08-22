@@ -68,18 +68,18 @@ LAKE_USER_DATA="$DEVICE_B_DATA" LAKE_ASSET_PORT=19877 nohup ./node_modules/.bin/
 echo $! >> "$PID_FILE"
 
 echo "==> 等待两端 CDP 就绪"
-for _ in $(seq 1 60); do
-  a=$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:9222/json/list" 2>/dev/null || true)
-  b=$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:9223/json/list" 2>/dev/null || true)
+for _ in $(seq 1 180); do
+  a=$(curl -s --connect-timeout 1 -o /dev/null -w '%{http_code}' "http://127.0.0.1:9222/json/version" 2>/dev/null || echo 000)
+  b=$(curl -s --connect-timeout 1 -o /dev/null -w '%{http_code}' "http://127.0.0.1:9223/json/version" 2>/dev/null || echo 000)
   [ "$a" = "200" ] && [ "$b" = "200" ] && break
   sleep 1
 done
-echo "CDP A=$a B=$b"
+echo "CDP A=${a} B=${b}"
 if [ "$a" != "200" ] || [ "$b" != "200" ]; then
-  echo "CDP 未就绪，退出（日志见 $LOG_A / $LOG_B / $LOG_VITE）" >&2
+  echo "CDP 未就绪，退出（日志见 ${LOG_A} / ${LOG_B} / ${LOG_VITE}）" >&2
   exit 1
 fi
 
 echo "==> CDP 驱动验证"
 node scripts/ab-verify.mjs
-echo "==> 验证完成（退出码 $?，日志见 $LOG_A / $LOG_B）"
+echo "==> 验证完成（退出码 ${?}，日志见 ${LOG_A} / ${LOG_B}）"
