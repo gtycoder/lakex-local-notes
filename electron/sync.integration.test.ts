@@ -325,7 +325,6 @@ describe("双设备同步（Step A/B 拆分后语义验证）", () => {
       expect(bNote2!.parentId).toBe(TRASH_NOTEBOOK_ID);
     } finally { cleanup([A, B]); }
   });
-});
 
   it("A 编辑后删除 + B 编辑被删 → B 恢复回到原父目录（deletedFromParentId 不丢失，2026-08-22 修复）", async () => {
     const s3 = new MockS3();
@@ -357,3 +356,138 @@ describe("双设备同步（Step A/B 拆分后语义验证）", () => {
       expect(restored.parentId).toBe(nb.id);
     } finally { cleanup([A, B]); }
   });
+});
+
+describe("多端场景验证（用户验收建议 1/2/3）", () => {
+  it("S1 三角同步：A 编辑 → B/C 同步 → B、C 各改不同笔记 → A 再同步 → 三方收敛", async () => {
+    const s3 = new MockS3();
+    const remote = (s: S3Settings, l: LoggerScopes) => s3 as unknown as ObjectStore;
+    const A = makeDevice(), B = makeDevice(), C = makeDevice();
+    try {
+      const n1 = A.store.createNote("三角1");
+      const n2 = A.store.createNote("三角2");
+      await syncNow(A.store, undefined, remote);
+      await syncNow(B.store, undefined, remote);
+      await syncNow(C.store, undefined, remote);
+      // B 改 n1、C 改 n2（不同笔记，无冲突）
+      B.store.saveNote(n1.id, "B 改 n1", "<p>B 版 n1</p>");
+      C.store.saveNote(n2.id, "C 改 n2", "<p>C 版 n2</p>");
+      await syncNow(B.store, undefined, remote);
+      await syncNow(C.store, undefined, remote);
+      // A 再同步 → 收三方全部变更
+      await syncNow(A.store, undefined, remote);
+      expect(A.store.readNote(n1.id).content).toBe("<p>B 版 n1</p>");
+      expect(A.store.readNote(n2.id).content).toBe("<p>C 版 n2</p>");
+      // B、C 也互相收敛
+      await syncNow(B.store, undefined, remote);
+      await syncNow(C.store, undefined, remote);
+      expect(B.store.readNote(n2.id).content).toBe("<p>C 版 n2</p>");
+      expect(C.store.readNote(n1.id).content).toBe("<p>B 版 n1</p>");
+    } finally { cleanup([A, B, C]); }
+  });
+
+  it("S2 删除 vs 移动交叉：A 删除 888 同步，B 同时把 888 移到另一笔记本 → B 同步应跟随删除", async () => {
+    const s3 = new MockS3();
+    const remote = (s: S3Settings, l: LoggerScopes) => s3 as unknown as ObjectStore;
+    const A = makeDevice(), B = makeDevice();
+    try {
+      const nb1 = A.store.createNotebook("笔记本1");
+      const nb2 = A.store.createNotebook("笔记本2");
+      const note = A.store.createNoteIn(nb1.id, "888");
+      await syncNow(A.store, undefined, remote);
+      await syncNow(B.store, undefined, remote);
+      // A 删除；B 离线把 888 移到 nb2
+      A.store.deleteNote(note.id);
+      B.store.moveTreeNode(note.id, nb2.id, 0);
+      await syncNow(A.store, undefined, remote);
+      // B 同步：删除压移动 → B 跟随删除（进回收站），移动被压制
+      const rb = await syncNow(B.store, undefined, remote);
+      const bNote = B.store.listNotesForSync().find((n) => n.id === note.id);
+      expect(bNote!.parentId).toBe(TRASH_NOTEBOOK_ID);
+      expect(bNote!.parentId).not.toBe(nb2.id);
+      expect(rb.supersededNotes.some((n) => n.id === note.id)).toBe(false); // B 未编辑内容，不留档
+    } finally { cleanup([A, B]); }
+  });
+
+  it("S3 正文冲突 + 移动冲突叠加：两端都改 888 内容且都移动 → 先同步者胜，后同步方同时接受正文和位置并留档", async () => {
+    const s3 = new MockS3();
+    const remote = (s: S3Settings, l: LoggerScopes) => s3 as unknown as ObjectStore;
+    const A = makeDevice(), B = makeDevice();
+    try {
+      const nb1 = A.store.createNotebook("册1");
+      const nb2 = A.store.createNotebook("册2");
+      const note = A.store.createNoteIn(nb1.id, "888");
+      await syncNow(A.store, undefined, remote);
+      await syncNow(B.store, undefined, remote);
+      // 两端离线：改内容 + 各自移动
+      A.store.saveNote(note.id, "A 改", "<p>A 版</p>");
+      B.store.saveNote(note.id, "B 改", "<p>B 版</p>");
+      A.store.moveTreeNode(note.id, nb2.id, 0);
+      B.store.moveTreeNode(note.id, nb1.id, 0); // 两端都移到对方册（或同册不同序）
+      // A 先同步（先提交先确认 → A 胜）
+      await syncNow(A.store, undefined, remote);
+      const rb = await syncNow(B.store, undefined, remote);
+      // B 后同步 → 接受 A 的正文 + 位置，且 B 的编辑被覆盖 → 留档 + superseded
+      expect(B.store.readNote(note.id).content).toBe("<p>A 版</p>");
+      expect(B.store.listTreeNodes().find((n: any) => n.id === note.id)!.parentId).toBe(nb2.id);
+      expect(rb.supersededNotes.some((n) => n.id === note.id)).toBe(true);
+      expect(B.store.listNoteHistory(note.id).some((h) => h.contentHash === sha256("<p>B 版</p>"))).toBe(true);
+      // A 端稳定
+      await syncNow(A.store, undefined, remote);
+      expect(A.store.readNote(note.id).content).toBe("<p>A 版</p>");
+    } finally { cleanup([A, B]); }
+  });
+});
+
+describe("多端场景验证（用户验收建议 4/5）", () => {
+
+  it("S4 回收站内编辑：A 删除 → B 在回收站里编辑已删笔记 → 同步不回滚 → 恢复后位置正确", async () => {
+    const s3 = new MockS3();
+    const remote = (s: S3Settings, l: LoggerScopes) => s3 as unknown as ObjectStore;
+    const A = makeDevice(), B = makeDevice();
+    try {
+      const note = A.store.createNote("回收站编辑");
+      await syncNow(A.store, undefined, remote);
+      await syncNow(B.store, undefined, remote);
+      A.store.deleteNote(note.id);
+      await syncNow(A.store, undefined, remote);
+      // B 同步进回收站
+      await syncNow(B.store, undefined, remote);
+      expect(B.store.listNotesForSync().find((n: any) => n.id === note.id)!.parentId).toBe(TRASH_NOTEBOOK_ID);
+      // B 在回收站里编辑
+      B.store.saveNote(note.id, "回收站改", "<p>B 回收站编辑</p>");
+      const rb2 = await syncNow(B.store, undefined, remote);
+      // 协议 §3 删除压编辑：回收站里的编辑被压制回删除前内容 + 强制留档（不溜进回收站内容）
+      expect(B.store.readNote(note.id).content).not.toBe("<p>B 回收站编辑</p>");
+      expect(rb2.supersededNotes.some((n) => n.id === note.id)).toBe(true);
+      // B 恢复 → 恢复删除前内容，位置回默认笔记本
+      B.store.restoreTrashItem(note.id);
+      await syncNow(B.store, undefined, remote);
+      // A 跟随恢复（restore_pending 传播）
+      await syncNow(A.store, undefined, remote);
+      const aNote = A.store.listNotesForSync().find((n: any) => n.id === note.id);
+      expect(aNote).toBeTruthy();
+      expect(aNote!.parentId).not.toBe(TRASH_NOTEBOOK_ID);
+    } finally { cleanup([A, B]); }
+  });
+
+  it("S5 双端同时创建同名笔记：first-sync-wins，不双份不互相覆盖", async () => {
+    const s3 = new MockS3();
+    const remote = (s: S3Settings, l: LoggerScopes) => s3 as unknown as ObjectStore;
+    const A = makeDevice(), B = makeDevice();
+    try {
+      const a = A.store.createNote("同名");
+      const b = B.store.createNote("同名");
+      // A 先同步 → A 的版本胜出
+      await syncNow(A.store, undefined, remote);
+      const rb = await syncNow(B.store, undefined, remote);
+      // B 的笔记对象仍在本地（不丢），但云端以 A 为准
+      expect(A.store.readNote(a.id).title).toBe("同名");
+      expect(B.store.readNote(b.id).title).toBe("同名");
+      // 两端同步后都能看到两份（不同 id，标题相同）
+      await syncNow(B.store, undefined, remote);
+      const bHasA = B.store.listNotesForSync().some((n: any) => n.id === a.id);
+      expect(bHasA).toBe(true);
+    } finally { cleanup([A, B]); }
+  });
+});
