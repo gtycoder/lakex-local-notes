@@ -160,3 +160,99 @@ lake-notes-electron/docs/ASSET-URL-MOBILE-PLAN.md                           图�
 lake-notes-mobile/docs/MOBILE-TECH-STACK.md                                 移动端技术定案 + M0-M1 验证记录（§10-14）
 lake-notes-electron/Electron-HANDOFF.md                                     桌面交接（V5 Phase 0-4 已合入）
 ```
+## 10. 本地多端联调手册（2026-08-22 实战固化，新会话照做，别重复踩坑）
+
+> 用途：验证同步重构/语义的真实双设备交互（两个 Electron 实例 + 真实七牛）。一键脚本已就绪，**直接跑脚本**，别手动折腾。
+
+### 10.1 一键流程（推荐）
+
+```bash
+cd /Users/admin/file/local-lake/lake-notes-electron   # 必须是主仓库（有 Electron 二进制）
+export PATH="$HOME/.nvm/versions/node/v24.18.0/bin:$PATH"
+
+# 1. 确保 electron 二进制在（allow-scripts 会漏装）：
+ls node_modules/electron/dist/Electron.app/Contents/MacOS/Electron || cp -R /Users/admin/file/local-lake/lake-notes-electron/node_modules/electron/dist node_modules/electron/
+
+# 2. 跑一键脚本（内部：清数据 → 注入 S3 配置 → vite preview → 双实例 → CDP 验证 → 清理）
+S3_AK=xxx S3_SK=xxx ./scripts/ab-verify.sh
+# 或分步手动（见 10.2）
+```
+
+**注意**：ab-verify.sh 当前是"脚本内启动"，但 vite dev server 会被 exec 会话回收（无 tty 必死）——脚本已用 `vite preview`（静态服务 dist，无 electron 插件）。**如脚本启动部分失败，用 10.2 手动流程**（经过验证的可靠方式）。
+
+### 10.2 手动可靠流程（验证过）
+
+```bash
+cd /Users/admin/file/local-lake/lake-notes-electron
+export PATH="$HOME/.nvm/versions/node/v24.18.0/bin:$PATH"
+
+# 0. 清空数据（从 0 开始）+ 确认 vite.config 无 onstart 补丁
+rm -rf "$HOME/Library/Application Support/lake-notes-dev" "${TMPDIR:-/tmp}/lake-device-b"
+mkdir -p "$HOME/Library/Application Support/lake-notes-dev"
+grep -c onstart vite.config.ts   # 应为 1（未 patch）；多端验证前需 patch 见 §10.4
+
+# 1. 注入 S3 配置到两端 DB（必须 electron 启动前！App 启动时读 settings 表）
+#    脚本逻辑：better-sqlite3 写 settings 表 key='s3_settings' 的 JSON
+#    （prefix 用独立测试前缀 ab-test-xxx，别用生产 lake-notes）
+
+# 2. 构建 + preview（vite dev 会被回收，preview 可靠）：
+node node_modules/vite/bin/vite.js build
+node node_modules/vite/bin/vite.js preview --port 1421 --strictPort   # 后台长驻
+
+# 3. 启动双实例（独立后台任务，各占端口/CDP；不同 userData）：
+#    A: LAKE_USER_DATA=~/Library/Application Support/lake-notes-dev LAKE_ASSET_PORT=19876 \
+#       ./node_modules/.bin/electron --use-angle=metal --remote-debugging-port=9222 .
+#    B: LAKE_USER_DATA=$TMPDIR/lake-device-b LAKE_ASSET_PORT=19877 \
+#       ./node_modules/.bin/electron --use-angle=metal --remote-debugging-port=9223 .
+
+# 4. 等 CDP 就绪（curl http://127.0.0.1:9222/json/version 返回 200）
+
+# 5. 验证：node scripts/ab-verify.mjs   （CDP 驱动 + B 端 DB 断言）
+
+# 6. 清理：
+#    停实例（按 PID）/ 还原 vite.config（mv vite.config.ts.multidev-bak vite.config.ts）
+#    清 dev 数据 / 云端 ab-test-* 前缀（见 10.3）
+```
+
+### 10.3 云端测试数据清理
+
+```bash
+cd /Users/admin/file/local-lake/lake-notes-electron
+# 删 ab-test-* 前缀（ListObjectsV2 + DeleteObjects，只删测试前缀不碰 lake-notes）：
+# 见下（aws-sdk 脚本，主仓库 cwd 跑）
+```
+
+### 10.4 踩坑速查表（每条都花过 token，先查这个）
+
+| 现象 | 根因 | 正确做法 |
+|---|---|---|
+| vite 启动即退出（build 后消失） | **exec 会话回收（无 tty）**——AGENTS.md 已知 | 用 `vite preview`（静态服务，无 electron 插件）替代 dev server |
+| `./node_modules/.bin/electron: No such file` | electron bin 缺失（npm 11 allow-scripts 阻止 postinstall）或 **cwd 错误**（`cd && cmd &` 把 cd 放后台子 shell） | 复制主仓库 `node_modules/electron/dist`；命令写全路径/先独立 cd |
+| A 端 CDP 000、B 端 200 | A 端启动慢/curl 时序 | 检测用 `/json/version` + `--connect-timeout 1` + 长等待（180s） |
+| 同步"zero-change skip"不上传 | **S3 配置没注入**（App 启动前必须写 DB settings）或 lastSeenCommitId 残留 | 启动前注入配置；必要时清 `device_state.last_seen_commit_id` |
+| 新建文档失败（id=null） | "新建文档"菜单项在**未选笔记本时 disabled** | 先点侧栏笔记本节点（个人笔记）再点 `.create-btn` |
+| 删除不生效 | 删除走 `setConfirmDelete`（React 确认对话框，非 window.confirm） | 右键菜单点"删除"后，再点 `.confirm-dialog .danger-button` |
+| B 拉不到新笔记 | **同步是后台异步**——B 同步早于 A 上传完成（时序竞态） | 同步后等 12s+ 或用 DB 轮询（ab-verify.mjs 已做） |
+| manifest 读取 JSON.parse 失败 | 云端 manifest 是 **gzip 字节**（桌面 put gzip:true） | 检查 0x1f 0x8b 魔数后 gunzip |
+| s3-ls 查 ab-test 显示 0 对象 | s3-ls 需要 `S3_PREFIX` 环境变量（--prefix 参数仅过滤） | `S3_PREFIX="ab-test" node scripts/s3-ls.mjs --json` 或直接用 aws-sdk 脚本 |
+| 云端测试数据堆积 | 每次跑脚本生成新前缀 ab-test-<时间戳> | 验证完统一清理（10.3） |
+
+### 10.5 CDP 驱动模板（新会话直接复用）
+
+```js
+// connect(port) → { ev(expr), waitFor(expr, timeout), send(method, params) }
+// 核心：
+//   ev: Runtime.evaluate（awaitPromise + returnByValue）
+//   waitFor: 轮询表达式直到 true
+//   send: 任意 CDP 方法（Input.dispatchMouseEvent 模拟鼠标/右键）
+// 验证断言用 DB（better-sqlite3 读两端 metadata.sqlite3）而非 UI——UI 断言脆弱
+// 完整实现见 scripts/ab-verify.mjs（connect/syncDevice/createNote/deleteNote/waitBHasNote）
+```
+
+### 10.6 关键文件
+
+```text
+scripts/ab-verify.sh    一键编排（清数据/注入配置/preview/双实例/验证/清理）——启动部分需按 10.2 修正后可靠
+scripts/ab-verify.mjs   CDP 驱动 + DB 断言（场景1 建→跨端拉取；场景2 删除传播）——已通过
+scripts/multidev.sh     旧多端脚本（nohup 方式，vite 在 tty 环境可用；exec 会话下用 10.2 流程）
+```
