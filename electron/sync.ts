@@ -548,7 +548,12 @@ export async function syncNow(
         : { locked: !!rn.isLocked, at: rn.lockedAt ?? null };
       store.importRemoteNote(
         { id: rn.id, title: rn.title, parentId: effectiveParent, sortOrder: rn.sortOrder, updatedAt: rn.updatedAt, isConflict: action.isConflictFromRemote ? rn.isConflict : false,
-          isLocked: merged.locked, lockedAt: merged.at, icon: rn.icon ?? null },
+          isLocked: merged.locked, lockedAt: merged.at, icon: rn.icon ?? null,
+          // 2026-08-22 修复：remoteImportRepository 的 ON CONFLICT UPDATE 会无条件覆盖
+          // trashed_at/deleted_from_parent_id 为 excluded（不传=null）——B 端 move-to-trash 刚写入的
+          // 删除前父目录被抹掉，导致恢复时回退默认笔记本（A 编辑后删除 + B 编辑被删的场景）。
+          trashedAt: rn.trashedAt ?? null,
+          deletedFromParentId: rn.deletedFromParentId ?? null },
         lakeBytes, assets
       );
       store.setBaseHash(rn.id, rn.contentHash);

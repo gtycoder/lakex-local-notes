@@ -139,6 +139,15 @@ class FakeStore {
   syncedAt: string | null = null;
   lastResult: unknown = null;
   private dir: string;
+  /** 单调时钟：保证同毫秒内多次 new Date() 产生严格递增的时间戳
+   * （reconcile 时间判据 remoteUpdatedAt vs lastSyncedMetaAt 依赖严格时序；
+   *  vitest 执行极快，真实用户操作间隔不会触发同毫秒，但测试必须确定）。 */
+  private monotonicMs = 0;
+  private nowIso(): string {
+    const now = Date.now();
+    this.monotonicMs = Math.max(now, this.monotonicMs + 1);
+    return new Date(this.monotonicMs).toISOString();
+  }
 
   constructor() {
     this.dir = fs.mkdtempSync(path.join(os.tmpdir(), "lake-sync-test-"));
@@ -148,18 +157,18 @@ class FakeStore {
 
   // ---- 测试辅助 ----
   createNote(id: string, title: string, content: string) {
-    const updatedAt = new Date().toISOString();
+    const updatedAt = this.nowIso();
     this.notes.set(id, { id, title, parentId: null, sortOrder: this.notes.size, updatedAt, syncState: "local", isConflict: false, icon: null });
     fs.writeFileSync(this.notePath(id), content, "utf8");
   }
   modifyNote(id: string, content: string) {
     const n = this.notes.get(id);
     if (!n) throw new Error(`笔记不存在: ${id}`);
-    n.updatedAt = new Date().toISOString();
+    n.updatedAt = this.nowIso();
     n.syncState = "local";
     fs.writeFileSync(this.notePath(id), content, "utf8");
   }
-  setIcon(id: string, icon: string | null, updatedAt = new Date().toISOString()) {
+  setIcon(id: string, icon: string | null, updatedAt = this.nowIso()) {
     const n = this.notes.get(id);
     if (!n) throw new Error(`笔记不存在: ${id}`);
     n.icon = icon;
@@ -171,7 +180,7 @@ class FakeStore {
     const n = this.notes.get(id);
     if (!n) throw new Error(`笔记不存在: ${id}`);
     fs.writeFileSync(this.notePath(id), content, "utf8");
-    n.updatedAt = new Date().toISOString();
+    n.updatedAt = this.nowIso();
     n.syncState = "local";
   }
   addAsset(noteId: string, filename: string, bytes: Buffer) {
@@ -201,7 +210,7 @@ class FakeStore {
       n.title = note.title; n.parentId = note.parentId; n.sortOrder = note.sortOrder; n.updatedAt = note.updatedAt; n.isConflict = note.isConflict;
       if (note.icon !== undefined) n.icon = note.icon ?? null;
       if (note.parentId === "notebook-trash") {
-        n.trashedAt = note.trashedAt ?? n.trashedAt ?? new Date().toISOString();
+        n.trashedAt = note.trashedAt ?? n.trashedAt ?? this.nowIso();
         n.deletedFromParentId = note.deletedFromParentId ?? n.deletedFromParentId ?? null;
       } else {
         n.trashedAt = null; n.deletedFromParentId = null;
@@ -282,7 +291,7 @@ class FakeStore {
     return new Set(fs.existsSync(dir) ? fs.readdirSync(dir).filter((f) => fs.statSync(path.join(dir, f)).isFile()) : []);
   }
   setCurrentRefs(noteId: string, refs: string[]) { this.currentRefs.set(noteId, new Set(refs)); }
-  addS3GcPending(key: string, markedAt = new Date().toISOString()) { if (!this.gcPending.has(key)) this.gcPending.set(key, markedAt); }
+  addS3GcPending(key: string, markedAt = this.nowIso()) { if (!this.gcPending.has(key)) this.gcPending.set(key, markedAt); }
   removeS3GcPending(keys: string[]) { for (const key of keys) this.gcPending.delete(key); }
   listS3GcPending() { return [...this.gcPending.entries()].map(([key, markedAt]) => ({ key, markedAt })); }
   getS3GcSettings() { return { gcRetentionDays: 7, gcIntervalHours: 24, trashAutoPurgeDays: 0 }; }
@@ -291,7 +300,7 @@ class FakeStore {
   recordS3GcLog(action: string, key: string, reason: string, commitId: string | null, deviceId: string | null, ok: boolean) {
     this.gcLog.push({ action, key, reason, commitId, deviceId, ok });
   }
-  markPurged(id: string) { this.purgedNotes.set(id, new Date().toISOString()); }
+  markPurged(id: string) { this.purgedNotes.set(id, this.nowIso()); }
   markPurgeSynced(id: string) { this.purgedNotes.delete(id); }
   listPurgedNotesForSync() {
     return [...this.purgedNotes.entries()].map(([id, purgedAt]) => ({ id, title: id, parentId: null, sortOrder: 0, updatedAt: purgedAt, deletedAt: purgedAt, purgedAt }));
@@ -300,7 +309,7 @@ class FakeStore {
     const n = this.notes.get(id);
     if (!n) throw new Error(`笔记不存在: ${id}`);
     n.isLocked = locked;
-    n.lockedAt = new Date().toISOString();
+    n.lockedAt = this.nowIso();
     n.syncState = "local";
   }
   applyRemoteLock(id: string, locked: boolean, lockedAt: string | null) {
@@ -327,7 +336,7 @@ class FakeStore {
     if (n) {
       n.deletedFromParentId = n.parentId;
       n.parentId = "notebook-trash";
-      n.trashedAt = new Date().toISOString();
+      n.trashedAt = this.nowIso();
       n.syncState = "local";
     }
   }
@@ -335,8 +344,8 @@ class FakeStore {
   purgeTrashItem(id: string) {
     const n = this.notes.get(id);
     if (n) {
-      this.deleted.set(id, { id, title: n.title, parentId: n.parentId, sortOrder: n.sortOrder, updatedAt: n.updatedAt, deletedAt: new Date().toISOString() });
-      this.purgedNotes.set(id, new Date().toISOString());
+      this.deleted.set(id, { id, title: n.title, parentId: n.parentId, sortOrder: n.sortOrder, updatedAt: n.updatedAt, deletedAt: this.nowIso() });
+      this.purgedNotes.set(id, this.nowIso());
       this.notes.delete(id);
     }
   }
@@ -346,7 +355,7 @@ class FakeStore {
     if (n) {
       n.deletedFromParentId = n.deletedFromParentId ?? n.parentId;
       n.parentId = "notebook-trash";
-      n.trashedAt = n.trashedAt ?? new Date().toISOString();
+      n.trashedAt = n.trashedAt ?? this.nowIso();
       n.syncState = "purged";
     }
   }
@@ -356,7 +365,7 @@ class FakeStore {
     if (n) {
       n.deletedFromParentId = n.deletedFromParentId ?? deletedFromParentId ?? n.parentId;
       n.parentId = "notebook-trash";
-      n.trashedAt = n.trashedAt ?? trashedAt ?? new Date().toISOString();
+      n.trashedAt = n.trashedAt ?? trashedAt ?? this.nowIso();
       n.syncState = "local";
     }
   }
@@ -379,7 +388,7 @@ class FakeStore {
     n.parentId = n.deletedFromParentId ?? null;
     n.trashedAt = null;
     n.deletedFromParentId = null;
-    n.updatedAt = new Date().toISOString();
+    n.updatedAt = this.nowIso();
     n.syncState = "local";
     this.markRestorePending(id);
   }

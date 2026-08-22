@@ -242,3 +242,34 @@ describe("双设备同步（Step A/B 拆分后语义验证）", () => {
     } finally { cleanup([A, B]); }
   });
 });
+
+  it("A 编辑后删除 + B 编辑被删 → B 恢复回到原父目录（deletedFromParentId 不丢失，2026-08-22 修复）", async () => {
+    const s3 = new MockS3();
+    const remote = (s: S3Settings, l: LoggerScopes) => s3 as unknown as ObjectStore;
+    const A = makeDevice();
+    const B = makeDevice();
+    try {
+      // A 建【多端笔记本】并创建 666
+      const nb = A.store.createNotebook("多端笔记本");
+      const note = A.store.createNoteIn(nb.id, "666");
+      await syncNow(A.store, undefined, remote);
+      await syncNow(B.store, undefined, remote);
+      expect(B.store.listNotesForSync().find((n) => n.id === note.id)!.parentId).toBe(nb.id);
+
+      // A 编辑 A1 → 删除 → 同步（A 端 manifest 带 deletedFromParentId=nb.id）
+      A.store.saveNote(note.id, "A 编辑", "<p>A1</p>");
+      A.store.deleteNote(note.id);
+      await syncNow(A.store, undefined, remote);
+
+      // B 编辑 B2 → 同步（B 被删除 + 留档 B2；正文不同走 importRemoteNote 分支）
+      B.store.saveNote(note.id, "B 编辑", "<p>B2</p>");
+      await syncNow(B.store, undefined, remote);
+      const inTrash = B.store.listNotesForSync().find((n) => n.id === note.id);
+      expect(inTrash!.parentId).toBe(TRASH_NOTEBOOK_ID);
+
+      // B 恢复 → 应回到多端笔记本（修复前回退默认笔记本）
+      B.store.restoreTrashItem(note.id);
+      const restored = B.store.listNotesForSync().find((n) => n.id === note.id)!;
+      expect(restored.parentId).toBe(nb.id);
+    } finally { cleanup([A, B]); }
+  });
