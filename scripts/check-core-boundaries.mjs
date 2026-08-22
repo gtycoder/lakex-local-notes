@@ -36,7 +36,7 @@ function collectTs(dir, out = []) {
     if (statSync(full).isDirectory()) {
       if (entry === "node_modules" || entry === "vendor") continue;
       collectTs(full, out);
-    } else if (entry.endsWith(".ts") || entry.endsWith(".mts") || entry.endsWith(".cts")) {
+    } else if ((entry.endsWith(".ts") || entry.endsWith(".mts") || entry.endsWith(".cts")) && !entry.endsWith(".test.ts")) {
       out.push(full);
     }
   }
