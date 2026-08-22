@@ -264,6 +264,45 @@ describe("双设备同步（Step A/B 拆分后语义验证）", () => {
     } finally { cleanup([A, B]); }
   });
 
+  it("循环移动：A 把 999 移入 888 下、B 把 888 移入 999 下 → 先提交先确认收敛（2026-08-22 修复）", async () => {
+    const s3 = new MockS3();
+    const remote = (s: S3Settings, l: LoggerScopes) => s3 as unknown as ObjectStore;
+    const A = makeDevice();
+    const B = makeDevice();
+    try {
+      const nb = A.store.createNotebook("多端笔记本");
+      const n888 = A.store.createNoteIn(nb.id, "888");
+      const n999 = A.store.createNoteIn(nb.id, "999");
+      await syncNow(A.store, undefined, remote);
+      await syncNow(B.store, undefined, remote);
+      // 两端各移动成互父子（循环）：A: 999→888 下；B: 888→999 下
+      A.store.moveTreeNodeOrdered(n999.id, n888.id, [n999.id]);
+      B.store.moveTreeNodeOrdered(n888.id, n999.id, [n888.id]);
+      // A 先同步（先提交先确认）
+      await syncNow(A.store, undefined, remote);
+      const rb = await syncNow(B.store, undefined, remote);
+      // B 应跟随 A：888 在多端下、999 在 888 下；不产生错位/循环/提示
+      expect(B.store.listTreeNodes().find((n: any) => n.id === n888.id)!.parentId).toBe(nb.id);
+      expect(B.store.listTreeNodes().find((n: any) => n.id === n999.id)!.parentId).toBe(n888.id);
+      expect(rb.supersededNotes.some((n) => n.id === n888.id || n.id === n999.id)).toBe(false);
+      // 反向：B 先同步 → A 后同步也应收敛到 B 的树（888 在 999 下、999 在多端下）
+      const C = makeDevice();
+      const D = makeDevice();
+      const nbC = C.store.createNotebook("多端笔记本");
+      const c888 = C.store.createNoteIn(nbC.id, "888");
+      const c999 = C.store.createNoteIn(nbC.id, "999");
+      await syncNow(C.store, undefined, remote);
+      await syncNow(D.store, undefined, remote);
+      C.store.moveTreeNodeOrdered(c999.id, c888.id, [c999.id]);
+      D.store.moveTreeNodeOrdered(c888.id, c999.id, [c888.id]);
+      await syncNow(D.store, undefined, remote); // B 先同步
+      await syncNow(C.store, undefined, remote); // A 后同步跟随
+      expect(C.store.listTreeNodes().find((n: any) => n.id === c888.id)!.parentId).toBe(c999.id);
+      expect(C.store.listTreeNodes().find((n: any) => n.id === c999.id)!.parentId).toBe(nbC.id);
+      cleanup([C, D]);
+    } finally { cleanup([A, B]); }
+  });
+
   it("墓碑学习：B 离线时 A 删除 → B 上线同步不复活删除（防复活）", async () => {
     const s3 = new MockS3();
     const remote = (s: S3Settings, l: LoggerScopes) => s3 as unknown as ObjectStore;

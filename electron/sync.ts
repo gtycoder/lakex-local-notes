@@ -343,6 +343,10 @@ export async function syncNow(
     // 替代逐条 lastSyncedMetaAt 查询，并支撑 fast-path 记账去重（10k 条时省 ~4 万次写）。
     const baseInfo = store.allSyncBaseInfo();
     // 先导入目录树，再导入笔记，保证文档的父 notebook/group 已存在。
+    // 父节点集合 = 默认/回收站笔记本 + 远端清单 folders + 远端清单笔记 id + 本地已有节点。
+    // （2026-08-22 修复：文档可嵌套（A 把 999 移入 888 下），笔记 id 也是合法父节点——
+    //  原实现只认 folders，把指向笔记的 parentId 误判无效 → 回退默认笔记本，多端移动错位。
+    //  校验语义是"父节点是否存在/本次可达"，不是"父节点是否为文件夹"。）
     const validParents = new Set<string>([store.defaultNotebookId(), TRASH_NOTEBOOK_ID]);
     for (const folder of remoteManifest.folders) {
       if (!isSafeSegment(folder.id)) throw new Error(`清单包含无效的目录 ID: ${folder.id}`);
@@ -350,6 +354,30 @@ export async function syncNow(
       store.importRemoteFolder(folder);
       validParents.add(folder.id);
     }
+    for (const rn of remoteManifest.notes) {
+      // 仅收集 id 供父节点判定；id/资源名安全校验仍在下载循环内原位置 fail fast
+      // （顺序敏感：恶意 asset.filename 应先于后续恶意 note.id 抛"资源文件名"错误，见审计#3）。
+      if (!rn.deleted) validParents.add(rn.id); // 远端 active 笔记可作为父（嵌套文档）
+    }
+    for (const localNode of localById.keys()) validParents.add(localNode); // 本地已有节点（含本次将保留的）
+    // 远端 parent 映射（仅 active 笔记；folders 由树结构天然无环，无需参与环检测）——
+    // 用于"本地移动与远端已提交移动互成父子（循环移动）"的结构冲突检测（2026-08-22 修复）：
+    // A 把 999 移入 888 下先提交，B 把 888 移入 999 下后同步时，若 B 保留本地移动会与
+    // 已应用的远端 999→888 成环 → 必须跟随远端打破环（先提交先确认，目录变更无需留档）。
+    const remoteParentMap = new Map<string, string | null>();
+    for (const rn of remoteManifest.notes) if (!rn.deleted) remoteParentMap.set(rn.id, rn.parentId);
+    /** nodeId 在远端树中是否为 ancestorId 的子孙（含自身；防环 seen 兜底异常清单）。 */
+    const isRemoteDescendant = (nodeId: string, ancestorId: string): boolean => {
+      let cur: string | null | undefined = nodeId;
+      const seen = new Set<string>();
+      while (cur !== null && cur !== undefined) {
+        if (cur === ancestorId) return true;
+        if (seen.has(cur)) return false;
+        seen.add(cur);
+        cur = remoteParentMap.get(cur);
+      }
+      return false;
+    };
     const downloadStart = Date.now();
     const remoteTotal = remoteManifest.notes.length;
     let remoteIndex = 0;
@@ -464,7 +492,12 @@ export async function syncNow(
           // - 否则远端是本设备已确认版本 → 保留本地续编/改名（不被远端旧值回滚），上传阶段回写。
           const base = baseInfo.get(rn.id);
           const lastMeta = base?.lastSyncedMetaAt ?? null;
-          if (decideMetaApply(rn.updatedAt, lastMeta)) {
+          // 结构环检测（先提交先确认）：本地移动（local.parentId）若在远端树中位于本节点
+          // 之下（如 B 把 888 移入 999 下，而 A 已把 999 移入 888 下并提交）→ 保留本地会
+          // 与远端成环 → 必须跟随远端打破环（即使本地 updatedAt 较新，树结构冲突优先）。
+          const localParentConflicts =
+            local.parentId !== null && local.parentId !== effectiveParent && isRemoteDescendant(local.parentId, rn.id);
+          if (decideMetaApply(rn.updatedAt, lastMeta) || localParentConflicts) {
             store.applyRemoteNoteMeta({ ...rn, parentId: effectiveParent });
             metaApplied = true;
           }
