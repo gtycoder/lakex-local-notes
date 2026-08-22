@@ -378,10 +378,13 @@ describe("目录树操作", () => {
     expect(fs.existsSync(assetDir)).toBe(true);
     // 软删不写墓碑（回收站条目是普通条目，移动即同步传播）
     expect(store.listDeletedNotesForSync().some((d) => d.id === note.id)).toBe(false);
-    // 回收站列出：只列 trash 笔记本直接子节点（文件夹整体），子笔记不单独列
+    // 回收站树：列出 trash 笔记本下的完整子树（根 + 连带子笔记，含 parentId 供组树）
     const trash = store.listTrash();
     expect(trash.some((t) => t.id === nb.id && t.nodeType === "notebook")).toBe(true);
-    expect(trash.some((t) => t.id === note.id)).toBe(false);
+    const trashNote = trash.find((t) => t.id === note.id);
+    expect(trashNote).toBeTruthy();
+    expect(trashNote!.parentId).toBe(group.id); // 子笔记挂在被删分组下（连带整棵，非独立条目）
+    expect(trash.find((t) => t.id === group.id)!.parentId).toBe(nb.id); // 分组挂在被删根下
     // 软删后仍进同步列表（回收站上云）：文件夹本身 parentId=trash + trashedAt
     const syncNb = store.listNotesForSync(); // 文件夹不进 notes；断言子笔记仍在同步列表
     const syncFolder = store.listFoldersForSync().find((f) => f.id === nb.id);
@@ -542,7 +545,8 @@ describe("目录树操作", () => {
     const recent = new Date(Date.now() - 59 * 24 * 3600 * 1000).toISOString();
     (store as any).db.prepare("UPDATE tree_nodes SET trashed_at=? WHERE id=?").run(recent, nb2.id);
     expect(store.autoPurgeExpiredTrash(60)).toBe(0);
-    expect(store.listTrash().length).toBe(1);
+    // 未过期根 + 其子笔记（树形回收站列出整棵子树）
+    expect(store.listTrash().length).toBe(2);
   });
 
   it("回收站：清空 emptyTrash 全部彻底删除", () => {
@@ -552,8 +556,8 @@ describe("目录树操作", () => {
     const n2 = store.createNoteIn(nb2.id, "n2");
     store.deleteTreeNode(nb1.id);
     store.deleteTreeNode(nb2.id);
-    // 只列 trash 笔记本直接子节点（两个笔记本）
-    expect(store.listTrash().length).toBe(2);
+    // 树形回收站：两个根各连带一个子笔记
+    expect(store.listTrash().length).toBe(4);
     store.emptyTrash();
     expect(store.listTrash().length).toBe(0);
     // purge 后写墓碑（防复活 + M4 删云端前缀）
