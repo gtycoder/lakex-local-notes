@@ -82,3 +82,13 @@ quickNotesSync.ts:4 `import { type S3Settings, ObjectStore, isSafeSegment, mimeT
 - 不合并重复函数（errorMessage 与 logger.ts 同名——留待后续，本次仅移动 sync.ts 版）
 - 不改 quickNotesSync（它的独立 objectKey/常量不受影响）
 - 不优化实现（mimeTypeFor 的 map、sha256 算法均为原样迁移/等价复刻）
+
+## 8. Step A 执行完成记录（2026-08-22，提交 b37e5ef）
+
+- 14 函数 + 7 常量 + S3Settings 类型下沉 `src/core/syncUtils.ts`；sha256 纯 JS 版 `src/core/sha256Sync.ts`
+- 等价测试：sha256Sync（10 例，FIPS 向量/padding 边界/node:crypto/subtle）、syncUtils（28 例，extname 13 边界/parseLakeManifest/validateManifest 抛错消息）
+- 边界检查：脚本排除 *.test.ts（测试允许 node 依赖做等价对照）
+- 验收：tsc ✅ / 边界 0 违规 ✅ / 全量 **474 passed**（原 416 + 58 新增等价测试）✅
+- sync.ts 1152→984 行（-195 函数体，+16 import/re-export）；quickNotesSync 等外部调用方经 re-export 零感知
+- 拆分映射表见提交信息（可 git show b37e5ef 回溯）
+- 踩坑记录：①注释中 `MAX_MANIFEST_*` 后跟 `/` 形成 `*/` 提前闭合块注释 → 全角字符 PARSE_ERROR；②collectManifestRefs 定义在工具区之前（非 989+），正则删除需按实际行号；③原文件尾 `const isSafeSegment = isSafePathSegment` 依赖被删的 import → 需恢复本地 import 别名
