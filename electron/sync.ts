@@ -31,6 +31,9 @@ import {
 } from "../src/core/syncUtils.js";
 import { MAX_IMAGE_BYTES } from "./storeLimits.js";
 import { isSafePathSegment as isSafeSegment } from "../src/core/storeUtils.js";
+import { decidePurge, decideLocalTombstone, decideTrashCross, decideMetaApply,
+  decideTrashYield, decideTombstoneYield, buildUploadEntry, buildTombstoneEntry, computeBookkeeping,
+  TRASH_NOTEBOOK_ID as TRASH_NOTEBOOK_ID_CORE } from "../src/core/syncDecisions.js";
 
 // ===== 类型 =====
 // Manifest 系列类型已外移至 src/core/manifestTypes.ts（lake-core，V5 Phase 1）。
@@ -363,13 +366,13 @@ export async function syncNow(store: Store, onProgress?: (p: SyncProgress) => vo
       // purge 不广播强制删除（用户决策）：本地有副本 → 保留并移入本地回收站标 purged（可恢复、不上传）；
       // 本地无 → 留存墓碑（学到的删除，防离线设备把残留当新文档上传复活，审计 #2）。
       if (rn.deleted) {
-        const local = localById.get(rn.id);
-        if (local) {
-          // 显式恢复例外：本地已恢复（restoreTrashItem）→ 不应用 purge，上传阶段写回 active
-          if (store.isRestorePending(rn.id)) {
-            store.logScopes.sync.info(`[perf] download ${rn.id} purge-skip (restore pending) ${Date.now() - noteStart}ms`);
-            continue;
-          }
+        // Step B：判定下沉 core（decidePurge），执行留在本地
+        const purgeAction = decidePurge(localById.get(rn.id) ?? null, store.isRestorePending(rn.id));
+        if (purgeAction === "skip-restore-pending") {
+          store.logScopes.sync.info(`[perf] download ${rn.id} purge-skip (restore pending) ${Date.now() - noteStart}ms`);
+          continue;
+        }
+        if (purgeAction === "apply-purge") {
           store.applyRemotePurge(rn.id);
           store.logScopes.sync.info(`[perf] download ${rn.id} remote-purged → local kept in trash (purged) ${Date.now() - noteStart}ms`);
         } else {
@@ -380,52 +383,45 @@ export async function syncNow(store: Store, onProgress?: (p: SyncProgress) => vo
       }
       // 本地已删除而云端未标记：删除 vs 远端恢复按时间 LWW（见上）。
       const tombAt = tombstoned.get(rn.id);
-      if (tombAt !== undefined) {
-        if (rn.updatedAt > tombAt) {
-          // 远端恢复较新：撤销本地墓碑并跟随恢复（随后走正常下载/对账分支，按远端对齐 markSynced）。
-          store.revokeLocalDeletion(rn.id);
-          store.logScopes.sync.info(`[perf] download ${rn.id} remote-restored → local tombstone revoked ${Date.now() - noteStart}ms`);
-          // 刷新本地索引：恢复后该笔记在本设备变为 active（软删场景行已保留，仅清 deleted_at）。
-          const revived = store.listNotesForSync().find((n) => n.id === rn.id) ?? null;
-          if (revived) {
-            localById.set(rn.id, revived);
-          }
-        } else {
-          // 本地删除较新：本地删除优先，跳过下载（上传阶段会标记 deleted）。
-          continue;
+      const tombDecision = decideLocalTombstone(rn.updatedAt, tombAt);
+      if (tombDecision === "revoke") {
+        // 远端恢复较新：撤销本地墓碑并跟随恢复（随后走正常下载/对账分支，按远端对齐 markSynced）。
+        store.revokeLocalDeletion(rn.id);
+        store.logScopes.sync.info(`[perf] download ${rn.id} remote-restored → local tombstone revoked ${Date.now() - noteStart}ms`);
+        // 刷新本地索引：恢复后该笔记在本设备变为 active（软删场景行已保留，仅清 deleted_at）。
+        const revived = store.listNotesForSync().find((n) => n.id === rn.id) ?? null;
+        if (revived) {
+          localById.set(rn.id, revived);
         }
+      } else if (tombDecision === "keep-local-delete") {
+        // 本地删除较新：本地删除优先，跳过下载（上传阶段会标记 deleted）。
+        continue;
       }
       // TRASH-NOTEBOOK：回收站笔记本 vs 本地普通位置的交叉冲突
       // (a) 远端已移入回收站（删除传播）而本地仍 active：删除压编辑（墓碑权威）——
       //     本地编辑先强制留档再跟随移动；唯一例外是本地显式恢复（restore_pending_at）。
       // (b) 远端已恢复（active）而本地在回收站：恢复 vs 删除按 updatedAt LWW。
       const local0 = localById.get(rn.id) ?? null;
-      const localInTrash = local0 !== null && local0.parentId === TRASH_NOTEBOOK_ID;
-      const remoteInTrash = rn.parentId === TRASH_NOTEBOOK_ID;
-      if (local0 && localInTrash !== remoteInTrash) {
-        if (remoteInTrash) {
-          if (store.isRestorePending(rn.id)) {
-            store.logScopes.sync.info(`[perf] download ${rn.id} trash-skip (restore pending) ${Date.now() - noteStart}ms`);
-            continue;
-          }
-          try { store.createHistorySnapshot(rn.id, undefined, false); } catch { /* 留档失败不阻断 */ }
-          store.applyRemoteMoveToTrash(rn.id, rn.trashedAt ?? rn.updatedAt, rn.deletedFromParentId ?? null);
-          pushSuperseded(rn.id, rn.title);
-          const moved = store.listNotesForSync().find((n) => n.id === rn.id) ?? null;
-          if (moved) localById.set(rn.id, moved);
-          store.logScopes.sync.info(`[perf] download ${rn.id} remote-trashed → local moved to trash (edit archived) ${Date.now() - noteStart}ms`);
-        } else {
-          const trashedAt = local0.trashedAt ?? local0.updatedAt;
-          if (rn.updatedAt > trashedAt) {
-            store.applyRemoteRestore(rn.id, effectiveParent, rn.updatedAt);
-            const revived = store.listNotesForSync().find((n) => n.id === rn.id) ?? null;
-            if (revived) localById.set(rn.id, revived);
-            store.logScopes.sync.info(`[perf] download ${rn.id} remote-restored → local trash revoked ${Date.now() - noteStart}ms`);
-          } else {
-            store.logScopes.sync.info(`[perf] download ${rn.id} local-trash newer → keep trash ${Date.now() - noteStart}ms`);
-            continue;
-          }
-        }
+      // Step B：TRASH 交叉判定下沉 core（decideTrashCross），执行留在本地
+      const cross = decideTrashCross(local0, rn, store.isRestorePending(rn.id));
+      if (cross === "move-to-trash") {
+        try { store.createHistorySnapshot(rn.id, undefined, false); } catch { /* 留档失败不阻断 */ }
+        store.applyRemoteMoveToTrash(rn.id, rn.trashedAt ?? rn.updatedAt, rn.deletedFromParentId ?? null);
+        pushSuperseded(rn.id, rn.title);
+        const moved = store.listNotesForSync().find((n) => n.id === rn.id) ?? null;
+        if (moved) localById.set(rn.id, moved);
+        store.logScopes.sync.info(`[perf] download ${rn.id} remote-trashed → local moved to trash (edit archived) ${Date.now() - noteStart}ms`);
+      } else if (cross === "restore") {
+        store.applyRemoteRestore(rn.id, effectiveParent, rn.updatedAt);
+        const revived = store.listNotesForSync().find((n) => n.id === rn.id) ?? null;
+        if (revived) localById.set(rn.id, revived);
+        store.logScopes.sync.info(`[perf] download ${rn.id} remote-restored → local trash revoked ${Date.now() - noteStart}ms`);
+      } else if (cross === "keep-trash") {
+        store.logScopes.sync.info(`[perf] download ${rn.id} local-trash newer → keep trash ${Date.now() - noteStart}ms`);
+        continue;
+      } else if (cross === "skip-restore-pending") {
+        store.logScopes.sync.info(`[perf] download ${rn.id} trash-skip (restore pending) ${Date.now() - noteStart}ms`);
+        continue;
       }
       const local = localById.get(rn.id) ?? null;
       // 增量扫描优化：synced 笔记信任"本地自上次同步后无写入"，直接用基线 hash 比对，
@@ -453,7 +449,7 @@ export async function syncNow(store: Store, onProgress?: (p: SyncProgress) => vo
           // - 否则远端是本设备已确认版本 → 保留本地续编/改名（不被远端旧值回滚），上传阶段回写。
           const base = baseInfo.get(rn.id);
           const lastMeta = base?.lastSyncedMetaAt ?? null;
-          if (lastMeta === null || rn.updatedAt > lastMeta) {
+          if (decideMetaApply(rn.updatedAt, lastMeta)) {
             store.applyRemoteNoteMeta({ ...rn, parentId: effectiveParent });
             metaApplied = true;
           }
@@ -585,9 +581,7 @@ export async function syncNow(store: Store, onProgress?: (p: SyncProgress) => vo
     }
     // TRASH-NOTEBOOK：本地回收站条目 vs 远端已恢复（active 且更新）→ 本端删除让位（跟随恢复）
     if (note.parentId === TRASH_NOTEBOOK_ID) {
-      const remoteActive = remoteNotesById.get(note.id);
-      if (remoteActive && !remoteActive.deleted && remoteActive.parentId !== TRASH_NOTEBOOK_ID
-          && remoteActive.updatedAt > (note.trashedAt ?? note.updatedAt)) {
+      if (decideTrashYield(note, remoteNotesById.get(note.id))) {
         store.logScopes.sync.info(`[perf] upload ${note.id} trash-yield (remote restored newer)`);
         continue;
       }
@@ -604,14 +598,7 @@ export async function syncNow(store: Store, onProgress?: (p: SyncProgress) => vo
       // skip-fast 保证远端条目存在且未删除、本地基线非空（decideUpload 输入映射等价于原条件）
       const entry = remoteEntry!;
       const base = cachedHash!;
-      manifestNotes.push({
-        id: note.id, title: note.title, parentId: note.parentId, sortOrder: note.sortOrder,
-        updatedAt: note.updatedAt, contentHash: base, isConflict: note.isConflict,
-        isLocked: !!note.isLocked, lockedAt: note.lockedAt ?? null, icon: note.icon ?? null,
-        assets: entry.assets ?? [],
-        trashedAt: note.parentId === TRASH_NOTEBOOK_ID ? (entry.trashedAt ?? null) : undefined,
-        deletedFromParentId: note.parentId === TRASH_NOTEBOOK_ID ? (entry.deletedFromParentId ?? null) : undefined,
-      });
+      manifestNotes.push(buildUploadEntry({ note, contentHash: base, assets: entry.assets ?? [], trashedAt: entry.trashedAt ?? null, deletedFromParentId: entry.deletedFromParentId ?? null }));
       continue;
     }
     const hash = store.contentHash(note.id);
@@ -653,13 +640,7 @@ export async function syncNow(store: Store, onProgress?: (p: SyncProgress) => vo
       uploaded += 1;
       lakeUploaded = true;
     }
-    manifestNotes.push({
-      id: note.id, title: note.title, parentId: note.parentId, sortOrder: note.sortOrder,
-      updatedAt: note.updatedAt, contentHash: hash, isConflict: note.isConflict,
-      isLocked: !!note.isLocked, lockedAt: note.lockedAt ?? null, icon: note.icon ?? null, assets,
-      trashedAt: note.parentId === TRASH_NOTEBOOK_ID ? (note.trashedAt ?? null) : undefined,
-      deletedFromParentId: note.parentId === TRASH_NOTEBOOK_ID ? (note.deletedFromParentId ?? null) : undefined,
-    });
+    manifestNotes.push(buildUploadEntry({ note, contentHash: hash, assets, trashedAt: note.trashedAt ?? null, deletedFromParentId: note.deletedFromParentId ?? null }));
     store.logScopes.sync.info(`[perf] upload ${note.id} ${note.title} ${Date.now() - noteUploadStart}ms (lake=${lakeUploaded ? `${lakeBytesLen}B` : "skip"}, assets=${pendingAssets.length})`);
   }
   store.logScopes.sync.info(`[perf] upload phase ${Date.now() - uploadStart}ms (uploaded=${uploaded}, local=${localNotes.length})`);
@@ -675,7 +656,7 @@ export async function syncNow(store: Store, onProgress?: (p: SyncProgress) => vo
     // 其他设备恢复较新，墓碑让位（不回写覆盖，避免恢复被撤销）。
     // 反向（本墓碑删除较新）仍回写，保证离线设备删除能传播（审计 #2）。
     const remoteNote = remoteNotesById.get(deleted.id);
-    if (remoteNote && !remoteNote.deleted && remoteNote.updatedAt > deleted.deletedAt) {
+    if (decideTombstoneYield(deleted.deletedAt, remoteNote)) {
       store.logScopes.sync.info(`[perf] upload ${deleted.id} tombstone-yield (remote restored newer)`);
       continue;
     }
@@ -691,13 +672,7 @@ export async function syncNow(store: Store, onProgress?: (p: SyncProgress) => vo
       store.logScopes.sync.warn(`[perf] upload ${deleted.id} tombstone content unreadable, placeholder fallback`);
     }
     // 墓碑保持轻量：只带正文 contentHash，不携带资源列表（资源由 GC 按软删前缀保护 + B 端 list 补全）。
-    manifestNotes.push({
-      id: deleted.id, title: deleted.title, parentId: deleted.parentId,
-      sortOrder: deleted.sortOrder, updatedAt: deleted.updatedAt,
-      contentHash: tombHash,
-      isConflict: false, assets: [],
-      deleted: true, deletedAt: deleted.deletedAt,
-    });
+    manifestNotes.push(buildTombstoneEntry(deleted, tombHash));
   }
 
   // 4. 写新清单（commit + latest）
@@ -735,18 +710,12 @@ export async function syncNow(store: Store, onProgress?: (p: SyncProgress) => vo
   }
 
   // P0-1 修正：lastUploadedHash 语义 = 已成功发布到 latest 的 hash，必须在 manifest 写成功后再更新。
-  // 仅对 active 笔记更新；deleted 墓碑是占位 contentHash，绝不写入 sync_base/lastUploadedHash。
-  for (const note of manifestNotes) {
-    if (note.deleted) continue;
-    store.setLastUploadedHash(note.id, note.contentHash);
-    store.setBaseHash(note.id, note.contentHash);
+  // 仅对 active 笔记更新；deleted 墓碑是占位 contentHash，绝不写入 sync_base/lastUploadedHash（Step B：computeBookkeeping）。
+  for (const item of computeBookkeeping(manifestNotes)) {
+    store.setLastUploadedHash(item.id, item.contentHash);
+    store.setBaseHash(item.id, item.contentHash);
     // V5 §5.2：快照 = 上传循环现算的 hash + manifest note 字段；同步期间编辑 → 不标，下轮重传
-    store.markSyncedIfUnchanged(note.id, {
-      contentHash: note.contentHash,
-      updatedAt: note.updatedAt,
-      title: note.title, parentId: note.parentId, sortOrder: note.sortOrder,
-      isLocked: !!note.isLocked, lockedAt: note.lockedAt ?? null, icon: note.icon ?? null,
-    });
+    store.markSyncedIfUnchanged(item.id, item.snapshot);
   }
   // V5 §5.1：folder 条件归位（latest 已发布成功后；用构建 manifest 时的 updatedAt 快照，
   // 同步期间本地再改 group 则 updated_at 变化 → 不归位，保持 local 下轮重传）。
