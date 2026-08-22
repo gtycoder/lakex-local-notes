@@ -165,3 +165,59 @@ syncNow(store, onProgress)
 ## 9. 执行顺序（审计建议，确认）
 
 Step A（14 函数，含 objectKey）→ Step B（6 判定 + G1 条目 + G2 记账 + G5 映射，全表驱动）→ G3 决策确认（默认 A）→ Step C/D 按需评估 → Step E 接线 + 双端真机 A/B（§5 清单）为强制验收。
+
+## 10. 执行记录（2026-08-22，分支 refactor/sync-split-desktop）
+
+### Step A ✅（提交 b37e5ef）
+- 14 纯逻辑函数 + 7 常量 + S3Settings 类型下沉 `src/core/syncUtils.ts` + `sha256Sync.ts`
+- 等价测试 38 例（sha256 FIPS/边界、extname 13 边界、parseLakeManifest、validateManifest 抛错）
+- sync.ts 1152→984 行；全量 474 passed
+
+### Step B ✅（提交 ccd9a9c）
+- `src/core/syncDecisions.ts`：6 判定（decidePurge/LocalTombstone/TrashCross/MetaApply/TrashYield/TombstoneYield）
+  + G1 条目构造（buildUploadEntry v4 编码逐字段断言 / buildTombstoneEntry）+ G2 记账（computeBookkeeping）
+  + G5 行映射（rowToLocalState）
+- sync.ts 内联判定全部改调 core（执行留本地，判定单源）；noteQueries 映射走 rowToLocalState
+- 30 表驱动测试；全量 504 passed
+
+### Step C/D 评估结论：不执行（方案 X 成立）
+- 移动端执行壳可直接调 core 决策函数（decide*/build*/compute*），无需全循环端口化
+- 全端口化 = SyncDbPort 覆盖 30+ store 方法 → 膨胀失控，且移动端 sql.js adapter 工作量翻倍
+- **执行层保持各端（方案 X）**：语义载体单源 + 执行时序双端真机 A/B 强验
+
+### Step E（待执行）：移动端接线
+1. 引入 `src/mobile/`（当前分支无——在 refactor/mobile-capacitor 分支；需 checkout 或 merge）
+2. 移动端执行壳重写：调 core syncUtils/syncDecisions（废弃原 syncEngine 自研编排）
+3. sql.js adapter（dbPort 思路）+ CapacitorHttp（s3Store 思路）对齐
+4. C2 修复（saveNote 置 sync_state='local'）从 mobile-capacitor 带入
+5. 双端真机 A/B（§5 清单 8 场景）强制验收
+6. G3 决策确认（默认 sql.js 轻量历史表对齐 superseded）
+
+### 已知待办（拆分之外）
+- H3 assets 进端口契约（与图片方案 lake-asset/blob 联动，待图片方案落地）
+- H4 folders 导入/发布（移动端）
+- G3 superseded 移动端历史表
+
+## 11. 双端 AB 真实验证通过（2026-08-22）
+
+**方式**：两个真实 Electron 实例（A=dev userData/19876/9222，B=$TMPDIR/lake-device-b/19877/9223）+ 真实七牛 S3（独立前缀 ab-test-verify）+ CDP 驱动 + DB 断言。
+
+| 场景 | 结果 |
+|---|---|
+| A 新建 → A 同步 → B 同步 → **B 数据库拉到**（元数据+正文） | ✅ |
+| A 删除（右键+确认）→ A 同步 → B 同步 → **B 数据库进回收站**（删除传播） | ✅ |
+
+**验证意义**：重构后（语义载体在 core、执行在各自端）的真实双设备同步语义正确——与集成测试（6 场景 mock S3）互为印证。
+
+**脚本**：`scripts/ab-verify.sh`（vite preview + 双实例 + 配置注入 + 清理）+ `scripts/ab-verify.mjs`（CDP 驱动 + DB 断言）。
+
+**环境踩坑（record）**：
+1. vite dev server 被 exec 会话回收（无 tty）→ 用 `vite preview`（静态服务 dist，无 electron 插件）规避
+2. electron bin 缺失（allow-scripts）→ 从主仓库复制 `dist/Electron.app`
+3. S3 配置注入必须**在 electron 启动前**（清数据后重注入；App 读 DB settings）
+4. "新建文档"在未选笔记本时 disabled → 先点笔记本
+5. 删除有确认对话框（`.confirm-dialog .danger-button`）
+6. 同步是后台异步 → 需等完成后才进行下一步（避免 B 拉旧 manifest 的时序竞态）
+7. manifest 是 gzip → 云端检查需解压
+
+**清理**：ab-test-* 测试前缀 22 对象已删；lake-notes 生产前缀未动；dev 数据已清空重建。
