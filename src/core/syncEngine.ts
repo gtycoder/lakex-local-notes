@@ -16,7 +16,23 @@
 import { reconcileLakeNote } from "./lakeReconcile.js";
 import { decideUpload } from "./decideUpload.js";
 import type { Manifest, ManifestNote } from "./manifestTypes.js";
-import { sha256Hex } from "./sha256.js";
+import { sha256Sync } from "./sha256Sync.js";
+
+/** 与桌面一致的对象键构造（内容寻址）。 */
+function objectKey(noteId: string, contentHash: string): string {
+  return `objects/${noteId}-${contentHash}.lake`;
+}
+
+/** 兼容 Web/Node 的 UUID（移动端 WebView 也提供 crypto.randomUUID）。 */
+function randomUUID(): string {
+  const c = globalThis.crypto;
+  if (c && typeof c.randomUUID === "function") return c.randomUUID();
+  // 兜底：无 crypto.randomUUID 的环境（极老 WebView）
+  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (ch) => {
+    const r = (Math.random() * 16) | 0;
+    return (ch === "x" ? r : (r & 0x3) | 0x8).toString(16);
+  });
+}
 
 export interface SyncConfig {
   endpoint: string;
@@ -51,7 +67,7 @@ export interface LocalNoteRow {
 export interface SyncDbPort {
   getNote(id: string): LocalNoteRow | null;
   getAllNotes(): LocalNoteRow[];
-  getSyncBase(id: string): { contentHash: string; lastUploadedHash: string | null } | null;
+  getSyncBase(id: string): { contentHash: string; lastUploadedHash: string | null; lastSyncedMetaAt: string | null } | null;
   applyRemoteNote(note: ManifestNote, content: string): void;
   /** 远端墓碑应用：先拉内容再标记回收站（先内容、后标志；保留可恢复） */
   applyRemoteTrash(id: string, content: string, title: string, trashedAt: string, deletedFromParentId: string | null, parentId: string | null, sortOrder: number): void;
@@ -65,10 +81,6 @@ export interface SyncDbPort {
 }
 
 const MANIFEST_KEY = "manifests/latest.json";
-
-function objectKey(noteId: string, contentHash: string): string {
-  return `objects/${noteId}-${contentHash}.lake`;
-}
 
 export async function syncNow(cfg: SyncConfig, s3: S3Store, db: SyncDbPort): Promise<SyncReport> {
   const report: SyncReport = { pulled: false, appliedRemote: 0, uploaded: 0, published: false, message: "", warnings: [] };
@@ -136,7 +148,7 @@ export async function syncNow(cfg: SyncConfig, s3: S3Store, db: SyncDbPort): Pro
 
       // 正常对账（含本地显式恢复 restore_pending_at → local-wins 走上传）
       const base = db.getSyncBase(rn.id);
-      const localHash = local ? await sha256Hex(local.content) : null;
+      const localHash = local ? sha256Sync(new TextEncoder().encode(local.content)) : null;
       // 幂等应用优化：本地内容与远端 hash 一致 → 仅对齐记账，不重复下载应用
       if (localHash === rn.contentHash) {
         db.setSyncBase(rn.id, rn.contentHash, rn.updatedAt, null);
@@ -147,6 +159,8 @@ export async function syncNow(cfg: SyncConfig, s3: S3Store, db: SyncDbPort): Pro
         localHash,
         remoteHash: rn.contentHash,
         lastUploadedHash: base?.lastUploadedHash ?? null,
+        remoteUpdatedAt: rn.updatedAt,
+        lastSyncedMetaAt: base?.lastSyncedMetaAt ?? null,
         localInTrash: localTrashed,
       });
       if (action.kind === "remote-wins") {
@@ -167,7 +181,7 @@ export async function syncNow(cfg: SyncConfig, s3: S3Store, db: SyncDbPort): Pro
   const localAll = db.getAllNotes();
   for (const local of localAll) {
     const rn = remote?.notes.find((n) => n.id === local.id) ?? null;
-    const localHash = await sha256Hex(local.content);
+    const localHash = sha256Sync(new TextEncoder().encode(local.content));
     const localTrashed = local.trashedAt != null;
     const localRestoring = local.restorePendingAt != null;
     const remoteTrashed = rn ? !!rn.trashedAt || !!rn.deleted : false;
@@ -225,7 +239,7 @@ export async function syncNow(cfg: SyncConfig, s3: S3Store, db: SyncDbPort): Pro
   let next: Manifest | null = null;
   if (uploadQueue.length > 0) {
     for (const item of uploadQueue) {
-      const hash = await sha256Hex(item.content);
+      const hash = sha256Sync(new TextEncoder().encode(item.content));
       if (item.entry.contentHash !== hash) item.entry.contentHash = hash;
       await s3.putObject(`${cfg.prefix}/${objectKey(item.id, item.entry.contentHash)}`, item.content);
       report.uploaded++;
@@ -233,7 +247,7 @@ export async function syncNow(cfg: SyncConfig, s3: S3Store, db: SyncDbPort): Pro
     next = {
       version: 4,
       workspaceId: "default",
-      commitId: crypto.randomUUID(),
+      commitId: randomUUID(),
       prevCommitId: remote?.commitId ?? null,
       createdAt: new Date().toISOString(),
       notes: [...(remote?.notes ?? [])],
