@@ -13,9 +13,11 @@ interface LakeEditorProps {
   onChange: (content: string) => void;
   prefs?: LakeEditorPrefs;
   onEditorReady?: (noteId: string, editor: LakeEditorInstance | null) => void;
+  /** 移动端 blob 注入：图片显示 URL 解析器（canonical → blob），传给内核 image 配置。 */
+  generateDisplayUrl?: (url: string) => string;
 }
 
-export function LakeEditor({ noteId, content, mode = "editor", tocEnabled, onChange, prefs, onEditorReady }: LakeEditorProps) {
+export function LakeEditor({ noteId, content, mode = "editor", tocEnabled, onChange, prefs, onEditorReady, generateDisplayUrl }: LakeEditorProps) {
   const hostRef = useRef<HTMLDivElement>(null);
   const editorRef = useRef<LakeEditorInstance | null>(null);
   const onChangeRef = useRef(onChange);
@@ -69,7 +71,7 @@ export function LakeEditor({ noteId, content, mode = "editor", tocEnabled, onCha
     try {
       editor = createLakeDocument(host, mode, () => {
         if (editor && !setting) onChangeRef.current(stripAssetAccessToken(editor.getDocument("text/lake")));
-      }, tocEnabled, noteId, undefined, prefs);
+      }, tocEnabled, noteId, undefined, { ...prefs, generateDisplayUrl });
       editor.setDocument("text/lake", addAssetAccessToken(content));
       // 修复：Lake TOC 侧边栏创建时用空 toc 渲染，setDocument 后补一次数据同步。
       // 该补偿有重试定时器，必须跟随实例一起清理。

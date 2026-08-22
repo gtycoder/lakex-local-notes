@@ -8,10 +8,10 @@ import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
 import type { ResourceUploadOutput } from "./storeTypes.js";
-import { AppError } from "./storeErrors.js";
+import { AppError } from "../src/core/storeErrors.js";
 import { SsrfError } from "./ssrf.js";
-import { MAX_IMAGE_BYTES, MAX_IMAGE_PIXELS } from "./storeLimits.js";
-import { readImageDimensions, sniffImageFormat } from "./imageUtils.js";
+import { MAX_IMAGE_BYTES, MAX_IMAGE_PIXELS } from "../src/core/storeLimits.js";
+import { readImageDimensions, sniffImageFormat } from "../src/core/imageUtils.js";
 import type { HttpFetcher } from "../src/core/httpFetcher.js";
 import { createPinnedHttpFetcher } from "./httpFetcher.js";
 

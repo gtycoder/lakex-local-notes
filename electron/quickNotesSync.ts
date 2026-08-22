@@ -5,7 +5,7 @@ import { type S3Settings, ObjectStore, isSafeSegment, mimeTypeFor, sha256Hex, va
 import { reconcileQuickNote } from "../src/core/quickNoteReconcile.js";
 import { decideUpload } from "../src/core/decideUpload.js";
 import type { ManifestItem, QuickNotesManifest } from "../src/core/manifestTypes.js";
-import { ASSET_TRANSFER_CONCURRENCY, runPool } from "./asyncPool.js";
+import { ASSET_TRANSFER_CONCURRENCY, runPool } from "../src/core/asyncPool.js";
 
 import { QuickNotesStore } from "./quickNotes.js";
 

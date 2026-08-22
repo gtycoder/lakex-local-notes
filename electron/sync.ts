@@ -15,7 +15,7 @@ import {
 } from "@aws-sdk/client-s3";
 import type { Store } from "./store.js";
 import { createSilentLoggerScopes, type LoggerScopes } from "../src/core/logger.js";
-import { ASSET_TRANSFER_CONCURRENCY, runPool } from "./asyncPool.js";
+import { ASSET_TRANSFER_CONCURRENCY, runPool } from "../src/core/asyncPool.js";
 import { mergeLockState } from "../src/core/syncDecision.js";
 import { reconcileLakeNote } from "../src/core/lakeReconcile.js";
 import { decideUpload } from "../src/core/decideUpload.js";
@@ -28,7 +28,7 @@ import {
   type S3Settings,
   sha256Hex as coreSha256Hex,
 } from "../src/core/syncUtils.js";
-import { MAX_IMAGE_BYTES } from "./storeLimits.js";
+import { MAX_IMAGE_BYTES } from "../src/core/storeLimits.js";
 import { isSafePathSegment as isSafeSegment } from "../src/core/storeUtils.js";
 import { decidePurge, decideLocalTombstone, decideTrashCross, decideMetaApply,
   decideTrashYield, decideTombstoneYield, buildUploadEntry, buildTombstoneEntry, computeBookkeeping,

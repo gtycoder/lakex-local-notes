@@ -1,5 +1,5 @@
-import { rowToLocalState } from "../src/core/syncDecisions.js";
-import type { DbLike } from "../src/core/dbLike.js";
+import { rowToLocalState } from "./syncDecisions.js";
+import type { DbLike } from "./dbLike.js";
 
 export interface NoteSummary {
   id: string;

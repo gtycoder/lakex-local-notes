@@ -2,7 +2,7 @@ import type { DbLike } from "../src/core/dbLike.js";
 import fs from "node:fs";
 import path from "node:path";
 import zlib from "node:zlib";
-import { lakeHtmlToPlain } from "./lakeCaches.js";
+import { lakeHtmlToPlain } from "../src/core/lakeCaches.js";
 
 export interface HistorySnapshotSummary {
   id: number;

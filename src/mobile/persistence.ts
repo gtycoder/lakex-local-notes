@@ -44,3 +44,40 @@ export async function loadSnapshot(): Promise<Uint8Array | null> {
     req.onerror = () => reject(req.error);
   });
 }
+
+/** 资产字节持久化（键 `asset:{noteId}/{filename}`）。图片可能较大（MB 级），用独立键避免全库快照膨胀。 */
+export async function saveAssetBytes(key: string, bytes: Uint8Array): Promise<void> {
+  const store = await openStore();
+  return new Promise((resolve, reject) => {
+    const req = store.put(bytes.buffer as ArrayBuffer, "asset:" + key);
+    req.onsuccess = () => resolve();
+    req.onerror = () => reject(req.error);
+  });
+}
+
+export async function loadAssetBytes(key: string): Promise<Uint8Array | null> {
+  const store = await openStore();
+  return new Promise((resolve, reject) => {
+    const req = store.get("asset:" + key);
+    req.onsuccess = () => {
+      const data = req.result as ArrayBuffer | undefined;
+      resolve(data ? new Uint8Array(data) : null);
+    };
+    req.onerror = () => reject(req.error);
+  });
+}
+
+/** 列出全部已持久化的资产键（供启动时载入内存）。 */
+export async function listAssetKeys(): Promise<string[]> {
+  const store = await openStore();
+  return new Promise((resolve, reject) => {
+    const req = store.getAllKeys();
+    req.onsuccess = () => {
+      const keys = (req.result as IDBValidKey[])
+        .filter((k): k is string => typeof k === "string" && k.startsWith("asset:"))
+        .map((k) => k.slice("asset:".length));
+      resolve(keys);
+    };
+    req.onerror = () => reject(req.error);
+  });
+}

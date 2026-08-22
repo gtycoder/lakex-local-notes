@@ -3,7 +3,7 @@ import type { QuickNotesStore } from "../quickNotes.js";
 import type { Store } from "../store.js";
 import { runDeepCleanup, runGcReconcile, testConnection, type SyncProgress } from "../sync.js";
 import { runQuickNotesDeepCleanup } from "../quickNotesSync.js";
-import { AppError } from "../storeErrors.js";
+import { AppError } from "../../src/core/storeErrors.js";
 import { IpcInputError } from "../ipcLimits.js";
 import type { IpcRegistrar } from "./registrar.js";
 

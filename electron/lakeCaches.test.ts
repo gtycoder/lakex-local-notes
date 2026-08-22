@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { lakeHtmlToMarkdown, lakeHtmlToPlain } from "./lakeCaches.js";
+import { lakeHtmlToMarkdown, lakeHtmlToPlain } from "../src/core/lakeCaches.js";
 
 describe("lakeHtmlToMarkdown（锁定态缓存兜底转换）", () => {
   it("段落与换行：<p> 分段、<br> 换行", () => {

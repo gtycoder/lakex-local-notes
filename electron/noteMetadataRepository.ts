@@ -1,6 +1,6 @@
 import type { DbLike } from "../src/core/dbLike.js";
-import { AppError } from "./storeErrors.js";
-import type { SyncFolder, TreeNode } from "./noteQueries.js";
+import { AppError } from "../src/core/storeErrors.js";
+import type { SyncFolder, TreeNode } from "../src/core/noteQueries.js";
 
 interface MetadataRepositoryDeps {
   db: DbLike;

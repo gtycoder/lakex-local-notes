@@ -82,22 +82,22 @@ export class CapacitorHttpHandler implements RequestHandler<HttpRequest, HttpRes
       responseHeaders[k.toLowerCase()] = String(v);
     }
 
-    let body: ReadableStream<Uint8Array> | undefined;
-    if (typeof res.data === "string" && res.data.length > 0) {
-      let bytes: Uint8Array;
-      try {
-        bytes = base64ToUint8Array(res.data);
-      } catch {
-        bytes = new TextEncoder().encode(res.data);
-      }
-      // AWS SDK 期望 Blob / ReadableStream（浏览器运行时）；Uint8Array 会被拒（Deserialization error）
-      body = new ReadableStream<Uint8Array>({
-        start(controller) {
-          controller.enqueue(bytes);
-          controller.close();
-        },
-      });
+    // 鲁棒读取 res.data（CapacitorHttp + responseType=arraybuffer → base64 string；也可能是 Uint8Array/Blob）。
+    // AWS SDK S3 GetObject 期望 Blob/ReadableStream；统一收敛为 Blob，避免 out.Body undefined。
+    let bytes: Uint8Array | null = null;
+    const respData = (res as { data?: unknown }).data;
+    if (typeof respData === "string" && respData.length > 0) {
+      // binary（responseType=arraybuffer → base64）或文本：优先 base64 解码，失败按 utf8
+      try { bytes = base64ToUint8Array(respData); } catch { bytes = new TextEncoder().encode(respData); }
+    } else if (respData instanceof Uint8Array) {
+      bytes = respData;
+    } else if (respData instanceof ArrayBuffer) {
+      bytes = new Uint8Array(respData);
+    } else if (respData !== null && typeof respData === "object") {
+      // CapacitorHttp 对 application/json 自动解析成对象 → 重新序列化回字节（manifest/元数据）
+      bytes = new TextEncoder().encode(JSON.stringify(respData));
     }
+    const body: ReadableStream<Uint8Array> | undefined = bytes ? new ReadableStream<Uint8Array>({ start(c) { c.enqueue(bytes); c.close(); } }) : undefined;
 
     return { response: { statusCode: res.status, headers: responseHeaders, body } };
   }

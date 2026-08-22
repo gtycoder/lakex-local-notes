@@ -3,9 +3,13 @@
  * 浏览列表 → 打开（LakeEditor 渲染）→ 编辑 → 保存（sql.js + IndexedDB）→ S3 通路验证。
  * 不复用 App.tsx（依赖完整 IPC）；直接复用 LakeEditor（纯 Web 组件，零 native 依赖）。
  */
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { LakeEditor } from "../features/editor/LakeEditor";
 import { bridge, type POCNote, type S3Config } from "./bridge";
+import { injectAssetBlobs } from "./blobInject";
+import { createCardBlobInjector } from "./cardBlobInject";
+import type { LakeEditorInstance } from "../features/editor/lakeRuntime";
+import { parseLocalAssetUrl } from "../core/assetUrl.js";
 import "lakex-editor-react-component/style.css";
 import "./mobile.css";
 
@@ -33,6 +37,9 @@ export function MobilePocApp() {
     forcePathStyle: false,
   });
   const dirtyRef = useRef(false);
+  const cardInjectorRef = useRef<ReturnType<typeof createCardBlobInjector> | null>(null);
+  const editorRef = useRef<LakeEditorInstance | null>(null);
+
 
   const refreshList = useCallback(async () => {
     setNotes(await bridge.listNotes());
@@ -50,6 +57,22 @@ export function MobilePocApp() {
       }
     })();
   }, [refreshList]);
+
+  // D8：viewer 内容 = 注入 blob 后的显示内容（setDocument 前改 src=blob → qH 挂载即用 blob）。
+  // 实测（真机）：注入后 cardData.src=blob + status=done 被保留（originalType=link 需顶层设置），
+  // setCardValue 命令作为 backup（onEditorReady 后注入）。
+  const { displayContent: viewerContent, revoke, restore } = useMemo(() => {
+    if (active) return injectAssetBlobs(active.content);
+    return { displayContent: "", revoke: () => {}, restore: (c) => c };
+  }, [active]);
+  // 基于当前文档内容建立卡片注入器（setCardValue 命令 backup）
+  const cardInjector = useMemo(
+    () => (active ? createCardBlobInjector(active.content) : null),
+    [active]
+  );
+  // 关文档/切 tab 时 revoke blob URLs
+  useEffect(() => () => { revoke(); cardInjector?.revoke(); }, [revoke, cardInjector]);
+
 
   const save = async () => {
     if (!active) return;
@@ -206,10 +229,31 @@ export function MobilePocApp() {
       <section className="poc-document">
         <LakeEditor
           noteId={active.id}
-          content={editing ? draft : active.content}
+          content={viewerContent}
           mode={editing ? "editor" : "viewer"}
           tocEnabled={false}
-          onChange={(content) => { setDraft(content); dirtyRef.current = true; }}
+          onChange={(content) => {
+            // 保存前还原：blob → canonical（内容注入 + cardInjector 注入的 blob 都要还原）
+            const restored = cardInjector ? cardInjector.restore(restore(content)) : restore(content);
+            setDraft(restored);
+            dirtyRef.current = true;
+          }}
+          onEditorReady={(noteId, editor) => {
+            editorRef.current = editor;
+            // editor 就绪后延迟注入 blob（等卡片创建）；resetCardValue+sync 可在卡片 error 后救活，
+            // 故用稍长延迟 + 重试确保卡片已挂载
+            if (editor && cardInjector) {
+              let attempts = 0;
+              const tryInject = () => {
+                const n = cardInjector.inject(editor);
+                if (n === 0 && attempts < 4) {
+                  attempts++;
+                  window.setTimeout(tryInject, 400);
+                }
+              };
+              window.setTimeout(tryInject, 800);
+            }
+          }}
           prefs={{ fontSize: 18, showToolbar: true }}
         />
       </section>

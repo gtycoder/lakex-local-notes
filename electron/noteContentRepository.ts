@@ -1,6 +1,6 @@
 import type { DbLike } from "../src/core/dbLike.js";
 import fs from "node:fs";
-import { AppError } from "./storeErrors.js";
+import { AppError } from "../src/core/storeErrors.js";
 
 export interface NoteCacheInput {
   markdown?: string | null;

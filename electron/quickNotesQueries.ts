@@ -1,7 +1,7 @@
 import type { DbLike } from "../src/core/dbLike.js";
 import fs from "node:fs";
 import type { QuickNoteDocument, QuickNoteSummary, QuickNoteDeleted } from "./quickNoteTypes.js";
-import { AppError } from "./storeErrors.js";
+import { AppError } from "../src/core/storeErrors.js";
 import { parseQuickNoteContent, validateQuickNoteContent, type StoredQuickNoteContent } from "../src/core/quickNoteModel.js";
 
 export interface QuickNoteRow {

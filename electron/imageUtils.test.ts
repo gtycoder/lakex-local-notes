@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { mimeTypeForFilename, readImageDimensions, sniffImageFormat } from "./imageUtils";
+import { mimeTypeForFilename, readImageDimensions, sniffImageFormat } from "../src/core/imageUtils.js";
 
 describe("imageUtils", () => {
   it("sniffs supported image magic bytes", () => {

@@ -2,8 +2,8 @@ import type { DbLike } from "../src/core/dbLike.js";
 import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
-import type { SyncNote } from "./noteQueries.js";
-import { AppError } from "./storeErrors.js";
+import type { SyncNote } from "../src/core/noteQueries.js";
+import { AppError } from "../src/core/storeErrors.js";
 
 interface RemoteAsset {
   filename: string;

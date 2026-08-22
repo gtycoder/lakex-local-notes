@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { IpcInputError } from "../ipcLimits";
-import { AppError } from "../storeErrors";
+import { AppError } from "../../src/core/storeErrors.js";
 import { encodeIpcError, parseIpcError, toIpcErrorPayload } from "./errors";
 
 describe("IPC error payloads", () => {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { runPool } from "./asyncPool.js";
+import { runPool } from "../src/core/asyncPool.js";
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 

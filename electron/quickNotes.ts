@@ -7,8 +7,8 @@ import path from "node:path";
 import crypto from "node:crypto";
 import sharp from "sharp";
 import { ASSET_PORT } from "./assetServer.js";
-import { AppError } from "./storeErrors.js";
-import { sniffImageFormat } from "./imageUtils.js";
+import { AppError } from "../src/core/storeErrors.js";
+import { sniffImageFormat } from "../src/core/imageUtils.js";
 import {
   QUICK_NOTE_VERSION,
   normalizeQuickNoteContent,

@@ -6,19 +6,19 @@ import zlib from "node:zlib";
 import os from "node:os";
 import { ASSET_PORT } from "./assetServer.js";
 import { mdToHtml, wrapHtmlPage } from "../src/core/mdToHtml.js";
-import { lakeHtmlToMarkdown, lakeHtmlToPlain } from "./lakeCaches.js";
+import { lakeHtmlToMarkdown, lakeHtmlToPlain } from "../src/core/lakeCaches.js";
 import { createSilentLoggerScopes, type LoggerScopes } from "../src/core/logger.js";
-import { AppError } from "./storeErrors.js";
+import { AppError } from "../src/core/storeErrors.js";
 import { extractAssetRefs, isSafePathSegment, sanitizeFileName, selectHistoryDrops } from "../src/core/storeUtils.js";
 import { readNoteDigest, type NoteDigest } from "./storeQueries.js";
-import { SearchRepository, type SearchResult } from "./searchRepository.js";
+import { SearchRepository, type SearchResult } from "../src/core/searchRepository.js";
 import { HistoryRepository, type HistorySnapshotPreview, type HistorySnapshotSummary } from "./historyRepository.js";
 import { TrashRepository, type TrashItem, type TrashReminderItem } from "../src/core/trashRepository.js";
 import { AssetRepository, type OrphanAsset, type OrphanAssetRow } from "./assetRepository.js";
-import { NoteQueries, type NoteSummary, type SummaryRow, type SyncFolder, type SyncNote, type TreeNode, type TreeNodeRow } from "./noteQueries.js";
+import { NoteQueries, type NoteSummary, type SummaryRow, type SyncFolder, type SyncNote, type TreeNode, type TreeNodeRow } from "../src/core/noteQueries.js";
 import { NoteMetadataRepository } from "./noteMetadataRepository.js";
 import { NoteContentRepository, type NoteCacheInput } from "./noteContentRepository.js";
-import { mimeTypeForFilename } from "./imageUtils.js";
+import { mimeTypeForFilename } from "../src/core/imageUtils.js";
 import { createPlaintextSecretCipher, type SecretCipher } from "../src/core/secretCipher.js";
 import type { DbLike } from "../src/core/dbLike.js";
 import { ResourceRepository } from "./resourceRepository.js";
@@ -32,9 +32,9 @@ const DEFAULT_NOTEBOOK_ID = "notebook-personal";
 /** 隐藏回收站笔记本（固定 ID，每端本地初始化、不同步 folder；软删 = 移入此处）。 */
 export const TRASH_NOTEBOOK_ID = "notebook-trash";
 
-export { MAX_IMAGE_BYTES, MAX_IMAGE_PIXELS } from "./storeLimits.js";
+export { MAX_IMAGE_BYTES, MAX_IMAGE_PIXELS } from "../src/core/storeLimits.js";
 
-export { AppError } from "./storeErrors.js";
+export { AppError } from "../src/core/storeErrors.js";
 
 interface NoteDocument extends NoteSummary { content: string; }
 interface S3Settings {
