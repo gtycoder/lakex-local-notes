@@ -408,12 +408,24 @@ export async function syncNow(
       // Step B：TRASH 交叉判定下沉 core（decideTrashCross），执行留在本地
       const cross = decideTrashCross(local0, rn, store.isRestorePending(rn.id));
       if (cross === "move-to-trash") {
-        try { store.createHistorySnapshot(rn.id, undefined, false); } catch { /* 留档失败不阻断 */ }
+        // 留档语义（与下载分支 reconcile 的 localIsOwnEdit 同构，协议 §4.2）：
+        // 仅当"本机编辑成果"被删除覆盖才留档 + 报 superseded——本地相对基线有改动，
+        // 或本机上传过当前版本（本机是作者）。B 从未编辑/从未上传（纯跟随删除传播）
+        // → 只移入回收站，不留档不报（2026-08-22 修复：A 新建同步 → 删除 → B 无编辑
+        //   跟随进回收站却误写快照）。
+        const mCachedBase = local0 && local0.syncState === "synced" ? store.baseHash(local0.id) : null;
+        const mLocalHash = local0 ? (mCachedBase ?? store.contentHash(local0.id)) : null;
+        const mBase = store.baseHash(rn.id);
+        const mLocalChanged = mLocalHash !== null && mLocalHash !== mBase;
+        const mOwnEdit = mLocalChanged || (mLocalHash !== null && mLocalHash === store.lastUploadedHash(rn.id));
+        if (mOwnEdit) {
+          try { store.createHistorySnapshot(rn.id, undefined, false); } catch { /* 留档失败不阻断 */ }
+          pushSuperseded(rn.id, rn.title);
+        }
         store.applyRemoteMoveToTrash(rn.id, rn.trashedAt ?? rn.updatedAt, rn.deletedFromParentId ?? null);
-        pushSuperseded(rn.id, rn.title);
         const moved = store.listNotesForSync().find((n) => n.id === rn.id) ?? null;
         if (moved) localById.set(rn.id, moved);
-        store.logScopes.sync.info(`[perf] download ${rn.id} remote-trashed → local moved to trash (edit archived) ${Date.now() - noteStart}ms`);
+        store.logScopes.sync.info(`[perf] download ${rn.id} remote-trashed → local moved to trash ${mOwnEdit ? "(edit archived)" : "(follow)"} ${Date.now() - noteStart}ms`);
       } else if (cross === "restore") {
         store.applyRemoteRestore(rn.id, effectiveParent, rn.updatedAt);
         const revived = store.listNotesForSync().find((n) => n.id === rn.id) ?? null;

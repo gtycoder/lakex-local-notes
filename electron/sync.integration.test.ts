@@ -183,6 +183,29 @@ describe("双设备同步（Step A/B 拆分后语义验证）", () => {
     } finally { cleanup([A, B]); }
   });
 
+  it("A 新建同步 → 删除 → B 无编辑跟随进回收站：移入回收站但不留档不报 superseded（2026-08-22 三修）", async () => {
+    const s3 = new MockS3();
+    const remote = (s: S3Settings, l: LoggerScopes) => s3 as unknown as ObjectStore;
+    const A = makeDevice();
+    const B = makeDevice();
+    try {
+      const note = A.store.createNote("跟随删除");
+      await syncNow(A.store, undefined, remote);
+      await syncNow(B.store, undefined, remote); // B 拉到，从未编辑
+      const histBefore = B.store.listNoteHistory(note.id).length;
+      // A 删除 → B 同步（B 无编辑，纯跟随删除传播）
+      A.store.deleteNote(note.id);
+      await syncNow(A.store, undefined, remote);
+      const resultB = await syncNow(B.store, undefined, remote);
+      // B 进回收站
+      const bNote = B.store.listNotesForSync().find((n) => n.id === note.id);
+      expect(bNote!.parentId).toBe(TRASH_NOTEBOOK_ID);
+      // B 从未编辑 → 不写快照、不报 superseded（修复前无条件留档）
+      expect(resultB.supersededNotes.some((n) => n.id === note.id)).toBe(false);
+      expect(B.store.listNoteHistory(note.id).length).toBe(histBefore);
+    } finally { cleanup([A, B]); }
+  });
+
   it("A 上传过 A1（本机是作者）后被 B 恢复历史续编版本覆盖 → A 接受 B2 且强制留档（2026-08-22 二修）", async () => {
     const s3 = new MockS3();
     const remote = (s: S3Settings, l: LoggerScopes) => s3 as unknown as ObjectStore;
@@ -216,6 +239,28 @@ describe("双设备同步（Step A/B 拆分后语义验证）", () => {
       // A 历史里能找到被覆盖前的 A1（留档兜底，A 的编辑不丢）
       const aHist = A.store.listNoteHistory(note.id);
       expect(aHist.some((h) => h.contentHash === sha256("<p>A1</p>"))).toBe(true);
+    } finally { cleanup([A, B]); }
+  });
+
+  it("移动 vs 删除一致性：B 无编辑跟随 A 的普通移动 / 删除（移入回收站）→ 均不留档不报 superseded（2026-08-22 三修）", async () => {
+    const s3 = new MockS3();
+    const remote = (s: S3Settings, l: LoggerScopes) => s3 as unknown as ObjectStore;
+    const A = makeDevice();
+    const B = makeDevice();
+    try {
+      // 普通移动：A 把笔记移到另一笔记本 → B 跟随（回收站是隐藏笔记本，移动语义一致）
+      const nb1 = A.store.createNotebook("笔记本1");
+      const nb2 = A.store.createNotebook("笔记本2");
+      const note = A.store.createNoteIn(nb1.id, "移动测试");
+      await syncNow(A.store, undefined, remote);
+      await syncNow(B.store, undefined, remote);
+      const histBefore = B.store.listNoteHistory(note.id).length;
+      A.store.moveTreeNode(note.id, nb2.id, 0);
+      await syncNow(A.store, undefined, remote);
+      const rb = await syncNow(B.store, undefined, remote);
+      expect(B.store.listNotesForSync().find((n) => n.id === note.id)!.parentId).toBe(nb2.id);
+      expect(rb.supersededNotes.some((n) => n.id === note.id)).toBe(false);
+      expect(B.store.listNoteHistory(note.id).length).toBe(histBefore);
     } finally { cleanup([A, B]); }
   });
 
