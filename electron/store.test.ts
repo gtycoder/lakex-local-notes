@@ -1091,6 +1091,22 @@ describe("审计修复回归（#2/#3/#12/#17/#18）", () => {
     expect(() => store.moveTreeNodeOrdered(note.id, note.id, [note.id])).toThrowError(/不能移动到自身/);
   });
 
+  it("moveTreeNodeOrdered 跨父移动：orderedIds 含被移动 id（目标父现有子节点 + 插入 id）→ 校验通过（2026-08-22 修复）", () => {
+    const nb1 = store.createNotebook("源册");
+    const nb2 = store.createNotebook("目标册");
+    const n1 = store.createNoteIn(nb2.id, "目标一");
+    const n2 = store.createNoteIn(nb2.id, "目标二");
+    const moving = store.createNoteIn(nb1.id, "移动中");
+    // 前端构造：目标父现有子节点（排除移动 id，本就无）+ 插入位置的移动 id
+    const orderedIds = [moving.id, n1.id, n2.id];
+    const moved = store.moveTreeNodeOrdered(moving.id, nb2.id, orderedIds);
+    expect(moved.parentId).toBe(nb2.id);
+    const rows = store.listTreeNodes().filter((n) => n.parentId === nb2.id).sort((a, b) => a.sortOrder - b.sortOrder);
+    expect(rows.map((r) => r.id)).toEqual(orderedIds);
+    // 反向：移动 id 未包含在 orderedIds → 仍报缺子节点
+    expect(() => store.moveTreeNodeOrdered(n1.id, nb2.id, [n1.id, n2.id])).toThrowError(/全部子节点/);
+  });
+
   it("cleanOrphanAssets：删除失败保留记录与计数（#12）", () => {
     const note = store.createNote("孤儿");
     const filename = assetFilename();
