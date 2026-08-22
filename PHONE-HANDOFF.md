@@ -150,7 +150,14 @@ async function resolveAssetToBlob(canonicalUrl: string): Promise<string | null> 
 4. **移动端 UI 设计**（后置）：参考 Tauri POC `MobileLibrary.tsx`；丢失的 HTML 雏形未找到。
 5. **test/adhoc 分支**（另一会话）：lake-asset:// 调研遇大问题已搁置；blob 方案已定稿替代。
 
-## 8. 关键文档索引
+## 8. 文档共享约定（重要）
+
+- **跨会话/对话共享的文档统一放 `/Users/admin/file/local-lake/doc_share/`**（不受分支影响）。
+- 新会话开工先看 `doc_share/`（方案/计划/审计/定稿/交接都在此），再看本仓库对应归档。
+- 已有共享文档已复制至 `doc_share/`；**后续新方案、计划、审计、定稿、交接类文档一律写到这里**（主仓库 docs/ 仅保留正式归档，与 doc_share 同步或引用）。
+- 当前 doc_share 内容：SYNC-SPLIT-PLAN（拆分方案 v2）/ SHARED-SYNC-PLAN / lake-notes-audit（审计）/ lake-notes-asset-architecture（图片定稿）/ ASSET-URL-MOBILE-PLAN / MOBILE-TECH-STACK / PHONE-HANDOFF（本文件）。
+
+## 9. 关键文档索引
 
 ```text
 /Users/admin/file/local-lake/lake-notes-asset-architecture-2026-08-22.md   ★ 图片方案定稿（canonical http + blob 显示）
