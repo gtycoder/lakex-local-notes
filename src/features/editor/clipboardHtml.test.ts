@@ -1,6 +1,20 @@
 // @vitest-environment jsdom
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, beforeAll, afterAll } from "vitest";
 import { normalizeClipboardHtml, normalizeImageDataUrl, upgradePastedHtml } from "./clipboardHtml";
+
+// jsdom 无 canvas 实现：mock getContext/toDataURL（仅测试 blob→png 分支的调用路径）
+const origGetContext = HTMLCanvasElement.prototype.getContext;
+const origToDataURL = HTMLCanvasElement.prototype.toDataURL;
+beforeAll(() => {
+  (HTMLCanvasElement.prototype as unknown as { getContext: unknown }).getContext = () =>
+    ({ drawImage: () => {}, fillRect: () => {}, fillStyle: "" }) as unknown as CanvasRenderingContext2D;
+  (HTMLCanvasElement.prototype as unknown as { toDataURL: unknown }).toDataURL = () =>
+    `data:image/png;base64,${PNG_1PX}`;
+});
+afterAll(() => {
+  (HTMLCanvasElement.prototype as unknown as { getContext: unknown }).getContext = origGetContext;
+  (HTMLCanvasElement.prototype as unknown as { toDataURL: unknown }).toDataURL = origToDataURL;
+});
 
 function fragmentFromHtml(html: string): DocumentFragment {
   const template = document.createElement("template");
@@ -34,6 +48,43 @@ describe("normalizeClipboardHtml", () => {
       document
     );
     expect(html).toBe(`<img src="data:image/png;base64,${PNG_1PX}">`);
+  });
+
+
+  it("移动端复制：blob 注入的已解码图片 → canvas 转 PNG data URL（微信兼容）", () => {
+    // 模拟移动端环境（lakeNative.uploadResource 存在）
+    (window as unknown as { lakeNative?: unknown }).lakeNative = { uploadResource: () => Promise.resolve({}) };
+    // 构造一个"已解码"的 blob img：canvas 生成真实图片数据
+    const canvas = document.createElement("canvas");
+    canvas.width = 2; canvas.height = 2;
+    const ctx = canvas.getContext("2d")!;
+    ctx.fillStyle = "red"; ctx.fillRect(0, 0, 2, 2);
+    const img = document.createElement("img");
+    img.src = canvas.toDataURL("image/png"); // data URL 同步解码
+    const html = normalizeClipboardHtml(fragmentFromHtml(`<img src="${img.src}">`), document);
+    // blob: src 才会走 canvas 分支——这里 data URL 走 normalizeImageDataUrl 常规路径，
+    // 验证移动端环境下 data URL 图片仍保留
+    expect(html).toContain('src="data:image/png;base64,');
+    // 清理
+    delete (window as unknown as { lakeNative?: unknown }).lakeNative;
+  });
+
+  it("移动端复制：blob src 且已解码 → canvas 转 PNG", () => {
+    (window as unknown as { lakeNative?: unknown }).lakeNative = { uploadResource: () => Promise.resolve({}) };
+    // 直接构造 blob URL 图片（真实 PNG 字节）
+    const bytes = Uint8Array.from(atob(PNG_1PX), (c) => c.charCodeAt(0));
+    const blob = new Blob([bytes as unknown as BlobPart], { type: "image/png" });
+    const blobUrl = URL.createObjectURL(blob);
+    // 直接构造含 blob src 的片段（jsdom 中 outerHTML 会序列化 blob URL，用字面量 HTML 更稳）
+    const frag = fragmentFromHtml(`<img src="${blobUrl}" width="1" height="1">`);
+    // 同步模拟"已解码"（jsdom 中 naturalWidth 为 0，需绕过 complete 判定）
+    const imgEl = frag.querySelector("img")!;
+    Object.defineProperty(imgEl, "naturalWidth", { value: 1, configurable: true });
+    Object.defineProperty(imgEl, "complete", { value: true, configurable: true });
+    const html = normalizeClipboardHtml(frag, document);
+    expect(html).toContain('src="data:image/png;base64,');
+    URL.revokeObjectURL(blobUrl);
+    delete (window as unknown as { lakeNative?: unknown }).lakeNative;
   });
 
   it("过滤隐藏卡片工具栏等选择器", () => {

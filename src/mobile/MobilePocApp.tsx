@@ -50,6 +50,11 @@ export function MobilePocApp() {
     (async () => {
       try {
         await bridge.init();
+        // 挂 window.lakeNative（uploadResource 等）：让 LakeEditor 的 native 调用（图片上传）走移动端实现
+        (window as unknown as Record<string, unknown>).lakeNative = {
+          uploadResource: (input: { bytes: number[]; filename: string }, noteId: string) =>
+            bridge.uploadResource(input, noteId),
+        };
         await refreshList();
         setPhase("ready");
       } catch (e) {

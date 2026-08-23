@@ -44,7 +44,7 @@ export function createCapacitorS3Store(cfg: SyncConfig): S3Store {
   }
 
   return {
-    async getObject(key: string): Promise<Uint8Array | null> {
+    async getObject(key: string, opts?: { maxBytes?: number }): Promise<Uint8Array | null> {
       const { GetObjectCommand } = await import("@aws-sdk/client-s3");
       const c = await getClient();
       try {
@@ -52,7 +52,12 @@ export function createCapacitorS3Store(cfg: SyncConfig): S3Store {
         if (!out.Body) return null;
         const raw = await out.Body.transformToByteArray();
         // 端口责任：gunzip 在端口内完成（gzip 魔数识别）；正文/资源本就纯字节，gzip 仅 manifest
-        return isGzip(raw) ? await decompressGzip(raw) : raw;
+        const bytes = isGzip(raw) ? await decompressGzip(raw) : raw;
+        // 单对象大小护栏（对齐桌面 sync.ts:507/523）：解压后仍超限 → 拒绝（防解压炸弹）
+        if (opts?.maxBytes != null && bytes.length > opts.maxBytes) {
+          throw new Error(`对象过大（${bytes.length} 字节 > ${opts.maxBytes}）`);
+        }
+        return bytes;
       } catch (e) {
         const status = (e as { $metadata?: { httpStatusCode?: number } })?.$metadata?.httpStatusCode;
         if (status === 404 || (e as { name?: string }).name === "NoSuchKey") return null;

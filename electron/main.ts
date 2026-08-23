@@ -8,6 +8,7 @@ import { QuickNotesStore } from "./quickNotes.js";
 import { startAssetServer, ASSET_PORT } from "./assetServer.js";
 import { resolveMirroredCdnRedirect, scanMirroredCdnFiles } from "./cdnRedirect.js";
 import { syncNow, runGcReconcile, type SyncResult, type SyncProgress } from "./sync.js";
+import { syncNowViaEngine } from "./syncEngineController.js";
 import { initLogger, log, logHeapPeak } from "./logger.js";
 import { syncQuickNotes } from "./quickNotesSync.js";
 import { readDevS3Settings } from "./devConfig.js";
@@ -110,7 +111,7 @@ async function runFullSync(onProgress?: (p: SyncProgress) => void): Promise<Sync
         if (onProgress) { try { onProgress(p); } catch { /* 渲染层已关闭 */ } }
         else { broadcastSyncProgress(p); }
       };
-      const result = await syncNow(store, report);
+      const result = await syncNowViaEngine(store, report);
       quickNotes.markTargetNotesSynced();
       try {
         const settings = store.getS3Settings();

@@ -1448,8 +1448,13 @@ export class Store {
       .run(id, hash);
   }
 
-  /** P0-1：本机最后一次成功上传某文档的 hash（同步上传成功后调用） */
-  setLastUploadedHash(id: string, hash: string): void {
+  /** P0-1：本机最后一次成功上传某文档的 hash（同步上传成功后调用）；hash 传 null = 清除（两端一致 skip 记账用）。
+   * null 走 UPDATE 而非 INSERT——INSERT VALUES(id,null,null) 即使 ON CONFLICT 也会触发 content_hash NOT NULL（SQLite upsert 行为）。 */
+  setLastUploadedHash(id: string, hash: string | null): void {
+    if (hash === null) {
+      this.db.prepare("UPDATE sync_base SET last_uploaded_hash=NULL WHERE note_id=?").run(id);
+      return;
+    }
     this.db.prepare("INSERT INTO sync_base(note_id,content_hash,last_uploaded_hash) VALUES(?,?,?) ON CONFLICT(note_id) DO UPDATE SET last_uploaded_hash=excluded.last_uploaded_hash")
       .run(id, hash, hash);
   }

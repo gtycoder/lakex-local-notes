@@ -356,6 +356,56 @@ describe("双设备同步（Step A/B 拆分后语义验证）", () => {
       expect(restored.parentId).toBe(nb.id);
     } finally { cleanup([A, B]); }
   });
+
+  it("删笔记本传播：A 删笔记本（软删进回收站）→ B 同步跟随进回收站（folders 变更必须发布，迁移回归修复）", async () => {
+    const s3 = new MockS3();
+    const remote = (s: S3Settings, l: LoggerScopes) => s3 as unknown as ObjectStore;
+    const A = makeDevice();
+    const B = makeDevice();
+    try {
+      const nb = A.store.createNotebook("待删笔记本");
+      A.store.createNoteIn(nb.id, "子笔记");
+      await syncNow(A.store, undefined, remote);
+      await syncNow(B.store, undefined, remote);
+      // 初始：B 的笔记本在活动位置（不在回收站）
+      expect(B.store.listTrash().some((x) => x.id === nb.id)).toBe(false);
+      // A 删笔记本（软删进回收站，sync_state=local）
+      A.store.deleteTreeNode(nb.id);
+      await syncNow(A.store, undefined, remote);
+      // B 跟随：笔记本进回收站（folders 变更发布 → importRemoteFolder trashedAt）
+      await syncNow(B.store, undefined, remote);
+      expect(B.store.listTrash().some((x) => x.id === nb.id)).toBe(true);
+      // 稳定：再同步一次不乒乓
+      await syncNow(B.store, undefined, remote);
+      expect(B.store.listTrash().some((x) => x.id === nb.id)).toBe(true);
+    } finally { cleanup([A, B]); }
+  });
+
+  it("跟随删除不重复留档：B 跟随 A 删除后 lastUploadedHash 不被污染，后续同步 superseded 恒空（ownEdit 误判修复）", async () => {
+    const s3 = new MockS3();
+    const remote = (s: S3Settings, l: LoggerScopes) => s3 as unknown as ObjectStore;
+    const A = makeDevice();
+    const B = makeDevice();
+    try {
+      const note = A.store.createNote("跟随删除防重复");
+      await syncNow(A.store, undefined, remote);
+      await syncNow(B.store, undefined, remote);
+      // B 拉取后 lastUploadedHash 应为 null（B 从未上传内容）
+      expect(B.store.lastUploadedHash(note.id)).toBe(null);
+      // A 删除 → B 跟随删除
+      A.store.deleteNote(note.id);
+      await syncNow(A.store, undefined, remote);
+      await syncNow(B.store, undefined, remote);
+      expect(B.store.listNotesForSync().find((n) => n.id === note.id)!.parentId).toBe(TRASH_NOTEBOOK_ID);
+      // 关键：B 跟随删除后 lastUploadedHash 仍为 null（两端一致 skip 记账传 null 清除，不误标本机是作者）
+      expect(B.store.lastUploadedHash(note.id)).toBe(null);
+      // B 再同步两次：不重复留档（superseded 恒空）
+      const r1 = await syncNow(B.store, undefined, remote);
+      const r2 = await syncNow(B.store, undefined, remote);
+      expect(r1.supersededNotes.some((n) => n.id === note.id)).toBe(false);
+      expect(r2.supersededNotes.some((n) => n.id === note.id)).toBe(false);
+    } finally { cleanup([A, B]); }
+  });
 });
 
 describe("多端场景验证（用户验收建议 1/2/3）", () => {

@@ -64,11 +64,16 @@ export class CapacitorHttpHandler implements RequestHandler<HttpRequest, HttpRes
     delete headers["transfer-encoding"];
     delete headers["host"];
 
+    // 传输超时（M4，对齐桌面 sync.ts S3_REQUEST_TIMEOUT_MS=30s / S3_TRANSFER_TIMEOUT_MS=120s）：
+    // Get/Put（大对象）走长超时，其余命令走短超时。
+    const isTransfer = request.method === "GET" || request.method === "PUT";
     const options: HttpOptions = {
       url: buildUrl(request),
       method: request.method,
       headers,
       responseType: "arraybuffer",
+      connectTimeout: isTransfer ? 120_000 : 30_000,
+      readTimeout: isTransfer ? 120_000 : 30_000,
     };
     if (data !== undefined) {
       options.data = data;

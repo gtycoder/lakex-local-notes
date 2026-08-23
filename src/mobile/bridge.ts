@@ -6,7 +6,8 @@
  * - 范围 = docs/MOBILE-TECH-STACK.md §9.2 的最小 IPC 集（POC 版）
  */
 import { SqlJsDb } from "./sqliteDb";
-import { loadSnapshot, saveSnapshot, saveAssetBytes, loadAssetBytes, listAssetKeys } from "./persistence";
+import { loadSnapshot, saveSnapshot, listAssetKeys as listLegacyAssetKeys, loadAssetBytes as loadLegacyAssetBytes } from "./persistence";
+import { saveAssetBytesFs, loadAssetBytesFs, listAssetKeysFs } from "./assetFs";
 import { syncNow as runSync, type SyncConfig, type SyncDbPort } from "../core/syncEngine.js";
 import { TRASH_NOTEBOOK_ID } from "../core/syncDecisions.js";
 import { sha256Sync } from "../core/sha256Sync.js";
@@ -36,6 +37,26 @@ export const INITIAL_LAKE_CONTENT = `<p class="ne-p"><br></p>`;
 let db: SqlJsDb | null = null;
 /** 已下载资源（POC 内存态；M2 接 Capacitor Filesystem 持久化）。key = "{noteId}/{filename}" */
 const assets = new Map<string, Uint8Array>();
+
+/** 与桌面一致的随机 8-hex 片段（crypto.randomBytes(4) 的等价物）。 */
+function randomHex(bytes: number): string {
+  const arr = new Uint8Array(bytes);
+  if (typeof crypto !== "undefined" && typeof crypto.getRandomValues === "function") {
+    crypto.getRandomValues(arr);
+  } else {
+    for (let i = 0; i < arr.length; i++) arr[i] = Math.floor(Math.random() * 256);
+  }
+  return Array.from(arr, (b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+const MIME_BY_EXT: Record<string, string> = {
+  png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", gif: "image/gif",
+  webp: "image/webp", avif: "image/avif", svg: "image/svg+xml", bmp: "image/bmp",
+  ico: "image/x-icon", tiff: "image/tiff", tif: "image/tiff",
+};
+function mimeForExt(ext: string): string {
+  return MIME_BY_EXT[ext] ?? "application/octet-stream";
+}
 
 async function ensureDb(): Promise<SqlJsDb> {
   if (db) return db;
@@ -97,7 +118,16 @@ async function ensureDb(): Promise<SqlJsDb> {
     icon TEXT,
     updated_at TEXT NOT NULL,
     trashed_at TEXT,
-    deleted_from_parent_id TEXT
+    deleted_from_parent_id TEXT,
+    sync_state TEXT NOT NULL DEFAULT 'synced'
+  )`);
+  if (!(db.prepare("PRAGMA table_info(folders)").all() as Array<{ name: string }>).some((c) => c.name === "sync_state")) {
+    db.exec("ALTER TABLE folders ADD COLUMN sync_state TEXT NOT NULL DEFAULT 'synced'");
+  }
+  // 零变更早退：本设备上次成功读/写的 manifest commitId + 墓碑签名（对齐桌面 device_state）
+  db.exec(`CREATE TABLE IF NOT EXISTS device_state (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL
   )`);
   // D5：文档历史快照（纯本地，不参与同步）；覆盖前留档，防丢数据（对齐桌面 note_history 简化）
   db.exec(`CREATE TABLE IF NOT EXISTS note_history (
@@ -232,15 +262,23 @@ const dbPort: SyncDbPort = {
     const currentHash = sha256Sync(new TextEncoder().encode(String(row.content)));
     if (currentHash !== expectedContentHash) return;
     d.prepare("UPDATE notes SET sync_state='synced', content_hash=?, restore_pending_at=NULL WHERE id=?").run(expectedContentHash, id);
+    // lastUploadedHash 非空才写：null = 下载对账/软删记账（不写不清，保留本机已上传标记——对齐桌面 adapter）
     d.prepare(
-      "INSERT INTO sync_base (note_id, content_hash, last_synced_meta_at, last_uploaded_hash) VALUES (?,?,?,?) ON CONFLICT(note_id) DO UPDATE SET content_hash=excluded.content_hash, last_synced_meta_at=excluded.last_synced_meta_at, last_uploaded_hash=excluded.last_uploaded_hash"
-    ).run(id, expectedContentHash, metaAt, lastUploadedHash);
+      "INSERT INTO sync_base (note_id, content_hash, last_synced_meta_at) VALUES (?,?,?) ON CONFLICT(note_id) DO UPDATE SET content_hash=excluded.content_hash, last_synced_meta_at=excluded.last_synced_meta_at"
+    ).run(id, expectedContentHash, metaAt);
+    if (lastUploadedHash != null) {
+      d.prepare("UPDATE sync_base SET last_uploaded_hash=? WHERE note_id=?").run(lastUploadedHash, id);
+    }
   },
   setSyncBase(id, contentHash, metaAt, lastUploadedHash) {
     const d = db!;
+    // lastUploadedHash 非空才写：null = 下载对账收尾（不写不清，保留本机已上传标记——对齐桌面 adapter）
     d.prepare(
-      "INSERT INTO sync_base (note_id, content_hash, last_synced_meta_at, last_uploaded_hash) VALUES (?,?,?,?) ON CONFLICT(note_id) DO UPDATE SET content_hash=excluded.content_hash, last_synced_meta_at=excluded.last_synced_meta_at, last_uploaded_hash=excluded.last_uploaded_hash"
-    ).run(id, contentHash, metaAt, lastUploadedHash);
+      "INSERT INTO sync_base (note_id, content_hash, last_synced_meta_at) VALUES (?,?,?) ON CONFLICT(note_id) DO UPDATE SET content_hash=excluded.content_hash, last_synced_meta_at=excluded.last_synced_meta_at"
+    ).run(id, contentHash, metaAt);
+    if (lastUploadedHash != null) {
+      d.prepare("UPDATE sync_base SET last_uploaded_hash=? WHERE note_id=?").run(lastUploadedHash, id);
+    }
   },
   defaultNotebookId() {
     // 对齐桌面 store.ts DEFAULT_NOTEBOOK_ID（effectiveParent 回退基准）
@@ -249,8 +287,18 @@ const dbPort: SyncDbPort = {
   importRemoteFolder(folder) {
     const d = db!;
     d.prepare(
-      "INSERT INTO folders (id, title, parent_id, sort_order, node_type, icon, updated_at, trashed_at, deleted_from_parent_id) VALUES (?,?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET title=excluded.title, parent_id=excluded.parent_id, sort_order=excluded.sort_order, node_type=excluded.node_type, icon=excluded.icon, updated_at=excluded.updated_at, trashed_at=excluded.trashed_at, deleted_from_parent_id=excluded.deleted_from_parent_id"
+      "INSERT INTO folders (id, title, parent_id, sort_order, node_type, icon, updated_at, trashed_at, deleted_from_parent_id, sync_state) VALUES (?,?,?,?,?,?,?,?,?,'synced') ON CONFLICT(id) DO UPDATE SET title=excluded.title, parent_id=excluded.parent_id, sort_order=excluded.sort_order, node_type=excluded.node_type, icon=excluded.icon, updated_at=excluded.updated_at, trashed_at=excluded.trashed_at, deleted_from_parent_id=excluded.deleted_from_parent_id"
     ).run(folder.id, folder.title, folder.parentId, folder.sortOrder, folder.nodeType, folder.icon ?? null, folder.updatedAt, folder.trashedAt ?? null, folder.deletedFromParentId ?? null);
+  },
+  listFoldersForSync() {
+    const d = db!;
+    const rows = d.prepare("SELECT id, title, parent_id, sort_order, node_type, icon, updated_at, trashed_at, deleted_from_parent_id FROM folders").all() as Array<{
+      id: string; title: string; parent_id: string | null; sort_order: number; node_type: string; icon: string | null; updated_at: string; trashed_at: string | null; deleted_from_parent_id: string | null;
+    }>;
+    return rows.map((r) => ({
+      id: r.id, title: r.title, parentId: r.parent_id, sortOrder: r.sort_order, nodeType: r.node_type,
+      icon: r.icon, updatedAt: r.updated_at, trashedAt: r.trashed_at ?? undefined, deletedFromParentId: r.deleted_from_parent_id ?? undefined,
+    }));
   },
   createHistorySnapshot(noteId, content, meta) {
     const d = db!;
@@ -261,8 +309,55 @@ const dbPort: SyncDbPort = {
   async saveAsset(noteId, filename, bytes) {
     const key = noteId + "/" + filename;
     assets.set(key, bytes);
-    // 持久化到 IndexedDB（图片较大，独立键，避免全库快照膨胀）；失败不阻断主流程
-    void saveAssetBytes(key, bytes).catch(() => {});
+    // 持久化到 Capacitor Filesystem（B1：note-assets/{noteId}/{file}，目录与桌面一致）；失败不阻断主流程
+    void saveAssetBytesFs(key, bytes).catch((e) => console.warn("[mobile] 资产落盘失败（可重新同步）:", e));
+  },
+  async listLocalAssets(noteId) {
+    // H3：从内存 assets Map 扫描该笔记的资产（POC 内存态；M2 接 FS 后改为目录扫描）
+    const out = [];
+    const prefix = noteId + "/";
+    for (const [key, bytes] of assets) {
+      if (!key.startsWith(prefix)) continue;
+      const filename = key.slice(prefix.length);
+      out.push({ filename, size: bytes.length, hash: sha256Sync(bytes) });
+    }
+    return out;
+  },
+  async readLocalAsset(noteId, filename) {
+    // H3：从内存 assets Map 读取字节（与 getAssetBytes 同源）
+    return assets.get(noteId + "/" + filename) ?? null;
+  },
+  getLastSeenCommitId() {
+    const d = db!;
+    const row = d.prepare("SELECT value FROM device_state WHERE key='last_seen_commit_id'").get() as { value?: string } | undefined;
+    return row?.value ?? null;
+  },
+  setLastSeenCommitId(commitId) {
+    const d = db!;
+    d.prepare("INSERT INTO device_state(key,value) VALUES('last_seen_commit_id',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value").run(commitId);
+  },
+  getLastTombstoneSig() {
+    const d = db!;
+    const row = d.prepare("SELECT value FROM device_state WHERE key='last_tombstone_sig'").get() as { value?: string } | undefined;
+    return row?.value ?? "";
+  },
+  setLastTombstoneSig(sig) {
+    const d = db!;
+    d.prepare("INSERT INTO device_state(key,value) VALUES('last_tombstone_sig',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value").run(sig);
+  },
+  tombstoneSignature() {
+    const d = db!;
+    const row = d.prepare("SELECT COUNT(*) AS c, COALESCE(MAX(deleted_at),'') AS m FROM deleted_notes").get() as { c: number; m: string };
+    return `${row.c}:${row.m}`;
+  },
+  hasLocalPendingNotes() {
+    const d = db!;
+    const noteRow = d.prepare("SELECT 1 FROM notes WHERE sync_state != 'synced' AND deleted_at IS NULL LIMIT 1").get();
+    if (noteRow) return true;
+    // 目录改动判定对齐桌面 tree_nodes.sync_state：仅 sync_state != 'synced' 的节点算待上传；
+    // 存在默认笔记本等已同步节点不算（否则永不早退）。
+    const groupRow = d.prepare("SELECT 1 FROM folders WHERE sync_state != 'synced' AND id != ? LIMIT 1").get(TRASH_NOTEBOOK_ID);
+    return !!groupRow;
   },
   log(msg) {
     console.log("[mobile-sync]", msg);
@@ -272,11 +367,28 @@ const dbPort: SyncDbPort = {
 export const bridge = {
   async init(): Promise<void> {
     await ensureDb();
-    // 启动时从 IndexedDB 载入已持久化资产到内存（getAssetBytes 同步读）
+    // 启动时从 Capacitor Filesystem 载入已持久化资产到内存（getAssetBytes 同步读；B1）
     try {
-      const keys = await listAssetKeys();
+      const keys = await listAssetKeysFs();
+      // 一次性迁移：IndexedDB 旧资产（B1 升级前）→ Filesystem（缺失的键才搬，幂等）
+      try {
+        const legacyKeys = await listLegacyAssetKeys();
+        let migrated = 0;
+        for (const key of legacyKeys) {
+          if (keys.includes(key)) continue;
+          const bytes = await loadLegacyAssetBytes(key);
+          if (bytes) {
+            await saveAssetBytesFs(key, bytes);
+            keys.push(key);
+            migrated++;
+          }
+        }
+        if (migrated > 0) console.log("[mobile] 已迁移旧资产:", migrated);
+      } catch (e) {
+        console.warn("[mobile] 旧资产迁移跳过（可重新同步）:", e);
+      }
       for (const key of keys) {
-        const bytes = await loadAssetBytes(key);
+        const bytes = await loadAssetBytesFs(key);
         if (bytes) assets.set(key, bytes);
       }
       if (keys.length > 0) console.log("[mobile] 已恢复资产:", keys.length);
@@ -306,9 +418,10 @@ export const bridge = {
   async saveNote(id: string, title: string, content: string): Promise<void> {
     const d = await ensureDb();
     const now = new Date().toISOString();
+    // 本地编辑必须置 sync_state='local'（待上传），否则同步零变更早退会跳过本次修改
     d.prepare(
-      `INSERT INTO notes (id, title, content, updated_at) VALUES (?,?,?,?)
-       ON CONFLICT(id) DO UPDATE SET title=excluded.title, content=excluded.content, updated_at=excluded.updated_at`
+      `INSERT INTO notes (id, title, content, updated_at, sync_state) VALUES (?,?,?,?,'local')
+       ON CONFLICT(id) DO UPDATE SET title=excluded.title, content=excluded.content, updated_at=excluded.updated_at, sync_state='local'`
     ).run(id, title, content, now);
     await saveSnapshot(d.exportBytes());
   },
@@ -383,6 +496,24 @@ export const bridge = {
     const client = await createS3Client(cfg);
     await client.send(new PutObjectCommand({ Bucket: cfg.bucket, Key: key, Body: body }));
     return key;
+  },
+
+  /** D8+：图片上传（Lake 编辑器粘贴/插入图片调用）。本地存资产（供 blob 显示）+ 返回 canonical URL。 */
+  async uploadResource(
+    input: { bytes: number[]; filename: string },
+    noteId: string
+  ): Promise<{ url: string; resourceRef: string; filename: string; mimeType: string; size: number }> {
+    const bytes = new Uint8Array(input.bytes);
+    // 与桌面一致的资产文件名：13 位时间戳 + 8 hex + 扩展名（extractAssetRefs 正则匹配）
+    const ext = (input.filename.split(".").pop() || "png").toLowerCase();
+    const name = `${Date.now()}_${randomHex(4)}.${ext}`;
+    // 本地存储（内存 + IndexedDB 持久化，供 blob 注入读取）
+    const key = noteId + "/" + name;
+    assets.set(key, bytes);
+    void saveAssetBytesFs(key, bytes).catch((e) => console.warn("[mobile] 资产落盘失败:", e));
+    const mimeType = mimeForExt(ext);
+    const url = `http://127.0.0.1:19876/${noteId}/${name}`;
+    return { url, resourceRef: url, filename: name, mimeType, size: bytes.length };
   },
 
   /** M1 同步：manifest v4 协议（拉取对账 + 上传发布），复用 src/core 决策纯函数 */

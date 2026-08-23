@@ -1,0 +1,87 @@
+/**
+ * 资产存储：Capacitor Filesystem（B1，M2 正式方案）。
+ *
+ * 目录布局与桌面一致：note-assets/{noteId}/{filename}（Directory.Data 下）。
+ * 桌面 = userData/note-assets/{noteId}/{file}；移动端 = app 私有 Data 目录同构。
+ * 替换 POC 的 IndexedDB 资产持久化（大文件 IndexedDB 不适合，且与桌面不同构）。
+ */
+import { Filesystem, Directory } from "@capacitor/filesystem";
+
+const ROOT = "note-assets";
+
+function base64ToBytes(b64: string): Uint8Array {
+  const bin = atob(b64);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  return bytes;
+}
+
+function bytesToBase64(bytes: Uint8Array): string {
+  let bin = "";
+  const CHUNK = 0x8000;
+  for (let i = 0; i < bytes.length; i += CHUNK) {
+    bin += String.fromCharCode(...bytes.subarray(i, i + CHUNK));
+  }
+  return btoa(bin);
+}
+
+/** 确保 note-assets/{noteId} 目录存在（递归）。 */
+async function ensureNoteDir(noteId: string): Promise<void> {
+  try {
+    await Filesystem.mkdir({ path: `${ROOT}/${noteId}`, directory: Directory.Data, recursive: true });
+  } catch {
+    // 已存在（mkdir 对已存在目录抛错）——忽略
+  }
+}
+
+export async function saveAssetBytesFs(key: string, bytes: Uint8Array): Promise<void> {
+  const [noteId, ...rest] = key.split("/");
+  const filename = rest.join("/");
+  if (!noteId || !filename) throw new Error(`非法资产键: ${key}`);
+  await ensureNoteDir(noteId);
+  // data 传 base64；不传 encoding（Android 原生默认按 base64 解码写入；UTF8 会把 base64 当文本写坏）
+  await Filesystem.writeFile({
+    path: `${ROOT}/${noteId}/${filename}`,
+    data: bytesToBase64(bytes),
+    directory: Directory.Data,
+    recursive: true,
+  });
+}
+
+export async function loadAssetBytesFs(key: string): Promise<Uint8Array | null> {
+  const [noteId, ...rest] = key.split("/");
+  const filename = rest.join("/");
+  if (!noteId || !filename) return null;
+  try {
+    const res = await Filesystem.readFile({
+      path: `${ROOT}/${noteId}/${filename}`,
+      directory: Directory.Data,
+    });
+    return base64ToBytes(String(res.data)); // 未传 encoding → Android 原生返回 base64
+  } catch {
+    return null; // 文件不存在/读取失败
+  }
+}
+
+/** 列出全部已持久化资产键（{noteId}/{file}），供启动时载入内存。 */
+export async function listAssetKeysFs(): Promise<string[]> {
+  const keys: string[] = [];
+  let noteIds: string[] = [];
+  try {
+    const root = await Filesystem.readdir({ path: ROOT, directory: Directory.Data });
+    noteIds = root.files.map((f) => f.name).filter((n) => n && n !== "." && n !== "..");
+  } catch {
+    return keys; // 根目录不存在 = 无资产
+  }
+  for (const noteId of noteIds) {
+    try {
+      const dir = await Filesystem.readdir({ path: `${ROOT}/${noteId}`, directory: Directory.Data });
+      for (const f of dir.files) {
+        if (f.type === "file") keys.push(`${noteId}/${f.name}`);
+      }
+    } catch {
+      // 单目录损坏跳过
+    }
+  }
+  return keys;
+}

@@ -66,16 +66,23 @@ export function createCardBlobInjector(content: string): CardBlobInjectResult {
   return {
     inject(editor) {
       let injected = 0;
-      // 从 DOM 拿 image 卡片节点（NE-CARD），用 cardData._resetCardValue + sync(false) 注入 blob。
-      // 真机实测：这是唯一有效的外部通道（内容注入被强制 pending，setCardValue 命令无重渲染）。
+      // 从 DOM 拿 image 卡片节点（NE-CARD）
       const cardEls = Array.from(document.querySelectorAll("NE-CARD[data-card-name=\"image\"], ne-card[name=\"image\"]"));
+      // renderer（编辑态 fallback 用 execCommand）
+      const renderer = lakeBridge(editor).renderer;
+      const canExec = !!renderer && typeof renderer.execCommand === "function";
+      const execCmd = canExec && renderer?.execCommand
+        ? (name: string, ...args: unknown[]) => renderer.execCommand!(name, ...args)
+        : null;
       // 按 cardId（value.id）匹配；匹配不到按顺序对应
       for (const c of cards) {
         if (!c.blobUrl) continue;
         const byCardId = cardEls.find((el) => el.getAttribute("id") === c.cardId);
         const el = byCardId || cardEls[cards.indexOf(c)];
         if (!el) continue;
+        const nodeId = el.getAttribute("id") || "";
         try {
+          // 路径 1：viewer 卡片有 cardData → _resetCardValue + sync(false)（真机实测有效）
           const inst = (el as unknown as { _neRef?: { _instance?: { cardData?: unknown } } })._neRef?._instance;
           const cd = inst?.cardData as unknown as {
             getCardValue?: () => Record<string, unknown>;
@@ -83,20 +90,37 @@ export function createCardBlobInjector(content: string): CardBlobInjectResult {
             _resetCardValue?: (v: Record<string, unknown>) => void;
             sync?: (isUser: boolean) => unknown;
           } | undefined;
-          if (!cd || typeof cd._resetCardValue !== "function" || typeof cd.sync !== "function") continue;
-          // 保留原 value 全部字段，只改 src/status/originalType（确保 width/height/crop 等不丢）
-          const old = (typeof cd.getCardValue === "function" ? cd.getCardValue() : cd._cardValue) ?? {};
-          const newValue = {
-            ...old,
-            src: c.blobUrl,
-            status: "done",
-            originalType: "link", // 非 binary，走非上传路径
-          };
-          delete (newValue as Record<string, unknown>).taskId;
-          delete (newValue as Record<string, unknown>).clientId;
-          cd._resetCardValue(newValue);
-          cd.sync(false); // 必须传 boolean（set-card-value-command.ts:17 断言）
-          injected++;
+          if (cd && typeof cd._resetCardValue === "function" && typeof cd.sync === "function") {
+            const old = (typeof cd.getCardValue === "function" ? cd.getCardValue() : cd._cardValue) ?? {};
+            const newValue = {
+              ...old,
+              src: c.blobUrl,
+              status: "done",
+              originalType: "link", // 非 binary，走非上传路径
+            };
+            delete (newValue as Record<string, unknown>).taskId;
+            delete (newValue as Record<string, unknown>).clientId;
+            cd._resetCardValue(newValue);
+            cd.sync(false); // 必须传 boolean（set-card-value-command.ts:17 断言）
+            injected++;
+            continue;
+          }
+          // 路径 2：编辑态卡片无 cardData → execCommand("setCardValue")（官方命令通道）
+          if (execCmd && nodeId) {
+            const newValue = {
+              src: c.blobUrl,
+              originalType: "link",
+              status: "done",
+              name: c.canonicalSrc.split("/").pop() ?? "image",
+              size: 0,
+              width: undefined,
+              height: undefined,
+              from: "ui",
+              id: nodeId,
+            };
+            execCmd("setCardValue", true, nodeId, newValue);
+            injected++;
+          }
         } catch { /* 单卡片失败不阻断 */ }
       }
       return injected;
