@@ -1,7 +1,0 @@
-feat(sync): Step 5 桌面同步收敛到共享 syncEngine + 实机验证修复与审计
-
-- 桌面 Controller 化：syncAdapters（ObjectStore 到 S3Store / Store 到 SyncDbPort）+ syncEngineController（syncNowViaEngine）+ sync.ts 委托 + main.ts 主流程切换
-- 语义保障：syncEquivalence（7 场景）/ syncAdapterEquiv（4 场景）/ syncDualAB（双端 A/B）等价测试
-- 实机验证修复：删笔记本不传播（发布条件/早退判定加 foldersChanged）、lastUploadedHash 污染误报 superseded（两端一致 skip 记账传 null + store 清除）、墓碑上传携带删除前内容
-- 审计修复：早退日志 remote 空指针防御、controller warnings noteId 完整 UUID、移动端记账语义对齐桌面
-- 移动端：资产落盘（assetFs）、复制到微信 PNG 转换、共享同步层接线

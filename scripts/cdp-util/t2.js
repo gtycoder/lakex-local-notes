@@ -1,1 +1,0 @@
-document.querySelector(".poc-status")?.textContent ?? "no-status"
