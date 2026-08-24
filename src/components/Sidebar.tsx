@@ -1,10 +1,11 @@
-import { memo, useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent } from "react";
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent } from "react";
 import { createPortal } from "react-dom";
 import { BookOpen, ChevronRight, FilePlus2, FileText, FoldVertical, Folder, FolderPlus, History, LocateFixed, Package, Pencil, Plus, Search, SmilePlus, Trash2, X } from "lucide-react";
 import { LAKE_EMOJIS } from "../lib/lakeEmojis";
 import { LAKE_EMOJI_GROUPS } from "../lib/lakeEmojiGroups";
 import type { TreeNode, TreeNodeType } from "../lib/types";
 import { buildTreeIndex, type TreeIndex } from "../core/treeIndex";
+import { computeSiblingDragOffsets, isValidTreeDrop, type TreeDragDropPosition } from "./treeDrag";
 
 type CreateKind = "notebook" | "group" | "note";
 type DropPosition = "before" | "inside" | "after";
@@ -50,12 +51,23 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
   const [editingTitle, setEditingTitle] = useState("");
   const [expanded, setExpanded] = useState<Set<string>>(() => autoExpanded(props.nodes));
   const [draggingId, setDraggingId] = useState<string | null>(null);
+  const [dragOffsetY, setDragOffsetY] = useState(0);
+  const [dragRowHeight, setDragRowHeight] = useState(38);
   const [dropTarget, setDropTarget] = useState<{ id: string; position: DropPosition } | null>(null);
+  const [releaseState, setReleaseState] = useState<{
+    id: string;
+    target: { id: string; position: DropPosition };
+    expectedParentId: string | null;
+    expectedOrder: string[];
+    positions: Record<string, number>;
+    transforms: Record<string, number>;
+  } | null>(null);
   const [contextMenu, setContextMenu] = useState<{ id: string; x: number; y: number } | null>(null);
   const [iconPicker, setIconPicker] = useState<{ node: TreeNode; x: number; y: number } | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const treeRef = useRef<HTMLElement>(null);
-  const dragRef = useRef<{ id: string; startX: number; startY: number; moved: boolean } | null>(null);
+  const dragRef = useRef<{ id: string; startX: number; startY: number; moved: boolean; offsetY: number } | null>(null);
+  const dropTargetRef = useRef<{ id: string; position: DropPosition } | null>(null);
   const resizeRef = useRef<{ pointerId: number; startX: number; startWidth: number; currentWidth: number } | null>(null);
   const suppressClickRef = useRef(false);
   const prevNodeIds = useRef<Set<string>>(new Set());
@@ -154,35 +166,107 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
     props.onPendingRenameConsumed();
   }, [props.pendingRenameId, props.nodes, props.onPendingRenameConsumed]);
 
+  const buildExpectedOrder = (movingId: string, target: { id: string; position: DropPosition }): { parentId: string | null; order: string[] } | null => {
+    const moving = props.nodes.find((node) => node.id === movingId);
+    const targetNode = props.nodes.find((node) => node.id === target.id);
+    if (!moving || !targetNode) return null;
+    const parentId = target.position === "inside" ? targetNode.id : targetNode.parentId;
+    const siblings = (treeIndex.childrenByParent.get(parentId) ?? []).map((node) => node.id).filter((id) => id !== movingId);
+    if (target.position === "inside") return { parentId, order: [...siblings, movingId] };
+    const targetIndex = siblings.indexOf(target.id);
+    if (targetIndex < 0) return { parentId, order: [...siblings, movingId] };
+    siblings.splice(target.position === "after" ? targetIndex + 1 : targetIndex, 0, movingId);
+    return { parentId, order: siblings };
+  };
+
   useEffect(() => {
-    if (!draggingId) return;
+    if (!draggingId || releaseState) return;
     const move = (event: PointerEvent) => {
       const drag = dragRef.current;
       if (!drag) return;
       if (Math.hypot(event.clientX - drag.startX, event.clientY - drag.startY) > 5) drag.moved = true;
       if (!drag.moved) return;
-      const row = document.elementFromPoint(event.clientX, event.clientY)?.closest<HTMLElement>("[data-tree-node-id]");
-      if (!row || row.dataset.treeNodeId === drag.id) { setDropTarget(null); return; }
+      drag.offsetY = event.clientY - drag.startY;
+      setDragOffsetY(drag.offsetY);
+      // 被拖动项本身会随指针移动，elementFromPoint 可能持续命中它，
+      // 尤其是向上越过兄弟项时会导致永远无法得到真实落点。先排除源行，
+      // 再从当前可见行中选出指针所在/最近的一行。
+      const rows = [...document.querySelectorAll<HTMLElement>("[data-tree-node-id]")]
+        .filter((candidate) => candidate.dataset.treeNodeId !== drag.id && candidate.getClientRects().length > 0);
+      const hit = document.elementsFromPoint(event.clientX, event.clientY)
+        .map((element) => element.closest<HTMLElement>("[data-tree-node-id]"))
+        .find((candidate) => candidate && candidate.dataset.treeNodeId !== drag.id);
+      const row = hit ?? rows
+        .map((candidate) => ({ candidate, rect: candidate.getBoundingClientRect(), distance: Math.abs((candidate.getBoundingClientRect().top + candidate.getBoundingClientRect().height / 2) - event.clientY) }))
+        .sort((a, b) => a.distance - b.distance)[0]?.candidate;
+      if (!row) {
+        dropTargetRef.current = null;
+        setDropTarget(null);
+        return;
+      }
       const rect = row.getBoundingClientRect();
-      const ratio = (event.clientY - rect.top) / rect.height;
+      if (rect.height > 0) setDragRowHeight(rect.height);
+      const ratio = (event.clientY - rect.top) / Math.max(rect.height, 1);
       const position: DropPosition = ratio < .25 ? "before" : ratio > .75 ? "after" : "inside";
-      setDropTarget({ id: row.dataset.treeNodeId!, position });
+      const nextTarget = { id: row.dataset.treeNodeId!, position };
+      const movingNode = props.nodes.find((node) => node.id === drag.id) ?? null;
+      const targetNode = props.nodes.find((node) => node.id === nextTarget.id) ?? null;
+      if (!isValidTreeDrop(movingNode, targetNode, nextTarget.position)) {
+        dropTargetRef.current = null;
+        setDropTarget(null);
+        return;
+      }
+      dropTargetRef.current = nextTarget;
+      setDropTarget(nextTarget);
     };
     const up = () => {
       const drag = dragRef.current;
-      if (drag?.moved && dropTarget) {
-        suppressClickRef.current = true;
-        props.onMoveNode(drag.id, dropTarget.id, dropTarget.position);
-        window.setTimeout(() => { suppressClickRef.current = false; }, 0);
+      const finalDropTarget = dropTargetRef.current;
+      if (drag?.moved && finalDropTarget) {
+        const expected = buildExpectedOrder(drag.id, finalDropTarget);
+        if (expected) {
+          const positions: Record<string, number> = {};
+          const transforms = computeSiblingDragOffsets(
+            (treeIndex.childrenByParent.get(props.nodes.find((node) => node.id === drag.id)?.parentId ?? null) ?? []).map((node) => node.id),
+            drag.id,
+            finalDropTarget.id,
+            finalDropTarget.position as TreeDragDropPosition,
+            dragRowHeight,
+          );
+          document.querySelectorAll<HTMLElement>("[data-tree-node-id]").forEach((row) => {
+            const id = row.dataset.treeNodeId;
+            if (id) positions[id] = row.getBoundingClientRect().top;
+          });
+          transforms[drag.id] = drag.offsetY;
+          setReleaseState({ id: drag.id, target: finalDropTarget, expectedParentId: expected.parentId, expectedOrder: expected.order, positions, transforms });
+          if (finalDropTarget.position === "inside") {
+            setExpanded((current) => {
+              const next = new Set(current);
+              next.add(finalDropTarget.id);
+              return next;
+            });
+          }
+          suppressClickRef.current = true;
+          props.onMoveNode(drag.id, finalDropTarget.id, finalDropTarget.position);
+          window.setTimeout(() => { suppressClickRef.current = false; }, 0);
+        }
+      }
+      if (!drag?.moved || !finalDropTarget) {
+        setDraggingId(null);
+        setDragOffsetY(0);
       }
       dragRef.current = null;
-      setDraggingId(null);
+      dropTargetRef.current = null;
       setDropTarget(null);
+      setDragRowHeight(38);
     };
     window.addEventListener("pointermove", move);
     window.addEventListener("pointerup", up, { once: true });
-    return () => { window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", up); };
-  }, [draggingId, dropTarget, props.onMoveNode]);
+    return () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+    };
+  }, [draggingId, dropTarget, releaseState, props.onMoveNode]);
 
   // 创建/上下文定位：直接用当前选中/右键的节点作为父节点（支持多层嵌套，
   // 文档也可作为父节点）；无选中时回退到第一个笔记本。
@@ -190,8 +274,9 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
     ?? props.nodes.find((node) => node.id === props.activeId)
     ?? props.nodes.find((node) => node.nodeType === "notebook")
     ?? null;
-  const groupParent = context?.id ?? props.nodes.find((node) => node.nodeType === "notebook")?.id ?? null;
-  const noteParent = context?.id ?? props.nodes.find((node) => node.nodeType === "notebook")?.id ?? null;
+  const defaultNotebookId = props.nodes.find((node) => node.nodeType === "notebook")?.id ?? null;
+  const groupParent = context?.id ?? defaultNotebookId;
+  const noteParent = context?.id ?? defaultNotebookId;
 
   const create = (kind: CreateKind) => {
     setMenuOpen(false);
@@ -279,7 +364,12 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
 
   const beginTreeDrag = useCallback((event: React.PointerEvent, id: string) => {
     if (event.button !== 0 || (event.target as HTMLElement).closest("input")) return;
-    dragRef.current = { id, startX: event.clientX, startY: event.clientY, moved: false };
+    dragRef.current = { id, startX: event.clientX, startY: event.clientY, moved: false, offsetY: 0 };
+    setReleaseState(null);
+    setDragOffsetY(0);
+    setDragRowHeight(Math.max(1, event.currentTarget.getBoundingClientRect().height));
+    dropTargetRef.current = null;
+    setDropTarget(null);
     setDraggingId(id);
   }, []);
   const toggleNode = useCallback((id: string) => setExpanded((current) => toggleSet(current, id)), []);
@@ -289,6 +379,91 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
     setIconPicker({ node, x: event.clientX, y: event.clientY });
   }, []);
   const cancelRename = useCallback(() => setEditingId(null), []);
+  useLayoutEffect(() => {
+    if (!releaseState) return;
+    const rows = [...document.querySelectorAll<HTMLElement>("[data-tree-node-id]")];
+    const currentOrder = props.nodes
+      .filter((item) => item.parentId === releaseState.expectedParentId)
+      .sort((a, b) => a.sortOrder - b.sortOrder)
+      .map((item) => item.id);
+    const settled = currentOrder.join("|") === releaseState.expectedOrder.join("|");
+
+    if (!settled) {
+      // Before the async tree refresh arrives, re-apply the pointer-time
+      // transforms directly. The React style prop deliberately leaves transform
+      // uncontrolled during this phase, preventing a render from snapping rows.
+      rows.forEach((row) => {
+        const id = row.dataset.treeNodeId;
+        const transform = id ? releaseState.transforms[id] : undefined;
+        if (transform === undefined) return;
+        row.style.transition = "none";
+        row.style.transform = `translateY(${transform}px)`;
+      });
+      return;
+    }
+
+    const animated: HTMLElement[] = [];
+    rows.forEach((row) => {
+      const id = row.dataset.treeNodeId;
+      const oldTop = id ? releaseState.positions[id] : undefined;
+      if (!id || oldTop === undefined) return;
+      row.style.transition = "none";
+      row.style.transform = "none";
+      const delta = oldTop - row.getBoundingClientRect().top;
+      if (Math.abs(delta) < 1) return;
+      row.style.transform = `translateY(${delta}px)`;
+      animated.push(row);
+    });
+    const frame = window.requestAnimationFrame(() => {
+      animated.forEach((row) => {
+        row.style.transition = "transform 250ms ease";
+        row.style.transform = "translateY(0px)";
+      });
+    });
+    const clear = () => {
+      rows.forEach((row) => { row.style.transition = ""; row.style.transform = ""; });
+      setReleaseState(null);
+      setDraggingId(null);
+      setDragOffsetY(0);
+      setDropTarget(null);
+    };
+    const timer = window.setTimeout(clear, 280);
+    return () => { window.cancelAnimationFrame(frame); window.clearTimeout(timer); };
+  }, [props.nodes, releaseState]);
+
+  useEffect(() => {
+    if (!releaseState) return;
+    const timer = window.setTimeout(() => {
+      document.querySelectorAll<HTMLElement>("[data-tree-node-id]").forEach((row) => { row.style.transition = ""; row.style.transform = ""; });
+      setReleaseState(null);
+      setDraggingId(null);
+      setDragOffsetY(0);
+      setDropTarget(null);
+    }, 900);
+    return () => window.clearTimeout(timer);
+  }, [releaseState]);
+
+  const draggedNode = draggingId ? props.nodes.find((node) => node.id === draggingId) ?? null : null;
+  const draggedSiblings = draggedNode
+    ? (treeIndex.childrenByParent.get(draggedNode.parentId) ?? []).filter((node) => treeIndex.visibleIds.has(node.id))
+    : [];
+  const siblingOffsets = useMemo(() => {
+    const offsets = computeSiblingDragOffsets(
+      draggedSiblings.map((node) => node.id),
+      draggingId ?? "",
+      dropTarget?.id ?? null,
+      (dropTarget?.position ?? null) as TreeDragDropPosition | null,
+      dragRowHeight,
+    );
+    return offsets;
+  }, [draggedSiblings, draggingId, dropTarget, dragRowHeight, releaseState]);
+
+  const dropNode = dropTarget ? props.nodes.find((node) => node.id === dropTarget.id) ?? null : null;
+  const dropParentId = dropTarget && dropNode
+    ? dropTarget.position === "inside" ? dropNode.id : dropNode.parentId
+    : null;
+  const draggedParentId = draggedNode?.parentId ?? null;
+
   // W-2-B：聚合对象 useMemo 化——props 稳定后 TreeRow memo 才能在按键路径命中
   const treeRowProps = useMemo(() => ({
     treeIndex,
@@ -297,7 +472,14 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
     contextId: context?.id ?? null,
     expanded,
     draggingId,
+    dragOffsetY,
+    releaseTransforms: releaseState?.transforms ?? null,
+    dragRowHeight,
+    siblingOffsets,
     dropTarget,
+    dropParentId,
+    draggedParentId,
+    releasingId: releaseState?.id ?? null,
     pendingCreate,
     editingId,
     editingTitle,
@@ -313,7 +495,7 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
     onToggle: toggleNode,
     onSelect: props.onSelect,
     onIconClick: setTreeIcon,
-  }), [treeIndex, query, props.activeId, context?.id ?? null, expanded, draggingId, dropTarget, pendingCreate, editingId, editingTitle, createField, submitRename, cancelRename, beginRename, beginTreeDrag, setContextNode, openContext, toggleNode, props.onSelect, setTreeIcon]);
+  }), [treeIndex, query, props.activeId, context?.id ?? null, expanded, draggingId, dragOffsetY, dragRowHeight, siblingOffsets, dropTarget, dropParentId, draggedParentId, releaseState, pendingCreate, editingId, editingTitle, createField, submitRename, cancelRename, beginRename, beginTreeDrag, setContextNode, openContext, toggleNode, props.onSelect, setTreeIcon]);
 
   return (
     <aside
@@ -364,6 +546,12 @@ interface TreeRowProps {
   contextId: string | null;
   expanded: Set<string>;
   draggingId: string | null;
+  dragOffsetY: number;
+  releaseTransforms: Record<string, number> | null;
+  dropParentId: string | null;
+  draggedParentId: string | null;
+  releasingId: string | null;
+  siblingOffsets: Record<string, number>;
   dropTarget: { id: string; position: DropPosition } | null;
   pendingCreate: { kind: CreateKind; parentId: string | null } | null;
   editingId: string | null;
@@ -389,19 +577,31 @@ const TreeRow = memo(function TreeRow(props: TreeRowProps) {
   const icon = nodeIcon(props.node.nodeType, open, props.node.icon);
 
   const dropPosition = props.dropTarget?.id === props.node.id ? props.dropTarget.position : null;
+  const siblingOffsetY = props.siblingOffsets[props.node.id] ?? 0;
+  const isDragging = props.draggingId === props.node.id;
+  // 只有“放入”才标记目标父项蓝框；before/after 永远表示最终插入线，
+  // 即使跨级把子项拖到父项同级，也要把线画在父项实际目标边缘。
+  const isDropParent = dropPosition === "inside" && props.dropParentId === props.node.id;
+  const sameLevelLine = Boolean(dropPosition && dropPosition !== "inside");
 
   return <div className="tree-item">
     <div
       role="treeitem"
       tabIndex={0}
       data-tree-node-id={props.node.id}
-      className={`note-row tree-row type-${props.node.nodeType} ${props.node.id === props.activeId ? "active" : ""} ${props.node.id === props.contextId ? "context" : ""} ${props.draggingId === props.node.id ? "dragging" : ""} ${dropPosition ? `drop-${dropPosition}` : ""}`}
-      style={{ paddingLeft: 8 }}
+      className={`note-row tree-row type-${props.node.nodeType} ${props.node.id === props.activeId ? "active" : ""} ${props.node.id === props.contextId ? "context" : ""} ${isDragging ? "dragging" : ""} ${props.releasingId === props.node.id ? "releasing" : ""} ${isDropParent ? "drop-parent" : ""} ${sameLevelLine ? `drop-line-${dropPosition}` : ""}`}
+      style={{ paddingLeft: 8, transform: props.releaseTransforms !== null
+        ? undefined
+        : isDragging ? `translateY(${props.dragOffsetY}px)`
+        : siblingOffsetY ? `translateY(${siblingOffsetY}px)` : undefined }}
       onClick={() => {
         if (props.consumeSuppressedClick()) return;
         props.onContext(props.node.id);
         if (props.node.nodeType === "note") props.onSelect(props.node.id);
-        else props.onToggle(props.node.id);
+        else {
+          // 选中笔记本后保持其可见，方便立即在顶部 + 菜单中创建分组。
+          props.onToggle(props.node.id);
+        }
       }}
       onKeyDown={(event) => { if (event.key === "Enter") props.node.nodeType === "note" ? props.onSelect(props.node.id) : props.onToggle(props.node.id); }}
       onPointerDown={(event) => props.onPointerDown(event, props.node.id)}
@@ -473,7 +673,6 @@ interface ContextMenuProps {
 
 const ContextMenu = ({ node, x, y, onNewChild, onRename, onDelete, onCopyMarkdown, onExportAs, onCopyPaths, onSetIconRequest, onOpenHistory, onClose }: ContextMenuProps) => {
   const [exportOpen, setExportOpen] = useState(false);
-  const isNotebook = node.nodeType === "notebook";
   // 视口边缘翻转，避免菜单溢出屏幕
   const left = Math.min(x, window.innerWidth - 232);
   const top = Math.min(y, window.innerHeight - 220);
@@ -484,7 +683,7 @@ const ContextMenu = ({ node, x, y, onNewChild, onRename, onDelete, onCopyMarkdow
   return createPortal(
     <div className="context-menu" style={{ left, top }} role="menu" data-context-menu>
       <button role="menuitem" onClick={() => { onNewChild("note"); onClose(); }}><FilePlus2 size={15} /><span>新建文档</span></button>
-      {!isNotebook && <button role="menuitem" onClick={() => { onNewChild("group"); onClose(); }}><FolderPlus size={15} /><span>新建分组</span></button>}
+      <button role="menuitem" onClick={() => { onNewChild("group"); onClose(); }}><FolderPlus size={15} /><span>新建分组</span></button>
       <button role="menuitem" onClick={() => { onRename(); onClose(); }}><Pencil size={15} /><span>重命名</span></button>
       {node.nodeType !== "notebook" && <button role="menuitem" onClick={() => { onSetIconRequest(); onClose(); }}><SmilePlus size={15} /><span>设置图标</span></button>}
       {node.nodeType === "note" && (

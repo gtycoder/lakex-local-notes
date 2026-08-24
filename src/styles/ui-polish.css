@@ -150,3 +150,84 @@
 @media (min-width: 761px) {
   .app-shell.sidebar-docked { transition: none !important; }
 }
+
+/* Precise sortable motion: the source row is the visible dragged object and
+   moves only on Y; siblings slide by exactly one row with a calm 250ms ease. */
+.tree-row {
+  position: relative;
+  transition: transform 250ms ease, background-color 120ms ease, box-shadow 120ms ease;
+  will-change: transform;
+}
+.tree-row.dragging {
+  z-index: 8;
+  opacity: 1 !important;
+  color: var(--lake-text) !important;
+  background: color-mix(in srgb, var(--lake-text) 10%, var(--lake-panel)) !important;
+  border-radius: 8px;
+  box-shadow: 0 3px 12px color-mix(in srgb, var(--lake-text) 18%, transparent), inset 0 0 0 1px color-mix(in srgb, var(--lake-text) 10%, transparent) !important;
+  transition: none !important;
+}
+.tree-row.drop-before::before,
+.tree-row.drop-after::after,
+.tree-row.drop-crossing::before,
+.tree-row.drop-crossing::after {
+  right: 0;
+  left: 8px;
+  height: 2px;
+  border-radius: 999px;
+  background: var(--lake-accent);
+  box-shadow: 0 0 0 3px var(--lake-accent-soft);
+}
+.tree-row.drop-crossing::before,
+.tree-row.drop-crossing::after {
+  content: "";
+  position: absolute;
+  pointer-events: none;
+}
+.tree-row.drop-crossing::before { top: -1px; }
+.tree-row.drop-crossing::after { bottom: -1px; }
+@media (prefers-reduced-motion: reduce) {
+  .tree-row { transition: none !important; }
+}
+
+/* Final drag-state contract:
+   - same-parent reorder => one insertion line only;
+   - parent change => highlight the destination parent as a blue rounded box;
+   - the source row remains the real row, translucent, and vertically movable. */
+.tree-row.dragging {
+  opacity: .46 !important;
+  color: var(--lake-text) !important;
+  background: color-mix(in srgb, var(--lake-text) 9%, var(--lake-panel)) !important;
+  border-radius: 8px;
+  box-shadow: 0 2px 9px color-mix(in srgb, var(--lake-text) 14%, transparent), inset 0 0 0 1px color-mix(in srgb, var(--lake-text) 12%, transparent) !important;
+}
+.tree-row.drop-line-before::before,
+.tree-row.drop-line-after::after {
+  content: "";
+  position: absolute;
+  right: 0;
+  left: 0;
+  height: 2px;
+  border-radius: 999px;
+  background: var(--lake-accent);
+  box-shadow: 0 0 0 3px var(--lake-accent-soft);
+  pointer-events: none;
+}
+.tree-row.drop-line-before::before { top: -1px; }
+.tree-row.drop-line-after::after { bottom: -1px; }
+.tree-row.drop-parent {
+  color: var(--lake-text) !important;
+  background: color-mix(in srgb, var(--lake-accent) 12%, var(--lake-panel)) !important;
+  box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--lake-accent) 76%, transparent) !important;
+}
+/* Old classes are no longer emitted for active drops; keep them inert so
+   legacy cascade rules cannot bring back the two-line crossing treatment. */
+.tree-row.drop-before::before,
+.tree-row.drop-after::after,
+.tree-row.drop-crossing::before,
+.tree-row.drop-crossing::after,
+.tree-row.drop-inside::before,
+.tree-row.drop-inside::after { display: none !important; }
+@media (prefers-reduced-motion: reduce) {
+  .tree-row.dragging { transition: none !important; }
+}

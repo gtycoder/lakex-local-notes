@@ -838,6 +838,10 @@ export function App() {
       const target = treeNodes.find((node) => node.id === targetId);
       if (!moving || !target) return;
       const parentId = position === "inside" ? target.id : target.parentId;
+      // UI 会过滤非法根层落点；这里再做一次边界保护，避免 stale pointerup
+      // 或异步树刷新把 note/group 送到根层后弹出“必须位于目录节点下”。
+      if (moving.nodeType !== "notebook" && parentId === null) return;
+      if (moving.nodeType === "notebook" && parentId !== null) return;
       const sameParent = treeNodes.filter((node) => node.parentId === parentId && node.id !== id).sort((a, b) => a.sortOrder - b.sortOrder);
       const orderedIds = position === "inside"
         ? [...sameParent.map((node) => node.id), id]
