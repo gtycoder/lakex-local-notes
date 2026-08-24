@@ -13,6 +13,7 @@ function DrawnixFallback() {
   return <div className="board-card-loading" aria-label="画板加载中">正在加载画板…</div>;
 }
 import { CardResizer, type ICardProps } from "lakex-editor-react-component";
+import { shouldRestoreDocumentScrollAfterBoardChange, useClickActivatedWheelGate } from "./canvasInteractionGate";
 import type { PlaitElement, Viewport, PlaitTheme, PlaitBoard } from "@plait/core";
 
 export interface IBoardCardValue {
@@ -90,6 +91,7 @@ const BoardCardEditor = React.forwardRef<HTMLDivElement, ICardProps<IBoardCardVa
     const elements = cardValue.elements ?? [];
     const cardHeight = cardValue.cardHeight ?? 400;
     const guardRef = useRef<HTMLDivElement>(null);
+    useClickActivatedWheelGate(guardRef);
 
     useEffect(() => {
       const el = guardRef.current;
@@ -161,7 +163,9 @@ const BoardCardEditor = React.forwardRef<HTMLDivElement, ICardProps<IBoardCardVa
                     theme: data.theme,
                   });
                 }
-                notifyLakeBoardChange(guardRef.current || document.body, before);
+                if (shouldRestoreDocumentScrollAfterBoardChange(elementsChanged)) {
+                  notifyLakeBoardChange(guardRef.current || document.body, before);
+                }
               }}
             />
             </Suspense>
@@ -177,10 +181,16 @@ const BoardCardViewer = React.forwardRef<HTMLDivElement, ICardProps<IBoardCardVa
     const { cardValue } = props;
     const elements = cardValue.elements ?? [];
     const cardHeight = cardValue.cardHeight ?? 400;
+    const gateRef = useRef<HTMLDivElement | null>(null);
+    useClickActivatedWheelGate(gateRef);
 
     return (
       <div
-        ref={ref}
+        ref={(node) => {
+          gateRef.current = node;
+          if (typeof ref === "function") ref(node);
+          else if (ref) (ref as React.MutableRefObject<HTMLDivElement | null>).current = node;
+        }}
         className="board-card-wrapper board-card-wrapper--viewer"
         style={{ width: "100%", height: cardHeight, minHeight: 200, border: "1px solid var(--ne-color-border, #e5e5e5)", borderRadius: 8 }}
       >

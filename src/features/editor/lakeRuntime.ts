@@ -3,6 +3,7 @@ import { renderToString } from "react-dom/server";
 import { Doc, DefaultEditorConfig } from "lakex-editor-react-component";
 import { uploadLakeResource } from "./resourceUpload";
 import { BoardCard } from "./BoardCard";
+import { shouldSkipBoardCardFocus, useClickActivatedWheelGate } from "./canvasInteractionGate";
 import { ASSET_ORIGIN } from "../../lib/assetPort";
 
 /** 与下方 math.KaTexURL 保持同一份相对路径，供预注入脚本去重匹配。 */
@@ -95,6 +96,18 @@ function deepMerge(base: Record<string, unknown>, overrides: Record<string, unkn
  * slash label/description from () => ({zhCN, enUS}) to strings.
  * Without this, registerCard() reads e.name as undefined.
  */
+function withCanvasWheelGate(Comp: React.ComponentType<Record<string, unknown>>): React.ComponentType<Record<string, unknown>> {
+  return React.forwardRef<unknown, Record<string, unknown>>((props, forwardedRef) => {
+    const rootRef = React.useRef<HTMLDivElement>(null);
+    useClickActivatedWheelGate(rootRef);
+    return React.createElement(
+      "div",
+      { ref: rootRef, className: "mindmap-interaction-gate", "data-canvas-interaction": "passive" },
+      React.createElement(Comp as React.ComponentType<Record<string, unknown> & { ref?: unknown }>, { ...props, ref: forwardedRef }),
+    );
+  });
+}
+
 function prepareCustomCards(config: Record<string, unknown>): void {
   const cc = config.customCard as { cards?: unknown[] } | undefined;
   if (!cc?.cards) return;
@@ -126,18 +139,18 @@ function prepareCustomCards(config: Record<string, unknown>): void {
     const viewerComponent = cfg.viewerComponent
       ? withCardBoundary(
           isMindmap
-            ? React.forwardRef((props: any, ref: any) => {
+            ? withCanvasWheelGate(React.forwardRef((props: any, ref: any) => {
                 const editor = props.editor?.theme?.currentThemeSchema
                   ? props.editor
                   : { theme: { currentThemeSchema: { colorScheme: "auto" } } };
                 return React.createElement(cfg.viewerComponent as any, { ...props, editor, ref });
-              })
+              }))
             : (cfg.viewerComponent as any),
           cardName
         )
       : undefined;
     const editorComponent = isMindmap && cfg.editorComponent
-      ? withCardBoundary(cfg.editorComponent as any, cardName)
+      ? withCardBoundary(withCanvasWheelGate(cfg.editorComponent as any), cardName)
       : cfg.editorComponent;
     return {
       ...cfg,
@@ -699,6 +712,9 @@ function setupInsertedCardAutoOpen(host: HTMLElement): () => void {
     const el = target.closest("ne-card");
     if (!el || !host.contains(el)) return;
     if (!isTargetCard(el)) return;
+    const insideBoard = Boolean((target as Element).closest(".plait-board-container"));
+    const canvasActive = el.querySelector<HTMLElement>("[data-canvas-interaction=active]") !== null;
+    if (shouldSkipBoardCardFocus(insideBoard, canvasActive)) return;
     tryFocusCard(el, false);
   };
 

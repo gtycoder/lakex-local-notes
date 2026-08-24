@@ -202,6 +202,36 @@ export function EditorTab({ noteId, content, visible, tocEnabled, onChange, pref
     // 只在一次真实 contentchange 后安排恢复，而不是 pointerdown 时就连续写入
     // scrollTop。画板自己的新增/删除操作会触发多轮 viewport/layout 重绘，过早或
     // 重复写滚动位置会让 Drawnix 画面短暂清空再重绘，表现为闪烁。
+    const getBoardDocumentScroller = (): HTMLElement | null => {
+      // Resolve directly from the tab host. During a card update Lake can
+      // briefly expose more than one editor wrapper, and the generic resolver
+      // may otherwise fall back to the host while the replacement is mounting.
+      return host.querySelector<HTMLElement>(".ne-editor-wrap, .ne-viewer")
+        ?? resolveScrollNode(host);
+    };
+    const restoreBoardScrollImmediately = (before: number): void => {
+      if (before < 100) return;
+      const restore = (): void => {
+        const scroller = getBoardDocumentScroller();
+        if (!scroller?.isConnected || Math.abs(scroller.scrollTop - before) <= 1) return;
+        scroller.scrollTop = before;
+        lastScrollTopRef.current = before;
+        stableScrollTopRef.current = before;
+      };
+      // Lake may reset the scroll node during the same event turn or while
+      // React commits the card update. Restore before the next paint and once
+      // more on the following frame so selection/delete never visibly flashes
+      // the document back to its top.
+      restore();
+      let frames = 0;
+      const restoreAcrossFrames = (): void => {
+        restore();
+        frames += 1;
+        if (frames < 8) window.requestAnimationFrame(restoreAcrossFrames);
+      };
+      window.requestAnimationFrame(restoreAcrossFrames);
+    };
+
     const scheduleBoardScrollRestore = (before: number): void => {
       if (before < 100) return;
       window.clearTimeout(boardRestoreTimer);
@@ -210,7 +240,7 @@ export function EditorTab({ noteId, content, visible, tocEnabled, onChange, pref
         const target = boardInteractionScrollRef.current || before;
         // Lake 在卡片变更后可能重建 .ne-editor-wrap；不能闭包捕获旧节点，
         // 每次恢复都重新解析真实滚动容器。
-        const scroller = resolveScrollNode(host);
+        const scroller = getBoardDocumentScroller();
         if (!scroller?.isConnected || target < 100 || Date.now() > boardInteractionUntilRef.current) return;
         // 仅恢复明确的跳顶；如果画板/用户已经处于其它位置，不抢回滚动。
         if (scroller.scrollTop < 50 && Math.abs(scroller.scrollTop - target) > 1) {
@@ -283,6 +313,7 @@ export function EditorTab({ noteId, content, visible, tocEnabled, onChange, pref
       // 不会强行滚回旧位置。
       if (before < 100) return;
       armBoardScrollRestore(before);
+      restoreBoardScrollImmediately(before);
       scheduleBoardScrollRestore(before);
     };
     host.addEventListener("pointerdown", boardScrollGuard, true);
@@ -321,6 +352,7 @@ export function EditorTab({ noteId, content, visible, tocEnabled, onChange, pref
               const anchor = boardInteractionScrollRef.current || stableScrollTopRef.current;
               const scroller = resolveScrollNode(host);
               if (anchor >= 100 && scroller) {
+                restoreBoardScrollImmediately(anchor);
                 scheduleBoardScrollRestore(anchor);
               }
             }
@@ -372,7 +404,16 @@ export function EditorTab({ noteId, content, visible, tocEnabled, onChange, pref
             stableScrollCommitTimer = undefined;
           } else if (jumpedToTop && Date.now() < boardInteractionUntilRef.current) {
             const anchor = boardInteractionScrollRef.current || stableScrollTopRef.current;
-            if (anchor >= 100) scheduleBoardScrollRestore(anchor);
+            if (anchor >= 100) {
+              // The scroll event is emitted in the same turn as Lake's jump to
+              // the top. Restore synchronously here, before the browser paints
+              // the transient top position; delayed timers remain as a fallback
+              // for a later replacement of the scroll node.
+              nextScroller.scrollTop = anchor;
+              lastScrollTopRef.current = anchor;
+              stableScrollTopRef.current = anchor;
+              scheduleBoardScrollRestore(anchor);
+            }
           } else {
             // 不要在瞬时跳顶的同一帧把稳定锚点改成 0；如果用户确实停在顶部，
             // 延迟提交即可让后续锁切换仍尊重用户的真实位置。

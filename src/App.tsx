@@ -16,6 +16,7 @@ import { DesktopStatusBar } from "./components/DesktopStatusBar";
 import { getDocumentStatus } from "./components/documentStatusModel";
 import { LakeEditor } from "./features/editor/LakeEditor";
 import { clearScrollMemory, locateEditorSearchHit } from "./features/editor/EditorTab";
+import { resolveScrollNode } from "./features/editor/lakeRuntime";
 import type { LakeEditorInstance } from "./features/editor/lakeRuntime";
 import { MultiTabEditor, type TabInfo } from "./features/editor/MultiTabEditor";
 import { selectEvictionIds, trimTabsToLimit } from "./core/tabLimit";
@@ -32,6 +33,7 @@ import { useSyncController } from "./hooks/useSyncController";
 import { useDocumentTabs } from "./hooks/useDocumentTabs";
 import { createRequestVersion } from "./core/requestVersion";
 import { stripAssetAccessToken } from "./lib/assetPort";
+import { getWorkspaceDisplayName } from "./lib/workspaceName";
 import { isDesktop, native } from "./lib/native";
 import { getNativeErrorMessage } from "./lib/nativeErrors";
 import { loadSettings, saveSettings, subscribeSettings, type AppSettings } from "./lib/settings";
@@ -41,8 +43,8 @@ import { subtreeIds } from "./core/tree";
 import { planTabReload } from "./core/planTabReload";
 import { DOCK_GUTTER, FIXED_RAIL_WIDTH } from "./lib/layoutMetrics";
 import { OUTLINE_HOVER_TRIGGER_WIDTH, OUTLINE_SCROLLBAR_CLEARANCE } from "./features/outline/outlineInteraction";
-import { shouldCollapseSidebarOnHoverLeave } from "./components/sidebarInteraction";
-import type { DraftJournalEntry, NoteDigest, NoteDocument, NoteSummary, SyncPendingSummary, SyncProgress, SyncStatus, TreeNode, WorkspaceSnapshot } from "./lib/types";
+import { shouldCollapseSidebarOnHoverLeave, shouldKeepSidebarPreviewOpen } from "./components/sidebarInteraction";
+import type { DraftJournalEntry, NoteDigest, NoteDocument, NoteSummary, S3Settings, SyncPendingSummary, SyncProgress, SyncStatus, TreeNode, WorkspaceSnapshot } from "./lib/types";
 
 const SIDEBAR_HOVER_HIDE_DELAY_MS = 120;
 
@@ -52,7 +54,7 @@ type DesktopWorkspace = "library" | "quick-notes";
 // 左侧资料库与右侧大纲面板各自维护宽度；两侧常驻 activity rail 才保持同宽。
 const SIDEBAR_DEFAULT_WIDTH = 224;
 const SIDEBAR_MIN_WIDTH = 160;
-const SIDEBAR_MAX_WIDTH = 300;
+const SIDEBAR_MAX_WIDTH = 420;
 const OUTLINE_SIDEBAR_DEFAULT_WIDTH = 280;
 const OUTLINE_SIDEBAR_MIN_WIDTH = 200;
 const OUTLINE_SIDEBAR_MAX_WIDTH = 420;
@@ -141,9 +143,6 @@ export function App() {
   const wsMenuWrapRef = useRef<HTMLDivElement>(null);
   const moreMenuWrapRef = useRef<HTMLDivElement>(null);
   const syncBtnRef = useRef<HTMLButtonElement>(null);
-  /** 顶栏「工作空间」名：取 S3 prefix（未配置时显示本地占位） */
-  const workspaceName = "本地空间";
-
   useWindowShortcuts({
     onOpenSearch: () => { setSearchPanelQuery(""); setSearchPanelOpen(true); closeMenus(); },
     onToggleFocus: () => { setFocusMode((value) => !value); closeMenus(); },
@@ -152,6 +151,9 @@ export function App() {
   const [sync, setSync] = useState<SyncStatus>({ phase: "idle", message: "仅本地保存", lastSyncedAt: null, pendingChanges: 0 });
   const [cloudEnabled, setCloudEnabled] = useState(true);
   const [cloudConfigured, setCloudConfigured] = useState(false);
+  /** 顶栏「工作空间」名：云同步启用且已配置 S3 时显示对象前缀。 */
+  const [s3Settings, setS3Settings] = useState<S3Settings | null>(null);
+  const workspaceName = getWorkspaceDisplayName(cloudEnabled, s3Settings);
   const [pendingSummary, setPendingSummary] = useState<SyncPendingSummary>({ documents: 0, resources: 0, quickNotes: 0, total: 0, generatedAt: "" });
   const [draftEntries, setDraftEntries] = useState<DraftJournalEntry[]>([]);
   const [confirmDelete, setConfirmDelete] = useState<TreeNode | null>(null);
@@ -180,6 +182,7 @@ export function App() {
   sidebarModeRef.current = sidebarMode;
   const [sidebarWidth, setSidebarWidth] = useState(initialSidebarWidth);
   const [sidebarResizing, setSidebarResizing] = useState(false);
+  const sidebarResizingRef = useRef(false);
   // 全局唯一大纲状态（持久化）：所有“有大纲”的文档都遵循它；
   // 仅当当前文档没有大纲时自动强制悬浮（除非用户在空文档上显式固定）。
   const [outlineMode, setOutlineMode] = useState<OutlineMode>(initialOutlineMode);
@@ -261,12 +264,6 @@ export function App() {
   }, [sidebarMode]);
 
   useEffect(() => {
-    if (sidebarMode !== "docked") return;
-    const target = outlineSidebarWidth + 4;
-    setSidebarWidth((current) => Math.abs(current - target) < 1 ? current : target);
-  }, [sidebarMode, outlineSidebarWidth]);
-
-  useEffect(() => {
     return () => {
       flushTimers();
       for (const tab of openTabsRef.current) {
@@ -331,7 +328,7 @@ export function App() {
     void native.bootstrap().then(async (snapshot) => {
       setWorkspace(snapshot); setNotes(snapshot.notes); setSync(snapshot.sync);
       void native.getSyncSettings().then((cfg) => setCloudEnabled(cfg.enabled)).catch(() => undefined);
-      void native.getS3Settings().then((cfg) => setCloudConfigured(Boolean(cfg))).catch(() => undefined);
+      void native.getS3Settings().then((cfg) => { setS3Settings(cfg); setCloudConfigured(Boolean(cfg)); }).catch(() => undefined);
       void native.getSyncStatus().then((info) => {
         const superseded = info.lastResult?.supersededNotes ?? [];
         if (superseded.length > 0) setConflictSnapshotNotice(superseded.map((item) => ({ noteId: item.id, title: item.title })));
@@ -682,6 +679,14 @@ export function App() {
     refreshPendingSummary,
   });
 
+  const handleS3SettingsChanged = useCallback((next: S3Settings) => {
+    setS3Settings(next);
+    setCloudConfigured(true);
+  }, []);
+  const handleSyncSettingsChanged = useCallback((next: { enabled: boolean }) => {
+    setCloudEnabled(next.enabled);
+  }, []);
+
   /** 编辑器实例就绪回调：注册到 map，销毁时移除；就绪时补写文本缓存（存量文档首次打开即有缓存） */
   const handleEditorReady = useCallback((noteId: string, editor: LakeEditorInstance | null) => {
     if (editor) {
@@ -914,6 +919,10 @@ export function App() {
   }, [clearSidebarPreviewTimer]);
 
   const hideSidebarPreview = useCallback(() => {
+    // A resize drag temporarily owns the pointer. The sidebar's bounds move
+    // under the pointer as its width changes, so pointerleave is expected and
+    // must not collapse the floating preview mid-drag.
+    if (shouldKeepSidebarPreviewOpen(sidebarModeRef.current, sidebarResizingRef.current)) return;
     // A docked sidebar is a user-selected persistent state. Pointer leaving it
     // must never route through the floating-preview collapse path.
     if (!shouldCollapseSidebarOnHoverLeave(sidebarModeRef.current)) return;
@@ -932,6 +941,7 @@ export function App() {
       return Boolean(rect && x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom);
     };
     const onPointerMove = (event: PointerEvent) => {
+      if (sidebarResizingRef.current) return;
       if (isInside(event.clientX, event.clientY, ".activity-rail") || isInside(event.clientX, event.clientY, ".sidebar")) {
         clearSidebarPreviewTimer();
       } else {
@@ -987,6 +997,11 @@ export function App() {
 
   const updateSidebarWidth = useCallback((width: number) => {
     setSidebarWidth(width);
+  }, []);
+
+  const handleSidebarResizeActiveChange = useCallback((active: boolean) => {
+    sidebarResizingRef.current = active;
+    setSidebarResizing(active);
   }, []);
 
   const commitSidebarWidth = useCallback((width: number) => {
@@ -1087,6 +1102,30 @@ export function App() {
   };
   // 编辑器面包屑：活动文档路径（思源 protyle-breadcrumb）
   const activePath = activeNoteId ? treeNodePath(treeNodes, activeNoteId) : [];
+  const scrollActiveEditorToTop = () => {
+    if (!activeNoteId) return;
+    clearScrollMemory(activeNoteId);
+    const activeHost = document.querySelector<HTMLElement>(`.lake-editor-tab[data-note-id="${CSS.escape(activeNoteId)}"]`);
+    // 正常路径按 activeNoteId 定位；多标签切换/懒加载的瞬间如果属性还未回流，
+    // 再兜底处理当前可见的编辑器，避免点击后仍停留在旧滚动位置。
+    const hosts = activeHost
+      ? [activeHost]
+      : [...document.querySelectorAll<HTMLElement>(".lake-editor-tab")].filter((host) => getComputedStyle(host).display !== "none");
+    for (const host of hosts) {
+      const scroller = resolveScrollNode(host);
+      try {
+        // 回到笔记本不是渐进定位：直接归零，避免大文档的平滑滚动
+        // 被编辑器滚动记忆/懒渲染中途打断，停在半路。
+        scroller.scrollTop = 0;
+        scroller.scrollTo({ top: 0, behavior: "auto" });
+      } catch {
+        scroller.scrollTop = 0;
+      }
+    }
+  };
+  const navigateToHeading = (id: string) => {
+    getOutlineTab(activeNoteId)?.navigate(id);
+  };
   // 大纲路径：从当前滚动标题沿 parentId 上溯（H1→H2→…），与目录路径可区分
   const headingPath: Array<{ id: string; level: number; text: string }> = (() => {
     const handle = getOutlineTab(activeNoteId);
@@ -1168,7 +1207,7 @@ export function App() {
         <button className={`activity-button ${desktopWorkspace === "quick-notes" ? "active" : ""}`} onClick={() => void switchDesktopWorkspace("quick-notes")} title="小记" aria-label="小记"><Feather size={16} /></button>
         <div className="activity-rail-fill" />
       </nav>
-      {desktopWorkspace === "library" && <Sidebar nodes={treeNodes} activeId={activeNoteId ?? mobileActive?.id ?? null} search={search} mobileOpen={mobileOpen} mode={sidebarMode} width={sidebarWidth} minWidth={SIDEBAR_MIN_WIDTH} maxWidth={SIDEBAR_MAX_WIDTH} onSearch={setSearch} onSelect={sidebarSelect} onCreate={sidebarCreate} onRename={sidebarRename} onMoveNode={sidebarMove} onRequestDelete={sidebarRequestDelete} onCopyMarkdown={copyMarkdownFromCache} onExportAs={exportAs} onCopyPaths={copyNotePaths} onSetIcon={sidebarSetIcon} onOpenHistory={sidebarOpenHistory} onOpenSearch={sidebarOpenSearch} pendingRenameId={pendingRenameId} onPendingRenameConsumed={sidebarPendingRenameConsumed} onPreviewEnter={showSidebarPreview} onPreviewLeave={hideSidebarPreview} onResizeActiveChange={setSidebarResizing} onWidthChange={updateSidebarWidth} onWidthCommit={commitSidebarWidth} onCloseMobile={sidebarCloseMobile} />}
+      {desktopWorkspace === "library" && <Sidebar nodes={treeNodes} activeId={activeNoteId ?? mobileActive?.id ?? null} search={search} mobileOpen={mobileOpen} mode={sidebarMode} width={sidebarWidth} minWidth={SIDEBAR_MIN_WIDTH} maxWidth={SIDEBAR_MAX_WIDTH} onSearch={setSearch} onSelect={sidebarSelect} onCreate={sidebarCreate} onRename={sidebarRename} onMoveNode={sidebarMove} onRequestDelete={sidebarRequestDelete} onCopyMarkdown={copyMarkdownFromCache} onExportAs={exportAs} onCopyPaths={copyNotePaths} onSetIcon={sidebarSetIcon} onOpenHistory={sidebarOpenHistory} onOpenSearch={sidebarOpenSearch} pendingRenameId={pendingRenameId} onPendingRenameConsumed={sidebarPendingRenameConsumed} onPreviewEnter={showSidebarPreview} onPreviewLeave={hideSidebarPreview} onResizeActiveChange={handleSidebarResizeActiveChange} onWidthChange={updateSidebarWidth} onWidthCommit={commitSidebarWidth} onCloseMobile={sidebarCloseMobile} />}
       {mobileOpen && <div className="mobile-scrim" onClick={() => setMobileOpen(false)} />}
       <main className="workspace" onPointerDownCapture={(event) => {
         if (!isMobile && sidebarMode === "floating" && (event.target as HTMLElement).closest(".document-pane, .empty-workspace")) setSidebarMode("collapsed");
@@ -1215,17 +1254,23 @@ export function App() {
               breadcrumb={activePath.length > 0 ? (
                 <nav className="protyle-breadcrumb" aria-label="文档路径">
                   {/* 只保留笔记本名（目录路径不重要，顶部有文档名） */}
-                  <span className="protyle-breadcrumb__item protyle-breadcrumb__item--notebook">{activePath[0].title || "无标题"}</span>
+                  <button type="button" className="protyle-breadcrumb__item protyle-breadcrumb__item--notebook" onClick={scrollActiveEditorToTop} title="回到文档顶部">{activePath[0].title || "无标题"}</button>
                   {headingPath.length > 0 && (
                     <>
                       <span className="protyle-breadcrumb__divider" aria-hidden="true"><ChevronRight size={12} /></span>
                       <span className="protyle-breadcrumb__outline" aria-label="大纲位置">
                         {headingPath.map((hn, i) => (
-                          <span key={hn.id} className={`protyle-breadcrumb__item${i === headingPath.length - 1 ? " protyle-breadcrumb__item--current" : ""}`}>
+                          <button
+                            key={hn.id}
+                            type="button"
+                            className={`protyle-breadcrumb__item${i === headingPath.length - 1 ? " protyle-breadcrumb__item--current" : ""}`}
+                            onClick={() => navigateToHeading(hn.id)}
+                            title={`跳转到 H${hn.level}：${hn.text}`}
+                          >
                             {i > 0 && <ChevronRight size={12} />}
                             <span className="protyle-breadcrumb__h">H{hn.level}</span>
                             {hn.text}
-                          </span>
+                          </button>
                         ))}
                       </span>
                     </>
@@ -1350,7 +1395,7 @@ export function App() {
         })();
       }} />
       {syncToast && <SyncToast data={syncToast} onClose={() => { setSyncToast(null); setSyncProgress(null); }} anchorRect={syncBtnRef.current?.getBoundingClientRect()} />}
-      <SettingsPanel open={settingsOpen} openCategory={settingsCategory} settings={settings} onClose={() => setSettingsOpen(false)} onChange={(patch) => saveSettings(patch)} />
+      <SettingsPanel open={settingsOpen} openCategory={settingsCategory} settings={settings} onClose={() => setSettingsOpen(false)} onChange={(patch) => saveSettings(patch)} onS3SettingsChanged={handleS3SettingsChanged} onSyncSettingsChanged={handleSyncSettingsChanged} />
     </div>
   );
 }

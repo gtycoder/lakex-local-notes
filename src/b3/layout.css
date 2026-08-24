@@ -211,7 +211,8 @@
   align-items: center;
   gap: 3px;
   padding: 0 16px;
-  min-height: 36px;
+  min-height: 32px;
+  height: 32px;
   flex-shrink: 0;
   background: var(--b3-theme-background);
   color: var(--b3-theme-on-surface);
@@ -227,8 +228,18 @@
   overflow: hidden;
   text-overflow: ellipsis;
   cursor: pointer;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  text-align: left;
 }
 .protyle-breadcrumb__item:hover { color: var(--b3-theme-on-background); }
+.protyle-breadcrumb__item:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--b3-theme-primary) 55%, transparent);
+  outline-offset: 1px;
+  border-radius: 3px;
+}
 .protyle-breadcrumb__item--current { color: var(--b3-theme-on-background); font-weight: 500; }
 
 /* ── 顶栏「更多」下拉菜单（思源 b3-menu）── */

@@ -70,7 +70,14 @@ export default defineConfig({
   },
   clearScreen: false,
   // lakex CSS 含 alipay 外部 URL，需走源码 transform（lakexAlipayLocal）本地化 → 排除依赖预构建
-  optimizeDeps: { exclude: ["lakex-editor-react-component"] },
+  optimizeDeps: {
+    // Drawnix is loaded on first board use. Pre-bundle it during Vite startup
+    // so the lazy import does not race a late dependency optimization and get
+    // a stale 504 "Outdated Optimize Dep" response.
+    include: ["lakex-drawnix"],
+    exclude: ["lakex-editor-react-component"],
+    force: true,
+  },
   server: { host: "127.0.0.1", port: 1421, strictPort: true },
   build: {
     target: "chrome120",

@@ -16,6 +16,8 @@ interface SettingsPanelProps {
   onChange: (patch: Partial<AppSettings>) => void;
   /** 打开设置时默认定位的分类，适合从具体功能的引导入口跳转。 */
   openCategory?: SettingsCategory;
+  onS3SettingsChanged?: (settings: S3Settings) => void;
+  onSyncSettingsChanged?: (settings: SyncSettings) => void;
 }
 
 const S3_DEFAULTS: S3Settings = { endpoint: "", region: "cn-east-1", bucket: "", prefix: "lake-notes", accessKeyId: "", secretAccessKey: "", forcePathStyle: false };
@@ -26,7 +28,7 @@ function formatBytes(n: number): string {
   return `${n} B`;
 }
 
-export function SettingsPanel({ open, settings, onClose, onChange, openCategory = "editor" }: SettingsPanelProps) {
+export function SettingsPanel({ open, settings, onClose, onChange, openCategory = "editor", onS3SettingsChanged, onSyncSettingsChanged }: SettingsPanelProps) {
   const [category, setCategory] = useState<SettingsCategory>(openCategory);
   const [navQuery, setNavQuery] = useState("");
   const navSearchRef = useRef<HTMLInputElement>(null);
@@ -103,12 +105,12 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
   const setS3Field = (key: keyof S3Settings, value: string | boolean) => setS3((c) => ({ ...c, [key]: value }));
   const saveS3 = async () => {
     setSyncMsg(null);
-    try { await native.saveS3Settings(s3); setSyncMsg("S3 配置已保存在当前设备"); }
+    try { await native.saveS3Settings(s3); onS3SettingsChanged?.(s3); setSyncMsg("S3 配置已保存在当前设备"); }
     catch (e) { setSyncMsg(getNativeErrorMessage(e)); }
   };
   const testS3 = async () => {
     setSyncMsg("正在连接...");
-    try { await native.saveS3Settings(s3); setSyncMsg(await native.testS3Connection()); }
+    try { await native.saveS3Settings(s3); onS3SettingsChanged?.(s3); setSyncMsg(await native.testS3Connection()); }
     catch (e) { setSyncMsg(getNativeErrorMessage(e)); }
   };
 
@@ -119,6 +121,7 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
     try {
       const saved = await native.saveSyncSettings(next);
       setSyncCfg(saved);
+      onSyncSettingsChanged?.(saved);
       setSyncMsg(saved.enabled ? "同步策略已保存" : "云同步已关闭（已完成最后一次对齐）");
     } catch (e) {
       setSyncMsg(getNativeErrorMessage(e));

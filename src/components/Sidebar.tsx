@@ -316,7 +316,16 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
   }), [treeIndex, query, props.activeId, context?.id ?? null, expanded, draggingId, dropTarget, pendingCreate, editingId, editingTitle, createField, submitRename, cancelRename, beginRename, beginTreeDrag, setContextNode, openContext, toggleNode, props.onSelect, setTreeIcon]);
 
   return (
-    <aside className={`sidebar sidebar-${props.mode} ${props.mobileOpen ? "sidebar-open" : ""}`} onPointerEnter={props.onPreviewEnter} onPointerLeave={props.onPreviewLeave}>
+    <aside
+      className={`sidebar sidebar-${props.mode} ${props.mobileOpen ? "sidebar-open" : ""}`}
+      onPointerEnter={props.onPreviewEnter}
+      onPointerLeave={() => {
+        // The panel's right edge moves with the pointer during resize. React
+        // can therefore report a leave even though the user is still dragging
+        // the handle; let the resize lifecycle decide when the preview closes.
+        if (!resizeRef.current) props.onPreviewLeave();
+      }}
+    >
       <button className="icon-button mobile-only sidebar-mobile-close" onClick={props.onCloseMobile} title="关闭"><X size={18} /></button>
       <div className="sidebar-toolbar-row desktop-only">
         <div className="search-box"><Search size={14} /><input value={props.search} onChange={(event) => props.onSearch(event.target.value)} placeholder="搜索" /></div>

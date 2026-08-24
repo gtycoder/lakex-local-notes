@@ -2132,3 +2132,20 @@ ne-card[data-card-name="codeblock"] .ne-card-resizer-mask {
     box-shadow: none !important;
   }
 }
+
+
+/* Embedded mindmap/board cards are passive while the reader scrolls through the
+   document. The gate is behavioral; this class is only a debugging/visual hook. */
+.mindmap-interaction-gate,
+.board-card-guard,
+.board-card-wrapper--viewer {
+  position: relative;
+}
+
+/* Drawnix owns an internal overflow viewport. Keep it non-scrollable while the
+   card is passive so a wheel passing over the card continues to scroll the
+   document; clicking the card switches the gate back to overflow:auto. */
+.board-card-guard[data-canvas-interaction="passive"] .plait-board-container .viewport-container,
+.board-card-wrapper--viewer[data-canvas-interaction="passive"] .plait-board-container .viewport-container {
+  overflow: hidden !important;
+}
