@@ -53,9 +53,30 @@ export function MobileApp() {
     (async () => {
       try {
         await bridge.init();
+        // lakeNative 调试/测试契约（对齐桌面端）：供 CDP 驱动与真机调试直接调用 bridge 端口
         (window as unknown as Record<string, unknown>).lakeNative = {
           uploadResource: (input: { bytes: number[]; filename: string }, noteId: string) =>
             bridge.uploadResource(input, noteId),
+          syncNow: () => bridge.syncNow(),
+          testS3Connection: () => bridge.testS3Connection(),
+          listTreeNodes: () => bridge.listTreeNodes(),
+          listNotes: () => bridge.listNotes(),
+          listQuickNotes: () => bridge.listQuickNotes(),
+          listTrashTree: () => bridge.listTrashTree(),
+          getS3Settings: () => bridge.getS3Settings(),
+          saveS3Settings: (cfg: import("../lib/types").S3Settings) => bridge.saveS3Settings(cfg),
+          createNote: (title: string, parentId: string | null) => bridge.createNote(title, parentId),
+          saveNote: (id: string, title: string, content: string, parentId: string | null) => bridge.saveNote(id, title, content, parentId),
+          trashNote: (id: string) => bridge.trashNote(id),
+          restoreNote: (id: string) => bridge.restoreNote(id),
+          listTrashed: () => bridge.listTrashed(),
+          listTrashTree: () => bridge.listTrashTree(),
+          restoreTreeItem: (id: string, kind: "folder" | "note") => bridge.restoreTreeItem(id, kind),
+          purgeTreeItem: (id: string, kind: "folder" | "note") => bridge.purgeTreeItem(id, kind),
+          createGroup: (parentId: string, title: string) => bridge.createGroup(parentId, title),
+          renameTreeNode: (id: string, title: string) => bridge.renameTreeNode(id, title),
+          createNotebook: (input: { title: string; icon: string | null }) => bridge.createNotebook(input),
+          searchNotes: (q: string) => bridge.searchNotes(q),
         };
         await refreshAll();
         setPhase("ready");
