@@ -38,11 +38,13 @@ export function MobileApp() {
   const [toastMsg, setToastMsg] = useState<string | null>(null);
   const [createNbOpen, setCreateNbOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
+  const [quickNotes, setQuickNotes] = useState<Array<{ id: string; previewText: string; imageCount: number; updatedAt: string }>>([]);
 
   const refreshAll = useCallback(async () => {
-    const [nodes, ns] = await Promise.all([bridge.listTreeNodes(), bridge.listNotes()]);
+    const [nodes, ns, qn] = await Promise.all([bridge.listTreeNodes(), bridge.listNotes(), bridge.listQuickNotes()]);
     setTreeNodes(nodes);
     setNotes(ns);
+    setQuickNotes(qn);
   }, []);
 
   useEffect(() => {
@@ -108,7 +110,12 @@ export function MobileApp() {
         <HomePage
           tab={route.tab}
           notebooks={notebooks}
-          quickNotes={notes}
+          quickNotes={quickNotes}
+          onCreateQuickNote={async (text) => {
+            await bridge.createQuickNote(text);
+            await refreshAll();
+            setToastMsg("已新建小记");
+          }}
           onTabChange={(tab) => setRoute({ kind: "home", tab })}
           onOpenNotebook={(id) => setRoute({ kind: "notebook", notebookId: id })}
           onOpenNote={(id) => openDocument(id, "viewer")}

@@ -15,6 +15,8 @@ import { createCapacitorS3Store } from "./s3Store";
 import type { S3Settings } from "../lib/types";
 import { assertNodeIcon, assertRootConstraint, assertTreeNodeTitle, nextSortOrder } from "../core/treeRules.js";
 import { buildLikePattern, buildSearchSql, toSearchResult } from "../core/mobileSearch.js";
+import { normalizeQuickNoteContent, previewQuickNote, serializeQuickNoteContent } from "../core/quickNoteModel.js";
+import type { StoredQuickNoteContent, StoredQuickNoteImage } from "../core/quickNoteModel.js";
 
 export interface POCNote {
   id: string;
@@ -124,6 +126,19 @@ async function ensureDb(): Promise<SqlJsDb> {
   db.exec(`CREATE TABLE IF NOT EXISTS device_state (
     key TEXT PRIMARY KEY,
     value TEXT NOT NULL
+  )`);
+  // B3：小记（对齐桌面 quick_notes 表列；移动端单库方案正文存 content 列，不建独立库/文件）
+  db.exec(`CREATE TABLE IF NOT EXISTS quick_notes (
+    id TEXT PRIMARY KEY,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    preview_text TEXT NOT NULL,
+    image_count INTEGER NOT NULL DEFAULT 0,
+    content_hash TEXT NOT NULL,
+    content TEXT NOT NULL,
+    sync_state TEXT NOT NULL DEFAULT 'local',
+    is_conflict INTEGER NOT NULL DEFAULT 0,
+    restore_pending_at TEXT
   )`);
   // D5：文档历史快照（纯本地，不参与同步）；覆盖前留档，防丢数据（对齐桌面 note_history 简化）
   db.exec(`CREATE TABLE IF NOT EXISTS note_history (
@@ -532,6 +547,53 @@ export const bridge = {
     }>;
     const term = query.trim().toLocaleLowerCase();
     return rows.map((row) => toSearchResult(row, row.title.toLocaleLowerCase().includes(term)));
+  },
+
+  // ---- 小记（Phase B3：本地 CRUD + 列表；同步后置，依赖 quick-notes/ 子空间端口化） ----
+
+  async listQuickNotes(): Promise<Array<{ id: string; previewText: string; imageCount: number; updatedAt: string }>> {
+    const d = await ensureDb();
+    const rows = d.prepare("SELECT id, preview_text, image_count, updated_at FROM quick_notes WHERE restore_pending_at IS NULL ORDER BY updated_at DESC").all() as Array<{ id: string; preview_text: string; image_count: number; updated_at: string }>;
+    return rows.map((r) => ({ id: r.id, previewText: r.preview_text, imageCount: r.image_count, updatedAt: r.updated_at }));
+  },
+
+  async readQuickNote(id: string): Promise<{ id: string; content: StoredQuickNoteContent; previewText: string; updatedAt: string } | null> {
+    const d = await ensureDb();
+    const row = d.prepare("SELECT id, content, preview_text, updated_at FROM quick_notes WHERE id=?").get(id) as { id: string; content: string; preview_text: string; updated_at: string } | undefined;
+    if (!row) return null;
+    let parsed: StoredQuickNoteContent;
+    try { parsed = JSON.parse(row.content) as StoredQuickNoteContent; }
+    catch { return null; }
+    return { id: row.id, content: parsed, previewText: row.preview_text, updatedAt: row.updated_at };
+  },
+
+  async saveQuickNote(id: string, text: string, images: StoredQuickNoteImage[] = []): Promise<string> {
+    const d = await ensureDb();
+    const now = new Date().toISOString();
+    const content = normalizeQuickNoteContent(text, images);
+    const serialized = serializeQuickNoteContent(content);
+    const contentHash = sha256Sync(new TextEncoder().encode(serialized));
+    const preview = previewQuickNote(text, images.length);
+    d.prepare(
+      `INSERT INTO quick_notes (id, created_at, updated_at, preview_text, image_count, content_hash, content, sync_state, is_conflict)
+       VALUES (?,?,?,?,?,?,?,'local',0)
+       ON CONFLICT(id) DO UPDATE SET updated_at=excluded.updated_at, preview_text=excluded.preview_text, image_count=excluded.image_count, content_hash=excluded.content_hash, content=excluded.content, sync_state='local'`
+    ).run(id, now, now, preview, images.length, contentHash, serialized);
+    await saveSnapshot(d.exportBytes());
+    return id;
+  },
+
+  async createQuickNote(text: string): Promise<string> {
+    const id = crypto.randomUUID();
+    await bridge.saveQuickNote(id, text, []);
+    return id;
+  },
+
+  /** 本地删除小记：restore_pending_at 标记（对齐桌面小记删除语义：随手记语义，删除即隐没，不做回收站复杂机制）。 */
+  async deleteQuickNote(id: string): Promise<void> {
+    const d = await ensureDb();
+    d.prepare("DELETE FROM quick_notes WHERE id=?").run(id);
+    await saveSnapshot(d.exportBytes());
   },
 
   async saveNote(id: string, title: string, content: string): Promise<void> {

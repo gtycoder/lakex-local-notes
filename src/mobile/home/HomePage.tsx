@@ -1,12 +1,19 @@
 /** 首页（小记/知识库切换 + 笔记本宫格）。Phase 1 基础版：真实 bridge 数据。 */
 import { BookOpen, Feather, Plus, Search, Settings } from "lucide-react";
-import type { POCNote } from "../bridge";
 import type { TreeNode } from "../../lib/types";
+
+export interface MobileQuickNote {
+  id: string;
+  previewText: string;
+  imageCount: number;
+  updatedAt: string;
+}
 
 export interface HomePageProps {
   tab: "quick" | "library";
   notebooks: TreeNode[];
-  quickNotes: POCNote[];
+  quickNotes: MobileQuickNote[];
+  onCreateQuickNote: (text: string) => void;
   onTabChange: (tab: "quick" | "library") => void;
   onOpenNotebook: (id: string) => void;
   onOpenNote: (id: string) => void;
@@ -17,7 +24,7 @@ export interface HomePageProps {
 }
 
 export function HomePage(props: HomePageProps) {
-  const { tab, notebooks, quickNotes, onTabChange, onOpenNotebook, onOpenNote, onOpenDrawer, onOpenSearch, onCreateNote, onCreateNotebook } = props;
+  const { tab, notebooks, quickNotes, onCreateQuickNote, onTabChange, onOpenNotebook, onOpenNote, onOpenDrawer, onOpenSearch, onCreateNote, onCreateNotebook } = props;
   return (
     <div className="mobile-home">
       <header className="mobile-topbar">
@@ -31,10 +38,10 @@ export function HomePage(props: HomePageProps) {
       {tab === "quick" ? (
         <div className="mobile-scroll">
           <div className="mobile-quick-list">
-            {quickNotes.length === 0 && <div className="mobile-empty">暂无小记</div>}
+            {quickNotes.length === 0 && <div className="mobile-empty">暂无小记，点右下新建</div>}
             {quickNotes.map((n) => (
-              <div key={n.id} className="mobile-qcard" onClick={() => onOpenNote(n.id)}>
-                <div className="mobile-qcard-text">{n.title}</div>
+              <div key={n.id} className="mobile-qcard">
+                <div className="mobile-qcard-text">{n.previewText || (n.imageCount > 0 ? "[图片]" : "（空白小记）")}</div>
                 <div className="mobile-qcard-meta">{new Date(n.updatedAt).toLocaleDateString("zh-CN")}</div>
               </div>
             ))}
@@ -54,8 +61,14 @@ export function HomePage(props: HomePageProps) {
         </div>
       )}
       <div className="mobile-fab-col">
-        <button className="mobile-fab" onClick={onCreateNote} aria-label="新建文档"><Plus size={24} /></button>
-        <button className="mobile-fab mobile-fab-secondary" onClick={onCreateNotebook} aria-label="新建知识库"><Feather size={20} /></button>
+        {tab === "quick" ? (
+          <button className="mobile-fab" onClick={() => { const t = window.prompt("小记内容"); if (t?.trim()) onCreateQuickNote(t.trim()); }} aria-label="新建小记"><Plus size={24} /></button>
+        ) : (
+          <>
+            <button className="mobile-fab" onClick={onCreateNote} aria-label="新建文档"><Plus size={24} /></button>
+            <button className="mobile-fab mobile-fab-secondary" onClick={onCreateNotebook} aria-label="新建知识库"><Feather size={20} /></button>
+          </>
+        )}
       </div>
     </div>
   );
