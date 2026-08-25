@@ -13,10 +13,11 @@ import { DocumentPage } from "./document/DocumentPage";
 import { CreateNotebookSheet } from "./settings/CreateNotebookSheet";
 import { SearchSheet } from "./settings/SearchSheet";
 import { SettingsDrawer } from "./settings/SettingsDrawer";
+import { useBackHandler } from "./useBackHandler";
 import "lakex-editor-react-component/style.css";
 import "./mobile.css";
 
-type Route =
+export type Route =
   | { kind: "home"; tab: "quick" | "library" }
   | { kind: "notebook"; notebookId: string }
   | { kind: "document"; noteId: string; mode: "viewer" | "editor" };
@@ -66,6 +67,28 @@ export function MobileApp() {
 
   const notebooks = useMemo(() => treeNodes.filter((n) => n.nodeType === "notebook"), [treeNodes]);
   const notebookChildren = useCallback((id: string) => treeNodes.filter((n) => n.parentId === id), [treeNodes]);
+
+  // B1：Android 返回键（Sheet→Drawer→退出编辑→文档→笔记本→首页→系统）
+  const exitEdit = useCallback(() => {
+    setEditing(false);
+    if (active) setRoute({ kind: "document", noteId: active.id, mode: "viewer" });
+  }, [active]);
+  useBackHandler({
+    route,
+    editing,
+    drawerOpen,
+    createNbOpen,
+    searchOpen,
+    onExitEdit: exitEdit,
+    onBackFromDocument: () => setRoute({ kind: "home", tab: "library" }),
+    onBackFromNotebook: () => setRoute({ kind: "home", tab: "library" }),
+    onCloseDrawer: () => setDrawerOpen(false),
+    onCloseSheets: () => { setCreateNbOpen(false); setSearchOpen(false); },
+    onAppExit: () => {
+      // 首页返回：交给系统退出（@capacitor/app 默认行为）
+      void import("@capacitor/app").then(({ App }) => App.exitApp?.()).catch(() => undefined);
+    },
+  });
 
   if (phase === "booting") return <div className="poc-center">启动中…（加载 WASM SQLite）</div>;
   if (error) return <div className="poc-center poc-error">{error}</div>;
