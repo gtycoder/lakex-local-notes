@@ -10,6 +10,7 @@
  */
 import { parseLocalAssetUrl } from "../core/assetUrl.js";
 import { bridge } from "./bridge";
+import { registerRuntimeBlob, unregisterRuntimeBlob } from "./cachePort.js";
 
 /** 裸 canonical URL：http://127.0.0.1:{port}/{noteId}/{filename} */
 const ASSET_URL_RE = /https?:\/\/127\.0\.0\.1:\d+\/[^\s"'<>)]*/g;
@@ -42,6 +43,7 @@ export function injectAssetBlobs(content: string): BlobInjectedDoc {
       blobUrl = URL.createObjectURL(new Blob([bytes as unknown as BlobPart]));
       seen.set(src, blobUrl);
       blobUrls.push(blobUrl);
+      registerRuntimeBlob(blobUrl);
     }
     return blobUrl;
   };
@@ -84,7 +86,7 @@ export function injectAssetBlobs(content: string): BlobInjectedDoc {
 
   return {
     displayContent: display,
-    revoke: () => { for (const u of blobUrls) URL.revokeObjectURL(u); },
+    revoke: () => { for (const u of blobUrls) { URL.revokeObjectURL(u); unregisterRuntimeBlob(u); } },
     restore: (content: string) => {
       let out = content;
       for (const [blobUrl, canonical] of blobToCanonical) {

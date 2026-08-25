@@ -81,3 +81,13 @@ export async function listAssetKeys(): Promise<string[]> {
     req.onerror = () => reject(req.error);
   });
 }
+
+/** 删除单个已持久化资产键（清缓存/迁移残留用；无此键时静默成功）。 */
+export async function removeAssetBytes(key: string): Promise<void> {
+  const store = await openStore();
+  return new Promise((resolve, reject) => {
+    const req = store.delete("asset:" + key);
+    req.onsuccess = () => resolve();
+    req.onerror = () => reject(req.error);
+  });
+}
