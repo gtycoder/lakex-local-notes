@@ -112,3 +112,32 @@ body { font-family: -apple-system, "PingFang SC", "Noto Sans SC", sans-serif; ba
 /* Toast */
 .mobile-toast { position: fixed; left: 50%; top: 44%; transform: translate(-50%,-50%); background: rgba(0,0,0,.78); color: #fff; font-size: 14px; padding: 10px 18px; border-radius: 10px; z-index: 60; max-width: 80%; text-align: center; }
 
+
+/* 新建知识库 Sheet */
+.mobile-sheet-mask { position: fixed; inset: 0; background: rgba(0,0,0,.4); z-index: 40; }
+.mobile-sheet { position: fixed; left: 0; right: 0; bottom: 0; background: #fff; border-radius: 16px 16px 0 0; z-index: 41; max-height: 70%; display: flex; flex-direction: column; }
+.mobile-sheet-grab { width: 36px; height: 4px; border-radius: 2px; background: #e0e2e5; margin: 10px auto 4px; }
+.mobile-sheet-title { flex: 0 0 auto; font-size: 15px; font-weight: 600; padding: 8px 18px 10px; border-bottom: 1px solid #f0f1f3; }
+.mobile-sheet-body { overflow-y: auto; padding: 16px 18px calc(20px + env(safe-area-inset-bottom)); }
+
+.create-nb-row { display: flex; gap: 12px; align-items: center; }
+.create-nb-icon {
+  width: 48px; height: 48px; border: 1px solid #e5e6eb; border-radius: 10px; background: #f7f8fa;
+  display: flex; align-items: center; justify-content: center; color: #3575f0; cursor: pointer; flex: 0 0 auto;
+}
+.create-nb-emoji { font-size: 24px; }
+.create-nb-input { flex: 1; border: 1px solid #dcdfe4; border-radius: 10px; padding: 12px 14px; font-size: 16px; outline: none; }
+.create-nb-input:focus { border-color: #3575f0; }
+
+.create-nb-emoji-picker { margin-top: 12px; }
+.create-nb-emoji-grid { display: grid; grid-template-columns: repeat(8, 1fr); gap: 4px; }
+.create-nb-emoji-btn { border: none; background: transparent; font-size: 22px; padding: 6px 0; border-radius: 8px; cursor: pointer; }
+.create-nb-emoji-btn.selected { background: #e8f1ff; }
+.create-nb-clear-icon { margin-top: 10px; border: none; background: transparent; color: #86909c; font-size: 13px; display: flex; align-items: center; gap: 4px; cursor: pointer; }
+.create-nb-error { color: #d83931; font-size: 13px; margin-top: 10px; }
+.create-nb-submit {
+  width: 100%; margin-top: 16px; border: none; border-radius: 10px; background: #3575f0; color: #fff;
+  font-size: 16px; font-weight: 600; padding: 14px 0; cursor: pointer;
+}
+.create-nb-submit:disabled { background: #c9cdd4; cursor: not-allowed; }
+

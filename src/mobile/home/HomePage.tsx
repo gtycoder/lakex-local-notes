@@ -12,7 +12,7 @@ export interface HomePageProps {
   onOpenNote: (id: string) => void;
   onOpenDrawer: () => void;
   onCreateNote: () => void;
-  onCreateNotebook: (title: string) => void;
+  onCreateNotebook: () => void;
 }
 
 export function HomePage(props: HomePageProps) {
@@ -54,7 +54,7 @@ export function HomePage(props: HomePageProps) {
       )}
       <div className="mobile-fab-col">
         <button className="mobile-fab" onClick={onCreateNote} aria-label="新建文档"><Plus size={24} /></button>
-        <button className="mobile-fab mobile-fab-secondary" onClick={() => { const t = window.prompt("知识库名称"); if (t?.trim()) onCreateNotebook(t.trim()); }} aria-label="新建知识库"><Feather size={20} /></button>
+        <button className="mobile-fab mobile-fab-secondary" onClick={onCreateNotebook} aria-label="新建知识库"><Feather size={20} /></button>
       </div>
     </div>
   );

@@ -10,6 +10,7 @@ import type { TreeNode } from "../lib/types";
 import { HomePage } from "./home/HomePage";
 import { NotebookPage } from "./notebook/NotebookPage";
 import { DocumentPage } from "./document/DocumentPage";
+import { CreateNotebookSheet } from "./settings/CreateNotebookSheet";
 import "lakex-editor-react-component/style.css";
 import "./mobile.css";
 
@@ -30,6 +31,7 @@ export function MobileApp() {
   const [error, setError] = useState<string | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [toastMsg, setToastMsg] = useState<string | null>(null);
+  const [createNbOpen, setCreateNbOpen] = useState(false);
 
   const refreshAll = useCallback(async () => {
     const [nodes, ns] = await Promise.all([bridge.listTreeNodes(), bridge.listNotes()]);
@@ -82,11 +84,7 @@ export function MobileApp() {
             await refreshAll();
             openDocument(n.id, "editor");
           }}
-          onCreateNotebook={async (title: string) => {
-            await bridge.createNotebook({ title, icon: null });
-            await refreshAll();
-            setToastMsg("已新建知识库");
-          }}
+          onCreateNotebook={() => setCreateNbOpen(true)}
         />
       )}
       {route.kind === "notebook" && (
@@ -125,6 +123,15 @@ export function MobileApp() {
           }}
         />
       )}
+      <CreateNotebookSheet
+        open={createNbOpen}
+        onClose={() => setCreateNbOpen(false)}
+        onCreate={async (input) => {
+          await bridge.createNotebook(input);
+          await refreshAll();
+          setToastMsg("已新建知识库");
+        }}
+      />
       {toastMsg && <div className="mobile-toast">{toastMsg}</div>}
     </div>
   );
