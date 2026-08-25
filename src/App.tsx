@@ -1,15 +1,9 @@
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type CSSProperties } from "react";
-import { createPortal } from "react-dom";
-import { ArrowLeft, Check, ChevronDown, ChevronRight, Files, ListTree, LoaderCircle, Feather, Lock, LockOpen, Moon, MoreHorizontal, Pencil, Focus, Settings as Settings2Icon, Sun, Trash2 } from "lucide-react";
+import { ArrowLeft, Check, ChevronDown, ChevronRight, Files, ListTree, LoaderCircle, Feather, MoreHorizontal, Moon, Pencil, Sun } from "lucide-react";
 import { MobileLibrary } from "./components/MobileLibrary";
-import { SearchPanel } from "./components/SearchPanel";
-import { TrashPanel } from "./components/TrashPanel";
-import { HistoryPanel } from "./components/HistoryPanel";
-import { ConfirmDelete, Sidebar, type SidebarMode } from "./components/Sidebar";
+import { Sidebar, type SidebarMode } from "./components/Sidebar";
 import { QuickNotesWorkspace, type QuickNotesWorkspaceHandle } from "./components/QuickNotesWorkspace";
-import { SyncToast } from "./components/SyncToast";
 import { SyncStatusPopover } from "./components/SyncStatusPopover";
-import { DraftRecoveryDialog } from "./components/DraftRecoveryDialog";
 import { useWindowShortcuts } from "./hooks/useWindowShortcuts";
 import { useTopMenus } from "./hooks/useTopMenus";
 import { DesktopStatusBar } from "./components/DesktopStatusBar";
@@ -38,14 +32,15 @@ import { isDesktop, native } from "./lib/native";
 import { getNativeErrorMessage } from "./lib/nativeErrors";
 import { loadSettings, saveSettings, subscribeSettings, type AppSettings } from "./lib/settings";
 import { applyTheme } from "./lib/theme";
-import { SettingsPanel, type SettingsCategory } from "./components/SettingsPanel";
+import type { SettingsCategory } from "./components/SettingsPanel";
 import { subtreeIds } from "./core/tree";
 import { planTabReload } from "./core/planTabReload";
-import { DOCK_GUTTER, FIXED_RAIL_WIDTH } from "./lib/layoutMetrics";
+import { DOCK_GUTTER } from "./lib/layoutMetrics";
 import { OUTLINE_HOVER_TRIGGER_WIDTH, OUTLINE_SCROLLBAR_CLEARANCE } from "./features/outline/outlineInteraction";
 import { shouldCollapseSidebarOnHoverLeave, shouldKeepSidebarPreviewOpen } from "./components/sidebarInteraction";
 import type { DraftJournalEntry, NoteDigest, NoteDocument, NoteSummary, S3Settings, SyncPendingSummary, SyncProgress, SyncStatus, TreeNode, WorkspaceSnapshot } from "./lib/types";
 import { initialOutlineMode, initialOutlineSidebarWidth, initialSidebarMode, initialSidebarWidth, patchNoteById, patchTabById, readEditorDocumentCaches, replaceTreeNode, saveLabel, summaryOf, treeNodePath, type DesktopWorkspace, type NoticeState, type OpenTab, type SaveState, OUTLINE_COLLAPSED_WIDTH, OUTLINE_SIDEBAR_DEFAULT_WIDTH, OUTLINE_SIDEBAR_MAX_WIDTH, OUTLINE_SIDEBAR_MIN_WIDTH, SIDEBAR_DEFAULT_WIDTH, SIDEBAR_HOVER_HIDE_DELAY_MS, SIDEBAR_MAX_WIDTH, SIDEBAR_MIN_WIDTH } from "./desktop/desktopTypes";
+import { DesktopOverlays } from "./desktop/DesktopOverlays";
 
 export function App() {
   const [workspace, setWorkspace] = useState<WorkspaceSnapshot | null>(null);
@@ -414,6 +409,49 @@ export function App() {
     } catch {
       // 草稿恢复是 best-effort，不能阻塞回收站/主界面的正常操作。
     }
+  }, []);
+
+  /** 回收站恢复后：刷新草稿/树/摘要；若恢复的文档正开在 tab 里且曾被标记"已删除"，重载正文并清除标记。 */
+  const handleTrashRestored = useCallback(() => {
+    void refreshDraftEntries();
+    void native.listTreeNodes().then(setTreeNodes).catch(() => undefined);
+    void native.listNoteSummaries().then(setNotes).catch(() => undefined);
+    void (async () => {
+      const reloadVersion = tabReloadVersionRef.current.next();
+      const t0 = performance.now();
+      for (const tab of openTabsRef.current.filter((t) => t.deleted)) {
+        if (!tabReloadVersionRef.current.isCurrent(reloadVersion)) return;
+        try {
+          const readT0 = performance.now();
+          const note = await native.readNote(tab.noteId);
+          if (!tabReloadVersionRef.current.isCurrent(reloadVersion)) return;
+          console.log("[sync-tab] trash-restore reload", JSON.stringify({ noteId: tab.noteId, readMs: Math.round(performance.now() - readT0) }));
+          setOpenTabs((tabs) => tabs.map((t) => t.noteId === tab.noteId
+            ? { ...t, title: note.title, content: note.content, dirty: false, deleted: false, reloadKey: (t.reloadKey ?? 0) + 1, lastDigest: { title: note.title, updatedAt: note.updatedAt } }
+            : t));
+        } catch { /* 该文档未恢复或仍不存在，保持标记 */ }
+      }
+      console.log("[sync-tab] trash-restore done", JSON.stringify({ totalMs: Math.round(performance.now() - t0) }));
+    })();
+  }, [refreshDraftEntries]);
+
+  /** 历史恢复后：刷新树/摘要；若该文档正开在 tab 里，重载正文 + bump reloadKey 强制重建 Lake 实例。 */
+  const handleHistoryRestored = useCallback((restoredId: string) => {
+    void native.listTreeNodes().then(setTreeNodes).catch(() => undefined);
+    void native.listNoteSummaries().then(setNotes).catch(() => undefined);
+    void (async () => {
+      const reloadVersion = tabReloadVersionRef.current.next();
+      try {
+        const t0 = performance.now();
+        const updated = await native.readNote(restoredId);
+        if (!tabReloadVersionRef.current.isCurrent(reloadVersion)) return;
+        console.log("[sync-tab] history-restore reload", JSON.stringify({ noteId: restoredId, readMs: Math.round(performance.now() - t0) }));
+        setOpenTabs((tabs) => tabs.map((tab) => tab.noteId === restoredId
+          ? { ...tab, title: updated.title, content: updated.content, dirty: false, reloadKey: (tab.reloadKey ?? 0) + 1 }
+          : tab));
+        bumpRevision(restoredId);
+      } catch { /* 文档未打开或读取失败则跳过 */ }
+    })();
   }, []);
 
   // 保存管线已收拢到 useSavePipeline（persistTab 由 hook 提供）
@@ -1252,78 +1290,51 @@ export function App() {
           onWidthCommit={commitOutlineSidebarWidth}
         />
       )}
-      {confirmDelete && <ConfirmDelete node={confirmDelete} onConfirm={() => { const id = confirmDelete.id; setConfirmDelete(null); void deleteTreeNode(id); }} onCancel={() => setConfirmDelete(null)} />}
-      {/* 顶栏下拉用 portal 渲染到 body 根部，避免被 app-shell 内部堆叠上下文/overflow 覆盖 */}
-      {workspaceMenuOpen && createPortal(
-        <div className="top-menu top-menu--workspace" role="menu" aria-label="工作空间"
-          style={{ top: (wsMenuWrapRef.current?.getBoundingClientRect().bottom ?? 38) + 6, left: wsMenuWrapRef.current?.getBoundingClientRect().left ?? 82 }}>
-          <button role="menuitem" onClick={() => { setSettingsCategory("editor"); setSettingsOpen(true); setWorkspaceMenuOpen(false); }}><Settings2Icon size={15} />偏好设置</button>
-          <button role="menuitem" onClick={() => { setTrashOpen(true); setWorkspaceMenuOpen(false); }}><Trash2 size={15} />回收站</button>
-        </div>,
-        document.body,
-      )}
-      {topMenuOpen && createPortal(
-        <div className="top-menu top-menu--more" role="menu" aria-label="文档操作"
-          style={{ top: (moreMenuWrapRef.current?.getBoundingClientRect().bottom ?? 38) + 6, left: (moreMenuWrapRef.current?.getBoundingClientRect().right ?? 1280) - 180 }}>
-          <button role="menuitem" aria-checked={focusMode} onClick={() => { setFocusMode((value) => !value); setTopMenuOpen(false); }}>
-            <Focus size={15} /><span>{focusMode ? "退出专注模式" : "进入专注模式"}<small>⌘⇧Enter</small></span>
-          </button>
-          {activeNoteId && (
-            <button role="menuitem" onClick={() => { void toggleNoteLock(); setTopMenuOpen(false); }}>
-              {lockedNoteIds.has(activeNoteId) ? <Lock size={15} /> : <LockOpen size={15} />}
-              <span>{lockedNoteIds.has(activeNoteId) ? "解锁当前文档" : "锁定当前文档（只读）"}</span>
-            </button>
-          )}
-        </div>,
-        document.body,
-      )}
-      <DraftRecoveryDialog entries={draftEntries} onRestore={(entry) => void restoreDraft(entry)} onDiscard={discardDraft} onClose={() => setDraftEntries([])} />
-      <SearchPanel open={searchPanelOpen} initialQuery={searchPanelQuery} onOpenNote={(id, query) => void openNote(id, query)} onClose={() => setSearchPanelOpen(false)} />
-      <TrashPanel open={trashOpen} onClose={() => setTrashOpen(false)} onChanged={() => void refreshDraftEntries()} onRestored={() => {
-        void refreshDraftEntries();
-        void native.listTreeNodes().then(setTreeNodes).catch(() => undefined);
-        void native.listNoteSummaries().then(setNotes).catch(() => undefined);
-        // 从回收站恢复后，若该文档正开在 tab 里且曾被标记"已删除"，重载正文并清除标记。
-        void (async () => {
-          const reloadVersion = tabReloadVersionRef.current.next();
-          const t0 = performance.now();
-          for (const tab of openTabsRef.current.filter((t) => t.deleted)) {
-            if (!tabReloadVersionRef.current.isCurrent(reloadVersion)) return;
-            try {
-              const readT0 = performance.now();
-              const note = await native.readNote(tab.noteId);
-              if (!tabReloadVersionRef.current.isCurrent(reloadVersion)) return;
-              console.log("[sync-tab] trash-restore reload", JSON.stringify({ noteId: tab.noteId, readMs: Math.round(performance.now() - readT0) }));
-              setOpenTabs((tabs) => tabs.map((t) => t.noteId === tab.noteId
-                ? { ...t, title: note.title, content: note.content, dirty: false, deleted: false, reloadKey: (t.reloadKey ?? 0) + 1, lastDigest: { title: note.title, updatedAt: note.updatedAt } }
-                : t));
-            } catch { /* 该文档未恢复或仍不存在，保持标记 */ }
-          }
-          console.log("[sync-tab] trash-restore done", JSON.stringify({ totalMs: Math.round(performance.now() - t0) }));
-        })();
-      }} />
-      <HistoryPanel open={historyOpen} noteId={historyNoteId} onClose={() => setHistoryOpen(false)} onRestored={(restoredId) => {
-        void native.listTreeNodes().then(setTreeNodes).catch(() => undefined);
-        void native.listNoteSummaries().then(setNotes).catch(() => undefined);
-        // P1：恢复历史后若该文档正开在 tab 里，重载正文 + bump reloadKey 强制重建 Lake 实例。
-        // reloadKey 是 MultiTabEditor 里 EditorTab key 的一部分（{noteId}-{reloadKey}），
-        // bump 后 React 卸载旧实例、用恢复后的 content 重建新实例，保证编辑器显示恢复版。
-        void (async () => {
-          const reloadVersion = tabReloadVersionRef.current.next();
-          try {
-            const t0 = performance.now();
-            const updated = await native.readNote(restoredId);
-            if (!tabReloadVersionRef.current.isCurrent(reloadVersion)) return;
-            console.log("[sync-tab] history-restore reload", JSON.stringify({ noteId: restoredId, readMs: Math.round(performance.now() - t0) }));
-            setOpenTabs((tabs) => tabs.map((tab) => tab.noteId === restoredId
-              ? { ...tab, title: updated.title, content: updated.content, dirty: false, reloadKey: (tab.reloadKey ?? 0) + 1 }
-              : tab));
-            bumpRevision(restoredId);
-          } catch { /* 文档未打开或读取失败则跳过 */ }
-        })();
-      }} />
-      {syncToast && <SyncToast data={syncToast} onClose={() => { setSyncToast(null); setSyncProgress(null); }} anchorRect={syncBtnRef.current?.getBoundingClientRect()} />}
-      <SettingsPanel open={settingsOpen} openCategory={settingsCategory} settings={settings} onClose={() => setSettingsOpen(false)} onChange={(patch) => saveSettings(patch)} onS3SettingsChanged={handleS3SettingsChanged} onSyncSettingsChanged={handleSyncSettingsChanged} />
+      <DesktopOverlays
+        confirmDelete={confirmDelete}
+        onConfirmDelete={(id) => void deleteTreeNode(id)}
+        onCancelDelete={() => setConfirmDelete(null)}
+        workspaceMenuOpen={workspaceMenuOpen}
+        wsMenuWrapRef={wsMenuWrapRef}
+        moreMenuWrapRef={moreMenuWrapRef}
+        topMenuOpen={topMenuOpen}
+        onOpenSettingsFromMenu={(category) => { setSettingsCategory(category); setSettingsOpen(true); setWorkspaceMenuOpen(false); }}
+        onOpenTrashFromMenu={() => { setTrashOpen(true); setWorkspaceMenuOpen(false); }}
+        onCloseWorkspaceMenu={() => setWorkspaceMenuOpen(false)}
+        onCloseTopMenu={() => setTopMenuOpen(false)}
+        focusMode={focusMode}
+        onToggleFocusMode={() => { setFocusMode((value) => !value); setTopMenuOpen(false); }}
+        activeNoteId={activeNoteId}
+        lockedNoteIds={lockedNoteIds}
+        onToggleNoteLock={() => { void toggleNoteLock(); setTopMenuOpen(false); }}
+        draftEntries={draftEntries}
+        onRestoreDraft={(entry) => void restoreDraft(entry)}
+        onDiscardDraft={discardDraft}
+        onCloseDrafts={() => setDraftEntries([])}
+        searchPanelOpen={searchPanelOpen}
+        searchPanelQuery={searchPanelQuery}
+        onOpenNoteFromSearch={(id, query) => void openNote(id, query)}
+        onCloseSearch={() => setSearchPanelOpen(false)}
+        trashOpen={trashOpen}
+        onCloseTrash={() => setTrashOpen(false)}
+        onTrashChanged={() => void refreshDraftEntries()}
+        onTrashRestored={handleTrashRestored}
+        historyOpen={historyOpen}
+        historyNoteId={historyNoteId}
+        onCloseHistory={() => setHistoryOpen(false)}
+        onHistoryRestored={handleHistoryRestored}
+        syncToast={syncToast}
+        syncAnchorRect={syncBtnRef.current?.getBoundingClientRect() ?? null}
+        onCloseSyncToast={() => { setSyncToast(null); setSyncProgress(null); }}
+        settingsOpen={settingsOpen}
+        settingsCategory={settingsCategory}
+        settings={settings}
+        onCloseSettings={() => setSettingsOpen(false)}
+        onSettingsChange={(patch) => saveSettings(patch)}
+        onS3SettingsChanged={handleS3SettingsChanged}
+        onSyncSettingsChanged={handleSyncSettingsChanged}
+      />
+
     </div>
   );
 }
