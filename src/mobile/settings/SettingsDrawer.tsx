@@ -9,12 +9,13 @@ export interface SettingsDrawerProps {
   open: boolean;
   onClose: () => void;
   onRefresh: () => Promise<void>;
+  onOpenTrash: () => void;
 }
 
 type Tab = "s3" | "cache" | "about";
 
 export function SettingsDrawer(props: SettingsDrawerProps) {
-  const { open, onClose, onRefresh } = props;
+  const { open, onClose, onRefresh, onOpenTrash } = props;
   const [tab, setTab] = useState<Tab>("s3");
   const [s3, setS3] = useState<S3Settings | null>(() => bridge.getS3Settings());
   const [s3Test, setS3Test] = useState("");
@@ -83,6 +84,7 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
           <button className={tab === "cache" ? "active" : ""} onClick={() => setTab("cache")}><Trash2 size={15} />清理缓存</button>
           <button className={tab === "about" ? "active" : ""} onClick={() => setTab("about")}><Info size={15} />关于</button>
         </div>
+        <button className="mobile-drawer-trash-entry" onClick={onOpenTrash}><Trash2 size={15} />回收站</button>
         <div className="mobile-drawer-body">
           {tab === "s3" && (
             <div className="mobile-settings-form">

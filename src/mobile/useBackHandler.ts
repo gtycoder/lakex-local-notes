@@ -15,6 +15,7 @@ export interface BackHandlerState {
   onExitEdit: () => void;
   onBackFromDocument: () => void;
   onBackFromNotebook: () => void;
+  onBackFromTrash: () => void;
   onCloseDrawer: () => void;
   onCloseSheets: () => void;
   onAppExit: () => void;
@@ -40,6 +41,8 @@ export function useBackHandler(state: BackHandlerState) {
           if (state.route.kind === "document") { state.onBackFromDocument(); return; }
           // 5) 笔记本页 → 首页
           if (state.route.kind === "notebook") { state.onBackFromNotebook(); return; }
+          // 5b) 回收站 → 首页
+          if (state.route.kind === "trash") { state.onBackFromTrash(); return; }
           // 6) 首页：交给系统退出
           state.onAppExit();
         });

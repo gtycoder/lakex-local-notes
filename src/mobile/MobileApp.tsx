@@ -14,13 +14,15 @@ import { CreateNotebookSheet } from "./settings/CreateNotebookSheet";
 import { SearchSheet } from "./settings/SearchSheet";
 import { SettingsDrawer } from "./settings/SettingsDrawer";
 import { useBackHandler } from "./useBackHandler";
+import { TrashPage } from "./trash/TrashPage";
 import "lakex-editor-react-component/style.css";
 import "./mobile.css";
 
 export type Route =
   | { kind: "home"; tab: "quick" | "library" }
   | { kind: "notebook"; notebookId: string }
-  | { kind: "document"; noteId: string; mode: "viewer" | "editor" };
+  | { kind: "document"; noteId: string; mode: "viewer" | "editor" }
+  | { kind: "trash" };
 
 export function MobileApp() {
   const [route, setRoute] = useState<Route>({ kind: "home", tab: "library" });
@@ -82,6 +84,7 @@ export function MobileApp() {
     onExitEdit: exitEdit,
     onBackFromDocument: () => setRoute({ kind: "home", tab: "library" }),
     onBackFromNotebook: () => setRoute({ kind: "home", tab: "library" }),
+    onBackFromTrash: () => setRoute({ kind: "home", tab: "library" }),
     onCloseDrawer: () => setDrawerOpen(false),
     onCloseSheets: () => { setCreateNbOpen(false); setSearchOpen(false); },
     onAppExit: () => {
@@ -99,6 +102,7 @@ export function MobileApp() {
         open={drawerOpen}
         onClose={() => setDrawerOpen(false)}
         onRefresh={refreshAll}
+        onOpenTrash={() => { setDrawerOpen(false); setRoute({ kind: "trash" }); }}
       />
       {route.kind === "home" && (
         <HomePage
@@ -129,6 +133,12 @@ export function MobileApp() {
             await refreshAll();
             openDocument(n.id, "editor");
           }}
+        />
+      )}
+      {route.kind === "trash" && (
+        <TrashPage
+          onBack={() => setRoute({ kind: "home", tab: "library" })}
+          onChanged={refreshAll}
         />
       )}
       {route.kind === "document" && active && (

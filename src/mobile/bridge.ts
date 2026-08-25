@@ -573,6 +573,66 @@ export const bridge = {
     return rows.map(rowToNote);
   },
 
+  /** B2：统一回收站树（folders 笔记本/分组 + notes 文档）。复用桌面 TrashPanel 语义：仅根节点可恢复（整棵连带），任意节点可彻底删除。 */
+  async listTrashTree(): Promise<Array<{ id: string; title: string; kind: "folder" | "note"; parentId: string | null; deletedAt: string | null }>> {
+    const d = await ensureDb();
+    const folders = d.prepare("SELECT id, title, parent_id, trashed_at FROM folders WHERE trashed_at IS NOT NULL").all() as Array<{ id: string; title: string; parent_id: string | null; trashed_at: string | null }>;
+    const notes = d.prepare("SELECT id, title, parent_id, trashed_at FROM notes WHERE trashed_at IS NOT NULL").all() as Array<{ id: string; title: string; parent_id: string | null; trashed_at: string | null }>;
+    return [
+      ...folders.map((f) => ({ id: f.id, title: f.title, kind: "folder" as const, parentId: f.parent_id, deletedAt: f.trashed_at })),
+      ...notes.map((n) => ({ id: n.id, title: n.title, kind: "note" as const, parentId: n.parent_id, deletedAt: n.trashed_at })),
+    ].sort((a, b) => (b.deletedAt ?? "").localeCompare(a.deletedAt ?? ""));
+  },
+
+  /** B2：恢复回收站项。folder = 恢复整棵（含子节点）；note = 文档级恢复。恢复标记 restore_pending_at → 同步 local-wins 上传 active 覆盖墓碑。 */
+  async restoreTreeItem(id: string, kind: "folder" | "note"): Promise<void> {
+    const d = await ensureDb();
+    if (kind === "note") { dbPort.localRestoreNote(id); }
+    else {
+      // folder：根节点清 trashed_at + 置恢复标记；子节点随父（保持 parentId 链）
+      const now = new Date().toISOString();
+      d.prepare("UPDATE folders SET trashed_at=NULL, updated_at=?, sync_state='local' WHERE id=?").run(now, id);
+      const children = d.prepare("SELECT id FROM folders WHERE parent_id = ?").all(id) as Array<{ id: string }>;
+      for (const c of children) {
+        d.prepare("UPDATE folders SET trashed_at=NULL, updated_at=?, sync_state='local' WHERE id=?").run(now, c.id);
+      }
+    }
+    await saveSnapshot(d.exportBytes());
+  },
+
+  /** B2：彻底删除回收站项（purge）。folder = 子树全部 purge；note = 单条 purge（同步发墓碑）。 */
+  async purgeTreeItem(id: string, kind: "folder" | "note"): Promise<void> {
+    const d = await ensureDb();
+    if (kind === "note") {
+      // purge 语义（对齐桌面 purgeTrashItem）：sync_state='purged' → 引擎发布时从 manifest 移除且不再上传
+      const now = new Date().toISOString();
+      d.prepare("UPDATE notes SET parent_id=?, trashed_at=COALESCE(trashed_at,?), deleted_from_parent_id=COALESCE(deleted_from_parent_id,parent_id), updated_at=?, sync_state='purged', restore_pending_at=NULL WHERE id=?").run(TRASH_NOTEBOOK_ID, now, now, id);
+    }
+    else {
+      // folder：收集子树（含自己）
+      const all = d.prepare("SELECT id, parent_id FROM folders").all() as Array<{ id: string; parent_id: string | null }>;
+      const ids = new Set<string>([id]);
+      let grew = true;
+      while (grew) {
+        grew = false;
+        for (const r2 of all) {
+          if (r2.parent_id && ids.has(r2.parent_id) && !ids.has(r2.id)) { ids.add(r2.id); grew = true; }
+        }
+      }
+      const now = new Date().toISOString();
+      for (const fid of ids) {
+        d.prepare("UPDATE folders SET trashed_at=COALESCE(trashed_at,?), updated_at=?, sync_state='purged' WHERE id=?").run(now, now, fid);
+      }
+      // 子树下的文档也 purge
+      const noteIds = d.prepare("SELECT id FROM notes WHERE parent_id IN (SELECT id FROM folders WHERE id IN (" + Array.from(ids).map(() => "?").join(",") + "))").all(...Array.from(ids)) as Array<{ id: string }>;
+      const now2 = new Date().toISOString();
+      for (const n of noteIds) {
+        d.prepare("UPDATE notes SET parent_id=?, trashed_at=COALESCE(trashed_at,?), deleted_from_parent_id=COALESCE(deleted_from_parent_id,parent_id), updated_at=?, sync_state='purged', restore_pending_at=NULL WHERE id=?").run(TRASH_NOTEBOOK_ID, now2, now2, n.id);
+      }
+    }
+    await saveSnapshot(d.exportBytes());
+  },
+
   /** 导出当前库快照字节（S3 通路验证 + 后续同步协议用） */
   async exportSnapshotBytes(): Promise<Uint8Array> {
     const d = await ensureDb();

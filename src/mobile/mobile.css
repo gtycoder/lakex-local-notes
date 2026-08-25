@@ -176,3 +176,17 @@ body { font-family: -apple-system, "PingFang SC", "Noto Sans SC", sans-serif; ba
 .mobile-about-name { font-size: 20px; font-weight: 700; margin-bottom: 8px; }
 .mobile-about-item { font-size: 13px; color: #4e5969; margin-top: 6px; }
 
+
+/* 回收站 */
+.mobile-drawer-trash-entry {
+  width: 100%; border: none; background: transparent; padding: 14px 20px; font-size: 15px;
+  display: flex; align-items: center; gap: 12px; cursor: pointer; color: #1f2329; text-align: left;
+  border-bottom: 1px solid #eef0f2;
+}
+.mobile-drawer-trash-entry:active { background: #f5f6f7; }
+.mobile-status-msg { padding: 6px 12px; font-size: 12px; color: #4e5969; background: #f7f8fa; border-bottom: 1px solid #f0f1f3; }
+.mobile-trash-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mobile-trash-date { color: #86909c; font-size: 12px; }
+.mobile-trash-action { border: none; background: transparent; color: #3575f0; cursor: pointer; display: flex; padding: 6px; }
+.mobile-trash-danger { color: #d83931; }
+
