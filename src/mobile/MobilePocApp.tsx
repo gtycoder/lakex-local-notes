@@ -5,7 +5,8 @@
  */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { LakeEditor } from "../features/editor/LakeEditor";
-import { bridge, type POCNote, type S3Config } from "./bridge";
+import { bridge, type POCNote } from "./bridge";
+import type { S3Settings } from "../lib/types";
 import { injectAssetBlobs } from "./blobInject";
 import { createCardBlobInjector } from "./cardBlobInject";
 import type { LakeEditorInstance } from "../features/editor/lakeRuntime";
@@ -28,10 +29,11 @@ export function MobilePocApp() {
   const [showS3Form, setShowS3Form] = useState(false);
   const [showTrash, setShowTrash] = useState(false);
   const [trashed, setTrashed] = useState<POCNote[]>([]);
-  const [s3Cfg, setS3Cfg] = useState<S3Config>(() => bridge.getS3Settings() ?? {
+  const [s3Cfg, setS3Cfg] = useState<S3Settings>(() => bridge.getS3Settings() ?? {
     endpoint: "https://s3.cn-north-1.qiniucs.com",
     region: "cn-north-1",
     bucket: "",
+    prefix: "ab-test-verify",
     accessKeyId: "",
     secretAccessKey: "",
     forcePathStyle: false,

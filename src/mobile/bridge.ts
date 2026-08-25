@@ -12,6 +12,7 @@ import { syncNow as runSync, type SyncConfig, type SyncDbPort } from "../core/sy
 import { TRASH_NOTEBOOK_ID } from "../core/syncDecisions.js";
 import { sha256Sync } from "../core/sha256Sync.js";
 import { createCapacitorS3Store } from "./s3Store";
+import type { S3Settings } from "../lib/types";
 
 export interface POCNote {
   id: string;
@@ -20,15 +21,8 @@ export interface POCNote {
   updatedAt: string;
 }
 
-export interface S3Config {
-  endpoint: string;
-  region: string;
-  bucket: string;
-  accessKeyId: string;
-  secretAccessKey: string;
-  forcePathStyle: boolean;
-  prefix?: string;
-}
+/** 与桌面一致的默认同步 prefix（桌面 store.ts 默认 "lake-notes"；移动端 POC 沿用 ab-test-verify 兼容旧数据） */
+const DEFAULT_S3_PREFIX = "ab-test-verify";
 
 const S3_STORAGE_KEY = "lake-notes-mobile.s3";
 /** 与桌面一致的初始 Lake 内容（store.ts createNoteInWithContent） */
@@ -147,7 +141,7 @@ function rowToNote(r: Record<string, unknown>): POCNote {
   return { id: String(r.id), title: String(r.title), content: String(r.content), updatedAt: String(r.updated_at) };
 }
 
-async function createS3Client(cfg: S3Config): Promise<import("@aws-sdk/client-s3").S3Client> {
+async function createS3Client(cfg: S3Settings): Promise<import("@aws-sdk/client-s3").S3Client> {
   const [{ S3Client }, { CapacitorHttpHandler }] = await Promise.all([
     import("@aws-sdk/client-s3"),
     import("./capacitorHttpHandler"),
@@ -462,16 +456,19 @@ export const bridge = {
 
   // ---- S3（POC 通路验证） ----
 
-  getS3Settings(): S3Config | null {
+  getS3Settings(): S3Settings | null {
     try {
       const raw = localStorage.getItem(S3_STORAGE_KEY);
-      return raw ? (JSON.parse(raw) as S3Config) : null;
+      if (!raw) return null;
+      const parsed = JSON.parse(raw) as Partial<S3Settings>;
+      // 历史配置可能缺 prefix（S3Config 时代为可选字段）；共享 S3Settings.prefix 必填，读取时归一化。
+      return { ...parsed, prefix: parsed.prefix ?? DEFAULT_S3_PREFIX } as S3Settings;
     } catch {
       return null;
     }
   },
 
-  saveS3Settings(cfg: S3Config): void {
+  saveS3Settings(cfg: S3Settings): void {
     localStorage.setItem(S3_STORAGE_KEY, JSON.stringify(cfg));
   },
 
@@ -527,7 +524,7 @@ export const bridge = {
       bucket: cfg.bucket,
       accessKeyId: cfg.accessKeyId,
       secretAccessKey: cfg.secretAccessKey,
-      prefix: cfg.prefix ?? "ab-test-verify",
+      prefix: cfg.prefix,
     };
     const s3Store = createCapacitorS3Store(syncCfg);
     const report = await runSync(syncCfg, s3Store, dbPort);
