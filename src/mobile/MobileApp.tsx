@@ -11,6 +11,7 @@ import { HomePage } from "./home/HomePage";
 import { NotebookPage } from "./notebook/NotebookPage";
 import { DocumentPage } from "./document/DocumentPage";
 import { CreateNotebookSheet } from "./settings/CreateNotebookSheet";
+import { SearchSheet } from "./settings/SearchSheet";
 import "lakex-editor-react-component/style.css";
 import "./mobile.css";
 
@@ -32,6 +33,7 @@ export function MobileApp() {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [toastMsg, setToastMsg] = useState<string | null>(null);
   const [createNbOpen, setCreateNbOpen] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
 
   const refreshAll = useCallback(async () => {
     const [nodes, ns] = await Promise.all([bridge.listTreeNodes(), bridge.listNotes()]);
@@ -79,6 +81,7 @@ export function MobileApp() {
           onOpenNotebook={(id) => setRoute({ kind: "notebook", notebookId: id })}
           onOpenNote={(id) => openDocument(id, "viewer")}
           onOpenDrawer={() => setDrawerOpen(true)}
+          onOpenSearch={() => setSearchOpen(true)}
           onCreateNote={async () => {
             const n = await bridge.createNote("无标题文档");
             await refreshAll();
@@ -108,7 +111,14 @@ export function MobileApp() {
           editing={editing}
           onTitleChange={setDraftTitle}
           onContentChange={(c) => setDraft(c)}
-          onToggleEdit={() => setEditing((v) => !v)}
+          onToggleEdit={async () => {
+            if (editing && active && draft !== active.content) {
+              await bridge.saveNote(active.id, draftTitle, draft);
+              if (draftTitle !== active.title) await bridge.renameTreeNode(active.id, draftTitle);
+              setActive({ ...active, title: draftTitle, content: draft, updatedAt: new Date().toISOString() });
+            }
+            setEditing((v) => !v);
+          }}
           onBack={async () => {
             if (editing && draft !== active.content) await bridge.saveNote(active.id, draftTitle, draft);
             setEditing(false);
@@ -131,6 +141,11 @@ export function MobileApp() {
           await refreshAll();
           setToastMsg("已新建知识库");
         }}
+      />
+      <SearchSheet
+        open={searchOpen}
+        onClose={() => setSearchOpen(false)}
+        onOpenNote={(id) => openDocument(id, "viewer")}
       />
       {toastMsg && <div className="mobile-toast">{toastMsg}</div>}
     </div>

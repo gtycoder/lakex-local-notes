@@ -11,12 +11,13 @@ export interface HomePageProps {
   onOpenNotebook: (id: string) => void;
   onOpenNote: (id: string) => void;
   onOpenDrawer: () => void;
+  onOpenSearch: () => void;
   onCreateNote: () => void;
   onCreateNotebook: () => void;
 }
 
 export function HomePage(props: HomePageProps) {
-  const { tab, notebooks, quickNotes, onTabChange, onOpenNotebook, onOpenNote, onOpenDrawer, onCreateNote, onCreateNotebook } = props;
+  const { tab, notebooks, quickNotes, onTabChange, onOpenNotebook, onOpenNote, onOpenDrawer, onOpenSearch, onCreateNote, onCreateNotebook } = props;
   return (
     <div className="mobile-home">
       <header className="mobile-topbar">
@@ -25,7 +26,7 @@ export function HomePage(props: HomePageProps) {
           <button className={tab === "quick" ? "mobile-htab active" : "mobile-htab"} onClick={() => onTabChange("quick")}>小记</button>
           <button className={tab === "library" ? "mobile-htab active" : "mobile-htab"} onClick={() => onTabChange("library")}>知识库</button>
         </div>
-        <button className="mobile-icon-btn" aria-label="占位" style={{ opacity: 0 }}><Search size={20} /></button>
+        <button className="mobile-icon-btn" onClick={onOpenSearch} aria-label="搜索"><Search size={20} /></button>
       </header>
       {tab === "quick" ? (
         <div className="mobile-scroll">

@@ -141,3 +141,13 @@ body { font-family: -apple-system, "PingFang SC", "Noto Sans SC", sans-serif; ba
 }
 .create-nb-submit:disabled { background: #c9cdd4; cursor: not-allowed; }
 
+
+/* 搜索 Sheet */
+.mobile-sheet-search { max-height: 70%; }
+.mobile-search-input-row { display: flex; align-items: center; gap: 8px; margin: 8px 16px; background: #f2f3f5; border-radius: 10px; padding: 9px 12px; }
+.mobile-search-input { flex: 1; border: none; outline: none; background: transparent; font-size: 15px; }
+.mobile-search-close { border: none; background: transparent; color: #86909c; cursor: pointer; display: flex; }
+.mobile-search-results { overflow-y: auto; padding-bottom: calc(20px + env(safe-area-inset-bottom)); }
+.mobile-search-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mobile-search-parent { color: #86909c; font-size: 12px; }
+
