@@ -1,4 +1,4 @@
-import { AlertTriangle, CheckCircle2, History, LoaderCircle, Save, Upload, WifiOff } from "lucide-react";
+import { AlertTriangle, CheckCircle2, History, LoaderCircle, Lock, Save, Upload, WifiOff } from "lucide-react";
 import type { DocumentStatusModel } from "./documentStatusModel";
 
 export interface StatusBarNotice {
@@ -12,6 +12,8 @@ export interface DesktopStatusBarProps {
   imageCount: number;
   notice: StatusBarNotice | null;
   documentStatus: DocumentStatusModel;
+  /** 当前文档已锁定（只读）：仅状态栏左侧显示锁标识，不做任何操作入口。 */
+  locked?: boolean;
 }
 
 function StatusIcon({ status }: { status: DocumentStatusModel }) {
@@ -27,11 +29,17 @@ function StatusIcon({ status }: { status: DocumentStatusModel }) {
   }
 }
 
-export function DesktopStatusBar({ showDocumentStats, wordCount, imageCount, notice, documentStatus }: DesktopStatusBarProps) {
+export function DesktopStatusBar({ showDocumentStats, wordCount, imageCount, notice, documentStatus, locked = false }: DesktopStatusBarProps) {
   if (!showDocumentStats) return null;
   return (
     <>
       <footer className={`statusbar document-statusbar${notice ? " has-message" : ""}`} aria-label="当前文档状态">
+        {locked && (
+          <span className="document-statusbar-lock" title="文档已锁定（只读）" aria-label="文档已锁定（只读）">
+            <Lock size={11} aria-hidden="true" />
+            <span>已锁定</span>
+          </span>
+        )}
         <div className="document-statusbar-message" aria-live="polite">
           {notice?.text || ""}
         </div>

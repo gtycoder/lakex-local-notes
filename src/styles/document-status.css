@@ -118,6 +118,16 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+/* 锁定标识：只做状态提示，不提供操作入口（锁定模式隐藏了工具栏，进文档需要能看出原因） */
+.document-statusbar-lock {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  color: var(--lake-accent-strong, var(--lake-accent));
+  font-weight: 600;
+  white-space: nowrap;
+}
 .document-statusbar.has-message .document-statusbar-message { display: block; }
 .document-statusbar-fixed { display: flex; align-items: center; gap: 12px; min-width: 0; }
 .document-statusbar-stats { flex: 0 0 auto; }

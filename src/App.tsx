@@ -1046,6 +1046,7 @@ export function App() {
           showDocumentStats={desktopWorkspace === "library"}
           wordCount={docStats.wordCount}
           imageCount={docStats.imageCount}
+          locked={activeNoteId !== null && lockedNoteIds.has(activeNoteId)}
           notice={notice}
           documentStatus={getDocumentStatus({
             hasCloudConfig: cloudConfigured,
