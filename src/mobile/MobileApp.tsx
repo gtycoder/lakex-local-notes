@@ -70,7 +70,6 @@ export function MobileApp() {
           trashNote: (id: string) => bridge.trashNote(id),
           restoreNote: (id: string) => bridge.restoreNote(id),
           listTrashed: () => bridge.listTrashed(),
-          listTrashTree: () => bridge.listTrashTree(),
           restoreTreeItem: (id: string, kind: "folder" | "note") => bridge.restoreTreeItem(id, kind),
           purgeTreeItem: (id: string, kind: "folder" | "note") => bridge.purgeTreeItem(id, kind),
           createGroup: (parentId: string, title: string) => bridge.createGroup(parentId, title),
