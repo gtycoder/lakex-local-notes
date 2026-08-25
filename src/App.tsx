@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
-import { ArrowLeft, Check, ChevronDown, ChevronRight, Files, ListTree, LoaderCircle, Feather, MoreHorizontal, Moon, Pencil, Sun } from "lucide-react";
+import { ArrowLeft, Check, ChevronDown, Files, ListTree, LoaderCircle, Feather, Moon, Pencil, Sun } from "lucide-react";
 import { MobileLibrary } from "./components/MobileLibrary";
 import { Sidebar } from "./components/Sidebar";
-import { QuickNotesWorkspace, type QuickNotesWorkspaceHandle } from "./components/QuickNotesWorkspace";
+import type { QuickNotesWorkspaceHandle } from "./components/QuickNotesWorkspace";
 import { SyncStatusPopover } from "./components/SyncStatusPopover";
 import { useWindowShortcuts } from "./hooks/useWindowShortcuts";
 import { useTopMenus } from "./hooks/useTopMenus";
@@ -12,7 +12,7 @@ import { LakeEditor } from "./features/editor/LakeEditor";
 import { clearScrollMemory, locateEditorSearchHit } from "./features/editor/EditorTab";
 import { resolveScrollNode } from "./features/editor/lakeRuntime";
 import type { LakeEditorInstance } from "./features/editor/lakeRuntime";
-import { MultiTabEditor, type TabInfo } from "./features/editor/MultiTabEditor";
+import type { TabInfo } from "./features/editor/MultiTabEditor";
 import { selectEvictionIds, trimTabsToLimit } from "./core/tabLimit";
 import { OutlineSidebar } from "./features/outline/OutlineSidebar";
 import type { OutlineMode } from "./features/outline/OutlineController";
@@ -40,6 +40,8 @@ import { OUTLINE_HOVER_TRIGGER_WIDTH, OUTLINE_SCROLLBAR_CLEARANCE } from "./feat
 import type { DraftJournalEntry, NoteDigest, NoteDocument, NoteSummary, S3Settings, SyncPendingSummary, SyncProgress, SyncStatus, TreeNode, WorkspaceSnapshot } from "./lib/types";
 import { patchNoteById, patchTabById, readEditorDocumentCaches, replaceTreeNode, saveLabel, summaryOf, treeNodePath, type DesktopWorkspace, type NoticeState, type OpenTab, type SaveState, OUTLINE_COLLAPSED_WIDTH, OUTLINE_SIDEBAR_MAX_WIDTH, OUTLINE_SIDEBAR_MIN_WIDTH, SIDEBAR_MAX_WIDTH, SIDEBAR_MIN_WIDTH } from "./desktop/desktopTypes";
 import { DesktopOverlays } from "./desktop/DesktopOverlays";
+import { DesktopLibrary } from "./desktop/DesktopLibrary";
+import { DesktopQuickNotes } from "./desktop/DesktopQuickNotes";
 import { useDesktopShell } from "./desktop/useDesktopShell";
 
 export function App() {
@@ -1100,68 +1102,43 @@ export function App() {
             </nav>}
           </section> : <section className="empty-workspace"><h2>开始写第一篇笔记</h2><button className="b3-button" onClick={() => void createNote()}>新建文档</button></section>
         ) : desktopWorkspace === "quick-notes" ? (
-          <>
-            <header className="tab-bar desktop-only" aria-label="顶栏">
-              <div className="tabbar-leading">{topBarLeading}</div>
-              <div className="tabbar-spacer" />
-              <div className="tabbar-trailing">{topBarTrailing}</div>
-            </header>
-            <QuickNotesWorkspace ref={quickNotesRef} notebooks={treeNodes} onDirtyChange={setQuickNotesDirty} onConverted={(note) => void handleQuickNoteConverted(note)} />
-          </>
+          <DesktopQuickNotes
+            notebooks={treeNodes}
+            quickNotesRef={quickNotesRef}
+            topbarLeading={topBarLeading}
+            topbarTrailing={topBarTrailing}
+            onDirtyChange={setQuickNotesDirty}
+            onConverted={(note) => void handleQuickNoteConverted(note)}
+          />
         ) : (
-          <section className={`document-pane ${wideMode ? "wide-mode" : ""} ${settings.paragraphSpacing ? "paragraph-spacing" : ""}`}>
-            <div className="read-progress" aria-hidden="true" />
-            <MultiTabEditor
-              tabs={tabInfos}
-              activeNoteId={activeNoteId}
-              tocEnabled={tocEnabled}
-              topbarLeading={topBarLeading}
-              topbarTrailing={topBarTrailing}
-              breadcrumb={activePath.length > 0 ? (
-                <nav className="protyle-breadcrumb" aria-label="文档路径">
-                  {/* 只保留笔记本名（目录路径不重要，顶部有文档名） */}
-                  <button type="button" className="protyle-breadcrumb__item protyle-breadcrumb__item--notebook" onClick={scrollActiveEditorToTop} title="回到文档顶部">{activePath[0].title || "无标题"}</button>
-                  {headingPath.length > 0 && (
-                    <>
-                      <span className="protyle-breadcrumb__divider" aria-hidden="true"><ChevronRight size={12} /></span>
-                      <span className="protyle-breadcrumb__outline" aria-label="大纲位置">
-                        {headingPath.map((hn, i) => (
-                          <button
-                            key={hn.id}
-                            type="button"
-                            className={`protyle-breadcrumb__item${i === headingPath.length - 1 ? " protyle-breadcrumb__item--current" : ""}`}
-                            onClick={() => navigateToHeading(hn.id)}
-                            title={`跳转到 H${hn.level}：${hn.text}`}
-                          >
-                            {i > 0 && <ChevronRight size={12} />}
-                            <span className="protyle-breadcrumb__h">H{hn.level}</span>
-                            {hn.text}
-                          </button>
-                        ))}
-                      </span>
-                    </>
-                  )}
-                  <div className="toolbar__menu-wrap protyle-breadcrumb__more" ref={moreMenuWrapRef}>
-                    <button className="toolbar__item protyle-breadcrumb__more-btn" onClick={() => { setTopMenuOpen((o) => !o); setWorkspaceMenuOpen(false); }} title="更多" aria-label="更多"><MoreHorizontal size={15} /></button>
-                  </div>
-                </nav>
-              ) : undefined}
-              onTabChange={handleTabChange}
-              onTabClose={closeTab}
-              onTabsReorder={reorderTabs}
-              lockedNoteIds={lockedNoteIds}
-              pinnedNoteIds={pinnedNoteIds}
-              onTogglePin={handleTogglePin}
-              onContentChange={handleContentChange}
-              prefs={editorPrefs}
-              onEditorReady={handleEditorReady}
-              onEditorCopyMarkdown={(noteId) => void copyMarkdownById(noteId)}
-              onEditorExport={(noteId, format) => void exportNoteById(noteId, format)}
-              onEditorCopyPaths={(noteId) => void copyPathsById(noteId)}
-
-              emptyAction={<button className="b3-button" onClick={() => void createNote()}>新建文档</button>}
-            />
-          </section>
+          <DesktopLibrary
+            tabs={tabInfos}
+            activeNoteId={activeNoteId}
+            tocEnabled={tocEnabled}
+            topbarLeading={topBarLeading}
+            topbarTrailing={topBarTrailing}
+            wideMode={wideMode}
+            paragraphSpacing={settings.paragraphSpacing}
+            editorPrefs={editorPrefs}
+            activePathTitle={activePath.length > 0 ? (activePath[0].title || "无标题") : null}
+            headingPath={headingPath}
+            moreMenuWrapRef={moreMenuWrapRef}
+            onToggleMoreMenu={() => { setTopMenuOpen((o) => !o); setWorkspaceMenuOpen(false); }}
+            onScrollToTop={scrollActiveEditorToTop}
+            onNavigateToHeading={navigateToHeading}
+            lockedNoteIds={lockedNoteIds}
+            pinnedNoteIds={pinnedNoteIds}
+            onTabChange={handleTabChange}
+            onTabClose={closeTab}
+            onTabsReorder={reorderTabs}
+            onTogglePin={handleTogglePin}
+            onContentChange={handleContentChange}
+            onEditorReady={handleEditorReady}
+            onEditorCopyMarkdown={(noteId) => void copyMarkdownById(noteId)}
+            onEditorExport={(noteId, format) => void exportNoteById(noteId, format)}
+            onEditorCopyPaths={(noteId) => void copyPathsById(noteId)}
+            onCreateNote={() => void createNote()}
+          />
         )}
         <DesktopStatusBar
           showDocumentStats={desktopWorkspace === "library"}
