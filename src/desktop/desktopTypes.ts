@@ -8,7 +8,7 @@ import type { LakeEditorInstance } from "../features/editor/lakeRuntime";
 import type { OutlineMode } from "../features/outline/OutlineController";
 import { cleanLakeMarkdown } from "../core/markdownClean";
 import { stripAssetAccessToken } from "../lib/assetPort";
-import { DOCK_GUTTER, FIXED_RAIL_WIDTH } from "../lib/layoutMetrics";
+import { FIXED_RAIL_WIDTH } from "../lib/layoutMetrics";
 import type { NoteDocument, NoteSummary, TreeNode } from "../lib/types";
 import type { SidebarMode } from "../components/Sidebar";
 

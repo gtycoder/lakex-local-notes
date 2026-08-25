@@ -1,5 +1,5 @@
 /** 搜索 Sheet（Phase 3b）：bridge.searchNotes LIKE fallback。 */
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Search, X } from "lucide-react";
 import type { SearchResult } from "../../core/searchRepository";
 import { bridge } from "../bridge";
@@ -15,17 +15,22 @@ export function SearchSheet(props: SearchSheetProps) {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<SearchResult[]>([]);
   const [searching, setSearching] = useState(false);
+  // 请求版本守卫：快速输入时旧响应不得覆盖新结果（防竞态）
+  const requestSeq = useRef(0);
 
   const run = useCallback(async (q: string) => {
     const trimmed = q.trim();
     if (!trimmed) { setResults([]); return; }
+    const seq = ++requestSeq.current;
     setSearching(true);
     try {
-      setResults(await bridge.searchNotes(trimmed));
+      const hits = await bridge.searchNotes(trimmed);
+      if (seq !== requestSeq.current) return; // 已有更新请求，丢弃旧响应
+      setResults(hits);
     } catch {
-      setResults([]);
+      if (seq === requestSeq.current) setResults([]);
     } finally {
-      setSearching(false);
+      if (seq === requestSeq.current) setSearching(false);
     }
   }, []);
 

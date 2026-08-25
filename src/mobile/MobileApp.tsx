@@ -133,6 +133,13 @@ export function MobileApp() {
     },
   });
 
+  // 新建文档：归属指定父节点（home → 个人笔记本；notebook → 当前笔记本），刷新列表并进入编辑
+  const createNoteInParent = useCallback(async (parentId: string | null) => {
+    const n = await bridge.createNote("无标题文档", parentId);
+    await refreshAll();
+    openDocument(n.id, "editor", parentId);
+  }, [refreshAll]);
+
   if (phase === "booting") return <div className="poc-center">启动中…（加载 WASM SQLite）</div>;
   if (error) return <div className="poc-center poc-error">{error}</div>;
 
@@ -159,12 +166,7 @@ export function MobileApp() {
           onOpenNote={(id) => openDocument(id, "viewer")}
           onOpenDrawer={() => setDrawerOpen(true)}
           onOpenSearch={() => setSearchOpen(true)}
-          onCreateNote={async () => {
-            // P1-2：首页新建默认归属个人笔记本（桌面语义一致），避免孤儿文档
-            const n = await bridge.createNote("无标题文档", "notebook-personal");
-            await refreshAll();
-            openDocument(n.id, "editor");
-          }}
+          onCreateNote={() => void createNoteInParent("notebook-personal")}
           onCreateNotebook={() => setCreateNbOpen(true)}
         />
       )}
@@ -173,11 +175,7 @@ export function MobileApp() {
           notebookId={route.notebookId}
           onBack={() => setRoute({ kind: "home", tab: "library" })}
           onOpenNote={(id) => openDocument(id, "viewer", route.notebookId)}
-          onCreateNote={async () => {
-            const n = await bridge.createNote("无标题文档", route.notebookId);
-            await refreshAll();
-            openDocument(n.id, "editor", route.notebookId);
-          }}
+          onCreateNote={() => void createNoteInParent(route.notebookId)}
         />
       )}
       {route.kind === "trash" && (

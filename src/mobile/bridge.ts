@@ -12,7 +12,8 @@ import { syncNow as runSync, type SyncConfig, type SyncDbPort } from "../core/sy
 import { TRASH_NOTEBOOK_ID } from "../core/syncDecisions.js";
 import { sha256Sync } from "../core/sha256Sync.js";
 import { createCapacitorS3Store } from "./s3Store";
-import type { S3Settings } from "../lib/types";
+import type { S3Settings, TreeNode, TreeNodeType } from "../lib/types";
+import type { SearchResult } from "../core/searchRepository.js";
 import { assertMoveTarget, assertNodeIcon, assertOrderedChildren, assertRootConstraint, assertTreeNodeTitle, nextSortOrder } from "../core/treeRules.js";
 import { buildLikePattern, buildSearchSql, toSearchResult } from "../core/mobileSearch.js";
 import { normalizeQuickNoteContent, previewQuickNote, serializeQuickNoteContent } from "../core/quickNoteModel.js";
@@ -160,6 +161,37 @@ async function ensureDb(): Promise<SqlJsDb> {
 
 function rowToNote(r: Record<string, unknown>): POCNote {
   return { id: String(r.id), title: String(r.title), content: String(r.content), updatedAt: String(r.updated_at) };
+}
+
+/** folders 行 → TreeNode（共享目录节点形状；统一 rename/setIcon/move 的映射避免重复）。 */
+function folderRowToTreeNode(row: Record<string, unknown>, overrides: { updatedAt?: string; title?: string; icon?: string | null; parentId?: string | null } = {}): TreeNode {
+  return {
+    id: String(row.id),
+    workspaceId: "mobile",
+    parentId: overrides.parentId !== undefined ? overrides.parentId : (row.parent_id ? String(row.parent_id) : null),
+    nodeType: String(row.node_type) as TreeNodeType,
+    title: overrides.title ?? String(row.title),
+    noteFileId: null,
+    sortOrder: Number(row.sort_order),
+    createdAt: String(row.updated_at),
+    updatedAt: overrides.updatedAt ?? String(row.updated_at),
+    syncState: "local",
+    isConflict: false,
+    icon: overrides.icon !== undefined ? overrides.icon : (row.icon ? String(row.icon) : null),
+  };
+}
+
+/** 收集 folder 子树 id（含自身）：沿 parent_id 迭代展开，供恢复/删除/树查询复用。 */
+function collectFolderSubtree(folders: Array<{ id: string; parent_id: string | null }>, rootId: string): Set<string> {
+  const ids = new Set<string>([rootId]);
+  let grew = true;
+  while (grew) {
+    grew = false;
+    for (const f of folders) {
+      if (f.parent_id && ids.has(f.parent_id) && !ids.has(f.id)) { ids.add(f.id); grew = true; }
+    }
+  }
+  return ids;
 }
 
 async function createS3Client(cfg: S3Settings): Promise<import("@aws-sdk/client-s3").S3Client> {
@@ -414,15 +446,15 @@ export const bridge = {
 
   // ---- 目录树 CRUD（Phase 0B：对齐共享 TreeRepository 接口，§20 ports.ts） ----
 
-  async listTreeNodes(): Promise<import("../lib/types").TreeNode[]> {
+  async listTreeNodes(): Promise<TreeNode[]> {
     const d = await ensureDb();
     const rows = d.prepare("SELECT id, title, parent_id, sort_order, node_type, icon, updated_at, trashed_at, deleted_from_parent_id, sync_state FROM folders WHERE trashed_at IS NULL").all() as Array<{
       id: string; title: string; parent_id: string | null; sort_order: number; node_type: string; icon: string | null; updated_at: string; trashed_at: string | null; deleted_from_parent_id: string | null; sync_state: string;
     }>;
     return rows.map((r) => ({
-      id: r.id, workspaceId: "mobile", parentId: r.parent_id, nodeType: r.node_type as import("../lib/types").TreeNodeType,
+      id: r.id, workspaceId: "mobile", parentId: r.parent_id, nodeType: r.node_type as TreeNodeType,
       title: r.title, noteFileId: null, sortOrder: r.sort_order, createdAt: r.updated_at, updatedAt: r.updated_at,
-      syncState: r.sync_state as import("../lib/types").TreeNode["syncState"], isConflict: false, icon: r.icon ?? null,
+      syncState: r.sync_state as TreeNode["syncState"], isConflict: false, icon: r.icon ?? null,
     }));
   },
 
@@ -431,14 +463,7 @@ export const bridge = {
     const d = await ensureDb();
     // 收集 notebook 下全部 folders（含深层 group）——沿 parent_id 迭代展开
     const allFolders = d.prepare("SELECT id, title, parent_id, sort_order, node_type FROM folders WHERE trashed_at IS NULL").all() as Array<{ id: string; title: string; parent_id: string | null; sort_order: number; node_type: string }>;
-    const folderIds = new Set<string>([notebookId]);
-    let grew = true;
-    while (grew) {
-      grew = false;
-      for (const f of allFolders) {
-        if (f.parent_id && folderIds.has(f.parent_id) && !folderIds.has(f.id)) { folderIds.add(f.id); grew = true; }
-      }
-    }
+    const folderIds = collectFolderSubtree(allFolders, notebookId);
     const groups = allFolders.filter((f) => f.node_type === "group" && f.parent_id && folderIds.has(f.parent_id));
     const allNotes = d.prepare("SELECT id, title, parent_id, sort_order FROM notes WHERE trashed_at IS NULL").all() as Array<{ id: string; title: string; parent_id: string | null; sort_order: number }>;
     const notes = allNotes.filter((n) => n.parent_id && folderIds.has(n.parent_id));
@@ -455,7 +480,7 @@ export const bridge = {
   },
 
   /** 新建 notebook：根层创建，名称必填（trim 校验，共享 treeRules），默认图标不落库（icon 由 setNodeIcon 单独写入）。 */
-  async createNotebook(input: { title: string; icon: string | null }): Promise<import("../lib/types").TreeNode> {
+  async createNotebook(input: { title: string; icon: string | null }): Promise<TreeNode> {
     const title = assertTreeNodeTitle(input.title);
     const d = await ensureDb();
     const id = crypto.randomUUID();
@@ -469,14 +494,12 @@ export const bridge = {
       d.prepare("UPDATE folders SET icon = ?, sync_state = 'local' WHERE id = ?").run(input.icon, id);
     }
     await saveSnapshot(d.exportBytes());
-    return {
-      id, workspaceId: "mobile", parentId: null, nodeType: "notebook", title,
-      noteFileId: null, sortOrder, createdAt: now, updatedAt: now, syncState: "local", isConflict: false, icon: input.icon ?? null,
-    };
+    const row = d.prepare("SELECT id, title, parent_id, sort_order, node_type, icon, updated_at FROM folders WHERE id=?").get(id) as Record<string, unknown>;
+    return folderRowToTreeNode(row, { title, updatedAt: now, icon: input.icon ?? null });
   },
 
   /** 新建 group：父节点必须存在（且非回收站），名称校验共享 treeRules。 */
-  async createGroup(parentId: string, title: string): Promise<import("../lib/types").TreeNode> {
+  async createGroup(parentId: string, title: string): Promise<TreeNode> {
     const trimmed = assertTreeNodeTitle(title);
     const d = await ensureDb();
     const parent = d.prepare("SELECT 1 FROM folders WHERE id = ? AND trashed_at IS NULL").get(parentId);
@@ -488,13 +511,11 @@ export const bridge = {
     d.prepare("INSERT INTO folders (id, title, parent_id, sort_order, node_type, icon, updated_at, sync_state) VALUES (?,?,?,?,?,?,?,'local')")
       .run(id, trimmed, parentId, sortOrder, "group", null, now);
     await saveSnapshot(d.exportBytes());
-    return {
-      id, workspaceId: "mobile", parentId, nodeType: "group", title: trimmed,
-      noteFileId: null, sortOrder, createdAt: now, updatedAt: now, syncState: "local", isConflict: false, icon: null,
-    };
+    const row = d.prepare("SELECT id, title, parent_id, sort_order, node_type, icon, updated_at FROM folders WHERE id=?").get(id) as Record<string, unknown>;
+    return folderRowToTreeNode(row, { title: trimmed, updatedAt: now });
   },
 
-  async renameTreeNode(id: string, title: string): Promise<import("../lib/types").TreeNode> {
+  async renameTreeNode(id: string, title: string): Promise<TreeNode> {
     const trimmed = assertTreeNodeTitle(title);
     const d = await ensureDb();
     const now = new Date().toISOString();
@@ -502,15 +523,10 @@ export const bridge = {
     if (!changed) throw new Error("节点不存在: " + id);
     await saveSnapshot(d.exportBytes());
     const row = d.prepare("SELECT id, title, parent_id, sort_order, node_type, icon, updated_at FROM folders WHERE id=?").get(id) as Record<string, unknown>;
-    return {
-      id, workspaceId: "mobile", parentId: row.parent_id ? String(row.parent_id) : null,
-      nodeType: String(row.node_type) as import("../lib/types").TreeNodeType, title: trimmed,
-      noteFileId: null, sortOrder: Number(row.sort_order), createdAt: String(row.updated_at), updatedAt: now,
-      syncState: "local", isConflict: false, icon: row.icon ? String(row.icon) : null,
-    };
+    return folderRowToTreeNode(row, { title: trimmed, updatedAt: now });
   },
 
-  async setNodeIcon(id: string, icon: string | null): Promise<import("../lib/types").TreeNode> {
+  async setNodeIcon(id: string, icon: string | null): Promise<TreeNode> {
     assertNodeIcon(icon);
     const d = await ensureDb();
     const now = new Date().toISOString();
@@ -518,15 +534,10 @@ export const bridge = {
     if (!changed) throw new Error("节点不存在: " + id);
     await saveSnapshot(d.exportBytes());
     const row = d.prepare("SELECT id, title, parent_id, sort_order, node_type, icon, updated_at FROM folders WHERE id=?").get(id) as Record<string, unknown>;
-    return {
-      id, workspaceId: "mobile", parentId: row.parent_id ? String(row.parent_id) : null,
-      nodeType: String(row.node_type) as import("../lib/types").TreeNodeType, title: String(row.title),
-      noteFileId: null, sortOrder: Number(row.sort_order), createdAt: String(row.updated_at), updatedAt: now,
-      syncState: "local", isConflict: false, icon,
-    };
+    return folderRowToTreeNode(row, { icon, updatedAt: now });
   },
 
-  async moveTreeNodeOrdered(id: string, parentId: string | null, orderedIds: string[]): Promise<import("../lib/types").TreeNode> {
+  async moveTreeNodeOrdered(id: string, parentId: string | null, orderedIds: string[]): Promise<TreeNode> {
     const d = await ensureDb();
     const moving = d.prepare("SELECT node_type FROM folders WHERE id = ? AND trashed_at IS NULL").get(id) as { node_type: string } | undefined;
     if (!moving) throw new Error("节点不存在: " + id);
@@ -564,11 +575,7 @@ export const bridge = {
     tx();
     await saveSnapshot(d.exportBytes());
     const row = d.prepare("SELECT id, title, parent_id, sort_order, node_type, icon, updated_at FROM folders WHERE id=?").get(id) as Record<string, unknown>;
-    return {
-      id, workspaceId: "mobile", parentId, nodeType: String(row.node_type) as import("../lib/types").TreeNodeType, title: String(row.title),
-      noteFileId: null, sortOrder: Number(row.sort_order), createdAt: String(row.updated_at), updatedAt: now,
-      syncState: "local", isConflict: false, icon: row.icon ? String(row.icon) : null,
-    };
+    return folderRowToTreeNode(row, { parentId, updatedAt: now });
   },
 
 
@@ -591,7 +598,7 @@ export const bridge = {
   },
 
   /** Phase 0B-5：搜索 fallback（sql.js 无 FTS5 → LIKE；标题+正文，参数化 + ESCAPE）。 */
-  async searchNotes(query: string): Promise<import("../core/searchRepository.js").SearchResult[]> {
+  async searchNotes(query: string): Promise<SearchResult[]> {
     const pattern = buildLikePattern(query);
     if (!pattern) return [];
     const d = await ensureDb();
@@ -712,14 +719,7 @@ export const bridge = {
       const tx = d.transaction(() => {
         // 收集整棵 folder 子树（含自己）→ 清 trashed_at
         const all = d.prepare("SELECT id, parent_id FROM folders").all() as Array<{ id: string; parent_id: string | null }>;
-        const ids = new Set<string>([id]);
-        let grew = true;
-        while (grew) {
-          grew = false;
-          for (const r2 of all) {
-            if (r2.parent_id && ids.has(r2.parent_id) && !ids.has(r2.id)) { ids.add(r2.id); grew = true; }
-          }
-        }
+        const ids = collectFolderSubtree(all, id);
         const now = new Date().toISOString();
         for (const fid of ids) {
           d.prepare("UPDATE folders SET trashed_at=NULL, updated_at=?, sync_state='local' WHERE id=?").run(now, fid);
@@ -746,14 +746,7 @@ export const bridge = {
     else {
       // folder：收集子树（含自己）
       const all = d.prepare("SELECT id, parent_id FROM folders").all() as Array<{ id: string; parent_id: string | null }>;
-      const ids = new Set<string>([id]);
-      let grew = true;
-      while (grew) {
-        grew = false;
-        for (const r2 of all) {
-          if (r2.parent_id && ids.has(r2.parent_id) && !ids.has(r2.id)) { ids.add(r2.id); grew = true; }
-        }
-      }
+      const ids = collectFolderSubtree(all, id);
       const now = new Date().toISOString();
       for (const fid of ids) {
         d.prepare("UPDATE folders SET trashed_at=COALESCE(trashed_at,?), updated_at=?, sync_state='purged' WHERE id=?").run(now, now, fid);

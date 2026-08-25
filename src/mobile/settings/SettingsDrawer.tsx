@@ -86,9 +86,13 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
 
   const clearCache = useCallback(async () => {
     setCacheMsg("清理中…");
-    const result = await mobileCachePort.clearDerivedCaches();
-    const cleared = result.cleared;
-    setCacheMsg("已清理：blob " + (cleared.runtimeBlobBytes ?? 0) + " 项 / 迁移残留 " + (cleared.legacyMigrationBytes ?? 0) + " 项");
+    try {
+      const result = await mobileCachePort.clearDerivedCaches();
+      const cleared = result.cleared;
+      setCacheMsg("已清理：blob " + (cleared.runtimeBlobBytes ?? 0) + " 项 / 迁移残留 " + (cleared.legacyMigrationBytes ?? 0) + " 项");
+    } catch (e) {
+      setCacheMsg("清理失败: " + (e as Error).message);
+    }
     void mobileCachePort.getCacheSummary().then(setCacheSummary).catch(() => undefined);
   }, []);
 
