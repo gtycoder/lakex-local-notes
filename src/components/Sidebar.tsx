@@ -15,7 +15,6 @@ interface SidebarProps {
   nodes: TreeNode[];
   activeId: string | null;
   search: string;
-  mobileOpen: boolean;
   mode: SidebarMode;
   width: number;
   minWidth: number;
@@ -39,7 +38,6 @@ interface SidebarProps {
   onResizeActiveChange: (active: boolean) => void;
   onWidthChange: (width: number) => void;
   onWidthCommit: (width: number) => void;
-  onCloseMobile: () => void;
 }
 
 export const Sidebar = memo(function Sidebar(props: SidebarProps) {
@@ -499,7 +497,7 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
 
   return (
     <aside
-      className={`sidebar sidebar-${props.mode} ${props.mobileOpen ? "sidebar-open" : ""}`}
+      className={`sidebar sidebar-${props.mode}`}
       onPointerEnter={props.onPreviewEnter}
       onPointerLeave={() => {
         // The panel's right edge moves with the pointer during resize. React
@@ -508,7 +506,6 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
         if (!resizeRef.current) props.onPreviewLeave();
       }}
     >
-      <button className="icon-button mobile-only sidebar-mobile-close" onClick={props.onCloseMobile} title="关闭"><X size={18} /></button>
       <div className="sidebar-toolbar-row desktop-only">
         <div className="search-box"><Search size={14} /><input value={props.search} onChange={(event) => props.onSearch(event.target.value)} placeholder="搜索" /></div>
         <div className="list-heading">

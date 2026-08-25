@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
 import { ArrowLeft, Check, ChevronDown, Files, ListTree, LoaderCircle, Feather, Moon, Pencil, Sun } from "lucide-react";
-import { MobileLibrary } from "./components/MobileLibrary";
 import { Sidebar } from "./components/Sidebar";
 import type { QuickNotesWorkspaceHandle } from "./components/QuickNotesWorkspace";
 import { SyncStatusPopover } from "./components/SyncStatusPopover";
@@ -22,7 +21,6 @@ import { cleanLakeMarkdown } from "./core/markdownClean";
 import { useDocumentStats } from "./hooks/useDocumentStats";
 import { useSavePipeline } from "./hooks/useSavePipeline";
 import { useSyncShell } from "./hooks/useSyncShell";
-import { useMobileDocumentSession } from "./hooks/useMobileDocumentSession";
 import { useSyncController } from "./hooks/useSyncController";
 import { useDocumentTabs } from "./hooks/useDocumentTabs";
 import { createRequestVersion } from "./core/requestVersion";
@@ -75,16 +73,6 @@ export function App() {
   const handleSyncToastAutoHide = useCallback(() => setSyncProgress(null), []);
   const { syncToast, setSyncToast, showSyncToast } = useSyncShell(handleSyncToastAutoHide);
   const [pendingRenameId, setPendingRenameId] = useState<string | null>(null);
-  const {
-    mobileOpen, setMobileOpen,
-    mobilePage, setMobilePage,
-    mobileEditing, setMobileEditing,
-    mobileTocOpen, setMobileTocOpen,
-    mobileActive, setMobileActive,
-    mobileDraftTitle, setMobileDraftTitle,
-    mobileDraftContent, setMobileDraftContent,
-  } = useMobileDocumentSession();
-  const [isMobile, setIsMobile] = useState(() => window.matchMedia("(max-width: 760px)").matches);
   const [settings, setSettings] = useState<AppSettings>(() => loadSettings());
   const [pinnedNoteIds, setPinnedNoteIds] = useState<Set<string>>(() => new Set());
   const tocEnabled = settings.showToc;
@@ -159,7 +147,7 @@ export function App() {
 
   useEffect(() => { openTabsRef.current = openTabs; }, [openTabs]);
 
-  const docStats = useDocumentStats(openTabs, activeNoteId, mobileActive?.id ?? null, mobileActive?.content ?? "");
+  const docStats = useDocumentStats(openTabs, activeNoteId, null, "");
 
   // 顶栏冲突提醒可以在 12 秒后消失，但当前文档的“历史 N”是持久事实，
   // 不能随着 toast 消失；切换文档/打开历史面板时重新读取本地快照数量。
@@ -234,9 +222,6 @@ export function App() {
   }, [settings.theme]);
 
   useEffect(() => {
-    const media = window.matchMedia("(max-width: 760px)");
-    const onChange = () => setIsMobile(media.matches);
-    media.addEventListener("change", onChange);
     void native.bootstrap().then(async (snapshot) => {
       setWorkspace(snapshot); setNotes(snapshot.notes); setSync(snapshot.sync);
       void native.getSyncSettings().then((cfg) => setCloudEnabled(cfg.enabled)).catch(() => undefined);
@@ -255,7 +240,7 @@ export function App() {
       }).catch(() => undefined);
       setTreeNodes(await native.listTreeNodes());
       const id = snapshot.lastOpenedNoteId ?? snapshot.notes[0]?.id;
-      if (id && !media.matches) {
+      if (id) {
         const opened = await openNote(id);
         if (!opened) {
           // lastOpenedNoteId 可能指向已 purge 的旧文档；启动不能停在错误页，
@@ -266,7 +251,6 @@ export function App() {
         }
       }
     }).catch((reason) => setError(getNativeErrorMessage(reason)));
-    return () => { media.removeEventListener("change", onChange); };
   }, []);
 
   useEffect(() => {
@@ -373,17 +357,7 @@ export function App() {
     });
   }, []);
 
-  useEffect(() => {
-    const viewport = window.visualViewport;
-    if (!viewport) return;
-    const update = () => {
-      const inset = Math.max(0, window.innerHeight - viewport.height - viewport.offsetTop);
-      document.documentElement.style.setProperty("--keyboard-inset", `${inset}px`);
-      document.body.classList.toggle("keyboard-open", inset > 120);
-    };
-    update(); viewport.addEventListener("resize", update); viewport.addEventListener("scroll", update);
-    return () => { viewport.removeEventListener("resize", update); viewport.removeEventListener("scroll", update); document.body.classList.remove("keyboard-open"); };
-  }, []);
+
 
   const refreshPendingSummary = useCallback(() => {
     void native.getSyncPendingSummary().then(setPendingSummary).catch(() => undefined);
@@ -480,7 +454,6 @@ export function App() {
     // 同时立即触发一次保存，尽量在用户留下期间落盘
     const onBeforeUnload = (event: BeforeUnloadEvent) => {
       const hasDirty = openTabsRef.current.some((tab) => tab.dirty)
-        || (mobileActive !== null && mobileDraftContent !== mobileActive.content)
         || quickNotesDirty;
       if (!hasDirty) return;
       for (const tab of openTabsRef.current) {
@@ -504,7 +477,7 @@ export function App() {
     };
     window.addEventListener("beforeunload", onBeforeUnload);
     return () => { window.removeEventListener("beforeunload", onBeforeUnload); };
-  }, [persistTab, mobileActive, mobileDraftContent, quickNotesDirty]);
+  }, [persistTab, quickNotesDirty]);
 
   // scheduleDraftJournal / scheduleSave 已收拢到 useSavePipeline（hook 提供）
   // notice/showNotice 已收拢到 useDesktopShell（Phase C）
@@ -574,14 +547,6 @@ export function App() {
       return false;
     }
   }, [evictTabsForLimit, settings.maxOpenTabs, pinnedNoteIds, showNotice]);
-
-  const openNoteMobile = useCallback(async (id: string) => {
-    try {
-      const note = await native.readNote(id);
-      setMobileActive(note); setMobileDraftTitle(note.title); setMobileDraftContent(note.content);
-      setMobilePage("document");
-    } catch (reason) { setError(getNativeErrorMessage(reason)); }
-  }, []);
 
   const restoreDraft = useCallback(async (entry: DraftJournalEntry) => {
     // 先确认正式文档仍存在。否则不能从恢复对话框中静默移除草稿，让用户误以为恢复成功。
@@ -729,10 +694,7 @@ export function App() {
     const note = parentId === null ? await native.createNote("无标题文档") : await native.createNoteIn(parentId, "无标题文档");
     setNotes((items) => [...items, summaryOf(note)]);
     setTreeNodes(await native.listTreeNodes());
-    if (isMobile) {
-      setMobileActive(note); setMobileDraftTitle(note.title); setMobileDraftContent(note.content);
-      setMobileOpen(false); setMobilePage("document"); setMobileEditing(true);
-    } else {
+    {
       resetRevision(note.id, 0);
       const newTab: OpenTab = { noteId: note.id, title: note.title, content: note.content, dirty: false, lastAccessedAt: Date.now() };
       const evictedIds = await evictTabsForLimit([...openTabsRef.current, newTab], note.id);
@@ -808,8 +770,8 @@ export function App() {
   // W-2-B：传给 Sidebar 的回调全部稳定化——App 每次渲染（含打字触发的 openTabs 变化）
   // 不再产生新引用，配合 memo(Sidebar) 让树行渲染彻底跳过按键路径。
   const sidebarSelect = useCallback((id: string) => {
-    void (isMobile ? openNoteMobile(id) : openNote(id));
-  }, [isMobile, openNoteMobile, openNote]);
+    void openNote(id);
+  }, [openNote]);
   const sidebarCreate = useCallback((kind: "notebook" | "group" | "note", parentId: string | null, title?: string) => {
     void createTreeItem(kind, parentId, title);
   }, [createTreeItem]);
@@ -832,7 +794,6 @@ export function App() {
     setSearchPanelOpen(true);
   }, []);
   const sidebarPendingRenameConsumed = useCallback(() => setPendingRenameId(null), []);
-  const sidebarCloseMobile = useCallback(() => setMobileOpen(false), []);
 
   async function deleteTreeNode(id: string) {
     try {
@@ -923,31 +884,6 @@ export function App() {
     }
   }
 
-  /** 审计 #8：移动端保存成功后同步 mobileActive/草稿，viewer 不再显示旧快照，
-   * 离开时也不会因"仍有差异"而重复保存 */
-  async function persistMobile(active: NoteDocument) {
-    const saved = await persistTab(active.id, mobileDraftTitle, mobileDraftContent);
-    if (saved) {
-      setMobileActive(saved);
-      setMobileDraftTitle(saved.title);
-      setMobileDraftContent(saved.content);
-    }
-  }
-
-  async function leaveMobileDocument() {
-    if (mobileActive && mobileDraftContent !== mobileActive.content) {
-      await persistMobile(mobileActive);
-    }
-    setMobileEditing(false); setMobileTocOpen(false); setMobileOpen(false); setMobilePage("library");
-  }
-
-  async function finishMobileEditing() {
-    if (mobileActive && mobileDraftContent !== mobileActive.content) {
-      await persistMobile(mobileActive);
-    }
-    setMobileEditing(false);
-  }
-
   async function handleQuickNoteConverted(note: NoteDocument) {
     setNotes((items) => [summaryOf(note), ...items.filter((item) => item.id !== note.id)]);
     try { setTreeNodes(await native.listTreeNodes()); }
@@ -957,9 +893,6 @@ export function App() {
   }
 
   if (!workspace) return <main className="loading-screen"><LoaderCircle className="spin" /><span>正在打开本地知识库</span>{error && <small>{error}</small>}</main>;
-  if (isMobile && mobilePage === "library") return <>
-    <MobileLibrary notes={notes} search={search} sync={sync} onSearch={setSearch} onSelect={(id) => void openNoteMobile(id)} onCreate={() => void createNote()} />
-  </>;
 
   // 字数/图片统计（W-2-A）：从渲染体移出，避免每次按键对整篇正文跑两次 O(n) 正则。
   const activeNodeSyncState = activeNoteId ? (treeNodes.find((n) => n.noteFileId === activeNoteId)?.syncState ?? "synced") : "synced";
@@ -1013,7 +946,7 @@ export function App() {
     reloadKey: tab.reloadKey ?? 0,
   }));
 
-  const outlineVisible = tocEnabled && !isMobile && desktopWorkspace === "library";
+  const outlineVisible = tocEnabled && desktopWorkspace === "library";
   // 只读锁：store 驱动（可同步），派生集合供多标签 viewer 重建
   const lockedNoteIds = new Set(notes.filter((n) => n.isLocked).map((n) => n.id));
 
@@ -1068,40 +1001,19 @@ export function App() {
   } as CSSProperties;
 
   return (
-    <div className={`app-shell ${shellPlatformClass} sidebar-${sidebarMode} outline-${effectiveOutlineMode} ${workspaceMenuOpen ? "workspace-menu-open" : ""} ${focusMode ? "focus-mode" : ""} ${desktopWorkspace === "quick-notes" ? "quick-notes-active" : ""} ${sidebarResizing ? "sidebar-resizing" : ""} ${outlineResizing ? "outline-resizing" : ""} ${outlineSwitching ? "outline-switching" : ""} ${isMobile ? `mobile-document-page ${mobileEditing ? "mobile-editing" : "mobile-reading"}` : ""}`} style={shellStyle}>
+    <div className={`app-shell ${shellPlatformClass} sidebar-${sidebarMode} outline-${effectiveOutlineMode} ${workspaceMenuOpen ? "workspace-menu-open" : ""} ${focusMode ? "focus-mode" : ""} ${desktopWorkspace === "quick-notes" ? "quick-notes-active" : ""} ${sidebarResizing ? "sidebar-resizing" : ""} ${outlineResizing ? "outline-resizing" : ""} ${outlineSwitching ? "outline-switching" : ""}`} style={shellStyle}>
       <nav className="activity-rail desktop-only" aria-label="应用导航" onPointerEnter={desktopWorkspace === "library" ? showSidebarPreview : undefined} onPointerLeave={desktopWorkspace === "library" ? hideSidebarPreview : undefined}>
         <div className="activity-rail-spacer" />
         <button className={`activity-button ${desktopWorkspace === "library" && sidebarMode === "docked" ? "active" : ""}`} onClick={() => { if (desktopWorkspace === "library") toggleSidebarDock(); else void switchDesktopWorkspace("library"); }} title="资料库" aria-label="资料库"><Files size={16} /></button>
         <button className={`activity-button ${desktopWorkspace === "quick-notes" ? "active" : ""}`} onClick={() => void switchDesktopWorkspace("quick-notes")} title="小记" aria-label="小记"><Feather size={16} /></button>
         <div className="activity-rail-fill" />
       </nav>
-      {desktopWorkspace === "library" && <Sidebar nodes={treeNodes} activeId={activeNoteId ?? mobileActive?.id ?? null} search={search} mobileOpen={mobileOpen} mode={sidebarMode} width={sidebarWidth} minWidth={SIDEBAR_MIN_WIDTH} maxWidth={SIDEBAR_MAX_WIDTH} onSearch={setSearch} onSelect={sidebarSelect} onCreate={sidebarCreate} onRename={sidebarRename} onMoveNode={sidebarMove} onRequestDelete={sidebarRequestDelete} onCopyMarkdown={copyMarkdownFromCache} onExportAs={exportAs} onCopyPaths={copyNotePaths} onSetIcon={sidebarSetIcon} onOpenHistory={sidebarOpenHistory} onOpenSearch={sidebarOpenSearch} pendingRenameId={pendingRenameId} onPendingRenameConsumed={sidebarPendingRenameConsumed} onPreviewEnter={showSidebarPreview} onPreviewLeave={hideSidebarPreview} onResizeActiveChange={handleSidebarResizeActiveChange} onWidthChange={updateSidebarWidth} onWidthCommit={commitSidebarWidth} onCloseMobile={sidebarCloseMobile} />}
-      {mobileOpen && <div className="mobile-scrim" onClick={() => setMobileOpen(false)} />}
+      {desktopWorkspace === "library" && <Sidebar nodes={treeNodes} activeId={activeNoteId} search={search} mode={sidebarMode} width={sidebarWidth} minWidth={SIDEBAR_MIN_WIDTH} maxWidth={SIDEBAR_MAX_WIDTH} onSearch={setSearch} onSelect={sidebarSelect} onCreate={sidebarCreate} onRename={sidebarRename} onMoveNode={sidebarMove} onRequestDelete={sidebarRequestDelete} onCopyMarkdown={copyMarkdownFromCache} onExportAs={exportAs} onCopyPaths={copyNotePaths} onSetIcon={sidebarSetIcon} onOpenHistory={sidebarOpenHistory} onOpenSearch={sidebarOpenSearch} pendingRenameId={pendingRenameId} onPendingRenameConsumed={sidebarPendingRenameConsumed} onPreviewEnter={showSidebarPreview} onPreviewLeave={hideSidebarPreview} onResizeActiveChange={handleSidebarResizeActiveChange} onWidthChange={updateSidebarWidth} onWidthCommit={commitSidebarWidth} />}
       <main className="workspace" onPointerDownCapture={(event) => {
-        if (!isMobile && sidebarMode === "floating" && (event.target as HTMLElement).closest(".document-pane, .empty-workspace")) setSidebarMode("collapsed");
+        if (sidebarMode === "floating" && (event.target as HTMLElement).closest(".document-pane, .empty-workspace")) setSidebarMode("collapsed");
       }}>
-        {isMobile && <header className="topbar">
-          <div className="topbar-left">
-            <button className="icon-button mobile-only" onClick={() => void leaveMobileDocument()} title="返回文档列表"><ArrowLeft size={21} /></button>
-            {mobileActive
-              ? <input className="current-note-input" aria-label="文档名称" value={mobileDraftTitle} onChange={(event) => setMobileDraftTitle(event.target.value)} onBlur={() => { const title = mobileDraftTitle.trim(); if (title && mobileActive && title !== mobileActive.title) void renameTreeNode(mobileActive.id, title); else if (mobileActive) setMobileDraftTitle(mobileActive.title); }} onKeyDown={(event) => { if (event.key === "Enter") event.currentTarget.blur(); if (event.key === "Escape" && mobileActive) { setMobileDraftTitle(mobileActive.title); event.currentTarget.blur(); } }} />
-              : <span className="current-note">没有文档</span>}
-          </div>
-          <div className="topbar-actions">
-            {mobileEditing && <button className="icon-button mobile-done" onClick={() => void finishMobileEditing()} title="完成编辑"><Check size={21} /></button>}
-          </div>
-        </header>}
         {error && <div className="error-banner"><span>{error}</span><button onClick={() => setError(null)}>关闭</button></div>}
-        {isMobile ? (
-          mobileActive ? <section className={`document-pane ${wideMode ? "wide-mode" : ""} ${settings.paragraphSpacing ? "paragraph-spacing" : ""}`}>
-            <LakeEditor noteId={mobileActive.id} content={mobileEditing ? mobileDraftContent : mobileActive.content} mode={mobileEditing ? "editor" : "viewer"} tocEnabled={mobileTocOpen} onChange={(content) => setMobileDraftContent(content)} prefs={editorPrefs} onEditorReady={handleEditorReady} />
-            {!mobileEditing && <nav className="mobile-reader-actions">
-              {!mobileActive.isLocked && <button onClick={() => setMobileEditing(true)}><Pencil size={20} /><span>编辑</span></button>}
-              <button className={mobileTocOpen ? "selected" : ""} onClick={() => setMobileTocOpen((open) => !open)}><ListTree size={21} /><span>大纲</span></button>
-              <button onClick={() => setMobileOpen(true)}><Files size={20} /><span>切换</span></button>
-            </nav>}
-          </section> : <section className="empty-workspace"><h2>开始写第一篇笔记</h2><button className="b3-button" onClick={() => void createNote()}>新建文档</button></section>
-        ) : desktopWorkspace === "quick-notes" ? (
+        {desktopWorkspace === "quick-notes" ? (
           <DesktopQuickNotes
             notebooks={treeNodes}
             quickNotesRef={quickNotesRef}
