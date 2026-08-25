@@ -31,7 +31,15 @@ export class DesktopTreeRepository implements TreeRepository {
 
   async createNotebook(input: CreateNotebookInput): Promise<TreeNode> {
     const node = this.store.createNotebook(input.title);
-    if (input.icon) return toSharedTreeNode(this.store.setNodeIcon(node.id, input.icon));
+    if (input.icon) {
+      try {
+        return toSharedTreeNode(this.store.setNodeIcon(node.id, input.icon));
+      } catch (e) {
+        // 图标写入失败：回滚刚创建的 notebook（避免"已建未设图标"的半成品），再抛原始错误
+        try { this.store.deleteTreeNode(node.id); } catch { /* 回滚失败则保留节点 */ }
+        throw e;
+      }
+    }
     return toSharedTreeNode(node);
   }
 
