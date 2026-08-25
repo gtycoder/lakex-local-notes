@@ -1,5 +1,6 @@
 import type { DbLike } from "../src/core/dbLike.js";
 import { AppError } from "../src/core/storeErrors.js";
+import { assertTreeNodeTitle } from "../src/core/treeRules.js";
 import type { SyncFolder, TreeNode } from "../src/core/noteQueries.js";
 
 interface MetadataRepositoryDeps {
@@ -45,22 +46,28 @@ export class NoteMetadataRepository {
   }
 
   createNotebook(title: string): TreeNode {
+    let trimmed: string;
+    try { trimmed = assertTreeNodeTitle(title); }
+    catch { throw new AppError("InvalidInput", "名称不能为空"); }
     const id = this.deps.uuid();
     const now = this.deps.nowIso();
     const sortOrder = this.deps.nextSortOrder(null);
     this.db.prepare("INSERT INTO tree_nodes(id,workspace_id,parent_id,node_type,title,note_file_id,sort_order,created_at,updated_at,sync_state,is_conflict) VALUES(?,?,NULL,'notebook',?,NULL,?,?,?,'local',0)")
-      .run(id, this.workspaceId, title, sortOrder, now, now);
+      .run(id, this.workspaceId, trimmed, sortOrder, now, now);
     return this.deps.readTreeNode(id);
   }
 
   createGroup(parentId: string, title: string): TreeNode {
+    let trimmed: string;
+    try { trimmed = assertTreeNodeTitle(title); }
+    catch { throw new AppError("InvalidInput", "名称不能为空"); }
     this.deps.ensureParent(parentId);
     this.deps.assertParentCompatible(parentId, "group");
     const id = this.deps.uuid();
     const now = this.deps.nowIso();
     const sortOrder = this.deps.nextSortOrder(parentId);
     this.db.prepare("INSERT INTO tree_nodes(id,workspace_id,parent_id,node_type,title,note_file_id,sort_order,created_at,updated_at,sync_state,is_conflict) VALUES(?,?,?,'group',?,NULL,?,?,?,'local',0)")
-      .run(id, this.workspaceId, parentId, title, sortOrder, now, now);
+      .run(id, this.workspaceId, parentId, trimmed, sortOrder, now, now);
     return this.deps.readTreeNode(id);
   }
 

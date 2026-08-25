@@ -43,12 +43,12 @@ describe("目录规则两端等价（桌面 Store vs 共享 treeRules）", () =>
     rmSync(dir, { recursive: true, force: true });
   });
 
-  it("空标题校验：共享 assertTreeNodeTitle 拒绝空白（移动端 createNotebook 强制）；桌面 createNotebook 现状允许空白（后续桌面加固项，§20 红线）", () => {
+  it("空标题校验：桌面与移动端一致拒绝空白（C3 加固后两端都走共享 assertTreeNodeTitle）", () => {
     const { store, dir } = makeStore();
-    // 桌面现状：createNotebook 不 trim 校验（仅 renameTreeNode 校验）——记录为已知差异，移动端已按红线实现
-    const nb = store.createNotebook("  ");
-    expect(nb.title).toBe("  ");
-    // 移动端（共享规则）拒绝空白
+    // 桌面 createNotebook/createGroup 已加固（共享 assertTreeNodeTitle + AppError 包装）
+    expect(() => store.createNotebook("  ")).toThrowError(/不能为空/);
+    expect(() => store.createNotebook("")).toThrowError(/不能为空/);
+    // 共享规则拒绝空白
     expect(() => assertTreeNodeTitle("  ")).toThrowError(/不能为空/);
     rmSync(dir, { recursive: true, force: true });
   });
