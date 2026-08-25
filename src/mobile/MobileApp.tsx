@@ -12,6 +12,7 @@ import { NotebookPage } from "./notebook/NotebookPage";
 import { DocumentPage } from "./document/DocumentPage";
 import { CreateNotebookSheet } from "./settings/CreateNotebookSheet";
 import { SearchSheet } from "./settings/SearchSheet";
+import { SettingsDrawer } from "./settings/SettingsDrawer";
 import "lakex-editor-react-component/style.css";
 import "./mobile.css";
 
@@ -71,7 +72,11 @@ export function MobileApp() {
 
   return (
     <div className="mobile-app">
-      {drawerOpen && <div className="mobile-drawer-mask" onClick={() => setDrawerOpen(false)} />}
+      <SettingsDrawer
+        open={drawerOpen}
+        onClose={() => setDrawerOpen(false)}
+        onRefresh={refreshAll}
+      />
       {route.kind === "home" && (
         <HomePage
           tab={route.tab}
