@@ -7,7 +7,6 @@ import { useWindowShortcuts } from "./hooks/useWindowShortcuts";
 import { useTopMenus } from "./hooks/useTopMenus";
 import { DesktopStatusBar } from "./components/DesktopStatusBar";
 import { getDocumentStatus } from "./components/documentStatusModel";
-import { LakeEditor } from "./features/editor/LakeEditor";
 import { clearScrollMemory, locateEditorSearchHit } from "./features/editor/EditorTab";
 import { resolveScrollNode } from "./features/editor/lakeRuntime";
 import type { LakeEditorInstance } from "./features/editor/lakeRuntime";
@@ -30,13 +29,12 @@ import { isDesktop, native } from "./lib/native";
 import { getNativeErrorMessage } from "./lib/nativeErrors";
 import { loadSettings, saveSettings, subscribeSettings, type AppSettings } from "./lib/settings";
 import { applyTheme } from "./lib/theme";
-import type { SettingsCategory } from "./components/SettingsPanel";
 import { subtreeIds } from "./core/tree";
 import { planTabReload } from "./core/planTabReload";
 import { DOCK_GUTTER } from "./lib/layoutMetrics";
 import { OUTLINE_HOVER_TRIGGER_WIDTH, OUTLINE_SCROLLBAR_CLEARANCE } from "./features/outline/outlineInteraction";
 import type { DraftJournalEntry, NoteDigest, NoteDocument, NoteSummary, S3Settings, SyncPendingSummary, SyncProgress, SyncStatus, TreeNode, WorkspaceSnapshot } from "./lib/types";
-import { patchNoteById, patchTabById, readEditorDocumentCaches, replaceTreeNode, saveLabel, summaryOf, treeNodePath, type DesktopWorkspace, type NoticeState, type OpenTab, type SaveState, OUTLINE_COLLAPSED_WIDTH, OUTLINE_SIDEBAR_MAX_WIDTH, OUTLINE_SIDEBAR_MIN_WIDTH, SIDEBAR_MAX_WIDTH, SIDEBAR_MIN_WIDTH } from "./desktop/desktopTypes";
+import { patchNoteById, patchTabById, readEditorDocumentCaches, replaceTreeNode, saveLabel, summaryOf, treeNodePath, type DesktopWorkspace, type NoticeState, type OpenTab, OUTLINE_COLLAPSED_WIDTH, OUTLINE_SIDEBAR_MAX_WIDTH, OUTLINE_SIDEBAR_MIN_WIDTH, SIDEBAR_MAX_WIDTH, SIDEBAR_MIN_WIDTH } from "./desktop/desktopTypes";
 import { DesktopOverlays } from "./desktop/DesktopOverlays";
 import { DesktopLibrary } from "./desktop/DesktopLibrary";
 import { DesktopQuickNotes } from "./desktop/DesktopQuickNotes";
@@ -159,10 +157,6 @@ export function App() {
       .catch(() => { if (alive) setActiveHistoryCount(0); });
     return () => { alive = false; };
   }, [activeNoteId, conflictSnapshotNotice.length, historyOpen]);
-
-  useEffect(() => {
-    if (sidebarMode !== "floating") localStorage.setItem("lake-notes-v2.sidebar-mode", sidebarMode);
-  }, [sidebarMode]);
 
   useEffect(() => {
     return () => {
