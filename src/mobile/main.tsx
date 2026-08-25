@@ -1,9 +1,9 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
-import { MobilePocApp } from "./MobilePocApp";
+import { MobileApp } from "./MobileApp";
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
-    <MobilePocApp />
+    <MobileApp />
   </React.StrictMode>
 );
