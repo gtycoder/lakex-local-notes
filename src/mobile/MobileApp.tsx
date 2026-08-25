@@ -74,6 +74,8 @@ export function MobileApp() {
           purgeTreeItem: (id: string, kind: "folder" | "note") => bridge.purgeTreeItem(id, kind),
           createGroup: (parentId: string, title: string) => bridge.createGroup(parentId, title),
           renameTreeNode: (id: string, title: string) => bridge.renameTreeNode(id, title),
+          reorderSiblings: (parentId: string | null, orderedIds: string[]) => bridge.reorderSiblings(parentId, orderedIds),
+          moveTreeNodeOrdered: (id: string, parentId: string | null, orderedIds: string[]) => bridge.moveTreeNodeOrdered(id, parentId, orderedIds),
           createNotebook: (input: { title: string; icon: string | null }) => bridge.createNotebook(input),
           searchNotes: (q: string) => bridge.searchNotes(q),
         };
@@ -163,6 +165,12 @@ export function MobileApp() {
           }}
           onTabChange={(tab) => setRoute({ kind: "home", tab })}
           onOpenNotebook={(id) => setRoute({ kind: "notebook", notebookId: id })}
+          onReorderNotebooks={async (orderedIds) => {
+            // 根层笔记本重排：单事务更新 sort_order（reorderSiblings），同步后传播
+            await bridge.reorderSiblings(null, orderedIds);
+            await refreshAll();
+            setToastMsg("已调整笔记本顺序（同步后传播）");
+          }}
           onOpenNote={(id) => openDocument(id, "viewer")}
           onOpenDrawer={() => setDrawerOpen(true)}
           onOpenSearch={() => setSearchOpen(true)}

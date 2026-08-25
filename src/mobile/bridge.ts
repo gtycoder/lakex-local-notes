@@ -448,7 +448,8 @@ export const bridge = {
 
   async listTreeNodes(): Promise<TreeNode[]> {
     const d = await ensureDb();
-    const rows = d.prepare("SELECT id, title, parent_id, sort_order, node_type, icon, updated_at, trashed_at, deleted_from_parent_id, sync_state FROM folders WHERE trashed_at IS NULL").all() as Array<{
+    // 按 sort_order 排序（目录顺序来自桌面拖拽重排/本地编辑，同步语义）
+    const rows = d.prepare("SELECT id, title, parent_id, sort_order, node_type, icon, updated_at, trashed_at, deleted_from_parent_id, sync_state FROM folders WHERE trashed_at IS NULL ORDER BY parent_id, sort_order").all() as Array<{
       id: string; title: string; parent_id: string | null; sort_order: number; node_type: string; icon: string | null; updated_at: string; trashed_at: string | null; deleted_from_parent_id: string | null; sync_state: string;
     }>;
     return rows.map((r) => ({
@@ -578,6 +579,18 @@ export const bridge = {
     return folderRowToTreeNode(row, { parentId, updatedAt: now });
   },
 
+  /** 同级重排（自定义排序）：单事务更新 sort_order，不改父节点。对齐桌面 reorderTreeNodes。 */
+  async reorderSiblings(parentId: string | null, orderedIds: string[]): Promise<void> {
+    const d = await ensureDb();
+    const now = new Date().toISOString();
+    const tx = d.transaction(() => {
+      orderedIds.forEach((childId, index) => {
+        d.prepare("UPDATE folders SET sort_order=?, updated_at=?, sync_state='local' WHERE id=? AND trashed_at IS NULL").run(index, now, childId);
+      });
+    });
+    tx();
+    await saveSnapshot(d.exportBytes());
+  },
 
   async listNotes(): Promise<POCNote[]> {
     const d = await ensureDb();

@@ -202,3 +202,17 @@ body { font-family: -apple-system, "PingFang SC", "Noto Sans SC", sans-serif; ba
 .mobile-group-child { padding-left: 34px; background: #fafbfc; }
 .mobile-chevron { transition: transform .2s; color: #86909c; }
 .mobile-chevron.open { transform: rotate(90deg); }
+
+/* 排序模式 */
+.mobile-sortbar {
+  display: flex; align-items: center; gap: 10px; padding: 8px 16px;
+  background: #e8f1ff; font-size: 13px; color: #3575f0; font-weight: 600;
+}
+.mobile-sortbar button {
+  margin-left: auto; border: none; background: #3575f0; color: #fff; border-radius: 8px;
+  width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; cursor: pointer;
+}
+.mobile-sortbar button:last-child { background: #c9cdd4; }
+.mobile-nb-card[draggable="true"] { cursor: grab; }
+.mobile-nb-card[draggable="true"]:active { cursor: grabbing; opacity: .7; }
+

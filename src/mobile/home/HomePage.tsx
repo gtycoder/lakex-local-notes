@@ -1,6 +1,7 @@
 /** 首页（小记/知识库切换 + 笔记本宫格）。Phase 1 基础版：真实 bridge 数据。 */
-import { BookOpen, Feather, Plus, Search, Settings } from "lucide-react";
+import { Feather, Plus, Search, Settings } from "lucide-react";
 import type { TreeNode } from "../../lib/types";
+import { NotebookGrid } from "./NotebookGrid";
 
 export interface MobileQuickNote {
   id: string;
@@ -16,6 +17,7 @@ export interface HomePageProps {
   onCreateQuickNote: (text: string) => void;
   onTabChange: (tab: "quick" | "library") => void;
   onOpenNotebook: (id: string) => void;
+  onReorderNotebooks: (orderedIds: string[]) => Promise<void>;
   onOpenNote: (id: string) => void;
   onOpenDrawer: () => void;
   onOpenSearch: () => void;
@@ -24,7 +26,7 @@ export interface HomePageProps {
 }
 
 export function HomePage(props: HomePageProps) {
-  const { tab, notebooks, quickNotes, onCreateQuickNote, onTabChange, onOpenNotebook, onOpenNote, onOpenDrawer, onOpenSearch, onCreateNote, onCreateNotebook } = props;
+  const { tab, notebooks, quickNotes, onCreateQuickNote, onTabChange, onOpenNotebook, onReorderNotebooks, onOpenNote, onOpenDrawer, onOpenSearch, onCreateNote, onCreateNotebook } = props;
   return (
     <div className="mobile-home">
       <header className="mobile-topbar">
@@ -49,15 +51,11 @@ export function HomePage(props: HomePageProps) {
         </div>
       ) : (
         <div className="mobile-scroll">
-          <div className="mobile-nb-grid">
-            {notebooks.length === 0 && <div className="mobile-empty">暂无知识库</div>}
-            {notebooks.map((nb) => (
-              <div key={nb.id} className="mobile-nb-card" onClick={() => onOpenNotebook(nb.id)}>
-                <div className="mobile-nb-cover"><BookOpen size={28} /></div>
-                <div className="mobile-nb-name">{nb.title}</div>
-              </div>
-            ))}
-          </div>
+          <NotebookGrid
+            notebooks={notebooks}
+            onOpenNotebook={onOpenNotebook}
+            onReorder={onReorderNotebooks}
+          />
         </div>
       )}
       <div className="mobile-fab-col">
