@@ -1,13 +1,14 @@
-/** 笔记本页：folders 子节点（group）+ notes 文档（移动端两表合并，见 bridge.listNotebookChildren）。 */
-import { useCallback, useEffect, useState } from "react";
+/** 笔记本页：完整子树递归展示（P1-3/P2-3/P2-4：顶级只含直接子节点，group 可递归展开，sort_order 排序）。 */
+import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { ArrowLeft, ChevronRight, FileText, FolderOpen, MoreHorizontal } from "lucide-react";
 import { bridge } from "../bridge";
 
-export interface NotebookChild {
+export interface NotebookTreeItem {
   id: string;
   title: string;
   kind: "group" | "note";
   parentId: string | null;
+  sortOrder: number;
 }
 
 export interface NotebookPageProps {
@@ -19,13 +20,13 @@ export interface NotebookPageProps {
 
 export function NotebookPage(props: NotebookPageProps) {
   const { notebookId, onBack, onOpenNote, onCreateNote } = props;
-  const [items, setItems] = useState<NotebookChild[]>([]);
+  const [items, setItems] = useState<NotebookTreeItem[]>([]);
   const [title, setTitle] = useState("知识库");
-  const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
+  const [expanded, setExpanded] = useState<Set<string>>(() => new Set([notebookId]));
 
   const load = useCallback(async () => {
-    const [children, nodes] = await Promise.all([bridge.listNotebookChildren(notebookId), bridge.listTreeNodes()]);
-    setItems(children);
+    const [tree, nodes] = await Promise.all([bridge.listNotebookTree(notebookId), bridge.listTreeNodes()]);
+    setItems(tree);
     const nb = nodes.find((n) => n.id === notebookId);
     if (nb) setTitle(nb.title);
   }, [notebookId]);
@@ -40,9 +41,33 @@ export function NotebookPage(props: NotebookPageProps) {
     });
   };
 
-  // 顶级项（根）+ 展开 group 的子项
-  const topLevel = items.filter((it) => it.parentId === notebookId || it.kind === "note");
-  const groupChildren = (groupId: string) => items.filter((it) => it.parentId === groupId);
+  // 递归渲染：items 已按父级分组 + sort_order 排序；只显示"父级已展开"的节点
+  const childrenOf = (parentId: string) => items.filter((it) => it.parentId === parentId);
+
+  const renderBranch = (parentId: string, depth: number): ReactNode => {
+    const children = childrenOf(parentId);
+    return children.map((it) => (
+      <div key={it.kind + "-" + it.id}>
+        {it.kind === "group" ? (
+          <>
+            <div className={`mobile-doc-row mobile-group-row`} style={{ paddingLeft: 16 + depth * 18 }} onClick={() => toggleGroup(it.id)}>
+              <FolderOpen size={18} />
+              <span className="mobile-group-title">{it.title}</span>
+              <ChevronRight size={15} className={expanded.has(it.id) ? "mobile-chevron open" : "mobile-chevron"} />
+            </div>
+            {expanded.has(it.id) && renderBranch(it.id, depth + 1)}
+          </>
+        ) : (
+          <div className="mobile-doc-row" style={{ paddingLeft: 16 + depth * 18 }} onClick={() => onOpenNote(it.id)}>
+            <FileText size={18} />
+            <span>{it.title}</span>
+          </div>
+        )}
+      </div>
+    ));
+  };
+
+  const topLevel = childrenOf(notebookId);
 
   return (
     <div className="mobile-notebook">
@@ -53,30 +78,7 @@ export function NotebookPage(props: NotebookPageProps) {
       </header>
       <div className="mobile-scroll">
         {topLevel.length === 0 && <div className="mobile-empty">暂无文档，点右上新建</div>}
-        {topLevel.map((it) => (
-          <div key={it.kind + "-" + it.id}>
-            {it.kind === "group" ? (
-              <>
-                <div className="mobile-doc-row mobile-group-row" onClick={() => toggleGroup(it.id)}>
-                  <FolderOpen size={18} />
-                  <span className="mobile-group-title">{it.title}</span>
-                  <ChevronRight size={15} className={expanded.has(it.id) ? "mobile-chevron open" : "mobile-chevron"} />
-                </div>
-                {expanded.has(it.id) && groupChildren(it.id).map((c) => (
-                  <div key={c.kind + "-" + c.id} className="mobile-doc-row mobile-group-child" onClick={() => c.kind === "note" && onOpenNote(c.id)}>
-                    {c.kind === "group" ? <FolderOpen size={16} /> : <FileText size={16} />}
-                    <span>{c.title}</span>
-                  </div>
-                ))}
-              </>
-            ) : (
-              <div className="mobile-doc-row" onClick={() => onOpenNote(it.id)}>
-                <FileText size={18} />
-                <span>{it.title}</span>
-              </div>
-            )}
-          </div>
-        ))}
+        {renderBranch(notebookId, 0)}
       </div>
       <div className="mobile-fab-col">
         <button className="mobile-fab" onClick={onCreateNote} aria-label="新建文档"><FileText size={20} /></button>

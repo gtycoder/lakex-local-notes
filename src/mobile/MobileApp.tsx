@@ -132,7 +132,8 @@ export function MobileApp() {
           onOpenDrawer={() => setDrawerOpen(true)}
           onOpenSearch={() => setSearchOpen(true)}
           onCreateNote={async () => {
-            const n = await bridge.createNote("无标题文档");
+            // P1-2：首页新建默认归属个人笔记本（桌面语义一致），避免孤儿文档
+            const n = await bridge.createNote("无标题文档", "notebook-personal");
             await refreshAll();
             openDocument(n.id, "editor");
           }}

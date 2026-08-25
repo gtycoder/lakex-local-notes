@@ -13,7 +13,7 @@ import { TRASH_NOTEBOOK_ID } from "../core/syncDecisions.js";
 import { sha256Sync } from "../core/sha256Sync.js";
 import { createCapacitorS3Store } from "./s3Store";
 import type { S3Settings } from "../lib/types";
-import { assertNodeIcon, assertRootConstraint, assertTreeNodeTitle, nextSortOrder } from "../core/treeRules.js";
+import { assertMoveTarget, assertNodeIcon, assertOrderedChildren, assertRootConstraint, assertTreeNodeTitle, nextSortOrder } from "../core/treeRules.js";
 import { buildLikePattern, buildSearchSql, toSearchResult } from "../core/mobileSearch.js";
 import { normalizeQuickNoteContent, previewQuickNote, serializeQuickNoteContent } from "../core/quickNoteModel.js";
 import type { StoredQuickNoteContent, StoredQuickNoteImage } from "../core/quickNoteModel.js";
@@ -26,8 +26,8 @@ export interface POCNote {
   updatedAt: string;
 }
 
-/** 与桌面一致的默认同步 prefix（桌面 store.ts 默认 "lake-notes"；移动端 POC 沿用 ab-test-verify 兼容旧数据） */
-const DEFAULT_S3_PREFIX = "ab-test-verify";
+/** 与桌面一致的默认同步 prefix（对齐桌面 store.ts 默认 "lake-notes"；P1-7 GPT 审计：ab-test-verify 仅限测试） */
+const DEFAULT_S3_PREFIX = "lake-notes";
 
 const S3_STORAGE_KEY = "lake-notes-mobile.s3";
 /** 与桌面一致的初始 Lake 内容（store.ts createNoteInWithContent） */
@@ -141,6 +141,9 @@ async function ensureDb(): Promise<SqlJsDb> {
     is_conflict INTEGER NOT NULL DEFAULT 0,
     restore_pending_at TEXT
   )`);
+  // P1-2（GPT 审计）：默认笔记本 seed（对齐桌面 notebook-personal）。幂等：仅首次初始化种入。
+  db.prepare("INSERT OR IGNORE INTO folders (id, title, parent_id, sort_order, node_type, icon, updated_at, sync_state) VALUES (?,?,NULL,0,'notebook',NULL,?,'synced')")
+    .run("notebook-personal", "个人笔记", new Date().toISOString());
   // D5：文档历史快照（纯本地，不参与同步）；覆盖前留档，防丢数据（对齐桌面 note_history 简化）
   db.exec(`CREATE TABLE IF NOT EXISTS note_history (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -423,15 +426,32 @@ export const bridge = {
     }));
   },
 
-  /** 笔记本详情：folders 子节点（group）+ notes 文档（parent_id=notebookId）。移动端 note 无 folders 条目，需合并两表。 */
-  async listNotebookChildren(notebookId: string): Promise<Array<{ id: string; title: string; kind: "group" | "note"; parentId: string | null }>> {
+  /** 笔记本详情：返回完整子树（递归 group 展开到叶 note/group），按 sort_order 排序（P1-3/P2-3/P2-4）。 */
+  async listNotebookTree(notebookId: string): Promise<Array<{ id: string; title: string; kind: "group" | "note"; parentId: string | null; sortOrder: number }>> {
     const d = await ensureDb();
-    const groups = d.prepare("SELECT id, title, parent_id FROM folders WHERE parent_id=? AND trashed_at IS NULL AND node_type='group'").all(notebookId) as Array<{ id: string; title: string; parent_id: string | null }>;
-    const notes = d.prepare("SELECT id, title, parent_id FROM notes WHERE parent_id=? AND trashed_at IS NULL").all(notebookId) as Array<{ id: string; title: string; parent_id: string | null }>;
-    return [
-      ...groups.map((g) => ({ id: g.id, title: g.title, kind: "group" as const, parentId: g.parent_id })),
-      ...notes.map((n) => ({ id: n.id, title: n.title, kind: "note" as const, parentId: n.parent_id })),
-    ].sort((a, b) => a.title.localeCompare(b.title, "zh"));
+    // 收集 notebook 下全部 folders（含深层 group）——沿 parent_id 迭代展开
+    const allFolders = d.prepare("SELECT id, title, parent_id, sort_order, node_type FROM folders WHERE trashed_at IS NULL").all() as Array<{ id: string; title: string; parent_id: string | null; sort_order: number; node_type: string }>;
+    const folderIds = new Set<string>([notebookId]);
+    let grew = true;
+    while (grew) {
+      grew = false;
+      for (const f of allFolders) {
+        if (f.parent_id && folderIds.has(f.parent_id) && !folderIds.has(f.id)) { folderIds.add(f.id); grew = true; }
+      }
+    }
+    const groups = allFolders.filter((f) => f.node_type === "group" && f.parent_id && folderIds.has(f.parent_id));
+    const allNotes = d.prepare("SELECT id, title, parent_id, sort_order FROM notes WHERE trashed_at IS NULL").all() as Array<{ id: string; title: string; parent_id: string | null; sort_order: number }>;
+    const notes = allNotes.filter((n) => n.parent_id && folderIds.has(n.parent_id));
+    const items: Array<{ id: string; title: string; kind: "group" | "note"; parentId: string | null; sortOrder: number }> = [
+      ...groups.map((g) => ({ id: g.id, title: g.title, kind: "group" as const, parentId: g.parent_id, sortOrder: g.sort_order })),
+      ...notes.map((n) => ({ id: n.id, title: n.title, kind: "note" as const, parentId: n.parent_id, sortOrder: n.sort_order })),
+    ];
+    // 同父级内按 sort_order 排序（对齐桌面目录排序语义）
+    items.sort((a, b) => {
+      if (a.parentId !== b.parentId) return 0;
+      return a.sortOrder - b.sortOrder || a.title.localeCompare(b.title, "zh");
+    });
+    return items;
   },
 
   /** 新建 notebook：根层创建，名称必填（trim 校验，共享 treeRules），默认图标不落库（icon 由 setNodeIcon 单独写入）。 */
@@ -512,6 +532,27 @@ export const bridge = {
     if (!moving) throw new Error("节点不存在: " + id);
     // 根层约束（共享 treeRules：notebook 必须根层；group/note 必须有父节点）
     assertRootConstraint(moving.node_type, parentId);
+    // P1-5（GPT 审计）：完整移动校验——不能移到自身/后代；父节点存在；orderedIds 去重/归属/完整
+    const all = d.prepare("SELECT id, parent_id FROM folders WHERE trashed_at IS NULL").all() as Array<{ id: string; parent_id: string | null }>;
+    // 计算被移动节点的后代 id 集合
+    const descendants = new Set<string>();
+    const childrenMap = new Map<string, string[]>();
+    for (const f of all) {
+      const list = childrenMap.get(f.parent_id ?? "") ?? [];
+      list.push(f.id);
+      childrenMap.set(f.parent_id ?? "", list);
+    }
+    const walk = (nodeId: string) => {
+      for (const c of childrenMap.get(nodeId) ?? []) {
+        if (!descendants.has(c)) { descendants.add(c); walk(c); }
+      }
+    };
+    walk(id);
+    const parentExists = parentId === null || all.some((f) => f.id === parentId);
+    assertMoveTarget(id, parentId, descendants, parentExists);
+    // 目标父节点当前子节点（移动前快照，不含 id 若跨父）
+    const currentChildren = (childrenMap.get(parentId ?? "") ?? []).filter((cid) => cid !== id);
+    assertOrderedChildren(orderedIds, currentChildren, id);
     const now = new Date().toISOString();
     const tx = d.transaction(() => {
       d.prepare("UPDATE folders SET parent_id=?, updated_at=?, sync_state='local' WHERE id=?").run(parentId, now, id);
@@ -612,12 +653,14 @@ export const bridge = {
   async saveNote(id: string, title: string, content: string, parentId: string | null = null): Promise<void> {
     const d = await ensureDb();
     const now = new Date().toISOString();
+    // P1-9（GPT 审计）：文档标题不为空——空白回退"无标题文档"（对齐 createNote 默认语义，避免同步空标题）
+    const safeTitle = title.trim() ? title.trim() : "无标题文档";
     // 本地编辑必须置 sync_state='local'（待上传），否则同步零变更早退会跳过本次修改
     // ON CONFLICT 不覆盖 parent_id：编辑后保留归属；新建时用传入 parentId
     d.prepare(
       `INSERT INTO notes (id, title, content, parent_id, updated_at, sync_state) VALUES (?,?,?,?,?,'local')
        ON CONFLICT(id) DO UPDATE SET title=excluded.title, content=excluded.content, updated_at=excluded.updated_at, sync_state='local'`
-    ).run(id, title, content, parentId, now);
+    ).run(id, safeTitle, content, parentId, now);
     await saveSnapshot(d.exportBytes());
   },
 
@@ -665,20 +708,29 @@ export const bridge = {
     const d = await ensureDb();
     if (kind === "note") { dbPort.localRestoreNote(id); }
     else {
-      // folder：收集整棵子树（含自己）→ 全部清 trashed_at（对齐 purgeTreeItem 的子树收集语义）
-      const all = d.prepare("SELECT id, parent_id FROM folders").all() as Array<{ id: string; parent_id: string | null }>;
-      const ids = new Set<string>([id]);
-      let grew = true;
-      while (grew) {
-        grew = false;
-        for (const r2 of all) {
-          if (r2.parent_id && ids.has(r2.parent_id) && !ids.has(r2.id)) { ids.add(r2.id); grew = true; }
+      // P1-4（GPT 审计）：folder 恢复必须同事务恢复其下 notes（否则文档继续留在回收站）
+      const tx = d.transaction(() => {
+        // 收集整棵 folder 子树（含自己）→ 清 trashed_at
+        const all = d.prepare("SELECT id, parent_id FROM folders").all() as Array<{ id: string; parent_id: string | null }>;
+        const ids = new Set<string>([id]);
+        let grew = true;
+        while (grew) {
+          grew = false;
+          for (const r2 of all) {
+            if (r2.parent_id && ids.has(r2.parent_id) && !ids.has(r2.id)) { ids.add(r2.id); grew = true; }
+          }
         }
-      }
-      const now = new Date().toISOString();
-      for (const fid of ids) {
-        d.prepare("UPDATE folders SET trashed_at=NULL, updated_at=?, sync_state='local' WHERE id=?").run(now, fid);
-      }
+        const now = new Date().toISOString();
+        for (const fid of ids) {
+          d.prepare("UPDATE folders SET trashed_at=NULL, updated_at=?, sync_state='local' WHERE id=?").run(now, fid);
+        }
+        // 恢复子树下被移入回收站的 notes：清 trashed + 置 restore_pending_at（同步 local-wins 上传）
+        const noteRows = d.prepare("SELECT id FROM notes WHERE parent_id IN (" + Array.from(ids).map(() => "?").join(",") + ") AND trashed_at IS NOT NULL").all(...Array.from(ids)) as Array<{ id: string }>;
+        for (const n of noteRows) {
+          d.prepare("UPDATE notes SET trashed_at=NULL, restore_pending_at=?, sync_state='local', updated_at=? WHERE id=?").run(now, now, n.id);
+        }
+      });
+      tx();
     }
     await saveSnapshot(d.exportBytes());
   },
@@ -784,10 +836,16 @@ export const bridge = {
     // 与桌面一致的资产文件名：13 位时间戳 + 8 hex + 扩展名（extractAssetRefs 正则匹配）
     const ext = (input.filename.split(".").pop() || "png").toLowerCase();
     const name = `${Date.now()}_${randomHex(4)}.${ext}`;
-    // 本地存储（内存 + IndexedDB 持久化，供 blob 注入读取）
+    // 本地存储（内存 + Filesystem 持久化，供 blob 注入读取）
+    // P1-8（GPT 审计）：必须等待 Filesystem 落盘成功再返回，否则"正文保存成功但图片重启后丢失"
     const key = noteId + "/" + name;
     assets.set(key, bytes);
-    void saveAssetBytesFs(key, bytes).catch((e) => console.warn("[mobile] 资产落盘失败:", e));
+    try {
+      await saveAssetBytesFs(key, bytes);
+    } catch (e) {
+      assets.delete(key);
+      throw new Error("图片落盘失败: " + (e as Error).message);
+    }
     const mimeType = mimeForExt(ext);
     const url = `http://127.0.0.1:19876/${noteId}/${name}`;
     return { url, resourceRef: url, filename: name, mimeType, size: bytes.length };

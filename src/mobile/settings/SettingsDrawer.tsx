@@ -43,7 +43,7 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
   const [endpoint, setEndpoint] = useState(s3?.endpoint ?? "https://s3.cn-north-1.qiniucs.com");
   const [region, setRegion] = useState(s3?.region ?? "cn-north-1");
   const [bucket, setBucket] = useState(s3?.bucket ?? "");
-  const [prefix, setPrefix] = useState(s3?.prefix ?? "ab-test-verify");
+  const [prefix, setPrefix] = useState(s3?.prefix ?? "lake-notes");
   const [ak, setAk] = useState(s3?.accessKeyId ?? "");
   // Secret 不显示明文（§6.2）：初始与回显都用掩码；未修改时保存保留旧值
   const [sk, setSk] = useState(S3_SECRET_MASK);
@@ -75,9 +75,9 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
   }, [saveS3]);
 
   const runSync = useCallback(async () => {
-    setSyncMsg("同步中…");
+    setSyncMsg("同步中（文档）…");
     try {
-      setSyncMsg("同步: " + await bridge.syncNow());
+      setSyncMsg("文档同步: " + await bridge.syncNow() + "（小记同步待后续版本）");
       await onRefresh();
     } catch (e) {
       setSyncMsg("同步失败: " + (e as Error).message);

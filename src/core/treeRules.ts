@@ -26,3 +26,32 @@ export function assertRootConstraint(nodeType: string, parentId: string | null):
   if (nodeType !== "notebook" && parentId === null) throw new Error("note/group 必须位于目录节点下");
   if (nodeType === "notebook" && parentId !== null) throw new Error("notebook 必须位于根层");
 }
+
+
+/** 移动校验：不能移动到自身/后代；父节点必须存在（P1-5，对齐桌面 moveTreeNode）。
+ * @param nodeId 被移动节点 id
+ * @param targetParentId 目标父节点 id（null = 根层）
+ * @param descendantIds 被移动节点的后代 id 集合（调用方从完整树计算）
+ * @param parentExists 目标父节点是否存在于树中
+ */
+export function assertMoveTarget(nodeId: string, targetParentId: string | null, descendantIds: ReadonlySet<string>, parentExists: boolean): void {
+  if (targetParentId === nodeId) throw new Error("不能移动到自身");
+  if (targetParentId !== null && descendantIds.has(targetParentId)) throw new Error("不能移动到子节点");
+  if (targetParentId !== null && !parentExists) throw new Error("父节点不存在: " + targetParentId);
+}
+
+/** 排序校验（对齐桌面 validateOrder）：orderedIds 不重复、都属于目标父节点（或含被移动节点）、且完整。
+ * @param orderedIds 新排序列表
+ * @param currentChildren 目标父节点的当前子节点 id 列表（不含被移动节点，若它是跨父移动）
+ * @param movingId 被移动节点 id（跨父移动时允许出现在列表中）
+ */
+export function assertOrderedChildren(orderedIds: string[], currentChildren: string[], movingId: string): void {
+  if (new Set(orderedIds).size !== orderedIds.length) throw new Error("重排列表包含重复节点");
+  const allowed = new Set(currentChildren.includes(movingId) ? currentChildren : [...currentChildren, movingId]);
+  for (const childId of orderedIds) {
+    if (!allowed.has(childId)) throw new Error("重排列表包含不属于该父节点的节点: " + childId);
+  }
+  // 完整性：列表必须等于目标父节点的全部子节点（含被移动节点）
+  if (orderedIds.length !== allowed.size) throw new Error("重排列表必须包含该父节点的全部子节点");
+}
+

@@ -2,8 +2,10 @@
  * Android 返回键处理（§9.2，Phase B1）。
  * 优先级：关闭 Sheet → 关闭 Drawer → 退出编辑态 → 文档页回笔记本 → 笔记本页回首页 → 首页交给系统。
  * 实现：@capacitor/app 的 backButton 监听；Web 浏览器环境（预览）无此插件时静默跳过（不注册）。
+ * P1-1（GPT 审计）：listener 只注册一次，handler 通过 ref 读取最新 state/回调，
+ * 避免"进入编辑态时的旧闭包丢失后续输入"的 stale closure 数据丢失。
  */
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import type { Route } from "./MobileApp";
 
 export interface BackHandlerState {
@@ -23,6 +25,10 @@ export interface BackHandlerState {
 
 /** 注册返回键监听。返回 true = 已消费（阻止系统退出）；false = 交给系统。 */
 export function useBackHandler(state: BackHandlerState) {
+  // ref 保存最新 state：每次渲染更新，listener 只注册一次（依赖 []），永远读到最新闭包
+  const stateRef = useRef(state);
+  stateRef.current = state;
+
   useEffect(() => {
     let cancelled = false;
     let listener: { remove(): void } | null = null;
@@ -30,22 +36,23 @@ export function useBackHandler(state: BackHandlerState) {
       try {
         const mod = await import("@capacitor/app");
         const l = await mod.App.addListener("backButton", () => {
+          const s = stateRef.current;
           // 1) 最上层 Sheet（新建知识库/搜索）
-          if (state.createNbOpen || state.searchOpen) { state.onCloseSheets(); return; }
+          if (s.createNbOpen || s.searchOpen) { s.onCloseSheets(); return; }
           // 2) 设置 Drawer
-          if (state.drawerOpen) { state.onCloseDrawer(); return; }
-          // 3) 编辑态（文档页）
-          if (state.route.kind === "document" && state.editing) { state.onExitEdit(); return; }
+          if (s.drawerOpen) { s.onCloseDrawer(); return; }
+          // 3) 编辑态（文档页）：退出编辑并保存最新草稿
+          if (s.route.kind === "document" && s.editing) { s.onExitEdit(); return; }
           // 4) 文档页 → 笔记本页
-          if (state.route.kind === "document") { state.onBackFromDocument(); return; }
+          if (s.route.kind === "document") { s.onBackFromDocument(); return; }
           // 5) 笔记本页 → 首页
-          if (state.route.kind === "notebook") { state.onBackFromNotebook(); return; }
+          if (s.route.kind === "notebook") { s.onBackFromNotebook(); return; }
           // 5b) 回收站 → 首页
-          if (state.route.kind === "trash") { state.onBackFromTrash(); return; }
+          if (s.route.kind === "trash") { s.onBackFromTrash(); return; }
           // 6) 首页：交给系统退出
-          state.onAppExit();
+          s.onAppExit();
         });
-        // 竞态防护：async import 期间 effect 已 cleanup（依赖变化）→ 立即移除刚注册的监听
+        // 竞态防护：async import 期间 effect 已 cleanup → 立即移除刚注册的监听
         if (cancelled) { void l.remove(); return; }
         listener = l;
       } catch {
@@ -56,7 +63,5 @@ export function useBackHandler(state: BackHandlerState) {
       cancelled = true;
       void listener?.remove();
     };
-    // 依赖：route.kind/editing 变化时重建监听（闭包拿最新状态）
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [state.route.kind, state.editing, state.drawerOpen, state.createNbOpen, state.searchOpen]);
+  }, []);
 }
