@@ -3,6 +3,7 @@ import fs from "node:fs";
 import type { QuickNoteDocument, QuickNoteSummary, QuickNoteDeleted } from "./quickNoteTypes.js";
 import { AppError } from "../src/core/storeErrors.js";
 import { parseQuickNoteContent, validateQuickNoteContent, type StoredQuickNoteContent } from "../src/core/quickNoteModel.js";
+import { mapQuickNoteDeletedRow, mapQuickNoteRow, mapTrashRow } from "../src/core/quickNoteQueries.js";
 
 export interface QuickNoteRow {
   id: string;
@@ -60,18 +61,7 @@ export class QuickNotesQueries {
   }
 
   mapDocument(row: QuickNoteRow, content: StoredQuickNoteContent): QuickNoteDocument {
-    const images = content.images.map((image) => ({ ...image, url: this.deps.imageUrl(row.id, image.filename) }));
-    return {
-      id: row.id,
-      createdAt: row.created_at,
-      updatedAt: row.updated_at,
-      previewText: row.preview_text,
-      imageCount: row.image_count,
-      contentHash: row.content_hash,
-      syncState: row.sync_state,
-      isConflict: !!row.is_conflict,
-      content: { version: content.version, text: content.text, images },
-    };
+    return mapQuickNoteRow(row, { content, imageUrl: this.deps.imageUrl });
   }
 
   read(id: string): QuickNoteDocument {
@@ -89,7 +79,7 @@ export class QuickNotesQueries {
       "SELECT id,created_at,updated_at,deleted_at FROM quick_note_deleted WHERE conversion_target_note_id IS NULL AND purged_at IS NULL ORDER BY deleted_at DESC"
     ).all() as Array<{ id: string; created_at: string; updated_at: string; deleted_at: string }>)
       .filter((row) => fs.existsSync(this.deps.itemPath(row.id)))
-      .map((row) => ({ id: row.id, createdAt: row.created_at, updatedAt: row.updated_at, deletedAt: row.deleted_at }));
+      .map(mapTrashRow);
   }
 
   isRestorePending(id: string): boolean {
@@ -121,13 +111,6 @@ export class QuickNotesQueries {
   }
 
   private mapDeletedRows(rows: QuickNoteDeletedRow[]): QuickNoteDeleted[] {
-    return rows.map((row) => ({
-      id: row.id,
-      createdAt: row.created_at,
-      updatedAt: row.updated_at,
-      deletedAt: row.deleted_at,
-      conversionTargetNoteId: row.conversion_target_note_id ?? null,
-      readyToSync: !!row.ready_to_sync,
-    }));
+    return rows.map(mapQuickNoteDeletedRow);
   }
 }
