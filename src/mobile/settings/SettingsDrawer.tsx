@@ -3,6 +3,8 @@ import { useCallback, useEffect, useState } from "react";
 import { Cloud, Info, Trash2, X, RefreshCw } from "lucide-react";
 import { bridge } from "../bridge";
 import { mobileCachePort } from "../cachePort";
+import { mobileAppInfoPort } from "../appInfoPort";
+import type { AppInfo } from "../../core/ports";
 import type { S3Settings } from "../../lib/types";
 
 export interface SettingsDrawerProps {
@@ -21,6 +23,18 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
   const [s3Test, setS3Test] = useState("");
   const [syncMsg, setSyncMsg] = useState("");
   const [cacheMsg, setCacheMsg] = useState("");
+  const [cacheSummary, setCacheSummary] = useState<import("../../core/ports").CacheSummary | null>(null);
+  const [appInfo, setAppInfo] = useState<AppInfo | null>(null);
+
+  useEffect(() => {
+    if (!open || tab !== "about") return;
+    void mobileAppInfoPort.getAppInfo().then(setAppInfo).catch(() => undefined);
+  }, [open, tab]);
+
+  useEffect(() => {
+    if (!open || tab !== "cache") return;
+    void mobileCachePort.getCacheSummary().then(setCacheSummary).catch(() => undefined);
+  }, [open, tab]);
 
   // S3 表单：复用共享 S3Settings（prefix 参与透传）
   const [endpoint, setEndpoint] = useState(s3?.endpoint ?? "https://s3.cn-north-1.qiniucs.com");
@@ -67,6 +81,7 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
     const result = await mobileCachePort.clearDerivedCaches();
     const cleared = result.cleared;
     setCacheMsg("已清理：blob " + (cleared.runtimeBlobBytes ?? 0) + " 项 / 迁移残留 " + (cleared.legacyMigrationBytes ?? 0) + " 项");
+    void mobileCachePort.getCacheSummary().then(setCacheSummary).catch(() => undefined);
   }, []);
 
   if (!open) return null;
@@ -106,16 +121,25 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
           {tab === "cache" && (
             <div className="mobile-settings-form">
               <p className="mobile-settings-hint">只清理可重建的派生数据（blob 运行时缓存 / 旧迁移残留）。<br />不会删除正文、未同步修改或已下载资源。</p>
+              {cacheSummary && (
+                <div className="mobile-cache-summary">
+                  <div className="mobile-cache-row"><span>Blob 运行时缓存</span><span>{cacheSummary.runtimeBlobBytes} 项</span></div>
+                  <div className="mobile-cache-row"><span>旧迁移残留</span><span>{cacheSummary.legacyMigrationBytes} 项</span></div>
+                  <div className="mobile-cache-row muted"><span>已下载资源（不清理）</span><span>{cacheSummary.downloadableAssetBytes} 项</span></div>
+                  <div className="mobile-cache-row muted"><span>待上传（不清理）</span><span>{cacheSummary.pendingUploadBytes} 项</span></div>
+                </div>
+              )}
               <button onClick={() => void clearCache()}>清理缓存</button>
               {cacheMsg && <div className="mobile-settings-msg">{cacheMsg}</div>}
             </div>
           )}
           {tab === "about" && (
             <div className="mobile-settings-form">
-              <div className="mobile-about-name">Lake Notes</div>
+              <div className="mobile-about-name">{appInfo?.name ?? "Lake Notes"}</div>
+              <div className="mobile-about-item">版本：{appInfo?.version ?? "…"}（build {appInfo?.build ?? "…"}）</div>
+              <div className="mobile-about-item">协议：manifest v{appInfo?.protocolVersion ?? "4"} · 本地为真相，S3 为同步镜像</div>
+              <div className="mobile-about-item">平台：{appInfo?.platform === "web" ? "Web 预览 (Capacitor 未就绪)" : "Android (Capacitor + sql.js WASM)"}</div>
               <div className="mobile-about-item">本地优先笔记应用（Electron + 安卓共享同步层）</div>
-              <div className="mobile-about-item">协议：manifest v4 · 本地为真相，S3 为同步镜像</div>
-              <div className="mobile-about-item">平台：Android (Capacitor + sql.js WASM)</div>
             </div>
           )}
         </div>

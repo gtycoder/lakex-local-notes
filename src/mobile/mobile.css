@@ -190,3 +190,9 @@ body { font-family: -apple-system, "PingFang SC", "Noto Sans SC", sans-serif; ba
 .mobile-trash-action { border: none; background: transparent; color: #3575f0; cursor: pointer; display: flex; padding: 6px; }
 .mobile-trash-danger { color: #d83931; }
 
+
+/* 缓存统计 */
+.mobile-cache-summary { background: #f7f8fa; border-radius: 10px; padding: 12px 14px; margin-bottom: 8px; }
+.mobile-cache-row { display: flex; justify-content: space-between; font-size: 13px; padding: 4px 0; }
+.mobile-cache-row.muted { color: #86909c; }
+
