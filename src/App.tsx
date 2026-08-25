@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type CSSProperties } from "react";
+import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
 import { ArrowLeft, Check, ChevronDown, ChevronRight, Files, ListTree, LoaderCircle, Feather, MoreHorizontal, Moon, Pencil, Sun } from "lucide-react";
 import { MobileLibrary } from "./components/MobileLibrary";
-import { Sidebar, type SidebarMode } from "./components/Sidebar";
+import { Sidebar } from "./components/Sidebar";
 import { QuickNotesWorkspace, type QuickNotesWorkspaceHandle } from "./components/QuickNotesWorkspace";
 import { SyncStatusPopover } from "./components/SyncStatusPopover";
 import { useWindowShortcuts } from "./hooks/useWindowShortcuts";
@@ -16,7 +16,7 @@ import { MultiTabEditor, type TabInfo } from "./features/editor/MultiTabEditor";
 import { selectEvictionIds, trimTabsToLimit } from "./core/tabLimit";
 import { OutlineSidebar } from "./features/outline/OutlineSidebar";
 import type { OutlineMode } from "./features/outline/OutlineController";
-import { getOutlineTab, getOutlineTabsVersion, subscribeOutlineTabs } from "./features/outline/registry";
+import { getOutlineTab } from "./features/outline/registry";
 import { cleanLakeMarkdown } from "./core/markdownClean";
 
 import { useDocumentStats } from "./hooks/useDocumentStats";
@@ -37,10 +37,10 @@ import { subtreeIds } from "./core/tree";
 import { planTabReload } from "./core/planTabReload";
 import { DOCK_GUTTER } from "./lib/layoutMetrics";
 import { OUTLINE_HOVER_TRIGGER_WIDTH, OUTLINE_SCROLLBAR_CLEARANCE } from "./features/outline/outlineInteraction";
-import { shouldCollapseSidebarOnHoverLeave, shouldKeepSidebarPreviewOpen } from "./components/sidebarInteraction";
 import type { DraftJournalEntry, NoteDigest, NoteDocument, NoteSummary, S3Settings, SyncPendingSummary, SyncProgress, SyncStatus, TreeNode, WorkspaceSnapshot } from "./lib/types";
-import { initialOutlineMode, initialOutlineSidebarWidth, initialSidebarMode, initialSidebarWidth, patchNoteById, patchTabById, readEditorDocumentCaches, replaceTreeNode, saveLabel, summaryOf, treeNodePath, type DesktopWorkspace, type NoticeState, type OpenTab, type SaveState, OUTLINE_COLLAPSED_WIDTH, OUTLINE_SIDEBAR_DEFAULT_WIDTH, OUTLINE_SIDEBAR_MAX_WIDTH, OUTLINE_SIDEBAR_MIN_WIDTH, SIDEBAR_DEFAULT_WIDTH, SIDEBAR_HOVER_HIDE_DELAY_MS, SIDEBAR_MAX_WIDTH, SIDEBAR_MIN_WIDTH } from "./desktop/desktopTypes";
+import { patchNoteById, patchTabById, readEditorDocumentCaches, replaceTreeNode, saveLabel, summaryOf, treeNodePath, type DesktopWorkspace, type NoticeState, type OpenTab, type SaveState, OUTLINE_COLLAPSED_WIDTH, OUTLINE_SIDEBAR_MAX_WIDTH, OUTLINE_SIDEBAR_MIN_WIDTH, SIDEBAR_MAX_WIDTH, SIDEBAR_MIN_WIDTH } from "./desktop/desktopTypes";
 import { DesktopOverlays } from "./desktop/DesktopOverlays";
+import { useDesktopShell } from "./desktop/useDesktopShell";
 
 export function App() {
   const [workspace, setWorkspace] = useState<WorkspaceSnapshot | null>(null);
@@ -49,15 +49,9 @@ export function App() {
   const [openTabs, setOpenTabs] = useState<OpenTab[]>([]);
   const [activeNoteId, setActiveNoteId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
-  const [searchPanelOpen, setSearchPanelOpen] = useState(false);
-  const [trashOpen, setTrashOpen] = useState(false);
-  const [historyOpen, setHistoryOpen] = useState(false);
-  const [historyNoteId, setHistoryNoteId] = useState<string | null>(null);
-  const [searchPanelQuery, setSearchPanelQuery] = useState("");
   const [conflictSnapshotNotice, setConflictSnapshotNotice] = useState<Array<{ noteId: string; title: string }>>([]);
   const [activeHistoryCount, setActiveHistoryCount] = useState(0);
   const { topMenuOpen, setTopMenuOpen, workspaceMenuOpen, setWorkspaceMenuOpen, closeMenus } = useTopMenus();
-  const [focusMode, setFocusMode] = useState(false);
   /** 顶栏两个下拉的触发容器 ref（定位 fixed 菜单用） */
   const wsMenuWrapRef = useRef<HTMLDivElement>(null);
   const moreMenuWrapRef = useRef<HTMLDivElement>(null);
@@ -75,7 +69,6 @@ export function App() {
   const workspaceName = getWorkspaceDisplayName(cloudEnabled, s3Settings);
   const [pendingSummary, setPendingSummary] = useState<SyncPendingSummary>({ documents: 0, resources: 0, quickNotes: 0, total: 0, generatedAt: "" });
   const [draftEntries, setDraftEntries] = useState<DraftJournalEntry[]>([]);
-  const [confirmDelete, setConfirmDelete] = useState<TreeNode | null>(null);
   const [, setSyncProgress] = useState<SyncProgress | null>(null);
   const handleSyncToastAutoHide = useCallback(() => setSyncProgress(null), []);
   const { syncToast, setSyncToast, showSyncToast } = useSyncShell(handleSyncToastAutoHide);
@@ -92,38 +85,37 @@ export function App() {
   const [isMobile, setIsMobile] = useState(() => window.matchMedia("(max-width: 760px)").matches);
   const [settings, setSettings] = useState<AppSettings>(() => loadSettings());
   const [pinnedNoteIds, setPinnedNoteIds] = useState<Set<string>>(() => new Set());
-  const [settingsOpen, setSettingsOpen] = useState(false);
-  const [settingsCategory, setSettingsCategory] = useState<SettingsCategory>("editor");
   const tocEnabled = settings.showToc;
   const [wideMode] = useState(true);
-  const [sidebarMode, setSidebarMode] = useState<SidebarMode>(initialSidebarMode);
-  const sidebarModeRef = useRef<SidebarMode>(sidebarMode);
-  sidebarModeRef.current = sidebarMode;
-  const [sidebarWidth, setSidebarWidth] = useState(initialSidebarWidth);
-  const [sidebarResizing, setSidebarResizing] = useState(false);
-  const sidebarResizingRef = useRef(false);
-  // 全局唯一大纲状态（持久化）：所有“有大纲”的文档都遵循它；
-  // 仅当当前文档没有大纲时自动强制悬浮（除非用户在空文档上显式固定）。
-  const [outlineMode, setOutlineMode] = useState<OutlineMode>(initialOutlineMode);
-  const [activeOutlineEmpty, setActiveOutlineEmpty] = useState(false);
-  const [outlineEmptyOverride, setOutlineEmptyOverride] = useState(false);
-  const [outlineSwitching, setOutlineSwitching] = useState(false);
-  const outlineTabsVersion = useSyncExternalStore(subscribeOutlineTabs, getOutlineTabsVersion, getOutlineTabsVersion);
-  const [outlineSidebarWidth, setOutlineSidebarWidth] = useState(initialOutlineSidebarWidth);
-  const [outlineResizing, setOutlineResizing] = useState(false);
-  const [desktopWorkspace, setDesktopWorkspace] = useState<DesktopWorkspace>("library");
   const [quickNotesDirty, setQuickNotesDirty] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const openTabsRef = useRef<OpenTab[]>([]);
   const quickNotesRef = useRef<QuickNotesWorkspaceHandle>(null);
   const tabReloadVersionRef = useRef(createRequestVersion());
-  const layoutWidthsRef = useRef({ sidebar: sidebarWidth, outline: outlineSidebarWidth });
-  layoutWidthsRef.current = { sidebar: sidebarWidth, outline: outlineSidebarWidth };
   // 已就绪的编辑器实例（noteId → editor），供导出 md 等场景使用
   const editorsRef = useRef<Map<string, LakeEditorInstance>>(new Map());
-  const [notice, setNotice] = useState<NoticeState | null>(null);
-  const noticeTimer = useRef<number | null>(null);
-  const sidebarPreviewTimer = useRef<number | null>(null);
+  const shell = useDesktopShell({ quickNotesRef });
+  const {
+    // sidebar
+    sidebarMode, setSidebarMode, sidebarWidth, sidebarResizing, sidebarResizingRef,
+    updateSidebarWidth, commitSidebarWidth, handleSidebarResizeActiveChange,
+    showSidebarPreview, hideSidebarPreview, toggleSidebarDock, clearSidebarPreviewTimer,
+    // outline
+    outlineMode, setOutlineMode, activeOutlineEmpty, setActiveOutlineEmpty,
+    outlineEmptyOverride, setOutlineEmptyOverride, outlineSwitching, setOutlineSwitching,
+    outlineTabsVersion, outlineSidebarWidth, outlineResizing, setOutlineResizing,
+    setOutlineModeForActive, collapseOutline, pinOutline,
+    updateOutlineSidebarWidth, commitOutlineSidebarWidth,
+    // workspace
+    desktopWorkspace, setDesktopWorkspace, switchDesktopWorkspace,
+    // panels & misc
+    focusMode, setFocusMode, notice, setNotice, showNotice, error, setError,
+    searchPanelOpen, setSearchPanelOpen, searchPanelQuery, setSearchPanelQuery,
+    trashOpen, setTrashOpen, historyOpen, setHistoryOpen, historyNoteId, setHistoryNoteId,
+    settingsOpen, setSettingsOpen, settingsCategory, setSettingsCategory,
+    confirmDelete, setConfirmDelete,
+  } = shell;
+  const layoutWidthsRef = useRef({ sidebar: sidebarWidth, outline: outlineSidebarWidth });
+  layoutWidthsRef.current = { sidebar: sidebarWidth, outline: outlineSidebarWidth };
   // V5 Phase 4：保存管线（串行队列 + 防抖定时器 + revision 竞态保护）收拢到 useSavePipeline。
   // 审计 #7：每篇笔记的编辑 revision——保存请求发出后若有新编辑（revision 增长），
   // 旧响应不得覆盖最新草稿/清除 dirty。
@@ -191,7 +183,6 @@ export function App() {
       }
       draftTimers.current.forEach((timer) => window.clearTimeout(timer));
       draftTimers.current.clear();
-      if (sidebarPreviewTimer.current !== null) window.clearTimeout(sidebarPreviewTimer.current);
       // 拖动过程只更新视觉状态；卸载时补一次合法的最终布局提交。
       const widths = layoutWidthsRef.current;
       localStorage.setItem("lake-notes-v3.sidebar-width", String(Math.round(Math.min(SIDEBAR_MAX_WIDTH, Math.max(SIDEBAR_MIN_WIDTH, widths.sidebar)))));
@@ -373,8 +364,7 @@ export function App() {
               ? { label: "查看历史", onClick: () => { setHistoryNoteId(supersededList[0].id); setHistoryOpen(true); setNotice(null); } }
               : { label: "查看回收站", onClick: () => { setTrashOpen(true); setNotice(null); } };
             setNotice({ text: parts.join("；"), action });
-            if (noticeTimer.current !== null) window.clearTimeout(noticeTimer.current);
-            noticeTimer.current = window.setTimeout(() => setNotice(null), 8000);
+            window.setTimeout(() => setNotice(null), 8000);
           }
         })();
       }
@@ -515,13 +505,7 @@ export function App() {
   }, [persistTab, mobileActive, mobileDraftContent, quickNotesDirty]);
 
   // scheduleDraftJournal / scheduleSave 已收拢到 useSavePipeline（hook 提供）
-
-  const showNotice = useCallback((text: string) => {
-    setNotice({ text });
-    if (noticeTimer.current !== null) window.clearTimeout(noticeTimer.current);
-    noticeTimer.current = window.setTimeout(() => setNotice(null), 2200);
-  }, []);
-
+  // notice/showNotice 已收拢到 useDesktopShell（Phase C）
 
   const openNote = useCallback(async (id: string, locateQuery = "", _newTab = false): Promise<boolean> => {
     const locate = () => {
@@ -872,34 +856,6 @@ export function App() {
     } catch (reason) { setError(getNativeErrorMessage(reason)); }
   }
 
-  const clearSidebarPreviewTimer = useCallback(() => {
-    if (sidebarPreviewTimer.current !== null) {
-      window.clearTimeout(sidebarPreviewTimer.current);
-      sidebarPreviewTimer.current = null;
-    }
-  }, []);
-
-  const showSidebarPreview = useCallback(() => {
-    clearSidebarPreviewTimer();
-    setSidebarMode((current) => current === "collapsed" ? "floating" : current);
-  }, [clearSidebarPreviewTimer]);
-
-  const hideSidebarPreview = useCallback(() => {
-    // A resize drag temporarily owns the pointer. The sidebar's bounds move
-    // under the pointer as its width changes, so pointerleave is expected and
-    // must not collapse the floating preview mid-drag.
-    if (shouldKeepSidebarPreviewOpen(sidebarModeRef.current, sidebarResizingRef.current)) return;
-    // A docked sidebar is a user-selected persistent state. Pointer leaving it
-    // must never route through the floating-preview collapse path.
-    if (!shouldCollapseSidebarOnHoverLeave(sidebarModeRef.current)) return;
-    // Do not restart the grace period on every pointerleave/pointermove event.
-    if (sidebarPreviewTimer.current !== null) return;
-    sidebarPreviewTimer.current = window.setTimeout(() => {
-      if (shouldCollapseSidebarOnHoverLeave(sidebarModeRef.current)) setSidebarMode("collapsed");
-      sidebarPreviewTimer.current = null;
-    }, SIDEBAR_HOVER_HIDE_DELAY_MS);
-  }, []);
-
   useEffect(() => {
     if (sidebarMode !== "floating") return;
     const isInside = (x: number, y: number, selector: string) => {
@@ -917,28 +873,6 @@ export function App() {
     window.addEventListener("pointermove", onPointerMove, true);
     return () => window.removeEventListener("pointermove", onPointerMove, true);
   }, [sidebarMode, clearSidebarPreviewTimer, hideSidebarPreview]);
-
-  const toggleSidebarDock = useCallback(() => {
-    clearSidebarPreviewTimer();
-    setSidebarMode((current) => current === "docked" ? "collapsed" : "docked");
-  }, [clearSidebarPreviewTimer]);
-
-  /** 手动切换全局大纲状态；空文档上显式固定时给一次豁免。 */
-  function setOutlineModeForActive(mode: OutlineMode) {
-    setOutlineMode(mode);
-    localStorage.setItem("lake-notes-v2.outline-sidebar-mode", mode);
-    if (mode === "docked" && activeOutlineEmpty) setOutlineEmptyOverride(true);
-    else if (mode === "collapsed") setOutlineEmptyOverride(false);
-  }
-
-  /** 右侧 rail 的无图标命中区：保留思源大纲固定/悬停切换，不恢复视觉图标。 */
-  function collapseOutline() {
-    setOutlineModeForActive("collapsed");
-  }
-
-  function pinOutline() {
-    setOutlineModeForActive("docked");
-  }
 
   // 切换标签时，大纲数据会在编辑器注册后异步更新；期间禁止壳层 grid 动画，
   // 避免“旧列宽 → 新列宽”与正文淡入同时发生，造成 tab 切换时主区横向抖动。
@@ -960,21 +894,6 @@ export function App() {
     return handle.controller.subscribe(evaluate);
     // tabsVersion：新标签注册晚于 activeNoteId 变化时也要重新评估。
   }, [activeNoteId, outlineTabsVersion]);
-
-  const updateSidebarWidth = useCallback((width: number) => {
-    setSidebarWidth(width);
-  }, []);
-
-  const handleSidebarResizeActiveChange = useCallback((active: boolean) => {
-    sidebarResizingRef.current = active;
-    setSidebarResizing(active);
-  }, []);
-
-  const commitSidebarWidth = useCallback((width: number) => {
-    const clamped = Math.min(SIDEBAR_MAX_WIDTH, Math.max(SIDEBAR_MIN_WIDTH, width));
-    setSidebarWidth(clamped);
-    localStorage.setItem("lake-notes-v3.sidebar-width", String(Math.round(clamped)));
-  }, []);
 
   /** 只读锁切换：先保存脏草稿，再写 SQLite（锁状态经 manifest v3 同步） */
   async function toggleNoteLock() {
@@ -1002,16 +921,6 @@ export function App() {
     }
   }
 
-  function updateOutlineSidebarWidth(width: number) {
-    setOutlineSidebarWidth(width);
-  }
-
-  function commitOutlineSidebarWidth(width: number) {
-    const clamped = Math.min(OUTLINE_SIDEBAR_MAX_WIDTH, Math.max(OUTLINE_SIDEBAR_MIN_WIDTH, width));
-    setOutlineSidebarWidth(clamped);
-    localStorage.setItem("lake-notes-v3.outline-sidebar-width", String(Math.round(clamped)));
-  }
-
   /** 审计 #8：移动端保存成功后同步 mobileActive/草稿，viewer 不再显示旧快照，
    * 离开时也不会因"仍有差异"而重复保存 */
   async function persistMobile(active: NoteDocument) {
@@ -1035,15 +944,6 @@ export function App() {
       await persistMobile(mobileActive);
     }
     setMobileEditing(false);
-  }
-
-  async function switchDesktopWorkspace(next: DesktopWorkspace) {
-    if (next === desktopWorkspace) return;
-    if (desktopWorkspace === "quick-notes") {
-      const canLeave = await quickNotesRef.current?.confirmLeave() ?? true;
-      if (!canLeave) return;
-    }
-    setDesktopWorkspace(next);
   }
 
   async function handleQuickNoteConverted(note: NoteDocument) {
