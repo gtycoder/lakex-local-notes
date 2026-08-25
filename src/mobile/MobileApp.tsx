@@ -39,6 +39,8 @@ export function MobileApp() {
   const [createNbOpen, setCreateNbOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [quickNotes, setQuickNotes] = useState<Array<{ id: string; previewText: string; imageCount: number; updatedAt: string }>>([]);
+  // P2-2：文档来源（home 或 notebookId）——返回时回到来源页，而非总是首页
+  const [documentOrigin, setDocumentOrigin] = useState<string | null>(null);
 
   const refreshAll = useCallback(async () => {
     const [nodes, ns, qn] = await Promise.all([bridge.listTreeNodes(), bridge.listNotes(), bridge.listQuickNotes()]);
@@ -80,6 +82,12 @@ export function MobileApp() {
     }
   }, [active, draft, draftTitle]);
 
+  const backFromDocument = useCallback(() => {
+    setEditing(false);
+    if (documentOrigin) setRoute({ kind: "notebook", notebookId: documentOrigin });
+    else setRoute({ kind: "home", tab: "library" });
+  }, [documentOrigin]);
+
   // B1：Android 返回键（Sheet→Drawer→退出编辑→文档→笔记本→首页→系统）
   const exitEdit = useCallback(() => {
     void saveEditing().then(() => {
@@ -94,7 +102,7 @@ export function MobileApp() {
     createNbOpen,
     searchOpen,
     onExitEdit: exitEdit,
-    onBackFromDocument: () => setRoute({ kind: "home", tab: "library" }),
+    onBackFromDocument: backFromDocument,
     onBackFromNotebook: () => setRoute({ kind: "home", tab: "library" }),
     onBackFromTrash: () => setRoute({ kind: "home", tab: "library" }),
     onCloseDrawer: () => setDrawerOpen(false),
@@ -144,11 +152,11 @@ export function MobileApp() {
         <NotebookPage
           notebookId={route.notebookId}
           onBack={() => setRoute({ kind: "home", tab: "library" })}
-          onOpenNote={(id) => openDocument(id, "viewer")}
+          onOpenNote={(id) => openDocument(id, "viewer", route.notebookId)}
           onCreateNote={async () => {
             const n = await bridge.createNote("无标题文档", route.notebookId);
             await refreshAll();
-            openDocument(n.id, "editor");
+            openDocument(n.id, "editor", route.notebookId);
           }}
         />
       )}
@@ -174,7 +182,7 @@ export function MobileApp() {
             if (editing) await saveEditing();
             setEditing(false);
             await refreshAll();
-            setRoute({ kind: "home", tab: "library" });
+            backFromDocument();
           }}
           onDelete={async () => {
             if (active && window.confirm("移入回收站？")) {
@@ -203,13 +211,14 @@ export function MobileApp() {
     </div>
   );
 
-  async function openDocument(id: string, mode: "viewer" | "editor") {
+  async function openDocument(id: string, mode: "viewer" | "editor", origin: string | null = null) {
     const n = await bridge.readNote(id);
     if (!n) return;
     setActive(n);
     setDraft(n.content);
     setDraftTitle(n.title);
     setEditing(mode === "editor");
+    setDocumentOrigin(origin);
     setRoute({ kind: "document", noteId: id, mode });
   }
 }

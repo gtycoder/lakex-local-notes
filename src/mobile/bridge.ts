@@ -798,8 +798,8 @@ export const bridge = {
   },
 
   async saveS3Settings(cfg: S3Settings): Promise<void> {
-    // secret 加密存 secretStore；其余字段存 localStorage（不回写明文 secret）
-    await mobileSecretStore.write("s3.secretAccessKey", cfg.secretAccessKey).catch(() => undefined);
+    // P2-8（GPT 审计）：secret 加密存储失败必须让保存整体失败（否则 UI 显示已保存但同步密钥缺失）
+    await mobileSecretStore.write("s3.secretAccessKey", cfg.secretAccessKey);
     const { secretAccessKey: _s, ...rest } = cfg;
     localStorage.setItem(S3_STORAGE_KEY, JSON.stringify(rest));
   },

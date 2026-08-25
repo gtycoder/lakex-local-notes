@@ -54,4 +54,3 @@ export function assertOrderedChildren(orderedIds: string[], currentChildren: str
   // 完整性：列表必须等于目标父节点的全部子节点（含被移动节点）
   if (orderedIds.length !== allowed.size) throw new Error("重排列表必须包含该父节点的全部子节点");
 }
-

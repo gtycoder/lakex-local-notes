@@ -202,4 +202,3 @@ body { font-family: -apple-system, "PingFang SC", "Noto Sans SC", sans-serif; ba
 .mobile-group-child { padding-left: 34px; background: #fafbfc; }
 .mobile-chevron { transition: transform .2s; color: #86909c; }
 .mobile-chevron.open { transform: rotate(90deg); }
-
