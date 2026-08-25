@@ -41,7 +41,9 @@ describe("DesktopTreeRepository（共享 TreeRepository 接口适配）", () => 
     expect(renamed.title).toBe("B");
     const iconed = await repo.setNodeIcon(nb.id, "📕");
     expect(iconed.icon).toBe("📕");
-    await repo.moveTreeNodeOrdered(nb.id, null, [nb.id]);
+    // 根层重排：orderedIds 必须包含根层全部笔记本（validateOrder 完整性要求）
+    const rootIds = (await repo.listTreeNodes()).filter((n) => n.parentId === null).map((n) => n.id);
+    await repo.moveTreeNodeOrdered(nb.id, null, rootIds);
     rmSync(dir, { recursive: true, force: true });
   });
 

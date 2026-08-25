@@ -208,8 +208,19 @@ export class NoteMetadataRepository {
     return "notebook-personal";
   }
 
+  /** 该父节点的有效子节点（排除回收站子树，对齐 listTreeNodes 的 UI 语义；用于移动/重排校验）。
+   * SQLite 中 parent_id = NULL 恒不成立：根层（parentId=null）必须用 IS NULL（桌面根层笔记本排序修复）。 */
   private childrenOf(parentId: string | null): string[] {
-    return (this.db.prepare("SELECT id FROM tree_nodes WHERE workspace_id=? AND parent_id=? AND deleted_at IS NULL").all(this.workspaceId, parentId) as Array<{ id: string }>).map((row) => row.id);
+    const base = parentId === null
+      ? "SELECT id FROM tree_nodes WHERE workspace_id=? AND parent_id IS NULL AND deleted_at IS NULL"
+      : "SELECT id FROM tree_nodes WHERE workspace_id=? AND parent_id=? AND deleted_at IS NULL";
+    // 参数顺序必须与 SQL 占位符一致：WITH trash_ids 的 2 个 ?（trashId）在前，base 的 ?（workspaceId[, parentId]）在后
+    const params: unknown[] = [this.deps.trashNotebookId, this.deps.trashNotebookId, this.workspaceId];
+    if (parentId !== null) params.push(parentId);
+    const rows = this.db.prepare(
+      "WITH RECURSIVE trash_ids(id) AS (SELECT ? FROM tree_nodes WHERE id=? UNION ALL SELECT t.id FROM tree_nodes t JOIN trash_ids ti ON t.parent_id=ti.id) SELECT id FROM (" + base + ") WHERE id NOT IN (SELECT id FROM trash_ids)"
+    ).all(...params) as Array<{ id: string }>;
+    return rows.map((row) => row.id);
   }
 
   private validateOrder(orderedIds: string[], children: string[]): void {
