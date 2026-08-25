@@ -7,7 +7,7 @@ describe("quickNoteQueries 共享映射（Phase 0B-4）", () => {
     id: "qn1", created_at: "2026-08-01T00:00:00.000Z", updated_at: "2026-08-02T00:00:00.000Z",
     preview_text: "预览", image_count: 1, content_hash: "abc", sync_state: "local" as const, is_conflict: 0,
   };
-  const content: StoredQuickNoteContent = { version: 1, text: "正文", images: [{ filename: "a.png", mime: "image/png", size: 10 }] };
+  const content: StoredQuickNoteContent = { version: 1, text: "正文", images: [{ id: "img1", filename: "a.png", mimeType: "image/png", hash: "h", width: null, height: null, size: 10 }] };
 
   it("mapQuickNoteRow：行→文档（含图片 URL 注入）", () => {
     const doc = mapQuickNoteRow(row, { content, imageUrl: (id, f) => "http://x/" + id + "/" + f });

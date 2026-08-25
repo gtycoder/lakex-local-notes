@@ -14,6 +14,7 @@ import { sha256Sync } from "../core/sha256Sync.js";
 import { createCapacitorS3Store } from "./s3Store";
 import type { S3Settings } from "../lib/types";
 import { assertNodeIcon, assertRootConstraint, assertTreeNodeTitle, nextSortOrder } from "../core/treeRules.js";
+import { buildLikePattern, buildSearchSql, toSearchResult } from "../core/mobileSearch.js";
 
 export interface POCNote {
   id: string;
@@ -518,6 +519,19 @@ export const bridge = {
   getAssetBytes(noteId: string, filename: string): Uint8Array | null {
     const bytes = assets.get(noteId + "/" + filename);
     return bytes ?? null;
+  },
+
+  /** Phase 0B-5：搜索 fallback（sql.js 无 FTS5 → LIKE；标题+正文，参数化 + ESCAPE）。 */
+  async searchNotes(query: string): Promise<import("../core/searchRepository.js").SearchResult[]> {
+    const pattern = buildLikePattern(query);
+    if (!pattern) return [];
+    const d = await ensureDb();
+    const [sql, params] = buildSearchSql(pattern);
+    const rows = d.prepare(sql).all(...params) as Array<{
+      id: string; title: string; content: string; updated_at: string; parent_id: string | null; parent_title: string | null;
+    }>;
+    const term = query.trim().toLocaleLowerCase();
+    return rows.map((row) => toSearchResult(row, row.title.toLocaleLowerCase().includes(term)));
   },
 
   async saveNote(id: string, title: string, content: string): Promise<void> {
