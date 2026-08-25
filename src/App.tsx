@@ -995,22 +995,15 @@ export function App() {
         onPreviewEnter={showSidebarPreview}
         onPreviewLeave={hideSidebarPreview}
       />
-      {desktopWorkspace === "library" && <Sidebar nodes={treeNodes} activeId={activeNoteId} search={search} mode={sidebarMode} width={sidebarWidth} minWidth={SIDEBAR_MIN_WIDTH} maxWidth={SIDEBAR_MAX_WIDTH} onSearch={setSearch} onSelect={sidebarSelect} onCreate={sidebarCreate} onRename={sidebarRename} onMoveNode={sidebarMove} onRequestDelete={sidebarRequestDelete} onCopyMarkdown={copyMarkdownFromCache} onExportAs={exportAs} onCopyPaths={copyNotePaths} onSetIcon={sidebarSetIcon} onOpenHistory={sidebarOpenHistory} onOpenSearch={sidebarOpenSearch} pendingRenameId={pendingRenameId} onPendingRenameConsumed={sidebarPendingRenameConsumed} onPreviewEnter={showSidebarPreview} onPreviewLeave={hideSidebarPreview} onResizeActiveChange={handleSidebarResizeActiveChange} onWidthChange={updateSidebarWidth} onWidthCommit={commitSidebarWidth} />}
+      {/* keep-alive：Sidebar 常驻，小记模式由 .app-shell.quick-notes-active .sidebar 隐藏（避免切回时重建目录树、丢失展开状态） */}
+      <Sidebar nodes={treeNodes} activeId={activeNoteId} search={search} mode={sidebarMode} width={sidebarWidth} minWidth={SIDEBAR_MIN_WIDTH} maxWidth={SIDEBAR_MAX_WIDTH} onSearch={setSearch} onSelect={sidebarSelect} onCreate={sidebarCreate} onRename={sidebarRename} onMoveNode={sidebarMove} onRequestDelete={sidebarRequestDelete} onCopyMarkdown={copyMarkdownFromCache} onExportAs={exportAs} onCopyPaths={copyNotePaths} onSetIcon={sidebarSetIcon} onOpenHistory={sidebarOpenHistory} onOpenSearch={sidebarOpenSearch} pendingRenameId={pendingRenameId} onPendingRenameConsumed={sidebarPendingRenameConsumed} onPreviewEnter={showSidebarPreview} onPreviewLeave={hideSidebarPreview} onResizeActiveChange={handleSidebarResizeActiveChange} onWidthChange={updateSidebarWidth} onWidthCommit={commitSidebarWidth} />
       <main className="workspace" onPointerDownCapture={(event) => {
         if (sidebarMode === "floating" && (event.target as HTMLElement).closest(".document-pane, .empty-workspace")) setSidebarMode("collapsed");
       }}>
         {error && <div className="error-banner"><span>{error}</span><button onClick={() => setError(null)}>关闭</button></div>}
-        {desktopWorkspace === "quick-notes" ? (
-          <DesktopQuickNotes
-            notebooks={treeNodes}
-            quickNotesRef={quickNotesRef}
-            topbarLeading={topBarLeading}
-            topbarTrailing={topBarTrailing}
-            onDirtyChange={setQuickNotesDirty}
-            onConverted={(note) => void handleQuickNoteConverted(note)}
-          />
-        ) : (
+        <div className={"workspace-view" + (desktopWorkspace === "quick-notes" ? " workspace-view--hidden" : "")}>
           <DesktopLibrary
+            visible={desktopWorkspace === "library"}
             tabs={tabInfos}
             activeNoteId={activeNoteId}
             tocEnabled={tocEnabled}
@@ -1038,7 +1031,17 @@ export function App() {
             onEditorCopyPaths={(noteId) => void copyPathsById(noteId)}
             onCreateNote={() => void createNote()}
           />
-        )}
+        </div>
+        <div className={"workspace-view" + (desktopWorkspace === "quick-notes" ? "" : " workspace-view--hidden")}>
+          <DesktopQuickNotes
+            notebooks={treeNodes}
+            quickNotesRef={quickNotesRef}
+            topbarLeading={topBarLeading}
+            topbarTrailing={topBarTrailing}
+            onDirtyChange={setQuickNotesDirty}
+            onConverted={(note) => void handleQuickNoteConverted(note)}
+          />
+        </div>
         <DesktopStatusBar
           showDocumentStats={desktopWorkspace === "library"}
           wordCount={docStats.wordCount}

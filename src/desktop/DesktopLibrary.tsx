@@ -24,6 +24,8 @@ export interface DesktopLibraryProps {
   editorPrefs: { fontSize: number; showToolbar: boolean };
   activePathTitle: string | null;
   headingPath: HeadingPathItem[];
+  /** 工作区级可见性（keep-alive：小记模式隐藏资料库但不卸载，切回时避免重建全部 Lake 编辑器） */
+  visible?: boolean;
   moreMenuWrapRef: RefObject<HTMLDivElement | null>;
   onToggleMoreMenu: () => void;
   onScrollToTop: () => void;
@@ -51,6 +53,7 @@ export function DesktopLibrary(props: DesktopLibraryProps) {
     lockedNoteIds, pinnedNoteIds,
     onTabChange, onTabClose, onTabsReorder, onTogglePin, onContentChange,
     onEditorReady, onEditorCopyMarkdown, onEditorExport, onEditorCopyPaths, onCreateNote,
+    visible = true,
   } = props;
 
   const breadcrumb = activePathTitle !== null ? (
@@ -87,6 +90,7 @@ export function DesktopLibrary(props: DesktopLibraryProps) {
     <section className={`document-pane ${wideMode ? "wide-mode" : ""} ${paragraphSpacing ? "paragraph-spacing" : ""}`}>
       <div className="read-progress" aria-hidden="true" />
       <MultiTabEditor
+        visible={visible}
         tabs={tabs}
         activeNoteId={activeNoteId}
         tocEnabled={tocEnabled}

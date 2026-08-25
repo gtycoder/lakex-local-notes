@@ -1203,6 +1203,13 @@ ne-card[data-card-name="codeblock"] .ne-card-resizer-mask {
   .settings-choice { animation: none !important; transition-duration: 1ms !important; }
 }
 
+/* ===== 工作区 keep-alive：小记/资料库两个视图常驻 DOM（display:contents 让子节点直接参与
+   .workspace 网格），切换工作区时用 display:none 隐藏而非卸载——避免重建全部 tab 的 Lake
+   编辑器（每个 setDocument 解析整篇文档）与目录树，切回笔记即点即显。 ===== */
+.workspace-view { display: contents; }
+.workspace-view--hidden { display: none; }
+.app-shell.quick-notes-active .sidebar { display: none; }
+
 /* ===== 小记工作台：独立于 Lake 编辑器，不覆盖任何 .ne-* / .lake-editor-* 选择器 ===== */
 @media (min-width: 761px) {
   .app-shell.quick-notes-active { grid-template-columns: var(--activity-rail-width) 0 minmax(0, 1fr); }

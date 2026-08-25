@@ -34,6 +34,8 @@ interface MultiTabEditorProps {
   /** 切换标签钉住状态（由上层更新状态）。 */
   onTogglePin?: (noteId: string) => void;
   onContentChange: (noteId: string, content: string) => void;
+  /** 工作区级可见性（keep-alive：外部隐藏整个工作区时把所有 tab 视为不可见，切回时触发重新水合） */
+  visible?: boolean;
   prefs?: LakeEditorPrefs;
   onEditorReady?: (noteId: string, editor: import("./lakeRuntime").LakeEditorInstance | null) => void;
   /** 编辑器右键资料操作（M1.3） */
@@ -60,6 +62,7 @@ export function MultiTabEditor({
   pinnedNoteIds,
   onTogglePin,
   onContentChange,
+  visible = true,
   prefs,
   onEditorReady,
   onEditorCopyMarkdown,
@@ -405,7 +408,7 @@ export function MultiTabEditor({
             noteId={tab.noteId}
             locked={lockedNoteIds?.has(tab.noteId) ?? false}
             content={contentFor(tab)}
-            visible={tab.noteId === activeNoteId}
+            visible={visible && tab.noteId === activeNoteId}
             tocEnabled={tocEnabled}
             onChange={(content) => handleChange(tab.noteId, content)}
             prefs={prefs}
