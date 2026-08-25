@@ -1,8 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
-import { ChevronDown, Files, LoaderCircle, Feather, Moon, Sun } from "lucide-react";
+import { Files, LoaderCircle, Feather } from "lucide-react";
 import { Sidebar } from "./components/Sidebar";
 import type { QuickNotesWorkspaceHandle } from "./components/QuickNotesWorkspace";
-import { SyncStatusPopover } from "./components/SyncStatusPopover";
 import { useWindowShortcuts } from "./hooks/useWindowShortcuts";
 import { useTopMenus } from "./hooks/useTopMenus";
 import { DesktopStatusBar } from "./components/DesktopStatusBar";
@@ -39,6 +38,7 @@ import { DesktopOverlays } from "./desktop/DesktopOverlays";
 import { DesktopLibrary } from "./desktop/DesktopLibrary";
 import { DesktopQuickNotes } from "./desktop/DesktopQuickNotes";
 import { useDesktopShell } from "./desktop/useDesktopShell";
+import { DesktopTopBarLeading, DesktopTopBarTrailing } from "./desktop/DesktopTopBar";
 
 export function App() {
   const [workspace, setWorkspace] = useState<WorkspaceSnapshot | null>(null);
@@ -945,39 +945,30 @@ export function App() {
   const lockedNoteIds = new Set(notes.filter((n) => n.isLocked).map((n) => n.id));
 
   // 融合顶栏左侧按钮（工作空间/云同步/外观/更多）：库视图并入多 tab 顶栏，小记视图单独渲染
-  // 顶栏左侧：工作空间（下拉：设置/回收站）+ 云同步
   const topBarLeading = (
-    <>
-      <div className="toolbar__menu-wrap" ref={wsMenuWrapRef}>
-        <button className="toolbar__item" onClick={() => { setWorkspaceMenuOpen((o) => !o); setTopMenuOpen(false); }} title="工作空间" aria-label="工作空间">
-          <span className="toolbar__text">{workspaceName}</span><ChevronDown size={13} />
-        </button>
-
-      </div>
-      <SyncStatusPopover
-        buttonRef={syncBtnRef}
-        sync={sync}
-        saveState={saveState}
-        saveLabel={saveLabel(saveState)}
-        pendingDocuments={pendingSummary.documents}
-        pendingResources={pendingSummary.resources}
-        pendingQuickNotes={pendingSummary.quickNotes}
-        dirtyTabCount={openTabs.filter((tab) => tab.dirty).length}
-        lastSavedAt={lastSavedAt}
-        cloudEnabled={cloudEnabled}
-        conflictSnapshots={conflictSnapshotNotice}
-        conflictSnapshotText={conflictSnapshotNotice.length > 0 ? "检测到远端版本差异，已保留历史快照" : null}
-        onSync={() => { void runSync(); }}
-        onOpenSettings={() => { setSettingsCategory("sync"); setSettingsOpen(true); }}
-        onOpenHistory={(noteId) => { setHistoryNoteId(noteId); setHistoryOpen(true); }}
-      />
-    </>
+    <DesktopTopBarLeading
+      workspaceName={workspaceName}
+      wsMenuWrapRef={wsMenuWrapRef}
+      syncBtnRef={syncBtnRef}
+      sync={sync}
+      saveState={saveState}
+      saveLabelText={saveLabel(saveState)}
+      pendingSummary={pendingSummary}
+      dirtyTabCount={openTabs.filter((tab) => tab.dirty).length}
+      lastSavedAt={lastSavedAt}
+      cloudEnabled={cloudEnabled}
+      conflictSnapshots={conflictSnapshotNotice}
+      onToggleWorkspaceMenu={() => { setWorkspaceMenuOpen((o) => !o); setTopMenuOpen(false); }}
+      onSync={() => { void runSync(); }}
+      onOpenSettings={() => { setSettingsCategory("sync"); setSettingsOpen(true); }}
+      onOpenHistory={(noteId) => { setHistoryNoteId(noteId); setHistoryOpen(true); }}
+    />
   );
-  // 顶栏最右侧：外观模式 + 更多（文档操作，目前仅加锁，后续扩展）
   const topBarTrailing = (
-    <button className="toolbar__item" onClick={() => saveSettings({ theme: settings.theme === "dark" ? "light" : "dark" })} title="外观模式（浅色/深色）" aria-label="外观模式">
-      {settings.theme === "dark" ? <Sun size={15} /> : <Moon size={15} />}
-    </button>
+    <DesktopTopBarTrailing
+      theme={settings.theme}
+      onToggleTheme={() => saveSettings({ theme: settings.theme === "dark" ? "light" : "dark" })}
+    />
   );
   const effectiveOutlineMode: OutlineMode = activeOutlineEmpty && !outlineEmptyOverride ? "collapsed" : outlineMode;
   const shellStyle = {
