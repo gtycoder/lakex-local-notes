@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
-import { ArrowLeft, Check, ChevronDown, Files, ListTree, LoaderCircle, Feather, Moon, Pencil, Sun } from "lucide-react";
+import { ChevronDown, Files, LoaderCircle, Feather, Moon, Sun } from "lucide-react";
 import { Sidebar } from "./components/Sidebar";
 import type { QuickNotesWorkspaceHandle } from "./components/QuickNotesWorkspace";
 import { SyncStatusPopover } from "./components/SyncStatusPopover";
