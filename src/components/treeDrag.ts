@@ -64,3 +64,18 @@ export function getDropIndicator(position: TreeDragDropPosition | null): "line" 
   if (!position) return null;
   return position === "inside" ? "parent" : "line";
 }
+
+/** 按指针在行内的纵向比例判定落点（before/after/inside）。
+ * 阈值随行高自适应：小行收窄插入区，避免 38px 固定阈值在小行上误判为 inside。
+ * @returns 无有效行高时返回 null（调用方维持原落点）。 */
+export function computeDropPosition(rect: { top: number; height: number }, clientY: number): TreeDragDropPosition | null {
+  if (rect.height <= 0) return null;
+  const ratio = (clientY - rect.top) / rect.height;
+  // 插入区宽度：至少 6px、最多 12px（大行用 25%，小行用固定下限）
+  const threshold = Math.min(12, Math.max(6, rect.height * 0.25));
+  const zone = threshold / rect.height;
+  // 半开区间：边界像素归入插入区（<=），避免精确落在阈值上时落入 inside 的死区
+  if (ratio <= zone) return "before";
+  if (ratio >= 1 - zone) return "after";
+  return "inside";
+}

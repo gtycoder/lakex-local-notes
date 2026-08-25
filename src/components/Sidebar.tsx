@@ -5,7 +5,7 @@ import { LAKE_EMOJIS } from "../lib/lakeEmojis";
 import { LAKE_EMOJI_GROUPS } from "../lib/lakeEmojiGroups";
 import type { TreeNode, TreeNodeType } from "../lib/types";
 import { buildTreeIndex, type TreeIndex } from "../core/treeIndex";
-import { computeSiblingDragOffsets, isValidTreeDrop, type TreeDragDropPosition } from "./treeDrag";
+import { computeDropPosition, computeSiblingDragOffsets, isValidTreeDrop, type TreeDragDropPosition } from "./treeDrag";
 
 type CreateKind = "notebook" | "group" | "note";
 type DropPosition = "before" | "inside" | "after";
@@ -203,9 +203,9 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
         return;
       }
       const rect = row.getBoundingClientRect();
-      if (rect.height > 0) setDragRowHeight(rect.height);
-      const ratio = (event.clientY - rect.top) / Math.max(rect.height, 1);
-      const position: DropPosition = ratio < .25 ? "before" : ratio > .75 ? "after" : "inside";
+      // 行高只在实际变化时更新（避免每帧 setState；dragRowHeight 供同级位移计算）
+      if (rect.height > 0 && rect.height !== dragRowHeight) setDragRowHeight(rect.height);
+      const position = computeDropPosition(rect, event.clientY) ?? (dropTargetRef.current?.position ?? "inside");
       const nextTarget = { id: row.dataset.treeNodeId!, position };
       const movingNode = props.nodes.find((node) => node.id === drag.id) ?? null;
       const targetNode = props.nodes.find((node) => node.id === nextTarget.id) ?? null;

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { computeSiblingDragOffsets, getDropIndicator, isCrossingSibling, isValidTreeDrop } from "./treeDrag";
+import { computeDropPosition, computeSiblingDragOffsets, getDropIndicator, isCrossingSibling, isValidTreeDrop } from "./treeDrag";
 
 describe("tree drag offsets", () => {
   it("moves the siblings between source and target up when dragging down", () => {
@@ -48,3 +48,26 @@ describe("drop indicator", () => {
     expect(getDropIndicator("inside")).toBe("parent");
   });
 });
+
+
+describe("computeDropPosition（行高自适应阈值）", () => {
+  const rect38 = { top: 100, height: 38 };
+  it("顶部 6px 内 → before（38 行高 25% = 9.5，取 min(12, max(6, 9.5)) = 9.5）", () => {
+    expect(computeDropPosition(rect38, 100 + 5)).toBe("before");
+  });
+  it("中间 → inside", () => {
+    expect(computeDropPosition(rect38, 100 + 19)).toBe("inside");
+  });
+  it("底部 6px 内 → after", () => {
+    expect(computeDropPosition(rect38, 100 + 37)).toBe("after");
+  });
+  it("小行（28px）阈值 = max(6, 28*0.25=7) = 7px → 7px 内 before", () => {
+    expect(computeDropPosition({ top: 0, height: 28 }, 2)).toBe("before"); // 2 < 7
+    expect(computeDropPosition({ top: 0, height: 28 }, 7)).toBe("before"); // 边界 = 7 → before（ratio < zone）
+    expect(computeDropPosition({ top: 0, height: 28 }, 8)).toBe("inside"); // 8 > 7 → inside
+  });
+  it("无有效行高返回 null", () => {
+    expect(computeDropPosition({ top: 0, height: 0 }, 10)).toBeNull();
+  });
+});
+
