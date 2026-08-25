@@ -27,8 +27,6 @@ export interface DesktopOverlaysProps {
   topMenuOpen: boolean;
   onOpenSettingsFromMenu: (category: SettingsCategory) => void;
   onOpenTrashFromMenu: () => void;
-  onCloseWorkspaceMenu: () => void;
-  onCloseTopMenu: () => void;
 
   focusMode: boolean;
   onToggleFocusMode: () => void;
@@ -73,7 +71,7 @@ export function DesktopOverlays(props: DesktopOverlaysProps) {
   const {
     confirmDelete, onConfirmDelete, onCancelDelete,
     workspaceMenuOpen, wsMenuWrapRef, moreMenuWrapRef, topMenuOpen,
-    onOpenSettingsFromMenu, onOpenTrashFromMenu, onCloseWorkspaceMenu, onCloseTopMenu,
+    onOpenSettingsFromMenu, onOpenTrashFromMenu,
     focusMode, onToggleFocusMode, activeNoteId, lockedNoteIds, onToggleNoteLock,
     draftEntries, onRestoreDraft, onDiscardDraft, onCloseDrafts,
     searchPanelOpen, searchPanelQuery, onOpenNoteFromSearch, onCloseSearch,

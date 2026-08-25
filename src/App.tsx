@@ -97,7 +97,7 @@ export function App() {
     // workspace
     desktopWorkspace, setDesktopWorkspace, switchDesktopWorkspace,
     // panels & misc
-    focusMode, setFocusMode, notice, setNotice, showNotice, error, setError,
+    focusMode, setFocusMode, notice, setNotice, showNotice, showNoticeWithAction, error, setError,
     searchPanelOpen, setSearchPanelOpen, searchPanelQuery, setSearchPanelQuery,
     trashOpen, setTrashOpen, historyOpen, setHistoryOpen, historyNoteId, setHistoryNoteId,
     settingsOpen, setSettingsOpen, settingsCategory, setSettingsCategory,
@@ -344,8 +344,7 @@ export function App() {
             const action: NoticeState["action"] = supersededList.length > 0
               ? { label: "查看历史", onClick: () => { setHistoryNoteId(supersededList[0].id); setHistoryOpen(true); setNotice(null); } }
               : { label: "查看回收站", onClick: () => { setTrashOpen(true); setNotice(null); } };
-            setNotice({ text: parts.join("；"), action });
-            window.setTimeout(() => setNotice(null), 8000);
+            showNoticeWithAction(parts.join("；"), action);
           }
         })();
       }
@@ -1077,8 +1076,6 @@ export function App() {
         topMenuOpen={topMenuOpen}
         onOpenSettingsFromMenu={(category) => { setSettingsCategory(category); setSettingsOpen(true); setWorkspaceMenuOpen(false); }}
         onOpenTrashFromMenu={() => { setTrashOpen(true); setWorkspaceMenuOpen(false); }}
-        onCloseWorkspaceMenu={() => setWorkspaceMenuOpen(false)}
-        onCloseTopMenu={() => setTopMenuOpen(false)}
         focusMode={focusMode}
         onToggleFocusMode={() => { setFocusMode((value) => !value); setTopMenuOpen(false); }}
         activeNoteId={activeNoteId}

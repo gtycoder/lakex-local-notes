@@ -39,4 +39,17 @@ describe("mobileSearch 移动端搜索 fallback（Phase 0B-5）", () => {
     });
     it("父标题透传", () => { expect(toSearchResult(row, true).parentTitle).toBe("笔记本"); });
   });
+
+  describe("ESCAPE 子句正确性（防 SQLite 'must be a single character' 报错）", () => {
+    it("buildSearchSql 的 ESCAPE 是单反斜杠字符（TS '\\' → 运行时 1 字符）", () => {
+      const [sql] = buildSearchSql("%50%%");
+      const esc = sql.match(/ESCAPE '([^']*)'/);
+      expect(esc).not.toBeNull();
+      expect(esc![1].length).toBe(1); // SQLite 要求 ESCAPE 单字符
+      expect(esc![1]).toBe("\\");
+    });
+    it("escapeLike 转义 % 后模式含反斜杠前缀（配合 ESCAPE 匹配字面 %）", () => {
+      expect(buildLikePattern("50%")).toContain("\\%");
+    });
+  });
 });

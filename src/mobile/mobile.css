@@ -196,3 +196,10 @@ body { font-family: -apple-system, "PingFang SC", "Noto Sans SC", sans-serif; ba
 .mobile-cache-row { display: flex; justify-content: space-between; font-size: 13px; padding: 4px 0; }
 .mobile-cache-row.muted { color: #86909c; }
 
+
+/* 分组展开 */
+.mobile-group-row { font-weight: 600; }
+.mobile-group-child { padding-left: 34px; background: #fafbfc; }
+.mobile-chevron { transition: transform .2s; color: #86909c; }
+.mobile-chevron.open { transform: rotate(90deg); }
+

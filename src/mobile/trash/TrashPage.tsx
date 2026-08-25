@@ -22,7 +22,10 @@ export function TrashPage(props: TrashPageProps) {
   const [msg, setMsg] = useState("");
 
   const load = useCallback(async () => {
-    setItems(await bridge.listTrashTree());
+    const all = await bridge.listTrashTree();
+    // 仅显示根级回收站项（子级随根恢复/删除，对齐桌面 TrashPanel"仅根节点可恢复"语义）
+    const trashIds = new Set(all.map((it) => it.id));
+    setItems(all.filter((it) => !(it.parentId && trashIds.has(it.parentId))));
   }, []);
 
   useEffect(() => { void load(); }, [load]);

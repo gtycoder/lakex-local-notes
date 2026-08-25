@@ -24,13 +24,12 @@ export interface BackHandlerState {
 /** 注册返回键监听。返回 true = 已消费（阻止系统退出）；false = 交给系统。 */
 export function useBackHandler(state: BackHandlerState) {
   useEffect(() => {
-    let app: { addListener(eventName: "backButton", handler: () => void): Promise<{ remove(): void }> } | null = null;
+    let cancelled = false;
     let listener: { remove(): void } | null = null;
     (async () => {
       try {
         const mod = await import("@capacitor/app");
-        app = mod.App;
-        listener = await app.addListener("backButton", () => {
+        const l = await mod.App.addListener("backButton", () => {
           // 1) 最上层 Sheet（新建知识库/搜索）
           if (state.createNbOpen || state.searchOpen) { state.onCloseSheets(); return; }
           // 2) 设置 Drawer
@@ -46,11 +45,17 @@ export function useBackHandler(state: BackHandlerState) {
           // 6) 首页：交给系统退出
           state.onAppExit();
         });
+        // 竞态防护：async import 期间 effect 已 cleanup（依赖变化）→ 立即移除刚注册的监听
+        if (cancelled) { void l.remove(); return; }
+        listener = l;
       } catch {
         // 非 Capacitor 环境（Web 预览/测试）：不注册，浏览器 history 或物理键兜底
       }
     })();
-    return () => { void listener?.remove(); };
+    return () => {
+      cancelled = true;
+      void listener?.remove();
+    };
     // 依赖：route.kind/editing 变化时重建监听（闭包拿最新状态）
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.route.kind, state.editing, state.drawerOpen, state.createNbOpen, state.searchOpen]);

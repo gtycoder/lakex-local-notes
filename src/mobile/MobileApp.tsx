@@ -72,11 +72,21 @@ export function MobileApp() {
   const notebooks = useMemo(() => treeNodes.filter((n) => n.nodeType === "notebook"), [treeNodes]);
   const notebookChildren = useCallback((id: string) => treeNodes.filter((n) => n.parentId === id), [treeNodes]);
 
+  // 编辑保存（完成按钮/返回键共用）：saveNote 的 ON CONFLICT 同时更新 title+content+sync_state
+  const saveEditing = useCallback(async () => {
+    if (active && (draftTitle !== active.title || draft !== active.content)) {
+      await bridge.saveNote(active.id, draftTitle, draft);
+      setActive({ ...active, title: draftTitle, content: draft, updatedAt: new Date().toISOString() });
+    }
+  }, [active, draft, draftTitle]);
+
   // B1：Android 返回键（Sheet→Drawer→退出编辑→文档→笔记本→首页→系统）
   const exitEdit = useCallback(() => {
-    setEditing(false);
-    if (active) setRoute({ kind: "document", noteId: active.id, mode: "viewer" });
-  }, [active]);
+    void saveEditing().then(() => {
+      setEditing(false);
+      if (active) setRoute({ kind: "document", noteId: active.id, mode: "viewer" });
+    });
+  }, [saveEditing, active]);
   useBackHandler({
     route,
     editing,
@@ -131,12 +141,11 @@ export function MobileApp() {
       )}
       {route.kind === "notebook" && (
         <NotebookPage
-          notebook={treeNodes.find((n) => n.id === route.notebookId)}
-          children={notebookChildren(route.notebookId)}
+          notebookId={route.notebookId}
           onBack={() => setRoute({ kind: "home", tab: "library" })}
           onOpenNote={(id) => openDocument(id, "viewer")}
           onCreateNote={async () => {
-            const n = await bridge.createNote("无标题文档");
+            const n = await bridge.createNote("无标题文档", route.notebookId);
             await refreshAll();
             openDocument(n.id, "editor");
           }}
@@ -157,16 +166,13 @@ export function MobileApp() {
           onTitleChange={setDraftTitle}
           onContentChange={(c) => setDraft(c)}
           onToggleEdit={async () => {
-            if (editing && active && draft !== active.content) {
-              await bridge.saveNote(active.id, draftTitle, draft);
-              if (draftTitle !== active.title) await bridge.renameTreeNode(active.id, draftTitle);
-              setActive({ ...active, title: draftTitle, content: draft, updatedAt: new Date().toISOString() });
-            }
+            if (editing) await saveEditing();
             setEditing((v) => !v);
           }}
           onBack={async () => {
-            if (editing && draft !== active.content) await bridge.saveNote(active.id, draftTitle, draft);
+            if (editing) await saveEditing();
             setEditing(false);
+            await refreshAll();
             setRoute({ kind: "home", tab: "library" });
           }}
           onDelete={async () => {

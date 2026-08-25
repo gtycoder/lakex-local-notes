@@ -131,6 +131,13 @@ export function useDesktopShell(options: UseDesktopShellOptions) {
     noticeTimer.current = window.setTimeout(() => setNotice(null), 2200);
   }, []);
 
+  /** 带动作的通知（同步冲突/删除提示）：8s 自动消失 + 卸载清理（复用 noticeTimer）。 */
+  const showNoticeWithAction = useCallback((text: string, action: NoticeState["action"]) => {
+    setNotice({ text, action });
+    if (noticeTimer.current !== null) window.clearTimeout(noticeTimer.current);
+    noticeTimer.current = window.setTimeout(() => setNotice(null), 8000);
+  }, []);
+
   // 卸载清理
   useEffect(() => {
     return () => {
@@ -153,7 +160,7 @@ export function useDesktopShell(options: UseDesktopShellOptions) {
     // workspace
     desktopWorkspace, setDesktopWorkspace, switchDesktopWorkspace,
     // panels & misc
-    focusMode, setFocusMode, notice, setNotice, showNotice, error, setError,
+    focusMode, setFocusMode, notice, setNotice, showNotice, showNoticeWithAction, error, setError,
     searchPanelOpen, setSearchPanelOpen, searchPanelQuery, setSearchPanelQuery,
     trashOpen, setTrashOpen, historyOpen, setHistoryOpen, historyNoteId, setHistoryNoteId,
     settingsOpen, setSettingsOpen, settingsCategory, setSettingsCategory,

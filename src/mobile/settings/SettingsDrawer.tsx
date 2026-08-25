@@ -16,10 +16,13 @@ export interface SettingsDrawerProps {
 
 type Tab = "s3" | "cache" | "about";
 
+/** 对齐桌面 registerSync 的 S3_SECRET_MASK：get 不回显明文，保存时掩码则保留旧值。 */
+const S3_SECRET_MASK = "********";
+
 export function SettingsDrawer(props: SettingsDrawerProps) {
   const { open, onClose, onRefresh, onOpenTrash } = props;
   const [tab, setTab] = useState<Tab>("s3");
-  const [s3, setS3] = useState<S3Settings | null>(() => bridge.getS3Settings());
+  const [s3, setS3] = useState<S3Settings | null>(null);
   const [s3Test, setS3Test] = useState("");
   const [syncMsg, setSyncMsg] = useState("");
   const [cacheMsg, setCacheMsg] = useState("");
@@ -42,26 +45,31 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
   const [bucket, setBucket] = useState(s3?.bucket ?? "");
   const [prefix, setPrefix] = useState(s3?.prefix ?? "ab-test-verify");
   const [ak, setAk] = useState(s3?.accessKeyId ?? "");
-  const [sk, setSk] = useState(s3?.secretAccessKey ?? "");
+  // Secret 不显示明文（§6.2）：初始与回显都用掩码；未修改时保存保留旧值
+  const [sk, setSk] = useState(S3_SECRET_MASK);
 
   useEffect(() => {
     if (!open) return;
-    const cfg = bridge.getS3Settings();
-    if (cfg) {
-      setEndpoint(cfg.endpoint); setRegion(cfg.region); setBucket(cfg.bucket);
-      setPrefix(cfg.prefix); setAk(cfg.accessKeyId); setSk(cfg.secretAccessKey);
-    }
+    void bridge.getS3Settings().then((cfg) => {
+      setS3(cfg);
+      if (cfg) {
+        setEndpoint(cfg.endpoint); setRegion(cfg.region); setBucket(cfg.bucket);
+        setPrefix(cfg.prefix); setAk(cfg.accessKeyId); setSk(S3_SECRET_MASK);
+      }
+    }).catch(() => undefined);
   }, [open]);
 
-  const saveS3 = useCallback(() => {
-    const cfg: S3Settings = { endpoint, region, bucket, prefix, accessKeyId: ak, secretAccessKey: sk, forcePathStyle: false };
-    bridge.saveS3Settings(cfg);
+  const saveS3 = useCallback(async () => {
+    const prev = await bridge.getS3Settings().catch(() => null);
+    const secret = sk === S3_SECRET_MASK ? (prev?.secretAccessKey ?? "") : sk;
+    const cfg: S3Settings = { endpoint, region, bucket, prefix, accessKeyId: ak, secretAccessKey: secret, forcePathStyle: false };
+    await bridge.saveS3Settings(cfg);
     setS3(cfg);
     setS3Test("已保存");
   }, [endpoint, region, bucket, prefix, ak, sk]);
 
   const testS3 = useCallback(async () => {
-    saveS3();
+    await saveS3();
     setS3Test("测试中…");
     setS3Test(await bridge.testS3Connection());
   }, [saveS3]);

@@ -17,6 +17,7 @@ import { assertNodeIcon, assertRootConstraint, assertTreeNodeTitle, nextSortOrde
 import { buildLikePattern, buildSearchSql, toSearchResult } from "../core/mobileSearch.js";
 import { normalizeQuickNoteContent, previewQuickNote, serializeQuickNoteContent } from "../core/quickNoteModel.js";
 import type { StoredQuickNoteContent, StoredQuickNoteImage } from "../core/quickNoteModel.js";
+import { mobileSecretStore } from "./secretStore.js";
 
 export interface POCNote {
   id: string;
@@ -412,14 +413,25 @@ export const bridge = {
 
   async listTreeNodes(): Promise<import("../lib/types").TreeNode[]> {
     const d = await ensureDb();
-    const rows = d.prepare("SELECT id, title, parent_id, sort_order, node_type, icon, updated_at, trashed_at, deleted_from_parent_id FROM folders WHERE trashed_at IS NULL").all() as Array<{
-      id: string; title: string; parent_id: string | null; sort_order: number; node_type: string; icon: string | null; updated_at: string; trashed_at: string | null; deleted_from_parent_id: string | null;
+    const rows = d.prepare("SELECT id, title, parent_id, sort_order, node_type, icon, updated_at, trashed_at, deleted_from_parent_id, sync_state FROM folders WHERE trashed_at IS NULL").all() as Array<{
+      id: string; title: string; parent_id: string | null; sort_order: number; node_type: string; icon: string | null; updated_at: string; trashed_at: string | null; deleted_from_parent_id: string | null; sync_state: string;
     }>;
     return rows.map((r) => ({
       id: r.id, workspaceId: "mobile", parentId: r.parent_id, nodeType: r.node_type as import("../lib/types").TreeNodeType,
       title: r.title, noteFileId: null, sortOrder: r.sort_order, createdAt: r.updated_at, updatedAt: r.updated_at,
-      syncState: "synced", isConflict: false, icon: r.icon ?? null,
+      syncState: r.sync_state as import("../lib/types").TreeNode["syncState"], isConflict: false, icon: r.icon ?? null,
     }));
+  },
+
+  /** 笔记本详情：folders 子节点（group）+ notes 文档（parent_id=notebookId）。移动端 note 无 folders 条目，需合并两表。 */
+  async listNotebookChildren(notebookId: string): Promise<Array<{ id: string; title: string; kind: "group" | "note"; parentId: string | null }>> {
+    const d = await ensureDb();
+    const groups = d.prepare("SELECT id, title, parent_id FROM folders WHERE parent_id=? AND trashed_at IS NULL AND node_type='group'").all(notebookId) as Array<{ id: string; title: string; parent_id: string | null }>;
+    const notes = d.prepare("SELECT id, title, parent_id FROM notes WHERE parent_id=? AND trashed_at IS NULL").all(notebookId) as Array<{ id: string; title: string; parent_id: string | null }>;
+    return [
+      ...groups.map((g) => ({ id: g.id, title: g.title, kind: "group" as const, parentId: g.parent_id })),
+      ...notes.map((n) => ({ id: n.id, title: n.title, kind: "note" as const, parentId: n.parent_id })),
+    ].sort((a, b) => a.title.localeCompare(b.title, "zh"));
   },
 
   /** 新建 notebook：根层创建，名称必填（trim 校验，共享 treeRules），默认图标不落库（icon 由 setNodeIcon 单独写入）。 */
@@ -503,8 +515,9 @@ export const bridge = {
     const now = new Date().toISOString();
     const tx = d.transaction(() => {
       d.prepare("UPDATE folders SET parent_id=?, updated_at=?, sync_state='local' WHERE id=?").run(parentId, now, id);
+      // 排序从 0 起（对齐桌面 reorderTreeNodes/moveTreeNodeOrdered 的 index 语义）
       orderedIds.forEach((childId, index) => {
-        d.prepare("UPDATE folders SET sort_order=?, updated_at=?, sync_state='local' WHERE id=?").run(index + 1, now, childId);
+        d.prepare("UPDATE folders SET sort_order=?, updated_at=?, sync_state='local' WHERE id=?").run(index, now, childId);
       });
     });
     tx();
@@ -589,28 +602,29 @@ export const bridge = {
     return id;
   },
 
-  /** 本地删除小记：restore_pending_at 标记（对齐桌面小记删除语义：随手记语义，删除即隐没，不做回收站复杂机制）。 */
+  /** 本地删除小记：直接 DELETE（对齐桌面小记语义：随手记，删除即隐没；同步后置阶段不做墓碑传播）。 */
   async deleteQuickNote(id: string): Promise<void> {
     const d = await ensureDb();
     d.prepare("DELETE FROM quick_notes WHERE id=?").run(id);
     await saveSnapshot(d.exportBytes());
   },
 
-  async saveNote(id: string, title: string, content: string): Promise<void> {
+  async saveNote(id: string, title: string, content: string, parentId: string | null = null): Promise<void> {
     const d = await ensureDb();
     const now = new Date().toISOString();
     // 本地编辑必须置 sync_state='local'（待上传），否则同步零变更早退会跳过本次修改
+    // ON CONFLICT 不覆盖 parent_id：编辑后保留归属；新建时用传入 parentId
     d.prepare(
-      `INSERT INTO notes (id, title, content, updated_at, sync_state) VALUES (?,?,?,?,'local')
+      `INSERT INTO notes (id, title, content, parent_id, updated_at, sync_state) VALUES (?,?,?,?,?,'local')
        ON CONFLICT(id) DO UPDATE SET title=excluded.title, content=excluded.content, updated_at=excluded.updated_at, sync_state='local'`
-    ).run(id, title, content, now);
+    ).run(id, title, content, parentId, now);
     await saveSnapshot(d.exportBytes());
   },
 
-  async createNote(title: string): Promise<POCNote> {
+  async createNote(title: string, parentId: string | null = null): Promise<POCNote> {
     const id = crypto.randomUUID();
     const now = new Date().toISOString();
-    await bridge.saveNote(id, title, INITIAL_LAKE_CONTENT);
+    await bridge.saveNote(id, title, INITIAL_LAKE_CONTENT, parentId);
     return { id, title, content: INITIAL_LAKE_CONTENT, updatedAt: now };
   },
 
@@ -646,17 +660,24 @@ export const bridge = {
     ].sort((a, b) => (b.deletedAt ?? "").localeCompare(a.deletedAt ?? ""));
   },
 
-  /** B2：恢复回收站项。folder = 恢复整棵（含子节点）；note = 文档级恢复。恢复标记 restore_pending_at → 同步 local-wins 上传 active 覆盖墓碑。 */
+  /** B2：恢复回收站项。folder = 恢复整棵（含深层子树）；note = 文档级恢复。恢复标记 restore_pending_at → 同步 local-wins 上传 active 覆盖墓碑。 */
   async restoreTreeItem(id: string, kind: "folder" | "note"): Promise<void> {
     const d = await ensureDb();
     if (kind === "note") { dbPort.localRestoreNote(id); }
     else {
-      // folder：根节点清 trashed_at + 置恢复标记；子节点随父（保持 parentId 链）
+      // folder：收集整棵子树（含自己）→ 全部清 trashed_at（对齐 purgeTreeItem 的子树收集语义）
+      const all = d.prepare("SELECT id, parent_id FROM folders").all() as Array<{ id: string; parent_id: string | null }>;
+      const ids = new Set<string>([id]);
+      let grew = true;
+      while (grew) {
+        grew = false;
+        for (const r2 of all) {
+          if (r2.parent_id && ids.has(r2.parent_id) && !ids.has(r2.id)) { ids.add(r2.id); grew = true; }
+        }
+      }
       const now = new Date().toISOString();
-      d.prepare("UPDATE folders SET trashed_at=NULL, updated_at=?, sync_state='local' WHERE id=?").run(now, id);
-      const children = d.prepare("SELECT id FROM folders WHERE parent_id = ?").all(id) as Array<{ id: string }>;
-      for (const c of children) {
-        d.prepare("UPDATE folders SET trashed_at=NULL, updated_at=?, sync_state='local' WHERE id=?").run(now, c.id);
+      for (const fid of ids) {
+        d.prepare("UPDATE folders SET trashed_at=NULL, updated_at=?, sync_state='local' WHERE id=?").run(now, fid);
       }
     }
     await saveSnapshot(d.exportBytes());
@@ -703,25 +724,37 @@ export const bridge = {
 
   // ---- S3（POC 通路验证） ----
 
-  getS3Settings(): S3Settings | null {
+  async getS3Settings(): Promise<S3Settings | null> {
     try {
       const raw = localStorage.getItem(S3_STORAGE_KEY);
       if (!raw) return null;
       const parsed = JSON.parse(raw) as Partial<S3Settings>;
-      // 历史配置可能缺 prefix（S3Config 时代为可选字段）；共享 S3Settings.prefix 必填，读取时归一化。
-      return { ...parsed, prefix: parsed.prefix ?? DEFAULT_S3_PREFIX } as S3Settings;
+      // §17.5/§22.3：secret 不落 localStorage 明文——从 secretStore（WebCrypto 加密 IndexedDB）读取；
+      // 旧版本明文 secret 在 saveS3Settings 时已迁移，此处兜底兼容（读到则加密回存并清明文）。
+      let secret = parsed.secretAccessKey ?? "";
+      const stored = await mobileSecretStore.read("s3.secretAccessKey");
+      if (stored !== null) secret = stored;
+      else if (secret) {
+        await mobileSecretStore.write("s3.secretAccessKey", secret);
+        delete parsed.secretAccessKey;
+        localStorage.setItem(S3_STORAGE_KEY, JSON.stringify(parsed));
+      }
+      return { ...parsed, prefix: parsed.prefix ?? DEFAULT_S3_PREFIX, secretAccessKey: secret } as S3Settings;
     } catch {
       return null;
     }
   },
 
-  saveS3Settings(cfg: S3Settings): void {
-    localStorage.setItem(S3_STORAGE_KEY, JSON.stringify(cfg));
+  async saveS3Settings(cfg: S3Settings): Promise<void> {
+    // secret 加密存 secretStore；其余字段存 localStorage（不回写明文 secret）
+    await mobileSecretStore.write("s3.secretAccessKey", cfg.secretAccessKey).catch(() => undefined);
+    const { secretAccessKey: _s, ...rest } = cfg;
+    localStorage.setItem(S3_STORAGE_KEY, JSON.stringify(rest));
   },
 
   /** 七牛验证必须用 ListObjectsV2（HeadBucket 对存在的桶也返回 404，AGENTS.md 踩坑 #4） */
   async testS3Connection(): Promise<string> {
-    const cfg = bridge.getS3Settings();
+    const cfg = await bridge.getS3Settings();
     if (!cfg) return "未配置 S3";
     try {
       const { ListObjectsV2Command } = await import("@aws-sdk/client-s3");
@@ -734,7 +767,7 @@ export const bridge = {
   },
 
   async uploadObject(key: string, body: Uint8Array | string): Promise<string> {
-    const cfg = bridge.getS3Settings();
+    const cfg = await bridge.getS3Settings();
     if (!cfg) throw new Error("S3 未配置");
     const { PutObjectCommand } = await import("@aws-sdk/client-s3");
     const client = await createS3Client(cfg);
@@ -762,7 +795,7 @@ export const bridge = {
 
   /** M1 同步：manifest v4 协议（拉取对账 + 上传发布），复用 src/core 决策纯函数 */
   async syncNow(): Promise<string> {
-    const cfg = bridge.getS3Settings();
+    const cfg = await bridge.getS3Settings();
     if (!cfg) return "未配置 S3";
     const d = await ensureDb();
     const syncCfg: SyncConfig = {
