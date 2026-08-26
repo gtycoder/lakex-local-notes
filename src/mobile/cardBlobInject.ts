@@ -53,6 +53,9 @@ const CARD_VALUE_RE = /<card\b[^>]*\bname="image"[^>]*\bvalue="data:([^"]+)"[^>]
 export interface CardBlobInjectResult {
   /** 对当前 editor 所有 image 卡片执行 setCardValue 注入 blob。返回注入的卡片数。 */
   inject(editor: LakeEditorInstance): number;
+  /** 编辑器重建后调用：清空幂等集（injectedIds 按 canonicalSrc 去重仅限同一编辑器实例内，
+   * 跨重建（viewer↔editor 切换）必须重置，否则重建后的新卡片 DOM 会被幂等挡住永不注入）。 */
+  reset(): void;
   /** 把内容（getDocument 输出）里的 blob URL 还原为 canonical http。 */
   restore(content: string): string;
   /** 释放所有 blob URL。 */
@@ -160,6 +163,9 @@ export function createCardBlobInjector(content: string): CardBlobInjectResult {
         } catch { /* 单卡片失败不阻断 */ }
       }
       return injected;
+    },
+    reset() {
+      injectedIds.clear();
     },
     restore(content) {
       let out = content;

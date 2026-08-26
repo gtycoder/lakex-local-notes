@@ -58,6 +58,9 @@ export function DocumentPage(props: DocumentPageProps) {
           onEditorReady={(noteId, editor) => {
             editorRef.current = editor;
             if (editor && cardInjector) {
+              // 每次编辑器重建（viewer↔editor 切换/重开）重置幂等集：injectedIds 只限同一实例内去重，
+              // 否则重建后的新卡片 DOM 会被上一次注入的 canonicalSrc 挡住，永不注入（图片破裂修复的回归）。
+              cardInjector.reset();
               // 图片破裂优化：注入时机从"800ms 后"提前到"卡片 DOM 出现即注入"——
               // 立即尝试一次（DOM 可能已就绪）+ MutationObserver 监听 NE-CARD 出现 + 短间隔兜底重试。
               // inject 幂等（cardBlobInject 内按 canonicalSrc 去重），Observer/重试重复触发无副作用。
