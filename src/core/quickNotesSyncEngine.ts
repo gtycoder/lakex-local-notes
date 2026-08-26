@@ -83,6 +83,10 @@ export interface QuickNotesSyncDbPort {
   applyRemoteQuickNote(item: ManifestItem, content: Uint8Array, assets: Array<{ filename: string; bytes: Uint8Array }>): void;
   /** 墓碑内容落地（先内容后标志）：把删除方内容写入本地存储，随后 deleteLocalQuickNote。 */
   applyTombstoneContent(id: string, content: Uint8Array): void;
+  /** 墓碑携带图片（A）：读取删除小记保留内容中的删除前图片元数据；无保留内容/解析失败 → []。 */
+  listDeletedQuickNoteAssets(id: string): QuickNoteSyncItemImage[];
+  /** 墓碑携带图片（A）：把删除方上传的删除前图片字节写入本地（软删行保留，恢复时图片完整）。 */
+  applyTombstoneAssets(id: string, assets: Array<{ metadata: QuickNoteSyncItemImage; bytes: Uint8Array }>): void;
   /** 本地软删（保留内容供墓碑携带）。 */
   deleteLocalQuickNote(id: string): void;
   /** 冲突：本地版本归档进回收站（新 id），随后 applyRemoteQuickNote 覆盖原 id。 */
@@ -130,7 +134,12 @@ export function parseManifest(
   if (value.items.length > (limits.maxItems ?? MAX_QUICK_MANIFEST_ITEMS)) {
     throw new Error(`小记同步清单条目过多（${value.items.length}），拒绝加载`);
   }
-  for (const item of value.items) validateRemoteItem(item as ManifestItem);
+  const ids = new Set<string>();
+  for (const item of value.items) {
+    validateRemoteItem(item as ManifestItem);
+    if (ids.has(item.id)) throw new Error(`小记同步清单包含重复条目: ${item.id}`);
+    ids.add(item.id);
+  }
   return value as QuickNotesManifest;
 }
 
@@ -195,7 +204,16 @@ export async function syncQuickNotesViaEngine(
   const manifestKey = `${cfg.prefix}/${ROOT}/manifests/latest.json`;
 
   const rawManifest = await s3.getObject(manifestKey, { maxBytes: MAX_QUICK_MANIFEST_BYTES });
-  const remoteManifest: QuickNotesManifest | null = rawManifest ? parseManifest(rawManifest) : null;
+  let remoteManifest: QuickNotesManifest | null = null;
+  if (rawManifest) {
+    try {
+      remoteManifest = parseManifest(rawManifest);
+    } catch (reason) {
+      // 清单解析失败（含重复 ID 拒绝）属云端数据异常：记录日志后中止本轮同步，不做静默降级
+      qn.log(`[download] 小记清单解析失败，放弃本轮同步: ${(reason as Error).message}`);
+      throw reason;
+    }
+  }
   let downloaded = 0;
   let conflicts = 0;
 
@@ -230,6 +248,20 @@ export async function syncQuickNotesViaEngine(
             }
           } catch (error) {
             qn.log(`[download] ${item.id} 删除前内容缺失，跳过`);
+          }
+          // 墓碑携带图片（A）：删除方上传的删除前图片也落地，恢复时图片完整。
+          // 资源缺失/校验失败走 best-effort（跳过该条图片 + 日志），不拖垮删除传播（老墓碑 assets:[] 天然兼容）。
+          if (item.assets.length > 0) {
+            const tombAssets: Array<{ metadata: (typeof item.assets)[number]; bytes: Uint8Array }> = [];
+            for (const asset of item.assets) {
+              try {
+                const bytes = await s3.getObject(assetKey(item.id, asset.filename));
+                if (!bytes) { qn.log(`[download] ${item.id} 墓碑图片 ${asset.filename} 缺失，跳过`); continue; }
+                if (bytes.length !== asset.size || sha256Sync(bytes) !== asset.hash) { qn.log(`[download] ${item.id} 墓碑图片 ${asset.filename} 校验失败，跳过`); continue; }
+                tombAssets.push({ metadata: asset, bytes });
+              } catch (error) { qn.log(`[download] ${item.id} 墓碑图片 ${asset.filename} 下载失败，跳过`); }
+            }
+            if (tombAssets.length > 0) qn.applyTombstoneAssets(item.id, tombAssets);
           }
           qn.deleteLocalQuickNote(item.id);
         } else {
@@ -382,13 +414,27 @@ export async function syncQuickNotesViaEngine(
     } catch (error) {
       qn.log(`[perf] upload ${deleted.id} tombstone content unreadable, placeholder fallback`);
     }
+    // 墓碑携带图片（A）：删除方把删除前图片对象也上传（缺失才传？此处直接幂等覆盖），
+    // 墓碑条目带 assets，使其他端恢复时图片完整。无保留内容/无图 → assets: []（旧协议兼容）。
+    const tombAssetMetadata = qn.listDeletedQuickNoteAssets(deleted.id);
+    const tombAssets: ManifestItem["assets"] = [];
+    for (const asset of tombAssetMetadata) {
+      try {
+        const bytes = await qn.readAsset(deleted.id, asset.filename);
+        if (!bytes || bytes.length !== asset.size || sha256Sync(bytes) !== asset.hash) continue;
+        await s3.putObject(assetKey(deleted.id, asset.filename), bytes);
+        tombAssets.push(asset);
+      } catch (error) {
+        qn.log(`[perf] upload ${deleted.id} tombstone asset ${asset.filename} unreadable, skip`);
+      }
+    }
     manifestItems.push({
       id: deleted.id,
       createdAt: deleted.createdAt,
       updatedAt: deleted.updatedAt,
       contentHash: tombHash,
       isConflict: false,
-      assets: [],
+      assets: tombAssets,
       deleted: true,
       deletedAt: deleted.deletedAt,
     });
@@ -401,6 +447,18 @@ export async function syncQuickNotesViaEngine(
     if (!item.deleted && deferredDeletedIds.has(item.id) && !localIds.has(item.id) && !readyDeletedIds.has(item.id)) {
       manifestItems.push(item);
     }
+  }
+
+  // P1-1（审计）：远端 active 但本地本轮未持有（正文对象缺失被下载阶段跳过）的条目必须原样保留，
+  // 否则新 manifest 不再包含它 → "对象暂时缺失、等待重试"被升级为"manifest 删除"，其他设备会误删。
+  // 保留后下轮重试下载；墓碑（readyDeleted）与转换延迟删除（deferredDeletedIds）各自已有路径，排除。
+  for (const item of remoteManifest?.items ?? []) {
+    if (item.deleted) continue;
+    if (localIds.has(item.id)) continue;
+    if (deferredDeletedIds.has(item.id)) continue;
+    if (readyDeletedIds.has(item.id)) continue;
+    manifestItems.push(item);
+    qn.log(`[perf] publish ${item.id} preserved (remote content missing this round, retry next sync)`);
   }
 
   const completedAt = new Date().toISOString();

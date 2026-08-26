@@ -21,6 +21,8 @@ import {
   type QuickNotesSyncResult,
 } from "../src/core/quickNotesSyncEngine.js";
 import { QuickNotesStore } from "./quickNotes.js";
+import { validateQuickNoteContent } from "../src/core/quickNoteModel.js";
+import type { StoredQuickNoteContent } from "../src/core/quickNoteModel.js";
 
 export type { QuickNotesSyncResult, QuickNotesSyncProgress } from "../src/core/quickNotesSyncEngine.js";
 export { parseManifest } from "../src/core/quickNotesSyncEngine.js";
@@ -60,6 +62,19 @@ function createQuickNotesSyncPort(quickNotes: QuickNotesStore): QuickNotesSyncDb
       const temporary = `${target}.tmp-${process.pid}`;
       fs.writeFileSync(temporary, Buffer.from(content));
       fs.renameSync(temporary, target);
+    },
+    listDeletedQuickNoteAssets(id) {
+      // 墓碑携带图片（A）：读软删保留的 .qnote 解析删除前图片元数据；文件缺失/解析失败 → []
+      try {
+        const content = validateQuickNoteContent(JSON.parse(fs.readFileSync(quickNotes.quickNotePathFor(id), "utf8")) as StoredQuickNoteContent);
+        return content.images.map(({ id: imageId, filename, mimeType, width, height, size, hash }) => ({ id: imageId, filename, mimeType, width, height, size, hash }));
+      } catch { return []; }
+    },
+    applyTombstoneAssets(id, assets) {
+      // 墓碑携带图片（A）：删除前图片字节落盘（软删保留，恢复时图片完整）
+      const dir = quickNotes.quickNoteAssetsPathFor(id);
+      fs.mkdirSync(dir, { recursive: true });
+      for (const a of assets) fs.writeFileSync(path.join(dir, a.metadata.filename), Buffer.from(a.bytes));
     },
     deleteLocalQuickNote(id) { quickNotes.deleteQuickNote(id); },
     archiveLocalQuickNoteToTrash(id) { quickNotes.archiveLocalToTrash(id); },
@@ -134,7 +149,7 @@ export async function runQuickNotesDeepCleanup(quickNotes: QuickNotesStore, sett
   for (const item of manifest.items) {
     // deleted 墓碑也保留内容引用：真实 hash 时保护删除前对象（恢复可达）；占位符对象不在云端，加入无害。
     keep.add(objectKey(item.contentHash));
-    if (item.deleted) continue;
+    // 墓碑携带图片（A）：墓碑条目 assets 引用的删除前图片对象同样保护（恢复时图片完整），不再跳过 deleted
     for (const asset of item.assets) keep.add(assetKey(item.id, asset.filename));
   }
 
