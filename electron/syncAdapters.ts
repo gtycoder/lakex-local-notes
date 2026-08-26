@@ -148,7 +148,11 @@ export function createStoreSyncPort(store: Store): SyncDbPort {
       return fs.existsSync(full) ? new Uint8Array(fs.readFileSync(full)) : null;
     },
     listDeletedNotesForSync() {
-      return store.listDeletedNotesForSync().map((d) => ({ id: d.id, deletedAt: d.deletedAt, title: d.title }));
+      return store.listDeletedNotesForSync().map((d) => ({ id: d.id, deletedAt: d.deletedAt, title: d.title, nodeType: d.nodeType }));
+    },
+    // 可选：sync.test FakeStore 等旧桩可能无此方法（发布方向标记缺失时计数降级，不影响同步正确性）
+    markTombstonesPublished(ids: string[]): void {
+      store.markTombstonesPublished?.(ids);
     },
     async readDeletedContent(id: string): Promise<string | null> {
       try { return fs.readFileSync(store.notePathFor(id), "utf8"); } catch { return null; }

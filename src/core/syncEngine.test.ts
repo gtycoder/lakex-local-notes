@@ -50,7 +50,9 @@ class MemDb implements SyncDbPort {
   applyRemotePurge(id: string) { const n = this.notes.get(id); if (n) { n.syncState = "purged"; n.parentId = TRASH_NOTEBOOK_ID; n.trashedAt = new Date().toISOString(); } }
   rememberDeleted(note: any, deletedAt: string) { this.deletedNotes.add(note.id); this.deletedAtMap.set(note.id, deletedAt); }
   deletedAtMap = new Map<string, string>();
+  publishedTombstones: string[] = [];
   listDeletedNotesForSync() { return [...this.deletedAtMap.entries()].map(([id, deletedAt]) => ({ id, deletedAt })); }
+  markTombstonesPublished(ids: string[]) { this.publishedTombstones.push(...ids); }
   revokeLocalDeletion(id: string) { this.deletedNotes.delete(id); this.deletedAtMap.delete(id); }
   markFolderSynced() { return true; }
   applyRemoteNoteMeta(note: any) {
@@ -193,6 +195,27 @@ describe("syncEngine（共享编排）", () => {
     expect(n.parentId).toBe(TRASH_NOTEBOOK_ID);
     expect(n.isLocked).toBe(true);
     expect(n.icon).toBe("star");
+  });
+
+  it("B4（回归）：收到他端 purge 的设备发布时保留 deleted:true 墓碑（不吞掉，防离线端复活）", async () => {
+    const s3 = new MemS3();
+    const db = new MemDb();
+    const h = hashOf("<p>内容</p>");
+    // 本地有副本（applyRemotePurge → 标 purged 保留）
+    db.notes.set("n1", row({ id: "n1", content: "<p>内容</p>", syncState: "purged" }));
+    // 远端 manifest：n1 deleted:true（他端 purge 墓碑）
+    s3.map.set("p/manifests/latest.json", new TextEncoder().encode(JSON.stringify({
+      version: 4, workspaceId: "default", commitId: "c1", prevCommitId: null, createdAt: "2026-01-01T00:00:00.000Z",
+      notes: [{ id: "n1", title: "被删", parentId: null, sortOrder: 0, updatedAt: "2026-01-02T00:00:00.000Z", contentHash: h, isConflict: false, assets: [], deleted: true, deletedAt: "2026-01-02T00:00:00.000Z" }],
+      folders: [],
+    })));
+    const r = await syncNow(CFG, s3, db);
+    expect(r.published).toBe(true);
+    const manifest = JSON.parse(decode((await s3.getObject("p/manifests/latest.json"))!));
+    const entry = manifest.notes.find((n: any) => n.id === "n1");
+    // 墓碑必须保留（此前 B4 filter 把 purged 条目从 manifest 移除 → 离线端可复活）
+    expect(entry).toBeDefined();
+    expect(entry.deleted).toBe(true);
   });
 
   it("B4：远端 purge（deleted:true）——本地有副本→标 purged 不上传；无副本→记住删除", async () => {
@@ -492,6 +515,36 @@ describe("syncEngine（共享编排）", () => {
     expect(s3.map.has("p/objects/dead1-" + H + ".lake")).toBe(true); // 删除前内容对象已上传
     expect(decode(s3.map.get("p/objects/dead1-" + H + ".lake")!)).toBe("<p>删除前内容</p>");
     expect(r.uploaded).toBe(1);
+  });
+
+  it("墓碑占位符发布（迁移回归修复）：purge 后内容缺失（readDeletedContent→null）→ 占位符 id 照常发布 deleted:true，不传空对象，且标记已发布", async () => {
+    const s3 = new MemS3();
+    const db = new MemDb();
+    db.deletedNotes.add("dead2");
+    db.deletedAtMap.set("dead2", "2026-01-02T00:00:00.000Z");
+    (db as any).readDeletedContent = async () => null; // 内容已物理删除
+    const r = await syncNow(CFG, s3, db);
+    const manifest = JSON.parse(decode((await s3.getObject("p/manifests/latest.json"))!));
+    const tomb = manifest.notes.find((n: any) => n.id === "dead2");
+    expect(tomb).toBeDefined();
+    expect(tomb.deleted).toBe(true);
+    expect(tomb.contentHash).toBe("dead2");                     // 占位符 id，非 sha256("")
+    expect([...s3.map.keys()].some((k) => k.includes("dead2-"))).toBe(false); // 未上传空对象
+    expect(r.uploaded).toBe(0);                                 // 占位符不计入上传
+    expect(r.published).toBe(true);
+    expect(db.publishedTombstones).toContain("dead2");          // 已标记发布
+  });
+
+  it("folder 墓碑不进 manifest.notes（nodeType=folder 仅本地下载过滤，发布方向跳过，不触发发布）", async () => {
+    const s3 = new MemS3();
+    const db = new MemDb();
+    db.deletedNotes.add("folder1");
+    db.deletedAtMap.set("folder1", "2026-01-02T00:00:00.000Z");
+    (db as any).listDeletedNotesForSync = () => [{ id: "folder1", deletedAt: "2026-01-02T00:00:00.000Z", nodeType: "folder" }];
+    const r = await syncNow(CFG, s3, db);
+    expect(r.published).toBe(false);          // 无任何上传/目录变更 → 不发布
+    expect(await s3.getObject("p/manifests/latest.json")).toBeNull();
+    expect(db.publishedTombstones).not.toContain("folder1");
   });
 
   it("H3：上传时本地资产进 manifest.assets（扫描→上传 S3→填入条目）", async () => {

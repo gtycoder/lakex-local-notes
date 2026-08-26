@@ -242,7 +242,9 @@ export class Store {
         parent_id TEXT,
         sort_order INTEGER NOT NULL,
         updated_at TEXT NOT NULL,
-        deleted_at TEXT NOT NULL
+        deleted_at TEXT NOT NULL,
+        node_type TEXT NOT NULL DEFAULT 'note',
+        published_at TEXT
       );
       -- 文档历史快照（纯本地，不参与同步）。refs_json=该快照引用的资源文件名清单。
       -- 不设 UNIQUE(note_id,content_hash)：恢复/回退同内容会再次出现，UNIQUE 会让
@@ -310,6 +312,14 @@ export class Store {
     const deletedCols = this.db.prepare("PRAGMA table_info(deleted_notes)").all() as Array<{ name: string }>;
     if (!deletedCols.some((c) => c.name === "purged_at")) {
       this.db.exec("ALTER TABLE deleted_notes ADD COLUMN purged_at TEXT");
+    }
+    // node_type：区分 folder/group 墓碑（仅本地下载过滤，不进 manifest.notes）与 note 墓碑（发布 deleted:true）
+    if (!deletedCols.some((c) => c.name === "node_type")) {
+      this.db.exec("ALTER TABLE deleted_notes ADD COLUMN node_type TEXT NOT NULL DEFAULT 'note'");
+    }
+    // published_at：墓碑已发布到 manifest 的时间（NULL = 未发布，计入"待上传"）
+    if (!deletedCols.some((c) => c.name === "published_at")) {
+      this.db.exec("ALTER TABLE deleted_notes ADD COLUMN published_at TEXT");
     }
     // 恢复标记（墓碑权威的显式例外）：restoreTrashItem 写入，markSynced 清除。
     // 同步下载分支据此区分"被动编辑"（跟随删除）与"主动恢复"（local wins）。
@@ -1247,9 +1257,11 @@ export class Store {
     const tx = this.db.transaction(() => {
       const nodeStmt = this.db.prepare("SELECT note_file_id FROM tree_nodes WHERE id=?");
       const noteMeta = this.db.prepare("SELECT id,title,parent_id,sort_order,updated_at FROM notes WHERE id=?");
+      // node_type：note（进 manifest.notes 发布 deleted:true）vs folder（仅本地下载过滤，不进 manifest）。
+      // 新墓碑 published_at=NULL（未发布，计入待上传）；ON CONFLICT 不清已发布的 published_at（幂等重复 purge 场景）。
       const tombstone = this.db.prepare(
-        "INSERT INTO deleted_notes(id,title,parent_id,sort_order,updated_at,deleted_at,purged_at) VALUES(?,?,?,?,?,?,?) " +
-        "ON CONFLICT(id) DO UPDATE SET title=excluded.title, parent_id=excluded.parent_id, sort_order=excluded.sort_order, updated_at=excluded.updated_at, deleted_at=excluded.deleted_at, purged_at=excluded.purged_at"
+        "INSERT INTO deleted_notes(id,title,parent_id,sort_order,updated_at,deleted_at,purged_at,node_type) VALUES(?,?,?,?,?,?,?,?) " +
+        "ON CONFLICT(id) DO UPDATE SET title=excluded.title, parent_id=excluded.parent_id, sort_order=excluded.sort_order, updated_at=excluded.updated_at, deleted_at=excluded.deleted_at, purged_at=excluded.purged_at, node_type=excluded.node_type"
       );
       const delNote = this.db.prepare("DELETE FROM notes WHERE id=?");
       const delFts = this.db.prepare("DELETE FROM notes_fts WHERE note_id=?");
@@ -1264,7 +1276,7 @@ export class Store {
           // 彻底删除 = 连历史快照 + 历史引用的资源一起物理删（用户确认）
           filesToRemove.push({ path: this.historyNoteDir(n.note_file_id), recursive: true });
           const meta = noteMeta.get(n.note_file_id) as { id: string; title: string; parent_id: string | null; sort_order: number; updated_at: string } | undefined;
-          if (meta) tombstone.run(meta.id, meta.title, meta.parent_id, meta.sort_order, meta.updated_at, now, now);
+          if (meta) tombstone.run(meta.id, meta.title, meta.parent_id, meta.sort_order, meta.updated_at, now, now, "note");
           delHistory.run(n.note_file_id);
           delOrphans.run(n.note_file_id);
           delFts.run(n.note_file_id);
@@ -1274,7 +1286,7 @@ export class Store {
           // 否则物理删除后无任何持久"已删"记录，同步下载阶段会把远端 manifest.folders 里
           // 仍存在的该笔记本重新导入（删除/清空回收站后同步 → 被删的又回来）。
           const f = this.db.prepare("SELECT title,parent_id,sort_order,updated_at FROM tree_nodes WHERE id=?").get(nid) as { title: string; parent_id: string | null; sort_order: number; updated_at: string } | undefined;
-          if (f) tombstone.run(nid, f.title, f.parent_id, f.sort_order, f.updated_at, now, now);
+          if (f) tombstone.run(nid, f.title, f.parent_id, f.sort_order, f.updated_at, now, now, "folder");
         }
         delNode.run(nid);
       }
@@ -1800,10 +1812,13 @@ export class Store {
   rememberDeleted(note: SyncNote, deletedAt: string): void {
     // 不用 INSERT OR REPLACE：purge 后该行已带 purged_at，若被远端墓碑重插会清空 purged_at，
     // 导致 listPurgedNotesForSync 漏掉、S3 对象前缀永远不删。
+    // node_type=note（只有 manifest.notes 条目会触发 remember；folder 不进 manifest.notes）；
+    // published_at=deletedAt：学到即已在云端发布（该墓碑来自 manifest），不计入待上传；
+    // ON CONFLICT 不清已有 published_at（本地 purge 后恰逢远端墓碑重插时不误标已发布）。
     this.db.prepare(
-      "INSERT INTO deleted_notes(id,title,parent_id,sort_order,updated_at,deleted_at) VALUES(?,?,?,?,?,?) " +
-      "ON CONFLICT(id) DO UPDATE SET title=excluded.title, parent_id=excluded.parent_id, sort_order=excluded.sort_order, updated_at=excluded.updated_at, deleted_at=excluded.deleted_at"
-    ).run(note.id, note.title, note.parentId, note.sortOrder, note.updatedAt, deletedAt);
+      "INSERT INTO deleted_notes(id,title,parent_id,sort_order,updated_at,deleted_at,node_type,published_at) VALUES(?,?,?,?,?,?,?,?) " +
+      "ON CONFLICT(id) DO UPDATE SET title=excluded.title, parent_id=excluded.parent_id, sort_order=excluded.sort_order, updated_at=excluded.updated_at, deleted_at=excluded.deleted_at, node_type=excluded.node_type, published_at=COALESCE(deleted_notes.published_at, excluded.published_at)"
+    ).run(note.id, note.title, note.parentId, note.sortOrder, note.updatedAt, deletedAt, "note", deletedAt);
   }
 
   /** purge 前缀删除成功后，清除 purged_at（保留墓碑，避免下次同步重复删前缀）。 */
@@ -1811,16 +1826,26 @@ export class Store {
     this.db.prepare("UPDATE deleted_notes SET purged_at=NULL WHERE id=?").run(id);
   }
 
-  listDeletedNotesForSync(): Array<{ id: string; title: string; parentId: string | null; sortOrder: number; updatedAt: string; deletedAt: string }> {
+  listDeletedNotesForSync(): Array<{ id: string; title: string; parentId: string | null; sortOrder: number; updatedAt: string; deletedAt: string; nodeType: string }> {
     return this.db.prepare(
-      "SELECT id,title,parent_id,sort_order,updated_at,deleted_at FROM deleted_notes ORDER BY deleted_at"
+      "SELECT id,title,parent_id,sort_order,updated_at,deleted_at,node_type FROM deleted_notes ORDER BY deleted_at"
     ).all().map((value) => {
-      const r = value as { id: string; title: string; parent_id: string | null; sort_order: number; updated_at: string; deleted_at: string };
+      const r = value as { id: string; title: string; parent_id: string | null; sort_order: number; updated_at: string; deleted_at: string; node_type: string };
       return {
         id: r.id, title: r.title, parentId: r.parent_id, sortOrder: r.sort_order,
-        updatedAt: r.updated_at, deletedAt: r.deleted_at,
+        updatedAt: r.updated_at, deletedAt: r.deleted_at, nodeType: r.node_type ?? "note",
       };
     });
+  }
+
+  /** 墓碑已发布到 manifest（发布成功后由 syncEngine 调用）：标记 published_at，从待上传计数中移除。
+   * 墓碑本体永久保留（防 manifest 删除标记因他端 B4 移除而丢失 → 离线设备复活，审计 #2）。 */
+  markTombstonesPublished(ids: string[]): void {
+    if (ids.length === 0) return;
+    const placeholders = ids.map(() => "?").join(",");
+    this.db.prepare(
+      "UPDATE deleted_notes SET published_at=COALESCE(published_at, ?) WHERE id IN (" + placeholders + ") AND node_type != 'folder'"
+    ).run(nowIso(), ...ids);
   }
 
   /** 零变更早退：本设备上次成功读/写的 manifest commitId（device_state）。 */
@@ -1846,21 +1871,27 @@ export class Store {
   }
 
   getSyncPendingSummary(): { documents: number; resources: number; generatedAt: string } {
-    const pendingRows = this.noteQueries.listNotesForSync().filter((note) => note.syncState !== "synced");
+    // purged（收到他端删除的保留副本）永不上传、永不标 synced，不计入待上传（否则计数永远虚高）。
+    const pendingRows = this.noteQueries.listNotesForSync().filter((note) => note.syncState !== "synced" && note.syncState !== "purged");
     let resources = 0;
     for (const note of pendingRows) {
       try { resources += extractAssetRefs(fs.readFileSync(this.notePath(note.id), "utf8")).size; }
       catch { /* missing/corrupt content is reported by sync itself; summary stays best-effort */ }
     }
-    const tombstones = (this.db.prepare("SELECT COUNT(*) AS count FROM deleted_notes").get() as { count: number }).count;
+    // 待上传墓碑 = 未发布（published_at IS NULL）的 note 墓碑；folder 墓碑仅本地下载过滤、永不发布，不计入。
+    // NULL node_type（历史行）按 note 处理（发布后即标 published → 计数归零）。
+    const tombstones = (this.db.prepare(
+      "SELECT COUNT(*) AS count FROM deleted_notes WHERE (node_type IS NULL OR node_type != 'folder') AND published_at IS NULL"
+    ).get() as { count: number }).count;
     return { documents: pendingRows.length + tombstones, resources, generatedAt: nowIso() };
   }
 
   /** 是否有本地待上传变更（早退判定）：notes 非 synced（含锁/元数据变更）或纯目录/分组改动（V5 §5.1）。
    * group/notebook 节点无 note_file_id，rename/icon/reorder 只写 tree_nodes；
-   * 排除回收站笔记本：固定节点不进 manifest.folders（listFoldersForSync 排除），其 local 状态不应阻塞早退。 */
+   * 排除回收站笔记本：固定节点不进 manifest.folders（listFoldersForSync 排除），其 local 状态不应阻塞早退。
+   * purged（收到他端删除的保留副本）也排除：永不上传，不应阻塞早退。 */
   hasLocalPendingNotes(): boolean {
-    const noteRow = this.db.prepare("SELECT 1 FROM notes WHERE sync_state != 'synced' AND deleted_at IS NULL LIMIT 1").get();
+    const noteRow = this.db.prepare("SELECT 1 FROM notes WHERE sync_state NOT IN ('synced','purged') AND deleted_at IS NULL LIMIT 1").get();
     if (noteRow) return true;
     const groupRow = this.db.prepare(
       "SELECT 1 FROM tree_nodes WHERE sync_state != 'synced' AND note_file_id IS NULL AND id != ? LIMIT 1"

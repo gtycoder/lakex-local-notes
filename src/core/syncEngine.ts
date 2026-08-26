@@ -127,7 +127,10 @@ export interface SyncDbPort {
   applyRemotePurge(id: string): void;
   /** 本地删除墓碑列表（deleted_notes 表：本设备从未持有或已彻底删除的）——远端恢复撤销判定用。
    * 返回 null = 端口不支持（移动端无 deleted_notes 场景时可不实现，撤销判定退化）。 */
-  listDeletedNotesForSync?(): Array<{ id: string; deletedAt: string; title?: string }>;
+  /** nodeType：'folder' 墓碑仅本地下载过滤、不进 manifest.notes（发布方向必须跳过）。 */
+  listDeletedNotesForSync?(): Array<{ id: string; deletedAt: string; title?: string; nodeType?: string }>;
+  /** 墓碑已发布到 manifest 后标记（port 无此能力则跳过，计数降级为按全部墓碑）。 */
+  markTombstonesPublished?(ids: string[]): void;
   /** 读墓碑笔记的删除前内容（墓碑携带内容，他端先拉内容再应用；读失败/不支持 → null 占位符）。 */
   readDeletedContent?(id: string): Promise<string | null>;
   /** 强制读真实内容 hash（远端缺失时回退全量扫描，对齐桌面 cachedBase 优化边界）。 */
@@ -271,7 +274,8 @@ export async function syncNow(cfg: SyncConfig, s3: S3Store, db: SyncDbPort, opts
     return report;
   }
 
-  const uploadQueue: Array<{ id: string; entry: ManifestNote; content: string }> = [];
+  // tombstone=true：墓碑条目。content="" 为占位符（内容已物理删除，发布阶段不传空对象、保留占位符 hash）。
+  const uploadQueue: Array<{ id: string; entry: ManifestNote; content: string; tombstone?: boolean }> = [];
   progress("pull", `拉取 ${remote ? remote.notes.length : 0} 条`);
 
   // ---- 2. 下载方向：墓碑/恢复分支 → reconcile 对账 → 应用远端 ----
@@ -564,35 +568,42 @@ export async function syncNow(cfg: SyncConfig, s3: S3Store, db: SyncDbPort, opts
   }
 
   // 3.5 墓碑上传：本地已删除（deleted_notes）的笔记 → manifest 恒保留 deleted 标记（审计#2：防删除复活）。
-  // 墓碑携带删除前内容（读本地 .lake 算真实 hash 上传，先内容后标志）；读失败降级占位符 id。
+  // 墓碑携带删除前内容（读本地 .lake 算真实 hash 上传，先内容后标志）；内容已物理删除（purge）→ 占位符 id。
+  // folder/group 墓碑（nodeType='folder'）仅本地下载过滤，不进 manifest.notes（发布方向跳过，避免污染他端 deleted_notes）。
   // 墓碑 vs 远端恢复 LWW：远端已 active 且更新 → 墓碑让位（decideTombstoneYield）。
+  const tombstonePublishedIds: string[] = [];
   {
     const localIds = new Set(localAll.map((n) => n.id));
     const remoteById = new Map((remote?.notes ?? []).map((n) => [n.id, n]));
     const deletedNotes = typeof db.listDeletedNotesForSync === "function" ? db.listDeletedNotesForSync() : [];
     for (const deleted of deletedNotes) {
       if (localIds.has(deleted.id)) continue;
-      // remembered（从未持有、他端 purge 学习）不上传墓碑：远端已有 deleted 标记，本端只是学习防复活；
-      // 仅本端主动删除（本地保留 .lake 内容）上传墓碑（对齐桌面：listDeletedNotesForSync 只含本端删除）。
-      if (typeof db.readDeletedContent !== "function") continue;
-      const tombContent = await db.readDeletedContent(deleted.id);
-      if (tombContent == null) continue;
+      if (deleted.nodeType === "folder") continue;
       const remoteNote = remoteById.get(deleted.id);
       if (decideTombstoneYield(deleted.deletedAt, remoteNote)) {
         db.log(`[tombstone] ${deleted.id} 远端恢复较新，墓碑让位`);
         continue;
       }
       // 墓碑携带删除前内容：content 传真实内容 → 发布阶段上传对象（先内容后标志，其他设备可恢复删除前最新版）。
-      // 修复：此前 content="" 导致发布循环把 contentHash 覆盖成 sha256("") 并上传空对象，删除前内容丢失（迁移回归）。
-      const tombHash = sha256Sync(new TextEncoder().encode(tombContent));
+      // 修复（迁移回归）：内容缺失（purge 已物理删除 .lake，含 remembered 墓碑）此前直接 continue →
+      // 墓碑永不发布、删除不传播、deleted_notes 永不标记已发布 → 待上传计数永远不降。现降级占位符 id 照常发布。
+      const tombBase = { id: deleted.id, title: deleted.title ?? deleted.id, parentId: null, sortOrder: 0, updatedAt: deleted.deletedAt, deletedAt: deleted.deletedAt };
+      let tombHash = deleted.id;
+      let content = "";
+      if (typeof db.readDeletedContent === "function") {
+        const tombContent = await db.readDeletedContent(deleted.id);
+        if (tombContent != null) {
+          content = tombContent;
+          tombHash = sha256Sync(new TextEncoder().encode(tombContent));
+        }
+      }
       uploadQueue.push({
         id: deleted.id,
-        content: tombContent,
-        entry: buildTombstoneEntry(
-          { id: deleted.id, title: deleted.title ?? deleted.id, parentId: null, sortOrder: 0, updatedAt: deleted.deletedAt, deletedAt: deleted.deletedAt },
-          tombHash,
-        ),
+        content,
+        entry: buildTombstoneEntry(tombBase, tombHash),
+        tombstone: true,
       });
+      tombstonePublishedIds.push(deleted.id);
     }
   }
 
@@ -605,6 +616,9 @@ export async function syncNow(cfg: SyncConfig, s3: S3Store, db: SyncDbPort, opts
   // manifest，folders 变更必须传播；迁移回归修复：否则删笔记本不传播 + 目录记账抹掉 local）。
   if (uploadQueue.length > 0 || purgedIds.size > 0 || foldersChanged) {
     for (const item of uploadQueue) {
+      // 占位符墓碑（tombstone && content 为空，purge 已物理删除内容）：不重算 hash（保留占位符 id）、
+      // 不传空对象（否则 contentHash 被覆盖成 sha256(空串) + 空对象残留——迁移回归），仅写 deleted 标记。
+      if (item.tombstone && item.content === "") continue;
       const hash = sha256Sync(new TextEncoder().encode(item.content));
       if (item.entry.contentHash !== hash) item.entry.contentHash = hash;
       await s3.putObject(`${cfg.prefix}/${objectKey(item.id, item.entry.contentHash)}`, item.content);
@@ -624,8 +638,10 @@ export async function syncNow(cfg: SyncConfig, s3: S3Store, db: SyncDbPort, opts
       if (idx >= 0) next.notes[idx] = item.entry;
       else next.notes.push(item.entry);
     }
-    // B4：purged 条目从 manifest 移除（云端删除已完成；对齐桌面 sync.ts:630-632 + manifestNotes 组装）
-    next.notes = next.notes.filter((n) => !purgedIds.has(n.id));
+    // B4 修复：purged 条目（收到他端删除后本地保留的回收站副本）**不得**从 manifest 移除——
+    // next.notes 继承 remote.notes，该条目必为 deleted:true（墓碑权威）；若被过滤掉，
+    // 墓碑消失 → 离线第三端把残留当 active 上传 → 已删除内容复活（删除传播漏洞，双端复现）。
+    // purged 不上传已由上传循环（syncState==='purged' continue）保证，manifest 保留墓碑即可。
     // M6：manifest 排序（notes 按 sortOrder，对齐桌面 sync.ts:733）+ 目录树发布
     // （folders 从本地发布，对齐桌面 listFoldersForSync；端口未实现则保持远端透传）。
     next.notes.sort((a, b) => a.sortOrder - b.sortOrder);
@@ -648,6 +664,10 @@ export async function syncNow(cfg: SyncConfig, s3: S3Store, db: SyncDbPort, opts
     await s3.putObject(`${cfg.prefix}/manifests/${next.commitId}.json`, JSON.stringify(next), { gzip: true });
     await s3.putObject(`${cfg.prefix}/${MANIFEST_KEY}`, JSON.stringify(next), { gzip: true });
     report.published = true;
+    // 墓碑已发布 → 标记 published_at（从待上传计数移除；墓碑本体保留防删除标记丢失，审计 #2）
+    if (tombstonePublishedIds.length > 0 && typeof db.markTombstonesPublished === "function") {
+      db.markTombstonesPublished(tombstonePublishedIds);
+    }
     // 桌面 GC 差集标记钩子（4.5）：发布后暴露 next/prev，桌面 Controller 算待回收引用
     try { await opts?.onPublished?.(next, remote); } catch { /* 钩子失败不阻断 */ }
     progress("publish", `发布 manifest（应用 ${report.appliedRemote}，上传 ${report.uploaded}）`);

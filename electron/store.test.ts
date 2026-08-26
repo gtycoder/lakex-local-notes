@@ -948,6 +948,32 @@ describe("同步状态 / 导入", () => {
     store.pruneTombstones([]); // 空数组安全
   });
 
+  it("purge 墓碑带 node_type：文档=note（发布方向），笔记本/分组=folder（仅本地下载过滤）", () => {
+    const nb = store.createNotebook("待彻底删-类型");
+    const note = store.createNoteIn(nb.id, "子笔记");
+    store.saveNote(note.id, "子笔记", "<p>内容</p>");
+    store.deleteTreeNode(nb.id);
+    store.purgeTrashItem(nb.id); // 笔记本 + 子笔记都 purge
+    const tombstones = store.listDeletedNotesForSync();
+    expect(tombstones.find((d) => d.id === note.id)?.nodeType).toBe("note");
+    expect(tombstones.find((d) => d.id === nb.id)?.nodeType).toBe("folder");
+  });
+
+  it("markTombstonesPublished + getSyncPendingSummary：未发布 note 墓碑计入待上传，已发布/文件夹墓碑不计", () => {
+    // 基线（含 welcome-note 等本地待上传）；folder 墓碑永不计数
+    const base = store.getSyncPendingSummary().documents;
+    const nb = store.createNotebook("待彻底删-计数");
+    const note = store.createNoteIn(nb.id, "子笔记");
+    store.saveNote(note.id, "子笔记", "<p>内容</p>");
+    store.deleteTreeNode(nb.id);
+    store.purgeTrashItem(nb.id);
+    // 未发布 note 墓碑 → +1（folder 墓碑不计入）
+    expect(store.getSyncPendingSummary().documents).toBe(base + 1);
+    // 发布 note 墓碑 → 回到基线（folder 墓碑仍不计）
+    store.markTombstonesPublished([note.id]);
+    expect(store.getSyncPendingSummary().documents).toBe(base);
+  });
+
   it("listNotesForSync 返回未删除笔记（含回收站条目，它们上云）", () => {
     const { id } = makeNote();
     expect(store.listNotesForSync().some((n) => n.id === id)).toBe(true);
