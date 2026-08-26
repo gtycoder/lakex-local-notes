@@ -91,6 +91,9 @@
 4. **macOS 文件系统大小写不敏感**：attachmentPreview.ts 与 AttachmentPreview.tsx 冲突 → 控制器改名 attachmentPreviewController.ts
 5. **run_code 模板字面量**：代码字符串里的反引号/中文引号会 parse error（HANDOFF-260823 第 6.7 条再现）——用 bash heredoc（'EOF' 定界）或数组 join 或 write 工具
 6. **vite dev server GPU 崩溃**（HANDOFF-260823 第 4.5 条再现）：重启即可；窗口被遮挡时 CDP Input 点击不生效（visibilityState hidden），需真实用户操作或 osascript activate
+9. **CSP object-src 'none' 拦截 PDF embed**：主进程日志 "Loading plugin data ... violates CSP: object-src 'none'"——PDF 预览空白、音视频同理（media-src 缺本地资产源）。已修（vite.config.ts object-src/media-src 放行 127.0.0.1:*）
+10. **vite8 transformIndexHtml 占位符丢失**：transform 收到的 html 里 %VITE_CSP% 已被处理成实际值，字面 replace 不匹配 → 旧 CSP 残留。必须用正则强替换 CSP meta content
+11. **contextBridge 暴露对象属性只读**：window.lakeNative.openAttachment = ... 静默失败（无异常），无法用 monkey-patch 观察 IPC 调用——验证按钮链路改用渲染进程 console.log（进主进程日志）
 7. **class 成员末尾不能有逗号**（写新方法时注意）
 8. **Uint8Array 跨 IPC**：structured clone 高效；number[] 对 100MiB 附件内存爆炸
 
