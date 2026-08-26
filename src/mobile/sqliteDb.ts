@@ -80,6 +80,13 @@ export class SqlJsDb implements DbLike {
     return new SqlJsStatement(this.db.prepare(sql));
   }
 
+  /**
+   * 事务：BEGIN → fn → COMMIT，出错 → ROLLBACK。
+   * 禁止在事务内再开事务：SQLite 不支持嵌套 BEGIN（会抛 "cannot start a transaction within
+   * a transaction"），且嵌套出错时外层事务可能停在半开状态。所有调用链必须保持单层事务；
+   * 若未来确有嵌套需求，改用 SAVEPOINT（SAVEPOINT sp / ROLLBACK TO sp / RELEASE sp）实现，
+   * 不要直接嵌套本方法。
+   */
   transaction<T extends (...args: never[]) => unknown>(fn: T): T {
     const wrapped = ((...args: unknown[]) => {
       this.db.run("BEGIN");

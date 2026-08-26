@@ -15,6 +15,7 @@ import { SearchSheet } from "./settings/SearchSheet";
 import { SettingsDrawer } from "./settings/SettingsDrawer";
 import { useBackHandler } from "./useBackHandler";
 import { TrashPage } from "./trash/TrashPage";
+import { QuickNotesTrashPage } from "./trash/QuickNotesTrashPage";
 import "lakex-editor-react-component/style.css";
 import "./mobile.css";
 
@@ -22,7 +23,8 @@ export type Route =
   | { kind: "home"; tab: "quick" | "library" }
   | { kind: "notebook"; notebookId: string }
   | { kind: "document"; noteId: string; mode: "viewer" | "editor" }
-  | { kind: "trash" };
+  | { kind: "trash" }
+  | { kind: "quick-trash" };
 
 export function MobileApp() {
   const [route, setRoute] = useState<Route>({ kind: "home", tab: "library" });
@@ -62,6 +64,9 @@ export function MobileApp() {
           listTreeNodes: () => bridge.listTreeNodes(),
           listNotes: () => bridge.listNotes(),
           listQuickNotes: () => bridge.listQuickNotes(),
+          listQuickNoteTrash: () => bridge.listQuickNoteTrash(),
+          restoreQuickNote: (id: string) => bridge.restoreQuickNote(id),
+          purgeQuickNote: (id: string) => bridge.purgeQuickNote(id),
           listTrashTree: () => bridge.listTrashTree(),
           getS3Settings: () => bridge.getS3Settings(),
           saveS3Settings: (cfg: import("../lib/types").S3Settings) => bridge.saveS3Settings(cfg),
@@ -127,6 +132,7 @@ export function MobileApp() {
     onBackFromDocument: backFromDocument,
     onBackFromNotebook: () => setRoute({ kind: "home", tab: "library" }),
     onBackFromTrash: () => setRoute({ kind: "home", tab: "library" }),
+    onBackFromQuickTrash: () => setRoute({ kind: "home", tab: "quick" }),
     onCloseDrawer: () => setDrawerOpen(false),
     onCloseSheets: () => { setCreateNbOpen(false); setSearchOpen(false); },
     onAppExit: () => {
@@ -176,6 +182,7 @@ export function MobileApp() {
           onOpenSearch={() => setSearchOpen(true)}
           onCreateNote={() => void createNoteInParent("notebook-personal")}
           onCreateNotebook={() => setCreateNbOpen(true)}
+          onOpenQuickTrash={() => setRoute({ kind: "quick-trash" })}
         />
       )}
       {route.kind === "notebook" && (
@@ -189,6 +196,12 @@ export function MobileApp() {
       {route.kind === "trash" && (
         <TrashPage
           onBack={() => setRoute({ kind: "home", tab: "library" })}
+          onChanged={refreshAll}
+        />
+      )}
+      {route.kind === "quick-trash" && (
+        <QuickNotesTrashPage
+          onBack={() => setRoute({ kind: "home", tab: "quick" })}
           onChanged={refreshAll}
         />
       )}

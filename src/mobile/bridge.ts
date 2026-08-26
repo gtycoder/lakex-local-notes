@@ -8,7 +8,9 @@
 import { SqlJsDb } from "./sqliteDb";
 import { loadSnapshot, saveSnapshot, listAssetKeys as listLegacyAssetKeys, loadAssetBytes as loadLegacyAssetBytes } from "./persistence";
 import { saveAssetBytesFs, loadAssetBytesFs, listAssetKeysFs } from "./assetFs";
-import { syncNow as runSync, type SyncConfig, type SyncDbPort } from "../core/syncEngine.js";
+import { syncNow as runSync, type SyncConfig, type SyncDbPort, type SyncReport } from "../core/syncEngine.js";
+import { KeyedAsyncQueue } from "../core/keyedAsyncQueue.js";
+import type { QuickNotesSyncResult } from "../core/quickNotesSyncEngine.js";
 import { TRASH_NOTEBOOK_ID } from "../core/syncDecisions.js";
 import { sha256Sync } from "../core/sha256Sync.js";
 import { createCapacitorS3Store } from "./s3Store";
@@ -18,6 +20,8 @@ import { assertMoveTarget, assertNodeIcon, assertOrderedChildren, assertRootCons
 import { buildLikePattern, buildSearchSql, toSearchResult } from "../core/mobileSearch.js";
 import { normalizeQuickNoteContent, previewQuickNote, serializeQuickNoteContent } from "../core/quickNoteModel.js";
 import type { StoredQuickNoteContent, StoredQuickNoteImage } from "../core/quickNoteModel.js";
+import { syncQuickNotesViaEngine } from "../core/quickNotesSyncEngine.js";
+import { applyQuickNotesSyncSchema, createQuickNotesSyncDbPort } from "./quickNotesDbPort.js";
 import { mobileSecretStore } from "./secretStore.js";
 
 export interface POCNote {
@@ -25,6 +29,13 @@ export interface POCNote {
   title: string;
   content: string;
   updatedAt: string;
+}
+
+/** 移动端同步结果（P2-5，GPT 审计）：文档/小记分字段，便于 UI 分别展示进度与失败。 */
+export interface MobileSyncResult {
+  message: string;
+  notes: SyncReport | null;
+  quickNotes: QuickNotesSyncResult | { error: string } | null;
 }
 
 /** 与桌面一致的默认同步 prefix（对齐桌面 store.ts 默认 "lake-notes"；P1-7 GPT 审计：ab-test-verify 仅限测试） */
@@ -37,6 +48,9 @@ export const INITIAL_LAKE_CONTENT = `<p class="ne-p"><br></p>`;
 let db: SqlJsDb | null = null;
 /** 已下载资源（POC 内存态；M2 接 Capacitor Filesystem 持久化）。key = "{noteId}/{filename}" */
 const assets = new Map<string, Uint8Array>();
+/** 主维护队列（GPT 审计 P2-6）：同步与本地写操作（保存/删除/恢复）串行化，防交错
+ * 覆盖快照/发布旧状态；小记同步与编辑竞态由队列闭合（引擎 markSynced 无"未变才标"守卫时也安全）。 */
+const maintenance = new KeyedAsyncQueue();
 
 /** 与桌面一致的随机 8-hex 片段（crypto.randomBytes(4) 的等价物）。 */
 function randomHex(bytes: number): string {
@@ -62,6 +76,8 @@ async function ensureDb(): Promise<SqlJsDb> {
   if (db) return db;
   const snap = await loadSnapshot();
   db = snap ? await SqlJsDb.openFrom(snap) : await SqlJsDb.open();
+  // P2-9（GPT 审计）：外键约束启用（sql.js 支持 PRAGMA foreign_keys；新建表的外键声明才生效）
+  try { db.exec("PRAGMA foreign_keys = ON"); } catch { /* 旧库/兼容环境忽略 */ }
   // M1 schema：对齐桌面 notes 子集 + sync_base（旧 POC 表自动迁移，列缺失则 ALTER 补充）
   db.exec(`CREATE TABLE IF NOT EXISTS notes (
     id TEXT PRIMARY KEY,
@@ -142,6 +158,8 @@ async function ensureDb(): Promise<SqlJsDb> {
     is_conflict INTEGER NOT NULL DEFAULT 0,
     restore_pending_at TEXT
   )`);
+  // P2（小记同步端口）：软删墓碑/基线/图片字节 schema（见 quickNotesDbPort.ts，幂等）
+  applyQuickNotesSyncSchema(db);
   // P1-2（GPT 审计）：默认笔记本 seed（对齐桌面 notebook-personal）。幂等：仅首次初始化种入。
   db.prepare("INSERT OR IGNORE INTO folders (id, title, parent_id, sort_order, node_type, icon, updated_at, sync_state) VALUES (?,?,NULL,0,'notebook',NULL,?,'synced')")
     .run("notebook-personal", "个人笔记", new Date().toISOString());
@@ -157,6 +175,29 @@ async function ensureDb(): Promise<SqlJsDb> {
     created_at TEXT NOT NULL
   )`);
   return db;
+}
+
+/**
+ * 小记保存的实际写入逻辑。调用方必须在 maintenance 队列中调用它；不要在这里
+ * 再次入队，否则 createQuickNote → saveQuickNote 会对同一个 key 发生嵌套等待死锁。
+ */
+async function saveQuickNoteInternal(id: string, text: string, images: StoredQuickNoteImage[] = []): Promise<string> {
+  const d = await ensureDb();
+  const now = new Date().toISOString();
+  const content = normalizeQuickNoteContent(text, images);
+  const serialized = serializeQuickNoteContent(content);
+  const contentHash = sha256Sync(new TextEncoder().encode(serialized));
+  const preview = previewQuickNote(text, images.length);
+  d.transaction(() => {
+    d.prepare(
+      `INSERT INTO quick_notes (id, created_at, updated_at, preview_text, image_count, content_hash, content, sync_state, is_conflict, restore_pending_at, ready_to_sync)
+       VALUES (?,?,?,?,?,?,?,'local',0,NULL,1)
+       ON CONFLICT(id) DO UPDATE SET updated_at=excluded.updated_at, preview_text=excluded.preview_text, image_count=excluded.image_count, content_hash=excluded.content_hash, content=excluded.content, sync_state='local', deleted_at=NULL, restore_pending_at=NULL, ready_to_sync=1`
+    ).run(id, now, now, preview, images.length, contentHash, serialized);
+    d.prepare("DELETE FROM quick_note_deleted WHERE id=?").run(id);
+  })();
+  await saveSnapshot(d.exportBytes());
+  return id;
 }
 
 function rowToNote(r: Record<string, unknown>): POCNote {
@@ -482,114 +523,126 @@ export const bridge = {
 
   /** 新建 notebook：根层创建，名称必填（trim 校验，共享 treeRules），默认图标不落库（icon 由 setNodeIcon 单独写入）。 */
   async createNotebook(input: { title: string; icon: string | null }): Promise<TreeNode> {
-    const title = assertTreeNodeTitle(input.title);
-    const d = await ensureDb();
-    const id = crypto.randomUUID();
-    const now = new Date().toISOString();
-    // 根层最大排序值（共享 nextSortOrder：MAX,-1)+1，首个节点为 0，对齐桌面）
-    const maxRow = d.prepare("SELECT MAX(sort_order) AS m FROM folders WHERE parent_id IS NULL AND trashed_at IS NULL").get() as { m: number | null } | undefined;
-    const sortOrder = nextSortOrder(maxRow?.m ?? null);
-    d.prepare("INSERT INTO folders (id, title, parent_id, sort_order, node_type, icon, updated_at, sync_state) VALUES (?,?,NULL,?,?,?,?,'local')")
-      .run(id, title, sortOrder, "notebook", null, now);
-    if (input.icon) {
-      d.prepare("UPDATE folders SET icon = ?, sync_state = 'local' WHERE id = ?").run(input.icon, id);
-    }
-    await saveSnapshot(d.exportBytes());
-    const row = d.prepare("SELECT id, title, parent_id, sort_order, node_type, icon, updated_at FROM folders WHERE id=?").get(id) as Record<string, unknown>;
-    return folderRowToTreeNode(row, { title, updatedAt: now, icon: input.icon ?? null });
+    return maintenance.run("main", async () => {
+      const title = assertTreeNodeTitle(input.title);
+      const d = await ensureDb();
+      const id = crypto.randomUUID();
+      const now = new Date().toISOString();
+      // 根层最大排序值（共享 nextSortOrder：MAX,-1)+1，首个节点为 0，对齐桌面）
+      const maxRow = d.prepare("SELECT MAX(sort_order) AS m FROM folders WHERE parent_id IS NULL AND trashed_at IS NULL").get() as { m: number | null } | undefined;
+      const sortOrder = nextSortOrder(maxRow?.m ?? null);
+      d.prepare("INSERT INTO folders (id, title, parent_id, sort_order, node_type, icon, updated_at, sync_state) VALUES (?,?,NULL,?,?,?,?,'local')")
+        .run(id, title, sortOrder, "notebook", null, now);
+      if (input.icon) {
+        d.prepare("UPDATE folders SET icon = ?, sync_state = 'local' WHERE id = ?").run(input.icon, id);
+      }
+      await saveSnapshot(d.exportBytes());
+      const row = d.prepare("SELECT id, title, parent_id, sort_order, node_type, icon, updated_at FROM folders WHERE id=?").get(id) as Record<string, unknown>;
+      return folderRowToTreeNode(row, { title, updatedAt: now, icon: input.icon ?? null });
+    });
   },
 
   /** 新建 group：父节点必须存在（且非回收站），名称校验共享 treeRules。 */
   async createGroup(parentId: string, title: string): Promise<TreeNode> {
-    const trimmed = assertTreeNodeTitle(title);
-    const d = await ensureDb();
-    const parent = d.prepare("SELECT 1 FROM folders WHERE id = ? AND trashed_at IS NULL").get(parentId);
-    if (!parent) throw new Error("父节点不存在: " + parentId);
-    const id = crypto.randomUUID();
-    const now = new Date().toISOString();
-    const maxRow = d.prepare("SELECT MAX(sort_order) AS m FROM folders WHERE parent_id = ? AND trashed_at IS NULL").get(parentId) as { m: number | null } | undefined;
-    const sortOrder = nextSortOrder(maxRow?.m ?? null);
-    d.prepare("INSERT INTO folders (id, title, parent_id, sort_order, node_type, icon, updated_at, sync_state) VALUES (?,?,?,?,?,?,?,'local')")
-      .run(id, trimmed, parentId, sortOrder, "group", null, now);
-    await saveSnapshot(d.exportBytes());
-    const row = d.prepare("SELECT id, title, parent_id, sort_order, node_type, icon, updated_at FROM folders WHERE id=?").get(id) as Record<string, unknown>;
-    return folderRowToTreeNode(row, { title: trimmed, updatedAt: now });
+    return maintenance.run("main", async () => {
+      const trimmed = assertTreeNodeTitle(title);
+      const d = await ensureDb();
+      const parent = d.prepare("SELECT 1 FROM folders WHERE id = ? AND trashed_at IS NULL").get(parentId);
+      if (!parent) throw new Error("父节点不存在: " + parentId);
+      const id = crypto.randomUUID();
+      const now = new Date().toISOString();
+      const maxRow = d.prepare("SELECT MAX(sort_order) AS m FROM folders WHERE parent_id = ? AND trashed_at IS NULL").get(parentId) as { m: number | null } | undefined;
+      const sortOrder = nextSortOrder(maxRow?.m ?? null);
+      d.prepare("INSERT INTO folders (id, title, parent_id, sort_order, node_type, icon, updated_at, sync_state) VALUES (?,?,?,?,?,?,?,'local')")
+        .run(id, trimmed, parentId, sortOrder, "group", null, now);
+      await saveSnapshot(d.exportBytes());
+      const row = d.prepare("SELECT id, title, parent_id, sort_order, node_type, icon, updated_at FROM folders WHERE id=?").get(id) as Record<string, unknown>;
+      return folderRowToTreeNode(row, { title: trimmed, updatedAt: now });
+    });
   },
 
   async renameTreeNode(id: string, title: string): Promise<TreeNode> {
-    const trimmed = assertTreeNodeTitle(title);
-    const d = await ensureDb();
-    const now = new Date().toISOString();
-    const changed = d.prepare("UPDATE folders SET title=?, updated_at=?, sync_state='local' WHERE id=?").run(trimmed, now, id).changes;
-    if (!changed) throw new Error("节点不存在: " + id);
-    await saveSnapshot(d.exportBytes());
-    const row = d.prepare("SELECT id, title, parent_id, sort_order, node_type, icon, updated_at FROM folders WHERE id=?").get(id) as Record<string, unknown>;
-    return folderRowToTreeNode(row, { title: trimmed, updatedAt: now });
+    return maintenance.run("main", async () => {
+      const trimmed = assertTreeNodeTitle(title);
+      const d = await ensureDb();
+      const now = new Date().toISOString();
+      const changed = d.prepare("UPDATE folders SET title=?, updated_at=?, sync_state='local' WHERE id=?").run(trimmed, now, id).changes;
+      if (!changed) throw new Error("节点不存在: " + id);
+      await saveSnapshot(d.exportBytes());
+      const row = d.prepare("SELECT id, title, parent_id, sort_order, node_type, icon, updated_at FROM folders WHERE id=?").get(id) as Record<string, unknown>;
+      return folderRowToTreeNode(row, { title: trimmed, updatedAt: now });
+    });
   },
 
   async setNodeIcon(id: string, icon: string | null): Promise<TreeNode> {
-    assertNodeIcon(icon);
-    const d = await ensureDb();
-    const now = new Date().toISOString();
-    const changed = d.prepare("UPDATE folders SET icon=?, updated_at=?, sync_state='local' WHERE id=?").run(icon, now, id).changes;
-    if (!changed) throw new Error("节点不存在: " + id);
-    await saveSnapshot(d.exportBytes());
-    const row = d.prepare("SELECT id, title, parent_id, sort_order, node_type, icon, updated_at FROM folders WHERE id=?").get(id) as Record<string, unknown>;
-    return folderRowToTreeNode(row, { icon, updatedAt: now });
+    return maintenance.run("main", async () => {
+      assertNodeIcon(icon);
+      const d = await ensureDb();
+      const now = new Date().toISOString();
+      const changed = d.prepare("UPDATE folders SET icon=?, updated_at=?, sync_state='local' WHERE id=?").run(icon, now, id).changes;
+      if (!changed) throw new Error("节点不存在: " + id);
+      await saveSnapshot(d.exportBytes());
+      const row = d.prepare("SELECT id, title, parent_id, sort_order, node_type, icon, updated_at FROM folders WHERE id=?").get(id) as Record<string, unknown>;
+      return folderRowToTreeNode(row, { icon, updatedAt: now });
+    });
   },
 
   async moveTreeNodeOrdered(id: string, parentId: string | null, orderedIds: string[]): Promise<TreeNode> {
-    const d = await ensureDb();
-    const moving = d.prepare("SELECT node_type FROM folders WHERE id = ? AND trashed_at IS NULL").get(id) as { node_type: string } | undefined;
-    if (!moving) throw new Error("节点不存在: " + id);
-    // 根层约束（共享 treeRules：notebook 必须根层；group/note 必须有父节点）
-    assertRootConstraint(moving.node_type, parentId);
-    // P1-5（GPT 审计）：完整移动校验——不能移到自身/后代；父节点存在；orderedIds 去重/归属/完整
-    const all = d.prepare("SELECT id, parent_id FROM folders WHERE trashed_at IS NULL").all() as Array<{ id: string; parent_id: string | null }>;
-    // 计算被移动节点的后代 id 集合
-    const descendants = new Set<string>();
-    const childrenMap = new Map<string, string[]>();
-    for (const f of all) {
-      const list = childrenMap.get(f.parent_id ?? "") ?? [];
-      list.push(f.id);
-      childrenMap.set(f.parent_id ?? "", list);
-    }
-    const walk = (nodeId: string) => {
-      for (const c of childrenMap.get(nodeId) ?? []) {
-        if (!descendants.has(c)) { descendants.add(c); walk(c); }
+    return maintenance.run("main", async () => {
+      const d = await ensureDb();
+      const moving = d.prepare("SELECT node_type FROM folders WHERE id = ? AND trashed_at IS NULL").get(id) as { node_type: string } | undefined;
+      if (!moving) throw new Error("节点不存在: " + id);
+      // 根层约束（共享 treeRules：notebook 必须根层；group/note 必须有父节点）
+      assertRootConstraint(moving.node_type, parentId);
+      // P1-5（GPT 审计）：完整移动校验——不能移到自身/后代；父节点存在；orderedIds 去重/归属/完整
+      const all = d.prepare("SELECT id, parent_id FROM folders WHERE trashed_at IS NULL").all() as Array<{ id: string; parent_id: string | null }>;
+      // 计算被移动节点的后代 id 集合
+      const descendants = new Set<string>();
+      const childrenMap = new Map<string, string[]>();
+      for (const f of all) {
+        const list = childrenMap.get(f.parent_id ?? "") ?? [];
+        list.push(f.id);
+        childrenMap.set(f.parent_id ?? "", list);
       }
-    };
-    walk(id);
-    const parentExists = parentId === null || all.some((f) => f.id === parentId);
-    assertMoveTarget(id, parentId, descendants, parentExists);
-    // 目标父节点当前子节点（移动前快照，不含 id 若跨父）
-    const currentChildren = (childrenMap.get(parentId ?? "") ?? []).filter((cid) => cid !== id);
-    assertOrderedChildren(orderedIds, currentChildren, id);
-    const now = new Date().toISOString();
-    const tx = d.transaction(() => {
-      d.prepare("UPDATE folders SET parent_id=?, updated_at=?, sync_state='local' WHERE id=?").run(parentId, now, id);
-      // 排序从 0 起（对齐桌面 reorderTreeNodes/moveTreeNodeOrdered 的 index 语义）
-      orderedIds.forEach((childId, index) => {
-        d.prepare("UPDATE folders SET sort_order=?, updated_at=?, sync_state='local' WHERE id=?").run(index, now, childId);
+      const walk = (nodeId: string) => {
+        for (const c of childrenMap.get(nodeId) ?? []) {
+          if (!descendants.has(c)) { descendants.add(c); walk(c); }
+        }
+      };
+      walk(id);
+      const parentExists = parentId === null || all.some((f) => f.id === parentId);
+      assertMoveTarget(id, parentId, descendants, parentExists);
+      // 目标父节点当前子节点（移动前快照，不含 id 若跨父）
+      const currentChildren = (childrenMap.get(parentId ?? "") ?? []).filter((cid) => cid !== id);
+      assertOrderedChildren(orderedIds, currentChildren, id);
+      const now = new Date().toISOString();
+      const tx = d.transaction(() => {
+        d.prepare("UPDATE folders SET parent_id=?, updated_at=?, sync_state='local' WHERE id=?").run(parentId, now, id);
+        // 排序从 0 起（对齐桌面 reorderTreeNodes/moveTreeNodeOrdered 的 index 语义）
+        orderedIds.forEach((childId, index) => {
+          d.prepare("UPDATE folders SET sort_order=?, updated_at=?, sync_state='local' WHERE id=?").run(index, now, childId);
+        });
       });
+      tx();
+      await saveSnapshot(d.exportBytes());
+      const row = d.prepare("SELECT id, title, parent_id, sort_order, node_type, icon, updated_at FROM folders WHERE id=?").get(id) as Record<string, unknown>;
+      return folderRowToTreeNode(row, { parentId, updatedAt: now });
     });
-    tx();
-    await saveSnapshot(d.exportBytes());
-    const row = d.prepare("SELECT id, title, parent_id, sort_order, node_type, icon, updated_at FROM folders WHERE id=?").get(id) as Record<string, unknown>;
-    return folderRowToTreeNode(row, { parentId, updatedAt: now });
   },
 
   /** 同级重排（自定义排序）：单事务更新 sort_order，不改父节点。对齐桌面 reorderTreeNodes。 */
   async reorderSiblings(parentId: string | null, orderedIds: string[]): Promise<void> {
-    const d = await ensureDb();
-    const now = new Date().toISOString();
-    const tx = d.transaction(() => {
-      orderedIds.forEach((childId, index) => {
-        d.prepare("UPDATE folders SET sort_order=?, updated_at=?, sync_state='local' WHERE id=? AND trashed_at IS NULL").run(index, now, childId);
+    return maintenance.run("main", async () => {
+      const d = await ensureDb();
+      const now = new Date().toISOString();
+      const tx = d.transaction(() => {
+        orderedIds.forEach((childId, index) => {
+          d.prepare("UPDATE folders SET sort_order=?, updated_at=?, sync_state='local' WHERE id=? AND trashed_at IS NULL").run(index, now, childId);
+        });
       });
+      tx();
+      await saveSnapshot(d.exportBytes());
     });
-    tx();
-    await saveSnapshot(d.exportBytes());
   },
 
   async listNotes(): Promise<POCNote[]> {
@@ -627,7 +680,7 @@ export const bridge = {
 
   async listQuickNotes(): Promise<Array<{ id: string; previewText: string; imageCount: number; updatedAt: string }>> {
     const d = await ensureDb();
-    const rows = d.prepare("SELECT id, preview_text, image_count, updated_at FROM quick_notes WHERE restore_pending_at IS NULL ORDER BY updated_at DESC").all() as Array<{ id: string; preview_text: string; image_count: number; updated_at: string }>;
+    const rows = d.prepare("SELECT id, preview_text, image_count, updated_at FROM quick_notes WHERE deleted_at IS NULL AND restore_pending_at IS NULL ORDER BY updated_at DESC").all() as Array<{ id: string; preview_text: string; image_count: number; updated_at: string }>;
     return rows.map((r) => ({ id: r.id, previewText: r.preview_text, imageCount: r.image_count, updatedAt: r.updated_at }));
   },
 
@@ -642,46 +695,72 @@ export const bridge = {
   },
 
   async saveQuickNote(id: string, text: string, images: StoredQuickNoteImage[] = []): Promise<string> {
-    const d = await ensureDb();
-    const now = new Date().toISOString();
-    const content = normalizeQuickNoteContent(text, images);
-    const serialized = serializeQuickNoteContent(content);
-    const contentHash = sha256Sync(new TextEncoder().encode(serialized));
-    const preview = previewQuickNote(text, images.length);
-    d.prepare(
-      `INSERT INTO quick_notes (id, created_at, updated_at, preview_text, image_count, content_hash, content, sync_state, is_conflict)
-       VALUES (?,?,?,?,?,?,?,'local',0)
-       ON CONFLICT(id) DO UPDATE SET updated_at=excluded.updated_at, preview_text=excluded.preview_text, image_count=excluded.image_count, content_hash=excluded.content_hash, content=excluded.content, sync_state='local'`
-    ).run(id, now, now, preview, images.length, contentHash, serialized);
-    await saveSnapshot(d.exportBytes());
-    return id;
+    return maintenance.run("main", () => saveQuickNoteInternal(id, text, images));
   },
 
   async createQuickNote(text: string): Promise<string> {
-    const id = crypto.randomUUID();
-    await bridge.saveQuickNote(id, text, []);
-    return id;
+    return maintenance.run("main", async () => {
+      const id = crypto.randomUUID();
+      return saveQuickNoteInternal(id, text, []);
+    });
   },
 
-  /** 本地删除小记：直接 DELETE（对齐桌面小记语义：随手记，删除即隐没；同步后置阶段不做墓碑传播）。 */
+  /** 本地删除小记：软删（保留 content 供墓碑携带），同步时上传墓碑跨端传播删除。 */
   async deleteQuickNote(id: string): Promise<void> {
+    return maintenance.run("main", async () => {
+      const d = await ensureDb();
+      d.prepare("UPDATE quick_notes SET deleted_at=?, restore_pending_at=NULL, sync_state='local', ready_to_sync=1 WHERE id=?").run(new Date().toISOString(), id);
+      await saveSnapshot(d.exportBytes());
+    });
+  },
+
+  /** 小记回收站列表（软删行；含冲突归档的 ready_to_sync=0 条目——它们也是可恢复的本地内容）。 */
+  async listQuickNoteTrash(): Promise<Array<{ id: string; createdAt: string; updatedAt: string; deletedAt: string; previewText: string }>> {
     const d = await ensureDb();
-    d.prepare("DELETE FROM quick_notes WHERE id=?").run(id);
-    await saveSnapshot(d.exportBytes());
+    const rows = d.prepare("SELECT id, created_at, updated_at, deleted_at, preview_text FROM quick_notes WHERE deleted_at IS NOT NULL ORDER BY deleted_at DESC").all() as Array<{ id: string; created_at: string; updated_at: string; deleted_at: string; preview_text: string }>;
+    return rows.map((r) => ({ id: String(r.id), createdAt: String(r.created_at), updatedAt: String(r.updated_at), deletedAt: String(r.deleted_at), previewText: String(r.preview_text) }));
+  },
+
+  /** 小记恢复（回收站 → active）：restore_pending_at → 同步 local-wins 上传 active 覆盖墓碑。 */
+  async restoreQuickNote(id: string): Promise<void> {
+    return maintenance.run("main", async () => {
+      const d = await ensureDb();
+      const row = d.prepare("SELECT 1 FROM quick_notes WHERE id=? AND deleted_at IS NOT NULL").get(id);
+      if (!row) throw new Error("小记不在回收站");
+      const now = new Date().toISOString();
+      d.prepare("UPDATE quick_notes SET deleted_at=NULL, restore_pending_at=?, sync_state='local', updated_at=? WHERE id=?").run(now, now, id);
+      await saveSnapshot(d.exportBytes());
+    });
+  },
+
+  /** 小记彻底删除（回收站 → 不可恢复）：删行 + 删图片；保留墓碑记录（同步继续传播删除，正文已删 → 占位符 hash）。 */
+  async purgeQuickNote(id: string): Promise<void> {
+    return maintenance.run("main", async () => {
+      const d = await ensureDb();
+      d.transaction(() => {
+        // 墓碑记录保留（若行存在则取行时间戳；行已不存在则覆盖旧记录保持幂等）
+        d.prepare("INSERT OR REPLACE INTO quick_note_deleted (id, created_at, updated_at, deleted_at) SELECT id, created_at, updated_at, deleted_at FROM quick_notes WHERE id=?").run(id);
+        d.prepare("DELETE FROM quick_note_assets WHERE quick_note_id=?").run(id);
+        d.prepare("DELETE FROM quick_notes WHERE id=?").run(id);
+      })();
+      await saveSnapshot(d.exportBytes());
+    });
   },
 
   async saveNote(id: string, title: string, content: string, parentId: string | null = null): Promise<void> {
-    const d = await ensureDb();
-    const now = new Date().toISOString();
-    // P1-9（GPT 审计）：文档标题不为空——空白回退"无标题文档"（对齐 createNote 默认语义，避免同步空标题）
-    const safeTitle = title.trim() ? title.trim() : "无标题文档";
-    // 本地编辑必须置 sync_state='local'（待上传），否则同步零变更早退会跳过本次修改
-    // ON CONFLICT 不覆盖 parent_id：编辑后保留归属；新建时用传入 parentId
-    d.prepare(
-      `INSERT INTO notes (id, title, content, parent_id, updated_at, sync_state) VALUES (?,?,?,?,?,'local')
-       ON CONFLICT(id) DO UPDATE SET title=excluded.title, content=excluded.content, updated_at=excluded.updated_at, sync_state='local'`
-    ).run(id, safeTitle, content, parentId, now);
-    await saveSnapshot(d.exportBytes());
+    return maintenance.run("main", async () => {
+      const d = await ensureDb();
+      const now = new Date().toISOString();
+      // P1-9（GPT 审计）：文档标题不为空——空白回退"无标题文档"（对齐 createNote 默认语义，避免同步空标题）
+      const safeTitle = title.trim() ? title.trim() : "无标题文档";
+      // 本地编辑必须置 sync_state='local'（待上传），否则同步零变更早退会跳过本次修改
+      // ON CONFLICT 不覆盖 parent_id：编辑后保留归属；新建时用传入 parentId
+      d.prepare(
+        `INSERT INTO notes (id, title, content, parent_id, updated_at, sync_state) VALUES (?,?,?,?,?,'local')
+         ON CONFLICT(id) DO UPDATE SET title=excluded.title, content=excluded.content, updated_at=excluded.updated_at, sync_state='local'`
+      ).run(id, safeTitle, content, parentId, now);
+      await saveSnapshot(d.exportBytes());
+    });
   },
 
   async createNote(title: string, parentId: string | null = null): Promise<POCNote> {
@@ -693,16 +772,18 @@ export const bridge = {
 
   /** 本地软删（入回收站）：同步时上传墓碑（删除压编辑） */
   async trashNote(id: string): Promise<void> {
-    const d = await ensureDb();
-    dbPort.localTrashNote(id);
-    await saveSnapshot(d.exportBytes());
+    return maintenance.run("main", async () => {
+      const d = await ensureDb();
+      dbPort.localTrashNote(id);
+      await saveSnapshot(d.exportBytes());
+    });
   },
 
-  /** 本地恢复：restore_pending_at → 同步时 local-wins 上传 active 覆盖墓碑 */
+  /** 本地恢复单条笔记：restore_pending_at → 同步时 local-wins 上传 active 覆盖墓碑。
+   * 与 restoreTreeItem(id, "note") 完全等价（同一实现）；回收站 UI 统一走 restoreTreeItem，
+   * 本方法仅供 lakeNative 调试契约使用，避免两套恢复入口语义分叉。 */
   async restoreNote(id: string): Promise<void> {
-    const d = await ensureDb();
-    dbPort.localRestoreNote(id);
-    await saveSnapshot(d.exportBytes());
+    return bridge.restoreTreeItem(id, "note");
   },
 
   /** 回收站列表 */
@@ -725,53 +806,62 @@ export const bridge = {
 
   /** B2：恢复回收站项。folder = 恢复整棵（含深层子树）；note = 文档级恢复。恢复标记 restore_pending_at → 同步 local-wins 上传 active 覆盖墓碑。 */
   async restoreTreeItem(id: string, kind: "folder" | "note"): Promise<void> {
-    const d = await ensureDb();
-    if (kind === "note") { dbPort.localRestoreNote(id); }
-    else {
-      // P1-4（GPT 审计）：folder 恢复必须同事务恢复其下 notes（否则文档继续留在回收站）
-      const tx = d.transaction(() => {
-        // 收集整棵 folder 子树（含自己）→ 清 trashed_at
-        const all = d.prepare("SELECT id, parent_id FROM folders").all() as Array<{ id: string; parent_id: string | null }>;
-        const ids = collectFolderSubtree(all, id);
-        const now = new Date().toISOString();
-        for (const fid of ids) {
-          d.prepare("UPDATE folders SET trashed_at=NULL, updated_at=?, sync_state='local' WHERE id=?").run(now, fid);
-        }
-        // 恢复子树下被移入回收站的 notes：清 trashed + 置 restore_pending_at（同步 local-wins 上传）
-        const noteRows = d.prepare("SELECT id FROM notes WHERE parent_id IN (" + Array.from(ids).map(() => "?").join(",") + ") AND trashed_at IS NOT NULL").all(...Array.from(ids)) as Array<{ id: string }>;
-        for (const n of noteRows) {
-          d.prepare("UPDATE notes SET trashed_at=NULL, restore_pending_at=?, sync_state='local', updated_at=? WHERE id=?").run(now, now, n.id);
-        }
-      });
-      tx();
-    }
-    await saveSnapshot(d.exportBytes());
+    return maintenance.run("main", async () => {
+      const d = await ensureDb();
+      if (kind === "note") { dbPort.localRestoreNote(id); }
+      else {
+        // P1-4（GPT 审计）：folder 恢复必须同事务恢复其下 notes（否则文档继续留在回收站）
+        const tx = d.transaction(() => {
+          // 收集整棵 folder 子树（含自己）→ 清 trashed_at
+          const all = d.prepare("SELECT id, parent_id FROM folders").all() as Array<{ id: string; parent_id: string | null }>;
+          const ids = collectFolderSubtree(all, id);
+          const now = new Date().toISOString();
+          for (const fid of ids) {
+            d.prepare("UPDATE folders SET trashed_at=NULL, updated_at=?, sync_state='local' WHERE id=?").run(now, fid);
+          }
+          // 恢复子树下被移入回收站的 notes：清 trashed + 置 restore_pending_at（同步 local-wins 上传）
+          const noteRows = d.prepare("SELECT id FROM notes WHERE parent_id IN (" + Array.from(ids).map(() => "?").join(",") + ") AND trashed_at IS NOT NULL").all(...Array.from(ids)) as Array<{ id: string }>;
+          for (const n of noteRows) {
+            d.prepare("UPDATE notes SET trashed_at=NULL, restore_pending_at=?, sync_state='local', updated_at=? WHERE id=?").run(now, now, n.id);
+          }
+        });
+        tx();
+      }
+      await saveSnapshot(d.exportBytes());
+    });
   },
 
   /** B2：彻底删除回收站项（purge）。folder = 子树全部 purge；note = 单条 purge（同步发墓碑）。 */
   async purgeTreeItem(id: string, kind: "folder" | "note"): Promise<void> {
-    const d = await ensureDb();
-    if (kind === "note") {
-      // purge 语义（对齐桌面 purgeTrashItem）：sync_state='purged' → 引擎发布时从 manifest 移除且不再上传
-      const now = new Date().toISOString();
-      d.prepare("UPDATE notes SET parent_id=?, trashed_at=COALESCE(trashed_at,?), deleted_from_parent_id=COALESCE(deleted_from_parent_id,parent_id), updated_at=?, sync_state='purged', restore_pending_at=NULL WHERE id=?").run(TRASH_NOTEBOOK_ID, now, now, id);
-    }
-    else {
-      // folder：收集子树（含自己）
-      const all = d.prepare("SELECT id, parent_id FROM folders").all() as Array<{ id: string; parent_id: string | null }>;
-      const ids = collectFolderSubtree(all, id);
-      const now = new Date().toISOString();
-      for (const fid of ids) {
-        d.prepare("UPDATE folders SET trashed_at=COALESCE(trashed_at,?), updated_at=?, sync_state='purged' WHERE id=?").run(now, now, fid);
-      }
-      // 子树下的文档也 purge
-      const noteIds = d.prepare("SELECT id FROM notes WHERE parent_id IN (SELECT id FROM folders WHERE id IN (" + Array.from(ids).map(() => "?").join(",") + "))").all(...Array.from(ids)) as Array<{ id: string }>;
-      const now2 = new Date().toISOString();
-      for (const n of noteIds) {
-        d.prepare("UPDATE notes SET parent_id=?, trashed_at=COALESCE(trashed_at,?), deleted_from_parent_id=COALESCE(deleted_from_parent_id,parent_id), updated_at=?, sync_state='purged', restore_pending_at=NULL WHERE id=?").run(TRASH_NOTEBOOK_ID, now2, now2, n.id);
-      }
-    }
-    await saveSnapshot(d.exportBytes());
+    return maintenance.run("main", async () => {
+      const d = await ensureDb();
+      // purge 同时修改 folders 与 notes；必须让整棵回收站子树在一个事务内完成，
+      // 避免快照/同步在两批 UPDATE 之间观察到半完成状态。
+      const tx = d.transaction(() => {
+        if (kind === "note") {
+          // purge 语义（对齐桌面 purgeTrashItem）：sync_state='purged' → 引擎发布时从 manifest 移除且不再上传
+          const now = new Date().toISOString();
+          d.prepare("UPDATE notes SET parent_id=?, trashed_at=COALESCE(trashed_at,?), deleted_from_parent_id=COALESCE(deleted_from_parent_id,parent_id), updated_at=?, sync_state='purged', restore_pending_at=NULL WHERE id=?").run(TRASH_NOTEBOOK_ID, now, now, id);
+        }
+        else {
+          // folder：收集子树（含自己）
+          const all = d.prepare("SELECT id, parent_id FROM folders").all() as Array<{ id: string; parent_id: string | null }>;
+          const ids = collectFolderSubtree(all, id);
+          const now = new Date().toISOString();
+          for (const fid of ids) {
+            d.prepare("UPDATE folders SET trashed_at=COALESCE(trashed_at,?), updated_at=?, sync_state='purged' WHERE id=?").run(now, now, fid);
+          }
+          // 子树下的文档也 purge
+          const noteIds = d.prepare("SELECT id FROM notes WHERE parent_id IN (SELECT id FROM folders WHERE id IN (" + Array.from(ids).map(() => "?").join(",") + "))").all(...Array.from(ids)) as Array<{ id: string }>;
+          const now2 = new Date().toISOString();
+          for (const n of noteIds) {
+            d.prepare("UPDATE notes SET parent_id=?, trashed_at=COALESCE(trashed_at,?), deleted_from_parent_id=COALESCE(deleted_from_parent_id,parent_id), updated_at=?, sync_state='purged', restore_pending_at=NULL WHERE id=?").run(TRASH_NOTEBOOK_ID, now2, now2, n.id);
+          }
+        }
+      });
+      tx();
+      await saveSnapshot(d.exportBytes());
+    });
   },
 
   /** 导出当前库快照字节（S3 通路验证 + 后续同步协议用） */
@@ -857,24 +947,38 @@ export const bridge = {
     return { url, resourceRef: url, filename: name, mimeType, size: bytes.length };
   },
 
-  /** M1 同步：manifest v4 协议（拉取对账 + 上传发布），复用 src/core 决策纯函数 */
-  async syncNow(): Promise<string> {
-    const cfg = await bridge.getS3Settings();
-    if (!cfg) return "未配置 S3";
-    const d = await ensureDb();
-    const syncCfg: SyncConfig = {
-      endpoint: cfg.endpoint,
-      region: cfg.region,
-      bucket: cfg.bucket,
-      accessKeyId: cfg.accessKeyId,
-      secretAccessKey: cfg.secretAccessKey,
-      prefix: cfg.prefix,
-    };
-    const s3Store = createCapacitorS3Store(syncCfg);
-    const report = await runSync(syncCfg, s3Store, dbPort);
-    await saveSnapshot(d.exportBytes());
-    return report.message;
+  /** M1 同步：manifest v4 协议（拉取对账 + 上传发布）+ 小记 quick-notes/ 子空间同步，复用 src/core 引擎。
+   * P2-5/6（GPT 审计）：结构化返回（notes/quickNotes 分字段）；主维护队列串行化防与本地写操作交错。 */
+  async syncNow(): Promise<MobileSyncResult> {
+    return maintenance.run("main", async () => {
+      const cfg = await bridge.getS3Settings();
+      if (!cfg) return { message: "未配置 S3", notes: null, quickNotes: null };
+      const d = await ensureDb();
+      const syncCfg: SyncConfig = {
+        endpoint: cfg.endpoint,
+        region: cfg.region,
+        bucket: cfg.bucket,
+        accessKeyId: cfg.accessKeyId,
+        secretAccessKey: cfg.secretAccessKey,
+        prefix: cfg.prefix,
+      };
+      const s3Store = createCapacitorS3Store(syncCfg);
+      const report = await runSync(syncCfg, s3Store, dbPort);
+      // 小记独立子空间同步（quick-notes/ 前缀，同一 S3 配置；墓碑/恢复/冲突语义与桌面一致）。
+      // 失败不拖垮笔记同步（对齐桌面 main.ts：quickNotes 错误单独上报）。
+      let quickNotes: QuickNotesSyncResult | { error: string };
+      let quickMsg = "；小记已同步";
+      try {
+        quickNotes = await syncQuickNotesViaEngine(syncCfg, s3Store, createQuickNotesSyncDbPort(d));
+        if (quickNotes.uploaded + quickNotes.downloaded > 0) {
+          quickMsg = `；小记 ↓${quickNotes.downloaded} ↑${quickNotes.uploaded}`;
+        }
+      } catch (reason) {
+        quickNotes = { error: (reason as Error).message };
+        quickMsg = `；小记同步失败：${quickNotes.error}`;
+      }
+      await saveSnapshot(d.exportBytes());
+      return { message: report.message + quickMsg, notes: report, quickNotes };
+    });
   },
 };
-
-

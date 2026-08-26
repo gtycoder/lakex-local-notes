@@ -75,9 +75,11 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
   }, [saveS3]);
 
   const runSync = useCallback(async () => {
-    setSyncMsg("同步中（文档）…");
+    setSyncMsg("同步中…");
     try {
-      setSyncMsg("文档同步: " + await bridge.syncNow() + "（小记同步待后续版本）");
+      // P2-5：结构化结果（message 已含文档+小记汇总；分字段供后续 UI 分别展示）
+      const result = await bridge.syncNow();
+      setSyncMsg(result.message);
       await onRefresh();
     } catch (e) {
       setSyncMsg("同步失败: " + (e as Error).message);

@@ -1,5 +1,5 @@
 /** 首页（小记/知识库切换 + 笔记本宫格）。Phase 1 基础版：真实 bridge 数据。 */
-import { Feather, Plus, Search, Settings } from "lucide-react";
+import { Feather, Plus, Search, Settings, Trash2 } from "lucide-react";
 import type { TreeNode } from "../../lib/types";
 import { NotebookGrid } from "./NotebookGrid";
 
@@ -23,10 +23,12 @@ export interface HomePageProps {
   onOpenSearch: () => void;
   onCreateNote: () => void;
   onCreateNotebook: () => void;
+  /** 小记 tab：打开小记回收站（B：小记全同步闭环的 UI 入口） */
+  onOpenQuickTrash: () => void;
 }
 
 export function HomePage(props: HomePageProps) {
-  const { tab, notebooks, quickNotes, onCreateQuickNote, onTabChange, onOpenNotebook, onReorderNotebooks, onOpenNote, onOpenDrawer, onOpenSearch, onCreateNote, onCreateNotebook } = props;
+  const { tab, notebooks, quickNotes, onCreateQuickNote, onTabChange, onOpenNotebook, onReorderNotebooks, onOpenNote, onOpenDrawer, onOpenSearch, onCreateNote, onCreateNotebook, onOpenQuickTrash } = props;
   return (
     <div className="mobile-home">
       <header className="mobile-topbar">
@@ -36,6 +38,7 @@ export function HomePage(props: HomePageProps) {
           <button className={tab === "library" ? "mobile-htab active" : "mobile-htab"} onClick={() => onTabChange("library")}>知识库</button>
         </div>
         <button className="mobile-icon-btn" onClick={onOpenSearch} aria-label="搜索"><Search size={20} /></button>
+        {tab === "quick" && <button className="mobile-icon-btn" onClick={onOpenQuickTrash} aria-label="小记回收站" title="小记回收站"><Trash2 size={18} /></button>}
       </header>
       {tab === "quick" ? (
         <div className="mobile-scroll">
