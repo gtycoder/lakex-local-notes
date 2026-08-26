@@ -4,30 +4,8 @@ import { ArrowLeft, Pencil, Trash2 } from "lucide-react";
 import { LakeEditor } from "../../features/editor/LakeEditor";
 import { injectAssetBlobs } from "../blobInject";
 import { createCardBlobInjector } from "../cardBlobInject";
-import { registerRuntimeBlob } from "../cachePort.js";
-import { parseLocalAssetUrl } from "../../core/assetUrl.js";
-import { bridge } from "../bridge";
 import type { LakeEditorInstance } from "../../features/editor/lakeRuntime";
 import type { POCNote } from "../bridge";
-
-/**
- * 图片首帧显示（generateDisplayUrl）：Lake 图片组件渲染时经此回调把 canonical 资源 URL
- * 解析为 blob URL——卡片创建即拿到 src，无需等 setCardValue 注入，消除"先破图后恢复"。
- * module 级缓存（canonical → blob）+ cachePort 注册（清缓存时统一 revoke）。
- */
-const displayUrlCache = new Map<string, string>();
-function mobileDisplayUrl(url: string): string {
-  const cached = displayUrlCache.get(url);
-  if (cached) return cached;
-  const ref = parseLocalAssetUrl(url);
-  if (!ref) return url;
-  const bytes = bridge.getAssetBytes(ref.noteId, ref.filename);
-  if (!bytes) return url;
-  const blobUrl = URL.createObjectURL(new Blob([bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer]));
-  displayUrlCache.set(url, blobUrl);
-  registerRuntimeBlob(blobUrl);
-  return blobUrl;
-}
 
 export interface DocumentPageProps {
   note: POCNote;
@@ -109,7 +87,7 @@ export function DocumentPage(props: DocumentPageProps) {
               }, 3000);
             }
           }}
-          prefs={{ fontSize: 18, showToolbar: true, disableVirtualRendering: true, generateDisplayUrl: mobileDisplayUrl }}
+          prefs={{ fontSize: 18, showToolbar: true, disableVirtualRendering: true }}
         />
       </section>
     </div>
