@@ -1,7 +1,11 @@
-/** 笔记本页：完整子树递归展示（P1-3/P2-3/P2-4：顶级只含直接子节点，group 可递归展开，sort_order 排序）。 */
+/** 笔记本页：完整子树递归展示（P1-3/P2-3/P2-4：顶级只含直接子节点，group 可递归展开，sort_order 排序）。
+ * 展开状态按 notebookId 缓存（模块级 Map）：进文档返回后保持原来的展开/收起状态。 */
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { ArrowLeft, ChevronRight, FileText, FolderOpen, MoreHorizontal } from "lucide-react";
 import { bridge } from "../bridge";
+
+/** 展开状态缓存：notebookId → 已展开节点 id 集合（进文档/返回时保持）。 */
+const expandedCache = new Map<string, Set<string>>();
 
 export interface NotebookTreeItem {
   id: string;
@@ -9,6 +13,7 @@ export interface NotebookTreeItem {
   kind: "group" | "note";
   parentId: string | null;
   sortOrder: number;
+  icon: string | null;
 }
 
 export interface NotebookPageProps {
@@ -22,7 +27,9 @@ export function NotebookPage(props: NotebookPageProps) {
   const { notebookId, onBack, onOpenNote, onCreateNote } = props;
   const [items, setItems] = useState<NotebookTreeItem[]>([]);
   const [title, setTitle] = useState("知识库");
-  const [expanded, setExpanded] = useState<Set<string>>(() => new Set([notebookId]));
+  const [expanded, setExpanded] = useState<Set<string>>(() => expandedCache.get(notebookId) ?? new Set([notebookId]));
+  // 展开状态写回缓存（进文档返回时恢复）
+  useEffect(() => { expandedCache.set(notebookId, expanded); }, [notebookId, expanded]);
 
   const load = useCallback(async () => {
     const [tree, nodes] = await Promise.all([bridge.listNotebookTree(notebookId), bridge.listTreeNodes()]);
@@ -46,25 +53,41 @@ export function NotebookPage(props: NotebookPageProps) {
 
   const renderBranch = (parentId: string, depth: number): ReactNode => {
     const children = childrenOf(parentId);
-    return children.map((it) => (
-      <div key={it.kind + "-" + it.id}>
-        {it.kind === "group" ? (
-          <>
-            <div className={`mobile-doc-row mobile-group-row`} style={{ paddingLeft: 16 + depth * 18 }} onClick={() => toggleGroup(it.id)}>
-              <FolderOpen size={18} />
-              <span className="mobile-group-title">{it.title}</span>
-              <ChevronRight size={15} className={expanded.has(it.id) ? "mobile-chevron open" : "mobile-chevron"} />
+    return children.map((it) => {
+      // 文档套文档：note 有子文档时显示展开箭头（点行展开/收起子文档），点标题打开文档
+      const hasChildren = childrenOf(it.id).length > 0;
+      // 图标：自定义 icon（emoji/字符）优先，无则默认 lucide（分组/文档）
+      const NodeIcon = it.kind === "group" ? FolderOpen : FileText;
+      const iconEl = it.icon ? <span className="mobile-node-icon">{it.icon}</span> : <NodeIcon size={18} />;
+      return (
+        <div key={it.kind + "-" + it.id}>
+          {it.kind === "group" ? (
+            <>
+              <div className={`mobile-doc-row mobile-group-row`} style={{ paddingLeft: 16 + depth * 18 }} onClick={() => toggleGroup(it.id)}>
+                <ChevronRight size={20} className={expanded.has(it.id) ? "mobile-chevron open" : "mobile-chevron"} />
+                {iconEl}
+                <span className="mobile-group-title">{it.title}</span>
+              </div>
+              {expanded.has(it.id) && renderBranch(it.id, depth + 1)}
+            </>
+          ) : hasChildren ? (
+            <>
+              <div className="mobile-doc-row mobile-doc-row--nested" style={{ paddingLeft: 16 + depth * 18 }} onClick={() => toggleGroup(it.id)}>
+                <ChevronRight size={20} className={expanded.has(it.id) ? "mobile-chevron open" : "mobile-chevron"} />
+                {iconEl}
+                <span className="mobile-group-title" onClick={(e) => { e.stopPropagation(); onOpenNote(it.id); }}>{it.title}</span>
+              </div>
+              {expanded.has(it.id) && renderBranch(it.id, depth + 1)}
+            </>
+          ) : (
+            <div className="mobile-doc-row" style={{ paddingLeft: 16 + depth * 18 }} onClick={() => onOpenNote(it.id)}>
+              {iconEl}
+              <span>{it.title}</span>
             </div>
-            {expanded.has(it.id) && renderBranch(it.id, depth + 1)}
-          </>
-        ) : (
-          <div className="mobile-doc-row" style={{ paddingLeft: 16 + depth * 18 }} onClick={() => onOpenNote(it.id)}>
-            <FileText size={18} />
-            <span>{it.title}</span>
-          </div>
-        )}
-      </div>
-    ));
+          )}
+        </div>
+      );
+    });
   };
 
   const topLevel = childrenOf(notebookId);

@@ -172,10 +172,14 @@ export function createCardBlobInjector(content: string): CardBlobInjectResult {
       for (const [blobUrl, canonical] of blobToCanonical) {
         // Lake 会给 img src 的 blob URL 追加 ?date= 缓存破坏参数；split(blobUrl) 匹配不到带参形态，
         // 导致保存时 blob 无法还原为 canonical → 污染存储。用 uuid 前缀正则，容忍任意参数后缀。
+        // 形态 2：card value 里 blob URL 是 URI 编码（blob%3Ahttps%3A%2F%2Flocalhost%2Fuuid）——
+        // 明文正则匹配不到 → 还原失败、blob 污染存储（改动文字保存后图片裂的根因）。
+        // 两种形态都还原；编码形态替换为编码 canonical（保持 value 的 URI 编码一致性）。
         const uuid = (blobUrl.split("/").pop() ?? "").split("?")[0];
         if (!uuid) continue;
-        const re = new RegExp("blob:[^\\s\"'<>]*/" + uuid + "(?:\\?[^\\s\"'<>]*)?", "g");
-        out = out.replace(re, canonical);
+        const re = new RegExp("(?:blob:|blob%3A)[^\\s\"'<>]*?" + uuid + "(?:\\?[^\\s\"'<>]*)?", "g");
+        const encodedCanonical = encodeURIComponent(canonical);
+        out = out.replace(re, (m) => (m.startsWith("blob%3A") ? encodedCanonical : canonical));
       }
       return out;
     },

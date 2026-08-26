@@ -250,3 +250,5 @@ body { font-family: -apple-system, "PingFang SC", "Noto Sans SC", sans-serif; ba
 .mobile-nb-card[draggable="true"] { cursor: grab; }
 .mobile-nb-card[draggable="true"]:active { cursor: grabbing; opacity: .7; }
 
+
+.mobile-node-icon { font-size: 18px; line-height: 1; }

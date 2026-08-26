@@ -116,14 +116,26 @@ async function ensureDb(): Promise<SqlJsDb> {
     last_uploaded_hash TEXT
   )`);
   // B4：从云端学到的删除（本设备从未持有），防离线设备把残留当新文档上传复活（对齐桌面 deleted_notes）
+  // node_type：note（发布方向进 manifest.notes 标记 deleted:true）/ folder（仅本地下载过滤）；
+  // purged_at：本地主动彻底删除（purge）标记——isFolderPurged 过滤 + 发布方向防复活；
+  // published_at：墓碑已发布到 manifest（对齐桌面计数语义，移动端无待上传计数 UI，仅保持列一致）。
   db.exec(`CREATE TABLE IF NOT EXISTS deleted_notes (
     id TEXT PRIMARY KEY,
     title TEXT NOT NULL,
     parent_id TEXT,
     sort_order INTEGER NOT NULL,
     updated_at TEXT NOT NULL,
-    deleted_at TEXT NOT NULL
+    deleted_at TEXT NOT NULL,
+    node_type TEXT NOT NULL DEFAULT 'note',
+    purged_at TEXT,
+    published_at TEXT
   )`);
+  {
+    const delCols = (db.prepare("PRAGMA table_info(deleted_notes)").all() as Array<{ name: string }>).map((c) => c.name);
+    if (!delCols.includes("node_type")) db.exec("ALTER TABLE deleted_notes ADD COLUMN node_type TEXT NOT NULL DEFAULT 'note'");
+    if (!delCols.includes("purged_at")) db.exec("ALTER TABLE deleted_notes ADD COLUMN purged_at TEXT");
+    if (!delCols.includes("published_at")) db.exec("ALTER TABLE deleted_notes ADD COLUMN published_at TEXT");
+  }
   // D4：目录树（notebook/group），导入远端 folders 供父目录判定/未来树 UI（对齐桌面 tree_nodes 子集）
   db.exec(`CREATE TABLE IF NOT EXISTS folders (
     id TEXT PRIMARY KEY,
@@ -318,9 +330,30 @@ const dbPort: SyncDbPort = {
   },
   rememberDeleted(note, deletedAt) {
     const d = db!;
+    // node_type=note（只有 manifest.notes 条目触发 remember；folder 不进 manifest.notes）；
+    // published_at=deletedAt：学到即已在云端发布，不计入待上传（对齐桌面 rememberDeleted）。
     d.prepare(
-      "INSERT INTO deleted_notes(id,title,parent_id,sort_order,updated_at,deleted_at) VALUES(?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET title=excluded.title, parent_id=excluded.parent_id, sort_order=excluded.sort_order, updated_at=excluded.updated_at, deleted_at=excluded.deleted_at"
-    ).run(note.id, note.title, note.parentId, note.sortOrder, note.updatedAt, deletedAt);
+      "INSERT INTO deleted_notes(id,title,parent_id,sort_order,updated_at,deleted_at,node_type,published_at) VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET title=excluded.title, parent_id=excluded.parent_id, sort_order=excluded.sort_order, updated_at=excluded.updated_at, deleted_at=excluded.deleted_at, node_type=excluded.node_type, published_at=COALESCE(deleted_notes.published_at, excluded.published_at)"
+    ).run(note.id, note.title, note.parentId, note.sortOrder, note.updatedAt, deletedAt, "note", deletedAt);
+  },
+  /** 本地删除墓碑列表（含 purge 墓碑 + 学到的删除）——发布方向：syncEngine 据此发布 deleted:true 传播删除。 */
+  listDeletedNotesForSync() {
+    const d = db!;
+    const rows = d.prepare("SELECT id,title,parent_id,sort_order,updated_at,deleted_at,node_type FROM deleted_notes ORDER BY deleted_at").all() as Array<{ id: string; title: string; parent_id: string | null; sort_order: number; updated_at: string; deleted_at: string; node_type: string | null }>;
+    return rows.map((r) => ({ id: String(r.id), title: String(r.title), parentId: r.parent_id, sortOrder: r.sort_order, updatedAt: String(r.updated_at), deletedAt: String(r.deleted_at), nodeType: r.node_type ?? "note" }));
+  },
+  /** 读墓碑笔记的删除前内容（purge 后行已物理删除 → null → 引擎用占位符 id 发布墓碑）。 */
+  async readDeletedContent(id: string): Promise<string | null> {
+    const d = db!;
+    const row = d.prepare("SELECT content FROM notes WHERE id=?").get(id) as { content: string } | undefined;
+    return row ? String(row.content) : null;
+  },
+  /** 墓碑已发布到 manifest：标记 published_at（移动端无待上传计数 UI，实现仅为与桌面语义一致）。 */
+  markTombstonesPublished(ids: string[]): void {
+    if (ids.length === 0) return;
+    const d = db!;
+    const placeholders = ids.map(() => "?").join(",");
+    d.prepare("UPDATE deleted_notes SET published_at=COALESCE(published_at, ?) WHERE id IN (" + placeholders + ") AND node_type != 'folder'").run(new Date().toISOString(), ...ids);
   },
   applyRemoteNoteMeta(note) {
     const d = db!;
@@ -440,16 +473,17 @@ const dbPort: SyncDbPort = {
   },
   hasLocalPendingNotes() {
     const d = db!;
-    const noteRow = d.prepare("SELECT 1 FROM notes WHERE sync_state != 'synced' AND deleted_at IS NULL LIMIT 1").get();
+    // purged（收到他端删除的保留副本）永不上传，不应阻塞早退（对齐桌面 hasLocalPendingNotes）
+    const noteRow = d.prepare("SELECT 1 FROM notes WHERE sync_state NOT IN ('synced','purged') AND deleted_at IS NULL LIMIT 1").get();
     if (noteRow) return true;
     // 目录改动判定对齐桌面 tree_nodes.sync_state：仅 sync_state != 'synced' 的节点算待上传；
     // 存在默认笔记本等已同步节点不算（否则永不早退）。
     const groupRow = d.prepare("SELECT 1 FROM folders WHERE sync_state != 'synced' AND id != ? LIMIT 1").get(TRASH_NOTEBOOK_ID);
     return !!groupRow;
   },
-  // 本地已删/purge 的 folder（deleted_notes 记录）：下载导入远端 folders 前过滤，防复活。
+  // 本地已 purge 的 folder（deleted_notes 带 purged_at）：下载导入远端 folders 前过滤，防复活（对齐桌面 isFolderPurged）。
   isFolderPurged(id: string): boolean {
-    return !!db!.prepare("SELECT 1 FROM deleted_notes WHERE id=?").get(id);
+    return !!db!.prepare("SELECT 1 FROM deleted_notes WHERE id=? AND purged_at IS NOT NULL").get(id);
   },
   log(msg) {
     console.log("[mobile-sync]", msg);
@@ -504,26 +538,8 @@ export const bridge = {
     }));
   },
 
-  /** 笔记本详情：返回完整子树（递归 group 展开到叶 note/group），按 sort_order 排序（P1-3/P2-3/P2-4）。 */
-  async listNotebookTree(notebookId: string): Promise<Array<{ id: string; title: string; kind: "group" | "note"; parentId: string | null; sortOrder: number }>> {
-    const d = await ensureDb();
-    // 收集 notebook 下全部 folders（含深层 group）——沿 parent_id 迭代展开
-    const allFolders = d.prepare("SELECT id, title, parent_id, sort_order, node_type FROM folders WHERE trashed_at IS NULL").all() as Array<{ id: string; title: string; parent_id: string | null; sort_order: number; node_type: string }>;
-    const folderIds = collectFolderSubtree(allFolders, notebookId);
-    const groups = allFolders.filter((f) => f.node_type === "group" && f.parent_id && folderIds.has(f.parent_id));
-    const allNotes = d.prepare("SELECT id, title, parent_id, sort_order FROM notes WHERE trashed_at IS NULL").all() as Array<{ id: string; title: string; parent_id: string | null; sort_order: number }>;
-    const notes = allNotes.filter((n) => n.parent_id && folderIds.has(n.parent_id));
-    const items: Array<{ id: string; title: string; kind: "group" | "note"; parentId: string | null; sortOrder: number }> = [
-      ...groups.map((g) => ({ id: g.id, title: g.title, kind: "group" as const, parentId: g.parent_id, sortOrder: g.sort_order })),
-      ...notes.map((n) => ({ id: n.id, title: n.title, kind: "note" as const, parentId: n.parent_id, sortOrder: n.sort_order })),
-    ];
-    // 同父级内按 sort_order 排序（对齐桌面目录排序语义）
-    items.sort((a, b) => {
-      if (a.parentId !== b.parentId) return 0;
-      return a.sortOrder - b.sortOrder || a.title.localeCompare(b.title, "zh");
-    });
-    return items;
-  },
+
+  /** 笔记本详情（含文档套文档）——实现见模块级 listNotebookTreeImpl（bridge 对象与 lakeNative 契约共用）。 */
 
   /** 新建 notebook：根层创建，名称必填（trim 校验，共享 treeRules），默认图标不落库（icon 由 setNodeIcon 单独写入）。 */
   async createNotebook(input: { title: string; icon: string | null }): Promise<TreeNode> {
@@ -583,10 +599,11 @@ export const bridge = {
       assertNodeIcon(icon);
       const d = await ensureDb();
       const now = new Date().toISOString();
-      const changed = d.prepare("UPDATE folders SET icon=?, updated_at=?, sync_state='local' WHERE id=?").run(icon, now, id).changes;
-      if (!changed) throw new Error("节点不存在: " + id);
+      d.prepare("UPDATE folders SET icon=?, updated_at=?, sync_state='local' WHERE id=?").run(icon, now, id);
+      // sql.js 的 run() 无 statement 级 changes（恒 0），不能据此判断行存在——用 SELECT 确认（实机设置图标报"节点不存在"的根因）
+      const row = d.prepare("SELECT id, title, parent_id, sort_order, node_type, icon, updated_at FROM folders WHERE id=?").get(id) as Record<string, unknown> | undefined;
+      if (!row) throw new Error("节点不存在: " + id);
       await saveSnapshot(d.exportBytes());
-      const row = d.prepare("SELECT id, title, parent_id, sort_order, node_type, icon, updated_at FROM folders WHERE id=?").get(id) as Record<string, unknown>;
       return folderRowToTreeNode(row, { icon, updatedAt: now });
     });
   },
@@ -881,31 +898,44 @@ export const bridge = {
     });
   },
 
-  /** B2：彻底删除回收站项（purge）。folder = 子树全部 purge；note = 单条 purge（同步发墓碑）。 */
+  /** B2：彻底删除回收站项（purge）。folder = 子树全部 purge；note = 单条 purge（同步发墓碑）。
+   * 对齐桌面 purgeTrashItem：物理删除行 + 写 deleted_notes 墓碑（purged_at + node_type）。
+   * 墓碑经 syncEngine 发布 deleted:true 传播到其他端（否则仅从 manifest 移除 → 其他端保留 active 副本，删除不传播）；
+   * folder 墓碑（purged_at）供 isFolderPurged 下载过滤（防远端文件夹重新导入复活）。
+   * 与收到他端 purge（applyRemotePurge：行保留标 purged、可恢复）语义不同：本地主动 purge 不可恢复。 */
   async purgeTreeItem(id: string, kind: "folder" | "note"): Promise<void> {
     return maintenance.run("main", async () => {
       const d = await ensureDb();
       // purge 同时修改 folders 与 notes；必须让整棵回收站子树在一个事务内完成，
       // 避免快照/同步在两批 UPDATE 之间观察到半完成状态。
       const tx = d.transaction(() => {
+        const now = new Date().toISOString();
+        const writeTombstone = d.prepare(
+          "INSERT OR REPLACE INTO deleted_notes (id, title, parent_id, sort_order, updated_at, deleted_at, node_type, purged_at) VALUES (?,?,?,?,?,?,?,?)"
+        );
         if (kind === "note") {
-          // purge 语义（对齐桌面 purgeTrashItem）：sync_state='purged' → 引擎发布时从 manifest 移除且不再上传
-          const now = new Date().toISOString();
-          d.prepare("UPDATE notes SET parent_id=?, trashed_at=COALESCE(trashed_at,?), deleted_from_parent_id=COALESCE(deleted_from_parent_id,parent_id), updated_at=?, sync_state='purged', restore_pending_at=NULL WHERE id=?").run(TRASH_NOTEBOOK_ID, now, now, id);
-        }
-        else {
-          // folder：收集子树（含自己）
+          const row = d.prepare("SELECT id, title, parent_id, sort_order, updated_at FROM notes WHERE id=?").get(id) as { id: string; title: string; parent_id: string | null; sort_order: number; updated_at: string } | undefined;
+          if (row) writeTombstone.run(row.id, row.title, row.parent_id, row.sort_order, row.updated_at, now, "note", now);
+          d.prepare("DELETE FROM notes WHERE id=?").run(id);
+          d.prepare("DELETE FROM sync_base WHERE note_id=?").run(id);
+          d.prepare("DELETE FROM note_history WHERE note_id=?").run(id);
+        } else {
+          // folder：收集子树（含自己）→ 每个 folder/note 节点写墓碑 + 物理删除
           const all = d.prepare("SELECT id, parent_id FROM folders").all() as Array<{ id: string; parent_id: string | null }>;
           const ids = collectFolderSubtree(all, id);
-          const now = new Date().toISOString();
           for (const fid of ids) {
-            d.prepare("UPDATE folders SET trashed_at=COALESCE(trashed_at,?), updated_at=?, sync_state='purged' WHERE id=?").run(now, now, fid);
+            const f = d.prepare("SELECT title, parent_id, sort_order, updated_at FROM folders WHERE id=?").get(fid) as { title: string; parent_id: string | null; sort_order: number; updated_at: string } | undefined;
+            if (f) writeTombstone.run(fid, f.title, f.parent_id, f.sort_order, f.updated_at, now, "folder", now);
+            d.prepare("DELETE FROM folders WHERE id=?").run(fid);
           }
-          // 子树下的文档也 purge
-          const noteIds = d.prepare("SELECT id FROM notes WHERE parent_id IN (SELECT id FROM folders WHERE id IN (" + Array.from(ids).map(() => "?").join(",") + "))").all(...Array.from(ids)) as Array<{ id: string }>;
-          const now2 = new Date().toISOString();
+          // 先收集子树 note（folders 删除后父目录信息已不在，不能依赖 folders 表反查）
+          const idList = Array.from(ids);
+          const noteIds = d.prepare("SELECT id, title, parent_id, sort_order, updated_at FROM notes WHERE parent_id IN (" + idList.map(() => "?").join(",") + ")").all(...idList) as Array<{ id: string; title: string; parent_id: string | null; sort_order: number; updated_at: string }>;
           for (const n of noteIds) {
-            d.prepare("UPDATE notes SET parent_id=?, trashed_at=COALESCE(trashed_at,?), deleted_from_parent_id=COALESCE(deleted_from_parent_id,parent_id), updated_at=?, sync_state='purged', restore_pending_at=NULL WHERE id=?").run(TRASH_NOTEBOOK_ID, now2, now2, n.id);
+            writeTombstone.run(n.id, n.title, n.parent_id, n.sort_order, n.updated_at, now, "note", now);
+            d.prepare("DELETE FROM notes WHERE id=?").run(n.id);
+            d.prepare("DELETE FROM sync_base WHERE note_id=?").run(n.id);
+            d.prepare("DELETE FROM note_history WHERE note_id=?").run(n.id);
           }
         }
       });
@@ -1031,4 +1061,43 @@ export const bridge = {
       return { message: report.message + quickMsg, notes: report, quickNotes };
     });
   },
+  // ---- 目录树只读契约（同步调试/测试用） ----
+  listNotebookTree: listNotebookTreeImpl,
+  // ---- 墓碑只读契约（同步调试/测试用；生产同步路径直接走 dbPort，不经此对象） ----
+  listDeletedNotesForSync() { return dbPort.listDeletedNotesForSync!(); },
+  readDeletedContent(id: string) { return dbPort.readDeletedContent!(id); },
+  markTombstonesPublished(ids: string[]) { dbPort.markTombstonesPublished!(ids); },
+  isFolderPurged(id: string): boolean { return dbPort.isFolderPurged!(id); },
 };
+
+/** 笔记本详情：返回完整子树（递归展开到叶），按 sort_order 排序（P1-3/P2-3/P2-4）。
+ * 支持文档套文档：note 的 parent 可以是 folder 或 note（桌面嵌套文档在移动端也可见）。
+ * 从 notebook 根 BFS 收集子树内所有节点（folders + notes，均可作父），再取父在子树内的节点。
+ * 模块级函数：bridge 对象与 lakeNative 调试契约共用（函数声明 hoist，引用在对象内可用）。 */
+async function listNotebookTreeImpl(notebookId: string): Promise<Array<{ id: string; title: string; kind: "group" | "note"; parentId: string | null; sortOrder: number; icon: string | null }>> {
+  const d = await ensureDb();
+  const allFolders = d.prepare("SELECT id, title, parent_id, sort_order, node_type, icon FROM folders WHERE trashed_at IS NULL").all() as Array<{ id: string; title: string; parent_id: string | null; sort_order: number; node_type: string; icon: string | null }>;
+  const allNotes = d.prepare("SELECT id, title, parent_id, sort_order, icon FROM notes WHERE trashed_at IS NULL").all() as Array<{ id: string; title: string; parent_id: string | null; sort_order: number; icon: string | null }>;
+  // 子树节点 id 集合（folder + note 都可作父；从根 BFS，支持任意层级嵌套）
+  const inTree = new Set<string>();
+  const queue = [notebookId];
+  while (queue.length > 0) {
+    const pid = queue.pop()!;
+    if (inTree.has(pid)) continue;
+    inTree.add(pid);
+    for (const f of allFolders) if (f.parent_id === pid && !inTree.has(f.id)) queue.push(f.id);
+    for (const n of allNotes) if (n.parent_id === pid && !inTree.has(n.id)) queue.push(n.id);
+  }
+  const groups = allFolders.filter((f) => f.node_type === "group" && f.parent_id && inTree.has(f.parent_id));
+  const notes = allNotes.filter((n) => n.parent_id && inTree.has(n.parent_id));
+  const items: Array<{ id: string; title: string; kind: "group" | "note"; parentId: string | null; sortOrder: number; icon: string | null }> = [
+    ...groups.map((g) => ({ id: g.id, title: g.title, kind: "group" as const, parentId: g.parent_id, sortOrder: g.sort_order, icon: g.icon ?? null })),
+    ...notes.map((n) => ({ id: n.id, title: n.title, kind: "note" as const, parentId: n.parent_id, sortOrder: n.sort_order, icon: n.icon ?? null })),
+  ];
+  // 同父级内按 sort_order 排序（对齐桌面目录排序语义）
+  items.sort((a, b) => {
+    if (a.parentId !== b.parentId) return 0;
+    return a.sortOrder - b.sortOrder || a.title.localeCompare(b.title, "zh");
+  });
+  return items;
+}

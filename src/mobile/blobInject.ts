@@ -81,6 +81,8 @@ export function injectAssetBlobs(content: string): BlobInjectedDoc {
   for (const raw of display.match(ASSET_URL_RE) ?? []) {
     const blobUrl = srcToBlob(raw);
     if (!blobUrl) continue;
+    // 裸 URL 也必须登记 blob→canonical 映射（否则 restore 无法还原，保存污染）
+    blobToCanonical.set(blobUrl, raw);
     display = display.split(raw).join(blobUrl);
   }
 
@@ -92,10 +94,14 @@ export function injectAssetBlobs(content: string): BlobInjectedDoc {
       for (const [blobUrl, canonical] of blobToCanonical) {
         // Lake 会给 img src 的 blob URL 追加 ?date= 参数；split(blobUrl) 匹配不到带参形态 →
         // 保存时 blob 无法还原为 canonical（污染存储）。用 uuid 前缀正则容忍任意参数后缀。
+        // 形态 2：card value 里 blob URL 是 URI 编码（blob%3Ahttps%3A%2F%2Flocalhost%2Fuuid）——
+        // 明文正则匹配不到 → 还原失败、blob 污染存储（改动文字保存后图片裂的根因）。
+        // 两种形态都还原；编码形态替换为编码 canonical（保持 value 的 URI 编码一致性）。
         const uuid = (blobUrl.split("/").pop() ?? "").split("?")[0];
         if (!uuid) continue;
-        const re = new RegExp("blob:[^\\s\"'<>]*/" + uuid + "(?:\\?[^\\s\"'<>]*)?", "g");
-        out = out.replace(re, canonical);
+        const re = new RegExp("(?:blob:|blob%3A)[^\\s\"'<>]*?" + uuid + "(?:\\?[^\\s\"'<>]*)?", "g");
+        const encodedCanonical = encodeURIComponent(canonical);
+        out = out.replace(re, (m) => (m.startsWith("blob%3A") ? encodedCanonical : canonical));
       }
       return out;
     },
