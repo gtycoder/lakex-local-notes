@@ -129,6 +129,8 @@ body { font-family: -apple-system, "PingFang SC", "Noto Sans SC", sans-serif; ba
 .mobile-doc-body ne-card[name="image"] img:not([src^="blob:"]) { visibility: hidden; }
 .mobile-done-btn { border: none; background: #3575f0; color: #fff; border-radius: 8px; padding: 6px 14px; font-size: 14px; cursor: pointer; }
 .mobile-doc-body { flex: 1; overflow-y: auto; background: #fff; padding-bottom: calc(40px + env(safe-area-inset-bottom, 0px)); }
+/* 只读/编辑文档左右留白（手机窄屏适配）：Lake 编辑器全宽铺满贴边，加安全留白 */
+.mobile-doc-body .lake-editor { padding-left: 14px; padding-right: 14px; }
 
 /* Drawer */
 .mobile-drawer-mask { position: fixed; inset: 0; background: rgba(0,0,0,.4); z-index: 40; }

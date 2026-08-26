@@ -87,7 +87,7 @@ export function DocumentPage(props: DocumentPageProps) {
               }, 3000);
             }
           }}
-          prefs={{ fontSize: 18, showToolbar: true }}
+          prefs={{ fontSize: 18, showToolbar: true, disableVirtualRendering: true }}
         />
       </section>
     </div>

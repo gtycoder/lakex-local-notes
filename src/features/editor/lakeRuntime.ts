@@ -425,6 +425,10 @@ export interface LakeEditorPrefs {
   disableNativeToc?: boolean;
   /** 图片显示 URL 解析器（移动端 blob 注入用）：给定 canonical URL 返回显示 URL（如 blob:），原样返回则用默认。 */
   generateDisplayUrl?: (url: string) => string;
+  /** 禁用编辑态虚拟渲染（移动端用）：移动端单编辑器无 Lake 内部滚动容器（页面滚动），
+   * scrollNode fallback 到 .document-pane（移动端不存在）会导致视口测量错误——编辑态只渲染
+   * 视口内内容（正文不全）、保存时 getDocument 输出不完整（图片丢失）。置 true 全量渲染。 */
+  disableVirtualRendering?: boolean;
 }
 
 export function createLakeDocument(
@@ -499,8 +503,9 @@ export function createLakeDocument(
           // Viewer 不需要编辑态的卡片懒加载。原生 Viewer 在虚拟卡片节点尚未
           // appear 时可能只留下 hole，尤其是 Drawnix 画板会在锁定切换后丢失。
           // 锁定文档数量通常远小于编辑态交互频率，Viewer 直接完整渲染更稳定。
-          virtualRendering: mode === "editor",
-          ...(mode === "editor"
+          // 编辑态可经 disableVirtualRendering 关闭（移动端无内部滚动容器，虚拟渲染视口测量失效）。
+          virtualRendering: mode === "editor" && !prefs?.disableVirtualRendering,
+          ...(mode === "editor" && !prefs?.disableVirtualRendering
             ? {
                 scrollNode: () => resolveScrollNode(scrollNode),
                 cardLazyInit: VIRTUAL_RENDERING.cardLazyInit,
