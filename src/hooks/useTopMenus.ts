@@ -1,7 +1,18 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, type RefObject } from "react";
+
+export interface TopMenuRefs {
+  workspaceTriggerRef?: RefObject<HTMLElement>;
+  moreTriggerRef?: RefObject<HTMLElement>;
+  workspaceMenuRef?: RefObject<HTMLElement>;
+  moreMenuRef?: RefObject<HTMLElement>;
+}
+
+function containsTarget(ref: RefObject<HTMLElement> | undefined, target: Node): boolean {
+  return Boolean(ref?.current?.contains(target));
+}
 
 /** Owns the two shell-level portal menus without coupling them to App's domain state. */
-export function useTopMenus() {
+export function useTopMenus(refs: TopMenuRefs = {}) {
   const [topMenuOpen, setTopMenuOpen] = useState(false);
   const [workspaceMenuOpen, setWorkspaceMenuOpen] = useState(false);
 
@@ -13,17 +24,18 @@ export function useTopMenus() {
   useEffect(() => {
     if (!topMenuOpen && !workspaceMenuOpen) return;
     const onPointerDown = (event: PointerEvent) => {
-      const target = event.target as Node;
-      const moreMenu = document.querySelector(".top-menu--more");
-      const moreBtn = document.querySelector('.toolbar__item[aria-label="更多"]');
-      const workspaceMenu = document.querySelector(".top-menu--workspace");
-      const workspaceBtn = document.querySelector('.toolbar__item[aria-label="工作空间"]');
-      if (moreMenu && !moreMenu.contains(target) && moreBtn && !moreBtn.contains(target)) setTopMenuOpen(false);
-      if (workspaceMenu && !workspaceMenu.contains(target) && workspaceBtn && !workspaceBtn.contains(target)) setWorkspaceMenuOpen(false);
+      const target = event.target;
+      if (!(target instanceof Node)) return;
+      if (topMenuOpen && !containsTarget(refs.moreTriggerRef, target) && !containsTarget(refs.moreMenuRef, target)) {
+        setTopMenuOpen(false);
+      }
+      if (workspaceMenuOpen && !containsTarget(refs.workspaceTriggerRef, target) && !containsTarget(refs.workspaceMenuRef, target)) {
+        setWorkspaceMenuOpen(false);
+      }
     };
-    document.addEventListener("pointerdown", onPointerDown);
-    return () => document.removeEventListener("pointerdown", onPointerDown);
-  }, [topMenuOpen, workspaceMenuOpen]);
+    document.addEventListener("pointerdown", onPointerDown, true);
+    return () => document.removeEventListener("pointerdown", onPointerDown, true);
+  }, [refs.moreMenuRef, refs.moreTriggerRef, refs.workspaceMenuRef, refs.workspaceTriggerRef, topMenuOpen, workspaceMenuOpen]);
 
   return { topMenuOpen, setTopMenuOpen, workspaceMenuOpen, setWorkspaceMenuOpen, closeMenus };
 }

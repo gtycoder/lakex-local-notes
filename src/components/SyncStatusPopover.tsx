@@ -1,12 +1,14 @@
-import { useEffect, useRef, useState, type MutableRefObject } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type RefObject } from "react";
 import { Check, Cloud, CloudOff, History, LoaderCircle, Settings2, TriangleAlert, UploadCloud } from "lucide-react";
 import type { SyncStatus } from "../lib/types";
 import { buildSyncStatusModel, type SyncStatusModelInput } from "./syncStatusModel";
+import { chooseVisibleAnchor, clampPopoverPosition } from "../hooks/topMenuPosition";
 
 type SaveState = SyncStatusModelInput["saveState"];
 
 export interface SyncStatusPopoverProps {
-  buttonRef: MutableRefObject<HTMLButtonElement | null>;
+  buttonRef?: RefObject<HTMLButtonElement>;
+  visible?: boolean;
   sync: SyncStatus;
   saveState: SaveState;
   saveLabel: string;
@@ -31,6 +33,7 @@ function formatTime(value: string | null): string {
 
 export function SyncStatusPopover({
   buttonRef,
+  visible = true,
   sync,
   saveState,
   saveLabel,
@@ -47,29 +50,63 @@ export function SyncStatusPopover({
   onOpenHistory,
 }: SyncStatusPopoverProps) {
   const [open, setOpen] = useState(false);
+  const [position, setPosition] = useState<{ top: number; left: number } | null>(null);
+  const localButtonRef = useRef<HTMLButtonElement | null>(null);
+  const resolvedButtonRef = buttonRef ?? localButtonRef;
   const popoverRef = useRef<HTMLDivElement | null>(null);
   const model = buildSyncStatusModel({ sync, saveState, saveLabel, pendingDocuments, pendingResources, pendingQuickNotes, dirtyTabCount, lastSavedAt, cloudEnabled, conflictSnapshotCount: conflictSnapshots.length });
+
+  useEffect(() => {
+    if (!visible) setOpen(false);
+  }, [visible]);
+
+  const updatePosition = useCallback(() => {
+    if (typeof window === "undefined") return;
+    const candidates = [...document.querySelectorAll<HTMLButtonElement>("[data-sync-status-button]")];
+    const anchor = chooseVisibleAnchor(resolvedButtonRef.current, candidates);
+    if (!anchor) {
+      setPosition(null);
+      return;
+    }
+    const rect = anchor.getBoundingClientRect();
+    const width = Math.min(320, Math.max(0, window.innerWidth - 16));
+    setPosition(clampPopoverPosition(rect, { width: window.innerWidth, height: window.innerHeight }, { width, height: 420 }, 7));
+  }, [resolvedButtonRef]);
+
+  useLayoutEffect(() => {
+    if (!open) {
+      setPosition(null);
+      return;
+    }
+    updatePosition();
+    const onViewportChange = () => updatePosition();
+    window.addEventListener("resize", onViewportChange);
+    window.addEventListener("scroll", onViewportChange, true);
+    return () => {
+      window.removeEventListener("resize", onViewportChange);
+      window.removeEventListener("scroll", onViewportChange, true);
+    };
+  }, [open, updatePosition]);
 
   useEffect(() => {
     if (!open) return;
     const close = (event: PointerEvent) => {
       const target = event.target as Node;
-      if (!popoverRef.current?.contains(target) && !buttonRef.current?.contains(target)) setOpen(false);
+      if (!popoverRef.current?.contains(target) && !resolvedButtonRef.current?.contains(target)) setOpen(false);
     };
     const keydown = (event: KeyboardEvent) => { if (event.key === "Escape") setOpen(false); };
     document.addEventListener("pointerdown", close, true);
     document.addEventListener("keydown", keydown);
     return () => { document.removeEventListener("pointerdown", close, true); document.removeEventListener("keydown", keydown); };
-  }, [buttonRef, open]);
+  }, [open, resolvedButtonRef]);
 
-  const anchor = buttonRef.current?.getBoundingClientRect();
-  const style = anchor ? { top: Math.round(anchor.bottom + 7), left: Math.max(8, Math.min(Math.round(anchor.left), window.innerWidth - 330)) } : undefined;
   const icon = model.statusClass === "syncing" ? <LoaderCircle className="spin" size={14} /> : model.statusClass === "error" ? <TriangleAlert size={14} /> : model.statusClass === "disabled" ? <CloudOff size={14} /> : model.statusClass === "synced" ? <Check size={14} /> : model.statusClass === "pending" ? <UploadCloud size={14} /> : <Cloud size={14} />;
 
   return (
     <div className="sync-status-control">
       <button
-        ref={buttonRef}
+        ref={resolvedButtonRef}
+        data-sync-status-button="true"
         className={`toolbar__item toolbar__sync sync-status-button ${model.statusClass}`}
         onClick={() => setOpen((value) => !value)}
         title={model.accessibleLabel}
@@ -82,7 +119,7 @@ export function SyncStatusPopover({
         <span className="sync-status-visually-hidden">{model.localLabel}，{model.statusLabel}</span>
       </button>
       {open && (
-        <div ref={popoverRef} className="sync-status-popover" role="dialog" aria-label="本地与云端同步状态" style={style}>
+          <div ref={popoverRef} className="sync-status-popover" role="dialog" aria-label="本地与云端同步状态" style={position ?? undefined}>
           <header className="sync-status-popover-header">
             <div><strong>同步状态</strong><span>{model.statusLabel}</span></div>
             <span className={`sync-status-dot ${model.statusClass}`} aria-hidden="true" />

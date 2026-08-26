@@ -6,6 +6,7 @@ import { LAKE_EMOJI_GROUPS } from "../lib/lakeEmojiGroups";
 import type { TreeNode, TreeNodeType } from "../lib/types";
 import { buildTreeIndex, type TreeIndex } from "../core/treeIndex";
 import { computeDropPosition, computeSiblingDragOffsets, isValidTreeDrop, type TreeDragDropPosition } from "./treeDrag";
+import { getCreateMenuPosition, type CreateMenuPosition } from "./createMenuPosition";
 
 type CreateKind = "notebook" | "group" | "note";
 type DropPosition = "before" | "inside" | "after";
@@ -62,7 +63,10 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
   } | null>(null);
   const [contextMenu, setContextMenu] = useState<{ id: string; x: number; y: number } | null>(null);
   const [iconPicker, setIconPicker] = useState<{ node: TreeNode; x: number; y: number } | null>(null);
+  const [createMenuPosition, setCreateMenuPosition] = useState<CreateMenuPosition | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
+  const createButtonRef = useRef<HTMLButtonElement>(null);
+  const createMenuRef = useRef<HTMLDivElement>(null);
   const treeRef = useRef<HTMLElement>(null);
   const dragRef = useRef<{ id: string; startX: number; startY: number; moved: boolean; offsetY: number } | null>(null);
   const dropTargetRef = useRef<{ id: string; position: DropPosition } | null>(null);
@@ -72,6 +76,30 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
   const query = props.search.trim().toLocaleLowerCase();
   const treeIndex = useMemo(() => buildTreeIndex(props.nodes, query), [props.nodes, query]);
   const roots = (treeIndex.childrenByParent.get(null) ?? []).filter((node) => treeIndex.visibleIds.has(node.id));
+
+  const updateCreateMenuPosition = useCallback(() => {
+    const button = createButtonRef.current;
+    const sidebar = button?.closest<HTMLElement>(".sidebar");
+    if (!button || !sidebar) return;
+    const buttonRect = button.getBoundingClientRect();
+    const sidebarRect = sidebar.getBoundingClientRect();
+    setCreateMenuPosition(getCreateMenuPosition(buttonRect, sidebarRect, { width: window.innerWidth, height: window.innerHeight }));
+  }, []);
+
+  useLayoutEffect(() => {
+    if (!menuOpen) {
+      setCreateMenuPosition(null);
+      return;
+    }
+    updateCreateMenuPosition();
+    const onViewportChange = () => updateCreateMenuPosition();
+    window.addEventListener("resize", onViewportChange);
+    window.addEventListener("scroll", onViewportChange, true);
+    return () => {
+      window.removeEventListener("resize", onViewportChange);
+      window.removeEventListener("scroll", onViewportChange, true);
+    };
+  }, [menuOpen, updateCreateMenuPosition]);
 
   const rubberBandWidth = (width: number) => {
     if (width < props.minWidth) return props.minWidth - (props.minWidth - width) * 0.16;
@@ -134,7 +162,8 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
 
   useEffect(() => {
     const close = (event: MouseEvent) => {
-      if (!menuRef.current?.contains(event.target as Node)) setMenuOpen(false);
+      const target = event.target as Node;
+      if (!menuRef.current?.contains(target) && !createMenuRef.current?.contains(target)) setMenuOpen(false);
       if (!(event.target as HTMLElement).closest("[data-context-menu]")) setContextMenu(null);
     };
     const closeContextMenu = (event: MouseEvent) => {
@@ -513,12 +542,15 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
         <button className="icon-button locate-btn" onClick={locateActive} title="定位到当前文档" disabled={!props.activeId} aria-label="定位到当前文档"><LocateFixed size={16} /></button>
         <button className="icon-button fulltext-btn" onClick={() => props.onOpenSearch(props.search)} title="全文搜索（⇧⌘F）" aria-label="全文搜索"><Search size={16} /></button>
         <div className="create-menu-wrap" ref={menuRef}>
-          <button className={`icon-button create-btn ${menuOpen ? "selected" : ""}`} onClick={() => setMenuOpen((open) => !open)} title="新建"><Plus size={18} /></button>
-          {menuOpen && <div className="create-menu">
+          <button ref={createButtonRef} className={`icon-button create-btn ${menuOpen ? "selected" : ""}`} onClick={() => {
+            if (menuOpen) setMenuOpen(false);
+            else { updateCreateMenuPosition(); setMenuOpen(true); }
+          }} title="新建"><Plus size={18} /></button>
+          {menuOpen && createMenuPosition && createPortal(<div ref={createMenuRef} className="create-menu" style={{ position: "fixed", top: createMenuPosition.top, left: createMenuPosition.left, width: createMenuPosition.width, zIndex: 1000 }}>
             <button onClick={() => create("note")} disabled={!noteParent}><FilePlus2 size={16} /><span><strong>新建文档</strong><small>{context ? `在“${context.title}”下` : "选择笔记本后创建"}</small></span></button>
             <button onClick={() => create("group")} disabled={!groupParent}><FolderPlus size={16} /><span><strong>新建分组</strong><small>{context ? `在“${context.title}”下` : "请先新建笔记本"}</small></span></button>
             <button onClick={() => create("notebook")}><BookOpen size={16} /><span><strong>新建笔记本</strong><small>创建顶层笔记本</small></span></button>
-          </div>}
+          </div>, document.body)}
         </div>
       </div>
       </div>

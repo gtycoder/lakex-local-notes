@@ -15,6 +15,7 @@ import { SyncToast, type SyncToastData } from "../components/SyncToast";
 import { SettingsPanel, type SettingsCategory } from "../components/SettingsPanel";
 import type { AppSettings } from "../lib/settings";
 import type { DraftJournalEntry, S3Settings, TreeNode } from "../lib/types";
+import { clampPopoverPosition } from "../hooks/topMenuPosition";
 
 export interface DesktopOverlaysProps {
   confirmDelete: TreeNode | null;
@@ -22,8 +23,10 @@ export interface DesktopOverlaysProps {
   onCancelDelete: () => void;
 
   workspaceMenuOpen: boolean;
-  wsMenuWrapRef: RefObject<HTMLDivElement | null>;
-  moreMenuWrapRef: RefObject<HTMLDivElement | null>;
+  wsMenuWrapRef: RefObject<HTMLDivElement>;
+  workspaceMenuRef: RefObject<HTMLDivElement>;
+  moreMenuWrapRef: RefObject<HTMLDivElement>;
+  moreMenuRef: RefObject<HTMLDivElement>;
   topMenuOpen: boolean;
   onOpenSettingsFromMenu: (category: SettingsCategory) => void;
   onOpenTrashFromMenu: () => void;
@@ -70,7 +73,7 @@ export interface DesktopOverlaysProps {
 export function DesktopOverlays(props: DesktopOverlaysProps) {
   const {
     confirmDelete, onConfirmDelete, onCancelDelete,
-    workspaceMenuOpen, wsMenuWrapRef, moreMenuWrapRef, topMenuOpen,
+    workspaceMenuOpen, wsMenuWrapRef, workspaceMenuRef, moreMenuWrapRef, moreMenuRef, topMenuOpen,
     onOpenSettingsFromMenu, onOpenTrashFromMenu,
     focusMode, onToggleFocusMode, activeNoteId, lockedNoteIds, onToggleNoteLock,
     draftEntries, onRestoreDraft, onDiscardDraft, onCloseDrafts,
@@ -91,16 +94,22 @@ export function DesktopOverlays(props: DesktopOverlaysProps) {
       )}
       {/* 顶栏下拉用 portal 渲染到 body 根部，避免被 app-shell 内部堆叠上下文/overflow 覆盖 */}
       {workspaceMenuOpen && createPortal(
-        <div className="top-menu top-menu--workspace" role="menu" aria-label="工作空间"
-          style={{ top: (wsMenuWrapRef.current?.getBoundingClientRect().bottom ?? 38) + 6, left: wsMenuWrapRef.current?.getBoundingClientRect().left ?? 82 }}>
+        <div ref={workspaceMenuRef} className="top-menu top-menu--workspace" role="menu" aria-label="工作空间"
+          style={(() => {
+            const rect = wsMenuWrapRef.current?.getBoundingClientRect();
+            return rect ? clampPopoverPosition(rect, { width: window.innerWidth, height: window.innerHeight }, { width: 180, height: 88 }, 6) : undefined;
+          })()}>
           <button role="menuitem" onClick={() => onOpenSettingsFromMenu("editor")}><Settings2Icon size={15} />偏好设置</button>
           <button role="menuitem" onClick={onOpenTrashFromMenu}><Trash2 size={15} />回收站</button>
         </div>,
         document.body,
       )}
       {topMenuOpen && createPortal(
-        <div className="top-menu top-menu--more" role="menu" aria-label="文档操作"
-          style={{ top: (moreMenuWrapRef.current?.getBoundingClientRect().bottom ?? 38) + 6, left: (moreMenuWrapRef.current?.getBoundingClientRect().right ?? 1280) - 180 }}>
+        <div ref={moreMenuRef} className="top-menu top-menu--more" role="menu" aria-label="文档操作"
+          style={(() => {
+            const rect = moreMenuWrapRef.current?.getBoundingClientRect();
+            return rect ? clampPopoverPosition(rect, { width: window.innerWidth, height: window.innerHeight }, { width: 180, height: 150 }, 6) : undefined;
+          })()}>
           <button role="menuitem" aria-checked={focusMode} onClick={onToggleFocusMode}>
             <Focus size={15} /><span>{focusMode ? "退出专注模式" : "进入专注模式"}<small>⌘⇧Enter</small></span>
           </button>

@@ -7,8 +7,9 @@ import type { SaveState } from "./desktopTypes";
 
 export interface DesktopTopBarLeadingProps {
   workspaceName: string;
-  wsMenuWrapRef: RefObject<HTMLDivElement | null>;
-  syncBtnRef: RefObject<HTMLButtonElement | null>;
+  wsMenuWrapRef?: RefObject<HTMLDivElement>;
+  syncBtnRef?: RefObject<HTMLButtonElement>;
+  visible?: boolean;
   sync: SyncStatus;
   saveState: SaveState;
   saveLabelText: string;
@@ -26,19 +27,20 @@ export interface DesktopTopBarLeadingProps {
 /** 顶栏左侧：工作空间（下拉：设置/回收站）+ 云同步状态。 */
 export function DesktopTopBarLeading(props: DesktopTopBarLeadingProps) {
   const {
-    workspaceName, wsMenuWrapRef, syncBtnRef, sync, saveState, saveLabelText,
+    workspaceName, wsMenuWrapRef, syncBtnRef, visible = true, sync, saveState, saveLabelText,
     pendingSummary, dirtyTabCount, lastSavedAt, cloudEnabled, conflictSnapshots,
     onToggleWorkspaceMenu, onSync, onOpenSettings, onOpenHistory,
   } = props;
   return (
     <>
-      <div className="toolbar__menu-wrap" ref={wsMenuWrapRef as Ref<HTMLDivElement>}>
+      <div className="toolbar__menu-wrap" data-top-menu-trigger="workspace" ref={wsMenuWrapRef as Ref<HTMLDivElement> | undefined}>
         <button className="toolbar__item" onClick={onToggleWorkspaceMenu} title="工作空间" aria-label="工作空间">
           <span className="toolbar__text">{workspaceName}</span><ChevronDown size={13} />
         </button>
       </div>
       <SyncStatusPopover
         buttonRef={syncBtnRef}
+        visible={visible}
         sync={sync}
         saveState={saveState}
         saveLabel={saveLabelText}

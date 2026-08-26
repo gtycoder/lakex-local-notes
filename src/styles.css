@@ -27,13 +27,13 @@ button { cursor: pointer; }
 .search-box input { width: 100%; border: 0; outline: 0; background: transparent; font-size: 12px; }
 .list-heading { display: flex; align-items: center; justify-content: flex-end; gap: 4px; height: 28px; padding: 0 8px 3px; }
 .create-menu-wrap { position: relative; }
-.create-menu { display: flex; position: absolute; top: 36px; right: 0; z-index: 30; flex-direction: column; width: 220px; padding: 5px; border: 1px solid var(--b3-theme-surface-lighter); border-radius: var(--b3-border-radius-b); background: var(--b3-menu-background); box-shadow: var(--b3-dialog-shadow); transform-origin: top right; transition: transform 140ms var(--ease-out), opacity 140ms var(--ease-out); }
-.create-menu > button { display: grid; grid-template-columns: 20px minmax(0, 1fr); align-items: center; gap: 8px; width: 100%; min-height: 48px; padding: 7px 8px; border: 0; border-radius: var(--b3-border-radius); color: var(--b3-theme-on-surface); background: transparent; text-align: left; }
+.create-menu { display: flex; position: absolute; top: 36px; right: 0; z-index: 1000; flex-direction: column; width: clamp(150px, calc(var(--sidebar-width, 260px) - 16px), 220px); max-width: calc(100vw - 16px); padding: 4px; border: 1px solid var(--b3-theme-surface-lighter); border-radius: var(--b3-border-radius-b); background: var(--b3-menu-background); box-shadow: var(--b3-dialog-shadow); transform-origin: top right; transition: transform 140ms var(--ease-out), opacity 140ms var(--ease-out); }
+.create-menu > button { display: grid; grid-template-columns: 20px minmax(0, 1fr); align-items: center; gap: 8px; width: 100%; min-height: 42px; padding: 5px 8px; border: 0; border-radius: var(--b3-border-radius); color: var(--b3-theme-on-surface); background: transparent; text-align: left; }
 .create-menu > button:hover { background: var(--b3-list-hover); }
 .create-menu > button:disabled { cursor: default; opacity: .45; }
 .create-menu > button > span { display: flex; flex-direction: column; min-width: 0; }
 .create-menu strong { font-size: 12px; font-weight: 600; }
-.create-menu small { margin-top: 2px; overflow: hidden; color: var(--b3-theme-on-surface-light); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+.create-menu small { margin-top: 1px; overflow: hidden; color: var(--b3-theme-on-surface-light); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
 .inline-create { display: grid; grid-template-columns: 16px minmax(0, 1fr) auto; align-items: center; gap: 5px; margin: 2px 7px 3px; padding: 3px 5px; border: 1px solid #b9cec4; border-radius: 5px; color: #286249; background: #fff; box-shadow: 0 0 0 1px #e3eee9; }
 .inline-create input { min-width: 0; height: 22px; padding: 0; border: 0; outline: 0; color: #293139; background: transparent; font-size: 12px; }
 .inline-create button { height: 22px; padding: 0 6px; border: 0; border-radius: 4px; color: #fff; background: #28775a; font-size: 10px; }

@@ -50,11 +50,18 @@ export function App() {
   const [search, setSearch] = useState("");
   const [conflictSnapshotNotice, setConflictSnapshotNotice] = useState<Array<{ noteId: string; title: string }>>([]);
   const [activeHistoryCount, setActiveHistoryCount] = useState(0);
-  const { topMenuOpen, setTopMenuOpen, workspaceMenuOpen, setWorkspaceMenuOpen, closeMenus } = useTopMenus();
+  const workspaceMenuRef = useRef<HTMLDivElement>(null);
+  const moreMenuRef = useRef<HTMLDivElement>(null);
   /** 顶栏两个下拉的触发容器 ref（定位 fixed 菜单用） */
   const wsMenuWrapRef = useRef<HTMLDivElement>(null);
   const moreMenuWrapRef = useRef<HTMLDivElement>(null);
   const syncBtnRef = useRef<HTMLButtonElement>(null);
+  const { topMenuOpen, setTopMenuOpen, workspaceMenuOpen, setWorkspaceMenuOpen, closeMenus } = useTopMenus({
+    workspaceTriggerRef: wsMenuWrapRef,
+    moreTriggerRef: moreMenuWrapRef,
+    workspaceMenuRef,
+    moreMenuRef,
+  });
   useWindowShortcuts({
     onOpenSearch: () => { setSearchPanelQuery(""); setSearchPanelOpen(true); closeMenus(); },
     onToggleFocus: () => { setFocusMode((value) => !value); closeMenus(); },
@@ -945,23 +952,35 @@ export function App() {
   const lockedNoteIds = new Set(notes.filter((n) => n.isLocked).map((n) => n.id));
 
   // 融合顶栏左侧按钮（工作空间/云同步/外观/更多）：库视图并入多 tab 顶栏，小记视图单独渲染
-  const topBarLeading = (
+  const topBarLeadingProps = {
+    workspaceName,
+    sync: sync,
+    saveState,
+    saveLabelText: saveLabel(saveState),
+    pendingSummary,
+    dirtyTabCount: openTabs.filter((tab) => tab.dirty).length,
+    lastSavedAt,
+    cloudEnabled,
+    conflictSnapshots: conflictSnapshotNotice,
+    onToggleWorkspaceMenu: () => { setWorkspaceMenuOpen((o) => !o); setTopMenuOpen(false); },
+    onSync: () => { void runSync(); },
+    onOpenSettings: () => { setSettingsCategory("sync"); setSettingsOpen(true); },
+    onOpenHistory: (noteId: string) => { setHistoryNoteId(noteId); setHistoryOpen(true); },
+  };
+  const libraryTopBarLeading = (
     <DesktopTopBarLeading
-      workspaceName={workspaceName}
-      wsMenuWrapRef={wsMenuWrapRef}
-      syncBtnRef={syncBtnRef}
-      sync={sync}
-      saveState={saveState}
-      saveLabelText={saveLabel(saveState)}
-      pendingSummary={pendingSummary}
-      dirtyTabCount={openTabs.filter((tab) => tab.dirty).length}
-      lastSavedAt={lastSavedAt}
-      cloudEnabled={cloudEnabled}
-      conflictSnapshots={conflictSnapshotNotice}
-      onToggleWorkspaceMenu={() => { setWorkspaceMenuOpen((o) => !o); setTopMenuOpen(false); }}
-      onSync={() => { void runSync(); }}
-      onOpenSettings={() => { setSettingsCategory("sync"); setSettingsOpen(true); }}
-      onOpenHistory={(noteId) => { setHistoryNoteId(noteId); setHistoryOpen(true); }}
+      {...topBarLeadingProps}
+      visible={desktopWorkspace === "library"}
+      wsMenuWrapRef={desktopWorkspace === "library" ? wsMenuWrapRef : undefined}
+      syncBtnRef={desktopWorkspace === "library" ? syncBtnRef : undefined}
+    />
+  );
+  const quickNotesTopBarLeading = (
+    <DesktopTopBarLeading
+      {...topBarLeadingProps}
+      visible={desktopWorkspace === "quick-notes"}
+      wsMenuWrapRef={desktopWorkspace === "quick-notes" ? wsMenuWrapRef : undefined}
+      syncBtnRef={desktopWorkspace === "quick-notes" ? syncBtnRef : undefined}
     />
   );
   const topBarTrailing = (
@@ -1007,7 +1026,7 @@ export function App() {
             tabs={tabInfos}
             activeNoteId={activeNoteId}
             tocEnabled={tocEnabled}
-            topbarLeading={topBarLeading}
+            topbarLeading={libraryTopBarLeading}
             topbarTrailing={topBarTrailing}
             wideMode={wideMode}
             paragraphSpacing={settings.paragraphSpacing}
@@ -1036,7 +1055,7 @@ export function App() {
           <DesktopQuickNotes
             notebooks={treeNodes}
             quickNotesRef={quickNotesRef}
-            topbarLeading={topBarLeading}
+            topbarLeading={quickNotesTopBarLeading}
             topbarTrailing={topBarTrailing}
             onDirtyChange={setQuickNotesDirty}
             onConverted={(note) => void handleQuickNoteConverted(note)}
@@ -1076,7 +1095,9 @@ export function App() {
         onCancelDelete={() => setConfirmDelete(null)}
         workspaceMenuOpen={workspaceMenuOpen}
         wsMenuWrapRef={wsMenuWrapRef}
+        workspaceMenuRef={workspaceMenuRef}
         moreMenuWrapRef={moreMenuWrapRef}
+        moreMenuRef={moreMenuRef}
         topMenuOpen={topMenuOpen}
         onOpenSettingsFromMenu={(category) => { setSettingsCategory(category); setSettingsOpen(true); setWorkspaceMenuOpen(false); }}
         onOpenTrashFromMenu={() => { setTrashOpen(true); setWorkspaceMenuOpen(false); }}
