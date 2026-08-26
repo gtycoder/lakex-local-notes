@@ -1,9 +1,12 @@
-/* 图片放大预览 Lightbox（桌面 + 移动端共用） */
+/* 图片放大预览 Lightbox（桌面 + 移动端共用）
+   背景：思源式模糊（backdrop-filter 模糊文档内容，非全黑遮罩）——用户确认 */
 .image-lightbox {
   position: fixed;
   inset: 0;
   z-index: 1000;
-  background: rgba(0, 0, 0, 0.82);
+  background: rgba(0, 0, 0, 0.08);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
   display: flex;
   align-items: center;
   justify-content: center;

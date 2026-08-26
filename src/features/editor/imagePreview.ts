@@ -62,13 +62,14 @@ export function subscribeImagePreview(listener: Listener): () => void {
 }
 
 /**
- * 给编辑器宿主挂图片点击放大预览监听（桌面 EditorTab / 共享 LakeEditor 共用）。
- * - 捕获阶段监听 img.ne-image 点击（不 preventDefault，Lake 选中/编辑行为照常）。
- * - 收集宿主内全部图片（画廊），点击的图定位到当前索引。
+ * 给编辑器宿主挂图片双击放大预览监听（桌面 EditorTab / 共享 LakeEditor 共用）。
+ * - **双击**触发（用户确认：单击留给选中/改图片大小，单击预览太容易误触）；
+ *   捕获阶段监听 dblclick（不 preventDefault，Lake 行为照常）。
+ * - 收集宿主内全部图片（画廊），双击的图定位到当前索引。
  * - 返回清理函数（组件卸载时移除）。
  */
 export function attachImagePreviewClick(host: HTMLElement): () => void {
-  const onClick = (event: MouseEvent) => {
+  const onDoubleClick = (event: MouseEvent) => {
     const target = event.target as HTMLElement | null;
     if (!target || typeof target.closest !== "function") return;
     const img = target.closest("img.ne-image") as HTMLImageElement | null;
@@ -79,6 +80,6 @@ export function attachImagePreviewClick(host: HTMLElement): () => void {
     const index = images.findIndex((im) => im.src === img.src);
     openImagePreview(images, index < 0 ? 0 : index);
   };
-  host.addEventListener("click", onClick, true);
-  return () => host.removeEventListener("click", onClick, true);
+  host.addEventListener("dblclick", onDoubleClick, true);
+  return () => host.removeEventListener("dblclick", onDoubleClick, true);
 }

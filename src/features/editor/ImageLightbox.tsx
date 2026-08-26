@@ -98,10 +98,17 @@ export function ImageLightbox() {
 
   return createPortal(
     <div className="image-lightbox" role="dialog" aria-modal="true" aria-label="图片预览"
-      onClick={(e) => { if (e.target === e.currentTarget) closeImagePreview(); }}
+      onClick={(e) => {
+        // 点击非图片/非工具栏位置 → 关闭预览（模糊背景区域即关闭热区）
+        const t = e.target as HTMLElement | null;
+        if (!t || typeof t.closest !== "function") return;
+        if (t.closest(".image-lightbox__toolbar") || t.closest("img")) return;
+        closeImagePreview();
+      }}
       onWheel={onWheel}>
       <div className="image-lightbox__stage" onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp}>
-        <img src={image.src} alt="" draggable={false} style={imgStyle} onClick={() => { if (scale > 1) resetView(); else closeImagePreview(); }} />
+        <img src={image.src} alt="" draggable={false} style={imgStyle}
+          onClick={() => { if (scale > 1) resetView(); }} />
       </div>
       <div className="image-lightbox__toolbar">
         <button className="image-lightbox__btn" onClick={() => navigateImagePreview(-1)} disabled={state.index <= 0} aria-label="上一张"><ChevronLeft size={20} /></button>

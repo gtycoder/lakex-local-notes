@@ -49,7 +49,8 @@
 
 ### 2.4 图片点击放大预览
 - **关键发现**：Lake 内置 allowClickToMaximize 在该构建**未传导到渲染层**（实测 o2e 组件收不到该 option，点击不派发 previewImgs）——**不要依赖 envAdapter.previewImgs**
-- 实现：imagePreview.ts 模块级单例控制器（open/close/navigate + 订阅）+ attachImagePreviewClick(host) DOM 捕获监听 img.ne-image 点击，收集宿主内全部图片（画廊）
+- 实现：imagePreview.ts 模块级单例控制器（open/close/navigate + 订阅）+ attachImagePreviewClick(host) DOM 捕获监听 img.ne-image **双击**，收集宿主内全部图片（画廊）
+- **交互（用户 2026-08-26 晚确认调整）**：双击触发（单击留给选中/改图片大小，防误触）；背景用 backdrop-filter blur(14px) **思源式模糊**（非全黑遮罩）；点击非图片/非工具栏区域关闭（图片上单击仅重置缩放）
 - ImageLightbox.tsx：Portal 全屏预览（滚轮光标为中心缩放、拖拽平移、←/→ 切换、Esc/背景/按钮关闭）
 - 挂载：桌面 EditorTab（编辑/锁定态）+ 共享 LakeEditor（移动端）
 
