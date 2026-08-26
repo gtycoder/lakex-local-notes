@@ -25,6 +25,14 @@ import { registerRuntimeBlob, unregisterRuntimeBlob } from "./cachePort.js";
  */
 const blobCache = new Map<string, { url: string; refs: number }>();
 
+/** 全局 blob → canonical 映射（跨注入器实例共享）：点击附件/保存还原都要能由 blob src 反查原始 URL。 */
+const globalBlobToCanonical = new Map<string, string>();
+
+/** 由 blob URL 反查原始 canonical URL（cardBlobInject 注入后 src 是 blob，打开附件需要原始引用）。 */
+export function canonicalForBlob(blobUrl: string): string | null {
+  return globalBlobToCanonical.get(blobUrl) ?? null;
+}
+
 function cachedBlobUrl(canonicalSrc: string, bytes: Uint8Array): string | null {
   const hit = blobCache.get(canonicalSrc);
   if (hit) {
@@ -115,7 +123,10 @@ export function createCardBlobInjector(content: string): CardBlobInjectResult {
   const fileCards = scanFileCardsForInject(content);
   const blobToCanonical = new Map<string, string>();
   for (const c of [...cards, ...fileCards]) {
-    if (c.blobUrl) blobToCanonical.set(c.blobUrl, c.canonicalSrc);
+    if (c.blobUrl) {
+      blobToCanonical.set(c.blobUrl, c.canonicalSrc);
+      globalBlobToCanonical.set(c.blobUrl, c.canonicalSrc);
+    }
   }
   const blobUrls = [...cards, ...fileCards].map((c) => c.blobUrl).filter((u): u is string => u !== null);
   /** 已注入的卡片（按 canonicalSrc 幂等）：MutationObserver/多次尝试重复触发不再重注入，避免闪烁。 */

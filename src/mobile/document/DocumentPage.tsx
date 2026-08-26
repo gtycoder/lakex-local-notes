@@ -8,8 +8,10 @@ import type { LakeEditorInstance, LakeEditorPrefs } from "../../features/editor/
 import type { AttachmentPreviewItem } from "../../features/attachment/attachmentPreviewController";
 import type { LocalAssetRef } from "../../core/assetUrl.js";
 import { mimeTypeForFilename } from "../../core/assetNaming.js";
+import { parseLocalAssetUrl } from "../../core/assetUrl.js";
 import { registerPlugin } from "@capacitor/core";
 import { Filesystem, Directory } from "@capacitor/filesystem";
+import { canonicalForBlob } from "../cardBlobInject.js";
 import { bridge } from "../bridge";
 import type { POCNote } from "../bridge";
 
@@ -63,35 +65,38 @@ export function DocumentPage(props: DocumentPageProps) {
         return URL.createObjectURL(new Blob([bytes as unknown as BlobPart], { type }));
       },
       onOpenAttachment: async (item: AttachmentPreviewItem) => {
-        // item.src 可能是 canonical（未注入）或 blob URL（cardBlobInject 注入后）——
-        // blob 本身就是本地字节，直接取；canonical 用 ref 解析本地资产
-        let bytes: Uint8Array | null = null;
-        let storedName = "";
-        if (item.ref) {
-          bytes = bytesFor(item.ref);
-          storedName = item.ref.filename;
-        } else if (typeof item.src === "string" && item.src.startsWith("blob:")) {
-          try {
-            const resp = await fetch(item.src);
-            bytes = new Uint8Array(await resp.arrayBuffer());
-          } catch { /* 取字节失败走下方提示 */ }
-          storedName = item.name.replace(/[\\/:*?"<>|\u0000-\u001f]/g, "_").trim() || "附件";
+        // item.src 可能是 canonical（未注入）或 blob URL（cardBlobInject 注入后）。
+        // 优先解析出 ref（blob 经全局映射反查 canonical）→ 直接打开**本地持久化的资产文件**
+        // （note-assets/{noteId}/{filename}，不复制 cache——复制会偶发 cache 清理/文件名/MIME 问题）。
+        let ref: LocalAssetRef | null = item.ref;
+        if (!ref && typeof item.src === "string" && item.src.startsWith("blob:")) {
+          const canonical = canonicalForBlob(item.src);
+          if (canonical) ref = parseLocalAssetUrl(canonical);
         }
-        if (!bytes || !storedName) { setToast("附件未同步到本机"); return; }
+        if (!ref) { setToast("附件未同步到本机"); return; }
         try {
-          // 移动端：文件已在本地（cache 落一份临时副本）→ 系统应用直接打开（ACTION_VIEW）
-          const written = await Filesystem.writeFile({
-            path: `open/${storedName}`,
-            data: bytesToBase64(bytes),
-            directory: Directory.Cache,
-            recursive: true,
+          const uri = await Filesystem.getUri({
+            path: `note-assets/${ref.noteId}/${ref.filename}`,
+            directory: Directory.Data,
           });
-          const filePath = written.uri.replace(/^file:\/\//, "");
-          await OpenFile.open({ path: filePath });
+          await OpenFile.open({ path: uri.uri.replace(/^file:\/\//, "") });
         } catch (e) {
           const msg = (e as { message?: string })?.message ?? "";
           console.log("[attach-open] failed:", msg);
-          setToast("没有可打开此文件的应用");
+          // 兜底：本地资产文件缺失（未持久化）→ 写 cache 副本再打开
+          try {
+            const bytes = bytesFor(ref);
+            if (!bytes) { setToast("附件未同步到本机"); return; }
+            const written = await Filesystem.writeFile({
+              path: `open/${ref.filename}`,
+              data: bytesToBase64(bytes),
+              directory: Directory.Cache,
+              recursive: true,
+            });
+            await OpenFile.open({ path: written.uri.replace(/^file:\/\//, "") });
+          } catch {
+            setToast("没有可打开此文件的应用");
+          }
         }
       },
     };
