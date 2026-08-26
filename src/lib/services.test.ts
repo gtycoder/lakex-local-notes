@@ -48,8 +48,8 @@ describe("createNativeServices（DTO 字段映射）", () => {
     expect(renamed).toMatchObject({ id: "n1", title: "改标题", nodeType: "note", noteFileId: "n1" });
   });
 
-  it("assets.upload：参数顺序 noteId→filename→bytes，bytes 转 number[] 数组", async () => {
-    const captured: Array<{ input: { bytes: number[]; filename: string }; noteId: string }> = [];
+  it("assets.upload：参数顺序 noteId→filename→bytes，bytes 保持 Uint8Array 高效传输", async () => {
+    const captured: Array<{ input: { bytes: Uint8Array; filename: string }; noteId: string }> = [];
     const api = fakeNative({
       uploadResource: async (input, noteId) => {
         captured.push({ input, noteId });
@@ -58,7 +58,10 @@ describe("createNativeServices（DTO 字段映射）", () => {
     });
     const { assets } = createNativeServices(api);
     const output = await assets.upload("note-9", "pic.png", new Uint8Array([1, 2, 3, 4]));
-    expect(captured).toEqual([{ input: { bytes: [1, 2, 3, 4], filename: "pic.png" }, noteId: "note-9" }]);
+    expect(captured[0].input.bytes).toBeInstanceOf(Uint8Array);
+    expect([...captured[0].input.bytes]).toEqual([1, 2, 3, 4]);
+    expect(captured[0].input.filename).toBe("pic.png");
+    expect(captured[0].noteId).toBe("note-9");
     expect(output).toMatchObject({ url: "http://127.0.0.1:19876/a/b.png", filename: "pic.png", mimeType: "image/png", size: 4 });
   });
 

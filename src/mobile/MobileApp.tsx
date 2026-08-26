@@ -57,7 +57,7 @@ export function MobileApp() {
         await bridge.init();
         // lakeNative 调试/测试契约（对齐桌面端）：供 CDP 驱动与真机调试直接调用 bridge 端口
         (window as unknown as Record<string, unknown>).lakeNative = {
-          uploadResource: (input: { bytes: number[]; filename: string }, noteId: string) =>
+          uploadResource: (input: { bytes: Uint8Array; filename: string }, noteId: string) =>
             bridge.uploadResource(input, noteId),
           syncNow: () => bridge.syncNow(),
           testS3Connection: () => bridge.testS3Connection(),

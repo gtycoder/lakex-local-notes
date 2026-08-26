@@ -22,12 +22,12 @@ export function sniffImageFormat(bytes: ArrayLike<number>): ImageFormat | null {
   return null;
 }
 
-export function normalizeImageInput(bytes: number[], filename: string): ResourceUploadInput {
+export function normalizeImageInput(bytes: Uint8Array, filename: string): ResourceUploadInput {
   const validated = validateImageInput(bytes, filename);
   return { bytes: validated.bytes, filename: validated.filename };
 }
 
-function validateImageInput(bytes: number[], filename: string): ValidatedImageInput {
+function validateImageInput(bytes: Uint8Array, filename: string): ValidatedImageInput {
   if (bytes.length === 0 || bytes.length > MAX_IMAGE_BYTES) throw new Error("图片为空或超过 25 MiB");
   const format = sniffImageFormat(bytes);
   if (!format) throw new Error("仅支持 PNG、JPEG、GIF、WebP 和 AVIF 图片");

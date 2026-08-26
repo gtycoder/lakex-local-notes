@@ -100,7 +100,7 @@ export function createNativeServices(api: LakeNative): AppServices {
     },
     assets: {
       upload: (noteId, filename, bytes) =>
-        api.uploadResource({ bytes: Array.from(bytes), filename }, noteId).then(assetToDto),
+        api.uploadResource({ bytes: bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes), filename }, noteId).then(assetToDto),
       downloadRemote: (url, noteId) => api.downloadRemoteResource(url, noteId).then(assetToDto),
     },
     sync: {

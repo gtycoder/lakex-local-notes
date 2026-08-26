@@ -6,12 +6,12 @@
  */
 import fs from "node:fs";
 import path from "node:path";
-import crypto from "node:crypto";
 import type { ResourceUploadOutput } from "./storeTypes.js";
 import { AppError } from "../src/core/storeErrors.js";
 import { SsrfError } from "./ssrf.js";
-import { MAX_IMAGE_BYTES, MAX_IMAGE_PIXELS } from "../src/core/storeLimits.js";
+import { MAX_ATTACHMENT_BYTES, MAX_IMAGE_BYTES, MAX_IMAGE_PIXELS } from "../src/core/storeLimits.js";
 import { readImageDimensions, sniffImageFormat } from "../src/core/imageUtils.js";
+import { buildAssetFilename, extOf } from "../src/core/assetNaming.js";
 import type { HttpFetcher } from "../src/core/httpFetcher.js";
 import { createPinnedHttpFetcher } from "./httpFetcher.js";
 
@@ -36,8 +36,15 @@ export class ResourceRepository {
     this.fetcher = deps.fetcher ?? createPinnedHttpFetcher();
   }
 
-  upload(input: { bytes: number[]; filename: string }, noteId: string): ResourceUploadOutput {
+  upload(input: { bytes: Uint8Array; filename: string }, noteId: string): ResourceUploadOutput {
     const bytes = Buffer.from(input.bytes);
+    // 附件（非图片格式字节）走附件落盘：不校验像素/图片格式，直接写文件。
+    // 判定以字节嗅探为准（扩展名可伪造）；嗅探到图片格式仍走图片路径（像素护栏）。
+    if (sniffImageFormat(bytes) == null) {
+      const output = attachmentOutput(bytes, input.filename, this.deps.noteAssetsDirFor(noteId), (filename) => this.deps.assetUrl(noteId, filename));
+      this.deps.registerOrphan(noteId, output.filename, output.size, output.mimeType);
+      return output;
+    }
     assertImageDimensions(bytes);
     const output = imageOutput(bytes, input.filename, this.deps.noteAssetsDirFor(noteId), (filename) => this.deps.assetUrl(noteId, filename));
     this.deps.registerOrphan(noteId, output.filename, output.size, output.mimeType);
@@ -114,14 +121,10 @@ function assertImageDimensions(bytes: Buffer): void {
   }
 }
 
-function imageOutput(bytes: Buffer, _requestedFilename: string, assetsDir: string, makeUrl: (filename: string) => string): ResourceUploadOutput {
-  if (bytes.length === 0 || bytes.length > MAX_IMAGE_BYTES) throw new AppError("InvalidInput", "图片为空或超过 25 MiB");
-  const format = sniffImageFormat(bytes);
-  if (!format) throw new AppError("InvalidInput", "仅支持 PNG、JPEG、GIF、WebP 和 AVIF 图片");
-  const filename = `${Date.now()}_${crypto.randomBytes(4).toString("hex")}.${format.extension}`;
+function writeAssetBytes(bytes: Buffer, filename: string, assetsDir: string): string {
   fs.mkdirSync(assetsDir, { recursive: true });
   const destination = path.join(assetsDir, filename);
-  const temporary = `${destination}.tmp-${process.pid}-${crypto.randomBytes(4).toString("hex")}`;
+  const temporary = `${destination}.tmp-${process.pid}-${Math.random().toString(36).slice(2, 10)}`;
   try {
     fs.writeFileSync(temporary, bytes);
     fs.renameSync(temporary, destination);
@@ -129,6 +132,52 @@ function imageOutput(bytes: Buffer, _requestedFilename: string, assetsDir: strin
     try { fs.rmSync(temporary, { force: true }); } catch { /* best effort */ }
     throw error;
   }
+  return destination;
+}
+
+function imageOutput(bytes: Buffer, _requestedFilename: string, assetsDir: string, makeUrl: (filename: string) => string): ResourceUploadOutput {
+  if (bytes.length === 0 || bytes.length > MAX_IMAGE_BYTES) throw new AppError("InvalidInput", "图片为空或超过 25 MiB");
+  const format = sniffImageFormat(bytes);
+  if (!format) throw new AppError("InvalidInput", "仅支持 PNG、JPEG、GIF、WebP 和 AVIF 图片");
+  const filename = buildAssetFilename(`image.${format.extension}`);
+  writeAssetBytes(bytes, filename, assetsDir);
   const url = makeUrl(filename);
   return { resourceRef: url, url, filename, mimeType: format.mimeType, size: bytes.length };
 }
+
+/** 附件落盘：保留原始扩展名（buildAssetFilename 归一化小写），跳过图片格式/像素校验。 */
+function attachmentOutput(bytes: Buffer, requestedFilename: string, assetsDir: string, makeUrl: (filename: string) => string): ResourceUploadOutput {
+  if (bytes.length === 0) throw new AppError("InvalidInput", "附件为空");
+  if (bytes.length > MAX_ATTACHMENT_BYTES) throw new AppError("InvalidInput", `附件超过 ${MAX_ATTACHMENT_BYTES / 1024 / 1024} MiB 协议上限`);
+  const filename = buildAssetFilename(requestedFilename);
+  writeAssetBytes(bytes, filename, assetsDir);
+  const url = makeUrl(filename);
+  const ext = extOf(filename).toLowerCase();
+  const mimeType = MIME_FOR_EXT[ext] ?? "application/octet-stream";
+  return { resourceRef: url, url, filename, mimeType, size: bytes.length };
+}
+
+/** 附件 MIME 兜底表（与渲染层 mimeForExtension 对齐的最小集；未知一律 octet-stream）。 */
+const MIME_FOR_EXT: Record<string, string> = {
+  pdf: "application/pdf",
+  doc: "application/msword",
+  docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  xls: "application/vnd.ms-excel",
+  xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  ppt: "application/vnd.ms-powerpoint",
+  pptx: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+  txt: "text/plain",
+  md: "text/markdown",
+  csv: "text/csv",
+  zip: "application/zip",
+  rar: "application/vnd.rar",
+  "7z": "application/x-7z-compressed",
+  mp3: "audio/mpeg",
+  wav: "audio/wav",
+  m4a: "audio/mp4",
+  mp4: "video/mp4",
+  mov: "video/quicktime",
+  mkv: "video/x-matroska",
+  webm: "video/webm",
+  epub: "application/epub+zip",
+};

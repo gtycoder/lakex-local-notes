@@ -1,6 +1,7 @@
 import { BrowserWindow, dialog } from "electron";
 import type { DraftJournal } from "../draftJournal.js";
-import { MAX_IMAGE_BYTES, Store } from "../store.js";
+import { Store } from "../store.js";
+import { MAX_ATTACHMENT_BYTES } from "../../src/core/storeLimits.js";
 import { exportNote, type ExportFormat } from "../export.js";
 import {
   IpcInputError,
@@ -13,7 +14,7 @@ import {
 import type { IpcRegistrar } from "./registrar.js";
 
 interface ResourceUploadInput {
-  bytes: number[];
+  bytes: Uint8Array;
   filename: string;
 }
 
@@ -84,8 +85,8 @@ export function registerNotesIpc(ipc: IpcRegistrar, store: Store, drafts: DraftJ
   ipc.handle("purge_trash", (id: string) => store.purgeTrashItem(id));
   ipc.handle("empty_trash", () => store.emptyTrash());
   ipc.handle("upload_resource", (input: ResourceUploadInput, noteId: string) => {
-    if (!input || !Array.isArray(input.bytes)) throw new Error("资源数据无效");
-    if (input.bytes.length > MAX_IMAGE_BYTES) throw new Error("图片超过 25 MiB");
+    if (!input || !(input.bytes instanceof Uint8Array)) throw new Error("资源数据无效");
+    if (input.bytes.length > MAX_ATTACHMENT_BYTES) throw new Error(`资源超过 ${MAX_ATTACHMENT_BYTES / 1024 / 1024} MiB 协议上限`);
     return store.uploadResource(input, noteId);
   });
   ipc.handle("download_remote_resource", (url: string, noteId: string) => store.downloadRemoteResource(url, noteId));
