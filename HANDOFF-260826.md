@@ -62,10 +62,17 @@
 - AttachmentPreview.tsx：PDF embed / audio/video / 其他类型信息面板；工具栏「用系统应用打开 / 在文件夹中显示 / 关闭」（平台动作注入式）
 
 ### 2.6 移动端
-- LakeEditorPrefs.attachment：resolveDisplayUrl（本地字节→blob URL）+ onOpenAttachment（分享）；桌面缺省走 native
-- DocumentPage：file 卡片点击 → blob 内联预览（PDF/音视频复用同一 overlay）+ navigator.share({files}) 系统分享（AbortError=取消不报错，未同步 toast 提示）
+- LakeEditorPrefs.attachment：resolveDisplayUrl（本地字节→blob URL）+ onOpenAttachment（系统应用打开）；桌面缺省走 native
+- **移动端实机验证完成（2026-08-26，小米 133ee490 + CDP 9295）**：
+  - file 卡片显示修复：cardBlobInject 扩展支持 file 卡片（src=canonical 127.0.0.1 手机不可达 → Lake 渲染
+    ne-error-tips「文件上传失败」→ 注入本地 blob，卡片正常显示图标/名称/大小，errTips 0；保存 restore 还原）
+  - 系统应用打开：原生插件 OpenFilePlugin（ACTION_VIEW + FileProvider，MainActivity 注册）；
+    附件预览统一「打开」面板（PDF/文档/音视频/其他全部系统应用，不再内联/分享）——实测系统「打开方式」选择器弹出
+  - 沉浸顶栏：AttachmentPreview 打开 SystemBars.setStyle(Dark)（深色背景白图标），关闭恢复 Light
+  - 保存不污染：file 卡片 blob 纳入 blobToCanonical + restore()（明文/URI 编码/带参三形态），blobRestore 回归测试
+  - CSP：桌面+移动端 connect-src 补 blob:（fetch(blob) 根因）；两端 transformIndexHtml 改正则强替换（vite8 占位符丢失）
+  - 弃用分享面板（Android WebView 无 navigator.share），卸载 @capacitor/share
 - 上传方向：共享 uploadLakeResource → lakeNative.uploadResource → bridge 落盘，**零额外改造**
-- **移动端 vite build 通过；实机验证未做**（adb 未检测到手机，需连接小米 133ee490 后装机验证）
 
 ### 2.7 七牛实测（scripts/verify/qiniu-stream-head-verify.mjs）
 - 流式上传（2MB Readable + ContentLength）OK / HeadObject 存在 200 / 缺失 404 OK / GET 回读一致 OK
