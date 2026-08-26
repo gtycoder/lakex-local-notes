@@ -94,6 +94,9 @@
 9. **CSP object-src 'none' 拦截 PDF embed**：主进程日志 "Loading plugin data ... violates CSP: object-src 'none'"——PDF 预览空白、音视频同理（media-src 缺本地资产源）。已修（vite.config.ts object-src/media-src 放行 127.0.0.1:*）
 10. **vite8 transformIndexHtml 占位符丢失**：transform 收到的 html 里 %VITE_CSP% 已被处理成实际值，字面 replace 不匹配 → 旧 CSP 残留。必须用正则强替换 CSP meta content
 11. **contextBridge 暴露对象属性只读**：window.lakeNative.openAttachment = ... 静默失败（无异常），无法用 monkey-patch 观察 IPC 调用——验证按钮链路改用渲染进程 console.log（进主进程日志）
+12. **PDF 内嵌预览空白 = webPreferences.plugins 默认 false**（electron.d.ts 注释确认）：<embed> 插件渲染被禁用，Chromium PDF viewer 不工作（iframe 也一样——内嵌 PDF 都走插件/扩展渲染）。修复：main.ts webPreferences.plugins: true。注意 Electron 43 类型里没有 pdfViewerEnabled（别加）
+13. **CSP frame-src**：iframe 加载本地资产 URL 需 frame-src 放行（默认 fallback default-src 'self'=1421）
+14. **附件 filename 字段语义 = 展示名**：uploadResource 返回 filename 用原始文件名（Lake 卡片 name 展示）；磁盘/URL/同步用 URL 里的生成名（孤儿登记必须用 URL 末段，不能用 filename）
 7. **class 成员末尾不能有逗号**（写新方法时注意）
 8. **Uint8Array 跨 IPC**：structured clone 高效；number[] 对 100MiB 附件内存爆炸
 
