@@ -26,7 +26,7 @@ const MOBILE_CSP =
   "style-src 'self' 'unsafe-inline'; " +
   "img-src 'self' data: blob: https://localhost; " +
   "font-src 'self' data:; " +
-  "connect-src 'self' https://localhost https://*.s3.cn-north-1.qiniucs.com https://s3.cn-north-1.qiniucs.com http://127.0.0.1:* ws://127.0.0.1:*; " +
+  "connect-src 'self' blob: https://localhost https://*.s3.cn-north-1.qiniucs.com https://s3.cn-north-1.qiniucs.com http://127.0.0.1:* ws://127.0.0.1:*; " +
   "media-src 'self' data: blob:; " +
   "worker-src 'self' blob:; object-src 'none'; base-uri 'none'; form-action 'none'";
 
@@ -35,9 +35,11 @@ function lakexAlipayLocalMobile(): Plugin {
     name: "lakex-alipay-local-mobile",
     enforce: "pre",
     transformIndexHtml(html) {
+      // 正则强替换 CSP meta content（兼容占位符或已被处理成旧值——与桌面同款修复：
+      // vite8 收到的 html 里 %VITE_CSP% 可能已消失，字面 replace 不匹配导致旧 CSP 残留）
       return html.replace(
-        '<meta http-equiv="Content-Security-Policy" content="%VITE_CSP%" />',
-        `<meta http-equiv="Content-Security-Policy" content="${MOBILE_CSP}" />`
+        /(<meta http-equiv="Content-Security-Policy" content=")[^"]*(")/,
+        `$1${MOBILE_CSP}$2`
       );
     },
     /** Capacitor webDir 入口必须是 index.html：构建后复制 mobile.html → index.html */

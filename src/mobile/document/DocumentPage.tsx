@@ -8,8 +8,22 @@ import type { LakeEditorInstance, LakeEditorPrefs } from "../../features/editor/
 import type { AttachmentPreviewItem } from "../../features/attachment/attachmentPreviewController";
 import type { LocalAssetRef } from "../../core/assetUrl.js";
 import { mimeTypeForFilename } from "../../core/assetNaming.js";
+import { registerPlugin } from "@capacitor/core";
+import { Filesystem, Directory } from "@capacitor/filesystem";
 import { bridge } from "../bridge";
 import type { POCNote } from "../bridge";
+
+/** 原生 OpenFile 插件（android/.../OpenFilePlugin.java）：系统默认应用打开本地文件。 */
+const OpenFile = registerPlugin<{ open: (opts: { path: string }) => Promise<void> }>("OpenFile");
+
+/** Uint8Array → base64（Capacitor Filesystem 写入用；分块避免参数栈溢出）。 */
+function bytesToBase64(bytes: Uint8Array): string {
+  let binary = "";
+  for (let i = 0; i < bytes.length; i += 0x8000) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  }
+  return btoa(binary);
+}
 
 export interface DocumentPageProps {
   note: POCNote;
@@ -38,7 +52,7 @@ export function DocumentPage(props: DocumentPageProps) {
     return () => window.clearTimeout(t);
   }, [toast]);
 
-  // 附件能力（移动端注入 LakeEditor）：本地字节 → blob URL 预览；打开 = 系统分享面板
+  // 附件能力（移动端注入 LakeEditor）：本地字节 → blob URL 预览；打开 = 系统应用打开（OpenFile 原生插件）
   const attachmentPrefs = useMemo<NonNullable<LakeEditorPrefs["attachment"]>>(() => {
     const bytesFor = (ref: LocalAssetRef): Uint8Array | null => bridge.getAssetBytes(ref.noteId, ref.filename);
     return {
@@ -49,20 +63,35 @@ export function DocumentPage(props: DocumentPageProps) {
         return URL.createObjectURL(new Blob([bytes as unknown as BlobPart], { type }));
       },
       onOpenAttachment: async (item: AttachmentPreviewItem) => {
-        const ref = item.ref;
-        if (!ref) { setToast("附件未同步到本机"); return; }
-        const bytes = bytesFor(ref);
-        if (!bytes) { setToast("附件未同步到本机，请先同步"); return; }
-        const file = new File([bytes as unknown as BlobPart], item.name, { type: mimeTypeForFilename(ref.filename) });
+        // item.src 可能是 canonical（未注入）或 blob URL（cardBlobInject 注入后）——
+        // blob 本身就是本地字节，直接取；canonical 用 ref 解析本地资产
+        let bytes: Uint8Array | null = null;
+        let storedName = "";
+        if (item.ref) {
+          bytes = bytesFor(item.ref);
+          storedName = item.ref.filename;
+        } else if (typeof item.src === "string" && item.src.startsWith("blob:")) {
+          try {
+            const resp = await fetch(item.src);
+            bytes = new Uint8Array(await resp.arrayBuffer());
+          } catch { /* 取字节失败走下方提示 */ }
+          storedName = item.name.replace(/[\\/:*?"<>|\u0000-\u001f]/g, "_").trim() || "附件";
+        }
+        if (!bytes || !storedName) { setToast("附件未同步到本机"); return; }
         try {
-          if (typeof navigator.share === "function") {
-            await navigator.share({ files: [file], title: item.name });
-          } else {
-            setToast("当前环境不支持文件分享");
-          }
+          // 移动端：文件已在本地（cache 落一份临时副本）→ 系统应用直接打开（ACTION_VIEW）
+          const written = await Filesystem.writeFile({
+            path: `open/${storedName}`,
+            data: bytesToBase64(bytes),
+            directory: Directory.Cache,
+            recursive: true,
+          });
+          const filePath = written.uri.replace(/^file:\/\//, "");
+          await OpenFile.open({ path: filePath });
         } catch (e) {
-          // 用户取消分享不算错误
-          if ((e as { name?: string })?.name !== "AbortError") setToast("分享失败");
+          const msg = (e as { message?: string })?.message ?? "";
+          console.log("[attach-open] failed:", msg);
+          setToast("没有可打开此文件的应用");
         }
       },
     };
