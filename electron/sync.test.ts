@@ -21,6 +21,7 @@ vi.mock("@aws-sdk/client-s3", () => {
     constructor(public input: Record<string, unknown>) {}
   }
   class HeadBucketCommand extends S3Command {}
+  class HeadObjectCommand extends S3Command {}
   class GetObjectCommand extends S3Command {}
   class PutObjectCommand extends S3Command {}
   class ListObjectsV2Command extends S3Command {}
@@ -32,6 +33,15 @@ vi.mock("@aws-sdk/client-s3", () => {
         throw new Error(`injected S3 failure: ${s3.failCommand}`);
       }
       if (command instanceof HeadBucketCommand) return {};
+      if (command instanceof HeadObjectCommand) {
+        const key = command.input.Key as string;
+        if (!s3.bucket.has(key)) {
+          const err = new Error(`NoSuchKey: ${key}`);
+          (err as { name: string }).name = "NoSuchKey";
+          throw err;
+        }
+        return {};
+      }
       if (command instanceof GetObjectCommand) {
         const key = command.input.Key as string;
         const bytes = s3.bucket.get(key);
@@ -44,7 +54,8 @@ vi.mock("@aws-sdk/client-s3", () => {
       }
       if (command instanceof PutObjectCommand) {
         const key = command.input.Key as string;
-        s3.bucket.set(key, Buffer.from(command.input.Body as Buffer));
+        const body = command.input.Body as unknown;
+        s3.bucket.set(key, Buffer.isBuffer(body) ? body : await collectStream(body as import("stream").Readable));
         s3.puts.push(key);
         return {};
       }
@@ -74,8 +85,15 @@ vi.mock("@aws-sdk/client-s3", () => {
       throw new Error(`未知命令: ${command.constructor.name}`);
     }
   }
-  return { S3Client, HeadBucketCommand, GetObjectCommand, PutObjectCommand, ListObjectsV2Command, DeleteObjectCommand, DeleteObjectsCommand };
+  return { S3Client, HeadBucketCommand, HeadObjectCommand, GetObjectCommand, PutObjectCommand, ListObjectsV2Command, DeleteObjectCommand, DeleteObjectsCommand };
 });
+
+/** 测试辅助：把 Node Readable 收成 Buffer（流式上传 mock 用）。 */
+async function collectStream(stream: import("stream").Readable): Promise<Buffer> {
+  const chunks: Buffer[] = [];
+  for await (const chunk of stream) chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk as string));
+  return Buffer.concat(chunks);
+}
 
 // ===== 本地类型（与 sync.ts 内部结构一致，避免引入 Electron/原生依赖） =====
 interface S3Settings {
