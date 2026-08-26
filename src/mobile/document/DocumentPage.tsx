@@ -58,15 +58,30 @@ export function DocumentPage(props: DocumentPageProps) {
           onEditorReady={(noteId, editor) => {
             editorRef.current = editor;
             if (editor && cardInjector) {
+              // 图片破裂优化：注入时机从"800ms 后"提前到"卡片 DOM 出现即注入"——
+              // 立即尝试一次（DOM 可能已就绪）+ MutationObserver 监听 NE-CARD 出现 + 短间隔兜底重试。
+              // inject 幂等（cardBlobInject 内按 canonicalSrc 去重），Observer/重试重复触发无副作用。
               let attempts = 0;
-              const tryInject = () => {
+              const tryInject = (): number => {
+                attempts++;
                 const n = cardInjector.inject(editor);
-                if (n === 0 && attempts < 4) {
-                  attempts++;
-                  window.setTimeout(tryInject, 400);
-                }
+                if (n === 0 && attempts < 20) window.setTimeout(tryInject, 120);
+                return n;
               };
-              window.setTimeout(tryInject, 800);
+              let observer: MutationObserver | null = null;
+              if (typeof MutationObserver !== "undefined") {
+                observer = new MutationObserver(() => {
+                  const n = cardInjector.inject(editor);
+                  if (n > 0 && observer) { observer.disconnect(); observer = null; }
+                });
+                observer.observe(document.body, { childList: true, subtree: true });
+              }
+              tryInject();
+              // 兜底：3s 后停掉 Observer 与重试（防止残留监听）
+              window.setTimeout(() => {
+                if (observer) { observer.disconnect(); observer = null; }
+                cardInjector.inject(editor);
+              }, 3000);
             }
           }}
           prefs={{ fontSize: 18, showToolbar: true }}

@@ -120,6 +120,13 @@ body { font-family: -apple-system, "PingFang SC", "Noto Sans SC", sans-serif; ba
 
 /* 文档页 */
 .mobile-title-input { flex: 1; min-width: 0; border: none; outline: none; font-size: 16px; font-weight: 600; background: transparent; }
+
+/* 图片破裂优化：图片卡片 blob 注入完成前显示灰底占位，隐藏破图图标闪烁
+   （注入后 img[src^="blob:"] 正常显示；选择器待真机验证 Lake 卡片 DOM 结构） */
+.mobile-doc-body NE-CARD[data-card-name="image"],
+.mobile-doc-body ne-card[name="image"] { background: #f2f3f5; }
+.mobile-doc-body NE-CARD[data-card-name="image"] img:not([src^="blob:"]),
+.mobile-doc-body ne-card[name="image"] img:not([src^="blob:"]) { visibility: hidden; }
 .mobile-done-btn { border: none; background: #3575f0; color: #fff; border-radius: 8px; padding: 6px 14px; font-size: 14px; cursor: pointer; }
 .mobile-doc-body { flex: 1; overflow-y: auto; background: #fff; padding-bottom: calc(40px + env(safe-area-inset-bottom, 0px)); }
 

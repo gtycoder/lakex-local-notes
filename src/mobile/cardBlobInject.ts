@@ -15,6 +15,37 @@ import type { LakeEditorInstance } from "../features/editor/lakeRuntime";
 import { lakeBridge } from "../features/editor/lakeRuntime";
 import { parseLocalAssetUrl } from "../core/assetUrl.js";
 import { bridge } from "./bridge";
+import { registerRuntimeBlob, unregisterRuntimeBlob } from "./cachePort.js";
+
+/**
+ * 跨文档进入/模式切换复用的 blob 缓存（图片破裂优化）：
+ * canonical src → blob URL + 引用计数。同一张图在文档重开/模式切换间复用同一 blob URL，
+ * 注入时可立即命中；引用归零才 revoke（受 cachePort 注册表与"清缓存"统一管理）。
+ */
+const blobCache = new Map<string, { url: string; refs: number }>();
+
+function cachedBlobUrl(canonicalSrc: string, bytes: Uint8Array): string | null {
+  const hit = blobCache.get(canonicalSrc);
+  if (hit) {
+    hit.refs += 1;
+    return hit.url;
+  }
+  const url = URL.createObjectURL(new Blob([bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer]));
+  blobCache.set(canonicalSrc, { url, refs: 1 });
+  registerRuntimeBlob(url);
+  return url;
+}
+
+function releaseBlobUrl(canonicalSrc: string, url: string): void {
+  const hit = blobCache.get(canonicalSrc);
+  if (!hit) return;
+  hit.refs -= 1;
+  if (hit.refs <= 0) {
+    blobCache.delete(canonicalSrc);
+    URL.revokeObjectURL(url);
+    unregisterRuntimeBlob(url);
+  }
+}
 
 /** card 元素 value="data:{uri-encoded-json}"（含完整 src） */
 const CARD_VALUE_RE = /<card\b[^>]*\bname="image"[^>]*\bvalue="data:([^"]+)"[^>]*>/g;
@@ -44,7 +75,7 @@ function scanImageCards(content: string): Array<{ cardId: string; canonicalSrc: 
       out.push({
         cardId: typeof obj.id === "string" ? obj.id : "",
         canonicalSrc: obj.src,
-        blobUrl: bytes ? URL.createObjectURL(new Blob([bytes as unknown as BlobPart])) : null,
+        blobUrl: bytes ? cachedBlobUrl(obj.src, bytes) : null,
       });
     } catch { /* 跳过无法解析的卡片 */ }
   }
@@ -62,6 +93,8 @@ export function createCardBlobInjector(content: string): CardBlobInjectResult {
     if (c.blobUrl) blobToCanonical.set(c.blobUrl, c.canonicalSrc);
   }
   const blobUrls = cards.map((c) => c.blobUrl).filter((u): u is string => u !== null);
+  /** 已注入的卡片（按 canonicalSrc 幂等）：MutationObserver/多次尝试重复触发不再重注入，避免闪烁。 */
+  const injectedIds = new Set<string>();
 
   return {
     inject(editor) {
@@ -77,6 +110,7 @@ export function createCardBlobInjector(content: string): CardBlobInjectResult {
       // 按 cardId（value.id）匹配；匹配不到按顺序对应
       for (const c of cards) {
         if (!c.blobUrl) continue;
+        if (injectedIds.has(c.canonicalSrc)) continue; // 幂等：已注入的卡片跳过（Observer/重试不重复注入）
         const byCardId = cardEls.find((el) => el.getAttribute("id") === c.cardId);
         const el = byCardId || cardEls[cards.indexOf(c)];
         if (!el) continue;
@@ -103,6 +137,7 @@ export function createCardBlobInjector(content: string): CardBlobInjectResult {
             cd._resetCardValue(newValue);
             cd.sync(false); // 必须传 boolean（set-card-value-command.ts:17 断言）
             injected++;
+            injectedIds.add(c.canonicalSrc);
             continue;
           }
           // 路径 2：编辑态卡片无 cardData → execCommand("setCardValue")（官方命令通道）
@@ -120,6 +155,7 @@ export function createCardBlobInjector(content: string): CardBlobInjectResult {
             };
             execCmd("setCardValue", true, nodeId, newValue);
             injected++;
+            injectedIds.add(c.canonicalSrc);
           }
         } catch { /* 单卡片失败不阻断 */ }
       }
@@ -133,7 +169,10 @@ export function createCardBlobInjector(content: string): CardBlobInjectResult {
       return out;
     },
     revoke() {
-      for (const u of blobUrls) URL.revokeObjectURL(u);
+      // 释放缓存引用（引用归零才真正 revoke + 注销注册表；跨进入复用的 blob 保留）
+      for (const c of cards) {
+        if (c.blobUrl) releaseBlobUrl(c.canonicalSrc, c.blobUrl);
+      }
     },
   };
 }
