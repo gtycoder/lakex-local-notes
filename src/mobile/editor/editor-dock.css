@@ -1,0 +1,114 @@
+/* 移动端编辑态底部 dock（app 化：工具栏悬浮输入法上方 + 展开面板覆盖输入法区域） */
+.mobile-editor-dock {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 60;
+  pointer-events: none;
+  padding-bottom: env(safe-area-inset-bottom);
+}
+.mobile-editor-dock[data-hidden="1"] .med-toolbar,
+.mobile-editor-dock[data-hidden="1"] .med-panel { display: none; }
+
+.med-toolbar {
+  pointer-events: auto;
+  margin: 0 10px;
+  background: #fff;
+  border-radius: 14px;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.16);
+  height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: space-around;
+}
+.med-btn {
+  width: 46px;
+  height: 42px;
+  border: none;
+  background: transparent;
+  border-radius: 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: #262626;
+  font-size: 16px;
+}
+.med-btn:active { background: rgba(0, 0, 0, 0.06); }
+.med-btn.med-active { color: #00b96b; }
+.med-btn.med-aa { font-weight: 700; font-size: 17px; }
+.med-btn.med-b { font-weight: 700; font-size: 18px; }
+
+.med-panel {
+  pointer-events: auto;
+  background: #fff;
+  margin: 8px 10px 0;
+  border-radius: 14px;
+  box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.08);
+  padding: 12px 12px 14px;
+  max-height: 46vh;
+  overflow-y: auto;
+}
+.med-ins-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 10px;
+}
+.med-ins-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 7px;
+  background: #f2f3f5;
+  border: none;
+  border-radius: 10px;
+  padding: 14px 8px;
+  font-size: 14px;
+  cursor: pointer;
+  color: #262626;
+}
+.med-ins-item:active { background: #e8eaec; }
+.med-ins-item svg { width: 21px; height: 21px; }
+
+.med-font-panel { display: flex; flex-direction: column; gap: 10px; }
+.med-f-row { display: flex; gap: 8px; }
+.med-f-align { gap: 0; }
+.med-f-row .med-f-btn { flex: 1; }
+.med-f-btn {
+  border: none;
+  background: #f2f3f5;
+  border-radius: 9px;
+  height: 40px;
+  font-size: 15px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: #262626;
+  gap: 4px;
+}
+.med-f-btn:active { background: #e8eaec; }
+.med-f-btn.med-b { font-weight: 700; }
+.med-f-btn.med-i { font-style: italic; }
+.med-f-btn.med-s { text-decoration: line-through; }
+.med-f-btn.med-u { text-decoration: underline; }
+
+.med-kb-reshow {
+  pointer-events: auto;
+  position: fixed;
+  right: 14px;
+  bottom: calc(16px + env(safe-area-inset-bottom));
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  background: #fff;
+  border: none;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.18);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: #262626;
+  z-index: 61;
+}

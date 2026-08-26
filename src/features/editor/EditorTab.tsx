@@ -458,6 +458,7 @@ export function EditorTab({ noteId, content, visible, tocEnabled, onChange, pref
       bindBoardScroller();
       editorRef.current = editor;
       setEditorState(editor);
+      (window as unknown as Record<string, unknown>).__desktopEditor = editor;
       onEditorReadyRef.current?.(noteId, editor);
     } catch (reason) {
       console.error("Failed to create editor for tab", noteId, reason);

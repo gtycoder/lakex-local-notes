@@ -1,4 +1,6 @@
 /** 文档页：LakeEditor viewer/editor + blob 注入 + 保存。Phase 1 复用 MobilePocApp 的注入/还原逻辑。 */
+import { EditorDock } from "../editor/EditorDock";
+import { lakeBridge } from "../../features/editor/lakeRuntime";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowLeft, Pencil, Trash2 } from "lucide-react";
 import { LakeEditor } from "../../features/editor/LakeEditor";
@@ -42,7 +44,17 @@ export interface DocumentPageProps {
 export function DocumentPage(props: DocumentPageProps) {
   const { note, content, title, editing, onTitleChange, onContentChange, onToggleEdit, onBack, onDelete } = props;
   const editorRef = useRef<LakeEditorInstance | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+
+  // 插入图片/附件：隐藏 file input 选文件 → Lake insertFiles 命令（走 createUploadPromise 上传 + 插入卡片）
+  const insertFileViaInput = (accept: string) => {
+    const input = fileInputRef.current;
+    if (!input) return;
+    input.accept = accept;
+    input.value = "";
+    input.click();
+  };
   // viewer 内容 = 注入 blob 后的显示内容（setDocument 前改 src=blob → 挂载即用 blob）
   const { displayContent, revoke, restore } = useMemo(() => injectAssetBlobs(note.content), [note.id, note.content]);
   const cardInjector = useMemo(() => createCardBlobInjector(note.content), [note.content]);
@@ -163,10 +175,31 @@ export function DocumentPage(props: DocumentPageProps) {
               }, 3000);
             }
           }}
-          prefs={{ fontSize: 18, showToolbar: true, disableVirtualRendering: true, attachment: attachmentPrefs }}
+          prefs={{ fontSize: 18, showToolbar: !editing, disableVirtualRendering: true, attachment: attachmentPrefs }}
         />
       </section>
+      {/* 编辑态底部 dock（app 化工具栏，悬浮输入法上方；替代 Lake 桌面样式原生工具栏） */}
+      <EditorDock
+        editor={editorRef.current}
+        editing={editing}
+        onInsertImage={() => insertFileViaInput("image/*")}
+        onInsertAttachment={() => insertFileViaInput("")}
+        onInsertTable={() => {
+          try { lakeBridge(editorRef.current ?? undefined)?.renderer?.execCommand?.("table" as never); } catch { /* 忽略 */ }
+        }}
+      />
       {toast && <div className="mobile-toast">{toast}</div>}
+      <input
+        ref={fileInputRef}
+        type="file"
+        style={{ display: "none" }}
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          const ed = editorRef.current;
+          if (!file || !ed) return;
+          try { lakeBridge(ed)?.renderer?.execCommand?.("insertFiles" as never, [file]); } catch { /* 忽略 */ }
+        }}
+      />
     </div>
   );
 }
