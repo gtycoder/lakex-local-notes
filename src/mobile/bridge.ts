@@ -698,6 +698,45 @@ export const bridge = {
     return maintenance.run("main", () => saveQuickNoteInternal(id, text, images));
   },
 
+  /** 带图片字节保存小记（composer 用）：图片字节写入 quick_note_assets BLOB，与正文/元数据同事务。
+   * 全量替换本小记图片（编辑时传已有图片字节 + 新增字节；简单一致，不引入 staged/retained 两段式）。 */
+  async saveQuickNoteWithImages(id: string, text: string, imageFiles: Array<{ filename: string; mimeType: string; width: number | null; height: number | null; bytes: Uint8Array }> = []): Promise<string> {
+    return maintenance.run("main", async () => {
+      const d = await ensureDb();
+      const images: StoredQuickNoteImage[] = imageFiles.map((f) => ({
+        id: crypto.randomUUID(),
+        filename: f.filename,
+        mimeType: f.mimeType,
+        width: f.width,
+        height: f.height,
+        size: f.bytes.length,
+        hash: sha256Sync(f.bytes),
+      }));
+      const now = new Date().toISOString();
+      const content = normalizeQuickNoteContent(text, images);
+      const serialized = serializeQuickNoteContent(content);
+      const contentHash = sha256Sync(new TextEncoder().encode(serialized));
+      const preview = previewQuickNote(text, images.length);
+      d.transaction(() => {
+        d.prepare(
+          `INSERT INTO quick_notes (id, created_at, updated_at, preview_text, image_count, content_hash, content, sync_state, is_conflict, restore_pending_at, ready_to_sync)
+           VALUES (?,?,?,?,?,?,?,'local',0,NULL,1)
+           ON CONFLICT(id) DO UPDATE SET updated_at=excluded.updated_at, preview_text=excluded.preview_text, image_count=excluded.image_count, content_hash=excluded.content_hash, content=excluded.content, sync_state='local', deleted_at=NULL, restore_pending_at=NULL, ready_to_sync=1`
+        ).run(id, now, now, preview, images.length, contentHash, serialized);
+        // 全量替换图片字节（删除旧的 + 写入新的）
+        d.prepare("DELETE FROM quick_note_assets WHERE quick_note_id=?").run(id);
+        if (imageFiles.length > 0) {
+          const insert = d.prepare("INSERT INTO quick_note_assets (quick_note_id, id, filename, mime_type, width, height, size, content_hash, bytes) VALUES (?,?,?,?,?,?,?,?,?)");
+          imageFiles.forEach((f, i) => {
+            insert.run(id, images[i].id, f.filename, f.mimeType, f.width, f.height, f.bytes.length, images[i].hash, f.bytes);
+          });
+        }
+      })();
+      await saveSnapshot(d.exportBytes());
+      return id;
+    });
+  },
+
   async createQuickNote(text: string): Promise<string> {
     return maintenance.run("main", async () => {
       const id = crypto.randomUUID();
@@ -712,6 +751,13 @@ export const bridge = {
       d.prepare("UPDATE quick_notes SET deleted_at=?, restore_pending_at=NULL, sync_state='local', ready_to_sync=1 WHERE id=?").run(new Date().toISOString(), id);
       await saveSnapshot(d.exportBytes());
     });
+  },
+
+  /** 小记图片字节读取（composer/卡片显示用；缺失 → null）。 */
+  async getQuickNoteImage(id: string, filename: string): Promise<Uint8Array | null> {
+    const d = await ensureDb();
+    const row = d.prepare("SELECT bytes FROM quick_note_assets WHERE quick_note_id=? AND filename=?").get(id, filename) as { bytes: Uint8Array } | undefined;
+    return row ? row.bytes : null;
   },
 
   /** 小记回收站列表（软删行；含冲突归档的 ready_to_sync=0 条目——它们也是可恢复的本地内容）。 */

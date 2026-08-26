@@ -167,11 +167,6 @@ export function MobileApp() {
           tab={route.tab}
           notebooks={notebooks}
           quickNotes={quickNotes}
-          onCreateQuickNote={async (text) => {
-            await bridge.createQuickNote(text);
-            await refreshAll();
-            setToastMsg("已新建小记");
-          }}
           onTabChange={(tab) => setRoute({ kind: "home", tab })}
           onOpenNotebook={(id) => setRoute({ kind: "notebook", notebookId: id })}
           onReorderNotebooks={async (orderedIds) => {
@@ -186,6 +181,7 @@ export function MobileApp() {
           onCreateNote={() => void createNoteInParent("notebook-personal")}
           onCreateNotebook={() => setCreateNbOpen(true)}
           onOpenQuickTrash={() => setRoute({ kind: "quick-trash" })}
+          onQuickNotesChanged={refreshAll}
         />
       )}
       {route.kind === "notebook" && (

@@ -1,7 +1,10 @@
-/** 首页（小记/知识库切换 + 笔记本宫格）。Phase 1 基础版：真实 bridge 数据。 */
+/** 首页（小记/知识库切换 + 笔记本宫格）。小记 tab：composer 新建/编辑 + 卡片（含图片缩略图）。 */
+import { useEffect, useState } from "react";
 import { Feather, Plus, Search, Settings, Trash2 } from "lucide-react";
 import type { TreeNode } from "../../lib/types";
 import { NotebookGrid } from "./NotebookGrid";
+import { QuickNoteComposer } from "./QuickNoteComposer";
+import { bridge } from "../bridge";
 
 export interface MobileQuickNote {
   id: string;
@@ -14,7 +17,6 @@ export interface HomePageProps {
   tab: "quick" | "library";
   notebooks: TreeNode[];
   quickNotes: MobileQuickNote[];
-  onCreateQuickNote: (text: string) => void;
   onTabChange: (tab: "quick" | "library") => void;
   onOpenNotebook: (id: string) => void;
   onReorderNotebooks: (orderedIds: string[]) => Promise<void>;
@@ -25,10 +27,34 @@ export interface HomePageProps {
   onCreateNotebook: () => void;
   /** 小记 tab：打开小记回收站（B：小记全同步闭环的 UI 入口） */
   onOpenQuickTrash: () => void;
+  /** 小记列表变化（composer 保存/编辑后刷新） */
+  onQuickNotesChanged: () => Promise<void>;
 }
 
+type ComposerState = { mode: "new" } | { mode: "edit"; id: string } | null;
+
 export function HomePage(props: HomePageProps) {
-  const { tab, notebooks, quickNotes, onCreateQuickNote, onTabChange, onOpenNotebook, onReorderNotebooks, onOpenNote, onOpenDrawer, onOpenSearch, onCreateNote, onCreateNotebook, onOpenQuickTrash } = props;
+  const {
+    tab, notebooks, quickNotes, onTabChange, onOpenNotebook, onReorderNotebooks, onOpenNote,
+    onOpenDrawer, onOpenSearch, onCreateNote, onCreateNotebook, onOpenQuickTrash, onQuickNotesChanged,
+  } = props;
+  const [composer, setComposer] = useState<ComposerState>(null);
+  const [editNote, setEditNote] = useState<{ id: string; text: string; images: import("../../core/quickNoteModel.js").StoredQuickNoteImage[] } | null>(null);
+
+  const openEdit = async (id: string): Promise<void> => {
+    try {
+      const full = await bridge.readQuickNote(id);
+      if (!full) return;
+      setEditNote({ id, text: full.content.text, images: full.content.images });
+      setComposer({ mode: "edit", id });
+    } catch { /* 读取失败忽略 */ }
+  };
+
+  const closeComposer = (): void => {
+    setComposer(null);
+    setEditNote(null);
+  };
+
   return (
     <div className="mobile-home">
       <header className="mobile-topbar">
@@ -41,17 +67,24 @@ export function HomePage(props: HomePageProps) {
         {tab === "quick" && <button className="mobile-icon-btn" onClick={onOpenQuickTrash} aria-label="小记回收站" title="小记回收站"><Trash2 size={18} /></button>}
       </header>
       {tab === "quick" ? (
-        <div className="mobile-scroll">
-          <div className="mobile-quick-list">
-            {quickNotes.length === 0 && <div className="mobile-empty">暂无小记，点右下新建</div>}
-            {quickNotes.map((n) => (
-              <div key={n.id} className="mobile-qcard">
-                <div className="mobile-qcard-text">{n.previewText || (n.imageCount > 0 ? "[图片]" : "（空白小记）")}</div>
-                <div className="mobile-qcard-meta">{new Date(n.updatedAt).toLocaleDateString("zh-CN")}</div>
-              </div>
-            ))}
+        composer !== null ? (
+          <div className="mobile-scroll">
+            <QuickNoteComposer
+              editNote={editNote}
+              onSaved={async () => { closeComposer(); await onQuickNotesChanged(); }}
+              onCancel={closeComposer}
+            />
           </div>
-        </div>
+        ) : (
+          <div className="mobile-scroll">
+            <div className="mobile-quick-list">
+              {quickNotes.length === 0 && <div className="mobile-empty">暂无小记，点右下新建</div>}
+              {quickNotes.map((n) => (
+                <QuickNoteCard key={n.id} note={n} onEdit={() => void openEdit(n.id)} />
+              ))}
+            </div>
+          </div>
+        )
       ) : (
         <div className="mobile-scroll">
           <NotebookGrid
@@ -63,7 +96,9 @@ export function HomePage(props: HomePageProps) {
       )}
       <div className="mobile-fab-col">
         {tab === "quick" ? (
-          <button className="mobile-fab" onClick={() => { const t = window.prompt("小记内容"); if (t?.trim()) onCreateQuickNote(t.trim()); }} aria-label="新建小记"><Plus size={24} /></button>
+          composer !== null
+            ? null
+            : <button className="mobile-fab" onClick={() => { setEditNote(null); setComposer({ mode: "new" }); }} aria-label="新建小记"><Plus size={24} /></button>
         ) : (
           <>
             <button className="mobile-fab" onClick={onCreateNote} aria-label="新建文档"><Plus size={24} /></button>
@@ -71,6 +106,42 @@ export function HomePage(props: HomePageProps) {
           </>
         )}
       </div>
+    </div>
+  );
+}
+
+/** 小记卡片：previewText + 首图缩略图（BLOB → objectURL）。 */
+function QuickNoteCard({ note, onEdit }: { note: MobileQuickNote; onEdit: () => void }) {
+  const [thumbUrl, setThumbUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    let url: string | null = null;
+    (async () => {
+      try {
+        const full = await bridge.readQuickNote(note.id);
+        const first = full?.content.images?.[0];
+        if (first && alive) {
+          const bytes = await bridge.getQuickNoteImage(note.id, first.filename);
+          if (bytes && alive) {
+            const blob = new Blob([bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer], { type: first.mimeType });
+            url = URL.createObjectURL(blob);
+            setThumbUrl(url);
+          }
+        }
+      } catch { /* 单卡缩略图失败忽略 */ }
+    })();
+    return () => {
+      alive = false;
+      if (url) URL.revokeObjectURL(url);
+    };
+  }, [note.id]);
+
+  return (
+    <div className="mobile-qcard" onClick={onEdit}>
+      {thumbUrl && <img className="mobile-qcard-thumb" src={thumbUrl} alt="" loading="lazy" />}
+      <div className="mobile-qcard-text">{note.previewText || (note.imageCount > 0 ? "[图片]" : "（空白小记）")}</div>
+      <div className="mobile-qcard-meta">{new Date(note.updatedAt).toLocaleDateString("zh-CN")}</div>
     </div>
   );
 }

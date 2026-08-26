@@ -74,8 +74,27 @@ body { font-family: -apple-system, "PingFang SC", "Noto Sans SC", sans-serif; ba
 .mobile-quick-list { padding: 10px 12px; }
 .mobile-qcard { background: #fff; border-radius: 12px; padding: 14px 16px; margin-bottom: 10px; box-shadow: 0 1px 2px rgba(0,0,0,.04); cursor: pointer; }
 .mobile-qcard:active { background: #f7f8fa; }
+.mobile-qcard-thumb { display: block; width: 100%; max-height: 180px; object-fit: cover; border-radius: 8px; margin-bottom: 10px; background: #f2f3f5; }
 .mobile-qcard-text { font-size: 15px; line-height: 1.6; }
 .mobile-qcard-meta { font-size: 12px; color: #86909c; margin-top: 4px; }
+
+/* 小记 composer */
+.mobile-qn-composer { background: #fff; border-radius: 12px; padding: 12px; box-shadow: 0 1px 2px rgba(0,0,0,.04); }
+.mobile-qn-textarea { display: block; width: 100%; min-height: 120px; border: 0; outline: 0; resize: vertical; font-size: 15px; line-height: 1.6; font-family: inherit; color: #1f2329; background: transparent; }
+.mobile-qn-textarea::placeholder { color: #a9aeb8; }
+.mobile-qn-images { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 8px; }
+.mobile-qn-img { position: relative; margin: 0; border-radius: 8px; overflow: hidden; background: #f2f3f5; aspect-ratio: 1; }
+.mobile-qn-img img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.mobile-qn-img button { position: absolute; top: 4px; right: 4px; width: 22px; height: 22px; border: 0; border-radius: 50%; background: rgba(31,35,41,.65); color: #fff; display: grid; place-items: center; cursor: pointer; }
+.mobile-qn-error { color: #d83931; font-size: 13px; margin-top: 8px; }
+.mobile-qn-actions { display: flex; align-items: center; gap: 8px; margin-top: 10px; }
+.mobile-qn-add { display: grid; place-items: center; width: 34px; height: 34px; border-radius: 8px; color: #3575f0; background: #e8f1ff; cursor: pointer; }
+.mobile-qn-add input { display: none; }
+.mobile-qn-hint { font-size: 12px; color: #86909c; }
+.mobile-qn-spacer { flex: 1; }
+.mobile-qn-btn { border: 1px solid #c9cdd4; background: #fff; border-radius: 8px; padding: 8px 14px; font-size: 14px; cursor: pointer; display: flex; align-items: center; gap: 4px; }
+.mobile-qn-btn:disabled { opacity: .6; }
+.mobile-qn-primary { border: 0; background: #3575f0; color: #fff; font-weight: 600; }
 
 /* 笔记本宫格 */
 .mobile-nb-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; padding: 12px 16px; }
