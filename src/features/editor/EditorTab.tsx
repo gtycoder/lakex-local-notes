@@ -13,6 +13,8 @@ import { normalizeClipboardHtml, upgradePastedHtml } from "./clipboardHtml";
 import { addAssetAccessToken, stripAssetAccessToken } from "../../lib/assetPort";
 import { registerOutlineTab, unregisterOutlineTab } from "../outline/registry";
 import { useOutline } from "../outline/useOutline";
+import { attachImagePreviewClick } from "./imagePreview";
+import { ImageLightbox } from "./ImageLightbox";
 
 export interface EditorTabProps {
   noteId: string;
@@ -541,7 +543,11 @@ export function EditorTab({ noteId, content, visible, tocEnabled, onChange, pref
     healObserver?.observe(host, { childList: true, subtree: true });
     scheduleHealCheck(900);
 
+    // 图片点击放大预览（桌面编辑/锁定态共用）：宿主级点击监听 + 共享 Lightbox
+    const detachImagePreview = attachImagePreviewClick(host);
+
     return () => {
+      detachImagePreview();
       window.clearTimeout(boardRestoreTimer);
       window.clearTimeout(boardRestoreFollowupTimer);
       boardRestoreTimer = undefined;
@@ -621,6 +627,7 @@ export function EditorTab({ noteId, content, visible, tocEnabled, onChange, pref
       }}
     >
       <div ref={editorMountRef} className="lake-editor-main" />
+      <ImageLightbox />
       {ctxMenu && (
         <EditorContextMenu
           x={ctxMenu.x}

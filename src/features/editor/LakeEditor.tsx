@@ -4,6 +4,8 @@ import { createLakeDocument, destroyLakeEditor, refreshTocSidebar, type LakeEdit
 import { normalizeClipboardHtml, upgradePastedHtml } from "./clipboardHtml";
 import { addAssetAccessToken, stripAssetAccessToken } from "../../lib/assetPort";
 import { getNativeErrorMessage } from "../../lib/nativeErrors";
+import { ImageLightbox } from "./ImageLightbox";
+import { attachImagePreviewClick } from "./imagePreview";
 
 interface LakeEditorProps {
   noteId: string;
@@ -63,6 +65,11 @@ export function LakeEditor({ noteId, content, mode = "editor", tocEnabled, onCha
     host.addEventListener("mousedown", preventCardBlur, true);
     host.addEventListener("copy", copyRichSelection, true);
     host.addEventListener("paste", pasteHandler, true);
+    // 图片点击放大预览（桌面/移动端共用）：捕获阶段监听 img.ne-image 点击，
+    // 收集文档内全部图片（画廊）打开共享 Lightbox。不 preventDefault——
+    // Lake 自身的卡片选中/编辑行为照常，预览作为叠加层展示。
+    // 注：不依赖 Lake 内置 allowClickToMaximize（该选项在本构建未传导到渲染层，实测无效）。
+    const detachImagePreview = attachImagePreviewClick(host);
 
     let editor: LakeEditorInstance | null = null;
     let disposeTocRefresh: (() => void) | null = null;
@@ -89,6 +96,7 @@ export function LakeEditor({ noteId, content, mode = "editor", tocEnabled, onCha
       host.removeEventListener("mousedown", preventCardBlur, true);
       host.removeEventListener("copy", copyRichSelection, true);
       host.removeEventListener("paste", pasteHandler, true);
+      detachImagePreview();
       window.clearTimeout(tocRefreshTimer);
       disposeTocRefresh?.();
       onEditorReadyRef.current?.(noteId, null);
@@ -101,5 +109,12 @@ export function LakeEditor({ noteId, content, mode = "editor", tocEnabled, onCha
   if (error) {
     return <div className="editor-error"><AlertCircle size={18} /><span>{error}</span></div>;
   }
-  return <div className={`lake-editor lake-${mode}`} ref={hostRef} />;
+  // ImageLightbox：图片点击放大预览（桌面/移动端共用）。单例控制器，任何 LakeEditor
+  // 实例挂载即提供预览 UI；previewImgs 事件由 envAdapter 转发到控制器。
+  return (
+    <>
+      <div className={`lake-editor lake-${mode}`} ref={hostRef} />
+      <ImageLightbox />
+    </>
+  );
 }
