@@ -122,11 +122,15 @@ body { font-family: -apple-system, "PingFang SC", "Noto Sans SC", sans-serif; ba
 .mobile-title-input { flex: 1; min-width: 0; border: none; outline: none; font-size: 16px; font-weight: 600; background: transparent; }
 
 /* 图片破裂优化：图片卡片 blob 注入完成前显示灰底占位，隐藏破图图标闪烁
-   （注入后 img[src^="blob:"] 正常显示；选择器待真机验证 Lake 卡片 DOM 结构） */
+   （注入后 img[src^="blob:"] 正常显示） */
 .mobile-doc-body NE-CARD[data-card-name="image"],
 .mobile-doc-body ne-card[name="image"] { background: #f2f3f5; }
 .mobile-doc-body NE-CARD[data-card-name="image"] img:not([src^="blob:"]),
 .mobile-doc-body ne-card[name="image"] img:not([src^="blob:"]) { visibility: hidden; }
+/* 关键：Lake 空 src 触发 error 状态显示破图图标（.ne-image-error 含 svg 破图 + 灰块）——
+   注入前隐藏它，只留灰底占位，注入后图片正常显示（消除破图图标闪烁） */
+.mobile-doc-body .ne-image-error { display: none !important; }
+.mobile-doc-body .ne-image-box { background: #f2f3f5; min-height: 48px; }
 .mobile-done-btn { border: none; background: #3575f0; color: #fff; border-radius: 8px; padding: 6px 14px; font-size: 14px; cursor: pointer; }
 .mobile-doc-body { flex: 1; overflow-y: auto; background: #fff; padding-bottom: calc(40px + env(safe-area-inset-bottom, 0px)); }
 /* 只读/编辑文档左右留白（手机窄屏适配）：Lake 编辑器全宽铺满贴边，加安全留白 */
