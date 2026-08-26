@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { AlignLeft, Cloud, Files, History, Info, Keyboard, ListTree, Monitor, Moon, PanelTop, Search, Settings, Sun, Trash2, Type } from "lucide-react";
+import { AlignLeft, Cloud, Files, History, Info, Keyboard, ListTree, Monitor, Moon, PanelTop, Paperclip, Search, Settings, Sun, Trash2, Type } from "lucide-react";
 import { fontSizeOptions, type AppSettings } from "../lib/settings";
 import { native } from "../lib/native";
 import type { S3Settings, SyncSettings } from "../lib/types";
@@ -210,6 +210,20 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
                     </div>
                   </div>
                   <p className="settings-hint">超过上限时自动关闭最旧的标签（当前编辑的标签与钉住的标签除外），未保存内容会自动保存。</p>
+                </section>
+                <section className="settings-group">
+                  <h4><Paperclip size={13} /> 附件</h4>
+                  <div className="settings-row">
+                    <div className="settings-field">
+                      <span>附件大小上限</span>
+                      <select value={settings.maxAttachmentBytes / (1024 * 1024)} onChange={(e) => onChange({ maxAttachmentBytes: Number(e.target.value) * 1024 * 1024 })} aria-label="附件大小上限">
+                        <option value={25}>25 MiB</option>
+                        <option value={50}>50 MiB</option>
+                        <option value={100}>100 MiB</option>
+                      </select>
+                    </div>
+                  </div>
+                  <p className="settings-hint">插入附件时的本机上限；同步/下载使用协议上限（100 MiB），其他设备配置不同不影响接收。</p>
                 </section>
               </>
             )}
