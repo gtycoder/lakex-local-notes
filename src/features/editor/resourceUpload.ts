@@ -2,7 +2,7 @@ import { isDesktop, native } from "../../lib/native";
 import type { ResourceUploadInput, ResourceUploadOutput } from "../../lib/types";
 import { MAX_IMAGE_BYTES, MAX_ATTACHMENT_BYTES } from "../../core/storeLimits";
 import { loadSettings } from "../../lib/settings";
-import { extOf } from "../../core/assetNaming";
+import { mimeTypeForFilename } from "../../core/assetNaming";
 import { imageDataUrl, normalizeImageInput } from "./imageFormat";
 import { createConcurrencyQueue } from "../../core/concurrency";
 import { withRetry } from "../../core/retry";
@@ -47,34 +47,9 @@ function isImageFile(file: File): boolean {
   return ["png", "jpg", "jpeg", "gif", "webp", "avif", "bmp", "svg", "ico", "tiff", "tif"].includes(ext);
 }
 
-/** MIME 兜底：按扩展名猜（与资产服务端 MIME_MAP 一致的最小集），猜不到用 octet-stream。 */
+/** MIME 兜底：按扩展名猜（共享 mimeTypeForFilename，单一事实源），猜不到用 octet-stream。 */
 function mimeForExtension(filename: string, declared: string): string {
-  if (declared) return declared;
-  const ext = extOf(filename).toLowerCase();
-  const map: Record<string, string> = {
-    pdf: "application/pdf",
-    doc: "application/msword",
-    docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-    xls: "application/vnd.ms-excel",
-    xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    ppt: "application/vnd.ms-powerpoint",
-    pptx: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-    txt: "text/plain",
-    md: "text/markdown",
-    csv: "text/csv",
-    zip: "application/zip",
-    rar: "application/vnd.rar",
-    "7z": "application/x-7z-compressed",
-    mp3: "audio/mpeg",
-    wav: "audio/wav",
-    m4a: "audio/mp4",
-    mp4: "video/mp4",
-    mov: "video/quicktime",
-    mkv: "video/x-matroska",
-    webm: "video/webm",
-    epub: "application/epub+zip",
-  };
-  return map[ext] ?? "application/octet-stream";
+  return declared || mimeTypeForFilename(filename);
 }
 
 /** 非图片附件：作为资产落盘（note-assets/{noteId}/{file}），返回 canonical URL —— 不再 base64 内嵌正文。

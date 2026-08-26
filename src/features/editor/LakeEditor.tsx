@@ -6,6 +6,9 @@ import { addAssetAccessToken, stripAssetAccessToken } from "../../lib/assetPort"
 import { getNativeErrorMessage } from "../../lib/nativeErrors";
 import { ImageLightbox } from "./ImageLightbox";
 import { attachImagePreviewClick } from "./imagePreview";
+import { attachFileCardClick, buildAttachmentPreviewItem, openAttachmentPreview } from "../attachment/attachmentPreviewController";
+import { AttachmentPreview } from "../attachment/AttachmentPreview";
+import { isDesktop, native } from "../../lib/native";
 
 interface LakeEditorProps {
   noteId: string;
@@ -70,6 +73,25 @@ export function LakeEditor({ noteId, content, mode = "editor", tocEnabled, onCha
     // Lake 自身的卡片选中/编辑行为照常，预览作为叠加层展示。
     // 注：不依赖 Lake 内置 allowClickToMaximize（该选项在本构建未传导到渲染层，实测无效）。
     const detachImagePreview = attachImagePreviewClick(host);
+    // 附件：file 卡片点击 → 打开/预览（桌面/移动端共用）。
+    // - 桌面：canonical URL 直接加载 + 系统应用打开/文件夹显示
+    // - 移动端：经 prefs.attachment.resolveDisplayUrl 解析本地字节 blob + onOpenAttachment 分享
+    const attachment = prefs?.attachment;
+    const detachFileCard = attachFileCardClick(host, (src, name, size) => {
+      const base = buildAttachmentPreviewItem(src, name, size);
+      const displaySrc = (attachment?.resolveDisplayUrl && base.ref)
+        ? (attachment.resolveDisplayUrl(base.ref) ?? base.src)
+        : base.src;
+      const item = { ...base, src: displaySrc };
+      openAttachmentPreview(
+        item,
+        attachment?.onOpenAttachment ??
+          ((it) => { if (it.ref) void native.openAttachment(it.ref.noteId, it.ref.filename).then((r) => { if (!r.ok) console.warn("[attach] 打开失败:", r.error); }); }),
+        isDesktop()
+          ? ((it) => { if (it.ref) void native.showAttachmentInFolder(it.ref.noteId, it.ref.filename); })
+          : null,
+      );
+    });
 
     let editor: LakeEditorInstance | null = null;
     let disposeTocRefresh: (() => void) | null = null;
@@ -97,6 +119,7 @@ export function LakeEditor({ noteId, content, mode = "editor", tocEnabled, onCha
       host.removeEventListener("copy", copyRichSelection, true);
       host.removeEventListener("paste", pasteHandler, true);
       detachImagePreview();
+      detachFileCard();
       window.clearTimeout(tocRefreshTimer);
       disposeTocRefresh?.();
       onEditorReadyRef.current?.(noteId, null);
@@ -115,6 +138,7 @@ export function LakeEditor({ noteId, content, mode = "editor", tocEnabled, onCha
     <>
       <div className={`lake-editor lake-${mode}`} ref={hostRef} />
       <ImageLightbox />
+      <AttachmentPreview />
     </>
   );
 }

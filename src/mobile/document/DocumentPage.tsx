@@ -1,10 +1,14 @@
 /** 文档页：LakeEditor viewer/editor + blob 注入 + 保存。Phase 1 复用 MobilePocApp 的注入/还原逻辑。 */
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowLeft, Pencil, Trash2 } from "lucide-react";
 import { LakeEditor } from "../../features/editor/LakeEditor";
 import { injectAssetBlobs } from "../blobInject";
 import { createCardBlobInjector } from "../cardBlobInject";
-import type { LakeEditorInstance } from "../../features/editor/lakeRuntime";
+import type { LakeEditorInstance, LakeEditorPrefs } from "../../features/editor/lakeRuntime";
+import type { AttachmentPreviewItem } from "../../features/attachment/attachmentPreviewController";
+import type { LocalAssetRef } from "../../core/assetUrl.js";
+import { mimeTypeForFilename } from "../../core/assetNaming.js";
+import { bridge } from "../bridge";
 import type { POCNote } from "../bridge";
 
 export interface DocumentPageProps {
@@ -22,11 +26,47 @@ export interface DocumentPageProps {
 export function DocumentPage(props: DocumentPageProps) {
   const { note, content, title, editing, onTitleChange, onContentChange, onToggleEdit, onBack, onDelete } = props;
   const editorRef = useRef<LakeEditorInstance | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
   // viewer 内容 = 注入 blob 后的显示内容（setDocument 前改 src=blob → 挂载即用 blob）
   const { displayContent, revoke, restore } = useMemo(() => injectAssetBlobs(note.content), [note.id, note.content]);
   const cardInjector = useMemo(() => createCardBlobInjector(note.content), [note.content]);
   // blob 生命周期：组件卸载时 revoke（URL 引用释放；cachePort 注册表同步注销）
   useEffect(() => () => { revoke(); cardInjector?.revoke(); }, [revoke, cardInjector]);
+  useEffect(() => {
+    if (!toast) return;
+    const t = window.setTimeout(() => setToast(null), 1800);
+    return () => window.clearTimeout(t);
+  }, [toast]);
+
+  // 附件能力（移动端注入 LakeEditor）：本地字节 → blob URL 预览；打开 = 系统分享面板
+  const attachmentPrefs = useMemo<NonNullable<LakeEditorPrefs["attachment"]>>(() => {
+    const bytesFor = (ref: LocalAssetRef): Uint8Array | null => bridge.getAssetBytes(ref.noteId, ref.filename);
+    return {
+      resolveDisplayUrl: (ref) => {
+        const bytes = bytesFor(ref);
+        if (!bytes) return null;
+        const type = mimeTypeForFilename(ref.filename);
+        return URL.createObjectURL(new Blob([bytes as unknown as BlobPart], { type }));
+      },
+      onOpenAttachment: async (item: AttachmentPreviewItem) => {
+        const ref = item.ref;
+        if (!ref) { setToast("附件未同步到本机"); return; }
+        const bytes = bytesFor(ref);
+        if (!bytes) { setToast("附件未同步到本机，请先同步"); return; }
+        const file = new File([bytes as unknown as BlobPart], item.name, { type: mimeTypeForFilename(ref.filename) });
+        try {
+          if (typeof navigator.share === "function") {
+            await navigator.share({ files: [file], title: item.name });
+          } else {
+            setToast("当前环境不支持文件分享");
+          }
+        } catch (e) {
+          // 用户取消分享不算错误
+          if ((e as { name?: string })?.name !== "AbortError") setToast("分享失败");
+        }
+      },
+    };
+  }, []);
 
   return (
     <div className="mobile-document">
@@ -87,9 +127,10 @@ export function DocumentPage(props: DocumentPageProps) {
               }, 3000);
             }
           }}
-          prefs={{ fontSize: 18, showToolbar: true, disableVirtualRendering: true }}
+          prefs={{ fontSize: 18, showToolbar: true, disableVirtualRendering: true, attachment: attachmentPrefs }}
         />
       </section>
+      {toast && <div className="mobile-toast">{toast}</div>}
     </div>
   );
 }

@@ -11,7 +11,7 @@ import { AppError } from "../src/core/storeErrors.js";
 import { SsrfError } from "./ssrf.js";
 import { MAX_ATTACHMENT_BYTES, MAX_IMAGE_BYTES, MAX_IMAGE_PIXELS } from "../src/core/storeLimits.js";
 import { readImageDimensions, sniffImageFormat } from "../src/core/imageUtils.js";
-import { buildAssetFilename, extOf } from "../src/core/assetNaming.js";
+import { buildAssetFilename, mimeTypeForFilename } from "../src/core/assetNaming.js";
 import type { HttpFetcher } from "../src/core/httpFetcher.js";
 import { createPinnedHttpFetcher } from "./httpFetcher.js";
 
@@ -152,32 +152,6 @@ function attachmentOutput(bytes: Buffer, requestedFilename: string, assetsDir: s
   const filename = buildAssetFilename(requestedFilename);
   writeAssetBytes(bytes, filename, assetsDir);
   const url = makeUrl(filename);
-  const ext = extOf(filename).toLowerCase();
-  const mimeType = MIME_FOR_EXT[ext] ?? "application/octet-stream";
+  const mimeType = mimeTypeForFilename(filename);
   return { resourceRef: url, url, filename, mimeType, size: bytes.length };
 }
-
-/** 附件 MIME 兜底表（与渲染层 mimeForExtension 对齐的最小集；未知一律 octet-stream）。 */
-const MIME_FOR_EXT: Record<string, string> = {
-  pdf: "application/pdf",
-  doc: "application/msword",
-  docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-  xls: "application/vnd.ms-excel",
-  xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-  ppt: "application/vnd.ms-powerpoint",
-  pptx: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-  txt: "text/plain",
-  md: "text/markdown",
-  csv: "text/csv",
-  zip: "application/zip",
-  rar: "application/vnd.rar",
-  "7z": "application/x-7z-compressed",
-  mp3: "audio/mpeg",
-  wav: "audio/wav",
-  m4a: "audio/mp4",
-  mp4: "video/mp4",
-  mov: "video/quicktime",
-  mkv: "video/x-matroska",
-  webm: "video/webm",
-  epub: "application/epub+zip",
-};

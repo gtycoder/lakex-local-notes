@@ -81,3 +81,28 @@ export function buildAssetFilename(originalName: string, now = Date.now()): stri
   const ext = /^[a-z0-9]{1,10}$/i.test(rawExt) ? rawExt.toLowerCase() : "bin";
   return String(now) + "_" + randomHex4() + "." + ext;
 }
+
+/** 扩展名 → MIME（桌面/移动端/资产服务共用单一事实源；未知回退 octet-stream）。 */
+const MIME_BY_EXT: Record<string, string> = {
+  png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", gif: "image/gif", webp: "image/webp", avif: "image/avif",
+  svg: "image/svg+xml", ico: "image/x-icon", bmp: "image/bmp", tiff: "image/tiff", tif: "image/tiff",
+  pdf: "application/pdf",
+  doc: "application/msword",
+  docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  xls: "application/vnd.ms-excel",
+  xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  ppt: "application/vnd.ms-powerpoint",
+  pptx: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+  txt: "text/plain", md: "text/markdown", csv: "text/csv", rtf: "application/rtf",
+  zip: "application/zip", rar: "application/vnd.rar", "7z": "application/x-7z-compressed",
+  tar: "application/x-tar", gz: "application/gzip", bz2: "application/x-bzip2", xz: "application/x-xz",
+  mp3: "audio/mpeg", wav: "audio/wav", m4a: "audio/mp4", aac: "audio/aac", flac: "audio/flac", ogg: "audio/ogg", wma: "audio/x-ms-wma",
+  mp4: "video/mp4", mov: "video/quicktime", mkv: "video/x-matroska", avi: "video/x-msvideo",
+  webm: "video/webm", m4v: "video/mp4", wmv: "video/x-ms-wmv", flv: "video/x-flv",
+  epub: "application/epub+zip", json: "application/json", apk: "application/vnd.android.package-archive",
+};
+
+/** 按文件名返回 MIME（未知扩展名 → application/octet-stream）。 */
+export function mimeTypeForFilename(filename: string): string {
+  return MIME_BY_EXT[extOf(filename).toLowerCase()] ?? "application/octet-stream";
+}
