@@ -1025,7 +1025,9 @@ export const bridge = {
     }
     const mimeType = mimeForExt(extOf(name));
     const url = `http://127.0.0.1:19876/${noteId}/${name}`;
-    return { url, resourceRef: url, filename: name, mimeType, size: bytes.length };
+    // filename 字段 = 原始文件名（Lake file 卡片展示名；磁盘名/同步用 URL 里的生成名，与桌面一致）
+    const displayName = input.filename.replace(/[\\/:*?"<>|\u0000-\u001f]/g, "_").trim() || "附件";
+    return { url, resourceRef: url, filename: displayName, mimeType, size: bytes.length };
   },
 
   /** M1 同步：manifest v4 协议（拉取对账 + 上传发布）+ 小记 quick-notes/ 子空间同步，复用 src/core 引擎。

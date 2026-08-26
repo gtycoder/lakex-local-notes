@@ -69,11 +69,14 @@ describe("ResourceRepository attachment upload", () => {
     });
     const pdf = Buffer.from("%PDF-1.7\n%\xe2\xe3\xcf\xd3\nhello attachment", "binary");
     const out = repo.upload({ bytes: new Uint8Array(pdf), filename: "需求文档.PDF" }, "note");
-    expect(out.filename).toMatch(/^\d{13}_[0-9a-f]{8}\.pdf$/); // 扩展名归一化小写 + 统一命名
+    // filename 字段 = 原始文件名（Lake 卡片展示名）；磁盘名在 URL 里（{13ts}_{8hex}.pdf）
+    expect(out.filename).toBe("需求文档.PDF");
     expect(out.mimeType).toBe("application/pdf");
     expect(out.size).toBe(pdf.length);
-    expect(out.url).toBe(`http://127.0.0.1:19876/note/${out.filename}`);
-    expect(fs.readFileSync(path.join(root, "note", out.filename))).toEqual(pdf);
+    const stored = out.url.split("/").pop()!;
+    expect(stored).toMatch(/^\d{13}_[0-9a-f]{8}\.pdf$/);
+    expect(out.url).toBe(`http://127.0.0.1:19876/note/${stored}`);
+    expect(fs.readFileSync(path.join(root, "note", stored))).toEqual(pdf);
   });
 
   it("rejects oversized attachments above the protocol cap", () => {

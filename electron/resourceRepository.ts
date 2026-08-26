@@ -42,7 +42,9 @@ export class ResourceRepository {
     // 判定以字节嗅探为准（扩展名可伪造）；嗅探到图片格式仍走图片路径（像素护栏）。
     if (sniffImageFormat(bytes) == null) {
       const output = attachmentOutput(bytes, input.filename, this.deps.noteAssetsDirFor(noteId), (filename) => this.deps.assetUrl(noteId, filename));
-      this.deps.registerOrphan(noteId, output.filename, output.size, output.mimeType);
+      // 附件 filename 字段 = 原始文件名（展示用）；孤儿登记必须用磁盘名（URL 末段）
+      const storedName = output.url.split("/").pop() ?? output.filename;
+      this.deps.registerOrphan(noteId, storedName, output.size, output.mimeType);
       return output;
     }
     assertImageDimensions(bytes);
@@ -145,13 +147,22 @@ function imageOutput(bytes: Buffer, _requestedFilename: string, assetsDir: strin
   return { resourceRef: url, url, filename, mimeType: format.mimeType, size: bytes.length };
 }
 
-/** 附件落盘：保留原始扩展名（buildAssetFilename 归一化小写），跳过图片格式/像素校验。 */
+/** 附件落盘：磁盘名用 buildAssetFilename（{13ts}_{8hex}.{ext}，跨端/同步/引用提取统一）；
+ * 返回的 filename 字段 = **原始文件名**（用户上传时名字，Lake file 卡片 name 展示用），
+ * URL 里才是磁盘名（打开/同步走 URL 解析）。 */
 function attachmentOutput(bytes: Buffer, requestedFilename: string, assetsDir: string, makeUrl: (filename: string) => string): ResourceUploadOutput {
   if (bytes.length === 0) throw new AppError("InvalidInput", "附件为空");
   if (bytes.length > MAX_ATTACHMENT_BYTES) throw new AppError("InvalidInput", `附件超过 ${MAX_ATTACHMENT_BYTES / 1024 / 1024} MiB 协议上限`);
-  const filename = buildAssetFilename(requestedFilename);
-  writeAssetBytes(bytes, filename, assetsDir);
-  const url = makeUrl(filename);
-  const mimeType = mimeTypeForFilename(filename);
-  return { resourceRef: url, url, filename, mimeType, size: bytes.length };
+  const stored = buildAssetFilename(requestedFilename);
+  writeAssetBytes(bytes, stored, assetsDir);
+  const url = makeUrl(stored);
+  const mimeType = mimeTypeForFilename(stored);
+  const displayName = sanitizeDisplayName(requestedFilename);
+  return { resourceRef: url, url, filename: displayName, mimeType, size: bytes.length };
+}
+
+/** 展示名清洗：去掉路径分隔/控制字符（展示用；磁盘名独立生成不受影响）。 */
+function sanitizeDisplayName(name: string): string {
+  const cleaned = name.replace(/[\/:*?"<>|\u0000-\u001f]/g, "_").trim();
+  return cleaned || "附件";
 }

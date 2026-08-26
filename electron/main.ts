@@ -232,6 +232,9 @@ async function createWindow() {
       // 打包版必须关闭 preload 沙箱：Electron 沙箱化 preload 从 app.asar 加载会报 SyntaxError（已知问题）
       // dev 环境实际也是 --no-sandbox 运行的，行为一致；contextIsolation 仍开启
       sandbox: false,
+      // PDF 内联预览：plugins 默认 false（electron.d.ts 注释确认）会禁用 <embed> 插件渲染
+      // → PDF viewer 空白（实测）。plugins: true 启用 Chromium PDF viewer。
+      plugins: true,
     },
   });
 
