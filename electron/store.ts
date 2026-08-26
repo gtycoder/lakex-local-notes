@@ -1099,6 +1099,18 @@ export class Store {
       this.db.prepare(
         "UPDATE tree_nodes SET parent_id=?,trashed_at=?,deleted_from_parent_id=?,updated_at=?,sync_state='local' WHERE id=? AND deleted_at IS NULL"
       ).run(TRASH_NOTEBOOK_ID, now, node.parentId, now, id);
+      // 级联：子树所有节点（嵌套分组 + 笔记）跟随根进回收站——trashed_at 必须标上，
+      // 否则同步发布时子树按"正常"传播，其他端不跟随删除（内容"没删掉"、根恢复/删除语义不一致）。
+      const subtreeIds = this.descendantIdsIncludingDeleted(id).filter((sid) => sid !== id);
+      if (subtreeIds.length > 0) {
+        const ph = subtreeIds.map(() => "?").join(",");
+        this.db.prepare(`UPDATE tree_nodes SET trashed_at=?,updated_at=?,sync_state='local' WHERE id IN (${ph}) AND deleted_at IS NULL`).run(now, now, ...subtreeIds);
+        const subNotes = this.db.prepare(`SELECT note_file_id FROM tree_nodes WHERE id IN (${ph}) AND note_file_id IS NOT NULL AND deleted_at IS NULL`).all(...subtreeIds) as Array<{ note_file_id: string }>;
+        if (subNotes.length > 0) {
+          const nph = subNotes.map(() => "?").join(",");
+          this.db.prepare(`UPDATE notes SET trashed_at=?,updated_at=?,sync_state='local' WHERE id IN (${nph}) AND deleted_at IS NULL`).run(now, now, ...subNotes.map((s) => s.note_file_id));
+        }
+      }
       // 回收站条目不出现在搜索（子树整体移出 FTS，恢复时重建）
       const noteIds = this.descendantNoteFileIds(id);
       if (noteIds.length > 0) {
@@ -1175,6 +1187,17 @@ export class Store {
       this.db.prepare(
         "UPDATE tree_nodes SET parent_id=?,trashed_at=NULL,deleted_from_parent_id=NULL,updated_at=?,sync_state='local' WHERE id=?"
       ).run(parentId, now, id);
+      // 级联：子树（跟随根进回收站的嵌套分组/笔记）随根恢复——清 trashed_at（父位置不变）。
+      const subtreeIds = this.descendantIdsIncludingDeleted(id).filter((sid) => sid !== id);
+      if (subtreeIds.length > 0) {
+        const ph = subtreeIds.map(() => "?").join(",");
+        this.db.prepare(`UPDATE tree_nodes SET trashed_at=NULL,updated_at=?,sync_state='local' WHERE id IN (${ph}) AND deleted_at IS NULL`).run(now, ...subtreeIds);
+        const subNotes = this.db.prepare(`SELECT note_file_id FROM tree_nodes WHERE id IN (${ph}) AND note_file_id IS NOT NULL AND deleted_at IS NULL`).all(...subtreeIds) as Array<{ note_file_id: string }>;
+        if (subNotes.length > 0) {
+          const nph = subNotes.map(() => "?").join(",");
+          this.db.prepare(`UPDATE notes SET trashed_at=NULL,updated_at=?,sync_state='local' WHERE id IN (${nph}) AND deleted_at IS NULL`).run(now, ...subNotes.map((s) => s.note_file_id));
+        }
+      }
     });
     tx();
   }
@@ -1246,6 +1269,12 @@ export class Store {
           delOrphans.run(n.note_file_id);
           delFts.run(n.note_file_id);
           delNote.run(n.note_file_id);
+        } else {
+          // folder/group（无 note_file_id）purge 也必须写墓碑（deleted_notes + purged_at）：
+          // 否则物理删除后无任何持久"已删"记录，同步下载阶段会把远端 manifest.folders 里
+          // 仍存在的该笔记本重新导入（删除/清空回收站后同步 → 被删的又回来）。
+          const f = this.db.prepare("SELECT title,parent_id,sort_order,updated_at FROM tree_nodes WHERE id=?").get(nid) as { title: string; parent_id: string | null; sort_order: number; updated_at: string } | undefined;
+          if (f) tombstone.run(nid, f.title, f.parent_id, f.sort_order, f.updated_at, now, now);
         }
         delNode.run(nid);
       }
@@ -1848,6 +1877,11 @@ export class Store {
       syncState: r.sync_state, updatedAt: r.updated_at, baseHash: r.content_hash ?? null,
       lastSyncedMetaAt: r.last_synced_meta_at ?? null, lastUploadedHash: r.last_uploaded_hash ?? null,
     }]));
+  }
+
+  /** 本地已彻底删除（purge）的 folder/group（deleted_notes 带 purged_at）——同步下载过滤/发布强制移除用。 */
+  isFolderPurged(id: string): boolean {
+    return !!this.db.prepare("SELECT 1 FROM deleted_notes WHERE id=? AND purged_at IS NOT NULL").get(id);
   }
 
   /** 已彻底删除（purge）的墓碑：下次同步需立即删 S3 前缀。 */

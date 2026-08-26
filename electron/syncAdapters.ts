@@ -158,6 +158,8 @@ export function createStoreSyncPort(store: Store): SyncDbPort {
     },
     revokeLocalDeletion(id: string): void { store.revokeLocalDeletion(id); },
     markFolderSynced(id: string, expectedUpdatedAt: string): boolean { return store.markFolderSynced(id, expectedUpdatedAt); },
+    // 可选调用：测试 FakeStore/旧实现可能无此方法（文件夹级 purge 墓碑是新能力），无则 false
+    isFolderPurged(id: string): boolean { return store.isFolderPurged?.(id) ?? false; },
     getLastSeenCommitId(): string | null { return store.getLastSeenCommitId(); },
     setLastSeenCommitId(commitId: string): void { store.setLastSeenCommitId(commitId); },
     getLastTombstoneSig(): string { return store.getLastTombstoneSig(); },

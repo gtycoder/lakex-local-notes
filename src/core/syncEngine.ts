@@ -136,6 +136,9 @@ export interface SyncDbPort {
   revokeLocalDeletion?(id: string): void;
   /** 目录记账：同步后标记 folder 为 synced（对齐桌面 store.markFolderSynced；移动端无目录编辑可不实现）。 */
   markFolderSynced?(id: string, expectedUpdatedAt: string): boolean;
+  /** 本地已彻底删除（purge）的 folder/group（deleted_notes 带 purged_at）：下载导入远端 folders 前过滤，
+   * 防"清空回收站后同步 → 被删笔记本重新导入复活"；发布时检测到也应强制重写 manifest 移除云端残留。 */
+  isFolderPurged?(id: string): boolean;
   /** 记录"从云端学到的删除"（本设备从未持有该笔记），防离线设备把残留当新文档上传复活（审计 #2）。 */
   rememberDeleted(note: ManifestNote, deletedAt: string): void;
   /** 正文相同但元数据（标题/父/排序/图标）变化时应用远端较新版本（B3 LWW）。 */
@@ -244,6 +247,13 @@ export async function syncNow(cfg: SyncConfig, s3: S3Store, db: SyncDbPort, opts
         rf.nodeType !== f.nodeType || (rf.icon ?? null) !== (f.icon ?? null) ||
         (rf.trashedAt ?? null) !== (f.trashedAt ?? null) || (rf.deletedFromParentId ?? null) !== (f.deletedFromParentId ?? null);
     });
+    // 远端 folders 中存在本地已 purge 的（deleted_notes 带 purged_at）：必须强制发布重写 manifest，
+    // 从云端移除残留（否则每轮同步都会尝试重新导入 → 复活）。
+    if (!foldersChanged && typeof db.isFolderPurged === "function") {
+      for (const rf of remoteFolders.values()) {
+        if (db.isFolderPurged(rf.id)) { foldersChanged = true; db.log(`[publish] folder ${rf.id} locally purged, force rewrite manifest`); break; }
+      }
+    }
   }
 
   // 零变更早退（性能）：远端 commitId 与上次成功读/写相同 + 本地无待上传 + 墓碑签名一致 → 整轮跳过。
@@ -274,6 +284,11 @@ export async function syncNow(cfg: SyncConfig, s3: S3Store, db: SyncDbPort, opts
     for (const folder of remote.folders) {
       if (!isSafePathSegment(folder.id)) throw new Error(`清单包含无效的目录 ID: ${folder.id}`);
       if (folder.parentId !== null && !isSafePathSegment(folder.parentId)) throw new Error(`清单包含无效的目录 parentId: ${folder.parentId}`);
+      // 本地已 purge 的 folder（deleted_notes 带 purged_at）：不重新导入（防"清空回收站后同步 → 被删的又回来"）
+      if (typeof db.isFolderPurged === "function" && db.isFolderPurged(folder.id)) {
+        db.log(`[pull] folder ${folder.id} locally purged, skip import`);
+        continue;
+      }
       db.importRemoteFolder(folder);
       validParents.add(folder.id);
     }
@@ -616,7 +631,10 @@ export async function syncNow(cfg: SyncConfig, s3: S3Store, db: SyncDbPort, opts
     next.notes.sort((a, b) => a.sortOrder - b.sortOrder);
     if (typeof db.listFoldersForSync === "function") {
       const localFolders = db.listFoldersForSync();
-      if (localFolders && localFolders.length > 0) {
+      // 空数组也必须覆盖（≠ null）：本地树为空（如 purge 清空全部目录）时，next.folders 必须清空
+      // 移除云端残留（否则远端 folders 残留被保留，下轮同步重新导入 → "清空回收站后同步 → 被删的又回来"）。
+      // 仅 null（端口未实现目录发布）才保持远端透传。
+      if (localFolders !== null && localFolders !== undefined) {
         next.folders = localFolders.map((f) => ({
           id: f.id, title: f.title, parentId: f.parentId, sortOrder: f.sortOrder, nodeType: f.nodeType as "notebook" | "group",
           icon: f.icon, updatedAt: f.updatedAt,

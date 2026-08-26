@@ -73,8 +73,10 @@ class MemDb implements SyncDbPort {
     this.bases.set(id, { contentHash, lastUploadedHash, lastSyncedMetaAt: metaAt });
   }
   folders = new Map<string, any>();
+  purgedFolders = new Set<string>();
   defaultNotebookId() { return "notebook-personal"; }
   importRemoteFolder(folder: any) { this.folders.set(folder.id, folder); }
+  isFolderPurged(id: string): boolean { return this.purgedFolders.has(id); }
   listFoldersForSync() {
     return [...this.folders.values()].map((f) => ({
       id: f.id, title: f.title, parentId: f.parentId ?? null, sortOrder: f.sortOrder ?? 0,
@@ -268,6 +270,31 @@ describe("syncEngine（共享编排）", () => {
     expect(db.notes.get("n1")!.parentId).toBe("folder-f1");    // 有效父目录保留
     expect(db.notes.get("n2")!.parentId).toBe("notebook-personal"); // 无效父目录回退默认
     expect(db.notes.get("n3")!.parentId).toBe("notebook-personal"); // 无父回退默认
+  });
+
+  it("B5（回归）：本地已 purge 的 folder 不随下载复活，且强制发布重写 manifest 移除云端残留", async () => {
+    const s3 = new MemS3();
+    const db = new MemDb();
+    // 场景：笔记本 nb-1 曾同步到云端，本地已删除并清空回收站（purge）→ deleted_notes 带 purged_at
+    db.purgedFolders.add("nb-1");
+    // 远端 manifest.folders 仍含 nb-1（purge 前的残留）
+    s3.map.set("p/manifests/latest.json", new TextEncoder().encode(JSON.stringify({
+      version: 4, workspaceId: "default", commitId: "c1", prevCommitId: null, createdAt: "2026-01-01T00:00:00.000Z",
+      notes: [],
+      folders: [{ id: "nb-1", title: "笔记本", parentId: null, sortOrder: 0, nodeType: "notebook", icon: null, updatedAt: "2026-01-01T00:00:00.000Z" }],
+    })));
+    expect(db.isFolderPurged("nb-1")).toBe(true); // 前置：purged 标记已设
+    const r = await syncNow(CFG, s3, db);
+    // 1) 下载不复活：nb-1 不被导入本地 folders
+    // eslint-disable-next-line no-console
+    console.log("LOGS:", JSON.stringify(db.logs), "FOLDERS:", JSON.stringify([...db.folders.keys()]));
+    expect(db.logs.some((l) => l.includes("locally purged, skip import"))).toBe(true); // 过滤日志
+    expect(db.folders.has("nb-1")).toBe(false);
+    // 2) 发布重写：manifest.folders 移除 nb-1（云端残留清理，下轮不再尝试导入）
+    const manifestBytes = await s3.getObject("p/manifests/latest.json");
+    const next = JSON.parse(new TextDecoder().decode(manifestBytes!)) as { folders: Array<{ id: string }> };
+    expect(next.folders.some((f) => f.id === "nb-1")).toBe(false);
+    expect(r.published).toBe(true);
   });
 
   it("D5：本机编辑成果被远端覆盖 → 先留档再接受远端（协议 §4.2）", async () => {

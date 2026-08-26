@@ -447,6 +447,10 @@ const dbPort: SyncDbPort = {
     const groupRow = d.prepare("SELECT 1 FROM folders WHERE sync_state != 'synced' AND id != ? LIMIT 1").get(TRASH_NOTEBOOK_ID);
     return !!groupRow;
   },
+  // 本地已删/purge 的 folder（deleted_notes 记录）：下载导入远端 folders 前过滤，防复活。
+  isFolderPurged(id: string): boolean {
+    return !!db!.prepare("SELECT 1 FROM deleted_notes WHERE id=?").get(id);
+  },
   log(msg) {
     console.log("[mobile-sync]", msg);
   },
