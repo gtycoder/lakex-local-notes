@@ -90,7 +90,12 @@ export function injectAssetBlobs(content: string): BlobInjectedDoc {
     restore: (content: string) => {
       let out = content;
       for (const [blobUrl, canonical] of blobToCanonical) {
-        out = out.split(blobUrl).join(canonical);
+        // Lake 会给 img src 的 blob URL 追加 ?date= 参数；split(blobUrl) 匹配不到带参形态 →
+        // 保存时 blob 无法还原为 canonical（污染存储）。用 uuid 前缀正则容忍任意参数后缀。
+        const uuid = (blobUrl.split("/").pop() ?? "").split("?")[0];
+        if (!uuid) continue;
+        const re = new RegExp("blob:[^\\s\"'<>]*/" + uuid + "(?:\\?[^\\s\"'<>]*)?", "g");
+        out = out.replace(re, canonical);
       }
       return out;
     },

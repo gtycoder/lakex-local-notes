@@ -170,7 +170,12 @@ export function createCardBlobInjector(content: string): CardBlobInjectResult {
     restore(content) {
       let out = content;
       for (const [blobUrl, canonical] of blobToCanonical) {
-        out = out.split(blobUrl).join(canonical);
+        // Lake 会给 img src 的 blob URL 追加 ?date= 缓存破坏参数；split(blobUrl) 匹配不到带参形态，
+        // 导致保存时 blob 无法还原为 canonical → 污染存储。用 uuid 前缀正则，容忍任意参数后缀。
+        const uuid = (blobUrl.split("/").pop() ?? "").split("?")[0];
+        if (!uuid) continue;
+        const re = new RegExp("blob:[^\\s\"'<>]*/" + uuid + "(?:\\?[^\\s\"'<>]*)?", "g");
+        out = out.replace(re, canonical);
       }
       return out;
     },
