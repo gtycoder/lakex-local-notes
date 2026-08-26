@@ -13,6 +13,11 @@
         <item name="windowActionBar">false</item>
         <item name="windowNoTitle">true</item>
         <item name="android:background">@null</item>
+        <!-- 通知栏适配（参考思源）：沉浸式状态栏——透明背景 + 深色图标（顶栏为白底），
+             内容经 env(safe-area-inset-top) 让出状态栏；shortEdges 允许内容延伸进刘海区域 -->
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:windowLayoutInDisplayCutoutMode">shortEdges</item>
     </style>
 
 
