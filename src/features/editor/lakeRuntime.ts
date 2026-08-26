@@ -434,10 +434,13 @@ export interface LakeEditorPrefs {
   /** 附件能力（移动端注入；桌面走 native.openAttachment 无需注入）：
    * - resolveDisplayUrl：把本地资产引用解析为可显示的 URL（移动端：本地字节 → blob URL；
    *   桌面 canonical URL 已可直接加载，无需提供）
-   * - onOpenAttachment：点"用系统应用打开"的动作（移动端：分享面板；缺省桌面系统打开） */
+   * - onOpenAttachment：点"用系统应用打开"的动作（移动端：系统应用打开；缺省桌面系统打开）
+   * - directOpen：移动端 true 时点击附件卡片**直接**系统应用打开（跳过 WebView 预览弹窗——
+   *   既然用的是本机能力就不需要中间层） */
   attachment?: {
     resolveDisplayUrl?: (ref: LocalAssetRef) => string | null;
     onOpenAttachment?: (item: AttachmentPreviewItem) => void;
+    directOpen?: boolean;
   };
 }
 

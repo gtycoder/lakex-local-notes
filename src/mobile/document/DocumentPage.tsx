@@ -58,6 +58,8 @@ export function DocumentPage(props: DocumentPageProps) {
   const attachmentPrefs = useMemo<NonNullable<LakeEditorPrefs["attachment"]>>(() => {
     const bytesFor = (ref: LocalAssetRef): Uint8Array | null => bridge.getAssetBytes(ref.noteId, ref.filename);
     return {
+      // 移动端：点击附件卡片直接系统应用打开（跳过 WebView 预览弹窗）
+      directOpen: true,
       resolveDisplayUrl: (ref) => {
         const bytes = bytesFor(ref);
         if (!bytes) return null;

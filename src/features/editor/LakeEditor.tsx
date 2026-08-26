@@ -74,11 +74,16 @@ export function LakeEditor({ noteId, content, mode = "editor", tocEnabled, onCha
     // 注：不依赖 Lake 内置 allowClickToMaximize（该选项在本构建未传导到渲染层，实测无效）。
     const detachImagePreview = attachImagePreviewClick(host);
     // 附件：file 卡片点击 → 打开/预览（桌面/移动端共用）。
-    // - 桌面：canonical URL 直接加载 + 系统应用打开/文件夹显示
-    // - 移动端：经 prefs.attachment.resolveDisplayUrl 解析本地字节 blob + onOpenAttachment 分享
+    // - 桌面：canonical URL 直接加载 + 系统应用打开/文件夹显示（弹预览 overlay）
+    // - 移动端 directOpen：点击**直接**系统应用打开（跳过 WebView 预览弹窗——本机能力无需中间层）
+    // - 移动端非 directOpen：blob 预览 overlay + onOpenAttachment 打开
     const attachment = prefs?.attachment;
     const detachFileCard = attachFileCardClick(host, (src, name, size) => {
       const base = buildAttachmentPreviewItem(src, name, size);
+      if (attachment?.directOpen) {
+        attachment.onOpenAttachment?.(base);
+        return;
+      }
       const displaySrc = (attachment?.resolveDisplayUrl && base.ref)
         ? (attachment.resolveDisplayUrl(base.ref) ?? base.src)
         : base.src;
