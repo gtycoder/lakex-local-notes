@@ -2,6 +2,8 @@
  * 应用设置：本地偏好（localStorage 持久化，不参与同步）。
  * 参考 lake-editor-main 的配置项（paragraphSpacing/defaultFontsize/toc/toolbar）+ 深色模式。
  */
+import { DEFAULT_MAX_ATTACHMENT_BYTES, MAX_ATTACHMENT_MB_OPTIONS } from "../core/storeLimits.js";
+
 export type ThemeMode = "light" | "dark";
 
 export interface AppSettings {
@@ -17,6 +19,9 @@ export interface AppSettings {
   theme: ThemeMode;
   /** 最大同时打开标签数（0=不限；超限自动关闭最旧标签，当前标签与钉住标签除外）。 */
   maxOpenTabs: number;
+  /** 附件上传大小上限（字节；档位 25/50/100 MiB，默认 25 MiB；仅影响本机上传校验，
+   * 同步/下载侧用协议上限 MAX_ATTACHMENT_BYTES，跨端配置不同不会导致下载失败）。 */
+  maxAttachmentBytes: number;
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -26,7 +31,11 @@ export const DEFAULT_SETTINGS: AppSettings = {
   showToolbar: true,
   theme: "light",
   maxOpenTabs: 8,
+  maxAttachmentBytes: DEFAULT_MAX_ATTACHMENT_BYTES,
 };
+
+/** 设置面板提供的附件大小档位（MiB）。 */
+export const MAX_ATTACHMENT_MB_OPTIONS_SETTINGS = MAX_ATTACHMENT_MB_OPTIONS;
 
 const STORAGE_KEY = "lake-notes-v1.settings";
 const FONT_SIZES = [12, 13, 14, 15, 16, 19, 22, 24];
@@ -60,6 +69,7 @@ export function loadSettings(): AppSettings {
     const raw = storage.getItem(STORAGE_KEY);
     if (raw) {
       const parsed = JSON.parse(raw) as Partial<AppSettings>;
+      const parsedMb = (parsed.maxAttachmentBytes ?? 0) / (1024 * 1024);
       cached = {
         fontSize: FONT_SIZES.includes(parsed.fontSize ?? -1) ? (parsed.fontSize as number) : DEFAULT_SETTINGS.fontSize,
         paragraphSpacing: parsed.paragraphSpacing === true,
@@ -69,6 +79,9 @@ export function loadSettings(): AppSettings {
         maxOpenTabs: MAX_OPEN_TAB_OPTIONS.includes(parsed.maxOpenTabs as number)
           ? (parsed.maxOpenTabs as number)
           : DEFAULT_SETTINGS.maxOpenTabs,
+        maxAttachmentBytes: (MAX_ATTACHMENT_MB_OPTIONS as readonly number[]).includes(parsedMb)
+          ? parsedMb * 1024 * 1024
+          : DEFAULT_SETTINGS.maxAttachmentBytes,
       };
       return cached;
     }

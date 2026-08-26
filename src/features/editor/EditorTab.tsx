@@ -13,6 +13,11 @@ import { normalizeClipboardHtml, upgradePastedHtml } from "./clipboardHtml";
 import { addAssetAccessToken, stripAssetAccessToken } from "../../lib/assetPort";
 import { registerOutlineTab, unregisterOutlineTab } from "../outline/registry";
 import { useOutline } from "../outline/useOutline";
+import { native } from "../../lib/native";
+import { attachImagePreviewClick } from "./imagePreview";
+import { ImageLightbox } from "./ImageLightbox";
+import { attachFileCardClick, buildAttachmentPreviewItem, openAttachmentPreview } from "../attachment/attachmentPreviewController";
+import { AttachmentPreview } from "../attachment/AttachmentPreview";
 
 export interface EditorTabProps {
   noteId: string;
@@ -541,7 +546,21 @@ export function EditorTab({ noteId, content, visible, tocEnabled, onChange, pref
     healObserver?.observe(host, { childList: true, subtree: true });
     scheduleHealCheck(900);
 
+    // 图片点击放大预览（桌面编辑/锁定态共用）：宿主级点击监听 + 共享 Lightbox
+    const detachImagePreview = attachImagePreviewClick(host);
+    // 附件：file 卡片点击 → 打开/预览（方案 B）。桌面动作 = 系统默认应用打开 / 文件夹显示
+    const detachFileCard = attachFileCardClick(host, (src, name, size) => {
+      const item = buildAttachmentPreviewItem(src, name, size);
+      openAttachmentPreview(
+        item,
+        (it) => { if (it.ref) void native.openAttachment(it.ref.noteId, it.ref.filename).then((r) => { if (!r.ok) console.warn("[attach] 打开失败:", r.error); }); },
+        (it) => { if (it.ref) void native.showAttachmentInFolder(it.ref.noteId, it.ref.filename); },
+      );
+    });
+
     return () => {
+      detachImagePreview();
+      detachFileCard();
       window.clearTimeout(boardRestoreTimer);
       window.clearTimeout(boardRestoreFollowupTimer);
       boardRestoreTimer = undefined;
@@ -621,6 +640,8 @@ export function EditorTab({ noteId, content, visible, tocEnabled, onChange, pref
       }}
     >
       <div ref={editorMountRef} className="lake-editor-main" />
+      <ImageLightbox />
+      <AttachmentPreview />
       {ctxMenu && (
         <EditorContextMenu
           x={ctxMenu.x}

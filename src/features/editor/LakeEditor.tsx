@@ -4,6 +4,11 @@ import { createLakeDocument, destroyLakeEditor, refreshTocSidebar, type LakeEdit
 import { normalizeClipboardHtml, upgradePastedHtml } from "./clipboardHtml";
 import { addAssetAccessToken, stripAssetAccessToken } from "../../lib/assetPort";
 import { getNativeErrorMessage } from "../../lib/nativeErrors";
+import { ImageLightbox } from "./ImageLightbox";
+import { attachImagePreviewClick } from "./imagePreview";
+import { attachFileCardClick, buildAttachmentPreviewItem, openAttachmentPreview } from "../attachment/attachmentPreviewController";
+import { AttachmentPreview } from "../attachment/AttachmentPreview";
+import { isDesktop, native } from "../../lib/native";
 
 interface LakeEditorProps {
   noteId: string;
@@ -63,6 +68,35 @@ export function LakeEditor({ noteId, content, mode = "editor", tocEnabled, onCha
     host.addEventListener("mousedown", preventCardBlur, true);
     host.addEventListener("copy", copyRichSelection, true);
     host.addEventListener("paste", pasteHandler, true);
+    // 图片点击放大预览（桌面/移动端共用）：捕获阶段监听 img.ne-image 点击，
+    // 收集文档内全部图片（画廊）打开共享 Lightbox。不 preventDefault——
+    // Lake 自身的卡片选中/编辑行为照常，预览作为叠加层展示。
+    // 注：不依赖 Lake 内置 allowClickToMaximize（该选项在本构建未传导到渲染层，实测无效）。
+    const detachImagePreview = attachImagePreviewClick(host);
+    // 附件：file 卡片点击 → 打开/预览（桌面/移动端共用）。
+    // - 桌面：canonical URL 直接加载 + 系统应用打开/文件夹显示（弹预览 overlay）
+    // - 移动端 directOpen：点击**直接**系统应用打开（跳过 WebView 预览弹窗——本机能力无需中间层）
+    // - 移动端非 directOpen：blob 预览 overlay + onOpenAttachment 打开
+    const attachment = prefs?.attachment;
+    const detachFileCard = attachFileCardClick(host, (src, name, size) => {
+      const base = buildAttachmentPreviewItem(src, name, size);
+      if (attachment?.directOpen) {
+        attachment.onOpenAttachment?.(base);
+        return;
+      }
+      const displaySrc = (attachment?.resolveDisplayUrl && base.ref)
+        ? (attachment.resolveDisplayUrl(base.ref) ?? base.src)
+        : base.src;
+      const item = { ...base, src: displaySrc };
+      openAttachmentPreview(
+        item,
+        attachment?.onOpenAttachment ??
+          ((it) => { if (it.ref) void native.openAttachment(it.ref.noteId, it.ref.filename).then((r) => { if (!r.ok) console.warn("[attach] 打开失败:", r.error); }); }),
+        isDesktop()
+          ? ((it) => { if (it.ref) void native.showAttachmentInFolder(it.ref.noteId, it.ref.filename); })
+          : null,
+      );
+    });
 
     let editor: LakeEditorInstance | null = null;
     let disposeTocRefresh: (() => void) | null = null;
@@ -89,6 +123,8 @@ export function LakeEditor({ noteId, content, mode = "editor", tocEnabled, onCha
       host.removeEventListener("mousedown", preventCardBlur, true);
       host.removeEventListener("copy", copyRichSelection, true);
       host.removeEventListener("paste", pasteHandler, true);
+      detachImagePreview();
+      detachFileCard();
       window.clearTimeout(tocRefreshTimer);
       disposeTocRefresh?.();
       onEditorReadyRef.current?.(noteId, null);
@@ -101,5 +137,13 @@ export function LakeEditor({ noteId, content, mode = "editor", tocEnabled, onCha
   if (error) {
     return <div className="editor-error"><AlertCircle size={18} /><span>{error}</span></div>;
   }
-  return <div className={`lake-editor lake-${mode}`} ref={hostRef} />;
+  // ImageLightbox：图片点击放大预览（桌面/移动端共用）。单例控制器，任何 LakeEditor
+  // 实例挂载即提供预览 UI；previewImgs 事件由 envAdapter 转发到控制器。
+  return (
+    <>
+      <div className={`lake-editor lake-${mode}`} ref={hostRef} />
+      <ImageLightbox />
+      <AttachmentPreview />
+    </>
+  );
 }

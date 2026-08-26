@@ -13,3 +13,4 @@ test-node-abi
 .env
 .env.*
 !.env.example
+prototype/

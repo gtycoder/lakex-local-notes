@@ -1,6 +1,10 @@
-import { BrowserWindow, dialog } from "electron";
+import { BrowserWindow, dialog, shell } from "electron";
+import fs from "node:fs";
+import path from "node:path";
 import type { DraftJournal } from "../draftJournal.js";
-import { MAX_IMAGE_BYTES, Store } from "../store.js";
+import { Store } from "../store.js";
+import { MAX_ATTACHMENT_BYTES } from "../../src/core/storeLimits.js";
+import { isSafePathSegment } from "../../src/core/storeUtils.js";
 import { exportNote, type ExportFormat } from "../export.js";
 import {
   IpcInputError,
@@ -13,7 +17,7 @@ import {
 import type { IpcRegistrar } from "./registrar.js";
 
 interface ResourceUploadInput {
-  bytes: number[];
+  bytes: Uint8Array;
   filename: string;
 }
 
@@ -84,11 +88,33 @@ export function registerNotesIpc(ipc: IpcRegistrar, store: Store, drafts: DraftJ
   ipc.handle("purge_trash", (id: string) => store.purgeTrashItem(id));
   ipc.handle("empty_trash", () => store.emptyTrash());
   ipc.handle("upload_resource", (input: ResourceUploadInput, noteId: string) => {
-    if (!input || !Array.isArray(input.bytes)) throw new Error("资源数据无效");
-    if (input.bytes.length > MAX_IMAGE_BYTES) throw new Error("图片超过 25 MiB");
+    if (!input || !(input.bytes instanceof Uint8Array)) throw new Error("资源数据无效");
+    if (input.bytes.length > MAX_ATTACHMENT_BYTES) throw new Error(`资源超过 ${MAX_ATTACHMENT_BYTES / 1024 / 1024} MiB 协议上限`);
     return store.uploadResource(input, noteId);
   });
   ipc.handle("download_remote_resource", (url: string, noteId: string) => store.downloadRemoteResource(url, noteId));
   ipc.handle("list_orphan_assets", () => store.listOrphanAssets());
   ipc.handle("clean_orphan_assets", () => store.cleanOrphanAssets());
+  /** 附件操作（桌面本地优先：文件本来就在磁盘）：用系统默认应用打开 / 在文件夹中显示。
+   * 路径安全：noteId + filename 双段校验（isSafePathSegment），只允许 note-assets 目录内。 */
+  ipc.handle("open_attachment", (noteId: string, filename: string) => {
+    assertAttachmentSegments(noteId, filename);
+    const full = store.noteAssetsPathFor(noteId) ? path.join(store.noteAssetsPathFor(noteId), filename) : "";
+    if (!fs.existsSync(full)) throw new IpcInputError("附件文件不存在（可能已清理）");
+    return shell.openPath(full).then((err) => (err ? { ok: false, error: err } : { ok: true }));
+  });
+  ipc.handle("show_attachment_in_folder", (noteId: string, filename: string) => {
+    assertAttachmentSegments(noteId, filename);
+    const full = path.join(store.noteAssetsPathFor(noteId), filename);
+    if (!fs.existsSync(full)) throw new IpcInputError("附件文件不存在（可能已清理）");
+    shell.showItemInFolder(full);
+    return { ok: true };
+  });
+}
+
+/** 附件路径段校验：noteId + filename 都必须是安全单段（防穿越 note-assets 目录）。 */
+function assertAttachmentSegments(noteId: string, filename: string): void {
+  if (!isSafePathSegment(noteId) || !isSafePathSegment(filename)) {
+    throw new IpcInputError("无效的附件路径");
+  }
 }

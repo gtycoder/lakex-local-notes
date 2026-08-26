@@ -122,7 +122,9 @@ export function isNoSuchKey(error: unknown): boolean {
   if (!(error instanceof Error)) return false;
   const name = (error as { name?: string }).name ?? "";
   const message = error.message ?? "";
-  return name === "NoSuchKey" || message.includes("NoSuchKey") || message.includes("404");
+  // 404 缺失对象判定：GetObject 缺失 = NoSuchKey；HeadObject 缺失 = NotFound（AWS/七牛 Kodo 均为
+  // 该错误名，消息文本可能是 "UnknownError" 等——必须按 name 判定，不能只看 message）。
+  return name === "NoSuchKey" || name === "NotFound" || message.includes("NoSuchKey") || message.includes("404");
 }
 
 /** SHA-256 hex（同步，Uint8Array 输入；输出与 node:crypto 一致，见 sha256Sync.test.ts） */

@@ -1071,7 +1071,7 @@ describe("同步状态 / 导入", () => {
     const { id } = makeNote();
     // 1x1 透明 PNG（sniffImageFormat 校验魔数）
     const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==", "base64");
-    const out = await store.uploadResource({ bytes: [...png], filename: "hello.png" }, id);
+    const out = await store.uploadResource({ bytes: new Uint8Array(png), filename: "hello.png" }, id);
     expect(out.url).toContain(`127.0.0.1:19876/${id}/`);
     expect(fs.existsSync(path.join(dir, "note-assets", id, out.filename))).toBe(true);
   });
@@ -1094,7 +1094,7 @@ describe("同步状态 / 导入", () => {
       chunk("IHDR", ihdr),
       chunk("IEND", Buffer.alloc(0)),
     ]);
-    await expect(store.uploadResource({ bytes: [...bomb], filename: "bomb.png" }, id)).rejects.toThrow(/尺寸过大/);
+    await expect(store.uploadResource({ bytes: new Uint8Array(bomb), filename: "bomb.png" }, id)).rejects.toThrow(/尺寸过大/);
   });
 });
 
@@ -1191,7 +1191,7 @@ describe("孤儿登记对账（写时登记/保存对账 + 导入对账）", () 
   it("uploadResource 写盘即登记孤儿；保存引用后撤销，不再引用重新登记", async () => {
     const { id } = makeNote();
     const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==", "base64");
-    const out = await store.uploadResource({ bytes: [...png], filename: "hello.png" }, id);
+    const out = await store.uploadResource({ bytes: new Uint8Array(png), filename: "hello.png" }, id);
     // 写盘瞬间已登记孤儿（正文尚未引用）——杜绝未登记就被同步上传的窄窗口
     expect(store.listOrphanAssets().some((o) => o.noteId === id && o.filename === out.filename)).toBe(true);
     // 保存时正文引用 → 撤销孤儿

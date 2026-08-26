@@ -1,0 +1,135 @@
+/**
+ * 附件预览控制器（桌面/移动端共用，与 imagePreview 同款模块级单例 pub/sub）。
+ *
+ * 打开时携带平台动作处理器（onOpen/onShowInFolder）：
+ * - 桌面：native.openAttachment（系统默认应用）/ native.showAttachmentInFolder
+ * - 移动端：分享面板 / 打开（后续接入）
+ * overlay 组件订阅本控制器渲染；PDF/音视频内联预览、其他类型显示信息 + 操作按钮。
+ */
+import { parseLocalAssetUrl, type LocalAssetRef } from "../../core/assetUrl.js";
+import { fileKindOf, type AttachmentKind } from "../../core/fileCard.js";
+
+export interface AttachmentPreviewItem {
+  /** 显示/预览用 URL（桌面 canonical http URL；移动端 blob URL） */
+  src: string;
+  name: string;
+  size: number;
+  ref: LocalAssetRef | null;
+  kind: AttachmentKind;
+}
+
+export interface AttachmentPreviewState {
+  item: AttachmentPreviewItem;
+  /** 平台动作：用系统应用打开（桌面 shell.openPath；移动端分享） */
+  onOpen: ((item: AttachmentPreviewItem) => void) | null;
+  /** 平台动作：在文件管理器中显示（桌面；移动端可为 null） */
+  onShowInFolder: ((item: AttachmentPreviewItem) => void) | null;
+}
+
+type Listener = (state: AttachmentPreviewState | null) => void;
+
+let current: AttachmentPreviewState | null = null;
+const listeners = new Set<Listener>();
+
+function emit(): void {
+  for (const l of listeners) {
+    try { l(current); } catch { /* 渲染层异常不影响其他订阅者 */ }
+  }
+}
+
+/** 由 src 构建预览条目（解析本地资产引用 + 类型分流）。 */
+export function buildAttachmentPreviewItem(src: string, name: string, size: number): AttachmentPreviewItem {
+  return {
+    src,
+    name: name || (src.split("/").pop() ?? "附件"),
+    size: typeof size === "number" ? size : 0,
+    ref: parseLocalAssetUrl(src),
+    kind: fileKindOf(name || src),
+  };
+}
+
+export function openAttachmentPreview(
+  item: AttachmentPreviewItem,
+  onOpen: ((item: AttachmentPreviewItem) => void) | null,
+  onShowInFolder: ((item: AttachmentPreviewItem) => void) | null,
+): void {
+  current = { item, onOpen, onShowInFolder };
+  emit();
+}
+
+export function closeAttachmentPreview(): void {
+  current = null;
+  emit();
+}
+
+export function subscribeAttachmentPreview(listener: Listener): () => void {
+  listeners.add(listener);
+  return () => listeners.delete(listener);
+}
+
+/**
+ * 从 file 卡片的 React fiber 读取 cardData（src/name/size）。
+ * 该构建的 inline file 卡片（.ne-card-file）不可点击也无 href，DOM 上拿不到 src；
+ * cardData 挂在渲染组件的 fiber.memoizedProps 上（getSrc/getName/getSize 稳定存在）。
+ * 注意：__reactFiber$ 挂在文件芯片（.ne-card-file）等内部元素上，卡片根 ne-card 没有——
+ * 因此从交互元素开始向上找。防御式：找不到 cardData 时回退 href。
+ */
+function readFileCardData(start: HTMLElement, card: HTMLElement): { src: string; name: string; size: number } | null {
+  const fiberKey = Object.keys(start).find((k) => k.startsWith("__reactFiber$")) ?? Object.keys(card).find((k) => k.startsWith("__reactFiber$"));
+  if (fiberKey) {
+    const holder = (Object.keys(start).some((k) => k === fiberKey) ? start : card) as unknown as Record<string, unknown>;
+    let fiber = holder[fiberKey] as { memoizedProps?: Record<string, unknown>; return?: unknown } | null;
+    for (let i = 0; fiber && i < 12; i++) {
+      const cd = fiber.memoizedProps?.cardData as { getSrc?: () => string; getName?: () => string; getSize?: () => number } | null;
+      if (cd && typeof cd.getSrc === "function") {
+        try {
+          const src = cd.getSrc();
+          if (typeof src === "string" && src) {
+            return {
+              src,
+              name: (typeof cd.getName === "function" ? cd.getName() : "") || src.split("/").pop() || "附件",
+              size: typeof cd.getSize === "function" ? cd.getSize() || 0 : 0,
+            };
+          }
+        } catch { /* 读取失败走 href 兜底 */ }
+      }
+      fiber = fiber.return as { memoizedProps?: Record<string, unknown>; return?: unknown } | null;
+    }
+  }
+  const href = card.querySelector("a[href]")?.getAttribute("href");
+  if (href) {
+    return { src: href, name: card.querySelector("a[href]")?.textContent?.trim() || href.split("/").pop() || "附件", size: 0 };
+  }
+  return null;
+}
+
+/**
+ * 给编辑器宿主挂文件卡片点击监听（桌面/移动端共用）。
+ * 命中 file 卡片的文件芯片（.ne-card-file：图标/文件名/大小区域）或链接/按钮时
+ * 解析 src（fiber cardData → 兜底 href）→ onOpen。不 preventDefault 其它区域，
+ * 编辑器内点卡片空白处仍走 Lake 选中行为。
+ * 返回清理函数。
+ */
+export function attachFileCardClick(
+  host: HTMLElement,
+  onOpen: (src: string, name: string, size: number) => void,
+): () => void {
+  const onClick = (event: MouseEvent) => {
+    const target = event.target as HTMLElement | null;
+    if (!target || typeof target.closest !== "function") return;
+    // 命中 file 卡片的交互元素：文件芯片（inline）/ 链接 / 预览下载按钮
+    const interactive = target.closest(
+      'ne-card[data-card-name="file"] .ne-card-file, ne-card[data-card-name="file"] a, [data-testid*="btn-preview"], [data-testid*="btn-download"]',
+    ) as HTMLElement | null;
+    if (!interactive) return;
+    const card = interactive.closest('ne-card[data-card-name="file"]') as HTMLElement | null;
+    if (!card || !host.contains(card)) return;
+    const data = readFileCardData(interactive, card);
+    if (!data) return;
+    event.preventDefault();
+    event.stopPropagation();
+    onOpen(data.src, data.name, data.size);
+  };
+  host.addEventListener("click", onClick, true);
+  return () => host.removeEventListener("click", onClick, true);
+}

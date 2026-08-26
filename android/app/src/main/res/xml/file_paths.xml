@@ -1,5 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <paths xmlns:android="http://schemas.android.com/apk/res/android">
-    <external-path name="my_images" path="." />
+    <!-- 附件资产目录（Directory.Data 下 note-assets/，与桌面同构）——系统应用打开附件用 -->
+    <files-path name="note_assets" path="note-assets/" />
+    <!-- 旧分享缓存路径（保留兼容；分享面板已弃用） -->
     <cache-path name="my_cache_images" path="." />
+    <external-path name="my_images" path="." />
 </paths>

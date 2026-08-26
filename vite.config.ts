@@ -16,8 +16,10 @@ const ALIPAY_JS_REUSE: Record<string, string> = {
  * dev：vite/react-refresh 内联 preamble 需要 unsafe-inline；
  * prod：script-src 无 unsafe-inline，内联 KITCHEN_URL 脚本用 sha256 hash 放行。
  * 全部资源已本地化（public/vendor/lakex/alipay/ + vendor/cdn/），不放行任何外部域。 */
-const DEV_CSP = "default-src 'self'; script-src 'self' 'unsafe-inline' http://127.0.0.1:*; style-src 'self' 'unsafe-inline' http://127.0.0.1:*; img-src 'self' data: blob: http://127.0.0.1:*; font-src 'self' data: http://127.0.0.1:*; connect-src 'self' http://127.0.0.1:* ws://127.0.0.1:1421; media-src 'self' data: blob:; worker-src 'self' blob:; object-src 'none'; base-uri 'none'; form-action 'none'";
-const PROD_CSP = "default-src 'self'; script-src 'self' 'sha256-r1Dc4EBzntnjCYkAEc8BC4xSaA3dOE5dL5hlL2pG/6s='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: http://127.0.0.1:*; font-src 'self' data: http://127.0.0.1:*; connect-src 'self' http://127.0.0.1:*; media-src 'self' data: blob:; worker-src 'self' blob:; object-src 'none'; base-uri 'none'; form-action 'none'";
+// 附件内联预览依赖：PDF 走 <embed>（object-src 需放行本地资产服务器）、音视频走 <audio>/<video>
+// （media-src 需放行本地资产服务器）。127.0.0.1:* 仅指向本机资产服务器（带 token 校验，非任意站点）。
+const DEV_CSP = "default-src 'self'; script-src 'self' 'unsafe-inline' http://127.0.0.1:*; style-src 'self' 'unsafe-inline' http://127.0.0.1:*; img-src 'self' data: blob: http://127.0.0.1:*; font-src 'self' data: http://127.0.0.1:*; connect-src 'self' http://127.0.0.1:* ws://127.0.0.1:1421; media-src 'self' data: blob: http://127.0.0.1:*; worker-src 'self' blob:; object-src http://127.0.0.1:*; frame-src http://127.0.0.1:*; base-uri 'none'; form-action 'none'";
+const PROD_CSP = "default-src 'self'; script-src 'self' 'sha256-r1Dc4EBzntnjCYkAEc8BC4xSaA3dOE5dL5hlL2pG/6s='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: http://127.0.0.1:*; font-src 'self' data: http://127.0.0.1:*; connect-src 'self' http://127.0.0.1:*; media-src 'self' data: blob: http://127.0.0.1:*; worker-src 'self' blob:; object-src http://127.0.0.1:*; frame-src http://127.0.0.1:*; base-uri 'none'; form-action 'none'";
 
 function lakexAlipayLocal(): Plugin {
   return {
@@ -25,7 +27,9 @@ function lakexAlipayLocal(): Plugin {
     enforce: "pre",
     transformIndexHtml(html, ctx) {
       const csp = ctx.mode === "development" ? DEV_CSP : PROD_CSP;
-      return html.replace('<meta http-equiv="Content-Security-Policy" content="%VITE_CSP%" />', `<meta http-equiv="Content-Security-Policy" content="${csp}" />`);
+      // 正则强替换 CSP meta 的 content（兼容占位符 %VITE_CSP% 或已被其它步骤写成的旧值——
+      // 实测 vite8 收到的 html 里占位符已消失，字面 replace 不匹配导致旧 CSP 残留）
+      return html.replace(/(<meta http-equiv="Content-Security-Policy" content=")[^"]*(")/, `$1${csp}$2`);
     },
     transform(code, id) {
       if (!id.includes("lakex-editor-react-component")) return;

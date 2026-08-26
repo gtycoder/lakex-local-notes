@@ -14,6 +14,7 @@
 import type { LakeEditorInstance } from "../features/editor/lakeRuntime";
 import { lakeBridge } from "../features/editor/lakeRuntime";
 import { parseLocalAssetUrl } from "../core/assetUrl.js";
+import { scanFileCards } from "../core/fileCard.js";
 import { bridge } from "./bridge";
 import { registerRuntimeBlob, unregisterRuntimeBlob } from "./cachePort.js";
 
@@ -23,6 +24,14 @@ import { registerRuntimeBlob, unregisterRuntimeBlob } from "./cachePort.js";
  * 注入时可立即命中；引用归零才 revoke（受 cachePort 注册表与"清缓存"统一管理）。
  */
 const blobCache = new Map<string, { url: string; refs: number }>();
+
+/** 全局 blob → canonical 映射（跨注入器实例共享）：点击附件/保存还原都要能由 blob src 反查原始 URL。 */
+const globalBlobToCanonical = new Map<string, string>();
+
+/** 由 blob URL 反查原始 canonical URL（cardBlobInject 注入后 src 是 blob，打开附件需要原始引用）。 */
+export function canonicalForBlob(blobUrl: string): string | null {
+  return globalBlobToCanonical.get(blobUrl) ?? null;
+}
 
 function cachedBlobUrl(canonicalSrc: string, bytes: Uint8Array): string | null {
   const hit = blobCache.get(canonicalSrc);
@@ -86,36 +95,63 @@ function scanImageCards(content: string): Array<{ cardId: string; canonicalSrc: 
 }
 
 /**
+ * 从文档内容扫描所有 file（附件）卡片的 canonical src。
+ * 移动端 file 卡片 src 是桌面 canonical URL（127.0.0.1:19876 不可达），
+ * Lake 渲染成 ne-error-tips「文件上传失败」——需要像 image 卡片一样注入本地 blob。
+ */
+function scanFileCardsForInject(content: string): Array<{ cardId: string; canonicalSrc: string; blobUrl: string | null; value: Record<string, unknown> }> {
+  const out: Array<{ cardId: string; canonicalSrc: string; blobUrl: string | null; value: Record<string, unknown> }> = [];
+  for (const card of scanFileCards(content)) {
+    if (!card.ref) continue;
+    const bytes = bridge.getAssetBytes(card.ref.noteId, card.ref.filename);
+    out.push({
+      cardId: card.cardId,
+      canonicalSrc: card.value.src,
+      blobUrl: bytes ? cachedBlobUrl(card.value.src, bytes) : null,
+      value: { ...card.value },
+    });
+  }
+  return out;
+}
+
+/**
  * 为移动端 editor 建立 blob 注入器：inject() 用 setCardValue 命令把卡片 src 换成 blob，
  * restore() 把 getDocument 输出里的 blob 还原为 canonical（保存前调用）。
  */
 export function createCardBlobInjector(content: string): CardBlobInjectResult {
   const cards = scanImageCards(content);
+  const fileCards = scanFileCardsForInject(content);
   const blobToCanonical = new Map<string, string>();
-  for (const c of cards) {
-    if (c.blobUrl) blobToCanonical.set(c.blobUrl, c.canonicalSrc);
+  for (const c of [...cards, ...fileCards]) {
+    if (c.blobUrl) {
+      blobToCanonical.set(c.blobUrl, c.canonicalSrc);
+      globalBlobToCanonical.set(c.blobUrl, c.canonicalSrc);
+    }
   }
-  const blobUrls = cards.map((c) => c.blobUrl).filter((u): u is string => u !== null);
+  const blobUrls = [...cards, ...fileCards].map((c) => c.blobUrl).filter((u): u is string => u !== null);
   /** 已注入的卡片（按 canonicalSrc 幂等）：MutationObserver/多次尝试重复触发不再重注入，避免闪烁。 */
   const injectedIds = new Set<string>();
 
   return {
     inject(editor) {
       let injected = 0;
-      // 从 DOM 拿 image 卡片节点（NE-CARD）
-      const cardEls = Array.from(document.querySelectorAll("NE-CARD[data-card-name=\"image\"], ne-card[name=\"image\"]"));
+      // 从 DOM 拿 image + file 卡片节点（NE-CARD）
+      const cardEls = Array.from(document.querySelectorAll(
+        "NE-CARD[data-card-name=\"image\"], ne-card[name=\"image\"], NE-CARD[data-card-name=\"file\"], ne-card[name=\"file\"]",
+      ));
       // renderer（编辑态 fallback 用 execCommand）
       const renderer = lakeBridge(editor).renderer;
       const canExec = !!renderer && typeof renderer.execCommand === "function";
       const execCmd = canExec && renderer?.execCommand
         ? (name: string, ...args: unknown[]) => renderer.execCommand!(name, ...args)
         : null;
-      // 按 cardId（value.id）匹配；匹配不到按顺序对应
-      for (const c of cards) {
+      // 先注入 image 卡片（原逻辑），再注入 file 卡片（附件 src 换 blob，消除"文件上传失败"错误态）
+      const allCards = [...cards, ...fileCards];
+      for (const c of allCards) {
         if (!c.blobUrl) continue;
         if (injectedIds.has(c.canonicalSrc)) continue; // 幂等：已注入的卡片跳过（Observer/重试不重复注入）
         const byCardId = cardEls.find((el) => el.getAttribute("id") === c.cardId);
-        const el = byCardId || cardEls[cards.indexOf(c)];
+        const el = byCardId || cardEls[allCards.indexOf(c)];
         if (!el) continue;
         const nodeId = el.getAttribute("id") || "";
         try {
@@ -127,13 +163,19 @@ export function createCardBlobInjector(content: string): CardBlobInjectResult {
             _resetCardValue?: (v: Record<string, unknown>) => void;
             sync?: (isUser: boolean) => unknown;
           } | undefined;
+          const isFile = "value" in c; // file 卡片保留原 value（name/size/mode 等）
           if (cd && typeof cd._resetCardValue === "function" && typeof cd.sync === "function") {
-            const old = (typeof cd.getCardValue === "function" ? cd.getCardValue() : cd._cardValue) ?? {};
+            // file 卡片用扫描保留的原始 value（错误态时 Lake 会清空 _cardValue 的 name，
+            // 依赖 old 会让名称/大小丢失）；image 卡片沿用 old（含宽高裁剪等运行时字段）
+            const old = isFile
+              ? (c as { value: Record<string, unknown> }).value
+              : (typeof cd.getCardValue === "function" ? cd.getCardValue() : cd._cardValue) ?? {};
             const newValue = {
               ...old,
               src: c.blobUrl,
               status: "done",
-              originalType: "link", // 非 binary，走非上传路径
+              // file 卡片无 originalType 概念，注入 link 标记无害（image 卡片必需，防 binary 上传态）
+              ...(isFile ? {} : { originalType: "link" }),
             };
             delete (newValue as Record<string, unknown>).taskId;
             delete (newValue as Record<string, unknown>).clientId;
@@ -145,17 +187,23 @@ export function createCardBlobInjector(content: string): CardBlobInjectResult {
           }
           // 路径 2：编辑态卡片无 cardData → execCommand("setCardValue")（官方命令通道）
           if (execCmd && nodeId) {
-            const newValue = {
-              src: c.blobUrl,
-              originalType: "link",
-              status: "done",
-              name: c.canonicalSrc.split("/").pop() ?? "image",
-              size: 0,
-              width: undefined,
-              height: undefined,
-              from: "ui",
-              id: nodeId,
-            };
+            const newValue = isFile
+              ? { ...(c as { value: Record<string, unknown> }).value, src: c.blobUrl, status: "done" }
+              : {
+                  src: c.blobUrl,
+                  originalType: "link",
+                  status: "done",
+                  name: c.canonicalSrc.split("/").pop() ?? "image",
+                  size: 0,
+                  width: undefined,
+                  height: undefined,
+                  from: "ui",
+                  id: nodeId,
+                };
+            if (isFile) {
+              delete (newValue as Record<string, unknown>).taskId;
+              delete (newValue as Record<string, unknown>).clientId;
+            }
             execCmd("setCardValue", true, nodeId, newValue);
             injected++;
             injectedIds.add(c.canonicalSrc);

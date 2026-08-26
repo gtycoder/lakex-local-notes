@@ -4,7 +4,7 @@
  */
 import { describe, expect, it } from "vitest";
 import path from "node:path";
-import { extnameLikeNode, mimeTypeFor, parseLakeManifest, validateManifest, objectKey } from "./syncUtils.js";
+import { extnameLikeNode, isNoSuchKey, mimeTypeFor, parseLakeManifest, validateManifest, objectKey } from "./syncUtils.js";
 
 // ---- H2: extnameLikeNode 与 node:path.extname 等价 ----
 const extnameCases = [
@@ -107,5 +107,28 @@ describe("validateManifest 抛错行为", () => {
 describe("objectKey", () => {
   it("格式不变", () => {
     expect(objectKey("n1", "abc")).toBe("objects/n1-abc.lake");
+  });
+});
+
+// ---- isNoSuchKey：GetObject(NoSuchKey) 与 HeadObject(NotFound) 的 404 都判缺失 ----
+describe("isNoSuchKey", () => {
+  it("recognizes GetObject missing (NoSuchKey)", () => {
+    const e = new Error("The specified key does not exist.");
+    e.name = "NoSuchKey";
+    expect(isNoSuchKey(e)).toBe(true);
+  });
+
+  it("recognizes HeadObject missing (NotFound name, UnknownError message)", () => {
+    // 七牛 Kodo HeadObject 缺失：name=NotFound、message=UnknownError（实测）
+    const e = new Error("UnknownError");
+    e.name = "NotFound";
+    expect(isNoSuchKey(e)).toBe(true);
+  });
+
+  it("rejects real errors", () => {
+    const e = new Error("network timeout");
+    e.name = "TimeoutError";
+    expect(isNoSuchKey(e)).toBe(false);
+    expect(isNoSuchKey(new Error("AccessDenied: denied"))).toBe(false);
   });
 });

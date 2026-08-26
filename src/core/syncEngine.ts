@@ -87,6 +87,18 @@ export interface S3Store {
   getObject(key: string, opts?: { maxBytes?: number }): Promise<Uint8Array | null>;
   /** 写入对象；opts.gzip 由端口压缩（manifest 传 {gzip:true}，正文/资源不压缩）。 */
   putObject(key: string, body: string | Uint8Array, opts?: { gzip?: boolean }): Promise<void>;
+  /**
+   * HEAD 存在性探测（桌面实现；移动端/测试桩可不实现走整对象 GET 回退）。
+   * 探测"远端是否已有此对象"用 HEAD 而非 getObject——大附件（100MiB 级）下
+   * 整对象 GET 判存在会每轮同步全量下载，浪费带宽且拖慢同步。
+   */
+  exists?(key: string): Promise<boolean>;
+  /**
+   * 流式上传（桌面实现；移动端/测试桩可不实现走字节路径回退）。
+   * open 返回 Node Readable（本地文件流）；size 为文件字节数（显式 Content-Length，
+   * 避免 aws-chunked 编码——七牛 Kodo 兼容性实测验证）。返回 null = 本地文件缺失。
+   */
+  putObjectStream?(key: string, size: number, open: () => Promise<unknown | null>): Promise<void>;
 }
 
 export interface SyncReport {
@@ -169,6 +181,9 @@ export interface SyncDbPort {
   listLocalAssets(noteId: string): Promise<Array<{ filename: string; size: number; hash: string }>>;
   /** 资产上传扫描（H3）：读取本地资产字节（供上传 S3）。 */
   readLocalAsset(noteId: string, filename: string): Promise<Uint8Array | null>;
+  /** 资产流式上传（桌面实现）：打开本地资产文件流；缺失返回 null。syncEngine 探测到
+   * 本方法 + S3Store.putObjectStream 同时存在才走流式，否则字节路径。 */
+  openLocalAssetStream?(noteId: string, filename: string): Promise<unknown | null>;
   /** 零变更早退：本设备上次成功读/写的 manifest commitId（无则 null）。 */
   getLastSeenCommitId(): string | null;
   setLastSeenCommitId(commitId: string): void;
@@ -184,16 +199,30 @@ export interface SyncDbPort {
 
 const MANIFEST_KEY = "manifests/latest.json";
 
-/** 扫描本地资产：上传到 S3（缺失才传）并返回清单条目（H3 与软删上云共用）。 */
-async function scanLocalAssets(cfg: SyncConfig, s3: S3Store, db: SyncDbPort, noteId: string): Promise<ManifestNote["assets"]> {
+/** 扫描本地资产：上传到 S3（缺失才传）并返回清单条目（H3 与软删上云共用）。
+ * 存在性探测优先 HEAD（s3.exists），避免整对象 GET 判存在；上传优先流式
+ * （s3.putObjectStream + db.openLocalAssetStream 同时可用时），否则字节路径。
+ * 导出供单元测试直接覆盖流式/HEAD 选择逻辑。 */
+export async function scanLocalAssets(cfg: SyncConfig, s3: S3Store, db: SyncDbPort, noteId: string): Promise<ManifestNote["assets"]> {
   const assets: ManifestNote["assets"] = [];
   const localAssets = await db.listLocalAssets(noteId);
+  const canStream = !!s3.putObjectStream && typeof db.openLocalAssetStream === "function";
   for (const a of localAssets) {
     const key = `${cfg.prefix}/assets/${noteId}/${a.filename}`;
-    const existing = await s3.getObject(key);
-    if (existing == null) {
-      const bytes = await db.readLocalAsset(noteId, a.filename);
-      if (bytes) await s3.putObject(key, bytes);
+    // 存在性探测：HEAD 优先；端口未实现则整对象 GET 判存在（兼容移动端/测试桩）
+    let exists: boolean;
+    if (s3.exists) {
+      exists = await s3.exists(key);
+    } else {
+      exists = (await s3.getObject(key)) != null;
+    }
+    if (!exists) {
+      if (canStream && s3.putObjectStream) {
+        await s3.putObjectStream(key, a.size, () => db.openLocalAssetStream!(noteId, a.filename));
+      } else {
+        const bytes = await db.readLocalAsset(noteId, a.filename);
+        if (bytes) await s3.putObject(key, bytes);
+      }
     }
     assets.push({ filename: a.filename, size: a.size, hash: a.hash });
   }

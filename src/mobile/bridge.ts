@@ -14,6 +14,7 @@ import type { QuickNotesSyncResult } from "../core/quickNotesSyncEngine.js";
 import { TRASH_NOTEBOOK_ID } from "../core/syncDecisions.js";
 import { sha256Sync } from "../core/sha256Sync.js";
 import { createCapacitorS3Store } from "./s3Store";
+import { buildAssetFilename, extOf } from "../core/assetNaming.js";
 import type { S3Settings, TreeNode, TreeNodeType } from "../lib/types";
 import type { SearchResult } from "../core/searchRepository.js";
 import { assertMoveTarget, assertNodeIcon, assertOrderedChildren, assertRootConstraint, assertTreeNodeTitle, nextSortOrder } from "../core/treeRules.js";
@@ -1003,15 +1004,15 @@ export const bridge = {
     return key;
   },
 
-  /** D8+：图片上传（Lake 编辑器粘贴/插入图片调用）。本地存资产（供 blob 显示）+ 返回 canonical URL。 */
+  /** D8+：图片/附件上传（Lake 编辑器粘贴/插入调用）。本地存资产（供 blob 显示）+ 返回 canonical URL。
+   * 附件（非图片）同样走本路径：任意字节落盘 + 保留原扩展名（与桌面 assetNaming 命名一致）。 */
   async uploadResource(
-    input: { bytes: number[]; filename: string },
+    input: { bytes: Uint8Array; filename: string },
     noteId: string
   ): Promise<{ url: string; resourceRef: string; filename: string; mimeType: string; size: number }> {
-    const bytes = new Uint8Array(input.bytes);
-    // 与桌面一致的资产文件名：13 位时间戳 + 8 hex + 扩展名（extractAssetRefs 正则匹配）
-    const ext = (input.filename.split(".").pop() || "png").toLowerCase();
-    const name = `${Date.now()}_${randomHex(4)}.${ext}`;
+    const bytes = input.bytes instanceof Uint8Array ? input.bytes : new Uint8Array(input.bytes as unknown as ArrayLike<number>);
+    // 与桌面一致的资产文件名（共享 buildAssetFilename：{13ts}_{8hex}.{ext}，extractAssetRefs 正则匹配）
+    const name = buildAssetFilename(input.filename);
     // 本地存储（内存 + Filesystem 持久化，供 blob 注入读取）
     // P1-8（GPT 审计）：必须等待 Filesystem 落盘成功再返回，否则"正文保存成功但图片重启后丢失"
     const key = noteId + "/" + name;
@@ -1022,9 +1023,11 @@ export const bridge = {
       assets.delete(key);
       throw new Error("图片落盘失败: " + (e as Error).message);
     }
-    const mimeType = mimeForExt(ext);
+    const mimeType = mimeForExt(extOf(name));
     const url = `http://127.0.0.1:19876/${noteId}/${name}`;
-    return { url, resourceRef: url, filename: name, mimeType, size: bytes.length };
+    // filename 字段 = 原始文件名（Lake file 卡片展示名；磁盘名/同步用 URL 里的生成名，与桌面一致）
+    const displayName = input.filename.replace(/[\\/:*?"<>|\u0000-\u001f]/g, "_").trim() || "附件";
+    return { url, resourceRef: url, filename: displayName, mimeType, size: bytes.length };
   },
 
   /** M1 同步：manifest v4 协议（拉取对账 + 上传发布）+ 小记 quick-notes/ 子空间同步，复用 src/core 引擎。

@@ -6,6 +6,7 @@ import {
   S3Client,
   GetObjectCommand,
   type GetObjectCommandOutput,
+  HeadObjectCommand,
   PutObjectCommand,
   type PutObjectCommandInput,
   ListObjectsV2Command,
@@ -188,6 +189,45 @@ export class ObjectStore {
     }
   }
 
+  /** HEAD 探测对象是否存在（附件存在性检查用；避免整对象 GET 只为判存在）。
+   * 七牛 Kodo 对 HeadBucket 返回 404（AGENTS.md 踩坑 #4），HeadObject 是标准 S3 API，
+   * 已在实测桶验证可用；异常（非 404）抛出由调用方处理。 */
+  async headObject(key: string): Promise<boolean> {
+    assertSafeKey(key);
+    const t0 = Date.now();
+    try {
+      await this.send<Record<string, unknown>>(new HeadObjectCommand({ Bucket: this.bucket, Key: this.key(key) }));
+      this.log.s3.info(`[perf] head ${key} ${Date.now()}ms HIT`);
+      return true;
+    } catch (error) {
+      if (isNoSuchKey(error)) { this.log.s3.info(`[perf] head ${key} ${Date.now()}ms MISS`); return false; }
+      this.log.s3.warn(`[perf] head ${key} FAIL ${Date.now()}ms: ${errorMessage(error)}`);
+      throw new Error("S3 探测失败 (" + key + "): " + errorMessage(error));
+    }
+  }
+
+  /** 流式上传（大附件用）：Body 直接给 Node Readable，显式 Content-Length（避免 aws-chunked，
+   * 七牛 Kodo 兼容性已验证）。失败抛错，调用方重试/下轮同步重传（幂等对账语义）。 */
+  async putStream(key: string, size: number, open: () => Promise<import("node:stream").Readable | null>): Promise<void> {
+    assertSafeKey(key);
+    const t0 = Date.now();
+    const stream = await open();
+    if (!stream) return; // 本地文件缺失（已删除）→ 视为无此资产
+    try {
+      await this.send<Record<string, unknown>>(new PutObjectCommand({
+        Bucket: this.bucket,
+        Key: this.key(key),
+        Body: stream,
+        ContentLength: size,
+        ContentType: "application/octet-stream",
+        CacheControl: "no-cache",
+      }));
+      this.log.s3.info(`[perf] put-stream ${key} ${Date.now()}ms (${size}B)`);
+    } catch (error) {
+      this.log.s3.warn(`[perf] put-stream ${key} FAIL ${Date.now()}ms: ${errorMessage(error)}`);
+      throw new Error("S3 上传失败 (" + key + "): " + errorMessage(error));
+    }
+  }
   /** ListObjectsV2 分页列出前缀下键（返回相对键 + LastModified）。 */
   async list(prefix: string): Promise<Array<{ key: string; lastModified: string }>> {
     const t0 = Date.now();
@@ -255,7 +295,7 @@ export class ObjectStore {
 
   /** 统一带超时发送命令：超时通过 AbortSignal 中断底层请求（NodeHttpHandler 支持）。
    *  Get/Put 走大对象超时（W-6），其余元数据命令走短超时。 */
-  private async send<T>(command: GetObjectCommand | PutObjectCommand | ListObjectsV2Command | DeleteObjectCommand | DeleteObjectsCommand): Promise<T> {
+  private async send<T>(command: GetObjectCommand | PutObjectCommand | HeadObjectCommand | ListObjectsV2Command | DeleteObjectCommand | DeleteObjectsCommand): Promise<T> {
     const isTransfer = command instanceof GetObjectCommand || command instanceof PutObjectCommand;
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), isTransfer ? S3_TRANSFER_TIMEOUT_MS : S3_REQUEST_TIMEOUT_MS);

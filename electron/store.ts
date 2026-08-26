@@ -1933,7 +1933,7 @@ export class Store {
     this.remoteImport.importNote(note, content, assets);
   }
 
-  async uploadResource(input: { bytes: number[]; filename: string }, noteId: string): Promise<ResourceUploadOutput> {
+  async uploadResource(input: { bytes: Uint8Array; filename: string }, noteId: string): Promise<ResourceUploadOutput> {
     return this.resourceRepository.upload(input, noteId);
   }
 

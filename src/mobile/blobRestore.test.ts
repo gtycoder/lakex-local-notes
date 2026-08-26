@@ -55,4 +55,32 @@ describe("移动端 blob 保存还原（显示层 blob，保存 canonical——�
     expect(restored).toContain(encodeURIComponent(CANONICAL));
     injector.revoke();
   });
+
+  it("cardBlobInject.restore：file 卡片 blob 还原 canonical（附件保存不污染 lake 文档）", () => {
+    const fileCanonical = "http://127.0.0.1:19876/note-1/17877322062846_ffb54fbf.pdf";
+    const content = `<p>before</p><card type="block" name="file" value="data:${encodeURIComponent(JSON.stringify({ src: fileCanonical, name: "需求.pdf", size: 42, ext: "pdf", status: "done", mode: "title" }))}"></card>`;
+    const injector = createCardBlobInjector(content);
+    // 模拟注入后（src=blob）再保存的脏内容：明文与 URI 编码两种形态都要还原
+    const dirtyPlain = content.replace(fileCanonical, FAKE_BLOB);
+    const restoredPlain = injector.restore(dirtyPlain);
+    expect(restoredPlain).not.toContain("blob");
+    // card value 里 src 是 URI 编码形态 → 还原为编码 canonical
+    expect(restoredPlain).toContain(encodeURIComponent(fileCanonical));
+    expect(restoredPlain).toContain(encodeURIComponent("需求.pdf")); // 名称/大小等元数据保留
+    const dirtyEncoded = content.replace(encodeURIComponent(fileCanonical), encodeURIComponent(FAKE_BLOB));
+    const restoredEncoded = injector.restore(dirtyEncoded);
+    expect(restoredEncoded).not.toContain("blob");
+    expect(restoredEncoded).toContain(encodeURIComponent(fileCanonical));
+    injector.revoke();
+  });
+
+  it("cardBlobInject.restore：file 卡片明文 blob（含 ? 参数）还原", () => {
+    const fileCanonical = "http://127.0.0.1:19876/note-1/17877322062846_ffb54fbf.xlsx";
+    const content = `<card type="block" name="file" value="data:${encodeURIComponent(JSON.stringify({ src: fileCanonical, name: "表.xlsx", size: 100, ext: "xlsx", status: "done" }))}"></card>`;
+    const injector = createCardBlobInjector(content);
+    const restored = injector.restore(content.replace(encodeURIComponent(fileCanonical), encodeURIComponent(FAKE_BLOB + "?v=1")));
+    expect(restored).not.toContain("blob");
+    expect(restored).toContain(encodeURIComponent(fileCanonical));
+    injector.revoke();
+  });
 });

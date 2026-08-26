@@ -1,6 +1,9 @@
 import { isDesktop, native } from "../../lib/native";
 import type { ResourceUploadInput, ResourceUploadOutput } from "../../lib/types";
-import { MAX_IMAGE_BYTES, imageDataUrl, normalizeImageInput } from "./imageFormat";
+import { MAX_IMAGE_BYTES, MAX_ATTACHMENT_BYTES } from "../../core/storeLimits";
+import { loadSettings } from "../../lib/settings";
+import { mimeTypeForFilename } from "../../core/assetNaming";
+import { imageDataUrl, normalizeImageInput } from "./imageFormat";
 import { createConcurrencyQueue } from "../../core/concurrency";
 import { withRetry } from "../../core/retry";
 
@@ -12,8 +15,14 @@ interface LakeUploadRequest {
 
 const uploadQueue = createConcurrencyQueue(6);
 
-/** 审计 #14：非图片附件/Data URL 的统一上限（与图片一致），避免大文件全量进内存再 base64 内嵌 */
-const MAX_ATTACHMENT_BYTES = 25 * 1024 * 1024;
+/** 当前附件上传上限（MiB 配置项；协议硬上限见 MAX_ATTACHMENT_BYTES）。 */
+function configuredMaxAttachmentBytes(): number {
+  try {
+    return loadSettings().maxAttachmentBytes;
+  } catch {
+    return MAX_ATTACHMENT_BYTES;
+  }
+}
 
 /** base64 文本长度 → 解码字节数（在 atob/数组转换前预检，防止先复制多份内存再拒） */
 function decodedBase64Length(encoded: string): number {
@@ -38,27 +47,21 @@ function isImageFile(file: File): boolean {
   return ["png", "jpg", "jpeg", "gif", "webp", "avif", "bmp", "svg", "ico", "tiff", "tif"].includes(ext);
 }
 
-/** Convert a File to a base64 data URL (for non-image attachments) */
-async function fileToBase64DataUrl(file: File): Promise<ResourceUploadOutput> {
-  // 审计 #14：读入内存前先按 file.size 预检（非图片附件）
-  if (file.size > MAX_ATTACHMENT_BYTES) {
-    throw new Error(`附件超过 ${MAX_ATTACHMENT_BYTES / 1024 / 1024} MiB 上限`);
+/** MIME 兜底：按扩展名猜（共享 mimeTypeForFilename，单一事实源），猜不到用 octet-stream。 */
+function mimeForExtension(filename: string, declared: string): string {
+  return declared || mimeTypeForFilename(filename);
+}
+
+/** 非图片附件：作为资产落盘（note-assets/{noteId}/{file}），返回 canonical URL —— 不再 base64 内嵌正文。
+ * 上传上限取用户配置（maxAttachmentBytes，默认 25MiB，可到 100MiB）。 */
+async function uploadAttachmentFile(file: File, noteId: string): Promise<ResourceUploadOutput> {
+  const maxBytes = configuredMaxAttachmentBytes();
+  if (file.size > maxBytes) {
+    throw new Error(`附件超过 ${maxBytes / 1024 / 1024} MiB 上限（可在设置中调整）`);
   }
-  const buffer = await file.arrayBuffer();
-  const bytes = new Uint8Array(buffer);
-  let binary = "";
-  for (let i = 0; i < bytes.length; i += 0x8000) {
-    binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
-  }
-  const mime = file.type || "application/octet-stream";
-  const url = `data:${mime};base64,${btoa(binary)}`;
-  return {
-    url,
-    resourceRef: url,
-    filename: file.name || "attachment",
-    mimeType: mime,
-    size: bytes.length,
-  };
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  const mime = mimeForExtension(file.name, file.type);
+  return native.uploadResource({ bytes, filename: file.name }, noteId);
 }
 
 async function performUpload(request: unknown, noteId: string): Promise<ResourceUploadOutput> {
@@ -67,12 +70,12 @@ async function performUpload(request: unknown, noteId: string): Promise<Resource
 
   // File upload from Lake's file picker
   if (payload instanceof File) {
-    // Non-image files (PDF, doc, zip, etc.) → base64 data URL directly
+    // Non-image files (PDF, doc, zip, audio, video, etc.) → 资产落盘（与图片同构的附件）
     if (!isImageFile(payload)) {
-      return fileToBase64DataUrl(payload);
+      return uploadAttachmentFile(payload, noteId);
     }
     // Image files → preserve the detected source format (including animated GIF/WebP)
-    const input = normalizeImageInput(Array.from(new Uint8Array(await payload.arrayBuffer())), payload.name || "image");
+    const input = normalizeImageInput(new Uint8Array(await payload.arrayBuffer()), payload.name || "image");
     return uploadWithOriginalFormat(input, noteId);
   }
 
@@ -81,8 +84,8 @@ async function performUpload(request: unknown, noteId: string): Promise<Resource
     // Non-image data URLs pass through as-is（审计 #14：先按 base64 长度预检）
     if (!payload.startsWith("data:image/")) {
       const [header, encoded = ""] = payload.split(",", 2);
-      if (decodedBase64Length(encoded) > MAX_ATTACHMENT_BYTES) {
-        throw new Error(`附件超过 ${MAX_ATTACHMENT_BYTES / 1024 / 1024} MiB 上限`);
+      if (decodedBase64Length(encoded) > configuredMaxAttachmentBytes()) {
+        throw new Error(`附件超过 ${configuredMaxAttachmentBytes() / 1024 / 1024} MiB 上限`);
       }
       return { url: payload, resourceRef: payload, filename: "attachment", mimeType: header.replace("data:", "").split(";")[0] || "application/octet-stream", size: decodedBase64Length(encoded) };
     }
@@ -113,7 +116,9 @@ function dataUrlInput(value: string): ResourceUploadInput {
     throw new Error("图片超过 25 MiB");
   }
   const binary = atob(encoded);
-  return normalizeImageInput(Array.from(binary, (character) => character.charCodeAt(0)), "image");
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return normalizeImageInput(bytes, "image");
 }
 
 async function uploadWithOriginalFormat(input: ResourceUploadInput, noteId: string): Promise<ResourceUploadOutput> {
@@ -192,18 +197,22 @@ async function downloadWithBrowserFetch(initialUrl: string): Promise<ResourceUpl
     const merged = new Uint8Array(total);
     let offset = 0;
     for (const chunk of chunks) { merged.set(chunk, offset); offset += chunk.byteLength; }
-    const bytes = Array.from(merged);
     const filename = new URL(initialUrl).pathname.split("/").pop() || "file";
     if (!contentType.startsWith("image/")) {
-      let binary = "";
-      for (let i = 0; i < bytes.length; i += 0x8000) {
-        binary += String.fromCharCode(...bytes.slice(i, i + 0x8000));
-      }
       const mime = contentType.split(";")[0] || "application/octet-stream";
-      const url = `data:${mime};base64,${btoa(binary)}`;
-      return { url, resourceRef: url, filename, mimeType: mime, size: bytes.length };
+      const url = `data:${mime};base64,${bytesToBase64(merged)}`;
+      return { url, resourceRef: url, filename, mimeType: mime, size: merged.length };
     }
     // 演示模式无原生层：校验图片格式后直接嵌入 data URL（不落盘）
-    return imageDataUrl(normalizeImageInput(bytes, filename));
+    return imageDataUrl(normalizeImageInput(merged, filename));
   }
+}
+
+/** Uint8Array → base64（无原生层的演示模式用；分块避免参数栈溢出）。 */
+function bytesToBase64(bytes: Uint8Array): string {
+  let binary = "";
+  for (let i = 0; i < bytes.length; i += 0x8000) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  }
+  return btoa(binary);
 }

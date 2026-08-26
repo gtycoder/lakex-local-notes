@@ -52,6 +52,10 @@ export interface LakeNative {
   downloadRemoteResource(url: string, noteId: string): Promise<ResourceUploadOutput>;
   listOrphanAssets(): Promise<OrphanAsset[]>;
   cleanOrphanAssets(): Promise<CleanOrphanResult>;
+  /** 附件操作（桌面本地优先）：系统默认应用打开。 */
+  openAttachment(noteId: string, filename: string): Promise<{ ok: boolean; error?: string }>;
+  /** 附件操作：在文件管理器中显示。 */
+  showAttachmentInFolder(noteId: string, filename: string): Promise<{ ok: boolean }>;
   getS3Settings(): Promise<S3Settings | null>;
   saveS3Settings(settings: S3Settings): Promise<void>;
   testS3Connection(): Promise<string>;
@@ -141,6 +145,8 @@ export const native = {
   downloadRemoteResource: (url: string, noteId: string) => api().downloadRemoteResource(url, noteId),
   listOrphanAssets: () => api().listOrphanAssets(),
   cleanOrphanAssets: () => api().cleanOrphanAssets(),
+  openAttachment: (noteId: string, filename: string) => api().openAttachment(noteId, filename),
+  showAttachmentInFolder: (noteId: string, filename: string) => api().showAttachmentInFolder(noteId, filename),
   getS3Settings: () => api().getS3Settings(),
   saveS3Settings: (settings: S3Settings) => api().saveS3Settings(settings),
   testS3Connection: () => api().testS3Connection(),

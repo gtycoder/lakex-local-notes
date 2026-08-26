@@ -167,7 +167,8 @@ export interface ImportedResource {
 }
 
 export interface ResourceUploadInput {
-  bytes: number[];
+  /** 文件字节（Uint8Array 跨 IPC 结构化克隆传输，避免 number[] 的高内存/慢序列化） */
+  bytes: Uint8Array;
   filename: string;
 }
 

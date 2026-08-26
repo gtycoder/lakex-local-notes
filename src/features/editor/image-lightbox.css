@@ -1,0 +1,76 @@
+/* 图片放大预览 Lightbox（桌面 + 移动端共用）
+   背景：思源式模糊（backdrop-filter 模糊文档内容，非全黑遮罩）——用户确认 */
+.image-lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  background: rgba(0, 0, 0, 0.08);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: zoom-out;
+  animation: image-lightbox-fade .16s ease;
+}
+@keyframes image-lightbox-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+.image-lightbox__stage {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+.image-lightbox img {
+  border-radius: 2px;
+  box-shadow: 0 6px 40px rgba(0, 0, 0, 0.5);
+  will-change: transform;
+}
+.image-lightbox__toolbar {
+  position: absolute;
+  bottom: 18px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 6px 10px;
+  border-radius: 10px;
+  background: rgba(24, 26, 32, 0.72);
+  backdrop-filter: blur(8px);
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.35);
+  user-select: none;
+}
+.image-lightbox__btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border: none;
+  border-radius: 7px;
+  background: transparent;
+  color: #e6e8ee;
+  cursor: pointer;
+}
+.image-lightbox__btn:hover { background: rgba(255, 255, 255, 0.14); }
+.image-lightbox__btn:disabled { opacity: 0.35; cursor: default; }
+.image-lightbox__btn:hover:disabled { background: transparent; }
+.image-lightbox__close { color: #ff9f9f; }
+.image-lightbox__count {
+  min-width: 52px;
+  text-align: center;
+  color: #c3c7d0;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+.image-lightbox__divider {
+  width: 1px;
+  height: 18px;
+  margin: 0 6px;
+  background: rgba(255, 255, 255, 0.18);
+}

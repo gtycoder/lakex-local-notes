@@ -5,6 +5,8 @@ import { uploadLakeResource } from "./resourceUpload";
 import { BoardCard } from "./BoardCard";
 import { shouldSkipBoardCardFocus, useClickActivatedWheelGate } from "./canvasInteractionGate";
 import { ASSET_ORIGIN } from "../../lib/assetPort";
+import type { LocalAssetRef } from "../../core/assetUrl.js";
+import type { AttachmentPreviewItem } from "../attachment/attachmentPreviewController.js";
 
 /** 与下方 math.KaTexURL 保持同一份相对路径，供预注入脚本去重匹配。 */
 const LAKE_KATEX_SCRIPT = "./vendor/cdn/os/lib/katex/0.16.8/dist/katex.min.js";
@@ -429,6 +431,17 @@ export interface LakeEditorPrefs {
    * scrollNode fallback 到 .document-pane（移动端不存在）会导致视口测量错误——编辑态只渲染
    * 视口内内容（正文不全）、保存时 getDocument 输出不完整（图片丢失）。置 true 全量渲染。 */
   disableVirtualRendering?: boolean;
+  /** 附件能力（移动端注入；桌面走 native.openAttachment 无需注入）：
+   * - resolveDisplayUrl：把本地资产引用解析为可显示的 URL（移动端：本地字节 → blob URL；
+   *   桌面 canonical URL 已可直接加载，无需提供）
+   * - onOpenAttachment：点"用系统应用打开"的动作（移动端：系统应用打开；缺省桌面系统打开）
+   * - directOpen：移动端 true 时点击附件卡片**直接**系统应用打开（跳过 WebView 预览弹窗——
+   *   既然用的是本机能力就不需要中间层） */
+  attachment?: {
+    resolveDisplayUrl?: (ref: LocalAssetRef) => string | null;
+    onOpenAttachment?: (item: AttachmentPreviewItem) => void;
+    directOpen?: boolean;
+  };
 }
 
 export function createLakeDocument(
