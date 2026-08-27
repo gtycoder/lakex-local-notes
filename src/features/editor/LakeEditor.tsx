@@ -6,7 +6,8 @@ import { addAssetAccessToken, stripAssetAccessToken } from "../../lib/assetPort"
 import { getNativeErrorMessage } from "../../lib/nativeErrors";
 import { ImageLightbox } from "./ImageLightbox";
 import { attachImagePreviewClick } from "./imagePreview";
-import { attachFileCardClick, buildAttachmentPreviewItem, openAttachmentPreview, type AttachmentPreviewItem } from "../attachment/attachmentPreviewController";
+import { attachFileCardClick, buildAttachmentPreviewItem, openAttachmentPreview, createCardHoverResidueCleaner, type AttachmentPreviewItem } from "../attachment/attachmentPreviewController";
+import { isMediaFilename } from "../../core/assetNaming.js";
 import { AttachmentPreview } from "../attachment/AttachmentPreview";
 import { isDesktop, native } from "../../lib/native";
 
@@ -66,13 +67,8 @@ export function LakeEditor({ noteId, content, mode = "editor", tocEnabled, onCha
     host.addEventListener("mousedown", preventCardBlur, true);
     host.addEventListener("copy", copyRichSelection, true);
     host.addEventListener("paste", pasteHandler, true);
-    // 点击任意位置清理 Lake 卡片 hover 残留：鼠标离开卡片的 mouseleave 事件在打开
-    // 系统应用/播放器遮罩或快速点击时可能被吞，ne-card-hovered 残留 → 卡片背景一直着色。
-    // 点击（pointerdown）即清理，随后鼠标再悬停卡片会由 Lake 的 hover 逻辑正常重新加亮。
-    const clearCardHoverResidue = (): void => {
-      try { host.querySelectorAll(".ne-card-hovered").forEach((el) => el.classList.remove("ne-card-hovered")); } catch { /* 忽略 */ }
-    };
-    host.addEventListener("pointerdown", clearCardHoverResidue, true);
+    // 点击任意位置清理 Lake 卡片 hover 残留（打开系统应用/遮罩时 mouseleave 可能被吞）
+    const detachHoverCleaner = createCardHoverResidueCleaner(host);
     // 图片点击放大预览（桌面/移动端共用）：捕获阶段监听 img.ne-image 点击，
     // 收集文档内全部图片（画廊）打开共享 Lightbox。不 preventDefault——
     // Lake 自身的卡片选中/编辑行为照常，预览作为叠加层展示。
@@ -90,7 +86,6 @@ export function LakeEditor({ noteId, content, mode = "editor", tocEnabled, onCha
       if (it.ref) void native.showAttachmentInFolder(it.ref.noteId, it.ref.filename);
     };
     const directOpen = attachment?.directOpen ?? isDesktop();
-    const MEDIA_EXT_RE = /\.(mp3|wav|m4a|aac|flac|ogg|mp4|mov|mkv|avi|webm|m4v|wma|midi?)$/i;
     const detachFileCard = attachFileCardClick(host, (src, name, size) => {
       const base = buildAttachmentPreviewItem(src, name, size);
       const displaySrc = (attachment?.resolveDisplayUrl && base.ref)
@@ -98,7 +93,7 @@ export function LakeEditor({ noteId, content, mode = "editor", tocEnabled, onCha
         : base.src;
       const item = { ...base, src: displaySrc };
       // 媒体附件：内嵌播放 overlay（不跳系统浏览器）
-      if (MEDIA_EXT_RE.test(name)) {
+      if (isMediaFilename(name)) {
         openAttachmentPreview(item, attachment?.onOpenAttachment ?? openAttachmentDefault, isDesktop() ? showInFolder : null);
         return;
       }
@@ -135,7 +130,7 @@ export function LakeEditor({ noteId, content, mode = "editor", tocEnabled, onCha
       host.removeEventListener("mousedown", preventCardBlur, true);
       host.removeEventListener("copy", copyRichSelection, true);
       host.removeEventListener("paste", pasteHandler, true);
-      host.removeEventListener("pointerdown", clearCardHoverResidue, true);
+      detachHoverCleaner();
       detachImagePreview();
       detachFileCard();
       window.clearTimeout(tocRefreshTimer);

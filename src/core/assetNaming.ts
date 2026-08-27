@@ -50,6 +50,15 @@ export function isAssetFilename(name: string): boolean {
   return ASSET_NAME_RE_SINGLE.test(name);
 }
 
+/** 媒体附件扩展名（音频/视频——应用内嵌播放；非媒体走系统打开）。桌面/移动端共用。 */
+const MEDIA_EXT_SET = new Set(["mp3", "wav", "m4a", "aac", "flac", "ogg", "oga", "mp4", "mov", "mkv", "avi", "webm", "m4v", "wma", "wmv", "flv", "mid", "midi"]);
+
+/** 文件名是否为媒体附件（音频/视频）。 */
+export function isMediaFilename(filename: string): boolean {
+  const i = filename.lastIndexOf(".");
+  return i >= 0 ? MEDIA_EXT_SET.has(filename.slice(i + 1).toLowerCase()) : false;
+}
+
 /** 提取正文中引用的资产文件名（去重）。 */
 export function extractAssetRefs(content: string): Set<string> {
   return new Set([...content.matchAll(ASSET_NAME_RE)].map((match) => match[0]));

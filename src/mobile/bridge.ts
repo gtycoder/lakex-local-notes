@@ -700,12 +700,6 @@ export const bridge = {
     return row ? rowToNote(row) : null;
   },
 
-  /** D8：读取已下载资产字节（内存态，同步；本地资源服务与附件打开共用）。 */
-  getAssetBytes(noteId: string, filename: string): Uint8Array | null {
-    const bytes = assets.get(noteId + "/" + filename);
-    return bytes ?? null;
-  },
-
   /** Phase 0B-5：搜索 fallback（sql.js 无 FTS5 → LIKE；标题+正文，参数化 + ESCAPE）。 */
   async searchNotes(query: string): Promise<SearchResult[]> {
     const pattern = buildLikePattern(query);

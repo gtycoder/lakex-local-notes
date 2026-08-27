@@ -642,7 +642,8 @@ export function createLakeDocument(
         // audio + video 卡都覆盖：两者初次渲染都可能撞上 AssetServer 启动竞态（error 4）
         const cards = document.querySelectorAll('ne-card[name="audio"], NE-CARD[data-card-name="audio"], ne-card[name="video"], NE-CARD[data-card-name="video"]');
         if (cards.length === 0) {
-          allReady = false; // 卡尚未渲染（setDocument 异步）——继续等待
+          // 卡尚未渲染（setDocument 异步）——前几轮继续等待；之后无媒体卡则停止（避免白跑）
+          allReady = tries >= 5;
         } else {
           cards.forEach((card) => {
             // 播放器已渲染但加载失败（server 启动竞态/瞬时失败 → networkState 3 + error）→ 重载

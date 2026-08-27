@@ -16,7 +16,8 @@ import { useOutline } from "../outline/useOutline";
 import { native } from "../../lib/native";
 import { attachImagePreviewClick } from "./imagePreview";
 import { ImageLightbox } from "./ImageLightbox";
-import { attachFileCardClick, buildAttachmentPreviewItem, openAttachmentPreview } from "../attachment/attachmentPreviewController";
+import { attachFileCardClick, buildAttachmentPreviewItem, openAttachmentPreview, createCardHoverResidueCleaner } from "../attachment/attachmentPreviewController";
+import { isMediaFilename } from "../../core/assetNaming.js";
 import { AttachmentPreview } from "../attachment/AttachmentPreview";
 
 export interface EditorTabProps {
@@ -547,21 +548,17 @@ export function EditorTab({ noteId, content, visible, tocEnabled, onChange, pref
     healObserver?.observe(host, { childList: true, subtree: true });
     scheduleHealCheck(900);
     // 点击任意位置清理 Lake 卡片 hover 残留（mouseleave 被系统应用/遮罩吞掉 → 背景一直着色）
-    const clearCardHoverResidue = (): void => {
-      try { host.querySelectorAll(".ne-card-hovered").forEach((el) => el.classList.remove("ne-card-hovered")); } catch { /* 忽略 */ }
-    };
-    host.addEventListener("pointerdown", clearCardHoverResidue, true);
+    const detachHoverCleaner = createCardHoverResidueCleaner(host);
 
     // 图片点击放大预览（桌面编辑/锁定态共用）：宿主级点击监听 + 共享 Lightbox
     const detachImagePreview = attachImagePreviewClick(host);
     // 附件：file 卡片点击 → 媒体内嵌播放 overlay；非媒体直接系统应用打开（少预览弹窗，对齐移动端）
-    const MEDIA_EXT_RE = /\.(mp3|wav|m4a|aac|flac|ogg|mp4|mov|mkv|avi|webm|m4v|wma|midi?)$/i;
     const detachFileCard = attachFileCardClick(host, (src, name, size) => {
       const item = buildAttachmentPreviewItem(src, name, size);
       const openSystem = (it: typeof item): void => {
         if (it.ref) void native.openAttachment(it.ref.noteId, it.ref.filename).then((r) => { if (!r.ok) console.warn("[attach] 打开失败:", r.error); });
       };
-      if (MEDIA_EXT_RE.test(name)) {
+      if (isMediaFilename(name)) {
         // 媒体附件：应用内嵌播放（audio/video 元素，不跳系统浏览器）
         openAttachmentPreview(item, openSystem, (it) => { if (it.ref) void native.showAttachmentInFolder(it.ref.noteId, it.ref.filename); });
         return;
@@ -571,6 +568,7 @@ export function EditorTab({ noteId, content, visible, tocEnabled, onChange, pref
     });
 
     return () => {
+      detachHoverCleaner();
       detachImagePreview();
       detachFileCard();
       window.clearTimeout(boardRestoreTimer);

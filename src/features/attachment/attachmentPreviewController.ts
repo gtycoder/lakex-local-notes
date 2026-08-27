@@ -104,6 +104,21 @@ function readFileCardData(start: HTMLElement, card: HTMLElement): { src: string;
 }
 
 /**
+ * 宿主级「点击任意位置清理 Lake 卡片 hover 残留」绑定（桌面/移动端共用）：
+ * mouseleave 事件在打开系统应用/播放器遮罩或快速点击时可能被吞，ne-card-hovered 残留 →
+ * 卡片背景一直着色。pointerdown 即清理；返回的清理函数用于移除监听。
+ */
+export function createCardHoverResidueCleaner(host: HTMLElement): () => void {
+  const clean = (): void => {
+    try {
+      host.querySelectorAll(".ne-card-hovered").forEach((el) => el.classList.remove("ne-card-hovered"));
+    } catch { /* 忽略 */ }
+  };
+  host.addEventListener("pointerdown", clean, true);
+  return () => host.removeEventListener("pointerdown", clean, true);
+}
+
+/**
  * 给编辑器宿主挂文件卡片点击监听（桌面/移动端共用）。
  * 命中 file 卡片的文件芯片（.ne-card-file：图标/文件名/大小区域）或链接/按钮时
  * 解析 src（fiber cardData → 兜底 href）→ onOpen。不 preventDefault 其它区域，

@@ -93,7 +93,8 @@ public final class AssetServer {
             String requestLine = reader.readLine();
             if (requestLine == null) return;
             String[] parts = requestLine.split(" ");
-            if (parts.length < 2 || !"GET".equalsIgnoreCase(parts[0])) {
+            boolean isHead = "HEAD".equalsIgnoreCase(parts[0]);
+            if (parts.length < 2 || (!"GET".equalsIgnoreCase(parts[0]) && !isHead)) {
                 writeError(out, 405, "method not allowed");
                 return;
             }
@@ -187,28 +188,30 @@ public final class AssetServer {
             head.append("Cache-Control: public, max-age=31536000, immutable\r\n");
             head.append("Connection: close\r\n\r\n");
             out.write(head.toString().getBytes(StandardCharsets.UTF_8));
-            if (isRange) {
-                // 部分读取（seek 场景），跳过 start 字节后流式输出 end-start+1 字节
-                try (FileInputStream in = new FileInputStream(file)) {
-                    long skip = start;
-                    while (skip > 0) {
-                        long s = in.skip(skip);
-                        if (s <= 0) break;
-                        skip -= s;
+            if (!isHead) {
+                if (isRange) {
+                    // 部分读取（seek 场景），跳过 start 字节后流式输出 end-start+1 字节
+                    try (FileInputStream in = new FileInputStream(file)) {
+                        long skip = start;
+                        while (skip > 0) {
+                            long s = in.skip(skip);
+                            if (s <= 0) break;
+                            skip -= s;
+                        }
+                        long remaining = end - start + 1;
+                        byte[] buf = new byte[BUFFER_SIZE];
+                        int n;
+                        while (remaining > 0 && (n = in.read(buf, 0, (int) Math.min(BUFFER_SIZE, remaining))) != -1) {
+                            out.write(buf, 0, n);
+                            remaining -= n;
+                        }
                     }
-                    long remaining = end - start + 1;
-                    byte[] buf = new byte[BUFFER_SIZE];
-                    int n;
-                    while (remaining > 0 && (n = in.read(buf, 0, (int) Math.min(BUFFER_SIZE, remaining))) != -1) {
-                        out.write(buf, 0, n);
-                        remaining -= n;
+                } else {
+                    try (FileInputStream in = new FileInputStream(file); BufferedInputStream bin = new BufferedInputStream(in, BUFFER_SIZE)) {
+                        byte[] buf = new byte[BUFFER_SIZE];
+                        int n;
+                        while ((n = bin.read(buf)) != -1) out.write(buf, 0, n);
                     }
-                }
-            } else {
-                try (FileInputStream in = new FileInputStream(file); BufferedInputStream bin = new BufferedInputStream(in, BUFFER_SIZE)) {
-                    byte[] buf = new byte[BUFFER_SIZE];
-                    int n;
-                    while ((n = bin.read(buf)) != -1) out.write(buf, 0, n);
                 }
             }
             out.flush();
