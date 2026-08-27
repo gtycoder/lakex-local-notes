@@ -491,6 +491,15 @@ export function createLakeDocument(
     },
     audio: {
       createUploadPromise: (request: unknown) => uploadLakeResource(request, noteId),
+      // audio 卡上传成功后 setId(audioId = canonical URL)，播放地址 = canonical（本地可达，持久）。
+      // 不配 queryAudioUrl 时 Lake 走 queryURL 轮询（应用无此端点）→ 永远"上传中"。
+      queryAudioUrl: (cardData: unknown) => {
+        const info = (cardData as { getAudioInfo?: () => { id?: string | null } } | null)?.getAudioInfo?.();
+        const url = info?.id ?? null;
+        return url
+          ? Promise.resolve({ audioUrl: url, downloadUrl: url })
+          : Promise.reject(new Error("audio url unavailable"));
+      },
     },
     slash: {
       cardSelect: {

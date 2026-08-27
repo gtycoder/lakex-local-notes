@@ -178,6 +178,10 @@ export interface ResourceUploadOutput {
   filename: string;
   mimeType: string;
   size: number;
+  /** Lake audio 卡上传成功读 video_id/audioId 作播放源 id（本应用 = canonical URL）；仅音频附件返回 */
+  audioId?: string;
+  /** Lake audio 卡 audioInfo.fileSize 显示字段 */
+  filesize?: number;
 }
 
 export interface OrphanAsset {
