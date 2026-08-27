@@ -243,10 +243,32 @@ public final class AssetServer {
         out.flush();
     }
 
+    /** Android MimeTypeMap 对部分音频返回 x- 变体（如 wav → audio/x-wav），WebView <audio> 不识别，
+     * 导致音频无 source 不加载——按标准 MIME 覆盖（与桌面 assetServer MIME_MAP 对齐）。 */
+    private static final java.util.Map<String, String> MIME_OVERRIDES = java.util.Map.ofEntries(
+        java.util.Map.entry("wav", "audio/wav"),
+        java.util.Map.entry("mp3", "audio/mpeg"),
+        java.util.Map.entry("m4a", "audio/mp4"),
+        java.util.Map.entry("aac", "audio/aac"),
+        java.util.Map.entry("flac", "audio/flac"),
+        java.util.Map.entry("ogg", "audio/ogg"),
+        java.util.Map.entry("oga", "audio/ogg"),
+        java.util.Map.entry("mp4", "video/mp4"),
+        java.util.Map.entry("m4v", "video/mp4"),
+        java.util.Map.entry("mov", "video/quicktime"),
+        java.util.Map.entry("webm", "video/webm"),
+        java.util.Map.entry("mkv", "video/x-matroska"),
+        java.util.Map.entry("avi", "video/x-msvideo"),
+        java.util.Map.entry("pdf", "application/pdf")
+    );
+
     private static String mimeFor(String name) {
         int dot = name.lastIndexOf('.');
         if (dot >= 0) {
-            String type = MimeTypeMap.getSingleton().getMimeTypeFromExtension(name.substring(dot + 1).toLowerCase());
+            String ext = name.substring(dot + 1).toLowerCase();
+            String override = MIME_OVERRIDES.get(ext);
+            if (override != null) return override;
+            String type = MimeTypeMap.getSingleton().getMimeTypeFromExtension(ext);
             if (type != null) return type;
         }
         return "application/octet-stream";
