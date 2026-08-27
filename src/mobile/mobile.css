@@ -131,6 +131,11 @@ body { font-family: -apple-system, "PingFang SC", "Noto Sans SC", sans-serif; ba
 .mobile-doc-body ne-card[name="video"] video,
 .mobile-doc-body NE-CARD[data-card-name="video"] video,
 .mobile-doc-body .attachment-preview video { background: #f2f3f5; }
+/* 视频未播放时不显示原生大播放三角（保留 controls 的进度条/暂停等；Android WebView 部分支持） */
+.mobile-doc-body ne-card[name="video"] video::-webkit-media-controls-play-button,
+.mobile-doc-body NE-CARD[data-card-name="video"] video::-webkit-media-controls-play-button,
+.mobile-doc-body ne-card[name="video"] video::-webkit-media-controls-start-playback-button,
+.mobile-doc-body NE-CARD[data-card-name="video"] video::-webkit-media-controls-start-playback-button { display: none !important; }
 /* 只读/编辑文档左右留白（手机窄屏适配）：Lake 编辑器全宽铺满贴边，加安全留白 */
 .mobile-doc-body .lake-editor { padding-left: 14px; padding-right: 14px; }
 /* 编辑态正文宽度自适应（对齐 viewer 手机形态，不左右滑动/偏移）：
