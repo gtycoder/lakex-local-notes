@@ -110,31 +110,23 @@ export function HomePage(props: HomePageProps) {
   );
 }
 
-/** 小记卡片：previewText + 首图缩略图（BLOB → objectURL）。 */
+/** 小记卡片：previewText + 首图缩略图（canonical URL 直显——本地 AssetServer 服务 quick-notes/）。 */
 function QuickNoteCard({ note, onEdit }: { note: MobileQuickNote; onEdit: () => void }) {
   const [thumbUrl, setThumbUrl] = useState<string | null>(null);
 
   useEffect(() => {
     let alive = true;
-    let url: string | null = null;
     (async () => {
       try {
         const full = await bridge.readQuickNote(note.id);
         const first = full?.content.images?.[0];
         if (first && alive) {
-          const bytes = await bridge.getQuickNoteImage(note.id, first.filename);
-          if (bytes && alive) {
-            const blob = new Blob([bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer], { type: first.mimeType });
-            url = URL.createObjectURL(blob);
-            setThumbUrl(url);
-          }
+          // 与桌面端一致的 canonical 形态：http://127.0.0.1:19876/quick-notes/{id}/{file}
+          setThumbUrl(`http://127.0.0.1:19876/quick-notes/${note.id}/${encodeURIComponent(first.filename)}`);
         }
       } catch { /* 单卡缩略图失败忽略 */ }
     })();
-    return () => {
-      alive = false;
-      if (url) URL.revokeObjectURL(url);
-    };
+    return () => { alive = false; };
   }, [note.id]);
 
   return (

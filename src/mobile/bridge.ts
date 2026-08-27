@@ -524,6 +524,24 @@ export const bridge = {
     } catch (e) {
       console.warn("[mobile] 恢复资产失败（可重新同步）:", e);
     }
+    // 小记图片落盘迁移（canonical 直显需要文件存在；BLOB 表是真相，缺失文件才写，幂等）
+    try {
+      const d = db!;
+      const rows = d.prepare("SELECT quick_note_id, filename, bytes FROM quick_note_assets").all() as Array<{ quick_note_id: string; filename: string; bytes: Uint8Array }>;
+      let migrated = 0;
+      for (const row of rows) {
+        const key = "quick-notes/" + row.quick_note_id + "/" + row.filename;
+        try {
+          const existing = await loadAssetBytesFs(key);
+          if (existing) continue;
+          await saveAssetBytesFs(key, row.bytes);
+          migrated++;
+        } catch { /* 单张失败跳过（BLOB 表仍在，仅显示降级） */ }
+      }
+      if (migrated > 0) console.log("[mobile] 小记图片落盘迁移:", migrated);
+    } catch (e) {
+      console.warn("[mobile] 小记图片迁移失败:", e);
+    }
   },
 
   // ---- 目录树 CRUD（Phase 0B：对齐共享 TreeRepository 接口，§20 ports.ts） ----
@@ -756,6 +774,16 @@ export const bridge = {
           });
         }
       })();
+      // 落盘小记图片文件（canonical URL http://127.0.0.1:19876/quick-notes/{id}/{file} 由本地
+      // AssetServer 服务，与桌面端一致——小记显示/缩略图走 canonical 直显，不再 blob 注入）。
+      // BLOB 表仍是同步/恢复的字节真相；文件仅供显示，落盘失败不阻断保存。
+      for (const f of imageFiles) {
+        try {
+          await saveAssetBytesFs("quick-notes/" + id + "/" + f.filename, f.bytes);
+        } catch (e) {
+          console.warn("[mobile] 小记图片落盘失败（显示降级）:", e);
+        }
+      }
       await saveSnapshot(d.exportBytes());
       return id;
     });

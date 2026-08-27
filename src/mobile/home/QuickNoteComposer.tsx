@@ -49,7 +49,8 @@ export function QuickNoteComposer({ editNote, onSaved, onCancel }: QuickNoteComp
     urlsRef.current = [];
   }, []);
 
-  // 编辑态：从 BLOB 读回已有图片字节
+  // 编辑态：从 BLOB 读回已有图片字节（保存用）；预览走 canonical URL 直显（本地 AssetServer
+  // 服务 quick-notes/，与桌面一致），加载失败时 onError 回退 BLOB 字节的 objectURL
   useEffect(() => {
     if (!editNote) return;
     let alive = true;
@@ -59,7 +60,14 @@ export function QuickNoteComposer({ editNote, onSaved, onCancel }: QuickNoteComp
         try {
           const bytes = await bridge.getQuickNoteImage(editNote.id, img.filename);
           if (bytes && alive) {
-            loaded.push({ filename: img.filename, mimeType: img.mimeType, width: img.width, height: img.height, bytes, url: makeUrl(bytes, img.mimeType) });
+            loaded.push({
+              filename: img.filename,
+              mimeType: img.mimeType,
+              width: img.width,
+              height: img.height,
+              bytes,
+              url: `http://127.0.0.1:19876/quick-notes/${editNote.id}/${encodeURIComponent(img.filename)}`,
+            });
           }
         } catch { /* 单张读失败跳过 */ }
       }
@@ -133,7 +141,17 @@ export function QuickNoteComposer({ editNote, onSaved, onCancel }: QuickNoteComp
         <div className="mobile-qn-images">
           {[...existing, ...images].map((img, i) => (
             <figure key={img.url} className="mobile-qn-img">
-              <img src={img.url} alt={img.filename} />
+              <img
+                src={img.url}
+                alt={img.filename}
+                onError={(e) => {
+                  // canonical 加载失败（文件缺失）→ 回退 BLOB 字节 objectURL
+                  const target = e.currentTarget;
+                  if (target.src.startsWith("http://127.0.0.1:19876") && img.bytes) {
+                    target.src = makeUrl(img.bytes, img.mimeType);
+                  }
+                }}
+              />
               <button type="button" onClick={() => removeImage(i)} aria-label="移除图片"><X size={14} /></button>
             </figure>
           ))}
