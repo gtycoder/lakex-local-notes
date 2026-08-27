@@ -483,6 +483,15 @@ export function createLakeDocument(
     file: {
       createUploadPromise: (request: unknown) => uploadLakeResource(request, noteId),
     },
+    // 视频/音频卡片：必须配 createUploadPromise，否则 Lake 走默认 uploadFileURL（/api/upload/video，
+    // 应用内不存在）→ 上传失败/一直"上传中"。uploadLakeResource 对非图片 File 走附件落盘
+    // （note-assets + canonical URL），video/audio 卡片 src=canonical 本地可达、持久可加载。
+    video: {
+      createUploadPromise: (request: unknown) => uploadLakeResource(request, noteId),
+    },
+    audio: {
+      createUploadPromise: (request: unknown) => uploadLakeResource(request, noteId),
+    },
     slash: {
       cardSelect: {
         general: {
