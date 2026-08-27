@@ -546,6 +546,11 @@ export function EditorTab({ noteId, content, visible, tocEnabled, onChange, pref
     host.addEventListener("focusout", onEditorFocusOut, true);
     healObserver?.observe(host, { childList: true, subtree: true });
     scheduleHealCheck(900);
+    // 点击任意位置清理 Lake 卡片 hover 残留（mouseleave 被系统应用/遮罩吞掉 → 背景一直着色）
+    const clearCardHoverResidue = (): void => {
+      try { host.querySelectorAll(".ne-card-hovered").forEach((el) => el.classList.remove("ne-card-hovered")); } catch { /* 忽略 */ }
+    };
+    host.addEventListener("pointerdown", clearCardHoverResidue, true);
 
     // 图片点击放大预览（桌面编辑/锁定态共用）：宿主级点击监听 + 共享 Lightbox
     const detachImagePreview = attachImagePreviewClick(host);

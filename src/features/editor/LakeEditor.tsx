@@ -66,6 +66,13 @@ export function LakeEditor({ noteId, content, mode = "editor", tocEnabled, onCha
     host.addEventListener("mousedown", preventCardBlur, true);
     host.addEventListener("copy", copyRichSelection, true);
     host.addEventListener("paste", pasteHandler, true);
+    // 点击任意位置清理 Lake 卡片 hover 残留：鼠标离开卡片的 mouseleave 事件在打开
+    // 系统应用/播放器遮罩或快速点击时可能被吞，ne-card-hovered 残留 → 卡片背景一直着色。
+    // 点击（pointerdown）即清理，随后鼠标再悬停卡片会由 Lake 的 hover 逻辑正常重新加亮。
+    const clearCardHoverResidue = (): void => {
+      try { host.querySelectorAll(".ne-card-hovered").forEach((el) => el.classList.remove("ne-card-hovered")); } catch { /* 忽略 */ }
+    };
+    host.addEventListener("pointerdown", clearCardHoverResidue, true);
     // 图片点击放大预览（桌面/移动端共用）：捕获阶段监听 img.ne-image 点击，
     // 收集文档内全部图片（画廊）打开共享 Lightbox。不 preventDefault——
     // Lake 自身的卡片选中/编辑行为照常，预览作为叠加层展示。
@@ -128,6 +135,7 @@ export function LakeEditor({ noteId, content, mode = "editor", tocEnabled, onCha
       host.removeEventListener("mousedown", preventCardBlur, true);
       host.removeEventListener("copy", copyRichSelection, true);
       host.removeEventListener("paste", pasteHandler, true);
+      host.removeEventListener("pointerdown", clearCardHoverResidue, true);
       detachImagePreview();
       detachFileCard();
       window.clearTimeout(tocRefreshTimer);
