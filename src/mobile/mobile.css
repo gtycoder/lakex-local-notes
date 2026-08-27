@@ -123,6 +123,14 @@ body { font-family: -apple-system, "PingFang SC", "Noto Sans SC", sans-serif; ba
 
 .mobile-done-btn { border: none; background: #3575f0; color: #fff; border-radius: 8px; padding: 6px 14px; font-size: 14px; cursor: pointer; }
 .mobile-doc-body { flex: 1; overflow-y: auto; background: #fff; padding-bottom: calc(40px + env(safe-area-inset-bottom, 0px)); }
+/* 音频/视频卡展示优化：
+   1) audio 卡播放器就绪（兜底异步设置）前的 error 状态（"音频文件不能播放"/版权链接）先隐藏，
+      避免进入文档/切编辑态时闪现不可用文案——兜底成功后播放器自然替换；
+   2) video 未播放时浏览器默认大黑块 → 浅色背景占位 */
+.mobile-doc-body .ne-card-audio-error { display: none; }
+.mobile-doc-body ne-card[name="video"] video,
+.mobile-doc-body NE-CARD[data-card-name="video"] video,
+.mobile-doc-body .attachment-preview video { background: #f2f3f5; }
 /* 只读/编辑文档左右留白（手机窄屏适配）：Lake 编辑器全宽铺满贴边，加安全留白 */
 .mobile-doc-body .lake-editor { padding-left: 14px; padding-right: 14px; }
 /* 编辑态正文宽度自适应（对齐 viewer 手机形态，不左右滑动/偏移）：
