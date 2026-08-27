@@ -219,6 +219,17 @@ export function DocumentPage(props: DocumentPageProps) {
           const ed = editorRef.current;
           if (!file || !ed) return;
           try { lakeBridge(ed)?.renderer?.execCommand?.("insertFiles" as never, [file]); } catch { /* 忽略 */ }
+          // 上传/插入后卡片异步出现——编辑态 blob 注入（cardBlobInject 只扫初始内容+动态补扫，
+          // 但 observer 已停）→ 延迟重试注入新图片（src=canonical 不可达 → blob 显示）
+          let tries = 0;
+          const tryInject = (): void => {
+            tries++;
+            try {
+              const n = cardInjector.inject(ed);
+              if (n === 0 && tries < 15) window.setTimeout(tryInject, 250);
+            } catch { /* 注入失败不阻断 */ }
+          };
+          window.setTimeout(tryInject, 300);
         }}
       />
     </div>

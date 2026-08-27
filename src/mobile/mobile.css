@@ -135,14 +135,20 @@ body { font-family: -apple-system, "PingFang SC", "Noto Sans SC", sans-serif; ba
 .mobile-doc-body { flex: 1; overflow-y: auto; background: #fff; padding-bottom: calc(40px + env(safe-area-inset-bottom, 0px)); }
 /* 只读/编辑文档左右留白（手机窄屏适配）：Lake 编辑器全宽铺满贴边，加安全留白 */
 .mobile-doc-body .lake-editor { padding-left: 14px; padding-right: 14px; }
-/* 编辑态正文宽度自适应（对齐 viewer 手机形态，不左右滑动）：
-   Lake 编辑态 ne-editor-wrap-content 固定 440px、fixed 布局 max-width 750px——手机屏幕溢出 */
-.mobile-doc-body .ne-editor-wrap-content { flex: 1; width: 100%; max-width: 100%; min-width: 0; margin: 0; }
-.mobile-doc-body .ne-editor-wrap { justify-content: flex-start; }
+/* 编辑态正文宽度自适应（对齐 viewer 手机形态，不左右滑动/偏移）：
+   Lake 编辑态容器有桌面限宽——fixed 模式 content 440px、adapt 模式外层 min-width 500px +
+   engine 左右 40px padding——手机屏幕全部溢出导致整体偏移。统一压回 100%。 */
+.mobile-doc-body .ne-editor-wrap-content,
+.mobile-doc-body .ne-editor-outer-wrap-box,
+.mobile-doc-body .ne-editor-wrap-box,
+.mobile-doc-body .ne-editor-extra-box,
+.mobile-doc-body .ne-editor-box { width: 100%; max-width: 100%; min-width: 0; }
+.mobile-doc-body .ne-editor-wrap-content { flex: 1; margin: 0; }
+.mobile-doc-body .ne-editor-wrap { overflow-x: hidden; }
+.mobile-doc-body .ne-engine { padding-left: 0; padding-right: 0; }
 .mobile-doc-body .ne-layout-mode-fixed:not(.ne-normal-toc):not(.ne-ui-sidebar-visible) .ne-engine > * { max-width: 100%; }
 .mobile-doc-body .ne-layout-mode-fixed .ne-editor-extra-box,
 .mobile-doc-body .ne-layout-mode-fixed .ne-editor-footer-box { max-width: 100%; padding-left: 0; padding-right: 0; }
-.mobile-doc-body .ne-editor-wrap { overflow-x: hidden; }
 
 /* Drawer */
 .mobile-drawer-mask { position: fixed; inset: 0; background: rgba(0,0,0,.4); z-index: 40; }

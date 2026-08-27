@@ -122,12 +122,13 @@ export function createCardBlobInjector(content: string): CardBlobInjectResult {
   const cards = scanImageCards(content);
   const fileCards = scanFileCardsForInject(content);
   const blobToCanonical = new Map<string, string>();
-  for (const c of [...cards, ...fileCards]) {
+  const registerBlob = (c: { blobUrl: string | null; canonicalSrc: string }): void => {
     if (c.blobUrl) {
       blobToCanonical.set(c.blobUrl, c.canonicalSrc);
       globalBlobToCanonical.set(c.blobUrl, c.canonicalSrc);
     }
-  }
+  };
+  for (const c of [...cards, ...fileCards]) registerBlob(c);
   const blobUrls = [...cards, ...fileCards].map((c) => c.blobUrl).filter((u): u is string => u !== null);
   /** 已注入的卡片（按 canonicalSrc 幂等）：MutationObserver/多次尝试重复触发不再重注入，避免闪烁。 */
   const injectedIds = new Set<string>();
@@ -135,6 +136,22 @@ export function createCardBlobInjector(content: string): CardBlobInjectResult {
   return {
     inject(editor) {
       let injected = 0;
+      // 动态扫描：上传/粘贴新增的图片不在初始 content 里（编辑中插入）——每次 inject 从编辑器
+      // 当前内容补扫新卡片（getDocument 输出已注入的 blob 无法解析 canonical → 天然跳过不重复注入）。
+      try {
+        if (typeof editor?.getDocument === "function") {
+          const live = editor.getDocument("text/lake");
+          if (typeof live === "string") {
+            for (const lc of scanImageCards(live)) {
+              if (!injectedIds.has(lc.canonicalSrc) && !cards.some((k) => k.canonicalSrc === lc.canonicalSrc)) {
+                registerBlob(lc);
+                cards.push(lc);
+                blobUrls.push(lc.blobUrl ?? "");
+              }
+            }
+          }
+        }
+      } catch { /* 动态扫描失败不影响初始注入 */ }
       // 从 DOM 拿 image + file 卡片节点（NE-CARD）
       const cardEls = Array.from(document.querySelectorAll(
         "NE-CARD[data-card-name=\"image\"], ne-card[name=\"image\"], NE-CARD[data-card-name=\"file\"], ne-card[name=\"file\"]",
