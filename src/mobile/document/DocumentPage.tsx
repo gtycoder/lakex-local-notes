@@ -51,6 +51,8 @@ export function DocumentPage(props: DocumentPageProps) {
   const { note, content, title, editing, onTitleChange, onContentChange, onToggleEdit, onBack, onDelete, documents, onOpenDocument } = props;
   const editorRef = useRef<LakeEditorInstance | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  /** 编辑态持久注入观察者（编辑器销毁时断开；见 onEditorReady） */
+  const injectObserver = useRef<MutationObserver | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [outlineOpen, setOutlineOpen] = useState(false);
   const [docListOpen, setDocListOpen] = useState(false);
@@ -157,35 +159,39 @@ export function DocumentPage(props: DocumentPageProps) {
             onContentChange(restored);
           }}
           onEditorReady={(noteId, editor) => {
+            (window as unknown as Record<string, unknown>).__mobileEditor = editor;
             editorRef.current = editor;
-            if (editor && cardInjector) {
-              // 每次编辑器重建（viewer↔editor 切换/重开）重置幂等集：injectedIds 只限同一实例内去重，
-              // 否则重建后的新卡片 DOM 会被上一次注入的 canonicalSrc 挡住，永不注入（图片破裂修复的回归）。
-              cardInjector.reset();
-              // 图片破裂优化：注入时机从"800ms 后"提前到"卡片 DOM 出现即注入"——
-              // 立即尝试一次（DOM 可能已就绪）+ MutationObserver 监听 NE-CARD 出现 + 短间隔兜底重试。
-              // inject 幂等（cardBlobInject 内按 canonicalSrc 去重），Observer/重试重复触发无副作用。
-              let attempts = 0;
-              const tryInject = (): number => {
-                attempts++;
-                const n = cardInjector.inject(editor);
-                if (n === 0 && attempts < 20) window.setTimeout(tryInject, 120);
-                return n;
-              };
-              let observer: MutationObserver | null = null;
-              if (typeof MutationObserver !== "undefined") {
-                observer = new MutationObserver(() => {
-                  const n = cardInjector.inject(editor);
-                  if (n > 0 && observer) { observer.disconnect(); observer = null; }
-                });
-                observer.observe(document.body, { childList: true, subtree: true });
-              }
-              tryInject();
-              // 兜底：3s 后停掉 Observer 与重试（防止残留监听）
-              window.setTimeout(() => {
-                if (observer) { observer.disconnect(); observer = null; }
-                cardInjector.inject(editor);
-              }, 3000);
+            // 编辑器销毁（viewer↔editor 切换/卸载）：断开持久注入观察者
+            if (!editor) {
+              if (injectObserver.current) { injectObserver.current.disconnect(); injectObserver.current = null; }
+              return;
+            }
+            if (!cardInjector) return;
+            cardInjector.reset();
+            // 图片破裂优化：注入时机从"800ms 后"提前到"卡片 DOM 出现即注入"——
+            // 立即尝试一次（DOM 可能已就绪）+ 短间隔兜底重试（卡片懒渲染未就绪）。
+            // inject 幂等（cardBlobInject 内按元素当前 src 判定），重复触发无副作用。
+            let attempts = 0;
+            const tryInject = (): number => {
+              attempts++;
+              const n = cardInjector.inject(editor);
+              if (n === 0 && attempts < 20) window.setTimeout(tryInject, 120);
+              return n;
+            };
+            tryInject();
+            // 编辑态持久观察：新卡片出现（childList）或 Lake 重写卡片 value（attributes，
+            // 上传完成会把 src 从 blob/临时值写回 canonical）→ 重新注入。live-src 幂等保证
+            // 注入后（src=blob）不再触发，不会死循环。viewer 不挂观察者（displayContent 已注入）。
+            // 此前 Observer 首次注入成功就断开 + 3s 兜底，导致"上传完成后 Lake 重写 canonical"
+            // 无人再注入 → 图片空白；现在观察者跟随编辑生命周期（onEditorReady(null) 断开）。
+            if (editing) {
+              if (injectObserver.current) { injectObserver.current.disconnect(); injectObserver.current = null; }
+              const obs = new MutationObserver(() => {
+                try { cardInjector.inject(editor); } catch { /* 注入失败不阻断 */ }
+              });
+              // 监听 value（Lake 重写卡片值）+ src（上传完成 img 变成 canonical）属性变化
+              obs.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ["value", "src"] });
+              injectObserver.current = obs;
             }
           }}
           prefs={{ fontSize: 18, showToolbar: !editing, disableVirtualRendering: true, attachment: attachmentPrefs }}
@@ -219,17 +225,10 @@ export function DocumentPage(props: DocumentPageProps) {
           const ed = editorRef.current;
           if (!file || !ed) return;
           try { lakeBridge(ed)?.renderer?.execCommand?.("insertFiles" as never, [file]); } catch { /* 忽略 */ }
-          // 上传/插入后卡片异步出现——编辑态 blob 注入（cardBlobInject 只扫初始内容+动态补扫，
-          // 但 observer 已停）→ 延迟重试注入新图片（src=canonical 不可达 → blob 显示）
-          let tries = 0;
-          const tryInject = (): void => {
-            tries++;
-            try {
-              const n = cardInjector.inject(ed);
-              if (n === 0 && tries < 15) window.setTimeout(tryInject, 250);
-            } catch { /* 注入失败不阻断 */ }
-          };
-          window.setTimeout(tryInject, 300);
+          // 上传/插入后卡片异步出现 + Lake 上传完成重写 canonical → 编辑态持久 Observer
+          // （onEditorReady 挂载，监听 childList + value 属性）会自动重新注入；这里只兜底一次，
+          // 防 Observer 尚未就绪的边界（inject 按元素当前 src 幂等，重复调用无副作用）。
+          window.setTimeout(() => { try { cardInjector.inject(ed); } catch { /* 忽略 */ } }, 800);
         }}
       />
     </div>
