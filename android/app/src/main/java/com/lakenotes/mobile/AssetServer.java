@@ -160,7 +160,9 @@ public final class AssetServer {
                 else { isRange = false; }
             }
             if (isRange && start == -2) { isRange = false; } // 非法 start
-            if (isRange && end == -2) { end = length - 1; } // bytes=start- → 到末尾
+            // bytes=start-（end 未指定/-1/-2）→ 到文件末尾。此前 end 保持 -1 时
+            // Content-Length = end-start+1 = 0 → 媒体元素拿到 0 字节 → SRC_NOT_SUPPORTED
+            if (isRange && end < 0) { end = length - 1; }
             if (isRange && start >= length) {
                 // 范围越界 → 416（Content-Range: bytes */length）
                 writeErrorWithRange(out, length);

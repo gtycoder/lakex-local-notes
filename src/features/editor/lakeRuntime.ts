@@ -639,21 +639,45 @@ export function createLakeDocument(
     const tryEnsureAudio = (tries: number): void => {
       let allReady = true;
       try {
-        const cards = document.querySelectorAll('ne-card[name="audio"], NE-CARD[data-card-name="audio"]');
+        // audio + video 卡都覆盖：两者初次渲染都可能撞上 AssetServer 启动竞态（error 4）
+        const cards = document.querySelectorAll('ne-card[name="audio"], NE-CARD[data-card-name="audio"], ne-card[name="video"], NE-CARD[data-card-name="video"]');
         if (cards.length === 0) {
           allReady = false; // 卡尚未渲染（setDocument 异步）——继续等待
         } else {
           cards.forEach((card) => {
-            if (card.querySelector("audio")) return;
+            // 播放器已渲染但加载失败（server 启动竞态/瞬时失败 → networkState 3 + error）→ 重载
+            const mediaEl = card.querySelector("audio, video") as HTMLMediaElement | null;
+            if (mediaEl && mediaEl.networkState === 3 && mediaEl.error) {
+              const s = mediaEl.getAttribute("src");
+              if (s) { mediaEl.src = s; mediaEl.load(); }
+            }
+            if (card.querySelector("audio, video")) return;
+            if (card.getAttribute("name") === "video" || card.getAttribute("data-card-name") === "video") return; // video 卡无 onTranscodeSuccess 流程
             allReady = false;
-            const inst = (card as unknown as { _neRef?: { _virtualNode?: { _instance?: { cardData?: unknown; _cardData?: unknown; onTranscodeSuccess?: (e: unknown) => void } } } })._neRef?._virtualNode?._instance;
+            // 编辑器实例在 _virtualNode._instance；viewer（只读）实例在 _neRef._instance
+            const inst = (card as unknown as { _neRef?: { _virtualNode?: { _instance?: { cardData?: unknown; _cardData?: unknown; onTranscodeSuccess?: (e: unknown) => void }; }; _instance?: { cardData?: unknown; _cardData?: unknown; onTranscodeSuccess?: (e: unknown) => void } } })._neRef?._virtualNode?._instance
+              ?? (card as unknown as { _neRef?: { _instance?: { cardData?: unknown; _cardData?: unknown; onTranscodeSuccess?: (e: unknown) => void } } })._neRef?._instance;
             const cd = inst?.cardData ?? inst?._cardData;
             const info = (cd as { getAudioInfo?: () => { id?: string | null } } | null | undefined)?.getAudioInfo?.();
             const url = info?.id;
             if (!url) return;
             const status = (cd as { getStatus?: () => string } | null | undefined)?.getStatus?.();
             if (status === "error") return;
-            inst?.onTranscodeSuccess?.({ success: true, data: { audio: url, origin: url } });
+            if (typeof inst?.onTranscodeSuccess === "function") {
+              inst.onTranscodeSuccess({ success: true, data: { audio: url, origin: url } });
+            } else {
+              // viewer 实例无 onTranscodeSuccess（Lake viewer audio 卡不跑查询流程）→
+              // 直接写 audioInfo.url = canonical + sync(true) + rerender（实测三者缺一不可：
+              // sync 触发渲染、rerender 传 audioUrl/uiStatus 给播放器组件）
+              const instAny = inst as { cardData?: { setAudioInfo?: (v: unknown) => void; sync?: (u: boolean) => void }; _cardUI?: { uiViewProxy?: { rerender?: (p: unknown) => void } }; _$cardUI?: { uiViewProxy?: { rerender?: (p: unknown) => void } } } | null | undefined;
+              const cd2 = instAny?.cardData;
+              if (cd2 && typeof cd2.setAudioInfo === "function") {
+                cd2.setAudioInfo({ ...info, url });
+                try { cd2.sync?.(true); } catch { /* 忽略 */ }
+              }
+              const ui = instAny?._cardUI ?? instAny?._$cardUI;
+              try { ui?.uiViewProxy?.rerender?.({ audioUrl: url, uiStatus: "transcoded" }); } catch { /* 忽略 */ }
+            }
           });
         }
       } catch { /* 单卡兜底失败不阻断 */ }
