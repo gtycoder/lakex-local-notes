@@ -549,14 +549,20 @@ export function EditorTab({ noteId, content, visible, tocEnabled, onChange, pref
 
     // 图片点击放大预览（桌面编辑/锁定态共用）：宿主级点击监听 + 共享 Lightbox
     const detachImagePreview = attachImagePreviewClick(host);
-    // 附件：file 卡片点击 → 打开/预览（方案 B）。桌面动作 = 系统默认应用打开 / 文件夹显示
+    // 附件：file 卡片点击 → 媒体内嵌播放 overlay；非媒体直接系统应用打开（少预览弹窗，对齐移动端）
+    const MEDIA_EXT_RE = /\.(mp3|wav|m4a|aac|flac|ogg|mp4|mov|mkv|avi|webm|m4v|wma|midi?)$/i;
     const detachFileCard = attachFileCardClick(host, (src, name, size) => {
       const item = buildAttachmentPreviewItem(src, name, size);
-      openAttachmentPreview(
-        item,
-        (it) => { if (it.ref) void native.openAttachment(it.ref.noteId, it.ref.filename).then((r) => { if (!r.ok) console.warn("[attach] 打开失败:", r.error); }); },
-        (it) => { if (it.ref) void native.showAttachmentInFolder(it.ref.noteId, it.ref.filename); },
-      );
+      const openSystem = (it: typeof item): void => {
+        if (it.ref) void native.openAttachment(it.ref.noteId, it.ref.filename).then((r) => { if (!r.ok) console.warn("[attach] 打开失败:", r.error); });
+      };
+      if (MEDIA_EXT_RE.test(name)) {
+        // 媒体附件：应用内嵌播放（audio/video 元素，不跳系统浏览器）
+        openAttachmentPreview(item, openSystem, (it) => { if (it.ref) void native.showAttachmentInFolder(it.ref.noteId, it.ref.filename); });
+        return;
+      }
+      // 非媒体附件：直接系统应用打开
+      openSystem(item);
     });
 
     return () => {

@@ -6,7 +6,7 @@ import { addAssetAccessToken, stripAssetAccessToken } from "../../lib/assetPort"
 import { getNativeErrorMessage } from "../../lib/nativeErrors";
 import { ImageLightbox } from "./ImageLightbox";
 import { attachImagePreviewClick } from "./imagePreview";
-import { attachFileCardClick, buildAttachmentPreviewItem, openAttachmentPreview } from "../attachment/attachmentPreviewController";
+import { attachFileCardClick, buildAttachmentPreviewItem, openAttachmentPreview, type AttachmentPreviewItem } from "../attachment/attachmentPreviewController";
 import { AttachmentPreview } from "../attachment/AttachmentPreview";
 import { isDesktop, native } from "../../lib/native";
 
@@ -71,29 +71,36 @@ export function LakeEditor({ noteId, content, mode = "editor", tocEnabled, onCha
     // Lake 自身的卡片选中/编辑行为照常，预览作为叠加层展示。
     // 注：不依赖 Lake 内置 allowClickToMaximize（该选项在本构建未传导到渲染层，实测无效）。
     const detachImagePreview = attachImagePreviewClick(host);
-    // 附件：file 卡片点击 → 打开/预览（桌面/移动端共用）。
-    // - 桌面：canonical URL 直接加载 + 系统应用打开/文件夹显示（弹预览 overlay）
-    // - 移动端 directOpen：点击**直接**系统应用打开（跳过 WebView 预览弹窗——本机能力无需中间层）
-    // - 移动端非 directOpen：canonical 预览 overlay + onOpenAttachment 打开（directOpen 直接系统打开）
+    // 附件：file 卡片点击 → 打开（桌面/移动端共用，媒体内嵌播放、非媒体系统打开）。
+    // - 媒体附件（音频/视频）：应用内嵌播放 overlay（AudioPreview 内联 <audio>/<video>，不跳系统浏览器）
+    // - 非媒体附件（PDF/Office/zip 等）：点击直接系统应用打开（跳过预览弹窗——本地文件无需中间层）
+    // - 桌面默认 directOpen（isDesktop）；移动端显式传 attachment.directOpen=true
     const attachment = prefs?.attachment;
+    const openAttachmentDefault = (it: AttachmentPreviewItem): void => {
+      if (it.ref) void native.openAttachment(it.ref.noteId, it.ref.filename).then((r) => { if (!r.ok) console.warn("[attach] 打开失败:", r.error); });
+    };
+    const showInFolder = (it: AttachmentPreviewItem): void => {
+      if (it.ref) void native.showAttachmentInFolder(it.ref.noteId, it.ref.filename);
+    };
+    const directOpen = attachment?.directOpen ?? isDesktop();
+    const MEDIA_EXT_RE = /\.(mp3|wav|m4a|aac|flac|ogg|mp4|mov|mkv|avi|webm|m4v|wma|midi?)$/i;
     const detachFileCard = attachFileCardClick(host, (src, name, size) => {
       const base = buildAttachmentPreviewItem(src, name, size);
-      if (attachment?.directOpen) {
-        attachment.onOpenAttachment?.(base);
-        return;
-      }
       const displaySrc = (attachment?.resolveDisplayUrl && base.ref)
         ? (attachment.resolveDisplayUrl(base.ref) ?? base.src)
         : base.src;
       const item = { ...base, src: displaySrc };
-      openAttachmentPreview(
-        item,
-        attachment?.onOpenAttachment ??
-          ((it) => { if (it.ref) void native.openAttachment(it.ref.noteId, it.ref.filename).then((r) => { if (!r.ok) console.warn("[attach] 打开失败:", r.error); }); }),
-        isDesktop()
-          ? ((it) => { if (it.ref) void native.showAttachmentInFolder(it.ref.noteId, it.ref.filename); })
-          : null,
-      );
+      // 媒体附件：内嵌播放 overlay（不跳系统浏览器）
+      if (MEDIA_EXT_RE.test(name)) {
+        openAttachmentPreview(item, attachment?.onOpenAttachment ?? openAttachmentDefault, isDesktop() ? showInFolder : null);
+        return;
+      }
+      // 非媒体附件：直接系统应用打开
+      if (directOpen) {
+        (attachment?.onOpenAttachment ?? openAttachmentDefault)(base);
+        return;
+      }
+      openAttachmentPreview(item, attachment?.onOpenAttachment ?? openAttachmentDefault, isDesktop() ? showInFolder : null);
     });
 
     let editor: LakeEditorInstance | null = null;

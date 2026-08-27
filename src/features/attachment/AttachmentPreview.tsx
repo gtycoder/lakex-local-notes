@@ -80,20 +80,20 @@ export function AttachmentPreview() {
         <button className="attachment-preview__btn attachment-preview__close" onClick={closeAttachmentPreview} aria-label="关闭"><X size={19} /></button>
       </div>
       <div className="attachment-preview__body">
-        {/* 桌面：PDF/音视频内联预览；移动端：所有附件统一「打开」面板（系统应用打开，文件已在本地） */}
+        {/* 媒体（audio/video）内联播放（桌面/移动端一致）；PDF 桌面内联、移动端系统打开；其余系统打开 */}
         {!isMobileNative && kind === "pdf" && (
           <embed src={item.src} type="application/pdf" className="attachment-preview__embed" />
         )}
-        {!isMobileNative && kind === "audio" && (
+        {kind === "audio" && (
           <div className="attachment-preview__media">
             <audio controls autoPlay src={item.src} className="attachment-preview__audio" />
             <p className="attachment-preview__hint">{item.name}</p>
           </div>
         )}
-        {!isMobileNative && kind === "video" && (
+        {kind === "video" && (
           <video controls autoPlay src={item.src} className="attachment-preview__video" />
         )}
-        {(isMobileNative || kind === "document" || kind === "archive" || kind === "other" || kind === "image") && (
+        {(isMobileNative || kind === "pdf" || kind === "document" || kind === "archive" || kind === "other" || kind === "image") && (
           <div className="attachment-preview__fallback">
             <Paperclip size={40} />
             <p className="attachment-preview__fallback-name">{item.name}</p>
