@@ -651,15 +651,6 @@ export function createLakeDocument(
               const s = mediaEl.getAttribute("src");
               if (s) { mediaEl.src = s; mediaEl.load(); }
             }
-            const vidEl = card.querySelector("video") as HTMLVideoElement | null;
-            if (vidEl && vidEl.controls) {
-              // 视频未播放时不显示原生大播放三角：初始无控件（无三角），点击播放时启用控件
-              // （进度条/暂停/音量）。CSS 隐藏伪元素对部分 WebView 无效，JS 控制更可靠。
-              vidEl.controls = false;
-              vidEl.addEventListener("click", () => {
-                if (vidEl.paused) { vidEl.controls = true; void vidEl.play(); }
-              }, { once: true });
-            }
             if (card.querySelector("audio, video")) return;
             if (card.getAttribute("name") === "video" || card.getAttribute("data-card-name") === "video") return; // video 卡无 onTranscodeSuccess 流程
             allReady = false;
