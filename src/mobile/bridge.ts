@@ -30,6 +30,8 @@ export interface POCNote {
   title: string;
   content: string;
   updatedAt: string;
+  /** 所属笔记本/分组 id（快捷切换目录用） */
+  parentId: string | null;
 }
 
 /** 移动端同步结果（P2-5，GPT 审计）：文档/小记分字段，便于 UI 分别展示进度与失败。 */
@@ -214,7 +216,7 @@ async function saveQuickNoteInternal(id: string, text: string, images: StoredQui
 }
 
 function rowToNote(r: Record<string, unknown>): POCNote {
-  return { id: String(r.id), title: String(r.title), content: String(r.content), updatedAt: String(r.updated_at) };
+  return { id: String(r.id), title: String(r.title), content: String(r.content), updatedAt: String(r.updated_at), parentId: r.parent_id ? String(r.parent_id) : null };
 }
 
 /** folders 行 → TreeNode（共享目录节点形状；统一 rename/setIcon/move 的映射避免重复）。 */
@@ -669,7 +671,7 @@ export const bridge = {
 
   async listNotes(): Promise<POCNote[]> {
     const d = await ensureDb();
-    const rows = d.prepare("SELECT id, title, content, updated_at FROM notes WHERE trashed_at IS NULL ORDER BY updated_at DESC").all();
+    const rows = d.prepare("SELECT id, title, content, updated_at, parent_id FROM notes WHERE trashed_at IS NULL ORDER BY updated_at DESC").all();
     return rows.map(rowToNote);
   },
 
@@ -835,7 +837,7 @@ export const bridge = {
     const id = crypto.randomUUID();
     const now = new Date().toISOString();
     await bridge.saveNote(id, title, INITIAL_LAKE_CONTENT, parentId);
-    return { id, title, content: INITIAL_LAKE_CONTENT, updatedAt: now };
+    return { id, title, content: INITIAL_LAKE_CONTENT, updatedAt: now, parentId };
   },
 
   /** 本地软删（入回收站）：同步时上传墓碑（删除压编辑） */

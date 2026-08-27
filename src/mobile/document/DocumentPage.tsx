@@ -1,8 +1,10 @@
 /** 文档页：LakeEditor viewer/editor + blob 注入 + 保存。Phase 1 复用 MobilePocApp 的注入/还原逻辑。 */
 import { EditorDock } from "../editor/EditorDock";
+import { OutlineSheet } from "../editor/OutlineSheet";
+import { DocListSheet, type DocListItem } from "../editor/DocListSheet";
 import { lakeBridge } from "../../features/editor/lakeRuntime";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeft, Pencil, Trash2 } from "lucide-react";
+import { ArrowLeft, Pencil, Trash2, ListTree, Files } from "lucide-react";
 import { LakeEditor } from "../../features/editor/LakeEditor";
 import { injectAssetBlobs } from "../blobInject";
 import { createCardBlobInjector } from "../cardBlobInject";
@@ -39,13 +41,19 @@ export interface DocumentPageProps {
   onToggleEdit: () => void;
   onBack: () => void;
   onDelete: () => void;
+  /** 当前笔记本文档列表（快捷切换目录用） */
+  documents?: DocListItem[];
+  /** 切换打开另一个文档 */
+  onOpenDocument?: (id: string) => void;
 }
 
 export function DocumentPage(props: DocumentPageProps) {
-  const { note, content, title, editing, onTitleChange, onContentChange, onToggleEdit, onBack, onDelete } = props;
+  const { note, content, title, editing, onTitleChange, onContentChange, onToggleEdit, onBack, onDelete, documents, onOpenDocument } = props;
   const editorRef = useRef<LakeEditorInstance | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+  const [outlineOpen, setOutlineOpen] = useState(false);
+  const [docListOpen, setDocListOpen] = useState(false);
 
   // 插入图片/附件：隐藏 file input 选文件 → Lake insertFiles 命令（走 createUploadPromise 上传 + 插入卡片）
   const insertFileViaInput = (accept: string) => {
@@ -124,11 +132,16 @@ export function DocumentPage(props: DocumentPageProps) {
         <div className="mobile-topbar-actions">
           {!editing ? (
             <>
+              <button className="mobile-icon-btn" onClick={() => setOutlineOpen(true)} aria-label="大纲"><ListTree size={20} /></button>
+              <button className="mobile-icon-btn" onClick={() => setDocListOpen(true)} aria-label="目录"><Files size={20} /></button>
               <button className="mobile-icon-btn" onClick={onToggleEdit} aria-label="编辑"><Pencil size={20} /></button>
               <button className="mobile-icon-btn" onClick={onDelete} aria-label="删除"><Trash2 size={19} /></button>
             </>
           ) : (
-            <button className="mobile-done-btn" onClick={onToggleEdit}>完成</button>
+            <>
+              <button className="mobile-icon-btn" onClick={() => setDocListOpen(true)} aria-label="目录"><Files size={20} /></button>
+              <button className="mobile-done-btn" onClick={onToggleEdit}>完成</button>
+            </>
           )}
         </div>
       </header>
@@ -187,6 +200,14 @@ export function DocumentPage(props: DocumentPageProps) {
         onInsertTable={() => {
           try { lakeBridge(editorRef.current ?? undefined)?.renderer?.execCommand?.("table" as never); } catch { /* 忽略 */ }
         }}
+      />
+      <OutlineSheet open={outlineOpen} editor={editorRef.current} onClose={() => setOutlineOpen(false)} />
+      <DocListSheet
+        open={docListOpen}
+        documents={documents ?? []}
+        activeId={note.id}
+        onPick={(id) => { setDocListOpen(false); onOpenDocument?.(id); }}
+        onClose={() => setDocListOpen(false)}
       />
       {toast && <div className="mobile-toast">{toast}</div>}
       <input

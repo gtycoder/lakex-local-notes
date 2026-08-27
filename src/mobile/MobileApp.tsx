@@ -103,6 +103,15 @@ export function MobileApp() {
 
   const notebooks = useMemo(() => treeNodes.filter((n) => n.nodeType === "notebook"), [treeNodes]);
   const notebookChildren = useCallback((id: string) => treeNodes.filter((n) => n.parentId === id), [treeNodes]);
+  // 当前笔记本文档列表（快捷切换目录：当前来源笔记本下的文档）
+  const notebookDocuments = useMemo(() => {
+    const nbId = documentOrigin;
+    if (!nbId) return [];
+    return notes
+      .filter((n) => n.parentId === nbId)
+      .map((n) => ({ id: n.id, title: n.title }))
+      .sort((a, b) => a.title.localeCompare(b.title, "zh"));
+  }, [notes, documentOrigin]);
 
   // 编辑保存（完成按钮/返回键共用）：saveNote 的 ON CONFLICT 同时更新 title+content+sync_state
   const saveEditing = useCallback(async () => {
@@ -210,6 +219,8 @@ export function MobileApp() {
           content={draft}
           title={draftTitle}
           editing={editing}
+          documents={notebookDocuments}
+          onOpenDocument={(id) => { void openDocument(id, "viewer", documentOrigin); }}
           onTitleChange={setDraftTitle}
           onContentChange={(c) => setDraft(c)}
           onToggleEdit={async () => {

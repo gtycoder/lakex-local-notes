@@ -137,7 +137,8 @@ body { font-family: -apple-system, "PingFang SC", "Noto Sans SC", sans-serif; ba
 .mobile-doc-body .lake-editor { padding-left: 14px; padding-right: 14px; }
 /* 编辑态正文宽度自适应（对齐 viewer 手机形态，不左右滑动）：
    Lake 编辑态 ne-editor-wrap-content 固定 440px、fixed 布局 max-width 750px——手机屏幕溢出 */
-.mobile-doc-body .ne-editor-wrap-content { width: auto; flex: 1 1 auto; min-width: 0; margin: 0; }
+.mobile-doc-body .ne-editor-wrap-content { flex: 1; width: 100%; max-width: 100%; min-width: 0; margin: 0; }
+.mobile-doc-body .ne-editor-wrap { justify-content: flex-start; }
 .mobile-doc-body .ne-layout-mode-fixed:not(.ne-normal-toc):not(.ne-ui-sidebar-visible) .ne-engine > * { max-width: 100%; }
 .mobile-doc-body .ne-layout-mode-fixed .ne-editor-extra-box,
 .mobile-doc-body .ne-layout-mode-fixed .ne-editor-footer-box { max-width: 100%; padding-left: 0; padding-right: 0; }
