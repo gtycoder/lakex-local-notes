@@ -129,6 +129,12 @@ export function attachFileCardClick(
     event.preventDefault();
     event.stopPropagation();
     onOpen(data.src, data.name, data.size);
+    // 打开系统应用/内嵌播放器后，鼠标离开卡片的 leave 事件可能被遮罩/系统窗口吞掉，
+    // Lake 的 ne-card-hovered 残留 → 卡片背景一直蓝色着色。点击后主动清理。
+    try {
+      card.classList.remove("ne-card-hovered");
+      card.querySelectorAll(".ne-card-hovered").forEach((el) => el.classList.remove("ne-card-hovered"));
+    } catch { /* 忽略 */ }
   };
   host.addEventListener("click", onClick, true);
   return () => host.removeEventListener("click", onClick, true);
