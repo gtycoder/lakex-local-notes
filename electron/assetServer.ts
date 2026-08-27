@@ -85,8 +85,42 @@ function streamFile(
   filePath: string,
   stat: fs.Stats,
   headers: Record<string, string>,
+  rangeHeader?: string,
 ): void {
-  res.writeHead(200, { ...headers, "Content-Length": String(stat.size) });
+  // Range 支持（音频/视频 seek、PDF 分页）：浏览器 seek 需要 206 Partial Content + Accept-Ranges。
+  // 无 Range 时 seekable 只有 [0,0]，进度条无法拖动。
+  const size = stat.size;
+  const rangeMatch = rangeHeader && /bytes=(\d*)-(\d*)/.exec(rangeHeader);
+  if (rangeMatch && (rangeMatch[1] !== "" || rangeMatch[2] !== "")) {
+    let start = rangeMatch[1] ? Number(rangeMatch[1]) : 0;
+    let end = rangeMatch[2] ? Number(rangeMatch[2]) : size - 1;
+    if (rangeMatch[1] === "" && rangeMatch[2] !== "") {
+      // 后缀范围 bytes=-N → 最后 N 字节
+      start = Math.max(0, size - Number(rangeMatch[2]));
+      end = size - 1;
+    }
+    if (start > end || start >= size) {
+      res.writeHead(416, { "Content-Range": "bytes */" + size });
+      res.end();
+      return;
+    }
+    end = Math.min(end, size - 1);
+    res.writeHead(206, {
+      ...headers,
+      "Content-Length": String(end - start + 1),
+      "Content-Range": "bytes " + start + "-" + end + "/" + size,
+      "Accept-Ranges": "bytes",
+    });
+    const partial = fs.createReadStream(filePath, { start, end });
+    partial.on("error", (error) => {
+      console.warn("[asset-server] 文件流读取失败:", filePath, error);
+      if (!res.headersSent) res.writeHead(404);
+      res.destroy();
+    });
+    partial.pipe(res);
+    return;
+  }
+  res.writeHead(200, { ...headers, "Content-Length": String(size), "Accept-Ranges": "bytes" });
   const stream = fs.createReadStream(filePath);
   stream.on("error", (error) => {
     console.warn("[asset-server] 文件流读取失败:", filePath, error);
@@ -136,7 +170,7 @@ export function startAssetServer(noteAssetsDir: string, vendorCdnDir: string, qu
           "Content-Type": mime,
           "Cache-Control": "public, max-age=31536000, immutable",
           "Access-Control-Allow-Origin": "*",
-        });
+        }, req.headers.range);
         return;
       }
       // 正式笔记资源：/{noteId}/{filename}
@@ -214,7 +248,7 @@ export function startAssetServer(noteAssetsDir: string, vendorCdnDir: string, qu
         "Content-Type": mime,
         "Cache-Control": "public, max-age=31536000, immutable",
         "Access-Control-Allow-Origin": "*",
-      });
+      }, req.headers.range);
     } catch (error) {
       console.warn("[asset-server] 请求处理失败:", req.url, error);
       if (!res.headersSent) res.writeHead(400);

@@ -97,10 +97,12 @@ public final class AssetServer {
                 writeError(out, 405, "method not allowed");
                 return;
             }
-            // 丢弃剩余请求头
+            // 读取剩余请求头（捕获 Range——音频/视频 seek 需要 206 部分响应）
+            String rangeHeader = null;
             for (;;) {
                 String line = reader.readLine();
                 if (line == null || line.isEmpty()) break;
+                if (line.regionMatches(true, 0, "Range:", 0, 6)) rangeHeader = line.substring(6).trim();
             }
             String target = parts[1];
             // 用 URI.getPath() 解码路径：URLDecoder 会把 '+' 解码成空格（小记文件名可能含 '+'），
@@ -132,21 +134,80 @@ public final class AssetServer {
                 String sniffed = sniffMime(file);
                 if (sniffed != null) mime = sniffed;
             }
+            // Range 支持（音频/视频 seek、PDF 分页）：浏览器 seek 需要 206 Partial Content + Accept-Ranges，
+            // 否则 seekable 只有 [0,0]，进度条无法拖动。解析 bytes=start-end / bytes=-N / bytes=start-
+            long start = -1;
+            long end = -1;
+            if (rangeHeader != null && rangeHeader.startsWith("bytes=")) {
+                String spec = rangeHeader.substring(6).trim();
+                int dash = spec.indexOf('-');
+                if (dash >= 0) {
+                    String s = spec.substring(0, dash).trim();
+                    String e = spec.substring(dash + 1).trim();
+                    if (!s.isEmpty()) {
+                        try { start = Long.parseLong(s); } catch (NumberFormatException ex) { start = -2; }
+                    }
+                    if (!e.isEmpty()) {
+                        try { end = Long.parseLong(e); } catch (NumberFormatException ex) { end = -2; }
+                    }
+                }
+            }
+            boolean isRange = start >= 0 || end >= 0;
+            if (isRange && start == -1) {
+                // bytes=-N → 最后 N 字节
+                long n = end;
+                if (n > 0) { start = Math.max(0, length - n); end = length - 1; }
+                else { isRange = false; }
+            }
+            if (isRange && start == -2) { isRange = false; } // 非法 start
+            if (isRange && end == -2) { end = length - 1; } // bytes=start- → 到末尾
+            if (isRange && start >= length) {
+                // 范围越界 → 416（Content-Range: bytes */length）
+                writeErrorWithRange(out, length);
+                return;
+            }
+            if (isRange && end >= length) end = length - 1;
             StringBuilder head = new StringBuilder(256);
-            head.append("HTTP/1.1 200 OK\r\n");
+            if (isRange) {
+                head.append("HTTP/1.1 206 Partial Content\r\n");
+                head.append("Content-Range: bytes ").append(start).append("-").append(end).append("/").append(length).append("\r\n");
+                head.append("Content-Length: ").append(end - start + 1).append("\r\n");
+            } else {
+                head.append("HTTP/1.1 200 OK\r\n");
+                head.append("Content-Length: ").append(length).append("\r\n");
+            }
             head.append("Content-Type: ").append(mime).append("\r\n");
-            head.append("Content-Length: ").append(length).append("\r\n");
             // CORS：页面 origin 是 https://localhost（Capacitor 默认），本地资源跨源加载需要放行
             head.append("Access-Control-Allow-Origin: *\r\n");
             head.append("Access-Control-Allow-Methods: GET, HEAD\r\n");
+            head.append("Accept-Ranges: bytes\r\n");
             // 文件名含唯一时间戳后缀，可长缓存（WebView 磁盘缓存，二次加载秒开）
             head.append("Cache-Control: public, max-age=31536000, immutable\r\n");
             head.append("Connection: close\r\n\r\n");
             out.write(head.toString().getBytes(StandardCharsets.UTF_8));
-            try (FileInputStream in = new FileInputStream(file); BufferedInputStream bin = new BufferedInputStream(in, BUFFER_SIZE)) {
-                byte[] buf = new byte[BUFFER_SIZE];
-                int n;
-                while ((n = bin.read(buf)) != -1) out.write(buf, 0, n);
+            if (isRange) {
+                // 部分读取（seek 场景），跳过 start 字节后流式输出 end-start+1 字节
+                try (FileInputStream in = new FileInputStream(file)) {
+                    long skip = start;
+                    while (skip > 0) {
+                        long s = in.skip(skip);
+                        if (s <= 0) break;
+                        skip -= s;
+                    }
+                    long remaining = end - start + 1;
+                    byte[] buf = new byte[BUFFER_SIZE];
+                    int n;
+                    while (remaining > 0 && (n = in.read(buf, 0, (int) Math.min(BUFFER_SIZE, remaining))) != -1) {
+                        out.write(buf, 0, n);
+                        remaining -= n;
+                    }
+                }
+            } else {
+                try (FileInputStream in = new FileInputStream(file); BufferedInputStream bin = new BufferedInputStream(in, BUFFER_SIZE)) {
+                    byte[] buf = new byte[BUFFER_SIZE];
+                    int n;
+                    while ((n = bin.read(buf)) != -1) out.write(buf, 0, n);
+                }
             }
             out.flush();
         } catch (Exception e) {
@@ -160,6 +221,21 @@ public final class AssetServer {
         head.append("HTTP/1.1 ").append(code).append(" ").append(msg).append("\r\n");
         head.append("Content-Type: text/plain; charset=utf-8\r\n");
         head.append("Access-Control-Allow-Origin: *\r\n");
+        head.append("Content-Length: ").append(body.length).append("\r\n");
+        head.append("Connection: close\r\n\r\n");
+        out.write(head.toString().getBytes(StandardCharsets.UTF_8));
+        out.write(body);
+        out.flush();
+    }
+
+    /** 416 Range Not Satisfiable（范围越界）：带 Content-Range: bytes 星号/分号 {size}。 */
+    private static void writeErrorWithRange(OutputStream out, long size) throws IOException {
+        byte[] body = "range not satisfiable".getBytes(StandardCharsets.UTF_8);
+        StringBuilder head = new StringBuilder(128);
+        head.append("HTTP/1.1 416 Range Not Satisfiable\r\n");
+        head.append("Content-Type: text/plain; charset=utf-8\r\n");
+        head.append("Access-Control-Allow-Origin: *\r\n");
+        head.append("Content-Range: bytes */").append(size).append("\r\n");
         head.append("Content-Length: ").append(body.length).append("\r\n");
         head.append("Connection: close\r\n\r\n");
         out.write(head.toString().getBytes(StandardCharsets.UTF_8));
