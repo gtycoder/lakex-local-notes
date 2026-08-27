@@ -175,7 +175,7 @@ export interface SyncDbPort {
   listFoldersForSync?(): Array<{ id: string; title: string; parentId: string | null; sortOrder: number; nodeType: string; icon: string | null; updatedAt: string; trashedAt?: string | null; deletedFromParentId?: string | null }>;
   /** 本机编辑成果被远端覆盖前强制留档（D5，协议 §4.2）：写一条 note_history，防丢数据。 */
   createHistorySnapshot(noteId: string, content: string, meta: { title: string; parentId: string | null; sortOrder: number }): void;
-  /** 资产落地（D8）：把已校验的图片字节写入本地（Capacitor Filesystem / IndexedDB），供 blob 注入。 */
+  /** 资产落地（D8）：把已校验的图片字节写入本地（Capacitor Filesystem / IndexedDB），供本地资源服务显示。 */
   saveAsset(noteId: string, filename: string, bytes: Uint8Array): Promise<void>;
   /** 资产上传扫描（H3）：列出笔记的本地资产（filename + size + sha256），供 manifest.assets 上传。 */
   listLocalAssets(noteId: string): Promise<Array<{ filename: string; size: number; hash: string }>>;

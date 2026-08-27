@@ -3,7 +3,7 @@
  * - 订阅 imagePreview 控制器，有状态才渲染（portal 到 body）。
  * - 交互：滚轮缩放（以光标为中心）、拖拽平移（缩放 >1 时）、←/→ 画廊切换、
  *   Esc / 点击背景 / 关闭按钮退出；右上角缩放与重置按钮。
- * - 图片用 <img src> 直接渲染（桌面 canonical URL / 移动端 blob URL 均可）。
+ * - 图片用 <img src> 直接渲染（桌面/移动端统一 canonical URL）。
  */
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";

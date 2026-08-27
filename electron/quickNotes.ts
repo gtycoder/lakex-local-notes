@@ -7,6 +7,7 @@ import path from "node:path";
 import crypto from "node:crypto";
 import sharp from "sharp";
 import { ASSET_PORT } from "./assetServer.js";
+import { localAssetHttpUrl } from "../src/core/assetUrl.js";
 import { AppError } from "../src/core/storeErrors.js";
 import { sniffImageFormat } from "../src/core/imageUtils.js";
 import {
@@ -169,7 +170,7 @@ export class QuickNotesStore {
   }
 
   private quickImageUrl(noteId: string, filename: string): string {
-    return `http://127.0.0.1:${ASSET_PORT}/quick-notes/${noteId}/${filename}`;
+    return localAssetHttpUrl(noteId, filename, { port: ASSET_PORT, space: "quick-notes" });
   }
 
   private stagingImageUrl(draftId: string, filename: string): string {

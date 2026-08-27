@@ -8,7 +8,7 @@
  *   mode(card|embed|title|inline)/download/taskId/taskType/source/id
  *
  * 解析后经 parseLocalAssetUrl 还原出本地资产引用（canonical URL → noteId + filename），
- * 供桌面"点击卡片 → 打开附件"、移动端"文件卡 blob 注入/分享"复用。
+ * 供桌面"点击卡片 → 打开附件"、移动端"文件卡打开/分享"复用。
  */
 import { parseLocalAssetUrl, type LocalAssetRef } from "./assetUrl.js";
 import { extOf } from "./assetNaming.js";

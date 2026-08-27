@@ -15,6 +15,7 @@ import { TRASH_NOTEBOOK_ID } from "../core/syncDecisions.js";
 import { sha256Sync } from "../core/sha256Sync.js";
 import { createCapacitorS3Store } from "./s3Store";
 import { buildAssetFilename, extOf } from "../core/assetNaming.js";
+import { localAssetHttpUrl } from "../core/assetUrl.js";
 import type { S3Settings, TreeNode, TreeNodeType } from "../lib/types";
 import type { SearchResult } from "../core/searchRepository.js";
 import { assertMoveTarget, assertNodeIcon, assertOrderedChildren, assertRootConstraint, assertTreeNodeTitle, nextSortOrder } from "../core/treeRules.js";
@@ -699,7 +700,7 @@ export const bridge = {
     return row ? rowToNote(row) : null;
   },
 
-  /** D8：读取已下载资产字节（blob 注入时从本地内存态读取；M2 接 Capacitor Filesystem）。 */
+  /** D8：读取已下载资产字节（内存态，同步；本地资源服务与附件打开共用）。 */
   getAssetBytes(noteId: string, filename: string): Uint8Array | null {
     const bytes = assets.get(noteId + "/" + filename);
     return bytes ?? null;
@@ -1034,7 +1035,7 @@ export const bridge = {
     return key;
   },
 
-  /** D8+：图片/附件上传（Lake 编辑器粘贴/插入调用）。本地存资产（供 blob 显示）+ 返回 canonical URL。
+  /** D8+：图片/附件上传（Lake 编辑器粘贴/插入调用）。本地落盘 + 返回 canonical URL（本地 AssetServer 服务）。
    * 附件（非图片）同样走本路径：任意字节落盘 + 保留原扩展名（与桌面 assetNaming 命名一致）。 */
   async uploadResource(
     input: { bytes: Uint8Array; filename: string },
@@ -1043,7 +1044,7 @@ export const bridge = {
     const bytes = input.bytes instanceof Uint8Array ? input.bytes : new Uint8Array(input.bytes as unknown as ArrayLike<number>);
     // 与桌面一致的资产文件名（共享 buildAssetFilename：{13ts}_{8hex}.{ext}，extractAssetRefs 正则匹配）
     const name = buildAssetFilename(input.filename);
-    // 本地存储（内存 + Filesystem 持久化，供 blob 注入读取）
+    // 本地存储（内存 + Filesystem 持久化，AssetServer 读取显示）
     // P1-8（GPT 审计）：必须等待 Filesystem 落盘成功再返回，否则"正文保存成功但图片重启后丢失"
     const key = noteId + "/" + name;
     assets.set(key, bytes);
@@ -1054,7 +1055,7 @@ export const bridge = {
       throw new Error("图片落盘失败: " + (e as Error).message);
     }
     const mimeType = mimeForExt(extOf(name));
-    const url = `http://127.0.0.1:19876/${noteId}/${name}`;
+    const url = localAssetHttpUrl(noteId, name);
     // filename 字段 = 原始文件名（Lake file 卡片展示名；磁盘名/同步用 URL 里的生成名，与桌面一致）
     const displayName = input.filename.replace(/[\\/:*?"<>|\u0000-\u001f]/g, "_").trim() || "附件";
     return { url, resourceRef: url, filename: displayName, mimeType, size: bytes.length };

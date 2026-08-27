@@ -5,6 +5,7 @@ import type { TreeNode } from "../../lib/types";
 import { NotebookGrid } from "./NotebookGrid";
 import { QuickNoteComposer } from "./QuickNoteComposer";
 import { bridge } from "../bridge";
+import { localAssetHttpUrl } from "../../core/assetUrl.js";
 
 export interface MobileQuickNote {
   id: string;
@@ -122,7 +123,7 @@ function QuickNoteCard({ note, onEdit }: { note: MobileQuickNote; onEdit: () => 
         const first = full?.content.images?.[0];
         if (first && alive) {
           // 与桌面端一致的 canonical 形态：http://127.0.0.1:19876/quick-notes/{id}/{file}
-          setThumbUrl(`http://127.0.0.1:19876/quick-notes/${note.id}/${encodeURIComponent(first.filename)}`);
+          setThumbUrl(localAssetHttpUrl(note.id, first.filename, { space: "quick-notes" }));
         }
       } catch { /* 单卡缩略图失败忽略 */ }
     })();

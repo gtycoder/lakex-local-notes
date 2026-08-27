@@ -6,6 +6,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Check, ImagePlus, X } from "lucide-react";
 import { bridge } from "../bridge";
+import { localAssetHttpUrl } from "../../core/assetUrl.js";
 import type { StoredQuickNoteImage } from "../../core/quickNoteModel.js";
 
 export interface ComposerImage {
@@ -66,7 +67,7 @@ export function QuickNoteComposer({ editNote, onSaved, onCancel }: QuickNoteComp
               width: img.width,
               height: img.height,
               bytes,
-              url: `http://127.0.0.1:19876/quick-notes/${editNote.id}/${encodeURIComponent(img.filename)}`,
+              url: localAssetHttpUrl(editNote.id, img.filename, { space: "quick-notes" }),
             });
           }
         } catch { /* 单张读失败跳过 */ }

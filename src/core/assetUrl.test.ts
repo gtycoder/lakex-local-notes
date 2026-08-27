@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseLocalAssetUrl, isLocalAssetUrl, lakeAssetToHttp, httpToLakeAsset } from "./assetUrl.js";
+import { parseLocalAssetUrl, isLocalAssetUrl, lakeAssetToHttp, httpToLakeAsset, localAssetHttpUrl } from "./assetUrl.js";
 
 describe("AssetUrlResolver (src/core/assetUrl.ts)", () => {
   describe("parseLocalAssetUrl", () => {
@@ -37,6 +37,22 @@ describe("AssetUrlResolver (src/core/assetUrl.ts)", () => {
       expect(isLocalAssetUrl("http://127.0.0.1:19876/n1/a.png")).toBe(true);
       expect(isLocalAssetUrl("lake-asset://n1/a.png")).toBe(true);
       expect(isLocalAssetUrl("https://example.com/x.png")).toBe(false);
+    });
+  });
+
+  describe("localAssetHttpUrl（桌面/移动端统一 canonical URL 生成）", () => {
+    it("note 资源", () => {
+      expect(localAssetHttpUrl("n1", "a.png")).toBe("http://127.0.0.1:19876/n1/a.png");
+    });
+    it("quick-notes 资源", () => {
+      expect(localAssetHttpUrl("q1", "b.png", { space: "quick-notes" })).toBe("http://127.0.0.1:19876/quick-notes/q1/b.png");
+    });
+    it("自定义端口（桌面 LAKE_ASSET_PORT 可覆盖）", () => {
+      expect(localAssetHttpUrl("n1", "a.png", { port: 19877 })).toBe("http://127.0.0.1:19877/n1/a.png");
+    });
+    it("生成结果可被 parseLocalAssetUrl 解析（两端语义闭环）", () => {
+      const url = localAssetHttpUrl("q1", "b.png", { space: "quick-notes" });
+      expect(parseLocalAssetUrl(url)).toEqual({ space: "quick-notes", noteId: "q1", filename: "b.png" });
     });
   });
 

@@ -58,6 +58,24 @@ export function isLocalAssetUrl(raw: string): boolean {
 }
 
 /**
+ * 本地资源服务器 canonical URL 生成（桌面/移动端统一）：
+ * - note 资源：http://127.0.0.1:{port}/{noteId}/{filename}
+ * - quick-notes 资源：http://127.0.0.1:{port}/quick-notes/{noteId}/{filename}
+ * port 由调用方决定（桌面 ASSET_PORT 可被 LAKE_ASSET_PORT 覆盖；移动端固定 19876）。
+ * 桌面 quickNotes.ts / 移动端 bridge.uploadResource / HomePage 缩略图 / Composer 预览统一走此函数，
+ * 保证两端 URL 形态一致（解析侧 parseLocalAssetUrl 同样识别）。
+ */
+export function localAssetHttpUrl(
+  noteId: string,
+  filename: string,
+  opts: { port?: number; space?: "note" | "quick-notes" } = {},
+): string {
+  const port = opts.port ?? 19876;
+  const prefix = (opts.space ?? "note") === "quick-notes" ? "quick-notes/" : "";
+  return `http://127.0.0.1:${port}/${prefix}${noteId}/${filename}`;
+}
+
+/**
  * 把 lake-asset 形态转成 http 形态（供复制路径同步拉取 base64 用）。
  * 非 lake-asset 输入原样返回。
  */
@@ -65,8 +83,7 @@ export function lakeAssetToHttp(raw: string, port: number): string {
   if (!raw.startsWith(`${NOTE_ASSET_SCHEME}://`)) return raw;
   const ref = parseLocalAssetUrl(raw);
   if (!ref) return raw;
-  const prefix = ref.space === "quick-notes" ? "quick-notes/" : "";
-  return `http://127.0.0.1:${port}/${prefix}${ref.noteId}/${ref.filename}`;
+  return localAssetHttpUrl(ref.noteId, ref.filename, { port, space: ref.space });
 }
 
 /**

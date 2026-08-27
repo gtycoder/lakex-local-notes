@@ -103,9 +103,15 @@ public final class AssetServer {
                 if (line == null || line.isEmpty()) break;
             }
             String target = parts[1];
-            int q = target.indexOf('?');
-            if (q >= 0) target = target.substring(0, q);
-            String decoded = URLDecoder.decode(target, StandardCharsets.UTF_8.name());
+            // 用 URI.getPath() 解码路径：URLDecoder 会把 '+' 解码成空格（小记文件名可能含 '+'），
+            // URI.getPath() 保留 '+' 且自动剥离 query 段
+            String decoded;
+            try {
+                java.net.URI uri = new java.net.URI(target);
+                decoded = uri.getPath() != null ? uri.getPath() : target;
+            } catch (Exception e) {
+                decoded = target;
+            }
             String rel = decoded.startsWith("/") ? decoded.substring(1) : decoded;
             if (rel.isEmpty()) { writeError(out, 404, "not found"); return; }
 
@@ -121,9 +127,14 @@ public final class AssetServer {
             if (!file.isFile()) { writeError(out, 404, "not found"); return; }
 
             long length = file.length();
+            String mime = mimeFor(file.getName());
+            if ("application/octet-stream".equals(mime)) {
+                String sniffed = sniffMime(file);
+                if (sniffed != null) mime = sniffed;
+            }
             StringBuilder head = new StringBuilder(256);
             head.append("HTTP/1.1 200 OK\r\n");
-            head.append("Content-Type: ").append(mimeFor(file.getName())).append("\r\n");
+            head.append("Content-Type: ").append(mime).append("\r\n");
             head.append("Content-Length: ").append(length).append("\r\n");
             // CORS：页面 origin 是 https://localhost（Capacitor 默认），本地资源跨源加载需要放行
             head.append("Access-Control-Allow-Origin: *\r\n");
@@ -163,5 +174,31 @@ public final class AssetServer {
             if (type != null) return type;
         }
         return "application/octet-stream";
+    }
+
+    /** 图片魔数嗅探（对齐桌面 assetServer.sniffMime）：扩展名缺失/异常时按文件头判断，
+     * 保证 <img> 渲染正确（WebView 按 Content-Type 决定图片解码路径）。 */
+    private static String sniffMime(File file) {
+        try (FileInputStream in = new FileInputStream(file)) {
+            byte[] head = new byte[16];
+            int n = in.read(head);
+            if (n >= 8) {
+                int b0 = head[0] & 0xFF;
+                if (b0 == 0x89 && head[1] == 'P' && head[2] == 'N' && head[3] == 'G') return "image/png";
+                if (b0 == 0xFF && (head[1] & 0xFF) == 0xD8 && (head[2] & 0xFF) == 0xFF) return "image/jpeg";
+                if (head[0] == 'G' && head[1] == 'I' && head[2] == 'F' && head[3] == '8') return "image/gif";
+                if (head[0] == 'R' && head[1] == 'I' && head[2] == 'F' && head[3] == 'F'
+                        && head[8] == 'W' && head[9] == 'E' && head[10] == 'B' && head[11] == 'P') return "image/webp";
+                if (head[4] == 'f' && head[5] == 't' && head[6] == 'y' && head[7] == 'p' && n >= 12) {
+                    String brand = new String(head, 8, 4, StandardCharsets.US_ASCII);
+                    if ("avif".equals(brand) || "avis".equals(brand)) return "image/avif";
+                }
+            }
+            String ascii = new String(head, 0, Math.max(0, n), StandardCharsets.US_ASCII);
+            if (ascii.startsWith("<svg") || ascii.startsWith("<?xml")) return "image/svg+xml";
+        } catch (IOException e) {
+            Log.w(TAG, "mime sniff failed: " + e.getMessage());
+        }
+        return null;
     }
 }

@@ -82,14 +82,13 @@ function normalizeChildren(element: Element, document: Document, tagName: string
   return output;
 }
 
-/** 移动端 blob 注入判定：window.lakeNative.uploadResource 存在 = 移动端（桌面无此注入）。
- * 移动端复制到微信：blob 注入的图已解码（naturalWidth>0）→ canvas 同步转 PNG data URL
- * （微信等不渲染 data:image/webp/avif，统一转 PNG，对齐桌面 assetServer ?base64=1 sharp 行为）。 */
-function isMobileBlobEnvironment(): boolean {
+/** 移动端环境判定：window.lakeNative.uploadResource 存在 = 移动端（桌面无此契约）。 */
+function isMobileEnvironment(): boolean {
   return typeof window !== "undefined" && typeof (window as { lakeNative?: { uploadResource?: unknown } }).lakeNative?.uploadResource === "function";
 }
 
-function blobImageToPngDataUrl(image: HTMLImageElement): string | null {
+/** 已解码 <img> → canvas 同步转 PNG data URL（复制到微信；同步，复制事件内可用）。 */
+function imageToPngDataUrl(image: HTMLImageElement): string | null {
   try {
     const canvas = document.createElement("canvas");
     canvas.width = image.naturalWidth;
@@ -105,9 +104,11 @@ function blobImageToPngDataUrl(image: HTMLImageElement): string | null {
 
 function normalizeImage(image: HTMLImageElement, document: Document): HTMLImageElement | null {
   let source = image.getAttribute("src") ?? "";
-  // 移动端：blob 注入的图（src=blob: 且已解码）→ canvas 转 PNG（复制到微信；同步，复制事件内可用）
-  if (isMobileBlobEnvironment() && source.startsWith("blob:") && image.complete && image.naturalWidth > 0) {
-    const converted = blobImageToPngDataUrl(image);
+  // 移动端：本地资源图（canonical http://127.0.0.1:19876 或 blob:）且已解码 → canvas 转 PNG data URL
+  // （微信等无法访问 127.0.0.1 的 canonical URL；对齐桌面 assetServer ?base64=1 行为）
+  const isLocalSrc = source.startsWith("blob:") || /^https?:\/\/127\.0\.0\.1:/.test(source);
+  if (isMobileEnvironment() && isLocalSrc && image.complete && image.naturalWidth > 0) {
+    const converted = imageToPngDataUrl(image);
     if (converted) source = converted;
     else return null;
   }

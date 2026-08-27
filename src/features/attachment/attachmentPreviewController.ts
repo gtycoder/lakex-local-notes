@@ -10,7 +10,7 @@ import { parseLocalAssetUrl, type LocalAssetRef } from "../../core/assetUrl.js";
 import { fileKindOf, type AttachmentKind } from "../../core/fileCard.js";
 
 export interface AttachmentPreviewItem {
-  /** 显示/预览用 URL（桌面 canonical http URL；移动端 blob URL） */
+  /** 显示/预览用 URL（桌面/移动端统一 canonical http URL） */
   src: string;
   name: string;
   size: number;

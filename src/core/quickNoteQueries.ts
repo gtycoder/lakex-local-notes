@@ -33,7 +33,7 @@ export interface QuickNoteDeletedRowShape {
 export interface QuickNoteDocumentParts {
   /** 已解析校验的内容（读取层注入；桌面读文件，移动端读存储端口）。 */
   content: StoredQuickNoteContent;
-  /** 图片 URL 解析（桌面 assetServer URL；移动端 blob/本地 URL）。 */
+  /** 图片 URL 解析（桌面/移动端统一 canonical assetServer URL）。 */
   imageUrl(noteId: string, filename: string): string;
 }
 

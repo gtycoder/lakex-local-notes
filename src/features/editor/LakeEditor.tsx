@@ -74,7 +74,7 @@ export function LakeEditor({ noteId, content, mode = "editor", tocEnabled, onCha
     // 附件：file 卡片点击 → 打开/预览（桌面/移动端共用）。
     // - 桌面：canonical URL 直接加载 + 系统应用打开/文件夹显示（弹预览 overlay）
     // - 移动端 directOpen：点击**直接**系统应用打开（跳过 WebView 预览弹窗——本机能力无需中间层）
-    // - 移动端非 directOpen：blob 预览 overlay + onOpenAttachment 打开
+    // - 移动端非 directOpen：canonical 预览 overlay + onOpenAttachment 打开（directOpen 直接系统打开）
     const attachment = prefs?.attachment;
     const detachFileCard = attachFileCardClick(host, (src, name, size) => {
       const base = buildAttachmentPreviewItem(src, name, size);

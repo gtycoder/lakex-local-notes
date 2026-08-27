@@ -8,7 +8,7 @@
  */
 
 export interface PreviewImage {
-  /** 显示用 src（桌面 canonical URL；移动端 blob URL 均可直接 <img>） */
+  /** 显示用 src（桌面/移动端 canonical URL，均可直接 <img>） */
   src: string;
   /** 预览小图（Lake payload 提供，非必需） */
   msrc?: string;
