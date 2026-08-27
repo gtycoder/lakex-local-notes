@@ -493,6 +493,9 @@ export function createLakeDocument(
       createUploadPromise: (request: unknown) => uploadLakeResource(request, noteId),
       // audio 卡上传成功后 setId(audioId = canonical URL)，播放地址 = canonical（本地可达，持久）。
       // 不配 queryAudioUrl 时 Lake 走 queryURL 轮询（应用无此端点）→ 永远"上传中"。
+      // allowAudioPlayer=false（Lake 默认，版权保护）会把卡片渲染成"版权限制"链接（点击跳系统
+      // 浏览器打开附件 URL）——本地私有笔记应内嵌播放，必须置 true。
+      allowAudioPlayer: true,
       queryAudioUrl: (cardData: unknown) => {
         const info = (cardData as { getAudioInfo?: () => { id?: string | null } } | null)?.getAudioInfo?.();
         const url = info?.id ?? null;
@@ -627,6 +630,44 @@ export function createLakeDocument(
       }
     });
   } catch { /* 非编辑器环境忽略 */ }
+  // audio 卡内嵌播放兜底（桌面/移动端共用）：Lake 的 queryAudioUrl 自动触发在「加载已有卡」时
+  // 不稳定（渲染成版权/错误链接，点击会跳系统浏览器打开附件 URL）。直接调 onTranscodeSuccess
+  // 设置播放器（audio 元素 src=canonical，应用内嵌播放）。卡渲染完成后调用才生效——持续重试
+  // （最长 ~20s）直到播放器出现；编辑器销毁时经 __disposeExtras 清理。
+  {
+    const audioTimers: number[] = [];
+    const tryEnsureAudio = (tries: number): void => {
+      let allReady = true;
+      try {
+        const cards = document.querySelectorAll('ne-card[name="audio"], NE-CARD[data-card-name="audio"]');
+        if (cards.length === 0) {
+          allReady = false; // 卡尚未渲染（setDocument 异步）——继续等待
+        } else {
+          cards.forEach((card) => {
+            if (card.querySelector("audio")) return;
+            allReady = false;
+            const inst = (card as unknown as { _neRef?: { _virtualNode?: { _instance?: { cardData?: unknown; _cardData?: unknown; onTranscodeSuccess?: (e: unknown) => void } } } })._neRef?._virtualNode?._instance;
+            const cd = inst?.cardData ?? inst?._cardData;
+            const info = (cd as { getAudioInfo?: () => { id?: string | null } } | null | undefined)?.getAudioInfo?.();
+            const url = info?.id;
+            if (!url) return;
+            const status = (cd as { getStatus?: () => string } | null | undefined)?.getStatus?.();
+            if (status === "error") return;
+            inst?.onTranscodeSuccess?.({ success: true, data: { audio: url, origin: url } });
+          });
+        }
+      } catch { /* 单卡兜底失败不阻断 */ }
+      if (!allReady && tries < 25) {
+        audioTimers.push(window.setTimeout(() => tryEnsureAudio(tries + 1), 800));
+      }
+    };
+    audioTimers.push(window.setTimeout(() => tryEnsureAudio(0), 500));
+    const prevDispose = (editor as any).__disposeExtras;
+    (editor as any).__disposeExtras = () => {
+      try { if (typeof prevDispose === "function") prevDispose(); } catch { /* ignore */ }
+      audioTimers.forEach((t) => window.clearTimeout(t));
+    };
+  }
   return editor;
 }
 
