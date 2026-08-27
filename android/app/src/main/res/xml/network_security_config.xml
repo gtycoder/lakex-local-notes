@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 本地资源服务（http://127.0.0.1:19876）需要明文 HTTP。
+     Network Security Config 的 domain 不支持 IP 字面量，base-config 直接放行（开发版）。 -->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true" />
+</network-security-config>

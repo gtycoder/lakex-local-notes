@@ -425,8 +425,6 @@ export interface LakeEditorPrefs {
    * 移动端（LakeEditor）不传此字段，保持原生行为。
    */
   disableNativeToc?: boolean;
-  /** 图片显示 URL 解析器（移动端 blob 注入用）：给定 canonical URL 返回显示 URL（如 blob:），原样返回则用默认。 */
-  generateDisplayUrl?: (url: string) => string;
   /** 禁用编辑态虚拟渲染（移动端用）：移动端单编辑器无 Lake 内部滚动容器（页面滚动），
    * scrollNode fallback 到 .document-pane（移动端不存在）会导致视口测量错误——编辑态只渲染
    * 视口内内容（正文不全）、保存时 getDocument 输出不完整（图片丢失）。置 true 全量渲染。 */
@@ -481,8 +479,6 @@ export function createLakeDocument(
       createUploadPromise: (request: unknown) => uploadLakeResource(request, noteId),
       // 本地资源服务器 URL 必须排除，否则 Lake 每次 setDocument 都会重新下载并上传本地图片
       isCaptureImageURL: (url: string) => !url.startsWith("data:") && !url.startsWith("blob:") && !url.startsWith(`${ASSET_ORIGIN}/`),
-      // 移动端 blob 注入：canonical URL → 本地字节 → blob URL（Lake 图片组件 getDisplayUrl 走此回调）
-      ...(typeof prefs?.generateDisplayUrl === "function" ? { generateDisplayUrl: prefs.generateDisplayUrl } : {}),
     },
     file: {
       createUploadPromise: (request: unknown) => uploadLakeResource(request, noteId),

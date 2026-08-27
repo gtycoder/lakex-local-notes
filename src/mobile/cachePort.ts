@@ -7,10 +7,10 @@ import type { CachePort, CacheSummary, ClearCacheResult } from "../core/ports.js
 import { listAssetKeys, removeAssetBytes } from "./persistence.js";
 import { listAssetKeysFs } from "./assetFs.js";
 
-/** 内存 blob 注册表：blobInject 创建后登记（供统计与 revoke 清理）。 */
+/** 内存 blob 注册表：运行时 blob URL（供统计与"清缓存"revoke 清理）。 */
 const runtimeBlobRegistry = new Set<string>();
 
-/** 登记一个运行时 blob URL（由 blobInject 在创建后调用）。 */
+/** 登记一个运行时 blob URL。 */
 export function registerRuntimeBlob(url: string): void {
   runtimeBlobRegistry.add(url);
 }
