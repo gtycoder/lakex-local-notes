@@ -36,6 +36,9 @@
 - [ ] 全文搜索 2 字以内查询回退：trigram 最小 3 字符，"回收/快照"等两字词需 LIKE 回退或提示（实现时处理）。
 
 ## 架构/技术债
+- [x] **附件 → 音视频/图片卡自动分发（2026-08-27）**：附件路径插入的音频/视频/图片文件自动转为对应原生卡（内嵌播放/显示）。实现：`src/features/editor/mediaCardRouting.ts` 的 `installMediaCardCategoryRouter`（`beforeExecCommand` 拦截 `insertFiles`/`dropFile`，按 `mediaKindOfFilename` 改写 args 加 `category, from:"ui"`，混合批次异步分批保持顺序）+ `assetNaming.ts` 的 `mediaKindOfFilename`（audio/video/image 三态）+ EditorTab/LakeEditor 接入 + 移动端 DocumentPage 显式分发。格式常量 `AUDIO_EXTENSIONS`/`VIDEO_EXTENSIONS`/`ASSET_IMAGE_EXTS` 已导出（移动端复用）；**清单 = Lake fileReader 实测接受集**（CDP 逐格式验证）：audio=mp3/wav/m4a/flac，video=mp4/mov/mkv/avi/webm/m4v/wmv/flv/mpeg/mpg/3gp/ts，image=png/jpg/jpeg/gif/webp/bmp/svg/tiff/tif；aac/ogg/wma/avif/apng/jfif 等 Lake 任何路径都建不出卡，**不列入**（保持附件路径原生行为）。参考思源 SIYUAN_ASSETS_*（app/src/constants.ts）核对过。测试 731 passed。
+- [x] **种子笔记本普通化：系统里没有"默认/不可删除"的笔记本（2026-08-27）**：所有笔记本（含首启种子"个人笔记"）都是普通笔记本——可删（移入回收站）、可改名、可 purge、删后不复活（`seed_initialized` 标记，桌面 store.ts + 移动端 bridge.ts）。唯一机制例外：回收站容器（`notebook-trash`，有笔记本行为的系统容器，非普通笔记本，保持不可删）。兜底父笔记本（`resolveParentNotebook`，用于无父新建/恢复/同步导入）：任意存在的笔记本（sortOrder 最小）→ 无则自动创建普通笔记本"未分类"（随机 ID + 图标 X，可随意删除）。修了根层笔记本 SQL 三值逻辑坑（`parent_id != ?` 对 NULL 恒不成立 + 回收站容器同属根层需显式排除）。删除入口 UI 无改动（原保护移除后右键删除即生效）。测试 735 passed。
+- [ ] **Lake 内核策略：源码辅助 + 受控黑盒（2026-08-27 讨论，待执行）**：详见下文「Lake 内核本地化讨论」小节——不要把 lakex 当自家代码 fork（拿不到闭源源码），用 lakejs 开源源码当机制字典 + 版本锚点清单固化脆弱 hack + 按需最小 patch。
 - [x] **锁定态（Viewer）文档的文本缓存**：已实现（`ensureNoteCaches` + lakeCaches 兜底 + 四处补缓存）。
 - [x] **M4 数据安全**：回收站（软删除 + 本地回收站 + 同步墓碑）+ 文档历史/快照（15 分钟自动 + 手动 + 恢复/孤儿清理）已实现。
 - [x] **P3：S3 对象垃圾回收（存储膨胀治理）**——已实现（`feat/s3-storage-rw-delete`，见 `docs/S3-GC-DESIGN.md` v4.1）：待回收清单 + 保留窗口（默认 7 天）+ 定期/手动对账（差集删除，默认 24h）+ 深度清理（Lake + 小记、孤儿兜底）+ purge 立即删 + 历史引用保护 + 审计日志；设置面板「云端回收（S3 GC）」三入口（立即对账 / 深度清理预览 / 执行深度清理）。设计经外部 AI 评审 + 用户确认（2026-08-13）。剩余“附件功能”另列于“视觉/体验”。
@@ -58,3 +61,38 @@
   - 复现：dev 库「444」（49 个标题，H1–H3，`depth` 实测 ≤3，已排除 depth 异常）；`--disable-gpu` 下未再复现，疑似偶发 GPU/网络服务崩溃。
   - 已做防御：`OutlineController.updateToc` 对异常 `depth` 收敛到 1..6（防未来畸形数据把引导线/缩进渲染打爆）。
   - 后续（未定，待讨论）：**程序崩溃的补救 / 减少数据丢失方案**——渲染进程崩溃监听（`render-process-gone`）、GPU 禁用降级开关、写前日志/原子写、SQLite WAL checkpoint、未保存草稿兜底恢复等。
+
+---
+
+## Lake 内核本地化讨论（2026-08-27，待执行）
+
+> 背景：为做「附件→音视频卡」反编译了 vendor 包 `lakex-editor-react-component`（语雀内部闭源版，0.1.2，无类型、压缩 bundle），
+> 并发现已有多处 hack 依赖压缩符号/内部私有结构（`_neRef._virtualNode._instance.cardData.onTranscodeSuccess`、`$appear`、
+> `uiViewProxy.rerender`、常量 `z_="ui"` 等）。用户提问「有没有必要做 lake 全量本地化」，结论见下。
+
+### 事实核对（本地仓库身份）
+| 目录 | 身份 | 关系 |
+| --- | --- | --- |
+| `/Users/admin/file/local-lake/lake-main` | lakejs/lake 开源版（MIT 0.4.6，github.com/lakejs/lake） | 语雀团队开源的**社区版内核**，有完整 src；**不是我们运行的** |
+| `vendor/npm/lakex-editor-react-component` | lakex 语雀内部版 0.1.2 + React 封装，闭源压缩 bundle | **实际运行的内核**，含语雀定制（Drawnix 画板/mindmap/迁移/语雀 API） |
+| `/Users/admin/file/local-lake/lake-editor-main` | 第三方 VSCode 插件 yuque-editor（ZhiGangCai/lake-editor） | 不是内核源码，参考价值低 |
+
+### 结论：不建议「全量本地化」（fork lakex）
+- **lakex 源码不可得**（语雀内部闭源）；lakejs 可替换但会丢功能（画板/mindmap/语雀卡片）→ 全量 fork 不现实。
+- 反编译出的能力分两类：**官方扩展点**（命令/插件事件/reader 分发——本轮音视频分发走的就是官方架构，只是没文档）与
+  **私有结构**（真正脆弱，集中在 `lakeRuntime.ts` 的音频卡兜底/水合/卡片工具栏几处）。
+- 当前阶段（开发版、KISS）没有触发 fork 红线的条件。
+
+### 待执行选项（A + B 一起做）
+- [ ] **A. lakejs 源码当机制字典**：用 `lake-main/src` 核对/解释 Lake 内核机制（命令系统、fileReader reader 注册与分发、
+      `beforeExecCommand`/插件事件、`readData` 的 `category/from/useMediaCard` 语义），把 lakeRuntime 相关注释升级为
+      「源码出处」级；先验证「reader 分发」与「insertFiles 参数透传」在开源版是否同源（验证 lakejs 是否真能当字典用）。
+- [ ] **B. 版本锚点 + hack 清单**：vendor 包已 pin（`file:` 引用 + lockfile，禁止随意升级）。写一份「Lake 版本锚点 + hack 清单」
+      文档（或并入 HANDOFF）：逐条记录每个私有结构 hack 依赖的内部签名、对应 bundle 版本、失效后的 CDP 回归验证方法；
+      升级流程 = 按清单逐项回归，而非全量重测。
+- [ ] **按需最小 patch，不整体 fork**：已有先例（`patches/@xiangfa+mindmap`）。仅当功能在扩展点上完全无法实现时才 patch。
+
+### 触发 fork 的红线（当前均未触发）
+1. 出现必须 lakex 内核源码才能实现的功能（扩展点全堵死）；
+2. 一次 Lake 升级碎 3+ 处 hack 且无法用扩展点修复；
+3. 上游停止分发/闭源收紧。

@@ -91,7 +91,7 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
     try {
       const result = await mobileCachePort.clearDerivedCaches();
       const cleared = result.cleared;
-      setCacheMsg("已清理：blob " + (cleared.runtimeBlobBytes ?? 0) + " 项 / 迁移残留 " + (cleared.legacyMigrationBytes ?? 0) + " 项");
+      setCacheMsg("已清理：blob " + (cleared.runtimeBlobBytes ?? 0) + " 项");
     } catch (e) {
       setCacheMsg("清理失败: " + (e as Error).message);
     }
@@ -134,11 +134,10 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
           )}
           {tab === "cache" && (
             <div className="mobile-settings-form">
-              <p className="mobile-settings-hint">只清理可重建的派生数据（blob 运行时缓存 / 旧迁移残留）。<br />不会删除正文、未同步修改或已下载资源。</p>
+              <p className="mobile-settings-hint">只清理可重建的派生数据（blob 运行时缓存）。<br />不会删除正文、未同步修改或已下载资源。</p>
               {cacheSummary && (
                 <div className="mobile-cache-summary">
                   <div className="mobile-cache-row"><span>Blob 运行时缓存</span><span>{cacheSummary.runtimeBlobBytes} 项</span></div>
-                  <div className="mobile-cache-row"><span>旧迁移残留</span><span>{cacheSummary.legacyMigrationBytes} 项</span></div>
                   <div className="mobile-cache-row muted"><span>已下载资源（不清理）</span><span>{cacheSummary.downloadableAssetBytes} 项</span></div>
                   <div className="mobile-cache-row muted"><span>待上传（不清理）</span><span>{cacheSummary.pendingUploadBytes} 项</span></div>
                 </div>

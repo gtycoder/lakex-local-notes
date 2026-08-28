@@ -295,6 +295,26 @@ describe("syncEngine（共享编排）", () => {
     expect(db.notes.get("n3")!.parentId).toBe("notebook-personal"); // 无父回退默认
   });
 
+  it("D4b：无默认笔记本（系统里没有默认概念）——effectiveParent 回退到 defaultNotebookId 返回值（自动建的'未分类'）", async () => {
+    const s3 = new MemS3();
+    const db = new MemDb();
+    // 模拟本地无任何笔记本：defaultNotebookId 返回自动创建的普通笔记本"未分类"（随机 ID，非固定 notebook-personal）
+    db.defaultNotebookId = () => "notebook-uncategorized";
+    const h1 = hashOf("<p>a</p>");
+    s3.map.set("p/objects/n1-" + h1 + ".lake", new TextEncoder().encode("<p>a</p>"));
+    s3.map.set("p/manifests/latest.json", new TextEncoder().encode(JSON.stringify({
+      version: 4, workspaceId: "default", commitId: "c1", prevCommitId: null, createdAt: "2026-01-01T00:00:00.000Z",
+      notes: [
+        { id: "n1", title: "A", parentId: "folder-missing", sortOrder: 0, updatedAt: "2026-01-01T00:00:00.000Z", contentHash: h1, isConflict: false, assets: [] },
+      ],
+      folders: [],
+    })));
+    const r = await syncNow(CFG, s3, db);
+    expect(r.appliedRemote).toBe(1);
+    // 父缺失 → 回退到兜底父笔记本（defaultNotebookId 返回值），而不是任何固定 ID
+    expect(db.notes.get("n1")!.parentId).toBe("notebook-uncategorized");
+  });
+
   it("B5（回归）：本地已 purge 的 folder 不随下载复活，且强制发布重写 manifest 移除云端残留", async () => {
     const s3 = new MemS3();
     const db = new MemDb();

@@ -60,6 +60,24 @@ function toDbLike(db: Database): DbLike {
   };
 }
 
+/** 统一端口工厂：注入内存资产依赖（测试无真实文件系统）。 */
+function mkPort(d: DbLike): ReturnType<typeof createQuickNotesSyncDbPort> {
+  const { deps } = makeAssetFsDeps();
+  return createQuickNotesSyncDbPort(d, deps);
+}
+
+/** 测试资产文件依赖：内存 Map 模拟文件系统（无 BLOB 后的纯文件语义）。 */
+function makeAssetFsDeps(): { deps: import("./quickNotesDbPort.js").QuickNotesAssetFsDeps; files: Map<string, Uint8Array> } {
+  const files = new Map<string, Uint8Array>();
+  const deps: import("./quickNotesDbPort.js").QuickNotesAssetFsDeps = {
+    assetBytes: new Map(),
+    saveAssetFile: async (key, bytes) => { files.set(key, bytes); },
+    loadAssetFile: async (key) => files.get(key) ?? null,
+    removeAssetFile: async (key) => { files.delete(key); },
+  };
+  return { deps, files };
+}
+
 function openQuickNotesDb(): { db: Database; d: DbLike } {
   const db = new SQL.Database();
   const d = toDbLike(db);
@@ -144,7 +162,7 @@ describe("移动端 Quick Notes 同步端口 + 共享引擎", () => {
 
     // A 创建并同步
     const created = createQuickNote(da, "手机小记");
-    const r1 = await syncQuickNotesViaEngine(cfg, s3, createQuickNotesSyncDbPort(da));
+    const r1 = await syncQuickNotesViaEngine(cfg, s3, mkPort(da));
     expect(r1.uploaded).toBe(1);
     // 线上格式 = 共享序列化（哈希与 content 一致；桌面 .qnote 同字节）
     const objBytes = s3.bucket.get(`lake/quick-notes/objects/${created.contentHash}.qnote`);
@@ -153,7 +171,7 @@ describe("移动端 Quick Notes 同步端口 + 共享引擎", () => {
     expect(JSON.parse(new TextDecoder().decode(objBytes!)).text).toBe("手机小记");
 
     // B 同步 → 拉到
-    await syncQuickNotesViaEngine(cfg, s3, createQuickNotesSyncDbPort(db));
+    await syncQuickNotesViaEngine(cfg, s3, mkPort(db));
     expect(textOf(db, created.id)).toBe("手机小记");
     // 清单时间戳保留（LWW 依据）：导入行的 updated_at = 清单 updatedAt（创建方时间），不是本机同步时间
     const m0 = readManifest(s3);
@@ -164,17 +182,17 @@ describe("移动端 Quick Notes 同步端口 + 共享引擎", () => {
 
     // B 编辑并同步 → A 同步跟随
     editQuickNote(db, created.id, "B 编辑版");
-    await syncQuickNotesViaEngine(cfg, s3, createQuickNotesSyncDbPort(db));
-    await syncQuickNotesViaEngine(cfg, s3, createQuickNotesSyncDbPort(da));
+    await syncQuickNotesViaEngine(cfg, s3, mkPort(db));
+    await syncQuickNotesViaEngine(cfg, s3, mkPort(da));
     expect(textOf(da, created.id)).toBe("B 编辑版");
 
     // B 删除并同步 → A 同步后跟随删除（墓碑权威）
-    const bd = createQuickNotesSyncDbPort(db);
+    const bd = mkPort(db);
     bd.deleteLocalQuickNote(created.id);
     await syncQuickNotesViaEngine(cfg, s3, bd);
     const manifestAfterDelete = readManifest(s3);
     expect(manifestAfterDelete.items.find((i) => i.id === created.id)?.deleted).toBe(true);
-    await syncQuickNotesViaEngine(cfg, s3, createQuickNotesSyncDbPort(da));
+    await syncQuickNotesViaEngine(cfg, s3, mkPort(da));
     expect(listActive(da).some((i) => i.id === created.id)).toBe(false);
     // A 的墓碑记录已记住（防复活）
     const tombRow = da.prepare("SELECT 1 FROM quick_notes WHERE id=? AND deleted_at IS NOT NULL").get(created.id);
@@ -184,7 +202,7 @@ describe("移动端 Quick Notes 同步端口 + 共享引擎", () => {
   it("端口合并本地与远端墓碑时按 id 去重", () => {
     const { d } = openQuickNotesDb();
     const created = createQuickNote(d, "待删除");
-    const port = createQuickNotesSyncDbPort(d);
+    const port = mkPort(d);
     port.deleteLocalQuickNote(created.id);
     port.rememberDeletedQuickNote({
       id: created.id,
@@ -201,7 +219,7 @@ describe("移动端 Quick Notes 同步端口 + 共享引擎", () => {
     const { d } = openQuickNotesDb();
     const created = createQuickNote(d, "恢复后又删除");
     d.prepare("UPDATE quick_notes SET restore_pending_at=? WHERE id=?").run("2099-01-01T00:00:00.000Z", created.id);
-    createQuickNotesSyncDbPort(d).deleteLocalQuickNote(created.id);
+    mkPort(d).deleteLocalQuickNote(created.id);
     const row = d.prepare("SELECT deleted_at, restore_pending_at, sync_state, ready_to_sync FROM quick_notes WHERE id=?").get(created.id) as { deleted_at: string | null; restore_pending_at: string | null; sync_state: string; ready_to_sync: number };
     expect(row.deleted_at).toBeTruthy();
     expect(row.restore_pending_at).toBeNull();
@@ -222,10 +240,12 @@ describe("移动端 Quick Notes 同步端口 + 共享引擎", () => {
         id: "img-1", filename: "image.png", mimeType: "image/png", width: 1, height: 1, size: 1, hash: "b".repeat(64),
       }],
     };
-    const port = createQuickNotesSyncDbPort(d);
+    const assetFs = makeAssetFsDeps();
+    const port = createQuickNotesSyncDbPort(d, assetFs.deps);
     expect(() => port.applyRemoteQuickNote(item, bytes, [])).toThrow(/图片缺失/);
     expect(textOf(d, created.id)).toBe("本地正文");
-    expect(d.prepare("SELECT COUNT(*) AS count FROM quick_note_assets WHERE quick_note_id=?").get(created.id)).toMatchObject({ count: 0 });
+    // 原子性：正文未落库，图片文件也未写入（纯文件，无 BLOB）
+    expect(assetFs.files.size).toBe(0);
   });
 
   it("恢复 LWW：B 显式恢复（restore_pending）→ 回写 active 覆盖墓碑；A 跟随恢复且本地墓碑撤销", async () => {
@@ -234,24 +254,24 @@ describe("移动端 Quick Notes 同步端口 + 共享引擎", () => {
     const s3 = createFakeS3();
 
     const created = createQuickNote(db, "原始");
-    await syncQuickNotesViaEngine(cfg, s3, createQuickNotesSyncDbPort(db));
-    await syncQuickNotesViaEngine(cfg, s3, createQuickNotesSyncDbPort(da));
+    await syncQuickNotesViaEngine(cfg, s3, mkPort(db));
+    await syncQuickNotesViaEngine(cfg, s3, mkPort(da));
     // A 删除并同步 → 云端 deleted
-    const ad = createQuickNotesSyncDbPort(da);
+    const ad = mkPort(da);
     ad.deleteLocalQuickNote(created.id);
     await syncQuickNotesViaEngine(cfg, s3, ad);
     // B 学到删除（墓碑权威）
-    await syncQuickNotesViaEngine(cfg, s3, createQuickNotesSyncDbPort(db));
+    await syncQuickNotesViaEngine(cfg, s3, mkPort(db));
     expect(listActive(db).some((i) => i.id === created.id)).toBe(false);
     // B 恢复：恢复标记 + 内容回 active（模拟 restoreQuickNote：清 deleted_at、置 restore_pending_at、sync_state=local）
     await new Promise((r) => setTimeout(r, 10));
     db.prepare("UPDATE quick_notes SET deleted_at=NULL, restore_pending_at=?, sync_state='local', updated_at=? WHERE id=?").run(new Date().toISOString(), new Date().toISOString(), created.id);
-    await syncQuickNotesViaEngine(cfg, s3, createQuickNotesSyncDbPort(db));
+    await syncQuickNotesViaEngine(cfg, s3, mkPort(db));
     // 云端墓碑被 active 覆盖
     const m = readManifest(s3);
     expect(m.items.find((i) => i.id === created.id)?.deleted).not.toBe(true);
     // A 再同步：跟随恢复 + 本地墓碑撤销
-    await syncQuickNotesViaEngine(cfg, s3, createQuickNotesSyncDbPort(da));
+    await syncQuickNotesViaEngine(cfg, s3, mkPort(da));
     expect(textOf(da, created.id)).toBe("原始");
     const revoked = da.prepare("SELECT 1 FROM quick_notes WHERE id=? AND deleted_at IS NULL AND restore_pending_at IS NULL").get(created.id);
     expect(revoked).toBeTruthy();
@@ -260,11 +280,12 @@ describe("移动端 Quick Notes 同步端口 + 共享引擎", () => {
     expect(restoreLeft.restore_pending_at).toBeNull();
   });
 
-  it("带图小记跨端：A 创建带图 → B 下载 BLOB 落库 → 快路径零上传 → C 再拉取", async () => {
+  it("带图小记跨端：A 创建带图（纯文件）→ B 下载文件落盘 → 快路径零上传 → C 再拉取", async () => {
     const { d: da } = openQuickNotesDb();
     const { d: db } = openQuickNotesDb();
     const s3 = createFakeS3();
-    // A 创建带图小记：content JSON 含图片元数据 + quick_note_assets BLOB（模拟移动端未来图片 UI 的产物）
+    // A 创建带图小记：content JSON 含图片元数据 + 图片文件（纯文件，无 BLOB）
+    const aDeps = makeAssetFsDeps();
     const imgBytes = new Uint8Array([137, 80, 78, 71, 1, 2, 3, 4]);
     const img = { id: "img-1", filename: "a.png", mimeType: "image/png", width: 10, height: 10, size: imgBytes.length, hash: sha256Sync(imgBytes) };
     const serialized = serializeQuickNoteContent({ version: 1, text: "带图", images: [img] });
@@ -272,34 +293,36 @@ describe("移动端 Quick Notes 同步端口 + 共享引擎", () => {
     const id = crypto.randomUUID();
     const now = new Date().toISOString();
     da.prepare("INSERT INTO quick_notes (id, created_at, updated_at, preview_text, image_count, content_hash, content, sync_state, is_conflict) VALUES (?,?,?,?,?,?,?,'local',0)").run(id, now, now, "带图", 1, hash, serialized);
-    da.prepare("INSERT INTO quick_note_assets (quick_note_id, id, filename, mime_type, width, height, size, content_hash, bytes) VALUES (?,?,?,?,?,?,?,?,?)").run(id, img.id, img.filename, img.mimeType, img.width, img.height, img.size, img.hash, imgBytes);
-    await syncQuickNotesViaEngine(cfg, s3, createQuickNotesSyncDbPort(da));
+    aDeps.deps.assetBytes.set("quick-notes/" + id + "/a.png", imgBytes);
+    aDeps.files.set("quick-notes/" + id + "/a.png", imgBytes);
+    await syncQuickNotesViaEngine(cfg, s3, createQuickNotesSyncDbPort(da, aDeps.deps));
     // 线上 manifest 含 assets（非空）
     const m = readManifest(s3);
     expect(m.items.find((i) => i.id === id)!.assets!.length).toBe(1);
-    // B 下载：BLOB 落库，字节/大小/哈希与元数据一致
-    await syncQuickNotesViaEngine(cfg, s3, createQuickNotesSyncDbPort(db));
-    const stored = db.prepare("SELECT filename, size, content_hash, bytes FROM quick_note_assets WHERE quick_note_id=?").get(id) as { filename: string; size: number; content_hash: string; bytes: Uint8Array };
-    expect(stored.filename).toBe("a.png");
-    expect(stored.size).toBe(imgBytes.length);
-    expect(stored.content_hash).toBe(img.hash);
-    expect(Array.from(stored.bytes)).toEqual(Array.from(imgBytes));
+    // B 下载：图片文件落盘（无 BLOB），字节/大小/哈希与元数据一致
+    const bDeps = makeAssetFsDeps();
+    await syncQuickNotesViaEngine(cfg, s3, createQuickNotesSyncDbPort(db, bDeps.deps));
+    const storedBytes = bDeps.files.get("quick-notes/" + id + "/a.png");
+    expect(storedBytes).toBeTruthy();
+    expect(Array.from(storedBytes!)).toEqual(Array.from(imgBytes));
     // B 重传：synced 快路径零上传
-    const r = await syncQuickNotesViaEngine(cfg, s3, createQuickNotesSyncDbPort(db));
+    const r = await syncQuickNotesViaEngine(cfg, s3, createQuickNotesSyncDbPort(db, bDeps.deps));
     expect(r.uploaded).toBe(0);
-    // C 再拉取（第三端）：资产同样落库
+    // C 再拉取（第三端）：资产同样落盘
     const { d: dc } = openQuickNotesDb();
-    await syncQuickNotesViaEngine(cfg, s3, createQuickNotesSyncDbPort(dc));
-    const cAsset = dc.prepare("SELECT size, content_hash FROM quick_note_assets WHERE quick_note_id=?").get(id) as { size: number; content_hash: string };
-    expect(cAsset.size).toBe(imgBytes.length);
-    expect(cAsset.content_hash).toBe(img.hash);
+    const cDeps = makeAssetFsDeps();
+    await syncQuickNotesViaEngine(cfg, s3, createQuickNotesSyncDbPort(dc, cDeps.deps));
+    const cBytes = cDeps.files.get("quick-notes/" + id + "/a.png");
+    expect(cBytes).toBeTruthy();
+    expect(Array.from(cBytes!)).toEqual(Array.from(imgBytes));
   });
 
-  it("墓碑携带图片（A）：带图小记删除 → 墓碑带 assets；B 收到墓碑后软删行图片 BLOB 完整，可恢复", async () => {
+  it("墓碑携带图片（A）：带图小记删除 → 墓碑带 assets；B 收到墓碑后软删行图片文件完整，可恢复", async () => {
     const { d: da } = openQuickNotesDb();
     const { d: db } = openQuickNotesDb();
     const s3 = createFakeS3();
-    // A 创建带图小记（content 元数据 + BLOB 字节）
+    // A 创建带图小记（content 元数据 + 图片文件，无 BLOB）
+    const aDeps = makeAssetFsDeps();
     const imgBytes = new Uint8Array([9, 8, 7, 6, 5]);
     const img = { id: "img-t", filename: "t.png", mimeType: "image/png", width: 3, height: 3, size: imgBytes.length, hash: sha256Sync(imgBytes) };
     const serialized = serializeQuickNoteContent({ version: 1, text: "待删带图", images: [img] });
@@ -307,23 +330,25 @@ describe("移动端 Quick Notes 同步端口 + 共享引擎", () => {
     const id = crypto.randomUUID();
     const now = new Date().toISOString();
     da.prepare("INSERT INTO quick_notes (id, created_at, updated_at, preview_text, image_count, content_hash, content, sync_state, is_conflict) VALUES (?,?,?,?,?,?,?,'local',0)").run(id, now, now, "待删带图", 1, hash, serialized);
-    da.prepare("INSERT INTO quick_note_assets (quick_note_id, id, filename, mime_type, width, height, size, content_hash, bytes) VALUES (?,?,?,?,?,?,?,?,?)").run(id, img.id, img.filename, img.mimeType, img.width, img.height, img.size, img.hash, imgBytes);
-    await syncQuickNotesViaEngine(cfg, s3, createQuickNotesSyncDbPort(da));
+    aDeps.deps.assetBytes.set("quick-notes/" + id + "/t.png", imgBytes);
+    aDeps.files.set("quick-notes/" + id + "/t.png", imgBytes);
+    await syncQuickNotesViaEngine(cfg, s3, createQuickNotesSyncDbPort(da, aDeps.deps));
     // B 拉到带图小记
-    await syncQuickNotesViaEngine(cfg, s3, createQuickNotesSyncDbPort(db));
+    const bDeps = makeAssetFsDeps();
+    await syncQuickNotesViaEngine(cfg, s3, createQuickNotesSyncDbPort(db, bDeps.deps));
     // A 删除并同步 → 墓碑带 assets + 图片对象
-    createQuickNotesSyncDbPort(da).deleteLocalQuickNote(id);
-    await syncQuickNotesViaEngine(cfg, s3, createQuickNotesSyncDbPort(da));
+    createQuickNotesSyncDbPort(da, aDeps.deps).deleteLocalQuickNote(id);
+    await syncQuickNotesViaEngine(cfg, s3, createQuickNotesSyncDbPort(da, aDeps.deps));
     const m = readManifest(s3);
     const tomb = m.items.find((i) => i.id === id)!;
     expect(tomb.deleted).toBe(true);
     expect(tomb.assets!.length).toBe(1);
-    // B 收到墓碑：软删 + 图片 BLOB 落地（恢复时图片完整）
-    await syncQuickNotesViaEngine(cfg, s3, createQuickNotesSyncDbPort(db));
+    // B 收到墓碑：软删 + 图片文件落地（恢复时图片完整，无 BLOB）
+    await syncQuickNotesViaEngine(cfg, s3, createQuickNotesSyncDbPort(db, bDeps.deps));
     expect(listActive(db).some((i) => i.id === id)).toBe(false);
-    const stored = db.prepare("SELECT filename, size, content_hash, bytes FROM quick_note_assets WHERE quick_note_id=?").get(id) as { filename: string; size: number; content_hash: string; bytes: Uint8Array };
-    expect(stored.filename).toBe("t.png");
-    expect(Array.from(stored.bytes)).toEqual(Array.from(imgBytes));
+    const storedBytes = bDeps.files.get("quick-notes/" + id + "/t.png");
+    expect(storedBytes).toBeTruthy();
+    expect(Array.from(storedBytes!)).toEqual(Array.from(imgBytes));
   });
 
   it("冲突归档：双端编辑 → 远端覆盖本地，本地版本进回收站（新 id 软删），恢复即新小记", async () => {
@@ -332,14 +357,14 @@ describe("移动端 Quick Notes 同步端口 + 共享引擎", () => {
     const s3 = createFakeS3();
 
     const created = createQuickNote(db, "v1");
-    await syncQuickNotesViaEngine(cfg, s3, createQuickNotesSyncDbPort(db));
-    await syncQuickNotesViaEngine(cfg, s3, createQuickNotesSyncDbPort(da));
+    await syncQuickNotesViaEngine(cfg, s3, mkPort(db));
+    await syncQuickNotesViaEngine(cfg, s3, mkPort(da));
     // 双端各自编辑
     editQuickNote(da, created.id, "A 编辑");
     editQuickNote(db, created.id, "B 编辑");
     // B 先同步（云端 = B 版）；A 后同步 → A 版进回收站（新 id + deleted_at）
-    await syncQuickNotesViaEngine(cfg, s3, createQuickNotesSyncDbPort(db));
-    const r = await syncQuickNotesViaEngine(cfg, s3, createQuickNotesSyncDbPort(da));
+    await syncQuickNotesViaEngine(cfg, s3, mkPort(db));
+    const r = await syncQuickNotesViaEngine(cfg, s3, mkPort(da));
     expect(r.conflicts).toBe(1);
     expect(textOf(da, created.id)).toBe("B 编辑");
     const archived = da.prepare("SELECT id, content FROM quick_notes WHERE deleted_at IS NOT NULL").all() as Array<{ id: string; content: string }>;
@@ -351,7 +376,7 @@ describe("移动端 Quick Notes 同步端口 + 共享引擎", () => {
     const archivedEntry = m.items.find((i) => i.id === archived[0].id);
     expect(archivedEntry).toBeUndefined();
     // A 再次同步：不重复冲突（已对齐）
-    const r2 = await syncQuickNotesViaEngine(cfg, s3, createQuickNotesSyncDbPort(da));
+    const r2 = await syncQuickNotesViaEngine(cfg, s3, mkPort(da));
     expect(r2.conflicts).toBe(0);
     expect(r2.uploaded).toBe(0);
   });

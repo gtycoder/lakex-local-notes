@@ -341,16 +341,23 @@ export class Store {
       this.db.exec("ALTER TABLE tree_nodes ADD COLUMN deleted_from_parent_id TEXT");
     }
     const now = nowIso();
-    this.db.prepare(`INSERT OR IGNORE INTO tree_nodes(id,workspace_id,parent_id,node_type,title,note_file_id,sort_order,created_at,updated_at,deleted_at,sync_state,is_conflict)
-      VALUES(?,?,?,?,?,NULL,0,?,?,NULL,'local',0)`).run(DEFAULT_NOTEBOOK_ID, DEFAULT_WORKSPACE_ID, null, "notebook", "个人笔记", now, now);
-    // 回收站笔记本：固定 ID 每端本地初始化；侧栏/搜索/同步 folder 全部排除（与默认笔记本同法）。
+    // 回收站笔记本：固定 ID 每端本地初始化；侧栏/搜索/同步 folder 全部排除。唯一机制容器，不可删。
     this.db.prepare(`INSERT OR IGNORE INTO tree_nodes(id,workspace_id,parent_id,node_type,title,note_file_id,sort_order,created_at,updated_at,deleted_at,sync_state,is_conflict)
       VALUES(?,?,?,?,?,NULL,0,?,?,NULL,'synced',0)`).run(TRASH_NOTEBOOK_ID, DEFAULT_WORKSPACE_ID, null, "notebook", "回收站", now, now);
-    // Migrate any notes not yet in tree_nodes
-    this.db.prepare(`INSERT INTO tree_nodes(id,workspace_id,parent_id,node_type,title,note_file_id,sort_order,created_at,updated_at,deleted_at,sync_state,is_conflict)
-      SELECT id,?,COALESCE(parent_id,?),'note',title,id,sort_order,updated_at,updated_at,deleted_at,sync_state,is_conflict
-      FROM notes WHERE id NOT IN (SELECT id FROM tree_nodes)`).run(DEFAULT_WORKSPACE_ID, DEFAULT_NOTEBOOK_ID);
-    this.db.prepare("UPDATE notes SET parent_id=? WHERE parent_id IS NULL").run(DEFAULT_NOTEBOOK_ID);
+    // 种子笔记本：仅全新库首次初始化自动创建一个普通笔记本（固定 ID 仅为多端首启同步一致）。
+    // 行为与用户手动创建的笔记本完全相同——可删/改名/purge、无任何默认/特殊地位；
+    // seed_initialized 标记保证用户删除（含 purge）后**不复活**。
+    const seeded = this.db.prepare("SELECT value FROM device_state WHERE key='seed_initialized'").get() as { value: string } | undefined;
+    if (!seeded) {
+      this.db.prepare(`INSERT OR IGNORE INTO tree_nodes(id,workspace_id,parent_id,node_type,title,note_file_id,sort_order,created_at,updated_at,deleted_at,sync_state,is_conflict)
+        VALUES(?,?,?,?,?,NULL,0,?,?,NULL,'local',0)`).run(DEFAULT_NOTEBOOK_ID, DEFAULT_WORKSPACE_ID, null, "notebook", "个人笔记", now, now);
+      // Migrate any notes not yet in tree_nodes（旧库升级兜底）
+      this.db.prepare(`INSERT INTO tree_nodes(id,workspace_id,parent_id,node_type,title,note_file_id,sort_order,created_at,updated_at,deleted_at,sync_state,is_conflict)
+        SELECT id,?,COALESCE(parent_id,?),'note',title,id,sort_order,updated_at,updated_at,deleted_at,sync_state,is_conflict
+        FROM notes WHERE id NOT IN (SELECT id FROM tree_nodes)`).run(DEFAULT_WORKSPACE_ID, DEFAULT_NOTEBOOK_ID);
+      this.db.prepare("UPDATE notes SET parent_id=? WHERE parent_id IS NULL").run(DEFAULT_NOTEBOOK_ID);
+      this.db.prepare("INSERT INTO device_state(key,value) VALUES('seed_initialized','1')").run();
+    }
   }
 
   private seed() {
@@ -461,7 +468,8 @@ export class Store {
   }
 
   createNote(title: string): NoteDocument {
-    return this.createNoteIn(DEFAULT_NOTEBOOK_ID, title);
+    // 无默认笔记本概念：无父新建落到兜底父笔记本（任意存在的笔记本；无则自动创建"未分类"）
+    return this.createNoteIn(this.resolveParentNotebook(), title);
   }
 
   createNoteIn(parentId: string | null, title: string): NoteDocument {
@@ -488,7 +496,7 @@ export class Store {
     id: string,
     position: "top" | "bottom",
   ): NoteDocument {
-    const parent = parentId ?? DEFAULT_NOTEBOOK_ID;
+    const parent = parentId ?? this.resolveParentNotebook();
     this.ensureParent(parent);
     this.assertParentCompatible(parent, "note");
     if (!isSafePathSegment(id)) throw new AppError("InvalidInput", `无效的笔记 ID: ${id}`);
@@ -1088,14 +1096,32 @@ export class Store {
   }
 
   /**
+   * 无父新建/恢复/同步兜底的父笔记本（系统中没有"默认笔记本"——所有笔记本都是普通笔记本）：
+   * 1. 任意存在的笔记本（非回收站，sortOrder 最小）→ 用它；
+   * 2. 否则自动创建一个普通笔记本"未分类"（随机 ID + 图标 X，与用户手动创建完全一致，可随意删除）。
+   * 仅在"必须给内容一个家"（新建/恢复/同步导入，数据不丢红线）时自动创建。
+   */
+  private resolveParentNotebook(): string {
+    // 回收站容器（notebook-trash）本身也是根层 notebook，必须显式排除；
+    // 根层笔记本 parent_id 为 NULL：parent_id != ? 对 NULL 恒不成立（SQL 三值逻辑），必须显式允许 NULL
+    const any = this.db.prepare(
+      "SELECT id FROM tree_nodes WHERE node_type='notebook' AND deleted_at IS NULL AND id != ? AND (parent_id IS NULL OR parent_id != ?) ORDER BY sort_order LIMIT 1"
+    ).get(TRASH_NOTEBOOK_ID, TRASH_NOTEBOOK_ID) as { id: string } | undefined;
+    if (any) return any.id;
+    const created = this.createNotebook("未分类");
+    try { this.setNodeIcon(created.id, "X"); } catch { /* 图标设置失败不影响兜底 */ }
+    return created.id;
+  }
+
+  /**
    * 软删除（回收站笔记本重构）：删除 = 把节点移入隐藏回收站笔记本（parentId=notebook-trash），
    * 记录 trashed_at（进入回收站时间）+ deleted_from_parent_id（删除前父目录，恢复位置），标 local 待上传。
    * 不递归子节点（子节点随父移动）、不写墓碑（回收站条目是普通条目，移动即同步传播）。
    * 文件保留（.lake / 资源不删）；彻底删除走 purgeTrashItem。审计 #10：DB 事务原子提交。
    */
   deleteTreeNode(id: string) {
-    if (id === TRASH_NOTEBOOK_ID || id === DEFAULT_NOTEBOOK_ID) {
-      throw new AppError("InvalidInput", "不能删除默认/回收站笔记本");
+    if (id === TRASH_NOTEBOOK_ID) {
+      throw new AppError("InvalidInput", "不能删除回收站笔记本");
     }
     const node = this.readTreeNode(id);
     if (node.parentId === TRASH_NOTEBOOK_ID) return; // 已在回收站
@@ -1174,7 +1200,7 @@ export class Store {
     const isNotebook = node.node_type === "notebook";
     let parentId: string | null = isNotebook ? null : node.deleted_from_parent_id;
     if (parentId === null || parentId === TRASH_NOTEBOOK_ID) {
-      parentId = isNotebook ? null : DEFAULT_NOTEBOOK_ID;
+      parentId = isNotebook ? null : this.resolveParentNotebook();
     } else {
       // 原父必须存在、未被删、且不在回收站内，否则回退默认笔记本。
       // 注意：根级笔记本 parent_id 为 NULL，`parent_id != ?` 会因 SQL 三值逻辑得 NULL 而漏判，
@@ -1182,7 +1208,7 @@ export class Store {
       const parent = this.db.prepare(
         "SELECT id FROM tree_nodes WHERE id=? AND deleted_at IS NULL AND (parent_id IS NULL OR parent_id != ?)"
       ).get(parentId, TRASH_NOTEBOOK_ID) as { id: string } | undefined;
-      if (!parent) parentId = DEFAULT_NOTEBOOK_ID;
+      if (!parent) parentId = this.resolveParentNotebook();
     }
     const now = nowIso();
     const tx = this.db.transaction(() => {
@@ -1725,8 +1751,9 @@ export class Store {
     this.noteMetadata.importRemoteFolder(folder);
   }
 
+  /** 兜底父笔记本（无默认笔记本概念）：存在的笔记本 → 无则自动创建"未分类"（见 resolveParentNotebook）。 */
   defaultNotebookId(): string {
-    return this.noteMetadata.defaultNotebookId();
+    return this.resolveParentNotebook();
   }
 
   hasTreeNode(id: string): boolean {
@@ -1870,20 +1897,20 @@ export class Store {
     return `${row.c}:${row.m}`;
   }
 
-  getSyncPendingSummary(): { documents: number; resources: number; generatedAt: string } {
-    // purged（收到他端删除的保留副本）永不上传、永不标 synced，不计入待上传（否则计数永远虚高）。
+  getSyncPendingSummary(): { documents: number; folders: number; resources: number; generatedAt: string } {
+    // 只统计可同步的本地事实：正文/文档元数据与目录元数据。
+    // purged 保留副本永不上传，不计入；被回收的目录仍会随 listFoldersForSync 发布（移动即同步传播），
+    // 发布后 markFolderSynced 归位 synced，故这里不做 trashed_at 过滤，与 listFoldersForSync 口径一致。
     const pendingRows = this.noteQueries.listNotesForSync().filter((note) => note.syncState !== "synced" && note.syncState !== "purged");
-    let resources = 0;
-    for (const note of pendingRows) {
-      try { resources += extractAssetRefs(fs.readFileSync(this.notePath(note.id), "utf8")).size; }
-      catch { /* missing/corrupt content is reported by sync itself; summary stays best-effort */ }
-    }
-    // 待上传墓碑 = 未发布（published_at IS NULL）的 note 墓碑；folder 墓碑仅本地下载过滤、永不发布，不计入。
-    // NULL node_type（历史行）按 note 处理（发布后即标 published → 计数归零）。
+    const pendingFolders = (this.db.prepare(
+      "SELECT COUNT(*) AS count FROM tree_nodes WHERE note_file_id IS NULL AND deleted_at IS NULL AND sync_state != 'synced' AND id != ?"
+    ).get(TRASH_NOTEBOOK_ID) as { count: number }).count;
+    // 待同步墓碑 = 未发布（published_at IS NULL）的 note 墓碑。
+    // 资源不在本地维护上传 ledger，不能把正文引用数冒充为待上传数；真实资源 diff 在同步阶段完成。
     const tombstones = (this.db.prepare(
       "SELECT COUNT(*) AS count FROM deleted_notes WHERE (node_type IS NULL OR node_type != 'folder') AND published_at IS NULL"
     ).get() as { count: number }).count;
-    return { documents: pendingRows.length + tombstones, resources, generatedAt: nowIso() };
+    return { documents: pendingRows.length + tombstones, folders: pendingFolders, resources: 0, generatedAt: nowIso() };
   }
 
   /** 是否有本地待上传变更（早退判定）：notes 非 synced（含锁/元数据变更）或纯目录/分组改动（V5 §5.1）。

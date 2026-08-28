@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { shouldAcceptEditorChange } from "../../core/editorChangeGuard";
 import { createPortal } from "react-dom";
 import { ChevronRight, Package } from "lucide-react";
 import {
@@ -17,6 +18,7 @@ import { native } from "../../lib/native";
 import { attachImagePreviewClick } from "./imagePreview";
 import { ImageLightbox } from "./ImageLightbox";
 import { attachFileCardClick, buildAttachmentPreviewItem, openAttachmentPreview, createCardHoverResidueCleaner } from "../attachment/attachmentPreviewController";
+import { installMediaCardCategoryRouter } from "./mediaCardRouting";
 import { isMediaFilename } from "../../core/assetNaming.js";
 import { AttachmentPreview } from "../attachment/AttachmentPreview";
 
@@ -338,6 +340,7 @@ export function EditorTab({ noteId, content, visible, tocEnabled, onChange, pref
     const prevScroll = hasRealScroller ? currentScroller.scrollTop : lastScrollTopRef.current;
     const mode: "editor" | "viewer" = locked ? "viewer" : "editor";
     let editor: LakeEditorInstance | null = null;
+    let detachMediaCardRouter: (() => void) | undefined;
     // 与 LakeEditor 保持一致：setDocument 初始化期间也会触发 contentchange，
     // 若此时回调里同步 getDocument() 会把整篇大文档（含图片/OCR JSON）序列化一遍，
     // 在主线程上额外叠加耗时；用 setting 标志屏蔽初始化阶段的重复序列化。
@@ -348,8 +351,9 @@ export function EditorTab({ noteId, content, visible, tocEnabled, onChange, pref
         mount,
         mode,
         () => {
-          if (editor && !setting) {
+          if (editor) {
             const next = stripAssetAccessToken(editor.getDocument("text/lake"));
+            if (!shouldAcceptEditorChange({ initializing: setting, previous: latestDocumentRef.current, next })) return;
             latestDocumentRef.current = next;
             onChangeRef.current(next);
             // 画板元素通过键盘 Delete/Backspace 删除，可能没有新的 pointerdown；
@@ -460,6 +464,8 @@ export function EditorTab({ noteId, content, visible, tocEnabled, onChange, pref
       editorRef.current = editor;
       setEditorState(editor);
       (window as unknown as Record<string, unknown>).__desktopEditor = editor;
+      // 附件路径自动分发：附件插入的音频/视频文件 → 原生音视频卡（编辑器内嵌播放）
+      detachMediaCardRouter = installMediaCardCategoryRouter(editor);
       onEditorReadyRef.current?.(noteId, editor);
     } catch (reason) {
       console.error("Failed to create editor for tab", noteId, reason);
@@ -558,7 +564,9 @@ export function EditorTab({ noteId, content, visible, tocEnabled, onChange, pref
       const openSystem = (it: typeof item): void => {
         if (it.ref) void native.openAttachment(it.ref.noteId, it.ref.filename).then((r) => { if (!r.ok) console.warn("[attach] 打开失败:", r.error); });
       };
-      if (isMediaFilename(name)) {
+      // 媒体判定用 item.kind（buildAttachmentPreviewItem 已按 name||src 判定，canonical src 带扩展名），
+      // 避免卡片名缺扩展名/异常时误判为非媒体而落到系统打开（webview 弹窗）。
+      if (item.kind === "audio" || item.kind === "video" || isMediaFilename(name)) {
         // 媒体附件：应用内嵌播放（audio/video 元素，不跳系统浏览器）
         openAttachmentPreview(item, openSystem, (it) => { if (it.ref) void native.showAttachmentInFolder(it.ref.noteId, it.ref.filename); });
         return;
@@ -600,6 +608,7 @@ export function EditorTab({ noteId, content, visible, tocEnabled, onChange, pref
       host.removeEventListener("copy", copyHandler, true);
       host.removeEventListener("paste", pasteHandler, true);
       onEditorReadyRef.current?.(noteId, null);
+      detachMediaCardRouter?.();
       destroyLakeEditor(editor);
       editorRef.current = null;
       setEditorState(null);

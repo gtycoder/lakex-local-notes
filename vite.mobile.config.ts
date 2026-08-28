@@ -83,16 +83,8 @@ export default defineConfig({
     sourcemap: false,
     rolldownOptions: {
       input: { mobile: "mobile.html" },
-      output: {
-        codeSplitting: {
-          groups: [
-            {
-              name: "drawnix",
-              test: /node_modules\/(lakex-drawnix|@plait|@plait-board)/,
-            },
-          ],
-        },
-      },
+      // 不手动把 Drawnix 合并为共享 chunk：文档页是懒加载路由，
+      // 手动分组会让 Drawnix 被首页 HTML modulepreload，抵消懒加载收益。
     },
   },
 });

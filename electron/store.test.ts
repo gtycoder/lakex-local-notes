@@ -234,6 +234,20 @@ describe("目录树操作", () => {
     expect(() => store.moveTreeNode(group3.id, null, 0)).toThrowError(/必须位于目录节点下/);
   });
 
+  it("重复保存同一正文只更新派生缓存，不产生新的同步修改", () => {
+    const note = store.createNote("幂等保存");
+    const first = store.saveNote(note.id, "幂等保存", "<p>same</p>", { markdown: "same", plain: "same" });
+    expect(store.readNote(note.id).syncState).toBe("local");
+    // 先模拟已经同步，第二次相同保存不应重新标记 local 或更新时间。
+    (store as any).db.prepare("UPDATE notes SET sync_state='synced' WHERE id=?").run(note.id);
+    (store as any).db.prepare("UPDATE tree_nodes SET sync_state='synced' WHERE note_file_id=?").run(note.id);
+    const before = store.readNote(note.id);
+    const second = store.saveNote(note.id, "幂等保存", "<p>same</p>", { markdown: "same", plain: "same" });
+    expect(second.updatedAt).toBe(before.updatedAt);
+    expect(store.readNote(note.id).syncState).toBe("synced");
+    expect(first.content).toBe(second.content);
+  });
+
   it("saveNote 写入文本缓存，updateNoteCaches/readNoteCaches 可单独读写", () => {
     const note = store.createNote("缓存测试");
     const saved = store.saveNote(note.id, "缓存测试", "<p>hello</p>", { markdown: "# hello\n", plain: "hello" });
@@ -1305,15 +1319,40 @@ describe("localAsset*Re 正则工厂", () => {
 });
 
 describe("同步待处理摘要", () => {
-  it("returns pending document and referenced resource counts from local facts", () => {
+  it("counts only syncable notes and does not treat every referenced asset as pending", () => {
     const note = store.createNote("待同步摘要");
     const filename = assetFilename();
     const content = `<p><img src="http://127.0.0.1:19876/${note.id}/${filename}"></p>`;
     store.saveNote(note.id, note.title, content, { plain: "摘要", markdown: content });
     const summary = store.getSyncPendingSummary();
     expect(summary.documents).toBeGreaterThanOrEqual(1);
-    expect(summary.resources).toBeGreaterThanOrEqual(1);
+    expect(summary.resources).toBe(0);
     expect(summary.generatedAt).toMatch(/T/);
+  });
+
+  it("counts pending folder metadata separately", () => {
+    for (const n of store.listNotesForSync()) store.markSynced(n.id);
+    for (const f of store.listFoldersForSync()) store.markFolderSynced(f.id, f.updatedAt);
+    const nb = store.listTreeNodes().find((n) => n.nodeType === "notebook")!;
+    const group = store.createGroup(nb.id, "待同步目录");
+    const summary = store.getSyncPendingSummary();
+    expect(summary.folders).toBeGreaterThanOrEqual(1);
+    expect(summary.documents).toBe(0);
+    store.setNodeIcon(group.id, "star");
+    expect(store.getSyncPendingSummary().folders).toBeGreaterThanOrEqual(1);
+  });
+
+  it("counts a trashed folder as pending (aligns with listFoldersForSync)", () => {
+    for (const n of store.listNotesForSync()) store.markSynced(n.id);
+    for (const f of store.listFoldersForSync()) store.markFolderSynced(f.id, f.updatedAt);
+    const nb = store.listTreeNodes().find((n) => n.nodeType === "notebook")!;
+    const group = store.createGroup(nb.id, "被回收目录");
+    store.markFolderSynced(group.id, group.updatedAt);
+    expect(store.getSyncPendingSummary().folders).toBe(0);
+    // 移入回收站 = 移动即同步传播；发布后 markFolderSynced 才会归位，故入回收站后应计入待同步目录。
+    store.deleteTreeNode(group.id);
+    expect(store.listFoldersForSync().some((f) => f.id === group.id)).toBe(true);
+    expect(store.getSyncPendingSummary().folders).toBeGreaterThanOrEqual(1);
   });
 
   it("counts a local delete tombstone as one pending document", () => {
@@ -1323,6 +1362,47 @@ describe("同步待处理摘要", () => {
     store.deleteTreeNode(note.id);
     // 删除会把已同步文档替换成墓碑；数量至少不应静默减少。
     expect(store.getSyncPendingSummary().documents).toBeGreaterThanOrEqual(beforeDelete);
+  });
+});
+
+// ===== 种子笔记本普通化：系统里没有"默认/不可删除"的笔记本（2026-08-27） =====
+describe("种子笔记本普通化（无默认/不可删笔记本）", () => {
+  it("种子笔记本（个人笔记）可删除：deleteTreeNode 不再抛错，移入回收站；回收站容器仍不可删", () => {
+    expect(store.listTreeNodes().some((n) => n.id === "notebook-personal")).toBe(true);
+    expect(() => store.deleteTreeNode("notebook-personal")).not.toThrow();
+    const trash = store.listTrash();
+    expect(trash.some((t) => t.id === "notebook-personal")).toBe(true);
+    // 回收站是机制容器（有笔记本行为的容器，非普通笔记本），仍不可删
+    expect(() => store.deleteTreeNode("notebook-trash")).toThrow(/不能删除回收站笔记本/);
+  });
+
+  it("purge 种子笔记本后重新初始化不复活（seed_initialized 标记）", () => {
+    store.deleteTreeNode("notebook-personal");
+    store.purgeTrashItem("notebook-personal");
+    // 重新打开同一库（模拟重启/下次启动）
+    store = new Store(dir, createSafeStorageSecretCipher());
+    const notebooks = store.listTreeNodes().filter((n) => n.nodeType === "notebook");
+    expect(notebooks.some((n) => n.id === "notebook-personal")).toBe(false);
+  });
+
+  it("无任何笔记本时 createNote 自动创建普通笔记本'未分类'（图标 X）", () => {
+    store.deleteTreeNode("notebook-personal");
+    store.purgeTrashItem("notebook-personal");
+    expect(store.listTreeNodes().filter((n) => n.nodeType === "notebook")).toHaveLength(0);
+    const note = store.createNote("新笔记");
+    const notebooks = store.listTreeNodes().filter((n) => n.nodeType === "notebook");
+    expect(notebooks).toHaveLength(1);
+    expect(notebooks[0].title).toBe("未分类");
+    expect(notebooks[0].icon).toBe("X");
+    expect(note.parentId).toBe(notebooks[0].id);
+  });
+
+  it("createNoteIn(parentId=null) 落到存在的笔记本（sortOrder 最小），不自动建'未分类'", () => {
+    const nb = store.createNotebook("我的库"); // sortOrder 1
+    const note = store.createNoteIn(null, "无父笔记");
+    // 种子（个人笔记）sortOrder 0 → 兜底优先它；不会新建"未分类"
+    expect(note.parentId).toBe("notebook-personal");
+    expect(store.listTreeNodes().filter((n) => n.nodeType === "notebook")).toHaveLength(2);
   });
 });
 // ===== R1/R2 红测试（V5 §4，Phase -1 测试护栏；修复前应失败） =====

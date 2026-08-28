@@ -1,6 +1,7 @@
 import type { DbLike } from "../src/core/dbLike.js";
 import fs from "node:fs";
 import { AppError } from "../src/core/storeErrors.js";
+import { hasNoteSaveChanges } from "../src/core/noteSaveDecision.js";
 
 export interface NoteCacheInput {
   markdown?: string | null;
@@ -30,9 +31,26 @@ export class NoteContentRepository {
     const notePath = this.deps.notePathFor(noteId);
     if (!fs.existsSync(notePath)) throw new AppError("NotFound", `笔记不存在: ${noteId}`);
 
+    const current = this.deps.db.prepare("SELECT title FROM notes WHERE id=? AND deleted_at IS NULL").get(noteId) as { title: string } | undefined;
+    if (!current) throw new AppError("NotFound", `笔记不存在: ${noteId}`);
+    const revived = this.deps.revivePurgedIfNeeded(noteId);
+    const currentContent = fs.readFileSync(notePath, "utf8");
+    if (!revived && !hasNoteSaveChanges({ title: current.title, content: currentContent }, { title, content })) {
+      // 编辑器打开时可能只补派生缓存；缓存更新不能改变 updated_at/sync_state。
+      if (caches) {
+        const transaction = this.deps.db.transaction(() => {
+          this.deps.db.prepare("UPDATE notes SET md_cache=?,text_cache=? WHERE id=? AND deleted_at IS NULL")
+            .run(caches.markdown ?? null, caches.plain ?? null, noteId);
+          this.deps.upsertSearch(noteId, title, caches.plain ?? "");
+        });
+        transaction();
+      }
+      return;
+    }
+
     // Editing a purged local copy is an implicit restore. Preserve the old
     // content before the new body replaces it, exactly as the legacy flow did.
-    if (this.deps.revivePurgedIfNeeded(noteId)) {
+    if (revived) {
       try { this.deps.createHistorySnapshot(noteId, undefined, true); } catch { /* 留档失败不阻断编辑 */ }
     }
 

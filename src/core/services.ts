@@ -86,7 +86,7 @@ export interface NoteService {
   /** 目录树（notebook/group/note）。 */
   listTree(): Promise<TreeNodeDto[]>;
   readNote(id: string): Promise<NoteDto>;
-  /** 父目录语义：parentId=null 建在默认个人笔记本。 */
+  /** 父目录语义：parentId=null 建在兜底父笔记本（无默认笔记本：存在的笔记本 → 无则自动创建"未分类"）。 */
   createNote(parentId: string | null, title: string): Promise<NoteDto>;
   /** 保存正文（标题随正文一并保存）。 */
   saveNoteContent(id: string, title: string, content: string): Promise<NoteDto>;

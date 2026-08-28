@@ -2156,3 +2156,17 @@ ne-card[data-card-name="codeblock"] .ne-card-resizer-mask {
 .board-card-wrapper--viewer[data-canvas-interaction="passive"] .plait-board-container .viewport-container {
   overflow: hidden !important;
 }
+
+/* 附件（文件）卡：无论是否 hover 都不渲染背景/描边/阴影。
+   覆盖 Lake 默认 .ne-viewer 的 :hover/.ne-card-hovered 背景，以及 block 卡的 outline。 */
+.ne-editor ne-card[data-card-name="file"] .ne-card-file,
+.ne-editor ne-card[data-card-name="file"].ne-card-hovered,
+.ne-editor ne-card[data-card-name="file"].ne-card-hovered .ne-card-file,
+.ne-viewer ne-card[data-card-name="file"]:hover .ne-card-file,
+.ne-viewer ne-card[data-card-name="file"].ne-card-hovered .ne-card-file,
+.ne-viewer ne-card[data-card-name="file"].ne-card-hovered,
+ne-card[data-card-name="file"] .ne-card-file {
+  background: transparent !important;
+  outline: none !important;
+  box-shadow: none !important;
+}

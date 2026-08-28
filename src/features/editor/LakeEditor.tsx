@@ -4,9 +4,11 @@ import { createLakeDocument, destroyLakeEditor, refreshTocSidebar, type LakeEdit
 import { normalizeClipboardHtml, upgradePastedHtml } from "./clipboardHtml";
 import { addAssetAccessToken, stripAssetAccessToken } from "../../lib/assetPort";
 import { getNativeErrorMessage } from "../../lib/nativeErrors";
+import { shouldAcceptEditorChange } from "../../core/editorChangeGuard";
 import { ImageLightbox } from "./ImageLightbox";
 import { attachImagePreviewClick } from "./imagePreview";
 import { attachFileCardClick, buildAttachmentPreviewItem, openAttachmentPreview, createCardHoverResidueCleaner, type AttachmentPreviewItem } from "../attachment/attachmentPreviewController";
+import { installMediaCardCategoryRouter } from "./mediaCardRouting";
 import { isMediaFilename } from "../../core/assetNaming.js";
 import { AttachmentPreview } from "../attachment/AttachmentPreview";
 import { isDesktop, native } from "../../lib/native";
@@ -24,6 +26,7 @@ interface LakeEditorProps {
 export function LakeEditor({ noteId, content, mode = "editor", tocEnabled, onChange, prefs, onEditorReady }: LakeEditorProps) {
   const hostRef = useRef<HTMLDivElement>(null);
   const editorRef = useRef<LakeEditorInstance | null>(null);
+  const latestDocumentRef = useRef("");
   const onChangeRef = useRef(onChange);
   const onEditorReadyRef = useRef(onEditorReady);
   const [error, setError] = useState<string | null>(null);
@@ -92,8 +95,10 @@ export function LakeEditor({ noteId, content, mode = "editor", tocEnabled, onCha
         ? (attachment.resolveDisplayUrl(base.ref) ?? base.src)
         : base.src;
       const item = { ...base, src: displaySrc };
-      // 媒体附件：内嵌播放 overlay（不跳系统浏览器）
-      if (isMediaFilename(name)) {
+      // 媒体判定用 base.kind（buildAttachmentPreviewItem 已按 name||src 判定，canonical src 带扩展名），
+      // 避免卡片名缺扩展名/异常时误判为非媒体而落到系统打开（webview 弹窗）。
+      if (base.kind === "audio" || base.kind === "video" || isMediaFilename(name)) {
+        // 媒体附件：内嵌播放 overlay（不跳系统浏览器）
         openAttachmentPreview(item, attachment?.onOpenAttachment ?? openAttachmentDefault, isDesktop() ? showInFolder : null);
         return;
       }
@@ -106,13 +111,19 @@ export function LakeEditor({ noteId, content, mode = "editor", tocEnabled, onCha
     });
 
     let editor: LakeEditorInstance | null = null;
+    let detachMediaCardRouter: (() => void) | undefined;
     let disposeTocRefresh: (() => void) | null = null;
     let tocRefreshTimer: number | undefined;
     let setting = true;
     try {
       editor = createLakeDocument(host, mode, () => {
-        if (editor && !setting) onChangeRef.current(stripAssetAccessToken(editor.getDocument("text/lake")));
+        if (!editor) return;
+        const next = stripAssetAccessToken(editor.getDocument("text/lake"));
+        if (!shouldAcceptEditorChange({ initializing: setting, previous: latestDocumentRef.current, next })) return;
+        latestDocumentRef.current = next;
+        onChangeRef.current(next);
       }, tocEnabled, noteId, undefined, prefs);
+      latestDocumentRef.current = stripAssetAccessToken(content);
       editor.setDocument("text/lake", addAssetAccessToken(content));
       // 修复：Lake TOC 侧边栏创建时用空 toc 渲染，setDocument 后补一次数据同步。
       // 该补偿有重试定时器，必须跟随实例一起清理。
@@ -121,6 +132,7 @@ export function LakeEditor({ noteId, content, mode = "editor", tocEnabled, onCha
       }, 0);
       setting = false;
       editorRef.current = editor;
+      if (mode === "editor") detachMediaCardRouter = installMediaCardCategoryRouter(editor);
       onEditorReadyRef.current?.(noteId, editor);
       setError(null);
     } catch (reason) {
@@ -136,6 +148,7 @@ export function LakeEditor({ noteId, content, mode = "editor", tocEnabled, onCha
       window.clearTimeout(tocRefreshTimer);
       disposeTocRefresh?.();
       onEditorReadyRef.current?.(noteId, null);
+      detachMediaCardRouter?.();
       destroyLakeEditor(editor);
       editorRef.current = null;
       host.replaceChildren();

@@ -7,6 +7,7 @@ export interface SyncStatusModelInput {
   saveState: SaveState;
   saveLabel: string;
   pendingDocuments: number;
+  pendingFolders?: number;
   pendingResources: number;
   pendingQuickNotes?: number;
   dirtyTabCount: number;
@@ -25,7 +26,7 @@ export interface SyncStatusModel {
 }
 
 export function buildSyncStatusModel(input: SyncStatusModelInput): SyncStatusModel {
-  const pendingTotal = Math.max(0, input.pendingDocuments + input.pendingResources + (input.pendingQuickNotes ?? 0));
+  const pendingTotal = Math.max(0, input.pendingDocuments + (input.pendingFolders ?? 0) + (input.pendingQuickNotes ?? 0));
   const localLabel = input.saveState === "saving" ? "本地保存中" : input.saveState === "dirty" ? "有未保存更改" : input.saveState === "error" ? "本地保存失败" : "本地已保存";
   let statusClass: SyncStatusModel["statusClass"] = "local";
   let statusLabel = "仅本地保存";
@@ -40,7 +41,7 @@ export function buildSyncStatusModel(input: SyncStatusModelInput): SyncStatusMod
     statusLabel = "同步失败";
   } else if (pendingTotal > 0 || input.sync.pendingChanges > 0) {
     statusClass = "pending";
-    statusLabel = `待上传 ${pendingTotal || input.sync.pendingChanges}`;
+    statusLabel = "待同步";
   } else if (input.sync.phase === "success" && input.sync.lastSyncedAt) {
     statusClass = "synced";
     statusLabel = "已同步";

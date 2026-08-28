@@ -6,8 +6,8 @@
  * - 范围 = docs/MOBILE-TECH-STACK.md §9.2 的最小 IPC 集（POC 版）
  */
 import { SqlJsDb } from "./sqliteDb";
-import { loadSnapshot, saveSnapshot, listAssetKeys as listLegacyAssetKeys, loadAssetBytes as loadLegacyAssetBytes } from "./persistence";
-import { saveAssetBytesFs, loadAssetBytesFs, listAssetKeysFs } from "./assetFs";
+import { loadSnapshot, saveSnapshot } from "./persistence";
+import { saveAssetBytesFs, loadAssetBytesFs, listAssetKeysFs, removeAssetBytesFs } from "./assetFs";
 import { syncNow as runSync, type SyncConfig, type SyncDbPort, type SyncReport } from "../core/syncEngine.js";
 import { KeyedAsyncQueue } from "../core/keyedAsyncQueue.js";
 import type { QuickNotesSyncResult } from "../core/quickNotesSyncEngine.js";
@@ -20,11 +20,12 @@ import type { S3Settings, TreeNode, TreeNodeType } from "../lib/types";
 import type { SearchResult } from "../core/searchRepository.js";
 import { assertMoveTarget, assertNodeIcon, assertOrderedChildren, assertRootConstraint, assertTreeNodeTitle, nextSortOrder } from "../core/treeRules.js";
 import { buildLikePattern, buildSearchSql, toSearchResult } from "../core/mobileSearch.js";
-import { normalizeQuickNoteContent, previewQuickNote, serializeQuickNoteContent } from "../core/quickNoteModel.js";
+import { buildQuickNoteImageFiles, normalizeQuickNoteContent, previewQuickNote, serializeQuickNoteContent, validateQuickNoteContent } from "../core/quickNoteModel.js";
 import type { StoredQuickNoteContent, StoredQuickNoteImage } from "../core/quickNoteModel.js";
 import { syncQuickNotesViaEngine } from "../core/quickNotesSyncEngine.js";
 import { applyQuickNotesSyncSchema, createQuickNotesSyncDbPort } from "./quickNotesDbPort.js";
 import { mobileSecretStore } from "./secretStore.js";
+import { hasNoteSaveChanges } from "../core/noteSaveDecision.js";
 
 export interface POCNote {
   id: string;
@@ -32,6 +33,14 @@ export interface POCNote {
   content: string;
   updatedAt: string;
   /** 所属笔记本/分组 id（快捷切换目录用） */
+  parentId: string | null;
+}
+
+/** 列表页只需要元数据；正文在 readNote() 打开文档时按需读取。 */
+export interface POCNoteSummary {
+  id: string;
+  title: string;
+  updatedAt: string;
   parentId: string | null;
 }
 
@@ -50,7 +59,7 @@ const S3_STORAGE_KEY = "lake-notes-mobile.s3";
 export const INITIAL_LAKE_CONTENT = `<p class="ne-p"><br></p>`;
 
 let db: SqlJsDb | null = null;
-/** 已下载资源（POC 内存态；M2 接 Capacitor Filesystem 持久化）。key = "{noteId}/{filename}" */
+/** 运行期资源缓存（新上传/同步中使用）；持久化资源不在启动时全量载入。key = "{noteId}/{filename}" */
 const assets = new Map<string, Uint8Array>();
 /** 主维护队列（GPT 审计 P2-6）：同步与本地写操作（保存/删除/恢复）串行化，防交错
  * 覆盖快照/发布旧状态；小记同步与编辑竞态由队列闭合（引擎 markSynced 无"未变才标"守卫时也安全）。 */
@@ -176,9 +185,14 @@ async function ensureDb(): Promise<SqlJsDb> {
   )`);
   // P2（小记同步端口）：软删墓碑/基线/图片字节 schema（见 quickNotesDbPort.ts，幂等）
   applyQuickNotesSyncSchema(db);
-  // P1-2（GPT 审计）：默认笔记本 seed（对齐桌面 notebook-personal）。幂等：仅首次初始化种入。
-  db.prepare("INSERT OR IGNORE INTO folders (id, title, parent_id, sort_order, node_type, icon, updated_at, sync_state) VALUES (?,?,NULL,0,'notebook',NULL,?,'synced')")
-    .run("notebook-personal", "个人笔记", new Date().toISOString());
+  // 种子笔记本：仅全新库首次初始化自动创建一个普通笔记本（固定 ID 仅为多端首启同步一致，无默认/特殊行为；
+  // seed_initialized 标记保证用户删除（含 purge）后不复活）。对齐桌面 store.ts。
+  const seeded = db.prepare("SELECT value FROM device_state WHERE key='seed_initialized'").get() as { value?: string } | undefined;
+  if (!seeded) {
+    db.prepare("INSERT OR IGNORE INTO folders (id, title, parent_id, sort_order, node_type, icon, updated_at, sync_state) VALUES (?,?,NULL,0,'notebook',NULL,?,'synced')")
+      .run("notebook-personal", "个人笔记", new Date().toISOString());
+    db.prepare("INSERT INTO device_state(key,value) VALUES('seed_initialized','1') ON CONFLICT(key) DO NOTHING").run();
+  }
   // D5：文档历史快照（纯本地，不参与同步）；覆盖前留档，防丢数据（对齐桌面 note_history 简化）
   db.exec(`CREATE TABLE IF NOT EXISTS note_history (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -220,7 +234,28 @@ function rowToNote(r: Record<string, unknown>): POCNote {
   return { id: String(r.id), title: String(r.title), content: String(r.content), updatedAt: String(r.updated_at), parentId: r.parent_id ? String(r.parent_id) : null };
 }
 
+function rowToNoteSummary(r: Record<string, unknown>): POCNoteSummary {
+  return { id: String(r.id), title: String(r.title), updatedAt: String(r.updated_at), parentId: r.parent_id ? String(r.parent_id) : null };
+}
+
 /** folders 行 → TreeNode（共享目录节点形状；统一 rename/setIcon/move 的映射避免重复）。 */
+function noteRowToTreeNode(row: Record<string, unknown>, overrides: { updatedAt?: string; title?: string; icon?: string | null; parentId?: string | null } = {}): TreeNode {
+  return {
+    id: String(row.id),
+    workspaceId: "mobile",
+    parentId: overrides.parentId !== undefined ? overrides.parentId : (row.parent_id ? String(row.parent_id) : null),
+    nodeType: "note",
+    title: overrides.title ?? String(row.title),
+    noteFileId: String(row.id),
+    sortOrder: Number(row.sort_order),
+    createdAt: String(row.updated_at),
+    updatedAt: overrides.updatedAt ?? String(row.updated_at),
+    syncState: String(row.sync_state ?? "local") as TreeNode["syncState"],
+    isConflict: Boolean(row.is_conflict),
+    icon: overrides.icon !== undefined ? overrides.icon : (row.icon ? String(row.icon) : null),
+  };
+}
+
 function folderRowToTreeNode(row: Record<string, unknown>, overrides: { updatedAt?: string; title?: string; icon?: string | null; parentId?: string | null } = {}): TreeNode {
   return {
     id: String(row.id),
@@ -406,8 +441,16 @@ const dbPort: SyncDbPort = {
     }
   },
   defaultNotebookId() {
-    // 对齐桌面 store.ts DEFAULT_NOTEBOOK_ID（effectiveParent 回退基准）
-    return "notebook-personal";
+    // 兜底父笔记本（系统中没有"默认笔记本"）：任意存在的笔记本 → 无则自动创建普通笔记本"未分类"（图标 X）。
+    const d = db!;
+    const row = d.prepare("SELECT id FROM folders WHERE node_type='notebook' AND trashed_at IS NULL ORDER BY sort_order LIMIT 1").get() as { id: string } | undefined;
+    if (row) return row.id;
+    const id = crypto.randomUUID();
+    const now = new Date().toISOString();
+    const maxRow = d.prepare("SELECT MAX(sort_order) AS m FROM folders WHERE parent_id IS NULL AND trashed_at IS NULL").get() as { m: number | null } | undefined;
+    d.prepare("INSERT INTO folders (id, title, parent_id, sort_order, node_type, icon, updated_at, sync_state) VALUES (?,?,NULL,?,?,?,?,'local')")
+      .run(id, "未分类", nextSortOrder(maxRow?.m ?? null), "notebook", "X", now);
+    return id;
   },
   importRemoteFolder(folder) {
     const d = db!;
@@ -438,19 +481,27 @@ const dbPort: SyncDbPort = {
     void saveAssetBytesFs(key, bytes).catch((e) => console.warn("[mobile] 资产落盘失败（可重新同步）:", e));
   },
   async listLocalAssets(noteId) {
-    // H3：从内存 assets Map 扫描该笔记的资产（POC 内存态；M2 接 FS 后改为目录扫描）
+    // 启动不预加载持久化资源；同步开始时才按当前笔记读取 Filesystem。
     const out = [];
     const prefix = noteId + "/";
-    for (const [key, bytes] of assets) {
+    const keys = new Set(await listAssetKeysFs());
+    for (const key of keys) {
       if (!key.startsWith(prefix)) continue;
+      const bytes = assets.get(key) ?? await loadAssetBytesFs(key);
+      if (!bytes) continue;
+      const filename = key.slice(prefix.length);
+      out.push({ filename, size: bytes.length, hash: sha256Sync(bytes) });
+    }
+    for (const [key, bytes] of assets) {
+      if (!key.startsWith(prefix) || keys.has(key)) continue;
       const filename = key.slice(prefix.length);
       out.push({ filename, size: bytes.length, hash: sha256Sync(bytes) });
     }
     return out;
   },
   async readLocalAsset(noteId, filename) {
-    // H3：从内存 assets Map 读取字节（与 getAssetBytes 同源）
-    return assets.get(noteId + "/" + filename) ?? null;
+    const key = noteId + "/" + filename;
+    return assets.get(key) ?? await loadAssetBytesFs(key);
   },
   getLastSeenCommitId() {
     const d = db!;
@@ -497,52 +548,7 @@ const dbPort: SyncDbPort = {
 export const bridge = {
   async init(): Promise<void> {
     await ensureDb();
-    // 启动时从 Capacitor Filesystem 载入已持久化资产到内存（getAssetBytes 同步读；B1）
-    try {
-      const keys = await listAssetKeysFs();
-      // 一次性迁移：IndexedDB 旧资产（B1 升级前）→ Filesystem（缺失的键才搬，幂等）
-      try {
-        const legacyKeys = await listLegacyAssetKeys();
-        let migrated = 0;
-        for (const key of legacyKeys) {
-          if (keys.includes(key)) continue;
-          const bytes = await loadLegacyAssetBytes(key);
-          if (bytes) {
-            await saveAssetBytesFs(key, bytes);
-            keys.push(key);
-            migrated++;
-          }
-        }
-        if (migrated > 0) console.log("[mobile] 已迁移旧资产:", migrated);
-      } catch (e) {
-        console.warn("[mobile] 旧资产迁移跳过（可重新同步）:", e);
-      }
-      for (const key of keys) {
-        const bytes = await loadAssetBytesFs(key);
-        if (bytes) assets.set(key, bytes);
-      }
-      if (keys.length > 0) console.log("[mobile] 已恢复资产:", keys.length);
-    } catch (e) {
-      console.warn("[mobile] 恢复资产失败（可重新同步）:", e);
-    }
-    // 小记图片落盘迁移（canonical 直显需要文件存在；BLOB 表是真相，缺失文件才写，幂等）
-    try {
-      const d = db!;
-      const rows = d.prepare("SELECT quick_note_id, filename, bytes FROM quick_note_assets").all() as Array<{ quick_note_id: string; filename: string; bytes: Uint8Array }>;
-      let migrated = 0;
-      for (const row of rows) {
-        const key = "quick-notes/" + row.quick_note_id + "/" + row.filename;
-        try {
-          const existing = await loadAssetBytesFs(key);
-          if (existing) continue;
-          await saveAssetBytesFs(key, row.bytes);
-          migrated++;
-        } catch { /* 单张失败跳过（BLOB 表仍在，仅显示降级） */ }
-      }
-      if (migrated > 0) console.log("[mobile] 小记图片落盘迁移:", migrated);
-    } catch (e) {
-      console.warn("[mobile] 小记图片迁移失败:", e);
-    }
+    // 资源显示走 AssetServer（Filesystem 文件直读，无需预加载/迁移）。
   },
 
   // ---- 目录树 CRUD（Phase 0B：对齐共享 TreeRepository 接口，§20 ports.ts） ----
@@ -621,12 +627,19 @@ export const bridge = {
       assertNodeIcon(icon);
       const d = await ensureDb();
       const now = new Date().toISOString();
-      d.prepare("UPDATE folders SET icon=?, updated_at=?, sync_state='local' WHERE id=?").run(icon, now, id);
-      // sql.js 的 run() 无 statement 级 changes（恒 0），不能据此判断行存在——用 SELECT 确认（实机设置图标报"节点不存在"的根因）
-      const row = d.prepare("SELECT id, title, parent_id, sort_order, node_type, icon, updated_at FROM folders WHERE id=?").get(id) as Record<string, unknown> | undefined;
-      if (!row) throw new Error("节点不存在: " + id);
+      const folder = d.prepare("SELECT id, title, parent_id, sort_order, node_type, icon, updated_at, sync_state FROM folders WHERE id=?").get(id) as Record<string, unknown> | undefined;
+      if (folder) {
+        d.prepare("UPDATE folders SET icon=?, updated_at=?, sync_state='local' WHERE id=?").run(icon, now, id);
+        const row = { ...folder, icon, updated_at: now, sync_state: "local" };
+        await saveSnapshot(d.exportBytes());
+        return folderRowToTreeNode(row, { icon, updatedAt: now });
+      }
+      const note = d.prepare("SELECT id, title, parent_id, sort_order, icon, updated_at, sync_state, is_conflict FROM notes WHERE id=? AND trashed_at IS NULL").get(id) as Record<string, unknown> | undefined;
+      if (!note) throw new Error("节点不存在: " + id);
+      d.prepare("UPDATE notes SET icon=?, updated_at=?, sync_state='local' WHERE id=?").run(icon, now, id);
+      const row = { ...note, icon, updated_at: now, sync_state: "local" };
       await saveSnapshot(d.exportBytes());
-      return folderRowToTreeNode(row, { icon, updatedAt: now });
+      return noteRowToTreeNode(row, { icon, updatedAt: now });
     });
   },
 
@@ -688,10 +701,10 @@ export const bridge = {
     });
   },
 
-  async listNotes(): Promise<POCNote[]> {
+  async listNotes(): Promise<POCNoteSummary[]> {
     const d = await ensureDb();
-    const rows = d.prepare("SELECT id, title, content, updated_at, parent_id FROM notes WHERE trashed_at IS NULL ORDER BY updated_at DESC").all();
-    return rows.map(rowToNote);
+    const rows = d.prepare("SELECT id, title, updated_at, parent_id FROM notes WHERE trashed_at IS NULL ORDER BY updated_at DESC").all();
+    return rows.map(rowToNoteSummary);
   },
 
   async readNote(id: string): Promise<POCNote | null> {
@@ -735,50 +748,34 @@ export const bridge = {
     return maintenance.run("main", () => saveQuickNoteInternal(id, text, images));
   },
 
-  /** 带图片字节保存小记（composer 用）：图片字节写入 quick_note_assets BLOB，与正文/元数据同事务。
+  /** 带图片字节保存小记（composer 用）：图片字节落盘为文件（canonical URL 由本地 AssetServer 服务），
+   * 与桌面端小记完全一致——纯文件存储，完全不用 BLOB。文件名用 buildAssetFilename 唯一化（同文件多次添加不覆盖）。
    * 全量替换本小记图片（编辑时传已有图片字节 + 新增字节；简单一致，不引入 staged/retained 两段式）。 */
   async saveQuickNoteWithImages(id: string, text: string, imageFiles: Array<{ filename: string; mimeType: string; width: number | null; height: number | null; bytes: Uint8Array }> = []): Promise<string> {
     return maintenance.run("main", async () => {
       const d = await ensureDb();
-      const images: StoredQuickNoteImage[] = imageFiles.map((f) => ({
-        id: crypto.randomUUID(),
-        filename: f.filename,
-        mimeType: f.mimeType,
-        width: f.width,
-        height: f.height,
-        size: f.bytes.length,
-        hash: sha256Sync(f.bytes),
-      }));
+      // 唯一名只生成一次（content JSON 与落盘文件名必须一致；见 buildQuickNoteImageFiles 注释）
+      const { images, files: imageFilesWithKey } = buildQuickNoteImageFiles(imageFiles);
       const now = new Date().toISOString();
       const content = normalizeQuickNoteContent(text, images);
       const serialized = serializeQuickNoteContent(content);
       const contentHash = sha256Sync(new TextEncoder().encode(serialized));
       const preview = previewQuickNote(text, images.length);
+      // 先落盘图片文件（纯文件为准，完全不用 BLOB；落盘失败抛错——文件是唯一真相，不能静默降级）。
+      // 文件名与 content 引用一致（buildQuickNoteImageFiles 只生成一次唯一名）。
+      // 不做旧文件清理：与文档资源一致（每次上传生成唯一新文件，旧文件由 GC/孤儿清理回收；冗余是设计理念）。
+      for (const f of imageFilesWithKey) {
+        const key = "quick-notes/" + id + "/" + f.filename;
+        assets.set(key, f.bytes); // 内存层（同步端口/显示优先读）
+        await saveAssetBytesFs(key, f.bytes);
+      }
       d.transaction(() => {
         d.prepare(
-          `INSERT INTO quick_notes (id, created_at, updated_at, preview_text, image_count, content_hash, content, sync_state, is_conflict, restore_pending_at, ready_to_sync)
-           VALUES (?,?,?,?,?,?,?,'local',0,NULL,1)
-           ON CONFLICT(id) DO UPDATE SET updated_at=excluded.updated_at, preview_text=excluded.preview_text, image_count=excluded.image_count, content_hash=excluded.content_hash, content=excluded.content, sync_state='local', deleted_at=NULL, restore_pending_at=NULL, ready_to_sync=1`
+          "INSERT INTO quick_notes (id, created_at, updated_at, preview_text, image_count, content_hash, content, sync_state, is_conflict, restore_pending_at, ready_to_sync) " +
+          "VALUES (?,?,?,?,?,?,?,'local',0,NULL,1) " +
+          "ON CONFLICT(id) DO UPDATE SET updated_at=excluded.updated_at, preview_text=excluded.preview_text, image_count=excluded.image_count, content_hash=excluded.content_hash, content=excluded.content, sync_state='local', deleted_at=NULL, restore_pending_at=NULL, ready_to_sync=1"
         ).run(id, now, now, preview, images.length, contentHash, serialized);
-        // 全量替换图片字节（删除旧的 + 写入新的）
-        d.prepare("DELETE FROM quick_note_assets WHERE quick_note_id=?").run(id);
-        if (imageFiles.length > 0) {
-          const insert = d.prepare("INSERT INTO quick_note_assets (quick_note_id, id, filename, mime_type, width, height, size, content_hash, bytes) VALUES (?,?,?,?,?,?,?,?,?)");
-          imageFiles.forEach((f, i) => {
-            insert.run(id, images[i].id, f.filename, f.mimeType, f.width, f.height, f.bytes.length, images[i].hash, f.bytes);
-          });
-        }
       })();
-      // 落盘小记图片文件（canonical URL http://127.0.0.1:19876/quick-notes/{id}/{file} 由本地
-      // AssetServer 服务，与桌面端一致——小记显示/缩略图走 canonical 直显，不再 blob 注入）。
-      // BLOB 表仍是同步/恢复的字节真相；文件仅供显示，落盘失败不阻断保存。
-      for (const f of imageFiles) {
-        try {
-          await saveAssetBytesFs("quick-notes/" + id + "/" + f.filename, f.bytes);
-        } catch (e) {
-          console.warn("[mobile] 小记图片落盘失败（显示降级）:", e);
-        }
-      }
       await saveSnapshot(d.exportBytes());
       return id;
     });
@@ -800,11 +797,9 @@ export const bridge = {
     });
   },
 
-  /** 小记图片字节读取（composer/卡片显示用；缺失 → null）。 */
+  /** 小记图片字节读取（composer/卡片显示用；缺失 → null）。纯文件为准（无 BLOB）。 */
   async getQuickNoteImage(id: string, filename: string): Promise<Uint8Array | null> {
-    const d = await ensureDb();
-    const row = d.prepare("SELECT bytes FROM quick_note_assets WHERE quick_note_id=? AND filename=?").get(id, filename) as { bytes: Uint8Array } | undefined;
-    return row ? row.bytes : null;
+    return loadAssetBytesFs("quick-notes/" + id + "/" + filename);
   },
 
   /** 小记回收站列表（软删行；含冲突归档的 ready_to_sync=0 条目——它们也是可恢复的本地内容）。 */
@@ -830,12 +825,22 @@ export const bridge = {
   async purgeQuickNote(id: string): Promise<void> {
     return maintenance.run("main", async () => {
       const d = await ensureDb();
+      // 先读旧内容（删除前），用于清理图片文件（纯文件为准；无 BLOB）
+      const prevRow = d.prepare("SELECT content FROM quick_notes WHERE id=?").get(id) as { content: string } | undefined;
       d.transaction(() => {
         // 墓碑记录保留（若行存在则取行时间戳；行已不存在则覆盖旧记录保持幂等）
         d.prepare("INSERT OR REPLACE INTO quick_note_deleted (id, created_at, updated_at, deleted_at) SELECT id, created_at, updated_at, deleted_at FROM quick_notes WHERE id=?").run(id);
-        d.prepare("DELETE FROM quick_note_assets WHERE quick_note_id=?").run(id);
         d.prepare("DELETE FROM quick_notes WHERE id=?").run(id);
       })();
+      // 删除小记图片文件
+      if (prevRow) {
+        try {
+          const parsed = validateQuickNoteContent(JSON.parse(prevRow.content) as StoredQuickNoteContent);
+          for (const img of parsed.images) {
+            await removeAssetBytesFs("quick-notes/" + id + "/" + img.filename).catch(() => undefined);
+          }
+        } catch { /* 内容解析失败不阻断 purge */ }
+      }
       await saveSnapshot(d.exportBytes());
     });
   },
@@ -846,6 +851,8 @@ export const bridge = {
       const now = new Date().toISOString();
       // P1-9（GPT 审计）：文档标题不为空——空白回退"无标题文档"（对齐 createNote 默认语义，避免同步空标题）
       const safeTitle = title.trim() ? title.trim() : "无标题文档";
+      const existing = d.prepare("SELECT title, content FROM notes WHERE id=? AND trashed_at IS NULL").get(id) as { title: string; content: string } | undefined;
+      if (existing && !hasNoteSaveChanges(existing, { title: safeTitle, content })) return;
       // 本地编辑必须置 sync_state='local'（待上传），否则同步零变更早退会跳过本次修改
       // ON CONFLICT 不覆盖 parent_id：编辑后保留归属；新建时用传入 parentId
       d.prepare(
@@ -859,8 +866,10 @@ export const bridge = {
   async createNote(title: string, parentId: string | null = null): Promise<POCNote> {
     const id = crypto.randomUUID();
     const now = new Date().toISOString();
-    await bridge.saveNote(id, title, INITIAL_LAKE_CONTENT, parentId);
-    return { id, title, content: INITIAL_LAKE_CONTENT, updatedAt: now, parentId };
+    // 无父新建 → 兜底父笔记本（存在的笔记本；无则自动创建"未分类"）
+    const pid = parentId ?? dbPort.defaultNotebookId();
+    await bridge.saveNote(id, title, INITIAL_LAKE_CONTENT, pid);
+    return { id, title, content: INITIAL_LAKE_CONTENT, updatedAt: now, parentId: pid };
   },
 
   /** 本地软删（入回收站）：同步时上传墓碑（删除压编辑） */
@@ -884,6 +893,38 @@ export const bridge = {
     const d = await ensureDb();
     const rows = d.prepare("SELECT id, title, content, updated_at FROM notes WHERE trashed_at IS NOT NULL ORDER BY trashed_at DESC").all();
     return rows.map(rowToNote);
+  },
+
+  /** 软删除（入回收站）：folder = 整棵子树（含深层 folders + 子树 notes）标 trashed_at；note = 单条。
+   * 与桌面 deleteTreeNode 同语义（删除 = 移入回收站，回收站条目是普通条目，移动即同步传播）：
+   * 移动端无 notebook-trash 容器行，用 trashed_at 标记 + listFoldersForSync 输出 trashedAt 传播；
+   * parent_id 不变（恢复即原地清 trashed_at，对齐 restoreTreeItem）。
+   * 仅提供 API（lakeNative 契约/未来 UI 用），当前移动端 UI 未接入删除笔记本入口。 */
+  async trashTreeItem(id: string, kind: "folder" | "note"): Promise<void> {
+    return maintenance.run("main", async () => {
+      const d = await ensureDb();
+      const tx = d.transaction(() => {
+        const now = new Date().toISOString();
+        if (kind === "note") {
+          dbPort.localTrashNote(id);
+          return;
+        }
+        // folder：收集整棵子树（含自己）→ 全部标 trashed_at（同步传播删除）
+        const all = d.prepare("SELECT id, parent_id FROM folders").all() as Array<{ id: string; parent_id: string | null }>;
+        const ids = collectFolderSubtree(all, id);
+        const idList = Array.from(ids);
+        if (idList.length === 0) return;
+        const ph = idList.map(() => "?").join(",");
+        d.prepare("UPDATE folders SET trashed_at=?, sync_state='local', updated_at=? WHERE id IN (" + ph + ") AND trashed_at IS NULL").run(now, now, ...idList);
+        // 子树下 notes 级联进回收站（对齐桌面 deleteTreeNode 子树 trashed_at 级联）
+        const noteRows = d.prepare("SELECT id FROM notes WHERE parent_id IN (" + ph + ") AND trashed_at IS NULL").all(...idList) as Array<{ id: string }>;
+        for (const n of noteRows) {
+          d.prepare("UPDATE notes SET trashed_at=?, sync_state='local', restore_pending_at=NULL, updated_at=? WHERE id=?").run(now, now, n.id);
+        }
+      });
+      tx();
+      await saveSnapshot(d.exportBytes());
+    });
   },
 
   /** B2：统一回收站树（folders 笔记本/分组 + notes 文档）。复用桌面 TrashPanel 语义：仅根节点可恢复（整棵连带），任意节点可彻底删除。 */
@@ -1077,7 +1118,12 @@ export const bridge = {
       let quickNotes: QuickNotesSyncResult | { error: string };
       let quickMsg = "；小记已同步";
       try {
-        quickNotes = await syncQuickNotesViaEngine(syncCfg, s3Store, createQuickNotesSyncDbPort(d));
+        quickNotes = await syncQuickNotesViaEngine(syncCfg, s3Store, createQuickNotesSyncDbPort(d, {
+          assetBytes: assets,
+          saveAssetFile: saveAssetBytesFs,
+          loadAssetFile: loadAssetBytesFs,
+          removeAssetFile: removeAssetBytesFs,
+        }));
         if (quickNotes.uploaded + quickNotes.downloaded > 0) {
           quickMsg = `；小记 ↓${quickNotes.downloaded} ↑${quickNotes.uploaded}`;
         }

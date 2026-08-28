@@ -40,8 +40,6 @@ vi.mock("./sqliteDb.js", async () => {
 vi.mock("./persistence", () => ({
   saveSnapshot: vi.fn(async () => {}),
   loadSnapshot: vi.fn(async () => null),
-  listAssetKeys: vi.fn(async () => []),
-  loadAssetBytes: vi.fn(async () => null),
 }));
 vi.mock("./assetFs", () => ({
   saveAssetBytesFs: vi.fn(async () => {}),
@@ -113,5 +111,37 @@ describe("mobile purge 删除传播", () => {
     bridge.markTombstonesPublished([NID]);
     const tombAfter = bridge.listDeletedNotesForSync().find((t) => t.id === NID);
     expect(tombAfter!.deletedAt).toBe(tombBefore!.deletedAt);
+  });
+
+  it("trashTreeItem(folder)：整棵子树（深层 folders + 子树 notes）进回收站，同步列表带 trashedAt", async () => {
+    const nbRow = await bridge.createNotebook({ title: "待删库", icon: null });
+    const grp = await bridge.createGroup(nbRow.id, "内层分组");
+    const nid = "trash-note-sub-" + Date.now();
+    await bridge.saveNote(nid, "子笔记", "<p>内容</p>", grp.id);
+    // 删整棵 notebook
+    await bridge.trashTreeItem(nbRow.id, "folder");
+    const trash = await bridge.listTrashTree();
+    expect(trash.some((t) => t.id === nbRow.id && t.kind === "folder")).toBe(true);
+    // 子树 folders 级联进回收站
+    expect(trash.some((t) => t.id === grp.id && t.kind === "folder")).toBe(true);
+    // 子树 notes 级联进回收站
+    expect(trash.some((t) => t.id === nid && t.kind === "note")).toBe(true);
+    // 已移出可见树（trashed_at 标记生效）
+    const visible = await bridge.listTreeNodes();
+    expect(visible.some((n) => n.id === nbRow.id)).toBe(false);
+    // 回收站条目带删除时间（deletedAt = trashed_at，同步传播载体）
+    const trashNb = trash.find((t) => t.id === nbRow.id);
+    expect(trashNb?.deletedAt).toBeTruthy();
+  });
+
+  it("trashTreeItem(note)：单条进回收站，不连累其它笔记", async () => {
+    const A = "trash-note-a";
+    const B = "trash-note-b";
+    await bridge.saveNote(A, "A", "<p>a</p>", "notebook-personal");
+    await bridge.saveNote(B, "B", "<p>b</p>", "notebook-personal");
+    await bridge.trashTreeItem(A, "note");
+    const trash = await bridge.listTrashTree();
+    expect(trash.some((t) => t.id === A && t.kind === "note")).toBe(true);
+    expect(trash.some((t) => t.id === B)).toBe(false);
   });
 });

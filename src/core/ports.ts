@@ -41,7 +41,6 @@ export interface SecretStore {
 export interface CacheSummary {
   runtimeBlobBytes: number;
   tempFileBytes: number;
-  legacyMigrationBytes: number;
   downloadableAssetBytes: number;
   pendingUploadBytes: number;
 }

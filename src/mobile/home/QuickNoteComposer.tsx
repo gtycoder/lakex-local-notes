@@ -1,7 +1,7 @@
 /**
  * 移动端小记 composer（新建/编辑共用）：textarea + 图片选择/预览/移除 + 保存/取消。
- * 图片字节经 bridge.saveQuickNoteWithImages 写 quick_note_assets BLOB（与正文/元数据同事务）；
- * 编辑时已有图片字节从 BLOB 读回（getQuickNoteImage），保存时全量重写。
+ * 图片字节经 bridge.saveQuickNoteWithImages 落盘为文件（canonical URL 由 AssetServer 服务，无 BLOB）；
+ * 编辑时已有图片字节从文件读回（getQuickNoteImage），保存时全量重写。
  */
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Check, ImagePlus, X } from "lucide-react";
@@ -50,8 +50,8 @@ export function QuickNoteComposer({ editNote, onSaved, onCancel }: QuickNoteComp
     urlsRef.current = [];
   }, []);
 
-  // 编辑态：从 BLOB 读回已有图片字节（保存用）；预览走 canonical URL 直显（本地 AssetServer
-  // 服务 quick-notes/，与桌面一致），加载失败时 onError 回退 BLOB 字节的 objectURL
+  // 编辑态：从文件读回已有图片字节（保存用）；预览走 canonical URL 直显（本地 AssetServer
+  // 服务 quick-notes/，与桌面一致），加载失败时 onError 回退文件字节的 objectURL
   useEffect(() => {
     if (!editNote) return;
     let alive = true;
@@ -146,7 +146,7 @@ export function QuickNoteComposer({ editNote, onSaved, onCancel }: QuickNoteComp
                 src={img.url}
                 alt={img.filename}
                 onError={(e) => {
-                  // canonical 加载失败（文件缺失）→ 回退 BLOB 字节 objectURL
+                  // canonical 加载失败（文件缺失）→ 回退文件字节 objectURL
                   const target = e.currentTarget;
                   if (target.src.startsWith("http://127.0.0.1:19876") && img.bytes) {
                     target.src = makeUrl(img.bytes, img.mimeType);

@@ -1,6 +1,6 @@
 /**
  * 桌面服务适配器（V5 Phase 3）：把 LakeNative（IPC facade）字段映射到跨端契约 DTO。
- * - createNote 父目录语义：parentId=null → 默认个人笔记本（native.createNote），否则 createNoteIn；
+ * - createNote 父目录语义：parentId=null → 兜底父笔记本（无默认笔记本概念：存在的笔记本，无则自动建"未分类"），否则 createNoteIn；
  * - saveNoteContent / renameNote 拆分（替代原 saveNote 混合签名）；
  * - uploadResource 参数顺序：noteId → filename → bytes（替代原 {bytes, filename} + noteId）。
  * 契约不含：导出 docx/pdf、S3 GC、pickExportDir、窗口控制（桌面专属，native.ts 保留）。

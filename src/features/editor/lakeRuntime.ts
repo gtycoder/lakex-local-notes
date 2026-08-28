@@ -650,7 +650,7 @@ export function createLakeDocument(
             const mediaEl = card.querySelector("audio, video") as HTMLMediaElement | null;
             if (mediaEl && mediaEl.networkState === 3 && mediaEl.error) {
               const s = mediaEl.getAttribute("src");
-              if (s) { mediaEl.src = s; mediaEl.load(); }
+              if (s) { mediaEl.preload = "metadata"; mediaEl.src = s; mediaEl.load(); }
             }
             if (card.querySelector("audio, video")) return;
             if (card.getAttribute("name") === "video" || card.getAttribute("data-card-name") === "video") return; // video 卡无 onTranscodeSuccess 流程
@@ -686,7 +686,7 @@ export function createLakeDocument(
         audioTimers.push(window.setTimeout(() => tryEnsureAudio(tries + 1), 800));
       }
     };
-    audioTimers.push(window.setTimeout(() => tryEnsureAudio(0), 500));
+    audioTimers.push(window.setTimeout(() => tryEnsureAudio(0), 80));
     const prevDispose = (editor as any).__disposeExtras;
     (editor as any).__disposeExtras = () => {
       try { if (typeof prevDispose === "function") prevDispose(); } catch { /* ignore */ }

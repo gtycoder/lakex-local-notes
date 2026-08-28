@@ -1,0 +1,154 @@
+import { describe, it, expect, vi, beforeEach } from "vitest";
+import path from "node:path";
+import type { Database } from "sql.js";
+
+vi.mock("./sqliteDb.js", async () => {
+  const initSqlJs = (await import("sql.js")).default;
+  let SQL: Awaited<ReturnType<typeof initSqlJs>> | null = null;
+  const getSql = async () => {
+    if (!SQL)
+      SQL = await initSqlJs({
+        locateFile: () =>
+          path.join(process.cwd(), "node_modules/sql.js/dist/sql-wasm.wasm"),
+      });
+    return SQL;
+  };
+  class FakeStmt {
+    private stmt: any;
+    constructor(db: Database, sql: string) {
+      this.stmt = db.prepare(sql);
+    }
+    get(...params: unknown[]) {
+      this.stmt.reset();
+      if (params.length) this.stmt.bind(params as never);
+      return this.stmt.step()
+        ? (this.stmt.getAsObject() as Record<string, unknown>)
+        : undefined;
+    }
+    all(...params: unknown[]) {
+      this.stmt.reset();
+      if (params.length) this.stmt.bind(params as never);
+      const out: Record<string, unknown>[] = [];
+      while (this.stmt.step())
+        out.push(this.stmt.getAsObject() as Record<string, unknown>);
+      return out;
+    }
+    run(...params: unknown[]) {
+      this.stmt.reset();
+      if (params.length) this.stmt.bind(params as never);
+      this.stmt.step();
+      return { changes: 0, lastInsertRowid: 0 };
+    }
+  }
+  return {
+    SqlJsDb: class {
+      private db: Database;
+      private constructor(db: Database) {
+        this.db = db;
+      }
+      static async open(): Promise<any> {
+        const S = await getSql();
+        return new (this as any)(new S.Database());
+      }
+      static async openFrom(bytes: Uint8Array): Promise<any> {
+        const S = await getSql();
+        return new (this as any)(new S.Database(bytes));
+      }
+      prepare(sql: string) {
+        return new FakeStmt(this.db, sql);
+      }
+      transaction<T extends (...args: never[]) => unknown>(fn: T): T {
+        const wrapped = ((...args: unknown[]) => {
+          this.db.run("BEGIN");
+          try {
+            const r = fn(...(args as never[]));
+            this.db.run("COMMIT");
+            return r;
+          } catch (e) {
+            this.db.run("ROLLBACK");
+            throw e;
+          }
+        }) as unknown as T;
+        return wrapped;
+      }
+      pragma(source: string) {
+        return this.db.exec(source);
+      }
+      exec(sql: string) {
+        this.db.exec(sql);
+      }
+      close() {
+        this.db.close();
+      }
+      exportBytes() {
+        return this.db.export();
+      }
+    },
+  };
+});
+
+const { loadAssetBytesFs, listAssetKeysFs } = vi.hoisted(() => ({
+  loadAssetBytesFs: vi.fn(async () => new Uint8Array([1, 2, 3])),
+  listAssetKeysFs: vi.fn(async () => ["note-1/image.png"]),
+}));
+
+vi.mock("./persistence", () => ({
+  saveSnapshot: vi.fn(async () => {}),
+  loadSnapshot: vi.fn(async () => null),
+}));
+vi.mock("./assetFs", () => ({
+  saveAssetBytesFs: vi.fn(async () => {}),
+  loadAssetBytesFs,
+  listAssetKeysFs,
+}));
+
+import { bridge } from "./bridge.js";
+
+describe("mobile startup performance contract", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("listNotes returns metadata without loading every document body", async () => {
+    await bridge.saveNote(
+      "startup-note",
+      "启动测试",
+      "<p>large body</p>",
+      null,
+    );
+
+    const notes = await bridge.listNotes();
+
+    expect(notes).toEqual([
+      {
+        id: "startup-note",
+        title: "启动测试",
+        updatedAt: expect.any(String),
+        parentId: null,
+      },
+    ]);
+    expect("content" in notes[0]).toBe(false);
+  });
+
+  it("repeatedly saving the same note does not advance its sync timestamp", async () => {
+    await bridge.saveNote("mobile-idempotent", "幂等保存", "<p>same</p>", null);
+    const first = await bridge.readNote("mobile-idempotent");
+    await new Promise((resolve) => setTimeout(resolve, 2));
+    await bridge.saveNote("mobile-idempotent", "幂等保存", "<p>same</p>", null);
+    const second = await bridge.readNote("mobile-idempotent");
+    expect(second?.updatedAt).toBe(first?.updatedAt);
+  });
+
+  it("init does not load assets into the JS heap (assets are served from Filesystem by AssetServer)", async () => {
+    await bridge.init();
+
+    expect(listAssetKeysFs).not.toHaveBeenCalled();
+    expect(loadAssetBytesFs).not.toHaveBeenCalled();
+
+    // 旧迁移（migrateAssetsToFilesystem）已删：init 完全不做资产预加载/迁移，
+    // 资产由 AssetServer 直接读 Filesystem 文件（含小记 quick-notes/）。
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    expect(listAssetKeysFs).not.toHaveBeenCalled();
+    expect(loadAssetBytesFs).not.toHaveBeenCalled();
+  });
+});

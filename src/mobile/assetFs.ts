@@ -63,6 +63,21 @@ export async function loadAssetBytesFs(key: string): Promise<Uint8Array | null> 
   }
 }
 
+/** 删除已持久化资产文件（不存在时静默成功）。 */
+export async function removeAssetBytesFs(key: string): Promise<void> {
+  const [noteId, ...rest] = key.split("/");
+  const filename = rest.join("/");
+  if (!noteId || !filename) return;
+  try {
+    await Filesystem.deleteFile({
+      path: ROOT + "/" + noteId + "/" + filename,
+      directory: Directory.Data,
+    });
+  } catch {
+    // 文件不存在/删除失败——静默（幂等删除语义）
+  }
+}
+
 /** 列出全部已持久化资产键（{noteId}/{file}），供启动时载入内存。 */
 export async function listAssetKeysFs(): Promise<string[]> {
   const keys: string[] = [];

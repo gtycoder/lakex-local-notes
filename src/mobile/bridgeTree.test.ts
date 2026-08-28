@@ -39,8 +39,6 @@ vi.mock("./sqliteDb.js", async () => {
 vi.mock("./persistence", () => ({
   saveSnapshot: vi.fn(async () => {}),
   loadSnapshot: vi.fn(async () => null),
-  listAssetKeys: vi.fn(async () => []),
-  loadAssetBytes: vi.fn(async () => null),
 }));
 vi.mock("./assetFs", () => ({
   saveAssetBytesFs: vi.fn(async () => {}),
@@ -83,5 +81,19 @@ describe("mobile 目录树（文档套文档）", () => {
     // notebook 本身不在 listNotebookTree（树从 notebook 根展开，不含根自身）；listTreeNodes 验证
     const nodes = await bridge.listTreeNodes();
     expect(nodes.find((n) => n.id === nb.id)?.icon).toBe("📁");      // notebook 图标
+  });
+});
+
+
+describe("mobile 文档图标同步能力", () => {
+  it("setNodeIcon 支持 note 元数据并保留在 notebook tree", async () => {
+    const nb = await bridge.createNotebook({ title: "文档图标本", icon: null });
+    const noteId = "mobile-note-icon";
+    await bridge.saveNote(noteId, "带图标文档", "<p>x</p>", nb.id);
+    const updated = await bridge.setNodeIcon(noteId, "star");
+    expect(updated.id).toBe(noteId);
+    expect(updated.icon).toBe("star");
+    const tree = await bridge.listNotebookTree(nb.id);
+    expect(tree.find((item) => item.id === noteId)?.icon).toBe("star");
   });
 });

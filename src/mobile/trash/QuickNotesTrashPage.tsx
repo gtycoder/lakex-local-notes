@@ -1,7 +1,7 @@
 /**
  * 移动端小记回收站页（B：小记全同步闭环的 UI 半）。
  * 对齐桌面小记回收站语义：软删行列表 + 恢复（restore_pending → 同步 local-wins 覆盖墓碑）/彻底删除（墓碑继续传播）。
- * 图片随内容恢复（软删保留 content + quick_note_assets BLOB；墓碑携带图片由引擎保障）。
+ * 图片随内容恢复（软删保留 content + 图片文件；墓碑携带图片由引擎保障）。
  */
 import { useCallback, useEffect, useState } from "react";
 import { ArrowLeft, Feather, RotateCcw, Trash2 } from "lucide-react";

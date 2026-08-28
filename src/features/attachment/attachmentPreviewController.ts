@@ -104,18 +104,39 @@ function readFileCardData(start: HTMLElement, card: HTMLElement): { src: string;
 }
 
 /**
- * 宿主级「点击任意位置清理 Lake 卡片 hover 残留」绑定（桌面/移动端共用）：
- * mouseleave 事件在打开系统应用/播放器遮罩或快速点击时可能被吞，ne-card-hovered 残留 →
- * 卡片背景一直着色。pointerdown 即清理；返回的清理函数用于移除监听。
+ * 宿主级「清理 Lake 卡片 hover 残留」绑定（桌面/移动端共用）：
+ * 光标离开卡片/宿主时直接移除 ne-card-hovered，背景随光标离开立即消失；
+ * 打开系统应用/播放器遮罩或快速点击时 mouseleave/pointerout 可能被吞，pointerdown 兜底清理。
+ * 返回的清理函数用于移除监听。
  */
 export function createCardHoverResidueCleaner(host: HTMLElement): () => void {
+  const clearCard = (card: Element): void => {
+    try {
+      card.classList.remove("ne-card-hovered");
+      card.querySelectorAll(".ne-card-hovered").forEach((el) => el.classList.remove("ne-card-hovered"));
+    } catch { /* 忽略 */ }
+  };
   const clean = (): void => {
     try {
       host.querySelectorAll(".ne-card-hovered").forEach((el) => el.classList.remove("ne-card-hovered"));
     } catch { /* 忽略 */ }
   };
+  // 光标离开卡片：relatedTarget 不在该卡片内 → 移除该卡片 hovered 背景。
+  const onPointerOut = (event: PointerEvent): void => {
+    const target = event.target as Element | null;
+    if (!target || typeof target.closest !== "function") return;
+    const card = target.closest("ne-card, [data-card-name]") as Element | null;
+    if (!card) return;
+    const rel = event.relatedTarget as Element | null;
+    if (rel && (rel === card || card.contains(rel))) return; // 仍在卡内（跨子元素移动不清理）
+    clearCard(card);
+  };
   host.addEventListener("pointerdown", clean, true);
-  return () => host.removeEventListener("pointerdown", clean, true);
+  host.addEventListener("pointerout", onPointerOut, true);
+  return () => {
+    host.removeEventListener("pointerdown", clean, true);
+    host.removeEventListener("pointerout", onPointerOut, true);
+  };
 }
 
 /**

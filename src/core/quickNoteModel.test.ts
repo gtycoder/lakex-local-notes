@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { QuickNoteModelError } from "./quickNoteModel";
 import {
   MAX_QUICK_NOTE_TEXT_LENGTH,
+  buildQuickNoteImageFiles,
   normalizeQuickNoteContent,
   parseQuickNoteContent,
   previewQuickNote,
@@ -54,5 +55,44 @@ describe("quickNoteModel", () => {
       expect(error).toBeInstanceOf(QuickNoteModelError);
       expect((error as QuickNoteModelError).kind).toBe("InvalidInput");
     }
+  });
+});
+
+describe("buildQuickNoteImageFiles", () => {
+  const bytes = (seed: number): Uint8Array => new Uint8Array([137, 80, 78, 71, seed, seed, seed, seed]);
+
+  it("content 引用的 filename 与落盘文件名一致（防 double buildAssetFilename 回归：真机踩过同步找不到文件）", () => {
+    const { images, files } = buildQuickNoteImageFiles([
+      { filename: "photo.png", mimeType: "image/png", width: 10, height: 10, bytes: bytes(1) },
+      { filename: "clip.jpg", mimeType: "image/jpeg", width: 20, height: 20, bytes: bytes(2) },
+    ]);
+    expect(images.map((i) => i.filename)).toEqual(files.map((f) => f.filename));
+    expect(images).toHaveLength(2);
+    for (const img of images) {
+      expect(img.filename).toMatch(/^\d{13}_[0-9a-f]{8}\.(png|jpg)$/);
+    }
+    expect(images[0].size).toBe(8);
+    expect(images[0].mimeType).toBe("image/png");
+  });
+
+  it("同原始文件名两次调用生成不同唯一名（同名不覆盖）", () => {
+    const a = buildQuickNoteImageFiles([{ filename: "same.png", mimeType: "image/png", width: null, height: null, bytes: bytes(1) }]);
+    const b = buildQuickNoteImageFiles([{ filename: "same.png", mimeType: "image/png", width: null, height: null, bytes: bytes(2) }]);
+    expect(a.images[0].filename).not.toBe(b.images[0].filename);
+  });
+
+  it("空输入返回空（不生成文件）", () => {
+    const { images, files } = buildQuickNoteImageFiles([]);
+    expect(images).toHaveLength(0);
+    expect(files).toHaveLength(0);
+  });
+
+  it("生成的 content 可通过 validateQuickNoteContent（与同步/持久化链路一致）", () => {
+    const { images } = buildQuickNoteImageFiles([
+      { filename: "ok.png", mimeType: "image/png", width: 5, height: 5, bytes: bytes(3) },
+    ]);
+    const content = normalizeQuickNoteContent("带图", images);
+    const serialized = serializeQuickNoteContent(content);
+    expect(validateQuickNoteContent(JSON.parse(serialized)).images[0].filename).toBe(images[0].filename);
   });
 });

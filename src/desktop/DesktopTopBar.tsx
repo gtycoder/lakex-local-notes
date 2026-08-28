@@ -45,6 +45,7 @@ export function DesktopTopBarLeading(props: DesktopTopBarLeadingProps) {
         saveState={saveState}
         saveLabel={saveLabelText}
         pendingDocuments={pendingSummary.documents}
+        pendingFolders={pendingSummary.folders}
         pendingResources={pendingSummary.resources}
         pendingQuickNotes={pendingSummary.quickNotes}
         dirtyTabCount={dirtyTabCount}

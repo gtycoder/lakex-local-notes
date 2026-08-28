@@ -73,7 +73,7 @@ export function App() {
   /** 顶栏「工作空间」名：云同步启用且已配置 S3 时显示对象前缀。 */
   const [s3Settings, setS3Settings] = useState<S3Settings | null>(null);
   const workspaceName = getWorkspaceDisplayName(cloudEnabled, s3Settings);
-  const [pendingSummary, setPendingSummary] = useState<SyncPendingSummary>({ documents: 0, resources: 0, quickNotes: 0, total: 0, generatedAt: "" });
+  const [pendingSummary, setPendingSummary] = useState<SyncPendingSummary>({ documents: 0, folders: 0, resources: 0, quickNotes: 0, total: 0, generatedAt: "" });
   const [draftEntries, setDraftEntries] = useState<DraftJournalEntry[]>([]);
   const [, setSyncProgress] = useState<SyncProgress | null>(null);
   const handleSyncToastAutoHide = useCallback(() => setSyncProgress(null), []);
@@ -120,7 +120,10 @@ export function App() {
   const handleNoteSaved = useCallback((saved: NoteDocument) => {
     setNotes(patchNoteById(saved.id, summaryOf(saved)));
     setTreeNodes((items) => items.map((item) => item.noteFileId === saved.id || item.id === saved.id ? { ...item, title: saved.title, updatedAt: saved.updatedAt, syncState: saved.syncState } : item));
-    setSync((current) => ({ ...current, pendingChanges: Math.max(1, current.pendingChanges) }));
+    setSync((current) => ({
+      ...current,
+      pendingChanges: saved.syncState === "synced" ? current.pendingChanges : Math.max(1, current.pendingChanges),
+    }));
     refreshPendingSummaryRef.current();
   }, [setNotes, setTreeNodes, setSync]);
   const handleOpenTabsApplied = useCallback((saved: NoteDocument) => {

@@ -166,7 +166,7 @@ export interface SyncDbPort {
    * lastUploadedHash 传 null = 下载对账收尾（本机未上传该版本，不得误标"本机是作者"）。 */
   markSyncedIfUnchanged(id: string, expectedContentHash: string, metaAt: string, lastUploadedHash: string | null): void;
   setSyncBase(id: string, contentHash: string, metaAt: string | null, lastUploadedHash: string | null): void;
-  /** 默认个人笔记本 id（effectiveParent 回退基准；对齐桌面 store.ts DEFAULT_NOTEBOOK_ID）。 */
+  /** 兜底父笔记本 id（系统中没有"默认笔记本"；实现 = 任意存在的笔记本，无则自动创建"未分类"）。 */
   defaultNotebookId(): string;
   /** 导入远端 notebook/group 节点（移动端 folders/tree 表）。 */
   importRemoteFolder(folder: ManifestFolder): void;
@@ -310,7 +310,7 @@ export async function syncNow(cfg: SyncConfig, s3: S3Store, db: SyncDbPort, opts
   // ---- 2. 下载方向：墓碑/恢复分支 → reconcile 对账 → 应用远端 ----
   if (remote) {
     // D4：先导入目录树（保证文档父 notebook/group 已存在），并构建 validParents——
-    // 父节点集合 = 默认笔记本 + 回收站笔记本 + 远端 folders + 远端 active 笔记 id + 本地已有节点。
+    // 父节点集合 = 兜底父笔记本（无默认笔记本概念）+ 回收站笔记本 + 远端 folders + 远端 active 笔记 id + 本地已有节点。
     // effectiveParent 据此回退，防"父目录缺失 → 文档消失/归属错位"（对齐桌面 sync.ts:344-363/395）。
     const defaultNotebook = db.defaultNotebookId();
     const validParents = new Set<string>([defaultNotebook, TRASH_NOTEBOOK_ID]);

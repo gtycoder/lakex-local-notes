@@ -4,19 +4,18 @@
  * - 数据：直接走 bridge 真实端口（folders CRUD/notes/搜索/同步已就绪），不做 fixture。
  * - 复杂卡片（画板/思维导图/流程图）：viewer 只读渲染（§19.1），编辑入口置灰。
  */
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { bridge, type POCNote } from "./bridge";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from "react";
+import { bridge, type POCNote, type POCNoteSummary } from "./bridge";
 import type { TreeNode } from "../lib/types";
 import { HomePage } from "./home/HomePage";
 import { NotebookPage } from "./notebook/NotebookPage";
-import { DocumentPage } from "./document/DocumentPage";
+const DocumentPage = lazy(() => import("./document/DocumentPage").then(({ DocumentPage: Page }) => ({ default: Page })));
 import { CreateNotebookSheet } from "./settings/CreateNotebookSheet";
 import { SearchSheet } from "./settings/SearchSheet";
 import { SettingsDrawer } from "./settings/SettingsDrawer";
 import { useBackHandler } from "./useBackHandler";
 import { TrashPage } from "./trash/TrashPage";
 import { QuickNotesTrashPage } from "./trash/QuickNotesTrashPage";
-import "lakex-editor-react-component/style.css";
 import "./mobile.css";
 
 export type Route =
@@ -29,7 +28,7 @@ export type Route =
 export function MobileApp() {
   const [route, setRoute] = useState<Route>({ kind: "home", tab: "library" });
   const [treeNodes, setTreeNodes] = useState<TreeNode[]>([]);
-  const [notes, setNotes] = useState<POCNote[]>([]);
+  const [notes, setNotes] = useState<POCNoteSummary[]>([]);
   const [active, setActive] = useState<POCNote | null>(null);
   const [draft, setDraft] = useState("");
   const [draftTitle, setDraftTitle] = useState("");
@@ -67,6 +66,9 @@ export function MobileApp() {
           createQuickNote: (text: string) => bridge.createQuickNote(text),
           deleteQuickNote: (id: string) => bridge.deleteQuickNote(id),
           saveQuickNote: (id: string, text: string) => bridge.saveQuickNote(id, text),
+          saveQuickNoteWithImages: (id: string, text: string, images: Array<{ filename: string; mimeType: string; width: number | null; height: number | null; bytes: Uint8Array }>) =>
+            bridge.saveQuickNoteWithImages(id, text, images),
+          getQuickNoteImage: (id: string, filename: string) => bridge.getQuickNoteImage(id, filename),
           listQuickNoteTrash: () => bridge.listQuickNoteTrash(),
           restoreQuickNote: (id: string) => bridge.restoreQuickNote(id),
           purgeQuickNote: (id: string) => bridge.purgeQuickNote(id),
@@ -82,6 +84,7 @@ export function MobileApp() {
           purgeTreeItem: (id: string, kind: "folder" | "note") => bridge.purgeTreeItem(id, kind),
           createGroup: (parentId: string, title: string) => bridge.createGroup(parentId, title),
           renameTreeNode: (id: string, title: string) => bridge.renameTreeNode(id, title),
+          setNodeIcon: (id: string, icon: string | null) => bridge.setNodeIcon(id, icon),
           reorderSiblings: (parentId: string | null, orderedIds: string[]) => bridge.reorderSiblings(parentId, orderedIds),
           moveTreeNodeOrdered: (id: string, parentId: string | null, orderedIds: string[]) => bridge.moveTreeNodeOrdered(id, parentId, orderedIds),
           createNotebook: (input: { title: string; icon: string | null }) => bridge.createNotebook(input),
@@ -187,7 +190,7 @@ export function MobileApp() {
           onOpenNote={(id) => openDocument(id, "viewer")}
           onOpenDrawer={() => setDrawerOpen(true)}
           onOpenSearch={() => setSearchOpen(true)}
-          onCreateNote={() => void createNoteInParent("notebook-personal")}
+          onCreateNote={() => void createNoteInParent(null)} // 无默认笔记本：bridge 兜底（存在的笔记本/自动建"未分类"）
           onCreateNotebook={() => setCreateNbOpen(true)}
           onOpenQuickTrash={() => setRoute({ kind: "quick-trash" })}
           onQuickNotesChanged={refreshAll}
@@ -214,7 +217,8 @@ export function MobileApp() {
         />
       )}
       {route.kind === "document" && active && (
-        <DocumentPage
+        <Suspense fallback={<div className="poc-center">打开文档中…</div>}>
+          <DocumentPage
           note={active}
           content={draft}
           title={draftTitle}
@@ -240,7 +244,8 @@ export function MobileApp() {
               setRoute({ kind: "home", tab: "library" });
             }
           }}
-        />
+          />
+        </Suspense>
       )}
       <CreateNotebookSheet
         open={createNbOpen}

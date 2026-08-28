@@ -37,7 +37,7 @@ describe("ports 共享接口（Phase 0A）", () => {
   it("CachePort 接口方法签名齐全（编译期校验）", () => {
     const port: CachePort = {
       getCacheSummary: async () => ({
-        runtimeBlobBytes: 0, tempFileBytes: 0, legacyMigrationBytes: 0,
+        runtimeBlobBytes: 0, tempFileBytes: 0,
         downloadableAssetBytes: 0, pendingUploadBytes: 0,
       }),
       clearDerivedCaches: async () => ({ cleared: {} }),

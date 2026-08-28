@@ -1,6 +1,7 @@
 /** 文档页：LakeEditor viewer/editor + 保存。图片/附件走本地资源服务（AssetServer，http://127.0.0.1:19876），
  * canonical URL 本机可达 → Lake 原生渲染，无 blob 注入/还原。 */
 import { EditorDock } from "../editor/EditorDock";
+import "lakex-editor-react-component/style.css";
 import { OutlineSheet } from "../editor/OutlineSheet";
 import { DocListSheet, type DocListItem } from "../editor/DocListSheet";
 import { lakeBridge } from "../../features/editor/lakeRuntime";
@@ -11,6 +12,7 @@ import type { LakeEditorInstance, LakeEditorPrefs } from "../../features/editor/
 import type { AttachmentPreviewItem } from "../../features/attachment/attachmentPreviewController";
 import type { LocalAssetRef } from "../../core/assetUrl.js";
 import { parseLocalAssetUrl } from "../../core/assetUrl.js";
+import { mediaKindOfFilename } from "../../core/assetNaming.js";
 import { registerPlugin } from "@capacitor/core";
 import { Filesystem, Directory } from "@capacitor/filesystem";
 import type { POCNote } from "../bridge";
@@ -119,6 +121,8 @@ export function DocumentPage(props: DocumentPageProps) {
         editing={editing}
         onInsertImage={() => insertFileViaInput("image/*")}
         onInsertAttachment={() => insertFileViaInput("")}
+        onInsertAudio={() => insertFileViaInput("audio/*")}
+        onInsertVideo={() => insertFileViaInput("video/*")}
         onInsertTable={() => {
           try { lakeBridge(editorRef.current ?? undefined)?.renderer?.execCommand?.("table" as never); } catch { /* 忽略 */ }
         }}
@@ -141,7 +145,10 @@ export function DocumentPage(props: DocumentPageProps) {
           const ed = editorRef.current;
           if (!file || !ed) return;
           // 上传走 Lake createUploadPromise（bridge.uploadResource 落盘 note-assets + 返回 canonical URL）
-          try { lakeBridge(ed)?.renderer?.execCommand?.("insertFiles" as never, [file]); } catch { /* 忽略 */ }
+          // 附件选中的音视频 → 原生音视频卡（编辑器内嵌播放）；其余保持附件卡
+          const kind = mediaKindOfFilename(file.name);
+          const opts = kind ? { category: kind, from: "ui" } : undefined;
+          try { lakeBridge(ed)?.renderer?.execCommand?.("insertFiles" as never, [file], opts as never); } catch { /* 忽略 */ }
         }}
       />
     </div>

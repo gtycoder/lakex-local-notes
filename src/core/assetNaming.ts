@@ -14,8 +14,15 @@ export const ASSET_NAME_RE = /\d{13}_[0-9a-f]{8}\.[a-z0-9]{1,10}/g;
 /** 非全局形态（test()/exec() 无 lastIndex 状态；matchAll 用上面的全局形态）。 */
 const ASSET_NAME_RE_SINGLE = /\d{13}_[0-9a-f]{8}\.[a-z0-9]{1,10}/;
 
-/** 受支持的图片扩展名（嗅探/格式校验用）。 */
-export const ASSET_IMAGE_EXTS = ["png", "jpg", "jpeg", "gif", "webp", "avif"] as const;
+/**
+ * 受支持的图片扩展名（嗅探/格式校验/附件→图片卡分发用）。
+ * 参考思源 SIYUAN_ASSETS_IMAGE（app/src/constants.ts）补齐常用格式；
+ * heic/heif 未列入（浏览器兼容差，保持附件卡由系统应用打开更合适）。
+ */
+export const ASSET_IMAGE_EXTS = [
+  "png", "jpg", "jpeg", "gif", "webp", "avif",
+  "apng", "bmp", "svg", "ico", "cur", "jfif", "pjp", "pjpeg", "jpe", "tiff", "tif",
+] as const;
 
 /** 常见附件扩展名（文件类型图标/内联预览分流用；引用提取不受此清单限制）。 */
 export const ASSET_ATTACHMENT_EXTS = [
@@ -50,13 +57,53 @@ export function isAssetFilename(name: string): boolean {
   return ASSET_NAME_RE_SINGLE.test(name);
 }
 
-/** 媒体附件扩展名（音频/视频——应用内嵌播放；非媒体走系统打开）。桌面/移动端共用。 */
-const MEDIA_EXT_SET = new Set(["mp3", "wav", "m4a", "aac", "flac", "ogg", "oga", "mp4", "mov", "mkv", "avi", "webm", "m4v", "wma", "wmv", "flv", "mid", "midi"]);
+/**
+ * 音频附件扩展名（附件→音频卡分发用）。桌面/移动端共用。
+ * ⚠️ 该清单 = Lake fileReader 实测可插入音频卡的格式（CDP 逐格式验证，2026-08-27）：
+ * aac/ogg/oga/wma/mid/opus/weba/amr/aiff 等 Lake 的 audio reader 不认，任何路径都建不出卡，
+ * 不列入——列入会导致附件插入失败（比保持附件卡更糟）。
+ */
+export const AUDIO_EXTENSIONS = ["mp3", "wav", "m4a", "flac"] as const;
 
-/** 文件名是否为媒体附件（音频/视频）。 */
+/**
+ * 视频附件扩展名（附件→视频卡分发用）。桌面/移动端共用。
+ * ⚠️ 该清单 = Lake fileReader 实测可插入视频卡的格式（CDP 逐格式验证，2026-08-27）：
+ * ogv/3g2/m2ts 等 Lake 的 video reader 不认，不列入。
+ */
+export const VIDEO_EXTENSIONS = [
+  "mp4", "mov", "mkv", "avi", "webm", "m4v", "wmv", "flv",
+  "mpeg", "mpg", "3gp", "ts",
+] as const;
+
+/**
+ * Lake fileReader 实测可插入图片卡的格式（CDP 逐格式验证，2026-08-27）。
+ * avif/apng/ico/cur/jfif/pjp/pjpeg/jpe 等 Lake 的 image reader 不认，任何路径都建不出卡，
+ * 不参与分发（ASSET_IMAGE_EXTS 仍是完整图片资产清单，两者职责不同）。
+ */
+const LAKE_IMAGE_INSERT_EXTS = new Set(["png", "jpg", "jpeg", "gif", "webp", "bmp", "svg", "tiff", "tif"]);
+
+/** 媒体附件扩展名（音频/视频——应用内嵌播放；非媒体走系统打开）。桌面/移动端共用。 */
+const MEDIA_EXT_SET = new Set<string>([...AUDIO_EXTENSIONS, ...VIDEO_EXTENSIONS]);
+
+/** 附件/插入路径的三类原生卡类型：音频卡 / 视频卡 / 图片卡。 */
+export type MediaKind = "audio" | "video" | "image";
+
+/** 文件名是否为媒体附件（音频/视频；图片不算"媒体附件"——图片本就内嵌显示）。 */
 export function isMediaFilename(filename: string): boolean {
-  const i = filename.lastIndexOf(".");
-  return i >= 0 ? MEDIA_EXT_SET.has(filename.slice(i + 1).toLowerCase()) : false;
+  const kind = mediaKindOfFilename(filename);
+  return kind === "audio" || kind === "video";
+}
+
+/**
+ * 文件名 → 卡片类型（"audio" | "video" | "image" | null）。
+ * 附件路径（insertFiles/dropFile）按此分发：音频/视频/图片自动转对应原生卡，其余保持附件卡。
+ */
+export function mediaKindOfFilename(filename: string): MediaKind | null {
+  const ext = extOf(filename).toLowerCase();
+  if ((AUDIO_EXTENSIONS as readonly string[]).includes(ext)) return "audio";
+  if ((VIDEO_EXTENSIONS as readonly string[]).includes(ext)) return "video";
+  if (LAKE_IMAGE_INSERT_EXTS.has(ext)) return "image";
+  return null;
 }
 
 /** 提取正文中引用的资产文件名（去重）。 */

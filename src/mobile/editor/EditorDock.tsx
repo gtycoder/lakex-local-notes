@@ -6,7 +6,7 @@
  * 格式命令走 Lake renderer.execCommand（文本 ne-* 属性；块级 style "h1"/"p" 等）。
  */
 import { useEffect, useRef, useState } from "react";
-import { Plus, Type, Bold, List, ListTodo, MoreHorizontal, Keyboard, X, Image as ImageIcon, Paperclip, Table2, Quote, Minus, Code2, ChevronDown } from "lucide-react";
+import { Plus, Type, Bold, List, ListTodo, MoreHorizontal, Keyboard, X, Image as ImageIcon, Paperclip, Table2, Quote, Minus, Code2, ChevronDown, Music, Video } from "lucide-react";
 import { lakeBridge, type LakeEditorInstance } from "../../features/editor/lakeRuntime";
 
 type PanelMode = "insert" | "font" | null;
@@ -19,6 +19,10 @@ export interface EditorDockProps {
   onInsertImage?: () => void;
   /** 触发附件插入 */
   onInsertAttachment?: () => void;
+  /** 触发音频卡片插入 */
+  onInsertAudio?: () => void;
+  /** 触发视频卡片插入 */
+  onInsertVideo?: () => void;
   /** 触发表格插入 */
   onInsertTable?: () => void;
 }
@@ -33,7 +37,7 @@ function useEditorExec(editor: LakeEditorInstance | null) {
   };
 }
 
-export function EditorDock({ editor, editing, onInsertImage, onInsertAttachment, onInsertTable }: EditorDockProps) {
+export function EditorDock({ editor, editing, onInsertImage, onInsertAttachment, onInsertAudio, onInsertVideo, onInsertTable }: EditorDockProps) {
   const [panelMode, setPanelMode] = useState<PanelMode>(null);
   const [dockHidden, setDockHidden] = useState(false);
   const exec = useEditorExec(editor);
@@ -86,6 +90,8 @@ export function EditorDock({ editor, editing, onInsertImage, onInsertAttachment,
             <div className="med-ins-grid">
               <button className="med-ins-item" onClick={() => { onInsertImage?.(); }}><ImageIcon size={20} /><span>图片</span></button>
               <button className="med-ins-item" onClick={() => { onInsertAttachment?.(); }}><Paperclip size={20} /><span>附件</span></button>
+              <button className="med-ins-item" onClick={() => { onInsertAudio?.(); }}><Music size={20} /><span>音频</span></button>
+              <button className="med-ins-item" onClick={() => { onInsertVideo?.(); }}><Video size={20} /><span>视频</span></button>
               <button className="med-ins-item" onClick={() => { onInsertTable?.(); }}><Table2 size={20} /><span>表格</span></button>
               <button className="med-ins-item" onClick={() => run("quote")}><Quote size={20} /><span>引用</span></button>
               <button className="med-ins-item" onClick={() => run("hr")}><Minus size={20} /><span>分割线</span></button>

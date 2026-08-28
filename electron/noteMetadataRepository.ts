@@ -204,10 +204,6 @@ export class NoteMetadataRepository {
     return !!this.db.prepare("SELECT 1 FROM tree_nodes WHERE id=? AND deleted_at IS NULL").get(id);
   }
 
-  defaultNotebookId(): string {
-    return "notebook-personal";
-  }
-
   /** 该父节点的有效子节点（排除回收站子树，对齐 listTreeNodes 的 UI 语义；用于移动/重排校验）。
    * SQLite 中 parent_id = NULL 恒不成立：根层（parentId=null）必须用 IS NULL（桌面根层笔记本排序修复）。 */
   private childrenOf(parentId: string | null): string[] {

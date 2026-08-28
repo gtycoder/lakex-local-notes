@@ -13,6 +13,7 @@ export interface SyncStatusPopoverProps {
   saveState: SaveState;
   saveLabel: string;
   pendingDocuments: number;
+  pendingFolders?: number;
   pendingResources: number;
   pendingQuickNotes?: number;
   dirtyTabCount: number;
@@ -38,6 +39,7 @@ export function SyncStatusPopover({
   saveState,
   saveLabel,
   pendingDocuments,
+  pendingFolders = 0,
   pendingResources,
   pendingQuickNotes = 0,
   dirtyTabCount,
@@ -54,7 +56,7 @@ export function SyncStatusPopover({
   const localButtonRef = useRef<HTMLButtonElement | null>(null);
   const resolvedButtonRef = buttonRef ?? localButtonRef;
   const popoverRef = useRef<HTMLDivElement | null>(null);
-  const model = buildSyncStatusModel({ sync, saveState, saveLabel, pendingDocuments, pendingResources, pendingQuickNotes, dirtyTabCount, lastSavedAt, cloudEnabled, conflictSnapshotCount: conflictSnapshots.length });
+  const model = buildSyncStatusModel({ sync, saveState, saveLabel, pendingDocuments, pendingFolders, pendingResources, pendingQuickNotes, dirtyTabCount, lastSavedAt, cloudEnabled, conflictSnapshotCount: conflictSnapshots.length });
 
   useEffect(() => {
     if (!visible) setOpen(false);
@@ -115,7 +117,6 @@ export function SyncStatusPopover({
         aria-haspopup="dialog"
       >
         <span className="sync-status-icon" aria-hidden="true">{icon}</span>
-        {model.pendingTotal > 0 && <span className="sync-status-count" aria-hidden="true">{model.pendingTotal > 99 ? "99+" : model.pendingTotal}</span>}
         <span className="sync-status-visually-hidden">{model.localLabel}，{model.statusLabel}</span>
       </button>
       {open && (
@@ -136,9 +137,9 @@ export function SyncStatusPopover({
             <h3>云端状态</h3>
             <dl>
               <div><dt>上次同步</dt><dd>{formatTime(sync.lastSyncedAt)}</dd></div>
-              <div><dt>待上传文档</dt><dd>{pendingDocuments}</dd></div>
-              <div><dt>待上传资源</dt><dd>{pendingResources}</dd></div>
-              <div><dt>待上传小记</dt><dd>{pendingQuickNotes}</dd></div>
+              <div><dt>待同步文档</dt><dd>{pendingDocuments}</dd></div>
+              <div><dt>待同步目录</dt><dd>{pendingFolders}</dd></div>
+              <div><dt>待同步小记</dt><dd>{pendingQuickNotes}</dd></div>
             </dl>
           </section>
           {conflictSnapshots.length > 0 && (

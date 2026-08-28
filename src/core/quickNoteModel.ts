@@ -1,3 +1,5 @@
+import { buildAssetFilename } from "./assetNaming.js";
+import { sha256Sync } from "./sha256Sync.js";
 import type { QuickNoteImage } from "./types.js";
 
 export const QUICK_NOTE_VERSION = 1;
@@ -25,6 +27,42 @@ export function normalizeQuickNoteContent(text: string, images: StoredQuickNoteI
   if (text.length > MAX_QUICK_NOTE_TEXT_LENGTH) throw new QuickNoteModelError("小记正文过长");
   if (!text.trim() && images.length === 0) throw new QuickNoteModelError("请至少记录文字或一张图片");
   return { version: QUICK_NOTE_VERSION, text, images };
+}
+
+/** 兼容 Web/Node 的 UUID（小记图片 id）。 */
+function randomUUID(): string {
+  const c = globalThis.crypto;
+  if (c && typeof c.randomUUID === "function") return c.randomUUID();
+  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (ch) => {
+    const r = (Math.random() * 16) | 0;
+    return (ch === "x" ? r : (r & 0x3) | 0x8).toString(16);
+  });
+}
+
+/**
+ * 从上传图片文件构造小记图片条目 + 落盘文件对。
+ * ⚠️ 唯一名（buildAssetFilename）只生成一次：content JSON 引用的 filename 与落盘文件名必须一致——
+ * 若两处各调 buildAssetFilename 会生成不同随机名，同步 readAsset 将找不到文件（真机踩过，勿拆回）。
+ */
+export function buildQuickNoteImageFiles(
+  imageFiles: Array<{ filename: string; mimeType: string; width: number | null; height: number | null; bytes: Uint8Array }>
+): { images: StoredQuickNoteImage[]; files: Array<{ filename: string; bytes: Uint8Array }> } {
+  const images: StoredQuickNoteImage[] = [];
+  const files: Array<{ filename: string; bytes: Uint8Array }> = [];
+  for (const f of imageFiles) {
+    const name = buildAssetFilename(f.filename);
+    images.push({
+      id: randomUUID(),
+      filename: name,
+      mimeType: f.mimeType,
+      width: f.width,
+      height: f.height,
+      size: f.bytes.length,
+      hash: sha256Sync(f.bytes),
+    });
+    files.push({ filename: name, bytes: f.bytes });
+  }
+  return { images, files };
 }
 
 /** Validate persisted or remote JSON, including image metadata and duplicate IDs. */

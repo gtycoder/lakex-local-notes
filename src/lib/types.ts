@@ -111,8 +111,10 @@ export interface DraftJournalEntry {
   updatedAt: string;
 }
 
+/** Local sync facts only; resource bytes are diffed during sync, not counted from content references. */
 export interface SyncPendingSummary {
   documents: number;
+  folders: number;
   resources: number;
   quickNotes: number;
   total: number;
