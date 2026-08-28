@@ -37,7 +37,6 @@
 
 .statusbar,
 .tab-bar {
-  background: color-mix(in srgb, var(--lake-shell) 94%, var(--lake-panel)) !important;
   color: var(--lake-text-secondary);
 }
 
@@ -87,10 +86,6 @@ html[data-theme="dark"] .search-panel {
 html[data-theme="dark"] .document-pane .lake-editor,
 html[data-theme="dark"] .document-pane .lake-editor-main {
   background: var(--lake-canvas) !important;
-}
-html[data-theme="dark"] .statusbar,
-html[data-theme="dark"] .tab-bar {
-  background: var(--lake-shell) !important;
 }
 
 html[data-theme="dark"] .document-pane .ne-engine,

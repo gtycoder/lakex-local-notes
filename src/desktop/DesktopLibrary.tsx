@@ -2,7 +2,7 @@
  * 桌面资料库主区（§20 Phase B：从 src/App.tsx 拆出）。
  * 渲染 MultiTabEditor + 思源式面包屑 + 空态。所有状态/回调由 App 注入，本组件不持有业务状态。
  */
-import { ChevronRight, MoreHorizontal } from "lucide-react";
+import { ChevronRight, File } from "lucide-react";
 import type { ReactNode, Ref, RefObject } from "react";
 import { MultiTabEditor, type TabInfo } from "../features/editor/MultiTabEditor";
 import type { LakeEditorInstance } from "../features/editor/lakeRuntime";
@@ -81,7 +81,7 @@ export function DesktopLibrary(props: DesktopLibraryProps) {
         </>
       )}
       <div className="toolbar__menu-wrap protyle-breadcrumb__more" ref={moreMenuWrapRef as Ref<HTMLDivElement>}>
-        <button className="toolbar__item protyle-breadcrumb__more-btn" onClick={onToggleMoreMenu} title="更多" aria-label="更多"><MoreHorizontal size={15} /></button>
+        <button className="toolbar__item protyle-breadcrumb__more-btn" onClick={onToggleMoreMenu} title="更多" aria-label="更多"><File size={15} /></button>
       </div>
     </nav>
   ) : undefined;

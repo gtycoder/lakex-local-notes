@@ -7,9 +7,16 @@
  * - 浮动 dock：top:112px / bottom:82px、外侧圆角 + --b3-dock-shadow-color 阴影。 */
 
 @media (min-width: 761px) {
-  /* 壳层：整窗渐变（顶部略浅 → body 灰），顶栏与左右固定轨透明共享同一背景 → 完全融合 */
+  /* 壳层：整窗渐变 + 思源式对角氛围（左上→右下渐隐）。
+   * 顶栏/左右轨透明共享此背景，白色工作卡片浮在上方遮住中部，
+   * 因此只有顶部与两侧轨道显色，且沿对角线自然过渡。 */
   .app-shell {
-    background: linear-gradient(180deg, color-mix(in srgb, var(--b3-theme-background) 45%, var(--b3-body-background)) 0%, var(--b3-body-background) 160px) !important;
+    background:
+      linear-gradient(135deg,
+        color-mix(in srgb, var(--shell-hue) 15%, transparent) 0,
+        color-mix(in srgb, var(--shell-hue) 6%, transparent) 32%,
+        transparent 68%),
+      linear-gradient(180deg, color-mix(in srgb, var(--b3-theme-background) 45%, var(--b3-body-background)) 0%, var(--b3-body-background) 160px) !important;
   }
 
   /* 左右活动轨：透明、满高、无边框，与顶部一体（内容仍在标题栏下方） */

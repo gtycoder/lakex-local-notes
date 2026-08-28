@@ -1,6 +1,6 @@
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent } from "react";
 import { createPortal } from "react-dom";
-import { BookOpen, ChevronRight, FilePlus2, FileText, FoldVertical, Folder, FolderPlus, History, LocateFixed, Package, Pencil, Plus, Search, SmilePlus, Trash2, X } from "lucide-react";
+import { BookOpen, ChevronRight, FilePlus2, FileText, FoldVertical, Folder, FolderOpen, FolderPlus, History, LocateFixed, Package, Pencil, Plus, Search, SmilePlus, Trash2, X } from "lucide-react";
 import { LAKE_EMOJIS } from "../lib/lakeEmojis";
 import { LAKE_EMOJI_GROUPS } from "../lib/lakeEmojiGroups";
 import type { TreeNode, TreeNodeType } from "../lib/types";
@@ -654,8 +654,8 @@ const TreeRow = memo(function TreeRow(props: TreeRowProps) {
 
 function nodeIcon(type: TreeNodeType, open: boolean, customIcon?: string | null) {
   if (customIcon) return <span className="tree-node-custom-icon">{customIcon}</span>;
-  if (type === "notebook") return <BookOpen size={17} />;
-  if (type === "group") return <Folder size={16} fill={open ? "currentColor" : "none"} />;
+  if (type === "notebook") return <BookOpen size={16} />;
+  if (type === "group") return open ? <FolderOpen size={16} /> : <Folder size={16} />;
   return <FileText size={16} />;
 }
 
