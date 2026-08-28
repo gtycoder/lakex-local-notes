@@ -3,12 +3,11 @@ import { native } from "../lib/native";
 import { getNativeErrorCode } from "../lib/nativeErrors";
 import type { SettingsCategory } from "../components/SettingsPanel";
 import type { SyncToastData } from "../components/SyncToast";
-import type { SyncProgress, SyncStatus } from "../lib/types";
+import type { SyncStatus } from "../lib/types";
 
 interface SyncControllerInput {
   setSync: Dispatch<SetStateAction<SyncStatus>>;
   setCloudConfigured: Dispatch<SetStateAction<boolean>>;
-  setSyncProgress: Dispatch<SetStateAction<SyncProgress | null>>;
   setSyncToast: Dispatch<SetStateAction<SyncToastData | null>>;
   setConflictSnapshotNotice: Dispatch<SetStateAction<Array<{ noteId: string; title: string }>>>;
   setSettingsCategory: Dispatch<SetStateAction<SettingsCategory>>;
@@ -21,7 +20,6 @@ interface SyncControllerInput {
 export function useSyncController({
   setSync,
   setCloudConfigured,
-  setSyncProgress,
   setSyncToast,
   setConflictSnapshotNotice,
   setSettingsCategory,
@@ -30,10 +28,8 @@ export function useSyncController({
   refreshPendingSummary,
 }: SyncControllerInput): () => Promise<void> {
   return useCallback(async () => {
-    setSyncProgress(null);
     showSyncToast({ kind: "busy", title: "正在同步", message: "准备同步...", progress: { phase: "connect", message: "准备同步..." } });
     const unsubscribe = native.onSyncProgress((progress) => {
-      setSyncProgress(progress);
       if (progress.error) {
         setSync((current) => ({ ...current, phase: "error", message: progress.error || "同步失败" }));
         showSyncToast({ kind: "error", title: "同步失败", message: progress.error || "同步失败" });
@@ -84,5 +80,5 @@ export function useSyncController({
     } finally {
       unsubscribe();
     }
-  }, [setSync, setCloudConfigured, setSyncProgress, setSyncToast, setConflictSnapshotNotice, setSettingsCategory, setSettingsOpen, showSyncToast, refreshPendingSummary]);
+  }, [setSync, setCloudConfigured, setSyncToast, setConflictSnapshotNotice, setSettingsCategory, setSettingsOpen, showSyncToast, refreshPendingSummary]);
 }

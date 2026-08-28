@@ -4,11 +4,17 @@
  */
 import fs from "node:fs";
 import path from "node:path";
+import { createHash } from "node:crypto";
 import type { Store } from "./store.js";
 import type { ObjectStore } from "./sync.js";
 import type { S3Store, SyncDbPort, LocalNoteRow, SyncConfig } from "../src/core/syncEngine.js";
 import type { ManifestFolder, ManifestNote } from "../src/core/manifestTypes.js";
 import { sha256Hex } from "../src/core/syncUtils.js";
+import { setSha256HexImpl } from "../src/core/sha256Sync.js";
+
+// P3-2：桌面端注入 node:crypto 的 SHA-256（比纯 JS 快 10-20 倍），经 core 注入点生效。
+// 本文件仅桌面主进程加载；移动端（bridge.ts）不加载此注入，保持共享层纯 JS 实现。
+setSha256HexImpl((input) => createHash("sha256").update(input).digest("hex"));
 
 export function createS3StoreAdapter(remote: ObjectStore, prefix: string): S3Store {
   // key 语义：syncEngine 传**含 prefix** 的完整对象键（S3Store 契约），桌面 ObjectStore 的 key

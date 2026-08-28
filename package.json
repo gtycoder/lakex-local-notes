@@ -5,6 +5,9 @@
   "description": "本地优先的 Lake 编辑器笔记应用（Electron 桌面端）",
   "main": "dist-electron/main.js",
   "type": "module",
+  "engines": {
+    "node": ">=20.19.0"
+  },
   "scripts": {
     "dev": "vite --host 127.0.0.1 --port 1421",
     "dev:vite": "vite --host 127.0.0.1 --port 1421",

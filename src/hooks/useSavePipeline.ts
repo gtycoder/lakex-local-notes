@@ -6,6 +6,13 @@ import type { NoteDocument } from "../lib/types";
 
 export type SaveState = "idle" | "dirty" | "saving" | "saved" | "error";
 
+// P1-3：放宽自动保存频率——保存落盘防抖 1s（人类打字节奏下无必要更频繁）；
+// 草稿防抖 1.5s，略晚于保存且保存成功即清草稿定时器（见 persistTab 内 onDraftCleared 前 clearTimeout）。
+// 草稿必须晚于保存：否则同一停顿点草稿与保存同时到点会双写一次草稿（无谓的写盘）。
+// 草稿仅作"保存失败/崩溃"的崩溃兜底。
+const SAVE_DEBOUNCE_MS = 1000;
+const DRAFT_JOURNAL_DEBOUNCE_MS = 1500;
+
 /** 保存管线依赖（V5 Phase 4：App 只抽 hook 不重写——外部状态经回调注入，管线可单测）。 */
 export interface SavePipelineOptions {
   /** 保存成功后的 App 侧状态应用（notes/treeNodes/sync/pendingSummary 更新）。 */
@@ -70,7 +77,7 @@ export function useSavePipeline(options: SavePipelineOptions) {
     });
   }, [getOpenTab, getEditorCaches, onNoteSaved, onOpenTabsApplied, onDraftCleared, onError]);
 
-  /** 防抖保存：800ms 无新输入后落盘。 */
+  /** 防抖保存：SAVE_DEBOUNCE_MS（1s）无新输入后落盘。 */
   const scheduleSave = useCallback((noteId: string, content: string) => {
     setSaveState("dirty");
     const existing = saveTimers.current.get(noteId);
@@ -79,18 +86,18 @@ export function useSavePipeline(options: SavePipelineOptions) {
       saveTimers.current.delete(noteId);
       const tab = getOpenTab(noteId);
       if (tab) void persistTab(noteId, tab.title, content);
-    }, 800);
+    }, SAVE_DEBOUNCE_MS);
     saveTimers.current.set(noteId, timer);
   }, [persistTab, getOpenTab]);
 
-  /** 草稿防抖：450ms 无新输入后写草稿（未保存内容兜底）。 */
+  /** 草稿防抖：1.5s 无新输入后写草稿（未保存内容兜底；晚于保存，正常路径由保存清草稿）。 */
   const scheduleDraftJournal = useCallback((noteId: string, title: string, content: string) => {
     const existing = draftTimers.current.get(noteId);
     if (existing !== undefined) window.clearTimeout(existing);
     const timer = window.setTimeout(() => {
       draftTimers.current.delete(noteId);
       void native.saveDraftJournal({ noteId, title, content, updatedAt: new Date().toISOString() }).catch(() => undefined);
-    }, 450);
+    }, DRAFT_JOURNAL_DEBOUNCE_MS);
     draftTimers.current.set(noteId, timer);
   }, []);
 

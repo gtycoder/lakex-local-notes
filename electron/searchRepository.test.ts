@@ -1,6 +1,7 @@
 import Database from "better-sqlite3";
 import { describe, expect, it } from "vitest";
 import { SearchRepository } from "../src/core/searchRepository.js";
+import type { DbLike, DbLikeStatement } from "../src/core/dbLike.js";
 
 function makeRepo() {
   const db = new Database(":memory:");
@@ -77,5 +78,52 @@ describe("FTS 转义与边界（V5 §4 R8）", () => {
     const rows = repo.search("文档");
     expect(rows.some((r) => r.id === "n-in-trash")).toBe(false);
     expect(rows.some((r) => r.id === "n-normal")).toBe(true);
+  });
+});
+describe("P1-2b FTS 条件重建（无变化短路）", () => {
+  function fresh() {
+    const db = new Database(":memory:");
+    db.exec("CREATE VIRTUAL TABLE notes_fts USING fts5(title, body, note_id UNINDEXED, tokenize='trigram')");
+    let deletes = 0;
+    let inserts = 0;
+    // 包装 db：计数对 notes_fts 的 DELETE/INSERT，以验证"无变化时跳过重建"
+    const wrapDb = {
+      prepare(sql: string): DbLikeStatement {
+        const stmt = db.prepare(sql);
+        if (sql.startsWith("DELETE FROM notes_fts")) {
+          return { ...stmt, run: (...a: unknown[]) => { deletes += 1; return stmt.run(...(a as never[])); } };
+        }
+        if (sql.startsWith("INSERT INTO notes_fts")) {
+          return { ...stmt, run: (...a: unknown[]) => { inserts += 1; return stmt.run(...(a as never[])); } };
+        }
+        return stmt;
+      },
+      transaction: ((fn: (...args: never[]) => unknown) => db.transaction(fn)) as DbLike["transaction"],
+      pragma: ((...args: unknown[]) => (db.pragma as (...x: unknown[]) => unknown)(...args)) as DbLike["pragma"],
+      exec: (sql: string) => db.exec(sql),
+      close: () => db.close(),
+    } satisfies DbLike;
+    const repo = new SearchRepository({ db: wrapDb, trashNotebookId: "trash", ensureNoteCaches: () => true, readNoteCaches: () => ({ markdown: null, plain: null }) });
+    return { count: () => ({ deletes, inserts }), repo };
+  }
+  it("title/body 未变时跳过 DELETE+INSERT，任一变化才重建", () => {
+    const { count, repo } = fresh();
+    repo.upsert("n1", "标题A", "正文A");
+    expect(count()).toEqual({ deletes: 1, inserts: 1 });
+    repo.upsert("n1", "标题A", "正文A"); // 无变化 → 不重建
+    expect(count()).toEqual({ deletes: 1, inserts: 1 });
+    repo.upsert("n1", "标题A", "正文B"); // body 变 → 重建
+    expect(count()).toEqual({ deletes: 2, inserts: 2 });
+    repo.upsert("n1", "标题B", "正文B"); // title 变 → 重建
+    expect(count()).toEqual({ deletes: 3, inserts: 3 });
+  });
+  it("body=null（无派生缓存路径）按同一规则短路", () => {
+    const { count, repo } = fresh();
+    repo.upsert("n1", "标题", "正文");
+    expect(count()).toEqual({ deletes: 1, inserts: 1 });
+    repo.upsert("n1", "标题", null); // null → "" 与现存 "正文" 不同 → 重建
+    expect(count()).toEqual({ deletes: 2, inserts: 2 });
+    repo.upsert("n1", "标题", null); // "" === "" → 跳过
+    expect(count()).toEqual({ deletes: 2, inserts: 2 });
   });
 });

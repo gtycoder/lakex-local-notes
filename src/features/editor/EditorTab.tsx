@@ -612,6 +612,10 @@ export function EditorTab({ noteId, content, visible, tocEnabled, onChange, pref
       destroyLakeEditor(editor);
       editorRef.current = null;
       setEditorState(null);
+      // 清理调试挂载句柄，避免残留指向已销毁实例
+      if ((window as unknown as Record<string, unknown>).__desktopEditor === editor) {
+        (window as unknown as Record<string, unknown>).__desktopEditor = null;
+      }
       // 只清空编辑器挂载点内部；不要 host.replaceChildren()——
       // React.StrictMode 在 dev 会双次挂载 effect，第二次复用同一 mount 节点，
       // 若把 .lake-editor-main 移出 DOM，会在脱离文档的节点上重建 Lake 编辑器

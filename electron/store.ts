@@ -1128,8 +1128,10 @@ export class Store {
     const now = nowIso();
     const tx = this.db.transaction(() => {
       if (node.noteFileId) {
+        // restore_pending_at 一并清除：恢复后未同步再删除，残留标记会以"恢复语义"上传（trashedAt:null）
+        // 导致本地删除不传播、云端复活（与 applyRemoteMoveToTrash/applyRemoteRestore 同口径清理）。
         this.db.prepare(
-          "UPDATE notes SET parent_id=?,trashed_at=?,deleted_from_parent_id=?,updated_at=?,sync_state='local' WHERE id=? AND deleted_at IS NULL"
+          "UPDATE notes SET parent_id=?,trashed_at=?,deleted_from_parent_id=?,updated_at=?,sync_state='local',restore_pending_at=NULL WHERE id=? AND deleted_at IS NULL"
         ).run(TRASH_NOTEBOOK_ID, now, node.parentId, now, node.noteFileId);
       }
       this.db.prepare(
@@ -1144,7 +1146,7 @@ export class Store {
         const subNotes = this.db.prepare(`SELECT note_file_id FROM tree_nodes WHERE id IN (${ph}) AND note_file_id IS NOT NULL AND deleted_at IS NULL`).all(...subtreeIds) as Array<{ note_file_id: string }>;
         if (subNotes.length > 0) {
           const nph = subNotes.map(() => "?").join(",");
-          this.db.prepare(`UPDATE notes SET trashed_at=?,updated_at=?,sync_state='local' WHERE id IN (${nph}) AND deleted_at IS NULL`).run(now, now, ...subNotes.map((s) => s.note_file_id));
+          this.db.prepare(`UPDATE notes SET trashed_at=?,updated_at=?,sync_state='local',restore_pending_at=NULL WHERE id IN (${nph}) AND deleted_at IS NULL`).run(now, now, ...subNotes.map((s) => s.note_file_id));
         }
       }
       // 回收站条目不出现在搜索（子树整体移出 FTS，恢复时重建）
@@ -1297,6 +1299,9 @@ export class Store {
       for (const nid of ids) {
         const n = nodeStmt.get(nid) as { note_file_id: string | null } | undefined;
         if (n?.note_file_id) {
+          // P2-7：纵深防御——note_file_id 来自 DB（建库时已校验），此处统一口径 fail fast，
+          // 防止任何异常来源的非法 ID 拼出落入 note_assets/history 目录的路径。
+          if (!isSafePathSegment(n.note_file_id)) throw new AppError("InvalidInput", `无效的回收站笔记 ID: ${n.note_file_id}`);
           filesToRemove.push({ path: this.notePath(n.note_file_id), recursive: false });
           filesToRemove.push({ path: path.join(this.noteAssetsDir, n.note_file_id), recursive: true });
           // 彻底删除 = 连历史快照 + 历史引用的资源一起物理删（用户确认）
@@ -1823,8 +1828,10 @@ export class Store {
   applyRemotePurge(id: string): void {
     const now = nowIso();
     const tx = this.db.transaction(() => {
+      // restore_pending_at 一并清除（对齐移动端 bridge applyRemotePurge）：purge 后恢复标记无意义，
+      // 残留会让 isRestorePending 误判。engine 的 decidePurge 已挡 restoring 场景，此处纯口径对齐。
       this.db.prepare(
-        "UPDATE notes SET parent_id=?,trashed_at=COALESCE(trashed_at,?),deleted_from_parent_id=COALESCE(deleted_from_parent_id,parent_id),updated_at=?,sync_state='purged' WHERE id=? AND deleted_at IS NULL"
+        "UPDATE notes SET parent_id=?,trashed_at=COALESCE(trashed_at,?),deleted_from_parent_id=COALESCE(deleted_from_parent_id,parent_id),updated_at=?,sync_state='purged',restore_pending_at=NULL WHERE id=? AND deleted_at IS NULL"
       ).run(TRASH_NOTEBOOK_ID, now, now, id);
       this.db.prepare(
         "UPDATE tree_nodes SET parent_id=?,trashed_at=COALESCE(trashed_at,?),deleted_from_parent_id=COALESCE(deleted_from_parent_id,parent_id),updated_at=?,sync_state='purged' WHERE note_file_id=? AND deleted_at IS NULL"

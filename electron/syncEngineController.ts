@@ -42,6 +42,10 @@ export async function syncNowViaEngine(
     pull: "download", upload: "upload", publish: "manifest",
   };
 
+  // P3-3：本次同步若发布了新 manifest，engine 的 onPublished 回调会把新 commitId 填到这里，
+  // 供结果组装直接复用；未发布（仅拉取对账/零变更）时再回退 readLatestCommitId。
+  let publishedCommitId: string | null = null;
+
   const engineReport = await engineSyncNow(cfg, s3Store, dbPort, {
     strictAssets: true,
     onProgress: (phase, message) => {
@@ -49,6 +53,8 @@ export async function syncNowViaEngine(
       report({ phase: mapped, message });
     },
     onPublished: async (next, prev) => {
+      // P3-3：本次已发布 → 直接记下新 commitId，避免结束后 readLatestCommitId 再全量 GET+解析一次。
+      publishedCommitId = next.commitId;
       // 4.5 GC 差集标记（对齐原 sync.ts 语义）：新 manifest 不再引用的旧正文/资源 → 待回收
       try {
         const newById = new Map(next.notes.map((n) => [n.id, n]));
@@ -99,7 +105,7 @@ export async function syncNowViaEngine(
     return { kind, noteId };
   });
   const completedAt = new Date().toISOString();
-  const commitId = await readLatestCommitId(remote);
+  const commitId = publishedCommitId ?? await readLatestCommitId(remote);
   const result: SyncResult = {
     uploaded: engineReport.uploaded, downloaded: engineReport.appliedRemote, conflicts: engineReport.supersededNotes.length,
     manifestId: commitId ?? "", completedAt, supersededNotes: engineReport.supersededNotes,

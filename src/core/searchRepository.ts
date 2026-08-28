@@ -58,8 +58,14 @@ export class SearchRepository {
   }
 
   upsert(noteId: string, title: string, body: string | null): void {
+    const nextBody = body ?? "";
+    // P1-2b：title/body 均未变时跳过 DELETE+INSERT——避免每次保存（尤其纯标题改动、
+    // 纯样式/内嵌结构调整导致 .lake 变但 plain 不变）都重建 trigram 倒排索引。
+    // FTS5 普通表不支持单列更新，故仍为"任一字段变化时整条重建"；无变化直接短路等价。
+    const prev = this.db.prepare("SELECT title, body FROM notes_fts WHERE note_id=?").get(noteId) as { title: string; body: string } | undefined;
+    if (prev && prev.title === title && prev.body === nextBody) return;
     this.db.prepare("DELETE FROM notes_fts WHERE note_id=?").run(noteId);
-    this.db.prepare("INSERT INTO notes_fts(title, body, note_id) VALUES(?,?,?)").run(title, body ?? "", noteId);
+    this.db.prepare("INSERT INTO notes_fts(title, body, note_id) VALUES(?,?,?)").run(title, nextBody, noteId);
   }
 
   rebuild(): void {

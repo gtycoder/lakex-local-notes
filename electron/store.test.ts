@@ -430,6 +430,56 @@ describe("目录树操作", () => {
     expect(store.readNote(note.id).content).toContain("恢复后编辑版");
   });
 
+  it("审计（W-4）：恢复后未同步再删除 → restore_pending_at 无残留，删除以软删语义传播", () => {
+    const nb = store.createNotebook("恢复后再删");
+    const note = store.createNoteIn(nb.id, "子笔记");
+    store.saveNote(note.id, "子笔记", "<p>v1</p>");
+
+    store.deleteTreeNode(note.id);
+    store.restoreTrashItem(note.id);
+    expect((store as any).isRestorePending(note.id)).toBe(true);
+
+    // 恢复后未同步，再次删除：标记必须清除——残留会让上传方向以"恢复语义"（trashedAt:null）
+    // 发布 active 条目 → 本地删除不传播、云端复活。
+    store.deleteTreeNode(note.id);
+    expect((store as any).isRestorePending(note.id)).toBe(false);
+    const row = store.listNotesForSync().find((n) => n.id === note.id)!;
+    expect(row.parentId).toBe("notebook-trash");
+    expect(row.trashedAt).not.toBeNull();
+    expect(row.syncState).toBe("local");
+  });
+
+  it("审计（W-4 级联）：整树移入回收站时子树笔记的 restore_pending_at 一并清除", () => {
+    const nb = store.createNotebook("级联清理");
+    const group = store.createGroup(nb.id, "分组");
+    const note = store.createNoteIn(group.id, "子笔记");
+    store.saveNote(note.id, "子笔记", "<p>v1</p>");
+
+    store.deleteTreeNode(note.id);
+    store.restoreTrashItem(note.id);
+    expect((store as any).isRestorePending(note.id)).toBe(true);
+
+    // 删分组 → 子笔记级联进回收站，标记必须一并清（同一残留问题）
+    store.deleteTreeNode(group.id);
+    expect((store as any).isRestorePending(note.id)).toBe(false);
+    const row = store.listNotesForSync().find((n) => n.id === note.id)!;
+    expect(row.trashedAt).not.toBeNull();
+  });
+
+  it("审计（W-4 对齐）：applyRemotePurge 清除 restore_pending_at（与移动端端口口径一致）", () => {
+    const nb = store.createNotebook("purge对齐");
+    const note = store.createNoteIn(nb.id, "子笔记");
+    store.saveNote(note.id, "子笔记", "<p>v1</p>");
+    store.deleteTreeNode(note.id);
+    store.restoreTrashItem(note.id);
+    expect((store as any).isRestorePending(note.id)).toBe(true);
+
+    store.applyRemotePurge(note.id);
+    expect((store as any).isRestorePending(note.id)).toBe(false);
+    const row = store.listNotesForSync().find((n) => n.id === note.id)!;
+    expect(row.syncState).toBe("purged");
+  });
+
   it("回收站：恢复节点（移回原位置，清回收站字段，重新可同步）", () => {
     const nb = store.createNotebook("待恢复");
     const note = store.createNoteIn(nb.id, "子笔记");

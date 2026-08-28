@@ -52,6 +52,10 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [dragOffsetY, setDragOffsetY] = useState(0);
   const [dragRowHeight, setDragRowHeight] = useState(38);
+  // P2-5：拖拽会在移动时更新行高（实测行高），而拖拽 effect 的 deps 不含 dragRowHeight，
+  // 若闭包直接读 state 会一直用初始 38（stale），导致兄弟位移计算偏差。用 ref 保存最新行高，
+  // 让 move/up 回调在不必重绑 listener 的前提下拿到实测值。
+  const dragRowHeightRef = useRef(dragRowHeight);
   const [dropTarget, setDropTarget] = useState<{ id: string; position: DropPosition } | null>(null);
   const [releaseState, setReleaseState] = useState<{
     id: string;
@@ -233,7 +237,10 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
       }
       const rect = row.getBoundingClientRect();
       // 行高只在实际变化时更新（避免每帧 setState；dragRowHeight 供同级位移计算）
-      if (rect.height > 0 && rect.height !== dragRowHeight) setDragRowHeight(rect.height);
+      if (rect.height > 0 && rect.height !== dragRowHeightRef.current) {
+        dragRowHeightRef.current = rect.height;
+        setDragRowHeight(rect.height);
+      }
       const position = computeDropPosition(rect, event.clientY) ?? (dropTargetRef.current?.position ?? "inside");
       const nextTarget = { id: row.dataset.treeNodeId!, position };
       const movingNode = props.nodes.find((node) => node.id === drag.id) ?? null;
@@ -258,7 +265,7 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
             drag.id,
             finalDropTarget.id,
             finalDropTarget.position as TreeDragDropPosition,
-            dragRowHeight,
+            dragRowHeightRef.current,
           );
           document.querySelectorAll<HTMLElement>("[data-tree-node-id]").forEach((row) => {
             const id = row.dataset.treeNodeId;

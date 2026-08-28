@@ -75,14 +75,19 @@ export function App() {
   const workspaceName = getWorkspaceDisplayName(cloudEnabled, s3Settings);
   const [pendingSummary, setPendingSummary] = useState<SyncPendingSummary>({ documents: 0, folders: 0, resources: 0, quickNotes: 0, total: 0, generatedAt: "" });
   const [draftEntries, setDraftEntries] = useState<DraftJournalEntry[]>([]);
-  const [, setSyncProgress] = useState<SyncProgress | null>(null);
-  const handleSyncToastAutoHide = useCallback(() => setSyncProgress(null), []);
-  const { syncToast, setSyncToast, showSyncToast } = useSyncShell(handleSyncToastAutoHide);
+  const { syncToast, setSyncToast, showSyncToast } = useSyncShell();
+  // P2-3：syncAnchorRect 仅在 toast 打开/内容变化时计算一次，避免每次渲染读 DOM 强制 reflow。
+  const [syncAnchorRect, setSyncAnchorRect] = useState<DOMRect | null>(null);
+  useEffect(() => {
+    if (!syncToast) { setSyncAnchorRect(null); return; }
+    setSyncAnchorRect(syncBtnRef.current?.getBoundingClientRect() ?? null);
+  }, [syncToast]);
   const [pendingRenameId, setPendingRenameId] = useState<string | null>(null);
   const [settings, setSettings] = useState<AppSettings>(() => loadSettings());
   const [pinnedNoteIds, setPinnedNoteIds] = useState<Set<string>>(() => new Set());
   const tocEnabled = settings.showToc;
-  const [wideMode] = useState(true);
+  // P2-4：wideMode 恒 true 且从不 set，改为模块常量（消除死 useState）
+  const wideMode = true;
   const [quickNotesDirty, setQuickNotesDirty] = useState(false);
   const openTabsRef = useRef<OpenTab[]>([]);
   const quickNotesRef = useRef<QuickNotesWorkspaceHandle>(null);
@@ -329,6 +334,16 @@ export function App() {
               const readMs = Math.round(performance.now() - readT0);
               // 正文或标题任一变化才重载（标题变化不重建 Lake 实例，只更新标签文案）。
               if (fresh && (superseded || fresh.content !== tab.content || fresh.title !== tab.title)) {
+                // W-3：tabsAtSync 是同步开始时的快照，异步期间用户可能已开始输入——
+                // 快照时 clean 的 tab 现在变 dirty（或 content 与快照不一致，含已落盘的防抖保存）。
+                // 此时重载会覆盖正在输入/刚保存的正文（reloadKey remount 清 contentCache）。
+                // superseded 例外：远端已覆盖且引擎已留档历史快照，按设计强制重载。
+                const liveTab = openTabsRef.current.find((t) => t.noteId === tab.noteId);
+                if (!superseded && liveTab && (liveTab.dirty || liveTab.content !== tab.content)) {
+                  skipped += 1;
+                  console.log("[sync-tab] tab", JSON.stringify({ noteId: tab.noteId, action: "skip-edited-during-sync", digestMs, readMs }));
+                  continue;
+                }
                 reloaded += 1;
                 console.log("[sync-tab] tab", JSON.stringify({ noteId: tab.noteId, action: superseded ? "reload-superseded" : "reload", digestMs, readMs, title: fresh.title }));
                 setOpenTabs((tabs) => tabs.map((t) => t.noteId === tab.noteId
@@ -587,7 +602,6 @@ export function App() {
   const runSync = useSyncController({
     setSync,
     setCloudConfigured,
-    setSyncProgress,
     setSyncToast,
     setConflictSnapshotNotice,
     setSettingsCategory,
@@ -1126,8 +1140,8 @@ export function App() {
         onCloseHistory={() => setHistoryOpen(false)}
         onHistoryRestored={handleHistoryRestored}
         syncToast={syncToast}
-        syncAnchorRect={syncBtnRef.current?.getBoundingClientRect() ?? null}
-        onCloseSyncToast={() => { setSyncToast(null); setSyncProgress(null); }}
+        syncAnchorRect={syncAnchorRect}
+        onCloseSyncToast={() => setSyncToast(null)}
         settingsOpen={settingsOpen}
         settingsCategory={settingsCategory}
         settings={settings}

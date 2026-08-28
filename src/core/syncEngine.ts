@@ -244,6 +244,13 @@ export async function syncNow(cfg: SyncConfig, s3: S3Store, db: SyncDbPort, opts
   const report: SyncReport = { pulled: false, appliedRemote: 0, uploaded: 0, published: false, message: "", warnings: [], supersededNotes: [] };
   // superseded 去重（与桌面同单点）：Lake 下载阶段冲突语义由 supersededNotes 表达，Set 去重防重复记。
   const supersededTracker = createSupersededTracker();
+  // H5：本机编辑成果判定（软删/purge 覆盖前留档共用）——本地相对基线有改动，或本机上传过当前版本（本机是作者）。
+  const ownEditOf = (local: LocalNoteRow | null, id: string): boolean => {
+    if (!local) return false;
+    const base = db.getSyncBase(id);
+    const localHash = local.contentHash ?? sha256Sync(new TextEncoder().encode(local.content));
+    return (base !== null && localHash !== base.contentHash) || (base?.lastUploadedHash != null && localHash === base.lastUploadedHash);
+  };
   const progress = (phase: string, message: string) => { try { opts?.onProgress?.(phase, message); } catch { /* 渲染层已关闭 */ } };
 
   // ---- 1. 拉 latest manifest（缺失视为首次同步） ----
@@ -367,6 +374,12 @@ export async function syncNow(cfg: SyncConfig, s3: S3Store, db: SyncDbPort, opts
         if (purgeAction === "skip-restore-pending") {
           db.log(`[purge] ${rn.id} 本地显式恢复，跳过 purge`);
         } else if (purgeAction === "apply-purge") {
+          // W-1：与软删分支对称——本地未同步编辑（或本机是作者）被远端 purge 覆盖前强制留档。
+          // purged 条目保留 .lake 可恢复，但无历史快照；清空回收站/自动过期后即彻底丢失。
+          if (ownEditOf(local, rn.id)) {
+            db.createHistorySnapshot(rn.id, local!.content, { title: local!.title, parentId: local!.parentId, sortOrder: local!.sortOrder });
+            supersededTracker.push(rn.id, rn.title);
+          }
           db.applyRemotePurge(rn.id);
           report.appliedRemote++;
         } else {
@@ -407,13 +420,7 @@ export async function syncNow(cfg: SyncConfig, s3: S3Store, db: SyncDbPort, opts
         // 才强制留档 + 报 superseded——本地相对基线有改动，或本机上传过当前版本（本机是作者）。
         // 纯跟随删除传播（从未编辑/上传）→ 只移入回收站（或已在内），不留档不报。
         // 回收站内编辑（localTrashed=true 且内容被改）同样压制回删除前内容 + 留档（S4）。
-        let ownEdit = false;
-        if (local) {
-          const base = db.getSyncBase(rn.id);
-          const localHash = local.contentHash ?? sha256Sync(new TextEncoder().encode(local.content));
-          ownEdit = (base !== null && localHash !== base.contentHash) || (base?.lastUploadedHash != null && localHash === base.lastUploadedHash);
-        }
-        if (ownEdit) {
+        if (ownEditOf(local, rn.id)) {
           db.createHistorySnapshot(rn.id, local!.content, { title: local!.title, parentId: local!.parentId, sortOrder: local!.sortOrder });
           supersededTracker.push(rn.id, rn.title);
         }

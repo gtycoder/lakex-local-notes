@@ -239,6 +239,34 @@ describe("syncEngine（共享编排）", () => {
     expect(r.uploaded).toBe(0); // purged 不上传
   });
 
+  it("W-1：远端 purge 覆盖本地未同步编辑 → 强制留档历史快照 + 报 superseded（与软删分支对称）", async () => {
+    const s3 = new MemS3();
+    const db = new MemDb();
+    // 本地持有未同步编辑：内容 ≠ 基线 hash（基线 = 上次同步的远端版本）
+    db.notes.set("n1", row({ id: "n1", content: "<p>本地未同步编辑</p>", syncState: "local" }));
+    db.bases.set("n1", { contentHash: hashOf("<p>旧版</p>"), lastUploadedHash: null, lastSyncedMetaAt: "2026-01-01T00:00:00.000Z" });
+    s3.map.set("p/manifests/latest.json", new TextEncoder().encode(JSON.stringify({
+      version: 4, workspaceId: "default", commitId: "c1", prevCommitId: null, createdAt: "2026-01-01T00:00:00.000Z",
+      notes: [
+        { id: "n1", title: "被永久删除", parentId: null, sortOrder: 0, updatedAt: "2026-01-01T00:00:00.000Z", contentHash: hashOf("<p>旧版</p>"), isConflict: false, assets: [], deleted: true, deletedAt: "2026-01-02T00:00:00.000Z" },
+        { id: "n2", title: "纯跟随", parentId: null, sortOrder: 1, updatedAt: "2026-01-01T00:00:00.000Z", contentHash: hashOf("<p>n2</p>"), isConflict: false, assets: [], deleted: true, deletedAt: "2026-01-02T00:00:00.000Z" },
+      ],
+      folders: [],
+    })));
+    // n2：从未编辑/上传（基线一致、非作者）→ 纯跟随删除，不留档
+    db.notes.set("n2", row({ id: "n2", content: "<p>n2</p>", syncState: "synced" }));
+    db.bases.set("n2", { contentHash: hashOf("<p>n2</p>"), lastUploadedHash: null, lastSyncedMetaAt: "2026-01-01T00:00:00.000Z" });
+
+    const r = await syncNow(CFG, s3, db);
+    expect(db.notes.get("n1")!.syncState).toBe("purged");
+    expect(db.notes.get("n2")!.syncState).toBe("purged");
+    // 仅 n1 留档（本地编辑成果）；n2 纯跟随不产生快照
+    expect(db.history).toHaveLength(1);
+    expect(db.history[0].noteId).toBe("n1");
+    expect(db.history[0].content).toBe("<p>本地未同步编辑</p>");
+    expect(r.supersededNotes.map((s) => s.id)).toEqual(["n1"]);
+  });
+
   it("B3：正文相同但远端元数据较新 → 应用远端标题/图标/锁（meta LWW，不重复下载正文）", async () => {
     const s3 = new MemS3();
     const db = new MemDb();

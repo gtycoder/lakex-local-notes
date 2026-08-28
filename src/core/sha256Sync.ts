@@ -27,6 +27,21 @@ function rotr(x: number, n: number): number {
 }
 
 export function sha256Sync(input: Uint8Array): string {
+  return sha256Impl(input);
+}
+
+/**
+ * 注入自定义实现（桌面端在 adapter 注入 node:crypto，吞吐高于纯 JS 10-20 倍）。
+ * 默认纯 JS（移动端 WebView 未注入时保持）。输出必须与 sha256SyncPure 一致
+ * （等价性由 sha256Sync.test.ts 保证）。core 不 import node:，注入由平台端口完成。
+ */
+export function setSha256HexImpl(impl: (input: Uint8Array) => string): void {
+  sha256Impl = impl;
+}
+
+let sha256Impl: (input: Uint8Array) => string = sha256SyncPure;
+
+function sha256SyncPure(input: Uint8Array): string {
   const bitLen = input.length * 8;
   const paddedLen = (((input.length + 8) >> 6) + 1) << 6;
   const padded = new Uint8Array(paddedLen);

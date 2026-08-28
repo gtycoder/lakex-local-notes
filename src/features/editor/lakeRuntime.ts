@@ -268,8 +268,10 @@ function lakeMeasure(name: string, startMark: string, endMark: string): void {
   } catch { /* 忽略 */ }
 }
 
-/** 长任务（Long Tasks）观测：量化 setDocument 之后主线程的阻塞 */
+/** 长任务（Long Tasks）观测：量化 setDocument 之后主线程的阻塞。
+ * 滚动窗口上限 100 条：仅诊断用，避免长会话无界增长。 */
 const lakeLongTasks: Array<{ start: number; duration: number }> = [];
+const LAKE_LONG_TASKS_LIMIT = 100;
 let lakeLongTaskObserver: PerformanceObserver | null = null;
 
 function ensureLakeLongTaskObserver(): void {
@@ -278,6 +280,7 @@ function ensureLakeLongTaskObserver(): void {
     lakeLongTaskObserver = new PerformanceObserver((list) => {
       for (const entry of list.getEntries()) {
         lakeLongTasks.push({ start: Math.round(entry.startTime), duration: Math.round(entry.duration) });
+        if (lakeLongTasks.length > LAKE_LONG_TASKS_LIMIT) lakeLongTasks.shift();
       }
     });
     lakeLongTaskObserver.observe({ entryTypes: ["longtask"] });
