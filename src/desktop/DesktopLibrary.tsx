@@ -88,7 +88,6 @@ export function DesktopLibrary(props: DesktopLibraryProps) {
 
   return (
     <section className={`document-pane ${wideMode ? "wide-mode" : ""} ${paragraphSpacing ? "paragraph-spacing" : ""}`}>
-      <div className="read-progress" aria-hidden="true" />
       <MultiTabEditor
         visible={visible}
         tabs={tabs}
