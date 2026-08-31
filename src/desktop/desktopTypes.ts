@@ -101,5 +101,3 @@ export function treeNodePath(nodes: TreeNode[], noteId: string): TreeNode[] {
 }
 
 export const summaryOf = ({ content: _content, ...summary }: NoteDocument): NoteSummary => summary;
-
-export const saveLabel = (state: SaveState) => ({ idle: "本地", dirty: "待保存", saving: "保存中", saved: "已保存", error: "保存失败" })[state];

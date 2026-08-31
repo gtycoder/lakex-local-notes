@@ -31,7 +31,8 @@ export function useSyncController({
     if (conflictTimerRef.current !== null) window.clearTimeout(conflictTimerRef.current);
   }, []);
   return useCallback(async () => {
-    showSyncToast({ kind: "busy", title: "正在同步", message: "准备同步...", progress: { phase: "connect", message: "准备同步..." } });
+    // 对齐思源：同步过程只在状态栏按钮上反映（syncing 转圈/完成还原），成功不打扰；
+    // 仅失败与未配置需要用户介入时才弹 toast。
     const unsubscribe = native.onSyncProgress((progress) => {
       if (progress.error) {
         setSync((current) => ({ ...current, phase: "error", message: progress.error || "同步失败" }));
@@ -39,7 +40,6 @@ export function useSyncController({
         return;
       }
       setSync((current) => ({ ...current, phase: "syncing", message: progress.message }));
-      setSyncToast((current) => current && current.kind === "busy" ? { ...current, progress, message: progress.message } : current);
     });
     try {
       const settings = await native.getS3Settings();
@@ -51,15 +51,11 @@ export function useSyncController({
         return;
       }
       const result = await native.syncNow();
-      const lakeMessage = `Lake：上传 ${result.uploaded}，下载 ${result.downloaded}，冲突 ${result.conflicts}`;
-      const quickMessage = result.quickNotes?.error
-        ? "；小记同步失败（Lake 已完成）"
-        : result.quickNotes ? `；小记：上传 ${result.quickNotes.uploaded}，下载 ${result.quickNotes.downloaded}，冲突 ${result.quickNotes.conflicts}` : "";
-      const resultMessage = `同步完成：${lakeMessage}${quickMessage}`;
-      const superseded = result.supersededNotes && result.supersededNotes.length > 0
-        ? `远端修改已覆盖本地 ${result.supersededNotes.length} 篇（${result.supersededNotes.slice(0, 3).map((n) => `「${n.title}」`).join("、")}${result.supersededNotes.length > 3 ? " 等" : ""}），本地修改已存入该文档的历史版本。`
-        : "";
-      setSync((current) => ({ ...current, phase: result.quickNotes?.error ? "error" : "success", message: resultMessage, lastSyncedAt: result.completedAt, pendingChanges: 0 }));
+      const quickFailed = Boolean(result.quickNotes?.error);
+      const resultMessage = quickFailed
+        ? "同步完成：Lake 已完成；小记同步失败"
+        : `同步完成：Lake 上传 ${result.uploaded}，下载 ${result.downloaded}${result.quickNotes ? `；小记 上传 ${result.quickNotes.uploaded}，下载 ${result.quickNotes.downloaded}` : ""}`;
+      setSync((current) => ({ ...current, phase: quickFailed ? "error" : "success", message: resultMessage, lastSyncedAt: result.completedAt, pendingChanges: 0 }));
       if (result.supersededNotes.length > 0) {
         setConflictSnapshotNotice(result.supersededNotes.map((item) => ({ noteId: item.id, title: item.title })));
         if (conflictTimerRef.current !== null) window.clearTimeout(conflictTimerRef.current);
@@ -68,7 +64,6 @@ export function useSyncController({
           setConflictSnapshotNotice([]);
         }, 12000);
       }
-      showSyncToast({ kind: result.quickNotes?.error ? "error" : "ok", title: "同步完成", message: `${lakeMessage}${quickMessage}`, detail: superseded || undefined });
     } catch (error) {
       // V5 Phase 3：CANCELLED（用户取消同步）不弹 toast，仅归位 idle 状态
       if (getNativeErrorCode(error) === "CANCELLED") {

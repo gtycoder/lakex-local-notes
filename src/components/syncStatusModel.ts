@@ -1,23 +1,15 @@
 import type { SyncStatus } from "../lib/types";
 
-type SaveState = "idle" | "dirty" | "saving" | "saved" | "error";
-
 export interface SyncStatusModelInput {
   sync: SyncStatus;
-  saveState: SaveState;
-  saveLabel: string;
   pendingDocuments: number;
   pendingFolders?: number;
-  pendingResources: number;
   pendingQuickNotes?: number;
-  dirtyTabCount: number;
-  lastSavedAt: string | null;
   cloudEnabled: boolean;
   conflictSnapshotCount?: number;
 }
 
 export interface SyncStatusModel {
-  localLabel: string;
   pendingTotal: number;
   statusLabel: string;
   statusClass: "local" | "pending" | "syncing" | "synced" | "error" | "disabled";
@@ -27,7 +19,6 @@ export interface SyncStatusModel {
 
 export function buildSyncStatusModel(input: SyncStatusModelInput): SyncStatusModel {
   const pendingTotal = Math.max(0, input.pendingDocuments + (input.pendingFolders ?? 0) + (input.pendingQuickNotes ?? 0));
-  const localLabel = input.saveState === "saving" ? "本地保存中" : input.saveState === "dirty" ? "有未保存更改" : input.saveState === "error" ? "本地保存失败" : "本地已保存";
   let statusClass: SyncStatusModel["statusClass"] = "local";
   let statusLabel = "仅本地保存";
   if (!input.cloudEnabled) {
@@ -42,10 +33,11 @@ export function buildSyncStatusModel(input: SyncStatusModelInput): SyncStatusMod
   } else if (pendingTotal > 0 || input.sync.pendingChanges > 0) {
     statusClass = "pending";
     statusLabel = "待同步";
-  } else if (input.sync.phase === "success" && input.sync.lastSyncedAt) {
+  } else if (input.sync.lastSyncedAt) {
+    // 对齐思源：同步完成后按钮为"云+对钩"组合图标（默认色、不变绿），仅文字标注"已同步"
     statusClass = "synced";
     statusLabel = "已同步";
   }
-  const accessibleLabel = `${localLabel}，${statusLabel}${input.conflictSnapshotCount ? `，${input.conflictSnapshotCount} 个历史快照提醒` : ""}`;
-  return { localLabel, pendingTotal, statusLabel, statusClass, accessibleLabel, hasConflictSnapshot: Boolean(input.conflictSnapshotCount) };
+  const accessibleLabel = `${statusLabel}${input.conflictSnapshotCount ? `，${input.conflictSnapshotCount} 个历史快照提醒` : ""}`;
+  return { pendingTotal, statusLabel, statusClass, accessibleLabel, hasConflictSnapshot: Boolean(input.conflictSnapshotCount) };
 }

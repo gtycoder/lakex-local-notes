@@ -56,6 +56,7 @@ async function downloadAssets(cfg: SyncConfig, s3: S3Store, db: SyncDbPort, rn: 
       continue;
     }
     await db.saveAsset(rn.id, asset.filename, bytes);
+    report.downloadedBytes += bytes.length;
   }
 }
 
@@ -110,6 +111,11 @@ export interface SyncReport {
   warnings: string[];
   /** 本地修改被远端覆盖、已强制留档的文档（对齐桌面 SyncResult.supersededNotes，UI 提醒用）。 */
   supersededNotes: Array<{ id: string; title: string }>;
+  /** 同步统计（思源式 tooltip 展示）：上传/下载的目录数与字节数（正文 + 资源 + manifest）。 */
+  foldersUploaded: number;
+  foldersDownloaded: number;
+  uploadedBytes: number;
+  downloadedBytes: number;
 }
 
 export interface LocalNoteRow {
@@ -202,8 +208,9 @@ const MANIFEST_KEY = "manifests/latest.json";
 /** 扫描本地资产：上传到 S3（缺失才传）并返回清单条目（H3 与软删上云共用）。
  * 存在性探测优先 HEAD（s3.exists），避免整对象 GET 判存在；上传优先流式
  * （s3.putObjectStream + db.openLocalAssetStream 同时可用时），否则字节路径。
+ * stats 传入时累计实际上传字节数（流式取声明 size，字节路径取 bytes.length）。
  * 导出供单元测试直接覆盖流式/HEAD 选择逻辑。 */
-export async function scanLocalAssets(cfg: SyncConfig, s3: S3Store, db: SyncDbPort, noteId: string): Promise<ManifestNote["assets"]> {
+export async function scanLocalAssets(cfg: SyncConfig, s3: S3Store, db: SyncDbPort, noteId: string, stats?: { uploadedBytes: number }): Promise<ManifestNote["assets"]> {
   const assets: ManifestNote["assets"] = [];
   const localAssets = await db.listLocalAssets(noteId);
   const canStream = !!s3.putObjectStream && typeof db.openLocalAssetStream === "function";
@@ -219,9 +226,13 @@ export async function scanLocalAssets(cfg: SyncConfig, s3: S3Store, db: SyncDbPo
     if (!exists) {
       if (canStream && s3.putObjectStream) {
         await s3.putObjectStream(key, a.size, () => db.openLocalAssetStream!(noteId, a.filename));
+        if (stats) stats.uploadedBytes += a.size;
       } else {
         const bytes = await db.readLocalAsset(noteId, a.filename);
-        if (bytes) await s3.putObject(key, bytes);
+        if (bytes) {
+          await s3.putObject(key, bytes);
+          if (stats) stats.uploadedBytes += bytes.length;
+        }
       }
     }
     assets.push({ filename: a.filename, size: a.size, hash: a.hash });
@@ -241,7 +252,7 @@ export interface SyncNowOptions {
 }
 
 export async function syncNow(cfg: SyncConfig, s3: S3Store, db: SyncDbPort, opts?: SyncNowOptions): Promise<SyncReport> {
-  const report: SyncReport = { pulled: false, appliedRemote: 0, uploaded: 0, published: false, message: "", warnings: [], supersededNotes: [] };
+  const report: SyncReport = { pulled: false, appliedRemote: 0, uploaded: 0, published: false, message: "", warnings: [], supersededNotes: [], foldersUploaded: 0, foldersDownloaded: 0, uploadedBytes: 0, downloadedBytes: 0 };
   // superseded 去重（与桌面同单点）：Lake 下载阶段冲突语义由 supersededNotes 表达，Set 去重防重复记。
   const supersededTracker = createSupersededTracker();
   // H5：本机编辑成果判定（软删/purge 覆盖前留档共用）——本地相对基线有改动，或本机上传过当前版本（本机是作者）。
@@ -260,6 +271,7 @@ export async function syncNow(cfg: SyncConfig, s3: S3Store, db: SyncDbPort, opts
     if (manifestBytes != null) {
       remote = parseLakeManifest(manifestBytes);
       report.pulled = true;
+      report.downloadedBytes += manifestBytes.length;
     } else {
       db.log("首次同步：无 latest manifest");
     }
@@ -279,18 +291,28 @@ export async function syncNow(cfg: SyncConfig, s3: S3Store, db: SyncDbPort, opts
   if (typeof db.listFoldersForSync === "function") {
     const localFolders = db.listFoldersForSync() ?? [];
     const remoteFolders = new Map((remote?.folders ?? []).map((f) => [f.id, f]));
-    foldersChanged = localFolders.some((f) => {
+    for (const f of localFolders) {
       const rf = remoteFolders.get(f.id);
-      if (!rf) return true; // 本地新增（远端无此 folder）
-      return rf.title !== f.title || (rf.parentId ?? null) !== (f.parentId ?? null) || rf.sortOrder !== f.sortOrder ||
+      // 本地新增（远端无此 folder）或内容有差异 → 需要发布
+      if (!rf || rf.title !== f.title || (rf.parentId ?? null) !== (f.parentId ?? null) || rf.sortOrder !== f.sortOrder ||
         rf.nodeType !== f.nodeType || (rf.icon ?? null) !== (f.icon ?? null) ||
-        (rf.trashedAt ?? null) !== (f.trashedAt ?? null) || (rf.deletedFromParentId ?? null) !== (f.deletedFromParentId ?? null);
-    });
+        (rf.trashedAt ?? null) !== (f.trashedAt ?? null) || (rf.deletedFromParentId ?? null) !== (f.deletedFromParentId ?? null)) {
+        foldersChanged = true;
+        report.foldersUploaded++;
+      }
+    }
     // 远端 folders 中存在本地已 purge 的（deleted_notes 带 purged_at）：必须强制发布重写 manifest，
     // 从云端移除残留（否则每轮同步都会尝试重新导入 → 复活）。
     if (!foldersChanged && typeof db.isFolderPurged === "function") {
       for (const rf of remoteFolders.values()) {
         if (db.isFolderPurged(rf.id)) { foldersChanged = true; db.log(`[publish] folder ${rf.id} locally purged, force rewrite manifest`); break; }
+      }
+    }
+    // 同步统计：远端存在而本地没有的目录 → 下载方向新导入
+    if (remote) {
+      const localIds = new Set(localFolders.map((f) => f.id));
+      for (const rf of remoteFolders.values()) {
+        if (!localIds.has(rf.id)) report.foldersDownloaded++;
       }
     }
   }
@@ -405,6 +427,7 @@ export async function syncNow(cfg: SyncConfig, s3: S3Store, db: SyncDbPort, opts
             report.warnings.push(`对象缺失（跳过+warning，B 方案）: ${rn.id}-${rn.contentHash}`);
             continue;
           }
+          report.downloadedBytes += contentBytes.length;
           // 资产先下载（严格模式：缺失 → 跳过该条目，不导入半成品；对齐桌面 sync.ts:533-541）
           if (opts?.strictAssets) {
             try { await downloadAssets(cfg, s3, db, rn, report, true); }
@@ -429,6 +452,7 @@ export async function syncNow(cfg: SyncConfig, s3: S3Store, db: SyncDbPort, opts
           report.warnings.push(`对象缺失（跳过+warning，B 方案）: ${rn.id}-${rn.contentHash}`);
           continue;
         }
+        report.downloadedBytes += contentBytes.length;
         db.applyRemoteTrash(rn.id, decodeText(contentBytes), rn.title, rn.trashedAt ?? rn.deletedAt ?? rn.updatedAt, rn.deletedFromParentId ?? null, rn.parentId, rn.sortOrder);
         await downloadAssets(cfg, s3, db, rn, report, opts?.strictAssets ?? false);
         report.appliedRemote++;
@@ -447,6 +471,7 @@ export async function syncNow(cfg: SyncConfig, s3: S3Store, db: SyncDbPort, opts
             report.warnings.push(`对象缺失（跳过+warning，B 方案）: ${rn.id}-${rn.contentHash}`);
             continue;
           }
+          report.downloadedBytes += contentBytes.length;
           // 跟随恢复 = 应用远端 active（dbPort 清 trashed_at）+ 记账
           if (opts?.strictAssets) {
             try { await downloadAssets(cfg, s3, db, rn, report, true); }
@@ -505,6 +530,7 @@ export async function syncNow(cfg: SyncConfig, s3: S3Store, db: SyncDbPort, opts
           report.warnings.push(`对象缺失（跳过+warning，B 方案）: ${rn.id}-${rn.contentHash}`);
           continue;
         }
+        report.downloadedBytes += contentBytes.length;
         // D5：本机编辑成果被远端覆盖 → 先强制留档（协议 §4.2，防丢数据），再接受远端
         if (action.superseded && local) {
           db.createHistorySnapshot(rn.id, local.content, { title: local.title, parentId: local.parentId, sortOrder: local.sortOrder });
@@ -557,7 +583,7 @@ export async function syncNow(cfg: SyncConfig, s3: S3Store, db: SyncDbPort, opts
       // 回收站条目携带资源清单（对齐桌面：trash 上云带 assets，B 端下载全文+资源可恢复）
       let trashAssets: ManifestNote["assets"] = [];
       try {
-        trashAssets = await scanLocalAssets(cfg, s3, db, local.id);
+        trashAssets = await scanLocalAssets(cfg, s3, db, local.id, report);
       } catch (e) {
         db.log(`[tombstone] ${local.id} 资源扫描失败（跳过）：${(e as Error).message}`);
       }
@@ -585,7 +611,7 @@ export async function syncNow(cfg: SyncConfig, s3: S3Store, db: SyncDbPort, opts
       // H3：上传前扫描本地资产 → 上传 S3 → 填入 manifest.assets（供他端下载）
       let assets: ManifestNote["assets"] = [];
       try {
-        assets = await scanLocalAssets(cfg, s3, db, local.id);
+        assets = await scanLocalAssets(cfg, s3, db, local.id, report);
       } catch (e) {
         db.log(`[H3] 资产扫描失败（跳过，不影响正文上传）: ${(e as Error).message}`);
       }
@@ -655,10 +681,12 @@ export async function syncNow(cfg: SyncConfig, s3: S3Store, db: SyncDbPort, opts
       // 占位符墓碑（tombstone && content 为空，purge 已物理删除内容）：不重算 hash（保留占位符 id）、
       // 不传空对象（否则 contentHash 被覆盖成 sha256(空串) + 空对象残留——迁移回归），仅写 deleted 标记。
       if (item.tombstone && item.content === "") continue;
-      const hash = sha256Sync(new TextEncoder().encode(item.content));
+      const contentBytes = new TextEncoder().encode(item.content);
+      const hash = sha256Sync(contentBytes);
       if (item.entry.contentHash !== hash) item.entry.contentHash = hash;
       await s3.putObject(`${cfg.prefix}/${objectKey(item.id, item.entry.contentHash)}`, item.content);
       report.uploaded++;
+      report.uploadedBytes += contentBytes.length;
     }
     next = {
       version: 4,
@@ -697,8 +725,10 @@ export async function syncNow(cfg: SyncConfig, s3: S3Store, db: SyncDbPort, opts
     }
 
     // ---- 5. 发布：commit（简化，仅 latest）+ latest ----
-    await s3.putObject(`${cfg.prefix}/manifests/${next.commitId}.json`, JSON.stringify(next), { gzip: true });
-    await s3.putObject(`${cfg.prefix}/${MANIFEST_KEY}`, JSON.stringify(next), { gzip: true });
+    const manifestJson = JSON.stringify(next);
+    await s3.putObject(`${cfg.prefix}/manifests/${next.commitId}.json`, manifestJson, { gzip: true });
+    await s3.putObject(`${cfg.prefix}/${MANIFEST_KEY}`, manifestJson, { gzip: true });
+    report.uploadedBytes += manifestJson.length * 2;
     report.published = true;
     // 墓碑已发布 → 标记 published_at（从待上传计数移除；墓碑本体保留防删除标记丢失，审计 #2）
     if (tombstonePublishedIds.length > 0 && typeof db.markTombstonesPublished === "function") {

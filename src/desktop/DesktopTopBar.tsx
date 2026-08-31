@@ -3,7 +3,6 @@ import { ChevronDown, Moon, Sun } from "lucide-react";
 import type { Ref, RefObject } from "react";
 import { SyncStatusPopover } from "../components/SyncStatusPopover";
 import type { SyncStatus, SyncPendingSummary } from "../lib/types";
-import type { SaveState } from "./desktopTypes";
 
 export interface DesktopTopBarLeadingProps {
   workspaceName: string;
@@ -11,11 +10,7 @@ export interface DesktopTopBarLeadingProps {
   syncBtnRef?: RefObject<HTMLButtonElement>;
   visible?: boolean;
   sync: SyncStatus;
-  saveState: SaveState;
-  saveLabelText: string;
   pendingSummary: SyncPendingSummary;
-  dirtyTabCount: number;
-  lastSavedAt: string | null;
   cloudEnabled: boolean;
   conflictSnapshots: Array<{ noteId: string; title: string }>;
   onToggleWorkspaceMenu: () => void;
@@ -27,8 +22,8 @@ export interface DesktopTopBarLeadingProps {
 /** 顶栏左侧：工作空间（下拉：设置/回收站）+ 云同步状态。 */
 export function DesktopTopBarLeading(props: DesktopTopBarLeadingProps) {
   const {
-    workspaceName, wsMenuWrapRef, syncBtnRef, visible = true, sync, saveState, saveLabelText,
-    pendingSummary, dirtyTabCount, lastSavedAt, cloudEnabled, conflictSnapshots,
+    workspaceName, wsMenuWrapRef, syncBtnRef, visible = true, sync,
+    pendingSummary, cloudEnabled, conflictSnapshots,
     onToggleWorkspaceMenu, onSync, onOpenSettings, onOpenHistory,
   } = props;
   return (
@@ -42,14 +37,9 @@ export function DesktopTopBarLeading(props: DesktopTopBarLeadingProps) {
         buttonRef={syncBtnRef}
         visible={visible}
         sync={sync}
-        saveState={saveState}
-        saveLabel={saveLabelText}
         pendingDocuments={pendingSummary.documents}
         pendingFolders={pendingSummary.folders}
-        pendingResources={pendingSummary.resources}
         pendingQuickNotes={pendingSummary.quickNotes}
-        dirtyTabCount={dirtyTabCount}
-        lastSavedAt={lastSavedAt}
         cloudEnabled={cloudEnabled}
         conflictSnapshots={conflictSnapshots}
         conflictSnapshotText={conflictSnapshots.length > 0 ? "检测到远端版本差异，已保留历史快照" : null}

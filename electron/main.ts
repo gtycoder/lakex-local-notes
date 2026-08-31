@@ -221,7 +221,8 @@ async function createWindow() {
     minWidth: 720,
     minHeight: 480,
     titleBarStyle: process.platform === "darwin" ? "hiddenInset" : "default",
-    trafficLightPosition: { x: 14, y: 14 },
+    // y = (顶栏 38px - 红绿灯 12px) / 2 = 13：红绿灯中心(19px)与顶栏内容中心(19px)垂直对齐
+    trafficLightPosition: { x: 14, y: 13 },
     webPreferences: {
       // 打包版直接指向 app.asar.unpacked 里的真实文件（asar 内 preload 在 Electron 33 有解析 Bug）
       preload: app.isPackaged

@@ -135,6 +135,11 @@ export interface SyncResult {
   conflicts: number;
   manifestId: string;
   completedAt: string;
+  /** 同步统计（思源式 tooltip）：上传/下载的目录数与字节数（正文 + 资源 + manifest）。 */
+  foldersUploaded?: number;
+  foldersDownloaded?: number;
+  uploadedBytes?: number;
+  downloadedBytes?: number;
   /** 小记失败不否定 Lake 同步成功。 */
   quickNotes?: QuickNotesSyncStatus;
   /** 本地修改被远端覆盖、已存入历史的文档（用于 UI 提醒） */

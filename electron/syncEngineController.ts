@@ -109,6 +109,8 @@ export async function syncNowViaEngine(
   const result: SyncResult = {
     uploaded: engineReport.uploaded, downloaded: engineReport.appliedRemote, conflicts: engineReport.supersededNotes.length,
     manifestId: commitId ?? "", completedAt, supersededNotes: engineReport.supersededNotes,
+    foldersUploaded: engineReport.foldersUploaded, foldersDownloaded: engineReport.foldersDownloaded,
+    uploadedBytes: engineReport.uploadedBytes, downloadedBytes: engineReport.downloadedBytes,
     warnings: warnings.length > 0 ? warnings : undefined,
   };
   store.markSyncComplete(completedAt);
