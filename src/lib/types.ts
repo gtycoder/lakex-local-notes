@@ -140,6 +140,10 @@ export interface SyncResult {
   foldersDownloaded?: number;
   uploadedBytes?: number;
   downloadedBytes?: number;
+  /** 本次同步总耗时（毫秒）。 */
+  durationMs?: number;
+  /** 本次同步移入回收站的文档数。 */
+  trashed?: number;
   /** 小记失败不否定 Lake 同步成功。 */
   quickNotes?: QuickNotesSyncStatus;
   /** 本地修改被远端覆盖、已存入历史的文档（用于 UI 提醒） */

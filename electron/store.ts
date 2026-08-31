@@ -1753,6 +1753,11 @@ export class Store {
     return this.noteQueries.listNotesForSync();
   }
 
+  /** P3-1：单行同步元数据查询（getNote/记账路径用，替代全表 .find()）。 */
+  getNoteForSync(id: string): SyncNote | null {
+    return this.noteQueries.getNoteForSync(id);
+  }
+
   /** 同步目录树：活动 notebook/group（不包含隐藏回收站笔记本）。 */
   listFoldersForSync(): SyncFolder[] {
     return this.noteQueries.listFoldersForSync();

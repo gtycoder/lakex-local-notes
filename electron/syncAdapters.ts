@@ -60,19 +60,21 @@ export function createStoreSyncPort(store: Store): SyncDbPort {
   });
 
   return {
+    // P3-1：显式取正文入口——engine 只在留历史快照/上传入队时调用（单行查询 + 读文件）。
     getNote(id: string): LocalNoteRow | null {
-      const n = store.listNotesForSync().find((x) => x.id === id);
+      const n = store.getNoteForSync(id);
       if (!n) return null;
       const row = rowFromSync(n);
       row.contentHash = localHashOf(store, n) ?? undefined;
       try { row.content = fs.readFileSync(store.notePathFor(id), "utf8"); } catch { /* 文件缺失 */ }
       return row;
     },
+    // P3-1：元数据 + contentHash（synced 走 baseHash 缓存零 IO；仅待同步笔记读文件算 hash），
+    // 不再无条件读全文——engine 在需要正文的分支显式调 getNote。
     getAllNotes(): LocalNoteRow[] {
       return store.listNotesForSync().map((n) => {
         const row = rowFromSync(n);
         row.contentHash = localHashOf(store, n) ?? undefined;
-        try { row.content = fs.readFileSync(store.notePathFor(n.id), "utf8"); } catch { /* 文件缺失 */ }
         return row;
       });
     },
@@ -100,14 +102,14 @@ export function createStoreSyncPort(store: Store): SyncDbPort {
       store.setBaseHash(id, contentHash);
       // 无条件写：string = 本机上传版本；null = 两端一致 skip（清除误标，SQL 写 NULL）
       store.setLastUploadedHash(id, lastUploadedHash);
-      const n = store.listNotesForSync().find((x) => x.id === id);
+      const n = store.getNoteForSync(id);
       if (n) store.markSyncedIfUnchanged(id, {
         contentHash, updatedAt: metaAt, title: n.title, parentId: n.parentId ?? null,
         sortOrder: n.sortOrder, isLocked: !!n.isLocked, lockedAt: n.lockedAt ?? null, icon: n.icon ?? null,
       });
     },
     markSyncedIfUnchanged(id: string, expectedContentHash: string, metaAt: string, lastUploadedHash: string): void {
-      const n = store.listNotesForSync().find((x) => x.id === id);
+      const n = store.getNoteForSync(id);
       if (!n) return;
       // 记账三元组：baseHash（基线）+ lastUploadedHash（已发布 hash，null=下载对账不写）+ lastSyncedMetaAt
       store.setBaseHash(id, expectedContentHash);
@@ -123,7 +125,7 @@ export function createStoreSyncPort(store: Store): SyncDbPort {
       // 下载对账也记录已确认版本（lastSyncedMetaAt）——否则 lma=null 使 decideMetaApply 恒 true，
       // 本地移动/改名会被远端旧 meta 撤销（循环移动收敛依赖 lma）。
       if (metaAt) {
-        const n = store.listNotesForSync().find((x) => x.id === id);
+        const n = store.getNoteForSync(id);
         if (n) store.markSyncedIfUnchanged(id, {
           contentHash, updatedAt: metaAt, title: n.title, parentId: n.parentId ?? null,
           sortOrder: n.sortOrder, isLocked: !!n.isLocked, lockedAt: n.lockedAt ?? null, icon: n.icon ?? null,

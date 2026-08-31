@@ -27,6 +27,24 @@ import { MAX_IMAGE_BYTES } from "./storeLimits.js";
 /** 单对象大小护栏（对齐桌面 sync.ts:100）：正文 .lake 上限 64MiB。 */
 const MAX_REMOTE_NOTE_BYTES = 64 * 1024 * 1024;
 
+/** P3-3：资产传输并发批大小。桌面实测（106 资产 58MB）：串行 RTT 占同步耗时 99%
+ * （head 均 24ms + put 均 157ms × 212 次往返 = 19.7s）。并发 4 → 首传约 5s、稳态 HEAD 巡检 <1s；
+ * 对齐思源 dejavu 的并发 worker 模式。4 路对七牛 Kodo QPS 安全。 */
+const ASSET_CONCURRENCY = 4;
+
+/** P3-3：小型并发池（定长车道，无依赖）：worker 按 index 领任务；结果由调用方按
+ * 原索引归位（warnings 顺序 / 字节记账保持确定性，对齐串行语义）。 */
+async function runPool<T>(items: readonly T[], limit: number, worker: (item: T, index: number) => Promise<void>): Promise<void> {
+  let next = 0;
+  const lanes = Array.from({ length: Math.max(1, Math.min(limit, items.length)) }, async () => {
+    while (next < items.length) {
+      const i = next++;
+      await worker(items[i], i);
+    }
+  });
+  await Promise.all(lanes);
+}
+
 /** 对象存储读取返回字节；正文对象是纯文本 Lake HTML，解码为字符串。 */
 const decodeText = (b: Uint8Array) => new TextDecoder("utf-8").decode(b);
 
@@ -37,27 +55,45 @@ const decodeText = (b: Uint8Array) => new TextDecoder("utf-8").decode(b);
 class AssetMissingError extends Error {}
 
 async function downloadAssets(cfg: SyncConfig, s3: S3Store, db: SyncDbPort, rn: ManifestNote, report: SyncReport, strict: boolean): Promise<void> {
-  for (const asset of rn.assets ?? []) {
-    const bytes = await s3.getObject(`${cfg.prefix}/assets/${rn.id}/${asset.filename}`, { maxBytes: MAX_IMAGE_BYTES });
-    if (bytes == null) {
-      if (strict) throw new AssetMissingError(`资源缺失: ${rn.id}/${asset.filename}`);
-      report.warnings.push(`资源缺失（跳过）: ${rn.id}/${asset.filename}`);
-      continue;
+  const assets = rn.assets ?? [];
+  // P3-3：并发下载（每资产 getObject/校验/saveAsset 相互独立）。worker 不抛错——
+  // 失败按索引归位，池结束后统一裁决：warnings 按原顺序入列、首个错误按原顺序抛出，
+  // 与旧串行实现的裁决结果逐字节一致（仅失败前的多余请求会发出，结果确定）。
+  const errors: Array<Error | null> = new Array(assets.length).fill(null);
+  const warnings: Array<string | null> = new Array(assets.length).fill(null);
+  const saved: Array<number> = new Array(assets.length).fill(0);
+  let aborted = false; // strict 首错后停止落盘（并发车道已在途的请求自然完成但不写盘，防孤儿资产目录）
+  await runPool(assets, ASSET_CONCURRENCY, async (asset, i) => {
+    try {
+      const bytes = await s3.getObject(`${cfg.prefix}/assets/${rn.id}/${asset.filename}`, { maxBytes: MAX_IMAGE_BYTES });
+      if (bytes == null) {
+        if (strict) { errors[i] = new AssetMissingError(`资源缺失: ${rn.id}/${asset.filename}`); aborted = true; }
+        else warnings[i] = `资源缺失（跳过）: ${rn.id}/${asset.filename}`;
+        return;
+      }
+      if (bytes.length !== asset.size) {
+        // 损坏（声明 size 不符）→ 严格模式整轮中止（对齐桌面：损坏拒绝，不静默接受）
+        if (strict) { errors[i] = new Error(`资源大小不符: ${rn.id}/${asset.filename}（声明 ${asset.size}，实际 ${bytes.length}）`); aborted = true; }
+        else warnings[i] = `资源大小不符（跳过）: ${rn.id}/${asset.filename}`;
+        return;
+      }
+      if (sha256Sync(bytes) !== asset.hash) {
+        if (strict) { errors[i] = new Error(`资源哈希不符: ${rn.id}/${asset.filename}`); aborted = true; }
+        else warnings[i] = `资源哈希不符（跳过）: ${rn.id}/${asset.filename}`;
+        return;
+      }
+      if (aborted) return; // strict 已首错：不落盘（防半成品孤儿资产）
+      await db.saveAsset(rn.id, asset.filename, bytes);
+      saved[i] = bytes.length;
+    } catch (e) {
+      // getObject 异常（网络/超限）：与旧实现一致向上传播（两模式均抛，不计入 warning）
+      aborted = true;
+      errors[i] = e instanceof Error ? e : new Error(String(e));
     }
-    if (bytes.length !== asset.size) {
-      // 损坏（声明 size 不符）→ 严格模式整轮中止（对齐桌面：损坏拒绝，不静默接受）
-      if (strict) throw new Error(`资源大小不符: ${rn.id}/${asset.filename}（声明 ${asset.size}，实际 ${bytes.length}）`);
-      report.warnings.push(`资源大小不符（跳过）: ${rn.id}/${asset.filename}`);
-      continue;
-    }
-    if (sha256Sync(bytes) !== asset.hash) {
-      if (strict) throw new Error(`资源哈希不符: ${rn.id}/${asset.filename}`);
-      report.warnings.push(`资源哈希不符（跳过）: ${rn.id}/${asset.filename}`);
-      continue;
-    }
-    await db.saveAsset(rn.id, asset.filename, bytes);
-    report.downloadedBytes += bytes.length;
-  }
+  });
+  for (const w of warnings) if (w) report.warnings.push(w);
+  for (const e of errors) if (e) throw e;
+  for (const n of saved) report.downloadedBytes += n;
 }
 
 /** 兼容 Web/Node 的 UUID（移动端 WebView 也提供 crypto.randomUUID）。 */
@@ -113,12 +149,18 @@ export interface SyncReport {
   supersededNotes: Array<{ id: string; title: string }>;
   /** 同步统计（思源式 tooltip 展示）：上传/下载的目录数与字节数（正文 + 资源 + manifest）。 */
   foldersUploaded: number;
+  /** 本次同步移入回收站的文档数：trashedDown=下载方向应用远端墓碑（新增入回收站，不含已一致的重复应用）；
+   * trashedUp=上传方向本端软删条目发布。UI"移入回收站"展示用。 */
+  trashedDown: number;
+  trashedUp: number;
   foldersDownloaded: number;
   uploadedBytes: number;
   downloadedBytes: number;
 }
 
 export interface LocalNoteRow {
+  /** P3-1 契约：getAllNotes 批量路径只保证元数据 + contentHash，content 可为 ""（桌面 adapter 不读全文）；
+   * 需要正文的时刻（留历史快照、上传入队）用 getNote(id) 显式回查。 */
   id: string; title: string; content: string; updatedAt: string; syncState: string;
   trashedAt: string | null; restorePendingAt: string | null; parentId: string | null; sortOrder: number;
   /** 协议字段透传（D9）：锁/图标/冲突标记不得因移动端不展示而丢失（红线 §3.5）。 */
@@ -211,33 +253,39 @@ const MANIFEST_KEY = "manifests/latest.json";
  * stats 传入时累计实际上传字节数（流式取声明 size，字节路径取 bytes.length）。
  * 导出供单元测试直接覆盖流式/HEAD 选择逻辑。 */
 export async function scanLocalAssets(cfg: SyncConfig, s3: S3Store, db: SyncDbPort, noteId: string, stats?: { uploadedBytes: number }): Promise<ManifestNote["assets"]> {
-  const assets: ManifestNote["assets"] = [];
   const localAssets = await db.listLocalAssets(noteId);
   const canStream = !!s3.putObjectStream && typeof db.openLocalAssetStream === "function";
-  for (const a of localAssets) {
-    const key = `${cfg.prefix}/assets/${noteId}/${a.filename}`;
-    // 存在性探测：HEAD 优先；端口未实现则整对象 GET 判存在（兼容移动端/测试桩）
-    let exists: boolean;
-    if (s3.exists) {
-      exists = await s3.exists(key);
-    } else {
-      exists = (await s3.getObject(key)) != null;
-    }
-    if (!exists) {
-      if (canStream && s3.putObjectStream) {
-        await s3.putObjectStream(key, a.size, () => db.openLocalAssetStream!(noteId, a.filename));
-        if (stats) stats.uploadedBytes += a.size;
-      } else {
-        const bytes = await db.readLocalAsset(noteId, a.filename);
-        if (bytes) {
-          await s3.putObject(key, bytes);
-          if (stats) stats.uploadedBytes += bytes.length;
+  // P3-3：并发 HEAD+PUT（桌面实测串行 RTT 占同步耗时 99%）。worker 不抛错——错误按索引
+  // 归位，池结束后按原顺序抛首个错误（与旧串行"逐个 await、首错即止"裁决一致）；
+  // 字节记账按索引归位（流式=声明 size，字节路径=实际 bytes.length）。
+  const uploadedSize: Array<number | null> = new Array(localAssets.length).fill(null);
+  const errors: Array<unknown> = new Array(localAssets.length).fill(null);
+  await runPool(localAssets, ASSET_CONCURRENCY, async (a, i) => {
+    try {
+      const key = `${cfg.prefix}/assets/${noteId}/${a.filename}`;
+      // 存在性探测：HEAD 优先；端口未实现则整对象 GET 判存在（兼容移动端/测试桩）
+      const exists = s3.exists ? await s3.exists(key) : (await s3.getObject(key)) != null;
+      if (!exists) {
+        if (canStream && s3.putObjectStream) {
+          await s3.putObjectStream(key, a.size, () => db.openLocalAssetStream!(noteId, a.filename));
+          uploadedSize[i] = a.size;
+        } else {
+          const bytes = await db.readLocalAsset(noteId, a.filename);
+          if (bytes) {
+            await s3.putObject(key, bytes);
+            uploadedSize[i] = bytes.length;
+          }
         }
       }
+    } catch (e) {
+      errors[i] = e;
     }
-    assets.push({ filename: a.filename, size: a.size, hash: a.hash });
+  });
+  for (const e of errors) if (e) throw e;
+  if (stats) {
+    for (const n of uploadedSize) if (n != null) stats.uploadedBytes += n;
   }
-  return assets;
+  return localAssets.map((a) => ({ filename: a.filename, size: a.size, hash: a.hash }));
 }
 
 export interface SyncNowOptions {
@@ -252,7 +300,7 @@ export interface SyncNowOptions {
 }
 
 export async function syncNow(cfg: SyncConfig, s3: S3Store, db: SyncDbPort, opts?: SyncNowOptions): Promise<SyncReport> {
-  const report: SyncReport = { pulled: false, appliedRemote: 0, uploaded: 0, published: false, message: "", warnings: [], supersededNotes: [], foldersUploaded: 0, foldersDownloaded: 0, uploadedBytes: 0, downloadedBytes: 0 };
+  const report: SyncReport = { pulled: false, appliedRemote: 0, uploaded: 0, published: false, message: "", warnings: [], supersededNotes: [], foldersUploaded: 0, foldersDownloaded: 0, trashedDown: 0, trashedUp: 0, uploadedBytes: 0, downloadedBytes: 0 };
   // superseded 去重（与桌面同单点）：Lake 下载阶段冲突语义由 supersededNotes 表达，Set 去重防重复记。
   const supersededTracker = createSupersededTracker();
   // H5：本机编辑成果判定（软删/purge 覆盖前留档共用）——本地相对基线有改动，或本机上传过当前版本（本机是作者）。
@@ -261,6 +309,13 @@ export async function syncNow(cfg: SyncConfig, s3: S3Store, db: SyncDbPort, opts
     const base = db.getSyncBase(id);
     const localHash = local.contentHash ?? sha256Sync(new TextEncoder().encode(local.content));
     return (base !== null && localHash !== base.contentHash) || (base?.lastUploadedHash != null && localHash === base.lastUploadedHash);
+  };
+  // P3-1：按需取正文——批量行（getAllNotes）content 可为 ""（桌面 adapter 元数据路径），
+  // 仅在留历史快照/上传入队时刻调用；行已带正文（移动端/测试桩）则直接用，不产生额外 IO。
+  const contentOf = (row: LocalNoteRow | null): string => {
+    if (!row) return "";
+    if (row.content) return row.content;
+    return db.getNote(row.id)?.content ?? "";
   };
   const progress = (phase: string, message: string) => { try { opts?.onProgress?.(phase, message); } catch { /* 渲染层已关闭 */ } };
 
@@ -355,7 +410,10 @@ export async function syncNow(cfg: SyncConfig, s3: S3Store, db: SyncDbPort, opts
       validParents.add(folder.id);
     }
     for (const rn of remote.notes) if (!rn.deleted) validParents.add(rn.id);
-    for (const localNote of db.getAllNotes()) validParents.add(localNote.id);
+    // P3-1：一次全表（仅元数据）建本地索引，validParents 与下载环共用——
+    // 替代原先"validParents 全量行 + 下载环每条远端笔记一次全表 SQL + 读全文"的 O(N²)。
+    const localById = new Map(db.getAllNotes().map((n) => [n.id, n]));
+    for (const id of localById.keys()) validParents.add(id);
     // 远端 parent 映射（仅 active 笔记）：结构环检测用——本地移动与远端已提交移动互成父子
     // （循环移动）时保留本地会成环 → 必须跟随远端打破环（先提交先确认，对齐桌面 sync.ts:363-380）。
     const remoteParentMap = new Map<string, string | null>();
@@ -373,7 +431,8 @@ export async function syncNow(cfg: SyncConfig, s3: S3Store, db: SyncDbPort, opts
       for (const asset of rn.assets ?? []) {
         if (!isSafePathSegment(asset.filename)) throw new Error(`清单包含无效的资源文件名: ${rn.id}/${asset.filename}`);
       }
-      const local = db.getNote(rn.id);
+      // P3-1：本地行来自 localById（元数据），需要正文的分支由 contentOf 回查
+      const local = localById.get(rn.id) ?? null;
       // 本地已删除而云端未标记（本地墓碑 vs 远端恢复）：按时间 LWW——
       // 远端 updatedAt 新于本地删除时间 → 撤销本地墓碑并跟随恢复；本地删除较新 → 跳过下载。
       const tombAt = tombstoned.get(rn.id);
@@ -399,7 +458,7 @@ export async function syncNow(cfg: SyncConfig, s3: S3Store, db: SyncDbPort, opts
           // W-1：与软删分支对称——本地未同步编辑（或本机是作者）被远端 purge 覆盖前强制留档。
           // purged 条目保留 .lake 可恢复，但无历史快照；清空回收站/自动过期后即彻底丢失。
           if (ownEditOf(local, rn.id)) {
-            db.createHistorySnapshot(rn.id, local!.content, { title: local!.title, parentId: local!.parentId, sortOrder: local!.sortOrder });
+            db.createHistorySnapshot(rn.id, contentOf(local), { title: local!.title, parentId: local!.parentId, sortOrder: local!.sortOrder });
             supersededTracker.push(rn.id, rn.title);
           }
           db.applyRemotePurge(rn.id);
@@ -418,6 +477,15 @@ export async function syncNow(cfg: SyncConfig, s3: S3Store, db: SyncDbPort, opts
       }
 
       if (remoteTrashed && !localRestoring) {
+        // P3-3b：幂等跳过——本地已在回收站、正文 hash 与墓碑一致、墓碑时间不新于本地 → 完全一致，
+        // 只对齐记账，不重复下载正文/资产。此前每轮"有变更的同步"都会重拉回收站全部文档
+        // （实测 B 端同 hash 对象重复下载；106 资产大文档批量删除后每轮重拉数十 MB）。
+        // 语义等价：applyRemoteTrash 重写相同内容/元数据是 no-op；hash 不同（回收站内编辑 S4）
+        // 或墓碑时间更新（回收站元数据变更）仍走完整应用路径。
+        if (local !== null && localTrashed && local.contentHash === rn.contentHash && (local.updatedAt ?? "") >= (rn.updatedAt ?? "")) {
+          db.setSyncBase(rn.id, rn.contentHash, rn.updatedAt, null);
+          continue;
+        }
         // 远端墓碑（删除压编辑）：本地无显式恢复 → 跟随删除
         if (local === null) {
           // 本地从未持有（全新设备/重装）：导入远端 trash 条目（对齐桌面 decideTrashCross no-cross → importRemoteNote，
@@ -437,6 +505,7 @@ export async function syncNow(cfg: SyncConfig, s3: S3Store, db: SyncDbPort, opts
           if (!opts?.strictAssets) await downloadAssets(cfg, s3, db, rn, report, false);
           db.setSyncBase(rn.id, rn.contentHash, rn.updatedAt, null);
           report.appliedRemote++;
+          report.trashedDown++; // 全新设备首次导入即入回收站（UI 移入回收站计数）
           continue;
         }
         // H5/回收站内编辑（对齐桌面 sync.ts:427-441 + S4）：仅当"本机编辑成果"被删除覆盖
@@ -444,7 +513,7 @@ export async function syncNow(cfg: SyncConfig, s3: S3Store, db: SyncDbPort, opts
         // 纯跟随删除传播（从未编辑/上传）→ 只移入回收站（或已在内），不留档不报。
         // 回收站内编辑（localTrashed=true 且内容被改）同样压制回删除前内容 + 留档（S4）。
         if (ownEditOf(local, rn.id)) {
-          db.createHistorySnapshot(rn.id, local!.content, { title: local!.title, parentId: local!.parentId, sortOrder: local!.sortOrder });
+          db.createHistorySnapshot(rn.id, contentOf(local), { title: local!.title, parentId: local!.parentId, sortOrder: local!.sortOrder });
           supersededTracker.push(rn.id, rn.title);
         }
         const contentBytes = await s3.getObject(`${cfg.prefix}/${objectKey(rn.id, rn.contentHash)}`, { maxBytes: MAX_REMOTE_NOTE_BYTES });
@@ -456,6 +525,8 @@ export async function syncNow(cfg: SyncConfig, s3: S3Store, db: SyncDbPort, opts
         db.applyRemoteTrash(rn.id, decodeText(contentBytes), rn.title, rn.trashedAt ?? rn.deletedAt ?? rn.updatedAt, rn.deletedFromParentId ?? null, rn.parentId, rn.sortOrder);
         await downloadAssets(cfg, s3, db, rn, report, opts?.strictAssets ?? false);
         report.appliedRemote++;
+        // UI 移入回收站计数：仅"本次新入回收站"（本地原先不在回收站）才计；已在回收站的重复应用不计
+        if (!localTrashed) report.trashedDown++;
         // 本地已在回收站 → 一致，无操作
         continue;
       }
@@ -533,7 +604,7 @@ export async function syncNow(cfg: SyncConfig, s3: S3Store, db: SyncDbPort, opts
         report.downloadedBytes += contentBytes.length;
         // D5：本机编辑成果被远端覆盖 → 先强制留档（协议 §4.2，防丢数据），再接受远端
         if (action.superseded && local) {
-          db.createHistorySnapshot(rn.id, local.content, { title: local.title, parentId: local.parentId, sortOrder: local.sortOrder });
+          db.createHistorySnapshot(rn.id, contentOf(local), { title: local.title, parentId: local.parentId, sortOrder: local.sortOrder });
           supersededTracker.push(rn.id, rn.title);
         }
         if (opts?.strictAssets) {
@@ -550,14 +621,18 @@ export async function syncNow(cfg: SyncConfig, s3: S3Store, db: SyncDbPort, opts
   }
 
   // ---- 3. 上传方向：墓碑 / 恢复 / 正常（decideUpload） ----
+  // 位置不变：必须在上传环开头重新取——这里看到的是下载合并后的状态（刚应用的笔记 syncState=synced），
+  // 提前取会让它们被误判 upload 造成回环重传（P3-1 语义关键点）。
   const localAll = db.getAllNotes();
+  // P3-1：远端条目索引一次建好——上传环与墓碑环节共用（原先各自 .find，O(N²)）。
+  const remoteById = new Map((remote?.notes ?? []).map((n) => [n.id, n]));
   // B4：本地已 purge（收到他端删除后的保留副本）不上传——恢复 = 清 purged 后再上传（对齐桌面 sync.ts:641）。
   // 同时记录 purged id：发布 manifest 时从 notes 中移除（云端删除已完成，manifest 不再携带该条目，
   // 对齐桌面 sync.ts:630-632 跳过 + manifestNotes 只含非 purged）。
   const purgedIds = new Set(localAll.filter((n) => n.syncState === "purged").map((n) => n.id));
   for (const local of localAll) {
     if (local.syncState === "purged") continue;
-    const rn = remote?.notes.find((n) => n.id === local.id) ?? null;
+    const rn = remoteById.get(local.id) ?? null;
     // 远端条目缺失（桶重置/被清空）→ 回退全量扫描：synced 笔记也强制读真实 hash 重传（对齐桌面 cachedBase 边界）
     let localHash = local.contentHash ?? sha256Sync(new TextEncoder().encode(local.content));
     if (rn === null && typeof db.forceHashRead === "function") {
@@ -594,7 +669,9 @@ export async function syncNow(cfg: SyncConfig, s3: S3Store, db: SyncDbPort, opts
         trashedAt: local.trashedAt,
         deletedFromParentId: local.deletedFromParentId ?? null,
       });
-      uploadQueue.push({ id: local.id, content: local.content, entry });
+      // P3-1：上传条目此刻才取正文（仅待上传的少数笔记产生 IO）
+      uploadQueue.push({ id: local.id, content: contentOf(local), entry });
+      report.trashedUp++; // 本端软删发布（UI 移入回收站计数）
       continue;
     }
 
@@ -623,7 +700,8 @@ export async function syncNow(cfg: SyncConfig, s3: S3Store, db: SyncDbPort, opts
         trashedAt: localRestoring ? null : undefined,
         deletedFromParentId: localRestoring ? null : undefined,
       });
-      uploadQueue.push({ id: local.id, content: local.content, entry });
+      // P3-1：上传条目此刻才取正文（仅待上传的少数笔记产生 IO）
+      uploadQueue.push({ id: local.id, content: contentOf(local), entry });
     } else {
       db.log(`[decide] ${local.id} → ${decision}`);
     }
@@ -636,7 +714,7 @@ export async function syncNow(cfg: SyncConfig, s3: S3Store, db: SyncDbPort, opts
   const tombstonePublishedIds: string[] = [];
   {
     const localIds = new Set(localAll.map((n) => n.id));
-    const remoteById = new Map((remote?.notes ?? []).map((n) => [n.id, n]));
+    // P3-1：remoteById 复用上传环前建好的远端索引
     const deletedNotes = typeof db.listDeletedNotesForSync === "function" ? db.listDeletedNotesForSync() : [];
     for (const deleted of deletedNotes) {
       if (localIds.has(deleted.id)) continue;
@@ -697,10 +775,16 @@ export async function syncNow(cfg: SyncConfig, s3: S3Store, db: SyncDbPort, opts
       notes: [...(remote?.notes ?? [])],
       folders: remote?.folders ?? [],
     };
+    // P3-1：id → 下标索引一次建好，替代逐项 findIndex（O(U×N) → O(N)）。
+    // 语义与 findIndex 一致：同 id 后项覆盖前项写同一位置（uploadQueue 内 id 唯一）。
+    const nextIndexById = new Map(next.notes.map((n, i) => [n.id, i] as const));
     for (const item of uploadQueue) {
-      const idx = next.notes.findIndex((n) => n.id === item.id);
-      if (idx >= 0) next.notes[idx] = item.entry;
-      else next.notes.push(item.entry);
+      const idx = nextIndexById.get(item.id);
+      if (idx !== undefined) next.notes[idx] = item.entry;
+      else {
+        nextIndexById.set(item.id, next.notes.length);
+        next.notes.push(item.entry);
+      }
     }
     // B4 修复：purged 条目（收到他端删除后本地保留的回收站副本）**不得**从 manifest 移除——
     // next.notes 继承 remote.notes，该条目必为 deleted:true（墓碑权威）；若被过滤掉，
@@ -749,9 +833,12 @@ export async function syncNow(cfg: SyncConfig, s3: S3Store, db: SyncDbPort, opts
     // 无上传：把已应用/对账的条目记账（对账收尾）。
     // 只标记"本地仍有、非 purge、远端非墓碑"的 active 条目——purge 墓碑与 remembered 删除
     // 不得被重标 synced（B4：否则本地 purge 后的保留副本被误当正常上传、删除复活）。
+    // P3-1：复用 localAll（下载环之后取、墓碑环节只读文件不写 notes 表，仍新鲜）建索引，
+    // 替代每条远端笔记一次 getNote（原先 = 2N 次全表 SQL + N 次全文读盘，空闲同步最热路径）。
+    const localAfterById = new Map(localAll.map((n) => [n.id, n]));
     for (const rn of remote?.notes ?? []) {
       if (rn.deleted) continue;
-      const loc = db.getNote(rn.id);
+      const loc = localAfterById.get(rn.id);
       if (!loc || loc.syncState === "purged") continue;
       // 下载对账收尾：lastUploadedHash 传 null——本机未上传该版本（下载的远端笔记不得误标"本机是作者"，对齐桌面语义）
       db.markSyncedIfUnchanged(rn.id, rn.contentHash, rn.updatedAt, null);

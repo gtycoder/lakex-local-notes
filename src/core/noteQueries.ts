@@ -1,5 +1,5 @@
 import { rowToLocalState } from "./syncDecisions.js";
-import type { DbLike } from "./dbLike.js";
+import type { DbLike, DbLikeStatement } from "./dbLike.js";
 
 export interface NoteSummary {
   id: string;
@@ -112,6 +112,10 @@ interface SyncFolderRow {
 
 /** Read-only note/tree queries; metadata and content writes remain in Store. */
 export class NoteQueries {
+  /** P3-1：同步热路径 SQL 的 prepared statement 缓存（better-sqlite3 prepare 复用，省去每次重新编译）。 */
+  private stmtListNotesForSync: DbLikeStatement | null = null;
+  private stmtGetNoteForSync: DbLikeStatement | null = null;
+
   constructor(
     private readonly db: DbLike,
     private readonly workspaceId: string,
@@ -169,14 +173,28 @@ export class NoteQueries {
     return rows.map((row) => this.mapSummary(row));
   }
 
+  private static readonly SYNC_NOTE_COLUMNS =
+    `SELECT n.id,n.title,n.parent_id,n.sort_order,n.updated_at,n.sync_state,n.is_conflict,n.is_locked,n.locked_at,t.icon,n.trashed_at,n.deleted_from_parent_id
+     FROM notes n LEFT JOIN tree_nodes t ON t.note_file_id = n.id`;
+
   listNotesForSync(): SyncNote[] {
-    const rows = this.db.prepare(
-      `SELECT n.id,n.title,n.parent_id,n.sort_order,n.updated_at,n.sync_state,n.is_conflict,n.is_locked,n.locked_at,t.icon,n.trashed_at,n.deleted_from_parent_id
-       FROM notes n LEFT JOIN tree_nodes t ON t.note_file_id = n.id
-       WHERE n.deleted_at IS NULL ORDER BY n.sort_order`
-    ).all() as SyncNoteRow[];
+    // P3-1：statement 缓存——本方法在同步周期内被多次调用（全表列出 + 单行 getNoteForSync），
+    // 不再每次 prepare。
+    this.stmtListNotesForSync ??= this.db.prepare(
+      `${NoteQueries.SYNC_NOTE_COLUMNS} WHERE n.deleted_at IS NULL ORDER BY n.sort_order`
+    );
+    const rows = this.stmtListNotesForSync.all() as SyncNoteRow[];
     // Step B G5：行映射统一走 core rowToLocalState（两端同一映射，避免"同一状态两种解读"）
     return rows.map((row) => rowToLocalState(row));
+  }
+
+  /** P3-1：单行查询（与 listNotesForSync 同列同 WHERE 语义），替代 getNote/记账路径的全表 .find()。 */
+  getNoteForSync(id: string): SyncNote | null {
+    this.stmtGetNoteForSync ??= this.db.prepare(
+      `${NoteQueries.SYNC_NOTE_COLUMNS} WHERE n.deleted_at IS NULL AND n.id = ?`
+    );
+    const row = this.stmtGetNoteForSync.get(id) as SyncNoteRow | undefined;
+    return row ? rowToLocalState(row) : null;
   }
 
   listFoldersForSync(): SyncFolder[] {
