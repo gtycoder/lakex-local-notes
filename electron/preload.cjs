@@ -107,4 +107,9 @@ contextBridge.exposeInMainWorld("lakeNative", {
     ipcRenderer.on("sync-progress", listener);
     return () => { ipcRenderer.removeListener("sync-progress", listener); };
   },
+  onPendingSummaryChanged: (callback) => {
+    const listener = (_event, summary) => callback(summary);
+    ipcRenderer.on("pending-summary-changed", listener);
+    return () => { ipcRenderer.removeListener("pending-summary-changed", listener); };
+  },
 });

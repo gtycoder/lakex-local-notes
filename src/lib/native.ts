@@ -83,6 +83,7 @@ export interface LakeNative {
   runS3DeepCleanup(dryRun: boolean): Promise<DeepCleanupResult>;
   getTrashReminder(): Promise<Array<{ id: string; title: string; deletedAt: string }>>;
   onSyncProgress(callback: (progress: SyncProgress) => void): () => void;
+  onPendingSummaryChanged(callback: (summary: import("./types").SyncPendingSummary) => void): () => void;
 }
 
 declare global {
@@ -174,4 +175,5 @@ export const native = {
   runS3DeepCleanup: (dryRun: boolean) => api().runS3DeepCleanup(dryRun),
   getTrashReminder: () => api().getTrashReminder(),
   onSyncProgress: (callback: (progress: SyncProgress) => void) => api().onSyncProgress(callback),
+  onPendingSummaryChanged: (callback: (summary: import("./types").SyncPendingSummary) => void) => api().onPendingSummaryChanged(callback),
 };

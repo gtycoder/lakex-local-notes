@@ -13,7 +13,6 @@ interface SyncControllerInput {
   setSettingsCategory: Dispatch<SetStateAction<SettingsCategory>>;
   setSettingsOpen: Dispatch<SetStateAction<boolean>>;
   showSyncToast: (data: SyncToastData) => void;
-  refreshPendingSummary: () => void;
 }
 
 /** Owns the user-triggered sync feedback loop; App keeps only its state ownership. */
@@ -25,7 +24,6 @@ export function useSyncController({
   setSettingsCategory,
   setSettingsOpen,
   showSyncToast,
-  refreshPendingSummary,
 }: SyncControllerInput): () => Promise<void> {
   // P2-6：12s 冲突提醒定时器句柄——重复触发清旧、卸载清尾
   const conflictTimerRef = useRef<number | null>(null);
@@ -62,7 +60,6 @@ export function useSyncController({
         ? `远端修改已覆盖本地 ${result.supersededNotes.length} 篇（${result.supersededNotes.slice(0, 3).map((n) => `「${n.title}」`).join("、")}${result.supersededNotes.length > 3 ? " 等" : ""}），本地修改已存入该文档的历史版本。`
         : "";
       setSync((current) => ({ ...current, phase: result.quickNotes?.error ? "error" : "success", message: resultMessage, lastSyncedAt: result.completedAt, pendingChanges: 0 }));
-      refreshPendingSummary();
       if (result.supersededNotes.length > 0) {
         setConflictSnapshotNotice(result.supersededNotes.map((item) => ({ noteId: item.id, title: item.title })));
         if (conflictTimerRef.current !== null) window.clearTimeout(conflictTimerRef.current);
@@ -89,5 +86,5 @@ export function useSyncController({
     } finally {
       unsubscribe();
     }
-  }, [setSync, setCloudConfigured, setSyncToast, setConflictSnapshotNotice, setSettingsCategory, setSettingsOpen, showSyncToast, refreshPendingSummary]);
+  }, [setSync, setCloudConfigured, setSyncToast, setConflictSnapshotNotice, setSettingsCategory, setSettingsOpen, showSyncToast]);
 }

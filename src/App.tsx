@@ -123,7 +123,8 @@ export function App() {
   // 审计 #7：每篇笔记的编辑 revision——保存请求发出后若有新编辑（revision 增长），
   // 旧响应不得覆盖最新草稿/清除 dirty。
   // V5 Phase 4：保存管线回调 useCallback 化——persistTab 依赖稳定，避免每次渲染重建（打字路径抖动收敛）。
-  const refreshPendingSummaryRef = useRef<() => void>(() => undefined);
+  // pending 计数刷新已收敛为主进程 IPC 层事件广播（思源模式）：pending-summary-changed 单点订阅，
+  // 渲染层不再需要各操作点手动触发（历史上 10+ 处手动刷新屡有遗漏）。
   const handleNoteSaved = useCallback((saved: NoteDocument) => {
     setNotes(patchNoteById(saved.id, summaryOf(saved)));
     setTreeNodes((items) => items.map((item) => item.noteFileId === saved.id || item.id === saved.id ? { ...item, title: saved.title, updatedAt: saved.updatedAt, syncState: saved.syncState } : item));
@@ -131,7 +132,6 @@ export function App() {
       ...current,
       pendingChanges: saved.syncState === "synced" ? current.pendingChanges : Math.max(1, current.pendingChanges),
     }));
-    refreshPendingSummaryRef.current();
   }, [setNotes, setTreeNodes, setSync]);
   const handleOpenTabsApplied = useCallback((saved: NoteDocument) => {
     setOpenTabs(patchTabById(saved.id, { title: saved.title, content: saved.content, dirty: false, lastDigest: { title: saved.title, updatedAt: saved.updatedAt } }));
@@ -395,10 +395,14 @@ export function App() {
 
 
 
+  // bootstrap 首拉 + 主进程广播订阅（写操作后的刷新由 pending-summary-changed 事件驱动，单点更新）
   const refreshPendingSummary = useCallback(() => {
     void native.getSyncPendingSummary().then(setPendingSummary).catch(() => undefined);
   }, []);
-  refreshPendingSummaryRef.current = refreshPendingSummary;
+  useEffect(() => {
+    refreshPendingSummary();
+    return native.onPendingSummaryChanged(setPendingSummary);
+  }, [refreshPendingSummary]);
 
   const refreshDraftEntries = useCallback(async () => {
     try {
@@ -435,7 +439,6 @@ export function App() {
       }
       console.log("[sync-tab] trash-restore done", JSON.stringify({ totalMs: Math.round(performance.now() - t0) }));
     })();
-    refreshPendingSummaryRef.current();
   }, [refreshDraftEntries]);
 
   /** 历史恢复后：刷新树/摘要；若该文档正开在 tab 里，重载正文 + bump reloadKey 强制重建 Lake 实例。 */
@@ -455,7 +458,6 @@ export function App() {
         bumpRevision(restoredId);
       } catch { /* 文档未打开或读取失败则跳过 */ }
     })();
-    refreshPendingSummaryRef.current();
   }, []);
 
   // 保存管线已收拢到 useSavePipeline（persistTab 由 hook 提供）
@@ -626,7 +628,6 @@ export function App() {
     setSettingsCategory,
     setSettingsOpen,
     showSyncToast,
-    refreshPendingSummary,
   });
 
   const handleS3SettingsChanged = useCallback((next: S3Settings) => {
@@ -749,7 +750,6 @@ export function App() {
       }
       setActiveNoteId(note.id);
       setPendingRenameId(note.id);
-      refreshPendingSummaryRef.current();
     }
   }
 
@@ -766,7 +766,6 @@ export function App() {
       if (kind === "notebook") await native.createNotebook(resolvedTitle);
       else if (parentId) await native.createGroup(parentId, resolvedTitle);
       setTreeNodes(await native.listTreeNodes());
-      refreshPendingSummaryRef.current();
     } catch (reason) { setError(getNativeErrorMessage(reason)); }
   }, []);
 
@@ -778,7 +777,6 @@ export function App() {
         setNotes(patchNoteById(renamed.noteFileId, { title: renamed.title, updatedAt: renamed.updatedAt, syncState: "local" }));
         setOpenTabs(patchTabById(renamed.noteFileId, { title: renamed.title }));
       }
-      refreshPendingSummaryRef.current();
     } catch (reason) { setError(getNativeErrorMessage(reason)); }
   }, []);
 
@@ -804,7 +802,6 @@ export function App() {
           })();
       await native.moveTreeNodeOrdered(id, parentId, orderedIds);
       setTreeNodes(await native.listTreeNodes());
-      refreshPendingSummaryRef.current();
     } catch (reason) { setError(getNativeErrorMessage(reason)); }
   }, [treeNodes]);
 
@@ -857,7 +854,6 @@ export function App() {
       if (activeNoteId && removedNoteIds.has(activeNoteId)) {
         setActiveNoteId(next[next.length - 1]?.noteId ?? null);
       }
-      refreshPendingSummaryRef.current();
     } catch (reason) { setError(getNativeErrorMessage(reason)); }
   }
 
@@ -921,7 +917,6 @@ export function App() {
     try {
       const updated = await native.setNoteLocked(tabId, next);
       setNotes(patchNoteById(tabId, { isLocked: updated.isLocked, lockedAt: updated.lockedAt }));
-      refreshPendingSummaryRef.current();
     } catch (reason) {
       setError(getNativeErrorMessage(reason));
     }
@@ -1101,8 +1096,7 @@ export function App() {
             topbarTrailing={topBarTrailing}
             onDirtyChange={setQuickNotesDirty}
             onConverted={(note) => void handleQuickNoteConverted(note)}
-            onChanged={() => refreshPendingSummaryRef.current()}
-          />
+            />
         </div>
         <DesktopStatusBar
           showDocumentStats={desktopWorkspace === "library"}
@@ -1159,7 +1153,7 @@ export function App() {
         onCloseSearch={() => setSearchPanelOpen(false)}
         trashOpen={trashOpen}
         onCloseTrash={() => setTrashOpen(false)}
-        onTrashChanged={() => { refreshPendingSummaryRef.current(); void refreshDraftEntries(); }}
+        onTrashChanged={() => void refreshDraftEntries()}
         onTrashRestored={handleTrashRestored}
         historyOpen={historyOpen}
         historyNoteId={historyNoteId}

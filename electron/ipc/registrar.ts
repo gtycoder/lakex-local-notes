@@ -10,12 +10,14 @@ export interface IpcRegistrar {
   handleEvent<Args extends IpcArgs>(channel: string, handler: IpcEventHandler<Args>): void;
 }
 
-export function createIpcRegistrar(validateSender: (event: IpcMainInvokeEvent) => void): IpcRegistrar {
+export function createIpcRegistrar(validateSender: (event: IpcMainInvokeEvent) => void, afterInvoke?: (channel: string) => void): IpcRegistrar {
   const handleEvent = <Args extends IpcArgs>(channel: string, handler: IpcEventHandler<Args>) => {
     ipcMain.handle(channel, async (event, ...args) => {
       try {
         validateSender(event);
-        return await handler(event, ...(args as Args));
+        const result = await handler(event, ...(args as Args));
+        afterInvoke?.(channel);
+        return result;
       } catch (error) {
         // Electron 的 invoke 序列化不会可靠保留 Error 自定义字段；只抛出
         // 明确的可序列化 envelope，让 preload 能稳定恢复 code。

@@ -327,9 +327,25 @@ function isTrustedSenderFrame(frame: WebFrameMain | null, sender: Electron.WebCo
 }
 
 function registerIpc(): void {
+  // 思源模式收敛：pending 待办计数不再依赖渲染层各操作点手动刷新（历史上有 10+ 处遗漏），
+  // 改为 IPC 层单点拦截——每个调用完成后 diff 廉价指纹（微秒级 COUNT），变化才广播完整摘要。
+  let lastPendingSig = "";
+  const afterInvoke = (channel: string): void => {
+    try {
+      const sig = `${store.pendingSignature()}:${quickNotes.getPendingSyncSummary().items}`;
+      if (sig === lastPendingSig) return;
+      lastPendingSig = sig;
+      const lake = store.getSyncPendingSummary();
+      const quick = quickNotes.getPendingSyncSummary();
+      const summary = { documents: lake.documents, folders: lake.folders, resources: 0, quickNotes: quick.items, total: lake.documents + lake.folders + quick.items, generatedAt: new Date().toISOString() };
+      for (const win of BrowserWindow.getAllWindows()) {
+        try { win.webContents.send("pending-summary-changed", summary); } catch { /* 窗口已关闭 */ }
+      }
+    } catch { /* store 未就绪（早期调用）忽略 */ }
+  };
   const ipc = createIpcRegistrar((event) => {
     if (!isTrustedSenderFrame(event.senderFrame, event.sender)) throw new Error("IPC 调用来源不受信任");
-  });
+  }, afterInvoke);
 
   registerNotesIpc(ipc, store, drafts);
   registerHistoryIpc(ipc, store, () => restartHistoryTimers?.());

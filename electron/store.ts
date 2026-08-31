@@ -1911,6 +1911,14 @@ export class Store {
     return `${row.c}:${row.m}`;
   }
 
+  /** 廉价 pending 指纹（三个索引级 COUNT，微秒级）：IPC 层每次调用后 diff，变化才广播完整摘要。 */
+  pendingSignature(): string {
+    const docs = this.db.prepare("SELECT COUNT(*) AS c FROM notes WHERE sync_state NOT IN ('synced','purged') AND deleted_at IS NULL").get() as { c: number };
+    const tombs = this.db.prepare("SELECT COUNT(*) AS c FROM deleted_notes WHERE (node_type IS NULL OR node_type != 'folder') AND published_at IS NULL").get() as { c: number };
+    const folders = this.db.prepare("SELECT COUNT(*) AS c FROM tree_nodes WHERE note_file_id IS NULL AND deleted_at IS NULL AND sync_state != 'synced' AND id != ?").get(TRASH_NOTEBOOK_ID) as { c: number };
+    return `${docs.c}:${folders.c}:${tombs.c}`;
+  }
+
   getSyncPendingSummary(): { documents: number; folders: number; resources: number; generatedAt: string } {
     // 只统计可同步的本地事实：正文/文档元数据与目录元数据。
     // purged 保留副本永不上传，不计入；被回收的目录仍会随 listFoldersForSync 发布（移动即同步传播），

@@ -27,15 +27,13 @@ interface QuickNotesWorkspaceProps {
   notebooks: TreeNode[];
   onConverted(note: NoteDocument): void;
   onDirtyChange(dirty: boolean): void;
-  /** 小记发生创建/编辑/删除/转换等写操作后回调（App 层刷新同步待办计数）。 */
-  onChanged?(): void;
 }
 
 const newDraft = (): DraftState => ({ id: crypto.randomUUID(), text: "", images: [] });
 const hasDraftContent = (draft: DraftState) => draft.text.trim().length > 0 || draft.images.length > 0;
 
 export const QuickNotesWorkspace = forwardRef<QuickNotesWorkspaceHandle, QuickNotesWorkspaceProps>(function QuickNotesWorkspace(props, ref) {
-  const { notebooks: notebookNodes, onConverted, onDirtyChange, onChanged } = props;
+  const { notebooks: notebookNodes, onConverted, onDirtyChange } = props;
   const [items, setItems] = useState<QuickNoteDocument[]>([]);
   const [createDraft, setCreateDraft] = useState<DraftState>(() => newDraft());
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -142,7 +140,6 @@ export const QuickNotesWorkspace = forwardRef<QuickNotesWorkspaceHandle, QuickNo
       });
       if (activeIsEditing) { setEditingId(null); setEditingDraft(null); }
       else setCreateDraft(newDraft());
-      onChanged?.();
     } catch (reason) { setError(`保存小记失败：${getNativeErrorMessage(reason)}`); }
     finally { setSaving(false); }
   }
@@ -186,7 +183,7 @@ export const QuickNotesWorkspace = forwardRef<QuickNotesWorkspaceHandle, QuickNo
       void native.deleteQuickNote(item.id).catch((reason) => {
         setError(`删除小记失败：${getNativeErrorMessage(reason)}`);
         setItems((current) => [item, ...current].sort((a, b) => b.createdAt.localeCompare(a.createdAt)));
-      }).finally(() => { setPendingDelete(null); onChanged?.(); });
+      }).finally(() => setPendingDelete(null));
     }, 5000);
   }
 
@@ -207,7 +204,6 @@ export const QuickNotesWorkspace = forwardRef<QuickNotesWorkspaceHandle, QuickNo
       listVersionRef.current.invalidate();
       setItems((current) => current.filter((item) => item.id !== convertItem.id));
       setConvertItem(null);
-      onChanged?.();
       onConverted(note);
     } catch (reason) { setError(`转换为正式笔记失败：${getNativeErrorMessage(reason)}`); }
     finally { setSaving(false); }
