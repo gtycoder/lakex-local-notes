@@ -435,6 +435,7 @@ export function App() {
       }
       console.log("[sync-tab] trash-restore done", JSON.stringify({ totalMs: Math.round(performance.now() - t0) }));
     })();
+    refreshPendingSummaryRef.current();
   }, [refreshDraftEntries]);
 
   /** 历史恢复后：刷新树/摘要；若该文档正开在 tab 里，重载正文 + bump reloadKey 强制重建 Lake 实例。 */
@@ -454,6 +455,7 @@ export function App() {
         bumpRevision(restoredId);
       } catch { /* 文档未打开或读取失败则跳过 */ }
     })();
+    refreshPendingSummaryRef.current();
   }, []);
 
   // 保存管线已收拢到 useSavePipeline（persistTab 由 hook 提供）
@@ -747,6 +749,7 @@ export function App() {
       }
       setActiveNoteId(note.id);
       setPendingRenameId(note.id);
+      refreshPendingSummaryRef.current();
     }
   }
 
@@ -763,6 +766,7 @@ export function App() {
       if (kind === "notebook") await native.createNotebook(resolvedTitle);
       else if (parentId) await native.createGroup(parentId, resolvedTitle);
       setTreeNodes(await native.listTreeNodes());
+      refreshPendingSummaryRef.current();
     } catch (reason) { setError(getNativeErrorMessage(reason)); }
   }, []);
 
@@ -774,6 +778,7 @@ export function App() {
         setNotes(patchNoteById(renamed.noteFileId, { title: renamed.title, updatedAt: renamed.updatedAt, syncState: "local" }));
         setOpenTabs(patchTabById(renamed.noteFileId, { title: renamed.title }));
       }
+      refreshPendingSummaryRef.current();
     } catch (reason) { setError(getNativeErrorMessage(reason)); }
   }, []);
 
@@ -799,6 +804,7 @@ export function App() {
           })();
       await native.moveTreeNodeOrdered(id, parentId, orderedIds);
       setTreeNodes(await native.listTreeNodes());
+      refreshPendingSummaryRef.current();
     } catch (reason) { setError(getNativeErrorMessage(reason)); }
   }, [treeNodes]);
 
@@ -851,6 +857,7 @@ export function App() {
       if (activeNoteId && removedNoteIds.has(activeNoteId)) {
         setActiveNoteId(next[next.length - 1]?.noteId ?? null);
       }
+      refreshPendingSummaryRef.current();
     } catch (reason) { setError(getNativeErrorMessage(reason)); }
   }
 
@@ -914,6 +921,7 @@ export function App() {
     try {
       const updated = await native.setNoteLocked(tabId, next);
       setNotes(patchNoteById(tabId, { isLocked: updated.isLocked, lockedAt: updated.lockedAt }));
+      refreshPendingSummaryRef.current();
     } catch (reason) {
       setError(getNativeErrorMessage(reason));
     }
