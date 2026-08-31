@@ -1093,6 +1093,7 @@ export function App() {
             topbarTrailing={topBarTrailing}
             onDirtyChange={setQuickNotesDirty}
             onConverted={(note) => void handleQuickNoteConverted(note)}
+            onChanged={() => refreshPendingSummaryRef.current()}
           />
         </div>
         <DesktopStatusBar
@@ -1150,7 +1151,7 @@ export function App() {
         onCloseSearch={() => setSearchPanelOpen(false)}
         trashOpen={trashOpen}
         onCloseTrash={() => setTrashOpen(false)}
-        onTrashChanged={() => void refreshDraftEntries()}
+        onTrashChanged={() => { refreshPendingSummaryRef.current(); void refreshDraftEntries(); }}
         onTrashRestored={handleTrashRestored}
         historyOpen={historyOpen}
         historyNoteId={historyNoteId}

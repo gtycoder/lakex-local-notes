@@ -12,10 +12,11 @@ export interface DesktopQuickNotesProps {
   topbarTrailing: ReactNode;
   onDirtyChange: (dirty: boolean) => void;
   onConverted: (note: import("../lib/types").NoteDocument) => void;
+  onChanged?: () => void;
 }
 
 export function DesktopQuickNotes(props: DesktopQuickNotesProps) {
-  const { notebooks, quickNotesRef, topbarLeading, topbarTrailing, onDirtyChange, onConverted } = props;
+  const { notebooks, quickNotesRef, topbarLeading, topbarTrailing, onDirtyChange, onConverted, onChanged } = props;
   return (
     <>
       <header className="tab-bar desktop-only" aria-label="顶栏">
@@ -23,7 +24,7 @@ export function DesktopQuickNotes(props: DesktopQuickNotesProps) {
         <div className="tabbar-spacer" />
         <div className="tabbar-trailing">{topbarTrailing}</div>
       </header>
-      <QuickNotesWorkspace ref={quickNotesRef as Ref<QuickNotesWorkspaceHandle>} notebooks={notebooks} onDirtyChange={onDirtyChange} onConverted={onConverted} />
+      <QuickNotesWorkspace ref={quickNotesRef as Ref<QuickNotesWorkspaceHandle>} notebooks={notebooks} onDirtyChange={onDirtyChange} onConverted={onConverted} onChanged={onChanged} />
     </>
   );
 }
