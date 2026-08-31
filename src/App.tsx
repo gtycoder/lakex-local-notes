@@ -49,8 +49,6 @@ export function App() {
   const [activeNoteId, setActiveNoteId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [conflictSnapshotNotice, setConflictSnapshotNotice] = useState<Array<{ noteId: string; title: string }>>([]);
-  // P2-6：12s 冲突提醒自动消失的定时器句柄——重复触发时清旧、卸载时清尾，防定时器泄漏/卸载后 setState
-  const conflictTimerRef = useRef<number | null>(null);
   const [activeHistoryCount, setActiveHistoryCount] = useState(0);
   const workspaceMenuRef = useRef<HTMLDivElement>(null);
   const moreMenuRef = useRef<HTMLDivElement>(null);
@@ -189,7 +187,6 @@ export function App() {
   useEffect(() => {
     return () => {
       flushTimers();
-      if (conflictTimerRef.current !== null) { window.clearTimeout(conflictTimerRef.current); conflictTimerRef.current = null; }
       for (const tab of openTabsRef.current) {
         if (!tab.dirty) continue;
         void native.saveDraftJournal({ noteId: tab.noteId, title: tab.title, content: tab.content, updatedAt: new Date().toISOString() }).catch(() => undefined);
@@ -297,12 +294,18 @@ export function App() {
         // readNote，避免每次同步都把所有打开文档重新读盘（历史快照恢复后上传卡顿的诱因之一）。
         const supersededList = progress.supersededNotes ?? [];
         if (supersededList.length > 0) {
-          setConflictSnapshotNotice(supersededList.map((item) => ({ noteId: item.id, title: item.title })));
-          if (conflictTimerRef.current !== null) window.clearTimeout(conflictTimerRef.current);
-          conflictTimerRef.current = window.setTimeout(() => {
-            conflictTimerRef.current = null;
-            setConflictSnapshotNotice([]);
-          }, 12000);
+          // 留档提示不自动消失（原 12s 定时器已删）：用户想回看时随时悬停云按钮可见。
+          // 合并去重（本会话累计，上限 10 条），重启后从 lastResult 恢复（见 bootstrap）。
+          setConflictSnapshotNotice((prev) => {
+            const seen = new Set(prev.map((p) => p.noteId));
+            const merged = [...prev];
+            for (const item of supersededList) {
+              if (seen.has(item.id)) continue;
+              seen.add(item.id);
+              merged.push({ noteId: item.id, title: item.title });
+            }
+            return merged.slice(-10);
+          });
         }
         const supersededIds = new Set(supersededList.map((n) => n.id));
         // 渲染进程日志经主进程 console-message 转发落盘；[sync-tab] 前缀便于 grep。

@@ -51,6 +51,10 @@ export interface SyncResult {
   /** 同步统计（思源式 tooltip）：上传/下载的目录数与字节数（正文 + 资源 + manifest）。 */
   foldersUploaded?: number; foldersDownloaded?: number;
   uploadedBytes?: number; downloadedBytes?: number;
+  /** 本次同步总耗时（毫秒，含小记同步与 GC 标记）。 */
+  durationMs?: number;
+  /** 本次同步移入回收站的文档数（下载应用墓碑 + 本端软删发布，不含已在回收站的重复应用）。 */
+  trashed?: number;
   /** 小记是独立同步空间，失败不会否定 Lake 文档本身的同步结果。 */
   quickNotes?: QuickNotesSyncStatus;
   /** 本地修改被远端覆盖、已存入历史的文档（用于 UI 提醒） */

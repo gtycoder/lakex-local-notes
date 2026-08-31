@@ -211,6 +211,8 @@ class FakeStore {
   getS3Settings() { return this.settings; }
   saveS3Settings(settings: S3Settings) { this.settings = settings; }
   listNotesForSync() { return [...this.notes.values()].map((n) => ({ ...n })); }
+  // P3-1：adapter getNote/记账路径的单行查询（真实 Store 由 noteQueries.getNoteForSync 提供）
+  getNoteForSync(id: string) { const n = this.notes.get(id); return n ? { ...n } : null; }
   listDeletedNotesForSync() { return [...this.deleted.values()].map((d) => ({ ...d })); }
   folders = new Map<string, { id: string; title: string; parentId: string | null; sortOrder: number; nodeType: "notebook" | "group"; icon: string | null; updatedAt: string }>();
   listFoldersForSync() { return [...this.folders.values()]; }

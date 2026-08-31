@@ -111,6 +111,8 @@ export async function syncNowViaEngine(
     manifestId: commitId ?? "", completedAt, supersededNotes: engineReport.supersededNotes,
     foldersUploaded: engineReport.foldersUploaded, foldersDownloaded: engineReport.foldersDownloaded,
     uploadedBytes: engineReport.uploadedBytes, downloadedBytes: engineReport.downloadedBytes,
+    durationMs: Date.now() - syncStart,
+    trashed: engineReport.trashedDown + engineReport.trashedUp,
     warnings: warnings.length > 0 ? warnings : undefined,
   };
   store.markSyncComplete(completedAt);

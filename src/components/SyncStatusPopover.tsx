@@ -46,6 +46,11 @@ function formatBytes(value: number | undefined): string {
   return `${unit === 0 || size >= 100 ? Math.round(size) : size.toFixed(1)} ${units[unit]}`;
 }
 
+function formatDuration(ms: number | undefined): string {
+  if (!ms || ms <= 0) return "—";
+  return ms < 1000 ? `${ms} ms` : `${(ms / 1000).toFixed(1)} 秒`;
+}
+
 export function SyncStatusPopover({
   buttonRef,
   visible = true,
@@ -159,7 +164,7 @@ export function SyncStatusPopover({
           </header>
           <section className="sync-status-section">
             <dl>
-              <div><dt>上次同步</dt><dd>{formatTime(sync.lastSyncedAt)}</dd></div>
+              <div><dt>上次同步</dt><dd>{formatTime(sync.lastSyncedAt)}{stats?.durationMs ? ` · ${formatDuration(stats.durationMs)}` : ""}</dd></div>
               {stats && (
                 <>
                   <div>
@@ -170,6 +175,12 @@ export function SyncStatusPopover({
                     <dt>下载</dt>
                     <dd>{stats.downloaded} 文档 · {stats.foldersDownloaded ?? 0} 目录 · {qn?.downloaded ?? 0} 小记 · {formatBytes(stats.downloadedBytes)}</dd>
                   </div>
+                  {(stats.trashed ?? 0) > 0 && (
+                    <div>
+                      <dt>移入回收站</dt>
+                      <dd>{stats.trashed} 文档</dd>
+                    </div>
+                  )}
                 </>
               )}
               <div>
