@@ -37,14 +37,17 @@ interface FakeNote {
   content: Uint8Array;
 }
 
-/** 内存假端口：语义对齐 QuickNotesSyncDbPort 契约（软删保留内容、归档不进墓碑列表）。 */
-function createFakePort(): { port: QuickNotesSyncDbPort; notes: Map<string, FakeNote>; assets: Map<string, Uint8Array>; deleted: Map<string, { id: string; createdAt: string; updatedAt: string; deletedAt: string }>; bases: Map<string, string>; restorePending: Set<string>; archived: Map<string, FakeNote> } {
+/** 内存假端口：语义对齐 QuickNotesSyncDbPort 契约（软删保留内容、归档不进墓碑列表）。
+ * deleted = 全部墓碑记录（对齐 quick_note_deleted 表，发布后保留）；published = 已发布记账集合。 */
+function createFakePort(): { port: QuickNotesSyncDbPort; notes: Map<string, FakeNote>; assets: Map<string, Uint8Array>; deleted: Map<string, { id: string; createdAt: string; updatedAt: string; deletedAt: string }>; bases: Map<string, string>; restorePending: Set<string>; archived: Map<string, FakeNote>; publishedDeleted: string[] } {
   const notes = new Map<string, FakeNote>();
   const assets = new Map<string, Uint8Array>();
   const deleted = new Map<string, { id: string; createdAt: string; updatedAt: string; deletedAt: string }>();
   const bases = new Map<string, string>();
   const restorePending = new Set<string>();
   const archived = new Map<string, FakeNote>();
+  const publishedDeleted: string[] = [];
+  const publishedSet = new Set<string>();
   const now = () => new Date().toISOString();
   const port: QuickNotesSyncDbPort = {
     listLocalQuickNotes(): QuickNoteSyncItem[] {
@@ -93,9 +96,15 @@ function createFakePort(): { port: QuickNotesSyncDbPort; notes: Map<string, Fake
         notes.set(newId, copy);
       }
     },
-    listDeletedQuickNotes() { return [...deleted.values()]; },
+    listDeletedQuickNotes() {
+      // 对齐真实口径：ready（未发布）的墓碑才可发布；已发布（published 记账）不再返回
+      return [...deleted.values()].filter((item) => !publishedSet.has(item.id));
+    },
+    // 对齐真实语义：发布 = 写 published 记账（记录保留在 deleted，下载 LWW 仍可见）
+    markDeletedPublished(ids) { for (const id of ids) { publishedSet.add(id); publishedDeleted.push(id); } },
+    listAllDeletedQuickNotes() { return [...deleted.values()]; },
     listDeferredDeletedQuickNotes() { return []; },
-    rememberDeletedQuickNote(item) { deleted.set(item.id, { ...item }); },
+    rememberDeletedQuickNote(item) { if (!deleted.has(item.id)) deleted.set(item.id, { ...item }); },
     revokeLocalDeletion(id) { deleted.delete(id); },
     isRestorePending(id) { return restorePending.has(id); },
     baseHash(id) { return bases.get(id) ?? null; },
@@ -103,7 +112,7 @@ function createFakePort(): { port: QuickNotesSyncDbPort; notes: Map<string, Fake
     markSynced(id) { const n = notes.get(id); if (n) n.syncState = "synced"; restorePending.delete(id); },
     log() { /* noop */ },
   };
-  return { port, notes, assets, deleted, bases, restorePending, archived };
+  return { port, notes, assets, deleted, bases, restorePending, archived, publishedDeleted };
 }
 
 function makeContent(text: string): { serialized: string; hash: string } {
@@ -202,12 +211,29 @@ describe("quickNotesSyncEngine（共享引擎独立测试）", () => {
     a.port.deleteLocalQuickNote(id);
     await syncQuickNotesViaEngine(cfg, s3, a.port);
     const m = readManifest(s3);
+    console.log("DBG A manifest:", JSON.stringify(m.items.map((i) => ({ id: i.id.slice(0, 8), deleted: !!i.deleted }))), "A.deleted:", JSON.stringify([...a.deleted.keys()]), "A.published:", JSON.stringify(a.publishedDeleted));
     expect(m.items.find((i) => i.id === id)?.deleted).toBe(true);
     // 墓碑携带删除前内容（真实 hash + 对象）
     expect(s3.bucket.has(`lake/quick-notes/objects/${a.notes.get(id)!.contentHash}.qnote`)).toBe(true);
     await syncQuickNotesViaEngine(cfg, s3, b.port);
+    console.log("DBG B deleted:", JSON.stringify([...b.deleted.keys()]), "B.notes:", JSON.stringify([...b.notes.keys()]));
     expect(b.deleted.has(id)).toBe(true);
     expect(b.port.listLocalQuickNotes().some((i) => i.id === id)).toBe(false);
+  });
+
+  it("墓碑发布后清除待同步标记（markDeletedPublished）且不再重复发布", async () => {
+    const a = createFakePort();
+    const s3 = createFakeS3();
+    const id = createLocal(a, "发布后清标记");
+    await syncQuickNotesViaEngine(cfg, s3, a.port);
+    a.port.deleteLocalQuickNote(id);
+    await syncQuickNotesViaEngine(cfg, s3, a.port);
+    // 发布即标记：待同步集合清空（否则 getPendingSyncSummary 永远计入 → "待同步"常挂）
+    expect(a.publishedDeleted).toEqual([id]);
+    // 二次同步：墓碑已清标记，不再进入发布列表、不再出现在新 manifest 循环
+    const before = a.publishedDeleted.length;
+    await syncQuickNotesViaEngine(cfg, s3, a.port);
+    expect(a.publishedDeleted.length).toBe(before);
   });
 
   it("墓碑携带图片（A）：带图小记删除 → 墓碑带 assets + 图片对象上传；B 收到墓碑后软删行有图片可恢复", async () => {

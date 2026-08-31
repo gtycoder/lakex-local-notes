@@ -147,6 +147,11 @@ export class QuickNotesStore {
     if (!deletedCols.some((c) => c.name === "purged_at")) {
       this.db.exec("ALTER TABLE quick_note_deleted ADD COLUMN purged_at TEXT");
     }
+    // 墓碑发布记账（对齐 Lake deleted_notes.published_at）：发布到 manifest 后写入，
+    // 只表示"本机墓碑已上云"，记录本身保留供下载方向 LWW（墓碑 vs 远端恢复）判定。
+    if (!deletedCols.some((c) => c.name === "published_at")) {
+      this.db.exec("ALTER TABLE quick_note_deleted ADD COLUMN published_at TEXT");
+    }
     // 恢复标记（墓碑权威的显式例外）：restoreQuickNote 写入，markSynced 清除。
     const quickCols = this.db.prepare("PRAGMA table_info(quick_notes)").all() as Array<{ name: string }>;
     if (!quickCols.some((c) => c.name === "restore_pending_at")) {
@@ -511,7 +516,8 @@ export class QuickNotesStore {
   // ===== Quick Note S3 sync adapter =====
   getPendingSyncSummary(): { items: number; resources: number } {
     const row = this.db.prepare("SELECT COUNT(*) AS items, COALESCE(SUM(image_count), 0) AS resources FROM quick_notes WHERE sync_state != 'synced'").get() as { items: number; resources: number };
-    const deleted = this.db.prepare("SELECT COUNT(*) AS items FROM quick_note_deleted WHERE ready_to_sync=1").get() as { items: number };
+    // 墓碑计数只算"可发布"的（ready=1 且未发布）；已发布（published_at 非空）不再计入待同步
+    const deleted = this.db.prepare("SELECT COUNT(*) AS items FROM quick_note_deleted WHERE ready_to_sync=1 AND published_at IS NULL").get() as { items: number };
     return { items: row.items + deleted.items, resources: row.resources };
   }
   listQuickNotesForSync(): QuickNoteDocument[] { return this.listQuickNotes(); }
@@ -536,6 +542,16 @@ export class QuickNotesStore {
   markLocal(id: string): void { this.db.prepare("UPDATE quick_notes SET sync_state='local' WHERE id=?").run(id); }
   listDeletedForSync(): QuickNoteDeleted[] {
     return this.queries.listDeletedForSync();
+  }
+
+  /** 墓碑已发布到 manifest → 清除待同步标记。 */
+  markDeletedPublished(ids: string[]): void {
+    this.queries.markDeletedPublished(ids);
+  }
+
+  /** 全部墓碑记录（含已发布）：下载方向 LWW 判定用。 */
+  listAllDeleted(): QuickNoteDeleted[] {
+    return this.queries.listAllDeleted();
   }
 
   /** 已删除、但尚不能同步出去的转换 tombstone。 */

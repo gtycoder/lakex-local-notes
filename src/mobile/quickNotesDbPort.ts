@@ -186,6 +186,25 @@ export function createQuickNotesSyncDbPort(d: DbLike, assetFs: QuickNotesAssetFs
       }
       return [...merged.values()];
     },
+    markDeletedPublished(ids) {
+      // 墓碑发布 → 清待同步标记（对齐桌面）。本地软删行置 ready_to_sync=0（不再重复发布/计数）；
+      // quick_note_deleted 是远端学习墓碑（无本地副本），无可清的 ready 标记，跳过。
+      for (const id of ids) {
+        d.prepare("UPDATE quick_notes SET ready_to_sync=0 WHERE id=? AND deleted_at IS NOT NULL").run(id);
+      }
+    },
+    listAllDeletedQuickNotes() {
+      // 下载方向 LWW 需要全部墓碑（含已发布 ready=0）：软删行任意 ready + 远端学习表合并
+      const local = d.prepare("SELECT id, created_at, updated_at, deleted_at FROM quick_notes WHERE deleted_at IS NOT NULL").all() as Array<Record<string, unknown>>;
+      const learned = d.prepare("SELECT id, created_at, updated_at, deleted_at FROM quick_note_deleted").all() as Array<Record<string, unknown>>;
+      const merged = new Map<string, { id: string; createdAt: string; updatedAt: string; deletedAt: string }>();
+      for (const r of [...local, ...learned]) {
+        const item = { id: String(r.id), createdAt: String(r.created_at), updatedAt: String(r.updated_at), deletedAt: String(r.deleted_at) };
+        const previous = merged.get(item.id);
+        if (!previous || item.deletedAt > previous.deletedAt) merged.set(item.id, item);
+      }
+      return [...merged.values()];
+    },
     listDeferredDeletedQuickNotes() { return []; }, // 移动端无小记→笔记转换
     rememberDeletedQuickNote(item) {
       d.prepare("INSERT OR REPLACE INTO quick_note_deleted (id, created_at, updated_at, deleted_at) VALUES (?,?,?,?)").run(item.id, item.createdAt, item.updatedAt, item.deletedAt);

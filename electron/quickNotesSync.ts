@@ -79,6 +79,8 @@ function createQuickNotesSyncPort(quickNotes: QuickNotesStore): QuickNotesSyncDb
     deleteLocalQuickNote(id) { quickNotes.deleteQuickNote(id); },
     archiveLocalQuickNoteToTrash(id) { quickNotes.archiveLocalToTrash(id); },
     listDeletedQuickNotes() { return quickNotes.listDeletedForSync().map((d) => ({ id: d.id, createdAt: d.createdAt, updatedAt: d.updatedAt, deletedAt: d.deletedAt })); },
+    markDeletedPublished(ids) { quickNotes.markDeletedPublished(ids); },
+    listAllDeletedQuickNotes() { return quickNotes.listAllDeleted().map((d) => ({ id: d.id, createdAt: d.createdAt, updatedAt: d.updatedAt, deletedAt: d.deletedAt })); },
     listDeferredDeletedQuickNotes() { return quickNotes.listDeferredDeletedForSync().map((d) => ({ id: d.id })); },
     rememberDeletedQuickNote(item) { quickNotes.rememberDeleted(item); },
     revokeLocalDeletion(id) { quickNotes.revokeLocalDeletion(id); },

@@ -93,6 +93,11 @@ export interface QuickNotesSyncDbPort {
   archiveLocalQuickNoteToTrash(id: string): void;
   /** 本地删除墓碑（软删/从远端学到的删除）；manifest 墓碑条目需要 createdAt/updatedAt。 */
   listDeletedQuickNotes(): Array<{ id: string; createdAt: string; updatedAt: string; deletedAt: string }>;
+  /** 全部墓碑记录（含已发布 ready=0）：下载方向 LWW（墓碑 vs 远端恢复）需要完整历史才能撤销/跟随恢复。
+   * 缺失则回退 listDeletedQuickNotes（仅 ready=1，已发布墓碑会失去恢复跟随能力）。 */
+  listAllDeletedQuickNotes?(): Array<{ id: string; createdAt: string; updatedAt: string; deletedAt: string }>;
+  /** 墓碑已发布到 manifest 后清除待同步标记（ready_to_sync=0）——缺失则待同步计数永不归零（对齐 Lake markTombstonesPublished）。 */
+  markDeletedPublished?(ids: string[]): void;
   /** 转换延迟删除（Lake 放行前不删云端源；移动端无转换场景可不实现 → 返回 []）。 */
   listDeferredDeletedQuickNotes(): Array<{ id: string }>;
   rememberDeletedQuickNote(item: { id: string; createdAt: string; updatedAt: string; deletedAt: string }): void;
@@ -219,7 +224,9 @@ export async function syncQuickNotesViaEngine(
 
   if (remoteManifest) {
     // 转换墓碑（Lake 放行前）恒不复活源小记；普通删除墓碑按 LWW（远端恢复较新时撤销本地墓碑并跟随恢复）。
-    const tombstoned = new Map(qn.listDeletedQuickNotes().map((item) => [item.id, item.deletedAt] as const));
+    // 下载方向必须看**全部**墓碑（含已发布 ready=0）：否则已发布墓碑丢失 LWW 上下文，
+    // 远端恢复后本机永远无法跟随恢复（对齐 Lake：published_at 只是记账，记录保留供判定）。
+    const tombstoned = new Map((qn.listAllDeletedQuickNotes?.() ?? qn.listDeletedQuickNotes()).map((item) => [item.id, item.deletedAt] as const));
     const deferredDeletedIds = new Set(qn.listDeferredDeletedQuickNotes().map((item) => item.id));
     const localItems = qn.listLocalQuickNotes();
     const localById = new Map(localItems.map((item) => [item.id, item]));
@@ -397,6 +404,7 @@ export async function syncQuickNotesViaEngine(
   const readyDeleted = qn.listDeletedQuickNotes();
   const readyDeletedIds = new Set(readyDeleted.map((item) => item.id));
   const remoteById = new Map((remoteManifest?.items ?? []).map((item) => [item.id, item]));
+  const publishedDeletedIds: string[] = [];
   for (const deleted of readyDeleted) {
     if (localIds.has(deleted.id)) continue;
     // 墓碑 vs 远端恢复 LWW：远端 active 且 updatedAt 晚于墓碑删除时间 → 恢复较新，墓碑让位（不回写覆盖）。
@@ -438,6 +446,7 @@ export async function syncQuickNotesViaEngine(
       deleted: true,
       deletedAt: deleted.deletedAt,
     });
+    publishedDeletedIds.push(deleted.id);
   }
 
   // 转换源小记在 Lake 目标文档成功前仍由其远端记录表示；此处省略会在 Lake 跨空间安全条件
@@ -473,6 +482,12 @@ export async function syncQuickNotesViaEngine(
   const manifestStart = Date.now();
   await s3.putObject(manifestKey, `${JSON.stringify(manifest, null, 2)}\n`, { gzip: true });
   qn.log(`[perf] quick manifest ${manifest.commitId} ${Date.now() - manifestStart}ms (items=${manifestItems.length})`);
+
+  // 墓碑已发布 → 清除待同步标记（对齐 Lake markTombstonesPublished）。缺失此调用会导致
+  // getPendingSyncSummary 的墓碑计数永不归零（"待同步"常挂）+ 每轮重复上传墓碑对象。
+  if (publishedDeletedIds.length > 0 && typeof qn.markDeletedPublished === "function") {
+    qn.markDeletedPublished(publishedDeletedIds);
+  }
 
   for (const item of localItems) {
     qn.setBaseHash(item.id, item.contentHash);
