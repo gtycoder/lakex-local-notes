@@ -33,18 +33,25 @@ describe("SearchRepository title/body search", () => {
     expect(repo.search("同").some((row) => row.id === "n-one")).toBe(true);
   });
 
-  it("searches two characters in title and body with title ranking", () => {
+  it("P4-2：2 字只搜标题——不再命中正文，标题命中保留", () => {
     const { repo } = makeRepo();
-    expect(repo.search("欢迎").find((row) => row.id === "n-cn-body")).toMatchObject({ matchType: "body" });
+    // "讨论" 只在 n-body 的正文里（2 字）→ 新语义下不返回
+    expect(repo.search("讨论").find((row) => row.id === "n-body")).toBeUndefined();
+    // "欢迎" 只在 n-cn-body 的正文里（2 字）→ 不返回
+    expect(repo.search("欢迎").find((row) => row.id === "n-cn-body")).toBeUndefined();
+    // "同步" 是 n-one 的标题（2 字）→ 标题命中保留，matchType=title
+    const rows = repo.search("同步");
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ id: "n-one", matchType: "title" });
+    // ≥3 字走 FTS 分支，正文命中不受影响：4 字 "Lake" 仍命中 n-body 的正文
+    expect(repo.search("Lake").find((row) => row.id === "n-body")?.matchType).toBe("body");
   });
 
   it("searches two characters in title and body with title ranking", () => {
     const { repo } = makeRepo();
     const rows = repo.search("Lake");
     expect(rows.slice(0, 2).map((row) => row.id)).toEqual(["n-exact", "n-prefix"]);
-    expect(rows.some((row) => row.id === "n-body" && row.matchType === "body")).toBe(true);
     expect(rows[0]).toMatchObject({ matchType: "title", updatedAt: "2026-08-19T10:00:00Z" });
-    expect(rows.find((row) => row.id === "n-body")?.matchType).toBe("body");
   });
 });
 describe("FTS 转义与边界（V5 §4 R8）", () => {

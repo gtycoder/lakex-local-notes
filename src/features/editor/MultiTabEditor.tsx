@@ -133,7 +133,15 @@ export function MultiTabEditor({
   const suppressClickRef = useRef(false);
   const flipRects = useRef<Map<string, number>>(new Map());
 
-  // FLIP：顺序变化时让标签从旧位置滑到新位置
+  // P2-6：关闭标签时清掉 FLIP 位置记忆，防残留（长会话累积 + 重开同笔记时误播滑入动画）
+  const handleTabClose = useCallback((noteId: string) => {
+    flipRects.current.delete(noteId);
+    onTabClose(noteId);
+  }, [onTabClose]);
+
+  // FLIP：顺序变化时让标签从旧位置滑到新位置（deps 用 memo 化的 orderKey，
+  // tabs 引用不变时跳过拼接与比较）
+  const tabOrderKey = useMemo(() => tabs.map((t) => t.noteId).join("|"), [tabs]);
   useLayoutEffect(() => {
     const strip = tabItemsRef.current;
     if (!strip) return;
@@ -151,7 +159,7 @@ export function MultiTabEditor({
         );
       }
     }
-  }, [tabs.map((t) => t.noteId).join("|")]);
+  }, [tabOrderKey]);
 
   const beginTabDrag = (event: ReactPointerEvent<HTMLButtonElement>, noteId: string) => {
     if (event.button !== 0 || !onTabsReorder) return;
@@ -336,7 +344,7 @@ export function MultiTabEditor({
                 onClick={(event) => {
                   event.stopPropagation();
                   if (pinned.has(tab.noteId)) return; // 钉住标签的 X 由 CSS 隐藏（思源式）
-                  onTabClose(tab.noteId);
+                  handleTabClose(tab.noteId);
                 }}
               >
                 <X size={12} />
@@ -385,7 +393,7 @@ export function MultiTabEditor({
                       </button>
                       <button
                         className="tab-switcher-close"
-                        onClick={() => onTabClose(tab.noteId)}
+                        onClick={() => handleTabClose(tab.noteId)}
                         aria-label={`关闭${tab.title || "无标题"}`}
                         title={`关闭${tab.title || "无标题"}`}
                       >
@@ -439,28 +447,28 @@ export function MultiTabEditor({
             onTabsReorder?.(ordered);
             onTogglePin?.(tabCtx.noteId);
           }}
-          onCloseTab={() => onTabClose(tabCtx.noteId)}
+          onCloseTab={() => handleTabClose(tabCtx.noteId)}
           onCloseOthers={() => {
             for (const t of tabs) {
-              if (t.noteId !== tabCtx.noteId && !pinned.has(t.noteId)) onTabClose(t.noteId);
+              if (t.noteId !== tabCtx.noteId && !pinned.has(t.noteId)) handleTabClose(t.noteId);
             }
           }}
           onCloseLeft={() => {
             const idx = tabs.findIndex((t) => t.noteId === tabCtx.noteId);
             for (const t of tabs.slice(0, idx)) {
-              if (!pinned.has(t.noteId)) onTabClose(t.noteId);
+              if (!pinned.has(t.noteId)) handleTabClose(t.noteId);
             }
           }}
           onCloseRight={() => {
             const idx = tabs.findIndex((t) => t.noteId === tabCtx.noteId);
             for (const t of tabs.slice(idx + 1)) {
-              if (!pinned.has(t.noteId)) onTabClose(t.noteId);
+              if (!pinned.has(t.noteId)) handleTabClose(t.noteId);
             }
           }}
           onCloseAll={() => {
             // 思源行为：关闭全部也跳过钉住的标签
             for (const t of tabs) {
-              if (!pinned.has(t.noteId)) onTabClose(t.noteId);
+              if (!pinned.has(t.noteId)) handleTabClose(t.noteId);
             }
           }}
           onClose={() => setTabCtx(null)}

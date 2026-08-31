@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { LoaderCircle } from "lucide-react";
 import { Sidebar } from "./components/Sidebar";
 import type { QuickNotesWorkspaceHandle } from "./components/QuickNotesWorkspace";
@@ -49,6 +49,8 @@ export function App() {
   const [activeNoteId, setActiveNoteId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [conflictSnapshotNotice, setConflictSnapshotNotice] = useState<Array<{ noteId: string; title: string }>>([]);
+  // P2-6：12s 冲突提醒自动消失的定时器句柄——重复触发时清旧、卸载时清尾，防定时器泄漏/卸载后 setState
+  const conflictTimerRef = useRef<number | null>(null);
   const [activeHistoryCount, setActiveHistoryCount] = useState(0);
   const workspaceMenuRef = useRef<HTMLDivElement>(null);
   const moreMenuRef = useRef<HTMLDivElement>(null);
@@ -161,6 +163,16 @@ export function App() {
 
   useEffect(() => { openTabsRef.current = openTabs; }, [openTabs]);
 
+  // P2-4：图标查找 Map 化——消除每次渲染 O(标签数 × 树节点数) 的线性 find（打字路径每帧都在跑）。
+  // 注意：useMemo 必须位于 if (!workspace) early-return 之前（hooks 顺序规则）。
+  const iconByNoteId = useMemo(() => {
+    const map = new Map<string, string | null>();
+    for (const node of treeNodes) {
+      if (node.noteFileId && !map.has(node.noteFileId)) map.set(node.noteFileId, node.icon ?? null);
+    }
+    return map;
+  }, [treeNodes]);
+
   const docStats = useDocumentStats(openTabs, activeNoteId, null, "");
 
   // 顶栏冲突提醒可以在 12 秒后消失，但当前文档的“历史 N”是持久事实，
@@ -177,6 +189,7 @@ export function App() {
   useEffect(() => {
     return () => {
       flushTimers();
+      if (conflictTimerRef.current !== null) { window.clearTimeout(conflictTimerRef.current); conflictTimerRef.current = null; }
       for (const tab of openTabsRef.current) {
         if (!tab.dirty) continue;
         void native.saveDraftJournal({ noteId: tab.noteId, title: tab.title, content: tab.content, updatedAt: new Date().toISOString() }).catch(() => undefined);
@@ -285,7 +298,11 @@ export function App() {
         const supersededList = progress.supersededNotes ?? [];
         if (supersededList.length > 0) {
           setConflictSnapshotNotice(supersededList.map((item) => ({ noteId: item.id, title: item.title })));
-          window.setTimeout(() => setConflictSnapshotNotice([]), 12000);
+          if (conflictTimerRef.current !== null) window.clearTimeout(conflictTimerRef.current);
+          conflictTimerRef.current = window.setTimeout(() => {
+            conflictTimerRef.current = null;
+            setConflictSnapshotNotice([]);
+          }, 12000);
         }
         const supersededIds = new Set(supersededList.map((n) => n.id));
         // 渲染进程日志经主进程 console-message 转发落盘；[sync-tab] 前缀便于 grep。
@@ -960,7 +977,7 @@ export function App() {
   })();
   const tabInfos: TabInfo[] = openTabs.map((tab) => ({
     noteId: tab.noteId, title: tab.title, content: tab.content, dirty: tab.dirty, deleted: tab.deleted,
-    icon: treeNodes.find((n) => n.noteFileId === tab.noteId)?.icon ?? null,
+    icon: iconByNoteId.get(tab.noteId) ?? null,
     reloadKey: tab.reloadKey ?? 0,
   }));
 

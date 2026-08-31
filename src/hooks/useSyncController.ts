@@ -1,4 +1,4 @@
-import { useCallback, type Dispatch, type SetStateAction } from "react";
+import { useCallback, useEffect, useRef, type Dispatch, type SetStateAction } from "react";
 import { native } from "../lib/native";
 import { getNativeErrorCode } from "../lib/nativeErrors";
 import type { SettingsCategory } from "../components/SettingsPanel";
@@ -27,6 +27,11 @@ export function useSyncController({
   showSyncToast,
   refreshPendingSummary,
 }: SyncControllerInput): () => Promise<void> {
+  // P2-6：12s 冲突提醒定时器句柄——重复触发清旧、卸载清尾
+  const conflictTimerRef = useRef<number | null>(null);
+  useEffect(() => () => {
+    if (conflictTimerRef.current !== null) window.clearTimeout(conflictTimerRef.current);
+  }, []);
   return useCallback(async () => {
     showSyncToast({ kind: "busy", title: "正在同步", message: "准备同步...", progress: { phase: "connect", message: "准备同步..." } });
     const unsubscribe = native.onSyncProgress((progress) => {
@@ -60,7 +65,11 @@ export function useSyncController({
       refreshPendingSummary();
       if (result.supersededNotes.length > 0) {
         setConflictSnapshotNotice(result.supersededNotes.map((item) => ({ noteId: item.id, title: item.title })));
-        window.setTimeout(() => setConflictSnapshotNotice([]), 12000);
+        if (conflictTimerRef.current !== null) window.clearTimeout(conflictTimerRef.current);
+        conflictTimerRef.current = window.setTimeout(() => {
+          conflictTimerRef.current = null;
+          setConflictSnapshotNotice([]);
+        }, 12000);
       }
       showSyncToast({ kind: result.quickNotes?.error ? "error" : "ok", title: "同步完成", message: `${lakeMessage}${quickMessage}`, detail: superseded || undefined });
     } catch (error) {

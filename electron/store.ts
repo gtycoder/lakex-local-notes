@@ -575,7 +575,14 @@ export class Store {
 
   saveNote(id: string, title: string, content: string, caches?: NoteCacheInput): NoteDocument {
     this.noteContent.save(id, title, content, caches);
-    return this.readNote(id);
+    // P1-2a：免回读——正文即入参 content（刚写入的同一字符串），不再 readFileSync 全文重读 +
+    // IPC 全文回传；轻量 SELECT 只取元数据（无文件 IO）。副作用修正：保存不再误写
+    // last_opened_note_id（那是「打开」语义，保存非活动文档不应改「最后打开」记录）。
+    const row = this.db.prepare(
+      "SELECT id,title,parent_id,sort_order,updated_at,sync_state,is_conflict,is_locked,locked_at FROM notes WHERE id=? AND deleted_at IS NULL"
+    ).get(id);
+    if (!row) throw new AppError("NotFound", `笔记不存在: ${id}`);
+    return { ...this.noteQueries.mapSummary(row as SummaryRow), content };
   }
 
   /** 15 分钟自动快照：标记文档为"本周期内保存过"（saveNote 落盘时调用） */
