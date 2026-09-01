@@ -151,10 +151,10 @@ html[data-theme="dark"] .document-pane .ne-engine > ne-h6 ne-heading-content {
 @media (min-width: 761px) {
   /* #2 浮层阴影：左右统一、更柔；阴影静态、不参与切出动画（避免逐帧重绘，保性能与速度） */
   .sidebar.sidebar-floating {
-    box-shadow: 14px 0 40px rgba(43, 50, 78, .14), 2px 0 6px rgba(43, 50, 78, .06) !important;
+    box-shadow: 16px 0 26px -14px rgba(43, 50, 78, .30) !important; /* 单侧投影：负 spread 收掉上下溢出 */
   }
   .outline-sidebar--collapsed.outline-sidebar--hovered .outline-sidebar__content {
-    box-shadow: -14px 0 40px rgba(43, 50, 78, .14), -2px 0 6px rgba(43, 50, 78, .06) !important;
+    box-shadow: -16px 0 26px -14px rgba(43, 50, 78, .30) !important; /* 单侧投影（朝内容侧） */
     transition: opacity 180ms var(--lake-ease-standard), transform 180ms var(--lake-ease-standard), visibility 180ms linear !important;
   }
 }
