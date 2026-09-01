@@ -94,15 +94,6 @@
 .med-f-btn.med-s { text-decoration: line-through; }
 .med-f-btn.med-u { text-decoration: underline; }
 
-/* 大纲/文档列表 sheet（对齐原型半屏 sheet） */
-.mobile-sheet-mask { position: fixed; inset: 0; background: rgba(0,0,0,.4); z-index: 70; }
-/* P1：与 mobile.css 的 .mobile-sheet 对齐为 fixed-bottom（两文件同值→不再依赖加载顺序；对 sheet 在 mask 内/外两种结构都成立）。
-   子元素 head/title/body 仍各有定义，如需彻底单源化再单独处理。 */
-.mobile-sheet { position: fixed; left: 0; right: 0; bottom: 0; background: var(--lake-panel); border-radius: 16px 16px 0 0; max-height: 70%; z-index: 71; display: flex; flex-direction: column; }
-.mobile-sheet-head { display: flex; align-items: center; justify-content: space-between; padding: 16px 18px 10px; border-bottom: 1px solid var(--lake-border); flex: 0 0 auto; }
-.mobile-sheet-title { font-size: 15px; font-weight: 600; }
-.mobile-sheet-body { overflow-y: auto; padding: 6px 0 calc(16px + env(safe-area-inset-bottom)); flex: 1; }
-.mobile-sheet-empty { text-align: center; color: var(--lake-text-tertiary); padding: 24px 0; font-size: 14px; }
 .med-outline-item { display: block; width: 100%; border: none; background: transparent; padding: 12px 20px; font-size: 15px; text-align: left; cursor: pointer; color: var(--lake-text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .med-outline-item:active { background: var(--lake-shell); }
 .med-outline-item.lv1 { font-weight: 600; }

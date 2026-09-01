@@ -53,6 +53,7 @@ export function OutlineSheet({ open, editor, onClose }: OutlineSheetProps) {
   return (
     <div className="mobile-sheet-mask" onClick={onClose}>
       <div className="mobile-sheet med-outline-sheet" onClick={(e) => e.stopPropagation()}>
+        <div className="mobile-sheet-grab" />
         <div className="mobile-sheet-head">
           <span className="mobile-sheet-title">大纲</span>
           <button className="mobile-icon-btn" onClick={onClose} aria-label="关闭"><X size={20} /></button>

@@ -30,6 +30,7 @@ export function DocListSheet({ open, documents, activeId, onPick, onClose }: Doc
   return (
     <div className="mobile-sheet-mask" onClick={onClose}>
       <div className="mobile-sheet" onClick={(e) => e.stopPropagation()}>
+        <div className="mobile-sheet-grab" />
         <div className="mobile-sheet-head">
           <span className="mobile-sheet-title">文档列表</span>
           <button className="mobile-icon-btn" onClick={onClose} aria-label="关闭"><X size={20} /></button>

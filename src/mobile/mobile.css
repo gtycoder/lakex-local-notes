@@ -120,9 +120,12 @@ body { font-family: BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino San
 /* 新建知识库 Sheet */
 .mobile-sheet-mask { position: fixed; inset: 0; background: rgba(0,0,0,.4); z-index: 70; }
 .mobile-sheet { position: fixed; left: 0; right: 0; bottom: 0; background: var(--lake-panel); border-radius: 16px 16px 0 0; z-index: 71; max-height: 70%; display: flex; flex-direction: column; }
-.mobile-sheet-grab { width: 36px; height: 4px; border-radius: 2px; background: var(--lake-border); margin: 10px auto 4px; }
-.mobile-sheet-title { flex: 0 0 auto; font-size: 15px; font-weight: 600; padding: 8px 18px 10px; border-bottom: 1px solid var(--lake-border); }
-.mobile-sheet-body { overflow-y: auto; padding: 16px 18px calc(20px + env(safe-area-inset-bottom)); }
+.mobile-sheet-grab { width: 36px; height: 4px; border-radius: 2px; background: var(--lake-border); margin: 10px auto 2px; flex: 0 0 auto; }
+.mobile-sheet-head { display: flex; align-items: center; justify-content: space-between; padding: 2px 18px 10px; border-bottom: 1px solid var(--lake-border); flex: 0 0 auto; }
+.mobile-sheet-title { font-size: 15px; font-weight: 600; }
+.mobile-sheet-body { overflow-y: auto; flex: 1; padding: 6px 0 calc(16px + env(safe-area-inset-bottom)); }
+.mobile-sheet-body--form { padding: 16px 18px calc(20px + env(safe-area-inset-bottom)); }
+.mobile-sheet-empty { text-align: center; color: var(--lake-text-tertiary); padding: 24px 0; font-size: 14px; }
 
 .create-nb-row { display: flex; gap: 12px; align-items: center; }
 .create-nb-icon {
@@ -149,7 +152,6 @@ body { font-family: BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino San
 .mobile-sheet-search { max-height: 70%; }
 .mobile-search-input-row { display: flex; align-items: center; gap: 8px; margin: 8px 16px; background: var(--lake-shell); border-radius: 10px; padding: 9px 12px; }
 .mobile-search-input { flex: 1; border: none; outline: none; background: transparent; font-size: 15px; }
-.mobile-search-close { border: none; background: transparent; color: var(--lake-text-tertiary); cursor: pointer; display: flex; }
 .mobile-search-results { overflow-y: auto; padding-bottom: calc(20px + env(safe-area-inset-bottom)); }
 .mobile-search-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .mobile-search-parent { color: var(--lake-text-tertiary); font-size: 12px; }

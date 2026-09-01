@@ -44,22 +44,25 @@ export function SearchSheet(props: SearchSheetProps) {
   if (!open) return null;
 
   return (
-    <>
-      <div className="mobile-sheet-mask" onClick={onClose} />
-      <div className="mobile-sheet mobile-sheet-search">
+    <div className="mobile-sheet-mask" onClick={onClose}>
+      <div className="mobile-sheet mobile-sheet-search" onClick={(e) => e.stopPropagation()}>
         <div className="mobile-sheet-grab" />
-        <div className="mobile-search-input-row">
-          <Search size={17} />
-          <input
-            className="mobile-search-input"
-            placeholder="搜索文档"
-            autoFocus
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-          />
-          <button className="mobile-search-close" onClick={onClose} aria-label="关闭"><X size={16} /></button>
+        <div className="mobile-sheet-head">
+          <span className="mobile-sheet-title">搜索</span>
+          <button className="mobile-icon-btn" onClick={onClose} aria-label="关闭"><X size={20} /></button>
         </div>
-        <div className="mobile-search-results">
+        <div className="mobile-sheet-body">
+          <div className="mobile-search-input-row">
+            <Search size={17} />
+            <input
+              className="mobile-search-input"
+              placeholder="搜索文档"
+              autoFocus
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+            />
+          </div>
+          <div className="mobile-search-results">
           {searching && <div className="mobile-empty">搜索中…</div>}
           {!searching && query.trim() && results.length === 0 && <div className="mobile-empty">无匹配结果</div>}
           {results.map((r) => (
@@ -68,8 +71,9 @@ export function SearchSheet(props: SearchSheetProps) {
               {r.parentTitle && <span className="mobile-search-parent">{r.parentTitle}</span>}
             </div>
           ))}
+          </div>
         </div>
       </div>
-    </>
+    </div>
   );
 }
