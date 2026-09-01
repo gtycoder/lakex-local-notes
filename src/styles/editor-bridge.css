@@ -8,3 +8,10 @@
 @keyframes lake-search-hit-pulse { 50% { background: color-mix(in srgb, var(--lake-accent) 10%, transparent); } }
 
 .board-card-loading { display: grid; place-items: center; min-height: 200px; color: var(--lake-text-tertiary); background: color-mix(in srgb, var(--lake-panel) 88%, transparent); font-size: 12px; }
+
+/* #6b 桌面编辑器工具栏变窄：vendor 默认 .ne-ui-toolbar{height:50px}，压到 40px。
+   内部按钮最高 32px（.ne-ui-toolbar-button/color-button），40px 容器 flex 居中不裁切。
+   仅桌面生效；editor-bridge.css 晚于 vendor 加载，!important 稳定覆盖。 */
+@media (min-width: 761px) {
+  .lake-editor-mount .ne-ui-toolbar { height: 40px !important; }
+}
