@@ -137,7 +137,7 @@ html[data-theme="dark"] .document-pane .ne-engine > ne-h6 ne-heading-content {
     height: calc(100vh - 144px) !important;
     max-height: calc(100vh - 144px) !important;
     overflow: hidden !important;
-    transition: opacity 120ms ease-out, transform 120ms var(--lake-ease-standard), box-shadow 120ms ease-out !important;
+    transition: opacity 120ms ease-out, transform 120ms var(--lake-ease-standard) !important;
   }
   /* 右侧大纲浮层与左侧目录浮层同高（对齐到 top/bottom 72），消除左右弹出高度不一致 */
   .outline-sidebar--collapsed.outline-sidebar--hovered .outline-sidebar__content {
@@ -145,6 +145,17 @@ html[data-theme="dark"] .document-pane .ne-engine > ne-h6 ne-heading-content {
     bottom: 72px !important;
     height: calc(100vh - 144px) !important;
     max-height: calc(100vh - 144px) !important;
+  }
+}
+
+@media (min-width: 761px) {
+  /* #2 浮层阴影：左右统一、更柔；阴影静态、不参与切出动画（避免逐帧重绘，保性能与速度） */
+  .sidebar.sidebar-floating {
+    box-shadow: 14px 0 40px rgba(43, 50, 78, .14), 2px 0 6px rgba(43, 50, 78, .06) !important;
+  }
+  .outline-sidebar--collapsed.outline-sidebar--hovered .outline-sidebar__content {
+    box-shadow: -14px 0 40px rgba(43, 50, 78, .14), -2px 0 6px rgba(43, 50, 78, .06) !important;
+    transition: opacity 180ms var(--lake-ease-standard), transform 180ms var(--lake-ease-standard), visibility 180ms linear !important;
   }
 }
 
