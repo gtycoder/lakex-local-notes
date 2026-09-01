@@ -84,3 +84,30 @@ npx tsc --noEmit && npx vitest run && node node_modules/vite/bin/vite.js build
 - **主题手动切换**：当前移动端深色=跟随系统；若要 App 内手动切换（像桌面设置），需在移动端设置里加主题选项 + 覆盖系统偏好。
 - **触摸手感**：M6 尺寸已提，实际手感（间距/滚动）建议真机再走查。
 - **editor-dock.css**：编辑坞样式未纳入本次令牌化（可后续同样收口）。
+
+---
+
+## 7. 两端统一自检结论（2026-09-01 收尾）
+全量门槛绿：`tsc` · 桌面 `vite build` · 移动端 `vite build --config vite.mobile.config.ts` · `vitest 750 passed/1 skipped`。代码内无 TODO/FIXME。改动全在 `src/`（未碰 electron/、src/core/）。
+
+**自检中已补/已修**：
+- ✅ **P1**：`.mobile-sheet`/`.mobile-sheet-mask` 双份冲突定义（fixed vs relative、z40 vs z70，靠加载顺序侥幸生效）→ 统一 `fixed-bottom`+z70/71，对 sheet 在 mask 内/外两种 DOM 结构都成立、不再依赖顺序。真机 CDP 复验 `.mobile-sheet` 仅剩 fixed。
+- ✅ **P3**：`editor-dock.css` 21 色令牌化（补 M3 深色下编辑坞白岛缺口）；清 `empty-workspace-hint` 过时兜底 `#8993a1`。
+
+## 8. P2 剩余（未做，需专项 + 双端 dev 复验）
+桌面重复选择器 top：`.sidebar.sidebar-floating`×13、`.sidebar`×12、`.tab-bar`×11、`.app-shell`×10、`.sidebar.sidebar-docked`×10、`.settings-overlay`×7。**注意**：多数是同一选择器设**不同属性**（合法），只有"同属性被后置 !important/更高优先级覆盖"的才是冗余，须逐属性判活/死再合并（方法见 §1 的 tab-item 收敛）。建议切片顺序：
+1. `.settings-overlay` 系（596 老 flex/z200 已被 1766 grid/z800 !important + b3 全遮 → 可删死基规则）。
+2. `.sidebar` 背景/边框/圆角重复（b3/layout.css 与 styles.css 多处）。
+3. `.tab-bar` 背景/定位重复（styles.css 多处 + b3/layout.css + shell.css）。
+4. `.mobile-sheet` 子元素（head/title/body）彻底统一 DOM（当前两 pattern 并存）。
+每片：改前后 CDP `getMatchedStylesForNode` 逐属性核对 + 桌面/移动真机各复验 + 独立提交。
+
+## 9. 如何接手（给新会话）
+- 先读：`AGENTS.md` → `HANDOFF-260901.md`（perf 主线，另支）→ 本文。
+- 分支：`polish/ui-260901`（桌面，28 提交）、`polish/mobile-ui-260901`（移动，39 提交=桌面+移动）。**均未合 master**。
+- 验收/合并：桌面需用户肉眼验收后合 master；移动分支从桌面分支拉出，桌面先合、移动随后 rebase 或一并合。
+- 回滚：每片独立提交，`git revert --no-edit <hash>`。
+- 验证回路：
+  - 桌面：`npm run dev`（长驻 tty，自动拉起 Electron 带 `--remote-debugging-port=9222`）→ CDP 连 `http://127.0.0.1:9222/json`（Node24 原生 WebSocket 即可，无需 playwright）。
+  - 移动：`adb` 连真机 → `cap sync android` + `cd android && ./gradlew assembleDebug`（增量~7s，需 `JAVA_HOME=jdk-21`）+ `adb install -r` → `adb forward tcp:9223 localabstract:webview_devtools_remote_<pid>` → CDP 连 `http://127.0.0.1:9223`。深色测试：`adb shell cmd uimode night yes/no`。
+- 红线：`src/core/` 禁 node:；本地是真相、不改同步/DB；数据只用 lake-notes-dev；杀 Electron 只 kill 具体 PID；死代码删除不预留；未验收不合 master。
