@@ -166,46 +166,6 @@ button { cursor: pointer; }
 .orphan-more { color: var(--lake-text-tertiary); font-style: italic; }
 .orphan-message { margin-top: 8px; color: var(--lake-sync-success); }
 .spin { animation: spin 1s linear infinite; } @keyframes spin { to { transform: rotate(360deg); } }
-@media (max-width: 760px) {
-  .app-shell, .app-shell.sidebar-collapsed { grid-template-columns: 1fr; }
-  .tab-items { display: flex; align-items: center; gap: 4px; overflow-x: auto; overflow-y: hidden; scrollbar-width: none; }
-  .tab-items::-webkit-scrollbar { display: none; }
-  .workspace { grid-template-rows: 56px minmax(0, 1fr) 30px; }
-  .sidebar, .sidebar.is-collapsed, .sidebar.is-collapsed:hover { position: fixed; width: min(300px, 88vw); height: 100%; padding-top: env(safe-area-inset-top); padding-bottom: env(safe-area-inset-bottom); transform: translateX(-102%); transition: transform .2s ease; box-shadow: 8px 0 30px #0002; }
-  .sidebar.is-collapsed .sidebar-brand-copy, .sidebar.is-collapsed .search-box, .sidebar.is-collapsed .list-heading, .sidebar.is-collapsed .note-list, .sidebar.is-collapsed .settings-link { visibility: visible; opacity: 1; }
-  .sidebar-open { transform: translateX(0); }
-  .desktop-only, .workspace-name, .slash, .sync-button span, .mode-toggle { display: none; }
-  .topbar { gap: 6px; padding: env(safe-area-inset-top) 8px 0; }
-  .topbar-left { flex: 1 1 auto; gap: 4px; overflow: hidden; }
-  .topbar-actions { flex: 0 0 auto; gap: 4px; }
-  .topbar .icon-button, .topbar .sync-button { width: 40px; height: 40px; }
-  .current-note { flex: 1 1 auto; max-width: none; min-width: 0; }
-  .save-label { display: none; }
-  .lake-editor { width: 100%; max-width: none; min-height: calc(100% - 90px); padding: 24px 16px 96px; overflow-x: hidden; }
-  .lake-viewer { padding-bottom: 126px; }
-  .lake-editor-mount, .lake-editor-mount .ne-editor, .lake-editor-mount .ne-editor-wrap, .lake-editor-mount .ne-editor-wrap-content, .lake-editor-mount .ne-editor-outer-wrap-box, .lake-editor-mount .ne-editor-wrap-box, .lake-editor-mount .ne-editor-body, .lake-editor-mount .ne-engine, .lake-editor-mount .ne-viewer-body { width: 100% !important; max-width: 100% !important; min-width: 0 !important; }
-  .lake-editor-mount .ne-engine { padding-right: 0 !important; padding-left: 0 !important; }
-  .lake-editor-mount .ne-engine > * { max-width: 100% !important; min-width: 0 !important; }
-  .lake-editor-mount .ne-ui-toolbar { width: 100% !important; max-width: 100% !important; overflow-x: auto !important; overflow-y: hidden !important; scrollbar-width: none; }
-  .lake-editor-mount .ne-ui-toolbar::-webkit-scrollbar { display: none; }
-  .lake-editor-mount .ne-ui-inner-toolbar { width: max-content !important; min-width: 100% !important; padding: 0 8px !important; }
-  .lake-editor-mount .ne-ui-toolbar-content { width: max-content !important; min-width: 100% !important; padding-right: 8px !important; }
-  .lake-editor-mount .ne-ui-toolbar .ne-toolbar-widget:first-child { margin-left: 0 !important; }
-  .ne-ui-command-menu, .ne-ui-command-menu.ne-ui-command-menu-column-1, .ne-ui-command-menu.ne-ui-command-menu-column-4 { width: min(360px, calc(100vw - 24px)) !important; max-width: calc(100vw - 24px) !important; }
-  .ne-ui-command-menu-content { display: block !important; width: 100% !important; max-width: 100% !important; overflow-x: hidden !important; }
-  .ne-ui-command-menu-column { width: 100% !important; min-width: 0 !important; }
-  .ne-ui-command-menu-scrollable { max-height: min(56dvh, 420px) !important; overflow-y: auto !important; }
-  .ne-ui-command-menu-info { display: none !important; }
-  .ne-ui-boundary-popover.ne-card-toolbar-select-popover { position: fixed !important; z-index: 1000 !important; inset: 68px 12px 16px !important; width: auto !important; max-width: none !important; height: auto !important; max-height: calc(100dvh - 84px) !important; overflow: hidden !important; }
-  .ne-ui-boundary-popover.ne-card-toolbar-select-popover .ne-ui-toolbar-card-select-menu { width: 100% !important; min-width: 0 !important; height: 100% !important; max-height: 100% !important; overflow-y: auto !important; overscroll-behavior: contain; }
-  .ne-ui-boundary-popover.ne-card-toolbar-select-popover .ne-ui-search-card-menu { min-width: 0 !important; }
-  .lake-editor-mount ne-heading-fold.mobile { transform: translate(4px, -2px) !important; }
-  .statusbar span:first-child { display: none; }
-  .statusbar { justify-content: flex-end; padding-bottom: env(safe-area-inset-bottom); }
-  .form-grid { grid-template-columns: 1fr; }
-  .form-grid label { grid-column: 1 !important; }
-  .modal-backdrop { align-items: end; padding: 12px 12px max(12px, env(safe-area-inset-bottom)); }
-}
 
 /* 入场动效：仅 transform/opacity，通过 @starting-style 实现，无需 JS 状态机。 */
 
@@ -369,7 +329,6 @@ button { cursor: pointer; }
 }
 .tab-item:hover .tab-close { opacity: 0.5; }
 .tab-close:hover { opacity: 1 !important; background: rgba(0,0,0,0.08); }
-
 
 .tab-panels {
   flex: 1;
@@ -543,7 +502,6 @@ ne-card[data-card-name="codeblock"] .ne-card-resizer-mask {
 .board-card-wrapper--viewer .drawnix canvas[class*="laser-pointer"] {
   display: none !important;
 }
-
 
 .plait-board-container .text foreignObject{overflow-y:auto}.plait-board-container .text foreignObject::-webkit-scrollbar{display:none}.plait-board-container .text foreignObject{scrollbar-width:none}.plait-text-container{min-height:20px;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,PingFang SC,Noto Sans,Noto Sans CJK SC,Microsoft Yahei,Hiragino Sans GB,Arial,sans-serif;font-size:14px;line-height:20px;display:block}.slate-editable-container{cursor:default;outline:none;padding:0}.slate-editable-container [data-slate-node=element]{-webkit-user-select:none;user-select:none}.slate-editable-container[contenteditable=true]{cursor:text}.slate-editable-container[contenteditable=true] [data-slate-node=element]{-webkit-user-select:text;user-select:text}.slate-editable-container [plait-underlined][plait-strike]{text-decoration:underline line-through}.slate-editable-container [plait-strike]{text-decoration:line-through}.slate-editable-container [plait-underlined]{text-decoration:underline}.slate-editable-container [plait-italic]{font-style:italic}.slate-editable-container [plait-bold]{font-weight:700}.slate-editable-container [plait-font-size="8"]{font-size:8px;line-height:1.5}.slate-editable-container [plait-font-size="9"]{font-size:9px;line-height:1.5}.slate-editable-container [plait-font-size="10"]{font-size:10px;line-height:1.5}.slate-editable-container [plait-font-size="11"]{font-size:11px;line-height:1.5}.slate-editable-container [plait-font-size="12"]{font-size:12px;line-height:1.5}.slate-editable-container [plait-font-size="13"]{font-size:13px;line-height:1.5}.slate-editable-container [plait-font-size="14"]{font-size:14px;line-height:1.5}.slate-editable-container [plait-font-size="15"]{font-size:15px;line-height:1.5}.slate-editable-container [plait-font-size="16"]{font-size:16px;line-height:1.5}.slate-editable-container [plait-font-size="17"]{font-size:17px;line-height:1.5}.slate-editable-container [plait-font-size="18"]{font-size:18px;line-height:1.5}.slate-editable-container [plait-font-size="19"]{font-size:19px;line-height:1.5}.slate-editable-container [plait-font-size="20"]{font-size:20px;line-height:1.5}.slate-editable-container [plait-font-size="21"]{font-size:21px;line-height:1.5}.slate-editable-container [plait-font-size="22"]{font-size:22px;line-height:1.5}.slate-editable-container [plait-font-size="23"]{font-size:23px;line-height:1.5}.slate-editable-container [plait-font-size="24"]{font-size:24px;line-height:1.5}.slate-editable-container [plait-font-size="25"]{font-size:25px;line-height:1.5}.slate-editable-container [plait-font-size="26"]{font-size:26px;line-height:1.5}.slate-editable-container [plait-font-size="27"]{font-size:27px;line-height:1.5}.slate-editable-container [plait-font-size="28"]{font-size:28px;line-height:1.5}.slate-editable-container [plait-font-size="29"]{font-size:29px;line-height:1.5}.slate-editable-container [plait-font-size="30"]{font-size:30px;line-height:1.5}.slate-editable-container [plait-font-size="31"]{font-size:31px;line-height:1.5}.slate-editable-container [plait-font-size="32"]{font-size:32px;line-height:1.5}.slate-editable-container [plait-font-size="33"]{font-size:33px;line-height:1.5}.slate-editable-container [plait-font-size="34"]{font-size:34px;line-height:1.5}.slate-editable-container [plait-font-size="35"]{font-size:35px;line-height:1.5}.slate-editable-container [plait-font-size="36"]{font-size:36px;line-height:1.5}.slate-editable-container [plait-font-size="37"]{font-size:37px;line-height:1.5}.slate-editable-container [plait-font-size="38"]{font-size:38px;line-height:1.5}.slate-editable-container [plait-font-size="39"]{font-size:39px;line-height:1.5}.slate-editable-container [plait-font-size="40"]{font-size:40px;line-height:1.5}.slate-editable-container [plait-font-size="41"]{font-size:41px;line-height:1.5}.slate-editable-container [plait-font-size="42"]{font-size:42px;line-height:1.5}.slate-editable-container [plait-font-size="43"]{font-size:43px;line-height:1.5}.slate-editable-container [plait-font-size="44"]{font-size:44px;line-height:1.5}.slate-editable-container [plait-font-size="45"]{font-size:45px;line-height:1.5}.slate-editable-container [plait-font-size="46"]{font-size:46px;line-height:1.5}.slate-editable-container [plait-font-size="47"]{font-size:47px;line-height:1.5}.slate-editable-container [plait-font-size="48"]{font-size:48px;line-height:1.5}.slate-editable-container [plait-font-size="49"]{font-size:49px;line-height:1.5}.slate-editable-container [plait-font-size="50"]{font-size:50px;line-height:1.5}.slate-editable-container [plait-font-size="51"]{font-size:51px;line-height:1.5}.slate-editable-container [plait-font-size="52"]{font-size:52px;line-height:1.5}.slate-editable-container [plait-font-size="53"]{font-size:53px;line-height:1.5}.slate-editable-container [plait-font-size="54"]{font-size:54px;line-height:1.5}.slate-editable-container [plait-font-size="55"]{font-size:55px;line-height:1.5}.slate-editable-container [plait-font-size="56"]{font-size:56px;line-height:1.5}.slate-editable-container [plait-font-size="57"]{font-size:57px;line-height:1.5}.slate-editable-container [plait-font-size="58"]{font-size:58px;line-height:1.5}.slate-editable-container [plait-font-size="59"]{font-size:59px;line-height:1.5}.slate-editable-container [plait-font-size="60"]{font-size:60px;line-height:1.5}.slate-editable-container [plait-font-size="61"]{font-size:61px;line-height:1.5}.slate-editable-container [plait-font-size="62"]{font-size:62px;line-height:1.5}.slate-editable-container [plait-font-size="63"]{font-size:63px;line-height:1.5}.slate-editable-container [plait-font-size="64"]{font-size:64px;line-height:1.5}.slate-editable-container [plait-font-size="65"]{font-size:65px;line-height:1.5}.slate-editable-container [plait-font-size="66"]{font-size:66px;line-height:1.5}.slate-editable-container [plait-font-size="67"]{font-size:67px;line-height:1.5}.slate-editable-container [plait-font-size="68"]{font-size:68px;line-height:1.5}.slate-editable-container [plait-font-size="69"]{font-size:69px;line-height:1.5}.slate-editable-container [plait-font-size="70"]{font-size:70px;line-height:1.5}.slate-editable-container [plait-font-size="71"]{font-size:71px;line-height:1.5}.slate-editable-container [plait-font-size="72"]{font-size:72px;line-height:1.5}.slate-editable-container [plait-font-size="73"]{font-size:73px;line-height:1.5}.slate-editable-container [plait-font-size="74"]{font-size:74px;line-height:1.5}.slate-editable-container [plait-font-size="75"]{font-size:75px;line-height:1.5}.slate-editable-container [plait-font-size="76"]{font-size:76px;line-height:1.5}.slate-editable-container [plait-font-size="77"]{font-size:77px;line-height:1.5}.slate-editable-container [plait-font-size="78"]{font-size:78px;line-height:1.5}
 /*$vite$:1*/
@@ -1241,7 +1199,6 @@ ne-card[data-card-name="codeblock"] .ne-card-resizer-mask {
 .quick-note-notebook-list button:hover { background: #f4f6fc; color: #4c5c99; }
 .quick-note-no-notebook { padding: 17px 12px; color: #848c9c; font-size: 12px; text-align: center; }
 .quick-note-convert-dialog footer { display: flex; justify-content: flex-end; margin-top: 14px; }
-@media (max-width: 760px) { .quick-notes-pane { padding: 22px 14px 30px; } }
 
 /* ===== 2026-08-06 视觉刷新：A 暖紫灰主调 + C 悬停微卡片 + 去分隔线 + 可读性 ===== */
 :root {
@@ -1278,7 +1235,6 @@ ne-card[data-card-name="codeblock"] .ne-card-resizer-mask {
   }
   .tab-item { background: transparent; }
   .tab-item:hover { background: rgba(0, 0, 0, .05); }
-
 
   /* 可读性：正文行高/字距/段色，标题收紧字距 */
   .lake-editor-mount .ne-engine,
@@ -1347,7 +1303,6 @@ ne-card[data-card-name="codeblock"] .ne-card-resizer-mask {
 /* ===== 2026-08-06 同步视觉：弹窗/小记/按钮统一到暖紫灰体系（仅配色） ===== */
 
 /* 主/次按钮：绿 → shell 强调色；次按钮白微卡 */
-
 
 /* 同步/设置面板：去绿、去旧边框，融入 shell */
 .form-grid input, .secret-field { border-color: rgba(0, 0, 0, .14); border-radius: var(--radius-md); background: #fbfbfd; }
@@ -1639,7 +1594,6 @@ ne-card[data-card-name="codeblock"] .ne-card-resizer-mask {
   }
 }
 
-
 /* 设置表单：思源式两列表单行（label 左、input 右，等宽对齐） */
 .settings-field { display: grid; grid-template-columns: 120px 1fr; align-items: center; gap: 12px; margin-bottom: 10px; }
 .settings-field > span { color: var(--b3-theme-on-surface); font-size: 13px; }
@@ -1865,24 +1819,6 @@ ne-card[data-card-name="codeblock"] .ne-card-resizer-mask {
   to { opacity: 1; transform: translate(-50%, -50%) scale(1); }
 }
 
-@media (max-width: 760px) {
-  .settings-overlay,
-  .history-panel-backdrop,
-  .trash-panel-backdrop {
-    align-items: end !important;
-    padding: 12px 12px max(12px, env(safe-area-inset-bottom)) !important;
-  }
-  .floating-dialog {
-    position: relative !important;
-    inset: auto !important;
-    width: 100% !important;
-    max-width: 100% !important;
-    max-height: calc(100dvh - 24px) !important;
-    transform: none !important;
-    animation: none;
-  }
-}
-
 /* ===== 2026-08-13 shell continuity pass =====
  * The window chrome and the fixed rails share one painted surface.  The
  * editor is intentionally the only opaque "room" opened from that surface.
@@ -1934,7 +1870,6 @@ ne-card[data-card-name="codeblock"] .ne-card-resizer-mask {
   .document-pane:has(> .multi-tab-editor) {
     background: #fff !important;
   }
-
 
   .app-shell.quick-notes-active .activity-rail {
     background: transparent !important;
@@ -2085,7 +2020,6 @@ ne-card[data-card-name="codeblock"] .ne-card-resizer-mask {
     box-shadow: none !important;
   }
 }
-
 
 /* Embedded mindmap/board cards are passive while the reader scrolls through the
    document. The gate is behavioral; this class is only a debugging/visual hook. */

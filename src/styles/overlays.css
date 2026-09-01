@@ -1,4 +1,3 @@
-
 .sync-status-control { position: relative; display: inline-flex; }
 .sync-status-button { position: relative; width: 30px; min-width: 30px; height: 28px; padding: 0; gap: 0; justify-content: center; }
 .sync-status-button .sync-status-icon { display: inline-flex; flex: 0 0 auto; }
@@ -169,15 +168,6 @@
 .settings-panel-large .shortcut-row { min-height: 44px; padding: 0 12px; background: var(--lake-canvas); }
 .settings-panel-large .shortcut-row + .shortcut-row { border-top-color: var(--lake-border); }
 .settings-panel-large .settings-header { min-height: 52px; padding: 0 20px; }
-@media (max-width: 760px) {
-  .settings-panel-large { width: calc(100vw - 20px) !important; min-height: 0; }
-  .settings-panel-large .settings-layout { flex-direction: column; }
-  .settings-panel-large .settings-nav { width: 100%; padding: 10px; border-right: 0; border-bottom: 1px solid var(--lake-border); }
-  .settings-panel-large .settings-nav-item { min-height: 34px; }
-  .settings-panel-large .settings-content { padding: 14px; }
-  .settings-panel-large .settings-group { padding: 14px; }
-  .settings-panel-large .settings-field { grid-template-columns: 1fr; gap: 6px; }
-}
 
 /* #4 遮罩淡入：弹窗背景层不再瞬间出现，消除突兀/闪烁；与 .floating-dialog 的入场缩放协同 */
 @keyframes lake-overlay-fade-in { from { opacity: 0; } to { opacity: 1; } }

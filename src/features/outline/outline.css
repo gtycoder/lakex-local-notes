@@ -199,9 +199,6 @@
 }
 
 /* 移动端不显示右侧栏 */
-@media (max-width: 760px) {
-  .outline-sidebar { display: none; }
-}
 
 /* ===== 侧栏内部 ===== */
 .outline-sidebar__header {

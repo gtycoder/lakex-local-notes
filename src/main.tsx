@@ -21,7 +21,6 @@ import "./styles/shell.css";
 import "./styles/overlays.css";
 import "./styles/editor-bridge.css";
 import "./styles/quick-notes.css";
-import "./styles/responsive.css";
 import "./styles/document-status.css";
 import "./styles/layout-contract.css";
 import "./styles/motion-contract.css";

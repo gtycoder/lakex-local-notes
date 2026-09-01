@@ -1,8 +1,0 @@
-/* Keep the desktop semantic shell overrides out of the large legacy stylesheet. */
-@media (max-width: 760px) {
-  .sync-status-button { min-width: 34px; max-width: 42px; padding-inline: 7px; }
-  .sync-status-button .sync-status-copy,
-  .sync-status-button > svg:last-child { display: none; }
-  .sync-status-popover { left: 8px !important; right: 8px; width: auto; }
-  .settings-nav-search { margin-inline: 6px; }
-}

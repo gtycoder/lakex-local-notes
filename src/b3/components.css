@@ -403,6 +403,3 @@
 .sync-toast-sub { margin-top: 4px; font-size: 11px; color: var(--b3-theme-on-surface); }
 .sync-toast-action { margin-top: 4px; align-self: flex-start; }
 
-@media (max-width: 760px) {
-  .sync-toast { top: calc(env(safe-area-inset-top) + 12px); right: 12px; left: 12px; width: auto; }
-}

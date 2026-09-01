@@ -1,4 +1,3 @@
-
 .workspace { position: relative; grid-template-rows: minmax(0, 1fr); }
 .document-statusbar {
   grid-row: 1;
@@ -43,9 +42,7 @@
 .document-statusbar-state.save-error { color: var(--lake-error); }
 .document-statusbar-state.saving { color: var(--lake-accent); }
 .document-statusbar-status-icon { display: inline-flex; align-items: center; gap: 4px; }
-@media (max-width: 760px) {
-  .document-statusbar { right: 8px; bottom: calc(8px + env(safe-area-inset-bottom)); left: 8px; }
-}
+
 @media (prefers-reduced-motion: reduce) {
   .document-statusbar { backdrop-filter: none; transition: none; }
 }
@@ -95,9 +92,7 @@
   font: inherit;
 }
 .document-notice-toast button:hover { background: color-mix(in srgb, var(--lake-accent) 10%, transparent); }
-@media (max-width: 760px) {
-  .document-notice-toast { bottom: calc(42px + env(safe-area-inset-bottom)); }
-}
+
 @media (prefers-reduced-motion: reduce) {
   .document-notice-toast { backdrop-filter: none; }
 }
@@ -135,7 +130,4 @@
 .document-statusbar-fixed { display: flex; align-items: center; gap: 12px; min-width: 0; }
 .document-statusbar-stats { flex: 0 0 auto; }
 .document-statusbar-state { flex: 0 0 auto; }
-@media (max-width: 760px) {
-  .document-statusbar { right: 8px !important; max-width: calc(100% - 16px); min-width: 176px; }
-  .document-statusbar-message { max-width: 34vw; }
-}
+
