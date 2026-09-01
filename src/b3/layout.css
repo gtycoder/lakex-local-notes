@@ -13,9 +13,9 @@
   .app-shell {
     background:
       linear-gradient(135deg,
-        color-mix(in srgb, var(--shell-hue) 15%, transparent) 0,
-        color-mix(in srgb, var(--shell-hue) 6%, transparent) 32%,
-        transparent 68%),
+        color-mix(in srgb, var(--shell-hue) var(--shell-tint-strong), transparent) 0,
+        color-mix(in srgb, var(--shell-hue) var(--shell-tint-soft), transparent) 26%,
+        transparent 48%),
       linear-gradient(180deg, color-mix(in srgb, var(--b3-theme-background) 45%, var(--b3-body-background)) 0%, var(--b3-body-background) 160px) !important;
   }
 

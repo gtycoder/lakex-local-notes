@@ -21,6 +21,9 @@
   --lake-shadow-soft: 0 1px 2px rgba(25, 35, 52, .08), 0 8px 24px rgba(25, 35, 52, .06);
   /* 壳层氛围色相（思源式淡紫）：左上→右下对角渐隐 */
   --shell-hue: #8f7bd8;
+  /* 对角氛围色的两档强度（供 b3/layout.css 渐变引用）：起点更深、落得更快 */
+  --shell-tint-strong: 26%;
+  --shell-tint-soft: 12%;
 }
 
 [data-theme="dark"] {
@@ -40,6 +43,9 @@
   --lake-shadow-soft: 0 1px 2px rgba(0, 0, 0, .24), 0 8px 24px rgba(0, 0, 0, .18);
   /* 深色主题用更亮的蓝紫，保证深底可辨 */
   --shell-hue: #9d8bff;
+  /* 深色底更亮，alpha 略降避免过曝 */
+  --shell-tint-strong: 20%;
+  --shell-tint-soft: 9%;
 }
 
 :where(button, input, textarea, select, [role="button"]):focus-visible {
