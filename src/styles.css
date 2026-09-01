@@ -46,8 +46,7 @@ button { cursor: pointer; }
 .tree-rename-input { width: 100%; height: 24px; padding: 0 4px; border: 1px solid #8db9a4; border-radius: 5px; outline: 0; background: #fff; font-size: 13px; }
 .tree-rename-input:focus { border-color: #9bc7b0; box-shadow: 0 0 0 2px rgba(155, 199, 176, .18); }
 .tree-rename-input::selection { color: #2d4968; background: #dcecf8; }
-.sync-dot { width: 5px; height: 5px; border-radius: 50%; background: #afb5be; }
-.sync-dot.local { background: #d59432; }.sync-dot.synced { background: #4b9675; }.sync-dot.conflict { background: #c6534c; }
+/* 树行同步绿点已移除：自动保存窗口仅 1s，该点无实际意义。顶栏/标签的同步状态另见 .sync-state-dot。 */
 .empty-list { padding: 28px 10px; color: #9197a0; font-size: 12px; text-align: center; }
 .tree-list { padding-bottom: 8px; }
 .tree-item { min-width: 0; }
@@ -785,7 +784,6 @@ ne-card[data-card-name="codeblock"] .ne-card-resizer-mask {
   .tree-row.type-notebook .note-row-copy strong { color: inherit; font-weight: 620; }
   .tree-row.type-group .note-row-copy strong { font-weight: 560; }
   .tree-children { border-left-color: rgba(31, 35, 41, .075); transform-origin: top; animation: shell-tree-reveal 180ms var(--shell-ease); }
-  .sync-dot { width: 4px; height: 4px; opacity: .9; }
 
   .sidebar-resize-handle {
     position: absolute;

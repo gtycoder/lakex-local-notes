@@ -650,7 +650,6 @@ const TreeRow = memo(function TreeRow(props: TreeRowProps) {
           ? <input className="tree-rename-input" autoFocus aria-label="节点名称" value={props.editingTitle} onChange={(event) => props.onEditingTitle(event.target.value)} onClick={(event) => event.stopPropagation()} onFocus={(event) => event.currentTarget.select()} onBlur={props.onSubmitRename} onKeyDown={(event) => { event.stopPropagation(); if (event.key === "Enter") props.onSubmitRename(); if (event.key === "Escape") props.onCancelRename(); }} />
           : <strong>{props.node.title}</strong>}
       </span>
-      {props.node.nodeType === "note" ? <span className={`sync-dot ${props.node.syncState}`} /> : null}
     </div>
     {open && <div className="tree-children">
       {props.pendingCreate?.parentId === props.node.id && props.createField(props.depth + 1)}
