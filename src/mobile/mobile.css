@@ -1,7 +1,7 @@
 /* M0 POC 页面样式（极简，验证用） */
 * { box-sizing: border-box; }
 html, body, #root { margin: 0; padding: 0; height: 100%; }
-body { font-family: -apple-system, "PingFang SC", "Noto Sans SC", sans-serif; background: #f5f6f8; color: #1f2329; }
+body { font-family: BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei UI", system-ui, sans-serif; background: #f5f6f8; color: #1f2329; -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; text-rendering: optimizeLegibility; }
 
 .poc-center { display: flex; align-items: center; justify-content: center; height: 100%; font-size: 15px; color: #666; }
 .poc-error { color: #d83931; }
