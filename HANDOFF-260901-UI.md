@@ -58,3 +58,29 @@ npx tsc --noEmit && npx vitest run && node node_modules/vite/bin/vite.js build
 
 ## 5. 与主线 perf 的关系
 本 UI 分支与 HANDOFF-260901.md 的 perf 主线（快照 gzip 异步化、P4-1 FTS 增量）**互不相干**，可各自独立验收/合并。
+
+---
+
+## 6. 移动端 UI 收口（分支 `polish/mobile-ui-260901`，从本 UI 分支拉出）
+
+> 移动端是 Capacitor Android，`main.tsx` **不加载 styles.css**（桌面专用），此前完全无令牌、无深色。
+> 真机验证回路：`adb` 连设备 → `cap sync` + `gradlew assembleDebug`（增量~7s）+ `adb install -r` →
+> `adb forward tcp:9223 localabstract:webview_devtools_remote_<pid>` → CDP 连 http://127.0.0.1:9223。
+
+| 提交 | 内容 | 真机 CDP 验证 |
+|---|---|---|
+| M1 `2bdd23f` | main.tsx import tokens.css；mobile.css 补 antialiased+optimizeLegibility、字体栈对齐桌面 | --lake-* 由 UNDEFINED→解析；smoothing=antialiased |
+| M4 `ea5f811` | 删 M0 POC 死样式 42 行（仅留 .poc-center/.poc-error） | App 正常渲染无回归 |
+| M2a `bbb38b7` | 单角色色→令牌 54 处（accent/error/文字灰/纯边框/正文底） | — |
+| M2b `20bde4e` | 多角色色按属性上下文→令牌 31 处（背景#fff→panel、边框#f0f1f3→border、active底→shell；保留蓝底白字 color:#fff、禁用#c9cdd4） | body/顶栏/muted 解析为令牌值、fab 蓝底白字正确 |
+| M3 `0d20890` | main.tsx 按 prefers-color-scheme 设 data-theme（跟随系统深色） | 设备切深色：body #17191e/#f3f5f8、accent→#78a5ff、muted→#9aa4b2 |
+| M5 `aaa776a` | 动效：抽屉左滑入/sheet上滑入/遮罩淡入/tab过渡/按压反馈（transform+opacity，reduced-motion 兜底） | 关键帧 mobile-fade-in/drawer-in/sheet-in 注入 |
+| M6 `7a9db57` | 触摸目标 icon-btn 36→44、qn-add 34→40、sortbar 28→36、删图角标 22→30 | icon-btn 44×44、顶栏 overflow 0 |
+
+**移动端对比度**：随 M2 用 --lake-text-tertiary（#5f6a78）自动达到桌面同款 AA。
+
+### 移动端剩余/待办
+- **编辑器正文区深色**：DocumentPage 的 Lake 编辑器（lakex 内核自有主题）在 data-theme=dark 下正文区仍可能是白底——需单独处理内核主题（本次只做了移动端**外壳**深色地基）。真机切深色进文档页需复验。
+- **主题手动切换**：当前移动端深色=跟随系统；若要 App 内手动切换（像桌面设置），需在移动端设置里加主题选项 + 覆盖系统偏好。
+- **触摸手感**：M6 尺寸已提，实际手感（间距/滚动）建议真机再走查。
+- **editor-dock.css**：编辑坞样式未纳入本次令牌化（可后续同样收口）。
