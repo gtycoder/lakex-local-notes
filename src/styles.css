@@ -664,8 +664,6 @@ ne-card[data-card-name="codeblock"] .ne-card-resizer-mask {
     height: calc(100% - var(--topbar-height));
     padding-top: 0;
     overflow: visible;
-    border-right: 1px solid var(--shell-separator);
-    background: linear-gradient(180deg, #e6e8ec 0%, var(--shell-material) 200px);
     opacity: 1;
     transform: translateX(0);
     transition: opacity 180ms ease-out, transform 260ms var(--shell-ease), box-shadow 240ms ease-out;
@@ -1258,7 +1256,6 @@ ne-card[data-card-name="codeblock"] .ne-card-resizer-mask {
 
   /* 去分隔线：rail / sidebar / 顶栏 / 状态栏全部靠颜色过渡 */
   .activity-rail { border-right: 0; background: linear-gradient(180deg, #e6e8ec 0%, var(--shell-material) 200px); }
-  .sidebar { border-right: 0; background: linear-gradient(180deg, #e6e8ec 0%, var(--shell-material) 200px); }
 
   /* C：悬停微卡片（白底 + 轻阴影，仅 transform/box-shadow，不动布局） */
   .activity-button:hover,
