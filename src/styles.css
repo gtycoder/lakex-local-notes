@@ -1902,6 +1902,9 @@ ne-card[data-card-name="codeblock"] .ne-card-resizer-mask {
   }
 }
 
+/* 浮窗（设置/回收站/历史）入场动画。必须保留 translate(-50%,-50%) 居中偏移：
+ * 任何只写 translateY/scale 的位移类 keyframes（如 lake-pop-in）套到 .floating-dialog
+ * 都会在入场期吃掉居中变换，使弹窗偏右下再弹回。勿把 .floating-dialog 加回 ui-polish.css 的 lake-pop-in。 */
 @keyframes floating-dialog-enter {
   from { opacity: 0; transform: translate(-50%, -50%) scale(.975); }
   to { opacity: 1; transform: translate(-50%, -50%) scale(1); }
