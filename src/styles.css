@@ -128,7 +128,7 @@ button { cursor: pointer; }
 .empty-workspace { gap: 6px; }
 .empty-workspace-icon { display: grid; place-items: center; width: 56px; height: 56px; margin-bottom: 8px; border-radius: var(--radius-xl); color: var(--lake-accent, #3575f0); background: var(--lake-accent-soft, #edf3ff); }
 .empty-workspace h2 { margin: 0; color: var(--lake-text, #252a33); font-size: 16px; font-weight: 600; letter-spacing: -.01em; }
-.empty-workspace-hint { margin: 0 0 6px; color: var(--lake-text-tertiary, #8993a1); font-size: 13px; }.loading-screen { height: 100vh; }.loading-screen small { color: var(--lake-error); }
+.empty-workspace-hint { margin: 0 0 6px; color: var(--lake-text-tertiary); font-size: 13px; }.loading-screen { height: 100vh; }.loading-screen small { color: var(--lake-error); }
 
 .modal-backdrop { display: grid; position: fixed; z-index: 30; inset: 0; place-items: center; padding: 20px; background: var(--b3-mask-background, rgba(32, 36, 44, .33)); transition: opacity var(--dur-drawer) var(--ease-out); }
 .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; padding: 20px; }.form-grid label { display: flex; flex-direction: column; gap: 6px; color: var(--lake-text-secondary); font-size: 11px; font-weight: 600; }.form-grid .wide { grid-column: 1 / -1; }.form-grid input[type="text"], .form-grid input[type="password"], .form-grid label > input:not([type="checkbox"]) { width: 100%; height: 36px; padding: 0 10px; border: 1px solid var(--lake-border); border-radius: 5px; outline: 0; font-size: 12px; font-weight: 400; }.form-grid input:focus { border-color: var(--b3-theme-primary); box-shadow: 0 0 0 2px var(--lake-accent-soft); }
