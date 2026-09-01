@@ -1259,11 +1259,6 @@ ne-card[data-card-name="codeblock"] .ne-card-resizer-mask {
   /* 去分隔线：rail / sidebar / 顶栏 / 状态栏全部靠颜色过渡 */
   .activity-rail { border-right: 0; background: linear-gradient(180deg, #e6e8ec 0%, var(--shell-material) 200px); }
   .sidebar { border-right: 0; background: linear-gradient(180deg, #e6e8ec 0%, var(--shell-material) 200px); }
-  .tab-bar {
-    border-bottom: 0;
-    box-shadow: none;
-    background: linear-gradient(90deg, #e9e7f2 0%, #f4f4f7 55%, #fbfcfd 100%);
-  }
 
   /* C：悬停微卡片（白底 + 轻阴影，仅 transform/box-shadow，不动布局） */
   .activity-button:hover,
@@ -1629,9 +1624,8 @@ ne-card[data-card-name="codeblock"] .ne-card-resizer-mask {
   .workspace { border-radius: 10px 0 0 10px; border-right: 0; }
   .outline-sidebar__content { border-radius: 0 10px 10px 0; border-left: 0; }
 
-  /* 顶栏恢复原有横向渐变（用户要求原样）；右侧大纲轨顶部取顶栏右端色，消除边界。
-     左侧 activity-rail / sidebar 保持原有 #e6e8ec 渐变，不做改动。 */
-  .tab-bar { background: linear-gradient(90deg, #e9e7f2 0%, #f4f4f7 55%, #fbfcfd 100%); }
+  /* 顶栏背景已单源为融合/统一材质（b3/layout.css + --shell-unified-topbar），不再就地设横向渐变；
+     右侧大纲轨顶部取顶栏右端色，消除边界。左侧 activity-rail / sidebar 保持原有 #e6e8ec 渐变。 */
   .outline-sidebar { background: linear-gradient(180deg, #fbfcfd 0%, var(--shell-material) 200px); }
 
   /* 小记：左轨颜色不变；小记内容用“视口固定”的横向渐变，与顶栏逐像素对齐融合，
