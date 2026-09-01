@@ -11,6 +11,8 @@
   --lake-sync-pending: #b7771e;
   --lake-sync-success: #368a61;
   --lake-error: #c94a43;
+  --lake-error-strong: #a83a34; --lake-error-soft: #fbeae8;
+  --lake-warning-soft: #fbf1de; --lake-success-soft: #e9f4ee;
   --lake-motion-fast: 120ms;
   --lake-motion-standard: 180ms;
   --lake-motion-panel: 260ms;
@@ -39,6 +41,8 @@
   --lake-sync-pending: #e4af5e;
   --lake-sync-success: #63c47b;
   --lake-error: #f08078;
+  --lake-error-strong: #f7b6b1; --lake-error-soft: rgba(240, 128, 120, .14);
+  --lake-warning-soft: rgba(228, 175, 94, .16); --lake-success-soft: rgba(99, 196, 123, .16);
   --lake-shadow-panel: 0 16px 38px rgba(0, 0, 0, .34), 0 2px 10px rgba(0, 0, 0, .24);
   --lake-shadow-soft: 0 1px 2px rgba(0, 0, 0, .24), 0 8px 24px rgba(0, 0, 0, .18);
   /* 深色主题用更亮的蓝紫，保证深底可辨 */
