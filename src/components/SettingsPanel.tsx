@@ -60,12 +60,6 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
     void native.listS3GcLog().then(setGcLog).catch(() => undefined);
   }, [open, openCategory]);
 
-  useEffect(() => {
-    if (!open) return;
-    const focusTimer = window.setTimeout(() => navSearchRef.current?.focus(), 30);
-    return () => window.clearTimeout(focusTimer);
-  }, [open]);
-
   const nav = [
     { id: "editor" as const, label: "编辑器", keywords: "字号 段间距 大纲 工具栏 标签页" , icon: <Type size={15} /> },
     { id: "appearance" as const, label: "外观", keywords: "浅色 深色 主题", icon: <Monitor size={15} /> },
@@ -168,7 +162,7 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
         </header>
         <div className="settings-layout">
           <nav className="settings-nav">
-            <label className="settings-nav-search"><Search size={14} /><input ref={navSearchRef} autoFocus value={navQuery} onChange={(event) => setNavQuery(event.target.value)} placeholder="搜索设置" aria-label="搜索设置" /></label>
+            <label className="settings-nav-search"><Search size={14} /><input ref={navSearchRef} value={navQuery} onChange={(event) => setNavQuery(event.target.value)} placeholder="搜索设置" aria-label="搜索设置" /></label>
             {visibleNav.map((item) => (
               <button key={item.id} className={`settings-nav-item ${category === item.id ? "active" : ""}`} onClick={() => setCategory(item.id)}>
                 {item.icon}<span>{item.label}</span>

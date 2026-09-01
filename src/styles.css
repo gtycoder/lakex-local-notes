@@ -168,6 +168,8 @@ button { cursor: pointer; }
 .spin { animation: spin 1s linear infinite; } @keyframes spin { to { transform: rotate(360deg); } }
 @media (max-width: 760px) {
   .app-shell, .app-shell.sidebar-collapsed { grid-template-columns: 1fr; }
+  .tab-items { display: flex; align-items: center; gap: 4px; overflow-x: auto; overflow-y: hidden; scrollbar-width: none; }
+  .tab-items::-webkit-scrollbar { display: none; }
   .workspace { grid-template-rows: 56px minmax(0, 1fr) 30px; }
   .sidebar, .sidebar.is-collapsed, .sidebar.is-collapsed:hover { position: fixed; width: min(300px, 88vw); height: 100%; padding-top: env(safe-area-inset-top); padding-bottom: env(safe-area-inset-bottom); transform: translateX(-102%); transition: transform .2s ease; box-shadow: 8px 0 30px #0002; }
   .sidebar.is-collapsed .sidebar-brand-copy, .sidebar.is-collapsed .search-box, .sidebar.is-collapsed .list-heading, .sidebar.is-collapsed .note-list, .sidebar.is-collapsed .settings-link { visibility: visible; opacity: 1; }
