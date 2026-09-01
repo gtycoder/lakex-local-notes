@@ -178,3 +178,14 @@
   .settings-panel-large .settings-group { padding: 14px; }
   .settings-panel-large .settings-field { grid-template-columns: 1fr; gap: 6px; }
 }
+
+/* #4 遮罩淡入：弹窗背景层不再瞬间出现，消除突兀/闪烁；与 .floating-dialog 的入场缩放协同 */
+@keyframes lake-overlay-fade-in { from { opacity: 0; } to { opacity: 1; } }
+.settings-overlay,
+.trash-panel-backdrop,
+.history-panel-backdrop,
+.search-panel-backdrop,
+.modal-backdrop { animation: lake-overlay-fade-in 160ms ease-out; }
+@media (prefers-reduced-motion: reduce) {
+  .settings-overlay, .trash-panel-backdrop, .history-panel-backdrop, .search-panel-backdrop, .modal-backdrop { animation: none; }
+}
