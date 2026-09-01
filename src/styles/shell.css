@@ -139,6 +139,13 @@ html[data-theme="dark"] .document-pane .ne-engine > ne-h6 ne-heading-content {
     overflow: hidden !important;
     transition: opacity 120ms ease-out, transform 120ms var(--lake-ease-standard), box-shadow 120ms ease-out !important;
   }
+  /* 右侧大纲浮层与左侧目录浮层同高（对齐到 top/bottom 72），消除左右弹出高度不一致 */
+  .outline-sidebar--collapsed.outline-sidebar--hovered .outline-sidebar__content {
+    top: 72px !important;
+    bottom: 72px !important;
+    height: calc(100vh - 144px) !important;
+    max-height: calc(100vh - 144px) !important;
+  }
 }
 
 @media (min-width: 761px) {
