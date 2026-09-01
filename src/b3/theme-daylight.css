@@ -70,7 +70,7 @@
     --b3-empty-color: var(--b3-theme-on-surface-light);
 
     /* 遮罩 */
-    --b3-mask-background: rgba(220, 220, 220, .4);
+    --b3-mask-background: rgba(31, 35, 41, .30); /* 原浅水洗 rgba(220,220,220,.4) 分离度弱，加深使弹窗更浮起 */
 
     /* 卡片背景 */
     --b3-card-error-color: #790600;

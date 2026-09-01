@@ -70,7 +70,7 @@
     --b3-empty-color: var(--b3-theme-on-surface);
 
     /* 遮罩 */
-    --b3-mask-background: rgba(10, 10, 10, .4);
+    --b3-mask-background: rgba(0, 0, 0, .55);
 
     /* 卡片背景 */
     --b3-card-error-color: rgb(243, 153, 147);
