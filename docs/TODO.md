@@ -1,5 +1,8 @@
 # 待办清单
 
+> ⚠️ 已知 Bug（记录，待重做）：**移动端大纲在只读(viewer)模式下点击标题不能跳转**。`OutlineSheet` 用 `renderer.execCommand("headingUnfold")`+`renderer.scrollByNodeId()`，viewer 模式下两者不生效/静默跳过。用户将重做大纲，届时一并处理（2026-09-01 记录）。
+
+
 ## UI 重做：复刻思源前端（2026-08-16 立项；Electron 43 升级测试完成后启动）
 
 > 目标：Lake Notes 界面「完全复刻」思源笔记（用户非常喜欢思源 UI/样式，且思源支持自定义 UI）。
