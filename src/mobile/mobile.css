@@ -6,48 +6,6 @@ body { font-family: BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino San
 .poc-center { display: flex; align-items: center; justify-content: center; height: 100%; font-size: 15px; color: #666; }
 .poc-error { color: #d83931; }
 
-.poc-shell { display: flex; flex-direction: column; height: 100%; }
-
-.poc-topbar {
-  display: flex; align-items: center; gap: 8px;
-  padding: 10px 12px; background: #fff; border-bottom: 1px solid #e5e6eb;
-  position: sticky; top: 0; z-index: 10;
-}
-.poc-topbar strong { font-size: 15px; }
-.poc-topbar-actions { margin-left: auto; display: flex; gap: 6px; }
-.poc-topbar button, .poc-s3form button {
-  border: 1px solid #c9cdd4; background: #fff; border-radius: 6px;
-  padding: 5px 10px; font-size: 13px; cursor: pointer;
-}
-.poc-topbar button:active { background: #f0f1f3; }
-
-.poc-title-input { flex: 1; min-width: 0; border: none; outline: none; font-size: 15px; font-weight: 600; background: transparent; }
-
-.poc-s3form { display: flex; flex-direction: column; gap: 6px; padding: 10px 12px; background: #fff; border-bottom: 1px solid #e5e6eb; }
-.poc-s3form input { border: 1px solid #dcdfe4; border-radius: 6px; padding: 6px 8px; font-size: 13px; }
-.poc-s3form-actions { display: flex; align-items: center; gap: 8px; }
-.poc-s3form-actions span { font-size: 12px; color: #4e5969; }
-
-.poc-list { flex: 1; overflow-y: auto; padding: 0; margin: 0; list-style: none; }
-.poc-note-item {
-  display: flex; flex-direction: column; gap: 2px;
-  padding: 12px 14px; background: #fff; border-bottom: 1px solid #f0f1f3; cursor: pointer;
-}
-.poc-note-item:active { background: #f7f8fa; }
-.poc-note-title { font-size: 15px; font-weight: 500; }
-.poc-note-time { font-size: 12px; color: #86909c; }
-.poc-empty { padding: 24px; text-align: center; color: #86909c; font-size: 13px; }
-
-.poc-status { padding: 4px 12px; font-size: 12px; color: #4e5969; min-height: 20px; }
-
-.poc-document { flex: 1; overflow-y: auto; background: #fff; }
-
-.poc-foot { padding: 8px 12px; font-size: 11px; color: #a9aeb8; text-align: center; }
-.poc-restore-btn { margin-left: auto; border: 1px solid #c9cdd4; background: #fff; border-radius: 6px; padding: 3px 10px; font-size: 12px; cursor: pointer; }
-.poc-note-item { flex-direction: row; align-items: center; gap: 8px; }
-.poc-note-title { flex: 1; min-width: 0; }
-.poc-note-time { font-size: 11px; }
-
 /* ===== Phase 1 产品壳样式（MobileApp） ===== */
 .mobile-app { display: flex; flex-direction: column; height: 100%; position: relative; }
 
@@ -159,7 +117,6 @@ body { font-family: BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino San
 /* Toast */
 .mobile-toast { position: fixed; left: 50%; top: 44%; transform: translate(-50%,-50%); background: rgba(0,0,0,.78); color: #fff; font-size: 14px; padding: 10px 18px; border-radius: 10px; z-index: 60; max-width: 80%; text-align: center; }
 
-
 /* 新建知识库 Sheet */
 .mobile-sheet-mask { position: fixed; inset: 0; background: rgba(0,0,0,.4); z-index: 40; }
 .mobile-sheet { position: fixed; left: 0; right: 0; bottom: 0; background: #fff; border-radius: 16px 16px 0 0; z-index: 41; max-height: 70%; display: flex; flex-direction: column; }
@@ -188,7 +145,6 @@ body { font-family: BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino San
 }
 .create-nb-submit:disabled { background: #c9cdd4; cursor: not-allowed; }
 
-
 /* 搜索 Sheet */
 .mobile-sheet-search { max-height: 70%; }
 .mobile-search-input-row { display: flex; align-items: center; gap: 8px; margin: 8px 16px; background: #f2f3f5; border-radius: 10px; padding: 9px 12px; }
@@ -197,7 +153,6 @@ body { font-family: BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino San
 .mobile-search-results { overflow-y: auto; padding-bottom: calc(20px + env(safe-area-inset-bottom)); }
 .mobile-search-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .mobile-search-parent { color: #86909c; font-size: 12px; }
-
 
 /* 设置抽屉 */
 .mobile-drawer-close { position: absolute; right: 14px; top: calc(18px + env(safe-area-inset-top, 0px)); border: none; background: transparent; color: #86909c; cursor: pointer; }
@@ -223,7 +178,6 @@ body { font-family: BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino San
 .mobile-about-name { font-size: 20px; font-weight: 700; margin-bottom: 8px; }
 .mobile-about-item { font-size: 13px; color: #4e5969; margin-top: 6px; }
 
-
 /* 回收站 */
 .mobile-drawer-trash-entry {
   width: 100%; border: none; background: transparent; padding: 14px 20px; font-size: 15px;
@@ -237,12 +191,10 @@ body { font-family: BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino San
 .mobile-trash-action { border: none; background: transparent; color: #3575f0; cursor: pointer; display: flex; padding: 6px; }
 .mobile-trash-danger { color: #d83931; }
 
-
 /* 缓存统计 */
 .mobile-cache-summary { background: #f7f8fa; border-radius: 10px; padding: 12px 14px; margin-bottom: 8px; }
 .mobile-cache-row { display: flex; justify-content: space-between; font-size: 13px; padding: 4px 0; }
 .mobile-cache-row.muted { color: #86909c; }
-
 
 /* 分组展开 */
 .mobile-group-row { font-weight: 600; }
@@ -262,6 +214,5 @@ body { font-family: BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino San
 .mobile-sortbar button:last-child { background: #c9cdd4; }
 .mobile-nb-card[draggable="true"] { cursor: grab; }
 .mobile-nb-card[draggable="true"]:active { cursor: grabbing; opacity: .7; }
-
 
 .mobile-node-icon { font-size: 18px; line-height: 1; }
