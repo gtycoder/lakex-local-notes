@@ -969,13 +969,6 @@ ne-card[data-card-name="codeblock"] .ne-card-resizer-mask {
   .tab-item:hover { color: #46527e; background: rgba(255, 255, 255, .78); }
   .tab-title { min-width: 0; }
   .tab-item:active { transform: scale(.98); }
-  .tab-item.active {
-    color: var(--shell-text);
-    border-color: rgba(53, 117, 240, .35);
-    background: var(--shell-accent-soft);
-    box-shadow: 0 1px 2px rgba(53, 117, 240, .10), 0 4px 12px rgba(53, 117, 240, .08);
-    font-weight: 520;
-  }
   .tab-close { position: absolute; top: 50%; right: 4px; flex: none; width: 17px; height: 17px; margin: 0; border-radius: 50%; transform: translateY(-50%); }
   .tab-item.active .tab-close { opacity: .38; }
   .tab-close:hover { background: rgba(31, 35, 41, .09); }
@@ -1984,10 +1977,6 @@ ne-card[data-card-name="codeblock"] .ne-card-resizer-mask {
     background: #fff !important;
   }
 
-  .tab-item.active {
-    background: rgba(255, 255, 255, .52) !important;
-    box-shadow: inset 0 -1px 0 rgba(255, 255, 255, .52) !important;
-  }
 
   .app-shell.quick-notes-active .activity-rail {
     background: transparent !important;
