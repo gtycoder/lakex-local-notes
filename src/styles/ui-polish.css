@@ -99,12 +99,7 @@
   .tree-row.drop-inside { transition: none !important; transform: none !important; }
 }
 
-/* Slightly stronger neutral text for long reading sessions; Lake native content
-   inherits these values without changing its toolbar or typography scale. */
-:root {
-  --lake-text-secondary: #5d6877;
-  --lake-text-tertiary: #7d8897;
-}
+/* 文字色令牌单一来源见 tokens.css（此处曾重复定义 :root 覆盖，已收敛） */
 .document-pane .lake-editor-mount .ne-engine,
 .document-pane .lake-editor-mount .ne-viewer-body {
   color: var(--lake-text) !important;
@@ -120,10 +115,6 @@
 .document-pane .lake-editor-mount .ne-viewer-body h2,
 .document-pane .lake-editor-mount .ne-viewer-body h3 {
   color: var(--lake-text) !important;
-}
-[data-theme="dark"] {
-  --lake-text-secondary: #b8c1cf;
-  --lake-text-tertiary: #929cad;
 }
 .tree-row.dragging {
   opacity: .42;

@@ -4,8 +4,8 @@
   --lake-canvas: #ffffff;
   --lake-border: #dfe3ea;
   --lake-text: #252a33;
-  --lake-text-secondary: #667181;
-  --lake-text-tertiary: #8993a1;
+  --lake-text-secondary: #5d6877; /* 文字色单一来源（原 ui-polish.css 重复定义已收敛至此）*/
+  --lake-text-tertiary: #6b7480; /* 生效旧值 #7d8897=3.60 不达 AA，加深至 4.74 */
   --lake-accent: #3575f0;
   --lake-accent-soft: #edf3ff;
   --lake-sync-pending: #b7771e;
@@ -32,8 +32,8 @@
   --lake-canvas: #272a31;
   --lake-border: #383e49;
   --lake-text: #f3f5f8;
-  --lake-text-secondary: #b1bac8;
-  --lake-text-tertiary: #838d9c;
+  --lake-text-secondary: #b8c1cf;
+  --lake-text-tertiary: #9aa4b2; /* 深底 AA 5.70 */
   --lake-accent: #78a5ff;
   --lake-accent-soft: rgba(120, 165, 255, .18);
   --lake-sync-pending: #e4af5e;
