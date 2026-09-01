@@ -410,7 +410,12 @@ export function MultiTabEditor({
       </div>
       {breadcrumb}
       <div className="tab-panels">
-        {tabs.length === 0 ? <section className="empty-workspace"><h2>开始写第一篇笔记</h2>{emptyAction}</section> : tabs.map((tab) => (
+        {tabs.length === 0 ? <section className="empty-workspace">
+          <span className="empty-workspace-icon" aria-hidden="true"><FileText size={26} /></span>
+          <h2>开始写第一篇笔记</h2>
+          <p className="empty-workspace-hint">新建文档开始记录，或按 ⌘K 搜索已有笔记</p>
+          {emptyAction}
+        </section> : tabs.map((tab) => (
           <EditorTab
             key={`${tab.noteId}-${tab.reloadKey ?? 0}`}
             noteId={tab.noteId}
