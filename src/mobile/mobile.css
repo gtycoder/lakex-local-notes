@@ -216,3 +216,20 @@ body { font-family: BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino San
 .mobile-nb-card[draggable="true"]:active { cursor: grabbing; opacity: .7; }
 
 .mobile-node-icon { font-size: 18px; line-height: 1; }
+
+/* ===== M5 动效（GPU 友好：仅 transform/opacity；reduced-motion 兜底） ===== */
+@keyframes mobile-fade-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes mobile-drawer-in { from { transform: translateX(-100%); } to { transform: translateX(0); } }
+@keyframes mobile-sheet-in { from { transform: translateY(100%); } to { transform: translateY(0); } }
+.mobile-drawer-mask, .mobile-sheet-mask { animation: mobile-fade-in 200ms ease-out; }
+.mobile-drawer { animation: mobile-drawer-in 260ms cubic-bezier(.22, 1, .36, 1); }
+.mobile-sheet { animation: mobile-sheet-in 280ms cubic-bezier(.22, 1, .36, 1); }
+.mobile-htab { transition: color 150ms ease-out; }
+.mobile-fab, .mobile-icon-btn, .mobile-drawer-item, .mobile-doc-row, .mobile-qcard { transition: background-color 120ms ease-out, transform 90ms ease-out; }
+.mobile-fab:active { transform: scale(.94); }
+.mobile-icon-btn:active { transform: scale(.9); }
+@media (prefers-reduced-motion: reduce) {
+  .mobile-drawer-mask, .mobile-sheet-mask, .mobile-drawer, .mobile-sheet { animation: none; }
+  .mobile-htab, .mobile-fab, .mobile-icon-btn, .mobile-drawer-item, .mobile-doc-row, .mobile-qcard { transition: none; }
+  .mobile-fab:active, .mobile-icon-btn:active { transform: none; }
+}
