@@ -29,6 +29,9 @@
 }
 .document-statusbar-stats,
 .document-statusbar-state { min-width: 0; display: flex; align-items: center; gap: 7px; }
+/* 状态栏仅展示、不加任何点击交互；但允许选中复制文字（容器仍穿透，不挡编辑器点击） */
+.document-statusbar-stats,
+.document-statusbar-state { pointer-events: auto; -webkit-user-select: text; user-select: text; }
 .document-statusbar-stats { gap: 10px; white-space: nowrap; }
 .document-statusbar-state { justify-content: flex-end; color: var(--lake-text-secondary); white-space: nowrap; }
 .document-statusbar-state.local-only { color: var(--lake-text-tertiary); }
