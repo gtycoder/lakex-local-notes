@@ -1293,7 +1293,7 @@ ne-card[data-card-name="codeblock"] .ne-card-resizer-mask {
 }
 
 @media (min-width: 761px) {
-  .app-shell { background: linear-gradient(180deg, #e6e8ec 0%, var(--shell-material) 200px); }
+  /* .app-shell 背景单一来源见 b3/layout.css（原此处 180deg 底色被其覆盖，已删） */
 
   /* 去分隔线：rail / sidebar / 顶栏 / 状态栏全部靠颜色过渡 */
   .activity-rail { border-right: 0; background: linear-gradient(180deg, #e6e8ec 0%, var(--shell-material) 200px); }
@@ -1940,23 +1940,8 @@ ne-card[data-card-name="codeblock"] .ne-card-resizer-mask {
   .app-shell {
     position: relative;
     isolation: isolate;
-    /*
-     * One material is painted for the whole desktop shell.  The topbar is
-     * not a separate strip anymore: the horizontal tint remains visible at
-     * the top, then eases into the rail background below it.  Because this
-     * layer belongs to the shell, the left/right fixed rails and the titlebar
-     * share the exact same pixels at their join.
-     */
-    background:
-      linear-gradient(
-        180deg,
-        rgba(255, 255, 255, 0) 0,
-        rgba(235, 236, 240, .08) 128px,
-        rgba(230, 232, 236, .48) 220px,
-        rgba(241, 242, 244, .94) 340px,
-        #f1f2f4 100%
-      ),
-      var(--shell-unified-topbar) !important;
+    /* 壳层背景（对角氛围渐变 + 底色）单一来源见 b3/layout.css 的 .app-shell；
+     * 此处仅保留定位与层叠上下文（isolation），原 180deg 多层背景被其覆盖，已删。 */
   }
 
   .tab-bar {
