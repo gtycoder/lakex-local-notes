@@ -25,7 +25,7 @@ button { cursor: pointer; }
 /* 收起态：折叠按钮常驻可见，hover 展开其余内容 */
 .sidebar.is-collapsed .sidebar-collapse-toggle { margin: 6px 4px 6px 6px; }
 
-.search-box { display: flex; align-items: center; gap: 7px; height: 30px; margin: 9px 8px 5px; padding: 0 8px; background: #fff; border: 1px solid #dfe2e7; border-radius: 5px; color: #818894; }
+.search-box { display: flex; align-items: center; gap: 7px; height: 30px; margin: 7px 8px 4px; padding: 0 8px; background: #fff; border: 1px solid #dfe2e7; border-radius: 5px; color: #818894; }
 .search-box:focus-within { border-color: #3a8064; box-shadow: 0 0 0 2px #dcece5; }
 .search-box input { width: 100%; border: 0; outline: 0; background: transparent; font-size: 12px; }
 .list-heading { display: flex; align-items: center; justify-content: flex-end; gap: 4px; height: 28px; padding: 0 8px 3px; }
@@ -41,7 +41,7 @@ button { cursor: pointer; }
 .inline-create input { min-width: 0; height: 22px; padding: 0; border: 0; outline: 0; color: #293139; background: transparent; font-size: 12px; }
 .inline-create button { height: 22px; padding: 0 6px; border: 0; border-radius: 4px; color: #fff; background: #28775a; font-size: 10px; }
 .note-list { flex: 1; min-height: 0; overflow: auto; padding: 0 5px; }
-.note-row { display: grid; grid-template-columns: 14px 16px minmax(0, 1fr) 6px; align-items: center; gap: 5px; width: 100%; min-height: 32px; padding: 3px 7px; border: 0; border-radius: 6px; color: #555d68; background: transparent; text-align: left; }
+.note-row { display: grid; grid-template-columns: 14px 16px minmax(0, 1fr) 6px; align-items: center; gap: 5px; width: 100%; min-height: 27px; padding: 2px 7px; border: 0; border-radius: 6px; color: #555d68; background: transparent; text-align: left; }
 .note-row:hover { background: #e9ebee; }
 .note-row.active { color: #20242c; background: #eff0f0; }
 .note-row-copy { display: block; min-width: 0; }
@@ -51,10 +51,10 @@ button { cursor: pointer; }
 .tree-rename-input::selection { color: #2d4968; background: #dcecf8; }
 /* 树行同步绿点已移除：自动保存窗口仅 1s，该点无实际意义。顶栏/标签的同步状态另见 .sync-state-dot。 */
 .empty-list { padding: 28px 10px; color: #9197a0; font-size: 12px; text-align: center; }
-.tree-list { padding-bottom: 8px; }
+.tree-list { padding-bottom: 4px; }
 .tree-item { min-width: 0; }
-.tree-row { grid-template-columns: 16px 22px minmax(0, 1fr) auto; min-height: 32px; gap: 4px; }
-.tree-row.type-notebook { min-height: 34px; margin-top: 2px; color: #244f3d; }
+.tree-row { grid-template-columns: 16px 22px minmax(0, 1fr) auto; min-height: 27px; gap: 4px; }
+.tree-row.type-notebook { min-height: 29px; margin-top: 1px; color: #244f3d; }
 .tree-row.type-notebook .note-row-copy strong { color: #244f3d; font-weight: 650; }
 .tree-row.type-group { color: #4c5963; }
 .tree-row.type-group .note-row-copy strong { font-weight: 600; }
@@ -771,11 +771,11 @@ ne-card[data-card-name="codeblock"] .ne-card-resizer-mask {
   .statusbar button:focus-visible,
   .settings-panel button:focus-visible { outline: 3px solid rgba(53, 117, 240, .22); outline-offset: 1px; }
 
-  .note-list { padding: 0 6px 10px; }
+  .note-list { padding: 0 6px 6px; }
   .note-row,
   .tree-row {
-    min-height: 31px;
-    padding: 3px 7px;
+    min-height: 27px;
+    padding: 2px 7px;
     border-radius: 8px;
     color: var(--shell-text-secondary);
     transition: background-color 120ms ease-out, color 120ms ease-out, box-shadow 120ms ease-out;
@@ -787,7 +787,7 @@ ne-card[data-card-name="codeblock"] .ne-card-resizer-mask {
     box-shadow: inset 0 0 0 1px rgba(47, 125, 94, .055);
   }
   .note-row-copy strong { color: inherit; font-size: 13px; font-weight: 480; }
-  .tree-row.type-notebook { min-height: 33px; color: #3f4d47; }
+  .tree-row.type-notebook { min-height: 29px; color: #3f4d47; }
   .tree-row.type-notebook .note-row-copy strong { color: inherit; font-weight: 620; }
   .tree-row.type-group .note-row-copy strong { font-weight: 560; }
   .tree-children { border-left-color: rgba(31, 35, 41, .075); transform-origin: top; animation: shell-tree-reveal 180ms var(--shell-ease); }
@@ -2059,7 +2059,7 @@ ne-card[data-card-name="codeblock"] .ne-card-resizer-mask {
 /* 树长列表：跳过视口外行的渲染（content-visibility） */
 .tree-row {
   content-visibility: auto;
-  contain-intrinsic-size: auto 32px;
+  contain-intrinsic-size: auto 28px;
 }
 
 /* 切换标签页：仅文档区做淡入淡出过渡，避免整页闪烁 */
