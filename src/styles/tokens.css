@@ -4,8 +4,8 @@
   --lake-canvas: #ffffff;
   --lake-border: #dfe3ea;
   --lake-text: #252a33;
-  --lake-text-secondary: #5d6877; /* 文字色单一来源（原 ui-polish.css 重复定义已收敛至此）*/
-  --lake-text-tertiary: #6b7480; /* 生效旧值 #7d8897=3.60 不达 AA，加深至 4.74 */
+  --lake-text-secondary: #54606f; /* 文字色单一来源；应反馈再加深 */
+  --lake-text-tertiary: #5f6a78; /* 再加深一档（约 5.6 对比），仍与 secondary 分层 */
   --lake-accent: #3575f0;
   --lake-accent-soft: #edf3ff;
   --lake-sync-pending: #b7771e;
