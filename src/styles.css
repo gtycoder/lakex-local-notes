@@ -1,4 +1,4 @@
-:root { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei UI", "Microsoft YaHei", sans-serif; color: #20242c; background: #f4f5f7; /* 字体栈统一走系统原生：macOS=SF Pro+苹方，Windows=Segoe UI+雅黑 UI；font-synthesis 不能设 none：中文字体（PingFang SC 等）无斜体变体，none 会禁止合成斜体导致 italic 失效 */
+:root { font-family: var(--b3-font-family); color: #20242c; background: #f4f5f7; /* 字体栈统一走系统原生：macOS=SF Pro+苹方，Windows=Segoe UI+雅黑 UI；font-synthesis 不能设 none：中文字体（PingFang SC 等）无斜体变体，none 会禁止合成斜体导致 italic 失效 */
   font-synthesis: style weight;
   /* 文字渲染对齐思源：灰度抗锯齿 + 最优排版（macOS 下比默认 subpixel 更干净清晰） */
   -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; text-rendering: optimizeLegibility;
@@ -619,7 +619,7 @@ ne-card[data-card-name="codeblock"] .ne-card-resizer-mask {
 
 /* ===== Apple-style management shell (Lake editor internals intentionally untouched) ===== */
 :root {
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei UI", system-ui, sans-serif;
+  /* font-family 单一来源：--b3-font-family（见 :root 顶部与 b3/base.css body）*/
   font-optical-sizing: auto;
   --shell-accent: #3575f0;
   --shell-accent-strong: #2a5fd0;
