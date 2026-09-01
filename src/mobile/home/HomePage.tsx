@@ -1,6 +1,6 @@
 /** 首页（小记/知识库切换 + 笔记本宫格）。小记 tab：composer 新建/编辑 + 卡片（含图片缩略图）。 */
 import { useEffect, useState } from "react";
-import { Feather, Plus, Search, Settings, Trash2 } from "lucide-react";
+import { Plus, Search, Settings, Trash2 } from "lucide-react";
 import type { TreeNode } from "../../lib/types";
 import { NotebookGrid } from "./NotebookGrid";
 import { QuickNoteComposer } from "./QuickNoteComposer";
@@ -102,8 +102,7 @@ export function HomePage(props: HomePageProps) {
             : <button className="mobile-fab" onClick={() => { setEditNote(null); setComposer({ mode: "new" }); }} aria-label="新建小记"><Plus size={24} /></button>
         ) : (
           <>
-            <button className="mobile-fab" onClick={onCreateNote} aria-label="新建文档"><Plus size={24} /></button>
-            <button className="mobile-fab mobile-fab-secondary" onClick={onCreateNotebook} aria-label="新建知识库"><Feather size={20} /></button>
+            <button className="mobile-fab" onClick={onCreateNotebook} aria-label="新建知识库"><Plus size={24} /></button>
           </>
         )}
       </div>
