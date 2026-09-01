@@ -13,13 +13,13 @@ body { font-family: BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino San
   display: flex; align-items: center; gap: 6px; flex: 0 0 auto;
   /* 通知栏适配（参考思源）：沉浸式状态下内容延伸到状态栏后，顶栏必须让出状态栏高度 */
   padding: calc(8px + env(safe-area-inset-top, 0px)) 10px 8px;
-  background: #fff; border-bottom: 1px solid var(--lake-border);
+  background: var(--lake-panel); border-bottom: 1px solid var(--lake-border);
   position: sticky; top: 0; z-index: 10; min-height: 48px;
 }
 .mobile-topbar-title { flex: 1; text-align: center; font-size: 16px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .mobile-topbar-actions { display: flex; gap: 4px; }
 .mobile-icon-btn { width: 36px; height: 36px; border: none; background: transparent; border-radius: 8px; display: flex; align-items: center; justify-content: center; cursor: pointer; color: var(--lake-text); }
-.mobile-icon-btn:active { background: #f0f1f3; }
+.mobile-icon-btn:active { background: var(--lake-shell); }
 
 .mobile-home-tabs { flex: 1; display: flex; justify-content: center; gap: 24px; }
 .mobile-htab { border: none; background: transparent; font-size: 16px; color: var(--lake-text-tertiary); cursor: pointer; padding: 6px 2px; font-weight: 500; }
@@ -30,18 +30,18 @@ body { font-family: BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino San
 
 /* 小记卡片 */
 .mobile-quick-list { padding: 10px 12px; }
-.mobile-qcard { background: #fff; border-radius: 12px; padding: 14px 16px; margin-bottom: 10px; box-shadow: 0 1px 2px rgba(0,0,0,.04); cursor: pointer; }
-.mobile-qcard:active { background: #f7f8fa; }
-.mobile-qcard-thumb { display: block; width: 100%; max-height: 180px; object-fit: cover; border-radius: 8px; margin-bottom: 10px; background: #f2f3f5; }
+.mobile-qcard { background: var(--lake-panel); border-radius: 12px; padding: 14px 16px; margin-bottom: 10px; box-shadow: 0 1px 2px rgba(0,0,0,.04); cursor: pointer; }
+.mobile-qcard:active { background: var(--lake-shell); }
+.mobile-qcard-thumb { display: block; width: 100%; max-height: 180px; object-fit: cover; border-radius: 8px; margin-bottom: 10px; background: var(--lake-shell); }
 .mobile-qcard-text { font-size: 15px; line-height: 1.6; }
 .mobile-qcard-meta { font-size: 12px; color: var(--lake-text-tertiary); margin-top: 4px; }
 
 /* 小记 composer */
-.mobile-qn-composer { background: #fff; border-radius: 12px; padding: 12px; box-shadow: 0 1px 2px rgba(0,0,0,.04); }
+.mobile-qn-composer { background: var(--lake-panel); border-radius: 12px; padding: 12px; box-shadow: 0 1px 2px rgba(0,0,0,.04); }
 .mobile-qn-textarea { display: block; width: 100%; min-height: 120px; border: 0; outline: 0; resize: vertical; font-size: 15px; line-height: 1.6; font-family: inherit; color: var(--lake-text); background: transparent; }
 .mobile-qn-textarea::placeholder { color: var(--lake-text-tertiary); }
 .mobile-qn-images { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 8px; }
-.mobile-qn-img { position: relative; margin: 0; border-radius: 8px; overflow: hidden; background: #f2f3f5; aspect-ratio: 1; }
+.mobile-qn-img { position: relative; margin: 0; border-radius: 8px; overflow: hidden; background: var(--lake-shell); aspect-ratio: 1; }
 .mobile-qn-img img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .mobile-qn-img button { position: absolute; top: 4px; right: 4px; width: 22px; height: 22px; border: 0; border-radius: 50%; background: rgba(31,35,41,.65); color: #fff; display: grid; place-items: center; cursor: pointer; }
 .mobile-qn-error { color: var(--lake-error); font-size: 13px; margin-top: 8px; }
@@ -50,7 +50,7 @@ body { font-family: BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino San
 .mobile-qn-add input { display: none; }
 .mobile-qn-hint { font-size: 12px; color: var(--lake-text-tertiary); }
 .mobile-qn-spacer { flex: 1; }
-.mobile-qn-btn { border: 1px solid #c9cdd4; background: #fff; border-radius: 8px; padding: 8px 14px; font-size: 14px; cursor: pointer; display: flex; align-items: center; gap: 4px; }
+.mobile-qn-btn { border: 1px solid var(--lake-border); background: var(--lake-panel); border-radius: 8px; padding: 8px 14px; font-size: 14px; cursor: pointer; display: flex; align-items: center; gap: 4px; }
 .mobile-qn-btn:disabled { opacity: .6; }
 .mobile-qn-primary { border: 0; background: var(--lake-accent); color: #fff; font-weight: 600; }
 
@@ -58,7 +58,7 @@ body { font-family: BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino San
 .mobile-nb-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; padding: 12px 16px; }
 .mobile-nb-card { cursor: pointer; text-align: center; }
 .mobile-nb-cover {
-  aspect-ratio: 3/4; border-radius: 8px; background: #eef1f5;
+  aspect-ratio: 3/4; border-radius: 8px; background: var(--lake-shell);
   display: flex; align-items: center; justify-content: center; color: var(--lake-accent);
   box-shadow: 0 2px 8px rgba(0,0,0,.08);
 }
@@ -70,17 +70,17 @@ body { font-family: BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino San
   width: 52px; height: 52px; border: none; border-radius: 50%; background: var(--lake-accent); color: #fff;
   display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 14px rgba(53,117,240,.35); cursor: pointer;
 }
-.mobile-fab-secondary { width: 44px; height: 44px; background: #fff; color: var(--lake-accent); box-shadow: 0 4px 14px rgba(0,0,0,.12); }
+.mobile-fab-secondary { width: 44px; height: 44px; background: var(--lake-panel); color: var(--lake-accent); box-shadow: 0 4px 14px rgba(0,0,0,.12); }
 
 /* 笔记本页文档行 */
-.mobile-doc-row { display: flex; align-items: center; gap: 10px; padding: 14px 16px; font-size: 15px; background: #fff; border-bottom: 1px solid #f0f1f3; cursor: pointer; }
-.mobile-doc-row:active { background: #f7f8fa; }
+.mobile-doc-row { display: flex; align-items: center; gap: 10px; padding: 14px 16px; font-size: 15px; background: var(--lake-panel); border-bottom: 1px solid var(--lake-border); cursor: pointer; }
+.mobile-doc-row:active { background: var(--lake-shell); }
 
 /* 文档页 */
 .mobile-title-input { flex: 1; min-width: 0; border: none; outline: none; font-size: 16px; font-weight: 600; background: transparent; }
 
 .mobile-done-btn { border: none; background: var(--lake-accent); color: #fff; border-radius: 8px; padding: 6px 14px; font-size: 14px; cursor: pointer; }
-.mobile-doc-body { flex: 1; overflow-y: auto; background: #fff; padding-bottom: calc(40px + env(safe-area-inset-bottom, 0px)); }
+.mobile-doc-body { flex: 1; overflow-y: auto; background: var(--lake-panel); padding-bottom: calc(40px + env(safe-area-inset-bottom, 0px)); }
 /* 音频/视频卡展示优化：
    1) audio 卡播放器就绪（兜底异步设置）前的 error 状态（"音频文件不能播放"/版权链接）先隐藏，
       避免进入文档/切编辑态时闪现不可用文案——兜底成功后播放器自然替换；
@@ -88,7 +88,7 @@ body { font-family: BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino San
 .mobile-doc-body .ne-card-audio-error { display: none; }
 .mobile-doc-body ne-card[name="video"] video,
 .mobile-doc-body NE-CARD[data-card-name="video"] video,
-.mobile-doc-body .attachment-preview video { background: #f2f3f5; }
+.mobile-doc-body .attachment-preview video { background: var(--lake-shell); }
 /* （大播放三角优化暂缓：用户后续用多模态模型处理——保留原生 controls） */
 /* 只读/编辑文档左右留白（手机窄屏适配）：Lake 编辑器全宽铺满贴边，加安全留白 */
 .mobile-doc-body .lake-editor { padding-left: 14px; padding-right: 14px; }
@@ -109,24 +109,24 @@ body { font-family: BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino San
 
 /* Drawer */
 .mobile-drawer-mask { position: fixed; inset: 0; background: rgba(0,0,0,.4); z-index: 40; }
-.mobile-drawer { position: fixed; top: 0; bottom: 0; left: 0; width: 78%; max-width: 320px; background: #fff; z-index: 45; display: flex; flex-direction: column; }
+.mobile-drawer { position: fixed; top: 0; bottom: 0; left: 0; width: 78%; max-width: 320px; background: var(--lake-panel); z-index: 45; display: flex; flex-direction: column; }
 .mobile-drawer-head { padding: calc(26px + env(safe-area-inset-top, 0px)) 20px 16px; border-bottom: 1px solid var(--lake-border); font-size: 17px; font-weight: 600; }
 .mobile-drawer-item { display: flex; align-items: center; gap: 12px; padding: 14px 20px; font-size: 15px; cursor: pointer; }
-.mobile-drawer-item:active { background: #f5f6f7; }
+.mobile-drawer-item:active { background: var(--lake-shell); }
 
 /* Toast */
 .mobile-toast { position: fixed; left: 50%; top: 44%; transform: translate(-50%,-50%); background: rgba(0,0,0,.78); color: #fff; font-size: 14px; padding: 10px 18px; border-radius: 10px; z-index: 60; max-width: 80%; text-align: center; }
 
 /* 新建知识库 Sheet */
 .mobile-sheet-mask { position: fixed; inset: 0; background: rgba(0,0,0,.4); z-index: 40; }
-.mobile-sheet { position: fixed; left: 0; right: 0; bottom: 0; background: #fff; border-radius: 16px 16px 0 0; z-index: 41; max-height: 70%; display: flex; flex-direction: column; }
-.mobile-sheet-grab { width: 36px; height: 4px; border-radius: 2px; background: #e0e2e5; margin: 10px auto 4px; }
-.mobile-sheet-title { flex: 0 0 auto; font-size: 15px; font-weight: 600; padding: 8px 18px 10px; border-bottom: 1px solid #f0f1f3; }
+.mobile-sheet { position: fixed; left: 0; right: 0; bottom: 0; background: var(--lake-panel); border-radius: 16px 16px 0 0; z-index: 41; max-height: 70%; display: flex; flex-direction: column; }
+.mobile-sheet-grab { width: 36px; height: 4px; border-radius: 2px; background: var(--lake-border); margin: 10px auto 4px; }
+.mobile-sheet-title { flex: 0 0 auto; font-size: 15px; font-weight: 600; padding: 8px 18px 10px; border-bottom: 1px solid var(--lake-border); }
 .mobile-sheet-body { overflow-y: auto; padding: 16px 18px calc(20px + env(safe-area-inset-bottom)); }
 
 .create-nb-row { display: flex; gap: 12px; align-items: center; }
 .create-nb-icon {
-  width: 48px; height: 48px; border: 1px solid var(--lake-border); border-radius: 10px; background: #f7f8fa;
+  width: 48px; height: 48px; border: 1px solid var(--lake-border); border-radius: 10px; background: var(--lake-shell);
   display: flex; align-items: center; justify-content: center; color: var(--lake-accent); cursor: pointer; flex: 0 0 auto;
 }
 .create-nb-emoji { font-size: 24px; }
@@ -147,7 +147,7 @@ body { font-family: BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino San
 
 /* 搜索 Sheet */
 .mobile-sheet-search { max-height: 70%; }
-.mobile-search-input-row { display: flex; align-items: center; gap: 8px; margin: 8px 16px; background: #f2f3f5; border-radius: 10px; padding: 9px 12px; }
+.mobile-search-input-row { display: flex; align-items: center; gap: 8px; margin: 8px 16px; background: var(--lake-shell); border-radius: 10px; padding: 9px 12px; }
 .mobile-search-input { flex: 1; border: none; outline: none; background: transparent; font-size: 15px; }
 .mobile-search-close { border: none; background: transparent; color: var(--lake-text-tertiary); cursor: pointer; display: flex; }
 .mobile-search-results { overflow-y: auto; padding-bottom: calc(20px + env(safe-area-inset-bottom)); }
@@ -170,9 +170,9 @@ body { font-family: BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino San
 .mobile-settings-form input:focus { border-color: var(--lake-accent); }
 .mobile-settings-actions { display: flex; gap: 8px; margin-top: 10px; }
 .mobile-settings-actions button, .mobile-settings-form > button {
-  border: 1px solid #c9cdd4; background: #fff; border-radius: 8px; padding: 9px 14px; font-size: 14px; cursor: pointer; display: flex; align-items: center; gap: 4px;
+  border: 1px solid var(--lake-border); background: var(--lake-panel); border-radius: 8px; padding: 9px 14px; font-size: 14px; cursor: pointer; display: flex; align-items: center; gap: 4px;
 }
-.mobile-settings-actions button:active, .mobile-settings-form > button:active { background: #f0f1f3; }
+.mobile-settings-actions button:active, .mobile-settings-form > button:active { background: var(--lake-shell); }
 .mobile-settings-msg { font-size: 12px; color: var(--lake-text-secondary); margin-top: 6px; }
 .mobile-settings-hint { font-size: 13px; color: var(--lake-text-secondary); line-height: 1.7; }
 .mobile-about-name { font-size: 20px; font-weight: 700; margin-bottom: 8px; }
@@ -184,21 +184,21 @@ body { font-family: BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino San
   display: flex; align-items: center; gap: 12px; cursor: pointer; color: var(--lake-text); text-align: left;
   border-bottom: 1px solid var(--lake-border);
 }
-.mobile-drawer-trash-entry:active { background: #f5f6f7; }
-.mobile-status-msg { padding: 6px 12px; font-size: 12px; color: var(--lake-text-secondary); background: #f7f8fa; border-bottom: 1px solid #f0f1f3; }
+.mobile-drawer-trash-entry:active { background: var(--lake-shell); }
+.mobile-status-msg { padding: 6px 12px; font-size: 12px; color: var(--lake-text-secondary); background: var(--lake-shell); border-bottom: 1px solid var(--lake-border); }
 .mobile-trash-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .mobile-trash-date { color: var(--lake-text-tertiary); font-size: 12px; }
 .mobile-trash-action { border: none; background: transparent; color: var(--lake-accent); cursor: pointer; display: flex; padding: 6px; }
 .mobile-trash-danger { color: var(--lake-error); }
 
 /* 缓存统计 */
-.mobile-cache-summary { background: #f7f8fa; border-radius: 10px; padding: 12px 14px; margin-bottom: 8px; }
+.mobile-cache-summary { background: var(--lake-shell); border-radius: 10px; padding: 12px 14px; margin-bottom: 8px; }
 .mobile-cache-row { display: flex; justify-content: space-between; font-size: 13px; padding: 4px 0; }
 .mobile-cache-row.muted { color: var(--lake-text-tertiary); }
 
 /* 分组展开 */
 .mobile-group-row { font-weight: 600; }
-.mobile-group-child { padding-left: 34px; background: #fafbfc; }
+.mobile-group-child { padding-left: 34px; background: var(--lake-shell); }
 .mobile-chevron { transition: transform .2s; color: var(--lake-text-tertiary); }
 .mobile-chevron.open { transform: rotate(90deg); }
 
