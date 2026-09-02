@@ -21,6 +21,7 @@ import { useNoteActions } from "./hooks/useNoteActions";
 import { useSyncRefresh } from "./hooks/useSyncRefresh";
 import { useTreeActions } from "./hooks/useTreeActions";
 import { useTabLifecycle } from "./hooks/useTabLifecycle";
+import { useNoteLifecycle } from "./hooks/useNoteLifecycle";
 import { useSavePipeline } from "./hooks/useSavePipeline";
 import { useSyncShell } from "./hooks/useSyncShell";
 import { useSyncController } from "./hooks/useSyncController";
@@ -176,6 +177,29 @@ export function App() {
     setPinnedNoteIds,
     setDraftEntries,
     setSaveState,
+  });
+  const { handleContentChange, createNoteIn, createNote, deleteTreeNode } = useNoteLifecycle({
+    bumpRevision,
+    resetRevision,
+    clearNote,
+    scheduleDraftJournal,
+    scheduleSave,
+    evictTabsForLimit,
+    showNotice,
+    setError,
+    treeNodes,
+    notes,
+    openTabsRef,
+    settingsMaxOpenTabs: settings.maxOpenTabs,
+    pinnedNoteIds,
+    activeNoteId,
+    setNotes,
+    setTreeNodes,
+    setOpenTabs,
+    setActiveNoteId,
+    setPinnedNoteIds,
+    setPendingRenameId,
+    setDraftEntries,
   });
   const shellPlatformClass = /Mac|iPhone|iPad/.test(navigator.platform) ? "platform-mac" : "platform-native-titlebar";
 
@@ -525,44 +549,6 @@ export function App() {
   /** M1：复制为 Markdown（按 noteId）——读保存时生成的文本缓存，无需打开编辑器 */
   const { copyMarkdownById, exportNoteById, copyPathsById, setNodeIcon, copyMarkdownFromCache, exportAs, copyNotePaths } = useNoteActions({ showNotice, setError, setTreeNodes });
 
-  const handleContentChange = useCallback((noteId: string, content: string) => {
-    bumpRevision(noteId);
-    setOpenTabs((tabs) => tabs.map((tab) => tab.noteId === noteId ? { ...tab, content, dirty: true } : tab));
-    const title = openTabsRef.current.find((tab) => tab.noteId === noteId)?.title ?? "无标题";
-    scheduleDraftJournal(noteId, title, content);
-    scheduleSave(noteId, content);
-  }, [scheduleDraftJournal, scheduleSave]);
-
-  async function createNoteIn(parentId: string | null) {
-    const note = parentId === null ? await native.createNote("无标题文档") : await native.createNoteIn(parentId, "无标题文档");
-    setNotes((items) => [...items, summaryOf(note)]);
-    setTreeNodes(await native.listTreeNodes());
-    {
-      resetRevision(note.id, 0);
-      const newTab: OpenTab = { noteId: note.id, title: note.title, content: note.content, dirty: false, lastAccessedAt: Date.now() };
-      const evictedIds = await evictTabsForLimit([...openTabsRef.current, newTab], note.id);
-      setOpenTabs((tabs) => {
-        const base = tabs.some((t) => t.noteId === note.id) ? tabs : [...tabs, newTab];
-        return trimTabsToLimit(base, { limit: settings.maxOpenTabs, activeNoteId: note.id, pinnedNoteIds });
-      });
-      if (evictedIds.length > 0) {
-        setPinnedNoteIds((prev) => {
-          const next = new Set(prev);
-          for (const ev of evictedIds) next.delete(ev);
-          return next.size === prev.size ? prev : next;
-        });
-        showNotice(`已自动关闭最旧的标签（上限 ${settings.maxOpenTabs}）`);
-      }
-      setActiveNoteId(note.id);
-      setPendingRenameId(note.id);
-    }
-  }
-
-  async function createNote() {
-    const notebookId = treeNodes.find((node) => node.nodeType === "notebook")?.id ?? null;
-    await createNoteIn(notebookId);
-  }
-
   const {
     createTreeItem, renameTreeNode, moveTreeNode,
     sidebarSelect, sidebarCreate, sidebarRename, sidebarMove,
@@ -573,30 +559,6 @@ export function App() {
     setHistoryNoteId, setHistoryOpen, setSearchPanelQuery, setSearchPanelOpen,
     setPendingRenameId, setError,
   });
-
-  async function deleteTreeNode(id: string) {
-    try {
-      const removedNodeIds = subtreeIds(treeNodes, id);
-      const removedNoteIds = new Set(
-        treeNodes.filter((node) => removedNodeIds.has(node.id) && node.noteFileId).map((node) => node.noteFileId!)
-      );
-      removedNoteIds.forEach((noteId) => {
-        clearNote(noteId);
-        clearScrollMemory(noteId);
-      });
-      await native.deleteTreeNode(id);
-      await Promise.all([...removedNoteIds].map((noteId) => native.deleteDraftJournal(noteId).catch(() => undefined)));
-      setDraftEntries((entries) => entries.filter((entry) => !removedNoteIds.has(entry.noteId)));
-      const remaining = notes.filter((note) => !removedNoteIds.has(note.id));
-      setNotes(remaining);
-      setTreeNodes(await native.listTreeNodes());
-      const next = openTabsRef.current.filter((tab) => !removedNoteIds.has(tab.noteId));
-      setOpenTabs(next);
-      if (activeNoteId && removedNoteIds.has(activeNoteId)) {
-        setActiveNoteId(next[next.length - 1]?.noteId ?? null);
-      }
-    } catch (reason) { setError(getNativeErrorMessage(reason)); }
-  }
 
   useEffect(() => {
     if (sidebarMode !== "floating") return;
