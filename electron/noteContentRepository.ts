@@ -55,6 +55,9 @@ export class NoteContentRepository {
     }
 
     const updatedAt = new Date().toISOString();
+    // W-7：文件写（正文）先于 DB 事务——落盘失败在触碰 DB 前就抛错，不产生「DB 已提交但正文没写进文件」；
+    // 仅极罕见 DB 提交失败时留「新正文+旧元数据」，该态由保存幂等/同步自愈。
+    this.deps.atomicWrite(notePath, content);
     const transaction = this.deps.db.transaction(() => {
       if (caches) {
         this.deps.db.prepare("UPDATE notes SET title=?,updated_at=?,sync_state='local',md_cache=?,text_cache=? WHERE id=? AND deleted_at IS NULL")
@@ -67,7 +70,6 @@ export class NoteContentRepository {
       }
       this.deps.db.prepare("UPDATE tree_nodes SET title=?,updated_at=?,sync_state='local' WHERE note_file_id=? AND deleted_at IS NULL")
         .run(title, updatedAt, noteId);
-      this.deps.atomicWrite(notePath, content);
     });
     transaction();
 
