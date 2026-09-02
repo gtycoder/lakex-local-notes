@@ -477,37 +477,40 @@ describe("syncNow 增量同步", () => {
     expect(readManifest().notes.find((n) => n.id === "n1")!.contentHash).toBe(store.contentHash("n1"));
   });
 
-  it("验收#3：每次同步后裁剪旧 manifest，只保留 latest + 9 份 commit（共 10 个文件）", async () => {
+  it("验收#3（修订·滞后裁剪）：manifest 稳定有界 + prevCommitId 链连通（O(3)）+ 无游离保留", async () => {
     const store = newStore();
     store.createNote("n1", "笔记A", "<p>hello</p>");
     await syncNow(store as unknown as Store);
-    // 12 次"有变更"的同步：零变更早退不会跳过（否则不写新 manifest，无法测裁剪）
-    for (let i = 1; i <= 12; i += 1) {
+    // 15 次"有变更"的同步（零变更早退不写 manifest，故用真实变更驱动裁剪）
+    for (let i = 1; i <= 15; i += 1) {
       store.modifyNote("n1", `<p>v${i}</p>`);
       await syncNow(store as unknown as Store);
     }
     const manifests = [...s3.bucket.keys()].filter((k) => k.startsWith(key("manifests/")));
     expect(manifests).toContain(key("manifests/latest.json"));
-    expect(manifests.length).toBeLessThanOrEqual(10);
+    // 目标 5 份（latest + 本 commit + 链 3 prev），水位 target+SLACK(6)=11；滞后裁剪后必显著低于全量
+    expect(manifests.length).toBeLessThanOrEqual(12);
+    expect(manifests.length).toBeLessThan(15);
     const commits = manifests.filter((k) => k !== key("manifests/latest.json"));
-    expect(commits.length).toBeLessThanOrEqual(9);
-    // 链完整性：latest 的 prevCommitId 链上 8 层都仍在云端（GC/对账引用可达）
     const latest = readManifest();
-    const seen = new Set<string>([key("manifests/latest.json")]);
+    // 滞后裁剪期允许链比 KEEP(3) 略长（下次水位触发才裁回），但保留的 commit 必须连成**一条完整 prevCommitId 链**：
+    // 沿链遍历直到某个 link 不在云端（链尾已被裁）为止，途中不得断链，且不得有游离在链外的保留。
+    const chainKeys = new Set<string>([key("manifests/latest.json")]);
     let prev = latest.prevCommitId;
-    let chain = 0;
-    while (prev && chain < 8) {
+    let links = 0;
+    while (prev) {
       const commitKey = key(`manifests/${prev}.json`);
-      seen.add(commitKey);
-      expect(s3.bucket.has(commitKey)).toBe(true);
-      const bytes = s3.bucket.get(commitKey)!;
-      prev = JSON.parse(maybeGunzip(bytes).toString("utf8")).prevCommitId as string | null;
-      chain += 1;
+      if (!s3.bucket.has(commitKey)) break;                 // 到达链尾（老 commit 已裁剪）——正常
+      chainKeys.add(commitKey);
+      prev = JSON.parse(maybeGunzip(s3.bucket.get(commitKey)!).toString("utf8")).prevCommitId as string | null;
+      links += 1;
     }
-    // 保留的 commit 文件要么在 latest 链上（GC/对账引用），要么是刚写入的 latest.commitId（供下次写入作 prev）
+    // GC/对账引用可达性下限：latest 之前至少 3 层 commit 仍在云端
+    expect(links).toBeGreaterThanOrEqual(3);
+    // 无游离保留：每个 commit 文件要么在这条链上，要么就是刚写入的 latest.commitId（链头，walk 从 prev 起故不含）
     for (const k of commits) {
       const commitId = k.slice(key("manifests/").length, -".json".length);
-      expect(seen.has(k) || commitId === latest.commitId).toBe(true);
+      expect(chainKeys.has(k) || commitId === latest.commitId).toBe(true);
     }
   });
 
