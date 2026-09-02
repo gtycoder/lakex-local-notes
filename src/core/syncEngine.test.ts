@@ -103,6 +103,9 @@ class MemDb implements SyncDbPort {
   async readLocalAsset(noteId: string, filename: string) {
     return this.assets.get(noteId + "/" + filename) ?? null;
   }
+  declaredAssets = new Map<string, Array<{ filename: string; size: number; hash: string }>>();
+  recordDeclaredAssets(noteId: string, assets: Array<{ filename: string; size: number; hash: string }>) { this.declaredAssets.set(noteId, assets); }
+  listDeclaredAssets(noteId: string) { return this.declaredAssets.get(noteId) ?? []; }
   lastSeenCommitId: string | null = null;
   lastTombstoneSig = "";
   getLastSeenCommitId() { return this.lastSeenCommitId; }
@@ -138,6 +141,21 @@ describe("syncEngine（共享编排）", () => {
     expect(manifest.version).toBe(4);
     expect(manifest.notes[0].id).toBe("n1");
     expect(db.notes.get("n1")!.syncState).toBe("synced");
+  });
+
+  it("A：manifest 声明正文引用但本地缺失、已记录元数据的资源（备份不丢引用）", async () => {
+    const s3 = new MemS3();
+    const db = new MemDb();
+    const assetName = "1234567890123_a1b2c3d4.png";
+    db.notes.set("n1", row({ id: "n1", content: `<p>see ${assetName}</p>`, syncState: "local" }));
+    // 本地无该资源文件，但 manifest 声明过其元数据（方案 A 下载时记录）
+    db.recordDeclaredAssets("n1", [{ filename: assetName, size: 200, hash: "aabbccdd" }]);
+    const r = await syncNow(CFG, s3, db);
+    expect(r.uploaded).toBe(1);
+    const manifest = JSON.parse(decode((await s3.getObject("p/manifests/latest.json"))!));
+    const entry = manifest.notes.find((n: any) => n.id === "n1");
+    const a = (entry.assets ?? []).find((x: any) => x.filename === assetName);
+    expect(a).toMatchObject({ filename: assetName, size: 200, hash: "aabbccdd" });
   });
 
   it("二次同步：无变更不重传（skip-fast）", async () => {

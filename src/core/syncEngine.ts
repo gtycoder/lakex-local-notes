@@ -21,6 +21,7 @@ import { shouldSkipZeroChange, isRemoteDescendant, createSupersededTracker } fro
 import type { Manifest, ManifestFolder, ManifestNote } from "./manifestTypes.js";
 import { sha256Sync } from "./sha256Sync.js";
 import { parseLakeManifest, objectKey } from "./syncUtils.js";
+import { extractAssetRefs } from "./assetNaming.js";
 import { isSafePathSegment } from "./storeUtils.js";
 import { MAX_IMAGE_BYTES } from "./storeLimits.js";
 
@@ -56,6 +57,8 @@ class AssetMissingError extends Error {}
 
 async function downloadAssets(cfg: SyncConfig, s3: S3Store, db: SyncDbPort, rn: ManifestNote, report: SyncReport, strict: boolean): Promise<void> {
   const assets = rn.assets ?? [];
+  // A 方案：记录 manifest 声明的资产元数据（即使某资源文件本地缺失，上传 union 仍可正确声明）。
+  if (typeof db.recordDeclaredAssets === "function") db.recordDeclaredAssets(rn.id, assets);
   // P3-3：并发下载（每资产 getObject/校验/saveAsset 相互独立）。worker 不抛错——
   // 失败按索引归位，池结束后统一裁决：warnings 按原顺序入列、首个错误按原顺序抛出，
   // 与旧串行实现的裁决结果逐字节一致（仅失败前的多余请求会发出，结果确定）。
@@ -227,6 +230,10 @@ export interface SyncDbPort {
   saveAsset(noteId: string, filename: string, bytes: Uint8Array): Promise<void>;
   /** 资产上传扫描（H3）：列出笔记的本地资产（filename + size + sha256），供 manifest.assets 上传。 */
   listLocalAssets(noteId: string): Promise<Array<{ filename: string; size: number; hash: string }>>;
+  /** A 方案：记录 manifest 声明的资产元数据（即使本地文件缺失，上传 union 仍可正确声明）。 */
+  recordDeclaredAssets?(noteId: string, assets: Array<{ filename: string; size: number; hash: string }>): void;
+  /** A 方案：列出该笔记已声明（含本地缺失但 manifest 声明过）的资产元数据。 */
+  listDeclaredAssets?(noteId: string): Array<{ filename: string; size: number; hash: string }>;
   /** 资产上传扫描（H3）：读取本地资产字节（供上传 S3）。 */
   readLocalAsset(noteId: string, filename: string): Promise<Uint8Array | null>;
   /** 资产流式上传（桌面实现）：打开本地资产文件流；缺失返回 null。syncEngine 探测到
@@ -316,6 +323,20 @@ export async function syncNow(cfg: SyncConfig, s3: S3Store, db: SyncDbPort, opts
     if (!row) return "";
     if (row.content) return row.content;
     return db.getNote(row.id)?.content ?? "";
+  };
+  // A 方案：上传 manifest 的 assets = 本地文件 ∪ (正文引用的、且有已声明元数据的资源)。
+  // 保证备份声明完整；正文引用（当前内容）不含已删除引用，避免历史把已删资源挂回当前文档。
+  const resolveUploadAssets = async (localId: string, content: string): Promise<ManifestNote["assets"]> => {
+    const localFiles = await scanLocalAssets(cfg, s3, db, localId, report);
+    const declared = typeof db.listDeclaredAssets === "function" ? (db.listDeclaredAssets(localId) ?? []) : [];
+    const byName = new Map(declared.map((d) => [d.filename, d]));
+    const seen = new Set(localFiles.map((f) => f.filename));
+    for (const ref of extractAssetRefs(content)) {
+      if (seen.has(ref)) continue;
+      const d = byName.get(ref);
+      if (d) { localFiles.push({ filename: d.filename, size: d.size, hash: d.hash }); seen.add(ref); }
+    }
+    return localFiles;
   };
   // W-2：正文下载后校验 hash（与资产强校验对齐）。不符 → 同“对象缺失”等级降级：warning + 跳过，不应用损坏正文。
   const verifyNoteHash = (contentBytes: Uint8Array, rn: ManifestNote): boolean => {
@@ -668,8 +689,9 @@ export async function syncNow(cfg: SyncConfig, s3: S3Store, db: SyncDbPort, opts
       db.log(`[tombstone] ${local.id} 上传软删条目（parentId=TRASH + trashedAt，非 deleted）`);
       // 回收站条目携带资源清单（对齐桌面：trash 上云带 assets，B 端下载全文+资源可恢复）
       let trashAssets: ManifestNote["assets"] = [];
+      const uploadContent = contentOf(local);
       try {
-        trashAssets = await scanLocalAssets(cfg, s3, db, local.id, report);
+        trashAssets = await resolveUploadAssets(local.id, uploadContent);
       } catch (e) {
         db.log(`[tombstone] ${local.id} 资源扫描失败（跳过）：${(e as Error).message}`);
       }
@@ -681,7 +703,7 @@ export async function syncNow(cfg: SyncConfig, s3: S3Store, db: SyncDbPort, opts
         deletedFromParentId: local.deletedFromParentId ?? null,
       });
       // P3-1：上传条目此刻才取正文（仅待上传的少数笔记产生 IO）
-      uploadQueue.push({ id: local.id, content: contentOf(local), entry });
+      uploadQueue.push({ id: local.id, content: uploadContent, entry });
       report.trashedUp++; // 本端软删发布（UI 移入回收站计数）
       continue;
     }
@@ -698,8 +720,9 @@ export async function syncNow(cfg: SyncConfig, s3: S3Store, db: SyncDbPort, opts
       db.log(`[decide] ${local.id} → upload（恢复=${localRestoring}）`);
       // H3：上传前扫描本地资产 → 上传 S3 → 填入 manifest.assets（供他端下载）
       let assets: ManifestNote["assets"] = [];
+      const uploadContent = contentOf(local);
       try {
-        assets = await scanLocalAssets(cfg, s3, db, local.id, report);
+        assets = await resolveUploadAssets(local.id, uploadContent);
       } catch (e) {
         db.log(`[H3] 资产扫描失败（跳过，不影响正文上传）: ${(e as Error).message}`);
       }
@@ -712,7 +735,7 @@ export async function syncNow(cfg: SyncConfig, s3: S3Store, db: SyncDbPort, opts
         deletedFromParentId: localRestoring ? null : undefined,
       });
       // P3-1：上传条目此刻才取正文（仅待上传的少数笔记产生 IO）
-      uploadQueue.push({ id: local.id, content: contentOf(local), entry });
+      uploadQueue.push({ id: local.id, content: uploadContent, entry });
     } else {
       db.log(`[decide] ${local.id} → ${decision}`);
     }

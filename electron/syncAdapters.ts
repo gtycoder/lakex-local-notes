@@ -84,6 +84,12 @@ export function createStoreSyncPort(store: Store): SyncDbPort {
       const out = { contentHash: base, lastUploadedHash: store.lastUploadedHash(id), lastSyncedMetaAt: store.lastSyncedMetaAt(id) ?? null };
       return out;
     },
+    recordDeclaredAssets(noteId: string, assets: Array<{ filename: string; size: number; hash: string }>): void {
+      if (typeof (store as any).recordDeclaredAssets === "function") store.recordDeclaredAssets(noteId, assets);
+    },
+    listDeclaredAssets(noteId: string): Array<{ filename: string; size: number; hash: string }> {
+      return typeof (store as any).listDeclaredAssets === "function" ? store.listDeclaredAssets(noteId) : [];
+    },
     applyRemoteNote(note: ManifestNote, content: string): void {
       store.importRemoteNote(note as never, Buffer.from(content, "utf8"), []);
     },

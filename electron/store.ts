@@ -231,6 +231,13 @@ export class Store {
         detected_at TEXT NOT NULL DEFAULT (datetime('now'))
       );
       CREATE UNIQUE INDEX IF NOT EXISTS idx_orphan_path ON orphan_assets(file_path);
+      CREATE TABLE IF NOT EXISTS declared_assets (
+        note_id    TEXT NOT NULL,
+        filename   TEXT NOT NULL,
+        size       INTEGER NOT NULL,
+        hash       TEXT NOT NULL,
+        PRIMARY KEY(note_id, filename)
+      );
       CREATE TABLE IF NOT EXISTS sync_base (
         note_id TEXT PRIMARY KEY,
         content_hash TEXT NOT NULL,
@@ -1688,6 +1695,17 @@ export class Store {
 
   listS3GcPending(): Array<{ key: string; markedAt: string }> {
     return this.db.prepare("SELECT key,marked_at AS markedAt FROM s3_gc_pending ORDER BY marked_at").all() as Array<{ key: string; markedAt: string }>;
+  }
+  /** A 方案：记录 manifest 声明的资产元数据（即使本地文件缺失，上传 union 仍可正确声明）。 */
+  recordDeclaredAssets(noteId: string, assets: Array<{ filename: string; size: number; hash: string }>): void {
+    const stmt = this.db.prepare(`INSERT INTO declared_assets(note_id,filename,size,hash) VALUES(?,?,?,?)
+      ON CONFLICT(note_id,filename) DO UPDATE SET size=excluded.size, hash=excluded.hash`);
+    for (const a of assets) stmt.run(noteId, a.filename, a.size, a.hash);
+  }
+
+  /** A 方案：列出该笔记已声明（含本地缺失但 manifest 声明过）的资产元数据。 */
+  listDeclaredAssets(noteId: string): Array<{ filename: string; size: number; hash: string }> {
+    return this.db.prepare(`SELECT filename,size,hash FROM declared_assets WHERE note_id=?`).all(noteId) as Array<{ filename: string; size: number; hash: string }>;
   }
 
   recordS3GcLog(action: string, key: string, reason: string, commitId: string | null, deviceId: string | null, ok: boolean): void {

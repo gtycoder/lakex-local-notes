@@ -132,6 +132,13 @@ async function ensureDb(): Promise<SqlJsDb> {
   // node_type：note（发布方向进 manifest.notes 标记 deleted:true）/ folder（仅本地下载过滤）；
   // purged_at：本地主动彻底删除（purge）标记——isFolderPurged 过滤 + 发布方向防复活；
   // published_at：墓碑已发布到 manifest（对齐桌面计数语义，移动端无待上传计数 UI，仅保持列一致）。
+  db.exec(`CREATE TABLE IF NOT EXISTS declared_assets (
+    note_id TEXT NOT NULL,
+    filename TEXT NOT NULL,
+    size INTEGER NOT NULL,
+    hash TEXT NOT NULL,
+    PRIMARY KEY(note_id, filename)
+  )`);
   db.exec(`CREATE TABLE IF NOT EXISTS deleted_notes (
     id TEXT PRIMARY KEY,
     title TEXT NOT NULL,
@@ -332,6 +339,15 @@ const dbPort: SyncDbPort = {
     const d = db!;
     const row = d.prepare("SELECT content_hash, last_uploaded_hash, last_synced_meta_at FROM sync_base WHERE note_id = ?").get(id);
     return row ? { contentHash: String(row.content_hash), lastUploadedHash: row.last_uploaded_hash ? String(row.last_uploaded_hash) : null, lastSyncedMetaAt: row.last_synced_meta_at ? String(row.last_synced_meta_at) : null } : null;
+  },
+  recordDeclaredAssets(noteId: string, assets: Array<{ filename: string; size: number; hash: string }>): void {
+    const d = db!;
+    const stmt = d.prepare("INSERT INTO declared_assets(note_id,filename,size,hash) VALUES(?,?,?,?) ON CONFLICT(note_id,filename) DO UPDATE SET size=excluded.size, hash=excluded.hash");
+    for (const a of assets) stmt.run(noteId, a.filename, a.size, a.hash);
+  },
+  listDeclaredAssets(noteId: string): Array<{ filename: string; size: number; hash: string }> {
+    const d = db!;
+    return (d.prepare("SELECT filename,size,hash FROM declared_assets WHERE note_id=?").all(noteId) as Array<{ filename: string; size: number; hash: string }>).map((r) => ({ filename: String(r.filename), size: Number(r.size), hash: String(r.hash) }));
   },
   applyRemoteNote(note, content) {
     const d = db!;
