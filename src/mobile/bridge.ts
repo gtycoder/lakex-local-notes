@@ -561,8 +561,9 @@ const dbPort: SyncDbPort = {
   },
 };
 
-/** 恢复前强拉全量（best-effort）：下载这些笔记的已声明资产；失败不阻断恢复（恢复红线）。 */
-async function downloadDeclaredAssetsFor(noteIds: string[]): Promise<void> {
+/** 下载这些笔记的已声明资产（best-effort）；失败不阻断调用方（恢复/预览红线）。
+ * @param onlyMissing true = 只补本地缺失的资源（预览用）；false = 强拉全量（恢复用） */
+async function downloadDeclaredAssetsFor(noteIds: string[], onlyMissing = false): Promise<void> {
   if (noteIds.length === 0) return;
   try {
     const cfg = await bridge.getS3Settings();
@@ -578,11 +579,16 @@ async function downloadDeclaredAssetsFor(noteIds: string[]): Promise<void> {
       trashedDown: 0, trashedUp: 0, uploadedBytes: 0, downloadedBytes: 0,
     };
     for (const noteId of noteIds) {
-      const assets = typeof dbPort.listDeclaredAssets === "function" ? dbPort.listDeclaredAssets(noteId) : [];
+      let assets = typeof dbPort.listDeclaredAssets === "function" ? dbPort.listDeclaredAssets(noteId) : [];
+      if (onlyMissing && assets.length > 0) {
+        const local = new Set((await dbPort.listLocalAssets(noteId)).map((a) => a.filename));
+        assets = assets.filter((a) => !local.has(a.filename));
+      }
+      if (assets.length === 0) continue;
       await downloadNoteAssets(syncCfg, s3Store, dbPort, noteId, assets, report, false);
     }
   } catch (e) {
-    console.warn("[restore] 资源下载失败（保留恢复，资源下次同步补拉）", e);
+    console.warn("[asset] 资源下载失败（保留调用方，资源下次同步补拉）", e);
   }
 }
 
@@ -919,6 +925,13 @@ export const bridge = {
       const d = await ensureDb();
       dbPort.localTrashNote(id);
       await saveSnapshot(d.exportBytes());
+    });
+  },
+
+  /** 回收站预览：按需补拉该笔记本地缺失的资源（不恢复、不移出回收站）。best-effort。 */
+  async ensureTrashNoteAssets(id: string): Promise<void> {
+    return maintenance.run("main", async () => {
+      await downloadDeclaredAssetsFor([id], true);
     });
   },
 
