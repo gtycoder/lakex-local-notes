@@ -317,6 +317,14 @@ export async function syncNow(cfg: SyncConfig, s3: S3Store, db: SyncDbPort, opts
     if (row.content) return row.content;
     return db.getNote(row.id)?.content ?? "";
   };
+  // W-2：正文下载后校验 hash（与资产强校验对齐）。不符 → 同“对象缺失”等级降级：warning + 跳过，不应用损坏正文。
+  const verifyNoteHash = (contentBytes: Uint8Array, rn: ManifestNote): boolean => {
+    if (sha256Sync(contentBytes) !== rn.contentHash) {
+      report.warnings.push(`正文哈希不符（跳过）: ${rn.id}-${rn.contentHash}`);
+      return false;
+    }
+    return true;
+  };
   const progress = (phase: string, message: string) => { try { opts?.onProgress?.(phase, message); } catch { /* 渲染层已关闭 */ } };
 
   // ---- 1. 拉 latest manifest（缺失视为首次同步） ----
@@ -495,6 +503,7 @@ export async function syncNow(cfg: SyncConfig, s3: S3Store, db: SyncDbPort, opts
             report.warnings.push(`对象缺失（跳过+warning，B 方案）: ${rn.id}-${rn.contentHash}`);
             continue;
           }
+          if (!verifyNoteHash(contentBytes, rn)) continue;
           report.downloadedBytes += contentBytes.length;
           // 资产先下载（严格模式：缺失 → 跳过该条目，不导入半成品；对齐桌面 sync.ts:533-541）
           if (opts?.strictAssets) {
@@ -521,6 +530,7 @@ export async function syncNow(cfg: SyncConfig, s3: S3Store, db: SyncDbPort, opts
           report.warnings.push(`对象缺失（跳过+warning，B 方案）: ${rn.id}-${rn.contentHash}`);
           continue;
         }
+        if (!verifyNoteHash(contentBytes, rn)) continue;
         report.downloadedBytes += contentBytes.length;
         db.applyRemoteTrash(rn.id, decodeText(contentBytes), rn.title, rn.trashedAt ?? rn.deletedAt ?? rn.updatedAt, rn.deletedFromParentId ?? null, rn.parentId, rn.sortOrder);
         await downloadAssets(cfg, s3, db, rn, report, opts?.strictAssets ?? false);
@@ -542,6 +552,7 @@ export async function syncNow(cfg: SyncConfig, s3: S3Store, db: SyncDbPort, opts
             report.warnings.push(`对象缺失（跳过+warning，B 方案）: ${rn.id}-${rn.contentHash}`);
             continue;
           }
+          if (!verifyNoteHash(contentBytes, rn)) continue;
           report.downloadedBytes += contentBytes.length;
           // 跟随恢复 = 应用远端 active（dbPort 清 trashed_at）+ 记账
           if (opts?.strictAssets) {
@@ -601,6 +612,7 @@ export async function syncNow(cfg: SyncConfig, s3: S3Store, db: SyncDbPort, opts
           report.warnings.push(`对象缺失（跳过+warning，B 方案）: ${rn.id}-${rn.contentHash}`);
           continue;
         }
+        if (!verifyNoteHash(contentBytes, rn)) continue;
         report.downloadedBytes += contentBytes.length;
         // D5：本机编辑成果被远端覆盖 → 先强制留档（协议 §4.2，防丢数据），再接受远端
         if (action.superseded && local) {

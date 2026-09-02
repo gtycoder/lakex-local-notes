@@ -170,6 +170,24 @@ describe("syncEngine（共享编排）", () => {
     expect(db.notes.get("n2")!.icon).toBe("star");
   });
 
+  it("下载：远端正文 hash 与清单不符 → 跳过 + warning（不应用损坏内容）", async () => {
+    const s3 = new MemS3();
+    const db = new MemDb();
+    const h = hashOf("<p>remote</p>");
+    // 对象内容与清单声明的 contentHash 不符（模拟损坏/篡改）
+    s3.map.set("p/objects/n2-" + h + ".lake", new TextEncoder().encode("<p>TAMPERED</p>"));
+    s3.map.set("p/manifests/latest.json", new TextEncoder().encode(JSON.stringify({
+      version: 4, workspaceId: "default", commitId: "c1", prevCommitId: null,
+      createdAt: "2026-01-01T00:00:00.000Z",
+      notes: [{ id: "n2", title: "远端", parentId: null, sortOrder: 0, updatedAt: "2026-01-01T00:00:00.000Z", contentHash: h, isConflict: false, assets: [] }],
+      folders: [],
+    })));
+    const r = await syncNow(CFG, s3, db);
+    expect(r.appliedRemote).toBe(0);
+    expect(db.notes.has("n2")).toBe(false);
+    expect(r.warnings.some((w) => w.includes("正文哈希不符"))).toBe(true);
+  });
+
   it("D2：远端 manifest 是非法 JSON → 整轮中止报错，不覆盖本地", async () => {
     const s3 = new MemS3();
     const db = new MemDb();
