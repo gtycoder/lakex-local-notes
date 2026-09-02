@@ -17,6 +17,11 @@ import { getOutlineTab } from "./features/outline/registry";
 import { cleanLakeMarkdown } from "./core/markdownClean";
 
 import { useDocumentStats } from "./hooks/useDocumentStats";
+import { useNoteActions } from "./hooks/useNoteActions";
+import { useSyncRefresh } from "./hooks/useSyncRefresh";
+import { useTreeActions } from "./hooks/useTreeActions";
+import { useTabLifecycle } from "./hooks/useTabLifecycle";
+import { useNoteLifecycle } from "./hooks/useNoteLifecycle";
 import { useSavePipeline } from "./hooks/useSavePipeline";
 import { useSyncShell } from "./hooks/useSyncShell";
 import { useSyncController } from "./hooks/useSyncController";
@@ -156,6 +161,45 @@ export function App() {
     onError: handleSaveError,
     getOpenTab: handleGetOpenTab,
     getEditorCaches: handleGetEditorCaches,
+  });
+
+  const { evictTabsForLimit, openNote, restoreDraft, discardDraft } = useTabLifecycle({
+    settingsMaxOpenTabs: settings.maxOpenTabs,
+    pinnedNoteIds,
+    openTabsRef,
+    persistTab,
+    scheduleSave,
+    resetRevision,
+    showNotice,
+    setError,
+    setOpenTabs,
+    setActiveNoteId,
+    setPinnedNoteIds,
+    setDraftEntries,
+    setSaveState,
+  });
+  const { handleContentChange, createNoteIn, createNote, deleteTreeNode } = useNoteLifecycle({
+    bumpRevision,
+    resetRevision,
+    clearNote,
+    scheduleDraftJournal,
+    scheduleSave,
+    evictTabsForLimit,
+    showNotice,
+    setError,
+    treeNodes,
+    notes,
+    openTabsRef,
+    settingsMaxOpenTabs: settings.maxOpenTabs,
+    pinnedNoteIds,
+    activeNoteId,
+    setNotes,
+    setTreeNodes,
+    setOpenTabs,
+    setActiveNoteId,
+    setPinnedNoteIds,
+    setPendingRenameId,
+    setDraftEntries,
   });
   const shellPlatformClass = /Mac|iPhone|iPad/.test(navigator.platform) ? "platform-mac" : "platform-native-titlebar";
 
@@ -399,87 +443,14 @@ export function App() {
 
 
   // bootstrap 首拉 + 主进程广播订阅（写操作后的刷新由 pending-summary-changed 事件驱动，单点更新）
-  const refreshPendingSummary = useCallback(() => {
-    void native.getSyncPendingSummary().then(setPendingSummary).catch(() => undefined);
-  }, []);
-  useEffect(() => {
-    refreshPendingSummary();
-    return native.onPendingSummaryChanged(setPendingSummary);
-  }, [refreshPendingSummary]);
-
-  const refreshDraftEntries = useCallback(async () => {
-    try {
-      const [entries, summaries] = await Promise.all([native.listDraftJournals(), native.listNoteSummaries()]);
-      const liveIds = new Set(summaries.map((note) => note.id));
-      const valid = entries.filter((entry) => liveIds.has(entry.noteId));
-      setDraftEntries(valid);
-      const orphaned = entries.filter((entry) => !liveIds.has(entry.noteId));
-      await Promise.all(orphaned.map((entry) => native.deleteDraftJournal(entry.noteId).catch(() => undefined)));
-    } catch {
-      // 草稿恢复是 best-effort，不能阻塞回收站/主界面的正常操作。
-    }
-  }, []);
-
-  /** 回收站恢复后：刷新草稿/树/摘要；若恢复的文档正开在 tab 里且曾被标记"已删除"，重载正文并清除标记。 */
-  const handleTrashRestored = useCallback(() => {
-    void refreshDraftEntries();
-    void native.listTreeNodes().then(setTreeNodes).catch(() => undefined);
-    void native.listNoteSummaries().then(setNotes).catch(() => undefined);
-    void (async () => {
-      const reloadVersion = tabReloadVersionRef.current.next();
-      const t0 = performance.now();
-      for (const tab of openTabsRef.current.filter((t) => t.deleted)) {
-        if (!tabReloadVersionRef.current.isCurrent(reloadVersion)) return;
-        try {
-          const readT0 = performance.now();
-          const note = await native.readNote(tab.noteId);
-          if (!tabReloadVersionRef.current.isCurrent(reloadVersion)) return;
-          console.log("[sync-tab] trash-restore reload", JSON.stringify({ noteId: tab.noteId, readMs: Math.round(performance.now() - readT0) }));
-          setOpenTabs((tabs) => tabs.map((t) => t.noteId === tab.noteId
-            ? { ...t, title: note.title, content: note.content, dirty: false, deleted: false, reloadKey: (t.reloadKey ?? 0) + 1, lastDigest: { title: note.title, updatedAt: note.updatedAt } }
-            : t));
-        } catch { /* 该文档未恢复或仍不存在，保持标记 */ }
-      }
-      console.log("[sync-tab] trash-restore done", JSON.stringify({ totalMs: Math.round(performance.now() - t0) }));
-    })();
-  }, [refreshDraftEntries]);
-
-  /** 历史恢复后：刷新树/摘要；若该文档正开在 tab 里，重载正文 + bump reloadKey 强制重建 Lake 实例。 */
-  const handleHistoryRestored = useCallback((restoredId: string) => {
-    void native.listTreeNodes().then(setTreeNodes).catch(() => undefined);
-    void native.listNoteSummaries().then(setNotes).catch(() => undefined);
-    void (async () => {
-      const reloadVersion = tabReloadVersionRef.current.next();
-      try {
-        const t0 = performance.now();
-        const updated = await native.readNote(restoredId);
-        if (!tabReloadVersionRef.current.isCurrent(reloadVersion)) return;
-        console.log("[sync-tab] history-restore reload", JSON.stringify({ noteId: restoredId, readMs: Math.round(performance.now() - t0) }));
-        setOpenTabs((tabs) => tabs.map((tab) => tab.noteId === restoredId
-          ? { ...tab, title: updated.title, content: updated.content, dirty: false, reloadKey: (tab.reloadKey ?? 0) + 1 }
-          : tab));
-        bumpRevision(restoredId);
-      } catch { /* 文档未打开或读取失败则跳过 */ }
-    })();
-  }, []);
+  const { refreshPendingSummary, refreshDraftEntries, handleTrashRestored, handleHistoryRestored } = useSyncRefresh({
+    setPendingSummary, setDraftEntries, setTreeNodes, setNotes, setOpenTabs, tabReloadVersionRef, openTabsRef, bumpRevision,
+  });
 
   // 保存管线已收拢到 useSavePipeline（persistTab 由 hook 提供）
 
 
   /** 超限自动淘汰：返回被关闭的 noteId 列表（dirty 内容先持久化，绝不淘汰当前激活标签）。 */
-  const evictTabsForLimit = useCallback(async (nextTabs: OpenTab[], openedId: string): Promise<string[]> => {
-    const limit = settings.maxOpenTabs;
-    if (limit <= 0) return [];
-    const evictedIds = selectEvictionIds(nextTabs, { limit, activeNoteId: openedId, pinnedNoteIds });
-    for (const id of evictedIds) {
-      const tab = openTabsRef.current.find((t) => t.noteId === id);
-      if (tab?.dirty) await persistTab(id, tab.title, tab.content);
-      // V5 Phase 4：淘汰路径同步清理滚动记忆（避免残留导致下次打开位置错乱）
-      clearScrollMemory(id);
-    }
-    return evictedIds;
-  }, [settings.maxOpenTabs, pinnedNoteIds, persistTab]);
-
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if ((event.metaKey || event.ctrlKey) && event.shiftKey && event.key.toLowerCase() === "f") {
@@ -524,92 +495,6 @@ export function App() {
 
   // scheduleDraftJournal / scheduleSave 已收拢到 useSavePipeline（hook 提供）
   // notice/showNotice 已收拢到 useDesktopShell（Phase C）
-
-  const openNote = useCallback(async (id: string, locateQuery = "", _newTab = false): Promise<boolean> => {
-    const locate = () => {
-      if (!locateQuery) return;
-      let attempts = 0;
-      const tryLocate = () => {
-        if (locateEditorSearchHit(id, locateQuery) || attempts++ >= 8) return;
-        window.setTimeout(tryLocate, 120);
-      };
-      window.setTimeout(tryLocate, 180);
-    };
-    const existing = openTabsRef.current.find((tab) => tab.noteId === id);
-    if (existing) {
-      // 标签曾被标记"已删除"（远端删除）：文档可能已从回收站恢复，重新拉取最新内容刷新标签。
-      if (existing.deleted) {
-        try {
-          const t0 = performance.now();
-          const note = await native.readNote(id);
-          console.log("[sync-tab] openNote reload-deleted", JSON.stringify({ noteId: id, readMs: Math.round(performance.now() - t0) }));
-          if (openTabsRef.current.some((t) => t.noteId === id)) {
-            setOpenTabs((tabs) => tabs.map((tab) => tab.noteId === id
-              ? { ...tab, title: note.title, content: note.content, dirty: false, deleted: false, reloadKey: (tab.reloadKey ?? 0) + 1, lastDigest: { title: note.title, updatedAt: note.updatedAt } }
-              : tab));
-          }
-        } catch { /* 尚未恢复，保持标记 */ }
-      }
-      setActiveNoteId(id);
-      setOpenTabs((tabs) => tabs.map((tab) =>
-        tab.noteId === id ? { ...tab, lastAccessedAt: Date.now() } : tab
-      ));
-      locate();
-      return true;
-    }
-    try {
-      const note = await native.readNote(id);
-      if (openTabsRef.current.some((t) => t.noteId === id)) {
-        setActiveNoteId(id);
-        return true;
-      }
-      resetRevision(note.id, 0);
-      const newTab: OpenTab = { noteId: note.id, title: note.title, content: note.content, dirty: false, lastAccessedAt: Date.now() };
-      const nextForEvict = openTabsRef.current.some((t) => t.noteId === id)
-        ? openTabsRef.current
-        : [...openTabsRef.current, newTab];
-      const evictedIds = await evictTabsForLimit(nextForEvict, id);
-      setOpenTabs((tabs) => {
-        const base = tabs.some((t) => t.noteId === id) ? tabs : [...tabs, newTab];
-        // 更新器内再次封顶：并发打开时以最新已提交状态为准，杜绝旧 ref 竞态超限。
-        return trimTabsToLimit(base, { limit: settings.maxOpenTabs, activeNoteId: id, pinnedNoteIds });
-      });
-      if (evictedIds.length > 0) {
-        setPinnedNoteIds((prev) => {
-          const next = new Set(prev);
-          for (const ev of evictedIds) next.delete(ev);
-          return next.size === prev.size ? prev : next;
-        });
-        showNotice(`已自动关闭最旧的标签（上限 ${settings.maxOpenTabs}）`);
-      }
-      setActiveNoteId(id);
-      locate();
-      return true;
-    } catch (reason) {
-      setError(getNativeErrorMessage(reason));
-      return false;
-    }
-  }, [evictTabsForLimit, settings.maxOpenTabs, pinnedNoteIds, showNotice]);
-
-  const restoreDraft = useCallback(async (entry: DraftJournalEntry) => {
-    // 先确认正式文档仍存在。否则不能从恢复对话框中静默移除草稿，让用户误以为恢复成功。
-    try { await native.readNote(entry.noteId); }
-    catch {
-      showNotice("草稿对应的文档已不存在；草稿仍保留，可手动丢弃。");
-      return;
-    }
-    await openNote(entry.noteId);
-    setOpenTabs((tabs) => tabs.map((tab) => tab.noteId === entry.noteId ? { ...tab, title: entry.title || tab.title, content: entry.content, dirty: true, reloadKey: (tab.reloadKey ?? 0) + 1 } : tab));
-    setActiveNoteId(entry.noteId);
-    setDraftEntries((entries) => entries.filter((item) => item.noteId !== entry.noteId));
-    setSaveState("dirty");
-    scheduleSave(entry.noteId, entry.content);
-  }, [openNote, scheduleSave, showNotice]);
-
-  const discardDraft = useCallback((noteId: string) => {
-    void native.deleteDraftJournal(noteId).catch(() => undefined);
-    setDraftEntries((entries) => entries.filter((entry) => entry.noteId !== noteId));
-  }, []);
 
   const { handleTabChange, reorderTabs, closeTab } = useDocumentTabs<OpenTab>({
     tabsRef: openTabsRef,
@@ -662,203 +547,18 @@ export function App() {
 
   /** 全文导出 Markdown：Lake 内核原生支持（getDocument("text/markdown")），复制到剪贴板 */
   /** M1：复制为 Markdown（按 noteId）——读保存时生成的文本缓存，无需打开编辑器 */
-  const copyMarkdownById = useCallback(async (noteId: string | null) => {
-    if (!noteId) { showNotice("该节点不是文档"); return; }
-    try {
-      const caches = await native.readNoteCaches(noteId);
-      if (!caches.markdown) { showNotice("该文档还没有文本缓存，请先打开并保存一次"); return; }
-      await navigator.clipboard.writeText(caches.markdown);
-      showNotice("已复制 Markdown（" + caches.markdown.length + " 字符）");
-    } catch (reason) {
-      setError("复制 Markdown 失败: " + (getNativeErrorMessage(reason)));
-    }
-  }, [showNotice]);
+  const { copyMarkdownById, exportNoteById, copyPathsById, setNodeIcon, copyMarkdownFromCache, exportAs, copyNotePaths } = useNoteActions({ showNotice, setError, setTreeNodes });
 
-  /** M1：收口导出（按 noteId）——右键「导出」子菜单所有格式统一入口（markdown/html/lake；word/pdf 待实现） */
-  const exportNoteById = useCallback(async (noteId: string | null, format: "markdown" | "html" | "lake") => {
-    if (!noteId) { showNotice("该节点不是文档"); return; }
-    try {
-      const dir = await native.pickExportDir();
-      if (!dir) return; // 用户取消
-      const result = await native.exportNote(noteId, format, dir);
-      const skippedText = result.skipped > 0 ? `（${result.skipped} 张图片缺失已跳过）` : "";
-      if (format === "markdown") {
-        showNotice(`已导出 Markdown 资料包到 ${result.exportPath}（${result.imageCount} 张图片${skippedText}）`);
-      } else if (format === "html") {
-        showNotice(`已导出 HTML：${result.exportPath}（${result.imageCount} 张图片${skippedText}）`);
-      } else {
-        showNotice(`已导出原生 Lake：${result.exportPath}（${result.imageCount} 张图片内嵌${skippedText}）`);
-      }
-    } catch (reason) {
-      setError("导出失败: " + (getNativeErrorMessage(reason)));
-    }
-  }, [showNotice]);
-
-  /** M1：复制资料路径（按 noteId）——标题 + .lake 绝对路径 + 图片目录绝对路径 */
-  const copyPathsById = useCallback(async (noteId: string | null) => {
-    if (!noteId) { showNotice("该节点不是文档"); return; }
-    try {
-      const info = await native.getNotePaths(noteId);
-      const text = `标题：${info.title}\n正文：${info.lakePath}\n图片目录：${info.assetsDir}`;
-      await navigator.clipboard.writeText(text);
-      showNotice("已复制资料路径（本机 AI 可读）");
-    } catch (reason) {
-      setError("复制资料路径失败: " + (getNativeErrorMessage(reason)));
-    }
-  }, [showNotice]);
-
-  /** M1.6：设置/清除文档或分组的自定义图标 */
-  const setNodeIcon = useCallback(async (node: TreeNode, icon: string | null) => {
-    try {
-      const updated = await native.setNodeIcon(node.id, icon);
-      setTreeNodes(replaceTreeNode(updated));
-      showNotice(icon ? "已设置图标" : "已清除图标");
-    } catch (reason) {
-      setError("设置图标失败: " + (getNativeErrorMessage(reason)));
-    }
-  }, [showNotice]);
-
-  // 文档右键（TreeNode 版）包装
-  const copyMarkdownFromCache = useCallback((node: TreeNode) => void copyMarkdownById(node.noteFileId), [copyMarkdownById]);
-  const exportAs = useCallback((node: TreeNode, format: "markdown" | "html" | "lake") => void exportNoteById(node.noteFileId, format), [exportNoteById]);
-  const copyNotePaths = useCallback((node: TreeNode) => void copyPathsById(node.noteFileId), [copyPathsById]);
-
-  const handleContentChange = useCallback((noteId: string, content: string) => {
-    bumpRevision(noteId);
-    setOpenTabs((tabs) => tabs.map((tab) => tab.noteId === noteId ? { ...tab, content, dirty: true } : tab));
-    const title = openTabsRef.current.find((tab) => tab.noteId === noteId)?.title ?? "无标题";
-    scheduleDraftJournal(noteId, title, content);
-    scheduleSave(noteId, content);
-  }, [scheduleDraftJournal, scheduleSave]);
-
-  async function createNoteIn(parentId: string | null) {
-    const note = parentId === null ? await native.createNote("无标题文档") : await native.createNoteIn(parentId, "无标题文档");
-    setNotes((items) => [...items, summaryOf(note)]);
-    setTreeNodes(await native.listTreeNodes());
-    {
-      resetRevision(note.id, 0);
-      const newTab: OpenTab = { noteId: note.id, title: note.title, content: note.content, dirty: false, lastAccessedAt: Date.now() };
-      const evictedIds = await evictTabsForLimit([...openTabsRef.current, newTab], note.id);
-      setOpenTabs((tabs) => {
-        const base = tabs.some((t) => t.noteId === note.id) ? tabs : [...tabs, newTab];
-        return trimTabsToLimit(base, { limit: settings.maxOpenTabs, activeNoteId: note.id, pinnedNoteIds });
-      });
-      if (evictedIds.length > 0) {
-        setPinnedNoteIds((prev) => {
-          const next = new Set(prev);
-          for (const ev of evictedIds) next.delete(ev);
-          return next.size === prev.size ? prev : next;
-        });
-        showNotice(`已自动关闭最旧的标签（上限 ${settings.maxOpenTabs}）`);
-      }
-      setActiveNoteId(note.id);
-      setPendingRenameId(note.id);
-    }
-  }
-
-  async function createNote() {
-    const notebookId = treeNodes.find((node) => node.nodeType === "notebook")?.id ?? null;
-    await createNoteIn(notebookId);
-  }
-
-  const createTreeItem = useCallback(async (kind: "notebook" | "group" | "note", parentId: string | null, title?: string) => {
-    try {
-      if (kind === "note") { await createNoteIn(parentId); return; }
-      const resolvedTitle = title?.trim();
-      if (!resolvedTitle) return;
-      if (kind === "notebook") await native.createNotebook(resolvedTitle);
-      else if (parentId) await native.createGroup(parentId, resolvedTitle);
-      setTreeNodes(await native.listTreeNodes());
-    } catch (reason) { setError(getNativeErrorMessage(reason)); }
-  }, []);
-
-  const renameTreeNode = useCallback(async (id: string, title: string) => {
-    try {
-      const renamed = await native.renameTreeNode(id, title);
-      setTreeNodes(replaceTreeNode(renamed));
-      if (renamed.noteFileId) {
-        setNotes(patchNoteById(renamed.noteFileId, { title: renamed.title, updatedAt: renamed.updatedAt, syncState: "local" }));
-        setOpenTabs(patchTabById(renamed.noteFileId, { title: renamed.title }));
-      }
-    } catch (reason) { setError(getNativeErrorMessage(reason)); }
-  }, []);
-
-  const moveTreeNode = useCallback(async (id: string, targetId: string, position: "before" | "inside" | "after") => {
-    try {
-      const moving = treeNodes.find((node) => node.id === id);
-      const target = treeNodes.find((node) => node.id === targetId);
-      if (!moving || !target) return;
-      const parentId = position === "inside" ? target.id : target.parentId;
-      // UI 会过滤非法根层落点；这里再做一次边界保护，避免 stale pointerup
-      // 或异步树刷新把 note/group 送到根层后弹出“必须位于目录节点下”。
-      if (moving.nodeType !== "notebook" && parentId === null) return;
-      if (moving.nodeType === "notebook" && parentId !== null) return;
-      const sameParent = treeNodes.filter((node) => node.parentId === parentId && node.id !== id).sort((a, b) => a.sortOrder - b.sortOrder);
-      const orderedIds = position === "inside"
-        ? [...sameParent.map((node) => node.id), id]
-        : (() => {
-            const at = sameParent.findIndex((node) => node.id === targetId);
-            const insertAt = at < 0 ? sameParent.length : position === "after" ? at + 1 : at;
-            const next = [...sameParent.map((node) => node.id)];
-            next.splice(insertAt, 0, id);
-            return next;
-          })();
-      await native.moveTreeNodeOrdered(id, parentId, orderedIds);
-      setTreeNodes(await native.listTreeNodes());
-    } catch (reason) { setError(getNativeErrorMessage(reason)); }
-  }, [treeNodes]);
-
-  // W-2-B：传给 Sidebar 的回调全部稳定化——App 每次渲染（含打字触发的 openTabs 变化）
-  // 不再产生新引用，配合 memo(Sidebar) 让树行渲染彻底跳过按键路径。
-  const sidebarSelect = useCallback((id: string) => {
-    void openNote(id);
-  }, [openNote]);
-  const sidebarCreate = useCallback((kind: "notebook" | "group" | "note", parentId: string | null, title?: string) => {
-    void createTreeItem(kind, parentId, title);
-  }, [createTreeItem]);
-  const sidebarRename = useCallback((id: string, title: string) => {
-    void renameTreeNode(id, title);
-  }, [renameTreeNode]);
-  const sidebarMove = useCallback((id: string, targetId: string, position: "before" | "inside" | "after") => {
-    void moveTreeNode(id, targetId, position);
-  }, [moveTreeNode]);
-  const sidebarRequestDelete = useCallback((node: TreeNode) => setConfirmDelete(node), []);
-  const sidebarSetIcon = useCallback((node: TreeNode, icon: string | null) => {
-    void setNodeIcon(node, icon);
-  }, [setNodeIcon]);
-  const sidebarOpenHistory = useCallback((node: TreeNode) => {
-    setHistoryNoteId(node.noteFileId);
-    setHistoryOpen(!!node.noteFileId);
-  }, []);
-  const sidebarOpenSearch = useCallback((q?: string) => {
-    setSearchPanelQuery(q ?? "");
-    setSearchPanelOpen(true);
-  }, []);
-  const sidebarPendingRenameConsumed = useCallback(() => setPendingRenameId(null), []);
-
-  async function deleteTreeNode(id: string) {
-    try {
-      const removedNodeIds = subtreeIds(treeNodes, id);
-      const removedNoteIds = new Set(
-        treeNodes.filter((node) => removedNodeIds.has(node.id) && node.noteFileId).map((node) => node.noteFileId!)
-      );
-      removedNoteIds.forEach((noteId) => {
-        clearNote(noteId);
-        clearScrollMemory(noteId);
-      });
-      await native.deleteTreeNode(id);
-      await Promise.all([...removedNoteIds].map((noteId) => native.deleteDraftJournal(noteId).catch(() => undefined)));
-      setDraftEntries((entries) => entries.filter((entry) => !removedNoteIds.has(entry.noteId)));
-      const remaining = notes.filter((note) => !removedNoteIds.has(note.id));
-      setNotes(remaining);
-      setTreeNodes(await native.listTreeNodes());
-      const next = openTabsRef.current.filter((tab) => !removedNoteIds.has(tab.noteId));
-      setOpenTabs(next);
-      if (activeNoteId && removedNoteIds.has(activeNoteId)) {
-        setActiveNoteId(next[next.length - 1]?.noteId ?? null);
-      }
-    } catch (reason) { setError(getNativeErrorMessage(reason)); }
-  }
+  const {
+    createTreeItem, renameTreeNode, moveTreeNode,
+    sidebarSelect, sidebarCreate, sidebarRename, sidebarMove,
+    sidebarRequestDelete, sidebarSetIcon, sidebarOpenHistory, sidebarOpenSearch, sidebarPendingRenameConsumed,
+  } = useTreeActions({
+    createNoteIn, openNote, setNodeIcon, treeNodes,
+    setTreeNodes, setNotes, setOpenTabs, setConfirmDelete,
+    setHistoryNoteId, setHistoryOpen, setSearchPanelQuery, setSearchPanelOpen,
+    setPendingRenameId, setError,
+  });
 
   useEffect(() => {
     if (sidebarMode !== "floating") return;
