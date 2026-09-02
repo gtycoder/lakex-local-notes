@@ -465,6 +465,25 @@ export function createLakeDocument(
     disabledPlugins: mode === "viewer"
       ? ["save", "toolbar", "emoji"]
       : ["save", ...(prefs?.showToolbar === false ? ["toolbar"] : [])],
+    // 语雀/Lake 导出的 bookmark 卡（bookmarkInline / bookmark）能否被注册进内核，
+    // 取决于 BookmarkEditorPlugin(option name="bookmark") 的 isEnable，而其
+    // isEnable = !!_option.detailAction || !!_option.fetchDetailHandler。
+    // 本地没有语雀 API，故提供 fetchDetailHandler 返回最小 detail，仅用于让插件
+    // 走三参 registerInlineCard/registerBlockCard 注册卡类（否则 getCardClass 返回
+    // null 直接崩溃）。已有 detail 的剪贴板卡不会走到该 handler；真正缺少 detail 的
+    // 纯 URL 粘贴时才被调用，这里返回基于 url 的最小结构、不出网。
+    bookmark: {
+      fetchDetailHandler: (src: unknown) => {
+        const url = typeof src === "string" ? src : String((src as { url?: unknown })?.url ?? "");
+        return Promise.resolve({
+          title: url,
+          icon: null,
+          image: null,
+          desc: null,
+          url,
+        });
+      },
+    },
     input: {},
     defaultFontsize: prefsSize,
     toc: { enable: !!tocEnabled && !prefs?.disableNativeToc },
