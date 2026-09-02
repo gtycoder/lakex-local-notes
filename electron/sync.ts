@@ -32,8 +32,8 @@ import {
 } from "../src/core/syncUtils.js";
 import { MAX_IMAGE_BYTES } from "../src/core/storeLimits.js";
 import { isSafePathSegment as isSafeSegment } from "../src/core/storeUtils.js";
-import { decidePurge, decideLocalTombstone, decideTrashCross, decideMetaApply,
-  decideTrashYield, decideTombstoneYield, buildUploadEntry, buildTombstoneEntry, computeBookkeeping,
+import { decidePurge, decideLocalTombstone, decideMetaApply,
+  decideTombstoneYield, buildUploadEntry, buildTombstoneEntry, computeBookkeeping,
   TRASH_NOTEBOOK_ID } from "../src/core/syncDecisions.js";
 
 // ===== 类型 =====

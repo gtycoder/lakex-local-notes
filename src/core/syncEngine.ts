@@ -496,8 +496,7 @@ export async function syncNow(cfg: SyncConfig, s3: S3Store, db: SyncDbPort, opts
         }
         // 远端墓碑（删除压编辑）：本地无显式恢复 → 跟随删除
         if (local === null) {
-          // 本地从未持有（全新设备/重装）：导入远端 trash 条目（对齐桌面 decideTrashCross no-cross → importRemoteNote，
-          // 先拉删除前内容再建回收站条目，内容可恢复）。
+          // 本地从未持有（全新设备/重装）：导入远端 trash 条目（先拉删除前内容再建回收站条目，内容可恢复）。
           const contentBytes = await s3.getObject(`${cfg.prefix}/${objectKey(rn.id, rn.contentHash)}`, { maxBytes: MAX_REMOTE_NOTE_BYTES });
           if (contentBytes == null) {
             report.warnings.push(`对象缺失（跳过+warning，B 方案）: ${rn.id}-${rn.contentHash}`);

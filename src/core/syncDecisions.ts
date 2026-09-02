@@ -56,38 +56,12 @@ export function decideLocalTombstone(remoteUpdatedAt: string, tombAt: string | u
   return remoteUpdatedAt > tombAt ? "revoke" : "keep-local-delete";
 }
 
-/** TRASH-NOTEBOOK 交叉（本地/远端回收站状态不一致时）：
- * 删除压编辑（本地留档由执行层做）+ 恢复 vs 删除按 updatedAt LWW。 */
-export type TrashCrossDecision = "no-cross" | "move-to-trash" | "restore" | "keep-trash" | "skip-restore-pending";
-export function decideTrashCross(local: LocalNoteState | null, rn: ManifestNote, isRestorePending: boolean): TrashCrossDecision {
-  if (!local) return "no-cross";
-  const localInTrash = local.parentId === TRASH_NOTEBOOK_ID;
-  const remoteInTrash = rn.parentId === TRASH_NOTEBOOK_ID;
-  if (localInTrash === remoteInTrash) return "no-cross";
-  if (remoteInTrash) {
-    if (isRestorePending) return "skip-restore-pending";
-    return "move-to-trash";
-  }
-  const trashedAt = local.trashedAt ?? local.updatedAt;
-  return rn.updatedAt > trashedAt ? "restore" : "keep-trash";
-}
-
 /** 元数据 LWW（正文相同分支）：远端 updatedAt 新于已确认版本 → 应用远端。 */
 export function decideMetaApply(remoteUpdatedAt: string, lastSyncedMetaAt: string | null): boolean {
   return lastSyncedMetaAt === null || remoteUpdatedAt > lastSyncedMetaAt;
 }
 
 // ===== 上传分支判定 =====
-
-/** 本地回收站条目 vs 远端已恢复（active 且更新）→ 本端删除让位（跟随恢复）。 */
-export function decideTrashYield(note: LocalNoteState, remoteActive: ManifestNote | null | undefined): boolean {
-  if (!remoteActive) return false;
-  return (
-    !remoteActive.deleted &&
-    remoteActive.parentId !== TRASH_NOTEBOOK_ID &&
-    remoteActive.updatedAt > (note.trashedAt ?? note.updatedAt)
-  );
-}
 
 /** 墓碑 vs 远端恢复 LWW：远端已 active 且更新 → 墓碑让位（不回写覆盖）。 */
 export function decideTombstoneYield(deletedAt: string, remoteNote: ManifestNote | null | undefined): boolean {

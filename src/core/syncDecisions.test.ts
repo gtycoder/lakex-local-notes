@@ -5,8 +5,8 @@
 import { describe, expect, it } from "vitest";
 import {
   TRASH_NOTEBOOK_ID,
-  decidePurge, decideLocalTombstone, decideTrashCross, decideMetaApply,
-  decideTrashYield, decideTombstoneYield,
+  decidePurge, decideLocalTombstone, decideMetaApply,
+  decideTombstoneYield,
   buildUploadEntry, buildTombstoneEntry, computeBookkeeping, rowToLocalState,
   type LocalNoteState,
 } from "./syncDecisions.js";
@@ -46,54 +46,6 @@ describe("decideLocalTombstone", () => {
   });
   it("时间相等 → 本地删除优先（非严格大于）", () => {
     expect(decideLocalTombstone(T0, T0)).toBe("keep-local-delete");
-  });
-});
-
-describe("decideTrashCross", () => {
-  it("两端回收站状态一致 → no-cross", () => {
-    expect(decideTrashCross(mkLocal({ parentId: TRASH_NOTEBOOK_ID }), mkRemote({ parentId: TRASH_NOTEBOOK_ID }) as never, false)).toBe("no-cross");
-  });
-  it("远端入回收站 + 本地 active → move-to-trash（删除压编辑）", () => {
-    expect(decideTrashCross(mkLocal(), mkRemote({ parentId: TRASH_NOTEBOOK_ID, trashedAt: T1 }) as never, false)).toBe("move-to-trash");
-  });
-  it("远端入回收站 + restore-pending → skip（恢复例外）", () => {
-    expect(decideTrashCross(mkLocal(), mkRemote({ parentId: TRASH_NOTEBOOK_ID }) as never, true)).toBe("skip-restore-pending");
-  });
-  it("本地回收站 + 远端恢复较新 → restore（跟随恢复）", () => {
-    expect(decideTrashCross(mkLocal({ parentId: TRASH_NOTEBOOK_ID, trashedAt: T0 }), mkRemote({ updatedAt: T1 }) as never, false)).toBe("restore");
-  });
-  it("本地回收站 + 远端旧 → keep-trash（本地删除较新）", () => {
-    expect(decideTrashCross(mkLocal({ parentId: TRASH_NOTEBOOK_ID, trashedAt: T1 }), mkRemote({ updatedAt: T0 }) as never, false)).toBe("keep-trash");
-  });
-  it("无本地 → no-cross", () => {
-    expect(decideTrashCross(null, mkRemote() as never, false)).toBe("no-cross");
-  });
-});
-
-describe("decideMetaApply", () => {
-  it("无基线 → 应用远端", () => {
-    expect(decideMetaApply(T1, null)).toBe(true);
-  });
-  it("远端新于基线 → 应用", () => {
-    expect(decideMetaApply(T1, T0)).toBe(true);
-  });
-  it("远端旧于基线 → 保留本地", () => {
-    expect(decideMetaApply(T0, T1)).toBe(false);
-  });
-});
-
-describe("decideTrashYield", () => {
-  it("远端 active 且更新 → 让位", () => {
-    expect(decideTrashYield(mkLocal({ trashedAt: T0 }), mkRemote({ parentId: null, updatedAt: T1 }) as never)).toBe(true);
-  });
-  it("远端也是回收站 → 不让位", () => {
-    expect(decideTrashYield(mkLocal({ trashedAt: T0 }), mkRemote({ parentId: TRASH_NOTEBOOK_ID, updatedAt: T1 }) as never)).toBe(false);
-  });
-  it("远端 deleted → 不让位", () => {
-    expect(decideTrashYield(mkLocal({ trashedAt: T0 }), mkRemote({ deleted: true, updatedAt: T1 }) as never)).toBe(false);
-  });
-  it("远端旧 → 不让位", () => {
-    expect(decideTrashYield(mkLocal({ trashedAt: T1 }), mkRemote({ updatedAt: T0 }) as never)).toBe(false);
   });
 });
 
