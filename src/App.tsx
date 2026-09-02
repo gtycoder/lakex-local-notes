@@ -21,6 +21,7 @@ import { useNoteActions } from "./hooks/useNoteActions";
 import { useSyncRefresh } from "./hooks/useSyncRefresh";
 import { useSyncProgress } from "./hooks/useSyncProgress";
 import { deriveDesktopView } from "./hooks/desktopDerivedState";
+import { useDesktopLifecycle } from "./hooks/useDesktopLifecycle";
 import { useBootstrap } from "./hooks/useBootstrap";
 import { useTreeActions } from "./hooks/useTreeActions";
 import { useTabLifecycle } from "./hooks/useTabLifecycle";
@@ -34,8 +35,7 @@ import { stripAssetAccessToken } from "./lib/assetPort";
 import { getWorkspaceDisplayName } from "./lib/workspaceName";
 import { native } from "./lib/native";
 import { getNativeErrorMessage } from "./lib/nativeErrors";
-import { loadSettings, saveSettings, subscribeSettings, type AppSettings } from "./lib/settings";
-import { applyTheme } from "./lib/theme";
+import { loadSettings, saveSettings, type AppSettings } from "./lib/settings";
 import { subtreeIds } from "./core/tree";
 import { DOCK_GUTTER } from "./lib/layoutMetrics";
 import { OUTLINE_HOVER_TRIGGER_WIDTH, OUTLINE_SCROLLBAR_CLEARANCE } from "./features/outline/outlineInteraction";
@@ -85,10 +85,6 @@ export function App() {
   const { syncToast, setSyncToast, showSyncToast } = useSyncShell();
   // P2-3：syncAnchorRect 仅在 toast 打开/内容变化时计算一次，避免每次渲染读 DOM 强制 reflow。
   const [syncAnchorRect, setSyncAnchorRect] = useState<DOMRect | null>(null);
-  useEffect(() => {
-    if (!syncToast) { setSyncAnchorRect(null); return; }
-    setSyncAnchorRect(syncBtnRef.current?.getBoundingClientRect() ?? null);
-  }, [syncToast]);
   const [pendingRenameId, setPendingRenameId] = useState<string | null>(null);
   const [settings, setSettings] = useState<AppSettings>(() => loadSettings());
   const [pinnedNoteIds, setPinnedNoteIds] = useState<Set<string>>(() => new Set());
@@ -221,57 +217,11 @@ export function App() {
 
   // 顶栏冲突提醒可以在 12 秒后消失，但当前文档的“历史 N”是持久事实，
   // 不能随着 toast 消失；切换文档/打开历史面板时重新读取本地快照数量。
-  useEffect(() => {
-    if (!activeNoteId) { setActiveHistoryCount(0); return; }
-    let alive = true;
-    void native.listNoteHistory(activeNoteId)
-      .then((items) => { if (alive) setActiveHistoryCount(items.length); })
-      .catch(() => { if (alive) setActiveHistoryCount(0); });
-    return () => { alive = false; };
-  }, [activeNoteId, conflictSnapshotNotice.length, historyOpen]);
 
-  useEffect(() => {
-    return () => {
-      flushTimers();
-      for (const tab of openTabsRef.current) {
-        if (!tab.dirty) continue;
-        void native.saveDraftJournal({ noteId: tab.noteId, title: tab.title, content: tab.content, updatedAt: new Date().toISOString() }).catch(() => undefined);
-      }
-      draftTimers.current.forEach((timer) => window.clearTimeout(timer));
-      draftTimers.current.clear();
-      // 拖动过程只更新视觉状态；卸载时补一次合法的最终布局提交。
-      const widths = layoutWidthsRef.current;
-      localStorage.setItem("lake-notes-v3.sidebar-width", String(Math.round(Math.min(SIDEBAR_MAX_WIDTH, Math.max(SIDEBAR_MIN_WIDTH, widths.sidebar)))));
-      localStorage.setItem("lake-notes-v3.outline-sidebar-width", String(Math.round(Math.min(OUTLINE_SIDEBAR_MAX_WIDTH, Math.max(OUTLINE_SIDEBAR_MIN_WIDTH, widths.outline)))));
-    };
-  }, []);
 
-  useEffect(() => {
-    return subscribeSettings((next) => setSettings(next));
-  }, []);
 
   // 钉住状态由 App 持有：自动淘汰/关闭后可感知并清理残留，淘汰逻辑能保护钉住标签。
-  useEffect(() => {
-    const activeIds = new Set(openTabs.map((t) => t.noteId));
-    setPinnedNoteIds((prev) => {
-      let changed = false;
-      const next = new Set<string>();
-      for (const id of prev) {
-        if (activeIds.has(id)) next.add(id);
-        else changed = true;
-      }
-      return changed ? next : prev;
-    });
-  }, [openTabs]);
 
-  const handleTogglePin = useCallback((noteId: string) => {
-    setPinnedNoteIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(noteId)) next.delete(noteId);
-      else next.add(noteId);
-      return next;
-    });
-  }, []);
 
 
   // 面包屑大纲路径：订阅活动文档大纲变化（滚动切换标题时刷新）
@@ -283,9 +233,6 @@ export function App() {
   }, [activeNoteId, outlineTabsVersion]);
 
   // 主题与自定义 CSS：设置变化即应用（data-theme 驱动 b3 令牌切换；首帧前已由 main.tsx 预应用）
-  useEffect(() => {
-    applyTheme(settings.theme);
-  }, [settings.theme]);
 
   useBootstrap({
     setWorkspace, setNotes, setSync, setCloudEnabled, setS3Settings, setCloudConfigured,
@@ -301,6 +248,14 @@ export function App() {
 
 
   // bootstrap 首拉 + 主进程广播订阅（写操作后的刷新由 pending-summary-changed 事件驱动，单点更新）
+  const { handleTogglePin } = useDesktopLifecycle({
+    syncToast, syncBtnRef, setSyncAnchorRect, activeNoteId,
+    conflictSnapshotCount: conflictSnapshotNotice.length, historyOpen, setActiveHistoryCount,
+    openTabs, setPinnedNoteIds, theme: settings.theme, setSettings,
+    setSearchPanelQuery, setSearchPanelOpen, flushTimers, openTabsRef, draftTimers, saveTimers,
+    layoutWidthsRef, quickNotesDirty, persistTab,
+  });
+
   const { refreshPendingSummary, refreshDraftEntries, handleTrashRestored, handleHistoryRestored } = useSyncRefresh({
     setPendingSummary, setDraftEntries, setTreeNodes, setNotes, setOpenTabs, tabReloadVersionRef, openTabsRef, bumpRevision,
   });
@@ -309,47 +264,7 @@ export function App() {
 
 
   /** 超限自动淘汰：返回被关闭的 noteId 列表（dirty 内容先持久化，绝不淘汰当前激活标签）。 */
-  useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      if ((event.metaKey || event.ctrlKey) && event.shiftKey && event.key.toLowerCase() === "f") {
-        event.preventDefault();
-        setSearchPanelQuery("");
-        setSearchPanelOpen(true);
-      }
-    };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, []);
 
-  useEffect(() => {
-    // 审计 #23：窗口/应用关闭时若有未保存草稿，阻止关闭并提示（Electron 显示原生对话框）；
-    // 同时立即触发一次保存，尽量在用户留下期间落盘
-    const onBeforeUnload = (event: BeforeUnloadEvent) => {
-      const hasDirty = openTabsRef.current.some((tab) => tab.dirty)
-        || quickNotesDirty;
-      if (!hasDirty) return;
-      for (const tab of openTabsRef.current) {
-        if (!tab.dirty) continue;
-        const pendingTimer = saveTimers.current.get(tab.noteId);
-        if (pendingTimer !== undefined) {
-          window.clearTimeout(pendingTimer);
-          saveTimers.current.delete(tab.noteId);
-        }
-        const draftTimer = draftTimers.current.get(tab.noteId);
-        if (draftTimer !== undefined) {
-          window.clearTimeout(draftTimer);
-          draftTimers.current.delete(tab.noteId);
-        }
-        // beforeunload 无法等待 IPC；先 best-effort 落一份草稿，再尝试正式保存。
-        void native.saveDraftJournal({ noteId: tab.noteId, title: tab.title, content: tab.content, updatedAt: new Date().toISOString() }).catch(() => undefined);
-        void persistTab(tab.noteId, tab.title, tab.content);
-      }
-      event.preventDefault();
-      event.returnValue = "";
-    };
-    window.addEventListener("beforeunload", onBeforeUnload);
-    return () => { window.removeEventListener("beforeunload", onBeforeUnload); };
-  }, [persistTab, quickNotesDirty]);
 
   // scheduleDraftJournal / scheduleSave 已收拢到 useSavePipeline（hook 提供）
   // notice/showNotice 已收拢到 useDesktopShell（Phase C）
