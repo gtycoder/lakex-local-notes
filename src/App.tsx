@@ -20,6 +20,7 @@ import { useDocumentStats } from "./hooks/useDocumentStats";
 import { useNoteActions } from "./hooks/useNoteActions";
 import { useSyncRefresh } from "./hooks/useSyncRefresh";
 import { useSyncProgress } from "./hooks/useSyncProgress";
+import { useBootstrap } from "./hooks/useBootstrap";
 import { useTreeActions } from "./hooks/useTreeActions";
 import { useTabLifecycle } from "./hooks/useTabLifecycle";
 import { useNoteLifecycle } from "./hooks/useNoteLifecycle";
@@ -285,37 +286,10 @@ export function App() {
     applyTheme(settings.theme);
   }, [settings.theme]);
 
-  useEffect(() => {
-    void native.bootstrap().then(async (snapshot) => {
-      setWorkspace(snapshot); setNotes(snapshot.notes); setSync(snapshot.sync);
-      void native.getSyncSettings().then((cfg) => setCloudEnabled(cfg.enabled)).catch(() => undefined);
-      void native.getS3Settings().then((cfg) => { setS3Settings(cfg); setCloudConfigured(Boolean(cfg)); }).catch(() => undefined);
-      void native.getSyncStatus().then((info) => {
-        const superseded = info.lastResult?.supersededNotes ?? [];
-        if (superseded.length > 0) setConflictSnapshotNotice(superseded.map((item) => ({ noteId: item.id, title: item.title })));
-      }).catch(() => undefined);
-      void native.getSyncPendingSummary().then(setPendingSummary).catch(() => undefined);
-      void native.listDraftJournals().then((entries) => {
-        // 启动时不展示已经被删除的文档草稿：删除文档是明确的用户操作，草稿不应绕过回收站重新出现。
-        const liveIds = new Set(snapshot.notes.map((note) => note.id));
-        const orphaned = entries.filter((entry) => !liveIds.has(entry.noteId));
-        setDraftEntries(entries.filter((entry) => liveIds.has(entry.noteId)));
-        void Promise.all(orphaned.map((entry) => native.deleteDraftJournal(entry.noteId).catch(() => undefined)));
-      }).catch(() => undefined);
-      setTreeNodes(await native.listTreeNodes());
-      const id = snapshot.lastOpenedNoteId ?? snapshot.notes[0]?.id;
-      if (id) {
-        const opened = await openNote(id);
-        if (!opened) {
-          // lastOpenedNoteId 可能指向已 purge 的旧文档；启动不能停在错误页，
-          // 回退到第一个仍存在的文档，若资料库为空则保持空状态。
-          setError(null);
-          const fallback = snapshot.notes.find((note) => note.id !== id)?.id;
-          if (fallback) await openNote(fallback);
-        }
-      }
-    }).catch((reason) => setError(getNativeErrorMessage(reason)));
-  }, []);
+  useBootstrap({
+    setWorkspace, setNotes, setSync, setCloudEnabled, setS3Settings, setCloudConfigured,
+    setConflictSnapshotNotice, setPendingSummary, setDraftEntries, setTreeNodes, setError, openNote,
+  });
 
   useSyncProgress({
     setSync, setCloudEnabled, setNotes, setTreeNodes, setOpenTabs,
