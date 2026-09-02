@@ -22,6 +22,7 @@ import { useSyncProgress } from "./hooks/useSyncProgress";
 import { deriveDesktopView } from "./hooks/desktopDerivedState";
 import { useDesktopLifecycle } from "./hooks/useDesktopLifecycle";
 import { useOutlineSync } from "./hooks/useOutlineSync";
+import { useWorkspaceState } from "./hooks/useWorkspaceState";
 import { useBootstrap } from "./hooks/useBootstrap";
 import { useTreeActions } from "./hooks/useTreeActions";
 import { useTabLifecycle } from "./hooks/useTabLifecycle";
@@ -49,20 +50,17 @@ import { DesktopTopBarLeading, DesktopTopBarTrailing } from "./desktop/DesktopTo
 import { DesktopActivityRail } from "./desktop/DesktopActivityRail";
 
 export function App() {
-  const [workspace, setWorkspace] = useState<WorkspaceSnapshot | null>(null);
-  const [notes, setNotes] = useState<NoteSummary[]>([]);
-  const [treeNodes, setTreeNodes] = useState<TreeNode[]>([]);
-  const [openTabs, setOpenTabs] = useState<OpenTab[]>([]);
-  const [activeNoteId, setActiveNoteId] = useState<string | null>(null);
-  const [search, setSearch] = useState("");
-  const [conflictSnapshotNotice, setConflictSnapshotNotice] = useState<Array<{ noteId: string; title: string }>>([]);
-  const [activeHistoryCount, setActiveHistoryCount] = useState(0);
-  const workspaceMenuRef = useRef<HTMLDivElement>(null);
-  const moreMenuRef = useRef<HTMLDivElement>(null);
-  /** 顶栏两个下拉的触发容器 ref（定位 fixed 菜单用） */
-  const wsMenuWrapRef = useRef<HTMLDivElement>(null);
-  const moreMenuWrapRef = useRef<HTMLDivElement>(null);
-  const syncBtnRef = useRef<HTMLButtonElement>(null);
+  const {
+    workspace, setWorkspace, notes, setNotes, treeNodes, setTreeNodes, openTabs, setOpenTabs,
+    activeNoteId, setActiveNoteId, search, setSearch, conflictSnapshotNotice, setConflictSnapshotNotice,
+    activeHistoryCount, setActiveHistoryCount,
+    workspaceMenuRef, moreMenuRef, wsMenuWrapRef, moreMenuWrapRef, syncBtnRef,
+    sync, setSync, cloudEnabled, setCloudEnabled, cloudConfigured, setCloudConfigured,
+    s3Settings, setS3Settings, workspaceName, pendingSummary, setPendingSummary, draftEntries, setDraftEntries,
+    syncAnchorRect, setSyncAnchorRect, pendingRenameId, setPendingRenameId,
+    settings, setSettings, pinnedNoteIds, setPinnedNoteIds, tocEnabled, wideMode,
+    quickNotesDirty, setQuickNotesDirty, openTabsRef, quickNotesRef, tabReloadVersionRef, editorsRef,
+  } = useWorkspaceState();
   const { topMenuOpen, setTopMenuOpen, workspaceMenuOpen, setWorkspaceMenuOpen, closeMenus } = useTopMenus({
     workspaceTriggerRef: wsMenuWrapRef,
     moreTriggerRef: moreMenuWrapRef,
@@ -74,29 +72,7 @@ export function App() {
     onToggleFocus: () => { setFocusMode((value) => !value); closeMenus(); },
     onEscape: closeMenus,
   });
-  const [sync, setSync] = useState<SyncStatus>({ phase: "idle", message: "仅本地保存", lastSyncedAt: null, pendingChanges: 0 });
-  const [cloudEnabled, setCloudEnabled] = useState(true);
-  const [cloudConfigured, setCloudConfigured] = useState(false);
-  /** 顶栏「工作空间」名：云同步启用且已配置 S3 时显示对象前缀。 */
-  const [s3Settings, setS3Settings] = useState<S3Settings | null>(null);
-  const workspaceName = getWorkspaceDisplayName(cloudEnabled, s3Settings);
-  const [pendingSummary, setPendingSummary] = useState<SyncPendingSummary>({ documents: 0, folders: 0, resources: 0, quickNotes: 0, total: 0, generatedAt: "" });
-  const [draftEntries, setDraftEntries] = useState<DraftJournalEntry[]>([]);
   const { syncToast, setSyncToast, showSyncToast } = useSyncShell();
-  // P2-3：syncAnchorRect 仅在 toast 打开/内容变化时计算一次，避免每次渲染读 DOM 强制 reflow。
-  const [syncAnchorRect, setSyncAnchorRect] = useState<DOMRect | null>(null);
-  const [pendingRenameId, setPendingRenameId] = useState<string | null>(null);
-  const [settings, setSettings] = useState<AppSettings>(() => loadSettings());
-  const [pinnedNoteIds, setPinnedNoteIds] = useState<Set<string>>(() => new Set());
-  const tocEnabled = settings.showToc;
-  // P2-4：wideMode 恒 true 且从不 set，改为模块常量（消除死 useState）
-  const wideMode = true;
-  const [quickNotesDirty, setQuickNotesDirty] = useState(false);
-  const openTabsRef = useRef<OpenTab[]>([]);
-  const quickNotesRef = useRef<QuickNotesWorkspaceHandle>(null);
-  const tabReloadVersionRef = useRef(createRequestVersion());
-  // 已就绪的编辑器实例（noteId → editor），供导出 md 等场景使用
-  const editorsRef = useRef<Map<string, LakeEditorInstance>>(new Map());
   const shell = useDesktopShell({ quickNotesRef });
   const {
     // sidebar
