@@ -8,7 +8,7 @@ import type { Store } from "./store.js";
 import { ObjectStore, pruneOldManifests } from "./sync.js";
 import type { S3Settings, SyncProgress, SyncResult, SyncWarning } from "./sync.js";
 import { parseLakeManifest, objectKey, MAX_MANIFEST_BYTES, validateS3Settings } from "../src/core/syncUtils.js";
-import { syncNow as engineSyncNow } from "../src/core/syncEngine.js";
+import { syncNow as engineSyncNow, downloadNoteAssets, type SyncReport } from "../src/core/syncEngine.js";
 import { createS3StoreAdapter, createStoreSyncPort, syncConfigFromStore } from "./syncAdapters.js";
 import type { LoggerScopes } from "../src/core/logger.js";
 
@@ -128,4 +128,39 @@ async function readLatestCommitId(remote: ObjectStore): Promise<string | null> {
     if (!bytes) return null;
     return parseLakeManifest(bytes).commitId;
   } catch { return null; }
+}
+
+/**
+ * 回收站恢复：恢复前强拉全量资产（惰性下载的补偿），best-effort——资源缺失/损坏/网络失败
+ * 不阻断恢复（恢复红线：restore 是墓碑权威唯一显式例外）。资源下载失败时保留恢复，下次同步补拉。
+ */
+export async function restoreTrashWithAssets(
+  store: Store,
+  id: string,
+  createRemote: (settings: S3Settings, logScopes: LoggerScopes) => ObjectStore = (s, l) => new ObjectStore(s, l),
+): Promise<{ warnings: string[] }> {
+  const warnings: string[] = [];
+  const settings = store.getS3Settings();
+  if (settings) {
+    try {
+      validateS3Settings(settings);
+      const remote = createRemote(settings, store.logScopes);
+      await remote.test();
+      const cfg = syncConfigFromStore(store);
+      const s3Store = createS3StoreAdapter(remote, cfg.prefix);
+      const dbPort = createStoreSyncPort(store);
+      const declared = store.listDeclaredAssets(id);
+      const report: SyncReport = {
+        pulled: false, appliedRemote: 0, uploaded: 0, published: false, message: "",
+        warnings: [], supersededNotes: [], foldersUploaded: 0, foldersDownloaded: 0,
+        trashedDown: 0, trashedUp: 0, uploadedBytes: 0, downloadedBytes: 0,
+      };
+      await downloadNoteAssets(cfg, s3Store, dbPort, id, declared, report, false);
+      warnings.push(...report.warnings);
+    } catch (e) {
+      warnings.push(`恢复时资源下载失败（保留恢复，资源下次同步补拉）: ${(e as Error).message}`);
+    }
+  }
+  store.restoreTrashItem(id);
+  return { warnings };
 }

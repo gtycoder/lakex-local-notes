@@ -55,38 +55,44 @@ const decodeText = (b: Uint8Array) => new TextDecoder("utf-8").decode(b);
  *   （不导入半成品；warning 由调用方记 kind=asset_missing）。 */
 class AssetMissingError extends Error {}
 
-async function downloadAssets(cfg: SyncConfig, s3: S3Store, db: SyncDbPort, rn: ManifestNote, report: SyncReport, strict: boolean): Promise<void> {
-  const assets = rn.assets ?? [];
+/** 回收站惰性下载：只记录 manifest 声明的资产元数据（冻结清点），不下载资源文件。
+ * 进回收站不可编辑 → 清点不变；他端删除可能随后被清空 → 先不拉资源；恢复时再强拉全量。 */
+function recordDeclaredAssetsOnly(db: SyncDbPort, noteId: string, assets: ManifestNote["assets"]): void {
+  if (typeof db.recordDeclaredAssets === "function") db.recordDeclaredAssets(noteId, assets ?? []);
+}
+
+export async function downloadNoteAssets(cfg: SyncConfig, s3: S3Store, db: SyncDbPort, noteId: string, assets: ManifestNote["assets"], report: SyncReport, strict: boolean): Promise<void> {
+  const items = assets ?? [];
   // A 方案：记录 manifest 声明的资产元数据（即使某资源文件本地缺失，上传 union 仍可正确声明）。
-  if (typeof db.recordDeclaredAssets === "function") db.recordDeclaredAssets(rn.id, assets);
+  if (typeof db.recordDeclaredAssets === "function") db.recordDeclaredAssets(noteId, items);
   // P3-3：并发下载（每资产 getObject/校验/saveAsset 相互独立）。worker 不抛错——
   // 失败按索引归位，池结束后统一裁决：warnings 按原顺序入列、首个错误按原顺序抛出，
   // 与旧串行实现的裁决结果逐字节一致（仅失败前的多余请求会发出，结果确定）。
-  const errors: Array<Error | null> = new Array(assets.length).fill(null);
-  const warnings: Array<string | null> = new Array(assets.length).fill(null);
-  const saved: Array<number> = new Array(assets.length).fill(0);
+  const errors: Array<Error | null> = new Array(items.length).fill(null);
+  const warnings: Array<string | null> = new Array(items.length).fill(null);
+  const saved: Array<number> = new Array(items.length).fill(0);
   let aborted = false; // strict 首错后停止落盘（并发车道已在途的请求自然完成但不写盘，防孤儿资产目录）
-  await runPool(assets, ASSET_CONCURRENCY, async (asset, i) => {
+  await runPool(items, ASSET_CONCURRENCY, async (asset, i) => {
     try {
-      const bytes = await s3.getObject(`${cfg.prefix}/assets/${rn.id}/${asset.filename}`, { maxBytes: MAX_IMAGE_BYTES });
+      const bytes = await s3.getObject(`${cfg.prefix}/assets/${noteId}/${asset.filename}`, { maxBytes: MAX_IMAGE_BYTES });
       if (bytes == null) {
-        if (strict) { errors[i] = new AssetMissingError(`资源缺失: ${rn.id}/${asset.filename}`); aborted = true; }
-        else warnings[i] = `资源缺失（跳过）: ${rn.id}/${asset.filename}`;
+        if (strict) { errors[i] = new AssetMissingError(`资源缺失: ${noteId}/${asset.filename}`); aborted = true; }
+        else warnings[i] = `资源缺失（跳过）: ${noteId}/${asset.filename}`;
         return;
       }
       if (bytes.length !== asset.size) {
         // 损坏（声明 size 不符）→ 严格模式整轮中止（对齐桌面：损坏拒绝，不静默接受）
-        if (strict) { errors[i] = new Error(`资源大小不符: ${rn.id}/${asset.filename}（声明 ${asset.size}，实际 ${bytes.length}）`); aborted = true; }
-        else warnings[i] = `资源大小不符（跳过）: ${rn.id}/${asset.filename}`;
+        if (strict) { errors[i] = new Error(`资源大小不符: ${noteId}/${asset.filename}（声明 ${asset.size}，实际 ${bytes.length}）`); aborted = true; }
+        else warnings[i] = `资源大小不符（跳过）: ${noteId}/${asset.filename}`;
         return;
       }
       if (sha256Sync(bytes) !== asset.hash) {
-        if (strict) { errors[i] = new Error(`资源哈希不符: ${rn.id}/${asset.filename}`); aborted = true; }
-        else warnings[i] = `资源哈希不符（跳过）: ${rn.id}/${asset.filename}`;
+        if (strict) { errors[i] = new Error(`资源哈希不符: ${noteId}/${asset.filename}`); aborted = true; }
+        else warnings[i] = `资源哈希不符（跳过）: ${noteId}/${asset.filename}`;
         return;
       }
       if (aborted) return; // strict 已首错：不落盘（防半成品孤儿资产）
-      await db.saveAsset(rn.id, asset.filename, bytes);
+      await db.saveAsset(noteId, asset.filename, bytes);
       saved[i] = bytes.length;
     } catch (e) {
       // getObject 异常（网络/超限）：与旧实现一致向上传播（两模式均抛，不计入 warning）
@@ -525,13 +531,10 @@ export async function syncNow(cfg: SyncConfig, s3: S3Store, db: SyncDbPort, opts
           }
           if (!verifyNoteHash(contentBytes, rn)) continue;
           report.downloadedBytes += contentBytes.length;
-          // 资产先下载（严格模式：缺失 → 跳过该条目，不导入半成品；对齐桌面 sync.ts:533-541）
-          if (opts?.strictAssets) {
-            try { await downloadAssets(cfg, s3, db, rn, report, true); }
-            catch (e) { if (e instanceof AssetMissingError) { report.warnings.push(`资源缺失（跳过该条目）: ${rn.id}`); continue; } throw e; }
-          }
+          // 回收站惰性下载：只记录声明资产元数据（冻结清点），不下载资源文件。
+          // 进回收站不可编辑 → 清点不变；他端删除可能随后被清空 → 先不拉资源；恢复时再强拉全量。
+          recordDeclaredAssetsOnly(db, rn.id, rn.assets);
           db.applyRemoteNote({ ...rn, parentId: TRASH_NOTEBOOK_ID, trashedAt: rn.trashedAt ?? rn.deletedAt ?? rn.updatedAt, deletedFromParentId: rn.deletedFromParentId ?? null, deleted: false, deletedAt: undefined }, decodeText(contentBytes));
-          if (!opts?.strictAssets) await downloadAssets(cfg, s3, db, rn, report, false);
           db.setSyncBase(rn.id, rn.contentHash, rn.updatedAt, null);
           report.appliedRemote++;
           report.trashedDown++; // 全新设备首次导入即入回收站（UI 移入回收站计数）
@@ -553,7 +556,7 @@ export async function syncNow(cfg: SyncConfig, s3: S3Store, db: SyncDbPort, opts
         if (!verifyNoteHash(contentBytes, rn)) continue;
         report.downloadedBytes += contentBytes.length;
         db.applyRemoteTrash(rn.id, decodeText(contentBytes), rn.title, rn.trashedAt ?? rn.deletedAt ?? rn.updatedAt, rn.deletedFromParentId ?? null, rn.parentId, rn.sortOrder);
-        await downloadAssets(cfg, s3, db, rn, report, opts?.strictAssets ?? false);
+        recordDeclaredAssetsOnly(db, rn.id, rn.assets);
         report.appliedRemote++;
         // UI 移入回收站计数：仅"本次新入回收站"（本地原先不在回收站）才计；已在回收站的重复应用不计
         if (!localTrashed) report.trashedDown++;
@@ -576,11 +579,11 @@ export async function syncNow(cfg: SyncConfig, s3: S3Store, db: SyncDbPort, opts
           report.downloadedBytes += contentBytes.length;
           // 跟随恢复 = 应用远端 active（dbPort 清 trashed_at）+ 记账
           if (opts?.strictAssets) {
-            try { await downloadAssets(cfg, s3, db, rn, report, true); }
+            try { await downloadNoteAssets(cfg, s3, db, rn.id, rn.assets, report, true); }
             catch (e) { if (e instanceof AssetMissingError) { report.warnings.push(`资源缺失（跳过该条目）: ${rn.id}`); continue; } throw e; }
           }
           db.applyRemoteNote({ ...rn, parentId: effectiveParent, trashedAt: null, deleted: false, deletedAt: undefined, deletedFromParentId: null }, decodeText(contentBytes));
-          if (!opts?.strictAssets) await downloadAssets(cfg, s3, db, rn, report, false);
+          if (!opts?.strictAssets) await downloadNoteAssets(cfg, s3, db, rn.id, rn.assets, report, false);
           db.setSyncBase(rn.id, rn.contentHash, rn.updatedAt, null);
           report.appliedRemote++;
         } else {
@@ -640,11 +643,11 @@ export async function syncNow(cfg: SyncConfig, s3: S3Store, db: SyncDbPort, opts
           supersededTracker.push(rn.id, rn.title);
         }
         if (opts?.strictAssets) {
-          try { await downloadAssets(cfg, s3, db, rn, report, true); }
+          try { await downloadNoteAssets(cfg, s3, db, rn.id, rn.assets, report, true); }
           catch (e) { if (e instanceof AssetMissingError) { report.warnings.push(`资源缺失（跳过该条目）: ${rn.id}`); continue; } throw e; }
         }
         db.applyRemoteNote({ ...rn, parentId: effectiveParent, trashedAt: null, deleted: false }, decodeText(contentBytes));
-        if (!opts?.strictAssets) await downloadAssets(cfg, s3, db, rn, report, false);
+        if (!opts?.strictAssets) await downloadNoteAssets(cfg, s3, db, rn.id, rn.assets, report, false);
         db.setSyncBase(rn.id, rn.contentHash, rn.updatedAt, null);
         report.appliedRemote++;
       }

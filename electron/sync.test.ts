@@ -1022,12 +1022,12 @@ describe("S3 GC v4 语义（M0/M2）— 回收站笔记本", () => {
     expect(trashEntry.deleted).not.toBe(true);
     expect(trashEntry.parentId).toBe("notebook-trash");
     expect(trashEntry.assets).toHaveLength(1);   // 回收站条目携带资源清单
-    // B 同步：回收站条目（非墓碑）→ 全文+资源下载到 B 回收站
+    // B 同步：回收站条目（非墓碑）→ 全文下载到 B 回收站；资源惰性不下载（恢复时强拉全量）
     await syncNow(storeB as unknown as Store);
     expect(storeB.notes.has("n1")).toBe(true);
     expect(storeB.listNotesForSync().find((n) => n.id === "n1")?.parentId).toBe("notebook-trash");
-    expect(fs.existsSync(path.join(storeB.noteAssetsPathFor("n1"), "1786735000000_a1b2c3d4.png"))).toBe(true);
-    // B 恢复 = 删除方版本（含图）
+    expect(fs.existsSync(path.join(storeB.noteAssetsPathFor("n1"), "1786735000000_a1b2c3d4.png"))).toBe(false);
+    // B 恢复 = 删除方版本（正文；资源在恢复前强拉，本 FakeStore 无 listDeclaredAssets 降级为空）
     storeB.restoreTrashItem("n1");
     expect(storeB.contentHash("n1")).toBe(storeA.contentHash("n1"));
     await syncNow(storeB as unknown as Store);
