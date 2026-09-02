@@ -1527,3 +1527,32 @@ describe("R2：本地同步快照保护（V5 §5.2，markSyncedIfUnchanged）", 
     expect(store.listNotesForSync().find((n) => n.id === note.id)!.syncState).toBe("synced");
   });
 });
+
+
+describe("A 方案 declared_assets（桌面 store）", () => {
+  it("recordDeclaredAssets 写入并 upsert；listDeclaredAssets 按 note 返回", () => {
+    const note = store.createNote("资源笔记");
+    store.recordDeclaredAssets(note.id, [
+      { filename: "1234567890123_a1b2c3d4.png", size: 200, hash: "ab".repeat(32) },
+      { filename: "1234567890124_b2c3d4e5.pdf", size: 99, hash: "cd".repeat(32) },
+    ]);
+    expect(store.listDeclaredAssets(note.id)).toEqual([
+      { filename: "1234567890123_a1b2c3d4.png", size: 200, hash: "ab".repeat(32) },
+      { filename: "1234567890124_b2c3d4e5.pdf", size: 99, hash: "cd".repeat(32) },
+    ]);
+    // upsert：同名更新 size/hash，不新增行
+    store.recordDeclaredAssets(note.id, [{ filename: "1234567890123_a1b2c3d4.png", size: 300, hash: "ef".repeat(32) }]);
+    const listed = store.listDeclaredAssets(note.id);
+    expect(listed).toHaveLength(2);
+    expect(listed.find((x) => x.filename === "1234567890123_a1b2c3d4.png")).toEqual({ filename: "1234567890123_a1b2c3d4.png", size: 300, hash: "ef".repeat(32) });
+  });
+
+  it("不同笔记的 declared_assets 互不串（按 note_id 隔离）", () => {
+    const a = store.createNote("A 笔记");
+    const b = store.createNote("B 笔记");
+    store.recordDeclaredAssets(a.id, [{ filename: "1234567890123_a1b2c3d4.png", size: 1, hash: "ab".repeat(32) }]);
+    store.recordDeclaredAssets(b.id, [{ filename: "1234567890124_b2c3d4e5.pdf", size: 2, hash: "cd".repeat(32) }]);
+    expect(store.listDeclaredAssets(a.id)).toHaveLength(1);
+    expect(store.listDeclaredAssets(b.id)).toHaveLength(1);
+  });
+});

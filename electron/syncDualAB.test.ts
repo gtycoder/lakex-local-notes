@@ -176,4 +176,33 @@ describe("Step 5 双端 A/B（桌面 Controller ↔ 移动端 syncEngine 同 S3�
       expect(bAfter!.trashedAt).not.toBeNull();
     } finally { rmSync(dirA, { recursive: true, force: true }); }
   });
+  it("A 方案：桌面 store declared_assets 经引擎上传→正文引用保留/删除引用不再挂回", async () => {
+    const s3 = new SharedS3();
+    const dirA = mkdtempSync(path.join(tmpdir(), "lake-ab-declared-"));
+    const assetName = "1234567890123_a1b2c3d4.png";
+    const validHash = "ab".repeat(32);
+    const readManifest = async () => {
+      const bytes = await s3.getObject("ab-test/manifests/latest.json");
+      return JSON.parse(decode(bytes!));
+    };
+    try {
+      const storeA = new Store(dirA);
+      storeA.saveS3Settings(S3_CFG);
+      const noteA = storeA.createNote("资源笔记");
+      storeA.saveNote(noteA.id, "资源笔记", `<p>see ${assetName}</p>`);
+      // 模拟「本地文件缺失，但 manifest 曾声明过该资源元数据」
+      storeA.recordDeclaredAssets(noteA.id, [{ filename: assetName, size: 200, hash: validHash }]);
+
+      await syncNowViaEngine(storeA, undefined, (s: S3Settings, l: any) => s3 as unknown as ObjectStore);
+      let entry = (await readManifest()).notes.find((n: any) => n.id === noteA.id);
+      expect((entry.assets ?? []).some((x: any) => x.filename === assetName)).toBe(true);
+
+      // 编辑删除该引用 → 再同步，manifest 不应再挂回
+      storeA.saveNote(noteA.id, "资源笔记", "<p>removed ref</p>");
+      await syncNowViaEngine(storeA, undefined, (s: S3Settings, l: any) => s3 as unknown as ObjectStore);
+      entry = (await readManifest()).notes.find((n: any) => n.id === noteA.id);
+      expect((entry.assets ?? []).some((x: any) => x.filename === assetName)).toBe(false);
+    } finally { rmSync(dirA, { recursive: true, force: true }); }
+  });
+
 });

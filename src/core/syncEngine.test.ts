@@ -158,6 +158,26 @@ describe("syncEngine（共享编排）", () => {
     expect(a).toMatchObject({ filename: assetName, size: 200, hash: "aabbccdd" });
   });
 
+  it("A：本地缺文件 + 编辑删除该引用 → manifest 不再含它（防删除引用挂回）", async () => {
+    const s3 = new MemS3();
+    const db = new MemDb();
+    const assetName = "1234567890123_a1b2c3d4.png";
+    db.notes.set("n1", row({ id: "n1", content: `<p>see ${assetName}</p>`, syncState: "local" }));
+    db.recordDeclaredAssets("n1", [{ filename: assetName, size: 200, hash: "ab".repeat(32) }]);
+    await syncNow(CFG, s3, db);
+    let manifest = JSON.parse(decode((await s3.getObject("p/manifests/latest.json"))!));
+    let entry = manifest.notes.find((n: any) => n.id === "n1");
+    expect((entry.assets ?? []).some((x: any) => x.filename === assetName)).toBe(true);
+
+    // 编辑：删除该引用 → 再同步，manifest 不应再挂回该资源
+    const prev = db.notes.get("n1")!;
+    db.notes.set("n1", { ...prev, content: "<p>removed ref</p>", syncState: "local" });
+    await syncNow(CFG, s3, db);
+    manifest = JSON.parse(decode((await s3.getObject("p/manifests/latest.json"))!));
+    entry = manifest.notes.find((n: any) => n.id === "n1");
+    expect((entry.assets ?? []).some((x: any) => x.filename === assetName)).toBe(false);
+  });
+
   it("二次同步：无变更不重传（skip-fast）", async () => {
     const s3 = new MemS3();
     const db = new MemDb();
