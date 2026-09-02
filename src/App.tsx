@@ -8,12 +8,10 @@ import { DesktopStatusBar } from "./components/DesktopStatusBar";
 import { getDocumentStatus } from "./components/documentStatusModel";
 import { clearScrollMemory, locateEditorSearchHit } from "./features/editor/EditorTab";
 import { resolveScrollNode } from "./features/editor/lakeRuntime";
-import type { LakeEditorInstance } from "./features/editor/lakeRuntime";
 import type { TabInfo } from "./features/editor/MultiTabEditor";
 import { selectEvictionIds, trimTabsToLimit } from "./core/tabLimit";
 import { OutlineSidebar } from "./features/outline/OutlineSidebar";
 import type { OutlineMode } from "./features/outline/OutlineController";
-import { cleanLakeMarkdown } from "./core/markdownClean";
 
 import { useDocumentStats } from "./hooks/useDocumentStats";
 import { useNoteActions } from "./hooks/useNoteActions";
@@ -23,6 +21,8 @@ import { deriveDesktopView } from "./hooks/desktopDerivedState";
 import { useDesktopLifecycle } from "./hooks/useDesktopLifecycle";
 import { useOutlineSync } from "./hooks/useOutlineSync";
 import { useWorkspaceState } from "./hooks/useWorkspaceState";
+import { useSavePipelineGlue } from "./hooks/useSavePipelineGlue";
+import { useDesktopHandlers } from "./hooks/useDesktopHandlers";
 import { useBootstrap } from "./hooks/useBootstrap";
 import { useTreeActions } from "./hooks/useTreeActions";
 import { useTabLifecycle } from "./hooks/useTabLifecycle";
@@ -32,16 +32,13 @@ import { useSyncShell } from "./hooks/useSyncShell";
 import { useSyncController } from "./hooks/useSyncController";
 import { useDocumentTabs } from "./hooks/useDocumentTabs";
 import { createRequestVersion } from "./core/requestVersion";
-import { stripAssetAccessToken } from "./lib/assetPort";
 import { getWorkspaceDisplayName } from "./lib/workspaceName";
 import { native } from "./lib/native";
-import { getNativeErrorMessage } from "./lib/nativeErrors";
 import { loadSettings, saveSettings, type AppSettings } from "./lib/settings";
 import { subtreeIds } from "./core/tree";
 import { DOCK_GUTTER } from "./lib/layoutMetrics";
 import { OUTLINE_HOVER_TRIGGER_WIDTH, OUTLINE_SCROLLBAR_CLEARANCE } from "./features/outline/outlineInteraction";
-import type { DraftJournalEntry, NoteDocument, NoteSummary, S3Settings, SyncPendingSummary, SyncProgress, SyncStatus, TreeNode, WorkspaceSnapshot } from "./lib/types";
-import { patchNoteById, patchTabById, readEditorDocumentCaches, replaceTreeNode, summaryOf, treeNodePath, type DesktopWorkspace, type NoticeState, type OpenTab, OUTLINE_COLLAPSED_WIDTH, OUTLINE_SIDEBAR_MAX_WIDTH, OUTLINE_SIDEBAR_MIN_WIDTH, SIDEBAR_MAX_WIDTH, SIDEBAR_MIN_WIDTH } from "./desktop/desktopTypes";
+import { type OpenTab, OUTLINE_SIDEBAR_MAX_WIDTH, OUTLINE_SIDEBAR_MIN_WIDTH, SIDEBAR_MAX_WIDTH, SIDEBAR_MIN_WIDTH } from "./desktop/desktopTypes";
 import { DesktopOverlays } from "./desktop/DesktopOverlays";
 import { DesktopLibrary } from "./desktop/DesktopLibrary";
 import { DesktopQuickNotes } from "./desktop/DesktopQuickNotes";
@@ -102,26 +99,9 @@ export function App() {
   // V5 Phase 4：保存管线回调 useCallback 化——persistTab 依赖稳定，避免每次渲染重建（打字路径抖动收敛）。
   // pending 计数刷新已收敛为主进程 IPC 层事件广播（思源模式）：pending-summary-changed 单点订阅，
   // 渲染层不再需要各操作点手动触发（历史上 10+ 处手动刷新屡有遗漏）。
-  const handleNoteSaved = useCallback((saved: NoteDocument) => {
-    setNotes(patchNoteById(saved.id, summaryOf(saved)));
-    setTreeNodes((items) => items.map((item) => item.noteFileId === saved.id || item.id === saved.id ? { ...item, title: saved.title, updatedAt: saved.updatedAt, syncState: saved.syncState } : item));
-    setSync((current) => ({
-      ...current,
-      pendingChanges: saved.syncState === "synced" ? current.pendingChanges : Math.max(1, current.pendingChanges),
-    }));
-  }, [setNotes, setTreeNodes, setSync]);
-  const handleOpenTabsApplied = useCallback((saved: NoteDocument) => {
-    setOpenTabs(patchTabById(saved.id, { title: saved.title, content: saved.content, dirty: false, lastDigest: { title: saved.title, updatedAt: saved.updatedAt } }));
-  }, [setOpenTabs]);
-  const handleDraftCleared = useCallback((noteId: string) => {
-    void native.deleteDraftJournal(noteId).catch(() => undefined);
-    setDraftEntries((entries) => entries.filter((entry) => entry.noteId !== noteId));
-  }, [setDraftEntries]);
-  const handleSaveError = useCallback((message: string) => setError(message), [setError]);
-  const handleGetOpenTab = useCallback((noteId: string) => openTabsRef.current.find((t) => t.noteId === noteId), []);
-  const handleGetEditorCaches = useCallback((noteId: string) => {
-    return readEditorDocumentCaches(editorsRef.current.get(noteId)) ?? { markdown: null, plain: null };
-  }, []);
+  const { handleNoteSaved, handleOpenTabsApplied, handleDraftCleared, handleSaveError, handleGetOpenTab, handleGetEditorCaches } = useSavePipelineGlue({
+    setNotes, setTreeNodes, setSync, setOpenTabs, setDraftEntries, setError, openTabsRef, editorsRef,
+  });
 
   const {
     saveState, setSaveState, lastSavedAt,
@@ -264,35 +244,11 @@ export function App() {
     showSyncToast,
   });
 
-  const handleS3SettingsChanged = useCallback((next: S3Settings) => {
-    setS3Settings(next);
-    setCloudConfigured(true);
-  }, []);
-  const handleSyncSettingsChanged = useCallback((next: { enabled: boolean }) => {
-    setCloudEnabled(next.enabled);
-  }, []);
-
-  /** 编辑器实例就绪回调：注册到 map，销毁时移除；就绪时补写文本缓存（存量文档首次打开即有缓存） */
-  const handleEditorReady = useCallback((noteId: string, editor: LakeEditorInstance | null) => {
-    if (editor) {
-      editorsRef.current.set(noteId, editor);
-      try {
-        if (typeof editor.getDocument === "function") {
-          const markdown = cleanLakeMarkdown(stripAssetAccessToken(editor.getDocument("text/markdown")));
-          const plain = stripAssetAccessToken(editor.getDocument("text/plain"));
-          void native.updateNoteCaches(noteId, markdown, plain);
-        }
-      } catch {
-        // 锁定态 Viewer 不暴露 getDocument("text/markdown")：由主进程从磁盘 .lake 兜底补齐缓存
-        void native.ensureNoteCaches(noteId);
-      }
-    } else {
-      editorsRef.current.delete(noteId);
-    }
-  }, []);
-
-  /** 全文导出 Markdown：Lake 内核原生支持（getDocument("text/markdown")），复制到剪贴板 */
-  /** M1：复制为 Markdown（按 noteId）——读保存时生成的文本缓存，无需打开编辑器 */
+  const { handleS3SettingsChanged, handleSyncSettingsChanged, handleEditorReady, toggleNoteLock, handleQuickNoteConverted } = useDesktopHandlers({
+    setS3Settings, setCloudConfigured, setCloudEnabled, editorsRef,
+    activeNoteId, notes, openTabsRef, persistTab, setNotes, setTreeNodes,
+    setDesktopWorkspace, openNote, setError,
+  });
   const { copyMarkdownById, exportNoteById, copyPathsById, setNodeIcon, copyMarkdownFromCache, exportAs, copyNotePaths } = useNoteActions({ showNotice, setError, setTreeNodes });
 
   const {
@@ -330,39 +286,6 @@ export function App() {
   // 跟踪当前文档是否为空大纲；切换标签时清除豁免、重新评估。
 
   /** 只读锁切换：先保存脏草稿，再写 SQLite（锁状态经 manifest v3 同步） */
-  async function toggleNoteLock() {
-    const tabId = activeNoteId;
-    if (!tabId) return;
-    const summary = notes.find((n) => n.id === tabId);
-    if (!summary) return;
-    const next = !summary.isLocked;
-    const tab = openTabsRef.current.find((t) => t.noteId === tabId);
-    if (next && tab?.dirty) await persistTab(tabId, tab.title, tab.content);
-    // 锁定态 Viewer 无法用内核生成文本缓存；锁定前确保 md/text 缓存存在（已有则跳过）
-    if (next) {
-      try {
-        const caches = await native.readNoteCaches(tabId);
-        if (!caches.markdown || !caches.plain) {
-          await native.ensureNoteCaches(tabId);
-        }
-      } catch { /* 缓存兜底失败不阻断锁定 */ }
-    }
-    try {
-      const updated = await native.setNoteLocked(tabId, next);
-      setNotes(patchNoteById(tabId, { isLocked: updated.isLocked, lockedAt: updated.lockedAt }));
-    } catch (reason) {
-      setError(getNativeErrorMessage(reason));
-    }
-  }
-
-  async function handleQuickNoteConverted(note: NoteDocument) {
-    setNotes((items) => [summaryOf(note), ...items.filter((item) => item.id !== note.id)]);
-    try { setTreeNodes(await native.listTreeNodes()); }
-    catch (reason) { setError(getNativeErrorMessage(reason)); }
-    setDesktopWorkspace("library");
-    await openNote(note.id);
-  }
-
   if (!workspace) return <main className="loading-screen"><LoaderCircle className="spin" /><span>正在打开本地知识库</span>{error && <small>{error}</small>}</main>;
 
   // 字数/图片统计（W-2-A）：从渲染体移出，避免每次按键对整篇正文跑两次 O(n) 正则。
