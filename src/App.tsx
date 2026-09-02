@@ -20,6 +20,7 @@ import { useDocumentStats } from "./hooks/useDocumentStats";
 import { useNoteActions } from "./hooks/useNoteActions";
 import { useSyncRefresh } from "./hooks/useSyncRefresh";
 import { useSyncProgress } from "./hooks/useSyncProgress";
+import { deriveDesktopView } from "./hooks/desktopDerivedState";
 import { useBootstrap } from "./hooks/useBootstrap";
 import { useTreeActions } from "./hooks/useTreeActions";
 import { useTabLifecycle } from "./hooks/useTabLifecycle";
@@ -493,62 +494,15 @@ export function App() {
   if (!workspace) return <main className="loading-screen"><LoaderCircle className="spin" /><span>正在打开本地知识库</span>{error && <small>{error}</small>}</main>;
 
   // 字数/图片统计（W-2-A）：从渲染体移出，避免每次按键对整篇正文跑两次 O(n) 正则。
-  const activeNodeSyncState = activeNoteId ? (treeNodes.find((n) => n.noteFileId === activeNoteId)?.syncState ?? "synced") : "synced";
-
-  const editorPrefs = {
-    fontSize: settings.fontSize,
-    showToolbar: settings.showToolbar,
-  };
-  // 编辑器面包屑：活动文档路径（思源 protyle-breadcrumb）
-  const activePath = activeNoteId ? treeNodePath(treeNodes, activeNoteId) : [];
-  const scrollActiveEditorToTop = () => {
-    if (!activeNoteId) return;
-    clearScrollMemory(activeNoteId);
-    const activeHost = document.querySelector<HTMLElement>(`.lake-editor-tab[data-note-id="${CSS.escape(activeNoteId)}"]`);
-    // 正常路径按 activeNoteId 定位；多标签切换/懒加载的瞬间如果属性还未回流，
-    // 再兜底处理当前可见的编辑器，避免点击后仍停留在旧滚动位置。
-    const hosts = activeHost
-      ? [activeHost]
-      : [...document.querySelectorAll<HTMLElement>(".lake-editor-tab")].filter((host) => getComputedStyle(host).display !== "none");
-    for (const host of hosts) {
-      const scroller = resolveScrollNode(host);
-      try {
-        // 回到笔记本不是渐进定位：直接归零，避免大文档的平滑滚动
-        // 被编辑器滚动记忆/懒渲染中途打断，停在半路。
-        scroller.scrollTop = 0;
-        scroller.scrollTo({ top: 0, behavior: "auto" });
-      } catch {
-        scroller.scrollTop = 0;
-      }
-    }
-  };
-  const navigateToHeading = (id: string) => {
-    getOutlineTab(activeNoteId)?.navigate(id);
-  };
-  // 大纲路径：从当前滚动标题沿 parentId 上溯（H1→H2→…），与目录路径可区分
-  const headingPath: Array<{ id: string; level: number; text: string }> = (() => {
-    const handle = getOutlineTab(activeNoteId);
-    const selectedId = handle?.controller.getSelectedId() ?? null;
-    if (!handle || !selectedId) return [];
-    const path: Array<{ id: string; level: number; text: string }> = [];
-    let node = handle.controller.getNode(selectedId);
-    while (node) {
-      path.unshift({ id: node.id, level: node.level, text: node.text });
-      node = node.parentId ? handle.controller.getNode(node.parentId) : null;
-    }
-    return path;
-  })();
-  const tabInfos: TabInfo[] = openTabs.map((tab) => ({
-    noteId: tab.noteId, title: tab.title, content: tab.content, dirty: tab.dirty, deleted: tab.deleted,
-    icon: iconByNoteId.get(tab.noteId) ?? null,
-    reloadKey: tab.reloadKey ?? 0,
-  }));
-
-  const outlineVisible = tocEnabled && desktopWorkspace === "library";
-  // 只读锁：store 驱动（可同步），派生集合供多标签 viewer 重建
-  const lockedNoteIds = new Set(notes.filter((n) => n.isLocked).map((n) => n.id));
-
-  // 融合顶栏左侧按钮（工作空间/云同步/外观/更多）：库视图并入多 tab 顶栏，小记视图单独渲染
+  const {
+    activeNodeSyncState, editorPrefs, activePath, scrollActiveEditorToTop, navigateToHeading,
+    headingPath, tabInfos, outlineVisible, lockedNoteIds, effectiveOutlineMode, shellStyle,
+  } = deriveDesktopView({
+    activeNoteId, treeNodes, notes, openTabs, iconByNoteId,
+    fontSize: settings.fontSize, showToolbar: settings.showToolbar, tocEnabled,
+    desktopWorkspace, activeOutlineEmpty, outlineEmptyOverride, outlineMode,
+    sidebarWidth, sidebarMode, outlineSidebarWidth,
+  });
   const topBarLeadingProps = {
     workspaceName,
     sync: sync,
@@ -582,20 +536,6 @@ export function App() {
       onToggleTheme={() => saveSettings({ theme: settings.theme === "dark" ? "light" : "dark" })}
     />
   );
-  const effectiveOutlineMode: OutlineMode = activeOutlineEmpty && !outlineEmptyOverride ? "collapsed" : outlineMode;
-  const shellStyle = {
-    "--sidebar-width": `${sidebarWidth}px`,
-    "--sidebar-grid-w": sidebarMode === "docked" ? `${sidebarWidth}px` : "0px",
-    // 目录与大纲的展开面板互不绑定；只有左右常驻 rail 都是 34px。
-    "--outline-sidebar-width": `${outlineSidebarWidth}px`,
-    "--outline-hover-trigger-width": `${OUTLINE_HOVER_TRIGGER_WIDTH}px`,
-    "--outline-scrollbar-clearance": `${OUTLINE_SCROLLBAR_CLEARANCE}px`,
-    "--outline-grid-w": outlineVisible
-      ? effectiveOutlineMode === "docked"
-        ? `${outlineSidebarWidth + OUTLINE_COLLAPSED_WIDTH + DOCK_GUTTER}px`
-        : `${OUTLINE_COLLAPSED_WIDTH}px`
-      : "0px",
-  } as CSSProperties;
 
   return (
     <div className={`app-shell ${shellPlatformClass} sidebar-${sidebarMode} outline-${effectiveOutlineMode} ${workspaceMenuOpen ? "workspace-menu-open" : ""} ${focusMode ? "focus-mode" : ""} ${desktopWorkspace === "quick-notes" ? "quick-notes-active" : ""} ${sidebarResizing ? "sidebar-resizing" : ""} ${outlineResizing ? "outline-resizing" : ""} ${outlineSwitching ? "outline-switching" : ""}`} style={shellStyle}>
