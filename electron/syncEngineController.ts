@@ -4,6 +4,8 @@
  *
  * 语义等价性由 electron/syncEquivalence.test.ts（7 场景）与 electron/syncAdapterEquiv.test.ts（4 场景）保证。
  */
+import fs from "node:fs";
+import path from "node:path";
 import type { Store } from "./store.js";
 import { ObjectStore, pruneOldManifests } from "./sync.js";
 import type { S3Settings, SyncProgress, SyncResult, SyncWarning } from "./sync.js";
@@ -131,6 +133,55 @@ async function readLatestCommitId(remote: ObjectStore): Promise<string | null> {
 }
 
 /**
+ * 下载某笔记的 declared 资产（惰性下载补偿）。best-effort：无 S3 配置/资源缺失/网络失败
+ * 一律返回 warnings、不抛错（恢复/预览都不被下载阻塞）。
+ * @param onlyMissing 只下载本地缺失的资源（预览用，已有文件不重复拉）
+ */
+async function downloadDeclaredAssets(
+  store: Store,
+  id: string,
+  onlyMissing: boolean,
+  createRemote: (settings: S3Settings, logScopes: LoggerScopes) => ObjectStore,
+): Promise<{ warnings: string[] }> {
+  const warnings: string[] = [];
+  const settings = store.getS3Settings();
+  if (!settings) return { warnings };
+  try {
+    validateS3Settings(settings);
+    const remote = createRemote(settings, store.logScopes);
+    await remote.test();
+    const cfg = syncConfigFromStore(store);
+    const s3Store = createS3StoreAdapter(remote, cfg.prefix);
+    const dbPort = createStoreSyncPort(store);
+    let assets = store.listDeclaredAssets(id);
+    if (onlyMissing) {
+      const dir = store.noteAssetsPathFor(id);
+      assets = assets.filter((a) => !fs.existsSync(path.join(dir, a.filename)));
+    }
+    if (assets.length === 0) return { warnings };
+    const report: SyncReport = {
+      pulled: false, appliedRemote: 0, uploaded: 0, published: false, message: "",
+      warnings: [], supersededNotes: [], foldersUploaded: 0, foldersDownloaded: 0,
+      trashedDown: 0, trashedUp: 0, uploadedBytes: 0, downloadedBytes: 0,
+    };
+    await downloadNoteAssets(cfg, s3Store, dbPort, id, assets, report, false);
+    warnings.push(...report.warnings);
+  } catch (e) {
+    warnings.push(`资源下载失败（保留恢复/预览，资源下次同步补拉）: ${(e as Error).message}`);
+  }
+  return { warnings };
+}
+
+/** 回收站预览：按需补拉该笔记本地缺失的资源（不恢复、不移出回收站）。best-effort。 */
+export async function ensureTrashNoteAssets(
+  store: Store,
+  id: string,
+  createRemote: (settings: S3Settings, logScopes: LoggerScopes) => ObjectStore = (s, l) => new ObjectStore(s, l),
+): Promise<{ warnings: string[] }> {
+  return downloadDeclaredAssets(store, id, true, createRemote);
+}
+
+/**
  * 回收站恢复：恢复前强拉全量资产（惰性下载的补偿），best-effort——资源缺失/损坏/网络失败
  * 不阻断恢复（恢复红线：restore 是墓碑权威唯一显式例外）。资源下载失败时保留恢复，下次同步补拉。
  */
@@ -139,28 +190,7 @@ export async function restoreTrashWithAssets(
   id: string,
   createRemote: (settings: S3Settings, logScopes: LoggerScopes) => ObjectStore = (s, l) => new ObjectStore(s, l),
 ): Promise<{ warnings: string[] }> {
-  const warnings: string[] = [];
-  const settings = store.getS3Settings();
-  if (settings) {
-    try {
-      validateS3Settings(settings);
-      const remote = createRemote(settings, store.logScopes);
-      await remote.test();
-      const cfg = syncConfigFromStore(store);
-      const s3Store = createS3StoreAdapter(remote, cfg.prefix);
-      const dbPort = createStoreSyncPort(store);
-      const declared = store.listDeclaredAssets(id);
-      const report: SyncReport = {
-        pulled: false, appliedRemote: 0, uploaded: 0, published: false, message: "",
-        warnings: [], supersededNotes: [], foldersUploaded: 0, foldersDownloaded: 0,
-        trashedDown: 0, trashedUp: 0, uploadedBytes: 0, downloadedBytes: 0,
-      };
-      await downloadNoteAssets(cfg, s3Store, dbPort, id, declared, report, false);
-      warnings.push(...report.warnings);
-    } catch (e) {
-      warnings.push(`恢复时资源下载失败（保留恢复，资源下次同步补拉）: ${(e as Error).message}`);
-    }
-  }
+  const { warnings } = await downloadDeclaredAssets(store, id, false, createRemote);
   store.restoreTrashItem(id);
   return { warnings };
 }

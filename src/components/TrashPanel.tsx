@@ -83,8 +83,11 @@ export function TrashPanel({ open, onClose, onChanged, onRestored }: {
   const [selected, setSelected] = useState<{ id: string; title: string; noteId: string | null; html: string } | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // 回收站预览资源补拉中的加载态（大文档首次预览需从云端补缺失资源）
+  const [previewing, setPreviewing] = useState(false);
   const floating = useFloatingDialog({ initialSize: { w: 1000, h: 640 }, minSize: { w: 740, h: 460 } });
   const docsVersionRef = useRef(createRequestVersion());
+  const previewVersionRef = useRef(createRequestVersion());
   const quickVersionRef = useRef(createRequestVersion());
   const previewHostRef = useRef<HTMLDivElement>(null);
   const viewerRef = useRef<LakeEditorInstance | null>(null);
@@ -135,12 +138,22 @@ export function TrashPanel({ open, onClose, onChanged, onRestored }: {
 
   const preview = async (item: TrashItem) => {
     if (item.nodeType !== "note" || !item.noteFileId) { setSelected({ id: item.id, title: item.title || "无标题", noteId: null, html: "" }); return; }
+    const noteFileId = item.noteFileId;
+    const version = previewVersionRef.current.next();
+    setSelected(null); // 清空旧预览（销毁旧 viewer），避免加载期间显示上一篇内容
+    setPreviewing(true);
     try {
-      const doc = await native.readNote(item.noteFileId);
-      setSelected({ id: item.id, title: item.title || "无标题", noteId: item.noteFileId, html: doc.content });
+      // 回收站惰性下载补偿：预览前按需补拉该笔记本地缺失的资源（best-effort，失败仍显示本地已有内容）。
+      await native.ensureTrashNoteAssets(noteFileId).catch(() => undefined);
+      const doc = await native.readNote(noteFileId);
+      if (!previewVersionRef.current.isCurrent(version)) return;
+      setSelected({ id: item.id, title: item.title || "无标题", noteId: noteFileId, html: doc.content });
     } catch (e) {
+      if (!previewVersionRef.current.isCurrent(version)) return;
       setSelected({ id: item.id, title: item.title || "无标题", noteId: null, html: "" });
       setError(getNativeErrorMessage(e));
+    } finally {
+      if (previewVersionRef.current.isCurrent(version)) setPreviewing(false);
     }
   };
 
@@ -259,7 +272,9 @@ export function TrashPanel({ open, onClose, onChanged, onRestored }: {
             ))}
           </div>
           <div className="history-preview-inline trash-preview">
-            {selected ? (
+            {previewing ? (
+              <div className="trash-empty-hint">正在加载资源…</div>
+            ) : selected ? (
               <>
                 <div className="history-preview-inline-title">{selected.title}</div>
                 {canPreview ? (

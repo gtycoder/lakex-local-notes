@@ -56,6 +56,7 @@ contextBridge.exposeInMainWorld("lakeNative", {
   deleteTreeNode: (id) => invoke("delete_tree_node", id),
   listTrash: () => invoke("list_trash"),
   restoreTrash: (id) => invoke("restore_trash", id),
+  ensureTrashNoteAssets: (id) => invoke("ensure_trash_note_assets", id),
   purgeTrash: (id) => invoke("purge_trash", id),
   emptyTrash: () => invoke("empty_trash"),
   createHistorySnapshot: (noteId, content, force) => invoke("create_history_snapshot", noteId, content, force),

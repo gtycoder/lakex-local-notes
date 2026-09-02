@@ -9,7 +9,7 @@ import path from "node:path";
 import zlib from "node:zlib";
 import crypto from "node:crypto";
 import { Store } from "./store.js";
-import { syncNowViaEngine, restoreTrashWithAssets } from "./syncEngineController.js";
+import { syncNowViaEngine, restoreTrashWithAssets, ensureTrashNoteAssets } from "./syncEngineController.js";
 import type { ObjectStore, S3Settings } from "./sync.js";
 import { syncNow as engineSync, type S3Store, type SyncConfig, type SyncDbPort, type LocalNoteRow } from "../src/core/syncEngine.js";
 import { sha256Sync } from "../src/core/sha256Sync.js";
@@ -249,6 +249,45 @@ describe("Step 5 双端 A/B（桌面 Controller ↔ 移动端 syncEngine 同 S3�
       expect(warnings).toEqual([]);
       expect(fs.existsSync(path.join(storeB.noteAssetsPathFor(noteA.id), assetName))).toBe(true);
       expect(fs.readFileSync(path.join(storeB.noteAssetsPathFor(noteA.id), assetName))).toEqual(imgBytes);
+    } finally {
+      rmSync(dirA, { recursive: true, force: true });
+      rmSync(dirB, { recursive: true, force: true });
+    }
+  });
+
+  it("ensureTrashNoteAssets：预览按需补拉缺失资源（不恢复、仍在回收站）", async () => {
+    const s3 = new SharedS3();
+    const dirA = mkdtempSync(path.join(tmpdir(), "lake-ab-prev-a-"));
+    const dirB = mkdtempSync(path.join(tmpdir(), "lake-ab-prev-b-"));
+    const assetName = "1786735000000_a1b2c3d4.png";
+    const imgBytes = Buffer.from("preview-img", "utf8");
+    const assetHash = sha256Sync(new Uint8Array(imgBytes));
+    const remote = (s: S3Settings, l: any) => s3 as unknown as ObjectStore;
+    try {
+      const storeA = new Store(dirA);
+      storeA.saveS3Settings(S3_CFG);
+      const noteA = storeA.createNote("预览笔记");
+      storeA.saveNote(noteA.id, "预览笔记", `<p>see ${assetName}</p>`);
+      const assetDir = storeA.noteAssetsPathFor(noteA.id);
+      fs.mkdirSync(assetDir, { recursive: true });
+      fs.writeFileSync(path.join(assetDir, assetName), imgBytes);
+      await syncNowViaEngine(storeA, undefined, remote);
+      storeA.deleteTreeNode(noteA.id);
+      await syncNowViaEngine(storeA, undefined, remote);
+
+      // B 全新设备惰性拉到回收站：资源缺失
+      const storeB = new Store(dirB);
+      storeB.saveS3Settings(S3_CFG);
+      await syncNowViaEngine(storeB, undefined, remote);
+      expect(fs.existsSync(path.join(storeB.noteAssetsPathFor(noteA.id), assetName))).toBe(false);
+
+      // 预览按需补拉：资源下载但笔记仍在回收站（不恢复）
+      const { warnings } = await ensureTrashNoteAssets(storeB, noteA.id, remote);
+      expect(warnings).toEqual([]);
+      expect(fs.existsSync(path.join(storeB.noteAssetsPathFor(noteA.id), assetName))).toBe(true);
+      const bRow = storeB.listNotesForSync().find((n) => n.id === noteA.id);
+      expect(bRow!.parentId).toBe(TRASH_NOTEBOOK_ID); // 仍在回收站
+      expect(bRow!.trashedAt).not.toBeNull();
     } finally {
       rmSync(dirA, { recursive: true, force: true });
       rmSync(dirB, { recursive: true, force: true });
