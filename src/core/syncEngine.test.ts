@@ -178,6 +178,59 @@ describe("syncEngine（共享编排）", () => {
     expect((entry.assets ?? []).some((x: any) => x.filename === assetName)).toBe(false);
   });
 
+  it("S3 差集上传：仅元数据变更重传时，远端清单已声明的资产不重复上传也不探测，清单仍全量声明（回归：稳态空转）", async () => {
+    const s3 = new MemS3();
+    const db = new MemDb();
+    const fn = "1787733338672_a1b2c3d4.png";
+    const body = "<p>hi</p>";
+    const h = hashOf(body);
+    const assetBytes = new TextEncoder().encode("img");
+    // 云端已有正文对象 + 资产对象；远端清单声明了该资产（= 对象此刻被引用、未被 GC → 存在）
+    s3.map.set("p/objects/n1-" + h + ".lake", new TextEncoder().encode(body));
+    s3.map.set("p/assets/n1/" + fn, assetBytes);
+    s3.map.set("p/manifests/latest.json", new TextEncoder().encode(JSON.stringify({
+      version: 4, workspaceId: "default", commitId: "c1", prevCommitId: null, createdAt: "2026-01-01T00:00:00.000Z",
+      notes: [{ id: "n1", title: "旧标题", parentId: null, sortOrder: 0, updatedAt: "2026-01-01T00:00:00.000Z", contentHash: h, isConflict: false, assets: [{ filename: fn, size: assetBytes.length, hash: "a".repeat(64) }] }],
+      folders: [],
+    })));
+    // 本地：正文不变、仅改标题 → sync_state=local（元数据变更触发重传）；本地存在该资产文件
+    db.notes.set("n1", row({ id: "n1", content: body, title: "新标题", syncState: "local", updatedAt: "2026-01-02T00:00:00.000Z" }));
+    db.assets.set("n1/" + fn, assetBytes);
+    const puts: string[] = [];
+    const origPut = s3.putObject.bind(s3);
+    s3.putObject = async (k: string, b: any, o?: any) => { puts.push(k); return origPut(k, b, o); };
+    const r = await syncNow(CFG, s3, db);
+    expect(r.uploaded).toBe(1);                                              // 正文（含新标题）仍发布
+    expect(puts.some((k) => k.startsWith("p/assets/"))).toBe(false);         // 资产既不重复 PUT 也不 GET 探测
+    const manifest = JSON.parse(decode((await s3.getObject("p/manifests/latest.json"))!));
+    const entry = manifest.notes.find((n: any) => n.id === "n1");
+    expect((entry.assets ?? []).some((x: any) => x.filename === fn)).toBe(true); // 清单仍全量声明（GC 红线：不得裁剪声明）
+  });
+
+  it("S3 差集上传：新增资产上传、已声明旧资产跳过", async () => {
+    const s3 = new MemS3();
+    const db = new MemDb();
+    const old = "1_a.png", added = "2_b.png";
+    const body = "<p>hi</p>";
+    const h = hashOf(body);
+    s3.map.set("p/objects/n1-" + h + ".lake", new TextEncoder().encode(body));
+    s3.map.set("p/assets/n1/" + old, new TextEncoder().encode("A"));
+    s3.map.set("p/manifests/latest.json", new TextEncoder().encode(JSON.stringify({
+      version: 4, workspaceId: "default", commitId: "c1", prevCommitId: null, createdAt: "2026-01-01T00:00:00.000Z",
+      notes: [{ id: "n1", title: "T", parentId: null, sortOrder: 0, updatedAt: "2026-01-01T00:00:00.000Z", contentHash: h, isConflict: false, assets: [{ filename: old, size: 1, hash: "c".repeat(64) }] }],
+      folders: [],
+    })));
+    db.notes.set("n1", row({ id: "n1", content: body, syncState: "local", updatedAt: "2026-01-02T00:00:00.000Z" }));
+    db.assets.set("n1/" + old, new TextEncoder().encode("A"));
+    db.assets.set("n1/" + added, new TextEncoder().encode("B"));
+    const puts: string[] = [];
+    const origPut = s3.putObject.bind(s3);
+    s3.putObject = async (k: string, b: any, o?: any) => { puts.push(k); return origPut(k, b, o); };
+    await syncNow(CFG, s3, db);
+    expect(puts).toContain("p/assets/n1/" + added);   // 新增资产上传
+    expect(puts).not.toContain("p/assets/n1/" + old); // 已声明资产走差集跳过（无 PUT、无探测）
+  });
+
   it("二次同步：无变更不重传（skip-fast）", async () => {
     const s3 = new MemS3();
     const db = new MemDb();

@@ -28,10 +28,13 @@ import { MAX_IMAGE_BYTES } from "./storeLimits.js";
 /** 单对象大小护栏（对齐桌面 sync.ts:100）：正文 .lake 上限 64MiB。 */
 const MAX_REMOTE_NOTE_BYTES = 64 * 1024 * 1024;
 
-/** P3-3：资产传输并发批大小。桌面实测（106 资产 58MB）：串行 RTT 占同步耗时 99%
- * （head 均 24ms + put 均 157ms × 212 次往返 = 19.7s）。并发 4 → 首传约 5s、稳态 HEAD 巡检 <1s；
- * 对齐思源 dejavu 的并发 worker 模式。4 路对七牛 Kodo QPS 安全。 */
+/** P3-3：资产传输并发批大小。桌面实测资产传输是同步长尾（串行逐条 RTT 占耗时 99%）。
+ * 现方案：① 存在性用「远端清单声明差集」判定（对齐思源 dejavu，见 scanLocalAssets），彻底去掉每对象一次
+ * HEAD 往返（旧实测 20 篇元数据变更 = 335 次 HEAD 全 HIT、0 上传 = 14s 空转）；② 真正缺失者并发上传，
+ * 并发 4 路（首传 106 资产 58MB 约 5s），4 路对七牛 Kodo QPS 安全。 */
 const ASSET_CONCURRENCY = 4;
+/** 正文对象并发上传车道数（内容寻址幂等，条目独立）。 */
+const UPLOAD_CONCURRENCY = 4;
 
 /** P3-3：小型并发池（定长车道，无依赖）：worker 按 index 领任务；结果由调用方按
  * 原索引归位（warnings 顺序 / 字节记账保持确定性，对齐串行语义）。 */
@@ -133,12 +136,6 @@ export interface S3Store {
   getObject(key: string, opts?: { maxBytes?: number }): Promise<Uint8Array | null>;
   /** 写入对象；opts.gzip 由端口压缩（manifest 传 {gzip:true}，正文/资源不压缩）。 */
   putObject(key: string, body: string | Uint8Array, opts?: { gzip?: boolean }): Promise<void>;
-  /**
-   * HEAD 存在性探测（桌面实现；移动端/测试桩可不实现走整对象 GET 回退）。
-   * 探测"远端是否已有此对象"用 HEAD 而非 getObject——大附件（100MiB 级）下
-   * 整对象 GET 判存在会每轮同步全量下载，浪费带宽且拖慢同步。
-   */
-  exists?(key: string): Promise<boolean>;
   /**
    * 流式上传（桌面实现；移动端/测试桩可不实现走字节路径回退）。
    * open 返回 Node Readable（本地文件流）；size 为文件字节数（显式 Content-Length，
@@ -260,34 +257,48 @@ export interface SyncDbPort {
 
 const MANIFEST_KEY = "manifests/latest.json";
 
-/** 扫描本地资产：上传到 S3（缺失才传）并返回清单条目（H3 与软删上云共用）。
- * 存在性探测优先 HEAD（s3.exists），避免整对象 GET 判存在；上传优先流式
- * （s3.putObjectStream + db.openLocalAssetStream 同时可用时），否则字节路径。
+/** 扫描本地资产：只上传云端缺失者，返回该笔记**完整**资产清单（H3 与软删上云共用）。
+ *
+ * 存在性判定采用「远端清单声明差集」（对齐思源 dejavu：以刚下载的 cloud 最新索引已声明的
+ * chunk 集合做减法，只传缺的）——而非逐对象 HEAD 探测。理由：
+ *  1. 稳态同步里资产几乎都已在云端，逐对象 HEAD 只是把「确认无需上传」的成本摊到每次同步
+ *     （实测：20 篇仅元数据变更 → 335 次 HEAD 全 HIT、0 字节上传 = 14s 纯往返空转）。
+ *  2. 我们下载的 remote 清单本身就是「云端当前引用集」的权威快照（发布顺序=先对象后清单），
+ *     且 GC 只删「未被任何清单引用」的对象（S3-GC-DESIGN：本地为真相、S3 只是镜像 + 年龄保护 + 差集删除），
+ *     所以「remote 清单声明了该资产」⇒ 该对象此刻被引用 ⇒ 未被 GC ⇒ 云端确实存在。无需再 HEAD。
+ *  3. 关键安全点：返回值仍是**完整** localAssets（全量写进 manifest.assets）——
+ *     只对「上传动作」做差集，绝不裁剪「清单声明」。清单声明一旦被裁剪，他端 GC 会把
+ *     仍在用的资产判为未引用而误删（HANDOFF-260901 恢复红线）。
+ *
+ * cloudDeclaredFilenames：本笔记在**已下载远端清单**中声明的资产文件名集合；缺省（如新笔记 /
+ * 桶被重置 → rn 为 null）传空集 → 全部本地资产都按缺失上传。
+ * 上传优先流式（s3.putObjectStream + db.openLocalAssetStream 同时可用），否则字节路径（移动端零改动）。
  * stats 传入时累计实际上传字节数（流式取声明 size，字节路径取 bytes.length）。
- * 导出供单元测试直接覆盖流式/HEAD 选择逻辑。 */
-export async function scanLocalAssets(cfg: SyncConfig, s3: S3Store, db: SyncDbPort, noteId: string, stats?: { uploadedBytes: number }): Promise<ManifestNote["assets"]> {
+ * 导出供单元测试直接覆盖差集/流式选择逻辑。 */
+export async function scanLocalAssets(
+  cfg: SyncConfig, s3: S3Store, db: SyncDbPort, noteId: string,
+  stats?: { uploadedBytes: number },
+  cloudDeclaredFilenames?: ReadonlySet<string>,
+): Promise<ManifestNote["assets"]> {
   const localAssets = await db.listLocalAssets(noteId);
   const canStream = !!s3.putObjectStream && typeof db.openLocalAssetStream === "function";
-  // P3-3：并发 HEAD+PUT（桌面实测串行 RTT 占同步耗时 99%）。worker 不抛错——错误按索引
-  // 归位，池结束后按原顺序抛首个错误（与旧串行"逐个 await、首错即止"裁决一致）；
-  // 字节记账按索引归位（流式=声明 size，字节路径=实际 bytes.length）。
+  // P3-3：并发上传（仅缺失者）。worker 不抛错——错误按索引归位，池结束后按原顺序抛首个错误
+  // （与旧串行「逐个 await、首错即止」裁决一致）；字节记账按索引归位（流式=声明 size，字节路径=bytes.length）。
   const uploadedSize: Array<number | null> = new Array(localAssets.length).fill(null);
   const errors: Array<unknown> = new Array(localAssets.length).fill(null);
   await runPool(localAssets, ASSET_CONCURRENCY, async (a, i) => {
     try {
+      // 已在远端清单声明 → 认定云端存在，跳过上传（不再 HEAD 探测）；但仍保留在返回清单里（全量声明）。
+      if (cloudDeclaredFilenames?.has(a.filename)) return;
       const key = `${cfg.prefix}/assets/${noteId}/${a.filename}`;
-      // 存在性探测：HEAD 优先；端口未实现则整对象 GET 判存在（兼容移动端/测试桩）
-      const exists = s3.exists ? await s3.exists(key) : (await s3.getObject(key)) != null;
-      if (!exists) {
-        if (canStream && s3.putObjectStream) {
-          await s3.putObjectStream(key, a.size, () => db.openLocalAssetStream!(noteId, a.filename));
-          uploadedSize[i] = a.size;
-        } else {
-          const bytes = await db.readLocalAsset(noteId, a.filename);
-          if (bytes) {
-            await s3.putObject(key, bytes);
-            uploadedSize[i] = bytes.length;
-          }
+      if (canStream && s3.putObjectStream) {
+        await s3.putObjectStream(key, a.size, () => db.openLocalAssetStream!(noteId, a.filename));
+        uploadedSize[i] = a.size;
+      } else {
+        const bytes = await db.readLocalAsset(noteId, a.filename);
+        if (bytes) {
+          await s3.putObject(key, bytes);
+          uploadedSize[i] = bytes.length;
         }
       }
     } catch (e) {
@@ -332,8 +343,14 @@ export async function syncNow(cfg: SyncConfig, s3: S3Store, db: SyncDbPort, opts
   };
   // A 方案：上传 manifest 的 assets = 本地文件 ∪ (正文引用的、且有已声明元数据的资源)。
   // 保证备份声明完整；正文引用（当前内容）不含已删除引用，避免历史把已删资源挂回当前文档。
-  const resolveUploadAssets = async (localId: string, content: string): Promise<ManifestNote["assets"]> => {
-    const localFiles = await scanLocalAssets(cfg, s3, db, localId, report);
+  const resolveUploadAssets = async (
+    localId: string, content: string,
+    cloudAssets?: ManifestNote["assets"] | null,
+  ): Promise<ManifestNote["assets"]> => {
+    // 差集上传：以已下载远端清单中本笔记声明的资产文件名为「云端已存在」依据（对齐思源 dejavu），
+    // 不再逐对象 HEAD。cloudAssets 缺省/为空（新笔记、桶重置 rn=null）→ 全部按缺失上传。
+    const cloudDeclared = cloudAssets && cloudAssets.length ? new Set(cloudAssets.map((a) => a.filename)) : undefined;
+    const localFiles = await scanLocalAssets(cfg, s3, db, localId, report, cloudDeclared);
     const declared = typeof db.listDeclaredAssets === "function" ? (db.listDeclaredAssets(localId) ?? []) : [];
     const byName = new Map(declared.map((d) => [d.filename, d]));
     const seen = new Set(localFiles.map((f) => f.filename));
@@ -694,7 +711,7 @@ export async function syncNow(cfg: SyncConfig, s3: S3Store, db: SyncDbPort, opts
       let trashAssets: ManifestNote["assets"] = [];
       const uploadContent = contentOf(local);
       try {
-        trashAssets = await resolveUploadAssets(local.id, uploadContent);
+        trashAssets = await resolveUploadAssets(local.id, uploadContent, rn?.assets ?? null);
       } catch (e) {
         db.log(`[tombstone] ${local.id} 资源扫描失败（跳过）：${(e as Error).message}`);
       }
@@ -725,7 +742,7 @@ export async function syncNow(cfg: SyncConfig, s3: S3Store, db: SyncDbPort, opts
       let assets: ManifestNote["assets"] = [];
       const uploadContent = contentOf(local);
       try {
-        assets = await resolveUploadAssets(local.id, uploadContent);
+        assets = await resolveUploadAssets(local.id, uploadContent, rn?.assets ?? null);
       } catch (e) {
         db.log(`[H3] 资产扫描失败（跳过，不影响正文上传）: ${(e as Error).message}`);
       }
@@ -792,17 +809,20 @@ export async function syncNow(cfg: SyncConfig, s3: S3Store, db: SyncDbPort, opts
   // 或本地目录树有变更（回收站笔记本 / 移动 / 改名 / 图标——对齐桌面 sync.ts 每次同步无条件发布
   // manifest，folders 变更必须传播；迁移回归修复：否则删笔记本不传播 + 目录记账抹掉 local）。
   if (uploadQueue.length > 0 || purgedIds.size > 0 || foldersChanged) {
-    for (const item of uploadQueue) {
+    // 正文对象上传：内容寻址幂等、条目相互独立 → 并发池（对齐 P3-3 资产并发；旧串行逐条 await，
+    // 实测 N 篇笔记正文上传是同步尾部长尾）。错误不再吞：任一失败即抛出（与旧串行首错即止一致，
+    // 且上传失败必须让整轮同步报错、不得继续发布 manifest 引用未落盘正文）。
+    await runPool(uploadQueue, UPLOAD_CONCURRENCY, async (item) => {
       // 占位符墓碑（tombstone && content 为空，purge 已物理删除内容）：不重算 hash（保留占位符 id）、
       // 不传空对象（否则 contentHash 被覆盖成 sha256(空串) + 空对象残留——迁移回归），仅写 deleted 标记。
-      if (item.tombstone && item.content === "") continue;
+      if (item.tombstone && item.content === "") return;
       const contentBytes = new TextEncoder().encode(item.content);
       const hash = sha256Sync(contentBytes);
       if (item.entry.contentHash !== hash) item.entry.contentHash = hash;
       await s3.putObject(`${cfg.prefix}/${objectKey(item.id, item.entry.contentHash)}`, item.content);
       report.uploaded++;
       report.uploadedBytes += contentBytes.length;
-    }
+    });
     next = {
       version: 4,
       workspaceId: "default",
