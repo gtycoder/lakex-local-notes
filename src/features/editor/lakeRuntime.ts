@@ -445,6 +445,98 @@ export interface LakeEditorPrefs {
   };
 }
 
+// 语雀/Lake 导出的 bookmark 卡（bookmarkInline 标题样式 / bookmark 块卡样式）在本地
+// 无法展示完整详情（无语雀 API），会渲染成"无标题 + 不可点击 + 无样式浮窗"的死卡。
+// 用户明确要求：新粘贴的内容统一降级为普通超链接（与虎扑/果壳一致，Lake 的 ne-link，
+// 可点击跳转）。降级原理：Lake 内置 cardToLink 命令提供"卡→链接"转换。
+// 只在用户粘贴时触发降级新出现的 bookmark 卡；历史/加载的文档不主动改动，seen 幂等收敛。
+
+/** 需要降级为超链接的 bookmark 卡名（Lake INode 的 card name；块卡落盘后为 bookmarklink）。 */
+const BOOKMARK_CARD_NAMES = ["bookmarkInline", "bookmark", "bookmarklink"] as const;
+/** 卡→链接转换用到的 Lake 命令名。 */
+const CARD_TO_LINK_COMMAND = "cardToLink";
+/** 粘贴后等待 Lake 渲染卡的首个延时（ms）。 */
+const BOOKMARK_DEGRADE_FIRST_DELAY = 150;
+/** 若卡尚未渲染/未拿到 src，后续重试的延时步进（ms）。 */
+const BOOKMARK_DEGRADE_RETRY_DELAY = 350;
+/** 单次粘贴后最多重试次数，兼顾 Lake 异步渲染慢（大文档/移动端）的场景。 */
+const BOOKMARK_DEGRADE_MAX_RETRY = 3;
+
+/** Lake 内核压缩 bundle 未公开 bookmark 卡数据接口，沿用项目现有私有路径访问。 */
+interface LakeBookmarkCardData {
+  getSrc?: () => string;
+  getDetail?: () => { title?: unknown } & Record<string, unknown>;
+  getCardValue?: () => { text?: string };
+}
+
+/** 从渲染后的 bookmark 卡 DOM 节点读取转换所需的（卡 id / 链接 / 标题）。 */
+function readBookmarkCardInfo(
+  card: Element,
+): { id: string; src: string; title: string } | null {
+  const id = card.getAttribute("id");
+  if (!id) return null;
+  const anyCard = card as unknown as {
+    _neRef?: {
+      _virtualNode?: { _instance?: { cardData?: unknown; _cardData?: unknown } };
+      _instance?: { cardData?: unknown; _cardData?: unknown };
+    };
+  };
+  const inst = anyCard._neRef?._virtualNode?._instance ?? anyCard._neRef?._instance;
+  const data = (inst?.cardData ?? inst?._cardData) as LakeBookmarkCardData | undefined;
+  const src = data?.getSrc?.() ?? "";
+  if (!src) return { id, src: "", title: "" };
+  const detail = data?.getDetail?.() ?? {};
+  const title = (detail.title as string) || data?.getCardValue?.()?.text || src;
+  return { id, src, title };
+}
+
+/** 监听编辑器挂载容器的粘贴事件，把新出现的 bookmark 卡降级为普通超链接。 */
+function installBookmarkCardDegrade(
+  scope: HTMLElement,
+  editor: unknown,
+): () => void {
+  const selectors = BOOKMARK_CARD_NAMES.map((name) => `ne-card[data-card-name="${name}"]`).join(", ");
+  const converted = new Set<string>();
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  let retriesLeft = 0;
+
+  const degradeOnce = () => {
+    timer = null;
+    const failed: Element[] = [];
+    for (const card of Array.from(scope.querySelectorAll(selectors))) {
+      const info = readBookmarkCardInfo(card);
+      if (!info) continue;
+      // 已成功的卡跳过；src 尚未就绪/转换失败则进入下一轮重试
+      if (converted.has(info.id)) continue;
+      if (!info.src) { failed.push(card); continue; }
+      try {
+        (editor as { execCommand?: (...args: unknown[]) => void }).execCommand?.(
+          CARD_TO_LINK_COMMAND, info.id, info.src, info.title,
+        );
+        converted.add(info.id);
+      } catch {
+        failed.push(card);
+      }
+    }
+    if (failed.length > 0 && retriesLeft > 0) {
+      retriesLeft -= 1;
+      timer = setTimeout(degradeOnce, BOOKMARK_DEGRADE_RETRY_DELAY * (BOOKMARK_DEGRADE_MAX_RETRY - retriesLeft));
+    }
+  };
+
+  const schedule = () => {
+    retriesLeft = BOOKMARK_DEGRADE_MAX_RETRY;
+    if (timer != null) return;
+    timer = setTimeout(degradeOnce, BOOKMARK_DEGRADE_FIRST_DELAY);
+  };
+  // Lake 粘贴会经 document 捕获阶段，事件仍会冒泡到挂载容器。
+  scope.addEventListener("paste", schedule, true);
+  return () => {
+    if (timer != null) { clearTimeout(timer); timer = null; }
+    scope.removeEventListener("paste", schedule, true);
+  };
+}
+
 export function createLakeDocument(
   element: HTMLElement,
   mode: "viewer" | "editor",
@@ -465,6 +557,25 @@ export function createLakeDocument(
     disabledPlugins: mode === "viewer"
       ? ["save", "toolbar", "emoji"]
       : ["save", ...(prefs?.showToolbar === false ? ["toolbar"] : [])],
+    // 语雀/Lake 导出的 bookmark 卡（bookmarkInline / bookmark）能否被注册进内核，
+    // 取决于 BookmarkEditorPlugin(option name="bookmark") 的 isEnable，而其
+    // isEnable = !!_option.detailAction || !!_option.fetchDetailHandler。
+    // 本地没有语雀 API，故提供 fetchDetailHandler 返回最小 detail，仅用于让插件
+    // 走三参 registerInlineCard/registerBlockCard 注册卡类（否则 getCardClass 返回
+    // null 直接崩溃）。已有 detail 的剪贴板卡不会走到该 handler；真正缺少 detail 的
+    // 纯 URL 粘贴时才被调用，这里返回基于 url 的最小结构、不出网。
+    bookmark: {
+      fetchDetailHandler: (src: unknown) => {
+        const url = typeof src === "string" ? src : String((src as { url?: unknown })?.url ?? "");
+        return Promise.resolve({
+          title: url,
+          icon: null,
+          image: null,
+          desc: null,
+          url,
+        });
+      },
+    },
     input: {},
     defaultFontsize: prefsSize,
     toc: { enable: !!tocEnabled && !prefs?.disableNativeToc },
@@ -572,6 +683,10 @@ export function createLakeDocument(
   lakeMeasure("lake:create:openEditor", "lake:create:start", "lake:create:end");
   if (mode === "editor") {
     editor.on("contentchange", onChange);
+  }
+  // 语雀 bookmark 卡本地降级为普通超链接（ne-link），见 installBookmarkCardDegrade。
+  if (mode === "editor") {
+    try { (editor as any).__disposeBookmarkDegrade = installBookmarkCardDegrade(mount, editor); } catch { /* 忽略 */ }
   }
   // 仅编辑态启用 virtualRendering + cardLazyInit，因此可见卡片水合只挂在编辑器实例；
   // 锁定态 Viewer 明确关闭虚拟渲染，避免自定义卡片停留在 hole 空壳。
@@ -1280,6 +1395,9 @@ export function destroyLakeEditor(editor: LakeEditorInstance | null): void {
   } catch (error) {
     console.warn("Lake editor extras cleanup failed", error);
   }
+  try {
+    (editor as any)?.__disposeBookmarkDegrade?.();
+  } catch { /* 忽略 */ }
   try {
     editor?.destroy?.();
     if (!editor?.destroy) editor?.destory?.();
