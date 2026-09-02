@@ -660,6 +660,49 @@ describe("syncEngine（共享编排）", () => {
     expect(r1.appliedRemote).toBe(1);
   });
 
+  it("回归：空库同步+无可下载内容（全部本地删除较新跳过）→ 不得急切创建兜底'未分类'（凭空笔记本 bug）", async () => {
+    const s3 = new MemS3();
+    const db = new MemDb();
+    let defaultCalled = 0;
+    db.defaultNotebookId = () => { defaultCalled++; return "notebook-uncategorized"; };
+    const h = hashOf("<p>old</p>");
+    // 本地无任何笔记本 + 本地删除墓碑较新；远端唯一笔记父目录也缺失（若能落地本会回退兜底）
+    db.deletedNotes.add("n1");
+    db.deletedAtMap.set("n1", "2026-01-05T00:00:00.000Z");
+    s3.map.set("p/manifests/latest.json", new TextEncoder().encode(JSON.stringify({
+      version: 4, workspaceId: "default", commitId: "c1", prevCommitId: null, createdAt: "2026-01-01T00:00:00.000Z",
+      notes: [{ id: "n1", title: "旧", parentId: "folder-missing", sortOrder: 0, updatedAt: "2026-01-01T00:00:00.000Z", contentHash: h, isConflict: false, assets: [] }],
+      folders: [],
+    })));
+    const r = await syncNow(CFG, s3, db);
+    expect(r.appliedRemote).toBe(0);
+    expect(db.notes.has("n1")).toBe(false);   // 墓碑较新 → 跳过下载
+    expect(defaultCalled).toBe(0);            // 关键：没有笔记需要安家 → 兜底"未分类"从不创建
+  });
+
+  it("兜底'未分类'惰性且缓存：多篇笔记都需兜底父 → defaultNotebookId 本轮只解析一次", async () => {
+    const s3 = new MemS3();
+    const db = new MemDb();
+    let defaultCalled = 0;
+    db.defaultNotebookId = () => { defaultCalled++; return "notebook-uncategorized"; };
+    const h1 = hashOf("<p>a</p>"), h2 = hashOf("<p>b</p>");
+    s3.map.set("p/objects/n1-" + h1 + ".lake", new TextEncoder().encode("<p>a</p>"));
+    s3.map.set("p/objects/n2-" + h2 + ".lake", new TextEncoder().encode("<p>b</p>"));
+    s3.map.set("p/manifests/latest.json", new TextEncoder().encode(JSON.stringify({
+      version: 4, workspaceId: "default", commitId: "c1", prevCommitId: null, createdAt: "2026-01-01T00:00:00.000Z",
+      notes: [
+        { id: "n1", title: "A", parentId: "folder-missing", sortOrder: 0, updatedAt: "2026-01-01T00:00:00.000Z", contentHash: h1, isConflict: false, assets: [] },
+        { id: "n2", title: "B", parentId: "folder-missing", sortOrder: 0, updatedAt: "2026-01-01T00:00:00.000Z", contentHash: h2, isConflict: false, assets: [] },
+      ],
+      folders: [],
+    })));
+    const r = await syncNow(CFG, s3, db);
+    expect(r.appliedRemote).toBe(2);
+    expect(db.notes.get("n1")!.parentId).toBe("notebook-uncategorized");
+    expect(db.notes.get("n2")!.parentId).toBe("notebook-uncategorized");
+    expect(defaultCalled).toBe(1);            // 缓存：至多建一个"未分类"
+  });
+
   it("墓碑保留：本地删除较新 + 远端恢复较旧 → keep-local-delete（不上传覆盖）", async () => {
     const s3 = new MemS3();
     const db = new MemDb();

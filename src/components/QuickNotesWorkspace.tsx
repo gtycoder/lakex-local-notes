@@ -46,6 +46,8 @@ export const QuickNotesWorkspace = forwardRef<QuickNotesWorkspaceHandle, QuickNo
   const deleteTimer = useRef<number | null>(null);
   const fileInputs = useRef<Map<string, HTMLInputElement>>(new Map());
   const listVersionRef = useRef(createRequestVersion());
+  // 撤销窗口内「尚未落盘删除」的小记 id：外部刷新（如同步完成）不得让它重新出现。
+  const pendingDeleteIdRef = useRef<string | null>(null);
 
   const activeDraft = editingDraft ?? createDraft;
   const activeIsEditing = editingDraft !== null;
@@ -56,7 +58,12 @@ export const QuickNotesWorkspace = forwardRef<QuickNotesWorkspaceHandle, QuickNo
     if (showLoading) setLoading(true);
     try {
       const nextItems = await native.listQuickNotes();
-      if (listVersionRef.current.isCurrent(version)) setItems(nextItems);
+      if (listVersionRef.current.isCurrent(version)) {
+        // 乐观删除尚未到期落盘时，同步完成等外部刷新会把该小记重新拉回列表 → 表现为「删不掉」。
+        // 刷新结果里过滤掉撤销窗口内的那条，保持它与 UI 一致（到期由定时器真正删除；撤销则重新显示）。
+        const pendingId = pendingDeleteIdRef.current;
+        setItems(pendingId ? nextItems.filter((item) => item.id !== pendingId) : nextItems);
+      }
     } catch (reason) {
       if (listVersionRef.current.isCurrent(version)) setError(getNativeErrorMessage(reason));
     } finally {
@@ -74,6 +81,8 @@ export const QuickNotesWorkspace = forwardRef<QuickNotesWorkspaceHandle, QuickNo
   }, []);
 
   useEffect(() => { onDirtyChange(dirty); }, [dirty, onDirtyChange]);
+
+  useEffect(() => { pendingDeleteIdRef.current = pendingDelete?.id ?? null; }, [pendingDelete]);
 
   useImperativeHandle(ref, () => ({
     async refresh() {

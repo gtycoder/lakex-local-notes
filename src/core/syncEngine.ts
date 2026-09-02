@@ -446,10 +446,15 @@ export async function syncNow(cfg: SyncConfig, s3: S3Store, db: SyncDbPort, opts
   // ---- 2. 下载方向：墓碑/恢复分支 → reconcile 对账 → 应用远端 ----
   if (remote) {
     // D4：先导入目录树（保证文档父 notebook/group 已存在），并构建 validParents——
-    // 父节点集合 = 兜底父笔记本（无默认笔记本概念）+ 回收站笔记本 + 远端 folders + 远端 active 笔记 id + 本地已有节点。
+    // 父节点集合 = 回收站笔记本 + 远端 folders + 远端 active 笔记 id + 本地已有节点（兜底父笔记本惰性解析，见下，创建前不入集合）。
     // effectiveParent 据此回退，防"父目录缺失 → 文档消失/归属错位"（对齐桌面 sync.ts:344-363/395）。
-    const defaultNotebook = db.defaultNotebookId();
-    const validParents = new Set<string>([defaultNotebook, TRASH_NOTEBOOK_ID]);
+    // 兜底父笔记本惰性解析：db.defaultNotebookId() 在本地无任何笔记本时会新建普通笔记本"未分类"（红线：仅"必须给内容一个家"时才建）。
+    // 旧实现在下载阶段开头无条件调用 → 空库同步即使 downloaded=0、没有任何笔记需要安家，也会凭空创建"未分类"并上传扩散到云端；
+    // 且它在目录导入之前执行，即便远端 folders 即将提供真实归属也会误建。改为首次真正需要兜底父时再解析并缓存（本轮至多建一次）。
+    let defaultNotebook: string | null = null;
+    const resolveDefaultNotebook = (): string => (defaultNotebook ??= db.defaultNotebookId());
+    // 兜底笔记本惰性创建，创建前其 id 未知，故不预置进 validParents（其随机 id 也不会被任何远端 rn.parentId 引用）。
+    const validParents = new Set<string>([TRASH_NOTEBOOK_ID]);
     for (const folder of remote.folders) {
       if (!isSafePathSegment(folder.id)) throw new Error(`清单包含无效的目录 ID: ${folder.id}`);
       if (folder.parentId !== null && !isSafePathSegment(folder.parentId)) throw new Error(`清单包含无效的目录 parentId: ${folder.parentId}`);
@@ -499,7 +504,10 @@ export async function syncNow(cfg: SyncConfig, s3: S3Store, db: SyncDbPort, opts
       const remoteTrashed = !!rn.trashedAt;   // 软删（回收站）；purge（deleted:true）已单独处理
       const localTrashed = local?.trashedAt != null;
       const localRestoring = local?.restorePendingAt != null;
-      const effectiveParent = rn.parentId !== null && validParents.has(rn.parentId) ? rn.parentId : defaultNotebook;
+      // 有效父惰性求值：父合法时直接用它；仅当确需回退兜底位时才解析（并可能创建）"未分类"（按 note 记忆，避免重复解析）。
+      let effectiveParentMemo: string | undefined;
+      const effectiveParent = (): string =>
+        (effectiveParentMemo ??= rn.parentId !== null && validParents.has(rn.parentId) ? rn.parentId : resolveDefaultNotebook());
 
       // B4：purge（deleted:true）——本地有副本→移入回收站标 purged（可恢复、不上传）；无→记住删除（防复活）
       if (rn.deleted) {
@@ -599,7 +607,7 @@ export async function syncNow(cfg: SyncConfig, s3: S3Store, db: SyncDbPort, opts
             try { await downloadNoteAssets(cfg, s3, db, rn.id, rn.assets, report, true); }
             catch (e) { if (e instanceof AssetMissingError) { report.warnings.push(`资源缺失（跳过该条目）: ${rn.id}`); continue; } throw e; }
           }
-          db.applyRemoteNote({ ...rn, parentId: effectiveParent, trashedAt: null, deleted: false, deletedAt: undefined, deletedFromParentId: null }, decodeText(contentBytes));
+          db.applyRemoteNote({ ...rn, parentId: effectiveParent(), trashedAt: null, deleted: false, deletedAt: undefined, deletedFromParentId: null }, decodeText(contentBytes));
           if (!opts?.strictAssets) await downloadNoteAssets(cfg, s3, db, rn.id, rn.assets, report, false);
           db.setSyncBase(rn.id, rn.contentHash, rn.updatedAt, null);
           report.appliedRemote++;
@@ -629,9 +637,9 @@ export async function syncNow(cfg: SyncConfig, s3: S3Store, db: SyncDbPort, opts
           // （B 把 888 移入 999 下，而 A 已把 999 移入 888 下并提交）→ 保留本地会与远端成环，
           // 即使本地 updatedAt 较新也强制跟随远端打破环（对齐桌面 sync.ts:484-492）。
           const localParentConflicts =
-            local.parentId !== null && local.parentId !== effectiveParent && isRemoteDescendant(local.parentId, rn.id, remoteParentMap);
+            local.parentId !== null && local.parentId !== effectiveParent() && isRemoteDescendant(local.parentId, rn.id, remoteParentMap);
           if (decideMetaApply(rn.updatedAt, base?.lastSyncedMetaAt ?? null) || localParentConflicts) {
-            db.applyRemoteNoteMeta({ ...rn, parentId: effectiveParent });
+            db.applyRemoteNoteMeta({ ...rn, parentId: effectiveParent() });
           }
         }
         db.setSyncBase(rn.id, rn.contentHash, rn.updatedAt, null);
@@ -663,7 +671,7 @@ export async function syncNow(cfg: SyncConfig, s3: S3Store, db: SyncDbPort, opts
           try { await downloadNoteAssets(cfg, s3, db, rn.id, rn.assets, report, true); }
           catch (e) { if (e instanceof AssetMissingError) { report.warnings.push(`资源缺失（跳过该条目）: ${rn.id}`); continue; } throw e; }
         }
-        db.applyRemoteNote({ ...rn, parentId: effectiveParent, trashedAt: null, deleted: false }, decodeText(contentBytes));
+        db.applyRemoteNote({ ...rn, parentId: effectiveParent(), trashedAt: null, deleted: false }, decodeText(contentBytes));
         if (!opts?.strictAssets) await downloadNoteAssets(cfg, s3, db, rn.id, rn.assets, report, false);
         db.setSyncBase(rn.id, rn.contentHash, rn.updatedAt, null);
         report.appliedRemote++;
