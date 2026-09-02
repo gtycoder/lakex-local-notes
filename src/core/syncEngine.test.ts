@@ -464,6 +464,26 @@ describe("syncEngine（共享编排）", () => {
     expect(new TextDecoder().decode(db.assets.get("n9/photo.png")!)).toBe("imgbytes");
     expect(r.warnings.length).toBe(0);                        // 校验通过无警告
   });
+
+  it("回收站惰性下载：远端墓碑（软删）只记录声明资产元数据、不下载资源文件", async () => {
+    const s3 = new MemS3();
+    const db = new MemDb();
+    const h = hashOf("<p>trash</p>");
+    const imgHash = sha256Sync(new TextEncoder().encode("imgbytes"));
+    s3.map.set("p/objects/nt-" + h + ".lake", new TextEncoder().encode("<p>trash</p>"));
+    s3.map.set("p/assets/nt/photo.png", new TextEncoder().encode("imgbytes"));
+    s3.map.set("p/manifests/latest.json", new TextEncoder().encode(JSON.stringify({
+      version: 4, workspaceId: "default", commitId: "c1", prevCommitId: null, createdAt: "2026-01-01T00:00:00.000Z",
+      notes: [{ id: "nt", title: "T", parentId: null, sortOrder: 0, updatedAt: "2026-01-02T00:00:00.000Z", contentHash: h, isConflict: false, assets: [{ filename: "photo.png", size: 8, hash: imgHash }], trashedAt: "2026-01-02T00:00:00.000Z", deletedFromParentId: null }],
+      folders: [],
+    })));
+    const r = await syncNow(CFG, s3, db);
+    expect(r.appliedRemote).toBe(1);
+    expect(db.getNote("nt")!.trashedAt).not.toBeNull(); // 已入回收站
+    expect(db.assets.has("nt/photo.png")).toBe(false);  // 惰性：资源文件不下载
+    expect(db.listDeclaredAssets("nt")).toEqual([{ filename: "photo.png", size: 8, hash: imgHash }]); // 但声明元数据已记录
+  });
+
   it("零变更早退：无变化二次同步整轮跳过（记账基线生效）", async () => {
     const s3 = new MemS3();
     const db = new MemDb();

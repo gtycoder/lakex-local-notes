@@ -15,6 +15,7 @@ import {
   clampSearchLimit,
 } from "../ipcLimits.js";
 import type { IpcRegistrar } from "./registrar.js";
+import { restoreTrashWithAssets, ensureTrashNoteAssets } from "../syncEngineController.js";
 
 interface ResourceUploadInput {
   bytes: Uint8Array;
@@ -84,7 +85,16 @@ export function registerNotesIpc(ipc: IpcRegistrar, store: Store, drafts: DraftJ
   ipc.handle("reorder_tree_nodes", (parentId: string | null, orderedIds: string[]) => store.reorderTreeNodes(parentId, orderedIds));
   ipc.handle("delete_tree_node", (id: string) => store.deleteTreeNode(id));
   ipc.handle("list_trash", () => store.listTrash());
-  ipc.handle("restore_trash", (id: string) => store.restoreTrashItem(id));
+  ipc.handle("restore_trash", async (id: string) => {
+    // 回收站惰性下载的补偿：恢复前强拉全量资产（best-effort，失败仍恢复）。
+    const { warnings } = await restoreTrashWithAssets(store, id);
+    for (const w of warnings) store.logScopes.sync.warn(`[restore] ${w}`);
+  });
+  ipc.handle("ensure_trash_note_assets", async (id: string) => {
+    // 回收站预览的补偿：预览前按需补拉该笔记缺失资源（best-effort，不恢复）。
+    const { warnings } = await ensureTrashNoteAssets(store, id);
+    for (const w of warnings) store.logScopes.sync.warn(`[preview] ${w}`);
+  });
   ipc.handle("purge_trash", (id: string) => store.purgeTrashItem(id));
   ipc.handle("empty_trash", () => store.emptyTrash());
   ipc.handle("upload_resource", (input: ResourceUploadInput, noteId: string) => {

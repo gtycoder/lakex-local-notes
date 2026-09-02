@@ -15,6 +15,7 @@ import { SearchSheet } from "./settings/SearchSheet";
 import { SettingsDrawer } from "./settings/SettingsDrawer";
 import { useBackHandler } from "./useBackHandler";
 import { TrashPage } from "./trash/TrashPage";
+import { TrashPreviewPage } from "./trash/TrashPreviewPage";
 import { QuickNotesTrashPage } from "./trash/QuickNotesTrashPage";
 import "./mobile.css";
 
@@ -23,6 +24,7 @@ export type Route =
   | { kind: "notebook"; notebookId: string }
   | { kind: "document"; noteId: string; mode: "viewer" | "editor" }
   | { kind: "trash" }
+  | { kind: "trash-preview"; noteId: string }
   | { kind: "quick-trash" };
 
 export function MobileApp() {
@@ -208,6 +210,14 @@ export function MobileApp() {
         <TrashPage
           onBack={() => setRoute({ kind: "home", tab: "library" })}
           onChanged={refreshAll}
+          onPreview={(noteId) => setRoute({ kind: "trash-preview", noteId })}
+        />
+      )}
+      {route.kind === "trash-preview" && (
+        <TrashPreviewPage
+          noteId={route.noteId}
+          onBack={() => setRoute({ kind: "trash" })}
+          onRestored={() => { setRoute({ kind: "trash" }); void refreshAll(); }}
         />
       )}
       {route.kind === "quick-trash" && (

@@ -14,10 +14,12 @@ export interface TrashItemUI {
 export interface TrashPageProps {
   onBack: () => void;
   onChanged: () => Promise<void>;
+  /** 点击回收站文档行 → 只读预览（回收站资源惰性下载补偿）。文件夹不可直接预览。 */
+  onPreview: (noteId: string) => void;
 }
 
 export function TrashPage(props: TrashPageProps) {
-  const { onBack, onChanged } = props;
+  const { onBack, onChanged, onPreview } = props;
   const [items, setItems] = useState<TrashItemUI[]>([]);
   const [msg, setMsg] = useState("");
 
@@ -64,12 +66,18 @@ export function TrashPage(props: TrashPageProps) {
       <div className="mobile-scroll">
         {items.length === 0 && <div className="mobile-empty">回收站为空</div>}
         {items.map((it) => (
-          <div key={it.kind + "-" + it.id} className="mobile-doc-row">
+          <div
+            key={it.kind + "-" + it.id}
+            className="mobile-doc-row"
+            onClick={() => { if (it.kind === "note") onPreview(it.id); }}
+            style={it.kind === "note" ? { cursor: "pointer" } : undefined}
+            title={it.kind === "note" ? "点击预览内容" : ""}
+          >
             {it.kind === "folder" ? <FolderOpen size={18} /> : <FileText size={18} />}
             <span className="mobile-trash-title">{it.title}</span>
             <span className="mobile-trash-date">{it.deletedAt ? it.deletedAt.slice(0, 10) : ""}</span>
-            <button className="mobile-trash-action" onClick={() => void restore(it)} title="恢复"><RotateCcw size={16} /></button>
-            <button className="mobile-trash-action mobile-trash-danger" onClick={() => void purge(it)} title="彻底删除"><Trash2 size={15} /></button>
+            <button className="mobile-trash-action" onClick={(e) => { e.stopPropagation(); void restore(it); }} title="恢复"><RotateCcw size={16} /></button>
+            <button className="mobile-trash-action mobile-trash-danger" onClick={(e) => { e.stopPropagation(); void purge(it); }} title="彻底删除"><Trash2 size={15} /></button>
           </div>
         ))}
       </div>

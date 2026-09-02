@@ -8,7 +8,7 @@
 import { SqlJsDb } from "./sqliteDb";
 import { loadSnapshot, saveSnapshot } from "./persistence";
 import { saveAssetBytesFs, loadAssetBytesFs, listAssetKeysFs, removeAssetBytesFs } from "./assetFs";
-import { syncNow as runSync, type SyncConfig, type SyncDbPort, type SyncReport } from "../core/syncEngine.js";
+import { syncNow as runSync, downloadNoteAssets, type SyncConfig, type SyncDbPort, type SyncReport } from "../core/syncEngine.js";
 import { KeyedAsyncQueue } from "../core/keyedAsyncQueue.js";
 import type { QuickNotesSyncResult } from "../core/quickNotesSyncEngine.js";
 import { TRASH_NOTEBOOK_ID } from "../core/syncDecisions.js";
@@ -561,6 +561,37 @@ const dbPort: SyncDbPort = {
   },
 };
 
+/** 下载这些笔记的已声明资产（best-effort）；失败不阻断调用方（恢复/预览红线）。
+ * @param onlyMissing true = 只补本地缺失的资源（预览用）；false = 强拉全量（恢复用） */
+async function downloadDeclaredAssetsFor(noteIds: string[], onlyMissing = false): Promise<void> {
+  if (noteIds.length === 0) return;
+  try {
+    const cfg = await bridge.getS3Settings();
+    if (!cfg) return;
+    const syncCfg: SyncConfig = {
+      endpoint: cfg.endpoint, region: cfg.region, bucket: cfg.bucket,
+      accessKeyId: cfg.accessKeyId, secretAccessKey: cfg.secretAccessKey, prefix: cfg.prefix,
+    };
+    const s3Store = createCapacitorS3Store(syncCfg);
+    const report: SyncReport = {
+      pulled: false, appliedRemote: 0, uploaded: 0, published: false, message: "",
+      warnings: [], supersededNotes: [], foldersUploaded: 0, foldersDownloaded: 0,
+      trashedDown: 0, trashedUp: 0, uploadedBytes: 0, downloadedBytes: 0,
+    };
+    for (const noteId of noteIds) {
+      let assets = typeof dbPort.listDeclaredAssets === "function" ? dbPort.listDeclaredAssets(noteId) : [];
+      if (onlyMissing && assets.length > 0) {
+        const local = new Set((await dbPort.listLocalAssets(noteId)).map((a) => a.filename));
+        assets = assets.filter((a) => !local.has(a.filename));
+      }
+      if (assets.length === 0) continue;
+      await downloadNoteAssets(syncCfg, s3Store, dbPort, noteId, assets, report, false);
+    }
+  } catch (e) {
+    console.warn("[asset] 资源下载失败（保留调用方，资源下次同步补拉）", e);
+  }
+}
+
 export const bridge = {
   async init(): Promise<void> {
     await ensureDb();
@@ -897,6 +928,13 @@ export const bridge = {
     });
   },
 
+  /** 回收站预览：按需补拉该笔记本地缺失的资源（不恢复、不移出回收站）。best-effort。 */
+  async ensureTrashNoteAssets(id: string): Promise<void> {
+    return maintenance.run("main", async () => {
+      await downloadDeclaredAssetsFor([id], true);
+    });
+  },
+
   /** 本地恢复单条笔记：restore_pending_at → 同步时 local-wins 上传 active 覆盖墓碑。
    * 与 restoreTreeItem(id, "note") 完全等价（同一实现）；回收站 UI 统一走 restoreTreeItem，
    * 本方法仅供 lakeNative 调试契约使用，避免两套恢复入口语义分叉。 */
@@ -958,21 +996,29 @@ export const bridge = {
   async restoreTreeItem(id: string, kind: "folder" | "note"): Promise<void> {
     return maintenance.run("main", async () => {
       const d = await ensureDb();
-      if (kind === "note") { dbPort.localRestoreNote(id); }
-      else {
+      // 恢复前强拉全量（惰性下载补偿）：先收集要恢复的 notes，best-effort 下载资产，再执行恢复
+      let folderIds: string[] = [];
+      let restoreNoteIds: string[] = [];
+      if (kind === "note") {
+        restoreNoteIds = [id];
+      } else {
+        const all = d.prepare("SELECT id, parent_id FROM folders").all() as Array<{ id: string; parent_id: string | null }>;
+        folderIds = Array.from(collectFolderSubtree(all, id));
+        restoreNoteIds = (d.prepare("SELECT id FROM notes WHERE parent_id IN (" + folderIds.map(() => "?").join(",") + ") AND trashed_at IS NOT NULL").all(...folderIds) as Array<{ id: string }>).map((n) => n.id);
+      }
+      await downloadDeclaredAssetsFor(restoreNoteIds);
+
+      if (kind === "note") {
+        dbPort.localRestoreNote(id);
+      } else {
         // P1-4（GPT 审计）：folder 恢复必须同事务恢复其下 notes（否则文档继续留在回收站）
         const tx = d.transaction(() => {
-          // 收集整棵 folder 子树（含自己）→ 清 trashed_at
-          const all = d.prepare("SELECT id, parent_id FROM folders").all() as Array<{ id: string; parent_id: string | null }>;
-          const ids = collectFolderSubtree(all, id);
           const now = new Date().toISOString();
-          for (const fid of ids) {
+          for (const fid of folderIds) {
             d.prepare("UPDATE folders SET trashed_at=NULL, updated_at=?, sync_state='local' WHERE id=?").run(now, fid);
           }
-          // 恢复子树下被移入回收站的 notes：清 trashed + 置 restore_pending_at（同步 local-wins 上传）
-          const noteRows = d.prepare("SELECT id FROM notes WHERE parent_id IN (" + Array.from(ids).map(() => "?").join(",") + ") AND trashed_at IS NOT NULL").all(...Array.from(ids)) as Array<{ id: string }>;
-          for (const n of noteRows) {
-            d.prepare("UPDATE notes SET trashed_at=NULL, restore_pending_at=?, sync_state='local', updated_at=? WHERE id=?").run(now, now, n.id);
+          for (const nid of restoreNoteIds) {
+            d.prepare("UPDATE notes SET trashed_at=NULL, restore_pending_at=?, sync_state='local', updated_at=? WHERE id=?").run(now, now, nid);
           }
         });
         tx();
