@@ -64,6 +64,17 @@
   - 复现：dev 库「444」（49 个标题，H1–H3，`depth` 实测 ≤3，已排除 depth 异常）；`--disable-gpu` 下未再复现，疑似偶发 GPU/网络服务崩溃。
   - 已做防御：`OutlineController.updateToc` 对异常 `depth` 收敛到 1..6（防未来畸形数据把引导线/缩进渲染打爆）。
   - 后续（未定，待讨论）：**程序崩溃的补救 / 减少数据丢失方案**——渲染进程崩溃监听（`render-process-gone`）、GPU 禁用降级开关、写前日志/原子写、SQLite WAL checkpoint、未保存草稿兜底恢复等。
+  - [ ] **语雀/Lake bookmark 卡：桌面已修（降级为链接），移动端编辑仍未决（长期待办）**：
+    - **结论（桌面已完成，`fix/bookmark-paste-crash` 分支 3 个 commit）**：
+      - 崩溃根因：`BookmarkEditorPlugin(option name="bookmark")` 的 `isEnable = !!detailAction || !!fetchDetailHandler`；本地无语雀 API → `isEnable=false` → 卡类从未注册 → 渲染/粘贴 `getCardClass` 返回 null → `virtual-card-node.ts` 硬断言崩溃。
+      - 修复 1：`lakeRuntime.ts` 注入 `bookmark.fetchDetailHandler`（返回基于 url 的最小 detail、不出网），使 `isEnable=true` 完成卡类注册（防崩溃）。
+      - 修复 2：新粘贴的 bookmark 卡统一**降级为普通超链接**（`installBookmarkCardDegrade`，用 Lake 内置 `cardToLink` 命令转 `<ne-link>`，与虎扑/果壳一致）。只在用户粘贴时触发，历史/加载文档不主动改动；`converted` 按卡 id 幂等收敛；最多重试 3 次覆盖 Lake 异步渲染慢。
+      - 审计重构：卡名/命令名/延时/重试提为常量，Lake 私有卡数据访问抽为 `readBookmarkCardInfo`。
+    - **验证**：桌面真实 Ctrl+V 粘贴语雀 bookmark 卡 → 全部降级 `<ne-link>`、无残留、可点击；tsc / vitest(748 passed) / 桌面+移动 build 全绿。
+    - **遗留问题（未决，长期）**：
+      1. **移动端编辑态粘贴语义未完全对齐**：真机上用 `ClipboardEvent`+`DataTransfer` 注入**纯 URL 卡**（自作 `/tmp/urlcard.html`）时 bookmark 卡能正确降级；但把**电脑剪贴板数据**（含 36kr 卡 detail 内嵌 `data:image/png;base64` 大图标）注入移动端**编辑器不解析、内容为空**。剥离 base64 后单独注入仍为空 —— 尚未定位到移动端对这份数据不解析的真正原因（怀疑与移动端 Lake 粘贴处理路径 / 未装 `installPasteInterceptor` / base64 图标触发图片处理有关）。
+      2. **移动端图片 / 本地资产 URL**：移动端资产 canonical 用 `http://127.0.0.1:19876/{noteId}/{file}`，但手机端 `127.0.0.1` 指向手机自己；真机上需要 `adb reverse tcp:19876 tcp:19876` 或在移动端解析为可达地址，否则图片/附件加载失败。本次真机测试中 `adb reverse` 绑定 19876 报 "Address already in use" 未建成功。
+      3. **移动端整体编辑体验存在其他问题**（用户 2026-09-02 反馈"移动端编辑还有问题"，未细化，待用户后续明确具体现象再入项）。
 
 ---
 
