@@ -13,7 +13,6 @@ import type { TabInfo } from "./features/editor/MultiTabEditor";
 import { selectEvictionIds, trimTabsToLimit } from "./core/tabLimit";
 import { OutlineSidebar } from "./features/outline/OutlineSidebar";
 import type { OutlineMode } from "./features/outline/OutlineController";
-import { getOutlineTab } from "./features/outline/registry";
 import { cleanLakeMarkdown } from "./core/markdownClean";
 
 import { useDocumentStats } from "./hooks/useDocumentStats";
@@ -22,6 +21,7 @@ import { useSyncRefresh } from "./hooks/useSyncRefresh";
 import { useSyncProgress } from "./hooks/useSyncProgress";
 import { deriveDesktopView } from "./hooks/desktopDerivedState";
 import { useDesktopLifecycle } from "./hooks/useDesktopLifecycle";
+import { useOutlineSync } from "./hooks/useOutlineSync";
 import { useBootstrap } from "./hooks/useBootstrap";
 import { useTreeActions } from "./hooks/useTreeActions";
 import { useTabLifecycle } from "./hooks/useTabLifecycle";
@@ -224,13 +224,6 @@ export function App() {
 
 
 
-  // 面包屑大纲路径：订阅活动文档大纲变化（滚动切换标题时刷新）
-  const [, forceOutlineRender] = useState(0);
-  useEffect(() => {
-    const handle = getOutlineTab(activeNoteId);
-    if (!handle) return;
-    return handle.controller.subscribe(() => forceOutlineRender((v) => v + 1));
-  }, [activeNoteId, outlineTabsVersion]);
 
   // 主题与自定义 CSS：设置变化即应用（data-theme 驱动 b3 令牌切换；首帧前已由 main.tsx 预应用）
 
@@ -254,6 +247,10 @@ export function App() {
     openTabs, setPinnedNoteIds, theme: settings.theme, setSettings,
     setSearchPanelQuery, setSearchPanelOpen, flushTimers, openTabsRef, draftTimers, saveTimers,
     layoutWidthsRef, quickNotesDirty, persistTab,
+  });
+
+  useOutlineSync({
+    activeNoteId, outlineTabsVersion, setOutlineSwitching, setOutlineEmptyOverride, setActiveOutlineEmpty,
   });
 
   const { refreshPendingSummary, refreshDraftEntries, handleTrashRestored, handleHistoryRestored } = useSyncRefresh({
@@ -353,24 +350,8 @@ export function App() {
 
   // 切换标签时，大纲数据会在编辑器注册后异步更新；期间禁止壳层 grid 动画，
   // 避免“旧列宽 → 新列宽”与正文淡入同时发生，造成 tab 切换时主区横向抖动。
-  useEffect(() => {
-    setOutlineSwitching(true);
-    const timer = window.setTimeout(() => setOutlineSwitching(false), 220);
-    return () => window.clearTimeout(timer);
-  }, [activeNoteId]);
 
   // 跟踪当前文档是否为空大纲；切换标签时清除豁免、重新评估。
-  useEffect(() => {
-    setOutlineEmptyOverride(false);
-    const tabId = activeNoteId;
-    if (!tabId) { setActiveOutlineEmpty(false); return; }
-    const handle = getOutlineTab(tabId);
-    if (!handle) { setActiveOutlineEmpty(false); return; }
-    const evaluate = () => setActiveOutlineEmpty(handle.controller.getEntryCount() === 0);
-    evaluate();
-    return handle.controller.subscribe(evaluate);
-    // tabsVersion：新标签注册晚于 activeNoteId 变化时也要重新评估。
-  }, [activeNoteId, outlineTabsVersion]);
 
   /** 只读锁切换：先保存脏草稿，再写 SQLite（锁状态经 manifest v3 同步） */
   async function toggleNoteLock() {
