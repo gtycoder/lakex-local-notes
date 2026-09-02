@@ -1,0 +1,89 @@
+import { useCallback, useEffect } from "react";
+import type { Dispatch, MutableRefObject, SetStateAction } from "react";
+import { native } from "../lib/native";
+import type { DraftJournalEntry, NoteSummary, SyncPendingSummary, TreeNode } from "../lib/types";
+import type { OpenTab } from "../desktop/desktopTypes";
+import type { RequestVersion } from "../core/requestVersion";
+
+export interface UseSyncRefreshOptions {
+  setPendingSummary: Dispatch<SetStateAction<SyncPendingSummary>>;
+  setDraftEntries: Dispatch<SetStateAction<DraftJournalEntry[]>>;
+  setTreeNodes: Dispatch<SetStateAction<TreeNode[]>>;
+  setNotes: Dispatch<SetStateAction<NoteSummary[]>>;
+  setOpenTabs: Dispatch<SetStateAction<OpenTab[]>>;
+  tabReloadVersionRef: MutableRefObject<RequestVersion>;
+  openTabsRef: MutableRefObject<OpenTab[]>;
+  bumpRevision: (noteId: string) => void;
+}
+
+/** 同步/回收站/历史恢复后的刷新与 tab 重载（从 App.tsx 收拢）。 */
+export function useSyncRefresh({
+  setPendingSummary, setDraftEntries, setTreeNodes, setNotes, setOpenTabs,
+  tabReloadVersionRef, openTabsRef, bumpRevision,
+}: UseSyncRefreshOptions) {
+  const refreshPendingSummary = useCallback(() => {
+    void native.getSyncPendingSummary().then(setPendingSummary).catch(() => undefined);
+  }, [setPendingSummary]);
+  useEffect(() => {
+    refreshPendingSummary();
+    return native.onPendingSummaryChanged(setPendingSummary);
+  }, [refreshPendingSummary, setPendingSummary]);
+
+  const refreshDraftEntries = useCallback(async () => {
+    try {
+      const [entries, summaries] = await Promise.all([native.listDraftJournals(), native.listNoteSummaries()]);
+      const liveIds = new Set(summaries.map((note) => note.id));
+      const valid = entries.filter((entry) => liveIds.has(entry.noteId));
+      setDraftEntries(valid);
+      const orphaned = entries.filter((entry) => !liveIds.has(entry.noteId));
+      await Promise.all(orphaned.map((entry) => native.deleteDraftJournal(entry.noteId).catch(() => undefined)));
+    } catch {
+      // 草稿恢复是 best-effort，不能阻塞回收站/主界面的正常操作。
+    }
+  }, [setDraftEntries]);
+
+  /** 回收站恢复后：刷新草稿/树/摘要；若恢复的文档正开在 tab 里且曾被标记"已删除"，重载正文并清除标记。 */
+  const handleTrashRestored = useCallback(() => {
+    void refreshDraftEntries();
+    void native.listTreeNodes().then(setTreeNodes).catch(() => undefined);
+    void native.listNoteSummaries().then(setNotes).catch(() => undefined);
+    void (async () => {
+      const reloadVersion = tabReloadVersionRef.current.next();
+      const t0 = performance.now();
+      for (const tab of openTabsRef.current.filter((t) => t.deleted)) {
+        if (!tabReloadVersionRef.current.isCurrent(reloadVersion)) return;
+        try {
+          const readT0 = performance.now();
+          const note = await native.readNote(tab.noteId);
+          if (!tabReloadVersionRef.current.isCurrent(reloadVersion)) return;
+          console.log("[sync-tab] trash-restore reload", JSON.stringify({ noteId: tab.noteId, readMs: Math.round(performance.now() - readT0) }));
+          setOpenTabs((tabs) => tabs.map((t) => t.noteId === tab.noteId
+            ? { ...t, title: note.title, content: note.content, dirty: false, deleted: false, reloadKey: (t.reloadKey ?? 0) + 1, lastDigest: { title: note.title, updatedAt: note.updatedAt } }
+            : t));
+        } catch { /* 该文档未恢复或仍不存在，保持标记 */ }
+      }
+      console.log("[sync-tab] trash-restore done", JSON.stringify({ totalMs: Math.round(performance.now() - t0) }));
+    })();
+  }, [refreshDraftEntries, setTreeNodes, setNotes, setOpenTabs, tabReloadVersionRef, openTabsRef]);
+
+  /** 历史恢复后：刷新树/摘要；若该文档正开在 tab 里，重载正文 + bump reloadKey 强制重建 Lake 实例。 */
+  const handleHistoryRestored = useCallback((restoredId: string) => {
+    void native.listTreeNodes().then(setTreeNodes).catch(() => undefined);
+    void native.listNoteSummaries().then(setNotes).catch(() => undefined);
+    void (async () => {
+      const reloadVersion = tabReloadVersionRef.current.next();
+      try {
+        const t0 = performance.now();
+        const updated = await native.readNote(restoredId);
+        if (!tabReloadVersionRef.current.isCurrent(reloadVersion)) return;
+        console.log("[sync-tab] history-restore reload", JSON.stringify({ noteId: restoredId, readMs: Math.round(performance.now() - t0) }));
+        setOpenTabs((tabs) => tabs.map((tab) => tab.noteId === restoredId
+          ? { ...tab, title: updated.title, content: updated.content, dirty: false, reloadKey: (tab.reloadKey ?? 0) + 1 }
+          : tab));
+        bumpRevision(restoredId);
+      } catch { /* 文档未打开或读取失败则跳过 */ }
+    })();
+  }, [setTreeNodes, setNotes, setOpenTabs, tabReloadVersionRef, bumpRevision]);
+
+  return { refreshPendingSummary, refreshDraftEntries, handleTrashRestored, handleHistoryRestored };
+}

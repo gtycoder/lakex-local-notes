@@ -18,6 +18,7 @@ import { cleanLakeMarkdown } from "./core/markdownClean";
 
 import { useDocumentStats } from "./hooks/useDocumentStats";
 import { useNoteActions } from "./hooks/useNoteActions";
+import { useSyncRefresh } from "./hooks/useSyncRefresh";
 import { useSavePipeline } from "./hooks/useSavePipeline";
 import { useSyncShell } from "./hooks/useSyncShell";
 import { useSyncController } from "./hooks/useSyncController";
@@ -400,69 +401,9 @@ export function App() {
 
 
   // bootstrap 首拉 + 主进程广播订阅（写操作后的刷新由 pending-summary-changed 事件驱动，单点更新）
-  const refreshPendingSummary = useCallback(() => {
-    void native.getSyncPendingSummary().then(setPendingSummary).catch(() => undefined);
-  }, []);
-  useEffect(() => {
-    refreshPendingSummary();
-    return native.onPendingSummaryChanged(setPendingSummary);
-  }, [refreshPendingSummary]);
-
-  const refreshDraftEntries = useCallback(async () => {
-    try {
-      const [entries, summaries] = await Promise.all([native.listDraftJournals(), native.listNoteSummaries()]);
-      const liveIds = new Set(summaries.map((note) => note.id));
-      const valid = entries.filter((entry) => liveIds.has(entry.noteId));
-      setDraftEntries(valid);
-      const orphaned = entries.filter((entry) => !liveIds.has(entry.noteId));
-      await Promise.all(orphaned.map((entry) => native.deleteDraftJournal(entry.noteId).catch(() => undefined)));
-    } catch {
-      // 草稿恢复是 best-effort，不能阻塞回收站/主界面的正常操作。
-    }
-  }, []);
-
-  /** 回收站恢复后：刷新草稿/树/摘要；若恢复的文档正开在 tab 里且曾被标记"已删除"，重载正文并清除标记。 */
-  const handleTrashRestored = useCallback(() => {
-    void refreshDraftEntries();
-    void native.listTreeNodes().then(setTreeNodes).catch(() => undefined);
-    void native.listNoteSummaries().then(setNotes).catch(() => undefined);
-    void (async () => {
-      const reloadVersion = tabReloadVersionRef.current.next();
-      const t0 = performance.now();
-      for (const tab of openTabsRef.current.filter((t) => t.deleted)) {
-        if (!tabReloadVersionRef.current.isCurrent(reloadVersion)) return;
-        try {
-          const readT0 = performance.now();
-          const note = await native.readNote(tab.noteId);
-          if (!tabReloadVersionRef.current.isCurrent(reloadVersion)) return;
-          console.log("[sync-tab] trash-restore reload", JSON.stringify({ noteId: tab.noteId, readMs: Math.round(performance.now() - readT0) }));
-          setOpenTabs((tabs) => tabs.map((t) => t.noteId === tab.noteId
-            ? { ...t, title: note.title, content: note.content, dirty: false, deleted: false, reloadKey: (t.reloadKey ?? 0) + 1, lastDigest: { title: note.title, updatedAt: note.updatedAt } }
-            : t));
-        } catch { /* 该文档未恢复或仍不存在，保持标记 */ }
-      }
-      console.log("[sync-tab] trash-restore done", JSON.stringify({ totalMs: Math.round(performance.now() - t0) }));
-    })();
-  }, [refreshDraftEntries]);
-
-  /** 历史恢复后：刷新树/摘要；若该文档正开在 tab 里，重载正文 + bump reloadKey 强制重建 Lake 实例。 */
-  const handleHistoryRestored = useCallback((restoredId: string) => {
-    void native.listTreeNodes().then(setTreeNodes).catch(() => undefined);
-    void native.listNoteSummaries().then(setNotes).catch(() => undefined);
-    void (async () => {
-      const reloadVersion = tabReloadVersionRef.current.next();
-      try {
-        const t0 = performance.now();
-        const updated = await native.readNote(restoredId);
-        if (!tabReloadVersionRef.current.isCurrent(reloadVersion)) return;
-        console.log("[sync-tab] history-restore reload", JSON.stringify({ noteId: restoredId, readMs: Math.round(performance.now() - t0) }));
-        setOpenTabs((tabs) => tabs.map((tab) => tab.noteId === restoredId
-          ? { ...tab, title: updated.title, content: updated.content, dirty: false, reloadKey: (tab.reloadKey ?? 0) + 1 }
-          : tab));
-        bumpRevision(restoredId);
-      } catch { /* 文档未打开或读取失败则跳过 */ }
-    })();
-  }, []);
+  const { refreshPendingSummary, refreshDraftEntries, handleTrashRestored, handleHistoryRestored } = useSyncRefresh({
+    setPendingSummary, setDraftEntries, setTreeNodes, setNotes, setOpenTabs, tabReloadVersionRef, openTabsRef, bumpRevision,
+  });
 
   // 保存管线已收拢到 useSavePipeline（persistTab 由 hook 提供）
 
