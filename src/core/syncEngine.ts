@@ -593,11 +593,15 @@ export async function syncNow(cfg: SyncConfig, s3: S3Store, db: SyncDbPort, opts
           db.createHistorySnapshot(rn.id, contentOf(local), { title: local!.title, parentId: local!.parentId, sortOrder: local!.sortOrder });
           supersededTracker.push(rn.id, rn.title);
         }
-        // 下载差集（对齐上传/缺口2）：删除不改正文 → 本地已持同 hash 内容时，用本地内容直接标记入回收站，省一次正文 GET。
-        // 仅「正文 hash 严格相等」才走此捷径；不等（回收站内被编辑 S4、或删除方携带的删除前内容更新）必须拉删除方权威内容 + 已在上做留档。
+        // 下载差集（对齐缺口1「验真实字节」哲学，不盲信缓存）：删除不改正文 → 仅当【本地实读正文的 sha256 == 远端 hash】
+        // 才用本地内容标记入回收站、省一次正文 GET。local.contentHash 对 synced 笔记走 baseHash 缓存、不读文件（syncAdapters.localHashOf），
+        // 只作便宜预筛；真判定以「读盘 + sha256 相等」为准 → 缓存说等于、文件却缺失/损坏时实读不符 → 回退 GET 权威内容自愈（旧行为）。
+        // hash 不等（S4 回收站内编辑 / 删除方携带更新的删除前内容）同样必须 GET 权威 + H5 留档（删除内容权威红线不动）。
         let trashContent: string;
-        if (local.contentHash != null && local.contentHash === rn.contentHash) {
-          trashContent = contentOf(local);
+        const localBodyCacheMatch = local.contentHash != null && local.contentHash === rn.contentHash;
+        const localBody = localBodyCacheMatch ? contentOf(local) : "";
+        if (localBody !== "" && sha256Sync(new TextEncoder().encode(localBody)) === rn.contentHash) {
+          trashContent = localBody;
         } else {
           const contentBytes = await s3.getObject(`${cfg.prefix}/${objectKey(rn.id, rn.contentHash)}`, { maxBytes: MAX_REMOTE_NOTE_BYTES });
           if (contentBytes == null) {

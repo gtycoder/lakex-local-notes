@@ -371,6 +371,26 @@ describe("syncEngine（共享编排）", () => {
     expect(db.notes.get("n1")!.content).toBe(tomb);                      // hash 不同 → 用删除方权威内容（非本地）
   });
 
+  it("缺口2加固：缓存 hash 谎报相等但本地正文缺失/损坏 → 仍 GET 权威内容自愈（不写空进回收站）", async () => {
+    const s3 = new MemS3(); const db = new MemDb();
+    const body = "<p>authoritative-from-cloud</p>"; const h = hashOf(body);
+    // 模拟桌面：getAllNotes 给 contentHash=缓存 baseHash（不读文件），row.content="" 且 getNote 也读不到正文（文件被外部删/坏）
+    const r = row({ id: "n1", content: body, syncState: "synced" });
+    r.content = "";            // 本地 .lake 实际缺失（按需读盘返回空）
+    r.contentHash = h;         // 但缓存 hash 仍等于远端墓碑正文 hash（陈旧/说谎）
+    db.notes.set("n1", r);
+    db.bases.set("n1", { contentHash: h, lastUploadedHash: null, lastSyncedMetaAt: "2026-01-01T00:00:00.000Z" });
+    s3.map.set("p/objects/n1-" + h + ".lake", new TextEncoder().encode(body));   // 云端权威正文在
+    s3.map.set("p/manifests/latest.json", gzipSync(new TextEncoder().encode(JSON.stringify({
+      version: 4, workspaceId: "default", commitId: "c1", prevCommitId: null, createdAt: "2026-01-01T00:00:00.000Z",
+      notes: [{ id: "n1", title: "N", parentId: "notebook-personal", sortOrder: 0, updatedAt: "2026-02-01T00:00:00.000Z", contentHash: h, isConflict: false, assets: [], trashedAt: "2026-02-01T00:00:00.000Z", deletedFromParentId: "notebook-personal" }],
+      folders: [],
+    }))));
+    await syncNow(CFG, s3, db);
+    expect(db.notes.get("n1")!.trashedAt).toBeTruthy();
+    expect(db.notes.get("n1")!.content).toBe(body);     // 关键：实读不符 → 回退 GET 权威内容（旧实现会把空写进回收站）
+  });
+
   it("二次同步：无变更不重传（skip-fast）", async () => {
     const s3 = new MemS3();
     const db = new MemDb();
