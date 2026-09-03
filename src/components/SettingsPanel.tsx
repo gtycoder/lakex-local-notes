@@ -2,14 +2,14 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { AlignLeft, Cloud, Files, History, Info, Keyboard, ListTree, Monitor, Moon, PanelTop, Paperclip, Search, Settings, Sun, Trash2, Type } from "lucide-react";
 import { fontSizeOptions, type AppSettings } from "../lib/settings";
 import { native } from "../lib/native";
-import type { S3GcPendingItem, S3Settings, SyncSettings } from "../lib/types";
+import type { CleanOrphanResult, OrphanAsset, S3GcPendingItem, S3Settings, SyncSettings } from "../lib/types";
 import type { GcDiagnostics } from "../core/gcDiagnostics";
 import { gcCutoffMs, parseIsoMs } from "../core/gcPolicy";
 import { useFloatingDialog } from "./useFloatingDialog";
 import { filterSettingsNav } from "./settingsSearch";
 import { getNativeErrorMessage } from "../lib/nativeErrors";
 
-export type SettingsCategory = "editor" | "appearance" | "shortcuts" | "history" | "sync" | "trash" | "about";
+export type SettingsCategory = "editor" | "appearance" | "shortcuts" | "history" | "sync" | "resources" | "trash" | "about";
 
 interface SettingsPanelProps {
   open: boolean;
@@ -59,6 +59,8 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
   const [syncCfg, setSyncCfg] = useState<SyncSettings | null>(null);
   const [syncCfgBusy, setSyncCfgBusy] = useState(false);
   const [gcPendingRows, setGcPendingRows] = useState<S3GcPendingItem[]>([]);
+  const [orphans, setOrphans] = useState<OrphanAsset[]>([]);
+  const [orphanBusy, setOrphanBusy] = useState(false);
 
   const refreshGcPending = async () => {
     try {
@@ -102,12 +104,17 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
     void native.listS3GcLog().then(setGcLog).catch(() => undefined);
   }, [open, openCategory]);
 
+  useEffect(() => {
+    if (open && category === "resources") void refreshOrphans();
+  }, [open, category]);
+
   const nav = [
     { id: "editor" as const, label: "编辑器", keywords: "字号 段间距 大纲 工具栏 标签页" , icon: <Type size={15} /> },
     { id: "appearance" as const, label: "外观", keywords: "浅色 深色 主题", icon: <Monitor size={15} /> },
     { id: "shortcuts" as const, label: "快捷键", keywords: "快捷键 搜索 专注模式 键盘", icon: <Keyboard size={15} /> },
     { id: "history" as const, label: "文档与历史", keywords: "快照 保留 清理", icon: <History size={15} /> },
-    { id: "sync" as const, label: "云端与同步", keywords: "S3 上传 下载 资源 云端", icon: <Cloud size={15} /> },
+    { id: "sync" as const, label: "云端与同步", keywords: "S3 上传 下载 资源 云端 回收", icon: <Cloud size={15} /> },
+    { id: "resources" as const, label: "资源", keywords: "资源 未引用 孤儿 清理 附件 图片", icon: <Paperclip size={15} /> },
     { id: "trash" as const, label: "回收站", keywords: "删除 恢复 清空", icon: <Trash2 size={15} /> },
     { id: "about" as const, label: "关于", keywords: "版本", icon: <Info size={15} /> },
   ];
@@ -197,6 +204,21 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
       setSyncMsg(r.deleted > 0 ? `已删除 ${r.deleted} 个未引用对象${cleared}` : cleared ? `无未引用对象可删${cleared}` : "云端无未引用对象");
     } catch (e) { setSyncMsg(getNativeErrorMessage(e)); }
     finally { setGcBusy(false); }
+  };
+  const refreshOrphans = async () => {
+    try { setOrphans(await native.listOrphanAssets()); } catch { /* 忽略 */ }
+  };
+  const cleanOrphans = async () => {
+    if (orphanBusy || orphans.length === 0) return;
+    if (!window.confirm(`删除 ${orphans.length} 个未引用资源文件？
+此操作物理删除本地文件并使其不再上传；被当前正文或历史快照引用的会在此刻自动跳过。`)) return;
+    setOrphanBusy(true); setSyncMsg(null);
+    try {
+      const r: CleanOrphanResult = await native.cleanOrphanAssets();
+      await refreshOrphans();
+      setSyncMsg(r.count > 0 ? `已清理 ${r.count} 个资源（释放 ${formatBytes(r.freedBytes)}）` : "没有可清理的未引用资源");
+    } catch (err) { setSyncMsg(getNativeErrorMessage(err)); }
+    finally { setOrphanBusy(false); }
   };
   const refreshCloudStats = async () => {
     if (gcDiagBusy) return;
@@ -422,6 +444,25 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
               </>
             )}
 
+            {category === "resources" && (
+              <section className="settings-group">
+                <h4><Paperclip size={13} /> 未引用资源（本地）</h4>
+                <p className="settings-hint">从文档删除的图片/附件会先出现在这里（删除动作不移除文件，它可能仍被历史引用）。被当前正文或历史快照引用的资源受保护，清理时会自动跳过；清理后本地文件被删除、不再上传，云端副本由“云端回收”收回。</p>
+                <div className="settings-row" style={{ gap: 6 }}>
+                  <button className="settings-choice" onClick={() => void refreshOrphans()}>刷新</button>
+                  <button className="settings-choice" onClick={() => void cleanOrphans()} disabled={orphanBusy || orphans.length === 0}>{orphanBusy ? "清理中…" : `清理全部可清（${orphans.length}）`}</button>
+                </div>
+                {orphans.length === 0 ? (
+                  <p className="settings-hint">没有未引用的资源。</p>
+                ) : (
+                  <div className="settings-hint" style={{ maxHeight: 220, overflow: "auto", fontSize: 12, lineHeight: 1.7, marginTop: 6 }}>
+                    {orphans.map((o) => (
+                      <div key={o.id}>[{o.noteId.slice(0, 8)}] {o.filename} · {formatBytes(o.size)} · 登记于 {o.detectedAt.slice(0, 10)}</div>
+                    ))}
+                  </div>
+                )}
+              </section>
+            )}
             {category === "trash" && (
               <section className="settings-group">
                 <h4><Trash2 size={13} /> 回收站</h4>

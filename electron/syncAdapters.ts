@@ -153,8 +153,13 @@ export function createStoreSyncPort(store: Store): SyncDbPort {
     async listLocalAssets(noteId: string) {
       const dir = store.noteAssetsPathFor(noteId);
       if (!fs.existsSync(dir)) return [];
+      // P1（对齐思源“未引用资源不上传”）：跳过本笔记孤儿登记的文件——从文档删除的图片
+      // 在本地清理前不再上传/声明，云端由回收机制收回；仍被当前正文或历史快照引用的
+      // 文件不会是孤儿（store.detectOrphans 已剔除），不会误跳过。
+      const orphans = store.orphanFilenamesForNote?.(noteId) ?? new Set<string>();
       const out: Array<{ filename: string; size: number; hash: string }> = [];
       for (const filename of fs.readdirSync(dir)) {
+        if (orphans.has(filename)) continue;
         const full = path.join(dir, filename);
         if (!fs.statSync(full).isFile()) continue;
         const bytes = fs.readFileSync(full);

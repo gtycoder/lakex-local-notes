@@ -1446,12 +1446,22 @@ export class Store {
     return this.assetRepository.listOrphanAssets();
   }
 
+  /** 某笔记当前登记的孤儿文件名集合（供“孤儿不同步上传”过滤与 UI 幂等）。 */
+  orphanFilenamesForNote(noteId: string): Set<string> {
+    const rows = this.db.prepare("SELECT filename FROM orphan_assets WHERE note_id=?").all(noteId) as Array<{ filename: string }>;
+    return new Set(rows.map((r) => r.filename));
+  }
+
   cleanOrphanAssets(): { count: number; freedBytes: number } {
-    // 审计 #12：仅当文件不存在或删除成功时才删除记录并计数；失败保留记录（UI 可重试）
+    // 审计 #12：仅当文件不存在或删除成功时才删除记录并计数；失败保留记录（UI 可重试）。
+    // 清理前再校验一次引用（当前正文/历史快照）——孤儿表是"保存时对账"的快照，
+    // 若在"刚插入未保存"的窗口里打开全局清理，避免误删刚写盘但正文尚未引用到的文件。
     const rows = this.db.prepare("SELECT * FROM orphan_assets").all() as OrphanAssetRow[];
     let count = 0;
     let freedBytes = 0;
     for (const row of rows) {
+      const refs = this.assetRepository.getProtectedRefs(row.note_id);
+      if (refs.has(row.filename)) continue;   // 此刻已被当前正文/历史引用 → 撤销孤儿语义，保留文件
       const fullPath = path.join(this.root, row.file_path);
       try {
         if (fs.existsSync(fullPath)) {
