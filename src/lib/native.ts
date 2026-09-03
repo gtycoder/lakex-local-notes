@@ -1,5 +1,6 @@
 import type { CleanOrphanResult, DeepCleanupResult, DraftJournalEntry, NoteDigest, NoteDocument, OrphanAsset, QuickNoteDocument, QuickNoteImage, QuickNoteTrashItem, ResourceUploadInput, ResourceUploadOutput, S3GcLogItem, S3GcPendingItem, S3GcSettings, S3Settings, SaveQuickNoteInput, SyncProgress, SyncResult, SyncSettings, SyncStatusInfo, TreeNode, WorkspaceSnapshot } from "./types";
 import type { TrashItem } from "../core/trashRepository";
+import type { GcDiagnostics } from "../core/gcDiagnostics";
 
 export interface LakeNative {
   /** 本地资源服务器端口（可被 LAKE_ASSET_PORT 覆盖，多端同机双开用）。 */
@@ -81,6 +82,7 @@ export interface LakeNative {
   saveS3GcSettings(settings: S3GcSettings): Promise<void>;
   listS3GcPending(): Promise<S3GcPendingItem[]>;
   listS3GcLog(): Promise<S3GcLogItem[]>;
+  runS3GcDiagnostics(): Promise<GcDiagnostics>;
   runS3GcReconcile(ignoreRetention?: boolean): Promise<{ deleted: number; kept: number; clearedReferenced: number; ageUnknown: number }>;
   runS3DeepCleanup(dryRun: boolean, ignoreRetention?: boolean): Promise<DeepCleanupResult>;
   getTrashReminder(): Promise<Array<{ id: string; title: string; deletedAt: string }>>;
@@ -174,6 +176,7 @@ export const native = {
   saveS3GcSettings: (settings: S3GcSettings) => api().saveS3GcSettings(settings),
   listS3GcPending: () => api().listS3GcPending(),
   listS3GcLog: () => api().listS3GcLog(),
+  runS3GcDiagnostics: () => api().runS3GcDiagnostics(),
   runS3GcReconcile: (ignoreRetention = false) => api().runS3GcReconcile(ignoreRetention),
   runS3DeepCleanup: (dryRun: boolean, ignoreRetention = false) => api().runS3DeepCleanup(dryRun, ignoreRetention),
   getTrashReminder: () => api().getTrashReminder(),

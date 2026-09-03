@@ -100,6 +100,7 @@ contextBridge.exposeInMainWorld("lakeNative", {
   saveS3GcSettings: (settings) => invoke("save_s3_gc_settings", settings),
   listS3GcPending: () => invoke("list_s3_gc_pending"),
   listS3GcLog: () => invoke("list_s3_gc_log"),
+  runS3GcDiagnostics: () => invoke("run_s3_gc_diagnostics"),
   runS3GcReconcile: (ignoreRetention = false) => invoke("run_s3_gc_reconcile", ignoreRetention),
   runS3DeepCleanup: (dryRun, ignoreRetention = false) => invoke("run_s3_deep_cleanup", dryRun, ignoreRetention),
   getTrashReminder: () => invoke("get_trash_reminder"),

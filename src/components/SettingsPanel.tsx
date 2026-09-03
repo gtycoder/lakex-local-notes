@@ -3,6 +3,7 @@ import { AlignLeft, Cloud, Files, History, Info, Keyboard, ListTree, Monitor, Mo
 import { fontSizeOptions, type AppSettings } from "../lib/settings";
 import { native } from "../lib/native";
 import type { S3GcPendingItem, S3Settings, SyncSettings } from "../lib/types";
+import type { GcDiagnostics } from "../core/gcDiagnostics";
 import { gcCutoffMs, parseIsoMs } from "../core/gcPolicy";
 import { useFloatingDialog } from "./useFloatingDialog";
 import { filterSettingsNav } from "./settingsSearch";
@@ -52,6 +53,8 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
   const [gcPending, setGcPending] = useState<number>(0);
   const [gcLog, setGcLog] = useState<Array<{ id: number; ts: string; action: string; key: string; reason: string; ok: boolean }>>([]);
   const [gcBusy, setGcBusy] = useState(false);
+  const [gcDiag, setGcDiag] = useState<GcDiagnostics | null>(null);
+  const [gcDiagBusy, setGcDiagBusy] = useState(false);
   const [syncMsg, setSyncMsg] = useState<string | null>(null);
   const [syncCfg, setSyncCfg] = useState<SyncSettings | null>(null);
   const [syncCfgBusy, setSyncCfgBusy] = useState(false);
@@ -177,6 +180,7 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
       // 手动清理 = 显式清云端：无视 7 天窗口，直接列出/删除当前全部未引用对象（自动定时仍按窗口）
       const r = await native.runS3DeepCleanup(dryRun, true);
       await refreshGcPending();
+      setGcDiag(null);
       setSyncMsg(dryRun ? `预览：可清理 Lake ${r.lake.candidateCount} 个、小记 ${r.quickNotes.candidateCount} 个` : `已清理：Lake ${r.lake.deletedCount} 个、小记 ${r.quickNotes.deletedCount} 个`);
     } catch (e) { setSyncMsg(getNativeErrorMessage(e)); }
     finally { setGcBusy(false); }
@@ -188,11 +192,23 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
       // 手动对账 = 显式清云端：无视 7 天窗口（自动/定时仍按窗口）
       const r = await native.runS3GcReconcile(true);
       await refreshGcPending();
+      setGcDiag(null);
       const cleared = r.clearedReferenced > 0 ? `；另有 ${r.clearedReferenced} 条已恢复引用、移出待回收` : "";
       setSyncMsg(r.deleted > 0 ? `已删除 ${r.deleted} 个未引用对象${cleared}` : cleared ? `无未引用对象可删${cleared}` : "云端无未引用对象");
     } catch (e) { setSyncMsg(getNativeErrorMessage(e)); }
     finally { setGcBusy(false); }
   };
+  const refreshCloudStats = async () => {
+    if (gcDiagBusy) return;
+    setGcDiagBusy(true); setSyncMsg(null);
+    try {
+      const d = await native.runS3GcDiagnostics();
+      setGcDiag(d);
+      setSyncMsg("云端统计已刷新");
+    } catch (e) { setSyncMsg(getNativeErrorMessage(e)); }
+    finally { setGcDiagBusy(false); }
+  };
+  const diagNs = (name: string) => gcDiag?.cloud.namespaces.find((n) => n.namespace === name);
 
   return (
     <div className="settings-overlay" onMouseDown={(event) => { if (event.target === event.currentTarget && !floating.interactionRef.current) onClose(); }}>
@@ -373,6 +389,18 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
                     <button className="settings-choice" onClick={() => void runGcAction(false)} disabled={gcBusy}>执行深度清理</button>
                   </div>
                   <p className="settings-hint">手动按钮会立即删除当前未被清单/历史引用的云端对象；自动对账按回收窗口到期后定期清理。结果偏少通常是被引用保护，不是漏删。</p>
+                  <div className="settings-row" style={{ gap: 6, marginTop: 6 }}>
+                    <button className="settings-choice" onClick={() => void refreshCloudStats()} disabled={gcBusy || gcDiagBusy}>{gcDiagBusy ? "统计中…" : "刷新云端统计"}</button>
+                    {gcDiagBusy && <span style={{ fontSize: 12, color: "#6b7280" }}>正在拉取云端清单…</span>}
+                  </div>
+                  {gcDiag && (
+                    <p className="settings-hint" style={{ marginTop: 6, lineHeight: 1.7 }}>
+                      云端占用：{gcDiag.cloud.objects} 个对象 / {formatBytes(gcDiag.cloud.bytes)}
+                      （正文 {diagNs("objects")?.cloudObjects ?? 0} 个 · 资源 {diagNs("assets")?.cloudObjects ?? 0} 个 · 清单 {diagNs("manifests")?.cloudObjects ?? 0} 个 · 小记 {diagNs("quick-notes")?.cloudObjects ?? 0} 个）
+                      未引用 {gcDiag.cloud.unreferenced} 个 · 已到期可回收 {gcDiag.cloud.due} 个 · 窗口内 {gcDiag.cloud.inWindow} 个
+                      （生成于 {formatDateTime(Date.parse(gcDiag.generatedAt))}）
+                    </p>
+                  )}
                   {gcCfg && (
                     <>
                       <div className="settings-field"><span>回收窗口（天）</span><input type="number" min={0} max={90} value={gcCfg.gcRetentionDays} onChange={(e) => saveGcCfg({ gcRetentionDays: Math.max(0, Number(e.target.value) || 7) })} /></div>

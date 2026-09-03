@@ -2,6 +2,7 @@ import type { IpcMainInvokeEvent } from "electron";
 import type { QuickNotesStore } from "../quickNotes.js";
 import type { Store } from "../store.js";
 import { runDeepCleanup, runGcReconcile, testConnection, type SyncProgress } from "../sync.js";
+import { runGcDiagnostics } from "../syncGc.js";
 import { runQuickNotesDeepCleanup } from "../quickNotesSync.js";
 import { AppError } from "../../src/core/storeErrors.js";
 import { IpcInputError } from "../ipcLimits.js";
@@ -120,6 +121,10 @@ export function registerSyncIpc(ipc: IpcRegistrar, deps: SyncIpcDeps): void {
   });
   ipc.handle("list_s3_gc_pending", () => store.listS3GcPending());
   ipc.handle("list_s3_gc_log", () => store.listS3GcLog());
+  ipc.handle("run_s3_gc_diagnostics", () => {
+    if (!store.getSyncSettings().enabled) throw new AppError("NotConfigured", "云同步已关闭");
+    return enqueueMaintenance(() => runGcDiagnostics(store));
+  });
   ipc.handle("run_s3_gc_reconcile", (ignoreRetention = false) => {
     if (!store.getSyncSettings().enabled) throw new AppError("NotConfigured", "云同步已关闭");
     return enqueueMaintenance(() => runGcReconcile(store, { ignoreRetention: !!ignoreRetention }));
