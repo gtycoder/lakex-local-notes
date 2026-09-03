@@ -758,6 +758,47 @@ describe("文档历史（快照，纯本地）", () => {
     expect(store.listNoteHistory(id).some((h) => h.contentHash === oldHash)).toBe(false);
   });
 
+  it("B3：冲突归档快照（protectedUntil）不被自动清理，到期自动解除保护，手动删除随时可用", () => {
+    const { id } = makeNote();
+    store.saveNote(id, "B3", "<p>base</p>");
+    // 收紧保留策略：仅保留 1 份 → 未保护的旧快照会被清，受保护的不清
+    store.saveHistorySettings({ maxSnapshots: 1, retentionDays: 0, cleanupIntervalHours: 0, snapshotIntervalMinutes: 0 });
+    // 普通快照 v1
+    store.saveNote(id, "B3", "<p>v1</p>");
+    store.createHistorySnapshot(id);
+    // 冲突归档快照 v2（protectedDays=30）
+    store.saveNote(id, "B3", "<p>v2-superseded</p>");
+    const protectedId = store.createHistorySnapshot(id, undefined, false, 30);
+    expect(protectedId).not.toBeNull();
+    const rows = store.listNoteHistory(id);
+    expect(rows.length).toBe(2);
+    const protectedRow = rows.find((h) => h.id === protectedId);
+    expect(protectedRow).toBeTruthy();
+    expect(protectedRow!.protectedUntil).not.toBeNull();
+    expect(Date.parse(protectedRow!.protectedUntil as string) > Date.now()).toBe(true);
+    // cleanup：maxSnapshots=1 → 普通快照被删，受保护的保留
+    store.cleanupHistory();
+    let after = store.listNoteHistory(id);
+    expect(after.some((h) => h.id === protectedId)).toBe(true);
+    // 到期解除：把 protected_until 拨回过去，再造一条更新快照 v3（无保护）——v2 不再是“最新保留”，
+    // cleanup 应幂等清除其保护并删除（maxSnapshots=1 只留最新）。
+    (store as any).db.prepare("UPDATE note_history SET protected_until=? WHERE id=?").run(new Date(Date.now() - 1000).toISOString(), protectedId);
+    store.saveNote(id, "B3", "<p>v3-newer</p>");
+    const newerId = store.createHistorySnapshot(id) as number;
+    store.cleanupHistory();
+    after = store.listNoteHistory(id);
+    expect(after.some((h) => h.id === protectedId)).toBe(false);
+    expect(after.some((h) => h.id === newerId)).toBe(true);
+    // 幂等性：再次 cleanup 无异常
+    expect(() => store.cleanupHistory()).not.toThrow();
+    // 手动删除任何时候允许（另造一条受保护的验证）
+    store.saveNote(id, "B3", "<p>v3</p>");
+    const pid = store.createHistorySnapshot(id, undefined, false, 30) as number;
+    expect(() => store.deleteHistory(pid)).not.toThrow();
+    expect(store.listNoteHistory(id).some((h) => h.id === pid)).toBe(false);
+  });
+
+
   it("listNoteOrphans / cleanNoteOrphans：被历史引用保护，未引用可清", () => {
     const { id } = makeNote();
     const assetsDir = path.join(dir, "note-assets", id);
@@ -1587,5 +1628,58 @@ describe("A 方案 declared_assets（桌面 store）", () => {
     store.recordDeclaredAssets(b.id, [{ filename: "1234567890124_b2c3d4e5.pdf", size: 2, hash: "cd".repeat(32) }]);
     expect(store.listDeclaredAssets(a.id)).toHaveLength(1);
     expect(store.listDeclaredAssets(b.id)).toHaveLength(1);
+  });
+});
+
+describe("A3 数据体检（runDataHealthCheck，只读）", () => {
+  it("健康库：无缺失无漂移，计数正确", () => {
+    const note = store.createNote("体检正常");
+    store.saveNote(note.id, "体检正常", "<p>hello</p>");
+    store.createHistorySnapshot(note.id);
+    const r = store.runDataHealthCheck();
+    expect(r.notesChecked).toBeGreaterThanOrEqual(1);
+    expect(r.notesMissingFile).toEqual([]);
+    expect(r.notesHashMismatch).toEqual([]);
+    expect(r.historyMissingFile).toBe(0);
+    expect(r.orphanRowsFileMissing).toEqual([]);
+    expect(r.checkedAt).toBeTruthy();
+  });
+
+  it("正文文件缺失/哈希不符被识别", () => {
+    const note = store.createNote("体检缺失");
+    store.saveNote(note.id, "体检缺失", "<p>v1</p>");
+    // 建立基线（setBaseHash 模拟已同步），然后删 .lake → 缺失
+    const lakePath = (store as any).notePath(note.id);
+    const hash1 = crypto.createHash("sha256").update(fs.readFileSync(lakePath)).digest("hex");
+    store.setBaseHash(note.id, hash1);
+    // 用脏内容覆盖 .lake → hash 不符
+    fs.writeFileSync(lakePath, "<p>corrupted</p>");
+    let r = store.runDataHealthCheck();
+    expect(r.notesHashMismatch.some((x) => x.id === note.id)).toBe(true);
+    // 直接删文件 → 缺失
+    fs.rmSync(lakePath, { force: true });
+    r = store.runDataHealthCheck();
+    expect(r.notesMissingFile.some((x) => x.id === note.id)).toBe(true);
+  });
+
+  it("历史快照文件缺失被识别", () => {
+    const note = store.createNote("快照缺失");
+    store.saveNote(note.id, "快照缺失", "<p>v1</p>");
+    const sid = store.createHistorySnapshot(note.id) as number;
+    const rows = (store as any).db.prepare("SELECT file_path FROM note_history WHERE id=?").get(sid) as { file_path: string };
+    fs.rmSync(path.join(dir, rows.file_path), { force: true });
+    const r = store.runDataHealthCheck();
+    expect(r.historyMissingFile).toBeGreaterThanOrEqual(1);
+    expect(r.historyMissingSample.some((h) => h.id === sid)).toBe(true);
+  });
+
+  it("孤儿登记漂移（登记文件缺失）被识别", () => {
+    // 直接插一条指向不存在文件的孤儿登记（绕过 registerOrphan 的写盘）
+    const note = store.createNote("孤儿漂移");
+    const fakePath = `note-assets/${note.id}/1786123456789_deadbeef.png`;
+    (store as any).db.prepare("INSERT INTO orphan_assets(note_id,filename,file_path,size,mime_type) VALUES(?,?,?,?,?)")
+      .run(note.id, "1786123456789_deadbeef.png", fakePath, 5, "image/png");
+    const r = store.runDataHealthCheck();
+    expect(r.orphanRowsFileMissing.some((o) => o.noteId === note.id)).toBe(true);
   });
 });

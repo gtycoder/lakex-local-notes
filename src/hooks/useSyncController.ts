@@ -4,6 +4,7 @@ import { getNativeErrorCode } from "../lib/nativeErrors";
 import type { SettingsCategory } from "../components/SettingsPanel";
 import type { SyncToastData } from "../components/SyncToast";
 import type { SyncStatus } from "../lib/types";
+import type { NoticeState } from "../desktop/desktopTypes";
 
 interface SyncControllerInput {
   setSync: Dispatch<SetStateAction<SyncStatus>>;
@@ -13,6 +14,10 @@ interface SyncControllerInput {
   setSettingsCategory: Dispatch<SetStateAction<SettingsCategory>>;
   setSettingsOpen: Dispatch<SetStateAction<boolean>>;
   showSyncToast: (data: SyncToastData) => void;
+  /** 手动同步完成且存在被覆盖留档时，发即时状态栏提示（与自动同步路径同一函数）。 */
+  showNoticeWithAction: (text: string, action: NoticeState["action"]) => void;
+  setHistoryNoteId: Dispatch<SetStateAction<string | null>>;
+  setHistoryOpen: Dispatch<SetStateAction<boolean>>;
 }
 
 /** Owns the user-triggered sync feedback loop; App keeps only its state ownership. */
@@ -24,6 +29,9 @@ export function useSyncController({
   setSettingsCategory,
   setSettingsOpen,
   showSyncToast,
+  showNoticeWithAction,
+  setHistoryNoteId,
+  setHistoryOpen,
 }: SyncControllerInput): () => Promise<void> {
   // P2-6：12s 冲突提醒定时器句柄——重复触发清旧、卸载清尾
   const conflictTimerRef = useRef<number | null>(null);
@@ -58,6 +66,12 @@ export function useSyncController({
       setSync((current) => ({ ...current, phase: quickFailed ? "error" : "success", message: resultMessage, lastSyncedAt: result.completedAt, pendingChanges: 0 }));
       if (result.supersededNotes.length > 0) {
         setConflictSnapshotNotice(result.supersededNotes.map((item) => ({ noteId: item.id, title: item.title })));
+        // 手动同步与自动同步（useSyncProgress）对齐：完成即提示，可点“查看历史”直达该快照。
+        const first = result.supersededNotes[0];
+        showNoticeWithAction(`远端修改已覆盖本地 ${result.supersededNotes.length} 篇（已存历史）`, {
+          label: "查看历史",
+          onClick: () => { setHistoryNoteId(first.id); setHistoryOpen(true); },
+        });
         if (conflictTimerRef.current !== null) window.clearTimeout(conflictTimerRef.current);
         conflictTimerRef.current = window.setTimeout(() => {
           conflictTimerRef.current = null;
@@ -81,5 +95,5 @@ export function useSyncController({
     } finally {
       unsubscribe();
     }
-  }, [setSync, setCloudConfigured, setSyncToast, setConflictSnapshotNotice, setSettingsCategory, setSettingsOpen, showSyncToast]);
+  }, [setSync, setCloudConfigured, setSyncToast, setConflictSnapshotNotice, setSettingsCategory, setSettingsOpen, showSyncToast, showNoticeWithAction, setHistoryNoteId, setHistoryOpen]);
 }

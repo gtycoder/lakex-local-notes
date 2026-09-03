@@ -28,3 +28,12 @@ export function isPastWindow(iso: string | null | undefined, cutoffMs: number): 
   const ms = parseIsoMs(iso);
   return ms !== null && ms <= cutoffMs;
 }
+
+/** D2/A4：待回收键的人类可读原因（多端共享纯函数）。按 key 前缀分类；未知前缀 → "未知类型"。 */
+export function pendingKeyReason(key: string): string {
+  if (key.startsWith("objects/")) return "旧正文（清单不再引用）";
+  if (key.startsWith("assets/")) return "旧资源（清单不再引用）";
+  if (key.startsWith("manifests/")) return "旧清单（链外滞后裁剪）";
+  if (key.startsWith("quick-notes/")) return "小记冗余";
+  return "未知类型";
+}

@@ -1,15 +1,15 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { AlignLeft, Cloud, Files, History, Info, Keyboard, ListTree, Monitor, Moon, PanelTop, Paperclip, Search, Settings, Sun, Trash2, Type } from "lucide-react";
+import { AlignLeft, Cloud, Files, History, Info, Keyboard, ListTree, Monitor, Moon, PanelTop, Paperclip, ScrollText, Search, Settings, Sun, Trash2, Type } from "lucide-react";
 import { fontSizeOptions, type AppSettings } from "../lib/settings";
 import { native } from "../lib/native";
-import type { CleanOrphanResult, S3GcPendingItem, S3Settings, SyncSettings } from "../lib/types";
+import type { CleanOrphanResult, DataHealthReport, S3GcPendingItem, S3Settings, SyncSettings } from "../lib/types";
 import type { GcDiagnostics } from "../core/gcDiagnostics";
-import { gcCutoffMs, parseIsoMs } from "../core/gcPolicy";
+import { gcCutoffMs, parseIsoMs, pendingKeyReason } from "../core/gcPolicy";
 import { useFloatingDialog } from "./useFloatingDialog";
 import { filterSettingsNav } from "./settingsSearch";
 import { getNativeErrorMessage } from "../lib/nativeErrors";
 
-export type SettingsCategory = "editor" | "appearance" | "shortcuts" | "history" | "sync" | "resources" | "trash" | "about";
+export type SettingsCategory = "editor" | "appearance" | "shortcuts" | "history" | "sync" | "resources" | "trash" | "logs" | "about";
 
 interface SettingsPanelProps {
   open: boolean;
@@ -60,6 +60,18 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
   const [histCfg, setHistCfg] = useState<{ maxSnapshots: number; retentionDays: number; cleanupIntervalHours: number; snapshotIntervalMinutes: number } | null>(null);
   const [histMsg, setHistMsg] = useState<string | null>(null);
   const [histBusy, setHistBusy] = useState(false);
+  const [lastCleanup, setLastCleanup] = useState<{ at: string; deletedSnapshots: number; freedBytes: number } | null>(null);
+  // A3 数据体检：只读三查报告
+  const [health, setHealth] = useState<DataHealthReport | null>(null);
+  const [healthBusy, setHealthBusy] = useState(false);
+  // A1/A2 备份与恢复
+  const [backupMsg, setBackupMsg] = useState<string | null>(null);
+  const [backupBusy, setBackupBusy] = useState(false);
+  // F1 日志查看
+  const [logRows, setLogRows] = useState<Array<{ line: string; hit: boolean }>>([]);
+  const [logKeyword, setLogKeyword] = useState("");
+  const [logBusy, setLogBusy] = useState(false);
+  const [logInfo, setLogInfo] = useState<string | null>(null);
 
   const [s3, setS3] = useState<S3Settings>(S3_DEFAULTS);
   const [gcCfg, setGcCfg] = useState<{ gcRetentionDays: number; gcIntervalHours: number; trashAutoPurgeDays: number } | null>(null);
@@ -77,6 +89,67 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
   const [busyId, setBusyId] = useState<number | null>(null);
   const [sel, setSel] = useState<RemovedAsset | null>(null);
   const [pv, setPv] = useState<{ filename: string; mimeType: string; supported: boolean; dataUrl?: string } | null>(null);
+
+  /** A1 整库备份：选目录 → 备份到 <dir>/lake-notes-backup-<ts>/。 */
+  const runBackup = async () => {
+    if (backupBusy) return;
+    setBackupBusy(true);
+    setBackupMsg(null);
+    try {
+      const dir = await native.pickBackupDir();
+      if (!dir) return;
+      const r = await native.runWorkspaceBackup(dir);
+      setBackupMsg(`备份完成：${r.backupPath}（目录 ${r.copiedDirs.length} 个）`);
+    } catch (e) {
+      setBackupMsg(`备份失败：${getNativeErrorMessage(e)}`);
+    } finally {
+      setBackupBusy(false);
+    }
+  };
+
+  /** A2 云端恢复（换机/坏库）：隔离备份当前数据 → 全新空库 → 重启后首次同步全量拉取。 */
+  const runCloudRestore = async () => {
+    if (!window.confirm("从云端恢复将：① 把当前全部本地数据改名隔离保存（可手动找回）；② 清空工作区为全新空库；③ 重启后首次同步从云端全量拉取（只拉不打）。继续？")) return;
+    setBackupBusy(true);
+    setBackupMsg(null);
+    try {
+      const { quarantinePath } = await native.prepareCloudRestore();
+      window.alert(`当前数据已隔离备份到：\n${quarantinePath}\n\n应用即将重启并从云端恢复。`);
+      await native.confirmRelaunch();
+    } catch (e) {
+      setBackupMsg(`云端恢复失败：${getNativeErrorMessage(e)}`);
+    } finally {
+      setBackupBusy(false);
+    }
+  };
+
+  /** F1 日志查看：尾部关键字过滤（GC/sync/trash 等），纯读。 */
+  const runLogLoad = async (keyword: string) => {
+    setLogBusy(true);
+    try {
+      const r = await native.readAppLog({ keyword: keyword.trim() || undefined, maxLines: 200, context: 1 });
+      setLogRows(r.matches);
+      setLogInfo(r.matches.length === 0 ? "无匹配日志" : r.truncated ? `显示最近 ${r.matches.length} 行（已截断）` : `共 ${r.matches.length} 行`);
+    } catch (e) {
+      setLogRows([]);
+      setLogInfo(`日志读取失败：${getNativeErrorMessage(e)}`);
+    } finally {
+      setLogBusy(false);
+    }
+  };
+
+  /** A3 数据体检：只读三查（notes↔文件/hash、history↔文件、orphan 登记↔文件）。 */
+  const runHealth = async () => {
+    setHealthBusy(true);
+    try {
+      const report = await native.runDataHealthCheck();
+      setHealth(report);
+    } catch (e) {
+      setHistMsg(`数据体检失败：${getNativeErrorMessage(e)}`);
+    } finally {
+      setHealthBusy(false);
+    }
+  };
 
   const refreshGcPending = async () => {
     try {
@@ -126,6 +199,7 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
     setCategory(openCategory);
     void native.getHistoryStats().then(setStats).catch(() => undefined);
     void native.getHistorySettings().then(setHistCfg).catch(() => undefined);
+    void native.getLastHistoryCleanup().then(setLastCleanup).catch(() => undefined);
     void native.getS3Settings().then((v) => v && setS3(v)).catch(() => undefined);
     void native.getS3GcSettings().then(setGcCfg).catch(() => undefined);
     void native.getSyncSettings().then(setSyncCfg).catch(() => undefined);
@@ -156,6 +230,7 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
     { id: "sync" as const, label: "云端与同步", keywords: "S3 上传 下载 资源 云端 回收", icon: <Cloud size={15} /> },
     { id: "resources" as const, label: "资源", keywords: "资源 未引用 孤儿 清理 附件 图片", icon: <Paperclip size={15} /> },
     { id: "trash" as const, label: "回收站", keywords: "删除 恢复 清空", icon: <Trash2 size={15} /> },
+    { id: "logs" as const, label: "日志", keywords: "日志 诊断 GC 同步 调试", icon: <ScrollText size={15} /> },
     { id: "about" as const, label: "关于", keywords: "版本", icon: <Info size={15} /> },
   ];
   const visibleNav = filterSettingsNav(nav, navQuery);
@@ -405,6 +480,9 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
                     <button className="settings-choice" onClick={() => void runCleanup()} disabled={histBusy}><Trash2 size={12} /> {histBusy ? "清理中…" : "立即清理"}</button>
                   </div>
                   {histMsg && <p className="settings-hint">{histMsg}</p>}
+                  {lastCleanup && (
+                    <p className="settings-hint">上次清理：{formatDateTime(Date.parse(lastCleanup.at))} · {lastCleanup.deletedSnapshots} 份 · {formatBytes(lastCleanup.freedBytes)}</p>
+                  )}
                   {histCfg && (
                     <>
                       <div className="settings-field"><span>每文档上限</span><input type="number" min={20} max={1000} value={histCfg.maxSnapshots} onChange={(e) => saveHistCfg({ maxSnapshots: Math.max(1, Number(e.target.value) || 100) })} /></div>
@@ -414,6 +492,32 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
                     </>
                   )}
                   <p className="settings-hint">历史快照保存在本机，不参与同步。保留策略修改即时生效。</p>
+                </section>
+                <section className="settings-group">
+                  <h4><Info size={13} /> 数据体检（只读诊断）</h4>
+                  <div className="settings-row" style={{ alignItems: "center", gap: 8, fontSize: 12, color: "#48515c" }}>
+                    <button className="settings-choice" onClick={() => void runHealth()} disabled={healthBusy}><Search size={12} /> {healthBusy ? "检查中…" : "运行检查"}</button>
+                    {health && healthBusy === false && (
+                      <span>
+                        笔记 {health.notesChecked} · 快照 {health.historyChecked} · 孤儿登记 {health.orphanRowsChecked}
+                      </span>
+                    )}
+                  </div>
+                  {health && (
+                    <div style={{ marginTop: 6, fontSize: 12, lineHeight: 1.7 }}>
+                      {health.notesMissingFile.length === 0 && health.notesHashMismatch.length === 0 && health.historyMissingFile === 0 && health.orphanRowsFileMissing.length === 0 ? (
+                        <p className="settings-hint" style={{ color: "var(--lake-sync-success, #15803d)" }}>✓ 全部自洽：正文文件、历史快照、孤儿登记均与数据库一致。</p>
+                      ) : (
+                        <>
+                          {health.notesMissingFile.length > 0 && <p className="settings-hint" style={{ color: "var(--lake-error, #b91c1c)" }}>✗ {health.notesMissingFile.length} 篇笔记正文文件缺失（首 3：{health.notesMissingFile.slice(0, 3).map((n) => n.title).join("、")}）</p>}
+                          {health.notesHashMismatch.length > 0 && <p className="settings-hint" style={{ color: "var(--lake-error, #b91c1c)" }}>✗ {health.notesHashMismatch.length} 篇正文与基线哈希不符（可能被外部改动）</p>}
+                          {health.historyMissingFile > 0 && <p className="settings-hint" style={{ color: "var(--lake-warning, #b45309)" }}>✗ {health.historyMissingFile} 份历史快照文件缺失（恢复对应版本时会失败）</p>}
+                          {health.orphanRowsFileMissing.length > 0 && <p className="settings-hint" style={{ color: "var(--lake-warning, #b45309)" }}>✗ {health.orphanRowsFileMissing.length} 条孤儿登记文件缺失（登记漂移）</p>}
+                        </>
+                      )}
+                      <p className="settings-hint">生成于 {formatDateTime(Date.parse(health.checkedAt))}。本检查只读、不修复；发现问题请从备份/云端恢复对应文件。</p>
+                    </div>
+                  )}
                 </section>
               </>
             )}
@@ -448,6 +552,15 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
                   )}
                 </section>
                 <section className="settings-group">
+                  <h4><Files size={13} /> 备份与恢复</h4>
+                  <div className="settings-row" style={{ flexWrap: "wrap", gap: 8 }}>
+                    <button className="settings-choice" onClick={() => void runBackup()} disabled={backupBusy}><Files size={12} /> {backupBusy ? "备份中…" : "整库备份到…"}</button>
+                    <button className="settings-choice" onClick={() => void runCloudRestore()} disabled={backupBusy} style={{ color: "#b91c1c" }}>从云端恢复（换机/坏库）…</button>
+                  </div>
+                  {backupMsg && <p className="settings-hint">{backupMsg}</p>}
+                  <p className="settings-hint">整库备份：数据库 + 全部笔记/资源/历史快照 + 小记，导出到所选目录（不覆盖非空目录）。云端恢复：当前数据先改名隔离保存，再以全新空库从云端全量拉取（只拉不打）。</p>
+                </section>
+                <section className="settings-group">
                   <h4><Cloud size={13} /> S3 连接（凭据仅保存在当前设备）</h4>
                   <div className="settings-field"><span>Endpoint</span><input type="text" value={s3.endpoint} placeholder="https://s3-cn-east-1.qiniucs.com" onChange={(e) => setS3Field("endpoint", e.target.value)} /></div>
                   <div className="settings-field"><span>Access Key</span><input type="text" value={s3.accessKeyId} onChange={(e) => setS3Field("accessKeyId", e.target.value)} /></div>
@@ -477,7 +590,7 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
                   <p className="settings-hint">手动按钮会立即删除当前未被清单/历史引用的云端对象；自动对账按回收窗口到期后定期清理。结果偏少通常是被引用保护，不是漏删。</p>
                   <div className="settings-row" style={{ gap: 6, marginTop: 6 }}>
                     <button className="settings-choice" onClick={() => void refreshCloudStats()} disabled={gcBusy || gcDiagBusy}>{gcDiagBusy ? "统计中…" : "刷新云端统计"}</button>
-                    {gcDiagBusy && <span style={{ fontSize: 12, color: "#6b7280" }}>正在拉取云端清单…</span>}
+                    {gcDiagBusy && <span style={{ fontSize: 12, color: "var(--lake-text-tertiary, #5f6a78)" }}>正在拉取云端清单…</span>}
                   </div>
                   {gcDiag && (
                     <p className="settings-hint" style={{ marginTop: 6, lineHeight: 1.7 }}>
@@ -490,12 +603,28 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
                   {gcCfg && (
                     <>
                       <div className="settings-field"><span>回收窗口（天）</span><input type="number" min={0} max={90} value={gcCfg.gcRetentionDays} onChange={(e) => saveGcCfg({ gcRetentionDays: Math.max(0, Number(e.target.value) || 7) })} /></div>
-                      <div style={{ fontSize: 11, color: "#6b7280", marginTop: -4, marginBottom: 6 }}>对象被替换/移除后的保护期；0 = 立即到期</div>
+                      <div style={{ fontSize: 11, color: "var(--lake-text-tertiary, #5f6a78)", marginTop: -4, marginBottom: 6 }}>对象被替换/移除后的保护期；0 = 立即到期</div>
                       <div className="settings-field"><span>自动对账周期（小时）</span><input type="number" min={0} max={720} value={gcCfg.gcIntervalHours} onChange={(e) => saveGcCfg({ gcIntervalHours: Math.max(0, Number(e.target.value) || 24) })} /></div>
-                      <div style={{ fontSize: 11, color: "#6b7280", marginTop: -4 }}>自动清理频率；0 = 仅手动</div>
+                      <div style={{ fontSize: 11, color: "var(--lake-text-tertiary, #5f6a78)", marginTop: -4 }}>自动清理频率；0 = 仅手动</div>
                     </>
                   )}
                   <p className="settings-hint">云端只是镜像：删除云端冗余不影响本地正文/回收站/历史快照（“彻底删除/清空回收站”除外）。</p>
+                  {gcPendingRows.length > 0 && (
+                    <div style={{ marginTop: 4 }}>
+                      <p className="settings-hint" style={{ fontWeight: 600, margin: "6px 0 2px" }}>待回收键明细（{gcPendingRows.length} 条）</p>
+                      <div className="settings-hint" style={{ maxHeight: 140, overflow: "auto", fontSize: 11, lineHeight: 1.7 }}>
+                        {gcPendingRows.slice().sort((a, b) => {
+                          const am = parseIsoMs(a.markedAt) ?? Infinity;
+                          const bm = parseIsoMs(b.markedAt) ?? Infinity;
+                          return am - bm;
+                        }).map((row) => (
+                          <div key={row.key} title={row.markedAt}>
+                            <span style={{ color: "var(--lake-text-tertiary, #5f6a78)" }}>{row.markedAt.slice(0, 10)}</span> [{pendingKeyReason(row.key)}] <span style={{ wordBreak: "break-all" }}>{row.key}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                   <p className="settings-hint" style={{ fontWeight: 600, margin: "8px 0 2px" }}>删除记录（最近 {gcLog.length > 0 ? Math.min(gcLog.length, 30) : 0} 条 · 只读审计）</p>
                   {gcLog.length > 0 ? (
                     <div className="settings-hint" style={{ maxHeight: 150, overflow: "auto", fontFamily: "monospace", fontSize: 11, lineHeight: 1.7 }}>
@@ -536,9 +665,9 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
                           <div style={{ display: "flex", alignItems: "baseline", gap: 8, fontSize: 13, fontWeight: 600, marginBottom: 3 }}>
                             <Paperclip size={13} />
                             <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", minWidth: 0 }}>{g.title}</span>
-                            {g.state === "trash" && <span style={{ fontSize: 11, color: "#b45309" }}>回收站</span>}
+                            {g.state === "trash" && <span style={{ fontSize: 11, color: "var(--lake-warning, #b45309)" }}>回收站</span>}
                             {g.state === "missing" && <span style={{ fontSize: 11, color: "#b91c1c" }}>文档已删除</span>}
-                            <span style={{ fontSize: 11, color: "#6b7280", fontWeight: 400 }}>{g.items.length} 个</span>
+                            <span style={{ fontSize: 11, color: "var(--lake-text-tertiary, #5f6a78)", fontWeight: 400 }}>{g.items.length} 个</span>
                           </div>
                           {g.items.map((o) => (
                             <div
@@ -549,9 +678,9 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
                             >
                               <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1, minWidth: 0 }} title={o.filename}>{o.filename}</span>
                               {o.status === "history"
-                                ? <span style={{ color: "#b45309", whiteSpace: "nowrap" }}>历史保护</span>
-                                : <span style={{ color: "#6b7280", whiteSpace: "nowrap" }}>未引用</span>}
-                              <span style={{ color: "#6b7280", whiteSpace: "nowrap" }}>{formatBytes(o.size)}</span>
+                                ? <span style={{ color: "var(--lake-warning, #b45309)", whiteSpace: "nowrap" }}>历史保护</span>
+                                : <span style={{ color: "var(--lake-text-tertiary, #5f6a78)", whiteSpace: "nowrap" }}>未引用</span>}
+                              <span style={{ color: "var(--lake-text-tertiary, #5f6a78)", whiteSpace: "nowrap" }}>{formatBytes(o.size)}</span>
                               <span style={{ display: "inline-flex", gap: 4 }}>
                                 <button className="settings-choice" style={{ padding: "0 6px" }} title="复制路径" onClick={(ev) => { ev.stopPropagation(); void copyPath(o); }}>复制</button>
                                 <button className="settings-choice" style={{ padding: "0 6px" }} title="在文件夹中显示" onClick={(ev) => { ev.stopPropagation(); void openFolder(o); }}>位置</button>
@@ -566,16 +695,16 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
                     </div>
                     <div style={{ width: 320, flexShrink: 0, border: "1px solid rgba(127,127,127,0.25)", borderRadius: 8, padding: 10, minHeight: 180, maxHeight: 360, overflow: "auto", display: "flex", flexDirection: "column", gap: 8 }}>
                       {!sel ? (
-                        <p style={{ fontSize: 12, color: "#6b7280", margin: 0 }}>点击左侧条目预览</p>
+                        <p style={{ fontSize: 12, color: "var(--lake-text-tertiary, #5f6a78)", margin: 0 }}>点击左侧条目预览</p>
                       ) : pv == null ? (
-                        <p style={{ fontSize: 12, color: "#6b7280", margin: 0 }}>加载中…</p>
+                        <p style={{ fontSize: 12, color: "var(--lake-text-tertiary, #5f6a78)", margin: 0 }}>加载中…</p>
                       ) : pv.supported && pv.dataUrl ? (
                         <>
                           <img src={pv.dataUrl} alt={pv.filename} style={{ maxWidth: "100%", maxHeight: 260, objectFit: "contain", alignSelf: "center" }} />
-                          <div style={{ fontSize: 12, wordBreak: "break-all" }}>{pv.filename}<span style={{ color: "#6b7280" }}> · {pv.mimeType || sel.mimeType}</span></div>
+                          <div style={{ fontSize: 12, wordBreak: "break-all" }}>{pv.filename}<span style={{ color: "var(--lake-text-tertiary, #5f6a78)" }}> · {pv.mimeType || sel.mimeType}</span></div>
                         </>
                       ) : (
-                        <p style={{ fontSize: 12, color: "#6b7280", margin: 0 }}>该类型不支持预览。<br />{sel.filename}</p>
+                        <p style={{ fontSize: 12, color: "var(--lake-text-tertiary, #5f6a78)", margin: 0 }}>该类型不支持预览。<br />{sel.filename}</p>
                       )}
                     </div>
                   </div>
@@ -590,6 +719,34 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
                   <div className="settings-field"><span>回收站自动过期（天，0=关闭）</span><input type="number" min={0} max={365} value={gcCfg.trashAutoPurgeDays} onChange={(e) => saveGcCfg({ trashAutoPurgeDays: Math.max(0, Number(e.target.value) || 0) })} /></div>
                 )}
                 <p className="settings-hint">回收站内容仅保存在本机；彻底删除会同时删除云端数据且不可撤销。</p>
+              </section>
+            )}
+
+            {category === "logs" && (
+              <section className="settings-group">
+                <h4><ScrollText size={13} /> 应用日志（只读）</h4>
+                <p className="settings-hint">主进程日志（GC / 同步 / 回收站 / 历史清理）位于 userData/logs/lake-notes.log。按关键字过滤，每条命中附带前后一行上下文。</p>
+                <div className="settings-row" style={{ gap: 6 }}>
+                  <input
+                    type="text"
+                    style={{ flex: 1, minWidth: 0, height: 30, padding: "0 8px", border: "1px solid var(--lake-border)", borderRadius: 6, outline: "none", fontSize: 12 }}
+                    value={logKeyword}
+                    onChange={(e) => setLogKeyword(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === "Enter") void runLogLoad(logKeyword); }}
+                    placeholder="过滤（如 GC / sync / trash / purge / snapshot）"
+                  />
+                  <button className="settings-choice" onClick={() => void runLogLoad(logKeyword)} disabled={logBusy}><Search size={12} /> {logBusy ? "读取中…" : "读取"}</button>
+                </div>
+                {logInfo && <p className="settings-hint">{logInfo}</p>}
+                {logRows.length > 0 ? (
+                  <div className="settings-hint" style={{ maxHeight: 280, overflow: "auto", fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace", fontSize: 11, lineHeight: 1.6, marginTop: 6 }}>
+                    {logRows.map((row, i) => (
+                      <div key={i} style={row.hit ? { color: "var(--lake-warning, #b45309)" } : { color: "var(--lake-text-tertiary, #5f6a78)" }}>{row.line}</div>
+                    ))}
+                  </div>
+                ) : (
+                  !logBusy && <p className="settings-hint">（尚无日志或未读取）</p>
+                )}
               </section>
             )}
 

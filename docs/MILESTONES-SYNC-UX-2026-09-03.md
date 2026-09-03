@@ -1,6 +1,9 @@
 # 里程碑实施计划 v2：冲突收口 / 回收站 / 诊断 / 数据生命周期 / 审美（2026-09-03）
 
-> 状态：**已定案待开工**（用户两轮评审 + 独立审计复核定稿）。审计见 docs/AUDIT-MILESTONES-SYNC-UX-2026-09-03.md。
+> 状态：**全部完成（feat/sync-ux-milestones，待合 master）**。审计见 docs/AUDIT-MILESTONES-SYNC-UX-2026-09-03.md。
+> 进度（commit）：M1a B1+D1 `02f1008` · M1b-B3 `3a282d4` · 方案进度 `146df66` · M2 C1+C2 `1cc9882` · M3 A3+D2+F3 `dd84e69` · M4 F1 `f1399cb` · M5 A1+A2 `4125950` · M6 E `49ec700`
+> B2 并入 B1（审计 §3.1：同步即完成、冲突留档不丢，完成即时 notice 已覆盖「冲突收口」价值；完整 preflight 需复制引擎下载判定、高漂移，成本>收益，不做）
+> 多端共享：B3 经 SyncDbPort 签名扩展（移动 bridge 忽略 protected）、C1 经 trashRepository 共享纯函数、D2 经 gcPolicy.pendingKeyReason、A3 只读放 electron（守 node: 禁入）；移动端零破坏。
 > v2 变更：吸收审计必改项——M1 拆 M1a/M1b、B2 降级为非阻断提示、B3 到期解除幂等+port 签名、
 > C1 换数据源（list_trash + settings 派生）、C2 文案更正（purge 立即删云端）、A2 机械安全四原则、
 > B4 取消（对齐 S3-GC-DESIGN §14）；S3-GC-DESIGN §7/§13.3 过时表述已修订（2026-09-03）。
@@ -12,7 +15,7 @@
 | 编号 | 事项 | 最终范围 |
 |---|---|---|
 | B1 | 同步完成通知 | SyncToast 完成态加"N 份本地修改被覆盖已存档"，点击跳冲突浮层；冲突浮层列表去 3 条上限（滚动） |
-| B2 | 拉取前提示 | **降级为非阻断提示**（不做"取消则中止同步"的门，审计 §3.1）：手动同步预检到将被覆盖的未同步本地修改时，提示"N 份将被覆盖，会先自动存档"并可继续；只挂桌面 sync_now，自动同步绝不弹 |
+| B2 | 拉取前提示 | ~~独立 preflight~~ **并入 B1（已决，2026-09-03）**：同步即完成 + 冲突自动留档不丢，完成瞬间的即时 notice（B1）已覆盖冲突收口价值；完整 preflight 需复制引擎下载判定、漂移风险高、收益≈0。自动同步绝不弹（保持） |
 | B3 | 被覆盖快照保护 | **方案 B（30 天窗口）**：superseded 留档快照标 protected_until=created_at+30d；cleanupHistory 跳过未到期、扫描内幂等"到期解除"；手动删除任何时候允许；HistoryPanel 标"冲突保留 · 剩余 N 天"；**移动端默认 protected=null，不做保护语义** |
 | C1 | 回收站到期可见 | 每行"N 天后自动清除"（**list_trash 的 trashed_at + get_s3_gc_settings 的 trashAutoPurgeDays 派生**，不用 get_trash_reminder）；≤7 天标黄；面板顶部提示条；**0=关闭时不显示倒计时/提示条** |
 | C2 | purge 文案 | "本机立即移除 + **云端正文/资源立即删除且不可恢复（非 GC 窗口）** + 他端保留可恢复副本" |

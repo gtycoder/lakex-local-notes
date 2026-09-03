@@ -18,6 +18,7 @@ import { DraftJournal } from "./draftJournal.js";
 import { registerHistoryIpc } from "./ipc/registerHistory.js";
 import { registerSyncIpc } from "./ipc/registerSync.js";
 import { registerQuickNotesIpc } from "./ipc/registerQuickNotes.js";
+import { registerLogIpc } from "./ipc/registerLogIpc.js";
 import { clampWindowState, readWindowState, writeWindowState } from "./windowState.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -348,7 +349,7 @@ function registerIpc(): void {
     if (!isTrustedSenderFrame(event.senderFrame, event.sender)) throw new Error("IPC 调用来源不受信任");
   }, afterInvoke);
 
-  registerNotesIpc(ipc, store, drafts);
+  registerNotesIpc(ipc, store, drafts, workspaceRoot());
   registerHistoryIpc(ipc, store, () => restartHistoryTimers?.());
   registerSyncIpc(ipc, {
     store,
@@ -360,6 +361,7 @@ function registerIpc(): void {
     restartSyncTimers: () => restartSyncTimers?.(),
   });
   registerQuickNotesIpc(ipc, quickNotes, store);
+  registerLogIpc(ipc);
 }
 
 // Increase renderer memory limit for large documents with base64 images

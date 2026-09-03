@@ -196,7 +196,7 @@ export function SyncStatusPopover({
                 <strong>已保留历史快照 · {conflictSnapshots.length}</strong>
                 <span>{conflictSnapshotText ?? "检测到远端版本差异，已保留历史快照"}</span>
                 <div className="sync-status-history-list">
-                  {conflictSnapshots.slice(0, 3).map((item) => (
+                  {conflictSnapshots.map((item) => (
                     <button key={item.noteId} type="button" onClick={() => onOpenHistory?.(item.noteId)}>{item.title || "无标题"} · 查看历史</button>
                   ))}
                 </div>

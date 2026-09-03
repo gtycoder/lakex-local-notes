@@ -291,6 +291,11 @@ export class Store {
     if (!cols.some((c) => c.name === "locked_at")) {
       this.db.exec("ALTER TABLE notes ADD COLUMN locked_at TEXT");
     }
+    // B3（冲突归档保护）：superseded 快照保护窗口（protected_until 未到不自动清理；手动删除不受限）
+    const histCols = this.db.prepare("PRAGMA table_info(note_history)").all() as Array<{ name: string }>;
+    if (!histCols.some((c) => c.name === "protected_until")) {
+      this.db.exec("ALTER TABLE note_history ADD COLUMN protected_until TEXT");
+    }
     // M1 文本缓存列：保存时由 Lake 内核生成的 markdown/纯文本（供导出资料包/复制MD/全文搜索）
     if (!cols.some((c) => c.name === "md_cache")) {
       this.db.exec("ALTER TABLE notes ADD COLUMN md_cache TEXT");
@@ -862,7 +867,9 @@ export class Store {
 
   /** 创建历史快照。content 缺省时读磁盘 .lake。
    * 返回快照 id；同 hash 且 24h 内已有则跳过返回 null。 */
-  createHistorySnapshot(noteId: string, content?: string, force = false): number | null {
+  /** 创建历史快照。content 缺省时读磁盘 .lake；protectedDays>0 时写 protected_until（冲突归档保护，B3）。
+   * 返回快照 id；同 hash 且 24h 内已有则跳过返回 null。 */
+  createHistorySnapshot(noteId: string, content?: string, force = false, protectedDays?: number): number | null {
     const t0 = Date.now();
     if (!isSafePathSegment(noteId)) throw new AppError("InvalidInput", `无效的笔记 ID: ${noteId}`);
     const lakePath = this.notePath(noteId);
@@ -886,9 +893,12 @@ export class Store {
     if (lastRow && created <= lastRow.created_at) {
       created = new Date(new Date(lastRow.created_at).getTime() + 1).toISOString();
     }
+    const protectedUntil = protectedDays && protectedDays > 0
+      ? new Date(new Date(created).getTime() + protectedDays * 24 * 3600 * 1000).toISOString()
+      : null;
     const info = this.db.prepare(
-      "INSERT INTO note_history(note_id,file_path,content_hash,created_at,size,refs_json,ref_count) VALUES(?,?,?,?,?,?,?)"
-    ).run(noteId, relPath, hash, created, gz.length, JSON.stringify(refs), refs.length);
+      "INSERT INTO note_history(note_id,file_path,content_hash,created_at,size,refs_json,ref_count,protected_until) VALUES(?,?,?,?,?,?,?,?)"
+    ).run(noteId, relPath, hash, created, gz.length, JSON.stringify(refs), refs.length, protectedUntil);
     const id = Number(info.lastInsertRowid);
     this.logScopes.history.info(`[perf] snapshot ${noteId} ${Date.now() - t0}ms id=${id}${force ? " force" : ""} (body=${body.length}B, gz=${gz.length}B, refs=${refs.length})`);
     return id;
@@ -984,11 +994,20 @@ export class Store {
     const notes = this.db.prepare("SELECT DISTINCT note_id FROM note_history").all() as Array<{ note_id: string }>;
     for (const { note_id } of notes) {
       const rows = this.db.prepare(
-        "SELECT id,file_path,created_at FROM note_history WHERE note_id=? ORDER BY created_at ASC"
-      ).all(note_id) as Array<{ id: number; file_path: string; created_at: string }>;
+        "SELECT id,file_path,created_at,protected_until FROM note_history WHERE note_id=? ORDER BY created_at ASC"
+      ).all(note_id) as Array<{ id: number; file_path: string; created_at: string; protected_until: string | null }>;
       if (rows.length === 0) continue;
+      const nowIso = new Date().toISOString();
+      // B3：先幂等解除已到期保护（protected_until 已过 → 清 NULL，使该行回归普通保留策略）；
+      // 未到期的受保护行即使命中 drops 也不删（冲突归档是唯一可恢复副本，保护窗口内不自动清理；手动删除不受限）。
+      for (const r of rows) {
+        if (r.protected_until != null && r.protected_until <= nowIso) {
+          this.db.prepare("UPDATE note_history SET protected_until=NULL WHERE id=?").run(r.id);
+          r.protected_until = null;
+        }
+      }
       const drops = selectHistoryDrops(rows.map((r) => r.created_at), { maxSnapshots: cfg.maxSnapshots, retentionDays: cfg.retentionDays });
-      const expired = rows.filter((r) => drops.has(r.created_at));
+      const expired = rows.filter((r) => drops.has(r.created_at) && r.protected_until == null);
       if (expired.length === 0) continue;
       for (const e of expired) {
         this.db.prepare("DELETE FROM note_history WHERE id=?").run(e.id);
@@ -1591,6 +1610,67 @@ export class Store {
       }
     }
     return { count, freedBytes };
+  }
+
+  // ===== A3 数据体检（只读诊断：不自动修复、不写库） =====
+
+  /** 只读三查：① notes↔.lake 文件存在 + sync_base 有基线的读盘 sha256 一致；② note_history↔快照文件存在；
+   *  ③ orphan_assets 登记文件是否存在（漂移抽查）。返回结构化报告（不做任何写操作）。 */
+  runDataHealthCheck(): {
+    notesChecked: number;
+    notesMissingFile: Array<{ id: string; title: string }>;
+    notesHashMismatch: Array<{ id: string; title: string }>;
+    historyChecked: number;
+    historyMissingFile: number;
+    historyMissingSample: Array<{ id: number; noteId: string; filePath: string }>;
+    orphanRowsChecked: number;
+    orphanRowsFileMissing: Array<{ id: number; noteId: string; filename: string }>;
+    checkedAt: string;
+  } {
+    const checkedAt = new Date().toISOString();
+    const notesMissingFile: Array<{ id: string; title: string }> = [];
+    const notesHashMismatch: Array<{ id: string; title: string }> = [];
+    const noteRows = this.db.prepare("SELECT id,title,parent_id FROM notes WHERE deleted_at IS NULL AND parent_id != ?").all(TRASH_NOTEBOOK_ID) as Array<{ id: string; title: string }>;
+    for (const n of noteRows) {
+      const lakePath = this.notePath(n.id);
+      if (!fs.existsSync(lakePath)) {
+        notesMissingFile.push({ id: n.id, title: n.title });
+        continue;
+      }
+      const base = this.db.prepare("SELECT content_hash FROM sync_base WHERE note_id=?").get(n.id) as { content_hash: string } | undefined;
+      if (!base) continue; // 无基线（本地草稿/未同步）→ 只查存在，不比 hash
+      try {
+        const diskHash = crypto.createHash("sha256").update(fs.readFileSync(lakePath)).digest("hex");
+        if (diskHash !== base.content_hash) notesHashMismatch.push({ id: n.id, title: n.title });
+      } catch { notesMissingFile.push({ id: n.id, title: n.title }); }
+    }
+    const histRows = this.db.prepare("SELECT id,note_id,file_path FROM note_history").all() as Array<{ id: number; note_id: string; file_path: string }>;
+    const historyMissingSample: Array<{ id: number; noteId: string; filePath: string }> = [];
+    let historyMissingFile = 0;
+    for (const h of histRows) {
+      if (!fs.existsSync(path.join(this.root, h.file_path))) {
+        historyMissingFile++;
+        if (historyMissingSample.length < 10) historyMissingSample.push({ id: h.id, noteId: h.note_id, filePath: h.file_path });
+      }
+    }
+    const orphanRows = this.db.prepare("SELECT * FROM orphan_assets").all() as OrphanAssetRow[];
+    const orphanRowsFileMissing: Array<{ id: number; noteId: string; filename: string }> = [];
+    for (const o of orphanRows) {
+      if (!fs.existsSync(path.join(this.root, o.file_path))) {
+        orphanRowsFileMissing.push({ id: o.id, noteId: o.note_id, filename: o.filename });
+      }
+    }
+    return {
+      notesChecked: noteRows.length,
+      notesMissingFile,
+      notesHashMismatch,
+      historyChecked: histRows.length,
+      historyMissingFile,
+      historyMissingSample,
+      orphanRowsChecked: orphanRows.length,
+      orphanRowsFileMissing,
+      checkedAt,
+    };
   }
 
   // ===== S3 同步支持 =====

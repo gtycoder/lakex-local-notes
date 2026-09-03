@@ -21,4 +21,6 @@ export function registerHistoryIpc(ipc: IpcRegistrar, store: Store, restartHisto
   ipc.handle("preview_history_snapshot", (historyId: number) => store.previewHistorySnapshot(historyId));
   ipc.handle("preview_note_orphan", (noteId: string, filename: string) => store.previewNoteOrphan(noteId, filename));
   ipc.handle("clean_note_orphans", (noteId: string, filenames?: string[]) => store.cleanNoteOrphans(noteId, filenames));
+  // F3：上次历史清理结果（store 已持久化 last_history_cleanup，无则 null）
+  ipc.handle("get_last_history_cleanup", () => store.getLastHistoryCleanup());
 }

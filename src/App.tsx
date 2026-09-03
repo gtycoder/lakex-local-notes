@@ -242,6 +242,9 @@ export function App() {
     setSettingsCategory,
     setSettingsOpen,
     showSyncToast,
+    showNoticeWithAction,
+    setHistoryNoteId,
+    setHistoryOpen,
   });
 
   const { handleS3SettingsChanged, handleSyncSettingsChanged, handleEditorReady, toggleNoteLock, handleQuickNoteConverted } = useDesktopHandlers({

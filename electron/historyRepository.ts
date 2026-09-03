@@ -11,6 +11,8 @@ export interface HistorySnapshotSummary {
   contentHash: string;
   refCount: number;
   filePath: string;
+  /** B3：冲突归档保护截止（ISO）；未到期的受保护快照不被自动清理。null=普通快照。 */
+  protectedUntil: string | null;
 }
 
 export interface HistorySnapshotPreview {
@@ -28,6 +30,7 @@ interface HistoryRow {
   content_hash: string;
   ref_count: number;
   file_path: string;
+  protected_until: string | null;
 }
 
 interface HistoryPreviewRow {
@@ -42,7 +45,7 @@ export class HistoryRepository {
 
   listForNote(noteId: string): HistorySnapshotSummary[] {
     const rows = this.db.prepare(
-      "SELECT id,created_at,size,content_hash,ref_count,file_path FROM note_history WHERE note_id=? ORDER BY created_at DESC"
+      "SELECT id,created_at,size,content_hash,ref_count,file_path,protected_until FROM note_history WHERE note_id=? ORDER BY created_at DESC"
     ).all(noteId) as HistoryRow[];
     return rows.map((row) => ({
       id: row.id,
@@ -51,6 +54,7 @@ export class HistoryRepository {
       contentHash: row.content_hash,
       refCount: row.ref_count,
       filePath: row.file_path,
+      protectedUntil: row.protected_until ?? null,
     }));
   }
 

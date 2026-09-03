@@ -7,7 +7,7 @@ import { useFloatingDialog } from "./useFloatingDialog";
 import { getNativeErrorMessage } from "../lib/nativeErrors";
 import { createLakeDocument, destroyLakeEditor, type LakeEditorInstance } from "../features/editor/lakeRuntime";
 import { addAssetAccessToken } from "../lib/assetPort";
-import type { TrashItem } from "../core/trashRepository";
+import { trashDaysUntilPurge, type TrashItem } from "../core/trashRepository";
 
 /** 组树：根 = parentId 为回收站笔记本或父不在列表内（旧数据/孤儿兜底）。 */
 function buildTrashTree(items: TrashItem[]): TrashItem[] {
@@ -16,13 +16,14 @@ function buildTrashTree(items: TrashItem[]): TrashItem[] {
   return items.filter(isRoot);
 }
 
-function TrashTreeRow({ item, items, selectedId, onSelect, onRestore, onPurge }: {
+function TrashTreeRow({ item, items, selectedId, onSelect, onRestore, onPurge, trashAutoPurgeDays }: {
   item: TrashItem;
   items: TrashItem[];
   selectedId: string | null;
   onSelect: (item: TrashItem) => void;
   onRestore: (id: string) => void;
   onPurge: (id: string) => void;
+  trashAutoPurgeDays: number | null;
 }) {
   const children = useMemo(() => items.filter((it) => it.parentId === item.id), [items, item.id]);
   const isRoot = !item.parentId || !items.some((it) => it.id === item.parentId);
@@ -44,6 +45,15 @@ function TrashTreeRow({ item, items, selectedId, onSelect, onRestore, onPurge }:
             {item.purged ? " · 已被其他设备彻底删除（可恢复）" : ""}
             {item.noteFileId && item.hasFile ? "" : item.nodeType === "note" ? " · 正文已删" : ""}
             {item.deletedAt ? ` · ${new Date(item.deletedAt).toLocaleString()}` : ""}
+            {(() => {
+              const days = item.deletedAt ? trashDaysUntilPurge(item.deletedAt, trashAutoPurgeDays ?? 0) : null;
+              if (days == null) return null;
+              return (
+                <span className={"trash-expiry" + (days <= 7 ? " trash-expiry--soon" : "")}>
+                  · {days} 天后自动清除
+                </span>
+              );
+            })()}
           </div>
         </div>
         <div className="trash-item-actions">
@@ -61,6 +71,7 @@ function TrashTreeRow({ item, items, selectedId, onSelect, onRestore, onPurge }:
         <div className="trash-tree-children">
           {children.map((child) => (
             <TrashTreeRow key={child.id} item={child} items={items} selectedId={selectedId}
+              trashAutoPurgeDays={trashAutoPurgeDays}
               onSelect={onSelect} onRestore={onRestore} onPurge={onPurge} />
           ))}
         </div>
@@ -85,6 +96,8 @@ export function TrashPanel({ open, onClose, onChanged, onRestored }: {
   const [error, setError] = useState<string | null>(null);
   // 回收站预览资源补拉中的加载态（大文档首次预览需从云端补缺失资源）
   const [previewing, setPreviewing] = useState(false);
+  // C1：回收站自动过期配置（trashAutoPurgeDays；0=关闭不显示倒计时/提示条）
+  const [trashAutoPurgeDays, setTrashAutoPurgeDays] = useState<number | null>(null);
   const floating = useFloatingDialog({ initialSize: { w: 1000, h: 640 }, minSize: { w: 740, h: 460 } });
   const docsVersionRef = useRef(createRequestVersion());
   const previewVersionRef = useRef(createRequestVersion());
@@ -119,7 +132,11 @@ export function TrashPanel({ open, onClose, onChanged, onRestored }: {
   useEffect(() => {
     docsVersionRef.current.invalidate();
     quickVersionRef.current.invalidate();
-    if (open) { void refresh(); void refreshQuick(); }
+    if (open) {
+      void refresh();
+      void refreshQuick();
+      void native.getS3GcSettings().then((s) => setTrashAutoPurgeDays(s.trashAutoPurgeDays)).catch(() => setTrashAutoPurgeDays(null));
+    }
     return () => {
       docsVersionRef.current.invalidate();
       quickVersionRef.current.invalidate();
@@ -186,7 +203,7 @@ export function TrashPanel({ open, onClose, onChanged, onRestored }: {
     catch (e) { setError(getNativeErrorMessage(e)); }
   };
   const purgeQuick = async (id: string) => {
-    if (!window.confirm("彻底删除后不可恢复，确定删除？")) return;
+    if (!window.confirm("彻底删除小记：本机立即移除、云端立即删除且不可恢复；其他设备若仍持有可恢复副本，直到它们也处理。确定删除？")) return;
     try { await native.purgeQuickNote(id); await refreshQuick(); }
     catch (e) { setError(getNativeErrorMessage(e)); }
   };
@@ -210,7 +227,7 @@ export function TrashPanel({ open, onClose, onChanged, onRestored }: {
     const isRoot = !item?.parentId || !items.some((it) => it.id === item.parentId);
     const label = item?.title || "该节点";
     const hint = isRoot ? `「${label}」及其全部内容` : `「${label}」及其子项`;
-    if (!window.confirm(`彻底删除${hint}后不可恢复，确定删除？`)) return;
+    if (!window.confirm(`彻底删除${hint}：本机立即移除、云端正文/资源立即删除且不可恢复（非回收窗口）；其他设备仍保留可恢复副本直到它们处理。确定删除？`)) return;
     try {
       await native.purgeTrash(id);
       if (selected?.id === id) setSelected(null);
@@ -223,7 +240,7 @@ export function TrashPanel({ open, onClose, onChanged, onRestored }: {
 
   const empty = async () => {
     if (items.length === 0) return;
-    if (!window.confirm(`清空回收站（${buildTrashTree(items).length} 项）？此操作不可恢复。`)) return;
+    if (!window.confirm(`清空回收站（${buildTrashTree(items).length} 项）？将彻底删除：本机立即移除、云端正文/资源立即删除且不可恢复；其他设备保留可恢复副本直到它们处理。此操作不可撤销。`)) return;
     try {
       await native.emptyTrash();
       setSelected(null);
@@ -261,6 +278,14 @@ export function TrashPanel({ open, onClose, onChanged, onRestored }: {
           <button className={`trash-tab ${tab === "quick" ? "active" : ""}`} onClick={() => setTab("quick")}>小记</button>
         </div>
         <p className="trash-panel-hint">回收站随云同步到所有设备。被删文档下的分组/文档随父级联（可展开查看），恢复仅对顶层生效（整棵恢复），子项可单独彻底删除。</p>
+        {trashAutoPurgeDays != null && trashAutoPurgeDays > 0 && tab === "docs" && items.some((it) => {
+          const d = it.deletedAt ? trashDaysUntilPurge(it.deletedAt, trashAutoPurgeDays) : null;
+          return d != null && d <= 7;
+        }) && (
+          <p className="trash-panel-notice">
+            开启自动过期（{trashAutoPurgeDays} 天）：部分条目将在 7 天内自动彻底删除（含云端）。需要保留请在到期前恢复。
+          </p>
+        )}
         {error && <div className="trash-error">{error}</div>}
         <div className="history-split" style={{ display: tab === "docs" ? undefined : "none" }}>
           <div className="history-list history-list-left">
@@ -268,6 +293,7 @@ export function TrashPanel({ open, onClose, onChanged, onRestored }: {
             {!loading && items.length === 0 && <div className="trash-empty-hint">回收站是空的</div>}
             {!loading && roots.map((item) => (
               <TrashTreeRow key={item.id} item={item} items={items} selectedId={selected?.id ?? null}
+                trashAutoPurgeDays={trashAutoPurgeDays}
                 onSelect={(it) => void preview(it)} onRestore={(id) => void restore(id)} onPurge={(id) => void purge(id)} />
             ))}
           </div>

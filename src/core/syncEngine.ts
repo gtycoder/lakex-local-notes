@@ -28,6 +28,10 @@ import { MAX_IMAGE_BYTES } from "./storeLimits.js";
 /** 单对象大小护栏（对齐桌面 sync.ts:100）：正文 .lake 上限 64MiB。 */
 const MAX_REMOTE_NOTE_BYTES = 64 * 1024 * 1024;
 
+/** B3：冲突归档（superseded）快照保护窗口（天）。引擎在远端覆盖本机编辑的强制留档处请求保护；
+ * 桌面 store 落 protected_until（未到期自动清理跳过、手动删除不受限）；移动端简化 schema 无保护、忽略。 */
+export const HISTORY_SNAPSHOT_PROTECT_DAYS = 30;
+
 /** P3-3：资产传输并发批大小。桌面实测资产传输是同步长尾（串行逐条 RTT 占耗时 99%）。
  * 现方案：① 存在性用「远端清单声明差集」判定（对齐思源 dejavu，见 scanLocalAssets），彻底去掉每对象一次
  * HEAD 往返（旧实测 20 篇元数据变更 = 335 次 HEAD 全 HIT、0 上传 = 14s 空转）；② 真正缺失者并发上传，
@@ -245,7 +249,7 @@ export interface SyncDbPort {
    * 返回 null = 端口不支持本地目录发布（POC 只读 folders 时可不实现，folders 保持远端透传）。 */
   listFoldersForSync?(): Array<{ id: string; title: string; parentId: string | null; sortOrder: number; nodeType: string; icon: string | null; updatedAt: string; trashedAt?: string | null; deletedFromParentId?: string | null }>;
   /** 本机编辑成果被远端覆盖前强制留档（D5，协议 §4.2）：写一条 note_history，防丢数据。 */
-  createHistorySnapshot(noteId: string, content: string, meta: { title: string; parentId: string | null; sortOrder: number }): void;
+  createHistorySnapshot(noteId: string, content: string, meta: { title: string; parentId: string | null; sortOrder: number; protectedDays?: number }): void;
   /** 资产落地（D8）：把已校验的图片字节写入本地（Capacitor Filesystem / IndexedDB），供本地资源服务显示。 */
   saveAsset(noteId: string, filename: string, bytes: Uint8Array): Promise<void>;
   /** 资产上传扫描（H3）：列出笔记的本地资产（filename + size + sha256），供 manifest.assets 上传。 */
@@ -538,7 +542,7 @@ export async function syncNow(cfg: SyncConfig, s3: S3Store, db: SyncDbPort, opts
           // W-1：与软删分支对称——本地未同步编辑（或本机是作者）被远端 purge 覆盖前强制留档。
           // purged 条目保留 .lake 可恢复，但无历史快照；清空回收站/自动过期后即彻底丢失。
           if (ownEditOf(local, rn.id)) {
-            db.createHistorySnapshot(rn.id, contentOf(local), { title: local!.title, parentId: local!.parentId, sortOrder: local!.sortOrder });
+            db.createHistorySnapshot(rn.id, contentOf(local), { title: local!.title, parentId: local!.parentId, sortOrder: local!.sortOrder, protectedDays: HISTORY_SNAPSHOT_PROTECT_DAYS });
             supersededTracker.push(rn.id, rn.title);
           }
           db.applyRemotePurge(rn.id);
@@ -590,7 +594,7 @@ export async function syncNow(cfg: SyncConfig, s3: S3Store, db: SyncDbPort, opts
         // 纯跟随删除传播（从未编辑/上传）→ 只移入回收站（或已在内），不留档不报。
         // 回收站内编辑（localTrashed=true 且内容被改）同样压制回删除前内容 + 留档（S4）。
         if (ownEditOf(local, rn.id)) {
-          db.createHistorySnapshot(rn.id, contentOf(local), { title: local!.title, parentId: local!.parentId, sortOrder: local!.sortOrder });
+          db.createHistorySnapshot(rn.id, contentOf(local), { title: local!.title, parentId: local!.parentId, sortOrder: local!.sortOrder, protectedDays: HISTORY_SNAPSHOT_PROTECT_DAYS });
           supersededTracker.push(rn.id, rn.title);
         }
         // 下载差集（对齐缺口1「验真实字节」哲学，不盲信缓存）：删除不改正文 → 仅当【本地实读正文的 sha256 == 远端 hash】
@@ -700,7 +704,7 @@ export async function syncNow(cfg: SyncConfig, s3: S3Store, db: SyncDbPort, opts
         report.downloadedBytes += contentBytes.length;
         // D5：本机编辑成果被远端覆盖 → 先强制留档（协议 §4.2，防丢数据），再接受远端
         if (action.superseded && local) {
-          db.createHistorySnapshot(rn.id, contentOf(local), { title: local.title, parentId: local.parentId, sortOrder: local.sortOrder });
+          db.createHistorySnapshot(rn.id, contentOf(local), { title: local.title, parentId: local.parentId, sortOrder: local.sortOrder, protectedDays: HISTORY_SNAPSHOT_PROTECT_DAYS });
           supersededTracker.push(rn.id, rn.title);
         }
         if (opts?.strictAssets) {
