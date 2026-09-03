@@ -35,6 +35,8 @@ const MAX_REMOTE_NOTE_BYTES = 64 * 1024 * 1024;
 const ASSET_CONCURRENCY = 4;
 /** 正文对象并发上传车道数（内容寻址幂等，条目独立）。 */
 const UPLOAD_CONCURRENCY = 4;
+/** 跨笔记资产扫描并发车道数（P3-4）。总并发 PUT ≈ NOTE_UPLOAD_CONCURRENCY × ASSET_CONCURRENCY，需与七牛 Kodo QPS 平衡。 */
+const NOTE_UPLOAD_CONCURRENCY = 4;
 
 /** P3-3：小型并发池（定长车道，无依赖）：worker 按 index 领任务；结果由调用方按
  * 原索引归位（warnings 顺序 / 字节记账保持确定性，对齐串行语义）。 */
@@ -694,6 +696,11 @@ export async function syncNow(cfg: SyncConfig, s3: S3Store, db: SyncDbPort, opts
   // 同时记录 purged id：发布 manifest 时从 notes 中移除（云端删除已完成，manifest 不再携带该条目，
   // 对齐桌面 sync.ts:630-632 跳过 + manifestNotes 只含非 purged）。
   const purgedIds = new Set(localAll.filter((n) => n.syncState === "purged").map((n) => n.id));
+  // P3-4 跨笔记资产扫描并发化：扫描/上传某笔记缺失资产是同步里唯一的“每笔记网络活”，旧实现逐篇 await（串行长尾，
+  // 大库首次同步多篇带图笔记时尤甚）。决策环内只登记任务（正文与条目照常构建、entry.assets 暂空），环后用并发池统一
+  // 解析并回填 entry.assets。语义与串行完全一致：同一 resolveUploadAssets、同样的失败吞并日志、最终 manifest.assets 同集合，
+  // 仅把各笔记的 IO 等待重叠起来；uploadQueue 顺序不变（改写的是已入队的同一 entry 对象）。
+  const assetTasks: Array<{ noteId: string; content: string; rnAssets: ManifestNote["assets"] | null; entry: ManifestNote; onError: (msg: string) => void }> = [];
   for (const local of localAll) {
     if (local.syncState === "purged") continue;
     const rn = remoteById.get(local.id) ?? null;
@@ -720,20 +727,15 @@ export async function syncNow(cfg: SyncConfig, s3: S3Store, db: SyncDbPort, opts
       }
       db.log(`[tombstone] ${local.id} 上传软删条目（parentId=TRASH + trashedAt，非 deleted）`);
       // 回收站条目携带资源清单（对齐桌面：trash 上云带 assets，B 端下载全文+资源可恢复）
-      let trashAssets: ManifestNote["assets"] = [];
       const uploadContent = contentOf(local);
-      try {
-        trashAssets = await resolveUploadAssets(local.id, uploadContent, rn?.assets ?? null);
-      } catch (e) {
-        db.log(`[tombstone] ${local.id} 资源扫描失败（跳过）：${(e as Error).message}`);
-      }
       const entry = buildUploadEntry({
         note: { id: local.id, title: local.title, parentId: TRASH_NOTEBOOK_ID, sortOrder: local.sortOrder, updatedAt: local.updatedAt, syncState: local.syncState, isConflict: local.isConflict, isLocked: local.isLocked, lockedAt: local.lockedAt, icon: local.icon, trashedAt: local.trashedAt, deletedFromParentId: local.deletedFromParentId ?? null },
         contentHash: localHash,
-        assets: trashAssets,
+        assets: [],
         trashedAt: local.trashedAt,
         deletedFromParentId: local.deletedFromParentId ?? null,
       });
+      assetTasks.push({ noteId: local.id, content: uploadContent, rnAssets: rn?.assets ?? null, entry, onError: (m) => db.log(`[tombstone] ${local.id} 资源扫描失败（跳过）：${m}`) });
       // P3-1：上传条目此刻才取正文（仅待上传的少数笔记产生 IO）
       uploadQueue.push({ id: local.id, content: uploadContent, entry });
       report.trashedUp++; // 本端软删发布（UI 移入回收站计数）
@@ -750,22 +752,17 @@ export async function syncNow(cfg: SyncConfig, s3: S3Store, db: SyncDbPort, opts
     });
     if (decision === "upload") {
       db.log(`[decide] ${local.id} → upload（恢复=${localRestoring}）`);
-      // H3：上传前扫描本地资产 → 上传 S3 → 填入 manifest.assets（供他端下载）
-      let assets: ManifestNote["assets"] = [];
+      // H3：上传前扫描本地资产 → 上传 S3 → 填入 manifest.assets（供他端下载）。P3-4：解析登记为并发任务、环后执行。
       const uploadContent = contentOf(local);
-      try {
-        assets = await resolveUploadAssets(local.id, uploadContent, rn?.assets ?? null);
-      } catch (e) {
-        db.log(`[H3] 资产扫描失败（跳过，不影响正文上传）: ${(e as Error).message}`);
-      }
       const entry = buildUploadEntry({
         note: { id: local.id, title: local.title, parentId: local.parentId, sortOrder: local.sortOrder, updatedAt: local.updatedAt, syncState: local.syncState, isConflict: local.isConflict, isLocked: local.isLocked, lockedAt: local.lockedAt, icon: local.icon },
         contentHash: localHash,
-        assets,
+        assets: [],
         // 恢复：显式清墓碑字段（覆盖远端墓碑 → local-wins）
         trashedAt: localRestoring ? null : undefined,
         deletedFromParentId: localRestoring ? null : undefined,
       });
+      assetTasks.push({ noteId: local.id, content: uploadContent, rnAssets: rn?.assets ?? null, entry, onError: (m) => db.log(`[H3] 资产扫描失败（跳过，不影响正文上传）: ${m}`) });
       // P3-1：上传条目此刻才取正文（仅待上传的少数笔记产生 IO）
       uploadQueue.push({ id: local.id, content: uploadContent, entry });
     } else {
@@ -811,6 +808,17 @@ export async function syncNow(cfg: SyncConfig, s3: S3Store, db: SyncDbPort, opts
       });
       tombstonePublishedIds.push(deleted.id);
     }
+  }
+
+  // P3-4：跨笔记并发解析并回填 entry.assets（各任务只改写自己那份已入队 entry，顺序无关；失败沿用原「吞并+日志、不影响正文发布」语义）。
+  if (assetTasks.length > 0) {
+    await runPool(assetTasks, NOTE_UPLOAD_CONCURRENCY, async (t) => {
+      try {
+        t.entry.assets = await resolveUploadAssets(t.noteId, t.content, t.rnAssets);
+      } catch (e) {
+        t.onError((e as Error).message);
+      }
+    });
   }
 
   // ---- 4. 上传对象（内容寻址幂等）+ 组装新 manifest ----
