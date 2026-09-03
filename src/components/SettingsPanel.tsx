@@ -506,13 +506,13 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
                   {health && (
                     <div style={{ marginTop: 6, fontSize: 12, lineHeight: 1.7 }}>
                       {health.notesMissingFile.length === 0 && health.notesHashMismatch.length === 0 && health.historyMissingFile === 0 && health.orphanRowsFileMissing.length === 0 ? (
-                        <p className="settings-hint" style={{ color: "#15803d" }}>✓ 全部自洽：正文文件、历史快照、孤儿登记均与数据库一致。</p>
+                        <p className="settings-hint" style={{ color: "var(--lake-sync-success, #15803d)" }}>✓ 全部自洽：正文文件、历史快照、孤儿登记均与数据库一致。</p>
                       ) : (
                         <>
-                          {health.notesMissingFile.length > 0 && <p className="settings-hint" style={{ color: "#b91c1c" }}>✗ {health.notesMissingFile.length} 篇笔记正文文件缺失（首 3：{health.notesMissingFile.slice(0, 3).map((n) => n.title).join("、")}）</p>}
-                          {health.notesHashMismatch.length > 0 && <p className="settings-hint" style={{ color: "#b91c1c" }}>✗ {health.notesHashMismatch.length} 篇正文与基线哈希不符（可能被外部改动）</p>}
-                          {health.historyMissingFile > 0 && <p className="settings-hint" style={{ color: "#b45309" }}>✗ {health.historyMissingFile} 份历史快照文件缺失（恢复对应版本时会失败）</p>}
-                          {health.orphanRowsFileMissing.length > 0 && <p className="settings-hint" style={{ color: "#b45309" }}>✗ {health.orphanRowsFileMissing.length} 条孤儿登记文件缺失（登记漂移）</p>}
+                          {health.notesMissingFile.length > 0 && <p className="settings-hint" style={{ color: "var(--lake-error, #b91c1c)" }}>✗ {health.notesMissingFile.length} 篇笔记正文文件缺失（首 3：{health.notesMissingFile.slice(0, 3).map((n) => n.title).join("、")}）</p>}
+                          {health.notesHashMismatch.length > 0 && <p className="settings-hint" style={{ color: "var(--lake-error, #b91c1c)" }}>✗ {health.notesHashMismatch.length} 篇正文与基线哈希不符（可能被外部改动）</p>}
+                          {health.historyMissingFile > 0 && <p className="settings-hint" style={{ color: "var(--lake-warning, #b45309)" }}>✗ {health.historyMissingFile} 份历史快照文件缺失（恢复对应版本时会失败）</p>}
+                          {health.orphanRowsFileMissing.length > 0 && <p className="settings-hint" style={{ color: "var(--lake-warning, #b45309)" }}>✗ {health.orphanRowsFileMissing.length} 条孤儿登记文件缺失（登记漂移）</p>}
                         </>
                       )}
                       <p className="settings-hint">生成于 {formatDateTime(Date.parse(health.checkedAt))}。本检查只读、不修复；发现问题请从备份/云端恢复对应文件。</p>
@@ -590,7 +590,7 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
                   <p className="settings-hint">手动按钮会立即删除当前未被清单/历史引用的云端对象；自动对账按回收窗口到期后定期清理。结果偏少通常是被引用保护，不是漏删。</p>
                   <div className="settings-row" style={{ gap: 6, marginTop: 6 }}>
                     <button className="settings-choice" onClick={() => void refreshCloudStats()} disabled={gcBusy || gcDiagBusy}>{gcDiagBusy ? "统计中…" : "刷新云端统计"}</button>
-                    {gcDiagBusy && <span style={{ fontSize: 12, color: "#6b7280" }}>正在拉取云端清单…</span>}
+                    {gcDiagBusy && <span style={{ fontSize: 12, color: "var(--lake-text-tertiary, #5f6a78)" }}>正在拉取云端清单…</span>}
                   </div>
                   {gcDiag && (
                     <p className="settings-hint" style={{ marginTop: 6, lineHeight: 1.7 }}>
@@ -603,9 +603,9 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
                   {gcCfg && (
                     <>
                       <div className="settings-field"><span>回收窗口（天）</span><input type="number" min={0} max={90} value={gcCfg.gcRetentionDays} onChange={(e) => saveGcCfg({ gcRetentionDays: Math.max(0, Number(e.target.value) || 7) })} /></div>
-                      <div style={{ fontSize: 11, color: "#6b7280", marginTop: -4, marginBottom: 6 }}>对象被替换/移除后的保护期；0 = 立即到期</div>
+                      <div style={{ fontSize: 11, color: "var(--lake-text-tertiary, #5f6a78)", marginTop: -4, marginBottom: 6 }}>对象被替换/移除后的保护期；0 = 立即到期</div>
                       <div className="settings-field"><span>自动对账周期（小时）</span><input type="number" min={0} max={720} value={gcCfg.gcIntervalHours} onChange={(e) => saveGcCfg({ gcIntervalHours: Math.max(0, Number(e.target.value) || 24) })} /></div>
-                      <div style={{ fontSize: 11, color: "#6b7280", marginTop: -4 }}>自动清理频率；0 = 仅手动</div>
+                      <div style={{ fontSize: 11, color: "var(--lake-text-tertiary, #5f6a78)", marginTop: -4 }}>自动清理频率；0 = 仅手动</div>
                     </>
                   )}
                   <p className="settings-hint">云端只是镜像：删除云端冗余不影响本地正文/回收站/历史快照（“彻底删除/清空回收站”除外）。</p>
@@ -619,7 +619,7 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
                           return am - bm;
                         }).map((row) => (
                           <div key={row.key} title={row.markedAt}>
-                            <span style={{ color: "#6b7280" }}>{row.markedAt.slice(0, 10)}</span> [{pendingKeyReason(row.key)}] <span style={{ wordBreak: "break-all" }}>{row.key}</span>
+                            <span style={{ color: "var(--lake-text-tertiary, #5f6a78)" }}>{row.markedAt.slice(0, 10)}</span> [{pendingKeyReason(row.key)}] <span style={{ wordBreak: "break-all" }}>{row.key}</span>
                           </div>
                         ))}
                       </div>
@@ -665,9 +665,9 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
                           <div style={{ display: "flex", alignItems: "baseline", gap: 8, fontSize: 13, fontWeight: 600, marginBottom: 3 }}>
                             <Paperclip size={13} />
                             <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", minWidth: 0 }}>{g.title}</span>
-                            {g.state === "trash" && <span style={{ fontSize: 11, color: "#b45309" }}>回收站</span>}
+                            {g.state === "trash" && <span style={{ fontSize: 11, color: "var(--lake-warning, #b45309)" }}>回收站</span>}
                             {g.state === "missing" && <span style={{ fontSize: 11, color: "#b91c1c" }}>文档已删除</span>}
-                            <span style={{ fontSize: 11, color: "#6b7280", fontWeight: 400 }}>{g.items.length} 个</span>
+                            <span style={{ fontSize: 11, color: "var(--lake-text-tertiary, #5f6a78)", fontWeight: 400 }}>{g.items.length} 个</span>
                           </div>
                           {g.items.map((o) => (
                             <div
@@ -678,9 +678,9 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
                             >
                               <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1, minWidth: 0 }} title={o.filename}>{o.filename}</span>
                               {o.status === "history"
-                                ? <span style={{ color: "#b45309", whiteSpace: "nowrap" }}>历史保护</span>
-                                : <span style={{ color: "#6b7280", whiteSpace: "nowrap" }}>未引用</span>}
-                              <span style={{ color: "#6b7280", whiteSpace: "nowrap" }}>{formatBytes(o.size)}</span>
+                                ? <span style={{ color: "var(--lake-warning, #b45309)", whiteSpace: "nowrap" }}>历史保护</span>
+                                : <span style={{ color: "var(--lake-text-tertiary, #5f6a78)", whiteSpace: "nowrap" }}>未引用</span>}
+                              <span style={{ color: "var(--lake-text-tertiary, #5f6a78)", whiteSpace: "nowrap" }}>{formatBytes(o.size)}</span>
                               <span style={{ display: "inline-flex", gap: 4 }}>
                                 <button className="settings-choice" style={{ padding: "0 6px" }} title="复制路径" onClick={(ev) => { ev.stopPropagation(); void copyPath(o); }}>复制</button>
                                 <button className="settings-choice" style={{ padding: "0 6px" }} title="在文件夹中显示" onClick={(ev) => { ev.stopPropagation(); void openFolder(o); }}>位置</button>
@@ -695,16 +695,16 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
                     </div>
                     <div style={{ width: 320, flexShrink: 0, border: "1px solid rgba(127,127,127,0.25)", borderRadius: 8, padding: 10, minHeight: 180, maxHeight: 360, overflow: "auto", display: "flex", flexDirection: "column", gap: 8 }}>
                       {!sel ? (
-                        <p style={{ fontSize: 12, color: "#6b7280", margin: 0 }}>点击左侧条目预览</p>
+                        <p style={{ fontSize: 12, color: "var(--lake-text-tertiary, #5f6a78)", margin: 0 }}>点击左侧条目预览</p>
                       ) : pv == null ? (
-                        <p style={{ fontSize: 12, color: "#6b7280", margin: 0 }}>加载中…</p>
+                        <p style={{ fontSize: 12, color: "var(--lake-text-tertiary, #5f6a78)", margin: 0 }}>加载中…</p>
                       ) : pv.supported && pv.dataUrl ? (
                         <>
                           <img src={pv.dataUrl} alt={pv.filename} style={{ maxWidth: "100%", maxHeight: 260, objectFit: "contain", alignSelf: "center" }} />
-                          <div style={{ fontSize: 12, wordBreak: "break-all" }}>{pv.filename}<span style={{ color: "#6b7280" }}> · {pv.mimeType || sel.mimeType}</span></div>
+                          <div style={{ fontSize: 12, wordBreak: "break-all" }}>{pv.filename}<span style={{ color: "var(--lake-text-tertiary, #5f6a78)" }}> · {pv.mimeType || sel.mimeType}</span></div>
                         </>
                       ) : (
-                        <p style={{ fontSize: 12, color: "#6b7280", margin: 0 }}>该类型不支持预览。<br />{sel.filename}</p>
+                        <p style={{ fontSize: 12, color: "var(--lake-text-tertiary, #5f6a78)", margin: 0 }}>该类型不支持预览。<br />{sel.filename}</p>
                       )}
                     </div>
                   </div>
@@ -741,7 +741,7 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
                 {logRows.length > 0 ? (
                   <div className="settings-hint" style={{ maxHeight: 280, overflow: "auto", fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace", fontSize: 11, lineHeight: 1.6, marginTop: 6 }}>
                     {logRows.map((row, i) => (
-                      <div key={i} style={row.hit ? { color: "#b45309" } : { color: "#6b7280" }}>{row.line}</div>
+                      <div key={i} style={row.hit ? { color: "var(--lake-warning, #b45309)" } : { color: "var(--lake-text-tertiary, #5f6a78)" }}>{row.line}</div>
                     ))}
                   </div>
                 ) : (
