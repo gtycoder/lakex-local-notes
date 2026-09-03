@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { AlignLeft, Cloud, Files, History, Info, Keyboard, ListTree, Monitor, Moon, PanelTop, Paperclip, Search, Settings, Sun, Trash2, Type } from "lucide-react";
+import { AlignLeft, Cloud, Files, History, Info, Keyboard, ListTree, Monitor, Moon, PanelTop, Paperclip, ScrollText, Search, Settings, Sun, Trash2, Type } from "lucide-react";
 import { fontSizeOptions, type AppSettings } from "../lib/settings";
 import { native } from "../lib/native";
 import type { CleanOrphanResult, DataHealthReport, S3GcPendingItem, S3Settings, SyncSettings } from "../lib/types";
@@ -9,7 +9,7 @@ import { useFloatingDialog } from "./useFloatingDialog";
 import { filterSettingsNav } from "./settingsSearch";
 import { getNativeErrorMessage } from "../lib/nativeErrors";
 
-export type SettingsCategory = "editor" | "appearance" | "shortcuts" | "history" | "sync" | "resources" | "trash" | "about";
+export type SettingsCategory = "editor" | "appearance" | "shortcuts" | "history" | "sync" | "resources" | "trash" | "logs" | "about";
 
 interface SettingsPanelProps {
   open: boolean;
@@ -64,6 +64,11 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
   // A3 数据体检：只读三查报告
   const [health, setHealth] = useState<DataHealthReport | null>(null);
   const [healthBusy, setHealthBusy] = useState(false);
+  // F1 日志查看
+  const [logRows, setLogRows] = useState<Array<{ line: string; hit: boolean }>>([]);
+  const [logKeyword, setLogKeyword] = useState("");
+  const [logBusy, setLogBusy] = useState(false);
+  const [logInfo, setLogInfo] = useState<string | null>(null);
 
   const [s3, setS3] = useState<S3Settings>(S3_DEFAULTS);
   const [gcCfg, setGcCfg] = useState<{ gcRetentionDays: number; gcIntervalHours: number; trashAutoPurgeDays: number } | null>(null);
@@ -81,6 +86,21 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
   const [busyId, setBusyId] = useState<number | null>(null);
   const [sel, setSel] = useState<RemovedAsset | null>(null);
   const [pv, setPv] = useState<{ filename: string; mimeType: string; supported: boolean; dataUrl?: string } | null>(null);
+
+  /** F1 日志查看：尾部关键字过滤（GC/sync/trash 等），纯读。 */
+  const runLogLoad = async (keyword: string) => {
+    setLogBusy(true);
+    try {
+      const r = await native.readAppLog({ keyword: keyword.trim() || undefined, maxLines: 200, context: 1 });
+      setLogRows(r.matches);
+      setLogInfo(r.matches.length === 0 ? "无匹配日志" : r.truncated ? `显示最近 ${r.matches.length} 行（已截断）` : `共 ${r.matches.length} 行`);
+    } catch (e) {
+      setLogRows([]);
+      setLogInfo(`日志读取失败：${getNativeErrorMessage(e)}`);
+    } finally {
+      setLogBusy(false);
+    }
+  };
 
   /** A3 数据体检：只读三查（notes↔文件/hash、history↔文件、orphan 登记↔文件）。 */
   const runHealth = async () => {
@@ -174,6 +194,7 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
     { id: "sync" as const, label: "云端与同步", keywords: "S3 上传 下载 资源 云端 回收", icon: <Cloud size={15} /> },
     { id: "resources" as const, label: "资源", keywords: "资源 未引用 孤儿 清理 附件 图片", icon: <Paperclip size={15} /> },
     { id: "trash" as const, label: "回收站", keywords: "删除 恢复 清空", icon: <Trash2 size={15} /> },
+    { id: "logs" as const, label: "日志", keywords: "日志 诊断 GC 同步 调试", icon: <ScrollText size={15} /> },
     { id: "about" as const, label: "关于", keywords: "版本", icon: <Info size={15} /> },
   ];
   const visibleNav = filterSettingsNav(nav, navQuery);
@@ -653,6 +674,34 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
                   <div className="settings-field"><span>回收站自动过期（天，0=关闭）</span><input type="number" min={0} max={365} value={gcCfg.trashAutoPurgeDays} onChange={(e) => saveGcCfg({ trashAutoPurgeDays: Math.max(0, Number(e.target.value) || 0) })} /></div>
                 )}
                 <p className="settings-hint">回收站内容仅保存在本机；彻底删除会同时删除云端数据且不可撤销。</p>
+              </section>
+            )}
+
+            {category === "logs" && (
+              <section className="settings-group">
+                <h4><ScrollText size={13} /> 应用日志（只读）</h4>
+                <p className="settings-hint">主进程日志（GC / 同步 / 回收站 / 历史清理）位于 userData/logs/lake-notes.log。按关键字过滤，每条命中附带前后一行上下文。</p>
+                <div className="settings-row" style={{ gap: 6 }}>
+                  <input
+                    type="text"
+                    style={{ flex: 1, minWidth: 0, height: 30, padding: "0 8px", border: "1px solid var(--lake-border)", borderRadius: 6, outline: "none", fontSize: 12 }}
+                    value={logKeyword}
+                    onChange={(e) => setLogKeyword(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === "Enter") void runLogLoad(logKeyword); }}
+                    placeholder="过滤（如 GC / sync / trash / purge / snapshot）"
+                  />
+                  <button className="settings-choice" onClick={() => void runLogLoad(logKeyword)} disabled={logBusy}><Search size={12} /> {logBusy ? "读取中…" : "读取"}</button>
+                </div>
+                {logInfo && <p className="settings-hint">{logInfo}</p>}
+                {logRows.length > 0 ? (
+                  <div className="settings-hint" style={{ maxHeight: 280, overflow: "auto", fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace", fontSize: 11, lineHeight: 1.6, marginTop: 6 }}>
+                    {logRows.map((row, i) => (
+                      <div key={i} style={row.hit ? { color: "#b45309" } : { color: "#6b7280" }}>{row.line}</div>
+                    ))}
+                  </div>
+                ) : (
+                  !logBusy && <p className="settings-hint">（尚无日志或未读取）</p>
+                )}
               </section>
             )}
 

@@ -90,6 +90,7 @@ export interface LakeNative {
   listS3GcLog(): Promise<S3GcLogItem[]>;
   runS3GcDiagnostics(): Promise<GcDiagnostics>;
   runDataHealthCheck(): Promise<DataHealthReport>;
+  readAppLog(opts: { keyword?: string; maxLines?: number; context?: number }): Promise<{ matches: Array<{ line: string; hit: boolean }>; file: string; truncated: boolean; generatedAt: string }>;
   runS3GcReconcile(ignoreRetention?: boolean): Promise<{ deleted: number; kept: number; clearedReferenced: number; ageUnknown: number }>;
   runS3DeepCleanup(dryRun: boolean, ignoreRetention?: boolean): Promise<DeepCleanupResult>;
   getTrashReminder(): Promise<Array<{ id: string; title: string; deletedAt: string }>>;
@@ -191,6 +192,7 @@ export const native = {
   listS3GcLog: () => api().listS3GcLog(),
   runS3GcDiagnostics: () => api().runS3GcDiagnostics(),
   runDataHealthCheck: () => api().runDataHealthCheck(),
+  readAppLog: (opts: { keyword?: string; maxLines?: number; context?: number }) => api().readAppLog(opts),
   runS3GcReconcile: (ignoreRetention = false) => api().runS3GcReconcile(ignoreRetention),
   runS3DeepCleanup: (dryRun: boolean, ignoreRetention = false) => api().runS3DeepCleanup(dryRun, ignoreRetention),
   getTrashReminder: () => api().getTrashReminder(),
