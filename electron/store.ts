@@ -1443,7 +1443,23 @@ export class Store {
   }
 
   listOrphanAssets(): OrphanAsset[] {
-    return this.assetRepository.listOrphanAssets();
+    const rows = this.assetRepository.listOrphanAssets();
+    if (rows.length === 0) return rows;
+    const ids = [...new Set(rows.map((r) => r.noteId))];
+    const placeholders = ids.map(() => "?").join(",");
+    const notes = this.db.prepare(
+      `SELECT id, title, trashed_at FROM notes WHERE id IN (${placeholders})`
+    ).all(...ids) as Array<{ id: string; title: string; trashed_at: string | null }>;
+    const titleBy = new Map<string, { title: string; trashed: boolean }>();
+    for (const n of notes) titleBy.set(n.id, { title: n.title || "(无标题)", trashed: n.trashed_at != null });
+    return rows.map((r) => {
+      const info = titleBy.get(r.noteId);
+      return {
+        ...r,
+        noteTitle: info?.title ?? "（文档已删除）",
+        noteState: info ? (info.trashed ? "trash" : "active") : "missing",
+      } as OrphanAsset;
+    });
   }
 
   /** 某笔记当前登记的孤儿文件名集合（供“孤儿不同步上传”过滤与 UI 幂等）。 */

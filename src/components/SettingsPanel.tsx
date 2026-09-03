@@ -92,6 +92,19 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
     return { due, inWindow, unknown, earliest };
   }, [gcPendingRows, gcCfg]);
 
+  /** 未引用资源按所属文档分组（含回收站/已删除状态标注）。 */
+  const groupedOrphans = useMemo(() => {
+    const map = new Map<string, { title: string; state: string; items: OrphanAsset[] }>();
+    for (const o of orphans) {
+      const state = o.noteState ?? "active";
+      const key = (o.noteTitle ?? o.noteId) + "|" + state;
+      let g = map.get(key);
+      if (!g) { g = { title: o.noteTitle ?? o.noteId, state, items: [] }; map.set(key, g); }
+      g.items.push(o);
+    }
+    return [...map.values()].sort((a, b) => a.title.localeCompare(b.title));
+  }, [orphans]);
+
   useEffect(() => {
     if (!open) return;
     setCategory(openCategory);
@@ -447,7 +460,7 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
             {category === "resources" && (
               <section className="settings-group">
                 <h4><Paperclip size={13} /> 未引用资源（本地）</h4>
-                <p className="settings-hint">从文档删除的图片/附件会先出现在这里（删除动作不移除文件，它可能仍被历史引用）。被当前正文或历史快照引用的资源受保护，清理时会自动跳过；清理后本地文件被删除、不再上传，云端副本由“云端回收”收回。</p>
+                <p className="settings-hint">从文档删除的图片/附件会先出现在这里（删除动作不移除文件，它可能仍被历史引用）。被当前正文或历史快照引用的资源受保护，清理时会自动跳过；清理后本地文件被删除、不再上传，云端副本由“云端回收”收回。文档进入回收站时其孤儿仍列出（正文已不引用），文档被彻底删除时相关资源与孤儿随文档一并清理。</p>
                 <div className="settings-row" style={{ gap: 6 }}>
                   <button className="settings-choice" onClick={() => void refreshOrphans()}>刷新</button>
                   <button className="settings-choice" onClick={() => void cleanOrphans()} disabled={orphanBusy || orphans.length === 0}>{orphanBusy ? "清理中…" : `清理全部可清（${orphans.length}）`}</button>
@@ -455,9 +468,16 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
                 {orphans.length === 0 ? (
                   <p className="settings-hint">没有未引用的资源。</p>
                 ) : (
-                  <div className="settings-hint" style={{ maxHeight: 220, overflow: "auto", fontSize: 12, lineHeight: 1.7, marginTop: 6 }}>
-                    {orphans.map((o) => (
-                      <div key={o.id}>[{o.noteId.slice(0, 8)}] {o.filename} · {formatBytes(o.size)} · 登记于 {o.detectedAt.slice(0, 10)}</div>
+                  <div style={{ maxHeight: 260, overflow: "auto", fontSize: 12, lineHeight: 1.7, marginTop: 6 }}>
+                    {groupedOrphans.map((g) => (
+                      <div key={g.title + "|" + g.state} style={{ marginBottom: 8 }}>
+                        <div style={{ fontWeight: 600 }}>
+                          {g.title}{g.state === "trash" ? "（回收站）" : g.state === "missing" ? "（文档已删除）" : ""} · {g.items.length} 个
+                        </div>
+                        {g.items.map((o) => (
+                          <div key={o.id} style={{ paddingLeft: 12, color: "#48515c" }}>· {o.filename} · {formatBytes(o.size)} · 登记于 {o.detectedAt.slice(0, 10)}</div>
+                        ))}
+                      </div>
                     ))}
                   </div>
                 )}
