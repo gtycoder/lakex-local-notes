@@ -7,15 +7,10 @@
 ## 0. 当前基线（新会话开工前）
 - 分支/远端：开发主干 `master` ↔ Gitee `origin`（SSH：`git@gitee.com:gtycoder/local-lake.git`；`master` 亦是远程默认分支）同步。
   **本文不固定 commit hash**——查 `git log -1 --oneline`。
-- 质量门槛：`tsc` 0 error · `vitest` **762 passed / 15 skipped** · 桌面 `vite build` + 移动 `vite build --config vite.mobile.config.ts` 全绿。
-- 本地业务分支只有 `master`（其余已合并/删除；`origin/main` 为旧 Tauri 遗留引用）。**另有一个在途 worktree（2026-09-03 本会话新发现，此前未记入交接）**：
-  `/Users/admin/file/local-lake/lake-notes-wt-android`（`feat/android-mobile-editing`，HEAD 是 `master` 的祖先、**无独有 commit、改动全部未提交**）——
-  内容是安卓端远程图片/粘贴收口：新增 `src/core/remoteAssetGuard.ts`（渲染层共用的协议+字面私网 host 闸门、`filenameFromUrl`）、
-  `src/mobile/remoteFetch.ts`（CapacitorHttp/OkHttp 原生下载远程字节，绕 WebView CORS）+ 3 个测试文件；
-  改 `src/features/editor/resourceUpload.ts`（`isDesktop()` → 能力探测 `window.lakeNative?.downloadRemoteResource`）、
-  `src/mobile/bridge.ts` + `MobileApp.tsx`（挂 `downloadRemoteResource`）、`src/mobile/main.tsx`（**移动端补挂 `installPasteInterceptor`**）。
-  ⇒ 正对 §3.6 与「粘贴远程图片丢失」；**该 worktree 门禁未跑、未经用户验收**，接手时先决定「继续推进」还是「丢弃重建」。
-- 最近这一整轮（260902→260903）主线：**语雀 bookmark 卡修复 + S3 同步性能优化 + 两处 bug 修复 + 压测**，已全部合入 master。
+- 质量门槛：`tsc` 0 error · `vitest` **812 passed / 15 skipped** · 桌面 `vite build` + 移动 `vite build --config vite.mobile.config.ts` 全绿（计数变动见 §2.x；别写死旧数字）。
+- 本地业务分支只有 `master`（其余已合并/删除；`origin/main` 为旧 Tauri 遗留引用）。
+- 里程碑（260903，docs/MILESTONES-SYNC-UX-2026-09-03.md）：M1a-M6 已全量实现并合入 master（merge e803948）——B1 冲突通知收口、B3 冲突归档 30 天保护（note_history.protected_until，多端 port 兼容）、C1 回收站到期倒计时（trashDaysUntilPurge 共享纯函数）、C2 purge 三端语义文案、A3 数据体检（runDataHealthCheck）、D2 待回收明细（pendingKeyReason）、F3 清理统计、F1 应用内日志查看器（read_app_log）、A1 整库备份（exportWorkspaceBackup）、A2 云端恢复（prepareCloudRestore 改名隔离+空库重启首同步）、E 视觉 tokens 收编。B4 按审计取消（对齐 S3-GC-DESIGN §14）；A4 云端报告留 backlog。
+- 近期其他主线（260902→260903）：语雀 bookmark 卡修复 + S3 同步性能优化 + 两处 bug 修复 + 压测，均已在 master。
 
 ## 1. 项目一句话 + 铁律（详见 AGENTS.md）
 本地优先笔记应用（Electron+React+better-sqlite3+语雀 Lake 内核），S3（七牛 Kodo 兼容）同步。
