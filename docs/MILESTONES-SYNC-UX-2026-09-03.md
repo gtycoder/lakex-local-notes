@@ -1,7 +1,9 @@
 # 里程碑实施计划 v2：冲突收口 / 回收站 / 诊断 / 数据生命周期 / 审美（2026-09-03）
 
-> 状态：**实施中（feat/sync-ux-milestones）**。审计见 docs/AUDIT-MILESTONES-SYNC-UX-2026-09-03.md。
-> 进度：M1a（B1+D1）✅ 02f1008 · M1b-B3 ✅ 3a282d4 · B2 并入 B1（审计 §3.1：同步即完成、冲突留档不丢，完成即时 notice 已覆盖「冲突收口」价值；完整 preflight 需复制引擎下载判定、高漂移，成本>收益，不做）
+> 状态：**全部完成（feat/sync-ux-milestones，待合 master）**。审计见 docs/AUDIT-MILESTONES-SYNC-UX-2026-09-03.md。
+> 进度（commit）：M1a B1+D1 `02f1008` · M1b-B3 `3a282d4` · 方案进度 `146df66` · M2 C1+C2 `1cc9882` · M3 A3+D2+F3 `dd84e69` · M4 F1 `f1399cb` · M5 A1+A2 `4125950` · M6 E `49ec700`
+> B2 并入 B1（审计 §3.1：同步即完成、冲突留档不丢，完成即时 notice 已覆盖「冲突收口」价值；完整 preflight 需复制引擎下载判定、高漂移，成本>收益，不做）
+> 多端共享：B3 经 SyncDbPort 签名扩展（移动 bridge 忽略 protected）、C1 经 trashRepository 共享纯函数、D2 经 gcPolicy.pendingKeyReason、A3 只读放 electron（守 node: 禁入）；移动端零破坏。
 > v2 变更：吸收审计必改项——M1 拆 M1a/M1b、B2 降级为非阻断提示、B3 到期解除幂等+port 签名、
 > C1 换数据源（list_trash + settings 派生）、C2 文案更正（purge 立即删云端）、A2 机械安全四原则、
 > B4 取消（对齐 S3-GC-DESIGN §14）；S3-GC-DESIGN §7/§13.3 过时表述已修订（2026-09-03）。
