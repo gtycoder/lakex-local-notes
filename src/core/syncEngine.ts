@@ -593,14 +593,22 @@ export async function syncNow(cfg: SyncConfig, s3: S3Store, db: SyncDbPort, opts
           db.createHistorySnapshot(rn.id, contentOf(local), { title: local!.title, parentId: local!.parentId, sortOrder: local!.sortOrder });
           supersededTracker.push(rn.id, rn.title);
         }
-        const contentBytes = await s3.getObject(`${cfg.prefix}/${objectKey(rn.id, rn.contentHash)}`, { maxBytes: MAX_REMOTE_NOTE_BYTES });
-        if (contentBytes == null) {
-          report.warnings.push(`对象缺失（跳过+warning，B 方案）: ${rn.id}-${rn.contentHash}`);
-          continue;
+        // 下载差集（对齐上传/缺口2）：删除不改正文 → 本地已持同 hash 内容时，用本地内容直接标记入回收站，省一次正文 GET。
+        // 仅「正文 hash 严格相等」才走此捷径；不等（回收站内被编辑 S4、或删除方携带的删除前内容更新）必须拉删除方权威内容 + 已在上做留档。
+        let trashContent: string;
+        if (local.contentHash != null && local.contentHash === rn.contentHash) {
+          trashContent = contentOf(local);
+        } else {
+          const contentBytes = await s3.getObject(`${cfg.prefix}/${objectKey(rn.id, rn.contentHash)}`, { maxBytes: MAX_REMOTE_NOTE_BYTES });
+          if (contentBytes == null) {
+            report.warnings.push(`对象缺失（跳过+warning，B 方案）: ${rn.id}-${rn.contentHash}`);
+            continue;
+          }
+          if (!verifyNoteHash(contentBytes, rn)) continue;
+          report.downloadedBytes += contentBytes.length;
+          trashContent = decodeText(contentBytes);
         }
-        if (!verifyNoteHash(contentBytes, rn)) continue;
-        report.downloadedBytes += contentBytes.length;
-        db.applyRemoteTrash(rn.id, decodeText(contentBytes), rn.title, rn.trashedAt ?? rn.deletedAt ?? rn.updatedAt, rn.deletedFromParentId ?? null, rn.parentId, rn.sortOrder);
+        db.applyRemoteTrash(rn.id, trashContent, rn.title, rn.trashedAt ?? rn.deletedAt ?? rn.updatedAt, rn.deletedFromParentId ?? null, rn.parentId, rn.sortOrder);
         recordDeclaredAssetsOnly(db, rn.id, rn.assets);
         report.appliedRemote++;
         // UI 移入回收站计数：仅"本次新入回收站"（本地原先不在回收站）才计；已在回收站的重复应用不计

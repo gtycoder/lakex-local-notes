@@ -334,6 +334,43 @@ describe("syncEngine（共享编排）", () => {
     expect(db.assets.get("n1/a.png") ? Array.from(db.assets.get("n1/a.png")!) : []).toEqual(Array.from(img1)); // 缺失的仍下载落盘
   });
 
+  it("缺口2：active→trash 且正文 hash 相同 → 跟随删除不重下正文（用本地内容入回收站）", async () => {
+    const s3 = new MemS3(); const db = new MemDb();
+    const content = "<p>keep me</p>"; const h = hashOf(content);
+    db.notes.set("n1", row({ id: "n1", content, syncState: "synced" }));
+    db.notes.get("n1")!.contentHash = h;                                   // 本地已持该 hash 正文
+    db.bases.set("n1", { contentHash: h, lastUploadedHash: null, lastSyncedMetaAt: "2026-01-01T00:00:00.000Z" });
+    // 远端软删进回收站，正文 hash 不变（删除不改内容）；故意【不放正文对象】——若走 GET 必 MISS → 不会入回收站
+    s3.map.set("p/manifests/latest.json", gzipSync(new TextEncoder().encode(JSON.stringify({
+      version: 4, workspaceId: "default", commitId: "c1", prevCommitId: null, createdAt: "2026-01-01T00:00:00.000Z",
+      notes: [{ id: "n1", title: "N", parentId: "notebook-personal", sortOrder: 0, updatedAt: "2026-02-01T00:00:00.000Z", contentHash: h, isConflict: false, assets: [], trashedAt: "2026-02-01T00:00:00.000Z", deletedFromParentId: "notebook-personal" }],
+      folders: [],
+    }))));
+    const objGets: string[] = []; const orig = s3.getObject.bind(s3);
+    s3.getObject = async (k: string, o?: { maxBytes?: number }) => { if (k.startsWith("p/objects/")) objGets.push(k); return orig(k, o); };
+    await syncNow(CFG, s3, db);
+    expect(objGets).toEqual([]);                                          // 关键：正文 hash 相等 → 未 GET
+    expect(db.notes.get("n1")!.trashedAt).toBeTruthy();                  // 仍正确跟随入回收站
+    expect(db.notes.get("n1")!.content).toBe(content);                   // 内容用本地（等价）
+  });
+
+  it("缺口2：hash 不同（删除方改过正文）→ 仍拉删除方权威内容入回收站（捷径只走 hash 相等）", async () => {
+    const s3 = new MemS3(); const db = new MemDb();
+    const local = "<p>stale</p>"; const tomb = "<p>deleted-side</p>"; const hT = hashOf(tomb);
+    db.notes.set("n1", row({ id: "n1", content: local, syncState: "synced" }));
+    db.notes.get("n1")!.contentHash = hashOf(local);
+    db.bases.set("n1", { contentHash: hashOf(local), lastUploadedHash: null, lastSyncedMetaAt: "2026-01-01T00:00:00.000Z" });
+    s3.map.set("p/objects/n1-" + hT + ".lake", new TextEncoder().encode(tomb));   // 删除方携带的删除前内容
+    s3.map.set("p/manifests/latest.json", gzipSync(new TextEncoder().encode(JSON.stringify({
+      version: 4, workspaceId: "default", commitId: "c1", prevCommitId: null, createdAt: "2026-01-01T00:00:00.000Z",
+      notes: [{ id: "n1", title: "N", parentId: "notebook-personal", sortOrder: 0, updatedAt: "2026-02-01T00:00:00.000Z", contentHash: hT, isConflict: false, assets: [], trashedAt: "2026-02-01T00:00:00.000Z", deletedFromParentId: "notebook-personal" }],
+      folders: [],
+    }))));
+    await syncNow(CFG, s3, db);
+    expect(db.notes.get("n1")!.trashedAt).toBeTruthy();
+    expect(db.notes.get("n1")!.content).toBe(tomb);                      // hash 不同 → 用删除方权威内容（非本地）
+  });
+
   it("二次同步：无变更不重传（skip-fast）", async () => {
     const s3 = new MemS3();
     const db = new MemDb();
