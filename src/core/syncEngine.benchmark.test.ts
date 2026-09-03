@@ -117,7 +117,12 @@ describe.skipIf(!RUN)("Tier A · syncNow 算法/请求数压测", () => {
     for (let i = 0; i < 200; i += 1) { const n = db.notes.get(`n${i}`)!; n.title = `改名 ${i}`; n.syncState = "local"; }
     const before = assetKeyCount(s3);
     const t0 = performance.now(); const r = await syncNow(CFG, s3, db); const ms = performance.now() - t0;
-    results.push({ case: "S2 元数据churn", notes: 500, churn: 200, ms: +ms.toFixed(1), gets: s3.ops.get, puts: s3.ops.put, assetPuts: 0 });
+    const assetPuts = assetKeyCount(s3) - before;
+    expect(assetPuts).toBe(0);            // 回归守卫：已声明资产零重传
+    expect(s3.ops.get).toBe(1);           // 仅读 latest：无逐对象 GET/HEAD 探测
+    expect(db.defaultCalls).toBe(0);      // 有 nb-root → 不新建兜底
+    expect(r.uploaded).toBe(200);         // 正文照常并发上传（=变更数）
+    results.push({ case: "S2 元数据churn", notes: 500, churn: 200, ms: +ms.toFixed(1), gets: s3.ops.get, puts: s3.ops.put, assetPuts });
   });
 
   it("S3 资产首传：1×200 + 3×50 图 → 资产 PUT 恰 350、gets≈1", async () => {
@@ -125,6 +130,8 @@ describe.skipIf(!RUN)("Tier A · syncNow 算法/请求数压测", () => {
     [["a0", 200], ["a1", 50], ["a2", 50], ["a3", 50]].forEach(([id, n]) => { const r = db.row(String(id), `<p>x${id}</p>`, "local"); db.notes.set(String(id), r); db.seedAssets(String(id), Number(n)); });
     putManifest(s3, [], "cX");
     const t0 = performance.now(); await syncNow(CFG, s3, db); const ms = performance.now() - t0;
+    expect(assetKeyCount(s3)).toBe(350);  // 回归守卫：新增资产全传
+    expect(s3.ops.get).toBe(1);           // 首传也无需逐对象探测（无远端声明→直接 PUT）
     results.push({ case: "S3 资产首传", newAssets: 350, ms: +ms.toFixed(1), assetPuts: assetKeyCount(s3), gets: s3.ops.get });
   });
 
@@ -136,6 +143,7 @@ describe.skipIf(!RUN)("Tier A · syncNow 算法/请求数压测", () => {
     putManifest(s3, [noteEntry(id, r.contentHash!, declared)], "cX");
     const before = assetKeyCount(s3);
     const t0 = performance.now(); await syncNow(CFG, s3, db); const ms = performance.now() - t0;
+    expect(assetKeyCount(s3) - before).toBe(1); // 回归守卫：只 PUT 缺失那 1 张、跳过 199
     results.push({ case: "S4 增量+1", assetPuts: 1, skipped: 199, ms: +ms.toFixed(1) });
   });
 

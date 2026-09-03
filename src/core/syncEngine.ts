@@ -277,6 +277,9 @@ const MANIFEST_KEY = "manifests/latest.json";
  * 桶被重置 → rn 为 null）传空集 → 全部本地资产都按缺失上传。
  * 上传优先流式（s3.putObjectStream + db.openLocalAssetStream 同时可用），否则字节路径（移动端零改动）。
  * stats 传入时累计实际上传字节数（流式取声明 size，字节路径取 bytes.length）。
+ * 守卫（勿回退）：**禁止**以 `rn.assets` 直接充当 manifest 声明来跳过本地重扫——`rn.assets` 只是「上轮远端声明」，
+ * 本地可能有未声明的新增/上次失败未传的资产，复用以声明冒充清单 = 裁剪声明 = 违反红线（他端 GC 误删在用资产）。
+ * 每次必须 `db.listLocalAssets` 实扫、远端声明只作 skip 集。外部前提（契约外不检测）：无带外删除；资产按 filename 内容寻址。
  * 导出供单元测试直接覆盖差集/流式选择逻辑。 */
 export async function scanLocalAssets(
   cfg: SyncConfig, s3: S3Store, db: SyncDbPort, noteId: string,

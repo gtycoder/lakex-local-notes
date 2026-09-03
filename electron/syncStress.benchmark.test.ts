@@ -112,10 +112,8 @@ describe.skipIf(!READY)("Tier B · 真实云（七牛）同步压测", () => {
     for (let i = 0; i < 60; i += 1) { const n = db.notes.get(ids[i])!; n.title = `改名 ${i}`; n.syncState = "local"; }
     reset();
     const t1 = performance.now(); const r1 = await syncNow(cfg, s3Store, db); const churnMs = performance.now() - t1;
-    const churnAssetPuts = (tally.putStream?.n ?? 0) + (tally.put?.n ?? 0) - 1 /*manifest latest*/ - r1.uploaded /*正文*/ - (tally.put?.n ? 0 : 0);
     results.push({ case: "B1 首传", notes: notesN, assets: notesN * per, ms: +firstMs.toFixed(0), putReqs: afterPut, headReqs: afterHead, getReqs: afterGet, uploaded: r0.uploaded });
     results.push({ case: "B1 churn复同步", churn: 60, ms: +churnMs.toFixed(0), headReqs: tally.headObject?.n ?? 0, putReqs: tally.put?.n ?? 0, putStream: tally.putStream?.n ?? 0 });
-    void churnAssetPuts;
     expect(afterHead).toBe(0); // 分支：结构上无 headObject
   }, 240_000);
 
