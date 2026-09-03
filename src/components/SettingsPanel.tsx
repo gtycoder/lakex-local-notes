@@ -135,7 +135,8 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
     if (gcBusy) return;
     setGcBusy(true); setSyncMsg(null);
     try {
-      const r = await native.runS3DeepCleanup(dryRun);
+      // 手动清理 = 显式清云端：无视 7 天窗口，直接列出/删除当前全部未引用对象（自动定时仍按窗口）
+      const r = await native.runS3DeepCleanup(dryRun, true);
       setGcPending(await native.listS3GcPending().then((i) => i.length).catch(() => 0));
       setSyncMsg(dryRun ? `预览：可清理 Lake ${r.lake.candidateCount} 个、小记 ${r.quickNotes.candidateCount} 个` : `已清理：Lake ${r.lake.deletedCount} 个、小记 ${r.quickNotes.deletedCount} 个`);
     } catch (e) { setSyncMsg(getNativeErrorMessage(e)); }
@@ -145,9 +146,11 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
     if (gcBusy) return;
     setGcBusy(true); setSyncMsg(null);
     try {
-      const r = await native.runS3GcReconcile();
+      // 手动对账 = 显式清云端：无视 7 天窗口（自动/定时仍按窗口）
+      const r = await native.runS3GcReconcile(true);
       setGcPending(await native.listS3GcPending().then((i) => i.length).catch(() => 0));
-      setSyncMsg(r.deleted > 0 ? `已删除 ${r.deleted} 个过期对象` : "无到期对象");
+      const cleared = r.clearedReferenced > 0 ? `；另有 ${r.clearedReferenced} 条已恢复引用、移出待回收` : "";
+      setSyncMsg(r.deleted > 0 ? `已删除 ${r.deleted} 个未引用对象${cleared}` : cleared ? `无未引用对象可删${cleared}` : "云端无未引用对象");
     } catch (e) { setSyncMsg(getNativeErrorMessage(e)); }
     finally { setGcBusy(false); }
   };

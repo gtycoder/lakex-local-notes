@@ -13,7 +13,9 @@ const s3 = vi.hoisted(() => ({
   bucket: new Map<string, Buffer>(),
   puts: [] as string[],
   failCommand: "" as string,
-  reset() { this.bucket.clear(); this.puts.length = 0; this.failCommand = ""; },
+  /** 覆盖某个键 list 返回的 LastModified：Date=指定时间；null=不返回（模拟云端未给时间戳） */
+  lastModifiedOverrides: new Map<string, Date | null>(),
+  reset() { this.bucket.clear(); this.puts.length = 0; this.failCommand = ""; this.lastModifiedOverrides.clear(); },
 }));
 
 vi.mock("@aws-sdk/client-s3", () => {
@@ -64,7 +66,7 @@ vi.mock("@aws-sdk/client-s3", () => {
         const contents = [...s3.bucket.keys()]
           .filter((k) => k.startsWith(prefix))
           .sort()
-          .map((k) => ({ Key: k, LastModified: new Date(0) }));
+          .map((k) => ({ Key: k, LastModified: s3.lastModifiedOverrides.has(k) ? s3.lastModifiedOverrides.get(k) : new Date(0) }));
         return { Contents: contents };
       }
       if (command instanceof DeleteObjectCommand) {
@@ -1317,6 +1319,33 @@ describe("S3 GC 语义修正（2026-09-03）", () => {
     const dry2 = await runDeepCleanup(store as unknown as Store, { dryRun: true });
     expect(dry2.keys).toContain(orphan);
     await runDeepCleanup(store as unknown as Store);
+    expect(s3.bucket.has(key(orphan))).toBe(false);
+  });
+
+  it("手动对账 ignoreRetention：窗口内标记的未引用键也立即删除（手动=显式清云端）", async () => {
+    const store = newStore();
+    store.createNote("n1", "笔记A", "<p>v1</p>");
+    await syncNow(store as unknown as Store);
+    store.addS3GcPending("objects/fresh-dead.lake");   // 刚标记（窗口内）
+    const r = await runGcReconcile(store as unknown as Store, { ignoreRetention: true });
+    expect(r.deleted).toBe(1);
+    expect(store.gcPending.has("objects/fresh-dead.lake")).toBe(false);
+  });
+
+  it("手动深度清理 ignoreRetention：年龄未知的未引用键也立即删；自动模式保留", async () => {
+    const store = newStore();
+    store.createNote("n1", "笔记A", "<p>v1</p>");
+    await syncNow(store as unknown as Store);
+    const orphan = "objects/age-unknown.lake";
+    s3.bucket.set(key(orphan), Buffer.from("x", "utf8"));
+    s3.lastModifiedOverrides.set(key(orphan), null);   // 云端未给 LastModified（年龄未知）
+    // 自动（默认）：年龄未知 → 保守不删
+    const auto = await runDeepCleanup(store as unknown as Store, { dryRun: true });
+    expect(auto.keys).not.toContain(orphan);
+    // 手动（ignoreRetention）：显式清理 → 删全部未引用
+    const manual = await runDeepCleanup(store as unknown as Store, { dryRun: true, ignoreRetention: true });
+    expect(manual.keys).toContain(orphan);
+    await runDeepCleanup(store as unknown as Store, { ignoreRetention: true });
     expect(s3.bucket.has(key(orphan))).toBe(false);
   });
 });

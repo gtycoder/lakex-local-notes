@@ -81,8 +81,8 @@ export interface LakeNative {
   saveS3GcSettings(settings: S3GcSettings): Promise<void>;
   listS3GcPending(): Promise<S3GcPendingItem[]>;
   listS3GcLog(): Promise<S3GcLogItem[]>;
-  runS3GcReconcile(): Promise<{ deleted: number; kept: number; clearedReferenced: number; ageUnknown: number }>;
-  runS3DeepCleanup(dryRun: boolean): Promise<DeepCleanupResult>;
+  runS3GcReconcile(ignoreRetention?: boolean): Promise<{ deleted: number; kept: number; clearedReferenced: number; ageUnknown: number }>;
+  runS3DeepCleanup(dryRun: boolean, ignoreRetention?: boolean): Promise<DeepCleanupResult>;
   getTrashReminder(): Promise<Array<{ id: string; title: string; deletedAt: string }>>;
   onSyncProgress(callback: (progress: SyncProgress) => void): () => void;
   onPendingSummaryChanged(callback: (summary: import("./types").SyncPendingSummary) => void): () => void;
@@ -174,8 +174,8 @@ export const native = {
   saveS3GcSettings: (settings: S3GcSettings) => api().saveS3GcSettings(settings),
   listS3GcPending: () => api().listS3GcPending(),
   listS3GcLog: () => api().listS3GcLog(),
-  runS3GcReconcile: () => api().runS3GcReconcile(),
-  runS3DeepCleanup: (dryRun: boolean) => api().runS3DeepCleanup(dryRun),
+  runS3GcReconcile: (ignoreRetention = false) => api().runS3GcReconcile(ignoreRetention),
+  runS3DeepCleanup: (dryRun: boolean, ignoreRetention = false) => api().runS3DeepCleanup(dryRun, ignoreRetention),
   getTrashReminder: () => api().getTrashReminder(),
   onSyncProgress: (callback: (progress: SyncProgress) => void) => api().onSyncProgress(callback),
   onPendingSummaryChanged: (callback: (summary: import("./types").SyncPendingSummary) => void) => api().onPendingSummaryChanged(callback),

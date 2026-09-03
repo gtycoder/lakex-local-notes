@@ -383,7 +383,7 @@ export interface GcReconcileResult {
  * 说明：旧实现只删「已过窗口 ∧ 不在 keep」，把「已过窗口但仍被引用」的行永久留在表里，
  * 造成 UI「待回收」数字只增不清、与实际可回收量脱节（2026-09-03 用户排查现象的一部分）。
  */
-export async function runGcReconcile(store: Store): Promise<GcReconcileResult> {
+export async function runGcReconcile(store: Store, opts?: { ignoreRetention?: boolean }): Promise<GcReconcileResult> {
   const gcStart = Date.now();
   store.logScopes.gc.info("[perf] gc-reconcile start");
   const settings = store.getS3Settings();
@@ -397,7 +397,9 @@ export async function runGcReconcile(store: Store): Promise<GcReconcileResult> {
   const keep = await buildLakeGcKeepSet(store, remote, latest);
 
   const cfg = store.getS3GcSettings();
-  const cutoff = gcCutoffMs(Date.now(), cfg.gcRetentionDays);
+  // 手动对账（UI 按钮）= 显式清理云端 → 无视保留窗口（边界推到未来，所有可解析标记都视为到期）；
+  // 自动/定时对账仍按窗口走（opts.ignoreRetention 缺省 false）。
+  const cutoff = opts?.ignoreRetention ? Number.MAX_SAFE_INTEGER : gcCutoffMs(Date.now(), cfg.gcRetentionDays);
   const toDelete: string[] = [];
   const toClear: string[] = [];
   let kept = 0;
@@ -437,16 +439,18 @@ export interface DeepCleanupResult {
  *   避免「刚被移除、还处在撤销/恢复窗口内」的对象被创建年龄提前清掉，与对账 M5 同口径）；
  *   无待回收标记（他端移除/历史孤儿）→ 仅看创建年龄。
  * dryRun=true 只列出不删；删除写 s3_gc_log。只枚举 Lake 子空间；quick-notes/ 由 runQuickNotesDeepCleanup 单独处理。
+ * opts.ignoreRetention=true（手动 UI 触发）= 显式清理云端：删除当前全部未引用键、无视 7 天窗口（自动/定时仍默认窗口）。
  */
-export async function runDeepCleanup(store: Store, opts?: { dryRun?: boolean; extraKeep?: Set<string> }): Promise<DeepCleanupResult> {
+export async function runDeepCleanup(store: Store, opts?: { dryRun?: boolean; extraKeep?: Set<string>; ignoreRetention?: boolean }): Promise<DeepCleanupResult> {
   const deepStart = Date.now();
-  store.logScopes.gc.info(`[perf] deep-cleanup start (dryRun=${opts?.dryRun ?? false})`);
+  store.logScopes.gc.info(`[perf] deep-cleanup start (dryRun=${opts?.dryRun ?? false}, ignoreRetention=${opts?.ignoreRetention ?? false})`);
   const settings = store.getS3Settings();
   if (!settings) throw new Error("请先保存 S3 配置");
   validateS3Settings(settings);
   const remote = new ObjectStore(settings, store.logScopes);
   const dryRun = opts?.dryRun ?? false;
   const extraKeep = opts?.extraKeep ?? new Set<string>();
+  const ignoreRetention = opts?.ignoreRetention ?? false;
 
   const latestBytes = await remote.getOptional("manifests/latest.json", { maxBytes: MAX_MANIFEST_BYTES });
   if (!latestBytes) { store.logScopes.gc.info(`[perf] deep-cleanup done ${Date.now() - deepStart}ms (no manifest)`); return { dryRun, candidateCount: 0, deletedCount: 0, keys: [] }; }
@@ -470,9 +474,10 @@ export async function runDeepCleanup(store: Store, opts?: { dryRun?: boolean; ex
   const candidates = all
     .filter((item) => !keep.has(item.key))
     .filter((item) => {
-      if (!isPastWindow(item.lastModified, cutoff)) return false;   // 创建不足窗口 → 保护
+      if (ignoreRetention) return true;                       // 手动深度清理：显式清云端 → 全部未引用（含窗口内/年龄未知）
+      if (!isPastWindow(item.lastModified, cutoff)) return false;   // 自动：创建不足窗口 → 保护
       const marked = pendingByKey.get(item.key);
-      return marked === undefined || isPastWindow(marked, cutoff);  // 无 pending 或有但标记也已过窗口
+      return marked === undefined || isPastWindow(marked, cutoff);  // 自动：本机已标记但窗口未过 → 保护
     })
     .map((item) => item.key);
 

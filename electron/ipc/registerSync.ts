@@ -120,19 +120,23 @@ export function registerSyncIpc(ipc: IpcRegistrar, deps: SyncIpcDeps): void {
   });
   ipc.handle("list_s3_gc_pending", () => store.listS3GcPending());
   ipc.handle("list_s3_gc_log", () => store.listS3GcLog());
-  ipc.handle("run_s3_gc_reconcile", () => {
+  ipc.handle("run_s3_gc_reconcile", (_e, ignoreRetention = false) => {
     if (!store.getSyncSettings().enabled) throw new AppError("NotConfigured", "云同步已关闭");
-    return enqueueMaintenance(() => runGcReconcile(store));
+    return enqueueMaintenance(() => runGcReconcile(store, { ignoreRetention: !!ignoreRetention }));
   });
-  ipc.handle("run_s3_deep_cleanup", (dryRun: boolean) => {
+  ipc.handle("run_s3_deep_cleanup", (_e, dryRun: boolean, ignoreRetention = false) => {
     if (!store.getSyncSettings().enabled) throw new AppError("NotConfigured", "云同步已关闭");
     return enqueueMaintenance(async () => {
       const settings = store.getS3Settings();
       if (!settings) throw new AppError("NotConfigured", "请先保存 S3 配置");
       const gcSettings = store.getS3GcSettings();
-      const lake = await runDeepCleanup(store, { dryRun: !!dryRun });
-      const quick = await runQuickNotesDeepCleanup(quickNotes, settings, { dryRun: !!dryRun, gcRetentionDays: gcSettings.gcRetentionDays });
-      return { dryRun: !!dryRun, lake, quickNotes: quick };
+      // 手动清理（ignoreRetention=true）= 显式清云端：无视 7 天窗口；自动/定时仍按窗口。
+      const lake = await runDeepCleanup(store, { dryRun: !!dryRun, ignoreRetention: !!ignoreRetention });
+      const quick = await runQuickNotesDeepCleanup(quickNotes, settings, {
+        dryRun: !!dryRun,
+        gcRetentionDays: ignoreRetention ? 0 : gcSettings.gcRetentionDays,
+      });
+      return { dryRun: !!dryRun, ignoreRetention: !!ignoreRetention, lake, quickNotes: quick };
     });
   });
   ipc.handleEvent("sync_now", (event: IpcMainInvokeEvent) => {
