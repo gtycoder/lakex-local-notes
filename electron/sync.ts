@@ -225,11 +225,11 @@ export class ObjectStore {
       throw new Error("S3 上传失败 (" + key + "): " + errorMessage(error));
     }
   }
-  /** ListObjectsV2 分页列出前缀下键（返回相对键 + LastModified）。 */
-  async list(prefix: string): Promise<Array<{ key: string; lastModified: string }>> {
+  /** ListObjectsV2 分页列出前缀下键（相对键 + LastModified + Size；Size 供 GC 诊断/清理统计体积用，云端缺失记 0）。 */
+  async list(prefix: string): Promise<Array<{ key: string; lastModified: string; size: number }>> {
     const t0 = Date.now();
     const fullPrefix = this.key(prefix);
-    const out: Array<{ key: string; lastModified: string }> = [];
+    const out: Array<{ key: string; lastModified: string; size: number }> = [];
     let continuationToken: string | undefined;
     let pages = 0;
     do {
@@ -241,7 +241,7 @@ export class ObjectStore {
       }));
       for (const obj of output.Contents ?? []) {
         if (typeof obj.Key !== "string") continue;
-        out.push({ key: this.unkey(obj.Key), lastModified: obj.LastModified?.toISOString() ?? "" });
+        out.push({ key: this.unkey(obj.Key), lastModified: obj.LastModified?.toISOString() ?? "", size: typeof obj.Size === "number" ? obj.Size : 0 });
       }
       continuationToken = output.NextContinuationToken;
     } while (continuationToken);
