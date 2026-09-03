@@ -1,6 +1,6 @@
 # Lake Notes Electron — 项目记忆（AGENTS.md）
 
-> 本文件是本项目的**长期记忆**，每次会话自动加载。开始工作前先读本文 + `Electron-HANDOFF.md`（会话交接，含最新进度）+ `docs/TODO.md`。
+> 本文件是本项目的**长期记忆**，每次会话自动加载。开始工作前先读本文 + `HANDOFF.md`（会话交接：当前状态与真正的待办）+ `docs/TODO.md`。
 > 用户反复强调的背景与原则都写在这里，**不要等用户重复**。
 
 ## 1. 项目是什么
@@ -101,6 +101,6 @@ node scripts/s3-ls.mjs --count | --note <id> | --prefix <prefix>   # 云端对�
 
 ## 8. 会话启动指引
 
-1. 读本文件 + `Electron-HANDOFF.md`（最新进度与待办）+ `docs/TODO.md`。
+1. 读本文件 + `HANDOFF.md`（当前状态与真正的待办）+ `docs/TODO.md`。
 2. 查 `git status`/`git log` 确认当前状态；`vite.config.ts` 不应有改动（除非多端调试中的 onstart 补丁）。
 3. 需要用户确认产品语义时，给出选项和推荐，但**当前删除/恢复语义已定稿**（见 §3），不要重新争论。

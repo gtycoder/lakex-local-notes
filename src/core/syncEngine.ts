@@ -285,7 +285,7 @@ const MANIFEST_KEY = "manifests/latest.json";
  *     所以「remote 清单声明了该资产」⇒ 该对象此刻被引用 ⇒ 未被 GC ⇒ 云端确实存在。无需再 HEAD。
  *  3. 关键安全点：返回值仍是**完整** localAssets（全量写进 manifest.assets）——
  *     只对「上传动作」做差集，绝不裁剪「清单声明」。清单声明一旦被裁剪，他端 GC 会把
- *     仍在用的资产判为未引用而误删（HANDOFF-260901 恢复红线）。
+ *     仍在用的资产判为未引用而误删（AGENTS #11 恢复红线）。
  *
  * cloudDeclaredFilenames：本笔记在**已下载远端清单**中声明的资产文件名集合；缺省（如新笔记 /
  * 桶被重置 → rn 为 null）传空集 → 全部本地资产都按缺失上传。

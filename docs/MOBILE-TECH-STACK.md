@@ -1,7 +1,7 @@
 # 移动端技术方案定案：Capacitor（Android 先行）+ 复用前端 bundle
 
 > 更新时间：2026-08-22 ｜ 决策人：用户（逐项确认）｜ 关联方案：`lake-notes-refactor-plan-v5-2026-08-21.md`（V5）
-> 本文是移动端技术选型的**唯一决策记录**；实施进度见 `Electron-HANDOFF.md` 与 M0 POC 记录。
+> 本文是移动端技术选型的**唯一决策记录**；实施进度见 `HANDOFF.md` 与 M0 POC 记录。
 
 ## 1. 决策记录（已确认，不再争论）
 

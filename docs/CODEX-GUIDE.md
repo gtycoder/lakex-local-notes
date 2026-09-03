@@ -102,7 +102,7 @@ await win.screenshot({ path: "/tmp/xxx.png" });  // 截图给用户看
 
 ## 推荐会话工作流
 
-1. **读交接**：`Electron-HANDOFF.md`（入口/索引）→ `docs/PROGRESS.md` ★最新交接
+1. **读交接**：`HANDOFF.md`（唯一交接文档：当前状态 / 真正的待办 / 踩坑）
 2. **改码前先想验证方式**：能实测的一律 Playwright 驱动真实应用
 3. **每个修复的闭环**：
    复现（拿数据）→ 根因（必要时反编译 Lake dist 确认）→ 改 → 实测数据 → 回归
