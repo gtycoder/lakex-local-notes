@@ -32,6 +32,16 @@ export interface TrashReminderItem {
   deletedAt: string;
 }
 
+/** C1：回收站自动过期倒计时（多端共享纯函数）。
+ * trashAutoPurgeDays<=0（关闭）→ null（不显示倒计时/不提示）；已过到期 → 0。
+ * 语义与 main.ts autoPurgeExpiredTrash 一致（deletedAt + N 天为自动清除时刻）。 */
+export function trashDaysUntilPurge(deletedAt: string | null, trashAutoPurgeDays: number): number | null {
+  if (!deletedAt || !Number.isFinite(trashAutoPurgeDays) || trashAutoPurgeDays <= 0) return null;
+  const t = Date.parse(deletedAt);
+  if (Number.isNaN(t)) return null;
+  return Math.max(0, Math.ceil((t + trashAutoPurgeDays * 24 * 3600 * 1000 - Date.now()) / (24 * 3600 * 1000)));
+}
+
 interface TrashRow {
   id: string;
   title: string;

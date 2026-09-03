@@ -1449,6 +1449,9 @@ ne-card[data-card-name="codeblock"] .ne-card-resizer-mask {
 .trash-item-main { flex: 1 1 auto; min-width: 0; }
 .trash-item-title { font-size: 13px; color: var(--b3-theme-on-background); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .trash-item-meta { font-size: 11px; color: var(--b3-theme-on-surface-light); margin-top: 2px; }
+.trash-item-meta .trash-expiry { color: var(--b3-theme-on-surface-light); }
+.trash-item-meta .trash-expiry--soon { color: #b45309; font-weight: 600; }
+.trash-panel-notice { margin: 0; padding: 8px 16px; font-size: 12px; line-height: 1.5; color: #92400e; background: #fef3c7; border-bottom: 1px solid var(--b3-border-color); }
 .trash-item-actions { display: flex; align-items: center; gap: 6px; flex: none; }
 .trash-item-actions button { display: inline-flex; align-items: center; gap: 5px; padding: 5px 9px; border-radius: var(--b3-border-radius); font-size: 12px; cursor: pointer; border: 1px solid var(--b3-theme-surface-lighter); background: var(--b3-theme-surface); color: var(--b3-theme-on-surface); }
 .trash-item-actions button:hover { background: var(--b3-list-hover); }
