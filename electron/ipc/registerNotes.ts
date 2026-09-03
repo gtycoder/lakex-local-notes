@@ -1,4 +1,4 @@
-import { BrowserWindow, dialog, shell } from "electron";
+import { BrowserWindow, clipboard, dialog, shell } from "electron";
 import fs from "node:fs";
 import path from "node:path";
 import type { DraftJournal } from "../draftJournal.js";
@@ -105,6 +105,10 @@ export function registerNotesIpc(ipc: IpcRegistrar, store: Store, drafts: DraftJ
   ipc.handle("download_remote_resource", (url: string, noteId: string) => store.downloadRemoteResource(url, noteId));
   ipc.handle("list_orphan_assets", () => store.listOrphanAssets());
   ipc.handle("clean_orphan_assets", () => store.cleanOrphanAssets());
+  ipc.handle("delete_orphan_asset", (id: number) => store.deleteOrphanAsset(Number(id)));
+  ipc.handle("read_orphan_preview", (id: number) => store.readOrphanPreview(Number(id)));
+  ipc.handle("list_removed_assets", () => store.listRemovedAssets());
+  ipc.handle("read_asset_preview", (noteId: string, filename: string) => store.readAssetPreview(noteId, filename));
   /** 附件操作（桌面本地优先：文件本来就在磁盘）：用系统默认应用打开 / 在文件夹中显示。
    * 路径安全：noteId + filename 双段校验（isSafePathSegment），只允许 note-assets 目录内。 */
   ipc.handle("open_attachment", (noteId: string, filename: string) => {
@@ -119,6 +123,13 @@ export function registerNotesIpc(ipc: IpcRegistrar, store: Store, drafts: DraftJ
     if (!fs.existsSync(full)) throw new IpcInputError("附件文件不存在（可能已清理）");
     shell.showItemInFolder(full);
     return { ok: true };
+  });
+  /** 复制资源文件绝对路径到系统剪贴板（孤儿/历史保护文件管理用）。 */
+  ipc.handle("copy_asset_path", (noteId: string, filename: string) => {
+    assertAttachmentSegments(noteId, filename);
+    const full = path.join(store.noteAssetsPathFor(noteId), filename);
+    clipboard.writeText(full);
+    return full;
   });
 }
 

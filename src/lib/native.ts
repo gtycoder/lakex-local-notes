@@ -1,5 +1,6 @@
 import type { CleanOrphanResult, DeepCleanupResult, DraftJournalEntry, NoteDigest, NoteDocument, OrphanAsset, QuickNoteDocument, QuickNoteImage, QuickNoteTrashItem, ResourceUploadInput, ResourceUploadOutput, S3GcLogItem, S3GcPendingItem, S3GcSettings, S3Settings, SaveQuickNoteInput, SyncProgress, SyncResult, SyncSettings, SyncStatusInfo, TreeNode, WorkspaceSnapshot } from "./types";
 import type { TrashItem } from "../core/trashRepository";
+import type { GcDiagnostics } from "../core/gcDiagnostics";
 
 export interface LakeNative {
   /** 本地资源服务器端口（可被 LAKE_ASSET_PORT 覆盖，多端同机双开用）。 */
@@ -54,10 +55,15 @@ export interface LakeNative {
   downloadRemoteResource(url: string, noteId: string): Promise<ResourceUploadOutput>;
   listOrphanAssets(): Promise<OrphanAsset[]>;
   cleanOrphanAssets(): Promise<CleanOrphanResult>;
+  deleteOrphanAsset(id: number): Promise<{ deleted: boolean; freedBytes: number }>;
+  readOrphanPreview(id: number): Promise<{ filename: string; mimeType: string; supported: boolean; dataUrl?: string }>;
+  listRemovedAssets(): Promise<Array<{ noteId: string; filename: string; status: "orphan" | "history"; orphanId?: number; size: number; mimeType: string; noteTitle?: string; noteState?: "active" | "trash" | "missing"; detectedAt?: string }>>;
+  readAssetPreview(noteId: string, filename: string): Promise<{ filename: string; mimeType: string; supported: boolean; dataUrl?: string }>;
   /** 附件操作（桌面本地优先）：系统默认应用打开。 */
   openAttachment(noteId: string, filename: string): Promise<{ ok: boolean; error?: string }>;
   /** 附件操作：在文件管理器中显示。 */
   showAttachmentInFolder(noteId: string, filename: string): Promise<{ ok: boolean }>;
+  copyAssetPath(noteId: string, filename: string): Promise<string>;
   getS3Settings(): Promise<S3Settings | null>;
   saveS3Settings(settings: S3Settings): Promise<void>;
   testS3Connection(): Promise<string>;
@@ -81,8 +87,9 @@ export interface LakeNative {
   saveS3GcSettings(settings: S3GcSettings): Promise<void>;
   listS3GcPending(): Promise<S3GcPendingItem[]>;
   listS3GcLog(): Promise<S3GcLogItem[]>;
-  runS3GcReconcile(): Promise<{ deleted: number; kept: number }>;
-  runS3DeepCleanup(dryRun: boolean): Promise<DeepCleanupResult>;
+  runS3GcDiagnostics(): Promise<GcDiagnostics>;
+  runS3GcReconcile(ignoreRetention?: boolean): Promise<{ deleted: number; kept: number; clearedReferenced: number; ageUnknown: number }>;
+  runS3DeepCleanup(dryRun: boolean, ignoreRetention?: boolean): Promise<DeepCleanupResult>;
   getTrashReminder(): Promise<Array<{ id: string; title: string; deletedAt: string }>>;
   onSyncProgress(callback: (progress: SyncProgress) => void): () => void;
   onPendingSummaryChanged(callback: (summary: import("./types").SyncPendingSummary) => void): () => void;
@@ -149,8 +156,13 @@ export const native = {
   downloadRemoteResource: (url: string, noteId: string) => api().downloadRemoteResource(url, noteId),
   listOrphanAssets: () => api().listOrphanAssets(),
   cleanOrphanAssets: () => api().cleanOrphanAssets(),
+  deleteOrphanAsset: (id: number) => api().deleteOrphanAsset(id),
+  readOrphanPreview: (id: number) => api().readOrphanPreview(id),
+  listRemovedAssets: () => api().listRemovedAssets(),
+  readAssetPreview: (noteId: string, filename: string) => api().readAssetPreview(noteId, filename),
   openAttachment: (noteId: string, filename: string) => api().openAttachment(noteId, filename),
   showAttachmentInFolder: (noteId: string, filename: string) => api().showAttachmentInFolder(noteId, filename),
+  copyAssetPath: (noteId: string, filename: string) => api().copyAssetPath(noteId, filename),
   getS3Settings: () => api().getS3Settings(),
   saveS3Settings: (settings: S3Settings) => api().saveS3Settings(settings),
   testS3Connection: () => api().testS3Connection(),
@@ -174,8 +186,9 @@ export const native = {
   saveS3GcSettings: (settings: S3GcSettings) => api().saveS3GcSettings(settings),
   listS3GcPending: () => api().listS3GcPending(),
   listS3GcLog: () => api().listS3GcLog(),
-  runS3GcReconcile: () => api().runS3GcReconcile(),
-  runS3DeepCleanup: (dryRun: boolean) => api().runS3DeepCleanup(dryRun),
+  runS3GcDiagnostics: () => api().runS3GcDiagnostics(),
+  runS3GcReconcile: (ignoreRetention = false) => api().runS3GcReconcile(ignoreRetention),
+  runS3DeepCleanup: (dryRun: boolean, ignoreRetention = false) => api().runS3DeepCleanup(dryRun, ignoreRetention),
   getTrashReminder: () => api().getTrashReminder(),
   onSyncProgress: (callback: (progress: SyncProgress) => void) => api().onSyncProgress(callback),
   onPendingSummaryChanged: (callback: (summary: import("./types").SyncPendingSummary) => void) => api().onPendingSummaryChanged(callback),

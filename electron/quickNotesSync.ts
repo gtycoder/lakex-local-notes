@@ -10,6 +10,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { ObjectStore, type S3Settings, validateS3Settings } from "./sync.js";
+import { gcCutoffMs, isPastWindow } from "../src/core/gcPolicy.js";
 import { createS3StoreAdapter } from "./syncAdapters.js";
 import {
   MAX_QUICK_MANIFEST_BYTES,
@@ -27,7 +28,9 @@ import type { StoredQuickNoteContent } from "../src/core/quickNoteModel.js";
 export type { QuickNotesSyncResult, QuickNotesSyncProgress } from "../src/core/quickNotesSyncEngine.js";
 export { parseManifest } from "../src/core/quickNotesSyncEngine.js";
 
-const ROOT = "quick-notes";
+/** 小记独立子空间前缀（同一 bucket 下 `lake-notes/quick-notes/`）。 */
+export const QUICK_NOTES_ROOT = "quick-notes";
+const ROOT = QUICK_NOTES_ROOT;
 
 /** 把桌面 QuickNotesStore（node sqlite + .qnote 文件）适配成共享引擎端口。 */
 function createQuickNotesSyncPort(quickNotes: QuickNotesStore): QuickNotesSyncDbPort {
@@ -128,8 +131,39 @@ export async function syncQuickNotes(
 export interface QuickNotesCleanupResult {
   dryRun: boolean;
   candidateCount: number;
+  candidateBytes: number;
   deletedCount: number;
+  deletedBytes: number;
   keys: string[];
+}
+
+export interface QuickNotesKeepSet {
+  /** 小记清单当前引用的全部键（含清单文件本身）。 */
+  keep: Set<string>;
+  /** 云端是否已有小记清单（无清单 ⇒ 不能判定引用，深度清理直接不动）。 */
+  manifestFound: boolean;
+  items: number;
+  commitId: string | null;
+}
+
+/**
+ * 小记侧权威引用集：`quick-notes/manifests/latest.json` + 其 items 引用的正文/图片对象。
+ * 深度清理与 GC 诊断共用（小记无 commit 链、无本地历史引用保护，语义与 Lake 不同但同源计算）。
+ * 墓碑条目也保留引用：删除前内容/图片仍需可恢复（见下方注释）。
+ */
+export async function buildQuickNotesKeepSet(remote: ObjectStore): Promise<QuickNotesKeepSet> {
+  const manifestKey = `${ROOT}/manifests/latest.json`;
+  const keep = new Set<string>([manifestKey]);
+  const raw = await remote.getOptional(manifestKey, { maxBytes: MAX_QUICK_MANIFEST_BYTES });
+  if (!raw) return { keep, manifestFound: false, items: 0, commitId: null };
+  const manifest = parseManifest(raw);
+  for (const item of manifest.items) {
+    // deleted 墓碑也保留内容引用：真实 hash 时保护删除前对象（恢复可达）；占位符对象不在云端，加入无害。
+    keep.add(`${ROOT}/objects/${item.contentHash}.qnote`);
+    // 墓碑携带图片（A）：墓碑条目 assets 引用的删除前图片对象同样保护（恢复时图片完整），不再跳过 deleted
+    for (const asset of item.assets) keep.add(`${ROOT}/assets/${item.id}/${asset.filename}`);
+  }
+  return { keep, manifestFound: true, items: manifest.items.length, commitId: manifest.commitId };
 }
 
 export async function runQuickNotesDeepCleanup(quickNotes: QuickNotesStore, settings: S3Settings, opts?: { dryRun?: boolean; gcRetentionDays?: number }): Promise<QuickNotesCleanupResult> {
@@ -139,36 +173,28 @@ export async function runQuickNotesDeepCleanup(quickNotes: QuickNotesStore, sett
   const dryRun = opts?.dryRun ?? false;
   const gcRetentionDays = opts?.gcRetentionDays ?? 7;
 
-  const manifestKey = `${ROOT}/manifests/latest.json`;
-  const objectKey = (contentHash: string) => `${ROOT}/objects/${contentHash}.qnote`;
-  const assetKey = (id: string, filename: string) => `${ROOT}/assets/${id}/${filename}`;
-
-  const raw = await remote.getOptional(manifestKey, { maxBytes: MAX_QUICK_MANIFEST_BYTES });
-  if (!raw) { quickNotes.logScopes.quick.info(`[perf] quick-deep-cleanup done ${Date.now() - deepStart}ms (no manifest)`); return { dryRun, candidateCount: 0, deletedCount: 0, keys: [] }; }
-  const manifest = parseManifest(raw);
-  const keep = new Set<string>([manifestKey]);
-
-  for (const item of manifest.items) {
-    // deleted 墓碑也保留内容引用：真实 hash 时保护删除前对象（恢复可达）；占位符对象不在云端，加入无害。
-    keep.add(objectKey(item.contentHash));
-    // 墓碑携带图片（A）：墓碑条目 assets 引用的删除前图片对象同样保护（恢复时图片完整），不再跳过 deleted
-    for (const asset of item.assets) keep.add(assetKey(item.id, asset.filename));
+  const refs = await buildQuickNotesKeepSet(remote);
+  if (!refs.manifestFound) {
+    quickNotes.logScopes.quick.info(`[perf] quick-deep-cleanup done ${Date.now() - deepStart}ms (no manifest)`);
+    return { dryRun, candidateCount: 0, candidateBytes: 0, deletedCount: 0, deletedBytes: 0, keys: [] };
   }
+  const keep = refs.keep;
 
-  // 与 Lake runDeepCleanup 共用同一 gcRetentionDays（逻辑一致），由 main.ts 统一传入。
-  const cutoff = Date.now() - gcRetentionDays * 24 * 3600 * 1000;
+  // 与 Lake runDeepCleanup 共用同一 gcRetentionDays 与窗口判定（诊断/对账/清理三者一致），由 main.ts 统一传入。
+  const cutoff = gcCutoffMs(Date.now(), gcRetentionDays);
   const objects = await remote.list(`${ROOT}/objects/`);
   const assets = await remote.list(`${ROOT}/assets/`);
-  const candidates = [...objects, ...assets]
+  const hits = [...objects, ...assets]
     .filter((item) => !keep.has(item.key))
-    .filter((item) => Date.parse(item.lastModified) < cutoff)
-    .map((item) => item.key);
+    .filter((item) => isPastWindow(item.lastModified, cutoff));
+  const candidates = hits.map((item) => item.key);
+  const candidateBytes = hits.reduce((sum, item) => sum + (Number.isFinite(item.size) ? item.size : 0), 0);
 
   if (dryRun || candidates.length === 0) {
-    quickNotes.logScopes.quick.info(`[perf] quick-deep-cleanup done ${Date.now() - deepStart}ms (dryRun=${dryRun}, candidates=${candidates.length}, deleted=0)`);
-    return { dryRun, candidateCount: candidates.length, deletedCount: 0, keys: candidates };
+    quickNotes.logScopes.quick.info(`[perf] quick-deep-cleanup done ${Date.now() - deepStart}ms (dryRun=${dryRun}, candidates=${candidates.length}, bytes=${candidateBytes}, deleted=0)`);
+    return { dryRun, candidateCount: candidates.length, candidateBytes, deletedCount: 0, deletedBytes: 0, keys: candidates };
   }
   await remote.deleteMany(candidates);
-  quickNotes.logScopes.quick.info(`[perf] quick-deep-cleanup done ${Date.now() - deepStart}ms (dryRun=${dryRun}, candidates=${candidates.length}, deleted=${candidates.length})`);
-  return { dryRun, candidateCount: candidates.length, deletedCount: candidates.length, keys: candidates };
+  quickNotes.logScopes.quick.info(`[perf] quick-deep-cleanup done ${Date.now() - deepStart}ms (dryRun=${dryRun}, candidates=${candidates.length}, bytes=${candidateBytes}, deleted=${candidates.length})`);
+  return { dryRun, candidateCount: candidates.length, candidateBytes, deletedCount: candidates.length, deletedBytes: candidateBytes, keys: candidates };
 }

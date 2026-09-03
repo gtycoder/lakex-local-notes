@@ -223,53 +223,8 @@
   flex: 1;
 }
 
-.outline-sidebar__btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 22px;
-  height: 24px;
-  padding: 0;
-  border: 0;
-  border-radius: 7px;
-  color: #747b85;
-  background: transparent;
-  cursor: pointer;
-  transition: color 130ms ease-out, background-color 130ms ease-out;
-}
-.outline-sidebar__btn:hover {
-  color: var(--shell-accent-strong);
-  background: rgba(53, 117, 240, 0.12);
-}
-.outline-sidebar__btn.is-active {
-  color: var(--shell-accent-strong);
-  background: var(--shell-accent-soft, rgba(53, 117, 240, 0.1));
-}
-
-.outline-sidebar__filter {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  flex: 0 0 29px;
-  min-height: 29px;
-  padding: 0 8px;
-  color: var(--shell-text-tertiary, #8a919c);
-  border-bottom: 1px solid var(--shell-separator);
-}
-.outline-sidebar__filter-input {
-  flex: 1;
-  min-width: 0;
-  height: 22px;
-  padding: 0;
-  border: 0;
-  outline: 0;
-  background: transparent;
-  color: var(--shell-text, #20242c);
-  font-size: 12px;
-}
-.outline-sidebar__filter-input::placeholder {
-  color: var(--shell-text-tertiary, #8a919c);
-}
+/* 大纲头部图标与筛选输入行改用 dock 共享样式：.dock-icon-btn / .dock-filter-row
+   （见 src/styles/ui-polish.css，2026-09-03 与目录栏对齐，避免两套视觉继续漂移）。 */
 
 .outline-list {
   position: relative;
@@ -451,7 +406,6 @@
 .outline-sidebar__panel { color: var(--lake-text); background: var(--lake-panel); border-color: var(--lake-border); }
 .outline-sidebar__header,
 .outline-sidebar__toolbar { color: var(--lake-text-secondary); border-color: var(--lake-border); }
-.outline-sidebar__filter-input { color: var(--lake-text); background: var(--lake-canvas); border-color: var(--lake-border); }
 .outline-item { color: var(--lake-text-secondary); }
 .outline-item:hover,
 .outline-item--selected { color: var(--lake-text); background: var(--lake-accent-soft); }

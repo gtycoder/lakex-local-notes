@@ -5,7 +5,7 @@
  */
 import { createPortal } from "react-dom";
 import type { RefObject } from "react";
-import { Focus, Lock, LockOpen, Settings as Settings2Icon, Trash2 } from "lucide-react";
+import { Focus, Lock, LockOpen, Search, Settings as Settings2Icon, Trash2 } from "lucide-react";
 import { ConfirmDelete } from "../components/Sidebar";
 import { DraftRecoveryDialog } from "../components/DraftRecoveryDialog";
 import { SearchPanel } from "../components/SearchPanel";
@@ -30,6 +30,8 @@ export interface DesktopOverlaysProps {
   topMenuOpen: boolean;
   onOpenSettingsFromMenu: (category: SettingsCategory) => void;
   onOpenTrashFromMenu: () => void;
+  /** 全局搜索（原目录栏放大镜入口，现收进顶栏工作空间下拉） */
+  onOpenSearchFromMenu: () => void;
 
   focusMode: boolean;
   onToggleFocusMode: () => void;
@@ -74,7 +76,7 @@ export function DesktopOverlays(props: DesktopOverlaysProps) {
   const {
     confirmDelete, onConfirmDelete, onCancelDelete,
     workspaceMenuOpen, wsMenuWrapRef, workspaceMenuRef, moreMenuWrapRef, moreMenuRef, topMenuOpen,
-    onOpenSettingsFromMenu, onOpenTrashFromMenu,
+    onOpenSettingsFromMenu, onOpenTrashFromMenu, onOpenSearchFromMenu,
     focusMode, onToggleFocusMode, activeNoteId, lockedNoteIds, onToggleNoteLock,
     draftEntries, onRestoreDraft, onDiscardDraft, onCloseDrafts,
     searchPanelOpen, searchPanelQuery, onOpenNoteFromSearch, onCloseSearch,
@@ -97,8 +99,11 @@ export function DesktopOverlays(props: DesktopOverlaysProps) {
         <div ref={workspaceMenuRef} className="top-menu top-menu--workspace" role="menu" aria-label="工作空间"
           style={(() => {
             const rect = wsMenuWrapRef.current?.getBoundingClientRect();
-            return rect ? clampPopoverPosition(rect, { width: window.innerWidth, height: window.innerHeight }, { width: 180, height: 88 }, 6) : undefined;
+            return rect ? clampPopoverPosition(rect, { width: window.innerWidth, height: window.innerHeight }, { width: 180, height: 132 }, 6) : undefined;
           })()}>
+          <button role="menuitem" onClick={onOpenSearchFromMenu}>
+            <Search size={15} /><span>全文搜索<small>⇧⌘F</small></span>
+          </button>
           <button role="menuitem" onClick={() => onOpenSettingsFromMenu("editor")}><Settings2Icon size={15} />偏好设置</button>
           <button role="menuitem" onClick={onOpenTrashFromMenu}><Trash2 size={15} />回收站</button>
         </div>,

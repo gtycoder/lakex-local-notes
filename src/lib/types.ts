@@ -203,6 +203,9 @@ export interface OrphanAsset {
   size: number;
   mimeType: string;
   detectedAt: string;
+  /** 所属文档标题（store 列表时补全；active/trash/missing）。 */
+  noteTitle?: string;
+  noteState?: "active" | "trash" | "missing";
 }
 
 export interface CleanOrphanResult {

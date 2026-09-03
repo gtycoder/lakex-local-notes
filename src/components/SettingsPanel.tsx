@@ -1,13 +1,15 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { AlignLeft, Cloud, Files, History, Info, Keyboard, ListTree, Monitor, Moon, PanelTop, Paperclip, Search, Settings, Sun, Trash2, Type } from "lucide-react";
 import { fontSizeOptions, type AppSettings } from "../lib/settings";
 import { native } from "../lib/native";
-import type { S3Settings, SyncSettings } from "../lib/types";
+import type { CleanOrphanResult, S3GcPendingItem, S3Settings, SyncSettings } from "../lib/types";
+import type { GcDiagnostics } from "../core/gcDiagnostics";
+import { gcCutoffMs, parseIsoMs } from "../core/gcPolicy";
 import { useFloatingDialog } from "./useFloatingDialog";
 import { filterSettingsNav } from "./settingsSearch";
 import { getNativeErrorMessage } from "../lib/nativeErrors";
 
-export type SettingsCategory = "editor" | "appearance" | "shortcuts" | "history" | "sync" | "trash" | "about";
+export type SettingsCategory = "editor" | "appearance" | "shortcuts" | "history" | "sync" | "resources" | "trash" | "about";
 
 interface SettingsPanelProps {
   open: boolean;
@@ -22,10 +24,30 @@ interface SettingsPanelProps {
 
 const S3_DEFAULTS: S3Settings = { endpoint: "", region: "cn-east-1", bucket: "", prefix: "lake-notes", accessKeyId: "", secretAccessKey: "", forcePathStyle: false };
 
+/** 2026-09-03 08:12 形式的本地短时间。 */
+function formatDateTime(ms: number): string {
+  const d = new Date(ms);
+  const pad = (x: number) => String(x).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
 function formatBytes(n: number): string {
   if (n >= 1024 * 1024) return `${(n / 1024 / 1024).toFixed(1)} MB`;
   if (n >= 1024) return `${(n / 1024).toFixed(1)} KB`;
   return `${n} B`;
+}
+
+/** 全局“被移除资源”条目：status=orphan 可删；history=历史引用保护（只读）。 */
+interface RemovedAsset {
+  noteId: string;
+  filename: string;
+  status: "orphan" | "history";
+  orphanId?: number;
+  size: number;
+  mimeType: string;
+  noteTitle?: string;
+  noteState?: "active" | "trash" | "missing";
+  detectedAt?: string;
 }
 
 export function SettingsPanel({ open, settings, onClose, onChange, openCategory = "editor", onS3SettingsChanged, onSyncSettingsChanged }: SettingsPanelProps) {
@@ -44,9 +66,60 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
   const [gcPending, setGcPending] = useState<number>(0);
   const [gcLog, setGcLog] = useState<Array<{ id: number; ts: string; action: string; key: string; reason: string; ok: boolean }>>([]);
   const [gcBusy, setGcBusy] = useState(false);
+  const [gcDiag, setGcDiag] = useState<GcDiagnostics | null>(null);
+  const [gcDiagBusy, setGcDiagBusy] = useState(false);
   const [syncMsg, setSyncMsg] = useState<string | null>(null);
   const [syncCfg, setSyncCfg] = useState<SyncSettings | null>(null);
   const [syncCfgBusy, setSyncCfgBusy] = useState(false);
+  const [gcPendingRows, setGcPendingRows] = useState<S3GcPendingItem[]>([]);
+  const [orphans, setOrphans] = useState<RemovedAsset[]>([]);
+  const [orphanBusy, setOrphanBusy] = useState(false);
+  const [busyId, setBusyId] = useState<number | null>(null);
+  const [sel, setSel] = useState<RemovedAsset | null>(null);
+  const [pv, setPv] = useState<{ filename: string; mimeType: string; supported: boolean; dataUrl?: string } | null>(null);
+
+  const refreshGcPending = async () => {
+    try {
+      const items = await native.listS3GcPending();
+      setGcPendingRows(items);
+      setGcPending(items.length);
+    } catch { /* 忽略：下次打开/操作后再刷新 */ }
+  };
+
+  /** 待回收行拆分：已过窗口（自动对账可删）/ 窗口内（最早何时到期）/ 时间未知。 */
+  const gcSummary = useMemo(() => {
+    const now = Date.now();
+    const retention = gcCfg?.gcRetentionDays ?? 7;
+    const cutoff = gcCutoffMs(now, retention);
+    let due = 0;
+    let inWindow = 0;
+    let unknown = 0;
+    let earliest: number | null = null;
+    for (const row of gcPendingRows) {
+      const ms = parseIsoMs(row.markedAt);
+      if (ms === null) { unknown += 1; continue; }
+      if (ms <= cutoff) { due += 1; }
+      else {
+        inWindow += 1;
+        const at = ms + retention * 86_400_000;
+        if (earliest === null || at < earliest) earliest = at;
+      }
+    }
+    return { due, inWindow, unknown, earliest };
+  }, [gcPendingRows, gcCfg]);
+
+  /** 未引用资源按所属文档分组（含回收站/已删除状态标注）。 */
+  const groupedOrphans = useMemo(() => {
+    const map = new Map<string, { title: string; state: string; items: RemovedAsset[] }>();
+    for (const o of orphans) {
+      const state = o.noteState ?? "active";
+      const key = (o.noteTitle ?? o.noteId) + "|" + state;
+      let g = map.get(key);
+      if (!g) { g = { title: o.noteTitle ?? o.noteId, state, items: [] }; map.set(key, g); }
+      g.items.push(o);
+    }
+    return [...map.values()].sort((a, b) => a.title.localeCompare(b.title));
+  }, [orphans]);
 
   useEffect(() => {
     if (!open) return;
@@ -56,16 +129,32 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
     void native.getS3Settings().then((v) => v && setS3(v)).catch(() => undefined);
     void native.getS3GcSettings().then(setGcCfg).catch(() => undefined);
     void native.getSyncSettings().then(setSyncCfg).catch(() => undefined);
-    void native.listS3GcPending().then((items) => setGcPending(items.length)).catch(() => undefined);
+    void refreshGcPending();
     void native.listS3GcLog().then(setGcLog).catch(() => undefined);
   }, [open, openCategory]);
+
+  useEffect(() => {
+    if (open && category === "resources") void refreshOrphans();
+  }, [open, category]);
+
+  // 选中即预览、切换自动加载（思源式资源管理交互）
+  useEffect(() => {
+    if (!sel) { setPv(null); return; }
+    let alive = true;
+    setPv(null);
+    native.readAssetPreview(sel.noteId, sel.filename)
+      .then((r) => { if (alive) setPv(r); })
+      .catch(() => { if (alive) setPv({ filename: sel.filename, mimeType: "", supported: false }); });
+    return () => { alive = false; };
+  }, [sel]);
 
   const nav = [
     { id: "editor" as const, label: "编辑器", keywords: "字号 段间距 大纲 工具栏 标签页" , icon: <Type size={15} /> },
     { id: "appearance" as const, label: "外观", keywords: "浅色 深色 主题", icon: <Monitor size={15} /> },
     { id: "shortcuts" as const, label: "快捷键", keywords: "快捷键 搜索 专注模式 键盘", icon: <Keyboard size={15} /> },
     { id: "history" as const, label: "文档与历史", keywords: "快照 保留 清理", icon: <History size={15} /> },
-    { id: "sync" as const, label: "云端与同步", keywords: "S3 上传 下载 资源 云端", icon: <Cloud size={15} /> },
+    { id: "sync" as const, label: "云端与同步", keywords: "S3 上传 下载 资源 云端 回收", icon: <Cloud size={15} /> },
+    { id: "resources" as const, label: "资源", keywords: "资源 未引用 孤儿 清理 附件 图片", icon: <Paperclip size={15} /> },
     { id: "trash" as const, label: "回收站", keywords: "删除 恢复 清空", icon: <Trash2 size={15} /> },
     { id: "about" as const, label: "关于", keywords: "版本", icon: <Info size={15} /> },
   ];
@@ -135,8 +224,10 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
     if (gcBusy) return;
     setGcBusy(true); setSyncMsg(null);
     try {
-      const r = await native.runS3DeepCleanup(dryRun);
-      setGcPending(await native.listS3GcPending().then((i) => i.length).catch(() => 0));
+      // 手动清理 = 显式清云端：无视 7 天窗口，直接列出/删除当前全部未引用对象（自动定时仍按窗口）
+      const r = await native.runS3DeepCleanup(dryRun, true);
+      await refreshGcPending();
+      setGcDiag(null);
       setSyncMsg(dryRun ? `预览：可清理 Lake ${r.lake.candidateCount} 个、小记 ${r.quickNotes.candidateCount} 个` : `已清理：Lake ${r.lake.deletedCount} 个、小记 ${r.quickNotes.deletedCount} 个`);
     } catch (e) { setSyncMsg(getNativeErrorMessage(e)); }
     finally { setGcBusy(false); }
@@ -145,12 +236,65 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
     if (gcBusy) return;
     setGcBusy(true); setSyncMsg(null);
     try {
-      const r = await native.runS3GcReconcile();
-      setGcPending(await native.listS3GcPending().then((i) => i.length).catch(() => 0));
-      setSyncMsg(r.deleted > 0 ? `已删除 ${r.deleted} 个过期对象` : "无到期对象");
+      // 手动对账 = 显式清云端：无视 7 天窗口（自动/定时仍按窗口）
+      const r = await native.runS3GcReconcile(true);
+      await refreshGcPending();
+      setGcDiag(null);
+      const cleared = r.clearedReferenced > 0 ? `；另有 ${r.clearedReferenced} 条已恢复引用、移出待回收` : "";
+      setSyncMsg(r.deleted > 0 ? `已删除 ${r.deleted} 个未引用对象${cleared}` : cleared ? `无未引用对象可删${cleared}` : "云端无未引用对象");
     } catch (e) { setSyncMsg(getNativeErrorMessage(e)); }
     finally { setGcBusy(false); }
   };
+  const refreshOrphans = async () => {
+    try { setOrphans(await native.listRemovedAssets()); } catch { /* 忽略 */ }
+  };
+  const copyPath = async (o: RemovedAsset) => {
+    try {
+      const full = await native.copyAssetPath(o.noteId, o.filename);
+      setSyncMsg(`已复制路径：${full}`);
+    } catch (err) { setSyncMsg(getNativeErrorMessage(err)); }
+  };
+  const openFolder = async (o: RemovedAsset) => {
+    try { await native.showAttachmentInFolder(o.noteId, o.filename); }
+    catch (err) { setSyncMsg(getNativeErrorMessage(err)); }
+  };
+  const deleteOne = async (o: RemovedAsset) => {
+    if (busyId !== null || o.orphanId == null) return;
+    if (!window.confirm(`删除未引用资源「${o.filename}」？`)) return;
+    setBusyId(o.orphanId); setSyncMsg(null);
+    try {
+      const r = await native.deleteOrphanAsset(o.orphanId);
+      if (r.deleted) setSyncMsg(`已删除「${o.filename}」（释放 ${formatBytes(r.freedBytes)}）`);
+      else setSyncMsg(`「${o.filename}」此刻仍被引用或删除失败，已保留`);
+      setSel(null);
+      await refreshOrphans();
+    } catch (err) { setSyncMsg(getNativeErrorMessage(err)); }
+    finally { setBusyId(null); }
+  };
+  const cleanOrphans = async () => {
+    if (orphanBusy || orphans.length === 0) return;
+    if (!window.confirm(`删除 ${orphans.length} 个未引用资源文件？
+此操作物理删除本地文件并使其不再上传；被当前正文或历史快照引用的会在此刻自动跳过。`)) return;
+    setOrphanBusy(true); setSyncMsg(null);
+    try {
+      const r: CleanOrphanResult = await native.cleanOrphanAssets();
+      setSel(null);
+      await refreshOrphans();
+      setSyncMsg(r.count > 0 ? `已清理 ${r.count} 个资源（释放 ${formatBytes(r.freedBytes)}）` : "没有可清理的未引用资源");
+    } catch (err) { setSyncMsg(getNativeErrorMessage(err)); }
+    finally { setOrphanBusy(false); }
+  };
+  const refreshCloudStats = async () => {
+    if (gcDiagBusy) return;
+    setGcDiagBusy(true); setSyncMsg(null);
+    try {
+      const d = await native.runS3GcDiagnostics();
+      setGcDiag(d);
+      setSyncMsg("云端统计已刷新");
+    } catch (e) { setSyncMsg(getNativeErrorMessage(e)); }
+    finally { setGcDiagBusy(false); }
+  };
+  const diagNs = (name: string) => gcDiag?.cloud.namespaces.find((n) => n.namespace === name);
 
   return (
     <div className="settings-overlay" onMouseDown={(event) => { if (event.target === event.currentTarget && !floating.interactionRef.current) onClose(); }}>
@@ -319,28 +463,126 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
                 </section>
                 <section className="settings-group">
                   <h4><Trash2 size={13} /> 云端回收（S3 GC）</h4>
-                  <div className="settings-row" style={{ alignItems: "center", gap: 8, fontSize: 12, color: "#48515c" }}>
-                    <span>待回收键：{gcPending} 个</span>
+                  <div style={{ display: "flex", flexWrap: "wrap", columnGap: 14, rowGap: 4, alignItems: "baseline", fontSize: 12, color: "#48515c" }}>
+                    <span><strong>待回收键 {gcPending} 个</strong></span>
+                    <span>可删 {gcSummary.due}</span>
+                    <span>窗口内 {gcSummary.inWindow}{gcSummary.earliest !== null ? " · 最早 " + formatDateTime(gcSummary.earliest) + " 到期" : ""}</span>
+                    {gcSummary.unknown > 0 && <span>时间未知 {gcSummary.unknown}</span>}
+                  </div>
+                  <div className="settings-row" style={{ gap: 6, marginTop: 8 }}>
                     <button className="settings-choice" onClick={() => void runReconcile()} disabled={gcBusy}><Trash2 size={12} /> {gcBusy ? "处理中…" : "立即对账"}</button>
                     <button className="settings-choice" onClick={() => void runGcAction(true)} disabled={gcBusy}>深度清理预览</button>
                     <button className="settings-choice" onClick={() => void runGcAction(false)} disabled={gcBusy}>执行深度清理</button>
                   </div>
+                  <p className="settings-hint">手动按钮会立即删除当前未被清单/历史引用的云端对象；自动对账按回收窗口到期后定期清理。结果偏少通常是被引用保护，不是漏删。</p>
+                  <div className="settings-row" style={{ gap: 6, marginTop: 6 }}>
+                    <button className="settings-choice" onClick={() => void refreshCloudStats()} disabled={gcBusy || gcDiagBusy}>{gcDiagBusy ? "统计中…" : "刷新云端统计"}</button>
+                    {gcDiagBusy && <span style={{ fontSize: 12, color: "#6b7280" }}>正在拉取云端清单…</span>}
+                  </div>
+                  {gcDiag && (
+                    <p className="settings-hint" style={{ marginTop: 6, lineHeight: 1.7 }}>
+                      云端占用：{gcDiag.cloud.objects} 个对象 / {formatBytes(gcDiag.cloud.bytes)}
+                      （正文 {diagNs("objects")?.cloudObjects ?? 0} 个 · 资源 {diagNs("assets")?.cloudObjects ?? 0} 个 · 清单 {diagNs("manifests")?.cloudObjects ?? 0} 个 · 小记 {diagNs("quick-notes")?.cloudObjects ?? 0} 个）
+                      未引用 {gcDiag.cloud.unreferenced} 个 · 已到期可回收 {gcDiag.cloud.due} 个 · 窗口内 {gcDiag.cloud.inWindow} 个
+                      （生成于 {formatDateTime(Date.parse(gcDiag.generatedAt))}）
+                    </p>
+                  )}
                   {gcCfg && (
                     <>
                       <div className="settings-field"><span>回收窗口（天）</span><input type="number" min={0} max={90} value={gcCfg.gcRetentionDays} onChange={(e) => saveGcCfg({ gcRetentionDays: Math.max(0, Number(e.target.value) || 7) })} /></div>
-                      <div className="settings-field"><span>对账周期（小时）</span><input type="number" min={0} max={720} value={gcCfg.gcIntervalHours} onChange={(e) => saveGcCfg({ gcIntervalHours: Math.max(0, Number(e.target.value) || 24) })} /></div>
+                      <div style={{ fontSize: 11, color: "#6b7280", marginTop: -4, marginBottom: 6 }}>对象被替换/移除后的保护期；0 = 立即到期</div>
+                      <div className="settings-field"><span>自动对账周期（小时）</span><input type="number" min={0} max={720} value={gcCfg.gcIntervalHours} onChange={(e) => saveGcCfg({ gcIntervalHours: Math.max(0, Number(e.target.value) || 24) })} /></div>
+                      <div style={{ fontSize: 11, color: "#6b7280", marginTop: -4 }}>自动清理频率；0 = 仅手动</div>
                     </>
                   )}
-                  <p className="settings-hint">云端只是镜像，删除的是云端冗余；本地数据、回收站、历史快照仍可找回。</p>
-                  {gcLog.length > 0 && (
-                    <div className="settings-hint" style={{ maxHeight: 140, overflow: "auto" }}>
-                      {gcLog.slice(0, 30).map((l) => <div key={l.id}>{l.ts.slice(0, 19)} {l.action} {l.reason} {l.key}</div>)}
+                  <p className="settings-hint">云端只是镜像：删除云端冗余不影响本地正文/回收站/历史快照（“彻底删除/清空回收站”除外）。</p>
+                  <p className="settings-hint" style={{ fontWeight: 600, margin: "8px 0 2px" }}>删除记录（最近 {gcLog.length > 0 ? Math.min(gcLog.length, 30) : 0} 条 · 只读审计）</p>
+                  {gcLog.length > 0 ? (
+                    <div className="settings-hint" style={{ maxHeight: 150, overflow: "auto", fontFamily: "monospace", fontSize: 11, lineHeight: 1.7 }}>
+                      {gcLog.slice(0, 30).map((l) => <div key={l.id}>{l.ts.slice(0, 19)}&nbsp;[{l.action} · {l.reason}] {l.key}</div>)}
                     </div>
+                  ) : (
+                    <p className="settings-hint">（暂无删除记录）</p>
                   )}
                 </section>
               </>
             )}
 
+            {category === "resources" && (
+              <>
+              <section className="settings-group">
+                <h4><Paperclip size={13} /> 未引用资源（本地）</h4>
+                <p className="settings-hint">
+                  汇总所有文档中“当前正文不再引用”的本地资产文件：<strong>未引用</strong>（可删除/复制/打开位置）
+                  与 <strong>历史保护</strong>（仍被历史快照引用，仅查看不可删除）。点击条目即预览并自动切换；
+                  文档在回收站时文件仍列出，彻底删除时随 purge 一并清理。
+                </p>
+                <div className="settings-row" style={{ flexWrap: "wrap", rowGap: 6, gap: 8, alignItems: "center" }}>
+                  <span style={{ fontSize: 12, color: "#48515c" }}>
+                    共 <strong>{orphans.length}</strong> 个 · {formatBytes(orphans.reduce((s, o) => s + (o.size || 0), 0))} ·
+                    可删 {orphans.filter((o) => o.status === "orphan").length} · 历史保护 {orphans.filter((o) => o.status === "history").length} · 涉及 {groupedOrphans.length} 篇文档
+                  </span>
+                  <span style={{ flex: 1 }} />
+                  <button className="settings-choice" onClick={() => void refreshOrphans()}>刷新</button>
+                  <button className="settings-choice" onClick={() => void cleanOrphans()} disabled={orphanBusy || orphans.filter((o) => o.status === "orphan").length === 0}>{orphanBusy ? "清理中…" : `清理未引用（${orphans.filter((o) => o.status === "orphan").length}）`}</button>
+                </div>
+                {orphans.length === 0 ? (
+                  <p className="settings-hint" style={{ marginTop: 8 }}>没有被移除的资源文件。</p>
+                ) : (
+                  <div style={{ display: "flex", gap: 12, marginTop: 8, alignItems: "flex-start" }}>
+                    <div style={{ flex: 1, minWidth: 0, maxHeight: 360, overflow: "auto", paddingRight: 4 }}>
+                      {groupedOrphans.map((g) => (
+                        <div key={g.title + "|" + g.state} style={{ marginBottom: 8 }}>
+                          <div style={{ display: "flex", alignItems: "baseline", gap: 8, fontSize: 13, fontWeight: 600, marginBottom: 3 }}>
+                            <Paperclip size={13} />
+                            <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", minWidth: 0 }}>{g.title}</span>
+                            {g.state === "trash" && <span style={{ fontSize: 11, color: "#b45309" }}>回收站</span>}
+                            {g.state === "missing" && <span style={{ fontSize: 11, color: "#b91c1c" }}>文档已删除</span>}
+                            <span style={{ fontSize: 11, color: "#6b7280", fontWeight: 400 }}>{g.items.length} 个</span>
+                          </div>
+                          {g.items.map((o) => (
+                            <div
+                              key={o.noteId + "/" + o.filename}
+                              onClick={() => setSel(sel && sel.noteId === o.noteId && sel.filename === o.filename ? null : o)}
+                              title="点击预览"
+                              style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, padding: "4px 6px", borderRadius: 6, cursor: "pointer", marginBottom: 2, background: sel && sel.noteId === o.noteId && sel.filename === o.filename ? "rgba(59,130,246,0.14)" : "rgba(127,127,127,0.07)" }}
+                            >
+                              <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1, minWidth: 0 }} title={o.filename}>{o.filename}</span>
+                              {o.status === "history"
+                                ? <span style={{ color: "#b45309", whiteSpace: "nowrap" }}>历史保护</span>
+                                : <span style={{ color: "#6b7280", whiteSpace: "nowrap" }}>未引用</span>}
+                              <span style={{ color: "#6b7280", whiteSpace: "nowrap" }}>{formatBytes(o.size)}</span>
+                              <span style={{ display: "inline-flex", gap: 4 }}>
+                                <button className="settings-choice" style={{ padding: "0 6px" }} title="复制路径" onClick={(ev) => { ev.stopPropagation(); void copyPath(o); }}>复制</button>
+                                <button className="settings-choice" style={{ padding: "0 6px" }} title="在文件夹中显示" onClick={(ev) => { ev.stopPropagation(); void openFolder(o); }}>位置</button>
+                                {o.orphanId != null && (
+                                  <button className="settings-choice" style={{ padding: "0 6px" }} title="删除（不可撤销）" onClick={(ev) => { ev.stopPropagation(); void deleteOne(o); }} disabled={busyId !== null}>{busyId === o.orphanId ? "…" : "删除"}</button>
+                                )}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      ))}
+                    </div>
+                    <div style={{ width: 320, flexShrink: 0, border: "1px solid rgba(127,127,127,0.25)", borderRadius: 8, padding: 10, minHeight: 180, maxHeight: 360, overflow: "auto", display: "flex", flexDirection: "column", gap: 8 }}>
+                      {!sel ? (
+                        <p style={{ fontSize: 12, color: "#6b7280", margin: 0 }}>点击左侧条目预览</p>
+                      ) : pv == null ? (
+                        <p style={{ fontSize: 12, color: "#6b7280", margin: 0 }}>加载中…</p>
+                      ) : pv.supported && pv.dataUrl ? (
+                        <>
+                          <img src={pv.dataUrl} alt={pv.filename} style={{ maxWidth: "100%", maxHeight: 260, objectFit: "contain", alignSelf: "center" }} />
+                          <div style={{ fontSize: 12, wordBreak: "break-all" }}>{pv.filename}<span style={{ color: "#6b7280" }}> · {pv.mimeType || sel.mimeType}</span></div>
+                        </>
+                      ) : (
+                        <p style={{ fontSize: 12, color: "#6b7280", margin: 0 }}>该类型不支持预览。<br />{sel.filename}</p>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </section>
+              </>
+            )}
             {category === "trash" && (
               <section className="settings-group">
                 <h4><Trash2 size={13} /> 回收站</h4>
