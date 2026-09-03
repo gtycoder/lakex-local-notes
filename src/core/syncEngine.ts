@@ -35,8 +35,9 @@ const MAX_REMOTE_NOTE_BYTES = 64 * 1024 * 1024;
 const ASSET_CONCURRENCY = 4;
 /** 正文对象并发上传车道数（内容寻址幂等，条目独立）。 */
 const UPLOAD_CONCURRENCY = 4;
-/** 跨笔记资产扫描并发车道数（P3-4）。总并发 PUT ≈ NOTE_UPLOAD_CONCURRENCY × ASSET_CONCURRENCY，需与七牛 Kodo QPS 平衡。 */
-const NOTE_UPLOAD_CONCURRENCY = 4;
+/** 跨笔记资产扫描并发车道数（P3-4）。峰值并发 PUT = NOTE_UPLOAD_CONCURRENCY × ASSET_CONCURRENCY = 2×4 = 8
+ *  （对齐七牛 Kodo 建议上限 8；16 偏高、日常用不到，徒增限流风险）。正文/下载各自 ≤4 且与资产阶段串行、不叠加。 */
+const NOTE_UPLOAD_CONCURRENCY = 2;
 
 /** P3-3：小型并发池（定长车道，无依赖）：worker 按 index 领任务；结果由调用方按
  * 原索引归位（warnings 顺序 / 字节记账保持确定性，对齐串行语义）。 */
