@@ -36,6 +36,13 @@ export function useDockFilter(value: string, onValueChange: (next: string) => vo
     setState(step.state);
   }, [state, value]);
 
+  // 收起时若输入框仍是焦点，交还给页面。
+  // 注意：不能在 keydown(Esc)/toggle 里直接 blur()——那两个处理器拿到的 value 还是本次渲染的旧值，
+  // 紧接着触发的 blur 会按"有内容"判定把输入框重新展开（实测 Esc 后行不收起就是这个原因）。
+  useEffect(() => {
+    if (!state.open && document.activeElement === inputRef.current) inputRef.current?.blur();
+  }, [state.open]);
+
   const apply = useCallback((event: DockFilterEvent) => {
     const step = stepDockFilter(state, event);
     setState(step.state);
@@ -53,7 +60,6 @@ export function useDockFilter(value: string, onValueChange: (next: string) => vo
     // 阻止冒泡：Esc 在本应用还承担"关闭菜单/浮层"的全局语义，清空筛选不应顺手关掉整个面板。
     event.stopPropagation();
     apply({ kind: "escape" });
-    event.currentTarget.blur();
   }, [apply]);
   const onBlur = useCallback(() => apply({ kind: "blur", value }), [apply, value]);
 

@@ -568,7 +568,7 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
       <nav className="note-list tree-list" ref={treeRef}>
         {pendingCreate?.kind === "notebook" && createField(0)}
         {roots.map((node) => <TreeRow key={node.id} node={node} depth={0} {...treeRowProps} />)}
-        {roots.length === 0 && <div className="empty-list">点击 + 新建第一个笔记本</div>}
+        {roots.length === 0 && <div className="empty-list">{query ? "没有匹配的目录项，Esc 或再点筛选图标可清空" : "点击 + 新建第一个笔记本"}</div>}
       </nav>
       {contextMenu && contextNode && <ContextMenu node={contextNode} x={contextMenu.x} y={contextMenu.y} onNewChild={menuNewChild} onRename={menuRename} onDelete={menuDelete} onCopyMarkdown={() => props.onCopyMarkdown(contextNode)} onExportAs={(format) => props.onExportAs(contextNode, format)} onCopyPaths={() => props.onCopyPaths(contextNode)} onSetIconRequest={() => setIconPicker({ node: contextNode, x: contextMenu!.x, y: contextMenu!.y })} onOpenHistory={() => props.onOpenHistory(contextNode)} onClose={() => setContextMenu(null)} />}
       {iconPicker && <EmojiIconPicker x={iconPicker.x} y={iconPicker.y} onPick={(icon) => { props.onSetIcon(iconPicker.node, icon); setIconPicker(null); }} onClose={() => setIconPicker(null)} />}

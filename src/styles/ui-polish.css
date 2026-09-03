@@ -21,12 +21,17 @@
 .tab-item .tab-close:focus-visible { opacity: .58; }
 .tab-item .tab-close:hover { opacity: 1 !important; }
 
-/* 目录栏头部：只剩一排图标（右对齐，与大纲头部同构；筛选改为点击展开）。 */
+/* 目录栏头部：只剩一排图标，几何与大纲头部逐项对齐（34px 高 + 1px 分隔线 + 右内缩 4px；
+ * 筛选改为点击图标展开）。两栏头部若高度/分隔线不一致，一排图标看上去就是"两个系统的产品"。 */
 .sidebar-toolbar-row {
   display: flex;
   align-items: center;
-  gap: 4px;
-  padding: 9px 8px 6px;
+  flex: 0 0 34px;
+  min-height: 34px;
+  gap: 1px;
+  padding: 0 4px 0 6px;
+  /* 用 --lake-border（与大纲头部同一层令牌）：--shell-separator 在暗色下是半透明黑，两栏分隔线深浅会不一致 */
+  border-bottom: 1px solid var(--lake-border);
 }
 .sidebar-toolbar-row .list-heading {
   display: flex;
@@ -34,7 +39,7 @@
   align-items: center;
   justify-content: flex-end;
   gap: 1px;
-  height: 28px;
+  height: 100%;
   padding: 0;
 }
 
