@@ -13,22 +13,17 @@ button { cursor: pointer; }
 .sidebar { display: flex; position: relative; padding-top: var(--topbar-height); flex-direction: column; width: 260px; min-width: 0; background: #f4f5f7; border-right: 1px solid var(--lake-border); z-index: 10; transition: width 180ms ease, box-shadow 180ms ease; }
 .sidebar.is-collapsed { width: 44px; overflow: hidden; border-right-color: transparent; }
 .sidebar.is-collapsed:hover { width: 260px; z-index: 30; box-shadow: 10px 0 24px #1f29331f; }
-.sidebar.is-collapsed:not(:hover) .search-box,
+.sidebar.is-collapsed:not(:hover) .dock-filter-row,
 .sidebar.is-collapsed:not(:hover) .list-heading,
 .sidebar.is-collapsed:not(:hover) .inline-create,
 .sidebar.is-collapsed:not(:hover) .note-list,
 .sidebar.is-collapsed:not(:hover) .settings-link { visibility: hidden; opacity: 0; }
-.list-heading .locate-btn { margin-left: 6px; }
 .sidebar-mobile-close { position: absolute; top: 8px; right: 8px; z-index: 2; }
 .sidebar-collapse-toggle { margin: 6px 4px 6px 6px; width: 28px; height: 28px; }
 
 /* 收起态：折叠按钮常驻可见，hover 展开其余内容 */
 .sidebar.is-collapsed .sidebar-collapse-toggle { margin: 6px 4px 6px 6px; }
 
-.search-box { display: flex; align-items: center; gap: 7px; height: 30px; margin: 7px 8px 4px; padding: 0 8px; background: #fff; border: 1px solid #dfe2e7; border-radius: 5px; }
-.search-box:focus-within { border-color: var(--b3-theme-primary); box-shadow: 0 0 0 2px var(--lake-accent-soft); }
-.search-box input { width: 100%; border: 0; outline: 0; background: transparent; font-size: 12px; }
-.list-heading { display: flex; align-items: center; justify-content: flex-end; gap: 4px; height: 28px; padding: 0 8px 3px; }
 .create-menu-wrap { position: relative; }
 .create-menu { display: flex; position: absolute; top: 36px; right: 0; z-index: 1000; flex-direction: column; width: clamp(150px, calc(var(--sidebar-width, 260px) - 16px), 220px); max-width: calc(100vw - 16px); padding: 4px; border: 1px solid var(--b3-theme-surface-lighter); border-radius: var(--b3-border-radius-b); background: var(--b3-menu-background); box-shadow: var(--b3-dialog-shadow); transform-origin: top right; transition: transform 140ms var(--ease-out), opacity 140ms var(--ease-out); }
 .create-menu > button { display: grid; grid-template-columns: 20px minmax(0, 1fr); align-items: center; gap: 8px; width: 100%; min-height: 42px; padding: 5px 8px; border: 0; border-radius: var(--b3-border-radius); color: var(--b3-theme-on-surface); background: transparent; text-align: left; }
@@ -671,24 +666,6 @@ ne-card[data-card-name="codeblock"] .ne-card-resizer-mask {
   .sidebar-heading-copy { display: flex; align-items: baseline; gap: 7px; min-width: 0; }
   .sidebar-heading-copy strong { color: #353a42; font-size: 13px; font-weight: 630; letter-spacing: -.01em; }
   .sidebar-heading-copy span { color: var(--shell-text-tertiary); font-size: 10px; font-weight: 500; }
-  .search-box {
-    height: 31px;
-    margin: 1px 8px 6px;
-    padding: 0 9px;
-    border: 1px solid transparent;
-    border-radius: var(--radius-md);
-    color: var(--shell-text-tertiary);
-    background: #ffffff;
-    box-shadow: inset 0 0 0 1px rgba(31, 35, 41, 0.055);
-    transition: background-color 150ms ease-out, border-color 150ms ease-out, box-shadow 150ms ease-out;
-  }
-  .search-box:focus-within {
-    border-color: rgba(53, 117, 240, .46);
-    background: #ffffff;
-    box-shadow: 0 0 0 3px rgba(53, 117, 240, .13);
-  }
-  .search-box input { color: var(--shell-text); font-size: 12.5px; }
-  .list-heading { height: 29px; padding: 0 8px 3px; }
   .icon-button { border-radius: var(--radius-md); }
   .icon-button:focus-visible,
   .tab-item:focus-visible,

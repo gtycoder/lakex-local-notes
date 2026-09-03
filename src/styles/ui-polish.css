@@ -21,42 +21,102 @@
 .tab-item .tab-close:focus-visible { opacity: .58; }
 .tab-item .tab-close:hover { opacity: 1 !important; }
 
-/* Sidebar toolbar mirrors the compact outline header controls. */
+/* 目录栏头部：只剩一排图标（右对齐，与大纲头部同构；筛选改为点击展开）。 */
 .sidebar-toolbar-row {
   display: flex;
   align-items: center;
   gap: 4px;
   padding: 9px 8px 6px;
 }
-.sidebar-toolbar-row .search-box {
-  flex: 1 1 auto;
-  min-width: 72px;
-  margin: 0;
-  height: 28px;
-}
 .sidebar-toolbar-row .list-heading {
   display: flex;
-  flex: 0 0 auto;
+  flex: 1 1 auto;
   align-items: center;
+  justify-content: flex-end;
   gap: 1px;
   height: 28px;
   padding: 0;
 }
-.sidebar-toolbar-row .list-heading .icon-button {
+
+/* ---- dock 头部共享层（目录栏 / 大纲）：图标按钮 + 隐藏式筛选行 ----
+ * 两栏此前各有两套图标样式（32px 灰底 vs 22px accent 底），2026-09-03 统一到这里。
+ * 颜色一律走 --lake-* 令牌，亮/暗主题自动跟随（不再写死 #747b85 之类）。 */
+.dock-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
   width: 22px;
   height: 24px;
   padding: 0;
-  border-radius: 7px;
+  border: 0;
+  border-radius: var(--lake-radius-md);
   color: var(--lake-text-tertiary);
+  background: transparent;
+  cursor: pointer;
   transition: color 130ms ease-out, background-color 130ms ease-out, transform 90ms ease-out;
 }
-.sidebar-toolbar-row .list-heading .icon-button:hover:not(:disabled) {
+.dock-icon-btn:hover:not(:disabled) {
   color: var(--lake-accent-strong, var(--lake-accent));
   background: var(--lake-accent-soft);
 }
-.sidebar-toolbar-row .list-heading .icon-button:active:not(:disabled) { transform: scale(.96); }
-.sidebar-toolbar-row .list-heading .icon-button:disabled { opacity: .35; }
-.sidebar-toolbar-row .list-heading .locate-btn { margin-left: 0; }
+.dock-icon-btn:active:not(:disabled) { transform: scale(.96); }
+.dock-icon-btn:disabled { opacity: .35; cursor: default; }
+/* 生效中的开关态（筛选有词 / 菜单展开 / 保持展开）：accent 文字 + 淡底，与大纲 is-active 一致 */
+.dock-icon-btn.is-active {
+  color: var(--lake-accent-strong, var(--lake-accent));
+  background: var(--lake-accent-soft);
+}
+.dock-icon-btn:focus-visible { outline: 2px solid var(--lake-accent); outline-offset: 1px; }
+
+/* 隐藏式筛选行：收起时高度 0 不占位；展开时 29px（与大纲头部原筛选行同高）。 */
+.dock-filter-row {
+  height: 0;
+  overflow: hidden;
+  opacity: 0;
+  transition: height 150ms var(--ease-out, ease-out), opacity 120ms linear;
+}
+.dock-filter-row.is-open { height: 29px; opacity: 1; }
+.dock-filter-row__inner {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  height: 29px;
+  padding: 0 9px;
+  color: var(--lake-text-tertiary);
+  border-bottom: 1px solid var(--lake-border);
+}
+.dock-filter-input {
+  flex: 1;
+  min-width: 0;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--lake-text);
+  font-size: 12px;
+}
+.dock-filter-input::placeholder { color: var(--lake-text-tertiary); }
+@media (prefers-reduced-motion: reduce) {
+  .dock-filter-row { transition: none; }
+  .dock-icon-btn { transition: none; }
+  .dock-icon-btn:active:not(:disabled) { transform: none; }
+}
+
+/* 顶栏下拉里的快捷键提示（全文搜索 ⇧⌘F / 专注模式 ⌘⇧Enter）统一成右对齐弱文字 */
+.top-menu > button span {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 14px;
+  width: 100%;
+}
+.top-menu > button span small {
+  color: var(--b3-theme-on-surface-light);
+  font-size: 11px;
+  white-space: nowrap;
+}
 
 /* Drag feedback: a soft lifted row plus a clear insertion guide, matching outline motion. */
 .tree-row.dragging {
@@ -226,8 +286,8 @@
 /* ---- 视觉一致性（A）：圆角按两档 token 覆盖统一，只作用于 product shell 表面 ---- */
 .activity-button,
 .outline-sidebar__activity-button,
-.outline-sidebar__btn,
-.outline-sidebar__btn.list-heading,
+.dock-icon-btn,
+.outline-sidebar__activity-button:hover,
 .tab-switcher {
   border-radius: var(--lake-radius-md) !important;
 }
