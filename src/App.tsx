@@ -343,7 +343,7 @@ export function App() {
         onPreviewLeave={hideSidebarPreview}
       />
       {/* keep-alive：Sidebar 常驻，小记模式由 .app-shell.quick-notes-active .sidebar 隐藏（避免切回时重建目录树、丢失展开状态） */}
-      <Sidebar nodes={treeNodes} activeId={activeNoteId} search={search} mode={sidebarMode} width={sidebarWidth} minWidth={SIDEBAR_MIN_WIDTH} maxWidth={SIDEBAR_MAX_WIDTH} onSearch={setSearch} onSelect={sidebarSelect} onCreate={sidebarCreate} onRename={sidebarRename} onMoveNode={sidebarMove} onRequestDelete={sidebarRequestDelete} onCopyMarkdown={copyMarkdownFromCache} onExportAs={exportAs} onCopyPaths={copyNotePaths} onSetIcon={sidebarSetIcon} onOpenHistory={sidebarOpenHistory} onOpenSearch={sidebarOpenSearch} pendingRenameId={pendingRenameId} onPendingRenameConsumed={sidebarPendingRenameConsumed} onPreviewEnter={showSidebarPreview} onPreviewLeave={hideSidebarPreview} onResizeActiveChange={handleSidebarResizeActiveChange} onWidthChange={updateSidebarWidth} onWidthCommit={commitSidebarWidth} />
+      <Sidebar nodes={treeNodes} activeId={activeNoteId} search={search} mode={sidebarMode} width={sidebarWidth} minWidth={SIDEBAR_MIN_WIDTH} maxWidth={SIDEBAR_MAX_WIDTH} onSearch={setSearch} onSelect={sidebarSelect} onCreate={sidebarCreate} onRename={sidebarRename} onMoveNode={sidebarMove} onRequestDelete={sidebarRequestDelete} onCopyMarkdown={copyMarkdownFromCache} onExportAs={exportAs} onCopyPaths={copyNotePaths} onSetIcon={sidebarSetIcon} onOpenHistory={sidebarOpenHistory} pendingRenameId={pendingRenameId} onPendingRenameConsumed={sidebarPendingRenameConsumed} onPreviewEnter={showSidebarPreview} onPreviewLeave={hideSidebarPreview} onResizeActiveChange={handleSidebarResizeActiveChange} onWidthChange={updateSidebarWidth} onWidthCommit={commitSidebarWidth} />
       <main className="workspace" onPointerDownCapture={(event) => {
         if (sidebarMode === "floating" && (event.target as HTMLElement).closest(".document-pane, .empty-workspace")) setSidebarMode("collapsed");
       }}>
@@ -429,6 +429,8 @@ export function App() {
         topMenuOpen={topMenuOpen}
         onOpenSettingsFromMenu={(category) => { setSettingsCategory(category); setSettingsOpen(true); setWorkspaceMenuOpen(false); }}
         onOpenTrashFromMenu={() => { setTrashOpen(true); setWorkspaceMenuOpen(false); }}
+        // 全局筛选入口从目录栏头部移到顶栏下拉（目录栏只做目录筛选）；带上当前目录筛选词
+        onOpenSearchFromMenu={() => { sidebarOpenSearch(search); closeMenus(); }}
         focusMode={focusMode}
         onToggleFocusMode={() => { setFocusMode((value) => !value); setTopMenuOpen(false); }}
         activeNoteId={activeNoteId}

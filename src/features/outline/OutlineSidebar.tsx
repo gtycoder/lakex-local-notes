@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, useSyncExternalStore, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent } from "react";
 import { ChevronsDownUp, ChevronsUpDown, Focus, ListOrdered, ListTree, Search } from "lucide-react";
+import { DockFilterRow, useDockFilter } from "../../components/DockFilterBar";
 import type { OutlineMode } from "./OutlineController";
 import { OutlineList } from "./OutlineList";
 import { getOutlineTab, getOutlineTabsVersion, subscribeOutlineTabs } from "./registry";
@@ -54,6 +55,8 @@ export function OutlineSidebar({
     controller ? controller.getVersion : noopVersion
   );
   const [filterDraft, setFilterDraft] = useState("");
+  // 筛选输入框默认隐藏，点头部图标展开（与目录栏共用同一状态机与视觉）
+  const filter = useDockFilter(filterDraft, setFilterDraft);
   const filterTimer = useRef<number | null>(null);
   const [levelMenuOpen, setLevelMenuOpen] = useState(false);
   const [railHovered, setRailHovered] = useState(false);
@@ -244,21 +247,30 @@ export function OutlineSidebar({
         <div className="outline-sidebar__header">
           <span className="outline-sidebar__spacer" />
           <button
-            className={`outline-sidebar__btn${controller?.isKeepCurrentExpand() ? " is-active" : ""}`}
+            className={`dock-icon-btn filter-btn${filter.active ? " is-active" : ""}`}
+            title="筛选大纲"
+            aria-label="筛选大纲"
+            aria-pressed={filter.open}
+            onClick={filter.toggle}
+          >
+            <Search size={14} />
+          </button>
+          <button
+            className={`dock-icon-btn keep-current-btn${controller?.isKeepCurrentExpand() ? " is-active" : ""}`}
             title="保持当前展开（选中项自动展开祖先）"
             onClick={() => controller?.setKeepCurrentExpand(!controller.isKeepCurrentExpand())}
           >
             <Focus size={14} />
           </button>
           <button
-            className="outline-sidebar__btn"
+            className="dock-icon-btn"
             title="展开全部"
             onClick={() => controller?.expandAll()}
           >
             <ChevronsDownUp size={14} />
           </button>
           <button
-            className="outline-sidebar__btn"
+            className="dock-icon-btn"
             title="折叠全部"
             onClick={() => controller?.collapseAll()}
           >
@@ -266,7 +278,7 @@ export function OutlineSidebar({
           </button>
           <div className="outline-sidebar__level" ref={levelMenuRef}>
             <button
-              className={`outline-sidebar__btn${levelMenuOpen ? " is-active" : ""}`}
+              className={`dock-icon-btn level-btn${levelMenuOpen ? " is-active" : ""}`}
               title="展开到级别"
               onClick={() => setLevelMenuOpen((v) => !v)}
             >
@@ -284,16 +296,7 @@ export function OutlineSidebar({
             )}
           </div>
         </div>
-        <div className="outline-sidebar__filter">
-          <Search size={12} />
-          <input
-            className="outline-sidebar__filter-input"
-            placeholder="筛选大纲"
-            value={filterDraft}
-            onChange={(e) => setFilterDraft(e.target.value)}
-            spellCheck={false}
-          />
-        </div>
+        <DockFilterRow filter={filter} placeholder="筛选大纲" />
         {controller ? (
           <OutlineList controller={controller} onNavigate={(id) => handle?.navigate(id)} />
         ) : (
