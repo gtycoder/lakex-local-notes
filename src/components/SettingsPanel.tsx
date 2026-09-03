@@ -1,8 +1,9 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { AlignLeft, Cloud, Files, History, Info, Keyboard, ListTree, Monitor, Moon, PanelTop, Paperclip, Search, Settings, Sun, Trash2, Type } from "lucide-react";
 import { fontSizeOptions, type AppSettings } from "../lib/settings";
 import { native } from "../lib/native";
-import type { S3Settings, SyncSettings } from "../lib/types";
+import type { S3GcPendingItem, S3Settings, SyncSettings } from "../lib/types";
+import { gcCutoffMs, parseIsoMs } from "../core/gcPolicy";
 import { useFloatingDialog } from "./useFloatingDialog";
 import { filterSettingsNav } from "./settingsSearch";
 import { getNativeErrorMessage } from "../lib/nativeErrors";
@@ -21,6 +22,13 @@ interface SettingsPanelProps {
 }
 
 const S3_DEFAULTS: S3Settings = { endpoint: "", region: "cn-east-1", bucket: "", prefix: "lake-notes", accessKeyId: "", secretAccessKey: "", forcePathStyle: false };
+
+/** 2026-09-03 08:12 形式的本地短时间。 */
+function formatDateTime(ms: number): string {
+  const d = new Date(ms);
+  const pad = (x: number) => String(x).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
 
 function formatBytes(n: number): string {
   if (n >= 1024 * 1024) return `${(n / 1024 / 1024).toFixed(1)} MB`;
@@ -47,6 +55,37 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
   const [syncMsg, setSyncMsg] = useState<string | null>(null);
   const [syncCfg, setSyncCfg] = useState<SyncSettings | null>(null);
   const [syncCfgBusy, setSyncCfgBusy] = useState(false);
+  const [gcPendingRows, setGcPendingRows] = useState<S3GcPendingItem[]>([]);
+
+  const refreshGcPending = async () => {
+    try {
+      const items = await native.listS3GcPending();
+      setGcPendingRows(items);
+      setGcPending(items.length);
+    } catch { /* 忽略：下次打开/操作后再刷新 */ }
+  };
+
+  /** 待回收行拆分：已过窗口（自动对账可删）/ 窗口内（最早何时到期）/ 时间未知。 */
+  const gcSummary = useMemo(() => {
+    const now = Date.now();
+    const retention = gcCfg?.gcRetentionDays ?? 7;
+    const cutoff = gcCutoffMs(now, retention);
+    let due = 0;
+    let inWindow = 0;
+    let unknown = 0;
+    let earliest: number | null = null;
+    for (const row of gcPendingRows) {
+      const ms = parseIsoMs(row.markedAt);
+      if (ms === null) { unknown += 1; continue; }
+      if (ms <= cutoff) { due += 1; }
+      else {
+        inWindow += 1;
+        const at = ms + retention * 86_400_000;
+        if (earliest === null || at < earliest) earliest = at;
+      }
+    }
+    return { due, inWindow, unknown, earliest };
+  }, [gcPendingRows, gcCfg]);
 
   useEffect(() => {
     if (!open) return;
@@ -56,7 +95,7 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
     void native.getS3Settings().then((v) => v && setS3(v)).catch(() => undefined);
     void native.getS3GcSettings().then(setGcCfg).catch(() => undefined);
     void native.getSyncSettings().then(setSyncCfg).catch(() => undefined);
-    void native.listS3GcPending().then((items) => setGcPending(items.length)).catch(() => undefined);
+    void refreshGcPending();
     void native.listS3GcLog().then(setGcLog).catch(() => undefined);
   }, [open, openCategory]);
 
@@ -137,7 +176,7 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
     try {
       // 手动清理 = 显式清云端：无视 7 天窗口，直接列出/删除当前全部未引用对象（自动定时仍按窗口）
       const r = await native.runS3DeepCleanup(dryRun, true);
-      setGcPending(await native.listS3GcPending().then((i) => i.length).catch(() => 0));
+      await refreshGcPending();
       setSyncMsg(dryRun ? `预览：可清理 Lake ${r.lake.candidateCount} 个、小记 ${r.quickNotes.candidateCount} 个` : `已清理：Lake ${r.lake.deletedCount} 个、小记 ${r.quickNotes.deletedCount} 个`);
     } catch (e) { setSyncMsg(getNativeErrorMessage(e)); }
     finally { setGcBusy(false); }
@@ -148,7 +187,7 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
     try {
       // 手动对账 = 显式清云端：无视 7 天窗口（自动/定时仍按窗口）
       const r = await native.runS3GcReconcile(true);
-      setGcPending(await native.listS3GcPending().then((i) => i.length).catch(() => 0));
+      await refreshGcPending();
       const cleared = r.clearedReferenced > 0 ? `；另有 ${r.clearedReferenced} 条已恢复引用、移出待回收` : "";
       setSyncMsg(r.deleted > 0 ? `已删除 ${r.deleted} 个未引用对象${cleared}` : cleared ? `无未引用对象可删${cleared}` : "云端无未引用对象");
     } catch (e) { setSyncMsg(getNativeErrorMessage(e)); }
@@ -322,23 +361,37 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
                 </section>
                 <section className="settings-group">
                   <h4><Trash2 size={13} /> 云端回收（S3 GC）</h4>
-                  <div className="settings-row" style={{ alignItems: "center", gap: 8, fontSize: 12, color: "#48515c" }}>
-                    <span>待回收键：{gcPending} 个</span>
-                    <button className="settings-choice" onClick={() => void runReconcile()} disabled={gcBusy}><Trash2 size={12} /> {gcBusy ? "处理中…" : "立即对账"}</button>
-                    <button className="settings-choice" onClick={() => void runGcAction(true)} disabled={gcBusy}>深度清理预览</button>
-                    <button className="settings-choice" onClick={() => void runGcAction(false)} disabled={gcBusy}>执行深度清理</button>
+                  <div className="settings-row" style={{ flexWrap: "wrap", rowGap: 6, gap: 10, fontSize: 12, color: "#48515c", alignItems: "center" }}>
+                    <span><strong>待回收键：{gcPending} 个</strong></span>
+                    <span>已过窗口可删 {gcSummary.due}</span>
+                    <span>窗口内 {gcSummary.inWindow}{gcSummary.earliest !== null ? `（最早 ${formatDateTime(gcSummary.earliest)} 到期）` : ""}</span>
+                    {gcSummary.unknown > 0 && <span>时间未知 {gcSummary.unknown}</span>}
+                    <span style={{ flexBasis: "100%" }}>
+                      <button className="settings-choice" onClick={() => void runReconcile()} disabled={gcBusy}><Trash2 size={12} /> {gcBusy ? "处理中…" : "立即对账"}</button>
+                      <button className="settings-choice" onClick={() => void runGcAction(true)} disabled={gcBusy}>深度清理预览</button>
+                      <button className="settings-choice" onClick={() => void runGcAction(false)} disabled={gcBusy}>执行深度清理</button>
+                    </span>
                   </div>
+                  <p className="settings-hint">
+                    待回收 = 本机记录的疑似云端冗余键。删除前都受“回收窗口”保护（防止误删刚替换的旧版本）：
+                    手动【立即对账 / 深度清理】会立刻清理当前不被任何清单或历史快照引用的对象（不受窗口限制）；
+                    自动定时对账按窗口执行，窗口内对象到期后由它删除。
+                    若预览/执行结果偏少，通常是因为这些键仍被清单链或本地历史快照引用（属于保护，不是漏删）。
+                  </p>
                   {gcCfg && (
                     <>
-                      <div className="settings-field"><span>回收窗口（天）</span><input type="number" min={0} max={90} value={gcCfg.gcRetentionDays} onChange={(e) => saveGcCfg({ gcRetentionDays: Math.max(0, Number(e.target.value) || 7) })} /></div>
-                      <div className="settings-field"><span>对账周期（小时）</span><input type="number" min={0} max={720} value={gcCfg.gcIntervalHours} onChange={(e) => saveGcCfg({ gcIntervalHours: Math.max(0, Number(e.target.value) || 24) })} /></div>
+                      <div className="settings-field"><span>回收窗口（天）</span><input type="number" min={0} max={90} value={gcCfg.gcRetentionDays} onChange={(e) => saveGcCfg({ gcRetentionDays: Math.max(0, Number(e.target.value) || 7) })} /><span style={{ fontSize: 11, color: "#6b7280", marginLeft: 6 }}>对象不再被引用后的保护期；0 = 到期即删</span></div>
+                      <div className="settings-field"><span>自动对账周期（小时）</span><input type="number" min={0} max={720} value={gcCfg.gcIntervalHours} onChange={(e) => saveGcCfg({ gcIntervalHours: Math.max(0, Number(e.target.value) || 24) })} /><span style={{ fontSize: 11, color: "#6b7280", marginLeft: 6 }}>多久自动跑一次对账删除到期对象；0 = 关闭自动，仅手动</span></div>
                     </>
                   )}
-                  <p className="settings-hint">云端只是镜像，删除的是云端冗余；本地数据、回收站、历史快照仍可找回。</p>
-                  {gcLog.length > 0 && (
-                    <div className="settings-hint" style={{ maxHeight: 140, overflow: "auto" }}>
-                      {gcLog.slice(0, 30).map((l) => <div key={l.id}>{l.ts.slice(0, 19)} {l.action} {l.reason} {l.key}</div>)}
+                  <p className="settings-hint">云端只是镜像：删除的是云端冗余，本地正文/回收站/历史快照不受影响（“彻底删除/清空回收站”除外，见“回收站”分类）。</p>
+                  <p className="settings-hint" style={{ fontWeight: 600, margin: "6px 0 0" }}>删除记录（最近 {gcLog.length > 0 ? Math.min(gcLog.length, 30) : 0} 条 · 只读审计）</p>
+                  {gcLog.length > 0 ? (
+                    <div className="settings-hint" style={{ maxHeight: 140, overflow: "auto", fontFamily: "monospace", fontSize: 11 }}>
+                      {gcLog.slice(0, 30).map((l) => <div key={l.id}>{l.ts.slice(0, 19)}&nbsp;[{l.action} · {l.reason}] {l.key}</div>)}
                     </div>
+                  ) : (
+                    <p className="settings-hint">（暂无删除记录）</p>
                   )}
                 </section>
               </>
