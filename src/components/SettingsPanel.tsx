@@ -361,33 +361,30 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
                 </section>
                 <section className="settings-group">
                   <h4><Trash2 size={13} /> 云端回收（S3 GC）</h4>
-                  <div className="settings-row" style={{ flexWrap: "wrap", rowGap: 6, gap: 10, fontSize: 12, color: "#48515c", alignItems: "center" }}>
-                    <span><strong>待回收键：{gcPending} 个</strong></span>
-                    <span>已过窗口可删 {gcSummary.due}</span>
-                    <span>窗口内 {gcSummary.inWindow}{gcSummary.earliest !== null ? `（最早 ${formatDateTime(gcSummary.earliest)} 到期）` : ""}</span>
+                  <div style={{ display: "flex", flexWrap: "wrap", columnGap: 14, rowGap: 4, alignItems: "baseline", fontSize: 12, color: "#48515c" }}>
+                    <span><strong>待回收键 {gcPending} 个</strong></span>
+                    <span>可删 {gcSummary.due}</span>
+                    <span>窗口内 {gcSummary.inWindow}{gcSummary.earliest !== null ? " · 最早 " + formatDateTime(gcSummary.earliest) + " 到期" : ""}</span>
                     {gcSummary.unknown > 0 && <span>时间未知 {gcSummary.unknown}</span>}
-                    <span style={{ flexBasis: "100%" }}>
-                      <button className="settings-choice" onClick={() => void runReconcile()} disabled={gcBusy}><Trash2 size={12} /> {gcBusy ? "处理中…" : "立即对账"}</button>
-                      <button className="settings-choice" onClick={() => void runGcAction(true)} disabled={gcBusy}>深度清理预览</button>
-                      <button className="settings-choice" onClick={() => void runGcAction(false)} disabled={gcBusy}>执行深度清理</button>
-                    </span>
                   </div>
-                  <p className="settings-hint">
-                    待回收 = 本机记录的疑似云端冗余键。删除前都受“回收窗口”保护（防止误删刚替换的旧版本）：
-                    手动【立即对账 / 深度清理】会立刻清理当前不被任何清单或历史快照引用的对象（不受窗口限制）；
-                    自动定时对账按窗口执行，窗口内对象到期后由它删除。
-                    若预览/执行结果偏少，通常是因为这些键仍被清单链或本地历史快照引用（属于保护，不是漏删）。
-                  </p>
+                  <div className="settings-row" style={{ gap: 6, marginTop: 8 }}>
+                    <button className="settings-choice" onClick={() => void runReconcile()} disabled={gcBusy}><Trash2 size={12} /> {gcBusy ? "处理中…" : "立即对账"}</button>
+                    <button className="settings-choice" onClick={() => void runGcAction(true)} disabled={gcBusy}>深度清理预览</button>
+                    <button className="settings-choice" onClick={() => void runGcAction(false)} disabled={gcBusy}>执行深度清理</button>
+                  </div>
+                  <p className="settings-hint">手动按钮会立即删除当前未被清单/历史引用的云端对象；自动对账按回收窗口到期后定期清理。结果偏少通常是被引用保护，不是漏删。</p>
                   {gcCfg && (
                     <>
-                      <div className="settings-field"><span>回收窗口（天）</span><input type="number" min={0} max={90} value={gcCfg.gcRetentionDays} onChange={(e) => saveGcCfg({ gcRetentionDays: Math.max(0, Number(e.target.value) || 7) })} /><span style={{ fontSize: 11, color: "#6b7280", marginLeft: 6 }}>对象不再被引用后的保护期；0 = 到期即删</span></div>
-                      <div className="settings-field"><span>自动对账周期（小时）</span><input type="number" min={0} max={720} value={gcCfg.gcIntervalHours} onChange={(e) => saveGcCfg({ gcIntervalHours: Math.max(0, Number(e.target.value) || 24) })} /><span style={{ fontSize: 11, color: "#6b7280", marginLeft: 6 }}>多久自动跑一次对账删除到期对象；0 = 关闭自动，仅手动</span></div>
+                      <div className="settings-field"><span>回收窗口（天）</span><input type="number" min={0} max={90} value={gcCfg.gcRetentionDays} onChange={(e) => saveGcCfg({ gcRetentionDays: Math.max(0, Number(e.target.value) || 7) })} /></div>
+                      <div style={{ fontSize: 11, color: "#6b7280", marginTop: -4, marginBottom: 6 }}>对象被替换/移除后的保护期；0 = 立即到期</div>
+                      <div className="settings-field"><span>自动对账周期（小时）</span><input type="number" min={0} max={720} value={gcCfg.gcIntervalHours} onChange={(e) => saveGcCfg({ gcIntervalHours: Math.max(0, Number(e.target.value) || 24) })} /></div>
+                      <div style={{ fontSize: 11, color: "#6b7280", marginTop: -4 }}>自动清理频率；0 = 仅手动</div>
                     </>
                   )}
-                  <p className="settings-hint">云端只是镜像：删除的是云端冗余，本地正文/回收站/历史快照不受影响（“彻底删除/清空回收站”除外，见“回收站”分类）。</p>
-                  <p className="settings-hint" style={{ fontWeight: 600, margin: "6px 0 0" }}>删除记录（最近 {gcLog.length > 0 ? Math.min(gcLog.length, 30) : 0} 条 · 只读审计）</p>
+                  <p className="settings-hint">云端只是镜像：删除云端冗余不影响本地正文/回收站/历史快照（“彻底删除/清空回收站”除外）。</p>
+                  <p className="settings-hint" style={{ fontWeight: 600, margin: "8px 0 2px" }}>删除记录（最近 {gcLog.length > 0 ? Math.min(gcLog.length, 30) : 0} 条 · 只读审计）</p>
                   {gcLog.length > 0 ? (
-                    <div className="settings-hint" style={{ maxHeight: 140, overflow: "auto", fontFamily: "monospace", fontSize: 11 }}>
+                    <div className="settings-hint" style={{ maxHeight: 150, overflow: "auto", fontFamily: "monospace", fontSize: 11, lineHeight: 1.7 }}>
                       {gcLog.slice(0, 30).map((l) => <div key={l.id}>{l.ts.slice(0, 19)}&nbsp;[{l.action} · {l.reason}] {l.key}</div>)}
                     </div>
                   ) : (
