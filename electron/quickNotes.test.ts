@@ -152,6 +152,13 @@ describe("小记回收站（M6）", () => {
     expect(quickNotes.listQuickNoteTrash().map((i) => i.id)).not.toContain(id);
     expect(() => quickNotes.restoreQuickNote(id)).toThrow();
   });
+
+  it("deleteQuickNote 幂等：删除不存在/已删的小记不抛 NotFound（同步先落地远端删除 → 撤销窗口到期提交不误报）", () => {
+    expect(() => quickNotes.deleteQuickNote("never-existed")).not.toThrow();
+    const id = quickNotes.createQuickNote({ text: "重复删除", draftId: crypto.randomUUID(), stagedImageIds: [] }).id;
+    quickNotes.deleteQuickNote(id);
+    expect(() => quickNotes.deleteQuickNote(id)).not.toThrow();
+  });
 });
 describe("R3：save staging 恢复（V5 §5.3）", () => {
   const stagingRoot = () => path.join(root, "quick-notes", "staging");

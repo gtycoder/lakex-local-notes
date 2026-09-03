@@ -382,7 +382,15 @@ export class QuickNotesStore {
   }
 
   deleteQuickNote(id: string): void {
-    const row = this.readRow(id);
+    // 幂等删除：小记已不存在时静默返回，不再抛 NotFound。UI「乐观删除 + 5 秒撤销窗口」内，
+    // 若同步先应用了远端删除（或本端已被其它路径删除），窗口到期提交时不应误报"删除失败"并把卡片塞回列表。
+    let row: QuickNoteRow;
+    try {
+      row = this.readRow(id);
+    } catch (reason) {
+      if (reason instanceof AppError && reason.kind === "NotFound") return;
+      throw reason;
+    }
     this.deleteSourceAndRemember(row, null, true, true);
   }
 

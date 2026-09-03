@@ -29,10 +29,6 @@ export function createS3StoreAdapter(remote: ObjectStore, prefix: string): S3Sto
       const bytes = typeof body === "string" ? Buffer.from(body, "utf8") : Buffer.from(body);
       await remote.put(strip(key), bytes, "application/octet-stream", { gzip: opts?.gzip });
     },
-    // 存在性探测：HEAD（避免整对象 GET 判存在——大附件下每轮同步全量下载的浪费）
-    async exists(key: string): Promise<boolean> {
-      return remote.headObject(strip(key));
-    },
     // 流式上传：Node Readable + 显式 Content-Length（aws-sdk v3 对 stream body + 已知长度
     // 走普通签名请求，不触发 aws-chunked；七牛 Kodo 实测兼容）
     async putObjectStream(key: string, size: number, open: () => Promise<unknown | null>): Promise<void> {

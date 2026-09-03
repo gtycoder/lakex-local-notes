@@ -30,6 +30,11 @@ Lake Notes 是**本地优先**笔记应用（Electron + React + better-sqlite3 +
 8. **KISS/DRY/SOLID**：优先最简单可靠的实现；不引入未经验证的抽象；用已有依赖解决，不随意加依赖；不过度设计（小记不搞备份机制就是例子）。
 9. **多表写必须用事务**：`this.db.transaction(() => {...})`。已审计修复：`restoreHistory`、`applyRemoteNoteMeta`、`markSynced`。
 10. **永远不要为旧数据写冗余代码**：开发阶段的脏数据/坏数据（如某次 bug 写坏的文档内容）**直接删掉重建**，不写任何"兼容/修复/容忍旧数据形态"的代码——不做展示层兼容、不做格式迁移、不判断占位符形态。理由：数据可删可重建（见第 7 条），为旧数据写兼容代码只会引入复杂度与新的错误面。判断标准：**先问"这些数据能不能删了重新生成？"——能，就绝不写兼容**。用户原话：*"永远不要为旧数据写冗余代码，我们这个阶段根本不需要。"*
+11. **资产存在性判定 = 远端清单声明差集（对齐思源 dejavu），禁止逐对象 HEAD/GET 探测、禁止本机陈旧缓存**：同步下载时已拿到远端 latest 清单，其 `notes[].assets` 就是「云端当前被引用集」的权威快照（发布顺序=先对象后清单；GC 只删「未被任何在留清单引用的键」+ 年龄保护）。⇒「清单声明该资产」即「云端存在且未被删」。上传只对「清单未声明的缺失资产」做 PUT，但 `manifest.assets` 仍**全量声明**（裁剪声明 → 他端 GC 把在用资产误判未引用而删）。**禁止**退回每对象 HEAD（实测 churn 同步因此 14s 空转、真实云首传 18s）；**禁止**「本机记过=已上传」的持久缓存（GC 可能删过该对象 → 缓存失真 → 破坏跨端自愈，这正是当年去掉缓存的原因）。
+**两个外部前提（协议契约外，按红线不写检测、仅记录）**：① 无带外删除——不绕过本协议手工删/生命周期规则删云端对象（若发生，latest 仍声明但对象已失，属契约外）；② 资产按 filename 内容寻址——skip 只比对 `assets/{noteId}/{filename}` 是否已声明、不校验云端字节，靠 `buildAssetFilename`（时间戳+hash 前缀）保证「同名即同内容」。
+对称地，**下载侧同样走差集**：`downloadNoteAssets` 按本地实扫的 size+sha256 跳过已持有资产；`active→trash` 跟随删除仅在**实读正文 sha256 相等**时复用本地、否则 GET 自愈——两处都验真实字节、不盲信 `contentHash` 缓存（`localHashOf` 对 synced 走 baseHash 缓存不读盘）。
+12. **兜底"未分类"笔记本只惰性创建**：系统无默认笔记本；仅当某笔记**真正回落到兜底父**时才 `resolveDefaultNotebook()` 创建（本轮至多一次）。**禁止**在下载阶段开头无条件 `defaultNotebookId()`（旧实现导致空库同步即使 `downloaded=0` 也凭空创建并上传"未分类"）；冲突探测等"最终可能不应用"的路径**不得**解析兜底父。
+13. **S3 并发上限 = 8（七牛建议）**：峰值并发 PUT = `NOTE_UPLOAD_CONCURRENCY(2) × ASSET_CONCURRENCY(4) = 8`；正文对象 `UPLOAD_CONCURRENCY(4)`、下载 `ASSET_CONCURRENCY(4)` 各自 ≤8 且与资产阶段串行、不叠加。**不得**为吞吐调到 16+（日常用不到、易触七牛限流）。
 
 ## 4. 关键机制速览（同步）
 
@@ -37,6 +42,8 @@ Lake Notes 是**本地优先**笔记应用（Electron + React + better-sqlite3 +
 - `supersededNotes`：本地改动被远端覆盖时先强制 `createHistorySnapshot` 留档再接受远端。
 - `folders[]` 必填；手动同步只发回触发窗口；自动同步广播所有窗口。
 - 同步/GC/深度清理共用 `enqueueMaintenance` 串行队列（进程内唯一必需互斥）。
+- 资产上传差集：`scanLocalAssets(cfg,s3,db,noteId,stats,cloudDeclaredFilenames)`，`cloudDeclaredFilenames` = 本笔记在**已下载远端清单**里声明的 `assets[].filename`；缺省/为空（新笔记、桶重置 rn=null）→ 全量上传。跨笔记并发：决策环登记 `assetTasks`，环后 `runPool(NOTE_UPLOAD_CONCURRENCY=2)` 回填 `entry.assets`（语义与串行逐字节一致，由 syncEquivalence/syncDualAB 保证）。见原则 11/12/13。
+- manifest commit 链保留 `MANIFEST_CHAIN_KEEP=3`（设计 D4 O(3)），prune/gc-reconcile/deep-cleanup 三者共用、滞后裁剪（水位超过 target+SLACK 才裁），活动对象恒在 latest 全量快照内、被降级旧键靠本地历史 refs + 7 天年龄保护 + 重新引用撤销 pending 兜底。
 - 小记独立前缀 `quick-notes/` + 独立小记库 `quick-notes/metadata.sqlite3`。
 
 ## 5. 数据路径与安全

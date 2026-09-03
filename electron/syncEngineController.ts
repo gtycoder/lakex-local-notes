@@ -79,7 +79,7 @@ export async function syncNowViaEngine(
         }
         store.removeS3GcPending([...referencedNow]);
       } catch (e) { store.logScopes.sync.warn(`[gc-mark] 失败（不影响同步）: ${(e as Error).message}`); }
-      // 验收#3：裁剪旧 manifest（latest + 本 commit + 沿链 8 层，共 10 份）
+      // 滞后裁剪旧 manifest（稳态 latest + 本 commit + 链 3 层 = 5 份；未到水位只 list 一次，见 pruneOldManifests）
       try { await pruneOldManifests(remote, next.commitId, prev, store.logScopes); } catch (e) { store.logScopes.sync.warn(`[prune] 失败（不影响同步）: ${(e as Error).message}`); }
     },
   });

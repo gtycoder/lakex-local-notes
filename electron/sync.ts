@@ -6,7 +6,6 @@ import {
   S3Client,
   GetObjectCommand,
   type GetObjectCommandOutput,
-  HeadObjectCommand,
   PutObjectCommand,
   type PutObjectCommandInput,
   ListObjectsV2Command,
@@ -92,10 +91,17 @@ const S3_REQUEST_TIMEOUT_MS = 30_000;
 /** W-6：Get/Put 大对象（25MiB 图片/正文）传输超时放宽到 120s——
  *  <1MB/s 弱网下 30s 会误杀传输并触发无效重试（元数据小命令仍走 30s）。 */
 const S3_TRANSFER_TIMEOUT_MS = 120_000;
-/** 保留的 manifest commit 链长度（latest + 本 commit + 8 层 prev = 10 份）。
- * prune / runGcReconcile / runDeepCleanup 三者必须一致，否则深度清理会在 7 天后
- * 把「多留的容错份」删掉（用户验收 #3：留 10 份）。 */
-const MANIFEST_CHAIN_KEEP = 8;
+/** 保留的 manifest commit 链长度（回归设计 S3-GC-DESIGN D4/§85「最近 3 份 commit，沿链 O(3) 遍历」）。
+ * 实现曾一度提到 8（"多留提高容错"），但 prune 在每次有变更的发布里都沿链回捞 = N 次串行 GET，
+ * 是稳态同步的纯浪费（实测单张 89B 图片的首传同步被拖到 4.4s，其中约 1.3s 就是回捞 8 份历史 manifest）。
+ * 浅链不影响数据安全：活动对象恒在 latest 全量快照内，被降级出 latest 的旧键另有
+ * 「本地历史 refs 保护 + 7 天年龄保护 + 重新引用即撤销 s3_gc_pending」三重兜底；prevCommitId 链只是
+ * 更保守的容错回溯窗口。prune / runGcReconcile / runDeepCleanup 三者共用此常量，必须一致，
+ * 否则深度清理会把「多留的份」在窗口后删掉。 */
+const MANIFEST_CHAIN_KEEP = 3;
+/** 滞后裁剪水位（份）：prune 不再每次发布都做链遍历，累计超过 (2 + KEEP + SLACK) 才裁回 (2 + KEEP)。
+ *  把「list + 沿链 GET」的 housekeeping 摊薄到约每 SLACK 次发布一次；期间 manifests/ 目录略多占几个小文件，无正确性影响。 */
+const MANIFEST_PRUNE_SLACK = 6;
 /**
  * 清单加载护栏（W-13）：manifest 是同步的第一个解析对象，且在零变更早退之前。
  * 异常/恶意清单（投毒、版本 bug、gzip 炸弹）不得打爆主进程：
@@ -196,23 +202,6 @@ export class ObjectStore {
     }
   }
 
-  /** HEAD 探测对象是否存在（附件存在性检查用；避免整对象 GET 只为判存在）。
-   * 七牛 Kodo 对 HeadBucket 返回 404（AGENTS.md 踩坑 #4），HeadObject 是标准 S3 API，
-   * 已在实测桶验证可用；异常（非 404）抛出由调用方处理。 */
-  async headObject(key: string): Promise<boolean> {
-    assertSafeKey(key);
-    const t0 = Date.now();
-    try {
-      await this.send<Record<string, unknown>>(new HeadObjectCommand({ Bucket: this.bucket, Key: this.key(key) }));
-      this.log.s3.info(`[perf] head ${key} ${Date.now()}ms HIT`);
-      return true;
-    } catch (error) {
-      if (isNoSuchKey(error)) { this.log.s3.info(`[perf] head ${key} ${Date.now()}ms MISS`); return false; }
-      this.log.s3.warn(`[perf] head ${key} FAIL ${Date.now()}ms: ${errorMessage(error)}`);
-      throw new Error("S3 探测失败 (" + key + "): " + errorMessage(error));
-    }
-  }
-
   /** 流式上传（大附件用）：Body 直接给 Node Readable，显式 Content-Length（避免 aws-chunked，
    * 七牛 Kodo 兼容性已验证）。失败抛错，调用方重试/下轮同步重传（幂等对账语义）。 */
   async putStream(key: string, size: number, open: () => Promise<import("node:stream").Readable | null>): Promise<void> {
@@ -302,7 +291,7 @@ export class ObjectStore {
 
   /** 统一带超时发送命令：超时通过 AbortSignal 中断底层请求（NodeHttpHandler 支持）。
    *  Get/Put 走大对象超时（W-6），其余元数据命令走短超时。 */
-  private async send<T>(command: GetObjectCommand | PutObjectCommand | HeadObjectCommand | ListObjectsV2Command | DeleteObjectCommand | DeleteObjectsCommand): Promise<T> {
+  private async send<T>(command: GetObjectCommand | PutObjectCommand | ListObjectsV2Command | DeleteObjectCommand | DeleteObjectsCommand): Promise<T> {
     const isTransfer = command instanceof GetObjectCommand || command instanceof PutObjectCommand;
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), isTransfer ? S3_TRANSFER_TIMEOUT_MS : S3_REQUEST_TIMEOUT_MS);
@@ -423,7 +412,7 @@ export async function runDeepCleanup(store: Store, opts?: { dryRun?: boolean; ex
   keep.add("manifests/latest.json");
   collectManifestRefs(latest, keep);
 
-  // commit 链（与 prune 同一保留窗口：latest + 本 commit + 8 层 prev = 10 份）
+  // commit 链（与 prune / gc-reconcile 同一保留窗口：latest + 本 commit + KEEP(3) 层 prev）
   let prev = latest.prevCommitId;
   let chain = 0;
   while (prev && chain < MANIFEST_CHAIN_KEEP) {
@@ -470,16 +459,17 @@ export async function runDeepCleanup(store: Store, opts?: { dryRun?: boolean; ex
 }
 
 /**
- * 验收 #3：裁剪 manifests/ 目录。保留 latest.json + 本设备刚写入的 commit + 沿 prevCommitId
- * 链再向上 8 份（共 10 个文件；超出 GC/对账 3 份引用上限的旧 commit 仅作容错保留）。
- * 只沿 latest 可达链裁剪：任何不在链上的 manifest 对 GC/对账均不可达，删除安全。
- * 删除失败不阻断同步（下次同步再试）。
+ * 验收 #3（修订）：裁剪 manifests/ 目录，保留 latest.json + 刚写入 commit + 沿 prevCommitId 链 KEEP(3) 份
+ * （稳态 targetFiles = 2 + KEEP = 5 个文件）。为把「list + 沿链 GET」的 housekeeping 摊薄出同步热路径，
+ * 采用滞后裁剪：目录内文件数未超过 targetFiles + SLACK 时直接返回（仅一次 list，不做链遍历 GET），
+ * 仅当超水位才沿链算出 keep 集并把多余的旧 commit 删回 target。只沿 latest 可达链裁剪：任何不在链上
+ * 的 manifest 对 GC/对账均不可达，删除安全；删除失败不阻断同步（下次同步再试）。
  */
 export async function pruneOldManifests(remote: ObjectStore, commitId: string, remoteManifest: Manifest | null, logScopes: LoggerScopes): Promise<void> {
+  const targetFiles = 2 + MANIFEST_CHAIN_KEEP;          // latest.json + 刚写入 commit + 链 prev（KEEP 份）
   const all = (await remote.list("manifests/")).map((item) => item.key);
-  // 稳态 = latest + 本 commit + 沿 latest 链 8 层 prev，共 10 份（用户验收 #3：多留一些提高容错）；
-  // 无需裁剪时跳过链遍历（省 2 次 GET）。
-  if (all.length <= 10) return;
+  // 滞后水位：未到阈值只花一次 list，跳过链遍历（省 KEEP 次串行 GET）；这是本次性能优化的主菜。
+  if (all.length <= targetFiles + MANIFEST_PRUNE_SLACK) return;
   const keep = new Set<string>(["manifests/latest.json", `manifests/${commitId}.json`]);
   let prev = remoteManifest?.commitId ?? null;
   let chain = 0;

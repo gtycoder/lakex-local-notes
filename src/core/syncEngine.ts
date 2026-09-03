@@ -28,10 +28,16 @@ import { MAX_IMAGE_BYTES } from "./storeLimits.js";
 /** 单对象大小护栏（对齐桌面 sync.ts:100）：正文 .lake 上限 64MiB。 */
 const MAX_REMOTE_NOTE_BYTES = 64 * 1024 * 1024;
 
-/** P3-3：资产传输并发批大小。桌面实测（106 资产 58MB）：串行 RTT 占同步耗时 99%
- * （head 均 24ms + put 均 157ms × 212 次往返 = 19.7s）。并发 4 → 首传约 5s、稳态 HEAD 巡检 <1s；
- * 对齐思源 dejavu 的并发 worker 模式。4 路对七牛 Kodo QPS 安全。 */
+/** P3-3：资产传输并发批大小。桌面实测资产传输是同步长尾（串行逐条 RTT 占耗时 99%）。
+ * 现方案：① 存在性用「远端清单声明差集」判定（对齐思源 dejavu，见 scanLocalAssets），彻底去掉每对象一次
+ * HEAD 往返（旧实测 20 篇元数据变更 = 335 次 HEAD 全 HIT、0 上传 = 14s 空转）；② 真正缺失者并发上传，
+ * 并发 4 路（首传 106 资产 58MB 约 5s），4 路对七牛 Kodo QPS 安全。 */
 const ASSET_CONCURRENCY = 4;
+/** 正文对象并发上传车道数（内容寻址幂等，条目独立）。 */
+const UPLOAD_CONCURRENCY = 4;
+/** 跨笔记资产扫描并发车道数（P3-4）。峰值并发 PUT = NOTE_UPLOAD_CONCURRENCY × ASSET_CONCURRENCY = 2×4 = 8
+ *  （对齐七牛 Kodo 建议上限 8；16 偏高、日常用不到，徒增限流风险）。正文/下载各自 ≤4 且与资产阶段串行、不叠加。 */
+const NOTE_UPLOAD_CONCURRENCY = 2;
 
 /** P3-3：小型并发池（定长车道，无依赖）：worker 按 index 领任务；结果由调用方按
  * 原索引归位（warnings 顺序 / 字节记账保持确定性，对齐串行语义）。 */
@@ -65,6 +71,15 @@ export async function downloadNoteAssets(cfg: SyncConfig, s3: S3Store, db: SyncD
   const items = assets ?? [];
   // A 方案：记录 manifest 声明的资产元数据（即使某资源文件本地缺失，上传 union 仍可正确声明）。
   if (typeof db.recordDeclaredAssets === "function") db.recordDeclaredAssets(noteId, items);
+  // 下载侧差集（对称于上传 scanLocalAssets，对齐思源 dejavu「只取缺失块」）：本地已持「同名 + 同 size + 同 sha256」
+  // 的资产即逐字节等价（内容寻址，无陈旧风险）→ 跳过 GET；缺失/损坏/变更（不满足精确匹配）仍照常下载或告警/严格拒绝。
+  // 治的是最常见浪费：远端只改一行文字 → 对端把整篇未变的图全重下一遍。预扫失败则 localHave=null → 回退全下载（不改旧行为）。
+  let localHave: Map<string, { size: number; hash: string }> | null = null;
+  if (items.length > 0) {
+    try {
+      localHave = new Map((await db.listLocalAssets(noteId)).map((a) => [a.filename, { size: a.size, hash: a.hash }]));
+    } catch { localHave = null; }
+  }
   // P3-3：并发下载（每资产 getObject/校验/saveAsset 相互独立）。worker 不抛错——
   // 失败按索引归位，池结束后统一裁决：warnings 按原顺序入列、首个错误按原顺序抛出，
   // 与旧串行实现的裁决结果逐字节一致（仅失败前的多余请求会发出，结果确定）。
@@ -74,6 +89,11 @@ export async function downloadNoteAssets(cfg: SyncConfig, s3: S3Store, db: SyncD
   let aborted = false; // strict 首错后停止落盘（并发车道已在途的请求自然完成但不写盘，防孤儿资产目录）
   await runPool(items, ASSET_CONCURRENCY, async (asset, i) => {
     try {
+      // 已在本地且 size+hash 精确匹配 → 无需下载（不记 downloadedBytes、不算缺失、不产 warning；对齐上传侧 skip）。
+      if (localHave) {
+        const have = localHave.get(asset.filename);
+        if (have && have.size === asset.size && have.hash === asset.hash) return;
+      }
       const bytes = await s3.getObject(`${cfg.prefix}/assets/${noteId}/${asset.filename}`, { maxBytes: MAX_IMAGE_BYTES });
       if (bytes == null) {
         if (strict) { errors[i] = new AssetMissingError(`资源缺失: ${noteId}/${asset.filename}`); aborted = true; }
@@ -133,12 +153,6 @@ export interface S3Store {
   getObject(key: string, opts?: { maxBytes?: number }): Promise<Uint8Array | null>;
   /** 写入对象；opts.gzip 由端口压缩（manifest 传 {gzip:true}，正文/资源不压缩）。 */
   putObject(key: string, body: string | Uint8Array, opts?: { gzip?: boolean }): Promise<void>;
-  /**
-   * HEAD 存在性探测（桌面实现；移动端/测试桩可不实现走整对象 GET 回退）。
-   * 探测"远端是否已有此对象"用 HEAD 而非 getObject——大附件（100MiB 级）下
-   * 整对象 GET 判存在会每轮同步全量下载，浪费带宽且拖慢同步。
-   */
-  exists?(key: string): Promise<boolean>;
   /**
    * 流式上传（桌面实现；移动端/测试桩可不实现走字节路径回退）。
    * open 返回 Node Readable（本地文件流）；size 为文件字节数（显式 Content-Length，
@@ -260,34 +274,51 @@ export interface SyncDbPort {
 
 const MANIFEST_KEY = "manifests/latest.json";
 
-/** 扫描本地资产：上传到 S3（缺失才传）并返回清单条目（H3 与软删上云共用）。
- * 存在性探测优先 HEAD（s3.exists），避免整对象 GET 判存在；上传优先流式
- * （s3.putObjectStream + db.openLocalAssetStream 同时可用时），否则字节路径。
+/** 扫描本地资产：只上传云端缺失者，返回该笔记**完整**资产清单（H3 与软删上云共用）。
+ *
+ * 存在性判定采用「远端清单声明差集」（对齐思源 dejavu：以刚下载的 cloud 最新索引已声明的
+ * chunk 集合做减法，只传缺的）——而非逐对象 HEAD 探测。理由：
+ *  1. 稳态同步里资产几乎都已在云端，逐对象 HEAD 只是把「确认无需上传」的成本摊到每次同步
+ *     （实测：20 篇仅元数据变更 → 335 次 HEAD 全 HIT、0 字节上传 = 14s 纯往返空转）。
+ *  2. 我们下载的 remote 清单本身就是「云端当前引用集」的权威快照（发布顺序=先对象后清单），
+ *     且 GC 只删「未被任何清单引用」的对象（S3-GC-DESIGN：本地为真相、S3 只是镜像 + 年龄保护 + 差集删除），
+ *     所以「remote 清单声明了该资产」⇒ 该对象此刻被引用 ⇒ 未被 GC ⇒ 云端确实存在。无需再 HEAD。
+ *  3. 关键安全点：返回值仍是**完整** localAssets（全量写进 manifest.assets）——
+ *     只对「上传动作」做差集，绝不裁剪「清单声明」。清单声明一旦被裁剪，他端 GC 会把
+ *     仍在用的资产判为未引用而误删（HANDOFF-260901 恢复红线）。
+ *
+ * cloudDeclaredFilenames：本笔记在**已下载远端清单**中声明的资产文件名集合；缺省（如新笔记 /
+ * 桶被重置 → rn 为 null）传空集 → 全部本地资产都按缺失上传。
+ * 上传优先流式（s3.putObjectStream + db.openLocalAssetStream 同时可用），否则字节路径（移动端零改动）。
  * stats 传入时累计实际上传字节数（流式取声明 size，字节路径取 bytes.length）。
- * 导出供单元测试直接覆盖流式/HEAD 选择逻辑。 */
-export async function scanLocalAssets(cfg: SyncConfig, s3: S3Store, db: SyncDbPort, noteId: string, stats?: { uploadedBytes: number }): Promise<ManifestNote["assets"]> {
+ * 守卫（勿回退）：**禁止**以 `rn.assets` 直接充当 manifest 声明来跳过本地重扫——`rn.assets` 只是「上轮远端声明」，
+ * 本地可能有未声明的新增/上次失败未传的资产，复用以声明冒充清单 = 裁剪声明 = 违反红线（他端 GC 误删在用资产）。
+ * 每次必须 `db.listLocalAssets` 实扫、远端声明只作 skip 集。外部前提（契约外不检测）：无带外删除；资产按 filename 内容寻址。
+ * 导出供单元测试直接覆盖差集/流式选择逻辑。 */
+export async function scanLocalAssets(
+  cfg: SyncConfig, s3: S3Store, db: SyncDbPort, noteId: string,
+  stats?: { uploadedBytes: number },
+  cloudDeclaredFilenames?: ReadonlySet<string>,
+): Promise<ManifestNote["assets"]> {
   const localAssets = await db.listLocalAssets(noteId);
   const canStream = !!s3.putObjectStream && typeof db.openLocalAssetStream === "function";
-  // P3-3：并发 HEAD+PUT（桌面实测串行 RTT 占同步耗时 99%）。worker 不抛错——错误按索引
-  // 归位，池结束后按原顺序抛首个错误（与旧串行"逐个 await、首错即止"裁决一致）；
-  // 字节记账按索引归位（流式=声明 size，字节路径=实际 bytes.length）。
+  // P3-3：并发上传（仅缺失者）。worker 不抛错——错误按索引归位，池结束后按原顺序抛首个错误
+  // （与旧串行「逐个 await、首错即止」裁决一致）；字节记账按索引归位（流式=声明 size，字节路径=bytes.length）。
   const uploadedSize: Array<number | null> = new Array(localAssets.length).fill(null);
   const errors: Array<unknown> = new Array(localAssets.length).fill(null);
   await runPool(localAssets, ASSET_CONCURRENCY, async (a, i) => {
     try {
+      // 已在远端清单声明 → 认定云端存在，跳过上传（不再 HEAD 探测）；但仍保留在返回清单里（全量声明）。
+      if (cloudDeclaredFilenames?.has(a.filename)) return;
       const key = `${cfg.prefix}/assets/${noteId}/${a.filename}`;
-      // 存在性探测：HEAD 优先；端口未实现则整对象 GET 判存在（兼容移动端/测试桩）
-      const exists = s3.exists ? await s3.exists(key) : (await s3.getObject(key)) != null;
-      if (!exists) {
-        if (canStream && s3.putObjectStream) {
-          await s3.putObjectStream(key, a.size, () => db.openLocalAssetStream!(noteId, a.filename));
-          uploadedSize[i] = a.size;
-        } else {
-          const bytes = await db.readLocalAsset(noteId, a.filename);
-          if (bytes) {
-            await s3.putObject(key, bytes);
-            uploadedSize[i] = bytes.length;
-          }
+      if (canStream && s3.putObjectStream) {
+        await s3.putObjectStream(key, a.size, () => db.openLocalAssetStream!(noteId, a.filename));
+        uploadedSize[i] = a.size;
+      } else {
+        const bytes = await db.readLocalAsset(noteId, a.filename);
+        if (bytes) {
+          await s3.putObject(key, bytes);
+          uploadedSize[i] = bytes.length;
         }
       }
     } catch (e) {
@@ -332,8 +363,14 @@ export async function syncNow(cfg: SyncConfig, s3: S3Store, db: SyncDbPort, opts
   };
   // A 方案：上传 manifest 的 assets = 本地文件 ∪ (正文引用的、且有已声明元数据的资源)。
   // 保证备份声明完整；正文引用（当前内容）不含已删除引用，避免历史把已删资源挂回当前文档。
-  const resolveUploadAssets = async (localId: string, content: string): Promise<ManifestNote["assets"]> => {
-    const localFiles = await scanLocalAssets(cfg, s3, db, localId, report);
+  const resolveUploadAssets = async (
+    localId: string, content: string,
+    cloudAssets?: ManifestNote["assets"] | null,
+  ): Promise<ManifestNote["assets"]> => {
+    // 差集上传：以已下载远端清单中本笔记声明的资产文件名为「云端已存在」依据（对齐思源 dejavu），
+    // 不再逐对象 HEAD。cloudAssets 缺省/为空（新笔记、桶重置 rn=null）→ 全部按缺失上传。
+    const cloudDeclared = cloudAssets && cloudAssets.length ? new Set(cloudAssets.map((a) => a.filename)) : undefined;
+    const localFiles = await scanLocalAssets(cfg, s3, db, localId, report, cloudDeclared);
     const declared = typeof db.listDeclaredAssets === "function" ? (db.listDeclaredAssets(localId) ?? []) : [];
     const byName = new Map(declared.map((d) => [d.filename, d]));
     const seen = new Set(localFiles.map((f) => f.filename));
@@ -429,10 +466,15 @@ export async function syncNow(cfg: SyncConfig, s3: S3Store, db: SyncDbPort, opts
   // ---- 2. 下载方向：墓碑/恢复分支 → reconcile 对账 → 应用远端 ----
   if (remote) {
     // D4：先导入目录树（保证文档父 notebook/group 已存在），并构建 validParents——
-    // 父节点集合 = 兜底父笔记本（无默认笔记本概念）+ 回收站笔记本 + 远端 folders + 远端 active 笔记 id + 本地已有节点。
+    // 父节点集合 = 回收站笔记本 + 远端 folders + 远端 active 笔记 id + 本地已有节点（兜底父笔记本惰性解析，见下，创建前不入集合）。
     // effectiveParent 据此回退，防"父目录缺失 → 文档消失/归属错位"（对齐桌面 sync.ts:344-363/395）。
-    const defaultNotebook = db.defaultNotebookId();
-    const validParents = new Set<string>([defaultNotebook, TRASH_NOTEBOOK_ID]);
+    // 兜底父笔记本惰性解析：db.defaultNotebookId() 在本地无任何笔记本时会新建普通笔记本"未分类"（红线：仅"必须给内容一个家"时才建）。
+    // 旧实现在下载阶段开头无条件调用 → 空库同步即使 downloaded=0、没有任何笔记需要安家，也会凭空创建"未分类"并上传扩散到云端；
+    // 且它在目录导入之前执行，即便远端 folders 即将提供真实归属也会误建。改为首次真正需要兜底父时再解析并缓存（本轮至多建一次）。
+    let defaultNotebook: string | null = null;
+    const resolveDefaultNotebook = (): string => (defaultNotebook ??= db.defaultNotebookId());
+    // 兜底笔记本惰性创建，创建前其 id 未知，故不预置进 validParents（其随机 id 也不会被任何远端 rn.parentId 引用）。
+    const validParents = new Set<string>([TRASH_NOTEBOOK_ID]);
     for (const folder of remote.folders) {
       if (!isSafePathSegment(folder.id)) throw new Error(`清单包含无效的目录 ID: ${folder.id}`);
       if (folder.parentId !== null && !isSafePathSegment(folder.parentId)) throw new Error(`清单包含无效的目录 parentId: ${folder.parentId}`);
@@ -482,7 +524,10 @@ export async function syncNow(cfg: SyncConfig, s3: S3Store, db: SyncDbPort, opts
       const remoteTrashed = !!rn.trashedAt;   // 软删（回收站）；purge（deleted:true）已单独处理
       const localTrashed = local?.trashedAt != null;
       const localRestoring = local?.restorePendingAt != null;
-      const effectiveParent = rn.parentId !== null && validParents.has(rn.parentId) ? rn.parentId : defaultNotebook;
+      // 有效父惰性求值：父合法时直接用它；仅当确需回退兜底位时才解析（并可能创建）"未分类"（按 note 记忆，避免重复解析）。
+      let effectiveParentMemo: string | undefined;
+      const effectiveParent = (): string =>
+        (effectiveParentMemo ??= rn.parentId !== null && validParents.has(rn.parentId) ? rn.parentId : resolveDefaultNotebook());
 
       // B4：purge（deleted:true）——本地有副本→移入回收站标 purged（可恢复、不上传）；无→记住删除（防复活）
       if (rn.deleted) {
@@ -548,14 +593,26 @@ export async function syncNow(cfg: SyncConfig, s3: S3Store, db: SyncDbPort, opts
           db.createHistorySnapshot(rn.id, contentOf(local), { title: local!.title, parentId: local!.parentId, sortOrder: local!.sortOrder });
           supersededTracker.push(rn.id, rn.title);
         }
-        const contentBytes = await s3.getObject(`${cfg.prefix}/${objectKey(rn.id, rn.contentHash)}`, { maxBytes: MAX_REMOTE_NOTE_BYTES });
-        if (contentBytes == null) {
-          report.warnings.push(`对象缺失（跳过+warning，B 方案）: ${rn.id}-${rn.contentHash}`);
-          continue;
+        // 下载差集（对齐缺口1「验真实字节」哲学，不盲信缓存）：删除不改正文 → 仅当【本地实读正文的 sha256 == 远端 hash】
+        // 才用本地内容标记入回收站、省一次正文 GET。local.contentHash 对 synced 笔记走 baseHash 缓存、不读文件（syncAdapters.localHashOf），
+        // 只作便宜预筛；真判定以「读盘 + sha256 相等」为准 → 缓存说等于、文件却缺失/损坏时实读不符 → 回退 GET 权威内容自愈（旧行为）。
+        // hash 不等（S4 回收站内编辑 / 删除方携带更新的删除前内容）同样必须 GET 权威 + H5 留档（删除内容权威红线不动）。
+        let trashContent: string;
+        const localBodyCacheMatch = local.contentHash != null && local.contentHash === rn.contentHash;
+        const localBody = localBodyCacheMatch ? contentOf(local) : "";
+        if (localBody !== "" && sha256Sync(new TextEncoder().encode(localBody)) === rn.contentHash) {
+          trashContent = localBody;
+        } else {
+          const contentBytes = await s3.getObject(`${cfg.prefix}/${objectKey(rn.id, rn.contentHash)}`, { maxBytes: MAX_REMOTE_NOTE_BYTES });
+          if (contentBytes == null) {
+            report.warnings.push(`对象缺失（跳过+warning，B 方案）: ${rn.id}-${rn.contentHash}`);
+            continue;
+          }
+          if (!verifyNoteHash(contentBytes, rn)) continue;
+          report.downloadedBytes += contentBytes.length;
+          trashContent = decodeText(contentBytes);
         }
-        if (!verifyNoteHash(contentBytes, rn)) continue;
-        report.downloadedBytes += contentBytes.length;
-        db.applyRemoteTrash(rn.id, decodeText(contentBytes), rn.title, rn.trashedAt ?? rn.deletedAt ?? rn.updatedAt, rn.deletedFromParentId ?? null, rn.parentId, rn.sortOrder);
+        db.applyRemoteTrash(rn.id, trashContent, rn.title, rn.trashedAt ?? rn.deletedAt ?? rn.updatedAt, rn.deletedFromParentId ?? null, rn.parentId, rn.sortOrder);
         recordDeclaredAssetsOnly(db, rn.id, rn.assets);
         report.appliedRemote++;
         // UI 移入回收站计数：仅"本次新入回收站"（本地原先不在回收站）才计；已在回收站的重复应用不计
@@ -582,7 +639,7 @@ export async function syncNow(cfg: SyncConfig, s3: S3Store, db: SyncDbPort, opts
             try { await downloadNoteAssets(cfg, s3, db, rn.id, rn.assets, report, true); }
             catch (e) { if (e instanceof AssetMissingError) { report.warnings.push(`资源缺失（跳过该条目）: ${rn.id}`); continue; } throw e; }
           }
-          db.applyRemoteNote({ ...rn, parentId: effectiveParent, trashedAt: null, deleted: false, deletedAt: undefined, deletedFromParentId: null }, decodeText(contentBytes));
+          db.applyRemoteNote({ ...rn, parentId: effectiveParent(), trashedAt: null, deleted: false, deletedAt: undefined, deletedFromParentId: null }, decodeText(contentBytes));
           if (!opts?.strictAssets) await downloadNoteAssets(cfg, s3, db, rn.id, rn.assets, report, false);
           db.setSyncBase(rn.id, rn.contentHash, rn.updatedAt, null);
           report.appliedRemote++;
@@ -611,10 +668,14 @@ export async function syncNow(cfg: SyncConfig, s3: S3Store, db: SyncDbPort, opts
           // 结构环检测（先提交先确认）：本地移动（local.parentId）若在远端树中位于本节点之下
           // （B 把 888 移入 999 下，而 A 已把 999 移入 888 下并提交）→ 保留本地会与远端成环，
           // 即使本地 updatedAt 较新也强制跟随远端打破环（对齐桌面 sync.ts:484-492）。
+          // 结构环检测只在「远端父合法且与本地父不同」时才可能成环（远端父非法将落兜底位，不产生子树环）。
+          // 关键：此处不得调用 effectiveParent()——兜底笔记本惰性解析，若只为探测就把远端父非法的条目算出兜底位，
+          // 会在「最终未应用(skip)」时凭空创建并上传"未分类"（点#1 空库同步幽灵笔记本的残留路径）。仅在下面真应用时才解析。
+          const remoteParentValid = rn.parentId !== null && validParents.has(rn.parentId);
           const localParentConflicts =
-            local.parentId !== null && local.parentId !== effectiveParent && isRemoteDescendant(local.parentId, rn.id, remoteParentMap);
+            local.parentId !== null && remoteParentValid && local.parentId !== rn.parentId && isRemoteDescendant(local.parentId, rn.id, remoteParentMap);
           if (decideMetaApply(rn.updatedAt, base?.lastSyncedMetaAt ?? null) || localParentConflicts) {
-            db.applyRemoteNoteMeta({ ...rn, parentId: effectiveParent });
+            db.applyRemoteNoteMeta({ ...rn, parentId: effectiveParent() });
           }
         }
         db.setSyncBase(rn.id, rn.contentHash, rn.updatedAt, null);
@@ -646,7 +707,7 @@ export async function syncNow(cfg: SyncConfig, s3: S3Store, db: SyncDbPort, opts
           try { await downloadNoteAssets(cfg, s3, db, rn.id, rn.assets, report, true); }
           catch (e) { if (e instanceof AssetMissingError) { report.warnings.push(`资源缺失（跳过该条目）: ${rn.id}`); continue; } throw e; }
         }
-        db.applyRemoteNote({ ...rn, parentId: effectiveParent, trashedAt: null, deleted: false }, decodeText(contentBytes));
+        db.applyRemoteNote({ ...rn, parentId: effectiveParent(), trashedAt: null, deleted: false }, decodeText(contentBytes));
         if (!opts?.strictAssets) await downloadNoteAssets(cfg, s3, db, rn.id, rn.assets, report, false);
         db.setSyncBase(rn.id, rn.contentHash, rn.updatedAt, null);
         report.appliedRemote++;
@@ -665,6 +726,14 @@ export async function syncNow(cfg: SyncConfig, s3: S3Store, db: SyncDbPort, opts
   // 同时记录 purged id：发布 manifest 时从 notes 中移除（云端删除已完成，manifest 不再携带该条目，
   // 对齐桌面 sync.ts:630-632 跳过 + manifestNotes 只含非 purged）。
   const purgedIds = new Set(localAll.filter((n) => n.syncState === "purged").map((n) => n.id));
+  // P3-4 跨笔记资产扫描并发化：扫描/上传某笔记缺失资产是同步里唯一的“每笔记网络活”，旧实现逐篇 await（串行长尾，
+  // 大库首次同步多篇带图笔记时尤甚）。决策环内只登记任务（正文与条目照常构建、entry.assets 暂空），环后用并发池统一
+  // 解析并回填 entry.assets。语义与串行完全一致：同一 resolveUploadAssets、同样的失败吞并日志、最终 manifest.assets 同集合，
+  // 仅把各笔记的 IO 等待重叠起来；uploadQueue 顺序不变（改写的是已入队的同一 entry 对象）。
+  const assetTasks: Array<{ noteId: string; content: string; rnAssets: ManifestNote["assets"] | null; entry: ManifestNote; onError: (msg: string) => void }> = [];
+  // P1（资产失败硬化，审计 260903）：本轮资产扫描/上传抛错的笔记 id 集；这些条目发布后不 markSynced（保持 local，下轮重扫重传），
+  // 避免「资产扫描失败→assets:[] 发布→被标 synced→永不重扫→原声明资产被 GC 误删」。语义仍为「资产失败不阻断正文」（正文照常发布，仅留该篇待重试）。
+  const assetScanFailed = new Set<string>();
   for (const local of localAll) {
     if (local.syncState === "purged") continue;
     const rn = remoteById.get(local.id) ?? null;
@@ -691,20 +760,15 @@ export async function syncNow(cfg: SyncConfig, s3: S3Store, db: SyncDbPort, opts
       }
       db.log(`[tombstone] ${local.id} 上传软删条目（parentId=TRASH + trashedAt，非 deleted）`);
       // 回收站条目携带资源清单（对齐桌面：trash 上云带 assets，B 端下载全文+资源可恢复）
-      let trashAssets: ManifestNote["assets"] = [];
       const uploadContent = contentOf(local);
-      try {
-        trashAssets = await resolveUploadAssets(local.id, uploadContent);
-      } catch (e) {
-        db.log(`[tombstone] ${local.id} 资源扫描失败（跳过）：${(e as Error).message}`);
-      }
       const entry = buildUploadEntry({
         note: { id: local.id, title: local.title, parentId: TRASH_NOTEBOOK_ID, sortOrder: local.sortOrder, updatedAt: local.updatedAt, syncState: local.syncState, isConflict: local.isConflict, isLocked: local.isLocked, lockedAt: local.lockedAt, icon: local.icon, trashedAt: local.trashedAt, deletedFromParentId: local.deletedFromParentId ?? null },
         contentHash: localHash,
-        assets: trashAssets,
+        assets: [],
         trashedAt: local.trashedAt,
         deletedFromParentId: local.deletedFromParentId ?? null,
       });
+      assetTasks.push({ noteId: local.id, content: uploadContent, rnAssets: rn?.assets ?? null, entry, onError: (m) => db.log(`[tombstone] ${local.id} 资源扫描失败（跳过）：${m}`) });
       // P3-1：上传条目此刻才取正文（仅待上传的少数笔记产生 IO）
       uploadQueue.push({ id: local.id, content: uploadContent, entry });
       report.trashedUp++; // 本端软删发布（UI 移入回收站计数）
@@ -721,22 +785,17 @@ export async function syncNow(cfg: SyncConfig, s3: S3Store, db: SyncDbPort, opts
     });
     if (decision === "upload") {
       db.log(`[decide] ${local.id} → upload（恢复=${localRestoring}）`);
-      // H3：上传前扫描本地资产 → 上传 S3 → 填入 manifest.assets（供他端下载）
-      let assets: ManifestNote["assets"] = [];
+      // H3：上传前扫描本地资产 → 上传 S3 → 填入 manifest.assets（供他端下载）。P3-4：解析登记为并发任务、环后执行。
       const uploadContent = contentOf(local);
-      try {
-        assets = await resolveUploadAssets(local.id, uploadContent);
-      } catch (e) {
-        db.log(`[H3] 资产扫描失败（跳过，不影响正文上传）: ${(e as Error).message}`);
-      }
       const entry = buildUploadEntry({
         note: { id: local.id, title: local.title, parentId: local.parentId, sortOrder: local.sortOrder, updatedAt: local.updatedAt, syncState: local.syncState, isConflict: local.isConflict, isLocked: local.isLocked, lockedAt: local.lockedAt, icon: local.icon },
         contentHash: localHash,
-        assets,
+        assets: [],
         // 恢复：显式清墓碑字段（覆盖远端墓碑 → local-wins）
         trashedAt: localRestoring ? null : undefined,
         deletedFromParentId: localRestoring ? null : undefined,
       });
+      assetTasks.push({ noteId: local.id, content: uploadContent, rnAssets: rn?.assets ?? null, entry, onError: (m) => db.log(`[H3] 资产扫描失败（跳过，不影响正文上传）: ${m}`) });
       // P3-1：上传条目此刻才取正文（仅待上传的少数笔记产生 IO）
       uploadQueue.push({ id: local.id, content: uploadContent, entry });
     } else {
@@ -784,6 +843,18 @@ export async function syncNow(cfg: SyncConfig, s3: S3Store, db: SyncDbPort, opts
     }
   }
 
+  // P3-4：跨笔记并发解析并回填 entry.assets（各任务只改写自己那份已入队 entry，顺序无关；失败沿用原「吞并+日志、不影响正文发布」语义）。
+  if (assetTasks.length > 0) {
+    await runPool(assetTasks, NOTE_UPLOAD_CONCURRENCY, async (t) => {
+      try {
+        t.entry.assets = await resolveUploadAssets(t.noteId, t.content, t.rnAssets);
+      } catch (e) {
+        assetScanFailed.add(t.noteId);
+        t.onError((e as Error).message);
+      }
+    });
+  }
+
   // ---- 4. 上传对象（内容寻址幂等）+ 组装新 manifest ----
   progress("upload", `上传 ${uploadQueue.length} 条`);
   let next: Manifest | null = null;
@@ -792,17 +863,27 @@ export async function syncNow(cfg: SyncConfig, s3: S3Store, db: SyncDbPort, opts
   // 或本地目录树有变更（回收站笔记本 / 移动 / 改名 / 图标——对齐桌面 sync.ts 每次同步无条件发布
   // manifest，folders 变更必须传播；迁移回归修复：否则删笔记本不传播 + 目录记账抹掉 local）。
   if (uploadQueue.length > 0 || purgedIds.size > 0 || foldersChanged) {
-    for (const item of uploadQueue) {
-      // 占位符墓碑（tombstone && content 为空，purge 已物理删除内容）：不重算 hash（保留占位符 id）、
-      // 不传空对象（否则 contentHash 被覆盖成 sha256(空串) + 空对象残留——迁移回归），仅写 deleted 标记。
-      if (item.tombstone && item.content === "") continue;
-      const contentBytes = new TextEncoder().encode(item.content);
-      const hash = sha256Sync(contentBytes);
-      if (item.entry.contentHash !== hash) item.entry.contentHash = hash;
-      await s3.putObject(`${cfg.prefix}/${objectKey(item.id, item.entry.contentHash)}`, item.content);
-      report.uploaded++;
-      report.uploadedBytes += contentBytes.length;
-    }
+    // 正文对象上传：内容寻址幂等、条目相互独立 → 并发池（对齐 P3-3 资产并发；旧串行逐条 await，
+    // 实测 N 篇笔记正文上传是同步尾部长尾）。worker 内不抛错——错误按索引收集、池后按序抛首个，
+    // 避免某条失败时其它并发车道的拒绝变成 unhandledRejection；且任一上传失败必须让整轮同步报错、
+    // 不得继续发布 manifest 引用未落盘正文（与旧串行首错即止等价：失败即中止，manifest 不写）。
+    const contentErrors: Array<unknown> = new Array(uploadQueue.length).fill(null);
+    await runPool(uploadQueue, UPLOAD_CONCURRENCY, async (item, i) => {
+      try {
+        // 占位符墓碑（tombstone && content 为空，purge 已物理删除内容）：不重算 hash（保留占位符 id）、
+        // 不传空对象（否则 contentHash 被覆盖成 sha256(空串) + 空对象残留——迁移回归），仅写 deleted 标记。
+        if (item.tombstone && item.content === "") return;
+        const contentBytes = new TextEncoder().encode(item.content);
+        const hash = sha256Sync(contentBytes);
+        if (item.entry.contentHash !== hash) item.entry.contentHash = hash;
+        await s3.putObject(`${cfg.prefix}/${objectKey(item.id, item.entry.contentHash)}`, item.content);
+        report.uploaded++;
+        report.uploadedBytes += contentBytes.length;
+      } catch (e) {
+        contentErrors[i] = e;
+      }
+    });
+    for (const e of contentErrors) if (e) throw e;
     next = {
       version: 4,
       workspaceId: "default",
@@ -861,6 +942,9 @@ export async function syncNow(cfg: SyncConfig, s3: S3Store, db: SyncDbPort, opts
 
     // ---- 6. 记账（B2 快照保护：同步期间被编辑则不标，等下轮重传） ----
     for (const item of uploadQueue) {
+      // P1：本轮资产扫描失败的笔记不 markSynced → 保持 local，下轮自动重扫重传其资产，防止 assets:[] 发布后被误标已同步、
+      // 再不清空声明导致原资产被 GC 误删（AGENTS #11 全量声明红线）。其余正常条目照常按 B2 快照保护记账。
+      if (assetScanFailed.has(item.id)) { db.log(`[H3] ${item.id} 本轮资产未齐，保持 local 待下轮重扫（不 markSynced）`); continue; }
       // 软删（trashedAt）/墓碑（deleted）条目本机未上传新正文：不写 lastUploadedHash，
       // 否则误标"本机是作者"→ 后续 ownEdit 判定恒成立、每次同步重复留档（对齐旧 sync.ts locallyUploadedIds）。
       const lastUploaded = item.entry.trashedAt || item.entry.deleted ? null : item.entry.contentHash;

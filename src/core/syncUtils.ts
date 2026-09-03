@@ -122,8 +122,8 @@ export function isNoSuchKey(error: unknown): boolean {
   if (!(error instanceof Error)) return false;
   const name = (error as { name?: string }).name ?? "";
   const message = error.message ?? "";
-  // 404 缺失对象判定：GetObject 缺失 = NoSuchKey；HeadObject 缺失 = NotFound（AWS/七牛 Kodo 均为
-  // 该错误名，消息文本可能是 "UnknownError" 等——必须按 name 判定，不能只看 message）。
+  // 404 缺失对象判定：缺失对象的错误名随操作/供应商不同——GetObject=NoSuchKey，部分操作（AWS/七牛 Kodo）
+  // 返回 NotFound 且消息文本可能是 "UnknownError" 等，故必须按 name 判定，不能只看 message。
   return name === "NoSuchKey" || name === "NotFound" || message.includes("NoSuchKey") || message.includes("404");
 }
 

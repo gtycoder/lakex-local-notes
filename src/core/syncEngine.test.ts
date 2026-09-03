@@ -178,6 +178,219 @@ describe("syncEngine（共享编排）", () => {
     expect((entry.assets ?? []).some((x: any) => x.filename === assetName)).toBe(false);
   });
 
+  it("S3 差集上传：仅元数据变更重传时，远端清单已声明的资产不重复上传也不探测，清单仍全量声明（回归：稳态空转）", async () => {
+    const s3 = new MemS3();
+    const db = new MemDb();
+    const fn = "1787733338672_a1b2c3d4.png";
+    const body = "<p>hi</p>";
+    const h = hashOf(body);
+    const assetBytes = new TextEncoder().encode("img");
+    // 云端已有正文对象 + 资产对象；远端清单声明了该资产（= 对象此刻被引用、未被 GC → 存在）
+    s3.map.set("p/objects/n1-" + h + ".lake", new TextEncoder().encode(body));
+    s3.map.set("p/assets/n1/" + fn, assetBytes);
+    s3.map.set("p/manifests/latest.json", new TextEncoder().encode(JSON.stringify({
+      version: 4, workspaceId: "default", commitId: "c1", prevCommitId: null, createdAt: "2026-01-01T00:00:00.000Z",
+      notes: [{ id: "n1", title: "旧标题", parentId: null, sortOrder: 0, updatedAt: "2026-01-01T00:00:00.000Z", contentHash: h, isConflict: false, assets: [{ filename: fn, size: assetBytes.length, hash: "a".repeat(64) }] }],
+      folders: [],
+    })));
+    // 本地：正文不变、仅改标题 → sync_state=local（元数据变更触发重传）；本地存在该资产文件
+    db.notes.set("n1", row({ id: "n1", content: body, title: "新标题", syncState: "local", updatedAt: "2026-01-02T00:00:00.000Z" }));
+    db.assets.set("n1/" + fn, assetBytes);
+    const puts: string[] = [];
+    const origPut = s3.putObject.bind(s3);
+    s3.putObject = async (k: string, b: any, o?: any) => { puts.push(k); return origPut(k, b, o); };
+    const r = await syncNow(CFG, s3, db);
+    expect(r.uploaded).toBe(1);                                              // 正文（含新标题）仍发布
+    expect(puts.some((k) => k.startsWith("p/assets/"))).toBe(false);         // 资产既不重复 PUT 也不 GET 探测
+    const manifest = JSON.parse(decode((await s3.getObject("p/manifests/latest.json"))!));
+    const entry = manifest.notes.find((n: any) => n.id === "n1");
+    expect((entry.assets ?? []).some((x: any) => x.filename === fn)).toBe(true); // 清单仍全量声明（GC 红线：不得裁剪声明）
+  });
+
+  it("S3 差集上传：新增资产上传、已声明旧资产跳过", async () => {
+    const s3 = new MemS3();
+    const db = new MemDb();
+    const old = "1_a.png", added = "2_b.png";
+    const body = "<p>hi</p>";
+    const h = hashOf(body);
+    s3.map.set("p/objects/n1-" + h + ".lake", new TextEncoder().encode(body));
+    s3.map.set("p/assets/n1/" + old, new TextEncoder().encode("A"));
+    s3.map.set("p/manifests/latest.json", new TextEncoder().encode(JSON.stringify({
+      version: 4, workspaceId: "default", commitId: "c1", prevCommitId: null, createdAt: "2026-01-01T00:00:00.000Z",
+      notes: [{ id: "n1", title: "T", parentId: null, sortOrder: 0, updatedAt: "2026-01-01T00:00:00.000Z", contentHash: h, isConflict: false, assets: [{ filename: old, size: 1, hash: "c".repeat(64) }] }],
+      folders: [],
+    })));
+    db.notes.set("n1", row({ id: "n1", content: body, syncState: "local", updatedAt: "2026-01-02T00:00:00.000Z" }));
+    db.assets.set("n1/" + old, new TextEncoder().encode("A"));
+    db.assets.set("n1/" + added, new TextEncoder().encode("B"));
+    const puts: string[] = [];
+    const origPut = s3.putObject.bind(s3);
+    s3.putObject = async (k: string, b: any, o?: any) => { puts.push(k); return origPut(k, b, o); };
+    await syncNow(CFG, s3, db);
+    expect(puts).toContain("p/assets/n1/" + added);   // 新增资产上传
+    expect(puts).not.toContain("p/assets/n1/" + old); // 已声明资产走差集跳过（无 PUT、无探测）
+  });
+
+  it("并发上传正文对象失败 → 整轮同步抛错且不发布 manifest（并发 worker 首错上报、无 unhandledRejection）", async () => {
+    const s3 = new MemS3();
+    const db = new MemDb();
+    db.notes.set("n1", row({ id: "n1", content: "<p>a1</p>", syncState: "local" }));
+    db.notes.set("n2", row({ id: "n2", content: "<p>a2</p>", syncState: "local" }));
+    const origPut = s3.putObject.bind(s3);
+    let manifestWritten = false;
+    s3.putObject = async (key: string, body: any, opts?: any) => {
+      if (key.endsWith("manifests/latest.json")) manifestWritten = true;
+      if (key.includes("/objects/n1-")) throw new Error("boom-n1-upload");
+      return origPut(key, body, opts);
+    };
+    await expect(syncNow(CFG, s3, db)).rejects.toThrow("boom-n1-upload");
+    expect(manifestWritten).toBe(false);   // 上传失败即中止，未发布引用未落盘正文的 manifest
+  });
+
+  it("回归：幂等跳过分支（正文一致·远端父非法·元数据不更新）不得解析兜底笔记本（点#1 残留幽灵路径）", async () => {
+    const s3 = new MemS3();
+    const db = new MemDb();
+    let defaultCalled = 0;
+    db.defaultNotebookId = () => { defaultCalled++; return "notebook-uncategorized"; };
+    const H = hashOf("<p>x</p>");
+    // 本地：该笔记正文 H、父指向一个已消失的笔记本（悬空），已同步，元数据基线较新
+    db.notes.set("n1", row({ id: "n1", content: "<p>x</p>", parentId: "dead-notebook", syncState: "synced", updatedAt: "2026-06-01T00:00:00.000Z" }));
+    db.bases.set("n1", { contentHash: H, lastUploadedHash: null, lastSyncedMetaAt: "2026-06-01T00:00:00.000Z" });
+    // 远端：同正文、父目录缺失、updatedAt 更旧（元数据不更新 → decideMetaApply=false）；folders 空 → 本地无笔记本
+    s3.map.set("p/manifests/latest.json", new TextEncoder().encode(JSON.stringify({
+      version: 4, workspaceId: "default", commitId: "c1", prevCommitId: null, createdAt: "2026-01-01T00:00:00.000Z",
+      notes: [{ id: "n1", title: "N", parentId: "folder-missing", sortOrder: 0, updatedAt: "2026-01-01T00:00:00.000Z", contentHash: H, isConflict: false, assets: [] }],
+      folders: [],
+    })));
+    await syncNow(CFG, s3, db);
+    expect(defaultCalled).toBe(0);                                   // 关键：为"探测/跳过"绝不创建"未分类"
+    expect(db.notes.get("n1")!.parentId).toBe("dead-notebook");      // 未应用远端 → 本地父不变
+  });
+
+  it("P1：资产扫描失败→正文照常发布但该篇不 markSynced（留待下轮重扫，防声明被清空→GC 误删）", async () => {
+    const s3 = new MemS3();
+    const db = new MemDb();
+    const content = "<p>x</p>";
+    const h = hashOf(content);
+    db.notes.set("n1", row({ id: "n1", content, syncState: "local" }));
+    db.assets.set("n1/photo.png", new TextEncoder().encode("img"));   // 本地一张待传资产
+    const origPut = s3.putObject.bind(s3);
+    s3.putObject = async (k: string, b: any, o?: any) => {
+      if (k.startsWith("p/assets/")) throw new Error("asset put boom");   // 仅资产上传失败
+      return origPut(k, b, o);
+    };
+    const r = await syncNow(CFG, s3, db);
+    expect(s3.map.has("p/objects/n1-" + h + ".lake")).toBe(true);   // 正文不被资产失败阻断
+    expect(r.published).toBe(true);
+    expect(db.notes.get("n1")!.syncState).toBe("local");            // 关键：资产未齐 → 不 markSynced，下轮重扫重传
+  });
+
+  it("下载侧差集：本地已持同 size/hash 资产 → remote-wins 重下正文但零重下资产（对齐上传侧/dejavu）", async () => {
+    const s3 = new MemS3();
+    const db = new MemDb();
+    const img1 = new TextEncoder().encode("AAAA");
+    const img2 = new TextEncoder().encode("BBBB");
+    const hI1 = sha256Sync(img1), hI2 = sha256Sync(img2);
+    const old = "<p>old</p>", neu = "<p>new</p>";
+    const hOld = hashOf(old), hNew = hashOf(neu);
+    // 本地已有该笔记（synced，正文 old）+ 两张未变资产（size/hash 与远端声明一致）
+    db.notes.set("n1", row({ id: "n1", content: old, syncState: "synced" }));
+    db.bases.set("n1", { contentHash: hOld, lastUploadedHash: hOld, lastSyncedMetaAt: "2026-01-01T00:00:00.000Z" });
+    db.assets.set("n1/a.png", img1);
+    db.assets.set("n1/b.png", img2);
+    // 远端：正文改为 new（触发 remote-wins），资产仍是同样这两张
+    s3.map.set("p/objects/n1-" + hNew + ".lake", new TextEncoder().encode(neu));
+    s3.map.set("p/assets/n1/a.png", img1);
+    s3.map.set("p/assets/n1/b.png", img2);
+    s3.map.set("p/manifests/latest.json", gzipSync(new TextEncoder().encode(JSON.stringify({
+      version: 4, workspaceId: "default", commitId: "c1", prevCommitId: null, createdAt: "2026-01-01T00:00:00.000Z",
+      notes: [{ id: "n1", title: "N", parentId: "notebook-personal", sortOrder: 0, updatedAt: "2026-02-01T00:00:00.000Z", contentHash: hNew, isConflict: false, assets: [{ filename: "a.png", size: 4, hash: hI1 }, { filename: "b.png", size: 4, hash: hI2 }] }],
+      folders: [],
+    }))));
+    const assetGets: string[] = [];
+    const origGet = s3.getObject.bind(s3);
+    s3.getObject = async (k: string, o?: { maxBytes?: number }) => { if (k.startsWith("p/assets/")) assetGets.push(k); return origGet(k, o); };
+    await syncNow(CFG, s3, db);
+    expect(assetGets).toEqual([]);                                  // 关键：未变资产零重下（旧实现会 2 次 GET）
+    expect(db.notes.get("n1")!.content).toBe(neu);                  // 正文照常应用
+  });
+
+  it("下载侧差集：本地缺该资产（未下载过）→ 仍照常 GET 下载（差集不误跳过缺失）", async () => {
+    const s3 = new MemS3();
+    const db = new MemDb();
+    const img1 = new TextEncoder().encode("AAAA");
+    const hI1 = sha256Sync(img1);
+    const neu = "<p>new</p>"; const hNew = hashOf(neu);
+    db.notes.set("n1", row({ id: "n1", content: "<p>old</p>", syncState: "synced" }));
+    db.bases.set("n1", { contentHash: hashOf("<p>old</p>"), lastUploadedHash: hashOf("<p>old</p>"), lastSyncedMetaAt: "2026-01-01T00:00:00.000Z" });
+    s3.map.set("p/objects/n1-" + hNew + ".lake", new TextEncoder().encode(neu));
+    s3.map.set("p/assets/n1/a.png", img1);   // 云端有，本地无
+    s3.map.set("p/manifests/latest.json", gzipSync(new TextEncoder().encode(JSON.stringify({
+      version: 4, workspaceId: "default", commitId: "c1", prevCommitId: null, createdAt: "2026-01-01T00:00:00.000Z",
+      notes: [{ id: "n1", title: "N", parentId: "notebook-personal", sortOrder: 0, updatedAt: "2026-02-01T00:00:00.000Z", contentHash: hNew, isConflict: false, assets: [{ filename: "a.png", size: 4, hash: hI1 }] }],
+      folders: [],
+    }))));
+    await syncNow(CFG, s3, db);
+    expect(db.assets.get("n1/a.png") ? Array.from(db.assets.get("n1/a.png")!) : []).toEqual(Array.from(img1)); // 缺失的仍下载落盘
+  });
+
+  it("缺口2：active→trash 且正文 hash 相同 → 跟随删除不重下正文（用本地内容入回收站）", async () => {
+    const s3 = new MemS3(); const db = new MemDb();
+    const content = "<p>keep me</p>"; const h = hashOf(content);
+    db.notes.set("n1", row({ id: "n1", content, syncState: "synced" }));
+    db.notes.get("n1")!.contentHash = h;                                   // 本地已持该 hash 正文
+    db.bases.set("n1", { contentHash: h, lastUploadedHash: null, lastSyncedMetaAt: "2026-01-01T00:00:00.000Z" });
+    // 远端软删进回收站，正文 hash 不变（删除不改内容）；故意【不放正文对象】——若走 GET 必 MISS → 不会入回收站
+    s3.map.set("p/manifests/latest.json", gzipSync(new TextEncoder().encode(JSON.stringify({
+      version: 4, workspaceId: "default", commitId: "c1", prevCommitId: null, createdAt: "2026-01-01T00:00:00.000Z",
+      notes: [{ id: "n1", title: "N", parentId: "notebook-personal", sortOrder: 0, updatedAt: "2026-02-01T00:00:00.000Z", contentHash: h, isConflict: false, assets: [], trashedAt: "2026-02-01T00:00:00.000Z", deletedFromParentId: "notebook-personal" }],
+      folders: [],
+    }))));
+    const objGets: string[] = []; const orig = s3.getObject.bind(s3);
+    s3.getObject = async (k: string, o?: { maxBytes?: number }) => { if (k.startsWith("p/objects/")) objGets.push(k); return orig(k, o); };
+    await syncNow(CFG, s3, db);
+    expect(objGets).toEqual([]);                                          // 关键：正文 hash 相等 → 未 GET
+    expect(db.notes.get("n1")!.trashedAt).toBeTruthy();                  // 仍正确跟随入回收站
+    expect(db.notes.get("n1")!.content).toBe(content);                   // 内容用本地（等价）
+  });
+
+  it("缺口2：hash 不同（删除方改过正文）→ 仍拉删除方权威内容入回收站（捷径只走 hash 相等）", async () => {
+    const s3 = new MemS3(); const db = new MemDb();
+    const local = "<p>stale</p>"; const tomb = "<p>deleted-side</p>"; const hT = hashOf(tomb);
+    db.notes.set("n1", row({ id: "n1", content: local, syncState: "synced" }));
+    db.notes.get("n1")!.contentHash = hashOf(local);
+    db.bases.set("n1", { contentHash: hashOf(local), lastUploadedHash: null, lastSyncedMetaAt: "2026-01-01T00:00:00.000Z" });
+    s3.map.set("p/objects/n1-" + hT + ".lake", new TextEncoder().encode(tomb));   // 删除方携带的删除前内容
+    s3.map.set("p/manifests/latest.json", gzipSync(new TextEncoder().encode(JSON.stringify({
+      version: 4, workspaceId: "default", commitId: "c1", prevCommitId: null, createdAt: "2026-01-01T00:00:00.000Z",
+      notes: [{ id: "n1", title: "N", parentId: "notebook-personal", sortOrder: 0, updatedAt: "2026-02-01T00:00:00.000Z", contentHash: hT, isConflict: false, assets: [], trashedAt: "2026-02-01T00:00:00.000Z", deletedFromParentId: "notebook-personal" }],
+      folders: [],
+    }))));
+    await syncNow(CFG, s3, db);
+    expect(db.notes.get("n1")!.trashedAt).toBeTruthy();
+    expect(db.notes.get("n1")!.content).toBe(tomb);                      // hash 不同 → 用删除方权威内容（非本地）
+  });
+
+  it("缺口2加固：缓存 hash 谎报相等但本地正文缺失/损坏 → 仍 GET 权威内容自愈（不写空进回收站）", async () => {
+    const s3 = new MemS3(); const db = new MemDb();
+    const body = "<p>authoritative-from-cloud</p>"; const h = hashOf(body);
+    // 模拟桌面：getAllNotes 给 contentHash=缓存 baseHash（不读文件），row.content="" 且 getNote 也读不到正文（文件被外部删/坏）
+    const r = row({ id: "n1", content: body, syncState: "synced" });
+    r.content = "";            // 本地 .lake 实际缺失（按需读盘返回空）
+    r.contentHash = h;         // 但缓存 hash 仍等于远端墓碑正文 hash（陈旧/说谎）
+    db.notes.set("n1", r);
+    db.bases.set("n1", { contentHash: h, lastUploadedHash: null, lastSyncedMetaAt: "2026-01-01T00:00:00.000Z" });
+    s3.map.set("p/objects/n1-" + h + ".lake", new TextEncoder().encode(body));   // 云端权威正文在
+    s3.map.set("p/manifests/latest.json", gzipSync(new TextEncoder().encode(JSON.stringify({
+      version: 4, workspaceId: "default", commitId: "c1", prevCommitId: null, createdAt: "2026-01-01T00:00:00.000Z",
+      notes: [{ id: "n1", title: "N", parentId: "notebook-personal", sortOrder: 0, updatedAt: "2026-02-01T00:00:00.000Z", contentHash: h, isConflict: false, assets: [], trashedAt: "2026-02-01T00:00:00.000Z", deletedFromParentId: "notebook-personal" }],
+      folders: [],
+    }))));
+    await syncNow(CFG, s3, db);
+    expect(db.notes.get("n1")!.trashedAt).toBeTruthy();
+    expect(db.notes.get("n1")!.content).toBe(body);     // 关键：实读不符 → 回退 GET 权威内容（旧实现会把空写进回收站）
+  });
+
   it("二次同步：无变更不重传（skip-fast）", async () => {
     const s3 = new MemS3();
     const db = new MemDb();
@@ -605,6 +818,49 @@ describe("syncEngine（共享编排）", () => {
     expect(db.deletedNotes.has("n1")).toBe(false);
     expect(db.notes.get("n1")!.content).toBe("<p>restored</p>");
     expect(r1.appliedRemote).toBe(1);
+  });
+
+  it("回归：空库同步+无可下载内容（全部本地删除较新跳过）→ 不得急切创建兜底'未分类'（凭空笔记本 bug）", async () => {
+    const s3 = new MemS3();
+    const db = new MemDb();
+    let defaultCalled = 0;
+    db.defaultNotebookId = () => { defaultCalled++; return "notebook-uncategorized"; };
+    const h = hashOf("<p>old</p>");
+    // 本地无任何笔记本 + 本地删除墓碑较新；远端唯一笔记父目录也缺失（若能落地本会回退兜底）
+    db.deletedNotes.add("n1");
+    db.deletedAtMap.set("n1", "2026-01-05T00:00:00.000Z");
+    s3.map.set("p/manifests/latest.json", new TextEncoder().encode(JSON.stringify({
+      version: 4, workspaceId: "default", commitId: "c1", prevCommitId: null, createdAt: "2026-01-01T00:00:00.000Z",
+      notes: [{ id: "n1", title: "旧", parentId: "folder-missing", sortOrder: 0, updatedAt: "2026-01-01T00:00:00.000Z", contentHash: h, isConflict: false, assets: [] }],
+      folders: [],
+    })));
+    const r = await syncNow(CFG, s3, db);
+    expect(r.appliedRemote).toBe(0);
+    expect(db.notes.has("n1")).toBe(false);   // 墓碑较新 → 跳过下载
+    expect(defaultCalled).toBe(0);            // 关键：没有笔记需要安家 → 兜底"未分类"从不创建
+  });
+
+  it("兜底'未分类'惰性且缓存：多篇笔记都需兜底父 → defaultNotebookId 本轮只解析一次", async () => {
+    const s3 = new MemS3();
+    const db = new MemDb();
+    let defaultCalled = 0;
+    db.defaultNotebookId = () => { defaultCalled++; return "notebook-uncategorized"; };
+    const h1 = hashOf("<p>a</p>"), h2 = hashOf("<p>b</p>");
+    s3.map.set("p/objects/n1-" + h1 + ".lake", new TextEncoder().encode("<p>a</p>"));
+    s3.map.set("p/objects/n2-" + h2 + ".lake", new TextEncoder().encode("<p>b</p>"));
+    s3.map.set("p/manifests/latest.json", new TextEncoder().encode(JSON.stringify({
+      version: 4, workspaceId: "default", commitId: "c1", prevCommitId: null, createdAt: "2026-01-01T00:00:00.000Z",
+      notes: [
+        { id: "n1", title: "A", parentId: "folder-missing", sortOrder: 0, updatedAt: "2026-01-01T00:00:00.000Z", contentHash: h1, isConflict: false, assets: [] },
+        { id: "n2", title: "B", parentId: "folder-missing", sortOrder: 0, updatedAt: "2026-01-01T00:00:00.000Z", contentHash: h2, isConflict: false, assets: [] },
+      ],
+      folders: [],
+    })));
+    const r = await syncNow(CFG, s3, db);
+    expect(r.appliedRemote).toBe(2);
+    expect(db.notes.get("n1")!.parentId).toBe("notebook-uncategorized");
+    expect(db.notes.get("n2")!.parentId).toBe("notebook-uncategorized");
+    expect(defaultCalled).toBe(1);            // 缓存：至多建一个"未分类"
   });
 
   it("墓碑保留：本地删除较新 + 远端恢复较旧 → keep-local-delete（不上传覆盖）", async () => {
