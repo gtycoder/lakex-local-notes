@@ -1489,6 +1489,7 @@ ne-card[data-card-name="codeblock"] .ne-card-resizer-mask {
 .history-item-icon { color: var(--b3-theme-on-surface); flex: none; }
 .history-item-main { flex: 1 1 auto; min-width: 0; }
 .history-item-time { font-size: 13px; color: var(--b3-theme-on-background); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.history-item-protected { display: inline-flex; align-items: center; margin-top: 2px; padding: 1px 6px; border-radius: 4px; font-size: 11px; color: #92400e; background: #fef3c7; }
 .history-item-meta { font-size: 11px; color: var(--b3-theme-on-surface-light); margin-top: 2px; }
 .history-item-actions { display: flex; align-items: center; gap: 6px; flex: none; }
 .history-item-actions button, .history-clean-all { display: inline-flex; align-items: center; gap: 5px; padding: 5px 9px; border-radius: var(--b3-border-radius); font-size: 12px; cursor: pointer; border: 1px solid var(--b3-theme-surface-lighter); background: var(--b3-theme-surface); color: var(--b3-theme-on-surface); }

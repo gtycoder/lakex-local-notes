@@ -484,7 +484,7 @@ const dbPort: SyncDbPort = {
       icon: r.icon, updatedAt: r.updated_at, trashedAt: r.trashed_at ?? undefined, deletedFromParentId: r.deleted_from_parent_id ?? undefined,
     }));
   },
-  createHistorySnapshot(noteId, content, meta) {
+  createHistorySnapshot(noteId, content, meta: { title: string; parentId: string | null; sortOrder: number; protectedDays?: number }) {
     const d = db!;
     const h = sha256Sync(new TextEncoder().encode(content));
     d.prepare("INSERT INTO note_history (note_id, content, content_hash, title, parent_id, sort_order, created_at) VALUES (?,?,?,?,?,?,?)")

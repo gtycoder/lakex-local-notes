@@ -40,7 +40,7 @@ export interface LakeNative {
   purgeTrash(id: string): Promise<void>;
   emptyTrash(): Promise<void>;
   createHistorySnapshot(noteId: string, content?: string, force?: boolean): Promise<number | null>;
-  listNoteHistory(noteId: string): Promise<Array<{ id: number; createdAt: string; size: number; contentHash: string; refCount: number; filePath: string }>>;
+  listNoteHistory(noteId: string): Promise<Array<{ id: number; createdAt: string; size: number; contentHash: string; refCount: number; filePath: string; protectedUntil: string | null }>>;
   restoreHistory(historyId: number): Promise<void>;
   deleteHistory(historyId: number): Promise<void>;
   cleanupHistory(): Promise<{ deletedSnapshots: number; freedBytes: number }>;

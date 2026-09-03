@@ -142,8 +142,8 @@ export function createStoreSyncPort(store: Store): SyncDbPort {
         icon: f.icon ?? null, updatedAt: f.updatedAt, trashedAt: f.trashedAt ?? null, deletedFromParentId: f.deletedFromParentId ?? null,
       }));
     },
-    createHistorySnapshot(noteId: string, content: string, meta: { title: string; parentId: string | null; sortOrder: number }): void {
-      try { store.createHistorySnapshot(noteId, content, false); } catch { /* 留档失败不阻断 */ }
+    createHistorySnapshot(noteId: string, content: string, meta: { title: string; parentId: string | null; sortOrder: number; protectedDays?: number }): void {
+      try { store.createHistorySnapshot(noteId, content, false, meta.protectedDays); } catch { /* 留档失败不阻断 */ }
     },
     async saveAsset(noteId: string, filename: string, bytes: Uint8Array): Promise<void> {
       const dir = store.noteAssetsPathFor(noteId);

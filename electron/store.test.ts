@@ -758,6 +758,47 @@ describe("文档历史（快照，纯本地）", () => {
     expect(store.listNoteHistory(id).some((h) => h.contentHash === oldHash)).toBe(false);
   });
 
+  it("B3：冲突归档快照（protectedUntil）不被自动清理，到期自动解除保护，手动删除随时可用", () => {
+    const { id } = makeNote();
+    store.saveNote(id, "B3", "<p>base</p>");
+    // 收紧保留策略：仅保留 1 份 → 未保护的旧快照会被清，受保护的不清
+    store.saveHistorySettings({ maxSnapshots: 1, retentionDays: 0, cleanupIntervalHours: 0, snapshotIntervalMinutes: 0 });
+    // 普通快照 v1
+    store.saveNote(id, "B3", "<p>v1</p>");
+    store.createHistorySnapshot(id);
+    // 冲突归档快照 v2（protectedDays=30）
+    store.saveNote(id, "B3", "<p>v2-superseded</p>");
+    const protectedId = store.createHistorySnapshot(id, undefined, false, 30);
+    expect(protectedId).not.toBeNull();
+    const rows = store.listNoteHistory(id);
+    expect(rows.length).toBe(2);
+    const protectedRow = rows.find((h) => h.id === protectedId);
+    expect(protectedRow).toBeTruthy();
+    expect(protectedRow!.protectedUntil).not.toBeNull();
+    expect(Date.parse(protectedRow!.protectedUntil as string) > Date.now()).toBe(true);
+    // cleanup：maxSnapshots=1 → 普通快照被删，受保护的保留
+    store.cleanupHistory();
+    let after = store.listNoteHistory(id);
+    expect(after.some((h) => h.id === protectedId)).toBe(true);
+    // 到期解除：把 protected_until 拨回过去，再造一条更新快照 v3（无保护）——v2 不再是“最新保留”，
+    // cleanup 应幂等清除其保护并删除（maxSnapshots=1 只留最新）。
+    (store as any).db.prepare("UPDATE note_history SET protected_until=? WHERE id=?").run(new Date(Date.now() - 1000).toISOString(), protectedId);
+    store.saveNote(id, "B3", "<p>v3-newer</p>");
+    const newerId = store.createHistorySnapshot(id) as number;
+    store.cleanupHistory();
+    after = store.listNoteHistory(id);
+    expect(after.some((h) => h.id === protectedId)).toBe(false);
+    expect(after.some((h) => h.id === newerId)).toBe(true);
+    // 幂等性：再次 cleanup 无异常
+    expect(() => store.cleanupHistory()).not.toThrow();
+    // 手动删除任何时候允许（另造一条受保护的验证）
+    store.saveNote(id, "B3", "<p>v3</p>");
+    const pid = store.createHistorySnapshot(id, undefined, false, 30) as number;
+    expect(() => store.deleteHistory(pid)).not.toThrow();
+    expect(store.listNoteHistory(id).some((h) => h.id === pid)).toBe(false);
+  });
+
+
   it("listNoteOrphans / cleanNoteOrphans：被历史引用保护，未引用可清", () => {
     const { id } = makeNote();
     const assetsDir = path.join(dir, "note-assets", id);

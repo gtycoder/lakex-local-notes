@@ -9,7 +9,7 @@ import { createLakeDocument, destroyLakeEditor, type LakeEditorInstance } from "
 import { addAssetAccessToken } from "../lib/assetPort";
 
 export interface HistoryItem {
-  id: number; createdAt: string; size: number; contentHash: string; refCount: number; filePath: string;
+  id: number; createdAt: string; size: number; contentHash: string; refCount: number; filePath: string; protectedUntil: string | null;
 }
 export interface NoteOrphan {
   filename: string; size: number; mimeType: string; protectedByHistory: boolean;
@@ -245,6 +245,11 @@ export function HistoryPanel({ open, noteId, onClose, onRestored }: {
                 <div className="history-item" key={h.id}>
                   <div className="history-item-main" onClick={() => void previewHistoryInline(h)} title="点击预览快照">
                     <div className="history-item-time">{new Date(h.createdAt).toLocaleString()}</div>
+                    {h.protectedUntil && Date.parse(h.protectedUntil) > Date.now() && (
+                      <div className="history-item-protected" title="被远端覆盖时自动保留，保护期内不被自动清理（可手动删除）">
+                        冲突保留 · 剩余 {Math.max(1, Math.ceil((Date.parse(h.protectedUntil) - Date.now()) / (24 * 3600 * 1000)))} 天
+                      </div>
+                    )}
                     <div className="history-item-meta">
                       {(h.size / 1024).toFixed(1)} KB · {h.refCount} 个资源 · {h.contentHash.slice(0, 8)}
                     </div>
