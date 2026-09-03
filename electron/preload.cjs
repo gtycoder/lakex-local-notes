@@ -75,6 +75,8 @@ contextBridge.exposeInMainWorld("lakeNative", {
   downloadRemoteResource: (url, noteId) => invoke("download_remote_resource", url, noteId),
   listOrphanAssets: () => invoke("list_orphan_assets"),
   cleanOrphanAssets: () => invoke("clean_orphan_assets"),
+  deleteOrphanAsset: (id) => invoke("delete_orphan_asset", id),
+  readOrphanPreview: (id) => invoke("read_orphan_preview", id),
   openAttachment: (noteId, filename) => invoke("open_attachment", noteId, filename),
   showAttachmentInFolder: (noteId, filename) => invoke("show_attachment_in_folder", noteId, filename),
   getS3Settings: () => invoke("get_s3_settings"),

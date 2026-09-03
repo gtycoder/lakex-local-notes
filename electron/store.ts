@@ -1442,6 +1442,44 @@ export class Store {
     tx();
   }
 
+  /** 单条删除未引用资源（与 cleanOrphanAssets 同规则：清理前按当前正文/历史引用再校验）。 */
+  deleteOrphanAsset(id: number): { deleted: boolean; freedBytes: number } {
+    const row = this.db.prepare("SELECT * FROM orphan_assets WHERE id=?").get(id) as OrphanAssetRow | undefined;
+    if (!row) return { deleted: false, freedBytes: 0 };
+    const refs = this.assetRepository.getProtectedRefs(row.note_id);
+    if (refs.has(row.filename)) return { deleted: false, freedBytes: 0 };   // 此刻被引用 → 不删
+    const fullPath = path.join(this.root, row.file_path);
+    let freedBytes = 0;
+    try {
+      if (fs.existsSync(fullPath)) {
+        freedBytes = fs.statSync(fullPath).size;
+        fs.unlinkSync(fullPath);
+      }
+      this.db.prepare("DELETE FROM orphan_assets WHERE id=?").run(row.id);
+      return { deleted: true, freedBytes };
+    } catch (error) {
+      console.warn("[store] 删除孤儿资源失败（保留记录待重试）:", fullPath, error);
+      return { deleted: false, freedBytes: 0 };
+    }
+  }
+
+  /** 读取孤儿文件预览（仅图片返回 dataUrl；其它类型/过大返回 supported=false）。 */
+  readOrphanPreview(id: number): { filename: string; mimeType: string; supported: boolean; dataUrl?: string } {
+    const row = this.db.prepare("SELECT * FROM orphan_assets WHERE id=?").get(id) as OrphanAssetRow | undefined;
+    if (!row) throw new AppError("NotFound", "资源记录不存在");
+    const segments = row.file_path.split("/");
+    if (segments.length < 3 || segments[0] !== "note-assets" || !segments.slice(1).every((s) => isSafePathSegment(s))) {
+      throw new AppError("InvalidInput", "非法资源路径");
+    }
+    const mimeType = row.mime_type || "application/octet-stream";
+    const fullPath = path.join(this.root, row.file_path);
+    if (!fs.existsSync(fullPath)) throw new AppError("NotFound", "资源文件已不存在");
+    if (!mimeType.startsWith("image/")) return { filename: row.filename, mimeType, supported: false };
+    const bytes = fs.readFileSync(fullPath);
+    if (bytes.length > 32 * 1024 * 1024) return { filename: row.filename, mimeType, supported: false };  // 过大不进弹层
+    return { filename: row.filename, mimeType, supported: true, dataUrl: `data:${mimeType};base64,${bytes.toString("base64")}` };
+  }
+
   listOrphanAssets(): OrphanAsset[] {
     const rows = this.assetRepository.listOrphanAssets();
     if (rows.length === 0) return rows;

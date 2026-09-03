@@ -105,6 +105,8 @@ export function registerNotesIpc(ipc: IpcRegistrar, store: Store, drafts: DraftJ
   ipc.handle("download_remote_resource", (url: string, noteId: string) => store.downloadRemoteResource(url, noteId));
   ipc.handle("list_orphan_assets", () => store.listOrphanAssets());
   ipc.handle("clean_orphan_assets", () => store.cleanOrphanAssets());
+  ipc.handle("delete_orphan_asset", (id: number) => store.deleteOrphanAsset(Number(id)));
+  ipc.handle("read_orphan_preview", (id: number) => store.readOrphanPreview(Number(id)));
   /** 附件操作（桌面本地优先：文件本来就在磁盘）：用系统默认应用打开 / 在文件夹中显示。
    * 路径安全：noteId + filename 双段校验（isSafePathSegment），只允许 note-assets 目录内。 */
   ipc.handle("open_attachment", (noteId: string, filename: string) => {

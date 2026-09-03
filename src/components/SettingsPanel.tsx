@@ -61,6 +61,8 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
   const [gcPendingRows, setGcPendingRows] = useState<S3GcPendingItem[]>([]);
   const [orphans, setOrphans] = useState<OrphanAsset[]>([]);
   const [orphanBusy, setOrphanBusy] = useState(false);
+  const [busyId, setBusyId] = useState<number | null>(null);
+  const [preview, setPreview] = useState<{ filename: string; mimeType: string; supported: boolean; dataUrl?: string } | null>(null);
 
   const refreshGcPending = async () => {
     try {
@@ -220,6 +222,25 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
   };
   const refreshOrphans = async () => {
     try { setOrphans(await native.listOrphanAssets()); } catch { /* 忽略 */ }
+  };
+  const previewOrphan = async (o: OrphanAsset) => {
+    if (busyId !== null) return;
+    setBusyId(o.id); setSyncMsg(null);
+    try { setPreview(await native.readOrphanPreview(o.id)); }
+    catch (err) { setSyncMsg(getNativeErrorMessage(err)); }
+    finally { setBusyId(null); }
+  };
+  const deleteOne = async (o: OrphanAsset) => {
+    if (busyId !== null) return;
+    if (!window.confirm(`删除未引用资源「${o.filename}」？`)) return;
+    setBusyId(o.id); setSyncMsg(null);
+    try {
+      const r = await native.deleteOrphanAsset(o.id);
+      if (r.deleted) setSyncMsg(`已删除「${o.filename}」（释放 ${formatBytes(r.freedBytes)}）`);
+      else setSyncMsg(`「${o.filename}」此刻仍被引用或删除失败，已保留`);
+      await refreshOrphans();
+    } catch (err) { setSyncMsg(getNativeErrorMessage(err)); }
+    finally { setBusyId(null); }
   };
   const cleanOrphans = async () => {
     if (orphanBusy || orphans.length === 0) return;
@@ -458,30 +479,66 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
             )}
 
             {category === "resources" && (
+              <>
               <section className="settings-group">
                 <h4><Paperclip size={13} /> 未引用资源（本地）</h4>
-                <p className="settings-hint">从文档删除的图片/附件会先出现在这里（删除动作不移除文件，它可能仍被历史引用）。被当前正文或历史快照引用的资源受保护，清理时会自动跳过；清理后本地文件被删除、不再上传，云端副本由“云端回收”收回。文档进入回收站时其孤儿仍列出（正文已不引用），文档被彻底删除时相关资源与孤儿随文档一并清理。</p>
-                <div className="settings-row" style={{ gap: 6 }}>
+                <p className="settings-hint">
+                  从文档删除的图片/附件会先出现在这里（删除动作不移除文件，它可能仍被历史引用）。被当前正文或历史快照引用的资源受保护，清理/删除时会自动跳过；清理后本地文件删除、不再上传，云端副本由“云端回收”收回。文档在回收站时其孤儿仍列出，文档被彻底删除时随 purge 一并清理。
+                </p>
+                <div className="settings-row" style={{ flexWrap: "wrap", rowGap: 6, gap: 8, alignItems: "center" }}>
+                  <span style={{ fontSize: 12, color: "#48515c" }}>
+                    共 <strong>{orphans.length}</strong> 个 · {formatBytes(orphans.reduce((s, o) => s + (o.size || 0), 0))} · 涉及 {groupedOrphans.length} 篇文档
+                  </span>
+                  <span style={{ flex: 1 }} />
                   <button className="settings-choice" onClick={() => void refreshOrphans()}>刷新</button>
-                  <button className="settings-choice" onClick={() => void cleanOrphans()} disabled={orphanBusy || orphans.length === 0}>{orphanBusy ? "清理中…" : `清理全部可清（${orphans.length}）`}</button>
+                  <button className="settings-choice" onClick={() => void cleanOrphans()} disabled={orphanBusy || orphans.length === 0}>{orphanBusy ? "清理中…" : `清理全部（${orphans.length}）`}</button>
                 </div>
                 {orphans.length === 0 ? (
-                  <p className="settings-hint">没有未引用的资源。</p>
+                  <p className="settings-hint" style={{ marginTop: 8 }}>没有未引用的资源。</p>
                 ) : (
-                  <div style={{ maxHeight: 260, overflow: "auto", fontSize: 12, lineHeight: 1.7, marginTop: 6 }}>
+                  <div style={{ marginTop: 8, maxHeight: 320, overflow: "auto", paddingRight: 4 }}>
                     {groupedOrphans.map((g) => (
-                      <div key={g.title + "|" + g.state} style={{ marginBottom: 8 }}>
-                        <div style={{ fontWeight: 600 }}>
-                          {g.title}{g.state === "trash" ? "（回收站）" : g.state === "missing" ? "（文档已删除）" : ""} · {g.items.length} 个
+                      <div key={g.title + "|" + g.state} style={{ marginBottom: 10 }}>
+                        <div style={{ display: "flex", alignItems: "baseline", gap: 8, fontSize: 13, fontWeight: 600, marginBottom: 4 }}>
+                          <Paperclip size={13} />
+                          <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", minWidth: 0 }}>{g.title}</span>
+                          {g.state === "trash" && <span style={{ fontSize: 11, color: "#b45309" }}>回收站</span>}
+                          {g.state === "missing" && <span style={{ fontSize: 11, color: "#b91c1c" }}>文档已删除</span>}
+                          <span style={{ fontSize: 11, color: "#6b7280", fontWeight: 400 }}>{g.items.length} 个</span>
                         </div>
                         {g.items.map((o) => (
-                          <div key={o.id} style={{ paddingLeft: 12, color: "#48515c" }}>· {o.filename} · {formatBytes(o.size)} · 登记于 {o.detectedAt.slice(0, 10)}</div>
+                          <div key={o.id} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, padding: "3px 6px", borderRadius: 6, background: "rgba(127,127,127,0.07)", marginBottom: 2 }}>
+                            <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1, minWidth: 0 }} title={o.filename}>{o.filename}</span>
+                            <span style={{ color: "#6b7280", whiteSpace: "nowrap" }}>{formatBytes(o.size)} · {o.detectedAt.slice(0, 10)}</span>
+                            {o.mimeType.startsWith("image/") && (
+                              <button className="settings-choice" style={{ padding: "0 8px" }} onClick={() => void previewOrphan(o)} disabled={busyId !== null}>预览</button>
+                            )}
+                            <button className="settings-choice" style={{ padding: "0 8px" }} onClick={() => void deleteOne(o)} disabled={busyId !== null}>{busyId === o.id ? "…" : "删除"}</button>
+                          </div>
                         ))}
                       </div>
                     ))}
                   </div>
                 )}
               </section>
+              {preview && (
+                <div onClick={(ev) => { if (ev.target === ev.currentTarget) setPreview(null); }} style={{ position: "fixed", inset: 0, zIndex: 1600, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                  <div style={{ background: "#fff", color: "#222", borderRadius: 10, padding: 16, maxWidth: "86vw", maxHeight: "86vh", overflow: "auto" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
+                      <span style={{ fontWeight: 600, fontSize: 13 }}>{preview.filename}</span>
+                      <span style={{ fontSize: 11, color: "#6b7280" }}>{preview.mimeType}</span>
+                      <span style={{ flex: 1 }} />
+                      <button className="settings-choice" onClick={() => setPreview(null)}>关闭</button>
+                    </div>
+                    {preview.supported && preview.dataUrl ? (
+                      <img src={preview.dataUrl} alt={preview.filename} style={{ maxWidth: "78vw", maxHeight: "62vh", objectFit: "contain" }} />
+                    ) : (
+                      <p style={{ fontSize: 13 }}>该类型暂不支持预览（文件仍可删除）。</p>
+                    )}
+                  </div>
+                </div>
+              )}
+              </>
             )}
             {category === "trash" && (
               <section className="settings-group">
