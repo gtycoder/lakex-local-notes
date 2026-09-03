@@ -20,6 +20,10 @@ export interface LakeNative {
   getNotePaths(id: string): Promise<{ title: string; lakePath: string; assetsDir: string }>;
   pickExportDir(): Promise<string | null>;
   exportNote(id: string, format: "markdown" | "html" | "lake" | "docx" | "pdf", baseDir?: string): Promise<{ format: string; exportPath: string; imageCount: number; skipped: number; size: number }>;
+  pickBackupDir(): Promise<string | null>;
+  runWorkspaceBackup(dir: string): Promise<{ backupPath: string; copiedDirs: string[] }>;
+  prepareCloudRestore(): Promise<{ quarantinePath: string }>;
+  confirmRelaunch(): Promise<boolean>;
   setNodeIcon(id: string, icon: string | null): Promise<TreeNode>;
   searchNotes(query: string, limit?: number): Promise<Array<{ id: string; title: string; snippet: string; matchType: "title" | "body"; updatedAt?: string; parentTitle?: string | null }>>;
   deleteNote(id: string): Promise<void>;
@@ -125,6 +129,10 @@ export const native = {
   getNotePaths: (id: string) => api().getNotePaths(id),
   pickExportDir: () => api().pickExportDir(),
   exportNote: (id: string, format: "markdown" | "html" | "lake" | "docx" | "pdf", baseDir?: string) => api().exportNote(id, format, baseDir),
+  pickBackupDir: () => api().pickBackupDir(),
+  runWorkspaceBackup: (dir: string) => api().runWorkspaceBackup(dir),
+  prepareCloudRestore: () => api().prepareCloudRestore(),
+  confirmRelaunch: () => api().confirmRelaunch(),
   setNodeIcon: (id: string, icon: string | null) => api().setNodeIcon(id, icon),
   searchNotes: (query: string, limit?: number) => api().searchNotes(query, limit),
   deleteNote: (id: string) => api().deleteNote(id),

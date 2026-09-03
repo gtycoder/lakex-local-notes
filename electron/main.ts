@@ -349,7 +349,7 @@ function registerIpc(): void {
     if (!isTrustedSenderFrame(event.senderFrame, event.sender)) throw new Error("IPC 调用来源不受信任");
   }, afterInvoke);
 
-  registerNotesIpc(ipc, store, drafts);
+  registerNotesIpc(ipc, store, drafts, workspaceRoot());
   registerHistoryIpc(ipc, store, () => restartHistoryTimers?.());
   registerSyncIpc(ipc, {
     store,

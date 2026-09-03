@@ -64,6 +64,9 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
   // A3 数据体检：只读三查报告
   const [health, setHealth] = useState<DataHealthReport | null>(null);
   const [healthBusy, setHealthBusy] = useState(false);
+  // A1/A2 备份与恢复
+  const [backupMsg, setBackupMsg] = useState<string | null>(null);
+  const [backupBusy, setBackupBusy] = useState(false);
   // F1 日志查看
   const [logRows, setLogRows] = useState<Array<{ line: string; hit: boolean }>>([]);
   const [logKeyword, setLogKeyword] = useState("");
@@ -86,6 +89,39 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
   const [busyId, setBusyId] = useState<number | null>(null);
   const [sel, setSel] = useState<RemovedAsset | null>(null);
   const [pv, setPv] = useState<{ filename: string; mimeType: string; supported: boolean; dataUrl?: string } | null>(null);
+
+  /** A1 整库备份：选目录 → 备份到 <dir>/lake-notes-backup-<ts>/。 */
+  const runBackup = async () => {
+    if (backupBusy) return;
+    setBackupBusy(true);
+    setBackupMsg(null);
+    try {
+      const dir = await native.pickBackupDir();
+      if (!dir) return;
+      const r = await native.runWorkspaceBackup(dir);
+      setBackupMsg(`备份完成：${r.backupPath}（目录 ${r.copiedDirs.length} 个）`);
+    } catch (e) {
+      setBackupMsg(`备份失败：${getNativeErrorMessage(e)}`);
+    } finally {
+      setBackupBusy(false);
+    }
+  };
+
+  /** A2 云端恢复（换机/坏库）：隔离备份当前数据 → 全新空库 → 重启后首次同步全量拉取。 */
+  const runCloudRestore = async () => {
+    if (!window.confirm("从云端恢复将：① 把当前全部本地数据改名隔离保存（可手动找回）；② 清空工作区为全新空库；③ 重启后首次同步从云端全量拉取（只拉不打）。继续？")) return;
+    setBackupBusy(true);
+    setBackupMsg(null);
+    try {
+      const { quarantinePath } = await native.prepareCloudRestore();
+      window.alert(`当前数据已隔离备份到：\n${quarantinePath}\n\n应用即将重启并从云端恢复。`);
+      await native.confirmRelaunch();
+    } catch (e) {
+      setBackupMsg(`云端恢复失败：${getNativeErrorMessage(e)}`);
+    } finally {
+      setBackupBusy(false);
+    }
+  };
 
   /** F1 日志查看：尾部关键字过滤（GC/sync/trash 等），纯读。 */
   const runLogLoad = async (keyword: string) => {
@@ -514,6 +550,15 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
                       <p className="settings-hint">S3 配置与同步策略均为本机配置，不会上传云端；A 端关闭不影响 B 端。</p>
                     </>
                   )}
+                </section>
+                <section className="settings-group">
+                  <h4><Files size={13} /> 备份与恢复</h4>
+                  <div className="settings-row" style={{ flexWrap: "wrap", gap: 8 }}>
+                    <button className="settings-choice" onClick={() => void runBackup()} disabled={backupBusy}><Files size={12} /> {backupBusy ? "备份中…" : "整库备份到…"}</button>
+                    <button className="settings-choice" onClick={() => void runCloudRestore()} disabled={backupBusy} style={{ color: "#b91c1c" }}>从云端恢复（换机/坏库）…</button>
+                  </div>
+                  {backupMsg && <p className="settings-hint">{backupMsg}</p>}
+                  <p className="settings-hint">整库备份：数据库 + 全部笔记/资源/历史快照 + 小记，导出到所选目录（不覆盖非空目录）。云端恢复：当前数据先改名隔离保存，再以全新空库从云端全量拉取（只拉不打）。</p>
                 </section>
                 <section className="settings-group">
                   <h4><Cloud size={13} /> S3 连接（凭据仅保存在当前设备）</h4>
