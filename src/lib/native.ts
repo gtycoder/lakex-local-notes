@@ -81,7 +81,7 @@ export interface LakeNative {
   saveS3GcSettings(settings: S3GcSettings): Promise<void>;
   listS3GcPending(): Promise<S3GcPendingItem[]>;
   listS3GcLog(): Promise<S3GcLogItem[]>;
-  runS3GcReconcile(): Promise<{ deleted: number; kept: number }>;
+  runS3GcReconcile(): Promise<{ deleted: number; kept: number; clearedReferenced: number; ageUnknown: number }>;
   runS3DeepCleanup(dryRun: boolean): Promise<DeepCleanupResult>;
   getTrashReminder(): Promise<Array<{ id: string; title: string; deletedAt: string }>>;
   onSyncProgress(callback: (progress: SyncProgress) => void): () => void;

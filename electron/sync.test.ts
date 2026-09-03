@@ -1267,6 +1267,60 @@ describe("S3 GC v4 语义（M0/M2）— 回收站笔记本", () => {
   });
 });
 
+
+describe("S3 GC 语义修正（2026-09-03）", () => {
+  beforeEach(() => s3.reset());
+
+  it("对账：已过窗口但仍被引用的 pending 行 → 清表不动对象（表只反映真冗余）", async () => {
+    const store = newStore();
+    store.createNote("n1", "笔记A", "<p>v1</p>");
+    await syncNow(store as unknown as Store);
+    const h1 = store.contentHash("n1");
+    // 模拟脏数据/他端恢复：对象其实仍被 latest 引用，但本地残留一条超窗待回收行
+    store.gcPending.set(`objects/n1-${h1}.lake`, "2020-01-01T00:00:00.000Z");
+
+    const r = await runGcReconcile(store as unknown as Store);
+    expect(r.deleted).toBe(0);                                  // 不删仍在引用的对象
+    expect(r.clearedReferenced).toBe(1);                        // 清掉表内冗余行
+    expect(store.gcPending.has(`objects/n1-${h1}.lake`)).toBe(false);
+    expect(s3.bucket.has(key(`objects/n1-${h1}.lake`))).toBe(true); // 云端对象完好
+  });
+
+  it("对账：窗口内行保留；超窗未引用行删除（口径与深度清理一致）", async () => {
+    const store = newStore();
+    store.createNote("n1", "笔记A", "<p>v1</p>");
+    await syncNow(store as unknown as Store);
+    store.createNote("n2", "笔记B", "<p>v1</p>");
+    await syncNow(store as unknown as Store);
+    // 窗口内：刚标记的孤儿（保留）
+    store.addS3GcPending("objects/in-window-orphan.lake");
+    // 超窗未引用：删
+    store.addS3GcPending("objects/dead-orphan.lake", "2020-01-01T00:00:00.000Z");
+    const r = await runGcReconcile(store as unknown as Store);
+    expect(r.deleted).toBe(1);
+    expect(r.kept).toBeGreaterThanOrEqual(1);
+    expect(store.gcPending.has("objects/in-window-orphan.lake")).toBe(true);
+    expect(store.gcPending.has("objects/dead-orphan.lake")).toBe(false);
+  });
+
+  it("深度清理尊重本机待回收窗口：刚被移除的旧对象不被创建年龄提前清掉", async () => {
+    const store = newStore();
+    store.createNote("n1", "笔记A", "<p>v1</p>");
+    await syncNow(store as unknown as Store);
+    const orphan = "objects/recently-removed.lake";
+    s3.bucket.set(key(orphan), Buffer.from("x", "utf8"));   // FakeS3 lastModified=1970 → 已超创建窗
+    store.addS3GcPending(orphan);                            // 但标记为刚移除（窗口内）
+    const dry = await runDeepCleanup(store as unknown as Store, { dryRun: true });
+    expect(dry.keys).not.toContain(orphan);                  // 移除窗口保护生效
+    // 窗口过后（标记改超窗）→ 可回收
+    store.gcPending.set(orphan, "2020-01-01T00:00:00.000Z");
+    const dry2 = await runDeepCleanup(store as unknown as Store, { dryRun: true });
+    expect(dry2.keys).toContain(orphan);
+    await runDeepCleanup(store as unknown as Store);
+    expect(s3.bucket.has(key(orphan))).toBe(false);
+  });
+});
+
 describe("manifest gzip（实验/manifest-gzip）", () => {
   it("manifest 以 gzip 存储，体积小于原始，读取透明解压", async () => {
     const storeA = newStore();
