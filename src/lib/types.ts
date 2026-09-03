@@ -150,6 +150,23 @@ export interface SyncResult {
   supersededNotes: Array<{ id: string; title: string }>;
 }
 
+/** A3 数据体检（只读诊断）报告：检查本地数据自洽性，不自动修复。 */
+export interface DataHealthReport {
+  notesChecked: number;
+  notesMissingFile: Array<{ id: string; title: string }>;
+  notesHashMismatch: Array<{ id: string; title: string }>;
+  historyChecked: number;
+  historyMissingFile: number;
+  historyMissingSample: Array<{ id: number; noteId: string; filePath: string }>;
+  orphanRowsChecked: number;
+  orphanRowsFileMissing: Array<{ id: number; noteId: string; filename: string }>;
+  checkedAt: string;
+}
+
+/** F3：上次历史清理结果（无记录 → null）。 */
+export type LastHistoryCleanup = { at: string; deletedSnapshots: number; freedBytes: number } | null;
+
+
 export interface SyncProgress {
   phase: "connect" | "download" | "upload" | "manifest" | "quick-notes" | "done";
   /** 主循环进度：笔记 / 小记条目 */

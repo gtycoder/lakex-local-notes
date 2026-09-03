@@ -1,4 +1,4 @@
-import type { CleanOrphanResult, DeepCleanupResult, DraftJournalEntry, NoteDigest, NoteDocument, OrphanAsset, QuickNoteDocument, QuickNoteImage, QuickNoteTrashItem, ResourceUploadInput, ResourceUploadOutput, S3GcLogItem, S3GcPendingItem, S3GcSettings, S3Settings, SaveQuickNoteInput, SyncProgress, SyncResult, SyncSettings, SyncStatusInfo, TreeNode, WorkspaceSnapshot } from "./types";
+import type { CleanOrphanResult, DataHealthReport, DeepCleanupResult, DraftJournalEntry, LastHistoryCleanup, NoteDigest, NoteDocument, OrphanAsset, QuickNoteDocument, QuickNoteImage, QuickNoteTrashItem, ResourceUploadInput, ResourceUploadOutput, S3GcLogItem, S3GcPendingItem, S3GcSettings, S3Settings, SaveQuickNoteInput, SyncProgress, SyncResult, SyncSettings, SyncStatusInfo, TreeNode, WorkspaceSnapshot } from "./types";
 import type { TrashItem } from "../core/trashRepository";
 import type { GcDiagnostics } from "../core/gcDiagnostics";
 
@@ -47,6 +47,7 @@ export interface LakeNative {
   getHistorySettings(): Promise<{ maxSnapshots: number; retentionDays: number; cleanupIntervalHours: number; snapshotIntervalMinutes: number }>;
   saveHistorySettings(settings: { maxSnapshots: number; retentionDays: number; cleanupIntervalHours: number; snapshotIntervalMinutes: number }): Promise<void>;
   getHistoryStats(): Promise<{ snapshotCount: number; totalBytes: number }>;
+  getLastHistoryCleanup(): Promise<LastHistoryCleanup>;
   listNoteOrphans(noteId: string): Promise<Array<{ filename: string; size: number; mimeType: string; protectedByHistory: boolean }>>;
   previewHistorySnapshot(historyId: number): Promise<{ plain: string; html: string; createdAt: string; contentHash: string } | null>;
   previewNoteOrphan(noteId: string, filename: string): Promise<{ kind: "image" | "text"; data: string; size: number } | null>;
@@ -88,6 +89,7 @@ export interface LakeNative {
   listS3GcPending(): Promise<S3GcPendingItem[]>;
   listS3GcLog(): Promise<S3GcLogItem[]>;
   runS3GcDiagnostics(): Promise<GcDiagnostics>;
+  runDataHealthCheck(): Promise<DataHealthReport>;
   runS3GcReconcile(ignoreRetention?: boolean): Promise<{ deleted: number; kept: number; clearedReferenced: number; ageUnknown: number }>;
   runS3DeepCleanup(dryRun: boolean, ignoreRetention?: boolean): Promise<DeepCleanupResult>;
   getTrashReminder(): Promise<Array<{ id: string; title: string; deletedAt: string }>>;
@@ -148,6 +150,7 @@ export const native = {
   getHistorySettings: () => api().getHistorySettings(),
   saveHistorySettings: (settings: { maxSnapshots: number; retentionDays: number; cleanupIntervalHours: number; snapshotIntervalMinutes: number }) => api().saveHistorySettings(settings),
   getHistoryStats: () => api().getHistoryStats(),
+  getLastHistoryCleanup: () => api().getLastHistoryCleanup(),
   listNoteOrphans: (noteId: string) => api().listNoteOrphans(noteId),
   previewHistorySnapshot: (historyId: number) => api().previewHistorySnapshot(historyId),
   previewNoteOrphan: (noteId: string, filename: string) => api().previewNoteOrphan(noteId, filename),
@@ -187,6 +190,7 @@ export const native = {
   listS3GcPending: () => api().listS3GcPending(),
   listS3GcLog: () => api().listS3GcLog(),
   runS3GcDiagnostics: () => api().runS3GcDiagnostics(),
+  runDataHealthCheck: () => api().runDataHealthCheck(),
   runS3GcReconcile: (ignoreRetention = false) => api().runS3GcReconcile(ignoreRetention),
   runS3DeepCleanup: (dryRun: boolean, ignoreRetention = false) => api().runS3DeepCleanup(dryRun, ignoreRetention),
   getTrashReminder: () => api().getTrashReminder(),

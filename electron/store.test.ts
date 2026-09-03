@@ -1630,3 +1630,56 @@ describe("A 方案 declared_assets（桌面 store）", () => {
     expect(store.listDeclaredAssets(b.id)).toHaveLength(1);
   });
 });
+
+describe("A3 数据体检（runDataHealthCheck，只读）", () => {
+  it("健康库：无缺失无漂移，计数正确", () => {
+    const note = store.createNote("体检正常");
+    store.saveNote(note.id, "体检正常", "<p>hello</p>");
+    store.createHistorySnapshot(note.id);
+    const r = store.runDataHealthCheck();
+    expect(r.notesChecked).toBeGreaterThanOrEqual(1);
+    expect(r.notesMissingFile).toEqual([]);
+    expect(r.notesHashMismatch).toEqual([]);
+    expect(r.historyMissingFile).toBe(0);
+    expect(r.orphanRowsFileMissing).toEqual([]);
+    expect(r.checkedAt).toBeTruthy();
+  });
+
+  it("正文文件缺失/哈希不符被识别", () => {
+    const note = store.createNote("体检缺失");
+    store.saveNote(note.id, "体检缺失", "<p>v1</p>");
+    // 建立基线（setBaseHash 模拟已同步），然后删 .lake → 缺失
+    const lakePath = (store as any).notePath(note.id);
+    const hash1 = crypto.createHash("sha256").update(fs.readFileSync(lakePath)).digest("hex");
+    store.setBaseHash(note.id, hash1);
+    // 用脏内容覆盖 .lake → hash 不符
+    fs.writeFileSync(lakePath, "<p>corrupted</p>");
+    let r = store.runDataHealthCheck();
+    expect(r.notesHashMismatch.some((x) => x.id === note.id)).toBe(true);
+    // 直接删文件 → 缺失
+    fs.rmSync(lakePath, { force: true });
+    r = store.runDataHealthCheck();
+    expect(r.notesMissingFile.some((x) => x.id === note.id)).toBe(true);
+  });
+
+  it("历史快照文件缺失被识别", () => {
+    const note = store.createNote("快照缺失");
+    store.saveNote(note.id, "快照缺失", "<p>v1</p>");
+    const sid = store.createHistorySnapshot(note.id) as number;
+    const rows = (store as any).db.prepare("SELECT file_path FROM note_history WHERE id=?").get(sid) as { file_path: string };
+    fs.rmSync(path.join(dir, rows.file_path), { force: true });
+    const r = store.runDataHealthCheck();
+    expect(r.historyMissingFile).toBeGreaterThanOrEqual(1);
+    expect(r.historyMissingSample.some((h) => h.id === sid)).toBe(true);
+  });
+
+  it("孤儿登记漂移（登记文件缺失）被识别", () => {
+    // 直接插一条指向不存在文件的孤儿登记（绕过 registerOrphan 的写盘）
+    const note = store.createNote("孤儿漂移");
+    const fakePath = `note-assets/${note.id}/1786123456789_deadbeef.png`;
+    (store as any).db.prepare("INSERT INTO orphan_assets(note_id,filename,file_path,size,mime_type) VALUES(?,?,?,?,?)")
+      .run(note.id, "1786123456789_deadbeef.png", fakePath, 5, "image/png");
+    const r = store.runDataHealthCheck();
+    expect(r.orphanRowsFileMissing.some((o) => o.noteId === note.id)).toBe(true);
+  });
+});

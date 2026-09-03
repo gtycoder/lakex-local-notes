@@ -76,6 +76,7 @@ export function registerSyncIpc(ipc: IpcRegistrar, deps: SyncIpcDeps): void {
   ipc.handle("test_s3_connection", () => testConnection(store));
   ipc.handle("get_s3_gc_settings", () => store.getS3GcSettings());
   ipc.handle("get_trash_reminder", () => store.listTrashReminder(store.getS3GcSettings().trashAutoPurgeDays));
+  ipc.handle("run_data_health_check", () => store.runDataHealthCheck());
   ipc.handle("save_s3_gc_settings", (settings: unknown) => {
     if (!settings || typeof settings !== "object") throw new IpcInputError("云端回收配置格式无效");
     const s = settings as Record<string, unknown>;

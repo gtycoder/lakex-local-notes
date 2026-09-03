@@ -2,9 +2,9 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { AlignLeft, Cloud, Files, History, Info, Keyboard, ListTree, Monitor, Moon, PanelTop, Paperclip, Search, Settings, Sun, Trash2, Type } from "lucide-react";
 import { fontSizeOptions, type AppSettings } from "../lib/settings";
 import { native } from "../lib/native";
-import type { CleanOrphanResult, S3GcPendingItem, S3Settings, SyncSettings } from "../lib/types";
+import type { CleanOrphanResult, DataHealthReport, S3GcPendingItem, S3Settings, SyncSettings } from "../lib/types";
 import type { GcDiagnostics } from "../core/gcDiagnostics";
-import { gcCutoffMs, parseIsoMs } from "../core/gcPolicy";
+import { gcCutoffMs, parseIsoMs, pendingKeyReason } from "../core/gcPolicy";
 import { useFloatingDialog } from "./useFloatingDialog";
 import { filterSettingsNav } from "./settingsSearch";
 import { getNativeErrorMessage } from "../lib/nativeErrors";
@@ -60,6 +60,10 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
   const [histCfg, setHistCfg] = useState<{ maxSnapshots: number; retentionDays: number; cleanupIntervalHours: number; snapshotIntervalMinutes: number } | null>(null);
   const [histMsg, setHistMsg] = useState<string | null>(null);
   const [histBusy, setHistBusy] = useState(false);
+  const [lastCleanup, setLastCleanup] = useState<{ at: string; deletedSnapshots: number; freedBytes: number } | null>(null);
+  // A3 数据体检：只读三查报告
+  const [health, setHealth] = useState<DataHealthReport | null>(null);
+  const [healthBusy, setHealthBusy] = useState(false);
 
   const [s3, setS3] = useState<S3Settings>(S3_DEFAULTS);
   const [gcCfg, setGcCfg] = useState<{ gcRetentionDays: number; gcIntervalHours: number; trashAutoPurgeDays: number } | null>(null);
@@ -77,6 +81,19 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
   const [busyId, setBusyId] = useState<number | null>(null);
   const [sel, setSel] = useState<RemovedAsset | null>(null);
   const [pv, setPv] = useState<{ filename: string; mimeType: string; supported: boolean; dataUrl?: string } | null>(null);
+
+  /** A3 数据体检：只读三查（notes↔文件/hash、history↔文件、orphan 登记↔文件）。 */
+  const runHealth = async () => {
+    setHealthBusy(true);
+    try {
+      const report = await native.runDataHealthCheck();
+      setHealth(report);
+    } catch (e) {
+      setHistMsg(`数据体检失败：${getNativeErrorMessage(e)}`);
+    } finally {
+      setHealthBusy(false);
+    }
+  };
 
   const refreshGcPending = async () => {
     try {
@@ -126,6 +143,7 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
     setCategory(openCategory);
     void native.getHistoryStats().then(setStats).catch(() => undefined);
     void native.getHistorySettings().then(setHistCfg).catch(() => undefined);
+    void native.getLastHistoryCleanup().then(setLastCleanup).catch(() => undefined);
     void native.getS3Settings().then((v) => v && setS3(v)).catch(() => undefined);
     void native.getS3GcSettings().then(setGcCfg).catch(() => undefined);
     void native.getSyncSettings().then(setSyncCfg).catch(() => undefined);
@@ -405,6 +423,9 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
                     <button className="settings-choice" onClick={() => void runCleanup()} disabled={histBusy}><Trash2 size={12} /> {histBusy ? "清理中…" : "立即清理"}</button>
                   </div>
                   {histMsg && <p className="settings-hint">{histMsg}</p>}
+                  {lastCleanup && (
+                    <p className="settings-hint">上次清理：{formatDateTime(Date.parse(lastCleanup.at))} · {lastCleanup.deletedSnapshots} 份 · {formatBytes(lastCleanup.freedBytes)}</p>
+                  )}
                   {histCfg && (
                     <>
                       <div className="settings-field"><span>每文档上限</span><input type="number" min={20} max={1000} value={histCfg.maxSnapshots} onChange={(e) => saveHistCfg({ maxSnapshots: Math.max(1, Number(e.target.value) || 100) })} /></div>
@@ -414,6 +435,32 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
                     </>
                   )}
                   <p className="settings-hint">历史快照保存在本机，不参与同步。保留策略修改即时生效。</p>
+                </section>
+                <section className="settings-group">
+                  <h4><Info size={13} /> 数据体检（只读诊断）</h4>
+                  <div className="settings-row" style={{ alignItems: "center", gap: 8, fontSize: 12, color: "#48515c" }}>
+                    <button className="settings-choice" onClick={() => void runHealth()} disabled={healthBusy}><Search size={12} /> {healthBusy ? "检查中…" : "运行检查"}</button>
+                    {health && healthBusy === false && (
+                      <span>
+                        笔记 {health.notesChecked} · 快照 {health.historyChecked} · 孤儿登记 {health.orphanRowsChecked}
+                      </span>
+                    )}
+                  </div>
+                  {health && (
+                    <div style={{ marginTop: 6, fontSize: 12, lineHeight: 1.7 }}>
+                      {health.notesMissingFile.length === 0 && health.notesHashMismatch.length === 0 && health.historyMissingFile === 0 && health.orphanRowsFileMissing.length === 0 ? (
+                        <p className="settings-hint" style={{ color: "#15803d" }}>✓ 全部自洽：正文文件、历史快照、孤儿登记均与数据库一致。</p>
+                      ) : (
+                        <>
+                          {health.notesMissingFile.length > 0 && <p className="settings-hint" style={{ color: "#b91c1c" }}>✗ {health.notesMissingFile.length} 篇笔记正文文件缺失（首 3：{health.notesMissingFile.slice(0, 3).map((n) => n.title).join("、")}）</p>}
+                          {health.notesHashMismatch.length > 0 && <p className="settings-hint" style={{ color: "#b91c1c" }}>✗ {health.notesHashMismatch.length} 篇正文与基线哈希不符（可能被外部改动）</p>}
+                          {health.historyMissingFile > 0 && <p className="settings-hint" style={{ color: "#b45309" }}>✗ {health.historyMissingFile} 份历史快照文件缺失（恢复对应版本时会失败）</p>}
+                          {health.orphanRowsFileMissing.length > 0 && <p className="settings-hint" style={{ color: "#b45309" }}>✗ {health.orphanRowsFileMissing.length} 条孤儿登记文件缺失（登记漂移）</p>}
+                        </>
+                      )}
+                      <p className="settings-hint">生成于 {formatDateTime(Date.parse(health.checkedAt))}。本检查只读、不修复；发现问题请从备份/云端恢复对应文件。</p>
+                    </div>
+                  )}
                 </section>
               </>
             )}
@@ -496,6 +543,22 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
                     </>
                   )}
                   <p className="settings-hint">云端只是镜像：删除云端冗余不影响本地正文/回收站/历史快照（“彻底删除/清空回收站”除外）。</p>
+                  {gcPendingRows.length > 0 && (
+                    <div style={{ marginTop: 4 }}>
+                      <p className="settings-hint" style={{ fontWeight: 600, margin: "6px 0 2px" }}>待回收键明细（{gcPendingRows.length} 条）</p>
+                      <div className="settings-hint" style={{ maxHeight: 140, overflow: "auto", fontSize: 11, lineHeight: 1.7 }}>
+                        {gcPendingRows.slice().sort((a, b) => {
+                          const am = parseIsoMs(a.markedAt) ?? Infinity;
+                          const bm = parseIsoMs(b.markedAt) ?? Infinity;
+                          return am - bm;
+                        }).map((row) => (
+                          <div key={row.key} title={row.markedAt}>
+                            <span style={{ color: "#6b7280" }}>{row.markedAt.slice(0, 10)}</span> [{pendingKeyReason(row.key)}] <span style={{ wordBreak: "break-all" }}>{row.key}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                   <p className="settings-hint" style={{ fontWeight: 600, margin: "8px 0 2px" }}>删除记录（最近 {gcLog.length > 0 ? Math.min(gcLog.length, 30) : 0} 条 · 只读审计）</p>
                   {gcLog.length > 0 ? (
                     <div className="settings-hint" style={{ maxHeight: 150, overflow: "auto", fontFamily: "monospace", fontSize: 11, lineHeight: 1.7 }}>

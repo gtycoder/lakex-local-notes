@@ -1612,6 +1612,67 @@ export class Store {
     return { count, freedBytes };
   }
 
+  // ===== A3 数据体检（只读诊断：不自动修复、不写库） =====
+
+  /** 只读三查：① notes↔.lake 文件存在 + sync_base 有基线的读盘 sha256 一致；② note_history↔快照文件存在；
+   *  ③ orphan_assets 登记文件是否存在（漂移抽查）。返回结构化报告（不做任何写操作）。 */
+  runDataHealthCheck(): {
+    notesChecked: number;
+    notesMissingFile: Array<{ id: string; title: string }>;
+    notesHashMismatch: Array<{ id: string; title: string }>;
+    historyChecked: number;
+    historyMissingFile: number;
+    historyMissingSample: Array<{ id: number; noteId: string; filePath: string }>;
+    orphanRowsChecked: number;
+    orphanRowsFileMissing: Array<{ id: number; noteId: string; filename: string }>;
+    checkedAt: string;
+  } {
+    const checkedAt = new Date().toISOString();
+    const notesMissingFile: Array<{ id: string; title: string }> = [];
+    const notesHashMismatch: Array<{ id: string; title: string }> = [];
+    const noteRows = this.db.prepare("SELECT id,title,parent_id FROM notes WHERE deleted_at IS NULL AND parent_id != ?").all(TRASH_NOTEBOOK_ID) as Array<{ id: string; title: string }>;
+    for (const n of noteRows) {
+      const lakePath = this.notePath(n.id);
+      if (!fs.existsSync(lakePath)) {
+        notesMissingFile.push({ id: n.id, title: n.title });
+        continue;
+      }
+      const base = this.db.prepare("SELECT content_hash FROM sync_base WHERE note_id=?").get(n.id) as { content_hash: string } | undefined;
+      if (!base) continue; // 无基线（本地草稿/未同步）→ 只查存在，不比 hash
+      try {
+        const diskHash = crypto.createHash("sha256").update(fs.readFileSync(lakePath)).digest("hex");
+        if (diskHash !== base.content_hash) notesHashMismatch.push({ id: n.id, title: n.title });
+      } catch { notesMissingFile.push({ id: n.id, title: n.title }); }
+    }
+    const histRows = this.db.prepare("SELECT id,note_id,file_path FROM note_history").all() as Array<{ id: number; note_id: string; file_path: string }>;
+    const historyMissingSample: Array<{ id: number; noteId: string; filePath: string }> = [];
+    let historyMissingFile = 0;
+    for (const h of histRows) {
+      if (!fs.existsSync(path.join(this.root, h.file_path))) {
+        historyMissingFile++;
+        if (historyMissingSample.length < 10) historyMissingSample.push({ id: h.id, noteId: h.note_id, filePath: h.file_path });
+      }
+    }
+    const orphanRows = this.db.prepare("SELECT * FROM orphan_assets").all() as OrphanAssetRow[];
+    const orphanRowsFileMissing: Array<{ id: number; noteId: string; filename: string }> = [];
+    for (const o of orphanRows) {
+      if (!fs.existsSync(path.join(this.root, o.file_path))) {
+        orphanRowsFileMissing.push({ id: o.id, noteId: o.note_id, filename: o.filename });
+      }
+    }
+    return {
+      notesChecked: noteRows.length,
+      notesMissingFile,
+      notesHashMismatch,
+      historyChecked: histRows.length,
+      historyMissingFile,
+      historyMissingSample,
+      orphanRowsChecked: orphanRows.length,
+      orphanRowsFileMissing,
+      checkedAt,
+    };
+  }
+
   // ===== S3 同步支持 =====
 
   getS3Settings(): S3Settings | null {
