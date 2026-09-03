@@ -38,9 +38,6 @@ class SharedS3 {
   async put(key: string, bytes: Buffer, _ct: string, opts?: { gzip?: boolean }) {
     this.map.set(this.full(key), opts?.gzip ? zlib.gzipSync(bytes) : bytes);
   }
-  async headObject(key: string) {
-    return this.map.has(this.full(key));
-  }
   async putStream(key: string, _size: number, open: () => Promise<any>) {
     const stream = await open();
     if (!stream) return;

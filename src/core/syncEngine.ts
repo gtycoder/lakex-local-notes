@@ -636,8 +636,12 @@ export async function syncNow(cfg: SyncConfig, s3: S3Store, db: SyncDbPort, opts
           // 结构环检测（先提交先确认）：本地移动（local.parentId）若在远端树中位于本节点之下
           // （B 把 888 移入 999 下，而 A 已把 999 移入 888 下并提交）→ 保留本地会与远端成环，
           // 即使本地 updatedAt 较新也强制跟随远端打破环（对齐桌面 sync.ts:484-492）。
+          // 结构环检测只在「远端父合法且与本地父不同」时才可能成环（远端父非法将落兜底位，不产生子树环）。
+          // 关键：此处不得调用 effectiveParent()——兜底笔记本惰性解析，若只为探测就把远端父非法的条目算出兜底位，
+          // 会在「最终未应用(skip)」时凭空创建并上传"未分类"（点#1 空库同步幽灵笔记本的残留路径）。仅在下面真应用时才解析。
+          const remoteParentValid = rn.parentId !== null && validParents.has(rn.parentId);
           const localParentConflicts =
-            local.parentId !== null && local.parentId !== effectiveParent() && isRemoteDescendant(local.parentId, rn.id, remoteParentMap);
+            local.parentId !== null && remoteParentValid && local.parentId !== rn.parentId && isRemoteDescendant(local.parentId, rn.id, remoteParentMap);
           if (decideMetaApply(rn.updatedAt, base?.lastSyncedMetaAt ?? null) || localParentConflicts) {
             db.applyRemoteNoteMeta({ ...rn, parentId: effectiveParent() });
           }
@@ -818,19 +822,26 @@ export async function syncNow(cfg: SyncConfig, s3: S3Store, db: SyncDbPort, opts
   // manifest，folders 变更必须传播；迁移回归修复：否则删笔记本不传播 + 目录记账抹掉 local）。
   if (uploadQueue.length > 0 || purgedIds.size > 0 || foldersChanged) {
     // 正文对象上传：内容寻址幂等、条目相互独立 → 并发池（对齐 P3-3 资产并发；旧串行逐条 await，
-    // 实测 N 篇笔记正文上传是同步尾部长尾）。错误不再吞：任一失败即抛出（与旧串行首错即止一致，
-    // 且上传失败必须让整轮同步报错、不得继续发布 manifest 引用未落盘正文）。
-    await runPool(uploadQueue, UPLOAD_CONCURRENCY, async (item) => {
-      // 占位符墓碑（tombstone && content 为空，purge 已物理删除内容）：不重算 hash（保留占位符 id）、
-      // 不传空对象（否则 contentHash 被覆盖成 sha256(空串) + 空对象残留——迁移回归），仅写 deleted 标记。
-      if (item.tombstone && item.content === "") return;
-      const contentBytes = new TextEncoder().encode(item.content);
-      const hash = sha256Sync(contentBytes);
-      if (item.entry.contentHash !== hash) item.entry.contentHash = hash;
-      await s3.putObject(`${cfg.prefix}/${objectKey(item.id, item.entry.contentHash)}`, item.content);
-      report.uploaded++;
-      report.uploadedBytes += contentBytes.length;
+    // 实测 N 篇笔记正文上传是同步尾部长尾）。worker 内不抛错——错误按索引收集、池后按序抛首个，
+    // 避免某条失败时其它并发车道的拒绝变成 unhandledRejection；且任一上传失败必须让整轮同步报错、
+    // 不得继续发布 manifest 引用未落盘正文（与旧串行首错即止等价：失败即中止，manifest 不写）。
+    const contentErrors: Array<unknown> = new Array(uploadQueue.length).fill(null);
+    await runPool(uploadQueue, UPLOAD_CONCURRENCY, async (item, i) => {
+      try {
+        // 占位符墓碑（tombstone && content 为空，purge 已物理删除内容）：不重算 hash（保留占位符 id）、
+        // 不传空对象（否则 contentHash 被覆盖成 sha256(空串) + 空对象残留——迁移回归），仅写 deleted 标记。
+        if (item.tombstone && item.content === "") return;
+        const contentBytes = new TextEncoder().encode(item.content);
+        const hash = sha256Sync(contentBytes);
+        if (item.entry.contentHash !== hash) item.entry.contentHash = hash;
+        await s3.putObject(`${cfg.prefix}/${objectKey(item.id, item.entry.contentHash)}`, item.content);
+        report.uploaded++;
+        report.uploadedBytes += contentBytes.length;
+      } catch (e) {
+        contentErrors[i] = e;
+      }
     });
+    for (const e of contentErrors) if (e) throw e;
     next = {
       version: 4,
       workspaceId: "default",

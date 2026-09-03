@@ -231,6 +231,42 @@ describe("syncEngine（共享编排）", () => {
     expect(puts).not.toContain("p/assets/n1/" + old); // 已声明资产走差集跳过（无 PUT、无探测）
   });
 
+  it("并发上传正文对象失败 → 整轮同步抛错且不发布 manifest（并发 worker 首错上报、无 unhandledRejection）", async () => {
+    const s3 = new MemS3();
+    const db = new MemDb();
+    db.notes.set("n1", row({ id: "n1", content: "<p>a1</p>", syncState: "local" }));
+    db.notes.set("n2", row({ id: "n2", content: "<p>a2</p>", syncState: "local" }));
+    const origPut = s3.putObject.bind(s3);
+    let manifestWritten = false;
+    s3.putObject = async (key: string, body: any, opts?: any) => {
+      if (key.endsWith("manifests/latest.json")) manifestWritten = true;
+      if (key.includes("/objects/n1-")) throw new Error("boom-n1-upload");
+      return origPut(key, body, opts);
+    };
+    await expect(syncNow(CFG, s3, db)).rejects.toThrow("boom-n1-upload");
+    expect(manifestWritten).toBe(false);   // 上传失败即中止，未发布引用未落盘正文的 manifest
+  });
+
+  it("回归：幂等跳过分支（正文一致·远端父非法·元数据不更新）不得解析兜底笔记本（点#1 残留幽灵路径）", async () => {
+    const s3 = new MemS3();
+    const db = new MemDb();
+    let defaultCalled = 0;
+    db.defaultNotebookId = () => { defaultCalled++; return "notebook-uncategorized"; };
+    const H = hashOf("<p>x</p>");
+    // 本地：该笔记正文 H、父指向一个已消失的笔记本（悬空），已同步，元数据基线较新
+    db.notes.set("n1", row({ id: "n1", content: "<p>x</p>", parentId: "dead-notebook", syncState: "synced", updatedAt: "2026-06-01T00:00:00.000Z" }));
+    db.bases.set("n1", { contentHash: H, lastUploadedHash: null, lastSyncedMetaAt: "2026-06-01T00:00:00.000Z" });
+    // 远端：同正文、父目录缺失、updatedAt 更旧（元数据不更新 → decideMetaApply=false）；folders 空 → 本地无笔记本
+    s3.map.set("p/manifests/latest.json", new TextEncoder().encode(JSON.stringify({
+      version: 4, workspaceId: "default", commitId: "c1", prevCommitId: null, createdAt: "2026-01-01T00:00:00.000Z",
+      notes: [{ id: "n1", title: "N", parentId: "folder-missing", sortOrder: 0, updatedAt: "2026-01-01T00:00:00.000Z", contentHash: H, isConflict: false, assets: [] }],
+      folders: [],
+    })));
+    await syncNow(CFG, s3, db);
+    expect(defaultCalled).toBe(0);                                   // 关键：为"探测/跳过"绝不创建"未分类"
+    expect(db.notes.get("n1")!.parentId).toBe("dead-notebook");      // 未应用远端 → 本地父不变
+  });
+
   it("二次同步：无变更不重传（skip-fast）", async () => {
     const s3 = new MemS3();
     const db = new MemDb();
