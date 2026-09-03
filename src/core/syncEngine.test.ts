@@ -285,6 +285,55 @@ describe("syncEngine（共享编排）", () => {
     expect(db.notes.get("n1")!.syncState).toBe("local");            // 关键：资产未齐 → 不 markSynced，下轮重扫重传
   });
 
+  it("下载侧差集：本地已持同 size/hash 资产 → remote-wins 重下正文但零重下资产（对齐上传侧/dejavu）", async () => {
+    const s3 = new MemS3();
+    const db = new MemDb();
+    const img1 = new TextEncoder().encode("AAAA");
+    const img2 = new TextEncoder().encode("BBBB");
+    const hI1 = sha256Sync(img1), hI2 = sha256Sync(img2);
+    const old = "<p>old</p>", neu = "<p>new</p>";
+    const hOld = hashOf(old), hNew = hashOf(neu);
+    // 本地已有该笔记（synced，正文 old）+ 两张未变资产（size/hash 与远端声明一致）
+    db.notes.set("n1", row({ id: "n1", content: old, syncState: "synced" }));
+    db.bases.set("n1", { contentHash: hOld, lastUploadedHash: hOld, lastSyncedMetaAt: "2026-01-01T00:00:00.000Z" });
+    db.assets.set("n1/a.png", img1);
+    db.assets.set("n1/b.png", img2);
+    // 远端：正文改为 new（触发 remote-wins），资产仍是同样这两张
+    s3.map.set("p/objects/n1-" + hNew + ".lake", new TextEncoder().encode(neu));
+    s3.map.set("p/assets/n1/a.png", img1);
+    s3.map.set("p/assets/n1/b.png", img2);
+    s3.map.set("p/manifests/latest.json", gzipSync(new TextEncoder().encode(JSON.stringify({
+      version: 4, workspaceId: "default", commitId: "c1", prevCommitId: null, createdAt: "2026-01-01T00:00:00.000Z",
+      notes: [{ id: "n1", title: "N", parentId: "notebook-personal", sortOrder: 0, updatedAt: "2026-02-01T00:00:00.000Z", contentHash: hNew, isConflict: false, assets: [{ filename: "a.png", size: 4, hash: hI1 }, { filename: "b.png", size: 4, hash: hI2 }] }],
+      folders: [],
+    }))));
+    const assetGets: string[] = [];
+    const origGet = s3.getObject.bind(s3);
+    s3.getObject = async (k: string, o?: { maxBytes?: number }) => { if (k.startsWith("p/assets/")) assetGets.push(k); return origGet(k, o); };
+    await syncNow(CFG, s3, db);
+    expect(assetGets).toEqual([]);                                  // 关键：未变资产零重下（旧实现会 2 次 GET）
+    expect(db.notes.get("n1")!.content).toBe(neu);                  // 正文照常应用
+  });
+
+  it("下载侧差集：本地缺该资产（未下载过）→ 仍照常 GET 下载（差集不误跳过缺失）", async () => {
+    const s3 = new MemS3();
+    const db = new MemDb();
+    const img1 = new TextEncoder().encode("AAAA");
+    const hI1 = sha256Sync(img1);
+    const neu = "<p>new</p>"; const hNew = hashOf(neu);
+    db.notes.set("n1", row({ id: "n1", content: "<p>old</p>", syncState: "synced" }));
+    db.bases.set("n1", { contentHash: hashOf("<p>old</p>"), lastUploadedHash: hashOf("<p>old</p>"), lastSyncedMetaAt: "2026-01-01T00:00:00.000Z" });
+    s3.map.set("p/objects/n1-" + hNew + ".lake", new TextEncoder().encode(neu));
+    s3.map.set("p/assets/n1/a.png", img1);   // 云端有，本地无
+    s3.map.set("p/manifests/latest.json", gzipSync(new TextEncoder().encode(JSON.stringify({
+      version: 4, workspaceId: "default", commitId: "c1", prevCommitId: null, createdAt: "2026-01-01T00:00:00.000Z",
+      notes: [{ id: "n1", title: "N", parentId: "notebook-personal", sortOrder: 0, updatedAt: "2026-02-01T00:00:00.000Z", contentHash: hNew, isConflict: false, assets: [{ filename: "a.png", size: 4, hash: hI1 }] }],
+      folders: [],
+    }))));
+    await syncNow(CFG, s3, db);
+    expect(db.assets.get("n1/a.png") ? Array.from(db.assets.get("n1/a.png")!) : []).toEqual(Array.from(img1)); // 缺失的仍下载落盘
+  });
+
   it("二次同步：无变更不重传（skip-fast）", async () => {
     const s3 = new MemS3();
     const db = new MemDb();

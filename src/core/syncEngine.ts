@@ -71,6 +71,15 @@ export async function downloadNoteAssets(cfg: SyncConfig, s3: S3Store, db: SyncD
   const items = assets ?? [];
   // A 方案：记录 manifest 声明的资产元数据（即使某资源文件本地缺失，上传 union 仍可正确声明）。
   if (typeof db.recordDeclaredAssets === "function") db.recordDeclaredAssets(noteId, items);
+  // 下载侧差集（对称于上传 scanLocalAssets，对齐思源 dejavu「只取缺失块」）：本地已持「同名 + 同 size + 同 sha256」
+  // 的资产即逐字节等价（内容寻址，无陈旧风险）→ 跳过 GET；缺失/损坏/变更（不满足精确匹配）仍照常下载或告警/严格拒绝。
+  // 治的是最常见浪费：远端只改一行文字 → 对端把整篇未变的图全重下一遍。预扫失败则 localHave=null → 回退全下载（不改旧行为）。
+  let localHave: Map<string, { size: number; hash: string }> | null = null;
+  if (items.length > 0) {
+    try {
+      localHave = new Map((await db.listLocalAssets(noteId)).map((a) => [a.filename, { size: a.size, hash: a.hash }]));
+    } catch { localHave = null; }
+  }
   // P3-3：并发下载（每资产 getObject/校验/saveAsset 相互独立）。worker 不抛错——
   // 失败按索引归位，池结束后统一裁决：warnings 按原顺序入列、首个错误按原顺序抛出，
   // 与旧串行实现的裁决结果逐字节一致（仅失败前的多余请求会发出，结果确定）。
@@ -80,6 +89,11 @@ export async function downloadNoteAssets(cfg: SyncConfig, s3: S3Store, db: SyncD
   let aborted = false; // strict 首错后停止落盘（并发车道已在途的请求自然完成但不写盘，防孤儿资产目录）
   await runPool(items, ASSET_CONCURRENCY, async (asset, i) => {
     try {
+      // 已在本地且 size+hash 精确匹配 → 无需下载（不记 downloadedBytes、不算缺失、不产 warning；对齐上传侧 skip）。
+      if (localHave) {
+        const have = localHave.get(asset.filename);
+        if (have && have.size === asset.size && have.hash === asset.hash) return;
+      }
       const bytes = await s3.getObject(`${cfg.prefix}/assets/${noteId}/${asset.filename}`, { maxBytes: MAX_IMAGE_BYTES });
       if (bytes == null) {
         if (strict) { errors[i] = new AssetMissingError(`资源缺失: ${noteId}/${asset.filename}`); aborted = true; }
