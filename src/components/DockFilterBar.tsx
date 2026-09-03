@@ -6,7 +6,7 @@
  */
 import { useCallback, useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type RefObject } from "react";
 import { Search } from "lucide-react";
-import { initialDockFilterState, isFilterActive, stepDockFilter } from "./dockFilterModel";
+import { initialDockFilterState, isFilterActive, stepDockFilter, type DockFilterEvent } from "./dockFilterModel";
 
 export interface DockFilter {
   value: string;
@@ -36,18 +36,14 @@ export function useDockFilter(value: string, onValueChange: (next: string) => vo
     setState(step.state);
   }, [state, value]);
 
-  const apply = useCallback((kind: "toggle" | "input" | "escape" | "blur", current: string) => {
-    setState((prev) => {
-      const step = stepDockFilter(prev, kind === "toggle" || kind === "input" || kind === "escape"
-        ? { kind }
-        : { kind: "blur", value: current });
-      if (step.clearValue) onValueChange("");
-      if (step.focus) queueMicrotask(() => { inputRef.current?.focus(); inputRef.current?.select(); });
-      return step.state;
-    });
-  }, [onValueChange]);
+  const apply = useCallback((event: DockFilterEvent) => {
+    const step = stepDockFilter(state, event);
+    setState(step.state);
+    if (step.clearValue) onValueChange("");
+    if (step.focus) queueMicrotask(() => { inputRef.current?.focus(); inputRef.current?.select(); });
+  }, [state, onValueChange]);
 
-  const toggle = useCallback(() => apply("toggle", value), [apply, value]);
+  const toggle = useCallback(() => apply({ kind: "toggle" }), [apply]);
   const onChange = useCallback((next: string) => {
     onValueChange(next);
     setState((prev) => stepDockFilter(prev, { kind: "input" }).state);
@@ -56,18 +52,18 @@ export function useDockFilter(value: string, onValueChange: (next: string) => vo
     if (event.key !== "Escape") return;
     // 阻止冒泡：Esc 在本应用还承担"关闭菜单/浮层"的全局语义，清空筛选不应顺手关掉整个面板。
     event.stopPropagation();
-    apply("escape", value);
+    apply({ kind: "escape" });
     event.currentTarget.blur();
-  }, [apply, value]);
-  const onBlur = useCallback(() => apply("blur", value), [apply, value]);
+  }, [apply]);
+  const onBlur = useCallback(() => apply({ kind: "blur", value }), [apply, value]);
 
   return { value, open: state.open, active: isFilterActive(value), inputRef, toggle, onChange, onKeyDown, onBlur };
 }
 
 /** 展开/收起的筛选输入行：收起时不占位、不进无障碍树、不可聚焦。 */
-export function DockFilterRow({ filter, placeholder }: { filter: DockFilter; placeholder: string }) {
+export function DockFilterRow({ filter, placeholder, className = "" }: { filter: DockFilter; placeholder: string; className?: string }) {
   return (
-    <div className={`dock-filter-row${filter.open ? " is-open" : ""}`} aria-hidden={!filter.open}>
+    <div className={`dock-filter-row${filter.open ? " is-open" : ""}${className ? " " + className : ""}`} aria-hidden={!filter.open}>
       <div className="dock-filter-row__inner">
         <Search size={12} aria-hidden="true" />
         <input

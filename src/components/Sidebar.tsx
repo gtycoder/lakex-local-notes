@@ -564,7 +564,7 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
         </div>
       </div>
       </div>
-      <DockFilterRow filter={filter} placeholder="筛选目录" />
+      <DockFilterRow filter={filter} placeholder="筛选目录" className="desktop-only" />
       <nav className="note-list tree-list" ref={treeRef}>
         {pendingCreate?.kind === "notebook" && createField(0)}
         {roots.map((node) => <TreeRow key={node.id} node={node} depth={0} {...treeRowProps} />)}
