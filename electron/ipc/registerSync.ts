@@ -120,11 +120,11 @@ export function registerSyncIpc(ipc: IpcRegistrar, deps: SyncIpcDeps): void {
   });
   ipc.handle("list_s3_gc_pending", () => store.listS3GcPending());
   ipc.handle("list_s3_gc_log", () => store.listS3GcLog());
-  ipc.handle("run_s3_gc_reconcile", (_e, ignoreRetention = false) => {
+  ipc.handle("run_s3_gc_reconcile", (ignoreRetention = false) => {
     if (!store.getSyncSettings().enabled) throw new AppError("NotConfigured", "云同步已关闭");
     return enqueueMaintenance(() => runGcReconcile(store, { ignoreRetention: !!ignoreRetention }));
   });
-  ipc.handle("run_s3_deep_cleanup", (_e, dryRun: boolean, ignoreRetention = false) => {
+  ipc.handle("run_s3_deep_cleanup", (dryRun: boolean, ignoreRetention = false) => {
     if (!store.getSyncSettings().enabled) throw new AppError("NotConfigured", "云同步已关闭");
     return enqueueMaintenance(async () => {
       const settings = store.getS3Settings();
