@@ -2,21 +2,25 @@
 
 > 本文件是本项目的**长期记忆**，每次会话自动加载。开始工作前先读本文 + `HANDOFF.md`（会话交接：当前状态与真正的待办）+ `docs/TODO.md`。
 > 用户反复强调的背景与原则都写在这里，**不要等用户重复**。
+> **本文只写长期内容**（红线/机制/坑）：分支名、commit hash、测试计数、当前焦点等易过期事实一律放 `HANDOFF.md` §0。
 
 ## 1. 项目是什么
 
 Lake Notes 是**本地优先**笔记应用（Electron + React + better-sqlite3 + 语雀 Lake 内核），带 S3 同步（七牛 Kodo S3 兼容 API）。**本地是真相，S3 只是镜像。**
 
 - 目录：`/Users/admin/file/local-lake/lake-notes-electron`
-- 当前分支：`feat/electron-43-upgrade`（**用户未验收不合并、不擅自提交**）
+- 开发分支：`master`（唯一持续演进的业务分支；历史分支一律已合入并删除，勿基于它们开发）
 - Node：**必须优先 Node 24**：`$HOME/.nvm/versions/node/v24.18.0/bin`
-- Electron：43.4.0；better-sqlite3 13.x（Electron 43 升级已完成）
+- Electron：43.4.0；better-sqlite3 13.x（N-API 单二进制、无需 rebuild；双 ABI 基建已随 43 升级删除）
 
-## 2. 当前阶段目标与排期
+## 2. 长期方向与文档分工
 
-- **当前焦点：代码审计与可维护性优化**（安全、IPC、资源服务、同步/存储边界、渲染层职责和测试覆盖）。
-- 删除/恢复链路与 Electron 43 升级均已完成历史验收，后续改动仍须保持现有同步语义和 217+ 测试基线。
-- 代码审计先修 Critical/Warning，再按模块拆分大文件；不在没有测试护栏的情况下进行大规模架构重写。
+- **长期焦点**：同步/存储热路径的性能与健壮性、移动端编辑收口、可维护性（安全、IPC、资源服务、渲染层职责、测试覆盖、大文件按领域分批拆）。
+- **具体待办与优先级只在 `HANDOFF.md` §3 维护**；`docs/TODO.md` 是历史总表（会过期），与 HANDOFF 冲突时以 HANDOFF 为准。
+- 删除/恢复语义与 Electron 43 升级均已验收，后续改动必须保持现有同步语义（§3 原则 1~13）与全绿门禁。
+- 先修 Critical/Warning，再按模块拆分大文件；不在没有测试护栏的情况下进行大规模架构重写。
+- **文档分工（防漂移）**：`AGENTS.md`=长期红线/机制/坑（不写易过期事实）· `README.md`=项目概览（不维护进度/计数）·
+  `HANDOFF.md`=唯一交接（当前基线/待办/本轮踩坑）。历史上本文件曾长期残留旧分支名与 188/217 测试计数，已清理，**不要写回去**。
 
 ## 3. 核心设计原则（用户反复强调，务必遵守）
 
@@ -63,7 +67,7 @@ Lake Notes 是**本地优先**笔记应用（Electron + React + better-sqlite3 +
 export PATH="$HOME/.nvm/versions/node/v24.18.0/bin:$PATH"
 cd /Users/admin/file/local-lake/lake-notes-electron
 npx tsc --noEmit
-npm test -- --run          # 基线 188；当前 197
+npm test -- --run          # 必须全绿；当前计数看 HANDOFF §0 或直接跑，别写死进文档
 node node_modules/vite/bin/vite.js build
 git diff --check
 
@@ -101,6 +105,7 @@ node scripts/s3-ls.mjs --count | --note <id> | --prefix <prefix>   # 云端对�
 
 ## 8. 会话启动指引
 
-1. 读本文件 + `HANDOFF.md`（当前状态与真正的待办）+ `docs/TODO.md`。
-2. 查 `git status`/`git log` 确认当前状态；`vite.config.ts` 不应有改动（除非多端调试中的 onstart 补丁）。
+1. 读本文件 + `HANDOFF.md`（当前状态与真正的待办）；`docs/TODO.md` 按需（历史总表）。
+2. 查 `git status`/`git log` 确认当前状态，并 **`git worktree list`** 检查有无未记录的在途 worktree 改动（2026-09-03 就漏看过一次）；
+   `vite.config.ts` 不应有改动（除非多端调试中的 onstart 补丁）。
 3. 需要用户确认产品语义时，给出选项和推荐，但**当前删除/恢复语义已定稿**（见 §3），不要重新争论。

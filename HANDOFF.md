@@ -5,9 +5,16 @@
 > 本文件只保留**当前状态 + 真正的待办 + 有价值的坑**；过期/已完成的不再罗列。
 
 ## 0. 当前基线（新会话开工前）
-- 分支/远端：`master` @ **`e512281`**，已推送 Gitee `origin`（`git@gitee.com:gtycoder/local-lake.git`），本地/远端同步。
+- 分支/远端：开发主干 `master` ↔ Gitee `origin`（SSH：`git@gitee.com:gtycoder/local-lake.git`；`master` 亦是远程默认分支）同步。
+  **本文不固定 commit hash**——查 `git log -1 --oneline`。
 - 质量门槛：`tsc` 0 error · `vitest` **762 passed / 15 skipped** · 桌面 `vite build` + 移动 `vite build --config vite.mobile.config.ts` 全绿。
-- 本地只有 `master` 一条业务分支（其余已合并/删除；`origin/main` 为历史遗留引用）。
+- 本地业务分支只有 `master`（其余已合并/删除；`origin/main` 为旧 Tauri 遗留引用）。**另有一个在途 worktree（2026-09-03 本会话新发现，此前未记入交接）**：
+  `/Users/admin/file/local-lake/lake-notes-wt-android`（`feat/android-mobile-editing`，HEAD 是 `master` 的祖先、**无独有 commit、改动全部未提交**）——
+  内容是安卓端远程图片/粘贴收口：新增 `src/core/remoteAssetGuard.ts`（渲染层共用的协议+字面私网 host 闸门、`filenameFromUrl`）、
+  `src/mobile/remoteFetch.ts`（CapacitorHttp/OkHttp 原生下载远程字节，绕 WebView CORS）+ 3 个测试文件；
+  改 `src/features/editor/resourceUpload.ts`（`isDesktop()` → 能力探测 `window.lakeNative?.downloadRemoteResource`）、
+  `src/mobile/bridge.ts` + `MobileApp.tsx`（挂 `downloadRemoteResource`）、`src/mobile/main.tsx`（**移动端补挂 `installPasteInterceptor`**）。
+  ⇒ 正对 §3.6 与「粘贴远程图片丢失」；**该 worktree 门禁未跑、未经用户验收**，接手时先决定「继续推进」还是「丢弃重建」。
 - 最近这一整轮（260902→260903）主线：**语雀 bookmark 卡修复 + S3 同步性能优化 + 两处 bug 修复 + 压测**，已全部合入 master。
 
 ## 1. 项目一句话 + 铁律（详见 AGENTS.md）
@@ -51,7 +58,10 @@
 5. 笔记本新建跨端 `sort_order` 撞号（可选：新建取同级 max+1）。
 
 **移动端编辑遗留（未决，需用户给具体现象）**
-6. 「电脑剪贴板数据」注入移动端编辑器**不解析/内容为空**（含/不含 base64 图标都为空）——根因未定位（疑与移动端 Lake 粘贴路径 / 移动端未装 `installPasteInterceptor` / base64 触发图片处理有关）。
+6. 「电脑剪贴板数据」注入移动端编辑器**不解析/内容为空**（含/不含 base64 图标都为空）——根因未定位。
+   **静态线索（未验证）**：`installPasteInterceptor()` 原本只在桌面入口 `src/main.tsx:35` 调用，移动端入口没有，`src/mobile/` 里 paste/clipboard 代码为 0 处
+   （bookmark 卡降级仍生效，因为它挂在共享的 `src/features/editor/lakeRuntime.ts`）；另一嫌疑是粘贴含 `data:image/png;base64` 大图标时移动端无远程/图片处理路径。
+   android worktree（见 §0）已补挂该 interceptor 并实现原生下载 ⇒ **下一步先在那条线上验证，而不是从零开始**。
 7. 移动端本地资产 canonical `http://127.0.0.1:19876/{noteId}/{file}` **真机不可达**（手机 127.0.0.1 指自己）：需 `adb reverse tcp:19876 tcp:19876` 或移动端解析为可达地址。
 8. 用户反馈「移动端整体编辑还有问题」——**现象未细化**，待复现。
 
@@ -66,6 +76,10 @@
 **非代码**：安卓同步偶发 `UnknownHostException` = 设备网络（联网重试）。
 
 ## 4. 踩过的坑（本会话新增；通用红线/环境见 AGENTS.md）
+- **文档漂移**（2026-09-03 清理）：`AGENTS.md`/`README.md` 曾长期残留旧分支名 `feat/electron-43-upgrade`、Electron 33/better-sqlite3 11、
+  82/188/217 测试计数、"SSH key 未注册必须 HTTPS 推送"、失效的参考仓库路径（`siyuan/`、`local-lake-notes-devlop/`）；`docs/PROGRESS.md` 还被 README 标成"★最新交接"。
+  ⇒ 已在 `AGENTS.md` §2 定了分工：**易过期事实（分支/hash/计数/当前焦点）只写 HANDOFF §0**，别把这些数字写回 AGENTS/README。
+- **`git worktree list` 要纳入开工检查**：android worktree 的未提交 WIP 曾完全没进交接，几乎导致重复劳动（现已记入 §0/§3.6）。
 - **`defaultNotebookId()` 急切调用 = 空库同步凭空建「未分类」并上传扩散**；改惰性后，`effectiveParent()` 也只能在"真应用"处解析（冲突探测等 skip 路径调它照样会建）。
 - **`contentHash` 会骗人**：`syncAdapters.localHashOf` 对 synced 笔记返回 `store.baseHash`（**不读 .lake**）；判"本地可复用"必须**实读正文 + sha256**，否则文件被外部删/坏时把空内容写进回收站（缺口2 加固的教训，与缺口1"验真实字节"对称）。
 - **不要给"资产存在性"做本机持久缓存**（GC 会真删对象→缓存失真→破坏跨端自愈，正是当年删缓存的原因）；用"刚下载的远端清单"做差集才对。
