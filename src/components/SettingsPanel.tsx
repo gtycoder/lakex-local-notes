@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { AlignLeft, Cloud, Files, History, Info, Keyboard, ListTree, Monitor, Moon, PanelTop, Paperclip, Search, Settings, Sun, Trash2, Type } from "lucide-react";
 import { fontSizeOptions, type AppSettings } from "../lib/settings";
 import { native } from "../lib/native";
-import type { CleanOrphanResult, OrphanAsset, S3GcPendingItem, S3Settings, SyncSettings } from "../lib/types";
+import type { CleanOrphanResult, S3GcPendingItem, S3Settings, SyncSettings } from "../lib/types";
 import type { GcDiagnostics } from "../core/gcDiagnostics";
 import { gcCutoffMs, parseIsoMs } from "../core/gcPolicy";
 import { useFloatingDialog } from "./useFloatingDialog";
@@ -37,6 +37,19 @@ function formatBytes(n: number): string {
   return `${n} B`;
 }
 
+/** 全局“被移除资源”条目：status=orphan 可删；history=历史引用保护（只读）。 */
+interface RemovedAsset {
+  noteId: string;
+  filename: string;
+  status: "orphan" | "history";
+  orphanId?: number;
+  size: number;
+  mimeType: string;
+  noteTitle?: string;
+  noteState?: "active" | "trash" | "missing";
+  detectedAt?: string;
+}
+
 export function SettingsPanel({ open, settings, onClose, onChange, openCategory = "editor", onS3SettingsChanged, onSyncSettingsChanged }: SettingsPanelProps) {
   const [category, setCategory] = useState<SettingsCategory>(openCategory);
   const [navQuery, setNavQuery] = useState("");
@@ -59,10 +72,11 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
   const [syncCfg, setSyncCfg] = useState<SyncSettings | null>(null);
   const [syncCfgBusy, setSyncCfgBusy] = useState(false);
   const [gcPendingRows, setGcPendingRows] = useState<S3GcPendingItem[]>([]);
-  const [orphans, setOrphans] = useState<OrphanAsset[]>([]);
+  const [orphans, setOrphans] = useState<RemovedAsset[]>([]);
   const [orphanBusy, setOrphanBusy] = useState(false);
   const [busyId, setBusyId] = useState<number | null>(null);
-  const [preview, setPreview] = useState<{ filename: string; mimeType: string; supported: boolean; dataUrl?: string } | null>(null);
+  const [sel, setSel] = useState<RemovedAsset | null>(null);
+  const [pv, setPv] = useState<{ filename: string; mimeType: string; supported: boolean; dataUrl?: string } | null>(null);
 
   const refreshGcPending = async () => {
     try {
@@ -96,7 +110,7 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
 
   /** 未引用资源按所属文档分组（含回收站/已删除状态标注）。 */
   const groupedOrphans = useMemo(() => {
-    const map = new Map<string, { title: string; state: string; items: OrphanAsset[] }>();
+    const map = new Map<string, { title: string; state: string; items: RemovedAsset[] }>();
     for (const o of orphans) {
       const state = o.noteState ?? "active";
       const key = (o.noteTitle ?? o.noteId) + "|" + state;
@@ -122,6 +136,17 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
   useEffect(() => {
     if (open && category === "resources") void refreshOrphans();
   }, [open, category]);
+
+  // 选中即预览、切换自动加载（思源式资源管理交互）
+  useEffect(() => {
+    if (!sel) { setPv(null); return; }
+    let alive = true;
+    setPv(null);
+    native.readAssetPreview(sel.noteId, sel.filename)
+      .then((r) => { if (alive) setPv(r); })
+      .catch(() => { if (alive) setPv({ filename: sel.filename, mimeType: "", supported: false }); });
+    return () => { alive = false; };
+  }, [sel]);
 
   const nav = [
     { id: "editor" as const, label: "编辑器", keywords: "字号 段间距 大纲 工具栏 标签页" , icon: <Type size={15} /> },
@@ -221,23 +246,27 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
     finally { setGcBusy(false); }
   };
   const refreshOrphans = async () => {
-    try { setOrphans(await native.listOrphanAssets()); } catch { /* 忽略 */ }
+    try { setOrphans(await native.listRemovedAssets()); } catch { /* 忽略 */ }
   };
-  const previewOrphan = async (o: OrphanAsset) => {
-    if (busyId !== null) return;
-    setBusyId(o.id); setSyncMsg(null);
-    try { setPreview(await native.readOrphanPreview(o.id)); }
-    catch (err) { setSyncMsg(getNativeErrorMessage(err)); }
-    finally { setBusyId(null); }
-  };
-  const deleteOne = async (o: OrphanAsset) => {
-    if (busyId !== null) return;
-    if (!window.confirm(`删除未引用资源「${o.filename}」？`)) return;
-    setBusyId(o.id); setSyncMsg(null);
+  const copyPath = async (o: RemovedAsset) => {
     try {
-      const r = await native.deleteOrphanAsset(o.id);
+      const full = await native.copyAssetPath(o.noteId, o.filename);
+      setSyncMsg(`已复制路径：${full}`);
+    } catch (err) { setSyncMsg(getNativeErrorMessage(err)); }
+  };
+  const openFolder = async (o: RemovedAsset) => {
+    try { await native.showAttachmentInFolder(o.noteId, o.filename); }
+    catch (err) { setSyncMsg(getNativeErrorMessage(err)); }
+  };
+  const deleteOne = async (o: RemovedAsset) => {
+    if (busyId !== null || o.orphanId == null) return;
+    if (!window.confirm(`删除未引用资源「${o.filename}」？`)) return;
+    setBusyId(o.orphanId); setSyncMsg(null);
+    try {
+      const r = await native.deleteOrphanAsset(o.orphanId);
       if (r.deleted) setSyncMsg(`已删除「${o.filename}」（释放 ${formatBytes(r.freedBytes)}）`);
       else setSyncMsg(`「${o.filename}」此刻仍被引用或删除失败，已保留`);
+      setSel(null);
       await refreshOrphans();
     } catch (err) { setSyncMsg(getNativeErrorMessage(err)); }
     finally { setBusyId(null); }
@@ -249,6 +278,7 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
     setOrphanBusy(true); setSyncMsg(null);
     try {
       const r: CleanOrphanResult = await native.cleanOrphanAssets();
+      setSel(null);
       await refreshOrphans();
       setSyncMsg(r.count > 0 ? `已清理 ${r.count} 个资源（释放 ${formatBytes(r.freedBytes)}）` : "没有可清理的未引用资源");
     } catch (err) { setSyncMsg(getNativeErrorMessage(err)); }
@@ -483,61 +513,74 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
               <section className="settings-group">
                 <h4><Paperclip size={13} /> 未引用资源（本地）</h4>
                 <p className="settings-hint">
-                  从文档删除的图片/附件会先出现在这里（删除动作不移除文件，它可能仍被历史引用）。被当前正文或历史快照引用的资源受保护，清理/删除时会自动跳过；清理后本地文件删除、不再上传，云端副本由“云端回收”收回。文档在回收站时其孤儿仍列出，文档被彻底删除时随 purge 一并清理。
+                  汇总所有文档中“当前正文不再引用”的本地资产文件：<strong>未引用</strong>（可删除/复制/打开位置）
+                  与 <strong>历史保护</strong>（仍被历史快照引用，仅查看不可删除）。点击条目即预览并自动切换；
+                  文档在回收站时文件仍列出，彻底删除时随 purge 一并清理。
                 </p>
                 <div className="settings-row" style={{ flexWrap: "wrap", rowGap: 6, gap: 8, alignItems: "center" }}>
                   <span style={{ fontSize: 12, color: "#48515c" }}>
-                    共 <strong>{orphans.length}</strong> 个 · {formatBytes(orphans.reduce((s, o) => s + (o.size || 0), 0))} · 涉及 {groupedOrphans.length} 篇文档
+                    共 <strong>{orphans.length}</strong> 个 · {formatBytes(orphans.reduce((s, o) => s + (o.size || 0), 0))} ·
+                    可删 {orphans.filter((o) => o.status === "orphan").length} · 历史保护 {orphans.filter((o) => o.status === "history").length} · 涉及 {groupedOrphans.length} 篇文档
                   </span>
                   <span style={{ flex: 1 }} />
                   <button className="settings-choice" onClick={() => void refreshOrphans()}>刷新</button>
-                  <button className="settings-choice" onClick={() => void cleanOrphans()} disabled={orphanBusy || orphans.length === 0}>{orphanBusy ? "清理中…" : `清理全部（${orphans.length}）`}</button>
+                  <button className="settings-choice" onClick={() => void cleanOrphans()} disabled={orphanBusy || orphans.filter((o) => o.status === "orphan").length === 0}>{orphanBusy ? "清理中…" : `清理未引用（${orphans.filter((o) => o.status === "orphan").length}）`}</button>
                 </div>
                 {orphans.length === 0 ? (
-                  <p className="settings-hint" style={{ marginTop: 8 }}>没有未引用的资源。</p>
+                  <p className="settings-hint" style={{ marginTop: 8 }}>没有被移除的资源文件。</p>
                 ) : (
-                  <div style={{ marginTop: 8, maxHeight: 320, overflow: "auto", paddingRight: 4 }}>
-                    {groupedOrphans.map((g) => (
-                      <div key={g.title + "|" + g.state} style={{ marginBottom: 10 }}>
-                        <div style={{ display: "flex", alignItems: "baseline", gap: 8, fontSize: 13, fontWeight: 600, marginBottom: 4 }}>
-                          <Paperclip size={13} />
-                          <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", minWidth: 0 }}>{g.title}</span>
-                          {g.state === "trash" && <span style={{ fontSize: 11, color: "#b45309" }}>回收站</span>}
-                          {g.state === "missing" && <span style={{ fontSize: 11, color: "#b91c1c" }}>文档已删除</span>}
-                          <span style={{ fontSize: 11, color: "#6b7280", fontWeight: 400 }}>{g.items.length} 个</span>
-                        </div>
-                        {g.items.map((o) => (
-                          <div key={o.id} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, padding: "3px 6px", borderRadius: 6, background: "rgba(127,127,127,0.07)", marginBottom: 2 }}>
-                            <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1, minWidth: 0 }} title={o.filename}>{o.filename}</span>
-                            <span style={{ color: "#6b7280", whiteSpace: "nowrap" }}>{formatBytes(o.size)} · {o.detectedAt.slice(0, 10)}</span>
-                            {o.mimeType.startsWith("image/") && (
-                              <button className="settings-choice" style={{ padding: "0 8px" }} onClick={() => void previewOrphan(o)} disabled={busyId !== null}>预览</button>
-                            )}
-                            <button className="settings-choice" style={{ padding: "0 8px" }} onClick={() => void deleteOne(o)} disabled={busyId !== null}>{busyId === o.id ? "…" : "删除"}</button>
+                  <div style={{ display: "flex", gap: 12, marginTop: 8, alignItems: "flex-start" }}>
+                    <div style={{ flex: 1, minWidth: 0, maxHeight: 360, overflow: "auto", paddingRight: 4 }}>
+                      {groupedOrphans.map((g) => (
+                        <div key={g.title + "|" + g.state} style={{ marginBottom: 8 }}>
+                          <div style={{ display: "flex", alignItems: "baseline", gap: 8, fontSize: 13, fontWeight: 600, marginBottom: 3 }}>
+                            <Paperclip size={13} />
+                            <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", minWidth: 0 }}>{g.title}</span>
+                            {g.state === "trash" && <span style={{ fontSize: 11, color: "#b45309" }}>回收站</span>}
+                            {g.state === "missing" && <span style={{ fontSize: 11, color: "#b91c1c" }}>文档已删除</span>}
+                            <span style={{ fontSize: 11, color: "#6b7280", fontWeight: 400 }}>{g.items.length} 个</span>
                           </div>
-                        ))}
-                      </div>
-                    ))}
+                          {g.items.map((o) => (
+                            <div
+                              key={o.noteId + "/" + o.filename}
+                              onClick={() => setSel(sel && sel.noteId === o.noteId && sel.filename === o.filename ? null : o)}
+                              title="点击预览"
+                              style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, padding: "4px 6px", borderRadius: 6, cursor: "pointer", marginBottom: 2, background: sel && sel.noteId === o.noteId && sel.filename === o.filename ? "rgba(59,130,246,0.14)" : "rgba(127,127,127,0.07)" }}
+                            >
+                              <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1, minWidth: 0 }} title={o.filename}>{o.filename}</span>
+                              {o.status === "history"
+                                ? <span style={{ color: "#b45309", whiteSpace: "nowrap" }}>历史保护</span>
+                                : <span style={{ color: "#6b7280", whiteSpace: "nowrap" }}>未引用</span>}
+                              <span style={{ color: "#6b7280", whiteSpace: "nowrap" }}>{formatBytes(o.size)}</span>
+                              <span style={{ display: "inline-flex", gap: 4 }}>
+                                <button className="settings-choice" style={{ padding: "0 6px" }} title="复制路径" onClick={(ev) => { ev.stopPropagation(); void copyPath(o); }}>复制</button>
+                                <button className="settings-choice" style={{ padding: "0 6px" }} title="在文件夹中显示" onClick={(ev) => { ev.stopPropagation(); void openFolder(o); }}>位置</button>
+                                {o.orphanId != null && (
+                                  <button className="settings-choice" style={{ padding: "0 6px" }} title="删除（不可撤销）" onClick={(ev) => { ev.stopPropagation(); void deleteOne(o); }} disabled={busyId !== null}>{busyId === o.orphanId ? "…" : "删除"}</button>
+                                )}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      ))}
+                    </div>
+                    <div style={{ width: 320, flexShrink: 0, border: "1px solid rgba(127,127,127,0.25)", borderRadius: 8, padding: 10, minHeight: 180, maxHeight: 360, overflow: "auto", display: "flex", flexDirection: "column", gap: 8 }}>
+                      {!sel ? (
+                        <p style={{ fontSize: 12, color: "#6b7280", margin: 0 }}>点击左侧条目预览</p>
+                      ) : pv == null ? (
+                        <p style={{ fontSize: 12, color: "#6b7280", margin: 0 }}>加载中…</p>
+                      ) : pv.supported && pv.dataUrl ? (
+                        <>
+                          <img src={pv.dataUrl} alt={pv.filename} style={{ maxWidth: "100%", maxHeight: 260, objectFit: "contain", alignSelf: "center" }} />
+                          <div style={{ fontSize: 12, wordBreak: "break-all" }}>{pv.filename}<span style={{ color: "#6b7280" }}> · {pv.mimeType || sel.mimeType}</span></div>
+                        </>
+                      ) : (
+                        <p style={{ fontSize: 12, color: "#6b7280", margin: 0 }}>该类型不支持预览。<br />{sel.filename}</p>
+                      )}
+                    </div>
                   </div>
                 )}
               </section>
-              {preview && (
-                <div onClick={(ev) => { if (ev.target === ev.currentTarget) setPreview(null); }} style={{ position: "fixed", inset: 0, zIndex: 1600, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                  <div style={{ background: "#fff", color: "#222", borderRadius: 10, padding: 16, maxWidth: "86vw", maxHeight: "86vh", overflow: "auto" }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
-                      <span style={{ fontWeight: 600, fontSize: 13 }}>{preview.filename}</span>
-                      <span style={{ fontSize: 11, color: "#6b7280" }}>{preview.mimeType}</span>
-                      <span style={{ flex: 1 }} />
-                      <button className="settings-choice" onClick={() => setPreview(null)}>关闭</button>
-                    </div>
-                    {preview.supported && preview.dataUrl ? (
-                      <img src={preview.dataUrl} alt={preview.filename} style={{ maxWidth: "78vw", maxHeight: "62vh", objectFit: "contain" }} />
-                    ) : (
-                      <p style={{ fontSize: 13 }}>该类型暂不支持预览（文件仍可删除）。</p>
-                    )}
-                  </div>
-                </div>
-              )}
               </>
             )}
             {category === "trash" && (

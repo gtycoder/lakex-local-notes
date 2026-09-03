@@ -57,10 +57,13 @@ export interface LakeNative {
   cleanOrphanAssets(): Promise<CleanOrphanResult>;
   deleteOrphanAsset(id: number): Promise<{ deleted: boolean; freedBytes: number }>;
   readOrphanPreview(id: number): Promise<{ filename: string; mimeType: string; supported: boolean; dataUrl?: string }>;
+  listRemovedAssets(): Promise<Array<{ noteId: string; filename: string; status: "orphan" | "history"; orphanId?: number; size: number; mimeType: string; noteTitle?: string; noteState?: "active" | "trash" | "missing"; detectedAt?: string }>>;
+  readAssetPreview(noteId: string, filename: string): Promise<{ filename: string; mimeType: string; supported: boolean; dataUrl?: string }>;
   /** 附件操作（桌面本地优先）：系统默认应用打开。 */
   openAttachment(noteId: string, filename: string): Promise<{ ok: boolean; error?: string }>;
   /** 附件操作：在文件管理器中显示。 */
   showAttachmentInFolder(noteId: string, filename: string): Promise<{ ok: boolean }>;
+  copyAssetPath(noteId: string, filename: string): Promise<string>;
   getS3Settings(): Promise<S3Settings | null>;
   saveS3Settings(settings: S3Settings): Promise<void>;
   testS3Connection(): Promise<string>;
@@ -155,8 +158,11 @@ export const native = {
   cleanOrphanAssets: () => api().cleanOrphanAssets(),
   deleteOrphanAsset: (id: number) => api().deleteOrphanAsset(id),
   readOrphanPreview: (id: number) => api().readOrphanPreview(id),
+  listRemovedAssets: () => api().listRemovedAssets(),
+  readAssetPreview: (noteId: string, filename: string) => api().readAssetPreview(noteId, filename),
   openAttachment: (noteId: string, filename: string) => api().openAttachment(noteId, filename),
   showAttachmentInFolder: (noteId: string, filename: string) => api().showAttachmentInFolder(noteId, filename),
+  copyAssetPath: (noteId: string, filename: string) => api().copyAssetPath(noteId, filename),
   getS3Settings: () => api().getS3Settings(),
   saveS3Settings: (settings: S3Settings) => api().saveS3Settings(settings),
   testS3Connection: () => api().testS3Connection(),

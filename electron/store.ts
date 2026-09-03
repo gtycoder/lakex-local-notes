@@ -1480,6 +1480,68 @@ export class Store {
     return { filename: row.filename, mimeType, supported: true, dataUrl: `data:${mimeType};base64,${bytes.toString("base64")}` };
   }
 
+  /** 按 noteId+filename 直接读取 note-assets 下文件预览（未引用资源/历史保护文件共用；路径双段校验）。 */
+  readAssetPreview(noteId: string, filename: string): { filename: string; mimeType: string; supported: boolean; dataUrl?: string } {
+    if (!isSafePathSegment(noteId) || !isSafePathSegment(filename)) throw new AppError("InvalidInput", "非法资源路径");
+    const full = path.join(this.noteAssetsDirFor(noteId), filename);
+    if (!fs.existsSync(full)) throw new AppError("NotFound", "资源文件已不存在");
+    const mimeType = mimeTypeForFilename(filename);
+    if (!mimeType.startsWith("image/")) return { filename, mimeType, supported: false };
+    const bytes = fs.readFileSync(full);
+    if (bytes.length > 32 * 1024 * 1024) return { filename, mimeType, supported: false };
+    return { filename, mimeType, supported: true, dataUrl: `data:${mimeType};base64,${bytes.toString("base64")}` };
+  }
+
+  /** 全局“未引用/被移除资源”汇总：当前正文不再引用的本地资产文件，分两类——
+   *   orphan  —— 未引用且不在任何历史快照（可删除，即 orphan_assets 行）；
+   *   history —— 仍被某历史快照引用（受保护：只预览不可删）。
+   * 用于设置页真正聚合所有文档的孤儿文件（2026-09-03 用户需求）。 */
+  listRemovedAssets(): Array<{
+    noteId: string; filename: string; status: "orphan" | "history"; orphanId?: number;
+    size: number; mimeType: string; noteTitle: string; noteState: "active" | "trash" | "missing"; detectedAt?: string;
+  }> {
+    const enriched = this.listOrphanAssets() as Array<OrphanAsset & { noteTitle: string; noteState: "active" | "trash" | "missing" }>;
+    const out: Array<{
+      noteId: string; filename: string; status: "orphan" | "history"; orphanId?: number;
+      size: number; mimeType: string; noteTitle: string; noteState: "active" | "trash" | "missing"; detectedAt?: string;
+    }> = enriched.map((o) => ({
+      noteId: o.noteId, filename: o.filename, status: "orphan", orphanId: o.id,
+      size: o.size, mimeType: o.mimeType, noteTitle: o.noteTitle, noteState: o.noteState, detectedAt: o.detectedAt,
+    }));
+    const seen = new Set(out.map((o) => o.noteId + "/" + o.filename));
+    for (const noteId of this.assetRepository.listNoteIdsWithHistory()) {
+      const dir = this.noteAssetsDirFor(noteId);
+      if (!fs.existsSync(dir)) continue;
+      const cur = this.assetRepository.getCurrentContentRefs(noteId);
+      const hist = this.assetRepository.getHistoryRefs(noteId);
+      if (hist.size === 0) continue;
+      for (const filename of fs.readdirSync(dir)) {
+        const key = noteId + "/" + filename;
+        if (seen.has(key)) continue;
+        if (cur.has(filename) || !hist.has(filename)) continue;   // 仍被当前正文引用 → 非“被移除”
+        seen.add(key);
+        const full = path.join(dir, filename);
+        let size = 0;
+        try { if (!fs.statSync(full).isFile()) continue; size = fs.statSync(full).size; } catch { continue; }
+        out.push({ noteId, filename, status: "history", size, mimeType: mimeTypeForFilename(filename), noteTitle: noteId, noteState: "active" });
+      }
+    }
+    // 统一补标题/状态（历史保护文档可能不在孤儿集合里）
+    const ids = [...new Set(out.map((o) => o.noteId))];
+    const placeholders = ids.map(() => "?").join(",");
+    const notes = ids.length > 0
+      ? this.db.prepare(`SELECT id, title, trashed_at FROM notes WHERE id IN (${placeholders})`).all(...ids) as Array<{ id: string; title: string; trashed_at: string | null }>
+      : [];
+    const titleBy = new Map(notes.map((n) => [n.id, { title: n.title || "(无标题)", trashed: n.trashed_at != null }]));
+    for (const o of out) {
+      const info = titleBy.get(o.noteId);
+      o.noteTitle = info?.title ?? "（文档已删除）";
+      o.noteState = info ? (info.trashed ? "trash" : "active") : "missing";
+    }
+    out.sort((a, b) => a.noteTitle.localeCompare(b.noteTitle) || a.filename.localeCompare(b.filename));
+    return out;
+  }
+
   listOrphanAssets(): OrphanAsset[] {
     const rows = this.assetRepository.listOrphanAssets();
     if (rows.length === 0) return rows;

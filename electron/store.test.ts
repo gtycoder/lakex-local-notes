@@ -788,6 +788,39 @@ describe("文档历史（快照，纯本地）", () => {
     expect(store.listNoteOrphans(id).find((o) => o.filename === refName)?.protectedByHistory).toBe(false);
   });
 
+  it("listRemovedAssets：聚合未引用(可删) + 历史保护(只读)；readAssetPreview 按路径预览", () => {
+    const { id } = makeNote();
+    const assetsDir = path.join(dir, "note-assets", id);
+    fs.mkdirSync(assetsDir, { recursive: true });
+    const refName = "1786123456789_ab12cd34.png";   // 名字需符合资源命名（13 位时间戳 + hex），extractAssetRefs 才识别
+    const orphanName = "1786123456789_ef345678.png";
+    fs.writeFileSync(path.join(assetsDir, refName), "refdata");
+    fs.writeFileSync(path.join(assetsDir, orphanName), "orphandata");
+    // 正文只引用 refName 并显式打历史快照（force + 显式正文，避免依赖自动快照时序）；
+    // 随后删引用 → refName 归入“历史保护”，orphanName 归入“未引用”
+    const refContent = `<p><img src="http://127.0.0.1:19876/${id}/${refName}"></p>`;
+    store.saveNote(id, "历史测试", refContent);
+    store.createHistorySnapshot(id, refContent, true);
+    store.saveNote(id, "历史测试", "<p>无图</p>");
+    const all = store.listRemovedAssets();
+    const hist = all.find((e) => e.filename === refName);
+    const plain = all.find((e) => e.filename === orphanName);
+    expect(hist?.status).toBe("history");          // 受历史引用保护
+    expect(hist?.orphanId).toBeUndefined();         // 不可删
+    expect(hist?.noteTitle).toBe("历史测试");
+    expect(plain?.status).toBe("orphan");           // 未引用可删
+    expect(plain?.orphanId).toBeGreaterThan(0);
+    // 预览按 noteId+filename（历史保护文件也能看）
+    const pv = store.readAssetPreview(id, refName);
+    expect(pv.supported).toBe(true);
+    expect(pv.dataUrl).toContain("base64,");
+    // 单条删除只作用于 orphan
+    const del = store.deleteOrphanAsset(plain!.orphanId!);
+    expect(del.deleted).toBe(true);
+    expect(fs.existsSync(path.join(assetsDir, orphanName))).toBe(false);
+    expect(fs.existsSync(path.join(assetsDir, refName))).toBe(true); // 历史保护未动
+    expect(store.listRemovedAssets().some((e) => e.filename === orphanName)).toBe(false);
+  });
   it("U1：saveNote 标记 dirty，flushHistorySnapshots 只快照 dirty 文档且清空", () => {
     const { id } = makeNote();
     const { id: id2 } = makeNote();
