@@ -267,6 +267,24 @@ describe("syncEngine（共享编排）", () => {
     expect(db.notes.get("n1")!.parentId).toBe("dead-notebook");      // 未应用远端 → 本地父不变
   });
 
+  it("P1：资产扫描失败→正文照常发布但该篇不 markSynced（留待下轮重扫，防声明被清空→GC 误删）", async () => {
+    const s3 = new MemS3();
+    const db = new MemDb();
+    const content = "<p>x</p>";
+    const h = hashOf(content);
+    db.notes.set("n1", row({ id: "n1", content, syncState: "local" }));
+    db.assets.set("n1/photo.png", new TextEncoder().encode("img"));   // 本地一张待传资产
+    const origPut = s3.putObject.bind(s3);
+    s3.putObject = async (k: string, b: any, o?: any) => {
+      if (k.startsWith("p/assets/")) throw new Error("asset put boom");   // 仅资产上传失败
+      return origPut(k, b, o);
+    };
+    const r = await syncNow(CFG, s3, db);
+    expect(s3.map.has("p/objects/n1-" + h + ".lake")).toBe(true);   // 正文不被资产失败阻断
+    expect(r.published).toBe(true);
+    expect(db.notes.get("n1")!.syncState).toBe("local");            // 关键：资产未齐 → 不 markSynced，下轮重扫重传
+  });
+
   it("二次同步：无变更不重传（skip-fast）", async () => {
     const s3 = new MemS3();
     const db = new MemDb();

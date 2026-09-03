@@ -705,6 +705,9 @@ export async function syncNow(cfg: SyncConfig, s3: S3Store, db: SyncDbPort, opts
   // 解析并回填 entry.assets。语义与串行完全一致：同一 resolveUploadAssets、同样的失败吞并日志、最终 manifest.assets 同集合，
   // 仅把各笔记的 IO 等待重叠起来；uploadQueue 顺序不变（改写的是已入队的同一 entry 对象）。
   const assetTasks: Array<{ noteId: string; content: string; rnAssets: ManifestNote["assets"] | null; entry: ManifestNote; onError: (msg: string) => void }> = [];
+  // P1（资产失败硬化，审计 260903）：本轮资产扫描/上传抛错的笔记 id 集；这些条目发布后不 markSynced（保持 local，下轮重扫重传），
+  // 避免「资产扫描失败→assets:[] 发布→被标 synced→永不重扫→原声明资产被 GC 误删」。语义仍为「资产失败不阻断正文」（正文照常发布，仅留该篇待重试）。
+  const assetScanFailed = new Set<string>();
   for (const local of localAll) {
     if (local.syncState === "purged") continue;
     const rn = remoteById.get(local.id) ?? null;
@@ -820,6 +823,7 @@ export async function syncNow(cfg: SyncConfig, s3: S3Store, db: SyncDbPort, opts
       try {
         t.entry.assets = await resolveUploadAssets(t.noteId, t.content, t.rnAssets);
       } catch (e) {
+        assetScanFailed.add(t.noteId);
         t.onError((e as Error).message);
       }
     });
@@ -912,6 +916,9 @@ export async function syncNow(cfg: SyncConfig, s3: S3Store, db: SyncDbPort, opts
 
     // ---- 6. 记账（B2 快照保护：同步期间被编辑则不标，等下轮重传） ----
     for (const item of uploadQueue) {
+      // P1：本轮资产扫描失败的笔记不 markSynced → 保持 local，下轮自动重扫重传其资产，防止 assets:[] 发布后被误标已同步、
+      // 再不清空声明导致原资产被 GC 误删（AGENTS #11 全量声明红线）。其余正常条目照常按 B2 快照保护记账。
+      if (assetScanFailed.has(item.id)) { db.log(`[H3] ${item.id} 本轮资产未齐，保持 local 待下轮重扫（不 markSynced）`); continue; }
       // 软删（trashedAt）/墓碑（deleted）条目本机未上传新正文：不写 lastUploadedHash，
       // 否则误标"本机是作者"→ 后续 ownEdit 判定恒成立、每次同步重复留档（对齐旧 sync.ts locallyUploadedIds）。
       const lastUploaded = item.entry.trashedAt || item.entry.deleted ? null : item.entry.contentHash;
