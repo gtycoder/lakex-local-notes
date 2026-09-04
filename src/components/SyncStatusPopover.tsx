@@ -204,6 +204,10 @@ export function SyncStatusPopover({
             </section>
           )}
           <footer className="sync-status-actions">
+            <span className="sync-status-footer-state" aria-live="polite">
+              上次同步 {formatTime(sync.lastSyncedAt)}
+              {model.pendingTotal > 0 && ` · 未同步 ${model.pendingTotal} 项`}
+            </span>
             <button type="button" className="sync-status-settings" onClick={() => { setOpen(false); onOpenSettings(); }}><Settings2 size={14} />同步设置</button>
           </footer>
         </div>

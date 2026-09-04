@@ -505,14 +505,15 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
                   </div>
                   {health && (
                     <div style={{ marginTop: 6, fontSize: 12, lineHeight: 1.7 }}>
-                      {health.notesMissingFile.length === 0 && health.notesHashMismatch.length === 0 && health.historyMissingFile === 0 && health.orphanRowsFileMissing.length === 0 ? (
-                        <p className="settings-hint" style={{ color: "var(--lake-sync-success, #15803d)" }}>✓ 全部自洽：正文文件、历史快照、孤儿登记均与数据库一致。</p>
+                      {health.notesMissingFile.length === 0 && health.notesHashMismatch.length === 0 && health.historyMissingFile === 0 && health.orphanRowsFileMissing.length === 0 && health.refsMissingResource.length === 0 ? (
+                        <p className="settings-hint" style={{ color: "var(--lake-sync-success, #15803d)" }}>✓ 全部自洽：正文文件、历史快照、孤儿登记、引用资源均与数据库一致。</p>
                       ) : (
                         <>
                           {health.notesMissingFile.length > 0 && <p className="settings-hint" style={{ color: "var(--lake-error, #b91c1c)" }}>✗ {health.notesMissingFile.length} 篇笔记正文文件缺失（首 3：{health.notesMissingFile.slice(0, 3).map((n) => n.title).join("、")}）</p>}
                           {health.notesHashMismatch.length > 0 && <p className="settings-hint" style={{ color: "var(--lake-error, #b91c1c)" }}>✗ {health.notesHashMismatch.length} 篇正文与基线哈希不符（可能被外部改动）</p>}
                           {health.historyMissingFile > 0 && <p className="settings-hint" style={{ color: "var(--lake-warning, #b45309)" }}>✗ {health.historyMissingFile} 份历史快照文件缺失（恢复对应版本时会失败）</p>}
                           {health.orphanRowsFileMissing.length > 0 && <p className="settings-hint" style={{ color: "var(--lake-warning, #b45309)" }}>✗ {health.orphanRowsFileMissing.length} 条孤儿登记文件缺失（登记漂移）</p>}
+                          {health.refsMissingResource.length > 0 && <p className="settings-hint" style={{ color: "var(--lake-error, #b91c1c)" }}>✗ 正文引用的 {health.refsMissingResource.length} 个资源文件缺失（首 3：{health.refsMissingResource.slice(0, 3).map((r) => r.filename).join("、")}）</p>}
                         </>
                       )}
                       <p className="settings-hint">生成于 {formatDateTime(Date.parse(health.checkedAt))}。本检查只读、不修复；发现问题请从备份/云端恢复对应文件。</p>

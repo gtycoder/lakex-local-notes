@@ -82,6 +82,12 @@ export class QuickNotesStore {
     });
   }
 
+  /** A1 一致性 DB 快照：VACUUM INTO 单文件（无 WAL 依赖、可独立打开）。目标必须不存在。 */
+  backupDatabaseTo(targetPath: string): void {
+    const escaped = targetPath.replace(/'/g, "''");
+    this.db.exec(`VACUUM INTO '${escaped}'`);
+  }
+
   private migrate(): void {
     this.db.exec(`
       CREATE TABLE IF NOT EXISTS quick_notes (

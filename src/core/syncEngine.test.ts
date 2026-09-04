@@ -948,4 +948,27 @@ describe("syncEngine（共享编排）", () => {
     expect(n.assets[0]).toMatchObject({ filename: "photo.png", size: imgBytes.length });
     expect(n.assets[0].hash).toBe(sha256Sync(imgBytes));
   });
+
+  it("A2 云端恢复语义：空本地 + 远端已有 manifest → 全量下载、零上传（只拉不打）", async () => {
+    const s3 = new MemS3();
+    const db = new MemDb();
+    // 远端：一篇 active 笔记（含内容对象）+ 目录树
+    const remoteContent = "<p>云端内容</p>";
+    const H = hashOf(remoteContent);
+    s3.map.set("p/objects/n1-" + H + ".lake", new TextEncoder().encode(remoteContent));
+    s3.map.set("p/manifests/latest.json", new TextEncoder().encode(JSON.stringify({
+      version: 4, workspaceId: "default", commitId: "c-remote", prevCommitId: null, createdAt: "2026-02-01T00:00:00.000Z",
+      folders: [{ id: "nb1", title: "笔记本", parentId: null, sortOrder: 0, nodeType: "notebook", icon: null, updatedAt: "2026-02-01T00:00:00.000Z" }],
+      notes: [{ id: "n1", title: "云端笔记", parentId: "nb1", sortOrder: 0, updatedAt: "2026-02-01T00:00:00.000Z", contentHash: H, isConflict: false, assets: [] }],
+    })));
+    // 空本地（恢复后全新空库）→ 同步
+    const r = await syncNow(CFG, s3, db);
+    expect(r.appliedRemote).toBe(1);      // 全量下载远端笔记
+    expect(r.uploaded).toBe(0);           // 只拉不打：零上传
+    expect(r.published).toBe(false);      // 无本地变更，不发布新 manifest
+    expect(db.notes.get("n1")).toBeTruthy();
+    expect(db.notes.get("n1")!.content).toBe(remoteContent);
+    expect(db.notes.get("n1")!.syncState).toBe("synced");
+    expect(db.folders.has("nb1")).toBe(true); // 远端目录树导入
+  });
 });

@@ -1642,6 +1642,7 @@ describe("A3 数据体检（runDataHealthCheck，只读）", () => {
     expect(r.notesHashMismatch).toEqual([]);
     expect(r.historyMissingFile).toBe(0);
     expect(r.orphanRowsFileMissing).toEqual([]);
+    expect(r.refsMissingResource).toEqual([]);
     expect(r.checkedAt).toBeTruthy();
   });
 
@@ -1681,5 +1682,18 @@ describe("A3 数据体检（runDataHealthCheck，只读）", () => {
       .run(note.id, "1786123456789_deadbeef.png", fakePath, 5, "image/png");
     const r = store.runDataHealthCheck();
     expect(r.orphanRowsFileMissing.some((o) => o.noteId === note.id)).toBe(true);
+  });
+  it("正文引用资源缺失被识别（refsMissingResource）", () => {
+    const note = store.createNote("引用缺失");
+    const refName = "1786123456789_abcd1234.png";
+    const assetUrl = "http://127.0.0.1:19876/" + note.id + "/" + refName;
+    store.saveNote(note.id, "引用缺失", "<p><img src=\"" + assetUrl + "\"></p>");
+    const r = store.runDataHealthCheck();
+    expect(r.refsMissingResource.some((x) => x.noteId === note.id && x.filename === refName)).toBe(true);
+    const assetsDir = path.join(dir, "note-assets", note.id);
+    fs.mkdirSync(assetsDir, { recursive: true });
+    fs.writeFileSync(path.join(assetsDir, refName), "refdata");
+    const r2 = store.runDataHealthCheck();
+    expect(r2.refsMissingResource.some((x) => x.noteId === note.id && x.filename === refName)).toBe(false);
   });
 });

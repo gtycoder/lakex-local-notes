@@ -1625,6 +1625,8 @@ export class Store {
     historyMissingSample: Array<{ id: number; noteId: string; filePath: string }>;
     orphanRowsChecked: number;
     orphanRowsFileMissing: Array<{ id: number; noteId: string; filename: string }>;
+    refsChecked: number;
+    refsMissingResource: Array<{ noteId: string; filename: string }>;
     checkedAt: string;
   } {
     const checkedAt = new Date().toISOString();
@@ -1653,7 +1655,22 @@ export class Store {
         if (historyMissingSample.length < 10) historyMissingSample.push({ id: h.id, noteId: h.note_id, filePath: h.file_path });
       }
     }
-    const orphanRows = this.db.prepare("SELECT * FROM orphan_assets").all() as OrphanAssetRow[];
+    const refsChecked: string[] = [];
+  const refsMissingResource: Array<{ noteId: string; filename: string }> = [];
+  for (const n of noteRows) {
+    const lakePath = this.notePath(n.id);
+    if (!fs.existsSync(lakePath)) continue; // 文件缺失已在第一查上报
+    try {
+      const body = fs.readFileSync(lakePath, "utf8");
+      for (const filename of extractAssetRefs(body)) {
+        refsChecked.push(filename);
+        if (!fs.existsSync(path.join(this.noteAssetsDirFor(n.id), filename))) {
+          refsMissingResource.push({ noteId: n.id, filename });
+        }
+      }
+    } catch { /* 读盘失败已在第一查覆盖 */ }
+  }
+  const orphanRows = this.db.prepare("SELECT * FROM orphan_assets").all() as OrphanAssetRow[];
     const orphanRowsFileMissing: Array<{ id: number; noteId: string; filename: string }> = [];
     for (const o of orphanRows) {
       if (!fs.existsSync(path.join(this.root, o.file_path))) {
@@ -1669,8 +1686,17 @@ export class Store {
       historyMissingSample,
       orphanRowsChecked: orphanRows.length,
       orphanRowsFileMissing,
+      refsChecked: refsChecked.length,
+      refsMissingResource,
       checkedAt,
     };
+  }
+
+  /** A1 一致性 DB 快照：VACUUM INTO 单文件（无 WAL 依赖、可独立打开）。
+   * 目标文件必须不存在（VACUUM INTO 语义）；路径含单引号需转义。 */
+  backupDatabaseTo(targetPath: string): void {
+    const escaped = targetPath.replace(/'/g, "''");
+    this.db.exec(`VACUUM INTO '${escaped}'`);
   }
 
   // ===== S3 同步支持 =====

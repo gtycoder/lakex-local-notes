@@ -16,14 +16,14 @@ import {
 } from "../ipcLimits.js";
 import type { IpcRegistrar } from "./registrar.js";
 import { restoreTrashWithAssets, ensureTrashNoteAssets } from "../syncEngineController.js";
-import { exportWorkspaceBackup, prepareCloudRestore, relaunchApp } from "../workspaceBackup.js";
+import { exportWorkspaceBackup, prepareCloudRestore, relaunchApp, writeS3RestoreSeed } from "../workspaceBackup.js";
 
 interface ResourceUploadInput {
   bytes: Uint8Array;
   filename: string;
 }
 
-export function registerNotesIpc(ipc: IpcRegistrar, store: Store, drafts: DraftJournal, workspaceRoot: string): void {
+export function registerNotesIpc(ipc: IpcRegistrar, store: Store, drafts: DraftJournal, workspaceRoot: string, backupDatabases: (targetRoot: string) => void): void {
   /** 导出目录白名单：只接受本进程 pick_export_dir 系统选择框的返回值。 */
   let lastPickedExportDir: string | null = null;
 
@@ -85,12 +85,15 @@ export function registerNotesIpc(ipc: IpcRegistrar, store: Store, drafts: DraftJ
     const ts = new Date().toISOString().replace(/[:T]/g, "-").slice(0, 19);
     const target = path.join(dir, `lake-notes-backup-${ts}`);
     const log = (msg: string) => store.logScopes.sync.info(msg);
-    const result = exportWorkspaceBackup(workspaceRoot, target, log);
+    const result = exportWorkspaceBackup(workspaceRoot, target, backupDatabases, log);
     return { backupPath: result.backupPath, copiedDirs: result.copiedDirs };
   });
   ipc.handle("prepare_cloud_restore", () => {
     // A2 机械安全（审计 §4.5）：隔离备份 → 全新空库 → 只拉不打（重启后首同步语义）→ 显式确认在渲染层。
+    // 生产可用性（审计瑕疵 2）：S3 凭据随恢复保留——重启后 main 从 seed 读回新库，避免空库丢配置。
+    const s3 = store.getS3Settings();
     const { quarantinePath } = prepareCloudRestore(workspaceRoot);
+    if (s3) writeS3RestoreSeed(workspaceRoot, s3);
     return { quarantinePath };
   });
   ipc.handle("confirm_relaunch", () => {

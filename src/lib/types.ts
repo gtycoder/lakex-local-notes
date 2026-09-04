@@ -160,6 +160,8 @@ export interface DataHealthReport {
   historyMissingSample: Array<{ id: number; noteId: string; filePath: string }>;
   orphanRowsChecked: number;
   orphanRowsFileMissing: Array<{ id: number; noteId: string; filename: string }>;
+  refsChecked: number;
+  refsMissingResource: Array<{ noteId: string; filename: string }>;
   checkedAt: string;
 }
 

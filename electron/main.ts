@@ -1,5 +1,6 @@
 import { app, BrowserWindow, crashReporter, dialog, screen, session, shell, type WebFrameMain } from "electron";
 import crypto from "node:crypto";
+import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { Store } from "./store.js";
@@ -12,6 +13,7 @@ import { syncNowViaEngine } from "./syncEngineController.js";
 import { initLogger, log, logHeapPeak } from "./logger.js";
 import { syncQuickNotes } from "./quickNotesSync.js";
 import { readDevS3Settings } from "./devConfig.js";
+import { readAndRemoveS3RestoreSeed } from "./workspaceBackup.js";
 import { createIpcRegistrar } from "./ipc/registrar.js";
 import { registerNotesIpc } from "./ipc/registerNotes.js";
 import { DraftJournal } from "./draftJournal.js";
@@ -349,7 +351,14 @@ function registerIpc(): void {
     if (!isTrustedSenderFrame(event.senderFrame, event.sender)) throw new Error("IPC 调用来源不受信任");
   }, afterInvoke);
 
-  registerNotesIpc(ipc, store, drafts, workspaceRoot());
+  registerNotesIpc(ipc, store, drafts, workspaceRoot(), (targetRoot) => {
+    // A1 一致性快照：主库 + 小记库各经其连接 VACUUM INTO（单文件、可独立打开）
+    const mainTarget = path.join(targetRoot, "metadata.sqlite3");
+    store.backupDatabaseTo(mainTarget);
+    const quickDir = path.join(targetRoot, "quick-notes");
+    fs.mkdirSync(quickDir, { recursive: true });
+    quickNotes.backupDatabaseTo(path.join(quickDir, "metadata.sqlite3"));
+  });
   registerHistoryIpc(ipc, store, () => restartHistoryTimers?.());
   registerSyncIpc(ipc, {
     store,
@@ -409,6 +418,15 @@ if (!app.requestSingleInstanceLock()) {
       });
       if (choice === 0) { app.quit(); return; }
     }
+    // A2 云端恢复（换机/坏库）：重启后若存在恢复 seed（prepareCloudRestore 写入的 S3 配置），
+    // 先回填新库再删除——避免生产环境恢复后空库丢凭据、无法首同步（审计瑕疵 2 修复）。
+    try {
+      const seed = readAndRemoveS3RestoreSeed(workspaceRoot());
+      if (seed && !store.getS3Settings()) {
+        store.saveS3Settings(seed as Parameters<typeof store.saveS3Settings>[0]);
+        log.app.info("[restore] S3 凭据已从恢复 seed 回填新库");
+      }
+    } catch (e) { log.app.warn(`[restore] S3 seed 回填失败: ${(e as Error).message}`); }
     // 开发版可选 S3 seed（多端联调用）：凭据只从环境变量读取；
     // 没有配置时保持纯本地模式，不把共享密钥打进源码或新开发数据。
     if (isDev && !store.getS3Settings()) {
