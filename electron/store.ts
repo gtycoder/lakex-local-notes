@@ -1656,21 +1656,21 @@ export class Store {
       }
     }
     const refsChecked: string[] = [];
-  const refsMissingResource: Array<{ noteId: string; filename: string }> = [];
-  for (const n of noteRows) {
-    const lakePath = this.notePath(n.id);
-    if (!fs.existsSync(lakePath)) continue; // 文件缺失已在第一查上报
-    try {
-      const body = fs.readFileSync(lakePath, "utf8");
-      for (const filename of extractAssetRefs(body)) {
-        refsChecked.push(filename);
-        if (!fs.existsSync(path.join(this.noteAssetsDirFor(n.id), filename))) {
-          refsMissingResource.push({ noteId: n.id, filename });
+    const refsMissingResource: Array<{ noteId: string; filename: string }> = [];
+    for (const n of noteRows) {
+      const lakePath = this.notePath(n.id);
+      if (!fs.existsSync(lakePath)) continue; // 文件缺失已在第一查上报
+      try {
+        const body = fs.readFileSync(lakePath, "utf8");
+        for (const filename of extractAssetRefs(body)) {
+          refsChecked.push(filename);
+          if (!fs.existsSync(path.join(this.noteAssetsDirFor(n.id), filename))) {
+            refsMissingResource.push({ noteId: n.id, filename });
+          }
         }
-      }
-    } catch { /* 读盘失败已在第一查覆盖 */ }
-  }
-  const orphanRows = this.db.prepare("SELECT * FROM orphan_assets").all() as OrphanAssetRow[];
+      } catch { /* 读盘失败已在第一查覆盖 */ }
+    }
+    const orphanRows = this.db.prepare("SELECT * FROM orphan_assets").all() as OrphanAssetRow[];
     const orphanRowsFileMissing: Array<{ id: number; noteId: string; filename: string }> = [];
     for (const o of orphanRows) {
       if (!fs.existsSync(path.join(this.root, o.file_path))) {
@@ -1712,6 +1712,17 @@ export class Store {
     } catch {
       return null;
     }
+  }
+
+  /** A2 恢复 seed：导出 settings 表原始行（secretAccessKey 为 enc:v1: 密文，绝不解密成明文）。无配置 → null。 */
+  exportS3SettingsRow(): string | null {
+    const row = this.db.prepare("SELECT value FROM settings WHERE key='s3_settings'").get() as { value: string } | undefined;
+    return row?.value ?? null;
+  }
+
+  /** A2 恢复 seed：把密文行原样写回（不经 saveS3Settings，避免二次加密）。 */
+  importS3SettingsRow(value: string): void {
+    this.db.prepare("INSERT INTO settings(key,value) VALUES('s3_settings',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value").run(value);
   }
 
   /** 历史保留策略配置（P5）：读取，缺省返回默认值 */

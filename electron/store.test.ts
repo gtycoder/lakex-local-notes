@@ -1049,6 +1049,19 @@ describe("S3 配置（safeStorage 加密落盘）", () => {
     new Database(path.join(dir, "metadata.sqlite3")).prepare("INSERT INTO settings(key,value) VALUES(?,?)").run("s3_settings", "not-json").changes || undefined;
     expect(store.getS3Settings()).toBeNull();
   });
+
+  it("A2 seed：exportS3SettingsRow 返回密文行（含 enc:v1:、绝无明文 secret）；importS3SettingsRow 原样写回可解密", () => {
+    store.saveS3Settings(settings);
+    const row = store.exportS3SettingsRow();
+    expect(row).not.toBeNull();
+    expect(row!).toContain("enc:v1:");            // secret 已加密
+    expect(row!).not.toContain("sk-secret");      // 绝无明文 secret
+    // 模拟新空库：import 原样写回 → 同机 safeStorage 可解密还原
+    new Database(path.join(dir, "metadata.sqlite3")).prepare("DELETE FROM settings WHERE key='s3_settings'").run();
+    expect(store.getS3Settings()).toBeNull();
+    store.importS3SettingsRow(row!);
+    expect(store.getS3Settings()?.secretAccessKey).toBe("sk-secret");
+  });
 });
 
 describe("同步状态 / 导入", () => {

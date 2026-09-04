@@ -418,13 +418,13 @@ if (!app.requestSingleInstanceLock()) {
       });
       if (choice === 0) { app.quit(); return; }
     }
-    // A2 云端恢复（换机/坏库）：重启后若存在恢复 seed（prepareCloudRestore 写入的 S3 配置），
-    // 先回填新库再删除——避免生产环境恢复后空库丢凭据、无法首同步（审计瑕疵 2 修复）。
+    // A2 云端恢复（换机/坏库）：重启后若存在恢复 seed（prepareCloudRestore 写入的 settings 密文行），
+    // 原样写回新库再删除——secretAccessKey 保持 enc:v1: 密文（绝不明文落盘），同机 safeStorage 可解。
     try {
       const seed = readAndRemoveS3RestoreSeed(workspaceRoot());
-      if (seed && !store.getS3Settings()) {
-        store.saveS3Settings(seed as Parameters<typeof store.saveS3Settings>[0]);
-        log.app.info("[restore] S3 凭据已从恢复 seed 回填新库");
+      if (seed && typeof seed === "string" && !store.getS3Settings()) {
+        store.importS3SettingsRow(seed);
+        log.app.info("[restore] S3 凭据（密文行）已从恢复 seed 回填新库");
       }
     } catch (e) { log.app.warn(`[restore] S3 seed 回填失败: ${(e as Error).message}`); }
     // 开发版可选 S3 seed（多端联调用）：凭据只从环境变量读取；
