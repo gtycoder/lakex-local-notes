@@ -1,6 +1,7 @@
 # 里程碑实施计划 v2：冲突收口 / 回收站 / 诊断 / 数据生命周期 / 审美（2026-09-03）
 
-> 状态：**全部完成（feat/sync-ux-milestones，待合 master）**。审计见 docs/AUDIT-MILESTONES-SYNC-UX-2026-09-03.md。
+> 状态：**全部完成（master 24caf6b，含 GPT 落地审计 5 项瑕疵修复）**。审计见 docs/AUDIT-MILESTONES-SYNC-UX-2026-09-03.md。
+> 落地审计修复（24caf6b）：A1 改 VACUUM INTO 一致性单文件快照（原顺序拷贝不保证一致）· A2 S3 凭据 seed 跨恢复保留（生产不再丢配置）+ 补「空库只拉不打」syncEngine 测试 · D1 补浮层页脚状态行 · A3 补引用图↔资源存在检查。
 > 进度（commit）：M1a B1+D1 `02f1008` · M1b-B3 `3a282d4` · 方案进度 `146df66` · M2 C1+C2 `1cc9882` · M3 A3+D2+F3 `dd84e69` · M4 F1 `f1399cb` · M5 A1+A2 `4125950` · M6 E `49ec700`
 > B2 并入 B1（审计 §3.1：同步即完成、冲突留档不丢，完成即时 notice 已覆盖「冲突收口」价值；完整 preflight 需复制引擎下载判定、高漂移，成本>收益，不做）
 > 多端共享：B3 经 SyncDbPort 签名扩展（移动 bridge 忽略 protected）、C1 经 trashRepository 共享纯函数、D2 经 gcPolicy.pendingKeyReason、A3 只读放 electron（守 node: 禁入）；移动端零破坏。
