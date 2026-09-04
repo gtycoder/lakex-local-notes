@@ -195,9 +195,12 @@ export function SyncStatusPopover({
               <div>
                 <strong>已保留历史快照 · {conflictSnapshots.length}</strong>
                 <span>{conflictSnapshotText ?? "检测到远端版本差异，已保留历史快照"}</span>
-                <div className="sync-status-history-list">
+                <div className="sync-status-history-list b3-list b3-list--background" role="list">
                   {conflictSnapshots.map((item) => (
-                    <button key={item.noteId} type="button" onClick={() => onOpenHistory?.(item.noteId)}>{item.title || "无标题"} · 查看历史</button>
+                    <button key={item.noteId} type="button" className="b3-list-item" onClick={() => onOpenHistory?.(item.noteId)}>
+                      <span className="b3-list-item__text">{item.title || "无标题"}</span>
+                      <span className="b3-list-item__meta">查看历史</span>
+                    </button>
                   ))}
                 </div>
               </div>
@@ -208,7 +211,7 @@ export function SyncStatusPopover({
               上次同步 {formatTime(sync.lastSyncedAt)}
               {model.pendingTotal > 0 && ` · 未同步 ${model.pendingTotal} 项`}
             </span>
-            <button type="button" className="sync-status-settings" onClick={() => { setOpen(false); onOpenSettings(); }}><Settings2 size={14} />同步设置</button>
+            <button type="button" className="b3-button b3-button--outline" onClick={() => { setOpen(false); onOpenSettings(); }}><Settings2 size={14} />同步设置</button>
           </footer>
         </div>
       )}

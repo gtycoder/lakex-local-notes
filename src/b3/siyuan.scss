@@ -3,8 +3,10 @@
  * 仅引入可复用的通用组件（button/dialog/menu/list/form/switch/tooltips/typography 等）；
  * protyle 编辑器 / av 数据库 / graph / pdf 等思源专属功能样式不引入。
  * 用法：Lake Notes 的 React 组件输出对应 .b3-* 类名即可获得思源观感。 */
+@use "./siyuan/util/function";
 @use "./siyuan/util/keyframes";
 @use "./siyuan/util/scroll";
+@use "./siyuan/business/config";
 @use "./siyuan/component/button";
 @use "./siyuan/component/card";
 @use "./siyuan/component/chip";

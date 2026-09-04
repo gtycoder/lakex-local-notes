@@ -7,7 +7,7 @@
 ## 0. 当前基线（新会话开工前）
 - 分支/远端：开发主干 `master` ↔ Gitee `origin`（SSH：`git@gitee.com:gtycoder/local-lake.git`；`master` 亦是远程默认分支）同步。
   **本文不固定 commit hash**——查 `git log -1 --oneline`。
-- 质量门槛：`tsc` 0 error · `vitest` **812 passed / 15 skipped** · 桌面 `vite build` + 移动 `vite build --config vite.mobile.config.ts` 全绿（计数变动见 §2.x；别写死旧数字）。
+- 质量门槛：`tsc` 0 error · `vitest` **824 passed / 15 skipped** · 桌面 `vite build` + 移动 `vite build --config vite.mobile.config.ts` 全绿（计数变动见 §2.x；别写死旧数字）。
 - 本地业务分支只有 `master`（其余已合并/删除；`origin/main` 为旧 Tauri 遗留引用）。
 - 里程碑（260903，docs/MILESTONES-SYNC-UX-2026-09-03.md）：M1a-M6 已全量实现并合入 master（merge e803948）——B1 冲突通知收口、B3 冲突归档 30 天保护（note_history.protected_until，多端 port 兼容）、C1 回收站到期倒计时（trashDaysUntilPurge 共享纯函数）、C2 purge 三端语义文案、A3 数据体检（runDataHealthCheck）、D2 待回收明细（pendingKeyReason）、F3 清理统计、F1 应用内日志查看器（read_app_log）、A1 整库备份（exportWorkspaceBackup）、A2 云端恢复（prepareCloudRestore 改名隔离+空库重启首同步）、E 视觉 tokens 收编。B4 按审计取消（对齐 S3-GC-DESIGN §14）；A4 云端报告留 backlog。
 - 近期其他主线（260902→260903）：语雀 bookmark 卡修复 + S3 同步性能优化 + 两处 bug 修复 + 压测，均已在 master。
@@ -44,6 +44,57 @@
 - `AGENTS.md` §3 新增不变量 **#11（清单声明⇒存在：禁逐对象 HEAD/禁陈旧缓存；含两前提：无带外删除、资产按 filename 内容寻址；下载侧对称差集）**、
   **#12（未分类惰性）**、**#13（S3 并发峰值 8）**。审计报告（外部 GPT）在仓库外 `../AUDIT-s3-sync-260903.md`、`../AUDIT-dejavu-alignment-260903.md`。
 
+### 2.5 UI 精仿思源（260904，用户验收中·未合入）
+- **决策**：设置面板/浮层从「自研 settings-* + 内联样式」整体切到思源版式语法（详见 `AGENTS.md §3 #14`）。
+  思源组件 SCSS 本就 vendored 在 `src/b3/siyuan/`，只是我们没用它——所以这次是**接线**，不是新造一套。
+- **新增** `src/b3/siyuan/business/_config.scss`（署名移植）：`config-group/title/items/item/name/block/readonly/stats/assets/empty`；
+  `overlays.css` 收编为「设置骨架 + 浮层通用件 + 本地小件」三段；`siyuan.scss` 补挂 `util/function`（`fn__space/fn__size200/ft__error/fn__kbd` 之前根本没加载）。
+- **SettingsPanel**（767→~840 行 JSX 全重写）：`Group/Item/Block/Switch/Seg/NumField/TextField/Shortcut` 原语替代散落 `style={{}}`；
+  数字框不再拉成整行（原「回收窗口 7」占满 1400px 就是它）、S3 长文本 360px、GC 删除记录/待回收明细/日志改 `.config-readonly` 等宽框、体检结果 `.checks` 分行配色。
+- **资源页**（用户点名「丑出天际」）：分组清单 + 状态徽章 + 单行省略 + **hover 才出现的图标操作**（复制/位置/删除）+ 预览按思源 设置-资源 的**竖向布局**（清单在上、大图预览在下，`config-assets` flex-direction:column）——先做成右侧窄栏过，图片看不清，已改回竖向。
+- **HistoryPanel**：孤儿文件 tab 从「整宽列表 + 删除按钮漂在最右」改成 左 320px 列表 + 右内嵌预览（图片/文本；历史弹窗沿用思源历史面板的横向分栏，不像设置页那样竖向），
+  工具条（摘要 + 清理全部）上移；**删掉孤儿预览模态框**（`history-preview-backdrop` 那套），统一走内嵌预览。
+- **TrashPanel**：行改 `.b3-list-item` 两行密度（标题 + 元信息），恢复/彻底删除改 hover 图标；`回收站/正文已删/已被他端删除/N 天后清除` 统一 `.badge`；
+  文档/小记 tab 用 `ln-tabs`（与历史弹窗同一套）。
+- **删除**（不留兼容层）：`.settings-group/row/choice/toggle/field/hint/body`、`.shortcut-list/.shortcut-row`、`.trash-item*`/`.history-item*`/`.trash-tabs`/`.history-tabs`/`.history-create`/`.history-clean-all`、
+  `quick-notes-trash-*`（无使用者）、`b3/components.css` 里与 overlays 打架的 `.settings-nav-item.active`/`.settings-choice`。
+- **修 bug**：回收站/历史弹窗「数据一多，左侧列表盖住顶部提示文字」——根因是浮层 flex 列里 `.trash-panel-hint/.history-hint/.ln-tabs/.ln-toolbar/.trash-error`
+  默认 `flex: 0 1 auto` 被压扁、溢出文字被后绘制的列表盖住；已给这些固定区 `flex: 0 0 auto`（`styles.css`，实测 200px 高面板不再重叠）。
+- **第二批（同日，用户验收反馈后）**：
+  - **页签存在感**：只给选中项灰底时看不出「这是两个横向 tab」（用户点名）。改成**分段控件**——`.ln-tabs__track`（`--b3-theme-surface` 轨道 + inset 描边 + 圆角）+ 选中项白色浮起段（`--b3-theme-background` + 主色字 + 轻投影）；历史弹窗与回收站共用。JSX 里 tab 项要包进 `.ln-tabs__track`，动作按钮（创建快照）留在轨道外。
+  - **搜索面板 / 同步状态 popover / 小记工作台**收进同一套：结果行与冲突快照行改 `.b3-list b3-list--background` + `.b3-list-item`(+`__graphic/__text/__meta`) + `.badge`（命中位置徽章），空态统一 `.ln-empty(--idle)`，popover 结构色由 `--lake-*` 改 `--b3-*`、设置按钮改 `b3-button b3-button--outline`；小记的三段 hex 覆盖层（1287-1306 / 1462-1466 / 基础层）**合并成一段令牌派生块**（紫色身份用 `--shell-hue`，不再写死 `#5d5a86` 等）。
+  - 顺带删除：`.search-result*`、`.search-panel-empty*`、`.quick-notes-empty/-loading/-no-notebook/notebook-list 自绘 hover`、`b3/components.css` 里重复的 `.search-result:hover/.settings-nav-item:hover`。
+- 门禁：`tsc` 0 · vitest 815/15 · 桌面+移动 build 全绿；深浅主题与真机 DOM 量测（CDP）逐页复核。
+### 2.6 「看不见的文档」数据 bug 根因 + 修复（260904，用户报：资源页出现本地/回收站都没有的欢迎文档，2 个资源既不能看也不能删）
+- **实数据证据**：`deleted_notes` 里 `notebook-personal`（folder 墓碑，deleted_at 09-02 12:21:22，**purged_at 已被清空**）；
+  而 `tree_nodes.welcome-note.created_at = 09-02 12:22:50`（**purge 之后 88 秒被重新导入**），`parent_id=notebook-personal` 指向已不存在的目录
+  → 侧栏/回收站都渲染不出来，但 `notes` + 云端清单条目 + 09-02 13:48 的历史快照都活着 → 它的 2 个资源被历史引用 → 「历史保护」不可删；
+  那 2 个文件是 89 B / 93 B 的伪 PNG（09-02 粘贴测试残留），所以预览还是破图。
+- **洞 1（保护是临时的）**：`isFolderPurged()` 看 `purged_at IS NOT NULL`，而 `markPurgeSynced()` 在 S3 前缀删除成功后会清空 `purged_at`（防重复删前缀）
+  ⇒ 前缀一删完，"本地已彻底删除该目录"的判定就失效，陈旧清单里的目录会被重新导入、其子文档落到不存在的父下。
+  **改成永久判定**：`deleted_notes` 存在 `node_type='folder'` 墓碑即视为已 purge（该墓碑只由 purgeTrashItem 写、软删不写、也不会被 revoke）。
+- **洞 2（墓碑漏写）**：`purgeTrashItem` 里 `if (meta) tombstone.run(...)` —— `notes` 行缺失（漂移）时**不写 note 墓碑** → 云端从不下架 → 必然复活。
+  **改成无条件写**：元数据从 `tree_nodes` 兜底（同一棵树的权威副本）。
+- **诊断补位**：`runDataHealthCheck` 新增 `treeChecked` / `treeDanglingParent`（父不存在的节点=「文档凭空消失」这一类），设置-文档与历史 的体检结果同步显示。
+- **顺手修误报**：哈希比对原先对所有有基线的笔记做，本地"已编辑待上传"（`sync_state='local'`）必然与基线不同 → 天天误报"可能被外部改动"。
+  改为**只比对 `sync_state='synced'`**（我们自认与云端一致的那些）；相应既有测试补 `sync_state='synced'` 前置。
+- **已清掉这条脏数据**（dev 库，一次性 SQL + 删文件，非兼容代码）：写 `welcome-note` 的 note 墓碑（`deleted_at/purged_at=now`、`published_at=NULL`）
+  + 删 `notes/tree_nodes/note_history/orphan_assets/notes_fts/sync_base/declared_assets` 行 + 删 `notes/welcome-note.lake`、`note-assets/welcome-note/`、`history/welcome-note/`。
+  ⇒ 下次同步会发布 `deleted:true` 并删云端 `objects/welcome-note-*`、`assets/welcome-note/` 前缀，其他端跟随，不会再复活。**我没有替你点同步**——点一次即可下架。
+- 回归测试 4 个（folder 永久判定 / notes 行缺失仍写墓碑 / 树完整性 / 哈希只比 synced）：`electron/store.test.ts`。
+
+
+
+### 2.7 关于页重做（260904，用户：「还有什么能模仿思源做得更好的」→ 讨论后定 A+B+C+D+E）
+- 思源的关于页其实只有两块（版本 + logo/信息），**没有**数据路径/存储占用；所以我们仿的是它「可核对的元信息」这一意图，不是抄布局。明确**不做**：检查更新/更新渠道（我们没有发布服务，做了就是假设置项）、把危险操作搬进关于页。
+- **新增只读 IPC**（`electron/ipc/registerSystemInfo.ts`，已在 `main.ts` 装配；preload 暴露名是 `lakeNative`，不是 lakeApi）：
+  - `get_system_info` → 应用版本（`app.getVersion()` 兜 package.json）、Electron/Chromium/Node/平台、**pin 的依赖版本表**（读 `app.getAppPath()/package.json`，含 lakex 内核）、路径、`store.getStorageOverview()`、小记数。
+  - `reveal_data_folder(kind)` → **白名单枚举**（data/workspace/logs/assets/history/quickNotes），路径由主进程拼；未知 kind 抛 `IpcInputError`；目标不存在退回父级。绝不接受渲染层传路径（对齐 `read_app_log` 口径）。
+- `store.getStorageOverview()`（只读）：笔记/笔记本/分组同口径（**排除回收站里的**）、小记、资源文件数与体积（`note-assets` 浅两层遍历，不全盘扫）、历史快照数与体积（读 `note_history` 的 size，不遍历）、库文件字节、回收站节点/删除墓碑/孤儿登记数。
+- 关于页 5 组：关于（版本+一句话定位）/ 版本与运行环境（kv 表）/ 数据与存储（config-stats 概览 + 4 条路径行带「在 Finder 中显示」）/ 诊断（**复制诊断信息**→剪贴板，反馈问题时直接贴）/ 第三方与许可（思源 AGPL 署名、lakex 闭源、开源依赖清单）。
+- 新样式件：`.kv/.kv__row/.kv__k/.kv__v`（等宽键值表）、`.config-item.item--path .b3-label__text{word-break:break-all}`（路径必须看全，思源的 desc 默认单行裁切）。
+- 测试：`electron/ipc/registerSystemInfo.test.ts`（白名单拒绝任意路径 / logs 定位到文件 / 版本表解析与缺文件降级）+ `store.test.ts` 概览 2 例。计数：vitest **824 passed / 15 skipped**。
+
 ## 3. 真正的待办（已剔除全部完成项，按优先级）
 **性能/健壮性（本轮延续）**
 1. 资产/正文 PUT 的**对象级 5xx 重试 + 池 fail-fast**（当前靠 #2.2 的"失败不 markSynced→下轮重扫"兜底，属缓做）。
@@ -76,6 +127,11 @@
   ⇒ 已在 `AGENTS.md` §2 定了分工：**易过期事实（分支/hash/计数/当前焦点）只写 HANDOFF §0**，别把这些数字写回 AGENTS/README。
 - **`git worktree list` 要纳入开工检查**：android worktree 的未提交 WIP 曾完全没进交接，几乎导致重复劳动（现已记入 §0/§3.6）。
 - **`defaultNotebookId()` 急切调用 = 空库同步凭空建「未分类」并上传扩散**；改惰性后，`effectiveParent()` 也只能在"真应用"处解析（冲突探测等 skip 路径调它照样会建）。
+- **hooks 必须在早退之前**：`SettingsPanel` 里 `if (!open) return null;` 之后还有一堆 `const handler = ...`，我把新加的 `useState/useEffect` 顺手插在那片区域 → 「Rendered more hooks than during the previous render」→ **整个 React 树卸载**（`#root` 变空，表现为"应用白屏/按钮全没了"，很容易被误判成 GPU 崩溃）。加 hook 一律放到组件顶部的 state 区；排查用 CDP 注入 `window.addEventListener('error')` + `Page.reload` 看真实堆栈。
+- **CDP `Input.dispatchMouseEvent` 在 `Page.reload` 之后可能点不动**（窗口非激活时），`element.click()` 仍可靠；验证 UI 用 JS click，验证真实交互（拖拽/悬停/剪贴板）才用鼠标事件。
+- **`purged_at` 不是"已彻底删除"的永久标记**：`markPurgeSynced()` 在前缀删除成功后会清空它（防重复删）。任何"别把这个复活"的判定都必须看**永久墓碑**（folder 看 `deleted_notes.node_type='folder'`），否则保护只活到下一次同步。
+- **`purgeTrashItem` 的墓碑必须无条件写**：`notes` 行缺失时跳过 = 云端永不下架 = 之后必然复活成"父不存在的不可见文档"（本次实数据就这么踩的）。
+- **改 `electron/*.ts` / `src/core/*` 会热重载重启 Electron → 又命中 GPU `exit_code=15` 把整个 dev 实例带走**（本轮两次）。改主进程后要么先重启再验证，要么按 HANDOFF §6 用带 `--use-angle=metal` 的方式起；`nohup` 起的 dev 会随会话回收而死，**必须 tty 长驻**。
 - **`contentHash` 会骗人**：`syncAdapters.localHashOf` 对 synced 笔记返回 `store.baseHash`（**不读 .lake**）；判"本地可复用"必须**实读正文 + sha256**，否则文件被外部删/坏时把空内容写进回收站（缺口2 加固的教训，与缺口1"验真实字节"对称）。
 - **不要给"资产存在性"做本机持久缓存**（GC 会真删对象→缓存失真→破坏跨端自愈，正是当年删缓存的原因）；用"刚下载的远端清单"做差集才对。
 - **S3 并发峰值 ≤8**（七牛建议），`NOTE(2)×ASSET(4)`；曾 16 偏高、无必要。
@@ -85,6 +141,14 @@
 - `better-sqlite3` 是 **N-API**（Electron 和 vitest/node 都能加载）；命令行查库：拷 `.sqlite3`+`.sqlite3-wal` 到别处用 `/usr/bin/sqlite3 -readonly`（app 在跑时读快照）。
 - S3 `[perf]` 日志里 head/put-stream 行尾数字是 **epoch 时间戳不是耗时**（旧坑，现 head 已移除）。
 - 幂等/删除语义红线：软删=移动到回收站笔记本（`parentId=TRASH + trashedAt`，**非 `deleted:true`**）；`deleted:true` 只用于 purge 墓碑。混用=B1 致命 bug。
+
+- **浮层 flex 列的固定区必须 `flex: 0 0 auto`**：`header/页签/提示条/错误条` 默认 `0 1 auto`，内容一多就被压扁，溢出文字被**后绘制的列表列盖住**（就是用户报的「回收站左侧列盖住顶部文字」）。复现法：CDP 把面板高度压到 200px，比对 `Range` 文字底边与列表 `top`。
+- **思源组件 CSS 早就 vendored 在 `src/b3/siyuan/`**（`main.tsx` 里 `siyuan.scss`），做 UI 前先查它有没有现成件，别再自研一套 `settings-*`；`util/function`（`fn__*`/`ft__*` 工具类）此前**没被 @use**，所以 `fn__size200`/`fn__space`/`ft__error` 一直是死类名。
+- **`text-clamp` 混入不等于省略号**：vendored `.b3-list-item__text` 只有 `overflow:hidden`，长文件名会把 `__meta`/`__action` 挤出列宽——需自己补 `min-width:0 + text-overflow:ellipsis + white-space:nowrap`。
+- **lucide 图标直接把 `className` 给 `<svg>`**：`el.className` 是 `SVGAnimatedString`（`.replace` 会炸），且思源的 `.b3-list-item__graphic svg{}` 选择器匹配不到；要包一层 `<span className="b3-list-item__graphic">`。
+- **同一元素被三层 CSS 覆盖**（styles.css → b3/components.css → overlays.css）会互相打架：本次把设置/浮层视觉**收口到 overlays.css 单层**，并删掉 components.css 里的重复规则；改 UI 前先 `grep` 类名看有几处定义。
+- **同一元素上「组件类 + 场景类」会互相覆盖**：`.badge`（overlays.css，后加载）赢过 `.quick-notes-count`（styles.css，先加载）。跨层加 modifier 时要么写进**同一层**（如 `.badge--accent/--muted`），要么别指望场景类能覆盖组件类。
+- **密集列表行不要做 `:active scale()`**：28~40px 的行按压缩放会抖字、与滚动条抢空间（思源只给 hover 底色）；按压反馈只留给独立卡片（小记）。
 
 ## 5. 下一步建议（新会话）
 1. 先跑 §6 门禁确认基线；有问题先测再改。

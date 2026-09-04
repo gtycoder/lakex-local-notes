@@ -30,8 +30,7 @@ export function HistoryPanel({ open, noteId, onClose, onRestored }: {
   const [orphans, setOrphans] = useState<NoteOrphan[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [preview, setPreview] = useState<{
-    kind: "history" | "orphan";
+  const [orphanPv, setOrphanPv] = useState<{
     title: string;
     text?: string;
     imageData?: string;
@@ -95,7 +94,7 @@ export function HistoryPanel({ open, noteId, onClose, onRestored }: {
       setHistory([]);
       setOrphans([]);
       setInline(null);
-      setPreview(null);
+      setOrphanPv(null);
       setError(null);
       void refreshHistory();
     }
@@ -193,13 +192,14 @@ export function HistoryPanel({ open, noteId, onClose, onRestored }: {
   const previewOrphanFile = async (o: NoteOrphan) => {
     if (!noteId) return;
     const version = previewVersionRef.current.next();
+    setOrphanPv(null);
     try {
       const r = await native.previewNoteOrphan(noteId, o.filename);
       if (!previewVersionRef.current.isCurrent(version)) return;
       if (r) {
-        setPreview(r.kind === "image"
-          ? { kind: "orphan", title: o.filename, imageData: r.data, size: r.size }
-          : { kind: "orphan", title: o.filename, text: r.data, size: r.size });
+        setOrphanPv(r.kind === "image"
+          ? { title: o.filename, imageData: r.data, size: r.size }
+          : { title: o.filename, text: r.data, size: r.size });
       } else {
         setError("文件预览失败（文件可能已删除）");
       }
@@ -208,27 +208,31 @@ export function HistoryPanel({ open, noteId, onClose, onRestored }: {
     }
   };
 
+  const cleanable = orphans.filter((o) => !o.protectedByHistory).length;
+
   if (!open || !noteId) return null;
   return createPortal(
     <div className="history-panel-backdrop" onMouseDown={(e) => { if (e.target === e.currentTarget && !floating.interactionRef.current) onClose(); }}>
       <section ref={floating.panelRef} className="floating-dialog history-panel" style={floating.panelStyle} role="dialog" aria-modal="true">
         <header className="floating-dialog-header" onPointerDown={floating.startDrag}>
-          <div className="history-panel-title">
+          <div className="panel-title">
             <History size={17} />
             <h2>历史版本</h2>
           </div>
-          <button className="history-close" onClick={onClose} aria-label="关闭"><X size={16} /></button>
+          <button className="ln-close" onClick={onClose} aria-label="关闭"><X size={16} /></button>
         </header>
-        <div className="history-tabs">
-          <button className={`history-tab${tab === "history" ? " active" : ""}`} onClick={() => switchTab("history")}>
-            <Clock size={13} /> 文档历史
+        <div className="ln-tabs">
+          <div className="ln-tabs__track" role="tablist" aria-label="历史版本">
+          <button role="tab" aria-selected={tab === "history"} className={`ln-tabs__item${tab === "history" ? " is-active" : ""}`} onClick={() => switchTab("history")}>
+            <Clock size={14} /> 文档历史
           </button>
-          <button className={`history-tab${tab === "orphans" ? " active" : ""}`} onClick={() => switchTab("orphans")}>
-            <Trash2 size={13} /> 文档孤儿文件
+          <button role="tab" aria-selected={tab === "orphans"} className={`ln-tabs__item${tab === "orphans" ? " is-active" : ""}`} onClick={() => switchTab("orphans")}>
+            <Trash2 size={14} /> 文档孤儿文件
           </button>
+          </div>
           {tab === "history" && (
-            <button className="history-create" onClick={() => void createSnapshot()} title="手动创建快照">
-              <Camera size={13} /> 创建快照
+            <button className="b3-button b3-button--outline ln-tabs__action" onClick={() => void createSnapshot()} title="手动创建快照">
+              <Camera size={14} /> 创建快照
             </button>
           )}
         </div>
@@ -236,83 +240,75 @@ export function HistoryPanel({ open, noteId, onClose, onRestored }: {
           {tab === "history" ? "历史快照保存在本地，不参与同步。恢复前会自动保存当前版本。" : "未引用的资源文件（被历史引用的受保护，不会误删）。"}
         </p>
         {error && <div className="history-error">{error}</div>}
-        {tab === "history" ? (
-          <div className="history-split">
-            <div className="history-list history-list-left">
-              {loading && <div className="history-empty">加载中…</div>}
-              {!loading && history.length === 0 && <div className="history-empty">暂无历史快照</div>}
-              {!loading && history.map((h) => (
-                <div className="history-item" key={h.id}>
-                  <div className="history-item-main" onClick={() => void previewHistoryInline(h)} title="点击预览快照">
-                    <div className="history-item-time">{new Date(h.createdAt).toLocaleString()}</div>
-                    {h.protectedUntil && Date.parse(h.protectedUntil) > Date.now() && (
-                      <div className="history-item-protected" title="被远端覆盖时自动保留，保护期内不被自动清理（可手动删除）">
-                        冲突保留 · 剩余 {Math.max(1, Math.ceil((Date.parse(h.protectedUntil) - Date.now()) / (24 * 3600 * 1000)))} 天
-                      </div>
-                    )}
-                    <div className="history-item-meta">
-                      {(h.size / 1024).toFixed(1)} KB · {h.refCount} 个资源 · {h.contentHash.slice(0, 8)}
-                    </div>
+        {tab === "orphans" && orphans.length > 0 && (
+          <div className="ln-toolbar">
+            <span className="ln-toolbar__info">共 {orphans.length} 个 · 可清理 {cleanable} · 受历史保护 {orphans.length - cleanable}</span>
+            <button className="b3-button b3-button--outline ft__error" onClick={() => void cleanOrphan()} disabled={cleanable === 0}>
+              清理全部可清（{cleanable} 个）
+            </button>
+          </div>
+        )}
+        <div className="history-split">
+          <div className="history-list b3-list b3-list--background history-list-left">
+            {loading && <div className="ln-empty">加载中…</div>}
+            {!loading && tab === "history" && history.length === 0 && <div className="ln-empty">暂无历史快照</div>}
+            {!loading && tab === "orphans" && orphans.length === 0 && <div className="ln-empty">没有孤儿文件</div>}
+            {!loading && tab === "history" && history.map((h) => {
+              const protectedUntil = h.protectedUntil && Date.parse(h.protectedUntil) > Date.now() ? Date.parse(h.protectedUntil as string) : null;
+              const label = new Date(h.createdAt).toLocaleString();
+              return (
+                <div key={h.id} className={`b3-list-item b3-list-item--hide-action ln-row2${inline?.title === label ? " b3-list-item--focus" : ""}`}>
+                  <span className="b3-list-item__graphic"><Clock size={14} /></span>
+                  <div className="b3-list-item__text ln-row2__main" onClick={() => void previewHistoryInline(h)} title="点击预览快照">
+                    <span className="ln-row2__title">{label}</span>
+                    <span className="ln-row2__meta">{(h.size / 1024).toFixed(1)} KB · {h.refCount} 个资源 · {h.contentHash.slice(0, 8)}</span>
                   </div>
-                  <div className="history-item-actions">
-                    <button className="history-restore" onClick={() => void restore(h.id)}><RotateCcw size={13} /> 恢复</button>
-                    <button className="history-delete" onClick={() => void removeHistory(h.id)}><Trash2 size={13} /></button>
-                  </div>
+                  {protectedUntil !== null && (
+                    <span className="badge badge--warn" title="被远端覆盖时自动保留，保护期内不被自动清理（可手动删除）">
+                      冲突保留 · 剩余 {Math.max(1, Math.ceil((protectedUntil - Date.now()) / (24 * 3600 * 1000)))} 天
+                    </span>
+                  )}
+                  <span className="fn__space" />
+                  <button className="b3-list-item__action" title="恢复此版本" aria-label="恢复此版本" onClick={() => void restore(h.id)}><RotateCcw size={14} /></button>
+                  <button className="b3-list-item__action b3-list-item__action--warning" title="删除快照" aria-label="删除快照" onClick={() => void removeHistory(h.id)}><Trash2 size={14} /></button>
                 </div>
-              ))}
-            </div>
-            <div className="history-preview-inline">
-              {inline ? (
+              );
+            })}
+            {!loading && tab === "orphans" && orphans.map((o) => (
+              <div key={o.filename} className={`b3-list-item b3-list-item--hide-action${orphanPv?.title === o.filename ? " b3-list-item--focus" : ""}`}>
+                <span className="b3-list-item__graphic"><FileText size={14} /></span>
+                <span className="b3-list-item__text" onClick={() => void previewOrphanFile(o)} title="点击预览文件">{o.filename}</span>
+                {o.protectedByHistory && <span className="badge badge--warn">历史保护</span>}
+                <span className="b3-list-item__meta">{(o.size / 1024).toFixed(1)} KB</span>
+                <span className="fn__space" />
+                {!o.protectedByHistory && (
+                  <button className="b3-list-item__action b3-list-item__action--warning" title="清理该文件" aria-label="清理该文件" onClick={() => void cleanOrphan(o.filename)}><Trash2 size={14} /></button>
+                )}
+              </div>
+            ))}
+          </div>
+          <div className="history-preview-inline">
+            {tab === "history" ? (
+              inline ? (
                 <>
                   <div className="history-preview-inline-title">{inline.title}{inline.size !== undefined ? ` · ${(inline.size / 1024).toFixed(1)} KB` : ""}</div>
                   <div className="history-preview-viewer" ref={previewHostRef} />
                 </>
               ) : (
-                <div className="history-empty">选择左侧快照查看内容</div>
-              )}
-            </div>
-          </div>
-        ) : (
-          <div className="history-list">
-            {loading && <div className="history-empty">加载中…</div>}
-            {!loading && orphans.length === 0 && <div className="history-empty">没有孤儿文件</div>}
-            {!loading && orphans.length > 0 && (
-              <button className="history-clean-all" onClick={() => void cleanOrphan()}>
-                清理全部可清（{orphans.filter((o) => !o.protectedByHistory).length} 个）
-              </button>
+                <div className="ln-empty">选择左侧快照查看内容</div>
+              )
+            ) : orphanPv ? (
+              <>
+                <div className="history-preview-inline-title">{orphanPv.title}{orphanPv.size !== undefined ? ` · ${(orphanPv.size / 1024).toFixed(1)} KB` : ""}</div>
+                {orphanPv.imageData
+                  ? <img className="history-preview-image" src={orphanPv.imageData} alt={orphanPv.title} />
+                  : <pre className="history-preview-text">{orphanPv.text ?? ""}</pre>}
+              </>
+            ) : (
+              <div className="ln-empty">选择左侧文件查看预览</div>
             )}
-            {!loading && orphans.map((o) => (
-              <div className="history-item" key={o.filename}>
-                <FileText size={14} className="history-item-icon" />
-                <div className="history-item-main" onClick={() => void previewOrphanFile(o)} title="点击预览文件">
-                  <div className="history-item-time">{o.filename}</div>
-                  <div className="history-item-meta">
-                    {(o.size / 1024).toFixed(1)} KB · {o.protectedByHistory ? "受历史保护" : "可清理"}
-                  </div>
-                </div>
-                {!o.protectedByHistory && (
-                  <button className="history-delete" onClick={() => void cleanOrphan(o.filename)}><Trash2 size={13} /></button>
-                )}
-              </div>
-            ))}
           </div>
-        )}
-        {preview && (
-          <div className="history-preview-backdrop" onMouseDown={(e) => { if (e.target === e.currentTarget) setPreview(null); }}>
-            <div className="history-preview" role="dialog" aria-modal="true">
-              <header>
-                <span className="history-preview-title">{preview.kind === "history" ? "快照预览" : "文件预览"} · {preview.title}</span>
-                {preview.size !== undefined && <span className="history-preview-size">{(preview.size / 1024).toFixed(1)} KB</span>}
-                <button className="history-close" onClick={() => setPreview(null)} aria-label="关闭预览"><X size={16} /></button>
-              </header>
-              <div className="history-preview-body">
-                {preview.imageData
-                  ? <img src={preview.imageData} alt={preview.title} style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain" }} />
-                  : <pre className="history-preview-text">{preview.text ?? ""}</pre>}
-              </div>
-            </div>
-          </div>
-        )}
+        </div>
         <div className="floating-dialog-resize" onPointerDown={floating.startResize} title="拖动调整大小" />
       </section>
     </div>,

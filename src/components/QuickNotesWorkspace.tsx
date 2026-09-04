@@ -221,7 +221,7 @@ export const QuickNotesWorkspace = forwardRef<QuickNotesWorkspaceHandle, QuickNo
   return <section className="quick-notes-pane" aria-label="小记">
     <header className="quick-notes-header">
       <div><span className="quick-notes-eyebrow">LOCAL TIMELINE</span><h1>小记</h1><p>记下当下，值得留存时再转为笔记。</p></div>
-      <span className="quick-notes-count">{items.length} 条</span>
+      <span className="badge badge--muted quick-notes-count">{items.length} 条</span>
     </header>
     {error && <div className="quick-notes-error"><span>{error}</span><button onClick={() => setError(null)} aria-label="关闭错误"><X size={15} /></button></div>}
     <QuickNoteComposer
@@ -236,8 +236,8 @@ export const QuickNotesWorkspace = forwardRef<QuickNotesWorkspaceHandle, QuickNo
       inputRef={(node) => { if (node) fileInputs.current.set(createDraft.id, node); }}
     />
     <div className="quick-notes-timeline" aria-live="polite">
-      {loading ? <div className="quick-notes-loading"><LoaderCircle className="spin" size={18} /> 正在读取小记…</div> : items.length === 0
-        ? <div className="quick-notes-empty"><Feather size={25} /><strong>还没有小记</strong><span>从上面写下第一条临时记录。</span></div>
+      {loading ? <div className="ln-empty"><LoaderCircle className="spin" size={18} /><span>正在读取小记…</span></div> : items.length === 0
+        ? <div className="ln-empty ln-empty--idle"><Feather size={25} /><strong>还没有小记</strong><span>从上面写下第一条临时记录。</span></div>
         : items.map((item) => editingId === item.id && editingDraft
           ? <article className="quick-note-entry editing" key={item.id}><QuickNoteComposer
               draft={editingDraft} compact saving={saving && activeIsEditing}
@@ -255,9 +255,9 @@ export const QuickNotesWorkspace = forwardRef<QuickNotesWorkspaceHandle, QuickNo
       <section className="quick-note-convert-dialog" role="dialog" aria-modal="true" aria-labelledby="quick-note-convert-title">
         <h3 id="quick-note-convert-title">转为正式笔记</h3>
         <p>选择一个笔记本。新文档将插入其中的最顶部；转化完成后，小记将从时间线移除。</p>
-        <div className="quick-note-notebook-list">
-          {notebooks.map((notebook) => <button key={notebook.id} disabled={saving} onClick={() => void convert(notebook.id)}><FilePlus2 size={16} /><span>{notebook.title}</span></button>)}
-          {notebooks.length === 0 && <span className="quick-note-no-notebook">请先在资料库中新建一个笔记本。</span>}
+        <div className="quick-note-notebook-list b3-list b3-list--background">
+          {notebooks.map((notebook) => <button key={notebook.id} className="b3-list-item" disabled={saving} onClick={() => void convert(notebook.id)}><span className="b3-list-item__graphic"><FilePlus2 size={14} /></span><span className="b3-list-item__text">{notebook.title}</span></button>)}
+          {notebooks.length === 0 && <span className="ln-empty">请先在资料库中新建一个笔记本。</span>}
         </div>
         <footer><button className="b3-button b3-button--cancel" disabled={saving} onClick={() => setConvertItem(null)}>取消</button></footer>
       </section>
@@ -304,7 +304,7 @@ function QuickNoteComposer({ draft, saving, onChange, onAddFiles, onRemoveImage,
 function QuickNoteCard({ item, deletePending, onEdit, onDelete, onConvert }: { item: QuickNoteDocument; deletePending: boolean; onEdit(): void; onDelete(): void; onConvert(): void }) {
   const date = new Intl.DateTimeFormat("zh-CN", { month: "long", day: "numeric", hour: "2-digit", minute: "2-digit", hour12: false }).format(new Date(item.createdAt));
   return <article className={`quick-note-entry ${item.isConflict ? "conflict" : ""}`} onDoubleClick={onEdit}>
-    <header><time dateTime={item.createdAt}>{date}</time>{item.isConflict && <span className="quick-note-conflict">同步冲突副本</span>}<div className="quick-note-card-actions"><button onClick={onConvert} title="转为正式笔记"><FilePlus2 size={15} /></button><button onClick={onEdit} title="编辑小记"><Pencil size={15} /></button><button className="danger" onClick={onDelete} disabled={deletePending} title={deletePending ? "请先完成当前删除的撤销操作" : "删除小记"}><Trash2 size={15} /></button></div></header>
+    <header><time dateTime={item.createdAt}>{date}</time>{item.isConflict && <span className="badge badge--warn quick-note-conflict">同步冲突副本</span>}<div className="quick-note-card-actions"><button onClick={onConvert} title="转为正式笔记"><FilePlus2 size={15} /></button><button onClick={onEdit} title="编辑小记"><Pencil size={15} /></button><button className="danger" onClick={onDelete} disabled={deletePending} title={deletePending ? "请先完成当前删除的撤销操作" : "删除小记"}><Trash2 size={15} /></button></div></header>
     {item.content.text && <p>{item.content.text}</p>}
     {item.content.images.length > 0 && <div className="quick-note-saved-images">{item.content.images.map((image) => <img key={image.id} src={image.url} alt="小记图片" loading="lazy" />)}</div>}
   </article>;

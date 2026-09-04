@@ -160,6 +160,9 @@ export interface DataHealthReport {
   historyMissingSample: Array<{ id: number; noteId: string; filePath: string }>;
   orphanRowsChecked: number;
   orphanRowsFileMissing: Array<{ id: number; noteId: string; filename: string }>;
+  /** 树完整性：parent_id 指向不存在节点的条目（侧栏/回收站渲染不出来，但仍在同步与资源聚合里）。 */
+  treeChecked: number;
+  treeDanglingParent: Array<{ id: string; title: string; parentId: string }>;
   refsChecked: number;
   refsMissingResource: Array<{ noteId: string; filename: string }>;
   checkedAt: string;
@@ -271,3 +274,23 @@ export interface SaveQuickNoteInput {
   stagedImageIds: string[];
   retainedImageIds?: string[];
 }
+
+/** 关于页：主进程 get_system_info 的返回（只读概览）。 */
+export interface StorageOverview {
+  root: string; dbBytes: number;
+  notes: number; notebooks: number; groups: number; trashedNodes: number; tombstones: number;
+  historySnapshots: number; historyBytes: number;
+  assetFiles: number; assetBytes: number; orphanRows: number;
+}
+
+export interface SystemInfo {
+  app: { name: string; version: string; description: string };
+  runtime: { electron: string; chromium: string; node: string; platform: string; arch: string };
+  deps: Record<string, string>;
+  paths: { userData: string; workspace: string; logs: string };
+  storage: StorageOverview;
+  quickNotes: number;
+  packaged: boolean;
+}
+
+export type DataFolderKind = "data" | "workspace" | "logs" | "assets" | "history" | "quickNotes";

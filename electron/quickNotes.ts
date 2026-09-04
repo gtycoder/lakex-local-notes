@@ -210,6 +210,11 @@ export class QuickNotesStore {
     return this.queries.list();
   }
 
+  /** 关于页概览用：小记条数（独立库；小记无软删列，删除走 quick_note_deleted）。 */
+  countQuickNotes(): number {
+    return (this.db.prepare("SELECT COUNT(*) AS c FROM quick_notes").get() as { c: number }).c;
+  }
+
   readQuickNote(id: string): QuickNoteDocument {
     return this.queries.read(id);
   }

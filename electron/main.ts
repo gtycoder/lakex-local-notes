@@ -21,6 +21,7 @@ import { registerHistoryIpc } from "./ipc/registerHistory.js";
 import { registerSyncIpc } from "./ipc/registerSync.js";
 import { registerQuickNotesIpc } from "./ipc/registerQuickNotes.js";
 import { registerLogIpc } from "./ipc/registerLogIpc.js";
+import { registerSystemInfoIpc } from "./ipc/registerSystemInfo.js";
 import { clampWindowState, readWindowState, writeWindowState } from "./windowState.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -371,6 +372,7 @@ function registerIpc(): void {
   });
   registerQuickNotesIpc(ipc, quickNotes, store);
   registerLogIpc(ipc);
+  registerSystemInfoIpc(ipc, { store, quickNotes, workspaceRoot });
 }
 
 // Increase renderer memory limit for large documents with base64 images

@@ -1110,6 +1110,61 @@ describe("同步状态 / 导入", () => {
     expect(tombstones.find((d) => d.id === nb.id)?.nodeType).toBe("folder");
   });
 
+  it("purge 过的 folder 判定必须永久：markPurgeSynced 清空 purged_at 后仍不得被重新导入", () => {
+    // 根因回归（2026-09-04 实数据）：folder 墓碑的 purged_at 会在 S3 前缀删除成功后被清空，
+    // 旧判定看 purged_at ⇒ 保护随之失效，陈旧清单里的已删笔记本会被重新导入，
+    // 其子文档落到"本地已不存在的父"下 → 侧栏/回收站都看不见、却仍占资源与同步。
+    const nb = store.createNotebook("待彻底删-永久判定");
+    store.deleteTreeNode(nb.id);
+    store.purgeTrashItem(nb.id);
+    expect(store.isFolderPurged(nb.id)).toBe(true);
+    store.markPurgeSynced(nb.id); // 前缀删完：purged_at 清空
+    expect((store as any).db.prepare("SELECT purged_at FROM deleted_notes WHERE id=?").get(nb.id).purged_at).toBeFalsy();
+    expect(store.isFolderPurged(nb.id)).toBe(true);
+    expect(store.isFolderPurged(store.createNotebook("未被删-永久判定").id)).toBe(false);
+  });
+
+  it("purge 时 notes 行缺失也必须写 note 墓碑（云端不下架就会被重新导入成孤儿）", () => {
+    const nb = store.createNotebook("待彻底删-缺notes行");
+    const note = store.createNoteIn(nb.id, "漂移子笔记");
+    store.saveNote(note.id, "漂移子笔记", "<p>x</p>");
+    store.deleteTreeNode(nb.id);
+    // 模拟漂移形态：tree_nodes 还在、notes 行已不在（实数据正是这样漏掉墓碑的）
+    (store as any).db.prepare("DELETE FROM notes WHERE id=?").run(note.id);
+    store.purgeTrashItem(nb.id);
+    const tomb = store.listDeletedNotesForSync().find((d) => d.id === note.id);
+    expect(tomb?.nodeType).toBe("note");
+    expect(tomb?.title).toBe("漂移子笔记");
+  });
+
+  it("runDataHealthCheck：本地已编辑待上传（sync_state=local）不算哈希不符，只有 synced 才比对基线", () => {
+    const nb = store.createNotebook("体检-哈希口径");
+    const note = store.createNoteIn(nb.id, "体检-改过未传");
+    store.saveNote(note.id, "体检-改过未传", "<p>v1</p>");
+    (store as any).db.prepare("UPDATE notes SET sync_state='synced' WHERE id=?").run(note.id);
+    (store as any).db.prepare("INSERT INTO sync_base(note_id,content_hash) VALUES(?,?)")
+      .run(note.id, (require("node:crypto") as typeof import("node:crypto")).createHash("sha256").update(fs.readFileSync(path.join(dir, "notes", note.id + ".lake"))).digest("hex"));
+    expect(store.runDataHealthCheck().notesHashMismatch).toHaveLength(0);
+    // 本地编辑（未上传）→ 与基线必然不同，属正常，不得误报
+    store.saveNote(note.id, "体检-改过未传", "<p>v2</p>");
+    expect(store.runDataHealthCheck().notesHashMismatch).toHaveLength(0);
+    // 真被外部改动（synced 但盘上内容变了）→ 必须报
+    (store as any).db.prepare("UPDATE notes SET sync_state='synced' WHERE id=?").run(note.id);
+    fs.writeFileSync(path.join(dir, "notes", note.id + ".lake"), "<p>外部篡改</p>");
+    expect(store.runDataHealthCheck().notesHashMismatch.map((m) => m.id)).toContain(note.id);
+  });
+
+  it("runDataHealthCheck 报出「父目录不存在」的不可达节点", () => {
+    const nb = store.createNotebook("体检-父消失");
+    const note = store.createNoteIn(nb.id, "体检-子笔记");
+    store.saveNote(note.id, "体检-子笔记", "<p>x</p>");
+    expect(store.runDataHealthCheck().treeDanglingParent).toHaveLength(0);
+    (store as any).db.prepare("DELETE FROM tree_nodes WHERE id=?").run(nb.id);
+    const report = store.runDataHealthCheck();
+    expect(report.treeChecked).toBeGreaterThan(0);
+    expect(report.treeDanglingParent.some((t) => t.id === note.id && t.parentId === nb.id)).toBe(true);
+  });
+
   it("markTombstonesPublished + getSyncPendingSummary：未发布 note 墓碑计入待上传，已发布/文件夹墓碑不计", () => {
     // 基线（含 welcome-note 等本地待上传）；folder 墓碑永不计数
     const base = store.getSyncPendingSummary().documents;
@@ -1644,6 +1699,39 @@ describe("A 方案 declared_assets（桌面 store）", () => {
   });
 });
 
+describe("关于页数据概览（getStorageOverview，只读）", () => {
+  it("计数来自库与资源目录：笔记/笔记本/分组/资源文件与体积/历史快照", () => {
+    const nb = store.createNotebook("概览笔记本");
+    const note = store.createNoteIn(nb.id, "概览笔记");
+    store.saveNote(note.id, "概览笔记", "<p>正文</p>");
+    const grp = store.createGroup(nb.id, "概览分组");
+    expect(grp.id).toBeTruthy();
+    // 资源目录浅两层遍历：手写两个文件即可被计入（不依赖上传管线）
+    const assetDir = path.join(dir, "note-assets", note.id);
+    fs.mkdirSync(assetDir, { recursive: true });
+    fs.writeFileSync(path.join(assetDir, "a.png"), Buffer.alloc(120));
+    fs.writeFileSync(path.join(assetDir, "b.png"), Buffer.alloc(80));
+    const sid = store.createHistorySnapshot(note.id) as number;
+    expect(sid).toBeGreaterThan(0);
+    const o = store.getStorageOverview();
+    expect(o.root).toBe(dir);
+    expect(o.notes).toBeGreaterThanOrEqual(1);
+    expect(o.notebooks).toBeGreaterThanOrEqual(1);
+    expect(o.groups).toBeGreaterThanOrEqual(1);
+    expect(o.assetFiles).toBeGreaterThanOrEqual(2);
+    expect(o.assetBytes).toBeGreaterThanOrEqual(200);
+    expect(o.historySnapshots).toBeGreaterThanOrEqual(1);
+    expect(o.dbBytes).toBeGreaterThan(0);
+    expect(o.trashedNodes).toBeGreaterThanOrEqual(0);
+  });
+
+  it("空目录不抛（全新库计数为 0）", () => {
+    const o = store.getStorageOverview();
+    expect(typeof o.notes).toBe("number");
+    expect(Number.isFinite(o.assetBytes)).toBe(true);
+  });
+});
+
 describe("A3 数据体检（runDataHealthCheck，只读）", () => {
   it("健康库：无缺失无漂移，计数正确", () => {
     const note = store.createNote("体检正常");
@@ -1666,6 +1754,8 @@ describe("A3 数据体检（runDataHealthCheck，只读）", () => {
     const lakePath = (store as any).notePath(note.id);
     const hash1 = crypto.createHash("sha256").update(fs.readFileSync(lakePath)).digest("hex");
     store.setBaseHash(note.id, hash1);
+    // 只有"自认已与云端一致"（synced）的笔记才比对基线：本地已编辑待上传时 hash 必然不同，属正常
+    (store as any).db.prepare("UPDATE notes SET sync_state='synced' WHERE id=?").run(note.id);
     // 用脏内容覆盖 .lake → hash 不符
     fs.writeFileSync(lakePath, "<p>corrupted</p>");
     let r = store.runDataHealthCheck();

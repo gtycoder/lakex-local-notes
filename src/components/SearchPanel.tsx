@@ -116,21 +116,29 @@ export function SearchPanel({ open, initialQuery, onOpenNote, onClose }: {
           <button className="search-panel-close" onClick={onClose} title="关闭（Esc）" aria-label="关闭搜索"><X size={15} /></button>
         </div>
         <div id="search-panel-help" className="search-panel-help">不搜索小记 · 1 个字符匹配标题，2 个及以上匹配标题和正文 · ↑↓ 选择 · Enter 打开并定位（已打开则切换）</div>
-        <div className="search-panel-results" role="listbox" aria-label="搜索结果">
-          {results.length === 0 && query.trim() && !searching && <div className="search-panel-empty">没有匹配结果<span>试试文档标题，或输入至少 2 个字符搜索正文</span></div>}
-          {!query.trim() && <div className="search-panel-empty search-panel-empty--idle"><Search size={18} /><span>搜索你的 Lake 文档</span><small>标题优先，正文命中后会自动定位</small></div>}
+        <div className="search-panel-results b3-list b3-list--background" role="listbox" aria-label="搜索结果">
+          {results.length === 0 && query.trim() && !searching && (
+            <div className="ln-empty"><strong>没有匹配结果</strong><span>试试文档标题，或输入至少 2 个字符搜索正文</span></div>
+          )}
+          {!query.trim() && (
+            <div className="ln-empty ln-empty--idle"><Search size={18} /><span>搜索你的 Lake 文档</span><small>标题优先，正文命中后会自动定位</small></div>
+          )}
           {results.map((result, index) => (
             <button
               key={result.id}
-              className={`search-result${index === activeIndex ? " active" : ""}`}
+              className={`b3-list-item ln-row2${index === activeIndex ? " b3-list-item--focus" : ""}`}
               role="option"
               aria-selected={index === activeIndex}
               onMouseEnter={() => setActiveIndex(index)}
               onClick={() => { setActiveIndex(index); onOpenNote(result.id, result.matchType === "body" ? query.trim() : ""); onClose(); }}
             >
-              <span className="search-result-title"><FileText size={14} />{result.title || "无标题"}<small>{result.matchType === "body" ? "正文" : "标题"}</small></span>
-              {result.snippet && <span className="search-result-snippet" dangerouslySetInnerHTML={{ __html: sanitizeSnippet(result.snippet) }} />}
-              <span className="search-result-meta">{result.parentTitle || "个人笔记"}{formatUpdatedAt(result.updatedAt) ? ` · ${formatUpdatedAt(result.updatedAt)}` : ""}</span>
+              <span className="b3-list-item__graphic"><FileText size={14} /></span>
+              <span className="b3-list-item__text ln-row2__main">
+                <span className="ln-row2__title">{result.title || "无标题"}</span>
+                {result.snippet && <span className="search-snippet" dangerouslySetInnerHTML={{ __html: sanitizeSnippet(result.snippet) }} />}
+                <span className="ln-row2__meta">{result.parentTitle || "个人笔记"}{formatUpdatedAt(result.updatedAt) ? ` · ${formatUpdatedAt(result.updatedAt)}` : ""}</span>
+              </span>
+              <span className={`badge ${result.matchType === "body" ? "badge--accent" : "badge--muted"}`}>{result.matchType === "body" ? "正文" : "标题"}</span>
             </button>
           ))}
         </div>

@@ -95,6 +95,10 @@ export interface LakeNative {
   runS3GcDiagnostics(): Promise<GcDiagnostics>;
   runDataHealthCheck(): Promise<DataHealthReport>;
   readAppLog(opts: { keyword?: string; maxLines?: number; context?: number }): Promise<{ matches: Array<{ line: string; hit: boolean }>; file: string; truncated: boolean; generatedAt: string }>;
+  /** 关于页：版本与运行环境 + 数据与存储概览（只读）。 */
+  getSystemInfo(): Promise<import("./types").SystemInfo>;
+  /** 关于页：在文件管理器中显示白名单目录（kind 由主进程解析，绝不传路径）。 */
+  revealDataFolder(kind: import("./types").DataFolderKind): Promise<{ ok: boolean; path: string }>;
   runS3GcReconcile(ignoreRetention?: boolean): Promise<{ deleted: number; kept: number; clearedReferenced: number; ageUnknown: number }>;
   runS3DeepCleanup(dryRun: boolean, ignoreRetention?: boolean): Promise<DeepCleanupResult>;
   getTrashReminder(): Promise<Array<{ id: string; title: string; deletedAt: string }>>;
@@ -201,6 +205,8 @@ export const native = {
   runS3GcDiagnostics: () => api().runS3GcDiagnostics(),
   runDataHealthCheck: () => api().runDataHealthCheck(),
   readAppLog: (opts: { keyword?: string; maxLines?: number; context?: number }) => api().readAppLog(opts),
+  getSystemInfo: () => api().getSystemInfo(),
+  revealDataFolder: (kind: import("./types").DataFolderKind) => api().revealDataFolder(kind),
   runS3GcReconcile: (ignoreRetention = false) => api().runS3GcReconcile(ignoreRetention),
   runS3DeepCleanup: (dryRun: boolean, ignoreRetention = false) => api().runS3DeepCleanup(dryRun, ignoreRetention),
   getTrashReminder: () => api().getTrashReminder(),

@@ -149,58 +149,21 @@
 .sync-panel header > div {
   color: var(--b3-theme-primary);
 }
-.sync-panel h2,
-.trash-panel-title h2,
-.history-panel-title h2 {
+.sync-panel h2 {
   color: var(--b3-theme-on-background);
 }
 
-.settings-close,
-.search-panel-close,
-.trash-close,
-.history-close {
+.search-panel-close {
   color: var(--b3-theme-on-surface);
   opacity: .68;
 }
-.settings-close:hover,
-.search-panel-close:hover,
-.trash-close:hover,
-.history-close:hover {
+.search-panel-close:hover {
   color: var(--b3-theme-on-background);
   opacity: 1;
   background: var(--b3-list-hover);
 }
 
-/* 面板内列表项（思源 b3-list） */
-.search-result:hover {
-  background-color: var(--b3-list-hover);
-}
-.search-result-title {
-  color: var(--b3-theme-on-background);
-}
-.search-result-snippet {
-  color: var(--b3-theme-on-surface);
-}
-.settings-nav-item:hover {
-  background-color: var(--b3-list-hover);
-}
-.settings-nav-item.active {
-  background-color: var(--b3-theme-primary-lightest);
-  color: var(--b3-theme-primary);
-}
-.settings-choice {
-  border-color: var(--b3-border-color);
-  color: var(--b3-theme-on-surface);
-  background: var(--b3-theme-background);
-}
-.settings-choice:hover {
-  border-color: var(--b3-theme-primary);
-}
-.settings-choice.active {
-  border-color: var(--b3-theme-primary);
-  color: var(--b3-theme-on-primary);
-  background: var(--b3-theme-primary);
-}
+/* 面板内列表项的 hover 底色由已 vendored 的 .b3-list--background .b3-list-item 提供，此处不再重复定义 */
 
 /* 表单输入（思源 b3-text-field） */
 .form-grid input[type="text"],
@@ -264,10 +227,6 @@
   background: var(--b3-theme-primary) !important;
   color: var(--b3-theme-on-primary) !important;
 }
-.settings-toggle input {
-  accent-color: var(--b3-theme-primary);
-}
-
 /* ── 标签页（思源：灰栏 + 白底激活 + 顶部主色指示线）── */
 .tab-bar {
   background: var(--b3-theme-surface) !important;

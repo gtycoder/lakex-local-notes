@@ -1340,7 +1340,13 @@ export class Store {
           // 彻底删除 = 连历史快照 + 历史引用的资源一起物理删（用户确认）
           filesToRemove.push({ path: this.historyNoteDir(n.note_file_id), recursive: true });
           const meta = noteMeta.get(n.note_file_id) as { id: string; title: string; parent_id: string | null; sort_order: number; updated_at: string } | undefined;
-          if (meta) tombstone.run(meta.id, meta.title, meta.parent_id, meta.sort_order, meta.updated_at, now, now, "note");
+          // 墓碑必须无条件写：notes 行缺失（历史漂移/半途失败）时若跳过，云端该条目仍是 active，
+          // 下次同步会把它连同资源重新导入到"已不存在的父"下 → UI 不可见的复活文档（2026-09-04）。
+          // 元数据从 tree_nodes 兜底（同一棵树的权威副本），字段语义不变。
+          const fallback = meta ?? this.db.prepare(
+            "SELECT ? AS id, title, parent_id, sort_order, updated_at FROM tree_nodes WHERE id=?"
+          ).get(n.note_file_id, nid) as { id: string; title: string; parent_id: string | null; sort_order: number; updated_at: string } | undefined;
+          if (fallback) tombstone.run(fallback.id, fallback.title, fallback.parent_id, fallback.sort_order, fallback.updated_at, now, now, "note");
           delHistory.run(n.note_file_id);
           delOrphans.run(n.note_file_id);
           delFts.run(n.note_file_id);
@@ -1612,6 +1618,52 @@ export class Store {
     return { count, freedBytes };
   }
 
+  /** 关于页「数据与存储」概览（只读）：库内计数 + 资源目录浅两层遍历（不做全盘扫描）。
+   * 小记在独立库（quick-notes/metadata.sqlite3），计数由调用方补（见 registerSystemInfo）。 */
+  getStorageOverview(): {
+    root: string; dbBytes: number;
+    notes: number; notebooks: number; groups: number; trashedNodes: number; tombstones: number;
+    historySnapshots: number; historyBytes: number;
+    assetFiles: number; assetBytes: number; orphanRows: number;
+  } {
+    const one = (sql: string, ...args: unknown[]) => Number((this.db.prepare(sql).get(...args) as { c: number }).c) || 0;
+    const statBytes = (file: string): number => {
+      try { return fs.statSync(file).size; } catch { return 0; }
+    };
+    let assetFiles = 0;
+    let assetBytes = 0;
+    try {
+      for (const entry of fs.readdirSync(this.noteAssetsDir, { withFileTypes: true })) {
+        if (!entry.isDirectory()) continue;
+        const dir = path.join(this.noteAssetsDir, entry.name);
+        let files: string[] = [];
+        try { files = fs.readdirSync(dir); } catch { continue; }
+        for (const f of files) {
+          try {
+            const st = fs.statSync(path.join(dir, f));
+            if (st.isFile()) { assetFiles += 1; assetBytes += st.size; }
+          } catch { /* 竞态删除：忽略 */ }
+        }
+      }
+    } catch { /* 目录不存在（全新库）→ 0 */ }
+    const hist = this.db.prepare("SELECT COUNT(*) AS c, COALESCE(SUM(size), 0) AS bytes FROM note_history").get() as { c: number; bytes: number };
+    return {
+      root: this.root,
+      dbBytes: statBytes(path.join(this.root, "metadata.sqlite3")) + statBytes(path.join(this.root, "metadata.sqlite3-wal")),
+      // 「笔记」与笔记本/分组同口径：只数不在回收站里的（回收站节点另计）
+      notes: one("SELECT COUNT(*) AS c FROM notes WHERE deleted_at IS NULL AND trashed_at IS NULL"),
+      notebooks: one("SELECT COUNT(*) AS c FROM tree_nodes WHERE node_type='notebook' AND deleted_at IS NULL AND trashed_at IS NULL"),
+      groups: one("SELECT COUNT(*) AS c FROM tree_nodes WHERE node_type='group' AND deleted_at IS NULL AND trashed_at IS NULL"),
+      trashedNodes: one("SELECT COUNT(*) AS c FROM tree_nodes WHERE deleted_at IS NULL AND trashed_at IS NOT NULL"),
+      tombstones: one("SELECT COUNT(*) AS c FROM deleted_notes"),
+      historySnapshots: hist.c,
+      historyBytes: hist.bytes,
+      assetFiles,
+      assetBytes,
+      orphanRows: one("SELECT COUNT(*) AS c FROM orphan_assets"),
+    };
+  }
+
   // ===== A3 数据体检（只读诊断：不自动修复、不写库） =====
 
   /** 只读三查：① notes↔.lake 文件存在 + sync_base 有基线的读盘 sha256 一致；② note_history↔快照文件存在；
@@ -1625,6 +1677,8 @@ export class Store {
     historyMissingSample: Array<{ id: number; noteId: string; filePath: string }>;
     orphanRowsChecked: number;
     orphanRowsFileMissing: Array<{ id: number; noteId: string; filename: string }>;
+    treeChecked: number;
+    treeDanglingParent: Array<{ id: string; title: string; parentId: string }>;
     refsChecked: number;
     refsMissingResource: Array<{ noteId: string; filename: string }>;
     checkedAt: string;
@@ -1632,7 +1686,7 @@ export class Store {
     const checkedAt = new Date().toISOString();
     const notesMissingFile: Array<{ id: string; title: string }> = [];
     const notesHashMismatch: Array<{ id: string; title: string }> = [];
-    const noteRows = this.db.prepare("SELECT id,title,parent_id FROM notes WHERE deleted_at IS NULL AND parent_id != ?").all(TRASH_NOTEBOOK_ID) as Array<{ id: string; title: string }>;
+    const noteRows = this.db.prepare("SELECT id,title,parent_id,sync_state FROM notes WHERE deleted_at IS NULL AND parent_id != ?").all(TRASH_NOTEBOOK_ID) as Array<{ id: string; title: string; sync_state: string }>;
     for (const n of noteRows) {
       const lakePath = this.notePath(n.id);
       if (!fs.existsSync(lakePath)) {
@@ -1640,7 +1694,9 @@ export class Store {
         continue;
       }
       const base = this.db.prepare("SELECT content_hash FROM sync_base WHERE note_id=?").get(n.id) as { content_hash: string } | undefined;
-      if (!base) continue; // 无基线（本地草稿/未同步）→ 只查存在，不比 hash
+      // 只在"我们自认为与云端一致"（synced）时比对基线 hash：本地已编辑待上传（local）的正文
+      // 与基线不同是**正常状态**，比了就是天天误报"可能被外部改动"，诊断就失去意义。
+      if (!base || n.sync_state !== "synced") continue; // 无基线/本地未上传 → 只查存在，不比 hash
       try {
         const diskHash = crypto.createHash("sha256").update(fs.readFileSync(lakePath)).digest("hex");
         if (diskHash !== base.content_hash) notesHashMismatch.push({ id: n.id, title: n.title });
@@ -1670,6 +1726,17 @@ export class Store {
         }
       } catch { /* 读盘失败已在第一查覆盖 */ }
     }
+    // ④ 树完整性：parent_id 指向不存在节点的条目在侧栏/回收站都渲染不出来（"文档凭空消失"），
+    //    但仍在同步与资源聚合里——必须能被诊断出来，而不是靠 UI 猜。
+    const treeRows = this.db.prepare(
+      "SELECT COUNT(*) AS c FROM tree_nodes WHERE deleted_at IS NULL AND parent_id IS NOT NULL"
+    ).get() as { c: number };
+    const treeDanglingParent = this.db.prepare(
+      `SELECT t.id, t.title, t.parent_id AS parentId FROM tree_nodes t
+       WHERE t.deleted_at IS NULL AND t.parent_id IS NOT NULL
+         AND NOT EXISTS (SELECT 1 FROM tree_nodes p WHERE p.id = t.parent_id)
+       ORDER BY t.title LIMIT 10`
+    ).all() as Array<{ id: string; title: string; parentId: string }>;
     const orphanRows = this.db.prepare("SELECT * FROM orphan_assets").all() as OrphanAssetRow[];
     const orphanRowsFileMissing: Array<{ id: number; noteId: string; filename: string }> = [];
     for (const o of orphanRows) {
@@ -1686,6 +1753,8 @@ export class Store {
       historyMissingSample,
       orphanRowsChecked: orphanRows.length,
       orphanRowsFileMissing,
+      treeChecked: treeRows.c,
+      treeDanglingParent,
       refsChecked: refsChecked.length,
       refsMissingResource,
       checkedAt,
@@ -2225,9 +2294,13 @@ export class Store {
     }]));
   }
 
-  /** 本地已彻底删除（purge）的 folder/group（deleted_notes 带 purged_at）——同步下载过滤/发布强制移除用。 */
+  /** 本地已彻底删除（purge）过的 folder/group —— 同步下载过滤 / 发布强制清单重写用。
+   * 判定必须**永久**：`node_type='folder'` 的墓碑只由 purgeTrashItem 写入（软删不写墓碑），
+   * 而 purged_at 会在 S3 前缀删除成功后被 markPurgeSynced 清空（防重复删前缀）。
+   * 旧实现看 purged_at ⇒ 前缀删完保护就失效，陈旧清单里的该目录会被重新导入、
+   * 其子文档落到"本地不存在的父"下 → 变成 UI 看不见但仍在同步/占资源的孤儿（2026-09-04 实数据踩到）。 */
   isFolderPurged(id: string): boolean {
-    return !!this.db.prepare("SELECT 1 FROM deleted_notes WHERE id=? AND purged_at IS NOT NULL").get(id);
+    return !!this.db.prepare("SELECT 1 FROM deleted_notes WHERE id=? AND node_type='folder'").get(id);
   }
 
   /** 已彻底删除（purge）的墓碑：下次同步需立即删 S3 前缀。 */

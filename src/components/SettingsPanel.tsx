@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import { AlignLeft, Cloud, Files, History, Info, Keyboard, ListTree, Monitor, Moon, PanelTop, Paperclip, ScrollText, Search, Settings, Sun, Trash2, Type } from "lucide-react";
+import { useEffect, useMemo, useRef, useState, type ChangeEvent, type ReactNode } from "react";
+import { Cloud, Copy, Files, FileText, FolderOpen, History, Info, Keyboard, Monitor, Moon, Paperclip, ScrollText, Search, Settings, Sun, Trash2, Type, X } from "lucide-react";
 import { fontSizeOptions, type AppSettings } from "../lib/settings";
 import { native } from "../lib/native";
 import type { CleanOrphanResult, DataHealthReport, S3GcPendingItem, S3Settings, SyncSettings } from "../lib/types";
@@ -50,6 +50,103 @@ interface RemovedAsset {
   detectedAt?: string;
 }
 
+/* ── 设置页版式原语（精仿思源：分组标题在灰卡外，卡内一行一项，控件固定宽度右对齐）──
+ * 类名来源：src/b3/siyuan/business/_config.scss（版式骨架）+ 已 vendored 的思源组件
+ * （.b3-label / .b3-text-field / .b3-select / .b3-switch / .b3-button / .b3-list-item）。
+ * 目的：设置页不再散落内联样式，视觉与思源设置面板一致。 */
+
+function Group({ title, icon, children }: { title: string; icon?: ReactNode; children: ReactNode }) {
+  return (
+    <section className="config-group">
+      <h4 className="config-title">{icon}{title}</h4>
+      <div className="config-items">{children}</div>
+    </section>
+  );
+}
+
+/** 标准行：左侧标题+说明，右侧控件（不拉伸）。 */
+function Item({ name, desc, pathDesc, children }: { name: string; desc?: string; pathDesc?: boolean; children?: ReactNode }) {
+  return (
+    <div className={`b3-label config-item${pathDesc ? " item--path" : ""}`}>
+      <div className="config-item__main">
+        <div className="config-name">{name}</div>
+        {desc && <div className="b3-label__text">{desc}</div>}
+      </div>
+      {children && (<><span className="fn__space" /><div className="config-item__ctl">{children}</div></>)}
+    </div>
+  );
+}
+
+/** 整块行：标题 + 说明 + 全宽内容（按钮组、统计、只读数据框）。 */
+function Block({ name, desc, children }: { name?: string; desc?: string; children?: ReactNode }) {
+  return (
+    <div className="config-block">
+      {name && <div className="config-block__name">{name}</div>}
+      {desc && <div className="b3-label__text">{desc}</div>}
+      {children}
+    </div>
+  );
+}
+
+/** 开关行（思源 .b3-switch）。 */
+function Switch({ name, desc, checked, disabled, onChange }: { name: string; desc?: string; checked: boolean; disabled?: boolean; onChange: (e: ChangeEvent<HTMLInputElement>) => void }) {
+  return (
+    <label className="b3-label config-item">
+      <div className="config-item__main">
+        <div className="config-name">{name}</div>
+        {desc && <div className="b3-label__text">{desc}</div>}
+      </div>
+      <span className="fn__space" />
+      <input className="b3-switch fn__flex-center" type="checkbox" checked={checked} disabled={disabled} onChange={onChange} />
+    </label>
+  );
+}
+
+/** 快捷键行：说明在左，键位在右。 */
+function Shortcut({ name, keys }: { name: string; keys: string }) {
+  return (
+    <div className="b3-label config-item">
+      <div className="config-item__main"><div className="config-name">{name}</div></div>
+      <span className="fn__space" />
+      <div className="config-item__ctl"><kbd className="fn__kbd">{keys}</kbd></div>
+    </div>
+  );
+}
+
+/** 互斥选项组（字号、主题）。 */
+function Seg({ ariaLabel, children }: { ariaLabel: string; children: ReactNode }) {
+  return <div className="seg" role="group" aria-label={ariaLabel}>{children}</div>;
+}
+
+/** 数字设置项：保留原有“空值回退默认 + 下限钳制”语义。 */
+function NumField({ label, value, min, max, floor, fallback, onSave }: { label: string; value: number; min: number; max: number; floor: number; fallback: number; onSave: (n: number) => void }) {
+  return (
+    <input
+      className="b3-text-field fn__size200"
+      type="number"
+      aria-label={label}
+      min={min}
+      max={max}
+      value={value}
+      onChange={(e) => onSave(Math.max(floor, Number(e.target.value) || fallback))}
+    />
+  );
+}
+
+/** 文本设置项（S3 配置等；wide = 比思源默认 200px 更宽，便于看长 URL）。 */
+function TextField({ label, value, onSave, type = "text", placeholder, wide }: { label: string; value: string; onSave: (v: string) => void; type?: "text" | "password"; placeholder?: string; wide?: boolean }) {
+  return (
+    <input
+      className={`b3-text-field${wide ? " input--wide" : " fn__size200"}`}
+      type={type}
+      aria-label={label}
+      value={value}
+      placeholder={placeholder}
+      onChange={(e) => onSave(e.target.value)}
+    />
+  );
+}
+
 export function SettingsPanel({ open, settings, onClose, onChange, openCategory = "editor", onS3SettingsChanged, onSyncSettingsChanged }: SettingsPanelProps) {
   const [category, setCategory] = useState<SettingsCategory>(openCategory);
   const [navQuery, setNavQuery] = useState("");
@@ -89,6 +186,8 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
   const [busyId, setBusyId] = useState<number | null>(null);
   const [sel, setSel] = useState<RemovedAsset | null>(null);
   const [pv, setPv] = useState<{ filename: string; mimeType: string; supported: boolean; dataUrl?: string } | null>(null);
+  const [sysInfo, setSysInfo] = useState<import("../lib/types").SystemInfo | null>(null);
+  const [diagMsg, setDiagMsg] = useState<string | null>(null);
 
   /** A1 整库备份：选目录 → 备份到 <dir>/lake-notes-backup-<ts>/。 */
   const runBackup = async () => {
@@ -211,6 +310,40 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
     if (open && category === "resources") void refreshOrphans();
   }, [open, category]);
 
+  // 关于页：只读概览（版本/环境/存储）。每次进入分类都刷新，保证计数与磁盘一致。
+  useEffect(() => {
+    if (!open || category !== "about") return;
+    let alive = true;
+    setSysInfo(null);
+    setDiagMsg(null);
+    native.getSystemInfo().then((r) => { if (alive) setSysInfo(r); }).catch(() => { if (alive) setDiagMsg("读取系统信息失败"); });
+    return () => { alive = false; };
+  }, [open, category]);
+
+  const revealFolder = (kind: import("../lib/types").DataFolderKind) => {
+    void native.revealDataFolder(kind).then((r) => setDiagMsg(r.ok ? `已在 Finder 中显示：${r.path}` : `目录尚不存在：${r.path}`)).catch((e) => setDiagMsg(getNativeErrorMessage(e)));
+  };
+
+  const copyDiagnostics = async () => {
+    if (!sysInfo) return;
+    const st = sysInfo.storage;
+    const lines = [
+      `Lake Notes ${sysInfo.app.version}${sysInfo.packaged ? "" : "（开发实例）"}`,
+      `Electron ${sysInfo.runtime.electron} · Chromium ${sysInfo.runtime.chromium} · Node ${sysInfo.runtime.node} · ${sysInfo.runtime.platform}/${sysInfo.runtime.arch}`,
+      `依赖：${Object.entries(sysInfo.deps).map(([k, v]) => `${k}@${v}`).join(", ")}`,
+      `数据目录：${st.root}`,
+      `日志目录：${sysInfo.paths.logs}`,
+      `笔记 ${st.notes} · 笔记本 ${st.notebooks} · 分组 ${st.groups} · 小记 ${sysInfo.quickNotes}`,
+      `资源 ${st.assetFiles} 个 / ${formatBytes(st.assetBytes)} · 历史快照 ${st.historySnapshots} 份 / ${formatBytes(st.historyBytes)}`,
+      `回收站节点 ${st.trashedNodes} · 删除墓碑 ${st.tombstones} · 孤儿登记 ${st.orphanRows} · 库文件 ${formatBytes(st.dbBytes)}`,
+      `生成于 ${new Date().toLocaleString()}`,
+    ];
+    try {
+      await navigator.clipboard.writeText(lines.join("\n"));
+      setDiagMsg("诊断信息已复制到剪贴板");
+    } catch { setDiagMsg("复制失败（剪贴板不可用）"); }
+  };
+
   // 选中即预览、切换自动加载（思源式资源管理交互）
   useEffect(() => {
     if (!sel) { setPv(null); return; }
@@ -238,6 +371,7 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
     if (!navQuery.trim() || visibleNav.length !== 1 || visibleNav[0].id === category) return;
     setCategory(visibleNav[0].id);
   }, [navQuery, category, visibleNav.map((item) => item.id).join("|")]);
+
 
 
   if (!open) return null;
@@ -370,6 +504,8 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
     finally { setGcDiagBusy(false); }
   };
   const diagNs = (name: string) => gcDiag?.cloud.namespaces.find((n) => n.namespace === name);
+  const orphanCount = orphans.filter((o) => o.status === "orphan").length;
+  const historyCount = orphans.filter((o) => o.status === "history").length;
 
   return (
     <div className="settings-overlay" onMouseDown={(event) => { if (event.target === event.currentTarget && !floating.interactionRef.current) onClose(); }}>
@@ -377,13 +513,13 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
         <header id="settings-panel-title" className="settings-header floating-dialog-header" onPointerDown={floating.startDrag}>
           <Settings size={16} />
           <span>偏好设置</span>
-          <button className="settings-close" onClick={onClose} aria-label="关闭">✕</button>
+          <button className="ln-close" onClick={onClose} aria-label="关闭"><X size={16} /></button>
         </header>
         <div className="settings-layout">
-          <nav className="settings-nav">
+          <nav className="settings-nav b3-list b3-list--background">
             <label className="settings-nav-search"><Search size={14} /><input ref={navSearchRef} value={navQuery} onChange={(event) => setNavQuery(event.target.value)} placeholder="搜索设置" aria-label="搜索设置" /></label>
             {visibleNav.map((item) => (
-              <button key={item.id} className={`settings-nav-item ${category === item.id ? "active" : ""}`} onClick={() => setCategory(item.id)}>
+              <button key={item.id} className={`b3-list-item settings-nav-item${category === item.id ? " active" : ""}`} onClick={() => setCategory(item.id)}>
                 {item.icon}<span>{item.label}</span>
               </button>
             ))}
@@ -392,374 +528,428 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
           <div className="settings-content">
             {category === "editor" && (
               <>
-                <section className="settings-group">
-                  <h4><Type size={13} /> 正文字号</h4>
-                  <div className="settings-row">
-                    {fontSizeOptions().map((fs) => (
-                      <button key={fs} className={`settings-choice ${settings.fontSize === fs ? "active" : ""}`} onClick={() => onChange({ fontSize: fs })}>{fs}</button>
-                    ))}
-                  </div>
-                </section>
-                <section className="settings-group">
-                  <h4>编辑器显示</h4>
-                  <label className="settings-toggle"><AlignLeft size={13} /><span>段间距（更宽松的段落留白）</span><input type="checkbox" checked={settings.paragraphSpacing} onChange={(e) => onChange({ paragraphSpacing: e.target.checked })} /></label>
-                  <label className="settings-toggle"><ListTree size={13} /><span>显示文档大纲（TOC）</span><input type="checkbox" checked={settings.showToc} onChange={(e) => onChange({ showToc: e.target.checked })} /></label>
-                  <label className="settings-toggle"><PanelTop size={13} /><span>显示编辑器工具栏</span><input type="checkbox" checked={settings.showToolbar} onChange={(e) => onChange({ showToolbar: e.target.checked })} /></label>
-                </section>
-                <section className="settings-group">
-                  <h4><Files size={13} /> 标签页</h4>
-                  <div className="settings-row">
-                    <div className="settings-field">
-                      <span>最大同时打开标签数</span>
-                      <select value={settings.maxOpenTabs} onChange={(e) => onChange({ maxOpenTabs: Number(e.target.value) })} aria-label="最大同时打开标签数">
-                        <option value={0}>不限</option>
-                        <option value={4}>4 个</option>
-                        <option value={6}>6 个</option>
-                        <option value={8}>8 个</option>
-                        <option value={12}>12 个</option>
-                        <option value={16}>16 个</option>
-                        <option value={24}>24 个</option>
-                      </select>
-                    </div>
-                  </div>
-                  <p className="settings-hint">超过上限时自动关闭最旧的标签（当前编辑的标签与钉住的标签除外），未保存内容会自动保存。</p>
-                </section>
-                <section className="settings-group">
-                  <h4><Paperclip size={13} /> 附件</h4>
-                  <div className="settings-row">
-                    <div className="settings-field">
-                      <span>附件大小上限</span>
-                      <select value={settings.maxAttachmentBytes / (1024 * 1024)} onChange={(e) => onChange({ maxAttachmentBytes: Number(e.target.value) * 1024 * 1024 })} aria-label="附件大小上限">
-                        <option value={25}>25 MiB</option>
-                        <option value={50}>50 MiB</option>
-                        <option value={100}>100 MiB</option>
-                      </select>
-                    </div>
-                  </div>
-                  <p className="settings-hint">插入附件时的本机上限；同步/下载使用协议上限（100 MiB），其他设备配置不同不影响接收。</p>
-                </section>
+                <Group title="编辑器" icon={<Type size={16} />}>
+                  <Item name="正文字号" desc="作用于当前文档正文。">
+                    <Seg ariaLabel="正文字号">
+                      {fontSizeOptions().map((fs) => (
+                        <button key={fs} className={`b3-button b3-button--outline seg__item ${settings.fontSize === fs ? "is-active" : ""}`} onClick={() => onChange({ fontSize: fs })}>{fs}</button>
+                      ))}
+                    </Seg>
+                  </Item>
+                  <Switch name="段间距" desc="更宽松的段落留白。" checked={settings.paragraphSpacing} onChange={(e) => onChange({ paragraphSpacing: e.target.checked })} />
+                  <Switch name="显示文档大纲（TOC）" checked={settings.showToc} onChange={(e) => onChange({ showToc: e.target.checked })} />
+                  <Switch name="显示编辑器工具栏" checked={settings.showToolbar} onChange={(e) => onChange({ showToolbar: e.target.checked })} />
+                </Group>
+                <Group title="标签页" icon={<Files size={16} />}>
+                  <Item name="最大同时打开标签数" desc="超过上限时自动关闭最旧的标签（当前编辑的标签与钉住的标签除外），未保存内容会自动保存。">
+                    <select className="b3-select fn__size200" value={settings.maxOpenTabs} onChange={(e) => onChange({ maxOpenTabs: Number(e.target.value) })} aria-label="最大同时打开标签数">
+                      <option value={0}>不限</option>
+                      <option value={4}>4 个</option>
+                      <option value={6}>6 个</option>
+                      <option value={8}>8 个</option>
+                      <option value={12}>12 个</option>
+                      <option value={16}>16 个</option>
+                      <option value={24}>24 个</option>
+                    </select>
+                  </Item>
+                </Group>
+                <Group title="附件" icon={<Paperclip size={16} />}>
+                  <Item name="附件大小上限" desc="插入附件时的本机上限；同步/下载使用协议上限（100 MiB），其他设备配置不同不影响接收。">
+                    <select className="b3-select fn__size200" value={settings.maxAttachmentBytes / (1024 * 1024)} onChange={(e) => onChange({ maxAttachmentBytes: Number(e.target.value) * 1024 * 1024 })} aria-label="附件大小上限">
+                      <option value={25}>25 MiB</option>
+                      <option value={50}>50 MiB</option>
+                      <option value={100}>100 MiB</option>
+                    </select>
+                  </Item>
+                </Group>
               </>
             )}
 
             {category === "appearance" && (
-              <>
-                <section className="settings-group">
-                  <h4><Monitor size={13} /> 主题</h4>
-                  <div className="settings-row">
-                    <button className={`settings-choice ${settings.theme === "light" ? "active" : ""}`} onClick={() => onChange({ theme: "light" })}><Sun size={13} /> 浅色（思源 daylight）</button>
-                    <button className={`settings-choice ${settings.theme === "dark" ? "active" : ""}`} onClick={() => onChange({ theme: "dark" })}><Moon size={13} /> 深色（思源 midnight）</button>
-                  </div>
-                </section>
-
-              </>
+              <Group title="外观" icon={<Monitor size={16} />}>
+                <Item name="主题">
+                  <Seg ariaLabel="主题">
+                    <button className={`b3-button b3-button--outline seg__item ${settings.theme === "light" ? "is-active" : ""}`} onClick={() => onChange({ theme: "light" })}><Sun size={14} /> 浅色</button>
+                    <button className={`b3-button b3-button--outline seg__item ${settings.theme === "dark" ? "is-active" : ""}`} onClick={() => onChange({ theme: "dark" })}><Moon size={14} /> 深色</button>
+                  </Seg>
+                </Item>
+              </Group>
             )}
 
             {category === "shortcuts" && (
-              <>
-                <section className="settings-group">
-                  <h4><Keyboard size={13} /> 快捷键</h4>
-                  <p className="settings-hint">当前版本先展示固定快捷键，暂不支持自定义。</p>
-                  <div className="shortcut-list" aria-label="快捷键列表">
-                    <div className="shortcut-row"><kbd>⌘K</kbd><span>打开全局搜索（标题和正文）</span></div>
-                    <div className="shortcut-row"><kbd>⌘⇧Enter</kbd><span>进入或退出专注模式</span></div>
-                    <div className="shortcut-row"><kbd>↑ / ↓</kbd><span>在搜索结果中移动</span></div>
-                    <div className="shortcut-row"><kbd>Enter</kbd><span>打开搜索结果并定位命中</span></div>
-                    <div className="shortcut-row"><kbd>⌘Enter</kbd><span>在新标签打开并定位命中</span></div>
-                    <div className="shortcut-row"><kbd>Esc</kbd><span>关闭当前菜单或浮层</span></div>
-                  </div>
-                </section>
-              </>
+              <Group title="快捷键" icon={<Keyboard size={16} />}>
+                <Block desc="当前版本先展示固定快捷键，暂不支持自定义。" />
+                <Shortcut name="打开全局搜索（标题和正文）" keys="⌘K" />
+                <Shortcut name="进入或退出专注模式" keys="⌘⇧Enter" />
+                <Shortcut name="在搜索结果中移动" keys="↑ / ↓" />
+                <Shortcut name="打开搜索结果并定位命中" keys="Enter" />
+                <Shortcut name="在新标签打开并定位命中" keys="⌘Enter" />
+                <Shortcut name="关闭当前菜单或浮层" keys="Esc" />
+              </Group>
             )}
 
             {category === "history" && (
               <>
-                <section className="settings-group">
-                  <h4><History size={13} /> 文档历史</h4>
-                  <div className="settings-row" style={{ alignItems: "center", gap: 8, fontSize: 12, color: "#48515c" }}>
-                    <span>历史快照：{stats ? `${stats.snapshotCount} 份 · ${formatBytes(stats.totalBytes)}` : "…"}</span>
-                    <button className="settings-choice" onClick={() => void runCleanup()} disabled={histBusy}><Trash2 size={12} /> {histBusy ? "清理中…" : "立即清理"}</button>
-                  </div>
-                  {histMsg && <p className="settings-hint">{histMsg}</p>}
-                  {lastCleanup && (
-                    <p className="settings-hint">上次清理：{formatDateTime(Date.parse(lastCleanup.at))} · {lastCleanup.deletedSnapshots} 份 · {formatBytes(lastCleanup.freedBytes)}</p>
-                  )}
+                <Group title="文档历史" icon={<History size={16} />}>
+                  <Block name="快照占用" desc="历史快照保存在本机，不参与同步。恢复前会自动保存当前版本。">
+                    <div className="config-stats">
+                      <span>快照 <strong>{stats ? stats.snapshotCount : "—"}</strong> 份</span>
+                      <span>{stats ? formatBytes(stats.totalBytes) : "统计中…"}</span>
+                      {lastCleanup && <span>上次清理 {formatDateTime(Date.parse(lastCleanup.at))} · {lastCleanup.deletedSnapshots} 份 · {formatBytes(lastCleanup.freedBytes)}</span>}
+                    </div>
+                    <div className="config-block__actions">
+                      <button className="b3-button b3-button--outline" onClick={() => void runCleanup()} disabled={histBusy}><Trash2 size={14} /> {histBusy ? "清理中…" : "立即清理"}</button>
+                    </div>
+                    {histMsg && <div className="block__text">{histMsg}</div>}
+                  </Block>
                   {histCfg && (
                     <>
-                      <div className="settings-field"><span>每文档上限</span><input type="number" min={20} max={1000} value={histCfg.maxSnapshots} onChange={(e) => saveHistCfg({ maxSnapshots: Math.max(1, Number(e.target.value) || 100) })} /></div>
-                      <div className="settings-field"><span>保留天数</span><input type="number" min={1} max={365} value={histCfg.retentionDays} onChange={(e) => saveHistCfg({ retentionDays: Math.max(1, Number(e.target.value) || 30) })} /></div>
-                      <div className="settings-field"><span>定期清理（小时）</span><input type="number" min={0} max={720} value={histCfg.cleanupIntervalHours} onChange={(e) => saveHistCfg({ cleanupIntervalHours: Math.max(0, Number(e.target.value) || 24) })} /></div>
-                      <div className="settings-field"><span>自动快照（分钟）</span><input type="number" min={0} max={1440} value={histCfg.snapshotIntervalMinutes} onChange={(e) => saveHistCfg({ snapshotIntervalMinutes: Math.max(0, Number(e.target.value) || 15) })} /></div>
+                      <Item name="每文档上限" desc="单篇文档最多保留的快照份数。"><NumField label="每文档上限" min={20} max={1000} value={histCfg.maxSnapshots} onSave={(v) => saveHistCfg({ maxSnapshots: v })}  floor={1} fallback={100} /></Item>
+                      <Item name="保留天数" desc="超期的自动快照会被定期清理；手动快照与冲突留档另计。"><NumField label="保留天数" min={1} max={365} value={histCfg.retentionDays} onSave={(v) => saveHistCfg({ retentionDays: v })}  floor={1} fallback={30} /></Item>
+                      <Item name="定期清理（小时）" desc="0 = 不自动清理。"><NumField label="定期清理（小时）" min={0} max={720} value={histCfg.cleanupIntervalHours} onSave={(v) => saveHistCfg({ cleanupIntervalHours: v })}  floor={0} fallback={24} /></Item>
+                      <Item name="自动快照（分钟）" desc="0 = 不自动快照。"><NumField label="自动快照（分钟）" min={0} max={1440} value={histCfg.snapshotIntervalMinutes} onSave={(v) => saveHistCfg({ snapshotIntervalMinutes: v })}  floor={0} fallback={15} /></Item>
                     </>
                   )}
-                  <p className="settings-hint">历史快照保存在本机，不参与同步。保留策略修改即时生效。</p>
-                </section>
-                <section className="settings-group">
-                  <h4><Info size={13} /> 数据体检（只读诊断）</h4>
-                  <div className="settings-row" style={{ alignItems: "center", gap: 8, fontSize: 12, color: "#48515c" }}>
-                    <button className="settings-choice" onClick={() => void runHealth()} disabled={healthBusy}><Search size={12} /> {healthBusy ? "检查中…" : "运行检查"}</button>
-                    {health && healthBusy === false && (
-                      <span>
-                        笔记 {health.notesChecked} · 快照 {health.historyChecked} · 孤儿登记 {health.orphanRowsChecked}
-                      </span>
-                    )}
-                  </div>
-                  {health && (
-                    <div style={{ marginTop: 6, fontSize: 12, lineHeight: 1.7 }}>
-                      {health.notesMissingFile.length === 0 && health.notesHashMismatch.length === 0 && health.historyMissingFile === 0 && health.orphanRowsFileMissing.length === 0 && health.refsMissingResource.length === 0 ? (
-                        <p className="settings-hint" style={{ color: "var(--lake-sync-success, #15803d)" }}>✓ 全部自洽：正文文件、历史快照、孤儿登记、引用资源均与数据库一致。</p>
-                      ) : (
-                        <>
-                          {health.notesMissingFile.length > 0 && <p className="settings-hint" style={{ color: "var(--lake-error, #b91c1c)" }}>✗ {health.notesMissingFile.length} 篇笔记正文文件缺失（首 3：{health.notesMissingFile.slice(0, 3).map((n) => n.title).join("、")}）</p>}
-                          {health.notesHashMismatch.length > 0 && <p className="settings-hint" style={{ color: "var(--lake-error, #b91c1c)" }}>✗ {health.notesHashMismatch.length} 篇正文与基线哈希不符（可能被外部改动）</p>}
-                          {health.historyMissingFile > 0 && <p className="settings-hint" style={{ color: "var(--lake-warning, #b45309)" }}>✗ {health.historyMissingFile} 份历史快照文件缺失（恢复对应版本时会失败）</p>}
-                          {health.orphanRowsFileMissing.length > 0 && <p className="settings-hint" style={{ color: "var(--lake-warning, #b45309)" }}>✗ {health.orphanRowsFileMissing.length} 条孤儿登记文件缺失（登记漂移）</p>}
-                          {health.refsMissingResource.length > 0 && <p className="settings-hint" style={{ color: "var(--lake-error, #b91c1c)" }}>✗ 正文引用的 {health.refsMissingResource.length} 个资源文件缺失（首 3：{health.refsMissingResource.slice(0, 3).map((r) => r.filename).join("、")}）</p>}
-                        </>
+                </Group>
+                <Group title="数据体检（只读诊断）" icon={<Info size={16} />}>
+                  <Block name="一致性检查" desc="只读比对正文文件、历史快照、孤儿登记与引用资源；不自动修复。发现问题请从备份/云端恢复对应文件。">
+                    <div className="config-block__actions">
+                      <button className="b3-button b3-button--outline" onClick={() => void runHealth()} disabled={healthBusy}><Search size={14} /> {healthBusy ? "检查中…" : "运行检查"}</button>
+                      {health && !healthBusy && (
+                        <span className="config-stats"><span>笔记 {health.notesChecked} · 快照 {health.historyChecked} · 孤儿登记 {health.orphanRowsChecked} · 树节点 {health.treeChecked}</span></span>
                       )}
-                      <p className="settings-hint">生成于 {formatDateTime(Date.parse(health.checkedAt))}。本检查只读、不修复；发现问题请从备份/云端恢复对应文件。</p>
                     </div>
-                  )}
-                </section>
+                    {health && (
+                      <div className="checks">
+                        {health.notesMissingFile.length === 0 && health.notesHashMismatch.length === 0 && health.historyMissingFile === 0 && health.orphanRowsFileMissing.length === 0 && health.refsMissingResource.length === 0 && health.treeDanglingParent.length === 0 ? (
+                          <div className="checks__row checks__row--ok">✓ 全部自洽：正文文件、历史快照、孤儿登记、引用资源、目录树父子链均一致。</div>
+                        ) : (
+                          <>
+                            {health.notesMissingFile.length > 0 && <div className="checks__row checks__row--error">✗ {health.notesMissingFile.length} 篇笔记正文文件缺失（首 3：{health.notesMissingFile.slice(0, 3).map((n) => n.title).join("、")}）</div>}
+                            {health.notesHashMismatch.length > 0 && <div className="checks__row checks__row--error">✗ {health.notesHashMismatch.length} 篇正文与基线哈希不符（可能被外部改动）</div>}
+                            {health.historyMissingFile > 0 && <div className="checks__row checks__row--warn">✗ {health.historyMissingFile} 份历史快照文件缺失（恢复对应版本时会失败）</div>}
+                            {health.orphanRowsFileMissing.length > 0 && <div className="checks__row checks__row--warn">✗ {health.orphanRowsFileMissing.length} 条孤儿登记文件缺失（登记漂移）</div>}
+                            {health.refsMissingResource.length > 0 && <div className="checks__row checks__row--error">✗ 正文引用的 {health.refsMissingResource.length} 个资源文件缺失（首 3：{health.refsMissingResource.slice(0, 3).map((r) => r.filename).join("、")}）</div>}
+                          {health.treeDanglingParent.length > 0 && <div className="checks__row checks__row--error">✗ {health.treeDanglingParent.length} 个节点的父目录不存在（侧栏与回收站都看不到它）：{health.treeDanglingParent.slice(0, 3).map((t) => `${t.title}→${t.parentId}`).join("、")}</div>}
+                          </>
+                        )}
+                        <div className="checks__row">生成于 {formatDateTime(Date.parse(health.checkedAt))}。</div>
+                      </div>
+                    )}
+                  </Block>
+                </Group>
               </>
             )}
 
             {category === "sync" && (
               <>
-                <section className="settings-group">
-                  <h4><Cloud size={13} /> 同步策略（仅保存在当前设备）</h4>
+                <Group title="同步策略（仅保存在当前设备）" icon={<Cloud size={16} />}>
                   {syncCfg && (
                     <>
-                      <label className="settings-toggle">
-                        <input type="checkbox" checked={syncCfg.enabled} disabled={syncCfgBusy} onChange={(e) => void saveSyncCfg({ enabled: e.target.checked })} />
-                        <span>启用云同步</span>
-                      </label>
+                      <Switch name="启用云同步" desc="S3 配置与同步策略均为本机配置，不会上传云端；A 端关闭不影响 B 端。" checked={syncCfg.enabled} disabled={syncCfgBusy} onChange={(e) => void saveSyncCfg({ enabled: e.target.checked })} />
                       {syncCfg.enabled && (
                         <>
-                          <div className="settings-field">
-                            <span>自动同步模式</span>
-                            <select value={syncCfg.autoMode} onChange={(e) => void saveSyncCfg({ autoMode: e.target.value as SyncSettings["autoMode"] })}>
+                          <Item name="自动同步模式">
+                            <select className="b3-select fn__size200" value={syncCfg.autoMode} onChange={(e) => void saveSyncCfg({ autoMode: e.target.value as SyncSettings["autoMode"] })} aria-label="自动同步模式">
                               <option value="manual">完全手动</option>
                               <option value="interval">按固定间隔自动同步</option>
                               <option value="onOpenClose">仅在开启/关闭时同步</option>
                             </select>
-                          </div>
+                          </Item>
                           {syncCfg.autoMode === "interval" && (
-                            <div className="settings-field"><span>自动同步间隔（分钟）</span><input type="number" min={1} max={1440} value={syncCfg.autoIntervalMinutes} onChange={(e) => void saveSyncCfg({ autoIntervalMinutes: Math.max(1, Number(e.target.value) || 15) })} /></div>
+                            <Item name="自动同步间隔（分钟）"><NumField label="自动同步间隔（分钟）" min={1} max={1440} value={syncCfg.autoIntervalMinutes} onSave={(v) => void saveSyncCfg({ autoIntervalMinutes: v })}  floor={1} fallback={15} /></Item>
                           )}
                         </>
                       )}
-                      <p className="settings-hint">S3 配置与同步策略均为本机配置，不会上传云端；A 端关闭不影响 B 端。</p>
                     </>
                   )}
-                </section>
-                <section className="settings-group">
-                  <h4><Files size={13} /> 备份与恢复</h4>
-                  <div className="settings-row" style={{ flexWrap: "wrap", gap: 8 }}>
-                    <button className="settings-choice" onClick={() => void runBackup()} disabled={backupBusy}><Files size={12} /> {backupBusy ? "备份中…" : "整库备份到…"}</button>
-                    <button className="settings-choice" onClick={() => void runCloudRestore()} disabled={backupBusy} style={{ color: "#b91c1c" }}>从云端恢复（换机/坏库）…</button>
-                  </div>
-                  {backupMsg && <p className="settings-hint">{backupMsg}</p>}
-                  <p className="settings-hint">整库备份：数据库 + 全部笔记/资源/历史快照 + 小记，导出到所选目录（不覆盖非空目录）。云端恢复：当前数据先改名隔离保存，再以全新空库从云端全量拉取（只拉不打）。</p>
-                </section>
-                <section className="settings-group">
-                  <h4><Cloud size={13} /> S3 连接（凭据仅保存在当前设备）</h4>
-                  <div className="settings-field"><span>Endpoint</span><input type="text" value={s3.endpoint} placeholder="https://s3-cn-east-1.qiniucs.com" onChange={(e) => setS3Field("endpoint", e.target.value)} /></div>
-                  <div className="settings-field"><span>Access Key</span><input type="text" value={s3.accessKeyId} onChange={(e) => setS3Field("accessKeyId", e.target.value)} /></div>
-                  <div className="settings-field"><span>Secret Key</span><input type="password" value={s3.secretAccessKey} placeholder="留空或保持 ******** 表示沿用已保存密钥" onChange={(e) => setS3Field("secretAccessKey", e.target.value)} /></div>
-                  <div className="settings-field"><span>Bucket</span><input type="text" value={s3.bucket} onChange={(e) => setS3Field("bucket", e.target.value)} /></div>
-                  <div className="settings-field"><span>Region</span><input type="text" value={s3.region} onChange={(e) => setS3Field("region", e.target.value)} /></div>
-                  <div className="settings-field"><span>对象前缀</span><input type="text" value={s3.prefix} onChange={(e) => setS3Field("prefix", e.target.value)} /></div>
-                  <label className="settings-toggle"><input type="checkbox" checked={s3.forcePathStyle} onChange={(e) => setS3Field("forcePathStyle", e.target.checked)} /><span>使用 Path-style URL</span></label>
-                  <div className="settings-row" style={{ gap: 6 }}>
-                    <button className="settings-choice" onClick={() => void testS3()}>测试连接</button>
-                    <button className="settings-choice" onClick={() => void saveS3()}>保存配置</button>
-                  </div>
-                </section>
-                <section className="settings-group">
-                  <h4><Trash2 size={13} /> 云端回收（S3 GC）</h4>
-                  <div style={{ display: "flex", flexWrap: "wrap", columnGap: 14, rowGap: 4, alignItems: "baseline", fontSize: 12, color: "#48515c" }}>
-                    <span><strong>待回收键 {gcPending} 个</strong></span>
-                    <span>可删 {gcSummary.due}</span>
-                    <span>窗口内 {gcSummary.inWindow}{gcSummary.earliest !== null ? " · 最早 " + formatDateTime(gcSummary.earliest) + " 到期" : ""}</span>
-                    {gcSummary.unknown > 0 && <span>时间未知 {gcSummary.unknown}</span>}
-                  </div>
-                  <div className="settings-row" style={{ gap: 6, marginTop: 8 }}>
-                    <button className="settings-choice" onClick={() => void runReconcile()} disabled={gcBusy}><Trash2 size={12} /> {gcBusy ? "处理中…" : "立即对账"}</button>
-                    <button className="settings-choice" onClick={() => void runGcAction(true)} disabled={gcBusy}>深度清理预览</button>
-                    <button className="settings-choice" onClick={() => void runGcAction(false)} disabled={gcBusy}>执行深度清理</button>
-                  </div>
-                  <p className="settings-hint">手动按钮会立即删除当前未被清单/历史引用的云端对象；自动对账按回收窗口到期后定期清理。结果偏少通常是被引用保护，不是漏删。</p>
-                  <div className="settings-row" style={{ gap: 6, marginTop: 6 }}>
-                    <button className="settings-choice" onClick={() => void refreshCloudStats()} disabled={gcBusy || gcDiagBusy}>{gcDiagBusy ? "统计中…" : "刷新云端统计"}</button>
-                    {gcDiagBusy && <span style={{ fontSize: 12, color: "var(--lake-text-tertiary, #5f6a78)" }}>正在拉取云端清单…</span>}
-                  </div>
-                  {gcDiag && (
-                    <p className="settings-hint" style={{ marginTop: 6, lineHeight: 1.7 }}>
-                      云端占用：{gcDiag.cloud.objects} 个对象 / {formatBytes(gcDiag.cloud.bytes)}
-                      （正文 {diagNs("objects")?.cloudObjects ?? 0} 个 · 资源 {diagNs("assets")?.cloudObjects ?? 0} 个 · 清单 {diagNs("manifests")?.cloudObjects ?? 0} 个 · 小记 {diagNs("quick-notes")?.cloudObjects ?? 0} 个）
-                      未引用 {gcDiag.cloud.unreferenced} 个 · 已到期可回收 {gcDiag.cloud.due} 个 · 窗口内 {gcDiag.cloud.inWindow} 个
-                      （生成于 {formatDateTime(Date.parse(gcDiag.generatedAt))}）
-                    </p>
-                  )}
+                </Group>
+                <Group title="备份与恢复" icon={<Files size={16} />}>
+                  <Block name="整库备份" desc="数据库 + 全部笔记/资源/历史快照 + 小记，导出到所选目录（不覆盖非空目录）。">
+                    <div className="config-block__actions">
+                      <button className="b3-button b3-button--outline" onClick={() => void runBackup()} disabled={backupBusy}><Files size={14} /> {backupBusy ? "备份中…" : "整库备份到…"}</button>
+                    </div>
+                  </Block>
+                  <Block name="从云端恢复" desc="当前数据先改名隔离保存，再以全新空库从云端全量拉取（只拉不打）。用于换机或本地库损坏。">
+                    <div className="config-block__actions">
+                      <button className="b3-button b3-button--outline ft__error" onClick={() => void runCloudRestore()} disabled={backupBusy}>从云端恢复（换机/坏库）…</button>
+                    </div>
+                  </Block>
+                  {backupMsg && <Block name={backupMsg} />}
+                </Group>
+                <Group title="S3 对象存储" icon={<Cloud size={16} />}>
+                  <Item name="Endpoint"><TextField label="Endpoint" value={s3.endpoint} placeholder="https://s3-cn-east-1.qiniucs.com" onSave={(v) => setS3Field("endpoint", v)} wide /></Item>
+                  <Item name="Access Key"><TextField label="Access Key" value={s3.accessKeyId} onSave={(v) => setS3Field("accessKeyId", v)} wide /></Item>
+                  <Item name="Secret Key" desc="留空或保持 ******** 表示沿用已保存密钥（本机加密存储）。"><TextField label="Secret Key" type="password" placeholder="留空或保持 ******** 表示沿用已保存密钥" value={s3.secretAccessKey} onSave={(v) => setS3Field("secretAccessKey", v)} wide /></Item>
+                  <Item name="Bucket"><TextField label="Bucket" value={s3.bucket} onSave={(v) => setS3Field("bucket", v)} wide /></Item>
+                  <Item name="Region"><TextField label="Region" value={s3.region} onSave={(v) => setS3Field("region", v)} wide /></Item>
+                  <Item name="对象前缀"><TextField label="对象前缀" value={s3.prefix} onSave={(v) => setS3Field("prefix", v)} wide /></Item>
+                  <Switch name="使用 Path-style URL" desc="自建 MinIO 等需要开启；七牛 Kodo 关闭即可。" checked={s3.forcePathStyle} onChange={(e) => setS3Field("forcePathStyle", e.target.checked)} />
+                  <Block name="连接" desc="测试仅探测桶可读性，不写入数据。">
+                    <div className="config-block__actions">
+                      <button className="b3-button b3-button--outline" onClick={() => void testS3()}>测试连接</button>
+                      <button className="b3-button" onClick={() => void saveS3()}>保存配置</button>
+                    </div>
+                  </Block>
+                </Group>
+                <Group title="云端回收（S3 GC）" icon={<Trash2 size={16} />}>
+                  <Block name="回收状态" desc="手动按钮会立即删除当前未被清单/历史引用的云端对象；自动对账按回收窗口到期后定期清理。结果偏少通常是被引用保护，不是漏删。">
+                    <div className="config-stats">
+                      <span>待回收键 <strong>{gcPending}</strong> 个</span>
+                      <span>可删 <strong>{gcSummary.due}</strong></span>
+                      <span>窗口内 <strong>{gcSummary.inWindow}</strong>{gcSummary.earliest !== null ? " · 最早 " + formatDateTime(gcSummary.earliest) + " 到期" : ""}</span>
+                      {gcSummary.unknown > 0 && <span>时间未知 {gcSummary.unknown}</span>}
+                    </div>
+                    <div className="config-block__actions">
+                      <button className="b3-button b3-button--outline" onClick={() => void runReconcile()} disabled={gcBusy}><Trash2 size={14} /> {gcBusy ? "处理中…" : "立即对账"}</button>
+                      <button className="b3-button b3-button--outline" onClick={() => void runGcAction(true)} disabled={gcBusy}>深度清理预览</button>
+                      <button className="b3-button b3-button--outline ft__error" onClick={() => void runGcAction(false)} disabled={gcBusy}>执行深度清理</button>
+                      <button className="b3-button b3-button--outline" onClick={() => void refreshCloudStats()} disabled={gcBusy || gcDiagBusy}>{gcDiagBusy ? "统计中…" : "刷新云端统计"}</button>
+                    </div>
+                    {gcDiag && (
+                      <div className="config-stats">
+                        <span>云端占用 {gcDiag.cloud.objects} 个对象 / {formatBytes(gcDiag.cloud.bytes)}</span>
+                        <span>正文 {diagNs("objects")?.cloudObjects ?? 0} · 资源 {diagNs("assets")?.cloudObjects ?? 0} · 清单 {diagNs("manifests")?.cloudObjects ?? 0} · 小记 {diagNs("quick-notes")?.cloudObjects ?? 0}</span>
+                        <span>未引用 {gcDiag.cloud.unreferenced} · 已到期 {gcDiag.cloud.due} · 窗口内 {gcDiag.cloud.inWindow}</span>
+                        <span>统计生成于 {formatDateTime(Date.parse(gcDiag.generatedAt))}</span>
+                      </div>
+                    )}
+                  </Block>
                   {gcCfg && (
                     <>
-                      <div className="settings-field"><span>回收窗口（天）</span><input type="number" min={0} max={90} value={gcCfg.gcRetentionDays} onChange={(e) => saveGcCfg({ gcRetentionDays: Math.max(0, Number(e.target.value) || 7) })} /></div>
-                      <div style={{ fontSize: 11, color: "var(--lake-text-tertiary, #5f6a78)", marginTop: -4, marginBottom: 6 }}>对象被替换/移除后的保护期；0 = 立即到期</div>
-                      <div className="settings-field"><span>自动对账周期（小时）</span><input type="number" min={0} max={720} value={gcCfg.gcIntervalHours} onChange={(e) => saveGcCfg({ gcIntervalHours: Math.max(0, Number(e.target.value) || 24) })} /></div>
-                      <div style={{ fontSize: 11, color: "var(--lake-text-tertiary, #5f6a78)", marginTop: -4 }}>自动清理频率；0 = 仅手动</div>
+                      <Item name="回收窗口（天）" desc="对象被替换/移除后的保护期；0 = 立即到期。"><NumField label="回收窗口（天）" min={0} max={90} value={gcCfg.gcRetentionDays} onSave={(v) => saveGcCfg({ gcRetentionDays: v })}  floor={0} fallback={7} /></Item>
+                      <Item name="自动对账周期（小时）" desc="自动清理频率；0 = 仅手动。"><NumField label="自动对账周期（小时）" min={0} max={720} value={gcCfg.gcIntervalHours} onSave={(v) => saveGcCfg({ gcIntervalHours: v })}  floor={0} fallback={24} /></Item>
                     </>
                   )}
-                  <p className="settings-hint">云端只是镜像：删除云端冗余不影响本地正文/回收站/历史快照（“彻底删除/清空回收站”除外）。</p>
+                  <Block name="云端只是镜像" desc="删除云端冗余不影响本地正文/回收站/历史快照（“彻底删除/清空回收站”除外）。" />
                   {gcPendingRows.length > 0 && (
-                    <div style={{ marginTop: 4 }}>
-                      <p className="settings-hint" style={{ fontWeight: 600, margin: "6px 0 2px" }}>待回收键明细（{gcPendingRows.length} 条）</p>
-                      <div className="settings-hint" style={{ maxHeight: 140, overflow: "auto", fontSize: 11, lineHeight: 1.7 }}>
-                        {gcPendingRows.slice().sort((a, b) => {
-                          const am = parseIsoMs(a.markedAt) ?? Infinity;
-                          const bm = parseIsoMs(b.markedAt) ?? Infinity;
-                          return am - bm;
-                        }).map((row) => (
-                          <div key={row.key} title={row.markedAt}>
-                            <span style={{ color: "var(--lake-text-tertiary, #5f6a78)" }}>{row.markedAt.slice(0, 10)}</span> [{pendingKeyReason(row.key)}] <span style={{ wordBreak: "break-all" }}>{row.key}</span>
-                          </div>
+                    <Block name={`待回收键明细（${gcPendingRows.length} 条）`} desc="按标记时间升序；[原因] 标注该键为何进入待回收。">
+                      <div className="config-readonly">
+                        {gcPendingRows.slice().sort((a, b) => (parseIsoMs(a.markedAt) ?? Infinity) - (parseIsoMs(b.markedAt) ?? Infinity)).map((row) => (
+                          <div key={row.key} title={row.markedAt}>{row.markedAt.slice(0, 10)} [{pendingKeyReason(row.key)}] {row.key}</div>
                         ))}
                       </div>
-                    </div>
+                    </Block>
                   )}
-                  <p className="settings-hint" style={{ fontWeight: 600, margin: "8px 0 2px" }}>删除记录（最近 {gcLog.length > 0 ? Math.min(gcLog.length, 30) : 0} 条 · 只读审计）</p>
-                  {gcLog.length > 0 ? (
-                    <div className="settings-hint" style={{ maxHeight: 150, overflow: "auto", fontFamily: "monospace", fontSize: 11, lineHeight: 1.7 }}>
-                      {gcLog.slice(0, 30).map((l) => <div key={l.id}>{l.ts.slice(0, 19)}&nbsp;[{l.action} · {l.reason}] {l.key}</div>)}
-                    </div>
-                  ) : (
-                    <p className="settings-hint">（暂无删除记录）</p>
-                  )}
-                </section>
+                  <Block name={`删除记录（最近 ${gcLog.length > 0 ? Math.min(gcLog.length, 30) : 0} 条 · 只读审计）`}>
+                    {gcLog.length > 0 ? (
+                      <div className="config-readonly">
+                        {gcLog.slice(0, 30).map((l) => <div key={l.id}>{l.ts.slice(0, 19)}&nbsp;[{l.action} · {l.reason}] {l.key}</div>)}
+                      </div>
+                    ) : (
+                      <div className="block__text">暂无删除记录。</div>
+                    )}
+                  </Block>
+                </Group>
               </>
             )}
 
             {category === "resources" && (
-              <>
-              <section className="settings-group">
-                <h4><Paperclip size={13} /> 未引用资源（本地）</h4>
-                <p className="settings-hint">
-                  汇总所有文档中“当前正文不再引用”的本地资产文件：<strong>未引用</strong>（可删除/复制/打开位置）
-                  与 <strong>历史保护</strong>（仍被历史快照引用，仅查看不可删除）。点击条目即预览并自动切换；
-                  文档在回收站时文件仍列出，彻底删除时随 purge 一并清理。
-                </p>
-                <div className="settings-row" style={{ flexWrap: "wrap", rowGap: 6, gap: 8, alignItems: "center" }}>
-                  <span style={{ fontSize: 12, color: "#48515c" }}>
-                    共 <strong>{orphans.length}</strong> 个 · {formatBytes(orphans.reduce((s, o) => s + (o.size || 0), 0))} ·
-                    可删 {orphans.filter((o) => o.status === "orphan").length} · 历史保护 {orphans.filter((o) => o.status === "history").length} · 涉及 {groupedOrphans.length} 篇文档
-                  </span>
-                  <span style={{ flex: 1 }} />
-                  <button className="settings-choice" onClick={() => void refreshOrphans()}>刷新</button>
-                  <button className="settings-choice" onClick={() => void cleanOrphans()} disabled={orphanBusy || orphans.filter((o) => o.status === "orphan").length === 0}>{orphanBusy ? "清理中…" : `清理未引用（${orphans.filter((o) => o.status === "orphan").length}）`}</button>
-                </div>
-                {orphans.length === 0 ? (
-                  <p className="settings-hint" style={{ marginTop: 8 }}>没有被移除的资源文件。</p>
-                ) : (
-                  <div style={{ display: "flex", gap: 12, marginTop: 8, alignItems: "flex-start" }}>
-                    <div style={{ flex: 1, minWidth: 0, maxHeight: 360, overflow: "auto", paddingRight: 4 }}>
-                      {groupedOrphans.map((g) => (
-                        <div key={g.title + "|" + g.state} style={{ marginBottom: 8 }}>
-                          <div style={{ display: "flex", alignItems: "baseline", gap: 8, fontSize: 13, fontWeight: 600, marginBottom: 3 }}>
-                            <Paperclip size={13} />
-                            <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", minWidth: 0 }}>{g.title}</span>
-                            {g.state === "trash" && <span style={{ fontSize: 11, color: "var(--lake-warning, #b45309)" }}>回收站</span>}
-                            {g.state === "missing" && <span style={{ fontSize: 11, color: "#b91c1c" }}>文档已删除</span>}
-                            <span style={{ fontSize: 11, color: "var(--lake-text-tertiary, #5f6a78)", fontWeight: 400 }}>{g.items.length} 个</span>
-                          </div>
-                          {g.items.map((o) => (
-                            <div
-                              key={o.noteId + "/" + o.filename}
-                              onClick={() => setSel(sel && sel.noteId === o.noteId && sel.filename === o.filename ? null : o)}
-                              title="点击预览"
-                              style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, padding: "4px 6px", borderRadius: 6, cursor: "pointer", marginBottom: 2, background: sel && sel.noteId === o.noteId && sel.filename === o.filename ? "rgba(59,130,246,0.14)" : "rgba(127,127,127,0.07)" }}
-                            >
-                              <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1, minWidth: 0 }} title={o.filename}>{o.filename}</span>
-                              {o.status === "history"
-                                ? <span style={{ color: "var(--lake-warning, #b45309)", whiteSpace: "nowrap" }}>历史保护</span>
-                                : <span style={{ color: "var(--lake-text-tertiary, #5f6a78)", whiteSpace: "nowrap" }}>未引用</span>}
-                              <span style={{ color: "var(--lake-text-tertiary, #5f6a78)", whiteSpace: "nowrap" }}>{formatBytes(o.size)}</span>
-                              <span style={{ display: "inline-flex", gap: 4 }}>
-                                <button className="settings-choice" style={{ padding: "0 6px" }} title="复制路径" onClick={(ev) => { ev.stopPropagation(); void copyPath(o); }}>复制</button>
-                                <button className="settings-choice" style={{ padding: "0 6px" }} title="在文件夹中显示" onClick={(ev) => { ev.stopPropagation(); void openFolder(o); }}>位置</button>
-                                {o.orphanId != null && (
-                                  <button className="settings-choice" style={{ padding: "0 6px" }} title="删除（不可撤销）" onClick={(ev) => { ev.stopPropagation(); void deleteOne(o); }} disabled={busyId !== null}>{busyId === o.orphanId ? "…" : "删除"}</button>
-                                )}
-                              </span>
-                            </div>
-                          ))}
-                        </div>
-                      ))}
-                    </div>
-                    <div style={{ width: 320, flexShrink: 0, border: "1px solid rgba(127,127,127,0.25)", borderRadius: 8, padding: 10, minHeight: 180, maxHeight: 360, overflow: "auto", display: "flex", flexDirection: "column", gap: 8 }}>
-                      {!sel ? (
-                        <p style={{ fontSize: 12, color: "var(--lake-text-tertiary, #5f6a78)", margin: 0 }}>点击左侧条目预览</p>
-                      ) : pv == null ? (
-                        <p style={{ fontSize: 12, color: "var(--lake-text-tertiary, #5f6a78)", margin: 0 }}>加载中…</p>
-                      ) : pv.supported && pv.dataUrl ? (
-                        <>
-                          <img src={pv.dataUrl} alt={pv.filename} style={{ maxWidth: "100%", maxHeight: 260, objectFit: "contain", alignSelf: "center" }} />
-                          <div style={{ fontSize: 12, wordBreak: "break-all" }}>{pv.filename}<span style={{ color: "var(--lake-text-tertiary, #5f6a78)" }}> · {pv.mimeType || sel.mimeType}</span></div>
-                        </>
-                      ) : (
-                        <p style={{ fontSize: 12, color: "var(--lake-text-tertiary, #5f6a78)", margin: 0 }}>该类型不支持预览。<br />{sel.filename}</p>
-                      )}
-                    </div>
+              <Group title="未引用资源（本地）" icon={<Paperclip size={16} />}>
+                <Block desc="汇总所有文档中“当前正文不再引用”的本地资产文件：未引用（可删除/复制/打开位置）与历史保护（仍被历史快照引用，仅查看不可删除）。点击条目即预览并自动切换；文档在回收站时文件仍列出，彻底删除时随 purge 一并清理。">
+                  <div className="config-stats">
+                    <span>共 <strong>{orphans.length}</strong> 个</span>
+                    <span>{formatBytes(orphans.reduce((s, o) => s + (o.size || 0), 0))}</span>
+                    <span>可删 <strong>{orphanCount}</strong></span>
+                    <span>历史保护 <strong>{historyCount}</strong></span>
+                    <span>涉及 <strong>{groupedOrphans.length}</strong> 篇文档</span>
                   </div>
+                  <div className="config-block__actions">
+                    <button className="b3-button b3-button--outline" onClick={() => void refreshOrphans()}>刷新</button>
+                    <button className="b3-button b3-button--outline ft__error" onClick={() => void cleanOrphans()} disabled={orphanBusy || orphanCount === 0}>{orphanBusy ? "清理中…" : `清理未引用（${orphanCount}）`}</button>
+                  </div>
+                </Block>
+                {orphans.length === 0 ? (
+                  <Block><div className="config-empty">没有被移除的资源文件。</div></Block>
+                ) : (
+                  <Block>
+                    <div className="config-assets">
+                      <div className="b3-list b3-list--background config-assets__list">
+                        {groupedOrphans.map((g) => (
+                          <div key={g.title + "|" + g.state} className="config-assets__group">
+                            <div className="config-assets__grouptitle">
+                              <Paperclip size={13} />
+                              <span className="fn__ellipsis">{g.title}</span>
+                              {g.state === "trash" && <span className="badge badge--warn">回收站</span>}
+                              {g.state === "missing" && <span className="badge badge--error">文档已删除</span>}
+                              <span className="config-assets__count">{g.items.length} 个</span>
+                            </div>
+                            {g.items.map((o) => (
+                              <div
+                                key={o.noteId + "/" + o.filename}
+                                className={`b3-list-item b3-list-item--hide-action${sel && sel.noteId === o.noteId && sel.filename === o.filename ? " b3-list-item--focus" : ""}`}
+                                onClick={() => setSel(sel && sel.noteId === o.noteId && sel.filename === o.filename ? null : o)}
+                                title="点击预览"
+                              >
+                                <FileText size={14} className="b3-list-item__graphic" />
+                                <span className="b3-list-item__text">{o.filename}</span>
+                                <span className={`badge ${o.status === "history" ? "badge--warn" : "badge--muted"}`}>{o.status === "history" ? "历史保护" : "未引用"}</span>
+                                <span className="b3-list-item__meta">{formatBytes(o.size)}</span>
+                                <span className="fn__space" />
+                                <button className="b3-list-item__action" title="复制路径" aria-label="复制路径" onClick={(ev) => { ev.stopPropagation(); void copyPath(o); }}><Copy size={14} /></button>
+                                <button className="b3-list-item__action" title="在文件夹中显示" aria-label="在文件夹中显示" onClick={(ev) => { ev.stopPropagation(); void openFolder(o); }}><FolderOpen size={14} /></button>
+                                {o.orphanId != null && (
+                                  <button className="b3-list-item__action b3-list-item__action--warning" title="删除（不可撤销）" aria-label="删除" disabled={busyId !== null} onClick={(ev) => { ev.stopPropagation(); void deleteOne(o); }}><Trash2 size={14} /></button>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        ))}
+                      </div>
+                      <div className="config-assets__preview">
+                        {!sel ? (
+                          <span className="config-assets__hint">点击左侧条目预览</span>
+                        ) : pv == null ? (
+                          <span className="config-assets__hint">加载中…</span>
+                        ) : pv.supported && pv.dataUrl ? (
+                          <>
+                            <img src={pv.dataUrl} alt={pv.filename} />
+                            <div className="config-assets__previewname">{pv.filename}<span className="config-assets__hint"> · {pv.mimeType || sel.mimeType}</span></div>
+                          </>
+                        ) : (
+                          <>
+                            <span className="config-assets__hint">该类型不支持预览</span>
+                            <div className="config-assets__previewname">{sel.filename}</div>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  </Block>
                 )}
-              </section>
-              </>
+              </Group>
             )}
+
             {category === "trash" && (
-              <section className="settings-group">
-                <h4><Trash2 size={13} /> 回收站</h4>
+              <Group title="回收站" icon={<Trash2 size={16} />}>
                 {gcCfg && (
-                  <div className="settings-field"><span>回收站自动过期（天，0=关闭）</span><input type="number" min={0} max={365} value={gcCfg.trashAutoPurgeDays} onChange={(e) => saveGcCfg({ trashAutoPurgeDays: Math.max(0, Number(e.target.value) || 0) })} /></div>
+                  <Item name="回收站自动过期（天）" desc="0 = 关闭。到期后自动彻底删除（含云端），不可撤销；需要保留请在到期前恢复。">
+                    <NumField label="回收站自动过期（天）" min={0} max={365} value={gcCfg.trashAutoPurgeDays} onSave={(v) => saveGcCfg({ trashAutoPurgeDays: v })}  floor={0} fallback={0} />
+                  </Item>
                 )}
-                <p className="settings-hint">回收站内容仅保存在本机；彻底删除会同时删除云端数据且不可撤销。</p>
-              </section>
+                <Block desc="回收站内容随云同步到所有设备；彻底删除会同时删除云端数据且不可撤销。" />
+              </Group>
             )}
 
             {category === "logs" && (
-              <section className="settings-group">
-                <h4><ScrollText size={13} /> 应用日志（只读）</h4>
-                <p className="settings-hint">主进程日志（GC / 同步 / 回收站 / 历史清理）位于 userData/logs/lake-notes.log。按关键字过滤，每条命中附带前后一行上下文。</p>
-                <div className="settings-row" style={{ gap: 6 }}>
-                  <input
-                    type="text"
-                    style={{ flex: 1, minWidth: 0, height: 30, padding: "0 8px", border: "1px solid var(--lake-border)", borderRadius: 6, outline: "none", fontSize: 12 }}
-                    value={logKeyword}
-                    onChange={(e) => setLogKeyword(e.target.value)}
-                    onKeyDown={(e) => { if (e.key === "Enter") void runLogLoad(logKeyword); }}
-                    placeholder="过滤（如 GC / sync / trash / purge / snapshot）"
-                  />
-                  <button className="settings-choice" onClick={() => void runLogLoad(logKeyword)} disabled={logBusy}><Search size={12} /> {logBusy ? "读取中…" : "读取"}</button>
-                </div>
-                {logInfo && <p className="settings-hint">{logInfo}</p>}
-                {logRows.length > 0 ? (
-                  <div className="settings-hint" style={{ maxHeight: 280, overflow: "auto", fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace", fontSize: 11, lineHeight: 1.6, marginTop: 6 }}>
-                    {logRows.map((row, i) => (
-                      <div key={i} style={row.hit ? { color: "var(--lake-warning, #b45309)" } : { color: "var(--lake-text-tertiary, #5f6a78)" }}>{row.line}</div>
-                    ))}
+              <Group title="应用日志（只读）" icon={<ScrollText size={16} />}>
+                <Block name="主进程日志" desc="GC / 同步 / 回收站 / 历史清理写入 userData/logs/lake-notes.log。按关键字过滤，每条命中附带前后一行上下文。">
+                  <div className="config-block__actions">
+                    <input
+                      className="b3-text-field logs__filter"
+                      type="text"
+                      value={logKeyword}
+                      onChange={(e) => setLogKeyword(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === "Enter") void runLogLoad(logKeyword); }}
+                      placeholder="过滤（如 GC / sync / trash / purge / snapshot）"
+                      aria-label="日志关键字过滤"
+                    />
+                    <button className="b3-button b3-button--outline" onClick={() => void runLogLoad(logKeyword)} disabled={logBusy}><Search size={14} /> {logBusy ? "读取中…" : "读取"}</button>
                   </div>
-                ) : (
-                  !logBusy && <p className="settings-hint">（尚无日志或未读取）</p>
-                )}
-              </section>
+                  {logInfo && <div className="block__text">{logInfo}</div>}
+                </Block>
+                <Block>
+                  {logRows.length > 0 ? (
+                    <div className="config-readonly readonly--tall">
+                      {logRows.map((row, i) => <div key={i} className={row.hit ? "logs__hit" : undefined}>{row.line}</div>)}
+                    </div>
+                  ) : (
+                    !logBusy && <div className="config-empty">尚无日志或未读取。</div>
+                  )}
+                </Block>
+              </Group>
             )}
 
             {category === "about" && (
-              <section className="settings-group">
-                <h4><Info size={13} /> 关于</h4>
-                <p className="settings-hint">Lake Notes：本地优先的笔记应用。数据保存在本机，S3 仅作云端镜像备份。</p>
-              </section>
+              <>
+                {!sysInfo && (
+                  <Group title="关于" icon={<Info size={16} />}>
+                    <Block><div className="config-empty">读取中…</div></Block>
+                  </Group>
+                )}
+                {sysInfo && (
+                  <>
+                    <Group title="关于" icon={<Info size={16} />}>
+                      <Block name={`Lake Notes ${sysInfo.app.version}${sysInfo.packaged ? "" : "（开发实例）"}`} desc="本地优先 · 离线可用 · 数据保存在本机，S3 仅作云端镜像备份。" />
+                    </Group>
+
+                    <Group title="版本与运行环境" icon={<Monitor size={16} />}>
+                      <Item name="应用版本" desc={sysInfo.app.description || undefined}>
+                        <span className="config-item__ctl"><code className="kv__v">v{sysInfo.app.version}</code></span>
+                      </Item>
+                      <Block name="运行时" desc="Electron 43 是 Lake 内核的原生环境（Chromium）；Node 版本决定 better-sqlite3 的 N-API 加载。">
+                        <div className="kv">
+                          <div className="kv__row"><span className="kv__k">Electron</span><span className="kv__v">{sysInfo.runtime.electron}</span></div>
+                          <div className="kv__row"><span className="kv__k">Chromium</span><span className="kv__v">{sysInfo.runtime.chromium}</span></div>
+                          <div className="kv__row"><span className="kv__k">Node</span><span className="kv__v">{sysInfo.runtime.node}</span></div>
+                          <div className="kv__row"><span className="kv__k">平台</span><span className="kv__v">{sysInfo.runtime.platform} / {sysInfo.runtime.arch}</span></div>
+                        </div>
+                      </Block>
+                      <Block name="内核与关键依赖" desc="vendor 内核按 package.json 锁定版本，勿随意升级（lakex 闭源，只做最小 hack）。">
+                        <div className="kv">
+                          {Object.entries(sysInfo.deps).map(([name, ver]) => (
+                            <div key={name} className="kv__row"><span className="kv__k">{name}</span><span className="kv__v">{ver}</span></div>
+                          ))}
+                        </div>
+                      </Block>
+                    </Group>
+
+                    <Group title="数据与存储" icon={<Files size={16} />}>
+                      <Block name="内容统计" desc="计数来自本机库与资源目录（只读遍历资源目录两层，不做全盘扫描）。">
+                        <div className="config-stats">
+                          <span>笔记 <strong>{sysInfo.storage.notes}</strong></span>
+                          <span>笔记本 <strong>{sysInfo.storage.notebooks}</strong></span>
+                          <span>分组 {sysInfo.storage.groups}</span>
+                          <span>小记 <strong>{sysInfo.quickNotes}</strong></span>
+                        </div>
+                        <div className="config-stats">
+                          <span>资源 <strong>{sysInfo.storage.assetFiles}</strong> 个 · {formatBytes(sysInfo.storage.assetBytes)}</span>
+                          <span>历史快照 <strong>{sysInfo.storage.historySnapshots}</strong> 份 · {formatBytes(sysInfo.storage.historyBytes)}</span>
+                          <span>库文件 {formatBytes(sysInfo.storage.dbBytes)}</span>
+                        </div>
+                        <div className="config-stats">
+                          <span>回收站节点 {sysInfo.storage.trashedNodes}</span>
+                          <span>删除墓碑 {sysInfo.storage.tombstones}</span>
+                          <span>孤儿登记 {sysInfo.storage.orphanRows}</span>
+                        </div>
+                      </Block>
+                      <Item name="数据目录" pathDesc desc={sysInfo.storage.root}>
+                        <button className="b3-button b3-button--outline" onClick={() => revealFolder("data")}>在 Finder 中显示</button>
+                      </Item>
+                      <Item name="工作空间" pathDesc desc={sysInfo.paths.workspace}>
+                        <button className="b3-button b3-button--outline" onClick={() => revealFolder("workspace")}>在 Finder 中显示</button>
+                      </Item>
+                      <Item name="资源目录" desc="图片与附件按笔记分目录存放（note-assets/{noteId}/）。">
+                        <button className="b3-button b3-button--outline" onClick={() => revealFolder("assets")}>在 Finder 中显示</button>
+                      </Item>
+                      <Item name="历史快照目录" desc="快照与正文分离存放，恢复对应版本时从这里读。">
+                        <button className="b3-button b3-button--outline" onClick={() => revealFolder("history")}>在 Finder 中显示</button>
+                      </Item>
+                      <Item name="日志目录" pathDesc desc={sysInfo.paths.logs}>
+                        <button className="b3-button b3-button--outline" onClick={() => revealFolder("logs")}>在 Finder 中显示</button>
+                      </Item>
+                    </Group>
+
+                    <Group title="诊断" icon={<Search size={16} />}>
+                      <Block name="复制诊断信息" desc="把版本、运行环境、依赖与本机计数拼成一段纯文本，反馈问题时直接贴出来。">
+                        <div className="config-block__actions">
+                          <button className="b3-button b3-button--outline" onClick={() => void copyDiagnostics()} disabled={!sysInfo}>复制诊断信息</button>
+                        </div>
+                      </Block>
+                      <Block name="一致性检查" desc="正文文件、历史快照、孤儿登记、引用资源与目录树父子链的只读体检在「文档与历史」页运行。" />
+                    </Group>
+
+                    <Group title="第三方与许可" icon={<Info size={16} />}>
+                      <Block name="思源笔记 SiYuan" desc="界面版式与主题令牌移植自 SiYuan（AGPL-3.0，https://github.com/siyuan-note/siyuan）：组件样式见 src/b3/siyuan/，分组版式见 src/b3/siyuan/business/_config.scss，均在文件头保留署名；本项目不构成分发思源代码。" />
+                      <Block name="语雀 Lake 内核" desc="lakex-editor-react-component / lakex-drawnix 为闭源组件（vendor 已 pin），仅按官方用法加载与最小 hack，不修改、不再分发其源码。" />
+                      <Block name="开源依赖" desc="better-sqlite3 (MIT) · sharp (Apache-2.0/MIT) · @aws-sdk/client-s3 (Apache-2.0) · lucide-react (ISC) · react/react-dom (MIT) · electron-log (MIT) · Typescript (Apache-2.0) · Vite (MIT)。完整清单以 package.json 与 lockfile 为准。" />
+                    </Group>
+                  </>
+                )}
+              </>
             )}
           </div>
         </div>
-        {syncMsg && <p className="settings-hint" style={{ padding: "0 16px 10px" }}>{syncMsg}</p>}
+        {(syncMsg ?? diagMsg) && <p className="settings-statusbar">{syncMsg ?? diagMsg}</p>}
         <div className="floating-dialog-resize" onPointerDown={floating.startResize} title="拖动调整大小" />
       </div>
     </div>

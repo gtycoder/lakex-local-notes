@@ -113,6 +113,8 @@ contextBridge.exposeInMainWorld("lakeNative", {
   runS3GcDiagnostics: () => invoke("run_s3_gc_diagnostics"),
   runDataHealthCheck: () => invoke("run_data_health_check"),
   readAppLog: (opts) => invoke("read_app_log", opts),
+  getSystemInfo: () => invoke("get_system_info"),
+  revealDataFolder: (kind) => invoke("reveal_data_folder", kind),
   runS3GcReconcile: (ignoreRetention = false) => invoke("run_s3_gc_reconcile", ignoreRetention),
   runS3DeepCleanup: (dryRun, ignoreRetention = false) => invoke("run_s3_deep_cleanup", dryRun, ignoreRetention),
   getTrashReminder: () => invoke("get_trash_reminder"),
