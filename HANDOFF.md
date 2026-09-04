@@ -7,7 +7,7 @@
 ## 0. 当前基线（新会话开工前）
 - 分支/远端：开发主干 `master` ↔ Gitee `origin`（SSH：`git@gitee.com:gtycoder/local-lake.git`；`master` 亦是远程默认分支）同步。
   **本文不固定 commit hash**——查 `git log -1 --oneline`。
-- 质量门槛：`tsc` 0 error · `vitest` **824 passed / 15 skipped** · 桌面 `vite build` + 移动 `vite build --config vite.mobile.config.ts` 全绿（计数变动见 §2.x；别写死旧数字）。
+- 质量门槛：`tsc` 0 error · `vitest` **828 passed / 15 skipped** · 桌面 `vite build` + 移动 `vite build --config vite.mobile.config.ts` 全绿（计数变动见 §2.x；别写死旧数字）。
 - 本地业务分支只有 `master`（其余已合并/删除；`origin/main` 为旧 Tauri 遗留引用）。
 - 里程碑（260903，docs/MILESTONES-SYNC-UX-2026-09-03.md）：M1a-M6 已全量实现并合入 master（merge e803948）——B1 冲突通知收口、B3 冲突归档 30 天保护（note_history.protected_until，多端 port 兼容）、C1 回收站到期倒计时（trashDaysUntilPurge 共享纯函数）、C2 purge 三端语义文案、A3 数据体检（runDataHealthCheck）、D2 待回收明细（pendingKeyReason）、F3 清理统计、F1 应用内日志查看器（read_app_log）、A1 整库备份（exportWorkspaceBackup）、A2 云端恢复（prepareCloudRestore 改名隔离+空库重启首同步）、E 视觉 tokens 收编。B4 按审计取消（对齐 S3-GC-DESIGN §14）；A4 云端报告留 backlog。
 - 近期其他主线（260902→260903）：语雀 bookmark 卡修复 + S3 同步性能优化 + 两处 bug 修复 + 压测，均已在 master。
@@ -94,6 +94,14 @@
 - 关于页 5 组：关于（版本+一句话定位）/ 版本与运行环境（kv 表）/ 数据与存储（config-stats 概览 + 4 条路径行带「在 Finder 中显示」）/ 诊断（**复制诊断信息**→剪贴板，反馈问题时直接贴）/ 第三方与许可（思源 AGPL 署名、lakex 闭源、开源依赖清单）。
 - 新样式件：`.kv/.kv__row/.kv__k/.kv__v`（等宽键值表）、`.config-item.item--path .b3-label__text{word-break:break-all}`（路径必须看全，思源的 desc 默认单行裁切）。
 - 测试：`electron/ipc/registerSystemInfo.test.ts`（白名单拒绝任意路径 / logs 定位到文件 / 版本表解析与缺文件降级）+ `store.test.ts` 概览 2 例。计数：vitest **824 passed / 15 skipped**。
+
+### 2.8 设置页条目级搜索（260904，H 项）
+- 此前设置搜索只能跳分类；现在对齐思源：**每条设置都可被搜到并定位**。`settingsSearch.ts` 新增 `SETTING_ITEMS`（55 条：id + 分类 + 标题 + 同义词）与 `searchSettingItems`（多词=每个词都命中，如「回收 窗口」）。
+- 行原语（Item/Block/Switch/Shortcut）接 `itemId` → 渲染 `data-set-id`；导航下方出现「条目 · N 项」结果列表，点击/回车 → 切分类 + `scrollIntoView` + `.is-hit` 闪 1.5s，当前分类内命中行留 `.is-match` 左指示条。
+- **故意不学思源隐藏非命中项**（用户会以为设置被删了），只标注。
+- 反漂移：`settingsSearch.test.ts` 读 SettingsPanel 源码比对 `itemId="..."` 集合与注册表（新增/改名/删行不同步就红）；id 唯一、分类合法、标题非空。
+- 坑：把「当前分类」补回被过滤空的导航时，「唯一命中自动切分类」的判断必须只看 `filteredNav`，否则永远凑不出 `length===1`（已踩并修正）。
+- 计数：vitest **828 passed / 15 skipped**。
 
 ## 3. 真正的待办（已剔除全部完成项，按优先级）
 **性能/健壮性（本轮延续）**

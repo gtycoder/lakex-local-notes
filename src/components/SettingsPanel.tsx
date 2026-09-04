@@ -6,7 +6,7 @@ import type { CleanOrphanResult, DataHealthReport, S3GcPendingItem, S3Settings, 
 import type { GcDiagnostics } from "../core/gcDiagnostics";
 import { gcCutoffMs, parseIsoMs, pendingKeyReason } from "../core/gcPolicy";
 import { useFloatingDialog } from "./useFloatingDialog";
-import { filterSettingsNav } from "./settingsSearch";
+import { filterSettingsNav, searchSettingItems, type SettingItemEntry } from "./settingsSearch";
 import { getNativeErrorMessage } from "../lib/nativeErrors";
 
 export type SettingsCategory = "editor" | "appearance" | "shortcuts" | "history" | "sync" | "resources" | "trash" | "logs" | "about";
@@ -65,9 +65,9 @@ function Group({ title, icon, children }: { title: string; icon?: ReactNode; chi
 }
 
 /** 标准行：左侧标题+说明，右侧控件（不拉伸）。 */
-function Item({ name, desc, pathDesc, children }: { name: string; desc?: string; pathDesc?: boolean; children?: ReactNode }) {
+function Item({ itemId, name, desc, pathDesc, children }: { itemId?: string; name: string; desc?: string; pathDesc?: boolean; children?: ReactNode }) {
   return (
-    <div className={`b3-label config-item${pathDesc ? " item--path" : ""}`}>
+    <div className={`b3-label config-item${pathDesc ? " item--path" : ""}`} data-set-id={itemId}>
       <div className="config-item__main">
         <div className="config-name">{name}</div>
         {desc && <div className="b3-label__text">{desc}</div>}
@@ -78,9 +78,9 @@ function Item({ name, desc, pathDesc, children }: { name: string; desc?: string;
 }
 
 /** 整块行：标题 + 说明 + 全宽内容（按钮组、统计、只读数据框）。 */
-function Block({ name, desc, children }: { name?: string; desc?: string; children?: ReactNode }) {
+function Block({ itemId, name, desc, children }: { itemId?: string; name?: string; desc?: string; children?: ReactNode }) {
   return (
-    <div className="config-block">
+    <div className="config-block" data-set-id={itemId}>
       {name && <div className="config-block__name">{name}</div>}
       {desc && <div className="b3-label__text">{desc}</div>}
       {children}
@@ -89,9 +89,9 @@ function Block({ name, desc, children }: { name?: string; desc?: string; childre
 }
 
 /** 开关行（思源 .b3-switch）。 */
-function Switch({ name, desc, checked, disabled, onChange }: { name: string; desc?: string; checked: boolean; disabled?: boolean; onChange: (e: ChangeEvent<HTMLInputElement>) => void }) {
+function Switch({ itemId, name, desc, checked, disabled, onChange }: { itemId?: string; name: string; desc?: string; checked: boolean; disabled?: boolean; onChange: (e: ChangeEvent<HTMLInputElement>) => void }) {
   return (
-    <label className="b3-label config-item">
+    <label className="b3-label config-item" data-set-id={itemId}>
       <div className="config-item__main">
         <div className="config-name">{name}</div>
         {desc && <div className="b3-label__text">{desc}</div>}
@@ -103,9 +103,9 @@ function Switch({ name, desc, checked, disabled, onChange }: { name: string; des
 }
 
 /** 快捷键行：说明在左，键位在右。 */
-function Shortcut({ name, keys }: { name: string; keys: string }) {
+function Shortcut({ itemId, name, keys }: { itemId?: string; name: string; keys: string }) {
   return (
-    <div className="b3-label config-item">
+    <div className="b3-label config-item" data-set-id={itemId}>
       <div className="config-item__main"><div className="config-name">{name}</div></div>
       <span className="fn__space" />
       <div className="config-item__ctl"><kbd className="fn__kbd">{keys}</kbd></div>
@@ -187,6 +187,7 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
   const [sel, setSel] = useState<RemovedAsset | null>(null);
   const [pv, setPv] = useState<{ filename: string; mimeType: string; supported: boolean; dataUrl?: string } | null>(null);
   const [sysInfo, setSysInfo] = useState<import("../lib/types").SystemInfo | null>(null);
+  const [pendingHit, setPendingHit] = useState<string | null>(null);
   const [diagMsg, setDiagMsg] = useState<string | null>(null);
 
   /** A1 整库备份：选目录 → 备份到 <dir>/lake-notes-backup-<ts>/。 */
@@ -320,6 +321,31 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
     return () => { alive = false; };
   }, [open, category]);
 
+  const itemHits = useMemo<SettingItemEntry[]>(() => (navQuery.trim() ? searchSettingItems(navQuery) : []), [navQuery]);
+
+  /** 跳到条目所在分类，渲染完成后滚动到该行并闪一下（思源是隐藏非命中项；我们只标注，避免用户以为设置被删了）。 */
+  const jumpToItem = (hit: SettingItemEntry) => {
+    if (category !== hit.category) setCategory(hit.category);
+    setPendingHit(hit.id);
+  };
+
+  useEffect(() => {
+    if (!pendingHit) return;
+    const el = document.querySelector<HTMLElement>(`.settings-content [data-set-id="${pendingHit}"]`);
+    if (!el) return;
+    el.scrollIntoView({ block: "center", behavior: "smooth" });
+    el.classList.add("is-hit");
+    const timer = window.setTimeout(() => { el.classList.remove("is-hit"); setPendingHit(null); }, 1600);
+    return () => { window.clearTimeout(timer); el.classList.remove("is-hit"); };
+  }, [pendingHit, category]);
+
+  useEffect(() => {
+    const ids = new Set(itemHits.map((h) => h.id));
+    for (const el of Array.from(document.querySelectorAll<HTMLElement>(".settings-content [data-set-id]"))) {
+      el.classList.toggle("is-match", ids.has(el.dataset.setId ?? ""));
+    }
+  }, [itemHits, category]);
+
   const revealFolder = (kind: import("../lib/types").DataFolderKind) => {
     void native.revealDataFolder(kind).then((r) => setDiagMsg(r.ok ? `已在 Finder 中显示：${r.path}` : `目录尚不存在：${r.path}`)).catch((e) => setDiagMsg(getNativeErrorMessage(e)));
   };
@@ -366,11 +392,17 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
     { id: "logs" as const, label: "日志", keywords: "日志 诊断 GC 同步 调试", icon: <ScrollText size={15} /> },
     { id: "about" as const, label: "关于", keywords: "版本", icon: <Info size={15} /> },
   ];
-  const visibleNav = filterSettingsNav(nav, navQuery);
+  const filteredNav = filterSettingsNav(nav, navQuery);
+  // 跳到命中条目后，当前分类未必匹配查询词 → 分类列表会被过滤空，看不出自己在哪：把当前分类补回导航。
+  // 注意「唯一命中就自动切分类」的判断只看 filteredNav（不含补回的当前项），否则永远凑不出 length===1。
+  const visibleNav = (() => {
+    const current = nav.find((item) => item.id === category);
+    return current && !filteredNav.some((item) => item.id === current.id) ? [...filteredNav, current] : filteredNav;
+  })();
   useEffect(() => {
-    if (!navQuery.trim() || visibleNav.length !== 1 || visibleNav[0].id === category) return;
-    setCategory(visibleNav[0].id);
-  }, [navQuery, category, visibleNav.map((item) => item.id).join("|")]);
+    if (!navQuery.trim() || filteredNav.length !== 1 || filteredNav[0].id === category) return;
+    setCategory(filteredNav[0].id);
+  }, [navQuery, category, filteredNav.map((item) => item.id).join("|")]);
 
 
 
@@ -517,31 +549,42 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
         </header>
         <div className="settings-layout">
           <nav className="settings-nav b3-list b3-list--background">
-            <label className="settings-nav-search"><Search size={14} /><input ref={navSearchRef} value={navQuery} onChange={(event) => setNavQuery(event.target.value)} placeholder="搜索设置" aria-label="搜索设置" /></label>
+            <label className="settings-nav-search"><Search size={14} /><input ref={navSearchRef} value={navQuery} onChange={(event) => setNavQuery(event.target.value)} onKeyDown={(event) => { if (event.key === "Escape") { navSearchRef.current?.blur(); return; } if (event.key === "Enter" && itemHits.length > 0) { event.preventDefault(); jumpToItem(itemHits[0]); } }} placeholder="搜索设置（分类与条目）" aria-label="搜索设置" /></label>
             {visibleNav.map((item) => (
               <button key={item.id} className={`b3-list-item settings-nav-item${category === item.id ? " active" : ""}`} onClick={() => setCategory(item.id)}>
                 {item.icon}<span>{item.label}</span>
               </button>
             ))}
-            {visibleNav.length === 0 && <span className="settings-nav-empty">没有匹配的设置</span>}
+            {visibleNav.length === 0 && itemHits.length === 0 && <span className="settings-nav-empty">没有匹配的设置</span>}
+            {navQuery.trim() && itemHits.length > 0 && (
+              <div className="settings-nav-hits">
+                <span className="settings-nav-hits__label">条目 · {itemHits.length} 项</span>
+                {itemHits.map((hit) => (
+                  <button key={hit.id} className="b3-list-item settings-nav-hit" onClick={() => jumpToItem(hit)} title={hit.label}>
+                    <span className="b3-list-item__text">{hit.label}</span>
+                    <span className="b3-list-item__meta">{nav.find((item) => item.id === hit.category)?.label}</span>
+                  </button>
+                ))}
+              </div>
+            )}
           </nav>
           <div className="settings-content">
             {category === "editor" && (
               <>
                 <Group title="编辑器" icon={<Type size={16} />}>
-                  <Item name="正文字号" desc="作用于当前文档正文。">
+                  <Item itemId="editor-font-size" name="正文字号" desc="作用于当前文档正文。">
                     <Seg ariaLabel="正文字号">
                       {fontSizeOptions().map((fs) => (
                         <button key={fs} className={`b3-button b3-button--outline seg__item ${settings.fontSize === fs ? "is-active" : ""}`} onClick={() => onChange({ fontSize: fs })}>{fs}</button>
                       ))}
                     </Seg>
                   </Item>
-                  <Switch name="段间距" desc="更宽松的段落留白。" checked={settings.paragraphSpacing} onChange={(e) => onChange({ paragraphSpacing: e.target.checked })} />
-                  <Switch name="显示文档大纲（TOC）" checked={settings.showToc} onChange={(e) => onChange({ showToc: e.target.checked })} />
-                  <Switch name="显示编辑器工具栏" checked={settings.showToolbar} onChange={(e) => onChange({ showToolbar: e.target.checked })} />
+                  <Switch itemId="editor-paragraph-spacing" name="段间距" desc="更宽松的段落留白。" checked={settings.paragraphSpacing} onChange={(e) => onChange({ paragraphSpacing: e.target.checked })} />
+                  <Switch itemId="editor-toc" name="显示文档大纲（TOC）" checked={settings.showToc} onChange={(e) => onChange({ showToc: e.target.checked })} />
+                  <Switch itemId="editor-toolbar" name="显示编辑器工具栏" checked={settings.showToolbar} onChange={(e) => onChange({ showToolbar: e.target.checked })} />
                 </Group>
                 <Group title="标签页" icon={<Files size={16} />}>
-                  <Item name="最大同时打开标签数" desc="超过上限时自动关闭最旧的标签（当前编辑的标签与钉住的标签除外），未保存内容会自动保存。">
+                  <Item itemId="editor-max-open-tabs" name="最大同时打开标签数" desc="超过上限时自动关闭最旧的标签（当前编辑的标签与钉住的标签除外），未保存内容会自动保存。">
                     <select className="b3-select fn__size200" value={settings.maxOpenTabs} onChange={(e) => onChange({ maxOpenTabs: Number(e.target.value) })} aria-label="最大同时打开标签数">
                       <option value={0}>不限</option>
                       <option value={4}>4 个</option>
@@ -554,7 +597,7 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
                   </Item>
                 </Group>
                 <Group title="附件" icon={<Paperclip size={16} />}>
-                  <Item name="附件大小上限" desc="插入附件时的本机上限；同步/下载使用协议上限（100 MiB），其他设备配置不同不影响接收。">
+                  <Item itemId="editor-max-attachment" name="附件大小上限" desc="插入附件时的本机上限；同步/下载使用协议上限（100 MiB），其他设备配置不同不影响接收。">
                     <select className="b3-select fn__size200" value={settings.maxAttachmentBytes / (1024 * 1024)} onChange={(e) => onChange({ maxAttachmentBytes: Number(e.target.value) * 1024 * 1024 })} aria-label="附件大小上限">
                       <option value={25}>25 MiB</option>
                       <option value={50}>50 MiB</option>
@@ -567,7 +610,7 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
 
             {category === "appearance" && (
               <Group title="外观" icon={<Monitor size={16} />}>
-                <Item name="主题">
+                <Item itemId="appearance-theme" name="主题">
                   <Seg ariaLabel="主题">
                     <button className={`b3-button b3-button--outline seg__item ${settings.theme === "light" ? "is-active" : ""}`} onClick={() => onChange({ theme: "light" })}><Sun size={14} /> 浅色</button>
                     <button className={`b3-button b3-button--outline seg__item ${settings.theme === "dark" ? "is-active" : ""}`} onClick={() => onChange({ theme: "dark" })}><Moon size={14} /> 深色</button>
@@ -579,19 +622,19 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
             {category === "shortcuts" && (
               <Group title="快捷键" icon={<Keyboard size={16} />}>
                 <Block desc="当前版本先展示固定快捷键，暂不支持自定义。" />
-                <Shortcut name="打开全局搜索（标题和正文）" keys="⌘K" />
-                <Shortcut name="进入或退出专注模式" keys="⌘⇧Enter" />
-                <Shortcut name="在搜索结果中移动" keys="↑ / ↓" />
-                <Shortcut name="打开搜索结果并定位命中" keys="Enter" />
-                <Shortcut name="在新标签打开并定位命中" keys="⌘Enter" />
-                <Shortcut name="关闭当前菜单或浮层" keys="Esc" />
+                <Shortcut itemId="shortcut-search" name="打开全局搜索（标题和正文）" keys="⌘K" />
+                <Shortcut itemId="shortcut-focus" name="进入或退出专注模式" keys="⌘⇧Enter" />
+                <Shortcut itemId="shortcut-move" name="在搜索结果中移动" keys="↑ / ↓" />
+                <Shortcut itemId="shortcut-open" name="打开搜索结果并定位命中" keys="Enter" />
+                <Shortcut itemId="shortcut-open-tab" name="在新标签打开并定位命中" keys="⌘Enter" />
+                <Shortcut itemId="shortcut-esc" name="关闭当前菜单或浮层" keys="Esc" />
               </Group>
             )}
 
             {category === "history" && (
               <>
                 <Group title="文档历史" icon={<History size={16} />}>
-                  <Block name="快照占用" desc="历史快照保存在本机，不参与同步。恢复前会自动保存当前版本。">
+                  <Block itemId="history-stats" name="快照占用" desc="历史快照保存在本机，不参与同步。恢复前会自动保存当前版本。">
                     <div className="config-stats">
                       <span>快照 <strong>{stats ? stats.snapshotCount : "—"}</strong> 份</span>
                       <span>{stats ? formatBytes(stats.totalBytes) : "统计中…"}</span>
@@ -604,15 +647,15 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
                   </Block>
                   {histCfg && (
                     <>
-                      <Item name="每文档上限" desc="单篇文档最多保留的快照份数。"><NumField label="每文档上限" min={20} max={1000} value={histCfg.maxSnapshots} onSave={(v) => saveHistCfg({ maxSnapshots: v })}  floor={1} fallback={100} /></Item>
-                      <Item name="保留天数" desc="超期的自动快照会被定期清理；手动快照与冲突留档另计。"><NumField label="保留天数" min={1} max={365} value={histCfg.retentionDays} onSave={(v) => saveHistCfg({ retentionDays: v })}  floor={1} fallback={30} /></Item>
-                      <Item name="定期清理（小时）" desc="0 = 不自动清理。"><NumField label="定期清理（小时）" min={0} max={720} value={histCfg.cleanupIntervalHours} onSave={(v) => saveHistCfg({ cleanupIntervalHours: v })}  floor={0} fallback={24} /></Item>
-                      <Item name="自动快照（分钟）" desc="0 = 不自动快照。"><NumField label="自动快照（分钟）" min={0} max={1440} value={histCfg.snapshotIntervalMinutes} onSave={(v) => saveHistCfg({ snapshotIntervalMinutes: v })}  floor={0} fallback={15} /></Item>
+                      <Item itemId="history-max-snapshots" name="每文档上限" desc="单篇文档最多保留的快照份数。"><NumField label="每文档上限" min={20} max={1000} value={histCfg.maxSnapshots} onSave={(v) => saveHistCfg({ maxSnapshots: v })}  floor={1} fallback={100} /></Item>
+                      <Item itemId="history-retention-days" name="保留天数" desc="超期的自动快照会被定期清理；手动快照与冲突留档另计。"><NumField label="保留天数" min={1} max={365} value={histCfg.retentionDays} onSave={(v) => saveHistCfg({ retentionDays: v })}  floor={1} fallback={30} /></Item>
+                      <Item itemId="history-cleanup-interval" name="定期清理（小时）" desc="0 = 不自动清理。"><NumField label="定期清理（小时）" min={0} max={720} value={histCfg.cleanupIntervalHours} onSave={(v) => saveHistCfg({ cleanupIntervalHours: v })}  floor={0} fallback={24} /></Item>
+                      <Item itemId="history-snapshot-interval" name="自动快照（分钟）" desc="0 = 不自动快照。"><NumField label="自动快照（分钟）" min={0} max={1440} value={histCfg.snapshotIntervalMinutes} onSave={(v) => saveHistCfg({ snapshotIntervalMinutes: v })}  floor={0} fallback={15} /></Item>
                     </>
                   )}
                 </Group>
                 <Group title="数据体检（只读诊断）" icon={<Info size={16} />}>
-                  <Block name="一致性检查" desc="只读比对正文文件、历史快照、孤儿登记与引用资源；不自动修复。发现问题请从备份/云端恢复对应文件。">
+                  <Block itemId="history-data-health" name="一致性检查" desc="只读比对正文文件、历史快照、孤儿登记与引用资源；不自动修复。发现问题请从备份/云端恢复对应文件。">
                     <div className="config-block__actions">
                       <button className="b3-button b3-button--outline" onClick={() => void runHealth()} disabled={healthBusy}><Search size={14} /> {healthBusy ? "检查中…" : "运行检查"}</button>
                       {health && !healthBusy && (
@@ -646,10 +689,10 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
                 <Group title="同步策略（仅保存在当前设备）" icon={<Cloud size={16} />}>
                   {syncCfg && (
                     <>
-                      <Switch name="启用云同步" desc="S3 配置与同步策略均为本机配置，不会上传云端；A 端关闭不影响 B 端。" checked={syncCfg.enabled} disabled={syncCfgBusy} onChange={(e) => void saveSyncCfg({ enabled: e.target.checked })} />
+                      <Switch itemId="sync-enabled" name="启用云同步" desc="S3 配置与同步策略均为本机配置，不会上传云端；A 端关闭不影响 B 端。" checked={syncCfg.enabled} disabled={syncCfgBusy} onChange={(e) => void saveSyncCfg({ enabled: e.target.checked })} />
                       {syncCfg.enabled && (
                         <>
-                          <Item name="自动同步模式">
+                          <Item itemId="sync-auto-mode" name="自动同步模式">
                             <select className="b3-select fn__size200" value={syncCfg.autoMode} onChange={(e) => void saveSyncCfg({ autoMode: e.target.value as SyncSettings["autoMode"] })} aria-label="自动同步模式">
                               <option value="manual">完全手动</option>
                               <option value="interval">按固定间隔自动同步</option>
@@ -657,7 +700,7 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
                             </select>
                           </Item>
                           {syncCfg.autoMode === "interval" && (
-                            <Item name="自动同步间隔（分钟）"><NumField label="自动同步间隔（分钟）" min={1} max={1440} value={syncCfg.autoIntervalMinutes} onSave={(v) => void saveSyncCfg({ autoIntervalMinutes: v })}  floor={1} fallback={15} /></Item>
+                            <Item itemId="sync-auto-interval" name="自动同步间隔（分钟）"><NumField label="自动同步间隔（分钟）" min={1} max={1440} value={syncCfg.autoIntervalMinutes} onSave={(v) => void saveSyncCfg({ autoIntervalMinutes: v })}  floor={1} fallback={15} /></Item>
                           )}
                         </>
                       )}
@@ -665,12 +708,12 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
                   )}
                 </Group>
                 <Group title="备份与恢复" icon={<Files size={16} />}>
-                  <Block name="整库备份" desc="数据库 + 全部笔记/资源/历史快照 + 小记，导出到所选目录（不覆盖非空目录）。">
+                  <Block itemId="backup-export" name="整库备份" desc="数据库 + 全部笔记/资源/历史快照 + 小记，导出到所选目录（不覆盖非空目录）。">
                     <div className="config-block__actions">
                       <button className="b3-button b3-button--outline" onClick={() => void runBackup()} disabled={backupBusy}><Files size={14} /> {backupBusy ? "备份中…" : "整库备份到…"}</button>
                     </div>
                   </Block>
-                  <Block name="从云端恢复" desc="当前数据先改名隔离保存，再以全新空库从云端全量拉取（只拉不打）。用于换机或本地库损坏。">
+                  <Block itemId="backup-restore" name="从云端恢复" desc="当前数据先改名隔离保存，再以全新空库从云端全量拉取（只拉不打）。用于换机或本地库损坏。">
                     <div className="config-block__actions">
                       <button className="b3-button b3-button--outline ft__error" onClick={() => void runCloudRestore()} disabled={backupBusy}>从云端恢复（换机/坏库）…</button>
                     </div>
@@ -678,14 +721,14 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
                   {backupMsg && <Block name={backupMsg} />}
                 </Group>
                 <Group title="S3 对象存储" icon={<Cloud size={16} />}>
-                  <Item name="Endpoint"><TextField label="Endpoint" value={s3.endpoint} placeholder="https://s3-cn-east-1.qiniucs.com" onSave={(v) => setS3Field("endpoint", v)} wide /></Item>
-                  <Item name="Access Key"><TextField label="Access Key" value={s3.accessKeyId} onSave={(v) => setS3Field("accessKeyId", v)} wide /></Item>
-                  <Item name="Secret Key" desc="留空或保持 ******** 表示沿用已保存密钥（本机加密存储）。"><TextField label="Secret Key" type="password" placeholder="留空或保持 ******** 表示沿用已保存密钥" value={s3.secretAccessKey} onSave={(v) => setS3Field("secretAccessKey", v)} wide /></Item>
-                  <Item name="Bucket"><TextField label="Bucket" value={s3.bucket} onSave={(v) => setS3Field("bucket", v)} wide /></Item>
-                  <Item name="Region"><TextField label="Region" value={s3.region} onSave={(v) => setS3Field("region", v)} wide /></Item>
-                  <Item name="对象前缀"><TextField label="对象前缀" value={s3.prefix} onSave={(v) => setS3Field("prefix", v)} wide /></Item>
-                  <Switch name="使用 Path-style URL" desc="自建 MinIO 等需要开启；七牛 Kodo 关闭即可。" checked={s3.forcePathStyle} onChange={(e) => setS3Field("forcePathStyle", e.target.checked)} />
-                  <Block name="连接" desc="测试仅探测桶可读性，不写入数据。">
+                  <Item itemId="s3-endpoint" name="Endpoint"><TextField label="Endpoint" value={s3.endpoint} placeholder="https://s3-cn-east-1.qiniucs.com" onSave={(v) => setS3Field("endpoint", v)} wide /></Item>
+                  <Item itemId="s3-access-key" name="Access Key"><TextField label="Access Key" value={s3.accessKeyId} onSave={(v) => setS3Field("accessKeyId", v)} wide /></Item>
+                  <Item itemId="s3-secret-key" name="Secret Key" desc="留空或保持 ******** 表示沿用已保存密钥（本机加密存储）。"><TextField label="Secret Key" type="password" placeholder="留空或保持 ******** 表示沿用已保存密钥" value={s3.secretAccessKey} onSave={(v) => setS3Field("secretAccessKey", v)} wide /></Item>
+                  <Item itemId="s3-bucket" name="Bucket"><TextField label="Bucket" value={s3.bucket} onSave={(v) => setS3Field("bucket", v)} wide /></Item>
+                  <Item itemId="s3-region" name="Region"><TextField label="Region" value={s3.region} onSave={(v) => setS3Field("region", v)} wide /></Item>
+                  <Item itemId="s3-prefix" name="对象前缀"><TextField label="对象前缀" value={s3.prefix} onSave={(v) => setS3Field("prefix", v)} wide /></Item>
+                  <Switch itemId="s3-path-style" name="使用 Path-style URL" desc="自建 MinIO 等需要开启；七牛 Kodo 关闭即可。" checked={s3.forcePathStyle} onChange={(e) => setS3Field("forcePathStyle", e.target.checked)} />
+                  <Block itemId="s3-connection" name="连接" desc="测试仅探测桶可读性，不写入数据。">
                     <div className="config-block__actions">
                       <button className="b3-button b3-button--outline" onClick={() => void testS3()}>测试连接</button>
                       <button className="b3-button" onClick={() => void saveS3()}>保存配置</button>
@@ -693,7 +736,7 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
                   </Block>
                 </Group>
                 <Group title="云端回收（S3 GC）" icon={<Trash2 size={16} />}>
-                  <Block name="回收状态" desc="手动按钮会立即删除当前未被清单/历史引用的云端对象；自动对账按回收窗口到期后定期清理。结果偏少通常是被引用保护，不是漏删。">
+                  <Block itemId="gc-status" name="回收状态" desc="手动按钮会立即删除当前未被清单/历史引用的云端对象；自动对账按回收窗口到期后定期清理。结果偏少通常是被引用保护，不是漏删。">
                     <div className="config-stats">
                       <span>待回收键 <strong>{gcPending}</strong> 个</span>
                       <span>可删 <strong>{gcSummary.due}</strong></span>
@@ -717,13 +760,13 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
                   </Block>
                   {gcCfg && (
                     <>
-                      <Item name="回收窗口（天）" desc="对象被替换/移除后的保护期；0 = 立即到期。"><NumField label="回收窗口（天）" min={0} max={90} value={gcCfg.gcRetentionDays} onSave={(v) => saveGcCfg({ gcRetentionDays: v })}  floor={0} fallback={7} /></Item>
-                      <Item name="自动对账周期（小时）" desc="自动清理频率；0 = 仅手动。"><NumField label="自动对账周期（小时）" min={0} max={720} value={gcCfg.gcIntervalHours} onSave={(v) => saveGcCfg({ gcIntervalHours: v })}  floor={0} fallback={24} /></Item>
+                      <Item itemId="gc-retention-days" name="回收窗口（天）" desc="对象被替换/移除后的保护期；0 = 立即到期。"><NumField label="回收窗口（天）" min={0} max={90} value={gcCfg.gcRetentionDays} onSave={(v) => saveGcCfg({ gcRetentionDays: v })}  floor={0} fallback={7} /></Item>
+                      <Item itemId="gc-interval-hours" name="自动对账周期（小时）" desc="自动清理频率；0 = 仅手动。"><NumField label="自动对账周期（小时）" min={0} max={720} value={gcCfg.gcIntervalHours} onSave={(v) => saveGcCfg({ gcIntervalHours: v })}  floor={0} fallback={24} /></Item>
                     </>
                   )}
-                  <Block name="云端只是镜像" desc="删除云端冗余不影响本地正文/回收站/历史快照（“彻底删除/清空回收站”除外）。" />
+                  <Block itemId="gc-mirror" name="云端只是镜像" desc="删除云端冗余不影响本地正文/回收站/历史快照（“彻底删除/清空回收站”除外）。" />
                   {gcPendingRows.length > 0 && (
-                    <Block name={`待回收键明细（${gcPendingRows.length} 条）`} desc="按标记时间升序；[原因] 标注该键为何进入待回收。">
+                    <Block itemId="gc-pending-list" name={`待回收键明细（${gcPendingRows.length} 条）`} desc="按标记时间升序；[原因] 标注该键为何进入待回收。">
                       <div className="config-readonly">
                         {gcPendingRows.slice().sort((a, b) => (parseIsoMs(a.markedAt) ?? Infinity) - (parseIsoMs(b.markedAt) ?? Infinity)).map((row) => (
                           <div key={row.key} title={row.markedAt}>{row.markedAt.slice(0, 10)} [{pendingKeyReason(row.key)}] {row.key}</div>
@@ -731,7 +774,7 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
                       </div>
                     </Block>
                   )}
-                  <Block name={`删除记录（最近 ${gcLog.length > 0 ? Math.min(gcLog.length, 30) : 0} 条 · 只读审计）`}>
+                  <Block itemId="gc-log" name={`删除记录（最近 ${gcLog.length > 0 ? Math.min(gcLog.length, 30) : 0} 条 · 只读审计）`}>
                     {gcLog.length > 0 ? (
                       <div className="config-readonly">
                         {gcLog.slice(0, 30).map((l) => <div key={l.id}>{l.ts.slice(0, 19)}&nbsp;[{l.action} · {l.reason}] {l.key}</div>)}
@@ -822,7 +865,7 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
             {category === "trash" && (
               <Group title="回收站" icon={<Trash2 size={16} />}>
                 {gcCfg && (
-                  <Item name="回收站自动过期（天）" desc="0 = 关闭。到期后自动彻底删除（含云端），不可撤销；需要保留请在到期前恢复。">
+                  <Item itemId="trash-auto-purge-days" name="回收站自动过期（天）" desc="0 = 关闭。到期后自动彻底删除（含云端），不可撤销；需要保留请在到期前恢复。">
                     <NumField label="回收站自动过期（天）" min={0} max={365} value={gcCfg.trashAutoPurgeDays} onSave={(v) => saveGcCfg({ trashAutoPurgeDays: v })}  floor={0} fallback={0} />
                   </Item>
                 )}
@@ -832,7 +875,7 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
 
             {category === "logs" && (
               <Group title="应用日志（只读）" icon={<ScrollText size={16} />}>
-                <Block name="主进程日志" desc="GC / 同步 / 回收站 / 历史清理写入 userData/logs/lake-notes.log。按关键字过滤，每条命中附带前后一行上下文。">
+                <Block itemId="logs-main" name="主进程日志" desc="GC / 同步 / 回收站 / 历史清理写入 userData/logs/lake-notes.log。按关键字过滤，每条命中附带前后一行上下文。">
                   <div className="config-block__actions">
                     <input
                       className="b3-text-field logs__filter"
@@ -869,14 +912,14 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
                 {sysInfo && (
                   <>
                     <Group title="关于" icon={<Info size={16} />}>
-                      <Block name={`Lake Notes ${sysInfo.app.version}${sysInfo.packaged ? "" : "（开发实例）"}`} desc="本地优先 · 离线可用 · 数据保存在本机，S3 仅作云端镜像备份。" />
+                      <Block itemId="about-app" name={`Lake Notes ${sysInfo.app.version}${sysInfo.packaged ? "" : "（开发实例）"}`} desc="本地优先 · 离线可用 · 数据保存在本机，S3 仅作云端镜像备份。" />
                     </Group>
 
                     <Group title="版本与运行环境" icon={<Monitor size={16} />}>
-                      <Item name="应用版本" desc={sysInfo.app.description || undefined}>
+                      <Item itemId="about-version" name="应用版本" desc={sysInfo.app.description || undefined}>
                         <span className="config-item__ctl"><code className="kv__v">v{sysInfo.app.version}</code></span>
                       </Item>
-                      <Block name="运行时" desc="Electron 43 是 Lake 内核的原生环境（Chromium）；Node 版本决定 better-sqlite3 的 N-API 加载。">
+                      <Block itemId="about-runtime" name="运行时" desc="Electron 43 是 Lake 内核的原生环境（Chromium）；Node 版本决定 better-sqlite3 的 N-API 加载。">
                         <div className="kv">
                           <div className="kv__row"><span className="kv__k">Electron</span><span className="kv__v">{sysInfo.runtime.electron}</span></div>
                           <div className="kv__row"><span className="kv__k">Chromium</span><span className="kv__v">{sysInfo.runtime.chromium}</span></div>
@@ -884,7 +927,7 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
                           <div className="kv__row"><span className="kv__k">平台</span><span className="kv__v">{sysInfo.runtime.platform} / {sysInfo.runtime.arch}</span></div>
                         </div>
                       </Block>
-                      <Block name="内核与关键依赖" desc="vendor 内核按 package.json 锁定版本，勿随意升级（lakex 闭源，只做最小 hack）。">
+                      <Block itemId="about-deps" name="内核与关键依赖" desc="vendor 内核按 package.json 锁定版本，勿随意升级（lakex 闭源，只做最小 hack）。">
                         <div className="kv">
                           {Object.entries(sysInfo.deps).map(([name, ver]) => (
                             <div key={name} className="kv__row"><span className="kv__k">{name}</span><span className="kv__v">{ver}</span></div>
@@ -894,7 +937,7 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
                     </Group>
 
                     <Group title="数据与存储" icon={<Files size={16} />}>
-                      <Block name="内容统计" desc="计数来自本机库与资源目录（只读遍历资源目录两层，不做全盘扫描）。">
+                      <Block itemId="about-storage-stats" name="内容统计" desc="计数来自本机库与资源目录（只读遍历资源目录两层，不做全盘扫描）。">
                         <div className="config-stats">
                           <span>笔记 <strong>{sysInfo.storage.notes}</strong></span>
                           <span>笔记本 <strong>{sysInfo.storage.notebooks}</strong></span>
@@ -912,36 +955,36 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
                           <span>孤儿登记 {sysInfo.storage.orphanRows}</span>
                         </div>
                       </Block>
-                      <Item name="数据目录" pathDesc desc={sysInfo.storage.root}>
+                      <Item itemId="about-data-dir" name="数据目录" pathDesc desc={sysInfo.storage.root}>
                         <button className="b3-button b3-button--outline" onClick={() => revealFolder("data")}>在 Finder 中显示</button>
                       </Item>
-                      <Item name="工作空间" pathDesc desc={sysInfo.paths.workspace}>
+                      <Item itemId="about-workspace-dir" name="工作空间" pathDesc desc={sysInfo.paths.workspace}>
                         <button className="b3-button b3-button--outline" onClick={() => revealFolder("workspace")}>在 Finder 中显示</button>
                       </Item>
-                      <Item name="资源目录" desc="图片与附件按笔记分目录存放（note-assets/{noteId}/）。">
+                      <Item itemId="about-assets-dir" name="资源目录" desc="图片与附件按笔记分目录存放（note-assets/{noteId}/）。">
                         <button className="b3-button b3-button--outline" onClick={() => revealFolder("assets")}>在 Finder 中显示</button>
                       </Item>
-                      <Item name="历史快照目录" desc="快照与正文分离存放，恢复对应版本时从这里读。">
+                      <Item itemId="about-history-dir" name="历史快照目录" desc="快照与正文分离存放，恢复对应版本时从这里读。">
                         <button className="b3-button b3-button--outline" onClick={() => revealFolder("history")}>在 Finder 中显示</button>
                       </Item>
-                      <Item name="日志目录" pathDesc desc={sysInfo.paths.logs}>
+                      <Item itemId="about-logs-dir" name="日志目录" pathDesc desc={sysInfo.paths.logs}>
                         <button className="b3-button b3-button--outline" onClick={() => revealFolder("logs")}>在 Finder 中显示</button>
                       </Item>
                     </Group>
 
                     <Group title="诊断" icon={<Search size={16} />}>
-                      <Block name="复制诊断信息" desc="把版本、运行环境、依赖与本机计数拼成一段纯文本，反馈问题时直接贴出来。">
+                      <Block itemId="about-diagnostics" name="复制诊断信息" desc="把版本、运行环境、依赖与本机计数拼成一段纯文本，反馈问题时直接贴出来。">
                         <div className="config-block__actions">
                           <button className="b3-button b3-button--outline" onClick={() => void copyDiagnostics()} disabled={!sysInfo}>复制诊断信息</button>
                         </div>
                       </Block>
-                      <Block name="一致性检查" desc="正文文件、历史快照、孤儿登记、引用资源与目录树父子链的只读体检在「文档与历史」页运行。" />
+                      <Block itemId="about-health-entry" name="一致性检查" desc="正文文件、历史快照、孤儿登记、引用资源与目录树父子链的只读体检在「文档与历史」页运行。" />
                     </Group>
 
                     <Group title="第三方与许可" icon={<Info size={16} />}>
-                      <Block name="思源笔记 SiYuan" desc="界面版式与主题令牌移植自 SiYuan（AGPL-3.0，https://github.com/siyuan-note/siyuan）：组件样式见 src/b3/siyuan/，分组版式见 src/b3/siyuan/business/_config.scss，均在文件头保留署名；本项目不构成分发思源代码。" />
-                      <Block name="语雀 Lake 内核" desc="lakex-editor-react-component / lakex-drawnix 为闭源组件（vendor 已 pin），仅按官方用法加载与最小 hack，不修改、不再分发其源码。" />
-                      <Block name="开源依赖" desc="better-sqlite3 (MIT) · sharp (Apache-2.0/MIT) · @aws-sdk/client-s3 (Apache-2.0) · lucide-react (ISC) · react/react-dom (MIT) · electron-log (MIT) · Typescript (Apache-2.0) · Vite (MIT)。完整清单以 package.json 与 lockfile 为准。" />
+                      <Block itemId="about-siyuan-license" name="思源笔记 SiYuan" desc="界面版式与主题令牌移植自 SiYuan（AGPL-3.0，https://github.com/siyuan-note/siyuan）：组件样式见 src/b3/siyuan/，分组版式见 src/b3/siyuan/business/_config.scss，均在文件头保留署名；本项目不构成分发思源代码。" />
+                      <Block itemId="about-lakex-license" name="语雀 Lake 内核" desc="lakex-editor-react-component / lakex-drawnix 为闭源组件（vendor 已 pin），仅按官方用法加载与最小 hack，不修改、不再分发其源码。" />
+                      <Block itemId="about-third-party" name="开源依赖" desc="better-sqlite3 (MIT) · sharp (Apache-2.0/MIT) · @aws-sdk/client-s3 (Apache-2.0) · lucide-react (ISC) · react/react-dom (MIT) · electron-log (MIT) · Typescript (Apache-2.0) · Vite (MIT)。完整清单以 package.json 与 lockfile 为准。" />
                     </Group>
                   </>
                 )}

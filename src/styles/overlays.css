@@ -129,6 +129,21 @@
   font-size: 12px;
   text-align: center;
 }
+/* 条目级搜索结果（思源：每条设置都可搜到并定位，不只是跳分类） */
+.settings-nav-hits {
+  display: grid;
+  gap: 1px;
+  margin-top: 8px;
+  padding-top: 6px;
+  border-top: 1px solid var(--b3-border-color);
+}
+.settings-nav-hits__label {
+  padding: 2px 10px 4px;
+  color: var(--b3-theme-on-surface-light);
+  font-size: 11px;
+}
+.settings-nav-hit { min-height: 26px; font-size: 12px; }
+.settings-nav-hit .b3-list-item__meta { font-size: 10px; }
 .settings-panel-large .settings-content {
   flex: 1 1 auto;
   min-width: 0;
