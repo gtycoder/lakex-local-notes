@@ -315,7 +315,7 @@ export function HistoryPanel({ open, noteId, onClose, onRestored }: {
                   {orphanSel ?? orphanPv.title}{orphanPv.size !== undefined ? ` · ${(orphanPv.size / 1024).toFixed(1)} KB` : ""}{orphanLoading ? " · 加载中" : ""}
                 </div>
                 {orphanPv.imageData
-                  ? <img className={`history-preview-image${orphanLoading ? " is-loading" : ""}`} src={orphanPv.imageData} alt={orphanPv.title} />
+                  ? <img key={orphanPv.title} className={`history-preview-image${orphanLoading ? " is-loading" : ""}`} src={orphanPv.imageData} alt={orphanPv.title} />
                   : <pre className="history-preview-text">{orphanPv.text ?? ""}</pre>}
               </>
             ) : (

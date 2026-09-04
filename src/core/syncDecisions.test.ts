@@ -7,7 +7,7 @@ import {
   TRASH_NOTEBOOK_ID,
   decidePurge, decideLocalTombstone, decideMetaApply,
   decideTombstoneYield,
-  buildUploadEntry, buildTombstoneEntry, computeBookkeeping, rowToLocalState,
+  buildUploadEntry, buildTombstoneEntry, computeBookkeeping, rowToLocalState, isGoneNote,
   type LocalNoteState,
 } from "./syncDecisions.js";
 
@@ -138,5 +138,21 @@ describe("rowToLocalState", () => {
       id: "n1", title: "t", parentId: "p", sortOrder: 2, updatedAt: T1, syncState: "synced",
       isConflict: true, isLocked: true, lockedAt: T1, icon: "📁", trashedAt: null, deletedFromParentId: null,
     });
+  });
+});
+
+describe("isGoneNote（打开与同步共用的「已删除」判定）", () => {
+  const mk = (parentId: string | null, syncState: string) => ({ parentId, syncState });
+  it("回收站里的文档 = 已删除（不得再编辑保存）", () => {
+    expect(isGoneNote(mk(TRASH_NOTEBOOK_ID, "local"))).toBe(true);
+    expect(isGoneNote(mk(TRASH_NOTEBOOK_ID, "synced"))).toBe(true);
+  });
+  it("被他端 purge 的文档 = 已删除", () => {
+    expect(isGoneNote(mk("notebook-a", "purged"))).toBe(true);
+  });
+  it("普通文档（含根层与未分类兜底父）不算已删除", () => {
+    expect(isGoneNote(mk("notebook-a", "synced"))).toBe(false);
+    expect(isGoneNote(mk("notebook-a", "local"))).toBe(false);
+    expect(isGoneNote(mk(null, "local"))).toBe(false);
   });
 });

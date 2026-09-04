@@ -113,6 +113,8 @@ export function App() {
     onOpenTabsApplied: handleOpenTabsApplied,
     onDraftCleared: handleDraftCleared,
     onError: handleSaveError,
+    // 回收站/被 purge 文档被丢弃保存时出声（编辑器此时已只读，这里是最后一道闸）
+    onBlockedSave: () => showNotice("文档已在回收站中，编辑不会保存；恢复后才能继续写。"),
     getOpenTab: handleGetOpenTab,
     getEditorCaches: handleGetEditorCaches,
   });
@@ -369,6 +371,7 @@ export function App() {
             onScrollToTop={scrollActiveEditorToTop}
             onNavigateToHeading={navigateToHeading}
             lockedNoteIds={lockedNoteIds}
+            onOpenTrash={() => setTrashOpen(true)}
             pinnedNoteIds={pinnedNoteIds}
             onTabChange={handleTabChange}
             onTabClose={closeTab}

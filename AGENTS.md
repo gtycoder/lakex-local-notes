@@ -43,6 +43,8 @@ Lake Notes 是**本地优先**笔记应用（Electron + React + better-sqlite3 +
 
 15. **"已彻底删除"的判定必须永久**：`deleted_notes.purged_at` 只是"待删 S3 前缀"的工作标记，前缀删完就被 `markPurgeSynced()` 清空——**不能**拿它当"这条已被 purge"的依据（否则陈旧清单会把它重新导入/让子文档挂到不存在的父下，产生侧栏看不见却仍在同步与占资源的"幽灵文档"）。永久口径：folder 看 `deleted_notes` 是否存在 `node_type='folder'` 墓碑；note 看其墓碑。purge 时**无条件**写墓碑（`notes` 行缺失就从 `tree_nodes` 兜底取元数据），漏写等于云端永不下架、必然复活。`runDataHealthCheck` 的 `treeDanglingParent` 就是查这类节点。
 
+16. **任何打开文档的入口都必须先判定"是否已进回收站/被他端 purge"**：统一用 `src/core/syncDecisions.ts` 的 `isGoneNote({parentId, syncState})`（parentId=TRASH 或 syncState='purged'）。命中则标签页以 `deleted` 打开 → 编辑器只读（复用 `EditorTab.locked` 的 viewer 模式）+ 顶部横幅提示 + 保存被拦时明确提示，**绝不允许静默丢弃编辑**。恢复走 `handleTrashRestored`（重载正文并清标记）。历史上这个守卫只在同步刷新路径里跑，导致重启自动重开"最后文档"时回收站文档可编辑可保存（2026-09-04 用户报）。
+
 ## 4. 关键机制速览（同步）
 
 - 冲突四分支在 `electron/sync.ts` 下载阶段；`baseHash + lastUploadedHash` 存本地 `sync_base`，**绝不上 manifest**。

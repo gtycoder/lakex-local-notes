@@ -29,6 +29,8 @@ interface MultiTabEditorProps {
   onTabsReorder?: (noteIds: string[]) => void;
   /** 只读锁的 noteId 集合（驱动 EditorTab viewer 重建） */
   lockedNoteIds?: ReadonlySet<string>;
+  /** 当前活动标签在回收站/已被他端 purge：顶部横幅 + 只读（见 tab.deleted）。 */
+  onOpenTrash?: () => void;
   /** 钉住的标签（由上层持有，保证关闭/自动淘汰时能感知钉住状态）。 */
   pinnedNoteIds?: ReadonlySet<string>;
   /** 切换标签钉住状态（由上层更新状态）。 */
@@ -68,6 +70,7 @@ export function MultiTabEditor({
   onEditorCopyMarkdown,
   onEditorExport,
   onEditorCopyPaths,
+  onOpenTrash,
   topbarLeading,
   topbarTrailing,
   emptyAction,
@@ -142,6 +145,8 @@ export function MultiTabEditor({
   // FLIP：顺序变化时让标签从旧位置滑到新位置（deps 用 memo 化的 orderKey，
   // tabs 引用不变时跳过拼接与比较）
   const tabOrderKey = useMemo(() => tabs.map((t) => t.noteId).join("|"), [tabs]);
+  // 活动标签是否"已在回收站/被他端 purge"：只读 + 顶部横幅（tab.deleted 由 openNote/同步刷新判定）
+  const activeTabGone = tabs.some((t) => t.noteId === activeNoteId && t.deleted === true);
   useLayoutEffect(() => {
     const strip = tabItemsRef.current;
     if (!strip) return;
@@ -335,7 +340,7 @@ export function MultiTabEditor({
               {tab.icon && <span className="tab-custom-icon" aria-hidden="true">{tab.icon}</span>}
               <span className="tab-title">{tab.title || "无标题"}</span>
               {tab.dirty && <span className="tab-dirty-dot" aria-label="有未保存更改" />}
-              {tab.deleted && <span className="tab-deleted-badge" title="该文档已在其他设备删除，正文为删除前的最后内容">已删除</span>}
+              {tab.deleted && <span className="tab-deleted-badge" title="文档在回收站中（本机或他端删除）：只读、编辑不会保存，恢复后才能继续写">已删除</span>}
               <span
                 className="tab-close"
                 role="button"
@@ -389,7 +394,7 @@ export function MultiTabEditor({
                         <span className="tab-switcher-icon" aria-hidden="true">{tab.icon ?? <FileText size={15} />}</span>
                         <span className="tab-switcher-status" aria-hidden="true">{tab.dirty ? "●" : ""}</span>
                         <span className="tab-switcher-title">{tab.title || "无标题"}</span>
-                        {tab.deleted && <span className="tab-deleted-badge" title="该文档已在其他设备删除，正文为删除前的最后内容">已删除</span>}
+                        {tab.deleted && <span className="tab-deleted-badge" title="文档在回收站中（本机或他端删除）：只读、编辑不会保存，恢复后才能继续写">已删除</span>}
                       </button>
                       <button
                         className="tab-switcher-close"
@@ -409,6 +414,13 @@ export function MultiTabEditor({
         )}
       </div>
       {breadcrumb}
+      {activeTabGone && (
+        <div className="tab-gone-banner" role="status">
+          <XOctagon size={14} aria-hidden="true" />
+          <span>该文档在回收站中：只读、编辑不会保存。需要继续写请先恢复。</span>
+          {onOpenTrash && <button type="button" onClick={onOpenTrash}>打开回收站</button>}
+        </div>
+      )}
       <div className="tab-panels">
         {tabs.length === 0 ? <section className="empty-workspace">
           <span className="empty-workspace-icon" aria-hidden="true"><FileText size={26} /></span>
@@ -419,7 +431,7 @@ export function MultiTabEditor({
           <EditorTab
             key={`${tab.noteId}-${tab.reloadKey ?? 0}`}
             noteId={tab.noteId}
-            locked={lockedNoteIds?.has(tab.noteId) ?? false}
+            locked={(lockedNoteIds?.has(tab.noteId) ?? false) || tab.deleted === true}
             content={contentFor(tab)}
             visible={visible && tab.noteId === activeNoteId}
             tocEnabled={tocEnabled}

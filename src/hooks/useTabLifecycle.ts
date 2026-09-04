@@ -1,3 +1,4 @@
+import { isGoneNote } from "../core/syncDecisions";
 import { useCallback } from "react";
 import type { Dispatch, MutableRefObject, SetStateAction } from "react";
 import { native } from "../lib/native";
@@ -54,15 +55,17 @@ export function useTabLifecycle({
     };
     const existing = openTabsRef.current.find((tab) => tab.noteId === id);
     if (existing) {
-      // 标签曾被标记"已删除"（远端删除）：文档可能已从回收站恢复，重新拉取最新内容刷新标签。
+      // 曾被标记"已删除"的标签：重新读一次落库状态再决定——可能已从回收站恢复（清标记），
+      // 也可能仍在回收站（必须保持标记；旧实现无条件 deleted:false 会把守卫解开）。
       if (existing.deleted) {
         try {
           const t0 = performance.now();
           const note = await native.readNote(id);
           console.log("[sync-tab] openNote reload-deleted", JSON.stringify({ noteId: id, readMs: Math.round(performance.now() - t0) }));
+          const gone = isGoneNote(note);
           if (openTabsRef.current.some((t) => t.noteId === id)) {
             setOpenTabs((tabs) => tabs.map((tab) => tab.noteId === id
-              ? { ...tab, title: note.title, content: note.content, dirty: false, deleted: false, reloadKey: (tab.reloadKey ?? 0) + 1, lastDigest: { title: note.title, updatedAt: note.updatedAt } }
+              ? { ...tab, title: note.title, content: note.content, dirty: false, deleted: gone, reloadKey: (tab.reloadKey ?? 0) + 1, lastDigest: { title: note.title, updatedAt: note.updatedAt } }
               : tab));
           }
         } catch { /* 尚未恢复，保持标记 */ }
@@ -81,7 +84,9 @@ export function useTabLifecycle({
         return true;
       }
       resetRevision(note.id, 0);
-      const newTab: OpenTab = { noteId: note.id, title: note.title, content: note.content, dirty: false, lastAccessedAt: Date.now() };
+      // 打开即判定：回收站里 / 已被他端 purge 的文档直接以"已删除"标签打开（只读 + 不保存），
+      // 不等下一次同步才标记——否则重启自动重开"最后文档"时会看到能编辑的已删文档。
+      const newTab: OpenTab = { noteId: note.id, title: note.title, content: note.content, dirty: false, lastAccessedAt: Date.now(), deleted: isGoneNote(note) };
       const nextForEvict = openTabsRef.current.some((t) => t.noteId === id)
         ? openTabsRef.current
         : [...openTabsRef.current, newTab];

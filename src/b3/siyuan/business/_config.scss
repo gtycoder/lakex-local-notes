@@ -210,10 +210,13 @@
       height: 300px;
       overflow: hidden;
 
+      /* 换图淡入：几何恒定 + 解码后才替换，淡入把"替换"这件事变成有意的过渡而非闪跳。
+       （prefers-reduced-motion 由 tokens.css 全局降级为 1ms） */
       img {
         max-width: 100%;
         max-height: 100%;
         object-fit: contain;
+        animation: ln-preview-fade-in var(--lake-motion-standard, 180ms) var(--lake-ease-standard, ease-out);
       }
     }
 
@@ -244,4 +247,14 @@
   color: var(--b3-theme-on-surface-light);
   font-size: 13px;
   text-align: center;
+}
+
+@keyframes ln-preview-fade-in {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
 }

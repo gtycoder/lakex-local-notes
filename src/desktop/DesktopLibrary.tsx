@@ -31,6 +31,8 @@ export interface DesktopLibraryProps {
   onScrollToTop: () => void;
   onNavigateToHeading: (id: string) => void;
   lockedNoteIds: ReadonlySet<string>;
+  /** 活动标签在回收站中：横幅里的"打开回收站"出口。 */
+  onOpenTrash?: () => void;
   pinnedNoteIds: ReadonlySet<string>;
   onTabChange: (noteId: string) => void;
   onTabClose: (noteId: string) => void;
@@ -52,7 +54,7 @@ export function DesktopLibrary(props: DesktopLibraryProps) {
     onScrollToTop, onNavigateToHeading,
     lockedNoteIds, pinnedNoteIds,
     onTabChange, onTabClose, onTabsReorder, onTogglePin, onContentChange,
-    onEditorReady, onEditorCopyMarkdown, onEditorExport, onEditorCopyPaths, onCreateNote,
+    onEditorReady, onEditorCopyMarkdown, onEditorExport, onEditorCopyPaths, onCreateNote, onOpenTrash,
     visible = true,
   } = props;
 
@@ -100,6 +102,7 @@ export function DesktopLibrary(props: DesktopLibraryProps) {
         onTabClose={onTabClose}
         onTabsReorder={onTabsReorder}
         lockedNoteIds={lockedNoteIds}
+        onOpenTrash={onOpenTrash}
         pinnedNoteIds={pinnedNoteIds}
         onTogglePin={onTogglePin}
         onContentChange={onContentChange}

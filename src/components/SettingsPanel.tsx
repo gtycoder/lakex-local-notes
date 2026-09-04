@@ -857,7 +857,7 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
                       <div className={`config-assets__preview${pvLoading ? " is-loading" : ""}`}>
                         <div className="config-assets__stage">
                           {pv?.supported && pv.dataUrl ? (
-                            <img src={pv.dataUrl} alt={pv.filename} />
+                            <img key={pv.filename} src={pv.dataUrl} alt={pv.filename} />
                           ) : (
                             <span className="config-assets__hint">
                               {!sel ? "点击左侧条目预览" : pvLoading ? "加载中…" : pv ? "该类型不支持预览" : "读取失败"}

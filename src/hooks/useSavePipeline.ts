@@ -23,6 +23,8 @@ export interface SavePipelineOptions {
   onDraftCleared: (noteId: string) => void;
   /** 保存失败提示（NOT_FOUND 自动忽略，不触发）。 */
   onError: (message: string) => void;
+  /** 因文档已在回收站/被 purge 而丢弃保存时通知上层（旧实现静默 return：用户以为存了）。 */
+  onBlockedSave?: (noteId: string) => void;
   /** 读取 openTabs 当前快照（含 deleted 标记，用于拦截写回回收站）。 */
   getOpenTab: (noteId: string) => { title: string; content: string; deleted?: boolean } | undefined;
   /** 从编辑器实例生成派生缓存（markdown/plain；无实例返回空）。 */
@@ -35,7 +37,7 @@ export interface SavePipelineOptions {
  * 旧响应不得覆盖最新草稿/清除 dirty（审计 #7）。
  */
 export function useSavePipeline(options: SavePipelineOptions) {
-  const { onNoteSaved, onOpenTabsApplied, onDraftCleared, onError, getOpenTab, getEditorCaches } = options;
+  const { onNoteSaved, onOpenTabsApplied, onDraftCleared, onError, onBlockedSave, getOpenTab, getEditorCaches } = options;
   const [saveState, setSaveState] = useState<SaveState>("idle");
   const [lastSavedAt, setLastSavedAt] = useState<string | null>(null);
   const saveTimers = useRef<Map<string, number>>(new Map());
@@ -46,9 +48,10 @@ export function useSavePipeline(options: SavePipelineOptions) {
 
   const persistTab = useCallback((noteId: string, title: string, content: string) => {
     return core.run(noteId, async () => {
-      // 远端已删除（标记 deleted）的文档不再保存：避免把内容写回已回收的笔记。
+      // 已在回收站/被他端 purge（标记 deleted）的文档不保存：避免把内容写回已回收的笔记。
+      // 必须出声——静默丢弃会让用户以为已保存（编辑器此时已只读，这里是最后一道闸）。
       const openTab = getOpenTab(noteId);
-      if (openTab?.deleted) return;
+      if (openTab?.deleted) { onBlockedSave?.(noteId); return; }
       // 审计 #7：保存时快照当前 revision；响应返回后仅当期间无新编辑才覆盖草稿/清除 dirty
       const revision = core.revision(noteId);
       setSaveState("saving");
@@ -75,7 +78,7 @@ export function useSavePipeline(options: SavePipelineOptions) {
         setSaveState("error"); onError(getNativeErrorMessage(reason));
       }
     });
-  }, [getOpenTab, getEditorCaches, onNoteSaved, onOpenTabsApplied, onDraftCleared, onError]);
+  }, [getOpenTab, getEditorCaches, onNoteSaved, onOpenTabsApplied, onDraftCleared, onError, onBlockedSave]);
 
   /** 防抖保存：SAVE_DEBOUNCE_MS（1s）无新输入后落盘。 */
   const scheduleSave = useCallback((noteId: string, content: string) => {

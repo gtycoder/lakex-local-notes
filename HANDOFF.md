@@ -7,7 +7,7 @@
 ## 0. 当前基线（新会话开工前）
 - 分支/远端：开发主干 `master` ↔ Gitee `origin`（SSH：`git@gitee.com:gtycoder/local-lake.git`；`master` 亦是远程默认分支）同步。
   **本文不固定 commit hash**——查 `git log -1 --oneline`。
-- 质量门槛：`tsc` 0 error · `vitest` **828 passed / 15 skipped** · 桌面 `vite build` + 移动 `vite build --config vite.mobile.config.ts` 全绿（计数变动见 §2.x；别写死旧数字）。
+- 质量门槛：`tsc` 0 error · `vitest` **831 passed / 15 skipped** · 桌面 `vite build` + 移动 `vite build --config vite.mobile.config.ts` 全绿（计数变动见 §2.x；别写死旧数字）。
 - 本地业务分支只有 `master`（其余已合并/删除；`origin/main` 为旧 Tauri 遗留引用）。
 - 里程碑（260903，docs/MILESTONES-SYNC-UX-2026-09-03.md）：M1a-M6 已全量实现并合入 master（merge e803948）——B1 冲突通知收口、B3 冲突归档 30 天保护（note_history.protected_until，多端 port 兼容）、C1 回收站到期倒计时（trashDaysUntilPurge 共享纯函数）、C2 purge 三端语义文案、A3 数据体检（runDataHealthCheck）、D2 待回收明细（pendingKeyReason）、F3 清理统计、F1 应用内日志查看器（read_app_log）、A1 整库备份（exportWorkspaceBackup）、A2 云端恢复（prepareCloudRestore 改名隔离+空库重启首同步）、E 视觉 tokens 收编。B4 按审计取消（对齐 S3-GC-DESIGN §14）；A4 云端报告留 backlog。
 - 近期其他主线（260902→260903）：语雀 bookmark 卡修复 + S3 同步性能优化 + 两处 bug 修复 + 压测，均已在 master。
@@ -112,6 +112,21 @@
 - 修复后实测：设置-资源 A→B / B→C **高度全程 352、0 跳变**（初次仅剩 3px 文本行高）；历史弹窗孤儿预览**全程 474 不变**。
 - 顺带修：舞台原先写成 `display:grid`，隐式 auto 行被图片原始尺寸撑破（图 373px 高、被 `overflow:hidden` 裁切而非缩放）→ 改 `display:flex` 居中后 `max-height:100%` 才真正生效（图 300px 完整显示）。
 
+### 2.10 回收站里的文档竟然可编辑可保存（260904 晚，用户报，严重）
+- **数据结论：文档还在，没坏**。`到啦领导`（ee860a19）`parent_id=notebook-trash`、`trashed_at=09-04 10:34`、`deleted_from_parent_id=测试本2222`；
+  18:06 那次编辑**写进了这份"回收站里的文档"**（`trashed_at` 未被清、无 `restore_pending_at`）⇒ 没有复活、没有违反墓碑/删除语义、正文可恢复（现为「测试老师啦啦队」）。
+  "目录栏找不到"本身是**正确行为**（它在回收站里），错的是**没有任何提示**，用户以为文档凭空消失。
+- **根因是三个洞叠在一起**：
+  1. 本地删除确实会关掉标签（`deleteTreeNode` 过滤 openTabs），但**启动恢复**按 `last_opened_note_id` 重开"最后文档"时**不校验回收站/purge** ⇒ 回收站文档以正常可编辑标签回来；
+  2. `tab.deleted` + 保存拦截这套守卫**只在同步刷新路径设置**（`useSyncProgress`）⇒ 自动同步关着/没跑过，就永远不会被标记；
+  3. `openNote` 的"复用已有标签"分支**无条件 `deleted:false`**，会把本来正确的标记解开；且 `persistTab` 丢弃保存时**静默 return**，用户以为存下来了。
+- **修法（复用既有机制，不新增状态）**：新增 core 纯函数 `isGoneNote({parentId,syncState})`（= 在回收站 或 被 purge），
+  `openNote` 新建/复用两条路径都按落库状态判定；`tab.deleted` → 复用 `EditorTab.locked` 走 **viewer 只读** +
+  顶部横幅「该文档在回收站中：只读、编辑不会保存。需要继续写请先恢复。〔打开回收站〕」；角标 tooltip 文案改准（原只说"其他设备删除"）；
+  丢弃保存回调 `onBlockedSave` → 明确提示。恢复路径 `handleTrashRestored`（重载 + 清标记）本就存在，实测无回归。
+- 实测：重启后启动日志 `init ee860a19… mode=viewer (locked)`（修复前是 `mode=editor`）；tab 类名含 `deleted` + 「已删除」角标 + 横幅出现 + `.ne-viewer` 存在、`.ne-editor` 不存在。
+- 测试：`isGoneNote` 3 例（回收站 / purged / 普通与根层）。
+
 ## 3. 真正的待办（已剔除全部完成项，按优先级）
 **性能/健壮性（本轮延续）**
 1. 资产/正文 PUT 的**对象级 5xx 重试 + 池 fail-fast**（当前靠 #2.2 的"失败不 markSynced→下轮重扫"兜底，属缓做）。
@@ -144,6 +159,8 @@
   ⇒ 已在 `AGENTS.md` §2 定了分工：**易过期事实（分支/hash/计数/当前焦点）只写 HANDOFF §0**，别把这些数字写回 AGENTS/README。
 - **`git worktree list` 要纳入开工检查**：android worktree 的未提交 WIP 曾完全没进交接，几乎导致重复劳动（现已记入 §0/§3.6）。
 - **`defaultNotebookId()` 急切调用 = 空库同步凭空建「未分类」并上传扩散**；改惰性后，`effectiveParent()` 也只能在"真应用"处解析（冲突探测等 skip 路径调它照样会建）。
+- **守卫不能只挂在一条路径上**：`tab.deleted`（不保存）此前只在同步刷新里设置，启动恢复/点击打开都不判定 ⇒ 同一个文档"同步过就只读、没同步就能编辑"。凡是"这条数据不该被写"的守卫，必须在**所有入口**（open/restore/sync/IPC）用同一个纯函数判定（现 `isGoneNote`）。
+- **静默丢弃用户输入是最坏的失败模式**：`if (deleted) return;` 不打字提示，用户会以为已保存。拦截必须同时给可见反馈（横幅/notice），并给出口（打开回收站/恢复）。
 - **量 DOM 逐帧变化前必须先解除后台节流**：Electron 窗口不可见时 `requestAnimationFrame` **一帧都不跑**、`setInterval(10ms)` 被节流成 ~1000ms（我第一版数据因此全错、误判"没有中间态"）。解法：CDP `Emulation.setFocusEmulationEnabled{enabled:true}` + `Page.setWebLifecycleState{state:'active'}`，并用"10ms 定时器 1 秒跑了几次"自检（>40 才算没被节流）。
 - **别用跨进程往返做时序观测**：每次 `Runtime.evaluate` 有几 ms 开销，点击和采样分两次调用就会错过 <100ms 的中间态。要**在页面内同一个 async 表达式里**完成"起采样 → 触发点击 → rAF 循环 → 返回过滤后的变化帧"。
 - **CSS 选择器陷阱**：`:nth-of-type` 数的是同类型兄弟元素（含分组标题 div），不是"第 N 个列表行"——我因此点到同一行两次，触发了"取消选中"，把测量带偏。用 `rows[i].click()` 显式取索引。
