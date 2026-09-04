@@ -193,22 +193,39 @@
     gap: 8px;
     align-items: center;
     justify-content: center;
-    min-height: 220px;
-    max-height: 420px;
     padding: 12px;
     overflow: auto;
     border-radius: var(--b3-border-radius);
     background-color: var(--b3-theme-background);
     box-shadow: inset 0 0 0 1px var(--b3-border-color);
 
-    img {
-      max-width: 100%;
-      max-height: 360px;
-      object-fit: contain;
+    /* 固定高度舞台：有无图、图多大都不改变几何（切换不再塌陷/撑开 = 闪烁）。
+     * 必须用 flex 居中：grid 的隐式 auto 行会被图片撑到原始高度，max-height:100% 失效 → 图被裁切而非缩放。 */
+    .config-assets__stage {
+      display: flex;
+      flex: none;
+      align-items: center;
+      justify-content: center;
+      width: 100%;
+      height: 300px;
+      overflow: hidden;
+
+      img {
+        max-width: 100%;
+        max-height: 100%;
+        object-fit: contain;
+      }
+    }
+
+    /* 加载态只压暗旧图，不换文本、不改高度 */
+    &.is-loading .config-assets__stage img {
+      opacity: .55;
+      transition: opacity var(--lake-motion-fast, 120ms) ease-out;
     }
   }
 
   &__previewname {
+    min-height: 17px; /* 空态也预留说明行：否则首次选中时整块高度会再跳 20px */
     color: var(--b3-theme-on-background);
     font-size: 12px;
     text-align: center;

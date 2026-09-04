@@ -31,6 +31,13 @@ function formatDateTime(ms: number): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
+/** 让浏览器先把 data URL 解码好再上屏：<img> 换 src 的那一帧若未解码完会画空白（闪烁的另一半来源）。 */
+async function decodeImage(dataUrl: string): Promise<void> {
+  const img = new Image();
+  img.src = dataUrl;
+  try { await img.decode(); } catch { /* 解码失败交给 <img> 自己表现（不支持的类型会走 hint 分支） */ }
+}
+
 function formatBytes(n: number): string {
   if (n >= 1024 * 1024) return `${(n / 1024 / 1024).toFixed(1)} MB`;
   if (n >= 1024) return `${(n / 1024).toFixed(1)} KB`;
@@ -189,6 +196,7 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
   const [sysInfo, setSysInfo] = useState<import("../lib/types").SystemInfo | null>(null);
   const [pendingHit, setPendingHit] = useState<string | null>(null);
   const [diagMsg, setDiagMsg] = useState<string | null>(null);
+  const [pvLoading, setPvLoading] = useState(false);
 
   /** A1 整库备份：选目录 → 备份到 <dir>/lake-notes-backup-<ts>/。 */
   const runBackup = async () => {
@@ -370,14 +378,21 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
     } catch { setDiagMsg("复制失败（剪贴板不可用）"); }
   };
 
-  // 选中即预览、切换自动加载（思源式资源管理交互）
+  // 选中即预览、切换自动加载（思源式资源管理交互）。
+  // 切换时**不清空**上一张已解码的图：旧实现 setPv(null) 会让预览区先塌成一行"加载中…"文本、
+  // 图到位再撑开（实测 220 → 412，192px 跳动），冷读盘时正好被看见 = "初次切换闪一下"。
+  // 现在：保留旧图 + 新图先 decode 再替换 + 预览舞台固定高度（见 .preview-stage），几何全程不变。
   useEffect(() => {
-    if (!sel) { setPv(null); return; }
+    if (!sel) { setPv(null); setPvLoading(false); return; }
     let alive = true;
-    setPv(null);
+    setPvLoading(true);
     native.readAssetPreview(sel.noteId, sel.filename)
-      .then((r) => { if (alive) setPv(r); })
-      .catch(() => { if (alive) setPv({ filename: sel.filename, mimeType: "", supported: false }); });
+      .then(async (r) => {
+        if (r.supported && r.dataUrl) await decodeImage(r.dataUrl);   // 解码完再上屏，避免换上去那一帧空白
+        if (!alive) return;
+        setPv(r); setPvLoading(false);
+      })
+      .catch(() => { if (alive) { setPv({ filename: sel.filename, mimeType: "", supported: false }); setPvLoading(false); } });
     return () => { alive = false; };
   }, [sel]);
 
@@ -839,22 +854,20 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
                           </div>
                         ))}
                       </div>
-                      <div className="config-assets__preview">
-                        {!sel ? (
-                          <span className="config-assets__hint">点击左侧条目预览</span>
-                        ) : pv == null ? (
-                          <span className="config-assets__hint">加载中…</span>
-                        ) : pv.supported && pv.dataUrl ? (
-                          <>
+                      <div className={`config-assets__preview${pvLoading ? " is-loading" : ""}`}>
+                        <div className="config-assets__stage">
+                          {pv?.supported && pv.dataUrl ? (
                             <img src={pv.dataUrl} alt={pv.filename} />
-                            <div className="config-assets__previewname">{pv.filename}<span className="config-assets__hint"> · {pv.mimeType || sel.mimeType}</span></div>
-                          </>
-                        ) : (
-                          <>
-                            <span className="config-assets__hint">该类型不支持预览</span>
-                            <div className="config-assets__previewname">{sel.filename}</div>
-                          </>
-                        )}
+                          ) : (
+                            <span className="config-assets__hint">
+                              {!sel ? "点击左侧条目预览" : pvLoading ? "加载中…" : pv ? "该类型不支持预览" : "读取失败"}
+                            </span>
+                          )}
+                        </div>
+                        <div className="config-assets__previewname">
+                          {sel?.filename ?? pv?.filename}
+                          {sel && <span className="config-assets__hint"> · {pv?.mimeType || sel.mimeType}{pvLoading ? " · 加载中" : ""}</span>}
+                        </div>
                       </div>
                     </div>
                   </Block>

@@ -272,6 +272,7 @@
 .history-preview-inline > * { width: 100%; }
 .history-preview-inline-title { align-self: flex-start; }
 .history-preview-image { flex: 1 1 auto; min-height: 0; width: auto !important; max-width: 100%; max-height: 100%; object-fit: contain; align-self: center; }
+.history-preview-image.is-loading { opacity: .55; transition: opacity var(--lake-motion-fast) ease-out; }
 
 /* 两行列表行（回收站 / 文档历史）：沿用思源 .b3-list-item 的密度与 hover 语言 */
 .ln-row2 { padding: 4px; }

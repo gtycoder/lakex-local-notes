@@ -30,6 +30,8 @@ export function HistoryPanel({ open, noteId, onClose, onRestored }: {
   const [orphans, setOrphans] = useState<NoteOrphan[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [orphanSel, setOrphanSel] = useState<string | null>(null);
+  const [orphanLoading, setOrphanLoading] = useState(false);
   const [orphanPv, setOrphanPv] = useState<{
     title: string;
     text?: string;
@@ -95,6 +97,8 @@ export function HistoryPanel({ open, noteId, onClose, onRestored }: {
       setOrphans([]);
       setInline(null);
       setOrphanPv(null);
+      setOrphanSel(null);
+      setOrphanLoading(false);
       setError(null);
       void refreshHistory();
     }
@@ -189,22 +193,30 @@ export function HistoryPanel({ open, noteId, onClose, onRestored }: {
     };
   }, [inline?.title, noteId]);
 
+  /** 预览孤儿文件：与设置-资源同口径 —— 不清空上一张已解码的图，新图解码完再替换，
+   *  否则预览区会先塌成提示文本再撑开（实测跳动 190px 量级 = 用户看到的"闪一下"）。 */
   const previewOrphanFile = async (o: NoteOrphan) => {
     if (!noteId) return;
     const version = previewVersionRef.current.next();
-    setOrphanPv(null);
+    setOrphanSel(o.filename);
+    setOrphanLoading(true);
     try {
       const r = await native.previewNoteOrphan(noteId, o.filename);
       if (!previewVersionRef.current.isCurrent(version)) return;
-      if (r) {
-        setOrphanPv(r.kind === "image"
-          ? { title: o.filename, imageData: r.data, size: r.size }
-          : { title: o.filename, text: r.data, size: r.size });
-      } else {
-        setError("文件预览失败（文件可能已删除）");
+      if (!r) { setError("文件预览失败（文件可能已删除）"); setOrphanLoading(false); return; }
+      const next = r.kind === "image"
+        ? { title: o.filename, imageData: r.data, size: r.size }
+        : { title: o.filename, text: r.data, size: r.size };
+      if (next.imageData) {
+        const img = new Image();
+        img.src = next.imageData;
+        try { await img.decode(); } catch { /* 解码失败交给 <img> 自己表现 */ }
+        if (!previewVersionRef.current.isCurrent(version)) return;
       }
+      setOrphanPv(next);
+      setOrphanLoading(false);
     } catch (e) {
-      if (previewVersionRef.current.isCurrent(version)) setError(getNativeErrorMessage(e));
+      if (previewVersionRef.current.isCurrent(version)) { setError(getNativeErrorMessage(e)); setOrphanLoading(false); }
     }
   };
 
@@ -275,7 +287,7 @@ export function HistoryPanel({ open, noteId, onClose, onRestored }: {
               );
             })}
             {!loading && tab === "orphans" && orphans.map((o) => (
-              <div key={o.filename} className={`b3-list-item b3-list-item--hide-action${orphanPv?.title === o.filename ? " b3-list-item--focus" : ""}`}>
+              <div key={o.filename} className={`b3-list-item b3-list-item--hide-action${orphanSel === o.filename ? " b3-list-item--focus" : ""}`}>
                 <span className="b3-list-item__graphic"><FileText size={14} /></span>
                 <span className="b3-list-item__text" onClick={() => void previewOrphanFile(o)} title="点击预览文件">{o.filename}</span>
                 {o.protectedByHistory && <span className="badge badge--warn">历史保护</span>}
@@ -299,13 +311,15 @@ export function HistoryPanel({ open, noteId, onClose, onRestored }: {
               )
             ) : orphanPv ? (
               <>
-                <div className="history-preview-inline-title">{orphanPv.title}{orphanPv.size !== undefined ? ` · ${(orphanPv.size / 1024).toFixed(1)} KB` : ""}</div>
+                <div className="history-preview-inline-title">
+                  {orphanSel ?? orphanPv.title}{orphanPv.size !== undefined ? ` · ${(orphanPv.size / 1024).toFixed(1)} KB` : ""}{orphanLoading ? " · 加载中" : ""}
+                </div>
                 {orphanPv.imageData
-                  ? <img className="history-preview-image" src={orphanPv.imageData} alt={orphanPv.title} />
+                  ? <img className={`history-preview-image${orphanLoading ? " is-loading" : ""}`} src={orphanPv.imageData} alt={orphanPv.title} />
                   : <pre className="history-preview-text">{orphanPv.text ?? ""}</pre>}
               </>
             ) : (
-              <div className="ln-empty">选择左侧文件查看预览</div>
+              <div className="ln-empty">{orphanLoading ? "加载中…" : "选择左侧文件查看预览"}</div>
             )}
           </div>
         </div>

@@ -103,6 +103,15 @@
 - 坑：把「当前分类」补回被过滤空的导航时，「唯一命中自动切分类」的判断必须只看 `filteredNav`，否则永远凑不出 `length===1`（已踩并修正）。
 - 计数：vitest **828 passed / 15 skipped**。
 
+### 2.9 设置-资源预览"初次切换闪一下"修复（260904，用户报，实测定位）
+- **根因（逐帧实测，非猜测）**：切换条目时 effect 先 `setPv(null)` → 预览区被换成一行「加载中…」文本 → 高度从 412 **塌到 220** → 图到位再撑回 412。冷读盘（首次）耗时 ~48ms 正好被看见 = 闪 + 跳；热切换 17ms 且已是展开态，所以只在"初次"明显。
+- **修法（两处同病同治：设置-资源 + 历史弹窗孤儿文件）**：
+  1. 切换时**不清空旧图**，新图 `new Image(); await img.decode()` 解码完成后才替换 → 没有中间空帧；
+  2. 预览改成**固定高度舞台** `.config-assets__stage{height:300px}` + 说明行 `min-height:17px` → 几何全程不变；加载态只把旧图 `opacity:.55` 压暗并在说明里加"· 加载中"，不换文本；
+  3. 说明行标题取**当前选中项**（`sel?.filename` / `orphanSel`），即时反映点击，不残留上一张的名字。
+- 修复后实测：设置-资源 A→B / B→C **高度全程 352、0 跳变**（初次仅剩 3px 文本行高）；历史弹窗孤儿预览**全程 474 不变**。
+- 顺带修：舞台原先写成 `display:grid`，隐式 auto 行被图片原始尺寸撑破（图 373px 高、被 `overflow:hidden` 裁切而非缩放）→ 改 `display:flex` 居中后 `max-height:100%` 才真正生效（图 300px 完整显示）。
+
 ## 3. 真正的待办（已剔除全部完成项，按优先级）
 **性能/健壮性（本轮延续）**
 1. 资产/正文 PUT 的**对象级 5xx 重试 + 池 fail-fast**（当前靠 #2.2 的"失败不 markSynced→下轮重扫"兜底，属缓做）。
@@ -135,6 +144,11 @@
   ⇒ 已在 `AGENTS.md` §2 定了分工：**易过期事实（分支/hash/计数/当前焦点）只写 HANDOFF §0**，别把这些数字写回 AGENTS/README。
 - **`git worktree list` 要纳入开工检查**：android worktree 的未提交 WIP 曾完全没进交接，几乎导致重复劳动（现已记入 §0/§3.6）。
 - **`defaultNotebookId()` 急切调用 = 空库同步凭空建「未分类」并上传扩散**；改惰性后，`effectiveParent()` 也只能在"真应用"处解析（冲突探测等 skip 路径调它照样会建）。
+- **量 DOM 逐帧变化前必须先解除后台节流**：Electron 窗口不可见时 `requestAnimationFrame` **一帧都不跑**、`setInterval(10ms)` 被节流成 ~1000ms（我第一版数据因此全错、误判"没有中间态"）。解法：CDP `Emulation.setFocusEmulationEnabled{enabled:true}` + `Page.setWebLifecycleState{state:'active'}`，并用"10ms 定时器 1 秒跑了几次"自检（>40 才算没被节流）。
+- **别用跨进程往返做时序观测**：每次 `Runtime.evaluate` 有几 ms 开销，点击和采样分两次调用就会错过 <100ms 的中间态。要**在页面内同一个 async 表达式里**完成"起采样 → 触发点击 → rAF 循环 → 返回过滤后的变化帧"。
+- **CSS 选择器陷阱**：`:nth-of-type` 数的是同类型兄弟元素（含分组标题 div），不是"第 N 个列表行"——我因此点到同一行两次，触发了"取消选中"，把测量带偏。用 `rows[i].click()` 显式取索引。
+- **预览/图片切换不要清空旧内容**：`setState(null)` + 文本占位 = 高度塌陷再撑开，冷启动那一帧就是用户说的"闪一下"。正解是保留旧图、新图 `img.decode()` 后替换、容器固定高度（几何恒定）。
+- **居中缩放容器别用 grid 的隐式 auto 行**：`display:grid; height:300px; overflow:hidden` 里图片会按原始尺寸撑高行 → `max-height:100%` 失效、图被裁切。要 `display:flex; align-items:center; justify-content:center`。
 - **hooks 必须在早退之前**：`SettingsPanel` 里 `if (!open) return null;` 之后还有一堆 `const handler = ...`，我把新加的 `useState/useEffect` 顺手插在那片区域 → 「Rendered more hooks than during the previous render」→ **整个 React 树卸载**（`#root` 变空，表现为"应用白屏/按钮全没了"，很容易被误判成 GPU 崩溃）。加 hook 一律放到组件顶部的 state 区；排查用 CDP 注入 `window.addEventListener('error')` + `Page.reload` 看真实堆栈。
 - **CDP `Input.dispatchMouseEvent` 在 `Page.reload` 之后可能点不动**（窗口非激活时），`element.click()` 仍可靠；验证 UI 用 JS click，验证真实交互（拖拽/悬停/剪贴板）才用鼠标事件。
 - **`purged_at` 不是"已彻底删除"的永久标记**：`markPurgeSynced()` 在前缀删除成功后会清空它（防重复删）。任何"别把这个复活"的判定都必须看**永久墓碑**（folder 看 `deleted_notes.node_type='folder'`），否则保护只活到下一次同步。
