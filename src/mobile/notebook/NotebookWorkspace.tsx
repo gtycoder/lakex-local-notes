@@ -10,6 +10,7 @@ import { bridge } from "../bridge";
 import { DocumentEditor } from "../editor/DocumentEditor";
 import { OutlineSheet } from "../editor/OutlineSheet";
 import type { LakeEditorInstance } from "../../features/editor/lakeRuntime";
+import { useEdgeSwipe } from "../useEdgeSwipe";
 import type { POCNote } from "../bridge";
 import type { NotebookTreeItem } from "./NotebookPage";
 
@@ -35,6 +36,12 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
   const [tabsOpen, setTabsOpen] = useState(false);
   const editorsRef = useRef<Map<string, LakeEditorInstance | null>>(new Map());
   const autoOpenedRef = useRef(false);
+
+  // 边缘滑动手势（对齐思源移动端）：左边缘右滑→目录抽屉；右边缘左滑→大纲抽屉（互斥）。
+  useEdgeSwipe({
+    onLeftEdgeSwipe: () => { setSidebarOpen(true); setOutlineOpen(false); },
+    onRightEdgeSwipe: () => { setOutlineOpen(true); setSidebarOpen(false); },
+  });
 
   const loadTree = useCallback(async () => {
     const [treeArr, nodes] = await Promise.all([bridge.listNotebookTree(notebookId), bridge.listTreeNodes()]);
