@@ -226,7 +226,7 @@ node scripts/s3-ls.mjs --count | --note <id> | --prefix <prefix>
 1. **"正在下载"从未复现**（MutationObserver 实时抓也没有）——判断是编辑器初始化瞬时态/旧命令报错后遗症，修复后未见。**若用户真机仍见，要截图或位置**再定位。
 2. 命令在**被改乱的段落**上可能不生效（caret 落标题/边界时 list 0→0）——编辑器 caret 语义，非命令 bug；干净段落正常。
 3. 移动端**既有遗留**（见 §3.6-3.8）：剪贴板粘贴不解析为空（静态线索：移动端入口没挂 `installPasteInterceptor`，android worktree 已补挂，先沿那条线验证）；本地资产 canonical `http://127.0.0.1:19876/{noteId}/{file}` 真机不可达（需 `adb reverse tcp:19876 tcp:19876` 或可达成名）；用户"移动端整体编辑还有问题"现象未细化。
-4. **大纲 viewer 只读点标题不跳转**（`OutlineSheet` 用 `headingUnfold`+`scrollByNodeId`，viewer 下静默失效）；用户计划重做大纲时一并处理。
+4. **大纲 viewer 只读点标题不跳转 —— 已修复（260908，e95ec6f）**：根因是 `.mobile-workspace-body` 非 `display:flex` 容器，`.doc-pane`/`.mobile-doc-body` 的 `height:100%` 塌陷为 0 → 编辑器无有效滚动容器。修复：workspace-body 加 flex column + doc-pane `flex:1; min-height:0`（实测 doc 高 0→794）；`OutlineSheet.jump` 补桌面式 DOM 校正（`resolveScrollNode`+节点位置兜底）。注意：用 Lake 正确内容格式（非裸 HTML）真机验证长文档跳转。
 
 ### 8.7 下一步（移动端）
 1. **整库备份/云端恢复**：桌面走「文件系统拷贝 + 应用重启」；移动端数据在沙盒（sql.js + Capacitor FS，无 workspace 目录），架构不匹配——需另做「数据导出/导入」（导出 DB 快照 + 资产清单到文件）。当前移动端已做「运行诊断」统计（§8.5.3）。
