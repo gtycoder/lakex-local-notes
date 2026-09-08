@@ -193,6 +193,8 @@ export function MobileApp() {
           notebookId={route.notebookId}
           initialNoteId={null}
           onBack={() => setRoute({ kind: "home", tab: "library" })}
+          notebooks={notebooks}
+          onSwitchNotebook={(id) => setRoute({ kind: "notebook", notebookId: id })}
         />
       )}
       {route.kind === "document" && active && (

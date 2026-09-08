@@ -5,6 +5,7 @@ import type { TreeNode } from "../../lib/types";
 import { NotebookGrid } from "./NotebookGrid";
 import { QuickNoteComposer } from "./QuickNoteComposer";
 import { bridge } from "../bridge";
+import { useHorizontalSwipe } from "../useHorizontalSwipe";
 import { localAssetHttpUrl } from "../../core/assetUrl.js";
 
 export interface MobileQuickNote {
@@ -39,6 +40,12 @@ export function HomePage(props: HomePageProps) {
   } = props;
   const [composer, setComposer] = useState<ComposerState>(null);
   const [editNote, setEditNote] = useState<{ id: string; text: string; images: import("../../core/quickNoteModel.js").StoredQuickNoteImage[] } | null>(null);
+
+  // 左右横滑切换小记 ↔ 知识库（左滑→知识库，右滑→小记）
+  useHorizontalSwipe((dir) => {
+    if (dir === "left" && tab === "quick") onTabChange("library");
+    else if (dir === "right" && tab === "library") onTabChange("quick");
+  });
 
   const openEdit = async (id: string): Promise<void> => {
     try {

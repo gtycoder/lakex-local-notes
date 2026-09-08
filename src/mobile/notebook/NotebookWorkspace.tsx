@@ -5,7 +5,7 @@
  * 多 tab 的「顶部 tab 条」是桌面版；移动端是底部胶囊栏 #toolbarTabs 弹全屏列表（子代理已核对源码）。
  */
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ArrowLeft, ListTree, Files, Pencil, X, ChevronRight, FolderOpen, FileText, Plus, Check } from "lucide-react";
+import { ArrowLeft, ListTree, Files, Pencil, X, ChevronRight, FolderOpen, FileText, Plus, Check, ArrowLeftRight } from "lucide-react";
 import { bridge } from "../bridge";
 import { DocumentEditor } from "../editor/DocumentEditor";
 import { OutlineSheet } from "../editor/OutlineSheet";
@@ -13,6 +13,7 @@ import type { LakeEditorInstance } from "../../features/editor/lakeRuntime";
 import { useEdgeSwipe } from "../useEdgeSwipe";
 import type { POCNote } from "../bridge";
 import type { NotebookTreeItem } from "./NotebookPage";
+import type { TreeNode } from "../../lib/types";
 
 /** 打开文档 tab 的内容状态（按 tab 缓存，切换不丢草稿） */
 interface TabState { id: string; title: string; content: string; editing: boolean; }
@@ -21,10 +22,14 @@ export interface NotebookWorkspaceProps {
   notebookId: string;
   initialNoteId?: string | null;
   onBack: () => void;
+  /** 全部笔记本（切换笔记本用） */
+  notebooks: TreeNode[];
+  /** 切换到另一个笔记本 */
+  onSwitchNotebook: (id: string) => void;
 }
 
 export function NotebookWorkspace(props: NotebookWorkspaceProps) {
-  const { notebookId, initialNoteId, onBack } = props;
+  const { notebookId, initialNoteId, onBack, notebooks, onSwitchNotebook } = props;
   const [title, setTitle] = useState("知识库");
   const [tree, setTree] = useState<NotebookTreeItem[]>([]);
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set([notebookId]));
@@ -34,6 +39,7 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [outlineOpen, setOutlineOpen] = useState(false);
   const [tabsOpen, setTabsOpen] = useState(false);
+  const [notebookSwitchOpen, setNotebookSwitchOpen] = useState(false);
   const editorsRef = useRef<Map<string, LakeEditorInstance | null>>(new Map());
   const autoOpenedRef = useRef(false);
 
@@ -146,7 +152,7 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
       <header className="mobile-topbar">
         <button className="mobile-icon-btn" onClick={onBack} aria-label="返回"><ArrowLeft size={22} /></button>
         <div className="mobile-topbar-title">{title}</div>
-        <button className="mobile-icon-btn" onClick={() => setSidebarOpen(true)} aria-label="目录"><Files size={20} /></button>
+        <button className="mobile-icon-btn" onClick={() => setNotebookSwitchOpen(true)} aria-label="切换笔记本"><ArrowLeftRight size={20} /></button>
       </header>
 
       {/* 文档层（正文） */}
@@ -214,6 +220,31 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
                 </div>
               ))}
               <button className="b3-button b3-button--outline model-add" onClick={() => { setTabsOpen(false); setSidebarOpen(true); }}><Plus size={14} />打开文档</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 笔记本切换 sheet（右上角入口；目录抽屉已由底部胶囊栏/左边缘手势承担） */}
+      {notebookSwitchOpen && (
+        <div className="mobile-sheet-mask" onClick={() => setNotebookSwitchOpen(false)}>
+          <div className="mobile-sheet" onClick={(e) => e.stopPropagation()}>
+            <div className="mobile-sheet-head">
+              <span className="mobile-sheet-title">切换笔记本</span>
+              <button className="mobile-icon-btn" onClick={() => setNotebookSwitchOpen(false)} aria-label="关闭"><X size={20} /></button>
+            </div>
+            <div className="mobile-sheet-body">
+              {notebooks.length === 0 && <p className="mobile-sheet-empty">暂无笔记本</p>}
+              {notebooks.map((nb) => (
+                <button
+                  key={nb.id}
+                  className={"b3-list-item" + (nb.id === notebookId ? " b3-list-item--selected" : "")}
+                  onClick={() => { setNotebookSwitchOpen(false); if (nb.id !== notebookId) onSwitchNotebook(nb.id); }}
+                >
+                  <span className="b3-list-item__text">{nb.title}</span>
+                  {nb.id === notebookId && <Check size={16} className="b3-list-item__action" />}
+                </button>
+              ))}
             </div>
           </div>
         </div>
