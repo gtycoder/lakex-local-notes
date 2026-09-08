@@ -40,6 +40,8 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
   const [outlineOpen, setOutlineOpen] = useState(false);
   const [tabsOpen, setTabsOpen] = useState(false);
   const [notebookSwitchOpen, setNotebookSwitchOpen] = useState(false);
+  const switchBtnRef = useRef<HTMLButtonElement>(null);
+  const [switchPos, setSwitchPos] = useState<{ top: number; right: number } | null>(null);
   const editorsRef = useRef<Map<string, LakeEditorInstance | null>>(new Map());
   const autoOpenedRef = useRef(false);
 
@@ -152,7 +154,14 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
       <header className="mobile-topbar">
         <button className="mobile-icon-btn" onClick={onBack} aria-label="返回"><ArrowLeft size={22} /></button>
         <div className="mobile-topbar-title">{title}</div>
-        <button className="mobile-icon-btn" onClick={() => setNotebookSwitchOpen(true)} aria-label="切换笔记本"><ArrowLeftRight size={20} /></button>
+        <button ref={switchBtnRef} className="mobile-icon-btn" onClick={() => {
+          const btn = switchBtnRef.current;
+          if (btn) {
+            const rect = btn.getBoundingClientRect();
+            setSwitchPos({ top: rect.bottom + 6, right: window.innerWidth - rect.right });
+          }
+          setNotebookSwitchOpen((v) => !v);
+        }} aria-label="切换笔记本"><ArrowLeftRight size={20} /></button>
       </header>
 
       {/* 文档层（正文） */}
@@ -225,15 +234,12 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
         </div>
       )}
 
-      {/* 笔记本切换 sheet（右上角入口；目录抽屉已由底部胶囊栏/左边缘手势承担） */}
-      {notebookSwitchOpen && (
-        <div className="mobile-sheet-mask" onClick={() => setNotebookSwitchOpen(false)}>
-          <div className="mobile-sheet" onClick={(e) => e.stopPropagation()}>
-            <div className="mobile-sheet-head">
-              <span className="mobile-sheet-title">切换笔记本</span>
-              <button className="mobile-icon-btn" onClick={() => setNotebookSwitchOpen(false)} aria-label="关闭"><X size={20} /></button>
-            </div>
-            <div className="mobile-sheet-body">
+      {/* 笔记本切换下拉（锚定右上角按钮，跟手弹出；目录抽屉已由底部胶囊栏/左边缘手势承担） */}
+      {notebookSwitchOpen && switchPos && (
+        <div className="mobile-dropdown-mask" onClick={() => setNotebookSwitchOpen(false)}>
+          <div className="mobile-dropdown" style={{ top: switchPos.top, right: switchPos.right }} onClick={(e) => e.stopPropagation()}>
+            <div className="mobile-dropdown-title">切换笔记本</div>
+            <div className="mobile-dropdown-body">
               {notebooks.length === 0 && <p className="mobile-sheet-empty">暂无笔记本</p>}
               {notebooks.map((nb) => (
                 <button

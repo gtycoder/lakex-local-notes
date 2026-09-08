@@ -128,6 +128,14 @@ body { font-family: BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino San
 .mobile-sheet-body--form { padding: 16px 18px calc(20px + env(safe-area-inset-bottom)); }
 .mobile-sheet-empty { text-align: center; color: var(--lake-text-tertiary); padding: 24px 0; font-size: 14px; }
 
+/* 笔记本切换下拉（锚定右上角按钮，跟手弹出） */
+.mobile-dropdown-mask { position: fixed; inset: 0; z-index: 71; background: transparent; }
+.mobile-dropdown { position: fixed; z-index: 72; min-width: 180px; max-width: 260px; background: var(--lake-panel); border: 1px solid var(--lake-border); border-radius: 12px; box-shadow: 0 8px 28px rgba(0,0,0,.18); overflow: hidden; animation: mobile-dropdown-in 140ms ease-out; }
+.mobile-dropdown-title { padding: 10px 14px 8px; font-size: 13px; font-weight: 600; color: var(--lake-text-tertiary); border-bottom: 1px solid var(--lake-border); }
+.mobile-dropdown-body { padding: 6px 0; max-height: 320px; overflow-y: auto; }
+.mobile-dropdown-body .b3-list-item { width: 100%; text-align: left; border-radius: 0; }
+@keyframes mobile-dropdown-in { from { opacity: 0; transform: translateY(-6px) scale(.98); } to { opacity: 1; transform: translateY(0) scale(1); } }
+
 .create-nb-row { display: flex; gap: 12px; align-items: center; }
 .create-nb-icon {
   width: 48px; height: 48px; border: 1px solid var(--lake-border); border-radius: 10px; background: var(--lake-shell);
