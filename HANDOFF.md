@@ -6,9 +6,9 @@
 
 ## 0. 当前基线（新会话开工前）
 - 分支/远端：开发主干 `master` ↔ Gitee `origin`（`git@gitee.com:gtycoder/local-lake.git`，SSH 可用；`master` 亦是远程默认分支）。**本文不写死 commit hash**——查 `git log -1 --oneline`。
-- 质量门槛：`tsc` 0 error · vitest **831 passed / 15 skipped** · 桌面 `vite build` + 移动 `vite build -c vite.mobile.config.ts` 全绿（计数变动见 §2；别把数字写回 AGENTS/README）。
+- 质量门槛：`tsc` 0 error · vitest **838 passed / 15 skipped** · 桌面 `vite build` + 移动 `vite build -c vite.mobile.config.ts` 全绿（计数变动见 §2；别把数字写回 AGENTS/README）。
 - 本地业务分支只有 `master`（其余已合并/删除；`origin/main` 是旧 Tauri 遗留）。`git worktree list` 目前只有主目录（历史上的 `lake-notes-wt-android` 已消失，见 §3 移动端条）。
-- **开工先跑 `git status` + `git worktree list`**：工作区里有**移动端会话的在途未提交改动**（`src/mobile/**`、`vite.mobile.config.ts`、`scripts/{emu-up,emu-cdp,fetch-sys-image,mobile-preview}.sh`）+ 早前会话留下的 `src/features/outline/outline.css`（focus-visible 微调）。**别把它们卷进你的提交**（用显式路径 `git add`）。
+- **开工先跑 `git status` + `git worktree list`**：**移动端会话的改动已全部提交**（260908 收尾，最新 `8e26910`）。工作区现仅有**非本会话的遗留**：`AGENTS.md`/`README.md` 被改（未提交）+ `docs/{LAKEX-CONTRACT,OBSIDIAN-PLUGIN-*,SYNC-RELIABILITY-VERIFY}.md` 未跟踪 + 一个乱码文件 `", v)"`。**别把它们卷进你的提交**（用显式路径 `git add`）。
 - dev 实例状态：本会话结束时 `npm run dev` 仍在跑（vite `:1421` / Electron CDP `:9222` / 资源服务 `:19876`）。新会话可直接 CDP 接管（§6），不需要就 `kill <具体PID>`。
 - **dev 数据现状（重要）**：
   - `welcome-note`（幽灵文档）已一次性清理：墓碑 `deleted_notes(welcome-note, note, purged_at=now, published_at=NULL)` 已写、行与文件已删 ⇒ **下次同步会发布 `deleted:true` 并删云端 `objects/welcome-note-*`、`assets/welcome-note/` 前缀**，之后不会复活。
@@ -155,9 +155,11 @@ node scripts/s3-ls.mjs --count | --note <id> | --prefix <prefix>
 
 ---
 
-## 8. 移动端（安卓模拟器 + 编辑器）专职交接（260904）
+## 8. 移动端（安卓模拟器 + 编辑器）专职交接（260908 收尾）
 
-> 本节是移动端（安卓模拟器 + 编辑器）交接：如何用**本机安卓模拟器**熟练验证移动端 UI/编辑，以及移动端编辑器任务的目标/已完成/遗留/坑。桌面 Electron 工作见 §0-§7。**注（260907）：原「只做移动端、别碰桌面」的硬隔离已解除**——那是早期多会话并行时规避提交冲突的历史约定，现在桌面与移动可自由改动（见 §8.0）。
+> 本节是移动端（安卓模拟器 + 编辑器）交接：如何用**本机安卓模拟器**熟练验证移动端 UI/编辑，以及移动端任务的目标/已完成/遗留/坑。桌面 Electron 工作见 §0-§7。**注（260907）：原「只做移动端、别碰桌面」的硬隔离已解除**——现在桌面与移动可自由改动（见 §8.0）。
+
+> **面向零上下文新会话——当前状态一句话（260908 收尾）**：移动端已完成**设置项收口** + **完整端**（历史快照列/恢复/删/24h去重/上限/定时、资源管理本地孤儿+云端GC、运行诊断）+ **大纲 viewer 跳转根因修复**（docs 高度塌陷）。主数据同步/编辑基础早已就绪（见 §8.4/8.5）。下一步见 §8.7（真机验收 + 数据导出/导入 + 剪贴板/资源URL）。本会话所有改动已提交 `master`（最新 `8e26910`）。
 
 ### 8.0 移动端注意（原「移动端铁律」已降级为注意项，260907 用户明确解除硬隔离）
 - **桌面与移动已可自由改动**（不再限定 `src/mobile/**`；当前无并行会话，不会有提交冲突）。仍请谨慎：`src/b3/**` 是**思源 vendored 组件（AGPL-3.0）**、`src/features/editor/lakeRuntime.ts` 等是**两端共享模块**，改动前先确认影响面；`electron/`、`src/main.tsx` 改动会触发 vite-plugin-electron 重启 Electron（见 §4 踩坑）。
@@ -178,7 +180,7 @@ node scripts/s3-ls.mjs --count | --note <id> | --prefix <prefix>
 - `npm run dev`（桌面）与移动端无关；移动端构建= `vite build -c vite.mobile.config.ts` → `dist-mobile/`。
 
 **CDP 自动化驱动（本会话验证过的可靠方式）**：
-1. `bash scripts/emu-cdp.sh` → 本地 `tcp:9335`。
+1. `bash scripts/emu-cdp.sh` → 本地 `tcp:9335`。**注意：App 每次重启/导航后 WebView socket 会变**，`/json/list` 可能连不上旧 socket——用 `adb shell cat /proc/net/unix | grep -oE "webview_devtools_remote_[0-9a-f]+" | sort -u` 找所有 socket，逐个 `adb forward tcp:9335 "localabstract:$s"` 后 `curl -s http://127.0.0.1:9335/json/list` 校验 `type=="page"`，命中即 break。
 2. 程序：`const list = await fetch("http://127.0.0.1:9335/json/list").then(r=>r.json())`，取 `type==="page"` 的 `webSocketDebuggerUrl`。
 3. 连 WebSocket，`Runtime.enable`，用 `Runtime.evaluate`（`returnByValue:true, awaitPromise:true`）执行任意 JS 驱动/断言。
 4. **触摸（触发键盘/IME）**：`Input.dispatchTouchEvent {type:"touchStart",touchPoints:[{x,y}]}` → 延时 ~70ms → `{type:"touchEnd",touchPoints:[]}`，再对 contenteditable `.focus()`。
@@ -199,39 +201,48 @@ node scripts/s3-ls.mjs --count | --note <id> | --prefix <prefix>
 - **焦点/键盘**：`onMouseDown={(e)=>e.preventDefault()}` 加在 `.med-toolbar`/`.med-panel` 上，**防按钮抢走编辑器焦点**（否则键盘关、caret/选区丢→命令 no-op）。`runInline`（工具栏）= 仅 `exec`；`runPanel`（面板项）= 仅 `exec`，**都不要调 `focusEditor`**。
 - 面板开关：开=`setPanelHeight(max(round(height),280))` + `setTimeout(()=>blur(),0)`（提 IME、占住键盘区）；关=`setPanelMode(null);setPanelHeight(0); focusEditor()`（自动恢复键盘）；`收起键盘/显示键盘` 切换。
 
-### 8.4 本轮任务目标（用户需求，260904）
-1. 面板展开"闪烁" → 加 `medPanelIn` 淡入+上滑；工具栏去 `transition:bottom`（对变化视口有害）。
-2. 加粗/无序列表不可用 + "正在下载" → 命令名错（`insertUnorderedList`→`unorderedList`）+ 按钮抢焦点；已修（干净文档 `ne-uli 0→1`、`ne-text font-weight:700`，键盘保持开）。
-3. 面板"正文/标题"不可用 + "工具栏-面板-键盘"3 层堆叠 → 面板项用 `runPanel`（仅 exec、不重开键盘）+ blur 提 IME；已验证 `ne-h1 0→1`、键盘保持收起、3 层消除。
-4. 追加：点工具栏一直跳、要稳定 + 展开具体工具 → `--kb-offset` 改 `innerHeight-base+panelHeight` + 删工具栏 `transition:bottom`；实测工具栏屏幕 Y 全程 478/526 恒定。
+### 8.4 任务主线（用户定位：移动端=完整端）
+用户把移动端定位为**完整端**（大平板轻办公趋势，可能长期只用移动端），要求对齐桌面端的体验与逻辑（AGENTS §3 红线全适用）。
+**近期主线（260908 本会话，已全部完成）**：
+1. **设置项收口**：移除 `showToolbar`/`showToc`；设置项加 `platform` 标记（桌面专属/移动专属/两端）；设置版式原语抽共享 `settingsPrimitives.tsx`。
+2. **移动端完整端**：历史快照（列/恢复/删除/去重/上限/定时自动快照）、资源管理（本地孤儿检测+清理、云端 GC）、运行诊断。
+3. **大纲 viewer 跳转根因修复**：编辑器滚动容器塌陷（`.mobile-workspace-body` 非 flex → doc 高度 0）。
 
-### 8.5 已完成（本轮，全在 `src/mobile/**`）
-`src/mobile/useKeyboard.ts`（暴露 `base`/`innerHeight`）· `src/mobile/editor/EditorDock.tsx`（`unorderedList` 命令名、`runInline`/`runPanel` 拆分、`--kb-offset` 稳定公式、`onMouseDown preventDefault`、blur `setTimeout(0)`）· `src/mobile/editor/editor-dock.css`（面板 `medPanelIn`、删工具栏 `transition:bottom`）。
-（早前会话）多 tab+左右抽屉、设置竖向菜单+子页、移动精仿思源样式、seed 数据、keep-alive 性能、settings 重构。
-门禁：`tsc` 0 · `vite build -c vite.mobile.config.ts` 过 · `android-build.sh --sync --install` 过。
+**更早（260904，移动端编辑器核心）**：面板闪烁/堆叠、命令名错、焦点/键盘、`--kb-offset` 稳定（见 §8.2-8.3 机制）。
 
-（260908 本会话）设置收口 + 完整端资源/历史：
-- 移除 `showToolbar`/`showToc` 设置（AppSettings + 桌面/移动 UI + settingsSearch 全清）；`SettingItemEntry.platform` 标记桌面/移动专属；设置版式原语抽 `src/components/settingsPrimitives.tsx`（桌面/移动共用，对齐思源分层）。
-- 移动端历史快照：`listNoteHistory`/`restoreHistory`（恢复前留档可反悔）/`deleteHistory` + **24h 去重** + `cleanupHistory`（>30 天过期 + 每文档 20 份上限，syncNow 后执行）；目录树长按「历史版本」sheet。
-- 移动端资源管理：`orphan_assets` 表 + `detectOrphans`（保存登记未引用资源，含历史 refs）+ `listLocalAssets` 跳过孤儿（**删图不再重传**）+ list/delete/clean API + 设置「资源管理」视图。
-- 云端 GC：`S3Store` 扩 `listObjects`/`deleteMany`；共享 `src/core/gcDecisions.buildGcKeepSet`（+单测）；移动 `gcDeepCleanup`（删「未被 latest 清单/历史引用 ∧ 超 7 天」的云端 objects/assets）+ 设置「云端清理」按钮。
-- 标签保持（localStorage 记上次打开标签 + `maxOpenTabs` LRU 淘汰）；工作区改标题；插入面板纯图标；小记缩略图批量；目录树长按管理（重命名/图标/移动/删除）。
-- lakeNative 暴露：listOrphanAssets/cleanOrphanAssets/deleteOrphanAsset/gcDeepCleanup/listNoteHistory/restoreHistory/cleanupHistory。
+### 8.5 已完成（本会话 + 早前，按领域组织；全部已提交 master）
 
-（260908 后续）1. 历史设置可配置 + 定时自动快照：HistoryMobileSettings（maxSnapshots/retentionDays/cleanupIntervalHours/snapshotIntervalMinutes）+ get/saveHistorySettings（device_state）+ cleanupHistory 改共享 selectHistoryDrops（分层保留+上限+保留天数）+ snapshotNote + MobileApp 定时器 + 设置「历史」视图。
-2. GC 完整对齐：s3_gc_pending/s3_gc_log 表 + add/remove/list/record 方法 + syncNow 加 onPublished 钩子（新 manifest 不再引用的旧正文/资源→登记待回收，full key）+ buildGcKeepSet 支持 extraManifests（prev 链引用保护）+ gcDeepCleanup 改 double-anchor 窗口 + 删除写 gc 日志。
-3. 运行诊断：getDiagnostics（文档/分组/小记/资源/孤儿/待回收/快照数+库大小）+ 关于页「数据诊断」区块（移动端无桌面日志文件，此为「关于/日志」等价）。
+**编辑/会话基础（早前）**：多 tab+左右抽屉、设置竖向菜单+子页、移动精仿思源样式、seed 数据、keep-alive 性能、settings 重构、`useKeyboard`/`EditorDock`/`editor-dock.css`（命令名、焦点/键盘、`--kb-offset` 稳定）。
 
-### 8.6 当前问题 / 未决（需用户给现象）
-1. **"正在下载"从未复现**（MutationObserver 实时抓也没有）——判断是编辑器初始化瞬时态/旧命令报错后遗症，修复后未见。**若用户真机仍见，要截图或位置**再定位。
-2. 命令在**被改乱的段落**上可能不生效（caret 落标题/边界时 list 0→0）——编辑器 caret 语义，非命令 bug；干净段落正常。
-3. 移动端**既有遗留**（见 §3.6-3.8）：剪贴板粘贴不解析为空（静态线索：移动端入口没挂 `installPasteInterceptor`，android worktree 已补挂，先沿那条线验证）；本地资产 canonical `http://127.0.0.1:19876/{noteId}/{file}` 真机不可达（需 `adb reverse tcp:19876 tcp:19876` 或可达成名）；用户"移动端整体编辑还有问题"现象未细化。
-4. **大纲 viewer 只读点标题不跳转 —— 已修复（260908，e95ec6f）**：根因是 `.mobile-workspace-body` 非 `display:flex` 容器，`.doc-pane`/`.mobile-doc-body` 的 `height:100%` 塌陷为 0 → 编辑器无有效滚动容器。修复：workspace-body 加 flex column + doc-pane `flex:1; min-height:0`（实测 doc 高 0→794）；`OutlineSheet.jump` 补桌面式 DOM 校正（`resolveScrollNode`+节点位置兜底）。注意：用 Lake 正确内容格式（非裸 HTML）真机验证长文档跳转。
+**设置收口（260908）**：移除 `showToolbar`/`showToc`（AppSettings schema + 桌面/移动 UI + settingsSearch 全清）；`SettingItemEntry.platform`（desktop/mobile/both）+ `isSettingVisibleFor` 助手；桌面专属项标 `platform:desktop`（快捷键/历史/GC/备份/日志/关于详情）；设置版式原语抽 `src/components/settingsPrimitives.tsx`（桌面 `SettingsPanel` + 移动 `SettingsDrawer` 共用，对齐思源"内核+薄前端"分层）。
 
-### 8.7 下一步（移动端）
-1. **整库备份/云端恢复**：桌面走「文件系统拷贝 + 应用重启」；移动端数据在沙盒（sql.js + Capacitor FS，无 workspace 目录），架构不匹配——需另做「数据导出/导入」（导出 DB 快照 + 资产清单到文件）。当前移动端已做「运行诊断」统计（§8.5.3）。
-2. **定时自动快照**：snapshotNote 复用 createHistorySnapshot（已带 24h 去重）；真机验证定时器（移动端模拟器 app 生命周期可能不触发 setInterval，需前台运行验证）。
-3. 剪贴板粘贴真机验证（§8.6.3）；大纲 viewer 跳转（§8.6.4）；资源 canonical URL 真机可达（adb reverse）。
+**移动端完整端**：
+- **历史快照**：`listNoteHistory`/`restoreHistory`（恢复前先给当前正文留档=可反悔）/`deleteHistory`/`cleanupHistory`（共享 `selectHistoryDrops` 分层保留+上限+保留天数）/`snapshotNote` + **24h 去重**；`HistoryMobileSettings`（maxSnapshots/retentionDays/cleanupIntervalHours/snapshotIntervalMinutes，存 device_state）+ 设置「历史」视图 + MobileApp 定时器（`snapshotIntervalMinutes` 周期快照）；目录树长按「历史版本」sheet。
+- **资源管理（本地）**：`orphan_assets` 表 + `detectOrphans`（保存登记未引用资源，含历史 refs 保护）+ `listLocalAssets` 跳过孤儿（**删图不再重传**）+ list/delete/clean API + 设置「资源管理」视图。
+- **资源管理（云端 GC）**：`S3Store` 扩 `listObjects`/`deleteMany`；共享 `src/core/gcDecisions.buildGcKeepSet`（含 `extraManifests` prev 链引用保护，+单测）；`s3_gc_pending`/`s3_gc_log` 表 + add/remove/list/record；`syncNow` 加 `onPublished` 钩子（新 manifest 不再引用的旧正文/资源→登记待回收，full key）；`gcDeepCleanup` double-anchor 窗口 + 删除写 gc 日志 + 设置「云端清理」按钮。
+- **运行诊断**：`getDiagnostics`（文档/分组/小记/资源/孤儿/待回收/快照数+库大小）+ 关于页「数据诊断」区块（移动端无桌面日志文件，此为「关于/日志」等价）。
+
+**其他**：标签保持（localStorage 记上次打开标签 + `maxOpenTabs` LRU 淘汰）；工作区改标题；插入面板纯图标；小记缩略图批量（`listQuickNotes` 一次返回 `firstImage`）；目录树长按管理（重命名/图标/移动/删除）；**大纲 viewer 跳转根因修复**（`.mobile-workspace-body` 加 flex + `.doc-pane` flex:1，编辑器滚动容器恢复）+ `OutlineSheet.jump` 补 DOM 校正。
+
+**lakeNative 暴露（调试契约）**：listOrphanAssets/cleanOrphanAssets/deleteOrphanAsset/gcDeepCleanup/listNoteHistory/restoreHistory/cleanupHistory/getHistorySettings/saveHistorySettings/snapshotNote/getDiagnostics。
+
+门禁：`tsc` 0 · `vitest` 838 通过/15 跳过 · desktop `vite build` + 移动 `vite build -c vite.mobile.config.ts` 全绿 · `android-build.sh --sync --install` 过。
+
+### 8.6 当前问题 / 未决（需用户真机给现象）
+1. **大纲 viewer 跳转 —— 已修复，但待长文档真机验证**：根因（`.mobile-workspace-body` 非 flex → doc 高度塌陷 0）已修复（e95ec6f，实测 doc 高 0→794）。**但**完整"点击大纲标题滚动到位"未端到端验证——因为**用测试文档造不出 Lake 可接受的高内容**（`ne-p`/`ne-h1` 格式不被编辑器接受，渲染成短内容），这是测试固件问题非 bug。**用真实长文档（正确内容格式）点大纲标题确认**。若仍不滚，给现象。
+2. **"正在下载"从未复现**（MutationObserver 实时抓也没有）——判断是编辑器初始化瞬时态/旧命令报错后遗症，修复后未见。**若真机仍见，要截图或位置**。
+3. 命令在**被改乱的段落**上可能不生效（caret 落标题/边界时 list 0→0）——编辑器 caret 语义，非命令 bug；干净段落正常。
+4. **剪贴板粘贴不解析为空**（§3.6-3.8 遗留）：静态线索=移动端入口没挂 `installPasteInterceptor`；android worktree 已补挂，先沿那条线验证。
+5. **本地资产 canonical `http://127.0.0.1:19876/{noteId}/{file}` 真机不可达**：需 `adb reverse tcp:19876 tcp:19876` 或移动端解析成可达地址。
+6. 用户"移动端整体编辑还有问题"现象未细化——**真机反馈给具体现象再定位**。
+
+### 8.7 下一步（移动端，按优先级）
+1. **真机验收本会话交付**（历史/资源/GC/设置/大纲）：重点用**真实长文档**验证①大纲跳转滚动②资源管理（删图不再重传、孤儿清理、云端 GC）。
+2. **整库备份/云端恢复**：桌面走「文件系统拷贝 + 应用重启」；移动端数据在沙盒（sql.js + Capacitor FS，无 workspace 目录），架构不匹配——需另做「**数据导出/导入**」（导出 DB 快照 + 资产清单到文件）。当前已有「运行诊断」统计。
+3. **定时自动快照真机验证**：`snapshotNote` 复用 `createHistorySnapshot`（已带 24h 去重）；**移动端模拟器 app 生命周期可能不触发 `setInterval`**，需前台运行验证。
+4. **剪贴板粘贴真机验证**（§8.6.4）：沿 android worktree `installPasteInterceptor` 线索。
+5. **资源 canonical URL 真机可达**（§8.6.5）：`adb reverse tcp:19876 tcp:19876`。
+6. **大纲 viewer 跳转**（§8.6.1）：长文档确认。
 
 ### 8.8 移动端踩坑（本会话新增）
 - **`insertUnorderedList` 不是 Lake 命令**：`unorderedList` 才对；命令名错=静默 no-op/疑似"下载"。
@@ -243,6 +254,14 @@ node scripts/s3-ls.mjs --count | --note <id> | --prefix <prefix>
 - **测试污染**：往文档打字/改格式会改脏 doc → 后续 caret 不可靠（list 0→0）。验证命令用**新建干净文档**（`window.lakeNative.createNote(name,'notebook-personal')`），别在已改过的 PRD/文档上测。
 - **模拟器 `.click()` 无 mousedown**：测不了 `preventDefault` 焦点路径；`Runtime.evaluate` 里 `element.click()` 测逻辑，真实 preventDefault 要真触屏/真机。
 - **模型看不了图**：`read_image` 失败（模型不声明图片输入）→ 用 DOM/computed style/`getBoundingClientRect` 量测代替截图。
+
+**（260908 本会话新增）**
+- **`.mobile-workspace-body` 必须显式 `display:flex`**：它 `flex:1`（高度来自父 flex）但非 flex 容器，`.doc-pane`/`.mobile-doc-body` 的 `height:100%` 在其中**塌陷为 0** → 编辑器无滚动容器 → 大纲跳转/长文滚动失效。修：workspace-body `display:flex; flex-direction:column` + doc-pane `flex:1; min-height:0`。
+- **Lake 内容格式 ≠ 裸 HTML**：测试文档别用 `<h1 class="ne-h1">`/`<p class="ne-p">`（编辑器不认，渲染成短内容、无真实标题）。要用**应用内真实生成的 Lake 内容**（或从真实文档读 content 再改）做高度/跳转测试，否则测不出滚动。
+- **`S3Store` 接口（共享 `src/core/syncEngine.ts`）扩 listObjects/deleteMany 是可选方法**（`?`）：桌面 `createS3StoreAdapter` 没实现也不报错（GC 用 legacy `electron/sync.ts` ObjectStore）；移动端必须实现才能云端 GC。
+- **GC key 带 prefix 一致性**：移动 `listObjects` 返回 **full key**（含 `{prefix}/`），而共享 `buildGcKeepSet`/`collectManifestRefs` 返回 **无 prefix 的 key**——`buildGcKeepSet` 里统一 `keep.add(prefix + "/" + ref)`；`onPublished` 钩子里 `addS3GcPending` 也要传 full key（`${prefix}/${objectKey(...)}`），否则与 `gcDeepCleanup` 的 full-key listing 对不上。
+- **`selectHistoryDrops` 是共享函数**（`src/core/storeUtils.ts`）：桌面 `cleanupHistory` 与移动 `cleanupHistory` 共用同一分层保留逻辑；移动端 note_history 无 `protected_until` 列，不涉及桌面那种"冲突归档保护期"。
+- **设置项加/改必须同步 settingsSearch 注册表**（AGENTS §3 #14）：新增 `itemId`（如 resources-clean、history-*、appearance-theme）若只在移动端（无搜索），不入 SETTING_ITEMS 也不报错；但**桌面**新增的设置行必须入 SETTING_ITEMS，且 `vitest src/components/settingsSearch.test.ts` 会卡漂移。
 
 ### 8.9 移动端常用命令
 ```bash
