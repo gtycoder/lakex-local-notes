@@ -10,7 +10,8 @@ import { loadSnapshot, saveSnapshot } from "./persistence";
 import { saveAssetBytesFs, loadAssetBytesFs, listAssetKeysFs, removeAssetBytesFs } from "./assetFs";
 import { syncNow as runSync, downloadNoteAssets, type SyncConfig, type SyncDbPort, type SyncReport } from "../core/syncEngine.js";
 import { buildGcKeepSet } from "../core/gcDecisions.js";
-import { parseLakeManifest } from "../core/syncUtils.js";
+import { parseLakeManifest, objectKey } from "../core/syncUtils.js";
+import type { Manifest } from "../core/manifestTypes.js";
 import { KeyedAsyncQueue } from "../core/keyedAsyncQueue.js";
 import type { QuickNotesSyncResult } from "../core/quickNotesSyncEngine.js";
 import { TRASH_NOTEBOOK_ID } from "../core/syncDecisions.js";
@@ -225,6 +226,9 @@ async function ensureDb(): Promise<SqlJsDb> {
     detected_at TEXT NOT NULL DEFAULT (datetime('now'))
   )`);
   db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_orphan_path ON orphan_assets(file_path)");
+  // GC 差集：待回收键（双锚窗口）+ 删除日志（对齐桌面 s3_gc_pending/s3_gc_log）
+  db.exec(`CREATE TABLE IF NOT EXISTS s3_gc_pending (key TEXT PRIMARY KEY, marked_at TEXT NOT NULL)`);
+  db.exec(`CREATE TABLE IF NOT EXISTS s3_gc_log (id INTEGER PRIMARY KEY AUTOINCREMENT, ts TEXT NOT NULL, action TEXT NOT NULL, key TEXT NOT NULL, reason TEXT NOT NULL, commit_id TEXT, device_id TEXT, ok INTEGER NOT NULL)`);
   return db;
 }
 
@@ -1107,6 +1111,32 @@ export const bridge = {
     d.prepare("DELETE FROM orphan_assets").run();
   },
 
+  /** GC：登记待回收键（新 manifest 不再引用，对齐桌面 addS3GcPending）。 */
+  async addS3GcPending(key: string): Promise<void> {
+    const d = await ensureDb();
+    d.prepare("INSERT INTO s3_gc_pending(key,marked_at) VALUES(?,?) ON CONFLICT(key) DO NOTHING").run(key, new Date().toISOString());
+  },
+
+  /** GC：从待回收表移除已被重新引用的键。 */
+  async removeS3GcPending(keys: string[]): Promise<void> {
+    if (keys.length === 0) return;
+    const d = await ensureDb();
+    const ph = keys.map(() => "?").join(",");
+    d.prepare(`DELETE FROM s3_gc_pending WHERE key IN (${ph})`).run(...keys);
+  },
+
+  /** GC：列出全部待回收键。 */
+  async listS3GcPending(): Promise<Array<{ key: string; markedAt: string }>> {
+    const d = await ensureDb();
+    return d.prepare("SELECT key, marked_at AS markedAt FROM s3_gc_pending ORDER BY marked_at").all() as Array<{ key: string; markedAt: string }>;
+  },
+
+  /** GC：记录删除（对齐桌面 recordS3GcLog）。 */
+  async recordS3GcLog(action: string, key: string, reason: string, ok: boolean): Promise<void> {
+    const d = await ensureDb();
+    d.prepare("INSERT INTO s3_gc_log(ts,action,key,reason,commit_id,device_id,ok) VALUES(?,?,?,?,?,?,?)").run(new Date().toISOString(), action, key, reason, null, "local", ok ? 1 : 0);
+  },
+
   async createNote(title: string, parentId: string | null = null): Promise<POCNote> {
     const id = crypto.randomUUID();
     const now = new Date().toISOString();
@@ -1355,7 +1385,7 @@ export const bridge = {
     return { url, resourceRef: url, filename: displayName, mimeType, size: bytes.length };
   },
 
-  /** 云端 GC：删除「未被 latest 清单/历史快照引用 ∧ 已过 7 天保护期」的 objects/assets（对齐桌面 runDeepCleanup 简化，无待回收表）。 */
+  /** 云端 GC（对齐桌面 runDeepCleanup）：删「未被 latest/prev 链清单/历史快照引用 ∧ 双锚窗口（创建 + 待回收标记）已过」的 objects/assets。 */
   async gcDeepCleanup(): Promise<{ candidateCount: number; deletedCount: number; keys: string[] }> {
     const cfg = await bridge.getS3Settings();
     if (!cfg) return { candidateCount: 0, deletedCount: 0, keys: [] };
@@ -1366,14 +1396,31 @@ export const bridge = {
     if (!latestBytes) return { candidateCount: 0, deletedCount: 0, keys: [] }; // 无清单 → 不 GC（安全）
     let manifest;
     try { manifest = parseLakeManifest(latestBytes); } catch { return { candidateCount: 0, deletedCount: 0, keys: [] }; } // 清单损坏 → 不 GC
-    const keep = buildGcKeepSet({ manifest, prefix: syncCfg.prefix, historyRefs: historyAssetRefs() });
-    const objects = await s3Store.listObjects(`${syncCfg.prefix}/objects/`);
-    const assets = await s3Store.listObjects(`${syncCfg.prefix}/assets/`);
-    const all = [...objects, ...assets];
-    const cutoff = Date.now() - 7 * 24 * 3600 * 1000; // 7 天保护期
-    const toDelete = all.filter((o) => !keep.has(o.key) && new Date(o.lastModified).getTime() < cutoff);
-    const keys = toDelete.map((o) => o.key);
+    // prev 链引用保护（最多 3 层，对齐桌面 MANIFEST_CHAIN_KEEP）
+    const prevManifests: Manifest[] = [];
+    let prev = manifest.prevCommitId;
+    let chain = 0;
+    while (prev && chain < 3) {
+      const pb = await s3Store.getObject(`${syncCfg.prefix}/manifests/${prev}.json`, { maxBytes: 20 * 1024 * 1024 });
+      if (!pb) break;
+      try { const pm = parseLakeManifest(pb); prevManifests.push(pm); prev = pm.prevCommitId; } catch { break; }
+      chain += 1;
+    }
+    const keep = buildGcKeepSet({ manifest, extraManifests: prevManifests, prefix: syncCfg.prefix, historyRefs: historyAssetRefs() });
+    const pendingByKey = new Map((await bridge.listS3GcPending()).map((p) => [p.key, p.markedAt] as const));
+    const all = [...(await s3Store.listObjects(`${syncCfg.prefix}/objects/`)), ...(await s3Store.listObjects(`${syncCfg.prefix}/assets/`))];
+    const cutoff = Date.now() - 7 * 24 * 3600 * 1000; // 7 天窗口
+    const toDelete: string[] = [];
+    for (const o of all) {
+      if (keep.has(o.key)) continue;
+      if (new Date(o.lastModified).getTime() > cutoff) continue; // 创建不足窗口 → 保护
+      const marked = pendingByKey.get(o.key);
+      if (marked && new Date(marked).getTime() > cutoff) continue; // 本机待回收标记但窗口未过 → 保护
+      toDelete.push(o.key);
+    }
+    const keys = toDelete;
     const deletedCount = keys.length ? await s3Store.deleteMany(keys) : 0;
+    for (const k of keys) await bridge.recordS3GcLog("delete", k, "deep-clean", true);
     return { candidateCount: all.length, deletedCount, keys };
   },
 
@@ -1393,7 +1440,32 @@ export const bridge = {
         prefix: cfg.prefix,
       };
       const s3Store = createCapacitorS3Store(syncCfg);
-      const report = await runSync(syncCfg, s3Store, dbPort);
+      const report = await runSync(syncCfg, s3Store, dbPort, {
+        onPublished: async (next, prev) => {
+          // GC 差集标记（对齐桌面 syncEngineController.onPublished）：新 manifest 不再引用的旧正文/资源 → 待回收。用 full key（含 prefix）与 gcDeepCleanup 一致。
+          try {
+            const newById = new Map(next.notes.map((n) => [n.id, n]));
+            for (const p of prev?.notes ?? []) {
+              if (p.deleted) continue;
+              const nx = newById.get(p.id);
+              if (!nx || nx.deleted) continue;
+              if (nx.contentHash !== p.contentHash) await bridge.addS3GcPending(`${syncCfg.prefix}/${objectKey(p.id, p.contentHash)}`);
+              const nextAssets = new Set((nx.assets ?? []).map((a) => a.filename));
+              for (const asset of p.assets ?? []) {
+                if (nextAssets.has(asset.filename)) continue;
+                await bridge.addS3GcPending(`${syncCfg.prefix}/assets/${p.id}/${asset.filename}`);
+              }
+            }
+            const referencedNow = new Set<string>();
+            for (const note of next.notes) {
+              if (note.deleted) continue;
+              referencedNow.add(`${syncCfg.prefix}/${objectKey(note.id, note.contentHash)}`);
+              for (const asset of note.assets ?? []) referencedNow.add(`${syncCfg.prefix}/assets/${note.id}/${asset.filename}`);
+            }
+            await bridge.removeS3GcPending([...referencedNow]);
+          } catch { /* 不影响同步 */ }
+        },
+      });
       // 小记独立子空间同步（quick-notes/ 前缀，同一 S3 配置；墓碑/恢复/冲突语义与桌面一致）。
       // 失败不拖垮笔记同步（对齐桌面 main.ts：quickNotes 错误单独上报）。
       let quickNotes: QuickNotesSyncResult | { error: string };
