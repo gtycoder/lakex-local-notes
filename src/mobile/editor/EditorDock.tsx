@@ -45,6 +45,7 @@ export function EditorDock({ editor, editing, onToggleEdit, onInsertImage, onIns
   const [panelMode, setPanelMode] = useState<PanelMode>(null);
   // 面板打开时占用「键盘空间」的高度：打开瞬间捕获键盘实际高度（height），随后收起键盘（不需要打字了）
   const [panelHeight, setPanelHeight] = useState(0);
+  const dockRef = useRef<HTMLDivElement>(null);
   const { base, innerHeight, offset, height, keyboardOpen } = useKeyboard();
   const exec = useEditorExec(editor);
   const execRef = useRef(exec);
@@ -66,6 +67,17 @@ export function EditorDock({ editor, editing, onToggleEdit, onInsertImage, onIns
     document.addEventListener("focusin", onFocusIn);
     return () => document.removeEventListener("focusin", onFocusIn);
   }, []);
+
+  // 把 dock 占用的底部空间暴露给正文容器，让正文底部留白（光标不被工具栏/面板盖住）。
+  // 面板开 = 面板高 + 工具栏高；面板关（编辑态）= 工具栏高。
+  useEffect(() => {
+    const toolbar = 52; // .med-toolbar 高 48 + 底部 4px 间隙
+    const space = editing ? (panelMode ? panelHeight + toolbar : toolbar) : 0;
+    // 作用域放到 dock 的父容器（.doc-pane / .mobile-document），而非全局 documentElement——避免多 tab 实例互相覆盖
+    const root = dockRef.current?.parentElement ?? document.documentElement;
+    root.style.setProperty("--mobile-dock-space", `${space}px`);
+    return () => { root.style.removeProperty("--mobile-dock-space"); };
+  }, [editing, panelMode, panelHeight]);
 
   // 编辑态常驻底部工具栏（完成/插入/字体等）；键盘弹出时悬浮在键盘上方。
   if (!editing) return null;
@@ -119,7 +131,7 @@ export function EditorDock({ editor, editing, onToggleEdit, onInsertImage, onIns
   const aaCls = "med-btn med-aa" + (panelMode === "font" ? " med-active" : "");
 
   return (
-    <div className="mobile-editor-dock" data-panel={panelMode ?? "none"} style={{ ["--kb-offset" as string]: `${usable}px` } as import("react").CSSProperties}>
+    <div ref={dockRef} className="mobile-editor-dock" data-panel={panelMode ?? "none"} style={{ ["--kb-offset" as string]: `${usable}px` } as import("react").CSSProperties}>
       {/* 主工具栏（悬浮输入法上方） */}
       <div className="med-toolbar" onMouseDown={(e) => e.preventDefault()}>
         <button className={plusCls} onClick={() => togglePanel("insert")} aria-label="插入">
@@ -145,7 +157,7 @@ export function EditorDock({ editor, editing, onToggleEdit, onInsertImage, onIns
               <button className="med-ins-item" onClick={() => { onInsertTable?.(); }}><Table2 size={20} /><span>表格</span></button>
               <button className="med-ins-item" onClick={() => runPanel("quote")}><Quote size={20} /><span>引用</span></button>
               <button className="med-ins-item" onClick={() => runPanel("hr")}><Minus size={20} /><span>分割线</span></button>
-              <button className="med-ins-item" onClick={() => runPanel("code")}><Code2 size={20} /><span>代码块</span></button>
+              <button className="med-ins-item" onClick={() => runPanel("insertCard", "codeblock")}><Code2 size={20} /><span>代码块</span></button>
             </div>
           ) : (
             <div className="med-font-panel">

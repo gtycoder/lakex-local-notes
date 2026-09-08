@@ -81,7 +81,7 @@ body { font-family: BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino San
 .mobile-title-input { flex: 1; min-width: 0; border: none; outline: none; font-size: 16px; font-weight: 600; background: transparent; }
 
 .mobile-done-btn { border: none; background: var(--lake-accent); color: #fff; border-radius: 8px; padding: 6px 14px; font-size: 14px; cursor: pointer; }
-.mobile-doc-body { flex: 1; overflow-y: auto; background: var(--b3-theme-background); padding-bottom: calc(40px + env(safe-area-inset-bottom, 0px)); }
+.mobile-doc-body { flex: 1; overflow-y: auto; background: var(--b3-theme-background); padding-bottom: calc(40px + var(--mobile-dock-space, 0px) + env(safe-area-inset-bottom, 0px)); }
 /* 音频/视频卡展示优化：
    1) audio 卡播放器就绪（兜底异步设置）前的 error 状态（"音频文件不能播放"/版权链接）先隐藏，
       避免进入文档/切编辑态时闪现不可用文案——兜底成功后播放器自然替换；

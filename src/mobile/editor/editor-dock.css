@@ -16,6 +16,7 @@
   left: 10px;
   right: 10px;
   bottom: calc(var(--kb-offset, 0px) + 4px);
+  transition: bottom .18s ease;
   pointer-events: auto;
   background: var(--b3-theme-surface);
   border: .5px solid var(--b3-border-color);
