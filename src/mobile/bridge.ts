@@ -921,12 +921,25 @@ export const bridge = {
     return rows.map((r) => ({ id: r.id, title: r.title, createdAt: r.created_at }));
   },
 
-  /** 恢复历史快照：把快照的正文+标题写回当前笔记（sync_state=local → 下次同步上传覆盖远端）。 */
+  /** 恢复历史快照：对齐桌面端——先给当前正文留档（可反悔），再把快照正文+标题写回（sync_state=local → 下轮同步上传覆盖远端）。 */
   async restoreHistory(historyId: number): Promise<void> {
     const d = await ensureDb();
     const row = d.prepare("SELECT note_id, title, content FROM note_history WHERE id=?").get(historyId) as { note_id: string; title: string; content: string } | undefined;
     if (!row) return;
+    // 恢复前留档：把当前正文快照一份（对齐桌面 store.restoreHistory 的 createHistorySnapshot(noteId)），恢复可反悔
+    const cur = d.prepare("SELECT title, content, parent_id, sort_order FROM notes WHERE id=?").get(row.note_id) as { title: string; content: string; parent_id: string | null; sort_order: number } | undefined;
+    if (cur) {
+      const h = sha256Sync(new TextEncoder().encode(cur.content));
+      d.prepare("INSERT INTO note_history (note_id, content, content_hash, title, parent_id, sort_order, created_at) VALUES (?,?,?,?,?,?,?)")
+        .run(row.note_id, cur.content, h, cur.title, cur.parent_id, cur.sort_order, new Date().toISOString());
+    }
     await bridge.saveNote(row.note_id, row.title, row.content);
+  },
+
+  /** 手动删除单个历史快照（对齐桌面 deleteHistory）。 */
+  async deleteHistory(historyId: number): Promise<void> {
+    const d = await ensureDb();
+    d.prepare("DELETE FROM note_history WHERE id=?").run(historyId);
   },
 
   async createNote(title: string, parentId: string | null = null): Promise<POCNote> {

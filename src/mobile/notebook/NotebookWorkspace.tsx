@@ -210,6 +210,12 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
       await loadTree();
     } catch { /* 忽略 */ }
   }, [historyRestoreId, loadTree]);
+  const deleteHistory = useCallback(async (historyId: number) => {
+    try {
+      await bridge.deleteHistory(historyId);
+      setHistoryList((prev) => prev.filter((h) => h.id !== historyId));
+    } catch { /* 忽略 */ }
+  }, []);
 
   const renderBranch = (parentId: string, depth: number) => {
     const children = childrenOf(parentId);
@@ -444,10 +450,11 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
             <div className="mobile-sheet-body">
               {historyList.length === 0 && <p className="mobile-sheet-empty">暂无历史版本</p>}
               {historyList.map((h) => (
-                <button key={h.id} className="b3-list-item" onClick={() => setHistoryRestoreId(h.id)}>
+                <div key={h.id} className="b3-list-item" onClick={() => setHistoryRestoreId(h.id)}>
                   <span className="b3-list-item__text">{h.title || "无标题"}</span>
                   <span className="b3-list-item__meta">{new Date(h.createdAt).toLocaleString("zh-CN")}</span>
-                </button>
+                  <button className="b3-list-item__action" onClick={(e) => { e.stopPropagation(); void deleteHistory(h.id); }} aria-label="删除"><X size={16} /></button>
+                </div>
               ))}
             </div>
           </div>
