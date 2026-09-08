@@ -9,6 +9,8 @@ import { SqlJsDb } from "./sqliteDb";
 import { loadSnapshot, saveSnapshot } from "./persistence";
 import { saveAssetBytesFs, loadAssetBytesFs, listAssetKeysFs, removeAssetBytesFs } from "./assetFs";
 import { syncNow as runSync, downloadNoteAssets, type SyncConfig, type SyncDbPort, type SyncReport } from "../core/syncEngine.js";
+import { buildGcKeepSet } from "../core/gcDecisions.js";
+import { parseLakeManifest } from "../core/syncUtils.js";
 import { KeyedAsyncQueue } from "../core/keyedAsyncQueue.js";
 import type { QuickNotesSyncResult } from "../core/quickNotesSyncEngine.js";
 import { TRASH_NOTEBOOK_ID } from "../core/syncDecisions.js";
@@ -271,6 +273,15 @@ function orphanFilenamesForNote(noteId: string): Set<string> {
   const d = db!;
   const rows = d.prepare("SELECT filename FROM orphan_assets WHERE note_id=?").all(noteId) as Array<{ filename: string }>;
   return new Set(rows.map((r) => r.filename));
+}
+
+/** 历史快照引用的资产路径集合（形如 assets/{noteId}/{filename}），GC 保留。 */
+function historyAssetRefs(): Set<string> {
+  const d = db!;
+  const refs = new Set<string>();
+  const rows = d.prepare("SELECT note_id, content FROM note_history").all() as Array<{ note_id: string; content: string }>;
+  for (const r of rows) for (const f of extractAssetRefs(r.content)) refs.add(`assets/${r.note_id}/${f}`);
+  return refs;
 }
 
 /**
@@ -1287,6 +1298,28 @@ export const bridge = {
     // filename 字段 = 原始文件名（Lake file 卡片展示名；磁盘名/同步用 URL 里的生成名，与桌面一致）
     const displayName = input.filename.replace(/[\\/:*?"<>|\u0000-\u001f]/g, "_").trim() || "附件";
     return { url, resourceRef: url, filename: displayName, mimeType, size: bytes.length };
+  },
+
+  /** 云端 GC：删除「未被 latest 清单/历史快照引用 ∧ 已过 7 天保护期」的 objects/assets（对齐桌面 runDeepCleanup 简化，无待回收表）。 */
+  async gcDeepCleanup(): Promise<{ candidateCount: number; deletedCount: number; keys: string[] }> {
+    const cfg = await bridge.getS3Settings();
+    if (!cfg) return { candidateCount: 0, deletedCount: 0, keys: [] };
+    const syncCfg: SyncConfig = { endpoint: cfg.endpoint, region: cfg.region, bucket: cfg.bucket, accessKeyId: cfg.accessKeyId, secretAccessKey: cfg.secretAccessKey, prefix: cfg.prefix };
+    const s3Store = createCapacitorS3Store(syncCfg);
+    if (!s3Store.listObjects || !s3Store.deleteMany) return { candidateCount: 0, deletedCount: 0, keys: [] };
+    const latestBytes = await s3Store.getObject(`${syncCfg.prefix}/manifests/latest.json`, { maxBytes: 20 * 1024 * 1024 });
+    if (!latestBytes) return { candidateCount: 0, deletedCount: 0, keys: [] }; // 无清单 → 不 GC（安全）
+    let manifest;
+    try { manifest = parseLakeManifest(latestBytes); } catch { return { candidateCount: 0, deletedCount: 0, keys: [] }; } // 清单损坏 → 不 GC
+    const keep = buildGcKeepSet({ manifest, prefix: syncCfg.prefix, historyRefs: historyAssetRefs() });
+    const objects = await s3Store.listObjects(`${syncCfg.prefix}/objects/`);
+    const assets = await s3Store.listObjects(`${syncCfg.prefix}/assets/`);
+    const all = [...objects, ...assets];
+    const cutoff = Date.now() - 7 * 24 * 3600 * 1000; // 7 天保护期
+    const toDelete = all.filter((o) => !keep.has(o.key) && new Date(o.lastModified).getTime() < cutoff);
+    const keys = toDelete.map((o) => o.key);
+    const deletedCount = keys.length ? await s3Store.deleteMany(keys) : 0;
+    return { candidateCount: all.length, deletedCount, keys };
   },
 
   /** M1 同步：manifest v4 协议（拉取对账 + 上传发布）+ 小记 quick-notes/ 子空间同步，复用 src/core 引擎。

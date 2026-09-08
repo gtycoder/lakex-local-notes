@@ -55,6 +55,7 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
   const [appInfo, setAppInfo] = useState<AppInfo | null>(null);
   const [orphans, setOrphans] = useState<Array<{ id: number; noteId: string; filename: string; size: number; mimeType: string }>>([]);
   const [orphanBusy, setOrphanBusy] = useState(false);
+  const [gcMsg, setGcMsg] = useState("");
 
   useEffect(() => {
     if (!open || view !== "resources") return;
@@ -191,6 +192,10 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
             <Group title="资源管理" icon={<Images size={16} />}>
               <Block itemId="resources-clean" name="未引用资源" desc="删除正文图片后残留的本地文件（不会被上传，可安全清理）。">
                 <button className="b3-button" disabled={orphans.length === 0 || orphanBusy} onClick={() => { setOrphanBusy(true); void bridge.cleanOrphanAssets().then(() => setOrphans([])).finally(() => setOrphanBusy(false)); }}>清理全部（{orphans.length}）</button>
+              </Block>
+              <Block itemId="resources-gc" name="云端未引用对象" desc="删除云端未被任何清单/历史快照引用且超过 7 天的对象（对齐桌面深度清理）。">
+                <button className="b3-button" disabled={orphanBusy} onClick={() => { setGcMsg("清理中…"); setOrphanBusy(true); void bridge.gcDeepCleanup().then((r) => setGcMsg("已清理 " + r.deletedCount + " 个对象（候选 " + r.candidateCount + "）")).catch(() => setGcMsg("清理失败")).finally(() => setOrphanBusy(false)); }}>清理云端</button>
+                {gcMsg && <div className="b3-label__text">{gcMsg}</div>}
               </Block>
               {orphans.length === 0 && <div className="config-empty">暂无冗余资源</div>}
               {orphans.map((o) => (

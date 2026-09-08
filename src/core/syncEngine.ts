@@ -163,6 +163,10 @@ export interface S3Store {
    * 避免 aws-chunked 编码——七牛 Kodo 兼容性实测验证）。返回 null = 本地文件缺失。
    */
   putObjectStream?(key: string, size: number, open: () => Promise<unknown | null>): Promise<void>;
+  /** 列出某前缀下的对象（GC 用；lastModified 用于年龄保护）。 */
+  listObjects?(prefix: string): Promise<Array<{ key: string; lastModified: string; size: number }>>;
+  /** 批量删除对象（GC 用）。返回删除数量。 */
+  deleteMany?(keys: string[]): Promise<number>;
 }
 
 export interface SyncReport {

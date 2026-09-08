@@ -71,5 +71,30 @@ export function createCapacitorS3Store(cfg: SyncConfig): S3Store {
       const out = opts?.gzip ? await compressGzip(bytes) : bytes;
       await c.send(new PutObjectCommand({ Bucket: cfg.bucket, Key: key, Body: out }));
     },
+    async listObjects(prefix: string): Promise<Array<{ key: string; lastModified: string; size: number }>> {
+      const { ListObjectsV2Command } = await import("@aws-sdk/client-s3");
+      const c = await getClient();
+      const out: Array<{ key: string; lastModified: string; size: number }> = [];
+      let token: string | undefined;
+      do {
+        const res = await c.send(new ListObjectsV2Command({ Bucket: cfg.bucket, Prefix: prefix, ContinuationToken: token }));
+        for (const o of res.Contents ?? []) {
+          if (o.Key && o.LastModified) out.push({ key: o.Key, lastModified: o.LastModified.toISOString(), size: o.Size ?? 0 });
+        }
+        token = res.IsTruncated ? res.NextContinuationToken : undefined;
+      } while (token);
+      return out;
+    },
+    async deleteMany(keys: string[]): Promise<number> {
+      const { DeleteObjectsCommand } = await import("@aws-sdk/client-s3");
+      const c = await getClient();
+      let deleted = 0;
+      for (let i = 0; i < keys.length; i += 1000) {
+        const chunk = keys.slice(i, i + 1000);
+        const res = await c.send(new DeleteObjectsCommand({ Bucket: cfg.bucket, Delete: { Objects: chunk.map((k) => ({ Key: k })), Quiet: true } }));
+        deleted += res.Deleted?.length ?? 0;
+      }
+      return deleted;
+    },
   };
 }
