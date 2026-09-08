@@ -14,7 +14,7 @@ import type { QuickNotesSyncResult } from "../core/quickNotesSyncEngine.js";
 import { TRASH_NOTEBOOK_ID } from "../core/syncDecisions.js";
 import { sha256Sync } from "../core/sha256Sync.js";
 import { createCapacitorS3Store } from "./s3Store";
-import { buildAssetFilename, extOf } from "../core/assetNaming.js";
+import { buildAssetFilename, extOf, extractAssetRefs } from "../core/assetNaming.js";
 import { localAssetHttpUrl } from "../core/assetUrl.js";
 import type { S3Settings, TreeNode, TreeNodeType } from "../lib/types";
 import type { SearchResult } from "../core/searchRepository.js";
@@ -211,7 +211,66 @@ async function ensureDb(): Promise<SqlJsDb> {
     sort_order INTEGER NOT NULL,
     created_at TEXT NOT NULL
   )`);
+  // 孤儿资源登记（对齐桌面 orphan_assets）：未引用且不在历史快照里的本地资源
+  db.exec(`CREATE TABLE IF NOT EXISTS orphan_assets (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    note_id TEXT NOT NULL,
+    filename TEXT NOT NULL,
+    file_path TEXT NOT NULL,
+    size INTEGER NOT NULL,
+    mime_type TEXT NOT NULL,
+    detected_at TEXT NOT NULL DEFAULT (datetime('now'))
+  )`);
+  db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_orphan_path ON orphan_assets(file_path)");
   return db;
+}
+
+/** 简单 MIME（孤儿列表展示用，等价桌面 mimeTypeForFilename）。 */
+function mimeOf(filename: string): string {
+  const ext = extOf(filename).toLowerCase();
+  const map: Record<string, string> = {
+    png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", gif: "image/gif", webp: "image/webp", svg: "image/svg+xml",
+    mp4: "video/mp4", webm: "video/webm", mov: "video/quicktime", mp3: "audio/mpeg", wav: "audio/wav",
+    pdf: "application/pdf", zip: "application/zip", doc: "application/msword", docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  };
+  return map[ext] ?? "application/octet-stream";
+}
+
+/** 历史快照引用的资源文件名集合（被历史引用的资源不孤儿，避免清理后历史恢复裂图）。 */
+function getHistoryRefs(noteId: string): Set<string> {
+  const d = db!;
+  const refs = new Set<string>();
+  const rows = d.prepare("SELECT content FROM note_history WHERE note_id=?").all(noteId) as Array<{ content: string }>;
+  for (const r of rows) for (const f of extractAssetRefs(r.content)) refs.add(f);
+  return refs;
+}
+
+/** 孤儿检测（对齐桌面 detectOrphans）：保存正文后，登记「本地有但正文/历史都不引用」的资源。 */
+async function detectOrphans(noteId: string, content: string): Promise<void> {
+  const d = db!;
+  const referenced = extractAssetRefs(content);
+  const historyRefs = getHistoryRefs(noteId);
+  const prefix = noteId + "/";
+  const keys = new Set<string>();
+  for (const k of await listAssetKeysFs()) if (k.startsWith(prefix)) keys.add(k.slice(prefix.length));
+  for (const [key] of assets) if (key.startsWith(prefix)) keys.add(key.slice(prefix.length));
+  const insert = d.prepare("INSERT OR IGNORE INTO orphan_assets (note_id, filename, file_path, size, mime_type) VALUES (?,?,?,?,?)");
+  const unorphan = d.prepare("DELETE FROM orphan_assets WHERE note_id=? AND filename=?");
+  for (const filename of keys) {
+    if (referenced.has(filename) || historyRefs.has(filename)) {
+      unorphan.run(noteId, filename);
+    } else {
+      const bytes = assets.get(prefix + filename) ?? await loadAssetBytesFs(prefix + filename);
+      insert.run(noteId, filename, `note-assets/${noteId}/${filename}`, bytes ? bytes.length : 0, mimeOf(filename));
+    }
+  }
+}
+
+/** 某笔记的孤儿文件名集合（listLocalAssets 跳过 → 孤儿不上传，对齐桌面 syncAdapters）。 */
+function orphanFilenamesForNote(noteId: string): Set<string> {
+  const d = db!;
+  const rows = d.prepare("SELECT filename FROM orphan_assets WHERE note_id=?").all(noteId) as Array<{ filename: string }>;
+  return new Set(rows.map((r) => r.filename));
 }
 
 /**
@@ -504,17 +563,20 @@ const dbPort: SyncDbPort = {
     // 启动不预加载持久化资源；同步开始时才按当前笔记读取 Filesystem。
     const out = [];
     const prefix = noteId + "/";
+    const orphans = orphanFilenamesForNote(noteId); // 孤儿不上传（对齐桌面 syncAdapters 跳过 orphan）
     const keys = new Set(await listAssetKeysFs());
     for (const key of keys) {
       if (!key.startsWith(prefix)) continue;
+      const filename = key.slice(prefix.length);
+      if (orphans.has(filename)) continue;
       const bytes = assets.get(key) ?? await loadAssetBytesFs(key);
       if (!bytes) continue;
-      const filename = key.slice(prefix.length);
       out.push({ filename, size: bytes.length, hash: sha256Sync(bytes) });
     }
     for (const [key, bytes] of assets) {
       if (!key.startsWith(prefix) || keys.has(key)) continue;
       const filename = key.slice(prefix.length);
+      if (orphans.has(filename)) continue;
       out.push({ filename, size: bytes.length, hash: sha256Sync(bytes) });
     }
     return out;
@@ -914,6 +976,7 @@ export const bridge = {
         `INSERT INTO notes (id, title, content, parent_id, updated_at, sync_state) VALUES (?,?,?,?,?,'local')
          ON CONFLICT(id) DO UPDATE SET title=excluded.title, content=excluded.content, updated_at=excluded.updated_at, sync_state='local'`
       ).run(id, safeTitle, content, parentId, now);
+      await detectOrphans(id, content);
       await saveSnapshot(d.exportBytes());
     });
   },
@@ -948,6 +1011,34 @@ export const bridge = {
   async deleteHistory(historyId: number): Promise<void> {
     const d = await ensureDb();
     d.prepare("DELETE FROM note_history WHERE id=?").run(historyId);
+  },
+
+  /** 全局孤儿资源列表（对齐桌面 listOrphanAssets）。 */
+  async listOrphanAssets(): Promise<Array<{ id: number; noteId: string; filename: string; size: number; mimeType: string; detectedAt: string }>> {
+    const d = await ensureDb();
+    const rows = d.prepare("SELECT id, note_id, filename, size, mime_type, detected_at FROM orphan_assets ORDER BY detected_at DESC").all() as Array<{ id: number; note_id: string; filename: string; size: number; mime_type: string; detected_at: string }>;
+    return rows.map((r) => ({ id: r.id, noteId: r.note_id, filename: r.filename, size: r.size, mimeType: r.mime_type, detectedAt: r.detected_at }));
+  },
+
+  /** 删除单个孤儿资源（本地文件 + 登记）。 */
+  async deleteOrphanAsset(id: number): Promise<void> {
+    const d = await ensureDb();
+    const row = d.prepare("SELECT note_id, filename FROM orphan_assets WHERE id=?").get(id) as { note_id: string; filename: string } | undefined;
+    if (!row) return;
+    await removeAssetBytesFs(row.note_id + "/" + row.filename);
+    assets.delete(row.note_id + "/" + row.filename);
+    d.prepare("DELETE FROM orphan_assets WHERE id=?").run(id);
+  },
+
+  /** 清理全部孤儿资源（本地文件 + 登记）。 */
+  async cleanOrphanAssets(): Promise<void> {
+    const d = await ensureDb();
+    const rows = d.prepare("SELECT note_id, filename FROM orphan_assets").all() as Array<{ note_id: string; filename: string }>;
+    for (const r of rows) {
+      await removeAssetBytesFs(r.note_id + "/" + r.filename);
+      assets.delete(r.note_id + "/" + r.filename);
+    }
+    d.prepare("DELETE FROM orphan_assets").run();
   },
 
   async createNote(title: string, parentId: string | null = null): Promise<POCNote> {

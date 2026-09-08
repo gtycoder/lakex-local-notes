@@ -2,9 +2,9 @@
  * 版式：竖向菜单列表（设置项一行一行），点某项进入新页面（带返回）；子页内容用 .config-* + .b3-* 骨架（AGENTS §3.14）。
  * 注意：全部 App 设置为竖向（无横向 tab）；「回收站」并入总回收站（见 TrashList）。 */
 import { useCallback, useEffect, useState } from "react";
-import { ArrowLeft, ChevronRight, Cloud, Info, Trash2, X, RefreshCw, HardDrive, ListTree } from "lucide-react";
+import { ArrowLeft, ChevronRight, Cloud, Info, Trash2, X, RefreshCw, HardDrive, ListTree, Images } from "lucide-react";
 import { loadSettings, saveSettings, fontSizeOptions, MAX_ATTACHMENT_MB_OPTIONS_SETTINGS, type AppSettings } from "../../lib/settings";
-import { Group, Item, Switch, Seg } from "../../components/settingsPrimitives";
+import { Group, Item, Switch, Seg, Block } from "../../components/settingsPrimitives";
 import { bridge } from "../bridge";
 import { mobileCachePort } from "../cachePort";
 import { mobileAppInfoPort } from "../appInfoPort";
@@ -19,11 +19,12 @@ export interface SettingsDrawerProps {
   onRefresh: () => Promise<void>;
 }
 
-type View = "menu" | "editor" | "appearance" | "s3" | "cache" | "trash" | "about";
+type View = "menu" | "editor" | "appearance" | "resources" | "s3" | "cache" | "trash" | "about";
 
 const MENU: { key: Exclude<View, "menu">; label: string; icon: typeof Cloud }[] = [
   { key: "editor", label: "编辑器", icon: ListTree },
   { key: "appearance", label: "外观", icon: Info },
+  { key: "resources", label: "资源管理", icon: Images },
   { key: "s3", label: "同步设置", icon: Cloud },
   { key: "cache", label: "清理缓存", icon: HardDrive },
   { key: "trash", label: "回收站", icon: Trash2 },
@@ -34,6 +35,12 @@ const MENU_LABEL = (key: Exclude<View, "menu">) => MENU.find((m) => m.key === ke
 
 /** 对齐桌面 registerSync 的 S3_SECRET_MASK：get 不回显明文，保存时掩码则保留旧值。 */
 const S3_SECRET_MASK = "********";
+
+function formatBytes(n: number): string {
+  if (n < 1024) return n + " B";
+  if (n < 1024 * 1024) return (n / 1024).toFixed(1) + " KB";
+  return (n / (1024 * 1024)).toFixed(1) + " MB";
+}
 
 export function SettingsDrawer(props: SettingsDrawerProps) {
   const { open, onClose, onRefresh } = props;
@@ -46,6 +53,13 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
   const [cacheMsg, setCacheMsg] = useState("");
   const [cacheSummary, setCacheSummary] = useState<import("../../core/ports").CacheSummary | null>(null);
   const [appInfo, setAppInfo] = useState<AppInfo | null>(null);
+  const [orphans, setOrphans] = useState<Array<{ id: number; noteId: string; filename: string; size: number; mimeType: string }>>([]);
+  const [orphanBusy, setOrphanBusy] = useState(false);
+
+  useEffect(() => {
+    if (!open || view !== "resources") return;
+    void bridge.listOrphanAssets().then((rows) => setOrphans(rows)).catch(() => setOrphans([]));
+  }, [open, view]);
   const [settings, setSettings] = useState<AppSettings>(() => loadSettings());
   const update = (patch: Partial<AppSettings>) => setSettings(saveSettings(patch));
 
@@ -170,6 +184,22 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
                   <button className={"b3-button b3-button--outline seg__item" + (settings.theme === "dark" ? " is-active" : "")} onClick={() => update({ theme: "dark" })}>深色</button>
                 </Seg>
               </Item>
+            </Group>
+          )}
+
+          {view === "resources" && (
+            <Group title="资源管理" icon={<Images size={16} />}>
+              <Block itemId="resources-clean" name="未引用资源" desc="删除正文图片后残留的本地文件（不会被上传，可安全清理）。">
+                <button className="b3-button" disabled={orphans.length === 0 || orphanBusy} onClick={() => { setOrphanBusy(true); void bridge.cleanOrphanAssets().then(() => setOrphans([])).finally(() => setOrphanBusy(false)); }}>清理全部（{orphans.length}）</button>
+              </Block>
+              {orphans.length === 0 && <div className="config-empty">暂无冗余资源</div>}
+              {orphans.map((o) => (
+                <div key={o.id} className="b3-list-item">
+                  <span className="b3-list-item__text">{o.filename}</span>
+                  <span className="b3-list-item__meta">{formatBytes(o.size)}</span>
+                  <button className="b3-list-item__action" onClick={() => { void bridge.deleteOrphanAsset(o.id).then(() => setOrphans((prev) => prev.filter((x) => x.id !== o.id))); }} aria-label="删除"><Trash2 size={16} /></button>
+                </div>
+              ))}
             </Group>
           )}
 
