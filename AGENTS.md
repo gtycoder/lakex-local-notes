@@ -12,6 +12,7 @@ Lake Notes 是**本地优先**笔记应用（Electron + React + better-sqlite3 +
 - 开发分支：`master`（唯一持续演进的业务分支；历史分支一律已合入并删除，勿基于它们开发）
 - Node：**必须优先 Node 24**：`$HOME/.nvm/versions/node/v24.18.0/bin`
 - Electron：43.4.0；better-sqlite3 13.x（N-API 单二进制、无需 rebuild；双 ABI 基建已随 43 升级删除）
+- **目标数据量级**：压测做到 **10 万文档 / 100 万附件**（≈100k notes / 1M assets）。性能与同步决策按此量级验证，**勿用"小库正常"下结论**；同步/搜索/GC 相关改动的预期场景均以此为准。
 
 ## 2. 长期方向与文档分工
 

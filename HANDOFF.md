@@ -57,23 +57,23 @@
 里程碑 M1a–M6 全量落地（冲突收口、归档 30 天保护、回收站倒计时、数据体检、日志查看器、整库备份 A1 / 云端恢复 A2、审美 tokens）+ 两个 bug（凭空「未分类」、小记删不掉）+ S3 同步差集化性能（churn 18.4s→<1s、首传 240 图 HEAD→0、manifest 链 8→3）。细节见 `docs/MILESTONES-SYNC-UX-2026-09-03.md` 与 git 历史；不变量在 `AGENTS.md §3 #11~13`。
 
 ## 3. 真正的待办（已剔除全部完成项，按优先级）
+> **260904 后续评估（用户决策 + 本轮核实）**：原 §3.1 对象级 5xx 重试、§3.2 快照 gzip 异步化、§3.5 笔记本 `sort_order` 撞号 —— **已评估不做**（5xx 有"失败不 markSynced→下轮重扫"兜底；gzip 异步收益小；sort_order 撞号场景极低）。
+> 原 §3.3（FTS 全量重建→增量）与 §3.4（1/2 字短词回退）**合并为一条**：计划**整体重做索引**，两件一起落地（同属 `src/core/searchRepository.ts` 的索引/搜索路径，同时覆盖 10 万文档量级）。
+> 原 §3.6（其余浮层统一）**基本已完成**：顶栏菜单/右键菜单/标签切换器已进 b3 令牌（`src/b3/components.css` + `src/b3/layout.css`）；仅**草稿恢复框**（`draft-recovery-*`，`overlays.css` 自定义类 + `--lake-*` 令牌）未收进 b3 套，属可选小收尾。
+
 **性能/健壮性**
-1. 资产/正文 PUT 的**对象级 5xx 重试 + 池 fail-fast**（当前靠"失败不 markSynced→下轮重扫"兜底，缓做）。
-2. **快照 gzip 异步化**（`electron/store.ts` 搜 gzip：15min 自动快照的 gzip 现在主进程同步跑；改先异步压缩、回调内事务写库，**时序不可反**）。← 建议下一个做，小且独立。
-3. **P4-1 FTS 启动全量重建 → 增量**（`src/core/searchRepository.ts`：每次启动 DELETE 全部 + 逐条重插；加 `updated_at`/旁表记账只重建缺失/过期。可动 FTS schema，dev 可删重建）。← 收益最大。
-4. **FTS 1/2 字短词搜索回退**（trigram 只索引 ≥3 字符；短词走「标题+正文 LIKE」回退或提示）。
-5. 笔记本新建跨端 `sort_order` 撞号（可选：新建取同级 max+1）。
-6. 其余浮层是否还要收进同一套：设置弹窗/历史/回收站/搜索/同步 popover/小记已统一；**顶栏菜单、右键菜单、草稿恢复框、标签切换器**仍是旧样式（要统一就照 §2.1 的路子，成本低）。
+1. **FTS 索引重做**（合并原 P4-1 增量 + P4-2 短词回退）：`src/core/searchRepository.ts` 的 `rebuild()` 现每次启动 `DELETE FROM notes_fts` 全清 + 逐条重插、trigram 只索引 ≥3 字；改为增量账本（`updated_at`/旁表记账，只重建缺失/过期）+ 1/2 字短词回退（标题+正文 LIKE）。可动 FTS schema（dev 可删重建），**按 10 万文档/100 万附件量级验证**。← 近期待办。
+2. 其余浮层收尾（可选，成本低）：仅**草稿恢复框**未进 b3 套；如统一照 §2.1 路子 + 同步 `settingsSearch.ts` 注册表即可。
 
-**移动端（安卓）** —— 全部见 **§8.6/§8.7**（剪贴板粘贴不解析、真机资产 canonical URL 不可达、"整体编辑还有问题"待现象、大纲 viewer 跳转）。注意 §3.6 提到的 android worktree **已不存在**，那条"沿 worktree 验证"的线索要重新确认落点。
+**移动端（安卓）** —— 全部见 **§8.6/§8.7**（剪贴板粘贴不解析、真机资产 canonical URL 不可达、"整体编辑还有问题"待现象、大纲 viewer 跳转）。注意 §8.6 提到的 android worktree **已不存在**，那条"沿 worktree 验证"的线索要重新确认落点。
 
-**产品/技术债（长期）**
-7. 大纲 **viewer（只读）点击标题不跳转**（用户计划重做大纲时一并处理）。
-8. **回收站首拉成本**（批量删除后接收端首拉仍下全文+资产）——惰性下载方案**暂缓**（要动恢复红线：恢复上传时资产清单必须全，否则他端 GC 误删）。
-9. Word/PDF 导出（`electron/export.ts` 已预留 docx/pdf）；附件大文件 S3 分片/断点续传。
-10. **Lake 内核策略**：A lakejs 开源源码当"机制字典"；B 版本锚点 + hack 清单（vendor lakex 已 pin，勿随意升级）；按需最小 patch，**不整体 fork**。
-11. Store 分批重构（`docs/REFACTOR-PLAN-2026-08-17.md`，按领域、严禁一次改事务边界）；移动端复用专项。
-12. W-8 ACAO / W-10 dompurify（并入"lake 资源导入统一优化"）。依赖维护：`@types/better-sqlite3` 可单升。
+**产品/技术债（长期；评估后多属低/缓）**
+3. W-8 ACAO / W-10 dompurify（并入"lake 资源导入统一优化"，**安全相关，建议优先**）；依赖维护：`@types/better-sqlite3` 可单升。
+4. 大纲 **viewer（只读）点击标题不跳转**（用户计划重做大纲时一并处理，低优先）。
+5. **回收站首拉成本**（批量删除后接收端首拉仍下全文+资产）——惰性下载方案**暂缓**（要动恢复红线，低优先）。
+6. Store 分批重构（`docs/REFACTOR-PLAN-2026-08-17.md`，按领域、严禁一次改事务边界；移动端复用专项；无测试护栏前不动）。
+7. Word/PDF 导出（`electron/export.ts` 已预留 docx/pdf）；附件大文件 S3 分片/断点续传（**nice-to-have，未被需求驱动**）。
+8. **Lake 内核策略**（属政策，非任务，记录即可）：A lakejs 开源源码当"机制字典"；B 版本锚点 + hack 清单（vendor lakex 已 pin，勿随意升级）；按需最小 patch，**不整体 fork**。
 
 **非代码**：安卓同步偶发 `UnknownHostException` = 设备网络（联网重试）。
 
@@ -121,7 +121,7 @@
 ## 5. 下一步建议（新会话）
 1. 先跑 §6 门禁确认基线；有问题先测再改。
 2. 待办优先：**§3.2 快照 gzip 异步化**（小、独立）→ **§3.3 FTS 增量**（收益大）。
-3. 移动端一律按 **§8**（含 §8.0 铁律：只改 `src/mobile/**`，别碰桌面文件）。
+3. 移动端一律按 **§8**（§8.0 移动端/桌面硬隔离已解除——现桌面与移动可自由改；仅 `src/b3/**` 思源 vendored 组件等共享/合规件仍须谨慎）。
 4. 任何同步/GC 改动**先读** `AGENTS.md §3 #11/#12/#13/#15/#16` + `docs/SYNC-PROTOCOL.md` + `docs/S3-GC-DESIGN.md`，改前想清"声明是否仍全、被引用对象会不会被 GC 删、跨端自愈是否成立、复活路径在哪"。
 5. UI 改动先看 `AGENTS.md §3 #14`（思源版式语法），别再造第四套类名、别写内联样式。
 
@@ -156,10 +156,10 @@ node scripts/s3-ls.mjs --count | --note <id> | --prefix <prefix>
 
 ## 8. 移动端（安卓模拟器 + 编辑器）专职交接（260904）
 
-> 本节写给**只做移动端（`src/mobile/**`）的新会话**：如何用**本机安卓模拟器**熟练验证移动端 UI/编辑，以及本轮移动端编辑器任务的目标/已完成/遗留/坑。桌面 Electron 工作见 §0-§7；`src/mobile/**` 之外的改动属另一会话，**不要碰**。
+> 本节是移动端（安卓模拟器 + 编辑器）交接：如何用**本机安卓模拟器**熟练验证移动端 UI/编辑，以及移动端编辑器任务的目标/已完成/遗留/坑。桌面 Electron 工作见 §0-§7。**注（260907）：原「只做移动端、别碰桌面」的硬隔离已解除**——那是早期多会话并行时规避提交冲突的历史约定，现在桌面与移动可自由改动（见 §8.0）。
 
-### 8.0 移动端铁律（与 §1 桌面红线并列）
-- **只改 `src/mobile/**`**。桌面入口（`src/main.tsx`、`electron/`、共享桌面 CSS）与 `src/features/**`、`src/b3/**` 是**只读**（移动端从 `src/features/editor/lakeRuntime.ts` 等 import，别改；`src/b3/**` 是思源 vendored 组件）。改错会与桌面会话冲突。
+### 8.0 移动端注意（原「移动端铁律」已降级为注意项，260907 用户明确解除硬隔离）
+- **桌面与移动已可自由改动**（不再限定 `src/mobile/**`；当前无并行会话，不会有提交冲突）。仍请谨慎：`src/b3/**` 是**思源 vendored 组件（AGPL-3.0）**、`src/features/editor/lakeRuntime.ts` 等是**两端共享模块**，改动前先确认影响面；`electron/`、`src/main.tsx` 改动会触发 vite-plugin-electron 重启 Electron（见 §4 踩坑）。
 - 移动端设置/浮层 UI 受 `AGENTS.md §3 #14` 约束：用思源 vendored b3 类，**禁内联样式**（`style={{...}}`）。
 - **移动端数据在安卓模拟器 App 沙盒（`com.lakenotes.mobile`）里，不是 macOS 的 `lake-notes-dev`**。开发数据可 `adb shell pm clear com.lakenotes.mobile` 整体重建（`seed_initialized` 会重新种子"个人笔记"笔记本）。
 - Node **24** 必须：`export PATH="$HOME/.nvm/versions/node/v24.18.0/bin:$PATH"`（别用系统 node 18）。安卓相关 JAVA/SDK 环境**脚本里已内置，不用手动 export**。
