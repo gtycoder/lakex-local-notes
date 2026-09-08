@@ -14,6 +14,7 @@ import { CreateNotebookSheet } from "./settings/CreateNotebookSheet";
 import { SearchSheet } from "./settings/SearchSheet";
 import { SettingsDrawer } from "./settings/SettingsDrawer";
 import { useBackHandler } from "./useBackHandler";
+import { useAutoSave } from "./useAutoSave";
 import "./mobile.css";
 
 export type Route =
@@ -120,6 +121,20 @@ export function MobileApp() {
     }
   }, [active, draft, draftTitle]);
 
+  // 自动保存：编辑态内容/标题变化防抖 1s 落盘（对齐桌面端）
+  const { schedule: scheduleAutoSave, flush: flushAutoSave } = useAutoSave(async (id, title, content) => {
+    await bridge.saveNote(id, title, content);
+    setActive((cur) => (cur && cur.id === id ? { ...cur, title, content, updatedAt: new Date().toISOString() } : cur));
+  });
+  const handleContentChange = useCallback((c: string) => {
+    setDraft(c);
+    if (editing && active) scheduleAutoSave(active.id, draftTitle, c);
+  }, [editing, active, draftTitle, scheduleAutoSave]);
+  const handleTitleChange = useCallback((t: string) => {
+    setDraftTitle(t);
+    if (editing && active) scheduleAutoSave(active.id, t, draft);
+  }, [editing, active, draft, scheduleAutoSave]);
+
   const backFromDocument = useCallback(() => {
     setEditing(false);
     if (documentOrigin) setRoute({ kind: "notebook", notebookId: documentOrigin });
@@ -128,6 +143,7 @@ export function MobileApp() {
 
   // B1：Android 返回键（Sheet→Drawer→退出编辑→文档→笔记本→首页→系统）
   const exitEdit = useCallback(() => {
+    flushAutoSave();
     void saveEditing().then(() => {
       setEditing(false);
       if (active) setRoute({ kind: "document", noteId: active.id, mode: "viewer" });
@@ -206,14 +222,14 @@ export function MobileApp() {
           editing={editing}
           documents={notebookDocuments}
           onOpenDocument={(id) => { void openDocument(id, "viewer", documentOrigin); }}
-          onTitleChange={setDraftTitle}
-          onContentChange={(c) => setDraft(c)}
+          onTitleChange={handleTitleChange}
+          onContentChange={handleContentChange}
           onToggleEdit={async () => {
-            if (editing) await saveEditing();
+            if (editing) { flushAutoSave(); await saveEditing(); }
             setEditing((v) => !v);
           }}
           onBack={async () => {
-            if (editing) await saveEditing();
+            if (editing) { flushAutoSave(); await saveEditing(); }
             setEditing(false);
             await refreshAll();
             backFromDocument();

@@ -11,6 +11,7 @@ import { DocumentEditor } from "../editor/DocumentEditor";
 import { OutlineSheet } from "../editor/OutlineSheet";
 import type { LakeEditorInstance } from "../../features/editor/lakeRuntime";
 import { useEdgeSwipe } from "../useEdgeSwipe";
+import { useAutoSave } from "../useAutoSave";
 import type { POCNote } from "../bridge";
 import type { NotebookTreeItem } from "./NotebookPage";
 import type { TreeNode } from "../../lib/types";
@@ -104,13 +105,19 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
   // 编辑：保存当前 tab
   const active = tabs.find((t) => t.id === activeId) ?? null;
 
+  // 自动保存：编辑态内容变化防抖 1s 落盘
+  const { schedule: scheduleAutoSave, flush: flushAutoSave } = useAutoSave(async (id, title, content) => {
+    await bridge.saveNote(id, title, content);
+  });
+
   const toggleEdit = useCallback(() => {
     if (!active) return;
     if (active.editing) {
+      flushAutoSave();
       void bridge.saveNote(active.id, active.title, active.content);
     }
     setTabs((prev) => prev.map((t) => (t.id === active.id ? { ...t, editing: !t.editing } : t)));
-  }, [active]);
+  }, [active, flushAutoSave]);
 
   const createDoc = useCallback(async () => {
     try {
@@ -175,7 +182,7 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
               content={t.content}
               title={t.title}
               editing={t.editing}
-              onContentChange={(c) => setTabs((prev) => prev.map((x) => (x.id === t.id ? { ...x, content: c } : x)))}
+              onContentChange={(c) => { setTabs((prev) => prev.map((x) => (x.id === t.id ? { ...x, content: c } : x))); if (t.editing) scheduleAutoSave(t.id, t.title, c); }}
               onToggleEdit={toggleEdit}
               documents={[]}
               hidePanels
