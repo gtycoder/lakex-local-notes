@@ -3,7 +3,8 @@
  * 注意：全部 App 设置为竖向（无横向 tab）；「回收站」并入总回收站（见 TrashList）。 */
 import { useCallback, useEffect, useState } from "react";
 import { ArrowLeft, ChevronRight, Cloud, Info, Trash2, X, RefreshCw, HardDrive, ListTree } from "lucide-react";
-import { loadSettings, saveSettings } from "../../lib/settings";
+import { loadSettings, saveSettings, fontSizeOptions, MAX_ATTACHMENT_MB_OPTIONS_SETTINGS, type AppSettings } from "../../lib/settings";
+import { Group, Item, Switch, Seg } from "../../components/settingsPrimitives";
 import { bridge } from "../bridge";
 import { mobileCachePort } from "../cachePort";
 import { mobileAppInfoPort } from "../appInfoPort";
@@ -18,10 +19,11 @@ export interface SettingsDrawerProps {
   onRefresh: () => Promise<void>;
 }
 
-type View = "menu" | "editor" | "s3" | "cache" | "trash" | "about";
+type View = "menu" | "editor" | "appearance" | "s3" | "cache" | "trash" | "about";
 
 const MENU: { key: Exclude<View, "menu">; label: string; icon: typeof Cloud }[] = [
   { key: "editor", label: "编辑器", icon: ListTree },
+  { key: "appearance", label: "外观", icon: Info },
   { key: "s3", label: "同步设置", icon: Cloud },
   { key: "cache", label: "清理缓存", icon: HardDrive },
   { key: "trash", label: "回收站", icon: Trash2 },
@@ -44,7 +46,8 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
   const [cacheMsg, setCacheMsg] = useState("");
   const [cacheSummary, setCacheSummary] = useState<import("../../core/ports").CacheSummary | null>(null);
   const [appInfo, setAppInfo] = useState<AppInfo | null>(null);
-  const [outlineEnhance, setOutlineEnhance] = useState(() => loadSettings().outlineEnhance);
+  const [settings, setSettings] = useState<AppSettings>(() => loadSettings());
+  const update = (patch: Partial<AppSettings>) => setSettings(saveSettings(patch));
 
   useEffect(() => {
     if (!open || view !== "about") return;
@@ -136,20 +139,41 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
       {isSub ? (
         <div className="mobile-settings-content">
           {view === "editor" && (
-            <div className="config-group">
-              <div className="config-title"><ListTree size={16} />编辑器</div>
-              <div className="config-items">
-                <div className="config-item">
-                  <div className="config-item__main">
-                    <div className="config-name">大纲增强</div>
-                    <div className="config-item__desc">开启=应用自建大纲（移动端大纲面板）；关闭=使用 Lake 原生大纲（不做任何改动）。</div>
-                  </div>
-                  <div className="config-item__ctl">
-                    <input type="checkbox" className="b3-switch" checked={outlineEnhance} onChange={(e) => { const v = e.target.checked; setOutlineEnhance(v); saveSettings({ outlineEnhance: v }); }} aria-label="大纲增强" />
-                  </div>
-                </div>
-              </div>
-            </div>
+            <Group title="编辑器" icon={<ListTree size={16} />}>
+              <Item itemId="editor-font-size" name="正文字号" desc="作用于当前文档正文。">
+                <Seg ariaLabel="正文字号">
+                  {fontSizeOptions().map((fs) => (
+                    <button key={fs} className={"b3-button b3-button--outline seg__item" + (settings.fontSize === fs ? " is-active" : "")} onClick={() => update({ fontSize: fs })}>{fs}</button>
+                  ))}
+                </Seg>
+              </Item>
+              <Switch itemId="editor-paragraph-spacing" name="段间距" desc="更宽松的段落留白。" checked={settings.paragraphSpacing} onChange={(e) => update({ paragraphSpacing: e.target.checked })} />
+              <Switch itemId="editor-toc" name="显示文档大纲（TOC）" checked={settings.showToc} onChange={(e) => update({ showToc: e.target.checked })} />
+              <Switch itemId="editor-outline-enhance" name="大纲增强" desc="开启=应用自建大纲；关闭=Lake 原生大纲（不做改动）。" checked={settings.outlineEnhance} onChange={(e) => update({ outlineEnhance: e.target.checked })} />
+              <Switch itemId="editor-toolbar" name="显示编辑器工具栏" checked={settings.showToolbar} onChange={(e) => update({ showToolbar: e.target.checked })} />
+              <Item itemId="editor-max-open-tabs" name="最大同时打开标签数" desc="超过上限自动关闭最旧的标签。">
+                <select className="b3-select fn__size200" value={settings.maxOpenTabs} onChange={(e) => update({ maxOpenTabs: Number(e.target.value) })} aria-label="最大同时打开标签数">
+                  <option value={0}>不限</option>
+                  {[4, 6, 8, 12, 16, 24].map((n) => <option key={n} value={n}>{n} 个</option>)}
+                </select>
+              </Item>
+              <Item itemId="editor-max-attachment" name="附件大小上限" desc="仅影响本机上传校验。">
+                <select className="b3-select fn__size200" value={Math.round(settings.maxAttachmentBytes / (1024 * 1024))} onChange={(e) => update({ maxAttachmentBytes: Number(e.target.value) * 1024 * 1024 })} aria-label="附件大小上限">
+                  {MAX_ATTACHMENT_MB_OPTIONS_SETTINGS.map((mb) => <option key={mb} value={mb}>{mb} MiB</option>)}
+                </select>
+              </Item>
+            </Group>
+          )}
+
+          {view === "appearance" && (
+            <Group title="外观" icon={<Info size={16} />}>
+              <Item itemId="appearance-theme" name="主题" desc="浅色=思源 daylight / 深色=midnight。">
+                <Seg ariaLabel="主题">
+                  <button className={"b3-button b3-button--outline seg__item" + (settings.theme === "light" ? " is-active" : "")} onClick={() => update({ theme: "light" })}>浅色</button>
+                  <button className={"b3-button b3-button--outline seg__item" + (settings.theme === "dark" ? " is-active" : "")} onClick={() => update({ theme: "dark" })}>深色</button>
+                </Seg>
+              </Item>
+            </Group>
           )}
 
           {view === "s3" && (
