@@ -18,6 +18,7 @@ import { mediaKindOfFilename } from "../../core/assetNaming.js";
 import { registerPlugin } from "@capacitor/core";
 import { Filesystem, Directory } from "@capacitor/filesystem";
 import type { POCNote } from "../bridge";
+import { loadSettings } from "../../lib/settings";
 
 /** 原生 OpenFile 插件（android/.../OpenFilePlugin.java）：系统默认应用打开本地文件。 */
 const OpenFile = registerPlugin<{ open: (opts: { path: string }) => Promise<void> }>("OpenFile");
@@ -53,6 +54,8 @@ export function DocumentEditor(props: DocumentEditorProps) {
   } = props;
   const editorRef = useRef<LakeEditorInstance | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  // 大纲增强：true=应用自建大纲（OutlineSheet 抽屉）/ false=启用 Lake 原生大纲（toc.enable，自建抽屉不渲染）。
+  const outlineEnhance = loadSettings().outlineEnhance;
   const [toast, setToast] = useState<string | null>(null);
   const [outlineOpenS, setOutlineOpenS] = useState(false);
   const [docListOpenS, setDocListOpenS] = useState(false);
@@ -98,7 +101,7 @@ export function DocumentEditor(props: DocumentEditorProps) {
           noteId={note.id}
           content={content}
           mode={editing ? "editor" : "viewer"}
-          tocEnabled={false}
+          tocEnabled={!outlineEnhance}
           onChange={(c) => onContentChange(c)}
           onEditorReady={(noteId, editor) => {
             (window as unknown as Record<string, unknown>).__mobileEditor = editor;
@@ -121,7 +124,7 @@ export function DocumentEditor(props: DocumentEditorProps) {
           try { lakeBridge(editorRef.current ?? undefined)?.renderer?.execCommand?.("table" as never); } catch { /* 忽略 */ }
         }}
       />
-      {!hidePanels && (
+      {outlineEnhance && !hidePanels && (
         <>
           <OutlineSheet open={outlineOpen} editor={editorRef.current} onClose={toggleOutline} />
           <DocListSheet

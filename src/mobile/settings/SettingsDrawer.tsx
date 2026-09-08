@@ -2,7 +2,8 @@
  * 版式：竖向菜单列表（设置项一行一行），点某项进入新页面（带返回）；子页内容用 .config-* + .b3-* 骨架（AGENTS §3.14）。
  * 注意：全部 App 设置为竖向（无横向 tab）；「回收站」并入总回收站（见 TrashList）。 */
 import { useCallback, useEffect, useState } from "react";
-import { ArrowLeft, ChevronRight, Cloud, Info, Trash2, X, RefreshCw, HardDrive } from "lucide-react";
+import { ArrowLeft, ChevronRight, Cloud, Info, Trash2, X, RefreshCw, HardDrive, ListTree } from "lucide-react";
+import { loadSettings, saveSettings } from "../../lib/settings";
 import { bridge } from "../bridge";
 import { mobileCachePort } from "../cachePort";
 import { mobileAppInfoPort } from "../appInfoPort";
@@ -17,9 +18,10 @@ export interface SettingsDrawerProps {
   onRefresh: () => Promise<void>;
 }
 
-type View = "menu" | "s3" | "cache" | "trash" | "about";
+type View = "menu" | "editor" | "s3" | "cache" | "trash" | "about";
 
 const MENU: { key: Exclude<View, "menu">; label: string; icon: typeof Cloud }[] = [
+  { key: "editor", label: "编辑器", icon: ListTree },
   { key: "s3", label: "同步设置", icon: Cloud },
   { key: "cache", label: "清理缓存", icon: HardDrive },
   { key: "trash", label: "回收站", icon: Trash2 },
@@ -42,6 +44,7 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
   const [cacheMsg, setCacheMsg] = useState("");
   const [cacheSummary, setCacheSummary] = useState<import("../../core/ports").CacheSummary | null>(null);
   const [appInfo, setAppInfo] = useState<AppInfo | null>(null);
+  const [outlineEnhance, setOutlineEnhance] = useState(() => loadSettings().outlineEnhance);
 
   useEffect(() => {
     if (!open || view !== "about") return;
@@ -132,6 +135,23 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
 
       {isSub ? (
         <div className="mobile-settings-content">
+          {view === "editor" && (
+            <div className="config-group">
+              <div className="config-title"><ListTree size={16} />编辑器</div>
+              <div className="config-items">
+                <div className="config-item">
+                  <div className="config-item__main">
+                    <div className="config-name">大纲增强</div>
+                    <div className="config-item__desc">开启=应用自建大纲（移动端大纲面板）；关闭=使用 Lake 原生大纲（不做任何改动）。</div>
+                  </div>
+                  <div className="config-item__ctl">
+                    <input type="checkbox" className="b3-switch" checked={outlineEnhance} onChange={(e) => { const v = e.target.checked; setOutlineEnhance(v); saveSettings({ outlineEnhance: v }); }} aria-label="大纲增强" />
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
           {view === "s3" && (
             <>
               <div className="config-group">
