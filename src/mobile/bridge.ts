@@ -487,6 +487,10 @@ const dbPort: SyncDbPort = {
   createHistorySnapshot(noteId, content, meta: { title: string; parentId: string | null; sortOrder: number; protectedDays?: number }) {
     const d = db!;
     const h = sha256Sync(new TextEncoder().encode(content));
+    // 24h 去重（对齐桌面 hasRecentDuplicate）：同 hash 且 24h 内已有快照则跳过，避免重复留档
+    const dup = d.prepare("SELECT 1 FROM note_history WHERE note_id=? AND content_hash=? AND created_at > ? LIMIT 1")
+      .get(noteId, h, new Date(Date.now() - 24 * 3600 * 1000).toISOString());
+    if (dup) return;
     d.prepare("INSERT INTO note_history (note_id, content, content_hash, title, parent_id, sort_order, created_at) VALUES (?,?,?,?,?,?,?)")
       .run(noteId, content, h, meta.title, meta.parentId, meta.sortOrder, new Date().toISOString());
   },
@@ -930,8 +934,12 @@ export const bridge = {
     const cur = d.prepare("SELECT title, content, parent_id, sort_order FROM notes WHERE id=?").get(row.note_id) as { title: string; content: string; parent_id: string | null; sort_order: number } | undefined;
     if (cur) {
       const h = sha256Sync(new TextEncoder().encode(cur.content));
-      d.prepare("INSERT INTO note_history (note_id, content, content_hash, title, parent_id, sort_order, created_at) VALUES (?,?,?,?,?,?,?)")
-        .run(row.note_id, cur.content, h, cur.title, cur.parent_id, cur.sort_order, new Date().toISOString());
+      const dup = d.prepare("SELECT 1 FROM note_history WHERE note_id=? AND content_hash=? AND created_at > ? LIMIT 1")
+        .get(row.note_id, h, new Date(Date.now() - 24 * 3600 * 1000).toISOString());
+      if (!dup) {
+        d.prepare("INSERT INTO note_history (note_id, content, content_hash, title, parent_id, sort_order, created_at) VALUES (?,?,?,?,?,?,?)")
+          .run(row.note_id, cur.content, h, cur.title, cur.parent_id, cur.sort_order, new Date().toISOString());
+      }
     }
     await bridge.saveNote(row.note_id, row.title, row.content);
   },
