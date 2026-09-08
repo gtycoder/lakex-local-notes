@@ -27,6 +27,7 @@ export const SETTING_ITEMS: SettingItemEntry[] = [
   { id: "editor-font-size", category: "editor", label: "正文字号", keywords: "字体 字号 font size" },
   { id: "editor-paragraph-spacing", category: "editor", label: "段间距", keywords: "段距 行距 留白" },
   { id: "editor-toc", category: "editor", label: "显示文档大纲（TOC）", keywords: "大纲 TOC 目录 侧栏" },
+  { id: "editor-outline-enhance", category: "editor", label: "大纲增强", keywords: "大纲 增强 原生 目录 TOC 侧栏" },
   { id: "editor-toolbar", category: "editor", label: "显示编辑器工具栏", keywords: "工具栏 菜单栏" },
   { id: "editor-max-open-tabs", category: "editor", label: "最大同时打开标签数", keywords: "标签 页签 tab 上限" },
   { id: "editor-max-attachment", category: "editor", label: "附件大小上限", keywords: "附件 上传 大小 上限 MiB" },

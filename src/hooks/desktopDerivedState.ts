@@ -19,6 +19,7 @@ export interface DesktopViewInput {
   fontSize: number;
   showToolbar: boolean;
   tocEnabled: boolean;
+  outlineEnhance: boolean;
   desktopWorkspace: DesktopWorkspace;
   activeOutlineEmpty: boolean;
   outlineEmptyOverride: boolean;
@@ -32,7 +33,7 @@ export interface DesktopViewInput {
 export function deriveDesktopView(input: DesktopViewInput) {
   const {
     activeNoteId, treeNodes, notes, openTabs, iconByNoteId,
-    fontSize, showToolbar, tocEnabled, desktopWorkspace,
+    fontSize, showToolbar, tocEnabled, outlineEnhance, desktopWorkspace,
     activeOutlineEmpty, outlineEmptyOverride, outlineMode,
     sidebarWidth, sidebarMode, outlineSidebarWidth,
   } = input;
@@ -88,7 +89,8 @@ export function deriveDesktopView(input: DesktopViewInput) {
     reloadKey: tab.reloadKey ?? 0,
   }));
 
-  const outlineVisible = tocEnabled && desktopWorkspace === "library";
+  // 大纲增强=开 → 应用自建大纲侧栏；关 → 用 Lake 原生大纲（此侧栏隐藏），原生 by toc.enable。
+  const outlineVisible = tocEnabled && outlineEnhance && desktopWorkspace === "library";
   // 只读锁：store 驱动（可同步），派生集合供多标签 viewer 重建
   const lockedNoteIds = new Set(notes.filter((n) => n.isLocked).map((n) => n.id));
 

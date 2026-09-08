@@ -13,6 +13,8 @@ export interface AppSettings {
   paragraphSpacing: boolean;
   /** 显示文档大纲（TOC） */
   showToc: boolean;
+  /** 大纲增强：true=应用自建增强大纲（筛选/折叠/H 徽标/悬停/移动端大纲面板）；false=直接使用 Lake 原生大纲（对此不做任何改动）。 */
+  outlineEnhance: boolean;
   /** 显示编辑器工具栏 */
   showToolbar: boolean;
   /** 主题：light=思源 daylight / dark=思源 midnight */
@@ -28,6 +30,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   fontSize: 18,
   paragraphSpacing: false,
   showToc: true,
+  outlineEnhance: true,
   showToolbar: true,
   theme: "light",
   maxOpenTabs: 8,
@@ -74,6 +77,7 @@ export function loadSettings(): AppSettings {
         fontSize: FONT_SIZES.includes(parsed.fontSize ?? -1) ? (parsed.fontSize as number) : DEFAULT_SETTINGS.fontSize,
         paragraphSpacing: parsed.paragraphSpacing === true,
         showToc: parsed.showToc !== false,
+        outlineEnhance: parsed.outlineEnhance !== false,
         showToolbar: parsed.showToolbar !== false,
         theme: parsed.theme === "dark" ? "dark" : "light",
         maxOpenTabs: MAX_OPEN_TAB_OPTIONS.includes(parsed.maxOpenTabs as number)

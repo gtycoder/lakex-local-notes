@@ -55,7 +55,7 @@ export function App() {
     sync, setSync, cloudEnabled, setCloudEnabled, cloudConfigured, setCloudConfigured,
     s3Settings, setS3Settings, workspaceName, pendingSummary, setPendingSummary, draftEntries, setDraftEntries,
     syncAnchorRect, setSyncAnchorRect, pendingRenameId, setPendingRenameId,
-    settings, setSettings, pinnedNoteIds, setPinnedNoteIds, tocEnabled, wideMode,
+    settings, setSettings, pinnedNoteIds, setPinnedNoteIds, tocEnabled, outlineEnhance, wideMode,
     quickNotesDirty, setQuickNotesDirty, openTabsRef, quickNotesRef, tabReloadVersionRef, editorsRef,
   } = useWorkspaceState();
   const { topMenuOpen, setTopMenuOpen, workspaceMenuOpen, setWorkspaceMenuOpen, closeMenus } = useTopMenus({
@@ -299,7 +299,7 @@ export function App() {
     headingPath, tabInfos, outlineVisible, lockedNoteIds, effectiveOutlineMode, shellStyle,
   } = deriveDesktopView({
     activeNoteId, treeNodes, notes, openTabs, iconByNoteId,
-    fontSize: settings.fontSize, showToolbar: settings.showToolbar, tocEnabled,
+    fontSize: settings.fontSize, showToolbar: settings.showToolbar, tocEnabled, outlineEnhance,
     desktopWorkspace, activeOutlineEmpty, outlineEmptyOverride, outlineMode,
     sidebarWidth, sidebarMode, outlineSidebarWidth,
   });
@@ -359,6 +359,7 @@ export function App() {
             tabs={tabInfos}
             activeNoteId={activeNoteId}
             tocEnabled={tocEnabled}
+            outlineEnhance={outlineEnhance}
             topbarLeading={libraryTopBarLeading}
             topbarTrailing={topBarTrailing}
             wideMode={wideMode}

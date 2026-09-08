@@ -17,6 +17,7 @@ export interface DesktopLibraryProps {
   tabs: TabInfo[];
   activeNoteId: string | null;
   tocEnabled: boolean;
+  outlineEnhance: boolean;
   topbarLeading: ReactNode;
   topbarTrailing: ReactNode;
   wideMode: boolean;
@@ -48,7 +49,7 @@ export interface DesktopLibraryProps {
 
 export function DesktopLibrary(props: DesktopLibraryProps) {
   const {
-    tabs, activeNoteId, tocEnabled, topbarLeading, topbarTrailing,
+    tabs, activeNoteId, tocEnabled, outlineEnhance, topbarLeading, topbarTrailing,
     wideMode, paragraphSpacing, editorPrefs,
     activePathTitle, headingPath, moreMenuWrapRef, onToggleMoreMenu,
     onScrollToTop, onNavigateToHeading,
@@ -95,6 +96,7 @@ export function DesktopLibrary(props: DesktopLibraryProps) {
         tabs={tabs}
         activeNoteId={activeNoteId}
         tocEnabled={tocEnabled}
+        outlineEnhance={outlineEnhance}
         topbarLeading={topbarLeading}
         topbarTrailing={topbarTrailing}
         breadcrumb={breadcrumb}

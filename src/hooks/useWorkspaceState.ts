@@ -41,6 +41,7 @@ export function useWorkspaceState() {
 
   const workspaceName = getWorkspaceDisplayName(cloudEnabled, s3Settings);
   const tocEnabled = settings.showToc;
+  const outlineEnhance = settings.outlineEnhance;
   const wideMode = true;
 
   return {
@@ -51,7 +52,7 @@ export function useWorkspaceState() {
     sync, setSync, cloudEnabled, setCloudEnabled, cloudConfigured, setCloudConfigured,
     s3Settings, setS3Settings, workspaceName, pendingSummary, setPendingSummary, draftEntries, setDraftEntries,
     syncAnchorRect, setSyncAnchorRect, pendingRenameId, setPendingRenameId,
-    settings, setSettings, pinnedNoteIds, setPinnedNoteIds, tocEnabled, wideMode,
+    settings, setSettings, pinnedNoteIds, setPinnedNoteIds, tocEnabled, outlineEnhance, wideMode,
     quickNotesDirty, setQuickNotesDirty, openTabsRef, quickNotesRef, tabReloadVersionRef, editorsRef,
   };
 }

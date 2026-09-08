@@ -23,6 +23,7 @@ interface MultiTabEditorProps {
   tabs: TabInfo[];
   activeNoteId: string | null;
   tocEnabled: boolean;
+  outlineEnhance: boolean;
   onTabChange: (noteId: string) => void;
   onTabClose: (noteId: string) => void;
   /** 拖拽排序：给出新的 noteId 顺序 */
@@ -57,6 +58,7 @@ export function MultiTabEditor({
   tabs,
   activeNoteId,
   tocEnabled,
+  outlineEnhance,
   onTabChange,
   onTabClose,
   onTabsReorder,
@@ -435,6 +437,7 @@ export function MultiTabEditor({
             content={contentFor(tab)}
             visible={visible && tab.noteId === activeNoteId}
             tocEnabled={tocEnabled}
+            outlineEnhance={outlineEnhance}
             onChange={(content) => handleChange(tab.noteId, content)}
             prefs={prefs}
             onEditorReady={onEditorReady}

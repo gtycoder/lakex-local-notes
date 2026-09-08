@@ -27,6 +27,7 @@ export interface EditorTabProps {
   content: string;
   visible: boolean;
   tocEnabled: boolean;
+  outlineEnhance: boolean;
   onChange: (content: string) => void;
   prefs?: LakeEditorPrefs;
   /** 只读锁：true 时重建为 Lake 原生 Viewer（真只读，含画板/表格/代码块） */
@@ -73,7 +74,7 @@ export function locateEditorSearchHit(noteId: string, query: string): boolean {
   return true;
 }
 
-export function EditorTab({ noteId, content, visible, tocEnabled, onChange, prefs, locked, onEditorReady, onEditorCopyMarkdown, onEditorExport, onEditorCopyPaths }: EditorTabProps) {
+export function EditorTab({ noteId, content, visible, tocEnabled, outlineEnhance, onChange, prefs, locked, onEditorReady, onEditorCopyMarkdown, onEditorExport, onEditorCopyPaths }: EditorTabProps) {
   const hostRef = useRef<HTMLDivElement>(null);
   const editorMountRef = useRef<HTMLDivElement>(null);
   const editorRef = useRef<LakeEditorInstance | null>(null);
@@ -371,7 +372,7 @@ export function EditorTab({ noteId, content, visible, tocEnabled, onChange, pref
         tocEnabled,
         noteId,
         host,
-        { ...prefs, disableNativeToc: true }
+        { ...prefs, disableNativeToc: outlineEnhance }
       );
       // 自愈重建时优先使用当前实例最后一次回调拿到的文档，避免 React prop
       // 尚未回流时把刚输入的内容覆盖掉；切换 noteId 时该 ref 已在上面重置。
