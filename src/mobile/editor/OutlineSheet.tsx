@@ -4,7 +4,7 @@
  */
 import { useEffect, useMemo, useState } from "react";
 import { X } from "lucide-react";
-import { lakeBridge, type LakeEditorInstance } from "../../features/editor/lakeRuntime";
+import { lakeBridge, resolveScrollNode, type LakeEditorInstance } from "../../features/editor/lakeRuntime";
 
 interface TocEntry {
   id?: string;
@@ -50,6 +50,21 @@ export function OutlineSheet({ open, editor, onClose, side }: OutlineSheetProps)
       renderer?.execCommand?.("headingUnfold" as never, id);
       renderer?.scrollByNodeId?.(id);
     } catch { /* 跳转失败不阻断 */ }
+    // DOM 校正（对齐桌面 handleOutlineNavigate）：viewer/懒卡片下 scrollByNodeId 可能不精确，按节点位置兜底滚动
+    try {
+      const host = document.querySelector(".doc-pane.active .mobile-doc-body") ?? document.querySelector(".mobile-doc-body");
+      if (host instanceof HTMLElement) {
+        const scroller = resolveScrollNode(host);
+        const el = document.getElementById(id);
+        const correct = () => {
+          if (!el || !scroller) return;
+          const delta = el.getBoundingClientRect().top - scroller.getBoundingClientRect().top;
+          if (Math.abs(delta) > 2) scroller.scrollTop += delta;
+        };
+        window.setTimeout(correct, 50);
+        window.setTimeout(correct, 200);
+      }
+    } catch { /* 校正失败不阻断 */ }
     onClose();
   };
 

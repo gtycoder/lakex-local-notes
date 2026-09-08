@@ -310,12 +310,12 @@ body { font-family: BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino San
 
 /* ===== 第二层工作区（精仿思源移动端：胶囊栏 + 左/右抽屉 + 全屏tab列表） ===== */
 .mobile-workspace { display: flex; flex-direction: column; height: 100%; position: relative; }
-.doc-pane { display: none; height: 100%; }
+.doc-pane { display: none; flex: 1; min-height: 0; }
 .doc-pane.active { display: block; }
 
-.mobile-workspace-body { flex: 1; overflow: hidden; position: relative; }
+.mobile-workspace-body { flex: 1; overflow: hidden; position: relative; display: flex; flex-direction: column; }
 .mobile-workspace-body .mobile-doc-body { height: 100%; }
-.mobile-workspace-body .mobile-empty { height: 100%; display: flex; align-items: center; justify-content: center; }
+.mobile-workspace-body .mobile-empty { flex: 1; display: flex; align-items: center; justify-content: center; }
 
 /* 底部胶囊栏（思源 .mobile-bottom-bar：fixed 居中，圆角胶囊，宽度自适应） */
 .mobile-bottom-bar {
