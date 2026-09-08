@@ -218,6 +218,10 @@ node scripts/s3-ls.mjs --count | --note <id> | --prefix <prefix>
 - 标签保持（localStorage 记上次打开标签 + `maxOpenTabs` LRU 淘汰）；工作区改标题；插入面板纯图标；小记缩略图批量；目录树长按管理（重命名/图标/移动/删除）。
 - lakeNative 暴露：listOrphanAssets/cleanOrphanAssets/deleteOrphanAsset/gcDeepCleanup/listNoteHistory/restoreHistory/cleanupHistory。
 
+（260908 后续）1. 历史设置可配置 + 定时自动快照：HistoryMobileSettings（maxSnapshots/retentionDays/cleanupIntervalHours/snapshotIntervalMinutes）+ get/saveHistorySettings（device_state）+ cleanupHistory 改共享 selectHistoryDrops（分层保留+上限+保留天数）+ snapshotNote + MobileApp 定时器 + 设置「历史」视图。
+2. GC 完整对齐：s3_gc_pending/s3_gc_log 表 + add/remove/list/record 方法 + syncNow 加 onPublished 钩子（新 manifest 不再引用的旧正文/资源→登记待回收，full key）+ buildGcKeepSet 支持 extraManifests（prev 链引用保护）+ gcDeepCleanup 改 double-anchor 窗口 + 删除写 gc 日志。
+3. 运行诊断：getDiagnostics（文档/分组/小记/资源/孤儿/待回收/快照数+库大小）+ 关于页「数据诊断」区块（移动端无桌面日志文件，此为「关于/日志」等价）。
+
 ### 8.6 当前问题 / 未决（需用户给现象）
 1. **"正在下载"从未复现**（MutationObserver 实时抓也没有）——判断是编辑器初始化瞬时态/旧命令报错后遗症，修复后未见。**若用户真机仍见，要截图或位置**再定位。
 2. 命令在**被改乱的段落**上可能不生效（caret 落标题/边界时 list 0→0）——编辑器 caret 语义，非命令 bug；干净段落正常。
@@ -225,10 +229,9 @@ node scripts/s3-ls.mjs --count | --note <id> | --prefix <prefix>
 4. **大纲 viewer 只读点标题不跳转**（`OutlineSheet` 用 `headingUnfold`+`scrollByNodeId`，viewer 下静默失效）；用户计划重做大纲时一并处理。
 
 ### 8.7 下一步（移动端）
-1. **历史定时自动快照**（周期快照，对齐桌面 `snapshotIntervalMinutes`）+ **可配置历史设置**（maxSnapshots/retentionDays，当前硬编码 20/30）。
-2. **完整 GC 对齐**：manifest 链 prev 引用保护 + 本地待回收表（`s3_gc_pending`）+ gc 日志（当前移动是简化版 deep-cleanup：仅 latest 清单+历史 refs+7 天年龄）。
-3. **备份/整库恢复 + 日志查看**（桌面专属，移动端可选补齐）。
-4. 剪贴板粘贴真机验证（§8.6.3）；大纲 viewer 跳转（§8.6.4）；资源 canonical URL 真机可达（`adb reverse`）。
+1. **整库备份/云端恢复**：桌面走「文件系统拷贝 + 应用重启」；移动端数据在沙盒（sql.js + Capacitor FS，无 workspace 目录），架构不匹配——需另做「数据导出/导入」（导出 DB 快照 + 资产清单到文件）。当前移动端已做「运行诊断」统计（§8.5.3）。
+2. **定时自动快照**：snapshotNote 复用 createHistorySnapshot（已带 24h 去重）；真机验证定时器（移动端模拟器 app 生命周期可能不触发 setInterval，需前台运行验证）。
+3. 剪贴板粘贴真机验证（§8.6.3）；大纲 viewer 跳转（§8.6.4）；资源 canonical URL 真机可达（adb reverse）。
 
 ### 8.8 移动端踩坑（本会话新增）
 - **`insertUnorderedList` 不是 Lake 命令**：`unorderedList` 才对；命令名错=静默 no-op/疑似"下载"。
