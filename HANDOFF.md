@@ -21,7 +21,19 @@
 ⑤ 不为旧数据写兼容/迁移（能删重建就删重建）；⑥ 杀 Electron 只 kill 具体 PID，禁 `pkill -f Electron`；
 ⑦ 不擅自合 master（代码批次需用户验收；文档类清理可直接提交）。移动端另有铁律见 **§8.0**。
 
-## 2. 本轮已完成（260904，全部已合入 master）
+## 2. 本轮已完成
+
+### 2.0 移动端 UI 全面对齐思源 B1–B6（260908，见 `docs/MOBILE-UI-SIYUAN-AUDIT-260908.md`）
+- **审计**：38 项发现（结构/弹层/手势/图标/动效/色彩排版/第一层/编辑器 8 个维度），每条带思源源码出处（`_mobile.scss` / `template/mobile/index.tpl` / `util/touch.ts` / `touchPanelGesture.ts` / `menus/Menu.ts` / `dialog/message.ts`）。
+- **B1 度量与令牌**：`--mobile-*` 骨架度量 + 动效令牌；栏内图标按钮 48×48/20px 图标；列表 16px/40px/18px（`.b3-list--mobile`）；硬编码 rgba/hex → `--b3-*`；滚动条隐藏；reduced-motion 补齐；删 `.med-toolbar` 的 `transition: bottom`。
+- **B2 弹层三件套**（新 `src/mobile/ui/`）：`MobileSheetMenu`（`.b3-menu--fullscreen.--sheet`，56dvh、grabber、根层无标题、子菜单整屏下钻、危险项红色）、`ConfirmDialog`+`confirmMobile()`（`.b3-dialog`，替掉两处 `window.confirm`）、`Toasts`+`showToast()`（`.b3-snackbars` 右上滑入，替掉居中黑胶囊）；`backStack`（返回键按层消费）、`haptics`。
+- **B3 第二层骨架**：**文档入口统一进 NotebookWorkspace**（删 `DocumentPage`/`NotebookPage` 两套旧壳；`openNote` 先用共享纯函数 `isGoneNote` 判回收站/purge，再向上解析归属笔记本 → 补上移动端一直缺失的 AGENTS §3 #16 守卫）；顶栏改 `.toolbar__title`（当前文档标题、编辑态可直接改名）+ 右侧同步；侧栏/大纲头改思源 `.toolbar` 行（标题 + 新建 + 箭头收起）；底部栏纯图标 5 槽（文档树/标签计数/大纲/编辑/更多）+ 编辑态下滑淡出；**层叠顺序对齐思源**（顶栏/底栏 z3、dock z1 < 遮罩 z6 < 面板 z7——此前顶栏 z10 盖住抽屉头、dock z60 盖住抽屉）；左右面板互斥。
+- **B4 手势引擎**（新 `src/mobile/usePanelDrag.ts`，删 `useEdgeSwipe.ts`）：跟手开合抽屉（内容区任意横滑、轴锁定、面板 transform 跟手 + 遮罩透明度联动、`--swiping` 关动画、1/3 屏宽提交、可反悔、关闭方向才可拖），实测开/关双向跟手数据正确。
+- **B5 第一层**：知识库宫格 → `.b3-list--mobile` 行（图标+名称+`.counter` 文档数+箭头）；小记白卡 → 平铺行（40 缩略图+摘要+日期）；首页 tab 加底部指示线；**去掉 FAB**，新建/同步进底部胶囊栏；空态补动作按钮。
+- **B6 编辑器**：`.med-toolbar` 悬浮胶囊 → 思源 `.keyboard` 贴底直条（48px + border-top，无阴影）；面板贴底平铺；正文区不再重复标题输入框。
+- 门禁全程绿：`tsc` 0 · vitest **838 passed / 15 skipped** · 桌面 + 移动 `vite build`。
+
+### 2.1 桌面 UI 整体「精仿思源」（用户：设置-资源丑出天际 → 决定精仿思源）
 ### 2.1 桌面 UI 整体「精仿思源」（用户：设置-资源丑出天际 → 决定精仿思源）
 - **可行性关键**：思源的组件 SCSS **早就 vendored** 在 `src/b3/siyuan/{util,component}` 并由 `main.tsx` 加载（`.b3-list-item`/`.b3-label`/`.b3-text-field`/`.b3-select`/`.b3-switch`/`.b3-button--outline` 全是活的）。丑的原因是设置面板/弹窗**没用它们**，自研了一套 `settings-*` + 大量内联样式。本轮是**接线**，不是新造。
 - 新增 `src/b3/siyuan/business/_config.scss`（署名移植版式骨架：`config-group/title/items/item/name/block/readonly/stats/assets/empty`）；`siyuan.scss` 补挂 `util/function`（`fn__space/fn__size200/ft__error/fn__kbd` 此前根本没加载 = 死类名）。
@@ -64,6 +76,11 @@
 **性能/健壮性**
 1. **FTS 索引重做**（合并原 P4-1 增量 + P4-2 短词回退）：`src/core/searchRepository.ts` 的 `rebuild()` 现每次启动 `DELETE FROM notes_fts` 全清 + 逐条重插、trigram 只索引 ≥3 字；改为增量账本（`updated_at`/旁表记账，只重建缺失/过期）+ 1/2 字短词回退（标题+正文 LIKE）。可动 FTS schema（dev 可删重建），**按 10 万文档/100 万附件量级验证**。← 近期待办。
 2. 其余浮层收尾（可选，成本低）：仅**草稿恢复框**未进 b3 套；如统一照 §2.1 路子 + 同步 `settingsSearch.ts` 注册表即可。
+
+**移动端 UI 对齐思源（260908 审计的剩余批次）** —— 明细见 `docs/MOBILE-UI-SIYUAN-AUDIT-260908.md` §4：
+- **B7（未做）**：`SearchSheet`/`CreateNotebookSheet`/图标选择器/历史 sheet 收进 sheet 菜单语言（现在还是 `.mobile-sheet` 自造头）；设置页进入方式改思源 `#model` 右滑（现为整页 fade-in）。
+- **B8（未做，需真机）**：`.med-btn` 的 `Aa`/`B` 文字换图标；插入面板项补 `.b3-menu` 风格分组；文档面包屑行（思源 `.protyle-breadcrumb` 42px）；空块占位符。
+- **验证缺口**：B4 跟手手势、B2 触感、B6 键盘态只在本机 Electron 390×844 harness 验过，**安卓模拟器/真机未复验**（模拟器 `scripts/emu-cdp.sh` + 真机 IME 行为差异见 §8.3）。
 
 **移动端（安卓）** —— 全部见 **§8.6/§8.7**（剪贴板粘贴不解析、真机资产 canonical URL 不可达、"整体编辑还有问题"待现象、大纲 viewer 跳转）。注意 §8.6 提到的 android worktree **已不存在**，那条"沿 worktree 验证"的线索要重新确认落点。
 
@@ -263,6 +280,13 @@ node scripts/s3-ls.mjs --count | --note <id> | --prefix <prefix>
 - **`selectHistoryDrops` 是共享函数**（`src/core/storeUtils.ts`）：桌面 `cleanupHistory` 与移动 `cleanupHistory` 共用同一分层保留逻辑；移动端 note_history 无 `protected_until` 列，不涉及桌面那种"冲突归档保护期"。
 - **设置项加/改必须同步 settingsSearch 注册表**（AGENTS §3 #14）：新增 `itemId`（如 resources-clean、history-*、appearance-theme）若只在移动端（无搜索），不入 SETTING_ITEMS 也不报错；但**桌面**新增的设置行必须入 SETTING_ITEMS，且 `vitest src/components/settingsSearch.test.ts` 会卡漂移。
 
+**（260908 移动端 UI 对齐思源批次新增）**
+- **CSS 层叠顺序坑（同一类被两套定义打架）**：`mobile.css` 由 `MobileApp.tsx` import，注入顺序**早于** `main.tsx` 里的 `src/b3/siyuan.scss` ⇒ 覆盖 `.b3-*` 的选择器必须比思源本体更具体（`.b3-menu.ln-sheet`、`.b3-button.ln-confirm__danger`），否则被反向压过（本次 danger 按钮不红、sheet 高度不生效都是这个原因）。
+- **border-box 语义差异**：思源 `_mobile.scss` 的 `.toolbar__icon{width:20px;padding:10px}` 是 content-box 思路；本项目全局 `* { box-sizing: border-box }` ⇒ 照抄会让内容盒塌成 0（图标 0×18 不可见）。移植时写成"总尺寸 = 图标 + 2×padding"。
+- **harness 截图假象**：Electron 窗口被遮挡时 transition 会**冻结**，`Page.captureScreenshot` 截到"半开的面板/半屏抽屉"，看着像布局 bug 其实是合成层没画完。解法：截图前注入 `*{transition:none!important;animation:none!important}`（本会话 harness 已内置）+ `Page.bringToFront` + `Emulation.setFocusEmulationEnabled`；另：`mobile:true` 的设备模拟会按 visual viewport 缩放，截图请用 `mobile:false, deviceScaleFactor:2`。
+- **同一文档不允许两种壳**：`DocumentPage`（顶栏 4 图标）与 `NotebookWorkspace`（底部栏+抽屉+手势）并存 ⇒ 从首页/搜索打开的文档没有抽屉和守卫。统一后 `openNote()` 一处判定（`isGoneNote`），别再加第二条打开路径。
+- **删除文档必须连带关标签**：`applyDelete` 里 `closeTab(node.id)`，否则回收站文档仍留在 tab 里可继续编辑（AGENTS §3 #16 的移动端形态）。
+
 ### 8.9 移动端常用命令
 ```bash
 export PATH="$HOME/.nvm/versions/node/v24.18.0/bin:$PATH"
@@ -272,6 +296,10 @@ node node_modules/vite/bin/vite.js build --config vite.mobile.config.ts   # 移�
 bash scripts/android-build.sh --sync --install               # sync+gradle+adb install+launch(com.lakenotes.mobile)
 bash scripts/emu-cdp.sh                                      # 转发 WebView→tcp:9335（测 UI 前必跑）
 bash scripts/emu-up.sh                                       # 启动模拟器（无窗口 --no-window）
-bash scripts/mobile-preview.sh                               # 浏览器预览 http://127.0.0.1:1422/preview.html
+bash scripts/mobile-preview.sh                               # 浏览器预览 http://127.0.0.1:1422/preview.html（需先 build）
+# UI 走查（本会话用这套，比模拟器快得多；harness 脚本暂在 /tmp/lkm，待入库 scripts/）
+node node_modules/vite/bin/vite.js -c vite.mobile.config.ts --host 127.0.0.1 --port 5173   # 移动 bundle dev（HMR）
+./node_modules/.bin/electron --remote-debugging-port=9223 /tmp/lkm                          # 390×844 Chromium 壳
+node /tmp/lkm/cdp.mjs --shot /tmp/lkm/x.png '<js>' ; node /tmp/lkm/walk.mjs steps.json      # 裸 CDP 求值/批量走查截图
 adb shell pm clear com.lakenotes.mobile                      # 清 App 数据重建种子（dev 才做）
 ```

@@ -116,6 +116,10 @@
 
 ## 4. 实施批次（每批：改动面 → 门禁 → 截图验收）
 
+**实施状态（260908）**：B1 ✅ `7d6d676` · B2 ✅ 同提交 · B3 ✅ `b2bfaf5` · B4 ✅ `9816e0a` · B5 ✅ `92f2e23` · B6 ✅ `ad75a57`（贴底直条 + 标题只在顶栏）。
+**未做（下一批）**：B7 = `SearchSheet`/`CreateNotebookSheet`/图标选择器/历史 sheet 收进 sheet 菜单语言 + 设置页改 `#model` 右滑；B8 = dock 文字图标化（`Aa`/`B`）、面包屑行（思源 `.protyle-breadcrumb` 42px）、空块占位符、`.mobile-sheet` 旧类清理；
+**验证缺口** = B4 跟手手势/B2 触感/B6 键盘态需在安卓模拟器与真机复验（本机 Electron harness 已验证逻辑与像素）。
+
 | 批次 | 内容（对应发现编号） | 主要文件 |
 |---|---|---|
 | **B1 令牌与度量统一**（低风险、纯 CSS） | 21,22,23,25,26,27,29,10,17,18：引入 `--mobile-*` 度量块 + 全量 `--b3-*` 化 + 图标/热区/密度统一 + reduced-motion 全覆盖 + 隐藏滚动条 + 删 `transition:bottom` | `mobile.css`、`editor-dock.css`、`mobile-theme.css` |
