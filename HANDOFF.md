@@ -74,6 +74,7 @@
 6. Store 分批重构（`docs/REFACTOR-PLAN-2026-08-17.md`，按领域、严禁一次改事务边界；移动端复用专项；无测试护栏前不动）。
 7. Word/PDF 导出（`electron/export.ts` 已预留 docx/pdf）；附件大文件 S3 分片/断点续传（**nice-to-have，未被需求驱动**）。
 8. **Lake 内核策略**（属政策，非任务，记录即可）：A lakejs 开源源码当"机制字典"；B 版本锚点 + hack 清单（vendor lakex 已 pin，勿随意升级）；按需最小 patch，**不整体 fork**。
+9. **lakex 契约固化（编辑器可观测性，低成本待落地）**：新增 `src/features/editor/lakex-contract.d.ts`（完整设计见 `docs/LAKEX-CONTRACT.md` §4，速查表 §5），替换 lakeRuntime 等处的 `as any`、收敛反编译结论；纯类型改动 + 门禁全绿，**不碰 vendor**。
 
 **非代码**：安卓同步偶发 `UnknownHostException` = 设备网络（联网重试）。
 
@@ -147,7 +148,7 @@ node scripts/s3-ls.mjs --count | --note <id> | --prefix <prefix>
 - 安卓/模拟器：全部命令与环境见 **§8.1 / §8.9**。
 
 ## 7. 文档索引（`docs/` 按需查）
-`AGENTS.md`（红线/机制/坑，必读）· `SYNC-PROTOCOL.md` · `S3-GC-DESIGN.md`（GC/保留链）· `TODO.md`（历史待办总表，§3 已摘要）· `PROGRESS.md` ·
+`AGENTS.md`（红线/机制/坑，必读）· `LAKEX-CONTRACT.md`（闭源 lakex 契约+速查表，编辑器相关先读）· `SYNC-PROTOCOL.md` · `S3-GC-DESIGN.md`（GC/保留链）· `TODO.md`（历史待办总表，§3 已摘要）· `PROGRESS.md` ·
 `CODEX-GUIDE.md`（动手前必读：Playwright/CDP 驱动真实 Electron）· `DEVELOPMENT.md` · `ARCHITECTURE.md` · `TROUBLESHOOTING.md` ·
 `ANDROID-TECH-SCHEME.md` / `MOBILE-TECH-STACK.md`（移动端）· `MILESTONES-SYNC-UX-2026-09-03.md` · `STRESS-260903.md` · 各 `*-AUDIT/*-REVIEW/*-DESIGN`。
 > `docs/` 里若干 `*-HANDOFF`/`AUDIT`/`PERF` 是过程记录；权威待办以本文件 §3 为准，移动端以 §8 为准。
@@ -209,6 +210,14 @@ node scripts/s3-ls.mjs --count | --note <id> | --prefix <prefix>
 （早前会话）多 tab+左右抽屉、设置竖向菜单+子页、移动精仿思源样式、seed 数据、keep-alive 性能、settings 重构。
 门禁：`tsc` 0 · `vite build -c vite.mobile.config.ts` 过 · `android-build.sh --sync --install` 过。
 
+（260908 本会话）设置收口 + 完整端资源/历史：
+- 移除 `showToolbar`/`showToc` 设置（AppSettings + 桌面/移动 UI + settingsSearch 全清）；`SettingItemEntry.platform` 标记桌面/移动专属；设置版式原语抽 `src/components/settingsPrimitives.tsx`（桌面/移动共用，对齐思源分层）。
+- 移动端历史快照：`listNoteHistory`/`restoreHistory`（恢复前留档可反悔）/`deleteHistory` + **24h 去重** + `cleanupHistory`（>30 天过期 + 每文档 20 份上限，syncNow 后执行）；目录树长按「历史版本」sheet。
+- 移动端资源管理：`orphan_assets` 表 + `detectOrphans`（保存登记未引用资源，含历史 refs）+ `listLocalAssets` 跳过孤儿（**删图不再重传**）+ list/delete/clean API + 设置「资源管理」视图。
+- 云端 GC：`S3Store` 扩 `listObjects`/`deleteMany`；共享 `src/core/gcDecisions.buildGcKeepSet`（+单测）；移动 `gcDeepCleanup`（删「未被 latest 清单/历史引用 ∧ 超 7 天」的云端 objects/assets）+ 设置「云端清理」按钮。
+- 标签保持（localStorage 记上次打开标签 + `maxOpenTabs` LRU 淘汰）；工作区改标题；插入面板纯图标；小记缩略图批量；目录树长按管理（重命名/图标/移动/删除）。
+- lakeNative 暴露：listOrphanAssets/cleanOrphanAssets/deleteOrphanAsset/gcDeepCleanup/listNoteHistory/restoreHistory/cleanupHistory。
+
 ### 8.6 当前问题 / 未决（需用户给现象）
 1. **"正在下载"从未复现**（MutationObserver 实时抓也没有）——判断是编辑器初始化瞬时态/旧命令报错后遗症，修复后未见。**若用户真机仍见，要截图或位置**再定位。
 2. 命令在**被改乱的段落**上可能不生效（caret 落标题/边界时 list 0→0）——编辑器 caret 语义，非命令 bug；干净段落正常。
@@ -216,10 +225,10 @@ node scripts/s3-ls.mjs --count | --note <id> | --prefix <prefix>
 4. **大纲 viewer 只读点标题不跳转**（`OutlineSheet` 用 `headingUnfold`+`scrollByNodeId`，viewer 下静默失效）；用户计划重做大纲时一并处理。
 
 ### 8.7 下一步（移动端）
-1. 复现用户剩的问题：让用户真机/模拟器点加粗/列表/正文，确认是否还失败；"下载"若在，拿图/日志。
-2. 剪贴板粘贴：沿 android worktree 那条线验证 `installPasteInterceptor` + 原生下载，勿从零写。
-3. 资源 canonical URL 真机可达：`adb reverse tcp:19876 tcp:19876` 或移动端解析成可达地址。
-4. 大纲 viewer 跳转：等用户重做大纲时连同处理。
+1. **历史定时自动快照**（周期快照，对齐桌面 `snapshotIntervalMinutes`）+ **可配置历史设置**（maxSnapshots/retentionDays，当前硬编码 20/30）。
+2. **完整 GC 对齐**：manifest 链 prev 引用保护 + 本地待回收表（`s3_gc_pending`）+ gc 日志（当前移动是简化版 deep-cleanup：仅 latest 清单+历史 refs+7 天年龄）。
+3. **备份/整库恢复 + 日志查看**（桌面专属，移动端可选补齐）。
+4. 剪贴板粘贴真机验证（§8.6.3）；大纲 viewer 跳转（§8.6.4）；资源 canonical URL 真机可达（`adb reverse`）。
 
 ### 8.8 移动端踩坑（本会话新增）
 - **`insertUnorderedList` 不是 Lake 命令**：`unorderedList` 才对；命令名错=静默 no-op/疑似"下载"。
