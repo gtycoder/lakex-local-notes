@@ -121,7 +121,8 @@ export function DocumentEditor(props: DocumentEditorProps) {
         onInsertAudio={() => insertFileViaInput("audio/*")}
         onInsertVideo={() => insertFileViaInput("video/*")}
         onInsertTable={() => {
-          try { lakeBridge(editorRef.current ?? undefined)?.renderer?.execCommand?.("table" as never); } catch { /* 忽略 */ }
+          // lakex 的 table 命令需要 rows/columns 配置（缺省会读 width 报错）；默认 3×3
+          try { lakeBridge(editorRef.current ?? undefined)?.renderer?.execCommand?.("table" as never, { rows: 3, columns: 3 }); } catch { /* 忽略 */ }
         }}
       />
       {outlineEnhance && !hidePanels && (

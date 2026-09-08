@@ -6,12 +6,19 @@
  * 格式命令走 Lake renderer.execCommand（文本 ne-* 属性；块级 style "h1"/"p" 等）。
  */
 import { useEffect, useRef, useState } from "react";
-import { Plus, Type, Bold, List, ListTodo, Keyboard, X, Check, Image as ImageIcon, Paperclip, Table2, Quote, Minus, Code2, Music, Video } from "lucide-react";
+import { Plus, Bold, Italic, Underline, List, ListOrdered, ListTodo, Keyboard, X, Check, Image as ImageIcon, Paperclip, Table2, Quote, Minus, Code2, Music, Video, Undo2, Redo2, Pilcrow } from "lucide-react";
 import { lakeBridge, type LakeEditorInstance } from "../../features/editor/lakeRuntime";
 import { MARK_COMMANDS, BLOCK_INSERT_COMMANDS, HISTORY_COMMANDS, STYLE_BLOCKS } from "../../features/editor/editorCommands";
 import { useKeyboard } from "../useKeyboard";
 
 type PanelMode = "insert" | "font" | null;
+
+/** 格式命令 → lucide 图标（正文面板用图标而非文字，对齐思源移动端） */
+const COMMAND_ICONS: Record<string, typeof Bold> = {
+  bold: Bold, italic: Italic, underline: Underline, code: Code2,
+  quote: Quote, unorderedList: List, orderedList: ListOrdered, taskList: ListTodo,
+  hr: Minus, undo: Undo2, redo: Redo2,
+};
 
 export interface EditorDockProps {
   editor: LakeEditorInstance | null;
@@ -164,26 +171,31 @@ export function EditorDock({ editor, editing, onToggleEdit, onInsertImage, onIns
               {/* 块级样式（style 命令：光标在段内即可执行，面板 blur 后仍有效） */}
               <div className="med-f-row">
                 {STYLE_BLOCKS.map((b) => (
-                  <button key={b.value} className="med-f-btn" onClick={() => runPanel("style", b.value)}>{b.label}</button>
+                  <button key={b.value} className="med-f-btn" onClick={() => runPanel("style", b.value)} aria-label={b.label} title={b.label}>
+                    {b.value === "p" ? <Pilcrow size={16} /> : b.label}
+                  </button>
                 ))}
               </div>
               {/* 行内标记（需先选中文本；主工具栏 B/列表/待办走 runInline 保选区更可靠） */}
               <div className="med-f-row">
-                {MARK_COMMANDS.map((c) => (
-                  <button key={c.name} className={"med-f-btn" + (c.name === "bold" ? " med-b" : "")} onClick={() => runPanel(c.name)}>{c.label}</button>
-                ))}
+                {MARK_COMMANDS.map((c) => {
+                  const Icon = COMMAND_ICONS[c.name];
+                  return <button key={c.name} className="med-f-btn" onClick={() => runPanel(c.name)} aria-label={c.label} title={c.label}>{Icon ? <Icon size={17} /> : c.label}</button>;
+                })}
               </div>
               {/* 块级/插入命令 */}
               <div className="med-f-row">
-                {BLOCK_INSERT_COMMANDS.map((c) => (
-                  <button key={c.name} className="med-f-btn" onClick={() => runPanel(c.name)}>{c.label}</button>
-                ))}
+                {BLOCK_INSERT_COMMANDS.map((c) => {
+                  const Icon = COMMAND_ICONS[c.name];
+                  return <button key={c.name} className="med-f-btn" onClick={() => runPanel(c.name)} aria-label={c.label} title={c.label}>{Icon ? <Icon size={17} /> : c.label}</button>;
+                })}
               </div>
               {/* 历史 */}
               <div className="med-f-row">
-                {HISTORY_COMMANDS.map((c) => (
-                  <button key={c.name} className="med-f-btn" onClick={() => runPanel(c.name)}>{c.label}</button>
-                ))}
+                {HISTORY_COMMANDS.map((c) => {
+                  const Icon = COMMAND_ICONS[c.name];
+                  return <button key={c.name} className="med-f-btn" onClick={() => runPanel(c.name)} aria-label={c.label} title={c.label}>{Icon ? <Icon size={17} /> : c.label}</button>;
+                })}
               </div>
             </div>
           )}
