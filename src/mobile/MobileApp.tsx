@@ -116,6 +116,12 @@ export function MobileApp() {
   }, []);
 
   const notebooks = useMemo(() => treeNodes.filter((n) => n.nodeType === "notebook"), [treeNodes]);
+  // 笔记本 → 直接文档数（首页列表行 .counter；与 listNotebookTree 的归属口径一致：parent 为笔记本）
+  const docCounts = useMemo(() => {
+    const m: Record<string, number> = {};
+    for (const n of notes) { if (n.parentId) m[n.parentId] = (m[n.parentId] ?? 0) + 1; }
+    return m;
+  }, [notes]);
 
   // B1：Android 返回键（浮层返回栈 → Sheet→Drawer→笔记本→首页→系统；编辑态由工作区自己注册）
   useBackHandler({
@@ -176,6 +182,7 @@ export function MobileApp() {
           tab={route.tab}
           notebooks={notebooks}
           quickNotes={quickNotes}
+          docCounts={docCounts}
           onTabChange={(tab) => setRoute({ kind: "home", tab })}
           onOpenNotebook={(id) => setRoute({ kind: "notebook", notebookId: id })}
           onReorderNotebooks={async (orderedIds) => {

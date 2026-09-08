@@ -1,11 +1,17 @@
-/** 首页（小记/知识库切换 + 笔记本宫格）。小记 tab：composer 新建/编辑 + 卡片（含图片缩略图）。 */
+/**
+ * 第一层（首页）：小记 / 知识库 两个 tab。
+ * 思源口径：顶栏 = .toolbar--border + .toolbar__button（48×48 图标）；tab 用「底部指示线」语言（与桌面 .ln-tabs 同源）；
+ * 列表 = .b3-list--mobile 平铺行（不再白卡阴影）；新建/同步走底部胶囊栏（思源移动端没有 FAB）。
+ */
 import { useState } from "react";
-import { Plus, Search, Settings } from "lucide-react";
+import { CloudUpload, FilePlus, Plus, Search, Settings, StickyNote } from "lucide-react";
 import type { TreeNode } from "../../lib/types";
 import { NotebookGrid } from "./NotebookGrid";
 import { QuickNoteComposer } from "./QuickNoteComposer";
 import { bridge } from "../bridge";
 import { useHorizontalSwipe } from "../useHorizontalSwipe";
+import { showToast } from "../ui/toastBus";
+import { tapFeedback } from "../ui/haptics";
 import { localAssetHttpUrl } from "../../core/assetUrl.js";
 
 export interface MobileQuickNote {
@@ -21,6 +27,8 @@ export interface HomePageProps {
   tab: "quick" | "library";
   notebooks: TreeNode[];
   quickNotes: MobileQuickNote[];
+  /** 笔记本 → 文档数（列表行 .counter） */
+  docCounts: Record<string, number>;
   onTabChange: (tab: "quick" | "library") => void;
   onOpenNotebook: (id: string) => void;
   onReorderNotebooks: (orderedIds: string[]) => Promise<void>;
@@ -29,7 +37,6 @@ export interface HomePageProps {
   onOpenSearch: () => void;
   onCreateNote: () => void;
   onCreateNotebook: () => void;
-  /** 小记列表变化（composer 保存/编辑后刷新） */
   onQuickNotesChanged: () => Promise<void>;
 }
 
@@ -37,7 +44,7 @@ type ComposerState = { mode: "new" } | { mode: "edit"; id: string } | null;
 
 export function HomePage(props: HomePageProps) {
   const {
-    tab, notebooks, quickNotes, onTabChange, onOpenNotebook, onReorderNotebooks, onOpenNote,
+    tab, notebooks, quickNotes, docCounts, onTabChange, onOpenNotebook, onReorderNotebooks,
     onOpenDrawer, onOpenSearch, onCreateNote, onCreateNotebook, onQuickNotesChanged,
   } = props;
   const [composer, setComposer] = useState<ComposerState>(null);
@@ -57,21 +64,23 @@ export function HomePage(props: HomePageProps) {
       setComposer({ mode: "edit", id });
     } catch { /* 读取失败忽略 */ }
   };
-
-  const closeComposer = (): void => {
-    setComposer(null);
-    setEditNote(null);
+  const closeComposer = (): void => { setComposer(null); setEditNote(null); };
+  const switchTab = (next: "quick" | "library"): void => { tapFeedback(); onTabChange(next); };
+  const runSync = async (): Promise<void> => {
+    tapFeedback();
+    try { const r = await bridge.syncNow(); showToast(r.message || "已同步"); }
+    catch (e) { showToast("同步失败：" + (e as Error).message, { type: "error" }); }
   };
 
   return (
     <div className="mobile-home">
-      <header className="mobile-topbar">
-        <button className="mobile-icon-btn" onClick={onOpenDrawer} aria-label="设置"><Settings size={20} /></button>
+      <header className="toolbar toolbar--border mobile-topbar">
+        <button className="toolbar__button" onClick={onOpenDrawer} aria-label="设置" title="设置"><Settings /></button>
         <div className="mobile-home-tabs">
-          <button className={tab === "quick" ? "mobile-htab active" : "mobile-htab"} onClick={() => onTabChange("quick")}>小记</button>
-          <button className={tab === "library" ? "mobile-htab active" : "mobile-htab"} onClick={() => onTabChange("library")}>知识库</button>
+          <button className={tab === "quick" ? "mobile-htab active" : "mobile-htab"} onClick={() => switchTab("quick")}>小记</button>
+          <button className={tab === "library" ? "mobile-htab active" : "mobile-htab"} onClick={() => switchTab("library")}>知识库</button>
         </div>
-        <button className="mobile-icon-btn" onClick={onOpenSearch} aria-label="搜索"><Search size={20} /></button>
+        <button className="toolbar__button" onClick={onOpenSearch} aria-label="搜索" title="搜索"><Search /></button>
       </header>
       {tab === "quick" ? (
         composer !== null ? (
@@ -84,47 +93,59 @@ export function HomePage(props: HomePageProps) {
           </div>
         ) : (
           <div className="mobile-scroll">
-            <div className="mobile-quick-list">
-              {quickNotes.length === 0 && <div className="mobile-empty">暂无小记，点右下新建</div>}
-              {quickNotes.map((n) => (
-                <QuickNoteCard key={n.id} note={n} onEdit={() => void openEdit(n.id)} />
-              ))}
-            </div>
+            {quickNotes.length === 0 ? (
+              <div className="mobile-empty">
+                暂无小记
+                <button className="b3-button b3-button--outline mobile-empty-action" onClick={() => { setEditNote(null); setComposer({ mode: "new" }); }}>
+                  <Plus size={16} />写一条小记
+                </button>
+              </div>
+            ) : (
+              <div className="b3-list b3-list--mobile mobile-quick-list">
+                {quickNotes.map((n) => <QuickNoteRow key={n.id} note={n} onEdit={() => void openEdit(n.id)} />)}
+              </div>
+            )}
           </div>
         )
       ) : (
         <div className="mobile-scroll">
-          <NotebookGrid
-            notebooks={notebooks}
-            onOpenNotebook={onOpenNotebook}
-            onReorder={onReorderNotebooks}
-          />
+          <NotebookGrid notebooks={notebooks} docCounts={docCounts} onOpenNotebook={onOpenNotebook} onReorder={onReorderNotebooks} />
+          {notebooks.length === 0 && (
+            <div className="mobile-empty">
+              暂无知识库
+              <button className="b3-button b3-button--outline mobile-empty-action" onClick={onCreateNotebook}><Plus size={16} />新建知识库</button>
+            </div>
+          )}
         </div>
       )}
-      <div className="mobile-fab-col">
+
+      {/* 底部胶囊栏（思源 #mobileBottomBar：纯图标；移动端不用 FAB） */}
+      <nav className="mobile-bottom-bar" aria-label="首页操作">
         {tab === "quick" ? (
-          composer !== null
-            ? null
-            : <button className="mobile-fab" onClick={() => { setEditNote(null); setComposer({ mode: "new" }); }} aria-label="新建小记"><Plus size={24} /></button>
+          <button className="mobile-bottom-bar__item" onClick={() => { tapFeedback(); setEditNote(null); setComposer({ mode: "new" }); }} aria-label="新建小记" title="新建小记"><Plus /></button>
         ) : (
           <>
-            <button className="mobile-fab" onClick={onCreateNotebook} aria-label="新建知识库"><Plus size={24} /></button>
+            <button className="mobile-bottom-bar__item" onClick={() => { tapFeedback(); onCreateNote(); }} aria-label="新建文档" title="新建文档"><FilePlus /></button>
+            <button className="mobile-bottom-bar__item" onClick={() => { tapFeedback(); onCreateNotebook(); }} aria-label="新建知识库" title="新建知识库"><Plus />
+            </button>
           </>
         )}
-      </div>
+        <button className="mobile-bottom-bar__item" onClick={() => void runSync()} aria-label="立即同步" title="立即同步"><CloudUpload /></button>
+      </nav>
     </div>
   );
 }
 
-/** 小记卡片：previewText + 首图缩略图（canonical URL 直显——本地 AssetServer 服务 quick-notes/）。 */
-function QuickNoteCard({ note, onEdit }: { note: MobileQuickNote; onEdit: () => void }) {
+/** 小记行：缩略图 40 + 单行摘要 + 时间（思源列表语言，不再是白卡）。 */
+function QuickNoteRow({ note, onEdit }: { note: MobileQuickNote; onEdit: () => void }) {
   const thumbUrl = note.firstImage ? localAssetHttpUrl(note.id, note.firstImage, { space: "quick-notes" }) : null;
-
   return (
-    <div className="mobile-qcard" onClick={onEdit}>
-      {thumbUrl && <img className="mobile-qcard-thumb" src={thumbUrl} alt="" loading="lazy" />}
-      <div className="mobile-qcard-text">{note.previewText || (note.imageCount > 0 ? "[图片]" : "（空白小记）")}</div>
-      <div className="mobile-qcard-meta">{new Date(note.updatedAt).toLocaleDateString("zh-CN")}</div>
+    <div className="b3-list-item mobile-quick-row" role="button" tabIndex={0} onClick={onEdit}>
+      <span className="b3-list-item__graphic mobile-quick-thumb">
+        {thumbUrl ? <img src={thumbUrl} alt="" loading="lazy" /> : <StickyNote size={18} />}
+      </span>
+      <span className="b3-list-item__text">{note.previewText || (note.imageCount > 0 ? "[图片]" : "（空白小记）")}</span>
+      <span className="b3-list-item__meta">{new Date(note.updatedAt).toLocaleDateString("zh-CN")}</span>
     </div>
   );
 }

@@ -540,3 +540,32 @@ body { font-family: BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino San
 .side-panel > .toolbar .toolbar__text { font-size: 15px; padding-left: 8px; }
 .side-panel > .toolbar { background-color: var(--b3-theme-surface); min-height: 48px; }
 .side-panel > .toolbar .toolbar__text { padding-left: 12px; }
+
+/* ===== B5 第一层（小记 / 知识库）：思源列表语言 + 底部胶囊栏留白 ===== */
+.mobile-nb-list, .mobile-quick-list { padding: 8px 0 calc(88px + var(--mobile-bottom-safe-area)); }
+.mobile-nb-row, .mobile-quick-row {
+  width: 100%; display: flex; align-items: center; gap: 8px;
+  min-height: 44px; padding: 2px 16px; font-size: 16px; cursor: pointer;
+  -webkit-tap-highlight-color: transparent; transition: background-color var(--mobile-duration-press) ease;
+}
+.mobile-nb-row:active, .mobile-quick-row:active { background: var(--b3-list-hover); }
+.mobile-nb-row .b3-list-item__text, .mobile-quick-row .b3-list-item__text { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mobile-nb-row .counter { flex: 0 0 auto; }
+.mobile-nb-row .b3-list-item__arrow { flex: 0 0 auto; color: var(--b3-theme-on-surface-light); display: inline-flex; }
+.ln-node-emoji { font-size: 18px; line-height: 18px; }
+.mobile-quick-row .b3-list-item__meta { flex: 0 0 auto; font-size: 12px; color: var(--b3-theme-on-surface-light); }
+.mobile-quick-thumb { width: 40px; height: 40px; border-radius: var(--b3-border-radius); overflow: hidden; background: var(--b3-theme-background-light); display: inline-flex; align-items: center; justify-content: center; color: var(--b3-theme-on-surface-light); }
+.mobile-quick-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.mobile-empty-action { display: inline-flex; align-items: center; gap: 6px; margin-top: 12px; }
+/* 首页 tab：底部指示线（与桌面 .ln-tabs 同一语言；只给选中项灰底会被判读成"看不出是 tab"） */
+.mobile-home-tabs { flex: 1; display: flex; justify-content: center; align-items: stretch; gap: 20px; }
+.mobile-htab {
+  position: relative; border: none; background: transparent; font-size: 16px; color: var(--b3-theme-on-surface-light);
+  cursor: pointer; padding: 0 2px; font-weight: 500; -webkit-tap-highlight-color: transparent;
+  transition: color var(--mobile-duration-press) ease;
+}
+.mobile-htab.active { color: var(--b3-theme-on-surface); font-weight: 600; }
+.mobile-htab.active::after {
+  content: ""; position: absolute; right: 0; bottom: 4px; left: 0; height: 2px;
+  border-radius: 1px; background: var(--b3-theme-primary);
+}
