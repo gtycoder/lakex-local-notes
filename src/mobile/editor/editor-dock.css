@@ -16,13 +16,13 @@
   left: 10px;
   right: 10px;
   bottom: calc(var(--kb-offset, 0px) + 4px);
-  transition: bottom .18s ease;
+  /* 不做 bottom 过渡：它等于对"正在 resize 的视口"做动画，会把一帧错位放大成抖动（HANDOFF §8.8） */
   pointer-events: auto;
   background: var(--b3-theme-surface);
   border: .5px solid var(--b3-border-color);
   border-radius: 14px;
-  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.16);
-  height: 48px;
+  box-shadow: var(--b3-dialog-shadow);
+  height: var(--mobile-bottom-bar-height, 48px);
   display: flex;
   align-items: center;
   justify-content: space-around;
@@ -31,19 +31,22 @@
   flex: 1 1 0;
   min-width: 0;
   max-width: 52px;
-  height: 42px;
+  height: 40px;
   border: none;
   background: transparent;
-  border-radius: 10px;
+  border-radius: var(--b3-border-radius);
   display: inline-flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  color: var(--lake-text);
+  color: var(--b3-theme-on-surface);
   font-size: 16px;
+  -webkit-tap-highlight-color: transparent;
+  transition: background-color var(--mobile-duration-press) ease, color var(--mobile-duration-press) ease;
 }
-.med-btn:active { background: rgba(0, 0, 0, 0.06); }
-.med-btn.med-active { color: var(--lake-accent); }
+.med-btn > svg { width: 20px; height: 20px; }
+.med-btn:active, .med-btn:focus-visible { background: var(--b3-list-hover); }
+.med-btn.med-active { color: var(--b3-theme-primary); background: var(--b3-theme-primary-lightest); }
 .med-btn.med-aa { font-weight: 700; font-size: 17px; }
 .med-btn.med-b { font-weight: 700; font-size: 18px; }
 
@@ -56,12 +59,15 @@
   background: var(--b3-theme-surface);
   border: .5px solid var(--b3-border-color);
   border-radius: 14px;
-  box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.08);
+  box-shadow: var(--b3-dialog-shadow);
   padding: 12px 12px 14px;
   height: calc(var(--kb-offset, 0px));
   overflow-y: auto;
-  animation: medPanelIn 0.18s ease;
+  overscroll-behavior: contain;
+  scrollbar-width: none;
+  animation: medPanelIn var(--mobile-duration-panel) var(--mobile-ease-panel);
 }
+.med-panel::-webkit-scrollbar { display: none; }
 @keyframes medPanelIn {
   from { opacity: 0; transform: translateY(14px); }
   to { opacity: 1; transform: translateY(0); }
@@ -76,48 +82,57 @@
   flex-direction: column;
   align-items: center;
   gap: 7px;
-  background: var(--lake-shell);
-  border: none;
-  border-radius: 10px;
+  background: var(--b3-theme-background);
+  border: 1px solid var(--b3-border-color);
+  border-radius: var(--b3-border-radius-b);
   padding: 14px 8px;
   font-size: 14px;
   cursor: pointer;
-  color: var(--lake-text);
+  color: var(--b3-theme-on-surface);
+  -webkit-tap-highlight-color: transparent;
+  transition: background-color var(--mobile-duration-press) ease;
 }
-.med-ins-item:active { background: var(--lake-border); }
-.med-ins-item svg { width: 21px; height: 21px; }
+.med-ins-item:active { background: var(--b3-list-hover); }
+.med-ins-item svg { width: 20px; height: 20px; }
 
 .med-font-panel { display: flex; flex-direction: column; gap: 10px; }
 .med-f-row { display: flex; gap: 8px; }
 .med-f-align { gap: 0; }
 .med-f-row .med-f-btn { flex: 1; }
 .med-f-btn {
-  border: none;
-  background: var(--lake-shell);
-  border-radius: 9px;
+  border: 1px solid var(--b3-border-color);
+  background: var(--b3-theme-background);
+  border-radius: var(--b3-border-radius);
   height: 40px;
   font-size: 15px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  color: var(--lake-text);
+  color: var(--b3-theme-on-surface);
   gap: 4px;
+  -webkit-tap-highlight-color: transparent;
+  transition: background-color var(--mobile-duration-press) ease;
 }
-.med-f-btn:active { background: var(--lake-border); }
+.med-f-btn:active { background: var(--b3-list-hover); }
 .med-f-btn.med-b { font-weight: 700; }
 .med-f-btn.med-i { font-style: italic; }
 .med-f-btn.med-s { text-decoration: line-through; }
 .med-f-btn.med-u { text-decoration: underline; }
 
-.med-outline-item { display: block; width: 100%; border: none; background: transparent; padding: 12px 20px; font-size: 15px; text-align: left; cursor: pointer; color: var(--lake-text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.med-outline-item:active { background: var(--lake-shell); }
+.med-outline-item { display: block; width: 100%; border: none; background: transparent; padding: 0 20px; min-height: 40px; line-height: 40px; font-size: 16px; text-align: left; cursor: pointer; color: var(--b3-theme-on-background); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; -webkit-tap-highlight-color: transparent; }
+.med-outline-item:active { background: var(--b3-list-hover); }
 .med-outline-item.lv1 { font-weight: 600; }
 .med-outline-item.lv2 { padding-left: 36px; }
-.med-outline-item.lv3 { padding-left: 52px; color: var(--lake-text-tertiary); }
-.med-doc-item { display: flex; align-items: center; width: 100%; border: none; background: transparent; padding: 14px 20px; font-size: 15px; cursor: pointer; color: var(--lake-text); }
-.med-doc-item:active { background: var(--lake-shell); }
-.med-doc-item.med-active { color: var(--lake-accent); font-weight: 600; }
+.med-outline-item.lv3 { padding-left: 52px; color: var(--b3-theme-on-surface-light); }
+.med-doc-item { display: flex; align-items: center; width: 100%; border: none; background: transparent; padding: 0 20px; min-height: 40px; font-size: 16px; cursor: pointer; color: var(--b3-theme-on-background); -webkit-tap-highlight-color: transparent; }
+.med-doc-item:active { background: var(--b3-list-hover); }
+.med-doc-item.med-active { color: var(--b3-theme-primary); font-weight: 600; }
 .med-doc-item-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 
+
+/* 降低动效偏好：dock 全部关动画（与 mobile.css 的 reduced-motion 兜底同口径） */
+@media (prefers-reduced-motion: reduce) {
+  .med-toolbar, .med-panel, .med-btn, .med-ins-item, .med-f-btn { animation: none; transition: none; }
+}

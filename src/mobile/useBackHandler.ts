@@ -7,6 +7,7 @@
  */
 import { useEffect, useRef } from "react";
 import type { Route } from "./MobileApp";
+import { consumeBack } from "./ui/backStack";
 
 export interface BackHandlerState {
   route: Route;
@@ -36,6 +37,8 @@ export function useBackHandler(state: BackHandlerState) {
         const mod = await import("@capacitor/app");
         const l = await mod.App.addListener("backButton", () => {
           const s = stateRef.current;
+          // 0) 浮层返回栈（思源：#model / .b3-menu--fullscreen / side-panel 谁在上层谁先吃返回）
+          if (consumeBack()) return;
           // 1) 最上层 Sheet（新建知识库/搜索）
           if (s.createNbOpen || s.searchOpen) { s.onCloseSheets(); return; }
           // 2) 设置 Drawer

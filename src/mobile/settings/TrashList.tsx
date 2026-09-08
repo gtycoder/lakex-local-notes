@@ -4,6 +4,8 @@
 import { useCallback, useEffect, useState } from "react";
 import { Feather, FolderOpen, FileText, RotateCcw, Trash2 } from "lucide-react";
 import { bridge } from "../bridge";
+import { confirmMobile } from "../ui/ConfirmDialog";
+import { showToast } from "../ui/toastBus";
 
 export interface TrashRow {
   key: string;
@@ -25,7 +27,6 @@ const IconFor = (k: TrashRow["kind"]) => (k === "folder" ? FolderOpen : k === "q
 
 export function TrashList({ title, onChanged, onPreview }: TrashListProps) {
   const [rows, setRows] = useState<TrashRow[]>([]);
-  const [msg, setMsg] = useState("");
 
   const load = useCallback(async () => {
     const [tree, quick] = await Promise.all([bridge.listTrashTree(), bridge.listQuickNoteTrash()]);
@@ -44,30 +45,30 @@ export function TrashList({ title, onChanged, onPreview }: TrashListProps) {
     try {
       if (row.kind === "quick") await bridge.restoreQuickNote(row.id);
       else await bridge.restoreTreeItem(row.id, row.kind === "folder" ? "folder" : "note");
-      setMsg("已恢复（同步后传播到其他设备）");
+      showToast("已恢复（同步后传播到其他设备）");
       await load();
       await onChanged();
     } catch (e) {
-      setMsg("恢复失败: " + (e as Error).message);
+      showToast("恢复失败：" + (e as Error).message, { type: "error" });
     }
   };
 
   const purge = async (row: TrashRow) => {
-    if (!window.confirm("彻底删除「" + row.title + "」？此操作不可撤销（其他设备同步后也会删除）。")) return;
+    const ok = await confirmMobile({ title: "彻底删除？", body: "「" + row.title + "」不可撤销（其他设备同步后也会删除）。", confirmText: "彻底删除", danger: true });
+    if (!ok) return;
     try {
       if (row.kind === "quick") await bridge.purgeQuickNote(row.id);
       else await bridge.purgeTreeItem(row.id, row.kind === "folder" ? "folder" : "note");
-      setMsg("已彻底删除");
+      showToast("已彻底删除");
       await load();
       await onChanged();
     } catch (e) {
-      setMsg("删除失败: " + (e as Error).message);
+      showToast("删除失败：" + (e as Error).message, { type: "error" });
     }
   };
 
   return (
     <div className="mobile-trash-list">
-      {msg && <div className="mobile-status-msg">{msg}</div>}
       {rows.length === 0 && <div className="mobile-trash-empty">{title ? title : "回收站"}为空</div>}
       {rows.map((row) => {
         const Icon = IconFor(row.kind);

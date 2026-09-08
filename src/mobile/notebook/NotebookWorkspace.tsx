@@ -14,6 +14,10 @@ import { DocumentEditor } from "../editor/DocumentEditor";
 import { OutlineSheet } from "../editor/OutlineSheet";
 import type { LakeEditorInstance } from "../../features/editor/lakeRuntime";
 import { useEdgeSwipe } from "../useEdgeSwipe";
+import { MobileSheetMenu, type MobileSheetItem } from "../ui/MobileSheetMenu";
+import { confirmMobile } from "../ui/ConfirmDialog";
+import { showToast } from "../ui/toastBus";
+import { longPressFeedback, tapFeedback } from "../ui/haptics";
 import { useAutoSave } from "../useAutoSave";
 import type { POCNote } from "../bridge";
 import type { NotebookTreeItem } from "./NotebookPage";
@@ -44,23 +48,18 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
   const [outlineOpen, setOutlineOpen] = useState(false);
   const [tabsOpen, setTabsOpen] = useState(false);
   const [notebookSwitchOpen, setNotebookSwitchOpen] = useState(false);
-  const switchBtnRef = useRef<HTMLButtonElement>(null);
-  const [switchPos, setSwitchPos] = useState<{ top: number; right: number } | null>(null);
   const editorsRef = useRef<Map<string, LakeEditorInstance | null>>(new Map());
   const autoOpenedRef = useRef(false);
   // 标签保持：本地记录上次打开的标签（按笔记本隔离）
   const TABS_KEY = "lake-notes-mobile.tabs." + notebookId;
 
-  // 目录树长按管理：右键菜单 / 内联重命名 / 图标 / 移动 / 删除
-  const [ctxMenu, setCtxMenu] = useState<{ node: NotebookTreeItem; x: number; y: number } | null>(null);
+  // 目录树长按管理：思源 sheet 菜单 / 内联重命名 / 图标 / 移动（菜单子层）/ 删除（确认框）
+  const [menuFor, setMenuFor] = useState<NotebookTreeItem | null>(null);
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState("");
   const [iconFor, setIconFor] = useState<NotebookTreeItem | null>(null);
-  const [moveFor, setMoveFor] = useState<NotebookTreeItem | null>(null);
-  const [deleteFor, setDeleteFor] = useState<NotebookTreeItem | null>(null);
   const [historyFor, setHistoryFor] = useState<NotebookTreeItem | null>(null);
   const [historyList, setHistoryList] = useState<Array<{ id: number; title: string; createdAt: string }>>([]);
-  const [historyRestoreId, setHistoryRestoreId] = useState<number | null>(null);
   const longPressTimer = useRef<number | null>(null);
 
   // 边缘滑动手势（对齐思源移动端）：左边缘右滑→目录抽屉；右边缘左滑→大纲抽屉（互斥）。
@@ -170,8 +169,9 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
     const el = e.currentTarget as HTMLElement;
     longPressTimer.current = window.setTimeout(() => {
       longPressTimer.current = null;
-      const rect = el.getBoundingClientRect();
-      setCtxMenu({ node, x: Math.max(8, Math.min(rect.left, window.innerWidth - 220)), y: Math.max(8, Math.min(rect.bottom + 4, window.innerHeight - 200)) });
+      void el;
+      longPressFeedback();
+      setMenuFor(node);
     }, 500);
   };
   const applyRename = useCallback(async () => {
@@ -183,39 +183,81 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
     const n = iconFor; setIconFor(null);
     if (n) { try { await bridge.setNodeIcon(n.id, icon); await loadTree(); } catch { /* 忽略 */ } }
   }, [iconFor, loadTree]);
-  const applyDelete = useCallback(async () => {
-    const n = deleteFor; setDeleteFor(null);
-    if (n) { try { await bridge.trashTreeItem(n.id, n.kind === "note" ? "note" : "folder"); await loadTree(); } catch { /* 忽略 */ } }
-  }, [deleteFor, loadTree]);
-  const applyMove = useCallback(async (targetParentId: string | null) => {
-    const n = moveFor; setMoveFor(null);
-    if (!n || n.parentId === targetParentId) return;
+  const applyDelete = useCallback(async (node: NotebookTreeItem) => {
+    const ok = await confirmMobile({
+      title: node.kind === "note" ? "移入回收站？" : "删除分组？",
+      body: node.title || "无标题",
+      confirmText: "删除",
+      danger: true,
+    });
+    if (!ok) return;
+    try {
+      await bridge.trashTreeItem(node.id, node.kind === "note" ? "note" : "folder");
+      await loadTree();
+      // 已打开的标签必须一起关掉：否则回收站文档仍留在 tab 里可继续编辑（AGENTS §3 #16）
+      closeTab(node.id);
+      showToast("已移入回收站");
+    } catch { showToast("删除失败", { type: "error" }); }
+  }, [loadTree, closeTab]);
+  const applyMove = useCallback(async (n: NotebookTreeItem, targetParentId: string) => {
+    if (!n || n.parentId === targetParentId || n.id === targetParentId) return;
     try {
       const siblings = tree.filter((x) => x.parentId === targetParentId && x.id !== n.id).map((x) => x.id);
       await bridge.moveTreeNodeOrdered(n.id, targetParentId, [...siblings, n.id]);
       await loadTree();
-    } catch { /* 忽略 */ }
-  }, [moveFor, tree, loadTree]);
+      showToast("已移动");
+    } catch { showToast("移动失败", { type: "error" }); }
+  }, [tree, loadTree]);
 
   const openHistory = useCallback(async (node: NotebookTreeItem) => {
     setHistoryFor(node);
     try { setHistoryList(await bridge.listNoteHistory(node.id)); } catch { setHistoryList([]); }
   }, []);
-  const applyRestoreHistory = useCallback(async () => {
-    const id = historyRestoreId; setHistoryRestoreId(null);
-    if (id == null) return;
+  const applyRestoreHistory = useCallback(async (id: number) => {
+    const ok = await confirmMobile({ title: "恢复此版本？", body: "将用该历史版本覆盖当前正文（当前正文会先自动留档）。", confirmText: "恢复", danger: true });
+    if (!ok) return;
     try {
       await bridge.restoreHistory(id);
       setHistoryFor(null);
       await loadTree();
-    } catch { /* 忽略 */ }
-  }, [historyRestoreId, loadTree]);
+      showToast("已恢复历史版本");
+    } catch { showToast("恢复失败", { type: "error" }); }
+  }, [loadTree]);
   const deleteHistory = useCallback(async (historyId: number) => {
     try {
       await bridge.deleteHistory(historyId);
       setHistoryList((prev) => prev.filter((h) => h.id !== historyId));
     } catch { /* 忽略 */ }
   }, []);
+
+  /** 目录树长按菜单（思源 .b3-menu--sheet 口径）：移动到… 用子层下钻，删除走危险项 + 确认框 */
+  const treeMenuItems = (node: NotebookTreeItem): MobileSheetItem[] => {
+    const groups = tree.filter((x) => x.kind === "group" && x.id !== node.id);
+    return [
+      { id: "rename", label: "重命名", icon: Pencil },
+      { id: "icon", label: "设置图标", icon: SmilePlus },
+      {
+        id: "move", label: "移动到…", icon: Move,
+        children: [
+          { id: "__root", label: title, icon: FolderOpen, note: "笔记本根目录" },
+          ...groups.map((g) => ({ id: g.id, label: g.title, icon: FolderOpen })),
+        ],
+      },
+      ...(node.kind === "note" ? [{ id: "history", label: "历史版本", icon: History }] : []),
+      { id: "delete", label: node.kind === "note" ? "移入回收站" : "删除分组", icon: Trash2, danger: true },
+    ];
+  };
+  const onTreeMenuSelect = (item: MobileSheetItem, path: MobileSheetItem[]) => {
+    const node = menuFor;
+    setMenuFor(null);
+    if (!node) return;
+    const root = path[0]?.id;
+    if (root === "move") { void applyMove(node, path[1]?.id === "__root" ? notebookId : String(path[1]?.id)); return; }
+    if (root === "rename") { tapFeedback(); setRenamingId(node.id); setRenameValue(node.title); return; }
+    if (root === "icon") { setIconFor(node); return; }
+    if (root === "history") { void openHistory(node); return; }
+    if (root === "delete") { void applyDelete(node); }
+  };
 
   const renderBranch = (parentId: string, depth: number) => {
     const children = childrenOf(parentId);
@@ -226,8 +268,8 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
       return (
         <div key={it.kind + "-" + it.id}>
           <button
-            className={"b3-list-item" + (activeId === it.id ? " b3-list-item--selected" : "")}
-            style={{ paddingLeft: 12 + depth * 16 }}
+            className={"b3-list-item ln-indent" + (activeId === it.id ? " b3-list-item--selected" : "")}
+            data-depth={depth}
             data-node-id={it.id}
             onClick={() => {
               if (renamingId) return;
@@ -238,7 +280,7 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
             onTouchMove={clearLongPress}
             onTouchEnd={clearLongPress}
             onTouchCancel={clearLongPress}
-            onContextMenu={(e) => { e.preventDefault(); const rect = (e.currentTarget as HTMLElement).getBoundingClientRect(); setCtxMenu({ node: it, x: Math.max(8, Math.min(rect.left, window.innerWidth - 220)), y: Math.max(8, Math.min(rect.bottom + 4, window.innerHeight - 200)) }); }}
+            onContextMenu={(e) => { e.preventDefault(); setMenuFor(it); }}
           >
             {hasChildren ? <ChevronRight size={16} className={expanded.has(it.id) ? "ln-chevron open" : "ln-chevron"} /> : <span className="ln-chevron-spacer" />}
             {renamingId === it.id ? (
@@ -270,14 +312,7 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
       <header className="mobile-topbar">
         <button className="mobile-icon-btn" onClick={onBack} aria-label="返回"><ArrowLeft size={22} /></button>
         <div className="mobile-topbar-title">{title}</div>
-        <button ref={switchBtnRef} className="mobile-icon-btn" onClick={() => {
-          const btn = switchBtnRef.current;
-          if (btn) {
-            const rect = btn.getBoundingClientRect();
-            setSwitchPos({ top: rect.bottom + 6, right: window.innerWidth - rect.right });
-          }
-          setNotebookSwitchOpen((v) => !v);
-        }} aria-label="切换笔记本"><ArrowLeftRight size={20} /></button>
+        <button className="mobile-icon-btn" onClick={() => { tapFeedback(); setNotebookSwitchOpen(true); }} aria-label="切换笔记本"><ArrowLeftRight size={20} /></button>
       </header>
 
       {/* 文档层（正文） */}
@@ -315,10 +350,10 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
 
       {/* 底部胶囊栏（思源 mobile-bottom-bar）：目录 / tab列表(计数) / 大纲 / 编辑；编辑态由底部工具栏接管（含完成），隐藏 */}
       {!active?.editing && (<nav className="mobile-bottom-bar">
-        <button className={(sidebarOpen ? "active" : "") + " bottom-bar-btn"} onClick={() => setSidebarOpen((v) => !v)} aria-label="目录"><Files size={22} /><span className="bottom-bar-label">目录</span></button>
-        <button className={"bottom-bar-btn" + (tabsOpen ? " active" : "")} onClick={() => setTabsOpen(true)} aria-label="标签页"><FileText size={22} /><span className="bottom-bar-label">标签</span>{tabs.length > 0 && <span className="bottom-bar-count">{tabs.length}</span>}</button>
-        <button className={(outlineOpen ? "active" : "") + " bottom-bar-btn"} onClick={() => setOutlineOpen((v) => !v)} aria-label="大纲"><ListTree size={22} /><span className="bottom-bar-label">大纲</span></button>
-        {active && <button className={"bottom-bar-btn" + (active.editing ? " active" : "")} onClick={toggleEdit} aria-label="编辑">{active.editing ? <Check size={22} /> : <Pencil size={22} />}<span className="bottom-bar-label">{active.editing ? "完成" : "编辑"}</span></button>}
+        <button className={(sidebarOpen ? "active" : "") + " bottom-bar-btn"} onClick={() => { tapFeedback(); setSidebarOpen((v) => !v); }} aria-label="目录"><Files size={20} /><span className="bottom-bar-label">目录</span></button>
+        <button className={"bottom-bar-btn" + (tabsOpen ? " active" : "")} onClick={() => { tapFeedback(); setTabsOpen(true); }} aria-label="标签页"><FileText size={20} /><span className="bottom-bar-label">标签</span>{tabs.length > 0 && <span className="bottom-bar-count">{tabs.length}</span>}</button>
+        <button className={(outlineOpen ? "active" : "") + " bottom-bar-btn"} onClick={() => { tapFeedback(); setOutlineOpen((v) => !v); }} aria-label="大纲"><ListTree size={20} /><span className="bottom-bar-label">大纲</span></button>
+        {active && <button className={"bottom-bar-btn" + (active.editing ? " active" : "")} onClick={toggleEdit} aria-label="编辑">{active.editing ? <Check size={20} /> : <Pencil size={20} />}<span className="bottom-bar-label">{active.editing ? "完成" : "编辑"}</span></button>}
       </nav>)}
 
       {/* 左目录抽屉 (.side-panel) */}
@@ -362,44 +397,21 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
         </div>
       )}
 
-      {/* 笔记本切换下拉（锚定右上角按钮，跟手弹出；目录抽屉已由底部胶囊栏/左边缘手势承担） */}
-      {notebookSwitchOpen && switchPos && (
-        <div className="mobile-dropdown-mask" onClick={() => setNotebookSwitchOpen(false)}>
-          <div className="mobile-dropdown" style={{ top: switchPos.top, right: switchPos.right }} onClick={(e) => e.stopPropagation()}>
-            <div className="mobile-dropdown-title">切换笔记本</div>
-            <div className="mobile-dropdown-body">
-              {notebooks.length === 0 && <p className="mobile-sheet-empty">暂无笔记本</p>}
-              {notebooks.map((nb) => (
-                <button
-                  key={nb.id}
-                  className={"b3-list-item" + (nb.id === notebookId ? " b3-list-item--selected" : "")}
-                  onClick={() => { setNotebookSwitchOpen(false); if (nb.id !== notebookId) onSwitchNotebook(nb.id); }}
-                >
-                  <span className="b3-list-item__text">{nb.title}</span>
-                  {nb.id === notebookId && <Check size={16} className="b3-list-item__action" />}
-                </button>
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
+      {/* 笔记本切换（思源 sheet 菜单：贴底、56dvh、下钻即整屏平移） */}
+      <MobileSheetMenu
+        open={notebookSwitchOpen}
+        items={notebooks.map((nb) => ({ id: nb.id, label: nb.title, icon: FolderOpen, note: nb.id === notebookId ? "当前" : undefined }))}
+        onClose={() => setNotebookSwitchOpen(false)}
+        onSelect={(it) => { setNotebookSwitchOpen(false); if (it.id !== notebookId) onSwitchNotebook(it.id); }}
+      />
 
       {/* 目录树长按菜单 */}
-      {ctxMenu && (
-        <div className="mobile-dropdown-mask" onClick={() => setCtxMenu(null)}>
-          <div className="mobile-dropdown" style={{ left: ctxMenu.x, top: ctxMenu.y, minWidth: 160 }} onClick={(e) => e.stopPropagation()}>
-            <div className="mobile-dropdown-body">
-              <button className="b3-list-item" onClick={() => { setRenamingId(ctxMenu.node.id); setRenameValue(ctxMenu.node.title); setCtxMenu(null); }}><Pencil size={16} className="ln-tree-icon" /><span className="b3-list-item__text">重命名</span></button>
-              <button className="b3-list-item" onClick={() => { setIconFor(ctxMenu.node); setCtxMenu(null); }}><SmilePlus size={16} className="ln-tree-icon" /><span className="b3-list-item__text">设置图标</span></button>
-              <button className="b3-list-item" onClick={() => { setMoveFor(ctxMenu.node); setCtxMenu(null); }}><Move size={16} className="ln-tree-icon" /><span className="b3-list-item__text">移动到…</span></button>
-              {ctxMenu.node.kind === "note" && (
-                <button className="b3-list-item" onClick={() => { void openHistory(ctxMenu.node); setCtxMenu(null); }}><History size={16} className="ln-tree-icon" /><span className="b3-list-item__text">历史版本</span></button>
-              )}
-              <button className="b3-list-item" onClick={() => { setDeleteFor(ctxMenu.node); setCtxMenu(null); }}><Trash2 size={16} className="ln-tree-icon" /><span className="b3-list-item__text">删除</span></button>
-            </div>
-          </div>
-        </div>
-      )}
+      <MobileSheetMenu
+        open={!!menuFor}
+        items={menuFor ? treeMenuItems(menuFor) : []}
+        onClose={() => setMenuFor(null)}
+        onSelect={onTreeMenuSelect}
+      />
 
       {/* 图标选择器 */}
       {iconFor && (
@@ -421,36 +433,18 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
         </div>
       )}
 
-      {/* 移动目标选择 */}
-      {moveFor && (
-        <div className="mobile-sheet-mask" onClick={() => setMoveFor(null)}>
-          <div className="mobile-sheet" onClick={(e) => e.stopPropagation()}>
-            <div className="mobile-sheet-head">
-              <span className="mobile-sheet-title">移动「{moveFor.title}」到…</span>
-              <button className="mobile-icon-btn" onClick={() => setMoveFor(null)} aria-label="关闭"><X size={20} /></button>
-            </div>
-            <div className="mobile-sheet-body">
-              <button className="b3-list-item" onClick={() => void applyMove(notebookId)}><FolderOpen size={16} className="ln-tree-icon" /><span className="b3-list-item__text">（笔记本根目录）</span></button>
-              {tree.filter((x) => x.kind === "group" && x.id !== moveFor.id).map((g) => (
-                <button key={g.id} className="b3-list-item" onClick={() => void applyMove(g.id)}><FolderOpen size={16} className="ln-tree-icon" /><span className="b3-list-item__text">{g.title}</span></button>
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* 历史版本 sheet */}
       {historyFor && (
-        <div className="mobile-sheet-mask" onClick={() => { setHistoryFor(null); setHistoryRestoreId(null); }}>
+        <div className="mobile-sheet-mask" onClick={() => setHistoryFor(null)}>
           <div className="mobile-sheet" onClick={(e) => e.stopPropagation()}>
             <div className="mobile-sheet-head">
               <span className="mobile-sheet-title">历史版本</span>
-              <button className="mobile-icon-btn" onClick={() => { setHistoryFor(null); setHistoryRestoreId(null); }} aria-label="关闭"><X size={20} /></button>
+              <button className="mobile-icon-btn" onClick={() => setHistoryFor(null)} aria-label="关闭"><X size={20} /></button>
             </div>
-            <div className="mobile-sheet-body">
+            <div className="mobile-sheet-body b3-list--mobile">
               {historyList.length === 0 && <p className="mobile-sheet-empty">暂无历史版本</p>}
               {historyList.map((h) => (
-                <div key={h.id} className="b3-list-item" onClick={() => setHistoryRestoreId(h.id)}>
+                <div key={h.id} className="b3-list-item" onClick={() => void applyRestoreHistory(h.id)}>
                   <span className="b3-list-item__text">{h.title || "无标题"}</span>
                   <span className="b3-list-item__meta">{new Date(h.createdAt).toLocaleString("zh-CN")}</span>
                   <button className="b3-list-item__action" onClick={(e) => { e.stopPropagation(); void deleteHistory(h.id); }} aria-label="删除"><X size={16} /></button>
@@ -461,37 +455,6 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
         </div>
       )}
 
-      {/* 恢复历史版本确认 */}
-      {historyRestoreId != null && (
-        <div className="mobile-sheet-mask" onClick={() => setHistoryRestoreId(null)}>
-          <div className="mobile-sheet" onClick={(e) => e.stopPropagation()}>
-            <div className="mobile-sheet-head"><span className="mobile-sheet-title">恢复此版本？</span></div>
-            <div className="mobile-sheet-body">
-              <p className="mobile-sheet-empty">将用该历史版本覆盖当前正文。</p>
-              <div className="mobile-model-body">
-                <button className="b3-button" onClick={() => setHistoryRestoreId(null)}>取消</button>
-                <button className="b3-button ft__error" onClick={() => void applyRestoreHistory()}>恢复</button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* 删除确认 */}
-      {deleteFor && (
-        <div className="mobile-sheet-mask" onClick={() => setDeleteFor(null)}>
-          <div className="mobile-sheet" onClick={(e) => e.stopPropagation()}>
-            <div className="mobile-sheet-head"><span className="mobile-sheet-title">删除「{deleteFor.title}」？</span></div>
-            <div className="mobile-sheet-body">
-              <p className="mobile-sheet-empty">将移入回收站，可在回收站中恢复或彻底删除。</p>
-              <div className="mobile-model-body">
-                <button className="b3-button" onClick={() => setDeleteFor(null)}>取消</button>
-                <button className="b3-button ft__error" onClick={() => void applyDelete()}>删除</button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

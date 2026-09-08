@@ -14,6 +14,9 @@ import { CreateNotebookSheet } from "./settings/CreateNotebookSheet";
 import { SearchSheet } from "./settings/SearchSheet";
 import { SettingsDrawer } from "./settings/SettingsDrawer";
 import { useBackHandler } from "./useBackHandler";
+import { Toasts } from "./ui/Toasts";
+import { ConfirmHost, confirmMobile } from "./ui/ConfirmDialog";
+import { showToast } from "./ui/toastBus";
 import { useAutoSave } from "./useAutoSave";
 import "./mobile.css";
 
@@ -34,7 +37,6 @@ export function MobileApp() {
   const [phase, setPhase] = useState<"booting" | "ready">("booting");
   const [error, setError] = useState<string | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
-  const [toastMsg, setToastMsg] = useState<string | null>(null);
   const [createNbOpen, setCreateNbOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [quickNotes, setQuickNotes] = useState<Array<{ id: string; previewText: string; imageCount: number; updatedAt: string; firstImage: string | null }>>([]);
@@ -106,12 +108,6 @@ export function MobileApp() {
       }
     })();
   }, [refreshAll]);
-
-  useEffect(() => {
-    if (!toastMsg) return;
-    const t = window.setTimeout(() => setToastMsg(null), 1600);
-    return () => window.clearTimeout(t);
-  }, [toastMsg]);
 
   // 定时自动快照：按历史设置 snapshotIntervalMinutes（0=关）周期给当前打开笔记留档
   useEffect(() => { activeIdRef.current = active?.id ?? null; }, [active?.id]);
@@ -220,7 +216,7 @@ export function MobileApp() {
             // 根层笔记本重排：单事务更新 sort_order（reorderSiblings），同步后传播
             await bridge.reorderSiblings(null, orderedIds);
             await refreshAll();
-            setToastMsg("已调整笔记本顺序（同步后传播）");
+            showToast("已调整笔记本顺序（同步后传播）");
           }}
           onOpenNote={(id) => openDocument(id, "viewer")}
           onOpenDrawer={() => setDrawerOpen(true)}
@@ -261,7 +257,7 @@ export function MobileApp() {
             backFromDocument();
           }}
           onDelete={async () => {
-            if (active && window.confirm("移入回收站？")) {
+            if (active && await confirmMobile({ title: "移入回收站", body: active.title || "无标题文档", confirmText: "移入回收站" })) {
               await bridge.trashNote(active.id);
               await refreshAll();
               setRoute({ kind: "home", tab: "library" });
@@ -276,7 +272,7 @@ export function MobileApp() {
         onCreate={async (input) => {
           await bridge.createNotebook(input);
           await refreshAll();
-          setToastMsg("已新建知识库");
+          showToast("已新建知识库");
         }}
       />
       <SearchSheet
@@ -284,7 +280,8 @@ export function MobileApp() {
         onClose={() => setSearchOpen(false)}
         onOpenNote={(id) => openDocument(id, "viewer")}
       />
-      {toastMsg && <div className="mobile-toast">{toastMsg}</div>}
+      <Toasts />
+      <ConfirmHost />
     </div>
   );
 
