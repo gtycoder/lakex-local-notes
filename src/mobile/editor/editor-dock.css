@@ -13,20 +13,22 @@
 }
 
 .med-toolbar {
+  /* 思源 #keyboardToolbar(.keyboard) 口径：贴底 48px 直条 + 上边框，不是悬浮胶囊 */
   position: fixed;
-  left: 10px;
-  right: 10px;
-  bottom: calc(var(--kb-offset, 0px) + 4px);
+  left: 0;
+  right: 0;
+  bottom: var(--kb-offset, 0px);
   /* 不做 bottom 过渡：它等于对"正在 resize 的视口"做动画，会把一帧错位放大成抖动（HANDOFF §8.8） */
   pointer-events: auto;
-  background: var(--b3-theme-surface);
-  border: .5px solid var(--b3-border-color);
-  border-radius: 14px;
-  box-shadow: var(--b3-dialog-shadow);
+  background: var(--b3-theme-background);
+  border: 0;
+  border-top: 1px solid var(--b3-theme-surface-lighter);
+  box-shadow: none;
   height: var(--mobile-bottom-bar-height, 48px);
   display: flex;
   align-items: center;
   justify-content: space-around;
+  overflow: hidden;
 }
 .med-btn {
   flex: 1 1 0;
@@ -52,15 +54,16 @@
 .med-btn.med-b { font-weight: 700; font-size: 18px; }
 
 .med-panel {
+  /* 展开面板：占住键盘区，贴底平铺（与工具栏同宽同底，思源面板语言） */
   position: fixed;
-  left: 10px;
-  right: 10px;
+  left: 0;
+  right: 0;
   bottom: 0;
   pointer-events: auto;
   background: var(--b3-theme-surface);
-  border: .5px solid var(--b3-border-color);
-  border-radius: 14px;
-  box-shadow: var(--b3-dialog-shadow);
+  border: 0;
+  border-top: 1px solid var(--b3-theme-surface-lighter);
+  box-shadow: none;
   padding: 12px 12px 14px;
   height: calc(var(--kb-offset, 0px));
   overflow-y: auto;

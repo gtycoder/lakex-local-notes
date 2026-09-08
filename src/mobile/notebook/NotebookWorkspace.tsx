@@ -368,18 +368,7 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
           <div className="mobile-empty">暂无打开的文档，点左目录或底部打开</div>
         ) : tabs.map((t) => (
           <div key={t.id} className={"doc-pane" + (t.id === activeId ? " active" : "")}>
-            {t.editing && (
-              <input
-                className="mobile-title-input"
-                value={t.title}
-                placeholder="无标题"
-                onChange={(e) => {
-                  const title = e.target.value;
-                  setTabs((prev) => prev.map((x) => (x.id === t.id ? { ...x, title } : x)));
-                  scheduleAutoSave(t.id, title, t.content);
-                }}
-              />
-            )}
+            {/* 标题只在顶栏（思源 #toolbarName 口径）；正文区不再重复一个标题输入框 */}
             <DocumentEditor
               note={{ id: t.id, title: t.title, content: t.content } as POCNote}
               content={t.content}
