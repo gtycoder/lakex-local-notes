@@ -1,4 +1,7 @@
-/* 移动端编辑态底部 dock（app 化：工具栏悬浮输入法上方 + 展开面板覆盖输入法区域） */
+/* 移动端编辑态底部 dock（app 化：工具栏悬浮输入法上方 + 展开面板在其上方展开）。
+   --kb-offset 由 useKeyboard 实时算出：adjustResize 下 WebView 自缩 ⇒ 0；edge-to-edge 下 = 键盘高度。
+   工具栏 bottom=kbOffset+8 恰好落在键盘上方（向下占用空间与输入法一致）；展开面板在工具栏上方
+   用 position:fixed 固定，故点击 添加/正文 切换面板时工具栏高度与位置保持不变 —— 像一直在键盘上展开。 */
 .mobile-editor-dock {
   position: fixed;
   left: 0;
@@ -6,15 +9,16 @@
   bottom: 0;
   z-index: 60;
   pointer-events: none;
-  padding-bottom: env(safe-area-inset-bottom);
 }
-.mobile-editor-dock[data-hidden="1"] .med-toolbar,
-.mobile-editor-dock[data-hidden="1"] .med-panel { display: none; }
 
 .med-toolbar {
+  position: fixed;
+  left: 10px;
+  right: 10px;
+  bottom: calc(var(--kb-offset, 0px) + 4px);
   pointer-events: auto;
-  margin: 0 10px;
-  background: var(--lake-panel);
+  background: var(--b3-theme-surface);
+  border: .5px solid var(--b3-border-color);
   border-radius: 14px;
   box-shadow: 0 6px 24px rgba(0, 0, 0, 0.16);
   height: 48px;
@@ -23,7 +27,9 @@
   justify-content: space-around;
 }
 .med-btn {
-  width: 46px;
+  flex: 1 1 0;
+  min-width: 0;
+  max-width: 52px;
   height: 42px;
   border: none;
   background: transparent;
@@ -41,14 +47,23 @@
 .med-btn.med-b { font-weight: 700; font-size: 18px; }
 
 .med-panel {
+  position: fixed;
+  left: 10px;
+  right: 10px;
+  bottom: 0;
   pointer-events: auto;
-  background: var(--lake-panel);
-  margin: 8px 10px 0;
+  background: var(--b3-theme-surface);
+  border: .5px solid var(--b3-border-color);
   border-radius: 14px;
   box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.08);
   padding: 12px 12px 14px;
-  max-height: 46vh;
+  height: calc(var(--kb-offset, 0px));
   overflow-y: auto;
+  animation: medPanelIn 0.18s ease;
+}
+@keyframes medPanelIn {
+  from { opacity: 0; transform: translateY(14px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 .med-ins-grid {
   display: grid;
@@ -104,21 +119,4 @@
 .med-doc-item.med-active { color: var(--lake-accent); font-weight: 600; }
 .med-doc-item-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-.med-kb-reshow {
-  pointer-events: auto;
-  position: fixed;
-  right: 14px;
-  bottom: calc(16px + env(safe-area-inset-bottom));
-  width: 46px;
-  height: 46px;
-  border-radius: 50%;
-  background: var(--lake-panel);
-  border: none;
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.18);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  color: var(--lake-text);
-  z-index: 61;
-}
+

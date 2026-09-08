@@ -1,5 +1,6 @@
 /* M0 POC 页面样式（极简，验证用） */
 * { box-sizing: border-box; }
+
 html, body, #root { margin: 0; padding: 0; height: 100%; }
 body { font-family: BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei UI", system-ui, sans-serif; background: var(--lake-shell); color: var(--lake-text); -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; text-rendering: optimizeLegibility; }
 
@@ -11,10 +12,10 @@ body { font-family: BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino San
 
 .mobile-topbar {
   display: flex; align-items: center; gap: 6px; flex: 0 0 auto;
-  /* 通知栏适配（参考思源）：沉浸式状态下内容延伸到状态栏后，顶栏必须让出状态栏高度 */
   padding: calc(8px + env(safe-area-inset-top, 0px)) 10px 8px;
-  background: var(--lake-panel); border-bottom: 1px solid var(--lake-border);
-  position: sticky; top: 0; z-index: 10; min-height: 48px;
+  height: 48px; background: var(--b3-theme-background);
+  border-bottom: 1px solid var(--b3-border-color);
+  position: sticky; top: 0; z-index: 10;
 }
 .mobile-topbar-title { flex: 1; text-align: center; font-size: 16px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .mobile-topbar-actions { display: flex; gap: 4px; }
@@ -80,7 +81,7 @@ body { font-family: BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino San
 .mobile-title-input { flex: 1; min-width: 0; border: none; outline: none; font-size: 16px; font-weight: 600; background: transparent; }
 
 .mobile-done-btn { border: none; background: var(--lake-accent); color: #fff; border-radius: 8px; padding: 6px 14px; font-size: 14px; cursor: pointer; }
-.mobile-doc-body { flex: 1; overflow-y: auto; background: var(--lake-panel); padding-bottom: calc(40px + env(safe-area-inset-bottom, 0px)); }
+.mobile-doc-body { flex: 1; overflow-y: auto; background: var(--b3-theme-background); padding-bottom: calc(40px + env(safe-area-inset-bottom, 0px)); }
 /* 音频/视频卡展示优化：
    1) audio 卡播放器就绪（兜底异步设置）前的 error 状态（"音频文件不能播放"/版权链接）先隐藏，
       避免进入文档/切编辑态时闪现不可用文案——兜底成功后播放器自然替换；
@@ -235,3 +236,147 @@ body { font-family: BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino San
   .mobile-htab, .mobile-fab, .mobile-icon-btn, .mobile-drawer-item, .mobile-doc-row, .mobile-qcard { transition: none; }
   .mobile-fab:active, .mobile-icon-btn:active { transform: none; }
 }
+
+/* ===== 设置页（精仿思源：全屏 + 横向菜单；AGENTS §3.14） ===== */
+.mobile-settings-page {
+  position: fixed; inset: 0; z-index: 50;
+  display: flex; flex-direction: column;
+  background: var(--b3-theme-background, var(--lake-shell));
+  color: var(--b3-theme-on-background, var(--lake-text));
+  animation: mobile-fade-in 180ms ease-out;
+}
+.mobile-settings-head {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: calc(12px + env(safe-area-inset-top, 0px)) 16px 10px;
+  border-bottom: 1px solid var(--b3-border-color, var(--lake-border));
+  position: sticky; top: 0; z-index: 2; background: inherit;
+}
+.mobile-settings-title { font-size: 17px; font-weight: 600; }
+.mobile-settings-close {
+  width: 40px; height: 40px; border: 0; background: transparent; border-radius: 8px;
+  display: flex; align-items: center; justify-content: center; color: var(--b3-theme-on-surface, var(--lake-text));
+  cursor: pointer;
+}
+.mobile-settings-close:active { background: var(--b3-theme-surface, var(--lake-shell)); }
+
+/* 竖向设置菜单：设置项一行一行（思源移动端式），点某项进入新页面 */
+.mobile-settings-list { flex: 1; overflow-y: auto; background: var(--b3-theme-background); padding: 4px 0 calc(24px + env(safe-area-inset-bottom, 0px)); }
+/* 注意：菜单行是 b3-list-item + mobile-settings-row。b3-list-item 由 siyuan.scss 在移动壳之后加载，
+   会用默认 padding/height 覆盖单类选择器；这里用父级作用域提高特异性保证生效（否则行高被压成 28px、又矮又挤）。 */
+.mobile-settings-list .mobile-settings-row {
+  width: 100%; display: flex; align-items: center; gap: 14px;
+  min-height: 52px; padding: 6px 18px; border: 0;
+  border-bottom: 1px solid var(--b3-theme-surface-lighter);
+  background: transparent; color: var(--b3-theme-on-background);
+  font-size: 15px; cursor: pointer; text-align: left;
+  transition: background-color 100ms ease;
+}
+.mobile-settings-list .mobile-settings-row:last-child { border-bottom: 0; }
+.mobile-settings-list .mobile-settings-row:active { background: var(--b3-list-hover); }
+.mobile-settings-list .mobile-settings-row .b3-list-item__graphic { color: var(--b3-theme-primary); flex: 0 0 auto; }
+.mobile-settings-list .mobile-settings-row .b3-list-item__text { flex: 1 1 auto; min-width: 0; }
+.mobile-settings-list .mobile-settings-row .b3-list-item__arrow { color: var(--b3-theme-on-surface-light); flex: 0 0 auto; }
+.mobile-settings-spacer { flex: 0 0 auto; width: 40px; }
+.mobile-settings-spacer--sm { width: 18px; }
+
+.mobile-settings-content { flex: 1; overflow-y: auto; background: var(--b3-theme-background); padding: 8px 16px calc(16px + env(safe-area-inset-bottom, 0px)); }
+
+/* config 骨架在移动端补齐行分隔 + 输入宽度（思源：行间 1px 分隔、ctl 固定列宽） */
+
+.mobile-settings-content .config-item { padding: 12px 16px; border-bottom: 1px solid var(--b3-border-color); }
+.mobile-settings-content .config-item:last-child { border-bottom: 0; }
+.mobile-settings-content .config-item__ctl .b3-text-field { width: min(200px, 44vw); }
+.mobile-settings-content .config-item__ctl { min-width: 0; }
+.mobile-settings-content .config-block { padding: 12px 16px; }
+
+/* 设置→回收站（总回收站：笔记+小记合并）+ 内嵌只读预览浮层 */
+.mobile-settings-preview { position: fixed; inset: 0; z-index: 55; background: var(--b3-theme-background, var(--lake-shell)); display: flex; }
+.mobile-settings-preview .mobile-document { flex: 1 1 auto; }
+.mobile-trash-list { padding-top: 4px; }
+.mobile-trash-empty { padding: 40px 24px; text-align: center; color: var(--b3-theme-on-surface, var(--lake-text-tertiary)); font-size: 14px; }
+
+/* ===== 第二层工作区（精仿思源移动端：胶囊栏 + 左/右抽屉 + 全屏tab列表） ===== */
+.mobile-workspace { display: flex; flex-direction: column; height: 100%; position: relative; }
+.doc-pane { display: none; height: 100%; }
+.doc-pane.active { display: block; }
+
+.mobile-workspace-body { flex: 1; overflow: hidden; position: relative; }
+.mobile-workspace-body .mobile-doc-body { height: 100%; }
+.mobile-workspace-body .mobile-empty { height: 100%; display: flex; align-items: center; justify-content: center; }
+
+/* 底部胶囊栏（思源 .mobile-bottom-bar：fixed 居中，圆角胶囊，宽度自适应） */
+.mobile-bottom-bar {
+  position: fixed; left: 0; right: 0; bottom: calc(14px + env(safe-area-inset-bottom, 0px));
+  z-index: 8; margin: 0 auto;
+  display: flex; align-items: center; gap: 0; padding: 0;
+  width: min(calc(100% - 32px), calc(48px * 6));
+  height: 48px;
+  border: .5px solid var(--b3-border-color);
+  border-radius: 24px;
+  background: var(--b3-theme-background);
+  box-shadow: var(--b3-point-shadow);
+}
+.bottom-bar-btn {
+  position: relative; flex: 1 1 0; min-width: 40px; height: 48px;
+  border: 0; border-radius: var(--b3-border-radius); padding: 2px;
+  background: transparent; color: var(--b3-theme-on-surface-light);
+  display: inline-flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+  cursor: pointer;
+  transition: color 80ms ease, background-color 80ms ease, transform 80ms ease;
+  -webkit-tap-highlight-color: transparent;
+}
+.bottom-bar-btn > svg { width: 20px; height: 20px; flex-shrink: 0; }
+.bottom-bar-btn:active { color: var(--b3-theme-on-surface); background: var(--b3-list-hover); transform: scale(.92); }
+.bottom-bar-btn.active { color: var(--b3-theme-primary); background: var(--b3-theme-primary-lightest); font-weight: 600; }
+.bottom-bar-label { font-size: 10px; line-height: 1; }
+.bottom-bar-count {
+  position: absolute; top: 3px; right: 6px; min-width: 15px; height: 15px; padding: 0 3px;
+  border-radius: 8px; background: var(--b3-theme-primary); color: var(--b3-theme-on-primary);
+  font-size: 10px; line-height: 15px; text-align: center; font-weight: 600;
+}
+
+/* 左/右抽屉骨架（思源 .side-panel：fixed 全宽 z7，translateX 滑入；z6 遮罩） */
+.side-mask { position: fixed; inset: 0; z-index: 6; background: #000; opacity: 0; visibility: hidden; transition: opacity 150ms linear; }
+.side-mask.on { opacity: 1; visibility: visible; }
+.side-panel {
+  position: fixed; top: 0; bottom: 0; left: 0; width: 100vw; z-index: 7;
+  display: flex; flex-direction: column; overflow: hidden;
+  background: var(--b3-theme-surface);
+  color: var(--b3-theme-on-surface);
+  transform: translateX(-100vw); transition: transform .15s cubic-bezier(0,0,.2,1);
+  will-change: transform;
+}
+.side-panel.on { transform: translateX(0); }
+.side-panel--right { left: auto; right: 0; transform: translateX(100vw); background: var(--b3-theme-surface); }
+.side-panel--right.on { transform: translateX(0); }
+.side-panel-head { display: flex; align-items: center; justify-content: space-between; padding: calc(14px + env(safe-area-inset-top, 0px)) 16px 12px; border-bottom: 1px solid var(--b3-border-color, var(--lake-border)); }
+.side-panel-title { font-size: 16px; font-weight: 600; }
+.side-panel-head-actions { display: flex; align-items: center; gap: 2px; }
+
+.side-panel-body { flex: 1; overflow-y: auto; padding: 8px 0 calc(24px + env(safe-area-inset-bottom, 0px)); }
+
+/* 目录树（b3-list-item 行） */
+.ln-chevron { flex: 0 0 auto; color: var(--b3-theme-on-surface, var(--lake-text-tertiary)); transition: transform 120ms ease; }
+.ln-chevron.open { transform: rotate(90deg); }
+.ln-chevron-spacer { flex: 0 0 auto; width: 16px; }
+.ln-tree-icon { flex: 0 0 auto; margin-right: 8px; color: var(--b3-theme-on-surface, var(--lake-text-secondary)); }
+.side-panel-body .b3-list-item { width: 100%; border: 0; background: transparent; cursor: pointer; gap: 4px; padding-top: 10px; padding-bottom: 10px; }
+
+/* 全屏 tab 列表（思源 #model） */
+.mobile-model-mask { position: fixed; inset: 0; z-index: 9; background: rgba(0,0,0,.45); display: flex; align-items: flex-end; }
+.mobile-model { width: 100%; max-width: 480px; margin: 0 auto; max-height: 80%; display: flex; flex-direction: column; background: var(--b3-theme-background, var(--lake-shell)); border-radius: 16px 16px 0 0; overflow: hidden; animation: mobile-sheet-in 240ms cubic-bezier(.22,1,.36,1); }
+.mobile-model-head { display: flex; align-items: center; justify-content: space-between; padding: 16px 16px 10px; border-bottom: 1px solid var(--b3-border-color, var(--lake-border)); }
+.mobile-model-title { font-size: 16px; font-weight: 600; }
+.mobile-model-body { overflow-y: auto; padding: 14px 16px calc(16px + env(safe-area-inset-bottom, 0px)); }
+.mobile-model-body .b3-list-item {
+  width: 100%; display: flex; align-items: center; gap: 10px;
+  min-height: 48px; margin-bottom: 8px; padding: 10px 14px;
+  border: 1px solid var(--b3-border-color); border-radius: var(--b3-border-radius-b);
+  background: var(--b3-theme-background); cursor: pointer;
+}
+.mobile-model-body .b3-list-item--selected { border-color: var(--b3-theme-primary); background: var(--b3-theme-primary-lightest); }
+.mobile-model-body .b3-list-item__text { flex: 1; min-width: 0; }
+.mobile-model-body .b3-list-item__action { border: 0; background: transparent; color: var(--b3-theme-on-surface-light); cursor: pointer; }
+.model-add { margin: 12px 20px 0; width: calc(100% - 40px); }
+
+

@@ -1,6 +1,6 @@
 /** 首页（小记/知识库切换 + 笔记本宫格）。小记 tab：composer 新建/编辑 + 卡片（含图片缩略图）。 */
 import { useEffect, useState } from "react";
-import { Plus, Search, Settings, Trash2 } from "lucide-react";
+import { Plus, Search, Settings } from "lucide-react";
 import type { TreeNode } from "../../lib/types";
 import { NotebookGrid } from "./NotebookGrid";
 import { QuickNoteComposer } from "./QuickNoteComposer";
@@ -26,8 +26,6 @@ export interface HomePageProps {
   onOpenSearch: () => void;
   onCreateNote: () => void;
   onCreateNotebook: () => void;
-  /** 小记 tab：打开小记回收站（B：小记全同步闭环的 UI 入口） */
-  onOpenQuickTrash: () => void;
   /** 小记列表变化（composer 保存/编辑后刷新） */
   onQuickNotesChanged: () => Promise<void>;
 }
@@ -37,7 +35,7 @@ type ComposerState = { mode: "new" } | { mode: "edit"; id: string } | null;
 export function HomePage(props: HomePageProps) {
   const {
     tab, notebooks, quickNotes, onTabChange, onOpenNotebook, onReorderNotebooks, onOpenNote,
-    onOpenDrawer, onOpenSearch, onCreateNote, onCreateNotebook, onOpenQuickTrash, onQuickNotesChanged,
+    onOpenDrawer, onOpenSearch, onCreateNote, onCreateNotebook, onQuickNotesChanged,
   } = props;
   const [composer, setComposer] = useState<ComposerState>(null);
   const [editNote, setEditNote] = useState<{ id: string; text: string; images: import("../../core/quickNoteModel.js").StoredQuickNoteImage[] } | null>(null);
@@ -65,7 +63,6 @@ export function HomePage(props: HomePageProps) {
           <button className={tab === "library" ? "mobile-htab active" : "mobile-htab"} onClick={() => onTabChange("library")}>知识库</button>
         </div>
         <button className="mobile-icon-btn" onClick={onOpenSearch} aria-label="搜索"><Search size={20} /></button>
-        {tab === "quick" && <button className="mobile-icon-btn" onClick={onOpenQuickTrash} aria-label="小记回收站" title="小记回收站"><Trash2 size={18} /></button>}
       </header>
       {tab === "quick" ? (
         composer !== null ? (

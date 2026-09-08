@@ -31,6 +31,37 @@ const MOBILE_CSP =
   "media-src 'self' data: blob: http://127.0.0.1:*; " +
   "worker-src 'self' blob:; object-src 'none'; base-uri 'none'; form-action 'none'";
 
+/** 浏览器移动预览宿主页：把 App 包在 390×844 竖屏手机框里（居中、窗口过小自动等比缩放）。
+ * 仅用于开发预览，不做发布入口（Capacitor 用 index.html）。生成到 dist-mobile/preview.html。 */
+const MOBILE_PREVIEW_HTML = `<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Lake Notes 移动端预览</title>
+<style>
+  html,body{margin:0;height:100vh;height:100dvh;background:#2b2b30;overflow:hidden;}
+  .stage{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;}
+  .phone{width:390px;height:844px;background:#000;border-radius:30px;box-shadow:0 24px 70px rgba(0,0,0,.55);overflow:hidden;flex:none;transform-origin:center center;}
+  .phone iframe{width:100%;height:100%;border:0;display:block;background:#fff;}
+  .hint{position:fixed;bottom:10px;left:0;right:0;text-align:center;color:#9a9aa0;font:12px/1.4 -apple-system,system-ui,sans-serif;pointer-events:none;}
+</style>
+</head>
+<body>
+  <div class="stage"><div class="phone"><iframe src="index.html" allow="clipboard-read; clipboard-write"></iframe></div></div>
+  <div class="hint">Lake Notes 移动端预览 · 390×844 · DevTools 设备模式可调试</div>
+  <script>
+    function fit(){
+      const p=document.querySelector('.phone');
+      const s=Math.min(1,(window.innerWidth-24)/390,(window.innerHeight-40)/844);
+      p.style.transform='scale('+Math.max(0.2,s)+')';
+    }
+    window.addEventListener('resize',fit);fit();
+  </script>
+</body>
+</html>
+`;
+
 function lakexAlipayLocalMobile(): Plugin {
   return {
     name: "lakex-alipay-local-mobile",
@@ -43,9 +74,10 @@ function lakexAlipayLocalMobile(): Plugin {
         `$1${MOBILE_CSP}$2`
       );
     },
-    /** Capacitor webDir 入口必须是 index.html：构建后复制 mobile.html → index.html */
+    /** Capacitor webDir 入口必须是 index.html：构建后复制 mobile.html → index.html；并生成浏览器预览宿主页 */
     closeBundle() {
       fs.copyFileSync("dist-mobile/mobile.html", "dist-mobile/index.html");
+      fs.writeFileSync("dist-mobile/preview.html", MOBILE_PREVIEW_HTML);
     },
     transform(code, id) {
       if (!id.includes("lakex-editor-react-component")) return;

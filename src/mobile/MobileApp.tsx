@@ -8,24 +8,18 @@ import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from "react
 import { bridge, type POCNote, type POCNoteSummary } from "./bridge";
 import type { TreeNode } from "../lib/types";
 import { HomePage } from "./home/HomePage";
-import { NotebookPage } from "./notebook/NotebookPage";
+import { NotebookWorkspace } from "./notebook/NotebookWorkspace";
 const DocumentPage = lazy(() => import("./document/DocumentPage").then(({ DocumentPage: Page }) => ({ default: Page })));
 import { CreateNotebookSheet } from "./settings/CreateNotebookSheet";
 import { SearchSheet } from "./settings/SearchSheet";
 import { SettingsDrawer } from "./settings/SettingsDrawer";
 import { useBackHandler } from "./useBackHandler";
-import { TrashPage } from "./trash/TrashPage";
-import { TrashPreviewPage } from "./trash/TrashPreviewPage";
-import { QuickNotesTrashPage } from "./trash/QuickNotesTrashPage";
 import "./mobile.css";
 
 export type Route =
   | { kind: "home"; tab: "quick" | "library" }
   | { kind: "notebook"; notebookId: string }
-  | { kind: "document"; noteId: string; mode: "viewer" | "editor" }
-  | { kind: "trash" }
-  | { kind: "trash-preview"; noteId: string }
-  | { kind: "quick-trash" };
+  | { kind: "document"; noteId: string; mode: "viewer" | "editor" };
 
 export function MobileApp() {
   const [route, setRoute] = useState<Route>({ kind: "home", tab: "library" });
@@ -148,8 +142,6 @@ export function MobileApp() {
     onExitEdit: exitEdit,
     onBackFromDocument: backFromDocument,
     onBackFromNotebook: () => setRoute({ kind: "home", tab: "library" }),
-    onBackFromTrash: () => setRoute({ kind: "home", tab: "library" }),
-    onBackFromQuickTrash: () => setRoute({ kind: "home", tab: "quick" }),
     onCloseDrawer: () => setDrawerOpen(false),
     onCloseSheets: () => { setCreateNbOpen(false); setSearchOpen(false); },
     onAppExit: () => {
@@ -174,7 +166,6 @@ export function MobileApp() {
         open={drawerOpen}
         onClose={() => setDrawerOpen(false)}
         onRefresh={refreshAll}
-        onOpenTrash={() => { setDrawerOpen(false); setRoute({ kind: "trash" }); }}
       />
       {route.kind === "home" && (
         <HomePage
@@ -194,36 +185,14 @@ export function MobileApp() {
           onOpenSearch={() => setSearchOpen(true)}
           onCreateNote={() => void createNoteInParent(null)} // 无默认笔记本：bridge 兜底（存在的笔记本/自动建"未分类"）
           onCreateNotebook={() => setCreateNbOpen(true)}
-          onOpenQuickTrash={() => setRoute({ kind: "quick-trash" })}
           onQuickNotesChanged={refreshAll}
         />
       )}
       {route.kind === "notebook" && (
-        <NotebookPage
+        <NotebookWorkspace
           notebookId={route.notebookId}
+          initialNoteId={null}
           onBack={() => setRoute({ kind: "home", tab: "library" })}
-          onOpenNote={(id) => openDocument(id, "viewer", route.notebookId)}
-          onCreateNote={() => void createNoteInParent(route.notebookId)}
-        />
-      )}
-      {route.kind === "trash" && (
-        <TrashPage
-          onBack={() => setRoute({ kind: "home", tab: "library" })}
-          onChanged={refreshAll}
-          onPreview={(noteId) => setRoute({ kind: "trash-preview", noteId })}
-        />
-      )}
-      {route.kind === "trash-preview" && (
-        <TrashPreviewPage
-          noteId={route.noteId}
-          onBack={() => setRoute({ kind: "trash" })}
-          onRestored={() => { setRoute({ kind: "trash" }); void refreshAll(); }}
-        />
-      )}
-      {route.kind === "quick-trash" && (
-        <QuickNotesTrashPage
-          onBack={() => setRoute({ kind: "home", tab: "quick" })}
-          onChanged={refreshAll}
         />
       )}
       {route.kind === "document" && active && (

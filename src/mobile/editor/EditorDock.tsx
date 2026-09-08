@@ -6,8 +6,10 @@
  * 格式命令走 Lake renderer.execCommand（文本 ne-* 属性；块级 style "h1"/"p" 等）。
  */
 import { useEffect, useRef, useState } from "react";
-import { Plus, Type, Bold, List, ListTodo, MoreHorizontal, Keyboard, X, Image as ImageIcon, Paperclip, Table2, Quote, Minus, Code2, ChevronDown, Music, Video } from "lucide-react";
+import { Plus, Type, Bold, List, ListTodo, MoreHorizontal, Keyboard, X, Check, Image as ImageIcon, Paperclip, Table2, Quote, Minus, Code2, ChevronDown, Music, Video } from "lucide-react";
 import { lakeBridge, type LakeEditorInstance } from "../../features/editor/lakeRuntime";
+import { MARK_COMMANDS, BLOCK_INSERT_COMMANDS, HISTORY_COMMANDS, STYLE_BLOCKS } from "../../features/editor/editorCommands";
+import { useKeyboard } from "../useKeyboard";
 
 type PanelMode = "insert" | "font" | null;
 
@@ -15,6 +17,8 @@ export interface EditorDockProps {
   editor: LakeEditorInstance | null;
   /** 编辑态才渲染 */
   editing: boolean;
+  /** 退出编辑态（工具栏“完成”） */
+  onToggleEdit?: () => void;
   /** 触发图片插入（选文件 → 上传 → 插入 Lake） */
   onInsertImage?: () => void;
   /** 触发附件插入 */
@@ -37,55 +41,90 @@ function useEditorExec(editor: LakeEditorInstance | null) {
   };
 }
 
-export function EditorDock({ editor, editing, onInsertImage, onInsertAttachment, onInsertAudio, onInsertVideo, onInsertTable }: EditorDockProps) {
+export function EditorDock({ editor, editing, onToggleEdit, onInsertImage, onInsertAttachment, onInsertAudio, onInsertVideo, onInsertTable }: EditorDockProps) {
   const [panelMode, setPanelMode] = useState<PanelMode>(null);
-  const [dockHidden, setDockHidden] = useState(false);
+  // 面板打开时占用「键盘空间」的高度：打开瞬间捕获键盘实际高度（height），随后收起键盘（不需要打字了）
+  const [panelHeight, setPanelHeight] = useState(0);
+  const { base, innerHeight, offset, height, keyboardOpen } = useKeyboard();
   const exec = useEditorExec(editor);
   const execRef = useRef(exec);
   execRef.current = exec;
 
   // 退出编辑态时复位
   useEffect(() => {
-    if (!editing) { setPanelMode(null); setDockHidden(false); }
+    if (!editing) { setPanelMode(null); setPanelHeight(0); }
   }, [editing]);
 
+  // 编辑态常驻底部工具栏（完成/插入/字体等）；键盘弹出时悬浮在键盘上方。
   if (!editing) return null;
 
-  const focusEditor = () => { try { lakeBridge(editor ?? undefined).renderer?.execCommand?.("focus" as never); } catch { /* 忽略 */ } };
-  const togglePanel = (mode: Exclude<PanelMode, null>) => setPanelMode((p) => (p === mode ? null : mode));
-  const run = (cmd: string, ...args: unknown[]) => { exec(cmd, ...args); focusEditor(); };
+  const focusEditor = () => {
+    try { const ce = document.querySelector<HTMLElement>(".doc-pane.active [contenteditable]"); ce?.focus(); } catch { /* 忽略 */ }
+    try { lakeBridge(editor ?? undefined).renderer?.execCommand?.("focus" as never); } catch { /* 忽略 */ }
+  };
+  // 切换展开面板：打开时把键盘高度捕获为面板占用空间，并收起键盘（用工具时不打字，直接占键盘空间）
+  const togglePanel = (mode: Exclude<PanelMode, null>) => {
+    if (panelMode === mode) {                                     // 关闭面板 → 自动恢复键盘（不需要手动）
+      setPanelMode(null);
+      setPanelHeight(0);
+      focusEditor();
+      return;
+    }
+    if (!panelMode) {                                             // 仅从关闭态打开：捕获键盘高度（此后工具栏不抖）
+      setPanelHeight(Math.max(Math.round(height), 280));
+      // blur 延迟到 setState 之后执行，确保输入法稳定退出（面板随后占住键盘区）
+      setTimeout(() => {
+        try { (document.activeElement as HTMLElement | null)?.blur?.(); } catch { /* 忽略 */ }
+      }, 0);
+    }                                                             // 面板间切换(insert<->font)保持原高度 → 工具栏不抖
+    setPanelMode(mode);
+  };
+  // 工具栏行内命令（bold/列表/待办）：按钮已用 onMouseDown preventDefault 防止抢焦点，
+  // 编辑器保持焦点 + 选区/光标保留 → 命令作用于正确位置，键盘也不被收起（继续打字）。
+  const runInline = (cmd: string, ...args: unknown[]) => { exec(cmd, ...args); };
+  // 面板项命令（正文/标题/引用/分割线/代码/字体等）：只执行，不聚焦 → 不重开输入法（面板已占用键盘空间）
+  const runPanel = (cmd: string, ...args: unknown[]) => { exec(cmd, ...args); };
 
-  const hideKeyboard = () => {
+  // 收起键盘：手动收起（编辑态保留）。有关闭面板则先收起面板（不恢复键盘——用户明确要收起）。
+  const dismissKeyboard = () => {
     setPanelMode(null);
-    setDockHidden(true);
+    setPanelHeight(0);
     try { (document.activeElement as HTMLElement | null)?.blur?.(); } catch { /* 忽略 */ }
   };
-  const showKeyboard = () => {
-    setDockHidden(false);
-    focusEditor();
-  };
+  const showKeyboard = () => { focusEditor(); };
+  // 工具栏“收起/展开键盘”按钮：无面板 = 按键盘开合切换；有面板 = 收起面板（键盘此前已收起）
+  const onKbToggle = () => { if (panelMode) dismissKeyboard(); else if (keyboardOpen) dismissKeyboard(); else showKeyboard(); };
+  const kbLabel = panelMode ? "收起面板" : (keyboardOpen ? "收起键盘" : "展开键盘");
+  const exitEdit = () => { onToggleEdit?.(); dismissKeyboard(); };
 
+  // 工具栏底部基准：无面板 = 键盘上移量(offset，adjustResize=0)；有面板 = 面板占用的键盘高度
+  // 工具栏 bottom 基准（--kb-offset，CSS 再加 4px）：
+  //  - 无面板：键盘开合由 WebView 自身处理（adjustResize 下 innerHeight 已缩，offset=0 → 贴底即为键盘上方）。
+  //  - 有面板：用 innerHeight-base+panelHeight，让工具栏屏幕 Y 恒定在「键盘/面板上方」——键盘收起、innerHeight
+  //    530→842 的过程中 toolbar 的位置不跳（原先直接用 panelHeight 会在视图仍 530 时闪到屏幕中间）。
+  const usable = panelMode ? Math.max(0, innerHeight - base + panelHeight) : offset;
   const plusCls = "med-btn" + (panelMode === "insert" ? " med-active" : "");
   const aaCls = "med-btn med-aa" + (panelMode === "font" ? " med-active" : "");
 
   return (
-    <div className="mobile-editor-dock" data-panel={panelMode ?? "none"} data-hidden={dockHidden ? "1" : "0"}>
+    <div className="mobile-editor-dock" data-panel={panelMode ?? "none"} style={{ ["--kb-offset" as string]: `${usable}px` } as import("react").CSSProperties}>
       {/* 主工具栏（悬浮输入法上方） */}
-      <div className="med-toolbar">
+      <div className="med-toolbar" onMouseDown={(e) => e.preventDefault()}>
         <button className={plusCls} onClick={() => togglePanel("insert")} aria-label="插入">
           {panelMode === "insert" ? <X size={20} /> : <Plus size={21} />}
         </button>
         <button className={aaCls} onClick={() => togglePanel("font")} aria-label="字体">Aa</button>
-        <button className="med-btn med-b" onClick={() => run("bold")} aria-label="加粗"><Bold size={19} /></button>
-        <button className="med-btn" onClick={() => run("insertUnorderedList" as never)} aria-label="列表"><List size={20} /></button>
-        <button className="med-btn" onClick={() => run("taskList" as never)} aria-label="待办"><ListTodo size={20} /></button>
+        <button className="med-btn med-b" onClick={() => runInline("bold")} aria-label="加粗"><Bold size={19} /></button>
+        <button className="med-btn" onClick={() => runInline("unorderedList" as never)} aria-label="列表"><List size={20} /></button>
+        <button className="med-btn" onClick={() => runInline("taskList" as never)} aria-label="待办"><ListTodo size={20} /></button>
         <button className="med-btn" onClick={() => togglePanel("font")} aria-label="更多"><MoreHorizontal size={20} /></button>
-        <button className="med-btn" onClick={hideKeyboard} aria-label="收起键盘"><Keyboard size={19} /></button>
+        <button className="med-btn" onClick={onKbToggle} aria-label={kbLabel}><Keyboard size={19} /></button>
+        <button className="med-btn med-done" onClick={exitEdit} aria-label="完成"><Check size={20} /></button>
       </div>
 
       {/* 展开面板（覆盖输入法区域） */}
       {panelMode && (
-        <div className="med-panel">
+        <div className="med-panel" onMouseDown={(e) => e.preventDefault()}>
           {panelMode === "insert" ? (
             <div className="med-ins-grid">
               <button className="med-ins-item" onClick={() => { onInsertImage?.(); }}><ImageIcon size={20} /><span>图片</span></button>
@@ -93,45 +132,41 @@ export function EditorDock({ editor, editing, onInsertImage, onInsertAttachment,
               <button className="med-ins-item" onClick={() => { onInsertAudio?.(); }}><Music size={20} /><span>音频</span></button>
               <button className="med-ins-item" onClick={() => { onInsertVideo?.(); }}><Video size={20} /><span>视频</span></button>
               <button className="med-ins-item" onClick={() => { onInsertTable?.(); }}><Table2 size={20} /><span>表格</span></button>
-              <button className="med-ins-item" onClick={() => run("quote")}><Quote size={20} /><span>引用</span></button>
-              <button className="med-ins-item" onClick={() => run("hr")}><Minus size={20} /><span>分割线</span></button>
-              <button className="med-ins-item" onClick={() => run("code")}><Code2 size={20} /><span>代码块</span></button>
+              <button className="med-ins-item" onClick={() => runPanel("quote")}><Quote size={20} /><span>引用</span></button>
+              <button className="med-ins-item" onClick={() => runPanel("hr")}><Minus size={20} /><span>分割线</span></button>
+              <button className="med-ins-item" onClick={() => runPanel("code")}><Code2 size={20} /><span>代码块</span></button>
             </div>
           ) : (
             <div className="med-font-panel">
+              {/* 块级样式（style 命令：光标在段内即可执行，面板 blur 后仍有效） */}
               <div className="med-f-row">
-                {["p", "h1", "h2", "h3", "h4"].map((b) => (
-                  <button key={b} className="med-f-btn" onClick={() => run("style" as never, b)}>{b === "p" ? "正文" : b.toUpperCase()}</button>
+                {STYLE_BLOCKS.map((b) => (
+                  <button key={b.value} className="med-f-btn" onClick={() => runPanel("style", b.value)}>{b.label}</button>
                 ))}
               </div>
+              {/* 行内标记（需先选中文本；主工具栏 B/列表/待办走 runInline 保选区更可靠） */}
               <div className="med-f-row">
-                <button className="med-f-btn med-b" onClick={() => run("bold")}>B</button>
-                <button className="med-f-btn med-i" onClick={() => run("italic")}>I</button>
-                <button className="med-f-btn med-s" onClick={() => run("strikethrough")}>S</button>
-                <button className="med-f-btn med-u" onClick={() => run("underline")}>U</button>
-                <button className="med-f-btn" onClick={() => run("clearFormat" as never)}>清除</button>
+                {MARK_COMMANDS.map((c) => (
+                  <button key={c.name} className={"med-f-btn" + (c.name === "bold" ? " med-b" : "")} onClick={() => runPanel(c.name)}>{c.label}</button>
+                ))}
               </div>
+              {/* 块级/插入命令 */}
               <div className="med-f-row">
-                <button className="med-f-btn" onClick={() => run("indent")}>缩进</button>
-                <button className="med-f-btn" onClick={() => run("outdent")}>减少</button>
-                <button className="med-f-btn" onClick={() => run("undo")}>撤销</button>
-                <button className="med-f-btn" onClick={() => run("redo" as never)}>重做</button>
+                {BLOCK_INSERT_COMMANDS.map((c) => (
+                  <button key={c.name} className="med-f-btn" onClick={() => runPanel(c.name)}>{c.label}</button>
+                ))}
               </div>
-              <div className="med-f-row med-f-align">
-                <button className="med-f-btn" onClick={() => run("justifyLeft" as never)}>左</button>
-                <button className="med-f-btn" onClick={() => run("justifyCenter" as never)}>中</button>
-                <button className="med-f-btn" onClick={() => run("justifyRight" as never)}>右</button>
-                <button className="med-f-btn" onClick={() => run("fontsize" as never, 2)}><ChevronDown size={16} />Aa</button>
+              {/* 历史 */}
+              <div className="med-f-row">
+                {HISTORY_COMMANDS.map((c) => (
+                  <button key={c.name} className="med-f-btn" onClick={() => runPanel(c.name)}>{c.label}</button>
+                ))}
               </div>
             </div>
           )}
         </div>
       )}
 
-      {/* 键盘收起后的重显按钮 */}
-      {dockHidden && (
-        <button className="med-kb-reshow" onClick={showKeyboard} aria-label="展开工具栏"><Keyboard size={20} /></button>
-      )}
     </div>
   );
 }

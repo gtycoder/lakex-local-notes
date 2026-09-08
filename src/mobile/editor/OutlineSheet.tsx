@@ -19,9 +19,11 @@ export interface OutlineSheetProps {
   open: boolean;
   editor: LakeEditorInstance | null;
   onClose: () => void;
+  /** 渲染为右侧抽屉(.side-panel--right)而非底部 sheet。缺省为底部 sheet。 */
+  side?: boolean;
 }
 
-export function OutlineSheet({ open, editor, onClose }: OutlineSheetProps) {
+export function OutlineSheet({ open, editor, onClose, side }: OutlineSheetProps) {
   const [entries, setEntries] = useState<TocEntry[]>([]);
 
   useEffect(() => {
@@ -39,7 +41,8 @@ export function OutlineSheet({ open, editor, onClose }: OutlineSheetProps) {
     return () => window.removeEventListener("keydown", onKey);
   }, [open, onClose]);
 
-  if (!open) return null;
+  // side 变体始终渲染（靠 .on 滑入/滑出，动画可达）；底部 sheet 仍按 open 条件渲染
+  if (!open && !side) return null;
 
   const jump = (id: string) => {
     try {
@@ -51,9 +54,9 @@ export function OutlineSheet({ open, editor, onClose }: OutlineSheetProps) {
   };
 
   return (
-    <div className="mobile-sheet-mask" onClick={onClose}>
-      <div className="mobile-sheet med-outline-sheet" onClick={(e) => e.stopPropagation()}>
-        <div className="mobile-sheet-grab" />
+    <div className={side ? ("side-mask" + (open ? " on" : "")) : "mobile-sheet-mask"} onClick={onClose}>
+      <div className={side ? ("side-panel side-panel--right" + (open ? " on" : "")) : "mobile-sheet med-outline-sheet"} onClick={(e) => e.stopPropagation()}>
+        {!side && <div className="mobile-sheet-grab" />}
         <div className="mobile-sheet-head">
           <span className="mobile-sheet-title">大纲</span>
           <button className="mobile-icon-btn" onClick={onClose} aria-label="关闭"><X size={20} /></button>

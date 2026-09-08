@@ -1,9 +1,13 @@
-/** 移动端设置抽屉（§6：同步设置 S3 / 清理缓存 / 关于）。Phase 4a 真实功能。 */
+/** 移动端设置页（§6：同步设置 S3 / 清理缓存 / 回收站 / 关于）。
+ * 版式：竖向菜单列表（设置项一行一行），点某项进入新页面（带返回）；子页内容用 .config-* + .b3-* 骨架（AGENTS §3.14）。
+ * 注意：全部 App 设置为竖向（无横向 tab）；「回收站」并入总回收站（见 TrashList）。 */
 import { useCallback, useEffect, useState } from "react";
-import { Cloud, Info, Trash2, X, RefreshCw } from "lucide-react";
+import { ArrowLeft, ChevronRight, Cloud, Info, Trash2, X, RefreshCw, HardDrive } from "lucide-react";
 import { bridge } from "../bridge";
 import { mobileCachePort } from "../cachePort";
 import { mobileAppInfoPort } from "../appInfoPort";
+import { TrashList } from "./TrashList";
+import { TrashPreviewPage } from "../trash/TrashPreviewPage";
 import type { AppInfo } from "../../core/ports";
 import type { S3Settings } from "../../lib/types";
 
@@ -11,17 +15,27 @@ export interface SettingsDrawerProps {
   open: boolean;
   onClose: () => void;
   onRefresh: () => Promise<void>;
-  onOpenTrash: () => void;
 }
 
-type Tab = "s3" | "cache" | "about";
+type View = "menu" | "s3" | "cache" | "trash" | "about";
+
+const MENU: { key: Exclude<View, "menu">; label: string; icon: typeof Cloud }[] = [
+  { key: "s3", label: "同步设置", icon: Cloud },
+  { key: "cache", label: "清理缓存", icon: HardDrive },
+  { key: "trash", label: "回收站", icon: Trash2 },
+  { key: "about", label: "关于", icon: Info },
+];
+
+const MENU_LABEL = (key: Exclude<View, "menu">) => MENU.find((m) => m.key === key)?.label ?? "";
 
 /** 对齐桌面 registerSync 的 S3_SECRET_MASK：get 不回显明文，保存时掩码则保留旧值。 */
 const S3_SECRET_MASK = "********";
 
 export function SettingsDrawer(props: SettingsDrawerProps) {
-  const { open, onClose, onRefresh, onOpenTrash } = props;
-  const [tab, setTab] = useState<Tab>("s3");
+  const { open, onClose, onRefresh } = props;
+  const [view, setView] = useState<View>("menu");
+  const [previewNoteId, setPreviewNoteId] = useState<string | null>(null);
+  const [listKey, setListKey] = useState(0);
   const [s3, setS3] = useState<S3Settings | null>(null);
   const [s3Test, setS3Test] = useState("");
   const [syncMsg, setSyncMsg] = useState("");
@@ -30,14 +44,14 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
   const [appInfo, setAppInfo] = useState<AppInfo | null>(null);
 
   useEffect(() => {
-    if (!open || tab !== "about") return;
+    if (!open || view !== "about") return;
     void mobileAppInfoPort.getAppInfo().then(setAppInfo).catch(() => undefined);
-  }, [open, tab]);
+  }, [open, view]);
 
   useEffect(() => {
-    if (!open || tab !== "cache") return;
+    if (!open || view !== "cache") return;
     void mobileCachePort.getCacheSummary().then(setCacheSummary).catch(() => undefined);
-  }, [open, tab]);
+  }, [open, view]);
 
   // S3 表单：复用共享 S3Settings（prefix 参与透传）
   const [endpoint, setEndpoint] = useState(s3?.endpoint ?? "https://s3.cn-north-1.qiniucs.com");
@@ -77,7 +91,6 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
   const runSync = useCallback(async () => {
     setSyncMsg("同步中…");
     try {
-      // P2-5：结构化结果（message 已含文档+小记汇总；分字段供后续 UI 分别展示）
       const result = await bridge.syncNow();
       setSyncMsg(result.message);
       await onRefresh();
@@ -90,8 +103,7 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
     setCacheMsg("清理中…");
     try {
       const result = await mobileCachePort.clearDerivedCaches();
-      const cleared = result.cleared;
-      setCacheMsg("已清理：blob " + (cleared.runtimeBlobBytes ?? 0) + " 项");
+      setCacheMsg("已清理：blob " + (result.cleared.runtimeBlobBytes ?? 0) + " 项");
     } catch (e) {
       setCacheMsg("清理失败: " + (e as Error).message);
     }
@@ -100,63 +112,141 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
 
   if (!open) return null;
 
+  const isSub = view !== "menu";
+
   return (
-    <>
-      <div className="mobile-drawer-mask" onClick={onClose} />
-      <div className="mobile-drawer">
-        <div className="mobile-drawer-head">
-          设置
-          <button className="mobile-drawer-close" onClick={onClose} aria-label="关闭"><X size={18} /></button>
-        </div>
-        <div className="mobile-drawer-tabs">
-          <button className={tab === "s3" ? "active" : ""} onClick={() => setTab("s3")}><Cloud size={15} />同步设置</button>
-          <button className={tab === "cache" ? "active" : ""} onClick={() => setTab("cache")}><Trash2 size={15} />清理缓存</button>
-          <button className={tab === "about" ? "active" : ""} onClick={() => setTab("about")}><Info size={15} />关于</button>
-        </div>
-        <button className="mobile-drawer-trash-entry" onClick={onOpenTrash}><Trash2 size={15} />回收站</button>
-        <div className="mobile-drawer-body">
-          {tab === "s3" && (
-            <div className="mobile-settings-form">
-              <label>Endpoint</label><input value={endpoint} onChange={(e) => setEndpoint(e.target.value)} />
-              <label>Region</label><input value={region} onChange={(e) => setRegion(e.target.value)} />
-              <label>Bucket</label><input value={bucket} onChange={(e) => setBucket(e.target.value)} />
-              <label>Object prefix</label><input value={prefix} onChange={(e) => setPrefix(e.target.value)} />
-              <label>Access Key</label><input value={ak} onChange={(e) => setAk(e.target.value)} />
-              <label>Secret Key</label><input type="password" value={sk} onChange={(e) => setSk(e.target.value)} />
-              <div className="mobile-settings-actions">
-                <button onClick={saveS3}>保存</button>
-                <button onClick={() => void testS3()}>测试连接</button>
-                <button onClick={() => void runSync()}><RefreshCw size={14} />同步</button>
-              </div>
-              {s3Test && <div className="mobile-settings-msg">{s3Test}</div>}
-              {syncMsg && <div className="mobile-settings-msg">{syncMsg}</div>}
-            </div>
-          )}
-          {tab === "cache" && (
-            <div className="mobile-settings-form">
-              <p className="mobile-settings-hint">只清理可重建的派生数据（blob 运行时缓存）。<br />不会删除正文、未同步修改或已下载资源。</p>
-              {cacheSummary && (
-                <div className="mobile-cache-summary">
-                  <div className="mobile-cache-row"><span>Blob 运行时缓存</span><span>{cacheSummary.runtimeBlobBytes} 项</span></div>
-                  <div className="mobile-cache-row muted"><span>已下载资源（不清理）</span><span>{cacheSummary.downloadableAssetBytes} 项</span></div>
-                  <div className="mobile-cache-row muted"><span>待上传（不清理）</span><span>{cacheSummary.pendingUploadBytes} 项</span></div>
+    <div className="mobile-settings-page">
+      <header className="mobile-settings-head">
+        {isSub ? (
+          <button className="mobile-settings-close" onClick={() => { setView("menu"); setPreviewNoteId(null); }} aria-label="返回"><ArrowLeft size={22} /></button>
+        ) : (
+          <div className="mobile-settings-spacer" />
+        )}
+        <div className="mobile-settings-title">{isSub ? MENU_LABEL(view) : "设置"}</div>
+        {isSub ? (
+          <div className="mobile-settings-spacer mobile-settings-spacer--sm" />
+        ) : (
+          <button className="mobile-settings-close" onClick={onClose} aria-label="关闭"><X size={18} /></button>
+        )}
+      </header>
+
+      {isSub ? (
+        <div className="mobile-settings-content">
+          {view === "s3" && (
+            <>
+              <div className="config-group">
+                <div className="config-title"><Cloud size={16} />同步设置（七牛 S3）</div>
+                <div className="config-items">
+                  <div className="config-item">
+                    <div className="config-item__main"><div className="config-name">Endpoint</div></div>
+                    <div className="config-item__ctl"><input className="b3-text-field" value={endpoint} onChange={(e) => setEndpoint(e.target.value)} /></div>
+                  </div>
+                  <div className="config-item">
+                    <div className="config-item__main"><div className="config-name">Region</div></div>
+                    <div className="config-item__ctl"><input className="b3-text-field" value={region} onChange={(e) => setRegion(e.target.value)} /></div>
+                  </div>
+                  <div className="config-item">
+                    <div className="config-item__main"><div className="config-name">Bucket</div></div>
+                    <div className="config-item__ctl"><input className="b3-text-field" value={bucket} onChange={(e) => setBucket(e.target.value)} /></div>
+                  </div>
+                  <div className="config-item">
+                    <div className="config-item__main"><div className="config-name">Object prefix</div></div>
+                    <div className="config-item__ctl"><input className="b3-text-field" value={prefix} onChange={(e) => setPrefix(e.target.value)} /></div>
+                  </div>
+                  <div className="config-item">
+                    <div className="config-item__main"><div className="config-name">Access Key</div></div>
+                    <div className="config-item__ctl"><input className="b3-text-field" value={ak} onChange={(e) => setAk(e.target.value)} /></div>
+                  </div>
+                  <div className="config-item">
+                    <div className="config-item__main"><div className="config-name">Secret Key</div></div>
+                    <div className="config-item__ctl"><input className="b3-text-field" type="password" value={sk} onChange={(e) => setSk(e.target.value)} /></div>
+                  </div>
                 </div>
-              )}
-              <button onClick={() => void clearCache()}>清理缓存</button>
-              {cacheMsg && <div className="mobile-settings-msg">{cacheMsg}</div>}
+              </div>
+              <div className="config-group">
+                <div className="config-title"><RefreshCw size={16} />连接与同步</div>
+                <div className="config-items">
+                  <div className="config-block">
+                    <div className="config-block__name">保存并测试连接</div>
+                    <div className="config-block__text">配置将由本地保存为真相，S3 仅作同步镜像。</div>
+                    <div className="config-block__actions">
+                      <button className="b3-button" onClick={saveS3}>保存</button>
+                      <button className="b3-button" onClick={() => void testS3()}>测试连接</button>
+                      <button className="b3-button b3-button--outline" onClick={() => void runSync()}><RefreshCw size={14} />立即同步</button>
+                    </div>
+                    {s3Test && <div className="config-block__text">{s3Test}</div>}
+                    {syncMsg && <div className="config-block__text">{syncMsg}</div>}
+                  </div>
+                </div>
+              </div>
+            </>
+          )}
+
+          {view === "cache" && (
+            <div className="config-group">
+              <div className="config-title"><HardDrive size={16} />清理缓存</div>
+              <div className="config-items">
+                <div className="config-block">
+                  <div className="config-block__text">只清理可重建的派生数据（blob 运行时缓存）。<br />不会删除正文、未同步修改或已下载资源。</div>
+                  {cacheSummary && (
+                    <div className="config-stats">
+                      <span><strong>Blob 运行时缓存</strong> {cacheSummary.runtimeBlobBytes} 项</span>
+                      <span>已下载资源（不清理）{cacheSummary.downloadableAssetBytes} 项</span>
+                      <span>待上传（不清理）{cacheSummary.pendingUploadBytes} 项</span>
+                    </div>
+                  )}
+                  <div className="config-block__actions">
+                    <button className="b3-button" onClick={() => void clearCache()}>清理缓存</button>
+                  </div>
+                  {cacheMsg && <div className="config-block__text">{cacheMsg}</div>}
+                </div>
+              </div>
             </div>
           )}
-          {tab === "about" && (
-            <div className="mobile-settings-form">
-              <div className="mobile-about-name">{appInfo?.name ?? "Lake Notes"}</div>
-              <div className="mobile-about-item">版本：{appInfo?.version ?? "…"}（build {appInfo?.build ?? "…"}）</div>
-              <div className="mobile-about-item">协议：manifest v{appInfo?.protocolVersion ?? "4"} · 本地为真相，S3 为同步镜像</div>
-              <div className="mobile-about-item">平台：{appInfo?.platform === "web" ? "Web 预览 (Capacitor 未就绪)" : "Android (Capacitor + sql.js WASM)"}</div>
-              <div className="mobile-about-item">本地优先笔记应用（Electron + 安卓共享同步层）</div>
+
+          {view === "about" && (
+            <div className="config-group">
+              <div className="config-title"><Info size={16} />关于</div>
+              <div className="config-items">
+                <div className="config-block">
+                  <div className="config-block__name">{appInfo?.name ?? "Lake Notes"}</div>
+                  <div className="config-block__text">版本：{appInfo?.version ?? "…"}（build {appInfo?.build ?? "…"}）</div>
+                  <div className="config-block__text">协议：manifest v{appInfo?.protocolVersion ?? "4"} · 本地为真相，S3 为同步镜像</div>
+                  <div className="config-block__text">平台：{appInfo?.platform === "web" ? "Web 预览 (Capacitor 未就绪)" : "Android (Capacitor + sql.js WASM)"}</div>
+                  <div className="config-block__text">本地优先笔记应用（Electron + 安卓共享同步层）</div>
+                </div>
+              </div>
             </div>
+          )}
+
+          {view === "trash" && (
+            <TrashList key={listKey} title="回收站" onChanged={onRefresh} onPreview={(noteId) => setPreviewNoteId(noteId)} />
           )}
         </div>
-      </div>
-    </>
+      ) : (
+        <div className="mobile-settings-list">
+          {MENU.map((m) => {
+            const Icon = m.icon;
+            return (
+              <button key={m.key} className="b3-list-item mobile-settings-row" onClick={() => { setView(m.key); setPreviewNoteId(null); }}>
+                <Icon size={20} className="b3-list-item__graphic" />
+                <span className="b3-list-item__text">{m.label}</span>
+                <ChevronRight size={18} className="b3-list-item__arrow" />
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      {previewNoteId && (
+        <div className="mobile-settings-preview">
+          <TrashPreviewPage
+            noteId={previewNoteId}
+            onBack={() => setPreviewNoteId(null)}
+            onRestored={() => { setPreviewNoteId(null); setListKey((k) => k + 1); void onRefresh(); }}
+          />
+        </div>
+      )}
+    </div>
   );
 }

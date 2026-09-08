@@ -17,8 +17,6 @@ export interface BackHandlerState {
   onExitEdit: () => void;
   onBackFromDocument: () => void;
   onBackFromNotebook: () => void;
-  onBackFromTrash: () => void;
-  onBackFromQuickTrash: () => void;
   onCloseDrawer: () => void;
   onCloseSheets: () => void;
   onAppExit: () => void;
@@ -48,10 +46,6 @@ export function useBackHandler(state: BackHandlerState) {
           if (s.route.kind === "document") { s.onBackFromDocument(); return; }
           // 5) 笔记本页 → 首页
           if (s.route.kind === "notebook") { s.onBackFromNotebook(); return; }
-          // 5b) 回收站 → 首页
-          if (s.route.kind === "trash") { s.onBackFromTrash(); return; }
-          // 5c) 小记回收站 → 首页（小记 tab）
-          if (s.route.kind === "quick-trash") { s.onBackFromQuickTrash(); return; }
           // 6) 首页：交给系统退出
           s.onAppExit();
         });

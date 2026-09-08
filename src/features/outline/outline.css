@@ -120,8 +120,8 @@
   }
   .outline-sidebar__activity-button:active { transform: scale(.965); }
   .outline-sidebar__activity-button:focus-visible {
-    outline: 3px solid rgba(53, 117, 240, .18);
-    outline-offset: 1px;
+    outline: 2px solid rgba(53, 117, 240, .18);
+    outline-offset: 2px;
   }
   /* 内容始终锚定 rail 左侧。收起时覆盖正文；固定时参与 grid，编辑器自行收缩。 */
   .outline-sidebar__content {
