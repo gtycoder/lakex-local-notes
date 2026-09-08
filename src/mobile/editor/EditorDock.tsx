@@ -55,6 +55,18 @@ export function EditorDock({ editor, editing, onToggleEdit, onInsertImage, onIns
     if (!editing) { setPanelMode(null); setPanelHeight(0); }
   }, [editing]);
 
+  // 用户点击可编辑正文（要打字）→ 立即收起面板、恢复输入法键盘，绝不让「面板展开 + 键盘」同时出现。
+  // 面板项按钮已 onMouseDown preventDefault 不抢焦点，故焦点落回 contenteditable 只可能是用户点了编辑区。
+  useEffect(() => {
+    const onFocusIn = (e: FocusEvent) => {
+      const t = e.target as HTMLElement | null;
+      if (!t || typeof t.closest !== "function") return;
+      if (t.closest('[contenteditable="true"]')) { setPanelMode(null); setPanelHeight(0); }
+    };
+    document.addEventListener("focusin", onFocusIn);
+    return () => document.removeEventListener("focusin", onFocusIn);
+  }, []);
+
   // 编辑态常驻底部工具栏（完成/插入/字体等）；键盘弹出时悬浮在键盘上方。
   if (!editing) return null;
 
@@ -72,10 +84,8 @@ export function EditorDock({ editor, editing, onToggleEdit, onInsertImage, onIns
     }
     if (!panelMode) {                                             // 仅从关闭态打开：捕获键盘高度（此后工具栏不抖）
       setPanelHeight(Math.max(Math.round(height), 280));
-      // blur 延迟到 setState 之后执行，确保输入法稳定退出（面板随后占住键盘区）
-      setTimeout(() => {
-        try { (document.activeElement as HTMLElement | null)?.blur?.(); } catch { /* 忽略 */ }
-      }, 0);
+      // 立即收起键盘（不再 setTimeout 延迟）：面板打开即代表不再打字，键盘必须马上让位，避免两者同现。
+      try { (document.activeElement as HTMLElement | null)?.blur?.(); } catch { /* 忽略 */ }
     }                                                             // 面板间切换(insert<->font)保持原高度 → 工具栏不抖
     setPanelMode(mode);
   };
@@ -102,7 +112,9 @@ export function EditorDock({ editor, editing, onToggleEdit, onInsertImage, onIns
   //  - 无面板：键盘开合由 WebView 自身处理（adjustResize 下 innerHeight 已缩，offset=0 → 贴底即为键盘上方）。
   //  - 有面板：用 innerHeight-base+panelHeight，让工具栏屏幕 Y 恒定在「键盘/面板上方」——键盘收起、innerHeight
   //    530→842 的过程中 toolbar 的位置不跳（原先直接用 panelHeight 会在视图仍 530 时闪到屏幕中间）。
-  const usable = panelMode ? Math.max(0, innerHeight - base + panelHeight) : offset;
+  // 有面板：面板以固定高度占满底部（>= 键盘高度），且面板打开即收起键盘 → 面板与输入法键盘绝不叠加。
+  // 不用 innerHeight-base+panelHeight（键盘未收时 innerHeight<base 会让面板高度算成 0 → 面板不可见 + 键盘仍显示）。
+  const usable = panelMode ? Math.max(0, panelHeight) : offset;
   const plusCls = "med-btn" + (panelMode === "insert" ? " med-active" : "");
   const aaCls = "med-btn med-aa" + (panelMode === "font" ? " med-active" : "");
 
