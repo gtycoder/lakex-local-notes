@@ -5,7 +5,7 @@
  * 多 tab 的「顶部 tab 条」是桌面版；移动端是底部胶囊栏 #toolbarTabs 弹全屏列表（子代理已核对源码）。
  */
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ArrowLeft, ListTree, Files, Pencil, X, ChevronRight, FolderOpen, FileText, Plus, Check, ArrowLeftRight, Trash2, SmilePlus, Move, History } from "lucide-react";
+import { ArrowLeft, ListTree, Files, Pencil, X, ChevronRight, FolderOpen, FileText, Plus, Check, ArrowLeftRight, Trash2, SmilePlus, Move, History, CloudUpload, MoreHorizontal, FilePlus, Search, Settings } from "lucide-react";
 import { bridge } from "../bridge";
 import { LAKE_EMOJIS } from "../../lib/lakeEmojis";
 import { loadSettings } from "../../lib/settings";
@@ -20,7 +20,15 @@ import { showToast } from "../ui/toastBus";
 import { longPressFeedback, tapFeedback } from "../ui/haptics";
 import { useAutoSave } from "../useAutoSave";
 import type { POCNote } from "../bridge";
-import type { NotebookTreeItem } from "./NotebookPage";
+/** 笔记本子树节点（原 NotebookPage 的类型，页面本体已随"两套壳"统一删除）。 */
+export interface NotebookTreeItem {
+  id: string;
+  title: string;
+  kind: "group" | "note";
+  parentId: string | null;
+  sortOrder: number;
+  icon: string | null;
+}
 import type { TreeNode } from "../../lib/types";
 
 /** 打开文档 tab 的内容状态（按 tab 缓存，切换不丢草稿） */
@@ -29,15 +37,23 @@ interface TabState { id: string; title: string; content: string; editing: boolea
 export interface NotebookWorkspaceProps {
   notebookId: string;
   initialNoteId?: string | null;
+  /** 打开时直接进入编辑态（首页/搜索"新建文档"用） */
+  initialMode?: "viewer" | "editor";
   onBack: () => void;
   /** 全部笔记本（切换笔记本用） */
   notebooks: TreeNode[];
   /** 切换到另一个笔记本 */
   onSwitchNotebook: (id: string) => void;
+  /** 底部栏「更多」菜单要拉起的第一层浮层（思源：主菜单承担搜索/设置等入口） */
+  onOpenSearch: () => void;
+  onOpenSettings: () => void;
+  onCreateNote: () => void;
+  /** 当前活动文档变化（MobileApp 的定时快照要用） */
+  onActiveNoteChange?: (id: string | null) => void;
 }
 
 export function NotebookWorkspace(props: NotebookWorkspaceProps) {
-  const { notebookId, initialNoteId, onBack, notebooks, onSwitchNotebook } = props;
+  const { notebookId, initialNoteId, initialMode, onBack, notebooks, onSwitchNotebook, onOpenSearch, onOpenSettings, onCreateNote, onActiveNoteChange } = props;
   const [title, setTitle] = useState("知识库");
   const [tree, setTree] = useState<NotebookTreeItem[]>([]);
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set([notebookId]));
@@ -48,8 +64,13 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
   const [outlineOpen, setOutlineOpen] = useState(false);
   const [tabsOpen, setTabsOpen] = useState(false);
   const [notebookSwitchOpen, setNotebookSwitchOpen] = useState(false);
+  const [moreOpen, setMoreOpen] = useState(false);
+  // 思源：左右两侧面板互斥（都是 100vw 全屏抽屉，同时开会互相盖住）
+  const openSidebar = useCallback((v: boolean) => { setSidebarOpen(v); if (v) { setOutlineOpen(false); setTabsOpen(false); } }, []);
+  const openOutline = useCallback((v: boolean) => { setOutlineOpen(v); if (v) { setSidebarOpen(false); setTabsOpen(false); } }, []);
   const editorsRef = useRef<Map<string, LakeEditorInstance | null>>(new Map());
   const autoOpenedRef = useRef(false);
+  const pendingEditRef = useRef(initialMode === "editor");
   // 标签保持：本地记录上次打开的标签（按笔记本隔离）
   const TABS_KEY = "lake-notes-mobile.tabs." + notebookId;
 
@@ -64,8 +85,8 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
 
   // 边缘滑动手势（对齐思源移动端）：左边缘右滑→目录抽屉；右边缘左滑→大纲抽屉（互斥）。
   useEdgeSwipe({
-    onLeftEdgeSwipe: () => { setSidebarOpen(true); setOutlineOpen(false); },
-    onRightEdgeSwipe: () => { setOutlineOpen(true); setSidebarOpen(false); },
+    onLeftEdgeSwipe: () => openSidebar(true),
+    onRightEdgeSwipe: () => openOutline(true),
   });
 
   const loadTree = useCallback(async () => {
@@ -104,7 +125,8 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
       if (!n) return;
       setTabs((prev) => {
         if (prev.some((t) => t.id === id)) return prev;
-        const added = [...prev, { id, title: n.title, content: n.content, editing: false, lastAccessedAt: Date.now() }];
+        const added = [...prev, { id, title: n.title, content: n.content, editing: pendingEditRef.current, lastAccessedAt: Date.now() }];
+        pendingEditRef.current = false;
         const evicted = selectEvictionIds(added.map((t) => ({ noteId: t.id, lastAccessedAt: t.lastAccessedAt })), { limit: loadSettings().maxOpenTabs, activeNoteId: id, pinnedNoteIds: new Set() });
         if (evicted.length === 0) return added;
         const evictedSet = new Set(evicted);
@@ -136,6 +158,16 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
 
   // 编辑：保存当前 tab
   const active = tabs.find((t) => t.id === activeId) ?? null;
+
+  // 立即同步（思源顶栏右侧的云图标就是同步状态/触发器）
+  const runSync = useCallback(async () => {
+    tapFeedback();
+    try { const r = await bridge.syncNow(); showToast(r.message || "已同步"); }
+    catch (e) { showToast("同步失败：" + (e as Error).message, { type: "error" }); }
+  }, []);
+
+  // 活动文档上报（MobileApp 的定时自动快照按当前文档留档）
+  useEffect(() => { onActiveNoteChange?.(activeId); }, [activeId, onActiveNoteChange]);
 
   // 自动保存：编辑态内容变化防抖 1s 落盘
   const { schedule: scheduleAutoSave, flush: flushAutoSave } = useAutoSave(async (id, title, content) => {
@@ -274,7 +306,7 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
             onClick={() => {
               if (renamingId) return;
               if (hasChildren) { toggleGroup(it.id); return; }
-              if (isNote) { setSidebarOpen(false); void openTab(it.id); }
+              if (isNote) { openSidebar(false); void openTab(it.id); }
             }}
             onTouchStart={(e) => startLongPress(e, it)}
             onTouchMove={clearLongPress}
@@ -308,11 +340,24 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
 
   return (
     <div className="mobile-workspace">
-      {/* 顶部栏 */}
-      <header className="mobile-topbar">
-        <button className="mobile-icon-btn" onClick={onBack} aria-label="返回"><ArrowLeft size={22} /></button>
-        <div className="mobile-topbar-title">{title}</div>
-        <button className="mobile-icon-btn" onClick={() => { tapFeedback(); setNotebookSwitchOpen(true); }} aria-label="切换笔记本"><ArrowLeftRight size={20} /></button>
+      {/* 顶部栏（思源 #mobileTopBar：.toolbar--border + .toolbar__title 左对齐 + 右侧同步状态） */}
+      <header className="toolbar toolbar--border mobile-topbar">
+        <button className="toolbar__button" onClick={onBack} aria-label="返回"><ArrowLeft /></button>
+        <input
+          className={"toolbar__title" + (active?.editing ? "" : " toolbar__title--readonly")}
+          value={active?.title ?? title}
+          readOnly={!active?.editing}
+          placeholder={active ? "" : title}
+          aria-label="文档标题"
+          onChange={(e) => {
+            const t = e.target.value;
+            const id = activeId;
+            if (!id) return;
+            setTabs((prev) => prev.map((x) => (x.id === id ? { ...x, title: t } : x)));
+            scheduleAutoSave(id, t, tabs.find((x) => x.id === id)?.content ?? "");
+          }}
+        />
+        <button className="toolbar__button" onClick={() => void runSync()} aria-label="立即同步"><CloudUpload /></button>
       </header>
 
       {/* 文档层（正文） */}
@@ -348,23 +393,41 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
         ))}
       </section>
 
-      {/* 底部胶囊栏（思源 mobile-bottom-bar）：目录 / tab列表(计数) / 大纲 / 编辑；编辑态由底部工具栏接管（含完成），隐藏 */}
-      {!active?.editing && (<nav className="mobile-bottom-bar">
-        <button className={(sidebarOpen ? "active" : "") + " bottom-bar-btn"} onClick={() => { tapFeedback(); setSidebarOpen((v) => !v); }} aria-label="目录"><Files size={20} /><span className="bottom-bar-label">目录</span></button>
-        <button className={"bottom-bar-btn" + (tabsOpen ? " active" : "")} onClick={() => { tapFeedback(); setTabsOpen(true); }} aria-label="标签页"><FileText size={20} /><span className="bottom-bar-label">标签</span>{tabs.length > 0 && <span className="bottom-bar-count">{tabs.length}</span>}</button>
-        <button className={(outlineOpen ? "active" : "") + " bottom-bar-btn"} onClick={() => { tapFeedback(); setOutlineOpen((v) => !v); }} aria-label="大纲"><ListTree size={20} /><span className="bottom-bar-label">大纲</span></button>
-        {active && <button className={"bottom-bar-btn" + (active.editing ? " active" : "")} onClick={toggleEdit} aria-label="编辑">{active.editing ? <Check size={20} /> : <Pencil size={20} />}<span className="bottom-bar-label">{active.editing ? "完成" : "编辑"}</span></button>}
-      </nav>)}
+      {/* 底部胶囊栏（思源 #mobileBottomBar：纯图标 5 槽，键盘/编辑态整条下滑淡出而不是卸载） */}
+      <nav className={"mobile-bottom-bar" + (active?.editing ? " mobile-bottom-bar--hidden" : "")} aria-hidden={active?.editing ? "true" : "false"}>
+        <button className={"mobile-bottom-bar__item" + (sidebarOpen ? " active" : "")} onClick={() => { tapFeedback(); openSidebar(!sidebarOpen); }} aria-label="文档树" title="文档树"><Files /></button>
+        <button className={"mobile-bottom-bar__item" + (tabsOpen ? " active" : "")} onClick={() => { tapFeedback(); setTabsOpen(true); }} aria-label="标签页" title="标签页"><FileText />{tabs.length > 0 && <span className="bottom-bar-count">{tabs.length}</span>}</button>
+        <button className={"mobile-bottom-bar__item" + (outlineOpen ? " active" : "")} onClick={() => { tapFeedback(); openOutline(!outlineOpen); }} aria-label="大纲" title="大纲"><ListTree /></button>
+        <button className={"mobile-bottom-bar__item" + (active?.editing ? " active" : "")} disabled={!active} onClick={toggleEdit} aria-label={active?.editing ? "完成" : "编辑"} title={active?.editing ? "完成" : "编辑"}>{active?.editing ? <Check /> : <Pencil />}</button>
+        <button className={"mobile-bottom-bar__item" + (moreOpen ? " active" : "")} onClick={() => { tapFeedback(); setMoreOpen(true); }} aria-label="更多" title="更多"><MoreHorizontal /></button>
+      </nav>
+
+      {/* 更多（思源 #menu：主菜单承担搜索/设置等次级入口） */}
+      <MobileSheetMenu
+        open={moreOpen}
+        items={[
+          { id: "new-doc", label: "新建文档", icon: FilePlus },
+          { id: "switch-nb", label: "切换笔记本", icon: ArrowLeftRight, note: title },
+          { id: "search", label: "搜索", icon: Search },
+          { id: "settings", label: "设置", icon: Settings },
+        ]}
+        onClose={() => setMoreOpen(false)}
+        onSelect={(it) => {
+          setMoreOpen(false);
+          if (it.id === "new-doc") onCreateNote();
+          else if (it.id === "switch-nb") setNotebookSwitchOpen(true);
+          else if (it.id === "search") onOpenSearch();
+          else if (it.id === "settings") onOpenSettings();
+        }}
+      />
 
       {/* 左目录抽屉 (.side-panel) */}
       <div className={"side-mask" + (sidebarOpen ? " on" : "")} onClick={() => setSidebarOpen(false)} />
       <aside className={"side-panel side-panel--left" + (sidebarOpen ? " on" : "")} aria-label="目录">
-        <div className="side-panel-head">
-          <span className="side-panel-title">{title}</span>
-          <div className="side-panel-head-actions">
-            <button className="mobile-icon-btn" onClick={() => void createDoc()} aria-label="新建"><Plus size={20} /></button>
-            <button className="mobile-icon-btn" onClick={() => setSidebarOpen(false)} aria-label="关闭"><X size={20} /></button>
-          </div>
+        <div className="toolbar toolbar--border toolbar--dark">
+          <div className="toolbar__scroll"><span className="toolbar__text">{title}</span></div>
+          <span className="toolbar__icon" role="button" tabIndex={0} onClick={() => void createDoc()} aria-label="新建文档"><Plus /></span>
+          <span className="toolbar__icon" role="button" tabIndex={0} onClick={() => openSidebar(false)} aria-label="收起"><ChevronRight /></span>
         </div>
         <div className="side-panel-body">
           {childrenOf(notebookId).length === 0 && <div className="mobile-empty">暂无文档，点右上新建</div>}
@@ -379,9 +442,9 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
       {tabsOpen && (
         <div className="mobile-model-mask" onClick={() => setTabsOpen(false)}>
           <div className="mobile-model" onClick={(e) => e.stopPropagation()}>
-            <div className="mobile-model-head">
-              <span className="mobile-model-title">标签页</span>
-              <button className="mobile-icon-btn" onClick={() => setTabsOpen(false)} aria-label="关闭"><X size={20} /></button>
+            <div className="toolbar toolbar--border mobile-model-head">
+              <span className="toolbar__text">标签页</span>
+              <span className="toolbar__icon" role="button" tabIndex={0} onClick={() => setTabsOpen(false)} aria-label="关闭"><X /></span>
             </div>
             <div className="mobile-model-body">
               {tabs.length === 0 && <div className="mobile-empty">暂无打开的文档</div>}
@@ -391,7 +454,7 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
                   <button className="b3-list-item__action" onClick={(e) => { e.stopPropagation(); closeTab(t.id); }} aria-label="关闭"><X size={16} /></button>
                 </div>
               ))}
-              <button className="b3-button b3-button--outline model-add" onClick={() => { setTabsOpen(false); setSidebarOpen(true); }}><Plus size={14} />打开文档</button>
+              <button className="b3-button b3-button--outline model-add" onClick={() => { setTabsOpen(false); openSidebar(true); }}><Plus size={16} />打开文档</button>
             </div>
           </div>
         </div>

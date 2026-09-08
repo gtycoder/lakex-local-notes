@@ -4,12 +4,12 @@
  * - 数据：直接走 bridge 真实端口（folders CRUD/notes/搜索/同步已就绪），不做 fixture。
  * - 复杂卡片（画板/思维导图/流程图）：viewer 只读渲染（§19.1），编辑入口置灰。
  */
-import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { bridge, type POCNote, type POCNoteSummary } from "./bridge";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { bridge, type POCNoteSummary } from "./bridge";
+import { isGoneNote } from "../core/syncDecisions";
 import type { TreeNode } from "../lib/types";
 import { HomePage } from "./home/HomePage";
 import { NotebookWorkspace } from "./notebook/NotebookWorkspace";
-const DocumentPage = lazy(() => import("./document/DocumentPage").then(({ DocumentPage: Page }) => ({ default: Page })));
 import { CreateNotebookSheet } from "./settings/CreateNotebookSheet";
 import { SearchSheet } from "./settings/SearchSheet";
 import { SettingsDrawer } from "./settings/SettingsDrawer";
@@ -17,31 +17,23 @@ import { useBackHandler } from "./useBackHandler";
 import { Toasts } from "./ui/Toasts";
 import { ConfirmHost, confirmMobile } from "./ui/ConfirmDialog";
 import { showToast } from "./ui/toastBus";
-import { useAutoSave } from "./useAutoSave";
 import "./mobile.css";
 
 export type Route =
   | { kind: "home"; tab: "quick" | "library" }
-  | { kind: "notebook"; notebookId: string }
-  | { kind: "document"; noteId: string; mode: "viewer" | "editor" };
+  | { kind: "notebook"; notebookId: string; initialNoteId?: string | null; initialMode?: "viewer" | "editor" };
 
 export function MobileApp() {
   const [route, setRoute] = useState<Route>({ kind: "home", tab: "library" });
   const [treeNodes, setTreeNodes] = useState<TreeNode[]>([]);
   const [notes, setNotes] = useState<POCNoteSummary[]>([]);
-  const [active, setActive] = useState<POCNote | null>(null);
   const activeIdRef = useRef<string | null>(null);
-  const [draft, setDraft] = useState("");
-  const [draftTitle, setDraftTitle] = useState("");
-  const [editing, setEditing] = useState(false);
   const [phase, setPhase] = useState<"booting" | "ready">("booting");
   const [error, setError] = useState<string | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [createNbOpen, setCreateNbOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [quickNotes, setQuickNotes] = useState<Array<{ id: string; previewText: string; imageCount: number; updatedAt: string; firstImage: string | null }>>([]);
-  // P2-2：文档来源（home 或 notebookId）——返回时回到来源页，而非总是首页
-  const [documentOrigin, setDocumentOrigin] = useState<string | null>(null);
 
   const refreshAll = useCallback(async () => {
     const [nodes, ns, qn] = await Promise.all([bridge.listTreeNodes(), bridge.listNotes(), bridge.listQuickNotes()]);
@@ -110,7 +102,7 @@ export function MobileApp() {
   }, [refreshAll]);
 
   // 定时自动快照：按历史设置 snapshotIntervalMinutes（0=关）周期给当前打开笔记留档
-  useEffect(() => { activeIdRef.current = active?.id ?? null; }, [active?.id]);
+  // （当前活动文档由工作区经 onActiveNoteChange 上报到 activeIdRef）
   useEffect(() => {
     let timer: number | null = null;
     void bridge.getHistorySettings().then((cfg) => {
@@ -124,61 +116,13 @@ export function MobileApp() {
   }, []);
 
   const notebooks = useMemo(() => treeNodes.filter((n) => n.nodeType === "notebook"), [treeNodes]);
-  const notebookChildren = useCallback((id: string) => treeNodes.filter((n) => n.parentId === id), [treeNodes]);
-  // 当前笔记本文档列表（快捷切换目录：当前来源笔记本下的文档）
-  const notebookDocuments = useMemo(() => {
-    const nbId = documentOrigin;
-    if (!nbId) return [];
-    return notes
-      .filter((n) => n.parentId === nbId)
-      .map((n) => ({ id: n.id, title: n.title }))
-      .sort((a, b) => a.title.localeCompare(b.title, "zh"));
-  }, [notes, documentOrigin]);
 
-  // 编辑保存（完成按钮/返回键共用）：saveNote 的 ON CONFLICT 同时更新 title+content+sync_state
-  const saveEditing = useCallback(async () => {
-    if (active && (draftTitle !== active.title || draft !== active.content)) {
-      await bridge.saveNote(active.id, draftTitle, draft);
-      setActive({ ...active, title: draftTitle, content: draft, updatedAt: new Date().toISOString() });
-    }
-  }, [active, draft, draftTitle]);
-
-  // 自动保存：编辑态内容/标题变化防抖 1s 落盘（对齐桌面端）
-  const { schedule: scheduleAutoSave, flush: flushAutoSave } = useAutoSave(async (id, title, content) => {
-    await bridge.saveNote(id, title, content);
-    setActive((cur) => (cur && cur.id === id ? { ...cur, title, content, updatedAt: new Date().toISOString() } : cur));
-  });
-  const handleContentChange = useCallback((c: string) => {
-    setDraft(c);
-    if (editing && active) scheduleAutoSave(active.id, draftTitle, c);
-  }, [editing, active, draftTitle, scheduleAutoSave]);
-  const handleTitleChange = useCallback((t: string) => {
-    setDraftTitle(t);
-    if (editing && active) scheduleAutoSave(active.id, t, draft);
-  }, [editing, active, draft, scheduleAutoSave]);
-
-  const backFromDocument = useCallback(() => {
-    setEditing(false);
-    if (documentOrigin) setRoute({ kind: "notebook", notebookId: documentOrigin });
-    else setRoute({ kind: "home", tab: "library" });
-  }, [documentOrigin]);
-
-  // B1：Android 返回键（Sheet→Drawer→退出编辑→文档→笔记本→首页→系统）
-  const exitEdit = useCallback(() => {
-    flushAutoSave();
-    void saveEditing().then(() => {
-      setEditing(false);
-      if (active) setRoute({ kind: "document", noteId: active.id, mode: "viewer" });
-    });
-  }, [saveEditing, active]);
+  // B1：Android 返回键（浮层返回栈 → Sheet→Drawer→笔记本→首页→系统；编辑态由工作区自己注册）
   useBackHandler({
     route,
-    editing,
     drawerOpen,
     createNbOpen,
     searchOpen,
-    onExitEdit: exitEdit,
-    onBackFromDocument: backFromDocument,
     onBackFromNotebook: () => setRoute({ kind: "home", tab: "library" }),
     onCloseDrawer: () => setDrawerOpen(false),
     onCloseSheets: () => { setCreateNbOpen(false); setSearchOpen(false); },
@@ -188,12 +132,34 @@ export function MobileApp() {
     },
   });
 
-  // 新建文档：归属指定父节点（home → 个人笔记本；notebook → 当前笔记本），刷新列表并进入编辑
+  /** 打开文档：一律进第二层工作区（此前"首页/搜索→DocumentPage、笔记本→NotebookWorkspace"两套壳，形态不一致）。
+   *  ① 先按 AGENTS §3 #16 判定"已进回收站/被他端 purge"；② 再向上解析归属笔记本（note 的父可以是 note/group）。 */
+  const openNote = useCallback(async (id: string, mode: "viewer" | "editor" = "viewer") => {
+    const st = await bridge.noteGoneState(id);
+    if (!st) { showToast("文档不存在", { type: "error" }); return; }
+    if (isGoneNote({ parentId: st.parentId, syncState: st.syncState })) {
+      showToast("该文档已在回收站，请到 设置-回收站 查看", { type: "error" });
+      return;
+    }
+    const parentOfNote = new Map(notes.map((n) => [n.id, n.parentId] as const));
+    const nodeById = new Map(treeNodes.map((n) => [n.id, n] as const));
+    let cur: string | null = st.parentId;
+    let notebookId: string | null = null;
+    for (let hops = 0; cur && hops < 64; hops++) {
+      const node = nodeById.get(cur);
+      if (node) { if (node.nodeType === "notebook") { notebookId = node.id; break; } cur = node.parentId; continue; }
+      cur = parentOfNote.get(cur) ?? null;
+    }
+    if (!notebookId) { showToast("未找到该文档所属笔记本（可在数据体检中修复）", { type: "error" }); return; }
+    await refreshAll();
+    setRoute({ kind: "notebook", notebookId, initialNoteId: id, initialMode: mode });
+  }, [notes, treeNodes, refreshAll]);
+
+  // 新建文档：归属指定父节点（home → 兜底笔记本；工作区 → 当前笔记本），随后进入工作区编辑态
   const createNoteInParent = useCallback(async (parentId: string | null) => {
     const n = await bridge.createNote("无标题文档", parentId);
-    await refreshAll();
-    openDocument(n.id, "editor", parentId);
-  }, [refreshAll]);
+    await openNote(n.id, "editor");
+  }, [openNote]);
 
   if (phase === "booting") return <div className="poc-center">启动中…（加载 WASM SQLite）</div>;
   if (error) return <div className="poc-center poc-error">{error}</div>;
@@ -218,7 +184,7 @@ export function MobileApp() {
             await refreshAll();
             showToast("已调整笔记本顺序（同步后传播）");
           }}
-          onOpenNote={(id) => openDocument(id, "viewer")}
+          onOpenNote={(id) => void openNote(id, "viewer")}
           onOpenDrawer={() => setDrawerOpen(true)}
           onOpenSearch={() => setSearchOpen(true)}
           onCreateNote={() => void createNoteInParent(null)} // 无默认笔记本：bridge 兜底（存在的笔记本/自动建"未分类"）
@@ -228,43 +194,18 @@ export function MobileApp() {
       )}
       {route.kind === "notebook" && (
         <NotebookWorkspace
+          key={route.notebookId}
           notebookId={route.notebookId}
-          initialNoteId={null}
+          initialNoteId={route.initialNoteId ?? null}
+          initialMode={route.initialMode}
           onBack={() => setRoute({ kind: "home", tab: "library" })}
           notebooks={notebooks}
           onSwitchNotebook={(id) => setRoute({ kind: "notebook", notebookId: id })}
+          onOpenSearch={() => setSearchOpen(true)}
+          onOpenSettings={() => setDrawerOpen(true)}
+          onCreateNote={() => void createNoteInParent(route.notebookId)}
+          onActiveNoteChange={(id) => { activeIdRef.current = id; }}
         />
-      )}
-      {route.kind === "document" && active && (
-        <Suspense fallback={<div className="poc-center">打开文档中…</div>}>
-          <DocumentPage
-          note={active}
-          content={draft}
-          title={draftTitle}
-          editing={editing}
-          documents={notebookDocuments}
-          onOpenDocument={(id) => { void openDocument(id, "viewer", documentOrigin); }}
-          onTitleChange={handleTitleChange}
-          onContentChange={handleContentChange}
-          onToggleEdit={async () => {
-            if (editing) { flushAutoSave(); await saveEditing(); }
-            setEditing((v) => !v);
-          }}
-          onBack={async () => {
-            if (editing) { flushAutoSave(); await saveEditing(); }
-            setEditing(false);
-            await refreshAll();
-            backFromDocument();
-          }}
-          onDelete={async () => {
-            if (active && await confirmMobile({ title: "移入回收站", body: active.title || "无标题文档", confirmText: "移入回收站" })) {
-              await bridge.trashNote(active.id);
-              await refreshAll();
-              setRoute({ kind: "home", tab: "library" });
-            }
-          }}
-          />
-        </Suspense>
       )}
       <CreateNotebookSheet
         open={createNbOpen}
@@ -278,21 +219,11 @@ export function MobileApp() {
       <SearchSheet
         open={searchOpen}
         onClose={() => setSearchOpen(false)}
-        onOpenNote={(id) => openDocument(id, "viewer")}
+        onOpenNote={(id) => void openNote(id, "viewer")}
       />
       <Toasts />
       <ConfirmHost />
     </div>
   );
 
-  async function openDocument(id: string, mode: "viewer" | "editor", origin: string | null = null) {
-    const n = await bridge.readNote(id);
-    if (!n) return;
-    setActive(n);
-    setDraft(n.content);
-    setDraftTitle(n.title);
-    setEditing(mode === "editor");
-    setDocumentOrigin(origin);
-    setRoute({ kind: "document", noteId: id, mode });
-  }
 }

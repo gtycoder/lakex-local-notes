@@ -851,6 +851,13 @@ export const bridge = {
     return row ? rowToNote(row) : null;
   },
 
+  /** 打开文档前的"是否已消失"判定原料（AGENTS §3 #16：所有打开入口都要判，判定逻辑用共享纯函数 isGoneNote）。 */
+  async noteGoneState(id: string): Promise<{ parentId: string | null; syncState: string } | null> {
+    const d = await ensureDb();
+    const row = d.prepare("SELECT parent_id, sync_state FROM notes WHERE id = ?").get(id) as { parent_id: string | null; sync_state: string | null } | undefined;
+    return row ? { parentId: row.parent_id, syncState: row.sync_state ?? "" } : null;
+  },
+
   /** Phase 0B-5：搜索 fallback（sql.js 无 FTS5 → LIKE；标题+正文，参数化 + ESCAPE）。 */
   async searchNotes(query: string): Promise<SearchResult[]> {
     const pattern = buildLikePattern(query);

@@ -33,7 +33,7 @@ body { font-family: BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino San
   margin-top: 8px;
   height: var(--mobile-topbar-height); background: var(--b3-theme-background);
   border-bottom: .5px solid var(--b3-theme-background-light);
-  position: sticky; top: 0; z-index: 10;
+  position: sticky; top: 0; z-index: 3;
 }
 .mobile-topbar-title { flex: 1; text-align: center; font-size: 17px; line-height: 30px; font-weight: 400; color: var(--b3-theme-on-background); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .mobile-topbar-actions { display: flex; gap: 0; }
@@ -351,8 +351,8 @@ body { font-family: BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino San
 
 /* 底部胶囊栏（思源 .mobile-bottom-bar：fixed 居中，圆角胶囊，宽度自适应） */
 .mobile-bottom-bar {
-  position: fixed; left: 0; right: 0; bottom: calc(14px + env(safe-area-inset-bottom, 0px));
-  z-index: 8; margin: 0 auto;
+  position: fixed; left: 0; right: 0; bottom: calc(var(--mobile-status-height) + var(--mobile-bar-gap) + var(--mobile-bottom-safe-area));
+  z-index: 3; margin: 0 auto;
   display: flex; align-items: center; gap: 0; padding: 0;
   width: min(calc(100% - 32px), calc(var(--mobile-bottom-bar-height) * 6));
   height: var(--mobile-bottom-bar-height);
@@ -374,9 +374,23 @@ body { font-family: BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino San
   -webkit-tap-highlight-color: transparent;
 }
 .bottom-bar-btn[disabled] { opacity: .38; }
-.bottom-bar-btn > svg { width: 20px; height: 20px; flex-shrink: 0; }
+.bottom-bar-btn > svg, .mobile-bottom-bar__item > svg { width: 20px; height: 20px; flex-shrink: 0; }
 .bottom-bar-btn:active { color: var(--b3-theme-on-surface); background: var(--b3-list-hover); transform: scale(.92); }
 .bottom-bar-btn.active { color: var(--b3-theme-primary); background: var(--b3-theme-primary-lightest); font-weight: 600; }
+/* 思源 #mobileBottomBar 口径：纯图标项（label 走 aria-label/title），active = 主色 + 轻底 */
+.mobile-bottom-bar__item {
+  appearance: none; position: relative; flex: 1 1 0; min-width: 40px; height: var(--mobile-bottom-bar-height);
+  padding: 2px; overflow: hidden; border: 0; border-radius: var(--b3-border-radius);
+  background: transparent; background-clip: content-box; color: var(--b3-theme-on-surface-light);
+  display: flex; align-items: center; justify-content: center; cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: color var(--mobile-duration-press) ease, background-color var(--mobile-duration-press) ease, transform var(--mobile-duration-press) ease;
+}
+.mobile-bottom-bar__item[disabled] { opacity: .38; cursor: default; }
+.mobile-bottom-bar__item:active:not([disabled]) { color: var(--b3-theme-on-surface); background-color: var(--b3-list-hover); transform: scale(.92); }
+.mobile-bottom-bar__item.active { color: var(--b3-theme-primary); background-color: var(--b3-theme-primary-lightest); }
+.mobile-bottom-bar__item:first-child { border-top-left-radius: calc(var(--mobile-bottom-bar-height) / 2); border-bottom-left-radius: calc(var(--mobile-bottom-bar-height) / 2); }
+.mobile-bottom-bar__item:last-child { border-top-right-radius: calc(var(--mobile-bottom-bar-height) / 2); border-bottom-right-radius: calc(var(--mobile-bottom-bar-height) / 2); }
 .bottom-bar-label { font-size: 10px; line-height: 1; }
 /* 计数 = 思源 .toolbar__tabs-count：描边小方框，不是实心圆点 */
 .bottom-bar-count {
@@ -483,3 +497,46 @@ body { font-family: BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino San
 @media (prefers-reduced-motion: reduce) {
   .ln-sheet, .ln-sheet .b3-menu__submenu, .b3-dialog__container, .b3-snackbar, .b3-snackbars { transition: none; }
 }
+
+/* ===== 思源移动端 .toolbar 口径（移植自 siyuan-master app/src/assets/scss/main/_mobile.scss:157-300，AGPL-3.0）=====
+   顶栏与侧栏头部用的就是这一套：图标 20 + padding 10（=40 热区）、激活/按压 --b3-list-hover、
+   标题 .toolbar__title 17px/30px 左对齐、侧栏内收紧为 18px 图标 + 15px 标题。 */
+.toolbar { display: flex; align-items: center; max-width: 100vw; background: var(--b3-theme-background); -webkit-user-select: none; user-select: none; }
+.toolbar--border { border-bottom: .5px solid var(--b3-theme-background-light); }
+.toolbar--dark { background-color: var(--b3-theme-surface); }
+/* 思源原式是 20×20 + padding 10（content-box 语义）；本文件全局 border-box ⇒ 这里写成"总尺寸=图标+2×padding"，视觉等价 */
+.toolbar__icon {
+  height: 40px; width: 40px; padding: 10px; flex-shrink: 0; margin: 4px;
+  color: var(--b3-theme-on-surface); border-radius: var(--b3-border-radius);
+  display: inline-flex; align-items: center; justify-content: center; cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: background-color var(--mobile-duration-press) ease, color var(--mobile-duration-press) ease;
+}
+.toolbar__icon > svg { width: 20px; height: 20px; }
+.toolbar__icon[disabled] { opacity: .38; cursor: not-allowed; }
+.toolbar__icon--active,
+.toolbar__icon:not(.toolbar__icon-deactivate):active,
+.toolbar__icon:not(.toolbar__icon-deactivate):focus-visible { background-color: var(--b3-list-hover); }
+.toolbar__button {
+  appearance: none; display: flex; align-items: center; justify-content: center;
+  width: var(--mobile-topbar-height); height: var(--mobile-topbar-height); padding: 0; flex-shrink: 0;
+  border: 0; border-radius: var(--b3-border-radius); background: transparent;
+  color: var(--b3-theme-on-surface); cursor: pointer; -webkit-tap-highlight-color: transparent;
+  transition: background-color var(--mobile-duration-press) ease;
+}
+.toolbar__button > svg { width: 20px; height: 20px; }
+.toolbar__button:active, .toolbar__button:focus-visible { background-color: var(--b3-list-hover); }
+.toolbar__title {
+  flex: 1; min-width: 1px; line-height: 30px; font-size: 17px; padding: 0; border: 0; outline: none;
+  background-color: transparent; color: var(--b3-theme-on-background);
+}
+.toolbar__title--readonly { -webkit-user-select: none; user-select: none; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.toolbar__text { flex: 1; min-width: 0; font-size: 17px; min-height: 30px; line-height: 30px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.toolbar__scroll { flex: 1; min-width: 0; display: flex; align-items: center; overflow-x: auto; overscroll-behavior-x: contain; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
+.toolbar__scroll::-webkit-scrollbar { display: none; }
+/* 侧栏/面板头部：思源 #sidebar .toolbar 口径（图标 18 + padding 11 + margin 2，标题 15px） */
+.side-panel > .toolbar .toolbar__icon { width: 40px; height: 40px; padding: 11px; margin: 2px; }
+.side-panel > .toolbar .toolbar__icon > svg { width: 18px; height: 18px; }
+.side-panel > .toolbar .toolbar__text { font-size: 15px; padding-left: 8px; }
+.side-panel > .toolbar { background-color: var(--b3-theme-surface); min-height: 48px; }
+.side-panel > .toolbar .toolbar__text { padding-left: 12px; }

@@ -1,6 +1,7 @@
 /**
- * 文档编辑器主体（可嵌入）：从 DocumentPage 拆出的「编辑器 body + 底部 dock + 插入文件 + 大纲/文档列表面板」。
- * 供两类宿主复用：单文档页 DocumentPage（自带顶栏），以及第二层工作区 NotebookWorkspace（包 tab + 左右抽屉）。
+ * 文档编辑器主体（可嵌入）：「编辑器 body + 底部 dock + 插入文件 + 大纲/文档列表面板」。
+ * 宿主 = 第二层工作区 NotebookWorkspace（包 tab + 左右抽屉 + 底部胶囊栏）；
+ * 原单文档页 DocumentPage 已删除——同一文档不允许有两种外壳（260908 UI 审计 A1）。
  * 大纲/文档列表的开关状态由宿主控制（传入 outlineOpen/docListOpen + onToggle*），宿主不传则内部自管。
  */
 import { EditorDock } from "./EditorDock";

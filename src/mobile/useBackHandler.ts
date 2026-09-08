@@ -11,12 +11,9 @@ import { consumeBack } from "./ui/backStack";
 
 export interface BackHandlerState {
   route: Route;
-  editing: boolean;
   drawerOpen: boolean;
   createNbOpen: boolean;
   searchOpen: boolean;
-  onExitEdit: () => void;
-  onBackFromDocument: () => void;
   onBackFromNotebook: () => void;
   onCloseDrawer: () => void;
   onCloseSheets: () => void;
@@ -43,13 +40,9 @@ export function useBackHandler(state: BackHandlerState) {
           if (s.createNbOpen || s.searchOpen) { s.onCloseSheets(); return; }
           // 2) 设置 Drawer
           if (s.drawerOpen) { s.onCloseDrawer(); return; }
-          // 3) 编辑态（文档页）：退出编辑并保存最新草稿
-          if (s.route.kind === "document" && s.editing) { s.onExitEdit(); return; }
-          // 4) 文档页 → 笔记本页
-          if (s.route.kind === "document") { s.onBackFromDocument(); return; }
-          // 5) 笔记本页 → 首页
+          // 3) 笔记本/工作区 → 首页（编辑态与浮层已由返回栈在 0) 消费）
           if (s.route.kind === "notebook") { s.onBackFromNotebook(); return; }
-          // 6) 首页：交给系统退出
+          // 4) 首页：交给系统退出
           s.onAppExit();
         });
         // 竞态防护：async import 期间 effect 已 cleanup → 立即移除刚注册的监听
