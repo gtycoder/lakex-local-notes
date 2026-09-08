@@ -55,6 +55,7 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
   const [cacheMsg, setCacheMsg] = useState("");
   const [cacheSummary, setCacheSummary] = useState<import("../../core/ports").CacheSummary | null>(null);
   const [appInfo, setAppInfo] = useState<AppInfo | null>(null);
+  const [diag, setDiag] = useState<{ noteCount: number; folderCount: number; quickNoteCount: number; resourceCount: number; orphanCount: number; gcPendingCount: number; snapshotCount: number; dbBytes: number } | null>(null);
   const [orphans, setOrphans] = useState<Array<{ id: number; noteId: string; filename: string; size: number; mimeType: string }>>([]);
   const [orphanBusy, setOrphanBusy] = useState(false);
   const [gcMsg, setGcMsg] = useState("");
@@ -82,6 +83,7 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
   useEffect(() => {
     if (!open || view !== "about") return;
     void mobileAppInfoPort.getAppInfo().then(setAppInfo).catch(() => undefined);
+    void bridge.getDiagnostics().then(setDiag).catch(() => undefined);
   }, [open, view]);
 
   useEffect(() => {
@@ -323,6 +325,21 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
                   <div className="config-block__text">平台：{appInfo?.platform === "web" ? "Web 预览 (Capacitor 未就绪)" : "Android (Capacitor + sql.js WASM)"}</div>
                   <div className="config-block__text">本地优先笔记应用（Electron + 安卓共享同步层）</div>
                 </div>
+                {diag && (
+                  <div className="config-block">
+                    <div className="config-block__name">数据诊断</div>
+                    <div className="config-stats">
+                      <span><strong>文档</strong> {diag.noteCount}</span>
+                      <span><strong>分组</strong> {diag.folderCount}</span>
+                      <span><strong>小记</strong> {diag.quickNoteCount}</span>
+                      <span><strong>资源</strong> {diag.resourceCount}</span>
+                      <span><strong>孤儿</strong> {diag.orphanCount}</span>
+                      <span><strong>待回收</strong> {diag.gcPendingCount}</span>
+                      <span><strong>快照</strong> {diag.snapshotCount}</span>
+                      <span><strong>库大小</strong> {formatBytes(diag.dbBytes)}</span>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           )}

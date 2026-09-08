@@ -1424,6 +1424,22 @@ export const bridge = {
     return { candidateCount: all.length, deletedCount, keys };
   },
 
+  /** 运行诊断（移动端"日志查看/关于"等价）：存储统计。 */
+  async getDiagnostics(): Promise<{ noteCount: number; folderCount: number; quickNoteCount: number; resourceCount: number; orphanCount: number; gcPendingCount: number; snapshotCount: number; dbBytes: number }> {
+    const d = await ensureDb();
+    const c = (sql: string) => (d.prepare(sql).get() as { c: number }).c;
+    return {
+      noteCount: c("SELECT COUNT(*) c FROM notes WHERE deleted_at IS NULL AND trashed_at IS NULL"),
+      folderCount: c("SELECT COUNT(*) c FROM folders WHERE trashed_at IS NULL"),
+      quickNoteCount: c("SELECT COUNT(*) c FROM quick_notes"),
+      resourceCount: (await listAssetKeysFs()).length,
+      orphanCount: c("SELECT COUNT(*) c FROM orphan_assets"),
+      gcPendingCount: c("SELECT COUNT(*) c FROM s3_gc_pending"),
+      snapshotCount: c("SELECT COUNT(*) c FROM note_history"),
+      dbBytes: d.exportBytes().length,
+    };
+  },
+
   /** M1 同步：manifest v4 协议（拉取对账 + 上传发布）+ 小记 quick-notes/ 子空间同步，复用 src/core 引擎。
    * P2-5/6（GPT 审计）：结构化返回（notes/quickNotes 分字段）；主维护队列串行化防与本地写操作交错。 */
   async syncNow(): Promise<MobileSyncResult> {

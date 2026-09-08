@@ -69,6 +69,7 @@ export function MobileApp() {
           restoreHistory: (historyId: number) => bridge.restoreHistory(historyId),
           cleanupHistory: () => bridge.cleanupHistory(),
           getHistorySettings: () => bridge.getHistorySettings(),
+          getDiagnostics: () => bridge.getDiagnostics(),
           saveHistorySettings: (s: import("./bridge").HistoryMobileSettings) => bridge.saveHistorySettings(s),
           snapshotNote: (id: string) => bridge.snapshotNote(id),
           createQuickNote: (text: string) => bridge.createQuickNote(text),
