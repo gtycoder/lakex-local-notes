@@ -8,6 +8,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { ArrowLeft, ListTree, Files, Pencil, X, ChevronRight, FolderOpen, FileText, Plus, Check, ArrowLeftRight, Trash2, SmilePlus, Move } from "lucide-react";
 import { bridge } from "../bridge";
 import { LAKE_EMOJIS } from "../../lib/lakeEmojis";
+import { loadSettings } from "../../lib/settings";
+import { selectEvictionIds } from "../../core/tabLimit";
 import { DocumentEditor } from "../editor/DocumentEditor";
 import { OutlineSheet } from "../editor/OutlineSheet";
 import type { LakeEditorInstance } from "../../features/editor/lakeRuntime";
@@ -18,7 +20,7 @@ import type { NotebookTreeItem } from "./NotebookPage";
 import type { TreeNode } from "../../lib/types";
 
 /** 打开文档 tab 的内容状态（按 tab 缓存，切换不丢草稿） */
-interface TabState { id: string; title: string; content: string; editing: boolean; }
+interface TabState { id: string; title: string; content: string; editing: boolean; lastAccessedAt: number; }
 
 export interface NotebookWorkspaceProps {
   notebookId: string;
@@ -46,6 +48,8 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
   const [switchPos, setSwitchPos] = useState<{ top: number; right: number } | null>(null);
   const editorsRef = useRef<Map<string, LakeEditorInstance | null>>(new Map());
   const autoOpenedRef = useRef(false);
+  // 标签保持：本地记录上次打开的标签（按笔记本隔离）
+  const TABS_KEY = "lake-notes-mobile.tabs." + notebookId;
 
   // 目录树长按管理：右键菜单 / 内联重命名 / 图标 / 移动 / 删除
   const [ctxMenu, setCtxMenu] = useState<{ node: NotebookTreeItem; x: number; y: number } | null>(null);
@@ -72,22 +76,38 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
 
   useEffect(() => { void loadTree(); }, [loadTree]);
 
-  // 初次进入：自动打开指定文档，或树中第一个文档作为首 tab（仅一次）
+  // 初次进入：优先恢复上次打开的标签（本地持久化），否则开指定文档/树中第一个（仅一次）
   useEffect(() => {
     if (autoOpenedRef.current) return;
+    let saved: string[] = [];
+    try { saved = JSON.parse(localStorage.getItem(TABS_KEY) ?? "[]") as string[]; } catch { saved = []; }
+    if (saved.length > 0) { autoOpenedRef.current = true; saved.forEach((id) => void openTab(id)); return; }
     if (initialNoteId) { autoOpenedRef.current = true; void openTab(initialNoteId); return; }
     const first = findFirstNote(tree);
     if (first) { autoOpenedRef.current = true; void openTab(first.id); }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tree]);
 
+  // 标签保持：打开标签变化即落本地（仅本机，不参与同步）
+  useEffect(() => {
+    try { localStorage.setItem(TABS_KEY, JSON.stringify(tabs.map((t) => t.id))); } catch { /* 忽略 */ }
+  }, [tabs, TABS_KEY]);
+
   const openTab = useCallback((id: string) => {
     setActiveId(id);
-    const existing = tabs.find((t) => t.id === id);
-    if (existing) return; // 已有 tab：仅切换（keep-alive，不重读正文，避免卡顿）
+    // 已打开：仅刷新 LRU 时间戳，不重读正文（keep-alive）
+    setTabs((prev) => prev.some((t) => t.id === id) ? prev.map((t) => (t.id === id ? { ...t, lastAccessedAt: Date.now() } : t)) : prev);
+    if (tabs.some((t) => t.id === id)) return;
     void bridge.readNote(id).then((n) => {
       if (!n) return;
-      setTabs((prev) => prev.some((t) => t.id === id) ? prev : [...prev, { id, title: n.title, content: n.content, editing: false }]);
+      setTabs((prev) => {
+        if (prev.some((t) => t.id === id)) return prev;
+        const added = [...prev, { id, title: n.title, content: n.content, editing: false, lastAccessedAt: Date.now() }];
+        const evicted = selectEvictionIds(added.map((t) => ({ noteId: t.id, lastAccessedAt: t.lastAccessedAt })), { limit: loadSettings().maxOpenTabs, activeNoteId: id, pinnedNoteIds: new Set() });
+        if (evicted.length === 0) return added;
+        const evictedSet = new Set(evicted);
+        return added.filter((t) => !evictedSet.has(t.id));
+      });
     });
   }, [tabs]);
 
