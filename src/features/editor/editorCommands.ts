@@ -66,8 +66,3 @@ export const KNOWN_COMMAND_NAMES: ReadonlySet<string> = new Set([
 export function isKnownEditorCommand(name: string): boolean {
   return KNOWN_COMMAND_NAMES.has(name);
 }
-
-/** 取某类别命令（按注册顺序），供工具栏/面板渲染。 */
-export function commandsByGroup(group: EditorCommandGroup): EditorCommandDef[] {
-  return [...MARK_COMMANDS, ...BLOCK_INSERT_COMMANDS, ...HISTORY_COMMANDS].filter((c) => c.group === group);
-}
