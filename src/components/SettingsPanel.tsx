@@ -500,9 +500,7 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
                     </Seg>
                   </Item>
                   <Switch itemId="editor-paragraph-spacing" name="段间距" desc="更宽松的段落留白。" checked={settings.paragraphSpacing} onChange={(e) => onChange({ paragraphSpacing: e.target.checked })} />
-                  <Switch itemId="editor-toc" name="显示文档大纲（TOC）" checked={settings.showToc} onChange={(e) => onChange({ showToc: e.target.checked })} />
                   <Switch itemId="editor-outline-enhance" name="大纲增强" desc="开启=应用自建大纲（筛选/折叠/级别徽标/悬停/移动端大纲面板）；关闭=直接使用 Lake 原生大纲，不做任何改动。" checked={settings.outlineEnhance} onChange={(e) => onChange({ outlineEnhance: e.target.checked })} />
-                  <Switch itemId="editor-toolbar" name="显示编辑器工具栏" checked={settings.showToolbar} onChange={(e) => onChange({ showToolbar: e.target.checked })} />
                 </Group>
                 <Group title="标签页" icon={<Files size={16} />}>
                   <Item itemId="editor-max-open-tabs" name="最大同时打开标签数" desc="超过上限时自动关闭最旧的标签（当前编辑的标签与钉住的标签除外），未保存内容会自动保存。">

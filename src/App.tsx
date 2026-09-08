@@ -299,7 +299,7 @@ export function App() {
     headingPath, tabInfos, outlineVisible, lockedNoteIds, effectiveOutlineMode, shellStyle,
   } = deriveDesktopView({
     activeNoteId, treeNodes, notes, openTabs, iconByNoteId,
-    fontSize: settings.fontSize, showToolbar: settings.showToolbar, tocEnabled, outlineEnhance,
+    fontSize: settings.fontSize, tocEnabled, outlineEnhance,
     desktopWorkspace, activeOutlineEmpty, outlineEmptyOverride, outlineMode,
     sidebarWidth, sidebarMode, outlineSidebarWidth,
   });

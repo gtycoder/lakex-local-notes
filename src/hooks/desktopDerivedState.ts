@@ -17,7 +17,6 @@ export interface DesktopViewInput {
   openTabs: OpenTab[];
   iconByNoteId: Map<string, string | null>;
   fontSize: number;
-  showToolbar: boolean;
   tocEnabled: boolean;
   outlineEnhance: boolean;
   desktopWorkspace: DesktopWorkspace;
@@ -33,14 +32,14 @@ export interface DesktopViewInput {
 export function deriveDesktopView(input: DesktopViewInput) {
   const {
     activeNoteId, treeNodes, notes, openTabs, iconByNoteId,
-    fontSize, showToolbar, tocEnabled, outlineEnhance, desktopWorkspace,
+    fontSize, tocEnabled, outlineEnhance, desktopWorkspace,
     activeOutlineEmpty, outlineEmptyOverride, outlineMode,
     sidebarWidth, sidebarMode, outlineSidebarWidth,
   } = input;
 
   const activeNodeSyncState = activeNoteId ? (treeNodes.find((n) => n.noteFileId === activeNoteId)?.syncState ?? "synced") : "synced";
 
-  const editorPrefs = { fontSize, showToolbar };
+  const editorPrefs = { fontSize };
 
   // 编辑器面包屑：活动文档路径（思源 protyle-breadcrumb）
   const activePath = activeNoteId ? treeNodePath(treeNodes, activeNoteId) : [];

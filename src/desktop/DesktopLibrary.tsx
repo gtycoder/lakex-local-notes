@@ -22,7 +22,7 @@ export interface DesktopLibraryProps {
   topbarTrailing: ReactNode;
   wideMode: boolean;
   paragraphSpacing: boolean;
-  editorPrefs: { fontSize: number; showToolbar: boolean };
+  editorPrefs: { fontSize: number };
   activePathTitle: string | null;
   headingPath: HeadingPathItem[];
   /** 工作区级可见性（keep-alive：小记模式隐藏资料库但不卸载，切回时避免重建全部 Lake 编辑器） */

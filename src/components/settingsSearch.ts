@@ -20,15 +20,15 @@ export interface SettingItemEntry {
   label: string;
   /** 界面上看不出来但用户会搜的同义词（如 "GC"、"sk"、"路径在哪"）。 */
   keywords?: string;
+  /** 平台可见性：desktop=仅桌面 / mobile=仅移动 / both=两端（默认）。 */
+  platform?: "desktop" | "mobile" | "both";
 }
 
 /** 全部可搜索设置行。新增/改名设置时同步这里，否则漂移测试会红。 */
 export const SETTING_ITEMS: SettingItemEntry[] = [
   { id: "editor-font-size", category: "editor", label: "正文字号", keywords: "字体 字号 font size" },
   { id: "editor-paragraph-spacing", category: "editor", label: "段间距", keywords: "段距 行距 留白" },
-  { id: "editor-toc", category: "editor", label: "显示文档大纲（TOC）", keywords: "大纲 TOC 目录 侧栏" },
-  { id: "editor-outline-enhance", category: "editor", label: "大纲增强", keywords: "大纲 增强 原生 目录 TOC 侧栏" },
-  { id: "editor-toolbar", category: "editor", label: "显示编辑器工具栏", keywords: "工具栏 菜单栏" },
+  { id: "editor-outline-enhance", category: "editor", label: "大纲增强", keywords: "大纲 增强 原生 目录 TOC 侧栏", platform: "desktop" },
   { id: "editor-max-open-tabs", category: "editor", label: "最大同时打开标签数", keywords: "标签 页签 tab 上限" },
   { id: "editor-max-attachment", category: "editor", label: "附件大小上限", keywords: "附件 上传 大小 上限 MiB" },
   { id: "appearance-theme", category: "appearance", label: "主题", keywords: "主题 深色 浅色 dark light 夜间" },
@@ -90,4 +90,12 @@ export function searchSettingItems(query: string, limit = 20): SettingItemEntry[
     return tokens.every((token) => haystack.includes(token));
   });
   return hits.slice(0, limit);
+}
+
+/** 判断某设置项在给定平台是否可见（desktop / mobile）。未标注 platform 视为两端可见。 */
+export function isSettingVisibleFor(id: string, platform: "desktop" | "mobile"): boolean {
+  const item = SETTING_ITEMS.find((s) => s.id === id);
+  if (!item) return true;
+  const p = item.platform ?? "both";
+  return p === "both" || p === platform;
 }

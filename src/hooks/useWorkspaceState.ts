@@ -40,7 +40,7 @@ export function useWorkspaceState() {
   const editorsRef = useRef<Map<string, LakeEditorInstance>>(new Map());
 
   const workspaceName = getWorkspaceDisplayName(cloudEnabled, s3Settings);
-  const tocEnabled = settings.showToc;
+  const tocEnabled = true; // 大纲始终可用（显示大纲由「大纲增强」决定用哪套，不再有显式开关）
   const outlineEnhance = settings.outlineEnhance;
   const wideMode = true;
 
