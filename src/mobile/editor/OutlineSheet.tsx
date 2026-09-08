@@ -69,12 +69,12 @@ export function OutlineSheet({ open, editor, onClose, side }: OutlineSheetProps)
   };
 
   return (
-    <div className={side ? ("side-mask" + (open ? " on" : "")) : "mobile-sheet-mask"} onClick={onClose}>
+    <div className={side ? ("side-mask" + (open ? " on" : "")) : "mobile-sheet-mask"} data-panel-mask={side ? "right" : undefined} onClick={onClose}>
       <div className={side ? ("side-panel side-panel--right" + (open ? " on" : "")) : "mobile-sheet med-outline-sheet"} onClick={(e) => e.stopPropagation()}>
         {!side && <div className="mobile-sheet-grab" />}
         {side ? (
           /* 侧栏头 = 思源 #sidebarRight .toolbar 口径：标题 + 箭头关闭（左栏收右箭头、右栏收左箭头） */
-          <div className="toolbar toolbar--border toolbar--dark">
+          <div className="toolbar toolbar--border toolbar--dark" data-prevent-swipe>
             <div className="toolbar__scroll"><span className="toolbar__text">大纲</span></div>
             <span className="toolbar__icon" role="button" tabIndex={0} onClick={onClose} aria-label="收起"><ChevronLeft /></span>
           </div>

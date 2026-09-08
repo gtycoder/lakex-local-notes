@@ -13,7 +13,7 @@ import { selectEvictionIds } from "../../core/tabLimit";
 import { DocumentEditor } from "../editor/DocumentEditor";
 import { OutlineSheet } from "../editor/OutlineSheet";
 import type { LakeEditorInstance } from "../../features/editor/lakeRuntime";
-import { useEdgeSwipe } from "../useEdgeSwipe";
+import { usePanelDrag, type PanelSide } from "../usePanelDrag";
 import { MobileSheetMenu, type MobileSheetItem } from "../ui/MobileSheetMenu";
 import { confirmMobile } from "../ui/ConfirmDialog";
 import { showToast } from "../ui/toastBus";
@@ -83,10 +83,12 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
   const [historyList, setHistoryList] = useState<Array<{ id: number; title: string; createdAt: string }>>([]);
   const longPressTimer = useRef<number | null>(null);
 
-  // 边缘滑动手势（对齐思源移动端）：左边缘右滑→目录抽屉；右边缘左滑→大纲抽屉（互斥）。
-  useEdgeSwipe({
-    onLeftEdgeSwipe: () => openSidebar(true),
-    onRightEdgeSwipe: () => openOutline(true),
+  // 跟手开合抽屉（思源 touch.ts 口径：内容区任意横滑、面板跟手、释放按 1/3 屏宽提交）
+  usePanelDrag({
+    getPanel: (side: PanelSide) => document.querySelector<HTMLElement>(side === "left" ? ".side-panel--left" : ".side-panel--right"),
+    getMask: (side: PanelSide) => document.querySelector<HTMLElement>('[data-panel-mask="' + side + '"]'),
+    isOpen: (side: PanelSide) => (side === "left" ? sidebarOpen : outlineOpen),
+    commit: (side: PanelSide, open: boolean) => { if (side === "left") openSidebar(open); else openOutline(open); },
   });
 
   const loadTree = useCallback(async () => {
@@ -394,7 +396,7 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
       </section>
 
       {/* 底部胶囊栏（思源 #mobileBottomBar：纯图标 5 槽，键盘/编辑态整条下滑淡出而不是卸载） */}
-      <nav className={"mobile-bottom-bar" + (active?.editing ? " mobile-bottom-bar--hidden" : "")} aria-hidden={active?.editing ? "true" : "false"}>
+      <nav className={"mobile-bottom-bar" + (active?.editing ? " mobile-bottom-bar--hidden" : "")} data-prevent-swipe aria-hidden={active?.editing ? "true" : "false"}>
         <button className={"mobile-bottom-bar__item" + (sidebarOpen ? " active" : "")} onClick={() => { tapFeedback(); openSidebar(!sidebarOpen); }} aria-label="文档树" title="文档树"><Files /></button>
         <button className={"mobile-bottom-bar__item" + (tabsOpen ? " active" : "")} onClick={() => { tapFeedback(); setTabsOpen(true); }} aria-label="标签页" title="标签页"><FileText />{tabs.length > 0 && <span className="bottom-bar-count">{tabs.length}</span>}</button>
         <button className={"mobile-bottom-bar__item" + (outlineOpen ? " active" : "")} onClick={() => { tapFeedback(); openOutline(!outlineOpen); }} aria-label="大纲" title="大纲"><ListTree /></button>
@@ -422,9 +424,9 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
       />
 
       {/* 左目录抽屉 (.side-panel) */}
-      <div className={"side-mask" + (sidebarOpen ? " on" : "")} onClick={() => setSidebarOpen(false)} />
+      <div className={"side-mask" + (sidebarOpen ? " on" : "")} data-panel-mask="left" onClick={() => openSidebar(false)} />
       <aside className={"side-panel side-panel--left" + (sidebarOpen ? " on" : "")} aria-label="目录">
-        <div className="toolbar toolbar--border toolbar--dark">
+        <div className="toolbar toolbar--border toolbar--dark" data-prevent-swipe>
           <div className="toolbar__scroll"><span className="toolbar__text">{title}</span></div>
           <span className="toolbar__icon" role="button" tabIndex={0} onClick={() => void createDoc()} aria-label="新建文档"><Plus /></span>
           <span className="toolbar__icon" role="button" tabIndex={0} onClick={() => openSidebar(false)} aria-label="收起"><ChevronRight /></span>
