@@ -775,10 +775,14 @@ export const bridge = {
 
   // ---- 小记（Phase B3：本地 CRUD + 列表；同步后置，依赖 quick-notes/ 子空间端口化） ----
 
-  async listQuickNotes(): Promise<Array<{ id: string; previewText: string; imageCount: number; updatedAt: string }>> {
+  async listQuickNotes(): Promise<Array<{ id: string; previewText: string; imageCount: number; updatedAt: string; firstImage: string | null }>> {
     const d = await ensureDb();
-    const rows = d.prepare("SELECT id, preview_text, image_count, updated_at FROM quick_notes WHERE deleted_at IS NULL AND restore_pending_at IS NULL ORDER BY updated_at DESC").all() as Array<{ id: string; preview_text: string; image_count: number; updated_at: string }>;
-    return rows.map((r) => ({ id: r.id, previewText: r.preview_text, imageCount: r.image_count, updatedAt: r.updated_at }));
+    const rows = d.prepare("SELECT id, preview_text, image_count, updated_at, content FROM quick_notes WHERE deleted_at IS NULL AND restore_pending_at IS NULL ORDER BY updated_at DESC").all() as Array<{ id: string; preview_text: string; image_count: number; updated_at: string; content: string }>;
+    return rows.map((r) => {
+      let firstImage: string | null = null;
+      try { firstImage = (JSON.parse(r.content) as StoredQuickNoteContent).images?.[0]?.filename ?? null; } catch { /* 解析失败无缩略图 */ }
+      return { id: r.id, previewText: r.preview_text, imageCount: r.image_count, updatedAt: r.updated_at, firstImage };
+    });
   },
 
   async readQuickNote(id: string): Promise<{ id: string; content: StoredQuickNoteContent; previewText: string; updatedAt: string } | null> {

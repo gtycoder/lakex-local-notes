@@ -5,8 +5,9 @@
  * 多 tab 的「顶部 tab 条」是桌面版；移动端是底部胶囊栏 #toolbarTabs 弹全屏列表（子代理已核对源码）。
  */
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ArrowLeft, ListTree, Files, Pencil, X, ChevronRight, FolderOpen, FileText, Plus, Check, ArrowLeftRight } from "lucide-react";
+import { ArrowLeft, ListTree, Files, Pencil, X, ChevronRight, FolderOpen, FileText, Plus, Check, ArrowLeftRight, Trash2, SmilePlus, Move } from "lucide-react";
 import { bridge } from "../bridge";
+import { LAKE_EMOJIS } from "../../lib/lakeEmojis";
 import { DocumentEditor } from "../editor/DocumentEditor";
 import { OutlineSheet } from "../editor/OutlineSheet";
 import type { LakeEditorInstance } from "../../features/editor/lakeRuntime";
@@ -45,6 +46,15 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
   const [switchPos, setSwitchPos] = useState<{ top: number; right: number } | null>(null);
   const editorsRef = useRef<Map<string, LakeEditorInstance | null>>(new Map());
   const autoOpenedRef = useRef(false);
+
+  // 目录树长按管理：右键菜单 / 内联重命名 / 图标 / 移动 / 删除
+  const [ctxMenu, setCtxMenu] = useState<{ node: NotebookTreeItem; x: number; y: number } | null>(null);
+  const [renamingId, setRenamingId] = useState<string | null>(null);
+  const [renameValue, setRenameValue] = useState("");
+  const [iconFor, setIconFor] = useState<NotebookTreeItem | null>(null);
+  const [moveFor, setMoveFor] = useState<NotebookTreeItem | null>(null);
+  const [deleteFor, setDeleteFor] = useState<NotebookTreeItem | null>(null);
+  const longPressTimer = useRef<number | null>(null);
 
   // 边缘滑动手势（对齐思源移动端）：左边缘右滑→目录抽屉；右边缘左滑→大纲抽屉（互斥）。
   useEdgeSwipe({
@@ -128,6 +138,42 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
     } catch { /* 忽略 */ }
   }, [notebookId, loadTree, openTab]);
 
+  // ---- 目录树长按管理 ----
+  const clearLongPress = () => {
+    if (longPressTimer.current !== null) { window.clearTimeout(longPressTimer.current); longPressTimer.current = null; }
+  };
+  const startLongPress = (e: React.TouchEvent, node: NotebookTreeItem) => {
+    clearLongPress();
+    const el = e.currentTarget as HTMLElement;
+    longPressTimer.current = window.setTimeout(() => {
+      longPressTimer.current = null;
+      const rect = el.getBoundingClientRect();
+      setCtxMenu({ node, x: Math.max(8, Math.min(rect.left, window.innerWidth - 220)), y: Math.max(8, Math.min(rect.bottom + 4, window.innerHeight - 200)) });
+    }, 500);
+  };
+  const applyRename = useCallback(async () => {
+    const id = renamingId; const v = renameValue.trim();
+    setRenamingId(null);
+    if (id && v) { try { await bridge.renameTreeNode(id, v); await loadTree(); } catch { /* 忽略 */ } }
+  }, [renamingId, renameValue, loadTree]);
+  const applyIcon = useCallback(async (icon: string | null) => {
+    const n = iconFor; setIconFor(null);
+    if (n) { try { await bridge.setNodeIcon(n.id, icon); await loadTree(); } catch { /* 忽略 */ } }
+  }, [iconFor, loadTree]);
+  const applyDelete = useCallback(async () => {
+    const n = deleteFor; setDeleteFor(null);
+    if (n) { try { await bridge.trashTreeItem(n.id, n.kind === "note" ? "note" : "folder"); await loadTree(); } catch { /* 忽略 */ } }
+  }, [deleteFor, loadTree]);
+  const applyMove = useCallback(async (targetParentId: string | null) => {
+    const n = moveFor; setMoveFor(null);
+    if (!n || n.parentId === targetParentId) return;
+    try {
+      const siblings = tree.filter((x) => x.parentId === targetParentId && x.id !== n.id).map((x) => x.id);
+      await bridge.moveTreeNodeOrdered(n.id, targetParentId, [...siblings, n.id]);
+      await loadTree();
+    } catch { /* 忽略 */ }
+  }, [moveFor, tree, loadTree]);
+
   const renderBranch = (parentId: string, depth: number) => {
     const children = childrenOf(parentId);
     return children.map((it) => {
@@ -141,13 +187,33 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
             style={{ paddingLeft: 12 + depth * 16 }}
             data-node-id={it.id}
             onClick={() => {
+              if (renamingId) return;
               if (hasChildren) { toggleGroup(it.id); return; }
               if (isNote) { setSidebarOpen(false); void openTab(it.id); }
             }}
+            onTouchStart={(e) => startLongPress(e, it)}
+            onTouchMove={clearLongPress}
+            onTouchEnd={clearLongPress}
+            onTouchCancel={clearLongPress}
+            onContextMenu={(e) => { e.preventDefault(); const rect = (e.currentTarget as HTMLElement).getBoundingClientRect(); setCtxMenu({ node: it, x: Math.max(8, Math.min(rect.left, window.innerWidth - 220)), y: Math.max(8, Math.min(rect.bottom + 4, window.innerHeight - 200)) }); }}
           >
             {hasChildren ? <ChevronRight size={16} className={expanded.has(it.id) ? "ln-chevron open" : "ln-chevron"} /> : <span className="ln-chevron-spacer" />}
-            <NodeIcon size={16} className="ln-tree-icon" />
-            <span className="b3-list-item__text">{it.title}</span>
+            {renamingId === it.id ? (
+              <input
+                className="b3-text-field"
+                autoFocus
+                value={renameValue}
+                onChange={(e) => setRenameValue(e.target.value)}
+                onClick={(e) => e.stopPropagation()}
+                onBlur={() => void applyRename()}
+                onKeyDown={(e) => { if (e.key === "Enter") void applyRename(); if (e.key === "Escape") setRenamingId(null); }}
+              />
+            ) : (
+              <>
+                {it.icon ? <span className="ln-tree-icon">{it.icon}</span> : <NodeIcon size={16} className="ln-tree-icon" />}
+                <span className="b3-list-item__text">{it.title}</span>
+              </>
+            )}
           </button>
           {hasChildren && expanded.has(it.id) && renderBranch(it.id, depth + 1)}
         </div>
@@ -177,6 +243,18 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
           <div className="mobile-empty">暂无打开的文档，点左目录或底部打开</div>
         ) : tabs.map((t) => (
           <div key={t.id} className={"doc-pane" + (t.id === activeId ? " active" : "")}>
+            {t.editing && (
+              <input
+                className="mobile-title-input"
+                value={t.title}
+                placeholder="无标题"
+                onChange={(e) => {
+                  const title = e.target.value;
+                  setTabs((prev) => prev.map((x) => (x.id === t.id ? { ...x, title } : x)));
+                  scheduleAutoSave(t.id, title, t.content);
+                }}
+              />
+            )}
             <DocumentEditor
               note={{ id: t.id, title: t.title, content: t.content } as POCNote}
               content={t.content}
@@ -258,6 +336,74 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
                   {nb.id === notebookId && <Check size={16} className="b3-list-item__action" />}
                 </button>
               ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 目录树长按菜单 */}
+      {ctxMenu && (
+        <div className="mobile-dropdown-mask" onClick={() => setCtxMenu(null)}>
+          <div className="mobile-dropdown" style={{ left: ctxMenu.x, top: ctxMenu.y, minWidth: 160 }} onClick={(e) => e.stopPropagation()}>
+            <div className="mobile-dropdown-body">
+              <button className="b3-list-item" onClick={() => { setRenamingId(ctxMenu.node.id); setRenameValue(ctxMenu.node.title); setCtxMenu(null); }}><Pencil size={16} className="ln-tree-icon" /><span className="b3-list-item__text">重命名</span></button>
+              <button className="b3-list-item" onClick={() => { setIconFor(ctxMenu.node); setCtxMenu(null); }}><SmilePlus size={16} className="ln-tree-icon" /><span className="b3-list-item__text">设置图标</span></button>
+              <button className="b3-list-item" onClick={() => { setMoveFor(ctxMenu.node); setCtxMenu(null); }}><Move size={16} className="ln-tree-icon" /><span className="b3-list-item__text">移动到…</span></button>
+              <button className="b3-list-item" onClick={() => { setDeleteFor(ctxMenu.node); setCtxMenu(null); }}><Trash2 size={16} className="ln-tree-icon" /><span className="b3-list-item__text">删除</span></button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 图标选择器 */}
+      {iconFor && (
+        <div className="mobile-sheet-mask" onClick={() => setIconFor(null)}>
+          <div className="mobile-sheet" onClick={(e) => e.stopPropagation()}>
+            <div className="mobile-sheet-head">
+              <span className="mobile-sheet-title">设置图标</span>
+              <button className="mobile-icon-btn" onClick={() => setIconFor(null)} aria-label="关闭"><X size={20} /></button>
+            </div>
+            <div className="mobile-sheet-body">
+              <div className="mobile-emoji-grid">
+                {LAKE_EMOJIS.map((e) => (
+                  <button key={e.name + e.char} className="mobile-emoji-cell" onClick={() => void applyIcon(e.char)} title={e.name}>{e.char}</button>
+                ))}
+              </div>
+              <button className="b3-button b3-button--outline" onClick={() => void applyIcon(null)}>清除图标</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 移动目标选择 */}
+      {moveFor && (
+        <div className="mobile-sheet-mask" onClick={() => setMoveFor(null)}>
+          <div className="mobile-sheet" onClick={(e) => e.stopPropagation()}>
+            <div className="mobile-sheet-head">
+              <span className="mobile-sheet-title">移动「{moveFor.title}」到…</span>
+              <button className="mobile-icon-btn" onClick={() => setMoveFor(null)} aria-label="关闭"><X size={20} /></button>
+            </div>
+            <div className="mobile-sheet-body">
+              <button className="b3-list-item" onClick={() => void applyMove(notebookId)}><FolderOpen size={16} className="ln-tree-icon" /><span className="b3-list-item__text">（笔记本根目录）</span></button>
+              {tree.filter((x) => x.kind === "group" && x.id !== moveFor.id).map((g) => (
+                <button key={g.id} className="b3-list-item" onClick={() => void applyMove(g.id)}><FolderOpen size={16} className="ln-tree-icon" /><span className="b3-list-item__text">{g.title}</span></button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 删除确认 */}
+      {deleteFor && (
+        <div className="mobile-sheet-mask" onClick={() => setDeleteFor(null)}>
+          <div className="mobile-sheet" onClick={(e) => e.stopPropagation()}>
+            <div className="mobile-sheet-head"><span className="mobile-sheet-title">删除「{deleteFor.title}」？</span></div>
+            <div className="mobile-sheet-body">
+              <p className="mobile-sheet-empty">将移入回收站，可在回收站中恢复或彻底删除。</p>
+              <div className="mobile-model-body">
+                <button className="b3-button" onClick={() => setDeleteFor(null)}>取消</button>
+                <button className="b3-button ft__error" onClick={() => void applyDelete()}>删除</button>
+              </div>
             </div>
           </div>
         </div>

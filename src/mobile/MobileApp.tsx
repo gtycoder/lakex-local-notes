@@ -36,7 +36,7 @@ export function MobileApp() {
   const [toastMsg, setToastMsg] = useState<string | null>(null);
   const [createNbOpen, setCreateNbOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
-  const [quickNotes, setQuickNotes] = useState<Array<{ id: string; previewText: string; imageCount: number; updatedAt: string }>>([]);
+  const [quickNotes, setQuickNotes] = useState<Array<{ id: string; previewText: string; imageCount: number; updatedAt: string; firstImage: string | null }>>([]);
   // P2-2：文档来源（home 或 notebookId）——返回时回到来源页，而非总是首页
   const [documentOrigin, setDocumentOrigin] = useState<string | null>(null);
 

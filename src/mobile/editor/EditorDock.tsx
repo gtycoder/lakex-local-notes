@@ -157,14 +157,14 @@ export function EditorDock({ editor, editing, onToggleEdit, onInsertImage, onIns
         <div className="med-panel" onMouseDown={(e) => e.preventDefault()}>
           {panelMode === "insert" ? (
             <div className="med-ins-grid">
-              <button className="med-ins-item" onClick={() => { onInsertImage?.(); }}><ImageIcon size={20} /><span>图片</span></button>
-              <button className="med-ins-item" onClick={() => { onInsertAttachment?.(); }}><Paperclip size={20} /><span>附件</span></button>
-              <button className="med-ins-item" onClick={() => { onInsertAudio?.(); }}><Music size={20} /><span>音频</span></button>
-              <button className="med-ins-item" onClick={() => { onInsertVideo?.(); }}><Video size={20} /><span>视频</span></button>
-              <button className="med-ins-item" onClick={() => { onInsertTable?.(); }}><Table2 size={20} /><span>表格</span></button>
-              <button className="med-ins-item" onClick={() => runPanel("quote")}><Quote size={20} /><span>引用</span></button>
-              <button className="med-ins-item" onClick={() => runPanel("hr")}><Minus size={20} /><span>分割线</span></button>
-              <button className="med-ins-item" onClick={() => runPanel("insertCard", "codeblock")}><Code2 size={20} /><span>代码块</span></button>
+              <button className="med-ins-item" onClick={() => { onInsertImage?.(); }} title="图片" aria-label="图片"><ImageIcon size={20} /></button>
+              <button className="med-ins-item" onClick={() => { onInsertAttachment?.(); }} title="附件" aria-label="附件"><Paperclip size={20} /></button>
+              <button className="med-ins-item" onClick={() => { onInsertAudio?.(); }} title="音频" aria-label="音频"><Music size={20} /></button>
+              <button className="med-ins-item" onClick={() => { onInsertVideo?.(); }} title="视频" aria-label="视频"><Video size={20} /></button>
+              <button className="med-ins-item" onClick={() => { onInsertTable?.(); }} title="表格" aria-label="表格"><Table2 size={20} /></button>
+              <button className="med-ins-item" onClick={() => runPanel("quote")} title="引用" aria-label="引用"><Quote size={20} /></button>
+              <button className="med-ins-item" onClick={() => runPanel("hr")} title="分割线" aria-label="分割线"><Minus size={20} /></button>
+              <button className="med-ins-item" onClick={() => runPanel("insertCard", "codeblock")} title="代码块" aria-label="代码块"><Code2 size={20} /></button>
             </div>
           ) : (
             <div className="med-font-panel">

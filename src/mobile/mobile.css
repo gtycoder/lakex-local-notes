@@ -136,6 +136,11 @@ body { font-family: BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino San
 .mobile-dropdown-body .b3-list-item { width: 100%; text-align: left; border-radius: 0; }
 @keyframes mobile-dropdown-in { from { opacity: 0; transform: translateY(-6px) scale(.98); } to { opacity: 1; transform: translateY(0) scale(1); } }
 
+/* 目录树节点图标选择器（emoji 网格） */
+.mobile-emoji-grid { display: grid; grid-template-columns: repeat(8, 1fr); gap: 4px; padding: 0 16px 12px; }
+.mobile-emoji-cell { border: 0; background: transparent; font-size: 20px; padding: 6px 0; cursor: pointer; border-radius: 8px; }
+.mobile-emoji-cell:active { background: var(--lake-shell); }
+
 .create-nb-row { display: flex; gap: 12px; align-items: center; }
 .create-nb-icon {
   width: 48px; height: 48px; border: 1px solid var(--lake-border); border-radius: 10px; background: var(--lake-shell);

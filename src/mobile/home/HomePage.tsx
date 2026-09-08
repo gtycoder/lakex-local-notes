@@ -1,5 +1,5 @@
 /** 首页（小记/知识库切换 + 笔记本宫格）。小记 tab：composer 新建/编辑 + 卡片（含图片缩略图）。 */
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Plus, Search, Settings } from "lucide-react";
 import type { TreeNode } from "../../lib/types";
 import { NotebookGrid } from "./NotebookGrid";
@@ -13,6 +13,8 @@ export interface MobileQuickNote {
   previewText: string;
   imageCount: number;
   updatedAt: string;
+  /** 首图文件名（listQuickNotes 一次返回，卡片不再逐条 readQuickNote） */
+  firstImage: string | null;
 }
 
 export interface HomePageProps {
@@ -116,22 +118,7 @@ export function HomePage(props: HomePageProps) {
 
 /** 小记卡片：previewText + 首图缩略图（canonical URL 直显——本地 AssetServer 服务 quick-notes/）。 */
 function QuickNoteCard({ note, onEdit }: { note: MobileQuickNote; onEdit: () => void }) {
-  const [thumbUrl, setThumbUrl] = useState<string | null>(null);
-
-  useEffect(() => {
-    let alive = true;
-    (async () => {
-      try {
-        const full = await bridge.readQuickNote(note.id);
-        const first = full?.content.images?.[0];
-        if (first && alive) {
-          // 与桌面端一致的 canonical 形态：http://127.0.0.1:19876/quick-notes/{id}/{file}
-          setThumbUrl(localAssetHttpUrl(note.id, first.filename, { space: "quick-notes" }));
-        }
-      } catch { /* 单卡缩略图失败忽略 */ }
-    })();
-    return () => { alive = false; };
-  }, [note.id]);
+  const thumbUrl = note.firstImage ? localAssetHttpUrl(note.id, note.firstImage, { space: "quick-notes" }) : null;
 
   return (
     <div className="mobile-qcard" onClick={onEdit}>
