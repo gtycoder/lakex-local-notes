@@ -6,7 +6,7 @@
  * 格式命令走 Lake renderer.execCommand（文本 ne-* 属性；块级 style "h1"/"p" 等）。
  */
 import { useEffect, useRef, useState } from "react";
-import { Plus, Type, Bold, List, ListTodo, MoreHorizontal, Keyboard, X, Check, Image as ImageIcon, Paperclip, Table2, Quote, Minus, Code2, ChevronDown, Music, Video } from "lucide-react";
+import { Plus, Type, Bold, List, ListTodo, Keyboard, X, Check, Image as ImageIcon, Paperclip, Table2, Quote, Minus, Code2, Music, Video } from "lucide-react";
 import { lakeBridge, type LakeEditorInstance } from "../../features/editor/lakeRuntime";
 import { MARK_COMMANDS, BLOCK_INSERT_COMMANDS, HISTORY_COMMANDS, STYLE_BLOCKS } from "../../features/editor/editorCommands";
 import { useKeyboard } from "../useKeyboard";
@@ -129,7 +129,6 @@ export function EditorDock({ editor, editing, onToggleEdit, onInsertImage, onIns
         <button className="med-btn med-b" onClick={() => runInline("bold")} aria-label="加粗"><Bold size={19} /></button>
         <button className="med-btn" onClick={() => runInline("unorderedList" as never)} aria-label="列表"><List size={20} /></button>
         <button className="med-btn" onClick={() => runInline("taskList" as never)} aria-label="待办"><ListTodo size={20} /></button>
-        <button className="med-btn" onClick={() => togglePanel("font")} aria-label="更多"><MoreHorizontal size={20} /></button>
         <button className="med-btn" onClick={onKbToggle} aria-label={kbLabel}><Keyboard size={19} /></button>
         <button className="med-btn med-done" onClick={exitEdit} aria-label="完成"><Check size={20} /></button>
       </div>
