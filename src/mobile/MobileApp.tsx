@@ -4,7 +4,7 @@
  * - 数据：直接走 bridge 真实端口（folders CRUD/notes/搜索/同步已就绪），不做 fixture。
  * - 复杂卡片（画板/思维导图/流程图）：viewer 只读渲染（§19.1），编辑入口置灰。
  */
-import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { bridge, type POCNote, type POCNoteSummary } from "./bridge";
 import type { TreeNode } from "../lib/types";
 import { HomePage } from "./home/HomePage";
@@ -27,6 +27,7 @@ export function MobileApp() {
   const [treeNodes, setTreeNodes] = useState<TreeNode[]>([]);
   const [notes, setNotes] = useState<POCNoteSummary[]>([]);
   const [active, setActive] = useState<POCNote | null>(null);
+  const activeIdRef = useRef<string | null>(null);
   const [draft, setDraft] = useState("");
   const [draftTitle, setDraftTitle] = useState("");
   const [editing, setEditing] = useState(false);
@@ -67,6 +68,9 @@ export function MobileApp() {
           listNoteHistory: (noteId: string) => bridge.listNoteHistory(noteId),
           restoreHistory: (historyId: number) => bridge.restoreHistory(historyId),
           cleanupHistory: () => bridge.cleanupHistory(),
+          getHistorySettings: () => bridge.getHistorySettings(),
+          saveHistorySettings: (s: import("./bridge").HistoryMobileSettings) => bridge.saveHistorySettings(s),
+          snapshotNote: (id: string) => bridge.snapshotNote(id),
           createQuickNote: (text: string) => bridge.createQuickNote(text),
           deleteQuickNote: (id: string) => bridge.deleteQuickNote(id),
           saveQuickNote: (id: string, text: string) => bridge.saveQuickNote(id, text),
@@ -107,6 +111,20 @@ export function MobileApp() {
     const t = window.setTimeout(() => setToastMsg(null), 1600);
     return () => window.clearTimeout(t);
   }, [toastMsg]);
+
+  // 定时自动快照：按历史设置 snapshotIntervalMinutes（0=关）周期给当前打开笔记留档
+  useEffect(() => { activeIdRef.current = active?.id ?? null; }, [active?.id]);
+  useEffect(() => {
+    let timer: number | null = null;
+    void bridge.getHistorySettings().then((cfg) => {
+      if (cfg.snapshotIntervalMinutes <= 0) return;
+      timer = window.setInterval(() => {
+        const id = activeIdRef.current;
+        if (id) void bridge.snapshotNote(id);
+      }, Math.max(1, cfg.snapshotIntervalMinutes) * 60 * 1000);
+    });
+    return () => { if (timer != null) window.clearInterval(timer); };
+  }, []);
 
   const notebooks = useMemo(() => treeNodes.filter((n) => n.nodeType === "notebook"), [treeNodes]);
   const notebookChildren = useCallback((id: string) => treeNodes.filter((n) => n.parentId === id), [treeNodes]);

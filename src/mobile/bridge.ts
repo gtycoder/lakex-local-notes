@@ -28,6 +28,7 @@ import { syncQuickNotesViaEngine } from "../core/quickNotesSyncEngine.js";
 import { applyQuickNotesSyncSchema, createQuickNotesSyncDbPort } from "./quickNotesDbPort.js";
 import { mobileSecretStore } from "./secretStore.js";
 import { hasNoteSaveChanges } from "../core/noteSaveDecision.js";
+import { selectHistoryDrops } from "../core/storeUtils.js";
 
 export interface POCNote {
   id: string;
@@ -283,6 +284,15 @@ function historyAssetRefs(): Set<string> {
   for (const r of rows) for (const f of extractAssetRefs(r.content)) refs.add(`assets/${r.note_id}/${f}`);
   return refs;
 }
+
+/** 移动端历史快照设置（对齐桌面 HistorySettings；存 device_state，纯本地）。 */
+export interface HistoryMobileSettings {
+  maxSnapshots: number;
+  retentionDays: number;
+  cleanupIntervalHours: number;
+  snapshotIntervalMinutes: number;
+}
+const DEFAULT_HISTORY_SETTINGS: HistoryMobileSettings = { maxSnapshots: 100, retentionDays: 30, cleanupIntervalHours: 24, snapshotIntervalMinutes: 15 };
 
 /**
  * 小记保存的实际写入逻辑。调用方必须在 maintenance 队列中调用它；不要在这里
@@ -1024,18 +1034,47 @@ export const bridge = {
     d.prepare("DELETE FROM note_history WHERE id=?").run(historyId);
   },
 
-  /** 历史快照清理（对齐桌面 cleanupHistory 简化）：过期（>30 天）+ 每文档上限（20 份，保留最新）。 */
+  /** 读取历史快照设置（对齐桌面 getHistorySettings；存 device_state，纯本地）。 */
+  async getHistorySettings(): Promise<HistoryMobileSettings> {
+    const d = await ensureDb();
+    const row = d.prepare("SELECT value FROM device_state WHERE key='history_settings'").get() as { value: string } | undefined;
+    if (!row) return DEFAULT_HISTORY_SETTINGS;
+    try {
+      const parsed = JSON.parse(row.value) as Partial<HistoryMobileSettings>;
+      return {
+        maxSnapshots: typeof parsed.maxSnapshots === "number" && parsed.maxSnapshots > 0 ? parsed.maxSnapshots : DEFAULT_HISTORY_SETTINGS.maxSnapshots,
+        retentionDays: typeof parsed.retentionDays === "number" && parsed.retentionDays > 0 ? parsed.retentionDays : DEFAULT_HISTORY_SETTINGS.retentionDays,
+        cleanupIntervalHours: typeof parsed.cleanupIntervalHours === "number" && parsed.cleanupIntervalHours >= 0 ? parsed.cleanupIntervalHours : DEFAULT_HISTORY_SETTINGS.cleanupIntervalHours,
+        snapshotIntervalMinutes: typeof parsed.snapshotIntervalMinutes === "number" && parsed.snapshotIntervalMinutes >= 0 ? parsed.snapshotIntervalMinutes : DEFAULT_HISTORY_SETTINGS.snapshotIntervalMinutes,
+      };
+    } catch { return DEFAULT_HISTORY_SETTINGS; }
+  },
+
+  /** 保存历史快照设置（对齐桌面 saveHistorySettings）。 */
+  async saveHistorySettings(settings: HistoryMobileSettings): Promise<void> {
+    const d = await ensureDb();
+    d.prepare("INSERT INTO device_state(key,value) VALUES('history_settings',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value").run(JSON.stringify(settings));
+  },
+
+  /** 给某笔记创建快照（定时自动快照用；读当前正文，24h 去重）。 */
+  async snapshotNote(noteId: string): Promise<void> {
+    const d = await ensureDb();
+    const row = d.prepare("SELECT title, content, parent_id, sort_order FROM notes WHERE id=? AND trashed_at IS NULL").get(noteId) as { title: string; content: string; parent_id: string | null; sort_order: number } | undefined;
+    if (!row) return;
+    dbPort.createHistorySnapshot(noteId, row.content, { title: row.title, parentId: row.parent_id, sortOrder: row.sort_order });
+  },
+
+  /** 历史快照清理（对齐桌面 cleanupHistory：分层保留 + 上限 + 保留天数，设置可配置）。 */
   async cleanupHistory(): Promise<{ deleted: number }> {
     const d = await ensureDb();
-    const MAX_SNAPSHOTS = 20;
-    const RETENTION_DAYS = 30;
-    let deleted = 0;
-    const cutoff = new Date(Date.now() - RETENTION_DAYS * 24 * 3600 * 1000).toISOString();
-    deleted += d.prepare("DELETE FROM note_history WHERE created_at < ?").run(cutoff).changes;
+    const cfg = await bridge.getHistorySettings();
     const noteIds = d.prepare("SELECT DISTINCT note_id FROM note_history").all() as Array<{ note_id: string }>;
+    let deleted = 0;
     for (const { note_id } of noteIds) {
-      const rows = d.prepare("SELECT id FROM note_history WHERE note_id=? ORDER BY created_at DESC, id DESC").all(note_id) as Array<{ id: number }>;
-      for (const r of rows.slice(MAX_SNAPSHOTS)) deleted += d.prepare("DELETE FROM note_history WHERE id=?").run(r.id).changes;
+      const rows = d.prepare("SELECT id, created_at FROM note_history WHERE note_id=? ORDER BY created_at ASC").all(note_id) as Array<{ id: number; created_at: string }>;
+      if (rows.length === 0) continue;
+      const drops = selectHistoryDrops(rows.map((r) => r.created_at), { maxSnapshots: cfg.maxSnapshots, retentionDays: cfg.retentionDays });
+      for (const r of rows) if (drops.has(r.created_at)) deleted += d.prepare("DELETE FROM note_history WHERE id=?").run(r.id).changes;
     }
     return { deleted };
   },

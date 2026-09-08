@@ -2,10 +2,11 @@
  * 版式：竖向菜单列表（设置项一行一行），点某项进入新页面（带返回）；子页内容用 .config-* + .b3-* 骨架（AGENTS §3.14）。
  * 注意：全部 App 设置为竖向（无横向 tab）；「回收站」并入总回收站（见 TrashList）。 */
 import { useCallback, useEffect, useState } from "react";
-import { ArrowLeft, ChevronRight, Cloud, Info, Trash2, X, RefreshCw, HardDrive, ListTree, Images } from "lucide-react";
+import { ArrowLeft, ChevronRight, Cloud, Info, Trash2, X, RefreshCw, HardDrive, ListTree, Images, History } from "lucide-react";
 import { loadSettings, saveSettings, fontSizeOptions, MAX_ATTACHMENT_MB_OPTIONS_SETTINGS, type AppSettings } from "../../lib/settings";
-import { Group, Item, Switch, Seg, Block } from "../../components/settingsPrimitives";
+import { Group, Item, Switch, Seg, Block, NumField } from "../../components/settingsPrimitives";
 import { bridge } from "../bridge";
+import type { HistoryMobileSettings } from "../bridge";
 import { mobileCachePort } from "../cachePort";
 import { mobileAppInfoPort } from "../appInfoPort";
 import { TrashList } from "./TrashList";
@@ -19,11 +20,12 @@ export interface SettingsDrawerProps {
   onRefresh: () => Promise<void>;
 }
 
-type View = "menu" | "editor" | "appearance" | "resources" | "s3" | "cache" | "trash" | "about";
+type View = "menu" | "editor" | "appearance" | "history" | "resources" | "s3" | "cache" | "trash" | "about";
 
 const MENU: { key: Exclude<View, "menu">; label: string; icon: typeof Cloud }[] = [
   { key: "editor", label: "编辑器", icon: ListTree },
   { key: "appearance", label: "外观", icon: Info },
+  { key: "history", label: "历史", icon: History },
   { key: "resources", label: "资源管理", icon: Images },
   { key: "s3", label: "同步设置", icon: Cloud },
   { key: "cache", label: "清理缓存", icon: HardDrive },
@@ -56,10 +58,23 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
   const [orphans, setOrphans] = useState<Array<{ id: number; noteId: string; filename: string; size: number; mimeType: string }>>([]);
   const [orphanBusy, setOrphanBusy] = useState(false);
   const [gcMsg, setGcMsg] = useState("");
+  const [hist, setHist] = useState<HistoryMobileSettings | null>(null);
+
+  const updateHist = (patch: Partial<HistoryMobileSettings>) => {
+    if (!hist) return;
+    const next = { ...hist, ...patch };
+    setHist(next);
+    void bridge.saveHistorySettings(next);
+  };
 
   useEffect(() => {
     if (!open || view !== "resources") return;
     void bridge.listOrphanAssets().then((rows) => setOrphans(rows)).catch(() => setOrphans([]));
+  }, [open, view]);
+
+  useEffect(() => {
+    if (!open || view !== "history") return;
+    void bridge.getHistorySettings().then((h) => setHist(h));
   }, [open, view]);
   const [settings, setSettings] = useState<AppSettings>(() => loadSettings());
   const update = (patch: Partial<AppSettings>) => setSettings(saveSettings(patch));
@@ -184,6 +199,23 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
                   <button className={"b3-button b3-button--outline seg__item" + (settings.theme === "light" ? " is-active" : "")} onClick={() => update({ theme: "light" })}>浅色</button>
                   <button className={"b3-button b3-button--outline seg__item" + (settings.theme === "dark" ? " is-active" : "")} onClick={() => update({ theme: "dark" })}>深色</button>
                 </Seg>
+              </Item>
+            </Group>
+          )}
+
+          {view === "history" && hist && (
+            <Group title="历史" icon={<History size={16} />}>
+              <Item itemId="history-max-snapshots" name="每文档快照上限" desc="超过后保留最新 N 份（对齐桌面）。">
+                <NumField label="每文档快照上限" value={hist.maxSnapshots} min={1} max={500} floor={1} fallback={100} onSave={(n) => updateHist({ maxSnapshots: n })} />
+              </Item>
+              <Item itemId="history-retention-days" name="保留天数" desc="超过该天数的快照会被清理。">
+                <NumField label="保留天数" value={hist.retentionDays} min={1} max={365} floor={1} fallback={30} onSave={(n) => updateHist({ retentionDays: n })} />
+              </Item>
+              <Item itemId="history-snapshot-interval" name="自动快照间隔（分钟）" desc="0 = 关闭定时自动快照。">
+                <NumField label="自动快照间隔" value={hist.snapshotIntervalMinutes} min={0} max={1440} floor={0} fallback={15} onSave={(n) => updateHist({ snapshotIntervalMinutes: n })} />
+              </Item>
+              <Item itemId="history-cleanup-interval" name="定期清理间隔（小时）" desc="0 = 关闭定期巡检清理。">
+                <NumField label="定期清理间隔" value={hist.cleanupIntervalHours} min={0} max={168} floor={0} fallback={24} onSave={(n) => updateHist({ cleanupIntervalHours: n })} />
               </Item>
             </Group>
           )}
