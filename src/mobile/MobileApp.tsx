@@ -66,6 +66,7 @@ export function MobileApp() {
           gcDeepCleanup: () => bridge.gcDeepCleanup(),
           listNoteHistory: (noteId: string) => bridge.listNoteHistory(noteId),
           restoreHistory: (historyId: number) => bridge.restoreHistory(historyId),
+          cleanupHistory: () => bridge.cleanupHistory(),
           createQuickNote: (text: string) => bridge.createQuickNote(text),
           deleteQuickNote: (id: string) => bridge.deleteQuickNote(id),
           saveQuickNote: (id: string, text: string) => bridge.saveQuickNote(id, text),

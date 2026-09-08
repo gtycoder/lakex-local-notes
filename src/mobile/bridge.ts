@@ -1024,6 +1024,22 @@ export const bridge = {
     d.prepare("DELETE FROM note_history WHERE id=?").run(historyId);
   },
 
+  /** 历史快照清理（对齐桌面 cleanupHistory 简化）：过期（>30 天）+ 每文档上限（20 份，保留最新）。 */
+  async cleanupHistory(): Promise<{ deleted: number }> {
+    const d = await ensureDb();
+    const MAX_SNAPSHOTS = 20;
+    const RETENTION_DAYS = 30;
+    let deleted = 0;
+    const cutoff = new Date(Date.now() - RETENTION_DAYS * 24 * 3600 * 1000).toISOString();
+    deleted += d.prepare("DELETE FROM note_history WHERE created_at < ?").run(cutoff).changes;
+    const noteIds = d.prepare("SELECT DISTINCT note_id FROM note_history").all() as Array<{ note_id: string }>;
+    for (const { note_id } of noteIds) {
+      const rows = d.prepare("SELECT id FROM note_history WHERE note_id=? ORDER BY created_at DESC, id DESC").all(note_id) as Array<{ id: number }>;
+      for (const r of rows.slice(MAX_SNAPSHOTS)) deleted += d.prepare("DELETE FROM note_history WHERE id=?").run(r.id).changes;
+    }
+    return { deleted };
+  },
+
   /** 全局孤儿资源列表（对齐桌面 listOrphanAssets）。 */
   async listOrphanAssets(): Promise<Array<{ id: number; noteId: string; filename: string; size: number; mimeType: string; detectedAt: string }>> {
     const d = await ensureDb();
@@ -1358,6 +1374,7 @@ export const bridge = {
         quickMsg = `；小记同步失败：${quickNotes.error}`;
       }
       await saveSnapshot(d.exportBytes());
+      await bridge.cleanupHistory().catch(() => {}); // 同步后清理快照（过期 + 每文档上限）
       return { message: report.message + quickMsg, notes: report, quickNotes };
     });
   },
