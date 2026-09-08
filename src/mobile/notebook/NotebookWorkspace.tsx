@@ -5,7 +5,7 @@
  * 多 tab 的「顶部 tab 条」是桌面版；移动端是底部胶囊栏 #toolbarTabs 弹全屏列表（子代理已核对源码）。
  */
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ArrowLeft, ListTree, Files, Pencil, X, ChevronRight, FolderOpen, FileText, Plus, Check, ArrowLeftRight, Trash2, SmilePlus, Move } from "lucide-react";
+import { ArrowLeft, ListTree, Files, Pencil, X, ChevronRight, FolderOpen, FileText, Plus, Check, ArrowLeftRight, Trash2, SmilePlus, Move, History } from "lucide-react";
 import { bridge } from "../bridge";
 import { LAKE_EMOJIS } from "../../lib/lakeEmojis";
 import { loadSettings } from "../../lib/settings";
@@ -58,6 +58,9 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
   const [iconFor, setIconFor] = useState<NotebookTreeItem | null>(null);
   const [moveFor, setMoveFor] = useState<NotebookTreeItem | null>(null);
   const [deleteFor, setDeleteFor] = useState<NotebookTreeItem | null>(null);
+  const [historyFor, setHistoryFor] = useState<NotebookTreeItem | null>(null);
+  const [historyList, setHistoryList] = useState<Array<{ id: number; title: string; createdAt: string }>>([]);
+  const [historyRestoreId, setHistoryRestoreId] = useState<number | null>(null);
   const longPressTimer = useRef<number | null>(null);
 
   // 边缘滑动手势（对齐思源移动端）：左边缘右滑→目录抽屉；右边缘左滑→大纲抽屉（互斥）。
@@ -193,6 +196,20 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
       await loadTree();
     } catch { /* 忽略 */ }
   }, [moveFor, tree, loadTree]);
+
+  const openHistory = useCallback(async (node: NotebookTreeItem) => {
+    setHistoryFor(node);
+    try { setHistoryList(await bridge.listNoteHistory(node.id)); } catch { setHistoryList([]); }
+  }, []);
+  const applyRestoreHistory = useCallback(async () => {
+    const id = historyRestoreId; setHistoryRestoreId(null);
+    if (id == null) return;
+    try {
+      await bridge.restoreHistory(id);
+      setHistoryFor(null);
+      await loadTree();
+    } catch { /* 忽略 */ }
+  }, [historyRestoreId, loadTree]);
 
   const renderBranch = (parentId: string, depth: number) => {
     const children = childrenOf(parentId);
@@ -369,6 +386,9 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
               <button className="b3-list-item" onClick={() => { setRenamingId(ctxMenu.node.id); setRenameValue(ctxMenu.node.title); setCtxMenu(null); }}><Pencil size={16} className="ln-tree-icon" /><span className="b3-list-item__text">重命名</span></button>
               <button className="b3-list-item" onClick={() => { setIconFor(ctxMenu.node); setCtxMenu(null); }}><SmilePlus size={16} className="ln-tree-icon" /><span className="b3-list-item__text">设置图标</span></button>
               <button className="b3-list-item" onClick={() => { setMoveFor(ctxMenu.node); setCtxMenu(null); }}><Move size={16} className="ln-tree-icon" /><span className="b3-list-item__text">移动到…</span></button>
+              {ctxMenu.node.kind === "note" && (
+                <button className="b3-list-item" onClick={() => { void openHistory(ctxMenu.node); setCtxMenu(null); }}><History size={16} className="ln-tree-icon" /><span className="b3-list-item__text">历史版本</span></button>
+              )}
               <button className="b3-list-item" onClick={() => { setDeleteFor(ctxMenu.node); setCtxMenu(null); }}><Trash2 size={16} className="ln-tree-icon" /><span className="b3-list-item__text">删除</span></button>
             </div>
           </div>
@@ -408,6 +428,43 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
               {tree.filter((x) => x.kind === "group" && x.id !== moveFor.id).map((g) => (
                 <button key={g.id} className="b3-list-item" onClick={() => void applyMove(g.id)}><FolderOpen size={16} className="ln-tree-icon" /><span className="b3-list-item__text">{g.title}</span></button>
               ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 历史版本 sheet */}
+      {historyFor && (
+        <div className="mobile-sheet-mask" onClick={() => { setHistoryFor(null); setHistoryRestoreId(null); }}>
+          <div className="mobile-sheet" onClick={(e) => e.stopPropagation()}>
+            <div className="mobile-sheet-head">
+              <span className="mobile-sheet-title">历史版本</span>
+              <button className="mobile-icon-btn" onClick={() => { setHistoryFor(null); setHistoryRestoreId(null); }} aria-label="关闭"><X size={20} /></button>
+            </div>
+            <div className="mobile-sheet-body">
+              {historyList.length === 0 && <p className="mobile-sheet-empty">暂无历史版本</p>}
+              {historyList.map((h) => (
+                <button key={h.id} className="b3-list-item" onClick={() => setHistoryRestoreId(h.id)}>
+                  <span className="b3-list-item__text">{h.title || "无标题"}</span>
+                  <span className="b3-list-item__meta">{new Date(h.createdAt).toLocaleString("zh-CN")}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 恢复历史版本确认 */}
+      {historyRestoreId != null && (
+        <div className="mobile-sheet-mask" onClick={() => setHistoryRestoreId(null)}>
+          <div className="mobile-sheet" onClick={(e) => e.stopPropagation()}>
+            <div className="mobile-sheet-head"><span className="mobile-sheet-title">恢复此版本？</span></div>
+            <div className="mobile-sheet-body">
+              <p className="mobile-sheet-empty">将用该历史版本覆盖当前正文。</p>
+              <div className="mobile-model-body">
+                <button className="b3-button" onClick={() => setHistoryRestoreId(null)}>取消</button>
+                <button className="b3-button ft__error" onClick={() => void applyRestoreHistory()}>恢复</button>
+              </div>
             </div>
           </div>
         </div>

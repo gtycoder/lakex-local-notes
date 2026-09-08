@@ -914,6 +914,21 @@ export const bridge = {
     });
   },
 
+  /** 列出某文档的历史快照（纯本地；冲突留档/手动快照）。 */
+  async listNoteHistory(noteId: string): Promise<Array<{ id: number; title: string; createdAt: string }>> {
+    const d = await ensureDb();
+    const rows = d.prepare("SELECT id, title, created_at FROM note_history WHERE note_id=? ORDER BY created_at DESC, id DESC").all(noteId) as Array<{ id: number; title: string; created_at: string }>;
+    return rows.map((r) => ({ id: r.id, title: r.title, createdAt: r.created_at }));
+  },
+
+  /** 恢复历史快照：把快照的正文+标题写回当前笔记（sync_state=local → 下次同步上传覆盖远端）。 */
+  async restoreHistory(historyId: number): Promise<void> {
+    const d = await ensureDb();
+    const row = d.prepare("SELECT note_id, title, content FROM note_history WHERE id=?").get(historyId) as { note_id: string; title: string; content: string } | undefined;
+    if (!row) return;
+    await bridge.saveNote(row.note_id, row.title, row.content);
+  },
+
   async createNote(title: string, parentId: string | null = null): Promise<POCNote> {
     const id = crypto.randomUUID();
     const now = new Date().toISOString();
