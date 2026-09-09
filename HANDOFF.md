@@ -8,8 +8,9 @@
 - 分支/远端：开发主干 `master` ↔ Gitee `origin`（`git@gitee.com:gtycoder/local-lake.git`，SSH 可用；`master` 亦是远程默认分支）。**本文不写死 commit hash**——查 `git log -1 --oneline`。
 - 质量门槛：`tsc` 0 error · vitest **838 passed / 15 skipped** · 桌面 `vite build` + 移动 `vite build -c vite.mobile.config.ts` 全绿（计数变动见 §2；别把数字写回 AGENTS/README）。
 - 本地业务分支只有 `master`（其余已合并/删除；`origin/main` 是旧 Tauri 遗留）。`git worktree list` 目前只有主目录（历史上的 `lake-notes-wt-android` 已消失，见 §3 移动端条）。
-- **开工先跑 `git status` + `git worktree list`**：**移动端会话的改动已全部提交**（260908 收尾，最新 `8e26910`）。工作区现仅有**非本会话的遗留**：`AGENTS.md`/`README.md` 被改（未提交）+ `docs/{LAKEX-CONTRACT,OBSIDIAN-PLUGIN-*,SYNC-RELIABILITY-VERIFY}.md` 未跟踪 + 一个乱码文件 `", v)"`。**别把它们卷进你的提交**（用显式路径 `git add`）。
-- dev 实例状态：本会话结束时 `npm run dev` 仍在跑（vite `:1421` / Electron CDP `:9222` / 资源服务 `:19876`）。新会话可直接 CDP 接管（§6），不需要就 `kill <具体PID>`。
+- **开工先跑 `git status` + `git worktree list`**：**当前有一批未提交的移动端改动**（本会话产出，见 §2.8，集中在 `src/mobile/`：`MobileApp`、`editor/EditorDock`、`editor/editor-dock.css`、`home/HomePage`、`home/NotebookGrid`、`mobile.css`、`notebook/NotebookWorkspace`）。其余是**非本会话的遗留**：`AGENTS.md`/`README.md` 被改（未提交）+ `docs/{LAKEX-CONTRACT,OBSIDIAN-PLUGIN-*,SYNC-RELIABILITY-VERIFY}.md` 未跟踪 + 一个乱码文件 `", v)"`。**别把遗留卷进你的提交**（用显式路径 `git add`）。
+- **提交状态**：`master` 头 ≈ 早前移动端提交（`git log -1 --oneline` 查）。本会话的移动端改动**未提交**——代码批次需用户验收后才提（项目红线）；文档类（含本文件）可直接单独提交。
+- dev 实例状态：**桌面 `npm run dev` 未启动**（本会话未跑）。**安卓模拟器 `emulator-5554` 在跑**，App `com.lakenotes.mobile` 已装**最新移动端 bundle**（用 `bash scripts/android-build.sh --sync --install`，gradle 用 `~/.gradle/wrapper/dists/gradle-8.14.3-bin/…` 缓存、勿走 wrapper）。WebView CDP 已转发 `tcp:9335`（http://127.0.0.1:9335/json/list）。**注意：socket 随 App 重启变化**——先 `adb forward --remove-all`，再 `adb shell cat /proc/net/unix | grep -oE "webview_devtools_remote_[0-9a-f]+"` 找新 socket，`adb forward tcp:9335 localabstract:$s` 后 `curl /json/list` 校验。
 - **dev 数据现状（重要）**：
   - `welcome-note`（幽灵文档）已一次性清理：墓碑 `deleted_notes(welcome-note, note, purged_at=now, published_at=NULL)` 已写、行与文件已删 ⇒ **下次同步会发布 `deleted:true` 并删云端 `objects/welcome-note-*`、`assets/welcome-note/` 前缀**，之后不会复活。
   - `到啦领导`（ee860a19）仍在回收站里（`trashed_at=09-04 10:34`，原父=测试本2222，正文含用户 18:06 的编辑「测试老师啦啦队」）；**用户尚未决定是否恢复**，别擅自删。
@@ -68,6 +69,28 @@
 ### 2.7 上一轮（260903）摘要
 里程碑 M1a–M6 全量落地（冲突收口、归档 30 天保护、回收站倒计时、数据体检、日志查看器、整库备份 A1 / 云端恢复 A2、审美 tokens）+ 两个 bug（凭空「未分类」、小记删不掉）+ S3 同步差集化性能（churn 18.4s→<1s、首传 240 图 HEAD→0、manifest 链 8→3）。细节见 `docs/MILESTONES-SYNC-UX-2026-09-03.md` 与 git 历史；不变量在 `AGENTS.md §3 #11~13`。
 
+### 2.8 移动端：编辑器工具栏重构 + 首层首页重做（2609xx 本会话；**未提交**）
+> 本会话全部为**移动端**改动（桌面/移动已可自由改，§8.0）。产物均已在模拟器 emulator-5554 上 CDP 实测/验收，但**未提交**。目标：对齐 Lake/Yuque 官方移动端的首层与编辑体验。
+
+**A. 编辑器底部工具栏（`src/mobile/editor/EditorDock.tsx` + `editor-dock.css`，对齐 Lake 官方）**
+1. **修"展开面板正文区剧烈抖动"**：根因是 `--mobile-dock-space`（正文底部留白）在点开面板瞬间从 54 猛跳到 280+54，而视口仍是键盘高度 ⇒ 内容区先压扁再弹回。修法：留白改由**动画中的 `usable`（= `--kb-offset`）驱动**（`留白 = usable + 工具栏`）。模拟器逐帧实测：键盘收起（inner 530→842）期间**正文可视区恒 436px、spread=0**，无抖动。
+2. **命令按钮实时高亮**（B/列表/待办 + 面板内 mark/block）：加 `useActiveCommandStates` 监听 `selectionchange` + 命令执行后 refresh。**坑：lakex 的 `queryCommandState` 对 mark 命令恒返回 `-1`**（0=无效/1=生效/-1=不确定），不能当真值——**行内标记（bold/italic/underline/code）改用 DOM 计算样式判定**（font-weight≥600 / font-style / text-decoration / code），**块级（quote/列表/待办/undo/redo）用 `queryCommandState === 1`**。
+3. **类别按钮 + / Aa 展开后变 ×**（`med-open` 实心主色圆钮）+ `tapFeedback()` 震动（震动仅真机可感）。
+4. 移除底部冗余"完成"✓（顶栏右侧已有）；工具栏= `[+, Aa, B, 列表, 待办, 键盘]`。
+
+**B. 首层首页（`src/mobile/home/HomePage.tsx` + `NotebookGrid.tsx` + `mobile.css`，对齐 Yuque 移动端首层）**
+1. 小记 = **卡片**（图 16:9 + 摘要 3 行 + 日期 MM-DD HH:mm + 「…」菜单[编辑/删除]）。
+2. 知识库 = **「最近文档」横向卡 + 笔记本书架**（白卡 + 简约线条 `BookOpen` 图标[默认]、名称带"01-"序号）；右上角**书架↔列表**切换（localStorage 持久化）。
+3. **最近文档仅书架视图显示**；数据 = **最近*更新*的 N 条笔记**（代理，非"最近打开"——要"最近打开"需加 `last_opened_at` 追踪）。**样式走过一轮**：去掉大边框→简约（透明、只读按钮改 `background:transparent`，否则浏览器按钮默认灰色 `#efefef` 露出来）→ 本会话最终为极简 icon+标题。
+4. 空态**不提示创建**（仅"暂无小记/暂无知识库"）。
+5. 底部胶囊栏 = **[搜索 | 新建 | 云同步]**（新建按 tab：小记=写小记/知识库=新建笔记本；纯图标，仿第二层悬浮栏）。之前一度做过 [搜索|筛选|新建|云同步]，后**筛选(排序)移到右上角**。
+6. **知识库排序已按用户决策移除**：手机不再拖拽重排、不再写本地 `sort_order` → 直接展示**共享 `sort_order` = 桌面端顺序**（`listTreeNodes` 本身 `ORDER BY parent_id, sort_order`，不重排即桌面顺序；且 `sort_order` 在 sync manifest `folders[].sortOrder`，跨端同步）。小记排序保留（右上角"排序"，最近更新/最早更新）。
+7. tab 切换（小记↔知识库）加**方向性滑入动效**（`mobile-tab-in-left/right`，150ms；swipe 或点 tab 都带方向）。
+
+**C. 其它移动端修复**
+1. **最近文档/搜索/新建点开直达文档**：`NotebookWorkspace` 启动逻辑改"显式 `initialNoteId` 优先打开并置为活动，再补开上次保存的标签"（旧逻辑"恢复上次标签"优先 ⇒ 点最近文档打开的是之前旧标签）。
+2. **第二层底栏滚动隐藏/显示**：阅读态文档下滑超 8px → 底栏 `mobile-bottom-bar--hidden`；上滑超 8px → 恢复（思源设计；修"阅读时底栏消失不再出现"）。
+
 ## 3. 真正的待办（已剔除全部完成项，按优先级）
 > **260904 后续评估（用户决策 + 本轮核实）**：原 §3.1 对象级 5xx 重试、§3.2 快照 gzip 异步化、§3.5 笔记本 `sort_order` 撞号 —— **已评估不做**（5xx 有"失败不 markSynced→下轮重扫"兜底；gzip 异步收益小；sort_order 撞号场景极低）。
 > 原 §3.3（FTS 全量重建→增量）与 §3.4（1/2 字短词回退）**合并为一条**：计划**整体重做索引**，两件一起落地（同属 `src/core/searchRepository.ts` 的索引/搜索路径，同时覆盖 10 万文档量级）。
@@ -101,6 +124,7 @@
 - **验证缺口**：B4 跟手手势、B2 触感、B6 键盘态只在本机 Electron 390×844 harness 验过，**安卓模拟器/真机未复验**（模拟器 `scripts/emu-cdp.sh` + 真机 IME 行为差异见 §8.3）。
 
 **移动端（安卓）** —— 全部见 **§8.6/§8.7**（剪贴板粘贴不解析、真机资产 canonical URL 不可达、"整体编辑还有问题"待现象、大纲 viewer 跳转）。注意 §8.6 提到的 android worktree **已不存在**，那条"沿 worktree 验证"的线索要重新确认落点。
+> **本会话决策/结论（2609xx）**：① **知识库排序不做**（用户确认）——手机端已删除拖拽重排 + 知识库排序入口，直接展示共享 `sort_order` = 桌面端顺序（见 §2.8.B6）；小记排序保留。② "最近文档"用**最近更新**代理（非"最近打开"），需"最近打开"再单独加追踪。③ 首层首页 + 编辑器工具栏已重做（§2.8），待**真机验收**后再提交。④ 删除/恢复语义、同步红线均未动。
 
 **产品/技术债（长期；评估后多属低/缓）**
 3. W-8 ACAO / W-10 dompurify（并入"lake 资源导入统一优化"，**安全相关，建议优先**）；依赖维护：`@types/better-sqlite3` 可单升。
@@ -195,6 +219,8 @@ node scripts/s3-ls.mjs --count | --note <id> | --prefix <prefix>
 > 本节是移动端（安卓模拟器 + 编辑器）交接：如何用**本机安卓模拟器**熟练验证移动端 UI/编辑，以及移动端任务的目标/已完成/遗留/坑。桌面 Electron 工作见 §0-§7。**注（260907）：原「只做移动端、别碰桌面」的硬隔离已解除**——现在桌面与移动可自由改动（见 §8.0）。
 
 > **面向零上下文新会话——当前状态一句话（260908 收尾）**：移动端已完成**设置项收口** + **完整端**（历史快照列/恢复/删/24h去重/上限/定时、资源管理本地孤儿+云端GC、运行诊断）+ **大纲 viewer 跳转根因修复**（docs 高度塌陷）。主数据同步/编辑基础早已就绪（见 §8.4/8.5）。下一步见 §8.7（真机验收 + 数据导出/导入 + 剪贴板/资源URL）。本会话所有改动已提交 `master`（最新 `8e26910`）。
+>
+> **更新的状态（2609xx 之后一个会话）**：又完成两块移动端大改——**编辑器底部工具栏**（修面板展开抖动、命令生效高亮、+/Aa 展开变 ×+震动、去冗余完成钮）与**首层首页重做**（小记卡片、知识库书架/列表+最近文档、底部栏[搜索|新建|云同步]、tab 滑入动效），并修**最近文档/搜索直达**、**第二层底栏滚动隐藏/显示**，且**按用户决策删除知识库排序**（改用共享 sort_order=桌面顺序）。**这批未提交**（详见 §2.8，待真机验收后提交）。
 
 ### 8.0 移动端注意（原「移动端铁律」已降级为注意项，260907 用户明确解除硬隔离）
 - **桌面与移动已可自由改动**（不再限定 `src/mobile/**`；当前无并行会话，不会有提交冲突）。仍请谨慎：`src/b3/**` 是**思源 vendored 组件（AGPL-3.0）**、`src/features/editor/lakeRuntime.ts` 等是**两端共享模块**，改动前先确认影响面；`electron/`、`src/main.tsx` 改动会触发 vite-plugin-electron 重启 Electron（见 §4 踩坑）。
@@ -263,6 +289,11 @@ node scripts/s3-ls.mjs --count | --note <id> | --prefix <prefix>
 
 门禁：`tsc` 0 · `vitest` 838 通过/15 跳过 · desktop `vite build` + 移动 `vite build -c vite.mobile.config.ts` 全绿 · `android-build.sh --sync --install` 过。
 
+**（2609xx 后续会话，未提交）编辑器工具栏 + 首层首页 —— 详见 §2.8**：
+- **编辑器工具栏**（`EditorDock.tsx`/`editor-dock.css`）：面板展开抖动修复（`--mobile-dock-space` 由动画 `usable` 驱动，正文区恒 436px）；命令生效高亮（mark 用 DOM 计算样式、块级用 `queryCommandState===1`）；+/Aa 展开变 ×（`med-open`）+ 触感；去底部冗余"完成"。
+- **首层首页**（`HomePage.tsx`/`NotebookGrid.tsx`/`mobile.css`）：小记卡片；知识库书架（白卡+线条图标）/列表 + "最近文档"；右上书架↔列表；底部栏[搜索|新建|云同步]；tab 滑入动效；空态不提示创建。
+- **其它**：最近文档/搜索/新建直达文档（`NotebookWorkspace` 的 `initialNoteId` 优先）；第二层底栏滚动隐藏/显示；**删除知识库排序**（改用共享 sort_order=桌面顺序）；最近文档简约样式 + 书架默认线条 `BookOpen` 图标。
+
 ### 8.6 当前问题 / 未决（需用户真机给现象）
 1. **大纲 viewer 跳转 —— 已修复，但待长文档真机验证**：根因（`.mobile-workspace-body` 非 flex → doc 高度塌陷 0）已修复（e95ec6f，实测 doc 高 0→794）。**但**完整"点击大纲标题滚动到位"未端到端验证——因为**用测试文档造不出 Lake 可接受的高内容**（`ne-p`/`ne-h1` 格式不被编辑器接受，渲染成短内容），这是测试固件问题非 bug。**用真实长文档（正确内容格式）点大纲标题确认**。若仍不滚，给现象。
 2. **"正在下载"从未复现**（MutationObserver 实时抓也没有）——判断是编辑器初始化瞬时态/旧命令报错后遗症，修复后未见。**若真机仍见，要截图或位置**。
@@ -270,8 +301,13 @@ node scripts/s3-ls.mjs --count | --note <id> | --prefix <prefix>
 4. **剪贴板粘贴不解析为空**（§3.6-3.8 遗留）：静态线索=移动端入口没挂 `installPasteInterceptor`；android worktree 已补挂，先沿那条线验证。
 5. **本地资产 canonical `http://127.0.0.1:19876/{noteId}/{file}` 真机不可达**：需 `adb reverse tcp:19876 tcp:19876` 或移动端解析成可达地址。
 6. 用户"移动端整体编辑还有问题"现象未细化——**真机反馈给具体现象再定位**。
+7. **首层首页 + 编辑器工具栏改动未提交**（§2.8）：待真机验收后按用户确认提交（代码红线）。
+8. **首层"最近文档"= 最近*更新*代理**：非"最近打开"；对用户说清后可再加 `last_opened_at` 追踪。
+9. **知识库排序已删除**（用户决策，不再做）：手机端不再写本地 `sort_order`，展示共享顺序 = 桌面端顺序。若日后想"每端独立顺序"，需改同步协议（manifest `folders[].sortOrder`），属红线区、须谨慎。
+10. **首层新 UI 真机确认项**：书架白卡+线条 `BookOpen` 图标（已去彩色/红 emoji）；最近文档极简 icon+标题（已去灰底）；顶部排序按钮仅小记显示；知识库右上角为书架↔列表切换。
 
 ### 8.7 下一步（移动端，按优先级）
+0. **（最新）真机验收首层首页 + 编辑器工具栏**（§2.8 这批未提交改动）：① 工具栏面板展开**不抖**、加粗/斜体生效**高亮**、+/Aa 展开变 × + 震动（震动须真机）；② 首层小记卡片、知识库书架/最近文档样式、tab 滑入动效。确认后**提交**这批（`git add src/mobile/... && git commit`，先跑门禁）。
 1. **真机验收本会话交付**（历史/资源/GC/设置/大纲）：重点用**真实长文档**验证①大纲跳转滚动②资源管理（删图不再重传、孤儿清理、云端 GC）。
 2. **整库备份/云端恢复**：桌面走「文件系统拷贝 + 应用重启」；移动端数据在沙盒（sql.js + Capacitor FS，无 workspace 目录），架构不匹配——需另做「**数据导出/导入**」（导出 DB 快照 + 资产清单到文件）。当前已有「运行诊断」统计。
 3. **定时自动快照真机验证**：`snapshotNote` 复用 `createHistorySnapshot`（已带 24h 去重）；**移动端模拟器 app 生命周期可能不触发 `setInterval`**，需前台运行验证。
@@ -304,6 +340,15 @@ node scripts/s3-ls.mjs --count | --note <id> | --prefix <prefix>
 - **harness 截图假象**：Electron 窗口被遮挡时 transition 会**冻结**，`Page.captureScreenshot` 截到"半开的面板/半屏抽屉"，看着像布局 bug 其实是合成层没画完。解法：截图前注入 `*{transition:none!important;animation:none!important}`（本会话 harness 已内置）+ `Page.bringToFront` + `Emulation.setFocusEmulationEnabled`；另：`mobile:true` 的设备模拟会按 visual viewport 缩放，截图请用 `mobile:false, deviceScaleFactor:2`。
 - **同一文档不允许两种壳**：`DocumentPage`（顶栏 4 图标）与 `NotebookWorkspace`（底部栏+抽屉+手势）并存 ⇒ 从首页/搜索打开的文档没有抽屉和守卫。统一后 `openNote()` 一处判定（`isGoneNote`），别再加第二条打开路径。
 - **删除文档必须连带关标签**：`applyDelete` 里 `closeTab(node.id)`，否则回收站文档仍留在 tab 里可继续编辑（AGENTS §3 #16 的移动端形态）。
+
+**（2609xx 首层 + 工具栏本会话新增）**
+- **lakex `queryCommandState` 对 mark 命令恒返回 `-1`**（0=无效/1=生效/-1=不确定）：用 `!!v` 会把 -1 当"生效"→ 恒误亮。**行内标记生效判定改用 DOM 计算样式**（font-weight≥600 / font-style / text-decoration / code）；块级（quote/列表/待办/undo/redo）用 `queryCommandState === 1`。
+- **`--mobile-dock-space`（正文底部留白）别用固定 `panelHeight + 工具栏`**：点开面板瞬间面板还没显形、键盘还开着，留白猛增 280 → 内容区先压扁再弹回（剧烈抖动）。要**用动画中的 `usable`（= `--kb-offset`）驱动**（`留白 = usable + 工具栏`），内容区才全程恒定。
+- **`<button>` 默认有浏览器按钮底色 `#efefef`（灰）**：首层最近文档卡、任何"纯图标 button"要设 `background:transparent; border:none`，否则灰色露出来（本会话"最近文档灰底"就是这么来的）。
+- **显式打开某文档（最近文档/搜索/新建）时 `initialNoteId` 会被"恢复上次标签"覆盖** ⇒ 打开错文档。修：`NotebookWorkspace` 启动改"显式 `initialNoteId` 优先打开并置为活动，再补开其它已存标签"。
+- **emulator CDP socket 随 App 重启变化且 forward 常连不上**：先 `adb forward --remove-all`，再 `adb shell cat /proc/net/unix | grep -oE "webview_devtools_remote_[0-9a-f]+"` 找新 socket，`adb forward tcp:9335 localabstract:$s` 后 `curl /json/list` 校验（多轮重试 + 等 App「Displayed」后再连；用 `adb forward --list` 核对）。
+- **知识库 `sort_order` 是共享字段**（manifest `folders[].sortOrder`，跨端同步）：跨端改会互相影响。用户已**决定不做**知识库排序（手机端不写本地 sort_order，展示共享顺序）；以后别再加回，除非先讨论同步语义（红线区）。
+- **触感 `navigator.vibrate` 经 CDP 观测不到**：需真机/模拟器手动确认。
 
 ### 8.9 移动端常用命令
 ```bash
