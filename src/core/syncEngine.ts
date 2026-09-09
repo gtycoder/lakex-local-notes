@@ -23,7 +23,7 @@ import { sha256Sync } from "./sha256Sync.js";
 import { parseLakeManifest, objectKey } from "./syncUtils.js";
 import { extractAssetRefs } from "./assetNaming.js";
 import { isSafePathSegment } from "./storeUtils.js";
-import { MAX_IMAGE_BYTES } from "./storeLimits.js";
+import { MAX_ATTACHMENT_BYTES } from "./storeLimits.js";
 
 /** 单对象大小护栏（对齐桌面 sync.ts:100）：正文 .lake 上限 64MiB。 */
 const MAX_REMOTE_NOTE_BYTES = 64 * 1024 * 1024;
@@ -98,7 +98,7 @@ export async function downloadNoteAssets(cfg: SyncConfig, s3: S3Store, db: SyncD
         const have = localHave.get(asset.filename);
         if (have && have.size === asset.size && have.hash === asset.hash) return;
       }
-      const bytes = await s3.getObject(`${cfg.prefix}/assets/${noteId}/${asset.filename}`, { maxBytes: MAX_IMAGE_BYTES });
+      const bytes = await s3.getObject(`${cfg.prefix}/assets/${noteId}/${asset.filename}`, { maxBytes: MAX_ATTACHMENT_BYTES });
       if (bytes == null) {
         if (strict) { errors[i] = new AssetMissingError(`资源缺失: ${noteId}/${asset.filename}`); aborted = true; }
         else warnings[i] = `资源缺失（跳过）: ${noteId}/${asset.filename}`;

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { gunzipSync, gzipSync } from "node:zlib";
-import { syncNow, type S3Store, type SyncDbPort, type LocalNoteRow } from "./syncEngine.js";
+import { downloadNoteAssets, syncNow, type S3Store, type SyncDbPort, type LocalNoteRow, type SyncReport } from "./syncEngine.js";
 import { sha256Sync } from "./sha256Sync.js";
 import { isGzip } from "./syncUtils.js";
 import { TRASH_NOTEBOOK_ID } from "./syncDecisions.js";
@@ -676,6 +676,35 @@ describe("syncEngine（共享编排）", () => {
     expect(db.assets.has("n9/photo.png")).toBe(true);          // D8 资产已落盘
     expect(new TextDecoder().decode(db.assets.get("n9/photo.png")!)).toBe("imgbytes");
     expect(r.warnings.length).toBe(0);                        // 校验通过无警告
+  });
+
+  it("D8：附件下载使用附件协议上限而非图片上限", async () => {
+    const s3 = new MemS3();
+    const db = new MemDb();
+    const bytes = new Uint8Array(26 * 1024 * 1024);
+    const report: SyncReport = {
+      pulled: false,
+      appliedRemote: 0,
+      uploaded: 0,
+      published: false,
+      message: "",
+      warnings: [],
+      supersededNotes: [],
+      foldersUploaded: 0,
+      trashedDown: 0,
+      trashedUp: 0,
+      foldersDownloaded: 0,
+      uploadedBytes: 0,
+      downloadedBytes: 0,
+    };
+    s3.map.set("p/assets/n-large/large.bin", bytes);
+
+    await downloadNoteAssets(CFG, s3, db, "n-large", [
+      { filename: "large.bin", size: bytes.length, hash: sha256Sync(bytes) },
+    ], report, false);
+
+    expect(db.assets.get("n-large/large.bin")).toBe(bytes);
+    expect(report.downloadedBytes).toBe(bytes.length);
   });
 
   it("回收站惰性下载：远端墓碑（软删）只记录声明资产元数据、不下载资源文件", async () => {
