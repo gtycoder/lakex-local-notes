@@ -15,13 +15,14 @@ import { previewQuickNote, validateQuickNoteContent } from "../core/quickNoteMod
 import type { StoredQuickNoteContent } from "../core/quickNoteModel.js";
 import type { QuickNoteSyncItemImage, QuickNotesSyncDbPort } from "../core/quickNotesSyncEngine.js";
 import type { DbLike } from "./sqliteDb.js";
+import { stageAssetWrites } from "./assetWrites.js";
 
 /** 小记图片文件访问依赖（注入：bridge 用 Capacitor Filesystem + 内存 assets Map；测试用内存实现）。
  * 键 = "quick-notes/{quickNoteId}/{filename}"（与 Lake 资源的 note-assets/{noteId}/{file} 同构）。 */
 export interface QuickNotesAssetFsDeps {
   /** 同步内存层（运行期字节真相；文件为持久层）。 */
   assetBytes: Map<string, Uint8Array>;
-  /** 落盘（异步；调用方 fire-and-forget，失败不阻断同步主流程）。 */
+  /** 落盘（异步；失败必须向上传播，由调用方回滚或保持未同步状态）。 */
   saveAssetFile(key: string, bytes: Uint8Array): Promise<void>;
   /** 读文件（缺失 → null）。 */
   loadAssetFile(key: string): Promise<Uint8Array | null>;
@@ -81,7 +82,7 @@ export function createQuickNotesSyncDbPort(d: DbLike, assetFs: QuickNotesAssetFs
       const key = quickNoteAssetKey(id, filename);
       return assetBytes.get(key) ?? loadAssetFile(key);
     },
-    applyRemoteQuickNote(item, content, assets) {
+    async applyRemoteQuickNote(item, content, assets) {
       const text = new TextDecoder().decode(content);
       let parsed: StoredQuickNoteContent;
       try { parsed = validateQuickNoteContent(JSON.parse(text)); }
@@ -93,6 +94,17 @@ export function createQuickNotesSyncDbPort(d: DbLike, assetFs: QuickNotesAssetFs
       for (const image of parsed.images) {
         if (!byName.get(image.filename)?.bytes) throw new Error("小记图片缺失: " + item.id + "/" + image.filename);
       }
+      // 先落图片文件，再提交 DB；任一失败都会回滚本次文件写入，避免 DB 声称图片存在。
+      const imageWrites = parsed.images.map((image) => ({
+        key: quickNoteAssetKey(item.id, image.filename),
+        bytes: byName.get(image.filename)!.bytes,
+      }));
+      const rollbackAssets = await stageAssetWrites(imageWrites, {
+        memory: assetBytes,
+        save: saveAssetFile,
+        remove: removeAssetFile,
+      });
+
       // 对齐桌面 importRemoteQuickNote：保留清单时间戳（LWW 依据）、冲突标记、直接置 synced（引擎收尾再记账）
       const tx = d.transaction(() => {
         d.prepare(
@@ -101,16 +113,13 @@ export function createQuickNotesSyncDbPort(d: DbLike, assetFs: QuickNotesAssetFs
           "ON CONFLICT(id) DO UPDATE SET created_at=excluded.created_at, updated_at=excluded.updated_at, preview_text=excluded.preview_text, image_count=excluded.image_count, content_hash=excluded.content_hash, content=excluded.content, sync_state=excluded.sync_state, is_conflict=excluded.is_conflict, restore_pending_at=NULL, deleted_at=NULL, ready_to_sync=1"
         ).run(item.id, item.createdAt, item.updatedAt, previewQuickNote(parsed.text, parsed.images.length), parsed.images.length, contentHash, text, item.isConflict ? 1 : 0);
       });
-      tx();
-      // 图片纯文件（无 BLOB）：写新图片（内存层 + fire-and-forget 落盘）。
-      // 不做旧文件清理：与文档资源一致（每次上传/同步生成唯一新文件，旧文件由 GC/孤儿清理回收；冗余是设计理念）。
-      for (const image of parsed.images) {
-        const bytes = byName.get(image.filename)?.bytes;
-        if (!bytes) throw new Error("小记图片缺失: " + item.id + "/" + image.filename);
-        const key = quickNoteAssetKey(item.id, image.filename);
-        assetBytes.set(key, bytes);
-        void saveAssetFile(key, bytes).catch((e) => console.warn("[mobile-quick-sync] 小记图片落盘失败:", e));
+      try {
+        tx();
+      } catch (error) {
+        await rollbackAssets();
+        throw error;
       }
+      // 不做旧文件清理：每次上传/同步生成唯一新文件，旧文件由 GC/孤儿清理回收；冗余是设计理念。
     },
     applyTombstoneContent(id, content) {
       const contentHash = sha256Sync(content);
@@ -128,49 +137,61 @@ export function createQuickNotesSyncDbPort(d: DbLike, assetFs: QuickNotesAssetFs
         return parsed.images.map(({ id: imageId, filename, mimeType, width, height, size, hash }) => ({ id: imageId, filename, mimeType, width, height, size, hash }));
       } catch { return []; }
     },
-    applyTombstoneAssets(id, assets) {
+    async applyTombstoneAssets(id, assets) {
       // 墓碑携带图片（A）：删除前图片字节落盘文件（软删行保留，恢复时图片完整；无 BLOB）。
       // 覆盖写：本机可能已有同 id 图片（此前同步过），墓碑携带的删除前最新字节应覆盖。
-      for (const a of assets) {
-        const key = quickNoteAssetKey(id, a.metadata.filename);
-        assetBytes.set(key, a.bytes);
-        void saveAssetFile(key, a.bytes).catch((e) => console.warn("[mobile-quick-sync] 墓碑图片落盘失败:", e));
-      }
+      await stageAssetWrites(
+        assets.map((asset) => ({
+          key: quickNoteAssetKey(id, asset.metadata.filename),
+          bytes: asset.bytes,
+        })),
+        { memory: assetBytes, save: saveAssetFile, remove: removeAssetFile },
+      );
     },
     deleteLocalQuickNote(id) {
       d.prepare("UPDATE quick_notes SET deleted_at=?, restore_pending_at=NULL, sync_state='local', ready_to_sync=1 WHERE id=?").run(new Date().toISOString(), id);
     },
-    archiveLocalQuickNoteToTrash(id) {
+    async archiveLocalQuickNoteToTrash(id) {
+      const row = d.prepare("SELECT created_at, preview_text, image_count, content_hash, content FROM quick_notes WHERE id=?").get(id) as { created_at: string; preview_text: string; image_count: number; content_hash: string; content: string } | undefined;
+      if (!row) return;
+
+      const newId = crypto.randomUUID();
+      const now = new Date().toISOString();
+      let parsed: StoredQuickNoteContent | null = null;
+      try {
+        parsed = JSON.parse(row.content) as StoredQuickNoteContent;
+      } catch { /* 内容解析失败：图片文件保持旧 id（归档回收站仍可读） */ }
+
+      const imageWrites: Array<{ key: string; bytes: Uint8Array }> = [];
+      if (parsed) {
+        for (const image of parsed.images) {
+          const oldKey = quickNoteAssetKey(id, image.filename);
+          const bytes = assetBytes.get(oldKey) ?? await loadAssetFile(oldKey);
+          if (bytes) imageWrites.push({ key: quickNoteAssetKey(newId, image.filename), bytes });
+        }
+      }
+      const rollbackAssets = imageWrites.length > 0
+        ? await stageAssetWrites(imageWrites, { memory: assetBytes, save: saveAssetFile, remove: removeAssetFile })
+        : async () => {};
+
       const tx = d.transaction(() => {
-        const row = d.prepare("SELECT created_at, preview_text, image_count, content_hash, content FROM quick_notes WHERE id=?").get(id) as { created_at: string; preview_text: string; image_count: number; content_hash: string; content: string } | undefined;
-        if (!row) return;
-        const newId = crypto.randomUUID();
-        const now = new Date().toISOString();
         // ready_to_sync=0：纯本地归档，不向云端发布删除记录（其他端从未持有该 id，防幽灵墓碑，对齐桌面 archiveLocalToTrash）
         d.prepare("INSERT INTO quick_notes (id, created_at, updated_at, preview_text, image_count, content_hash, content, sync_state, is_conflict, restore_pending_at, deleted_at, ready_to_sync) VALUES (?,?,?,?,?,?,?, 'local', 0, NULL, ?, 0)").run(newId, row.created_at, now, row.preview_text, row.image_count, row.content_hash, row.content, now);
-        // 图片文件随归档迁移到新 id（内存层 + 落盘新键 + 清理旧键；无 BLOB）
-        try {
-          const parsed = JSON.parse(row.content) as StoredQuickNoteContent;
-          for (const img of parsed.images) {
-            const oldKey = quickNoteAssetKey(id, img.filename);
-            const newKey = quickNoteAssetKey(newId, img.filename);
-            const bytes = assetBytes.get(oldKey);
-            if (bytes) {
-              assetBytes.set(newKey, bytes);
-              void saveAssetFile(newKey, bytes).catch(() => undefined);
-            } else {
-              void loadAssetFile(oldKey).then((b) => {
-                if (!b) return;
-                assetBytes.set(newKey, b);
-                void saveAssetFile(newKey, b).catch(() => undefined);
-              });
-            }
-            assetBytes.delete(oldKey);
-            void removeAssetFile(oldKey).catch(() => undefined);
-          }
-        } catch { /* 内容解析失败：图片文件保持旧 id（归档回收站仍可读） */ }
       });
-      tx();
+      try {
+        tx();
+      } catch (error) {
+        await rollbackAssets();
+        throw error;
+      }
+
+      if (parsed) {
+        for (const image of parsed.images) {
+          const oldKey = quickNoteAssetKey(id, image.filename);
+          assetBytes.delete(oldKey);
+          await removeAssetFile(oldKey).catch(() => undefined);
+        }
+      }
     },
     listDeletedQuickNotes() {
       // ready_to_sync=1 才作为可同步墓碑；冲突归档（=0）纯本地保留不发布

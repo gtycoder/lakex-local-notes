@@ -227,7 +227,7 @@ describe("移动端 Quick Notes 同步端口 + 共享引擎", () => {
     expect(row.ready_to_sync).toBe(1);
   });
 
-  it("远端小记写入失败时端口事务回滚正文与图片", () => {
+  it("远端小记写入失败时端口事务回滚正文与图片", async () => {
     const { d } = openQuickNotesDb();
     const created = createQuickNote(d, "本地正文");
     const content = serializeQuickNoteContent(normalizeQuickNoteContent("远端正文", [{
@@ -242,10 +242,108 @@ describe("移动端 Quick Notes 同步端口 + 共享引擎", () => {
     };
     const assetFs = makeAssetFsDeps();
     const port = createQuickNotesSyncDbPort(d, assetFs.deps);
-    expect(() => port.applyRemoteQuickNote(item, bytes, [])).toThrow(/图片缺失/);
+    await expect(port.applyRemoteQuickNote(item, bytes, [])).rejects.toThrow(/图片缺失/);
     expect(textOf(d, created.id)).toBe("本地正文");
     // 原子性：正文未落库，图片文件也未写入（纯文件，无 BLOB）
     expect(assetFs.files.size).toBe(0);
+  });
+
+  it("远端小记图片落盘失败时回滚内存层且不提交 DB", async () => {
+    const { d } = openQuickNotesDb();
+    const created = createQuickNote(d, "本地正文");
+    const imageBytes = new Uint8Array([1, 2, 3]);
+    const image = {
+      id: "img-fail",
+      filename: "fail.png",
+      mimeType: "image/png",
+      width: 1,
+      height: 1,
+      size: imageBytes.length,
+      hash: sha256Sync(imageBytes),
+    };
+    const content = serializeQuickNoteContent({ version: 1, text: "远端正文", images: [image] });
+    const bytes = new TextEncoder().encode(content);
+    const item: ManifestItem = {
+      id: created.id,
+      createdAt: "2026-01-01T00:00:00.000Z",
+      updatedAt: "2026-01-01T00:00:01.000Z",
+      contentHash: sha256Sync(bytes),
+      isConflict: false,
+      assets: [image],
+    };
+    const assetFs = makeAssetFsDeps();
+    assetFs.deps.saveAssetFile = async () => {
+      throw new Error("disk full");
+    };
+    const port = createQuickNotesSyncDbPort(d, assetFs.deps);
+
+    await expect(
+      port.applyRemoteQuickNote(item, bytes, [{ filename: image.filename, bytes: imageBytes }]),
+    ).rejects.toThrow("disk full");
+
+    expect(textOf(d, created.id)).toBe("本地正文");
+    expect(assetFs.deps.assetBytes.has("quick-notes/" + created.id + "/fail.png")).toBe(false);
+    expect(assetFs.files.size).toBe(0);
+  });
+
+  it("墓碑图片落盘失败时回滚内存层", async () => {
+    const { d } = openQuickNotesDb();
+    const assetFs = makeAssetFsDeps();
+    assetFs.deps.saveAssetFile = async () => {
+      throw new Error("disk full");
+    };
+    const port = createQuickNotesSyncDbPort(d, assetFs.deps);
+    const bytes = new Uint8Array([4, 5, 6]);
+    const metadata = {
+      id: "tomb-img",
+      filename: "tomb.png",
+      mimeType: "image/png",
+      width: 1,
+      height: 1,
+      size: bytes.length,
+      hash: sha256Sync(bytes),
+    };
+
+    await expect(port.applyTombstoneAssets("tomb-note", [{ metadata, bytes }])).rejects.toThrow("disk full");
+    expect(assetFs.deps.assetBytes.has("quick-notes/tomb-note/tomb.png")).toBe(false);
+    expect(assetFs.files.size).toBe(0);
+  });
+
+  it("冲突归档图片落盘失败时不提交归档行", async () => {
+    const { d } = openQuickNotesDb();
+    const imageBytes = new Uint8Array([7, 8, 9]);
+    const image = {
+      id: "archive-img",
+      filename: "archive.png",
+      mimeType: "image/png",
+      width: 1,
+      height: 1,
+      size: imageBytes.length,
+      hash: sha256Sync(imageBytes),
+    };
+    const serialized = serializeQuickNoteContent({ version: 1, text: "冲突本地版", images: [image] });
+    const id = crypto.randomUUID();
+    const now = new Date().toISOString();
+    d.prepare(
+      `INSERT INTO quick_notes (id, created_at, updated_at, preview_text, image_count, content_hash, content, sync_state, is_conflict)
+       VALUES (?,?,?,?,?,?,?, 'local', 0)`
+    ).run(id, now, now, "冲突本地版", 1, sha256Sync(new TextEncoder().encode(serialized)), serialized);
+
+    const assetFs = makeAssetFsDeps();
+    const oldKey = "quick-notes/" + id + "/archive.png";
+    assetFs.deps.assetBytes.set(oldKey, imageBytes);
+    assetFs.files.set(oldKey, imageBytes);
+    assetFs.deps.saveAssetFile = async () => {
+      throw new Error("disk full");
+    };
+    const port = createQuickNotesSyncDbPort(d, assetFs.deps);
+
+    await expect(port.archiveLocalQuickNoteToTrash(id)).rejects.toThrow("disk full");
+
+    const rowCount = d.prepare("SELECT COUNT(*) AS count FROM quick_notes").get() as { count: number };
+    expect(rowCount.count).toBe(1);
+    expect(assetFs.deps.assetBytes.get(oldKey)).toBe(imageBytes);
+    expect(assetFs.files.get(oldKey)).toBe(imageBytes);
   });
 
   it("恢复 LWW：B 显式恢复（restore_pending）→ 回写 active 覆盖墓碑；A 跟随恢复且本地墓碑撤销", async () => {

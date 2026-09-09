@@ -28,6 +28,7 @@ import type { StoredQuickNoteContent, StoredQuickNoteImage } from "../core/quick
 import { syncQuickNotesViaEngine } from "../core/quickNotesSyncEngine.js";
 import { applyQuickNotesSyncSchema, createQuickNotesSyncDbPort } from "./quickNotesDbPort.js";
 import { mobileSecretStore } from "./secretStore.js";
+import { stageAssetWrites } from "./assetWrites.js";
 import { hasNoteSaveChanges } from "../core/noteSaveDecision.js";
 import { selectHistoryDrops } from "../core/storeUtils.js";
 import { sqlParameterBatches } from "../core/sqlParameterBatch.js";
@@ -618,9 +619,11 @@ const dbPort: SyncDbPort = {
   },
   async saveAsset(noteId, filename, bytes) {
     const key = noteId + "/" + filename;
-    assets.set(key, bytes);
-    // 持久化到 Capacitor Filesystem（B1：note-assets/{noteId}/{file}，目录与桌面一致）；失败不阻断主流程
-    void saveAssetBytesFs(key, bytes).catch((e) => console.warn("[mobile] 资产落盘失败（可重新同步）:", e));
+    // 文件写入失败必须向上抛并回滚内存层，避免本端 manifest 漏声明后触发跨端 GC。
+    await stageAssetWrites(
+      [{ key, bytes }],
+      { memory: assets, save: saveAssetBytesFs, remove: removeAssetBytesFs },
+    );
   },
   async listLocalAssets(noteId) {
     // 启动不预加载持久化资源；同步开始时才按当前笔记读取 Filesystem。

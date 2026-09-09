@@ -80,17 +80,17 @@ export interface QuickNotesSyncDbPort {
   /** 本地图片字节（上传/校验用）；缺失 → null。 */
   readAsset(id: string, filename: string): Promise<Uint8Array | null> | Uint8Array | null;
   /** 应用远端小记（新/覆盖）：写入内容 + 图片 + DB 行。 */
-  applyRemoteQuickNote(item: ManifestItem, content: Uint8Array, assets: Array<{ filename: string; bytes: Uint8Array }>): void;
+  applyRemoteQuickNote(item: ManifestItem, content: Uint8Array, assets: Array<{ filename: string; bytes: Uint8Array }>): void | Promise<void>;
   /** 墓碑内容落地（先内容后标志）：把删除方内容写入本地存储，随后 deleteLocalQuickNote。 */
   applyTombstoneContent(id: string, content: Uint8Array): void;
   /** 墓碑携带图片（A）：读取删除小记保留内容中的删除前图片元数据；无保留内容/解析失败 → []。 */
   listDeletedQuickNoteAssets(id: string): QuickNoteSyncItemImage[];
   /** 墓碑携带图片（A）：把删除方上传的删除前图片字节写入本地（软删行保留，恢复时图片完整）。 */
-  applyTombstoneAssets(id: string, assets: Array<{ metadata: QuickNoteSyncItemImage; bytes: Uint8Array }>): void;
+  applyTombstoneAssets(id: string, assets: Array<{ metadata: QuickNoteSyncItemImage; bytes: Uint8Array }>): void | Promise<void>;
   /** 本地软删（保留内容供墓碑携带）。 */
   deleteLocalQuickNote(id: string): void;
   /** 冲突：本地版本归档进回收站（新 id），随后 applyRemoteQuickNote 覆盖原 id。 */
-  archiveLocalQuickNoteToTrash(id: string): void;
+  archiveLocalQuickNoteToTrash(id: string): void | Promise<void>;
   /** 本地删除墓碑（软删/从远端学到的删除）；manifest 墓碑条目需要 createdAt/updatedAt。 */
   listDeletedQuickNotes(): Array<{ id: string; createdAt: string; updatedAt: string; deletedAt: string }>;
   /** 全部墓碑记录（含已发布 ready=0）：下载方向 LWW（墓碑 vs 远端恢复）需要完整历史才能撤销/跟随恢复。
@@ -268,7 +268,7 @@ export async function syncQuickNotesViaEngine(
                 tombAssets.push({ metadata: asset, bytes });
               } catch (error) { qn.log(`[download] ${item.id} 墓碑图片 ${asset.filename} 下载失败，跳过`); }
             }
-            if (tombAssets.length > 0) qn.applyTombstoneAssets(item.id, tombAssets);
+            if (tombAssets.length > 0) await qn.applyTombstoneAssets(item.id, tombAssets);
           }
           qn.deleteLocalQuickNote(item.id);
         } else {
@@ -316,8 +316,8 @@ export async function syncQuickNotesViaEngine(
       });
       if (action.kind === "conflict") {
         // 验收 #4（B 方案）：双端都改 → 远端覆盖本地；本地版本归档进回收站（新 id，恢复后为一条新小记）。
-        qn.archiveLocalQuickNoteToTrash(item.id);
-        qn.applyRemoteQuickNote(item, content, assets);
+        await qn.archiveLocalQuickNoteToTrash(item.id);
+        await qn.applyRemoteQuickNote(item, content, assets);
         qn.setBaseHash(item.id, item.contentHash);
         conflicts += 1;
         downloaded += 1;
@@ -326,7 +326,7 @@ export async function syncQuickNotesViaEngine(
         // 只在本地变更：上传阶段将其作为权威版本，不以下载覆盖。
         continue;
       } else {
-        qn.applyRemoteQuickNote(item, content, assets);
+        await qn.applyRemoteQuickNote(item, content, assets);
         qn.setBaseHash(item.id, item.contentHash);
         downloaded += 1;
         qn.log(`[perf] download ${item.id} new-content ${Date.now() - itemStart}ms (content=${content.length}B, assets=${assets.length})`);
