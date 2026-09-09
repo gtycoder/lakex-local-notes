@@ -4,6 +4,7 @@ import type { QuickNoteDocument, QuickNoteSummary, QuickNoteDeleted } from "./qu
 import { AppError } from "../src/core/storeErrors.js";
 import { parseQuickNoteContent, validateQuickNoteContent, type StoredQuickNoteContent } from "../src/core/quickNoteModel.js";
 import { mapQuickNoteDeletedRow, mapQuickNoteRow, mapTrashRow } from "../src/core/quickNoteQueries.js";
+import { sqlParameterBatches } from "../src/core/sqlParameterBatch.js";
 
 export interface QuickNoteRow {
   id: string;
@@ -114,8 +115,11 @@ export class QuickNotesQueries {
   /** 墓碑已发布到 manifest → 写发布记账（对齐 Lake deleted_notes.published_at；记录保留供下载 LWW 判定）。 */
   markDeletedPublished(ids: string[]): void {
     if (ids.length === 0) return;
-    const placeholders = ids.map(() => "?").join(",");
-    this.deps.db.prepare(`UPDATE quick_note_deleted SET published_at=? WHERE id IN (${placeholders}) AND published_at IS NULL`).run(new Date().toISOString(), ...ids);
+    const publishedAt = new Date().toISOString();
+    for (const batch of sqlParameterBatches(ids)) {
+      const placeholders = batch.map(() => "?").join(",");
+      this.deps.db.prepare(`UPDATE quick_note_deleted SET published_at=? WHERE id IN (${placeholders}) AND published_at IS NULL`).run(publishedAt, ...batch);
+    }
   }
 
   listDeferredDeletedForSync(): QuickNoteDeleted[] {

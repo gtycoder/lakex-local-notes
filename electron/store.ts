@@ -24,6 +24,7 @@ import type { DbLike } from "../src/core/dbLike.js";
 import { ResourceRepository } from "./resourceRepository.js";
 import { RemoteImportRepository } from "./remoteImportRepository.js";
 import type { ResourceUploadOutput } from "./storeTypes.js";
+import { sqlParameterBatches } from "../src/core/sqlParameterBatch.js";
 
 export { ASSET_NAME_RE, extractAssetRefs, isoWeekKey, selectHistoryDrops, sanitizeFileName } from "../src/core/storeUtils.js";
 
@@ -1174,19 +1175,23 @@ export class Store {
       // 否则同步发布时子树按"正常"传播，其他端不跟随删除（内容"没删掉"、根恢复/删除语义不一致）。
       const subtreeIds = this.descendantIdsIncludingDeleted(id).filter((sid) => sid !== id);
       if (subtreeIds.length > 0) {
-        const ph = subtreeIds.map(() => "?").join(",");
-        this.db.prepare(`UPDATE tree_nodes SET trashed_at=?,updated_at=?,sync_state='local' WHERE id IN (${ph}) AND deleted_at IS NULL`).run(now, now, ...subtreeIds);
-        const subNotes = this.db.prepare(`SELECT note_file_id FROM tree_nodes WHERE id IN (${ph}) AND note_file_id IS NOT NULL AND deleted_at IS NULL`).all(...subtreeIds) as Array<{ note_file_id: string }>;
-        if (subNotes.length > 0) {
-          const nph = subNotes.map(() => "?").join(",");
-          this.db.prepare(`UPDATE notes SET trashed_at=?,updated_at=?,sync_state='local',restore_pending_at=NULL WHERE id IN (${nph}) AND deleted_at IS NULL`).run(now, now, ...subNotes.map((s) => s.note_file_id));
+        const subNotes: Array<{ note_file_id: string }> = [];
+        for (const batch of sqlParameterBatches(subtreeIds)) {
+          const ph = batch.map(() => "?").join(",");
+          this.db.prepare(`UPDATE tree_nodes SET trashed_at=?,updated_at=?,sync_state='local' WHERE id IN (${ph}) AND deleted_at IS NULL`).run(now, now, ...batch);
+          subNotes.push(...this.db.prepare(`SELECT note_file_id FROM tree_nodes WHERE id IN (${ph}) AND note_file_id IS NOT NULL AND deleted_at IS NULL`).all(...batch) as Array<{ note_file_id: string }>);
+        }
+        const subNoteIds = subNotes.map((s) => s.note_file_id);
+        for (const batch of sqlParameterBatches(subNoteIds)) {
+          const nph = batch.map(() => "?").join(",");
+          this.db.prepare(`UPDATE notes SET trashed_at=?,updated_at=?,sync_state='local',restore_pending_at=NULL WHERE id IN (${nph}) AND deleted_at IS NULL`).run(now, now, ...batch);
         }
       }
       // 回收站条目不出现在搜索（子树整体移出 FTS，恢复时重建）
       const noteIds = this.descendantNoteFileIds(id);
-      if (noteIds.length > 0) {
-        const ph = noteIds.map(() => "?").join(",");
-        this.db.prepare(`DELETE FROM notes_fts WHERE note_id IN (${ph})`).run(...noteIds);
+      for (const batch of sqlParameterBatches(noteIds)) {
+        const ph = batch.map(() => "?").join(",");
+        this.db.prepare(`DELETE FROM notes_fts WHERE note_id IN (${ph})`).run(...batch);
       }
     });
     tx();
@@ -1261,12 +1266,16 @@ export class Store {
       // 级联：子树（跟随根进回收站的嵌套分组/笔记）随根恢复——清 trashed_at（父位置不变）。
       const subtreeIds = this.descendantIdsIncludingDeleted(id).filter((sid) => sid !== id);
       if (subtreeIds.length > 0) {
-        const ph = subtreeIds.map(() => "?").join(",");
-        this.db.prepare(`UPDATE tree_nodes SET trashed_at=NULL,updated_at=?,sync_state='local' WHERE id IN (${ph}) AND deleted_at IS NULL`).run(now, ...subtreeIds);
-        const subNotes = this.db.prepare(`SELECT note_file_id FROM tree_nodes WHERE id IN (${ph}) AND note_file_id IS NOT NULL AND deleted_at IS NULL`).all(...subtreeIds) as Array<{ note_file_id: string }>;
-        if (subNotes.length > 0) {
-          const nph = subNotes.map(() => "?").join(",");
-          this.db.prepare(`UPDATE notes SET trashed_at=NULL,updated_at=?,sync_state='local' WHERE id IN (${nph}) AND deleted_at IS NULL`).run(now, ...subNotes.map((s) => s.note_file_id));
+        const subNotes: Array<{ note_file_id: string }> = [];
+        for (const batch of sqlParameterBatches(subtreeIds)) {
+          const ph = batch.map(() => "?").join(",");
+          this.db.prepare(`UPDATE tree_nodes SET trashed_at=NULL,updated_at=?,sync_state='local' WHERE id IN (${ph}) AND deleted_at IS NULL`).run(now, ...batch);
+          subNotes.push(...this.db.prepare(`SELECT note_file_id FROM tree_nodes WHERE id IN (${ph}) AND note_file_id IS NOT NULL AND deleted_at IS NULL`).all(...batch) as Array<{ note_file_id: string }>);
+        }
+        const subNoteIds = subNotes.map((s) => s.note_file_id);
+        for (const batch of sqlParameterBatches(subNoteIds)) {
+          const nph = batch.map(() => "?").join(",");
+          this.db.prepare(`UPDATE notes SET trashed_at=NULL,updated_at=?,sync_state='local' WHERE id IN (${nph}) AND deleted_at IS NULL`).run(now, ...batch);
         }
       }
     });
@@ -1553,10 +1562,10 @@ export class Store {
     }
     // 统一补标题/状态（历史保护文档可能不在孤儿集合里）
     const ids = [...new Set(out.map((o) => o.noteId))];
-    const placeholders = ids.map(() => "?").join(",");
-    const notes = ids.length > 0
-      ? this.db.prepare(`SELECT id, title, trashed_at FROM notes WHERE id IN (${placeholders})`).all(...ids) as Array<{ id: string; title: string; trashed_at: string | null }>
-      : [];
+    const notes = sqlParameterBatches(ids).flatMap((batch) => {
+      const placeholders = batch.map(() => "?").join(",");
+      return this.db.prepare(`SELECT id, title, trashed_at FROM notes WHERE id IN (${placeholders})`).all(...batch) as Array<{ id: string; title: string; trashed_at: string | null }>;
+    });
     const titleBy = new Map(notes.map((n) => [n.id, { title: n.title || "(无标题)", trashed: n.trashed_at != null }]));
     for (const o of out) {
       const info = titleBy.get(o.noteId);
@@ -1571,10 +1580,10 @@ export class Store {
     const rows = this.assetRepository.listOrphanAssets();
     if (rows.length === 0) return rows;
     const ids = [...new Set(rows.map((r) => r.noteId))];
-    const placeholders = ids.map(() => "?").join(",");
-    const notes = this.db.prepare(
-      `SELECT id, title, trashed_at FROM notes WHERE id IN (${placeholders})`
-    ).all(...ids) as Array<{ id: string; title: string; trashed_at: string | null }>;
+    const notes = sqlParameterBatches(ids).flatMap((batch) => {
+      const placeholders = batch.map(() => "?").join(",");
+      return this.db.prepare(`SELECT id, title, trashed_at FROM notes WHERE id IN (${placeholders})`).all(...batch) as Array<{ id: string; title: string; trashed_at: string | null }>;
+    });
     const titleBy = new Map<string, { title: string; trashed: boolean }>();
     for (const n of notes) titleBy.set(n.id, { title: n.title || "(无标题)", trashed: n.trashed_at != null });
     return rows.map((r) => {
@@ -2001,8 +2010,10 @@ export class Store {
 
   removeS3GcPending(keys: string[]): void {
     if (keys.length === 0) return;
-    const placeholders = keys.map(() => "?").join(",");
-    this.db.prepare(`DELETE FROM s3_gc_pending WHERE key IN (${placeholders})`).run(...keys);
+    for (const batch of sqlParameterBatches(keys)) {
+      const placeholders = batch.map(() => "?").join(",");
+      this.db.prepare(`DELETE FROM s3_gc_pending WHERE key IN (${placeholders})`).run(...batch);
+    }
   }
 
   listS3GcPending(): Array<{ key: string; markedAt: string }> {
@@ -2054,8 +2065,10 @@ export class Store {
   /** 已写入同步清单的删除标记可安全剪除，避免 deleted_notes 无限累积 */
   pruneTombstones(ids: string[]): void {
     if (ids.length === 0) return;
-    const placeholders = ids.map(() => "?").join(",");
-    this.db.prepare(`DELETE FROM deleted_notes WHERE id IN (${placeholders})`).run(...ids);
+    for (const batch of sqlParameterBatches(ids)) {
+      const placeholders = batch.map(() => "?").join(",");
+      this.db.prepare(`DELETE FROM deleted_notes WHERE id IN (${placeholders})`).run(...batch);
+    }
   }
 
   getSyncStatus(): { lastSyncedAt: string | null; lastResult: Record<string, unknown> | null } {
@@ -2218,10 +2231,13 @@ export class Store {
    * 墓碑本体永久保留（防 manifest 删除标记因他端 B4 移除而丢失 → 离线设备复活，审计 #2）。 */
   markTombstonesPublished(ids: string[]): void {
     if (ids.length === 0) return;
-    const placeholders = ids.map(() => "?").join(",");
-    this.db.prepare(
-      "UPDATE deleted_notes SET published_at=COALESCE(published_at, ?) WHERE id IN (" + placeholders + ") AND node_type != 'folder'"
-    ).run(nowIso(), ...ids);
+    const publishedAt = nowIso();
+    for (const batch of sqlParameterBatches(ids)) {
+      const placeholders = batch.map(() => "?").join(",");
+      this.db.prepare(
+        "UPDATE deleted_notes SET published_at=COALESCE(published_at, ?) WHERE id IN (" + placeholders + ") AND node_type != 'folder'"
+      ).run(publishedAt, ...batch);
+    }
   }
 
   /** 零变更早退：本设备上次成功读/写的 manifest commitId（device_state）。 */

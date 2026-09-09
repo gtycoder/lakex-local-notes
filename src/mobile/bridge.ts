@@ -30,6 +30,7 @@ import { applyQuickNotesSyncSchema, createQuickNotesSyncDbPort } from "./quickNo
 import { mobileSecretStore } from "./secretStore.js";
 import { hasNoteSaveChanges } from "../core/noteSaveDecision.js";
 import { selectHistoryDrops } from "../core/storeUtils.js";
+import { sqlParameterBatches } from "../core/sqlParameterBatch.js";
 
 export interface POCNote {
   id: string;
@@ -491,8 +492,11 @@ const dbPort: SyncDbPort = {
   markTombstonesPublished(ids: string[]): void {
     if (ids.length === 0) return;
     const d = db!;
-    const placeholders = ids.map(() => "?").join(",");
-    d.prepare("UPDATE deleted_notes SET published_at=COALESCE(published_at, ?) WHERE id IN (" + placeholders + ") AND node_type != 'folder'").run(new Date().toISOString(), ...ids);
+    const publishedAt = new Date().toISOString();
+    for (const batch of sqlParameterBatches(ids)) {
+      const placeholders = batch.map(() => "?").join(",");
+      d.prepare("UPDATE deleted_notes SET published_at=COALESCE(published_at, ?) WHERE id IN (" + placeholders + ") AND node_type != 'folder'").run(publishedAt, ...batch);
+    }
   },
   applyRemoteNoteMeta(note) {
     const d = db!;
@@ -1128,8 +1132,10 @@ export const bridge = {
   async removeS3GcPending(keys: string[]): Promise<void> {
     if (keys.length === 0) return;
     const d = await ensureDb();
-    const ph = keys.map(() => "?").join(",");
-    d.prepare(`DELETE FROM s3_gc_pending WHERE key IN (${ph})`).run(...keys);
+    for (const batch of sqlParameterBatches(keys)) {
+      const ph = batch.map(() => "?").join(",");
+      d.prepare(`DELETE FROM s3_gc_pending WHERE key IN (${ph})`).run(...batch);
+    }
   },
 
   /** GC：列出全部待回收键。 */
@@ -1202,10 +1208,13 @@ export const bridge = {
         const ids = collectFolderSubtree(all, id);
         const idList = Array.from(ids);
         if (idList.length === 0) return;
-        const ph = idList.map(() => "?").join(",");
-        d.prepare("UPDATE folders SET trashed_at=?, sync_state='local', updated_at=? WHERE id IN (" + ph + ") AND trashed_at IS NULL").run(now, now, ...idList);
-        // 子树下 notes 级联进回收站（对齐桌面 deleteTreeNode 子树 trashed_at 级联）
-        const noteRows = d.prepare("SELECT id FROM notes WHERE parent_id IN (" + ph + ") AND trashed_at IS NULL").all(...idList) as Array<{ id: string }>;
+        const noteRows: Array<{ id: string }> = [];
+        for (const batch of sqlParameterBatches(idList)) {
+          const ph = batch.map(() => "?").join(",");
+          d.prepare("UPDATE folders SET trashed_at=?, sync_state='local', updated_at=? WHERE id IN (" + ph + ") AND trashed_at IS NULL").run(now, now, ...batch);
+          // 子树下 notes 级联进回收站（对齐桌面 deleteTreeNode 子树 trashed_at 级联）
+          noteRows.push(...d.prepare("SELECT id FROM notes WHERE parent_id IN (" + ph + ") AND trashed_at IS NULL").all(...batch) as Array<{ id: string }>);
+        }
         for (const n of noteRows) {
           d.prepare("UPDATE notes SET trashed_at=?, sync_state='local', restore_pending_at=NULL, updated_at=? WHERE id=?").run(now, now, n.id);
         }
@@ -1238,7 +1247,9 @@ export const bridge = {
       } else {
         const all = d.prepare("SELECT id, parent_id FROM folders").all() as Array<{ id: string; parent_id: string | null }>;
         folderIds = Array.from(collectFolderSubtree(all, id));
-        restoreNoteIds = (d.prepare("SELECT id FROM notes WHERE parent_id IN (" + folderIds.map(() => "?").join(",") + ") AND trashed_at IS NOT NULL").all(...folderIds) as Array<{ id: string }>).map((n) => n.id);
+        restoreNoteIds = sqlParameterBatches(folderIds).flatMap((batch) =>
+          d.prepare("SELECT id FROM notes WHERE parent_id IN (" + batch.map(() => "?").join(",") + ") AND trashed_at IS NOT NULL").all(...batch) as Array<{ id: string }>
+        ).map((n) => n.id);
       }
       await downloadDeclaredAssetsFor(restoreNoteIds);
 
@@ -1293,7 +1304,9 @@ export const bridge = {
           }
           // 先收集子树 note（folders 删除后父目录信息已不在，不能依赖 folders 表反查）
           const idList = Array.from(ids);
-          const noteIds = d.prepare("SELECT id, title, parent_id, sort_order, updated_at FROM notes WHERE parent_id IN (" + idList.map(() => "?").join(",") + ")").all(...idList) as Array<{ id: string; title: string; parent_id: string | null; sort_order: number; updated_at: string }>;
+          const noteIds = sqlParameterBatches(idList).flatMap((batch) =>
+            d.prepare("SELECT id, title, parent_id, sort_order, updated_at FROM notes WHERE parent_id IN (" + batch.map(() => "?").join(",") + ")").all(...batch) as Array<{ id: string; title: string; parent_id: string | null; sort_order: number; updated_at: string }>
+          );
           for (const n of noteIds) {
             writeTombstone.run(n.id, n.title, n.parent_id, n.sort_order, n.updated_at, now, "note", now);
             d.prepare("DELETE FROM notes WHERE id=?").run(n.id);

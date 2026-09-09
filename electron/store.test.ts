@@ -7,6 +7,7 @@ import zlib from "node:zlib";
 import Database from "better-sqlite3";
 import { Store, AppError, selectHistoryDrops, isoWeekKey } from "./store.js";
 import { createSafeStorageSecretCipher } from "./secretCipher.js";
+import { SQL_PARAMETER_BATCH_SIZE } from "../src/core/sqlParameterBatch.js";
 
 // ===== electron mock（Store 模块加载即需要；DB 用例只用 safeStorage 的 S3 密钥加解密） =====
 const electronMock = vi.hoisted(() => {
@@ -1097,6 +1098,30 @@ describe("同步状态 / 导入", () => {
     store.pruneTombstones([id]);
     expect(store.listDeletedNotesForSync().some((d) => d.id === id)).toBe(false);
     store.pruneTombstones([]); // 空数组安全
+  });
+
+  it("removeS3GcPending 按 SQLite 参数上限分批删除", () => {
+    const keys = Array.from(
+      { length: SQL_PARAMETER_BATCH_SIZE + 1 },
+      (_, index) => `gc-key-${index}`,
+    );
+    for (const key of keys) store.addS3GcPending(key);
+
+    const db = (store as any).db as InstanceType<typeof Database>;
+    const prepare = vi.spyOn(db, "prepare");
+    try {
+      store.removeS3GcPending(keys);
+      const deleteSqls = prepare.mock.calls
+        .map((call) => String(call[0]))
+        .filter((sql) => sql.includes("DELETE FROM s3_gc_pending"));
+
+      expect(deleteSqls).toHaveLength(2);
+      expect(deleteSqls[0]?.match(/\?/g)).toHaveLength(SQL_PARAMETER_BATCH_SIZE);
+      expect(deleteSqls[1]?.match(/\?/g)).toHaveLength(1);
+      expect(store.listS3GcPending()).toEqual([]);
+    } finally {
+      prepare.mockRestore();
+    }
   });
 
   it("purge 墓碑带 node_type：文档=note（发布方向），笔记本/分组=folder（仅本地下载过滤）", () => {

@@ -1,6 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import path from "node:path";
 import type { Database } from "sql.js";
+import { SQL_PARAMETER_BATCH_SIZE } from "../core/sqlParameterBatch.js";
+
+const sqlitePrepareSqls = vi.hoisted(() => [] as string[]);
 
 // sqliteDb.js 依赖 Vite ?url wasm import，vitest 下解析失败 → mock 为真实 sql.js（同 bridgePurge.test.ts）
 vi.mock("./sqliteDb.js", async () => {
@@ -31,7 +34,10 @@ vi.mock("./sqliteDb.js", async () => {
       private constructor(db: Database) { this.db = db; }
       static async open(): Promise<any> { const S = await getSql(); return new (this as any)(new S.Database()); }
       static async openFrom(bytes: Uint8Array): Promise<any> { const S = await getSql(); return new (this as any)(new S.Database(bytes)); }
-      prepare(sql: string) { return new FakeStmt(this.db, sql); }
+      prepare(sql: string) {
+        sqlitePrepareSqls.push(sql);
+        return new FakeStmt(this.db, sql);
+      }
       transaction<T extends (...args: never[]) => unknown>(fn: T): T {
         const wrapped = ((...args: unknown[]) => { this.db.run("BEGIN"); try { const r = fn(...(args as never[])); this.db.run("COMMIT"); return r; } catch (e) { this.db.run("ROLLBACK"); throw e; } }) as unknown as T;
         return wrapped;
@@ -102,6 +108,29 @@ describe("mobile 目录重命名", () => {
 
     const nodes = await bridge.listTreeNodes();
     expect(nodes.find((node) => node.id === nb.id)?.title).toBe("重命名成功");
+  });
+});
+
+describe("mobile SQL parameter batching", () => {
+  it("removes GC keys in parameter-sized batches", async () => {
+    const keys = Array.from(
+      { length: SQL_PARAMETER_BATCH_SIZE + 1 },
+      (_, index) => `gc-key-${index}`,
+    );
+    for (const key of keys) {
+      await bridge.addS3GcPending(key);
+    }
+
+    sqlitePrepareSqls.length = 0;
+    await bridge.removeS3GcPending(keys);
+
+    const deleteSqls = sqlitePrepareSqls.filter((sql) =>
+      sql.includes("DELETE FROM s3_gc_pending"),
+    );
+    expect(deleteSqls).toHaveLength(2);
+    expect(deleteSqls[0]?.match(/\?/g)).toHaveLength(SQL_PARAMETER_BATCH_SIZE);
+    expect(deleteSqls[1]?.match(/\?/g)).toHaveLength(1);
+    expect(await bridge.listS3GcPending()).toEqual([]);
   });
 });
 
