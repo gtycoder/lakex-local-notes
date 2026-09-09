@@ -365,17 +365,51 @@ function folderRowToTreeNode(row: Record<string, unknown>, overrides: { updatedA
   };
 }
 
-/** 收集 folder 子树 id（含自身）：沿 parent_id 迭代展开，供恢复/删除/树查询复用。 */
-function collectFolderSubtree(folders: Array<{ id: string; parent_id: string | null }>, rootId: string): Set<string> {
-  const ids = new Set<string>([rootId]);
-  let grew = true;
-  while (grew) {
-    grew = false;
-    for (const f of folders) {
-      if (f.parent_id && ids.has(f.parent_id) && !ids.has(f.id)) { ids.add(f.id); grew = true; }
-    }
+interface ParentedNode {
+  id: string;
+  parent_id: string | null;
+}
+
+interface SubtreeIds {
+  folderIds: Set<string>;
+  noteIds: Set<string>;
+  allIds: Set<string>;
+}
+
+/** 收集 folder + note 子树（含自身）：note 也可作为父节点，供删除/恢复/purge 复用。 */
+function collectSubtree(folders: ParentedNode[], notes: ParentedNode[], rootId: string): SubtreeIds {
+  const children = new Map<string, Array<{ id: string; kind: "folder" | "note" }>>();
+  const addChild = (parentId: string, id: string, kind: "folder" | "note") => {
+    const list = children.get(parentId) ?? [];
+    list.push({ id, kind });
+    children.set(parentId, list);
+  };
+  for (const folder of folders) {
+    if (folder.parent_id) addChild(folder.parent_id, folder.id, "folder");
   }
-  return ids;
+  for (const note of notes) {
+    if (note.parent_id) addChild(note.parent_id, note.id, "note");
+  }
+
+  const rootNode = folders.find((node) => node.id === rootId) ?? notes.find((node) => node.id === rootId);
+  const subtree: SubtreeIds = { folderIds: new Set(), noteIds: new Set(), allIds: new Set() };
+  if (!rootNode) return subtree;
+
+  const queue: Array<{ id: string; kind: "folder" | "note" }> = [];
+  const visit = (id: string, kind: "folder" | "note") => {
+    if (subtree.allIds.has(id)) return;
+    subtree.allIds.add(id);
+    if (kind === "folder") subtree.folderIds.add(id);
+    else subtree.noteIds.add(id);
+    queue.push({ id, kind });
+  };
+  visit(rootNode.id, folders.some((node) => node.id === rootId) ? "folder" : "note");
+
+  while (queue.length > 0) {
+    const parent = queue.shift()!;
+    for (const child of children.get(parent.id) ?? []) visit(child.id, child.kind);
+  }
+  return subtree;
 }
 
 async function createS3Client(cfg: S3Settings): Promise<import("@aws-sdk/client-s3").S3Client> {
@@ -1204,15 +1238,19 @@ export const bridge = {
           return;
         }
         // folder：收集整棵子树（含自己）→ 全部标 trashed_at（同步传播删除）
-        const all = d.prepare("SELECT id, parent_id FROM folders").all() as Array<{ id: string; parent_id: string | null }>;
-        const ids = collectFolderSubtree(all, id);
-        const idList = Array.from(ids);
-        if (idList.length === 0) return;
+        const allFolders = d.prepare("SELECT id, parent_id FROM folders").all() as Array<{ id: string; parent_id: string | null }>;
+        const allNotes = d.prepare("SELECT id, parent_id FROM notes").all() as Array<{ id: string; parent_id: string | null }>;
+        const subtree = collectSubtree(allFolders, allNotes, id);
+        const folderIdList = Array.from(subtree.folderIds);
+        if (folderIdList.length === 0) return;
         const noteRows: Array<{ id: string }> = [];
-        for (const batch of sqlParameterBatches(idList)) {
+        for (const batch of sqlParameterBatches(folderIdList)) {
           const ph = batch.map(() => "?").join(",");
           d.prepare("UPDATE folders SET trashed_at=?, sync_state='local', updated_at=? WHERE id IN (" + ph + ") AND trashed_at IS NULL").run(now, now, ...batch);
-          // 子树下 notes 级联进回收站（对齐桌面 deleteTreeNode 子树 trashed_at 级联）
+        }
+        // 子树下 notes（含挂在 note 下的嵌套文档）级联进回收站
+        for (const batch of sqlParameterBatches(Array.from(subtree.allIds))) {
+          const ph = batch.map(() => "?").join(",");
           noteRows.push(...d.prepare("SELECT id FROM notes WHERE parent_id IN (" + ph + ") AND trashed_at IS NULL").all(...batch) as Array<{ id: string }>);
         }
         for (const n of noteRows) {
@@ -1245,10 +1283,12 @@ export const bridge = {
       if (kind === "note") {
         restoreNoteIds = [id];
       } else {
-        const all = d.prepare("SELECT id, parent_id FROM folders").all() as Array<{ id: string; parent_id: string | null }>;
-        folderIds = Array.from(collectFolderSubtree(all, id));
-        restoreNoteIds = sqlParameterBatches(folderIds).flatMap((batch) =>
-          d.prepare("SELECT id FROM notes WHERE parent_id IN (" + batch.map(() => "?").join(",") + ") AND trashed_at IS NOT NULL").all(...batch) as Array<{ id: string }>
+        const allFolders = d.prepare("SELECT id, parent_id FROM folders").all() as Array<{ id: string; parent_id: string | null }>;
+        const allNotes = d.prepare("SELECT id, parent_id FROM notes").all() as Array<{ id: string; parent_id: string | null }>;
+        const subtree = collectSubtree(allFolders, allNotes, id);
+        folderIds = Array.from(subtree.folderIds);
+        restoreNoteIds = sqlParameterBatches(Array.from(subtree.noteIds)).flatMap((batch) =>
+          d.prepare("SELECT id FROM notes WHERE id IN (" + batch.map(() => "?").join(",") + ") AND trashed_at IS NOT NULL").all(...batch) as Array<{ id: string }>
         ).map((n) => n.id);
       }
       await downloadDeclaredAssetsFor(restoreNoteIds);
@@ -1295,17 +1335,17 @@ export const bridge = {
           d.prepare("DELETE FROM note_history WHERE note_id=?").run(id);
         } else {
           // folder：收集子树（含自己）→ 每个 folder/note 节点写墓碑 + 物理删除
-          const all = d.prepare("SELECT id, parent_id FROM folders").all() as Array<{ id: string; parent_id: string | null }>;
-          const ids = collectFolderSubtree(all, id);
-          for (const fid of ids) {
+          const allFolders = d.prepare("SELECT id, parent_id FROM folders").all() as Array<{ id: string; parent_id: string | null }>;
+          const allNotes = d.prepare("SELECT id, parent_id FROM notes").all() as Array<{ id: string; parent_id: string | null }>;
+          const subtree = collectSubtree(allFolders, allNotes, id);
+          for (const fid of subtree.folderIds) {
             const f = d.prepare("SELECT title, parent_id, sort_order, updated_at FROM folders WHERE id=?").get(fid) as { title: string; parent_id: string | null; sort_order: number; updated_at: string } | undefined;
             if (f) writeTombstone.run(fid, f.title, f.parent_id, f.sort_order, f.updated_at, now, "folder", now);
             d.prepare("DELETE FROM folders WHERE id=?").run(fid);
           }
-          // 先收集子树 note（folders 删除后父目录信息已不在，不能依赖 folders 表反查）
-          const idList = Array.from(ids);
-          const noteIds = sqlParameterBatches(idList).flatMap((batch) =>
-            d.prepare("SELECT id, title, parent_id, sort_order, updated_at FROM notes WHERE parent_id IN (" + batch.map(() => "?").join(",") + ")").all(...batch) as Array<{ id: string; title: string; parent_id: string | null; sort_order: number; updated_at: string }>
+          // 嵌套文档也写 note 墓碑，避免云端残留 active 子文档
+          const noteIds = sqlParameterBatches(Array.from(subtree.noteIds)).flatMap((batch) =>
+            d.prepare("SELECT id, title, parent_id, sort_order, updated_at FROM notes WHERE id IN (" + batch.map(() => "?").join(",") + ")").all(...batch) as Array<{ id: string; title: string; parent_id: string | null; sort_order: number; updated_at: string }>
           );
           for (const n of noteIds) {
             writeTombstone.run(n.id, n.title, n.parent_id, n.sort_order, n.updated_at, now, "note", now);

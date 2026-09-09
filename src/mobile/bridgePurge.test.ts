@@ -152,4 +152,46 @@ describe("mobile purge 删除传播", () => {
     expect(trash.some((t) => t.id === A && t.kind === "note")).toBe(true);
     expect(trash.some((t) => t.id === B)).toBe(false);
   });
+
+  it("trash/restore folder 覆盖挂在 note 下的嵌套文档", async () => {
+    const nb = await bridge.createNotebook({ title: "嵌套子树恢复", icon: null });
+    const group = await bridge.createGroup(nb.id, "嵌套分组");
+    await bridge.saveNote("nested-parent", "父文档", "<p>p</p>", group.id);
+    await bridge.saveNote("nested-child", "子文档", "<p>c</p>", "nested-parent");
+    await bridge.saveNote("nested-grandchild", "孙文档", "<p>g</p>", "nested-child");
+
+    await bridge.trashTreeItem(nb.id, "folder");
+    let trash = await bridge.listTrashTree();
+    expect(trash.some((item) => item.id === "nested-parent")).toBe(true);
+    expect(trash.some((item) => item.id === "nested-child")).toBe(true);
+    expect(trash.some((item) => item.id === "nested-grandchild")).toBe(true);
+
+    await bridge.restoreTreeItem(nb.id, "folder");
+    trash = await bridge.listTrashTree();
+    expect(trash.some((item) => item.id === "nested-parent")).toBe(false);
+    expect(trash.some((item) => item.id === "nested-child")).toBe(false);
+    expect(trash.some((item) => item.id === "nested-grandchild")).toBe(false);
+
+    const tree = await bridge.listNotebookTree(nb.id);
+    expect(tree.some((item) => item.id === "nested-child")).toBe(true);
+    expect(tree.some((item) => item.id === "nested-grandchild")).toBe(true);
+  });
+
+  it("purge folder 为嵌套文档写墓碑并物理删除", async () => {
+    const nb = await bridge.createNotebook({ title: "嵌套子树删除", icon: null });
+    const group = await bridge.createGroup(nb.id, "嵌套分组");
+    await bridge.saveNote("purge-nested-parent", "父文档", "<p>p</p>", group.id);
+    await bridge.saveNote("purge-nested-child", "子文档", "<p>c</p>", "purge-nested-parent");
+    await bridge.trashTreeItem(nb.id, "folder");
+
+    await bridge.purgeTreeItem(nb.id, "folder");
+
+    const notes = await bridge.listNotes();
+    expect(notes.some((note) => note.id === "purge-nested-parent")).toBe(false);
+    expect(notes.some((note) => note.id === "purge-nested-child")).toBe(false);
+
+    const tombstones = bridge.listDeletedNotesForSync();
+    expect(tombstones.find((item) => item.id === "purge-nested-parent")?.nodeType).toBe("note");
+    expect(tombstones.find((item) => item.id === "purge-nested-child")?.nodeType).toBe("note");
+  });
 });
