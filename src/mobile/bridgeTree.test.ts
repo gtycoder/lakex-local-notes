@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import path from "node:path";
 import type { Database } from "sql.js";
 import { SQL_PARAMETER_BATCH_SIZE } from "../core/sqlParameterBatch.js";
+import { saveSnapshot } from "./persistence";
 
 const sqlitePrepareSqls = vi.hoisted(() => [] as string[]);
 
@@ -60,7 +61,39 @@ vi.mock("./assetFs", () => ({
   listAssetKeysFs: vi.fn(async () => []),
 }));
 
+type TestManifest = {
+  notes: Array<{ id: string; contentHash: string; assets?: Array<{ filename: string }> }>;
+};
+
+vi.mock("../core/syncEngine.js", () => ({
+  downloadNoteAssets: vi.fn(),
+  syncNow: vi.fn(async (
+    _config: unknown,
+    _store: unknown,
+    _port: unknown,
+    options: { onPublished: (next: TestManifest, prev: TestManifest) => Promise<void> },
+  ) => {
+    await options.onPublished(
+      { notes: [{ id: "sync-note", contentHash: "next", assets: [] }] },
+      { notes: [{ id: "sync-note", contentHash: "prev", assets: [{ filename: "old.png" }] }] },
+    );
+    return { message: "同步完成" };
+  }),
+}));
+
+vi.mock("../core/quickNotesSyncEngine.js", () => ({
+  syncQuickNotesViaEngine: vi.fn(async () => ({ uploaded: 0, downloaded: 0 })),
+}));
+
+vi.mock("./secretStore.js", () => ({
+  mobileSecretStore: {
+    read: vi.fn(async () => null),
+    write: vi.fn(async () => {}),
+  },
+}));
+
 import { bridge } from "./bridge.js";
+import { syncNow as coreSyncNow } from "../core/syncEngine.js";
 
 /** 移动端目录树：文档套文档（note 作父）在树中可见（回归：listNotebookTree 此前只显示 folder 直属 note）。 */
 describe("mobile 目录树（文档套文档）", () => {
@@ -131,6 +164,69 @@ describe("mobile SQL parameter batching", () => {
     expect(deleteSqls[0]?.match(/\?/g)).toHaveLength(SQL_PARAMETER_BATCH_SIZE);
     expect(deleteSqls[1]?.match(/\?/g)).toHaveLength(1);
     expect(await bridge.listS3GcPending()).toEqual([]);
+  });
+});
+
+describe("mobile maintenance writes", () => {
+  it("persists history and GC writes after each queued mutation", async () => {
+    const saveSnapshotMock = vi.mocked(saveSnapshot);
+    const nb = await bridge.createNotebook({ title: "维护队列测试本", icon: null });
+    await bridge.saveNote("maintenance-note", "维护队列文档", "<p>x</p>", nb.id);
+    saveSnapshotMock.mockClear();
+
+    await bridge.snapshotNote("maintenance-note");
+    expect(saveSnapshotMock).toHaveBeenCalledTimes(1);
+    const history = await bridge.listNoteHistory("maintenance-note");
+    expect(history).toHaveLength(1);
+
+    await bridge.deleteHistory(history[0]!.id);
+    expect(saveSnapshotMock).toHaveBeenCalledTimes(2);
+    expect(await bridge.listNoteHistory("maintenance-note")).toEqual([]);
+
+    await bridge.saveHistorySettings({
+      maxSnapshots: 3,
+      retentionDays: 7,
+      cleanupIntervalHours: 1,
+      snapshotIntervalMinutes: 1,
+    });
+    expect(saveSnapshotMock).toHaveBeenCalledTimes(3);
+
+    const gcKey = "maintenance-gc-key";
+    await bridge.addS3GcPending(gcKey);
+    expect(saveSnapshotMock).toHaveBeenCalledTimes(4);
+    await bridge.removeS3GcPending([gcKey]);
+    expect(saveSnapshotMock).toHaveBeenCalledTimes(5);
+    await bridge.recordS3GcLog("delete", gcKey, "test", true);
+    expect(saveSnapshotMock).toHaveBeenCalledTimes(6);
+
+    await expect(bridge.cleanupHistory()).resolves.toEqual({ deleted: 0 });
+    expect(saveSnapshotMock).toHaveBeenCalledTimes(7);
+  });
+
+  it("syncNow updates GC state inside its existing maintenance queue without deadlocking", async () => {
+    const storage = new Map<string, string>();
+    vi.stubGlobal("localStorage", {
+      getItem: (key: string) => storage.get(key) ?? null,
+      setItem: (key: string, value: string) => storage.set(key, value),
+      removeItem: (key: string) => storage.delete(key),
+    });
+    storage.set("lake-notes-mobile.s3", JSON.stringify({
+      endpoint: "https://s3.example.test",
+      region: "us-east-1",
+      bucket: "lake-notes",
+      accessKeyId: "access-key",
+      secretAccessKey: "secret-key",
+      prefix: "lake-notes",
+    }));
+
+    try {
+      const result = await bridge.syncNow();
+      expect(result.message).toContain("同步完成");
+      expect(coreSyncNow).toHaveBeenCalled();
+      expect(await bridge.listS3GcPending()).toHaveLength(2);
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 });
 

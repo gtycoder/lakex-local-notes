@@ -724,6 +724,88 @@ async function downloadDeclaredAssetsFor(noteIds: string[], onlyMissing = false)
   }
 }
 
+async function persistDatabaseSnapshot(): Promise<void> {
+  const currentDb = await ensureDb();
+  await saveSnapshot(currentDb.exportBytes());
+}
+
+async function runMaintenanceAndPersist<T>(operation: () => T | Promise<T>): Promise<T> {
+  return maintenance.run("main", async () => {
+    const result = await operation();
+    await persistDatabaseSnapshot();
+    return result;
+  });
+}
+
+async function deleteHistoryInternal(historyId: number): Promise<void> {
+  const d = await ensureDb();
+  d.prepare("DELETE FROM note_history WHERE id=?").run(historyId);
+}
+
+async function saveHistorySettingsInternal(settings: HistoryMobileSettings): Promise<void> {
+  const d = await ensureDb();
+  d.prepare("INSERT INTO device_state(key,value) VALUES('history_settings',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value").run(JSON.stringify(settings));
+}
+
+async function snapshotNoteInternal(noteId: string): Promise<void> {
+  const d = await ensureDb();
+  const row = d.prepare("SELECT title, content, parent_id, sort_order FROM notes WHERE id=? AND trashed_at IS NULL").get(noteId) as { title: string; content: string; parent_id: string | null; sort_order: number } | undefined;
+  if (!row) return;
+  dbPort.createHistorySnapshot(noteId, row.content, { title: row.title, parentId: row.parent_id, sortOrder: row.sort_order });
+}
+
+async function cleanupHistoryInternal(): Promise<{ deleted: number }> {
+  const d = await ensureDb();
+  const cfg = await bridge.getHistorySettings();
+  const noteIds = d.prepare("SELECT DISTINCT note_id FROM note_history").all() as Array<{ note_id: string }>;
+  let deleted = 0;
+  for (const { note_id } of noteIds) {
+    const rows = d.prepare("SELECT id, created_at FROM note_history WHERE note_id=? ORDER BY created_at ASC").all(note_id) as Array<{ id: number; created_at: string }>;
+    if (rows.length === 0) continue;
+    const drops = selectHistoryDrops(rows.map((r) => r.created_at), { maxSnapshots: cfg.maxSnapshots, retentionDays: cfg.retentionDays });
+    for (const r of rows) if (drops.has(r.created_at)) deleted += d.prepare("DELETE FROM note_history WHERE id=?").run(r.id).changes;
+  }
+  return { deleted };
+}
+
+async function deleteOrphanAssetInternal(id: number): Promise<void> {
+  const d = await ensureDb();
+  const row = d.prepare("SELECT note_id, filename FROM orphan_assets WHERE id=?").get(id) as { note_id: string; filename: string } | undefined;
+  if (!row) return;
+  await removeAssetBytesFs(row.note_id + "/" + row.filename);
+  assets.delete(row.note_id + "/" + row.filename);
+  d.prepare("DELETE FROM orphan_assets WHERE id=?").run(id);
+}
+
+async function cleanOrphanAssetsInternal(): Promise<void> {
+  const d = await ensureDb();
+  const rows = d.prepare("SELECT note_id, filename FROM orphan_assets").all() as Array<{ note_id: string; filename: string }>;
+  for (const r of rows) {
+    await removeAssetBytesFs(r.note_id + "/" + r.filename);
+    assets.delete(r.note_id + "/" + r.filename);
+  }
+  d.prepare("DELETE FROM orphan_assets").run();
+}
+
+async function addS3GcPendingInternal(key: string): Promise<void> {
+  const d = await ensureDb();
+  d.prepare("INSERT INTO s3_gc_pending(key,marked_at) VALUES(?,?) ON CONFLICT(key) DO NOTHING").run(key, new Date().toISOString());
+}
+
+async function removeS3GcPendingInternal(keys: string[]): Promise<void> {
+  if (keys.length === 0) return;
+  const d = await ensureDb();
+  for (const batch of sqlParameterBatches(keys)) {
+    const ph = batch.map(() => "?").join(",");
+    d.prepare(`DELETE FROM s3_gc_pending WHERE key IN (${ph})`).run(...batch);
+  }
+}
+
+async function recordS3GcLogInternal(action: string, key: string, reason: string, ok: boolean): Promise<void> {
+  const d = await ensureDb();
+  d.prepare("INSERT INTO s3_gc_log(ts,action,key,reason,commit_id,device_id,ok) VALUES(?,?,?,?,?,?,?)").run(new Date().toISOString(), action, key, reason, null, "local", ok ? 1 : 0);
+}
+
 export const bridge = {
   async init(): Promise<void> {
     await ensureDb();
@@ -1082,8 +1164,7 @@ export const bridge = {
 
   /** 手动删除单个历史快照（对齐桌面 deleteHistory）。 */
   async deleteHistory(historyId: number): Promise<void> {
-    const d = await ensureDb();
-    d.prepare("DELETE FROM note_history WHERE id=?").run(historyId);
+    await runMaintenanceAndPersist(() => deleteHistoryInternal(historyId));
   },
 
   /** 读取历史快照设置（对齐桌面 getHistorySettings；存 device_state，纯本地）。 */
@@ -1104,31 +1185,17 @@ export const bridge = {
 
   /** 保存历史快照设置（对齐桌面 saveHistorySettings）。 */
   async saveHistorySettings(settings: HistoryMobileSettings): Promise<void> {
-    const d = await ensureDb();
-    d.prepare("INSERT INTO device_state(key,value) VALUES('history_settings',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value").run(JSON.stringify(settings));
+    await runMaintenanceAndPersist(() => saveHistorySettingsInternal(settings));
   },
 
   /** 给某笔记创建快照（定时自动快照用；读当前正文，24h 去重）。 */
   async snapshotNote(noteId: string): Promise<void> {
-    const d = await ensureDb();
-    const row = d.prepare("SELECT title, content, parent_id, sort_order FROM notes WHERE id=? AND trashed_at IS NULL").get(noteId) as { title: string; content: string; parent_id: string | null; sort_order: number } | undefined;
-    if (!row) return;
-    dbPort.createHistorySnapshot(noteId, row.content, { title: row.title, parentId: row.parent_id, sortOrder: row.sort_order });
+    await runMaintenanceAndPersist(() => snapshotNoteInternal(noteId));
   },
 
   /** 历史快照清理（对齐桌面 cleanupHistory：分层保留 + 上限 + 保留天数，设置可配置）。 */
   async cleanupHistory(): Promise<{ deleted: number }> {
-    const d = await ensureDb();
-    const cfg = await bridge.getHistorySettings();
-    const noteIds = d.prepare("SELECT DISTINCT note_id FROM note_history").all() as Array<{ note_id: string }>;
-    let deleted = 0;
-    for (const { note_id } of noteIds) {
-      const rows = d.prepare("SELECT id, created_at FROM note_history WHERE note_id=? ORDER BY created_at ASC").all(note_id) as Array<{ id: number; created_at: string }>;
-      if (rows.length === 0) continue;
-      const drops = selectHistoryDrops(rows.map((r) => r.created_at), { maxSnapshots: cfg.maxSnapshots, retentionDays: cfg.retentionDays });
-      for (const r of rows) if (drops.has(r.created_at)) deleted += d.prepare("DELETE FROM note_history WHERE id=?").run(r.id).changes;
-    }
-    return { deleted };
+    return runMaintenanceAndPersist(cleanupHistoryInternal);
   },
 
   /** 全局孤儿资源列表（对齐桌面 listOrphanAssets）。 */
@@ -1140,39 +1207,22 @@ export const bridge = {
 
   /** 删除单个孤儿资源（本地文件 + 登记）。 */
   async deleteOrphanAsset(id: number): Promise<void> {
-    const d = await ensureDb();
-    const row = d.prepare("SELECT note_id, filename FROM orphan_assets WHERE id=?").get(id) as { note_id: string; filename: string } | undefined;
-    if (!row) return;
-    await removeAssetBytesFs(row.note_id + "/" + row.filename);
-    assets.delete(row.note_id + "/" + row.filename);
-    d.prepare("DELETE FROM orphan_assets WHERE id=?").run(id);
+    await runMaintenanceAndPersist(() => deleteOrphanAssetInternal(id));
   },
 
   /** 清理全部孤儿资源（本地文件 + 登记）。 */
   async cleanOrphanAssets(): Promise<void> {
-    const d = await ensureDb();
-    const rows = d.prepare("SELECT note_id, filename FROM orphan_assets").all() as Array<{ note_id: string; filename: string }>;
-    for (const r of rows) {
-      await removeAssetBytesFs(r.note_id + "/" + r.filename);
-      assets.delete(r.note_id + "/" + r.filename);
-    }
-    d.prepare("DELETE FROM orphan_assets").run();
+    await runMaintenanceAndPersist(cleanOrphanAssetsInternal);
   },
 
   /** GC：登记待回收键（新 manifest 不再引用，对齐桌面 addS3GcPending）。 */
   async addS3GcPending(key: string): Promise<void> {
-    const d = await ensureDb();
-    d.prepare("INSERT INTO s3_gc_pending(key,marked_at) VALUES(?,?) ON CONFLICT(key) DO NOTHING").run(key, new Date().toISOString());
+    await runMaintenanceAndPersist(() => addS3GcPendingInternal(key));
   },
 
   /** GC：从待回收表移除已被重新引用的键。 */
   async removeS3GcPending(keys: string[]): Promise<void> {
-    if (keys.length === 0) return;
-    const d = await ensureDb();
-    for (const batch of sqlParameterBatches(keys)) {
-      const ph = batch.map(() => "?").join(",");
-      d.prepare(`DELETE FROM s3_gc_pending WHERE key IN (${ph})`).run(...batch);
-    }
+    await runMaintenanceAndPersist(() => removeS3GcPendingInternal(keys));
   },
 
   /** GC：列出全部待回收键。 */
@@ -1183,8 +1233,7 @@ export const bridge = {
 
   /** GC：记录删除（对齐桌面 recordS3GcLog）。 */
   async recordS3GcLog(action: string, key: string, reason: string, ok: boolean): Promise<void> {
-    const d = await ensureDb();
-    d.prepare("INSERT INTO s3_gc_log(ts,action,key,reason,commit_id,device_id,ok) VALUES(?,?,?,?,?,?,?)").run(new Date().toISOString(), action, key, reason, null, "local", ok ? 1 : 0);
+    await runMaintenanceAndPersist(() => recordS3GcLogInternal(action, key, reason, ok));
   },
 
   async createNote(title: string, parentId: string | null = null): Promise<POCNote> {
@@ -1483,7 +1532,11 @@ export const bridge = {
     }
     const keys = toDelete;
     const deletedCount = keys.length ? await s3Store.deleteMany(keys) : 0;
-    for (const k of keys) await bridge.recordS3GcLog("delete", k, "deep-clean", true);
+    if (keys.length > 0) {
+      await runMaintenanceAndPersist(async () => {
+        for (const k of keys) await recordS3GcLogInternal("delete", k, "deep-clean", true);
+      });
+    }
     return { candidateCount: all.length, deletedCount, keys };
   },
 
@@ -1519,53 +1572,58 @@ export const bridge = {
         prefix: cfg.prefix,
       };
       const s3Store = createCapacitorS3Store(syncCfg);
-      const report = await runSync(syncCfg, s3Store, dbPort, {
-        onPublished: async (next, prev) => {
-          // GC 差集标记（对齐桌面 syncEngineController.onPublished）：新 manifest 不再引用的旧正文/资源 → 待回收。用 full key（含 prefix）与 gcDeepCleanup 一致。
-          try {
-            const newById = new Map(next.notes.map((n) => [n.id, n]));
-            for (const p of prev?.notes ?? []) {
-              if (p.deleted) continue;
-              const nx = newById.get(p.id);
-              if (!nx || nx.deleted) continue;
-              if (nx.contentHash !== p.contentHash) await bridge.addS3GcPending(`${syncCfg.prefix}/${objectKey(p.id, p.contentHash)}`);
-              const nextAssets = new Set((nx.assets ?? []).map((a) => a.filename));
-              for (const asset of p.assets ?? []) {
-                if (nextAssets.has(asset.filename)) continue;
-                await bridge.addS3GcPending(`${syncCfg.prefix}/assets/${p.id}/${asset.filename}`);
-              }
-            }
-            const referencedNow = new Set<string>();
-            for (const note of next.notes) {
-              if (note.deleted) continue;
-              referencedNow.add(`${syncCfg.prefix}/${objectKey(note.id, note.contentHash)}`);
-              for (const asset of note.assets ?? []) referencedNow.add(`${syncCfg.prefix}/assets/${note.id}/${asset.filename}`);
-            }
-            await bridge.removeS3GcPending([...referencedNow]);
-          } catch { /* 不影响同步 */ }
-        },
-      });
-      // 小记独立子空间同步（quick-notes/ 前缀，同一 S3 配置；墓碑/恢复/冲突语义与桌面一致）。
-      // 失败不拖垮笔记同步（对齐桌面 main.ts：quickNotes 错误单独上报）。
-      let quickNotes: QuickNotesSyncResult | { error: string };
-      let quickMsg = "；小记已同步";
       try {
-        quickNotes = await syncQuickNotesViaEngine(syncCfg, s3Store, createQuickNotesSyncDbPort(d, {
-          assetBytes: assets,
-          saveAssetFile: saveAssetBytesFs,
-          loadAssetFile: loadAssetBytesFs,
-          removeAssetFile: removeAssetBytesFs,
-        }));
-        if (quickNotes.uploaded + quickNotes.downloaded > 0) {
-          quickMsg = `；小记 ↓${quickNotes.downloaded} ↑${quickNotes.uploaded}`;
+        const report = await runSync(syncCfg, s3Store, dbPort, {
+          onPublished: async (next, prev) => {
+            // GC 差集标记（对齐桌面 syncEngineController.onPublished）：新 manifest 不再引用的旧正文/资源 → 待回收。用 full key（含 prefix）与 gcDeepCleanup 一致。
+            try {
+              const newById = new Map(next.notes.map((n) => [n.id, n]));
+              for (const p of prev?.notes ?? []) {
+                if (p.deleted) continue;
+                const nx = newById.get(p.id);
+                if (!nx || nx.deleted) continue;
+                if (nx.contentHash !== p.contentHash) await addS3GcPendingInternal(`${syncCfg.prefix}/${objectKey(p.id, p.contentHash)}`);
+                const nextAssets = new Set((nx.assets ?? []).map((a) => a.filename));
+                for (const asset of p.assets ?? []) {
+                  if (nextAssets.has(asset.filename)) continue;
+                  await addS3GcPendingInternal(`${syncCfg.prefix}/assets/${p.id}/${asset.filename}`);
+                }
+              }
+              const referencedNow = new Set<string>();
+              for (const note of next.notes) {
+                if (note.deleted) continue;
+                referencedNow.add(`${syncCfg.prefix}/${objectKey(note.id, note.contentHash)}`);
+                for (const asset of note.assets ?? []) referencedNow.add(`${syncCfg.prefix}/assets/${note.id}/${asset.filename}`);
+              }
+              await removeS3GcPendingInternal([...referencedNow]);
+            } catch { /* 不影响同步 */ }
+          },
+        });
+        // 小记独立子空间同步（quick-notes/ 前缀，同一 S3 配置；墓碑/恢复/冲突语义与桌面一致）。
+        // 失败不拖垮笔记同步（对齐桌面 main.ts：quickNotes 错误单独上报）。
+        let quickNotes: QuickNotesSyncResult | { error: string };
+        let quickMsg = "；小记已同步";
+        try {
+          quickNotes = await syncQuickNotesViaEngine(syncCfg, s3Store, createQuickNotesSyncDbPort(d, {
+            assetBytes: assets,
+            saveAssetFile: saveAssetBytesFs,
+            loadAssetFile: loadAssetBytesFs,
+            removeAssetFile: removeAssetBytesFs,
+          }));
+          if (quickNotes.uploaded + quickNotes.downloaded > 0) {
+            quickMsg = `；小记 ↓${quickNotes.downloaded} ↑${quickNotes.uploaded}`;
+          }
+        } catch (reason) {
+          quickNotes = { error: (reason as Error).message };
+          quickMsg = `；小记同步失败：${quickNotes.error}`;
         }
-      } catch (reason) {
-        quickNotes = { error: (reason as Error).message };
-        quickMsg = `；小记同步失败：${quickNotes.error}`;
+        // 清理可能部分成功；即便失败也要把当前内存库落盘，避免下一次启动回退到旧状态。
+        await cleanupHistoryInternal().catch(() => {}); // 同步后清理快照（过期 + 每文档上限）
+        return { message: report.message + quickMsg, notes: report, quickNotes };
+      } finally {
+        // 同步中途失败时，已应用的远端变更也必须持久化，不能只在成功路径保存。
+        await saveSnapshot(d.exportBytes());
       }
-      await saveSnapshot(d.exportBytes());
-      await bridge.cleanupHistory().catch(() => {}); // 同步后清理快照（过期 + 每文档上限）
-      return { message: report.message + quickMsg, notes: report, quickNotes };
     });
   },
   // ---- 目录树只读契约（同步调试/测试用） ----
