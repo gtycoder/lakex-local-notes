@@ -23,7 +23,14 @@ interface ResourceUploadInput {
   filename: string;
 }
 
-export function registerNotesIpc(ipc: IpcRegistrar, store: Store, drafts: DraftJournal, workspaceRoot: string, backupDatabases: (targetRoot: string) => void): void {
+export function registerNotesIpc(
+  ipc: IpcRegistrar,
+  store: Store,
+  drafts: DraftJournal,
+  workspaceRoot: string,
+  backupDatabases: (targetRoot: string) => void,
+  enqueueMaintenance: <T>(task: () => Promise<T>) => Promise<T>,
+): void {
   /** 导出目录白名单：只接受本进程 pick_export_dir 系统选择框的返回值。 */
   let lastPickedExportDir: string | null = null;
 
@@ -82,11 +89,13 @@ export function registerNotesIpc(ipc: IpcRegistrar, store: Store, drafts: DraftJ
   });
   ipc.handle("run_workspace_backup", (dir: string) => {
     if (dir !== lastPickedBackupDir) throw new IpcInputError("备份目录无效：请先通过系统选择框选择目录");
-    const ts = new Date().toISOString().replace(/[:T]/g, "-").slice(0, 19);
-    const target = path.join(dir, `lake-notes-backup-${ts}`);
-    const log = (msg: string) => store.logScopes.sync.info(msg);
-    const result = exportWorkspaceBackup(workspaceRoot, target, backupDatabases, log);
-    return { backupPath: result.backupPath, copiedDirs: result.copiedDirs };
+    return enqueueMaintenance(async () => {
+      const ts = new Date().toISOString().replace(/[:T]/g, "-").slice(0, 19);
+      const target = path.join(dir, `lake-notes-backup-${ts}`);
+      const log = (msg: string) => store.logScopes.sync.info(msg);
+      const result = exportWorkspaceBackup(workspaceRoot, target, backupDatabases, log);
+      return { backupPath: result.backupPath, copiedDirs: result.copiedDirs };
+    });
   });
   ipc.handle("prepare_cloud_restore", () => {
     // A2 机械安全（审计 §4.5）：隔离备份 → 全新空库 → 只拉不打（重启后首同步语义）→ 显式确认在渲染层。

@@ -359,7 +359,7 @@ function registerIpc(): void {
     const quickDir = path.join(targetRoot, "quick-notes");
     fs.mkdirSync(quickDir, { recursive: true });
     quickNotes.backupDatabaseTo(path.join(quickDir, "metadata.sqlite3"));
-  });
+  }, enqueueMaintenance);
   registerHistoryIpc(ipc, store, () => restartHistoryTimers?.());
   registerSyncIpc(ipc, {
     store,
