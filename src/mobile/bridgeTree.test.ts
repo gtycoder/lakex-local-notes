@@ -12,10 +12,18 @@ vi.mock("./sqliteDb.js", async () => {
   };
   class FakeStmt {
     private stmt: any;
-    constructor(db: Database, sql: string) { this.stmt = db.prepare(sql); }
+    private db: Database;
+    constructor(db: Database, sql: string) { this.db = db; this.stmt = db.prepare(sql); }
     get(...params: unknown[]) { this.stmt.reset(); if (params.length) this.stmt.bind(params as never); return this.stmt.step() ? this.stmt.getAsObject() as Record<string, unknown> : undefined; }
     all(...params: unknown[]) { this.stmt.reset(); if (params.length) this.stmt.bind(params as never); const out: Record<string, unknown>[] = []; while (this.stmt.step()) out.push(this.stmt.getAsObject() as Record<string, unknown>); return out; }
-    run(...params: unknown[]) { this.stmt.reset(); if (params.length) this.stmt.bind(params as never); this.stmt.step(); return { changes: 0, lastInsertRowid: 0 }; }
+    run(...params: unknown[]) {
+      this.stmt.reset();
+      if (params.length) this.stmt.bind(params as never);
+      this.stmt.step();
+      const changes = this.db.getRowsModified();
+      const rowid = this.db.exec("SELECT last_insert_rowid() AS rowid")[0]?.values[0]?.[0] ?? 0;
+      return { changes, lastInsertRowid: typeof rowid === "bigint" ? rowid : Number(rowid) };
+    }
   }
   return {
     SqlJsDb: class {
@@ -81,6 +89,19 @@ describe("mobile 目录树（文档套文档）", () => {
     // notebook 本身不在 listNotebookTree（树从 notebook 根展开，不含根自身）；listTreeNodes 验证
     const nodes = await bridge.listTreeNodes();
     expect(nodes.find((n) => n.id === nb.id)?.icon).toBe("📁");      // notebook 图标
+  });
+});
+
+describe("mobile 目录重命名", () => {
+  it("renameTreeNode 真实更新标题并返回新节点", async () => {
+    const nb = await bridge.createNotebook({ title: "重命名测试本", icon: null });
+    const renamed = await bridge.renameTreeNode(nb.id, "重命名成功");
+
+    expect(renamed.id).toBe(nb.id);
+    expect(renamed.title).toBe("重命名成功");
+
+    const nodes = await bridge.listTreeNodes();
+    expect(nodes.find((node) => node.id === nb.id)?.title).toBe("重命名成功");
   });
 });
 

@@ -35,7 +35,10 @@ async function initSqlJsModule(): Promise<SqlJsStatic> {
 }
 
 class SqlJsStatement implements DbLikeStatement {
-  constructor(private readonly stmt: Statement) {}
+  constructor(
+    private readonly db: Database,
+    private readonly stmt: Statement,
+  ) {}
 
   private runWith(params: unknown[]): void {
     this.stmt.reset();
@@ -54,11 +57,19 @@ class SqlJsStatement implements DbLikeStatement {
     return rows;
   }
 
-  /** sql.js 无 statement 级 changes/rowid；POC 写操作走 db.exec/db.run（changes 另计） */
+  /** sql.js 的变更数在 Database 上；rowid 需在同一连接上查询。 */
   run(...params: unknown[]): { changes: number; lastInsertRowid: number | bigint } {
     this.runWith(params);
     this.stmt.step();
-    return { changes: 0, lastInsertRowid: 0 };
+
+    const changes = this.db.getRowsModified();
+    const rowidResult = this.db.exec("SELECT last_insert_rowid() AS rowid");
+    const rowid = rowidResult[0]?.values[0]?.[0] ?? 0;
+
+    return {
+      changes,
+      lastInsertRowid: typeof rowid === "bigint" ? rowid : Number(rowid),
+    };
   }
 }
 
@@ -77,7 +88,7 @@ export class SqlJsDb implements DbLike {
   }
 
   prepare(sql: string): DbLikeStatement {
-    return new SqlJsStatement(this.db.prepare(sql));
+    return new SqlJsStatement(this.db, this.db.prepare(sql));
   }
 
   /**

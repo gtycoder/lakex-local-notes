@@ -15,7 +15,9 @@ vi.mock("./sqliteDb.js", async () => {
   };
   class FakeStmt {
     private stmt: any;
+    private db: Database;
     constructor(db: Database, sql: string) {
+      this.db = db;
       this.stmt = db.prepare(sql);
     }
     get(...params: unknown[]) {
@@ -37,7 +39,9 @@ vi.mock("./sqliteDb.js", async () => {
       this.stmt.reset();
       if (params.length) this.stmt.bind(params as never);
       this.stmt.step();
-      return { changes: 0, lastInsertRowid: 0 };
+      const changes = this.db.getRowsModified();
+      const rowid = this.db.exec("SELECT last_insert_rowid() AS rowid")[0]?.values[0]?.[0] ?? 0;
+      return { changes, lastInsertRowid: typeof rowid === "bigint" ? rowid : Number(rowid) };
     }
   }
   return {

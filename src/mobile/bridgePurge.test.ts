@@ -13,10 +13,18 @@ vi.mock("./sqliteDb.js", async () => {
   };
   class FakeStmt {
     private stmt: any;
-    constructor(db: Database, sql: string) { this.stmt = db.prepare(sql); }
+    private db: Database;
+    constructor(db: Database, sql: string) { this.db = db; this.stmt = db.prepare(sql); }
     get(...params: unknown[]) { this.stmt.reset(); if (params.length) this.stmt.bind(params as never); return this.stmt.step() ? this.stmt.getAsObject() as Record<string, unknown> : undefined; }
     all(...params: unknown[]) { this.stmt.reset(); if (params.length) this.stmt.bind(params as never); const out: Record<string, unknown>[] = []; while (this.stmt.step()) out.push(this.stmt.getAsObject() as Record<string, unknown>); return out; }
-    run(...params: unknown[]) { this.stmt.reset(); if (params.length) this.stmt.bind(params as never); this.stmt.step(); return { changes: 0, lastInsertRowid: 0 }; }
+    run(...params: unknown[]) {
+      this.stmt.reset();
+      if (params.length) this.stmt.bind(params as never);
+      this.stmt.step();
+      const changes = this.db.getRowsModified();
+      const rowid = this.db.exec("SELECT last_insert_rowid() AS rowid")[0]?.values[0]?.[0] ?? 0;
+      return { changes, lastInsertRowid: typeof rowid === "bigint" ? rowid : Number(rowid) };
+    }
   }
   return {
     SqlJsDb: class {
