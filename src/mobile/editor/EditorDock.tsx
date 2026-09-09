@@ -6,12 +6,19 @@
  * 格式命令走 Lake renderer.execCommand（文本 ne-* 属性；块级 style "h1"/"p" 等）。
  */
 import { useEffect, useRef, useState } from "react";
-import { Plus, Bold, Italic, Underline, List, ListOrdered, ListTodo, Keyboard, X, Check, Image as ImageIcon, Paperclip, Table2, Quote, Minus, Code2, Music, Video, Undo2, Redo2, Pilcrow } from "lucide-react";
+import { Plus, Bold, Italic, Underline, List, ListOrdered, ListTodo, Keyboard, X, Check, Image as ImageIcon, Paperclip, Table2, Quote, Minus, Code2, Music, Video, Undo2, Redo2, Pilcrow, Type } from "lucide-react";
 import { lakeBridge, type LakeEditorInstance } from "../../features/editor/lakeRuntime";
 import { MARK_COMMANDS, BLOCK_INSERT_COMMANDS, HISTORY_COMMANDS, STYLE_BLOCKS } from "../../features/editor/editorCommands";
 import { useKeyboard } from "../useKeyboard";
 
 type PanelMode = "insert" | "font" | null;
+
+/** 选区/焦点节点是否属于编辑器正文（面板命令只认正文选区） */
+function isEditorNode(node: Node | null): boolean {
+  let el: Element | null = node ? (node.nodeType === 1 ? (node as Element) : (node as ChildNode).parentElement) : null;
+  while (el) { if (el.nodeType === 1 && (el as HTMLElement).isContentEditable) return true; el = el.parentElement; }
+  return false;
+}
 
 /** 格式命令 → lucide 图标（正文面板用图标而非文字，对齐思源移动端） */
 const COMMAND_ICONS: Record<string, typeof Bold> = {
@@ -50,41 +57,53 @@ function useEditorExec(editor: LakeEditorInstance | null) {
 
 export function EditorDock({ editor, editing, onToggleEdit, onInsertImage, onInsertAttachment, onInsertAudio, onInsertVideo, onInsertTable }: EditorDockProps) {
   const [panelMode, setPanelMode] = useState<PanelMode>(null);
-  // 面板打开时占用「键盘空间」的高度：打开瞬间捕获键盘实际高度（height），随后收起键盘（不需要打字了）
-  const [panelHeight, setPanelHeight] = useState(0);
+
+  /** 面板打开期间的选区快照：命令执行前后都还原，才能连续加粗→倾斜→下划线 */
+  const savedRangeRef = useRef<Range | null>(null);
+  /** 只有"用户手指点在正文里"才关面板；程序性 focusin（Lake 命令内部重新聚焦）不算 */
+  const userTappedEditorRef = useRef(false);
   const dockRef = useRef<HTMLDivElement>(null);
-  const { base, innerHeight, offset, height, keyboardOpen } = useKeyboard();
+  const { offset, keyboardOpen } = useKeyboard();
   const exec = useEditorExec(editor);
   const execRef = useRef(exec);
   execRef.current = exec;
 
   // 退出编辑态时复位
   useEffect(() => {
-    if (!editing) { setPanelMode(null); setPanelHeight(0); }
+    if (!editing) setPanelMode(null);
   }, [editing]);
 
   // 用户点击可编辑正文（要打字）→ 立即收起面板、恢复输入法键盘，绝不让「面板展开 + 键盘」同时出现。
   // 面板项按钮已 onMouseDown preventDefault 不抢焦点，故焦点落回 contenteditable 只可能是用户点了编辑区。
   useEffect(() => {
-    const onFocusIn = (e: FocusEvent) => {
-      const t = e.target as HTMLElement | null;
-      if (!t || typeof t.closest !== "function") return;
-      if (t.closest('[contenteditable="true"]')) { setPanelMode(null); setPanelHeight(0); }
+    const isEditor = (node: EventTarget | null) => {
+      const t = node as HTMLElement | null;
+      return !!t && typeof t.closest === "function" && !!t.closest('[contenteditable="true"]');
     };
+    const onPointerDown = (e: PointerEvent) => { if (isEditor(e.target)) userTappedEditorRef.current = true; };
+    const onFocusIn = (e: FocusEvent) => {
+      if (!isEditor(e.target)) return;
+      if (!userTappedEditorRef.current) return;          // 命令内部重新聚焦 → 面板不关、键盘不再弹
+      userTappedEditorRef.current = false;
+      setPanelMode(null);                                // 用户点了正文 → 收起面板（键盘保持不动）
+    };
+    document.addEventListener("pointerdown", onPointerDown, true);
     document.addEventListener("focusin", onFocusIn);
-    return () => document.removeEventListener("focusin", onFocusIn);
+    return () => { document.removeEventListener("pointerdown", onPointerDown, true); document.removeEventListener("focusin", onFocusIn); };
   }, []);
 
   // 把 dock 占用的底部空间暴露给正文容器，让正文底部留白（光标不被工具栏/面板盖住）。
   // 面板开 = 面板高 + 工具栏高；面板关（编辑态）= 工具栏高。
   useEffect(() => {
-    const toolbar = 52; // .med-toolbar 高 48 + 底部 4px 间隙
-    const space = editing ? (panelMode ? panelHeight + toolbar : toolbar) : 0;
+    const toolbar = 54; // .med-toolbar 高 48 + 与面板的 6px 间隙
+    const panelEl = dockRef.current?.querySelector<HTMLElement>(".med-panel");
+    const space = editing ? (panelMode ? (panelEl?.getBoundingClientRect().height ?? 280) + toolbar : toolbar) : 0;
     // 作用域放到 dock 的父容器（.doc-pane / .mobile-document），而非全局 documentElement——避免多 tab 实例互相覆盖
     const root = dockRef.current?.parentElement ?? document.documentElement;
     root.style.setProperty("--mobile-dock-space", `${space}px`);
     return () => { root.style.removeProperty("--mobile-dock-space"); };
-  }, [editing, panelMode, panelHeight]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editing, panelMode]);
 
   // 编辑态常驻底部工具栏（完成/插入/字体等）；键盘弹出时悬浮在键盘上方。
   if (!editing) return null;
@@ -93,31 +112,44 @@ export function EditorDock({ editor, editing, onToggleEdit, onInsertImage, onIns
     try { const ce = document.querySelector<HTMLElement>(".doc-pane.active [contenteditable]"); ce?.focus(); } catch { /* 忽略 */ }
     try { lakeBridge(editor ?? undefined).renderer?.execCommand?.("focus" as never); } catch { /* 忽略 */ }
   };
-  // 切换展开面板：打开时把键盘高度捕获为面板占用空间，并收起键盘（用工具时不打字，直接占键盘空间）
-  const togglePanel = (mode: Exclude<PanelMode, null>) => {
-    if (panelMode === mode) {                                     // 关闭面板 → 自动恢复键盘（不需要手动）
-      setPanelMode(null);
-      setPanelHeight(0);
-      focusEditor();
-      return;
-    }
-    if (!panelMode) {                                             // 仅从关闭态打开：捕获键盘高度（此后工具栏不抖）
-      setPanelHeight(Math.max(Math.round(height), 280));
-      // 立即收起键盘（不再 setTimeout 延迟）：面板打开即代表不再打字，键盘必须马上让位，避免两者同现。
-      try { (document.activeElement as HTMLElement | null)?.blur?.(); } catch { /* 忽略 */ }
-    }                                                             // 面板间切换(insert<->font)保持原高度 → 工具栏不抖
-    setPanelMode(mode);
+  /** 记下当前选区（Range 克隆在 blur 之后仍可用于还原） */
+  const snapshotSelection = () => {
+    const sel = document.getSelection();
+    if (sel && sel.rangeCount > 0 && isEditorNode(sel.anchorNode)) savedRangeRef.current = sel.getRangeAt(0).cloneRange();
   };
-  // 工具栏行内命令（bold/列表/待办）：按钮已用 onMouseDown preventDefault 防止抢焦点，
-  // 编辑器保持焦点 + 选区/光标保留 → 命令作用于正确位置，键盘也不被收起（继续打字）。
-  const runInline = (cmd: string, ...args: unknown[]) => { exec(cmd, ...args); };
-  // 面板项命令（正文/标题/引用/分割线/代码/字体等）：只执行，不聚焦 → 不重开输入法（面板已占用键盘空间）
-  const runPanel = (cmd: string, ...args: unknown[]) => { exec(cmd, ...args); };
+  const restoreSelection = () => {
+    const r = savedRangeRef.current;
+    const sel = document.getSelection();
+    if (!r || !sel || !r.startContainer.isConnected) return;
+    sel.removeAllRanges();
+    sel.addRange(r);
+  };
+
+  /**
+   * 展开面板：面板长在工具栏上方（思源 .keyboard 口径），**不动输入法、不动焦点**。
+   * 旧做法"点面板 → blur 收键盘 → 面板接管键盘区"有两个问题：① 键盘下滑与面板上顶同帧对撞 = 闪烁；
+   * ② blur 后 Lake 内部选区失效，面板里的加粗/斜体命令变成 no-op（实测 bolds=0）。
+   */
+  const togglePanel = (mode: Exclude<PanelMode, null>) => {
+    if (panelMode === mode) { setPanelMode(null); return; }        // 再点一次 = 关面板
+    snapshotSelection();
+    setPanelMode(mode);                                            // 面板开在工具栏上方：键盘不动、焦点不动
+  };
+
+  // 工具栏行内命令（bold/列表/待办）：按钮 onMouseDown preventDefault 不抢焦点 →
+  // 焦点/选区留在正文，命令作用在正确位置，键盘不收；执行后再记一次选区，供面板连续使用。
+  const runInline = (cmd: string, ...args: unknown[]) => { exec(cmd, ...args); snapshotSelection(); };
+  // 面板项命令：**还原选区 → 执行 → 再记选区 → 面板保持打开**（加粗后还能接着点倾斜/下划线），
+  // 且命令若把焦点抢回正文（会顶出输入法、把面板挤掉）就在下一帧再收一次键盘。
+  const runPanel = (cmd: string, ...args: unknown[]) => {
+    restoreSelection();
+    exec(cmd, ...args);
+    snapshotSelection();
+  };
 
   // 收起键盘：手动收起（编辑态保留）。有关闭面板则先收起面板（不恢复键盘——用户明确要收起）。
   const dismissKeyboard = () => {
     setPanelMode(null);
-    setPanelHeight(0);
     try { (document.activeElement as HTMLElement | null)?.blur?.(); } catch { /* 忽略 */ }
   };
   const showKeyboard = () => { focusEditor(); };
@@ -126,14 +158,9 @@ export function EditorDock({ editor, editing, onToggleEdit, onInsertImage, onIns
   const kbLabel = panelMode ? "收起面板" : (keyboardOpen ? "收起键盘" : "展开键盘");
   const exitEdit = () => { onToggleEdit?.(); dismissKeyboard(); };
 
-  // 工具栏底部基准：无面板 = 键盘上移量(offset，adjustResize=0)；有面板 = 面板占用的键盘高度
-  // 工具栏 bottom 基准（--kb-offset，CSS 再加 4px）：
-  //  - 无面板：键盘开合由 WebView 自身处理（adjustResize 下 innerHeight 已缩，offset=0 → 贴底即为键盘上方）。
-  //  - 有面板：用 innerHeight-base+panelHeight，让工具栏屏幕 Y 恒定在「键盘/面板上方」——键盘收起、innerHeight
-  //    530→842 的过程中 toolbar 的位置不跳（原先直接用 panelHeight 会在视图仍 530 时闪到屏幕中间）。
-  // 有面板：面板以固定高度占满底部（>= 键盘高度），且面板打开即收起键盘 → 面板与输入法键盘绝不叠加。
-  // 不用 innerHeight-base+panelHeight（键盘未收时 innerHeight<base 会让面板高度算成 0 → 面板不可见 + 键盘仍显示）。
-  const usable = panelMode ? Math.max(0, panelHeight) : offset;
+  // --kb-offset = 键盘上移量（adjustResize 恒 0；edge-to-edge = 键盘高度）。
+  // 面板不再参与该计算：面板排在工具栏上方，工具栏位置只跟键盘走 → 键盘开合时工具栏屏幕 Y 天然不跳。
+  const usable = offset;
   const plusCls = "med-btn" + (panelMode === "insert" ? " med-active" : "");
   const aaCls = "med-btn med-aa" + (panelMode === "font" ? " med-active" : "");
 
@@ -144,7 +171,7 @@ export function EditorDock({ editor, editing, onToggleEdit, onInsertImage, onIns
         <button className={plusCls} onClick={() => togglePanel("insert")} aria-label="插入">
           {panelMode === "insert" ? <X size={20} /> : <Plus size={21} />}
         </button>
-        <button className={aaCls} onClick={() => togglePanel("font")} aria-label="字体">Aa</button>
+        <button className={aaCls} onClick={() => togglePanel("font")} aria-label="字体"><Type size={20} /></button>
         <button className="med-btn med-b" onClick={() => runInline("bold")} aria-label="加粗"><Bold size={19} /></button>
         <button className="med-btn" onClick={() => runInline("unorderedList" as never)} aria-label="列表"><List size={20} /></button>
         <button className="med-btn" onClick={() => runInline("taskList" as never)} aria-label="待办"><ListTodo size={20} /></button>

@@ -54,28 +54,28 @@
 .med-btn.med-b { font-weight: 700; font-size: 18px; }
 
 .med-panel {
-  /* 展开面板：占住键盘区，贴底平铺（与工具栏同宽同底，思源面板语言） */
+  /* 展开面板：长在工具栏**上方**（思源 .keyboard 口径——不接管输入法，
+     所以点格式按钮不会引发"键盘收起→面板弹出"的对撞闪烁，且编辑器焦点/选区始终活着，命令才生效） */
   position: fixed;
   left: 0;
   right: 0;
-  bottom: 0;
+  bottom: calc(var(--kb-offset, 0px) + var(--mobile-bottom-bar-height, 48px) + 6px);
   pointer-events: auto;
-  background: var(--b3-theme-surface);
+  background: var(--b3-theme-background);
   border: 0;
   border-top: 1px solid var(--b3-theme-surface-lighter);
+  border-bottom: 1px solid var(--b3-theme-surface-lighter);
   box-shadow: none;
   padding: 12px 12px 14px;
-  height: calc(var(--kb-offset, 0px));
+  max-height: min(44dvh, 340px);
+  height: auto;
   overflow-y: auto;
   overscroll-behavior: contain;
   scrollbar-width: none;
-  animation: medPanelIn var(--mobile-duration-panel) var(--mobile-ease-panel);
+  /* 不做入场动画：面板是"接管键盘位置"，再叠一层 translateY 会和输入法收起动画对撞成闪烁 */
 }
 .med-panel::-webkit-scrollbar { display: none; }
-@keyframes medPanelIn {
-  from { opacity: 0; transform: translateY(14px); }
-  to { opacity: 1; transform: translateY(0); }
-}
+/* medPanelIn 已删除（见上：面板不做入场动画） */
 .med-ins-grid {
   display: grid;
   grid-template-columns: 1fr 1fr 1fr;

@@ -77,9 +77,19 @@
 1. **FTS 索引重做**（合并原 P4-1 增量 + P4-2 短词回退）：`src/core/searchRepository.ts` 的 `rebuild()` 现每次启动 `DELETE FROM notes_fts` 全清 + 逐条重插、trigram 只索引 ≥3 字；改为增量账本（`updated_at`/旁表记账，只重建缺失/过期）+ 1/2 字短词回退（标题+正文 LIKE）。可动 FTS schema（dev 可删重建），**按 10 万文档/100 万附件量级验证**。← 近期待办。
 2. 其余浮层收尾（可选，成本低）：仅**草稿恢复框**未进 b3 套；如统一照 §2.1 路子 + 同步 `settingsSearch.ts` 注册表即可。
 
+**移动端 UI 对齐思源 · 用户首轮验收反馈修复（260909）**
+- **用户看不到变化 = 装机包过期**：改动只在仓库/dist，安卓端必须 `bash scripts/android-build.sh --sync --install` 才进模拟器/真机（本会话已装并复验）。
+- **面板闪烁（#2）**：面板改到**工具栏上方**（思源 .keyboard 口径），不再"blur 收键盘 + 面板接管键盘区"；键盘全程不动 → 无双动画对撞。实测 innerHeight 恒 530、面板照常开合。
+- **加粗后面板被键盘顶掉（#3）**：根因是旧实现 blur 后 **Lake 内部选区失效**（实测 bolds=0/italics=0），且 focusin 会把面板关掉。现在：不 blur、不抢焦点、pointerdown 只有落在正文才收面板；实测面板保持打开、选区保持、`fontStyle` 随点切换（连续加粗→斜体可用）。
+- **表格跟随光标（#4）**：新增 `src/mobile/useCaretIntoView.ts`（选区变化/点击后把光标所在单元格滚进可视区，只调目标所在滚动链，不用 scrollIntoView）。实测 `ne-table-inner-wrap` scrollLeft 0→376，最右单元格 inView=true。
+- **dock 文字改图标**：`Aa`→`<Type/>`，`textButtons` 实测为空。
+- **修好自己引入的 P0**：`EditorDock` 新加的 `useEffect` 一度放在 `if (!editing) return null` **之后** → 条件 hook → 整棵 React 树卸载（#root 空，HANDOFF §4 老坑）。已把 hooks 全部放回早退之前。**教训：动 EditorDock 这类"早退 + hooks"组件时，任何新 hook 必须放在 `if (!editing) return null;` 上方。**
+- 设置页**不做**思源右滑（用户 260909 明确：保持现状）。
+
 **移动端 UI 对齐思源（260908 审计的剩余批次）** —— 明细见 `docs/MOBILE-UI-SIYUAN-AUDIT-260908.md` §4：
 - **B7（未做）**：`SearchSheet`/`CreateNotebookSheet`/图标选择器/历史 sheet 收进 sheet 菜单语言（现在还是 `.mobile-sheet` 自造头）；设置页进入方式改思源 `#model` 右滑（现为整页 fade-in）。
-- **B8（未做，需真机）**：`.med-btn` 的 `Aa`/`B` 文字换图标；插入面板项补 `.b3-menu` 风格分组；文档面包屑行（思源 `.protyle-breadcrumb` 42px）；空块占位符。
+- **B8（剩余）**：插入面板项补 `.b3-menu` 风格分组；文档面包屑行（思源 `.protyle-breadcrumb` 42px）；空块占位符。（`Aa`/`B` 文字图标化已于 260909 完成）
+- **B7 修订**：设置页**保持现状**（用户 260909 决定不做思源 #model 右滑），只做 SearchSheet/新建知识库/图标选择器/历史 sheet 的收口。
 - **验证缺口**：B4 跟手手势、B2 触感、B6 键盘态只在本机 Electron 390×844 harness 验过，**安卓模拟器/真机未复验**（模拟器 `scripts/emu-cdp.sh` + 真机 IME 行为差异见 §8.3）。
 
 **移动端（安卓）** —— 全部见 **§8.6/§8.7**（剪贴板粘贴不解析、真机资产 canonical URL 不可达、"整体编辑还有问题"待现象、大纲 viewer 跳转）。注意 §8.6 提到的 android worktree **已不存在**，那条"沿 worktree 验证"的线索要重新确认落点。

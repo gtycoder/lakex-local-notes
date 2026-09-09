@@ -5,6 +5,8 @@
  * 大纲/文档列表的开关状态由宿主控制（传入 outlineOpen/docListOpen + onToggle*），宿主不传则内部自管。
  */
 import { EditorDock } from "./EditorDock";
+import { useCaretIntoView } from "../useCaretIntoView";
+import { showToast } from "../ui/toastBus";
 import "lakex-editor-react-component/style.css";
 import { OutlineSheet } from "./OutlineSheet";
 import { DocListSheet, type DocListItem } from "./DocListSheet";
@@ -54,7 +56,6 @@ export function DocumentEditor(props: DocumentEditorProps) {
   } = props;
   const editorRef = useRef<LakeEditorInstance | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const [toast, setToast] = useState<string | null>(null);
   const [outlineOpenS, setOutlineOpenS] = useState(false);
   const [docListOpenS, setDocListOpenS] = useState(false);
   const outlineOpen = outlineOpenProp ?? outlineOpenS;
@@ -69,12 +70,6 @@ export function DocumentEditor(props: DocumentEditorProps) {
     input.value = "";
     input.click();
   };
-  useEffect(() => {
-    if (!toast) return;
-    const t = window.setTimeout(() => setToast(null), 1800);
-    return () => window.clearTimeout(t);
-  }, [toast]);
-
   // 附件能力（移动端注入 LakeEditor）：canonical URL 本地可达（AssetServer），
   // 点击附件卡片直接系统应用打开本地文件（OpenFile 原生插件，跳过 WebView 预览弹窗）
   const attachmentPrefs = useMemo<NonNullable<LakeEditorPrefs["attachment"]>>(() => ({
@@ -82,19 +77,23 @@ export function DocumentEditor(props: DocumentEditorProps) {
     onOpenAttachment: async (item: AttachmentPreviewItem) => {
       let ref: LocalAssetRef | null = item.ref;
       if (!ref && typeof item.src === "string") ref = parseLocalAssetUrl(item.src);
-      if (!ref) { setToast("附件未同步到本机"); return; }
+      if (!ref) { showToast("附件未同步到本机", { type: "error" }); return; }
       try {
         const uri = await Filesystem.getUri({ path: `note-assets/${ref.noteId}/${ref.filename}`, directory: Directory.Data });
         await OpenFile.open({ path: uri.uri.replace(/^file:\/\//, "") });
       } catch {
-        setToast("没有可打开此文件的应用");
+        showToast("没有可打开此文件的应用", { type: "error" });
       }
     },
   }), []);
 
+  const bodyRef = useRef<HTMLElement | null>(null);
+  // 点了可视区外的表格单元格 / 光标跑到屏外 → 自动把它滚进可视区（移动端表格必然横向溢出）
+  useCaretIntoView(bodyRef, true);
+
   return (
     <>
-      <section className="mobile-doc-body">
+      <section className="mobile-doc-body" ref={bodyRef}>
         <LakeEditor
           noteId={note.id}
           content={content}
@@ -135,7 +134,6 @@ export function DocumentEditor(props: DocumentEditorProps) {
           />
         </>
       )}
-      {toast && <div className="mobile-toast">{toast}</div>}
       <input
         ref={fileInputRef}
         type="file"
