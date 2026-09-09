@@ -22,6 +22,47 @@ interface RemoteImportDeps {
   logImport(noteId: string, contentBytes: number, assetCount: number, startedAt: number): void;
 }
 
+interface FilePlacement {
+  destination: string;
+  backupPath: string | null;
+  placed: boolean;
+}
+
+function placeFile(source: string, destination: string, backupDir: string | null): FilePlacement {
+  const backupPath = fs.existsSync(destination)
+    ? backupDir
+      ? path.join(backupDir, path.basename(destination))
+      : `${destination}.previous-${process.pid}-${crypto.randomBytes(4).toString("hex")}`
+    : null;
+  const placement: FilePlacement = { destination, backupPath, placed: false };
+
+  if (backupPath) {
+    fs.mkdirSync(path.dirname(backupPath), { recursive: true });
+    fs.renameSync(destination, backupPath);
+  }
+  fs.renameSync(source, destination);
+  placement.placed = true;
+  return placement;
+}
+
+function rollbackPlacements(placements: FilePlacement[]): string[] {
+  const failures: string[] = [];
+  for (let index = placements.length - 1; index >= 0; index -= 1) {
+    const placement = placements[index]!;
+    try {
+      if (placement.backupPath && fs.existsSync(placement.backupPath)) {
+        if (fs.existsSync(placement.destination)) fs.rmSync(placement.destination, { force: true });
+        fs.renameSync(placement.backupPath, placement.destination);
+      } else if (placement.placed) {
+        fs.rmSync(placement.destination, { force: true });
+      }
+    } catch {
+      failures.push(placement.backupPath ?? placement.destination);
+    }
+  }
+  return failures;
+}
+
 /** Owns remote note staging and atomic file placement; Store keeps the wrapper. */
 export class RemoteImportRepository {
   constructor(private readonly deps: RemoteImportDeps) {}
@@ -34,15 +75,16 @@ export class RemoteImportRepository {
         throw new AppError("InvalidInput", `无效的资源文件名: ${asset.filename}`);
       }
     }
+    if (new Set(assets.map((asset) => asset.filename)).size !== assets.length) {
+      throw new AppError("InvalidInput", "远端资源文件名重复");
+    }
 
     const assetDir = assets.length > 0 ? this.deps.assetDirFor(note.id) : null;
     const lakeTmp = `${lakePath}.tmp-${process.pid}-${crypto.randomBytes(4).toString("hex")}`;
     const assetTmpDir = assetDir ? `${assetDir}.staging-${crypto.randomBytes(4).toString("hex")}` : null;
-    let moved = false;
-    let lakePlaced = false;
-    let previousLakeBackedUp = false;
-    const lakeBackup = `${lakePath}.previous-${process.pid}-${crypto.randomBytes(4).toString("hex")}`;
-    const movedAssetPaths: string[] = [];
+    const assetBackupDir = assetDir ? `${assetDir}.backup-${crypto.randomBytes(4).toString("hex")}` : null;
+    const placements: FilePlacement[] = [];
+    let committed = false;
     try {
       // 先完成文件落盘，再提交 DB。这样 rename 故障不会留下“DB 已 synced、正文文件不存在”的半状态。
       fs.writeFileSync(lakeTmp, content, "utf8");
@@ -52,19 +94,13 @@ export class RemoteImportRepository {
       }
 
       fs.mkdirSync(path.dirname(lakePath), { recursive: true });
-      if (fs.existsSync(lakePath)) {
-        fs.renameSync(lakePath, lakeBackup);
-        previousLakeBackedUp = true;
-      }
-      fs.renameSync(lakeTmp, lakePath);
-      lakePlaced = true;
+      placements.push(placeFile(lakeTmp, lakePath, null));
 
       if (assetTmpDir && assetDir) {
         fs.mkdirSync(assetDir, { recursive: true });
         for (const asset of assets) {
           const destination = path.join(assetDir, asset.filename);
-          fs.renameSync(path.join(assetTmpDir, asset.filename), destination);
-          movedAssetPaths.push(destination);
+          placements.push(placeFile(path.join(assetTmpDir, asset.filename), destination, assetBackupDir));
         }
         try { fs.rmdirSync(assetTmpDir); } catch { /* staging cleanup is best effort */ }
       }
@@ -93,28 +129,33 @@ export class RemoteImportRepository {
         ).run(note.id, this.deps.workspaceId, note.parentId, note.title, note.id, note.sortOrder, note.updatedAt, note.updatedAt, note.isConflict ? 1 : 0, note.icon ?? null, trashedAt, deletedFrom);
       });
       transaction();
-      if (previousLakeBackedUp) { try { fs.rmSync(lakeBackup, { force: true }); } catch { /* best effort */ } }
-      moved = true;
+      committed = true;
+      for (const placement of placements) {
+        if (placement.backupPath) {
+          try { fs.rmSync(placement.backupPath, { force: true }); } catch { /* best effort */ }
+        }
+      }
+      if (assetBackupDir) {
+        try { fs.rmSync(assetBackupDir, { recursive: true, force: true }); } catch { /* best effort */ }
+      }
     } catch (error) {
-      // DB 尚未提交时，回滚所有已经落盘的临时/目标文件；保留旧正文备份。
-      for (const file of movedAssetPaths) { try { fs.rmSync(file, { force: true }); } catch { /* best effort */ } }
+      // DB 尚未提交时，按落位逆序恢复旧文件；恢复失败的备份必须保留。
+      const rollbackFailures = rollbackPlacements(placements);
       if (assetDir) {
         try { if (fs.existsSync(assetDir) && fs.readdirSync(assetDir).length === 0) fs.rmdirSync(assetDir); } catch { /* best effort */ }
       }
-      if (lakePlaced) { try { fs.rmSync(lakePath, { force: true }); } catch { /* best effort */ } }
-      if (previousLakeBackedUp && fs.existsSync(lakeBackup)) {
-        try { fs.renameSync(lakeBackup, lakePath); } catch { /* best effort */ }
+      if (rollbackFailures.length > 0) {
+        throw new AppError(
+          "Internal",
+          `远端导入回滚失败，已保留备份: ${rollbackFailures.join(", ")}；原错误: ${(error as Error).message}`,
+        );
       }
-      try { fs.rmSync(lakeTmp, { force: true }); } catch { /* best effort */ }
-      if (assetTmpDir) { try { fs.rmSync(assetTmpDir, { recursive: true, force: true }); } catch { /* best effort */ } }
       throw error;
     } finally {
-      if (!moved) {
-        try { fs.rmSync(lakeTmp, { force: true }); } catch { /* best effort */ }
-        if (assetTmpDir) { try { fs.rmSync(assetTmpDir, { recursive: true, force: true }); } catch { /* best effort */ } }
-      }
-      if (previousLakeBackedUp && fs.existsSync(lakeBackup)) {
-        try { fs.rmSync(lakeBackup, { force: true }); } catch { /* best effort */ }
+      try { fs.rmSync(lakeTmp, { force: true }); } catch { /* best effort */ }
+      if (assetTmpDir) { try { fs.rmSync(assetTmpDir, { recursive: true, force: true }); } catch { /* best effort */ } }
+      if (!committed && assetBackupDir && fs.existsSync(assetBackupDir) && fs.readdirSync(assetBackupDir).length === 0) {
+        try { fs.rmdirSync(assetBackupDir); } catch { /* best effort */ }
       }
     }
 
