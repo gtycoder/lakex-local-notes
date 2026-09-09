@@ -128,6 +128,12 @@ async function ensureDb(): Promise<SqlJsDb> {
   addCol("is_locked", "INTEGER NOT NULL DEFAULT 0");
   addCol("locked_at", "TEXT");
   addCol("icon", "TEXT");
+  // 旧库补齐 content_hash：同步批量路径改为 metadata-only 后，每行都必须有当前内容哈希。
+  const missingHashes = db.prepare("SELECT id, content FROM notes WHERE content_hash IS NULL").all() as Array<{ id: string; content: string }>;
+  for (const row of missingHashes) {
+    db.prepare("UPDATE notes SET content_hash=? WHERE id=?")
+      .run(sha256Sync(new TextEncoder().encode(row.content)), row.id);
+  }
   db.exec(`CREATE TABLE IF NOT EXISTS sync_base (
     note_id TEXT PRIMARY KEY,
     content_hash TEXT NOT NULL,
@@ -443,6 +449,13 @@ function rowToLocal(r: Record<string, unknown>) {
   };
 }
 
+function rowToLocalMetadata(r: Record<string, unknown>) {
+  return {
+    ...rowToLocal({ ...r, content: "" }),
+    contentHash: r.content_hash ? String(r.content_hash) : undefined,
+  };
+}
+
 const dbPort: SyncDbPort = {
   getNote(id) {
     const d = db!;
@@ -451,8 +464,8 @@ const dbPort: SyncDbPort = {
   },
   getAllNotes() {
     const d = db!;
-    const rows = d.prepare("SELECT id, title, content, updated_at, sync_state, trashed_at, restore_pending_at, parent_id, sort_order, is_locked, locked_at, icon, is_conflict FROM notes").all();
-    return rows.map(rowToLocal);
+    const rows = d.prepare("SELECT id, title, updated_at, sync_state, trashed_at, restore_pending_at, parent_id, sort_order, is_locked, locked_at, icon, is_conflict, content_hash FROM notes").all();
+    return rows.map(rowToLocalMetadata);
   },
   getSyncBase(id) {
     const d = db!;
@@ -1126,9 +1139,9 @@ export const bridge = {
       // 本地编辑必须置 sync_state='local'（待上传），否则同步零变更早退会跳过本次修改
       // ON CONFLICT 不覆盖 parent_id：编辑后保留归属；新建时用传入 parentId
       d.prepare(
-        `INSERT INTO notes (id, title, content, parent_id, updated_at, sync_state) VALUES (?,?,?,?,?,'local')
-         ON CONFLICT(id) DO UPDATE SET title=excluded.title, content=excluded.content, updated_at=excluded.updated_at, sync_state='local'`
-      ).run(id, safeTitle, content, parentId, now);
+        `INSERT INTO notes (id, title, content, parent_id, updated_at, content_hash, sync_state) VALUES (?,?,?,?,?,?,'local')
+         ON CONFLICT(id) DO UPDATE SET title=excluded.title, content=excluded.content, updated_at=excluded.updated_at, content_hash=excluded.content_hash, sync_state='local'`
+      ).run(id, safeTitle, content, parentId, now, sha256Sync(new TextEncoder().encode(content)));
       await detectOrphans(id, content);
       await saveSnapshot(d.exportBytes());
     });

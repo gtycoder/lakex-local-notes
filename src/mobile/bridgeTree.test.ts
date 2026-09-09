@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import path from "node:path";
 import type { Database } from "sql.js";
 import { SQL_PARAMETER_BATCH_SIZE } from "../core/sqlParameterBatch.js";
+import { sha256Sync } from "../core/sha256Sync.js";
 import { saveSnapshot } from "./persistence";
 
 const sqlitePrepareSqls = vi.hoisted(() => [] as string[]);
@@ -224,6 +225,12 @@ describe("mobile maintenance writes", () => {
       const result = await bridge.syncNow();
       expect(result.message).toContain("同步完成");
       expect(coreSyncNow).toHaveBeenCalled();
+      const port = vi.mocked(coreSyncNow).mock.calls[0]?.[2] as {
+        getAllNotes(): Array<{ id: string; content: string; contentHash?: string }>;
+      };
+      const metadata = port.getAllNotes().find((row) => row.id === "maintenance-note");
+      expect(metadata?.content).toBe("");
+      expect(metadata?.contentHash).toBe(sha256Sync(new TextEncoder().encode("<p>x</p>")));
       expect(await bridge.listS3GcPending()).toHaveLength(2);
     } finally {
       vi.unstubAllGlobals();
