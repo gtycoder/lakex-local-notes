@@ -86,6 +86,14 @@
 - **修好自己引入的 P0**：`EditorDock` 新加的 `useEffect` 一度放在 `if (!editing) return null` **之后** → 条件 hook → 整棵 React 树卸载（#root 空，HANDOFF §4 老坑）。已把 hooks 全部放回早退之前。**教训：动 EditorDock 这类"早退 + hooks"组件时，任何新 hook 必须放在 `if (!editing) return null;` 上方。**
 - 设置页**不做**思源右滑（用户 260909 明确：保持现状）。
 
+**第二轮反馈（260909 同日）**
+- **面板方向按用户要求回到"向下展开占住键盘区"**：工具栏屏幕 Y 恒定（实测键盘开 toolbarTop=512 → 面板展开仍 512，差 0），面板 560→842 正好吃掉键盘腾出的 282px。
+  不闪的关键不是"面板放上面"，而是**顺序**：同一帧挂面板 + 抬 `--kb-offset`，**下一帧才 blur** → 键盘是在面板背后滑走的；面板无入场动画。
+  `--kb-offset = innerHeight - base + panelHeight`（HANDOFF §8.3 原公式，键盘收起过程中屏幕 Y 不跳）。
+- **打字/编辑切换**：手指点在正文（pointerdown 落在 contenteditable）→ 关面板 + 恢复键盘（实测点正文后 panel:false、工具栏回到 794）；再点同一工具栏键 = 关面板并 focusEditor。
+- **编辑键上移顶栏**：顶栏右侧 = 编辑/完成 + 云同步并列；底部胶囊栏只留阅读相关（文档树/标签/大纲/更多），避免打字时误触；「更多」菜单里保留一个编辑/完成备用入口。
+- 教训：**测试脚本自身的 helper 参数写错**（`at(sel)` 少传 label → 恒 MISS）会伪装成"App 没生效"，排查前先手验一次 DOM 查询。
+
 **移动端 UI 对齐思源（260908 审计的剩余批次）** —— 明细见 `docs/MOBILE-UI-SIYUAN-AUDIT-260908.md` §4：
 - **B7（未做）**：`SearchSheet`/`CreateNotebookSheet`/图标选择器/历史 sheet 收进 sheet 菜单语言（现在还是 `.mobile-sheet` 自造头）；设置页进入方式改思源 `#model` 右滑（现为整页 fade-in）。
 - **B8（剩余）**：插入面板项补 `.b3-menu` 风格分组；文档面包屑行（思源 `.protyle-breadcrumb` 42px）；空块占位符。（`Aa`/`B` 文字图标化已于 260909 完成）

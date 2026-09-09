@@ -359,7 +359,9 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
             scheduleAutoSave(id, t, tabs.find((x) => x.id === id)?.content ?? "");
           }}
         />
-        <button className="toolbar__button" onClick={() => void runSync()} aria-label="立即同步"><CloudUpload /></button>
+        <button className={"toolbar__button" + (active?.editing ? " toolbar__icon--active" : "")} onClick={toggleEdit} disabled={!active}
+          aria-label={active?.editing ? "完成" : "编辑"} title={active?.editing ? "完成" : "编辑"}>{active?.editing ? <Check /> : <Pencil />}</button>
+        <button className="toolbar__button" onClick={() => void runSync()} aria-label="立即同步" title="立即同步"><CloudUpload /></button>
       </header>
 
       {/* 文档层（正文） */}
@@ -384,12 +386,12 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
         ))}
       </section>
 
-      {/* 底部胶囊栏（思源 #mobileBottomBar：纯图标 5 槽，键盘/编辑态整条下滑淡出而不是卸载） */}
+      {/* 底部胶囊栏（思源 #mobileBottomBar：纯图标）——只放阅读相关（文档树/标签/大纲/更多）；
+          编辑与同步在顶栏右侧，避免打字时误触（用户 260909）。编辑态整条下滑淡出而不是卸载。 */}
       <nav className={"mobile-bottom-bar" + (active?.editing ? " mobile-bottom-bar--hidden" : "")} data-prevent-swipe aria-hidden={active?.editing ? "true" : "false"}>
         <button className={"mobile-bottom-bar__item" + (sidebarOpen ? " active" : "")} onClick={() => { tapFeedback(); openSidebar(!sidebarOpen); }} aria-label="文档树" title="文档树"><Files /></button>
         <button className={"mobile-bottom-bar__item" + (tabsOpen ? " active" : "")} onClick={() => { tapFeedback(); setTabsOpen(true); }} aria-label="标签页" title="标签页"><FileText />{tabs.length > 0 && <span className="bottom-bar-count">{tabs.length}</span>}</button>
         <button className={"mobile-bottom-bar__item" + (outlineOpen ? " active" : "")} onClick={() => { tapFeedback(); openOutline(!outlineOpen); }} aria-label="大纲" title="大纲"><ListTree /></button>
-        <button className={"mobile-bottom-bar__item" + (active?.editing ? " active" : "")} disabled={!active} onClick={toggleEdit} aria-label={active?.editing ? "完成" : "编辑"} title={active?.editing ? "完成" : "编辑"}>{active?.editing ? <Check /> : <Pencil />}</button>
         <button className={"mobile-bottom-bar__item" + (moreOpen ? " active" : "")} onClick={() => { tapFeedback(); setMoreOpen(true); }} aria-label="更多" title="更多"><MoreHorizontal /></button>
       </nav>
 
@@ -401,10 +403,12 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
           { id: "switch-nb", label: "切换笔记本", icon: ArrowLeftRight, note: title },
           { id: "search", label: "搜索", icon: Search },
           { id: "settings", label: "设置", icon: Settings },
+          ...(active ? [{ id: "toggle-edit", label: active.editing ? "完成编辑" : "编辑本文", icon: Pencil }] : []),
         ]}
         onClose={() => setMoreOpen(false)}
         onSelect={(it) => {
           setMoreOpen(false);
+          if (it.id === "toggle-edit") { toggleEdit(); return; }
           if (it.id === "new-doc") onCreateNote();
           else if (it.id === "switch-nb") setNotebookSwitchOpen(true);
           else if (it.id === "search") onOpenSearch();

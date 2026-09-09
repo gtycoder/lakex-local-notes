@@ -54,21 +54,20 @@
 .med-btn.med-b { font-weight: 700; font-size: 18px; }
 
 .med-panel {
-  /* 展开面板：长在工具栏**上方**（思源 .keyboard 口径——不接管输入法，
-     所以点格式按钮不会引发"键盘收起→面板弹出"的对撞闪烁，且编辑器焦点/选区始终活着，命令才生效） */
+  /* 展开面板：**占住输入法键盘区**（bottom:0 + 高=--kb-offset），工具栏停在它上沿不动
+     → 视觉上是"工具栏向下展开盖住键盘"；键盘是在面板背后滑走的，所以不闪。 */
   position: fixed;
   left: 0;
   right: 0;
-  bottom: calc(var(--kb-offset, 0px) + var(--mobile-bottom-bar-height, 48px) + 6px);
+  bottom: 0;
   pointer-events: auto;
   background: var(--b3-theme-background);
   border: 0;
   border-top: 1px solid var(--b3-theme-surface-lighter);
-  border-bottom: 1px solid var(--b3-theme-surface-lighter);
   box-shadow: none;
   padding: 12px 12px 14px;
-  max-height: min(44dvh, 340px);
-  height: auto;
+  height: calc(var(--kb-offset, 0px));
+  max-height: 60dvh;
   overflow-y: auto;
   overscroll-behavior: contain;
   scrollbar-width: none;
