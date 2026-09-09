@@ -91,9 +91,10 @@ vi.mock("./sqliteDb.js", async () => {
   };
 });
 
-const { loadAssetBytesFs, listAssetKeysFs } = vi.hoisted(() => ({
+const { loadAssetBytesFs, listAssetKeysFs, listNoteAssetKeysFs } = vi.hoisted(() => ({
   loadAssetBytesFs: vi.fn(async () => new Uint8Array([1, 2, 3])),
   listAssetKeysFs: vi.fn(async () => ["note-1/image.png"]),
+  listNoteAssetKeysFs: vi.fn(async (noteId: string) => [`${noteId}/image.png`]),
 }));
 
 vi.mock("./persistence", () => ({
@@ -104,6 +105,7 @@ vi.mock("./assetFs", () => ({
   saveAssetBytesFs: vi.fn(async () => {}),
   loadAssetBytesFs,
   listAssetKeysFs,
+  listNoteAssetKeysFs,
 }));
 
 import { bridge } from "./bridge.js";
@@ -120,6 +122,8 @@ describe("mobile startup performance contract", () => {
       "<p>large body</p>",
       null,
     );
+    expect(listNoteAssetKeysFs).toHaveBeenCalledWith("startup-note");
+    expect(listAssetKeysFs).not.toHaveBeenCalled();
 
     const notes = await bridge.listNotes();
 

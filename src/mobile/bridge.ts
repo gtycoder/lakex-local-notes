@@ -7,7 +7,7 @@
  */
 import { SqlJsDb } from "./sqliteDb";
 import { loadSnapshot, saveSnapshot } from "./persistence";
-import { saveAssetBytesFs, loadAssetBytesFs, listAssetKeysFs, removeAssetBytesFs } from "./assetFs";
+import { saveAssetBytesFs, loadAssetBytesFs, listAssetKeysFs, listNoteAssetKeysFs, removeAssetBytesFs } from "./assetFs";
 import { syncNow as runSync, downloadNoteAssets, type SyncConfig, type SyncDbPort, type SyncReport } from "../core/syncEngine.js";
 import { buildGcKeepSet } from "../core/gcDecisions.js";
 import { parseLakeManifest, objectKey } from "../core/syncUtils.js";
@@ -260,8 +260,7 @@ async function detectOrphans(noteId: string, content: string): Promise<void> {
   const referenced = extractAssetRefs(content);
   const historyRefs = getHistoryRefs(noteId);
   const prefix = noteId + "/";
-  const keys = new Set<string>();
-  for (const k of await listAssetKeysFs()) if (k.startsWith(prefix)) keys.add(k.slice(prefix.length));
+  const keys = new Set((await listNoteAssetKeysFs(noteId)).map((key) => key.slice(prefix.length)));
   for (const [key] of assets) if (key.startsWith(prefix)) keys.add(key.slice(prefix.length));
   const insert = d.prepare("INSERT OR IGNORE INTO orphan_assets (note_id, filename, file_path, size, mime_type) VALUES (?,?,?,?,?)");
   const unorphan = d.prepare("DELETE FROM orphan_assets WHERE note_id=? AND filename=?");
@@ -630,18 +629,17 @@ const dbPort: SyncDbPort = {
     const out = [];
     const prefix = noteId + "/";
     const orphans = orphanFilenamesForNote(noteId); // 孤儿不上传（对齐桌面 syncAdapters 跳过 orphan）
-    const keys = new Set(await listAssetKeysFs());
-    for (const key of keys) {
-      if (!key.startsWith(prefix)) continue;
-      const filename = key.slice(prefix.length);
+    const diskFilenames = new Set((await listNoteAssetKeysFs(noteId)).map((key) => key.slice(prefix.length)));
+    for (const filename of diskFilenames) {
       if (orphans.has(filename)) continue;
-      const bytes = assets.get(key) ?? await loadAssetBytesFs(key);
+      const bytes = assets.get(prefix + filename) ?? await loadAssetBytesFs(prefix + filename);
       if (!bytes) continue;
       out.push({ filename, size: bytes.length, hash: sha256Sync(bytes) });
     }
     for (const [key, bytes] of assets) {
-      if (!key.startsWith(prefix) || keys.has(key)) continue;
+      if (!key.startsWith(prefix)) continue;
       const filename = key.slice(prefix.length);
+      if (diskFilenames.has(filename)) continue;
       if (orphans.has(filename)) continue;
       out.push({ filename, size: bytes.length, hash: sha256Sync(bytes) });
     }

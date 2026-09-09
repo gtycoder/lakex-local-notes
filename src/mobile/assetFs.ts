@@ -78,24 +78,48 @@ export async function removeAssetBytesFs(key: string): Promise<void> {
   }
 }
 
-/** 列出全部已持久化资产键（{noteId}/{file}），供启动时载入内存。 */
+/** 列出单个普通笔记目录下的资产键（{noteId}/{file}）。 */
+export async function listNoteAssetKeysFs(noteId: string): Promise<string[]> {
+  try {
+    const dir = await Filesystem.readdir({ path: `${ROOT}/${noteId}`, directory: Directory.Data });
+    return dir.files.filter((f) => f.type === "file").map((f) => `${noteId}/${f.name}`);
+  } catch {
+    return []; // 目录不存在或损坏时按无资产处理
+  }
+}
+
+/** 列出单条小记目录下的资产键（quick-notes/{quickNoteId}/{file}）。 */
+export async function listQuickNoteAssetKeysFs(quickNoteId: string): Promise<string[]> {
+  try {
+    const dir = await Filesystem.readdir({ path: `${ROOT}/quick-notes/${quickNoteId}`, directory: Directory.Data });
+    return dir.files.filter((f) => f.type === "file").map((f) => `quick-notes/${quickNoteId}/${f.name}`);
+  } catch {
+    return [];
+  }
+}
+
+/** 列出全部已持久化资产键；仅供诊断/缓存统计，同步与保存路径应使用按笔记目录的函数。 */
 export async function listAssetKeysFs(): Promise<string[]> {
   const keys: string[] = [];
-  let noteIds: string[] = [];
+  let entries: Array<{ name: string; type?: string }> = [];
   try {
     const root = await Filesystem.readdir({ path: ROOT, directory: Directory.Data });
-    noteIds = root.files.map((f) => f.name).filter((n) => n && n !== "." && n !== "..");
+    entries = root.files.filter((f) => f.type === "directory" && f.name && f.name !== "." && f.name !== "..");
   } catch {
-    return keys; // 根目录不存在 = 无资产
+    return keys;
   }
-  for (const noteId of noteIds) {
-    try {
-      const dir = await Filesystem.readdir({ path: `${ROOT}/${noteId}`, directory: Directory.Data });
-      for (const f of dir.files) {
-        if (f.type === "file") keys.push(`${noteId}/${f.name}`);
+  for (const entry of entries) {
+    if (entry.name === "quick-notes") {
+      try {
+        const quickRoot = await Filesystem.readdir({ path: `${ROOT}/quick-notes`, directory: Directory.Data });
+        for (const quickNote of quickRoot.files.filter((f) => f.type === "directory")) {
+          keys.push(...await listQuickNoteAssetKeysFs(quickNote.name));
+        }
+      } catch {
+        // 小记根目录损坏时跳过
       }
-    } catch {
-      // 单目录损坏跳过
+    } else {
+      keys.push(...await listNoteAssetKeysFs(entry.name));
     }
   }
   return keys;
