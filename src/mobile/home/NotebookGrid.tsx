@@ -1,94 +1,62 @@
 /**
- * 知识库列表（思源口径：.b3-list--mobile 行 = 图标 18 + 名称 + .counter 文档数 + 右箭头；不再是 3:4 卡片宫格）。
- * 排序：长按进排序模式（拖动调整顺序，松手持久化 bridge.moveTreeNodeOrdered）。
+ * 知识库展示（首页第二块）：
+ * - view="shelf"：书架 —— 3:4 白卡宫格（图标 emoji + 名称，名称带「序号-」前缀）；
+ * - view="list" ：列表行（.b3-list--mobile 行 = 图标 + 名称 + .counter 文档数 + 右箭头）。
+ * 排序：**不提供移动端重排**（知识库顺序 = 桌面/同步的 sort_order，见 HANDOFF/AGENTS 同步语义——
+ *       移动端不写 sort_order，展示的就是共享目录顺序 = 桌面端顺序）。长按拖动重排已移除，点击直接进入。
  */
-import { useRef, useState } from "react";
-import { BookOpen, Check, GripVertical, X, ChevronRight } from "lucide-react";
 import type { TreeNode } from "../../lib/types";
+import type { LibraryView } from "./HomePage";
+import { BookOpen, ChevronRight } from "lucide-react";
 
 export interface NotebookGridProps {
   notebooks: TreeNode[];
   /** 每个笔记本下的文档数（.counter 展示） */
   docCounts: Record<string, number>;
+  /** 布局：shelf=书架宫格 / list=列表行 */
+  view: LibraryView;
+  /** 书架视图是否给名称加「序号-」前缀（按排列顺序显示序号，非排序依据） */
+  namePrefix?: boolean;
   onOpenNotebook: (id: string) => void;
-  /** 持久化排序：传入新的排序 id 列表。 */
-  onReorder: (orderedIds: string[]) => Promise<void>;
 }
 
 export function NotebookGrid(props: NotebookGridProps) {
-  const { notebooks, docCounts, onOpenNotebook, onReorder } = props;
-  const [sorting, setSorting] = useState(false);
-  const [items, setItems] = useState<TreeNode[]>(notebooks);
-  const dragIdRef = useRef<string | null>(null);
-  const dragOverIdRef = useRef<string | null>(null);
-  const longPressRef = useRef<number | null>(null);
-
-  const startSort = () => { setItems(notebooks); setSorting(true); };
-  const cancelSort = () => { setSorting(false); };
-  const finishSort = async () => {
-    setSorting(false);
-    try { await onReorder(items.map((n) => n.id)); } catch { /* 持久化失败由调用方提示 */ }
-  };
-  const handleDragStart = (id: string) => { dragIdRef.current = id; };
-  const handleDragOver = (id: string) => {
-    if (!dragIdRef.current || dragIdRef.current === id || dragOverIdRef.current === id) return;
-    dragOverIdRef.current = id;
-    setItems((prev) => {
-      const from = prev.findIndex((n) => n.id === dragIdRef.current);
-      const to = prev.findIndex((n) => n.id === id);
-      if (from < 0 || to < 0) return prev;
-      const next = [...prev];
-      const [moved] = next.splice(from, 1);
-      next.splice(to, 0, moved);
-      return next;
-    });
-  };
-  const handleDragEnd = () => { dragIdRef.current = null; dragOverIdRef.current = null; };
-  const clearLongPress = () => { if (longPressRef.current !== null) { window.clearTimeout(longPressRef.current); longPressRef.current = null; } };
+  const { notebooks, docCounts, view, namePrefix, onOpenNotebook } = props;
 
   if (notebooks.length === 0) return <div className="mobile-empty">暂无知识库</div>;
 
-  return (
-    <>
-      {sorting && (
-        <div className="mobile-sortbar">
-          <span>拖动调整顺序</span>
-          <button onClick={() => void finishSort()} aria-label="完成"><Check size={18} /></button>
-          <button onClick={cancelSort} aria-label="取消"><X size={18} /></button>
-        </div>
-      )}
-      <div className="b3-list b3-list--mobile mobile-nb-list">
-        {(sorting ? items : notebooks).map((nb) => (
-          <div
-            key={nb.id}
-            className="b3-list-item mobile-nb-row"
-            role="button"
-            tabIndex={0}
-            draggable={sorting}
-            onClick={() => !sorting && onOpenNotebook(nb.id)}
-            onDragStart={() => handleDragStart(nb.id)}
-            onDragOver={(e) => { e.preventDefault(); handleDragOver(nb.id); }}
-            onDragEnd={handleDragEnd}
-            onDragLeave={() => { if (dragOverIdRef.current === nb.id) dragOverIdRef.current = null; }}
-            onContextMenu={(e) => { e.preventDefault(); if (!sorting) startSort(); }}
-            onTouchStart={(e) => {
-              if (sorting) return;
-              longPressRef.current = window.setTimeout(() => { longPressRef.current = null; startSort(); }, 600);
-              void e;
-            }}
-            onTouchEnd={clearLongPress}
-            onTouchMove={clearLongPress}
-            onTouchCancel={clearLongPress}
-          >
-            <span className="b3-list-item__graphic">
-              {sorting ? <GripVertical size={18} /> : nb.icon ? <span className="ln-node-emoji">{nb.icon}</span> : <BookOpen size={18} />}
-            </span>
-            <span className="b3-list-item__text">{nb.title}</span>
-            <span className="counter">{docCounts[nb.id] ?? 0}</span>
-            {!sorting && <span className="b3-list-item__arrow"><ChevronRight size={16} /></span>}
-          </div>
-        ))}
+  // 书架视图：白卡（点开即进）
+  if (view === "shelf") {
+    return (
+      <div className="nb-shelf">
+        {notebooks.map((nb, i) => {
+          const label = namePrefix ? `${String(i + 1).padStart(2, "0")}-${nb.title}` : nb.title;
+          return (
+            <div key={nb.id} className="nb-shelf-card" role="button" tabIndex={0} onClick={() => onOpenNotebook(nb.id)}>
+              <div className="nb-shelf-cover">
+                {nb.icon ? <span className="nb-shelf-emoji">{nb.icon}</span> : <BookOpen size={28} className="nb-shelf-line" />}
+              </div>
+              <div className="nb-shelf-name">{label}</div>
+            </div>
+          );
+        })}
       </div>
-    </>
+    );
+  }
+
+  // 列表视图：静态行（数据顺序 = 共享 sort_order = 桌面端顺序）
+  return (
+    <div className="b3-list b3-list--mobile mobile-nb-list">
+      {notebooks.map((nb) => (
+        <div key={nb.id} className="b3-list-item mobile-nb-row" role="button" tabIndex={0} onClick={() => onOpenNotebook(nb.id)}>
+          <span className="b3-list-item__graphic">
+            {nb.icon ? <span className="ln-node-emoji">{nb.icon}</span> : <BookOpen size={18} />}
+          </span>
+          <span className="b3-list-item__text">{nb.title}</span>
+          <span className="counter">{docCounts[nb.id] ?? 0}</span>
+          <span className="b3-list-item__arrow"><ChevronRight size={16} /></span>
+        </div>
+      ))}
+    </div>
   );
 }

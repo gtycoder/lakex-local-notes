@@ -49,7 +49,19 @@
 }
 .med-btn > svg { width: 20px; height: 20px; }
 .med-btn:active, .med-btn:focus-visible { background: var(--b3-list-hover); }
-.med-btn.med-active { color: var(--b3-theme-primary); background: var(--b3-theme-primary-lightest); }
+/* 命令生效（B/列表/待办等）：主色文字 + 主色浅底 + 主色描边，突出"光标处正在生效" */
+.med-btn.med-active {
+  color: var(--b3-theme-primary);
+  background: var(--b3-theme-primary-lightest);
+  box-shadow: inset 0 0 0 1px var(--b3-theme-primary-light);
+}
+/* 类别按钮（+ / Aa）：展开面板时图标变 ×（关闭）并高亮为实心主色圆钮（Lake 官方口径）；
+   仅"展开态"启用圆角，其余时刻与普通按钮一致，避免工具栏混用两种形状。 */
+.med-btn.med-toggle.med-open {
+  color: var(--b3-theme-on-primary);
+  background: var(--b3-theme-primary);
+  border-radius: calc(var(--mobile-bottom-bar-height, 48px) / 2 - 4px);
+}
 .med-btn.med-aa { font-weight: 700; font-size: 17px; }
 .med-btn.med-b { font-weight: 700; font-size: 18px; }
 
@@ -118,6 +130,12 @@
   transition: background-color var(--mobile-duration-press) ease;
 }
 .med-f-btn:active { background: var(--b3-list-hover); }
+/* 面板内命令生效（加粗/斜体/下划线/列表等）：主色 + 浅底 + 描边 */
+.med-f-btn.med-f-on {
+  color: var(--b3-theme-primary);
+  background: var(--b3-theme-primary-lightest);
+  box-shadow: inset 0 0 0 1px var(--b3-theme-primary-light);
+}
 .med-f-btn.med-b { font-weight: 700; }
 .med-f-btn.med-i { font-style: italic; }
 .med-f-btn.med-s { text-decoration: line-through; }

@@ -181,20 +181,14 @@ export function MobileApp() {
         <HomePage
           tab={route.tab}
           notebooks={notebooks}
+          notes={notes}
           quickNotes={quickNotes}
           docCounts={docCounts}
           onTabChange={(tab) => setRoute({ kind: "home", tab })}
           onOpenNotebook={(id) => setRoute({ kind: "notebook", notebookId: id })}
-          onReorderNotebooks={async (orderedIds) => {
-            // 根层笔记本重排：单事务更新 sort_order（reorderSiblings），同步后传播
-            await bridge.reorderSiblings(null, orderedIds);
-            await refreshAll();
-            showToast("已调整笔记本顺序（同步后传播）");
-          }}
           onOpenNote={(id) => void openNote(id, "viewer")}
           onOpenDrawer={() => setDrawerOpen(true)}
           onOpenSearch={() => setSearchOpen(true)}
-          onCreateNote={() => void createNoteInParent(null)} // 无默认笔记本：bridge 兜底（存在的笔记本/自动建"未分类"）
           onCreateNotebook={() => setCreateNbOpen(true)}
           onQuickNotesChanged={refreshAll}
         />

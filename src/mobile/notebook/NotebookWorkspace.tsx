@@ -65,6 +65,7 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
   const [tabsOpen, setTabsOpen] = useState(false);
   const [notebookSwitchOpen, setNotebookSwitchOpen] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
+  const [navHidden, setNavHidden] = useState(false);
   // 思源：左右两侧面板互斥（都是 100vw 全屏抽屉，同时开会互相盖住）
   const openSidebar = useCallback((v: boolean) => { setSidebarOpen(v); if (v) { setOutlineOpen(false); setTabsOpen(false); } }, []);
   const openOutline = useCallback((v: boolean) => { setOutlineOpen(v); if (v) { setSidebarOpen(false); setTabsOpen(false); } }, []);
@@ -101,13 +102,22 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
 
   useEffect(() => { void loadTree(); }, [loadTree]);
 
-  // 初次进入：优先恢复上次打开的标签（本地持久化），否则开指定文档/树中第一个（仅一次）
+  // 初次进入（仅一次）：
+  //  - 显式指定了要打开的文档（首页「最近文档」/搜索/新建）→ 优先开它并置为活动标签（修"点最近文档直达不了"）；
+  //    其余上次已存的标签（不含它）补开，不覆盖它的激活态；
+  //  - 否则恢复上次打开的标签（本地持久化）；
+  //  - 否则开树中第一个。
   useEffect(() => {
     if (autoOpenedRef.current) return;
     let saved: string[] = [];
     try { saved = JSON.parse(localStorage.getItem(TABS_KEY) ?? "[]") as string[]; } catch { saved = []; }
+    if (initialNoteId) {
+      autoOpenedRef.current = true;
+      saved.filter((id) => id !== initialNoteId).forEach((id) => void openTab(id));
+      void openTab(initialNoteId);
+      return;
+    }
     if (saved.length > 0) { autoOpenedRef.current = true; saved.forEach((id) => void openTab(id)); return; }
-    if (initialNoteId) { autoOpenedRef.current = true; void openTab(initialNoteId); return; }
     const first = findFirstNote(tree);
     if (first) { autoOpenedRef.current = true; void openTab(first.id); }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -175,6 +185,23 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
   const { schedule: scheduleAutoSave, flush: flushAutoSave } = useAutoSave(async (id, title, content) => {
     await bridge.saveNote(id, title, content);
   });
+
+  // 阅读态：文档下滑 → 底栏隐藏；上滑 → 弹出（思源设计，修"阅读时底部悬浮框消失后不再出现"）
+  useEffect(() => {
+    if (active?.editing) { setNavHidden(false); return; }
+    const scroller = document.querySelector<HTMLElement>(".doc-pane.active .mobile-doc-body");
+    if (!scroller) return;
+    setNavHidden(false);
+    let last = scroller.scrollTop;
+    const onScroll = () => {
+      const cur = scroller.scrollTop;
+      if (cur - last > 8) setNavHidden(true);
+      else if (last - cur > 8) setNavHidden(false);
+      last = cur;
+    };
+    scroller.addEventListener("scroll", onScroll, { passive: true });
+    return () => scroller.removeEventListener("scroll", onScroll);
+  }, [activeId, active?.editing, tabs.length]);
 
   const toggleEdit = useCallback(() => {
     if (!active) return;
@@ -388,7 +415,7 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
 
       {/* 底部胶囊栏（思源 #mobileBottomBar：纯图标）——只放阅读相关（文档树/标签/大纲/更多）；
           编辑与同步在顶栏右侧，避免打字时误触（用户 260909）。编辑态整条下滑淡出而不是卸载。 */}
-      <nav className={"mobile-bottom-bar" + (active?.editing ? " mobile-bottom-bar--hidden" : "")} data-prevent-swipe aria-hidden={active?.editing ? "true" : "false"}>
+      <nav className={"mobile-bottom-bar" + ((active?.editing || navHidden) ? " mobile-bottom-bar--hidden" : "")} data-prevent-swipe aria-hidden={(active?.editing || navHidden) ? "true" : "false"}>
         <button className={"mobile-bottom-bar__item" + (sidebarOpen ? " active" : "")} onClick={() => { tapFeedback(); openSidebar(!sidebarOpen); }} aria-label="文档树" title="文档树"><Files /></button>
         <button className={"mobile-bottom-bar__item" + (tabsOpen ? " active" : "")} onClick={() => { tapFeedback(); setTabsOpen(true); }} aria-label="标签页" title="标签页"><FileText />{tabs.length > 0 && <span className="bottom-bar-count">{tabs.length}</span>}</button>
         <button className={"mobile-bottom-bar__item" + (outlineOpen ? " active" : "")} onClick={() => { tapFeedback(); openOutline(!outlineOpen); }} aria-label="大纲" title="大纲"><ListTree /></button>

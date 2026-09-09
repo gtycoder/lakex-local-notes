@@ -1,16 +1,22 @@
 /**
  * 第一层（首页）：小记 / 知识库 两个 tab。
- * 思源口径：顶栏 = .toolbar--border + .toolbar__button（48×48 图标）；tab 用「底部指示线」语言（与桌面 .ln-tabs 同源）；
- * 列表 = .b3-list--mobile 平铺行（不再白卡阴影）；新建/同步走底部胶囊栏（思源移动端没有 FAB）。
+ * 布局（对齐 Yuque 官方移动端首层）：
+ * - 小记 → 卡片（图在上/文在下/日期+更多「...」）；
+ * - 知识库 → 「最近文档」横向卡 + 笔记本书架（3:4 彩面书卡，右上角切换 书架↔列表）；
+ * - 空态不做「创建」提示（默认空白即可）；
+ * - 底部胶囊栏 = [筛选 | 新建 | 云同步]（新建按 tab 记性：小记=写小记、知识库=新建笔记本）。
  */
-import { useState } from "react";
-import { CloudUpload, FilePlus, Plus, Search, Settings, StickyNote } from "lucide-react";
+import { useMemo, useRef, useState } from "react";
+import { CloudUpload, List, LayoutGrid, ArrowUpDown, MoreHorizontal, Pencil, Plus, Search, Settings, Trash2, FileText, FolderOpen } from "lucide-react";
 import type { TreeNode } from "../../lib/types";
+import type { POCNoteSummary } from "../bridge";
 import { NotebookGrid } from "./NotebookGrid";
 import { QuickNoteComposer } from "./QuickNoteComposer";
+import { MobileSheetMenu, type MobileSheetItem } from "../ui/MobileSheetMenu";
+import { confirmMobile } from "../ui/ConfirmDialog";
+import { showToast } from "../ui/toastBus";
 import { bridge } from "../bridge";
 import { useHorizontalSwipe } from "../useHorizontalSwipe";
-import { showToast } from "../ui/toastBus";
 import { tapFeedback } from "../ui/haptics";
 import { localAssetHttpUrl } from "../../core/assetUrl.js";
 
@@ -23,38 +29,67 @@ export interface MobileQuickNote {
   firstImage: string | null;
 }
 
+export type LibraryView = "shelf" | "list";
+type QuickSort = "recent" | "oldest";
+
 export interface HomePageProps {
   tab: "quick" | "library";
   notebooks: TreeNode[];
+  /** 全部笔记（「最近文档」用，按 updatedAt 取最近 N 条） */
+  notes: POCNoteSummary[];
   quickNotes: MobileQuickNote[];
-  /** 笔记本 → 文档数（列表行 .counter） */
+  /** 笔记本 → 文档数 */
   docCounts: Record<string, number>;
   onTabChange: (tab: "quick" | "library") => void;
   onOpenNotebook: (id: string) => void;
-  onReorderNotebooks: (orderedIds: string[]) => Promise<void>;
   onOpenNote: (id: string) => void;
   onOpenDrawer: () => void;
   onOpenSearch: () => void;
-  onCreateNote: () => void;
   onCreateNotebook: () => void;
   onQuickNotesChanged: () => Promise<void>;
 }
 
 type ComposerState = { mode: "new" } | { mode: "edit"; id: string } | null;
 
+const VIEW_KEY = "lake-notes-mobile.libraryView";
+
+function fmtDate(iso: string): string {
+  try { const d = new Date(iso); return `${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")} ${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}`; }
+  catch { return iso; }
+}
+
 export function HomePage(props: HomePageProps) {
   const {
-    tab, notebooks, quickNotes, docCounts, onTabChange, onOpenNotebook, onReorderNotebooks,
-    onOpenDrawer, onOpenSearch, onCreateNote, onCreateNotebook, onQuickNotesChanged,
+    tab, notebooks, notes, quickNotes, docCounts, onTabChange, onOpenNotebook,
+    onOpenNote, onOpenDrawer, onOpenSearch, onCreateNotebook, onQuickNotesChanged,
   } = props;
   const [composer, setComposer] = useState<ComposerState>(null);
   const [editNote, setEditNote] = useState<{ id: string; text: string; images: import("../../core/quickNoteModel.js").StoredQuickNoteImage[] } | null>(null);
+  const [libraryView, setLibraryView] = useState<LibraryView>(() => (localStorage.getItem(VIEW_KEY) === "list" ? "list" : "shelf"));
+  const [quickMenuFor, setQuickMenuFor] = useState<string | null>(null);
+  const [filterOpen, setFilterOpen] = useState(false);
+  const [quickSort, setQuickSort] = useState<QuickSort>("recent");
+  const [enterDir, setEnterDir] = useState<"left" | "right">("right");
+  const enteredOnceRef = useRef(false);
 
-  // 左右横滑切换小记 ↔ 知识库（左滑→知识库，右滑→小记）
+  // 左右横滑切换小记 ↔ 知识库（左滑→知识库，右滑→小记），带方向性滑动入场动效
   useHorizontalSwipe((dir) => {
-    if (dir === "left" && tab === "quick") onTabChange("library");
-    else if (dir === "right" && tab === "library") onTabChange("quick");
+    if (dir === "left" && tab === "quick") { enteredOnceRef.current = true; setEnterDir("right"); onTabChange("library"); }
+    else if (dir === "right" && tab === "library") { enteredOnceRef.current = true; setEnterDir("left"); onTabChange("quick"); }
   });
+
+  // 「最近文档」= 最近更新的 N 条笔记（代理；如需"最近打开"后续再加 last_opened_at 追踪）
+  const recentNotes = useMemo(() => {
+    return [...notes].sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()).slice(0, 6);
+  }, [notes]);
+
+  const sortedQuickNotes = useMemo(() => {
+    const arr = [...quickNotes];
+    arr.sort((a, b) => quickSort === "recent"
+      ? new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
+      : new Date(a.updatedAt).getTime() - new Date(b.updatedAt).getTime());
+    return arr;
+  }, [quickNotes, quickSort]);
 
   const openEdit = async (id: string): Promise<void> => {
     try {
@@ -65,12 +100,39 @@ export function HomePage(props: HomePageProps) {
     } catch { /* 读取失败忽略 */ }
   };
   const closeComposer = (): void => { setComposer(null); setEditNote(null); };
-  const switchTab = (next: "quick" | "library"): void => { tapFeedback(); onTabChange(next); };
+  const switchTab = (next: "quick" | "library"): void => { tapFeedback(); enteredOnceRef.current = true; setEnterDir(next === "library" ? "right" : "left"); onTabChange(next); };
   const runSync = async (): Promise<void> => {
     tapFeedback();
     try { const r = await bridge.syncNow(); showToast(r.message || "已同步"); }
     catch (e) { showToast("同步失败：" + (e as Error).message, { type: "error" }); }
   };
+  const toggleView = (): void => {
+    tapFeedback();
+    setLibraryView((v) => { const nv = v === "shelf" ? "list" : "shelf"; try { localStorage.setItem(VIEW_KEY, nv); } catch { /* 忽略 */ } return nv; });
+  };
+
+  const deleteQuickNote = async (id: string): Promise<void> => {
+    const ok = await confirmMobile({ title: "删除小记？", body: "小记不备份，删除后不可恢复。", confirmText: "删除", danger: true });
+    if (!ok) return;
+    try { await bridge.deleteQuickNote(id); await onQuickNotesChanged(); showToast("已删除小记"); }
+    catch { showToast("删除失败", { type: "error" }); }
+  };
+
+  // 排序（小记专用；知识库顺序 = 共享 sort_order = 桌面端顺序，不做本地排序）
+  const filterItems = useMemo<MobileSheetItem[]>(() => {
+    return [
+      { id: "recent", label: "最近更新", note: quickSort === "recent" ? "当前" : undefined },
+      { id: "oldest", label: "最早更新", note: quickSort === "oldest" ? "当前" : undefined },
+    ];
+  }, [quickSort]);
+  const onFilterSelect = (item: MobileSheetItem): void => {
+    setFilterOpen(false);
+    tapFeedback();
+    setQuickSort(item.id as QuickSort);
+  };
+
+  const viewIcon = libraryView === "shelf" ? <LayoutGrid size={20} /> : <List size={20} />;
+  const animClass = enteredOnceRef.current ? (enterDir === "right" ? " mobile-tab-in-right" : " mobile-tab-in-left") : "";
 
   return (
     <div className="mobile-home">
@@ -80,8 +142,11 @@ export function HomePage(props: HomePageProps) {
           <button className={tab === "quick" ? "mobile-htab active" : "mobile-htab"} onClick={() => switchTab("quick")}>小记</button>
           <button className={tab === "library" ? "mobile-htab active" : "mobile-htab"} onClick={() => switchTab("library")}>知识库</button>
         </div>
-        <button className="toolbar__button" onClick={onOpenSearch} aria-label="搜索" title="搜索"><Search /></button>
+        {tab === "quick" && <button className="toolbar__button" onClick={() => { tapFeedback(); setFilterOpen(true); }} aria-label="排序" title="排序"><ArrowUpDown /></button>}
+        {tab === "library" && <button className="toolbar__button" onClick={toggleView} aria-label={libraryView === "shelf" ? "切换到列表" : "切换到书架"} title={libraryView === "shelf" ? "切换到列表" : "切换到书架"}>{viewIcon}</button>}
       </header>
+
+      <div key={tab} className={"mobile-tab-stage" + animClass}>
       {tab === "quick" ? (
         composer !== null ? (
           <div className="mobile-scroll">
@@ -93,59 +158,91 @@ export function HomePage(props: HomePageProps) {
           </div>
         ) : (
           <div className="mobile-scroll">
-            {quickNotes.length === 0 ? (
-              <div className="mobile-empty">
-                暂无小记
-                <button className="b3-button b3-button--outline mobile-empty-action" onClick={() => { setEditNote(null); setComposer({ mode: "new" }); }}>
-                  <Plus size={16} />写一条小记
-                </button>
-              </div>
+            {sortedQuickNotes.length === 0 ? (
+              <div className="mobile-empty">暂无小记</div>
             ) : (
-              <div className="b3-list b3-list--mobile mobile-quick-list">
-                {quickNotes.map((n) => <QuickNoteRow key={n.id} note={n} onEdit={() => void openEdit(n.id)} />)}
+              <div className="mobile-quick-cards">
+                {sortedQuickNotes.map((n) => (
+                  <QuickNoteCard key={n.id} note={n} onEdit={() => void openEdit(n.id)} onMore={() => { tapFeedback(); setQuickMenuFor(n.id); }} />
+                ))}
               </div>
             )}
           </div>
         )
       ) : (
         <div className="mobile-scroll">
-          <NotebookGrid notebooks={notebooks} docCounts={docCounts} onOpenNotebook={onOpenNotebook} onReorder={onReorderNotebooks} />
-          {notebooks.length === 0 && (
-            <div className="mobile-empty">
-              暂无知识库
-              <button className="b3-button b3-button--outline mobile-empty-action" onClick={onCreateNotebook}><Plus size={16} />新建知识库</button>
-            </div>
+          {libraryView === "shelf" && recentNotes.length > 0 && (
+            <>
+              <div className="home-section-title">最近文档</div>
+              <div className="home-recent">
+                {recentNotes.map((r) => (
+                  <button key={r.id} className="home-recent-card" onClick={() => { tapFeedback(); onOpenNote(r.id); }} aria-label={r.title || "文档"}>
+                    <span className="home-recent-inner">
+                      <span className="home-recent-icon"><FileText size={16} /></span>
+                      <span className="home-recent-name">{r.title || "无标题"}</span>
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </>
           )}
+          <NotebookGrid
+            notebooks={notebooks}
+            docCounts={docCounts}
+            view={libraryView}
+            namePrefix={libraryView === "shelf"}
+            onOpenNotebook={onOpenNotebook}
+          />
         </div>
       )}
+      </div>
 
-      {/* 底部胶囊栏（思源 #mobileBottomBar：纯图标；移动端不用 FAB） */}
+      {/* 底部胶囊栏（首页）：搜索 | 新建 | 云同步（仿第二层悬浮栏：纯图标胶囊条）；排序已移到右上角 */}
       <nav className="mobile-bottom-bar" aria-label="首页操作">
+        <button className="mobile-bottom-bar__item" onClick={() => { tapFeedback(); onOpenSearch(); }} aria-label="搜索" title="搜索"><Search /></button>
         {tab === "quick" ? (
           <button className="mobile-bottom-bar__item" onClick={() => { tapFeedback(); setEditNote(null); setComposer({ mode: "new" }); }} aria-label="新建小记" title="新建小记"><Plus /></button>
         ) : (
-          <>
-            <button className="mobile-bottom-bar__item" onClick={() => { tapFeedback(); onCreateNote(); }} aria-label="新建文档" title="新建文档"><FilePlus /></button>
-            <button className="mobile-bottom-bar__item" onClick={() => { tapFeedback(); onCreateNotebook(); }} aria-label="新建知识库" title="新建知识库"><Plus />
-            </button>
-          </>
+          <button className="mobile-bottom-bar__item" onClick={() => { tapFeedback(); onCreateNotebook(); }} aria-label="新建知识库" title="新建知识库"><FolderOpen /></button>
         )}
         <button className="mobile-bottom-bar__item" onClick={() => void runSync()} aria-label="立即同步" title="立即同步"><CloudUpload /></button>
       </nav>
+
+      {/* 小记「...」菜单 */}
+      <MobileSheetMenu
+        open={!!quickMenuFor}
+        items={[
+          { id: "edit", label: "编辑", icon: Pencil },
+          { id: "delete", label: "删除", icon: Trash2, danger: true },
+        ]}
+        onClose={() => setQuickMenuFor(null)}
+        onSelect={(it) => { const id = quickMenuFor; setQuickMenuFor(null); if (!id) return; if (it.id === "edit") void openEdit(id); else if (it.id === "delete") void deleteQuickNote(id); }}
+      />
+
+      {/* 筛选 / 排序 */}
+      <MobileSheetMenu
+        open={filterOpen}
+        items={filterItems}
+        onClose={() => setFilterOpen(false)}
+        onSelect={onFilterSelect}
+      />
     </div>
   );
 }
 
-/** 小记行：缩略图 40 + 单行摘要 + 时间（思源列表语言，不再是白卡）。 */
-function QuickNoteRow({ note, onEdit }: { note: MobileQuickNote; onEdit: () => void }) {
+/** 小记卡片：图（若有）在上、摘要+日期+「...」在下。 */
+function QuickNoteCard({ note, onEdit, onMore }: { note: MobileQuickNote; onEdit: () => void; onMore: () => void }) {
   const thumbUrl = note.firstImage ? localAssetHttpUrl(note.id, note.firstImage, { space: "quick-notes" }) : null;
   return (
-    <div className="b3-list-item mobile-quick-row" role="button" tabIndex={0} onClick={onEdit}>
-      <span className="b3-list-item__graphic mobile-quick-thumb">
-        {thumbUrl ? <img src={thumbUrl} alt="" loading="lazy" /> : <StickyNote size={18} />}
-      </span>
-      <span className="b3-list-item__text">{note.previewText || (note.imageCount > 0 ? "[图片]" : "（空白小记）")}</span>
-      <span className="b3-list-item__meta">{new Date(note.updatedAt).toLocaleDateString("zh-CN")}</span>
+    <div className="qn-card" role="button" tabIndex={0} onClick={onEdit}>
+      {thumbUrl && <img className="qn-card__img" src={thumbUrl} alt="" loading="lazy" />}
+      <div className="qn-card__body">
+        <div className="qn-card__text">{note.previewText || (note.imageCount > 0 ? "[图片]" : "（空白小记）")}</div>
+        <div className="qn-card__meta">
+          <span className="qn-card__date">{fmtDate(note.updatedAt)}</span>
+          <button className="qn-card__more" onClick={(e) => { e.stopPropagation(); onMore(); }} aria-label="更多"><MoreHorizontal size={18} /></button>
+        </div>
+      </div>
     </div>
   );
 }
