@@ -10,6 +10,7 @@ import { createPortal } from "react-dom";
 import { ExternalLink, FolderOpen, Paperclip, X } from "lucide-react";
 import { closeAttachmentPreview, subscribeAttachmentPreview, type AttachmentPreviewState } from "./attachmentPreviewController";
 import { formatFileSize } from "../../core/fileCard";
+import { withAssetAccessToken } from "../../lib/assetPort";
 import { SystemBars, SystemBarsStyle } from "@capacitor/core";
 
 const KIND_LABEL: Record<string, string> = {
@@ -59,6 +60,7 @@ export function AttachmentPreview() {
   // 桌面保留 PDF/音视频内联预览。注意不能用 isDesktop()——移动端也映射了 lakeNative。
   const win = window as Window & { Capacitor?: { isNativePlatform?: () => boolean } };
   const isMobileNative = typeof win.Capacitor !== "undefined" && !!win.Capacitor.isNativePlatform?.();
+  const authorizedSrc = withAssetAccessToken(item.src);
 
   return createPortal(
     <div className="attachment-preview" role="dialog" aria-modal="true" aria-label="附件预览"
@@ -82,16 +84,16 @@ export function AttachmentPreview() {
       <div className="attachment-preview__body">
         {/* 媒体（audio/video）内联播放（桌面/移动端一致）；PDF 桌面内联、移动端系统打开；其余系统打开 */}
         {!isMobileNative && kind === "pdf" && (
-          <embed src={item.src} type="application/pdf" className="attachment-preview__embed" />
+          <embed src={authorizedSrc} type="application/pdf" className="attachment-preview__embed" />
         )}
         {kind === "audio" && (
           <div className="attachment-preview__media">
-            <audio controls autoPlay src={item.src} className="attachment-preview__audio" />
+            <audio controls autoPlay src={authorizedSrc} className="attachment-preview__audio" />
             <p className="attachment-preview__hint">{item.name}</p>
           </div>
         )}
         {kind === "video" && (
-          <video controls autoPlay src={item.src} className="attachment-preview__video" />
+          <video controls autoPlay src={authorizedSrc} className="attachment-preview__video" />
         )}
         {(isMobileNative || kind === "pdf" || kind === "document" || kind === "archive" || kind === "other" || kind === "image") && (
           <div className="attachment-preview__fallback">

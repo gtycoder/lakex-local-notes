@@ -19,6 +19,7 @@ import { bridge } from "../bridge";
 import { useHorizontalSwipe } from "../useHorizontalSwipe";
 import { tapFeedback } from "../ui/haptics";
 import { localAssetHttpUrl } from "../../core/assetUrl.js";
+import { withAssetAccessToken } from "../../lib/assetPort";
 
 export interface MobileQuickNote {
   id: string;
@@ -232,7 +233,9 @@ export function HomePage(props: HomePageProps) {
 
 /** 小记卡片：图（若有）在上、摘要+日期+「...」在下。 */
 function QuickNoteCard({ note, onEdit, onMore }: { note: MobileQuickNote; onEdit: () => void; onMore: () => void }) {
-  const thumbUrl = note.firstImage ? localAssetHttpUrl(note.id, note.firstImage, { space: "quick-notes" }) : null;
+  const thumbUrl = note.firstImage
+    ? withAssetAccessToken(localAssetHttpUrl(note.id, note.firstImage, { space: "quick-notes" }))
+    : null;
   return (
     <div className="qn-card" role="button" tabIndex={0} onClick={onEdit}>
       {thumbUrl && <img className="qn-card__img" src={thumbUrl} alt="" loading="lazy" />}

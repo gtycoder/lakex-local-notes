@@ -26,4 +26,18 @@ describe("asset access token rewriting", () => {
     expect(addAssetAccessToken(content)).toBe(content);
     expect(stripAssetAccessToken(content)).toBe(content);
   });
+
+  it("uses the Android runtime token interface for direct asset URLs", async () => {
+    Object.defineProperty(globalThis, "window", {
+      configurable: true,
+      value: { lakeAssetToken: { getToken: () => "android-secret" } },
+    });
+    vi.resetModules();
+    const runtimeAssetPort = await import("./assetPort");
+
+    const url = "http://127.0.0.1:19876/note/image.webp";
+    const externalUrl = "https://example.test/image.png";
+    expect(runtimeAssetPort.withAssetAccessToken(url)).toContain("token=android-secret");
+    expect(runtimeAssetPort.withAssetAccessToken(externalUrl)).toBe(externalUrl);
+  });
 });

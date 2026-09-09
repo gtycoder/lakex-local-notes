@@ -14,8 +14,11 @@ import java.io.OutputStream;
 import java.net.InetAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.net.URI;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.SecureRandom;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ThreadFactory;
@@ -41,19 +44,24 @@ public final class AssetServer {
     private static final int BACKLOG = 8;
     private static final int BUFFER_SIZE = 64 * 1024;
     private static final int POOL_SIZE = 4;
+    /** Capacitor 当前配置 androidScheme=http，页面固定 origin 是 http://localhost。 */
+    private static final String ALLOWED_ORIGIN = "http://localhost";
 
     private static volatile ServerSocket sServerSocket;
     private static volatile ExecutorService sExecutor;
+    private static volatile String sToken;
     private static final AtomicBoolean sAccepting = new AtomicBoolean(false);
 
     private AssetServer() {}
 
     /** 幂等启动（MainActivity.onCreate 调用；daemon 线程随进程退出自动结束）。 */
-    public static synchronized void start(Context context) {
-        if (sServerSocket != null) return;
+    public static synchronized String start(Context context) {
+        if (sServerSocket != null) return sToken;
+        String token = randomToken();
         try {
             ServerSocket ss = new ServerSocket(PORT, BACKLOG, InetAddress.getByName("127.0.0.1"));
             sServerSocket = ss;
+            sToken = token;
             ExecutorService ex = Executors.newFixedThreadPool(POOL_SIZE, new ThreadFactory() {
                 private final java.util.concurrent.atomic.AtomicInteger n = new java.util.concurrent.atomic.AtomicInteger();
                 public Thread newThread(Runnable r) {
@@ -68,9 +76,12 @@ public final class AssetServer {
             acceptor.setDaemon(true);
             acceptor.start();
             Log.i(TAG, "asset server listening on http://127.0.0.1:" + PORT);
+            return token;
         } catch (IOException e) {
             Log.e(TAG, "asset server start failed: " + e.getMessage(), e);
             sServerSocket = null;
+            sToken = null;
+            return null;
         }
     }
 
@@ -100,20 +111,28 @@ public final class AssetServer {
             }
             // 读取剩余请求头（捕获 Range——音频/视频 seek 需要 206 部分响应）
             String rangeHeader = null;
+            String originHeader = null;
             for (;;) {
                 String line = reader.readLine();
                 if (line == null || line.isEmpty()) break;
                 if (line.regionMatches(true, 0, "Range:", 0, 6)) rangeHeader = line.substring(6).trim();
+                if (line.regionMatches(true, 0, "Origin:", 0, 7)) originHeader = line.substring(7).trim();
             }
             String target = parts[1];
             // 用 URI.getPath() 解码路径：URLDecoder 会把 '+' 解码成空格（小记文件名可能含 '+'），
             // URI.getPath() 保留 '+' 且自动剥离 query 段
             String decoded;
             try {
-                java.net.URI uri = new java.net.URI(target);
+                URI uri = new URI(target);
                 decoded = uri.getPath() != null ? uri.getPath() : target;
+                if (!isAuthorized(uri, originHeader)) {
+                    writeError(out, 403, "forbidden");
+                    return;
+                }
             } catch (Exception e) {
                 decoded = target;
+                writeError(out, 403, "forbidden");
+                return;
             }
             String rel = decoded.startsWith("/") ? decoded.substring(1) : decoded;
             if (rel.isEmpty()) { writeError(out, 404, "not found"); return; }
@@ -180,8 +199,8 @@ public final class AssetServer {
                 head.append("Content-Length: ").append(length).append("\r\n");
             }
             head.append("Content-Type: ").append(mime).append("\r\n");
-            // CORS：页面 origin 是 https://localhost（Capacitor 默认），本地资源跨源加载需要放行
-            head.append("Access-Control-Allow-Origin: *\r\n");
+            // CORS：仅放行本应用 WebView 的固定 origin；无 Origin 的媒体/图片请求由 token 保护。
+            head.append("Access-Control-Allow-Origin: ").append(ALLOWED_ORIGIN).append("\r\n");
             head.append("Access-Control-Allow-Methods: GET, HEAD\r\n");
             head.append("Accept-Ranges: bytes\r\n");
             // 文件名含唯一时间戳后缀，可长缓存（WebView 磁盘缓存，二次加载秒开）
@@ -225,7 +244,6 @@ public final class AssetServer {
         StringBuilder head = new StringBuilder(128);
         head.append("HTTP/1.1 ").append(code).append(" ").append(msg).append("\r\n");
         head.append("Content-Type: text/plain; charset=utf-8\r\n");
-        head.append("Access-Control-Allow-Origin: *\r\n");
         head.append("Content-Length: ").append(body.length).append("\r\n");
         head.append("Connection: close\r\n\r\n");
         out.write(head.toString().getBytes(StandardCharsets.UTF_8));
@@ -239,13 +257,48 @@ public final class AssetServer {
         StringBuilder head = new StringBuilder(128);
         head.append("HTTP/1.1 416 Range Not Satisfiable\r\n");
         head.append("Content-Type: text/plain; charset=utf-8\r\n");
-        head.append("Access-Control-Allow-Origin: *\r\n");
         head.append("Content-Range: bytes */").append(size).append("\r\n");
         head.append("Content-Length: ").append(body.length).append("\r\n");
         head.append("Connection: close\r\n\r\n");
         out.write(head.toString().getBytes(StandardCharsets.UTF_8));
         out.write(body);
         out.flush();
+    }
+
+    private static boolean isAuthorized(URI uri, String origin) {
+        if (sToken == null) return false;
+        String token = queryParameter(uri, "token");
+        if (token == null) return false;
+        boolean tokenMatches = MessageDigest.isEqual(
+            token.getBytes(StandardCharsets.UTF_8),
+            sToken.getBytes(StandardCharsets.UTF_8)
+        );
+        return tokenMatches && (origin == null || ALLOWED_ORIGIN.equals(origin));
+    }
+
+    private static String queryParameter(URI uri, String name) {
+        String query = uri.getRawQuery();
+        if (query == null) return null;
+        for (String pair : query.split("&")) {
+            int equals = pair.indexOf('=');
+            String key = equals >= 0 ? pair.substring(0, equals) : pair;
+            if (!name.equals(key)) continue;
+            String value = equals >= 0 ? pair.substring(equals + 1) : "";
+            try {
+                return URLDecoder.decode(value, "UTF-8");
+            } catch (Exception e) {
+                return null;
+            }
+        }
+        return null;
+    }
+
+    private static String randomToken() {
+        byte[] bytes = new byte[32];
+        new SecureRandom().nextBytes(bytes);
+        StringBuilder token = new StringBuilder(bytes.length * 2);
+        for (byte value : bytes) token.append(String.format("%02x", value));
+        return token.toString();
     }
 
     /** Android MimeTypeMap 对部分音频返回 x- 变体（如 wav → audio/x-wav），WebView <audio> 不识别，

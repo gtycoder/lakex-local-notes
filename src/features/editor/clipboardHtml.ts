@@ -138,14 +138,14 @@ function copySafeAttributes(source: Element, target: HTMLElement): void {
   if (style) target.setAttribute("style", style);
 }
 
-import { ASSET_TOKEN, LOCAL_ASSET_PREFIX } from "../../lib/assetPort";
+import { assetToken, LOCAL_ASSET_PREFIX } from "../../lib/assetPort";
 
 function assetUrlToDataUrlSync(url: string): string | null {
   if (!url.startsWith(LOCAL_ASSET_PREFIX)) return null;
   try {
     const xhr = new XMLHttpRequest();
     // 审计：CORS 拉取必须带资产令牌，否则资产服务器 403（外部网页无法读取本地图片）
-    xhr.open("GET", `${url}?base64=1&token=${encodeURIComponent(ASSET_TOKEN)}`, false);
+    xhr.open("GET", `${url}?base64=1&token=${encodeURIComponent(assetToken())}`, false);
     xhr.send();
     if (xhr.status !== 200) return null;
     return xhr.responseText; // already "data:image/png;base64,..."
