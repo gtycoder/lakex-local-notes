@@ -168,7 +168,7 @@ export const bridge = {
 
   async listTreeNodes(): Promise<TreeNode[]> {
     const d = await ensureDb();
-    return await treeRepository.listTreeNodes(d);
+    return await treeRepository.listTreeNodes(new SqlJsAsyncDb(d));
   },
 
 
@@ -178,7 +178,7 @@ export const bridge = {
   async createNotebook(input: { title: string; icon: string | null }): Promise<TreeNode> {
     return maintenance.run("main", async () => {
       const d = await ensureDb();
-      const node = await treeRepository.createNotebook(d, input);
+      const node = await treeRepository.createNotebook(new SqlJsAsyncDb(d), input);
       await saveSnapshot(d.exportBytes());
       return node;
     });
@@ -188,7 +188,7 @@ export const bridge = {
   async createGroup(parentId: string, title: string): Promise<TreeNode> {
     return maintenance.run("main", async () => {
       const d = await ensureDb();
-      const node = await treeRepository.createGroup(d, parentId, title);
+      const node = await treeRepository.createGroup(new SqlJsAsyncDb(d), parentId, title);
       await saveSnapshot(d.exportBytes());
       return node;
     });
@@ -197,7 +197,7 @@ export const bridge = {
   async renameTreeNode(id: string, title: string): Promise<TreeNode> {
     return maintenance.run("main", async () => {
       const d = await ensureDb();
-      const node = await treeRepository.renameTreeNode(d, id, title);
+      const node = await treeRepository.renameTreeNode(new SqlJsAsyncDb(d), id, title);
       await saveSnapshot(d.exportBytes());
       return node;
     });
@@ -206,7 +206,7 @@ export const bridge = {
   async setNodeIcon(id: string, icon: string | null): Promise<TreeNode> {
     return maintenance.run("main", async () => {
       const d = await ensureDb();
-      const node = await treeRepository.setNodeIcon(d, id, icon);
+      const node = await treeRepository.setNodeIcon(new SqlJsAsyncDb(d), id, icon);
       await saveSnapshot(d.exportBytes());
       return node;
     });
@@ -215,7 +215,7 @@ export const bridge = {
   async moveTreeNodeOrdered(id: string, parentId: string | null, orderedIds: string[]): Promise<TreeNode> {
     return maintenance.run("main", async () => {
       const d = await ensureDb();
-      const node = await treeRepository.moveTreeNodeOrdered(d, id, parentId, orderedIds);
+      const node = await treeRepository.moveTreeNodeOrdered(new SqlJsAsyncDb(d), id, parentId, orderedIds);
       await saveSnapshot(d.exportBytes());
       return node;
     });
@@ -225,7 +225,7 @@ export const bridge = {
   async reorderSiblings(parentId: string | null, orderedIds: string[]): Promise<void> {
     return maintenance.run("main", async () => {
       const d = await ensureDb();
-      await treeRepository.reorderSiblings(d, parentId, orderedIds);
+      await treeRepository.reorderSiblings(new SqlJsAsyncDb(d), parentId, orderedIds);
       await saveSnapshot(d.exportBytes());
     });
   },
