@@ -199,18 +199,18 @@ describe("移动端 Quick Notes 同步端口 + 共享引擎", () => {
     expect(tombRow).toBeTruthy();
   });
 
-  it("端口合并本地与远端墓碑时按 id 去重", () => {
+  it("端口合并本地与远端墓碑时按 id 去重", async () => {
     const { d } = openQuickNotesDb();
     const created = createQuickNote(d, "待删除");
     const port = mkPort(d);
-    port.deleteLocalQuickNote(created.id);
-    port.rememberDeletedQuickNote({
+    await port.deleteLocalQuickNote(created.id);
+    await port.rememberDeletedQuickNote({
       id: created.id,
       createdAt: "2026-01-01T00:00:00.000Z",
       updatedAt: "2026-01-01T00:00:00.000Z",
       deletedAt: "2099-01-01T00:00:01.000Z",
     });
-    const deleted = port.listDeletedQuickNotes();
+    const deleted = await port.listDeletedQuickNotes();
     expect(deleted.filter((item) => item.id === created.id)).toHaveLength(1);
     expect(deleted[0].deletedAt).toBe("2099-01-01T00:00:01.000Z");
   });

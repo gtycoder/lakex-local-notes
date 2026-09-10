@@ -115,6 +115,18 @@ function createFakePort(): { port: QuickNotesSyncDbPort; notes: Map<string, Fake
   return { port, notes, assets, deleted, bases, restorePending, archived, publishedDeleted };
 }
 
+function promisifyPort(port: QuickNotesSyncDbPort): QuickNotesSyncDbPort {
+  return new Proxy(port, {
+    get(target, property, receiver) {
+      if (property === "log") return Reflect.get(target, property, receiver);
+      const value = Reflect.get(target, property, receiver);
+      if (typeof value !== "function") return value;
+      return async (...args: unknown[]) =>
+        await (value as (...args: unknown[]) => unknown).apply(target, args);
+    },
+  }) as QuickNotesSyncDbPort;
+}
+
 function makeContent(text: string): { serialized: string; hash: string } {
   const serialized = serializeQuickNoteContent(normalizeQuickNoteContent(text, []));
   return { serialized, hash: sha256Sync(new TextEncoder().encode(serialized)) };
@@ -167,6 +179,18 @@ describe("quickNotesSyncEngine（共享引擎独立测试）", () => {
     expect(b.notes.get(id)?.syncState).toBe("synced");
   });
 
+  it("接受全异步存储端口：Promise 返回值与同步返回值语义一致", async () => {
+    const a = createFakePort();
+    const s3 = createFakeS3();
+    const id = createLocal(a, "异步端口");
+
+    const result = await syncQuickNotesViaEngine(cfg, s3, promisifyPort(a.port));
+
+    expect(result.uploaded).toBe(1);
+    expect(readManifest(s3).items[0]?.id).toBe(id);
+    expect(a.notes.get(id)?.syncState).toBe("synced");
+  });
+
   it("本地编辑上传：新 hash 对象 + manifest 更新", async () => {
     const a = createFakePort();
     const s3 = createFakeS3();
@@ -208,7 +232,7 @@ describe("quickNotesSyncEngine（共享引擎独立测试）", () => {
     const id = createLocal(a, "会被删");
     await syncQuickNotesViaEngine(cfg, s3, a.port);
     await syncQuickNotesViaEngine(cfg, s3, b.port);
-    a.port.deleteLocalQuickNote(id);
+    await a.port.deleteLocalQuickNote(id);
     await syncQuickNotesViaEngine(cfg, s3, a.port);
     const m = readManifest(s3);
     console.log("DBG A manifest:", JSON.stringify(m.items.map((i) => ({ id: i.id.slice(0, 8), deleted: !!i.deleted }))), "A.deleted:", JSON.stringify([...a.deleted.keys()]), "A.published:", JSON.stringify(a.publishedDeleted));
@@ -218,7 +242,8 @@ describe("quickNotesSyncEngine（共享引擎独立测试）", () => {
     await syncQuickNotesViaEngine(cfg, s3, b.port);
     console.log("DBG B deleted:", JSON.stringify([...b.deleted.keys()]), "B.notes:", JSON.stringify([...b.notes.keys()]));
     expect(b.deleted.has(id)).toBe(true);
-    expect(b.port.listLocalQuickNotes().some((i) => i.id === id)).toBe(false);
+    const localAfterTombstone = await b.port.listLocalQuickNotes();
+    expect(localAfterTombstone.some((i) => i.id === id)).toBe(false);
   });
 
   it("墓碑发布后清除待同步标记（markDeletedPublished）且不再重复发布", async () => {
@@ -226,7 +251,7 @@ describe("quickNotesSyncEngine（共享引擎独立测试）", () => {
     const s3 = createFakeS3();
     const id = createLocal(a, "发布后清标记");
     await syncQuickNotesViaEngine(cfg, s3, a.port);
-    a.port.deleteLocalQuickNote(id);
+    await a.port.deleteLocalQuickNote(id);
     await syncQuickNotesViaEngine(cfg, s3, a.port);
     // 发布即标记：待同步集合清空（否则 getPendingSyncSummary 永远计入 → "待同步"常挂）
     expect(a.publishedDeleted).toEqual([id]);
@@ -256,7 +281,7 @@ describe("quickNotesSyncEngine（共享引擎独立测试）", () => {
     await syncQuickNotesViaEngine(cfg, s3, b.port);
     expect(b.assets.has(`${id}/${img.filename}`)).toBe(true);
     // A 删除（未先同步图片变更——图片已在云端，此场景验证删除携带 assets）并同步
-    a.port.deleteLocalQuickNote(id);
+    await a.port.deleteLocalQuickNote(id);
     await syncQuickNotesViaEngine(cfg, s3, a.port);
     const m = readManifest(s3);
     const tomb = m.items.find((i) => i.id === id)!;
@@ -277,7 +302,7 @@ describe("quickNotesSyncEngine（共享引擎独立测试）", () => {
     const id = createLocal(a, "原始");
     await syncQuickNotesViaEngine(cfg, s3, a.port);
     await syncQuickNotesViaEngine(cfg, s3, b.port);
-    a.port.deleteLocalQuickNote(id);
+    await a.port.deleteLocalQuickNote(id);
     await syncQuickNotesViaEngine(cfg, s3, a.port);
     await syncQuickNotesViaEngine(cfg, s3, b.port); // B 学到删除
     // B 恢复：清墓碑 + restore_pending + local
@@ -320,7 +345,7 @@ describe("quickNotesSyncEngine（共享引擎独立测试）", () => {
     const id = createLocal(a, "将被 purge");
     await syncQuickNotesViaEngine(cfg, s3, a.port);
     // 模拟 purge：软删 → 硬删行（保留墓碑记录，内容已删）
-    a.port.deleteLocalQuickNote(id);
+    await a.port.deleteLocalQuickNote(id);
     const deletedRec = a.deleted.get(id)!;
     a.notes.delete(id);
     await syncQuickNotesViaEngine(cfg, s3, a.port);

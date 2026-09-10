@@ -23,6 +23,7 @@ import { mimeTypeFor } from "./syncUtils.js";
 import type { ManifestItem, QuickNotesManifest } from "./manifestTypes.js";
 import { runPool, ASSET_TRANSFER_CONCURRENCY } from "./asyncPool.js";
 import type { S3Store, SyncConfig } from "./syncEngine.js";
+import type { MaybeAsync } from "./maybeAsync.js";
 
 const MANIFEST_VERSION = 1;
 const ROOT = "quick-notes";
@@ -74,38 +75,38 @@ export interface QuickNoteSyncItem {
  * 桌面：QuickNotesStore（node sqlite + .qnote 文件）；移动端：sql.js quick_notes 表 + 内容列。
  */
 export interface QuickNotesSyncDbPort {
-  listLocalQuickNotes(): QuickNoteSyncItem[];
+  listLocalQuickNotes(): MaybeAsync<QuickNoteSyncItem[]>;
   /** 本地内容字节（桌面 .qnote 文件 / 移动端 content 列序列化字节）；缺失 → null。 */
-  readContent(id: string): Uint8Array | null;
+  readContent(id: string): MaybeAsync<Uint8Array | null>;
   /** 本地图片字节（上传/校验用）；缺失 → null。 */
-  readAsset(id: string, filename: string): Promise<Uint8Array | null> | Uint8Array | null;
+  readAsset(id: string, filename: string): MaybeAsync<Uint8Array | null>;
   /** 应用远端小记（新/覆盖）：写入内容 + 图片 + DB 行。 */
-  applyRemoteQuickNote(item: ManifestItem, content: Uint8Array, assets: Array<{ filename: string; bytes: Uint8Array }>): void | Promise<void>;
+  applyRemoteQuickNote(item: ManifestItem, content: Uint8Array, assets: Array<{ filename: string; bytes: Uint8Array }>): MaybeAsync<void>;
   /** 墓碑内容落地（先内容后标志）：把删除方内容写入本地存储，随后 deleteLocalQuickNote。 */
-  applyTombstoneContent(id: string, content: Uint8Array): void;
+  applyTombstoneContent(id: string, content: Uint8Array): MaybeAsync<void>;
   /** 墓碑携带图片（A）：读取删除小记保留内容中的删除前图片元数据；无保留内容/解析失败 → []。 */
-  listDeletedQuickNoteAssets(id: string): QuickNoteSyncItemImage[];
+  listDeletedQuickNoteAssets(id: string): MaybeAsync<QuickNoteSyncItemImage[]>;
   /** 墓碑携带图片（A）：把删除方上传的删除前图片字节写入本地（软删行保留，恢复时图片完整）。 */
-  applyTombstoneAssets(id: string, assets: Array<{ metadata: QuickNoteSyncItemImage; bytes: Uint8Array }>): void | Promise<void>;
+  applyTombstoneAssets(id: string, assets: Array<{ metadata: QuickNoteSyncItemImage; bytes: Uint8Array }>): MaybeAsync<void>;
   /** 本地软删（保留内容供墓碑携带）。 */
-  deleteLocalQuickNote(id: string): void;
+  deleteLocalQuickNote(id: string): MaybeAsync<void>;
   /** 冲突：本地版本归档进回收站（新 id），随后 applyRemoteQuickNote 覆盖原 id。 */
-  archiveLocalQuickNoteToTrash(id: string): void | Promise<void>;
+  archiveLocalQuickNoteToTrash(id: string): MaybeAsync<void>;
   /** 本地删除墓碑（软删/从远端学到的删除）；manifest 墓碑条目需要 createdAt/updatedAt。 */
-  listDeletedQuickNotes(): Array<{ id: string; createdAt: string; updatedAt: string; deletedAt: string }>;
+  listDeletedQuickNotes(): MaybeAsync<Array<{ id: string; createdAt: string; updatedAt: string; deletedAt: string }>>;
   /** 全部墓碑记录（含已发布 ready=0）：下载方向 LWW（墓碑 vs 远端恢复）需要完整历史才能撤销/跟随恢复。
    * 缺失则回退 listDeletedQuickNotes（仅 ready=1，已发布墓碑会失去恢复跟随能力）。 */
-  listAllDeletedQuickNotes?(): Array<{ id: string; createdAt: string; updatedAt: string; deletedAt: string }>;
+  listAllDeletedQuickNotes?(): MaybeAsync<Array<{ id: string; createdAt: string; updatedAt: string; deletedAt: string }>>;
   /** 墓碑已发布到 manifest 后清除待同步标记（ready_to_sync=0）——缺失则待同步计数永不归零（对齐 Lake markTombstonesPublished）。 */
-  markDeletedPublished?(ids: string[]): void;
+  markDeletedPublished?(ids: string[]): MaybeAsync<void>;
   /** 转换延迟删除（Lake 放行前不删云端源；移动端无转换场景可不实现 → 返回 []）。 */
-  listDeferredDeletedQuickNotes(): Array<{ id: string }>;
-  rememberDeletedQuickNote(item: { id: string; createdAt: string; updatedAt: string; deletedAt: string }): void;
-  revokeLocalDeletion(id: string): void;
-  isRestorePending(id: string): boolean;
-  baseHash(id: string): string | null;
-  setBaseHash(id: string, contentHash: string): void;
-  markSynced(id: string): void;
+  listDeferredDeletedQuickNotes(): MaybeAsync<Array<{ id: string }>>;
+  rememberDeletedQuickNote(item: { id: string; createdAt: string; updatedAt: string; deletedAt: string }): MaybeAsync<void>;
+  revokeLocalDeletion(id: string): MaybeAsync<void>;
+  isRestorePending(id: string): MaybeAsync<boolean>;
+  baseHash(id: string): MaybeAsync<string | null>;
+  setBaseHash(id: string, contentHash: string): MaybeAsync<void>;
+  markSynced(id: string): MaybeAsync<void>;
   log(message: string): void;
 }
 
@@ -226,9 +227,11 @@ export async function syncQuickNotesViaEngine(
     // 转换墓碑（Lake 放行前）恒不复活源小记；普通删除墓碑按 LWW（远端恢复较新时撤销本地墓碑并跟随恢复）。
     // 下载方向必须看**全部**墓碑（含已发布 ready=0）：否则已发布墓碑丢失 LWW 上下文，
     // 远端恢复后本机永远无法跟随恢复（对齐 Lake：published_at 只是记账，记录保留供判定）。
-    const tombstoned = new Map((qn.listAllDeletedQuickNotes?.() ?? qn.listDeletedQuickNotes()).map((item) => [item.id, item.deletedAt] as const));
-    const deferredDeletedIds = new Set(qn.listDeferredDeletedQuickNotes().map((item) => item.id));
-    const localItems = qn.listLocalQuickNotes();
+    const tombstoneRows = await (qn.listAllDeletedQuickNotes?.() ?? qn.listDeletedQuickNotes());
+    const tombstoned = new Map(tombstoneRows.map((item) => [item.id, item.deletedAt] as const));
+    const deferredDeletedRows = await qn.listDeferredDeletedQuickNotes();
+    const deferredDeletedIds = new Set(deferredDeletedRows.map((item) => item.id));
+    const localItems = await qn.listLocalQuickNotes();
     const localById = new Map(localItems.map((item) => [item.id, item]));
     const localIds = new Set(localItems.map((item) => item.id));
 
@@ -242,7 +245,7 @@ export async function syncQuickNotesViaEngine(
         if (localIds.has(item.id)) {
           // 墓碑权威（与 Lake 一致）：远端 deleted 是权威状态，本地编辑（无论新旧）都不抵抗；
           // 唯一例外是显式恢复标记（restoreQuickNote 写入）→ local wins，上传阶段写回 active 覆盖墓碑。
-          if (qn.isRestorePending(item.id)) {
+          if (await qn.isRestorePending(item.id)) {
             qn.log(`[perf] download ${item.id} tombstone-skip (restore pending) ${Date.now() - itemStart}ms`);
             continue;
           }
@@ -251,7 +254,7 @@ export async function syncQuickNotesViaEngine(
           try {
             const content = await s3.getObject(objectKey(item.contentHash), { maxBytes: MAX_QUICK_NOTE_BYTES });
             if (content) {
-              qn.applyTombstoneContent(item.id, content);
+              await qn.applyTombstoneContent(item.id, content);
             }
           } catch (error) {
             qn.log(`[download] ${item.id} 删除前内容缺失，跳过`);
@@ -270,9 +273,9 @@ export async function syncQuickNotesViaEngine(
             }
             if (tombAssets.length > 0) await qn.applyTombstoneAssets(item.id, tombAssets);
           }
-          qn.deleteLocalQuickNote(item.id);
+          await qn.deleteLocalQuickNote(item.id);
         } else {
-          qn.rememberDeletedQuickNote({ id: item.id, createdAt: item.createdAt, updatedAt: item.updatedAt, deletedAt: item.deletedAt ?? new Date().toISOString() });
+          await qn.rememberDeletedQuickNote({ id: item.id, createdAt: item.createdAt, updatedAt: item.updatedAt, deletedAt: item.deletedAt ?? new Date().toISOString() });
         }
         qn.log(`[perf] download ${item.id} deleted ${Date.now() - itemStart}ms`);
         continue;
@@ -283,7 +286,7 @@ export async function syncQuickNotesViaEngine(
       const tombAt = tombstoned.get(item.id);
       if (tombAt !== undefined) {
         if (item.updatedAt > tombAt) {
-          qn.revokeLocalDeletion(item.id);
+          await qn.revokeLocalDeletion(item.id);
           qn.log(`[perf] download ${item.id} remote-restored → local tombstone revoked ${Date.now() - itemStart}ms`);
         } else {
           continue;
@@ -292,8 +295,8 @@ export async function syncQuickNotesViaEngine(
 
       const local = localById.get(item.id) ?? null;
       if (local?.contentHash === item.contentHash) {
-        qn.setBaseHash(item.id, item.contentHash);
-        qn.markSynced(item.id);
+        await qn.setBaseHash(item.id, item.contentHash);
+        await qn.markSynced(item.id);
         qn.log(`[perf] download ${item.id} unchanged ${Date.now() - itemStart}ms`);
         continue;
       }
@@ -310,7 +313,7 @@ export async function syncQuickNotesViaEngine(
       });
       // 决策收敛到纯函数 reconcileQuickNote：正文相同（local.contentHash===item.contentHash）已走 unchanged 分支。
       const action = reconcileQuickNote({
-        baseHash: qn.baseHash(item.id),
+        baseHash: await qn.baseHash(item.id),
         localHash: local !== null ? local.contentHash : null,
         remoteHash: item.contentHash,
       });
@@ -318,7 +321,7 @@ export async function syncQuickNotesViaEngine(
         // 验收 #4（B 方案）：双端都改 → 远端覆盖本地；本地版本归档进回收站（新 id，恢复后为一条新小记）。
         await qn.archiveLocalQuickNoteToTrash(item.id);
         await qn.applyRemoteQuickNote(item, content, assets);
-        qn.setBaseHash(item.id, item.contentHash);
+        await qn.setBaseHash(item.id, item.contentHash);
         conflicts += 1;
         downloaded += 1;
         qn.log(`[perf] download ${item.id} conflict → remote wins, local archived to trash ${Date.now() - itemStart}ms (content=${content.length}B, assets=${assets.length})`);
@@ -327,7 +330,7 @@ export async function syncQuickNotesViaEngine(
         continue;
       } else {
         await qn.applyRemoteQuickNote(item, content, assets);
-        qn.setBaseHash(item.id, item.contentHash);
+        await qn.setBaseHash(item.id, item.contentHash);
         downloaded += 1;
         qn.log(`[perf] download ${item.id} new-content ${Date.now() - itemStart}ms (content=${content.length}B, assets=${assets.length})`);
       }
@@ -335,7 +338,7 @@ export async function syncQuickNotesViaEngine(
   }
   qn.log(`[perf] quick download phase ${Date.now() - quickStart}ms (downloaded=${downloaded}, conflicts=${conflicts})`);
 
-  const localItems = qn.listLocalQuickNotes();
+  const localItems = await qn.listLocalQuickNotes();
   const remoteItemsById = new Map((remoteManifest?.items ?? []).map((item) => [item.id, item]));
   const remoteHashes = new Map<string, string>((remoteManifest?.items ?? []).filter((item) => !item.deleted).map((item) => [item.id, item.contentHash]));
   const remoteAssetHashes = new Map<string, string>();
@@ -369,7 +372,7 @@ export async function syncQuickNotesViaEngine(
       });
       continue;
     }
-    const content = qn.readContent(item.id);
+    const content = await qn.readContent(item.id);
     if (content === null) throw new Error(`本地小记内容读取失败: ${item.id}`);
     const contentHash = sha256Sync(content);
     if (contentHash !== item.contentHash) throw new Error(`本地小记索引与内容不一致: ${item.id}`);
@@ -401,7 +404,7 @@ export async function syncQuickNotesViaEngine(
   qn.log(`[perf] quick upload phase ${Date.now() - uploadStart}ms (uploaded=${uploaded})`);
 
   const localIds = new Set(localItems.map((item) => item.id));
-  const readyDeleted = qn.listDeletedQuickNotes();
+  const readyDeleted = await qn.listDeletedQuickNotes();
   const readyDeletedIds = new Set(readyDeleted.map((item) => item.id));
   const remoteById = new Map((remoteManifest?.items ?? []).map((item) => [item.id, item]));
   const publishedDeletedIds: string[] = [];
@@ -414,7 +417,7 @@ export async function syncQuickNotesViaEngine(
     // 使其他设备先拉到"删除前最新版"再应用墓碑。读失败降级为占位符 id。
     let tombHash = deleted.id;
     try {
-      const content = qn.readContent(deleted.id);
+      const content = await qn.readContent(deleted.id);
       if (content) {
         tombHash = sha256Sync(content);
         await s3.putObject(objectKey(tombHash), content);
@@ -424,7 +427,7 @@ export async function syncQuickNotesViaEngine(
     }
     // 墓碑携带图片（A）：删除方把删除前图片对象也上传（缺失才传？此处直接幂等覆盖），
     // 墓碑条目带 assets，使其他端恢复时图片完整。无保留内容/无图 → assets: []（旧协议兼容）。
-    const tombAssetMetadata = qn.listDeletedQuickNoteAssets(deleted.id);
+    const tombAssetMetadata = await qn.listDeletedQuickNoteAssets(deleted.id);
     const tombAssets: ManifestItem["assets"] = [];
     for (const asset of tombAssetMetadata) {
       try {
@@ -451,7 +454,8 @@ export async function syncQuickNotesViaEngine(
 
   // 转换源小记在 Lake 目标文档成功前仍由其远端记录表示；此处省略会在 Lake 跨空间安全条件
   // 满足前意外发布"删除源"的 manifest。
-  const deferredDeletedIds = new Set(qn.listDeferredDeletedQuickNotes().map((item) => item.id));
+  const deferredDeletedRows = await qn.listDeferredDeletedQuickNotes();
+  const deferredDeletedIds = new Set(deferredDeletedRows.map((item) => item.id));
   for (const item of remoteManifest?.items ?? []) {
     if (!item.deleted && deferredDeletedIds.has(item.id) && !localIds.has(item.id) && !readyDeletedIds.has(item.id)) {
       manifestItems.push(item);
@@ -486,12 +490,12 @@ export async function syncQuickNotesViaEngine(
   // 墓碑已发布 → 清除待同步标记（对齐 Lake markTombstonesPublished）。缺失此调用会导致
   // getPendingSyncSummary 的墓碑计数永不归零（"待同步"常挂）+ 每轮重复上传墓碑对象。
   if (publishedDeletedIds.length > 0 && typeof qn.markDeletedPublished === "function") {
-    qn.markDeletedPublished(publishedDeletedIds);
+    await qn.markDeletedPublished(publishedDeletedIds);
   }
 
   for (const item of localItems) {
-    qn.setBaseHash(item.id, item.contentHash);
-    qn.markSynced(item.id);
+    await qn.setBaseHash(item.id, item.contentHash);
+    await qn.markSynced(item.id);
   }
   qn.log(`[perf] quick-sync done ${Date.now() - quickStart}ms (uploaded=${uploaded}, downloaded=${downloaded}, conflicts=${conflicts})`);
   return { uploaded, downloaded, conflicts, manifestId: manifest.commitId, completedAt };
