@@ -1,4 +1,4 @@
-import type { DbLike } from "./sqliteDb";
+import type { MobileDb } from "./sqliteDb";
 
 export interface NotebookTreeItem {
   id: string;
@@ -11,10 +11,10 @@ export interface NotebookTreeItem {
 
 /** 返回笔记本完整子树；note 也能作为父节点，桌面端嵌套文档在移动端保持可见。 */
 export async function listNotebookTree(
-  d: DbLike,
+  d: MobileDb,
   notebookId: string,
 ): Promise<NotebookTreeItem[]> {
-  const allFolders = d.prepare(
+  const allFolders = await d.prepare(
     "SELECT id, title, parent_id, sort_order, node_type, icon FROM folders WHERE trashed_at IS NULL",
   ).all() as Array<{
     id: string;
@@ -24,7 +24,7 @@ export async function listNotebookTree(
     node_type: string;
     icon: string | null;
   }>;
-  const allNotes = d.prepare(
+  const allNotes = await d.prepare(
     "SELECT id, title, parent_id, sort_order, icon FROM notes WHERE trashed_at IS NULL",
   ).all() as Array<{
     id: string;

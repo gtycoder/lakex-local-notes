@@ -761,7 +761,7 @@ export const bridge = {
   // ---- 目录树只读契约（同步调试/测试用） ----
   async listNotebookTree(notebookId: string): Promise<notebookTreeRepository.NotebookTreeItem[]> {
     const d = await ensureDb();
-    return await notebookTreeRepository.listNotebookTree(d, notebookId);
+    return await notebookTreeRepository.listNotebookTree(new SqlJsAsyncDb(d), notebookId);
   },
   // ---- 墓碑只读契约（同步调试/测试用；生产同步路径直接走 dbPort，不经此对象） ----
   async listDeletedNotesForSync() { return dbPort.listDeletedNotesForSync!(); },
