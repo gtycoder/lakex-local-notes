@@ -16,7 +16,7 @@ import { SqlJsDb } from "./sqliteDb.js";
 describe("mobile history repository", () => {
   it("deduplicates identical snapshots within 24 hours", async () => {
     const db = await SqlJsDb.open();
-    applyMobileSchema(db);
+    await applyMobileSchema(db);
     const meta = { title: "Title", parentId: null, sortOrder: 0 };
 
     await createHistorySnapshot(db, "note-1", "<p>same</p>", meta);
@@ -29,7 +29,7 @@ describe("mobile history repository", () => {
 
   it("falls back to default settings when stored JSON is invalid", async () => {
     const db = await SqlJsDb.open();
-    applyMobileSchema(db);
+    await applyMobileSchema(db);
     db.prepare("INSERT INTO device_state(key,value) VALUES('history_settings',?)")
       .run("{invalid-json");
 

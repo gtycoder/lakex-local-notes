@@ -15,7 +15,7 @@ import { SqlJsDb } from "./sqliteDb.js";
 
 async function createDbWithOrphans(): Promise<SqlJsDb> {
   const db = await SqlJsDb.open();
-  applyMobileSchema(db);
+  await applyMobileSchema(db);
   const insert = db.prepare(
     "INSERT INTO orphan_assets(note_id,filename,file_path,size,mime_type) VALUES(?,?,?,?,?)",
   );

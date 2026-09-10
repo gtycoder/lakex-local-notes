@@ -3,7 +3,7 @@ import { applyQuickNotesSyncSchema } from "./quickNotesDbPort.js";
 import type { DbLike } from "./sqliteDb.js";
 
 /** Apply idempotent mobile schema migrations and first-run seed data. */
-export function applyMobileSchema(db: DbLike): void {
+export async function applyMobileSchema(db: DbLike): Promise<void> {
   try {
     db.exec("PRAGMA foreign_keys = ON");
   } catch {
