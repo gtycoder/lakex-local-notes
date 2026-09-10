@@ -33,7 +33,7 @@ export const QUICK_NOTES_ROOT = "quick-notes";
 const ROOT = QUICK_NOTES_ROOT;
 
 /** 把桌面 QuickNotesStore（node sqlite + .qnote 文件）适配成共享引擎端口。 */
-function createQuickNotesSyncPort(quickNotes: QuickNotesStore): QuickNotesSyncDbPort {
+export function createQuickNotesSyncPort(quickNotes: QuickNotesStore): QuickNotesSyncDbPort {
   return {
     listLocalQuickNotes(): QuickNoteSyncItem[] {
       return quickNotes.listQuickNotesForSync().map((item) => ({
