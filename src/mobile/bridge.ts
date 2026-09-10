@@ -672,9 +672,10 @@ export const bridge = {
   /** 运行诊断（移动端"日志查看/关于"等价）：存储统计。 */
   async getDiagnostics(): Promise<diagnosticsRepository.MobileDiagnostics> {
     const d = await ensureDb();
-    return diagnosticsRepository.getDiagnostics(d, {
+    const mobileDb = new SqlJsAsyncDb(d);
+    return diagnosticsRepository.getDiagnostics(mobileDb, {
       listAssetKeys: listAssetKeysFs,
-      getDatabaseSizeBytes: () => d.databaseSizeBytes(),
+      getDatabaseSizeBytes: () => mobileDb.databaseSizeBytes(),
     });
   },
 

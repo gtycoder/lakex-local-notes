@@ -7,20 +7,20 @@ vi.mock("sql.js/dist/sql-wasm.wasm?url", () => ({
 
 import { getDiagnostics } from "./diagnosticsRepository.js";
 import { applyMobileSchema } from "./schema.js";
-import { SqlJsDb } from "./sqliteDb.js";
+import { SqlJsAsyncDb, SqlJsDb } from "./sqliteDb.js";
 
-async function createDb(): Promise<SqlJsDb> {
+async function createDb(): Promise<{ db: SqlJsDb; mobileDb: SqlJsAsyncDb }> {
   const db = await SqlJsDb.open();
   await applyMobileSchema(db);
   for (const table of ["notes", "folders", "quick_notes", "orphan_assets", "s3_gc_pending", "note_history"]) {
     db.prepare(`DELETE FROM ${table}`).run();
   }
-  return db;
+  return { db, mobileDb: new SqlJsAsyncDb(db) };
 }
 
 describe("mobile diagnostics repository", () => {
   it("counts only active notes and folders", async () => {
-    const db = await createDb();
+    const { db, mobileDb } = await createDb();
     const note = db.prepare("INSERT INTO notes(id,title,content,updated_at,trashed_at,deleted_at) VALUES(?,?,?,?,?,?)");
     note.run("active", "Active", "<p></p>", "2026-01-01T00:00:00Z", null, null);
     note.run("trashed", "Trashed", "<p></p>", "2026-01-01T00:00:00Z", "2026-01-02T00:00:00Z", null);
@@ -31,9 +31,9 @@ describe("mobile diagnostics repository", () => {
     db.prepare("INSERT INTO quick_notes(id,created_at,updated_at,preview_text,content_hash,content) VALUES(?,?,?,?,?,?)")
       .run("quick", "2026-01-01T00:00:00Z", "2026-01-01T00:00:00Z", "text", "hash", "{}");
 
-    const diagnostics = await getDiagnostics(db, {
+    const diagnostics = await getDiagnostics(mobileDb, {
       listAssetKeys: async () => ["a", "b", "c"],
-      getDatabaseSizeBytes: () => db.databaseSizeBytes(),
+      getDatabaseSizeBytes: () => mobileDb.databaseSizeBytes(),
     });
 
     expect(diagnostics.noteCount).toBe(1);
@@ -43,12 +43,12 @@ describe("mobile diagnostics repository", () => {
   });
 
   it("computes database size without exporting the database", async () => {
-    const db = await createDb();
+    const { db, mobileDb } = await createDb();
     const exportBytes = vi.spyOn(db, "exportBytes");
 
-    const diagnostics = await getDiagnostics(db, {
+    const diagnostics = await getDiagnostics(mobileDb, {
       listAssetKeys: async () => [],
-      getDatabaseSizeBytes: () => db.databaseSizeBytes(),
+      getDatabaseSizeBytes: () => mobileDb.databaseSizeBytes(),
     });
 
     expect(diagnostics.dbBytes).toBeGreaterThan(0);

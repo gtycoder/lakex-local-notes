@@ -1,4 +1,4 @@
-import type { DbLike } from "./sqliteDb";
+import type { MobileDb } from "./sqliteDb";
 
 export interface MobileDiagnostics {
   noteCount: number;
@@ -13,22 +13,25 @@ export interface MobileDiagnostics {
 
 export interface DiagnosticsRepositoryDeps {
   listAssetKeys: () => Promise<string[]>;
-  getDatabaseSizeBytes: () => number;
+  getDatabaseSizeBytes: () => Promise<number>;
 }
 
 export async function getDiagnostics(
-  d: DbLike,
+  d: MobileDb,
   deps: DiagnosticsRepositoryDeps,
 ): Promise<MobileDiagnostics> {
-  const count = (sql: string) => (d.prepare(sql).get() as { c: number }).c;
+  const count = async (sql: string): Promise<number> => {
+    const row = await d.prepare(sql).get() as { c: number };
+    return row.c;
+  };
   return {
-    noteCount: count("SELECT COUNT(*) c FROM notes WHERE deleted_at IS NULL AND trashed_at IS NULL"),
-    folderCount: count("SELECT COUNT(*) c FROM folders WHERE trashed_at IS NULL"),
-    quickNoteCount: count("SELECT COUNT(*) c FROM quick_notes"),
+    noteCount: await count("SELECT COUNT(*) c FROM notes WHERE deleted_at IS NULL AND trashed_at IS NULL"),
+    folderCount: await count("SELECT COUNT(*) c FROM folders WHERE trashed_at IS NULL"),
+    quickNoteCount: await count("SELECT COUNT(*) c FROM quick_notes"),
     resourceCount: (await deps.listAssetKeys()).length,
-    orphanCount: count("SELECT COUNT(*) c FROM orphan_assets"),
-    gcPendingCount: count("SELECT COUNT(*) c FROM s3_gc_pending"),
-    snapshotCount: count("SELECT COUNT(*) c FROM note_history"),
-    dbBytes: deps.getDatabaseSizeBytes(),
+    orphanCount: await count("SELECT COUNT(*) c FROM orphan_assets"),
+    gcPendingCount: await count("SELECT COUNT(*) c FROM s3_gc_pending"),
+    snapshotCount: await count("SELECT COUNT(*) c FROM note_history"),
+    dbBytes: await deps.getDatabaseSizeBytes(),
   };
 }
