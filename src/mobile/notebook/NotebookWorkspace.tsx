@@ -19,7 +19,7 @@ import { confirmMobile } from "../ui/ConfirmDialog";
 import { showToast } from "../ui/toastBus";
 import { longPressFeedback, tapFeedback } from "../ui/haptics";
 import { useAutoSave } from "../useAutoSave";
-import type { POCNote } from "../bridge";
+import type { POCNote } from "../noteRepository";
 /** 笔记本子树节点（原 NotebookPage 的类型，页面本体已随"两套壳"统一删除）。 */
 export interface NotebookTreeItem {
   id: string;

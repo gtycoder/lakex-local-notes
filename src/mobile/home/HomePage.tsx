@@ -9,7 +9,7 @@
 import { useMemo, useRef, useState } from "react";
 import { CloudUpload, List, LayoutGrid, ArrowUpDown, MoreHorizontal, Pencil, Plus, Search, Settings, Trash2, FileText, FolderOpen } from "lucide-react";
 import type { TreeNode } from "../../lib/types";
-import type { POCNoteSummary } from "../bridge";
+import type { POCNoteSummary } from "../noteRepository";
 import { NotebookGrid } from "./NotebookGrid";
 import { QuickNoteComposer } from "./QuickNoteComposer";
 import { MobileSheetMenu, type MobileSheetItem } from "../ui/MobileSheetMenu";

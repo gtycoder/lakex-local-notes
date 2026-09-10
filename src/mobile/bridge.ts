@@ -22,7 +22,6 @@ import { localAssetHttpUrl } from "../core/assetUrl.js";
 import type { S3Settings, TreeNode } from "../lib/types";
 import type { SearchResult } from "../core/searchRepository.js";
 import { nextSortOrder } from "../core/treeRules.js";
-import { buildLikePattern, buildSearchSql, toSearchResult } from "../core/mobileSearch.js";
 import {
   buildQuickNoteImageFiles,
   normalizeQuickNoteContent,
@@ -37,28 +36,12 @@ import { syncQuickNotesViaEngine } from "../core/quickNotesSyncEngine.js";
 import { createQuickNotesSyncDbPort } from "./quickNotesDbPort.js";
 import { mobileSecretStore } from "./secretStore.js";
 import { stageAssetWrites } from "./assetWrites.js";
-import { hasNoteSaveChanges } from "../core/noteSaveDecision.js";
 import { selectHistoryDrops } from "../core/storeUtils.js";
 import { sqlParameterBatches } from "../core/sqlParameterBatch.js";
 import { applyMobileSchema } from "./schema.js";
 import * as treeRepository from "./treeRepository.js";
-
-export interface POCNote {
-  id: string;
-  title: string;
-  content: string;
-  updatedAt: string;
-  /** 所属笔记本/分组 id（快捷切换目录用） */
-  parentId: string | null;
-}
-
-/** 列表页只需要元数据；正文在 readNote() 打开文档时按需读取。 */
-export interface POCNoteSummary {
-  id: string;
-  title: string;
-  updatedAt: string;
-  parentId: string | null;
-}
+import * as noteRepository from "./noteRepository.js";
+import type { POCNote, POCNoteSummary } from "./noteRepository.js";
 
 /** 移动端同步结果（P2-5，GPT 审计）：文档/小记分字段，便于 UI 分别展示进度与失败。 */
 export interface MobileSyncResult {
@@ -109,53 +92,6 @@ async function ensureDb(): Promise<SqlJsDb> {
   return db;
 }
 
-/** 简单 MIME（孤儿列表展示用，等价桌面 mimeTypeForFilename）。 */
-function mimeOf(filename: string): string {
-  const ext = extOf(filename).toLowerCase();
-  const map: Record<string, string> = {
-    png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", gif: "image/gif", webp: "image/webp", svg: "image/svg+xml",
-    mp4: "video/mp4", webm: "video/webm", mov: "video/quicktime", mp3: "audio/mpeg", wav: "audio/wav",
-    pdf: "application/pdf", zip: "application/zip", doc: "application/msword", docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-  };
-  return map[ext] ?? "application/octet-stream";
-}
-
-/** 历史快照引用的资源文件名集合（被历史引用的资源不孤儿，避免清理后历史恢复裂图）。 */
-function getHistoryRefs(noteId: string): Set<string> {
-  const d = db!;
-  const refs = new Set<string>();
-  const rows = d.prepare("SELECT content FROM note_history WHERE note_id=?").all(noteId) as Array<{ content: string }>;
-  for (const r of rows) for (const f of extractAssetRefs(r.content)) refs.add(f);
-  return refs;
-}
-
-/** 孤儿检测（对齐桌面 detectOrphans）：保存正文后，登记「本地有但正文/历史都不引用」的资源。 */
-async function detectOrphans(noteId: string, content: string): Promise<void> {
-  const d = db!;
-  const referenced = extractAssetRefs(content);
-  const historyRefs = getHistoryRefs(noteId);
-  const prefix = noteId + "/";
-  const keys = new Set((await listNoteAssetKeysFs(noteId)).map((key) => key.slice(prefix.length)));
-  for (const [key] of assets) if (key.startsWith(prefix)) keys.add(key.slice(prefix.length));
-  const insert = d.prepare("INSERT OR IGNORE INTO orphan_assets (note_id, filename, file_path, size, mime_type) VALUES (?,?,?,?,?)");
-  const unorphan = d.prepare("DELETE FROM orphan_assets WHERE note_id=? AND filename=?");
-  for (const filename of keys) {
-    if (referenced.has(filename) || historyRefs.has(filename)) {
-      unorphan.run(noteId, filename);
-    } else {
-      const bytes = assets.get(prefix + filename) ?? await loadAssetBytesFs(prefix + filename);
-      insert.run(noteId, filename, `note-assets/${noteId}/${filename}`, bytes ? bytes.length : 0, mimeOf(filename));
-    }
-  }
-}
-
-/** 某笔记的孤儿文件名集合（listLocalAssets 跳过 → 孤儿不上传，对齐桌面 syncAdapters）。 */
-function orphanFilenamesForNote(noteId: string): Set<string> {
-  const d = db!;
-  const rows = d.prepare("SELECT filename FROM orphan_assets WHERE note_id=?").all(noteId) as Array<{ filename: string }>;
-  return new Set(rows.map((r) => r.filename));
-}
-
 /** 历史快照引用的资产路径集合（形如 assets/{noteId}/{filename}），GC 保留。 */
 function historyAssetRefs(): Set<string> {
   const d = db!;
@@ -195,14 +131,6 @@ async function saveQuickNoteInternal(id: string, text: string, images: StoredQui
   })();
   await saveSnapshot(d.exportBytes());
   return id;
-}
-
-function rowToNote(r: Record<string, unknown>): POCNote {
-  return { id: String(r.id), title: String(r.title), content: String(r.content), updatedAt: String(r.updated_at), parentId: r.parent_id ? String(r.parent_id) : null };
-}
-
-function rowToNoteSummary(r: Record<string, unknown>): POCNoteSummary {
-  return { id: String(r.id), title: String(r.title), updatedAt: String(r.updated_at), parentId: r.parent_id ? String(r.parent_id) : null };
 }
 
 interface ParentedNode {
@@ -474,8 +402,9 @@ const dbPort: SyncDbPort = {
   async listLocalAssets(noteId) {
     // 启动不预加载持久化资源；同步开始时才按当前笔记读取 Filesystem。
     const out = [];
+    const d = db!;
     const prefix = noteId + "/";
-    const orphans = orphanFilenamesForNote(noteId); // 孤儿不上传（对齐桌面 syncAdapters 跳过 orphan）
+    const orphans = noteRepository.orphanFilenamesForNote(d, noteId); // 孤儿不上传（对齐桌面 syncAdapters 跳过 orphan）
     const diskFilenames = new Set((await listNoteAssetKeysFs(noteId)).map((key) => key.slice(prefix.length)));
     for (const filename of diskFilenames) {
       if (orphans.has(filename)) continue;
@@ -725,34 +654,24 @@ export const bridge = {
 
   async listNotes(): Promise<POCNoteSummary[]> {
     const d = await ensureDb();
-    const rows = d.prepare("SELECT id, title, updated_at, parent_id FROM notes WHERE trashed_at IS NULL ORDER BY updated_at DESC").all();
-    return rows.map(rowToNoteSummary);
+    return noteRepository.listNotes(d);
   },
 
   async readNote(id: string): Promise<POCNote | null> {
     const d = await ensureDb();
-    const row = d.prepare("SELECT id, title, content, updated_at FROM notes WHERE id = ?").get(id);
-    return row ? rowToNote(row) : null;
+    return noteRepository.readNote(d, id);
   },
 
   /** 打开文档前的"是否已消失"判定原料（AGENTS §3 #16：所有打开入口都要判，判定逻辑用共享纯函数 isGoneNote）。 */
   async noteGoneState(id: string): Promise<{ parentId: string | null; syncState: string } | null> {
     const d = await ensureDb();
-    const row = d.prepare("SELECT parent_id, sync_state FROM notes WHERE id = ?").get(id) as { parent_id: string | null; sync_state: string | null } | undefined;
-    return row ? { parentId: row.parent_id, syncState: row.sync_state ?? "" } : null;
+    return noteRepository.noteGoneState(d, id);
   },
 
   /** Phase 0B-5：搜索 fallback（sql.js 无 FTS5 → LIKE；标题+正文，参数化 + ESCAPE）。 */
   async searchNotes(query: string): Promise<SearchResult[]> {
-    const pattern = buildLikePattern(query);
-    if (!pattern) return [];
     const d = await ensureDb();
-    const [sql, params] = buildSearchSql(pattern);
-    const rows = d.prepare(sql).all(...params) as Array<{
-      id: string; title: string; content: string; updated_at: string; parent_id: string | null; parent_title: string | null;
-    }>;
-    const term = query.trim().toLocaleLowerCase();
-    return rows.map((row) => toSearchResult(row, row.title.toLocaleLowerCase().includes(term)));
+    return noteRepository.searchNotes(d, query);
   },
 
   // ---- 小记（Phase B3：本地 CRUD + 列表；同步后置，依赖 quick-notes/ 子空间端口化） ----
@@ -887,19 +806,8 @@ export const bridge = {
   async saveNote(id: string, title: string, content: string, parentId: string | null = null): Promise<void> {
     return maintenance.run("main", async () => {
       const d = await ensureDb();
-      const now = new Date().toISOString();
-      // P1-9（GPT 审计）：文档标题不为空——空白回退"无标题文档"（对齐 createNote 默认语义，避免同步空标题）
-      const safeTitle = title.trim() ? title.trim() : "无标题文档";
-      const existing = d.prepare("SELECT title, content FROM notes WHERE id=? AND trashed_at IS NULL").get(id) as { title: string; content: string } | undefined;
-      if (existing && !hasNoteSaveChanges(existing, { title: safeTitle, content })) return;
-      // 本地编辑必须置 sync_state='local'（待上传），否则同步零变更早退会跳过本次修改
-      // ON CONFLICT 不覆盖 parent_id：编辑后保留归属；新建时用传入 parentId
-      d.prepare(
-        `INSERT INTO notes (id, title, content, parent_id, updated_at, content_hash, sync_state) VALUES (?,?,?,?,?,?,'local')
-         ON CONFLICT(id) DO UPDATE SET title=excluded.title, content=excluded.content, updated_at=excluded.updated_at, content_hash=excluded.content_hash, sync_state='local'`
-      ).run(id, safeTitle, content, parentId, now, sha256Sync(new TextEncoder().encode(content)));
-      await detectOrphans(id, content);
-      await saveSnapshot(d.exportBytes());
+      const changed = await noteRepository.saveNote(d, id, title, content, parentId, assets);
+      if (changed) await saveSnapshot(d.exportBytes());
     });
   },
 
@@ -1016,7 +924,7 @@ export const bridge = {
   async trashNote(id: string): Promise<void> {
     return maintenance.run("main", async () => {
       const d = await ensureDb();
-      dbPort.localTrashNote(id);
+      noteRepository.trashNote(d, id);
       await saveSnapshot(d.exportBytes());
     });
   },
@@ -1038,8 +946,7 @@ export const bridge = {
   /** 回收站列表 */
   async listTrashed(): Promise<POCNote[]> {
     const d = await ensureDb();
-    const rows = d.prepare("SELECT id, title, content, updated_at FROM notes WHERE trashed_at IS NOT NULL ORDER BY trashed_at DESC").all();
-    return rows.map(rowToNote);
+    return noteRepository.listTrashed(d);
   },
 
   /** 软删除（入回收站）：folder = 整棵子树（含深层 folders + 子树 notes）标 trashed_at；note = 单条。

@@ -5,7 +5,8 @@
  * - 复杂卡片（画板/思维导图/流程图）：viewer 只读渲染（§19.1），编辑入口置灰。
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { bridge, type POCNoteSummary } from "./bridge";
+import { bridge } from "./bridge";
+import type { POCNoteSummary } from "./noteRepository";
 import { isGoneNote } from "../core/syncDecisions";
 import type { TreeNode } from "../lib/types";
 import { HomePage } from "./home/HomePage";
