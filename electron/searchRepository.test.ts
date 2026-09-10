@@ -1,7 +1,7 @@
 import Database from "better-sqlite3";
 import { describe, expect, it } from "vitest";
-import { SearchRepository } from "../src/core/searchRepository.js";
-import type { DbLike, DbLikeStatement } from "../src/core/dbLike.js";
+import { SearchRepository } from "./searchRepository.js";
+import type { DbLike, DbLikeStatement } from "./dbLike.js";
 
 function makeRepo() {
   const db = new Database(":memory:");

@@ -3,7 +3,7 @@
  * 标题 LIKE + 正文 LIKE；两字以内查询也走 LIKE（不依赖 trigram）。
  * 纯查询构造（可单测）：escapeLike 转义 %/_；buildLikePattern 组装；行→结果映射。
  */
-import type { SearchResult } from "./searchRepository.js";
+import type { SearchResult } from "./searchTypes.js";
 
 /** LIKE 通配符转义：% → \%，_ → \_（配合 ESCAPE '\\'）。 */
 export function escapeLike(input: string): string {

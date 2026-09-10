@@ -1,4 +1,4 @@
-import type { DbLike } from "../src/core/dbLike.js";
+import type { DbLike } from "./dbLike.js";
 import fs from "node:fs";
 import type { QuickNoteDocument, QuickNoteSummary, QuickNoteDeleted } from "./quickNoteTypes.js";
 import { AppError } from "../src/core/storeErrors.js";

@@ -1,4 +1,4 @@
-import type { DbLike } from "../src/core/dbLike.js";
+import type { DbLike } from "./dbLike.js";
 
 export interface NoteDigest {
   id: string;

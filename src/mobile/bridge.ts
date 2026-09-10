@@ -21,7 +21,7 @@ import { readImageDimensions, sniffImageFormat } from "../core/imageUtils.js";
 import { localAssetHttpUrl } from "../core/assetUrl.js";
 import { MAX_ATTACHMENT_BYTES, MAX_IMAGE_BYTES, MAX_IMAGE_PIXELS } from "../core/storeLimits.js";
 import type { S3Settings, TreeNode } from "../lib/types";
-import type { SearchResult } from "../core/searchRepository.js";
+import type { SearchResult } from "../core/searchTypes.js";
 import { nextSortOrder } from "../core/treeRules.js";
 import type { StoredQuickNoteContent, StoredQuickNoteImage } from "../core/quickNoteModel.js";
 import { syncQuickNotesViaEngine } from "../core/quickNotesSyncEngine.js";

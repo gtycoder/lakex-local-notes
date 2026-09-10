@@ -7,7 +7,7 @@ import { useFloatingDialog } from "./useFloatingDialog";
 import { getNativeErrorMessage } from "../lib/nativeErrors";
 import { createLakeDocument, destroyLakeEditor, type LakeEditorInstance } from "../features/editor/lakeRuntime";
 import { addAssetAccessToken } from "../lib/assetPort";
-import { trashDaysUntilPurge, type TrashItem } from "../core/trashRepository";
+import { trashDaysUntilPurge, type TrashItem } from "../core/trashPolicy";
 
 /** 组树：根 = parentId 为回收站笔记本或父不在列表内（旧数据/孤儿兜底）。 */
 function buildTrashTree(items: TrashItem[]): TrashItem[] {

@@ -1,7 +1,7 @@
 /** 搜索 Sheet（Phase 3b）：bridge.searchNotes LIKE fallback。 */
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Search, X } from "lucide-react";
-import type { SearchResult } from "../../core/searchRepository";
+import type { SearchResult } from "../../core/searchTypes";
 import { bridge } from "../bridge";
 
 export interface SearchSheetProps {

@@ -1,13 +1,8 @@
+import type { SearchResult } from "../src/core/searchTypes.js";
+
 import type { DbLike } from "./dbLike.js";
 
-export interface SearchResult {
-  id: string;
-  title: string;
-  snippet: string;
-  matchType: "title" | "body";
-  updatedAt: string;
-  parentTitle: string | null;
-}
+export type { SearchResult } from "../src/core/searchTypes.js";
 
 interface SearchRepositoryDeps {
   db: DbLike;

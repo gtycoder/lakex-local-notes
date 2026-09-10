@@ -1,7 +1,7 @@
 import Database from "better-sqlite3";
 import { isSafePathSegment as isSafeSegment } from "../src/core/storeUtils.js";
 import { createSilentLoggerScopes, type LoggerScopes } from "../src/core/logger.js";
-import type { DbLike } from "../src/core/dbLike.js";
+import type { DbLike } from "./dbLike.js";
 import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";

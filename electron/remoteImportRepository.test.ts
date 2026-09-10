@@ -2,8 +2,8 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { DbLike } from "../src/core/dbLike.js";
-import type { SyncNote } from "../src/core/noteQueries.js";
+import type { DbLike } from "./dbLike.js";
+import type { SyncNote } from "./noteQueries.js";
 import { RemoteImportRepository } from "./remoteImportRepository.js";
 
 const tempRoots: string[] = [];

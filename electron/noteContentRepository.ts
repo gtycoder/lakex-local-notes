@@ -1,4 +1,4 @@
-import type { DbLike } from "../src/core/dbLike.js";
+import type { DbLike } from "./dbLike.js";
 import fs from "node:fs";
 import { AppError } from "../src/core/storeErrors.js";
 import { hasNoteSaveChanges } from "../src/core/noteSaveDecision.js";

@@ -1,6 +1,6 @@
 /**
  * 移动端 Quick Notes 同步端口集成测试（P2/P3）：
- * - 用真实 sql.js（node 直载 WASM）实现 DbLike，驱动共享引擎 syncQuickNotesViaEngine；
+ * - 用真实 sql.js（node 直载 WASM）驱动共享引擎 syncQuickNotesViaEngine，作为 native SQLite 行为对照；
  * - 验证移动端端口 + 引擎的跨端语义：上传/下载、删除墓碑传播、恢复 LWW、冲突归档；
  * - 验证线上格式 = 共享序列化（serializeQuickNoteContent），两端哈希一致。
  */

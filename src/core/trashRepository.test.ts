@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { trashDaysUntilPurge } from "./trashRepository.js";
+import { trashDaysUntilPurge } from "./trashPolicy.js";
 
 describe("trashDaysUntilPurge（C1 共享纯函数）", () => {
   const DAY = 24 * 3600 * 1000;

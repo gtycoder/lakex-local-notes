@@ -1,6 +1,6 @@
 import { extractAssetRefs, extOf } from "../core/assetNaming.js";
 import { buildLikePattern, buildSearchSql, toSearchResult } from "../core/mobileSearch.js";
-import type { SearchResult } from "../core/searchRepository.js";
+import type { SearchResult } from "../core/searchTypes.js";
 import { hasNoteSaveChanges } from "../core/noteSaveDecision.js";
 import { sha256Sync } from "../core/sha256Sync.js";
 import { loadAssetBytesFs, listNoteAssetKeysFs } from "./assetFs";

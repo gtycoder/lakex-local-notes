@@ -3,7 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { NoteContentRepository } from "./noteContentRepository.js";
-import type { DbLike } from "../src/core/dbLike.js";
+import type { DbLike } from "./dbLike.js";
 
 /** 最小 DbLike mock：prepare 返回 run()（计入 calls）/ get()；transaction(fn) 直接执行。 */
 function makeDb() {

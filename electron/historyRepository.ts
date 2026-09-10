@@ -1,4 +1,4 @@
-import type { DbLike } from "../src/core/dbLike.js";
+import type { DbLike } from "./dbLike.js";
 import fs from "node:fs";
 import path from "node:path";
 import zlib from "node:zlib";

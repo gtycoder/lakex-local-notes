@@ -1,5 +1,5 @@
 import type { CleanOrphanResult, DataHealthReport, DeepCleanupResult, DraftJournalEntry, LastHistoryCleanup, NoteDigest, NoteDocument, OrphanAsset, QuickNoteDocument, QuickNoteImage, QuickNoteTrashItem, ResourceUploadInput, ResourceUploadOutput, S3GcLogItem, S3GcPendingItem, S3GcSettings, S3Settings, SaveQuickNoteInput, SyncProgress, SyncResult, SyncSettings, SyncStatusInfo, TreeNode, WorkspaceSnapshot } from "./types";
-import type { TrashItem } from "../core/trashRepository";
+import type { TrashItem } from "../core/trashPolicy";
 import type { GcDiagnostics } from "../core/gcDiagnostics";
 
 export interface LakeNative {

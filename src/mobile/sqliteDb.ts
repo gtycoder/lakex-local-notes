@@ -1,7 +1,7 @@
 /**
  * 移动端 SQLite（M0 POC）：sql.js（WASM，同步 API）实现 DbLike 兼容数据层。
  *
- * - 与 lake-core `src/core/dbLike.ts`（V5 Phase 2）的接口形态对齐：
+ * - 与桌面 `electron/dbLike.ts`（V5 Phase 2）的接口形态对齐：
  *   prepare / exec / transaction 全同步（better-sqlite3 风格）。
  * - 持久化：db.export() 快照 → IndexedDB（POC 阶段）；M1 迁移到 Filesystem/正式方案。
  * - POC 结论（见 docs/MOBILE-TECH-STACK.md §9.3）：
