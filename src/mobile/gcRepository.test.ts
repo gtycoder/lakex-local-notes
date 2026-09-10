@@ -28,19 +28,19 @@ describe("mobile GC repository", () => {
       { length: SQL_PARAMETER_BATCH_SIZE + 1 },
       (_, index) => `gc-key-${index}`,
     );
-    for (const key of keys) addS3GcPending(db, key);
+    for (const key of keys) await addS3GcPending(db, key);
 
-    expect(listS3GcPending(db)).toHaveLength(keys.length);
+    await expect(listS3GcPending(db)).resolves.toHaveLength(keys.length);
 
-    removeS3GcPending(db, keys);
+    await removeS3GcPending(db, keys);
 
-    expect(listS3GcPending(db)).toEqual([]);
+    await expect(listS3GcPending(db)).resolves.toEqual([]);
   });
 
   it("records deletion results for audit", async () => {
     const db = await createDb();
 
-    recordS3GcLog(db, "delete", "objects/note-1", "deep-clean", true);
+    await recordS3GcLog(db, "delete", "objects/note-1", "deep-clean", true);
 
     const row = db.prepare("SELECT action,key,reason,ok FROM s3_gc_log").get() as {
       action: string;

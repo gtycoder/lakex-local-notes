@@ -6,12 +6,12 @@ export interface S3GcPendingKey {
   markedAt: string;
 }
 
-export function addS3GcPending(d: DbLike, key: string): void {
+export async function addS3GcPending(d: DbLike, key: string): Promise<void> {
   d.prepare("INSERT INTO s3_gc_pending(key,marked_at) VALUES(?,?) ON CONFLICT(key) DO NOTHING")
     .run(key, new Date().toISOString());
 }
 
-export function removeS3GcPending(d: DbLike, keys: string[]): void {
+export async function removeS3GcPending(d: DbLike, keys: string[]): Promise<void> {
   if (keys.length === 0) return;
   for (const batch of sqlParameterBatches(keys)) {
     const placeholders = batch.map(() => "?").join(",");
@@ -19,7 +19,7 @@ export function removeS3GcPending(d: DbLike, keys: string[]): void {
   }
 }
 
-export function listS3GcPending(d: DbLike): S3GcPendingKey[] {
+export async function listS3GcPending(d: DbLike): Promise<S3GcPendingKey[]> {
   const rows = d.prepare("SELECT key, marked_at AS markedAt FROM s3_gc_pending ORDER BY marked_at").all() as Array<{
     key: string;
     markedAt: string;
@@ -27,13 +27,13 @@ export function listS3GcPending(d: DbLike): S3GcPendingKey[] {
   return rows.map((row) => ({ key: row.key, markedAt: row.markedAt }));
 }
 
-export function recordS3GcLog(
+export async function recordS3GcLog(
   d: DbLike,
   action: string,
   key: string,
   reason: string,
   ok: boolean,
-): void {
+): Promise<void> {
   d.prepare("INSERT INTO s3_gc_log(ts,action,key,reason,commit_id,device_id,ok) VALUES(?,?,?,?,?,?,?)")
     .run(new Date().toISOString(), action, key, reason, null, "local", ok ? 1 : 0);
 }

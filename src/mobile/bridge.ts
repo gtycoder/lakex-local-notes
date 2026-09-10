@@ -429,7 +429,7 @@ export const bridge = {
   async addS3GcPending(key: string): Promise<void> {
     await runMaintenanceAndPersist(async () => {
       const d = await ensureDb();
-      gcRepository.addS3GcPending(d, key);
+      await gcRepository.addS3GcPending(d, key);
     });
   },
 
@@ -437,21 +437,21 @@ export const bridge = {
   async removeS3GcPending(keys: string[]): Promise<void> {
     await runMaintenanceAndPersist(async () => {
       const d = await ensureDb();
-      gcRepository.removeS3GcPending(d, keys);
+      await gcRepository.removeS3GcPending(d, keys);
     });
   },
 
   /** GC：列出全部待回收键。 */
   async listS3GcPending(): Promise<Array<{ key: string; markedAt: string }>> {
     const d = await ensureDb();
-    return gcRepository.listS3GcPending(d);
+    return await gcRepository.listS3GcPending(d);
   },
 
   /** GC：记录删除（对齐桌面 recordS3GcLog）。 */
   async recordS3GcLog(action: string, key: string, reason: string, ok: boolean): Promise<void> {
     await runMaintenanceAndPersist(async () => {
       const d = await ensureDb();
-      gcRepository.recordS3GcLog(d, action, key, reason, ok);
+      await gcRepository.recordS3GcLog(d, action, key, reason, ok);
     });
   },
 
@@ -662,7 +662,7 @@ export const bridge = {
     const deletedCount = keys.length ? await s3Store.deleteMany(keys) : 0;
     if (keys.length > 0) {
       await runMaintenanceAndPersist(async () => {
-        for (const key of keys) gcRepository.recordS3GcLog(d, "delete", key, "deep-clean", true);
+        for (const key of keys) await gcRepository.recordS3GcLog(d, "delete", key, "deep-clean", true);
       });
     }
     return { candidateCount: all.length, deletedCount, keys };
@@ -703,11 +703,11 @@ export const bridge = {
                 if (p.deleted) continue;
                 const nx = newById.get(p.id);
                 if (!nx || nx.deleted) continue;
-                if (nx.contentHash !== p.contentHash) gcRepository.addS3GcPending(d, `${syncCfg.prefix}/${objectKey(p.id, p.contentHash)}`);
+                if (nx.contentHash !== p.contentHash) await gcRepository.addS3GcPending(d, `${syncCfg.prefix}/${objectKey(p.id, p.contentHash)}`);
                 const nextAssets = new Set((nx.assets ?? []).map((a) => a.filename));
                 for (const asset of p.assets ?? []) {
                   if (nextAssets.has(asset.filename)) continue;
-                  gcRepository.addS3GcPending(d, `${syncCfg.prefix}/assets/${p.id}/${asset.filename}`);
+                  await gcRepository.addS3GcPending(d, `${syncCfg.prefix}/assets/${p.id}/${asset.filename}`);
                 }
               }
               const referencedNow = new Set<string>();
@@ -716,7 +716,7 @@ export const bridge = {
                 referencedNow.add(`${syncCfg.prefix}/${objectKey(note.id, note.contentHash)}`);
                 for (const asset of note.assets ?? []) referencedNow.add(`${syncCfg.prefix}/assets/${note.id}/${asset.filename}`);
               }
-              gcRepository.removeS3GcPending(d, [...referencedNow]);
+              await gcRepository.removeS3GcPending(d, [...referencedNow]);
             } catch { /* 不影响同步 */ }
           },
         });
