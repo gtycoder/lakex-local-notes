@@ -1,9 +1,35 @@
 import { buildAssetFilename } from "./assetNaming.js";
+import { sniffImageFormat, type ImageDimensions, type ImageFormat } from "./imageUtils.js";
 import { sha256Sync } from "./sha256Sync.js";
+import { MAX_IMAGE_BYTES, MAX_IMAGE_PIXELS } from "./storeLimits.js";
 import type { QuickNoteImage } from "./types.js";
 
 export const QUICK_NOTE_VERSION = 1;
 export const MAX_QUICK_NOTE_TEXT_LENGTH = 200_000;
+
+/** Shared quick-note image gate: size, magic bytes, and MIME are platform-independent. */
+export function validateQuickNoteImageBytes(bytes: Uint8Array): ImageFormat {
+  if (bytes.length === 0 || bytes.length > MAX_IMAGE_BYTES) {
+    throw new QuickNoteModelError("图片为空或超过 25 MiB");
+  }
+  const format = sniffImageFormat(bytes);
+  if (!format) throw new QuickNoteModelError("仅支持 PNG、JPEG、GIF、WebP 和 AVIF 图片");
+  return format;
+}
+
+export function validateQuickNoteImageDimensions(dimensions: ImageDimensions): void {
+  if (
+    !Number.isSafeInteger(dimensions.width) || dimensions.width <= 0 ||
+    !Number.isSafeInteger(dimensions.height) || dimensions.height <= 0
+  ) {
+    throw new QuickNoteModelError("图片尺寸无效");
+  }
+  if (
+    dimensions.width * dimensions.height > MAX_IMAGE_PIXELS
+  ) {
+    throw new QuickNoteModelError(`图片尺寸过大（${dimensions.width}x${dimensions.height}），上限 ${MAX_IMAGE_PIXELS} 像素`);
+  }
+}
 
 export type StoredQuickNoteImage = Omit<QuickNoteImage, "url">;
 export interface StoredQuickNoteContent {

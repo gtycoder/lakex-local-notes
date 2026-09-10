@@ -23,7 +23,15 @@ import type { S3Settings, TreeNode, TreeNodeType } from "../lib/types";
 import type { SearchResult } from "../core/searchRepository.js";
 import { assertMoveTarget, assertNodeIcon, assertOrderedChildren, assertRootConstraint, assertTreeNodeTitle, nextSortOrder } from "../core/treeRules.js";
 import { buildLikePattern, buildSearchSql, toSearchResult } from "../core/mobileSearch.js";
-import { buildQuickNoteImageFiles, normalizeQuickNoteContent, previewQuickNote, serializeQuickNoteContent, validateQuickNoteContent } from "../core/quickNoteModel.js";
+import {
+  buildQuickNoteImageFiles,
+  normalizeQuickNoteContent,
+  previewQuickNote,
+  serializeQuickNoteContent,
+  validateQuickNoteContent,
+  validateQuickNoteImageBytes,
+  validateQuickNoteImageDimensions,
+} from "../core/quickNoteModel.js";
 import type { StoredQuickNoteContent, StoredQuickNoteImage } from "../core/quickNoteModel.js";
 import { syncQuickNotesViaEngine } from "../core/quickNotesSyncEngine.js";
 import { applyQuickNotesSyncSchema, createQuickNotesSyncDbPort } from "./quickNotesDbPort.js";
@@ -1037,8 +1045,14 @@ export const bridge = {
   async saveQuickNoteWithImages(id: string, text: string, imageFiles: Array<{ filename: string; mimeType: string; width: number | null; height: number | null; bytes: Uint8Array }> = []): Promise<string> {
     return maintenance.run("main", async () => {
       const d = await ensureDb();
+      const validatedImageFiles = imageFiles.map((image) => {
+        const format = validateQuickNoteImageBytes(image.bytes);
+        if (image.width == null || image.height == null) throw new Error("图片尺寸缺失");
+        validateQuickNoteImageDimensions({ width: image.width, height: image.height });
+        return { ...image, mimeType: format.mimeType };
+      });
       // 唯一名只生成一次（content JSON 与落盘文件名必须一致；见 buildQuickNoteImageFiles 注释）
-      const { images, files: imageFilesWithKey } = buildQuickNoteImageFiles(imageFiles);
+      const { images, files: imageFilesWithKey } = buildQuickNoteImageFiles(validatedImageFiles);
       const now = new Date().toISOString();
       const content = normalizeQuickNoteContent(text, images);
       const serialized = serializeQuickNoteContent(content);

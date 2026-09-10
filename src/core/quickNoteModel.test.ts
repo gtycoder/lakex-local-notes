@@ -8,7 +8,10 @@ import {
   previewQuickNote,
   serializeQuickNoteContent,
   validateQuickNoteContent,
+  validateQuickNoteImageBytes,
+  validateQuickNoteImageDimensions,
 } from "./quickNoteModel";
+import { MAX_IMAGE_BYTES } from "./storeLimits";
 
 const image = {
   id: "img-1",
@@ -94,5 +97,24 @@ describe("buildQuickNoteImageFiles", () => {
     const content = normalizeQuickNoteContent("带图", images);
     const serialized = serializeQuickNoteContent(content);
     expect(validateQuickNoteContent(JSON.parse(serialized)).images[0].filename).toBe(images[0].filename);
+  });
+});
+
+describe("quick-note image validation", () => {
+  const pngMagic = Uint8Array.of(0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a);
+
+  it("accepts supported magic bytes and rejects SVG or empty input", () => {
+    expect(validateQuickNoteImageBytes(pngMagic)).toEqual({ mimeType: "image/png", extension: "png" });
+    expect(() => validateQuickNoteImageBytes(new Uint8Array())).toThrow("图片为空或超过 25 MiB");
+    expect(() => validateQuickNoteImageBytes(new TextEncoder().encode("<svg xmlns='http://www.w3.org/2000/svg'/>")))
+      .toThrow("仅支持 PNG、JPEG、GIF、WebP 和 AVIF 图片");
+  });
+
+  it("rejects images above the protocol size and decoded pixel limits", () => {
+    const oversized = new Uint8Array(MAX_IMAGE_BYTES + 1);
+    oversized.set(pngMagic);
+    expect(() => validateQuickNoteImageBytes(oversized)).toThrow("图片为空或超过 25 MiB");
+    expect(() => validateQuickNoteImageDimensions({ width: 10_000, height: 5_001 }))
+      .toThrow("图片尺寸过大");
   });
 });

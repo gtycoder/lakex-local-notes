@@ -8,7 +8,11 @@ import { Check, ImagePlus, X } from "lucide-react";
 import { bridge } from "../bridge";
 import { localAssetHttpUrl } from "../../core/assetUrl.js";
 import { withAssetAccessToken } from "../../lib/assetPort";
-import type { StoredQuickNoteImage } from "../../core/quickNoteModel.js";
+import {
+  validateQuickNoteImageBytes,
+  validateQuickNoteImageDimensions,
+  type StoredQuickNoteImage,
+} from "../../core/quickNoteModel.js";
 
 export interface ComposerImage {
   filename: string;
@@ -80,24 +84,28 @@ export function QuickNoteComposer({ editNote, onSaved, onCancel }: QuickNoteComp
   }, [editNote]);
 
   const addFiles = async (files: FileList | File[]): Promise<void> => {
-    const candidates = Array.from(files).filter((f) => f.type.startsWith("image/"));
+    const candidates = Array.from(files);
     if (candidates.length === 0) return;
     setError(null);
     const next: ComposerImage[] = [];
     for (const file of candidates) {
       try {
         const bytes = new Uint8Array(await file.arrayBuffer());
-        let width: number | null = null;
-        let height: number | null = null;
-        try {
-          const bmp = await createImageBitmap(new Blob([bytes], { type: file.type }));
-          width = bmp.width;
-          height = bmp.height;
-          bmp.close();
-        } catch { /* 解码失败仍可保存（宽高 null） */ }
-        next.push({ filename: file.name, mimeType: file.type || "image/png", width, height, bytes, url: makeUrl(bytes, file.type || "image/png") });
+        const format = validateQuickNoteImageBytes(bytes);
+        const bitmap = await createImageBitmap(toBlob(bytes, format.mimeType));
+        const dimensions = { width: bitmap.width, height: bitmap.height };
+        bitmap.close();
+        validateQuickNoteImageDimensions(dimensions);
+        next.push({
+          filename: file.name,
+          mimeType: format.mimeType,
+          width: dimensions.width,
+          height: dimensions.height,
+          bytes,
+          url: makeUrl(bytes, format.mimeType),
+        });
       } catch (e) {
-        setError("读取图片失败: " + (e as Error).message);
+        setError("图片读取失败: " + (e as Error).message);
       }
     }
     if (next.length > 0) setImages((prev) => [...prev, ...next]);

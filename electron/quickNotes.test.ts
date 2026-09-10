@@ -57,6 +57,14 @@ describe("QuickNotesStore", () => {
     expect(saved.content.images[0]).toMatchObject({ id: image.id, hash: image.hash, filename: image.filename });
   });
 
+  it("拒绝伪装成图片的 SVG，不落 staging 文件", async () => {
+    const draftId = crypto.randomUUID();
+    const svg = Array.from(new TextEncoder().encode("<svg xmlns='http://www.w3.org/2000/svg'/>"));
+    await expect(quickNotes.stageImage(draftId, { bytes: svg, filename: "spoof.svg" }))
+      .rejects.toThrow("仅支持 PNG、JPEG、GIF、WebP 和 AVIF 图片");
+    expect(fs.existsSync(path.join(root, "quick-notes", "staging", draftId))).toBe(false);
+  });
+
   it("转换会复制图片到独立 Lake 资源空间，并生成固定格式的无标题文档", async () => {
     const draftId = crypto.randomUUID();
     const image = await quickNotes.stageImage(draftId, { bytes: [...PNG], filename: "convert.png" });

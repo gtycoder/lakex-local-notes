@@ -9,7 +9,6 @@ import sharp from "sharp";
 import { ASSET_PORT } from "./assetServer.js";
 import { localAssetHttpUrl } from "../src/core/assetUrl.js";
 import { AppError } from "../src/core/storeErrors.js";
-import { sniffImageFormat } from "../src/core/imageUtils.js";
 import {
   QUICK_NOTE_VERSION,
   normalizeQuickNoteContent,
@@ -17,6 +16,8 @@ import {
   previewQuickNote,
   serializeQuickNoteContent,
   validateQuickNoteContent,
+  validateQuickNoteImageBytes,
+  validateQuickNoteImageDimensions,
   QuickNoteModelError,
   type StoredQuickNoteContent,
 } from "./quickNoteModel.js";
@@ -27,12 +28,10 @@ export { QUICK_NOTE_VERSION, MAX_QUICK_NOTE_TEXT_LENGTH } from "./quickNoteModel
 export type { QuickNoteContent, QuickNoteConversion, QuickNoteDeleted, QuickNoteDocument, QuickNoteImage, QuickNoteImageInput, QuickNoteSummary, SaveQuickNoteInput } from "./quickNoteTypes.js";
 export type { StoredQuickNoteContent } from "./quickNoteModel.js";
 
-export const MAX_QUICK_NOTE_IMAGE_BYTES = 25 * 1024 * 1024;
+export { MAX_IMAGE_BYTES as MAX_QUICK_NOTE_IMAGE_BYTES } from "../src/core/storeLimits.js";
 /** V5 §5.3：save 轻量 staging 文件约定（staging/{draftId}/ 内） */
 const SAVE_BODY_FILE = "content.qnote";
 const SAVE_META_FILE = "meta.json";
-/** 小记图片解码后像素上限（与 Lake 图片一致：50MP，防解压炸弹） */
-const MAX_QUICK_NOTE_IMAGE_PIXELS = 50_000_000;
 
 function nowIso(): string { return new Date().toISOString(); }
 function uuid(): string { return crypto.randomUUID(); }
@@ -221,14 +220,11 @@ export class QuickNotesStore {
 
   async stageImage(draftId: string, input: QuickNoteImageInput): Promise<QuickNoteImage> {
     if (!input || !Array.isArray(input.bytes)) throw new AppError("InvalidInput", "图片数据无效");
-    if (input.bytes.length === 0 || input.bytes.length > MAX_QUICK_NOTE_IMAGE_BYTES) throw new AppError("InvalidInput", "图片为空或超过 25 MiB");
     const bytes = Buffer.from(input.bytes);
-    const format = sniffImageFormat(bytes);
-    if (!format) throw new AppError("InvalidInput", "仅支持 PNG、JPEG、GIF、WebP 和 AVIF 图片");
+    const format = toStoreValidation(() => validateQuickNoteImageBytes(bytes));
     const metadata = await sharp(bytes, { animated: true }).metadata().catch(() => null);
-    if (metadata?.width && metadata?.height && metadata.width * metadata.height > MAX_QUICK_NOTE_IMAGE_PIXELS) {
-      throw new AppError("InvalidInput", `图片尺寸过大（${metadata.width}x${metadata.height}），上限 ${MAX_QUICK_NOTE_IMAGE_PIXELS} 像素`);
-    }
+    if (!metadata?.width || !metadata?.height) throw new AppError("InvalidInput", "图片尺寸读取失败");
+    toStoreValidation(() => validateQuickNoteImageDimensions({ width: metadata.width, height: metadata.height }));
     const id = uuid();
     const filename = `${Date.now()}_${crypto.randomBytes(4).toString("hex")}.${format.extension}`;
     const stagingDir = this.stagingDirFor(draftId);
