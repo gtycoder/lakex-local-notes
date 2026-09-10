@@ -28,6 +28,7 @@
 - **共享行为契约**：嵌套文档树删除/恢复、资源大小上限、小记同步/墓碑/恢复/冲突归档已在桌面与移动两侧锁定；GC keep set 统一走 `src/core/gcDecisions.ts`。
 - **跨端契约收敛**：删除 `src/core/maybeAsync.ts`，`SyncDbPort` / `QuickNotesSyncDbPort` 明确 `Promise`；桌面 adapter 显式 async。`DbLike`、`NoteQueries`、`TrashRepository`、`SearchRepository` 移到 `electron/`，`src/core` 不再共享同步 SQLite 形态。
 - **模拟器验证**：最新分支构建安装到 `emulator-5554`；启动、5 笔记 / 3 分组 / 2 小记数据、进程强停重启后数据持久化均通过。资源限制实测：100 MiB+ 附件、25 MiB+ 图片均在落盘前拒绝，无资源残留。
+- **测试脚手架收敛**：bridge 测试共用全局 sql.js WASM setup 与 `NativeSqliteDb` 测试工厂；`bridgeTree` 只保留一层 async `prepare` 记录器用于 SQL 分批断言。全套 904/15 门槛和双端构建保持绿。
 - **门禁**：`tsc` 0 error；vitest **904 passed / 15 skipped**；Android `:app:testDebugUnitTest` + `assembleDebug` 通过；移动 Vite 构建通过。桌面构建仍按需在合并前跑。
 
 ### 2.0 移动端 UI 全面对齐思源 B1–B6（260908，见 `docs/MOBILE-UI-SIYUAN-AUDIT-260908.md`）
