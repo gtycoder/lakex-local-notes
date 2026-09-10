@@ -6,10 +6,9 @@
 
 ## 0. 当前基线（新会话开工前）
 - 分支/远端：开发主干 `master` ↔ Gitee `origin`（`git@gitee.com:gtycoder/local-lake.git`，SSH 可用；`master` 亦是远程默认分支）。**本文不写死 commit hash**——查 `git log -1 --oneline`。
-- 质量门槛：`tsc` 0 error · vitest **838 passed / 15 skipped** · 桌面 `vite build` + 移动 `vite build -c vite.mobile.config.ts` 全绿（计数变动见 §2；别把数字写回 AGENTS/README）。
-- 本地业务分支只有 `master`（其余已合并/删除；`origin/main` 是旧 Tauri 遗留）。`git worktree list` 目前只有主目录（历史上的 `lake-notes-wt-android` 已消失，见 §3 移动端条）。
-- **开工先跑 `git status` + `git worktree list`**：**当前有一批未提交的移动端改动**（本会话产出，见 §2.8，集中在 `src/mobile/`：`MobileApp`、`editor/EditorDock`、`editor/editor-dock.css`、`home/HomePage`、`home/NotebookGrid`、`mobile.css`、`notebook/NotebookWorkspace`）。其余是**非本会话的遗留**：`AGENTS.md`/`README.md` 被改（未提交）+ `docs/{LAKEX-CONTRACT,OBSIDIAN-PLUGIN-*,SYNC-RELIABILITY-VERIFY}.md` 未跟踪 + 一个乱码文件 `", v)"`。**别把遗留卷进你的提交**（用显式路径 `git add`）。
-- **提交状态**：`master` 头 ≈ 早前移动端提交（`git log -1 --oneline` 查）。本会话的移动端改动**未提交**——代码批次需用户验收后才提（项目红线）；文档类（含本文件）可直接单独提交。
+- 质量门槛：`tsc` 0 error · vitest **904 passed / 15 skipped** · 桌面 `vite build` + 移动 `vite build -c vite.mobile.config.ts` 全绿（计数变动见 §2；别把数字写回 AGENTS/README）。
+- **当前业务分支：`refactor/mobile-native-sqlite`**（本轮已提交）；`master` 仍是主干。`git worktree list` 目前只有主目录。
+- **开工先跑 `git status` + `git worktree list`**：当前工作区遗留是**非本轮代码**：`AGENTS.md`/`README.md` 被改（未提交）+ `docs/{CODE-AUDIT-20260909-FULL-CODE-AUDIT,LAKEX-CONTRACT,OBSIDIAN-PLUGIN-*,SYNC-RELIABILITY-VERIFY}.md` 未跟踪 + 一个乱码文件 `", v)"`。**别把遗留卷进你的提交**（用显式路径 `git add`）。
 - dev 实例状态：**桌面 `npm run dev` 未启动**（本会话未跑）。**安卓模拟器 `emulator-5554` 在跑**，App `com.lakenotes.mobile` 已装**最新移动端 bundle**（用 `bash scripts/android-build.sh --sync --install`，gradle 用 `~/.gradle/wrapper/dists/gradle-8.14.3-bin/…` 缓存、勿走 wrapper）。WebView CDP 已转发 `tcp:9335`（http://127.0.0.1:9335/json/list）。**注意：socket 随 App 重启变化**——先 `adb forward --remove-all`，再 `adb shell cat /proc/net/unix | grep -oE "webview_devtools_remote_[0-9a-f]+"` 找新 socket，`adb forward tcp:9335 localabstract:$s` 后 `curl /json/list` 校验。
 - **dev 数据现状（重要）**：
   - `welcome-note`（幽灵文档）已一次性清理：墓碑 `deleted_notes(welcome-note, note, purged_at=now, published_at=NULL)` 已写、行与文件已删 ⇒ **下次同步会发布 `deleted:true` 并删云端 `objects/welcome-note-*`、`assets/welcome-note/` 前缀**，之后不会复活。
@@ -23,6 +22,13 @@
 ⑦ 不擅自合 master（代码批次需用户验收；文档类清理可直接提交）。移动端另有铁律见 **§8.0**。
 
 ## 2. 本轮已完成
+
+### 2.9 移动端原生 SQLite 收口（260910）
+- **生产存储已切到 Android native SQLite（WAL）**：`src/mobile/bridge.ts` 用共享初始化 Promise 打开 `NativeSqliteDb`；`sql.js` 不再承担生产写入；旧 IndexedDB 快照只作为一次性迁移源，不再写入。
+- **共享行为契约**：嵌套文档树删除/恢复、资源大小上限、小记同步/墓碑/恢复/冲突归档已在桌面与移动两侧锁定；GC keep set 统一走 `src/core/gcDecisions.ts`。
+- **跨端契约收敛**：删除 `src/core/maybeAsync.ts`，`SyncDbPort` / `QuickNotesSyncDbPort` 明确 `Promise`；桌面 adapter 显式 async。`DbLike`、`NoteQueries`、`TrashRepository`、`SearchRepository` 移到 `electron/`，`src/core` 不再共享同步 SQLite 形态。
+- **模拟器验证**：最新分支构建安装到 `emulator-5554`；启动、5 笔记 / 3 分组 / 2 小记数据、进程强停重启后数据持久化均通过。资源限制实测：100 MiB+ 附件、25 MiB+ 图片均在落盘前拒绝，无资源残留。
+- **门禁**：`tsc` 0 error；vitest **904 passed / 15 skipped**；Android `:app:testDebugUnitTest` + `assembleDebug` 通过；移动 Vite 构建通过。桌面构建仍按需在合并前跑。
 
 ### 2.0 移动端 UI 全面对齐思源 B1–B6（260908，见 `docs/MOBILE-UI-SIYUAN-AUDIT-260908.md`）
 - **审计**：38 项发现（结构/弹层/手势/图标/动效/色彩排版/第一层/编辑器 8 个维度），每条带思源源码出处（`_mobile.scss` / `template/mobile/index.tpl` / `util/touch.ts` / `touchPanelGesture.ts` / `menus/Menu.ts` / `dialog/message.ts`）。
@@ -220,6 +226,8 @@ node scripts/s3-ls.mjs --count | --note <id> | --prefix <prefix>
 
 > **面向零上下文新会话——当前状态一句话（260908 收尾）**：移动端已完成**设置项收口** + **完整端**（历史快照列/恢复/删/24h去重/上限/定时、资源管理本地孤儿+云端GC、运行诊断）+ **大纲 viewer 跳转根因修复**（docs 高度塌陷）。主数据同步/编辑基础早已就绪（见 §8.4/8.5）。下一步见 §8.7（真机验收 + 数据导出/导入 + 剪贴板/资源URL）。本会话所有改动已提交 `master`（最新 `8e26910`）。
 >
+> **260910 更新**：移动端生产存储已切到 **Android native SQLite（WAL）**；`sql.js` 只保留为测试/一次性迁移验证实现。跨端同步端口已全部显式 `Promise`，共享 GC keep set、嵌套树契约、资源大小契约已锁定。最新分支已在 `emulator-5554` 安装并通过重启持久化与资源上限验证；详见 §2.9。
+>
 > **更新的状态（2609xx 之后一个会话）**：又完成两块移动端大改——**编辑器底部工具栏**（修面板展开抖动、命令生效高亮、+/Aa 展开变 ×+震动、去冗余完成钮）与**首层首页重做**（小记卡片、知识库书架/列表+最近文档、底部栏[搜索|新建|云同步]、tab 滑入动效），并修**最近文档/搜索直达**、**第二层底栏滚动隐藏/显示**，且**按用户决策删除知识库排序**（改用共享 sort_order=桌面顺序）。**这批未提交**（详见 §2.8，待真机验收后提交）。
 
 ### 8.0 移动端注意（原「移动端铁律」已降级为注意项，260907 用户明确解除硬隔离）
@@ -309,7 +317,7 @@ node scripts/s3-ls.mjs --count | --note <id> | --prefix <prefix>
 ### 8.7 下一步（移动端，按优先级）
 0. **（最新）真机验收首层首页 + 编辑器工具栏**（§2.8 这批未提交改动）：① 工具栏面板展开**不抖**、加粗/斜体生效**高亮**、+/Aa 展开变 × + 震动（震动须真机）；② 首层小记卡片、知识库书架/最近文档样式、tab 滑入动效。确认后**提交**这批（`git add src/mobile/... && git commit`，先跑门禁）。
 1. **真机验收本会话交付**（历史/资源/GC/设置/大纲）：重点用**真实长文档**验证①大纲跳转滚动②资源管理（删图不再重传、孤儿清理、云端 GC）。
-2. **整库备份/云端恢复**：桌面走「文件系统拷贝 + 应用重启」；移动端数据在沙盒（sql.js + Capacitor FS，无 workspace 目录），架构不匹配——需另做「**数据导出/导入**」（导出 DB 快照 + 资产清单到文件）。当前已有「运行诊断」统计。
+2. **整库备份/云端恢复**：桌面走「文件系统拷贝 + 应用重启」；移动端数据在沙盒（native SQLite + Capacitor FS，无 workspace 目录），架构不匹配——需另做「**数据导出/导入**」（导出 DB 快照 + 资产清单到文件）。当前已有「运行诊断」统计。
 3. **定时自动快照真机验证**：`snapshotNote` 复用 `createHistorySnapshot`（已带 24h 去重）；**移动端模拟器 app 生命周期可能不触发 `setInterval`**，需前台运行验证。
 4. **剪贴板粘贴真机验证**（§8.6.4）：沿 android worktree `installPasteInterceptor` 线索。
 5. **资源 canonical URL 真机可达**（§8.6.5）：`adb reverse tcp:19876 tcp:19876`。
