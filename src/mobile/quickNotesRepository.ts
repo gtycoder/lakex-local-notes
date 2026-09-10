@@ -42,7 +42,7 @@ export interface QuickNoteTrashItem {
   previewText: string;
 }
 
-export function listQuickNotes(d: DbLike): QuickNoteListItem[] {
+export async function listQuickNotes(d: DbLike): Promise<QuickNoteListItem[]> {
   const rows = d.prepare("SELECT id, preview_text, image_count, updated_at, content FROM quick_notes WHERE deleted_at IS NULL AND restore_pending_at IS NULL ORDER BY updated_at DESC").all() as Array<{ id: string; preview_text: string; image_count: number; updated_at: string; content: string }>;
   return rows.map((r) => {
     let firstImage: string | null = null;
@@ -51,7 +51,7 @@ export function listQuickNotes(d: DbLike): QuickNoteListItem[] {
   });
 }
 
-export function readQuickNote(d: DbLike, id: string): QuickNoteReadResult | null {
+export async function readQuickNote(d: DbLike, id: string): Promise<QuickNoteReadResult | null> {
   const row = d.prepare("SELECT id, content, preview_text, updated_at FROM quick_notes WHERE id=?").get(id) as { id: string; content: string; preview_text: string; updated_at: string } | undefined;
   if (!row) return null;
   let parsed: StoredQuickNoteContent;
@@ -60,7 +60,7 @@ export function readQuickNote(d: DbLike, id: string): QuickNoteReadResult | null
   return { id: row.id, content: parsed, previewText: row.preview_text, updatedAt: row.updated_at };
 }
 
-export function saveQuickNote(d: DbLike, id: string, text: string, images: StoredQuickNoteImage[] = []): string {
+export async function saveQuickNote(d: DbLike, id: string, text: string, images: StoredQuickNoteImage[] = []): Promise<string> {
   const now = new Date().toISOString();
   const content = normalizeQuickNoteContent(text, images);
   const serialized = serializeQuickNoteContent(content);
@@ -117,16 +117,16 @@ export async function saveQuickNoteWithImages(
   return id;
 }
 
-export function deleteQuickNote(d: DbLike, id: string): void {
+export async function deleteQuickNote(d: DbLike, id: string): Promise<void> {
   d.prepare("UPDATE quick_notes SET deleted_at=?, restore_pending_at=NULL, sync_state='local', ready_to_sync=1 WHERE id=?").run(new Date().toISOString(), id);
 }
 
-export function listQuickNoteTrash(d: DbLike): QuickNoteTrashItem[] {
+export async function listQuickNoteTrash(d: DbLike): Promise<QuickNoteTrashItem[]> {
   const rows = d.prepare("SELECT id, created_at, updated_at, deleted_at, preview_text FROM quick_notes WHERE deleted_at IS NOT NULL ORDER BY deleted_at DESC").all() as Array<{ id: string; created_at: string; updated_at: string; deleted_at: string; preview_text: string }>;
   return rows.map((r) => ({ id: String(r.id), createdAt: String(r.created_at), updatedAt: String(r.updated_at), deletedAt: String(r.deleted_at), previewText: String(r.preview_text) }));
 }
 
-export function restoreQuickNote(d: DbLike, id: string): void {
+export async function restoreQuickNote(d: DbLike, id: string): Promise<void> {
   const row = d.prepare("SELECT 1 FROM quick_notes WHERE id=? AND deleted_at IS NOT NULL").get(id);
   if (!row) throw new Error("小记不在回收站");
   const now = new Date().toISOString();
