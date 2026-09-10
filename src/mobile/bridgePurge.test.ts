@@ -79,7 +79,6 @@ vi.mock("./sqliteDb.js", async () => {
 });
 
 vi.mock("./persistence", () => ({
-  saveSnapshot: vi.fn(async () => {}),
   loadSnapshot: vi.fn(async () => null),
 }));
 

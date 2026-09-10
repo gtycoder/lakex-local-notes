@@ -1,15 +1,10 @@
-/**
- * POC 持久化：SQLite 全库快照（sql.js db.export() 字节）→ IndexedDB。
- * - WebView 内零依赖持久化；键值结构，快照体积 = 全库导出字节。
- * - 资产（note-assets / quick-notes 图片）已全部走 Capacitor Filesystem 文件（assetFs.ts），
- *   不再存 IndexedDB（旧 asset: 前缀存储与迁移逻辑已随 2026-08-28 清理删除）。
- */
+/** Read the legacy sql.js IndexedDB snapshot during one-time native SQLite migration. */
 
 const IDB_NAME = "lake-notes-mobile";
 const IDB_STORE = "kv";
 const DB_KEY = "sqlite-snapshot";
 
-function openStore(): Promise<IDBObjectStore> {
+function openLegacyStore(): Promise<IDBObjectStore> {
   return new Promise((resolve, reject) => {
     const req = indexedDB.open(IDB_NAME, 1);
     req.onupgradeneeded = () => {
@@ -18,24 +13,15 @@ function openStore(): Promise<IDBObjectStore> {
       }
     };
     req.onsuccess = () => {
-      const tx = req.result.transaction(IDB_STORE, "readwrite");
+      const tx = req.result.transaction(IDB_STORE, "readonly");
       resolve(tx.objectStore(IDB_STORE));
     };
     req.onerror = () => reject(req.error);
   });
 }
 
-export async function saveSnapshot(bytes: Uint8Array): Promise<void> {
-  const store = await openStore();
-  return new Promise((resolve, reject) => {
-    const req = store.put(bytes.buffer as ArrayBuffer, DB_KEY);
-    req.onsuccess = () => resolve();
-    req.onerror = () => reject(req.error);
-  });
-}
-
 export async function loadSnapshot(): Promise<Uint8Array | null> {
-  const store = await openStore();
+  const store = await openLegacyStore();
   return new Promise((resolve, reject) => {
     const req = store.get(DB_KEY);
     req.onsuccess = () => {

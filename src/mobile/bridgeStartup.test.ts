@@ -156,7 +156,6 @@ const {
 }));
 
 vi.mock("./persistence", () => ({
-  saveSnapshot: vi.fn(async () => {}),
   loadSnapshot: vi.fn(async () => null),
 }));
 
