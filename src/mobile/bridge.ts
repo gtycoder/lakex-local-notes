@@ -26,7 +26,6 @@ import { syncQuickNotesViaEngine } from "../core/quickNotesSyncEngine.js";
 import { createQuickNotesSyncDbPort } from "./quickNotesDbPort.js";
 import { mobileSecretStore } from "./secretStore.js";
 import { stageAssetWrites } from "./assetWrites.js";
-import { sqlParameterBatches } from "../core/sqlParameterBatch.js";
 import { applyMobileSchema } from "./schema.js";
 import * as treeRepository from "./treeRepository.js";
 import * as noteRepository from "./noteRepository.js";
@@ -37,6 +36,7 @@ import { createMobileSyncDbPort } from "./syncDbPort.js";
 import * as historyRepository from "./historyRepository.js";
 import type { HistoryMobileSettings } from "./historyRepository.js";
 import * as orphanAssetRepository from "./orphanAssetRepository.js";
+import * as gcRepository from "./gcRepository.js";
 
 export type { HistoryMobileSettings } from "./historyRepository.js";
 
@@ -154,25 +154,6 @@ async function runMaintenanceAndPersist<T>(operation: () => T | Promise<T>): Pro
     await persistDatabaseSnapshot();
     return result;
   });
-}
-
-async function addS3GcPendingInternal(key: string): Promise<void> {
-  const d = await ensureDb();
-  d.prepare("INSERT INTO s3_gc_pending(key,marked_at) VALUES(?,?) ON CONFLICT(key) DO NOTHING").run(key, new Date().toISOString());
-}
-
-async function removeS3GcPendingInternal(keys: string[]): Promise<void> {
-  if (keys.length === 0) return;
-  const d = await ensureDb();
-  for (const batch of sqlParameterBatches(keys)) {
-    const ph = batch.map(() => "?").join(",");
-    d.prepare(`DELETE FROM s3_gc_pending WHERE key IN (${ph})`).run(...batch);
-  }
-}
-
-async function recordS3GcLogInternal(action: string, key: string, reason: string, ok: boolean): Promise<void> {
-  const d = await ensureDb();
-  d.prepare("INSERT INTO s3_gc_log(ts,action,key,reason,commit_id,device_id,ok) VALUES(?,?,?,?,?,?,?)").run(new Date().toISOString(), action, key, reason, null, "local", ok ? 1 : 0);
 }
 
 export const bridge = {
@@ -444,23 +425,32 @@ export const bridge = {
 
   /** GC：登记待回收键（新 manifest 不再引用，对齐桌面 addS3GcPending）。 */
   async addS3GcPending(key: string): Promise<void> {
-    await runMaintenanceAndPersist(() => addS3GcPendingInternal(key));
+    await runMaintenanceAndPersist(async () => {
+      const d = await ensureDb();
+      gcRepository.addS3GcPending(d, key);
+    });
   },
 
   /** GC：从待回收表移除已被重新引用的键。 */
   async removeS3GcPending(keys: string[]): Promise<void> {
-    await runMaintenanceAndPersist(() => removeS3GcPendingInternal(keys));
+    await runMaintenanceAndPersist(async () => {
+      const d = await ensureDb();
+      gcRepository.removeS3GcPending(d, keys);
+    });
   },
 
   /** GC：列出全部待回收键。 */
   async listS3GcPending(): Promise<Array<{ key: string; markedAt: string }>> {
     const d = await ensureDb();
-    return d.prepare("SELECT key, marked_at AS markedAt FROM s3_gc_pending ORDER BY marked_at").all() as Array<{ key: string; markedAt: string }>;
+    return gcRepository.listS3GcPending(d);
   },
 
   /** GC：记录删除（对齐桌面 recordS3GcLog）。 */
   async recordS3GcLog(action: string, key: string, reason: string, ok: boolean): Promise<void> {
-    await runMaintenanceAndPersist(() => recordS3GcLogInternal(action, key, reason, ok));
+    await runMaintenanceAndPersist(async () => {
+      const d = await ensureDb();
+      gcRepository.recordS3GcLog(d, action, key, reason, ok);
+    });
   },
 
   async createNote(title: string, parentId: string | null = null): Promise<POCNote> {
@@ -670,7 +660,7 @@ export const bridge = {
     const deletedCount = keys.length ? await s3Store.deleteMany(keys) : 0;
     if (keys.length > 0) {
       await runMaintenanceAndPersist(async () => {
-        for (const k of keys) await recordS3GcLogInternal("delete", k, "deep-clean", true);
+        for (const key of keys) gcRepository.recordS3GcLog(d, "delete", key, "deep-clean", true);
       });
     }
     return { candidateCount: all.length, deletedCount, keys };
@@ -718,11 +708,11 @@ export const bridge = {
                 if (p.deleted) continue;
                 const nx = newById.get(p.id);
                 if (!nx || nx.deleted) continue;
-                if (nx.contentHash !== p.contentHash) await addS3GcPendingInternal(`${syncCfg.prefix}/${objectKey(p.id, p.contentHash)}`);
+                if (nx.contentHash !== p.contentHash) gcRepository.addS3GcPending(d, `${syncCfg.prefix}/${objectKey(p.id, p.contentHash)}`);
                 const nextAssets = new Set((nx.assets ?? []).map((a) => a.filename));
                 for (const asset of p.assets ?? []) {
                   if (nextAssets.has(asset.filename)) continue;
-                  await addS3GcPendingInternal(`${syncCfg.prefix}/assets/${p.id}/${asset.filename}`);
+                  gcRepository.addS3GcPending(d, `${syncCfg.prefix}/assets/${p.id}/${asset.filename}`);
                 }
               }
               const referencedNow = new Set<string>();
@@ -731,7 +721,7 @@ export const bridge = {
                 referencedNow.add(`${syncCfg.prefix}/${objectKey(note.id, note.contentHash)}`);
                 for (const asset of note.assets ?? []) referencedNow.add(`${syncCfg.prefix}/assets/${note.id}/${asset.filename}`);
               }
-              await removeS3GcPendingInternal([...referencedNow]);
+              gcRepository.removeS3GcPending(d, [...referencedNow]);
             } catch { /* 不影响同步 */ }
           },
         });
