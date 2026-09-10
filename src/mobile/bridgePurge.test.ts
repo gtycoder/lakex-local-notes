@@ -54,6 +54,7 @@ vi.mock("./assetFs", () => ({
   loadAssetBytesFs: vi.fn(async () => null),
   listAssetKeysFs: vi.fn(async () => []),
   listNoteAssetKeysFs: vi.fn(async () => []),
+  removeAssetBytesFs: vi.fn(async () => {}),
 }));
 
 import { bridge } from "./bridge.js";

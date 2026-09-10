@@ -96,10 +96,16 @@ vi.mock("./sqliteDb.js", async () => {
   };
 });
 
-const { loadAssetBytesFs, listAssetKeysFs, listNoteAssetKeysFs } = vi.hoisted(() => ({
+const {
+  loadAssetBytesFs,
+  listAssetKeysFs,
+  listNoteAssetKeysFs,
+  removeAssetBytesFs,
+} = vi.hoisted(() => ({
   loadAssetBytesFs: vi.fn(async () => new Uint8Array([1, 2, 3])),
   listAssetKeysFs: vi.fn(async () => ["note-1/image.png"]),
   listNoteAssetKeysFs: vi.fn(async (noteId: string) => [`${noteId}/image.png`]),
+  removeAssetBytesFs: vi.fn(async () => {}),
 }));
 
 vi.mock("./persistence", () => ({
@@ -111,6 +117,7 @@ vi.mock("./assetFs", () => ({
   loadAssetBytesFs,
   listAssetKeysFs,
   listNoteAssetKeysFs,
+  removeAssetBytesFs,
 }));
 
 import { bridge } from "./bridge.js";

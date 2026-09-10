@@ -61,6 +61,7 @@ vi.mock("./assetFs", () => ({
   loadAssetBytesFs: vi.fn(async () => null),
   listAssetKeysFs: vi.fn(async () => []),
   listNoteAssetKeysFs: vi.fn(async () => []),
+  removeAssetBytesFs: vi.fn(async () => {}),
 }));
 
 type TestManifest = {
