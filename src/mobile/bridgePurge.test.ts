@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import path from "node:path";
 import type { Database } from "sql.js";
+import { defineTreeBehaviorContract, type TreeBehaviorAdapter } from "../core/treeBehaviorContract.js";
 
 // sqliteDb.js 的 SqlJsDb 依赖 Vite 的 ?url wasm import，vitest 下解析为根路径失败；
 // mock 为真实 sql.js（node 直载 wasm，同 quickNotesDbPort.test.ts 模式）。
@@ -108,6 +109,40 @@ vi.mock("./assetFs", () => ({
 
 import { bridge } from "./bridge.js";
 
+function createMobileAdapter(): TreeBehaviorAdapter {
+  return {
+    async createNotebook(title) {
+      return (await bridge.createNotebook({ title, icon: null })).id;
+    },
+    async createGroup(parentId, title) {
+      return (await bridge.createGroup(parentId, title)).id;
+    },
+    async createNote(parentId, title) {
+      return (await bridge.createNote(title, parentId)).id;
+    },
+    async trashTree(rootId) {
+      await bridge.trashTreeItem(rootId, "folder");
+    },
+    async restoreTree(rootId) {
+      await bridge.restoreTreeItem(rootId, "folder");
+    },
+    async notebookTreeIds(notebookId) {
+      return (await bridge.listNotebookTree(notebookId)).map((item) => item.id);
+    },
+    async isNoteTrashed(noteId) {
+      return (await bridge.listTrashTree()).some((item) => item.id === noteId);
+    },
+    async noteParentId(noteId) {
+      return (await bridge.noteGoneState(noteId))?.parentId ?? null;
+    },
+    async noteSyncState(noteId) {
+      return (await bridge.noteGoneState(noteId))?.syncState ?? "";
+    },
+  };
+}
+
+defineTreeBehaviorContract("Mobile", createMobileAdapter);
+
 /**
  * 移动端 purge 删除传播回归测试：
  * - purgeTreeItem 必须物理删除行（回收站不再残留）+ 写 deleted_notes 墓碑（purged_at + node_type）；
@@ -202,30 +237,6 @@ describe("mobile purge 删除传播", () => {
     const trash = await bridge.listTrashTree();
     expect(trash.some((t) => t.id === A && t.kind === "note")).toBe(true);
     expect(trash.some((t) => t.id === B)).toBe(false);
-  });
-
-  it("trash/restore folder 覆盖挂在 note 下的嵌套文档", async () => {
-    const nb = await bridge.createNotebook({ title: "嵌套子树恢复", icon: null });
-    const group = await bridge.createGroup(nb.id, "嵌套分组");
-    await bridge.saveNote("nested-parent", "父文档", "<p>p</p>", group.id);
-    await bridge.saveNote("nested-child", "子文档", "<p>c</p>", "nested-parent");
-    await bridge.saveNote("nested-grandchild", "孙文档", "<p>g</p>", "nested-child");
-
-    await bridge.trashTreeItem(nb.id, "folder");
-    let trash = await bridge.listTrashTree();
-    expect(trash.some((item) => item.id === "nested-parent")).toBe(true);
-    expect(trash.some((item) => item.id === "nested-child")).toBe(true);
-    expect(trash.some((item) => item.id === "nested-grandchild")).toBe(true);
-
-    await bridge.restoreTreeItem(nb.id, "folder");
-    trash = await bridge.listTrashTree();
-    expect(trash.some((item) => item.id === "nested-parent")).toBe(false);
-    expect(trash.some((item) => item.id === "nested-child")).toBe(false);
-    expect(trash.some((item) => item.id === "nested-grandchild")).toBe(false);
-
-    const tree = await bridge.listNotebookTree(nb.id);
-    expect(tree.some((item) => item.id === "nested-child")).toBe(true);
-    expect(tree.some((item) => item.id === "nested-grandchild")).toBe(true);
   });
 
   it("purge folder 为嵌套文档写墓碑并物理删除", async () => {
