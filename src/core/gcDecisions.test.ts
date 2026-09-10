@@ -21,6 +21,12 @@ describe("buildGcKeepSet", () => {
     expect(keep.size).toBe(1);
   });
 
+  it("supports desktop-relative keys when no prefix is supplied", () => {
+    const keep = buildGcKeepSet({ manifest: null, prefix: "", historyRefs: ["assets/n1/x.png"] });
+    expect(keep.has("assets/n1/x.png")).toBe(true);
+    expect(keep.has("/assets/n1/x.png")).toBe(false);
+  });
+
   it("extraManifests（prev 链）的旧对象引用也进保留集", () => {
     const latest: Manifest = { version: 4, workspaceId: "default", commitId: "c2", prevCommitId: "c1", createdAt: "2026-01-02T00:00:00.000Z", notes: [{ id: "n1", title: "t", contentHash: "hash1", updatedAt: "2026-01-02T00:00:00.000Z", deleted: false, parentId: "nb", sortOrder: 0, isConflict: false, assets: [] }], folders: [] };
     const prev: Manifest = { version: 4, workspaceId: "default", commitId: "c1", prevCommitId: null, createdAt: "2026-01-01T00:00:00.000Z", notes: [{ id: "n1", title: "t", contentHash: "hash0", updatedAt: "2026-01-01T00:00:00.000Z", deleted: false, parentId: "nb", sortOrder: 0, isConflict: false, assets: [] }], folders: [] };

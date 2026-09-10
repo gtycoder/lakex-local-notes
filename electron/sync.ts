@@ -22,7 +22,7 @@ import { reconcileLakeNote } from "../src/core/lakeReconcile.js";
 import { decideUpload } from "../src/core/decideUpload.js";
 import type { Manifest, ManifestFolder, ManifestNote } from "../src/core/manifestTypes.js";
 import {
-  syncSnapshot, parseLakeManifest, isGzip, objectKey, collectManifestRefs,
+  syncSnapshot, parseLakeManifest, isGzip, objectKey,
   normalizeEndpoint, validateS3Settings, errorMessage, isNoSuchKey,
   mimeTypeFor, assertSafeKey, chunkArray, validateManifest,
   MANIFEST_VERSION, MAX_MANIFEST_BYTES, MAX_MANIFEST_NOTES, MAX_MANIFEST_FOLDERS,
@@ -31,6 +31,7 @@ import {
 } from "../src/core/syncUtils.js";
 import { MAX_IMAGE_BYTES } from "../src/core/storeLimits.js";
 import { gcCutoffMs, isPastWindow, parseIsoMs } from "../src/core/gcPolicy.js";
+import { buildGcKeepSet } from "../src/core/gcDecisions.js";
 import { isSafePathSegment as isSafeSegment } from "../src/core/storeUtils.js";
 import { decidePurge, decideLocalTombstone, decideMetaApply,
   decideTombstoneYield, buildUploadEntry, buildTombstoneEntry, computeBookkeeping,
@@ -340,8 +341,8 @@ export async function syncNow(
  */
 export async function buildLakeGcKeepSet(store: Store, remote: ObjectStore, latest: Manifest | null): Promise<Set<string>> {
   const keep = new Set<string>(["manifests/latest.json"]);
+  const extraManifests: Manifest[] = [];
   if (latest) {
-    collectManifestRefs(latest, keep);
     let prev = latest.prevCommitId;
     let chain = 0;
     while (prev && chain < MANIFEST_CHAIN_KEEP) {
@@ -350,17 +351,21 @@ export async function buildLakeGcKeepSet(store: Store, remote: ObjectStore, late
       const bytes = await remote.getOptional(key, { maxBytes: MAX_MANIFEST_BYTES });
       if (!bytes) break;
       const m = parseLakeManifest(bytes);
-      collectManifestRefs(m, keep);
+      extraManifests.push(m);
       prev = m.prevCommitId;
       chain += 1;
     }
   }
+  const refs = buildGcKeepSet({
+    manifest: latest,
+    extraManifests,
+    prefix: "",
+    historyRefs: store.listNoteIdsWithHistory().flatMap((noteId) =>
+      Array.from(store.getProtectedRefs(noteId), (filename) => `assets/${noteId}/${filename}`),
+    ),
+  });
+  for (const key of refs) keep.add(key);
   // 本设备历史引用保护（B1：最佳努力）
-  for (const noteId of store.listNoteIdsWithHistory()) {
-    for (const filename of store.getProtectedRefs(noteId)) {
-      keep.add(`assets/${noteId}/${filename}`);
-    }
-  }
   return keep;
 }
 
