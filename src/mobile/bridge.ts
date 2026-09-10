@@ -22,15 +22,6 @@ import { localAssetHttpUrl } from "../core/assetUrl.js";
 import type { S3Settings, TreeNode } from "../lib/types";
 import type { SearchResult } from "../core/searchRepository.js";
 import { nextSortOrder } from "../core/treeRules.js";
-import {
-  buildQuickNoteImageFiles,
-  normalizeQuickNoteContent,
-  previewQuickNote,
-  serializeQuickNoteContent,
-  validateQuickNoteContent,
-  validateQuickNoteImageBytes,
-  validateQuickNoteImageDimensions,
-} from "../core/quickNoteModel.js";
 import type { StoredQuickNoteContent, StoredQuickNoteImage } from "../core/quickNoteModel.js";
 import { syncQuickNotesViaEngine } from "../core/quickNotesSyncEngine.js";
 import { createQuickNotesSyncDbPort } from "./quickNotesDbPort.js";
@@ -43,6 +34,7 @@ import * as treeRepository from "./treeRepository.js";
 import * as noteRepository from "./noteRepository.js";
 import type { POCNote, POCNoteSummary } from "./noteRepository.js";
 import * as trashRepository from "./trashRepository.js";
+import * as quickNotesRepository from "./quickNotesRepository.js";
 
 /** 移动端同步结果（P2-5，GPT 审计）：文档/小记分字段，便于 UI 分别展示进度与失败。 */
 export interface MobileSyncResult {
@@ -110,29 +102,6 @@ export interface HistoryMobileSettings {
   snapshotIntervalMinutes: number;
 }
 const DEFAULT_HISTORY_SETTINGS: HistoryMobileSettings = { maxSnapshots: 100, retentionDays: 30, cleanupIntervalHours: 24, snapshotIntervalMinutes: 15 };
-
-/**
- * 小记保存的实际写入逻辑。调用方必须在 maintenance 队列中调用它；不要在这里
- * 再次入队，否则 createQuickNote → saveQuickNote 会对同一个 key 发生嵌套等待死锁。
- */
-async function saveQuickNoteInternal(id: string, text: string, images: StoredQuickNoteImage[] = []): Promise<string> {
-  const d = await ensureDb();
-  const now = new Date().toISOString();
-  const content = normalizeQuickNoteContent(text, images);
-  const serialized = serializeQuickNoteContent(content);
-  const contentHash = sha256Sync(new TextEncoder().encode(serialized));
-  const preview = previewQuickNote(text, images.length);
-  d.transaction(() => {
-    d.prepare(
-      `INSERT INTO quick_notes (id, created_at, updated_at, preview_text, image_count, content_hash, content, sync_state, is_conflict, restore_pending_at, ready_to_sync)
-       VALUES (?,?,?,?,?,?,?,'local',0,NULL,1)
-       ON CONFLICT(id) DO UPDATE SET updated_at=excluded.updated_at, preview_text=excluded.preview_text, image_count=excluded.image_count, content_hash=excluded.content_hash, content=excluded.content, sync_state='local', deleted_at=NULL, restore_pending_at=NULL, ready_to_sync=1`
-    ).run(id, now, now, preview, images.length, contentHash, serialized);
-    d.prepare("DELETE FROM quick_note_deleted WHERE id=?").run(id);
-  })();
-  await saveSnapshot(d.exportBytes());
-  return id;
-}
 
 async function createS3Client(cfg: S3Settings): Promise<import("@aws-sdk/client-s3").S3Client> {
   const [{ S3Client }, { CapacitorHttpHandler }] = await Promise.all([
@@ -632,26 +601,21 @@ export const bridge = {
 
   async listQuickNotes(): Promise<Array<{ id: string; previewText: string; imageCount: number; updatedAt: string; firstImage: string | null }>> {
     const d = await ensureDb();
-    const rows = d.prepare("SELECT id, preview_text, image_count, updated_at, content FROM quick_notes WHERE deleted_at IS NULL AND restore_pending_at IS NULL ORDER BY updated_at DESC").all() as Array<{ id: string; preview_text: string; image_count: number; updated_at: string; content: string }>;
-    return rows.map((r) => {
-      let firstImage: string | null = null;
-      try { firstImage = (JSON.parse(r.content) as StoredQuickNoteContent).images?.[0]?.filename ?? null; } catch { /* 解析失败无缩略图 */ }
-      return { id: r.id, previewText: r.preview_text, imageCount: r.image_count, updatedAt: r.updated_at, firstImage };
-    });
+    return quickNotesRepository.listQuickNotes(d);
   },
 
   async readQuickNote(id: string): Promise<{ id: string; content: StoredQuickNoteContent; previewText: string; updatedAt: string } | null> {
     const d = await ensureDb();
-    const row = d.prepare("SELECT id, content, preview_text, updated_at FROM quick_notes WHERE id=?").get(id) as { id: string; content: string; preview_text: string; updated_at: string } | undefined;
-    if (!row) return null;
-    let parsed: StoredQuickNoteContent;
-    try { parsed = JSON.parse(row.content) as StoredQuickNoteContent; }
-    catch { return null; }
-    return { id: row.id, content: parsed, previewText: row.preview_text, updatedAt: row.updated_at };
+    return quickNotesRepository.readQuickNote(d, id);
   },
 
   async saveQuickNote(id: string, text: string, images: StoredQuickNoteImage[] = []): Promise<string> {
-    return maintenance.run("main", () => saveQuickNoteInternal(id, text, images));
+    return maintenance.run("main", async () => {
+      const d = await ensureDb();
+      const result = quickNotesRepository.saveQuickNote(d, id, text, images);
+      await saveSnapshot(d.exportBytes());
+      return result;
+    });
   },
 
   /** 带图片字节保存小记（composer 用）：图片字节落盘为文件（canonical URL 由本地 AssetServer 服务），
@@ -660,43 +624,22 @@ export const bridge = {
   async saveQuickNoteWithImages(id: string, text: string, imageFiles: Array<{ filename: string; mimeType: string; width: number | null; height: number | null; bytes: Uint8Array }> = []): Promise<string> {
     return maintenance.run("main", async () => {
       const d = await ensureDb();
-      const validatedImageFiles = imageFiles.map((image) => {
-        const format = validateQuickNoteImageBytes(image.bytes);
-        if (image.width == null || image.height == null) throw new Error("图片尺寸缺失");
-        validateQuickNoteImageDimensions({ width: image.width, height: image.height });
-        return { ...image, mimeType: format.mimeType };
+      const result = await quickNotesRepository.saveQuickNoteWithImages(d, id, text, imageFiles, {
+        assets,
+        saveAssetFile: saveAssetBytesFs,
       });
-      // 唯一名只生成一次（content JSON 与落盘文件名必须一致；见 buildQuickNoteImageFiles 注释）
-      const { images, files: imageFilesWithKey } = buildQuickNoteImageFiles(validatedImageFiles);
-      const now = new Date().toISOString();
-      const content = normalizeQuickNoteContent(text, images);
-      const serialized = serializeQuickNoteContent(content);
-      const contentHash = sha256Sync(new TextEncoder().encode(serialized));
-      const preview = previewQuickNote(text, images.length);
-      // 先落盘图片文件（纯文件为准，完全不用 BLOB；落盘失败抛错——文件是唯一真相，不能静默降级）。
-      // 文件名与 content 引用一致（buildQuickNoteImageFiles 只生成一次唯一名）。
-      // 不做旧文件清理：与文档资源一致（每次上传生成唯一新文件，旧文件由 GC/孤儿清理回收；冗余是设计理念）。
-      for (const f of imageFilesWithKey) {
-        const key = "quick-notes/" + id + "/" + f.filename;
-        assets.set(key, f.bytes); // 内存层（同步端口/显示优先读）
-        await saveAssetBytesFs(key, f.bytes);
-      }
-      d.transaction(() => {
-        d.prepare(
-          "INSERT INTO quick_notes (id, created_at, updated_at, preview_text, image_count, content_hash, content, sync_state, is_conflict, restore_pending_at, ready_to_sync) " +
-          "VALUES (?,?,?,?,?,?,?,'local',0,NULL,1) " +
-          "ON CONFLICT(id) DO UPDATE SET updated_at=excluded.updated_at, preview_text=excluded.preview_text, image_count=excluded.image_count, content_hash=excluded.content_hash, content=excluded.content, sync_state='local', deleted_at=NULL, restore_pending_at=NULL, ready_to_sync=1"
-        ).run(id, now, now, preview, images.length, contentHash, serialized);
-      })();
       await saveSnapshot(d.exportBytes());
-      return id;
+      return result;
     });
   },
 
   async createQuickNote(text: string): Promise<string> {
     return maintenance.run("main", async () => {
+      const d = await ensureDb();
       const id = crypto.randomUUID();
-      return saveQuickNoteInternal(id, text, []);
+      const result = quickNotesRepository.saveQuickNote(d, id, text, []);
+      await saveSnapshot(d.exportBytes());
+      return result;
     });
   },
 
@@ -704,7 +647,7 @@ export const bridge = {
   async deleteQuickNote(id: string): Promise<void> {
     return maintenance.run("main", async () => {
       const d = await ensureDb();
-      d.prepare("UPDATE quick_notes SET deleted_at=?, restore_pending_at=NULL, sync_state='local', ready_to_sync=1 WHERE id=?").run(new Date().toISOString(), id);
+      quickNotesRepository.deleteQuickNote(d, id);
       await saveSnapshot(d.exportBytes());
     });
   },
@@ -717,18 +660,14 @@ export const bridge = {
   /** 小记回收站列表（软删行；含冲突归档的 ready_to_sync=0 条目——它们也是可恢复的本地内容）。 */
   async listQuickNoteTrash(): Promise<Array<{ id: string; createdAt: string; updatedAt: string; deletedAt: string; previewText: string }>> {
     const d = await ensureDb();
-    const rows = d.prepare("SELECT id, created_at, updated_at, deleted_at, preview_text FROM quick_notes WHERE deleted_at IS NOT NULL ORDER BY deleted_at DESC").all() as Array<{ id: string; created_at: string; updated_at: string; deleted_at: string; preview_text: string }>;
-    return rows.map((r) => ({ id: String(r.id), createdAt: String(r.created_at), updatedAt: String(r.updated_at), deletedAt: String(r.deleted_at), previewText: String(r.preview_text) }));
+    return quickNotesRepository.listQuickNoteTrash(d);
   },
 
   /** 小记恢复（回收站 → active）：restore_pending_at → 同步 local-wins 上传 active 覆盖墓碑。 */
   async restoreQuickNote(id: string): Promise<void> {
     return maintenance.run("main", async () => {
       const d = await ensureDb();
-      const row = d.prepare("SELECT 1 FROM quick_notes WHERE id=? AND deleted_at IS NOT NULL").get(id);
-      if (!row) throw new Error("小记不在回收站");
-      const now = new Date().toISOString();
-      d.prepare("UPDATE quick_notes SET deleted_at=NULL, restore_pending_at=?, sync_state='local', updated_at=? WHERE id=?").run(now, now, id);
+      quickNotesRepository.restoreQuickNote(d, id);
       await saveSnapshot(d.exportBytes());
     });
   },
@@ -737,22 +676,7 @@ export const bridge = {
   async purgeQuickNote(id: string): Promise<void> {
     return maintenance.run("main", async () => {
       const d = await ensureDb();
-      // 先读旧内容（删除前），用于清理图片文件（纯文件为准；无 BLOB）
-      const prevRow = d.prepare("SELECT content FROM quick_notes WHERE id=?").get(id) as { content: string } | undefined;
-      d.transaction(() => {
-        // 墓碑记录保留（若行存在则取行时间戳；行已不存在则覆盖旧记录保持幂等）
-        d.prepare("INSERT OR REPLACE INTO quick_note_deleted (id, created_at, updated_at, deleted_at) SELECT id, created_at, updated_at, deleted_at FROM quick_notes WHERE id=?").run(id);
-        d.prepare("DELETE FROM quick_notes WHERE id=?").run(id);
-      })();
-      // 删除小记图片文件
-      if (prevRow) {
-        try {
-          const parsed = validateQuickNoteContent(JSON.parse(prevRow.content) as StoredQuickNoteContent);
-          for (const img of parsed.images) {
-            await removeAssetBytesFs("quick-notes/" + id + "/" + img.filename).catch(() => undefined);
-          }
-        } catch { /* 内容解析失败不阻断 purge */ }
-      }
+      await quickNotesRepository.purgeQuickNote(d, id, removeAssetBytesFs);
       await saveSnapshot(d.exportBytes());
     });
   },
