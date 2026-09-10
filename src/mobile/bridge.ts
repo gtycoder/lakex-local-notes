@@ -38,6 +38,7 @@ import type { HistoryMobileSettings } from "./historyRepository.js";
 import * as orphanAssetRepository from "./orphanAssetRepository.js";
 import * as gcRepository from "./gcRepository.js";
 import * as diagnosticsRepository from "./diagnosticsRepository.js";
+import * as notebookTreeRepository from "./notebookTreeRepository.js";
 
 export type { HistoryMobileSettings } from "./historyRepository.js";
 
@@ -751,42 +752,13 @@ export const bridge = {
     });
   },
   // ---- 目录树只读契约（同步调试/测试用） ----
-  listNotebookTree: listNotebookTreeImpl,
+  async listNotebookTree(notebookId: string): Promise<notebookTreeRepository.NotebookTreeItem[]> {
+    const d = await ensureDb();
+    return notebookTreeRepository.listNotebookTree(d, notebookId);
+  },
   // ---- 墓碑只读契约（同步调试/测试用；生产同步路径直接走 dbPort，不经此对象） ----
   async listDeletedNotesForSync() { return dbPort.listDeletedNotesForSync!(); },
   readDeletedContent(id: string) { return dbPort.readDeletedContent!(id); },
   async markTombstonesPublished(ids: string[]) { await dbPort.markTombstonesPublished!(ids); },
   async isFolderPurged(id: string): Promise<boolean> { return dbPort.isFolderPurged!(id); },
 };
-
-/** 笔记本详情：返回完整子树（递归展开到叶），按 sort_order 排序（P1-3/P2-3/P2-4）。
- * 支持文档套文档：note 的 parent 可以是 folder 或 note（桌面嵌套文档在移动端也可见）。
- * 从 notebook 根 BFS 收集子树内所有节点（folders + notes，均可作父），再取父在子树内的节点。
- * 模块级函数：bridge 对象与 lakeNative 调试契约共用（函数声明 hoist，引用在对象内可用）。 */
-async function listNotebookTreeImpl(notebookId: string): Promise<Array<{ id: string; title: string; kind: "group" | "note"; parentId: string | null; sortOrder: number; icon: string | null }>> {
-  const d = await ensureDb();
-  const allFolders = d.prepare("SELECT id, title, parent_id, sort_order, node_type, icon FROM folders WHERE trashed_at IS NULL").all() as Array<{ id: string; title: string; parent_id: string | null; sort_order: number; node_type: string; icon: string | null }>;
-  const allNotes = d.prepare("SELECT id, title, parent_id, sort_order, icon FROM notes WHERE trashed_at IS NULL").all() as Array<{ id: string; title: string; parent_id: string | null; sort_order: number; icon: string | null }>;
-  // 子树节点 id 集合（folder + note 都可作父；从根 BFS，支持任意层级嵌套）
-  const inTree = new Set<string>();
-  const queue = [notebookId];
-  while (queue.length > 0) {
-    const pid = queue.pop()!;
-    if (inTree.has(pid)) continue;
-    inTree.add(pid);
-    for (const f of allFolders) if (f.parent_id === pid && !inTree.has(f.id)) queue.push(f.id);
-    for (const n of allNotes) if (n.parent_id === pid && !inTree.has(n.id)) queue.push(n.id);
-  }
-  const groups = allFolders.filter((f) => f.node_type === "group" && f.parent_id && inTree.has(f.parent_id));
-  const notes = allNotes.filter((n) => n.parent_id && inTree.has(n.parent_id));
-  const items: Array<{ id: string; title: string; kind: "group" | "note"; parentId: string | null; sortOrder: number; icon: string | null }> = [
-    ...groups.map((g) => ({ id: g.id, title: g.title, kind: "group" as const, parentId: g.parent_id, sortOrder: g.sort_order, icon: g.icon ?? null })),
-    ...notes.map((n) => ({ id: n.id, title: n.title, kind: "note" as const, parentId: n.parent_id, sortOrder: n.sort_order, icon: n.icon ?? null })),
-  ];
-  // 同父级内按 sort_order 排序（对齐桌面目录排序语义）
-  items.sort((a, b) => {
-    if (a.parentId !== b.parentId) return 0;
-    return a.sortOrder - b.sortOrder || a.title.localeCompare(b.title, "zh");
-  });
-  return items;
-}
