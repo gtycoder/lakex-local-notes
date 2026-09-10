@@ -24,24 +24,21 @@ export class NativeSqliteDb implements MobileDb {
   private constructor(private readonly database: string) {}
 
   static async open(database = "lake-notes-mobile"): Promise<NativeSqliteDb> {
-    const opened = await CapacitorSQLite.isDBOpen({ database });
-    if (opened.result !== true) {
-      const connection = {
-        database,
-        encrypted: false,
-        mode: "no-encryption",
-        version: 1,
-        readonly: false,
-      };
-      try {
-        await CapacitorSQLite.createConnection(connection);
-      } catch (error) {
-        if (!isConnectionExistsError(error)) throw error;
-        await CapacitorSQLite.closeConnection({ database });
-        await CapacitorSQLite.createConnection(connection);
-      }
-      await CapacitorSQLite.open({ database, readonly: false });
+    const connection = {
+      database,
+      encrypted: false,
+      mode: "no-encryption",
+      version: 1,
+      readonly: false,
+    };
+    try {
+      await CapacitorSQLite.createConnection(connection);
+    } catch (error) {
+      // Android reports an already-registered connection as an error. It is
+      // still usable, and open() re-opens it safely when needed.
+      if (!isConnectionExistsError(error)) throw error;
     }
+    await CapacitorSQLite.open({ database, readonly: false });
 
     const db = new NativeSqliteDb(database);
     // Android's plugin rejects PRAGMA through execute(); query() is the supported path.

@@ -4,7 +4,6 @@ import { NativeSqliteDb } from "./nativeSqliteDb.js";
 
 vi.mock("@capacitor-community/sqlite", () => ({
   CapacitorSQLite: {
-    isDBOpen: vi.fn(async () => ({ result: false })),
     createConnection: vi.fn(async () => undefined),
     closeConnection: vi.fn(async () => undefined),
     open: vi.fn(async () => undefined),
@@ -23,14 +22,12 @@ const plugin = vi.mocked(CapacitorSQLite);
 describe("native SQLite database adapter", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    plugin.isDBOpen.mockResolvedValue({ result: false });
     plugin.query.mockResolvedValue({ values: [] });
   });
 
   it("opens a connection and enables WAL through query", async () => {
     await NativeSqliteDb.open("lake-notes-mobile");
 
-    expect(plugin.isDBOpen).toHaveBeenCalledWith({ database: "lake-notes-mobile" });
     expect(plugin.createConnection).toHaveBeenCalledWith({
       database: "lake-notes-mobile",
       encrypted: false,
@@ -42,6 +39,18 @@ describe("native SQLite database adapter", () => {
     expect(plugin.query).toHaveBeenCalledWith(
       expect.objectContaining({ statement: "PRAGMA journal_mode=WAL" }),
     );
+  });
+
+  it("reuses an existing connection without closing and recreating it", async () => {
+    plugin.createConnection.mockRejectedValueOnce(
+      new Error("Connection lake-notes-mobile already exists"),
+    );
+
+    await NativeSqliteDb.open("lake-notes-mobile");
+
+    expect(plugin.createConnection).toHaveBeenCalledTimes(1);
+    expect(plugin.closeConnection).not.toHaveBeenCalled();
+    expect(plugin.open).toHaveBeenCalledWith({ database: "lake-notes-mobile", readonly: false });
   });
 
   it("supports statement reads, writes, and row normalization", async () => {
