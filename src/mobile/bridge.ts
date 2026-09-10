@@ -1577,7 +1577,7 @@ export const bridge = {
       orphanCount: c("SELECT COUNT(*) c FROM orphan_assets"),
       gcPendingCount: c("SELECT COUNT(*) c FROM s3_gc_pending"),
       snapshotCount: c("SELECT COUNT(*) c FROM note_history"),
-      dbBytes: d.exportBytes().length,
+      dbBytes: d.databaseSizeBytes(),
     };
   },
 

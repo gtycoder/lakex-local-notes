@@ -29,3 +29,13 @@ describe("SqlJsDb statement run result", () => {
     expect(missing.changes).toBe(0);
   });
 });
+
+describe("SqlJsDb diagnostics", () => {
+  it("computes database size without exporting the whole database", async () => {
+    const db = await SqlJsDb.open();
+    db.exec("CREATE TABLE diagnostics_data(value TEXT)");
+    db.prepare("INSERT INTO diagnostics_data(value) VALUES (?)").run("x".repeat(2048));
+
+    expect(db.databaseSizeBytes()).toBe(db.exportBytes().length);
+  });
+});

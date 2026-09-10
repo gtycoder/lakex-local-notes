@@ -129,4 +129,13 @@ export class SqlJsDb implements DbLike {
   exportBytes(): Uint8Array {
     return this.db.export();
   }
+
+  /** 数据库逻辑大小：page_count * page_size；诊断统计禁止为此导出全库。 */
+  databaseSizeBytes(): number {
+    const readPragma = (name: "page_count" | "page_size"): number => {
+      const row = this.prepare(`PRAGMA ${name}`).get() as Record<string, unknown> | undefined;
+      return Number(row?.[name] ?? 0);
+    };
+    return readPragma("page_count") * readPragma("page_size");
+  }
 }

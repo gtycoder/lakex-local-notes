@@ -87,6 +87,11 @@ vi.mock("./sqliteDb.js", async () => {
       exportBytes() {
         return this.db.export();
       }
+      databaseSizeBytes() {
+        const value = (name: "page_count" | "page_size") =>
+          Number(this.db.exec(`PRAGMA ${name}`)[0]?.values[0]?.[0] ?? 0);
+        return value("page_count") * value("page_size");
+      }
     },
   };
 });
