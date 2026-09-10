@@ -749,7 +749,7 @@ describe("文档历史（快照，纯本地）", () => {
     // 30 天兜底：造一条旧快照
     const oldContent = "<p>旧版本</p>";
     const oldHash = crypto.createHash("sha256").update(oldContent).digest("hex");
-    const gz = (store as any).gzipContent(oldContent);
+    const gz = zlib.gzipSync(oldContent, { level: 6 });
     const oldPath = `history/${id}/2020-01-01-00-00-00-${oldHash.slice(0, 16)}.lake.gz`;
     fs.mkdirSync(path.dirname(path.join(dir, oldPath)), { recursive: true });
     fs.writeFileSync(path.join(dir, oldPath), gz);

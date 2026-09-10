@@ -16,6 +16,7 @@ import type { SearchResult } from "../src/core/searchTypes.js";
 import { HistoryRepository, type HistorySnapshotPreview, type HistorySnapshotSummary } from "./historyRepository.js";
 import { TrashRepository } from "./trashRepository.js";
 import { TrashLifecycle } from "./trashLifecycle.js";
+import { HistoryLifecycle } from "./historyLifecycle.js";
 import type { TrashItem, TrashReminderItem } from "./trashRepository.js";
 export type { TrashItem, TrashReminderItem };
 import { AssetRepository, type OrphanAsset, type OrphanAssetRow } from "./assetRepository.js";
@@ -28,7 +29,7 @@ import { createPlaintextSecretCipher, type SecretCipher } from "../src/core/secr
 import type { DbLike } from "./dbLike.js";
 import { ResourceRepository } from "./resourceRepository.js";
 import { RemoteImportRepository } from "./remoteImportRepository.js";
-import type { ResourceUploadOutput } from "./storeTypes.js";
+import type { ResourceUploadOutput, HistorySettings, HistoryCleanupResult } from "./storeTypes.js";
 import { sqlParameterBatches } from "../src/core/sqlParameterBatch.js";
 
 export { ASSET_NAME_RE, extractAssetRefs, isoWeekKey, selectHistoryDrops, sanitizeFileName } from "../src/core/storeUtils.js";
@@ -48,17 +49,8 @@ interface S3Settings {
   accessKeyId: string; secretAccessKey: string; forcePathStyle: boolean;
 }
 
-/** 历史保留策略配置（P5，可配置；存 settings 表，纯本地） */
-export interface HistorySettings {
-  /** 每文档最多保留的快照份数（默认 100） */
-  maxSnapshots: number;
-  /** 快照保留天数兜底（默认 30） */
-  retentionDays: number;
-  /** 定期巡检清理间隔（小时，默认 24；0 = 关闭定期巡检） */
-  cleanupIntervalHours: number;
-  /** 自动快照间隔（分钟，默认 15；0 = 关闭自动快照） */
-  snapshotIntervalMinutes: number;
-}
+/** 历史保留策略配置（P5，可配置；存 settings 表，纯本地）——定义已收敛到 storeTypes.ts */
+export type { HistorySettings, HistoryCleanupResult } from "./storeTypes.js";
 
 /** 云同步开关与自动/手动同步策略（v4，可配置；存 settings 表，纯本地） */
 export interface SyncSettings {
@@ -80,10 +72,6 @@ export interface S3GcSettings {
   trashAutoPurgeDays: number;
 }
 
-export interface HistoryCleanupResult {
-  deletedSnapshots: number;
-  freedBytes: number;
-}
 /** 仅供主进程内部的小记转换调用。sourcePath 绝不来自渲染进程。 */
 export interface ImportedNoteAsset {
   filename: string;
@@ -122,6 +110,7 @@ export class Store {
   private historyRepository: HistoryRepository;
   private trashRepository: TrashRepository;
   private trashLifecycle: TrashLifecycle;
+  private historyLifecycle: HistoryLifecycle;
   private assetRepository: AssetRepository;
   private noteQueries: NoteQueries;
   private noteMetadata: NoteMetadataRepository;
@@ -198,12 +187,22 @@ export class Store {
       ensureNoteCaches: (noteId) => this.ensureNoteCaches(noteId),
       readNoteCaches: (noteId) => this.readNoteCaches(noteId),
     });
+    this.historyLifecycle = new HistoryLifecycle({
+      db: this.db,
+      root: this.root,
+      logScopes: this.logScopes,
+      notePathFor: (noteId) => this.notePath(noteId),
+      atomicWrite: (filePath, content) => this.atomicWrite(filePath, content),
+      updateNoteCaches: (noteId, markdown, plain) => this.updateNoteCaches(noteId, markdown, plain),
+      getHistorySettings: () => this.getHistorySettings(),
+      cleanupUnreferencedAssetsForNote: (noteId) => this.cleanupUnreferencedAssetsForNote(noteId),
+    });
     this.trashLifecycle = new TrashLifecycle({
       db: this.db,
       trashNotebookId: TRASH_NOTEBOOK_ID,
       notePathFor: (noteId) => this.notePath(noteId),
       noteAssetsDir: this.noteAssetsDir,
-      historyNoteDirFor: (noteId) => this.historyNoteDir(noteId),
+      historyNoteDirFor: (noteId) => this.historyLifecycle.historyNoteDir(noteId),
       logScopes: this.logScopes,
       readTreeNode: (id) => this.readTreeNode(id),
       readNoteCaches: (noteId) => this.readNoteCaches(noteId),
@@ -857,70 +856,10 @@ export class Store {
 
   // ===== 文档历史（快照，纯本地不参与同步） =====
 
-  /** 历史快照目录（相对 workspace root） */
-  private historyDir(): string {
-    return path.join(this.root, "history");
-  }
-
-  private historyNoteDir(noteId: string): string {
-    return path.join(this.historyDir(), noteId);
-  }
-
-  /** gzip 快照正文 → Buffer */
-  private gzipContent(content: string): Buffer {
-    return zlib.gzipSync(content, { level: 6 });
-  }
-
-  /** 读取历史快照正文（解压） */
-  private readHistoryContent(filePath: string): string {
-    return zlib.gunzipSync(fs.readFileSync(path.join(this.root, filePath))).toString("utf8");
-  }
-
-  /** 24h 内同 hash 是否已有快照（去重防抖，P0-2：不用 UNIQUE） */
-  private hasRecentDuplicate(noteId: string, hash: string): boolean {
-    const row = this.db.prepare(
-      "SELECT 1 FROM note_history WHERE note_id=? AND content_hash=? AND created_at > ? LIMIT 1"
-    ).get(noteId, hash, new Date(Date.now() - 24 * 3600 * 1000).toISOString());
-    return !!row;
-  }
-
-  /** 创建历史快照。content 缺省时读磁盘 .lake。
-   * 返回快照 id；同 hash 且 24h 内已有则跳过返回 null。 */
   /** 创建历史快照。content 缺省时读磁盘 .lake；protectedDays>0 时写 protected_until（冲突归档保护，B3）。
    * 返回快照 id；同 hash 且 24h 内已有则跳过返回 null。 */
   createHistorySnapshot(noteId: string, content?: string, force = false, protectedDays?: number): number | null {
-    const t0 = Date.now();
-    if (!isSafePathSegment(noteId)) throw new AppError("InvalidInput", `无效的笔记 ID: ${noteId}`);
-    const lakePath = this.notePath(noteId);
-    if (!fs.existsSync(lakePath)) return null;
-    const body = content ?? fs.readFileSync(lakePath, "utf8");
-    const hash = crypto.createHash("sha256").update(body).digest("hex");
-    // 恢复动作 force=true 强制写（即使同 hash，用 created_at 区分）；普通快照 24h 防抖
-    if (!force && this.hasRecentDuplicate(noteId, hash)) return null;
-    const refs = [...extractAssetRefs(body)];
-    const gz = this.gzipContent(body);
-    const ts = new Date().toISOString().replace(/[:T]/g, "-").slice(0, 19); // YYYY-MM-DD-HH-mm-ss
-    const filename = `${ts}-${hash.slice(0, 16)}.lake.gz`;
-    const relPath = `history/${noteId}/${filename}`;
-    const absPath = path.join(this.root, relPath);
-    fs.mkdirSync(path.dirname(absPath), { recursive: true });
-    fs.writeFileSync(absPath, gz);
-    // created_at 用单调时间：同毫秒内多条快照会撞（UNIQUE 已去，但排序需稳定），
-    // 若与上一条同毫秒则 +1ms，保证 ORDER BY created_at DESC 稳定（P2-4）。
-    let created = new Date().toISOString();
-    const lastRow = this.db.prepare("SELECT created_at FROM note_history WHERE note_id=? ORDER BY created_at DESC LIMIT 1").get(noteId) as { created_at: string } | undefined;
-    if (lastRow && created <= lastRow.created_at) {
-      created = new Date(new Date(lastRow.created_at).getTime() + 1).toISOString();
-    }
-    const protectedUntil = protectedDays && protectedDays > 0
-      ? new Date(new Date(created).getTime() + protectedDays * 24 * 3600 * 1000).toISOString()
-      : null;
-    const info = this.db.prepare(
-      "INSERT INTO note_history(note_id,file_path,content_hash,created_at,size,refs_json,ref_count,protected_until) VALUES(?,?,?,?,?,?,?,?)"
-    ).run(noteId, relPath, hash, created, gz.length, JSON.stringify(refs), refs.length, protectedUntil);
-    const id = Number(info.lastInsertRowid);
-    this.logScopes.history.info(`[perf] snapshot ${noteId} ${Date.now() - t0}ms id=${id}${force ? " force" : ""} (body=${body.length}B, gz=${gz.length}B, refs=${refs.length})`);
-    return id;
+    return this.historyLifecycle.createHistorySnapshot(noteId, content, force, protectedDays);
   }
 
   /** 列出文档历史快照（新→旧）。 */
@@ -954,95 +893,19 @@ export class Store {
     }
   }
 
-  /** 恢复历史版本。
-   * 1) 恢复前强制快照当前版本（可反悔，force=true 即使同 hash）
-   * 2) 解压写回 .lake + 更新缓存/FTS
-   * 3) 重算 hash → setBaseHash + markSynced（恢复=新基线，非本地新修改，P0-1）
-   */
+  /** 恢复历史版本（恢复前留档 + 解压写回 + 标 local 待上传；语义详见 historyLifecycle）。 */
   restoreHistory(historyId: number): void {
-    const t0 = Date.now();
-    const row = this.db.prepare("SELECT note_id,file_path FROM note_history WHERE id=?").get(historyId) as
-      { note_id: string; file_path: string } | undefined;
-    if (!row) throw new AppError("NotFound", `历史快照不存在: ${historyId}`);
-    const noteId = row.note_id;
-    if (!isSafePathSegment(noteId)) throw new AppError("InvalidInput", `无效的笔记 ID: ${noteId}`);
-    // 1) 恢复前留档（默认防抖：24h 内同内容已有快照则跳过，避免自动快照+覆盖留档产生重复；
-    //    若表里没有（含被手动删除）会重新写，可反悔保障不丢）
-    this.createHistorySnapshot(noteId, undefined, false);
-    // 2) 解压写回
-    const body = this.readHistoryContent(row.file_path);
-    this.atomicWrite(this.notePath(noteId), body);
-    // 3) 更新缓存/FTS（用恢复的正文）
-    const titleRow = this.db.prepare("SELECT title FROM notes WHERE id=?").get(noteId) as { title: string } | undefined;
-    if (titleRow) {
-      const markdown = lakeHtmlToMarkdown(body);
-      const plain = lakeHtmlToPlain(body);
-      this.updateNoteCaches(noteId, markdown, plain);
-    }
-    // 4) 同步语义（P0-1，与 S3-GC v4 §5.2 一致）：恢复 = 本地写回 + 待上传。
-    // 不再 setBaseHash/setLastUploadedHash/markSynced；保持恢复前 base/lastUploaded，
-    // 下次同步上传覆盖（远端被他人改则接受远端、恢复版已入历史）。
-    const now = new Date().toISOString();
-    const tx = this.db.transaction(() => {
-      this.db.prepare("UPDATE notes SET sync_state='local', updated_at=? WHERE id=?").run(now, noteId);
-      this.db.prepare("UPDATE tree_nodes SET sync_state='local' WHERE id=?").run(noteId);
-    });
-    tx();
-    this.logScopes.history.info(`[perf] restore ${noteId} from history#${historyId} ${Date.now() - t0}ms`);
+    this.historyLifecycle.restoreHistory(historyId);
   }
 
   /** 手动删除单个历史快照（文件 + DB）。调用方随后刷新孤儿列表（顺序 §5）。 */
   deleteHistory(historyId: number): void {
-    const t0 = Date.now();
-    const row = this.db.prepare("SELECT file_path FROM note_history WHERE id=?").get(historyId) as { file_path: string } | undefined;
-    if (!row) throw new AppError("NotFound", `历史快照不存在: ${historyId}`);
-    this.db.prepare("DELETE FROM note_history WHERE id=?").run(historyId);
-    try { fs.rmSync(path.join(this.root, row.file_path), { force: true }); } catch { /* 忽略 */ }
-    // 若目录空则清理
-    this.pruneEmptyHistoryDirs();
-    this.logScopes.history.info(`[perf] delete-history ${historyId} ${Date.now() - t0}ms`);
+    this.historyLifecycle.deleteHistory(historyId);
   }
 
-  /** 惰性清理：每文档超 100 份删最旧；created_at < 30 天删。
-   * 删除后对受影响文档重算引用，无引用资源物理删（方案 A）。 */
+  /** 惰性清理：每文档超上限删最旧 + 天数兜底；删除后重算引用，无引用资源物理删（方案 A）。 */
   cleanupHistory(): HistoryCleanupResult {
-    const t0 = Date.now();
-    // P5 + M8：保留策略可配置（份数硬上限 + 天数兜底 + 分层保留判定）
-    const cfg = this.getHistorySettings();
-    const result: HistoryCleanupResult = { deletedSnapshots: 0, freedBytes: 0 };
-    const notes = this.db.prepare("SELECT DISTINCT note_id FROM note_history").all() as Array<{ note_id: string }>;
-    for (const { note_id } of notes) {
-      const rows = this.db.prepare(
-        "SELECT id,file_path,created_at,protected_until FROM note_history WHERE note_id=? ORDER BY created_at ASC"
-      ).all(note_id) as Array<{ id: number; file_path: string; created_at: string; protected_until: string | null }>;
-      if (rows.length === 0) continue;
-      const nowIso = new Date().toISOString();
-      // B3：先幂等解除已到期保护（protected_until 已过 → 清 NULL，使该行回归普通保留策略）；
-      // 未到期的受保护行即使命中 drops 也不删（冲突归档是唯一可恢复副本，保护窗口内不自动清理；手动删除不受限）。
-      for (const r of rows) {
-        if (r.protected_until != null && r.protected_until <= nowIso) {
-          this.db.prepare("UPDATE note_history SET protected_until=NULL WHERE id=?").run(r.id);
-          r.protected_until = null;
-        }
-      }
-      const drops = selectHistoryDrops(rows.map((r) => r.created_at), { maxSnapshots: cfg.maxSnapshots, retentionDays: cfg.retentionDays });
-      const expired = rows.filter((r) => drops.has(r.created_at) && r.protected_until == null);
-      if (expired.length === 0) continue;
-      for (const e of expired) {
-        this.db.prepare("DELETE FROM note_history WHERE id=?").run(e.id);
-        try {
-          const p = path.join(this.root, e.file_path);
-          result.freedBytes += fs.statSync(p).size;
-          fs.rmSync(p, { force: true });
-          result.deletedSnapshots++;
-        } catch { /* 忽略 */ }
-      }
-      // 方案 A：清理后重算该文档引用，无引用资源物理删
-      this.cleanupUnreferencedAssetsForNote(note_id);
-    }
-    this.pruneEmptyHistoryDirs();
-    this.logScopes.history.info(`[perf] cleanup-history ${Date.now() - t0}ms (deleted=${result.deletedSnapshots}, freed=${result.freedBytes}B)`);
-    return result;
+    return this.historyLifecycle.cleanupHistory();
   }
 
   /** 历史占用统计（U6/P4：设置面板展示"快照总数 + 占用字节"）。 */
@@ -1108,16 +971,6 @@ export class Store {
       try { freed += fs.statSync(full).size; fs.unlinkSync(full); count++; } catch { /* 忽略 */ }
     }
     return { count, freedBytes: freed };
-  }
-
-  /** 清理空的历史文档目录 */
-  private pruneEmptyHistoryDirs(): void {
-    const root = this.historyDir();
-    if (!fs.existsSync(root)) return;
-    for (const d of fs.readdirSync(root)) {
-      const p = path.join(root, d);
-      try { if (fs.statSync(p).isDirectory() && fs.readdirSync(p).length === 0) fs.rmdirSync(p); } catch { /* 忽略 */ }
-    }
   }
 
   deleteNote(id: string) {
