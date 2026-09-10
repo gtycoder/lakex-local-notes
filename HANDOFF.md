@@ -5,11 +5,13 @@
 > **§8 是移动端（安卓）专职交接**，由移动端会话维护；桌面会话不要改 §8，移动端会话不要改 §0-§7 之外的桌面文件。
 
 ## 0. 当前基线（新会话开工前）
-- 分支/远端：开发主干 `master` ↔ Gitee `origin`（`git@gitee.com:gtycoder/local-lake.git`，SSH 可用；`master` 亦是远程默认分支）。**本文不写死 commit hash**——查 `git log -1 --oneline`。
+- 分支/远端：`refactor/mobile-native-sqlite` **已合入 `master`**（260910，fast-forward 755ba41），已推送到 Gitee。当前在 `master` 上。`git worktree list` 只有主目录。
 - 质量门槛：`tsc` 0 error · vitest **904 passed / 15 skipped** · 桌面 `vite build` + 移动 `vite build -c vite.mobile.config.ts` 全绿（计数变动见 §2；别把数字写回 AGENTS/README）。
-- **当前业务分支：`refactor/mobile-native-sqlite`**（本轮已提交）；`master` 仍是主干。`git worktree list` 目前只有主目录。
-- **开工先跑 `git status` + `git worktree list`**：当前工作区遗留是**非本轮代码**：`AGENTS.md`/`README.md` 被改（未提交）+ `docs/{CODE-AUDIT-20260909-FULL-CODE-AUDIT,LAKEX-CONTRACT,OBSIDIAN-PLUGIN-*,SYNC-RELIABILITY-VERIFY}.md` 未跟踪 + 一个乱码文件 `", v)"`。**别把遗留卷进你的提交**（用显式路径 `git add`）。
-- dev 实例状态：**桌面 `npm run dev` 未启动**（本会话未跑）。**安卓模拟器 `emulator-5554` 在跑**，App `com.lakenotes.mobile` 已装**最新移动端 bundle**（用 `bash scripts/android-build.sh --sync --install`，gradle 用 `~/.gradle/wrapper/dists/gradle-8.14.3-bin/…` 缓存、勿走 wrapper）。WebView CDP 已转发 `tcp:9335`（http://127.0.0.1:9335/json/list）。**注意：socket 随 App 重启变化**——先 `adb forward --remove-all`，再 `adb shell cat /proc/net/unix | grep -oE "webview_devtools_remote_[0-9a-f]+"` 找新 socket，`adb forward tcp:9335 localabstract:$s` 后 `curl /json/list` 校验。
+- **真机级验收（260910，两轮）**：
+  - 第一轮（2 桌面 + 1 移动）：A/B 同步 push/pull、新建/删除传播、移动端 WAL 崩溃恢复、旧 IndexedDB 快照迁移 全通过。
+  - 第二轮（3 桌面 + 1 移动，大数据量）：50 笔记 + 70 资源（PNG/JPEG/GIF/PDF/512KB/2MB）、23.4MB；A/B/C/移动端四端正文 sha256 完全一致；并发编辑冲突（先提交者获胜 + 被覆盖方强制留档 30 天）；批量删除 5 篇墓碑传播 全通过。
+  - **发现**：folder 墓碑不跨端传播（manifest 只有 `notes/folders`，无 folder 删除表达）。A 的永久墓碑守卫生效（拒绝回流），churn 有限（2~3 轮后收敛），无数据损坏。**已记入 §3 待办**。
+- dev 实例状态：桌面和模拟器**未在跑**。启动方式：`vite` 长驻 1421 + 手动 `electron --remote-debugging-port=9222 .`（多实例加 `LAKE_USER_DATA=… LAKE_ASSET_PORT=…`）。模拟器 `bash scripts/emu-up.sh`。
 - **dev 数据现状（重要）**：
   - `welcome-note`（幽灵文档）已一次性清理：墓碑 `deleted_notes(welcome-note, note, purged_at=now, published_at=NULL)` 已写、行与文件已删 ⇒ **下次同步会发布 `deleted:true` 并删云端 `objects/welcome-note-*`、`assets/welcome-note/` 前缀**，之后不会复活。
   - `到啦领导`（ee860a19）仍在回收站里（`trashed_at=09-04 10:34`，原父=测试本2222，正文含用户 18:06 的编辑「测试老师啦啦队」）；**用户尚未决定是否恢复**，别擅自删。
@@ -137,10 +139,11 @@
 3. W-8 ACAO / W-10 dompurify（并入"lake 资源导入统一优化"，**安全相关，建议优先**）；依赖维护：`@types/better-sqlite3` 可单升。
 4. 大纲 **viewer（只读）点击标题不跳转**（用户计划重做大纲时一并处理，低优先）。
 5. **回收站首拉成本**（批量删除后接收端首拉仍下全文+资产）——惰性下载方案**暂缓**（要动恢复红线，低优先）。
-6. Store 分批重构（`docs/REFACTOR-PLAN-2026-08-17.md`，按领域、严禁一次改事务边界；移动端复用专项；无测试护栏前不动）。
-7. Word/PDF 导出（`electron/export.ts` 已预留 docx/pdf）；附件大文件 S3 分片/断点续传（**nice-to-have，未被需求驱动**）。
-8. **Lake 内核策略**（属政策，非任务，记录即可）：A lakejs 开源源码当"机制字典"；B 版本锚点 + hack 清单（vendor lakex 已 pin，勿随意升级）；按需最小 patch，**不整体 fork**。
-9. **lakex 契约固化（编辑器可观测性，低成本待落地）**：新增 `src/features/editor/lakex-contract.d.ts`（完整设计见 `docs/LAKEX-CONTRACT.md` §4，速查表 §5），替换 lakeRuntime 等处的 `as any`、收敛反编译结论；纯类型改动 + 门禁全绿，**不碰 vendor**。
+6. Store 分批重构（`docs/REFACTOR-PLAN-2026-08-17.md` 原计划已 80% 完成或被架构决策取代；当前 `electron/store.ts` 2352 行，按领域拆分：回收站生命周期 / 历史生命周期 / 孤儿 GC / 诊断备份 / 同步状态标记。理由不再是"移动端复用"（已走 native SQLite + 端口注入），而是维护痛点——新功能堆入导致单文件过大。按既有 repository 模式：只读优先、不动事务边界、Store 留 wrapper。**本轮启动**）。
+7. **folder 墓碑不跨端传播**（260910 验收发现）：云端 manifest 顶层只有 `notes/folders`，无 folder 删除表达；A 的永久墓碑守卫（§2.4 修复）能拒绝回流，churn 有限（2~3 轮收敛），无数据损坏。但"新设备 + 同名系统笔记本"场景会产生多余 manifest 提交。**需动同步协议（红线区），单独立项讨论后再做**。
+8. Word/PDF 导出（`electron/export.ts` 已预留 docx/pdf）；附件大文件 S3 分片/断点续传（**nice-to-have，未被需求驱动**）。
+9. **Lake 内核策略**（属政策，非任务，记录即可）：A lakejs 开源源码当"机制字典"；B 版本锚点 + hack 清单（vendor lakex 已 pin，勿随意升级）；按需最小 patch，**不整体 fork**。
+10. **lakex 契约固化（编辑器可观测性，低成本待落地）**：新增 `src/features/editor/lakex-contract.d.ts`（完整设计见 `docs/LAKEX-CONTRACT.md` §4，速查表 §5），替换 lakeRuntime 等处的 `as any`、收敛反编译结论；纯类型改动 + 门禁全绿，**不碰 vendor**。
 
 **非代码**：安卓同步偶发 `UnknownHostException` = 设备网络（联网重试）。
 
