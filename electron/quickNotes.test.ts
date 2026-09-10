@@ -190,6 +190,52 @@ describe("R3：save staging 恢复（V5 §5.3）", () => {
     expect(quickNotes2.listQuickNotes().some((n) => n.id === saved.id)).toBe(true);
   });
 
+  it("正文已 promote + 图片残留 → 新实例补移动图片，不因缺 content.qnote 中断", async () => {
+    const draftId = crypto.randomUUID();
+    const image = await quickNotes.stageImage(draftId, { bytes: [...PNG], filename: "partial.png" });
+    const saved = quickNotes.createQuickNote({ text: "部分 promote", draftId, stagedImageIds: [image.id] });
+    const itemPath = itemPathFor(saved.id);
+    const assetPath = path.join(root, "quick-notes", "assets", saved.id, image.filename);
+    const imageBytes = fs.readFileSync(assetPath);
+    const contentHash = hashOf(fs.readFileSync(itemPath));
+
+    // 模拟旧顺序/异常中断后的状态：正文已在正式路径，图片仍在 staging。
+    fs.rmSync(assetPath, { force: true });
+    const opDir = path.join(stagingRoot(), crypto.randomUUID());
+    fs.mkdirSync(opDir, { recursive: true });
+    fs.writeFileSync(path.join(opDir, image.filename), imageBytes);
+    fs.writeFileSync(path.join(opDir, "meta.json"), JSON.stringify({
+      operationId: "x", quickNoteId: saved.id, contentHash,
+      assetFilenames: [image.filename], createdAt: new Date().toISOString(), state: "prepared",
+    }));
+
+    new QuickNotesStore(root);
+    expect(fs.existsSync(assetPath)).toBe(true);
+    expect(fs.readFileSync(assetPath).equals(imageBytes)).toBe(true);
+    expect(fs.existsSync(opDir)).toBe(false);
+  });
+
+  it("promote 缺少图片且目标也不存在 → 保留 staging，不静默清理", async () => {
+    const draftId = crypto.randomUUID();
+    const image = await quickNotes.stageImage(draftId, { bytes: [...PNG], filename: "missing.png" });
+    const saved = quickNotes.createQuickNote({ text: "缺图恢复", draftId, stagedImageIds: [image.id] });
+    const itemPath = itemPathFor(saved.id);
+    const assetPath = path.join(root, "quick-notes", "assets", saved.id, image.filename);
+    const contentHash = hashOf(fs.readFileSync(itemPath));
+
+    fs.rmSync(assetPath, { force: true });
+    const opDir = path.join(stagingRoot(), crypto.randomUUID());
+    fs.mkdirSync(opDir, { recursive: true });
+    fs.writeFileSync(path.join(opDir, "meta.json"), JSON.stringify({
+      operationId: "x", quickNoteId: saved.id, contentHash,
+      assetFilenames: [image.filename], createdAt: new Date().toISOString(), state: "prepared",
+    }));
+
+    new QuickNotesStore(root);
+    expect(fs.existsSync(assetPath)).toBe(false);
+    expect(fs.existsSync(opDir)).toBe(true);
+  });
+
   it("DB 未提交 + staging 残留 → 新实例清理 staging（不误补 promote）", () => {
     const opDir = path.join(stagingRoot(), crypto.randomUUID());
     fs.mkdirSync(opDir, { recursive: true });

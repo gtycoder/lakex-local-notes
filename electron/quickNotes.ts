@@ -277,7 +277,7 @@ export class QuickNotesStore {
     const targetAssets = this.assetDirFor(id);
     const removed = existing.filter((image) => !retainedIds.includes(image.id));
 
-    // V5 §5.3：staging 全量组装 → DB 事务提交 → 原子 promote（文件绝不先于 DB 落正式路径；
+    // V5 §5.3：staging 全量组装 → DB 事务提交 → promote（文件绝不先于 DB 落正式路径；
     // DB 失败时正式路径保持旧内容 + 旧索引一致，staging 残留由启动恢复清理）。
     // 组装前确保 staging 目录存在（无图片保存时 draft 目录可能不存在）
     fs.mkdirSync(stagingDir, { recursive: true });
@@ -313,17 +313,22 @@ export class QuickNotesStore {
   }
 
   /** V5 §5.3：把 staging 组装好的内容 promote 到正式路径（DB 已提交后调用，幂等）。
-   * 正文 rename 原子覆盖；图片逐个 rename（目标已存在则覆盖，内容寻址同 hash 幂等）。
-   * 图片缺失：DB 已提交不可回滚（先提交为确定），记录并跳过（正文仍可用，缺图 UI 显示缺失）。 */
+   * 图片先全部 promote，正文最后 rename：正文存在即代表本次文件集已完整落地，
+   * 崩溃恢复时源/目标任一存在就跳过，缺失则保留 staging 待人工处理。 */
   private promoteStagedSave(stagingDir: string, id: string, _contentHash: string, assetFilenames: string[]): void {
-    const bodySrc = path.join(stagingDir, SAVE_BODY_FILE);
-    if (!fs.existsSync(bodySrc)) throw new AppError("Internal", `staging 缺少正文文件: ${stagingDir}`);
-    fs.renameSync(bodySrc, this.itemPath(id));
-    fs.mkdirSync(this.assetDirFor(id), { recursive: true });
+    const assetDir = this.assetDirFor(id);
+    fs.mkdirSync(assetDir, { recursive: true });
     for (const filename of assetFilenames) {
       const src = path.join(stagingDir, filename);
-      if (!fs.existsSync(src)) { console.warn(`[quick] promote 缺图（DB 已提交，跳过）: ${id}/${filename}`); continue; }
-      fs.renameSync(src, path.join(this.assetDirFor(id), filename));
+      const dst = path.join(assetDir, filename);
+      if (fs.existsSync(src)) fs.renameSync(src, dst);
+      else if (!fs.existsSync(dst)) throw new AppError("Internal", `staging 缺少图片文件: ${id}/${filename}`);
+    }
+    const bodySrc = path.join(stagingDir, SAVE_BODY_FILE);
+    const bodyDst = this.itemPath(id);
+    if (fs.existsSync(bodySrc)) fs.renameSync(bodySrc, bodyDst);
+    else if (!fs.existsSync(bodyDst)) {
+      throw new AppError("Internal", `staging 缺少正文文件: ${stagingDir}`);
     }
   }
 
