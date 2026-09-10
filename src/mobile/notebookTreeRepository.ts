@@ -10,7 +10,10 @@ export interface NotebookTreeItem {
 }
 
 /** 返回笔记本完整子树；note 也能作为父节点，桌面端嵌套文档在移动端保持可见。 */
-export function listNotebookTree(d: DbLike, notebookId: string): NotebookTreeItem[] {
+export async function listNotebookTree(
+  d: DbLike,
+  notebookId: string,
+): Promise<NotebookTreeItem[]> {
   const allFolders = d.prepare(
     "SELECT id, title, parent_id, sort_order, node_type, icon FROM folders WHERE trashed_at IS NULL",
   ).all() as Array<{
