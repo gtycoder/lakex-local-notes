@@ -19,8 +19,8 @@ describe("mobile history repository", () => {
     applyMobileSchema(db);
     const meta = { title: "Title", parentId: null, sortOrder: 0 };
 
-    createHistorySnapshot(db, "note-1", "<p>same</p>", meta);
-    createHistorySnapshot(db, "note-1", "<p>same</p>", meta);
+    await createHistorySnapshot(db, "note-1", "<p>same</p>", meta);
+    await createHistorySnapshot(db, "note-1", "<p>same</p>", meta);
 
     const count = db.prepare("SELECT COUNT(*) AS count FROM note_history WHERE note_id=?")
       .get("note-1") as { count: number };
@@ -33,6 +33,6 @@ describe("mobile history repository", () => {
     db.prepare("INSERT INTO device_state(key,value) VALUES('history_settings',?)")
       .run("{invalid-json");
 
-    expect(getHistorySettings(db)).toEqual(DEFAULT_HISTORY_SETTINGS);
+    await expect(getHistorySettings(db)).resolves.toEqual(DEFAULT_HISTORY_SETTINGS);
   });
 });

@@ -198,7 +198,7 @@ export function createMobileSyncDbPort(getDb: () => DbLike, deps: MobileSyncDbPo
       }));
     },
     createHistorySnapshot(noteId, content, meta: { title: string; parentId: string | null; sortOrder: number; protectedDays?: number }) {
-      insertHistorySnapshot(getDb(), noteId, content, meta);
+      return insertHistorySnapshot(getDb(), noteId, content, meta);
     },
     async saveAsset(noteId, filename, bytes) {
       const key = noteId + "/" + filename;

@@ -31,7 +31,7 @@ type HistoryMeta = {
 };
 
 /** 历史快照引用的资产路径集合（形如 assets/{noteId}/{filename}），深清理 GC 必须保留。 */
-export function historyAssetRefs(d: DbLike): Set<string> {
+export async function historyAssetRefs(d: DbLike): Promise<Set<string>> {
   const refs = new Set<string>();
   const rows = d.prepare("SELECT note_id, content FROM note_history").all() as Array<{ note_id: string; content: string }>;
   for (const row of rows) {
@@ -43,7 +43,7 @@ export function historyAssetRefs(d: DbLike): Set<string> {
 }
 
 /** 同 hash 24 小时内只留一份，避免编辑器高频保存撑爆历史表。 */
-export function createHistorySnapshot(d: DbLike, noteId: string, content: string, meta: HistoryMeta): void {
+export async function createHistorySnapshot(d: DbLike, noteId: string, content: string, meta: HistoryMeta): Promise<void> {
   const contentHash = sha256Sync(new TextEncoder().encode(content));
   const duplicate = d.prepare("SELECT 1 FROM note_history WHERE note_id=? AND content_hash=? AND created_at > ? LIMIT 1")
     .get(noteId, contentHash, new Date(Date.now() - 24 * 3600 * 1000).toISOString());
@@ -52,7 +52,7 @@ export function createHistorySnapshot(d: DbLike, noteId: string, content: string
     .run(noteId, content, contentHash, meta.title, meta.parentId, meta.sortOrder, new Date().toISOString());
 }
 
-export function listNoteHistory(d: DbLike, noteId: string): HistorySnapshotSummary[] {
+export async function listNoteHistory(d: DbLike, noteId: string): Promise<HistorySnapshotSummary[]> {
   const rows = d.prepare("SELECT id, title, created_at FROM note_history WHERE note_id=? ORDER BY created_at DESC, id DESC").all(noteId) as Array<{
     id: number;
     title: string;
@@ -61,7 +61,7 @@ export function listNoteHistory(d: DbLike, noteId: string): HistorySnapshotSumma
   return rows.map((row) => ({ id: row.id, title: row.title, createdAt: row.created_at }));
 }
 
-export function readHistory(d: DbLike, historyId: number): { noteId: string; title: string; content: string } | null {
+export async function readHistory(d: DbLike, historyId: number): Promise<{ noteId: string; title: string; content: string } | null> {
   const row = d.prepare("SELECT note_id, title, content FROM note_history WHERE id=?").get(historyId) as {
     note_id: string;
     title: string;
@@ -71,7 +71,7 @@ export function readHistory(d: DbLike, historyId: number): { noteId: string; tit
 }
 
 /** 恢复前给当前正文留档，保证历史恢复本身可以反悔。 */
-export function backupCurrentNote(d: DbLike, noteId: string): void {
+export async function backupCurrentNote(d: DbLike, noteId: string): Promise<void> {
   const row = d.prepare("SELECT title, content, parent_id, sort_order FROM notes WHERE id=?").get(noteId) as {
     title: string;
     content: string;
@@ -79,18 +79,18 @@ export function backupCurrentNote(d: DbLike, noteId: string): void {
     sort_order: number;
   } | undefined;
   if (!row) return;
-  createHistorySnapshot(d, noteId, row.content, {
+  await createHistorySnapshot(d, noteId, row.content, {
     title: row.title,
     parentId: row.parent_id,
     sortOrder: row.sort_order,
   });
 }
 
-export function deleteHistory(d: DbLike, historyId: number): void {
+export async function deleteHistory(d: DbLike, historyId: number): Promise<void> {
   d.prepare("DELETE FROM note_history WHERE id=?").run(historyId);
 }
 
-export function getHistorySettings(d: DbLike): HistoryMobileSettings {
+export async function getHistorySettings(d: DbLike): Promise<HistoryMobileSettings> {
   const row = d.prepare("SELECT value FROM device_state WHERE key='history_settings'").get() as { value: string } | undefined;
   if (!row) return DEFAULT_HISTORY_SETTINGS;
   try {
@@ -114,12 +114,12 @@ function normalizeNonNegative(value: unknown, fallback: number): number {
   return typeof value === "number" && value >= 0 ? value : fallback;
 }
 
-export function saveHistorySettings(d: DbLike, settings: HistoryMobileSettings): void {
+export async function saveHistorySettings(d: DbLike, settings: HistoryMobileSettings): Promise<void> {
   d.prepare("INSERT INTO device_state(key,value) VALUES('history_settings',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value")
     .run(JSON.stringify(settings));
 }
 
-export function snapshotNote(d: DbLike, noteId: string): void {
+export async function snapshotNote(d: DbLike, noteId: string): Promise<void> {
   const row = d.prepare("SELECT title, content, parent_id, sort_order FROM notes WHERE id=? AND trashed_at IS NULL").get(noteId) as {
     title: string;
     content: string;
@@ -127,7 +127,7 @@ export function snapshotNote(d: DbLike, noteId: string): void {
     sort_order: number;
   } | undefined;
   if (!row) return;
-  createHistorySnapshot(d, noteId, row.content, {
+  await createHistorySnapshot(d, noteId, row.content, {
     title: row.title,
     parentId: row.parent_id,
     sortOrder: row.sort_order,
@@ -135,7 +135,7 @@ export function snapshotNote(d: DbLike, noteId: string): void {
 }
 
 /** 分层保留 + 每篇上限 + 保留天数；删除逻辑由共享纯函数决策，本层只负责落库。 */
-export function cleanupHistory(d: DbLike, settings: HistoryMobileSettings): { deleted: number } {
+export async function cleanupHistory(d: DbLike, settings: HistoryMobileSettings): Promise<{ deleted: number }> {
   const noteIds = d.prepare("SELECT DISTINCT note_id FROM note_history").all() as Array<{ note_id: string }>;
   let deleted = 0;
   for (const { note_id } of noteIds) {

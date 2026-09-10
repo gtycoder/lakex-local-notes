@@ -347,15 +347,15 @@ export const bridge = {
   /** 列出某文档的历史快照（纯本地；冲突留档/手动快照）。 */
   async listNoteHistory(noteId: string): Promise<Array<{ id: number; title: string; createdAt: string }>> {
     const d = await ensureDb();
-    return historyRepository.listNoteHistory(d, noteId);
+    return await historyRepository.listNoteHistory(d, noteId);
   },
 
   /** 恢复历史快照：对齐桌面端——先给当前正文留档（可反悔），再把快照正文+标题写回（sync_state=local → 下轮同步上传覆盖远端）。 */
   async restoreHistory(historyId: number): Promise<void> {
     const d = await ensureDb();
-    const snapshot = historyRepository.readHistory(d, historyId);
+    const snapshot = await historyRepository.readHistory(d, historyId);
     if (!snapshot) return;
-    historyRepository.backupCurrentNote(d, snapshot.noteId);
+    await historyRepository.backupCurrentNote(d, snapshot.noteId);
     await bridge.saveNote(snapshot.noteId, snapshot.title, snapshot.content);
   },
 
@@ -363,21 +363,21 @@ export const bridge = {
   async deleteHistory(historyId: number): Promise<void> {
     await runMaintenanceAndPersist(async () => {
       const d = await ensureDb();
-      historyRepository.deleteHistory(d, historyId);
+      await historyRepository.deleteHistory(d, historyId);
     });
   },
 
   /** 读取历史快照设置（对齐桌面 getHistorySettings；存 device_state，纯本地）。 */
   async getHistorySettings(): Promise<HistoryMobileSettings> {
     const d = await ensureDb();
-    return historyRepository.getHistorySettings(d);
+    return await historyRepository.getHistorySettings(d);
   },
 
   /** 保存历史快照设置（对齐桌面 saveHistorySettings）。 */
   async saveHistorySettings(settings: HistoryMobileSettings): Promise<void> {
     await runMaintenanceAndPersist(async () => {
       const d = await ensureDb();
-      historyRepository.saveHistorySettings(d, settings);
+      await historyRepository.saveHistorySettings(d, settings);
     });
   },
 
@@ -385,7 +385,7 @@ export const bridge = {
   async snapshotNote(noteId: string): Promise<void> {
     await runMaintenanceAndPersist(async () => {
       const d = await ensureDb();
-      historyRepository.snapshotNote(d, noteId);
+      await historyRepository.snapshotNote(d, noteId);
     });
   },
 
@@ -393,7 +393,7 @@ export const bridge = {
   async cleanupHistory(): Promise<{ deleted: number }> {
     return runMaintenanceAndPersist(async () => {
       const d = await ensureDb();
-      return historyRepository.cleanupHistory(d, historyRepository.getHistorySettings(d));
+      return await historyRepository.cleanupHistory(d, await historyRepository.getHistorySettings(d));
     });
   },
 
@@ -645,7 +645,7 @@ export const bridge = {
       manifest,
       extraManifests: prevManifests,
       prefix: syncCfg.prefix,
-      historyRefs: historyRepository.historyAssetRefs(d),
+      historyRefs: await historyRepository.historyAssetRefs(d),
     });
     const pendingByKey = new Map((await bridge.listS3GcPending()).map((p) => [p.key, p.markedAt] as const));
     const all = [...(await s3Store.listObjects(`${syncCfg.prefix}/objects/`)), ...(await s3Store.listObjects(`${syncCfg.prefix}/assets/`))];
@@ -740,7 +740,7 @@ export const bridge = {
         }
         // 清理可能部分成功；即便失败也要把当前内存库落盘，避免下一次启动回退到旧状态。
         try {
-          historyRepository.cleanupHistory(d, historyRepository.getHistorySettings(d));
+          await historyRepository.cleanupHistory(d, await historyRepository.getHistorySettings(d));
         } catch {
           // 清理失败不拖垮同步；下一次同步会继续按策略清理。
         }
