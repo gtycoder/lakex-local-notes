@@ -256,18 +256,18 @@ export const bridge = {
 
   async listQuickNotes(): Promise<Array<{ id: string; previewText: string; imageCount: number; updatedAt: string; firstImage: string | null }>> {
     const d = await ensureDb();
-    return await quickNotesRepository.listQuickNotes(d);
+    return await quickNotesRepository.listQuickNotes(new SqlJsAsyncDb(d));
   },
 
   async readQuickNote(id: string): Promise<{ id: string; content: StoredQuickNoteContent; previewText: string; updatedAt: string } | null> {
     const d = await ensureDb();
-    return await quickNotesRepository.readQuickNote(d, id);
+    return await quickNotesRepository.readQuickNote(new SqlJsAsyncDb(d), id);
   },
 
   async saveQuickNote(id: string, text: string, images: StoredQuickNoteImage[] = []): Promise<string> {
     return maintenance.run("main", async () => {
       const d = await ensureDb();
-      const result = await quickNotesRepository.saveQuickNote(d, id, text, images);
+      const result = await quickNotesRepository.saveQuickNote(new SqlJsAsyncDb(d), id, text, images);
       await saveSnapshot(d.exportBytes());
       return result;
     });
@@ -279,7 +279,7 @@ export const bridge = {
   async saveQuickNoteWithImages(id: string, text: string, imageFiles: Array<{ filename: string; mimeType: string; width: number | null; height: number | null; bytes: Uint8Array }> = []): Promise<string> {
     return maintenance.run("main", async () => {
       const d = await ensureDb();
-      const result = await quickNotesRepository.saveQuickNoteWithImages(d, id, text, imageFiles, {
+      const result = await quickNotesRepository.saveQuickNoteWithImages(new SqlJsAsyncDb(d), id, text, imageFiles, {
         assets,
         saveAssetFile: saveAssetBytesFs,
       });
@@ -292,7 +292,7 @@ export const bridge = {
     return maintenance.run("main", async () => {
       const d = await ensureDb();
       const id = crypto.randomUUID();
-      const result = await quickNotesRepository.saveQuickNote(d, id, text, []);
+      const result = await quickNotesRepository.saveQuickNote(new SqlJsAsyncDb(d), id, text, []);
       await saveSnapshot(d.exportBytes());
       return result;
     });
@@ -302,7 +302,7 @@ export const bridge = {
   async deleteQuickNote(id: string): Promise<void> {
     return maintenance.run("main", async () => {
       const d = await ensureDb();
-      await quickNotesRepository.deleteQuickNote(d, id);
+      await quickNotesRepository.deleteQuickNote(new SqlJsAsyncDb(d), id);
       await saveSnapshot(d.exportBytes());
     });
   },
@@ -315,14 +315,14 @@ export const bridge = {
   /** 小记回收站列表（软删行；含冲突归档的 ready_to_sync=0 条目——它们也是可恢复的本地内容）。 */
   async listQuickNoteTrash(): Promise<Array<{ id: string; createdAt: string; updatedAt: string; deletedAt: string; previewText: string }>> {
     const d = await ensureDb();
-    return await quickNotesRepository.listQuickNoteTrash(d);
+    return await quickNotesRepository.listQuickNoteTrash(new SqlJsAsyncDb(d));
   },
 
   /** 小记恢复（回收站 → active）：restore_pending_at → 同步 local-wins 上传 active 覆盖墓碑。 */
   async restoreQuickNote(id: string): Promise<void> {
     return maintenance.run("main", async () => {
       const d = await ensureDb();
-      await quickNotesRepository.restoreQuickNote(d, id);
+      await quickNotesRepository.restoreQuickNote(new SqlJsAsyncDb(d), id);
       await saveSnapshot(d.exportBytes());
     });
   },
@@ -331,7 +331,7 @@ export const bridge = {
   async purgeQuickNote(id: string): Promise<void> {
     return maintenance.run("main", async () => {
       const d = await ensureDb();
-      await quickNotesRepository.purgeQuickNote(d, id, removeAssetBytesFs);
+      await quickNotesRepository.purgeQuickNote(new SqlJsAsyncDb(d), id, removeAssetBytesFs);
       await saveSnapshot(d.exportBytes());
     });
   },
