@@ -36,6 +36,7 @@ import * as quickNotesRepository from "./quickNotesRepository.js";
 import { createMobileSyncDbPort } from "./syncDbPort.js";
 import * as historyRepository from "./historyRepository.js";
 import type { HistoryMobileSettings } from "./historyRepository.js";
+import * as orphanAssetRepository from "./orphanAssetRepository.js";
 
 export type { HistoryMobileSettings } from "./historyRepository.js";
 
@@ -153,25 +154,6 @@ async function runMaintenanceAndPersist<T>(operation: () => T | Promise<T>): Pro
     await persistDatabaseSnapshot();
     return result;
   });
-}
-
-async function deleteOrphanAssetInternal(id: number): Promise<void> {
-  const d = await ensureDb();
-  const row = d.prepare("SELECT note_id, filename FROM orphan_assets WHERE id=?").get(id) as { note_id: string; filename: string } | undefined;
-  if (!row) return;
-  await removeAssetBytesFs(row.note_id + "/" + row.filename);
-  assets.delete(row.note_id + "/" + row.filename);
-  d.prepare("DELETE FROM orphan_assets WHERE id=?").run(id);
-}
-
-async function cleanOrphanAssetsInternal(): Promise<void> {
-  const d = await ensureDb();
-  const rows = d.prepare("SELECT note_id, filename FROM orphan_assets").all() as Array<{ note_id: string; filename: string }>;
-  for (const r of rows) {
-    await removeAssetBytesFs(r.note_id + "/" + r.filename);
-    assets.delete(r.note_id + "/" + r.filename);
-  }
-  d.prepare("DELETE FROM orphan_assets").run();
 }
 
 async function addS3GcPendingInternal(key: string): Promise<void> {
@@ -435,18 +417,29 @@ export const bridge = {
   /** 全局孤儿资源列表（对齐桌面 listOrphanAssets）。 */
   async listOrphanAssets(): Promise<Array<{ id: number; noteId: string; filename: string; size: number; mimeType: string; detectedAt: string }>> {
     const d = await ensureDb();
-    const rows = d.prepare("SELECT id, note_id, filename, size, mime_type, detected_at FROM orphan_assets ORDER BY detected_at DESC").all() as Array<{ id: number; note_id: string; filename: string; size: number; mime_type: string; detected_at: string }>;
-    return rows.map((r) => ({ id: r.id, noteId: r.note_id, filename: r.filename, size: r.size, mimeType: r.mime_type, detectedAt: r.detected_at }));
+    return orphanAssetRepository.listOrphanAssets(d);
   },
 
   /** 删除单个孤儿资源（本地文件 + 登记）。 */
   async deleteOrphanAsset(id: number): Promise<void> {
-    await runMaintenanceAndPersist(() => deleteOrphanAssetInternal(id));
+    await runMaintenanceAndPersist(async () => {
+      const d = await ensureDb();
+      await orphanAssetRepository.deleteOrphanAsset(d, id, {
+        assets,
+        removeAssetFile: removeAssetBytesFs,
+      });
+    });
   },
 
   /** 清理全部孤儿资源（本地文件 + 登记）。 */
   async cleanOrphanAssets(): Promise<void> {
-    await runMaintenanceAndPersist(cleanOrphanAssetsInternal);
+    await runMaintenanceAndPersist(async () => {
+      const d = await ensureDb();
+      await orphanAssetRepository.cleanOrphanAssets(d, {
+        assets,
+        removeAssetFile: removeAssetBytesFs,
+      });
+    });
   },
 
   /** GC：登记待回收键（新 manifest 不再引用，对齐桌面 addS3GcPending）。 */
