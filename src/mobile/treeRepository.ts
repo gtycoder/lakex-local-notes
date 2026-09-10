@@ -49,7 +49,7 @@ function folderRowToTreeNode(
   };
 }
 
-export function listTreeNodes(d: DbLike): TreeNode[] {
+export async function listTreeNodes(d: DbLike): Promise<TreeNode[]> {
   const rows = d.prepare(
     "SELECT id, title, parent_id, sort_order, node_type, icon, updated_at, trashed_at, deleted_from_parent_id, sync_state FROM folders WHERE trashed_at IS NULL ORDER BY parent_id, sort_order",
   ).all() as Array<{
@@ -62,7 +62,7 @@ export function listTreeNodes(d: DbLike): TreeNode[] {
   }));
 }
 
-export function createNotebook(d: DbLike, input: { title: string; icon: string | null }): TreeNode {
+export async function createNotebook(d: DbLike, input: { title: string; icon: string | null }): Promise<TreeNode> {
   const title = assertTreeNodeTitle(input.title);
   const id = crypto.randomUUID();
   const now = new Date().toISOString();
@@ -77,7 +77,7 @@ export function createNotebook(d: DbLike, input: { title: string; icon: string |
   return folderRowToTreeNode(row, { title, updatedAt: now, icon: input.icon ?? null });
 }
 
-export function createGroup(d: DbLike, parentId: string, title: string): TreeNode {
+export async function createGroup(d: DbLike, parentId: string, title: string): Promise<TreeNode> {
   const trimmed = assertTreeNodeTitle(title);
   const parent = d.prepare("SELECT 1 FROM folders WHERE id = ? AND trashed_at IS NULL").get(parentId);
   if (!parent) throw new Error("父节点不存在: " + parentId);
@@ -91,7 +91,7 @@ export function createGroup(d: DbLike, parentId: string, title: string): TreeNod
   return folderRowToTreeNode(row, { title: trimmed, updatedAt: now });
 }
 
-export function renameTreeNode(d: DbLike, id: string, title: string): TreeNode {
+export async function renameTreeNode(d: DbLike, id: string, title: string): Promise<TreeNode> {
   const trimmed = assertTreeNodeTitle(title);
   const now = new Date().toISOString();
   const changed = d.prepare("UPDATE folders SET title=?, updated_at=?, sync_state='local' WHERE id=?").run(trimmed, now, id).changes;
@@ -100,7 +100,7 @@ export function renameTreeNode(d: DbLike, id: string, title: string): TreeNode {
   return folderRowToTreeNode(row, { title: trimmed, updatedAt: now });
 }
 
-export function setNodeIcon(d: DbLike, id: string, icon: string | null): TreeNode {
+export async function setNodeIcon(d: DbLike, id: string, icon: string | null): Promise<TreeNode> {
   assertNodeIcon(icon);
   const now = new Date().toISOString();
   const folder = d.prepare("SELECT id, title, parent_id, sort_order, node_type, icon, updated_at, sync_state FROM folders WHERE id=?").get(id) as Record<string, unknown> | undefined;
@@ -116,7 +116,7 @@ export function setNodeIcon(d: DbLike, id: string, icon: string | null): TreeNod
   return noteRowToTreeNode(row, { icon, updatedAt: now });
 }
 
-export function moveTreeNodeOrdered(d: DbLike, id: string, parentId: string | null, orderedIds: string[]): TreeNode {
+export async function moveTreeNodeOrdered(d: DbLike, id: string, parentId: string | null, orderedIds: string[]): Promise<TreeNode> {
   const moving = d.prepare("SELECT node_type FROM folders WHERE id = ? AND trashed_at IS NULL").get(id) as { node_type: string } | undefined;
   if (!moving) throw new Error("节点不存在: " + id);
   assertRootConstraint(moving.node_type, parentId);
@@ -152,7 +152,7 @@ export function moveTreeNodeOrdered(d: DbLike, id: string, parentId: string | nu
   return folderRowToTreeNode(row, { parentId, updatedAt: now });
 }
 
-export function reorderSiblings(d: DbLike, parentId: string | null, orderedIds: string[]): void {
+export async function reorderSiblings(d: DbLike, parentId: string | null, orderedIds: string[]): Promise<void> {
   const now = new Date().toISOString();
   const tx = d.transaction(() => {
     orderedIds.forEach((childId, index) => {
