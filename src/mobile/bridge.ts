@@ -1,12 +1,12 @@
 /**
  * POC JS 桥（M0/M1）：window.lakeNative 兼容接口的移动端实现。
- * - 数据层：sql.js（WASM 同步 DbLike，见 sqliteDb.ts）+ IndexedDB 快照持久化
+ * - 数据层：Android 原生 SQLite（WAL，见 nativeSqliteDb.ts）
  * - S3：@aws-sdk/client-s3 + CapacitorHttpHandler（原生传输层，无 CORS）
  * - 同步：syncEngine（manifest v4 协议，复用 src/core 决策纯函数）
  * - 范围 = docs/MOBILE-TECH-STACK.md §9.2 的最小 IPC 集（POC 版）
  */
-import { SqlJsAsyncDb, SqlJsDb } from "./sqliteDb";
-import { loadSnapshot, saveSnapshot } from "./persistence";
+import { NativeSqliteDb } from "./nativeSqliteDb";
+import { migrateSnapshotToNativeSqlite } from "./nativeSqliteMigration";
 import { saveAssetBytesFs, loadAssetBytesFs, listAssetKeysFs, listNoteAssetKeysFs, removeAssetBytesFs } from "./assetFs";
 import { syncNow as runSync, downloadNoteAssets, type SyncConfig, type SyncDbPort, type SyncReport } from "../core/syncEngine.js";
 import { buildGcKeepSet } from "../core/gcDecisions.js";
@@ -56,11 +56,12 @@ const S3_STORAGE_KEY = "lake-notes-mobile.s3";
 /** 与桌面一致的初始 Lake 内容（store.ts createNoteInWithContent） */
 export const INITIAL_LAKE_CONTENT = `<p class="ne-p"><br></p>`;
 
-let db: SqlJsDb | null = null;
+let db: NativeSqliteDb | null = null;
+let dbInitialization: Promise<NativeSqliteDb> | null = null;
 /** 运行期资源缓存（新上传/同步中使用）；持久化资源不在启动时全量载入。key = "{noteId}/{filename}" */
 const assets = new Map<string, Uint8Array>();
 /** 主维护队列（GPT 审计 P2-6）：同步与本地写操作（保存/删除/恢复）串行化，防交错
- * 覆盖快照/发布旧状态；小记同步与编辑竞态由队列闭合（引擎 markSynced 无"未变才标"守卫时也安全）。 */
+ * 覆盖数据库写入/发布旧状态；小记同步与编辑竞态由队列闭合（引擎 markSynced 无"未变才标"守卫时也安全）。 */
 const maintenance = new KeyedAsyncQueue();
 
 /** 与桌面一致的随机 8-hex 片段（crypto.randomBytes(4) 的等价物）。 */
@@ -83,12 +84,21 @@ function mimeForExt(ext: string): string {
   return MIME_BY_EXT[ext] ?? "application/octet-stream";
 }
 
-async function ensureDb(): Promise<SqlJsDb> {
+async function initializeDb(): Promise<NativeSqliteDb> {
+  const migration = await migrateSnapshotToNativeSqlite();
+  const openedDb = await NativeSqliteDb.open(migration.databaseName);
+  await applyMobileSchema(openedDb);
+  db = openedDb;
+  return openedDb;
+}
+
+async function ensureDb(): Promise<NativeSqliteDb> {
   if (db) return db;
-  const snap = await loadSnapshot();
-  db = snap ? await SqlJsDb.openFrom(snap) : await SqlJsDb.open();
-  await applyMobileSchema(new SqlJsAsyncDb(db));
-  return db;
+  dbInitialization ??= initializeDb().catch((error: unknown) => {
+    dbInitialization = null;
+    throw error;
+  });
+  return dbInitialization;
 }
 
 async function createS3Client(cfg: S3Settings): Promise<import("@aws-sdk/client-s3").S3Client> {
@@ -106,7 +116,7 @@ async function createS3Client(cfg: S3Settings): Promise<import("@aws-sdk/client-
   });
 }
 
-const dbPort: SyncDbPort = createMobileSyncDbPort(() => new SqlJsAsyncDb(db!), {
+const dbPort: SyncDbPort = createMobileSyncDbPort(() => db!, {
   assets,
   saveAssetFile: saveAssetBytesFs,
   loadAssetFile: loadAssetBytesFs,
@@ -145,16 +155,9 @@ async function downloadDeclaredAssetsFor(noteIds: string[], onlyMissing = false)
   }
 }
 
-async function persistDatabaseSnapshot(): Promise<void> {
-  const currentDb = await ensureDb();
-  await saveSnapshot(currentDb.exportBytes());
-}
-
-async function runMaintenanceAndPersist<T>(operation: () => T | Promise<T>): Promise<T> {
+async function runMaintenanceOperation<T>(operation: () => T | Promise<T>): Promise<T> {
   return maintenance.run("main", async () => {
-    const result = await operation();
-    await persistDatabaseSnapshot();
-    return result;
+    return await operation();
   });
 }
 
@@ -168,7 +171,7 @@ export const bridge = {
 
   async listTreeNodes(): Promise<TreeNode[]> {
     const d = await ensureDb();
-    return await treeRepository.listTreeNodes(new SqlJsAsyncDb(d));
+    return await treeRepository.listTreeNodes(d);
   },
 
 
@@ -178,8 +181,7 @@ export const bridge = {
   async createNotebook(input: { title: string; icon: string | null }): Promise<TreeNode> {
     return maintenance.run("main", async () => {
       const d = await ensureDb();
-      const node = await treeRepository.createNotebook(new SqlJsAsyncDb(d), input);
-      await saveSnapshot(d.exportBytes());
+      const node = await treeRepository.createNotebook(d, input);
       return node;
     });
   },
@@ -188,8 +190,7 @@ export const bridge = {
   async createGroup(parentId: string, title: string): Promise<TreeNode> {
     return maintenance.run("main", async () => {
       const d = await ensureDb();
-      const node = await treeRepository.createGroup(new SqlJsAsyncDb(d), parentId, title);
-      await saveSnapshot(d.exportBytes());
+      const node = await treeRepository.createGroup(d, parentId, title);
       return node;
     });
   },
@@ -197,8 +198,7 @@ export const bridge = {
   async renameTreeNode(id: string, title: string): Promise<TreeNode> {
     return maintenance.run("main", async () => {
       const d = await ensureDb();
-      const node = await treeRepository.renameTreeNode(new SqlJsAsyncDb(d), id, title);
-      await saveSnapshot(d.exportBytes());
+      const node = await treeRepository.renameTreeNode(d, id, title);
       return node;
     });
   },
@@ -206,8 +206,7 @@ export const bridge = {
   async setNodeIcon(id: string, icon: string | null): Promise<TreeNode> {
     return maintenance.run("main", async () => {
       const d = await ensureDb();
-      const node = await treeRepository.setNodeIcon(new SqlJsAsyncDb(d), id, icon);
-      await saveSnapshot(d.exportBytes());
+      const node = await treeRepository.setNodeIcon(d, id, icon);
       return node;
     });
   },
@@ -215,8 +214,7 @@ export const bridge = {
   async moveTreeNodeOrdered(id: string, parentId: string | null, orderedIds: string[]): Promise<TreeNode> {
     return maintenance.run("main", async () => {
       const d = await ensureDb();
-      const node = await treeRepository.moveTreeNodeOrdered(new SqlJsAsyncDb(d), id, parentId, orderedIds);
-      await saveSnapshot(d.exportBytes());
+      const node = await treeRepository.moveTreeNodeOrdered(d, id, parentId, orderedIds);
       return node;
     });
   },
@@ -225,50 +223,48 @@ export const bridge = {
   async reorderSiblings(parentId: string | null, orderedIds: string[]): Promise<void> {
     return maintenance.run("main", async () => {
       const d = await ensureDb();
-      await treeRepository.reorderSiblings(new SqlJsAsyncDb(d), parentId, orderedIds);
-      await saveSnapshot(d.exportBytes());
+      await treeRepository.reorderSiblings(d, parentId, orderedIds);
     });
   },
 
   async listNotes(): Promise<POCNoteSummary[]> {
     const d = await ensureDb();
-    return await noteRepository.listNotes(new SqlJsAsyncDb(d));
+    return await noteRepository.listNotes(d);
   },
 
   async readNote(id: string): Promise<POCNote | null> {
     const d = await ensureDb();
-    return await noteRepository.readNote(new SqlJsAsyncDb(d), id);
+    return await noteRepository.readNote(d, id);
   },
 
   /** 打开文档前的"是否已消失"判定原料（AGENTS §3 #16：所有打开入口都要判，判定逻辑用共享纯函数 isGoneNote）。 */
   async noteGoneState(id: string): Promise<{ parentId: string | null; syncState: string } | null> {
     const d = await ensureDb();
-    return await noteRepository.noteGoneState(new SqlJsAsyncDb(d), id);
+    return await noteRepository.noteGoneState(d, id);
   },
 
-  /** Phase 0B-5：搜索 fallback（sql.js 无 FTS5 → LIKE；标题+正文，参数化 + ESCAPE）。 */
+  /** Phase 0B-5：搜索 fallback（LIKE；标题+正文，参数化 + ESCAPE，不依赖 FTS5）。 */
   async searchNotes(query: string): Promise<SearchResult[]> {
     const d = await ensureDb();
-    return await noteRepository.searchNotes(new SqlJsAsyncDb(d), query);
+    return await noteRepository.searchNotes(d, query);
   },
 
   // ---- 小记（Phase B3：本地 CRUD + 列表；同步后置，依赖 quick-notes/ 子空间端口化） ----
 
   async listQuickNotes(): Promise<Array<{ id: string; previewText: string; imageCount: number; updatedAt: string; firstImage: string | null }>> {
     const d = await ensureDb();
-    return await quickNotesRepository.listQuickNotes(new SqlJsAsyncDb(d));
+    return await quickNotesRepository.listQuickNotes(d);
   },
 
   async readQuickNote(id: string): Promise<{ id: string; content: StoredQuickNoteContent; previewText: string; updatedAt: string } | null> {
     const d = await ensureDb();
-    return await quickNotesRepository.readQuickNote(new SqlJsAsyncDb(d), id);
+    return await quickNotesRepository.readQuickNote(d, id);
   },
 
   async saveQuickNote(id: string, text: string, images: StoredQuickNoteImage[] = []): Promise<string> {
     return maintenance.run("main", async () => {
       const d = await ensureDb();
-      const result = await quickNotesRepository.saveQuickNote(new SqlJsAsyncDb(d), id, text, images);
-      await saveSnapshot(d.exportBytes());
+      const result = await quickNotesRepository.saveQuickNote(d, id, text, images);
       return result;
     });
   },
@@ -279,11 +275,10 @@ export const bridge = {
   async saveQuickNoteWithImages(id: string, text: string, imageFiles: Array<{ filename: string; mimeType: string; width: number | null; height: number | null; bytes: Uint8Array }> = []): Promise<string> {
     return maintenance.run("main", async () => {
       const d = await ensureDb();
-      const result = await quickNotesRepository.saveQuickNoteWithImages(new SqlJsAsyncDb(d), id, text, imageFiles, {
+      const result = await quickNotesRepository.saveQuickNoteWithImages(d, id, text, imageFiles, {
         assets,
         saveAssetFile: saveAssetBytesFs,
       });
-      await saveSnapshot(d.exportBytes());
       return result;
     });
   },
@@ -292,8 +287,7 @@ export const bridge = {
     return maintenance.run("main", async () => {
       const d = await ensureDb();
       const id = crypto.randomUUID();
-      const result = await quickNotesRepository.saveQuickNote(new SqlJsAsyncDb(d), id, text, []);
-      await saveSnapshot(d.exportBytes());
+      const result = await quickNotesRepository.saveQuickNote(d, id, text, []);
       return result;
     });
   },
@@ -302,8 +296,7 @@ export const bridge = {
   async deleteQuickNote(id: string): Promise<void> {
     return maintenance.run("main", async () => {
       const d = await ensureDb();
-      await quickNotesRepository.deleteQuickNote(new SqlJsAsyncDb(d), id);
-      await saveSnapshot(d.exportBytes());
+      await quickNotesRepository.deleteQuickNote(d, id);
     });
   },
 
@@ -315,15 +308,14 @@ export const bridge = {
   /** 小记回收站列表（软删行；含冲突归档的 ready_to_sync=0 条目——它们也是可恢复的本地内容）。 */
   async listQuickNoteTrash(): Promise<Array<{ id: string; createdAt: string; updatedAt: string; deletedAt: string; previewText: string }>> {
     const d = await ensureDb();
-    return await quickNotesRepository.listQuickNoteTrash(new SqlJsAsyncDb(d));
+    return await quickNotesRepository.listQuickNoteTrash(d);
   },
 
   /** 小记恢复（回收站 → active）：restore_pending_at → 同步 local-wins 上传 active 覆盖墓碑。 */
   async restoreQuickNote(id: string): Promise<void> {
     return maintenance.run("main", async () => {
       const d = await ensureDb();
-      await quickNotesRepository.restoreQuickNote(new SqlJsAsyncDb(d), id);
-      await saveSnapshot(d.exportBytes());
+      await quickNotesRepository.restoreQuickNote(d, id);
     });
   },
 
@@ -331,29 +323,27 @@ export const bridge = {
   async purgeQuickNote(id: string): Promise<void> {
     return maintenance.run("main", async () => {
       const d = await ensureDb();
-      await quickNotesRepository.purgeQuickNote(new SqlJsAsyncDb(d), id, removeAssetBytesFs);
-      await saveSnapshot(d.exportBytes());
+      await quickNotesRepository.purgeQuickNote(d, id, removeAssetBytesFs);
     });
   },
 
   async saveNote(id: string, title: string, content: string, parentId: string | null = null): Promise<void> {
     return maintenance.run("main", async () => {
       const d = await ensureDb();
-      const changed = await noteRepository.saveNote(new SqlJsAsyncDb(d), id, title, content, parentId, assets);
-      if (changed) await saveSnapshot(d.exportBytes());
+      const changed = await noteRepository.saveNote(d, id, title, content, parentId, assets);
     });
   },
 
   /** 列出某文档的历史快照（纯本地；冲突留档/手动快照）。 */
   async listNoteHistory(noteId: string): Promise<Array<{ id: number; title: string; createdAt: string }>> {
     const d = await ensureDb();
-    return await historyRepository.listNoteHistory(new SqlJsAsyncDb(d), noteId);
+    return await historyRepository.listNoteHistory(d, noteId);
   },
 
   /** 恢复历史快照：对齐桌面端——先给当前正文留档（可反悔），再把快照正文+标题写回（sync_state=local → 下轮同步上传覆盖远端）。 */
   async restoreHistory(historyId: number): Promise<void> {
     const d = await ensureDb();
-    const mobileDb = new SqlJsAsyncDb(d);
+    const mobileDb = d;
     const snapshot = await historyRepository.readHistory(mobileDb, historyId);
     if (!snapshot) return;
     await historyRepository.backupCurrentNote(mobileDb, snapshot.noteId);
@@ -362,39 +352,39 @@ export const bridge = {
 
   /** 手动删除单个历史快照（对齐桌面 deleteHistory）。 */
   async deleteHistory(historyId: number): Promise<void> {
-    await runMaintenanceAndPersist(async () => {
+    await runMaintenanceOperation(async () => {
       const d = await ensureDb();
-      await historyRepository.deleteHistory(new SqlJsAsyncDb(d), historyId);
+      await historyRepository.deleteHistory(d, historyId);
     });
   },
 
   /** 读取历史快照设置（对齐桌面 getHistorySettings；存 device_state，纯本地）。 */
   async getHistorySettings(): Promise<HistoryMobileSettings> {
     const d = await ensureDb();
-    return await historyRepository.getHistorySettings(new SqlJsAsyncDb(d));
+    return await historyRepository.getHistorySettings(d);
   },
 
   /** 保存历史快照设置（对齐桌面 saveHistorySettings）。 */
   async saveHistorySettings(settings: HistoryMobileSettings): Promise<void> {
-    await runMaintenanceAndPersist(async () => {
+    await runMaintenanceOperation(async () => {
       const d = await ensureDb();
-      await historyRepository.saveHistorySettings(new SqlJsAsyncDb(d), settings);
+      await historyRepository.saveHistorySettings(d, settings);
     });
   },
 
   /** 给某笔记创建快照（定时自动快照用；读当前正文，24h 去重）。 */
   async snapshotNote(noteId: string): Promise<void> {
-    await runMaintenanceAndPersist(async () => {
+    await runMaintenanceOperation(async () => {
       const d = await ensureDb();
-      await historyRepository.snapshotNote(new SqlJsAsyncDb(d), noteId);
+      await historyRepository.snapshotNote(d, noteId);
     });
   },
 
   /** 历史快照清理（对齐桌面 cleanupHistory：分层保留 + 上限 + 保留天数，设置可配置）。 */
   async cleanupHistory(): Promise<{ deleted: number }> {
-    return runMaintenanceAndPersist(async () => {
+    return runMaintenanceOperation(async () => {
       const d = await ensureDb();
-      const mobileDb = new SqlJsAsyncDb(d);
+      const mobileDb = d;
       return await historyRepository.cleanupHistory(mobileDb, await historyRepository.getHistorySettings(mobileDb));
     });
   },
@@ -402,14 +392,14 @@ export const bridge = {
   /** 全局孤儿资源列表（对齐桌面 listOrphanAssets）。 */
   async listOrphanAssets(): Promise<Array<{ id: number; noteId: string; filename: string; size: number; mimeType: string; detectedAt: string }>> {
     const d = await ensureDb();
-    return await orphanAssetRepository.listOrphanAssets(new SqlJsAsyncDb(d));
+    return await orphanAssetRepository.listOrphanAssets(d);
   },
 
   /** 删除单个孤儿资源（本地文件 + 登记）。 */
   async deleteOrphanAsset(id: number): Promise<void> {
-    await runMaintenanceAndPersist(async () => {
+    await runMaintenanceOperation(async () => {
       const d = await ensureDb();
-      await orphanAssetRepository.deleteOrphanAsset(new SqlJsAsyncDb(d), id, {
+      await orphanAssetRepository.deleteOrphanAsset(d, id, {
         assets,
         removeAssetFile: removeAssetBytesFs,
       });
@@ -418,9 +408,9 @@ export const bridge = {
 
   /** 清理全部孤儿资源（本地文件 + 登记）。 */
   async cleanOrphanAssets(): Promise<void> {
-    await runMaintenanceAndPersist(async () => {
+    await runMaintenanceOperation(async () => {
       const d = await ensureDb();
-      await orphanAssetRepository.cleanOrphanAssets(new SqlJsAsyncDb(d), {
+      await orphanAssetRepository.cleanOrphanAssets(d, {
         assets,
         removeAssetFile: removeAssetBytesFs,
       });
@@ -429,31 +419,31 @@ export const bridge = {
 
   /** GC：登记待回收键（新 manifest 不再引用，对齐桌面 addS3GcPending）。 */
   async addS3GcPending(key: string): Promise<void> {
-    await runMaintenanceAndPersist(async () => {
+    await runMaintenanceOperation(async () => {
       const d = await ensureDb();
-      await gcRepository.addS3GcPending(new SqlJsAsyncDb(d), key);
+      await gcRepository.addS3GcPending(d, key);
     });
   },
 
   /** GC：从待回收表移除已被重新引用的键。 */
   async removeS3GcPending(keys: string[]): Promise<void> {
-    await runMaintenanceAndPersist(async () => {
+    await runMaintenanceOperation(async () => {
       const d = await ensureDb();
-      await gcRepository.removeS3GcPending(new SqlJsAsyncDb(d), keys);
+      await gcRepository.removeS3GcPending(d, keys);
     });
   },
 
   /** GC：列出全部待回收键。 */
   async listS3GcPending(): Promise<Array<{ key: string; markedAt: string }>> {
     const d = await ensureDb();
-    return await gcRepository.listS3GcPending(new SqlJsAsyncDb(d));
+    return await gcRepository.listS3GcPending(d);
   },
 
   /** GC：记录删除（对齐桌面 recordS3GcLog）。 */
   async recordS3GcLog(action: string, key: string, reason: string, ok: boolean): Promise<void> {
-    await runMaintenanceAndPersist(async () => {
+    await runMaintenanceOperation(async () => {
       const d = await ensureDb();
-      await gcRepository.recordS3GcLog(new SqlJsAsyncDb(d), action, key, reason, ok);
+      await gcRepository.recordS3GcLog(d, action, key, reason, ok);
     });
   },
 
@@ -470,8 +460,7 @@ export const bridge = {
   async trashNote(id: string): Promise<void> {
     return maintenance.run("main", async () => {
       const d = await ensureDb();
-      await noteRepository.trashNote(new SqlJsAsyncDb(d), id);
-      await saveSnapshot(d.exportBytes());
+      await noteRepository.trashNote(d, id);
     });
   },
 
@@ -492,7 +481,7 @@ export const bridge = {
   /** 回收站列表 */
   async listTrashed(): Promise<POCNote[]> {
     const d = await ensureDb();
-    return await noteRepository.listTrashed(new SqlJsAsyncDb(d));
+    return await noteRepository.listTrashed(d);
   },
 
   /** 软删除（入回收站）：folder = 整棵子树（含深层 folders + 子树 notes）标 trashed_at；note = 单条。
@@ -503,23 +492,21 @@ export const bridge = {
   async trashTreeItem(id: string, kind: "folder" | "note"): Promise<void> {
     return maintenance.run("main", async () => {
       const d = await ensureDb();
-      await trashRepository.trashTreeItem(new SqlJsAsyncDb(d), id, kind);
-      await saveSnapshot(d.exportBytes());
+      await trashRepository.trashTreeItem(d, id, kind);
     });
   },
 
   /** B2：统一回收站树（folders 笔记本/分组 + notes 文档）。复用桌面 TrashPanel 语义：仅根节点可恢复（整棵连带），任意节点可彻底删除。 */
   async listTrashTree(): Promise<Array<{ id: string; title: string; kind: "folder" | "note"; parentId: string | null; deletedAt: string | null }>> {
     const d = await ensureDb();
-    return await trashRepository.listTrashTree(new SqlJsAsyncDb(d));
+    return await trashRepository.listTrashTree(d);
   },
 
   /** B2：恢复回收站项。folder = 恢复整棵（含深层子树）；note = 文档级恢复。恢复标记 restore_pending_at → 同步 local-wins 上传 active 覆盖墓碑。 */
   async restoreTreeItem(id: string, kind: "folder" | "note"): Promise<void> {
     return maintenance.run("main", async () => {
       const d = await ensureDb();
-      await trashRepository.restoreTreeItem(new SqlJsAsyncDb(d), id, kind, downloadDeclaredAssetsFor);
-      await saveSnapshot(d.exportBytes());
+      await trashRepository.restoreTreeItem(d, id, kind, downloadDeclaredAssetsFor);
     });
   },
 
@@ -531,15 +518,8 @@ export const bridge = {
   async purgeTreeItem(id: string, kind: "folder" | "note"): Promise<void> {
     return maintenance.run("main", async () => {
       const d = await ensureDb();
-      await trashRepository.purgeTreeItem(new SqlJsAsyncDb(d), id, kind);
-      await saveSnapshot(d.exportBytes());
+      await trashRepository.purgeTreeItem(d, id, kind);
     });
-  },
-
-  /** 导出当前库快照字节（S3 通路验证 + 后续同步协议用） */
-  async exportSnapshotBytes(): Promise<Uint8Array> {
-    const d = await ensureDb();
-    return d.exportBytes();
   },
 
   // ---- S3（POC 通路验证） ----
@@ -643,7 +623,7 @@ export const bridge = {
       chain += 1;
     }
     const d = await ensureDb();
-    const mobileDb = new SqlJsAsyncDb(d);
+    const mobileDb = d;
     const keep = buildGcKeepSet({
       manifest,
       extraManifests: prevManifests,
@@ -664,8 +644,8 @@ export const bridge = {
     const keys = toDelete;
     const deletedCount = keys.length ? await s3Store.deleteMany(keys) : 0;
     if (keys.length > 0) {
-      await runMaintenanceAndPersist(async () => {
-        const mobileDb = new SqlJsAsyncDb(d);
+      await runMaintenanceOperation(async () => {
+        const mobileDb = d;
         for (const key of keys) await gcRepository.recordS3GcLog(mobileDb, "delete", key, "deep-clean", true);
       });
     }
@@ -675,7 +655,7 @@ export const bridge = {
   /** 运行诊断（移动端"日志查看/关于"等价）：存储统计。 */
   async getDiagnostics(): Promise<diagnosticsRepository.MobileDiagnostics> {
     const d = await ensureDb();
-    const mobileDb = new SqlJsAsyncDb(d);
+    const mobileDb = d;
     return diagnosticsRepository.getDiagnostics(mobileDb, {
       listAssetKeys: listAssetKeysFs,
       getDatabaseSizeBytes: () => mobileDb.databaseSizeBytes(),
@@ -698,9 +678,8 @@ export const bridge = {
         prefix: cfg.prefix,
       };
       const s3Store = createCapacitorS3Store(syncCfg);
-      const mobileDb = new SqlJsAsyncDb(d);
-      try {
-        const report = await runSync(syncCfg, s3Store, dbPort, {
+      const mobileDb = d;
+      const report = await runSync(syncCfg, s3Store, dbPort, {
           onPublished: async (next, prev) => {
             // GC 差集标记（对齐桌面 syncEngineController.onPublished）：新 manifest 不再引用的旧正文/资源 → 待回收。用 full key（含 prefix）与 gcDeepCleanup 一致。
             try {
@@ -731,7 +710,7 @@ export const bridge = {
         let quickNotes: QuickNotesSyncResult | { error: string };
         let quickMsg = "；小记已同步";
         try {
-          quickNotes = await syncQuickNotesViaEngine(syncCfg, s3Store, createQuickNotesSyncDbPort(new SqlJsAsyncDb(d), {
+          quickNotes = await syncQuickNotesViaEngine(syncCfg, s3Store, createQuickNotesSyncDbPort(d, {
             assetBytes: assets,
             saveAssetFile: saveAssetBytesFs,
             loadAssetFile: loadAssetBytesFs,
@@ -744,24 +723,20 @@ export const bridge = {
           quickNotes = { error: (reason as Error).message };
           quickMsg = `；小记同步失败：${quickNotes.error}`;
         }
-        // 清理可能部分成功；即便失败也要把当前内存库落盘，避免下一次启动回退到旧状态。
+        // 清理可能部分成功；失败不拖垮同步，下一次同步继续按策略清理。
         try {
-          const mobileDb = new SqlJsAsyncDb(d);
+          const mobileDb = d;
           await historyRepository.cleanupHistory(mobileDb, await historyRepository.getHistorySettings(mobileDb));
         } catch {
           // 清理失败不拖垮同步；下一次同步会继续按策略清理。
         }
-        return { message: report.message + quickMsg, notes: report, quickNotes };
-      } finally {
-        // 同步中途失败时，已应用的远端变更也必须持久化，不能只在成功路径保存。
-        await saveSnapshot(d.exportBytes());
-      }
+      return { message: report.message + quickMsg, notes: report, quickNotes };
     });
   },
   // ---- 目录树只读契约（同步调试/测试用） ----
   async listNotebookTree(notebookId: string): Promise<notebookTreeRepository.NotebookTreeItem[]> {
     const d = await ensureDb();
-    return await notebookTreeRepository.listNotebookTree(new SqlJsAsyncDb(d), notebookId);
+    return await notebookTreeRepository.listNotebookTree(d, notebookId);
   },
   // ---- 墓碑只读契约（同步调试/测试用；生产同步路径直接走 dbPort，不经此对象） ----
   async listDeletedNotesForSync() { return dbPort.listDeletedNotesForSync!(); },

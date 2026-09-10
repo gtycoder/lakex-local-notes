@@ -3,7 +3,6 @@ import path from "node:path";
 import type { Database } from "sql.js";
 import { SQL_PARAMETER_BATCH_SIZE } from "../core/sqlParameterBatch.js";
 import { sha256Sync } from "../core/sha256Sync.js";
-import { saveSnapshot } from "./persistence";
 
 const sqlitePrepareSqls = vi.hoisted(() => [] as string[]);
 
@@ -87,6 +86,24 @@ vi.mock("./persistence", () => ({
   saveSnapshot: vi.fn(async () => {}),
   loadSnapshot: vi.fn(async () => null),
 }));
+
+vi.mock("./nativeSqliteMigration", () => ({
+  migrateSnapshotToNativeSqlite: vi.fn(async () => ({
+    status: "no-snapshot",
+    databaseName: "lake-notes-mobile",
+  })),
+}));
+
+vi.mock("./nativeSqliteDb", async () => {
+  const { SqlJsDb, SqlJsAsyncDb } = await import("./sqliteDb.js");
+  return {
+    NativeSqliteDb: class {
+      static async open() {
+        return new SqlJsAsyncDb(await SqlJsDb.open());
+      }
+    },
+  };
+});
 vi.mock("./assetFs", () => ({
   saveAssetBytesFs: vi.fn(async () => {}),
   loadAssetBytesFs: vi.fn(async () => null),
@@ -202,19 +219,15 @@ describe("mobile SQL parameter batching", () => {
 });
 
 describe("mobile maintenance writes", () => {
-  it("persists history and GC writes after each queued mutation", async () => {
-    const saveSnapshotMock = vi.mocked(saveSnapshot);
+  it("applies history and GC writes through the maintenance queue", async () => {
     const nb = await bridge.createNotebook({ title: "维护队列测试本", icon: null });
     await bridge.saveNote("maintenance-note", "维护队列文档", "<p>x</p>", nb.id);
-    saveSnapshotMock.mockClear();
 
     await bridge.snapshotNote("maintenance-note");
-    expect(saveSnapshotMock).toHaveBeenCalledTimes(1);
     const history = await bridge.listNoteHistory("maintenance-note");
     expect(history).toHaveLength(1);
 
     await bridge.deleteHistory(history[0]!.id);
-    expect(saveSnapshotMock).toHaveBeenCalledTimes(2);
     expect(await bridge.listNoteHistory("maintenance-note")).toEqual([]);
 
     await bridge.saveHistorySettings({
@@ -223,18 +236,14 @@ describe("mobile maintenance writes", () => {
       cleanupIntervalHours: 1,
       snapshotIntervalMinutes: 1,
     });
-    expect(saveSnapshotMock).toHaveBeenCalledTimes(3);
 
     const gcKey = "maintenance-gc-key";
     await bridge.addS3GcPending(gcKey);
-    expect(saveSnapshotMock).toHaveBeenCalledTimes(4);
     await bridge.removeS3GcPending([gcKey]);
-    expect(saveSnapshotMock).toHaveBeenCalledTimes(5);
     await bridge.recordS3GcLog("delete", gcKey, "test", true);
-    expect(saveSnapshotMock).toHaveBeenCalledTimes(6);
+    expect(await bridge.listS3GcPending()).toEqual([]);
 
     await expect(bridge.cleanupHistory()).resolves.toEqual({ deleted: 0 });
-    expect(saveSnapshotMock).toHaveBeenCalledTimes(7);
   });
 
   it("syncNow updates GC state inside its existing maintenance queue without deadlocking", async () => {

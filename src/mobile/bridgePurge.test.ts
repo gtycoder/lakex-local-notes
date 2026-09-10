@@ -80,6 +80,24 @@ vi.mock("./persistence", () => ({
   saveSnapshot: vi.fn(async () => {}),
   loadSnapshot: vi.fn(async () => null),
 }));
+
+vi.mock("./nativeSqliteMigration", () => ({
+  migrateSnapshotToNativeSqlite: vi.fn(async () => ({
+    status: "no-snapshot",
+    databaseName: "lake-notes-mobile",
+  })),
+}));
+
+vi.mock("./nativeSqliteDb", async () => {
+  const { SqlJsDb, SqlJsAsyncDb } = await import("./sqliteDb.js");
+  return {
+    NativeSqliteDb: class {
+      static async open() {
+        return new SqlJsAsyncDb(await SqlJsDb.open());
+      }
+    },
+  };
+});
 vi.mock("./assetFs", () => ({
   saveAssetBytesFs: vi.fn(async () => {}),
   loadAssetBytesFs: vi.fn(async () => null),

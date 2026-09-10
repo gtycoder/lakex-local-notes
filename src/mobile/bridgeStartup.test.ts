@@ -159,6 +159,24 @@ vi.mock("./persistence", () => ({
   saveSnapshot: vi.fn(async () => {}),
   loadSnapshot: vi.fn(async () => null),
 }));
+
+vi.mock("./nativeSqliteMigration", () => ({
+  migrateSnapshotToNativeSqlite: vi.fn(async () => ({
+    status: "no-snapshot",
+    databaseName: "lake-notes-mobile",
+  })),
+}));
+
+vi.mock("./nativeSqliteDb", async () => {
+  const { SqlJsDb, SqlJsAsyncDb } = await import("./sqliteDb.js");
+  return {
+    NativeSqliteDb: class {
+      static async open() {
+        return new SqlJsAsyncDb(await SqlJsDb.open());
+      }
+    },
+  };
+});
 vi.mock("./assetFs", () => ({
   saveAssetBytesFs: vi.fn(async () => {}),
   loadAssetBytesFs,
@@ -217,5 +235,20 @@ describe("mobile startup performance contract", () => {
     await new Promise((resolve) => setTimeout(resolve, 10));
     expect(listAssetKeysFs).not.toHaveBeenCalled();
     expect(loadAssetBytesFs).not.toHaveBeenCalled();
+  });
+
+  it("concurrent startup calls initialize the native database once", async () => {
+    vi.resetModules();
+    const { migrateSnapshotToNativeSqlite } = await import("./nativeSqliteMigration");
+    const { bridge: freshBridge } = await import("./bridge.js");
+    vi.mocked(migrateSnapshotToNativeSqlite).mockClear();
+
+    await Promise.all([
+      freshBridge.init(),
+      freshBridge.init(),
+      freshBridge.listNotes(),
+    ]);
+
+    expect(migrateSnapshotToNativeSqlite).toHaveBeenCalledTimes(1);
   });
 });
