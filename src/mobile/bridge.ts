@@ -87,7 +87,7 @@ async function ensureDb(): Promise<SqlJsDb> {
   if (db) return db;
   const snap = await loadSnapshot();
   db = snap ? await SqlJsDb.openFrom(snap) : await SqlJsDb.open();
-  await applyMobileSchema(db);
+  await applyMobileSchema(new SqlJsAsyncDb(db));
   return db;
 }
 

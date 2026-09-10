@@ -11,7 +11,7 @@ import { SqlJsAsyncDb, SqlJsDb } from "./sqliteDb.js";
 
 async function createDb(): Promise<{ db: SqlJsDb; mobileDb: SqlJsAsyncDb }> {
   const db = await SqlJsDb.open();
-  await applyMobileSchema(db);
+  await applyMobileSchema(new SqlJsAsyncDb(db));
   for (const table of ["notes", "folders", "quick_notes", "orphan_assets", "s3_gc_pending", "note_history"]) {
     db.prepare(`DELETE FROM ${table}`).run();
   }

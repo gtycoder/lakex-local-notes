@@ -17,7 +17,7 @@ import { SqlJsAsyncDb, SqlJsDb } from "./sqliteDb.js";
 
 async function createDb(): Promise<SqlJsAsyncDb> {
   const db = await SqlJsDb.open();
-  await applyMobileSchema(db);
+  await applyMobileSchema(new SqlJsAsyncDb(db));
   return new SqlJsAsyncDb(db);
 }
 
