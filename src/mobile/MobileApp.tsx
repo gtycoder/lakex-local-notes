@@ -174,7 +174,7 @@ export function MobileApp() {
     await openNote(n.id, "editor");
   }, [openNote]);
 
-  if (phase === "booting") return <div className="poc-center">启动中…（加载 WASM SQLite）</div>;
+  if (phase === "booting") return <div className="poc-center">启动中…</div>;
   if (error) return <div className="poc-center poc-error">{error}</div>;
 
   return (
