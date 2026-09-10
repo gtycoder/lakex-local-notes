@@ -37,6 +37,7 @@ import * as historyRepository from "./historyRepository.js";
 import type { HistoryMobileSettings } from "./historyRepository.js";
 import * as orphanAssetRepository from "./orphanAssetRepository.js";
 import * as gcRepository from "./gcRepository.js";
+import * as diagnosticsRepository from "./diagnosticsRepository.js";
 
 export type { HistoryMobileSettings } from "./historyRepository.js";
 
@@ -667,19 +668,12 @@ export const bridge = {
   },
 
   /** 运行诊断（移动端"日志查看/关于"等价）：存储统计。 */
-  async getDiagnostics(): Promise<{ noteCount: number; folderCount: number; quickNoteCount: number; resourceCount: number; orphanCount: number; gcPendingCount: number; snapshotCount: number; dbBytes: number }> {
+  async getDiagnostics(): Promise<diagnosticsRepository.MobileDiagnostics> {
     const d = await ensureDb();
-    const c = (sql: string) => (d.prepare(sql).get() as { c: number }).c;
-    return {
-      noteCount: c("SELECT COUNT(*) c FROM notes WHERE deleted_at IS NULL AND trashed_at IS NULL"),
-      folderCount: c("SELECT COUNT(*) c FROM folders WHERE trashed_at IS NULL"),
-      quickNoteCount: c("SELECT COUNT(*) c FROM quick_notes"),
-      resourceCount: (await listAssetKeysFs()).length,
-      orphanCount: c("SELECT COUNT(*) c FROM orphan_assets"),
-      gcPendingCount: c("SELECT COUNT(*) c FROM s3_gc_pending"),
-      snapshotCount: c("SELECT COUNT(*) c FROM note_history"),
-      dbBytes: d.databaseSizeBytes(),
-    };
+    return diagnosticsRepository.getDiagnostics(d, {
+      listAssetKeys: listAssetKeysFs,
+      getDatabaseSizeBytes: () => d.databaseSizeBytes(),
+    });
   },
 
   /** M1 同步：manifest v4 协议（拉取对账 + 上传发布）+ 小记 quick-notes/ 子空间同步，复用 src/core 引擎。
