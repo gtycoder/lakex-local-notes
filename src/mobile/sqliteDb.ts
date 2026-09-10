@@ -25,6 +25,21 @@ export interface DbLike {
   close(): void;
 }
 
+export interface MobileDbStatement {
+  get(...params: unknown[]): Promise<Record<string, unknown> | undefined>;
+  all(...params: unknown[]): Promise<Record<string, unknown>[]>;
+  run(...params: unknown[]): Promise<{ changes: number; lastInsertRowid: number | bigint }>;
+}
+
+export interface MobileDb {
+  prepare(sql: string): MobileDbStatement;
+  transaction<T extends (...args: never[]) => Promise<unknown>>(fn: T): Promise<Awaited<ReturnType<T>>>;
+  pragma(source: string): Promise<unknown>;
+  exec(sql: string): Promise<void>;
+  databaseSizeBytes(): Promise<number>;
+  close(): Promise<void>;
+}
+
 let SQL: SqlJsStatic | null = null;
 
 async function initSqlJsModule(): Promise<SqlJsStatic> {
@@ -137,5 +152,55 @@ export class SqlJsDb implements DbLike {
       return Number(row?.[name] ?? 0);
     };
     return readPragma("page_count") * readPragma("page_size");
+  }
+}
+
+/** Transitional async facade over sql.js; native SQLite will implement MobileDb directly. */
+export class SqlJsAsyncDb implements MobileDb {
+  constructor(private readonly db: SqlJsDb) {}
+
+  prepare(sql: string): MobileDbStatement {
+    const statement = this.db.prepare(sql);
+    return {
+      async get(...params: unknown[]) {
+        return statement.get(...params);
+      },
+      async all(...params: unknown[]) {
+        return statement.all(...params);
+      },
+      async run(...params: unknown[]) {
+        return statement.run(...params);
+      },
+    };
+  }
+
+  async transaction<T extends (...args: never[]) => Promise<unknown>>(
+    fn: T,
+  ): Promise<Awaited<ReturnType<T>>> {
+    this.db.exec("BEGIN");
+    try {
+      const result = await fn();
+      this.db.exec("COMMIT");
+      return result as Awaited<ReturnType<T>>;
+    } catch (error) {
+      this.db.exec("ROLLBACK");
+      throw error;
+    }
+  }
+
+  async pragma(source: string): Promise<unknown> {
+    return this.db.pragma(source);
+  }
+
+  async exec(sql: string): Promise<void> {
+    this.db.exec(sql);
+  }
+
+  async databaseSizeBytes(): Promise<number> {
+    return this.db.databaseSizeBytes();
+  }
+
+  async close(): Promise<void> {
+    this.db.close();
   }
 }

@@ -13,12 +13,12 @@ import {
   removeS3GcPending,
 } from "./gcRepository.js";
 import { applyMobileSchema } from "./schema.js";
-import { SqlJsDb } from "./sqliteDb.js";
+import { SqlJsAsyncDb, SqlJsDb } from "./sqliteDb.js";
 
-async function createDb(): Promise<SqlJsDb> {
+async function createDb(): Promise<SqlJsAsyncDb> {
   const db = await SqlJsDb.open();
   await applyMobileSchema(db);
-  return db;
+  return new SqlJsAsyncDb(db);
 }
 
 describe("mobile GC repository", () => {
@@ -42,7 +42,7 @@ describe("mobile GC repository", () => {
 
     await recordS3GcLog(db, "delete", "objects/note-1", "deep-clean", true);
 
-    const row = db.prepare("SELECT action,key,reason,ok FROM s3_gc_log").get() as {
+    const row = await db.prepare("SELECT action,key,reason,ok FROM s3_gc_log").get() as {
       action: string;
       key: string;
       reason: string;

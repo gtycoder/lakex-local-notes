@@ -49,6 +49,37 @@ vi.mock("./sqliteDb.js", async () => {
       close() { this.db.close(); }
       exportBytes(): Uint8Array { return this.db.export(); }
     },
+    SqlJsAsyncDb: class {
+      private db: any;
+      constructor(db: any) { this.db = db; }
+      prepare(sql: string) {
+        const statement = this.db.prepare(sql);
+        return {
+          async get(...params: unknown[]) { return statement.get(...params); },
+          async all(...params: unknown[]) { return statement.all(...params); },
+          async run(...params: unknown[]) { return statement.run(...params); },
+        };
+      }
+      async transaction<T extends (...args: never[]) => Promise<unknown>>(fn: T): Promise<unknown> {
+        this.db.exec("BEGIN");
+        try {
+          const result = await fn();
+          this.db.exec("COMMIT");
+          return result;
+        } catch (error) {
+          this.db.exec("ROLLBACK");
+          throw error;
+        }
+      }
+      async pragma(source: string) { return this.db.pragma(source); }
+      async exec(sql: string) { this.db.exec(sql); }
+      async databaseSizeBytes(): Promise<number> {
+        const pageCount = await this.db.prepare("PRAGMA page_count").get() as { page_count: number };
+        const pageSize = await this.db.prepare("PRAGMA page_size").get() as { page_size: number };
+        return Number(pageCount.page_count) * Number(pageSize.page_size);
+      }
+      async close() { this.db.close(); }
+    },
   };
 });
 

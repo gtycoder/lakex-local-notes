@@ -5,7 +5,7 @@
  * - 同步：syncEngine（manifest v4 协议，复用 src/core 决策纯函数）
  * - 范围 = docs/MOBILE-TECH-STACK.md §9.2 的最小 IPC 集（POC 版）
  */
-import { SqlJsDb } from "./sqliteDb";
+import { SqlJsAsyncDb, SqlJsDb } from "./sqliteDb";
 import { loadSnapshot, saveSnapshot } from "./persistence";
 import { saveAssetBytesFs, loadAssetBytesFs, listAssetKeysFs, listNoteAssetKeysFs, removeAssetBytesFs } from "./assetFs";
 import { syncNow as runSync, downloadNoteAssets, type SyncConfig, type SyncDbPort, type SyncReport } from "../core/syncEngine.js";
@@ -429,7 +429,7 @@ export const bridge = {
   async addS3GcPending(key: string): Promise<void> {
     await runMaintenanceAndPersist(async () => {
       const d = await ensureDb();
-      await gcRepository.addS3GcPending(d, key);
+      await gcRepository.addS3GcPending(new SqlJsAsyncDb(d), key);
     });
   },
 
@@ -437,21 +437,21 @@ export const bridge = {
   async removeS3GcPending(keys: string[]): Promise<void> {
     await runMaintenanceAndPersist(async () => {
       const d = await ensureDb();
-      await gcRepository.removeS3GcPending(d, keys);
+      await gcRepository.removeS3GcPending(new SqlJsAsyncDb(d), keys);
     });
   },
 
   /** GC：列出全部待回收键。 */
   async listS3GcPending(): Promise<Array<{ key: string; markedAt: string }>> {
     const d = await ensureDb();
-    return await gcRepository.listS3GcPending(d);
+    return await gcRepository.listS3GcPending(new SqlJsAsyncDb(d));
   },
 
   /** GC：记录删除（对齐桌面 recordS3GcLog）。 */
   async recordS3GcLog(action: string, key: string, reason: string, ok: boolean): Promise<void> {
     await runMaintenanceAndPersist(async () => {
       const d = await ensureDb();
-      await gcRepository.recordS3GcLog(d, action, key, reason, ok);
+      await gcRepository.recordS3GcLog(new SqlJsAsyncDb(d), action, key, reason, ok);
     });
   },
 
@@ -662,7 +662,8 @@ export const bridge = {
     const deletedCount = keys.length ? await s3Store.deleteMany(keys) : 0;
     if (keys.length > 0) {
       await runMaintenanceAndPersist(async () => {
-        for (const key of keys) await gcRepository.recordS3GcLog(d, "delete", key, "deep-clean", true);
+        const mobileDb = new SqlJsAsyncDb(d);
+        for (const key of keys) await gcRepository.recordS3GcLog(mobileDb, "delete", key, "deep-clean", true);
       });
     }
     return { candidateCount: all.length, deletedCount, keys };
@@ -693,6 +694,7 @@ export const bridge = {
         prefix: cfg.prefix,
       };
       const s3Store = createCapacitorS3Store(syncCfg);
+      const mobileDb = new SqlJsAsyncDb(d);
       try {
         const report = await runSync(syncCfg, s3Store, dbPort, {
           onPublished: async (next, prev) => {
@@ -703,11 +705,11 @@ export const bridge = {
                 if (p.deleted) continue;
                 const nx = newById.get(p.id);
                 if (!nx || nx.deleted) continue;
-                if (nx.contentHash !== p.contentHash) await gcRepository.addS3GcPending(d, `${syncCfg.prefix}/${objectKey(p.id, p.contentHash)}`);
+                if (nx.contentHash !== p.contentHash) await gcRepository.addS3GcPending(mobileDb, `${syncCfg.prefix}/${objectKey(p.id, p.contentHash)}`);
                 const nextAssets = new Set((nx.assets ?? []).map((a) => a.filename));
                 for (const asset of p.assets ?? []) {
                   if (nextAssets.has(asset.filename)) continue;
-                  await gcRepository.addS3GcPending(d, `${syncCfg.prefix}/assets/${p.id}/${asset.filename}`);
+                  await gcRepository.addS3GcPending(mobileDb, `${syncCfg.prefix}/assets/${p.id}/${asset.filename}`);
                 }
               }
               const referencedNow = new Set<string>();
@@ -716,7 +718,7 @@ export const bridge = {
                 referencedNow.add(`${syncCfg.prefix}/${objectKey(note.id, note.contentHash)}`);
                 for (const asset of note.assets ?? []) referencedNow.add(`${syncCfg.prefix}/assets/${note.id}/${asset.filename}`);
               }
-              await gcRepository.removeS3GcPending(d, [...referencedNow]);
+              await gcRepository.removeS3GcPending(mobileDb, [...referencedNow]);
             } catch { /* 不影响同步 */ }
           },
         });
