@@ -36,7 +36,7 @@ describe("mobile orphan asset repository", () => {
 
     expect(removeAssetFile).toHaveBeenCalledWith("note-1/old.png");
     expect(assets.has("note-1/old.png")).toBe(true);
-    expect(listOrphanAssets(db)).toHaveLength(2);
+    await expect(listOrphanAssets(db)).resolves.toHaveLength(2);
   });
 
   it("cleans files, memory cache, and DB rows together", async () => {
@@ -56,6 +56,6 @@ describe("mobile orphan asset repository", () => {
 
     expect(removedKeys).toEqual(["note-1/old.png", "note-2/unused.png"]);
     expect(assets.size).toBe(0);
-    expect(listOrphanAssets(db)).toEqual([]);
+    await expect(listOrphanAssets(db)).resolves.toEqual([]);
   });
 });

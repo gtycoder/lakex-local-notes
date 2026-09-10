@@ -32,7 +32,7 @@ function rowToOrphanAsset(row: {
   };
 }
 
-export function listOrphanAssets(d: DbLike): OrphanAsset[] {
+export async function listOrphanAssets(d: DbLike): Promise<OrphanAsset[]> {
   const rows = d.prepare(
     "SELECT id, note_id, filename, size, mime_type, detected_at FROM orphan_assets ORDER BY detected_at DESC",
   ).all() as Array<{

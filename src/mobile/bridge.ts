@@ -400,7 +400,7 @@ export const bridge = {
   /** 全局孤儿资源列表（对齐桌面 listOrphanAssets）。 */
   async listOrphanAssets(): Promise<Array<{ id: number; noteId: string; filename: string; size: number; mimeType: string; detectedAt: string }>> {
     const d = await ensureDb();
-    return orphanAssetRepository.listOrphanAssets(d);
+    return await orphanAssetRepository.listOrphanAssets(d);
   },
 
   /** 删除单个孤儿资源（本地文件 + 登记）。 */
