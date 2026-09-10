@@ -33,7 +33,7 @@ export interface QuickNotesAssetFsDeps {
 const quickNoteAssetKey = (id: string, filename: string): string => "quick-notes/" + id + "/" + filename;
 
 /** P2 同步端口所需的 schema 增量（幂等应用：列缺失才 ALTER，表缺失才 CREATE）。 */
-export function applyQuickNotesSyncSchema(d: DbLike): void {
+export async function applyQuickNotesSyncSchema(d: DbLike): Promise<void> {
   const qCols = (d.prepare("PRAGMA table_info(quick_notes)").all() as Array<{ name: string }>).map((c) => c.name);
   if (!qCols.includes("deleted_at")) d.exec("ALTER TABLE quick_notes ADD COLUMN deleted_at TEXT");
   if (!qCols.includes("base_hash")) d.exec("ALTER TABLE quick_notes ADD COLUMN base_hash TEXT");
@@ -51,7 +51,7 @@ export function applyQuickNotesSyncSchema(d: DbLike): void {
 export function createQuickNotesSyncDbPort(d: DbLike, assetFs: QuickNotesAssetFsDeps): QuickNotesSyncDbPort {
   const { assetBytes, saveAssetFile, loadAssetFile, removeAssetFile } = assetFs;
   return {
-    listLocalQuickNotes() {
+    async listLocalQuickNotes() {
       const rows = d.prepare("SELECT id, created_at, updated_at, content_hash, sync_state, is_conflict, content FROM quick_notes WHERE deleted_at IS NULL").all() as Array<Record<string, unknown>>;
       return rows.map((r) => {
         let images: QuickNoteSyncItemImage[] = [];
@@ -73,14 +73,14 @@ export function createQuickNotesSyncDbPort(d: DbLike, assetFs: QuickNotesAssetFs
         };
       });
     },
-    readContent(id) {
+    async readContent(id) {
       const row = d.prepare("SELECT content FROM quick_notes WHERE id=?").get(id) as { content: string } | undefined;
       return row ? new TextEncoder().encode(row.content) : null;
     },
-    readAsset(id, filename) {
+    async readAsset(id, filename) {
       // 纯文件为准（无 BLOB）：内存层优先，文件兜底（对齐 Lake readLocalAsset 模式）
       const key = quickNoteAssetKey(id, filename);
-      return assetBytes.get(key) ?? loadAssetFile(key);
+      return assetBytes.get(key) ?? await loadAssetFile(key);
     },
     async applyRemoteQuickNote(item, content, assets) {
       const text = new TextDecoder().decode(content);
@@ -121,14 +121,14 @@ export function createQuickNotesSyncDbPort(d: DbLike, assetFs: QuickNotesAssetFs
       }
       // 不做旧文件清理：每次上传/同步生成唯一新文件，旧文件由 GC/孤儿清理回收；冗余是设计理念。
     },
-    applyTombstoneContent(id, content) {
+    async applyTombstoneContent(id, content) {
       const contentHash = sha256Sync(content);
       const tx = d.transaction(() => {
         d.prepare("UPDATE quick_notes SET content=?, content_hash=? WHERE id=?").run(new TextDecoder().decode(content), contentHash, id);
       });
       tx();
     },
-    listDeletedQuickNoteAssets(id) {
+    async listDeletedQuickNoteAssets(id) {
       // 墓碑携带图片（A）：读软删保留的 content 列解析删除前图片元数据；行缺失/解析失败 → []
       const row = d.prepare("SELECT content FROM quick_notes WHERE id=?").get(id) as { content: string } | undefined;
       if (!row) return [];
@@ -148,7 +148,7 @@ export function createQuickNotesSyncDbPort(d: DbLike, assetFs: QuickNotesAssetFs
         { memory: assetBytes, save: saveAssetFile, remove: removeAssetFile },
       );
     },
-    deleteLocalQuickNote(id) {
+    async deleteLocalQuickNote(id) {
       d.prepare("UPDATE quick_notes SET deleted_at=?, restore_pending_at=NULL, sync_state='local', ready_to_sync=1 WHERE id=?").run(new Date().toISOString(), id);
     },
     async archiveLocalQuickNoteToTrash(id) {
@@ -193,7 +193,7 @@ export function createQuickNotesSyncDbPort(d: DbLike, assetFs: QuickNotesAssetFs
         }
       }
     },
-    listDeletedQuickNotes() {
+    async listDeletedQuickNotes() {
       // ready_to_sync=1 才作为可同步墓碑；冲突归档（=0）纯本地保留不发布
       const local = d.prepare("SELECT id, created_at, updated_at, deleted_at FROM quick_notes WHERE deleted_at IS NOT NULL AND ready_to_sync=1").all() as Array<Record<string, unknown>>;
       const learned = d.prepare("SELECT id, created_at, updated_at, deleted_at FROM quick_note_deleted").all() as Array<Record<string, unknown>>;
@@ -207,14 +207,14 @@ export function createQuickNotesSyncDbPort(d: DbLike, assetFs: QuickNotesAssetFs
       }
       return [...merged.values()];
     },
-    markDeletedPublished(ids) {
+    async markDeletedPublished(ids) {
       // 墓碑发布 → 清待同步标记（对齐桌面）。本地软删行置 ready_to_sync=0（不再重复发布/计数）；
       // quick_note_deleted 是远端学习墓碑（无本地副本），无可清的 ready 标记，跳过。
       for (const id of ids) {
         d.prepare("UPDATE quick_notes SET ready_to_sync=0 WHERE id=? AND deleted_at IS NOT NULL").run(id);
       }
     },
-    listAllDeletedQuickNotes() {
+    async listAllDeletedQuickNotes() {
       // 下载方向 LWW 需要全部墓碑（含已发布 ready=0）：软删行任意 ready + 远端学习表合并
       const local = d.prepare("SELECT id, created_at, updated_at, deleted_at FROM quick_notes WHERE deleted_at IS NOT NULL").all() as Array<Record<string, unknown>>;
       const learned = d.prepare("SELECT id, created_at, updated_at, deleted_at FROM quick_note_deleted").all() as Array<Record<string, unknown>>;
@@ -226,29 +226,29 @@ export function createQuickNotesSyncDbPort(d: DbLike, assetFs: QuickNotesAssetFs
       }
       return [...merged.values()];
     },
-    listDeferredDeletedQuickNotes() { return []; }, // 移动端无小记→笔记转换
-    rememberDeletedQuickNote(item) {
+    async listDeferredDeletedQuickNotes() { return []; }, // 移动端无小记→笔记转换
+    async rememberDeletedQuickNote(item) {
       d.prepare("INSERT OR REPLACE INTO quick_note_deleted (id, created_at, updated_at, deleted_at) VALUES (?,?,?,?)").run(item.id, item.createdAt, item.updatedAt, item.deletedAt);
     },
-    revokeLocalDeletion(id) {
+    async revokeLocalDeletion(id) {
       const tx = d.transaction(() => {
         d.prepare("UPDATE quick_notes SET deleted_at=NULL WHERE id=? AND deleted_at IS NOT NULL").run(id);
         d.prepare("DELETE FROM quick_note_deleted WHERE id=?").run(id);
       });
       tx();
     },
-    isRestorePending(id) {
+    async isRestorePending(id) {
       const row = d.prepare("SELECT restore_pending_at FROM quick_notes WHERE id=?").get(id) as { restore_pending_at: string | null } | undefined;
       return row ? row.restore_pending_at !== null : false;
     },
-    baseHash(id) {
+    async baseHash(id) {
       const row = d.prepare("SELECT base_hash FROM quick_notes WHERE id=?").get(id) as { base_hash: string | null } | undefined;
       return row ? row.base_hash : null;
     },
-    setBaseHash(id, contentHash) {
+    async setBaseHash(id, contentHash) {
       d.prepare("UPDATE quick_notes SET base_hash=? WHERE id=?").run(contentHash, id);
     },
-    markSynced(id) {
+    async markSynced(id) {
       // restore_pending_at 一并清除：恢复已生效后残留标记会让本设备永远 local-wins（墓碑永胜被破坏）。
       d.prepare("UPDATE quick_notes SET sync_state='synced', restore_pending_at=NULL WHERE id=?").run(id);
     },

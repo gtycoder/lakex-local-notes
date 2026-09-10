@@ -47,7 +47,7 @@ async function makeDevice(): Promise<QuickNotesContractDevice> {
     is_conflict INTEGER NOT NULL DEFAULT 0,
     restore_pending_at TEXT
   )`);
-  applyQuickNotesSyncSchema(db);
+  await applyQuickNotesSyncSchema(db);
   const assets = makeAssetDeps();
 
   const insert = (id: string, text: string) => {

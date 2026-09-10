@@ -125,7 +125,7 @@ export async function applyMobileSchema(db: DbLike): Promise<void> {
     is_conflict INTEGER NOT NULL DEFAULT 0,
     restore_pending_at TEXT
   )`);
-  applyQuickNotesSyncSchema(db);
+  await applyQuickNotesSyncSchema(db);
 
   const seeded = db.prepare(
     "SELECT value FROM device_state WHERE key='seed_initialized'",
