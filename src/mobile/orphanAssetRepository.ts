@@ -1,4 +1,4 @@
-import type { DbLike } from "./sqliteDb";
+import type { MobileDb } from "./sqliteDb";
 
 export interface OrphanAsset {
   id: number;
@@ -32,8 +32,8 @@ function rowToOrphanAsset(row: {
   };
 }
 
-export async function listOrphanAssets(d: DbLike): Promise<OrphanAsset[]> {
-  const rows = d.prepare(
+export async function listOrphanAssets(d: MobileDb): Promise<OrphanAsset[]> {
+  const rows = await d.prepare(
     "SELECT id, note_id, filename, size, mime_type, detected_at FROM orphan_assets ORDER BY detected_at DESC",
   ).all() as Array<{
     id: number;
@@ -48,11 +48,11 @@ export async function listOrphanAssets(d: DbLike): Promise<OrphanAsset[]> {
 
 /** 删除孤儿前先移除文件；文件失败时不删 DB 行，避免登记与真实文件状态分叉。 */
 export async function deleteOrphanAsset(
-  d: DbLike,
+  d: MobileDb,
   id: number,
   deps: OrphanAssetRepositoryDeps,
 ): Promise<void> {
-  const row = d.prepare("SELECT note_id, filename FROM orphan_assets WHERE id=?").get(id) as {
+  const row = await d.prepare("SELECT note_id, filename FROM orphan_assets WHERE id=?").get(id) as {
     note_id: string;
     filename: string;
   } | undefined;
@@ -60,14 +60,14 @@ export async function deleteOrphanAsset(
   const key = `${row.note_id}/${row.filename}`;
   await deps.removeAssetFile(key);
   deps.assets.delete(key);
-  d.prepare("DELETE FROM orphan_assets WHERE id=?").run(id);
+  await d.prepare("DELETE FROM orphan_assets WHERE id=?").run(id);
 }
 
 export async function cleanOrphanAssets(
-  d: DbLike,
+  d: MobileDb,
   deps: OrphanAssetRepositoryDeps,
 ): Promise<void> {
-  const rows = d.prepare("SELECT note_id, filename FROM orphan_assets").all() as Array<{
+  const rows = await d.prepare("SELECT note_id, filename FROM orphan_assets").all() as Array<{
     note_id: string;
     filename: string;
   }>;
@@ -76,5 +76,5 @@ export async function cleanOrphanAssets(
     await deps.removeAssetFile(key);
     deps.assets.delete(key);
   }
-  d.prepare("DELETE FROM orphan_assets").run();
+  await d.prepare("DELETE FROM orphan_assets").run();
 }

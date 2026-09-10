@@ -400,14 +400,14 @@ export const bridge = {
   /** 全局孤儿资源列表（对齐桌面 listOrphanAssets）。 */
   async listOrphanAssets(): Promise<Array<{ id: number; noteId: string; filename: string; size: number; mimeType: string; detectedAt: string }>> {
     const d = await ensureDb();
-    return await orphanAssetRepository.listOrphanAssets(d);
+    return await orphanAssetRepository.listOrphanAssets(new SqlJsAsyncDb(d));
   },
 
   /** 删除单个孤儿资源（本地文件 + 登记）。 */
   async deleteOrphanAsset(id: number): Promise<void> {
     await runMaintenanceAndPersist(async () => {
       const d = await ensureDb();
-      await orphanAssetRepository.deleteOrphanAsset(d, id, {
+      await orphanAssetRepository.deleteOrphanAsset(new SqlJsAsyncDb(d), id, {
         assets,
         removeAssetFile: removeAssetBytesFs,
       });
@@ -418,7 +418,7 @@ export const bridge = {
   async cleanOrphanAssets(): Promise<void> {
     await runMaintenanceAndPersist(async () => {
       const d = await ensureDb();
-      await orphanAssetRepository.cleanOrphanAssets(d, {
+      await orphanAssetRepository.cleanOrphanAssets(new SqlJsAsyncDb(d), {
         assets,
         removeAssetFile: removeAssetBytesFs,
       });

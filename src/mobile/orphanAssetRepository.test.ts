@@ -11,17 +11,17 @@ import {
   deleteOrphanAsset,
   listOrphanAssets,
 } from "./orphanAssetRepository.js";
-import { SqlJsDb } from "./sqliteDb.js";
+import { SqlJsAsyncDb, SqlJsDb } from "./sqliteDb.js";
 
-async function createDbWithOrphans(): Promise<SqlJsDb> {
+async function createDbWithOrphans(): Promise<SqlJsAsyncDb> {
   const db = await SqlJsDb.open();
   await applyMobileSchema(db);
   const insert = db.prepare(
     "INSERT INTO orphan_assets(note_id,filename,file_path,size,mime_type) VALUES(?,?,?,?,?)",
   );
-  insert.run("note-1", "old.png", "note-assets/note-1/old.png", 10, "image/png");
-  insert.run("note-2", "unused.png", "note-assets/note-2/unused.png", 20, "image/png");
-  return db;
+  await insert.run("note-1", "old.png", "note-assets/note-1/old.png", 10, "image/png");
+  await insert.run("note-2", "unused.png", "note-assets/note-2/unused.png", 20, "image/png");
+  return new SqlJsAsyncDb(db);
 }
 
 describe("mobile orphan asset repository", () => {
