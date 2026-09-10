@@ -1,86 +1,14 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import path from "node:path";
-import type { Database } from "sql.js";
 import { defineTreeBehaviorContract, type TreeBehaviorAdapter } from "../core/treeBehaviorContract.js";
 import { defineResourceBehaviorContract, type ResourceBehaviorAdapter } from "../core/resourceBehaviorContract.js";
-
-// sqliteDb.js 的 SqlJsDb 依赖 Vite 的 ?url wasm import，vitest 下解析为根路径失败；
-// mock 为真实 sql.js（node 直载 wasm，同 quickNotesDbPort.test.ts 模式）。
-vi.mock("./sqliteDb.js", async () => {
-  const initSqlJs = (await import("sql.js")).default;
-  let SQL: Awaited<ReturnType<typeof initSqlJs>> | null = null;
-  const getSql = async () => {
-    if (!SQL) SQL = await initSqlJs({ locateFile: () => path.join(process.cwd(), "node_modules/sql.js/dist/sql-wasm.wasm") });
-    return SQL;
-  };
-  class FakeStmt {
-    private stmt: any;
-    private db: Database;
-    constructor(db: Database, sql: string) { this.db = db; this.stmt = db.prepare(sql); }
-    get(...params: unknown[]) { this.stmt.reset(); if (params.length) this.stmt.bind(params as never); return this.stmt.step() ? this.stmt.getAsObject() as Record<string, unknown> : undefined; }
-    all(...params: unknown[]) { this.stmt.reset(); if (params.length) this.stmt.bind(params as never); const out: Record<string, unknown>[] = []; while (this.stmt.step()) out.push(this.stmt.getAsObject() as Record<string, unknown>); return out; }
-    run(...params: unknown[]) {
-      this.stmt.reset();
-      if (params.length) this.stmt.bind(params as never);
-      this.stmt.step();
-      const changes = this.db.getRowsModified();
-      const rowid = this.db.exec("SELECT last_insert_rowid() AS rowid")[0]?.values[0]?.[0] ?? 0;
-      return { changes, lastInsertRowid: typeof rowid === "bigint" ? rowid : Number(rowid) };
-    }
-  }
-  return {
-    SqlJsDb: class {
-      private db: Database;
-      private constructor(db: Database) { this.db = db; }
-      static async open(): Promise<any> { const S = await getSql(); return new (this as any)(new S.Database()); }
-      static async openFrom(bytes: Uint8Array): Promise<any> { const S = await getSql(); return new (this as any)(new S.Database(bytes)); }
-      prepare(sql: string) { return new FakeStmt(this.db, sql); }
-      transaction<T extends (...args: never[]) => unknown>(fn: T): T {
-        const wrapped = ((...args: unknown[]) => { this.db.run("BEGIN"); try { const r = fn(...(args as never[])); this.db.run("COMMIT"); return r; } catch (e) { this.db.run("ROLLBACK"); throw e; } }) as unknown as T;
-        return wrapped;
-      }
-      pragma(source: string) { return this.db.exec(source); }
-      exec(sql: string) { this.db.exec(sql); }
-      close() { this.db.close(); }
-      exportBytes(): Uint8Array { return this.db.export(); }
-    },
-    SqlJsAsyncDb: class {
-      private db: any;
-      constructor(db: any) { this.db = db; }
-      prepare(sql: string) {
-        const statement = this.db.prepare(sql);
-        return {
-          async get(...params: unknown[]) { return statement.get(...params); },
-          async all(...params: unknown[]) { return statement.all(...params); },
-          async run(...params: unknown[]) { return statement.run(...params); },
-        };
-      }
-      async transaction<T extends (...args: never[]) => Promise<unknown>>(fn: T): Promise<unknown> {
-        this.db.exec("BEGIN");
-        try {
-          const result = await fn();
-          this.db.exec("COMMIT");
-          return result;
-        } catch (error) {
-          this.db.exec("ROLLBACK");
-          throw error;
-        }
-      }
-      async pragma(source: string) { return this.db.pragma(source); }
-      async exec(sql: string) { this.db.exec(sql); }
-      async databaseSizeBytes(): Promise<number> {
-        const pageCount = await this.db.prepare("PRAGMA page_count").get() as { page_count: number };
-        const pageSize = await this.db.prepare("PRAGMA page_size").get() as { page_size: number };
-        return Number(pageCount.page_count) * Number(pageSize.page_size);
-      }
-      async close() { this.db.close(); }
-    },
-  };
-});
 
 vi.mock("./persistence", () => ({
   loadSnapshot: vi.fn(async () => null),
 }));
+
+vi.mock("./nativeSqliteDb.js", async () =>
+  (await import("./nativeSqliteDbTestMock.js")).createNativeSqliteDbMockModule(),
+);
 
 vi.mock("./nativeSqliteMigration", () => ({
   migrateSnapshotToNativeSqlite: vi.fn(async () => ({
@@ -89,16 +17,6 @@ vi.mock("./nativeSqliteMigration", () => ({
   })),
 }));
 
-vi.mock("./nativeSqliteDb", async () => {
-  const { SqlJsDb, SqlJsAsyncDb } = await import("./sqliteDb.js");
-  return {
-    NativeSqliteDb: class {
-      static async open() {
-        return new SqlJsAsyncDb(await SqlJsDb.open());
-      }
-    },
-  };
-});
 vi.mock("./assetFs", () => ({
   saveAssetBytesFs: vi.fn(async () => {}),
   loadAssetBytesFs: vi.fn(async () => null),

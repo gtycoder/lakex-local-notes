@@ -9,5 +9,6 @@ export default defineConfig({
   test: {
     include: ["electron/**/*.test.ts", "src/**/*.test.ts"],
     environment: "node",
+    setupFiles: ["src/mobile/testSetup.ts"],
   },
 });
