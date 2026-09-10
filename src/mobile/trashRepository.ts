@@ -48,7 +48,7 @@ function collectSubtree(folders: ParentedNode[], notes: ParentedNode[], rootId: 
   return subtree;
 }
 
-export function trashTreeItem(d: DbLike, id: string, kind: "folder" | "note"): void {
+export async function trashTreeItem(d: DbLike, id: string, kind: "folder" | "note"): Promise<void> {
   const tx = d.transaction(() => {
     const now = new Date().toISOString();
     if (kind === "note") {
@@ -78,7 +78,7 @@ export function trashTreeItem(d: DbLike, id: string, kind: "folder" | "note"): v
   tx();
 }
 
-export function listTrashTree(d: DbLike): Array<{ id: string; title: string; kind: "folder" | "note"; parentId: string | null; deletedAt: string | null }> {
+export async function listTrashTree(d: DbLike): Promise<Array<{ id: string; title: string; kind: "folder" | "note"; parentId: string | null; deletedAt: string | null }>> {
   const folders = d.prepare("SELECT id, title, parent_id, trashed_at FROM folders WHERE trashed_at IS NOT NULL").all() as Array<{ id: string; title: string; parent_id: string | null; trashed_at: string | null }>;
   const notes = d.prepare("SELECT id, title, parent_id, trashed_at FROM notes WHERE trashed_at IS NOT NULL").all() as Array<{ id: string; title: string; parent_id: string | null; trashed_at: string | null }>;
   return [
@@ -126,7 +126,7 @@ export async function restoreTreeItem(
   tx();
 }
 
-export function purgeTreeItem(d: DbLike, id: string, kind: "folder" | "note"): void {
+export async function purgeTreeItem(d: DbLike, id: string, kind: "folder" | "note"): Promise<void> {
   const tx = d.transaction(() => {
     const now = new Date().toISOString();
     const writeTombstone = d.prepare(

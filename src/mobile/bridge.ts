@@ -501,7 +501,7 @@ export const bridge = {
   async trashTreeItem(id: string, kind: "folder" | "note"): Promise<void> {
     return maintenance.run("main", async () => {
       const d = await ensureDb();
-      trashRepository.trashTreeItem(d, id, kind);
+      await trashRepository.trashTreeItem(d, id, kind);
       await saveSnapshot(d.exportBytes());
     });
   },
@@ -509,7 +509,7 @@ export const bridge = {
   /** B2：统一回收站树（folders 笔记本/分组 + notes 文档）。复用桌面 TrashPanel 语义：仅根节点可恢复（整棵连带），任意节点可彻底删除。 */
   async listTrashTree(): Promise<Array<{ id: string; title: string; kind: "folder" | "note"; parentId: string | null; deletedAt: string | null }>> {
     const d = await ensureDb();
-    return trashRepository.listTrashTree(d);
+    return await trashRepository.listTrashTree(d);
   },
 
   /** B2：恢复回收站项。folder = 恢复整棵（含深层子树）；note = 文档级恢复。恢复标记 restore_pending_at → 同步 local-wins 上传 active 覆盖墓碑。 */
@@ -529,7 +529,7 @@ export const bridge = {
   async purgeTreeItem(id: string, kind: "folder" | "note"): Promise<void> {
     return maintenance.run("main", async () => {
       const d = await ensureDb();
-      trashRepository.purgeTreeItem(d, id, kind);
+      await trashRepository.purgeTreeItem(d, id, kind);
       await saveSnapshot(d.exportBytes());
     });
   },
