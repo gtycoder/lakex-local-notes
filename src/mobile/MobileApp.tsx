@@ -19,6 +19,7 @@ import { Toasts } from "./ui/Toasts";
 import { ConfirmHost, confirmMobile } from "./ui/ConfirmDialog";
 import { showToast } from "./ui/toastBus";
 import { runNativeSqliteSpike } from "./nativeSqlite";
+import { migrateSnapshotToNativeSqlite } from "./nativeSqliteMigration";
 import "./mobile.css";
 
 export type Route =
@@ -96,6 +97,8 @@ export function MobileApp() {
           searchNotes: (q: string) => bridge.searchNotes(q),
           runNativeSqliteSpike: (database?: string, reset?: boolean) =>
             runNativeSqliteSpike(database, reset),
+          migrateSnapshotToNativeSqlite: (database?: string) =>
+            migrateSnapshotToNativeSqlite(database),
         };
         await refreshAll();
         setPhase("ready");
