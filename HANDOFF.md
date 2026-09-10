@@ -139,7 +139,7 @@
 3. W-8 ACAO / W-10 dompurify（并入"lake 资源导入统一优化"，**安全相关，建议优先**）；依赖维护：`@types/better-sqlite3` 可单升。
 4. 大纲 **viewer（只读）点击标题不跳转**（用户计划重做大纲时一并处理，低优先）。
 5. **回收站首拉成本**（批量删除后接收端首拉仍下全文+资产）——惰性下载方案**暂缓**（要动恢复红线，低优先）。
-6. Store 分批重构（`docs/REFACTOR-PLAN-2026-08-17.md` 原计划已 80% 完成或被架构决策取代；当前 `electron/store.ts` 2352 行，按领域拆分：回收站生命周期 / 历史生命周期 / 孤儿 GC / 诊断备份 / 同步状态标记。理由不再是"移动端复用"（已走 native SQLite + 端口注入），而是维护痛点——新功能堆入导致单文件过大。按既有 repository 模式：只读优先、不动事务边界、Store 留 wrapper。**本轮启动**）。
+6. Store 分批重构（**进行中**，分支 `refactor/store-split` 已推 Gitee，待用户验收后合 master）：原计划已 80% 完成或被架构决策取代。260910 已完成 4 批抽取（全部只搬家不改语义，事务边界/SQL 零改动，每批全量门禁验证）：① `trashLifecycle.ts`（回收站生命周期 300 行）② `historyLifecycle.ts`（历史快照 205 行）③ `orphanLifecycle.ts`（孤儿资产 296 行）④ `diagnostics.ts`（体检/备份 187 行）。store.ts **2352 → 1701 行（-28%）**。**剩余第 5 批（最后一批）**：S3 同步对账方法（applyRemote*/markSynced*/tombstone 系列约 700 行，同步语义红线区，调用点最深，须单独一批仔细做）。
 7. **folder 墓碑不跨端传播**（260910 验收发现）：云端 manifest 顶层只有 `notes/folders`，无 folder 删除表达；A 的永久墓碑守卫（§2.4 修复）能拒绝回流，churn 有限（2~3 轮收敛），无数据损坏。但"新设备 + 同名系统笔记本"场景会产生多余 manifest 提交。**需动同步协议（红线区），单独立项讨论后再做**。
 8. Word/PDF 导出（`electron/export.ts` 已预留 docx/pdf）；附件大文件 S3 分片/断点续传（**nice-to-have，未被需求驱动**）。
 9. **Lake 内核策略**（属政策，非任务，记录即可）：A lakejs 开源源码当"机制字典"；B 版本锚点 + hack 清单（vendor lakex 已 pin，勿随意升级）；按需最小 patch，**不整体 fork**。
