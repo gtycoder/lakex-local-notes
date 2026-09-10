@@ -56,33 +56,33 @@ class Port implements SyncDbPort {
   restore(id: string) { const n = this.notes.get(id); if (n) { n.trashedAt = null; n.restorePendingAt = "2026-03-05T00:00:00.000Z"; n.updatedAt = "2026-03-05T00:00:00.000Z"; n.syncState = "local"; } }
   content(id: string) { return this.notes.get(id)?.content ?? null; }
   synced() { return this.notes.size > 0 && [...this.notes.values()].every((n) => n.syncState === "synced"); }
-  getNote(id: string): LocalNoteRow | null { return this.notes.get(id) ?? null; }
-  getAllNotes(): LocalNoteRow[] { return [...this.notes.values()]; }
-  getSyncBase(id: string) { return this.bases.get(id) ?? null; }
-  setSyncBase(id: string, ch: string, metaAt: string | null, lu: string | null) { this.bases.set(id, { contentHash: ch, lastUploadedHash: lu, lastSyncedMetaAt: metaAt }); }
-  markLocalNoteSynced(id: string, ch: string, metaAt: string, lu: string | null) { this.bases.set(id, { contentHash: ch, lastUploadedHash: lu, lastSyncedMetaAt: metaAt }); const n = this.notes.get(id); if (n) n.syncState = "synced"; }
-  markSyncedIfUnchanged(id: string, exp: string, metaAt: string, lu: string | null) { const n = this.notes.get(id); if (n && n.contentHash === exp) { n.syncState = "synced"; this.bases.set(id, { contentHash: exp, lastUploadedHash: lu, lastSyncedMetaAt: metaAt }); } }
-  applyRemoteNote(note: ManifestNote, content: string) { const ex = this.notes.get(note.id); const row: LocalNoteRow = { id: note.id, title: note.title, content, updatedAt: note.updatedAt, syncState: "synced", trashedAt: note.trashedAt ?? null, restorePendingAt: null, parentId: note.parentId ?? null, sortOrder: note.sortOrder ?? 0, isLocked: !!note.isLocked, lockedAt: note.lockedAt ?? null, icon: note.icon ?? null, isConflict: !!note.isConflict, contentHash: note.contentHash }; this.notes.set(note.id, row); if (ex) this.bases.set(note.id, { contentHash: note.contentHash, lastUploadedHash: null, lastSyncedMetaAt: note.updatedAt }); else this.bases.set(note.id, { contentHash: note.contentHash, lastUploadedHash: null, lastSyncedMetaAt: note.updatedAt }); }
-  applyRemoteNoteMeta(note: ManifestNote) { const n = this.notes.get(note.id); if (n) { n.title = note.title; n.parentId = note.parentId; n.sortOrder = note.sortOrder; n.updatedAt = note.updatedAt; n.isConflict = !!note.isConflict; n.icon = note.icon ?? null; n.isLocked = !!note.isLocked; n.lockedAt = note.lockedAt ?? null; } }
-  applyRemoteTrash(id: string, content: string, title: string, trashedAt: string, _dfp: string | null, parentId: string | null, sortOrder: number) { const n: LocalNoteRow = { id, title, content, updatedAt: trashedAt, syncState: "synced", trashedAt, restorePendingAt: null, parentId, sortOrder, isLocked: false, lockedAt: null, icon: null, isConflict: false, contentHash: hashOf(content) }; this.notes.set(id, n); this.bases.set(id, { contentHash: n.contentHash!, lastUploadedHash: null, lastSyncedMetaAt: trashedAt }); }
-  localTrashNote(id: string) { this.trash(id); }
-  localRestoreNote(id: string) { this.restore(id); }
-  applyRemotePurge(id: string) { const n = this.notes.get(id); if (n) { n.syncState = "purged"; n.parentId = TRASH_NOTEBOOK_ID; n.trashedAt = "2026-03-01T00:00:00.000Z"; } }
-  rememberDeleted(note: ManifestNote, at: string) { this.deleted.set(note.id, at); }
-  listDeletedNotesForSync() { return [...this.deleted.entries()].map(([id, deletedAt]) => ({ id, deletedAt })); }
-  applyRemoteLock(id: string, locked: boolean, at: string | null) { const n = this.notes.get(id); if (n) { n.isLocked = locked; n.lockedAt = at; } }
-  createHistorySnapshot(noteId: string, content: string) { this.history.push({ noteId, content }); }
+  async getNote(id: string) { return this.notes.get(id) ?? null; }
+  async getAllNotes() { return [...this.notes.values()]; }
+async getSyncBase(id: string) { return this.bases.get(id) ?? null; }
+async setSyncBase(id: string, ch: string, metaAt: string | null, lu: string | null) { this.bases.set(id, { contentHash: ch, lastUploadedHash: lu, lastSyncedMetaAt: metaAt }); }
+async markLocalNoteSynced(id: string, ch: string, metaAt: string, lu: string | null) { this.bases.set(id, { contentHash: ch, lastUploadedHash: lu, lastSyncedMetaAt: metaAt }); const n = this.notes.get(id); if (n) n.syncState = "synced"; }
+async markSyncedIfUnchanged(id: string, exp: string, metaAt: string, lu: string | null) { const n = this.notes.get(id); if (n && n.contentHash === exp) { n.syncState = "synced"; this.bases.set(id, { contentHash: exp, lastUploadedHash: lu, lastSyncedMetaAt: metaAt }); } }
+async applyRemoteNote(note: ManifestNote, content: string) { const ex = this.notes.get(note.id); const row: LocalNoteRow = { id: note.id, title: note.title, content, updatedAt: note.updatedAt, syncState: "synced", trashedAt: note.trashedAt ?? null, restorePendingAt: null, parentId: note.parentId ?? null, sortOrder: note.sortOrder ?? 0, isLocked: !!note.isLocked, lockedAt: note.lockedAt ?? null, icon: note.icon ?? null, isConflict: !!note.isConflict, contentHash: note.contentHash }; this.notes.set(note.id, row); if (ex) this.bases.set(note.id, { contentHash: note.contentHash, lastUploadedHash: null, lastSyncedMetaAt: note.updatedAt }); else this.bases.set(note.id, { contentHash: note.contentHash, lastUploadedHash: null, lastSyncedMetaAt: note.updatedAt }); }
+async applyRemoteNoteMeta(note: ManifestNote) { const n = this.notes.get(note.id); if (n) { n.title = note.title; n.parentId = note.parentId; n.sortOrder = note.sortOrder; n.updatedAt = note.updatedAt; n.isConflict = !!note.isConflict; n.icon = note.icon ?? null; n.isLocked = !!note.isLocked; n.lockedAt = note.lockedAt ?? null; } }
+async applyRemoteTrash(id: string, content: string, title: string, trashedAt: string, _dfp: string | null, parentId: string | null, sortOrder: number) { const n: LocalNoteRow = { id, title, content, updatedAt: trashedAt, syncState: "synced", trashedAt, restorePendingAt: null, parentId, sortOrder, isLocked: false, lockedAt: null, icon: null, isConflict: false, contentHash: hashOf(content) }; this.notes.set(id, n); this.bases.set(id, { contentHash: n.contentHash!, lastUploadedHash: null, lastSyncedMetaAt: trashedAt }); }
+async localTrashNote(id: string) { this.trash(id); }
+async localRestoreNote(id: string) { this.restore(id); }
+async applyRemotePurge(id: string) { const n = this.notes.get(id); if (n) { n.syncState = "purged"; n.parentId = TRASH_NOTEBOOK_ID; n.trashedAt = "2026-03-01T00:00:00.000Z"; } }
+async rememberDeleted(note: ManifestNote, at: string) { this.deleted.set(note.id, at); }
+async listDeletedNotesForSync() { return [...this.deleted.entries()].map(([id, deletedAt]) => ({ id, deletedAt })); }
+async applyRemoteLock(id: string, locked: boolean, at: string | null) { const n = this.notes.get(id); if (n) { n.isLocked = locked; n.lockedAt = at; } }
+async createHistorySnapshot(noteId: string, content: string) { this.history.push({ noteId, content }); }
   saveAsset(): Promise<void> { return Promise.resolve(); }
   async listLocalAssets(id: string) { return this.assets.get(id) ?? []; }
   async readLocalAsset() { return this.asset; }
-  defaultNotebookId() { return "nb-main"; }
-  importRemoteFolder(f: ManifestFolder) { this.folders.set(f.id, f); }
-  listFoldersForSync() { return [...this.folders.values()].filter((f) => f.id !== TRASH_NOTEBOOK_ID).map((f) => ({ id: f.id, title: f.title, parentId: f.parentId, sortOrder: f.sortOrder, nodeType: f.nodeType, icon: f.icon, updatedAt: f.updatedAt })); }
-  getLastSeenCommitId(): string | null { return this.lastSeenCommitId; } setLastSeenCommitId(id: string) { this.lastSeenCommitId = id; }
-  getLastTombstoneSig(): string { return this.lastTombstoneSig; } setLastTombstoneSig(s: string) { this.lastTombstoneSig = s; }
-  tombstoneSignature(): string { return `${this.deleted.size}:${[...this.deleted.keys()].sort().at(-1) ?? ""}`; }
-  hasLocalPendingNotes(): boolean { return [...this.notes.values()].some((n) => n.syncState !== "synced"); }
-  log() {}
+async defaultNotebookId() { return "nb-main"; }
+async importRemoteFolder(f: ManifestFolder) { this.folders.set(f.id, f); }
+async listFoldersForSync() { return [...this.folders.values()].filter((f) => f.id !== TRASH_NOTEBOOK_ID).map((f) => ({ id: f.id, title: f.title, parentId: f.parentId, sortOrder: f.sortOrder, nodeType: f.nodeType, icon: f.icon, updatedAt: f.updatedAt })); }
+  async getLastSeenCommitId() { return this.lastSeenCommitId; } async setLastSeenCommitId(id: string) { this.lastSeenCommitId = id; }
+  async getLastTombstoneSig() { return this.lastTombstoneSig; } async setLastTombstoneSig(s: string) { this.lastTombstoneSig = s; }
+  async tombstoneSignature() { return `${this.deleted.size}:${[...this.deleted.keys()].sort().at(-1) ?? ""}`; }
+  async hasLocalPendingNotes() { return [...this.notes.values()].some((n) => n.syncState !== "synced"); }
+async log() {}
 }
 
 function manifest(notes: ManifestNote[]): string {

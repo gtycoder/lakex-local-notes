@@ -60,34 +60,34 @@ class BigPort implements SyncDbPort {
     for (let i = 0; i < n; i += 1) list.push({ filename: `17883550${String(i).padStart(5, "0")}_dead${i}.png`, size: this.assetBytes.length, hash: h });
     this.assetsByNote.set(id, list); return list;
   }
-  getNote(id: string): LocalNoteRow | null { return this.notes.get(id) ?? null; }
-  getAllNotes(): LocalNoteRow[] { return [...this.notes.values()]; }
-  getSyncBase(id: string): Base | null { return this.bases.get(id) ?? null; }
-  setSyncBase(id: string, ch: string, metaAt: string | null, lu: string | null): void { this.bases.set(id, { contentHash: ch, lastUploadedHash: lu, lastSyncedMetaAt: metaAt }); }
-  markLocalNoteSynced(id: string, ch: string, metaAt: string, lu: string | null): void { this.bases.set(id, { contentHash: ch, lastUploadedHash: lu, lastSyncedMetaAt: metaAt }); const n = this.notes.get(id); if (n) n.syncState = "synced"; }
-  markSyncedIfUnchanged(id: string, exp: string, metaAt: string, lu: string | null): void { const n = this.notes.get(id); if (n && (n.contentHash ?? hashOf(n.content)) === exp) this.markLocalNoteSynced(id, exp, metaAt, lu); }
-  applyRemoteNote(note: ManifestNote): void { const n = this.notes.get(note.id); this.notes.set(note.id, n ? { ...n, title: note.title, syncState: "synced" } : this.row(note.id, "<p>remote</p>")); }
-  applyRemoteNoteMeta(note: ManifestNote): void { const n = this.notes.get(note.id); if (n) { n.title = note.title; n.parentId = note.parentId; n.sortOrder = note.sortOrder; n.icon = note.icon ?? null; } }
-  applyRemoteTrash(): void {}
-  localTrashNote(): void {}
-  localRestoreNote(): void {}
-  applyRemotePurge(id: string): void { const n = this.notes.get(id); if (n) n.syncState = "purged"; }
-  rememberDeleted(note: ManifestNote, at: string): void { this.deleted.set(note.id, at); }
-  listDeletedNotesForSync(): Array<{ id: string; deletedAt: string }> { return [...this.deleted.entries()].map(([id, deletedAt]) => ({ id, deletedAt })); }
-  applyRemoteLock(): void {}
-  createHistorySnapshot(): void {}
+  async getNote(id: string) { return this.notes.get(id) ?? null; }
+  async getAllNotes() { return [...this.notes.values()]; }
+  async getSyncBase(id: string) { return this.bases.get(id) ?? null; }
+  async setSyncBase(id: string, ch: string, metaAt: string | null, lu: string | null) { this.bases.set(id, { contentHash: ch, lastUploadedHash: lu, lastSyncedMetaAt: metaAt }); }
+  async markLocalNoteSynced(id: string, ch: string, metaAt: string, lu: string | null) { this.bases.set(id, { contentHash: ch, lastUploadedHash: lu, lastSyncedMetaAt: metaAt }); const n = this.notes.get(id); if (n) n.syncState = "synced"; }
+  async markSyncedIfUnchanged(id: string, exp: string, metaAt: string, lu: string | null) { const n = this.notes.get(id); if (n && (n.contentHash ?? hashOf(n.content)) === exp) this.markLocalNoteSynced(id, exp, metaAt, lu); }
+  async applyRemoteNote(note: ManifestNote) { const n = this.notes.get(note.id); this.notes.set(note.id, n ? { ...n, title: note.title, syncState: "synced" } : this.row(note.id, "<p>remote</p>")); }
+  async applyRemoteNoteMeta(note: ManifestNote) { const n = this.notes.get(note.id); if (n) { n.title = note.title; n.parentId = note.parentId; n.sortOrder = note.sortOrder; n.icon = note.icon ?? null; } }
+  async applyRemoteTrash() {}
+  async localTrashNote() {}
+  async localRestoreNote() {}
+  async applyRemotePurge(id: string) { const n = this.notes.get(id); if (n) n.syncState = "purged"; }
+  async rememberDeleted(note: ManifestNote, at: string) { this.deleted.set(note.id, at); }
+  async listDeletedNotesForSync() { return [...this.deleted.entries()].map(([id, deletedAt]) => ({ id, deletedAt })); }
+  async applyRemoteLock() {}
+  async createHistorySnapshot() {}
   async saveAsset(): Promise<void> {}
   async listLocalAssets(id: string): Promise<Asset[]> { return this.assetsByNote.get(id) ?? []; }
   async readLocalAsset(): Promise<Uint8Array> { return this.assetBytes; }
-  defaultNotebookId(): string { this.defaultCalls++; return "nb-root"; }
-  importRemoteFolder(_f: ManifestFolder): void {}
-  getLastSeenCommitId(): string | null { return this.lastSeenCommitId; }
-  setLastSeenCommitId(id: string): void { this.lastSeenCommitId = id; }
-  getLastTombstoneSig(): string { return this.lastTombstoneSig; }
-  setLastTombstoneSig(sig: string): void { this.lastTombstoneSig = sig; }
-  tombstoneSignature(): string { return `${this.deleted.size}:${[...this.deleted.keys()].sort().at(-1) ?? ""}`; }
-  hasLocalPendingNotes(): boolean { return [...this.notes.values()].some((n) => n.syncState !== "synced"); }
-  log(): void {}
+  async defaultNotebookId() { this.defaultCalls++; return "nb-root"; }
+  async importRemoteFolder(_f: ManifestFolder) {}
+  async getLastSeenCommitId() { return this.lastSeenCommitId; }
+  async setLastSeenCommitId(id: string) { this.lastSeenCommitId = id; }
+  async getLastTombstoneSig() { return this.lastTombstoneSig; }
+  async setLastTombstoneSig(sig: string) { this.lastTombstoneSig = sig; }
+  async tombstoneSignature() { return `${this.deleted.size}:${[...this.deleted.keys()].sort().at(-1) ?? ""}`; }
+  async hasLocalPendingNotes() { return [...this.notes.values()].some((n) => n.syncState !== "synced"); }
+  async log() {}
 }
 
 function manifest(notes: ManifestNote[], commitId = "c1"): string {
@@ -105,7 +105,7 @@ describe.skipIf(!RUN)("Tier A · syncNow 算法/请求数压测", () => {
   it("S1 稳态零变更：N=2000 → 命中早退、几乎 0 请求", async () => {
     const s3 = new CountingS3(); const db = new BigPort(); const entries: ManifestNote[] = [];
     for (let i = 0; i < 2000; i += 1) { const id = `n${i}`; const r = db.row(id, `<p>body ${i}</p>`); db.notes.set(id, r); db.bases.set(id, { contentHash: r.contentHash!, lastUploadedHash: r.contentHash!, lastSyncedMetaAt: r.updatedAt }); entries.push(noteEntry(id, r.contentHash!)); }
-    putManifest(s3, entries, "cX"); db.lastSeenCommitId = "cX"; db.lastTombstoneSig = db.tombstoneSignature();
+    putManifest(s3, entries, "cX"); db.lastSeenCommitId = "cX"; db.lastTombstoneSig = await db.tombstoneSignature();
     const t0 = performance.now(); const r = await syncNow(CFG, s3, db); const ms = performance.now() - t0;
     results.push({ case: "S1 稳态零变更", N: 2000, ms: +ms.toFixed(1), gets: s3.ops.get, puts: s3.ops.put, uploaded: r.uploaded });
   });

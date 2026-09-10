@@ -35,7 +35,7 @@ const ROOT = QUICK_NOTES_ROOT;
 /** 把桌面 QuickNotesStore（node sqlite + .qnote 文件）适配成共享引擎端口。 */
 export function createQuickNotesSyncPort(quickNotes: QuickNotesStore): QuickNotesSyncDbPort {
   return {
-    listLocalQuickNotes(): QuickNoteSyncItem[] {
+    async listLocalQuickNotes(): Promise<QuickNoteSyncItem[]> {
       return quickNotes.listQuickNotesForSync().map((item) => ({
         id: item.id,
         createdAt: item.createdAt,
@@ -46,52 +46,52 @@ export function createQuickNotesSyncPort(quickNotes: QuickNotesStore): QuickNote
         images: item.content.images.map(({ id, filename, mimeType, width, height, size, hash }) => ({ id, filename, mimeType, width, height, size, hash })),
       }));
     },
-    readContent(id: string): Uint8Array | null {
+    async readContent(id: string): Promise<Uint8Array | null> {
       try { return new Uint8Array(fs.readFileSync(quickNotes.quickNotePathFor(id))); } catch { return null; }
     },
-    readAsset(id: string, filename: string): Uint8Array | null {
+    async readAsset(id: string, filename: string): Promise<Uint8Array | null> {
       try { return new Uint8Array(fs.readFileSync(path.join(quickNotes.quickNoteAssetsPathFor(id), filename))); } catch { return null; }
     },
-    applyRemoteQuickNote(item, content, assets) {
+    async applyRemoteQuickNote(item, content, assets) {
       quickNotes.importRemoteQuickNote(
         { id: item.id, createdAt: item.createdAt, updatedAt: item.updatedAt, contentHash: item.contentHash, isConflict: item.isConflict },
         Buffer.from(content),
         assets.map((a) => ({ filename: a.filename, bytes: Buffer.from(a.bytes) })),
       );
     },
-    applyTombstoneContent(id, content) {
+    async applyTombstoneContent(id, content) {
       // V5 §5.5：墓碑内容原子写（写临时 + rename，防崩溃半写文件）
       const target = quickNotes.quickNotePathFor(id);
       const temporary = `${target}.tmp-${process.pid}`;
       fs.writeFileSync(temporary, Buffer.from(content));
       fs.renameSync(temporary, target);
     },
-    listDeletedQuickNoteAssets(id) {
+    async listDeletedQuickNoteAssets(id) {
       // 墓碑携带图片（A）：读软删保留的 .qnote 解析删除前图片元数据；文件缺失/解析失败 → []
       try {
         const content = validateQuickNoteContent(JSON.parse(fs.readFileSync(quickNotes.quickNotePathFor(id), "utf8")) as StoredQuickNoteContent);
         return content.images.map(({ id: imageId, filename, mimeType, width, height, size, hash }) => ({ id: imageId, filename, mimeType, width, height, size, hash }));
       } catch { return []; }
     },
-    applyTombstoneAssets(id, assets) {
+    async applyTombstoneAssets(id, assets) {
       // 墓碑携带图片（A）：删除前图片字节落盘（软删保留，恢复时图片完整）
       const dir = quickNotes.quickNoteAssetsPathFor(id);
       fs.mkdirSync(dir, { recursive: true });
       for (const a of assets) fs.writeFileSync(path.join(dir, a.metadata.filename), Buffer.from(a.bytes));
     },
-    deleteLocalQuickNote(id) { quickNotes.deleteQuickNote(id); },
-    archiveLocalQuickNoteToTrash(id) { quickNotes.archiveLocalToTrash(id); },
-    listDeletedQuickNotes() { return quickNotes.listDeletedForSync().map((d) => ({ id: d.id, createdAt: d.createdAt, updatedAt: d.updatedAt, deletedAt: d.deletedAt })); },
-    markDeletedPublished(ids) { quickNotes.markDeletedPublished(ids); },
-    listAllDeletedQuickNotes() { return quickNotes.listAllDeleted().map((d) => ({ id: d.id, createdAt: d.createdAt, updatedAt: d.updatedAt, deletedAt: d.deletedAt })); },
-    listDeferredDeletedQuickNotes() { return quickNotes.listDeferredDeletedForSync().map((d) => ({ id: d.id })); },
-    rememberDeletedQuickNote(item) { quickNotes.rememberDeleted(item); },
-    revokeLocalDeletion(id) { quickNotes.revokeLocalDeletion(id); },
-    isRestorePending(id) { return quickNotes.isRestorePending(id); },
-    baseHash(id) { return quickNotes.baseHash(id); },
-    setBaseHash(id, contentHash) { quickNotes.setBaseHash(id, contentHash); },
-    markSynced(id) { quickNotes.markSynced(id); },
-    log(message) { quickNotes.logScopes.quick.info(message); },
+    async deleteLocalQuickNote(id) { quickNotes.deleteQuickNote(id); },
+    async archiveLocalQuickNoteToTrash(id) { quickNotes.archiveLocalToTrash(id); },
+    async listDeletedQuickNotes() { return quickNotes.listDeletedForSync().map((d) => ({ id: d.id, createdAt: d.createdAt, updatedAt: d.updatedAt, deletedAt: d.deletedAt })); },
+    async markDeletedPublished(ids) { quickNotes.markDeletedPublished(ids); },
+    async listAllDeletedQuickNotes() { return quickNotes.listAllDeleted().map((d) => ({ id: d.id, createdAt: d.createdAt, updatedAt: d.updatedAt, deletedAt: d.deletedAt })); },
+    async listDeferredDeletedQuickNotes() { return quickNotes.listDeferredDeletedForSync().map((d) => ({ id: d.id })); },
+    async rememberDeletedQuickNote(item) { quickNotes.rememberDeleted(item); },
+    async revokeLocalDeletion(id) { quickNotes.revokeLocalDeletion(id); },
+    async isRestorePending(id) { return quickNotes.isRestorePending(id); },
+    async baseHash(id) { return quickNotes.baseHash(id); },
+    async setBaseHash(id, contentHash) { quickNotes.setBaseHash(id, contentHash); },
+    async markSynced(id) { quickNotes.markSynced(id); },
+    async log(message) { quickNotes.logScopes.quick.info(message); },
   };
 }
 

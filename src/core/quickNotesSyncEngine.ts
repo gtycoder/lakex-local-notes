@@ -4,7 +4,7 @@
  * 由桌面 electron/quickNotesSync.ts 的编排下沉而来（行为等价，V5 Step 6）：
  * - 决策纯函数（reconcileQuickNote / decideUpload / 清单校验）与存储端口分离；
  * - 通过 S3Store + QuickNotesSyncDbPort 端口实现环境无关，桌面（node fs + sqlite）
- *   与移动端（sql.js 单库）共用同一编排；
+ *   与移动端（native SQLite 单库）共用同一编排；
  * - 协议与 Lake 笔记一致但完全独立：manifest 与对象均在 quick-notes/ 子空间，
  *   不读取/修改 Lake manifest v2（相同 S3 配置下仅共享 bucket/prefix）。
  *
@@ -23,7 +23,6 @@ import { mimeTypeFor } from "./syncUtils.js";
 import type { ManifestItem, QuickNotesManifest } from "./manifestTypes.js";
 import { runPool, ASSET_TRANSFER_CONCURRENCY } from "./asyncPool.js";
 import type { S3Store, SyncConfig } from "./syncEngine.js";
-import type { MaybeAsync } from "./maybeAsync.js";
 
 const MANIFEST_VERSION = 1;
 const ROOT = "quick-notes";
@@ -75,38 +74,38 @@ export interface QuickNoteSyncItem {
  * 桌面：QuickNotesStore（node sqlite + .qnote 文件）；移动端：sql.js quick_notes 表 + 内容列。
  */
 export interface QuickNotesSyncDbPort {
-  listLocalQuickNotes(): MaybeAsync<QuickNoteSyncItem[]>;
+  listLocalQuickNotes(): Promise<QuickNoteSyncItem[]>;
   /** 本地内容字节（桌面 .qnote 文件 / 移动端 content 列序列化字节）；缺失 → null。 */
-  readContent(id: string): MaybeAsync<Uint8Array | null>;
+  readContent(id: string): Promise<Uint8Array | null>;
   /** 本地图片字节（上传/校验用）；缺失 → null。 */
-  readAsset(id: string, filename: string): MaybeAsync<Uint8Array | null>;
+  readAsset(id: string, filename: string): Promise<Uint8Array | null>;
   /** 应用远端小记（新/覆盖）：写入内容 + 图片 + DB 行。 */
-  applyRemoteQuickNote(item: ManifestItem, content: Uint8Array, assets: Array<{ filename: string; bytes: Uint8Array }>): MaybeAsync<void>;
+  applyRemoteQuickNote(item: ManifestItem, content: Uint8Array, assets: Array<{ filename: string; bytes: Uint8Array }>): Promise<void>;
   /** 墓碑内容落地（先内容后标志）：把删除方内容写入本地存储，随后 deleteLocalQuickNote。 */
-  applyTombstoneContent(id: string, content: Uint8Array): MaybeAsync<void>;
+  applyTombstoneContent(id: string, content: Uint8Array): Promise<void>;
   /** 墓碑携带图片（A）：读取删除小记保留内容中的删除前图片元数据；无保留内容/解析失败 → []。 */
-  listDeletedQuickNoteAssets(id: string): MaybeAsync<QuickNoteSyncItemImage[]>;
+  listDeletedQuickNoteAssets(id: string): Promise<QuickNoteSyncItemImage[]>;
   /** 墓碑携带图片（A）：把删除方上传的删除前图片字节写入本地（软删行保留，恢复时图片完整）。 */
-  applyTombstoneAssets(id: string, assets: Array<{ metadata: QuickNoteSyncItemImage; bytes: Uint8Array }>): MaybeAsync<void>;
+  applyTombstoneAssets(id: string, assets: Array<{ metadata: QuickNoteSyncItemImage; bytes: Uint8Array }>): Promise<void>;
   /** 本地软删（保留内容供墓碑携带）。 */
-  deleteLocalQuickNote(id: string): MaybeAsync<void>;
+  deleteLocalQuickNote(id: string): Promise<void>;
   /** 冲突：本地版本归档进回收站（新 id），随后 applyRemoteQuickNote 覆盖原 id。 */
-  archiveLocalQuickNoteToTrash(id: string): MaybeAsync<void>;
+  archiveLocalQuickNoteToTrash(id: string): Promise<void>;
   /** 本地删除墓碑（软删/从远端学到的删除）；manifest 墓碑条目需要 createdAt/updatedAt。 */
-  listDeletedQuickNotes(): MaybeAsync<Array<{ id: string; createdAt: string; updatedAt: string; deletedAt: string }>>;
+  listDeletedQuickNotes(): Promise<Array<{ id: string; createdAt: string; updatedAt: string; deletedAt: string }>>;
   /** 全部墓碑记录（含已发布 ready=0）：下载方向 LWW（墓碑 vs 远端恢复）需要完整历史才能撤销/跟随恢复。
    * 缺失则回退 listDeletedQuickNotes（仅 ready=1，已发布墓碑会失去恢复跟随能力）。 */
-  listAllDeletedQuickNotes?(): MaybeAsync<Array<{ id: string; createdAt: string; updatedAt: string; deletedAt: string }>>;
+  listAllDeletedQuickNotes?(): Promise<Array<{ id: string; createdAt: string; updatedAt: string; deletedAt: string }>>;
   /** 墓碑已发布到 manifest 后清除待同步标记（ready_to_sync=0）——缺失则待同步计数永不归零（对齐 Lake markTombstonesPublished）。 */
-  markDeletedPublished?(ids: string[]): MaybeAsync<void>;
+  markDeletedPublished?(ids: string[]): Promise<void>;
   /** 转换延迟删除（Lake 放行前不删云端源；移动端无转换场景可不实现 → 返回 []）。 */
-  listDeferredDeletedQuickNotes(): MaybeAsync<Array<{ id: string }>>;
-  rememberDeletedQuickNote(item: { id: string; createdAt: string; updatedAt: string; deletedAt: string }): MaybeAsync<void>;
-  revokeLocalDeletion(id: string): MaybeAsync<void>;
-  isRestorePending(id: string): MaybeAsync<boolean>;
-  baseHash(id: string): MaybeAsync<string | null>;
-  setBaseHash(id: string, contentHash: string): MaybeAsync<void>;
-  markSynced(id: string): MaybeAsync<void>;
+  listDeferredDeletedQuickNotes(): Promise<Array<{ id: string }>>;
+  rememberDeletedQuickNote(item: { id: string; createdAt: string; updatedAt: string; deletedAt: string }): Promise<void>;
+  revokeLocalDeletion(id: string): Promise<void>;
+  isRestorePending(id: string): Promise<boolean>;
+  baseHash(id: string): Promise<string | null>;
+  setBaseHash(id: string, contentHash: string): Promise<void>;
+  markSynced(id: string): Promise<void>;
   log(message: string): void;
 }
 

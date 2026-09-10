@@ -5,7 +5,7 @@
  * 桌面（electron/sync.ts 收敛）+ 移动端（Capacitor）共用同一实现，
  * 平台差异全部经端口注入：
  * - S3Store：对象读写（桌面=ObjectStore，移动端=CapacitorHttpHandler adapter）
- * - SyncDbPort：本地库读写（桌面=store 方法包装，移动端=sql.js）
+ * - SyncDbPort：本地库读写（桌面=store 方法包装，移动端=native SQLite）
  *
  * 语义（对齐 docs/SYNC-PROTOCOL.md v4）：
  * - 下载方向：墓碑/恢复分支 → reconcile 对账 → 对象下载（先内容后标志）→ 本地应用
@@ -24,7 +24,6 @@ import { parseLakeManifest, objectKey } from "./syncUtils.js";
 import { extractAssetRefs } from "./assetNaming.js";
 import { isSafePathSegment } from "./storeUtils.js";
 import { MAX_ATTACHMENT_BYTES } from "./storeLimits.js";
-import type { MaybeAsync } from "./maybeAsync.js";
 
 /** 单对象大小护栏（对齐桌面 sync.ts:100）：正文 .lake 上限 64MiB。 */
 const MAX_REMOTE_NOTE_BYTES = 64 * 1024 * 1024;
@@ -205,80 +204,80 @@ export interface LocalNoteRow {
 }
 
 export interface SyncDbPort {
-  getNote(id: string): MaybeAsync<LocalNoteRow | null>;
-  getAllNotes(): MaybeAsync<LocalNoteRow[]>;
-  getSyncBase(id: string): MaybeAsync<{ contentHash: string; lastUploadedHash: string | null; lastSyncedMetaAt: string | null } | null>;
-  applyRemoteNote(note: ManifestNote, content: string): MaybeAsync<void>;
+  getNote(id: string): Promise<LocalNoteRow | null>;
+  getAllNotes(): Promise<LocalNoteRow[]>;
+  getSyncBase(id: string): Promise<{ contentHash: string; lastUploadedHash: string | null; lastSyncedMetaAt: string | null } | null>;
+  applyRemoteNote(note: ManifestNote, content: string): Promise<void>;
   /** 远端墓碑应用：先拉内容再标记回收站（先内容、后标志；保留可恢复） */
-  applyRemoteTrash(id: string, content: string, title: string, trashedAt: string, deletedFromParentId: string | null, parentId: string | null, sortOrder: number): MaybeAsync<void>;
+  applyRemoteTrash(id: string, content: string, title: string, trashedAt: string, deletedFromParentId: string | null, parentId: string | null, sortOrder: number): Promise<void>;
   /** 本地软删（入回收站）：保留内容，sync_state=local */
-  localTrashNote(id: string): MaybeAsync<void>;
+  localTrashNote(id: string): Promise<void>;
   /** 本地恢复：移出回收站 + restore_pending_at（同步时 local-wins 上传 active 覆盖墓碑） */
-  localRestoreNote(id: string): MaybeAsync<void>;
+  localRestoreNote(id: string): Promise<void>;
   /** 收到他端 purge 墓碑（deleted:true）：本地条目移入回收站并标 purged（保留可恢复、不上传）。 */
-  applyRemotePurge(id: string): MaybeAsync<void>;
+  applyRemotePurge(id: string): Promise<void>;
   /** 本地删除墓碑列表（deleted_notes 表：本设备从未持有或已彻底删除的）——远端恢复撤销判定用。
    * 返回 null = 端口不支持（移动端无 deleted_notes 场景时可不实现，撤销判定退化）。 */
   /** nodeType：'folder' 墓碑仅本地下载过滤、不进 manifest.notes（发布方向必须跳过）。 */
-  listDeletedNotesForSync?(): MaybeAsync<Array<{ id: string; deletedAt: string; title?: string; nodeType?: string }>>;
+  listDeletedNotesForSync?(): Promise<Array<{ id: string; deletedAt: string; title?: string; nodeType?: string }>>;
   /** 墓碑已发布到 manifest 后标记（port 无此能力则跳过，计数降级为按全部墓碑）。 */
-  markTombstonesPublished?(ids: string[]): MaybeAsync<void>;
+  markTombstonesPublished?(ids: string[]): Promise<void>;
   /** 读墓碑笔记的删除前内容（墓碑携带内容，他端先拉内容再应用；读失败/不支持 → null 占位符）。 */
   readDeletedContent?(id: string): Promise<string | null>;
   /** 强制读真实内容 hash（远端缺失时回退全量扫描，对齐桌面 cachedBase 优化边界）。 */
-  forceHashRead?(id: string): MaybeAsync<string | null>;
+  forceHashRead?(id: string): Promise<string | null>;
   /** 撤销本地删除墓碑（远端恢复较新，下载分支调用；对齐桌面 store.revokeLocalDeletion）。 */
-  revokeLocalDeletion?(id: string): MaybeAsync<void>;
+  revokeLocalDeletion?(id: string): Promise<void>;
   /** 目录记账：同步后标记 folder 为 synced（对齐桌面 store.markFolderSynced；移动端无目录编辑可不实现）。 */
-  markFolderSynced?(id: string, expectedUpdatedAt: string): MaybeAsync<boolean>;
+  markFolderSynced?(id: string, expectedUpdatedAt: string): Promise<boolean>;
   /** 本地已彻底删除（purge）的 folder/group（deleted_notes 带 purged_at）：下载导入远端 folders 前过滤，
    * 防"清空回收站后同步 → 被删笔记本重新导入复活"；发布时检测到也应强制重写 manifest 移除云端残留。 */
-  isFolderPurged?(id: string): MaybeAsync<boolean>;
+  isFolderPurged?(id: string): Promise<boolean>;
   /** 记录"从云端学到的删除"（本设备从未持有该笔记），防离线设备把残留当新文档上传复活（审计 #2）。 */
-  rememberDeleted(note: ManifestNote, deletedAt: string): MaybeAsync<void>;
+  rememberDeleted(note: ManifestNote, deletedAt: string): Promise<void>;
   /** 正文相同但元数据（标题/父/排序/图标）变化时应用远端较新版本（B3 LWW）。 */
-  applyRemoteNoteMeta(note: ManifestNote): MaybeAsync<void>;
+  applyRemoteNoteMeta(note: ManifestNote): Promise<void>;
   /** 锁字段级 LWW：应用远端锁状态（锁变更不改正文哈希，需独立应用）。 */
-  applyRemoteLock(id: string, locked: boolean, lockedAt: string | null): MaybeAsync<void>;
+  applyRemoteLock(id: string, locked: boolean, lockedAt: string | null): Promise<void>;
   /** lastUploadedHash 传 null = 两端一致 skip 记账（本机未上传该版本内容，须清除误标，防 ownEdit 重复留档）。 */
-  markLocalNoteSynced(id: string, contentHash: string, metaAt: string, lastUploadedHash: string | null): MaybeAsync<void>;
+  markLocalNoteSynced(id: string, contentHash: string, metaAt: string, lastUploadedHash: string | null): Promise<void>;
   /** 记账快照保护（B2，V5 §5.2）：仅当本地当前内容 hash 仍等于 expectedContentHash（同步期间未编辑）才标 synced；否则保持 local 下轮重传。
    * lastUploadedHash 传 null = 下载对账收尾（本机未上传该版本，不得误标"本机是作者"）。 */
-  markSyncedIfUnchanged(id: string, expectedContentHash: string, metaAt: string, lastUploadedHash: string | null): MaybeAsync<void>;
-  setSyncBase(id: string, contentHash: string, metaAt: string | null, lastUploadedHash: string | null): MaybeAsync<void>;
+  markSyncedIfUnchanged(id: string, expectedContentHash: string, metaAt: string, lastUploadedHash: string | null): Promise<void>;
+  setSyncBase(id: string, contentHash: string, metaAt: string | null, lastUploadedHash: string | null): Promise<void>;
   /** 兜底父笔记本 id（系统中没有"默认笔记本"；实现 = 任意存在的笔记本，无则自动创建"未分类"）。 */
-  defaultNotebookId(): MaybeAsync<string>;
+  defaultNotebookId(): Promise<string>;
   /** 导入远端 notebook/group 节点（移动端 folders/tree 表）。 */
-  importRemoteFolder(folder: ManifestFolder): MaybeAsync<void>;
+  importRemoteFolder(folder: ManifestFolder): Promise<void>;
   /** 发布方向：列出本地目录树（notebook/group），供 manifest.folders 写入（对齐桌面 listFoldersForSync）。
    * 返回 null = 端口不支持本地目录发布（POC 只读 folders 时可不实现，folders 保持远端透传）。 */
-  listFoldersForSync?(): MaybeAsync<Array<{ id: string; title: string; parentId: string | null; sortOrder: number; nodeType: string; icon: string | null; updatedAt: string; trashedAt?: string | null; deletedFromParentId?: string | null }>>;
+  listFoldersForSync?(): Promise<Array<{ id: string; title: string; parentId: string | null; sortOrder: number; nodeType: string; icon: string | null; updatedAt: string; trashedAt?: string | null; deletedFromParentId?: string | null }>>;
   /** 本机编辑成果被远端覆盖前强制留档（D5，协议 §4.2）：写一条 note_history，防丢数据。 */
-  createHistorySnapshot(noteId: string, content: string, meta: { title: string; parentId: string | null; sortOrder: number; protectedDays?: number }): MaybeAsync<void>;
+  createHistorySnapshot(noteId: string, content: string, meta: { title: string; parentId: string | null; sortOrder: number; protectedDays?: number }): Promise<void>;
   /** 资产落地（D8）：把已校验的图片字节写入本地（Capacitor Filesystem / IndexedDB），供本地资源服务显示。 */
   saveAsset(noteId: string, filename: string, bytes: Uint8Array): Promise<void>;
   /** 资产上传扫描（H3）：列出笔记的本地资产（filename + size + sha256），供 manifest.assets 上传。 */
   listLocalAssets(noteId: string): Promise<Array<{ filename: string; size: number; hash: string }>>;
   /** A 方案：记录 manifest 声明的资产元数据（即使本地文件缺失，上传 union 仍可正确声明）。 */
-  recordDeclaredAssets?(noteId: string, assets: Array<{ filename: string; size: number; hash: string }>): MaybeAsync<void>;
+  recordDeclaredAssets?(noteId: string, assets: Array<{ filename: string; size: number; hash: string }>): Promise<void>;
   /** A 方案：列出该笔记已声明（含本地缺失但 manifest 声明过）的资产元数据。 */
-  listDeclaredAssets?(noteId: string): MaybeAsync<Array<{ filename: string; size: number; hash: string }>>;
+  listDeclaredAssets?(noteId: string): Promise<Array<{ filename: string; size: number; hash: string }>>;
   /** 资产上传扫描（H3）：读取本地资产字节（供上传 S3）。 */
   readLocalAsset(noteId: string, filename: string): Promise<Uint8Array | null>;
   /** 资产流式上传（桌面实现）：打开本地资产文件流；缺失返回 null。syncEngine 探测到
    * 本方法 + S3Store.putObjectStream 同时存在才走流式，否则字节路径。 */
   openLocalAssetStream?(noteId: string, filename: string): Promise<unknown | null>;
   /** 零变更早退：本设备上次成功读/写的 manifest commitId（无则 null）。 */
-  getLastSeenCommitId(): MaybeAsync<string | null>;
-  setLastSeenCommitId(commitId: string): MaybeAsync<void>;
+  getLastSeenCommitId(): Promise<string | null>;
+  setLastSeenCommitId(commitId: string): Promise<void>;
   /** 零变更早退：本地上次同步时的墓碑签名（COUNT:MAX(deleted_at)）。 */
-  getLastTombstoneSig(): MaybeAsync<string>;
-  setLastTombstoneSig(sig: string): MaybeAsync<void>;
+  getLastTombstoneSig(): Promise<string>;
+  setLastTombstoneSig(sig: string): Promise<void>;
   /** 零变更早退：deleted_notes 的 COUNT:MAX(deleted_at) 签名。 */
-  tombstoneSignature(): MaybeAsync<string>;
+  tombstoneSignature(): Promise<string>;
   /** 零变更早退：本地是否有待上传变更（notes 非 synced 或目录/分组改动）。 */
-  hasLocalPendingNotes(): MaybeAsync<boolean>;
-  log(msg: string): MaybeAsync<void>;
+  hasLocalPendingNotes(): Promise<boolean>;
+  log(msg: string): Promise<void>;
 }
 
 const MANIFEST_KEY = "manifests/latest.json";
@@ -739,7 +738,7 @@ export async function syncNow(cfg: SyncConfig, s3: S3Store, db: SyncDbPort, opts
   // 大库首次同步多篇带图笔记时尤甚）。决策环内只登记任务（正文与条目照常构建、entry.assets 暂空），环后用并发池统一
   // 解析并回填 entry.assets。语义与串行完全一致：同一 resolveUploadAssets、同样的失败吞并日志、最终 manifest.assets 同集合，
   // 仅把各笔记的 IO 等待重叠起来；uploadQueue 顺序不变（改写的是已入队的同一 entry 对象）。
-  const assetTasks: Array<{ noteId: string; content: string; rnAssets: ManifestNote["assets"] | null; entry: ManifestNote; onError: (msg: string) => MaybeAsync<void> }> = [];
+  const assetTasks: Array<{ noteId: string; content: string; rnAssets: ManifestNote["assets"] | null; entry: ManifestNote; onError: (msg: string) => Promise<void> }> = [];
   // P1（资产失败硬化，审计 260903）：本轮资产扫描/上传抛错的笔记 id 集；这些条目发布后不 markSynced（保持 local，下轮重扫重传），
   // 避免「资产扫描失败→assets:[] 发布→被标 synced→永不重扫→原声明资产被 GC 误删」。语义仍为「资产失败不阻断正文」（正文照常发布，仅留该篇待重试）。
   const assetScanFailed = new Set<string>();

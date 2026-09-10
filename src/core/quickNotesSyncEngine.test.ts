@@ -50,15 +50,15 @@ function createFakePort(): { port: QuickNotesSyncDbPort; notes: Map<string, Fake
   const publishedSet = new Set<string>();
   const now = () => new Date().toISOString();
   const port: QuickNotesSyncDbPort = {
-    listLocalQuickNotes(): QuickNoteSyncItem[] {
+    async listLocalQuickNotes(): Promise<QuickNoteSyncItem[]> {
       return [...notes.values()].filter((n) => !deleted.has(n.id)).map((n) => ({
         id: n.id, createdAt: n.createdAt, updatedAt: n.updatedAt,
         contentHash: n.contentHash, syncState: n.syncState, isConflict: n.isConflict, images: n.images,
       }));
     },
-    readContent(id) { return notes.get(id)?.content ?? null; },
-    readAsset(id, filename) { return assets.get(`${id}/${filename}`) ?? null; },
-    applyRemoteQuickNote(item, content, assetsIn) {
+    async readContent(id) { return notes.get(id)?.content ?? null; },
+    async readAsset(id, filename) { return assets.get(`${id}/${filename}`) ?? null; },
+    async applyRemoteQuickNote(item, content, assetsIn) {
       if (sha256Sync(content) !== item.contentHash) throw new Error(`哈希不符: ${item.id}`);
       notes.set(item.id, {
         id: item.id, createdAt: item.createdAt, updatedAt: item.updatedAt,
@@ -67,10 +67,10 @@ function createFakePort(): { port: QuickNotesSyncDbPort; notes: Map<string, Fake
       });
       for (const a of assetsIn) assets.set(`${item.id}/${a.filename}`, a.bytes);
     },
-    applyTombstoneContent(id, content) {
+    async applyTombstoneContent(id, content) {
       const n = notes.get(id); if (n) { n.content = content; n.contentHash = sha256Sync(content); }
     },
-    listDeletedQuickNoteAssets(id) {
+    async listDeletedQuickNoteAssets(id) {
       const n = notes.get(id);
       if (!n) return [];
       try {
@@ -78,16 +78,16 @@ function createFakePort(): { port: QuickNotesSyncDbPort; notes: Map<string, Fake
         return parsed.images;
       } catch { return []; }
     },
-    applyTombstoneAssets(id, tombAssets) {
+    async applyTombstoneAssets(id, tombAssets) {
       for (const a of tombAssets) assets.set(`${id}/${a.metadata.filename}`, a.bytes);
     },
-    deleteLocalQuickNote(id) {
+    async deleteLocalQuickNote(id) {
       if (!deleted.has(id)) {
         const n = notes.get(id);
         deleted.set(id, { id, createdAt: n?.createdAt ?? now(), updatedAt: n?.updatedAt ?? now(), deletedAt: now() });
       }
     },
-    archiveLocalQuickNoteToTrash(id) {
+    async archiveLocalQuickNoteToTrash(id) {
       const n = notes.get(id);
       if (n) {
         const newId = crypto.randomUUID();
@@ -96,21 +96,21 @@ function createFakePort(): { port: QuickNotesSyncDbPort; notes: Map<string, Fake
         notes.set(newId, copy);
       }
     },
-    listDeletedQuickNotes() {
+    async listDeletedQuickNotes() {
       // 对齐真实口径：ready（未发布）的墓碑才可发布；已发布（published 记账）不再返回
       return [...deleted.values()].filter((item) => !publishedSet.has(item.id));
     },
     // 对齐真实语义：发布 = 写 published 记账（记录保留在 deleted，下载 LWW 仍可见）
-    markDeletedPublished(ids) { for (const id of ids) { publishedSet.add(id); publishedDeleted.push(id); } },
-    listAllDeletedQuickNotes() { return [...deleted.values()]; },
-    listDeferredDeletedQuickNotes() { return []; },
-    rememberDeletedQuickNote(item) { if (!deleted.has(item.id)) deleted.set(item.id, { ...item }); },
-    revokeLocalDeletion(id) { deleted.delete(id); },
-    isRestorePending(id) { return restorePending.has(id); },
-    baseHash(id) { return bases.get(id) ?? null; },
-    setBaseHash(id, hash) { bases.set(id, hash); },
-    markSynced(id) { const n = notes.get(id); if (n) n.syncState = "synced"; restorePending.delete(id); },
-    log() { /* noop */ },
+    async markDeletedPublished(ids) { for (const id of ids) { publishedSet.add(id); publishedDeleted.push(id); } },
+    async listAllDeletedQuickNotes() { return [...deleted.values()]; },
+    async listDeferredDeletedQuickNotes() { return []; },
+    async rememberDeletedQuickNote(item) { if (!deleted.has(item.id)) deleted.set(item.id, { ...item }); },
+    async revokeLocalDeletion(id) { deleted.delete(id); },
+    async isRestorePending(id) { return restorePending.has(id); },
+    async baseHash(id) { return bases.get(id) ?? null; },
+    async setBaseHash(id, hash) { bases.set(id, hash); },
+    async markSynced(id) { const n = notes.get(id); if (n) n.syncState = "synced"; restorePending.delete(id); },
+    async log() { /* noop */ },
   };
   return { port, notes, assets, deleted, bases, restorePending, archived, publishedDeleted };
 }

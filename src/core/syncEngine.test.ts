@@ -30,63 +30,63 @@ class MemDb implements SyncDbPort {
   notes = new Map<string, LocalNoteRow>();
   bases = new Map<string, { contentHash: string; lastUploadedHash: string | null; lastSyncedMetaAt: string | null }>();
   logs: string[] = [];
-  log(msg: string): void { this.logs.push(msg); }
-  getNote(id: string) { return this.notes.get(id) ?? null; }
-  getAllNotes() { return [...this.notes.values()]; }
-  getSyncBase(id: string) { return this.bases.get(id) ?? null; }
-  applyRemoteNote(note: any, content: string) {
+  async log(msg: string): Promise<void> { this.logs.push(msg); }
+async getNote(id: string) { return this.notes.get(id) ?? null; }
+async getAllNotes() { return [...this.notes.values()]; }
+async getSyncBase(id: string) { return this.bases.get(id) ?? null; }
+async applyRemoteNote(note: any, content: string) {
     this.notes.set(note.id, {
       id: note.id, title: note.title, content, updatedAt: note.updatedAt, syncState: "synced",
       trashedAt: note.trashedAt ?? null, restorePendingAt: null, parentId: note.parentId ?? null, sortOrder: note.sortOrder ?? 0,
       isLocked: !!note.isLocked, lockedAt: note.lockedAt ?? null, icon: note.icon ?? null, isConflict: !!note.isConflict,
     });
   }
-  applyRemoteTrash(id: string, content: string, title: string, trashedAt: string, _dfp: string | null, _pid: string | null, _so: number) {
+async applyRemoteTrash(id: string, content: string, title: string, trashedAt: string, _dfp: string | null, _pid: string | null, _so: number) {
     this.notes.set(id, { id, title, content, updatedAt: trashedAt, syncState: "synced", trashedAt, restorePendingAt: null, parentId: null, sortOrder: 0, isLocked: false, lockedAt: null, icon: null, isConflict: false });
   }
-  localTrashNote(id: string) { const n = this.notes.get(id); if (n) { n.trashedAt = new Date().toISOString(); n.syncState = "local"; } }
-  localRestoreNote(id: string) { const n = this.notes.get(id); if (n) { n.trashedAt = null; n.restorePendingAt = new Date().toISOString(); n.syncState = "local"; } }
+async localTrashNote(id: string) { const n = this.notes.get(id); if (n) { n.trashedAt = new Date().toISOString(); n.syncState = "local"; } }
+async localRestoreNote(id: string) { const n = this.notes.get(id); if (n) { n.trashedAt = null; n.restorePendingAt = new Date().toISOString(); n.syncState = "local"; } }
   deletedNotes = new Set<string>();
-  applyRemotePurge(id: string) { const n = this.notes.get(id); if (n) { n.syncState = "purged"; n.parentId = TRASH_NOTEBOOK_ID; n.trashedAt = new Date().toISOString(); } }
-  rememberDeleted(note: any, deletedAt: string) { this.deletedNotes.add(note.id); this.deletedAtMap.set(note.id, deletedAt); }
+async applyRemotePurge(id: string) { const n = this.notes.get(id); if (n) { n.syncState = "purged"; n.parentId = TRASH_NOTEBOOK_ID; n.trashedAt = new Date().toISOString(); } }
+async rememberDeleted(note: any, deletedAt: string) { this.deletedNotes.add(note.id); this.deletedAtMap.set(note.id, deletedAt); }
   deletedAtMap = new Map<string, string>();
   publishedTombstones: string[] = [];
-  listDeletedNotesForSync() { return [...this.deletedAtMap.entries()].map(([id, deletedAt]) => ({ id, deletedAt })); }
-  markTombstonesPublished(ids: string[]) { this.publishedTombstones.push(...ids); }
-  revokeLocalDeletion(id: string) { this.deletedNotes.delete(id); this.deletedAtMap.delete(id); }
-  markFolderSynced() { return true; }
-  applyRemoteNoteMeta(note: any) {
+async listDeletedNotesForSync() { return [...this.deletedAtMap.entries()].map(([id, deletedAt]) => ({ id, deletedAt })); }
+async markTombstonesPublished(ids: string[]) { this.publishedTombstones.push(...ids); }
+async revokeLocalDeletion(id: string) { this.deletedNotes.delete(id); this.deletedAtMap.delete(id); }
+async markFolderSynced() { return true; }
+async applyRemoteNoteMeta(note: any) {
     const n = this.notes.get(note.id);
     if (n) { n.title = note.title; n.parentId = note.parentId; n.sortOrder = note.sortOrder; n.updatedAt = note.updatedAt; n.isConflict = !!note.isConflict; n.icon = note.icon ?? null; n.isLocked = !!note.isLocked; n.lockedAt = note.lockedAt ?? null; }
   }
-  applyRemoteLock(id: string, locked: boolean, lockedAt: string | null) { const n = this.notes.get(id); if (n) { n.isLocked = locked; n.lockedAt = lockedAt; } }
-  markLocalNoteSynced(id: string, contentHash: string, metaAt: string, lastUploadedHash: string | null) {
+async applyRemoteLock(id: string, locked: boolean, lockedAt: string | null) { const n = this.notes.get(id); if (n) { n.isLocked = locked; n.lockedAt = lockedAt; } }
+async markLocalNoteSynced(id: string, contentHash: string, metaAt: string, lastUploadedHash: string | null) {
     const n = this.notes.get(id); if (n) n.syncState = "synced";
     this.bases.set(id, { contentHash, lastUploadedHash, lastSyncedMetaAt: metaAt });
   }
-  markSyncedIfUnchanged(id: string, expectedContentHash: string, metaAt: string, lastUploadedHash: string) {
+async markSyncedIfUnchanged(id: string, expectedContentHash: string, metaAt: string, lastUploadedHash: string) {
     const n = this.notes.get(id); if (!n) return;
     const current = sha256Sync(new TextEncoder().encode(n.content));
     if (current !== expectedContentHash) return; // B2：同步中编辑 → 不标
     n.syncState = "synced";
     this.bases.set(id, { contentHash: expectedContentHash, lastUploadedHash, lastSyncedMetaAt: metaAt });
   }
-  setSyncBase(id: string, contentHash: string, metaAt: string | null, lastUploadedHash: string | null) {
+async setSyncBase(id: string, contentHash: string, metaAt: string | null, lastUploadedHash: string | null) {
     this.bases.set(id, { contentHash, lastUploadedHash, lastSyncedMetaAt: metaAt });
   }
   folders = new Map<string, any>();
   purgedFolders = new Set<string>();
-  defaultNotebookId() { return "notebook-personal"; }
-  importRemoteFolder(folder: any) { this.folders.set(folder.id, folder); }
-  isFolderPurged(id: string): boolean { return this.purgedFolders.has(id); }
-  listFoldersForSync() {
+async defaultNotebookId() { return "notebook-personal"; }
+async importRemoteFolder(folder: any) { this.folders.set(folder.id, folder); }
+  async isFolderPurged(id: string) { return this.purgedFolders.has(id); }
+async listFoldersForSync() {
     return [...this.folders.values()].map((f) => ({
       id: f.id, title: f.title, parentId: f.parentId ?? null, sortOrder: f.sortOrder ?? 0,
       nodeType: f.nodeType ?? "group", icon: f.icon ?? null, updatedAt: f.updatedAt ?? "2026-01-01T00:00:00.000Z",
     }));
   }
   history: Array<{ noteId: string; content: string; meta: any }> = [];
-  createHistorySnapshot(noteId: string, content: string, meta: { title: string; parentId: string | null; sortOrder: number }) {
+async createHistorySnapshot(noteId: string, content: string, meta: { title: string; parentId: string | null; sortOrder: number }) {
     this.history.push({ noteId, content, meta });
   }
   assets = new Map<string, Uint8Array>();
@@ -104,16 +104,16 @@ class MemDb implements SyncDbPort {
     return this.assets.get(noteId + "/" + filename) ?? null;
   }
   declaredAssets = new Map<string, Array<{ filename: string; size: number; hash: string }>>();
-  recordDeclaredAssets(noteId: string, assets: Array<{ filename: string; size: number; hash: string }>) { this.declaredAssets.set(noteId, assets); }
-  listDeclaredAssets(noteId: string) { return this.declaredAssets.get(noteId) ?? []; }
+async recordDeclaredAssets(noteId: string, assets: Array<{ filename: string; size: number; hash: string }>) { this.declaredAssets.set(noteId, assets); }
+async listDeclaredAssets(noteId: string) { return this.declaredAssets.get(noteId) ?? []; }
   lastSeenCommitId: string | null = null;
   lastTombstoneSig = "";
-  getLastSeenCommitId() { return this.lastSeenCommitId; }
-  setLastSeenCommitId(id: string) { this.lastSeenCommitId = id; }
-  getLastTombstoneSig() { return this.lastTombstoneSig; }
-  setLastTombstoneSig(sig: string) { this.lastTombstoneSig = sig; }
-  tombstoneSignature() { return `${this.deletedNotes.size}:${[...this.deletedNotes].sort().at(-1) ?? ""}`; }
-  hasLocalPendingNotes() { return [...this.notes.values()].some((n) => n.syncState !== "synced"); }
+async getLastSeenCommitId() { return this.lastSeenCommitId; }
+async setLastSeenCommitId(id: string) { this.lastSeenCommitId = id; }
+async getLastTombstoneSig() { return this.lastTombstoneSig; }
+async setLastTombstoneSig(sig: string) { this.lastTombstoneSig = sig; }
+async tombstoneSignature() { return `${this.deletedNotes.size}:${[...this.deletedNotes].sort().at(-1) ?? ""}`; }
+async hasLocalPendingNotes() { return [...this.notes.values()].some((n) => n.syncState !== "synced"); }
 }
 
 function promisifyDb(db: MemDb): SyncDbPort {
@@ -279,7 +279,7 @@ describe("syncEngine（共享编排）", () => {
     const s3 = new MemS3();
     const db = new MemDb();
     let defaultCalled = 0;
-    db.defaultNotebookId = () => { defaultCalled++; return "notebook-uncategorized"; };
+    db.defaultNotebookId = async () => { defaultCalled++; return "notebook-uncategorized"; };
     const H = hashOf("<p>x</p>");
     // 本地：该笔记正文 H、父指向一个已消失的笔记本（悬空），已同步，元数据基线较新
     db.notes.set("n1", row({ id: "n1", content: "<p>x</p>", parentId: "dead-notebook", syncState: "synced", updatedAt: "2026-06-01T00:00:00.000Z" }));
@@ -624,7 +624,7 @@ describe("syncEngine（共享编排）", () => {
     const s3 = new MemS3();
     const db = new MemDb();
     // 模拟本地无任何笔记本：defaultNotebookId 返回自动创建的普通笔记本"未分类"（随机 ID，非固定 notebook-personal）
-    db.defaultNotebookId = () => "notebook-uncategorized";
+    db.defaultNotebookId = async () => "notebook-uncategorized";
     const h1 = hashOf("<p>a</p>");
     s3.map.set("p/objects/n1-" + h1 + ".lake", new TextEncoder().encode("<p>a</p>"));
     s3.map.set("p/manifests/latest.json", new TextEncoder().encode(JSON.stringify({
@@ -651,7 +651,7 @@ describe("syncEngine（共享编排）", () => {
       notes: [],
       folders: [{ id: "nb-1", title: "笔记本", parentId: null, sortOrder: 0, nodeType: "notebook", icon: null, updatedAt: "2026-01-01T00:00:00.000Z" }],
     })));
-    expect(db.isFolderPurged("nb-1")).toBe(true); // 前置：purged 标记已设
+    expect(await db.isFolderPurged("nb-1")).toBe(true); // 前置：purged 标记已设
     const r = await syncNow(CFG, s3, db);
     // 1) 下载不复活：nb-1 不被导入本地 folders
     // eslint-disable-next-line no-console
@@ -749,9 +749,9 @@ describe("syncEngine（共享编排）", () => {
     })));
     const r = await syncNow(CFG, s3, db);
     expect(r.appliedRemote).toBe(1);
-    expect(db.getNote("nt")!.trashedAt).not.toBeNull(); // 已入回收站
+    expect((await db.getNote("nt"))!.trashedAt).not.toBeNull(); // 已入回收站
     expect(db.assets.has("nt/photo.png")).toBe(false);  // 惰性：资源文件不下载
-    expect(db.listDeclaredAssets("nt")).toEqual([{ filename: "photo.png", size: 8, hash: imgHash }]); // 但声明元数据已记录
+    expect(await db.listDeclaredAssets("nt")).toEqual([{ filename: "photo.png", size: 8, hash: imgHash }]); // 但声明元数据已记录
   });
 
   it("零变更早退：无变化二次同步整轮跳过（记账基线生效）", async () => {
@@ -881,7 +881,7 @@ describe("syncEngine（共享编排）", () => {
     const s3 = new MemS3();
     const db = new MemDb();
     let defaultCalled = 0;
-    db.defaultNotebookId = () => { defaultCalled++; return "notebook-uncategorized"; };
+    db.defaultNotebookId = async () => { defaultCalled++; return "notebook-uncategorized"; };
     const h = hashOf("<p>old</p>");
     // 本地无任何笔记本 + 本地删除墓碑较新；远端唯一笔记父目录也缺失（若能落地本会回退兜底）
     db.deletedNotes.add("n1");
@@ -901,7 +901,7 @@ describe("syncEngine（共享编排）", () => {
     const s3 = new MemS3();
     const db = new MemDb();
     let defaultCalled = 0;
-    db.defaultNotebookId = () => { defaultCalled++; return "notebook-uncategorized"; };
+    db.defaultNotebookId = async () => { defaultCalled++; return "notebook-uncategorized"; };
     const h1 = hashOf("<p>a</p>"), h2 = hashOf("<p>b</p>");
     s3.map.set("p/objects/n1-" + h1 + ".lake", new TextEncoder().encode("<p>a</p>"));
     s3.map.set("p/objects/n2-" + h2 + ".lake", new TextEncoder().encode("<p>b</p>"));

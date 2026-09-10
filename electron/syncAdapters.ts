@@ -57,7 +57,7 @@ export function createStoreSyncPort(store: Store): SyncDbPort {
 
   return {
     // P3-1：显式取正文入口——engine 只在留历史快照/上传入队时调用（单行查询 + 读文件）。
-    getNote(id: string): LocalNoteRow | null {
+    async getNote(id: string): Promise<LocalNoteRow | null> {
       const n = store.getNoteForSync(id);
       if (!n) return null;
       const row = rowFromSync(n);
@@ -67,40 +67,40 @@ export function createStoreSyncPort(store: Store): SyncDbPort {
     },
     // P3-1：元数据 + contentHash（synced 走 baseHash 缓存零 IO；仅待同步笔记读文件算 hash），
     // 不再无条件读全文——engine 在需要正文的分支显式调 getNote。
-    getAllNotes(): LocalNoteRow[] {
+    async getAllNotes(): Promise<LocalNoteRow[]> {
       return store.listNotesForSync().map((n) => {
         const row = rowFromSync(n);
         row.contentHash = localHashOf(store, n) ?? undefined;
         return row;
       });
     },
-    getSyncBase(id: string) {
+    async getSyncBase(id: string) {
       const base = store.baseHash(id);
       if (base === null) return null;
       const out = { contentHash: base, lastUploadedHash: store.lastUploadedHash(id), lastSyncedMetaAt: store.lastSyncedMetaAt(id) ?? null };
       return out;
     },
-    recordDeclaredAssets(noteId: string, assets: Array<{ filename: string; size: number; hash: string }>): void {
+    async recordDeclaredAssets(noteId: string, assets: Array<{ filename: string; size: number; hash: string }>): Promise<void> {
       if (typeof (store as any).recordDeclaredAssets === "function") store.recordDeclaredAssets(noteId, assets);
     },
-    listDeclaredAssets(noteId: string): Array<{ filename: string; size: number; hash: string }> {
+    async listDeclaredAssets(noteId: string): Promise<Array<{ filename: string; size: number; hash: string }>> {
       return typeof (store as any).listDeclaredAssets === "function" ? store.listDeclaredAssets(noteId) : [];
     },
-    applyRemoteNote(note: ManifestNote, content: string): void {
+    async applyRemoteNote(note: ManifestNote, content: string): Promise<void> {
       store.importRemoteNote(note as never, Buffer.from(content, "utf8"), []);
     },
-    applyRemoteTrash(id: string, content: string, title: string, trashedAt: string, deletedFromParentId: string | null, parentId: string | null, sortOrder: number): void {
+    async applyRemoteTrash(id: string, content: string, title: string, trashedAt: string, deletedFromParentId: string | null, parentId: string | null, sortOrder: number): Promise<void> {
       // 先写删除方最新内容（墓碑携带内容，删除压编辑——B 的离线编辑不得溜进回收站，对齐桌面原 trash-cross）
       try { fs.writeFileSync(store.notePathFor(id), content, "utf8"); } catch { /* 内容写失败不阻断移入回收站 */ }
       store.applyRemoteMoveToTrash(id, trashedAt, deletedFromParentId);
     },
-    localTrashNote(id: string): void { store.deleteTreeNode(id); },
-    localRestoreNote(id: string): void { store.restoreTrashItem(id); },
-    applyRemotePurge(id: string): void { store.applyRemotePurge(id); },
-    rememberDeleted(note: ManifestNote, deletedAt: string): void { store.rememberDeleted(note as never, deletedAt); },
-    applyRemoteNoteMeta(note: ManifestNote): void { store.applyRemoteNoteMeta(note as never); },
-    applyRemoteLock(id: string, locked: boolean, lockedAt: string | null): void { store.applyRemoteLock(id, locked, lockedAt); },
-    markLocalNoteSynced(id: string, contentHash: string, metaAt: string, lastUploadedHash: string | null): void {
+    async localTrashNote(id: string): Promise<void> { store.deleteTreeNode(id); },
+    async localRestoreNote(id: string): Promise<void> { store.restoreTrashItem(id); },
+    async applyRemotePurge(id: string): Promise<void> { store.applyRemotePurge(id); },
+    async rememberDeleted(note: ManifestNote, deletedAt: string): Promise<void> { store.rememberDeleted(note as never, deletedAt); },
+    async applyRemoteNoteMeta(note: ManifestNote): Promise<void> { store.applyRemoteNoteMeta(note as never); },
+    async applyRemoteLock(id: string, locked: boolean, lockedAt: string | null): Promise<void> { store.applyRemoteLock(id, locked, lockedAt); },
+    async markLocalNoteSynced(id: string, contentHash: string, metaAt: string, lastUploadedHash: string | null): Promise<void> {
       store.setBaseHash(id, contentHash);
       // 无条件写：string = 本机上传版本；null = 两端一致 skip（清除误标，SQL 写 NULL）
       store.setLastUploadedHash(id, lastUploadedHash);
@@ -110,7 +110,7 @@ export function createStoreSyncPort(store: Store): SyncDbPort {
         sortOrder: n.sortOrder, isLocked: !!n.isLocked, lockedAt: n.lockedAt ?? null, icon: n.icon ?? null,
       });
     },
-    markSyncedIfUnchanged(id: string, expectedContentHash: string, metaAt: string, lastUploadedHash: string): void {
+    async markSyncedIfUnchanged(id: string, expectedContentHash: string, metaAt: string, lastUploadedHash: string): Promise<void> {
       const n = store.getNoteForSync(id);
       if (!n) return;
       // 记账三元组：baseHash（基线）+ lastUploadedHash（已发布 hash，null=下载对账不写）+ lastSyncedMetaAt
@@ -121,7 +121,7 @@ export function createStoreSyncPort(store: Store): SyncDbPort {
         sortOrder: n.sortOrder, isLocked: !!n.isLocked, lockedAt: n.lockedAt ?? null, icon: n.icon ?? null,
       });
     },
-    setSyncBase(id: string, contentHash: string, metaAt: string | null, lastUploadedHash: string | null): void {
+    async setSyncBase(id: string, contentHash: string, metaAt: string | null, lastUploadedHash: string | null): Promise<void> {
       store.setBaseHash(id, contentHash);
       if (lastUploadedHash) store.setLastUploadedHash(id, lastUploadedHash);
       // 下载对账也记录已确认版本（lastSyncedMetaAt）——否则 lma=null 使 decideMetaApply 恒 true，
@@ -134,15 +134,15 @@ export function createStoreSyncPort(store: Store): SyncDbPort {
         });
       }
     },
-    defaultNotebookId(): string { return store.defaultNotebookId(); },
-    importRemoteFolder(folder: ManifestFolder): void { store.importRemoteFolder(folder as never); },
-    listFoldersForSync() {
+    async defaultNotebookId(): Promise<string> { return store.defaultNotebookId(); },
+    async importRemoteFolder(folder: ManifestFolder): Promise<void> { store.importRemoteFolder(folder as never); },
+    async listFoldersForSync() {
       return store.listFoldersForSync().map((f) => ({
         id: f.id, title: f.title, parentId: f.parentId ?? null, sortOrder: f.sortOrder, nodeType: f.nodeType,
         icon: f.icon ?? null, updatedAt: f.updatedAt, trashedAt: f.trashedAt ?? null, deletedFromParentId: f.deletedFromParentId ?? null,
       }));
     },
-    createHistorySnapshot(noteId: string, content: string, meta: { title: string; parentId: string | null; sortOrder: number; protectedDays?: number }): void {
+    async createHistorySnapshot(noteId: string, content: string, meta: { title: string; parentId: string | null; sortOrder: number; protectedDays?: number }): Promise<void> {
       try { store.createHistorySnapshot(noteId, content, false, meta.protectedDays); } catch { /* 留档失败不阻断 */ }
     },
     async saveAsset(noteId: string, filename: string, bytes: Uint8Array): Promise<void> {
@@ -176,30 +176,30 @@ export function createStoreSyncPort(store: Store): SyncDbPort {
       const full = path.join(store.noteAssetsPathFor(noteId), filename);
       return fs.existsSync(full) ? fs.createReadStream(full) : null;
     },
-    listDeletedNotesForSync() {
+    async listDeletedNotesForSync() {
       return store.listDeletedNotesForSync().map((d) => ({ id: d.id, deletedAt: d.deletedAt, title: d.title, nodeType: d.nodeType }));
     },
     // 可选：sync.test FakeStore 等旧桩可能无此方法（发布方向标记缺失时计数降级，不影响同步正确性）
-    markTombstonesPublished(ids: string[]): void {
+    async markTombstonesPublished(ids: string[]): Promise<void> {
       store.markTombstonesPublished?.(ids);
     },
     async readDeletedContent(id: string): Promise<string | null> {
       try { return fs.readFileSync(store.notePathFor(id), "utf8"); } catch { return null; }
     },
-    forceHashRead(id: string): string | null {
+    async forceHashRead(id: string): Promise<string | null> {
       try { return store.contentHash(id); } catch { return null; }
     },
-    revokeLocalDeletion(id: string): void { store.revokeLocalDeletion(id); },
-    markFolderSynced(id: string, expectedUpdatedAt: string): boolean { return store.markFolderSynced(id, expectedUpdatedAt); },
+    async revokeLocalDeletion(id: string): Promise<void> { store.revokeLocalDeletion(id); },
+    async markFolderSynced(id: string, expectedUpdatedAt: string): Promise<boolean> { return store.markFolderSynced(id, expectedUpdatedAt); },
     // 可选调用：测试 FakeStore/旧实现可能无此方法（文件夹级 purge 墓碑是新能力），无则 false
-    isFolderPurged(id: string): boolean { return store.isFolderPurged?.(id) ?? false; },
-    getLastSeenCommitId(): string | null { return store.getLastSeenCommitId(); },
-    setLastSeenCommitId(commitId: string): void { store.setLastSeenCommitId(commitId); },
-    getLastTombstoneSig(): string { return store.getLastTombstoneSig(); },
-    setLastTombstoneSig(sig: string): void { store.setLastTombstoneSig(sig); },
-    tombstoneSignature(): string { return store.tombstoneSignature(); },
-    hasLocalPendingNotes(): boolean { return store.hasLocalPendingNotes(); },
-    log(msg: string): void { store.logScopes.sync.info(msg); },
+    async isFolderPurged(id: string): Promise<boolean> { return store.isFolderPurged?.(id) ?? false; },
+    async getLastSeenCommitId(): Promise<string | null> { return store.getLastSeenCommitId(); },
+    async setLastSeenCommitId(commitId: string): Promise<void> { store.setLastSeenCommitId(commitId); },
+    async getLastTombstoneSig(): Promise<string> { return store.getLastTombstoneSig(); },
+    async setLastTombstoneSig(sig: string): Promise<void> { store.setLastTombstoneSig(sig); },
+    async tombstoneSignature(): Promise<string> { return store.tombstoneSignature(); },
+    async hasLocalPendingNotes(): Promise<boolean> { return store.hasLocalPendingNotes(); },
+    async log(msg: string): Promise<void> { store.logScopes.sync.info(msg); },
   };
 }
 

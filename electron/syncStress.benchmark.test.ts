@@ -64,27 +64,27 @@ class BigPort implements SyncDbPort {
     return { id, title: `笔记 ${id}`, content, updatedAt: "2026-01-01T00:00:00.000Z", syncState, trashedAt: null, restorePendingAt: null, parentId: "nb-root", sortOrder: 0, isLocked: false, lockedAt: null, icon: null, isConflict: false, contentHash: hashOf(content) };
   }
   seed(id: string, n: number) { const l: Array<{ filename: string; size: number; hash: string }> = []; for (let i = 0; i < n; i += 1) l.push({ filename: `1788355${String(i).padStart(6, "0")}_stress${i}.png`, size: PNG.length, hash: PNG_HASH }); this.assets.set(id, l); return l; }
-  getNote(id: string) { return this.notes.get(id) ?? null; }
-  getAllNotes() { return [...this.notes.values()]; }
-  getSyncBase(id: string) { return this.bases.get(id) ?? null; }
-  setSyncBase(id: string, ch: string, metaAt: string | null, lu: string | null) { this.bases.set(id, { contentHash: ch, lastUploadedHash: lu, lastSyncedMetaAt: metaAt }); }
-  markLocalNoteSynced(id: string, ch: string, metaAt: string, lu: string | null) { this.bases.set(id, { contentHash: ch, lastUploadedHash: lu, lastSyncedMetaAt: metaAt }); const n = this.notes.get(id); if (n) n.syncState = "synced"; }
-  markSyncedIfUnchanged(id: string, exp: string, metaAt: string, lu: string | null) { const n = this.notes.get(id); if (n && n.contentHash === exp) this.markLocalNoteSynced(id, exp, metaAt, lu); }
-  applyRemoteNote(note: ManifestNote) { const n = this.notes.get(note.id); this.notes.set(note.id, n ? { ...n, title: note.title, syncState: "synced" } : this.row(note.id, "<p>r</p>")); }
-  applyRemoteNoteMeta(note: ManifestNote) { const n = this.notes.get(note.id); if (n) n.title = note.title; }
-  applyRemoteTrash(): void {} localTrashNote(): void {} localRestoreNote(): void {}
-  applyRemotePurge(id: string) { const n = this.notes.get(id); if (n) n.syncState = "purged"; }
-  rememberDeleted(note: ManifestNote, at: string) { this.deleted.set(note.id, at); }
-  listDeletedNotesForSync() { return [...this.deleted.entries()].map(([id, deletedAt]) => ({ id, deletedAt })); }
-  applyRemoteLock(): void {} createHistorySnapshot(): void {} saveAsset(): Promise<void> { return Promise.resolve(); }
+async getNote(id: string) { return this.notes.get(id) ?? null; }
+async getAllNotes() { return [...this.notes.values()]; }
+async getSyncBase(id: string) { return this.bases.get(id) ?? null; }
+async setSyncBase(id: string, ch: string, metaAt: string | null, lu: string | null) { this.bases.set(id, { contentHash: ch, lastUploadedHash: lu, lastSyncedMetaAt: metaAt }); }
+async markLocalNoteSynced(id: string, ch: string, metaAt: string, lu: string | null) { this.bases.set(id, { contentHash: ch, lastUploadedHash: lu, lastSyncedMetaAt: metaAt }); const n = this.notes.get(id); if (n) n.syncState = "synced"; }
+async markSyncedIfUnchanged(id: string, exp: string, metaAt: string, lu: string | null) { const n = this.notes.get(id); if (n && n.contentHash === exp) this.markLocalNoteSynced(id, exp, metaAt, lu); }
+async applyRemoteNote(note: ManifestNote) { const n = this.notes.get(note.id); this.notes.set(note.id, n ? { ...n, title: note.title, syncState: "synced" } : this.row(note.id, "<p>r</p>")); }
+async applyRemoteNoteMeta(note: ManifestNote) { const n = this.notes.get(note.id); if (n) n.title = note.title; }
+  async applyRemoteTrash() {} async localTrashNote() {} async localRestoreNote() {}
+async applyRemotePurge(id: string) { const n = this.notes.get(id); if (n) n.syncState = "purged"; }
+async rememberDeleted(note: ManifestNote, at: string) { this.deleted.set(note.id, at); }
+async listDeletedNotesForSync() { return [...this.deleted.entries()].map(([id, deletedAt]) => ({ id, deletedAt })); }
+  async applyRemoteLock() {} async createHistorySnapshot() {} saveAsset(): Promise<void> { return Promise.resolve(); }
   async listLocalAssets(id: string) { return this.assets.get(id) ?? []; }
   async readLocalAsset() { return new Uint8Array(PNG); }
-  defaultNotebookId() { this.defaultCalls++; return "nb-root"; }
-  importRemoteFolder(_f: ManifestFolder): void {}
-  getLastSeenCommitId() { return this.lastSeenCommitId; } setLastSeenCommitId(id: string) { this.lastSeenCommitId = id; }
-  getLastTombstoneSig() { return this.lastTombstoneSig; } setLastTombstoneSig(s: string) { this.lastTombstoneSig = s; }
-  tombstoneSignature() { return `${this.deleted.size}`; } hasLocalPendingNotes() { return [...this.notes.values()].some((n) => n.syncState !== "synced"); }
-  log(): void {}
+async defaultNotebookId() { this.defaultCalls++; return "nb-root"; }
+  async importRemoteFolder(_f: ManifestFolder) {}
+  async getLastSeenCommitId() { return this.lastSeenCommitId; } async setLastSeenCommitId(id: string) { this.lastSeenCommitId = id; }
+  async getLastTombstoneSig() { return this.lastTombstoneSig; } async setLastTombstoneSig(s: string) { this.lastTombstoneSig = s; }
+  async tombstoneSignature() { return `${this.deleted.size}`; } async hasLocalPendingNotes() { return [...this.notes.values()].some((n) => n.syncState !== "synced"); }
+  async log() {}
 }
 
 const reset = () => { for (const k of Object.keys(tally)) delete tally[k]; };
