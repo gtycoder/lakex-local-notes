@@ -79,24 +79,24 @@ export function orphanFilenamesForNote(d: DbLike, noteId: string): Set<string> {
   return new Set(rows.map((r) => r.filename));
 }
 
-export function listNotes(d: DbLike): POCNoteSummary[] {
+export async function listNotes(d: DbLike): Promise<POCNoteSummary[]> {
   const rows = d.prepare("SELECT id, title, updated_at, parent_id FROM notes WHERE trashed_at IS NULL ORDER BY updated_at DESC").all();
   return rows.map(rowToNoteSummary);
 }
 
-export function readNote(d: DbLike, id: string): POCNote | null {
+export async function readNote(d: DbLike, id: string): Promise<POCNote | null> {
   const row = d.prepare("SELECT id, title, content, updated_at FROM notes WHERE id = ?").get(id);
   return row ? rowToNote(row) : null;
 }
 
 /** 打开文档前的"是否已消失"判定原料（AGENTS §3 #16）。 */
-export function noteGoneState(d: DbLike, id: string): { parentId: string | null; syncState: string } | null {
+export async function noteGoneState(d: DbLike, id: string): Promise<{ parentId: string | null; syncState: string } | null> {
   const row = d.prepare("SELECT parent_id, sync_state FROM notes WHERE id = ?").get(id) as { parent_id: string | null; sync_state: string | null } | undefined;
   return row ? { parentId: row.parent_id, syncState: row.sync_state ?? "" } : null;
 }
 
 /** Phase 0B-5：搜索 fallback（sql.js 无 FTS5 → LIKE；标题+正文，参数化 + ESCAPE）。 */
-export function searchNotes(d: DbLike, query: string): SearchResult[] {
+export async function searchNotes(d: DbLike, query: string): Promise<SearchResult[]> {
   const pattern = buildLikePattern(query);
   if (!pattern) return [];
   const [sql, params] = buildSearchSql(pattern);
@@ -130,11 +130,11 @@ export async function saveNote(
 }
 
 /** 本地软删（入回收站）：同步时上传墓碑（删除压编辑）。 */
-export function trashNote(d: DbLike, id: string): void {
+export async function trashNote(d: DbLike, id: string): Promise<void> {
   d.prepare("UPDATE notes SET trashed_at=?, sync_state='local', restore_pending_at=NULL WHERE id=?").run(new Date().toISOString(), id);
 }
 
-export function listTrashed(d: DbLike): POCNote[] {
+export async function listTrashed(d: DbLike): Promise<POCNote[]> {
   const rows = d.prepare("SELECT id, title, content, updated_at FROM notes WHERE trashed_at IS NOT NULL ORDER BY trashed_at DESC").all();
   return rows.map(rowToNote);
 }

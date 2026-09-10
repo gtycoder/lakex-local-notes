@@ -232,24 +232,24 @@ export const bridge = {
 
   async listNotes(): Promise<POCNoteSummary[]> {
     const d = await ensureDb();
-    return noteRepository.listNotes(d);
+    return await noteRepository.listNotes(d);
   },
 
   async readNote(id: string): Promise<POCNote | null> {
     const d = await ensureDb();
-    return noteRepository.readNote(d, id);
+    return await noteRepository.readNote(d, id);
   },
 
   /** 打开文档前的"是否已消失"判定原料（AGENTS §3 #16：所有打开入口都要判，判定逻辑用共享纯函数 isGoneNote）。 */
   async noteGoneState(id: string): Promise<{ parentId: string | null; syncState: string } | null> {
     const d = await ensureDb();
-    return noteRepository.noteGoneState(d, id);
+    return await noteRepository.noteGoneState(d, id);
   },
 
   /** Phase 0B-5：搜索 fallback（sql.js 无 FTS5 → LIKE；标题+正文，参数化 + ESCAPE）。 */
   async searchNotes(query: string): Promise<SearchResult[]> {
     const d = await ensureDb();
-    return noteRepository.searchNotes(d, query);
+    return await noteRepository.searchNotes(d, query);
   },
 
   // ---- 小记（Phase B3：本地 CRUD + 列表；同步后置，依赖 quick-notes/ 子空间端口化） ----
@@ -468,7 +468,7 @@ export const bridge = {
   async trashNote(id: string): Promise<void> {
     return maintenance.run("main", async () => {
       const d = await ensureDb();
-      noteRepository.trashNote(d, id);
+      await noteRepository.trashNote(d, id);
       await saveSnapshot(d.exportBytes());
     });
   },
@@ -490,7 +490,7 @@ export const bridge = {
   /** 回收站列表 */
   async listTrashed(): Promise<POCNote[]> {
     const d = await ensureDb();
-    return noteRepository.listTrashed(d);
+    return await noteRepository.listTrashed(d);
   },
 
   /** 软删除（入回收站）：folder = 整棵子树（含深层 folders + 子树 notes）标 trashed_at；note = 单条。
