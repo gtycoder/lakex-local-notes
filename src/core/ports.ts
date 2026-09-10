@@ -29,7 +29,7 @@ export interface TreeRepository {
 /**
  * 平台安全密钥存储（移动端方案 §17.5）。
  * 平台实现：Electron → safeStorage（Keychain）；Android → Keystore-backed storage；测试 → memory fake。
- * Secret 不进入 sql.js 主表/IndexedDB 普通 kv/manifest/日志。
+ * Secret 不进入 SQLite 主表/IndexedDB 普通 kv/manifest/日志。
  */
 export interface SecretStore {
   read(key: string): Promise<string | null>;
@@ -52,7 +52,7 @@ export interface ClearCacheResult {
 
 /**
  * 派生缓存端口（移动端方案 §6.3）：只清理可重建数据。
- * 永远不可清理：sql.js 主库/正文/未同步修改/.lake/历史快照/待上传资源/仍被引用的本地资源。
+ * 永远不可清理：SQLite 主库/正文/未同步修改/.lake/历史快照/待上传资源/仍被引用的本地资源。
  */
 export interface CachePort {
   getCacheSummary(): Promise<CacheSummary>;

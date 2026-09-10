@@ -11,7 +11,7 @@ import type { ManifestNote } from "./manifestTypes.js";
  * v4 协议：软删（回收站）= parentId 指向此 + trashedAt；deleted:true 仅用于 purge。 */
 export const TRASH_NOTEBOOK_ID = "notebook-trash";
 
-/** 决策函数输入的本地状态快照（普通对象；桌面从 store 行映射，移动端从 sql.js 行映射）。 */
+/** 决策函数输入的本地状态快照（普通对象；桌面从 Store 行映射，移动端从 native SQLite 行映射）。 */
 export interface LocalNoteState {
   id: string; title: string; parentId: string | null; sortOrder: number;
   updatedAt: string; syncState?: string; isConflict: boolean;

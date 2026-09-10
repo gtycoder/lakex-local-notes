@@ -1,6 +1,6 @@
 /**
  * 移动端 CachePort（Phase 0B-3，§17.4 缓存边界）。
- * 只清理可重建派生数据；绝不清理：sql.js 主库/正文/未同步修改/.lake/历史快照/待上传资源/仍被引用的本地资源。
+ * 只清理可重建派生数据；绝不清理：native SQLite 主库/正文/未同步修改/.lake/历史快照/待上传资源/仍被引用的本地资源。
  * 分类：runtimeBlob（blob URL 运行时）/ downloadable（已下载资源，仅二次确认）。
  * （IndexedDB 旧资产迁移残留分类已于 2026-08-28 清理——资产全走 Filesystem 文件，无 IndexedDB 资产。）
  */

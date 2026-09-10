@@ -1,7 +1,6 @@
 /**
- * 数据库注入点（lake-core，V5 Phase 2）：DbLike 接口先行。
- * 桌面默认 = better-sqlite3 的 Database（结构兼容，无需包装类）；
- * 移动端可提供 AsyncDb / WASM 实现。事务边界不动（调用方仍用 db.transaction(fn)）。
+ * 桌面同步 SQLite 注入点：better-sqlite3 Database 结构兼容本接口，无需包装类。
+ * 移动端使用独立的 MobileDb 异步契约，不共享“数据库必须在调用方同步执行”的假设。
  */
 
 export interface DbLikeStatement {

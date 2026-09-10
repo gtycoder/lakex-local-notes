@@ -2,7 +2,7 @@
  * 小记查询共享核心（Phase 0B-4：从 electron/quickNotesQueries.ts 抽取纯映射逻辑）。
  * 原则（§6.5 用户定调）：共享"难逻辑"纯函数，不共享编排骨架。
  * 本文件只包含：行→文档映射、删除行→已删记录映射（无 fs/平台依赖）。
- * 内容读取（文件/sql.js）由调用方注入后经 mapDocument 组装。
+ * 内容读取（桌面文件 / 移动端 native SQLite）由调用方注入后经 mapDocument 组装。
  */
 import type { QuickNoteDocument, QuickNoteSummary } from "../lib/types.js";
 import type { StoredQuickNoteContent } from "./quickNoteModel.js";

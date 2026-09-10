@@ -3,7 +3,7 @@
  * 降级实现：WebCrypto AES-GCM + IndexedDB 密文存储（优于 localStorage 明文）。
  * ⚠️ 标注：非硬件级安全（密钥仍可被 WebView 内存读取）；正式版应替换为 Android Keystore-backed
  * 实现（如 @aparajita/capacitor-secure-storage 或自写 bridge 原生方法），接口不变（见 src/core/ports.ts SecretStore）。
- * 约束：Secret 不进入 sql.js 主表 / manifest / 日志；解密只在需要时进行。
+ * 约束：Secret 不进入 SQLite 主表 / manifest / 日志；解密只在需要时进行。
  */
 import type { SecretStore } from "../core/ports.js";
 

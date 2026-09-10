@@ -71,7 +71,7 @@ export interface QuickNoteSyncItem {
 
 /**
  * Quick Notes 本地存储端口（平台注入）。
- * 桌面：QuickNotesStore（node sqlite + .qnote 文件）；移动端：sql.js quick_notes 表 + 内容列。
+ * 桌面：QuickNotesStore（node sqlite + .qnote 文件）；移动端：native SQLite quick_notes 表 + 内容列。
  */
 export interface QuickNotesSyncDbPort {
   listLocalQuickNotes(): Promise<QuickNoteSyncItem[]>;

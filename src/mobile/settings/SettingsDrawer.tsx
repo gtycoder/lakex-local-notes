@@ -322,7 +322,7 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
                   <div className="config-block__name">{appInfo?.name ?? "Lake Notes"}</div>
                   <div className="config-block__text">版本：{appInfo?.version ?? "…"}（build {appInfo?.build ?? "…"}）</div>
                   <div className="config-block__text">协议：manifest v{appInfo?.protocolVersion ?? "4"} · 本地为真相，S3 为同步镜像</div>
-                  <div className="config-block__text">平台：{appInfo?.platform === "web" ? "Web 预览 (Capacitor 未就绪)" : "Android (Capacitor + sql.js WASM)"}</div>
+                  <div className="config-block__text">平台：{appInfo?.platform === "web" ? "Web 预览 (Capacitor 未就绪)" : "Android (Capacitor + native SQLite)"}</div>
                   <div className="config-block__text">本地优先笔记应用（Electron + 安卓共享同步层）</div>
                 </div>
                 {diag && (

@@ -2,7 +2,7 @@
  * 移动端 Quick Notes 同步端口（quickNotesSyncEngine 的本地存储实现）。
  *
  * 独立于 bridge.ts 以便单测（注入测试用同步 DB + 资产文件依赖，不依赖 Capacitor/native SQLite 装载）：
- * - sql.js 单库方案：quick_notes 行 + content 列（序列化正文）；图片**纯文件**（无 BLOB，与桌面一致），
+ * - native SQLite 单库方案：quick_notes 行 + content 列（序列化正文）；图片**纯文件**（无 BLOB，与桌面一致），
  *   同步端口通过注入的 assetBytes 内存层 + 文件读写操作图片（复用 Lake 资源同步的既有模式：
  *   内存 Map 同步访问 + fire-and-forget 落盘 + 读时文件兜底）；
  * - 与桌面 QuickNotesStore 语义对齐：软删保留内容（墓碑携带）、恢复标记、同步基线、冲突归档新 id。

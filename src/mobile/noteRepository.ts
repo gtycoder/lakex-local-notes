@@ -95,7 +95,7 @@ export async function noteGoneState(d: MobileDb, id: string): Promise<{ parentId
   return row ? { parentId: row.parent_id, syncState: row.sync_state ?? "" } : null;
 }
 
-/** Phase 0B-5：搜索 fallback（sql.js 无 FTS5 → LIKE；标题+正文，参数化 + ESCAPE）。 */
+/** Phase 0B-5：搜索 fallback（LIKE；标题+正文，参数化 + ESCAPE）。 */
 export async function searchNotes(d: MobileDb, query: string): Promise<SearchResult[]> {
   const pattern = buildLikePattern(query);
   if (!pattern) return [];

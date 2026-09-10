@@ -1,5 +1,5 @@
 /**
- * 移动端搜索 fallback（Phase 0B-5）：sql.js 无 FTS5（已实测 no such module），一期用 LIKE。
+ * 移动端搜索 fallback（Phase 0B-5）：一期用 LIKE，不依赖平台 SQLite 的 FTS 编译特性。
  * 标题 LIKE + 正文 LIKE；两字以内查询也走 LIKE（不依赖 trigram）。
  * 纯查询构造（可单测）：escapeLike 转义 %/_；buildLikePattern 组装；行→结果映射。
  */

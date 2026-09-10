@@ -5,7 +5,7 @@
  * 设计语义（与普通笔记本树同构）：
  * - 回收站是隐藏笔记本；删除 = 把根节点移入回收站笔记本（parentId=notebook-trash），
  *   子节点随父（parentId 链保留，不递归改写）——所以回收站树 = trash 笔记本下的完整子树。
- * - 树查询用 WITH RECURSIVE（SQLite 3.8.3+，sql.js 支持），返回全部节点含 parentId，
+ * - 树查询用 WITH RECURSIVE（SQLite 3.8.3+），返回全部节点含 parentId，
  *   前端/执行壳按 parentId 组树。
  * - 恢复：仅对被删树的根（parent_id=trash）开放，整棵连带移回（restore 属写操作，留在各端 store）。
  * - 彻底删除：回收站树内任意节点可 purge（该节点及其子树），写操作留在各端 store。
