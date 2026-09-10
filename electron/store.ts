@@ -20,6 +20,7 @@ import { HistoryLifecycle } from "./historyLifecycle.js";
 import { OrphanLifecycle } from "./orphanLifecycle.js";
 import { Diagnostics } from "./diagnostics.js";
 import { SyncReconciliation } from "./syncReconciliation.js";
+import { SettingsRepository } from "./settingsRepository.js";
 import type { TrashItem, TrashReminderItem } from "./trashRepository.js";
 export type { TrashItem, TrashReminderItem };
 import { AssetRepository, type OrphanAsset, type OrphanAssetRow } from "./assetRepository.js";
@@ -32,7 +33,7 @@ import { createPlaintextSecretCipher, type SecretCipher } from "../src/core/secr
 import type { DbLike } from "./dbLike.js";
 import { ResourceRepository } from "./resourceRepository.js";
 import { RemoteImportRepository } from "./remoteImportRepository.js";
-import type { ResourceUploadOutput, HistorySettings, HistoryCleanupResult } from "./storeTypes.js";
+import type { ResourceUploadOutput, HistorySettings, HistoryCleanupResult, S3Settings, SyncSettings, S3GcSettings } from "./storeTypes.js";
 import { sqlParameterBatches } from "../src/core/sqlParameterBatch.js";
 
 export { ASSET_NAME_RE, extractAssetRefs, isoWeekKey, selectHistoryDrops, sanitizeFileName } from "../src/core/storeUtils.js";
@@ -47,33 +48,9 @@ export { MAX_IMAGE_BYTES, MAX_IMAGE_PIXELS } from "../src/core/storeLimits.js";
 export { AppError } from "../src/core/storeErrors.js";
 
 interface NoteDocument extends NoteSummary { content: string; }
-interface S3Settings {
-  endpoint: string; region: string; bucket: string; prefix: string;
-  accessKeyId: string; secretAccessKey: string; forcePathStyle: boolean;
-}
 
-/** 历史保留策略配置（P5，可配置；存 settings 表，纯本地）——定义已收敛到 storeTypes.ts */
-export type { HistorySettings, HistoryCleanupResult } from "./storeTypes.js";
-
-/** 云同步开关与自动/手动同步策略（v4，可配置；存 settings 表，纯本地） */
-export interface SyncSettings {
-  /** 云同步总开关：false 时完全不执行任何 S3 后台任务/同步（纯本地）。 */
-  enabled: boolean;
-  /** 自动同步模式：interval=按间隔；onOpenClose=仅在开启/关闭时；manual=完全手动。 */
-  autoMode: "interval" | "onOpenClose" | "manual";
-  /** autoMode=interval 时的间隔分钟数（>=1）。 */
-  autoIntervalMinutes: number;
-}
-
-/** S3 GC 保留策略配置（v4，可配置；存 settings 表，纯本地） */
-export interface S3GcSettings {
-  /** 待回收键保留窗口天数（默认 7） */
-  gcRetentionDays: number;
-  /** 定期对账周期小时数（默认 24） */
-  gcIntervalHours: number;
-  /** 回收站自动清空提醒天数（默认 0=关闭；仅提醒，不自动删） */
-  trashAutoPurgeDays: number;
-}
+/** 设置/账本类型单一来源：storeTypes.ts（S3/Sync/S3GC/History） */
+export type { S3Settings, SyncSettings, S3GcSettings, HistorySettings, HistoryCleanupResult } from "./storeTypes.js";
 
 /** 仅供主进程内部的小记转换调用。sourcePath 绝不来自渲染进程。 */
 export interface ImportedNoteAsset {
@@ -117,6 +94,7 @@ export class Store {
   private orphanLifecycle: OrphanLifecycle;
   private diagnostics: Diagnostics;
   private syncReconciliation: SyncReconciliation;
+  private settingsRepository: SettingsRepository;
   private assetRepository: AssetRepository;
   private noteQueries: NoteQueries;
   private noteMetadata: NoteMetadataRepository;
@@ -139,6 +117,7 @@ export class Store {
     this.db.pragma("journal_mode = WAL");
     this.db.pragma("foreign_keys = ON");
     this.migrate();
+    this.settingsRepository = new SettingsRepository(this.db, secretCipher);
     this.historyRepository = new HistoryRepository(this.db, this.root);
     this.trashRepository = new TrashRepository(this.db, TRASH_NOTEBOOK_ID);
     this.noteQueries = new NoteQueries(this.db, DEFAULT_WORKSPACE_ID, TRASH_NOTEBOOK_ID);
@@ -1143,65 +1122,30 @@ export class Store {
   // ===== S3 同步支持 =====
 
   getS3Settings(): S3Settings | null {
-    const row = this.db.prepare("SELECT value FROM settings WHERE key='s3_settings'").get() as { value: string } | undefined;
-    if (!row) return null;
-    try {
-      const parsed = JSON.parse(row.value) as S3Settings;
-      if (!parsed || typeof parsed.endpoint !== "string") return null;
-      if (typeof parsed.secretAccessKey === "string") parsed.secretAccessKey = this.decryptSecret(parsed.secretAccessKey);
-      return parsed;
-    } catch {
-      return null;
-    }
+    return this.settingsRepository.getS3Settings();
   }
 
-  /** A2 恢复 seed：导出 settings 表原始行（secretAccessKey 为 enc:v1: 密文，绝不解密成明文）。无配置 → null。 */
+  /** A2 恢复 seed：导出 settings 表原始行（密文直通，绝不解密）。无配置 → null。 */
   exportS3SettingsRow(): string | null {
-    const row = this.db.prepare("SELECT value FROM settings WHERE key='s3_settings'").get() as { value: string } | undefined;
-    return row?.value ?? null;
+    return this.settingsRepository.exportS3SettingsRow();
   }
 
   /** A2 恢复 seed：把密文行原样写回（不经 saveS3Settings，避免二次加密）。 */
   importS3SettingsRow(value: string): void {
-    this.db.prepare("INSERT INTO settings(key,value) VALUES('s3_settings',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value").run(value);
+    this.settingsRepository.importS3SettingsRow(value);
   }
 
   /** 历史保留策略配置（P5）：读取，缺省返回默认值 */
   getHistorySettings(): HistorySettings {
-    const row = this.db.prepare("SELECT value FROM settings WHERE key='history_settings'").get() as { value: string } | undefined;
-    const def: HistorySettings = { maxSnapshots: 100, retentionDays: 30, cleanupIntervalHours: 24, snapshotIntervalMinutes: 15 };
-    if (!row) return def;
-    try {
-      const parsed = JSON.parse(row.value) as Partial<HistorySettings>;
-      return {
-        maxSnapshots: typeof parsed.maxSnapshots === "number" && parsed.maxSnapshots > 0 ? parsed.maxSnapshots : def.maxSnapshots,
-        retentionDays: typeof parsed.retentionDays === "number" && parsed.retentionDays > 0 ? parsed.retentionDays : def.retentionDays,
-        cleanupIntervalHours: typeof parsed.cleanupIntervalHours === "number" && parsed.cleanupIntervalHours >= 0 ? parsed.cleanupIntervalHours : def.cleanupIntervalHours,
-        snapshotIntervalMinutes: typeof parsed.snapshotIntervalMinutes === "number" && parsed.snapshotIntervalMinutes >= 0 ? parsed.snapshotIntervalMinutes : def.snapshotIntervalMinutes,
-      };
-    } catch {
-      return def;
-    }
+    return this.settingsRepository.getHistorySettings();
   }
 
   saveHistorySettings(settings: HistorySettings): void {
-    this.db.prepare("INSERT INTO settings(key,value) VALUES('history_settings',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value")
-      .run(JSON.stringify(settings));
+    this.settingsRepository.saveHistorySettings(settings);
   }
 
   saveS3Settings(settings: S3Settings): void {
-    // 密钥用 Electron safeStorage（macOS Keychain）加密落盘；不可用时退回明文
-    const stored = { ...settings, secretAccessKey: this.encryptSecret(settings.secretAccessKey) };
-    this.db.prepare("INSERT INTO settings(key,value) VALUES('s3_settings',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value")
-      .run(JSON.stringify(stored));
-  }
-
-  private encryptSecret(value: string): string {
-    return this.secretCipher.encrypt(value);
-  }
-
-  private decryptSecret(value: string): string {
-    return this.secretCipher.decrypt(value);
+    this.settingsRepository.saveS3Settings(settings);
   }
 
   contentHash(id: string): string {
@@ -1269,45 +1213,19 @@ export class Store {
   }
 
   getS3GcSettings(): S3GcSettings {
-    const row = this.db.prepare("SELECT value FROM settings WHERE key='s3_gc_settings'").get() as { value: string } | undefined;
-    const def: S3GcSettings = { gcRetentionDays: 7, gcIntervalHours: 24, trashAutoPurgeDays: 60 };
-    if (!row) return def;
-    try {
-      const parsed = JSON.parse(row.value) as Partial<S3GcSettings>;
-      return {
-        gcRetentionDays: typeof parsed.gcRetentionDays === "number" && parsed.gcRetentionDays >= 0 ? parsed.gcRetentionDays : def.gcRetentionDays,
-        gcIntervalHours: typeof parsed.gcIntervalHours === "number" && parsed.gcIntervalHours >= 0 ? parsed.gcIntervalHours : def.gcIntervalHours,
-        trashAutoPurgeDays: typeof parsed.trashAutoPurgeDays === "number" && parsed.trashAutoPurgeDays >= 0 ? parsed.trashAutoPurgeDays : def.trashAutoPurgeDays,
-      };
-    } catch {
-      return def;
-    }
+    return this.settingsRepository.getS3GcSettings();
   }
 
   saveS3GcSettings(settings: S3GcSettings): void {
-    this.db.prepare("INSERT INTO settings(key,value) VALUES('s3_gc_settings',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value")
-      .run(JSON.stringify(settings));
+    this.settingsRepository.saveS3GcSettings(settings);
   }
 
   getSyncSettings(): SyncSettings {
-    const row = this.db.prepare("SELECT value FROM settings WHERE key='sync_settings'").get() as { value: string } | undefined;
-    const def: SyncSettings = { enabled: true, autoMode: "manual", autoIntervalMinutes: 15 };
-    if (!row) return def;
-    try {
-      const parsed = JSON.parse(row.value) as Partial<SyncSettings>;
-      return {
-        enabled: typeof parsed.enabled === "boolean" ? parsed.enabled : def.enabled,
-        autoMode: parsed.autoMode === "interval" || parsed.autoMode === "onOpenClose" || parsed.autoMode === "manual" ? parsed.autoMode : def.autoMode,
-        autoIntervalMinutes: typeof parsed.autoIntervalMinutes === "number" && parsed.autoIntervalMinutes >= 1 ? Math.floor(parsed.autoIntervalMinutes) : def.autoIntervalMinutes,
-      };
-    } catch {
-      return def;
-    }
+    return this.settingsRepository.getSyncSettings();
   }
 
   saveSyncSettings(settings: SyncSettings): void {
-    this.db.prepare("INSERT INTO settings(key,value) VALUES('sync_settings',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value")
-      .run(JSON.stringify(settings));
+    this.settingsRepository.saveSyncSettings(settings);
   }
 
   addS3GcPending(key: string, markedAt?: string): void {
