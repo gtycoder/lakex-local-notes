@@ -93,6 +93,53 @@ vi.mock("./sqliteDb.js", async () => {
         return value("page_count") * value("page_size");
       }
     },
+    SqlJsAsyncDb: class {
+      private db: any;
+      constructor(db: any) {
+        this.db = db;
+      }
+      prepare(sql: string) {
+        const statement = this.db.prepare(sql);
+        return {
+          async get(...params: unknown[]) {
+            return statement.get(...params);
+          },
+          async all(...params: unknown[]) {
+            return statement.all(...params);
+          },
+          async run(...params: unknown[]) {
+            return statement.run(...params);
+          },
+        };
+      }
+      async transaction<T extends (...args: never[]) => Promise<unknown>>(
+        fn: T,
+      ): Promise<unknown> {
+        this.db.exec("BEGIN");
+        try {
+          const result = await fn();
+          this.db.exec("COMMIT");
+          return result;
+        } catch (error) {
+          this.db.exec("ROLLBACK");
+          throw error;
+        }
+      }
+      async pragma(source: string) {
+        return this.db.pragma(source);
+      }
+      async exec(sql: string) {
+        this.db.exec(sql);
+      }
+      async databaseSizeBytes(): Promise<number> {
+        const value = (name: "page_count" | "page_size") =>
+          Number(this.db.exec(`PRAGMA ${name}`)[0]?.values[0]?.[0] ?? 0);
+        return value("page_count") * value("page_size");
+      }
+      async close() {
+        this.db.close();
+      }
+    },
   };
 });
 

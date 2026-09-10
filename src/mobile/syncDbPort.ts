@@ -223,7 +223,7 @@ export function createMobileSyncDbPort(getDb: () => DbLike, deps: MobileSyncDbPo
       const out = [];
       const prefix = noteId + "/";
       // 孤儿不上传；持久化资产只在本方法内按需读取，避免启动全量加载。
-      const orphans = orphanFilenamesForNote(d, noteId);
+      const orphans = await orphanFilenamesForNote(new SqlJsAsyncDb(d), noteId);
       const diskFilenames = new Set((await deps.listNoteAssetKeys(noteId)).map((key) => key.slice(prefix.length)));
       for (const filename of diskFilenames) {
         if (orphans.has(filename)) continue;
