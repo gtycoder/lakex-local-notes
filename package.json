@@ -17,6 +17,7 @@
     "test": "vitest run",
     "test:ui": "node scripts/e2e-electron-smoke.mjs",
     "check:bundle": "node scripts/check-bundle-budget.mjs",
+    "check:core": "node scripts/check-core-boundaries.mjs",
     "test:packaged": "node scripts/e2e-packaged-smoke.mjs",
     "test:drawnix": "node scripts/e2e-drawnix-smoke.mjs",
     "benchmark:workspace": "LAKE_RUN_BENCHMARK=1 vitest run electron/workspace.benchmark.test.ts --reporter=verbose",

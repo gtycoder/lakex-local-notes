@@ -43,6 +43,18 @@ function collectTs(dir, out = []) {
   return out;
 }
 
+function globalMatcher(token) {
+  // MIME strings such as ...wordprocessingml.document must not trigger the
+  // `document.` rule; only an identifier-like boundary introduces a global.
+  const escaped = token.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(`(^|[^A-Za-z0-9_$])${escaped}`);
+}
+
+const FORBIDDEN_GLOBAL_MATCHERS = FORBIDDEN_GLOBALS.map((token) => ({
+  token,
+  matcher: globalMatcher(token),
+}));
+
 function scanFile(file) {
   const rel = relative(ROOT, file);
   const source = readFileSync(file, "utf8");
@@ -72,9 +84,9 @@ function scanFile(file) {
     }
 
     // 平台全局 API
-    for (const g of FORBIDDEN_GLOBALS) {
-      if (line.includes(g)) {
-        issues.push(`L${n} 出现平台全局：${g}`);
+    for (const { token, matcher } of FORBIDDEN_GLOBAL_MATCHERS) {
+      if (matcher.test(line)) {
+        issues.push(`L${n} 出现平台全局：${token}`);
         break;
       }
     }
