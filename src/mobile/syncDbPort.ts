@@ -7,6 +7,7 @@ import { stageAssetWrites } from "./assetWrites.js";
 import type { DbLike } from "./sqliteDb";
 import { orphanFilenamesForNote } from "./noteRepository.js";
 import { createHistorySnapshot as insertHistorySnapshot } from "./historyRepository.js";
+import { SqlJsAsyncDb } from "./sqliteDb.js";
 
 export interface MobileSyncDbPortDeps {
   assets: Map<string, Uint8Array>;
@@ -207,7 +208,7 @@ export function createMobileSyncDbPort(getDb: () => DbLike, deps: MobileSyncDbPo
       content,
       meta: { title: string; parentId: string | null; sortOrder: number; protectedDays?: number },
     ) {
-      return insertHistorySnapshot(getDb(), noteId, content, meta);
+      return insertHistorySnapshot(new SqlJsAsyncDb(getDb()), noteId, content, meta);
     },
     async saveAsset(noteId, filename, bytes) {
       const key = noteId + "/" + filename;

@@ -12,15 +12,17 @@ import {
   getHistorySettings,
 } from "./historyRepository.js";
 import { SqlJsDb } from "./sqliteDb.js";
+import { SqlJsAsyncDb } from "./sqliteDb.js";
 
 describe("mobile history repository", () => {
   it("deduplicates identical snapshots within 24 hours", async () => {
     const db = await SqlJsDb.open();
     await applyMobileSchema(db);
+    const mobileDb = new SqlJsAsyncDb(db);
     const meta = { title: "Title", parentId: null, sortOrder: 0 };
 
-    await createHistorySnapshot(db, "note-1", "<p>same</p>", meta);
-    await createHistorySnapshot(db, "note-1", "<p>same</p>", meta);
+    await createHistorySnapshot(mobileDb, "note-1", "<p>same</p>", meta);
+    await createHistorySnapshot(mobileDb, "note-1", "<p>same</p>", meta);
 
     const count = db.prepare("SELECT COUNT(*) AS count FROM note_history WHERE note_id=?")
       .get("note-1") as { count: number };
@@ -30,9 +32,10 @@ describe("mobile history repository", () => {
   it("falls back to default settings when stored JSON is invalid", async () => {
     const db = await SqlJsDb.open();
     await applyMobileSchema(db);
+    const mobileDb = new SqlJsAsyncDb(db);
     db.prepare("INSERT INTO device_state(key,value) VALUES('history_settings',?)")
       .run("{invalid-json");
 
-    await expect(getHistorySettings(db)).resolves.toEqual(DEFAULT_HISTORY_SETTINGS);
+    await expect(getHistorySettings(mobileDb)).resolves.toEqual(DEFAULT_HISTORY_SETTINGS);
   });
 });

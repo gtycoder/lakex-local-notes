@@ -157,7 +157,9 @@ export class SqlJsDb implements DbLike {
 
 /** Transitional async facade over sql.js; native SQLite will implement MobileDb directly. */
 export class SqlJsAsyncDb implements MobileDb {
-  constructor(private readonly db: SqlJsDb) {}
+  constructor(
+    private readonly db: DbLike & { databaseSizeBytes?: () => number },
+  ) {}
 
   prepare(sql: string): MobileDbStatement {
     const statement = this.db.prepare(sql);
@@ -197,6 +199,7 @@ export class SqlJsAsyncDb implements MobileDb {
   }
 
   async databaseSizeBytes(): Promise<number> {
+    if (!this.db.databaseSizeBytes) throw new Error("Database size is unavailable");
     return this.db.databaseSizeBytes();
   }
 
