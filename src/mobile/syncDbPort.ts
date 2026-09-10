@@ -6,6 +6,7 @@ import { sqlParameterBatches } from "../core/sqlParameterBatch.js";
 import { stageAssetWrites } from "./assetWrites.js";
 import type { DbLike } from "./sqliteDb";
 import { orphanFilenamesForNote } from "./noteRepository.js";
+import { createHistorySnapshot as insertHistorySnapshot } from "./historyRepository.js";
 
 export interface MobileSyncDbPortDeps {
   assets: Map<string, Uint8Array>;
@@ -197,14 +198,7 @@ export function createMobileSyncDbPort(getDb: () => DbLike, deps: MobileSyncDbPo
       }));
     },
     createHistorySnapshot(noteId, content, meta: { title: string; parentId: string | null; sortOrder: number; protectedDays?: number }) {
-      const d = getDb();
-      const h = sha256Sync(new TextEncoder().encode(content));
-      // 同 hash 24 小时内只留一份，避免编辑器高频保存撑爆历史表。
-      const dup = d.prepare("SELECT 1 FROM note_history WHERE note_id=? AND content_hash=? AND created_at > ? LIMIT 1")
-        .get(noteId, h, new Date(Date.now() - 24 * 3600 * 1000).toISOString());
-      if (dup) return;
-      d.prepare("INSERT INTO note_history (note_id, content, content_hash, title, parent_id, sort_order, created_at) VALUES (?,?,?,?,?,?,?)")
-        .run(noteId, content, h, meta.title, meta.parentId, meta.sortOrder, new Date().toISOString());
+      insertHistorySnapshot(getDb(), noteId, content, meta);
     },
     async saveAsset(noteId, filename, bytes) {
       const key = noteId + "/" + filename;

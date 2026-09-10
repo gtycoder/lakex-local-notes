@@ -15,9 +15,8 @@ import type { Manifest } from "../core/manifestTypes.js";
 import { KeyedAsyncQueue } from "../core/keyedAsyncQueue.js";
 import type { QuickNotesSyncResult } from "../core/quickNotesSyncEngine.js";
 import { TRASH_NOTEBOOK_ID } from "../core/syncDecisions.js";
-import { sha256Sync } from "../core/sha256Sync.js";
 import { createCapacitorS3Store } from "./s3Store";
-import { buildAssetFilename, extOf, extractAssetRefs } from "../core/assetNaming.js";
+import { buildAssetFilename, extOf } from "../core/assetNaming.js";
 import { localAssetHttpUrl } from "../core/assetUrl.js";
 import type { S3Settings, TreeNode } from "../lib/types";
 import type { SearchResult } from "../core/searchRepository.js";
@@ -27,7 +26,6 @@ import { syncQuickNotesViaEngine } from "../core/quickNotesSyncEngine.js";
 import { createQuickNotesSyncDbPort } from "./quickNotesDbPort.js";
 import { mobileSecretStore } from "./secretStore.js";
 import { stageAssetWrites } from "./assetWrites.js";
-import { selectHistoryDrops } from "../core/storeUtils.js";
 import { sqlParameterBatches } from "../core/sqlParameterBatch.js";
 import { applyMobileSchema } from "./schema.js";
 import * as treeRepository from "./treeRepository.js";
@@ -36,6 +34,10 @@ import type { POCNote, POCNoteSummary } from "./noteRepository.js";
 import * as trashRepository from "./trashRepository.js";
 import * as quickNotesRepository from "./quickNotesRepository.js";
 import { createMobileSyncDbPort } from "./syncDbPort.js";
+import * as historyRepository from "./historyRepository.js";
+import type { HistoryMobileSettings } from "./historyRepository.js";
+
+export type { HistoryMobileSettings } from "./historyRepository.js";
 
 /** 移动端同步结果（P2-5，GPT 审计）：文档/小记分字段，便于 UI 分别展示进度与失败。 */
 export interface MobileSyncResult {
@@ -85,24 +87,6 @@ async function ensureDb(): Promise<SqlJsDb> {
   applyMobileSchema(db);
   return db;
 }
-
-/** 历史快照引用的资产路径集合（形如 assets/{noteId}/{filename}），GC 保留。 */
-function historyAssetRefs(): Set<string> {
-  const d = db!;
-  const refs = new Set<string>();
-  const rows = d.prepare("SELECT note_id, content FROM note_history").all() as Array<{ note_id: string; content: string }>;
-  for (const r of rows) for (const f of extractAssetRefs(r.content)) refs.add(`assets/${r.note_id}/${f}`);
-  return refs;
-}
-
-/** 移动端历史快照设置（对齐桌面 HistorySettings；存 device_state，纯本地）。 */
-export interface HistoryMobileSettings {
-  maxSnapshots: number;
-  retentionDays: number;
-  cleanupIntervalHours: number;
-  snapshotIntervalMinutes: number;
-}
-const DEFAULT_HISTORY_SETTINGS: HistoryMobileSettings = { maxSnapshots: 100, retentionDays: 30, cleanupIntervalHours: 24, snapshotIntervalMinutes: 15 };
 
 async function createS3Client(cfg: S3Settings): Promise<import("@aws-sdk/client-s3").S3Client> {
   const [{ S3Client }, { CapacitorHttpHandler }] = await Promise.all([
@@ -169,37 +153,6 @@ async function runMaintenanceAndPersist<T>(operation: () => T | Promise<T>): Pro
     await persistDatabaseSnapshot();
     return result;
   });
-}
-
-async function deleteHistoryInternal(historyId: number): Promise<void> {
-  const d = await ensureDb();
-  d.prepare("DELETE FROM note_history WHERE id=?").run(historyId);
-}
-
-async function saveHistorySettingsInternal(settings: HistoryMobileSettings): Promise<void> {
-  const d = await ensureDb();
-  d.prepare("INSERT INTO device_state(key,value) VALUES('history_settings',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value").run(JSON.stringify(settings));
-}
-
-async function snapshotNoteInternal(noteId: string): Promise<void> {
-  const d = await ensureDb();
-  const row = d.prepare("SELECT title, content, parent_id, sort_order FROM notes WHERE id=? AND trashed_at IS NULL").get(noteId) as { title: string; content: string; parent_id: string | null; sort_order: number } | undefined;
-  if (!row) return;
-  dbPort.createHistorySnapshot(noteId, row.content, { title: row.title, parentId: row.parent_id, sortOrder: row.sort_order });
-}
-
-async function cleanupHistoryInternal(): Promise<{ deleted: number }> {
-  const d = await ensureDb();
-  const cfg = await bridge.getHistorySettings();
-  const noteIds = d.prepare("SELECT DISTINCT note_id FROM note_history").all() as Array<{ note_id: string }>;
-  let deleted = 0;
-  for (const { note_id } of noteIds) {
-    const rows = d.prepare("SELECT id, created_at FROM note_history WHERE note_id=? ORDER BY created_at ASC").all(note_id) as Array<{ id: number; created_at: string }>;
-    if (rows.length === 0) continue;
-    const drops = selectHistoryDrops(rows.map((r) => r.created_at), { maxSnapshots: cfg.maxSnapshots, retentionDays: cfg.retentionDays });
-    for (const r of rows) if (drops.has(r.created_at)) deleted += d.prepare("DELETE FROM note_history WHERE id=?").run(r.id).changes;
-  }
-  return { deleted };
 }
 
 async function deleteOrphanAssetInternal(id: number): Promise<void> {
@@ -429,63 +382,54 @@ export const bridge = {
   /** 列出某文档的历史快照（纯本地；冲突留档/手动快照）。 */
   async listNoteHistory(noteId: string): Promise<Array<{ id: number; title: string; createdAt: string }>> {
     const d = await ensureDb();
-    const rows = d.prepare("SELECT id, title, created_at FROM note_history WHERE note_id=? ORDER BY created_at DESC, id DESC").all(noteId) as Array<{ id: number; title: string; created_at: string }>;
-    return rows.map((r) => ({ id: r.id, title: r.title, createdAt: r.created_at }));
+    return historyRepository.listNoteHistory(d, noteId);
   },
 
   /** 恢复历史快照：对齐桌面端——先给当前正文留档（可反悔），再把快照正文+标题写回（sync_state=local → 下轮同步上传覆盖远端）。 */
   async restoreHistory(historyId: number): Promise<void> {
     const d = await ensureDb();
-    const row = d.prepare("SELECT note_id, title, content FROM note_history WHERE id=?").get(historyId) as { note_id: string; title: string; content: string } | undefined;
-    if (!row) return;
-    // 恢复前留档：把当前正文快照一份（对齐桌面 store.restoreHistory 的 createHistorySnapshot(noteId)），恢复可反悔
-    const cur = d.prepare("SELECT title, content, parent_id, sort_order FROM notes WHERE id=?").get(row.note_id) as { title: string; content: string; parent_id: string | null; sort_order: number } | undefined;
-    if (cur) {
-      const h = sha256Sync(new TextEncoder().encode(cur.content));
-      const dup = d.prepare("SELECT 1 FROM note_history WHERE note_id=? AND content_hash=? AND created_at > ? LIMIT 1")
-        .get(row.note_id, h, new Date(Date.now() - 24 * 3600 * 1000).toISOString());
-      if (!dup) {
-        d.prepare("INSERT INTO note_history (note_id, content, content_hash, title, parent_id, sort_order, created_at) VALUES (?,?,?,?,?,?,?)")
-          .run(row.note_id, cur.content, h, cur.title, cur.parent_id, cur.sort_order, new Date().toISOString());
-      }
-    }
-    await bridge.saveNote(row.note_id, row.title, row.content);
+    const snapshot = historyRepository.readHistory(d, historyId);
+    if (!snapshot) return;
+    historyRepository.backupCurrentNote(d, snapshot.noteId);
+    await bridge.saveNote(snapshot.noteId, snapshot.title, snapshot.content);
   },
 
   /** 手动删除单个历史快照（对齐桌面 deleteHistory）。 */
   async deleteHistory(historyId: number): Promise<void> {
-    await runMaintenanceAndPersist(() => deleteHistoryInternal(historyId));
+    await runMaintenanceAndPersist(async () => {
+      const d = await ensureDb();
+      historyRepository.deleteHistory(d, historyId);
+    });
   },
 
   /** 读取历史快照设置（对齐桌面 getHistorySettings；存 device_state，纯本地）。 */
   async getHistorySettings(): Promise<HistoryMobileSettings> {
     const d = await ensureDb();
-    const row = d.prepare("SELECT value FROM device_state WHERE key='history_settings'").get() as { value: string } | undefined;
-    if (!row) return DEFAULT_HISTORY_SETTINGS;
-    try {
-      const parsed = JSON.parse(row.value) as Partial<HistoryMobileSettings>;
-      return {
-        maxSnapshots: typeof parsed.maxSnapshots === "number" && parsed.maxSnapshots > 0 ? parsed.maxSnapshots : DEFAULT_HISTORY_SETTINGS.maxSnapshots,
-        retentionDays: typeof parsed.retentionDays === "number" && parsed.retentionDays > 0 ? parsed.retentionDays : DEFAULT_HISTORY_SETTINGS.retentionDays,
-        cleanupIntervalHours: typeof parsed.cleanupIntervalHours === "number" && parsed.cleanupIntervalHours >= 0 ? parsed.cleanupIntervalHours : DEFAULT_HISTORY_SETTINGS.cleanupIntervalHours,
-        snapshotIntervalMinutes: typeof parsed.snapshotIntervalMinutes === "number" && parsed.snapshotIntervalMinutes >= 0 ? parsed.snapshotIntervalMinutes : DEFAULT_HISTORY_SETTINGS.snapshotIntervalMinutes,
-      };
-    } catch { return DEFAULT_HISTORY_SETTINGS; }
+    return historyRepository.getHistorySettings(d);
   },
 
   /** 保存历史快照设置（对齐桌面 saveHistorySettings）。 */
   async saveHistorySettings(settings: HistoryMobileSettings): Promise<void> {
-    await runMaintenanceAndPersist(() => saveHistorySettingsInternal(settings));
+    await runMaintenanceAndPersist(async () => {
+      const d = await ensureDb();
+      historyRepository.saveHistorySettings(d, settings);
+    });
   },
 
   /** 给某笔记创建快照（定时自动快照用；读当前正文，24h 去重）。 */
   async snapshotNote(noteId: string): Promise<void> {
-    await runMaintenanceAndPersist(() => snapshotNoteInternal(noteId));
+    await runMaintenanceAndPersist(async () => {
+      const d = await ensureDb();
+      historyRepository.snapshotNote(d, noteId);
+    });
   },
 
   /** 历史快照清理（对齐桌面 cleanupHistory：分层保留 + 上限 + 保留天数，设置可配置）。 */
   async cleanupHistory(): Promise<{ deleted: number }> {
-    return runMaintenanceAndPersist(cleanupHistoryInternal);
+    return runMaintenanceAndPersist(async () => {
+      const d = await ensureDb();
+      return historyRepository.cleanupHistory(d, historyRepository.getHistorySettings(d));
+    });
   },
 
   /** 全局孤儿资源列表（对齐桌面 listOrphanAssets）。 */
@@ -711,7 +655,13 @@ export const bridge = {
       try { const pm = parseLakeManifest(pb); prevManifests.push(pm); prev = pm.prevCommitId; } catch { break; }
       chain += 1;
     }
-    const keep = buildGcKeepSet({ manifest, extraManifests: prevManifests, prefix: syncCfg.prefix, historyRefs: historyAssetRefs() });
+    const d = await ensureDb();
+    const keep = buildGcKeepSet({
+      manifest,
+      extraManifests: prevManifests,
+      prefix: syncCfg.prefix,
+      historyRefs: historyRepository.historyAssetRefs(d),
+    });
     const pendingByKey = new Map((await bridge.listS3GcPending()).map((p) => [p.key, p.markedAt] as const));
     const all = [...(await s3Store.listObjects(`${syncCfg.prefix}/objects/`)), ...(await s3Store.listObjects(`${syncCfg.prefix}/assets/`))];
     const cutoff = Date.now() - 7 * 24 * 3600 * 1000; // 7 天窗口
@@ -811,7 +761,11 @@ export const bridge = {
           quickMsg = `；小记同步失败：${quickNotes.error}`;
         }
         // 清理可能部分成功；即便失败也要把当前内存库落盘，避免下一次启动回退到旧状态。
-        await cleanupHistoryInternal().catch(() => {}); // 同步后清理快照（过期 + 每文档上限）
+        try {
+          historyRepository.cleanupHistory(d, historyRepository.getHistorySettings(d));
+        } catch {
+          // 清理失败不拖垮同步；下一次同步会继续按策略清理。
+        }
         return { message: report.message + quickMsg, notes: report, quickNotes };
       } finally {
         // 同步中途失败时，已应用的远端变更也必须持久化，不能只在成功路径保存。
