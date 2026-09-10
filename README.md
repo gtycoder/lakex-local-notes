@@ -1,12 +1,25 @@
 # Lake Notes（Electron）
 
-本地优先的 Lake（语雀）编辑器笔记应用。**本文是项目总览入口；会话交接的唯一文档是 `HANDOFF.md`。**
+本地优先的 Lake（语雀）编辑器笔记应用。**本文是项目总览入口；会话交接的唯一文档是** **`HANDOFF.md`。**
 
 > 给完全没有上下文的后续会话：先读 **HANDOFF.md（唯一交接文档：当前状态 / 真正的待办 / 踩坑）**，再读
 > **AGENTS.md（项目长期记忆 / 红线，每次自动加载）**，然后按需读下面的开发/架构/踩坑文档与 `docs/TODO.md`。
-> **当前主开发分支是 `master`**（= Gitee 远程默认分支，已验证 `ls-remote --symref`；本地与远端同步）。
+> **当前主开发分支是** **`master`**（= Gitee 远程默认分支，已验证 `ls-remote --symref`；本地与远端同步）。
 
----
+***
+
+## 设计先决条件（所有开发 / 审计 / 重构的前置约束）
+
+> 用户定稿（260909）。任何功能开发、代码审计、重构与性能决策都必须以本节为前提：
+> **不为超出这些条件的场景做设计**（过度设计）；改动与本节冲突时先与用户讨论，不擅自变更语义。
+> 与 `AGENTS.md` 冲突时：红线/机制以 AGENTS 为准，**量级与场景假设以本节为准**。
+
+1. **本地优先 + 云端备份**：本地是唯一真相，S3 只是镜像/备份；云端绝不反噬本地。
+2. **个人笔记、多端无并发**：单用户多设备轮换使用；不存在多设备同时编辑同一文档的对抗场景。
+3. **先提交者为真、不解决冲突**：冲突时先提交者视为正确，被覆盖方的编辑以历史快照（`createHistorySnapshot`）归档留档，不做冲突合并。
+4. **回收站是"有笔记本行为的系统容器"**：软删 = 移入回收站笔记本；墓碑权威、删除压编辑；恢复是唯一显式例外（`restore_pending_at` → local-wins）。
+5. **数据量级基线：5000 文档 / 2万附件**（全库含附件 \~20GB，单文档可达数 MB）：性能、分批、内存与 SQL 参数预算均按此量级核算；AGENTS §1 的 10 万/100 万压测基线仅作长期参考，不作为设计前提。
+6. **搜索单独立项**：搜索功能（FTS 索引/短词/增量等）将整体统一重构，常规审计与重构不含搜索优化项。
 
 ## 一、项目概览
 
@@ -33,26 +46,28 @@ sharp（图片转换）+ @aws-sdk/client-s3；移动端 = Vite + Capacitor（安
 
 ## 四、已完成里程碑（事实性，不含当前进度）
 
-| 项 | 状态 |
-|---|---|
-| 路线验证（Electron 替代 Tauri） | ✅ 完成 |
-| 资源归一化 + 第三方图片下载/复制 | ✅ 完成（用户验证通过） |
-| S3 备份同步 + 对象 GC（七牛 Kodo） | ✅ 完成（真实云同步/GC 验证通过） |
-| 打包发布：dmg | ✅ 完成并冒烟验证（未签名、默认图标） |
-| 大文档性能 + 虚拟渲染 | ✅ 已合入 master（首图 3.5s→88ms、TOC/代码块粘贴/表格工具栏/长大纲跟随修复） |
-| 代码审计 + 优化 + 单测、Electron 43 升级、S3 同步差集化 | ✅ 已完成并合入 master |
-| 安卓端（Capacitor） | ✅ 可用；编辑遗留见 HANDOFF §3 |
+| 项                                      | 状态                                                 |
+| -------------------------------------- | -------------------------------------------------- |
+| 路线验证（Electron 替代 Tauri）                | ✅ 完成                                               |
+| 资源归一化 + 第三方图片下载/复制                     | ✅ 完成（用户验证通过）                                       |
+| S3 备份同步 + 对象 GC（七牛 Kodo）               | ✅ 完成（真实云同步/GC 验证通过）                                |
+| 打包发布：dmg                               | ✅ 完成并冒烟验证（未签名、默认图标）                                |
+| 大文档性能 + 虚拟渲染                           | ✅ 已合入 master（首图 3.5s→88ms、TOC/代码块粘贴/表格工具栏/长大纲跟随修复） |
+| 代码审计 + 优化 + 单测、Electron 43 升级、S3 同步差集化 | ✅ 已完成并合入 master                                    |
+| 安卓端（Capacitor）                         | ✅ 可用；编辑遗留见 HANDOFF §3                              |
 
-> **本文不维护当前进度、测试计数、commit hash**（必然过期）。当前基线 / 本轮已完成 / 真正的待办 → **`HANDOFF.md` §0 / §2 / §3**。
+> **本文不维护当前进度、测试计数、commit hash**（必然过期）。当前基线 / 本轮已完成 / 真正的待办 → **`HANDOFF.md`** **§0 / §2 / §3**。
 
 ## 五、仓库与分支
 
 **本地仓库**：`/Users/admin/file/local-lake/lake-notes-electron`（独立 git 仓库）
 **当前分支**：`master`（主开发分支 = Gitee 默认分支）
 **远程**：
+
 ```
 origin  git@gitee.com:gtycoder/local-lake.git
 ```
+
 - Gitee `master` = 当前主干；Gitee `main` = 旧 Tauri（trui）版，保留未动
 - SSH key 已在 Gitee 可用（`git ls-remote` / `git push` 走 SSH 均通过）；HTTPS 备援地址
   `https://gitee.com/gtycoder/local-lake.git`（macOS 钥匙串亦缓存凭据）
@@ -68,24 +83,26 @@ origin  git@gitee.com:gtycoder/local-lake.git
 
 ## 六、参考仓库（只读，勿修改）
 
-| 仓库 | 用途 |
-|---|---|
-| `/Users/admin/file/local-lake/lake-notes-tauri-poc/` | Tauri 版源码：Rust 后端下载逻辑参考、**CSS 基准** |
-| `/Users/admin/file/local-lake/siyuan-master/` | 思源笔记 v3.8.0（**AGPL-3.0**，移植样式需留 NOTICE）：S3 同步/dejavu、资源管理、UI 视觉基准 |
-| `/Users/admin/file/local-lake/lake-main/` | lakejs 开源社区版内核（MIT）：**当"机制字典"读源码**，不是我们实际运行的 lakex 内核 |
-| `/Users/admin/file/local-lake/lake-editor-main/` | 第三方 VSCode yuque-editor 插件（参考价值低） |
-| `/Users/admin/file/local-lake/drawnix-develop/` | Drawnix 画板源码参考 |
+| 仓库                                                   | 用途                                                                |
+| ---------------------------------------------------- | ----------------------------------------------------------------- |
+| `/Users/admin/file/local-lake/lake-notes-tauri-poc/` | Tauri 版源码：Rust 后端下载逻辑参考、**CSS 基准**                                |
+| `/Users/admin/file/local-lake/siyuan-master/`        | 思源笔记 v3.8.0（**AGPL-3.0**，移植样式需留 NOTICE）：S3 同步/dejavu、资源管理、UI 视觉基准 |
+| `/Users/admin/file/local-lake/lake-main/`            | lakejs 开源社区版内核（MIT）：**当"机制字典"读源码**，不是我们实际运行的 lakex 内核             |
+| `/Users/admin/file/local-lake/lake-editor-main/`     | 第三方 VSCode yuque-editor 插件（参考价值低）                                 |
+| `/Users/admin/file/local-lake/drawnix-develop/`      | Drawnix 画板源码参考                                                    |
 
 ## 七、文档索引
 
-| 文档 | 内容 | 新会话优先级 |
-|---|---|---|
-| **HANDOFF.md** | 唯一交接文档（当前状态/待办/坑） | **先读** |
-| **docs/CODEX-GUIDE.md** | Codex 自主开发指南（Playwright 驱动真实 Electron/Computer Use/浏览器） | **动手前必读** |
-| docs/PROGRESS.md | 历史会话全记录 + **经验总结（方法论/深层认识/工程实践）**（**过程记录**：当前状态/待办以 HANDOFF 为准） | 考古/复盘用 |
-| docs/DEVELOPMENT.md | 环境要求、开发/构建/打包命令、测试、依赖版本、提交历史 | 动手前读 |
-| docs/SYNC-PROTOCOL.md · docs/S3-GC-DESIGN.md | 同步协议 / GC 与保留链（**改同步、GC 前必读**，配合 AGENTS §3 原则 11~13） | 动同步必读 |
-| docs/TODO.md | 历史待办总表（**可能过期**，权威待办 = HANDOFF §3） | 按需 |
-| docs/ARCHITECTURE.md | 进程结构、关键文件索引、图片数据流、数据与存储、S3 同步机制 | 改代码前读 |
-| docs/TROUBLESHOOTING.md | 踩过的坑（打包/CDN/剪贴板/编辑器与 CSS/环境/S3 + 虚拟渲染新坑） | 遇坑查 |
-| VIRTUAL-RENDERING-TEST.md | 虚拟渲染回归清单（逐项手测） | 动虚拟渲染相关代码前后跑 |
+| 文档                                           | 内容                                                              | 新会话优先级       |
+| -------------------------------------------- | --------------------------------------------------------------- | ------------ |
+| **HANDOFF.md**                               | 唯一交接文档（当前状态/待办/坑）                                               | **先读**       |
+| **docs/CODEX-GUIDE.md**                      | Codex 自主开发指南（Playwright 驱动真实 Electron/Computer Use/浏览器）         | **动手前必读**    |
+| docs/LAKEX-CONTRACT.md                       | 闭源 lakex 内核行为契约 + 调试速查表（会话知识库，编辑器相关先查）                          | 编辑器先读        |
+| docs/PROGRESS.md                             | 历史会话全记录 + **经验总结（方法论/深层认识/工程实践）**（**过程记录**：当前状态/待办以 HANDOFF 为准） | 考古/复盘用       |
+| docs/DEVELOPMENT.md                          | 环境要求、开发/构建/打包命令、测试、依赖版本、提交历史                                    | 动手前读         |
+| docs/SYNC-PROTOCOL.md · docs/S3-GC-DESIGN.md | 同步协议 / GC 与保留链（**改同步、GC 前必读**，配合 AGENTS §3 原则 11\~13）           | 动同步必读        |
+| docs/TODO.md                                 | 历史待办总表（**可能过期**，权威待办 = HANDOFF §3）                              | 按需           |
+| docs/ARCHITECTURE.md                         | 进程结构、关键文件索引、图片数据流、数据与存储、S3 同步机制                                 | 改代码前读        |
+| docs/TROUBLESHOOTING.md                      | 踩过的坑（打包/CDN/剪贴板/编辑器与 CSS/环境/S3 + 虚拟渲染新坑）                        | 遇坑查          |
+| VIRTUAL-RENDERING-TEST.md                    | 虚拟渲染回归清单（逐项手测）                                                  | 动虚拟渲染相关代码前后跑 |
+
