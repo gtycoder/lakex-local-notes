@@ -18,6 +18,7 @@ import { TrashRepository } from "./trashRepository.js";
 import { TrashLifecycle } from "./trashLifecycle.js";
 import { HistoryLifecycle } from "./historyLifecycle.js";
 import { OrphanLifecycle } from "./orphanLifecycle.js";
+import { Diagnostics } from "./diagnostics.js";
 import type { TrashItem, TrashReminderItem } from "./trashRepository.js";
 export type { TrashItem, TrashReminderItem };
 import { AssetRepository, type OrphanAsset, type OrphanAssetRow } from "./assetRepository.js";
@@ -113,6 +114,7 @@ export class Store {
   private trashLifecycle: TrashLifecycle;
   private historyLifecycle: HistoryLifecycle;
   private orphanLifecycle: OrphanLifecycle;
+  private diagnostics: Diagnostics;
   private assetRepository: AssetRepository;
   private noteQueries: NoteQueries;
   private noteMetadata: NoteMetadataRepository;
@@ -188,6 +190,15 @@ export class Store {
       root: this.root,
       noteAssetsDirFor: (noteId) => this.noteAssetsDirFor(noteId),
       assetRepository: this.assetRepository,
+    });
+    this.diagnostics = new Diagnostics({
+      db: this.db,
+      root: this.root,
+      trashNotebookId: TRASH_NOTEBOOK_ID,
+      noteAssetsDir: this.noteAssetsDir,
+      notePathFor: (noteId) => this.notePath(noteId),
+      noteAssetsDirFor: (noteId) => this.noteAssetsDirFor(noteId),
+      logScopes: this.logScopes,
     });
     this.searchRepository = new SearchRepository({
       db: this.db,
@@ -682,8 +693,7 @@ export class Store {
 
   /** Rebuild the full-text index without exposing repository internals to callers. */
   checkpointWal(): void {
-    try { this.db.pragma("wal_checkpoint(TRUNCATE)"); }
-    catch (error) { this.logScopes.store.warn(`[store] WAL checkpoint failed: ${error instanceof Error ? error.message : String(error)}`); }
+    this.diagnostics.checkpointWal();
   }
 
   checkIntegrity(): { ok: boolean; integrity: string; foreignKeyErrors: number } {
@@ -1091,48 +1101,12 @@ export class Store {
     historySnapshots: number; historyBytes: number;
     assetFiles: number; assetBytes: number; orphanRows: number;
   } {
-    const one = (sql: string, ...args: unknown[]) => Number((this.db.prepare(sql).get(...args) as { c: number }).c) || 0;
-    const statBytes = (file: string): number => {
-      try { return fs.statSync(file).size; } catch { return 0; }
-    };
-    let assetFiles = 0;
-    let assetBytes = 0;
-    try {
-      for (const entry of fs.readdirSync(this.noteAssetsDir, { withFileTypes: true })) {
-        if (!entry.isDirectory()) continue;
-        const dir = path.join(this.noteAssetsDir, entry.name);
-        let files: string[] = [];
-        try { files = fs.readdirSync(dir); } catch { continue; }
-        for (const f of files) {
-          try {
-            const st = fs.statSync(path.join(dir, f));
-            if (st.isFile()) { assetFiles += 1; assetBytes += st.size; }
-          } catch { /* 竞态删除：忽略 */ }
-        }
-      }
-    } catch { /* 目录不存在（全新库）→ 0 */ }
-    const hist = this.db.prepare("SELECT COUNT(*) AS c, COALESCE(SUM(size), 0) AS bytes FROM note_history").get() as { c: number; bytes: number };
-    return {
-      root: this.root,
-      dbBytes: statBytes(path.join(this.root, "metadata.sqlite3")) + statBytes(path.join(this.root, "metadata.sqlite3-wal")),
-      // 「笔记」与笔记本/分组同口径：只数不在回收站里的（回收站节点另计）
-      notes: one("SELECT COUNT(*) AS c FROM notes WHERE deleted_at IS NULL AND trashed_at IS NULL"),
-      notebooks: one("SELECT COUNT(*) AS c FROM tree_nodes WHERE node_type='notebook' AND deleted_at IS NULL AND trashed_at IS NULL"),
-      groups: one("SELECT COUNT(*) AS c FROM tree_nodes WHERE node_type='group' AND deleted_at IS NULL AND trashed_at IS NULL"),
-      trashedNodes: one("SELECT COUNT(*) AS c FROM tree_nodes WHERE deleted_at IS NULL AND trashed_at IS NOT NULL"),
-      tombstones: one("SELECT COUNT(*) AS c FROM deleted_notes"),
-      historySnapshots: hist.c,
-      historyBytes: hist.bytes,
-      assetFiles,
-      assetBytes,
-      orphanRows: one("SELECT COUNT(*) AS c FROM orphan_assets"),
-    };
+    return this.diagnostics.getStorageOverview();
   }
 
   // ===== A3 数据体检（只读诊断：不自动修复、不写库） =====
 
-  /** 只读三查：① notes↔.lake 文件存在 + sync_base 有基线的读盘 sha256 一致；② note_history↔快照文件存在；
-   *  ③ orphan_assets 登记文件是否存在（漂移抽查）。返回结构化报告（不做任何写操作）。 */
+  /** 只读四查（notes↔文件、history↔快照、孤儿登记漂移、树完整性 + 资源引用；语义详见 diagnostics）。 */
   runDataHealthCheck(): {
     notesChecked: number;
     notesMissingFile: Array<{ id: string; title: string }>;
@@ -1148,89 +1122,12 @@ export class Store {
     refsMissingResource: Array<{ noteId: string; filename: string }>;
     checkedAt: string;
   } {
-    const checkedAt = new Date().toISOString();
-    const notesMissingFile: Array<{ id: string; title: string }> = [];
-    const notesHashMismatch: Array<{ id: string; title: string }> = [];
-    const noteRows = this.db.prepare("SELECT id,title,parent_id,sync_state FROM notes WHERE deleted_at IS NULL AND parent_id != ?").all(TRASH_NOTEBOOK_ID) as Array<{ id: string; title: string; sync_state: string }>;
-    for (const n of noteRows) {
-      const lakePath = this.notePath(n.id);
-      if (!fs.existsSync(lakePath)) {
-        notesMissingFile.push({ id: n.id, title: n.title });
-        continue;
-      }
-      const base = this.db.prepare("SELECT content_hash FROM sync_base WHERE note_id=?").get(n.id) as { content_hash: string } | undefined;
-      // 只在"我们自认为与云端一致"（synced）时比对基线 hash：本地已编辑待上传（local）的正文
-      // 与基线不同是**正常状态**，比了就是天天误报"可能被外部改动"，诊断就失去意义。
-      if (!base || n.sync_state !== "synced") continue; // 无基线/本地未上传 → 只查存在，不比 hash
-      try {
-        const diskHash = crypto.createHash("sha256").update(fs.readFileSync(lakePath)).digest("hex");
-        if (diskHash !== base.content_hash) notesHashMismatch.push({ id: n.id, title: n.title });
-      } catch { notesMissingFile.push({ id: n.id, title: n.title }); }
-    }
-    const histRows = this.db.prepare("SELECT id,note_id,file_path FROM note_history").all() as Array<{ id: number; note_id: string; file_path: string }>;
-    const historyMissingSample: Array<{ id: number; noteId: string; filePath: string }> = [];
-    let historyMissingFile = 0;
-    for (const h of histRows) {
-      if (!fs.existsSync(path.join(this.root, h.file_path))) {
-        historyMissingFile++;
-        if (historyMissingSample.length < 10) historyMissingSample.push({ id: h.id, noteId: h.note_id, filePath: h.file_path });
-      }
-    }
-    const refsChecked: string[] = [];
-    const refsMissingResource: Array<{ noteId: string; filename: string }> = [];
-    for (const n of noteRows) {
-      const lakePath = this.notePath(n.id);
-      if (!fs.existsSync(lakePath)) continue; // 文件缺失已在第一查上报
-      try {
-        const body = fs.readFileSync(lakePath, "utf8");
-        for (const filename of extractAssetRefs(body)) {
-          refsChecked.push(filename);
-          if (!fs.existsSync(path.join(this.noteAssetsDirFor(n.id), filename))) {
-            refsMissingResource.push({ noteId: n.id, filename });
-          }
-        }
-      } catch { /* 读盘失败已在第一查覆盖 */ }
-    }
-    // ④ 树完整性：parent_id 指向不存在节点的条目在侧栏/回收站都渲染不出来（"文档凭空消失"），
-    //    但仍在同步与资源聚合里——必须能被诊断出来，而不是靠 UI 猜。
-    const treeRows = this.db.prepare(
-      "SELECT COUNT(*) AS c FROM tree_nodes WHERE deleted_at IS NULL AND parent_id IS NOT NULL"
-    ).get() as { c: number };
-    const treeDanglingParent = this.db.prepare(
-      `SELECT t.id, t.title, t.parent_id AS parentId FROM tree_nodes t
-       WHERE t.deleted_at IS NULL AND t.parent_id IS NOT NULL
-         AND NOT EXISTS (SELECT 1 FROM tree_nodes p WHERE p.id = t.parent_id)
-       ORDER BY t.title LIMIT 10`
-    ).all() as Array<{ id: string; title: string; parentId: string }>;
-    const orphanRows = this.db.prepare("SELECT * FROM orphan_assets").all() as OrphanAssetRow[];
-    const orphanRowsFileMissing: Array<{ id: number; noteId: string; filename: string }> = [];
-    for (const o of orphanRows) {
-      if (!fs.existsSync(path.join(this.root, o.file_path))) {
-        orphanRowsFileMissing.push({ id: o.id, noteId: o.note_id, filename: o.filename });
-      }
-    }
-    return {
-      notesChecked: noteRows.length,
-      notesMissingFile,
-      notesHashMismatch,
-      historyChecked: histRows.length,
-      historyMissingFile,
-      historyMissingSample,
-      orphanRowsChecked: orphanRows.length,
-      orphanRowsFileMissing,
-      treeChecked: treeRows.c,
-      treeDanglingParent,
-      refsChecked: refsChecked.length,
-      refsMissingResource,
-      checkedAt,
-    };
+    return this.diagnostics.runDataHealthCheck();
   }
 
-  /** A1 一致性 DB 快照：VACUUM INTO 单文件（无 WAL 依赖、可独立打开）。
-   * 目标文件必须不存在（VACUUM INTO 语义）；路径含单引号需转义。 */
+  /** A1 一致性 DB 快照：VACUUM INTO 单文件（无 WAL 依赖、可独立打开）。 */
   backupDatabaseTo(targetPath: string): void {
-    const escaped = targetPath.replace(/'/g, "''");
-    this.db.exec(`VACUUM INTO '${escaped}'`);
+    this.diagnostics.backupDatabaseTo(targetPath);
   }
 
   // ===== S3 同步支持 =====
