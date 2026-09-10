@@ -4,9 +4,10 @@ const readdir = vi.hoisted(() => vi.fn());
 const writeFile = vi.hoisted(() => vi.fn());
 const readFile = vi.hoisted(() => vi.fn());
 const deleteFile = vi.hoisted(() => vi.fn());
+const mkdir = vi.hoisted(() => vi.fn());
 
 vi.mock("@capacitor/filesystem", () => ({
-  Filesystem: { readdir, writeFile, readFile, deleteFile },
+  Filesystem: { readdir, writeFile, readFile, deleteFile, mkdir },
   Directory: { Data: "DATA" },
 }));
 
@@ -24,6 +25,8 @@ describe("mobile asset filesystem", () => {
     writeFile.mockReset();
     readFile.mockReset();
     deleteFile.mockReset();
+    mkdir.mockReset();
+    mkdir.mockResolvedValue({ uri: "file:///data/user/0/com.lakenotes.mobile/files/x" });
   });
 
   it("lists one note directory without scanning the asset root", async () => {
@@ -85,6 +88,24 @@ describe("mobile asset filesystem", () => {
 
     readFile.mockRejectedValueOnce(new Error("permission denied"));
     await expect(loadAssetBytesFs("note-1/image.png")).rejects.toThrow("permission denied");
+  });
+
+  it("survives concurrent new-directory race: pre-creates parent and retries once on OS-PLUG-FILE-0011", async () => {
+    const bytes = new Uint8Array([1, 2, 3]);
+    writeFile
+      .mockRejectedValueOnce(new Error("Missing parent directory – possibly recursive=false was passed or parent directory creation failed."))
+      .mockResolvedValueOnce({ uri: "file:///data/user/0/com.lakenotes.mobile/files/note-assets/note-1/new.png" });
+    await expect(saveAssetBytesFs("note-1/new.png", bytes)).resolves.toBeUndefined();
+    // 写前 mkdir 父目录 + 失败后再次 mkdir（两次）
+    expect(mkdir).toHaveBeenCalledTimes(2);
+    expect(mkdir).toHaveBeenNthCalledWith(1, { path: "note-assets/note-1", directory: "DATA", recursive: true });
+    expect(writeFile).toHaveBeenCalledTimes(2);
+    // 非该错误原样抛出，不重试
+    writeFile.mockReset();
+    writeFile.mockRejectedValueOnce(new Error("permission denied"));
+    mkdir.mockClear();
+    await expect(saveAssetBytesFs("note-1/other.png", bytes)).rejects.toThrow("permission denied");
+    expect(writeFile).toHaveBeenCalledTimes(1);
   });
 
   it("keeps deletion idempotent without hiding IO failures", async () => {

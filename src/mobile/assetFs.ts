@@ -44,13 +44,30 @@ function isMissingFileError(error: unknown): boolean {
 
 export async function saveAssetBytesFs(key: string, bytes: Uint8Array): Promise<void> {
   const path = requireAssetPath(key);
+  const parent = path.split("/").slice(0, -1).join("/");
+  // 并发防竞态（压测2 260910）：4 路并发 saveAsset 写同一个新建笔记目录时，Android 原生
+  // writeFile(recursive:true) 偶发 OS-PLUG-FILE-0011「Missing parent directory」（目录创建竞态，
+  // 同目录并发下一个成功一个失败）。写前显式 mkdir 父目录（幂等，已存在错误忽略）+ 失败重试一次。
+  if (parent) {
+    await Filesystem.mkdir({ path: parent, directory: Directory.Data, recursive: true }).catch(() => { /* 已存在 */ });
+  }
   // data 传 base64；不传 encoding（Android 原生默认按 base64 解码写入；UTF8 会把 base64 当文本写坏）
-  await Filesystem.writeFile({
+  const write = () => Filesystem.writeFile({
     path,
     data: bytesToBase64(bytes),
     directory: Directory.Data,
     recursive: true,
   });
+  try {
+    await write();
+  } catch (error) {
+    if (/Missing parent directory|OS-PLUG-FILE-0011/i.test(error instanceof Error ? error.message : String(error))) {
+      await Filesystem.mkdir({ path: parent, directory: Directory.Data, recursive: true }).catch(() => { /* 已存在 */ });
+      await write();
+    } else {
+      throw error;
+    }
+  }
 }
 
 export async function loadAssetBytesFs(key: string): Promise<Uint8Array | null> {
