@@ -1,6 +1,6 @@
 import { sha256Sync } from "../core/sha256Sync.js";
 import { applyQuickNotesSyncSchema } from "./quickNotesDbPort.js";
-import type { DbLike } from "./sqliteDb.js";
+import { SqlJsAsyncDb, type DbLike } from "./sqliteDb.js";
 
 /** Apply idempotent mobile schema migrations and first-run seed data. */
 export async function applyMobileSchema(db: DbLike): Promise<void> {
@@ -125,7 +125,7 @@ export async function applyMobileSchema(db: DbLike): Promise<void> {
     is_conflict INTEGER NOT NULL DEFAULT 0,
     restore_pending_at TEXT
   )`);
-  await applyQuickNotesSyncSchema(db);
+  await applyQuickNotesSyncSchema(new SqlJsAsyncDb(db));
 
   const seeded = db.prepare(
     "SELECT value FROM device_state WHERE key='seed_initialized'",

@@ -731,7 +731,7 @@ export const bridge = {
         let quickNotes: QuickNotesSyncResult | { error: string };
         let quickMsg = "；小记已同步";
         try {
-          quickNotes = await syncQuickNotesViaEngine(syncCfg, s3Store, createQuickNotesSyncDbPort(d, {
+          quickNotes = await syncQuickNotesViaEngine(syncCfg, s3Store, createQuickNotesSyncDbPort(new SqlJsAsyncDb(d), {
             assetBytes: assets,
             saveAssetFile: saveAssetBytesFs,
             loadAssetFile: loadAssetBytesFs,

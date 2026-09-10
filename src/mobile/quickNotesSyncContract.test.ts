@@ -1,7 +1,7 @@
 import path from "node:path";
 import crypto from "node:crypto";
 import { describe, it, vi } from "vitest";
-import { SqlJsDb } from "./sqliteDb.js";
+import { SqlJsAsyncDb, SqlJsDb } from "./sqliteDb.js";
 import { applyQuickNotesSyncSchema, createQuickNotesSyncDbPort } from "./quickNotesDbPort.js";
 import {
   contractQuickNoteContent,
@@ -47,7 +47,8 @@ async function makeDevice(): Promise<QuickNotesContractDevice> {
     is_conflict INTEGER NOT NULL DEFAULT 0,
     restore_pending_at TEXT
   )`);
-  await applyQuickNotesSyncSchema(db);
+  const mobileDb = new SqlJsAsyncDb(db);
+  await applyQuickNotesSyncSchema(mobileDb);
   const assets = makeAssetDeps();
 
   const insert = (id: string, text: string) => {
@@ -64,7 +65,7 @@ async function makeDevice(): Promise<QuickNotesContractDevice> {
   };
 
   return {
-    port: createQuickNotesSyncDbPort(db, assets),
+    port: createQuickNotesSyncDbPort(mobileDb, assets),
     create(text) {
       return insert(crypto.randomUUID(), text);
     },

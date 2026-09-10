@@ -14,7 +14,7 @@ import { sha256Sync } from "../core/sha256Sync.js";
 import { previewQuickNote, validateQuickNoteContent } from "../core/quickNoteModel.js";
 import type { StoredQuickNoteContent } from "../core/quickNoteModel.js";
 import type { QuickNoteSyncItemImage, QuickNotesSyncDbPort } from "../core/quickNotesSyncEngine.js";
-import type { DbLike } from "./sqliteDb.js";
+import type { MobileDb } from "./sqliteDb.js";
 import { stageAssetWrites } from "./assetWrites.js";
 
 /** 小记图片文件访问依赖（注入：bridge 用 Capacitor Filesystem + 内存 assets Map；测试用内存实现）。
@@ -33,13 +33,13 @@ export interface QuickNotesAssetFsDeps {
 const quickNoteAssetKey = (id: string, filename: string): string => "quick-notes/" + id + "/" + filename;
 
 /** P2 同步端口所需的 schema 增量（幂等应用：列缺失才 ALTER，表缺失才 CREATE）。 */
-export async function applyQuickNotesSyncSchema(d: DbLike): Promise<void> {
-  const qCols = (d.prepare("PRAGMA table_info(quick_notes)").all() as Array<{ name: string }>).map((c) => c.name);
-  if (!qCols.includes("deleted_at")) d.exec("ALTER TABLE quick_notes ADD COLUMN deleted_at TEXT");
-  if (!qCols.includes("base_hash")) d.exec("ALTER TABLE quick_notes ADD COLUMN base_hash TEXT");
+export async function applyQuickNotesSyncSchema(d: MobileDb): Promise<void> {
+  const qCols = ((await d.prepare("PRAGMA table_info(quick_notes)").all()) as Array<{ name: string }>).map((c) => c.name);
+  if (!qCols.includes("deleted_at")) await d.exec("ALTER TABLE quick_notes ADD COLUMN deleted_at TEXT");
+  if (!qCols.includes("base_hash")) await d.exec("ALTER TABLE quick_notes ADD COLUMN base_hash TEXT");
   // ready_to_sync：0 = 纯本地归档（冲突归档新 id，不向云端发布删除记录，防幽灵墓碑，对齐桌面）；1 = 可同步的删除墓碑
-  if (!qCols.includes("ready_to_sync")) d.exec("ALTER TABLE quick_notes ADD COLUMN ready_to_sync INTEGER NOT NULL DEFAULT 1");
-  d.exec(`CREATE TABLE IF NOT EXISTS quick_note_deleted (
+  if (!qCols.includes("ready_to_sync")) await d.exec("ALTER TABLE quick_notes ADD COLUMN ready_to_sync INTEGER NOT NULL DEFAULT 1");
+  await d.exec(`CREATE TABLE IF NOT EXISTS quick_note_deleted (
     id TEXT PRIMARY KEY,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL,
@@ -48,11 +48,11 @@ export async function applyQuickNotesSyncSchema(d: DbLike): Promise<void> {
 }
 
 /** 端口实现：注入已打开的小记库（sql.js DbLike）+ 资产文件依赖，供 syncQuickNotesViaEngine 使用。 */
-export function createQuickNotesSyncDbPort(d: DbLike, assetFs: QuickNotesAssetFsDeps): QuickNotesSyncDbPort {
+export function createQuickNotesSyncDbPort(d: MobileDb, assetFs: QuickNotesAssetFsDeps): QuickNotesSyncDbPort {
   const { assetBytes, saveAssetFile, loadAssetFile, removeAssetFile } = assetFs;
   return {
     async listLocalQuickNotes() {
-      const rows = d.prepare("SELECT id, created_at, updated_at, content_hash, sync_state, is_conflict, content FROM quick_notes WHERE deleted_at IS NULL").all() as Array<Record<string, unknown>>;
+      const rows = await d.prepare("SELECT id, created_at, updated_at, content_hash, sync_state, is_conflict, content FROM quick_notes WHERE deleted_at IS NULL").all() as Array<Record<string, unknown>>;
       return rows.map((r) => {
         let images: QuickNoteSyncItemImage[] = [];
         try {
@@ -74,7 +74,7 @@ export function createQuickNotesSyncDbPort(d: DbLike, assetFs: QuickNotesAssetFs
       });
     },
     async readContent(id) {
-      const row = d.prepare("SELECT content FROM quick_notes WHERE id=?").get(id) as { content: string } | undefined;
+      const row = await d.prepare("SELECT content FROM quick_notes WHERE id=?").get(id) as { content: string } | undefined;
       return row ? new TextEncoder().encode(row.content) : null;
     },
     async readAsset(id, filename) {
@@ -106,15 +106,14 @@ export function createQuickNotesSyncDbPort(d: DbLike, assetFs: QuickNotesAssetFs
       });
 
       // 对齐桌面 importRemoteQuickNote：保留清单时间戳（LWW 依据）、冲突标记、直接置 synced（引擎收尾再记账）
-      const tx = d.transaction(() => {
-        d.prepare(
-          "INSERT INTO quick_notes (id, created_at, updated_at, preview_text, image_count, content_hash, content, sync_state, is_conflict, restore_pending_at, ready_to_sync) " +
-          "VALUES (?,?,?,?,?,?,?, 'synced', ?, NULL, 1) " +
-          "ON CONFLICT(id) DO UPDATE SET created_at=excluded.created_at, updated_at=excluded.updated_at, preview_text=excluded.preview_text, image_count=excluded.image_count, content_hash=excluded.content_hash, content=excluded.content, sync_state=excluded.sync_state, is_conflict=excluded.is_conflict, restore_pending_at=NULL, deleted_at=NULL, ready_to_sync=1"
-        ).run(item.id, item.createdAt, item.updatedAt, previewQuickNote(parsed.text, parsed.images.length), parsed.images.length, contentHash, text, item.isConflict ? 1 : 0);
-      });
       try {
-        tx();
+        await d.transaction(async () => {
+          await d.prepare(
+            "INSERT INTO quick_notes (id, created_at, updated_at, preview_text, image_count, content_hash, content, sync_state, is_conflict, restore_pending_at, ready_to_sync) " +
+            "VALUES (?,?,?,?,?,?,?, 'synced', ?, NULL, 1) " +
+            "ON CONFLICT(id) DO UPDATE SET created_at=excluded.created_at, updated_at=excluded.updated_at, preview_text=excluded.preview_text, image_count=excluded.image_count, content_hash=excluded.content_hash, content=excluded.content, sync_state=excluded.sync_state, is_conflict=excluded.is_conflict, restore_pending_at=NULL, deleted_at=NULL, ready_to_sync=1"
+          ).run(item.id, item.createdAt, item.updatedAt, previewQuickNote(parsed.text, parsed.images.length), parsed.images.length, contentHash, text, item.isConflict ? 1 : 0);
+        });
       } catch (error) {
         await rollbackAssets();
         throw error;
@@ -123,14 +122,13 @@ export function createQuickNotesSyncDbPort(d: DbLike, assetFs: QuickNotesAssetFs
     },
     async applyTombstoneContent(id, content) {
       const contentHash = sha256Sync(content);
-      const tx = d.transaction(() => {
-        d.prepare("UPDATE quick_notes SET content=?, content_hash=? WHERE id=?").run(new TextDecoder().decode(content), contentHash, id);
+      await d.transaction(async () => {
+        await d.prepare("UPDATE quick_notes SET content=?, content_hash=? WHERE id=?").run(new TextDecoder().decode(content), contentHash, id);
       });
-      tx();
     },
     async listDeletedQuickNoteAssets(id) {
       // 墓碑携带图片（A）：读软删保留的 content 列解析删除前图片元数据；行缺失/解析失败 → []
-      const row = d.prepare("SELECT content FROM quick_notes WHERE id=?").get(id) as { content: string } | undefined;
+      const row = await d.prepare("SELECT content FROM quick_notes WHERE id=?").get(id) as { content: string } | undefined;
       if (!row) return [];
       try {
         const parsed = JSON.parse(row.content) as StoredQuickNoteContent;
@@ -149,10 +147,10 @@ export function createQuickNotesSyncDbPort(d: DbLike, assetFs: QuickNotesAssetFs
       );
     },
     async deleteLocalQuickNote(id) {
-      d.prepare("UPDATE quick_notes SET deleted_at=?, restore_pending_at=NULL, sync_state='local', ready_to_sync=1 WHERE id=?").run(new Date().toISOString(), id);
+      await d.prepare("UPDATE quick_notes SET deleted_at=?, restore_pending_at=NULL, sync_state='local', ready_to_sync=1 WHERE id=?").run(new Date().toISOString(), id);
     },
     async archiveLocalQuickNoteToTrash(id) {
-      const row = d.prepare("SELECT created_at, preview_text, image_count, content_hash, content FROM quick_notes WHERE id=?").get(id) as { created_at: string; preview_text: string; image_count: number; content_hash: string; content: string } | undefined;
+      const row = await d.prepare("SELECT created_at, preview_text, image_count, content_hash, content FROM quick_notes WHERE id=?").get(id) as { created_at: string; preview_text: string; image_count: number; content_hash: string; content: string } | undefined;
       if (!row) return;
 
       const newId = crypto.randomUUID();
@@ -174,12 +172,11 @@ export function createQuickNotesSyncDbPort(d: DbLike, assetFs: QuickNotesAssetFs
         ? await stageAssetWrites(imageWrites, { memory: assetBytes, save: saveAssetFile, remove: removeAssetFile })
         : async () => {};
 
-      const tx = d.transaction(() => {
-        // ready_to_sync=0：纯本地归档，不向云端发布删除记录（其他端从未持有该 id，防幽灵墓碑，对齐桌面 archiveLocalToTrash）
-        d.prepare("INSERT INTO quick_notes (id, created_at, updated_at, preview_text, image_count, content_hash, content, sync_state, is_conflict, restore_pending_at, deleted_at, ready_to_sync) VALUES (?,?,?,?,?,?,?, 'local', 0, NULL, ?, 0)").run(newId, row.created_at, now, row.preview_text, row.image_count, row.content_hash, row.content, now);
-      });
       try {
-        tx();
+        await d.transaction(async () => {
+          // ready_to_sync=0：纯本地归档，不向云端发布删除记录（其他端从未持有该 id，防幽灵墓碑，对齐桌面 archiveLocalToTrash）
+          await d.prepare("INSERT INTO quick_notes (id, created_at, updated_at, preview_text, image_count, content_hash, content, sync_state, is_conflict, restore_pending_at, deleted_at, ready_to_sync) VALUES (?,?,?,?,?,?,?, 'local', 0, NULL, ?, 0)").run(newId, row.created_at, now, row.preview_text, row.image_count, row.content_hash, row.content, now);
+        });
       } catch (error) {
         await rollbackAssets();
         throw error;
@@ -195,8 +192,8 @@ export function createQuickNotesSyncDbPort(d: DbLike, assetFs: QuickNotesAssetFs
     },
     async listDeletedQuickNotes() {
       // ready_to_sync=1 才作为可同步墓碑；冲突归档（=0）纯本地保留不发布
-      const local = d.prepare("SELECT id, created_at, updated_at, deleted_at FROM quick_notes WHERE deleted_at IS NOT NULL AND ready_to_sync=1").all() as Array<Record<string, unknown>>;
-      const learned = d.prepare("SELECT id, created_at, updated_at, deleted_at FROM quick_note_deleted").all() as Array<Record<string, unknown>>;
+      const local = await d.prepare("SELECT id, created_at, updated_at, deleted_at FROM quick_notes WHERE deleted_at IS NOT NULL AND ready_to_sync=1").all() as Array<Record<string, unknown>>;
+      const learned = await d.prepare("SELECT id, created_at, updated_at, deleted_at FROM quick_note_deleted").all() as Array<Record<string, unknown>>;
       const merged = new Map<string, { id: string; createdAt: string; updatedAt: string; deletedAt: string }>();
       for (const r of [...local, ...learned]) {
         const item = { id: String(r.id), createdAt: String(r.created_at), updatedAt: String(r.updated_at), deletedAt: String(r.deleted_at) };
@@ -211,13 +208,13 @@ export function createQuickNotesSyncDbPort(d: DbLike, assetFs: QuickNotesAssetFs
       // 墓碑发布 → 清待同步标记（对齐桌面）。本地软删行置 ready_to_sync=0（不再重复发布/计数）；
       // quick_note_deleted 是远端学习墓碑（无本地副本），无可清的 ready 标记，跳过。
       for (const id of ids) {
-        d.prepare("UPDATE quick_notes SET ready_to_sync=0 WHERE id=? AND deleted_at IS NOT NULL").run(id);
+        await d.prepare("UPDATE quick_notes SET ready_to_sync=0 WHERE id=? AND deleted_at IS NOT NULL").run(id);
       }
     },
     async listAllDeletedQuickNotes() {
       // 下载方向 LWW 需要全部墓碑（含已发布 ready=0）：软删行任意 ready + 远端学习表合并
-      const local = d.prepare("SELECT id, created_at, updated_at, deleted_at FROM quick_notes WHERE deleted_at IS NOT NULL").all() as Array<Record<string, unknown>>;
-      const learned = d.prepare("SELECT id, created_at, updated_at, deleted_at FROM quick_note_deleted").all() as Array<Record<string, unknown>>;
+      const local = await d.prepare("SELECT id, created_at, updated_at, deleted_at FROM quick_notes WHERE deleted_at IS NOT NULL").all() as Array<Record<string, unknown>>;
+      const learned = await d.prepare("SELECT id, created_at, updated_at, deleted_at FROM quick_note_deleted").all() as Array<Record<string, unknown>>;
       const merged = new Map<string, { id: string; createdAt: string; updatedAt: string; deletedAt: string }>();
       for (const r of [...local, ...learned]) {
         const item = { id: String(r.id), createdAt: String(r.created_at), updatedAt: String(r.updated_at), deletedAt: String(r.deleted_at) };
@@ -228,29 +225,28 @@ export function createQuickNotesSyncDbPort(d: DbLike, assetFs: QuickNotesAssetFs
     },
     async listDeferredDeletedQuickNotes() { return []; }, // 移动端无小记→笔记转换
     async rememberDeletedQuickNote(item) {
-      d.prepare("INSERT OR REPLACE INTO quick_note_deleted (id, created_at, updated_at, deleted_at) VALUES (?,?,?,?)").run(item.id, item.createdAt, item.updatedAt, item.deletedAt);
+      await d.prepare("INSERT OR REPLACE INTO quick_note_deleted (id, created_at, updated_at, deleted_at) VALUES (?,?,?,?)").run(item.id, item.createdAt, item.updatedAt, item.deletedAt);
     },
     async revokeLocalDeletion(id) {
-      const tx = d.transaction(() => {
-        d.prepare("UPDATE quick_notes SET deleted_at=NULL WHERE id=? AND deleted_at IS NOT NULL").run(id);
-        d.prepare("DELETE FROM quick_note_deleted WHERE id=?").run(id);
+      await d.transaction(async () => {
+        await d.prepare("UPDATE quick_notes SET deleted_at=NULL WHERE id=? AND deleted_at IS NOT NULL").run(id);
+        await d.prepare("DELETE FROM quick_note_deleted WHERE id=?").run(id);
       });
-      tx();
     },
     async isRestorePending(id) {
-      const row = d.prepare("SELECT restore_pending_at FROM quick_notes WHERE id=?").get(id) as { restore_pending_at: string | null } | undefined;
+      const row = await d.prepare("SELECT restore_pending_at FROM quick_notes WHERE id=?").get(id) as { restore_pending_at: string | null } | undefined;
       return row ? row.restore_pending_at !== null : false;
     },
     async baseHash(id) {
-      const row = d.prepare("SELECT base_hash FROM quick_notes WHERE id=?").get(id) as { base_hash: string | null } | undefined;
+      const row = await d.prepare("SELECT base_hash FROM quick_notes WHERE id=?").get(id) as { base_hash: string | null } | undefined;
       return row ? row.base_hash : null;
     },
     async setBaseHash(id, contentHash) {
-      d.prepare("UPDATE quick_notes SET base_hash=? WHERE id=?").run(contentHash, id);
+      await d.prepare("UPDATE quick_notes SET base_hash=? WHERE id=?").run(contentHash, id);
     },
     async markSynced(id) {
       // restore_pending_at 一并清除：恢复已生效后残留标记会让本设备永远 local-wins（墓碑永胜被破坏）。
-      d.prepare("UPDATE quick_notes SET sync_state='synced', restore_pending_at=NULL WHERE id=?").run(id);
+      await d.prepare("UPDATE quick_notes SET sync_state='synced', restore_pending_at=NULL WHERE id=?").run(id);
     },
     log(msg) {
       console.log("[mobile-quick-sync]", msg);
