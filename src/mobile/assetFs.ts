@@ -6,6 +6,7 @@
  * 替换 POC 的 IndexedDB 资产持久化（大文件 IndexedDB 不适合，且与桌面不同构）。
  */
 import { Filesystem, Directory } from "@capacitor/filesystem";
+import { isSafePathSegment } from "../core/storeUtils.js";
 
 const ROOT = "note-assets";
 
@@ -25,23 +26,27 @@ function bytesToBase64(bytes: Uint8Array): string {
   return btoa(bin);
 }
 
-/** 确保 note-assets/{noteId} 目录存在（递归）。 */
-async function ensureNoteDir(noteId: string): Promise<void> {
-  try {
-    await Filesystem.mkdir({ path: `${ROOT}/${noteId}`, directory: Directory.Data, recursive: true });
-  } catch {
-    // 已存在（mkdir 对已存在目录抛错）——忽略
-  }
+function requireAssetPath(key: string): string {
+  const segments = key.split("/");
+  if (segments.length < 2 || !segments.every(isSafePathSegment)) throw new Error(`非法资产键: ${key}`);
+  return [ROOT, ...segments].join("/");
+}
+
+function isMissingFileError(error: unknown): boolean {
+  if (error && typeof error === "object" && (error as { code?: unknown }).code === "ENOENT") return true;
+  const message = error instanceof Error
+    ? error.message
+    : error && typeof error === "object" && "message" in error
+      ? String((error as { message: unknown }).message)
+      : String(error);
+  return /(?:ENOENT|does not exist|not found)/i.test(message);
 }
 
 export async function saveAssetBytesFs(key: string, bytes: Uint8Array): Promise<void> {
-  const [noteId, ...rest] = key.split("/");
-  const filename = rest.join("/");
-  if (!noteId || !filename) throw new Error(`非法资产键: ${key}`);
-  await ensureNoteDir(noteId);
+  const path = requireAssetPath(key);
   // data 传 base64；不传 encoding（Android 原生默认按 base64 解码写入；UTF8 会把 base64 当文本写坏）
   await Filesystem.writeFile({
-    path: `${ROOT}/${noteId}/${filename}`,
+    path,
     data: bytesToBase64(bytes),
     directory: Directory.Data,
     recursive: true,
@@ -49,40 +54,40 @@ export async function saveAssetBytesFs(key: string, bytes: Uint8Array): Promise<
 }
 
 export async function loadAssetBytesFs(key: string): Promise<Uint8Array | null> {
-  const [noteId, ...rest] = key.split("/");
-  const filename = rest.join("/");
-  if (!noteId || !filename) return null;
+  const path = requireAssetPath(key);
   try {
     const res = await Filesystem.readFile({
-      path: `${ROOT}/${noteId}/${filename}`,
+      path,
       directory: Directory.Data,
     });
     return base64ToBytes(String(res.data)); // 未传 encoding → Android 原生返回 base64
-  } catch {
-    return null; // 文件不存在/读取失败
+  } catch (error) {
+    if (isMissingFileError(error)) return null;
+    throw error;
   }
 }
 
 /** 删除已持久化资产文件（不存在时静默成功）。 */
 export async function removeAssetBytesFs(key: string): Promise<void> {
-  const [noteId, ...rest] = key.split("/");
-  const filename = rest.join("/");
-  if (!noteId || !filename) return;
+  const path = requireAssetPath(key);
   try {
     await Filesystem.deleteFile({
-      path: ROOT + "/" + noteId + "/" + filename,
+      path,
       directory: Directory.Data,
     });
-  } catch {
-    // 文件不存在/删除失败——静默（幂等删除语义）
+  } catch (error) {
+    if (!isMissingFileError(error)) throw error;
   }
 }
 
 /** 列出单个普通笔记目录下的资产键（{noteId}/{file}）。 */
 export async function listNoteAssetKeysFs(noteId: string): Promise<string[]> {
+  if (!isSafePathSegment(noteId)) return [];
   try {
     const dir = await Filesystem.readdir({ path: `${ROOT}/${noteId}`, directory: Directory.Data });
-    return dir.files.filter((f) => f.type === "file").map((f) => `${noteId}/${f.name}`);
+    return dir.files
+      .filter((f) => f.type === "file" && isSafePathSegment(f.name))
+      .map((f) => `${noteId}/${f.name}`);
   } catch {
     return []; // 目录不存在或损坏时按无资产处理
   }
@@ -90,9 +95,12 @@ export async function listNoteAssetKeysFs(noteId: string): Promise<string[]> {
 
 /** 列出单条小记目录下的资产键（quick-notes/{quickNoteId}/{file}）。 */
 export async function listQuickNoteAssetKeysFs(quickNoteId: string): Promise<string[]> {
+  if (!isSafePathSegment(quickNoteId)) return [];
   try {
     const dir = await Filesystem.readdir({ path: `${ROOT}/quick-notes/${quickNoteId}`, directory: Directory.Data });
-    return dir.files.filter((f) => f.type === "file").map((f) => `quick-notes/${quickNoteId}/${f.name}`);
+    return dir.files
+      .filter((f) => f.type === "file" && isSafePathSegment(f.name))
+      .map((f) => `quick-notes/${quickNoteId}/${f.name}`);
   } catch {
     return [];
   }
@@ -104,7 +112,7 @@ export async function listAssetKeysFs(): Promise<string[]> {
   let entries: Array<{ name: string; type?: string }> = [];
   try {
     const root = await Filesystem.readdir({ path: ROOT, directory: Directory.Data });
-    entries = root.files.filter((f) => f.type === "directory" && f.name && f.name !== "." && f.name !== "..");
+    entries = root.files.filter((f) => f.type === "directory" && isSafePathSegment(f.name));
   } catch {
     return keys;
   }
@@ -112,7 +120,7 @@ export async function listAssetKeysFs(): Promise<string[]> {
     if (entry.name === "quick-notes") {
       try {
         const quickRoot = await Filesystem.readdir({ path: `${ROOT}/quick-notes`, directory: Directory.Data });
-        for (const quickNote of quickRoot.files.filter((f) => f.type === "directory")) {
+        for (const quickNote of quickRoot.files.filter((f) => f.type === "directory" && isSafePathSegment(f.name))) {
           keys.push(...await listQuickNoteAssetKeysFs(quickNote.name));
         }
       } catch {
