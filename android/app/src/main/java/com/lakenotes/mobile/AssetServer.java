@@ -334,7 +334,7 @@ public final class AssetServer {
 
     /** 图片魔数嗅探（对齐桌面 assetServer.sniffMime）：扩展名缺失/异常时按文件头判断，
      * 保证 <img> 渲染正确（WebView 按 Content-Type 决定图片解码路径）。 */
-    private static String sniffMime(File file) {
+    static String sniffMime(File file) {
         try (FileInputStream in = new FileInputStream(file)) {
             byte[] head = new byte[16];
             int n = in.read(head);
@@ -343,7 +343,7 @@ public final class AssetServer {
                 if (b0 == 0x89 && head[1] == 'P' && head[2] == 'N' && head[3] == 'G') return "image/png";
                 if (b0 == 0xFF && (head[1] & 0xFF) == 0xD8 && (head[2] & 0xFF) == 0xFF) return "image/jpeg";
                 if (head[0] == 'G' && head[1] == 'I' && head[2] == 'F' && head[3] == '8') return "image/gif";
-                if (head[0] == 'R' && head[1] == 'I' && head[2] == 'F' && head[3] == 'F'
+                if (n >= 12 && head[0] == 'R' && head[1] == 'I' && head[2] == 'F' && head[3] == 'F'
                         && head[8] == 'W' && head[9] == 'E' && head[10] == 'B' && head[11] == 'P') return "image/webp";
                 if (head[4] == 'f' && head[5] == 't' && head[6] == 'y' && head[7] == 'p' && n >= 12) {
                     String brand = new String(head, 8, 4, StandardCharsets.US_ASCII);
