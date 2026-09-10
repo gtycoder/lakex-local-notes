@@ -82,7 +82,7 @@ describe("mobile purge 删除传播", () => {
     expect((await bridge.listNotes()).some((n) => n.id === NID)).toBe(false);
 
     // 墓碑写入 deleted_notes（node_type='note'），供 syncEngine 发布 deleted:true 传播删除
-    const tombstones = bridge.listDeletedNotesForSync();
+    const tombstones = await bridge.listDeletedNotesForSync();
     const tomb = tombstones.find((t) => t.id === NID);
     expect(tomb).toBeDefined();
     expect(tomb!.nodeType).toBe("note");
@@ -104,9 +104,9 @@ describe("mobile purge 删除传播", () => {
     expect((await bridge.listNotes()).some((n) => n.id === NID)).toBe(false);
 
     // folder 墓碑：isFolderPurged 生效（下载远端 folders 时过滤，防复活）
-    expect(bridge.isFolderPurged(nb.id)).toBe(true);
+    expect(await bridge.isFolderPurged(nb.id)).toBe(true);
     // 子树 note 墓碑：发布 deleted:true 传播
-    const tombstones = bridge.listDeletedNotesForSync();
+    const tombstones = await bridge.listDeletedNotesForSync();
     expect(tombstones.find((t) => t.id === nb.id)?.nodeType).toBe("folder");
     expect(tombstones.find((t) => t.id === NID)?.nodeType).toBe("note");
   });
@@ -116,9 +116,9 @@ describe("mobile purge 删除传播", () => {
     await bridge.saveNote(NID, "待删", "<p>内容</p>", null);
     await bridge.trashNote(NID);
     await bridge.purgeTreeItem(NID, "note");
-    const tombBefore = bridge.listDeletedNotesForSync().find((t) => t.id === NID);
-    bridge.markTombstonesPublished([NID]);
-    const tombAfter = bridge.listDeletedNotesForSync().find((t) => t.id === NID);
+    const tombBefore = (await bridge.listDeletedNotesForSync()).find((t) => t.id === NID);
+    await bridge.markTombstonesPublished([NID]);
+    const tombAfter = (await bridge.listDeletedNotesForSync()).find((t) => t.id === NID);
     expect(tombAfter!.deletedAt).toBe(tombBefore!.deletedAt);
   });
 
@@ -191,7 +191,7 @@ describe("mobile purge 删除传播", () => {
     expect(notes.some((note) => note.id === "purge-nested-parent")).toBe(false);
     expect(notes.some((note) => note.id === "purge-nested-child")).toBe(false);
 
-    const tombstones = bridge.listDeletedNotesForSync();
+    const tombstones = await bridge.listDeletedNotesForSync();
     expect(tombstones.find((item) => item.id === "purge-nested-parent")?.nodeType).toBe("note");
     expect(tombstones.find((item) => item.id === "purge-nested-child")?.nodeType).toBe("note");
   });

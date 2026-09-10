@@ -590,7 +590,7 @@ async function downloadDeclaredAssetsFor(noteIds: string[], onlyMissing = false)
       trashedDown: 0, trashedUp: 0, uploadedBytes: 0, downloadedBytes: 0,
     };
     for (const noteId of noteIds) {
-      let assets = typeof dbPort.listDeclaredAssets === "function" ? dbPort.listDeclaredAssets(noteId) : [];
+      let assets = typeof dbPort.listDeclaredAssets === "function" ? await dbPort.listDeclaredAssets(noteId) : [];
       if (onlyMissing && assets.length > 0) {
         const local = new Set((await dbPort.listLocalAssets(noteId)).map((a) => a.filename));
         assets = assets.filter((a) => !local.has(a.filename));
@@ -1125,7 +1125,7 @@ export const bridge = {
     const id = crypto.randomUUID();
     const now = new Date().toISOString();
     // 无父新建 → 兜底父笔记本（存在的笔记本；无则自动创建"未分类"）
-    const pid = parentId ?? dbPort.defaultNotebookId();
+    const pid = parentId ?? await dbPort.defaultNotebookId();
     await bridge.saveNote(id, title, INITIAL_LAKE_CONTENT, pid);
     return { id, title, content: INITIAL_LAKE_CONTENT, updatedAt: now, parentId: pid };
   },
@@ -1514,10 +1514,10 @@ export const bridge = {
   // ---- 目录树只读契约（同步调试/测试用） ----
   listNotebookTree: listNotebookTreeImpl,
   // ---- 墓碑只读契约（同步调试/测试用；生产同步路径直接走 dbPort，不经此对象） ----
-  listDeletedNotesForSync() { return dbPort.listDeletedNotesForSync!(); },
+  async listDeletedNotesForSync() { return dbPort.listDeletedNotesForSync!(); },
   readDeletedContent(id: string) { return dbPort.readDeletedContent!(id); },
-  markTombstonesPublished(ids: string[]) { dbPort.markTombstonesPublished!(ids); },
-  isFolderPurged(id: string): boolean { return dbPort.isFolderPurged!(id); },
+  async markTombstonesPublished(ids: string[]) { await dbPort.markTombstonesPublished!(ids); },
+  async isFolderPurged(id: string): Promise<boolean> { return dbPort.isFolderPurged!(id); },
 };
 
 /** 笔记本详情：返回完整子树（递归展开到叶），按 sort_order 排序（P1-3/P2-3/P2-4）。

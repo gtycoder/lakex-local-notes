@@ -116,6 +116,17 @@ class MemDb implements SyncDbPort {
   hasLocalPendingNotes() { return [...this.notes.values()].some((n) => n.syncState !== "synced"); }
 }
 
+function promisifyDb(db: MemDb): SyncDbPort {
+  return new Proxy(db, {
+    get(target, property, receiver) {
+      const value = Reflect.get(target, property, receiver);
+      if (typeof value !== "function") return value;
+      return async (...args: unknown[]) =>
+        await (value as (...args: unknown[]) => unknown).apply(target, args);
+    },
+  }) as SyncDbPort;
+}
+
 const CFG = { endpoint: "https://s3.example.com", region: "cn-north-1", bucket: "b", accessKeyId: "ak", secretAccessKey: "sk", prefix: "p" };
 const hashOf = (s: string) => sha256Sync(new TextEncoder().encode(s));
 const row = (over: Partial<LocalNoteRow> & { id: string }): LocalNoteRow => ({
@@ -125,6 +136,23 @@ const row = (over: Partial<LocalNoteRow> & { id: string }): LocalNoteRow => ({
 });
 
 describe("syncEngine（共享编排）", () => {
+  it("全异步 SyncDbPort：可完整走上传、发布、记账与下一轮零变更早退", async () => {
+    const s3 = new MemS3();
+    const db = new MemDb();
+    db.notes.set("n1", row({ id: "n1" }));
+
+    const first = await syncNow(CFG, s3, promisifyDb(db));
+    expect(first.published).toBe(true);
+    expect(first.uploaded).toBe(1);
+    expect(db.notes.get("n1")!.syncState).toBe("synced");
+    expect(db.bases.get("n1")!.lastUploadedHash).toBe(hashOf("<p>hi</p>"));
+
+    const second = await syncNow(CFG, s3, promisifyDb(db));
+    expect(second.message).toContain("零变更跳过");
+    expect(second.uploaded).toBe(0);
+    expect(second.published).toBe(false);
+  });
+
   it("首次同步：上传本地笔记 + 写 gzip manifest（D1/D2）", async () => {
     const s3 = new MemS3();
     const db = new MemDb();
