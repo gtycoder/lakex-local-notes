@@ -34,12 +34,13 @@ import {
 } from "../core/quickNoteModel.js";
 import type { StoredQuickNoteContent, StoredQuickNoteImage } from "../core/quickNoteModel.js";
 import { syncQuickNotesViaEngine } from "../core/quickNotesSyncEngine.js";
-import { applyQuickNotesSyncSchema, createQuickNotesSyncDbPort } from "./quickNotesDbPort.js";
+import { createQuickNotesSyncDbPort } from "./quickNotesDbPort.js";
 import { mobileSecretStore } from "./secretStore.js";
 import { stageAssetWrites } from "./assetWrites.js";
 import { hasNoteSaveChanges } from "../core/noteSaveDecision.js";
 import { selectHistoryDrops } from "../core/storeUtils.js";
 import { sqlParameterBatches } from "../core/sqlParameterBatch.js";
+import { applyMobileSchema } from "./schema.js";
 
 export interface POCNote {
   id: string;
@@ -103,148 +104,7 @@ async function ensureDb(): Promise<SqlJsDb> {
   if (db) return db;
   const snap = await loadSnapshot();
   db = snap ? await SqlJsDb.openFrom(snap) : await SqlJsDb.open();
-  // P2-9（GPT 审计）：外键约束启用（sql.js 支持 PRAGMA foreign_keys；新建表的外键声明才生效）
-  try { db.exec("PRAGMA foreign_keys = ON"); } catch { /* 旧库/兼容环境忽略 */ }
-  // M1 schema：对齐桌面 notes 子集 + sync_base（旧 POC 表自动迁移，列缺失则 ALTER 补充）
-  db.exec(`CREATE TABLE IF NOT EXISTS notes (
-    id TEXT PRIMARY KEY,
-    title TEXT NOT NULL,
-    content TEXT NOT NULL,
-    parent_id TEXT,
-    sort_order INTEGER NOT NULL DEFAULT 0,
-    updated_at TEXT NOT NULL,
-    content_hash TEXT,
-    sync_state TEXT NOT NULL DEFAULT 'local',
-    is_conflict INTEGER NOT NULL DEFAULT 0,
-    deleted_at TEXT
-  )`);
-  const cols = (db.prepare("PRAGMA table_info(notes)").all() as Array<{ name: string }>).map((c) => c.name);
-  const addCol = (name: string, decl: string) => {
-    if (!cols.includes(name)) db!.exec(`ALTER TABLE notes ADD COLUMN ${name} ${decl}`);
-  };
-  addCol("parent_id", "TEXT");
-  addCol("sort_order", "INTEGER NOT NULL DEFAULT 0");
-  addCol("content_hash", "TEXT");
-  addCol("sync_state", "TEXT NOT NULL DEFAULT 'local'");
-  addCol("is_conflict", "INTEGER NOT NULL DEFAULT 0");
-  addCol("deleted_at", "TEXT");
-  // 同步语义补齐：回收站 + 恢复标记（对齐桌面 notes 表）
-  addCol("trashed_at", "TEXT");
-  addCol("deleted_from_parent_id", "TEXT");
-  addCol("restore_pending_at", "TEXT");
-  // 协议字段透传（D9）：锁/图标/冲突标记，移动端不展示也必须落库（红线 §3.5）
-  addCol("is_locked", "INTEGER NOT NULL DEFAULT 0");
-  addCol("locked_at", "TEXT");
-  addCol("icon", "TEXT");
-  // 旧库补齐 content_hash：同步批量路径改为 metadata-only 后，每行都必须有当前内容哈希。
-  const missingHashes = db.prepare("SELECT id, content FROM notes WHERE content_hash IS NULL").all() as Array<{ id: string; content: string }>;
-  for (const row of missingHashes) {
-    db.prepare("UPDATE notes SET content_hash=? WHERE id=?")
-      .run(sha256Sync(new TextEncoder().encode(row.content)), row.id);
-  }
-  db.exec(`CREATE TABLE IF NOT EXISTS sync_base (
-    note_id TEXT PRIMARY KEY,
-    content_hash TEXT NOT NULL,
-    last_synced_meta_at TEXT,
-    last_uploaded_hash TEXT
-  )`);
-  // B4：从云端学到的删除（本设备从未持有），防离线设备把残留当新文档上传复活（对齐桌面 deleted_notes）
-  // node_type：note（发布方向进 manifest.notes 标记 deleted:true）/ folder（仅本地下载过滤）；
-  // purged_at：本地主动彻底删除（purge）标记——isFolderPurged 过滤 + 发布方向防复活；
-  // published_at：墓碑已发布到 manifest（对齐桌面计数语义，移动端无待上传计数 UI，仅保持列一致）。
-  db.exec(`CREATE TABLE IF NOT EXISTS declared_assets (
-    note_id TEXT NOT NULL,
-    filename TEXT NOT NULL,
-    size INTEGER NOT NULL,
-    hash TEXT NOT NULL,
-    PRIMARY KEY(note_id, filename)
-  )`);
-  db.exec(`CREATE TABLE IF NOT EXISTS deleted_notes (
-    id TEXT PRIMARY KEY,
-    title TEXT NOT NULL,
-    parent_id TEXT,
-    sort_order INTEGER NOT NULL,
-    updated_at TEXT NOT NULL,
-    deleted_at TEXT NOT NULL,
-    node_type TEXT NOT NULL DEFAULT 'note',
-    purged_at TEXT,
-    published_at TEXT
-  )`);
-  {
-    const delCols = (db.prepare("PRAGMA table_info(deleted_notes)").all() as Array<{ name: string }>).map((c) => c.name);
-    if (!delCols.includes("node_type")) db.exec("ALTER TABLE deleted_notes ADD COLUMN node_type TEXT NOT NULL DEFAULT 'note'");
-    if (!delCols.includes("purged_at")) db.exec("ALTER TABLE deleted_notes ADD COLUMN purged_at TEXT");
-    if (!delCols.includes("published_at")) db.exec("ALTER TABLE deleted_notes ADD COLUMN published_at TEXT");
-  }
-  // D4：目录树（notebook/group），导入远端 folders 供父目录判定/未来树 UI（对齐桌面 tree_nodes 子集）
-  db.exec(`CREATE TABLE IF NOT EXISTS folders (
-    id TEXT PRIMARY KEY,
-    title TEXT NOT NULL,
-    parent_id TEXT,
-    sort_order INTEGER NOT NULL,
-    node_type TEXT NOT NULL,
-    icon TEXT,
-    updated_at TEXT NOT NULL,
-    trashed_at TEXT,
-    deleted_from_parent_id TEXT,
-    sync_state TEXT NOT NULL DEFAULT 'synced'
-  )`);
-  if (!(db.prepare("PRAGMA table_info(folders)").all() as Array<{ name: string }>).some((c) => c.name === "sync_state")) {
-    db.exec("ALTER TABLE folders ADD COLUMN sync_state TEXT NOT NULL DEFAULT 'synced'");
-  }
-  // 零变更早退：本设备上次成功读/写的 manifest commitId + 墓碑签名（对齐桌面 device_state）
-  db.exec(`CREATE TABLE IF NOT EXISTS device_state (
-    key TEXT PRIMARY KEY,
-    value TEXT NOT NULL
-  )`);
-  // B3：小记（对齐桌面 quick_notes 表列；移动端单库方案正文存 content 列，不建独立库/文件）
-  db.exec(`CREATE TABLE IF NOT EXISTS quick_notes (
-    id TEXT PRIMARY KEY,
-    created_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL,
-    preview_text TEXT NOT NULL,
-    image_count INTEGER NOT NULL DEFAULT 0,
-    content_hash TEXT NOT NULL,
-    content TEXT NOT NULL,
-    sync_state TEXT NOT NULL DEFAULT 'local',
-    is_conflict INTEGER NOT NULL DEFAULT 0,
-    restore_pending_at TEXT
-  )`);
-  // P2（小记同步端口）：软删墓碑/基线/图片字节 schema（见 quickNotesDbPort.ts，幂等）
-  applyQuickNotesSyncSchema(db);
-  // 种子笔记本：仅全新库首次初始化自动创建一个普通笔记本（固定 ID 仅为多端首启同步一致，无默认/特殊行为；
-  // seed_initialized 标记保证用户删除（含 purge）后不复活）。对齐桌面 store.ts。
-  const seeded = db.prepare("SELECT value FROM device_state WHERE key='seed_initialized'").get() as { value?: string } | undefined;
-  if (!seeded) {
-    db.prepare("INSERT OR IGNORE INTO folders (id, title, parent_id, sort_order, node_type, icon, updated_at, sync_state) VALUES (?,?,NULL,0,'notebook',NULL,?,'synced')")
-      .run("notebook-personal", "个人笔记", new Date().toISOString());
-    db.prepare("INSERT INTO device_state(key,value) VALUES('seed_initialized','1') ON CONFLICT(key) DO NOTHING").run();
-  }
-  // D5：文档历史快照（纯本地，不参与同步）；覆盖前留档，防丢数据（对齐桌面 note_history 简化）
-  db.exec(`CREATE TABLE IF NOT EXISTS note_history (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    note_id TEXT NOT NULL,
-    content TEXT NOT NULL,
-    content_hash TEXT NOT NULL,
-    title TEXT NOT NULL,
-    parent_id TEXT,
-    sort_order INTEGER NOT NULL,
-    created_at TEXT NOT NULL
-  )`);
-  // 孤儿资源登记（对齐桌面 orphan_assets）：未引用且不在历史快照里的本地资源
-  db.exec(`CREATE TABLE IF NOT EXISTS orphan_assets (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    note_id TEXT NOT NULL,
-    filename TEXT NOT NULL,
-    file_path TEXT NOT NULL,
-    size INTEGER NOT NULL,
-    mime_type TEXT NOT NULL,
-    detected_at TEXT NOT NULL DEFAULT (datetime('now'))
-  )`);
-  db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_orphan_path ON orphan_assets(file_path)");
-  // GC 差集：待回收键（双锚窗口）+ 删除日志（对齐桌面 s3_gc_pending/s3_gc_log）
-  db.exec(`CREATE TABLE IF NOT EXISTS s3_gc_pending (key TEXT PRIMARY KEY, marked_at TEXT NOT NULL)`);
-  db.exec(`CREATE TABLE IF NOT EXISTS s3_gc_log (id INTEGER PRIMARY KEY AUTOINCREMENT, ts TEXT NOT NULL, action TEXT NOT NULL, key TEXT NOT NULL, reason TEXT NOT NULL, commit_id TEXT, device_id TEXT, ok INTEGER NOT NULL)`);
+  applyMobileSchema(db);
   return db;
 }
 
