@@ -17,7 +17,9 @@ import type { QuickNotesSyncResult } from "../core/quickNotesSyncEngine.js";
 import { TRASH_NOTEBOOK_ID } from "../core/syncDecisions.js";
 import { createCapacitorS3Store } from "./s3Store";
 import { buildAssetFilename, extOf } from "../core/assetNaming.js";
+import { readImageDimensions, sniffImageFormat } from "../core/imageUtils.js";
 import { localAssetHttpUrl } from "../core/assetUrl.js";
+import { MAX_ATTACHMENT_BYTES, MAX_IMAGE_BYTES, MAX_IMAGE_PIXELS } from "../core/storeLimits.js";
 import type { S3Settings, TreeNode } from "../lib/types";
 import type { SearchResult } from "../core/searchRepository.js";
 import { nextSortOrder } from "../core/treeRules.js";
@@ -82,6 +84,23 @@ const MIME_BY_EXT: Record<string, string> = {
 };
 function mimeForExt(ext: string): string {
   return MIME_BY_EXT[ext] ?? "application/octet-stream";
+}
+
+function assertResourceBytes(bytes: Uint8Array): void {
+  if (sniffImageFormat(bytes) != null) {
+    if (bytes.length === 0 || bytes.length > MAX_IMAGE_BYTES) {
+      throw new Error("图片为空或超过 25 MiB");
+    }
+    const dimensions = readImageDimensions(bytes);
+    if (dimensions && dimensions.width * dimensions.height > MAX_IMAGE_PIXELS) {
+      throw new Error(`图片尺寸过大（${dimensions.width}x${dimensions.height}），上限 ${MAX_IMAGE_PIXELS} 像素`);
+    }
+    return;
+  }
+  if (bytes.length === 0) throw new Error("附件为空");
+  if (bytes.length > MAX_ATTACHMENT_BYTES) {
+    throw new Error(`附件超过 ${MAX_ATTACHMENT_BYTES / 1024 / 1024} MiB 协议上限`);
+  }
 }
 
 async function initializeDb(): Promise<NativeSqliteDb> {
@@ -582,6 +601,7 @@ export const bridge = {
     noteId: string
   ): Promise<{ url: string; resourceRef: string; filename: string; mimeType: string; size: number }> {
     const bytes = input.bytes instanceof Uint8Array ? input.bytes : new Uint8Array(input.bytes as unknown as ArrayLike<number>);
+    assertResourceBytes(bytes);
     // 与桌面一致的资产文件名（共享 buildAssetFilename：{13ts}_{8hex}.{ext}，extractAssetRefs 正则匹配）
     const name = buildAssetFilename(input.filename);
     // 本地存储（内存 + Filesystem 持久化，AssetServer 读取显示）

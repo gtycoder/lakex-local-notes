@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import path from "node:path";
 import type { Database } from "sql.js";
 import { defineTreeBehaviorContract, type TreeBehaviorAdapter } from "../core/treeBehaviorContract.js";
+import { defineResourceBehaviorContract, type ResourceBehaviorAdapter } from "../core/resourceBehaviorContract.js";
 
 // sqliteDb.js 的 SqlJsDb 依赖 Vite 的 ?url wasm import，vitest 下解析为根路径失败；
 // mock 为真实 sql.js（node 直载 wasm，同 quickNotesDbPort.test.ts 模式）。
@@ -142,6 +143,14 @@ function createMobileAdapter(): TreeBehaviorAdapter {
 }
 
 defineTreeBehaviorContract("Mobile", createMobileAdapter);
+
+function createMobileResourceAdapter(): ResourceBehaviorAdapter {
+  return {
+    upload: (input, noteId) => bridge.uploadResource(input, noteId),
+  };
+}
+
+defineResourceBehaviorContract("Mobile", createMobileResourceAdapter);
 
 /**
  * 移动端 purge 删除传播回归测试：
