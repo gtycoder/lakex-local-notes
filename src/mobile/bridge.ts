@@ -106,7 +106,7 @@ async function createS3Client(cfg: S3Settings): Promise<import("@aws-sdk/client-
   });
 }
 
-const dbPort: SyncDbPort = createMobileSyncDbPort(() => db!, {
+const dbPort: SyncDbPort = createMobileSyncDbPort(() => new SqlJsAsyncDb(db!), {
   assets,
   saveAssetFile: saveAssetBytesFs,
   loadAssetFile: loadAssetBytesFs,
