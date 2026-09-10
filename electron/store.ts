@@ -21,6 +21,7 @@ import { OrphanLifecycle } from "./orphanLifecycle.js";
 import { Diagnostics } from "./diagnostics.js";
 import { SyncReconciliation } from "./syncReconciliation.js";
 import { SettingsRepository } from "./settingsRepository.js";
+import { NoteExport } from "./noteExport.js";
 import type { TrashItem, TrashReminderItem } from "./trashRepository.js";
 export type { TrashItem, TrashReminderItem };
 import { AssetRepository, type OrphanAsset, type OrphanAssetRow } from "./assetRepository.js";
@@ -66,19 +67,8 @@ function uuid(): string {
   return crypto.randomUUID();
 }
 
-/**
- * W-3：资产服务器 URL 提取正则工厂。端口跟随 ASSET_PORT（LAKE_ASSET_PORT 可覆盖，
- * 多端同机双开），此前硬编码 19876 会在端口覆盖时让导出静默丢失全部图片。
- */
-export function localAssetLakeSrcRe(port: number): RegExp {
-  return new RegExp(`^http://127\\.0\\.0\\.1:${port}/([^/]+)/([^/]+)$`);
-}
-export function localAssetHtmlImgRe(port: number): RegExp {
-  return new RegExp(`<img[^>]*src="(http://127\\.0\\.0\\.1:${port}/([^/]+)/([^/"\\s]+))"`, "g");
-}
-export function localAssetMdImgRe(port: number): RegExp {
-  return new RegExp(`!\\[[^\\]]*\\]\\((http://127\\.0\\.0\\.1:${port}/([^/)]+)/([^/)]+))\\)`, "g");
-}
+/** W-3：资产 URL 正则工厂（端口跟随 ASSET_PORT）——实现已搬到 noteExport.ts，此处 re-export 保兼容 */
+export { localAssetLakeSrcRe, localAssetHtmlImgRe, localAssetMdImgRe } from "./noteExport.js";
 
 export class Store {
   private db: DbLike;
@@ -95,6 +85,7 @@ export class Store {
   private diagnostics: Diagnostics;
   private syncReconciliation: SyncReconciliation;
   private settingsRepository: SettingsRepository;
+  private noteExport: NoteExport;
   private assetRepository: AssetRepository;
   private noteQueries: NoteQueries;
   private noteMetadata: NoteMetadataRepository;
@@ -194,6 +185,12 @@ export class Store {
       readNoteCaches: (noteId) => this.readNoteCaches(noteId),
       upsertSearch: (noteId, title, body) => this.searchRepository.upsert(noteId, title, body),
       listNotesForSync: () => this.noteQueries.listNotesForSync(),
+    });
+    this.noteExport = new NoteExport({
+      db: this.db,
+      notePathFor: (noteId) => this.notePath(noteId),
+      noteAssetsDir: this.noteAssetsDir,
+      readNoteCaches: (noteId) => this.readNoteCaches(noteId),
     });
     this.historyLifecycle = new HistoryLifecycle({
       db: this.db,
@@ -702,163 +699,23 @@ export class Store {
   }
 
   /** M1：返回文档正文/图片目录的绝对路径（供“复制资料路径给本机 AI”） */
-  /**
-   * M1：导出原生 Lake 文档（图片 base64 内嵌，VS Code Lake 插件兼容）。
-   * 把 image card 的 src 从本地 assetServer URL 替换为 data:image/...;base64，其余结构原样保留。
-   */
-  exportNativeLake(id: string, baseDir?: string): { exportPath: string; imageCount: number; skipped: number; size: number } {
-    if (!isSafePathSegment(id)) throw new AppError("InvalidInput", `无效的笔记 ID: ${id}`);
-    const lakePath = this.notePath(id);
-    if (!fs.existsSync(lakePath)) throw new AppError("NotFound", `笔记不存在: ${id}`);
-    const lake = fs.readFileSync(lakePath, "utf8");
-    const titleRow = this.db.prepare("SELECT title FROM notes WHERE id=?").get(id) as { title: string } | undefined;
-    const title = sanitizeFileName(titleRow?.title ?? "未命名");
-    const base = baseDir ?? path.join(os.homedir(), "Desktop", "lake-notes-导出");
-    let exportDir = path.join(base, title);
-    let suffix = 2;
-    while (fs.existsSync(exportDir)) {
-      exportDir = path.join(base, `${title}-${suffix}`);
-      suffix++;
-    }
-    fs.mkdirSync(exportDir, { recursive: true });
-    const exportPath = path.join(exportDir, `${title}.lake`);
-    // image card: <card ... name="image" ... value="data:...">（value = "data:" + encodeURIComponent(JSON)）
-    const cardRe = /(<card\b[^>]*\bname="image"[^>]*\bvalue=")data:([^"]+)(")/g;
-    let imageCount = 0;
-    let skipped = 0;
-    const out = lake.replace(cardRe, (whole, prefix: string, encoded: string, suffixTag: string) => {
-      try {
-        const value = JSON.parse(decodeURIComponent(encoded)) as { src?: string };
-        const src = typeof value.src === "string" ? value.src : "";
-        const m = localAssetLakeSrcRe(ASSET_PORT).exec(src);
-        if (!m) { skipped++; return whole; } // 远程 URL 保持原样
-        const noteId = m[1];
-        const filename = m[2];
-        if (!isSafePathSegment(noteId) || !isSafePathSegment(filename)) { skipped++; return whole; }
-        const file = path.join(this.noteAssetsDir, noteId, filename);
-        if (!fs.existsSync(file)) { skipped++; return whole; }
-        const bytes = fs.readFileSync(file);
-        const mime = mimeTypeForFilename(filename);
-        value.src = `data:${mime};base64,${bytes.toString("base64")}`;
-        imageCount++;
-        return prefix + "data:" + encodeURIComponent(JSON.stringify(value)) + suffixTag;
-      } catch { skipped++; return whole; }
-    });
-    fs.writeFileSync(exportPath, out, "utf8");
-    return { exportPath, imageCount, skipped, size: out.length };
-  }
-
-  /**
-   * M1：导出 HTML（收口导出的一环）：读缓存 Markdown → 轻量转 HTML →
-   * 复制本地图片到 images/ 并改写相对引用 → 写 {标题}/index.html。
-   */
-  exportHtmlNote(id: string, baseDir?: string): { exportPath: string; imageCount: number; skipped: number; size: number } {
-    if (!isSafePathSegment(id)) throw new AppError("InvalidInput", `无效的笔记 ID: ${id}`);
-    const caches = this.readNoteCaches(id);
-    const markdown = caches.markdown ?? "";
-    if (!markdown.trim()) throw new AppError("InvalidInput", "该文档还没有文本缓存，请先打开并保存一次");
-    const titleRow = this.db.prepare("SELECT title FROM notes WHERE id=?").get(id) as { title: string } | undefined;
-    const title = sanitizeFileName(titleRow?.title ?? "未命名");
-    const base = baseDir ?? path.join(os.homedir(), "Desktop", "lake-notes-导出");
-    let exportDir = path.join(base, title);
-    let suffix = 2;
-    while (fs.existsSync(exportDir)) {
-      exportDir = path.join(base, `${title}-${suffix}`);
-      suffix++;
-    }
-    const imagesDir = path.join(exportDir, "images");
-    fs.mkdirSync(imagesDir, { recursive: true });
-    let body = mdToHtml(markdown);
-    // 提取 <img src="http://127.0.0.1:{ASSET_PORT}/{noteId}/{file}"> 并复制 + 改写相对引用
-    const imgRe = localAssetHtmlImgRe(ASSET_PORT);
-    const seen = new Set<string>();
-    let imageCount = 0;
-    let skipped = 0;
-    body = body.replace(imgRe, (whole: string, url: string, noteId: string, filename: string) => {
-      const key = `${noteId}/${filename}`;
-      if (seen.has(key)) return whole.replace(url, `images/${filename}`);
-      seen.add(key);
-      if (!isSafePathSegment(noteId) || !isSafePathSegment(filename)) { skipped++; return whole; }
-      const src = path.join(this.noteAssetsDir, noteId, filename);
-      try {
-        if (fs.existsSync(src)) {
-          const dest = path.join(imagesDir, filename);
-          if (!fs.existsSync(dest)) fs.copyFileSync(src, dest);
-          imageCount++;
-          return whole.replace(url, `images/${filename}`);
-        }
-      } catch { /* 复制失败算跳过 */ }
-      skipped++;
-      return whole;
-    });
-    const page = wrapHtmlPage(title, body);
-    fs.writeFileSync(path.join(exportDir, "index.html"), page, "utf8");
-    return { exportPath: path.join(exportDir, "index.html"), imageCount, skipped, size: page.length };
-  }
-
   getNotePaths(id: string): { title: string; lakePath: string; assetsDir: string } {
-    if (!isSafePathSegment(id)) throw new AppError("InvalidInput", `无效的笔记 ID: ${id}`);
-    const row = this.db.prepare("SELECT title FROM notes WHERE id=?").get(id) as { title: string } | undefined;
-    if (!row) throw new AppError("NotFound", `笔记不存在: ${id}`);
-    return { title: row.title, lakePath: this.notePath(id), assetsDir: path.join(this.noteAssetsDir, id) };
+    return this.noteExport.getNotePaths(id);
   }
 
-  /**
-   * M1：导出资料包（Markdown + 图片）到桌面 lake-notes-导出/{标题}/。
-   * 图片引用从 Lake 生成的 markdown 里以轻量正则提取（`![](http://127.0.0.1:19876/{noteId}/{filename})`），
-   * 复制到导出目录 images/ 并把 MD 改写为相对引用，产出自包含资料包。
-   */
+  /** M1：导出原生 Lake 文档（图片 base64 内嵌，VS Code Lake 插件兼容）。 */
+  exportNativeLake(id: string, baseDir?: string): { exportPath: string; imageCount: number; skipped: number; size: number } {
+    return this.noteExport.exportNativeLake(id, baseDir);
+  }
+
+  /** M1：导出 HTML（读缓存 Markdown → 转换 + 复制图片 + 相对引用 → index.html）。 */
+  exportHtmlNote(id: string, baseDir?: string): { exportPath: string; imageCount: number; skipped: number; size: number } {
+    return this.noteExport.exportHtmlNote(id, baseDir);
+  }
+
+  /** M1：导出资料包（Markdown + 图片，自包含资料包）。 */
   exportNotePackage(id: string, baseDir?: string): { exportDir: string; imageCount: number; skipped: number; size: number } {
-    if (!isSafePathSegment(id)) throw new AppError("InvalidInput", `无效的笔记 ID: ${id}`);
-    const caches = this.readNoteCaches(id);
-    const markdown = caches.markdown ?? "";
-    if (!markdown.trim()) throw new AppError("InvalidInput", "该文档还没有文本缓存，请先打开并保存一次");
-    const titleRow = this.db.prepare("SELECT title FROM notes WHERE id=?").get(id) as { title: string } | undefined;
-    const title = sanitizeFileName(titleRow?.title ?? "未命名");
-    // 提取图片引用（仅处理本地 assetServer URL；远程 URL 保持原样）
-    const imgRe = localAssetMdImgRe(ASSET_PORT);
-    const unique: Array<{ url: string; noteId: string; filename: string }> = [];
-    const seen = new Set<string>();
-    let m: RegExpExecArray | null;
-    while ((m = imgRe.exec(markdown))) {
-      const url = m[1], noteId = m[2], filename = m[3];
-      if (!isSafePathSegment(noteId) || !isSafePathSegment(filename)) continue; // 防路径穿越
-      const key = `${noteId}/${filename}`;
-      if (seen.has(key)) continue;
-      seen.add(key);
-      unique.push({ url, noteId, filename });
-    }
-    const base = baseDir ?? path.join(os.homedir(), "Desktop", "lake-notes-导出");
-    let exportDir = path.join(base, title);
-    let suffix = 2;
-    while (fs.existsSync(exportDir)) {
-      exportDir = path.join(base, `${title}-${suffix}`);
-      suffix++;
-    }
-    const imagesDir = path.join(exportDir, "images");
-    fs.mkdirSync(imagesDir, { recursive: true });
-    let imageCount = 0;
-    let skipped = 0;
-    let md = markdown;
-    for (const img of unique) {
-      const src = path.join(this.noteAssetsDir, img.noteId, img.filename);
-      let copied = false;
-      try {
-        if (fs.existsSync(src)) {
-          const dest = path.join(imagesDir, img.filename);
-          if (!fs.existsSync(dest)) fs.copyFileSync(src, dest);
-          copied = true;
-        }
-      } catch { /* 复制失败算跳过 */ }
-      if (copied) {
-        imageCount++;
-        md = md.split(img.url).join(`images/${img.filename}`);
-      } else {
-        skipped++;
-      }
-    }
-    fs.writeFileSync(path.join(exportDir, "index.md"), md, "utf8");
-    return { exportDir, imageCount, skipped, size: md.length };
+    return this.noteExport.exportNotePackage(id, baseDir);
   }
 
   // ===== 文档历史（快照，纯本地不参与同步） =====
