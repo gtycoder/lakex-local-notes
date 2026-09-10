@@ -227,9 +227,9 @@ describe("mobile maintenance writes", () => {
       expect(result.message).toContain("同步完成");
       expect(coreSyncNow).toHaveBeenCalled();
       const port = vi.mocked(coreSyncNow).mock.calls[0]?.[2] as {
-        getAllNotes(): Array<{ id: string; content: string; contentHash?: string }>;
+        getAllNotes(): Promise<Array<{ id: string; content: string; contentHash?: string }>>;
       };
-      const metadata = port.getAllNotes().find((row) => row.id === "maintenance-note");
+      const metadata = (await port.getAllNotes()).find((row) => row.id === "maintenance-note");
       expect(metadata?.content).toBe("");
       expect(metadata?.contentHash).toBe(sha256Sync(new TextEncoder().encode("<p>x</p>")));
       expect(await bridge.listS3GcPending()).toHaveLength(2);
