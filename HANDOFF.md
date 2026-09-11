@@ -248,7 +248,7 @@
 - **E2E 中发现并修复的 bug**：图片 src 带 `?token=` 时，`resolveCardAsset` 用 `src.split("/").pop()` 当文件名 → `fileKindOf` 把图片判成 `other`、菜单错误显示「复制文件名」。改为优先 `parseLocalAssetUrl(src).filename`，否则按 URL pathname 取干净文件名（`assetNameFromUrl`）。
 
 ### 2.28 文档右键改造：复制 + 属性（260911 晚）
-- 目录文档右键顺序：新建文档 / 新建分组 / 复制 / 重命名 / 属性 / 打开文件位置 / 导出 / 删除。去掉「打开」（点行即打开）与「设置图标」（行图标处仍可改）；「历史版本」收进「属性」。
+- 目录文档右键顺序：新建文档 / 新建分组 / 复制 / 重命名 / 属性 / 历史版本 / 打开文件位置 / 导出 / 删除。去掉「打开」（点行即打开）与「设置图标」（行图标处仍可改）。「历史版本」保留独立入口（曾一度并入属性，用户要求加回），属性面板内也保留「打开历史版本」。
 - **复制**：`store.duplicateNote` → 新 noteId + `note-assets/{newId}` 拷全部附件（**文件名不变**：路径按 noteId 隔离，无需重命名）+ 正文资源 URL 由旧 id 改写为新 id；`sync_state='local'`。IPC `duplicate_note`。菜单复制后刷新树并打开副本（`useTreeActions.duplicateNode`）。
 - **属性**：`store.getNoteInfo` + `src/components/NoteInfoDialog.tsx`（样式在 `ui-polish.css`）→ 位置 / 创建 / 更新 / 字数·字符 / 大小 / 同步状态；文件位置 + 资源目录（可打开）；附件网格（图片缩略图，点击打开原始文件）；历史版本列表 + 打开历史面板。IPC `get_note_info`。
 - 实测：菜单顺序 ✓；复制 18 附件文件名一致、`.lake` 同尺寸、正文 URL 已改写 ✓（测试副本已 purge 清理）；属性弹窗数据 ✓。
