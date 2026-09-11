@@ -82,9 +82,18 @@ function normalizeChildren(element: Element, document: Document, tagName: string
   return output;
 }
 
-/** 移动端环境判定：window.lakeNative.uploadResource 存在 = 移动端（桌面无此契约）。 */
-function isMobileEnvironment(): boolean {
-  return typeof window !== "undefined" && typeof (window as { lakeNative?: { uploadResource?: unknown } }).lakeNative?.uploadResource === "function";
+/**
+ * 移动端环境判定：必须用 Capacitor 原生平台标志。
+ * 旧实现用“lakeNative.uploadResource 存在”——但桌面也暴露该契约，会把桌面误判成移动端，
+ * 进而对跨源资产图跑 canvas.toDataURL()，画布 taint 抛 SecurityError → 图片被丢弃（复制到微信裂图）。
+ */
+export function isMobileEnvironment(): boolean {
+  try {
+    const capacitor = (window as { Capacitor?: { isNativePlatform?: () => boolean } }).Capacitor;
+    return capacitor?.isNativePlatform?.() === true;
+  } catch {
+    return false;
+  }
 }
 
 /** 已解码 <img> → canvas 同步转 PNG data URL（复制到微信；同步，复制事件内可用）。 */

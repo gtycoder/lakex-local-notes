@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, expect, it, beforeAll, afterAll } from "vitest";
-import { buildAssetDataUrlRequest, normalizeClipboardHtml, normalizeImageDataUrl, upgradePastedHtml } from "./clipboardHtml";
+import { buildAssetDataUrlRequest, isMobileEnvironment, normalizeClipboardHtml, normalizeImageDataUrl, upgradePastedHtml } from "./clipboardHtml";
 
 // jsdom 无 canvas 实现：mock getContext/toDataURL（仅测试 blob→png 分支的调用路径）
 const origGetContext = HTMLCanvasElement.prototype.getContext;
@@ -25,6 +25,21 @@ function fragmentFromHtml(html: string): DocumentFragment {
 // 1x1 透明 PNG
 const PNG_1PX =
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==";
+
+describe("isMobileEnvironment（平台判定）", () => {
+  it("桌面：有 lakeNative.uploadResource 但 Capacitor 非原生 → 非移动端", () => {
+    (window as unknown as { lakeNative?: unknown }).lakeNative = { uploadResource: () => Promise.resolve({}) };
+    (window as unknown as { Capacitor?: unknown }).Capacitor = { isNativePlatform: () => false };
+    expect(isMobileEnvironment()).toBe(false);
+    delete (window as unknown as { lakeNative?: unknown }).lakeNative;
+    delete (window as unknown as { Capacitor?: unknown }).Capacitor;
+  });
+  it("Capacitor 原生平台 true → 移动端", () => {
+    (window as unknown as { Capacitor?: unknown }).Capacitor = { isNativePlatform: () => true };
+    expect(isMobileEnvironment()).toBe(true);
+    delete (window as unknown as { Capacitor?: unknown }).Capacitor;
+  });
+});
 
 describe("buildAssetDataUrlRequest（复制到第三方的图片 URL 组装）", () => {
   it("已带 token 的 URL 不重复拼接（单一 query，base64 生效）", () => {
@@ -68,8 +83,8 @@ describe("normalizeClipboardHtml", () => {
 
 
   it("移动端复制：blob 注入的已解码图片 → canvas 转 PNG data URL（微信兼容）", () => {
-    // 模拟移动端环境（lakeNative.uploadResource 存在）
-    (window as unknown as { lakeNative?: unknown }).lakeNative = { uploadResource: () => Promise.resolve({}) };
+    // 模拟移动端环境（Capacitor 原生平台）
+    (window as unknown as { Capacitor?: unknown }).Capacitor = { isNativePlatform: () => true };
     // 构造一个"已解码"的 blob img：canvas 生成真实图片数据
     const canvas = document.createElement("canvas");
     canvas.width = 2; canvas.height = 2;
@@ -82,11 +97,11 @@ describe("normalizeClipboardHtml", () => {
     // 验证移动端环境下 data URL 图片仍保留
     expect(html).toContain('src="data:image/png;base64,');
     // 清理
-    delete (window as unknown as { lakeNative?: unknown }).lakeNative;
+    delete (window as unknown as { Capacitor?: unknown }).Capacitor;
   });
 
   it("移动端复制：blob src 且已解码 → canvas 转 PNG", () => {
-    (window as unknown as { lakeNative?: unknown }).lakeNative = { uploadResource: () => Promise.resolve({}) };
+    (window as unknown as { Capacitor?: unknown }).Capacitor = { isNativePlatform: () => true };
     // 直接构造 blob URL 图片（真实 PNG 字节）
     const bytes = Uint8Array.from(atob(PNG_1PX), (c) => c.charCodeAt(0));
     const blob = new Blob([bytes as unknown as BlobPart], { type: "image/png" });
@@ -100,7 +115,7 @@ describe("normalizeClipboardHtml", () => {
     const html = normalizeClipboardHtml(frag, document);
     expect(html).toContain('src="data:image/png;base64,');
     URL.revokeObjectURL(blobUrl);
-    delete (window as unknown as { lakeNative?: unknown }).lakeNative;
+    delete (window as unknown as { Capacitor?: unknown }).Capacitor;
   });
 
   it("过滤隐藏卡片工具栏等选择器", () => {

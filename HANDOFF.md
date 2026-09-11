@@ -137,8 +137,8 @@
 - **跨端一致性实测（260911 晚，CDP 驱动）**：桌面 9222 与安卓 9335 用同一 fixture（5 篇文档）+ 12 条查询 + 重命名/删除生命周期，**结果逐条完全一致**：1/2/3+ 字统一、标题优先、短语相邻（`编辑器` 不误命中相隔的 `编…辑…器`）、拉丁大小写、空命中/符号查询、重命名保正文、删除即消失。
 
 ### 2.12 Bug 修复：复制到微信裂图 + 大纲重开不渲染 + 大纲增强默认关闭（260911 晚）
-- **复制到第三方（微信）图片不显示**：`clipboardHtml.assetUrlToDataUrlSync` 对已带 `?token=` 的图片 URL 又拼了 `?base64=1&token=`，形成 `?token=X?base64=1&token=Y` 双问号 → 资产服务器 `base64` 参数丢失/鉴权失败 → 图片被丢弃或写成二进制。改为 `URL.searchParams.set` 组装（`buildAssetDataUrlRequest`，含单测），并只接受 `data:` 响应。资产服务器 E2E 实测：正确 URL → `data:image/png;base64,…`；旧双问号 URL → `forbidden`。
-- **桌面大纲关闭重开不渲染**：`useOutline` 开头 `if (!kernel) return`，重开文档时内核可能晚于 effect 就绪且依赖不变 → effect 不再跑，大纲永远为空。改为在既有轮询里动态取内核、就绪后再订阅 `tocChange`，不再早退。
+- **复制到第三方（微信）图片不显示**：**真因** = `isMobileEnvironment()` 用 `lakeNative.uploadResource` 是否存在判移动端，而**桌面也暴露该方法** → 桌面被误判为移动端，对**跨源**资产图跑 `canvas.toDataURL()`，画布 taint 抛 `SecurityError: Tainted canvases may not be exported` → `normalizeImage` 返回 null、图片被整张丢弃（实测复制 HTML 里 0 个 `<img>`）。改为用 `Capacitor.isNativePlatform()` 判定，并导出 `isMobileEnvironment` 加回归单测。**附带修复**：`assetUrlToDataUrlSync` 对已带 `?token=` 的 URL 会拼出双问号（`?token=X?base64=1&token=Y`），改用 `URL.searchParams.set`（`buildAssetDataUrlRequest`）。桌面 E2E：修复前选中图片卡片复制得到**空 HTML**，修复后得到 `<img src="data:image/png;base64,…">`。
+- **桌面大纲关闭重开不渲染**：`useOutline` 开头 `if (!kernel) return`，重开文档时内核可能晚于 effect 就绪且依赖不变 → effect 不再跑，大纲永远为空。改为在既有轮询里动态取内核、就绪后再订阅 `tocChange`，不再早退。（代码根因修复 + 门禁绿；带真实标题文档的“关闭重开”端到端复现待用户确认。）
 - **移动端大纲**：`DocumentEditor` 固定 `tocEnabled={false}`（不用 Lake 原生），使用应用 `OutlineSheet`（读 `kernel.getDocExtraContent().toc` → 按 depth 缩进列表 → `headingUnfold + scrollByNodeId` 跳转 + DOM 校正）；本轮补了 toc 就绪短轮询。`outlineEnhance` 是桌面专属设置，移动端始终用应用大纲面板。
 - **大纲增强默认关闭**：`DEFAULT_SETTINGS.outlineEnhance=false`；`loadSettings` 仅显式 `true` 才开启（存量已存 true 的保持 true）；设置文案注明“关闭（默认）”。
 - 门禁：`tsc` 0 · vitest **943 passed / 16 skipped** · 桌面+移动 `vite build` 全绿。
