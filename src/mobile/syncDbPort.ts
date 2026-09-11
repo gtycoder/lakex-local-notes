@@ -72,13 +72,16 @@ export function createMobileSyncDbPort(getDb: () => MobileDb, deps: MobileSyncDb
     },
     async applyRemoteNote(note, content) {
       const d = getDb();
+      // deleted_from_parent_id 必须随条目保存（对齐桌面 remoteImport.importNote）：
+      // 全新导入的回收站条目（L339 分支）靠它恢复原父——硬编码 NULL 会让"安卓首次同步拉到
+      // 他端已删笔记 → 恢复"后 parent 卡在 TRASH 容器，上传条目 parentId=TRASH 传染他端（260910 实测）。
       await d.prepare(
-        `INSERT INTO notes (id, title, content, parent_id, sort_order, updated_at, content_hash, sync_state, is_conflict, is_locked, locked_at, icon, trashed_at, restore_pending_at)
-         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+        `INSERT INTO notes (id, title, content, parent_id, sort_order, updated_at, content_hash, sync_state, is_conflict, is_locked, locked_at, icon, trashed_at, deleted_from_parent_id, restore_pending_at)
+         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
          ON CONFLICT(id) DO UPDATE SET title=excluded.title, content=excluded.content, parent_id=excluded.parent_id,
            sort_order=excluded.sort_order, updated_at=excluded.updated_at, content_hash=excluded.content_hash,
-           sync_state=excluded.sync_state, is_conflict=excluded.is_conflict, is_locked=excluded.is_locked, locked_at=excluded.locked_at, icon=excluded.icon, trashed_at=excluded.trashed_at, restore_pending_at=NULL`
-      ).run(note.id, note.title, content, note.parentId, note.sortOrder, note.updatedAt, note.contentHash, "synced", note.isConflict ? 1 : 0, note.isLocked ? 1 : 0, note.lockedAt ?? null, note.icon ?? null, note.trashedAt ?? null, null);
+           sync_state=excluded.sync_state, is_conflict=excluded.is_conflict, is_locked=excluded.is_locked, locked_at=excluded.locked_at, icon=excluded.icon, trashed_at=excluded.trashed_at, deleted_from_parent_id=excluded.deleted_from_parent_id, restore_pending_at=NULL`
+      ).run(note.id, note.title, content, note.parentId, note.sortOrder, note.updatedAt, note.contentHash, "synced", note.isConflict ? 1 : 0, note.isLocked ? 1 : 0, note.lockedAt ?? null, note.icon ?? null, note.trashedAt ?? null, note.deletedFromParentId ?? null, null);
     },
     async applyRemoteTrash(id, content, title, trashedAt, deletedFromParentId, parentId, sortOrder) {
       const d = getDb();
@@ -111,6 +114,41 @@ export function createMobileSyncDbPort(getDb: () => MobileDb, deps: MobileSyncDb
         "INSERT INTO deleted_notes(id,title,parent_id,sort_order,updated_at,deleted_at,node_type,published_at) VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET title=excluded.title, parent_id=excluded.parent_id, sort_order=excluded.sort_order, updated_at=excluded.updated_at, deleted_at=excluded.deleted_at, node_type=excluded.node_type, published_at=COALESCE(deleted_notes.published_at, excluded.published_at)"
       ).run(note.id, note.title, note.parentId, note.sortOrder, note.updatedAt, deletedAt, "note", deletedAt);
     },
+    async rememberFolderDeleted(folder, deletedAt) {
+      const d = getDb();
+      // v5：从云端学到的 folder 删除（本设备从未持有该目录）——node_type='folder' 墓碑防复活；
+      // 不写 purged_at（S3 对象前缀由发起端清理）；published_at=deletedAt（墓碑来自 manifest，已发布）。
+      await d.prepare(
+        "INSERT INTO deleted_notes(id,title,parent_id,sort_order,updated_at,deleted_at,node_type,published_at) VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET title=excluded.title, parent_id=excluded.parent_id, sort_order=excluded.sort_order, updated_at=excluded.updated_at, deleted_at=excluded.deleted_at, node_type=excluded.node_type, published_at=COALESCE(deleted_notes.published_at, excluded.published_at)"
+      ).run(folder.id, folder.title, folder.parentId, folder.sortOrder, folder.updatedAt, deletedAt, "folder", deletedAt);
+    },
+    async applyRemoteFolderDelete(id, deletedAt) {
+      const d = getDb();
+      // v5：收到他端 folder 墓碑且本地有活跃副本 → folder 子树移入回收站标 purged（行保留可恢复、不上传）。
+      // folders/notes 分表：先递归取 folder 子树 id（分批 IN 防 SQL 参数上限），再各自批量标 purged。
+      const now = deletedAt || new Date().toISOString();
+      const folderIds: string[] = [];
+      let frontier = [id];
+      while (frontier.length > 0) {
+        folderIds.push(...frontier);
+        const placeholders = frontier.map(() => "?").join(",");
+        const next = await d.prepare(`SELECT id FROM folders WHERE parent_id IN (${placeholders})`).all(...frontier) as Array<{ id: string }>;
+        frontier = next.map((r) => r.id);
+      }
+      for (const batch of sqlParameterBatches(folderIds)) {
+        const ph = batch.map(() => "?").join(",");
+        await d.prepare(
+          "UPDATE folders SET trashed_at=COALESCE(trashed_at,?), deleted_from_parent_id=COALESCE(deleted_from_parent_id,parent_id), updated_at=?, sync_state='purged' WHERE id IN (" + ph + ")"
+        ).run(now, now, ...batch);
+      }
+      // 子树内 notes：对齐 applyRemotePurge 语义（移入回收站标 purged、清恢复标记）
+      for (const batch of sqlParameterBatches(folderIds)) {
+        const ph = batch.map(() => "?").join(",");
+        await d.prepare(
+          "UPDATE notes SET parent_id=?, trashed_at=COALESCE(trashed_at,?), deleted_from_parent_id=COALESCE(deleted_from_parent_id,parent_id), updated_at=?, sync_state='purged', restore_pending_at=NULL WHERE parent_id IN (" + ph + ")"
+        ).run(TRASH_NOTEBOOK_ID, now, now, ...batch);
+      }
+    },
     async listDeletedNotesForSync() {
       const d = getDb();
       const rows = await d.prepare("SELECT id,title,parent_id,sort_order,updated_at,deleted_at,node_type FROM deleted_notes ORDER BY deleted_at").all() as Array<{ id: string; title: string; parent_id: string | null; sort_order: number; updated_at: string; deleted_at: string; node_type: string | null }>;
@@ -125,9 +163,10 @@ export function createMobileSyncDbPort(getDb: () => MobileDb, deps: MobileSyncDb
       if (ids.length === 0) return;
       const d = getDb();
       const publishedAt = new Date().toISOString();
+      // v5：放开旧版 node_type != 'folder' 过滤——folder 墓碑同样发布进 manifest.folders 参与记账。
       for (const batch of sqlParameterBatches(ids)) {
         const placeholders = batch.map(() => "?").join(",");
-        await d.prepare("UPDATE deleted_notes SET published_at=COALESCE(published_at, ?) WHERE id IN (" + placeholders + ") AND node_type != 'folder'").run(publishedAt, ...batch);
+        await d.prepare("UPDATE deleted_notes SET published_at=COALESCE(published_at, ?) WHERE id IN (" + placeholders + ")").run(publishedAt, ...batch);
       }
     },
     async applyRemoteNoteMeta(note) {
@@ -195,7 +234,9 @@ export function createMobileSyncDbPort(getDb: () => MobileDb, deps: MobileSyncDb
     },
     async listFoldersForSync() {
       const d = getDb();
-      const rows = await d.prepare("SELECT id, title, parent_id, sort_order, node_type, icon, updated_at, trashed_at, deleted_from_parent_id FROM folders").all() as Array<{
+      // v5：排除 purged（收到他端 folder 墓碑后保留的回收站副本）——学习端不回填，
+      // 对齐 notes 上传环的 purged continue；否则每端把已删目录当活跃条目重新发布 → manifest 震荡。
+      const rows = await d.prepare("SELECT id, title, parent_id, sort_order, node_type, icon, updated_at, trashed_at, deleted_from_parent_id FROM folders WHERE sync_state != 'purged'").all() as Array<{
         id: string; title: string; parent_id: string | null; sort_order: number; node_type: string; icon: string | null; updated_at: string; trashed_at: string | null; deleted_from_parent_id: string | null;
       }>;
       return rows.map((r) => ({
@@ -249,6 +290,14 @@ export function createMobileSyncDbPort(getDb: () => MobileDb, deps: MobileSyncDb
       const row = await d.prepare("SELECT value FROM device_state WHERE key='last_seen_commit_id'").get() as { value?: string } | undefined;
       return row?.value ?? null;
     },
+    async markFolderSynced(id: string, expectedUpdatedAt: string): Promise<boolean> {
+      // 目录记账（对齐桌面 syncReconciliation.markFolderSynced）：latest 发布成功后按 updatedAt 快照归位。
+      // 缺失此实现 → folder 永远停在 local → hasLocalPendingNotes 恒真 → 零变更早退永不生效（每轮全量+重发布）。
+      const d = getDb();
+      const info = await d.prepare("UPDATE folders SET sync_state='synced' WHERE id=? AND updated_at=?").run(id, expectedUpdatedAt);
+      const changes = (info as { changes?: number }).changes ?? 0;
+      return changes > 0;
+    },
     async setLastSeenCommitId(commitId) {
       const d = getDb();
       await d.prepare("INSERT INTO device_state(key,value) VALUES('last_seen_commit_id',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value").run(commitId);
@@ -269,17 +318,23 @@ export function createMobileSyncDbPort(getDb: () => MobileDb, deps: MobileSyncDb
     },
     async hasLocalPendingNotes() {
       const d = getDb();
-      // purged 是收到他端删除后的本地保留副本，不应阻塞早退。
+      // purged 是收到他端删除后的本地保留副本（含 folder 行），不应阻塞早退——
+      // 否则学习端收到 folder 墓碑后早退永不生效（每轮全量 + 重发布）。
       const noteRow = await d.prepare("SELECT 1 FROM notes WHERE sync_state NOT IN ('synced','purged') AND deleted_at IS NULL LIMIT 1").get();
       if (noteRow) return true;
-      // 默认笔记本等已同步目录不算待上传，否则同步永远不会早退。
-      const groupRow = await d.prepare("SELECT 1 FROM folders WHERE sync_state != 'synced' AND id != ? LIMIT 1").get(TRASH_NOTEBOOK_ID);
-      return !!groupRow;
+      // 默认笔记本等已同步目录不算待上传，否则同步永远不会早退；v5 起排除 purged folder。
+      const groupRow = await d.prepare("SELECT 1 FROM folders WHERE sync_state NOT IN ('synced','purged') AND id != ? LIMIT 1").get(TRASH_NOTEBOOK_ID);
+      if (groupRow) return true;
+      // 未发布的 purge 墓碑 = 待上传事实（对齐桌面 hasLocalPendingNotes）：否则墓碑与他端发布撞车时
+      // 被零变更早退吞掉，markTombstonesPublished 永不执行 → pending documents 永久挂起（260910 实测）。
+      const tombRow = await d.prepare("SELECT 1 FROM deleted_notes WHERE published_at IS NULL LIMIT 1").get();
+      return !!tombRow;
     },
     async isFolderPurged(id: string): Promise<boolean> {
       const d = getDb();
-      // 防止远端仍存在的 folder 在本地 purge 后被下载导入复活。
-      return !!(await d.prepare("SELECT 1 FROM deleted_notes WHERE id=? AND purged_at IS NOT NULL").get(id));
+      // 判定必须永久（对齐桌面）：node_type='folder' 墓碑只由 purge 写入，purged_at 会在 S3 前缀
+      // 删除成功后被清空——旧实现看 purged_at ⇒ 保护失效，云端残留的活跃条目被重新导入复活。
+      return !!(await d.prepare("SELECT 1 FROM deleted_notes WHERE id=? AND node_type='folder'").get(id));
     },
     async log(msg) {
       console.log("[mobile-sync]", msg);

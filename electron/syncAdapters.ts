@@ -193,6 +193,9 @@ export function createStoreSyncPort(store: Store): SyncDbPort {
     async markFolderSynced(id: string, expectedUpdatedAt: string): Promise<boolean> { return store.markFolderSynced(id, expectedUpdatedAt); },
     // 可选调用：测试 FakeStore/旧实现可能无此方法（文件夹级 purge 墓碑是新能力），无则 false
     async isFolderPurged(id: string): Promise<boolean> { return store.isFolderPurged?.(id) ?? false; },
+    // v5：folder 墓碑（删除传播）——学习端应用 / 从未持有记墓碑
+    async applyRemoteFolderDelete(id: string, deletedAt: string): Promise<void> { store.applyRemoteFolderDelete?.(id, deletedAt); },
+    async rememberFolderDeleted(folder: ManifestFolder, deletedAt: string): Promise<void> { store.rememberFolderDeleted?.(folder, deletedAt); },
     async getLastSeenCommitId(): Promise<string | null> { return store.getLastSeenCommitId(); },
     async setLastSeenCommitId(commitId: string): Promise<void> { store.setLastSeenCommitId(commitId); },
     async getLastTombstoneSig(): Promise<string> { return store.getLastTombstoneSig(); },

@@ -154,6 +154,32 @@ describe("mobile purge 删除传播", () => {
     expect(trashNb?.deletedAt).toBeTruthy();
   });
 
+  it("restoreNote：updated_at 必须 bump 到恢复时刻（恢复传播 LWW 依赖；否则他端判定相等不跟随，恢复被墓碑压回）", async () => {
+    // 假时钟拉开 save/trash 与 restore 的间隔（否则同毫秒内三操作时间戳相等，无法区分 bump 与否）
+    vi.useFakeTimers({ now: new Date("2026-01-01T00:00:00.000Z") });
+    try {
+      const NID = "restore-bump-note-1";
+      const nbRow = await bridge.createNotebook({ title: "恢复传播测试本", icon: null });
+      await bridge.saveNote(NID, "恢复传播", "<p>内容</p>", nbRow.id);
+      await bridge.trashNote(NID);
+      const trashAt = (await bridge.listTrashTree()).find((t) => t.id === NID)!.deletedAt!;
+      expect(trashAt).toBeTruthy();
+
+      vi.setSystemTime(new Date("2026-01-01T00:00:05.000Z"));
+      await bridge.restoreNote(NID);
+
+      // 恢复后回到可见列表，且 updated_at bump 到恢复时刻（严格晚于删除时刻）
+      const restored = (await bridge.listNotes()).find((n) => n.id === NID);
+      expect(restored).toBeDefined();
+      expect(restored!.updatedAt > trashAt).toBe(true);
+      expect(restored!.updatedAt).toBe("2026-01-01T00:00:05.000Z");
+      // parent_id 回原位（远端学来的删除 parent=TRASH 容器 → 恢复必须移回，否则他端"跟随恢复"卡在回收站）
+      expect(restored!.parentId).toBe(nbRow.id);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("trashTreeItem(note)：单条进回收站，不连累其它笔记", async () => {
     const A = "trash-note-a";
     const B = "trash-note-b";

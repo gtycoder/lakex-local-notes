@@ -1025,6 +1025,16 @@ export class Store {
     this.syncReconciliation.rememberDeleted(note, deletedAt);
   }
 
+  /** v5：记录"从云端学到的 folder 删除"（本设备从未持有该目录），node_type='folder' 墓碑防复活。 */
+  rememberFolderDeleted(folder: { id: string; title: string; parentId: string | null; sortOrder: number; updatedAt?: string }, deletedAt: string): void {
+    this.syncReconciliation.rememberFolderDeleted(folder, deletedAt);
+  }
+
+  /** v5：收到他端 folder 墓碑：folder 子树移入回收站标 purged（行保留可恢复、不上传）。 */
+  applyRemoteFolderDelete(id: string, deletedAt: string): void {
+    this.syncReconciliation.applyRemoteFolderDelete(id, deletedAt);
+  }
+
   /** purge 前缀删除成功后，清除 purged_at（保留墓碑，避免下次同步重复删前缀）。 */
   markPurgeSynced(id: string): void {
     this.syncReconciliation.markPurgeSynced(id);

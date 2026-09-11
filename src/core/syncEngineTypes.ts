@@ -81,9 +81,10 @@ export interface SyncDbPort {
   /** 收到他端 purge 墓碑（deleted:true）：本地条目移入回收站并标 purged（保留可恢复、不上传）。 */
   applyRemotePurge(id: string): Promise<void>;
   /** 本地删除墓碑列表（deleted_notes 表：本设备从未持有或已彻底删除的）——远端恢复撤销判定用。
-   * 返回 null = 端口不支持（移动端无 deleted_notes 场景时可不实现，撤销判定退化）。 */
-  /** nodeType：'folder' 墓碑仅本地下载过滤、不进 manifest.notes（发布方向必须跳过）。 */
-  listDeletedNotesForSync?(): Promise<Array<{ id: string; deletedAt: string; title?: string; nodeType?: string }>>;
+   * 返回 null = 端口不支持（移动端无 deleted_notes 场景时可不实现，撤销判定退化）。
+   * nodeType：'note' 进 manifest.notes；'folder' 进 manifest.folders 墓碑（v5 删除传播，
+   * 发布侧需要 title/parentId/sortOrder 构建墓碑条目，两端实现均返回完整字段）。 */
+  listDeletedNotesForSync?(): Promise<Array<{ id: string; deletedAt: string; title?: string; nodeType?: string; parentId?: string | null; sortOrder?: number; updatedAt?: string }>>;
   /** 墓碑已发布到 manifest 后标记（port 无此能力则跳过，计数降级为按全部墓碑）。 */
   markTombstonesPublished?(ids: string[]): Promise<void>;
   /** 读墓碑笔记的删除前内容（墓碑携带内容，他端先拉内容再应用；读失败/不支持 → null 占位符）。 */
@@ -99,6 +100,12 @@ export interface SyncDbPort {
   isFolderPurged?(id: string): Promise<boolean>;
   /** 记录"从云端学到的删除"（本设备从未持有该笔记），防离线设备把残留当新文档上传复活（审计 #2）。 */
   rememberDeleted(note: ManifestNote, deletedAt: string): Promise<void>;
+  /** v5：收到远端 folder 墓碑且本地有活跃行 → folder 子树移入回收站标 purged（行保留可恢复、不上传），
+   * 子 notes 对齐 applyRemotePurge 语义。两端必须实现（与 markFolderSynced 同级，缺失时引擎跳过并记日志）。 */
+  applyRemoteFolderDelete?(id: string, deletedAt: string): Promise<void>;
+  /** v5：记录"从云端学到的 folder 删除"（本设备从未持有该目录），写 node_type='folder' 墓碑防复活；
+   * 不写 purged_at（S3 对象前缀由发起端清理）。 */
+  rememberFolderDeleted?(folder: ManifestFolder, deletedAt: string): Promise<void>;
   /** 正文相同但元数据（标题/父/排序/图标）变化时应用远端较新版本（B3 LWW）。 */
   applyRemoteNoteMeta(note: ManifestNote): Promise<void>;
   /** 锁字段级 LWW：应用远端锁状态（锁变更不改正文哈希，需独立应用）。 */

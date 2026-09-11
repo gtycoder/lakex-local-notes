@@ -451,7 +451,7 @@ describe("syncNow 增量同步", () => {
     expect(r1.conflicts).toBe(0);
     expect(s3.bucket.has(key(`objects/n1-${store.contentHash("n1")}.lake`))).toBe(true);
     const manifest = readManifest();
-    expect(manifest.version).toBe(4);
+    expect(manifest.version).toBe(5);
     expect(manifest.notes).toHaveLength(1);
     expect(manifest.notes[0].contentHash).toBe(store.contentHash("n1"));
 

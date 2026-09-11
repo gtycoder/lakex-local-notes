@@ -198,8 +198,10 @@ export class NoteQueries {
   }
 
   listFoldersForSync(): SyncFolder[] {
+    // v5：排除 sync_state='purged'（收到他端 folder 墓碑后保留的回收站副本）——学习端不回填，
+    // 对齐 notes 上传环的 purged continue；否则每端都会把已删目录当活跃条目重新发布 → manifest 震荡。
     const rows = this.db.prepare(
-      "SELECT id,title,parent_id,sort_order,node_type,icon,updated_at,trashed_at,deleted_from_parent_id FROM tree_nodes WHERE node_type IN ('notebook','group') AND deleted_at IS NULL AND id != ? ORDER BY sort_order"
+      "SELECT id,title,parent_id,sort_order,node_type,icon,updated_at,trashed_at,deleted_from_parent_id FROM tree_nodes WHERE node_type IN ('notebook','group') AND deleted_at IS NULL AND sync_state != 'purged' AND id != ? ORDER BY sort_order"
     ).all(this.trashNotebookId) as SyncFolderRow[];
     return rows.map((row) => ({
       id: row.id,

@@ -20,7 +20,13 @@ export interface S3Settings {
 }
 
 // ===== 常量（随迁，原值不变） =====
-export const MANIFEST_VERSION = 4;
+export const MANIFEST_VERSION = 5;
+/**
+ * 读兼容窗口：v5 = v4 + manifest.folders 条目可选 deleted 墓碑字段（纯 additive），v5 端可安全读 v4
+ * （升级期云端 latest 未重写前同步不中断）；发布恒写 MANIFEST_VERSION。
+ * 旧端（v4 代码）读 v5 清单按版本不兼容整轮拒绝——防其把 folder 墓碑当活跃目录导入复活。
+ */
+const READABLE_MANIFEST_VERSIONS = new Set([4, 5]);
 export const MAX_MANIFEST_BYTES = 20 * 1024 * 1024;
 export const MAX_MANIFEST_NOTES = 200_000;
 export const MAX_MANIFEST_FOLDERS = 50_000;
@@ -186,7 +192,7 @@ export function chunkArray<T>(items: T[], size: number): T[][] {
 export function validateManifest(manifest: unknown, limits: { maxNotes: number; maxFolders: number }): asserts manifest is Manifest {
   if (!manifest || typeof manifest !== "object") throw new Error("清单格式无效：非对象");
   const m = manifest as Partial<Manifest>;
-  if (m.version !== MANIFEST_VERSION) {
+  if (!READABLE_MANIFEST_VERSIONS.has(m.version as number)) {
     throw new Error(`清单版本不兼容（本地 ${MANIFEST_VERSION}，远端 ${String(m.version)}）`);
   }
   if (typeof m.workspaceId !== "string" || typeof m.commitId !== "string" || typeof m.createdAt !== "string") {

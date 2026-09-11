@@ -39,6 +39,7 @@ async applyRemoteNote(note: any, content: string) {
       id: note.id, title: note.title, content, updatedAt: note.updatedAt, syncState: "synced",
       trashedAt: note.trashedAt ?? null, restorePendingAt: null, parentId: note.parentId ?? null, sortOrder: note.sortOrder ?? 0,
       isLocked: !!note.isLocked, lockedAt: note.lockedAt ?? null, icon: note.icon ?? null, isConflict: !!note.isConflict,
+      deletedFromParentId: note.deletedFromParentId ?? null,
     });
   }
 async applyRemoteTrash(id: string, content: string, title: string, trashedAt: string, _dfp: string | null, _pid: string | null, _so: number) {
@@ -51,9 +52,18 @@ async applyRemotePurge(id: string) { const n = this.notes.get(id); if (n) { n.sy
 async rememberDeleted(note: any, deletedAt: string) { this.deletedNotes.add(note.id); this.deletedAtMap.set(note.id, deletedAt); }
   deletedAtMap = new Map<string, string>();
   publishedTombstones: string[] = [];
-async listDeletedNotesForSync() { return [...this.deletedAtMap.entries()].map(([id, deletedAt]) => ({ id, deletedAt })); }
+async listDeletedNotesForSync() {
+    // v5：note 墓碑 + folder 墓碑（含 title/parentId/sortOrder，发布侧构建 folder 墓碑条目用）
+    return [
+      ...[...this.deletedAtMap.entries()].map(([id, deletedAt]) => ({ id, deletedAt, nodeType: "note" })),
+      ...[...this.folderTombstones.entries()].map(([id, t]) => ({
+        id, deletedAt: t.deletedAt, nodeType: "folder",
+        title: t.folder.title, parentId: t.folder.parentId ?? null, sortOrder: t.folder.sortOrder ?? 0, updatedAt: t.folder.updatedAt,
+      })),
+    ];
+  }
 async markTombstonesPublished(ids: string[]) { this.publishedTombstones.push(...ids); }
-async revokeLocalDeletion(id: string) { this.deletedNotes.delete(id); this.deletedAtMap.delete(id); }
+async revokeLocalDeletion(id: string) { this.deletedNotes.delete(id); this.deletedAtMap.delete(id); this.folderTombstones.delete(id); this.purgedFolders.delete(id); }
 async markFolderSynced() { return true; }
 async applyRemoteNoteMeta(note: any) {
     const n = this.notes.get(note.id);
@@ -76,11 +86,41 @@ async setSyncBase(id: string, contentHash: string, metaAt: string | null, lastUp
   }
   folders = new Map<string, any>();
   purgedFolders = new Set<string>();
+  /** v5：本地 folder 墓碑（deleted_notes node_type='folder'）——发布进 manifest.folders。 */
+  folderTombstones = new Map<string, { folder: any; deletedAt: string }>();
+  /** v5：applyRemoteFolderDelete 调用记录（学习端应用远端 folder 墓碑）。 */
+  folderDeleteCalls: string[] = [];
 async defaultNotebookId() { return "notebook-personal"; }
-async importRemoteFolder(folder: any) { this.folders.set(folder.id, folder); }
-  async isFolderPurged(id: string) { return this.purgedFolders.has(id); }
+async importRemoteFolder(folder: any) { this.folders.set(folder.id, { syncState: "synced", ...folder }); }
+  async isFolderPurged(id: string) { return this.purgedFolders.has(id) || this.folderTombstones.has(id); }
+  async rememberFolderDeleted(folder: any, deletedAt: string) {
+    this.folderTombstones.set(folder.id, { folder, deletedAt });
+    this.purgedFolders.add(folder.id);
+  }
+  async applyRemoteFolderDelete(id: string, deletedAt: string) {
+    // 子树 = folder 自身 + parent 链后代（含 notes.parent 命中的子文档）
+    const subtree = new Set<string>([id]);
+    let grew = true;
+    while (grew) {
+      grew = false;
+      for (const [fid, f] of this.folders) {
+        if (f.parentId != null && subtree.has(f.parentId) && !subtree.has(fid)) { subtree.add(fid); grew = true; }
+      }
+    }
+    this.folderDeleteCalls.push(id);
+    for (const fid of subtree) {
+      const f = this.folders.get(fid);
+      if (f) { f.syncState = "purged"; f.trashedAt = f.trashedAt ?? deletedAt; }
+    }
+    for (const n of this.notes.values()) {
+      if (n.parentId != null && subtree.has(n.parentId)) {
+        n.syncState = "purged"; n.trashedAt = n.trashedAt ?? deletedAt; n.parentId = TRASH_NOTEBOOK_ID; n.restorePendingAt = null;
+      }
+    }
+  }
 async listFoldersForSync() {
-    return [...this.folders.values()].map((f) => ({
+    // v5：purged 行不发布（学习端不回填）
+    return [...this.folders.values()].filter((f) => f.syncState !== "purged").map((f) => ({
       id: f.id, title: f.title, parentId: f.parentId ?? null, sortOrder: f.sortOrder ?? 0,
       nodeType: f.nodeType ?? "group", icon: f.icon ?? null, updatedAt: f.updatedAt ?? "2026-01-01T00:00:00.000Z",
     }));
@@ -112,8 +152,8 @@ async getLastSeenCommitId() { return this.lastSeenCommitId; }
 async setLastSeenCommitId(id: string) { this.lastSeenCommitId = id; }
 async getLastTombstoneSig() { return this.lastTombstoneSig; }
 async setLastTombstoneSig(sig: string) { this.lastTombstoneSig = sig; }
-async tombstoneSignature() { return `${this.deletedNotes.size}:${[...this.deletedNotes].sort().at(-1) ?? ""}`; }
-async hasLocalPendingNotes() { return [...this.notes.values()].some((n) => n.syncState !== "synced"); }
+async tombstoneSignature() { return `${this.deletedNotes.size + this.folderTombstones.size}:${[...this.deletedAtMap.values(), ...[...this.folderTombstones.values()].map((t) => t.deletedAt)].sort().at(-1) ?? ""}`; }
+async hasLocalPendingNotes() { return [...this.notes.values()].some((n) => n.syncState !== "synced" && n.syncState !== "purged") || [...this.folders.values()].some((f) => f.syncState !== "synced" && f.syncState !== "purged"); }
 }
 
 function promisifyDb(db: MemDb): SyncDbPort {
@@ -166,7 +206,7 @@ describe("syncEngine（共享编排）", () => {
     const manifestBytes = await s3.getObject("p/manifests/latest.json");
     expect(manifestBytes).not.toBeNull();
     const manifest = JSON.parse(decode(manifestBytes!));
-    expect(manifest.version).toBe(4);
+    expect(manifest.version).toBe(5);
     expect(manifest.notes[0].id).toBe("n1");
     expect(db.notes.get("n1")!.syncState).toBe("synced");
   });
@@ -494,12 +534,33 @@ describe("syncEngine（共享编排）", () => {
     expect(n.icon).toBe("star");
   });
 
-  it("B4（回归）：收到他端 purge 的设备发布时保留 deleted:true 墓碑（不吞掉，防离线端复活）", async () => {
+  it("B4（收敛）：远端已带同 id 墓碑 + 本地行保留 purged → 不重发布（purge 幂等，防每轮空转重写 manifest）", async () => {
     const s3 = new MemS3();
     const db = new MemDb();
     const h = hashOf("<p>内容</p>");
-    // 本地有副本（applyRemotePurge → 标 purged 保留）
+    // 本地有副本（applyRemotePurge → 标 purged 保留；移动端 purge 表示）
     db.notes.set("n1", row({ id: "n1", content: "<p>内容</p>", syncState: "purged" }));
+    // 远端 manifest：n1 deleted:true（他端 purge 墓碑已在云端）
+    s3.map.set("p/manifests/latest.json", new TextEncoder().encode(JSON.stringify({
+      version: 4, workspaceId: "default", commitId: "c1", prevCommitId: null, createdAt: "2026-01-01T00:00:00.000Z",
+      notes: [{ id: "n1", title: "被删", parentId: null, sortOrder: 0, updatedAt: "2026-01-02T00:00:00.000Z", contentHash: h, isConflict: false, assets: [], deleted: true, deletedAt: "2026-01-02T00:00:00.000Z" }],
+      folders: [],
+    })));
+    const r = await syncNow(CFG, s3, db);
+    // 墓碑已在 manifest → 无发布理由（否则每轮重写 manifest，四端 commitId 永不稳定）
+    expect(r.published).toBe(false);
+    const manifest = JSON.parse(decode((await s3.getObject("p/manifests/latest.json"))!));
+    const entry = manifest.notes.find((n: any) => n.id === "n1");
+    expect(entry.deleted).toBe(true);
+  });
+
+  it("B4（回归）：本地 purged 副本因其他变更触发发布时，墓碑保留 deleted:true（不吞掉，防离线端复活）", async () => {
+    const s3 = new MemS3();
+    const db = new MemDb();
+    const h = hashOf("<p>内容</p>");
+    // 本地：n1 purged 保留副本 + n2 本地编辑（真实上传理由 → 触发发布）
+    db.notes.set("n1", row({ id: "n1", content: "<p>内容</p>", syncState: "purged" }));
+    db.notes.set("n2", row({ id: "n2", content: "<p>新笔记</p>", syncState: "local" }));
     // 远端 manifest：n1 deleted:true（他端 purge 墓碑）
     s3.map.set("p/manifests/latest.json", new TextEncoder().encode(JSON.stringify({
       version: 4, workspaceId: "default", commitId: "c1", prevCommitId: null, createdAt: "2026-01-01T00:00:00.000Z",
@@ -534,6 +595,168 @@ describe("syncEngine（共享编排）", () => {
     expect(db.notes.has("n2")).toBe(false);
     expect(db.deletedNotes.has("n2")).toBe(true);
     expect(r.uploaded).toBe(0); // purged 不上传
+  });
+
+  // ===== v5：folder 墓碑（删除传播） =====
+
+  const mkFolderTomb = (id: string, title: string, deletedAt: string) => ({
+    id, title, parentId: null, sortOrder: 0, nodeType: "notebook", updatedAt: deletedAt, deleted: true as const, deletedAt,
+  });
+
+  it("v5 发布：本地 folder 墓碑上云（manifest.folders 带 deleted:true，版本 5）", async () => {
+    const s3 = new MemS3();
+    const db = new MemDb();
+    // 发起端 purge：行已物理删 + deleted_notes 写 folder 墓碑
+    db.folderTombstones.set("nb1", { folder: { id: "nb1", title: "已删笔记本", parentId: null, sortOrder: 0, nodeType: "notebook", updatedAt: "2026-01-02T00:00:00.000Z" }, deletedAt: "2026-01-02T00:00:00.000Z" });
+    db.purgedFolders.add("nb1");
+    const r = await syncNow(CFG, s3, db);
+    expect(r.published).toBe(true);
+    const manifest = JSON.parse(decode((await s3.getObject("p/manifests/latest.json"))!));
+    expect(manifest.version).toBe(5);
+    const entry = manifest.folders.find((f: any) => f.id === "nb1");
+    expect(entry).toBeDefined();
+    expect(entry.deleted).toBe(true);
+    expect(entry.deletedAt).toBe("2026-01-02T00:00:00.000Z");
+  });
+
+  it("v5 发布幂等：远端已带同 id folder 墓碑 → 不重发布（防每轮空转重写 manifest）", async () => {
+    const s3 = new MemS3();
+    const db = new MemDb();
+    db.folderTombstones.set("nb1", { folder: { id: "nb1", title: "已删笔记本", parentId: null, sortOrder: 0, nodeType: "notebook", updatedAt: "2026-01-02T00:00:00.000Z" }, deletedAt: "2026-01-02T00:00:00.000Z" });
+    db.purgedFolders.add("nb1");
+    // 第一轮：发布墓碑上云
+    await syncNow(CFG, s3, db);
+    // 第二轮：远端已带墓碑 + 本地无其他变更 → 不发布（commitId 稳定，四端可早退）
+    const r2 = await syncNow(CFG, s3, db);
+    expect(r2.published).toBe(false);
+    // 墓碑条目仍在（不因不发布而丢失）
+    const manifest = JSON.parse(decode((await s3.getObject("p/manifests/latest.json"))!));
+    expect(manifest.folders.find((f: any) => f.id === "nb1")?.deleted).toBe(true);
+  });
+
+  it("v5 下载 apply：远端 folder 墓碑 + 本地有活跃副本 → applyRemoteFolderDelete（folder 行与子 notes 移入回收站标 purged）", async () => {
+    const s3 = new MemS3();
+    const db = new MemDb();
+    db.folders.set("nb1", { id: "nb1", title: "本", parentId: null, sortOrder: 0, nodeType: "notebook", updatedAt: "2026-01-01T00:00:00.000Z", syncState: "synced" });
+    db.notes.set("n1", row({ id: "n1", parentId: "nb1", syncState: "synced" }));
+    const h = hashOf("<p>内容</p>");
+    s3.map.set("p/manifests/latest.json", new TextEncoder().encode(JSON.stringify({
+      version: 5, workspaceId: "default", commitId: "c1", prevCommitId: null, createdAt: "2026-01-01T00:00:00.000Z",
+      notes: [{ id: "n1", title: "子文档", parentId: "nb1", sortOrder: 0, updatedAt: "2026-01-01T00:00:00.000Z", contentHash: h, isConflict: false, assets: [], deleted: true, deletedAt: "2026-01-02T00:00:00.000Z" }],
+      folders: [mkFolderTomb("nb1", "本", "2026-01-02T00:00:00.000Z")],
+    })));
+    const r = await syncNow(CFG, s3, db);
+    expect(db.folderDeleteCalls).toContain("nb1");
+    // folder 行保留标 purged（可恢复、不上传）
+    expect(db.folders.get("nb1").syncState).toBe("purged");
+    // 子 notes 对齐 applyRemotePurge 语义（先由 folder 子树标注；note 环 skip-already-purged 幂等）
+    expect(db.notes.get("n1")!.syncState).toBe("purged");
+    expect(db.notes.get("n1")!.trashedAt).not.toBeNull();
+    expect(r.uploaded).toBe(0); // 学习端不回传
+  });
+
+  it("v5 下载 remember：远端 folder 墓碑 + 本地无副本 → 记 folder 墓碑防复活（空库/新设备）", async () => {
+    const s3 = new MemS3();
+    const db = new MemDb();
+    s3.map.set("p/manifests/latest.json", new TextEncoder().encode(JSON.stringify({
+      version: 5, workspaceId: "default", commitId: "c1", prevCommitId: null, createdAt: "2026-01-01T00:00:00.000Z",
+      notes: [],
+      folders: [mkFolderTomb("nb1", "从未见过的本", "2026-01-02T00:00:00.000Z")],
+    })));
+    await syncNow(CFG, s3, db);
+    expect(db.folderTombstones.has("nb1")).toBe(true);
+    // 第二轮幂等：已有墓碑 → skip-already-purged，不重复 remember/apply
+    const callsBefore = db.folderDeleteCalls.length;
+    await syncNow(CFG, s3, db);
+    expect(db.folderDeleteCalls.length).toBe(callsBefore);
+  });
+
+  it("v5 下载恢复 yield：远端活跃 folder updatedAt 新于本地 folder 墓碑 → 撤销墓碑跟随恢复", async () => {
+    const s3 = new MemS3();
+    const db = new MemDb();
+    // 本地：folder 墓碑（2026-01-02 删除）
+    db.folderTombstones.set("nb1", { folder: { id: "nb1", title: "被删的本", parentId: null, sortOrder: 0, nodeType: "notebook", updatedAt: "2026-01-02T00:00:00.000Z" }, deletedAt: "2026-01-02T00:00:00.000Z" });
+    db.purgedFolders.add("nb1");
+    // 远端：活跃条目（2026-01-03 恢复，晚于墓碑）→ 恢复胜出
+    s3.map.set("p/manifests/latest.json", new TextEncoder().encode(JSON.stringify({
+      version: 5, workspaceId: "default", commitId: "c1", prevCommitId: null, createdAt: "2026-01-01T00:00:00.000Z",
+      notes: [],
+      folders: [{ id: "nb1", title: "被删的本", parentId: null, sortOrder: 0, nodeType: "notebook", icon: null, updatedAt: "2026-01-03T00:00:00.000Z" }],
+    })));
+    await syncNow(CFG, s3, db);
+    // 墓碑已撤销 + folder 重新导入为活跃
+    expect(db.folderTombstones.has("nb1")).toBe(false);
+    expect(db.folders.get("nb1")).toBeDefined();
+  });
+
+  it("v5 学习端不回填：收到 folder 墓碑后行标 purged → 下一轮发布不含活跃条目（manifest 稳定）", async () => {
+    const s3 = new MemS3();
+    const dbA = new MemDb();
+    // A：本地有 folder + 子文档，先同步上云（活跃）
+    dbA.folders.set("nb1", { id: "nb1", title: "本", parentId: null, sortOrder: 0, nodeType: "notebook", updatedAt: "2026-01-01T00:00:00.000Z", syncState: "local" });
+    dbA.notes.set("n1", row({ id: "n1", parentId: "nb1" }));
+    await syncNow(CFG, s3, dbA);
+    const manifest1 = JSON.parse(decode((await s3.getObject("p/manifests/latest.json"))!));
+    expect(manifest1.folders.find((f: any) => f.id === "nb1").deleted).toBeUndefined();
+
+    // A：purge folder（行删 + 写墓碑）→ 同步发布墓碑
+    dbA.folders.delete("nb1");
+    dbA.folderTombstones.set("nb1", { folder: { id: "nb1", title: "本", parentId: null, sortOrder: 0, nodeType: "notebook", updatedAt: "2026-01-02T00:00:00.000Z" }, deletedAt: "2026-01-02T00:00:00.000Z" });
+    dbA.purgedFolders.add("nb1");
+    dbA.notes.get("n1")!.syncState = "synced"; // 简化：子文档已同步（purge 场景由发起端墓碑覆盖）
+    await syncNow(CFG, s3, dbA);
+    const manifest2 = JSON.parse(decode((await s3.getObject("p/manifests/latest.json"))!));
+    expect(manifest2.folders.find((f: any) => f.id === "nb1")?.deleted).toBe(true);
+
+    // B（学习端）：本地有活跃副本 → 应用删除
+    const dbB = new MemDb();
+    dbB.folders.set("nb1", { id: "nb1", title: "本", parentId: null, sortOrder: 0, nodeType: "notebook", updatedAt: "2026-01-01T00:00:00.000Z", syncState: "synced" });
+    dbB.notes.set("n1", row({ id: "n1", parentId: "nb1", syncState: "synced", content: "<p>内容</p>" }));
+    await syncNow(CFG, s3, dbB);
+    expect(dbB.folders.get("nb1").syncState).toBe("purged");
+    // B 再同步：不把 purged 行当活跃条目回填（manifest 中该 folder 保持墓碑）
+    const rB2 = await syncNow(CFG, s3, dbB);
+    const manifest3 = JSON.parse(decode((await s3.getObject("p/manifests/latest.json"))!));
+    const entry = manifest3.folders.find((f: any) => f.id === "nb1");
+    expect(entry?.deleted).toBe(true);
+    // B 第二轮无新发布理由（收敛；A/B 终态一致）
+    expect(rB2.published).toBe(false);
+  });
+
+  it("v5 强写收窄：远端墓碑条目 + 本地 isFolderPurged → 不触发 foldersChanged（防 commitId 震荡，260910 实测回归）", async () => {
+    const s3 = new MemS3();
+    const db = new MemDb();
+    // 本地：folder 已 purge（墓碑在）
+    db.folderTombstones.set("nb1", { folder: { id: "nb1", title: "本", parentId: null, sortOrder: 0, nodeType: "notebook", updatedAt: "2026-01-02T00:00:00.000Z" }, deletedAt: "2026-01-02T00:00:00.000Z" });
+    db.purgedFolders.add("nb1");
+    // 远端：同 id 墓碑（v5 已传播）
+    s3.map.set("p/manifests/latest.json", new TextEncoder().encode(JSON.stringify({
+      version: 5, workspaceId: "default", commitId: "c1", prevCommitId: null, createdAt: "2026-01-01T00:00:00.000Z",
+      notes: [],
+      folders: [mkFolderTomb("nb1", "本", "2026-01-02T00:00:00.000Z")],
+    })));
+    // 第一轮：无发布理由（旧版会因强写重写 manifest → 每轮 commitId 变化）
+    const r1 = await syncNow(CFG, s3, db);
+    expect(r1.published).toBe(false);
+    // 第二轮：零变更跳过（彻底收敛）
+    const r2 = await syncNow(CFG, s3, db);
+    expect(r2.message).toContain("零变更跳过");
+  });
+
+  it("v5 读兼容：v4 清单（无 folder 墓碑字段）可被正常读取，不报版本不兼容", async () => {
+    const s3 = new MemS3();
+    const db = new MemDb();
+    db.notes.set("n1", row({ id: "n1", syncState: "synced", content: "<p>内容</p>" }));
+    db.bases.set("n1", { contentHash: hashOf("<p>内容</p>"), lastUploadedHash: hashOf("<p>内容</p>"), lastSyncedMetaAt: "2026-01-01T00:00:00.000Z" });
+    s3.map.set("p/manifests/latest.json", new TextEncoder().encode(JSON.stringify({
+      version: 4, workspaceId: "default", commitId: "c1", prevCommitId: null, createdAt: "2026-01-01T00:00:00.000Z",
+      notes: [{ id: "n1", title: "笔记", parentId: null, sortOrder: 0, updatedAt: "2026-01-01T00:00:00.000Z", contentHash: hashOf("<p>内容</p>"), isConflict: false, assets: [] }],
+      folders: [{ id: "nb1", title: "本", parentId: null, sortOrder: 0, nodeType: "notebook", icon: null, updatedAt: "2026-01-01T00:00:00.000Z" }],
+    })));
+    const r = await syncNow(CFG, s3, db);
+    expect(r.message).not.toContain("版本不兼容");
+    // v4 活跃 folder 正常导入
+    expect(db.folders.get("nb1")).toBeDefined();
   });
 
   it("W-1：远端 purge 覆盖本地未同步编辑 → 强制留档历史快照 + 报 superseded（与软删分支对称）", async () => {
@@ -877,6 +1100,67 @@ describe("syncEngine（共享编排）", () => {
     expect(r1.appliedRemote).toBe(1);
   });
 
+  it("恢复传播（LWW >= 回归）：本地在回收站 + 远端 active updatedAt==trashedAt（恢复方未 bump）→ 跟随恢复出回收站", async () => {
+    const s3 = new MemS3();
+    const db = new MemDb();
+    const h = hashOf("<p>内容</p>");
+    // A 端：行在回收站（trashedAt=T1，已同步）；B 端恢复但未 bump updated_at（历史移动端 bug）→ 上传条目 updatedAt=T1
+    db.notes.set("n1", row({ id: "n1", content: "<p>内容</p>", syncState: "synced", trashedAt: "2026-01-02T00:00:00.000Z" }));
+    db.bases.set("n1", { contentHash: h, lastUploadedHash: null, lastSyncedMetaAt: "2026-01-02T00:00:00.000Z" });
+    s3.map.set("p/objects/n1-" + h + ".lake", new TextEncoder().encode("<p>内容</p>"));
+    s3.map.set("p/manifests/latest.json", new TextEncoder().encode(JSON.stringify({
+      version: 5, workspaceId: "default", commitId: "c1", prevCommitId: null, createdAt: "2026-01-01T00:00:00.000Z",
+      notes: [{ id: "n1", title: "已恢复", parentId: "notebook-personal", sortOrder: 0, updatedAt: "2026-01-02T00:00:00.000Z", contentHash: h, isConflict: false, assets: [] }],
+      folders: [],
+    })));
+    const r = await syncNow(CFG, s3, db);
+    // 严格相等判恢复胜 → A 出回收站（否则 A 保留删除并压回 B 的恢复，恢复不传播）
+    expect(r.appliedRemote).toBe(1);
+    const n = db.notes.get("n1")!;
+    expect(n.trashedAt).toBeNull();
+    expect(n.syncState).toBe("synced");
+  });
+
+  it("删除压旧 active：本地在回收站（trashedAt 较新）+ 远端 active updatedAt 较旧 → 保留删除并重发墓碑", async () => {
+    const s3 = new MemS3();
+    const db = new MemDb();
+    const hOld = hashOf("<p>旧版</p>");
+    // A 端：刚删除（syncState=local，尚未上传）；远端是 B 端离线期的旧 active（updatedAt 早于删除时刻）
+    db.notes.set("n1", row({ id: "n1", content: "<p>旧版</p>", syncState: "local", trashedAt: "2026-01-05T00:00:00.000Z" }));
+    s3.map.set("p/objects/n1-" + hOld + ".lake", new TextEncoder().encode("<p>旧版</p>"));
+    s3.map.set("p/manifests/latest.json", new TextEncoder().encode(JSON.stringify({
+      version: 5, workspaceId: "default", commitId: "c1", prevCommitId: null, createdAt: "2026-01-01T00:00:00.000Z",
+      notes: [{ id: "n1", title: "旧 active", parentId: "notebook-personal", sortOrder: 0, updatedAt: "2026-01-01T00:00:00.000Z", contentHash: hOld, isConflict: false, assets: [] }],
+      folders: [],
+    })));
+    const r = await syncNow(CFG, s3, db);
+    // 下载侧：保留删除（不应用远端）
+    expect(r.appliedRemote).toBe(0);
+    expect(db.notes.get("n1")!.trashedAt).toBe("2026-01-05T00:00:00.000Z");
+    // 上传侧：墓碑重发（trashedAt 条目覆盖远端 active，删除不被旧 active 吞掉）
+    expect(r.published).toBe(true);
+    const manifest = JSON.parse(decode((await s3.getObject("p/manifests/latest.json"))!));
+    expect(manifest.notes.find((n: any) => n.id === "n1")?.trashedAt).toBe("2026-01-05T00:00:00.000Z");
+  });
+
+  it("全新导入回收站条目携带 dfp（恢复原父依赖）：本地从未持有 + 远端 trashed 条目带 deletedFromParentId → 端口收到 dfp", async () => {
+    const s3 = new MemS3();
+    const db = new MemDb();
+    const h = hashOf("<p>内容</p>");
+    // 本地无副本（全新设备）；远端是他端已软删的条目，dfp=原父
+    s3.map.set("p/objects/n1-" + h + ".lake", new TextEncoder().encode("<p>内容</p>"));
+    s3.map.set("p/manifests/latest.json", new TextEncoder().encode(JSON.stringify({
+      version: 5, workspaceId: "default", commitId: "c1", prevCommitId: null, createdAt: "2026-01-01T00:00:00.000Z",
+      notes: [{ id: "n1", title: "他端已删", parentId: "notebook-trash", sortOrder: 0, updatedAt: "2026-01-02T00:00:00.000Z", contentHash: h, isConflict: false, assets: [], trashedAt: "2026-01-02T00:00:00.000Z", deletedFromParentId: "nb-origin" }],
+      folders: [],
+    })));
+    const r = await syncNow(CFG, s3, db);
+    expect(r.trashedDown).toBe(1);
+    // 端口必须收到 dfp（移动端 SQL 曾硬编码 NULL → 恢复后 parent 卡 TRASH 容器，260910 实测）
+    expect(db.notes.get("n1")!.deletedFromParentId).toBe("nb-origin");
+    expect(db.notes.get("n1")!.parentId).toBe(TRASH_NOTEBOOK_ID);
+  });
+
   it("回归：空库同步+无可下载内容（全部本地删除较新跳过）→ 不得急切创建兜底'未分类'（凭空笔记本 bug）", async () => {
     const s3 = new MemS3();
     const db = new MemDb();
@@ -972,16 +1256,18 @@ describe("syncEngine（共享编排）", () => {
     expect(db.publishedTombstones).toContain("dead2");          // 已标记发布
   });
 
-  it("folder 墓碑不进 manifest.notes（nodeType=folder 仅本地下载过滤，发布方向跳过，不触发发布）", async () => {
+  it("v5：folder 墓碑发布进 manifest.folders（deleted:true）、不进 manifest.notes", async () => {
     const s3 = new MemS3();
     const db = new MemDb();
     db.deletedNotes.add("folder1");
     db.deletedAtMap.set("folder1", "2026-01-02T00:00:00.000Z");
     (db as any).listDeletedNotesForSync = () => [{ id: "folder1", deletedAt: "2026-01-02T00:00:00.000Z", nodeType: "folder" }];
     const r = await syncNow(CFG, s3, db);
-    expect(r.published).toBe(false);          // 无任何上传/目录变更 → 不发布
-    expect(await s3.getObject("p/manifests/latest.json")).toBeNull();
-    expect(db.publishedTombstones).not.toContain("folder1");
+    expect(r.published).toBe(true);          // folder 墓碑是发布理由（v5 删除传播）
+    const manifest = JSON.parse(decode((await s3.getObject("p/manifests/latest.json"))!));
+    expect(manifest.folders.find((f: any) => f.id === "folder1")?.deleted).toBe(true);
+    expect(manifest.notes.some((n: any) => n.id === "folder1")).toBe(false); // 不污染 notes
+    expect(db.publishedTombstones).toContain("folder1");
   });
 
   it("H3：上传时本地资产进 manifest.assets（扫描→上传 S3→填入条目）", async () => {

@@ -237,13 +237,51 @@ export class SyncReconciliation {
   rememberDeleted(note: SyncNote, deletedAt: string): void {
     // 不用 INSERT OR REPLACE：purge 后该行已带 purged_at，若被远端墓碑重插会清空 purged_at，
     // 导致 listPurgedNotesForSync 漏掉、S3 对象前缀永远不删。
-    // node_type=note（只有 manifest.notes 条目会触发 remember；folder 不进 manifest.notes）；
+    // node_type=note（只有 manifest.notes 条目会触发 remember）；
     // published_at=deletedAt：学到即已在云端发布（该墓碑来自 manifest），不计入待上传；
     // ON CONFLICT 不清已有 published_at（本地 purge 后恰逢远端墓碑重插时不误标已发布）。
     this.ctx.db.prepare(
       "INSERT INTO deleted_notes(id,title,parent_id,sort_order,updated_at,deleted_at,node_type,published_at) VALUES(?,?,?,?,?,?,?,?) " +
       "ON CONFLICT(id) DO UPDATE SET title=excluded.title, parent_id=excluded.parent_id, sort_order=excluded.sort_order, updated_at=excluded.updated_at, deleted_at=excluded.deleted_at, node_type=excluded.node_type, published_at=COALESCE(deleted_notes.published_at, excluded.published_at)"
     ).run(note.id, note.title, note.parentId, note.sortOrder, note.updatedAt, deletedAt, "note", deletedAt);
+  }
+
+  /** v5：记录"从云端学到的 folder 删除"（本设备从未持有该目录）——node_type='folder' 墓碑防复活。
+   * 不写 purged_at（S3 对象前缀由发起端清理）；published_at=deletedAt（墓碑来自 manifest，已发布）。 */
+  rememberFolderDeleted(folder: { id: string; title: string; parentId: string | null; sortOrder: number; updatedAt?: string }, deletedAt: string): void {
+    this.ctx.db.prepare(
+      "INSERT INTO deleted_notes(id,title,parent_id,sort_order,updated_at,deleted_at,node_type,published_at) VALUES(?,?,?,?,?,?,?,?) " +
+      "ON CONFLICT(id) DO UPDATE SET title=excluded.title, parent_id=excluded.parent_id, sort_order=excluded.sort_order, updated_at=excluded.updated_at, deleted_at=excluded.deleted_at, node_type=excluded.node_type, published_at=COALESCE(deleted_notes.published_at, excluded.published_at)"
+    ).run(folder.id, folder.title, folder.parentId, folder.sortOrder, folder.updatedAt ?? deletedAt, deletedAt, "folder", deletedAt);
+  }
+
+  /** v5：收到他端 folder 墓碑（deleted:true）且本地有活跃副本 → folder 子树移入回收站标 purged
+   * （行保留可恢复、不上传），子 notes 对齐 applyRemotePurge 语义（副本可从回收站恢复）。 */
+  applyRemoteFolderDelete(id: string, deletedAt: string): void {
+    const now = deletedAt || nowIso();
+    const tx = this.ctx.db.transaction(() => {
+      // 递归找 folder 子树（含自身）：tree_nodes parent 链向下（软删子节点也跟随）
+      const subtree = this.ctx.db.prepare(
+        `WITH RECURSIVE sub(id) AS (
+           SELECT ? UNION ALL SELECT t.id FROM tree_nodes t JOIN sub s ON t.parent_id = s.id
+         ) SELECT t.id, t.note_file_id, t.node_type FROM tree_nodes t WHERE t.id IN (SELECT id FROM sub) AND t.deleted_at IS NULL`
+      ).all(id) as Array<{ id: string; note_file_id: string | null; node_type: string }>;
+      const purgeNote = this.ctx.db.prepare(
+        "UPDATE notes SET parent_id=?,trashed_at=COALESCE(trashed_at,?),deleted_from_parent_id=COALESCE(deleted_from_parent_id,parent_id),updated_at=?,sync_state='purged',restore_pending_at=NULL WHERE id=? AND deleted_at IS NULL"
+      );
+      const purgeNode = this.ctx.db.prepare(
+        "UPDATE tree_nodes SET parent_id=?,trashed_at=COALESCE(trashed_at,?),deleted_from_parent_id=COALESCE(deleted_from_parent_id,parent_id),updated_at=?,sync_state='purged' WHERE id=? AND deleted_at IS NULL"
+      );
+      const delFts = this.ctx.db.prepare("DELETE FROM notes_fts WHERE note_id=?");
+      for (const node of subtree) {
+        if (node.note_file_id) {
+          purgeNote.run(this.ctx.trashNotebookId, now, now, node.note_file_id);
+          delFts.run(node.note_file_id);
+        }
+        purgeNode.run(this.ctx.trashNotebookId, now, now, node.id);
+      }
+    });
+    tx();
   }
 
   /** purge 前缀删除成功后，清除 purged_at（保留墓碑，避免下次同步重复删前缀）。 */
@@ -264,14 +302,15 @@ export class SyncReconciliation {
   }
 
   /** 墓碑已发布到 manifest（发布成功后由 syncEngine 调用）：标记 published_at，从待上传计数中移除。
-   * 墓碑本体永久保留（防 manifest 删除标记因他端 B4 移除而丢失 → 离线设备复活，审计 #2）。 */
+   * 墓碑本体永久保留（防 manifest 删除标记因他端 B4 移除而丢失 → 离线设备复活，审计 #2）。
+   * v5：folder 墓碑同样参与（发布进 manifest.folders）——放开旧版的 node_type != 'folder' 过滤。 */
   markTombstonesPublished(ids: string[]): void {
     if (ids.length === 0) return;
     const publishedAt = nowIso();
     for (const batch of sqlParameterBatches(ids)) {
       const placeholders = batch.map(() => "?").join(",");
       this.ctx.db.prepare(
-        "UPDATE deleted_notes SET published_at=COALESCE(published_at, ?) WHERE id IN (" + placeholders + ") AND node_type != 'folder'"
+        "UPDATE deleted_notes SET published_at=COALESCE(published_at, ?) WHERE id IN (" + placeholders + ")"
       ).run(publishedAt, ...batch);
     }
   }
@@ -335,17 +374,19 @@ export class SyncReconciliation {
   pendingSignature(): string {
     const docs = this.ctx.db.prepare("SELECT COUNT(*) AS c FROM notes WHERE sync_state NOT IN ('synced','purged') AND deleted_at IS NULL").get() as { c: number };
     const tombs = this.ctx.db.prepare("SELECT COUNT(*) AS c FROM deleted_notes WHERE (node_type IS NULL OR node_type != 'folder') AND published_at IS NULL").get() as { c: number };
-    const folders = this.ctx.db.prepare("SELECT COUNT(*) AS c FROM tree_nodes WHERE note_file_id IS NULL AND deleted_at IS NULL AND sync_state != 'synced' AND id != ?").get(this.ctx.trashNotebookId) as { c: number };
+    const folders = this.ctx.db.prepare("SELECT COUNT(*) AS c FROM tree_nodes WHERE note_file_id IS NULL AND deleted_at IS NULL AND sync_state NOT IN ('synced','purged') AND id != ?").get(this.ctx.trashNotebookId) as { c: number };
     return `${docs.c}:${folders.c}:${tombs.c}`;
   }
 
   getSyncPendingSummary(): { documents: number; folders: number; resources: number; generatedAt: string } {
     // 只统计可同步的本地事实：正文/文档元数据与目录元数据。
-    // purged 保留副本永不上传，不计入；被回收的目录仍会随 listFoldersForSync 发布（移动即同步传播），
-    // 发布后 markFolderSynced 归位 synced，故这里不做 trashed_at 过滤，与 listFoldersForSync 口径一致。
+    // purged 保留副本永不上传，不计入（含收到他端 folder 墓碑后标 purged 的目录行——收敛后行停留 purged、
+    // 不再触发发布，若计入则 pending folders 永久挂起；口径与 listFoldersForSync/hasLocalPendingNotes 一致）。
+    // 被回收的目录仍会随 listFoldersForSync 发布（移动即同步传播），
+    // 发布后 markFolderSynced 归位 synced，故这里不做 trashed_at 过滤。
     const pendingRows = this.ctx.listNotesForSync().filter((note) => note.syncState !== "synced" && note.syncState !== "purged");
     const pendingFolders = (this.ctx.db.prepare(
-      "SELECT COUNT(*) AS count FROM tree_nodes WHERE note_file_id IS NULL AND deleted_at IS NULL AND sync_state != 'synced' AND id != ?"
+      "SELECT COUNT(*) AS count FROM tree_nodes WHERE note_file_id IS NULL AND deleted_at IS NULL AND sync_state NOT IN ('synced','purged') AND id != ?"
     ).get(this.ctx.trashNotebookId) as { count: number }).count;
     // 待同步墓碑 = 未发布（published_at IS NULL）的 note 墓碑。
     // 资源不在本地维护上传 ledger，不能把正文引用数冒充为待上传数；真实资源 diff 在同步阶段完成。
@@ -358,14 +399,20 @@ export class SyncReconciliation {
   /** 是否有本地待上传变更（早退判定）：notes 非 synced（含锁/元数据变更）或纯目录/分组改动（V5 §5.1）。
    * group/notebook 节点无 note_file_id，rename/icon/reorder 只写 tree_nodes；
    * 排除回收站笔记本：固定节点不进 manifest.folders（listFoldersForSync 排除），其 local 状态不应阻塞早退。
-   * purged（收到他端删除的保留副本）也排除：永不上传，不应阻塞早退。 */
+   * purged（收到他端删除的保留副本，含 folder 行）也排除：永不上传，不应阻塞早退——
+   * 否则学习端收到 folder 墓碑后早退永不生效（每轮全量 + 重发布，260910 实测）。 */
   hasLocalPendingNotes(): boolean {
     const noteRow = this.ctx.db.prepare("SELECT 1 FROM notes WHERE sync_state NOT IN ('synced','purged') AND deleted_at IS NULL LIMIT 1").get();
     if (noteRow) return true;
     const groupRow = this.ctx.db.prepare(
-      "SELECT 1 FROM tree_nodes WHERE sync_state != 'synced' AND note_file_id IS NULL AND id != ? LIMIT 1"
+      "SELECT 1 FROM tree_nodes WHERE sync_state NOT IN ('synced','purged') AND note_file_id IS NULL AND id != ? LIMIT 1"
     ).get(this.ctx.trashNotebookId);
-    return !!groupRow;
+    if (groupRow) return true;
+    // 未发布的 purge 墓碑 = 待上传事实：墓碑环节要把它发布/对齐记账（markTombstonesPublished）。
+    // 若不计入 → purge 与他端发布撞车（远端已带墓碑 → 收敛减枝无需发布）时早退吞掉整轮，
+    // 墓碑永不上传/记账 → pending documents 永久挂起（260910 实测：B 端 122891ab/efbc6884）。
+    const tombRow = this.ctx.db.prepare("SELECT 1 FROM deleted_notes WHERE published_at IS NULL LIMIT 1").get();
+    return !!tombRow;
   }
 
   /** 批量读取同步基线信息（一次性取回，替代逐条 lastSyncedMetaAt 查询 + 支撑记账去重）。 */

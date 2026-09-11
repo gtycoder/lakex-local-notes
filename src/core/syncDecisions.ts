@@ -40,13 +40,23 @@ export function rowToLocalState(row: SyncNoteRowShape): LocalNoteState {
 // ===== 下载分支判定 =====
 
 /** purge（deleted:true）分支。前置：rn.deleted === true。 */
-export type PurgeDecision = "skip-restore-pending" | "apply-purge" | "remember-deleted";
+export type PurgeDecision = "skip-restore-pending" | "skip-already-purged" | "apply-purge" | "remember-deleted";
 export function decidePurge(local: LocalNoteState | null, isRestorePending: boolean): PurgeDecision {
   if (local) {
     if (isRestorePending) return "skip-restore-pending";
+    // 幂等跳过：本地行已标 purged（移动端 purge 表示 = 行保留标 purged 可恢复）→ 远端 purge 无新信息，
+    // 不重复应用；否则每轮同步重放 applyRemotePurge → appliedRemote 不收敛 + 连带重发布 manifest。
+    if (local.syncState === "purged") return "skip-already-purged";
     return "apply-purge";
   }
   return "remember-deleted";
+}
+
+/** v5 folder 墓碑（deleted:true）分支。输入：本地是否已有 folder 墓碑（isFolderPurged）、是否有活跃行（listFoldersForSync 含软删行、过滤 purged）。 */
+export type FolderPurgeDecision = "skip-already-purged" | "apply-purge" | "remember-deleted";
+export function decideFolderPurge(isFolderPurged: boolean, hasLiveFolder: boolean): FolderPurgeDecision {
+  if (isFolderPurged) return "skip-already-purged";
+  return hasLiveFolder ? "apply-purge" : "remember-deleted";
 }
 
 /** 本地墓碑 vs 远端 active：按 updatedAt LWW（删除 vs 远端恢复）。tombAt undefined → none。 */

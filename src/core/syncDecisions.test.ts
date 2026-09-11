@@ -5,7 +5,7 @@
 import { describe, expect, it } from "vitest";
 import {
   TRASH_NOTEBOOK_ID,
-  decidePurge, decideLocalTombstone, decideMetaApply,
+  decidePurge, decideFolderPurge, decideLocalTombstone, decideMetaApply,
   decideTombstoneYield,
   buildUploadEntry, buildTombstoneEntry, computeBookkeeping, rowToLocalState, isGoneNote,
   type LocalNoteState,
@@ -29,8 +29,26 @@ describe("decidePurge", () => {
   it("本地有副本 + restore-pending → skip", () => {
     expect(decidePurge(mkLocal(), true)).toBe("skip-restore-pending");
   });
+  it("本地行已标 purged（移动端行保留表示）→ skip-already-purged（幂等）", () => {
+    expect(decidePurge(mkLocal({ syncState: "purged" }), false)).toBe("skip-already-purged");
+  });
+  it("本地行已标 purged + restore-pending → 恢复优先", () => {
+    expect(decidePurge(mkLocal({ syncState: "purged" }), true)).toBe("skip-restore-pending");
+  });
   it("本地无 → remember-deleted（防复活）", () => {
     expect(decidePurge(null, false)).toBe("remember-deleted");
+  });
+});
+
+describe("decideFolderPurge", () => {
+  it("本地已有 folder 墓碑（isFolderPurged）→ skip-already-purged（幂等）", () => {
+    expect(decideFolderPurge(true, false)).toBe("skip-already-purged");
+  });
+  it("本地有活跃行（含软删）→ apply-purge（子树进回收站标 purged）", () => {
+    expect(decideFolderPurge(false, true)).toBe("apply-purge");
+  });
+  it("本地无副本（从未持有 / 行已 purged 被过滤）→ remember-deleted（防复活）", () => {
+    expect(decideFolderPurge(false, false)).toBe("remember-deleted");
   });
 });
 

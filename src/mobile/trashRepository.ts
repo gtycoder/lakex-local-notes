@@ -111,17 +111,32 @@ export async function restoreTreeItem(
 
   if (kind === "note") {
     const now = new Date().toISOString();
-    await d.prepare("UPDATE notes SET trashed_at=NULL, restore_pending_at=?, sync_state='local' WHERE id=?").run(now, id);
+    // updated_at 必须 bump 到恢复时刻（对齐桌面 restoreTrashItem 与本函数 folder 分支）：
+    // 恢复传播靠 updatedAt LWW（syncEngine 下载分支 rn.updatedAt > 他端 trashedAt 判恢复胜），
+    // 不 bump 则上传条目 updatedAt=删除时刻 → 他端判定相等不跟随 → 恢复被他端墓碑压回。
+    // parent_id 必须移回原父：UI 自己的软删不动 parent，但从远端学到的删除（applyRemoteTrash）
+    // 是 parent=TRASH 容器表示——不移回则恢复后行仍挂在回收站容器下，上传条目 parentId=TRASH，
+    // 他端"跟随恢复"后同样卡在回收站（260910 四端实测）。
+    await d.prepare(
+      "UPDATE notes SET parent_id=COALESCE(deleted_from_parent_id, parent_id), trashed_at=NULL, restore_pending_at=?, sync_state='local', updated_at=? WHERE id=?"
+    ).run(now, now, id);
     return;
   }
 
   await d.transaction(async () => {
     const now = new Date().toISOString();
     for (const fid of folderIds) {
-      await d.prepare("UPDATE folders SET trashed_at=NULL, updated_at=?, sync_state='local' WHERE id=?").run(now, fid);
+      // folder 同理：远端学到的 folder 删除（applyRemoteFolderDelete）标 trashed 但根行 parent 可能不变；
+      // COALESCE 兼容两种表示（UI 软删 parent 未动 → 保持；远端学来 → deleted_from_parent_id 为原父）。
+      await d.prepare(
+        "UPDATE folders SET parent_id=COALESCE(deleted_from_parent_id, parent_id), trashed_at=NULL, updated_at=?, sync_state='local' WHERE id=?"
+      ).run(now, fid);
     }
     for (const nid of restoreNoteIds) {
-      await d.prepare("UPDATE notes SET trashed_at=NULL, restore_pending_at=?, sync_state='local', updated_at=? WHERE id=?").run(now, now, nid);
+      // 子树内 notes：applyRemoteFolderDelete 会把子笔记 parent 移到 TRASH 容器 → 恢复时一并移回原父
+      await d.prepare(
+        "UPDATE notes SET parent_id=COALESCE(deleted_from_parent_id, parent_id), trashed_at=NULL, restore_pending_at=?, sync_state='local', updated_at=? WHERE id=?"
+      ).run(now, now, nid);
     }
   });
 }

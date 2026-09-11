@@ -30,6 +30,10 @@ export interface ManifestFolder {
   /** 被删文件夹：进入回收站时间与删除前父目录（恢复位置）。 */
   trashedAt?: string | null;
   deletedFromParentId?: string | null;
+  /** v5 folder 墓碑：该目录已被彻底删除（purge）。条目永久保留防他端复活（对齐 notes B4 语义）。
+   * 墓碑为纯元数据条目（无正文对象）；远端恢复较新（活跃条目 updatedAt > deletedAt）时墓碑让位。 */
+  deleted?: true;
+  deletedAt?: string;
 }
 
 /** Lake 笔记同步清单。 */

@@ -15,12 +15,12 @@
  */
 import { reconcileLakeNote } from "./lakeReconcile.js";
 import { decideUpload } from "./decideUpload.js";
-import { buildUploadEntry, buildTombstoneEntry, decideMetaApply, decideLocalTombstone, decidePurge, decideTombstoneYield, TRASH_NOTEBOOK_ID } from "./syncDecisions.js";
+import { buildUploadEntry, buildTombstoneEntry, decideMetaApply, decideLocalTombstone, decidePurge, decideFolderPurge, decideTombstoneYield, TRASH_NOTEBOOK_ID } from "./syncDecisions.js";
 import { mergeLockState } from "./syncDecision.js";
 import { shouldSkipZeroChange, isRemoteDescendant, createSupersededTracker } from "./syncPerf.js";
 import type { Manifest, ManifestFolder, ManifestNote } from "./manifestTypes.js";
 import { sha256Sync } from "./sha256Sync.js";
-import { parseLakeManifest, objectKey } from "./syncUtils.js";
+import { parseLakeManifest, objectKey, MANIFEST_VERSION } from "./syncUtils.js";
 import { extractAssetRefs } from "./assetNaming.js";
 import { isSafePathSegment } from "./storeUtils.js";
 import { AssetMissingError, decodeText, downloadNoteAssets, recordDeclaredAssetsOnly, runPool, scanLocalAssets } from "./syncAssets.js";
@@ -124,11 +124,18 @@ export async function syncNow(cfg: SyncConfig, s3: S3Store, db: SyncDbPort, opts
   // 必须传播——对齐桌面 sync.ts 每次同步无条件发布 manifest 的语义（迁移回归修复：
   // 否则删笔记本不传播 + 目录记账抹掉 local，且 hasLocalPendingNotes 被抹后早退跳过）。
   let foldersChanged = false;
+  // 开头快照：下载环判"本地是否有该 folder 活跃行"用（此时本轮尚未应用任何远端变更；
+  // purged 行已被 listFoldersForSync 过滤 → absent = 无活跃副本）。
+  const localFolderIdsAtStart = new Set<string>();
   if (typeof db.listFoldersForSync === "function") {
     const localFolders = (await db.listFoldersForSync()) ?? [];
+    for (const f of localFolders) localFolderIdsAtStart.add(f.id);
     const remoteFolders = new Map((remote?.folders ?? []).map((f) => [f.id, f]));
     for (const f of localFolders) {
       const rf = remoteFolders.get(f.id);
+      // v5：远端同 id 条目是墓碑（deleted:true）→ 下载环会应用删除（applyRemoteFolderDelete），
+      // 本地行随之下轮消失；此处只需阻止早退，不作为上传方向计数。
+      if (rf?.deleted) { foldersChanged = true; continue; }
       // 本地新增（远端无此 folder）或内容有差异 → 需要发布
       if (!rf || rf.title !== f.title || (rf.parentId ?? null) !== (f.parentId ?? null) || rf.sortOrder !== f.sortOrder ||
         rf.nodeType !== f.nodeType || (rf.icon ?? null) !== (f.icon ?? null) ||
@@ -137,18 +144,18 @@ export async function syncNow(cfg: SyncConfig, s3: S3Store, db: SyncDbPort, opts
         report.foldersUploaded++;
       }
     }
-    // 远端 folders 中存在本地已 purge 的（deleted_notes 带 purged_at）：必须强制发布重写 manifest，
+    // 远端存在**活跃**的 folder 而本地已 purge（deleted_notes 带 folder 墓碑）：必须强制发布重写 manifest，
     // 从云端移除残留（否则每轮同步都会尝试重新导入 → 复活）。
+    // v5 收窄：远端墓碑条目（deleted:true）不触发——墓碑已在云端，重写属空转（每轮 commitId 震荡的根因之一）。
     if (!foldersChanged && typeof db.isFolderPurged === "function") {
       for (const rf of remoteFolders.values()) {
-        if (await db.isFolderPurged(rf.id)) { foldersChanged = true; await db.log(`[publish] folder ${rf.id} locally purged, force rewrite manifest`); break; }
+        if (!rf.deleted && await db.isFolderPurged(rf.id)) { foldersChanged = true; await db.log(`[publish] folder ${rf.id} locally purged, force rewrite manifest`); break; }
       }
     }
-    // 同步统计：远端存在而本地没有的目录 → 下载方向新导入
+    // 同步统计：远端存在而本地没有的**活跃**目录 → 下载方向新导入（墓碑条目计入无意义）
     if (remote) {
-      const localIds = new Set(localFolders.map((f) => f.id));
       for (const rf of remoteFolders.values()) {
-        if (!localIds.has(rf.id)) report.foldersDownloaded++;
+        if (!rf.deleted && !localFolderIdsAtStart.has(rf.id)) report.foldersDownloaded++;
       }
     }
   }
@@ -184,10 +191,48 @@ export async function syncNow(cfg: SyncConfig, s3: S3Store, db: SyncDbPort, opts
     const resolveDefaultNotebook = async (): Promise<string> => (defaultNotebook ??= await db.defaultNotebookId());
     // 兜底笔记本惰性创建，创建前其 id 未知，故不预置进 validParents（其随机 id 也不会被任何远端 rn.parentId 引用）。
     const validParents = new Set<string>([TRASH_NOTEBOOK_ID]);
+    // 本地 folder 墓碑（deleted_notes node_type='folder'）：远端活跃条目恢复撤销判定用
+    // （对齐 note 的 decideLocalTombstone：远端 updatedAt 新于墓碑时间 → 撤销墓碑跟随恢复）。
+    const folderTombstoned = new Map(
+      ((typeof db.listDeletedNotesForSync === "function" ? await db.listDeletedNotesForSync() : []) ?? [])
+        .filter((d) => d.nodeType === "folder")
+        .map((d) => [d.id, d.deletedAt] as const)
+    );
     for (const folder of remote.folders) {
       if (!isSafePathSegment(folder.id)) throw new Error(`清单包含无效的目录 ID: ${folder.id}`);
       if (folder.parentId !== null && !isSafePathSegment(folder.parentId)) throw new Error(`清单包含无效的目录 parentId: ${folder.parentId}`);
-      // 本地已 purge 的 folder（deleted_notes 带 purged_at）：不重新导入（防"清空回收站后同步 → 被删的又回来"）
+      // v5 folder 墓碑：远端已彻底删除该目录 → 本地子树移入回收站标 purged（行保留可恢复）；从未持有 → 记墓碑防复活
+      if (folder.deleted) {
+        const action = decideFolderPurge(
+          (typeof db.isFolderPurged === "function" && await db.isFolderPurged(folder.id)) ?? false,
+          localFolderIdsAtStart.has(folder.id),
+        );
+        if (action === "skip-already-purged") {
+          continue; // 幂等：发起端墓碑 / 学习端已应用（已记墓碑）
+        } else if (action === "apply-purge") {
+          if (typeof db.applyRemoteFolderDelete !== "function") {
+            await db.log(`[pull] folder ${folder.id} 远端墓碑但端口不支持目录删除，跳过`);
+            continue;
+          }
+          await db.applyRemoteFolderDelete(folder.id, folder.deletedAt ?? new Date().toISOString());
+          await db.log(`[pull] folder ${folder.id} 远端 purge，子树移入回收站`);
+          report.appliedRemote++;
+        } else {
+          if (typeof db.rememberFolderDeleted === "function") {
+            await db.rememberFolderDeleted(folder, folder.deletedAt ?? new Date().toISOString());
+          }
+          await db.log(`[pull] folder ${folder.id} 远端 purge（本地无副本），记墓碑防复活`);
+        }
+        continue;
+      }
+      // 活跃 folder vs 本地 folder 墓碑：远端恢复较新（updatedAt LWW）→ 撤销墓碑跟随恢复（对齐 note 墓碑撤销）
+      const folderTombAt = folderTombstoned.get(folder.id);
+      if (folderTombAt !== undefined && folder.updatedAt > folderTombAt) {
+        await db.log(`[tombstone] folder ${folder.id} 远端恢复较新，撤销本地墓碑`);
+        if (typeof db.revokeLocalDeletion === "function") await db.revokeLocalDeletion(folder.id);
+      }
+      // 本地已 purge 的 folder（deleted_notes 带 folder 墓碑且远端活跃条目较旧 = 云端残留）：不重新导入
+      // （防"清空回收站后同步 → 被删的又回来"；v5 后此分支仅在旧清单残留窗口触发）
       if (typeof db.isFolderPurged === "function" && await db.isFolderPurged(folder.id)) {
         await db.log(`[pull] folder ${folder.id} locally purged, skip import`);
         continue;
@@ -243,6 +288,9 @@ export async function syncNow(cfg: SyncConfig, s3: S3Store, db: SyncDbPort, opts
         const purgeAction = decidePurge(local, localRestoring);
         if (purgeAction === "skip-restore-pending") {
           await db.log(`[purge] ${rn.id} 本地显式恢复，跳过 purge`);
+        } else if (purgeAction === "skip-already-purged") {
+          // 幂等：本地已学习过 purge（行保留标 purged），只对齐记账不重复应用。
+          await db.log(`[purge] ${rn.id} 本地已 purged，跳过重复应用`);
         } else if (purgeAction === "apply-purge") {
           // W-1：与软删分支对称——本地未同步编辑（或本机是作者）被远端 purge 覆盖前强制留档。
           // purged 条目保留 .lake 可恢复，但无历史快照；清空回收站/自动过期后即彻底丢失。
@@ -332,9 +380,12 @@ export async function syncNow(cfg: SyncConfig, s3: S3Store, db: SyncDbPort, opts
 
       if (localTrashed && !localRestoring) {
         // 本地在回收站、远端 active：时间比较决定胜负
-        // - 远端 updatedAt 新于本地删除时间 → 远端恢复较新，跟随恢复
+        // - 远端 updatedAt 新于（或等于）本地删除时间 → 远端恢复较新，跟随恢复。
+        //   `>=` 容错：恢复方未 bump updated_at 的历史数据（如旧版移动端单条恢复）上传条目
+        //   updatedAt == 本地 trashedAt——严格相等只可能来自"原样恢复"（他端真实编辑时刻
+        //   不可能与本端删除时刻精确相等），判恢复胜符合"恢复传播"语义。
         // - 本地删除时间新于远端 → 本地删除压远端 active（删除压编辑），保留删除，步骤 3 上传墓碑
-        const remoteNewer = (rn.updatedAt ?? "") > (local.trashedAt ?? "");
+        const remoteNewer = (rn.updatedAt ?? "") >= (local.trashedAt ?? "");
         if (remoteNewer) {
           const contentBytes = await s3.getObject(`${cfg.prefix}/${objectKey(rn.id, rn.contentHash)}`, { maxBytes: MAX_REMOTE_NOTE_BYTES });
           if (contentBytes == null) {
@@ -432,9 +483,13 @@ export async function syncNow(cfg: SyncConfig, s3: S3Store, db: SyncDbPort, opts
   // P3-1：远端条目索引一次建好——上传环与墓碑环节共用（原先各自 .find，O(N²)）。
   const remoteById = new Map((remote?.notes ?? []).map((n) => [n.id, n]));
   // B4：本地已 purge（收到他端删除后的保留副本）不上传——恢复 = 清 purged 后再上传（对齐桌面 sync.ts:641）。
-  // 同时记录 purged id：发布 manifest 时从 notes 中移除（云端删除已完成，manifest 不再携带该条目，
-  // 对齐桌面 sync.ts:630-632 跳过 + manifestNotes 只含非 purged）。
+  // 同时记录 purged id：作为"必须发布 manifest"的强制理由（防本地 purge 因零变更早退而永不上云）。
+  // 收敛减枝：远端 manifest 已带同 id 墓碑（deleted:true）→ 墓碑已在云端，无需再作为发布理由；
+  // 否则移动端（purge 表示 = 行保留标 purged）会每轮 purgedIds 非空 → 每轮重发布 manifest → 四端 commitId 永不稳定。
   const purgedIds = new Set(localAll.filter((n) => n.syncState === "purged").map((n) => n.id));
+  if (remote) {
+    for (const rn of remote.notes) if (rn.deleted) purgedIds.delete(rn.id);
+  }
   // P3-4 跨笔记资产扫描并发化：扫描/上传某笔记缺失资产是同步里唯一的“每笔记网络活”，旧实现逐篇 await（串行长尾，
   // 大库首次同步多篇带图笔记时尤甚）。决策环内只登记任务（正文与条目照常构建、entry.assets 暂空），环后用并发池统一
   // 解析并回填 entry.assets。语义与串行完全一致：同一 resolveUploadAssets、同样的失败吞并日志、最终 manifest.assets 同集合，
@@ -512,21 +567,46 @@ export async function syncNow(cfg: SyncConfig, s3: S3Store, db: SyncDbPort, opts
     }
   }
 
-  // 3.5 墓碑上传：本地已删除（deleted_notes）的笔记 → manifest 恒保留 deleted 标记（审计#2：防删除复活）。
-  // 墓碑携带删除前内容（读本地 .lake 算真实 hash 上传，先内容后标志）；内容已物理删除（purge）→ 占位符 id。
-  // folder/group 墓碑（nodeType='folder'）仅本地下载过滤，不进 manifest.notes（发布方向跳过，避免污染他端 deleted_notes）。
+  // 3.5 墓碑上传：本地已删除（deleted_notes）的条目 → manifest 恒保留 deleted 标记（审计#2：防删除复活）。
+  // note 墓碑携带删除前内容（读本地 .lake 算真实 hash 上传，先内容后标志）；内容已物理删除（purge）→ 占位符 id。
+  // v5 folder 墓碑（nodeType='folder'）：进 manifest.folders（deleted:true，纯元数据无对象）——folder 删除传播。
   // 墓碑 vs 远端恢复 LWW：远端已 active 且更新 → 墓碑让位（decideTombstoneYield）。
   const tombstonePublishedIds: string[] = [];
+  const folderTombstoneEntries: ManifestFolder[] = [];
   {
     const localIds = new Set(localAll.map((n) => n.id));
     // P3-1：remoteById 复用上传环前建好的远端索引
     const deletedNotes = typeof db.listDeletedNotesForSync === "function" ? await db.listDeletedNotesForSync() : [];
+    const remoteFolderById = new Map((remote?.folders ?? []).map((f) => [f.id, f]));
     for (const deleted of deletedNotes) {
       if (localIds.has(deleted.id)) continue;
-      if (deleted.nodeType === "folder") continue;
+      if (deleted.nodeType === "folder") {
+        const rf = remoteFolderById.get(deleted.id);
+        // 收敛减枝：远端已带同 id folder 墓碑 → 墓碑已在云端，不重建条目重发布（仅对齐记账标 published）。
+        if (rf?.deleted) { tombstonePublishedIds.push(deleted.id); continue; }
+        // 墓碑让位（对齐 note decideTombstoneYield）：远端活跃且 updatedAt 新于墓碑时间（恢复传播）→ 不发布墓碑。
+        if (rf && !rf.deleted && rf.updatedAt > deleted.deletedAt) {
+          await db.log(`[tombstone] folder ${deleted.id} 远端恢复较新，墓碑让位`);
+          continue;
+        }
+        // 纯元数据墓碑条目（无正文对象）：nodeType 用 notebook 占位（读取端 deleted:true 时不消费该字段）。
+        folderTombstoneEntries.push({
+          id: deleted.id, title: deleted.title ?? deleted.id, parentId: deleted.parentId ?? null,
+          sortOrder: deleted.sortOrder ?? 0, nodeType: "notebook", icon: null, updatedAt: deleted.deletedAt,
+          deleted: true, deletedAt: deleted.deletedAt,
+        });
+        tombstonePublishedIds.push(deleted.id);
+        continue;
+      }
       const remoteNote = remoteById.get(deleted.id);
       if (decideTombstoneYield(deleted.deletedAt, remoteNote)) {
         await db.log(`[tombstone] ${deleted.id} 远端恢复较新，墓碑让位`);
+        continue;
+      }
+      // 收敛减枝：远端 manifest 已带 deleted:true 墓碑 → 墓碑已在云端，无需重建占位符条目重发布
+      // （否则每次真实变更后每台设备都会因占位符墓碑再各发布一轮 manifest）。仅对齐记账（标 published）。
+      if (remoteNote?.deleted) {
+        tombstonePublishedIds.push(deleted.id);
         continue;
       }
       // 墓碑携带删除前内容：content 传真实内容 → 发布阶段上传对象（先内容后标志，其他设备可恢复删除前最新版）。
@@ -570,8 +650,9 @@ export async function syncNow(cfg: SyncConfig, s3: S3Store, db: SyncDbPort, opts
   // 发布条件：有上传，或本地存在 purged 条目（须重写 manifest 移除该条目——云端删除已完成，
   // 对齐桌面"purged 不上传且 manifestNotes 不含 purged"的语义），
   // 或本地目录树有变更（回收站笔记本 / 移动 / 改名 / 图标——对齐桌面 sync.ts 每次同步无条件发布
-  // manifest，folders 变更必须传播；迁移回归修复：否则删笔记本不传播 + 目录记账抹掉 local）。
-  if (uploadQueue.length > 0 || purgedIds.size > 0 || foldersChanged) {
+  // manifest，folders 变更必须传播；迁移回归修复：否则删笔记本不传播 + 目录记账抹掉 local），
+  // 或存在待发布的 folder 墓碑（v5：folder 删除传播）。
+  if (uploadQueue.length > 0 || purgedIds.size > 0 || foldersChanged || folderTombstoneEntries.length > 0) {
     // 正文对象上传：内容寻址幂等、条目相互独立 → 并发池（对齐 P3-3 资产并发；旧串行逐条 await，
     // 实测 N 篇笔记正文上传是同步尾部长尾）。worker 内不抛错——错误按索引收集、池后按序抛首个，
     // 避免某条失败时其它并发车道的拒绝变成 unhandledRejection；且任一上传失败必须让整轮同步报错、
@@ -594,7 +675,7 @@ export async function syncNow(cfg: SyncConfig, s3: S3Store, db: SyncDbPort, opts
     });
     for (const e of contentErrors) if (e) throw e;
     next = {
-      version: 4,
+      version: MANIFEST_VERSION,
       workspaceId: "default",
       commitId: randomUUID(),
       prevCommitId: remote?.commitId ?? null,
@@ -622,16 +703,28 @@ export async function syncNow(cfg: SyncConfig, s3: S3Store, db: SyncDbPort, opts
     next.notes.sort((a, b) => a.sortOrder - b.sortOrder);
     if (typeof db.listFoldersForSync === "function") {
       const localFolders = await db.listFoldersForSync();
-      // 空数组也必须覆盖（≠ null）：本地树为空（如 purge 清空全部目录）时，next.folders 必须清空
+      // 空数组也必须覆盖（≠ null）：本地树为空（如 purge 清空全部目录）时，活跃条目必须清空
       // 移除云端残留（否则远端 folders 残留被保留，下轮同步重新导入 → "清空回收站后同步 → 被删的又回来"）。
       // 仅 null（端口未实现目录发布）才保持远端透传。
       if (localFolders !== null && localFolders !== undefined) {
-        next.folders = localFolders.map((f) => ({
-          id: f.id, title: f.title, parentId: f.parentId, sortOrder: f.sortOrder, nodeType: f.nodeType as "notebook" | "group",
-          icon: f.icon, updatedAt: f.updatedAt,
-          trashedAt: f.trashedAt ?? undefined,
-          deletedFromParentId: f.deletedFromParentId ?? undefined,
-        }));
+        // v5 合并规则（同 id 后写覆盖）：远端墓碑保留（防复活）← 本地活跃行（恢复场景胜出）← 本轮新墓碑（删除胜出）。
+        // 学习端（行标 purged 被 listFoldersForSync 过滤）天然缺席 → 不回填；purged 行下轮恢复时以活跃行覆盖墓碑。
+        const folderById = new Map((remote?.folders ?? []).filter((f) => f.deleted).map((f) => [f.id, f]));
+        for (const f of localFolders) {
+          folderById.set(f.id, {
+            id: f.id, title: f.title, parentId: f.parentId, sortOrder: f.sortOrder, nodeType: f.nodeType as "notebook" | "group",
+            icon: f.icon, updatedAt: f.updatedAt,
+            trashedAt: f.trashedAt ?? undefined,
+            deletedFromParentId: f.deletedFromParentId ?? undefined,
+          });
+        }
+        for (const t of folderTombstoneEntries) folderById.set(t.id, t);
+        next.folders = [...folderById.values()];
+      } else if (folderTombstoneEntries.length > 0) {
+        // 端口不发布目录（POC 透传）：仅追加本轮新墓碑（同 id 覆盖活跃残留）。
+        const folderById = new Map((remote?.folders ?? []).map((f) => [f.id, f]));
+        for (const t of folderTombstoneEntries) folderById.set(t.id, t);
+        next.folders = [...folderById.values()];
       }
     }
 
@@ -641,10 +734,6 @@ export async function syncNow(cfg: SyncConfig, s3: S3Store, db: SyncDbPort, opts
     await s3.putObject(`${cfg.prefix}/${MANIFEST_KEY}`, manifestJson, { gzip: true });
     report.uploadedBytes += manifestJson.length * 2;
     report.published = true;
-    // 墓碑已发布 → 标记 published_at（从待上传计数移除；墓碑本体保留防删除标记丢失，审计 #2）
-    if (tombstonePublishedIds.length > 0 && typeof db.markTombstonesPublished === "function") {
-      await db.markTombstonesPublished(tombstonePublishedIds);
-    }
     // 桌面 GC 差集标记钩子（4.5）：发布后暴露 next/prev，桌面 Controller 算待回收引用
     try { await opts?.onPublished?.(next, remote); } catch { /* 钩子失败不阻断 */ }
     progress("publish", `发布 manifest（应用 ${report.appliedRemote}，上传 ${report.uploaded}）`);
@@ -673,6 +762,14 @@ export async function syncNow(cfg: SyncConfig, s3: S3Store, db: SyncDbPort, opts
       // 下载对账收尾：lastUploadedHash 传 null——本机未上传该版本（下载的远端笔记不得误标"本机是作者"，对齐桌面语义）
       await db.markSyncedIfUnchanged(rn.id, rn.contentHash, rn.updatedAt, null);
     }
+  }
+
+  // 墓碑记账收尾（无论本轮是否发布 manifest）：push 进 tombstonePublishedIds 的两种情况——
+  // ①收敛减枝（远端已带同 id 墓碑，无需再发布）②本轮已随 manifest 发布。两种情况的墓碑都已在云端，
+  // 必须标 published_at 从待上传计数移除；原先只在发布分支内 mark → 收敛减枝场景永不记账，
+  // purge 后 pending documents/folders 永久挂起（260910 实测：B 端两轮同步后 published_at 仍 NULL）。
+  if (tombstonePublishedIds.length > 0 && typeof db.markTombstonesPublished === "function") {
+    await db.markTombstonesPublished(tombstonePublishedIds);
   }
 
   // 目录记账（对齐桌面 sync.ts:789-793）：latest 发布成功后，用构建 manifest 时的 updatedAt 快照
