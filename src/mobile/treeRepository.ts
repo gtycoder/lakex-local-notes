@@ -183,9 +183,18 @@ export async function moveTreeNodeOrdered(d: MobileDb, id: string, parentId: str
 
 export async function reorderSiblings(d: MobileDb, parentId: string | null, orderedIds: string[]): Promise<void> {
   const now = new Date().toISOString();
+  // 同级列表是 folders + notes 混合（listNotebookTree 混合排序）——必须按 id 归属写回各自表，
+  // 否则文档的 sort_order 永远不动（与"移动"同一个坑）。
+  const folderIds = new Set(
+    (await d.prepare("SELECT id FROM folders WHERE trashed_at IS NULL").all() as Array<{ id: string }>).map((r) => r.id)
+  );
   await d.transaction(async () => {
     for (const [index, childId] of orderedIds.entries()) {
-      await d.prepare("UPDATE folders SET sort_order=?, updated_at=?, sync_state='local' WHERE id=? AND trashed_at IS NULL").run(index, now, childId);
+      if (folderIds.has(childId)) {
+        await d.prepare("UPDATE folders SET sort_order=?, updated_at=?, sync_state='local' WHERE id=? AND trashed_at IS NULL").run(index, now, childId);
+      } else {
+        await d.prepare("UPDATE notes SET sort_order=?, updated_at=?, sync_state='local' WHERE id=? AND trashed_at IS NULL").run(index, now, childId);
+      }
     }
   });
 }
