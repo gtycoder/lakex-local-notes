@@ -509,7 +509,7 @@ body { font-family: BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino San
 }
 
 /* 左/右抽屉骨架（非全屏：宽度 min(86%,360px)、内侧圆角 + 投影，translateX 滑入；遮罩 z6） */
-.side-mask { position: fixed; inset: 0; z-index: 6; background: #000; opacity: 0; visibility: hidden; transition: opacity var(--mobile-duration-panel) linear; }
+.side-mask { position: fixed; inset: 0; z-index: 6; background: var(--mobile-mask); opacity: 0; visibility: hidden; transition: opacity var(--mobile-duration-panel) linear; }
 .side-mask--swiping { transition: none; will-change: opacity; }
 .side-mask.on { opacity: 1; visibility: visible; }
 .side-panel {
