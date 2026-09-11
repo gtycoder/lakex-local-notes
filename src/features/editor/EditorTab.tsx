@@ -16,7 +16,7 @@ import { useOutline } from "../outline/useOutline";
 import { native } from "../../lib/native";
 import { attachImagePreviewClick } from "./imagePreview";
 import { ImageLightbox } from "./ImageLightbox";
-import { attachFileCardClick, buildAttachmentPreviewItem, openAttachmentPreview, createCardHoverResidueCleaner, resolveCardAsset, type AttachmentPreviewItem } from "../attachment/attachmentPreviewController";
+import { attachFileCardClick, buildAttachmentPreviewItem, openAttachmentPreview, createCardHoverResidueCleaner, resolveCardAsset, findCardData, type AttachmentPreviewItem } from "../attachment/attachmentPreviewController";
 import { CardContextMenu, TextContextMenu, cutCardElement } from "./CardContextMenu";
 import { AssetRenameDialog } from "./AssetRenameDialog";
 import { renameFileCardDisplay } from "../../core/fileCard.js";
@@ -113,7 +113,7 @@ export function EditorTab({ noteId, content, visible, tocEnabled, outlineEnhance
   const [rebuildTick, setRebuildTick] = useState(0);
   const [cardMenu, setCardMenu] = useState<{ x: number; y: number; item: AttachmentPreviewItem; el: HTMLElement } | null>(null);
   const [textMenu, setTextMenu] = useState<{ x: number; y: number } | null>(null);
-  const [renameItem, setRenameItem] = useState<AttachmentPreviewItem | null>(null);
+  const [renameItem, setRenameItem] = useState<{ item: AttachmentPreviewItem; el: HTMLElement } | null>(null);
   const onChangeRef = useRef(onChange);
   const onEditorReadyRef = useRef(onEditorReady);
   onChangeRef.current = onChange;
@@ -722,7 +722,7 @@ export function EditorTab({ noteId, content, visible, tocEnabled, outlineEnhance
             openOriginal: (it) => { if (it.ref) void native.openAttachment(it.ref.noteId, it.ref.filename); },
             showInFolder: (it) => { if (it.ref) void native.showAttachmentInFolder(it.ref.noteId, it.ref.filename); },
             cut: () => { cutCardElement(cardMenu.el); },
-            rename: (it) => { setRenameItem(it); },
+            rename: (it) => { setRenameItem({ item: it, el: cardMenu.el }); },
             copyImage: (it) => { if (it.ref) void native.copyAssetImage(it.ref.noteId, it.ref.filename); },
             copyPath: (it) => { if (it.ref) void native.copyAssetPath(it.ref.noteId, it.ref.filename); },
             saveAs: (it) => { if (it.ref) void native.saveAssetAs(it.ref.noteId, it.ref.filename, it.name); },
@@ -734,11 +734,17 @@ export function EditorTab({ noteId, content, visible, tocEnabled, outlineEnhance
       {textMenu && <TextContextMenu x={textMenu.x} y={textMenu.y} onClose={() => setTextMenu(null)} />}
       {renameItem && (
         <AssetRenameDialog
-          initial={renameItem.name}
+          initial={renameItem.item.name}
           onCancel={() => setRenameItem(null)}
           onConfirm={(newName) => {
-            const item = renameItem;
+            const picked = renameItem;
             setRenameItem(null);
+            // 首选 lakex cardData.setName + sync(true)：原地改卡片名并写回编辑器文档（getDocument 可见），
+            // 不调 setDocument → 不重渲染整篇 → 没有白屏。
+            const cardData = findCardData(picked.el);
+            if (cardData?.setName) { cardData.setName(newName); cardData.sync?.(true); return; }
+            // 兜底：拿不到 cardData 时整篇 setDocument（带旧内容遮罩）
+            const item = picked.item;
             if (!item.ref) return;
             const editor = editorRef.current;
             const host = hostRef.current;

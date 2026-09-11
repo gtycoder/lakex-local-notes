@@ -107,6 +107,26 @@ function readFileCardData(start: HTMLElement, card: HTMLElement): { src: string;
 }
 
 /**
+ * 从卡片元素向上找 lakex 的 cardData（含 setName/sync）——用于原地改卡片名/值，避免 setDocument 整篇重渲染。
+ * fiber 挂在文件芯片等内部元素上，故从 start/芯片开始向上找。
+ */
+export function findCardData(start: HTMLElement): { setName?: (n: string) => void; sync?: (force?: boolean) => void } | null {
+  const card = start.closest("ne-card") as HTMLElement | null;
+  const base = card ?? start;
+  const chip = (base.querySelector(".ne-card-file") as HTMLElement | null) ?? start;
+  const key = Object.keys(chip).find((k) => k.startsWith("__reactFiber$")) ?? Object.keys(base).find((k) => k.startsWith("__reactFiber$"));
+  if (!key) return null;
+  const holder = (Object.keys(chip).some((k) => k === key) ? chip : base) as unknown as Record<string, unknown>;
+  let fiber = holder[key] as { memoizedProps?: Record<string, unknown>; return?: unknown } | null;
+  for (let i = 0; fiber && i < 15; i++) {
+    const cd = fiber.memoizedProps?.cardData as { setName?: (n: string) => void; sync?: (force?: boolean) => void } | undefined;
+    if (cd && typeof cd.setName === "function") return cd;
+    fiber = fiber.return as { memoizedProps?: Record<string, unknown>; return?: unknown } | null;
+  }
+  return null;
+}
+
+/**
  * 从右键目标解析卡片资产（图片 / 视频 / 音频 / file 卡），返回与附件预览同构的条目。
  * - image：取 <img src>；video/audio：取 <video>/<audio src>；file：走 fiber cardData（同点击路径）。
  * - 解析不到（如行内 data: URL 图片、非资产卡片）返回 null，由调用方回退到文本菜单。
