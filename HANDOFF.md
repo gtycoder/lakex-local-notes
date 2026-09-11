@@ -124,7 +124,12 @@
 - **实测（模拟器 emulator-5554，真机同引擎 SQLCipher 3.53.3）**：1 字/2 字/3+ 字统一、标题优先、`<mark>` 摘要、回收站排除、增删改增量与清理 全部通过；与桌面同 fixture 结果逐条一致。
 - **基准**（`electron/searchRepository.benchmark.test.ts`，opt-in）：5000 文档 build 178ms / 9.8MB / 查询 3–8ms；20000 文档 build 730ms / 39.3MB / 查询 12–34ms（含 tree_nodes/notes JOIN + bm25）。
 - **门禁**：`tsc` 0 · vitest **935 passed / 16 skipped** · 桌面+移动 `vite build` 全绿 · Android `assembleDebug` + 安装通过。
-- **留尾**：设置页「重建搜索索引」按钮（IPC `rebuild_search_index` 已就绪）；移动端改用编辑器 `getDocument("text/plain")` 作为索引源（当前用共享 `lakeHtmlToPlain` 兜底，普通文本两端已一致）。
+- **留尾（= 已实现当前功能、后续可增强，非缺陷；文档里显式登记以防丢线索）**：
+  - 移动端索引源：当前用共享 `lakeHtmlToPlain(content)` 兜底；编辑器已暴露 `getDocument("text/plain")`（实测可用），后续改用它使两端索引源完全同源（普通文本两端已一致）。
+  - A+ 拉丁检索：拉丁/ASCII 现按整词匹配，失去任意子串（`ake` 搜不到 `Lake`）；若代码/英文检索重要，可加“拉丁 3-gram 列”（调研 §6.8）。
+  - 小记搜索：本期按用户决定不做，二期再评估（调研 §6.7）。
+  - 定位仍是 DOM 启发式（已支持多词）；lakex 无公开查找 API。
+  - 设置页「重建搜索索引」按钮 **已完成**（提交 4fea72b），不再是留尾。
 - **自检修复（260911 晚）**：
   1. **重命名会清空正文索引**（旧实现把 @@body=null@@ 当空串）：`renameTreeNode` 传 null → 正文索引被重置。改为 @@body=null@@ 时读 @@notes.text_cache@@ 保留正文；桌面 @@store.test@@ + @@searchRepository.test@@ 各加回归测试。
   2. **移动端 @@treeRepository.renameTreeNode@@ 只处理 folders**，重命名文档静默失败（与桌面不一致）：补 notes 分支并即时 @@indexNote@@；@@bridgeTree.test@@ 加回归测试。
@@ -136,7 +141,7 @@
 > 原 §3.6（其余浮层统一）**基本已完成**：顶栏菜单/右键菜单/标签切换器已进 b3 令牌（`src/b3/components.css` + `src/b3/layout.css`）；仅**草稿恢复框**（`draft-recovery-*`，`overlays.css` 自定义类 + `--lake-*` 令牌）未收进 b3 套，属可选小收尾。
 
 **性能/健壮性**
-1. ~~**FTS 索引重做**~~ **✅ 已完成（260911，见 §2.11）**：统一 FTS5 + unicode61 + 单字预分词 + 增量账本；不再有 1/2/3 字分支。留尾：设置页「重建搜索索引」按钮、移动端 `getDocument("text/plain")` 索引源。
+1. ~~**FTS 索引重做**~~ **✅ 已完成（260911，见 §2.11）**：统一 FTS5 + unicode61 + 单字预分词 + 增量账本；不再有 1/2/3 字分支。后续增强：移动端 `getDocument("text/plain")` 索引源、A+ 拉丁检索、小记搜索（二期）。
 2. 其余浮层收尾（可选，成本低）：仅**草稿恢复框**未进 b3 套；如统一照 §2.1 路子 + 同步 `settingsSearch.ts` 注册表即可。
 
 **移动端 UI 对齐思源 · 用户首轮验收反馈修复（260909）**
@@ -220,7 +225,7 @@
 
 ## 5. 下一步建议（新会话）
 1. 先跑 §6 门禁确认基线；有问题先测再改。
-2. **搜索重构已完成（§2.11，分支 `feat/search-refactor`）**：`src/core/search/` 共享核心 + 桌面/移动 FTS5 统一，设备实测通过；待用户验收后合 master。留尾：设置页重建按钮、移动端编辑器纯文本源。
+2. **搜索重构已完成（§2.11，分支 `feat/search-refactor`）**：`src/core/search/` 共享核心 + 桌面/移动 FTS5 统一，设备实测通过；待用户验收后合 master。后续增强：移动端编辑器纯文本源、A+ 拉丁检索、小记搜索（二期）。
 3. 待用户验收 `refactor/store-split` 上的 260911 批次（2ecac39 同步收敛 + a18a95b 安卓修复）后合 master；用户可能要求真机（小米）复验 §8.7.0。
 4. 移动端一律按 **§8**（§8.0 移动端/桌面硬隔离已解除——现桌面与移动可自由改；仅 `src/b3/**` 思源 vendored 组件等共享/合规件仍须谨慎）。
 5. 任何同步/GC 改动**先读** `AGENTS.md §3 #11/#12/#13/#15/#16` + `docs/SYNC-PROTOCOL.md` + `docs/S3-GC-DESIGN.md`，改前想清"声明是否仍全、被引用对象会不会被 GC 删、跨端自愈是否成立、复活路径在哪"。
