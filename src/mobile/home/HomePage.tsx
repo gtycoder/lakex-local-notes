@@ -6,7 +6,7 @@
  * - 空态不做「创建」提示（默认空白即可）；
  * - 底部胶囊栏 = [筛选 | 新建 | 云同步]（新建按 tab 记性：小记=写小记、知识库=新建笔记本）。
  */
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { CloudUpload, List, LayoutGrid, ArrowUpDown, MoreHorizontal, Pencil, Plus, Search, Settings, Trash2, Paperclip, FolderOpen } from "lucide-react";
 import type { TreeNode } from "../../lib/types";
 import type { POCNoteSummary } from "../noteRepository";
@@ -84,6 +84,12 @@ export function HomePage(props: HomePageProps) {
   const [quickSort, setQuickSort] = useState<QuickSort>("recent");
   const [enterDir, setEnterDir] = useState<"left" | "right">("right");
   const enteredOnceRef = useRef(false);
+
+  // 离开「小记」tab（未点保存）即取消编辑：切回来是小记列表，不保留编辑框。
+  // 覆盖所有离开路径（顶部 tab / 左右横滑 / 父级路由变化）。
+  useEffect(() => {
+    if (tab !== "quick") { setComposer(null); setEditNote(null); }
+  }, [tab]);
 
   // 左右横滑切换小记 ↔ 知识库（左滑→知识库，右滑→小记），带方向性滑动入场动效
   useHorizontalSwipe((dir) => {
@@ -194,7 +200,7 @@ export function HomePage(props: HomePageProps) {
                   <button key={r.id} className="doc-card" onClick={() => { tapFeedback(); onOpenNote(r.id); }} aria-label={r.title || "文档"}>
                     <span className="doc-card__paper" aria-hidden="true">
                       <span className="doc-card__lines" />
-                      <span className="doc-card__clip"><Paperclip size={11} /></span>
+                      <span className="doc-card__clip"><Paperclip size={10} /></span>
                     </span>
                     <span className="doc-card__name">{r.title || "无标题"}</span>
                     <span className="doc-card__date">{fmtRelative(r.updatedAt)}</span>
@@ -205,6 +211,9 @@ export function HomePage(props: HomePageProps) {
           )}
           {/* key=view：切换书架/列表时重挂载，重放入场动效 */}
           <section className="home-section" key={libraryView}>
+            <div className="home-section__head">
+              <span className="home-section__title">笔记本</span>
+            </div>
             <NotebookGrid
               notebooks={notebooks}
               docCounts={docCounts}
