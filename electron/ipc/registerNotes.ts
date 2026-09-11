@@ -1,7 +1,6 @@
 import { app, BrowserWindow, clipboard, dialog, nativeImage, shell } from "electron";
 import fs from "node:fs";
 import path from "node:path";
-import crypto from "node:crypto";
 import type { DraftJournal } from "../draftJournal.js";
 import { Store } from "../store.js";
 import { MAX_ATTACHMENT_BYTES } from "../../src/core/storeLimits.js";
@@ -196,7 +195,8 @@ export function registerNotesIpc(
     if (!fs.existsSync(full)) throw new IpcInputError("附件文件不存在（可能已清理）");
     const ext = path.extname(filename);
     let baseName = typeof suggestedName === "string" ? sanitizeFileName(suggestedName).trim() : "";
-    if (!baseName) baseName = `附件-${crypto.randomBytes(4).toString("hex")}${ext}`;
+    // 没有展示名就用我们存的附件名（本身就是 时间戳_hash，等价"随机"），不另造名字。
+    if (!baseName) baseName = filename;
     else if (path.extname(baseName) === "") baseName += ext;
     const win = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0];
     const result = await dialog.showSaveDialog(win, { defaultPath: path.join(app.getPath("downloads"), baseName) });
