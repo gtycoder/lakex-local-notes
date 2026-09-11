@@ -7,7 +7,7 @@
  * - 底部胶囊栏 = [筛选 | 新建 | 云同步]（新建按 tab 记性：小记=写小记、知识库=新建笔记本）。
  */
 import { useEffect, useMemo, useRef, useState } from "react";
-import { CloudUpload, List, LayoutGrid, ArrowUpDown, MoreHorizontal, Pencil, Plus, Search, Settings, Trash2, Paperclip, FolderOpen } from "lucide-react";
+import { CloudUpload, List, LayoutGrid, ArrowUpDown, MoreHorizontal, Pencil, Plus, Search, Settings, Trash2, Paperclip, FolderOpen, StickyNote } from "lucide-react";
 import type { TreeNode } from "../../lib/types";
 import type { POCNoteSummary } from "../noteRepository";
 import { NotebookGrid } from "./NotebookGrid";
@@ -258,21 +258,21 @@ export function HomePage(props: HomePageProps) {
   );
 }
 
-/** 小记卡片：图（若有）在上、摘要+日期+「...」在下。 */
+/** 小记卡片：与知识库同一语言（图标块/缩略图 + 摘要 + 日期 + 「...」）。 */
 function QuickNoteCard({ note, onEdit, onMore }: { note: MobileQuickNote; onEdit: () => void; onMore: () => void }) {
   const thumbUrl = note.firstImage
     ? withAssetAccessToken(localAssetHttpUrl(note.id, note.firstImage, { space: "quick-notes" }))
     : null;
   return (
     <div className="qn-card" role="button" tabIndex={0} onClick={onEdit}>
-      {thumbUrl && <img className="qn-card__img" src={thumbUrl} alt="" loading="lazy" />}
-      <div className="qn-card__body">
-        <div className="qn-card__text">{note.previewText || (note.imageCount > 0 ? "[图片]" : "（空白小记）")}</div>
-        <div className="qn-card__meta">
-          <span className="qn-card__date">{fmtDate(note.updatedAt)}</span>
-          <button className="qn-card__more" onClick={(e) => { e.stopPropagation(); onMore(); }} aria-label="更多"><MoreHorizontal size={18} /></button>
-        </div>
-      </div>
+      <span className="qn-card__tile">
+        {thumbUrl ? <img className="qn-card__thumb" src={thumbUrl} alt="" loading="lazy" /> : <StickyNote size={20} strokeWidth={1.9} />}
+      </span>
+      <span className="qn-card__main">
+        <span className="qn-card__text">{note.previewText || (note.imageCount > 0 ? "[图片]" : "（空白小记）")}</span>
+        <span className="qn-card__date">{fmtDate(note.updatedAt)}</span>
+      </span>
+      <button className="qn-card__more" onClick={(e) => { e.stopPropagation(); onMore(); }} aria-label="更多"><MoreHorizontal size={18} /></button>
     </div>
   );
 }
