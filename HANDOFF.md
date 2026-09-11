@@ -291,6 +291,13 @@
 - JS：bridge `saveAssetAs(noteId, filename, name)`（`Filesystem.getUri(Directory.Data)` → `OpenFile.saveAs`）；`MobileApp` 调试契约同步；移动端长按卡片菜单加「另存为…」（`CardContextMenu` 复用，有 ref 即显示）。
 - 实测：长按图片卡菜单含「另存为…」，触发返回 `{ok:true}`（MediaStore 路径）；附件走 SAF 系统面板（需人工点选，未自动化）。
 - **不做**移动端「复制图片」：Android 无通用剪贴板图片，思源靠 FileProvider content URI（`writeImageClipboard`）跨 App 兼容差，用户已确认跳过。
+### 2.35 同步事故：文档父级错挂到「测试本1」且不可自愈（260912 查清+修复+已修数据）
+- **现象**：桌面/安卓同一个 S3、同一个「个人笔记」，文档列表不一致（安卓有 安卓上行-* 等，桌面没有）。
+- **实证结论**：不是丢数据、不是 manifest 覆盖。远端 manifest 链（lake-notes-stress2-260910）整条链里这些 note 一直 parentId=notebook-personal；桌面本地却是 9116074d（测试本1）、updated_at 与远端完全相同、sync_state=synced。桌面日志显示它们走 importRemoteNote（正常下载 apply）。
+- **根因（共享 core，一直都有，非某次改动引入）**：syncEngine 的 validParents 只收集「远端 folders」，本地已有 folder 不算合法父；一旦本次清单没列出该父，effectiveParent() 就落 defaultNotebookId()（最老笔记本=测试本1）把 note 错挂、并沿用远端 updatedAt；之后 decideMetaApply 用严格 updatedAt > lastSyncedMetaAt，时间戳相等 → 永久跳过。纯桌面多端难触发（move 会抬 updatedAt）。
+- **修复**（f867c7e）：① validParents 纳入 localFolderIdsAtStart；② meta 对账加字段判据：父合法且与本地不同、且本地无待上传 meta 变更（sync_state !== 'local'）→ 跟随远端。
+- **数据修复**：零变更早退（hasPending=false + commit 一致）挡在对账循环前，修复后首次同步没生效；清掉 device_state.last_seen_commit_id 强制走完整对账后，10 条自动归位（9116074d 15→5，notebook-personal 10→20）。
+- **遗留**：零变更早退未纳入「父级漂移」信号 —— 已同步设备若父错挂，不强制对账就不会自愈。建议后续给 runDataHealthCheck 加 metaParentMismatch（或把 meta 签名并入早退判据）。
 - **Electron 反复被"回收"结论（非内存泄露）**：日志是 `Port 1421 already in use` / devtools `bind() failed` + 单实例锁；`crash reason=killed exitCode=15` 是 SIGTERM（session/job 结束或 kill 旧 PID），非崩溃/OOM；RSS 主进程 ~120MB、渲染 ~125MB。**重启前必须先 kill 占用 1421/9222 的旧 PID**；vite 需长驻 tty（§7.1）。
 - **移动端新增**：长按菜单加 复制 / 属性（历史版本原有）。bridge 补 `duplicateNote/getNoteInfo/readAssetPreview/previewHistorySnapshot/openAttachment`；`MobileApp` 的 lakeNative 调试契约同步加。
 - **修复**：移动端 `noteRepository.readNote` 的 SQL **漏 select `parent_id`** → 属性父级链恒为空、复制的副本丢父级；已补列。
