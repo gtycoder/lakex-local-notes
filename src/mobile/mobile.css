@@ -99,24 +99,19 @@ body { font-family: BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino San
 .mobile-nb-name { margin-top: 8px; font-size: 13px; }
 
 /* ===== 首页卡片语言（小记卡片 + 最近文档 + 笔记本书架/列表 + 带标签底部栏） ===== */
-/* —— 小记卡片（1 列，图在上、文在下、日期+更多） —— */
-/* —— 小记卡片（与知识库列表同语言：图标块/缩略图 + 摘要 + 日期 + 「...」） —— */
-.mobile-quick-cards { display: flex; flex-direction: column; padding: 6px 8px 12px; }
-.qn-card { display: flex; align-items: center; gap: 12px; padding: 10px; border-radius: 12px; background: transparent; border: none; cursor: pointer; -webkit-tap-highlight-color: transparent; transition: background-color var(--mobile-duration-press) ease, transform var(--mobile-duration-press) ease; }
-.qn-card:active { background: var(--b3-list-hover); transform: scale(.99); }
-.qn-card__tile { flex: 0 0 auto; width: 44px; height: 44px; border-radius: 12px; display: flex; align-items: center; justify-content: center; overflow: hidden; background: color-mix(in srgb, var(--nb-accent) 14%, var(--b3-theme-surface)); color: color-mix(in srgb, var(--nb-accent) 84%, var(--b3-theme-on-surface)); }
-.qn-card__thumb { width: 100%; height: 100%; object-fit: cover; display: block; }
-.qn-card__main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
-.qn-card__text { font-size: 15px; line-height: 1.4; color: var(--b3-theme-on-surface); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; word-break: break-word; }
+/* —— 小记卡片（整张白卡：图片完整展示 + 摘要 + 日期 + 「...」，仿语雀） —— */
+.mobile-quick-cards { display: flex; flex-direction: column; gap: 12px; padding: 12px 14px; }
+.qn-card { display: flex; flex-direction: column; background: var(--b3-theme-background); border-radius: 14px; overflow: hidden; cursor: pointer; -webkit-tap-highlight-color: transparent; box-shadow: 0 1px 2px rgba(16,24,40,.05), 0 10px 24px -18px rgba(16,24,40,.35); transition: transform var(--mobile-duration-press) ease; }
+.qn-card:active { transform: scale(.99); }
+.qn-card__cover { position: relative; width: 100%; padding: 12px 12px 2px; display: flex; align-items: center; justify-content: center; background: var(--b3-theme-background); }
+.qn-card__img { max-width: 100%; max-height: 210px; width: auto; height: auto; object-fit: contain; border-radius: 8px; display: block; }
+.qn-card__count { position: absolute; top: 10px; right: 10px; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px; background: rgba(0,0,0,.5); color: #fff; font-size: 11px; line-height: 18px; text-align: center; }
+.qn-card__body { padding: 10px 16px 12px; }
+.qn-card__text { font-size: 15px; line-height: 1.5; color: var(--b3-theme-on-surface); display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; word-break: break-word; }
+.qn-card__meta { display: flex; align-items: center; justify-content: space-between; margin-top: 6px; }
 .qn-card__date { font-size: 12px; color: var(--b3-theme-on-surface-light); }
-.qn-card__more { flex: 0 0 auto; width: 32px; height: 32px; margin-right: -6px; border: none; background: transparent; color: var(--b3-theme-on-surface-light); display: flex; align-items: center; justify-content: center; border-radius: 10px; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.qn-card__more { width: 32px; height: 32px; margin-right: -6px; border: none; background: transparent; color: var(--b3-theme-on-surface-light); display: flex; align-items: center; justify-content: center; border-radius: 10px; cursor: pointer; -webkit-tap-highlight-color: transparent; }
 .qn-card__more:active { background: var(--b3-list-hover); color: var(--b3-theme-on-surface); }
-.qn-card:nth-child(6n+1) { --nb-accent: #5b8def; }
-.qn-card:nth-child(6n+2) { --nb-accent: #dfa03c; }
-.qn-card:nth-child(6n+3) { --nb-accent: #48b07a; }
-.qn-card:nth-child(6n+4) { --nb-accent: #d96a97; }
-.qn-card:nth-child(6n+5) { --nb-accent: #8f7be0; }
-.qn-card:nth-child(6n+6) { --nb-accent: #3fb0c0; }
 
 /* —— 首页分区：白底、从顶部开始，分区之间用发丝线分隔（不用灰底/卡片） —— */
 .mobile-library { background: var(--b3-theme-background); }
