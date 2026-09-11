@@ -179,17 +179,18 @@ export function NoteInfoDialog({ note, onClose, onRevealNoteFile, onOpenAssetsDi
               </div>
             )}
 
-            {/* 第二部分：文件位置（打开文件位置 / 打开附件文件夹 / 复制 ID） */}
+            {/* 第二部分：文件位置（动作按钮放标题右侧，与历史版本同款式；ID 不再单独展示——路径里已含） */}
             <div className="note-info-section">
-              <div className="note-info-section-title"><FolderOpen size={14} /><span>文件位置</span></div>
-              <div className="note-info-actions">
-                {onRevealNoteFile && <button className="b3-button b3-button--outline" onClick={onRevealNoteFile}>打开文件位置</button>}
-                {onOpenAssetsDir && <button className="b3-button b3-button--outline" onClick={onOpenAssetsDir}>打开附件文件夹</button>}
-                <button className="b3-button b3-button--outline" onClick={copyId}>{copied ? "已复制" : "复制 ID"}</button>
+              <div className="note-info-section-title">
+                <FolderOpen size={14} /><span>文件位置</span>
+                <div className="note-info-actions">
+                  {onRevealNoteFile && <button className="b3-button b3-button--outline" onClick={onRevealNoteFile}>打开文件位置</button>}
+                  {onOpenAssetsDir && <button className="b3-button b3-button--outline" onClick={onOpenAssetsDir}>打开附件文件夹</button>}
+                  <button className="b3-button b3-button--outline" onClick={copyId}>{copied ? "已复制" : "复制 ID"}</button>
+                </div>
               </div>
               <div className="note-info-path" title={info.lakePath}>{info.lakePath}</div>
-              <div className="note-info-path" title={info.assetsDir}>{info.assetsDir}</div>
-              <div className="note-info-id"><span className="note-info-key">ID</span><code title={info.id}>{info.id}</code></div>
+              {info.assetsDir && <div className="note-info-path" title={info.assetsDir}>{info.assetsDir}</div>}
             </div>
 
             {/* 第三部分：附件（高度受限，可滚；附件过多不会撑破布局） */}

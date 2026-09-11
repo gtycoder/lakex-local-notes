@@ -264,6 +264,8 @@
 - 第二部分「文件位置」= 3 个按钮：**打开文件位置**（reveal `.lake`）/ **打开附件文件夹**（新 IPC `open_note_assets` → `shell.openPath(assetsDir)`）/ **复制 ID**；下方保留两条路径 + ID 文本。
 - **附件 / 历史条目加高度上限**（`.note-info-assets` 190px、`.note-info-history` 200px，`overflow:auto`；渲染上限 200 + "+N"）——附件/快照多时不再撑破或错位。实测 36 个附件：clientH 190 < scrollH 242，正常滚动。
 - 移动端：文件管理器类按钮不渲染（无对应能力）；窄屏第一部分折单列；弹窗高度按内容自适应（max 78vh）。
+- 收尾调整（用户）：文件位置三个按钮**移到标题右侧**（与「历史版本」同款）；**不再单独展示 ID**（路径里已含两次）。
+- **历史快照压测**：造 46 条（`createHistorySnapshot(force)`，settings.maxSnapshots=50）→ `.note-info-history` `clientH 200 < scrollH 1235` 正常滚动；测完已 `deleteHistory` 全清。
 - **移动端新增**：长按菜单加 复制 / 属性（历史版本原有）。bridge 补 `duplicateNote/getNoteInfo/readAssetPreview/previewHistorySnapshot/openAttachment`；`MobileApp` 的 lakeNative 调试契约同步加。
 - **修复**：移动端 `noteRepository.readNote` 的 SQL **漏 select `parent_id`** → 属性父级链恒为空、复制的副本丢父级；已补列。
 - 门禁：`tsc` 0 · vitest **951 passed / 16 skipped** · 双端 `vite build`。实测：桌面菜单顺序 ✓、属性新字段 ✓、拖拽 720×640→860×740 ✓；移动端长按菜单 ✓、复制（含父级继承）✓、属性弹窗布局 ✓。

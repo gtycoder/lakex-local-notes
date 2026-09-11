@@ -60,7 +60,7 @@
 .note-info-history em { margin-left: auto; font-style: normal; opacity: .7; }
 .note-info-empty { margin: 8px 0 0; font-size: 12px; color: var(--b3-theme-on-surface); }
 
-.note-info-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.note-info-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; }
 .note-info-key { color: var(--b3-theme-on-surface); font-size: 12px; }
 .note-info-breadcrumb { display: flex; align-items: center; flex-wrap: wrap; gap: 2px; }
 .note-info-crumb-wrap { display: inline-flex; align-items: center; }
