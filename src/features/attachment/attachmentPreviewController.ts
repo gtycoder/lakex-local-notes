@@ -16,6 +16,8 @@ export interface AttachmentPreviewItem {
   size: number;
   ref: LocalAssetRef | null;
   kind: AttachmentKind;
+  /** 来源卡片类型（image / video / audio / file）；只有 file 卡展示名字、才允许重命名 */
+  cardName?: string;
 }
 
 export interface AttachmentPreviewState {
@@ -38,13 +40,14 @@ function emit(): void {
 }
 
 /** 由 src 构建预览条目（解析本地资产引用 + 类型分流）。 */
-export function buildAttachmentPreviewItem(src: string, name: string, size: number): AttachmentPreviewItem {
+export function buildAttachmentPreviewItem(src: string, name: string, size: number, cardName?: string): AttachmentPreviewItem {
   return {
     src,
     name: name || (src.split("/").pop() ?? "附件"),
     size: typeof size === "number" ? size : 0,
     ref: parseLocalAssetUrl(src),
     kind: fileKindOf(name || src),
+    ...(cardName ? { cardName } : {}),
   };
 }
 
@@ -124,20 +127,20 @@ export function resolveCardAsset(start: HTMLElement): AttachmentPreviewItem | nu
     const src = card.querySelector("img")?.getAttribute("src") || "";
     if (!src) return null;
     const meta = readFileCardData(start, card);
-    return buildAttachmentPreviewItem(src, meta?.name || assetNameFromUrl(src), meta?.size ?? 0);
+    return buildAttachmentPreviewItem(src, meta?.name || assetNameFromUrl(src), meta?.size ?? 0, "image");
   }
   if (cardName === "video" || cardName === "audio") {
     const src = (card.querySelector("video,audio") as HTMLMediaElement | null)?.getAttribute("src") || "";
     if (!src) return null;
     const meta = readFileCardData(start, card);
-    return buildAttachmentPreviewItem(src, meta?.name || assetNameFromUrl(src), meta?.size ?? 0);
+    return buildAttachmentPreviewItem(src, meta?.name || assetNameFromUrl(src), meta?.size ?? 0, cardName);
   }
   if (cardName === "file" || cardName === "attachment") {
     // __reactFiber$ 挂在文件芯片（.ne-card-file）等内部元素上，卡片根常常没有；
     // 必须从右键命中的元素（start）开始找，否则拿不到 cardData，右键会落到文字菜单。
     const chip = card.querySelector(".ne-card-file") as HTMLElement | null;
     const data = readFileCardData(start, card) ?? (chip ? readFileCardData(chip, card) : null);
-    return data ? buildAttachmentPreviewItem(data.src, data.name, data.size) : null;
+    return data ? buildAttachmentPreviewItem(data.src, data.name, data.size, "file") : null;
   }
   return null;
 }

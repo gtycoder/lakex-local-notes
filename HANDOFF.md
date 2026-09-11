@@ -276,7 +276,14 @@
 ### 2.32 卡片菜单：合并复制 + 顺序对齐 + 文件卡右键修复（260912 凌晨）
 - **文件卡右键修复**：`resolveCardAsset` 的 file 分支原来 `readFileCardData(card, card)`（从卡片根读 fiber），而 `__reactFiber$` 挂在 `.ne-card-file` 芯片上 → 解析失败落到文字菜单。改为从右键命中元素 `start` 读、并兜底芯片（实测文件卡右键现在出卡片菜单）。
 - **复制合并**：三项复制收进「复制 ▸」子菜单（复制图片(仅图) / 复制文件路径 / 复制文件名）；hover 展开 + click 切换（触屏可用）。
-- **顺序对齐文档右键理念**（编辑 → 打开 → 位置 → 导出）：**剪切 / 复制▸ / 使用默认程序打开 / 打开文件位置 / 另存为…**。
+- **顺序对齐文档右键理念**（编辑 → 打开 → 位置 → 导出）：**剪切 / 复制▸ / 重命名 / 使用默认程序打开 / 打开文件位置 / 另存为…**（重命名仅 file 卡显示）。
+
+### 2.33 附件展示名重命名（只改展示名，260912 凌晨）
+- 需求：只改文档里显示的名字（如微信来的 `weixin-xxx.pdf` 显示体面些），**不动 note-assets 下的存储文件/路径**。
+- 后端 `store.renameAssetDisplay(noteId, filename, newName)`：匹配 `name="file"` 卡（src 的 noteId+filename）→ 改 value 的 `name`、保留 `src` → `saveNote`（重索引 + sync_state=local）。IPC `rename_asset_display`。
+- UI：卡片菜单只对 **file 卡**加「重命名」→ `AssetRenameDialog`（复用 `.ln-dialog`，预填 + Enter/Esc）→ 成功后经 `useSyncRefresh.reloadNoteTab` 重载 tab（bump reloadKey）。
+- 实测：单测 `renameAssetDisplay`（store.test.ts 118 passed）+ 实时 UI 流程（展示名变、src 不变）。
+- 另存为默认名：有展示名用展示名，没有用存储名（`3565615`）。
 - **Electron 反复被"回收"结论（非内存泄露）**：日志是 `Port 1421 already in use` / devtools `bind() failed` + 单实例锁；`crash reason=killed exitCode=15` 是 SIGTERM（session/job 结束或 kill 旧 PID），非崩溃/OOM；RSS 主进程 ~120MB、渲染 ~125MB。**重启前必须先 kill 占用 1421/9222 的旧 PID**；vite 需长驻 tty（§7.1）。
 - **移动端新增**：长按菜单加 复制 / 属性（历史版本原有）。bridge 补 `duplicateNote/getNoteInfo/readAssetPreview/previewHistorySnapshot/openAttachment`；`MobileApp` 的 lakeNative 调试契约同步加。
 - **修复**：移动端 `noteRepository.readNote` 的 SQL **漏 select `parent_id`** → 属性父级链恒为空、复制的副本丢父级；已补列。

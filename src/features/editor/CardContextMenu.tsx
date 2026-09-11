@@ -5,7 +5,7 @@
  */
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { ClipboardPaste, ChevronRight, Copy, Download, ExternalLink, FolderOpen, Scissors, TextSelect } from "lucide-react";
+import { ClipboardPaste, ChevronRight, Copy, Download, ExternalLink, FolderOpen, Pencil, Scissors, TextSelect } from "lucide-react";
 import type { AttachmentPreviewItem } from "../attachment/attachmentPreviewController";
 
 export interface CardMenuActions {
@@ -15,6 +15,8 @@ export interface CardMenuActions {
   showInFolder?: (item: AttachmentPreviewItem) => void;
   /** 剪切卡片：复制到剪贴板并从正文移除 */
   cut?: (item: AttachmentPreviewItem) => void;
+  /** 重命名附件展示名（仅 file 卡有效） */
+  rename?: (item: AttachmentPreviewItem) => void;
   /** 复制图片到系统剪贴板（桌面，图片卡） */
   copyImage?: (item: AttachmentPreviewItem) => void;
   /** 复制文件的绝对路径（桌面） */
@@ -93,6 +95,9 @@ export function CardContextMenu({ x, y, item, actions, onClose }: {
             </div>
           )}
         </div>
+      )}
+      {actions.rename && item.cardName === "file" && (
+        <button role="menuitem" onClick={() => run(actions.rename)}><Pencil size={15} /><span>重命名</span></button>
       )}
       {ref && actions.openOriginal && (
         <button role="menuitem" onClick={() => run(actions.openOriginal)}><ExternalLink size={15} /><span>使用默认程序打开</span></button>

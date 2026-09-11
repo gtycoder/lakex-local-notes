@@ -1845,6 +1845,20 @@ describe("duplicateNote 复制文档", () => {
     expect(hits.some((h) => h.id === copy.id)).toBe(true);
   });
 
+  it("renameAssetDisplay 只改文件卡展示名、不动 src 里的存储文件名", () => {
+    const note = store.createNote("附件卡");
+    const stored = "1789142407633_804945a9.pdf";
+    const src = `http://127.0.0.1:19876/${note.id}/${stored}`;
+    const value = encodeURIComponent(JSON.stringify({ src, name: "weixin-xxx.pdf", size: 12 }));
+    store.saveNote(note.id, "附件卡", `<card type="inline" name="file" value="data:${value}"></card>`);
+    const r = store.renameAssetDisplay(note.id, stored, "域名发票.pdf");
+    expect(r).toEqual({ ok: true, changed: 1 });
+    const content = store.readNote(note.id).content;
+    // value 是 URL 编码 JSON：按编码形态断言展示名，src 里的存储名保持原样
+    expect(content.includes(encodeURIComponent("域名发票.pdf"))).toBe(true);
+    expect(content.includes(stored)).toBe(true);
+  });
+
   it("附件复制到新 noteId 目录、文件名不变，正文 URL 改写为新 id", () => {
     const src = store.createNote("带附件");
     const assetsDir = path.join(dir, "note-assets", src.id);

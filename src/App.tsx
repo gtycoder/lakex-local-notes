@@ -215,7 +215,7 @@ export function App() {
     activeNoteId, outlineTabsVersion, setOutlineSwitching, setOutlineEmptyOverride, setActiveOutlineEmpty,
   });
 
-  const { refreshPendingSummary, refreshDraftEntries, handleTrashRestored, handleHistoryRestored } = useSyncRefresh({
+  const { refreshPendingSummary, refreshDraftEntries, handleTrashRestored, handleHistoryRestored, reloadNoteTab } = useSyncRefresh({
     setPendingSummary, setDraftEntries, setTreeNodes, setNotes, setOpenTabs, tabReloadVersionRef, openTabsRef, bumpRevision,
   });
 
@@ -383,6 +383,7 @@ export function App() {
             onTogglePin={handleTogglePin}
             onContentChange={handleContentChange}
             onEditorReady={handleEditorReady}
+            onReloadNote={reloadNoteTab}
             onCreateNote={() => void createNote()}
           />
         </div>

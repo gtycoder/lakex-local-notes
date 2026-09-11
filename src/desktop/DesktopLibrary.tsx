@@ -40,6 +40,8 @@ export interface DesktopLibraryProps {
   onTogglePin: (noteId: string) => void;
   onContentChange: (noteId: string, content: string) => void;
   onEditorReady: (noteId: string, editor: LakeEditorInstance | null) => void;
+  /** 外部改动正文后重载该文档 tab（附件重命名用） */
+  onReloadNote: (noteId: string) => void;
   onCreateNote: () => void;
 }
 
@@ -51,7 +53,7 @@ export function DesktopLibrary(props: DesktopLibraryProps) {
     onScrollToTop, onNavigateToHeading,
     lockedNoteIds, pinnedNoteIds,
     onTabChange, onTabClose, onTabsReorder, onTogglePin, onContentChange,
-    onEditorReady, onCreateNote, onOpenTrash,
+    onEditorReady, onReloadNote, onCreateNote, onOpenTrash,
     visible = true,
   } = props;
 
@@ -106,6 +108,7 @@ export function DesktopLibrary(props: DesktopLibraryProps) {
         onContentChange={onContentChange}
         prefs={editorPrefs}
         onEditorReady={onEditorReady}
+        onReloadNote={onReloadNote}
         emptyAction={<button className="b3-button" onClick={onCreateNote}>新建文档</button>}
       />
     </section>

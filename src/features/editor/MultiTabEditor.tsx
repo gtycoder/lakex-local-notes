@@ -41,6 +41,8 @@ interface MultiTabEditorProps {
   visible?: boolean;
   prefs?: LakeEditorPrefs;
   onEditorReady?: (noteId: string, editor: import("./lakeRuntime").LakeEditorInstance | null) => void;
+  /** 外部改动正文后重载该文档 tab（附件重命名用） */
+  onReloadNote?: (noteId: string) => void;
   /** 顶栏左侧元素（工作空间/云同步），渲染在标签左侧，与多 tab 融合成一条顶栏 */
   topbarLeading?: ReactNode;
   /** 顶栏右侧元素（外观/更多），渲染在标签最右侧 */
@@ -65,6 +67,7 @@ export function MultiTabEditor({
   visible = true,
   prefs,
   onEditorReady,
+  onReloadNote,
   onOpenTrash,
   topbarLeading,
   topbarTrailing,
@@ -434,6 +437,7 @@ export function MultiTabEditor({
             onChange={(content) => handleChange(tab.noteId, content)}
             prefs={prefs}
             onEditorReady={onEditorReady}
+            onReloadNote={onReloadNote}
           />
         ))}
       </div>

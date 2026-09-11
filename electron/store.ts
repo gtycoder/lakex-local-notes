@@ -37,7 +37,8 @@ import { ResourceRepository } from "./resourceRepository.js";
 import { RemoteImportRepository } from "./remoteImportRepository.js";
 import type { ResourceUploadOutput, HistorySettings, HistoryCleanupResult, S3Settings, SyncSettings, S3GcSettings } from "./storeTypes.js";
 import { sqlParameterBatches } from "../src/core/sqlParameterBatch.js";
-import { fileKindOf, scanAssetCards } from "../src/core/fileCard.js";
+import { decodeCardValue, encodeCardValue, fileKindOf, scanAssetCards } from "../src/core/fileCard.js";
+import { parseLocalAssetUrl } from "../src/core/assetUrl.js";
 
 export { ASSET_NAME_RE, extractAssetRefs, isoWeekKey, selectHistoryDrops, sanitizeFileName } from "../src/core/storeUtils.js";
 
@@ -650,6 +651,30 @@ export class Store {
       assetTotalBytes: assets.reduce((sum, a) => sum + a.size, 0),
       history: this.listNoteHistory(id).map((h) => ({ id: h.id, createdAt: h.createdAt, size: h.size })),
     };
+  }
+
+  /**
+   * 重命名附件（**只改展示名**，不动 note-assets 下的存储文件/路径）。
+   * 用途：让微信等来源的 `weixin-xxx.pdf` 在文档里显示得体面。
+   * 只处理 `name="file"` 卡（图片/音视频卡不展示名字，改了也没意义）。
+   */
+  renameAssetDisplay(noteId: string, filename: string, newName: string): { ok: boolean; changed: number } {
+    const doc = this.readNote(noteId);
+    const trimmed = newName.trim();
+    if (!trimmed) throw new AppError("InvalidInput", "名称不能为空");
+    let changed = 0;
+    const content = doc.content.replace(/<card\b[^>]*\bname="file"[^>]*\bvalue="data:([^"]+)"/g, (whole, encoded: string) => {
+      const value = decodeCardValue(encoded);
+      if (!value || typeof value.src !== "string") return whole;
+      const ref = parseLocalAssetUrl(value.src);
+      if (!ref || ref.noteId !== noteId || ref.filename !== filename) return whole;
+      changed += 1;
+      const nextEncoded = encodeCardValue({ ...value, name: trimmed }).replace(/^data:/, "");
+      return whole.replace(`value="data:${encoded}"`, `value="data:${nextEncoded}"`);
+    });
+    if (changed === 0) return { ok: false, changed: 0 };
+    this.saveNote(noteId, doc.title, content);
+    return { ok: true, changed };
   }
 
   /** 所属路径链：自根向下的父级（笔记本 / 分组 …），带 id 供目录跳转。 */

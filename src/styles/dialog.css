@@ -82,6 +82,12 @@
 .note-info-history-preview h1, .note-info-history-preview h2, .note-info-history-preview h3 { font-size: 14px; margin: 6px 0; }
 .note-info-error { margin: 12px 14px; font-size: 12px; color: var(--b3-theme-error, #d23f31); }
 
+/* 附件重命名弹窗（复用 .ln-dialog） */
+.asset-rename-dialog { width: min(420px, 92vw); }
+.asset-rename-dialog .b3-text-field { width: 100%; }
+.asset-rename-hint { margin: 8px 0 0; font-size: 11px; color: var(--b3-theme-on-surface); }
+.asset-rename-actions { display: flex; justify-content: flex-end; gap: 9px; margin-top: 14px; }
+
 /* 窄屏（移动端）：两列折成一列 */
 @media (max-width: 600px) {
   .note-info-dialog { width: calc(100vw - 24px); max-width: calc(100vw - 24px); height: auto; max-height: 78vh; min-width: 0; min-height: 200px; }

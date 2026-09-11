@@ -59,6 +59,11 @@ export function registerNotesIpc(
   ipc.handle("delete_draft_journal", (id: string) => drafts.remove(id));
   ipc.handle("get_note_paths", (id: string) => store.getNotePaths(id));
   ipc.handle("get_note_info", (id: string) => store.getNoteInfo(id));
+  /** 只改附件展示名（不动存储文件）。 */
+  ipc.handle("rename_asset_display", (noteId: string, filename: string, newName: string) => {
+    assertAttachmentSegments(noteId, filename);
+    return store.renameAssetDisplay(noteId, filename, String(newName ?? ""));
+  });
   ipc.handle("duplicate_note", (id: string) => store.duplicateNote(id));
   ipc.handle("pick_export_dir", async () => {
     const win = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0];

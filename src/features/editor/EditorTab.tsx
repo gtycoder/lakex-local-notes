@@ -18,6 +18,7 @@ import { attachImagePreviewClick } from "./imagePreview";
 import { ImageLightbox } from "./ImageLightbox";
 import { attachFileCardClick, buildAttachmentPreviewItem, openAttachmentPreview, createCardHoverResidueCleaner, resolveCardAsset, type AttachmentPreviewItem } from "../attachment/attachmentPreviewController";
 import { CardContextMenu, TextContextMenu, cutCardElement } from "./CardContextMenu";
+import { AssetRenameDialog } from "./AssetRenameDialog";
 import { installMediaCardCategoryRouter } from "./mediaCardRouting";
 import { isMediaFilename } from "../../core/assetNaming.js";
 import { AttachmentPreview } from "../attachment/AttachmentPreview";
@@ -34,6 +35,8 @@ export interface EditorTabProps {
   locked?: boolean;
   /** 编辑器实例就绪回调（导出 md 等需要访问 editor 实例的场景） */
   onEditorReady?: (noteId: string, editor: LakeEditorInstance | null) => void;
+  /** 外部改动正文后重载该 tab（附件重命名后主进程改写了正文） */
+  onReloadNote?: (noteId: string) => void;
 }
 
 function escapeId(id: string): string {
@@ -82,7 +85,7 @@ export function locateEditorSearchHit(noteId: string, query: string): boolean {
   return true;
 }
 
-export function EditorTab({ noteId, content, visible, tocEnabled, outlineEnhance, onChange, prefs, locked, onEditorReady }: EditorTabProps) {
+export function EditorTab({ noteId, content, visible, tocEnabled, outlineEnhance, onChange, prefs, locked, onEditorReady, onReloadNote }: EditorTabProps) {
   const hostRef = useRef<HTMLDivElement>(null);
   const editorMountRef = useRef<HTMLDivElement>(null);
   const editorRef = useRef<LakeEditorInstance | null>(null);
@@ -109,6 +112,7 @@ export function EditorTab({ noteId, content, visible, tocEnabled, outlineEnhance
   const [rebuildTick, setRebuildTick] = useState(0);
   const [cardMenu, setCardMenu] = useState<{ x: number; y: number; item: AttachmentPreviewItem; el: HTMLElement } | null>(null);
   const [textMenu, setTextMenu] = useState<{ x: number; y: number } | null>(null);
+  const [renameItem, setRenameItem] = useState<AttachmentPreviewItem | null>(null);
   const onChangeRef = useRef(onChange);
   const onEditorReadyRef = useRef(onEditorReady);
   onChangeRef.current = onChange;
@@ -717,6 +721,7 @@ export function EditorTab({ noteId, content, visible, tocEnabled, outlineEnhance
             openOriginal: (it) => { if (it.ref) void native.openAttachment(it.ref.noteId, it.ref.filename); },
             showInFolder: (it) => { if (it.ref) void native.showAttachmentInFolder(it.ref.noteId, it.ref.filename); },
             cut: () => { cutCardElement(cardMenu.el); },
+            rename: (it) => { setRenameItem(it); },
             copyImage: (it) => { if (it.ref) void native.copyAssetImage(it.ref.noteId, it.ref.filename); },
             copyPath: (it) => { if (it.ref) void native.copyAssetPath(it.ref.noteId, it.ref.filename); },
             saveAs: (it) => { if (it.ref) void native.saveAssetAs(it.ref.noteId, it.ref.filename, it.name); },
@@ -726,6 +731,20 @@ export function EditorTab({ noteId, content, visible, tocEnabled, outlineEnhance
         />
       )}
       {textMenu && <TextContextMenu x={textMenu.x} y={textMenu.y} onClose={() => setTextMenu(null)} />}
+      {renameItem && (
+        <AssetRenameDialog
+          initial={renameItem.name}
+          onCancel={() => setRenameItem(null)}
+          onConfirm={(newName) => {
+            const item = renameItem;
+            setRenameItem(null);
+            if (!item.ref) return;
+            void native.renameAssetDisplay(item.ref.noteId, item.ref.filename, newName)
+              .then((res) => { if (res.ok) onReloadNote?.(noteId); })
+              .catch(() => undefined);
+          }}
+        />
+      )}
     </div>
   );
 }

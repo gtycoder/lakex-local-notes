@@ -85,5 +85,20 @@ export function useSyncRefresh({
     })();
   }, [setTreeNodes, setNotes, setOpenTabs, tabReloadVersionRef, bumpRevision]);
 
-  return { refreshPendingSummary, refreshDraftEntries, handleTrashRestored, handleHistoryRestored };
+  /** 外部改动正文后重载某个 tab（bump reloadKey 强制重建 Lake 实例）。用于附件重命名等主进程写正文的场景。 */
+  const reloadNoteTab = useCallback((noteId: string) => {
+    void (async () => {
+      const reloadVersion = tabReloadVersionRef.current.next();
+      try {
+        const updated = await native.readNote(noteId);
+        if (!tabReloadVersionRef.current.isCurrent(reloadVersion)) return;
+        setOpenTabs((tabs) => tabs.map((tab) => tab.noteId === noteId
+          ? { ...tab, title: updated.title, content: updated.content, dirty: false, reloadKey: (tab.reloadKey ?? 0) + 1 }
+          : tab));
+        bumpRevision(noteId);
+      } catch { /* 文档未打开则跳过 */ }
+    })();
+  }, [setOpenTabs, tabReloadVersionRef, bumpRevision]);
+
+  return { refreshPendingSummary, refreshDraftEntries, handleTrashRestored, handleHistoryRestored, reloadNoteTab };
 }
