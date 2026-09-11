@@ -34,7 +34,10 @@ import { mobileSecretStore } from "./secretStore.js";
 import { stageAssetWrites } from "./assetWrites.js";
 
 /** 系统默认应用打开本地文件（与 DocumentEditor 同插件）。 */
-const OpenFile = registerPlugin<{ open: (opts: { path: string }) => Promise<void> }>("OpenFile");
+const OpenFile = registerPlugin<{
+  open: (opts: { path: string }) => Promise<void>;
+  saveAs: (opts: { path: string; name: string; mime?: string }) => Promise<void>;
+}>("OpenFile");
 import { applyMobileSchema } from "./schema.js";
 import * as treeRepository from "./treeRepository.js";
 import * as noteRepository from "./noteRepository.js";
@@ -470,6 +473,16 @@ export const bridge = {
   async openAttachment(noteId: string, filename: string) {
     const uri = await Filesystem.getUri({ path: `note-assets/${noteId}/${filename}`, directory: Directory.Data });
     await OpenFile.open({ path: uri.uri.replace(/^file:\/\//, "") });
+    return { ok: true };
+  },
+
+  /**
+   * 另存为到用户可见区域：图片 → 相册（MediaStore），其它附件 → SAF 系统“保存到”面板。
+   * 私有 Data 目录里的文件用户看不到，这是把它转出去的唯一合规路径。
+   */
+  async saveAssetAs(noteId: string, filename: string, name?: string) {
+    const uri = await Filesystem.getUri({ path: `note-assets/${noteId}/${filename}`, directory: Directory.Data });
+    await OpenFile.saveAs({ path: uri.uri.replace(/^file:\/\//, ""), name: name || filename });
     return { ok: true };
   },
 

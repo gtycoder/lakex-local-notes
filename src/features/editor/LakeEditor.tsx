@@ -210,6 +210,7 @@ export function LakeEditor({ noteId, content, mode = "editor", tocEnabled, onCha
             cut: () => { cutCardElement(cardMenu.el); },
             rename: (it) => { setRenameItem({ item: it, el: cardMenu.el }); },
             copyName: (it) => { void navigator.clipboard.writeText(it.name).catch(() => undefined); },
+            saveAs: (it) => { if (it.ref) void native.saveAssetAs(it.ref.noteId, it.ref.filename, it.name).catch(() => undefined); },
           }}
           onClose={() => setCardMenu(null)}
         />

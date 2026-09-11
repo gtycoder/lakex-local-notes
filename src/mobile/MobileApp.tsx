@@ -68,6 +68,7 @@ export function MobileApp() {
           readAssetPreview: (noteId: string, filename: string) => bridge.readAssetPreview(noteId, filename),
           previewHistorySnapshot: (historyId: number) => bridge.previewHistorySnapshot(historyId),
           openAttachment: (noteId: string, filename: string) => bridge.openAttachment(noteId, filename),
+          saveAssetAs: (noteId: string, filename: string, name?: string) => bridge.saveAssetAs(noteId, filename, name),
           restoreHistory: (historyId: number) => bridge.restoreHistory(historyId),
           cleanupHistory: () => bridge.cleanupHistory(),
           getHistorySettings: () => bridge.getHistorySettings(),

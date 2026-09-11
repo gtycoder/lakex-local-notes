@@ -284,6 +284,13 @@
 - UI：卡片菜单只对 **file 卡**加「重命名」→ `AssetRenameDialog`（复用 `.ln-dialog`，预填 + Enter/Esc）→ 成功后经 `useSyncRefresh.reloadNoteTab` 重载 tab（bump reloadKey）。
 - 实测：单测 `renameAssetDisplay`（store.test.ts 118 passed）+ 实时 UI 流程（展示名变、src 不变）。
 - 另存为默认名：有展示名用展示名，没有用存储名（`3565615`）。
+
+### 2.34 移动端「另存为」：图片进相册 / 附件走 SAF（260912）
+- 调研思源安卓（独立仓库 `siyuan-note/siyuan-android`，`app/src/main/java/org/b3log/siyuan/JSAndroid.java`）：它是 `writeImageClipboard(FileProvider uri)` + `exportByDefault/openExternal` **甩浏览器下载** → 用户实测"太糙"。
+- 我们走更优：扩 `OpenFilePlugin.java` 加 `saveAs({path,name,mime})`——**image/* 且 API≥29 → MediaStore `Pictures`**（直接进相册）；**其它 → SAF `ACTION_CREATE_DOCUMENT`**（系统"保存到"面板，用户自选可见位置）；低版本/非图片同样 SAF。
+- JS：bridge `saveAssetAs(noteId, filename, name)`（`Filesystem.getUri(Directory.Data)` → `OpenFile.saveAs`）；`MobileApp` 调试契约同步；移动端长按卡片菜单加「另存为…」（`CardContextMenu` 复用，有 ref 即显示）。
+- 实测：长按图片卡菜单含「另存为…」，触发返回 `{ok:true}`（MediaStore 路径）；附件走 SAF 系统面板（需人工点选，未自动化）。
+- **不做**移动端「复制图片」：Android 无通用剪贴板图片，思源靠 FileProvider content URI（`writeImageClipboard`）跨 App 兼容差，用户已确认跳过。
 - **Electron 反复被"回收"结论（非内存泄露）**：日志是 `Port 1421 already in use` / devtools `bind() failed` + 单实例锁；`crash reason=killed exitCode=15` 是 SIGTERM（session/job 结束或 kill 旧 PID），非崩溃/OOM；RSS 主进程 ~120MB、渲染 ~125MB。**重启前必须先 kill 占用 1421/9222 的旧 PID**；vite 需长驻 tty（§7.1）。
 - **移动端新增**：长按菜单加 复制 / 属性（历史版本原有）。bridge 补 `duplicateNote/getNoteInfo/readAssetPreview/previewHistorySnapshot/openAttachment`；`MobileApp` 的 lakeNative 调试契约同步加。
 - **修复**：移动端 `noteRepository.readNote` 的 SQL **漏 select `parent_id`** → 属性父级链恒为空、复制的副本丢父级；已补列。
