@@ -143,6 +143,12 @@
 - **大纲增强默认关闭**：`DEFAULT_SETTINGS.outlineEnhance=false`；`loadSettings` 仅显式 `true` 才开启（存量已存 true 的保持 true）；设置文案注明“关闭（默认）”。
 - 门禁：`tsc` 0 · vitest **943 passed / 16 skipped** · 桌面+移动 `vite build` 全绿。
 
+### 2.13 原生大纲在虚拟渲染下不可用 → 统一使用应用大纲（260911 晚）
+- **根因（用户实例 CDP 实测）**：lakex 原生 toc 侧栏依赖**已渲染 DOM**；大文档（245KB）虚拟渲染下 DOM 只有 1 个标题、内核 toc 有 15 个 → 原生侧栏列表为空。重放 `kernel.emitPluginEvent("tocChange")`（15 条）、`editor.emit("afterContentChange")/"contentchange"`、再次 `setDocument`、切 `ne-normal-toc-sidebar` 常态视图，**全部不填充**。`docs/LAKEX-CONTRACT.md` 早已记录“原生 TOC watcher 在虚拟渲染失效；用 kernel toc+自研定位”。
+- **修复**：始终使用应用自建大纲（数据来自 `kernel.getDocExtraContent().toc`，与虚拟渲染无关）；`EditorTab` 固定 `disableNativeToc: true`（不再挂原生空侧栏）；`desktopDerivedState.outlineVisible` 不再依赖 `outlineEnhance`；`outlineEnhance` 改为只控制**增强外观**（筛选/折叠/H 徽标/层级线），关闭（默认）= 简洁列表（`OutlineList/OutlineSidebar` 新增 `enhance` 开关）。
+- **实测**：`outlineEnhance=false` 下，打开大文档并**连续重开两次**，应用大纲都渲染 **15 条**、无增强件、无原生空侧栏。
+- 门禁：`tsc` 0 · vitest **945 passed / 16 skipped** · 桌面+移动 `vite build`。
+
 ## 3. 真正的待办（已剔除全部完成项，按优先级）
 > **260904 后续评估（用户决策 + 本轮核实）**：原 §3.1 对象级 5xx 重试、§3.2 快照 gzip 异步化、§3.5 笔记本 `sort_order` 撞号 —— **已评估不做**（5xx 有"失败不 markSynced→下轮重扫"兜底；gzip 异步收益小；sort_order 撞号场景极低）。
 > 原 §3.3（FTS 全量重建→增量）与 §3.4（1/2 字短词回退）**合并为一条**：计划**整体重做索引**，两件一起落地（同属 `src/core/searchRepository.ts` 的索引/搜索路径，同时覆盖 10 万文档量级）。

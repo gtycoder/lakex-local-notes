@@ -384,7 +384,7 @@ export function EditorTab({ noteId, content, visible, tocEnabled, outlineEnhance
         tocEnabled,
         noteId,
         host,
-        { ...prefs, disableNativeToc: outlineEnhance }
+        { ...prefs, disableNativeToc: true }
       );
       // 自愈重建时优先使用当前实例最后一次回调拿到的文档，避免 React prop
       // 尚未回流时把刚输入的内容覆盖掉；切换 noteId 时该 ref 已在上面重置。

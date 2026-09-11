@@ -15,6 +15,8 @@ function noopVersion(): number {
 
 interface OutlineSidebarProps {
   mode: OutlineMode;
+  /** 增强外观（折叠按钮/级别徽标/筛选行）；关闭则渲染接近原生的简洁列表。 */
+  enhance?: boolean;
   activeNoteId: string | null;
   width: number;
   minWidth: number;
@@ -35,6 +37,7 @@ interface OutlineSidebarProps {
  */
 export function OutlineSidebar({
   mode,
+  enhance = true,
   activeNoteId,
   width,
   minWidth,
@@ -244,7 +247,7 @@ export function OutlineSidebar({
       </nav>
 
       <div className="outline-sidebar__content" onPointerEnter={() => { cancelHoverHide(); if (mode === "collapsed") setRailHovered(true); }}>
-        <div className="outline-sidebar__header">
+        {enhance && (<div className="outline-sidebar__header">
           <span className="outline-sidebar__spacer" />
           <button
             className={`dock-icon-btn filter-btn${filter.active ? " is-active" : ""}`}
@@ -295,10 +298,10 @@ export function OutlineSidebar({
               </div>
             )}
           </div>
-        </div>
-        <DockFilterRow filter={filter} placeholder="筛选大纲" />
+        </div>)}
+        {enhance && <DockFilterRow filter={filter} placeholder="筛选大纲" />}
         {controller ? (
-          <OutlineList controller={controller} onNavigate={(id) => handle?.navigate(id)} />
+          <OutlineList controller={controller} enhance={enhance} onNavigate={(id) => handle?.navigate(id)} />
         ) : (
           <div className="outline-panel__empty">暂无大纲</div>
         )}
