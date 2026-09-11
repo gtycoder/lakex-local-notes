@@ -73,6 +73,7 @@
   right: 0;
   bottom: 0;
   pointer-events: auto;
+  box-sizing: border-box;
   background: var(--b3-theme-background);
   border: 0;
   border-top: 1px solid var(--b3-theme-surface-lighter);

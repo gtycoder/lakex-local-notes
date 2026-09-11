@@ -27,6 +27,12 @@ function isEditorNode(node: Node | null): boolean {
   return false;
 }
 
+/** blur 正文焦点以收起输入法（面板要占键盘区；Lake 命令内部异步重聚焦时也靠它压回）。 */
+function blurActiveEditable(): void {
+  const el = document.activeElement as HTMLElement | null;
+  if (el && typeof el.closest === "function" && el.closest('[contenteditable="true"]')) { try { el.blur(); } catch { /* 忽略 */ } }
+}
+
 /** 格式命令 → lucide 图标（正文面板用图标而非文字，对齐思源移动端） */
 const COMMAND_ICONS: Record<string, typeof Bold> = {
   bold: Bold, italic: Italic, underline: Underline, code: Code2,
@@ -143,7 +149,7 @@ export function EditorDock({ editor, editing, onToggleEdit, onInsertImage, onIns
   const [panelHeight, setPanelHeight] = useState(0);
   // --kb-offset 基准：无面板 = 键盘上移量（adjustResize 恒 0；edge-to-edge = 键盘高度）；
   // 有面板 = innerHeight - base + panelHeight —— 键盘收起中（innerHeight 530→842）工具栏屏幕 Y 恒定，面板占住键盘区向下展开。
-  const usable = panelMode ? Math.max(0, Math.round(innerHeight - base + panelHeight)) : offset;
+  const usable = panelMode ? Math.max(0, Math.round(innerHeight - base + panelHeight), offset) : offset;
   const exec = useEditorExec(editor);
   const execRef = useRef(exec);
   execRef.current = exec;
@@ -173,6 +179,16 @@ export function EditorDock({ editor, editing, onToggleEdit, onInsertImage, onIns
     return () => { document.removeEventListener("pointerdown", onPointerDown, true); document.removeEventListener("focusin", onFocusIn); };
   }, []);
 
+  // 面板⇄输入法硬互斥兜底：runPanel 执行命令后 Lake 会异步重聚焦正文 → 输入法被顶回，把展开面板
+  // 压成 27px 细条盖住工具栏（260911 用户复现：插入分割线后回车）。以实测键盘状态驱动——只要面板
+  // 开着而键盘又弹出（任何机型/输入法、任何回弹路径），立即再次收起；同时把面板高度抬到实测键盘
+  // 高度（panelHeight 只是打开瞬间的快照，真机输入法带候选条/工具条会更高）。
+  useEffect(() => {
+    if (!panelMode || !keyboardOpen) return;
+    setPanelHeight((h) => Math.max(h, height));
+    blurActiveEditable();
+  }, [panelMode, keyboardOpen, height]);
+
   // 把 dock 占用的底部空间暴露给正文容器，让正文底部留白（光标不被工具栏/面板盖住）。
   // 面板开时 = 面板实际占住的键盘区高度（跟随键盘收起动画的 usable）+ 工具栏高；
   // 关键：用「动画中」的 usable 而非固定 panelHeight → 正文可视区不随键盘收起突跳（修复抖动）。
@@ -198,10 +214,7 @@ export function EditorDock({ editor, editing, onToggleEdit, onInsertImage, onIns
     try { lakeBridge(editor ?? undefined).renderer?.execCommand?.("focus" as never); } catch { /* 忽略 */ }
   };
   /** 收起输入法（面板要占键盘区）：只 blur 正文里的焦点 */
-  const dismissIme = () => {
-    const el = document.activeElement as HTMLElement | null;
-    if (el && typeof el.closest === "function" && el.closest('[contenteditable="true"]')) { try { el.blur(); } catch { /* 忽略 */ } }
-  };
+  const dismissIme = () => blurActiveEditable();
   /** 记下当前选区（Range 克隆在 blur 之后仍可用于还原） */
   const snapshotSelection = () => {
     const sel = document.getSelection();

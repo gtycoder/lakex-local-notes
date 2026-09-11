@@ -199,7 +199,7 @@ public final class AssetServer {
                 head.append("Content-Length: ").append(length).append("\r\n");
             }
             head.append("Content-Type: ").append(mime).append("\r\n");
-            // CORS：仅放行本应用 WebView 的固定 origin；无 Origin 的媒体/图片请求由 token 保护。
+            // CORS：仅放行本应用 WebView 的固定 origin；无 Origin 的媒体/图片请求不校验（与桌面同语义）。
             head.append("Access-Control-Allow-Origin: ").append(ALLOWED_ORIGIN).append("\r\n");
             head.append("Access-Control-Allow-Methods: GET, HEAD\r\n");
             head.append("Accept-Ranges: bytes\r\n");
@@ -265,15 +265,23 @@ public final class AssetServer {
         out.flush();
     }
 
-    private static boolean isAuthorized(URI uri, String origin) {
+    /**
+     * 与桌面 assetServer 同语义：仅 CORS 请求（带 Origin 头）强制校验 token——
+     * 外部网页没有令牌，无法跨源读取本地资源；<img>/<audio>/<video> 等 no-cors
+     * 请求不带 Origin（浏览器本就不允许跨源读取其字节），放行。此前对所有请求
+     * 无条件要求 token，导致 Lake 内核上传完成后重写的 canonical URL（无 token）
+     * 加载 403，图片/附件卡片显示空白。
+     */
+    static boolean isAuthorized(URI uri, String origin) {
+        if (origin == null) return true;
+        if (!ALLOWED_ORIGIN.equals(origin)) return false;
         if (sToken == null) return false;
         String token = queryParameter(uri, "token");
         if (token == null) return false;
-        boolean tokenMatches = MessageDigest.isEqual(
+        return MessageDigest.isEqual(
             token.getBytes(StandardCharsets.UTF_8),
             sToken.getBytes(StandardCharsets.UTF_8)
         );
-        return tokenMatches && (origin == null || ALLOWED_ORIGIN.equals(origin));
     }
 
     private static String queryParameter(URI uri, String name) {
