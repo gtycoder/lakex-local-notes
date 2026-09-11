@@ -186,6 +186,13 @@
 - 旧 localStorage 里的 `paragraphSpacing` 字段不再解析（开发版不考虑数据兼容）。`docs/REFERENCE-REVIEW-2026-08-03.md`/`PROGRESS.md` 属历史记录，不改。
 - 门禁：`tsc` 0 · vitest **951 passed / 16 skipped** · 桌面+移动 `vite build`。
 
+### 2.19 移动端知识库书架样式重做（260911 晚）
+- `.nb-shelf` 旧样式（3:4 白卡 + 灰色 BookOpen + 单行标题）重做为**简约书卡**：序号角标 + 柔和渐变封面 + 圆角图标底 + 名称（2 行省略）+ 文档数；6 色按 `nth-child` 循环（`--nb-accent`，用 `color-mix` 混入 b3 表面色，深浅主题自适应）。
+- `NotebookGrid` 书架视图改渲染 `nb-shelf-index`/`nb-shelf-glyph`/`nb-shelf-count`；移除 `namePrefix`（序号不再拼进标题，改为角标）。列表视图不变。
+- 实测：模拟器 1080×2400 截图，浅色 + 深色两套主题均正常。
+- 「最近文档排除附件」：**用户确认那是测试数据，不改代码过滤**，保持现实现（`notes` 表无类型字段，无法结构化区分）。
+- 门禁：`tsc` 0 · vitest **951 passed / 16 skipped** · 桌面+移动 `vite build`。
+
 ## 3. 真正的待办（已剔除全部完成项，按优先级）
 > **260904 后续评估（用户决策 + 本轮核实）**：原 §3.1 对象级 5xx 重试、§3.2 快照 gzip 异步化、§3.5 笔记本 `sort_order` 撞号 —— **已评估不做**（5xx 有"失败不 markSynced→下轮重扫"兜底；gzip 异步收益小；sort_order 撞号场景极低）。
 > 原 §3.3（FTS 全量重建→增量）与 §3.4（1/2 字短词回退）**合并为一条**：计划**整体重做索引**，两件一起落地（同属 `src/core/searchRepository.ts` 的索引/搜索路径，同时覆盖 10 万文档量级）。

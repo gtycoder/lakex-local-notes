@@ -191,7 +191,6 @@ export function HomePage(props: HomePageProps) {
             notebooks={notebooks}
             docCounts={docCounts}
             view={libraryView}
-            namePrefix={libraryView === "shelf"}
             onOpenNotebook={onOpenNotebook}
           />
         </div>
