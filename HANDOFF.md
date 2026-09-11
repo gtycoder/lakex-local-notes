@@ -257,6 +257,7 @@
 - **右键顺序**（用户定）：新建文档 / 新建分组 / 复制 / 重命名 / 历史版本 / 打开文件位置 / 属性 / 导出 / 删除。
 - **属性面板新增**：文档 ID（复制）、**卡片统计**（图片/视频/附件/代码块/表格…，正文 `<card name>` + `<table>` 计数）、**父级路径可点击跳转**（Sidebar `revealNodeId` 展开+滚动）、**历史快照内联预览**（`previewHistorySnapshot` → 内联 HTML）。
 - **统一浮层弹窗样式**：新增 `src/styles/dialog.css`（`.ln-dialog`/`__head`/`__title`/`__body`/`__resize` + `.modal-backdrop` + `.note-info-*`），**桌面与移动端都 import**；属性弹窗默认 720×min(80vh,640)、右下角可拖拽调整、窄屏折单列。以后同类弹窗复用 `.ln-dialog`。
+- **弹窗层级**：`NoteInfoDialog` 必须 `createPortal(..., document.body)`——否则被 `.sidebar` 的堆叠上下文压住（用户实测"弹窗被目录盖住"）。与 `ContextMenu`/`DesktopOverlays` 同款做法。
 - **移动端新增**：长按菜单加 复制 / 属性（历史版本原有）。bridge 补 `duplicateNote/getNoteInfo/readAssetPreview/previewHistorySnapshot/openAttachment`；`MobileApp` 的 lakeNative 调试契约同步加。
 - **修复**：移动端 `noteRepository.readNote` 的 SQL **漏 select `parent_id`** → 属性父级链恒为空、复制的副本丢父级；已补列。
 - 门禁：`tsc` 0 · vitest **951 passed / 16 skipped** · 双端 `vite build`。实测：桌面菜单顺序 ✓、属性新字段 ✓、拖拽 720×640→860×740 ✓；移动端长按菜单 ✓、复制（含父级继承）✓、属性弹窗布局 ✓。

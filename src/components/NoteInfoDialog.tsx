@@ -4,6 +4,7 @@
  * 动作复用 native.*；父级路径可点击跳转目录。
  */
 import { useEffect, useState, type PointerEvent as ReactPointerEvent } from "react";
+import { createPortal } from "react-dom";
 import { Box, ChevronRight, Clock, Copy, FileText, FolderOpen, History, Image as ImageIcon, Paperclip, X } from "lucide-react";
 import { native } from "../lib/native";
 import { getNativeErrorMessage } from "../lib/nativeErrors";
@@ -126,7 +127,8 @@ export function NoteInfoDialog({ note, onClose, onRevealNoteFile, onOpenHistory,
     ["状态", `${SYNC_LABEL[info.syncState] ?? info.syncState}${info.isConflict ? " · 有冲突副本" : ""}${info.isLocked ? " · 已锁定" : ""}`],
   ] : [];
 
-  return (
+  // Portal 到 body：侧栏/工作区可能形成堆叠上下文，挂到 body 才能保证弹窗在目录之上（与 ContextMenu/DesktopOverlays 同款做法）。
+  return createPortal(
     <div className="modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
       <section className="ln-dialog note-info-dialog" style={size ? { width: size.w, height: size.h } : undefined} role="dialog" aria-modal="true" aria-label="文档属性">
         <header className="ln-dialog__head">
@@ -222,6 +224,7 @@ export function NoteInfoDialog({ note, onClose, onRevealNoteFile, onOpenHistory,
         )}
         <span className="ln-dialog__resize" onPointerDown={onResizeStart} aria-hidden="true" />
       </section>
-    </div>
+    </div>,
+    document.body
   );
 }
