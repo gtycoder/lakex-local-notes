@@ -126,8 +126,11 @@
   仍需应用侧 `setupTocScrollFollow`。关闭虚拟渲染则原生 watcher 可用。
 - **点击定位**：条目是 `<a href="#id">`，hash 导航能正确滚动内层 `.ne-editor-wrap`。
   （注意：CDP `Input.dispatchMouseEvent` 在本机 Electron 渲染进程收不到，无法用合成点击验证。）
-- **应用现状**：桌面 `outlineEnhance=false`（默认）→ 原生侧栏（`EditorTab` 不禁用原生 toc，并调 `refreshTocSidebar`）；
-  `true` → 应用自建增强大纲（`disableNativeToc: true`）。移动端恒用应用大纲面板。
+- **应用现状**：桌面**始终创建**原生侧栏（`EditorTab` 不再传 `disableNativeToc`），`refreshTocSidebar` 照常填充；
+  `outlineEnhance=false`（默认）→ 显示原生侧栏；`true` → `EditorTab` 给 host 加 `native-toc-hidden` 类，
+  CSS `.lake-editor-tab.native-toc-hidden .ne-toc-sidebar{display:none}` 隐藏原生 + 显示应用自建大纲。
+  运行中切换开关只切 class、不重建编辑器（大文档重建会重渲染 + 丢滚动），且原生侧栏一直保持填充，
+  切回原生即时可见。移动端恒用应用大纲面板。
 
 ---
 

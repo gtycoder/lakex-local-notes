@@ -345,6 +345,12 @@ button { cursor: pointer; }
   overscroll-behavior: contain;
 }
 
+/* 「大纲增强」开启 → 用应用自建大纲，隐藏 lakex 原生 TOC 侧栏。
+   原生侧栏始终创建（保证运行中切换即时生效），这里只做 display 隐藏。 */
+.lake-editor-tab.native-toc-hidden .ne-toc-sidebar {
+  display: none !important;
+}
+
 /* ===== Fix: multi-tab layout overrides ===== */
 /* In multi-tab mode, the tab panel is absolutely positioned with its own scroll.
    The .lake-editor min-height and padding-bottom from single-editor mode cause

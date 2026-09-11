@@ -387,16 +387,18 @@ export function EditorTab({ noteId, content, visible, tocEnabled, outlineEnhance
         tocEnabled,
         noteId,
         host,
-        { ...prefs, disableNativeToc: outlineEnhance }
+        // 原生 TOC 始终创建（哪怕「大纲增强」开启）：运行中切换开关时靠 host 的
+        // native-toc-hidden 类隐藏/显示原生侧栏，不重建编辑器（重建 = 大文档重渲染 + 丢滚动）。
+        prefs
       );
       // 自愈重建时优先使用当前实例最后一次回调拿到的文档，避免 React prop
       // 尚未回流时把刚输入的内容覆盖掉；切换 noteId 时该 ref 已在上面重置。
       editor.setDocument("text/lake", addAssetAccessToken(latestDocumentRef.current));
-      // 原生大纲（outlineEnhance=false）：Lake 侧栏创建时用空 toc 渲染，若 ready 先于内核
-      // tocChange，打开文档时侧栏一直为空（关闭重开尤其明显）。setDocument 后重放一次
-      // tocChange（复用移动端 refreshTocSidebar，内部带收敛重试），销毁时清理其定时器。
-      // outlineEnhance=true 走应用大纲并已禁用原生侧栏，无需重放；锁定 Viewer 不走编辑侧栏。
-      if (tocEnabled && !outlineEnhance && !locked) {
+      // 原生大纲：Lake 侧栏以空 toc 创建，若 ready 先于内核 tocChange，侧栏会一直为空
+      // （关闭重开尤其明显）。setDocument 后补一次数据（refreshTocSidebar，带收敛重试），
+      // 销毁时清理定时器。原生侧栏始终创建（「大纲增强」开启时仅被隐藏），故这里照常填充，
+      // 保证切回原生时立即可见。锁定 Viewer 不走编辑侧栏。
+      if (tocEnabled && !locked) {
         tocRefreshTimer = window.setTimeout(() => {
           disposeTocRefresh = refreshTocSidebar(editor, host);
         }, 0);
@@ -680,7 +682,7 @@ export function EditorTab({ noteId, content, visible, tocEnabled, outlineEnhance
   return (
     <div
       ref={hostRef}
-      className={`lake-editor lake-editor-tab${locked ? " lake-locked" : ""}`}
+      className={`lake-editor lake-editor-tab${locked ? " lake-locked" : ""}${outlineEnhance ? " native-toc-hidden" : ""}`}
       style={{ display: visible ? "flex" : "none", width: "100%" }}
       data-note-id={noteId}
       onContextMenu={(event) => {

@@ -175,6 +175,12 @@
 - **实测**：条目出现 ~3.0–3.3s → **~1.9–2.05s**（剩余 ~1.7s 是 Lake 建编辑器耗时，非 toc）。门禁：`tsc` 0 · vitest **951 passed / 16 skipped** · 桌面+移动 `vite build`。
 - **知识固化**：`docs/LAKEX-CONTRACT.md` 新增 §5.1 + §4.2/§5 表条目（原生编辑 TOC 侧栏填充时序/正确接法）。
 
+### 2.17 「大纲增强」开关支持运行中切换（原生 ↔ 应用自建）（260911 晚）
+- **现象**：开启「大纲增强」后原生侧栏不消失。根因：`disableNativeToc` 只在编辑器创建时读，且不在创建依赖里 → 运行中切换不生效。
+- **修复**：原生侧栏**始终创建**（`EditorTab` 不再传 `disableNativeToc`，恒调 `refreshTocSidebar` 填充）；`outlineEnhance=true` 时给 host 加 `native-toc-hidden`，CSS 隐藏 `.ne-toc-sidebar`，应用大纲侧栏同时显示。切换只改 class，**不重建编辑器**。
+- **实测**：设置面板点开关 ON→OFF→ON，每步 <1 帧：ON 时原生 `display:none` + 应用大纲可见；OFF 时原生 `display:flex` 且已含 15/23 条（无需重新加载）。默认仍 `false`。
+- 门禁：`tsc` 0 · vitest **951 passed / 16 skipped** · 桌面+移动 `vite build`。
+
 ## 3. 真正的待办（已剔除全部完成项，按优先级）
 > **260904 后续评估（用户决策 + 本轮核实）**：原 §3.1 对象级 5xx 重试、§3.2 快照 gzip 异步化、§3.5 笔记本 `sort_order` 撞号 —— **已评估不做**（5xx 有"失败不 markSynced→下轮重扫"兜底；gzip 异步收益小；sort_order 撞号场景极低）。
 > 原 §3.3（FTS 全量重建→增量）与 §3.4（1/2 字短词回退）**合并为一条**：计划**整体重做索引**，两件一起落地（同属 `src/core/searchRepository.ts` 的索引/搜索路径，同时覆盖 10 万文档量级）。
