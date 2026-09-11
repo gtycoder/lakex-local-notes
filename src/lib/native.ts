@@ -111,7 +111,21 @@ declare global {
   interface Window { lakeNative?: LakeNative; }
 }
 
-export const isDesktop = () => typeof window.lakeNative !== "undefined";
+/** 是否存在原生桥：桌面 Electron 与移动 Capacitor **都**注入 window.lakeNative。 */
+export const hasNativeBridge = () => typeof window.lakeNative !== "undefined";
+
+/** Capacitor 原生平台（Android/iOS）判定；桌面 Electron 的 Capacitor.isNativePlatform() 实测为 false，web 为 "web"。 */
+const isCapacitorNative = () =>
+  (window as { Capacitor?: { isNativePlatform?: () => boolean } }).Capacitor?.isNativePlatform?.() === true;
+
+/**
+ * 是否桌面（Electron）壳。
+ * 注意：移动端（Capacitor）**也**注入 window.lakeNative，所以不能只凭它判断；
+ * 旧实现 `typeof lakeNative !== "undefined"` 在安卓同样返回 true，导致移动端误走桌面路径
+ * （如 native.downloadRemoteResource / native.onSyncProgress 在移动端并不存在 → 抛错）。
+ * 判据：有原生桥 且 不是 Capacitor 原生平台。
+ */
+export const isDesktop = () => hasNativeBridge() && !isCapacitorNative();
 
 function api(): LakeNative {
   if (!window.lakeNative) throw new Error("原生桥接未就绪，请在 Electron 环境中运行");

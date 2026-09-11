@@ -6,8 +6,8 @@
 
 ## 0. 当前基线（新会话开工前）
 - 分支/远端：当前在 **`refactor/store-split`**（store.ts 分批重构 8 commits 已推 Gitee，终态 2352→1103 行见 §3.6）；260911 在其上追加 3 个提交：`2ecac39`（同步收敛修复）、`a18a95b`（安卓 AssetServer 403 + Dock 键盘竞态修复）、HANDOFF 文档。**未推送、未合 master**（待用户验收）。
-- **搜索重构（260911 本会话）**：在 `refactor/store-split` 之上新建 **`feat/search-refactor`** 分支完成（未推送、未合）；统一 FTS5(unicode61)+单字预分词 + 增量账本 + 桌面/移动同核心；详见 §2.11。
-- 质量门槛：`tsc` 0 error · vitest **923 passed / 15 skipped**（260911）· 桌面 `vite build` + 移动 `vite build -c vite.mobile.config.ts` 全绿 · Android `testDebugUnitTest` + `assembleDebug` 通过（计数变动见 §2；别把数字写回 AGENTS/README）。
+- **搜索重构（260911 本会话）**：在 `refactor/store-split` 之上新建 **`feat/search-refactor`** 分支完成（未推送、未合）；统一 FTS5(unicode61)+单字预分词 + 增量账本 + 桌面/移动同核心；同分支其后追加复制裂图 / 大纲 / 平台判定修复（§2.12–§2.14）。
+- 质量门槛：`tsc` 0 error · vitest **951 passed / 16 skipped**（260911）· 桌面 `vite build` + 移动 `vite build -c vite.mobile.config.ts` 全绿 · Android `assembleDebug` + `adb install -r` 通过（计数变动见 §2；别把数字写回 AGENTS/README）。
 - **真机级验收（260910-260911，三轮）**：
   - 第一轮（2 桌面 + 1 移动）：A/B 同步 push/pull、新建/删除传播、移动端 WAL 崩溃恢复、旧 IndexedDB 快照迁移 全通过。
   - 第二轮（3 桌面 + 1 移动，大数据量）：50 笔记 + 70 资源（PNG/JPEG/GIF/PDF/512KB/2MB）、23.4MB；A/B/C/移动端四端正文 sha256 完全一致；并发编辑冲突（先提交者获胜 + 被覆盖方强制留档 30 天）；批量删除 5 篇墓碑传播 全通过。
@@ -148,6 +148,13 @@
 - **修复**：始终使用应用自建大纲（数据来自 `kernel.getDocExtraContent().toc`，与虚拟渲染无关）；`EditorTab` 固定 `disableNativeToc: true`（不再挂原生空侧栏）；`desktopDerivedState.outlineVisible` 不再依赖 `outlineEnhance`；`outlineEnhance` 改为只控制**增强外观**（筛选/折叠/H 徽标/层级线），关闭（默认）= 简洁列表（`OutlineList/OutlineSidebar` 新增 `enhance` 开关）。
 - **实测**：`outlineEnhance=false` 下，打开大文档并**连续重开两次**，应用大纲都渲染 **15 条**、无增强件、无原生空侧栏。
 - 门禁：`tsc` 0 · vitest **945 passed / 16 skipped** · 桌面+移动 `vite build`。
+
+### 2.14 平台判定 isDesktop 把安卓误判为桌面（260911 晚，同类问题扫描）
+- **根因**：`src/lib/native.ts` 的 `isDesktop()` 用 `typeof window.lakeNative !== "undefined"` 判定，但**安卓 Capacitor 也注入 window.lakeNative**（与 §2.12 复制裂图同一根因）→ 移动端被当成桌面。安卓 WebView CDP 实测：`Capacitor.isNativePlatform()===true`、`window.lakeNative` 有 44 个键（含 `uploadResource`），但**没有** `downloadRemoteResource` / `onSyncProgress` / `showInFolder`。
+- **三处受害路径**：① `resourceUpload.ts` 外链图片：移动端走 `native.downloadRemoteResource`（undefined）→ 抛错；② `useSyncProgress.ts`：移动端订阅 `native.onSyncProgress`（undefined）→ 抛错；③ `LakeEditor.tsx` 附件 `showInFolder`（undefined）。
+- **修复**：新增 `hasNativeBridge()`（仅判桥存在）；`isDesktop()` = 有桥 **且** `Capacitor.isNativePlatform() !== true`。外链图片补移动端分支：渲染层取回字节（原 `downloadWithBrowserFetch` 提取为 `downloadRemoteBytes`，保留逐跳字面私网校验 + 25MiB 限流）→ `native.uploadResource` 落盘为资产（与桌面同构，**不**把大图 base64 内嵌正文）；仅纯 web 演示（无桥）才 `embedAsDataUrl`。
+- **回归测试**：`src/lib/native.platform.test.ts`（桌面 true / 安卓 false / 无桥 false / 旧外壳 true）、`src/features/editor/resourceUpload.remote.test.ts`（移动端落盘 / web 内嵌）。
+- **实测**：桌面 CDP `isDesktop()=true`；安卓 WebView `capNative=true` 且三方法缺失（前提核实）；Android `assembleDebug` + `install` 绿。门禁：`tsc` 0 · vitest **951 passed / 16 skipped** · 桌面+移动 `vite build`。
 
 ## 3. 真正的待办（已剔除全部完成项，按优先级）
 > **260904 后续评估（用户决策 + 本轮核实）**：原 §3.1 对象级 5xx 重试、§3.2 快照 gzip 异步化、§3.5 笔记本 `sort_order` 撞号 —— **已评估不做**（5xx 有"失败不 markSynced→下轮重扫"兜底；gzip 异步收益小；sort_order 撞号场景极低）。

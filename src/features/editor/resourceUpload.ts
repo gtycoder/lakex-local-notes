@@ -1,4 +1,4 @@
-import { isDesktop, native } from "../../lib/native";
+import { hasNativeBridge, isDesktop, native } from "../../lib/native";
 import type { ResourceUploadInput, ResourceUploadOutput } from "../../lib/types";
 import { MAX_IMAGE_BYTES, MAX_ATTACHMENT_BYTES } from "../../core/storeLimits";
 import { loadSettings } from "../../lib/settings";
@@ -110,12 +110,23 @@ async function performUpload(request: unknown, noteId: string): Promise<Resource
   // - Electron：主进程是唯一受控下载路径（SSRF 防护 + DNS 解析 + 逐跳重定向校验 +
   //   25 MiB 上限 + Chromium TLS 指纹）。任何失败（含 SSRF 拒绝）都不回退到渲染层
   //   fetch——那会明确绕过主进程安全策略（审计 #5）。
-  // - 浏览器演示模式（无原生桥）：尽力而为的直连，仍带大小限制与字面私网/本机拦截。
+  // - 移动端（Capacitor 原生桥，无主进程下载 IPC）：渲染层下载后交原生桥落盘为资产，
+  //   与桌面同构（不能内嵌 base64 进正文，否则文档膨胀且不走 S3 同步）。
+  // - 纯浏览器演示模式（无原生桥）：尽力而为的直连并内嵌 data URL，仍带大小限制与字面私网/本机拦截。
   if (typeof payload === "string" && (payload.startsWith("http://") || payload.startsWith("https://"))) {
     if (isDesktop()) {
       return native.downloadRemoteResource(payload, noteId);
     }
-    return downloadWithBrowserFetch(payload);
+    const downloaded = await downloadRemoteBytes(payload);
+    if (hasNativeBridge()) {
+      return native.uploadResource(
+        downloaded.mime.startsWith("image/")
+          ? normalizeImageInput(downloaded.bytes, downloaded.filename)
+          : { bytes: downloaded.bytes, filename: downloaded.filename },
+        noteId
+      );
+    }
+    return embedAsDataUrl(downloaded);
   }
 
   throw new Error("无法识别的上传内容");
@@ -168,8 +179,15 @@ function isBlockedLiteralHost(hostname: string): boolean {
   return false;
 }
 
-/** 浏览器演示模式下载：逐跳校验（协议 + 字面 host），流式限量 25 MiB */
-async function downloadWithBrowserFetch(initialUrl: string): Promise<ResourceUploadOutput> {
+interface DownloadedRemote {
+  bytes: Uint8Array;
+  mime: string;
+  filename: string;
+}
+
+/** 渲染层下载（移动端 / 浏览器演示共用）：逐跳校验（协议 + 字面 host），流式限量 25 MiB。
+ * 只负责取回原始字节；落盘（移动端 native.uploadResource）还是内嵌（纯 web）由调用方决定。 */
+async function downloadRemoteBytes(initialUrl: string): Promise<DownloadedRemote> {
   let current = initialUrl;
   for (let hop = 0; ; hop++) {
     let parsed: URL;
@@ -211,14 +229,17 @@ async function downloadWithBrowserFetch(initialUrl: string): Promise<ResourceUpl
     let offset = 0;
     for (const chunk of chunks) { merged.set(chunk, offset); offset += chunk.byteLength; }
     const filename = new URL(initialUrl).pathname.split("/").pop() || "file";
-    if (!contentType.startsWith("image/")) {
-      const mime = contentType.split(";")[0] || "application/octet-stream";
-      const url = `data:${mime};base64,${bytesToBase64(merged)}`;
-      return { url, resourceRef: url, filename, mimeType: mime, size: merged.length };
-    }
-    // 演示模式无原生层：校验图片格式后直接嵌入 data URL（不落盘）
-    return imageDataUrl(normalizeImageInput(merged, filename));
+    return { bytes: merged, mime: contentType.split(";")[0] || "application/octet-stream", filename };
   }
+}
+
+/** 纯浏览器演示（无原生桥）：图片校验格式后内嵌，非图片按 base64 内嵌，都不落盘。 */
+function embedAsDataUrl(downloaded: DownloadedRemote): ResourceUploadOutput {
+  if (!downloaded.mime.startsWith("image/")) {
+    const url = `data:${downloaded.mime};base64,${bytesToBase64(downloaded.bytes)}`;
+    return { url, resourceRef: url, filename: downloaded.filename, mimeType: downloaded.mime, size: downloaded.bytes.length };
+  }
+  return imageDataUrl(normalizeImageInput(downloaded.bytes, downloaded.filename));
 }
 
 /** Uint8Array → base64（无原生层的演示模式用；分块避免参数栈溢出）。 */
