@@ -169,10 +169,21 @@ export async function syncNow(cfg: SyncConfig, s3: S3Store, db: SyncDbPort, opts
     tombstoneSig: await db.tombstoneSignature(),
     lastTombstoneSig: await db.getLastTombstoneSig(),
   })) {
-    // remote 可能为 null（空桶首次同步 + 本地无变更的极端组合）——用 ?. 防御，避免空指针
-    await db.log(`[perf] zero-change sync skipped (commit=${remote?.commitId.slice(0, 8) ?? "none"}, notes=${remote?.notes.length ?? 0})`);
-    report.message = `零变更跳过（${remote?.notes.length ?? 0} 条）`;
-    return report;
+    // 早退前加一道「元数据漂移」护栏：远端 parent 与本地不一致时**不得早退**。
+    // 历史 bug：文档被落到兜底笔记本后 updated_at 与云端相同，严格时间戳判定永远跳过 → 两端永久不一致。
+    let metaDrift = false;
+    if (remote) {
+      const localNotesForDrift = await db.getAllNotes();
+      const localParentById = new Map(localNotesForDrift.map((n) => [n.id, n.parentId ?? null] as const));
+      metaDrift = remote.notes.some((rn) => !rn.deleted && localParentById.has(rn.id) && (localParentById.get(rn.id) ?? null) !== (rn.parentId ?? null));
+    }
+    if (!metaDrift) {
+      // remote 可能为 null（空桶首次同步 + 本地无变更的极端组合）——用 ?. 防御，避免空指针
+      await db.log(`[perf] zero-change sync skipped (commit=${remote?.commitId.slice(0, 8) ?? "none"}, notes=${remote?.notes.length ?? 0})`);
+      report.message = `零变更跳过（${remote?.notes.length ?? 0} 条）`;
+      return report;
+    }
+    await db.log("[sync] meta parent drift detected → 跳过零变更早退，走完整对账自愈");
   }
 
   // tombstone=true：墓碑条目。content="" 为占位符（内容已物理删除，发布阶段不传空对象、保留占位符 hash）。
