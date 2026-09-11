@@ -174,7 +174,12 @@ export async function syncNow(cfg: SyncConfig, s3: S3Store, db: SyncDbPort, opts
     let metaDrift = false;
     if (remote) {
       const localNotesForDrift = await db.getAllNotes();
-      const localParentById = new Map(localNotesForDrift.map((n) => [n.id, n.parentId ?? null] as const));
+      // 只看"本地活跃"的 note：本地已进回收站/已 purge 的行与远端活跃条目不同属正常（墓碑语义），不算父级漂移。
+      const localParentById = new Map(
+        localNotesForDrift
+          .filter((n) => n.syncState !== "purged" && (n.parentId ?? null) !== TRASH_NOTEBOOK_ID)
+          .map((n) => [n.id, n.parentId ?? null] as const)
+      );
       metaDrift = remote.notes.some((rn) => !rn.deleted && localParentById.has(rn.id) && (localParentById.get(rn.id) ?? null) !== (rn.parentId ?? null));
     }
     if (!metaDrift) {
