@@ -80,8 +80,8 @@ export interface LakeNative {
   copyAssetPath(noteId: string, filename: string): Promise<string>;
   /** 复制图片到系统剪贴板 */
   copyAssetImage(noteId: string, filename: string): Promise<{ ok: boolean }>;
-  /** 另存为：把单个附件复制到用户选择的位置 */
-  saveAssetAs(noteId: string, filename: string): Promise<{ ok: boolean; path?: string; canceled?: boolean }>;
+  /** 另存为：把单个附件复制到用户选择的位置（suggestedName 为卡片展示名） */
+  saveAssetAs(noteId: string, filename: string, suggestedName?: string): Promise<{ ok: boolean; path?: string; canceled?: boolean }>;
   getS3Settings(): Promise<S3Settings | null>;
   saveS3Settings(settings: S3Settings): Promise<void>;
   testS3Connection(): Promise<string>;
@@ -212,7 +212,7 @@ export const native = {
   openNoteAssets: (id: string) => api().openNoteAssets(id),
   copyAssetPath: (noteId: string, filename: string) => api().copyAssetPath(noteId, filename),
   copyAssetImage: (noteId: string, filename: string) => api().copyAssetImage(noteId, filename),
-  saveAssetAs: (noteId: string, filename: string) => api().saveAssetAs(noteId, filename),
+  saveAssetAs: (noteId: string, filename: string, suggestedName?: string) => api().saveAssetAs(noteId, filename, suggestedName),
   getS3Settings: () => api().getS3Settings(),
   saveS3Settings: (settings: S3Settings) => api().saveS3Settings(settings),
   testS3Connection: () => api().testS3Connection(),

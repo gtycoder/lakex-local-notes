@@ -122,11 +122,15 @@ export function resolveCardAsset(start: HTMLElement): AttachmentPreviewItem | nu
   const cardName = card.getAttribute("data-card-name") || card.getAttribute("name") || "";
   if (cardName === "image") {
     const src = card.querySelector("img")?.getAttribute("src") || "";
-    return src ? buildAttachmentPreviewItem(src, assetNameFromUrl(src), 0) : null;
+    if (!src) return null;
+    const meta = readFileCardData(start, card);
+    return buildAttachmentPreviewItem(src, meta?.name || assetNameFromUrl(src), meta?.size ?? 0);
   }
   if (cardName === "video" || cardName === "audio") {
     const src = (card.querySelector("video,audio") as HTMLMediaElement | null)?.getAttribute("src") || "";
-    return src ? buildAttachmentPreviewItem(src, assetNameFromUrl(src), 0) : null;
+    if (!src) return null;
+    const meta = readFileCardData(start, card);
+    return buildAttachmentPreviewItem(src, meta?.name || assetNameFromUrl(src), meta?.size ?? 0);
   }
   if (cardName === "file" || cardName === "attachment") {
     // __reactFiber$ 挂在文件芯片（.ne-card-file）等内部元素上，卡片根常常没有；

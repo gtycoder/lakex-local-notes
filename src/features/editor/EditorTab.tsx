@@ -719,7 +719,7 @@ export function EditorTab({ noteId, content, visible, tocEnabled, outlineEnhance
             cut: () => { cutCardElement(cardMenu.el); },
             copyImage: (it) => { if (it.ref) void native.copyAssetImage(it.ref.noteId, it.ref.filename); },
             copyPath: (it) => { if (it.ref) void native.copyAssetPath(it.ref.noteId, it.ref.filename); },
-            saveAs: (it) => { if (it.ref) void native.saveAssetAs(it.ref.noteId, it.ref.filename); },
+            saveAs: (it) => { if (it.ref) void native.saveAssetAs(it.ref.noteId, it.ref.filename, it.name); },
             copyName: (it) => { void navigator.clipboard.writeText(it.name).catch(() => undefined); },
           }}
           onClose={() => setCardMenu(null)}

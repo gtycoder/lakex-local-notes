@@ -1,10 +1,11 @@
 import { app, BrowserWindow, clipboard, dialog, nativeImage, shell } from "electron";
 import fs from "node:fs";
 import path from "node:path";
+import crypto from "node:crypto";
 import type { DraftJournal } from "../draftJournal.js";
 import { Store } from "../store.js";
 import { MAX_ATTACHMENT_BYTES } from "../../src/core/storeLimits.js";
-import { isSafePathSegment } from "../../src/core/storeUtils.js";
+import { isSafePathSegment, sanitizeFileName } from "../../src/core/storeUtils.js";
 import { exportNote, type ExportFormat } from "../export.js";
 import {
   IpcInputError,
@@ -188,13 +189,17 @@ export function registerNotesIpc(
     clipboard.writeImage(image);
     return { ok: true };
   });
-  /** 另存为：把单个附件复制到用户选择的位置。 */
-  ipc.handle("save_asset_as", async (noteId: string, filename: string) => {
+  /** 另存为：把单个附件复制到用户选择的位置。默认文件名优先用卡片展示名，缺失则随机（不再用内部时间戳名）。 */
+  ipc.handle("save_asset_as", async (noteId: string, filename: string, suggestedName?: string) => {
     assertAttachmentSegments(noteId, filename);
     const full = path.join(store.noteAssetsPathFor(noteId), filename);
     if (!fs.existsSync(full)) throw new IpcInputError("附件文件不存在（可能已清理）");
+    const ext = path.extname(filename);
+    let baseName = typeof suggestedName === "string" ? sanitizeFileName(suggestedName).trim() : "";
+    if (!baseName) baseName = `附件-${crypto.randomBytes(4).toString("hex")}${ext}`;
+    else if (path.extname(baseName) === "") baseName += ext;
     const win = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0];
-    const result = await dialog.showSaveDialog(win, { defaultPath: path.join(app.getPath("downloads"), filename) });
+    const result = await dialog.showSaveDialog(win, { defaultPath: path.join(app.getPath("downloads"), baseName) });
     if (result.canceled || !result.filePath) return { ok: false, canceled: true };
     fs.copyFileSync(full, result.filePath);
     return { ok: true, path: result.filePath };
