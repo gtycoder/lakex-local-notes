@@ -363,8 +363,10 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
             data-depth={depth}
             data-node-id={it.id}
             onClick={() => {
-              if (renamingId || sortMode) return;
+              if (renamingId) return;
+              // 排序模式下仍允许展开/收起分组（否则折叠的分组里没法排序）；但不打开文档、避免误触。
               if (hasChildren) { toggleGroup(it.id); return; }
+              if (sortMode) return;
               if (isNote) { openSidebar(false); void openTab(it.id); }
             }}
             onTouchStart={(e) => startLongPress(e, it)}
