@@ -132,6 +132,30 @@
   运行中切换开关只切 class、不重建编辑器（大文档重建会重渲染 + 丢滚动），且原生侧栏一直保持填充，
   切回原生即时可见。移动端恒用应用大纲面板。
 
+### 5.2 卡片值/名称的原地更新：`cardData.setName` + `sync(true)`（2026-09-12 实测）
+
+- **需求**：给文件卡「重命名展示名」时**不要** `editor.setDocument(...)`——它会清空整篇并异步重渲染（tile 分批），
+  用户会看到**白屏闪烁**（即使配滚动恢复也盖不住；旧 DOM 克隆遮罩只是兜底）。
+- **正确接法（内核自带，无需 hack）**：拿到卡片的 `cardData`（React fiber `memoizedProps.cardData`；fiber 挂在
+  `.ne-card-file` 等**内部元素**上，**不在 `ne-card` 根**）后：
+  ```js
+  cardData.setName(name);   // 只改内存卡片值，getDocument 还看不到
+  cardData.sync(true);      // 关键：写回文档模型（getDocument 可见）+ 触发更新（随后可落盘）
+  ```
+  上传流程本身同款：bundle 里 `cardData.setName(e.filename), cardData.setExt(...), cardData.sync(!0)`。
+- **实测（2026-09-12）**：重命名期间给 `editor.setDocument` 装计数器 → **调用数 0**；卡片文字原地更新；
+  `editor.getDocument("text/lake")` 能读到新名；`readNote` 确认已落盘。
+- **`cardData` 可用 API（部分）**：`getName/setName`、`getSrc/setSrc`、`getExt/setExt`、`getSize/setSize`、
+  `getStatus/setStatus`、`getMode/setMode`、`getCardValue/formatCardValue`、`sync(force)`、`afterChange()`、
+  `_updateCardValue(value)`（实现 = `_resetCardValue(value)` + `afterChange()`）、`emit/on`（EventEmitter）、`destroy()`。
+- **坑 / 反例**：
+  - `setName` 单独调用**不会写进 `getDocument`**（只改内存 + 可 `emit("change")` 让 DOM 文字更新，但**落不了盘**）。
+  - `_updateCardValue(value)` 必须传**当前正确的 value**（bundle 内是 `_updateCardValue(this.modelNode.attrs.value)`）；
+    传旧值/构造值会把卡片值**清空**（实测变成 `{name:"",src:""}`）——别用它做重命名。
+- **应用实现**：`features/attachment/attachmentPreviewController.ts#findCardData(el)` 从元素找 `cardData`；
+  `EditorTab` 重命名走 `setName(基名 + 原扩展名) + sync(true)`（扩展名锁定——附件类型按扩展名判定）；
+  `setDocument` + 旧内容克隆遮罩仅作拿不到 `cardData` 的兜底。
+
 ---
 
 ## 6. 使用守则（所有会话遵守）
