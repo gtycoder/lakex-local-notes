@@ -2,7 +2,7 @@
  * 版式：竖向菜单列表（设置项一行一行），点某项进入新页面（带返回）；子页内容用 .config-* + .b3-* 骨架（AGENTS §3.14）。
  * 注意：全部 App 设置为竖向（无横向 tab）；「回收站」并入总回收站（见 TrashList）。 */
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ArrowLeft, ChevronRight, Cloud, Info, Trash2, X, RefreshCw, HardDrive, ListTree, Images, History } from "lucide-react";
+import { ArrowLeft, ChevronRight, Cloud, Info, Trash2, RefreshCw, HardDrive, ListTree, Images, History } from "lucide-react";
 import { loadSettings, saveSettings, fontSizeOptions, MAX_ATTACHMENT_MB_OPTIONS_SETTINGS, type AppSettings } from "../../lib/settings";
 import { Group, Item, Switch, Seg, Block, NumField } from "../../components/settingsPrimitives";
 import { bridge } from "../bridge";
@@ -151,22 +151,21 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
 
   const pageRef = useRef<HTMLDivElement>(null);
   const maskRef = useRef<HTMLDivElement>(null);
-  // 左滑跟手关闭（复用思源 .side-panel 的 usePanelDrag：跟手位移、超 1/3 视口提交）
+  const isSub = view !== "menu";
+  // 左滑跟手关闭（仅根菜单；子页全屏，用左上返回）。复用思源 usePanelDrag。
   usePanelDrag({
     getPanel: (side) => (side === "left" ? pageRef.current : null),
     getMask: (side) => (side === "left" ? maskRef.current : null),
-    isOpen: (side) => side === "left" && open,
+    isOpen: (side) => side === "left" && open && !isSub,
     commit: (side, next) => { if (side === "left" && !next) onClose(); },
   });
 
   if (!open) return null;
 
-  const isSub = view !== "menu";
-
   return (
     <>
-      <div ref={maskRef} className="mobile-settings-mask" onClick={onClose} />
-      <div ref={pageRef} className="mobile-settings-page">
+      {!isSub && <div ref={maskRef} className="mobile-settings-mask" onClick={onClose} />}
+      <div ref={pageRef} className={`mobile-settings-page${isSub ? " mobile-settings-page--full" : ""}`}>
       <header className="mobile-settings-head">
         {isSub ? (
           <button className="mobile-settings-close" onClick={() => { setView("menu"); setPreviewNoteId(null); }} aria-label="返回"><ArrowLeft size={22} /></button>
@@ -174,11 +173,7 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
           <div className="mobile-settings-spacer" />
         )}
         <div className="mobile-settings-title">{isSub ? MENU_LABEL(view) : "设置"}</div>
-        {isSub ? (
-          <div className="mobile-settings-spacer mobile-settings-spacer--sm" />
-        ) : (
-          <button className="mobile-settings-close" onClick={onClose} aria-label="关闭"><X size={18} /></button>
-        )}
+        <div className="mobile-settings-spacer mobile-settings-spacer--sm" />
       </header>
 
       {isSub ? (
