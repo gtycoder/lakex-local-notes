@@ -1350,11 +1350,33 @@ function setupTocScrollFollow(
   };
 }
 
+/** 取原生 TOC 侧栏实例（bundle: 编辑器 toc 插件 afterInit `this._tocSidebar = ao(qY, …)`）。
+ * 插件实例挂在 editor._plugins（数组/Map/对象），逐个找带 `_tocSidebar.update` 的那个。
+ * 属私有结构 hack：找不到返回 null，调用方回退到 tocChange 事件重放。 */
+function findNativeTocSidebar(editor: LakeEditorInstance | null): { update?: (toc: unknown) => void } | null {
+  try {
+    const ps = (editor as any)?._plugins;
+    const list: unknown[] = Array.isArray(ps)
+      ? ps
+      : ps && typeof (ps as Map<unknown, unknown>).values === "function"
+        ? [...(ps as Map<unknown, unknown>).values()]
+        : ps && typeof ps === "object"
+          ? Object.values(ps as Record<string, unknown>)
+          : [];
+    for (const p of list) {
+      const sb = (p as { _tocSidebar?: { update?: (toc: unknown) => void } })?._tocSidebar;
+      if (sb && typeof sb.update === "function") return sb;
+    }
+  } catch { /* 内核插件结构变化时静默降级 */ }
+  return null;
+}
+
 /** 修复：Lake 编辑器 TOC 侧边栏创建时用空 toc 渲染（jI.render(GY, {toc: []})），
  * 若 ready 在 tocChange 之前触发，侧边栏永远不会被填充（打开文档时大纲为 0，
  * 编辑触发新 tocChange 后才出现）。setDocument 后调用一次，把最新 toc 数据
  * 同步进侧边栏，弥补这个加载时机缺口。
- * 重试收敛：最多 8 次，延时 200ms 起、封顶 500ms（侧边栏通常 ~600ms 内出现）。 */
+ * 重试收敛：固定 120ms 轮询、上限 40 次（≈4.8s）。侧栏就绪通常 ~2s，慢速递增重试会让
+ * 大纲多等 1s+（实测条目出现从 ~2.1s 拖到 ~3.1-3.6s）。 */
 export function refreshTocSidebar(editor: LakeEditorInstance | null, host?: HTMLElement | null): () => void {
   // toc 数据权威来源是内核的 docExtraContent（TOC 管理器 setDocExtraContent({toc})）。
   // 通过内核官方事件总线重放 tocChange（与编辑触发路径一致），并重试直到条目出现。
@@ -1375,13 +1397,24 @@ export function refreshTocSidebar(editor: LakeEditorInstance | null, host?: HTML
       const anyEditor = editor as any;
       const kernel = anyEditor?.kernel;
       const tocData = kernel?.getDocExtraContent?.()?.toc;
-      if (kernel?.emitPluginEvent && Array.isArray(tocData) && tocData.length > 0) {
-        kernel.emitPluginEvent("tocChange", tocData);
+      // 等原生侧栏视图挂载后再补数据，避免在空壳上重放。
+      const sidebarReady = !!scope.querySelector(".ne-toc-sidebar .ne-toc-view");
+      if (sidebarReady && Array.isArray(tocData) && tocData.length > 0) {
+        // 优先直接调侧栏实例的 update()：编辑器 toc 插件对 tocChange 的监听是 1s 节流
+        // （bundle: onPluginEvent("tocChange", cI()(…, 1e3))），而内核在侧栏挂载前就会先 emit
+        // 一次 tocChange、白白消耗 leading 边沿 → 靠事件重放必须再等一个 1s 窗口（实测大纲晚
+        // ~1.3s）。直接 update 绕过节流（实测 ~90ms）。
+        const sidebar = findNativeTocSidebar(editor);
+        let done = false;
+        if (sidebar?.update) {
+          try { sidebar.update(tocData); done = true; } catch { done = false; }
+        }
+        if (!done && kernel?.emitPluginEvent) kernel.emitPluginEvent("tocChange", tocData);
       }
       const itemsAfter = scope.querySelectorAll(".ne-toc-sidebar .ne-toc-item").length;
-      if (itemsAfter === 0 && attempt < 8) {
+      if (itemsAfter === 0 && attempt < 40) {
         attempt += 1;
-        later(tryOnce, Math.min(200 * attempt, 500));
+        later(tryOnce, 120);
       }
     } catch (error) {
       console.warn("refreshTocSidebar failed", error);

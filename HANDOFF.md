@@ -168,6 +168,13 @@
 - **定位验证限制**：CDP `Input.dispatchMouseEvent` 在本机 Electron 渲染进程收不到（对照：document 级 mousedown/click 计数恒 0），无法用合成点击验证原生大纲点击跳转；已验证 `<a href="#id">` 的 hash 导航能正确滚动内层 `.ne-editor-wrap`。
 - 门禁：`tsc` 0 · vitest **951 passed / 16 skipped** · 桌面+移动 `vite build`。
 
+### 2.16 原生大纲延迟 ~3s → ~2s：绕开 tocChange 的 1s 节流（260911 晚）
+- **时间线实测**（大文档「测试1112」，作用域=可见编辑器）：编辑器/侧栏 DOM ~1.5s → `.ne-toc-view` ~1.7–1.8s → **`.ne-toc-item` ~3.0–3.3s**。
+- **根因（bundle @4385085）**：编辑器 toc 插件用 `t.kernel.onPluginEvent("tocChange", cI()(…, 1e3))` 订阅（1s 节流）；内核在侧栏挂载**之前**先 emit 一次 `tocChange`，白白消耗 leading 边沿 → 靠事件重放要再等一个 1s 窗口。`sidebarVisibleChange(false) → refresh()` 不能填空白侧栏（实测仍等 ~1.3s）。
+- **修复**：`refreshTocSidebar` 在 `.ne-toc-sidebar .ne-toc-view` 挂载后，从 `editor._plugins` 找到带 `_tocSidebar.update` 的插件实例，直接 `update(kernel.getDocExtraContent().toc)` 绕过节流（实测 ~90ms 出现）；找不到则回退 `emitPluginEvent("tocChange")`。固定 120ms 轮询 ×≤40。
+- **实测**：条目出现 ~3.0–3.3s → **~1.9–2.05s**（剩余 ~1.7s 是 Lake 建编辑器耗时，非 toc）。门禁：`tsc` 0 · vitest **951 passed / 16 skipped** · 桌面+移动 `vite build`。
+- **知识固化**：`docs/LAKEX-CONTRACT.md` 新增 §5.1 + §4.2/§5 表条目（原生编辑 TOC 侧栏填充时序/正确接法）。
+
 ## 3. 真正的待办（已剔除全部完成项，按优先级）
 > **260904 后续评估（用户决策 + 本轮核实）**：原 §3.1 对象级 5xx 重试、§3.2 快照 gzip 异步化、§3.5 笔记本 `sort_order` 撞号 —— **已评估不做**（5xx 有"失败不 markSynced→下轮重扫"兜底；gzip 异步收益小；sort_order 撞号场景极低）。
 > 原 §3.3（FTS 全量重建→增量）与 §3.4（1/2 字短词回退）**合并为一条**：计划**整体重做索引**，两件一起落地（同属 `src/core/searchRepository.ts` 的索引/搜索路径，同时覆盖 10 万文档量级）。

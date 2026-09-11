@@ -70,6 +70,8 @@
 5. **事件与负载**：editor.on contentchange / monitorLog；renderer.on tileRenderCompleted / generalRenderCompleted；
    editing.on beforeExecCommand（{commandName,args}，可改 args 重定向）；kernel.onPluginEvent tocChange + emitPluginEvent(tocChange) 回放；
    kernel.getDocExtraContent().toc（扁平 {id,text,level,depth,type}）。
+   **编辑 TOC 侧栏**：对 `tocChange` 的订阅是 1s 节流（bundle `cI()(fn, 1e3)`）；侧栏实例在 toc 插件
+   `afterInit` 创建，可从 `editor._plugins[*]._tocSidebar` 取到，`update(toc)` 可绕过节流（详见 §5.1）。
 6. **卡数据私有形状（反编译所得，最强耦合区）**：`ne-card[data-card-name]` 的 DOM；
    card._neRef._virtualNode._instance.cardData / _cardData 的 getSrc/getDetail/getCardValue（bookmark）；getAudioInfo/setAudioInfo/onTranscodeSuccess（audio）；
    _virtualNode.$appear()/isAppear（手动水合）；_$cardUI.uiViewProxy.rerender；React fiber `__reactFiber$` cardData（附件点击）。
@@ -97,9 +99,35 @@
 | mindmap viewer 报 reading theme of undefined | mindmap 卡 | viewer 不注入 editor prop；注册边界补最小 editor.theme 兼容层 | lakeRuntime.ts prepareCustomCards L135-156 |
 | 附件/媒体点击无反应 | file/audio/video 卡 | 卡数据在 React fiber cardData；.ne-card-file DOM 变化会破坏挂接 | attachmentPreviewController.ts L70-177 |
 | 虚拟渲染下滚动/TOC 错位 | viewport 虚拟渲染 | 原生 TOC watcher 在虚拟渲染失效；用 kernel toc 数据 + 自研 DOM 定位/高亮 | lakeRuntime.ts L1142-1262、useOutline.ts |
+| 打开文档原生大纲为空 / 迟 ~3s 才出现 | 编辑器 TOC 侧栏 | 侧栏以空 toc 创建；插件对 `tocChange` 是 1s 节流，内核在侧栏挂载前先 emit 消耗 leading；对策：等 `.ne-toc-view` 挂载后直接 `_tocSidebar.update(toc)` 绕过节流，回退 emit。详见 §5.1 | lakeRuntime.ts `refreshTocSidebar` / `findNativeTocSidebar`、EditorTab.tsx |
 | 保存的文档里图片丢失/不完整 | 虚拟渲染 + 保存 | setDocument 后未等渲染完成就 getDocument 会丢内容；大文档注意 tile 完成事件 | lakeRuntime.ts 注释 L271-367/736 |
 | 点击表情/公式框后编辑器失焦折叠 | unicode-emoji / math 卡 | mousedown 默认行为抢焦点；捕获阶段 preventDefault | LakeEditor.tsx preventCardBlur L63-70 |
 | 编辑器整体变空/GPU 崩疑似 | React hooks | hooks 放早退 return 之后会卸载整树；检查 if(!open) return null 后是否还有 hooks | HANDOFF §4 渲染坑、SettingsPanel |
+
+### 5.1 原生编辑 TOC 侧栏：填充时序与正确接法（2026-09-11 实测）
+
+- **组件与实例**：编辑器 toc 插件（PluginOption `toc`）在 `afterInit` 创建侧栏实例
+  `this._tocSidebar = ao(qY, [editorWrapNode.parentNode, editor, renderer, option])`，监听 `document.create` 后 `open()`。
+  DOM：`.ne-toc-sidebar > .ne-toc-view`，条目 `.ne-toc-item`（内含 `<a href="#节点id">`）。
+- **坑 1（打开为空）**：侧栏初始以空 toc 渲染（`jI.render(GY, {toc: []})`）。内核 TOC 管理器在文档解析后 emit
+  `tocChange`；若侧栏挂载晚于该 emit，侧栏**永远为空**（"关闭软件再进来大纲不渲染"）。必须在 `setDocument` 后主动补数据。
+- **坑 2（迟 ~1s）**：插件用 `kernel.onPluginEvent("tocChange", cI()(fn, 1e3))` 订阅（≈1s 节流/去抖）。内核会在侧栏组件
+  挂载**之前**先 emit 一次 `tocChange`，白白消耗 leading 边沿 → 仅靠事件重放要再等一个 1s 窗口，实测大纲晚 ~1.3s
+  （~3.0–3.3s 才出现）。
+- **正确接法（应用层最小 hack）**：等 `.ne-toc-sidebar .ne-toc-view` 挂载后，从 `editor._plugins`（数组/Map/对象）
+  找到带 `_tocSidebar.update` 的插件，直接 `_tocSidebar.update(kernel.getDocExtraContent().toc)`。绕过节流，
+  实测条目 ~90ms 出现（整体 ~1.9–2.0s，剩余为编辑器创建耗时）；找不到实例时回退 `kernel.emitPluginEvent("tocChange", toc)`。
+  收敛轮询固定 120ms × ≤40 次；销毁时清定时器。
+- **反例**：`sidebarVisibleChange(false) → _tocSidebar.refresh()` **不能填空白侧栏**（实测触发后仍等 ~1.3s 才出现），别用它救场。
+- **`scrollNode` 必须下发（与虚拟渲染解耦）**：`body overflow:hidden` 时 Lake 默认回退 `document.scrollingElement||document.body`
+  会拿错，原生 TOC 定位/测量错乱（TROUBLESHOOTING #26）。移动端 `disableVirtualRendering=true`（无内部滚动容器）不传。
+- **与虚拟渲染的关系**：原生 TOC 的**列表**来自内核 toc 数据（与 DOM 无关）；但**高亮/跟随** watcher 用二分
+  `querySelector('[id=…]')` 探测标题（bundle `TWe._checkIndex`），虚拟渲染下视口外标题无 DOM → 永不选中，故开启虚拟渲染时
+  仍需应用侧 `setupTocScrollFollow`。关闭虚拟渲染则原生 watcher 可用。
+- **点击定位**：条目是 `<a href="#id">`，hash 导航能正确滚动内层 `.ne-editor-wrap`。
+  （注意：CDP `Input.dispatchMouseEvent` 在本机 Electron 渲染进程收不到，无法用合成点击验证。）
+- **应用现状**：桌面 `outlineEnhance=false`（默认）→ 原生侧栏（`EditorTab` 不禁用原生 toc，并调 `refreshTocSidebar`）；
+  `true` → 应用自建增强大纲（`disableNativeToc: true`）。移动端恒用应用大纲面板。
 
 ---
 
@@ -119,6 +147,7 @@
 - **任务 T1（待办，HANDOFF §3.9）**：新增 `src/features/editor/lakex-contract.d.ts`（§4 清单），替换 lakeRuntime 等处的 `as any`，纯类型改动 + 门禁全绿。
 - **实验 E1/E2（换核决策前置）**：真实 .lake ↔ lakelib 双向解析；lakelib 大文档渲染。详见工作区根 `lake-kernel-swap-analysis-260908.md` §9。
 - 本文件由 260908 只读评估生成；落地/回填后在此追加更新日志（一行一条，勿删历史）。
+- 2026-09-11：新增 §5.1（原生编辑 TOC 侧栏填充时序：空 toc 创建 + 1s 节流 + 直接 `_tocSidebar.update` 绕过节流），§4.2/§5 表补对应条目。来源：HANDOFF §2.15–2.16、lakeRuntime.ts `refreshTocSidebar`/`findNativeTocSidebar`。
 
 ---
 
