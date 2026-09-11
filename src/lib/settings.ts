@@ -1,6 +1,6 @@
 /**
  * 应用设置：本地偏好（localStorage 持久化，不参与同步）。
- * 参考 lake-editor-main 的配置项（paragraphSpacing/defaultFontsize/toc/toolbar）+ 深色模式。
+ * 参考 lake-editor-main 的配置项（defaultFontsize/toc/toolbar）+ 深色模式。
  */
 import { DEFAULT_MAX_ATTACHMENT_BYTES, MAX_ATTACHMENT_MB_OPTIONS } from "../core/storeLimits.js";
 
@@ -9,8 +9,6 @@ export type ThemeMode = "light" | "dark";
 export interface AppSettings {
   /** 正文默认字号（内核支持 12/13/14/15/16/19/22/24） */
   fontSize: number;
-  /** 段间距（relax） */
-  paragraphSpacing: boolean;
   /** 大纲增强：true=应用自建增强大纲（筛选/折叠/H 徽标/悬停/移动端大纲面板）；false=直接使用 Lake 原生大纲（对此不做任何改动）。 */
   outlineEnhance: boolean;
   /** 主题：light=思源 daylight / dark=思源 midnight */
@@ -24,7 +22,6 @@ export interface AppSettings {
 
 export const DEFAULT_SETTINGS: AppSettings = {
   fontSize: 18,
-  paragraphSpacing: false,
   outlineEnhance: false,
   theme: "light",
   maxOpenTabs: 8,
@@ -69,7 +66,6 @@ export function loadSettings(): AppSettings {
       const parsedMb = (parsed.maxAttachmentBytes ?? 0) / (1024 * 1024);
       cached = {
         fontSize: FONT_SIZES.includes(parsed.fontSize ?? -1) ? (parsed.fontSize as number) : DEFAULT_SETTINGS.fontSize,
-        paragraphSpacing: parsed.paragraphSpacing === true,
         outlineEnhance: parsed.outlineEnhance === true,
         theme: parsed.theme === "dark" ? "dark" : "light",
         maxOpenTabs: MAX_OPEN_TAB_OPTIONS.includes(parsed.maxOpenTabs as number)

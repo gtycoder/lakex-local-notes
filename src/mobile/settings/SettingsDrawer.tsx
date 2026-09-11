@@ -179,7 +179,6 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
                   ))}
                 </Seg>
               </Item>
-              <Switch itemId="editor-paragraph-spacing" name="段间距" desc="更宽松的段落留白。" checked={settings.paragraphSpacing} onChange={(e) => update({ paragraphSpacing: e.target.checked })} />
               <Item itemId="editor-max-open-tabs" name="最大同时打开标签数" desc="超过上限自动关闭最旧的标签。">
                 <select className="b3-select fn__size200" value={settings.maxOpenTabs} onChange={(e) => update({ maxOpenTabs: Number(e.target.value) })} aria-label="最大同时打开标签数">
                   <option value={0}>不限</option>

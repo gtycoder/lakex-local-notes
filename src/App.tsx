@@ -363,7 +363,6 @@ export function App() {
             topbarLeading={libraryTopBarLeading}
             topbarTrailing={topBarTrailing}
             wideMode={wideMode}
-            paragraphSpacing={settings.paragraphSpacing}
             editorPrefs={editorPrefs}
             activePathTitle={activePath.length > 0 ? (activePath[0].title || "无标题") : null}
             headingPath={headingPath}

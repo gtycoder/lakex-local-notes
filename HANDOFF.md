@@ -181,6 +181,11 @@
 - **实测**：设置面板点开关 ON→OFF→ON，每步 <1 帧：ON 时原生 `display:none` + 应用大纲可见；OFF 时原生 `display:flex` 且已含 15/23 条（无需重新加载）。默认仍 `false`。
 - 门禁：`tsc` 0 · vitest **951 passed / 16 skipped** · 桌面+移动 `vite build`。
 
+### 2.18 移除「段间距」配置（260911 晚）
+- 用户判定无用，连同实现一起删。涉及：`settings.ts`（类型/默认值/loadSettings 解析）、`SettingsPanel.tsx`（行 + 分类关键词）、移动端 `SettingsDrawer.tsx`、`settingsSearch.ts` 注册表、`DesktopLibrary.tsx`（`paragraph-spacing` class 与 prop）、`App.tsx` 传参、`styles.css` 三条 `.paragraph-spacing` 规则。
+- 旧 localStorage 里的 `paragraphSpacing` 字段不再解析（开发版不考虑数据兼容）。`docs/REFERENCE-REVIEW-2026-08-03.md`/`PROGRESS.md` 属历史记录，不改。
+- 门禁：`tsc` 0 · vitest **951 passed / 16 skipped** · 桌面+移动 `vite build`。
+
 ## 3. 真正的待办（已剔除全部完成项，按优先级）
 > **260904 后续评估（用户决策 + 本轮核实）**：原 §3.1 对象级 5xx 重试、§3.2 快照 gzip 异步化、§3.5 笔记本 `sort_order` 撞号 —— **已评估不做**（5xx 有"失败不 markSynced→下轮重扫"兜底；gzip 异步收益小；sort_order 撞号场景极低）。
 > 原 §3.3（FTS 全量重建→增量）与 §3.4（1/2 字短词回退）**合并为一条**：计划**整体重做索引**，两件一起落地（同属 `src/core/searchRepository.ts` 的索引/搜索路径，同时覆盖 10 万文档量级）。

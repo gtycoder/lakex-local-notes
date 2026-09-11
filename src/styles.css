@@ -527,11 +527,6 @@ ne-card[data-card-name="codeblock"] .ne-card-resizer-mask {
 .settings-panel { width: 360px; max-width: calc(100vw - 32px); max-height: 80vh; overflow: auto; border: 1px solid var(--b3-theme-surface-lighter); border-radius: var(--b3-border-radius-b); background: var(--b3-theme-surface); box-shadow: var(--b3-dialog-shadow); }
 .settings-header { display: flex; align-items: center; gap: 8px; height: 44px; padding: 0 14px; border-bottom: 1px solid var(--b3-theme-surface-lighter); color: var(--b3-theme-on-background); font-size: 14px; font-weight: 600; }
 
-/* ===== 段间距（relax） ===== */
-.paragraph-spacing .lake-editor-mount .ne-p,
-.paragraph-spacing .lake-editor-mount .ne-block-quote { margin-top: 0.5em; margin-bottom: 0.5em; }
-.paragraph-spacing .lake-editor-mount .ne-editor-body { line-height: 1.85; }
-
 /* ===== Apple-style management shell (Lake editor internals intentionally untouched) ===== */
 :root {
   /* font-family 单一来源：--b3-font-family（见 :root 顶部与 b3/base.css body）*/

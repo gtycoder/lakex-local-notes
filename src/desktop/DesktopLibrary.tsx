@@ -21,7 +21,6 @@ export interface DesktopLibraryProps {
   topbarLeading: ReactNode;
   topbarTrailing: ReactNode;
   wideMode: boolean;
-  paragraphSpacing: boolean;
   editorPrefs: { fontSize: number };
   activePathTitle: string | null;
   headingPath: HeadingPathItem[];
@@ -50,7 +49,7 @@ export interface DesktopLibraryProps {
 export function DesktopLibrary(props: DesktopLibraryProps) {
   const {
     tabs, activeNoteId, tocEnabled, outlineEnhance, topbarLeading, topbarTrailing,
-    wideMode, paragraphSpacing, editorPrefs,
+    wideMode, editorPrefs,
     activePathTitle, headingPath, moreMenuWrapRef, onToggleMoreMenu,
     onScrollToTop, onNavigateToHeading,
     lockedNoteIds, pinnedNoteIds,
@@ -90,7 +89,7 @@ export function DesktopLibrary(props: DesktopLibraryProps) {
   ) : undefined;
 
   return (
-    <section className={`document-pane ${wideMode ? "wide-mode" : ""} ${paragraphSpacing ? "paragraph-spacing" : ""}`}>
+    <section className={`document-pane${wideMode ? " wide-mode" : ""}`}>
       <MultiTabEditor
         visible={visible}
         tabs={tabs}
