@@ -41,10 +41,6 @@ interface MultiTabEditorProps {
   visible?: boolean;
   prefs?: LakeEditorPrefs;
   onEditorReady?: (noteId: string, editor: import("./lakeRuntime").LakeEditorInstance | null) => void;
-  /** 编辑器右键资料操作（M1.3） */
-  onEditorCopyMarkdown?: (noteId: string) => void;
-  onEditorExport?: (noteId: string, format: "markdown" | "html" | "lake") => void;
-  onEditorCopyPaths?: (noteId: string) => void;
   /** 顶栏左侧元素（工作空间/云同步），渲染在标签左侧，与多 tab 融合成一条顶栏 */
   topbarLeading?: ReactNode;
   /** 顶栏右侧元素（外观/更多），渲染在标签最右侧 */
@@ -69,9 +65,6 @@ export function MultiTabEditor({
   visible = true,
   prefs,
   onEditorReady,
-  onEditorCopyMarkdown,
-  onEditorExport,
-  onEditorCopyPaths,
   onOpenTrash,
   topbarLeading,
   topbarTrailing,
@@ -441,9 +434,6 @@ export function MultiTabEditor({
             onChange={(content) => handleChange(tab.noteId, content)}
             prefs={prefs}
             onEditorReady={onEditorReady}
-            onEditorCopyMarkdown={onEditorCopyMarkdown}
-            onEditorExport={onEditorExport}
-            onEditorCopyPaths={onEditorCopyPaths}
           />
         ))}
       </div>

@@ -7,7 +7,9 @@ import { getNativeErrorMessage } from "../../lib/nativeErrors";
 import { shouldAcceptEditorChange } from "../../core/editorChangeGuard";
 import { ImageLightbox } from "./ImageLightbox";
 import { attachImagePreviewClick } from "./imagePreview";
-import { attachFileCardClick, buildAttachmentPreviewItem, openAttachmentPreview, createCardHoverResidueCleaner, type AttachmentPreviewItem } from "../attachment/attachmentPreviewController";
+import { attachFileCardClick, buildAttachmentPreviewItem, openAttachmentPreview, createCardHoverResidueCleaner, resolveCardAsset, type AttachmentPreviewItem } from "../attachment/attachmentPreviewController";
+import { CardContextMenu } from "./CardContextMenu";
+import { attachLongPress } from "./longPress";
 import { installMediaCardCategoryRouter } from "./mediaCardRouting";
 import { isMediaFilename } from "../../core/assetNaming.js";
 import { AttachmentPreview } from "../attachment/AttachmentPreview";
@@ -30,8 +32,19 @@ export function LakeEditor({ noteId, content, mode = "editor", tocEnabled, onCha
   const onChangeRef = useRef(onChange);
   const onEditorReadyRef = useRef(onEditorReady);
   const [error, setError] = useState<string | null>(null);
+  const [cardMenu, setCardMenu] = useState<{ x: number; y: number; item: AttachmentPreviewItem } | null>(null);
   onChangeRef.current = onChange;
   onEditorReadyRef.current = onEditorReady;
+
+  // 移动端：长按卡片 → 卡片菜单（触屏没有右键；桌面此处由 EditorTab 的右键处理）。
+  useEffect(() => {
+    const host = hostRef.current;
+    if (!host) return;
+    return attachLongPress(host, (x, y, target) => {
+      const item = resolveCardAsset(target as HTMLElement);
+      if (item) setCardMenu({ x, y, item });
+    });
+  }, []);
 
   useEffect(() => {
     const host = hostRef.current;
@@ -160,11 +173,28 @@ export function LakeEditor({ noteId, content, mode = "editor", tocEnabled, onCha
   }
   // ImageLightbox：图片点击放大预览（桌面/移动端共用）。单例控制器，任何 LakeEditor
   // 实例挂载即提供预览 UI；previewImgs 事件由 envAdapter 转发到控制器。
+  const attachmentPrefs = prefs?.attachment;
+  const openOriginalFromMenu = (it: AttachmentPreviewItem): void => {
+    if (attachmentPrefs?.onOpenAttachment) attachmentPrefs.onOpenAttachment(it);
+    else if (it.ref) void native.openAttachment(it.ref.noteId, it.ref.filename);
+  };
   return (
     <>
       <div className={`lake-editor lake-${mode}`} ref={hostRef} />
       <ImageLightbox />
       <AttachmentPreview />
+      {cardMenu && (
+        <CardContextMenu
+          x={cardMenu.x}
+          y={cardMenu.y}
+          item={cardMenu.item}
+          actions={{
+            openOriginal: openOriginalFromMenu,
+            copyText: (t) => { void navigator.clipboard.writeText(t).catch(() => undefined); },
+          }}
+          onClose={() => setCardMenu(null)}
+        />
+      )}
     </>
   );
 }

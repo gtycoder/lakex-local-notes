@@ -40,9 +40,6 @@ export interface DesktopLibraryProps {
   onTogglePin: (noteId: string) => void;
   onContentChange: (noteId: string, content: string) => void;
   onEditorReady: (noteId: string, editor: LakeEditorInstance | null) => void;
-  onEditorCopyMarkdown: (noteId: string) => void;
-  onEditorExport: (noteId: string, format: "markdown" | "html" | "lake") => void;
-  onEditorCopyPaths: (noteId: string) => void;
   onCreateNote: () => void;
 }
 
@@ -54,7 +51,7 @@ export function DesktopLibrary(props: DesktopLibraryProps) {
     onScrollToTop, onNavigateToHeading,
     lockedNoteIds, pinnedNoteIds,
     onTabChange, onTabClose, onTabsReorder, onTogglePin, onContentChange,
-    onEditorReady, onEditorCopyMarkdown, onEditorExport, onEditorCopyPaths, onCreateNote, onOpenTrash,
+    onEditorReady, onCreateNote, onOpenTrash,
     visible = true,
   } = props;
 
@@ -109,9 +106,6 @@ export function DesktopLibrary(props: DesktopLibraryProps) {
         onContentChange={onContentChange}
         prefs={editorPrefs}
         onEditorReady={onEditorReady}
-        onEditorCopyMarkdown={onEditorCopyMarkdown}
-        onEditorExport={onEditorExport}
-        onEditorCopyPaths={onEditorCopyPaths}
         emptyAction={<button className="b3-button" onClick={onCreateNote}>新建文档</button>}
       />
     </section>

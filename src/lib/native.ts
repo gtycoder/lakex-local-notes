@@ -69,6 +69,8 @@ export interface LakeNative {
   openAttachment(noteId: string, filename: string): Promise<{ ok: boolean; error?: string }>;
   /** 附件操作：在文件管理器中显示。 */
   showAttachmentInFolder(noteId: string, filename: string): Promise<{ ok: boolean }>;
+  /** 在文件管理器中显示笔记 .lake 文件 */
+  revealNoteFile(id: string): Promise<{ ok: boolean }>;
   copyAssetPath(noteId: string, filename: string): Promise<string>;
   getS3Settings(): Promise<S3Settings | null>;
   saveS3Settings(settings: S3Settings): Promise<void>;
@@ -194,6 +196,7 @@ export const native = {
   readAssetPreview: (noteId: string, filename: string) => api().readAssetPreview(noteId, filename),
   openAttachment: (noteId: string, filename: string) => api().openAttachment(noteId, filename),
   showAttachmentInFolder: (noteId: string, filename: string) => api().showAttachmentInFolder(noteId, filename),
+  revealNoteFile: (id: string) => api().revealNoteFile(id),
   copyAssetPath: (noteId: string, filename: string) => api().copyAssetPath(noteId, filename),
   getS3Settings: () => api().getS3Settings(),
   saveS3Settings: (settings: S3Settings) => api().saveS3Settings(settings),

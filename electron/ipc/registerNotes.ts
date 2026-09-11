@@ -176,6 +176,13 @@ export function registerNotesIpc(
     clipboard.writeText(full);
     return full;
   });
+  /** 在文件管理器中显示笔记对应的 \`.lake\` 文件（.lake 的默认程序即本应用，不另做"用默认程序打开"）。 */
+  ipc.handle("reveal_note_file", (id: string) => {
+    const { lakePath } = store.getNotePaths(id);
+    if (!fs.existsSync(lakePath)) throw new IpcInputError("笔记文件不存在（可能已清理）");
+    shell.showItemInFolder(lakePath);
+    return { ok: true };
+  });
 }
 
 /** 附件路径段校验：noteId + filename 都必须是安全单段（防穿越 note-assets 目录）。 */

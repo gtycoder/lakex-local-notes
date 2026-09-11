@@ -104,6 +104,30 @@ function readFileCardData(start: HTMLElement, card: HTMLElement): { src: string;
 }
 
 /**
+ * 从右键目标解析卡片资产（图片 / 视频 / 音频 / file 卡），返回与附件预览同构的条目。
+ * - image：取 <img src>；video/audio：取 <video>/<audio src>；file：走 fiber cardData（同点击路径）。
+ * - 解析不到（如行内 data: URL 图片、非资产卡片）返回 null，由调用方回退到文本菜单。
+ */
+export function resolveCardAsset(start: HTMLElement): AttachmentPreviewItem | null {
+  const card = start.closest("ne-card") as HTMLElement | null;
+  if (!card) return null;
+  const cardName = card.getAttribute("data-card-name") || card.getAttribute("name") || "";
+  if (cardName === "image") {
+    const src = card.querySelector("img")?.getAttribute("src") || "";
+    return src ? buildAttachmentPreviewItem(src, src.split("/").pop() || "图片", 0) : null;
+  }
+  if (cardName === "video" || cardName === "audio") {
+    const src = (card.querySelector("video,audio") as HTMLMediaElement | null)?.getAttribute("src") || "";
+    return src ? buildAttachmentPreviewItem(src, src.split("/").pop() || cardName, 0) : null;
+  }
+  if (cardName === "file" || cardName === "attachment") {
+    const data = readFileCardData(card, card);
+    return data ? buildAttachmentPreviewItem(data.src, data.name, data.size) : null;
+  }
+  return null;
+}
+
+/**
  * 宿主级「清理 Lake 卡片 hover 残留」绑定（桌面/移动端共用）：
  * 光标离开卡片/宿主时直接移除 ne-card-hovered，背景随光标离开立即消失；
  * 打开系统应用/播放器遮罩或快速点击时 mouseleave/pointerout 可能被吞，pointerdown 兜底清理。

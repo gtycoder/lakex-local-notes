@@ -1,7 +1,5 @@
 import { useEffect, useRef, useState } from "react";
 import { shouldAcceptEditorChange } from "../../core/editorChangeGuard";
-import { createPortal } from "react-dom";
-import { ChevronRight, Package } from "lucide-react";
 import {
   createLakeDocument,
   destroyLakeEditor,
@@ -18,7 +16,8 @@ import { useOutline } from "../outline/useOutline";
 import { native } from "../../lib/native";
 import { attachImagePreviewClick } from "./imagePreview";
 import { ImageLightbox } from "./ImageLightbox";
-import { attachFileCardClick, buildAttachmentPreviewItem, openAttachmentPreview, createCardHoverResidueCleaner } from "../attachment/attachmentPreviewController";
+import { attachFileCardClick, buildAttachmentPreviewItem, openAttachmentPreview, createCardHoverResidueCleaner, resolveCardAsset, type AttachmentPreviewItem } from "../attachment/attachmentPreviewController";
+import { CardContextMenu, TextContextMenu } from "./CardContextMenu";
 import { installMediaCardCategoryRouter } from "./mediaCardRouting";
 import { isMediaFilename } from "../../core/assetNaming.js";
 import { AttachmentPreview } from "../attachment/AttachmentPreview";
@@ -35,10 +34,6 @@ export interface EditorTabProps {
   locked?: boolean;
   /** 编辑器实例就绪回调（导出 md 等需要访问 editor 实例的场景） */
   onEditorReady?: (noteId: string, editor: LakeEditorInstance | null) => void;
-  /** 编辑器右键资料操作（M1.3） */
-  onEditorCopyMarkdown?: (noteId: string) => void;
-  onEditorExport?: (noteId: string, format: "markdown" | "html" | "lake") => void;
-  onEditorCopyPaths?: (noteId: string) => void;
 }
 
 function escapeId(id: string): string {
@@ -87,7 +82,7 @@ export function locateEditorSearchHit(noteId: string, query: string): boolean {
   return true;
 }
 
-export function EditorTab({ noteId, content, visible, tocEnabled, outlineEnhance, onChange, prefs, locked, onEditorReady, onEditorCopyMarkdown, onEditorExport, onEditorCopyPaths }: EditorTabProps) {
+export function EditorTab({ noteId, content, visible, tocEnabled, outlineEnhance, onChange, prefs, locked, onEditorReady }: EditorTabProps) {
   const hostRef = useRef<HTMLDivElement>(null);
   const editorMountRef = useRef<HTMLDivElement>(null);
   const editorRef = useRef<LakeEditorInstance | null>(null);
@@ -112,8 +107,8 @@ export function EditorTab({ noteId, content, visible, tocEnabled, outlineEnhance
   });
   const [editorState, setEditorState] = useState<LakeEditorInstance | null>(null);
   const [rebuildTick, setRebuildTick] = useState(0);
-  const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number } | null>(null);
-  const [exportOpen, setExportOpen] = useState(false);
+  const [cardMenu, setCardMenu] = useState<{ x: number; y: number; item: AttachmentPreviewItem } | null>(null);
+  const [textMenu, setTextMenu] = useState<{ x: number; y: number } | null>(null);
   const onChangeRef = useRef(onChange);
   const onEditorReadyRef = useRef(onEditorReady);
   onChangeRef.current = onChange;
@@ -686,79 +681,30 @@ export function EditorTab({ noteId, content, visible, tocEnabled, outlineEnhance
       style={{ display: visible ? "flex" : "none", width: "100%" }}
       data-note-id={noteId}
       onContextMenu={(event) => {
-        // M1.3：编辑器右键 → 自定义资料操作菜单（覆盖 Lake 默认右键，复制/粘贴用快捷键）
         event.preventDefault();
-        setExportOpen(false);
-        setCtxMenu({ x: event.clientX, y: event.clientY });
+        const item = resolveCardAsset(event.target as HTMLElement);
+        if (item) { setTextMenu(null); setCardMenu({ x: event.clientX, y: event.clientY, item }); return; }
+        setCardMenu(null);
+        setTextMenu({ x: event.clientX, y: event.clientY });
       }}
     >
       <div ref={editorMountRef} className="lake-editor-main" />
       <ImageLightbox />
       <AttachmentPreview />
-      {ctxMenu && (
-        <EditorContextMenu
-          x={ctxMenu.x}
-          y={ctxMenu.y}
-          exportOpen={exportOpen}
-          onExportOpen={setExportOpen}
-          onCopyMarkdown={() => onEditorCopyMarkdown?.(noteId)}
-          onExport={(format) => onEditorExport?.(noteId, format)}
-          onCopyPaths={() => onEditorCopyPaths?.(noteId)}
-          onClose={() => setCtxMenu(null)}
+      {cardMenu && (
+        <CardContextMenu
+          x={cardMenu.x}
+          y={cardMenu.y}
+          item={cardMenu.item}
+          actions={{
+            openOriginal: (it) => { if (it.ref) void native.openAttachment(it.ref.noteId, it.ref.filename); },
+            showInFolder: (it) => { if (it.ref) void native.showAttachmentInFolder(it.ref.noteId, it.ref.filename); },
+            copyText: (t) => { void navigator.clipboard.writeText(t).catch(() => undefined); },
+          }}
+          onClose={() => setCardMenu(null)}
         />
       )}
+      {textMenu && <TextContextMenu x={textMenu.x} y={textMenu.y} onClose={() => setTextMenu(null)} />}
     </div>
   );
 }
-
-interface EditorContextMenuProps {
-  x: number;
-  y: number;
-  exportOpen: boolean;
-  onExportOpen: (open: boolean) => void;
-  onCopyMarkdown: () => void;
-  onExport: (format: "markdown" | "html" | "lake") => void;
-  onCopyPaths: () => void;
-  onClose: () => void;
-}
-
-const EditorContextMenu = ({ x, y, exportOpen, onExportOpen, onCopyMarkdown, onExport, onCopyPaths, onClose }: EditorContextMenuProps) => {
-  const left = Math.min(x, window.innerWidth - 232);
-  const top = Math.min(y, window.innerHeight - 240);
-  const submenuLeft = left + 232 + 230 <= window.innerWidth;
-  const menuRef = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    const onPointerDown = (event: PointerEvent) => {
-      if (menuRef.current && !menuRef.current.contains(event.target as Node)) onClose();
-    };
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onClose();
-    };
-    document.addEventListener("pointerdown", onPointerDown);
-    document.addEventListener("keydown", onKeyDown);
-    return () => {
-      document.removeEventListener("pointerdown", onPointerDown);
-      document.removeEventListener("keydown", onKeyDown);
-    };
-  }, [onClose]);
-  return createPortal(
-    <div ref={menuRef} className="context-menu" style={{ left, top }} role="menu" data-context-menu>
-      <div className="context-menu-item has-submenu" onMouseEnter={() => onExportOpen(true)} onMouseLeave={() => onExportOpen(false)}>
-        <span className="context-menu-item-label"><Package size={15} /><span>导出</span></span><ChevronRight size={14} />
-        {exportOpen && (
-          <div className={`context-menu-submenu${submenuLeft ? "" : " open-left"}`} role="menu">
-            <button role="menuitem" onClick={() => { onExport("markdown"); onClose(); }}>导出为 Markdown 资料包</button>
-            <button role="menuitem" onClick={() => { onCopyMarkdown(); onClose(); }}>导出为 Markdown 文本（复制）</button>
-            <button role="menuitem" onClick={() => { onExport("html"); onClose(); }}>导出为 HTML</button>
-            <button role="menuitem" disabled title="开发中">导出为 Word（开发中）</button>
-            <button role="menuitem" disabled title="开发中">导出为 PDF（开发中）</button>
-            <div className="context-menu-sep" />
-            <button role="menuitem" onClick={() => { onExport("lake"); onClose(); }}>导出为原生 Lake（图片内嵌）</button>
-            <button role="menuitem" onClick={() => { onCopyPaths(); onClose(); }}>导出资料路径（本机 AI）</button>
-          </div>
-        )}
-      </div>
-    </div>,
-    document.body
-  );
-};

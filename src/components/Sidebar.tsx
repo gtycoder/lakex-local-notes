@@ -32,6 +32,8 @@ interface SidebarProps {
   onCopyPaths: (node: TreeNode) => void;
   onSetIcon: (node: TreeNode, icon: string | null) => void;
   onOpenHistory: (node: TreeNode) => void;
+  /** 在文件管理器中显示笔记 .lake */
+  onRevealNoteFile: (node: TreeNode) => void;
   pendingRenameId: string | null;
   onPendingRenameConsumed: () => void;
   onPreviewEnter: () => void;
@@ -571,7 +573,7 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
         {roots.map((node) => <TreeRow key={node.id} node={node} depth={0} {...treeRowProps} />)}
         {roots.length === 0 && <div className="empty-list">{query ? "没有匹配的目录项，Esc 或再点筛选图标可清空" : "点击 + 新建第一个笔记本"}</div>}
       </nav>
-      {contextMenu && contextNode && <ContextMenu node={contextNode} x={contextMenu.x} y={contextMenu.y} onNewChild={menuNewChild} onRename={menuRename} onDelete={menuDelete} onCopyMarkdown={() => props.onCopyMarkdown(contextNode)} onExportAs={(format) => props.onExportAs(contextNode, format)} onCopyPaths={() => props.onCopyPaths(contextNode)} onSetIconRequest={() => setIconPicker({ node: contextNode, x: contextMenu!.x, y: contextMenu!.y })} onOpenHistory={() => props.onOpenHistory(contextNode)} onClose={() => setContextMenu(null)} />}
+      {contextMenu && contextNode && <ContextMenu node={contextNode} x={contextMenu.x} y={contextMenu.y} onNewChild={menuNewChild} onRename={menuRename} onDelete={menuDelete} onCopyMarkdown={() => props.onCopyMarkdown(contextNode)} onExportAs={(format) => props.onExportAs(contextNode, format)} onCopyPaths={() => props.onCopyPaths(contextNode)} onSetIconRequest={() => setIconPicker({ node: contextNode, x: contextMenu!.x, y: contextMenu!.y })} onOpenHistory={() => props.onOpenHistory(contextNode)} onOpen={() => props.onSelect(contextNode.id)} onRevealNoteFile={() => props.onRevealNoteFile(contextNode)} onClose={() => setContextMenu(null)} />}
       {iconPicker && <EmojiIconPicker x={iconPicker.x} y={iconPicker.y} onPick={(icon) => { props.onSetIcon(iconPicker.node, icon); setIconPicker(null); }} onClose={() => setIconPicker(null)} />}
       <div className="sidebar-resize-handle desktop-only" role="separator" aria-label="调整资料库宽度" aria-orientation="vertical" aria-valuemin={props.minWidth} aria-valuemax={props.maxWidth} aria-valuenow={Math.round(props.width)} tabIndex={0} onPointerDown={handleResizePointerDown} onPointerMove={handleResizePointerMove} onPointerUp={finishResize} onPointerCancel={finishResize} onKeyDown={handleResizeKeyDown} />
     </aside>
@@ -708,10 +710,12 @@ interface ContextMenuProps {
   onCopyPaths: () => void;
   onSetIconRequest: () => void;
   onOpenHistory: () => void;
+  onOpen: () => void;
+  onRevealNoteFile: () => void;
   onClose: () => void;
 }
 
-const ContextMenu = ({ node, x, y, onNewChild, onRename, onDelete, onCopyMarkdown, onExportAs, onCopyPaths, onSetIconRequest, onOpenHistory, onClose }: ContextMenuProps) => {
+const ContextMenu = ({ node, x, y, onNewChild, onRename, onDelete, onCopyMarkdown, onExportAs, onCopyPaths, onSetIconRequest, onOpenHistory, onOpen, onRevealNoteFile, onClose }: ContextMenuProps) => {
   const [exportOpen, setExportOpen] = useState(false);
   // 视口边缘翻转，避免菜单溢出屏幕
   const left = Math.min(x, window.innerWidth - 232);
@@ -722,6 +726,13 @@ const ContextMenu = ({ node, x, y, onNewChild, onRename, onDelete, onCopyMarkdow
   // 相对侧边栏定位，导致菜单偏离光标右下；挂到 body 后恢复真正的视口固定定位。
   return createPortal(
     <div className="context-menu" style={{ left, top }} role="menu" data-context-menu>
+      {node.nodeType === "note" && (
+        <>
+          <button role="menuitem" onClick={() => { onOpen(); onClose(); }}><FileText size={15} /><span>打开</span></button>
+          <button role="menuitem" onClick={() => { onRevealNoteFile(); onClose(); }}><FolderOpen size={15} /><span>打开文件位置</span></button>
+          <div className="context-menu-sep" />
+        </>
+      )}
       <button role="menuitem" onClick={() => { onNewChild("note"); onClose(); }}><FilePlus2 size={15} /><span>新建文档</span></button>
       <button role="menuitem" onClick={() => { onNewChild("group"); onClose(); }}><FolderPlus size={15} /><span>新建分组</span></button>
       <button role="menuitem" onClick={() => { onRename(); onClose(); }}><Pencil size={15} /><span>重命名</span></button>
