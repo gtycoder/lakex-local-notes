@@ -4,8 +4,6 @@ import { OutlineController, type OutlineNode } from "./OutlineController";
 
 interface OutlineListProps {
   controller: OutlineController;
-  /** 增强外观：折叠按钮/级别徽标/层级引导线。false = 接近原生的简洁列表。 */
-  enhance?: boolean;
   onNavigate: (id: string) => void;
 }
 
@@ -67,7 +65,7 @@ function guideStyle(segs: GuideSeg[]): React.CSSProperties | undefined {
 }
 
 /** 大纲条目列表：层级引导线（子弹线）+ 级别徽标 + 折叠 + 选中高亮。 */
-export function OutlineList({ controller, enhance = true, onNavigate }: OutlineListProps) {
+export function OutlineList({ controller, onNavigate }: OutlineListProps) {
   const version = useSyncExternalStore(controller.subscribe, controller.getVersion, controller.getVersion);
   const items = controller.getVisibleItems();
   const selectedId = controller.getSelectedId();
@@ -101,13 +99,13 @@ export function OutlineList({ controller, enhance = true, onNavigate }: OutlineL
         items.map((node, i) => {
           const indent = 8 + (node.depth - 1) * INDENT_STEP;
           const selected = node.id === selectedId;
-          const segs = enhance ? computeGuides(items, i, (id) => controller.isCollapsed(id)) : [];
+          const segs = computeGuides(items, i, (id) => controller.isCollapsed(id));
           return (
             <div
               key={node.id}
-              className={`outline-item${selected ? " outline-item--selected" : ""}${enhance && node.hasChildren ? " has-children" : ""}`}
+              className={`outline-item${selected ? " outline-item--selected" : ""}${node.hasChildren ? " has-children" : ""}`}
               data-id={node.id}
-              style={{ paddingLeft: indent, ...(enhance ? guideStyle(segs) : {}) }}
+              style={{ paddingLeft: indent, ...guideStyle(segs) }}
               onClick={() => {
                 smoothNextRef.current = true;
                 controller.setSelected(node.id);
@@ -116,7 +114,7 @@ export function OutlineList({ controller, enhance = true, onNavigate }: OutlineL
               }}
               title={node.text}
             >
-              {!enhance ? null : node.hasChildren ? (
+              {node.hasChildren ? (
                 <button
                   className={`outline-item__fold${controller.isCollapsed(node.id) ? " is-collapsed" : ""}`}
                   onClick={(e) => {
@@ -132,7 +130,7 @@ export function OutlineList({ controller, enhance = true, onNavigate }: OutlineL
               ) : (
                 <span className="outline-item__fold-slot" aria-hidden="true" />
               )}
-              {enhance && <span className={`outline-item__level outline-item__level--${Math.min(Math.max(node.level, 1), 6)}`}>H{node.level}</span>}
+              <span className={`outline-item__level outline-item__level--${Math.min(Math.max(node.level, 1), 6)}`}>H{node.level}</span>
               <span className="outline-item__text">{node.text || "\u00a0"}</span>
             </div>
           );

@@ -413,7 +413,6 @@ export function App() {
       {outlineVisible && (
         <OutlineSidebar
           mode={effectiveOutlineMode}
-          enhance={outlineEnhance}
           activeNoteId={activeNoteId}
           width={outlineSidebarWidth}
           minWidth={OUTLINE_SIDEBAR_MIN_WIDTH}

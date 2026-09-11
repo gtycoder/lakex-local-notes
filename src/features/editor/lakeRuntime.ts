@@ -380,7 +380,14 @@ if (typeof window !== "undefined") {
  *    ensureCardsInViewHydrated 修复粘贴卡片卡壳）
  */
 const VIRTUAL_RENDERING = {
-  enabled: true,
+  // 实验：关闭虚拟渲染（用户要求「尝试不用」）。关闭后只下发 scrollNode，不下发
+  // virtualRendering / cardLazyInit，Lake 恢复全量渲染。
+  // 大文档 A/B（「测试1112」15 标题，同文档 reload×2，本机）：
+  //   OFF → 首资产 ~4.13s / 36 个资产请求 / DCL ~1.19s / 原生大纲 ~4.3s
+  //   ON  → 首资产 ~2.0-2.3s / 仅 2 个视口资产 / DCL ~0.9-1.2s / 原生大纲 ~2.9-3.2s
+  // 结论：原生大纲在两种模式下都能用了（桌面前端补上 refreshTocSidebar 才是关键修复）；
+  // 关闭虚拟渲染反而首屏更慢、请求更多。最终去留守 OFF/ON 待用户拍板。
+  enabled: false,
   scrollContainerSelector: ".document-pane",
   cardLazyInit: true,
 };
@@ -642,19 +649,19 @@ export function createLakeDocument(
       },
     },
     customCard: { cards: [BoardCard] },
-    ...(VIRTUAL_RENDERING.enabled
+    // scrollNode 与虚拟渲染解耦：原生 TOC 的点击定位/滚动高亮需要真实滚动容器
+    // （body overflow:hidden 时 Lake 默认回退 document.scrollingElement||document.body 会拿错，
+    // TROUBLESHOOTING #26）。移动端 disableVirtualRendering=true 表示无内部滚动容器，不传。
+    ...(mode === "editor" && !prefs?.disableVirtualRendering
+      ? { scrollNode: () => resolveScrollNode(scrollNode) }
+      : {}),
+    ...(VIRTUAL_RENDERING.enabled && mode === "editor" && !prefs?.disableVirtualRendering
       ? {
           // Viewer 不需要编辑态的卡片懒加载。原生 Viewer 在虚拟卡片节点尚未
           // appear 时可能只留下 hole，尤其是 Drawnix 画板会在锁定切换后丢失。
           // 锁定文档数量通常远小于编辑态交互频率，Viewer 直接完整渲染更稳定。
-          // 编辑态可经 disableVirtualRendering 关闭（移动端无内部滚动容器，虚拟渲染视口测量失效）。
-          virtualRendering: mode === "editor" && !prefs?.disableVirtualRendering,
-          ...(mode === "editor" && !prefs?.disableVirtualRendering
-            ? {
-                scrollNode: () => resolveScrollNode(scrollNode),
-                cardLazyInit: VIRTUAL_RENDERING.cardLazyInit,
-              }
-            : {}),
+          virtualRendering: true,
+          cardLazyInit: VIRTUAL_RENDERING.cardLazyInit,
         }
       : {}),
   };

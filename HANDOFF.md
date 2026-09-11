@@ -156,6 +156,18 @@
 - **回归测试**：`src/lib/native.platform.test.ts`（桌面 true / 安卓 false / 无桥 false / 旧外壳 true）、`src/features/editor/resourceUpload.remote.test.ts`（移动端落盘 / web 内嵌）。
 - **实测**：桌面 CDP `isDesktop()=true`；安卓 WebView `capNative=true` 且三方法缺失（前提核实）；Android `assembleDebug` + `install` 绿。门禁：`tsc` 0 · vitest **951 passed / 16 skipped** · 桌面+移动 `vite build`。
 
+### 2.15 撤回「简洁列表」大纲降级 + 关闭虚拟渲染实测（260911 晚，承接 §2.13）
+- **用户澄清**：`1bb0360` 把大纲降级成的「无筛选/无定位简洁列表」要删（那是 agent 加的）；**功能齐全的应用大纲（筛选/折叠/定位/徽标，用户长期迭代）不能动**。
+- **撤销**：`git checkout 1bb0360^ -- <7 个源文件>` 精确还原（1bb0360 之后无人动过这些文件）→ `outlineEnhance=false`（默认）= **Lake 原生大纲**；`true` = 功能齐全的应用大纲。`OutlineSidebar/OutlineList/OutlineController` 本体零改动，`enhance` 分支删除。
+- **原生大纲「关闭重开为空」真因（推翻 §2.13 结论）**：桌面 `EditorTab` **从未调用 `refreshTocSidebar`**（移动端 `LakeEditor` 有）。Lake 侧栏创建时用空 toc 渲染，若 ready 先于内核 `tocChange`，侧栏永远为空 → 与虚拟渲染无必然关系。修复：`EditorTab` 在 `setDocument` 后、原生模式（`tocEnabled && !outlineEnhance && !locked`）调用一次 `refreshTocSidebar(editor, host)`，销毁时清理重试定时器。
+- **scrollNode 与虚拟渲染解耦**：`scrollNode` 之前只在虚拟渲染开启时下发；原生 TOC 定位/测量依赖真实滚动容器（TROUBLESHOOTING #26），现编辑态始终下发（移动端 `disableVirtualRendering=true` 仍不传）。
+- **关闭虚拟渲染 A/B**（`VIRTUAL_RENDERING.enabled`，文档「测试1112」15 标题，reload×2，本机）：
+  - OFF：首资产 ~4.13s / 36 个资产请求 / DCL ~1.19s / 原生大纲出现 ~4.3s
+  - ON：首资产 ~2.0–2.3s / 仅 2 个视口资产 / DCL ~0.9–1.2s / 原生大纲出现 ~2.9–3.2s
+  - 原生大纲 **两种模式都渲染 15 条**（补上 refreshTocSidebar 后）。**结论：使用原生大纲不需要关虚拟渲染；关掉反而首屏更慢、请求更多。** 当前 `enabled:false` 仅为满足「实测不用」，最终去留守 OFF/ON 待用户拍板。
+- **定位验证限制**：CDP `Input.dispatchMouseEvent` 在本机 Electron 渲染进程收不到（对照：document 级 mousedown/click 计数恒 0），无法用合成点击验证原生大纲点击跳转；已验证 `<a href="#id">` 的 hash 导航能正确滚动内层 `.ne-editor-wrap`。
+- 门禁：`tsc` 0 · vitest **951 passed / 16 skipped** · 桌面+移动 `vite build`。
+
 ## 3. 真正的待办（已剔除全部完成项，按优先级）
 > **260904 后续评估（用户决策 + 本轮核实）**：原 §3.1 对象级 5xx 重试、§3.2 快照 gzip 异步化、§3.5 笔记本 `sort_order` 撞号 —— **已评估不做**（5xx 有"失败不 markSynced→下轮重扫"兜底；gzip 异步收益小；sort_order 撞号场景极低）。
 > 原 §3.3（FTS 全量重建→增量）与 §3.4（1/2 字短词回退）**合并为一条**：计划**整体重做索引**，两件一起落地（同属 `src/core/searchRepository.ts` 的索引/搜索路径，同时覆盖 10 万文档量级）。

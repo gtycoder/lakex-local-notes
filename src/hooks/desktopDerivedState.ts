@@ -88,9 +88,8 @@ export function deriveDesktopView(input: DesktopViewInput) {
     reloadKey: tab.reloadKey ?? 0,
   }));
 
-  // 始终使用应用自建大纲：Lake 原生 toc 依赖已渲染 DOM，虚拟渲染（大文档）下拿不到标题、重开后为空
-  // （LAKEX-CONTRACT「原生 TOC watcher 在虚拟渲染失效」）。outlineEnhance 只控制增强外观，不再决定用哪套。
-  const outlineVisible = tocEnabled && desktopWorkspace === "library";
+  // 大纲增强=开 → 应用自建大纲侧栏；关 → 用 Lake 原生大纲（此侧栏隐藏），原生 by toc.enable。
+  const outlineVisible = tocEnabled && outlineEnhance && desktopWorkspace === "library";
   // 只读锁：store 驱动（可同步），派生集合供多标签 viewer 重建
   const lockedNoteIds = new Set(notes.filter((n) => n.isLocked).map((n) => n.id));
 

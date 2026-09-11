@@ -11,8 +11,7 @@ export interface AppSettings {
   fontSize: number;
   /** 段间距（relax） */
   paragraphSpacing: boolean;
-  /** 大纲增强：true=应用大纲的增强外观（筛选/折叠/H 徽标/悬停）；false=简洁列表（接近原生）。
-   * 注：Lake 原生 toc 依赖已渲染 DOM，大文档虚拟渲染下不可靠（重开后为空），故两端统一使用应用大纲；此开关只控制外观。 */
+  /** 大纲增强：true=应用自建增强大纲（筛选/折叠/H 徽标/悬停/移动端大纲面板）；false=直接使用 Lake 原生大纲（对此不做任何改动）。 */
   outlineEnhance: boolean;
   /** 主题：light=思源 daylight / dark=思源 midnight */
   theme: ThemeMode;

@@ -6,6 +6,7 @@ import {
   createLakeDocument,
   destroyLakeEditor,
   lakeBridge,
+  refreshTocSidebar,
   resolveScrollNode,
   type LakeEditorInstance,
   type LakeEditorPrefs,
@@ -354,6 +355,8 @@ export function EditorTab({ noteId, content, visible, tocEnabled, outlineEnhance
     const mode: "editor" | "viewer" = locked ? "viewer" : "editor";
     let editor: LakeEditorInstance | null = null;
     let detachMediaCardRouter: (() => void) | undefined;
+    let tocRefreshTimer = 0;
+    let disposeTocRefresh: (() => void) | undefined;
     // 与 LakeEditor 保持一致：setDocument 初始化期间也会触发 contentchange，
     // 若此时回调里同步 getDocument() 会把整篇大文档（含图片/OCR JSON）序列化一遍，
     // 在主线程上额外叠加耗时；用 setting 标志屏蔽初始化阶段的重复序列化。
@@ -384,11 +387,20 @@ export function EditorTab({ noteId, content, visible, tocEnabled, outlineEnhance
         tocEnabled,
         noteId,
         host,
-        { ...prefs, disableNativeToc: true }
+        { ...prefs, disableNativeToc: outlineEnhance }
       );
       // 自愈重建时优先使用当前实例最后一次回调拿到的文档，避免 React prop
       // 尚未回流时把刚输入的内容覆盖掉；切换 noteId 时该 ref 已在上面重置。
       editor.setDocument("text/lake", addAssetAccessToken(latestDocumentRef.current));
+      // 原生大纲（outlineEnhance=false）：Lake 侧栏创建时用空 toc 渲染，若 ready 先于内核
+      // tocChange，打开文档时侧栏一直为空（关闭重开尤其明显）。setDocument 后重放一次
+      // tocChange（复用移动端 refreshTocSidebar，内部带收敛重试），销毁时清理其定时器。
+      // outlineEnhance=true 走应用大纲并已禁用原生侧栏，无需重放；锁定 Viewer 不走编辑侧栏。
+      if (tocEnabled && !outlineEnhance && !locked) {
+        tocRefreshTimer = window.setTimeout(() => {
+          disposeTocRefresh = refreshTocSidebar(editor, host);
+        }, 0);
+      }
       // Viewer 的卡片水合订阅在 setDocument 前就已建立；这里再主动请求一次，
       // 确保锁定态首次加载的画板不会只在空文档布局阶段执行水合。
       editor.requestCardHydration?.();
@@ -589,6 +601,9 @@ export function EditorTab({ noteId, content, visible, tocEnabled, outlineEnhance
     });
 
     return () => {
+      window.clearTimeout(tocRefreshTimer);
+      disposeTocRefresh?.();
+      disposeTocRefresh = undefined;
       detachHoverCleaner();
       detachImagePreview();
       detachFileCard();
