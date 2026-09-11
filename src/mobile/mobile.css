@@ -113,11 +113,12 @@ body { font-family: BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino San
 .qn-card__more { width: 32px; height: 32px; margin-right: -6px; border: none; background: transparent; color: var(--b3-theme-on-surface-light); display: flex; align-items: center; justify-content: center; border-radius: 10px; cursor: pointer; -webkit-tap-highlight-color: transparent; }
 .qn-card__more:active { background: var(--b3-list-hover); color: var(--b3-theme-on-surface); }
 
-/* —— 首页分区：白底、从顶部开始，分区之间用发丝线分隔（不用灰底/卡片） —— */
+/* —— 首页分区：白底 + 白色分块卡片（轻投影，与小记同一套语言） —— */
 .mobile-library { background: var(--b3-theme-background); }
-.home-section { background: transparent; margin: 0; border-radius: 0; overflow: visible; }
-.home-section + .home-section { border-top: 1px solid var(--b3-theme-background-light); }
-.home-section__head { display: flex; align-items: center; padding: 12px 16px 2px; }
+.home-section { background: var(--b3-theme-background); border-radius: 14px; margin: 12px 12px 0; overflow: hidden; box-shadow: 0 1px 2px rgba(16,24,40,.05), 0 10px 24px -18px rgba(16,24,40,.35); }
+.home-section:first-child { margin-top: 12px; }
+.home-section:last-child { margin-bottom: 12px; }
+.home-section__head { display: flex; align-items: center; padding: 14px 16px 2px; }
 .home-section__title { font-size: 15px; font-weight: 600; color: var(--b3-theme-on-background); }
 
 /* —— 最近文档：仿语雀纸卡（纸张纹理 + 回形针 + 标题/时间） —— */
