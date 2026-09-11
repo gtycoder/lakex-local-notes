@@ -266,6 +266,13 @@
 - 移动端：文件管理器类按钮不渲染（无对应能力）；窄屏第一部分折单列；弹窗高度按内容自适应（max 78vh）。
 - 收尾调整（用户）：文件位置三个按钮**移到标题右侧**（与「历史版本」同款）；**不再单独展示 ID**（路径里已含两次）。
 - **历史快照压测**：造 46 条（`createHistorySnapshot(force)`，settings.maxSnapshots=50）→ `.note-info-history` `clientH 200 < scrollH 1235` 正常滚动；测完已 `deleteHistory` 全清。
+
+### 2.31 卡片复制动作 + 剪切 + 复制审计（260912 凌晨）
+- **文件名隔离审计**：本地 `note-assets/{noteId}/{file}`、S3 `assets/{noteId}/{file}`、`declared_assets(note_id,filename)`、GC keep `assets/{noteId}/{file}`、`syncEngineController` gcPending、`orphan_assets` **全部带 noteId**；没有"裸文件名"的全局键，不同笔记同名附件安全。以文件名为键的集合都是单篇笔记内（protected refs / declared）。
+- **复制索引补漏**：桌面 `createNoteInWithContent` 只按标题索引（body=""）→ 已让 `duplicateNote` 复制后补 `searchRepository.upsert(newId, title, lakeHtmlToPlain(content))`。新增单测 `duplicateNote 复制文档`（正文可搜 + 附件复制/URL 改写），`store.test.ts` **117 passed**。
+- **卡片菜单复制动作**（4 个都做）：使用默认程序打开 / 打开文件位置 / 剪切 / 复制图片(仅图) / 复制文件路径 / 另存为… / 复制文件名；**去掉「复制地址」**（127.0.0.1 本机 URL 无意义）。新 IPC `copy_asset_image`（clipboard.writeImage）、`save_asset_as`（showSaveDialog+copyFile）；移动端只留 使用默认程序打开/剪切/复制文件名。
+- **剪切**：`EditorTab`/`LakeEditor` 加 `cut` handler（copy 同源序列化写剪贴板 + `execCommand("delete")`），快捷键与文本菜单「剪切」可用；卡片「剪切」= `cutCardElement`。
+- **Electron 反复被"回收"结论（非内存泄露）**：日志是 `Port 1421 already in use` / devtools `bind() failed` + 单实例锁；`crash reason=killed exitCode=15` 是 SIGTERM（session/job 结束或 kill 旧 PID），非崩溃/OOM；RSS 主进程 ~120MB、渲染 ~125MB。**重启前必须先 kill 占用 1421/9222 的旧 PID**；vite 需长驻 tty（§7.1）。
 - **移动端新增**：长按菜单加 复制 / 属性（历史版本原有）。bridge 补 `duplicateNote/getNoteInfo/readAssetPreview/previewHistorySnapshot/openAttachment`；`MobileApp` 的 lakeNative 调试契约同步加。
 - **修复**：移动端 `noteRepository.readNote` 的 SQL **漏 select `parent_id`** → 属性父级链恒为空、复制的副本丢父级；已补列。
 - 门禁：`tsc` 0 · vitest **951 passed / 16 skipped** · 双端 `vite build`。实测：桌面菜单顺序 ✓、属性新字段 ✓、拖拽 720×640→860×740 ✓；移动端长按菜单 ✓、复制（含父级继承）✓、属性弹窗布局 ✓。
