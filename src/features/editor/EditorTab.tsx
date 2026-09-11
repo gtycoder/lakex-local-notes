@@ -756,6 +756,22 @@ export function EditorTab({ noteId, content, visible, tocEnabled, outlineEnhance
             if (next === current) return;
             const scroller = resolveScrollNode(host);
             const top = scroller.scrollTop;
+            // setDocument 会清空并重渲染整篇（tile 异步）→ 期间短暂白屏。用旧内容克隆做固定定位遮罩盖住，
+            // 新内容渲染后移除：用户看到的是"旧内容 → 新内容"，不再有白屏闪烁。
+            let cover: HTMLElement | null = null;
+            try {
+              const rect = host.getBoundingClientRect();
+              cover = host.cloneNode(true) as HTMLElement;
+              Object.assign(cover.style, {
+                position: "fixed", left: `${rect.left}px`, top: `${rect.top}px`,
+                width: `${rect.width}px`, height: `${rect.height}px`,
+                zIndex: "5", pointerEvents: "none", overflow: "hidden",
+                background: "var(--b3-theme-background)",
+              });
+              document.body.appendChild(cover);
+              const coverScroller = cover.querySelector(".ne-editor-wrap") as HTMLElement | null;
+              if (coverScroller) coverScroller.scrollTop = top;
+            } catch { cover = null; }
             latestDocumentRef.current = next;
             editor.setDocument("text/lake", addAssetAccessToken(next));
             const restore = (): void => { if (scroller.isConnected) scroller.scrollTop = top; };
@@ -763,6 +779,9 @@ export function EditorTab({ noteId, content, visible, tocEnabled, outlineEnhance
             window.requestAnimationFrame(restore);
             window.setTimeout(restore, 120);
             window.setTimeout(restore, 400);
+            const dropCover = (): void => { try { cover?.remove(); } catch { /* 忽略 */ } cover = null; };
+            window.requestAnimationFrame(dropCover);
+            window.setTimeout(dropCover, 260);
           }}
         />
       )}
