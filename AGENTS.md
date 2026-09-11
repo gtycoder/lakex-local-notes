@@ -47,6 +47,11 @@ Lake Notes 是**本地优先**笔记应用（Electron + React + better-sqlite3 +
 
 16. **任何打开文档的入口都必须先判定"是否已进回收站/被他端 purge"**：统一用 `src/core/syncDecisions.ts` 的 `isGoneNote({parentId, syncState})`（parentId=TRASH 或 syncState='purged'）。命中则标签页以 `deleted` 打开 → 编辑器只读（复用 `EditorTab.locked` 的 viewer 模式）+ 顶部横幅提示 + 保存被拦时明确提示，**绝不允许静默丢弃编辑**。恢复走 `handleTrashRestored`（重载正文并清标记）。历史上这个守卫只在同步刷新路径里跑，导致重启自动重开"最后文档"时回收站文档可编辑可保存（2026-09-04 用户报）。
 
+17. **拒绝"迎合式找需求"：任何非 bug 改动先证真实价值，证不了就直说"不做"（红线）**。不要为了顺着用户去发明需求、把"看起来该做"的改动包装成必要。判断三问，**缺一即不做**：① 问题真实存在吗（有复现/数据/历史 bug 证据）？② 不做会付出什么代价？③ 收益是否明确大于新增复杂度？用户明确要求这种诚实——"不用迎合我、一定拒绝过分设计"。
+    - **过度设计的信号**（命中即警惕）：为"统一/优雅/以后可能需要"而加抽象层或共享层；把两个本就不同的东西强行合并；用新依赖解决旧依赖能解决的问题；收益只停留在"代码更整洁"而非"解决了已发生的问题"；只给方案不给反对意见。
+    - **实例（SQL 统一）**：曾提议"抽共享 SQL 常量 / 统一两端查询入口"。核查后**否决**：桌面 `notes` 只存元数据（正文在 `.lake`）、树是 `tree_nodes`；移动 `notes` 含 `content`、树是 `folders`，连 `search_index` 列都不同（多 `title`/`raw_hash`）→ 看似"重复"其实是**两套持久化模型**，不是同一份抄了两遍；共享 SQL 文本的前提是先收敛 schema（产品级决策），收益仅是整齐。真正该做的是**共享 core 逻辑 + 跨端对拍测试**（已有 `syncEquivalence`/`syncAdapterEquiv`/`syncDualAB`/`treeRules.equiv`）；**SQLite 也不需要连接池**（单写、better-sqlite3 同步单连接）。
+    - 宁可少做，不要多做；不确定时先自问："这是真问题，还是我想做的？"
+
 ## 4. 关键机制速览（同步）
 
 - 冲突四分支在 `electron/sync.ts` 下载阶段；`baseHash + lastUploadedHash` 存本地 `sync_base`，**绝不上 manifest**。
