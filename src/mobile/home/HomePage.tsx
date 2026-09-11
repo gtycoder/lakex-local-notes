@@ -210,7 +210,7 @@ export function HomePage(props: HomePageProps) {
             </section>
           )}
           {/* key=view：切换书架/列表时重挂载，重放入场动效 */}
-          <section className="home-section" key={libraryView}>
+          <section className={`home-section${libraryView === "list" ? " home-section--list" : ""}`} key={libraryView}>
             <div className="home-section__head">
               <span className="home-section__title">笔记本</span>
             </div>

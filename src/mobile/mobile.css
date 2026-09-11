@@ -118,6 +118,9 @@ body { font-family: BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino San
 .home-section { background: var(--b3-theme-background); border-radius: 14px; margin: 12px 12px 0; overflow: hidden; box-shadow: 0 1px 2px rgba(16,24,40,.05), 0 10px 24px -18px rgba(16,24,40,.35); }
 .home-section:first-child { margin-top: 12px; }
 .home-section:last-child { margin-bottom: 12px; }
+.home-section--list { background: transparent; box-shadow: none; margin: 0; border-radius: 0; overflow: visible; }
+.home-section--list:first-child, .home-section--list:last-child { margin: 0; }
+.home-section--list .home-section__head { padding: 12px 16px 6px; }
 .home-section__head { display: flex; align-items: center; padding: 14px 16px 2px; }
 .home-section__title { font-size: 15px; font-weight: 600; color: var(--b3-theme-on-background); }
 
@@ -158,8 +161,8 @@ body { font-family: BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino San
 .nb-shelf-card:nth-child(6n+6) { --nb-accent: #3fb0c0; }
 
 /* —— 知识库列表（仿语雀：图标块 + 标题 + 副标题「共 N 篇文档 · 更新时间」） —— */
-.nb-list { padding: 8px 8px 12px; }
-.nb-row { display: flex; align-items: center; gap: 12px; padding: 9px 10px; border-radius: 12px; cursor: pointer; -webkit-tap-highlight-color: transparent; transition: background-color var(--mobile-duration-press) ease, transform var(--mobile-duration-press) ease; }
+.nb-list { display: flex; flex-direction: column; gap: 8px; padding: 0 12px 12px; }
+.nb-row { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 12px; background: var(--b3-theme-background); box-shadow: 0 1px 2px rgba(16,24,40,.05), 0 8px 18px -14px rgba(16,24,40,.3); cursor: pointer; -webkit-tap-highlight-color: transparent; transition: background-color var(--mobile-duration-press) ease, transform var(--mobile-duration-press) ease; }
 .nb-row:active { background: var(--b3-list-hover); transform: scale(.99); }
 .nb-row__tile { flex: 0 0 auto; width: 44px; height: 44px; border-radius: 12px; display: flex; align-items: center; justify-content: center; background: color-mix(in srgb, var(--nb-accent) 14%, var(--b3-theme-surface)); color: color-mix(in srgb, var(--nb-accent) 84%, var(--b3-theme-on-surface)); }
 .nb-row__emoji { font-size: 22px; line-height: 1; }
@@ -371,21 +374,26 @@ body { font-family: BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino San
 .mobile-icon-btn:active { transform: scale(.9); }
 @media (prefers-reduced-motion: reduce) {
   .mobile-drawer-mask, .mobile-sheet-mask, .mobile-drawer, .mobile-sheet,
-  .mobile-model, .mobile-model-mask, .mobile-dropdown, .side-panel, .side-mask, .mobile-toast { animation: none; }
+  .mobile-model, .mobile-model-mask, .mobile-dropdown, .side-panel, .side-mask, .mobile-toast, .mobile-settings-page, .mobile-settings-mask { animation: none; }
   .mobile-htab, .mobile-fab, .mobile-icon-btn, .mobile-drawer-item, .mobile-doc-row, .mobile-qcard,
   .bottom-bar-btn, .ln-chevron, .mobile-bottom-bar, .med-btn, .med-ins-item, .med-f-btn { transition: none; }
   .mobile-fab:active, .bottom-bar-btn:active { transform: none; }
   .side-panel, .side-mask { transition: none !important; }
 }
 
-/* ===== 设置页（精仿思源：全屏 + 横向菜单；AGENTS §3.14） ===== */
+/* ===== 设置页（左侧抽屉：非全屏 + 圆角投影 + 左滑跟手关闭） ===== */
+.mobile-settings-mask { position: fixed; inset: 0; z-index: 49; background: var(--mobile-mask); animation: mobile-fade-in 180ms ease-out; }
 .mobile-settings-page {
-  position: fixed; inset: 0; z-index: 50;
+  position: fixed; top: 0; bottom: 0; left: 0; width: min(86%, 360px); z-index: 50;
   display: flex; flex-direction: column;
   background: var(--b3-theme-background, var(--lake-shell));
   color: var(--b3-theme-on-background, var(--lake-text));
-  animation: mobile-fade-in 180ms ease-out;
+  border-radius: 0 18px 18px 0;
+  box-shadow: 0 12px 40px -12px rgba(0, 0, 0, .35);
+  overflow: hidden;
+  animation: mobile-drawer-in 260ms cubic-bezier(.22, 1, .36, 1);
 }
+.mobile-settings-page.side-panel--swiping, .mobile-settings-mask.side-mask--swiping { transition: none; }
 .mobile-settings-head {
   display: flex; align-items: center; justify-content: space-between;
   padding: calc(12px + env(safe-area-inset-top, 0px)) 16px 10px;
