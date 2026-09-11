@@ -402,7 +402,10 @@ export class Store {
       }
     }
     const content = source.content.split(id).join(newId);
-    return this.createNoteInAtTopWithContent(source.parentId, `${source.title} 副本`, content, assets, newId);
+    const created = this.createNoteInAtTopWithContent(source.parentId, `${source.title} 副本`, content, assets, newId);
+    // createNoteInWithContent 只按标题入索引（body=""），复制是整篇正文，必须补一次全量索引，否则副本正文搜不到。
+    try { this.searchRepository.upsert(newId, created.title, lakeHtmlToPlain(content)); } catch { /* 索引失败可由全量重建修复 */ }
+    return created;
   }
 
   private createNoteInWithContent(

@@ -33,7 +33,7 @@ function useDismiss(ref: React.RefObject<HTMLElement | null>, onClose: () => voi
   }, [ref, onClose]);
 }
 
-/** 卡片菜单：打开原始文件 / 打开文件位置 / 复制地址（附件复制文件名）。 */
+/** 卡片菜单：使用默认程序打开 / 打开文件位置 / 复制地址（附件复制文件名）。 */
 export function CardContextMenu({ x, y, item, actions, onClose }: {
   x: number; y: number; item: AttachmentPreviewItem; actions: CardMenuActions; onClose: () => void;
 }) {
@@ -45,7 +45,7 @@ export function CardContextMenu({ x, y, item, actions, onClose }: {
   return createPortal(
     <div ref={menuRef} className="context-menu" style={{ left: Math.min(x, window.innerWidth - MENU_MAX_W), top: Math.min(y, window.innerHeight - 200) }} role="menu" data-context-menu>
       {ref && actions.openOriginal && (
-        <button role="menuitem" onClick={() => { actions.openOriginal?.(item); onClose(); }}><ExternalLink size={15} /><span>打开原始文件</span></button>
+        <button role="menuitem" onClick={() => { actions.openOriginal?.(item); onClose(); }}><ExternalLink size={15} /><span>使用默认程序打开</span></button>
       )}
       {ref && actions.showInFolder && (
         <button role="menuitem" onClick={() => { actions.showInFolder?.(item); onClose(); }}><FolderOpen size={15} /><span>打开文件位置</span></button>
