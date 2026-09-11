@@ -96,6 +96,7 @@ export class Diagnostics {
     orphanRowsFileMissing: Array<{ id: number; noteId: string; filename: string }>;
     treeChecked: number;
     treeDanglingParent: Array<{ id: string; title: string; parentId: string }>;
+    metaParentMismatch: Array<{ id: string; title: string; noteParent: string | null; treeParent: string | null }>;
     refsChecked: number;
     refsMissingResource: Array<{ noteId: string; filename: string }>;
     checkedAt: string;
@@ -154,6 +155,14 @@ export class Diagnostics {
          AND NOT EXISTS (SELECT 1 FROM tree_nodes p WHERE p.id = t.parent_id)
        ORDER BY t.title LIMIT 10`
     ).all() as Array<{ id: string; title: string; parentId: string }>;
+    // ④.1 元数据一致性：notes.parent_id 与 tree_nodes.parent_id 不一致（本地自相矛盾）——同类"静默错挂"的现场取证。
+    // 远端清单 parent 与本地不同属同步语义（由 syncEngine 字段判据修复），本地两表互斥一定是坏数据。
+    const metaParentMismatch = this.ctx.db.prepare(
+      `SELECT n.id, n.title, n.parent_id AS noteParent, t.parent_id AS treeParent
+       FROM notes n JOIN tree_nodes t ON t.id = n.id
+       WHERE n.deleted_at IS NULL AND n.parent_id IS NOT t.parent_id
+       ORDER BY n.title LIMIT 10`
+    ).all() as Array<{ id: string; title: string; noteParent: string | null; treeParent: string | null }>;
     const orphanRows = this.ctx.db.prepare("SELECT * FROM orphan_assets").all() as OrphanAssetRow[];
     const orphanRowsFileMissing: Array<{ id: number; noteId: string; filename: string }> = [];
     for (const o of orphanRows) {
@@ -172,6 +181,7 @@ export class Diagnostics {
       orphanRowsFileMissing,
       treeChecked: treeRows.c,
       treeDanglingParent,
+      metaParentMismatch,
       refsChecked: refsChecked.length,
       refsMissingResource,
       checkedAt,

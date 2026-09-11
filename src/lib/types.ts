@@ -194,6 +194,8 @@ export interface DataHealthReport {
   /** 树完整性：parent_id 指向不存在节点的条目（侧栏/回收站渲染不出来，但仍在同步与资源聚合里）。 */
   treeChecked: number;
   treeDanglingParent: Array<{ id: string; title: string; parentId: string }>;
+  /** 元数据一致性：notes.parent_id 与 tree_nodes.parent_id 不一致（本地自相矛盾的错挂）。 */
+  metaParentMismatch: Array<{ id: string; title: string; noteParent: string | null; treeParent: string | null }>;
   refsChecked: number;
   refsMissingResource: Array<{ noteId: string; filename: string }>;
   checkedAt: string;
