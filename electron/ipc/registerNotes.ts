@@ -1,4 +1,4 @@
-import { BrowserWindow, clipboard, dialog, shell } from "electron";
+import { app, BrowserWindow, clipboard, dialog, nativeImage, shell } from "electron";
 import fs from "node:fs";
 import path from "node:path";
 import type { DraftJournal } from "../draftJournal.js";
@@ -177,6 +177,27 @@ export function registerNotesIpc(
     const full = path.join(store.noteAssetsPathFor(noteId), filename);
     clipboard.writeText(full);
     return full;
+  });
+  /** 复制图片到系统剪贴板（粘贴到聊天/文档直接出图）。 */
+  ipc.handle("copy_asset_image", (noteId: string, filename: string) => {
+    assertAttachmentSegments(noteId, filename);
+    const full = path.join(store.noteAssetsPathFor(noteId), filename);
+    if (!fs.existsSync(full)) throw new IpcInputError("附件文件不存在（可能已清理）");
+    const image = nativeImage.createFromPath(full);
+    if (image.isEmpty()) throw new IpcInputError("该附件不是可复制的图片");
+    clipboard.writeImage(image);
+    return { ok: true };
+  });
+  /** 另存为：把单个附件复制到用户选择的位置。 */
+  ipc.handle("save_asset_as", async (noteId: string, filename: string) => {
+    assertAttachmentSegments(noteId, filename);
+    const full = path.join(store.noteAssetsPathFor(noteId), filename);
+    if (!fs.existsSync(full)) throw new IpcInputError("附件文件不存在（可能已清理）");
+    const win = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0];
+    const result = await dialog.showSaveDialog(win, { defaultPath: path.join(app.getPath("downloads"), filename) });
+    if (result.canceled || !result.filePath) return { ok: false, canceled: true };
+    fs.copyFileSync(full, result.filePath);
+    return { ok: true, path: result.filePath };
   });
   /** 在文件管理器中显示笔记对应的 \`.lake\` 文件（.lake 的默认程序即本应用，不另做"用默认程序打开"）。 */
   ipc.handle("reveal_note_file", (id: string) => {

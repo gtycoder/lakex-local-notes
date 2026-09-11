@@ -17,7 +17,7 @@ import { native } from "../../lib/native";
 import { attachImagePreviewClick } from "./imagePreview";
 import { ImageLightbox } from "./ImageLightbox";
 import { attachFileCardClick, buildAttachmentPreviewItem, openAttachmentPreview, createCardHoverResidueCleaner, resolveCardAsset, type AttachmentPreviewItem } from "../attachment/attachmentPreviewController";
-import { CardContextMenu, TextContextMenu } from "./CardContextMenu";
+import { CardContextMenu, TextContextMenu, cutCardElement } from "./CardContextMenu";
 import { installMediaCardCategoryRouter } from "./mediaCardRouting";
 import { isMediaFilename } from "../../core/assetNaming.js";
 import { AttachmentPreview } from "../attachment/AttachmentPreview";
@@ -107,7 +107,7 @@ export function EditorTab({ noteId, content, visible, tocEnabled, outlineEnhance
   });
   const [editorState, setEditorState] = useState<LakeEditorInstance | null>(null);
   const [rebuildTick, setRebuildTick] = useState(0);
-  const [cardMenu, setCardMenu] = useState<{ x: number; y: number; item: AttachmentPreviewItem } | null>(null);
+  const [cardMenu, setCardMenu] = useState<{ x: number; y: number; item: AttachmentPreviewItem; el: HTMLElement } | null>(null);
   const [textMenu, setTextMenu] = useState<{ x: number; y: number } | null>(null);
   const onChangeRef = useRef(onChange);
   const onEditorReadyRef = useRef(onEditorReady);
@@ -191,6 +191,19 @@ export function EditorTab({ noteId, content, visible, tocEnabled, outlineEnhance
       if (!html) return;
       const upgraded = upgradePastedHtml(html);
       if (upgraded !== html) dt.setData("text/html", upgraded);
+    };
+    // 剪切：与 copy 同源序列化写入剪贴板，再删除选区（走 execCommand 的 input 路径，编辑器模型才跟得上）。
+    // 没有这个 handler 时依赖浏览器默认 cut，Lake 未实现剪贴板 cut，快捷键/菜单都无效。
+    const cutHandler = (event: ClipboardEvent) => {
+      const selection = window.getSelection();
+      if (!event.clipboardData || !selection || selection.isCollapsed || selection.rangeCount === 0) return;
+      const range = selection.getRangeAt(0);
+      if (!host.contains(range.commonAncestorContainer)) return;
+      event.clipboardData.setData("text/html", normalizeClipboardHtml(range.cloneContents(), document));
+      event.clipboardData.setData("text/plain", selection.toString());
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      try { document.execCommand("delete"); } catch { /* 忽略 */ }
     };
     // 画板卡片交互（选择、删除、工具栏）偶发把 Lake 滚动容器重置到顶部。
     // 先记录交互前位置，若后续渲染发生大幅回跳则恢复；仅作用于画板卡片。
@@ -340,6 +353,7 @@ export function EditorTab({ noteId, content, visible, tocEnabled, outlineEnhance
     document.addEventListener("pointerdown", documentBoardPointerGuard, true);
     document.addEventListener("keydown", documentBoardKeyGuard, true);
     host.addEventListener("copy", copyHandler, true);
+    host.addEventListener("cut", cutHandler, true);
     host.addEventListener("paste", pasteHandler, true);
 
     // 锁切换会重建实例：如果真实滚动节点仍在，当前节点的值优先；只有节点已被
@@ -631,6 +645,7 @@ export function EditorTab({ noteId, content, visible, tocEnabled, outlineEnhance
       window.clearTimeout(heal.timer);
       heal.timer = undefined;
       host.removeEventListener("copy", copyHandler, true);
+      host.removeEventListener("cut", cutHandler, true);
       host.removeEventListener("paste", pasteHandler, true);
       onEditorReadyRef.current?.(noteId, null);
       detachMediaCardRouter?.();
@@ -682,8 +697,10 @@ export function EditorTab({ noteId, content, visible, tocEnabled, outlineEnhance
       data-note-id={noteId}
       onContextMenu={(event) => {
         event.preventDefault();
-        const item = resolveCardAsset(event.target as HTMLElement);
-        if (item) { setTextMenu(null); setCardMenu({ x: event.clientX, y: event.clientY, item }); return; }
+        const target = event.target as HTMLElement;
+        const item = resolveCardAsset(target);
+        const card = target.closest("ne-card") as HTMLElement | null;
+        if (item && card) { setTextMenu(null); setCardMenu({ x: event.clientX, y: event.clientY, item, el: card }); return; }
         setCardMenu(null);
         setTextMenu({ x: event.clientX, y: event.clientY });
       }}
@@ -699,7 +716,11 @@ export function EditorTab({ noteId, content, visible, tocEnabled, outlineEnhance
           actions={{
             openOriginal: (it) => { if (it.ref) void native.openAttachment(it.ref.noteId, it.ref.filename); },
             showInFolder: (it) => { if (it.ref) void native.showAttachmentInFolder(it.ref.noteId, it.ref.filename); },
-            copyText: (t) => { void navigator.clipboard.writeText(t).catch(() => undefined); },
+            cut: () => { cutCardElement(cardMenu.el); },
+            copyImage: (it) => { if (it.ref) void native.copyAssetImage(it.ref.noteId, it.ref.filename); },
+            copyPath: (it) => { if (it.ref) void native.copyAssetPath(it.ref.noteId, it.ref.filename); },
+            saveAs: (it) => { if (it.ref) void native.saveAssetAs(it.ref.noteId, it.ref.filename); },
+            copyName: (it) => { void navigator.clipboard.writeText(it.name).catch(() => undefined); },
           }}
           onClose={() => setCardMenu(null)}
         />

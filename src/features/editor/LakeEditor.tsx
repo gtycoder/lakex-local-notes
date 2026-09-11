@@ -8,7 +8,7 @@ import { shouldAcceptEditorChange } from "../../core/editorChangeGuard";
 import { ImageLightbox } from "./ImageLightbox";
 import { attachImagePreviewClick } from "./imagePreview";
 import { attachFileCardClick, buildAttachmentPreviewItem, openAttachmentPreview, createCardHoverResidueCleaner, resolveCardAsset, type AttachmentPreviewItem } from "../attachment/attachmentPreviewController";
-import { CardContextMenu } from "./CardContextMenu";
+import { CardContextMenu, cutCardElement } from "./CardContextMenu";
 import { attachLongPress } from "./longPress";
 import { installMediaCardCategoryRouter } from "./mediaCardRouting";
 import { isMediaFilename } from "../../core/assetNaming.js";
@@ -32,7 +32,7 @@ export function LakeEditor({ noteId, content, mode = "editor", tocEnabled, onCha
   const onChangeRef = useRef(onChange);
   const onEditorReadyRef = useRef(onEditorReady);
   const [error, setError] = useState<string | null>(null);
-  const [cardMenu, setCardMenu] = useState<{ x: number; y: number; item: AttachmentPreviewItem } | null>(null);
+  const [cardMenu, setCardMenu] = useState<{ x: number; y: number; item: AttachmentPreviewItem; el: HTMLElement } | null>(null);
   onChangeRef.current = onChange;
   onEditorReadyRef.current = onEditorReady;
 
@@ -41,8 +41,10 @@ export function LakeEditor({ noteId, content, mode = "editor", tocEnabled, onCha
     const host = hostRef.current;
     if (!host) return;
     return attachLongPress(host, (x, y, target) => {
-      const item = resolveCardAsset(target as HTMLElement);
-      if (item) setCardMenu({ x, y, item });
+      const el = target as HTMLElement;
+      const item = resolveCardAsset(el);
+      const card = el.closest?.("ne-card") as HTMLElement | null;
+      if (item && card) setCardMenu({ x, y, item, el: card });
     });
   }, []);
 
@@ -61,6 +63,17 @@ export function LakeEditor({ noteId, content, mode = "editor", tocEnabled, onCha
       event.clipboardData.setData("text/plain", plainText);
       event.preventDefault();
       event.stopImmediatePropagation();
+    };
+    const cutRichSelection = (event: ClipboardEvent) => {
+      const selection = window.getSelection();
+      if (!event.clipboardData || !selection || selection.isCollapsed || selection.rangeCount === 0) return;
+      const range = selection.getRangeAt(0);
+      if (!host.contains(range.commonAncestorContainer)) return;
+      event.clipboardData.setData("text/html", normalizeClipboardHtml(range.cloneContents(), document));
+      event.clipboardData.setData("text/plain", selection.toString());
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      try { document.execCommand("delete"); } catch { /* 忽略 */ }
     };
     const pasteHandler = (event: ClipboardEvent) => {
       const dt = event.clipboardData;
@@ -82,6 +95,7 @@ export function LakeEditor({ noteId, content, mode = "editor", tocEnabled, onCha
     };
     host.addEventListener("mousedown", preventCardBlur, true);
     host.addEventListener("copy", copyRichSelection, true);
+    host.addEventListener("cut", cutRichSelection, true);
     host.addEventListener("paste", pasteHandler, true);
     // 点击任意位置清理 Lake 卡片 hover 残留（打开系统应用/遮罩时 mouseleave 可能被吞）
     const detachHoverCleaner = createCardHoverResidueCleaner(host);
@@ -154,6 +168,7 @@ export function LakeEditor({ noteId, content, mode = "editor", tocEnabled, onCha
     return () => {
       host.removeEventListener("mousedown", preventCardBlur, true);
       host.removeEventListener("copy", copyRichSelection, true);
+      host.removeEventListener("cut", cutRichSelection, true);
       host.removeEventListener("paste", pasteHandler, true);
       detachHoverCleaner();
       detachImagePreview();
@@ -190,7 +205,8 @@ export function LakeEditor({ noteId, content, mode = "editor", tocEnabled, onCha
           item={cardMenu.item}
           actions={{
             openOriginal: openOriginalFromMenu,
-            copyText: (t) => { void navigator.clipboard.writeText(t).catch(() => undefined); },
+            cut: () => { cutCardElement(cardMenu.el); },
+            copyName: (it) => { void navigator.clipboard.writeText(it.name).catch(() => undefined); },
           }}
           onClose={() => setCardMenu(null)}
         />
