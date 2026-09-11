@@ -5,7 +5,8 @@
 > **§8 是移动端（安卓）专职交接**，由移动端会话维护；桌面会话不要改 §8，移动端会话不要改 §0-§7 之外的桌面文件。
 
 ## 0. 当前基线（新会话开工前）
-- 分支/远端：当前在 **`refactor/store-split`**（store.ts 分批重构 8 commits 已推 Gitee，终态 2352→1103 行见 §3.6）；260911 在其上追加 3 个提交：`2ecac39`（同步收敛修复）、`a18a95b`（安卓 AssetServer 403 + Dock 键盘竞态修复）、HANDOFF 文档。**未推送、未合 master**（待用户验收；用户在做桌面搜索重做）。
+- 分支/远端：当前在 **`refactor/store-split`**（store.ts 分批重构 8 commits 已推 Gitee，终态 2352→1103 行见 §3.6）；260911 在其上追加 3 个提交：`2ecac39`（同步收敛修复）、`a18a95b`（安卓 AssetServer 403 + Dock 键盘竞态修复）、HANDOFF 文档。**未推送、未合 master**（待用户验收）。
+- **搜索重构（260911 本会话）**：在 `refactor/store-split` 之上新建 **`feat/search-refactor`** 分支完成（未推送、未合）；统一 FTS5(unicode61)+单字预分词 + 增量账本 + 桌面/移动同核心；详见 §2.11。
 - 质量门槛：`tsc` 0 error · vitest **923 passed / 15 skipped**（260911）· 桌面 `vite build` + 移动 `vite build -c vite.mobile.config.ts` 全绿 · Android `testDebugUnitTest` + `assembleDebug` 通过（计数变动见 §2；别把数字写回 AGENTS/README）。
 - **真机级验收（260910-260911，三轮）**：
   - 第一轮（2 桌面 + 1 移动）：A/B 同步 push/pull、新建/删除传播、移动端 WAL 崩溃恢复、旧 IndexedDB 快照迁移 全通过。
@@ -113,13 +114,24 @@
 1. **最近文档/搜索/新建点开直达文档**：`NotebookWorkspace` 启动逻辑改"显式 `initialNoteId` 优先打开并置为活动，再补开上次保存的标签"（旧逻辑"恢复上次标签"优先 ⇒ 点最近文档打开的是之前旧标签）。
 2. **第二层底栏滚动隐藏/显示**：阅读态文档下滑超 8px → 底栏 `mobile-bottom-bar--hidden`；上滑超 8px → 恢复（思源设计；修"阅读时底栏消失不再出现"）。
 
+### 2.11 搜索整体重构（260911，本会话；分支 `feat/search-refactor`，未推送/未合）
+- **问题**：桌面 trigram 天生要求 ≥3 字 → 被迫「1 字只搜标题、2 字只搜标题、≥3 才搜正文」；移动端则是 `LIKE` 裸扫 `notes.content`（命中标签/JSON、摘要不可读、无排序）；两端两套语义。
+- **方案**：统一 **FTS5 + `unicode61` + 纯 TS 单字预分词**。
+  - 新增 `src/core/search/`：`segment.ts`（中文逐字/拉丁整词）、`query.ts`（引号 phrase + AND + LIKE 转义）、`snippet.ts`（从原文生成带 `<mark>` 的安全 HTML）；桌面/移动共用同一核心。
+  - 桌面 `electron/searchRepository.ts` 重写：`search_index` 增量账本（内容 hash 短路 + 稳定 rowid，删除 O(1)）；`ensureIndex()` 只在账本与活跃文档数不符时重建（**去掉启动全量重建**）；搜索按 `bm25(title 权重 10)` + 标题精确/前缀/包含分级 + `updated_at`。
+  - 移动 `src/mobile/searchIndex.ts`：同一核心 + FTS5；`reconcileIndex()` 启动/同步后对账，`saveNote` 增量索引、`trashNote` 移除；删除旧的 `src/core/mobileSearch.ts`（LIKE 方案）。
+  - schema：`electron/schemaInit.ts` / `src/mobile/schema.ts` 建 `notes_fts(title, body, tokenize='unicode61')` + `search_index`；旧 trigram 直接 DROP 重建（开发期可删重建，AGENTS §3 #7/#10）。
+- **实测（模拟器 emulator-5554，真机同引擎 SQLCipher 3.53.3）**：1 字/2 字/3+ 字统一、标题优先、`<mark>` 摘要、回收站排除、增删改增量与清理 全部通过；与桌面同 fixture 结果逐条一致。
+- **基准**（`electron/searchRepository.benchmark.test.ts`，opt-in）：5000 文档 build 178ms / 9.8MB / 查询 3–8ms；20000 文档 build 730ms / 39.3MB / 查询 12–34ms（含 tree_nodes/notes JOIN + bm25）。
+- **门禁**：`tsc` 0 · vitest **935 passed / 16 skipped** · 桌面+移动 `vite build` 全绿 · Android `assembleDebug` + 安装通过。
+- **留尾**：设置页「重建搜索索引」按钮（IPC `rebuild_search_index` 已就绪）；移动端改用编辑器 `getDocument("text/plain")` 作为索引源（当前用共享 `lakeHtmlToPlain` 兜底，普通文本两端已一致）。
 ## 3. 真正的待办（已剔除全部完成项，按优先级）
 > **260904 后续评估（用户决策 + 本轮核实）**：原 §3.1 对象级 5xx 重试、§3.2 快照 gzip 异步化、§3.5 笔记本 `sort_order` 撞号 —— **已评估不做**（5xx 有"失败不 markSynced→下轮重扫"兜底；gzip 异步收益小；sort_order 撞号场景极低）。
 > 原 §3.3（FTS 全量重建→增量）与 §3.4（1/2 字短词回退）**合并为一条**：计划**整体重做索引**，两件一起落地（同属 `src/core/searchRepository.ts` 的索引/搜索路径，同时覆盖 10 万文档量级）。
 > 原 §3.6（其余浮层统一）**基本已完成**：顶栏菜单/右键菜单/标签切换器已进 b3 令牌（`src/b3/components.css` + `src/b3/layout.css`）；仅**草稿恢复框**（`draft-recovery-*`，`overlays.css` 自定义类 + `--lake-*` 令牌）未收进 b3 套，属可选小收尾。
 
 **性能/健壮性**
-1. **FTS 索引重做**（合并原 P4-1 增量 + P4-2 短词回退）：`src/core/searchRepository.ts` 的 `rebuild()` 现每次启动 `DELETE FROM notes_fts` 全清 + 逐条重插、trigram 只索引 ≥3 字；改为增量账本（`updated_at`/旁表记账，只重建缺失/过期）+ 1/2 字短词回退（标题+正文 LIKE）。可动 FTS schema（dev 可删重建），**按 10 万文档/100 万附件量级验证**。← 近期待办。
+1. ~~**FTS 索引重做**~~ **✅ 已完成（260911，见 §2.11）**：统一 FTS5 + unicode61 + 单字预分词 + 增量账本；不再有 1/2/3 字分支。留尾：设置页「重建搜索索引」按钮、移动端 `getDocument("text/plain")` 索引源。
 2. 其余浮层收尾（可选，成本低）：仅**草稿恢复框**未进 b3 套；如统一照 §2.1 路子 + 同步 `settingsSearch.ts` 注册表即可。
 
 **移动端 UI 对齐思源 · 用户首轮验收反馈修复（260909）**
@@ -203,7 +215,7 @@
 
 ## 5. 下一步建议（新会话）
 1. 先跑 §6 门禁确认基线；有问题先测再改。
-2. **用户正在自行重做桌面端搜索**（FTS 索引重做，§3 性能项）——**别碰搜索相关文件**（`src/core/searchRepository.ts` 等），避免撞车；等用户的批次出来再做交叉验证。
+2. **搜索重构已完成（§2.11，分支 `feat/search-refactor`）**：`src/core/search/` 共享核心 + 桌面/移动 FTS5 统一，设备实测通过；待用户验收后合 master。留尾：设置页重建按钮、移动端编辑器纯文本源。
 3. 待用户验收 `refactor/store-split` 上的 260911 批次（2ecac39 同步收敛 + a18a95b 安卓修复）后合 master；用户可能要求真机（小米）复验 §8.7.0。
 4. 移动端一律按 **§8**（§8.0 移动端/桌面硬隔离已解除——现桌面与移动可自由改；仅 `src/b3/**` 思源 vendored 组件等共享/合规件仍须谨慎）。
 5. 任何同步/GC 改动**先读** `AGENTS.md §3 #11/#12/#13/#15/#16` + `docs/SYNC-PROTOCOL.md` + `docs/S3-GC-DESIGN.md`，改前想清"声明是否仍全、被引用对象会不会被 GC 删、跨端自愈是否成立、复活路径在哪"。

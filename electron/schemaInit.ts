@@ -131,8 +131,23 @@ export class SchemaInit {
     if (!treeCols.some((c) => c.name === "icon")) {
       this.ctx.db.exec("ALTER TABLE tree_nodes ADD COLUMN icon TEXT");
     }
-    // M2 全文搜索：FTS5 trigram（中文子串友好）。note_id UNINDEXED 用于关联删除。
-    this.ctx.db.exec(`CREATE VIRTUAL TABLE IF NOT EXISTS notes_fts USING fts5(title, body, note_id UNINDEXED, tokenize='trigram')`);
+    // M2 全文搜索 v2：FTS5 + unicode61；中文按单字预分词（src/core/search），任意长度查询都可走索引。
+    // 旧库若仍是 trigram，直接 DROP 重建（开发期数据可重建，AGENTS §3 #7/#10）。
+    const ftsSql = (this.ctx.db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='notes_fts'").get() as { sql: string | null } | undefined)?.sql ?? "";
+    if (ftsSql && !ftsSql.includes("unicode61")) {
+      this.ctx.db.exec("DROP TABLE notes_fts");
+      this.ctx.db.exec("DROP TABLE IF EXISTS search_index");
+    }
+    this.ctx.db.exec("CREATE VIRTUAL TABLE IF NOT EXISTS notes_fts USING fts5(title, body, tokenize='unicode61')");
+    this.ctx.db.exec(
+      "CREATE TABLE IF NOT EXISTS search_index (" +
+      "note_id TEXT PRIMARY KEY, " +
+      "fts_rowid INTEGER NOT NULL, " +
+      "title_hash TEXT NOT NULL, " +
+      "body_hash TEXT NOT NULL, " +
+      "indexed_at TEXT NOT NULL)"
+    );
+    this.ctx.db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_search_index_rowid ON search_index(fts_rowid)");
     if (!cols.some((c) => c.name === "text_cache")) {
       this.ctx.db.exec("ALTER TABLE notes ADD COLUMN text_cache TEXT");
     }

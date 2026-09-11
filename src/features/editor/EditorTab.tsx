@@ -60,11 +60,13 @@ export function clearScrollMemory(noteId: string): void {
 export function locateEditorSearchHit(noteId: string, query: string): boolean {
   const host = document.querySelector<HTMLElement>(`.lake-editor-tab[data-note-id="${escapeId(noteId)}"]`);
   if (!host || !query.trim()) return false;
-  const needle = query.trim().toLocaleLowerCase();
+  const terms = query.trim().toLocaleLowerCase().split(/\s+/).filter(Boolean);
+  if (terms.length === 0) return false;
   const walker = document.createTreeWalker(host, NodeFilter.SHOW_TEXT);
   let node: Text | null = null;
   while ((node = walker.nextNode() as Text | null)) {
-    if ((node.nodeValue ?? "").toLocaleLowerCase().includes(needle)) break;
+    const value = (node.nodeValue ?? "").toLocaleLowerCase();
+    if (terms.some((term) => value.includes(term))) break;
   }
   if (!node?.parentElement) return false;
   const target = node.parentElement.closest<HTMLElement>("[data-node-id], .ne-p, .ne-h, .ne-block, p, h1, h2, h3, h4, h5, h6") ?? node.parentElement;

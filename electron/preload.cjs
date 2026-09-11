@@ -46,6 +46,7 @@ contextBridge.exposeInMainWorld("lakeNative", {
   confirmRelaunch: () => invoke("confirm_relaunch"),
   setNodeIcon: (id, icon) => invoke("set_node_icon", id, icon),
   searchNotes: (query, limit) => invoke("search_notes", query, limit),
+  rebuildSearchIndex: () => invoke("rebuild_search_index"),
   deleteNote: (id) => invoke("delete_note", id),
   setNoteLocked: (id, locked) => invoke("set_note_locked", id, locked),
   listTreeNodes: () => invoke("list_tree_nodes"),

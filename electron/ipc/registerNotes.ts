@@ -115,6 +115,8 @@ export function registerNotesIpc(
     if (typeof query !== "string") throw new IpcInputError("搜索词格式无效");
     return store.searchNotes(query, clampSearchLimit(limit));
   });
+  // 手动重建全文索引（异常/换分词器后修复用；正常启动走增量对账）。
+  ipc.handle("rebuild_search_index", () => { store.rebuildSearchIndex(); return true; });
   ipc.handle("delete_note", (id: string) => store.deleteNote(id));
   ipc.handle("set_note_locked", (id: string, locked: boolean) => { store.setNoteLocked(id, locked); return store.readNote(id); });
   ipc.handle("list_tree_nodes", () => store.listTreeNodes());

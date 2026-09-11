@@ -14,16 +14,6 @@ interface SearchResult {
   parentTitle?: string | null;
 }
 
-/** 把 highlight() 输出的 <mark> 保留、其余 HTML 转义（防文档内容注入） */
-function sanitizeSnippet(s: string): string {
-  return s
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/&lt;mark&gt;/g, "<mark>")
-    .replace(/&lt;\/mark&gt;/g, "</mark>");
-}
-
 function formatUpdatedAt(value?: string): string {
   if (!value) return "";
   const date = new Date(value);
@@ -115,10 +105,10 @@ export function SearchPanel({ open, initialQuery, onOpenNote, onClose }: {
           {searching && <span className="search-panel-spinner" aria-label="搜索中" />}
           <button className="search-panel-close" onClick={onClose} title="关闭（Esc）" aria-label="关闭搜索"><X size={15} /></button>
         </div>
-        <div id="search-panel-help" className="search-panel-help">不搜索小记 · 1 个字符匹配标题，2 个及以上匹配标题和正文 · ↑↓ 选择 · Enter 打开并定位（已打开则切换）</div>
+        <div id="search-panel-help" className="search-panel-help">不搜索小记 · 标题优先，正文命中 · ↑↓ 选择 · Enter 打开并定位（已打开则切换）</div>
         <div className="search-panel-results b3-list b3-list--background" role="listbox" aria-label="搜索结果">
           {results.length === 0 && query.trim() && !searching && (
-            <div className="ln-empty"><strong>没有匹配结果</strong><span>试试文档标题，或输入至少 2 个字符搜索正文</span></div>
+            <div className="ln-empty"><strong>没有匹配结果</strong><span>试试文档标题或正文关键词</span></div>
           )}
           {!query.trim() && (
             <div className="ln-empty ln-empty--idle"><Search size={18} /><span>搜索你的 Lake 文档</span><small>标题优先，正文命中后会自动定位</small></div>
@@ -135,7 +125,7 @@ export function SearchPanel({ open, initialQuery, onOpenNote, onClose }: {
               <span className="b3-list-item__graphic"><FileText size={14} /></span>
               <span className="b3-list-item__text ln-row2__main">
                 <span className="ln-row2__title">{result.title || "无标题"}</span>
-                {result.snippet && <span className="search-snippet" dangerouslySetInnerHTML={{ __html: sanitizeSnippet(result.snippet) }} />}
+                {result.snippet && <span className="search-snippet" dangerouslySetInnerHTML={{ __html: result.snippet }} />}
                 <span className="ln-row2__meta">{result.parentTitle || "个人笔记"}{formatUpdatedAt(result.updatedAt) ? ` · ${formatUpdatedAt(result.updatedAt)}` : ""}</span>
               </span>
               <span className={`badge ${result.matchType === "body" ? "badge--accent" : "badge--muted"}`}>{result.matchType === "body" ? "正文" : "标题"}</span>

@@ -186,8 +186,7 @@ export class Store {
     this.searchRepository = new SearchRepository({
       db: this.db,
       trashNotebookId: TRASH_NOTEBOOK_ID,
-      ensureNoteCaches: (noteId) => this.ensureNoteCaches(noteId),
-      readNoteCaches: (noteId) => this.readNoteCaches(noteId),
+      derivePlainText: (noteId) => this.derivePlainText(noteId),
     });
     this.syncReconciliation = new SyncReconciliation({
       db: this.db,
@@ -195,6 +194,7 @@ export class Store {
       notePathFor: (noteId) => this.notePath(noteId),
       readNoteCaches: (noteId) => this.readNoteCaches(noteId),
       upsertSearch: (noteId, title, body) => this.searchRepository.upsert(noteId, title, body),
+      removeSearch: (noteIds) => this.searchRepository.remove(noteIds),
       listNotesForSync: () => this.noteQueries.listNotesForSync(),
     });
     this.noteExport = new NoteExport({
@@ -223,16 +223,19 @@ export class Store {
       readTreeNode: (id) => this.readTreeNode(id),
       readNoteCaches: (noteId) => this.readNoteCaches(noteId),
       upsertSearch: (noteId, title, body) => this.searchRepository.upsert(noteId, title, body),
+      removeSearch: (noteIds) => this.searchRepository.remove(noteIds),
       resolveParentNotebook: () => this.resolveParentNotebook(),
     });
     this.schemaInit.seed();
-    // M2：全量重建全文索引（幂等；文档量小，启动开销可忽略）
-    // V5 §5.7：启动耗时实测（100/1000/5000/10000 篇梯度；显著慢再考虑按需重建）
+    // M2 v2：增量账本；仅在账本缺失/与活跃文档数不符时全量重建，正常启动零重建。
     const ftsStart = Date.now();
-    try { this.searchRepository.rebuild(); } catch (error) {
+    try {
+      if (this.searchRepository.ensureIndex()) {
+        console.info(`[perf] FTS rebuild ${Date.now() - ftsStart}ms`);
+      }
+    } catch (error) {
       console.warn("[store] 全文索引重建失败（不影响使用）:", error);
     }
-    console.info(`[perf] FTS rebuild ${Date.now() - ftsStart}ms`);
   }
 
   private notePath(id: string): string {
@@ -389,6 +392,8 @@ export class Store {
           .run(id, DEFAULT_WORKSPACE_ID, parent, normalizedTitle, id, sortOrder, updatedAt, updatedAt);
       });
       tx();
+      // 新建文档立即入索引（标题即可搜）；索引失败不阻断创建，可由全量重建修复。
+      try { this.searchRepository.upsert(id, normalizedTitle, ""); } catch { /* 忽略 */ }
     } catch (error) {
       // 本地原子性边界：元数据未成功时回收目标半成品；若元数据已成功，绝不误删。
       const exists = this.db.prepare("SELECT 1 FROM notes WHERE id=?").get(id);
@@ -465,6 +470,19 @@ export class Store {
     this.db.prepare("UPDATE notes SET md_cache=?, text_cache=? WHERE id=?").run(markdown, plain, id);
     const titleRow = this.db.prepare("SELECT title FROM notes WHERE id=?").get(id) as { title: string } | undefined;
     this.searchRepository.upsert(id, titleRow?.title ?? "", plain ?? "");
+  }
+
+  /** 从磁盘 .lake 派生纯文本并写缓存列（不触发索引）；全量重建兜底用。 */
+  private derivePlainText(id: string): string | null {
+    const row = this.db.prepare("SELECT text_cache FROM notes WHERE id=?").get(id) as { text_cache: string | null } | undefined;
+    if (!row) return null;
+    if (row.text_cache != null) return row.text_cache;
+    const content = fs.existsSync(this.notePath(id)) ? fs.readFileSync(this.notePath(id), "utf8") : "";
+    const markdown = lakeHtmlToMarkdown(content);
+    const plain = lakeHtmlToPlain(content);
+    if (!markdown && !plain) return null;
+    this.db.prepare("UPDATE notes SET md_cache=?, text_cache=? WHERE id=?").run(markdown, plain, id);
+    return plain;
   }
 
   /**

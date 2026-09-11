@@ -352,7 +352,7 @@ describe("目录树操作", () => {
     fs.rmSync(assetsDir, { recursive: true, force: true });
   });
 
-  it("全文搜索：正文 trigram 命中 + 高亮，标题 LIKE 回退，删除后消失", () => {
+  it("全文搜索：标题优先、正文命中 + 高亮，1/2/3 字统一，删除后消失", () => {
     const note = store.createNote("搜索引擎笔记");
     store.saveNote(note.id, "搜索引擎笔记", "<p>全文搜索与回收站方案</p>", { markdown: "# 搜索引擎笔记\n\n全文搜索与回收站方案", plain: "搜索引擎笔记\n全文搜索与回收站方案" });
     // ≥3 字：trigram 命中正文

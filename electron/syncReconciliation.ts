@@ -20,6 +20,8 @@ export interface SyncReconciliationContext {
   readNoteCaches: (noteId: string) => { markdown: string | null; plain: string | null };
   /** FTS 上行 */
   upsertSearch: (noteId: string, title: string, body: string | null) => void;
+  /** FTS 下行（回收站/彻底删/文件夹删除） */
+  removeSearch: (noteIds: readonly string[]) => void;
   /** 同步清单读（getSyncPendingSummary 口径对齐 listFoldersForSync） */
   listNotesForSync: () => SyncNote[];
 }
@@ -189,7 +191,7 @@ export class SyncReconciliation {
       this.ctx.db.prepare(
         "UPDATE tree_nodes SET parent_id=?,trashed_at=COALESCE(trashed_at,?),deleted_from_parent_id=COALESCE(deleted_from_parent_id,?),updated_at=?,sync_state='local' WHERE note_file_id=? AND deleted_at IS NULL"
       ).run(this.ctx.trashNotebookId, trashedAt, deletedFromParentId, trashedAt ?? nowIso(), id);
-      this.ctx.db.prepare("DELETE FROM notes_fts WHERE note_id=?").run(id);
+      this.ctx.removeSearch([id]);
     });
     tx();
   }
@@ -225,7 +227,7 @@ export class SyncReconciliation {
       this.ctx.db.prepare(
         "UPDATE tree_nodes SET parent_id=?,trashed_at=COALESCE(trashed_at,?),deleted_from_parent_id=COALESCE(deleted_from_parent_id,parent_id),updated_at=?,sync_state='purged' WHERE note_file_id=? AND deleted_at IS NULL"
       ).run(this.ctx.trashNotebookId, now, now, id);
-      this.ctx.db.prepare("DELETE FROM notes_fts WHERE note_id=?").run(id);
+      this.ctx.removeSearch([id]);
     });
     tx();
   }
@@ -272,11 +274,10 @@ export class SyncReconciliation {
       const purgeNode = this.ctx.db.prepare(
         "UPDATE tree_nodes SET parent_id=?,trashed_at=COALESCE(trashed_at,?),deleted_from_parent_id=COALESCE(deleted_from_parent_id,parent_id),updated_at=?,sync_state='purged' WHERE id=? AND deleted_at IS NULL"
       );
-      const delFts = this.ctx.db.prepare("DELETE FROM notes_fts WHERE note_id=?");
       for (const node of subtree) {
         if (node.note_file_id) {
           purgeNote.run(this.ctx.trashNotebookId, now, now, node.note_file_id);
-          delFts.run(node.note_file_id);
+          this.ctx.removeSearch([node.note_file_id]);
         }
         purgeNode.run(this.ctx.trashNotebookId, now, now, node.id);
       }

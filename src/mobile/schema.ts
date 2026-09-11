@@ -43,6 +43,26 @@ export async function applyMobileSchema(db: MobileDb): Promise<void> {
   await addNoteColumn("locked_at", "TEXT");
   await addNoteColumn("icon", "TEXT");
 
+  // 全文搜索 v2：FTS5 + unicode61（中文单字预分词，src/core/search）。旧库若为 trigram 则重建。
+  const ftsRow = await db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='notes_fts'").get() as { sql: string | null } | undefined;
+  if (ftsRow?.sql && !ftsRow.sql.includes("unicode61")) {
+    try { await db.exec("DROP TABLE notes_fts"); } catch { /* ignore */ }
+    try { await db.exec("DROP TABLE IF EXISTS search_index"); } catch { /* ignore */ }
+  }
+  // 测试环境 sql.js 无 FTS5 模块 → 跳过虚拟表（生产 SQLCipher 有；searchIndex 会按 sqlite_master 探测）。
+  try { await db.exec("CREATE VIRTUAL TABLE IF NOT EXISTS notes_fts USING fts5(title, body, tokenize='unicode61')"); } catch { /* FTS5 unavailable */ }
+  await db.exec(
+    "CREATE TABLE IF NOT EXISTS search_index (" +
+    "note_id TEXT PRIMARY KEY, " +
+    "fts_rowid INTEGER NOT NULL, " +
+    "title TEXT NOT NULL, " +
+    "raw_hash TEXT, " +
+    "title_hash TEXT NOT NULL, " +
+    "body_hash TEXT NOT NULL, " +
+    "indexed_at TEXT NOT NULL)"
+  );
+  await db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_search_index_rowid ON search_index(fts_rowid)");
+
   const missingHashes = await db.prepare(
     "SELECT id, content FROM notes WHERE content_hash IS NULL",
   ).all() as Array<{ id: string; content: string }>;

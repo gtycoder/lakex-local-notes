@@ -28,6 +28,8 @@ export interface TrashLifecycleContext {
   readNoteCaches: (noteId: string) => { markdown: string | null; plain: string | null };
   /** FTS 上行（恢复/撤销删除时重建索引） */
   upsertSearch: (noteId: string, title: string, body: string | null) => void;
+  /** FTS 下行（回收站/彻底删批量移除） */
+  removeSearch: (noteIds: readonly string[]) => void;
   /** 兜底父笔记本（原父缺失时恢复目标） */
   resolveParentNotebook: () => string;
 }
@@ -108,12 +110,8 @@ export class TrashLifecycle {
           this.ctx.db.prepare(`UPDATE notes SET trashed_at=?,updated_at=?,sync_state='local',restore_pending_at=NULL WHERE id IN (${nph}) AND deleted_at IS NULL`).run(now, now, ...batch);
         }
       }
-      // 回收站条目不出现在搜索（子树整体移出 FTS，恢复时重建）
-      const noteIds = this.descendantNoteFileIds(id);
-      for (const batch of sqlParameterBatches(noteIds)) {
-        const ph = batch.map(() => "?").join(",");
-        this.ctx.db.prepare(`DELETE FROM notes_fts WHERE note_id IN (${ph})`).run(...batch);
-      }
+      // 回收站条目不出现在搜索（子树整体移出 FTS 账本，恢复时重建）
+      this.ctx.removeSearch(this.descendantNoteFileIds(id));
     });
     tx();
   }
@@ -245,7 +243,6 @@ export class TrashLifecycle {
         "ON CONFLICT(id) DO UPDATE SET title=excluded.title, parent_id=excluded.parent_id, sort_order=excluded.sort_order, updated_at=excluded.updated_at, deleted_at=excluded.deleted_at, purged_at=excluded.purged_at, node_type=excluded.node_type"
       );
       const delNote = this.ctx.db.prepare("DELETE FROM notes WHERE id=?");
-      const delFts = this.ctx.db.prepare("DELETE FROM notes_fts WHERE note_id=?");
       const delNode = this.ctx.db.prepare("DELETE FROM tree_nodes WHERE id=?");
       const delOrphans = this.ctx.db.prepare("DELETE FROM orphan_assets WHERE note_id=?");
       const delHistory = this.ctx.db.prepare("DELETE FROM note_history WHERE note_id=?");
@@ -269,7 +266,7 @@ export class TrashLifecycle {
           if (fallback) tombstone.run(fallback.id, fallback.title, fallback.parent_id, fallback.sort_order, fallback.updated_at, now, now, "note");
           delHistory.run(n.note_file_id);
           delOrphans.run(n.note_file_id);
-          delFts.run(n.note_file_id);
+          this.ctx.removeSearch([n.note_file_id]);
           delNote.run(n.note_file_id);
         } else {
           // folder/group（无 note_file_id）purge 也必须写墓碑（deleted_notes + purged_at）：

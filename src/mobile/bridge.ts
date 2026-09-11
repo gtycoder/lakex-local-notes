@@ -31,6 +31,7 @@ import { stageAssetWrites } from "./assetWrites.js";
 import { applyMobileSchema } from "./schema.js";
 import * as treeRepository from "./treeRepository.js";
 import * as noteRepository from "./noteRepository.js";
+import { reconcileIndex } from "./searchIndex.js";
 import type { POCNote, POCNoteSummary } from "./noteRepository.js";
 import * as trashRepository from "./trashRepository.js";
 import * as quickNotesRepository from "./quickNotesRepository.js";
@@ -108,6 +109,8 @@ async function initializeDb(): Promise<NativeSqliteDb> {
   const openedDb = await NativeSqliteDb.open(migration.databaseName);
   await applyMobileSchema(openedDb);
   db = openedDb;
+  // 搜索索引对账：首次建索引 / 修复跨会话漂移（失败不阻断启动）。
+  try { await reconcileIndex(openedDb); } catch (error) { console.warn("[search] reconcile failed:", error); }
   return openedDb;
 }
 
@@ -512,6 +515,7 @@ export const bridge = {
     return maintenance.run("main", async () => {
       const d = await ensureDb();
       await trashRepository.trashTreeItem(d, id, kind);
+      await reconcileIndex(d);
     });
   },
 
@@ -526,6 +530,7 @@ export const bridge = {
     return maintenance.run("main", async () => {
       const d = await ensureDb();
       await trashRepository.restoreTreeItem(d, id, kind, downloadDeclaredAssetsFor);
+      await reconcileIndex(d);
     });
   },
 
@@ -538,6 +543,7 @@ export const bridge = {
     return maintenance.run("main", async () => {
       const d = await ensureDb();
       await trashRepository.purgeTreeItem(d, id, kind);
+      await reconcileIndex(d);
     });
   },
 
@@ -750,6 +756,8 @@ export const bridge = {
         } catch {
           // 清理失败不拖垮同步；下一次同步会继续按策略清理。
         }
+      // 同步可能增删改文档：对账搜索索引（本地派生数据，随同步刷新）。
+      try { await reconcileIndex(d); } catch { /* 索引对账失败不影响同步结果 */ }
       return { message: report.message + quickMsg, notes: report, quickNotes };
     });
   },

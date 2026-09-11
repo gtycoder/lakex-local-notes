@@ -1,136 +1,134 @@
 import Database from "better-sqlite3";
 import { describe, expect, it } from "vitest";
 import { SearchRepository } from "./searchRepository.js";
-import type { DbLike, DbLikeStatement } from "./dbLike.js";
+import type { DbLike } from "./dbLike.js";
 
-function makeRepo() {
-  const db = new Database(":memory:");
-  db.exec(`
-    CREATE TABLE tree_nodes (id TEXT PRIMARY KEY, note_file_id TEXT, title TEXT, parent_id TEXT, node_type TEXT, deleted_at TEXT, updated_at TEXT, sort_order INTEGER);
-    CREATE VIRTUAL TABLE notes_fts USING fts5(title, body, note_id UNINDEXED, tokenize='trigram');
-  `);
-  const notes = [
-    ["n-exact", "Lake", "Lake", "2026-08-19T10:00:00Z"],
-    ["n-prefix", "Lake Notes", "Lake Notes app", "2026-08-19T09:00:00Z"],
-    ["n-body", "个人笔记", "这里讨论 Lake 编辑器性能", "2026-08-19T11:00:00Z"],
-    ["n-cn-body", "技术记录", "欢迎使用 Lake 编辑器", "2026-08-19T12:00:00Z"],
-    ["n-one", "同步", "云端镜像", "2026-08-19T08:00:00Z"],
-  ];
-  const insertNode = db.prepare("INSERT INTO tree_nodes(id,note_file_id,title,parent_id,node_type,deleted_at,updated_at,sort_order) VALUES(?,?,?,?,?,?,?,?)");
-  const insertFts = db.prepare("INSERT INTO notes_fts(title,body,note_id) VALUES(?,?,?)");
-  for (const [id, title, body, updatedAt] of notes) {
-    insertNode.run(id, id, title, null, "note", null, updatedAt, 0);
-    insertFts.run(title, body, id);
-  }
-  return { db, repo: new SearchRepository({ db, trashNotebookId: "trash", ensureNoteCaches: () => true, readNoteCaches: () => ({ markdown: null, plain: null }) }) };
+const SCHEMA =
+  "CREATE TABLE tree_nodes (id TEXT PRIMARY KEY, note_file_id TEXT, title TEXT, parent_id TEXT, node_type TEXT, deleted_at TEXT, updated_at TEXT, sort_order INTEGER);" +
+  "CREATE TABLE notes (id TEXT PRIMARY KEY, title TEXT, text_cache TEXT);" +
+  "CREATE VIRTUAL TABLE notes_fts USING fts5(title, body, tokenize='unicode61');" +
+  "CREATE TABLE search_index (note_id TEXT PRIMARY KEY, fts_rowid INTEGER NOT NULL, title_hash TEXT NOT NULL, body_hash TEXT NOT NULL, indexed_at TEXT NOT NULL);" +
+  "CREATE UNIQUE INDEX idx_search_index_rowid ON search_index(fts_rowid);";
+
+function wrapCounting(raw: Database.Database, counter: { deletes: number; inserts: number }): DbLike {
+  return {
+    prepare(sql: string) {
+      const stmt = raw.prepare(sql);
+      if (sql.startsWith("DELETE FROM notes_fts")) {
+        return { ...stmt, run: (...a: unknown[]) => { counter.deletes += 1; return stmt.run(...(a as never[])); } };
+      }
+      if (sql.startsWith("INSERT INTO notes_fts")) {
+        return { ...stmt, run: (...a: unknown[]) => { counter.inserts += 1; return stmt.run(...(a as never[])); } };
+      }
+      return stmt;
+    },
+    transaction: ((fn: (...args: never[]) => unknown) => raw.transaction(fn)) as DbLike["transaction"],
+    pragma: ((...a: unknown[]) => (raw.pragma as (...x: unknown[]) => unknown)(...a)) as DbLike["pragma"],
+    exec: (sql: string) => raw.exec(sql),
+    close: () => raw.close(),
+  };
 }
 
-describe("SearchRepository title/body search", () => {
-  it("searches one character by title only", () => {
-    const { repo } = makeRepo();
-    const rows = repo.search("湖");
-    expect(rows).toEqual([]);
-    expect(repo.search("同").some((row) => row.id === "n-one")).toBe(true);
+function makeRepo(options: { countWrites?: { deletes: number; inserts: number } } = {}) {
+  const raw = new Database(":memory:");
+  raw.exec(SCHEMA);
+  const db = options.countWrites ? wrapCounting(raw, options.countWrites) : (raw as unknown as DbLike);
+  const repo = new SearchRepository({
+    db,
+    trashNotebookId: "trash",
+    derivePlainText: (noteId: string) => {
+      const row = raw.prepare("SELECT text_cache FROM notes WHERE id=?").get(noteId) as { text_cache: string | null } | undefined;
+      return row?.text_cache ?? null;
+    },
+  });
+  let tick = 0;
+  const addNote = (id: string, title: string, plain: string, parentId: string | null = null): void => {
+    tick += 1;
+    const updatedAt = "2026-01-" + String(tick).padStart(2, "0") + "T00:00:00Z";
+    raw.prepare(
+      "INSERT INTO tree_nodes(id,note_file_id,title,parent_id,node_type,deleted_at,updated_at,sort_order) VALUES(?,?,?,?,?,?,?,0)"
+    ).run(id, id, title, parentId, "note", null, updatedAt);
+    raw.prepare("INSERT INTO notes(id,title,text_cache) VALUES(?,?,?)").run(id, title, plain);
+    repo.upsert(id, title, plain);
+  };
+  return { raw, repo, addNote };
+}
+
+describe("SearchRepository v2（统一 FTS5 unicode61 + 账本）", () => {
+  it("1/2/3 字统一；2 字正文也能命中；短语要求相邻", () => {
+    const { repo, addNote } = makeRepo();
+    addNote("n1", "Lake", "欢迎使用Lake编辑器性能测试");
+    addNote("n2", "技术记录", "这是编辑器的一个测试");
+    addNote("n3", "杂谈", "编辑遇到问题需要修复器");
+    expect(repo.search("编").some((r) => r.id === "n1")).toBe(true);
+    expect(repo.search("编辑").some((r) => r.id === "n3")).toBe(true);
+    expect(repo.search("编辑器").map((r) => r.id).sort()).toEqual(["n1", "n2"]);
   });
 
-  it("P4-2：2 字只搜标题——不再命中正文，标题命中保留", () => {
-    const { repo } = makeRepo();
-    // "讨论" 只在 n-body 的正文里（2 字）→ 新语义下不返回
-    expect(repo.search("讨论").find((row) => row.id === "n-body")).toBeUndefined();
-    // "欢迎" 只在 n-cn-body 的正文里（2 字）→ 不返回
-    expect(repo.search("欢迎").find((row) => row.id === "n-cn-body")).toBeUndefined();
-    // "同步" 是 n-one 的标题（2 字）→ 标题命中保留，matchType=title
-    const rows = repo.search("同步");
-    expect(rows).toHaveLength(1);
-    expect(rows[0]).toMatchObject({ id: "n-one", matchType: "title" });
-    // ≥3 字走 FTS 分支，正文命中不受影响：4 字 "Lake" 仍命中 n-body 的正文
-    expect(repo.search("Lake").find((row) => row.id === "n-body")?.matchType).toBe("body");
+  it("标题精确/前缀排在正文命中之前", () => {
+    const { repo, addNote } = makeRepo();
+    addNote("n-exact", "同步", "正文无关");
+    addNote("n-prefix", "同步笔记", "正文无关");
+    addNote("n-body", "其他", "这里讲同步机制");
+    const ids = repo.search("同步").map((r) => r.id);
+    expect(ids.indexOf("n-exact")).toBeLessThan(ids.indexOf("n-body"));
+    expect(ids.indexOf("n-prefix")).toBeLessThan(ids.indexOf("n-body"));
   });
 
-  it("searches two characters in title and body with title ranking", () => {
-    const { repo } = makeRepo();
-    const rows = repo.search("Lake");
-    expect(rows.slice(0, 2).map((row) => row.id)).toEqual(["n-exact", "n-prefix"]);
-    expect(rows[0]).toMatchObject({ matchType: "title", updatedAt: "2026-08-19T10:00:00Z" });
+  it("回收站子树不返回", () => {
+    const { raw, repo, addNote } = makeRepo();
+    raw.prepare("INSERT INTO tree_nodes(id,note_file_id,title,parent_id,node_type,deleted_at,updated_at,sort_order) VALUES(?,?,?,?,?,?,?,0)")
+      .run("trash", null, "回收站", null, "notebook", null, "2026-01-01T00:00:00Z");
+    addNote("n-in", "秘密文档", "正文", "trash");
+    addNote("n-out", "正常文档", "正文");
+    const ids = repo.search("文档").map((r) => r.id);
+    expect(ids).toContain("n-out");
+    expect(ids).not.toContain("n-in");
   });
-});
-describe("FTS 转义与边界（V5 §4 R8）", () => {
-  it("FTS5 特殊字符不抛错（引号/%/_/*/-/空白/超长）", () => {
-    const { repo } = makeRepo();
-    for (const q of ["\"", "%", "_", "*", "-", "\"unclosed", "a b  c", "a".repeat(500), "%完整%", "50%"]) {
-      expect(() => repo.search(q)).not.toThrow();
-    }
+
+  it("remove 后不再命中", () => {
+    const { repo, addNote } = makeRepo();
+    addNote("n1", "标题", "可搜索的正文内容");
+    expect(repo.search("正文").length).toBe(1);
+    repo.remove(["n1"]);
+    expect(repo.search("正文").length).toBe(0);
   });
-  it("1/2 字符 LIKE 分支特殊字符不抛错", () => {
-    const { repo } = makeRepo();
-    for (const q of ["%", "_", "*", "-", "\""]) {
-      expect(() => repo.search(q)).not.toThrow();
-    }
-  });
-  it("空串与纯空白返回空数组", () => {
-    const { repo } = makeRepo();
-    expect(repo.search("")).toEqual([]);
-    expect(repo.search("   ")).toEqual([]);
-  });
-  it("回收站下笔记不返回", () => {
-    const db = new Database(":memory:");
-    db.exec("CREATE TABLE tree_nodes (id TEXT PRIMARY KEY, note_file_id TEXT, title TEXT, parent_id TEXT, node_type TEXT, sort_order INTEGER, updated_at TEXT, deleted_at TEXT)");
-    db.exec("CREATE VIRTUAL TABLE notes_fts USING fts5(title, body, note_id UNINDEXED, tokenize='trigram')");
-    const repo = new SearchRepository({ db, trashNotebookId: "trash", ensureNoteCaches: () => true, readNoteCaches: () => ({ markdown: null, plain: null }) });
-    db.prepare("INSERT INTO tree_nodes VALUES(?,?,?,?,?,?,?,NULL)").run("trash", null, "回收站", null, "notebook", 0, "2026-01-01T00:00:00Z");
-    db.prepare("INSERT INTO tree_nodes VALUES(?,?,?,?,?,?,?,NULL)").run("n-in-trash", "n-in-trash", "秘密文档", "trash", "note", 0, "2026-01-01T00:00:00Z");
-    db.prepare("INSERT INTO tree_nodes VALUES(?,?,?,?,?,?,?,NULL)").run("n-normal", "n-normal", "正常文档", null, "note", 0, "2026-01-01T00:00:00Z");
-    db.prepare("INSERT INTO notes_fts VALUES(?,?,?)").run("秘密文档", "", "n-in-trash");
-    db.prepare("INSERT INTO notes_fts VALUES(?,?,?)").run("正常文档", "", "n-normal");
-    const rows = repo.search("文档");
-    expect(rows.some((r) => r.id === "n-in-trash")).toBe(false);
-    expect(rows.some((r) => r.id === "n-normal")).toBe(true);
-  });
-});
-describe("P1-2b FTS 条件重建（无变化短路）", () => {
-  function fresh() {
-    const db = new Database(":memory:");
-    db.exec("CREATE VIRTUAL TABLE notes_fts USING fts5(title, body, note_id UNINDEXED, tokenize='trigram')");
-    let deletes = 0;
-    let inserts = 0;
-    // 包装 db：计数对 notes_fts 的 DELETE/INSERT，以验证"无变化时跳过重建"
-    const wrapDb = {
-      prepare(sql: string): DbLikeStatement {
-        const stmt = db.prepare(sql);
-        if (sql.startsWith("DELETE FROM notes_fts")) {
-          return { ...stmt, run: (...a: unknown[]) => { deletes += 1; return stmt.run(...(a as never[])); } };
-        }
-        if (sql.startsWith("INSERT INTO notes_fts")) {
-          return { ...stmt, run: (...a: unknown[]) => { inserts += 1; return stmt.run(...(a as never[])); } };
-        }
-        return stmt;
-      },
-      transaction: ((fn: (...args: never[]) => unknown) => db.transaction(fn)) as DbLike["transaction"],
-      pragma: ((...args: unknown[]) => (db.pragma as (...x: unknown[]) => unknown)(...args)) as DbLike["pragma"],
-      exec: (sql: string) => db.exec(sql),
-      close: () => db.close(),
-    } satisfies DbLike;
-    const repo = new SearchRepository({ db: wrapDb, trashNotebookId: "trash", ensureNoteCaches: () => true, readNoteCaches: () => ({ markdown: null, plain: null }) });
-    return { count: () => ({ deletes, inserts }), repo };
-  }
-  it("title/body 未变时跳过 DELETE+INSERT，任一变化才重建", () => {
-    const { count, repo } = fresh();
+
+  it("内容 hash 未变短路；变则重建", () => {
+    const counter = { deletes: 0, inserts: 0 };
+    const { repo } = makeRepo({ countWrites: counter });
     repo.upsert("n1", "标题A", "正文A");
-    expect(count()).toEqual({ deletes: 1, inserts: 1 });
-    repo.upsert("n1", "标题A", "正文A"); // 无变化 → 不重建
-    expect(count()).toEqual({ deletes: 1, inserts: 1 });
-    repo.upsert("n1", "标题A", "正文B"); // body 变 → 重建
-    expect(count()).toEqual({ deletes: 2, inserts: 2 });
-    repo.upsert("n1", "标题B", "正文B"); // title 变 → 重建
-    expect(count()).toEqual({ deletes: 3, inserts: 3 });
+    expect(counter).toEqual({ deletes: 0, inserts: 1 });
+    repo.upsert("n1", "标题A", "正文A");
+    expect(counter).toEqual({ deletes: 0, inserts: 1 });
+    repo.upsert("n1", "标题A", "正文B");
+    expect(counter).toEqual({ deletes: 1, inserts: 2 });
+    repo.upsert("n1", "标题B", "正文B");
+    expect(counter).toEqual({ deletes: 2, inserts: 3 });
   });
-  it("body=null（无派生缓存路径）按同一规则短路", () => {
-    const { count, repo } = fresh();
-    repo.upsert("n1", "标题", "正文");
-    expect(count()).toEqual({ deletes: 1, inserts: 1 });
-    repo.upsert("n1", "标题", null); // null → "" 与现存 "正文" 不同 → 重建
-    expect(count()).toEqual({ deletes: 2, inserts: 2 });
-    repo.upsert("n1", "标题", null); // "" === "" → 跳过
-    expect(count()).toEqual({ deletes: 2, inserts: 2 });
+
+  it("rebuild 从 text_cache 重建", () => {
+    const { raw, repo } = makeRepo();
+    raw.prepare("INSERT INTO tree_nodes(id,note_file_id,title,parent_id,node_type,deleted_at,updated_at,sort_order) VALUES(?,?,?,?,?,?,?,0)")
+      .run("n1", "n1", "磁盘文档", null, "note", null, "2026-01-01T00:00:00Z");
+    raw.prepare("INSERT INTO notes(id,title,text_cache) VALUES(?,?,?)").run("n1", "磁盘文档", "磁盘正文包含量子纠缠");
+    repo.rebuild();
+    expect(repo.search("量子纠缠").some((r) => r.id === "n1")).toBe(true);
+  });
+
+  it("特殊字符/超长不抛错", () => {
+    const { repo, addNote } = makeRepo();
+    addNote("n1", "标题", "正文");
+    for (const q of ['"', "%", "_", "*", "-", "a b  c", "a".repeat(500), "%完整%", "50%", "C++", "a.b", "   "]) {
+      expect(() => repo.search(q)).not.toThrow();
+    }
+  });
+
+  it("摘要带 <mark>；正文命中 matchType=body", () => {
+    const { repo, addNote } = makeRepo();
+    addNote("n1", "Lake", "欢迎使用Lake编辑器性能测试");
+    const hit = repo.search("编辑器").find((r) => r.id === "n1")!;
+    expect(hit.snippet).toContain("<mark>编辑器</mark>");
+    expect(hit.matchType).toBe("body");
   });
 });

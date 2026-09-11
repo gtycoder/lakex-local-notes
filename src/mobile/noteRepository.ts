@@ -1,5 +1,5 @@
 import { extractAssetRefs, extOf } from "../core/assetNaming.js";
-import { buildLikePattern, buildSearchSql, toSearchResult } from "../core/mobileSearch.js";
+import { indexNote, removeNoteFromIndex, searchNotes as searchNotesIndexed } from "./searchIndex.js";
 import type { SearchResult } from "../core/searchTypes.js";
 import { hasNoteSaveChanges } from "../core/noteSaveDecision.js";
 import { sha256Sync } from "../core/sha256Sync.js";
@@ -95,16 +95,9 @@ export async function noteGoneState(d: MobileDb, id: string): Promise<{ parentId
   return row ? { parentId: row.parent_id, syncState: row.sync_state ?? "" } : null;
 }
 
-/** Phase 0B-5：搜索 fallback（LIKE；标题+正文，参数化 + ESCAPE）。 */
+/** 全文搜索：FTS5 + unicode61，与桌面同分词/查询/摘要（src/core/search）。 */
 export async function searchNotes(d: MobileDb, query: string): Promise<SearchResult[]> {
-  const pattern = buildLikePattern(query);
-  if (!pattern) return [];
-  const [sql, params] = buildSearchSql(pattern);
-  const rows = await d.prepare(sql).all(...params) as Array<{
-    id: string; title: string; content: string; updated_at: string; parent_id: string | null; parent_title: string | null;
-  }>;
-  const term = query.trim().toLocaleLowerCase();
-  return rows.map((row) => toSearchResult(row, row.title.toLocaleLowerCase().includes(term)));
+  return searchNotesIndexed(d, query);
 }
 
 /** 返回 false 表示内容无变化，调用方无需持久化快照。 */
@@ -126,12 +119,14 @@ export async function saveNote(
      ON CONFLICT(id) DO UPDATE SET title=excluded.title, content=excluded.content, updated_at=excluded.updated_at, content_hash=excluded.content_hash, sync_state='local'`
   ).run(id, safeTitle, content, parentId, now, sha256Sync(new TextEncoder().encode(content)));
   await detectOrphans(d, id, content, assets);
+  await indexNote(d, id);
   return true;
 }
 
 /** 本地软删（入回收站）：同步时上传墓碑（删除压编辑）。 */
 export async function trashNote(d: MobileDb, id: string): Promise<void> {
   await d.prepare("UPDATE notes SET trashed_at=?, sync_state='local', restore_pending_at=NULL WHERE id=?").run(new Date().toISOString(), id);
+  await removeNoteFromIndex(d, id);
 }
 
 export async function listTrashed(d: MobileDb): Promise<POCNote[]> {
