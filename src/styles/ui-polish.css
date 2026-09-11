@@ -38,9 +38,8 @@
   min-height: 34px;
   gap: 1px;
   padding: 0 6px 0 12px;
-  /* 用 --lake-border（与大纲头部同一层令牌）：--shell-separator 在暗色下是半透明黑，两栏分隔线深浅会不一致 */
-  border-bottom: 1px solid var(--lake-border);
 }
+/* 操作图标默认隐藏、悬停目录栏才显示（对齐思源）；去掉分隔线，靠留白分层 */
 .sidebar-toolbar-row .list-heading {
   display: flex;
   flex: 1 1 auto;
@@ -49,7 +48,11 @@
   gap: 1px;
   height: 100%;
   padding: 0;
+  opacity: 0;
+  transition: opacity 130ms ease-out;
 }
+.sidebar:hover .sidebar-toolbar-row .list-heading,
+.sidebar-toolbar-row:focus-within .list-heading { opacity: 1; }
 
 /* ---- dock 头部共享层（目录栏 / 大纲）：图标按钮 + 隐藏式筛选行 ----
  * 两栏此前各有两套图标样式（32px 灰底 vs 22px accent 底），2026-09-03 统一到这里。

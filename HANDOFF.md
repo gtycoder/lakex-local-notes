@@ -228,6 +228,14 @@
 - **改动**：头部左侧加「目录」小标题（`.sidebar-toolbar-title`：12px/600/`--lake-text-secondary`），左内缩 12px，图标仍靠右；与右侧「大纲」标题形成对称，整行读作正式 header。
 - 门禁：`tsc` 0 · vitest **951 passed / 16 skipped** · 桌面+移动 `vite build`。
 
+### 2.26 图标统一到思源 litheness（lucide @1.7）+ 目录栏头部悬停（260911 晚）
+- **关键结论**：思源默认图标主题 litheness（`app/appearance/icons/litheness/icon.js`）**就是 Lucide**（`viewBox 0 0 24 24`、`stroke-width:1.7`、路径与 lucide 一致）。我们本就用 lucide，问题在 **stroke=2 + 隐喻混用**，不需要换图标库。
+- **全局**：`tokens.css` 加 `.lucide { stroke-width: 1.7 }`（桌面+移动共用），全站图标统一到思源口径。
+- **目录栏头部**：操作图标默认隐藏、`.sidebar:hover`/聚焦时淡入；**去掉分隔线**。图标换思源口径：筛选=`Filter`、收起=`ChevronsDownUp`、定位=`Focus`、新建=`Plus`。
+- **大纲头部**：筛选=`Filter`；并**修正展开/折叠装反**——展开全部=`ChevronsUpDown`、折叠全部=`ChevronsDownUp`（与思源 `iconExpand`/`iconContract` 一致）。
+- **设置**：移动端菜单 外观=`Palette`、资源=`Image`、缓存=`DatabaseBackup`；桌面 外观=`Palette`、资源=`Image`。
+- 门禁：`tsc` 0 · vitest **951 passed / 16 skipped** · 桌面+移动 `vite build`。
+
 ## 3. 真正的待办（已剔除全部完成项，按优先级）
 > **260904 后续评估（用户决策 + 本轮核实）**：原 §3.1 对象级 5xx 重试、§3.2 快照 gzip 异步化、§3.5 笔记本 `sort_order` 撞号 —— **已评估不做**（5xx 有"失败不 markSynced→下轮重扫"兜底；gzip 异步收益小；sort_order 撞号场景极低）。
 > 原 §3.3（FTS 全量重建→增量）与 §3.4（1/2 字短词回退）**合并为一条**：计划**整体重做索引**，两件一起落地（同属 `src/core/searchRepository.ts` 的索引/搜索路径，同时覆盖 10 万文档量级）。

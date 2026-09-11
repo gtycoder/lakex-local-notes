@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useSyncExternalStore, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent } from "react";
-import { ChevronsDownUp, ChevronsUpDown, Focus, ListOrdered, ListTree, Search } from "lucide-react";
+import { ChevronsDownUp, ChevronsUpDown, Filter, Focus, ListOrdered, ListTree } from "lucide-react";
 import { DockFilterRow, useDockFilter } from "../../components/DockFilterBar";
 import type { OutlineMode } from "./OutlineController";
 import { OutlineList } from "./OutlineList";
@@ -253,7 +253,7 @@ export function OutlineSidebar({
             aria-pressed={filter.open}
             onClick={filter.toggle}
           >
-            <Search size={14} />
+            <Filter size={14} />
           </button>
           <button
             className={`dock-icon-btn keep-current-btn${controller?.isKeepCurrentExpand() ? " is-active" : ""}`}
@@ -267,14 +267,14 @@ export function OutlineSidebar({
             title="展开全部"
             onClick={() => controller?.expandAll()}
           >
-            <ChevronsDownUp size={14} />
+            <ChevronsUpDown size={14} />
           </button>
           <button
             className="dock-icon-btn"
             title="折叠全部"
             onClick={() => controller?.collapseAll()}
           >
-            <ChevronsUpDown size={14} />
+            <ChevronsDownUp size={14} />
           </button>
           <div className="outline-sidebar__level" ref={levelMenuRef}>
             <button

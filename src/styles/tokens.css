@@ -1,3 +1,6 @@
+/* 图标统一：对齐思源 litheness（同为 lucide，stroke-width 1.7） */
+.lucide { stroke-width: 1.7; }
+
 :root {
   --lake-shell: #f2f4f7;
   --lake-panel: #ffffff;

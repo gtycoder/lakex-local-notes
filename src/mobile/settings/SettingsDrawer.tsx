@@ -2,7 +2,7 @@
  * 版式：竖向菜单列表（设置项一行一行），点某项进入新页面（带返回）；子页内容用 .config-* + .b3-* 骨架（AGENTS §3.14）。
  * 注意：全部 App 设置为竖向（无横向 tab）；「回收站」并入总回收站（见 TrashList）。 */
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ArrowLeft, ChevronRight, Cloud, Info, Trash2, RefreshCw, HardDrive, ListTree, Images, History } from "lucide-react";
+import { ArrowLeft, ChevronRight, Cloud, DatabaseBackup, HardDrive, History, Image, Images, Info, ListTree, Palette, RefreshCw, Trash2 } from "lucide-react";
 import { loadSettings, saveSettings, fontSizeOptions, MAX_ATTACHMENT_MB_OPTIONS_SETTINGS, type AppSettings } from "../../lib/settings";
 import { Group, Item, Switch, Seg, Block, NumField } from "../../components/settingsPrimitives";
 import { bridge } from "../bridge";
@@ -25,11 +25,11 @@ type View = "menu" | "editor" | "appearance" | "history" | "resources" | "s3" | 
 
 const MENU: { key: Exclude<View, "menu">; label: string; icon: typeof Cloud }[] = [
   { key: "editor", label: "编辑器", icon: ListTree },
-  { key: "appearance", label: "外观", icon: Info },
+  { key: "appearance", label: "外观", icon: Palette },
   { key: "history", label: "历史", icon: History },
-  { key: "resources", label: "资源管理", icon: Images },
+  { key: "resources", label: "资源管理", icon: Image },
   { key: "s3", label: "同步设置", icon: Cloud },
-  { key: "cache", label: "清理缓存", icon: HardDrive },
+  { key: "cache", label: "清理缓存", icon: DatabaseBackup },
   { key: "trash", label: "回收站", icon: Trash2 },
   { key: "about", label: "关于", icon: Info },
 ];

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ChangeEvent, type ReactNode } from "react";
-import { Cloud, Copy, Files, FileText, FolderOpen, History, Info, Keyboard, Monitor, Moon, Paperclip, ScrollText, Search, Settings, Sun, Trash2, Type, X } from "lucide-react";
+import { Cloud, Copy, Files, FileText, FolderOpen, History, Image as ImageIcon, Info, Keyboard, Monitor, Moon, Palette, Paperclip, ScrollText, Search, Settings, Sun, Trash2, Type, X } from "lucide-react";
 import { fontSizeOptions, type AppSettings } from "../lib/settings";
 import { native } from "../lib/native";
 import type { CleanOrphanResult, DataHealthReport, S3GcPendingItem, S3Settings, SyncSettings } from "../lib/types";
@@ -305,11 +305,11 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
 
   const nav = [
     { id: "editor" as const, label: "编辑器", keywords: "字号 大纲 工具栏 标签页" , icon: <Type size={15} /> },
-    { id: "appearance" as const, label: "外观", keywords: "浅色 深色 主题", icon: <Monitor size={15} /> },
+    { id: "appearance" as const, label: "外观", keywords: "浅色 深色 主题", icon: <Palette size={15} /> },
     { id: "shortcuts" as const, label: "快捷键", keywords: "快捷键 搜索 专注模式 键盘", icon: <Keyboard size={15} /> },
     { id: "history" as const, label: "文档与历史", keywords: "快照 保留 清理", icon: <History size={15} /> },
     { id: "sync" as const, label: "云端与同步", keywords: "S3 上传 下载 资源 云端 回收", icon: <Cloud size={15} /> },
-    { id: "resources" as const, label: "资源", keywords: "资源 未引用 孤儿 清理 附件 图片", icon: <Paperclip size={15} /> },
+    { id: "resources" as const, label: "资源", keywords: "资源 未引用 孤儿 清理 附件 图片", icon: <ImageIcon size={15} /> },
     { id: "trash" as const, label: "回收站", keywords: "删除 恢复 清空", icon: <Trash2 size={15} /> },
     { id: "logs" as const, label: "日志", keywords: "日志 诊断 GC 同步 调试", icon: <ScrollText size={15} /> },
     { id: "about" as const, label: "关于", keywords: "版本", icon: <Info size={15} /> },

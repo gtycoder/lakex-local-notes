@@ -1,6 +1,6 @@
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent } from "react";
 import { createPortal } from "react-dom";
-import { BookOpen, ChevronRight, FilePlus2, FileText, FoldVertical, Folder, FolderOpen, FolderPlus, History, LocateFixed, Package, Pencil, Plus, Search, SmilePlus, Trash2, X } from "lucide-react";
+import { BookOpen, ChevronRight, ChevronsDownUp, FilePlus2, FileText, Filter, Focus, Folder, FolderOpen, FolderPlus, History, Package, Pencil, Plus, Search, SmilePlus, Trash2, X } from "lucide-react";
 import { DockFilterRow, useDockFilter } from "./DockFilterBar";
 import { LAKE_EMOJIS } from "../lib/lakeEmojis";
 import { LAKE_EMOJI_GROUPS } from "../lib/lakeEmojiGroups";
@@ -549,9 +549,9 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
         <span className="sidebar-toolbar-title">目录</span>
         <div className="list-heading">
         <button className={`dock-icon-btn filter-btn${filter.active ? " is-active" : ""}`} onClick={filter.toggle}
-          title="筛选目录" aria-label="筛选目录" aria-pressed={filter.open}><Search size={14} /></button>
-        <button className="dock-icon-btn collapse-all-btn" onClick={() => setExpanded(new Set())} title="全部收起" disabled={expanded.size === 0}><FoldVertical size={14} /></button>
-        <button className="dock-icon-btn locate-btn" onClick={locateActive} title="定位到当前文档" disabled={!props.activeId} aria-label="定位到当前文档"><LocateFixed size={14} /></button>
+          title="筛选目录" aria-label="筛选目录" aria-pressed={filter.open}><Filter size={14} /></button>
+        <button className="dock-icon-btn collapse-all-btn" onClick={() => setExpanded(new Set())} title="全部收起" disabled={expanded.size === 0}><ChevronsDownUp size={14} /></button>
+        <button className="dock-icon-btn locate-btn" onClick={locateActive} title="定位到当前文档" disabled={!props.activeId} aria-label="定位到当前文档"><Focus size={14} /></button>
         <div className="create-menu-wrap" ref={menuRef}>
           <button ref={createButtonRef} className={`dock-icon-btn create-btn${menuOpen ? " is-active" : ""}`} onClick={() => {
             if (menuOpen) setMenuOpen(false);
