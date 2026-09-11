@@ -762,6 +762,7 @@ export function EditorTab({ noteId, content, visible, tocEnabled, outlineEnhance
             restore();
             window.requestAnimationFrame(restore);
             window.setTimeout(restore, 120);
+            window.setTimeout(restore, 400);
           }}
         />
       )}
