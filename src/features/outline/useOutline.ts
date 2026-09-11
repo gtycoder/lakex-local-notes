@@ -33,9 +33,6 @@ export function useOutline(
       computeRef.current = () => {};
       return;
     }
-    const kernel = lakeBridge(editor).kernel;
-    if (!kernel) return;
-
     const timers = new Set<number>();
     const later = (fn: () => void, ms: number): void => {
       const id = window.setTimeout(() => {
@@ -47,6 +44,7 @@ export function useOutline(
 
     const readToc = (): void => {
       try {
+        const kernel = lakeBridge(editor).kernel;
         const toc = kernel?.getDocExtraContent?.()?.toc;
         if (Array.isArray(toc)) {
           controller.updateToc(toc as OutlineEntry[]);
@@ -120,9 +118,21 @@ export function useOutline(
     };
     computeRef.current = compute;
 
-    // 打开文档：toc 就绪晚于 ready，轮询直到有内容（≤ 40 次 × 200ms ≈ 8s）
+    // 打开文档：toc 就绪晚于 ready；重开文档时内核也可能晚于本 effect 就绪（此前 !kernel 直接 return → 永不重建 = “关闭重开大纲不渲染”）。
+    // 改为在轮询里动态取内核，就绪后再订阅 tocChange，并持续到有内容（≤ 40 次 × 200ms ≈ 8s）。
+    let offToc: (() => void) | undefined;
+    const subscribeToc = (): void => {
+      if (offToc) return;
+      try {
+        const kernel = lakeBridge(editor).kernel;
+        offToc = kernel?.onPluginEvent?.("tocChange", readToc);
+      } catch {
+        /* 忽略 */
+      }
+    };
     let attempts = 0;
     const poll = (): void => {
+      subscribeToc();
       readToc();
       compute();
       if (controller.getRootItems().length === 0 && attempts < 40) {
@@ -131,13 +141,6 @@ export function useOutline(
       }
     };
     later(poll, 0);
-
-    let offToc: (() => void) | undefined;
-    try {
-      offToc = kernel?.onPluginEvent?.("tocChange", readToc);
-    } catch {
-      /* 忽略 */
-    }
 
     // 编辑时 contentchange 后兜底刷新（tocChange 由内核 aftercontentchange 触发）
     let contentTimer: number | undefined;

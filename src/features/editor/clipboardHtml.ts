@@ -140,15 +140,31 @@ function copySafeAttributes(source: Element, target: HTMLElement): void {
 
 import { assetToken, LOCAL_ASSET_PREFIX } from "../../lib/assetPort";
 
-function assetUrlToDataUrlSync(url: string): string | null {
+/** 组装资产服务器「取 data URL」请求。URL 已带 ?token= 时不能再拼第二个 ?（会把 base64 参数吞掉、返回二进制→裂图）。 */
+export function buildAssetDataUrlRequest(url: string, token: string): string | null {
   if (!url.startsWith(LOCAL_ASSET_PREFIX)) return null;
+  try {
+    const target = new URL(url);
+    target.searchParams.set("base64", "1");
+    if (token) target.searchParams.set("token", token);
+    return target.toString();
+  } catch {
+    return null;
+  }
+}
+
+function assetUrlToDataUrlSync(url: string): string | null {
+  const requestUrl = buildAssetDataUrlRequest(url, assetToken());
+  if (!requestUrl) return null;
   try {
     const xhr = new XMLHttpRequest();
     // 审计：CORS 拉取必须带资产令牌，否则资产服务器 403（外部网页无法读取本地图片）
-    xhr.open("GET", `${url}?base64=1&token=${encodeURIComponent(assetToken())}`, false);
+    xhr.open("GET", requestUrl, false);
     xhr.send();
     if (xhr.status !== 200) return null;
-    return xhr.responseText; // already "data:image/png;base64,..."
+    // 只接受 data URL；否则（403/参数被破坏/非 base64 分支）丢弃，避免把二进制当图片粘贴。
+    const body = xhr.responseText;
+    return body.startsWith("data:") ? body : null;
   } catch (e) {
     console.error("同步 XHR 获取本地图片失败:", e);
     return null;

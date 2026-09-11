@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, expect, it, beforeAll, afterAll } from "vitest";
-import { normalizeClipboardHtml, normalizeImageDataUrl, upgradePastedHtml } from "./clipboardHtml";
+import { buildAssetDataUrlRequest, normalizeClipboardHtml, normalizeImageDataUrl, upgradePastedHtml } from "./clipboardHtml";
 
 // jsdom 无 canvas 实现：mock getContext/toDataURL（仅测试 blob→png 分支的调用路径）
 const origGetContext = HTMLCanvasElement.prototype.getContext;
@@ -25,6 +25,22 @@ function fragmentFromHtml(html: string): DocumentFragment {
 // 1x1 透明 PNG
 const PNG_1PX =
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==";
+
+describe("buildAssetDataUrlRequest（复制到第三方的图片 URL 组装）", () => {
+  it("已带 token 的 URL 不重复拼接（单一 query，base64 生效）", () => {
+    const out = buildAssetDataUrlRequest("http://127.0.0.1:19876/n1/1700_ab.webp?token=ABC", "ABC")!;
+    expect(out).toContain("base64=1");
+    expect((out.match(/\?/g) || []).length).toBe(1);
+    expect((out.match(/token=/g) || []).length).toBe(1);
+    expect(new URL(out).searchParams.get("base64")).toBe("1");
+  });
+  it("无 query 的 URL 正确附加 base64 与 token", () => {
+    expect(buildAssetDataUrlRequest("http://127.0.0.1:19876/n1/a.png", "T")).toBe("http://127.0.0.1:19876/n1/a.png?base64=1&token=T");
+  });
+  it("非本地资产 URL → null", () => {
+    expect(buildAssetDataUrlRequest("https://example.com/a.png", "T")).toBeNull();
+  });
+});
 
 describe("normalizeClipboardHtml", () => {
   it("去除零宽字符（Lake 光标定位用）", () => {

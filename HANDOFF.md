@@ -136,6 +136,13 @@
   3. `applyRemoteFolderDelete` 的 FTS 删除改为一次批量移除（减少嵌套 savepoint）。
 - **跨端一致性实测（260911 晚，CDP 驱动）**：桌面 9222 与安卓 9335 用同一 fixture（5 篇文档）+ 12 条查询 + 重命名/删除生命周期，**结果逐条完全一致**：1/2/3+ 字统一、标题优先、短语相邻（`编辑器` 不误命中相隔的 `编…辑…器`）、拉丁大小写、空命中/符号查询、重命名保正文、删除即消失。
 
+### 2.12 Bug 修复：复制到微信裂图 + 大纲重开不渲染 + 大纲增强默认关闭（260911 晚）
+- **复制到第三方（微信）图片不显示**：`clipboardHtml.assetUrlToDataUrlSync` 对已带 `?token=` 的图片 URL 又拼了 `?base64=1&token=`，形成 `?token=X?base64=1&token=Y` 双问号 → 资产服务器 `base64` 参数丢失/鉴权失败 → 图片被丢弃或写成二进制。改为 `URL.searchParams.set` 组装（`buildAssetDataUrlRequest`，含单测），并只接受 `data:` 响应。资产服务器 E2E 实测：正确 URL → `data:image/png;base64,…`；旧双问号 URL → `forbidden`。
+- **桌面大纲关闭重开不渲染**：`useOutline` 开头 `if (!kernel) return`，重开文档时内核可能晚于 effect 就绪且依赖不变 → effect 不再跑，大纲永远为空。改为在既有轮询里动态取内核、就绪后再订阅 `tocChange`，不再早退。
+- **移动端大纲**：`DocumentEditor` 固定 `tocEnabled={false}`（不用 Lake 原生），使用应用 `OutlineSheet`（读 `kernel.getDocExtraContent().toc` → 按 depth 缩进列表 → `headingUnfold + scrollByNodeId` 跳转 + DOM 校正）；本轮补了 toc 就绪短轮询。`outlineEnhance` 是桌面专属设置，移动端始终用应用大纲面板。
+- **大纲增强默认关闭**：`DEFAULT_SETTINGS.outlineEnhance=false`；`loadSettings` 仅显式 `true` 才开启（存量已存 true 的保持 true）；设置文案注明“关闭（默认）”。
+- 门禁：`tsc` 0 · vitest **943 passed / 16 skipped** · 桌面+移动 `vite build` 全绿。
+
 ## 3. 真正的待办（已剔除全部完成项，按优先级）
 > **260904 后续评估（用户决策 + 本轮核实）**：原 §3.1 对象级 5xx 重试、§3.2 快照 gzip 异步化、§3.5 笔记本 `sort_order` 撞号 —— **已评估不做**（5xx 有"失败不 markSynced→下轮重扫"兜底；gzip 异步收益小；sort_order 撞号场景极低）。
 > 原 §3.3（FTS 全量重建→增量）与 §3.4（1/2 字短词回退）**合并为一条**：计划**整体重做索引**，两件一起落地（同属 `src/core/searchRepository.ts` 的索引/搜索路径，同时覆盖 10 万文档量级）。

@@ -28,10 +28,19 @@ export function OutlineSheet({ open, editor, onClose, side }: OutlineSheetProps)
 
   useEffect(() => {
     if (!open) return;
-    try {
-      const toc = lakeBridge(editor ?? undefined).kernel?.getDocExtraContent?.().toc;
-      setEntries(Array.isArray(toc) ? (toc as TocEntry[]) : []);
-    } catch { setEntries([]); }
+    let attempts = 0;
+    let timer: number | undefined;
+    // 内核 toc 就绪可能晚于面板打开：空则短轮询重试（≤ 20 次 × 200ms ≈ 4s），避免只读一次得到“暂无标题”。
+    const read = (): void => {
+      try {
+        const toc = lakeBridge(editor ?? undefined).kernel?.getDocExtraContent?.().toc;
+        const next = Array.isArray(toc) ? (toc as TocEntry[]) : [];
+        setEntries(next);
+        if (next.length === 0 && attempts < 20) { attempts += 1; timer = window.setTimeout(read, 200); }
+      } catch { setEntries([]); }
+    };
+    read();
+    return () => { if (timer !== undefined) window.clearTimeout(timer); };
   }, [open, editor]);
 
   useEffect(() => {

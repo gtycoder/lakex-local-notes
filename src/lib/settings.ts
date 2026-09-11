@@ -25,7 +25,7 @@ export interface AppSettings {
 export const DEFAULT_SETTINGS: AppSettings = {
   fontSize: 18,
   paragraphSpacing: false,
-  outlineEnhance: true,
+  outlineEnhance: false,
   theme: "light",
   maxOpenTabs: 8,
   maxAttachmentBytes: DEFAULT_MAX_ATTACHMENT_BYTES,
@@ -70,7 +70,7 @@ export function loadSettings(): AppSettings {
       cached = {
         fontSize: FONT_SIZES.includes(parsed.fontSize ?? -1) ? (parsed.fontSize as number) : DEFAULT_SETTINGS.fontSize,
         paragraphSpacing: parsed.paragraphSpacing === true,
-        outlineEnhance: parsed.outlineEnhance !== false,
+        outlineEnhance: parsed.outlineEnhance === true,
         theme: parsed.theme === "dark" ? "dark" : "light",
         maxOpenTabs: MAX_OPEN_TAB_OPTIONS.includes(parsed.maxOpenTabs as number)
           ? (parsed.maxOpenTabs as number)
