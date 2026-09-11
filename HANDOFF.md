@@ -164,7 +164,7 @@
 - **关闭虚拟渲染 A/B**（`VIRTUAL_RENDERING.enabled`，文档「测试1112」15 标题，reload×2，本机）：
   - OFF：首资产 ~4.13s / 36 个资产请求 / DCL ~1.19s / 原生大纲出现 ~4.3s
   - ON：首资产 ~2.0–2.3s / 仅 2 个视口资产 / DCL ~0.9–1.2s / 原生大纲出现 ~2.9–3.2s
-  - 原生大纲 **两种模式都渲染 15 条**（补上 refreshTocSidebar 后）。**结论：使用原生大纲不需要关虚拟渲染；关掉反而首屏更慢、请求更多。** 当前 `enabled:false` 仅为满足「实测不用」，最终去留守 OFF/ON 待用户拍板。
+  - 原生大纲 **两种模式都渲染 15 条**（补上 refreshTocSidebar 后）。**结论：使用原生大纲不需要关虚拟渲染；关掉反而首屏更慢、请求更多。** 用户 260911 拍板：**保持虚拟渲染开启**（`enabled:true`），怎么快怎么来。
 - **定位验证限制**：CDP `Input.dispatchMouseEvent` 在本机 Electron 渲染进程收不到（对照：document 级 mousedown/click 计数恒 0），无法用合成点击验证原生大纲点击跳转；已验证 `<a href="#id">` 的 hash 导航能正确滚动内层 `.ne-editor-wrap`。
 - 门禁：`tsc` 0 · vitest **951 passed / 16 skipped** · 桌面+移动 `vite build`。
 

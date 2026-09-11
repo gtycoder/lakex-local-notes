@@ -380,14 +380,13 @@ if (typeof window !== "undefined") {
  *    ensureCardsInViewHydrated 修复粘贴卡片卡壳）
  */
 const VIRTUAL_RENDERING = {
-  // 实验：关闭虚拟渲染（用户要求「尝试不用」）。关闭后只下发 scrollNode，不下发
-  // virtualRendering / cardLazyInit，Lake 恢复全量渲染。
-  // 大文档 A/B（「测试1112」15 标题，同文档 reload×2，本机）：
-  //   OFF → 首资产 ~4.13s / 36 个资产请求 / DCL ~1.19s / 原生大纲 ~4.3s
-  //   ON  → 首资产 ~2.0-2.3s / 仅 2 个视口资产 / DCL ~0.9-1.2s / 原生大纲 ~2.9-3.2s
-  // 结论：原生大纲在两种模式下都能用了（桌面前端补上 refreshTocSidebar 才是关键修复）；
-  // 关闭虚拟渲染反而首屏更慢、请求更多。最终去留守 OFF/ON 待用户拍板。
-  enabled: false,
+  // 开启虚拟渲染（用户 260911 拍板：大纲已修好，怎么快怎么来）。
+  // scrollNode 已与虚拟渲染解耦（见下 customOptions）：无论本开关如何都下发；
+  // 本开关只决定 virtualRendering + cardLazyInit。
+  // 大文档 A/B（「测试1112」15 标题，同文档 reload×2，本机）：ON 首资产 ~2.0-2.3s / 仅 2 个
+  // 视口资产；OFF 首资产 ~4.13s / 36 个资产请求。原生大纲两种模式都渲染 15 条（关键是
+  // EditorTab 补上了 refreshTocSidebar，与虚拟渲染无关）。故保持开启。
+  enabled: true,
   scrollContainerSelector: ".document-pane",
   cardLazyInit: true,
 };
