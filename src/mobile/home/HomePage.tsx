@@ -7,7 +7,7 @@
  * - 底部胶囊栏 = [筛选 | 新建 | 云同步]（新建按 tab 记性：小记=写小记、知识库=新建笔记本）。
  */
 import { useMemo, useRef, useState } from "react";
-import { CloudUpload, List, LayoutGrid, ArrowUpDown, MoreHorizontal, Pencil, Plus, Search, Settings, Trash2, FileText, FolderOpen } from "lucide-react";
+import { CloudUpload, List, LayoutGrid, ArrowUpDown, MoreHorizontal, Pencil, Plus, Search, Settings, Trash2, Paperclip, FolderOpen } from "lucide-react";
 import type { TreeNode } from "../../lib/types";
 import type { POCNoteSummary } from "../noteRepository";
 import { NotebookGrid } from "./NotebookGrid";
@@ -57,6 +57,18 @@ const VIEW_KEY = "lake-notes-mobile.libraryView";
 function fmtDate(iso: string): string {
   try { const d = new Date(iso); return `${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")} ${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}`; }
   catch { return iso; }
+}
+
+/** 相对时间（仿语雀：今天/昨天 HH:mm，更早显示 MM-DD）。 */
+function fmtRelative(iso: string): string {
+  try {
+    const d = new Date(iso); const now = new Date();
+    const hm = `${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}`;
+    if (d.toDateString() === now.toDateString()) return `今天 ${hm}`;
+    const y = new Date(now); y.setDate(now.getDate() - 1);
+    if (d.toDateString() === y.toDateString()) return `昨天 ${hm}`;
+    return `${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+  } catch { return ""; }
 }
 
 export function HomePage(props: HomePageProps) {
@@ -171,28 +183,35 @@ export function HomePage(props: HomePageProps) {
           </div>
         )
       ) : (
-        <div className="mobile-scroll">
+        <div className="mobile-scroll mobile-library">
           {libraryView === "shelf" && recentNotes.length > 0 && (
-            <>
-              <div className="home-section-title">最近文档</div>
+            <section className="home-section">
+              <div className="home-section__head">
+                <span className="home-section__title">最近文档</span>
+              </div>
               <div className="home-recent">
                 {recentNotes.map((r) => (
-                  <button key={r.id} className="home-recent-card" onClick={() => { tapFeedback(); onOpenNote(r.id); }} aria-label={r.title || "文档"}>
-                    <span className="home-recent-inner">
-                      <span className="home-recent-icon"><FileText size={16} /></span>
-                      <span className="home-recent-name">{r.title || "无标题"}</span>
+                  <button key={r.id} className="doc-card" onClick={() => { tapFeedback(); onOpenNote(r.id); }} aria-label={r.title || "文档"}>
+                    <span className="doc-card__paper" aria-hidden="true">
+                      <span className="doc-card__lines" />
+                      <span className="doc-card__clip"><Paperclip size={11} /></span>
                     </span>
+                    <span className="doc-card__name">{r.title || "无标题"}</span>
+                    <span className="doc-card__date">{fmtRelative(r.updatedAt)}</span>
                   </button>
                 ))}
               </div>
-            </>
+            </section>
           )}
-          <NotebookGrid
-            notebooks={notebooks}
-            docCounts={docCounts}
-            view={libraryView}
-            onOpenNotebook={onOpenNotebook}
-          />
+          {/* key=view：切换书架/列表时重挂载，重放入场动效 */}
+          <section className="home-section" key={libraryView}>
+            <NotebookGrid
+              notebooks={notebooks}
+              docCounts={docCounts}
+              view={libraryView}
+              onOpenNotebook={(id) => { tapFeedback(); onOpenNotebook(id); }}
+            />
+          </section>
         </div>
       )}
       </div>

@@ -111,15 +111,24 @@ body { font-family: BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino San
 .qn-card__more { width: 34px; height: 34px; margin-right: -8px; border: none; background: transparent; color: var(--b3-theme-on-surface-light); display: flex; align-items: center; justify-content: center; border-radius: var(--b3-border-radius); cursor: pointer; -webkit-tap-highlight-color: transparent; }
 .qn-card__more:active { background: var(--b3-list-hover); color: var(--b3-theme-on-surface); }
 
-/* —— 最近文档（横向滚动小卡） —— */
-.home-section-title { padding: 10px 16px 6px; font-size: 15px; font-weight: 700; color: var(--b3-theme-on-surface); }
-.home-recent { display: flex; gap: 12px; overflow-x: auto; padding: 2px 16px 14px; scrollbar-width: none; }
+/* —— 首页分区：「最近文档」与「知识库」两张独立卡片（灰底白卡，仿语雀） —— */
+.mobile-library { background: var(--b3-theme-background-light); }
+.home-section { background: var(--b3-theme-background); border-radius: 16px; margin: 10px 10px 0; overflow: hidden; }
+.home-section:first-child { margin-top: 12px; }
+.home-section:last-child { margin-bottom: 12px; }
+.home-section__head { display: flex; align-items: center; padding: 14px 16px 2px; }
+.home-section__title { font-size: 15px; font-weight: 600; color: var(--b3-theme-on-background); }
+
+/* —— 最近文档：仿语雀纸卡（纸张纹理 + 回形针 + 标题/时间） —— */
+.home-recent { display: flex; gap: 14px; overflow-x: auto; padding: 12px 16px 16px; scrollbar-width: none; }
 .home-recent::-webkit-scrollbar { display: none; }
-.home-recent-card { flex: 0 0 100px; width: 100px; cursor: pointer; -webkit-tap-highlight-color: transparent; text-align: left; background: transparent; border: none; }
-.home-recent-inner { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; padding: 8px 6px; border: none; border-radius: var(--b3-border-radius); background: transparent; }
-.home-recent-card:active .home-recent-inner { background: var(--b3-list-hover); }
-.home-recent-icon { color: var(--b3-theme-primary); display: flex; }
-.home-recent-name { font-size: 12px; color: var(--b3-theme-on-surface); line-height: 1.35; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; word-break: break-word; }
+.doc-card { flex: 0 0 92px; width: 92px; display: flex; flex-direction: column; gap: 7px; padding: 0; border: none; background: transparent; text-align: left; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.doc-card__paper { position: relative; aspect-ratio: 3 / 3.9; border-radius: 6px; background: var(--b3-theme-background); border: 1px solid var(--b3-border-color); box-shadow: 0 1px 2px rgba(16,24,40,.05), 0 8px 16px -14px rgba(16,24,40,.28); overflow: hidden; transition: transform var(--mobile-duration-press) ease, box-shadow var(--mobile-duration-press) ease; }
+.doc-card:active .doc-card__paper { transform: scale(.96); box-shadow: 0 1px 2px rgba(16,24,40,.05); }
+.doc-card__lines { position: absolute; left: 11px; right: 11px; top: 15px; bottom: 12px; background-image: repeating-linear-gradient(to bottom, var(--b3-theme-background-light) 0 2px, transparent 2px 8px); border-radius: 2px; }
+.doc-card__clip { position: absolute; top: 5px; right: 6px; color: var(--b3-theme-on-surface-light); opacity: .85; transform: rotate(16deg); }
+.doc-card__name { font-size: 12.5px; line-height: 1.35; color: var(--b3-theme-on-surface); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; word-break: break-word; }
+.doc-card__date { font-size: 11px; color: var(--b3-theme-on-surface-light); }
 
 /* —— 笔记本书架（简约书卡：序号角标 + 图标 + 名称 + 文档数） —— */
 .nb-shelf { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px 12px; padding: 4px 14px 22px; }
@@ -146,8 +155,28 @@ body { font-family: BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino San
 .nb-shelf-card:nth-child(6n+5) { --nb-accent: #8f7be0; }
 .nb-shelf-card:nth-child(6n+6) { --nb-accent: #3fb0c0; }
 
-/* —— 知识库列表行容器 —— */
-.mobile-nb-list { padding: 10px 12px; }
+/* —— 知识库列表（仿语雀：图标块 + 标题 + 副标题「共 N 篇文档 · 更新时间」） —— */
+.nb-list { padding: 8px 8px 12px; }
+.nb-row { display: flex; align-items: center; gap: 12px; padding: 9px 10px; border-radius: 12px; cursor: pointer; -webkit-tap-highlight-color: transparent; transition: background-color var(--mobile-duration-press) ease, transform var(--mobile-duration-press) ease; }
+.nb-row:active { background: var(--b3-list-hover); transform: scale(.99); }
+.nb-row__tile { flex: 0 0 auto; width: 44px; height: 44px; border-radius: 12px; display: flex; align-items: center; justify-content: center; background: color-mix(in srgb, var(--nb-accent) 14%, var(--b3-theme-surface)); color: color-mix(in srgb, var(--nb-accent) 84%, var(--b3-theme-on-surface)); }
+.nb-row__emoji { font-size: 22px; line-height: 1; }
+.nb-row__main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.nb-row__title { font-size: 15px; font-weight: 500; color: var(--b3-theme-on-surface); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nb-row__sub { font-size: 12px; color: var(--b3-theme-on-surface-light); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nb-row__arrow { flex: 0 0 auto; color: var(--b3-theme-on-surface-light); display: inline-flex; }
+.nb-row:nth-child(6n+1) { --nb-accent: #5b8def; }
+.nb-row:nth-child(6n+2) { --nb-accent: #dfa03c; }
+.nb-row:nth-child(6n+3) { --nb-accent: #48b07a; }
+.nb-row:nth-child(6n+4) { --nb-accent: #d96a97; }
+.nb-row:nth-child(6n+5) { --nb-accent: #8f7be0; }
+.nb-row:nth-child(6n+6) { --nb-accent: #3fb0c0; }
+
+/* 首页分区入场（GPU：opacity/transform；reduced-motion 兜底） */
+@keyframes home-section-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+.mobile-library .home-section { animation: home-section-in 320ms var(--mobile-ease-panel) both; }
+.mobile-library .home-section:nth-child(2) { animation-delay: 60ms; }
+@media (prefers-reduced-motion: reduce) { .mobile-library .home-section { animation: none; } }
 
 /* —— 带标签的底部栏（首页：筛选/新建/云同步） —— */
 .mobile-bottom-bar--labeled { width: min(calc(100% - 32px), calc(var(--mobile-bottom-bar-height) * 4 + 24px)); min-width: 232px; }

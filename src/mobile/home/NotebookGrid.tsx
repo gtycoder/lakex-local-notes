@@ -9,6 +9,19 @@ import type { TreeNode } from "../../lib/types";
 import type { LibraryView } from "./HomePage";
 import { BookOpen, ChevronRight } from "lucide-react";
 
+/** 更新时间（仿语雀：今天/昨天 HH:mm，更早 MM-DD）。 */
+function fmtUpdated(iso: string | undefined): string {
+  try {
+    if (!iso) return "";
+    const d = new Date(iso); const now = new Date();
+    const hm = `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+    if (d.toDateString() === now.toDateString()) return `今天 ${hm}`;
+    const y = new Date(now); y.setDate(now.getDate() - 1);
+    if (d.toDateString() === y.toDateString()) return `昨天 ${hm}`;
+    return `${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  } catch { return ""; }
+}
+
 export interface NotebookGridProps {
   notebooks: TreeNode[];
   /** 每个笔记本下的文档数（.counter 展示） */
@@ -46,19 +59,25 @@ export function NotebookGrid(props: NotebookGridProps) {
     );
   }
 
-  // 列表视图：静态行（数据顺序 = 共享 sort_order = 桌面端顺序）
+  // 列表视图：仿语雀排布（图标块 + 标题 + 副标题「共 N 篇文档 · 更新时间」）
   return (
-    <div className="b3-list b3-list--mobile mobile-nb-list">
-      {notebooks.map((nb) => (
-        <div key={nb.id} className="b3-list-item mobile-nb-row" role="button" tabIndex={0} onClick={() => onOpenNotebook(nb.id)}>
-          <span className="b3-list-item__graphic">
-            {nb.icon ? <span className="ln-node-emoji">{nb.icon}</span> : <BookOpen size={18} />}
-          </span>
-          <span className="b3-list-item__text">{nb.title}</span>
-          <span className="counter">{docCounts[nb.id] ?? 0}</span>
-          <span className="b3-list-item__arrow"><ChevronRight size={16} /></span>
-        </div>
-      ))}
+    <div className="nb-list">
+      {notebooks.map((nb) => {
+        const count = docCounts[nb.id] ?? 0;
+        const updated = fmtUpdated(nb.updatedAt);
+        return (
+          <div key={nb.id} className="nb-row" role="button" tabIndex={0} onClick={() => onOpenNotebook(nb.id)}>
+            <span className="nb-row__tile">
+              {nb.icon ? <span className="nb-row__emoji">{nb.icon}</span> : <BookOpen size={20} strokeWidth={1.9} />}
+            </span>
+            <span className="nb-row__main">
+              <span className="nb-row__title">{nb.title || "未命名"}</span>
+              <span className="nb-row__sub">共 {count} 篇文档{updated ? ` · ${updated}` : ""}</span>
+            </span>
+            <span className="nb-row__arrow"><ChevronRight size={16} /></span>
+          </div>
+        );
+      })}
     </div>
   );
 }
