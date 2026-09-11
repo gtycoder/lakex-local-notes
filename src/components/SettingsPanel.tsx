@@ -73,6 +73,8 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
   // A3 数据体检：只读三查报告
   const [health, setHealth] = useState<DataHealthReport | null>(null);
   const [healthBusy, setHealthBusy] = useState(false);
+  const [searchBusy, setSearchBusy] = useState(false);
+  const [searchMsg, setSearchMsg] = useState<string | null>(null);
   // A1/A2 备份与恢复
   const [backupMsg, setBackupMsg] = useState<string | null>(null);
   const [backupBusy, setBackupBusy] = useState(false);
@@ -704,6 +706,22 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
                   </Block>
                 </Group>
               </>
+            )}
+
+            {category === "resources" && (
+              <Group title="全文搜索" icon={<Search size={16} />}>
+                <Item itemId="search-rebuild" name="重建全文搜索索引" desc="标题/正文全文索引（FTS5，中文单字分词）。正常由增量账本自动维护；索引异常或换分词器后可手动重建。">
+                  {searchMsg && <span className="b3-label__text">{searchMsg}</span>}
+                  <button className="b3-button b3-button--outline" disabled={searchBusy} onClick={() => {
+                    setSearchBusy(true);
+                    setSearchMsg(null);
+                    void native.rebuildSearchIndex()
+                      .then(() => setSearchMsg("已重建搜索索引"))
+                      .catch((error) => setSearchMsg(getNativeErrorMessage(error)))
+                      .finally(() => setSearchBusy(false));
+                  }}>{searchBusy ? "重建中…" : "重建"}</button>
+                </Item>
+              </Group>
             )}
 
             {category === "resources" && (

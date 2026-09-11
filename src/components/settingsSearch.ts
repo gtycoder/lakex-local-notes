@@ -37,6 +37,7 @@ export const SETTING_ITEMS: SettingItemEntry[] = [
   { id: "shortcut-move", category: "shortcuts", label: "在搜索结果中移动", keywords: "上下 选择", platform: "desktop" },
   { id: "shortcut-open", category: "shortcuts", label: "打开搜索结果并定位命中", keywords: "打开 定位 命中", platform: "desktop" },
   { id: "shortcut-open-tab", category: "shortcuts", label: "在新标签打开并定位命中", keywords: "新标签 打开", platform: "desktop" },
+  { id: "search-rebuild", category: "resources", label: "重建全文搜索索引", keywords: "搜索 索引 fts 重建 修复 分词", platform: "desktop" },
   { id: "shortcut-esc", category: "shortcuts", label: "关闭当前菜单或浮层", keywords: "关闭 浮层 菜单 Esc", platform: "desktop" },
   { id: "history-stats", category: "history", label: "快照占用", keywords: "快照 占用 大小 清理", platform: "desktop" },
   { id: "history-max-snapshots", category: "history", label: "每文档上限", keywords: "快照 上限 份数", platform: "desktop" },
