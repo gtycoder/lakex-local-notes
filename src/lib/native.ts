@@ -1,4 +1,4 @@
-import type { CleanOrphanResult, DataHealthReport, DeepCleanupResult, DraftJournalEntry, LastHistoryCleanup, NoteDigest, NoteDocument, OrphanAsset, QuickNoteDocument, QuickNoteImage, QuickNoteTrashItem, ResourceUploadInput, ResourceUploadOutput, S3GcLogItem, S3GcPendingItem, S3GcSettings, S3Settings, SaveQuickNoteInput, SyncProgress, SyncResult, SyncSettings, SyncStatusInfo, TreeNode, WorkspaceSnapshot } from "./types";
+import type { CleanOrphanResult, DataHealthReport, DeepCleanupResult, DraftJournalEntry, LastHistoryCleanup, NoteDigest, NoteDocument, NoteInfo, OrphanAsset, QuickNoteDocument, QuickNoteImage, QuickNoteTrashItem, ResourceUploadInput, ResourceUploadOutput, S3GcLogItem, S3GcPendingItem, S3GcSettings, S3Settings, SaveQuickNoteInput, SyncProgress, SyncResult, SyncSettings, SyncStatusInfo, TreeNode, WorkspaceSnapshot } from "./types";
 import type { TrashItem } from "../core/trashPolicy";
 import type { GcDiagnostics } from "../core/gcDiagnostics";
 
@@ -18,6 +18,10 @@ export interface LakeNative {
   deleteDraftJournal(noteId: string): Promise<void>;
   ensureNoteCaches(id: string, lakeContent?: string): Promise<boolean>;
   getNotePaths(id: string): Promise<{ title: string; lakePath: string; assetsDir: string }>;
+  /** 文档属性（元数据 + 字数 + 引用资产 + 历史快照） */
+  getNoteInfo(id: string): Promise<NoteInfo>;
+  /** 复制文档（含附件）；返回新文档 */
+  duplicateNote(id: string): Promise<NoteDocument>;
   pickExportDir(): Promise<string | null>;
   exportNote(id: string, format: "markdown" | "html" | "lake" | "docx" | "pdf", baseDir?: string): Promise<{ format: string; exportPath: string; imageCount: number; skipped: number; size: number }>;
   pickBackupDir(): Promise<string | null>;
@@ -148,6 +152,8 @@ export const native = {
   deleteDraftJournal: (noteId: string) => api().deleteDraftJournal(noteId),
   ensureNoteCaches: (id: string, lakeContent?: string) => api().ensureNoteCaches(id, lakeContent),
   getNotePaths: (id: string) => api().getNotePaths(id),
+  getNoteInfo: (id: string) => api().getNoteInfo(id),
+  duplicateNote: (id: string) => api().duplicateNote(id),
   pickExportDir: () => api().pickExportDir(),
   exportNote: (id: string, format: "markdown" | "html" | "lake" | "docx" | "pdf", baseDir?: string) => api().exportNote(id, format, baseDir),
   pickBackupDir: () => api().pickBackupDir(),

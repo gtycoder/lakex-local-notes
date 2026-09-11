@@ -92,6 +92,43 @@ export function scanFileCards(content: string): ScannedFileCard[] {
   return out;
 }
 
+export interface ScannedAssetCard {
+  /** 卡片名：image / video / audio / file */
+  cardName: string;
+  /** 本地资产引用；src 非本地形态为 null */
+  ref: LocalAssetRef | null;
+  /** 展示文件名（优先 ref.filename） */
+  filename: string;
+  size: number;
+  mimeType?: string;
+  /** 原始 src（非本地形态时有值） */
+  src: string;
+}
+
+const ASSET_CARD_RE = /<card\b[^>]*\bname="([^"]+)"[^>]*\bvalue="data:([^"]+)"/g;
+
+/** 扫描正文中的本地资产卡（image/video/audio/file），供文档属性统计 / 复制使用。 */
+export function scanAssetCards(content: string): ScannedAssetCard[] {
+  const out: ScannedAssetCard[] = [];
+  for (const m of content.matchAll(new RegExp(ASSET_CARD_RE.source, "g"))) {
+    const cardName = m[1];
+    if (cardName !== "image" && cardName !== "video" && cardName !== "audio" && cardName !== "file") continue;
+    const value = decodeCardValue(m[2]);
+    if (!value) continue;
+    const src = typeof value.src === "string" ? value.src : "";
+    const ref = src ? parseLocalAssetUrl(src) : null;
+    out.push({
+      cardName,
+      ref,
+      filename: ref?.filename ?? (typeof value.name === "string" ? value.name : ""),
+      size: typeof value.size === "number" ? value.size : 0,
+      mimeType: typeof value.type === "string" ? value.type : undefined,
+      src,
+    });
+  }
+  return out;
+}
+
 /** 构建一个"已完成"的 file 卡片 value（本地资产形态；插入/测试/移动端注入用）。 */
 export function buildDoneFileCardValue(input: { src: string; name: string; size: number; type?: string; id?: string }): FileCardValue {
   return {

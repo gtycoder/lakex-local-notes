@@ -23,6 +23,33 @@ export interface NoteDigest {
   deleted: boolean;
 }
 
+export interface NoteInfoAsset {
+  filename: string;
+  size: number;
+  kind: string;
+}
+
+/** 文档属性（"属性"弹窗数据）。 */
+export interface NoteInfo {
+  id: string;
+  title: string;
+  /** 所属路径（笔记本 / 分组 …），根下为空 */
+  parentPath: string;
+  createdAt: string | null;
+  updatedAt: string;
+  syncState: string;
+  isConflict: boolean;
+  isLocked: boolean;
+  lakePath: string;
+  assetsDir: string;
+  sizeBytes: number;
+  charCount: number;
+  wordCount: number;
+  assets: NoteInfoAsset[];
+  assetTotalBytes: number;
+  history: Array<{ id: number; createdAt: string; size: number }>;
+}
+
 export type TreeNodeType = "notebook" | "group" | "note";
 
 export interface TreeNode {

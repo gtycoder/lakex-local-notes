@@ -37,6 +37,7 @@ import { ResourceRepository } from "./resourceRepository.js";
 import { RemoteImportRepository } from "./remoteImportRepository.js";
 import type { ResourceUploadOutput, HistorySettings, HistoryCleanupResult, S3Settings, SyncSettings, S3GcSettings } from "./storeTypes.js";
 import { sqlParameterBatches } from "../src/core/sqlParameterBatch.js";
+import { fileKindOf, scanAssetCards } from "../src/core/fileCard.js";
 
 export { ASSET_NAME_RE, extractAssetRefs, isoWeekKey, selectHistoryDrops, sanitizeFileName } from "../src/core/storeUtils.js";
 
@@ -58,6 +59,34 @@ export type { S3Settings, SyncSettings, S3GcSettings, HistorySettings, HistoryCl
 export interface ImportedNoteAsset {
   filename: string;
   sourcePath: string;
+}
+
+/** 文档属性（设置里的"属性"弹窗数据）。 */
+export interface NoteInfo {
+  id: string;
+  title: string;
+  /** 所属路径（笔记本 / 分组 …），根下为空 */
+  parentPath: string;
+  createdAt: string | null;
+  updatedAt: string;
+  syncState: string;
+  isConflict: boolean;
+  isLocked: boolean;
+  lakePath: string;
+  assetsDir: string;
+  sizeBytes: number;
+  charCount: number;
+  wordCount: number;
+  /** 正文引用到的本地资产（去重） */
+  assets: NoteInfoAsset[];
+  assetTotalBytes: number;
+  history: Array<{ id: number; createdAt: string; size: number }>;
+}
+
+export interface NoteInfoAsset {
+  filename: string;
+  size: number;
+  kind: string;
 }
 
 function nowIso(): string {
@@ -342,8 +371,27 @@ export class Store {
    * sourcePath 只允许由主进程内部传入，先复制并验证目标资源，再写入元数据。若进程
    * 在跨空间转换中断，调用方的 conversion journal 会负责识别并清理未登记的目标文件。
    */
-  createNoteInAtTopWithContent(parentId: string, title: string, content: string, assets: ImportedNoteAsset[], id = uuid()): NoteDocument {
+  createNoteInAtTopWithContent(parentId: string | null, title: string, content: string, assets: ImportedNoteAsset[], id = uuid()): NoteDocument {
     return this.createNoteInWithContent(parentId, title, content, assets, id, "top");
+  }
+
+  /**
+   * 复制文档（含附件）：新 noteId → 独立资源目录，**文件名不变即可**（路径按 noteId 隔离，无需重命名）；
+   * 正文里的本地资源 URL 由旧 id 改写为新 id；新文档 sync_state='local'，随下次同步上传。
+   */
+  duplicateNote(id: string): NoteDocument {
+    const source = this.readNote(id);
+    const newId = uuid();
+    const assets: ImportedNoteAsset[] = [];
+    const assetsDir = this.noteAssetsDirFor(id);
+    if (fs.existsSync(assetsDir)) {
+      for (const entry of fs.readdirSync(assetsDir, { withFileTypes: true })) {
+        if (!entry.isFile() || !isSafePathSegment(entry.name)) continue;
+        assets.push({ filename: entry.name, sourcePath: path.join(assetsDir, entry.name) });
+      }
+    }
+    const content = source.content.split(id).join(newId);
+    return this.createNoteInAtTopWithContent(source.parentId, `${source.title} 副本`, content, assets, newId);
   }
 
   private createNoteInWithContent(
@@ -539,6 +587,56 @@ export class Store {
   /** M1：返回文档正文/图片目录的绝对路径（供“复制资料路径给本机 AI”） */
   getNotePaths(id: string): { title: string; lakePath: string; assetsDir: string } {
     return this.noteExport.getNotePaths(id);
+  }
+
+  /** 文档属性：元数据 + 字数 + 引用资产 + 历史快照（"属性"弹窗）。 */
+  getNoteInfo(id: string): NoteInfo {
+    const doc = this.readNote(id);
+    const created = this.db.prepare("SELECT created_at FROM tree_nodes WHERE id=?").get(id) as { created_at: string } | undefined;
+    const { lakePath, assetsDir } = this.getNotePaths(id);
+    const sizeBytes = fs.existsSync(lakePath) ? fs.statSync(lakePath).size : 0;
+    const plain = this.readNoteCaches(id).plain ?? lakeHtmlToPlain(doc.content);
+    const charCount = plain.replace(/\s+/g, "").length;
+    const wordCount = (plain.match(/[\u4e00-\u9fff]/g)?.length ?? 0) + (plain.match(/[A-Za-z0-9]+/g)?.length ?? 0);
+    const seen = new Set<string>();
+    const assets: NoteInfoAsset[] = [];
+    for (const card of scanAssetCards(doc.content)) {
+      if (!card.filename || seen.has(card.filename)) continue;
+      seen.add(card.filename);
+      assets.push({ filename: card.filename, size: card.size, kind: fileKindOf(card.filename) });
+    }
+    return {
+      id,
+      title: doc.title,
+      parentPath: this.parentPathOf(id),
+      createdAt: created?.created_at ?? null,
+      updatedAt: doc.updatedAt,
+      syncState: doc.syncState,
+      isConflict: doc.isConflict,
+      isLocked: doc.isLocked ?? false,
+      lakePath,
+      assetsDir,
+      sizeBytes,
+      charCount,
+      wordCount,
+      assets,
+      assetTotalBytes: assets.reduce((sum, a) => sum + a.size, 0),
+      history: this.listNoteHistory(id).map((h) => ({ id: h.id, createdAt: h.createdAt, size: h.size })),
+    };
+  }
+
+  /** 所属路径：自根向下的父级标题（笔记本 / 分组 …）。 */
+  private parentPathOf(id: string): string {
+    const names: string[] = [];
+    let parentId = (this.db.prepare("SELECT parent_id FROM tree_nodes WHERE id=?").get(id) as { parent_id: string | null } | undefined)?.parent_id ?? null;
+    let guard = 0;
+    while (parentId && guard++ < 64) {
+      const row = this.db.prepare("SELECT parent_id,title FROM tree_nodes WHERE id=?").get(parentId) as { parent_id: string | null; title: string } | undefined;
+      if (!row) break;
+      names.unshift(row.title);
+      parentId = row.parent_id;
+    }
+    return names.join(" / ");
   }
 
   /** M1：导出原生 Lake 文档（图片 base64 内嵌，VS Code Lake 插件兼容）。 */

@@ -34,6 +34,8 @@ import { useDocumentTabs } from "./hooks/useDocumentTabs";
 import { createRequestVersion } from "./core/requestVersion";
 import { getWorkspaceDisplayName } from "./lib/workspaceName";
 import { native } from "./lib/native";
+import type { TreeNode } from "./lib/types";
+import { NoteInfoDialog } from "./components/NoteInfoDialog";
 import { loadSettings, saveSettings, type AppSettings } from "./lib/settings";
 import { subtreeIds } from "./core/tree";
 import { DOCK_GUTTER } from "./lib/layoutMetrics";
@@ -69,6 +71,7 @@ export function App() {
     onToggleFocus: () => { setFocusMode((value) => !value); closeMenus(); },
     onEscape: closeMenus,
   });
+  const [infoNote, setInfoNote] = useState<TreeNode | null>(null);
   const { syncToast, setSyncToast, showSyncToast } = useSyncShell();
   const shell = useDesktopShell({ quickNotesRef });
   const {
@@ -257,7 +260,7 @@ export function App() {
   const { copyMarkdownById, exportNoteById, copyPathsById, setNodeIcon, copyMarkdownFromCache, exportAs, copyNotePaths } = useNoteActions({ showNotice, setError, setTreeNodes });
 
   const {
-    createTreeItem, renameTreeNode, moveTreeNode,
+    createTreeItem, renameTreeNode, moveTreeNode, duplicateNode,
     sidebarSelect, sidebarCreate, sidebarRename, sidebarMove,
     sidebarRequestDelete, sidebarSetIcon, sidebarOpenHistory, sidebarOpenSearch, sidebarPendingRenameConsumed,
   } = useTreeActions({
@@ -348,7 +351,7 @@ export function App() {
         onPreviewLeave={hideSidebarPreview}
       />
       {/* keep-alive：Sidebar 常驻，小记模式由 .app-shell.quick-notes-active .sidebar 隐藏（避免切回时重建目录树、丢失展开状态） */}
-      <Sidebar nodes={treeNodes} activeId={activeNoteId} search={search} mode={sidebarMode} width={sidebarWidth} minWidth={SIDEBAR_MIN_WIDTH} maxWidth={SIDEBAR_MAX_WIDTH} onSearch={setSearch} onSelect={sidebarSelect} onCreate={sidebarCreate} onRename={sidebarRename} onMoveNode={sidebarMove} onRequestDelete={sidebarRequestDelete} onCopyMarkdown={copyMarkdownFromCache} onExportAs={exportAs} onCopyPaths={copyNotePaths} onSetIcon={sidebarSetIcon} onOpenHistory={sidebarOpenHistory} onRevealNoteFile={(node) => { if (node.noteFileId) void native.revealNoteFile(node.noteFileId); }} pendingRenameId={pendingRenameId} onPendingRenameConsumed={sidebarPendingRenameConsumed} onPreviewEnter={showSidebarPreview} onPreviewLeave={hideSidebarPreview} onResizeActiveChange={handleSidebarResizeActiveChange} onWidthChange={updateSidebarWidth} onWidthCommit={commitSidebarWidth} />
+      <Sidebar nodes={treeNodes} activeId={activeNoteId} search={search} mode={sidebarMode} width={sidebarWidth} minWidth={SIDEBAR_MIN_WIDTH} maxWidth={SIDEBAR_MAX_WIDTH} onSearch={setSearch} onSelect={sidebarSelect} onCreate={sidebarCreate} onRename={sidebarRename} onMoveNode={sidebarMove} onRequestDelete={sidebarRequestDelete} onCopyMarkdown={copyMarkdownFromCache} onExportAs={exportAs} onCopyPaths={copyNotePaths} onSetIcon={sidebarSetIcon} onDuplicate={(node) => void duplicateNode(node)} onShowInfo={(node) => setInfoNote(node)} onRevealNoteFile={(node) => { if (node.noteFileId) void native.revealNoteFile(node.noteFileId); }} pendingRenameId={pendingRenameId} onPendingRenameConsumed={sidebarPendingRenameConsumed} onPreviewEnter={showSidebarPreview} onPreviewLeave={hideSidebarPreview} onResizeActiveChange={handleSidebarResizeActiveChange} onWidthChange={updateSidebarWidth} onWidthCommit={commitSidebarWidth} />
       <main className="workspace" onPointerDownCapture={(event) => {
         if (sidebarMode === "floating" && (event.target as HTMLElement).closest(".document-pane, .empty-workspace")) setSidebarMode("collapsed");
       }}>
@@ -418,6 +421,14 @@ export function App() {
           onResizeActiveChange={setOutlineResizing}
           onWidthChange={updateOutlineSidebarWidth}
           onWidthCommit={commitOutlineSidebarWidth}
+        />
+      )}
+      {infoNote && (
+        <NoteInfoDialog
+          note={infoNote}
+          onClose={() => setInfoNote(null)}
+          onRevealNoteFile={() => { if (infoNote.noteFileId) void native.revealNoteFile(infoNote.noteFileId); }}
+          onOpenHistory={() => { void sidebarOpenHistory(infoNote); setInfoNote(null); }}
         />
       )}
       <DesktopOverlays

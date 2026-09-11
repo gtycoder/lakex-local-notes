@@ -58,6 +58,8 @@ export function registerNotesIpc(
   });
   ipc.handle("delete_draft_journal", (id: string) => drafts.remove(id));
   ipc.handle("get_note_paths", (id: string) => store.getNotePaths(id));
+  ipc.handle("get_note_info", (id: string) => store.getNoteInfo(id));
+  ipc.handle("duplicate_note", (id: string) => store.duplicateNote(id));
   ipc.handle("pick_export_dir", async () => {
     const win = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0];
     const result = await dialog.showOpenDialog(win, {

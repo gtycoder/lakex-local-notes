@@ -247,6 +247,14 @@
 - **实测（环境恢复后，端到端）**：桌面（合成 `contextmenu`，因 CDP 真实鼠标进不了 Electron 渲染进程）——目录文档右键「打开 / 打开文件位置」；真实图片卡右键「打开原始文件 / 打开文件位置 / 复制地址」，点「打开原始文件」后磁盘文件确认存在（`note-assets/{noteId}/…png`，1080×513）；文本右键「复制/剪切/粘贴/全选」；旧导出菜单已消失。移动端（合成 TouchEvent 长按）——真实图片笔记卡片长按「打开原始文件 / 复制地址」，点击生效。
 - **E2E 中发现并修复的 bug**：图片 src 带 `?token=` 时，`resolveCardAsset` 用 `src.split("/").pop()` 当文件名 → `fileKindOf` 把图片判成 `other`、菜单错误显示「复制文件名」。改为优先 `parseLocalAssetUrl(src).filename`，否则按 URL pathname 取干净文件名（`assetNameFromUrl`）。
 
+### 2.28 文档右键改造：复制 + 属性（260911 晚）
+- 目录文档右键顺序：新建文档 / 新建分组 / 复制 / 重命名 / 属性 / 打开文件位置 / 导出 / 删除。去掉「打开」（点行即打开）与「设置图标」（行图标处仍可改）；「历史版本」收进「属性」。
+- **复制**：`store.duplicateNote` → 新 noteId + `note-assets/{newId}` 拷全部附件（**文件名不变**：路径按 noteId 隔离，无需重命名）+ 正文资源 URL 由旧 id 改写为新 id；`sync_state='local'`。IPC `duplicate_note`。菜单复制后刷新树并打开副本（`useTreeActions.duplicateNode`）。
+- **属性**：`store.getNoteInfo` + `src/components/NoteInfoDialog.tsx`（样式在 `ui-polish.css`）→ 位置 / 创建 / 更新 / 字数·字符 / 大小 / 同步状态；文件位置 + 资源目录（可打开）；附件网格（图片缩略图，点击打开原始文件）；历史版本列表 + 打开历史面板。IPC `get_note_info`。
+- 实测：菜单顺序 ✓；复制 18 附件文件名一致、`.lake` 同尺寸、正文 URL 已改写 ✓（测试副本已 purge 清理）；属性弹窗数据 ✓。
+- 门禁：`tsc` 0 · vitest **951 passed / 16 skipped** · 桌面+移动 `vite build`。
+- 待定：属性字段是否加 锁定状态 / 卡片统计 / 父级路径点击跳转；移动端长按菜单是否也加 复制 / 属性。
+
 ## 3. 真正的待办（已剔除全部完成项，按优先级）
 > **260904 后续评估（用户决策 + 本轮核实）**：原 §3.1 对象级 5xx 重试、§3.2 快照 gzip 异步化、§3.5 笔记本 `sort_order` 撞号 —— **已评估不做**（5xx 有"失败不 markSynced→下轮重扫"兜底；gzip 异步收益小；sort_order 撞号场景极低）。
 > 原 §3.3（FTS 全量重建→增量）与 §3.4（1/2 字短词回退）**合并为一条**：计划**整体重做索引**，两件一起落地（同属 `src/core/searchRepository.ts` 的索引/搜索路径，同时覆盖 10 万文档量级）。
