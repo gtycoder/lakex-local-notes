@@ -91,6 +91,7 @@ contextBridge.exposeInMainWorld("lakeNative", {
   showAttachmentInFolder: (noteId, filename) => invoke("show_attachment_in_folder", noteId, filename),
   copyAssetPath: (noteId, filename) => invoke("copy_asset_path", noteId, filename),
   revealNoteFile: (id) => invoke("reveal_note_file", id),
+  openNoteAssets: (id) => invoke("open_note_assets", id),
   getS3Settings: () => invoke("get_s3_settings"),
   saveS3Settings: (settings) => invoke("save_s3_settings", settings),
   testS3Connection: () => invoke("test_s3_connection"),

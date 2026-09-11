@@ -429,6 +429,7 @@ export function App() {
           note={{ noteFileId: infoNote.noteFileId, title: infoNote.title }}
           onClose={() => setInfoNote(null)}
           onRevealNoteFile={() => { if (infoNote.noteFileId) void native.revealNoteFile(infoNote.noteFileId); }}
+          onOpenAssetsDir={() => { if (infoNote.noteFileId) void native.openNoteAssets(infoNote.noteFileId); }}
           onOpenHistory={() => { void sidebarOpenHistory(infoNote); setInfoNote(null); }}
           onJumpToNode={(id) => { setInfoNote(null); setRevealNodeId(id); }}
         />

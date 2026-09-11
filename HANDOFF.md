@@ -258,6 +258,12 @@
 - **属性面板新增**：文档 ID（复制）、**卡片统计**（图片/视频/附件/代码块/表格…，正文 `<card name>` + `<table>` 计数）、**父级路径可点击跳转**（Sidebar `revealNodeId` 展开+滚动）、**历史快照内联预览**（`previewHistorySnapshot` → 内联 HTML）。
 - **统一浮层弹窗样式**：新增 `src/styles/dialog.css`（`.ln-dialog`/`__head`/`__title`/`__body`/`__resize` + `.modal-backdrop` + `.note-info-*`），**桌面与移动端都 import**；属性弹窗默认 720×min(80vh,640)、右下角可拖拽调整、窄屏折单列。以后同类弹窗复用 `.ln-dialog`。
 - **弹窗层级**：`NoteInfoDialog` 必须 `createPortal(..., document.body)`——否则被 `.sidebar` 的堆叠上下文压住（用户实测"弹窗被目录盖住"）。与 `ContextMenu`/`DesktopOverlays` 同款做法。
+
+### 2.30 属性面板排布细化（260911 深夜）
+- 第一部分信息改**两列并排**（位置独占一行；创建/更新、字数/大小成对），去掉 ID 行。
+- 第二部分「文件位置」= 3 个按钮：**打开文件位置**（reveal `.lake`）/ **打开附件文件夹**（新 IPC `open_note_assets` → `shell.openPath(assetsDir)`）/ **复制 ID**；下方保留两条路径 + ID 文本。
+- **附件 / 历史条目加高度上限**（`.note-info-assets` 190px、`.note-info-history` 200px，`overflow:auto`；渲染上限 200 + "+N"）——附件/快照多时不再撑破或错位。实测 36 个附件：clientH 190 < scrollH 242，正常滚动。
+- 移动端：文件管理器类按钮不渲染（无对应能力）；窄屏第一部分折单列；弹窗高度按内容自适应（max 78vh）。
 - **移动端新增**：长按菜单加 复制 / 属性（历史版本原有）。bridge 补 `duplicateNote/getNoteInfo/readAssetPreview/previewHistorySnapshot/openAttachment`；`MobileApp` 的 lakeNative 调试契约同步加。
 - **修复**：移动端 `noteRepository.readNote` 的 SQL **漏 select `parent_id`** → 属性父级链恒为空、复制的副本丢父级；已补列。
 - 门禁：`tsc` 0 · vitest **951 passed / 16 skipped** · 双端 `vite build`。实测：桌面菜单顺序 ✓、属性新字段 ✓、拖拽 720×640→860×740 ✓；移动端长按菜单 ✓、复制（含父级继承）✓、属性弹窗布局 ✓。

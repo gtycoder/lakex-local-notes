@@ -40,25 +40,27 @@
 
 /* 文档属性弹窗：表面/圆角/阴影/头体用浮层通用 .ln-dialog，这里只定默认尺寸（比旧版更大，可拖右下角调整） */
 .note-info-dialog { width: 720px; height: min(80vh, 640px); min-width: 420px; min-height: 320px; max-width: 94vw; max-height: 90vh; }
-.note-info-rows { display: grid; grid-template-columns: auto 1fr; gap: 6px 12px; margin: 10px 0 4px; padding: 0; }
-.note-info-row { display: contents; }
-.note-info-row dt { color: var(--b3-theme-on-surface); font-size: 12px; }
-.note-info-row dd { margin: 0; color: var(--b3-theme-on-background); font-size: 12px; word-break: break-all; }
+/* 第一部分：两列并排，省纵向空间；位置独占一行 */
+.note-info-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px 20px; margin: 12px 0 4px; padding: 0; }
+.note-info-cell { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+.note-info-cell--wide { grid-column: 1 / -1; }
+.note-info-cell dt { flex: 0 0 auto; color: var(--b3-theme-on-surface); font-size: 12px; }
+.note-info-cell dd { flex: 1 1 auto; min-width: 0; margin: 0; color: var(--b3-theme-on-background); font-size: 12px; word-break: break-all; }
 .note-info-section { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--b3-theme-surface-lighter); }
 .note-info-section-title { display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; color: var(--b3-theme-on-background); }
 .note-info-section-title span { flex: 1 1 auto; }
 .note-info-path { margin-top: 6px; font-size: 11px; color: var(--b3-theme-on-surface); word-break: break-all; }
-.note-info-assets { display: grid; grid-template-columns: repeat(auto-fill, 56px); gap: 6px; margin-top: 8px; }
+.note-info-assets { display: grid; grid-template-columns: repeat(auto-fill, 56px); gap: 6px; margin-top: 8px; max-height: 190px; overflow: auto; align-content: start; }
 .note-info-asset { width: 56px; height: 56px; padding: 0; border: 1px solid var(--b3-theme-surface-lighter); border-radius: 6px; background: var(--b3-theme-surface); overflow: hidden; cursor: pointer; display: grid; place-items: center; }
 .note-info-asset img { width: 100%; height: 100%; object-fit: cover; }
 .note-info-asset-glyph { color: var(--b3-theme-on-surface); }
 .note-info-asset-more { align-self: center; font-size: 11px; color: var(--b3-theme-on-surface); }
-.note-info-history { list-style: none; margin: 8px 0 0; padding: 0; font-size: 12px; color: var(--b3-theme-on-surface); }
+.note-info-history { list-style: none; margin: 8px 0 0; padding: 0; font-size: 12px; color: var(--b3-theme-on-surface); max-height: 200px; overflow: auto; }
 .note-info-history li { display: flex; align-items: center; gap: 6px; padding: 3px 0; }
 .note-info-history em { margin-left: auto; font-style: normal; opacity: .7; }
 .note-info-empty { margin: 8px 0 0; font-size: 12px; color: var(--b3-theme-on-surface); }
 
-.note-info-row-line { display: flex; align-items: center; gap: 12px; margin-top: 10px; }
+.note-info-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
 .note-info-key { color: var(--b3-theme-on-surface); font-size: 12px; }
 .note-info-breadcrumb { display: flex; align-items: center; flex-wrap: wrap; gap: 2px; }
 .note-info-crumb-wrap { display: inline-flex; align-items: center; }
@@ -80,12 +82,10 @@
 .note-info-history-preview h1, .note-info-history-preview h2, .note-info-history-preview h3 { font-size: 14px; margin: 6px 0; }
 .note-info-error { margin: 12px 14px; font-size: 12px; color: var(--b3-theme-error, #d23f31); }
 
-/* 窄屏（移动端）：弹窗内边距与两列行折成一列 */
+/* 窄屏（移动端）：两列折成一列 */
 @media (max-width: 600px) {
-  .note-info-dialog { width: calc(100vw - 24px); max-width: calc(100vw - 24px); height: min(78vh, 640px); min-width: 0; min-height: 240px; }
-  .note-info-row-line { flex-direction: column; align-items: flex-start; gap: 4px; }
-  .note-info-rows { grid-template-columns: 1fr; gap: 8px; }
-  .note-info-row { display: flex; flex-direction: column; gap: 2px; }
+  .note-info-dialog { width: calc(100vw - 24px); max-width: calc(100vw - 24px); height: auto; max-height: 78vh; min-width: 0; min-height: 200px; }
+  .note-info-grid { grid-template-columns: 1fr; gap: 6px; }
   .note-info-section-title { flex-wrap: wrap; }
   .note-info-id code { word-break: break-all; }
 }

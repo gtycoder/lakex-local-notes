@@ -1,6 +1,8 @@
 /**
  * 文档属性弹窗（目录右键 →「属性」）。
- * 展示元数据 / 字数 / 卡片统计 / 文件位置 / 附件预览 / 历史版本（含内联快照预览）。
+ * 第一部分：位置/创建/更新/字数/大小/状态（两列并排，省纵向空间）。
+ * 第二部分：文件位置（打开文件位置 / 打开附件文件夹 / 复制 ID）+ 路径 + ID。
+ * 第三部分：附件网格（高度受限可滚，避免附件过多撑破布局）；第四部分：历史版本（同一处理 + 内联快照预览）。
  * 动作复用 native.*；父级路径可点击跳转目录。
  */
 import { useEffect, useState, type PointerEvent as ReactPointerEvent } from "react";
@@ -10,6 +12,8 @@ import { native } from "../lib/native";
 import { getNativeErrorMessage } from "../lib/nativeErrors";
 import type { NoteInfo } from "../lib/types";
 
+/** 附件/历史条目的渲染上限（超出提示 +N，避免超大文档一次性渲染成千上万节点）。 */
+const ITEM_LIMIT = 200;
 const THUMB_LIMIT = 24;
 
 function fmtTime(iso: string | null): string {
@@ -31,11 +35,13 @@ function fmtSize(bytes: number): string {
 const SYNC_LABEL: Record<string, string> = { local: "未同步", synced: "已同步", conflict: "冲突" };
 
 /** 桌面传 TreeNode 子集；移动端传 { noteFileId: id, title }，与平台解耦。 */
-export function NoteInfoDialog({ note, onClose, onRevealNoteFile, onOpenHistory, onJumpToNode }: {
+export function NoteInfoDialog({ note, onClose, onRevealNoteFile, onOpenAssetsDir, onOpenHistory, onJumpToNode }: {
   note: { noteFileId: string | null; title: string };
   onClose: () => void;
-  /** 桌面：在文件管理器中显示 .lake；移动端不传则不渲染该按钮 */
+  /** 桌面：在文件管理器中显示 .lake；移动端不传则不渲染 */
   onRevealNoteFile?: () => void;
+  /** 桌面：打开附件文件夹；移动端不传则不渲染 */
+  onOpenAssetsDir?: () => void;
   onOpenHistory: () => void;
   /** 父级路径点击跳转；不传则路径只读展示 */
   onJumpToNode?: (id: string) => void;
@@ -106,8 +112,10 @@ export function NoteInfoDialog({ note, onClose, onRevealNoteFile, onOpenHistory,
   };
 
   const copyId = (): void => {
-    if (!info) return;
-    void navigator.clipboard.writeText(info.id).then(() => { setCopied(true); window.setTimeout(() => setCopied(false), 1200); }).catch(() => undefined);
+    setInfo((current) => {
+      if (current) void navigator.clipboard.writeText(current.id).then(() => { setCopied(true); window.setTimeout(() => setCopied(false), 1200); }).catch(() => undefined);
+      return current;
+    });
   };
 
   const toggleHistory = (id: number): void => {
@@ -119,7 +127,7 @@ export function NoteInfoDialog({ note, onClose, onRevealNoteFile, onOpenHistory,
       .finally(() => setHistLoading(null));
   };
 
-  const rows: Array<[string, string]> = info ? [
+  const cells: Array<[string, string]> = info ? [
     ["创建", fmtTime(info.createdAt)],
     ["更新", fmtTime(info.updatedAt)],
     ["字数", `${info.wordCount} 字 · ${info.charCount} 字符`],
@@ -140,30 +148,26 @@ export function NoteInfoDialog({ note, onClose, onRevealNoteFile, onOpenHistory,
         {!info && !error && <p className="note-info-empty">读取中…</p>}
         {info && (
           <div className="ln-dialog__body">
-            <div className="note-info-row-line">
-              <span className="note-info-key">位置</span>
-              <span className="note-info-breadcrumb">
-                {info.parents.length === 0
-                  ? <span className="note-info-crumb is-current">根目录</span>
-                  : info.parents.map((p, i) => (
-                    <span key={p.id} className="note-info-crumb-wrap">
-                      {i > 0 && <ChevronRight size={12} className="note-info-crumb-sep" />}
-                      {onJumpToNode
-                        ? <button className="note-info-crumb" onClick={() => onJumpToNode(p.id)}>{p.title}</button>
-                        : <span className="note-info-crumb is-current">{p.title}</span>}
-                    </span>
-                  ))}
-              </span>
-            </div>
-            <dl className="note-info-rows">
-              {rows.map(([k, v]) => (<div key={k} className="note-info-row"><dt>{k}</dt><dd>{v}</dd></div>))}
-              <div className="note-info-row">
-                <dt>ID</dt>
-                <dd className="note-info-id">
-                  <code title={info.id}>{info.id}</code>
-                  <button className="b3-button b3-button--outline" onClick={copyId}>{copied ? "已复制" : "复制"}</button>
+            {/* 第一部分：基本信息（两列并排） */}
+            <dl className="note-info-grid">
+              <div className="note-info-cell note-info-cell--wide">
+                <dt>位置</dt>
+                <dd className="note-info-breadcrumb">
+                  {info.parents.length === 0
+                    ? <span className="note-info-crumb is-current">根目录</span>
+                    : info.parents.map((p, i) => (
+                      <span key={p.id} className="note-info-crumb-wrap">
+                        {i > 0 && <ChevronRight size={12} className="note-info-crumb-sep" />}
+                        {onJumpToNode
+                          ? <button className="note-info-crumb" onClick={() => onJumpToNode(p.id)}>{p.title}</button>
+                          : <span className="note-info-crumb is-current">{p.title}</span>}
+                      </span>
+                    ))}
                 </dd>
               </div>
+              {cells.map(([k, v]) => (
+                <div key={k} className="note-info-cell"><dt>{k}</dt><dd>{v}</dd></div>
+              ))}
             </dl>
 
             {info.cardStats.length > 0 && (
@@ -175,37 +179,44 @@ export function NoteInfoDialog({ note, onClose, onRevealNoteFile, onOpenHistory,
               </div>
             )}
 
+            {/* 第二部分：文件位置（打开文件位置 / 打开附件文件夹 / 复制 ID） */}
             <div className="note-info-section">
-              <div className="note-info-section-title"><FolderOpen size={14} /><span>文件位置</span>
+              <div className="note-info-section-title"><FolderOpen size={14} /><span>文件位置</span></div>
+              <div className="note-info-actions">
                 {onRevealNoteFile && <button className="b3-button b3-button--outline" onClick={onRevealNoteFile}>打开文件位置</button>}
+                {onOpenAssetsDir && <button className="b3-button b3-button--outline" onClick={onOpenAssetsDir}>打开附件文件夹</button>}
+                <button className="b3-button b3-button--outline" onClick={copyId}>{copied ? "已复制" : "复制 ID"}</button>
               </div>
               <div className="note-info-path" title={info.lakePath}>{info.lakePath}</div>
               <div className="note-info-path" title={info.assetsDir}>{info.assetsDir}</div>
+              <div className="note-info-id"><span className="note-info-key">ID</span><code title={info.id}>{info.id}</code></div>
             </div>
 
+            {/* 第三部分：附件（高度受限，可滚；附件过多不会撑破布局） */}
             <div className="note-info-section">
               <div className="note-info-section-title"><Paperclip size={14} /><span>附件 {info.assets.length} 个 · {fmtSize(info.assetTotalBytes)}</span></div>
               {info.assets.length === 0 ? <p className="note-info-empty">无附件</p> : (
                 <div className="note-info-assets">
-                  {info.assets.slice(0, THUMB_LIMIT).map((a) => (
+                  {info.assets.slice(0, ITEM_LIMIT).map((a) => (
                     <button key={a.filename} className="note-info-asset" onClick={() => openAsset(a.filename)} title={`${a.filename}（${fmtSize(a.size)}）`}>
                       {thumbs[a.filename]
                         ? <img src={thumbs[a.filename]} alt={a.filename} loading="lazy" />
                         : <span className="note-info-asset-glyph">{a.kind === "image" ? <ImageIcon size={16} /> : a.kind === "video" || a.kind === "audio" ? <Box size={16} /> : <Paperclip size={16} />}</span>}
                     </button>
                   ))}
-                  {info.assets.length > THUMB_LIMIT && <span className="note-info-asset-more">+{info.assets.length - THUMB_LIMIT}</span>}
+                  {info.assets.length > ITEM_LIMIT && <span className="note-info-asset-more">+{info.assets.length - ITEM_LIMIT}</span>}
                 </div>
               )}
             </div>
 
+            {/* 第四部分：历史版本（同一滚动约束 + 内联快照预览） */}
             <div className="note-info-section">
               <div className="note-info-section-title"><History size={14} /><span>历史版本 {info.history.length} 个</span>
                 <button className="b3-button b3-button--outline" onClick={onOpenHistory}>打开历史版本</button>
               </div>
               {info.history.length === 0 ? <p className="note-info-empty">暂无历史快照</p> : (
                 <ul className="note-info-history">
-                  {info.history.slice(0, 5).map((h) => (
+                  {info.history.slice(0, ITEM_LIMIT).map((h) => (
                     <li key={h.id}>
                       <button className={"note-info-history-row" + (histPreview?.id === h.id ? " is-active" : "")} onClick={() => toggleHistory(h.id)}>
                         <Clock size={13} /><span>{fmtTime(h.createdAt)}</span><em>{fmtSize(h.size)}</em>
@@ -213,7 +224,7 @@ export function NoteInfoDialog({ note, onClose, onRevealNoteFile, onOpenHistory,
                       </button>
                     </li>
                   ))}
-                  {info.history.length > 5 && <li className="note-info-history-more"><span>还有 {info.history.length - 5} 个…</span></li>}
+                  {info.history.length > ITEM_LIMIT && <li className="note-info-history-more"><span>还有 {info.history.length - ITEM_LIMIT} 个…</span></li>}
                 </ul>
               )}
               {histPreview && (

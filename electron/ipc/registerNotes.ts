@@ -185,6 +185,12 @@ export function registerNotesIpc(
     shell.showItemInFolder(lakePath);
     return { ok: true };
   });
+  /** 打开笔记的附件目录（note-assets/{id}；不存在则先建空目录再打开）。 */
+  ipc.handle("open_note_assets", (id: string) => {
+    const { assetsDir } = store.getNotePaths(id);
+    fs.mkdirSync(assetsDir, { recursive: true });
+    return shell.openPath(assetsDir).then((err) => (err ? { ok: false, error: err } : { ok: true }));
+  });
 }
 
 /** 附件路径段校验：noteId + filename 都必须是安全单段（防穿越 note-assets 目录）。 */
