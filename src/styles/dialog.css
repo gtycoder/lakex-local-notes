@@ -84,7 +84,9 @@
 
 /* 附件重命名弹窗（复用 .ln-dialog） */
 .asset-rename-dialog { width: min(420px, 92vw); }
-.asset-rename-dialog .b3-text-field { width: 100%; }
+.asset-rename-field { display: flex; align-items: center; gap: 6px; }
+.asset-rename-field .b3-text-field { flex: 1 1 auto; min-width: 0; }
+.asset-rename-ext { flex: 0 0 auto; font-size: 12px; color: var(--b3-theme-on-surface); }
 .asset-rename-hint { margin: 8px 0 0; font-size: 11px; color: var(--b3-theme-on-surface); }
 .asset-rename-actions { display: flex; justify-content: flex-end; gap: 9px; margin-top: 14px; }
 

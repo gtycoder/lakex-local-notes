@@ -19,6 +19,7 @@ import { ImageLightbox } from "./ImageLightbox";
 import { attachFileCardClick, buildAttachmentPreviewItem, openAttachmentPreview, createCardHoverResidueCleaner, resolveCardAsset, type AttachmentPreviewItem } from "../attachment/attachmentPreviewController";
 import { CardContextMenu, TextContextMenu, cutCardElement } from "./CardContextMenu";
 import { AssetRenameDialog } from "./AssetRenameDialog";
+import { renameFileCardDisplay } from "../../core/fileCard.js";
 import { installMediaCardCategoryRouter } from "./mediaCardRouting";
 import { isMediaFilename } from "../../core/assetNaming.js";
 import { AttachmentPreview } from "../attachment/AttachmentPreview";
@@ -739,9 +740,28 @@ export function EditorTab({ noteId, content, visible, tocEnabled, outlineEnhance
             const item = renameItem;
             setRenameItem(null);
             if (!item.ref) return;
-            void native.renameAssetDisplay(item.ref.noteId, item.ref.filename, newName)
-              .then((res) => { if (res.ok) onReloadNote?.(noteId); })
-              .catch(() => undefined);
+            const editor = editorRef.current;
+            const host = hostRef.current;
+            if (!editor || !host) {
+              // 没有活编辑器时兜底走主进程（正常不触发：该菜单只在编辑器里可用）
+              void native.renameAssetDisplay(item.ref.noteId, item.ref.filename, newName)
+                .then((res) => { if (res.ok) onReloadNote?.(noteId); })
+                .catch(() => undefined);
+              return;
+            }
+            // 渲染层原地改写：拿编辑器**当前**正文（含未保存改动）改展示名，再 setDocument 更新，
+            // 不 bump reloadKey → 不重挂编辑器、不闪、不丢未保存内容。
+            const current = stripAssetAccessToken(editor.getDocument("text/lake"));
+            const next = renameFileCardDisplay(current, item.ref.noteId, item.ref.filename, newName);
+            if (next === current) return;
+            const scroller = resolveScrollNode(host);
+            const top = scroller.scrollTop;
+            latestDocumentRef.current = next;
+            editor.setDocument("text/lake", addAssetAccessToken(next));
+            const restore = (): void => { if (scroller.isConnected) scroller.scrollTop = top; };
+            restore();
+            window.requestAnimationFrame(restore);
+            window.setTimeout(restore, 120);
           }}
         />
       )}

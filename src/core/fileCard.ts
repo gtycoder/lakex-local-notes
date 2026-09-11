@@ -129,6 +129,24 @@ export function scanAssetCards(content: string): ScannedAssetCard[] {
   return out;
 }
 
+/**
+ * 重命名 file 卡的**展示名**（只改 value.name，src 不变）；扩展名锁定为存储文件的扩展名。
+ * 返回新正文；没有匹配到目标卡片时原样返回。桌面/移动端共用（渲染层原地更新 + 主进程兜底）。
+ */
+export function renameFileCardDisplay(content: string, noteId: string, filename: string, newName: string): string {
+  const dot = filename.lastIndexOf(".");
+  const ext = dot > 0 ? filename.slice(dot) : "";
+  const displayName = newName.trim().replace(/\.[^./\\]*$/, "") + ext;
+  return content.replace(/<card\b[^>]*\bname="file"[^>]*\bvalue="data:([^"]+)"/g, (whole, encoded: string) => {
+    const value = decodeCardValue(encoded);
+    if (!value || typeof value.src !== "string") return whole;
+    const ref = parseLocalAssetUrl(value.src);
+    if (!ref || ref.noteId !== noteId || ref.filename !== filename) return whole;
+    const nextEncoded = encodeCardValue({ ...value, name: displayName }).replace(/^data:/, "");
+    return whole.replace(`value="data:${encoded}"`, `value="data:${nextEncoded}"`);
+  });
+}
+
 /** 构建一个"已完成"的 file 卡片 value（本地资产形态；插入/测试/移动端注入用）。 */
 export function buildDoneFileCardValue(input: { src: string; name: string; size: number; type?: string; id?: string }): FileCardValue {
   return {
