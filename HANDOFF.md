@@ -297,7 +297,7 @@
 - **根因（共享 core，一直都有，非某次改动引入）**：syncEngine 的 validParents 只收集「远端 folders」，本地已有 folder 不算合法父；一旦本次清单没列出该父，effectiveParent() 就落 defaultNotebookId()（最老笔记本=测试本1）把 note 错挂、并沿用远端 updatedAt；之后 decideMetaApply 用严格 updatedAt > lastSyncedMetaAt，时间戳相等 → 永久跳过。纯桌面多端难触发（move 会抬 updatedAt）。
 - **修复**（f867c7e）：① validParents 纳入 localFolderIdsAtStart；② meta 对账加字段判据：父合法且与本地不同、且本地无待上传 meta 变更（sync_state !== 'local'）→ 跟随远端。
 - **数据修复**：零变更早退（hasPending=false + commit 一致）挡在对账循环前，修复后首次同步没生效；清掉 device_state.last_seen_commit_id 强制走完整对账后，10 条自动归位（9116074d 15→5，notebook-personal 10→20）。
-- **遗留**：零变更早退未纳入「父级漂移」信号 —— 已同步设备若父错挂，不强制对账就不会自愈。建议后续给 runDataHealthCheck 加 metaParentMismatch（或把 meta 签名并入早退判据）。
+- **已闭环**：① fde0725 runDataHealthCheck 增 metaParentMismatch（本地两表父级不一致）；② d639b7f/d91c71f 零变更早退前对账「远端 parent vs 本地活跃 note parent」，有漂移则不早退、强制走完整对账自愈（只看活跃 note，排除回收站/purged 墓碑语义，避免误触发）。
 - **Electron 反复被"回收"结论（非内存泄露）**：日志是 `Port 1421 already in use` / devtools `bind() failed` + 单实例锁；`crash reason=killed exitCode=15` 是 SIGTERM（session/job 结束或 kill 旧 PID），非崩溃/OOM；RSS 主进程 ~120MB、渲染 ~125MB。**重启前必须先 kill 占用 1421/9222 的旧 PID**；vite 需长驻 tty（§7.1）。
 - **移动端新增**：长按菜单加 复制 / 属性（历史版本原有）。bridge 补 `duplicateNote/getNoteInfo/readAssetPreview/previewHistorySnapshot/openAttachment`；`MobileApp` 的 lakeNative 调试契约同步加。
 - **修复**：移动端 `noteRepository.readNote` 的 SQL **漏 select `parent_id`** → 属性父级链恒为空、复制的副本丢父级；已补列。
