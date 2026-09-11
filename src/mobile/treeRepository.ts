@@ -185,9 +185,16 @@ export async function reorderSiblings(d: MobileDb, parentId: string | null, orde
   const now = new Date().toISOString();
   // 同级列表是 folders + notes 混合（listNotebookTree 混合排序）——必须按 id 归属写回各自表，
   // 否则文档的 sort_order 永远不动（与"移动"同一个坑）。
-  const folderIds = new Set(
-    (await d.prepare("SELECT id FROM folders WHERE trashed_at IS NULL").all() as Array<{ id: string }>).map((r) => r.id)
-  );
+  const folderRows = await d.prepare("SELECT id, parent_id FROM folders WHERE trashed_at IS NULL").all() as Array<{ id: string; parent_id: string | null }>;
+  const noteRows = await d.prepare("SELECT id, parent_id FROM notes WHERE trashed_at IS NULL").all() as Array<{ id: string; parent_id: string | null }>;
+  const folderIds = new Set(folderRows.map((r) => r.id));
+  // 服务端校验（对齐桌面 reorderTreeNodes）：列表不得重复、必须恰好是该父节点的全部子节点。
+  const currentChildren = [...folderRows, ...noteRows].filter((r) => (r.parent_id ?? null) === parentId).map((r) => r.id);
+  if (currentChildren.length > 0) {
+    assertOrderedChildren(orderedIds, currentChildren, currentChildren[0]);
+  } else if (orderedIds.length > 0) {
+    throw new Error("重排列表包含不属于该父节点的节点");
+  }
   await d.transaction(async () => {
     for (const [index, childId] of orderedIds.entries()) {
       if (folderIds.has(childId)) {

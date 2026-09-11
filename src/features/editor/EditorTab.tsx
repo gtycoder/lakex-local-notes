@@ -19,7 +19,6 @@ import { ImageLightbox } from "./ImageLightbox";
 import { attachFileCardClick, buildAttachmentPreviewItem, openAttachmentPreview, createCardHoverResidueCleaner, resolveCardAsset, findCardData, type AttachmentPreviewItem } from "../attachment/attachmentPreviewController";
 import { CardContextMenu, TextContextMenu, cutCardElement } from "./CardContextMenu";
 import { AssetRenameDialog } from "./AssetRenameDialog";
-import { renameFileCardDisplay } from "../../core/fileCard.js";
 import { installMediaCardCategoryRouter } from "./mediaCardRouting";
 import { isMediaFilename } from "../../core/assetNaming.js";
 import { AttachmentPreview } from "../attachment/AttachmentPreview";
@@ -743,51 +742,12 @@ export function EditorTab({ noteId, content, visible, tocEnabled, outlineEnhance
             // 不调 setDocument → 不重渲染整篇 → 没有白屏。
             const cardData = findCardData(picked.el);
             if (cardData?.setName) { cardData.setName(newName); cardData.sync?.(true); return; }
-            // 兜底：拿不到 cardData 时整篇 setDocument（带旧内容遮罩）
+            // 极小兜底：拿不到 cardData（lakex 内部结构变动）时走主进程改文档，再重载该 tab。
             const item = picked.item;
             if (!item.ref) return;
-            const editor = editorRef.current;
-            const host = hostRef.current;
-            if (!editor || !host) {
-              // 没有活编辑器时兜底走主进程（正常不触发：该菜单只在编辑器里可用）
-              void native.renameAssetDisplay(item.ref.noteId, item.ref.filename, newName)
-                .then((res) => { if (res.ok) onReloadNote?.(noteId); })
-                .catch(() => undefined);
-              return;
-            }
-            // 渲染层原地改写：拿编辑器**当前**正文（含未保存改动）改展示名，再 setDocument 更新，
-            // 不 bump reloadKey → 不重挂编辑器、不闪、不丢未保存内容。
-            const current = stripAssetAccessToken(editor.getDocument("text/lake"));
-            const next = renameFileCardDisplay(current, item.ref.noteId, item.ref.filename, newName);
-            if (next === current) return;
-            const scroller = resolveScrollNode(host);
-            const top = scroller.scrollTop;
-            // setDocument 会清空并重渲染整篇（tile 异步）→ 期间短暂白屏。用旧内容克隆做固定定位遮罩盖住，
-            // 新内容渲染后移除：用户看到的是"旧内容 → 新内容"，不再有白屏闪烁。
-            let cover: HTMLElement | null = null;
-            try {
-              const rect = host.getBoundingClientRect();
-              cover = host.cloneNode(true) as HTMLElement;
-              Object.assign(cover.style, {
-                position: "fixed", left: `${rect.left}px`, top: `${rect.top}px`,
-                width: `${rect.width}px`, height: `${rect.height}px`,
-                zIndex: "5", pointerEvents: "none", overflow: "hidden",
-                background: "var(--b3-theme-background)",
-              });
-              document.body.appendChild(cover);
-              const coverScroller = cover.querySelector(".ne-editor-wrap") as HTMLElement | null;
-              if (coverScroller) coverScroller.scrollTop = top;
-            } catch { cover = null; }
-            latestDocumentRef.current = next;
-            editor.setDocument("text/lake", addAssetAccessToken(next));
-            const restore = (): void => { if (scroller.isConnected) scroller.scrollTop = top; };
-            restore();
-            window.requestAnimationFrame(restore);
-            window.setTimeout(restore, 120);
-            window.setTimeout(restore, 400);
-            const dropCover = (): void => { try { cover?.remove(); } catch { /* 忽略 */ } cover = null; };
-            window.requestAnimationFrame(dropCover);
-            window.setTimeout(dropCover, 260);
+            void native.renameAssetDisplay(item.ref.noteId, item.ref.filename, newName)
+              .then((res) => { if (res.ok) onReloadNote?.(noteId); })
+              .catch(() => undefined);
           }}
         />
       )}
