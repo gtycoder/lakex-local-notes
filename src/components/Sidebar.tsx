@@ -544,8 +544,9 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
         if (!resizeRef.current) props.onPreviewLeave();
       }}
     >
-      {/* 目录栏头部：只留图标（与大纲栏同一视觉），筛选改为点击展开；全局搜索入口已移到顶栏下拉。 */}
+      {/* 目录栏头部：左侧「目录」标题 + 右侧操作图标（与大纲栏 header 同一层视觉），筛选改为点击展开。 */}
       <div className="sidebar-toolbar-row desktop-only">
+        <span className="sidebar-toolbar-title">目录</span>
         <div className="list-heading">
         <button className={`dock-icon-btn filter-btn${filter.active ? " is-active" : ""}`} onClick={filter.toggle}
           title="筛选目录" aria-label="筛选目录" aria-pressed={filter.open}><Search size={14} /></button>

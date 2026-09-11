@@ -23,13 +23,21 @@
 
 /* 目录栏头部：只剩一排图标，几何与大纲头部逐项对齐（34px 高 + 1px 分隔线 + 右内缩 4px；
  * 筛选改为点击图标展开）。两栏头部若高度/分隔线不一致，一排图标看上去就是"两个系统的产品"。 */
+.sidebar-toolbar-title {
+  flex: 0 0 auto;
+  margin-right: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: .02em;
+  color: var(--lake-text-secondary, var(--lake-text));
+}
 .sidebar-toolbar-row {
   display: flex;
   align-items: center;
   flex: 0 0 34px;
   min-height: 34px;
   gap: 1px;
-  padding: 0 4px 0 6px;
+  padding: 0 6px 0 12px;
   /* 用 --lake-border（与大纲头部同一层令牌）：--shell-separator 在暗色下是半透明黑，两栏分隔线深浅会不一致 */
   border-bottom: 1px solid var(--lake-border);
 }
