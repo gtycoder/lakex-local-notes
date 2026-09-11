@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, useSyncExternalStore, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent } from "react";
-import { ChevronsDownUp, ChevronsUpDown, Filter, Focus, ListOrdered, ListTree } from "lucide-react";
+import { ChevronsDownUp, ChevronsUpDown, Filter, Focus, List } from "lucide-react";
+import { ExpandLevelIcon } from "./ExpandLevelIcon";
 import { DockFilterRow, useDockFilter } from "../../components/DockFilterBar";
 import type { OutlineMode } from "./OutlineController";
 import { OutlineList } from "./OutlineList";
@@ -233,7 +234,7 @@ export function OutlineSidebar({
           aria-pressed={mode === "docked"}
           onClick={handleOutlineButtonClick}
         >
-          <ListTree size={16} />
+          <List size={16} />
         </button>
         <div className="outline-sidebar__rail-fill" />
         {/* 独立触发区：只有右侧窄条感应鼠标进入（rail 视觉宽度与其解耦）。 */}
@@ -282,7 +283,7 @@ export function OutlineSidebar({
               title="展开到级别"
               onClick={() => setLevelMenuOpen((v) => !v)}
             >
-              <ListOrdered size={14} />
+              <ExpandLevelIcon size={14} />
             </button>
             {levelMenuOpen && (
               <div className="outline-sidebar__level-menu" role="menu">

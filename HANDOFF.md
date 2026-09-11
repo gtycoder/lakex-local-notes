@@ -233,6 +233,7 @@
 - **全局**：`tokens.css` 加 `.lucide { stroke-width: 1.7 }`（桌面+移动共用），全站图标统一到思源口径。
 - **目录栏头部**：操作图标默认隐藏、`.sidebar:hover`/聚焦时淡入；**去掉分隔线**。图标换思源口径：筛选=`Filter`、收起=`ChevronsDownUp`、定位=`Focus`、新建=`Plus`。
 - **大纲头部**：筛选=`Filter`；并**修正展开/折叠装反**——展开全部=`ChevronsUpDown`、折叠全部=`ChevronsDownUp`（与思源 `iconExpand`/`iconContract` 一致）。
+- **增强大纲头部**：对照思源 `app/src/layout/dock/Outline.ts`（`iconFilter/iconFocus/iconExpandLevel/iconExpand/iconContract`）逐枚对齐；新增 `ExpandLevelIcon`（思源 `iconExpandLevel` 路径）替换 `ListOrdered`；折叠箭头 `ChevronRight` 即思源 `iconRight`；面板收纳态图标 `ListTree`→`List`（思源 `iconOutline`）。
 - **设置**：移动端菜单 外观=`Palette`、资源=`Image`、缓存=`DatabaseBackup`；桌面 外观=`Palette`、资源=`Image`。
 - 门禁：`tsc` 0 · vitest **951 passed / 16 skipped** · 桌面+移动 `vite build`。
 
