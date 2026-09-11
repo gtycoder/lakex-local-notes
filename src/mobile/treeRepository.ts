@@ -94,10 +94,18 @@ export async function createGroup(d: MobileDb, parentId: string, title: string):
 export async function renameTreeNode(d: MobileDb, id: string, title: string): Promise<TreeNode> {
   const trimmed = assertTreeNodeTitle(title);
   const now = new Date().toISOString();
-  const changed = (await d.prepare("UPDATE folders SET title=?, updated_at=?, sync_state='local' WHERE id=?").run(trimmed, now, id)).changes;
-  if (!changed) throw new Error("节点不存在: " + id);
-  const row = await d.prepare("SELECT id, title, parent_id, sort_order, node_type, icon, updated_at FROM folders WHERE id=?").get(id) as Record<string, unknown>;
-  return folderRowToTreeNode(row, { title: trimmed, updatedAt: now });
+  const changedFolder = (await d.prepare("UPDATE folders SET title=?, updated_at=?, sync_state='local' WHERE id=?").run(trimmed, now, id)).changes;
+  if (changedFolder) {
+    const row = await d.prepare("SELECT id, title, parent_id, sort_order, node_type, icon, updated_at FROM folders WHERE id=?").get(id) as Record<string, unknown>;
+    return folderRowToTreeNode(row, { title: trimmed, updatedAt: now });
+  }
+  // 文档（notes）也是目录树节点：移动端长按重命名 / 顶栏改名都走这里；与桌面 renameTreeNode 语义对齐。
+  const changedNote = (await d.prepare("UPDATE notes SET title=?, updated_at=?, sync_state='local' WHERE id=? AND trashed_at IS NULL").run(trimmed, now, id)).changes;
+  if (changedNote) {
+    const row = await d.prepare("SELECT id, title, parent_id, sort_order, icon, updated_at, sync_state, is_conflict FROM notes WHERE id=?").get(id) as Record<string, unknown>;
+    return noteRowToTreeNode(row, { title: trimmed, updatedAt: now });
+  }
+  throw new Error("节点不存在: " + id);
 }
 
 export async function setNodeIcon(d: MobileDb, id: string, icon: string | null): Promise<TreeNode> {

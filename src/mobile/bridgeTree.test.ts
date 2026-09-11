@@ -115,6 +115,16 @@ describe("mobile 目录重命名", () => {
     const nodes = await bridge.listTreeNodes();
     expect(nodes.find((node) => node.id === nb.id)?.title).toBe("重命名成功");
   });
+
+  it("renameTreeNode 也支持文档（notes）重命名", async () => {
+    const nb = await bridge.createNotebook({ title: "文档重命名本", icon: null });
+    const note = await bridge.createNote("原标题", nb.id);
+    const renamed = await bridge.renameTreeNode(note.id, "新标题");
+    expect(renamed.id).toBe(note.id);
+    expect(renamed.title).toBe("新标题");
+    const tree = await bridge.listNotebookTree(nb.id);
+    expect(tree.find((node) => node.id === note.id)?.title).toBe("新标题");
+  });
 });
 
 describe("mobile SQL parameter batching", () => {

@@ -125,6 +125,11 @@
 - **基准**（`electron/searchRepository.benchmark.test.ts`，opt-in）：5000 文档 build 178ms / 9.8MB / 查询 3–8ms；20000 文档 build 730ms / 39.3MB / 查询 12–34ms（含 tree_nodes/notes JOIN + bm25）。
 - **门禁**：`tsc` 0 · vitest **935 passed / 16 skipped** · 桌面+移动 `vite build` 全绿 · Android `assembleDebug` + 安装通过。
 - **留尾**：设置页「重建搜索索引」按钮（IPC `rebuild_search_index` 已就绪）；移动端改用编辑器 `getDocument("text/plain")` 作为索引源（当前用共享 `lakeHtmlToPlain` 兜底，普通文本两端已一致）。
+- **自检修复（260911 晚）**：
+  1. **重命名会清空正文索引**（旧实现把 @@body=null@@ 当空串）：`renameTreeNode` 传 null → 正文索引被重置。改为 @@body=null@@ 时读 @@notes.text_cache@@ 保留正文；桌面 @@store.test@@ + @@searchRepository.test@@ 各加回归测试。
+  2. **移动端 @@treeRepository.renameTreeNode@@ 只处理 folders**，重命名文档静默失败（与桌面不一致）：补 notes 分支并即时 @@indexNote@@；@@bridgeTree.test@@ 加回归测试。
+  3. @@applyRemoteFolderDelete@@ 的 FTS 删除改为一次批量移除（减少嵌套 savepoint）。
+- **跨端一致性实测（260911 晚，CDP 驱动）**：桌面 9222 与安卓 9335 用同一 fixture（5 篇文档）+ 12 条查询 + 重命名/删除生命周期，**结果逐条完全一致**：1/2/3+ 字统一、标题优先、短语相邻（`编辑器` 不误命中相隔的 `编…辑…器`）、拉丁大小写、空命中/符号查询、重命名保正文、删除即消失。
 ## 3. 真正的待办（已剔除全部完成项，按优先级）
 > **260904 后续评估（用户决策 + 本轮核实）**：原 §3.1 对象级 5xx 重试、§3.2 快照 gzip 异步化、§3.5 笔记本 `sort_order` 撞号 —— **已评估不做**（5xx 有"失败不 markSynced→下轮重扫"兜底；gzip 异步收益小；sort_order 撞号场景极低）。
 > 原 §3.3（FTS 全量重建→增量）与 §3.4（1/2 字短词回退）**合并为一条**：计划**整体重做索引**，两件一起落地（同属 `src/core/searchRepository.ts` 的索引/搜索路径，同时覆盖 10 万文档量级）。
