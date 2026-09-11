@@ -79,7 +79,10 @@ export function CardContextMenu({ x, y, item, actions, onClose }: {
       {actions.cut && (
         <button role="menuitem" onClick={() => run(actions.cut)}><Scissors size={15} /><span>剪切</span></button>
       )}
-      {copyItems.length > 0 && (
+      {copyItems.length === 1 && (
+        <button role="menuitem" onClick={() => run(copyItems[0][1])}><Copy size={15} /><span>{copyItems[0][0]}</span></button>
+      )}
+      {copyItems.length > 1 && (
         <div
           className="context-menu-item has-submenu"
           onMouseEnter={() => setCopyOpen(true)}

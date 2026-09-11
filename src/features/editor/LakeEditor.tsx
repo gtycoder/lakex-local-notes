@@ -7,8 +7,9 @@ import { getNativeErrorMessage } from "../../lib/nativeErrors";
 import { shouldAcceptEditorChange } from "../../core/editorChangeGuard";
 import { ImageLightbox } from "./ImageLightbox";
 import { attachImagePreviewClick } from "./imagePreview";
-import { attachFileCardClick, buildAttachmentPreviewItem, openAttachmentPreview, createCardHoverResidueCleaner, resolveCardAsset, type AttachmentPreviewItem } from "../attachment/attachmentPreviewController";
+import { attachFileCardClick, buildAttachmentPreviewItem, openAttachmentPreview, createCardHoverResidueCleaner, resolveCardAsset, findCardData, type AttachmentPreviewItem } from "../attachment/attachmentPreviewController";
 import { CardContextMenu, cutCardElement } from "./CardContextMenu";
+import { AssetRenameDialog } from "./AssetRenameDialog";
 import { attachLongPress } from "./longPress";
 import { installMediaCardCategoryRouter } from "./mediaCardRouting";
 import { isMediaFilename } from "../../core/assetNaming.js";
@@ -33,6 +34,7 @@ export function LakeEditor({ noteId, content, mode = "editor", tocEnabled, onCha
   const onEditorReadyRef = useRef(onEditorReady);
   const [error, setError] = useState<string | null>(null);
   const [cardMenu, setCardMenu] = useState<{ x: number; y: number; item: AttachmentPreviewItem; el: HTMLElement } | null>(null);
+  const [renameItem, setRenameItem] = useState<{ item: AttachmentPreviewItem; el: HTMLElement } | null>(null);
   onChangeRef.current = onChange;
   onEditorReadyRef.current = onEditorReady;
 
@@ -206,9 +208,22 @@ export function LakeEditor({ noteId, content, mode = "editor", tocEnabled, onCha
           actions={{
             openOriginal: openOriginalFromMenu,
             cut: () => { cutCardElement(cardMenu.el); },
+            rename: (it) => { setRenameItem({ item: it, el: cardMenu.el }); },
             copyName: (it) => { void navigator.clipboard.writeText(it.name).catch(() => undefined); },
           }}
           onClose={() => setCardMenu(null)}
+        />
+      )}
+      {renameItem && (
+        <AssetRenameDialog
+          initial={renameItem.item.name}
+          onCancel={() => setRenameItem(null)}
+          onConfirm={(newName) => {
+            const picked = renameItem;
+            setRenameItem(null);
+            const cardData = findCardData(picked.el);
+            if (cardData?.setName) { cardData.setName(newName); cardData.sync?.(true); }
+          }}
         />
       )}
     </>
