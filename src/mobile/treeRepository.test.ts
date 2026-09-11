@@ -67,4 +67,12 @@ describe("mobile treeRepository：文档移动 / 混合排序", () => {
     const { db } = await setup();
     await expect(moveTreeNodeOrdered(db, "n1", "n1", ["n1"])).rejects.toThrow();
   });
+
+  it("reorderSiblings 服务端校验：跨父 / 重复 / 不完整都抛错", async () => {
+    const { db } = await setup();
+    await expect(reorderSiblings(db, "nb1", ["n3"])).rejects.toThrow();          // n3 属 nb2
+    await expect(reorderSiblings(db, "nb1", ["n1", "n1", "n2"])).rejects.toThrow(); // 重复
+    await expect(reorderSiblings(db, "nb1", ["n1"])).rejects.toThrow();          // 不完整（缺 n2）
+    await expect(reorderSiblings(db, "nb1", ["n2", "n1"])).resolves.toBeUndefined(); // 完整合法
+  });
 });
