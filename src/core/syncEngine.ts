@@ -191,6 +191,9 @@ export async function syncNow(cfg: SyncConfig, s3: S3Store, db: SyncDbPort, opts
     const resolveDefaultNotebook = async (): Promise<string> => (defaultNotebook ??= await db.defaultNotebookId());
     // 兜底笔记本惰性创建，创建前其 id 未知，故不预置进 validParents（其随机 id 也不会被任何远端 rn.parentId 引用）。
     const validParents = new Set<string>([TRASH_NOTEBOOK_ID]);
+    // 本地已有的 folder 也算合法父：否则"本地有这个笔记本、但本次远端清单没列出它"时父判定失败，
+    // 会落到 defaultNotebookId() 兜底（历史 bug：文档被错挂到最老的笔记本、且时间戳相同无法自愈）。
+    for (const id of localFolderIdsAtStart) validParents.add(id);
     // 本地 folder 墓碑（deleted_notes node_type='folder'）：远端活跃条目恢复撤销判定用
     // （对齐 note 的 decideLocalTombstone：远端 updatedAt 新于墓碑时间 → 撤销墓碑跟随恢复）。
     const folderTombstoned = new Map(
@@ -434,7 +437,11 @@ export async function syncNow(cfg: SyncConfig, s3: S3Store, db: SyncDbPort, opts
           const remoteParentValid = rn.parentId !== null && validParents.has(rn.parentId);
           const localParentConflicts =
             local.parentId !== null && remoteParentValid && local.parentId !== rn.parentId && isRemoteDescendant(local.parentId, rn.id, remoteParentMap);
-          if (decideMetaApply(rn.updatedAt, base?.lastSyncedMetaAt ?? null) || localParentConflicts) {
+          // 字段判据（修历史 bug）：父合法且与本地不同时，只要本地没有待上传的 meta 变更（sync_state!=='local'）就跟随远端。
+          // 只靠时间戳严格 `>` 时，"updatedAt 相同但 parent 不同"的错挂会被永久跳过、两端再也对不齐。
+          const remoteParentDiffers = remoteParentValid && (local.parentId ?? null) !== (rn.parentId ?? null);
+          const localMetaPending = local.syncState === "local";
+          if (decideMetaApply(rn.updatedAt, base?.lastSyncedMetaAt ?? null) || localParentConflicts || (remoteParentDiffers && !localMetaPending)) {
             await db.applyRemoteNoteMeta({ ...rn, parentId: await effectiveParent() });
           }
         }
