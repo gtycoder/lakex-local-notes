@@ -6,6 +6,10 @@
 const CJK_RE = /[\u{3400}-\u{4DBF}\u{4E00}-\u{9FFF}\u{F900}-\u{FAFF}\u{3040}-\u{30FF}\u{AC00}-\u{D7AF}\u{20000}-\u{2FA1F}]/u;
 const WORD_RE = /[\p{L}\p{N}]/u;
 
+export function isCjkChar(char: string): boolean {
+  return CJK_RE.test(char);
+}
+
 export function segmentText(text: string): string[] {
   const out: string[] = [];
   let buffer = "";

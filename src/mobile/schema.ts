@@ -42,6 +42,7 @@ export async function applyMobileSchema(db: MobileDb): Promise<void> {
   await addNoteColumn("is_locked", "INTEGER NOT NULL DEFAULT 0");
   await addNoteColumn("locked_at", "TEXT");
   await addNoteColumn("icon", "TEXT");
+  await addNoteColumn("text_cache", "TEXT");
 
   // 全文搜索 v2：FTS5 + unicode61（中文单字预分词，src/core/search）。旧库若为 trigram 则重建。
   const ftsRow = await db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='notes_fts'").get() as { sql: string | null } | undefined;

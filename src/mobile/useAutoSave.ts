@@ -6,17 +6,17 @@ import { useCallback, useEffect, useRef } from "react";
 
 const DEBOUNCE_MS = 1000;
 
-export function useAutoSave(save: (id: string, title: string, content: string) => void) {
+export function useAutoSave(save: (id: string, title: string, content: string, plain?: string) => void) {
   const timers = useRef<Map<string, number>>(new Map());
   const saveRef = useRef(save);
   saveRef.current = save;
 
-  const schedule = useCallback((id: string, title: string, content: string) => {
+  const schedule = useCallback((id: string, title: string, content: string, plain?: string) => {
     const existing = timers.current.get(id);
     if (existing !== undefined) window.clearTimeout(existing);
     const t = window.setTimeout(() => {
       timers.current.delete(id);
-      saveRef.current(id, title, content);
+      saveRef.current(id, title, content, plain);
     }, DEBOUNCE_MS);
     timers.current.set(id, t);
   }, []);

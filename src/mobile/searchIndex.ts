@@ -19,6 +19,7 @@ interface NoteRow {
   title: string;
   content: string;
   content_hash: string | null;
+  text_cache: string | null;
 }
 
 interface LedgerRow {
@@ -29,7 +30,8 @@ interface LedgerRow {
 
 async function writeIndexRow(d: MobileDb, row: NoteRow, prev: LedgerRow | undefined): Promise<void> {
   const title = row.title ?? "";
-  const plain = lakeHtmlToPlain(row.content ?? "");
+  // 优先编辑器写入的纯文本缓存（与桌面同源），缺失才回退剥离标签。
+  const plain = row.text_cache ?? lakeHtmlToPlain(row.content ?? "");
   const titleHash = hashText(title);
   const bodyHash = hashText(plain);
   if (prev && prev.title_hash === titleHash && prev.body_hash === bodyHash) {
@@ -57,7 +59,7 @@ async function writeIndexRow(d: MobileDb, row: NoteRow, prev: LedgerRow | undefi
 /** 单条索引（保存后调用）：按内容 hash 短路，未变不写。 */
 export async function indexNote(d: MobileDb, noteId: string): Promise<void> {
   if (!(await hasSearchIndex(d))) return;
-  const row = await d.prepare("SELECT id, title, content, content_hash FROM notes WHERE id=?").get(noteId) as NoteRow | undefined;
+  const row = await d.prepare("SELECT id, title, content, content_hash, text_cache FROM notes WHERE id=?").get(noteId) as NoteRow | undefined;
   if (!row) return;
   const prev = await d.prepare("SELECT fts_rowid, title_hash, body_hash FROM search_index WHERE note_id=?").get(noteId) as LedgerRow | undefined;
   await writeIndexRow(d, row, prev);
@@ -91,7 +93,7 @@ export async function reconcileIndex(d: MobileDb): Promise<void> {
     });
   }
   const changed = await d.prepare(
-    "SELECT n.id AS id, n.title AS title, n.content AS content, n.content_hash AS content_hash " +
+    "SELECT n.id AS id, n.title AS title, n.content AS content, n.content_hash AS content_hash, n.text_cache AS text_cache " +
     "FROM notes n LEFT JOIN search_index si ON si.note_id = n.id " +
     "WHERE n.trashed_at IS NULL AND (si.note_id IS NULL OR si.title != n.title OR si.raw_hash IS NULL OR si.raw_hash != n.content_hash)"
   ).all() as unknown as NoteRow[];
@@ -111,7 +113,7 @@ export async function searchNotes(d: MobileDb, query: string, limit = 50): Promi
   const titlePrefix = escapeLike(normalized) + "%";
   const titleContains = "%" + escapeLike(normalized) + "%";
   const rows = await d.prepare(
-    "SELECT si.note_id AS note_id, n.title AS title, n.content AS content, n.updated_at AS updated_at, f.title AS parent_title, " +
+    "SELECT si.note_id AS note_id, n.title AS title, n.content AS content, n.text_cache AS text_cache, n.updated_at AS updated_at, f.title AS parent_title, " +
     "CASE WHEN n.title = ? THEN 0 WHEN n.title LIKE ? ESCAPE '\\' THEN 1 WHEN n.title LIKE ? ESCAPE '\\' THEN 2 ELSE 3 END AS title_match " +
     "FROM notes_fts " +
     "JOIN search_index si ON si.fts_rowid = notes_fts.rowid " +
@@ -122,7 +124,7 @@ export async function searchNotes(d: MobileDb, query: string, limit = 50): Promi
   ).all(normalized, titlePrefix, titleContains, match, limit) as Array<Record<string, unknown>>;
   return rows.map((row) => {
     const title = String(row.title ?? "");
-    const plain = lakeHtmlToPlain(String(row.content ?? ""));
+    const plain = row.text_cache != null ? String(row.text_cache) : lakeHtmlToPlain(String(row.content ?? ""));
     const fromTitle = Number(row.title_match ?? 3) < 3;
     const titleSnippet = fromTitle ? buildSnippet(title, normalized) : "";
     const bodySnippet = buildSnippet(plain, normalized);

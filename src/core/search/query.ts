@@ -1,4 +1,4 @@
-import { segmentText } from "./segment.js";
+import { isCjkChar, segmentText } from "./segment.js";
 
 /** LIKE 通配符转义：% → \%，_ → \_，\ → \\（配合 ESCAPE '\\'）。 */
 export function escapeLike(input: string): string {
@@ -14,12 +14,18 @@ export function escapeLike(input: string): string {
  */
 export function buildMatchExpression(query: string): string | null {
   const terms = query.trim().split(/\s+/).filter(Boolean);
-  const phrases: string[] = [];
+  const parts: string[] = [];
   for (const term of terms) {
     const tokens = segmentText(term);
     if (tokens.length === 0) continue;
+    // 单个拉丁/数字词（≥2 字符）→ FTS5 前缀查询：`Lak` 命中 `Lake`。
+    // 单字符不前缀（避免 C→cdp… 这类爆炸）；中文单字/混合词仍用引号短语保证精确相邻。
+    if (tokens.length === 1 && tokens[0].length >= 2 && !isCjkChar(tokens[0])) {
+      parts.push(tokens[0] + "*");
+      continue;
+    }
     const inner = tokens.join(" ").replace(/"/g, '""');
-    phrases.push('"' + inner + '"');
+    parts.push('"' + inner + '"');
   }
-  return phrases.length > 0 ? phrases.join(" ") : null;
+  return parts.length > 0 ? parts.join(" ") : null;
 }

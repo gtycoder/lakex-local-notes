@@ -82,7 +82,7 @@ export function MobileApp() {
           getS3Settings: () => bridge.getS3Settings(),
           saveS3Settings: (cfg: import("../lib/types").S3Settings) => bridge.saveS3Settings(cfg),
           createNote: (title: string, parentId: string | null) => bridge.createNote(title, parentId),
-          saveNote: (id: string, title: string, content: string, parentId: string | null) => bridge.saveNote(id, title, content, parentId),
+          saveNote: (id: string, title: string, content: string, parentId: string | null, plain?: string) => bridge.saveNote(id, title, content, parentId, plain),
           trashNote: (id: string) => bridge.trashNote(id),
           restoreNote: (id: string) => bridge.restoreNote(id),
           listTrashed: () => bridge.listTrashed(),

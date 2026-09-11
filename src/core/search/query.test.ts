@@ -14,9 +14,17 @@ describe("buildMatchExpression", () => {
   it("中英混合", () => {
     expect(buildMatchExpression("Lake编辑器")).toBe('"Lake 编 辑 器"');
   });
+  it("单个拉丁词 → 前缀 *（Lak 命中 Lake）；单字符不前缀", () => {
+    expect(buildMatchExpression("Lake")).toBe("Lake*");
+    expect(buildMatchExpression("lak")).toBe("lak*");
+    expect(buildMatchExpression("L")).toBe('"L"');
+  });
+  it("纯数字词也前缀", () => {
+    expect(buildMatchExpression("2024")).toBe("2024*");
+  });
   it("标点被当分隔符，不产生裸引号", () => {
     expect(buildMatchExpression('a"b')).toBe('"a b"');
-    expect(buildMatchExpression('" OR "')).toBe('"OR"');
+    expect(buildMatchExpression('" OR "')).toBe("OR*");
   });
   it("空/纯空白/纯符号 → null", () => {
     expect(buildMatchExpression("")).toBeNull();

@@ -25,12 +25,24 @@ import type { POCNote } from "../noteRepository";
 /** 原生 OpenFile 插件（android/.../OpenFilePlugin.java）：系统默认应用打开本地文件。 */
 const OpenFile = registerPlugin<{ open: (opts: { path: string }) => Promise<void> }>("OpenFile");
 
+/** 从 lakex 实例取纯文本（编辑器未就绪/getDocument 不可用时返回 undefined，保存侧回退 lakeHtmlToPlain）。 */
+function plainFromEditor(editor: unknown): string | undefined {
+  try {
+    const fn = (editor as { getDocument?: (mime: string) => unknown } | null)?.getDocument;
+    if (typeof fn !== "function") return undefined;
+    const value = fn.call(editor, "text/plain");
+    return typeof value === "string" ? value : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 export interface DocumentEditorProps {
   note: POCNote;
   content: string;
   title: string;
   editing: boolean;
-  onContentChange: (content: string) => void;
+  onContentChange: (content: string, plain?: string) => void;
   onToggleEdit: () => void;
   /** 打开/切换到另一个文档（工作区加 tab；单文档页接管） */
   onOpenDocument?: (id: string) => void;
@@ -99,7 +111,7 @@ export function DocumentEditor(props: DocumentEditorProps) {
           content={content}
           mode={editing ? "editor" : "viewer"}
           tocEnabled={false}
-          onChange={(c) => onContentChange(c)}
+          onChange={(c) => onContentChange(c, plainFromEditor(editorRef.current))}
           onEditorReady={(noteId, editor) => {
             (window as unknown as Record<string, unknown>).__mobileEditor = editor;
             editorRef.current = editor;

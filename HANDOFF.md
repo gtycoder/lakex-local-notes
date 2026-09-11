@@ -124,17 +124,18 @@
 - **实测（模拟器 emulator-5554，真机同引擎 SQLCipher 3.53.3）**：1 字/2 字/3+ 字统一、标题优先、`<mark>` 摘要、回收站排除、增删改增量与清理 全部通过；与桌面同 fixture 结果逐条一致。
 - **基准**（`electron/searchRepository.benchmark.test.ts`，opt-in）：5000 文档 build 178ms / 9.8MB / 查询 3–8ms；20000 文档 build 730ms / 39.3MB / 查询 12–34ms（含 tree_nodes/notes JOIN + bm25）。
 - **门禁**：`tsc` 0 · vitest **935 passed / 16 skipped** · 桌面+移动 `vite build` 全绿 · Android `assembleDebug` + 安装通过。
-- **留尾（= 已实现当前功能、后续可增强，非缺陷；文档里显式登记以防丢线索）**：
-  - 移动端索引源：当前用共享 `lakeHtmlToPlain(content)` 兜底；编辑器已暴露 `getDocument("text/plain")`（实测可用），后续改用它使两端索引源完全同源（普通文本两端已一致）。
-  - A+ 拉丁检索：拉丁/ASCII 现按整词匹配，失去任意子串（`ake` 搜不到 `Lake`）；若代码/英文检索重要，可加“拉丁 3-gram 列”（调研 §6.8）。
+- **后续增强（原“留尾”；非缺陷；下列除注明外均已完成）**：
+  - ✅ 移动端索引源 **已完成**：编辑器 `getDocument("text/plain")` → `notes.text_cache` → 索引（`saveNote` 带 plain；缺失时从 .lake 派生兜底），两端索引源同源。
+  - ✅ 拉丁前缀 **已完成**：单个拉丁/数字词（≥2 字符）走 FTS5 前缀（`Lak`→`Lake`，桌面/安卓一致）。**仍未做**：任意子串（`ake` 搜不到 `Lake`）→ 需“拉丁 3-gram 列”（调研 §6.8）。
+  - ✅ 定位 **已改进**：高亮全部命中块（上限 200）、长词优先、滚动到首个命中；仍是 DOM 启发式（lakex 无公开查找 API）。
   - 小记搜索：本期按用户决定不做，二期再评估（调研 §6.7）。
-  - 定位仍是 DOM 启发式（已支持多词）；lakex 无公开查找 API。
-  - 设置页「重建搜索索引」按钮 **已完成**（提交 4fea72b），不再是留尾。
+  - 设置页「重建搜索索引」按钮 **已完成**（4fea72b）。
 - **自检修复（260911 晚）**：
-  1. **重命名会清空正文索引**（旧实现把 @@body=null@@ 当空串）：`renameTreeNode` 传 null → 正文索引被重置。改为 @@body=null@@ 时读 @@notes.text_cache@@ 保留正文；桌面 @@store.test@@ + @@searchRepository.test@@ 各加回归测试。
-  2. **移动端 @@treeRepository.renameTreeNode@@ 只处理 folders**，重命名文档静默失败（与桌面不一致）：补 notes 分支并即时 @@indexNote@@；@@bridgeTree.test@@ 加回归测试。
-  3. @@applyRemoteFolderDelete@@ 的 FTS 删除改为一次批量移除（减少嵌套 savepoint）。
+  1. **重命名会清空正文索引**（旧实现把 `body=null` 当空串）：`renameTreeNode` 传 null → 正文索引被重置。改为 `body=null` 时读 `notes.text_cache` 保留正文；桌面 `store.test` + `searchRepository.test` 各加回归测试。
+  2. **移动端 `treeRepository.renameTreeNode` 只处理 folders**，重命名文档静默失败（与桌面不一致）：补 notes 分支并即时 `indexNote`；`bridgeTree.test` 加回归测试。
+  3. `applyRemoteFolderDelete` 的 FTS 删除改为一次批量移除（减少嵌套 savepoint）。
 - **跨端一致性实测（260911 晚，CDP 驱动）**：桌面 9222 与安卓 9335 用同一 fixture（5 篇文档）+ 12 条查询 + 重命名/删除生命周期，**结果逐条完全一致**：1/2/3+ 字统一、标题优先、短语相邻（`编辑器` 不误命中相隔的 `编…辑…器`）、拉丁大小写、空命中/符号查询、重命名保正文、删除即消失。
+
 ## 3. 真正的待办（已剔除全部完成项，按优先级）
 > **260904 后续评估（用户决策 + 本轮核实）**：原 §3.1 对象级 5xx 重试、§3.2 快照 gzip 异步化、§3.5 笔记本 `sort_order` 撞号 —— **已评估不做**（5xx 有"失败不 markSynced→下轮重扫"兜底；gzip 异步收益小；sort_order 撞号场景极低）。
 > 原 §3.3（FTS 全量重建→增量）与 §3.4（1/2 字短词回退）**合并为一条**：计划**整体重做索引**，两件一起落地（同属 `src/core/searchRepository.ts` 的索引/搜索路径，同时覆盖 10 万文档量级）。

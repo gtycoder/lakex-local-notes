@@ -182,8 +182,8 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
   useEffect(() => { onActiveNoteChange?.(activeId); }, [activeId, onActiveNoteChange]);
 
   // 自动保存：编辑态内容变化防抖 1s 落盘
-  const { schedule: scheduleAutoSave, flush: flushAutoSave } = useAutoSave(async (id, title, content) => {
-    await bridge.saveNote(id, title, content);
+  const { schedule: scheduleAutoSave, flush: flushAutoSave } = useAutoSave(async (id, title, content, plain) => {
+    await bridge.saveNote(id, title, content, null, plain);
   });
 
   // 阅读态：文档下滑 → 底栏隐藏；上滑 → 弹出（思源设计，修"阅读时底部悬浮框消失后不再出现"）
@@ -403,7 +403,7 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
               content={t.content}
               title={t.title}
               editing={t.editing}
-              onContentChange={(c) => { setTabs((prev) => prev.map((x) => (x.id === t.id ? { ...x, content: c } : x))); if (t.editing) scheduleAutoSave(t.id, t.title, c); }}
+              onContentChange={(c, plain) => { setTabs((prev) => prev.map((x) => (x.id === t.id ? { ...x, content: c } : x))); if (t.editing) scheduleAutoSave(t.id, t.title, c, plain); }}
               onToggleEdit={toggleEdit}
               documents={[]}
               hidePanels

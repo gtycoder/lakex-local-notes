@@ -56,23 +56,33 @@ export function clearScrollMemory(noteId: string): void {
   scrollMemory.delete(noteId);
 }
 
-/** Locate the first visible body occurrence for global search without changing Lake's editor API. */
+/** Locate body hits for global search without changing Lake's editor API.
+ * 高亮全部命中块（上限 200）、长词优先、滚动到第一个命中。 */
 export function locateEditorSearchHit(noteId: string, query: string): boolean {
   const host = document.querySelector<HTMLElement>(`.lake-editor-tab[data-note-id="${escapeId(noteId)}"]`);
   if (!host || !query.trim()) return false;
-  const terms = query.trim().toLocaleLowerCase().split(/\s+/).filter(Boolean);
+  const terms = query.trim().toLocaleLowerCase().split(/\s+/).filter(Boolean).sort((a, b) => b.length - a.length);
   if (terms.length === 0) return false;
   const walker = document.createTreeWalker(host, NodeFilter.SHOW_TEXT);
+  const blocks: HTMLElement[] = [];
+  const seen = new Set<HTMLElement>();
+  const MAX_BLOCKS = 200;
   let node: Text | null = null;
   while ((node = walker.nextNode() as Text | null)) {
-    const value = (node.nodeValue ?? "").toLocaleLowerCase();
-    if (terms.some((term) => value.includes(term))) break;
+    const value = node.nodeValue ?? "";
+    if (!value) continue;
+    const lower = value.toLocaleLowerCase();
+    if (!terms.some((term) => lower.includes(term))) continue;
+    const block = node.parentElement?.closest<HTMLElement>("[data-node-id], .ne-p, .ne-h, .ne-block, p, h1, h2, h3, h4, h5, h6") ?? node.parentElement;
+    if (!block || seen.has(block)) continue;
+    seen.add(block);
+    blocks.push(block);
+    block.classList.add("lake-search-hit-target");
+    if (blocks.length >= MAX_BLOCKS) break;
   }
-  if (!node?.parentElement) return false;
-  const target = node.parentElement.closest<HTMLElement>("[data-node-id], .ne-p, .ne-h, .ne-block, p, h1, h2, h3, h4, h5, h6") ?? node.parentElement;
-  target.classList.add("lake-search-hit-target");
-  target.scrollIntoView({ block: "center", behavior: "smooth" });
-  window.setTimeout(() => target.classList.remove("lake-search-hit-target"), 1800);
+  if (blocks.length === 0) return false;
+  blocks[0].scrollIntoView({ block: "center", behavior: "smooth" });
+  window.setTimeout(() => { for (const block of blocks) block.classList.remove("lake-search-hit-target"); }, 1800);
   return true;
 }
 

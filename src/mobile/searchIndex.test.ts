@@ -33,7 +33,7 @@ function adapt(raw: Database.Database): MobileDb {
 function makeDb(): MobileDb {
   const raw = new Database(":memory:");
   raw.exec([
-    "CREATE TABLE notes (id TEXT PRIMARY KEY, title TEXT NOT NULL, content TEXT NOT NULL, parent_id TEXT, updated_at TEXT NOT NULL, content_hash TEXT, trashed_at TEXT);",
+    "CREATE TABLE notes (id TEXT PRIMARY KEY, title TEXT NOT NULL, content TEXT NOT NULL, parent_id TEXT, updated_at TEXT NOT NULL, content_hash TEXT, text_cache TEXT, trashed_at TEXT);",
     "CREATE TABLE folders (id TEXT PRIMARY KEY, title TEXT NOT NULL, parent_id TEXT);",
     "CREATE VIRTUAL TABLE notes_fts USING fts5(title, body, tokenize='unicode61');",
     "CREATE TABLE search_index (note_id TEXT PRIMARY KEY, fts_rowid INTEGER NOT NULL, title TEXT NOT NULL, raw_hash TEXT, title_hash TEXT NOT NULL, body_hash TEXT NOT NULL, indexed_at TEXT NOT NULL);",

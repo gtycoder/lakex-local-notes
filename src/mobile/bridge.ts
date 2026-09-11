@@ -351,10 +351,10 @@ export const bridge = {
     });
   },
 
-  async saveNote(id: string, title: string, content: string, parentId: string | null = null): Promise<void> {
+  async saveNote(id: string, title: string, content: string, parentId: string | null = null, plain?: string): Promise<void> {
     return maintenance.run("main", async () => {
       const d = await ensureDb();
-      const changed = await noteRepository.saveNote(d, id, title, content, parentId, assets);
+      const changed = await noteRepository.saveNote(d, id, title, content, parentId, assets, plain);
     });
   },
 

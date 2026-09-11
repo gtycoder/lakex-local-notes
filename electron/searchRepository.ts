@@ -176,7 +176,12 @@ export class SearchRepository {
   }
 
   private readCachedBody(noteId: string): string {
-    try { return this.readNoteCaches(noteId).plain ?? ""; } catch { return ""; }
+    // 优先缓存；缺失则从磁盘 .lake 派生（覆盖 saveNote 未传 caches 的调用方）。
+    try {
+      const cached = this.readNoteCaches(noteId).plain;
+      if (cached != null) return cached;
+    } catch { /* notes 行缺失，下面兜底 */ }
+    try { return this.derivePlainText(noteId) ?? ""; } catch { return ""; }
   }
 
   private ledgerCount(): number {

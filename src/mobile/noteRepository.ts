@@ -1,4 +1,5 @@
 import { extractAssetRefs, extOf } from "../core/assetNaming.js";
+import { lakeHtmlToPlain } from "../core/lakeCaches.js";
 import { indexNote, removeNoteFromIndex, searchNotes as searchNotesIndexed } from "./searchIndex.js";
 import type { SearchResult } from "../core/searchTypes.js";
 import { hasNoteSaveChanges } from "../core/noteSaveDecision.js";
@@ -108,16 +109,19 @@ export async function saveNote(
   content: string,
   parentId: string | null,
   assets: Map<string, Uint8Array>,
+  plain?: string,
 ): Promise<boolean> {
   const now = new Date().toISOString();
   const safeTitle = title.trim() ? title.trim() : "无标题文档";
   const existing = await d.prepare("SELECT title, content FROM notes WHERE id=? AND trashed_at IS NULL").get(id) as { title: string; content: string } | undefined;
   if (existing && !hasNoteSaveChanges(existing, { title: safeTitle, content })) return false;
+  // 首选编辑器 getDocument("text/plain")（与桌面同源）；缺省回退共享 lakeHtmlToPlain。
+  const bodyPlain = plain ?? lakeHtmlToPlain(content);
 
   await d.prepare(
-    `INSERT INTO notes (id, title, content, parent_id, updated_at, content_hash, sync_state) VALUES (?,?,?,?,?,?,'local')
-     ON CONFLICT(id) DO UPDATE SET title=excluded.title, content=excluded.content, updated_at=excluded.updated_at, content_hash=excluded.content_hash, sync_state='local'`
-  ).run(id, safeTitle, content, parentId, now, sha256Sync(new TextEncoder().encode(content)));
+    `INSERT INTO notes (id, title, content, parent_id, updated_at, content_hash, sync_state, text_cache) VALUES (?,?,?,?,?,?,'local',?)
+     ON CONFLICT(id) DO UPDATE SET title=excluded.title, content=excluded.content, updated_at=excluded.updated_at, content_hash=excluded.content_hash, sync_state='local', text_cache=excluded.text_cache`
+  ).run(id, safeTitle, content, parentId, now, sha256Sync(new TextEncoder().encode(content)), bodyPlain);
   await detectOrphans(d, id, content, assets);
   await indexNote(d, id);
   return true;
