@@ -31,7 +31,7 @@ import { stageAssetWrites } from "./assetWrites.js";
 import { applyMobileSchema } from "./schema.js";
 import * as treeRepository from "./treeRepository.js";
 import * as noteRepository from "./noteRepository.js";
-import { reconcileIndex } from "./searchIndex.js";
+import { indexNote, reconcileIndex } from "./searchIndex.js";
 import type { POCNote, POCNoteSummary } from "./noteRepository.js";
 import * as trashRepository from "./trashRepository.js";
 import * as quickNotesRepository from "./quickNotesRepository.js";
@@ -221,6 +221,8 @@ export const bridge = {
     return maintenance.run("main", async () => {
       const d = await ensureDb();
       const node = await treeRepository.renameTreeNode(d, id, title);
+      // 重命名即时更新搜索索引（folder 重命名时 indexNote 找不到 notes 行，自动 no-op）。
+      await indexNote(d, id);
       return node;
     });
   },

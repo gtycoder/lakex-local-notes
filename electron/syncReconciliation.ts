@@ -274,13 +274,15 @@ export class SyncReconciliation {
       const purgeNode = this.ctx.db.prepare(
         "UPDATE tree_nodes SET parent_id=?,trashed_at=COALESCE(trashed_at,?),deleted_from_parent_id=COALESCE(deleted_from_parent_id,parent_id),updated_at=?,sync_state='purged' WHERE id=? AND deleted_at IS NULL"
       );
+      const removedNoteIds: string[] = [];
       for (const node of subtree) {
         if (node.note_file_id) {
           purgeNote.run(this.ctx.trashNotebookId, now, now, node.note_file_id);
-          this.ctx.removeSearch([node.note_file_id]);
+          removedNoteIds.push(node.note_file_id);
         }
         purgeNode.run(this.ctx.trashNotebookId, now, now, node.id);
       }
+      if (removedNoteIds.length > 0) this.ctx.removeSearch(removedNoteIds);
     });
     tx();
   }

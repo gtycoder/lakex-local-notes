@@ -355,7 +355,7 @@ describe("目录树操作", () => {
   it("全文搜索：标题优先、正文命中 + 高亮，1/2/3 字统一，删除后消失", () => {
     const note = store.createNote("搜索引擎笔记");
     store.saveNote(note.id, "搜索引擎笔记", "<p>全文搜索与回收站方案</p>", { markdown: "# 搜索引擎笔记\n\n全文搜索与回收站方案", plain: "搜索引擎笔记\n全文搜索与回收站方案" });
-    // ≥3 字：trigram 命中正文
+    // 正文命中（FTS5 unicode61 + 单字分词）
     let r = store.searchNotes("回收站");
     expect(r.some((x) => x.id === note.id)).toBe(true);
     const hit = r.find((x) => x.id === note.id)!;
@@ -363,7 +363,7 @@ describe("目录树操作", () => {
     // 标题命中
     r = store.searchNotes("搜索引擎");
     expect(r.some((x) => x.id === note.id)).toBe(true);
-    // 短查询（2 字）回退标题 LIKE
+    // 2 字标题同样走统一索引（无长度分支）
     const n2 = store.createNote("快照测试文档");
     r = store.searchNotes("快照");
     expect(r.some((x) => x.id === n2.id)).toBe(true);
@@ -371,6 +371,15 @@ describe("目录树操作", () => {
     store.deleteTreeNode(n2.id);
     r = store.searchNotes("快照");
     expect(r.some((x) => x.id === n2.id)).toBe(false);
+  });
+
+  it("重命名文档保留正文索引（body=null 不写入空正文）", () => {
+    const note = store.createNote("原标题");
+    store.saveNote(note.id, "原标题", "<p>独特正文词量子纠缠</p>", { plain: "独特正文词量子纠缠" });
+    expect(store.searchNotes("量子纠缠").some((x) => x.id === note.id)).toBe(true);
+    store.renameTreeNode(note.id, "重命名后标题");
+    expect(store.searchNotes("量子纠缠").some((x) => x.id === note.id)).toBe(true);
+    expect(store.searchNotes("重命名后").some((x) => x.id === note.id)).toBe(true);
   });
 
   it("deleteTreeNode 软删除 = 移入回收站笔记本：树隐藏、文件保留、不写墓碑、进同步列表", () => {

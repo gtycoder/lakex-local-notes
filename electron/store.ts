@@ -187,6 +187,7 @@ export class Store {
       db: this.db,
       trashNotebookId: TRASH_NOTEBOOK_ID,
       derivePlainText: (noteId) => this.derivePlainText(noteId),
+      readNoteCaches: (noteId) => this.readNoteCaches(noteId),
     });
     this.syncReconciliation = new SyncReconciliation({
       db: this.db,

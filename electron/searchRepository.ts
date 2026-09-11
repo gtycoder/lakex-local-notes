@@ -11,6 +11,8 @@ interface SearchRepositoryDeps {
   trashNotebookId: string;
   /** 从磁盘 .lake 派生纯文本（仅写缓存列、不触发索引），供全量重建兜底。 */
   derivePlainText(noteId: string): string | null;
+  /** 读取正文纯文本缓存；body=null（仅标题变更，如重命名）时用它保留原正文索引。 */
+  readNoteCaches(noteId: string): { markdown: string | null; plain: string | null };
 }
 
 interface LedgerRow {
@@ -48,17 +50,20 @@ export class SearchRepository {
   private readonly db: DbLike;
   private readonly trashNotebookId: string;
   private readonly derivePlainText: SearchRepositoryDeps["derivePlainText"];
+  private readonly readNoteCaches: SearchRepositoryDeps["readNoteCaches"];
 
-  constructor({ db, trashNotebookId, derivePlainText }: SearchRepositoryDeps) {
+  constructor({ db, trashNotebookId, derivePlainText, readNoteCaches }: SearchRepositoryDeps) {
     this.db = db;
     this.trashNotebookId = trashNotebookId;
     this.derivePlainText = derivePlainText;
+    this.readNoteCaches = readNoteCaches;
   }
 
   /** 单条增量写入；内容 hash（标题+纯文本）未变直接短路，不重复分词。 */
   upsert(noteId: string, title: string, body: string | null): void {
     const nextTitle = title ?? "";
-    const nextBody = body ?? "";
+    // body=null 表示“仅标题变更”（重命名）：读取现有纯文本缓存，保留正文索引。
+    const nextBody = body ?? this.readCachedBody(noteId);
     const titleHash = hashText(nextTitle);
     const bodyHash = hashText(nextBody);
     const prev = this.db.prepare("SELECT fts_rowid, title_hash, body_hash FROM search_index WHERE note_id=?").get(noteId) as LedgerRow | undefined;
@@ -168,6 +173,10 @@ export class SearchRepository {
         parentTitle: row.parent_title,
       };
     });
+  }
+
+  private readCachedBody(noteId: string): string {
+    try { return this.readNoteCaches(noteId).plain ?? ""; } catch { return ""; }
   }
 
   private ledgerCount(): number {

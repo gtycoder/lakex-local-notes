@@ -40,6 +40,10 @@ function makeRepo(options: { countWrites?: { deletes: number; inserts: number } 
       const row = raw.prepare("SELECT text_cache FROM notes WHERE id=?").get(noteId) as { text_cache: string | null } | undefined;
       return row?.text_cache ?? null;
     },
+    readNoteCaches: (noteId: string) => {
+      const row = raw.prepare("SELECT text_cache FROM notes WHERE id=?").get(noteId) as { text_cache: string | null } | undefined;
+      return { markdown: null, plain: row?.text_cache ?? null };
+    },
   });
   let tick = 0;
   const addNote = (id: string, title: string, plain: string, parentId: string | null = null): void => {
@@ -114,6 +118,15 @@ describe("SearchRepository v2（统一 FTS5 unicode61 + 账本）", () => {
     raw.prepare("INSERT INTO notes(id,title,text_cache) VALUES(?,?,?)").run("n1", "磁盘文档", "磁盘正文包含量子纠缠");
     repo.rebuild();
     expect(repo.search("量子纠缠").some((r) => r.id === "n1")).toBe(true);
+  });
+
+  it("仅标题 upsert（body=null）保留正文索引（重命名回归）", () => {
+    const { repo, addNote } = makeRepo();
+    addNote("n1", "原标题", "独特正文词量子纠缠");
+    expect(repo.search("量子纠缠").some((r) => r.id === "n1")).toBe(true);
+    repo.upsert("n1", "新标题", null);
+    expect(repo.search("量子纠缠").some((r) => r.id === "n1")).toBe(true);
+    expect(repo.search("新标题").some((r) => r.id === "n1")).toBe(true);
   });
 
   it("特殊字符/超长不抛错", () => {

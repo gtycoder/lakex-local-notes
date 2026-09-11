@@ -48,7 +48,7 @@ const N = Number(process.env.LAKE_BENCH_N ?? 5000);
       }
     });
     seed();
-    const repo = new SearchRepository({ db: db as unknown as DbLike, trashNotebookId: "trash", derivePlainText: () => null });
+    const repo = new SearchRepository({ db: db as unknown as DbLike, trashNotebookId: "trash", derivePlainText: () => null, readNoteCaches: () => ({ markdown: null, plain: null }) });
     const buildStart = Date.now();
     repo.rebuild();
     const buildMs = Date.now() - buildStart;
