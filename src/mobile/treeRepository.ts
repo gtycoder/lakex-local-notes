@@ -125,17 +125,24 @@ export async function setNodeIcon(d: MobileDb, id: string, icon: string | null):
 }
 
 export async function moveTreeNodeOrdered(d: MobileDb, id: string, parentId: string | null, orderedIds: string[]): Promise<TreeNode> {
-  const moving = await d.prepare("SELECT node_type FROM folders WHERE id = ? AND trashed_at IS NULL").get(id) as { node_type: string } | undefined;
-  if (!moving) throw new Error("节点不存在: " + id);
-  assertRootConstraint(moving.node_type, parentId);
+  // 被移动节点可能是 folder（notebook/group）或 note（文档）。此前只查 folders，
+  // 导致文档"移动到…"必然抛"节点不存在"（长按菜单里点了就报"移动失败"）。
+  // 对齐桌面 moveTreeNodeOrdered：同时处理两表（移动端 notes 也能作父，见 listNotebookTree）。
+  const movingFolder = await d.prepare("SELECT node_type FROM folders WHERE id = ? AND trashed_at IS NULL").get(id) as { node_type: string } | undefined;
+  const movingNote = movingFolder ? undefined : await d.prepare("SELECT id FROM notes WHERE id = ? AND trashed_at IS NULL").get(id) as { id: string } | undefined;
+  if (!movingFolder && !movingNote) throw new Error("节点不存在: " + id);
+  const nodeType = movingFolder ? movingFolder.node_type : "note";
+  assertRootConstraint(nodeType, parentId);
 
-  const all = await d.prepare("SELECT id, parent_id FROM folders WHERE trashed_at IS NULL").all() as Array<{ id: string; parent_id: string | null }>;
+  const folderRows = await d.prepare("SELECT id, parent_id FROM folders WHERE trashed_at IS NULL").all() as Array<{ id: string; parent_id: string | null }>;
+  const noteRows = await d.prepare("SELECT id, parent_id FROM notes WHERE trashed_at IS NULL").all() as Array<{ id: string; parent_id: string | null }>;
+  const all = [...folderRows, ...noteRows];
   const descendants = new Set<string>();
   const childrenMap = new Map<string, string[]>();
-  for (const f of all) {
-    const list = childrenMap.get(f.parent_id ?? "") ?? [];
-    list.push(f.id);
-    childrenMap.set(f.parent_id ?? "", list);
+  for (const n of all) {
+    const list = childrenMap.get(n.parent_id ?? "") ?? [];
+    list.push(n.id);
+    childrenMap.set(n.parent_id ?? "", list);
   }
   const walk = (nodeId: string) => {
     for (const c of childrenMap.get(nodeId) ?? []) {
@@ -143,20 +150,35 @@ export async function moveTreeNodeOrdered(d: MobileDb, id: string, parentId: str
     }
   };
   walk(id);
-  const parentExists = parentId === null || all.some((f) => f.id === parentId);
+  const validIds = new Set(all.map((n) => n.id));
+  const parentExists = parentId === null || validIds.has(parentId);
   assertMoveTarget(id, parentId, descendants, parentExists);
   const currentChildren = (childrenMap.get(parentId ?? "") ?? []).filter((cid) => cid !== id);
   assertOrderedChildren(orderedIds, currentChildren, id);
 
   const now = new Date().toISOString();
+  const folderIds = new Set(folderRows.map((r) => r.id));
+  const movedInFolders = folderIds.has(id);
   await d.transaction(async () => {
-    await d.prepare("UPDATE folders SET parent_id=?, updated_at=?, sync_state='local' WHERE id=?").run(parentId, now, id);
+    if (movedInFolders) {
+      await d.prepare("UPDATE folders SET parent_id=?, updated_at=?, sync_state='local' WHERE id=?").run(parentId, now, id);
+    } else {
+      await d.prepare("UPDATE notes SET parent_id=?, updated_at=?, sync_state='local' WHERE id=?").run(parentId, now, id);
+    }
     for (const [index, childId] of orderedIds.entries()) {
-      await d.prepare("UPDATE folders SET sort_order=?, updated_at=?, sync_state='local' WHERE id=?").run(index, now, childId);
+      if (folderIds.has(childId)) {
+        await d.prepare("UPDATE folders SET sort_order=?, updated_at=?, sync_state='local' WHERE id=?").run(index, now, childId);
+      } else {
+        await d.prepare("UPDATE notes SET sort_order=?, updated_at=?, sync_state='local' WHERE id=?").run(index, now, childId);
+      }
     }
   });
-  const row = await d.prepare("SELECT id, title, parent_id, sort_order, node_type, icon, updated_at FROM folders WHERE id=?").get(id) as Record<string, unknown>;
-  return folderRowToTreeNode(row, { parentId, updatedAt: now });
+  if (movedInFolders) {
+    const row = await d.prepare("SELECT id, title, parent_id, sort_order, node_type, icon, updated_at FROM folders WHERE id=?").get(id) as Record<string, unknown>;
+    return folderRowToTreeNode(row, { parentId, updatedAt: now });
+  }
+  const row = await d.prepare("SELECT id, title, parent_id, sort_order, icon, updated_at, sync_state, is_conflict FROM notes WHERE id=?").get(id) as Record<string, unknown>;
+  return noteRowToTreeNode(row, { parentId, updatedAt: now });
 }
 
 export async function reorderSiblings(d: MobileDb, parentId: string | null, orderedIds: string[]): Promise<void> {
