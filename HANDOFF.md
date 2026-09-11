@@ -272,6 +272,11 @@
 - **复制索引补漏**：桌面 `createNoteInWithContent` 只按标题索引（body=""）→ 已让 `duplicateNote` 复制后补 `searchRepository.upsert(newId, title, lakeHtmlToPlain(content))`。新增单测 `duplicateNote 复制文档`（正文可搜 + 附件复制/URL 改写），`store.test.ts` **117 passed**。
 - **卡片菜单复制动作**（4 个都做）：使用默认程序打开 / 打开文件位置 / 剪切 / 复制图片(仅图) / 复制文件路径 / 另存为… / 复制文件名；**去掉「复制地址」**（127.0.0.1 本机 URL 无意义）。新 IPC `copy_asset_image`（clipboard.writeImage）、`save_asset_as`（showSaveDialog+copyFile）；移动端只留 使用默认程序打开/剪切/复制文件名。
 - **剪切**：`EditorTab`/`LakeEditor` 加 `cut` handler（copy 同源序列化写剪贴板 + `execCommand("delete")`），快捷键与文本菜单「剪切」可用；卡片「剪切」= `cutCardElement`。
+
+### 2.32 卡片菜单：合并复制 + 顺序对齐 + 文件卡右键修复（260912 凌晨）
+- **文件卡右键修复**：`resolveCardAsset` 的 file 分支原来 `readFileCardData(card, card)`（从卡片根读 fiber），而 `__reactFiber$` 挂在 `.ne-card-file` 芯片上 → 解析失败落到文字菜单。改为从右键命中元素 `start` 读、并兜底芯片（实测文件卡右键现在出卡片菜单）。
+- **复制合并**：三项复制收进「复制 ▸」子菜单（复制图片(仅图) / 复制文件路径 / 复制文件名）；hover 展开 + click 切换（触屏可用）。
+- **顺序对齐文档右键理念**（编辑 → 打开 → 位置 → 导出）：**剪切 / 复制▸ / 使用默认程序打开 / 打开文件位置 / 另存为…**。
 - **Electron 反复被"回收"结论（非内存泄露）**：日志是 `Port 1421 already in use` / devtools `bind() failed` + 单实例锁；`crash reason=killed exitCode=15` 是 SIGTERM（session/job 结束或 kill 旧 PID），非崩溃/OOM；RSS 主进程 ~120MB、渲染 ~125MB。**重启前必须先 kill 占用 1421/9222 的旧 PID**；vite 需长驻 tty（§7.1）。
 - **移动端新增**：长按菜单加 复制 / 属性（历史版本原有）。bridge 补 `duplicateNote/getNoteInfo/readAssetPreview/previewHistorySnapshot/openAttachment`；`MobileApp` 的 lakeNative 调试契约同步加。
 - **修复**：移动端 `noteRepository.readNote` 的 SQL **漏 select `parent_id`** → 属性父级链恒为空、复制的副本丢父级；已补列。

@@ -1,10 +1,11 @@
 /**
  * 卡片 / 文本右键（移动端为长按）菜单，桌面与移动端共用。
- * 动作由调用方注入（桌面走 native.*，移动端走注入的 attachment 回调），组件只负责排版与关闭。
+ * 顺序理念与文档右键一致：编辑动作（剪切/复制）→ 打开 → 文件位置 → 导出（另存为）。
+ * 复制类动作合并进「复制 ▸」子菜单；动作由调用方注入，组件只负责排版与关闭。
  */
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { ClipboardPaste, Copy, Download, ExternalLink, FolderOpen, Scissors, TextSelect } from "lucide-react";
+import { ClipboardPaste, ChevronRight, Copy, Download, ExternalLink, FolderOpen, Scissors, TextSelect } from "lucide-react";
 import type { AttachmentPreviewItem } from "../attachment/attachmentPreviewController";
 
 export interface CardMenuActions {
@@ -25,6 +26,7 @@ export interface CardMenuActions {
 }
 
 const MENU_MAX_W = 232;
+const SUBMENU_W = 180;
 
 /** 选中卡片并触发 cut：由宿主编辑器的 cut 处理器写剪贴板 + 删除选区（模型随 input 更新）。 */
 export function cutCardElement(el: HTMLElement): void {
@@ -52,36 +54,54 @@ function useDismiss(ref: React.RefObject<HTMLElement | null>, onClose: () => voi
   }, [ref, onClose]);
 }
 
-/** 卡片菜单：使用默认程序打开 / 打开文件位置 / 复制地址（附件复制文件名）。 */
+/** 卡片菜单：剪切 / 复制 ▸ / 使用默认程序打开 / 打开文件位置 / 另存为… */
 export function CardContextMenu({ x, y, item, actions, onClose }: {
   x: number; y: number; item: AttachmentPreviewItem; actions: CardMenuActions; onClose: () => void;
 }) {
   const menuRef = useRef<HTMLDivElement>(null);
+  const [copyOpen, setCopyOpen] = useState(false);
   useDismiss(menuRef, onClose);
   const ref = item.ref;
+  const left = Math.min(x, window.innerWidth - MENU_MAX_W);
+  const top = Math.min(y, window.innerHeight - 260);
+  const submenuClass = left + MENU_MAX_W + SUBMENU_W <= window.innerWidth ? "" : " open-left";
   const run = (fn?: (it: AttachmentPreviewItem) => void): void => { fn?.(item); onClose(); };
+
+  const copyItems: Array<[string, (it: AttachmentPreviewItem) => void]> = [];
+  if (ref && item.kind === "image" && actions.copyImage) copyItems.push(["复制图片", actions.copyImage]);
+  if (ref && actions.copyPath) copyItems.push(["复制文件路径", actions.copyPath]);
+  if (actions.copyName) copyItems.push(["复制文件名", actions.copyName]);
+
   return createPortal(
-    <div ref={menuRef} className="context-menu" style={{ left: Math.min(x, window.innerWidth - MENU_MAX_W), top: Math.min(y, window.innerHeight - 240) }} role="menu" data-context-menu>
+    <div ref={menuRef} className="context-menu" style={{ left, top }} role="menu" data-context-menu>
+      {actions.cut && (
+        <button role="menuitem" onClick={() => run(actions.cut)}><Scissors size={15} /><span>剪切</span></button>
+      )}
+      {copyItems.length > 0 && (
+        <div
+          className="context-menu-item has-submenu"
+          onMouseEnter={() => setCopyOpen(true)}
+          onMouseLeave={() => setCopyOpen(false)}
+          onClick={() => setCopyOpen((v) => !v)}
+        >
+          <span className="context-menu-item-label"><Copy size={15} /><span>复制</span></span><ChevronRight size={14} />
+          {copyOpen && (
+            <div className={`context-menu-submenu${submenuClass}`} role="menu">
+              {copyItems.map(([label, fn]) => (
+                <button key={label} role="menuitem" onClick={() => run(fn)}>{label}</button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
       {ref && actions.openOriginal && (
         <button role="menuitem" onClick={() => run(actions.openOriginal)}><ExternalLink size={15} /><span>使用默认程序打开</span></button>
       )}
       {ref && actions.showInFolder && (
         <button role="menuitem" onClick={() => run(actions.showInFolder)}><FolderOpen size={15} /><span>打开文件位置</span></button>
       )}
-      {actions.cut && (
-        <button role="menuitem" onClick={() => run(actions.cut)}><Scissors size={15} /><span>剪切</span></button>
-      )}
-      {ref && item.kind === "image" && actions.copyImage && (
-        <button role="menuitem" onClick={() => run(actions.copyImage)}><Copy size={15} /><span>复制图片</span></button>
-      )}
-      {ref && actions.copyPath && (
-        <button role="menuitem" onClick={() => run(actions.copyPath)}><Copy size={15} /><span>复制文件路径</span></button>
-      )}
       {ref && actions.saveAs && (
         <button role="menuitem" onClick={() => run(actions.saveAs)}><Download size={15} /><span>另存为…</span></button>
-      )}
-      {actions.copyName && (
-        <button role="menuitem" onClick={() => run(actions.copyName)}><Copy size={15} /><span>复制文件名</span></button>
       )}
     </div>,
     document.body

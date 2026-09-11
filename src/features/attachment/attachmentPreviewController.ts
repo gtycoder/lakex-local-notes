@@ -129,7 +129,10 @@ export function resolveCardAsset(start: HTMLElement): AttachmentPreviewItem | nu
     return src ? buildAttachmentPreviewItem(src, assetNameFromUrl(src), 0) : null;
   }
   if (cardName === "file" || cardName === "attachment") {
-    const data = readFileCardData(card, card);
+    // __reactFiber$ 挂在文件芯片（.ne-card-file）等内部元素上，卡片根常常没有；
+    // 必须从右键命中的元素（start）开始找，否则拿不到 cardData，右键会落到文字菜单。
+    const chip = card.querySelector(".ne-card-file") as HTMLElement | null;
+    const data = readFileCardData(start, card) ?? (chip ? readFileCardData(chip, card) : null);
     return data ? buildAttachmentPreviewItem(data.src, data.name, data.size) : null;
   }
   return null;
