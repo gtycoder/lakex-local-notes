@@ -108,17 +108,25 @@ function readFileCardData(start: HTMLElement, card: HTMLElement): { src: string;
  * - image：取 <img src>；video/audio：取 <video>/<audio src>；file：走 fiber cardData（同点击路径）。
  * - 解析不到（如行内 data: URL 图片、非资产卡片）返回 null，由调用方回退到文本菜单。
  */
+/** 从 URL 取干净文件名：优先本地资产引用还原（query/hash 不影响扩展名判定）。 */
+function assetNameFromUrl(src: string): string {
+  const ref = parseLocalAssetUrl(src);
+  if (ref?.filename) return ref.filename;
+  try { return decodeURIComponent(new URL(src).pathname.split("/").pop() || "") || "附件"; }
+  catch { return src.split("?")[0].split("#")[0].split("/").pop() || "附件"; }
+}
+
 export function resolveCardAsset(start: HTMLElement): AttachmentPreviewItem | null {
   const card = start.closest("ne-card") as HTMLElement | null;
   if (!card) return null;
   const cardName = card.getAttribute("data-card-name") || card.getAttribute("name") || "";
   if (cardName === "image") {
     const src = card.querySelector("img")?.getAttribute("src") || "";
-    return src ? buildAttachmentPreviewItem(src, src.split("/").pop() || "图片", 0) : null;
+    return src ? buildAttachmentPreviewItem(src, assetNameFromUrl(src), 0) : null;
   }
   if (cardName === "video" || cardName === "audio") {
     const src = (card.querySelector("video,audio") as HTMLMediaElement | null)?.getAttribute("src") || "";
-    return src ? buildAttachmentPreviewItem(src, src.split("/").pop() || cardName, 0) : null;
+    return src ? buildAttachmentPreviewItem(src, assetNameFromUrl(src), 0) : null;
   }
   if (cardName === "file" || cardName === "attachment") {
     const data = readFileCardData(card, card);

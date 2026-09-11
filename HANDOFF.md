@@ -244,7 +244,8 @@
 - **移动端长按**：目录项长按本就有；新增 `features/editor/longPress.ts` + `LakeEditor` 宿主长按 → 卡片菜单（走注入的 `onOpenAttachment` 系统打开；移动端无"打开文件位置"）。
 - **不做**：分屏"在右侧/下侧打开"、多窗口"新窗口打开"（需重做标签/窗口模型，另立项）。
 - 门禁：`tsc` 0 · vitest **951 passed / 16 skipped** · 桌面+移动 `vite build`。
-- **验证限制（重要）**：本会话后段环境异常——桌面 dev server(vite) 被反复回收（`npm run dev` 1s 即 exit 0）、静态服务同样被回收、`file://` 加载 dist 被主进程"IPC 来源不受信任"拦截、模拟器也被关闭 → **未取得两端实时右键/长按截图**。请本地 `npm run dev` + 重开模拟器后目视复核；代码以门禁为准。
+- **实测（环境恢复后，端到端）**：桌面（合成 `contextmenu`，因 CDP 真实鼠标进不了 Electron 渲染进程）——目录文档右键「打开 / 打开文件位置」；真实图片卡右键「打开原始文件 / 打开文件位置 / 复制地址」，点「打开原始文件」后磁盘文件确认存在（`note-assets/{noteId}/…png`，1080×513）；文本右键「复制/剪切/粘贴/全选」；旧导出菜单已消失。移动端（合成 TouchEvent 长按）——真实图片笔记卡片长按「打开原始文件 / 复制地址」，点击生效。
+- **E2E 中发现并修复的 bug**：图片 src 带 `?token=` 时，`resolveCardAsset` 用 `src.split("/").pop()` 当文件名 → `fileKindOf` 把图片判成 `other`、菜单错误显示「复制文件名」。改为优先 `parseLocalAssetUrl(src).filename`，否则按 URL pathname 取干净文件名（`assetNameFromUrl`）。
 
 ## 3. 真正的待办（已剔除全部完成项，按优先级）
 > **260904 后续评估（用户决策 + 本轮核实）**：原 §3.1 对象级 5xx 重试、§3.2 快照 gzip 异步化、§3.5 笔记本 `sort_order` 撞号 —— **已评估不做**（5xx 有"失败不 markSynced→下轮重扫"兜底；gzip 异步收益小；sort_order 撞号场景极低）。
