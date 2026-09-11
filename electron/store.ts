@@ -67,6 +67,10 @@ export interface NoteInfo {
   title: string;
   /** 所属路径（笔记本 / 分组 …），根下为空 */
   parentPath: string;
+  /** 所属路径链（自根向下，带 id，供跳转） */
+  parents: Array<{ id: string; title: string }>;
+  /** 卡片统计（图片/视频/附件/代码块/表格…） */
+  cardStats: Array<{ key: string; label: string; count: number }>;
   createdAt: string | null;
   updatedAt: string;
   syncState: string;
@@ -88,6 +92,13 @@ export interface NoteInfoAsset {
   size: number;
   kind: string;
 }
+
+/** 卡片名 → 统计展示名。 */
+const CARD_LABELS: Record<string, string> = {
+  image: "图片", video: "视频", audio: "音频", file: "附件",
+  codeblock: "代码块", table: "表格", board: "画板", mindmap: "思维导图",
+  bookmark: "书签", database: "数据库", hr: "分隔线", math: "公式",
+};
 
 function nowIso(): string {
   return new Date().toISOString();
@@ -605,10 +616,23 @@ export class Store {
       seen.add(card.filename);
       assets.push({ filename: card.filename, size: card.size, kind: fileKindOf(card.filename) });
     }
+    const parents = this.parentChainOf(id);
+    const cardCounts = new Map<string, number>();
+    for (const m of doc.content.matchAll(/<card\b[^>]*\bname="([^"]+)"/g)) {
+      cardCounts.set(m[1], (cardCounts.get(m[1]) ?? 0) + 1);
+    }
+    const tableCount = (doc.content.match(/<table\b/g) ?? []).length;
+    if (tableCount > 0) cardCounts.set("table", (cardCounts.get("table") ?? 0) + tableCount);
+    const cardStats = [...cardCounts.entries()]
+      .filter(([, count]) => count > 0)
+      .sort((a, b) => b[1] - a[1])
+      .map(([key, count]) => ({ key, label: CARD_LABELS[key] ?? key, count }));
     return {
       id,
       title: doc.title,
-      parentPath: this.parentPathOf(id),
+      parentPath: parents.map((p) => p.title).join(" / "),
+      parents,
+      cardStats,
       createdAt: created?.created_at ?? null,
       updatedAt: doc.updatedAt,
       syncState: doc.syncState,
@@ -625,18 +649,18 @@ export class Store {
     };
   }
 
-  /** 所属路径：自根向下的父级标题（笔记本 / 分组 …）。 */
-  private parentPathOf(id: string): string {
-    const names: string[] = [];
+  /** 所属路径链：自根向下的父级（笔记本 / 分组 …），带 id 供目录跳转。 */
+  private parentChainOf(id: string): Array<{ id: string; title: string }> {
+    const chain: Array<{ id: string; title: string }> = [];
     let parentId = (this.db.prepare("SELECT parent_id FROM tree_nodes WHERE id=?").get(id) as { parent_id: string | null } | undefined)?.parent_id ?? null;
     let guard = 0;
     while (parentId && guard++ < 64) {
-      const row = this.db.prepare("SELECT parent_id,title FROM tree_nodes WHERE id=?").get(parentId) as { parent_id: string | null; title: string } | undefined;
+      const row = this.db.prepare("SELECT id,parent_id,title FROM tree_nodes WHERE id=?").get(parentId) as { id: string; parent_id: string | null; title: string } | undefined;
       if (!row) break;
-      names.unshift(row.title);
+      chain.unshift({ id: row.id, title: row.title });
       parentId = row.parent_id;
     }
-    return names.join(" / ");
+    return chain;
   }
 
   /** M1：导出原生 Lake 文档（图片 base64 内嵌，VS Code Lake 插件兼容）。 */

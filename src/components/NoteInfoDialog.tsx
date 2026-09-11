@@ -1,12 +1,13 @@
 /**
  * 文档属性弹窗（目录右键 →「属性」）。
- * 展示元数据 / 字数 / 文件位置 / 附件预览 / 历史版本，动作复用 native.*（打开位置、打开附件、历史面板）。
+ * 展示元数据 / 字数 / 卡片统计 / 文件位置 / 附件预览 / 历史版本（含内联快照预览）。
+ * 动作复用 native.*；父级路径可点击跳转目录。
  */
-import { useEffect, useState } from "react";
-import { Box, Clock, FileText, FolderOpen, History, Image as ImageIcon, Paperclip, X } from "lucide-react";
+import { useEffect, useState, type PointerEvent as ReactPointerEvent } from "react";
+import { Box, ChevronRight, Clock, Copy, FileText, FolderOpen, History, Image as ImageIcon, Paperclip, X } from "lucide-react";
 import { native } from "../lib/native";
 import { getNativeErrorMessage } from "../lib/nativeErrors";
-import type { NoteInfo, TreeNode } from "../lib/types";
+import type { NoteInfo } from "../lib/types";
 
 const THUMB_LIMIT = 24;
 
@@ -28,15 +29,45 @@ function fmtSize(bytes: number): string {
 
 const SYNC_LABEL: Record<string, string> = { local: "未同步", synced: "已同步", conflict: "冲突" };
 
-export function NoteInfoDialog({ note, onClose, onRevealNoteFile, onOpenHistory }: {
-  note: TreeNode;
+/** 桌面传 TreeNode 子集；移动端传 { noteFileId: id, title }，与平台解耦。 */
+export function NoteInfoDialog({ note, onClose, onRevealNoteFile, onOpenHistory, onJumpToNode }: {
+  note: { noteFileId: string | null; title: string };
   onClose: () => void;
-  onRevealNoteFile: () => void;
+  /** 桌面：在文件管理器中显示 .lake；移动端不传则不渲染该按钮 */
+  onRevealNoteFile?: () => void;
   onOpenHistory: () => void;
+  /** 父级路径点击跳转；不传则路径只读展示 */
+  onJumpToNode?: (id: string) => void;
 }) {
   const [info, setInfo] = useState<NoteInfo | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [thumbs, setThumbs] = useState<Record<string, string>>({});
+  const [copied, setCopied] = useState(false);
+  const [histPreview, setHistPreview] = useState<{ id: number; html: string } | null>(null);
+  const [histLoading, setHistLoading] = useState<number | null>(null);
+  const [size, setSize] = useState<{ w: number; h: number } | null>(null);
+
+  /** 右下角拖拽调整弹窗大小（默认尺寸见 .note-info-dialog）。 */
+  const onResizeStart = (event: ReactPointerEvent<HTMLElement>): void => {
+    event.preventDefault();
+    const rect = (event.currentTarget.parentElement as HTMLElement | null)?.getBoundingClientRect();
+    const startX = event.clientX;
+    const startY = event.clientY;
+    const startW = rect?.width ?? 720;
+    const startH = rect?.height ?? 640;
+    const onMove = (ev: PointerEvent): void => {
+      setSize({
+        w: Math.max(420, Math.min(window.innerWidth * 0.94, startW + ev.clientX - startX)),
+        h: Math.max(320, Math.min(window.innerHeight * 0.9, startH + ev.clientY - startY)),
+      });
+    };
+    const onUp = (): void => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+    };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+  };
 
   useEffect(() => {
     let alive = true;
@@ -73,8 +104,21 @@ export function NoteInfoDialog({ note, onClose, onRevealNoteFile, onOpenHistory 
     if (note.noteFileId) void native.openAttachment(note.noteFileId, filename);
   };
 
+  const copyId = (): void => {
+    if (!info) return;
+    void navigator.clipboard.writeText(info.id).then(() => { setCopied(true); window.setTimeout(() => setCopied(false), 1200); }).catch(() => undefined);
+  };
+
+  const toggleHistory = (id: number): void => {
+    if (histPreview?.id === id) { setHistPreview(null); return; }
+    setHistLoading(id);
+    native.previewHistorySnapshot(id)
+      .then((p) => setHistPreview(p ? { id, html: p.html } : null))
+      .catch(() => setHistPreview(null))
+      .finally(() => setHistLoading(null));
+  };
+
   const rows: Array<[string, string]> = info ? [
-    ["位置", info.parentPath || "根目录"],
     ["创建", fmtTime(info.createdAt)],
     ["更新", fmtTime(info.updatedAt)],
     ["字数", `${info.wordCount} 字 · ${info.charCount} 字符`],
@@ -84,23 +128,54 @@ export function NoteInfoDialog({ note, onClose, onRevealNoteFile, onOpenHistory 
 
   return (
     <div className="modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-      <section className="note-info-dialog" role="dialog" aria-modal="true" aria-label="文档属性">
-        <header className="note-info-head">
+      <section className="ln-dialog note-info-dialog" style={size ? { width: size.w, height: size.h } : undefined} role="dialog" aria-modal="true" aria-label="文档属性">
+        <header className="ln-dialog__head">
           <FileText size={16} />
-          <h3 title={info?.title ?? note.title}>{info?.title ?? note.title}</h3>
+          <h3 className="ln-dialog__title" title={info?.title ?? note.title}>{info?.title ?? note.title}</h3>
           <button className="ln-close" onClick={onClose} aria-label="关闭"><X size={16} /></button>
         </header>
         {error && <p className="note-info-error">{error}</p>}
         {!info && !error && <p className="note-info-empty">读取中…</p>}
         {info && (
-          <div className="note-info-body">
+          <div className="ln-dialog__body">
+            <div className="note-info-row-line">
+              <span className="note-info-key">位置</span>
+              <span className="note-info-breadcrumb">
+                {info.parents.length === 0
+                  ? <span className="note-info-crumb is-current">根目录</span>
+                  : info.parents.map((p, i) => (
+                    <span key={p.id} className="note-info-crumb-wrap">
+                      {i > 0 && <ChevronRight size={12} className="note-info-crumb-sep" />}
+                      {onJumpToNode
+                        ? <button className="note-info-crumb" onClick={() => onJumpToNode(p.id)}>{p.title}</button>
+                        : <span className="note-info-crumb is-current">{p.title}</span>}
+                    </span>
+                  ))}
+              </span>
+            </div>
             <dl className="note-info-rows">
               {rows.map(([k, v]) => (<div key={k} className="note-info-row"><dt>{k}</dt><dd>{v}</dd></div>))}
+              <div className="note-info-row">
+                <dt>ID</dt>
+                <dd className="note-info-id">
+                  <code title={info.id}>{info.id}</code>
+                  <button className="b3-button b3-button--outline" onClick={copyId}>{copied ? "已复制" : "复制"}</button>
+                </dd>
+              </div>
             </dl>
+
+            {info.cardStats.length > 0 && (
+              <div className="note-info-section">
+                <div className="note-info-section-title"><Box size={14} /><span>内容统计</span></div>
+                <div className="note-info-stats">
+                  {info.cardStats.map((s) => (<span key={s.key} className="note-info-stat"><em>{s.label}</em>{s.count}</span>))}
+                </div>
+              </div>
+            )}
 
             <div className="note-info-section">
               <div className="note-info-section-title"><FolderOpen size={14} /><span>文件位置</span>
-                <button className="b3-button b3-button--outline" onClick={onRevealNoteFile}>打开文件位置</button>
+                {onRevealNoteFile && <button className="b3-button b3-button--outline" onClick={onRevealNoteFile}>打开文件位置</button>}
               </div>
               <div className="note-info-path" title={info.lakePath}>{info.lakePath}</div>
               <div className="note-info-path" title={info.assetsDir}>{info.assetsDir}</div>
@@ -129,14 +204,23 @@ export function NoteInfoDialog({ note, onClose, onRevealNoteFile, onOpenHistory 
               {info.history.length === 0 ? <p className="note-info-empty">暂无历史快照</p> : (
                 <ul className="note-info-history">
                   {info.history.slice(0, 5).map((h) => (
-                    <li key={h.id}><Clock size={13} /><span>{fmtTime(h.createdAt)}</span><em>{fmtSize(h.size)}</em></li>
+                    <li key={h.id}>
+                      <button className={"note-info-history-row" + (histPreview?.id === h.id ? " is-active" : "")} onClick={() => toggleHistory(h.id)}>
+                        <Clock size={13} /><span>{fmtTime(h.createdAt)}</span><em>{fmtSize(h.size)}</em>
+                        <span className="note-info-history-hint">{histLoading === h.id ? "加载中…" : histPreview?.id === h.id ? "收起" : "预览"}</span>
+                      </button>
+                    </li>
                   ))}
                   {info.history.length > 5 && <li className="note-info-history-more"><span>还有 {info.history.length - 5} 个…</span></li>}
                 </ul>
               )}
+              {histPreview && (
+                <div className="note-info-history-preview" dangerouslySetInnerHTML={{ __html: histPreview.html }} />
+              )}
             </div>
           </div>
         )}
+        <span className="ln-dialog__resize" onPointerDown={onResizeStart} aria-hidden="true" />
       </section>
     </div>
   );

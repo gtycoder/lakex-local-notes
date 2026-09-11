@@ -253,7 +253,13 @@
 - **属性**：`store.getNoteInfo` + `src/components/NoteInfoDialog.tsx`（样式在 `ui-polish.css`）→ 位置 / 创建 / 更新 / 字数·字符 / 大小 / 同步状态；文件位置 + 资源目录（可打开）；附件网格（图片缩略图，点击打开原始文件）；历史版本列表 + 打开历史面板。IPC `get_note_info`。
 - 实测：菜单顺序 ✓；复制 18 附件文件名一致、`.lake` 同尺寸、正文 URL 已改写 ✓（测试副本已 purge 清理）；属性弹窗数据 ✓。
 - 门禁：`tsc` 0 · vitest **951 passed / 16 skipped** · 桌面+移动 `vite build`。
-- 待定：属性字段是否加 锁定状态 / 卡片统计 / 父级路径点击跳转；移动端长按菜单是否也加 复制 / 属性。
+### 2.29 属性面板增强 + 移动端复制/属性 + 统一可调尺寸弹窗（260911 深夜）
+- **右键顺序**（用户定）：新建文档 / 新建分组 / 复制 / 重命名 / 历史版本 / 打开文件位置 / 属性 / 导出 / 删除。
+- **属性面板新增**：文档 ID（复制）、**卡片统计**（图片/视频/附件/代码块/表格…，正文 `<card name>` + `<table>` 计数）、**父级路径可点击跳转**（Sidebar `revealNodeId` 展开+滚动）、**历史快照内联预览**（`previewHistorySnapshot` → 内联 HTML）。
+- **统一浮层弹窗样式**：新增 `src/styles/dialog.css`（`.ln-dialog`/`__head`/`__title`/`__body`/`__resize` + `.modal-backdrop` + `.note-info-*`），**桌面与移动端都 import**；属性弹窗默认 720×min(80vh,640)、右下角可拖拽调整、窄屏折单列。以后同类弹窗复用 `.ln-dialog`。
+- **移动端新增**：长按菜单加 复制 / 属性（历史版本原有）。bridge 补 `duplicateNote/getNoteInfo/readAssetPreview/previewHistorySnapshot/openAttachment`；`MobileApp` 的 lakeNative 调试契约同步加。
+- **修复**：移动端 `noteRepository.readNote` 的 SQL **漏 select `parent_id`** → 属性父级链恒为空、复制的副本丢父级；已补列。
+- 门禁：`tsc` 0 · vitest **951 passed / 16 skipped** · 双端 `vite build`。实测：桌面菜单顺序 ✓、属性新字段 ✓、拖拽 720×640→860×740 ✓；移动端长按菜单 ✓、复制（含父级继承）✓、属性弹窗布局 ✓。
 
 ## 3. 真正的待办（已剔除全部完成项，按优先级）
 > **260904 后续评估（用户决策 + 本轮核实）**：原 §3.1 对象级 5xx 重试、§3.2 快照 gzip 异步化、§3.5 笔记本 `sort_order` 撞号 —— **已评估不做**（5xx 有"失败不 markSynced→下轮重扫"兜底；gzip 异步收益小；sort_order 撞号场景极低）。

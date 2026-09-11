@@ -72,6 +72,7 @@ export function App() {
     onEscape: closeMenus,
   });
   const [infoNote, setInfoNote] = useState<TreeNode | null>(null);
+  const [revealNodeId, setRevealNodeId] = useState<string | null>(null);
   const { syncToast, setSyncToast, showSyncToast } = useSyncShell();
   const shell = useDesktopShell({ quickNotesRef });
   const {
@@ -351,7 +352,7 @@ export function App() {
         onPreviewLeave={hideSidebarPreview}
       />
       {/* keep-alive：Sidebar 常驻，小记模式由 .app-shell.quick-notes-active .sidebar 隐藏（避免切回时重建目录树、丢失展开状态） */}
-      <Sidebar nodes={treeNodes} activeId={activeNoteId} search={search} mode={sidebarMode} width={sidebarWidth} minWidth={SIDEBAR_MIN_WIDTH} maxWidth={SIDEBAR_MAX_WIDTH} onSearch={setSearch} onSelect={sidebarSelect} onCreate={sidebarCreate} onRename={sidebarRename} onMoveNode={sidebarMove} onRequestDelete={sidebarRequestDelete} onCopyMarkdown={copyMarkdownFromCache} onExportAs={exportAs} onCopyPaths={copyNotePaths} onSetIcon={sidebarSetIcon} onDuplicate={(node) => void duplicateNode(node)} onShowInfo={(node) => setInfoNote(node)} onOpenHistory={sidebarOpenHistory} onRevealNoteFile={(node) => { if (node.noteFileId) void native.revealNoteFile(node.noteFileId); }} pendingRenameId={pendingRenameId} onPendingRenameConsumed={sidebarPendingRenameConsumed} onPreviewEnter={showSidebarPreview} onPreviewLeave={hideSidebarPreview} onResizeActiveChange={handleSidebarResizeActiveChange} onWidthChange={updateSidebarWidth} onWidthCommit={commitSidebarWidth} />
+      <Sidebar nodes={treeNodes} activeId={activeNoteId} search={search} mode={sidebarMode} width={sidebarWidth} minWidth={SIDEBAR_MIN_WIDTH} maxWidth={SIDEBAR_MAX_WIDTH} onSearch={setSearch} onSelect={sidebarSelect} onCreate={sidebarCreate} onRename={sidebarRename} onMoveNode={sidebarMove} onRequestDelete={sidebarRequestDelete} onCopyMarkdown={copyMarkdownFromCache} onExportAs={exportAs} onCopyPaths={copyNotePaths} onSetIcon={sidebarSetIcon} onDuplicate={(node) => void duplicateNode(node)} onShowInfo={(node) => setInfoNote(node)} onOpenHistory={sidebarOpenHistory} onRevealNoteFile={(node) => { if (node.noteFileId) void native.revealNoteFile(node.noteFileId); }} revealNodeId={revealNodeId} onRevealConsumed={() => setRevealNodeId(null)} pendingRenameId={pendingRenameId} onPendingRenameConsumed={sidebarPendingRenameConsumed} onPreviewEnter={showSidebarPreview} onPreviewLeave={hideSidebarPreview} onResizeActiveChange={handleSidebarResizeActiveChange} onWidthChange={updateSidebarWidth} onWidthCommit={commitSidebarWidth} />
       <main className="workspace" onPointerDownCapture={(event) => {
         if (sidebarMode === "floating" && (event.target as HTMLElement).closest(".document-pane, .empty-workspace")) setSidebarMode("collapsed");
       }}>
@@ -425,10 +426,11 @@ export function App() {
       )}
       {infoNote && (
         <NoteInfoDialog
-          note={infoNote}
+          note={{ noteFileId: infoNote.noteFileId, title: infoNote.title }}
           onClose={() => setInfoNote(null)}
           onRevealNoteFile={() => { if (infoNote.noteFileId) void native.revealNoteFile(infoNote.noteFileId); }}
           onOpenHistory={() => { void sidebarOpenHistory(infoNote); setInfoNote(null); }}
+          onJumpToNode={(id) => { setInfoNote(null); setRevealNodeId(id); }}
         />
       )}
       <DesktopOverlays

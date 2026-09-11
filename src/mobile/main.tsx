@@ -10,6 +10,7 @@ import "../b3/theme-midnight.css"; // 思源 midnight 令牌，作用于 [data-t
 import "../b3/siyuan.scss";         // 思源组件类 .b3-* / config-*（精仿思源，AGPL-3.0）
 import "./editor/editor-dock.css";
 import "./mobile-theme.css"; // 精仿思源调色板（--lake-* -> --b3-*），晚于 tokens.css 加载以覆盖其 :root 值
+import "../styles/dialog.css"; // 浮层通用弹窗（属性等）：与桌面共用同一套样式
 
 // M3：移动端深色模式——跟随系统偏好设 data-theme，令 tokens.css 的深色令牌生效
 const __mq = window.matchMedia?.("(prefers-color-scheme: dark)");

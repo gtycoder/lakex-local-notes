@@ -39,6 +39,9 @@ interface SidebarProps {
   onOpenHistory: (node: TreeNode) => void;
   /** 在文件管理器中显示笔记 .lake */
   onRevealNoteFile: (node: TreeNode) => void;
+  /** 属性面板父级路径跳转：展开到该节点并滚动可见 */
+  revealNodeId: string | null;
+  onRevealConsumed: () => void;
   pendingRenameId: string | null;
   onPendingRenameConsumed: () => void;
   onPreviewEnter: () => void;
@@ -374,6 +377,18 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
       row?.scrollIntoView({ block: "nearest", inline: "nearest" });
     }, 60);
   };
+
+  // 属性面板父级路径点击 → 展开到目标节点并滚动可见（消费后清空，避免重复触发）
+  useEffect(() => {
+    const id = props.revealNodeId;
+    if (!id) return;
+    setExpanded((current) => expandAncestors(current, props.nodes, id));
+    window.setTimeout(() => {
+      const row = treeRef.current?.querySelector<HTMLElement>(`[data-tree-node-id="${CSS.escape(id)}"]`);
+      row?.scrollIntoView({ block: "nearest", inline: "nearest" });
+    }, 60);
+    props.onRevealConsumed();
+  }, [props.revealNodeId, props.nodes, props.onRevealConsumed]);
 
   const menuNewChild = (kind: "group" | "note") => {
     if (!contextNode) return;
@@ -738,9 +753,9 @@ const ContextMenu = ({ node, x, y, onNewChild, onRename, onDelete, onCopyMarkdow
         <>
           <button role="menuitem" onClick={() => { onDuplicate(); onClose(); }}><Copy size={15} /><span>复制</span></button>
           <button role="menuitem" onClick={() => { onRename(); onClose(); }}><Pencil size={15} /><span>重命名</span></button>
-          <button role="menuitem" onClick={() => { onShowInfo(); onClose(); }}><Info size={15} /><span>属性</span></button>
           <button role="menuitem" onClick={() => { onOpenHistory(); onClose(); }}><History size={15} /><span>历史版本</span></button>
           <button role="menuitem" onClick={() => { onRevealNoteFile(); onClose(); }}><FolderOpen size={15} /><span>打开文件位置</span></button>
+          <button role="menuitem" onClick={() => { onShowInfo(); onClose(); }}><Info size={15} /><span>属性</span></button>
           <div className="context-menu-item has-submenu" onMouseEnter={() => setExportOpen(true)} onMouseLeave={() => setExportOpen(false)}>
             <span className="context-menu-item-label"><Package size={15} /><span>导出</span></span><ChevronRight size={14} />
             {exportOpen && (

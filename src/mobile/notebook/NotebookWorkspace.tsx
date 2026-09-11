@@ -5,7 +5,8 @@
  * 多 tab 的「顶部 tab 条」是桌面版；移动端是底部胶囊栏 #toolbarTabs 弹全屏列表（子代理已核对源码）。
  */
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ArrowLeft, ListTree, Files, Pencil, X, ChevronRight, FolderOpen, FileText, Plus, Check, ArrowLeftRight, Trash2, SmilePlus, Move, History, CloudUpload, MoreHorizontal, FilePlus, Search, Settings } from "lucide-react";
+import { ArrowLeft, ListTree, Files, Pencil, X, ChevronRight, FolderOpen, FileText, Plus, Check, ArrowLeftRight, Trash2, SmilePlus, Move, History, CloudUpload, MoreHorizontal, FilePlus, Search, Settings, Copy, Info } from "lucide-react";
+import { NoteInfoDialog } from "../../components/NoteInfoDialog";
 import { bridge } from "../bridge";
 import { LAKE_EMOJIS } from "../../lib/lakeEmojis";
 import { loadSettings } from "../../lib/settings";
@@ -77,6 +78,7 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
 
   // 目录树长按管理：思源 sheet 菜单 / 内联重命名 / 图标 / 移动（菜单子层）/ 删除（确认框）
   const [menuFor, setMenuFor] = useState<NotebookTreeItem | null>(null);
+  const [infoFor, setInfoFor] = useState<NotebookTreeItem | null>(null);
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState("");
   const [iconFor, setIconFor] = useState<NotebookTreeItem | null>(null);
@@ -295,7 +297,10 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
   const treeMenuItems = (node: NotebookTreeItem): MobileSheetItem[] => {
     const groups = tree.filter((x) => x.kind === "group" && x.id !== node.id);
     return [
-      { id: "rename", label: "重命名", icon: Pencil },
+      ...(node.kind === "note" ? [
+        { id: "duplicate", label: "复制", icon: Copy },
+        { id: "rename", label: "重命名", icon: Pencil },
+      ] : [{ id: "rename", label: "重命名", icon: Pencil }]),
       { id: "icon", label: "设置图标", icon: SmilePlus },
       {
         id: "move", label: "移动到…", icon: Move,
@@ -304,7 +309,10 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
           ...groups.map((g) => ({ id: g.id, label: g.title, icon: FolderOpen })),
         ],
       },
-      ...(node.kind === "note" ? [{ id: "history", label: "历史版本", icon: History }] : []),
+      ...(node.kind === "note" ? [
+        { id: "history", label: "历史版本", icon: History },
+        { id: "info", label: "属性", icon: Info },
+      ] : []),
       { id: "delete", label: node.kind === "note" ? "移入回收站" : "删除分组", icon: Trash2, danger: true },
     ];
   };
@@ -317,6 +325,14 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
     if (root === "rename") { tapFeedback(); setRenamingId(node.id); setRenameValue(node.title); return; }
     if (root === "icon") { setIconFor(node); return; }
     if (root === "history") { void openHistory(node); return; }
+    if (root === "duplicate") {
+      void (async () => {
+        try { const created = await bridge.duplicateNote(node.id); await loadTree(); void openTab(created.id); showToast("已复制为「" + created.title + "」"); }
+        catch { showToast("复制失败"); }
+      })();
+      return;
+    }
+    if (root === "info") { setInfoFor(node); return; }
     if (root === "delete") { void applyDelete(node); }
   };
 
@@ -497,6 +513,15 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
         onClose={() => setMenuFor(null)}
         onSelect={onTreeMenuSelect}
       />
+
+      {/* 文档属性（长按 → 属性） */}
+      {infoFor && (
+        <NoteInfoDialog
+          note={{ noteFileId: infoFor.id, title: infoFor.title }}
+          onClose={() => setInfoFor(null)}
+          onOpenHistory={() => { const n = infoFor; setInfoFor(null); void openHistory(n); }}
+        />
+      )}
 
       {/* 图标选择器 */}
       {iconFor && (

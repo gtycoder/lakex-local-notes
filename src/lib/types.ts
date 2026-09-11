@@ -35,6 +35,10 @@ export interface NoteInfo {
   title: string;
   /** 所属路径（笔记本 / 分组 …），根下为空 */
   parentPath: string;
+  /** 所属路径链（自根向下，带 id，供跳转） */
+  parents: Array<{ id: string; title: string }>;
+  /** 卡片统计（图片/视频/附件/代码块/表格…） */
+  cardStats: Array<{ key: string; label: string; count: number }>;
   createdAt: string | null;
   updatedAt: string;
   syncState: string;

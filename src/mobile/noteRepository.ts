@@ -86,7 +86,7 @@ export async function listNotes(d: MobileDb): Promise<POCNoteSummary[]> {
 }
 
 export async function readNote(d: MobileDb, id: string): Promise<POCNote | null> {
-  const row = await d.prepare("SELECT id, title, content, updated_at FROM notes WHERE id = ?").get(id);
+  const row = await d.prepare("SELECT id, title, content, updated_at, parent_id FROM notes WHERE id = ?").get(id);
   return row ? rowToNote(row) : null;
 }
 

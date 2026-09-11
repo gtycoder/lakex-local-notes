@@ -418,38 +418,3 @@
 .history-preview-inline:hover::-webkit-scrollbar-thumb,
 .history-preview-viewer:hover::-webkit-scrollbar-thumb,
 .trash-preview-viewer:hover::-webkit-scrollbar-thumb { background: color-mix(in srgb, var(--lake-text) 26%, transparent); }
-
-/* 文档属性弹窗（目录右键 →「属性」） */
-.note-info-dialog {
-  width: min(520px, 100%);
-  max-height: 82vh;
-  display: flex;
-  flex-direction: column;
-  padding: 0;
-  border: 1px solid var(--b3-theme-surface-lighter);
-  border-radius: 12px;
-  background: var(--b3-theme-background);
-  box-shadow: 0 8px 24px color-mix(in srgb, #000 18%, transparent);
-  overflow: hidden;
-}
-.note-info-head { display: flex; align-items: center; gap: 8px; padding: 12px 14px; border-bottom: 1px solid var(--b3-theme-surface-lighter); }
-.note-info-head h3 { flex: 1 1 auto; margin: 0; font-size: 14px; font-weight: 600; color: var(--b3-theme-on-background); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.note-info-body { padding: 4px 14px 14px; overflow: auto; }
-.note-info-rows { display: grid; grid-template-columns: auto 1fr; gap: 6px 12px; margin: 10px 0 4px; padding: 0; }
-.note-info-row { display: contents; }
-.note-info-row dt { color: var(--b3-theme-on-surface); font-size: 12px; }
-.note-info-row dd { margin: 0; color: var(--b3-theme-on-background); font-size: 12px; word-break: break-all; }
-.note-info-section { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--b3-theme-surface-lighter); }
-.note-info-section-title { display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; color: var(--b3-theme-on-background); }
-.note-info-section-title span { flex: 1 1 auto; }
-.note-info-path { margin-top: 6px; font-size: 11px; color: var(--b3-theme-on-surface); word-break: break-all; }
-.note-info-assets { display: grid; grid-template-columns: repeat(auto-fill, 56px); gap: 6px; margin-top: 8px; }
-.note-info-asset { width: 56px; height: 56px; padding: 0; border: 1px solid var(--b3-theme-surface-lighter); border-radius: 6px; background: var(--b3-theme-surface); overflow: hidden; cursor: pointer; display: grid; place-items: center; }
-.note-info-asset img { width: 100%; height: 100%; object-fit: cover; }
-.note-info-asset-glyph { color: var(--b3-theme-on-surface); }
-.note-info-asset-more { align-self: center; font-size: 11px; color: var(--b3-theme-on-surface); }
-.note-info-history { list-style: none; margin: 8px 0 0; padding: 0; font-size: 12px; color: var(--b3-theme-on-surface); }
-.note-info-history li { display: flex; align-items: center; gap: 6px; padding: 3px 0; }
-.note-info-history em { margin-left: auto; font-style: normal; opacity: .7; }
-.note-info-empty { margin: 8px 0 0; font-size: 12px; color: var(--b3-theme-on-surface); }
-.note-info-error { margin: 12px 14px; font-size: 12px; color: var(--b3-theme-error, #d23f31); }

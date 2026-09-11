@@ -25,6 +25,7 @@ import "./styles/document-status.css";
 import "./styles/layout-contract.css";
 import "./styles/motion-contract.css";
 import "./styles/ui-polish.css";
+import "./styles/dialog.css";
 import "./features/editor/image-lightbox.css";
 import "./features/attachment/attachment-preview.css";
 

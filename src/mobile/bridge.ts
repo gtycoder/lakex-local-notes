@@ -7,7 +7,11 @@
  */
 import { NativeSqliteDb } from "./nativeSqliteDb";
 import { migrateSnapshotToNativeSqlite } from "./nativeSqliteMigration";
-import { saveAssetBytesFs, loadAssetBytesFs, listAssetKeysFs, listNoteAssetKeysFs, removeAssetBytesFs } from "./assetFs";
+import { saveAssetBytesFs, loadAssetBytesFs, listAssetKeysFs, listNoteAssetKeysFs, removeAssetBytesFs, bytesToBase64 } from "./assetFs";
+import { Filesystem, Directory } from "@capacitor/filesystem";
+import { registerPlugin } from "@capacitor/core";
+import { scanAssetCards, fileKindOf } from "../core/fileCard.js";
+import { lakeHtmlToPlain } from "../core/lakeCaches.js";
 import { syncNow as runSync, downloadNoteAssets, type SyncConfig, type SyncDbPort, type SyncReport } from "../core/syncEngine.js";
 import { buildGcKeepSet } from "../core/gcDecisions.js";
 import { parseLakeManifest, objectKey } from "../core/syncUtils.js";
@@ -17,7 +21,7 @@ import type { QuickNotesSyncResult } from "../core/quickNotesSyncEngine.js";
 import { TRASH_NOTEBOOK_ID } from "../core/syncDecisions.js";
 import { createCapacitorS3Store } from "./s3Store";
 import { buildAssetFilename, extOf } from "../core/assetNaming.js";
-import { readImageDimensions, sniffImageFormat } from "../core/imageUtils.js";
+import { readImageDimensions, sniffImageFormat, mimeTypeForFilename } from "../core/imageUtils.js";
 import { localAssetHttpUrl } from "../core/assetUrl.js";
 import { MAX_ATTACHMENT_BYTES, MAX_IMAGE_BYTES, MAX_IMAGE_PIXELS } from "../core/storeLimits.js";
 import type { S3Settings, TreeNode } from "../lib/types";
@@ -28,6 +32,9 @@ import { syncQuickNotesViaEngine } from "../core/quickNotesSyncEngine.js";
 import { createQuickNotesSyncDbPort } from "./quickNotesDbPort.js";
 import { mobileSecretStore } from "./secretStore.js";
 import { stageAssetWrites } from "./assetWrites.js";
+
+/** 系统默认应用打开本地文件（与 DocumentEditor 同插件）。 */
+const OpenFile = registerPlugin<{ open: (opts: { path: string }) => Promise<void> }>("OpenFile");
 import { applyMobileSchema } from "./schema.js";
 import * as treeRepository from "./treeRepository.js";
 import * as noteRepository from "./noteRepository.js";
@@ -362,6 +369,108 @@ export const bridge = {
   async listNoteHistory(noteId: string): Promise<Array<{ id: number; title: string; createdAt: string }>> {
     const d = await ensureDb();
     return await historyRepository.listNoteHistory(d, noteId);
+  },
+
+  /** 复制文档（含附件）：新 id 目录、正文资源 URL 改写、sync_state='local'。 */
+  async duplicateNote(id: string) {
+    const d = await ensureDb();
+    const src = await noteRepository.readNote(d, id);
+    if (!src) throw new Error("笔记不存在");
+    const newId = crypto.randomUUID();
+    const assetMap = new Map<string, Uint8Array>();
+    for (const key of await listNoteAssetKeysFs(id)) {
+      const filename = key.split("/").pop() ?? "";
+      if (!filename) continue;
+      const bytes = await loadAssetBytesFs(key);
+      if (!bytes) continue;
+      await saveAssetBytesFs(`${newId}/${filename}`, bytes);
+      assetMap.set(filename, bytes);
+    }
+    const content = src.content.split(id).join(newId);
+    const title = `${src.title} 副本`;
+    await noteRepository.saveNote(d, newId, title, content, src.parentId, assetMap);
+    return { id: newId, title, content, updatedAt: new Date().toISOString(), parentId: src.parentId };
+  },
+
+  /** 文档属性（移动端：正文在本地 DB，资源在 app Data 目录）。 */
+  async getNoteInfo(id: string) {
+    const d = await ensureDb();
+    const note = await noteRepository.readNote(d, id);
+    if (!note) throw new Error("笔记不存在");
+    const row = await d.prepare("SELECT sync_state, is_conflict, updated_at FROM notes WHERE id=?").get(id) as
+      { sync_state: string; is_conflict: number; updated_at: string } | undefined;
+    const plain = lakeHtmlToPlain(note.content);
+    const charCount = plain.replace(/\s+/g, "").length;
+    const wordCount = (plain.match(/[\u4e00-\u9fff]/g)?.length ?? 0) + (plain.match(/[A-Za-z0-9]+/g)?.length ?? 0);
+    const seen = new Set<string>();
+    const assets: Array<{ filename: string; size: number; kind: string }> = [];
+    for (const card of scanAssetCards(note.content)) {
+      if (!card.filename || seen.has(card.filename)) continue;
+      seen.add(card.filename);
+      assets.push({ filename: card.filename, size: card.size, kind: fileKindOf(card.filename) });
+    }
+    const cardCounts = new Map<string, number>();
+    for (const m of note.content.matchAll(/<card\b[^>]*\bname="([^"]+)"/g)) cardCounts.set(m[1], (cardCounts.get(m[1]) ?? 0) + 1);
+    const tableCount = (note.content.match(/<table\b/g) ?? []).length;
+    if (tableCount > 0) cardCounts.set("table", (cardCounts.get("table") ?? 0) + tableCount);
+    const labels: Record<string, string> = { image: "图片", video: "视频", audio: "音频", file: "附件", codeblock: "代码块", table: "表格", board: "画板", mindmap: "思维导图", bookmark: "书签", database: "数据库", hr: "分隔线", math: "公式" };
+    const cardStats = [...cardCounts.entries()].filter(([, c]) => c > 0).sort((a, b) => b[1] - a[1]).map(([key, count]) => ({ key, label: labels[key] ?? key, count }));
+    const parents: Array<{ id: string; title: string }> = [];
+    let pid = note.parentId;
+    let guard = 0;
+    while (pid && guard++ < 64) {
+      const parent = (await d.prepare("SELECT id,title,parent_id FROM folders WHERE id=?").get(pid)
+        ?? await d.prepare("SELECT id,title,parent_id FROM notes WHERE id=?").get(pid)) as
+        { id: string; title: string; parent_id: string | null } | undefined;
+      if (!parent) break;
+      parents.unshift({ id: parent.id, title: parent.title });
+      pid = parent.parent_id;
+    }
+    const history = (await historyRepository.listNoteHistory(d, id)).map((h) => ({ id: h.id, createdAt: h.createdAt, size: 0 }));
+    return {
+      id,
+      title: note.title,
+      parentPath: parents.map((p) => p.title).join(" / "),
+      parents,
+      cardStats,
+      createdAt: null,
+      updatedAt: row?.updated_at ?? note.updatedAt,
+      syncState: row?.sync_state ?? "local",
+      isConflict: Boolean(row?.is_conflict),
+      isLocked: false,
+      lakePath: "(移动端：正文存于本地数据库)",
+      assetsDir: `note-assets/${id}`,
+      sizeBytes: new TextEncoder().encode(note.content).length,
+      charCount,
+      wordCount,
+      assets,
+      assetTotalBytes: assets.reduce((sum, a) => sum + a.size, 0),
+      history,
+    };
+  },
+
+  /** 本地资源预览（仅图片返回 dataUrl）。 */
+  async readAssetPreview(noteId: string, filename: string) {
+    const mimeType = mimeTypeForFilename(filename);
+    if (!mimeType.startsWith("image/")) return { filename, mimeType, supported: false };
+    const bytes = await loadAssetBytesFs(`${noteId}/${filename}`);
+    if (!bytes || bytes.length > 32 * 1024 * 1024) return { filename, mimeType, supported: false };
+    return { filename, mimeType, supported: true, dataUrl: `data:${mimeType};base64,${bytesToBase64(bytes)}` };
+  },
+
+  /** 历史快照预览（返回 HTML，供属性面板内联渲染）。 */
+  async previewHistorySnapshot(historyId: number) {
+    const d = await ensureDb();
+    const h = await historyRepository.readHistory(d, historyId);
+    if (!h) return null;
+    return { plain: lakeHtmlToPlain(h.content), html: h.content, createdAt: "", contentHash: "" };
+  },
+
+  /** 系统默认应用打开本地附件（OpenFile 原生插件）。 */
+  async openAttachment(noteId: string, filename: string) {
+    const uri = await Filesystem.getUri({ path: `note-assets/${noteId}/${filename}`, directory: Directory.Data });
+    await OpenFile.open({ path: uri.uri.replace(/^file:\/\//, "") });
+    return { ok: true };
   },
 
   /** 恢复历史快照：对齐桌面端——先给当前正文留档（可反悔），再把快照正文+标题写回（sync_state=local → 下轮同步上传覆盖远端）。 */
