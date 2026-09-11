@@ -5,16 +5,16 @@
 > **§8 是移动端（安卓）专职交接**，由移动端会话维护；桌面会话不要改 §8，移动端会话不要改 §0-§7 之外的桌面文件。
 
 ## 0. 当前基线（新会话开工前）
-- 分支/远端：`refactor/mobile-native-sqlite` **已合入 `master`**（260910，fast-forward 755ba41），已推送到 Gitee。当前在 `master` 上。`git worktree list` 只有主目录。
-- 质量门槛：`tsc` 0 error · vitest **904 passed / 15 skipped** · 桌面 `vite build` + 移动 `vite build -c vite.mobile.config.ts` 全绿（计数变动见 §2；别把数字写回 AGENTS/README）。
-- **真机级验收（260910，两轮）**：
+- 分支/远端：当前在 **`refactor/store-split`**（store.ts 分批重构 8 commits 已推 Gitee，终态 2352→1103 行见 §3.6）；260911 在其上追加 3 个提交：`2ecac39`（同步收敛修复）、`a18a95b`（安卓 AssetServer 403 + Dock 键盘竞态修复）、HANDOFF 文档。**未推送、未合 master**（待用户验收；用户在做桌面搜索重做）。
+- 质量门槛：`tsc` 0 error · vitest **923 passed / 15 skipped**（260911）· 桌面 `vite build` + 移动 `vite build -c vite.mobile.config.ts` 全绿 · Android `testDebugUnitTest` + `assembleDebug` 通过（计数变动见 §2；别把数字写回 AGENTS/README）。
+- **真机级验收（260910-260911，三轮）**：
   - 第一轮（2 桌面 + 1 移动）：A/B 同步 push/pull、新建/删除传播、移动端 WAL 崩溃恢复、旧 IndexedDB 快照迁移 全通过。
   - 第二轮（3 桌面 + 1 移动，大数据量）：50 笔记 + 70 资源（PNG/JPEG/GIF/PDF/512KB/2MB）、23.4MB；A/B/C/移动端四端正文 sha256 完全一致；并发编辑冲突（先提交者获胜 + 被覆盖方强制留档 30 天）；批量删除 5 篇墓碑传播 全通过。
-  - **发现**：folder 墓碑不跨端传播（manifest 只有 `notes/folders`，无 folder 删除表达）。A 的永久墓碑守卫生效（拒绝回流），churn 有限（2~3 轮后收敛），无数据损坏。**已记入 §3 待办**。
-- dev 实例状态：桌面和模拟器**未在跑**。启动方式：`vite` 长驻 1421 + 手动 `electron --remote-debugging-port=9222 .`（多实例加 `LAKE_USER_DATA=… LAKE_ASSET_PORT=…`）。模拟器 `bash scripts/emu-up.sh`。
+  - 第三轮（260910-260911，真实素材大数据，见 §2.10）：175 笔记（真实壁纸/文档附件，~324MB）四端收敛 pending 0；附件 hash 抽样 5 组一致；**folder 墓碑跨端传播已实现并验证**（原 260910 发现的缺陷，本轮修复）；12 条实验笔记全链路删除→purge→三端回收站 purged=true。
+- dev 实例状态（260911 会话结束）：模拟器 `emulator-5554` **带窗口**在跑（AVD lake_mobile，装 v1.2/versionCode 3，数据完好）；桌面 A（9222）可能在跑，B/C（9223/9224）已停。启动方式：`vite` 长驻 1421 + 手动 `electron --remote-debugging-port=9222 .`（多实例加 `LAKE_USER_DATA=… LAKE_ASSET_PORT=…`）；模拟器 `bash scripts/emu-up.sh`。**坑**：emu-up.sh 会复用已跑实例——若用户「看不到模拟器界面」，多半是前一会话用 `--no-window` 启动的 headless 实例（`ps aux | grep qemu` 看 `-no-window`），`adb emu kill` 后重跑脚本即可（AVD 数据不丢）。
 - **dev 数据现状（重要）**：
-  - `welcome-note`（幽灵文档）已一次性清理：墓碑 `deleted_notes(welcome-note, note, purged_at=now, published_at=NULL)` 已写、行与文件已删 ⇒ **下次同步会发布 `deleted:true` 并删云端 `objects/welcome-note-*`、`assets/welcome-note/` 前缀**，之后不会复活。
-  - `到啦领导`（ee860a19）仍在回收站里（`trashed_at=09-04 10:34`，原父=测试本2222，正文含用户 18:06 的编辑「测试老师啦啦队」）；**用户尚未决定是否恢复**，别擅自删。
+  - `到啦领导`（ee860a19）仍在回收站里（`trashed_at=09-04 10:34`）；**用户尚未决定是否恢复**，别擅自删。
+  - 安卓端回收站还有 **48 条旧测试数据未动**（260911 只清了本轮 12 条实验笔记）；笔记本「20-UI编辑测试」「测试本1」保留（后者含用户笔记「啦啦啦」「移动端上行-260910」等，**不是**实验数据，勿删）。
 
 ## 1. 项目一句话 + 铁律（详见 AGENTS.md）
 本地优先笔记应用（Electron 43 + React 18.3 + better-sqlite3 + 语雀 Lake 内核），S3（七牛 Kodo 兼容）同步。
@@ -24,6 +24,19 @@
 ⑦ 不擅自合 master（代码批次需用户验收；文档类清理可直接提交）。移动端另有铁律见 **§8.0**。
 
 ## 2. 本轮已完成
+
+### 2.10 同步收敛修复 + 第三轮真实素材压测 + 安卓双修复（260910-260911，提交 2ecac39 / a18a95b）
+- **同步收敛三连修**（用户报「folder 的问题也解决了」那批，四端压测验证）：
+  - **folder 墓碑跨端传播**（§3 旧待办 7 落地）：manifest 携带 folder 墓碑；收端子树移入回收站标 purged（行保留可恢复、不上传）；从未持有该目录的设备把远端删除学成 `deleted_notes(folder)` 墓碑防复活；`listFoldersForSync` 排除 purged 副本。
+  - **purge 每轮重放**：`decidePurge` 原不识别移动端「行保留标 purged」表示 → 每轮重复应用（syncDecisions）。
+  - **manifest 空转重发布**：`purgedIds` 把云端已带墓碑的条目当发布理由 → 每轮空提交（syncEngine）。
+  - **移动端 `markFolderSynced` 缺失**：folder 永远停在 local → 零变更早退从未生效 + 墓牌占位符每轮重建（syncDbPort/trashRepository）。
+- **第三轮压测（真实素材）**：A 端 60 张真实壁纸、B 端真实附件（mp4/mp3/sqlite）、C 端图片+合成大附件，共 175 笔记 ~324MB；四端（3 桌面 + 安卓）收敛 pending 0，安卓应用 178 条 / 下载 378MB；附件 hash 抽样 5 组一致。
+- **实验痕迹清理（全链路验证）**：12 条实验笔记（「20-UI编辑测试」10 条 + 「测试本1」2 条无标题）走移动端 UI 删除 → 回收站彻底删除 → purge 墓碑上云 → A/B/C 回收站全部 `purged=true`、active 残留 0。
+- **安卓 AssetServer 403 修复**（`AssetServer.java isAuthorized`）：旧逻辑对所有请求无条件要求 token（87e4642 引入的过度限制），Lake 内核上传后重写的 canonical URL（无 token）全 403 → 图片/附件空白。对齐桌面语义：**仅 CORS 请求（带 Origin）校验 token**，`<img>/<audio>/<video>` 等 no-cors 放行，外部 Origin 仍 403。+3 单测；实机验证 DOM 内图片 1500px 渲染、落库正文无 token 泄漏。
+- **Dock 面板⇄IME 硬互斥修复**（`EditorDock.tsx`，用户第三次报「工具栏被面板盖住」）：根因 = Lake 命令（hr 等）执行后**内核异步重聚焦正文 → 输入法弹回**；模拟器是 adjustResize，窗口 842→530，`--kb-offset` 塌缩为 0，面板（`height:calc(var(--kb-offset))` 无 border-box）只剩 27px padding 细条压在工具栏上。修：① 面板开着且实测到键盘弹出 → 立即再 blur（实测驱动，任何机型/输入法通用）；② `panelHeight` 跟踪实测键盘高度（原为打开瞬间快照，高输入法会压住）；③ `.med-panel` 加 `box-sizing:border-box`；④ `usable` 取 `max(…, offset)` 兜底 edge-to-edge。实测：hr 后键盘回弹 500ms 内压回、面板 312px 恒定、全程 0 遮挡。
+- **版本**：安卓 versionCode 3 / versionName "1.2"；已装模拟器（`scripts/android-build.sh --sync --install`）。
+- 门禁：`tsc` 0 · vitest **923 passed / 15 skipped** · mobile 16 文件 67 测试 · Android 单测通过。
 
 ### 2.9 移动端原生 SQLite 收口（260910）
 - **生产存储已切到 Android native SQLite（WAL）**：`src/mobile/bridge.ts` 用共享初始化 Promise 打开 `NativeSqliteDb`；`sql.js` 不再承担生产写入；旧 IndexedDB 快照只作为一次性迁移源，不再写入。
@@ -133,14 +146,14 @@
 - **验证缺口**：B4 跟手手势、B2 触感、B6 键盘态只在本机 Electron 390×844 harness 验过，**安卓模拟器/真机未复验**（模拟器 `scripts/emu-cdp.sh` + 真机 IME 行为差异见 §8.3）。
 
 **移动端（安卓）** —— 全部见 **§8.6/§8.7**（剪贴板粘贴不解析、真机资产 canonical URL 不可达、"整体编辑还有问题"待现象、大纲 viewer 跳转）。注意 §8.6 提到的 android worktree **已不存在**，那条"沿 worktree 验证"的线索要重新确认落点。
-> **本会话决策/结论（2609xx）**：① **知识库排序不做**（用户确认）——手机端已删除拖拽重排 + 知识库排序入口，直接展示共享 `sort_order` = 桌面端顺序（见 §2.8.B6）；小记排序保留。② "最近文档"用**最近更新**代理（非"最近打开"），需"最近打开"再单独加追踪。③ 首层首页 + 编辑器工具栏已重做（§2.8），待**真机验收**后再提交。④ 删除/恢复语义、同步红线均未动。
+> **本会话决策/结论（2609xx）**：① **知识库排序不做**（用户确认）——手机端已删除拖拽重排 + 知识库排序入口，直接展示共享 `sort_order` = 桌面端顺序（见 §2.8.B6）；小记排序保留。② "最近文档"用**最近更新**代理（非"最近打开"），需"最近打开"再单独加追踪。③ 首层首页 + 编辑器工具栏已重做（§2.8），**已提交**（a752f2a）。④ 删除/恢复语义、同步红线均未动。
 
 **产品/技术债（长期；评估后多属低/缓）**
 3. W-8 ACAO / W-10 dompurify（并入"lake 资源导入统一优化"，**安全相关，建议优先**）；依赖维护：`@types/better-sqlite3` 可单升。
 4. 大纲 **viewer（只读）点击标题不跳转**（用户计划重做大纲时一并处理，低优先）。
 5. **回收站首拉成本**（批量删除后接收端首拉仍下全文+资产）——惰性下载方案**暂缓**（要动恢复红线，低优先）。
 6. Store 分批重构（**拆分完成**，分支 `refactor/store-split` 8 commits 已推 Gitee，待用户验收后合 master）：全部只搬家不改语义，事务边界/SQL 零改动，每批全量门禁验证（904/15 + tsc + check:core + 双端 build）。store.ts **2352 → 1103 行（-53%）**，8 个新领域模块：① `trashLifecycle.ts`（回收站 300）② `historyLifecycle.ts`（快照 205）③ `orphanLifecycle.ts`（孤儿资产 296）④ `diagnostics.ts`（体检/备份 187）⑤ `syncReconciliation.ts`（同步对账 451：hash 账本/标记/applyRemote*/墓碑/游标/GC 记录）⑥ `settingsRepository.ts`（设置 123，类型收敛到 storeTypes.ts）⑦ `noteExport.ts`（导出 206 + localAsset*Re 正则工厂）⑧ `schemaInit.ts`（建表/迁移/种子 221）。**终态**：Store = 组合根装配 + 笔记域核心 CRUD（createNoteInWithContent 等与 ensureParent/resolveParentNotebook 强耦合，按"Store 留核心"原计划原则保留）+ wrapper。
-7. **folder 墓碑不跨端传播**（260910 验收发现）：云端 manifest 顶层只有 `notes/folders`，无 folder 删除表达；A 的永久墓碑守卫（§2.4 修复）能拒绝回流，churn 有限（2~3 轮收敛），无数据损坏。但"新设备 + 同名系统笔记本"场景会产生多余 manifest 提交。**需动同步协议（红线区），单独立项讨论后再做**。
+7. ~~**folder 墓碑不跨端传播**~~ **✅ 已完成（260911，提交 2ecac39，见 §2.10）**：manifest 已携带 folder 墓碑表达，收端子树 purged、学端防复活，四端压测 + 12 条笔记 purge 链路验证通过。
 8. Word/PDF 导出（`electron/export.ts` 已预留 docx/pdf）；附件大文件 S3 分片/断点续传（**nice-to-have，未被需求驱动**）。
 9. **Lake 内核策略**（属政策，非任务，记录即可）：A lakejs 开源源码当"机制字典"；B 版本锚点 + hack 清单（vendor lakex 已 pin，勿随意升级）；按需最小 patch，**不整体 fork**。
 10. **lakex 契约固化（编辑器可观测性，低成本待落地）**：新增 `src/features/editor/lakex-contract.d.ts`（完整设计见 `docs/LAKEX-CONTRACT.md` §4，速查表 §5），替换 lakeRuntime 等处的 `as any`、收敛反编译结论；纯类型改动 + 门禁全绿，**不碰 vendor**。
@@ -190,10 +203,11 @@
 
 ## 5. 下一步建议（新会话）
 1. 先跑 §6 门禁确认基线；有问题先测再改。
-2. 待办优先：**§3.2 快照 gzip 异步化**（小、独立）→ **§3.3 FTS 增量**（收益大）。
-3. 移动端一律按 **§8**（§8.0 移动端/桌面硬隔离已解除——现桌面与移动可自由改；仅 `src/b3/**` 思源 vendored 组件等共享/合规件仍须谨慎）。
-4. 任何同步/GC 改动**先读** `AGENTS.md §3 #11/#12/#13/#15/#16` + `docs/SYNC-PROTOCOL.md` + `docs/S3-GC-DESIGN.md`，改前想清"声明是否仍全、被引用对象会不会被 GC 删、跨端自愈是否成立、复活路径在哪"。
-5. UI 改动先看 `AGENTS.md §3 #14`（思源版式语法），别再造第四套类名、别写内联样式。
+2. **用户正在自行重做桌面端搜索**（FTS 索引重做，§3 性能项）——**别碰搜索相关文件**（`src/core/searchRepository.ts` 等），避免撞车；等用户的批次出来再做交叉验证。
+3. 待用户验收 `refactor/store-split` 上的 260911 批次（2ecac39 同步收敛 + a18a95b 安卓修复）后合 master；用户可能要求真机（小米）复验 §8.7.0。
+4. 移动端一律按 **§8**（§8.0 移动端/桌面硬隔离已解除——现桌面与移动可自由改；仅 `src/b3/**` 思源 vendored 组件等共享/合规件仍须谨慎）。
+5. 任何同步/GC 改动**先读** `AGENTS.md §3 #11/#12/#13/#15/#16` + `docs/SYNC-PROTOCOL.md` + `docs/S3-GC-DESIGN.md`，改前想清"声明是否仍全、被引用对象会不会被 GC 删、跨端自愈是否成立、复活路径在哪"。
+6. UI 改动先看 `AGENTS.md §3 #14`（思源版式语法），别再造第四套类名、别写内联样式。
 
 ## 6. 环境与命令
 ```bash
@@ -270,7 +284,8 @@ node scripts/s3-ls.mjs --count | --note <id> | --prefix <prefix>
 - `src/mobile/useKeyboard.ts` 返回 `{ base, innerHeight, offset, height, keyboardOpen }`。`base`=键盘收起满高度（max innerHeight）；`innerHeight`=当前；`offset`=edge-to-edge 上移量（adjustResize=0）；`height`=键盘实际高；`keyboardOpen=height>8`。
   - 模拟器是 **adjustResize**（键盘弹 `innerHeight 842→530`，`offset=0`，`bottom:0` 元素天然在键盘上方）；真机可能 **edge-to-edge**（`offset>0` 需上移）。两模式都被覆盖。
 - `src/mobile/editor/EditorDock.tsx`：`if(!editing) return null`。工具栏 8 钮：`[+]插入 [Aa]字体 [B]加粗 [列表]unorderedList [任务]taskList [...]字体 [键盘]切换 [√]完成`。
-- **工具栏 `--kb-offset`（bottom 基准）**：面板开时 `usable = Math.max(0, innerHeight - base + panelHeight)`；无面板 `usable = offset`。作用：工具栏屏幕 Y 恒等于 `base - panelHeight`——键盘收起 `innerHeight 530→842` 全程**不跳**（本轮修的核心）。CSS：工具栏 `bottom:calc(var(--kb-offset)+4px)`；面板 `bottom:0; height:calc(var(--kb-offset))` 占键盘区。
+- **工具栏 `--kb-offset`（bottom 基准）**：面板开时 `usable = Math.max(0, innerHeight - base + panelHeight, offset)`；无面板 `usable = offset`。作用：键盘收起 `innerHeight 530→842` 全程工具栏屏幕 Y **不跳**；`max(…, offset)` 兜底 edge-to-edge 真机（键盘回弹瞬间工具栏实时抬到实测键盘上方）。CSS：工具栏 `bottom: var(--kb-offset)`（**无 transition**——对 resize 中的视口做动画会把一帧错位放大成抖动）；面板 `bottom:0; height:var(--kb-offset)` 占键盘区（**有 `box-sizing:border-box`**，塌缩到 0 时不会剩 padding 细条）。
+- **面板⇄IME 硬互斥兜底（260911 新增，EditorDock guard effect）**：Lake 命令（hr 等）执行后**内核会异步重聚焦 contenteditable → 输入法弹回**，面板开着时会把面板压扁盖住工具栏（用户三次报此现象，260911 定位到真因）。兜底：`useEffect` 监听 `panelMode && keyboardOpen`（实测键盘状态驱动）→ `setPanelHeight(max(h, height))` + `blurActiveEditable()` 再压回。**任何机型/输入法通用**，因为依据是 visualViewport 实测而非输入法假设。
 - **焦点/键盘**：`onMouseDown={(e)=>e.preventDefault()}` 加在 `.med-toolbar`/`.med-panel` 上，**防按钮抢走编辑器焦点**（否则键盘关、caret/选区丢→命令 no-op）。`runInline`（工具栏）= 仅 `exec`；`runPanel`（面板项）= 仅 `exec`，**都不要调 `focusEditor`**。
 - 面板开关：开=`setPanelHeight(max(round(height),280))` + `setTimeout(()=>blur(),0)`（提 IME、占住键盘区）；关=`setPanelMode(null);setPanelHeight(0); focusEditor()`（自动恢复键盘）；`收起键盘/显示键盘` 切换。
 
@@ -306,20 +321,25 @@ node scripts/s3-ls.mjs --count | --note <id> | --prefix <prefix>
 - **首层首页**（`HomePage.tsx`/`NotebookGrid.tsx`/`mobile.css`）：小记卡片；知识库书架（白卡+线条图标）/列表 + "最近文档"；右上书架↔列表；底部栏[搜索|新建|云同步]；tab 滑入动效；空态不提示创建。
 - **其它**：最近文档/搜索/新建直达文档（`NotebookWorkspace` 的 `initialNoteId` 优先）；第二层底栏滚动隐藏/显示；**删除知识库排序**（改用共享 sort_order=桌面顺序）；最近文档简约样式 + 书架默认线条 `BookOpen` 图标。
 
+**（260911 本会话新增，提交 a18a95b）安卓 AssetServer + Dock 竞态 —— 详见 §2.10**：
+- **AssetServer token 语义对齐桌面**：仅 CORS（带 Origin）校验 token，no-cors（`<img>` 等）放行，外部 Origin 仍 403；修 no-token canonical URL 403 → 图片空白（87e4642 的过度限制）。`+3` 单测（`AssetServerTest`）。
+- **Dock 面板⇄IME 硬互斥**（guard effect + panelHeight 跟踪实测 + border-box + usable max(offset)），模拟器实测 0 遮挡。
+- **实验痕迹清理**：12 条实验笔记 UI 删除→purge→三端 purged=true。
+
 ### 8.6 当前问题 / 未决（需用户真机给现象）
 1. **大纲 viewer 跳转 —— 已修复，但待长文档真机验证**：根因（`.mobile-workspace-body` 非 flex → doc 高度塌陷 0）已修复（e95ec6f，实测 doc 高 0→794）。**但**完整"点击大纲标题滚动到位"未端到端验证——因为**用测试文档造不出 Lake 可接受的高内容**（`ne-p`/`ne-h1` 格式不被编辑器接受，渲染成短内容），这是测试固件问题非 bug。**用真实长文档（正确内容格式）点大纲标题确认**。若仍不滚，给现象。
 2. **"正在下载"从未复现**（MutationObserver 实时抓也没有）——判断是编辑器初始化瞬时态/旧命令报错后遗症，修复后未见。**若真机仍见，要截图或位置**。
 3. 命令在**被改乱的段落**上可能不生效（caret 落标题/边界时 list 0→0）——编辑器 caret 语义，非命令 bug；干净段落正常。
 4. **剪贴板粘贴不解析为空**（§3.6-3.8 遗留）：静态线索=移动端入口没挂 `installPasteInterceptor`；android worktree 已补挂，先沿那条线验证。
-5. **本地资产 canonical `http://127.0.0.1:19876/{noteId}/{file}` 真机不可达**：需 `adb reverse tcp:19876 tcp:19876` 或移动端解析成可达地址。
+5. ~~**本地资产 canonical `http://127.0.0.1:19876/{noteId}/{file}` 真机不可达**~~ **✅ 已解决（260911）**：安卓端 `AssetServer.java` 让 canonical URL 在本机可达，403 过度限制已修（§2.10），模拟器实测编辑器内图片正常渲染。`adb reverse tcp:19876 tcp:19876` 仅宿主机浏览器调试时需要。
 6. 用户"移动端整体编辑还有问题"现象未细化——**真机反馈给具体现象再定位**。
-7. **首层首页 + 编辑器工具栏改动未提交**（§2.8）：待真机验收后按用户确认提交（代码红线）。
+7. ~~**首层首页 + 编辑器工具栏改动未提交**~~ **✅ 已提交**（a752f2a，260911 前批次）。
 8. **首层"最近文档"= 最近*更新*代理**：非"最近打开"；对用户说清后可再加 `last_opened_at` 追踪。
 9. **知识库排序已删除**（用户决策，不再做）：手机端不再写本地 `sort_order`，展示共享顺序 = 桌面端顺序。若日后想"每端独立顺序"，需改同步协议（manifest `folders[].sortOrder`），属红线区、须谨慎。
 10. **首层新 UI 真机确认项**：书架白卡+线条 `BookOpen` 图标（已去彩色/红 emoji）；最近文档极简 icon+标题（已去灰底）；顶部排序按钮仅小记显示；知识库右上角为书架↔列表切换。
 
 ### 8.7 下一步（移动端，按优先级）
-0. **（最新）真机验收首层首页 + 编辑器工具栏**（§2.8 这批未提交改动）：① 工具栏面板展开**不抖**、加粗/斜体生效**高亮**、+/Aa 展开变 × + 震动（震动须真机）；② 首层小记卡片、知识库书架/最近文档样式、tab 滑入动效。确认后**提交**这批（`git add src/mobile/... && git commit`，先跑门禁）。
+0. **（最新）真机（小米）验收 260911 双修复**（模拟器已实测通过，真机待验）：① **图片/附件插入后立即显示**（AssetServer no-cors 放行修复，此前上传后空白 403）；② **编辑态工具栏不被面板/键盘盖住**（插入分割线→回车复现路径）；③ 同步后图片加载。注意真机很可能是 **edge-to-edge 模式**（与模拟器 adjustResize 不同），兜底已覆盖但值得盯一下。
 1. **真机验收本会话交付**（历史/资源/GC/设置/大纲）：重点用**真实长文档**验证①大纲跳转滚动②资源管理（删图不再重传、孤儿清理、云端 GC）。
 2. **整库备份/云端恢复**：桌面走「文件系统拷贝 + 应用重启」；移动端数据在沙盒（native SQLite + Capacitor FS，无 workspace 目录），架构不匹配——需另做「**数据导出/导入**」（导出 DB 快照 + 资产清单到文件）。当前已有「运行诊断」统计。
 3. **定时自动快照真机验证**：`snapshotNote` 复用 `createHistorySnapshot`（已带 24h 去重）；**移动端模拟器 app 生命周期可能不触发 `setInterval`**，需前台运行验证。
@@ -361,6 +381,17 @@ node scripts/s3-ls.mjs --count | --note <id> | --prefix <prefix>
 - **emulator CDP socket 随 App 重启变化且 forward 常连不上**：先 `adb forward --remove-all`，再 `adb shell cat /proc/net/unix | grep -oE "webview_devtools_remote_[0-9a-f]+"` 找新 socket，`adb forward tcp:9335 localabstract:$s` 后 `curl /json/list` 校验（多轮重试 + 等 App「Displayed」后再连；用 `adb forward --list` 核对）。
 - **知识库 `sort_order` 是共享字段**（manifest `folders[].sortOrder`，跨端同步）：跨端改会互相影响。用户已**决定不做**知识库排序（手机端不写本地 sort_order，展示共享顺序）；以后别再加回，除非先讨论同步语义（红线区）。
 - **触感 `navigator.vibrate` 经 CDP 观测不到**：需真机/模拟器手动确认。
+
+**（260911 同步收敛 + AssetServer + Dock 竞态新增）**
+- **跨端平台代码先读对端实现再写**：安卓 AssetServer 当初对所有请求强制 token（87e4642），而桌面只对 CORS 请求校验——语义漂移直接造成「上传后图片全 403」。安全语义（token/Origin）两端必须逐字节对齐。
+- **Lake 命令执行后内核会异步重聚焦 contenteditable**：面板开着时 IME 会被顶回。不要试图枚举谁在重聚焦（lakex 闭源），用**实测键盘状态兜底**（`panelMode && keyboardOpen` → 再 blur）；`panelHeight` 是打开瞬间的快照，真机输入法带候选条/工具条会更高，必须跟踪实测最大值。
+- **`.med-panel` 的 `height:calc(var(--kb-offset))` 必须配 `box-sizing:border-box`**：否则塌缩到 0 时剩 27px padding+border 细条，压在工具栏下半截（就是用户截图里的「工具栏被弹窗盖住」）。
+- **adjustResize 下「面板展开 + IME 弹回」的可视症状**：窗口 842→530、`--kb-offset`→0、面板变细条——看到的不是「键盘盖住工具栏」而是「面板细条盖住工具栏」，别误判成 z-index 问题。
+- **`listNoteSummaries()` 没有 `trashedAt` 字段**（返回 id/title/parentId/sortOrder/updatedAt/syncState/isConflict/isLocked/lockedAt）：判定「回收站/活跃」必须用 `listTrash()` 的条目（含 `purged`/`deletedAt`）。本轮验证脚本两次因此误判「删除失败」。
+- **桌面实例会占宿主机 19876/19877**：`adb reverse tcp:X tcp:19876` 想从宿主机 curl 安卓 AssetServer 时，请求会被宿主 Electron 的 asset server 截胡（404/语义不同）——先 `lsof -nP -i :<port>` 确认宿主端口归属，换冷门端口。
+- **`adb kill-server` 后 reverse 规则可能注册了但监听没真正建立**（curl 000）：重启 adb server 后重建 forward/reverse，再 `lsof` 核对监听。
+- **CDP 复现 IME 竞态的假象**：物理 `input tap` 后 `userTappedEditorRef` 可能残留 true（目标已聚焦时不再触发 focusin 消费）→ 程序化点击面板命令会把面板关掉，与真实用户路径不同。验证 IME 用 `dumpsys input_method | grep mInputShown` 当事实源；测兜底可直接 JS `el.focus()`（CDP 的 focus 足以唤起模拟器 IME）。
+- **模拟器 headless 实例复用坑**：`emu-up.sh` 检测到已跑实例就复用；前会话 `--no-window` 启动的实例会让用户「看不到界面」。处理：`adb emu kill`（优雅关，AVD 数据不丢）→ 重跑脚本（默认带窗口）。
 
 ### 8.9 移动端常用命令
 ```bash
