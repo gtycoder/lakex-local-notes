@@ -37,7 +37,7 @@
 - **安卓 AssetServer 403 修复**（`AssetServer.java isAuthorized`）：旧逻辑对所有请求无条件要求 token（87e4642 引入的过度限制），Lake 内核上传后重写的 canonical URL（无 token）全 403 → 图片/附件空白。对齐桌面语义：**仅 CORS 请求（带 Origin）校验 token**，`<img>/<audio>/<video>` 等 no-cors 放行，外部 Origin 仍 403。+3 单测；实机验证 DOM 内图片 1500px 渲染、落库正文无 token 泄漏。
 - **Dock 面板⇄IME 硬互斥修复**（`EditorDock.tsx`，用户第三次报「工具栏被面板盖住」）：根因 = Lake 命令（hr 等）执行后**内核异步重聚焦正文 → 输入法弹回**；模拟器是 adjustResize，窗口 842→530，`--kb-offset` 塌缩为 0，面板（`height:calc(var(--kb-offset))` 无 border-box）只剩 27px padding 细条压在工具栏上。修：① 面板开着且实测到键盘弹出 → 立即再 blur（实测驱动，任何机型/输入法通用）；② `panelHeight` 跟踪实测键盘高度（原为打开瞬间快照，高输入法会压住）；③ `.med-panel` 加 `box-sizing:border-box`；④ `usable` 取 `max(…, offset)` 兜底 edge-to-edge。实测：hr 后键盘回弹 500ms 内压回、面板 312px 恒定、全程 0 遮挡。
 - **版本**：安卓 versionCode 3 / versionName "1.2"；已装模拟器（`scripts/android-build.sh --sync --install`）。
-- 门禁：`tsc` 0 · vitest **958 passed / 16 skipped**（新增 `src/mobile/treeRepository.test.ts` 4 例：文档移动/混合排序）· mobile 16 文件 67 测试 · Android 单测通过。
+- 门禁：`tsc` 0 · vitest **959 passed / 16 skipped**（新增 `src/mobile/treeRepository.test.ts` 5 例：文档移动/混合排序/重排校验）· mobile 16 文件 67 测试 · Android 单测通过。
 
 ### 2.9 移动端原生 SQLite 收口（260910）
 - **生产存储已切到 Android native SQLite（WAL）**：`src/mobile/bridge.ts` 用共享初始化 Promise 打开 `NativeSqliteDb`；`sql.js` 不再承担生产写入；旧 IndexedDB 快照只作为一次性迁移源，不再写入。
