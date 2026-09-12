@@ -227,15 +227,6 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
     setTabs((prev) => prev.map((t) => (t.id === active.id ? { ...t, editing: !t.editing } : t)));
   }, [active, flushAutoSave]);
 
-  const createDoc = useCallback(async () => {
-    try {
-      const n = await bridge.createNote("无标题文档", notebookId);
-      await loadTree();
-      setSidebarOpen(false);
-      await openTab(n.id);
-    } catch { /* 忽略 */ }
-  }, [notebookId, loadTree, openTab]);
-
   /** 行内 ＋ → 新建文档：在该节点下建子文档（对齐思源 .b3-list-item__action[data-type=new]）。 */
   const createChildDoc = useCallback(async (parentId: string) => {
     try {
