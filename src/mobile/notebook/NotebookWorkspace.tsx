@@ -80,6 +80,10 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
   const [menuFor, setMenuFor] = useState<NotebookTreeItem | null>(null);
   /** 行内 ＋ 的目标节点：先弹"新建文档 / 新建分组"再创建（与桌面 + 菜单同构）。 */
   const [addFor, setAddFor] = useState<NotebookTreeItem | null>(null);
+  /** 长按拖拽排序（思源口径）：长按进入拖拽，跟手位移 + 落点（前/后/内），松手重排或移入分组。 */
+  const [drag, setDrag] = useState<{ id: string; startY: number; dy: number; overId: string | null; position: "before" | "after" | "inside" | null } | null>(null);
+  const dragRef = useRef<typeof drag>(null);
+  dragRef.current = drag;
   const [infoFor, setInfoFor] = useState<NotebookTreeItem | null>(null);
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState("");
@@ -249,14 +253,76 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
   };
   const startLongPress = (e: React.TouchEvent, node: NotebookTreeItem) => {
     clearLongPress();
-    const el = e.currentTarget as HTMLElement;
+    const touch = e.touches[0];
+    if (!touch) return;
+    const startY = touch.clientY;
     longPressTimer.current = window.setTimeout(() => {
       longPressTimer.current = null;
-      void el;
       longPressFeedback();
-      setMenuFor(node);
-    }, 500);
+      // 长按 = 进入拖拽排序（菜单改由行内 ⋯ 触发）
+      setDrag({ id: node.id, startY, dy: 0, overId: null, position: null });
+    }, 350);
   };
+  /** 提交拖拽：同父 → reorderSiblings；跨父/拖入分组 → moveTreeNodeOrdered。 */
+  const commitDrag = useCallback(async () => {
+    const d = dragRef.current;
+    setDrag(null);
+    if (!d || !d.overId || d.overId === d.id) return;
+    const dragged = tree.find((x) => x.id === d.id);
+    const over = tree.find((x) => x.id === d.overId);
+    if (!dragged || !over) return;
+    try {
+      if (d.position === "inside" && over.kind === "group") {
+        const siblings = tree.filter((x) => x.parentId === over.id && x.id !== d.id).map((x) => x.id);
+        await bridge.moveTreeNodeOrdered(d.id, over.id, [...siblings, d.id]);
+        setExpanded((prev) => new Set(prev).add(over.id));
+      } else {
+        const parentId = over.parentId;
+        const siblings = tree.filter((x) => (x.parentId ?? null) === (parentId ?? null) && x.id !== d.id).map((x) => x.id);
+        let idx = siblings.indexOf(over.id);
+        if (idx < 0) idx = siblings.length - 1;
+        const insertAt = d.position === "after" ? idx + 1 : idx;
+        const next = [...siblings.slice(0, insertAt), d.id, ...siblings.slice(insertAt)];
+        if ((dragged.parentId ?? null) === (parentId ?? null)) await bridge.reorderSiblings(parentId, next);
+        else await bridge.moveTreeNodeOrdered(d.id, parentId, next);
+      }
+      await loadTree();
+    } catch { showToast("移动失败", { type: "error" }); }
+  }, [tree, loadTree]);
+
+  useEffect(() => {
+    if (!drag) return;
+    const onMove = (e: TouchEvent) => {
+      const t = e.touches[0];
+      if (!t) return;
+      e.preventDefault();
+      const d = dragRef.current;
+      if (!d) return;
+      const dy = t.clientY - d.startY;
+      const el = document.elementFromPoint(t.clientX, t.clientY) as HTMLElement | null;
+      const rowEl = el?.closest("[data-node-id]") as HTMLElement | null;
+      let overId: string | null = null;
+      let position: "before" | "after" | "inside" | null = null;
+      const id = rowEl?.getAttribute("data-node-id") ?? null;
+      if (rowEl && id && id !== d.id) {
+        const r = rowEl.getBoundingClientRect();
+        const ratio = (t.clientY - r.top) / r.height;
+        overId = id;
+        position = ratio < 0.28 ? "before" : ratio > 0.72 ? "after" : "inside";
+      }
+      setDrag({ ...d, dy, overId, position });
+    };
+    const onEnd = () => { void commitDrag(); };
+    document.addEventListener("touchmove", onMove, { passive: false });
+    document.addEventListener("touchend", onEnd);
+    document.addEventListener("touchcancel", onEnd);
+    return () => {
+      document.removeEventListener("touchmove", onMove);
+      document.removeEventListener("touchend", onEnd);
+      document.removeEventListener("touchcancel", onEnd);
+    };
+  }, [drag !== null, commitDrag]);
+
   const applyRename = useCallback(async () => {
     const id = renamingId; const v = renameValue.trim();
     setRenamingId(null);
@@ -366,7 +432,8 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
       return (
         <div key={it.kind + "-" + it.id}>
           <button
-            className={"b3-list-item ln-indent" + (activeId === it.id ? " b3-list-item--selected" : "")}
+            className={"b3-list-item ln-indent" + (activeId === it.id ? " b3-list-item--selected" : "") + (drag?.id === it.id ? " nb-dragging" : "") + (drag?.overId === it.id && drag.position ? " nb-drop-" + drag.position : "")}
+            style={drag?.id === it.id ? { transform: "translateY(" + drag.dy + "px)", zIndex: 5 } : undefined}
             data-depth={depth}
             data-node-id={it.id}
             onClick={() => {

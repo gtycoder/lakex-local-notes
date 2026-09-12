@@ -687,3 +687,9 @@ body { font-family: BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino San
 .nb-tree-action { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; border-radius: 8px; color: var(--b3-theme-on-surface-light); }
 .nb-tree-action:active { background: var(--b3-list-hover); color: var(--b3-theme-primary); }
 .mobile-workspace .b3-list-item__text, .side-panel .b3-list-item__text { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* 长按拖拽排序（思源口径）：拖起的行抬起 + 落点线（前/后）/ 拖入分组高亮 */
+.nb-dragging { position: relative; opacity: .92; box-shadow: 0 8px 20px rgba(16, 24, 40, .22); }
+.nb-drop-before { box-shadow: inset 0 2px 0 var(--b3-theme-primary); }
+.nb-drop-after { box-shadow: inset 0 -2px 0 var(--b3-theme-primary); }
+.nb-drop-inside { background: var(--b3-list-hover); }
