@@ -281,39 +281,45 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
     const dragged = tree.find((x) => x.id === d.id);
     const over = tree.find((x) => x.id === d.overId);
     if (!dragged || !over) return;
-    try {
-      if (d.position === "inside" && over.kind === "group") {
-        const siblings = tree.filter((x) => x.parentId === over.id && x.id !== d.id).map((x) => x.id);
-        await bridge.moveTreeNodeOrdered(d.id, over.id, [...siblings, d.id]);
-        setExpanded((prev) => new Set(prev).add(over.id));
-      } else {
-        const parentId = over.parentId;
-        const siblings = tree.filter((x) => (x.parentId ?? null) === (parentId ?? null) && x.id !== d.id).map((x) => x.id);
-        let idx = siblings.indexOf(over.id);
-        if (idx < 0) idx = siblings.length - 1;
-        const insertAt = d.position === "after" ? idx + 1 : idx;
-        const next = [...siblings.slice(0, insertAt), d.id, ...siblings.slice(insertAt)];
-        if ((dragged.parentId ?? null) === (parentId ?? null)) await bridge.reorderSiblings(parentId, next);
-        else await bridge.moveTreeNodeOrdered(d.id, parentId, next);
-      }
-      // FLIP：记住行旧位置 → 重载后从旧位置平移到新位置（松手回弹）
-      const before = document.querySelector('.side-panel-body [data-node-id="' + d.id + '"]')?.getBoundingClientRect();
-      await loadTree();
+    // inside → 成为该节点的子文档（移动端 notes 也能作父，不止分组）；before/after → 与目标同级
+    const targetParent = d.position === "inside" ? over.id : over.parentId;
+    const siblings = tree.filter((x) => (x.parentId ?? null) === (targetParent ?? null) && x.id !== d.id);
+    let insertAt = siblings.length;
+    if (d.position !== "inside") {
+      const idx = siblings.findIndex((x) => x.id === over.id);
+      insertAt = idx < 0 ? siblings.length : (d.position === "after" ? idx + 1 : idx);
+    }
+    const orderedIds = [...siblings.slice(0, insertAt).map((x) => x.id), d.id, ...siblings.slice(insertAt).map((x) => x.id)];
+    const orderIndex = new Map(orderedIds.map((id, i) => [id, i] as const));
+    const before = document.querySelector('.side-panel-body [data-node-id="' + d.id + '"]')?.getBoundingClientRect();
+    // 乐观更新：本地立即重排，松手即生效（不等 loadTree 读库 → 修掉 ~2s 延迟）
+    setTree(tree.map((x) => {
+      const moved = x.id === d.id ? { ...x, parentId: targetParent } : x;
+      const i = orderIndex.get(moved.id);
+      return i === undefined ? moved : { ...moved, sortOrder: i };
+    }));
+    if (d.position === "inside") setExpanded((prev) => new Set(prev).add(over.id));
+    // FLIP：重排后从旧位置平移到新位置（松手回弹）
+    window.requestAnimationFrame(() => {
       const el = document.querySelector('.side-panel-body [data-node-id="' + d.id + '"]') as HTMLElement | null;
       const after = el?.getBoundingClientRect();
-      if (el && before && after) {
-        const fromDy = before.top - after.top;
-        if (Math.abs(fromDy) > 1) {
-          el.style.transition = "none";
-          el.style.transform = "translateY(" + fromDy + "px)";
-          window.requestAnimationFrame(() => {
-            el.style.transition = "transform 180ms cubic-bezier(.2,.8,.2,1)";
-            el.style.transform = "";
-            window.setTimeout(() => { el.style.transition = ""; el.style.transform = ""; }, 220);
-          });
-        }
-      }
-    } catch { showToast("移动失败", { type: "error" }); }
+      if (!el || !before || !after) return;
+      const fromDy = before.top - after.top;
+      if (Math.abs(fromDy) <= 1) return;
+      el.style.transition = "none";
+      el.style.transform = "translateY(" + fromDy + "px)";
+      window.requestAnimationFrame(() => {
+        el.style.transition = "transform 180ms cubic-bezier(.2,.8,.2,1)";
+        el.style.transform = "";
+        window.setTimeout(() => { el.style.transition = ""; el.style.transform = ""; }, 220);
+      });
+    });
+    // 持久化（仅在失败时重读纠正）
+    try {
+      if (d.position === "inside") await bridge.moveTreeNodeOrdered(d.id, targetParent!, orderedIds);
+      else if ((dragged.parentId ?? null) === (targetParent ?? null)) await bridge.reorderSiblings(targetParent, orderedIds);
+      else await bridge.moveTreeNodeOrdered(d.id, targetParent, orderedIds);
+    } catch { showToast("移动失败", { type: "error" }); void loadTree(); }
   }, [tree, loadTree]);
 
   useEffect(() => {
