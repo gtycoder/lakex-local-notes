@@ -173,7 +173,9 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
     setExpanded((prev) => { const n = new Set(prev); if (n.has(id)) n.delete(id); else n.add(id); return n; });
   };
 
-  const childrenOf = (parentId: string) => tree.filter((it) => it.parentId === parentId);
+  // 必须按 sortOrder 排序：否则拖拽的乐观重排（只改 sortOrder 不动数组顺序）看不出效果——
+  // 同级拖动会"没反应"，而 inside（改了 parentId）却能立刻显示。这是同级拖不动的真因。
+  const childrenOf = (parentId: string) => tree.filter((it) => it.parentId === parentId).sort((a, b) => a.sortOrder - b.sortOrder);
   const findFirstNote = (arr: NotebookTreeItem[]): NotebookTreeItem | null => {
     for (const it of arr) {
       if (it.kind === "note") return it;
