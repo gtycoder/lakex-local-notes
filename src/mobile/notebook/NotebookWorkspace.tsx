@@ -5,7 +5,7 @@
  * 多 tab 的「顶部 tab 条」是桌面版；移动端是底部胶囊栏 #toolbarTabs 弹全屏列表（子代理已核对源码）。
  */
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ArrowLeft, ListTree, Files, Pencil, X, ChevronRight, ChevronUp, ChevronDown, ArrowUpDown, FolderOpen, FileText, Plus, Check, ArrowLeftRight, Trash2, SmilePlus, Move, History, CloudUpload, MoreHorizontal, FilePlus, Search, Settings, Copy, Info } from "lucide-react";
+import { ArrowLeft, ListTree, Files, Pencil, X, ChevronRight, FolderOpen, FileText, Plus, Check, ArrowLeftRight, Trash2, SmilePlus, Move, History, CloudUpload, MoreHorizontal, FilePlus, Search, Settings, Copy, Info } from "lucide-react";
 import { NoteInfoDialog } from "../../components/NoteInfoDialog";
 import { bridge } from "../bridge";
 import { LAKE_EMOJIS } from "../../lib/lakeEmojis";
@@ -78,8 +78,6 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
 
   // 目录树长按管理：思源 sheet 菜单 / 内联重命名 / 图标 / 移动（菜单子层）/ 删除（确认框）
   const [menuFor, setMenuFor] = useState<NotebookTreeItem | null>(null);
-  /** 排序模式：同级上/下移（A 方案，避开移动端拖拽手势的不稳定）。 */
-  const [sortMode, setSortMode] = useState(false);
   const [infoFor, setInfoFor] = useState<NotebookTreeItem | null>(null);
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState("");
@@ -274,17 +272,6 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
     } catch { showToast("移动失败", { type: "error" }); }
   }, [tree, loadTree]);
 
-  /** 同级上移/下移：取同父全部兄弟（folders+notes 混合）重排，交给已支持两表的 reorderSiblings。 */
-  const moveSibling = useCallback(async (n: NotebookTreeItem, dir: -1 | 1) => {
-    const parent = n.parentId ?? null;
-    const siblings = tree.filter((x) => (x.parentId ?? null) === parent).map((x) => x.id);
-    const idx = siblings.indexOf(n.id);
-    const target = idx + dir;
-    if (idx < 0 || target < 0 || target >= siblings.length) return;
-    const next = [...siblings];
-    [next[idx], next[target]] = [next[target], next[idx]];
-    try { await bridge.reorderSiblings(parent, next); await loadTree(); } catch { showToast("排序失败", { type: "error" }); }
-  }, [tree, loadTree]);
 
   const openHistory = useCallback(async (node: NotebookTreeItem) => {
     setHistoryFor(node);
@@ -364,9 +351,7 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
             data-node-id={it.id}
             onClick={() => {
               if (renamingId) return;
-              // 排序模式下仍允许展开/收起分组（否则折叠的分组里没法排序）；但不打开文档、避免误触。
               if (hasChildren) { toggleGroup(it.id); return; }
-              if (sortMode) return;
               if (isNote) { openSidebar(false); void openTab(it.id); }
             }}
             onTouchStart={(e) => startLongPress(e, it)}
@@ -390,12 +375,6 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
               <>
                 {it.icon ? <span className="ln-tree-icon">{it.icon}</span> : <NodeIcon size={16} className="ln-tree-icon" />}
                 <span className="b3-list-item__text">{it.title}</span>
-                {sortMode && (
-                  <span className="ln-sort-controls">
-                    <span role="button" tabIndex={0} className="ln-sort-btn" aria-label="上移" onClick={(e) => { e.stopPropagation(); void moveSibling(it, -1); }}><ChevronUp size={16} /></span>
-                    <span role="button" tabIndex={0} className="ln-sort-btn" aria-label="下移" onClick={(e) => { e.stopPropagation(); void moveSibling(it, 1); }}><ChevronDown size={16} /></span>
-                  </span>
-                )}
               </>
             )}
           </button>
@@ -426,7 +405,6 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
         />
         <button className={"toolbar__button" + (active?.editing ? " toolbar__icon--active" : "")} onClick={toggleEdit} disabled={!active}
           aria-label={active?.editing ? "完成" : "编辑"} title={active?.editing ? "完成" : "编辑"}>{active?.editing ? <Check /> : <Pencil />}</button>
-        <button className={"toolbar__button" + (sortMode ? " toolbar__icon--active" : "")} onClick={() => setSortMode((v) => !v)} aria-label="排序" title="排序"><ArrowUpDown /></button>
         <button className="toolbar__button" onClick={() => void runSync()} aria-label="立即同步" title="立即同步"><CloudUpload /></button>
       </header>
 

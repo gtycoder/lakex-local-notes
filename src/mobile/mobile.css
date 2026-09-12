@@ -677,8 +677,3 @@ body { font-family: BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino San
   content: ""; position: absolute; right: 0; bottom: 4px; left: 0; height: 2px;
   border-radius: 1px; background: var(--b3-theme-primary);
 }
-
-/* 排序模式：同级上/下移按钮（A 方案，避开移动端拖拽手势的不稳定） */
-.ln-sort-controls { margin-left: auto; display: inline-flex; align-items: center; gap: 2px; }
-.ln-sort-btn { display: inline-flex; align-items: center; justify-content: center; padding: 4px; border-radius: var(--b3-border-radius, 4px); color: var(--b3-theme-on-surface); }
-.ln-sort-btn:active { background: var(--b3-list-hover, rgba(0,0,0,0.06)); }
