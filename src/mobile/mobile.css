@@ -705,3 +705,9 @@ body { font-family: BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino San
   background: color-mix(in srgb, var(--lake-accent) 12%, var(--b3-theme-surface)) !important;
   box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--lake-accent) 76%, transparent) !important;
 }
+
+/* 拖拽中：禁掉原生手势，避免 WebView 把纵向滑动判给滚动 → 触发 touchcancel 取消拖拽（真机不重排的根因）。
+   拖拽激活才加这个 class，不影响平时列表滚动。 */
+body.nb-drag-active .side-panel-body,
+body.nb-drag-active .side-panel-body .b3-list-item { touch-action: none; }
+body.nb-drag-active .side-panel-body { overscroll-behavior: none; }

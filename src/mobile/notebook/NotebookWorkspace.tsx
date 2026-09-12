@@ -266,6 +266,8 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
     longPressTimer.current = window.setTimeout(() => {
       longPressTimer.current = null;
       longPressFeedback();
+      // 关键：标记拖拽中 → CSS 给面板 touch-action:none，避免 WebView 把纵向手势判给滚动并 touchcancel 掉拖拽
+      document.body.classList.add("nb-drag-active");
       // 长按 = 进入拖拽排序（菜单改由行内 ⋯ 触发）
       setDrag({ id: node.id, startY, dy: 0, overId: null, position: null, shift: {}, scrollDir: 0 });
     }, 350);
@@ -274,6 +276,7 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
   const commitDrag = useCallback(async () => {
     const d = dragRef.current;
     setDrag(null);
+    document.body.classList.remove("nb-drag-active");
     if (!d || !d.overId || d.overId === d.id) return;
     const dragged = tree.find((x) => x.id === d.id);
     const over = tree.find((x) => x.id === d.overId);
@@ -293,7 +296,23 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
         if ((dragged.parentId ?? null) === (parentId ?? null)) await bridge.reorderSiblings(parentId, next);
         else await bridge.moveTreeNodeOrdered(d.id, parentId, next);
       }
+      // FLIP：记住行旧位置 → 重载后从旧位置平移到新位置（松手回弹）
+      const before = document.querySelector('.side-panel-body [data-node-id="' + d.id + '"]')?.getBoundingClientRect();
       await loadTree();
+      const el = document.querySelector('.side-panel-body [data-node-id="' + d.id + '"]') as HTMLElement | null;
+      const after = el?.getBoundingClientRect();
+      if (el && before && after) {
+        const fromDy = before.top - after.top;
+        if (Math.abs(fromDy) > 1) {
+          el.style.transition = "none";
+          el.style.transform = "translateY(" + fromDy + "px)";
+          window.requestAnimationFrame(() => {
+            el.style.transition = "transform 180ms cubic-bezier(.2,.8,.2,1)";
+            el.style.transform = "";
+            window.setTimeout(() => { el.style.transition = ""; el.style.transform = ""; }, 220);
+          });
+        }
+      }
     } catch { showToast("移动失败", { type: "error" }); }
   }, [tree, loadTree]);
 
@@ -356,14 +375,16 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
     };
     raf = window.requestAnimationFrame(tick);
     const onEnd = () => { void commitDrag(); };
+    const onCancel = () => { document.body.classList.remove("nb-drag-active"); void commitDrag(); };
     document.addEventListener("touchmove", onMove, { passive: false });
     document.addEventListener("touchend", onEnd);
-    document.addEventListener("touchcancel", onEnd);
+    document.addEventListener("touchcancel", onCancel);
     return () => {
       if (raf) window.cancelAnimationFrame(raf);
+      document.body.classList.remove("nb-drag-active");
       document.removeEventListener("touchmove", onMove);
       document.removeEventListener("touchend", onEnd);
-      document.removeEventListener("touchcancel", onEnd);
+      document.removeEventListener("touchcancel", onCancel);
     };
   }, [drag !== null, commitDrag]);
 
