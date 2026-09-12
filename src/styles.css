@@ -42,7 +42,9 @@ button { cursor: pointer; }
 .note-row:hover { background: #e9ebee; }
 .note-row.active { color: var(--lake-text); background: #eff0f0; }
 .note-row-copy { display: block; min-width: 0; }
-.note-row-copy strong { overflow: hidden; color: var(--lake-text); font-size: 13px; font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
+/* display:block 不可省：strong 默认 inline，overflow/text-overflow/ellipsis 对行内元素不生效，
+   超长文档名会溢出盖住右侧 ⋯/＋（用户 260912 真机截图反馈）。 */
+.note-row-copy strong { display: block; overflow: hidden; color: var(--lake-text); font-size: 13px; font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
 .tree-rename-input { width: 100%; height: 24px; padding: 0 4px; border: 1px solid var(--b3-theme-primary-lighter); border-radius: 5px; outline: 0; background: #fff; font-size: 13px; }
 .tree-rename-input:focus { border-color: var(--b3-theme-primary); box-shadow: 0 0 0 2px var(--b3-theme-primary-lightest); }
 .tree-rename-input::selection { color: #2d4968; background: #dcecf8; }
