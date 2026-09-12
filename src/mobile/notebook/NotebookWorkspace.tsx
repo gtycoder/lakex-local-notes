@@ -476,7 +476,7 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
       return (
         <div key={it.kind + "-" + it.id}>
           <button
-            className={"b3-list-item ln-indent" + (activeId === it.id ? " b3-list-item--selected" : "") + (drag?.id === it.id ? " nb-dragging" : "") + (drag?.overId === it.id && drag.position ? " nb-drop-" + drag.position : "")}
+            className={"b3-list-item ln-indent" + (activeId === it.id ? " b3-list-item--selected" : "") + (drag?.id === it.id ? " nb-dragging" : "") + (drag?.overId === it.id && drag.position ? (drag.position === "inside" ? " drop-parent" : " drop-line-" + drag.position) : "")}
             style={
               drag?.id === it.id
                 ? { transform: "translateY(" + drag.dy + "px)", zIndex: 5 }
