@@ -51,8 +51,10 @@ body { font-family: BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino San
 .mobile-htab { border: none; background: transparent; font-size: 16px; color: var(--b3-theme-on-surface-light); cursor: pointer; padding: 6px 2px; font-weight: 500; -webkit-tap-highlight-color: transparent; }
 .mobile-htab.active { color: var(--b3-theme-on-surface); font-weight: 700; }
 
-/* 首层 tab 切换入场动效（小记 ↔ 知识库，按滑动方向） */
-.mobile-tab-stage { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+/* 首层 tab 切换入场动效（小记 ↔ 知识库，按滑动方向）。stage 必须裁剪溢出：
+   入场是 translateX(±24px)，不裁剪则新面板整体移出屏、右侧露出"被拉伸/拉过头"的边（用户 260912 报）。
+   纵向滚动在内部 .mobile-scroll，不受影响。 */
+.mobile-tab-stage { flex: 1; min-height: 0; display: flex; flex-direction: column; position: relative; overflow: hidden; }
 .mobile-tab-in-right { animation: mobile-tab-slide-right var(--mobile-duration-panel) var(--mobile-ease-panel); }
 .mobile-tab-in-left { animation: mobile-tab-slide-left var(--mobile-duration-panel) var(--mobile-ease-panel); }
 @keyframes mobile-tab-slide-right { from { transform: translateX(24px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
