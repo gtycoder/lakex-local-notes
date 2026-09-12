@@ -78,8 +78,6 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
 
   // 目录树长按管理：思源 sheet 菜单 / 内联重命名 / 图标 / 移动（菜单子层）/ 删除（确认框）
   const [menuFor, setMenuFor] = useState<NotebookTreeItem | null>(null);
-  /** 行内 ＋ 的目标节点：先弹"新建文档 / 新建分组"再创建（与桌面 + 菜单同构）。 */
-  const [addFor, setAddFor] = useState<NotebookTreeItem | null>(null);
   /** 长按拖拽排序（思源口径）：长按进入拖拽，跟手位移 + 落点（前/后/内），松手重排或移入分组。 */
   const [drag, setDrag] = useState<{
     id: string; startY: number; dy: number;
@@ -457,6 +455,8 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
   const treeMenuItems = (node: NotebookTreeItem): MobileSheetItem[] => {
     const groups = tree.filter((x) => x.kind === "group" && x.id !== node.id);
     return [
+      { id: "new-note", label: "新建文档", icon: FileText },
+      { id: "new-group", label: "新建分组", icon: FolderPlus },
       ...(node.kind === "note" ? [
         { id: "duplicate", label: "复制", icon: Copy },
         { id: "rename", label: "重命名", icon: Pencil },
@@ -481,6 +481,8 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
     setMenuFor(null);
     if (!node) return;
     const root = path[0]?.id;
+    if (root === "new-note") { void createChildDoc(node.id); return; }
+    if (root === "new-group") { void createChildGroup(node.id); return; }
     if (root === "move") { void applyMove(node, path[1]?.id === "__root" ? notebookId : String(path[1]?.id)); return; }
     if (root === "rename") { tapFeedback(); setRenamingId(node.id); setRenameValue(node.title); return; }
     if (root === "icon") { setIconFor(node); return; }
@@ -545,7 +547,6 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
                     ⋯ = 右键菜单，＋ = 新建子文档。 */}
                 <span className="nb-tree-actions">
                   <span role="button" tabIndex={0} className="nb-tree-action" aria-label="更多" onClick={(e) => { e.stopPropagation(); setMenuFor(it); }}><MoreVertical size={17} /></span>
-                  <span role="button" tabIndex={0} className="nb-tree-action" aria-label="新建" onClick={(e) => { e.stopPropagation(); setAddFor(it); }}><Plus size={17} /></span>
                 </span>
               </>
             )}
@@ -637,7 +638,6 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
       <aside className={"side-panel side-panel--left" + (sidebarOpen ? " on" : "")} aria-label="目录">
         <div className="toolbar toolbar--border toolbar--dark" data-prevent-swipe>
           <div className="toolbar__scroll"><span className="toolbar__text">{title}</span></div>
-          <span className="toolbar__icon" role="button" tabIndex={0} onClick={() => void createDoc()} aria-label="新建文档"><Plus /></span>
           <span className="toolbar__icon" role="button" tabIndex={0} onClick={() => openSidebar(false)} aria-label="收起"><ChevronRight /></span>
         </div>
         <div className="side-panel-body">
@@ -687,22 +687,6 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
         onSelect={onTreeMenuSelect}
       />
 
-      {/* 行内 ＋：新建文档 / 新建分组 */}
-      <MobileSheetMenu
-        open={!!addFor}
-        items={[
-          { id: "note", label: "新建文档", icon: FileText },
-          { id: "group", label: "新建分组", icon: FolderPlus },
-        ]}
-        onClose={() => setAddFor(null)}
-        onSelect={(it) => {
-          const node = addFor;
-          setAddFor(null);
-          if (!node) return;
-          if (it.id === "note") void createChildDoc(node.id);
-          else if (it.id === "group") void createChildGroup(node.id);
-        }}
-      />
 
       {/* 文档属性（长按 → 属性） */}
       {infoFor && (
