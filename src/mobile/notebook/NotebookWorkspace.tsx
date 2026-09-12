@@ -5,7 +5,7 @@
  * 多 tab 的「顶部 tab 条」是桌面版；移动端是底部胶囊栏 #toolbarTabs 弹全屏列表（子代理已核对源码）。
  */
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ArrowLeft, ListTree, Files, Pencil, X, ChevronRight, FolderOpen, FileText, Plus, Check, ArrowLeftRight, Trash2, SmilePlus, Move, History, CloudUpload, MoreHorizontal, MoreVertical, FilePlus, Search, Settings, Copy, Info } from "lucide-react";
+import { ArrowLeft, ListTree, Files, Pencil, X, ChevronRight, FolderOpen, FolderPlus, FileText, Plus, Check, ArrowLeftRight, Trash2, SmilePlus, Move, History, CloudUpload, MoreHorizontal, MoreVertical, FilePlus, Search, Settings, Copy, Info } from "lucide-react";
 import { NoteInfoDialog } from "../../components/NoteInfoDialog";
 import { bridge } from "../bridge";
 import { LAKE_EMOJIS } from "../../lib/lakeEmojis";
@@ -78,6 +78,8 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
 
   // 目录树长按管理：思源 sheet 菜单 / 内联重命名 / 图标 / 移动（菜单子层）/ 删除（确认框）
   const [menuFor, setMenuFor] = useState<NotebookTreeItem | null>(null);
+  /** 行内 ＋ 的目标节点：先弹"新建文档 / 新建分组"再创建（与桌面 + 菜单同构）。 */
+  const [addFor, setAddFor] = useState<NotebookTreeItem | null>(null);
   const [infoFor, setInfoFor] = useState<NotebookTreeItem | null>(null);
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState("");
@@ -223,7 +225,7 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
     } catch { /* 忽略 */ }
   }, [notebookId, loadTree, openTab]);
 
-  /** 行内 ＋：在该节点下新建子文档（对齐思源 .b3-list-item__action[data-type=new]）。 */
+  /** 行内 ＋ → 新建文档：在该节点下建子文档（对齐思源 .b3-list-item__action[data-type=new]）。 */
   const createChildDoc = useCallback(async (parentId: string) => {
     try {
       const n = await bridge.createNote("无标题文档", parentId);
@@ -231,6 +233,15 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
       await openTab(n.id);
     } catch { showToast("新建失败", { type: "error" }); }
   }, [loadTree, openTab]);
+
+  /** 行内 ＋ → 新建分组：在该节点下建子分组并展开父节点。 */
+  const createChildGroup = useCallback(async (parentId: string) => {
+    try {
+      await bridge.createGroup(parentId, "新建分组");
+      await loadTree();
+      setExpanded((prev) => new Set(prev).add(parentId));
+    } catch { showToast("新建失败", { type: "error" }); }
+  }, [loadTree]);
 
   // ---- 目录树长按管理 ----
   const clearLongPress = () => {
@@ -388,7 +399,7 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
                     ⋯ = 右键菜单，＋ = 新建子文档。 */}
                 <span className="nb-tree-actions">
                   <span role="button" tabIndex={0} className="nb-tree-action" aria-label="更多" onClick={(e) => { e.stopPropagation(); setMenuFor(it); }}><MoreVertical size={17} /></span>
-                  <span role="button" tabIndex={0} className="nb-tree-action" aria-label="新建子文档" onClick={(e) => { e.stopPropagation(); void createChildDoc(it.id); }}><Plus size={17} /></span>
+                  <span role="button" tabIndex={0} className="nb-tree-action" aria-label="新建" onClick={(e) => { e.stopPropagation(); setAddFor(it); }}><Plus size={17} /></span>
                 </span>
               </>
             )}
@@ -528,6 +539,23 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
         items={menuFor ? treeMenuItems(menuFor) : []}
         onClose={() => setMenuFor(null)}
         onSelect={onTreeMenuSelect}
+      />
+
+      {/* 行内 ＋：新建文档 / 新建分组 */}
+      <MobileSheetMenu
+        open={!!addFor}
+        items={[
+          { id: "note", label: "新建文档", icon: FileText },
+          { id: "group", label: "新建分组", icon: FolderPlus },
+        ]}
+        onClose={() => setAddFor(null)}
+        onSelect={(it) => {
+          const node = addFor;
+          setAddFor(null);
+          if (!node) return;
+          if (it.id === "note") void createChildDoc(node.id);
+          else if (it.id === "group") void createChildGroup(node.id);
+        }}
       />
 
       {/* 文档属性（长按 → 属性） */}
