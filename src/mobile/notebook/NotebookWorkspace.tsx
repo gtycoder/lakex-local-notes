@@ -81,7 +81,14 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
   /** 行内 ＋ 的目标节点：先弹"新建文档 / 新建分组"再创建（与桌面 + 菜单同构）。 */
   const [addFor, setAddFor] = useState<NotebookTreeItem | null>(null);
   /** 长按拖拽排序（思源口径）：长按进入拖拽，跟手位移 + 落点（前/后/内），松手重排或移入分组。 */
-  const [drag, setDrag] = useState<{ id: string; startY: number; dy: number; overId: string | null; position: "before" | "after" | "inside" | null } | null>(null);
+  const [drag, setDrag] = useState<{
+    id: string; startY: number; dy: number;
+    overId: string | null; position: "before" | "after" | "inside" | null;
+    /** 其他行的让位位移（id → translateY px） */
+    shift: Record<string, number>;
+    /** 边缘自动滚动方向 */
+    scrollDir: -1 | 0 | 1;
+  } | null>(null);
   const dragRef = useRef<typeof drag>(null);
   dragRef.current = drag;
   const [infoFor, setInfoFor] = useState<NotebookTreeItem | null>(null);
@@ -260,7 +267,7 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
       longPressTimer.current = null;
       longPressFeedback();
       // 长按 = 进入拖拽排序（菜单改由行内 ⋯ 触发）
-      setDrag({ id: node.id, startY, dy: 0, overId: null, position: null });
+      setDrag({ id: node.id, startY, dy: 0, overId: null, position: null, shift: {}, scrollDir: 0 });
     }, 350);
   };
   /** 提交拖拽：同父 → reorderSiblings；跨父/拖入分组 → moveTreeNodeOrdered。 */
@@ -292,6 +299,46 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
 
   useEffect(() => {
     if (!drag) return;
+    const panel = document.querySelector(".side-panel-body") as HTMLElement | null;
+    let raf = 0;
+    /** 由手指位置算出：落点（overId/position）、其他行让位位移（shift）、边缘滚动方向（scrollDir）。 */
+    const compute = (clientX: number, clientY: number, d: NonNullable<typeof dragRef.current>) => {
+      const rowEls = ([...document.querySelectorAll(".side-panel-body [data-node-id]")] as HTMLElement[])
+        .filter((el) => el.getClientRects().length > 0);
+      // 被拖起的行 pointer-events:none，elementFromPoint 会穿透到下面的行
+      const hit = (document.elementFromPoint(clientX, clientY) as HTMLElement | null)?.closest("[data-node-id]") as HTMLElement | null;
+      const hitId = hit?.getAttribute("data-node-id") ?? null;
+      let overId: string | null = null;
+      let position: "before" | "after" | "inside" | null = null;
+      if (hit && hitId && hitId !== d.id) {
+        const r = hit.getBoundingClientRect();
+        const ratio = (clientY - r.top) / r.height;
+        overId = hitId;
+        position = ratio < 0.28 ? "before" : ratio > 0.72 ? "after" : "inside";
+      }
+      // 让位：源行到落点之间的行整体上/下移一个行高
+      const fromIndex = rowEls.findIndex((r) => r.getAttribute("data-node-id") === d.id);
+      const overIndex = overId ? rowEls.findIndex((r) => r.getAttribute("data-node-id") === overId) : -1;
+      const rowH = rowEls[0]?.getBoundingClientRect().height ?? 44;
+      const dropIndex = overIndex < 0 ? fromIndex : overIndex + (position === "after" ? 1 : 0);
+      const shift: Record<string, number> = {};
+      if (fromIndex >= 0 && overIndex >= 0 && dropIndex !== fromIndex && dropIndex !== fromIndex + 1) {
+        rowEls.forEach((r, i) => {
+          const rid = r.getAttribute("data-node-id");
+          if (!rid || rid === d.id) return;
+          if (fromIndex < dropIndex && i > fromIndex && i < dropIndex) shift[rid] = -rowH;
+          else if (fromIndex > dropIndex && i >= dropIndex && i < fromIndex) shift[rid] = rowH;
+        });
+      }
+      // 边缘自动滚动：靠近面板上/下沿 64px 内 → 持续滚动
+      let scrollDir: -1 | 0 | 1 = 0;
+      if (panel) {
+        const pr = panel.getBoundingClientRect();
+        if (clientY < pr.top + 64) scrollDir = -1;
+        else if (clientY > pr.bottom - 64) scrollDir = 1;
+      }
+      return { overId, position, shift, scrollDir };
+    };
     const onMove = (e: TouchEvent) => {
       const t = e.touches[0];
       if (!t) return;
@@ -299,24 +346,21 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
       const d = dragRef.current;
       if (!d) return;
       const dy = t.clientY - d.startY;
-      const el = document.elementFromPoint(t.clientX, t.clientY) as HTMLElement | null;
-      const rowEl = el?.closest("[data-node-id]") as HTMLElement | null;
-      let overId: string | null = null;
-      let position: "before" | "after" | "inside" | null = null;
-      const id = rowEl?.getAttribute("data-node-id") ?? null;
-      if (rowEl && id && id !== d.id) {
-        const r = rowEl.getBoundingClientRect();
-        const ratio = (t.clientY - r.top) / r.height;
-        overId = id;
-        position = ratio < 0.28 ? "before" : ratio > 0.72 ? "after" : "inside";
-      }
-      setDrag({ ...d, dy, overId, position });
+      setDrag({ ...d, dy, ...compute(t.clientX, t.clientY, d) });
     };
+    const tick = () => {
+      const d = dragRef.current;
+      if (!d || !panel) { raf = 0; return; }
+      if (d.scrollDir && panel.scrollHeight > panel.clientHeight) panel.scrollTop += d.scrollDir * 8;
+      raf = window.requestAnimationFrame(tick);
+    };
+    raf = window.requestAnimationFrame(tick);
     const onEnd = () => { void commitDrag(); };
     document.addEventListener("touchmove", onMove, { passive: false });
     document.addEventListener("touchend", onEnd);
     document.addEventListener("touchcancel", onEnd);
     return () => {
+      if (raf) window.cancelAnimationFrame(raf);
       document.removeEventListener("touchmove", onMove);
       document.removeEventListener("touchend", onEnd);
       document.removeEventListener("touchcancel", onEnd);
@@ -433,7 +477,13 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
         <div key={it.kind + "-" + it.id}>
           <button
             className={"b3-list-item ln-indent" + (activeId === it.id ? " b3-list-item--selected" : "") + (drag?.id === it.id ? " nb-dragging" : "") + (drag?.overId === it.id && drag.position ? " nb-drop-" + drag.position : "")}
-            style={drag?.id === it.id ? { transform: "translateY(" + drag.dy + "px)", zIndex: 5 } : undefined}
+            style={
+              drag?.id === it.id
+                ? { transform: "translateY(" + drag.dy + "px)", zIndex: 5 }
+                : drag?.shift && drag.shift[it.id]
+                  ? { transform: "translateY(" + drag.shift[it.id] + "px)" }
+                  : undefined
+            }
             data-depth={depth}
             data-node-id={it.id}
             onClick={() => {
