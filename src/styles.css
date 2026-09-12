@@ -50,12 +50,12 @@ button { cursor: pointer; }
 .empty-list { padding: 28px 10px; color: var(--lake-text-tertiary); font-size: 12px; text-align: center; }
 .tree-list { padding-bottom: 4px; }
 .tree-item { min-width: 0; }
-.tree-row { grid-template-columns: 16px 22px minmax(0, 1fr) 44px; min-height: 27px; gap: 4px; }
-/* 行内悬浮动作（⋯ = 右键菜单，＋ = 新建子文档，对齐思源 more-root/new）。
-   容器固定 44px 预留 → hover 显形时不会重排标题；超长标题由 ellipsis 截断，不会挤掉按钮。 */
-.tree-row-actions { display: inline-flex; align-items: center; justify-content: flex-end; gap: 2px; opacity: 0; transition: opacity 120ms ease-out; }
-.tree-row:hover .tree-row-actions, .tree-row.active .tree-row-actions, .tree-row-actions:focus-within { opacity: 1; }
-.tree-row-action { display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; padding: 0; border: 0; border-radius: var(--radius-sm); background: transparent; color: var(--lake-text-tertiary); cursor: pointer; }
+.tree-row { grid-template-columns: 16px 22px minmax(0, 1fr) 36px; min-height: 27px; gap: 4px; }
+/* 行内动作（⋯ = 右键菜单，＋ = 新建子文档，对齐思源 more-root/new）。
+   按钮**常显**（超长标题下也一定看得见），动作列只预留 36px（2×18，无间隙），把宽度尽量还给标题；
+   标题 minmax(0,1fr) + ellipsis 截断，永远不会盖住按钮。 */
+.tree-row-actions { display: inline-flex; align-items: center; justify-content: flex-end; }
+.tree-row-action { display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; padding: 0; border: 0; border-radius: var(--radius-xs); background: transparent; color: var(--lake-text-tertiary); cursor: pointer; }
 .tree-row:hover .tree-row-action { background: var(--b3-list-hover); }
 .tree-row-action:hover { background: var(--lake-accent-soft); color: var(--lake-accent); }
 .tree-row.type-notebook { min-height: 29px; margin-top: 1px; color: var(--lake-text); }
