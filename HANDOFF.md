@@ -605,3 +605,99 @@ adb shell pm clear com.lakenotes.mobile                      # 清 App 数据重
 - **移动端**：行内 ⋯ + ＋ 常显（触屏无 hover；对齐思源移动端 MobileFiles.ts:1505-1509——移动端行 class 不带 --hide-action）。⋯ → setMenuFor（现有 MobileSheetMenu）；＋ → 弹「新建文档 / 新建分组」再建（bridge.createNote / bridge.createGroup）。标题 min-width:0 + ellipsis 防超长名盖住按钮。
 - **长按拖拽排序**：长按 350ms 进入拖拽（haptic），长按不再弹菜单（菜单交给 ⋯）；document 级 touchmove 跟手位移，用 elementFromPoint + 落点比例（<28% before / >72% after / 中间 inside）定落点，视觉 .nb-dragging / .nb-drop-before|after|inside；松手：同父 → bridge.reorderSiblings，跨父/拖入分组 → bridge.moveTreeNodeOrdered。真机实测：把「安卓上行-2」拖到「安卓上行-1」前，顺序生效。
 - **已补齐（ed87eb7 / 9d78e6a）**：① 边缘自动滚动——手指进入面板上/下 64px 内，rAF 循环滚动；② 其他行让位——源行到落点之间的行整体上/下移一个行高；③ 拖起行 pointer-events:none，elementFromPoint 穿透到下层行，落点判定稳定；④ 落点线照搬桌面专做的那套（drop-line-before/after 伪元素画 2px accent 线 + soft 光晕；拖入分组 drop-parent），替换原 nb-drop-* box-shadow 方案。真机合成拖拽复验：第 3 行拖到第 1 行前顺序生效。
+
+---
+
+## 附：会话交接（2026-09-12）—— 无上下文的新会话请先读这一节
+
+> 分支：feat/search-refactor（本地未推；**未经用户验收不要 push / merge**）。工作区干净，门禁全绿（tsc 0 / vitest 959 passed 16 skipped / 桌面+移动构建绿）。
+
+### 0. 本轮任务目标
+1. **卡片右键菜单补齐**（桌面 + 移动）：文件卡重命名展示名、另存为、复制合并、剪切、打开原始文件/位置。
+2. **目录树交互对齐思源**：⋯ 悬浮按钮 = 右键菜单触发；＋ 快捷创建（后按用户要求全部并入菜单）；长按拖拽排序。
+3. **查清并修复「多端同步后文档挂错笔记本」**（用户报了严重不一致）。
+4. 用户真机反馈的每个问题当场修掉。
+
+### 1. 已完成
+
+#### 1.1 卡片重命名 / 另存为（桌面 + 移动）
+- **重命名展示名**：lakex 里没有文档化的 API，最终实测确认正确调用是
+  **cardData.setName(名字) + cardData.sync(true)**（写回文档模型，可落盘；不调 setDocument，所以不重挂、不白屏）。
+  详见 docs/LAKEX-CONTRACT.md 第 5.2 节（含反例：setName 单独调用落不了盘；_updateCardValue 传旧值会把卡片清空）。
+- **扩展名锁定**：AssetRenameDialog 只编辑基名 + 固定后缀；后端纯函数 renameFileCardDisplay 再锁一次。
+- **另存为（移动端）**：扩展 OpenFilePlugin.java 加 saveAs——图片走 MediaStore（进相册），其它走 SAF（系统"保存到"）。
+  前端 bridge.saveAssetAs，移动端长按卡片菜单「另存为…」已接入。桌面端走 dialog.showSaveDialog。
+- 复制动作合并成子菜单：剪切 / 复制▸ / 重命名 / 使用默认程序打开 / 打开文件位置 / 另存为…；移动端只有「复制文件名」时内联不套子菜单。
+
+#### 1.2 目录树交互（桌面 + 移动）
+- **桌面**：每行 ⋯（竖向 lucide-ellipsis-vertical）= 右键菜单，弹出在按钮处；动作默认 display:none 不占宽度，
+  行 hover/选中/聚焦才显形，此时标题才 ellipsis；着重色只给光标所在的按钮。行内 ＋ 已按用户要求删除（右键菜单本就有新建）。
+- **移动端**：每行 ⋯ 常显（触屏无 hover；对齐思源移动端 MobileFiles.ts，行不带 --hide-action）。
+  ⋯ 菜单已加入「新建文档 / 新建分组」（此前菜单没有新建项）；行内 ＋ 与抽屉头 ＋ 均已删除。
+- **长按拖拽排序（移动端）**：长按 350ms 进入拖拽；落点判定复用 .side-panel-body [data-node-id] + elementFromPoint + 比例分带；
+  松手：同父 reorderSiblings / 跨父或 inside moveTreeNodeOrdered。
+  已实现：其他行让位位移、边缘自动滚动（面板上/下 64px，rAF）、拖起行 pointer-events:none 让落点穿透、
+  落点线照搬桌面专做的那套（drop-line-before/after 伪元素 2px accent 线 + soft 光晕；拖入分组 drop-parent）、
+  **乐观本地重排**（松手立即生效，不等 loadTree，去掉约 2 秒延迟）+ FLIP 松手回弹。
+- **inside = 成为子文档**：不再限定分组；移动端 notes 也能作父，可把文档拖成别的文档的子文档（对齐桌面）。
+
+#### 1.3 同步事故：文档挂错笔记本（根因已查清 + 已修 + 数据已修回）
+- **现象**：桌面/安卓同一个 S3、同一个「个人笔记」，两端文档列表不一致。
+- **实证**：不是丢数据、不是 manifest 覆盖。远端 manifest 链（lake-notes-stress2-260910）里这些 note 一直 parentId=notebook-personal；
+  桌面本地却是 9116074d（测试本1）、updated_at 与远端**完全相同**、sync_state=synced。
+- **根因（共享 core，一直都有，不是某次改动引入）**：syncEngine 构建合法父集合 validParents 时**只收集远端 folders**，
+  本地已有 folder 不算合法父；一旦本次清单没列出该父，effectiveParent() 就落 defaultNotebookId()（最老笔记本）把 note 错挂，
+  且沿用远端 updatedAt；之后 decideMetaApply 用严格 updatedAt > lastSyncedMetaAt，时间戳相等 → 永远跳过 → 两端永久不一致。
+  纯桌面多端难触发是因为桌面 move 会抬 updatedAt，后续一次移动能顺手纠正。
+- **修复**：f867c7e（validParents 纳入 localFolderIdsAtStart + meta 对账加字段判据）；d639b7f/d91c71f（零变更早退前对账 parent 漂移，
+  只看本地活跃 note）；fde0725（runDataHealthCheck 增 metaParentMismatch）。
+- **数据修复**：零变更早退会挡在对账前，故手动清 device_state.last_seen_commit_id 强制走完整对账 → 10 条自动归位（9116074d 15→5，notebook-personal 10→20）。真机同步后与桌面一致。
+
+### 2. 当前问题 / 未验证 / 遗留
+1. **移动端拖拽的"连续手感"没做完整真机验证**：落位提交、即时生效（60ms 内）、子文档移动都已用合成事件验证；
+   但**自动滚动的连续手感**与**拖起行跟手的视觉**没法用 CDP 合成事件复现（原生手势行为），需人手指在真机上试。
+2. 桌面端目录树头部的全局 ＋（新建文档/分组/笔记本）与移动端「更多 → 新建文档」**保留**了。用户说"统一去掉所有 ＋"，
+   但去掉后就没有"新建笔记本"入口（右键菜单没有该项）。若要彻底去掉，需先往右键菜单加「新建笔记本」。
+3. 拖拽时拖起行目前是跟手 transform + FLIP 回弹，**没有**桌面那种 releasing 多行过渡动画。
+4. 桌面端超长标题平时溢出显示、hover 显形动作时才 ellipsis（用户明确要求"不问不缩、要按钮才缩"）。
+5. 测试在手机上把「安卓上行-2/安卓上行-1」等文档顺序动过（dev 测试数据，同步会带到其他端）。
+
+### 3. 下一步计划
+1. 真机上用手指完整拖一遍（长按→拖到顶/底触发自动滚动→松手），确认手感；
+2. 若用户坚持去掉全局 ＋：给桌面右键菜单加「新建笔记本」（右键任意笔记本节点），再删头部 ＋ 与移动端「更多→新建文档」；
+3. 可选：给拖拽补 releasing 过渡动画（参考桌面 Sidebar.tsx 的 releaseState/releaseTransforms）；
+4. 可选：把移动端拖拽从自写 touch 逻辑正式收敛到桌面的 Pointer Events 方案（见踩坑 4）。
+
+### 4. 踩过的坑（重要，别再踩）
+1. **Android WebView 长按会触发原生 contextmenu**：行上残留 onContextMenu 会弹菜单，压过拖拽。
+   移动端行必须 onContextMenu 只 preventDefault（c136c16 修）。
+2. **长按会触发原生文字选择**：树区域必须 user-select:none + -webkit-touch-callout:none（821392b 修）。
+3. **WebView 抢纵向手势 → touchcancel 取消拖拽**（真机"拖了不重排"的根因）：拖拽激活时给面板 touch-action:none（de808b7 修）。
+4. 真机触屏手势有三个独立的原生坑（1/2/3），**CDP 合成 TouchEvent 一个都测不出来**（合成事件不触发原生行为），
+   只能靠真机；这也是本轮反复的原因。桌面端用的是 **Pointer Events + setPointerCapture**（鼠标/触屏同一套），
+   若后续还要动拖拽，建议直接把移动端也换成指针方案，别在 touch 上继续堆。
+5. **childrenOf 必须按 sortOrder 排序**：移动端 childrenOf 原为 tree.filter(...) 不排序，
+   乐观重排只改 sortOrder 就**看不出效果**（同级拖不动），而 inside 改了 parentId 却立刻可见（d1fdcb8 修）。
+6. **overflow:hidden 不裁元素自己的 transform**：给正在做 translateX 动画的元素自身加 overflow 无效，
+   必须加在**祖先**容器上（首页 tab 切滑动"被拉伸"的真因；88251e3 修在 .mobile-app）。
+7. **S3 设置在移动端是逐 WebView 的**，App 有两个 http://localhost 的 devtools target；
+   只写一个会同步报 "No value provided for input HTTP label: Bucket."，要写所有 target。
+8. **CDP 端口在重装 APK 后会变**：真机用 adb forward tcp:9335 localabstract:webview_devtools_remote_xxxx（socket 名会变，需重取）。
+   scripts/emu-cdp.sh 只认模拟器，真机要手动取 socket。
+9. **启动只跑 npm run dev**（vite-plugin-electron 会自动拉起 Electron，带 9222）。再手动 electron . 会起第二个进程/抢端口。
+10. **改样式别自己发明**：落点线/新建菜单都应对齐桌面已专做的实现（src/components/treeDrag.ts、src/styles/ui-polish.css）。
+
+### 5. 环境与命令
+- Node 24：export PATH="$HOME/.nvm/versions/node/v24.18.0/bin:$PATH"
+- 桌面开发：cd lake-notes-electron && npm run dev（自动起 Electron，CDP 9222；vite 1421）
+- 门禁：npx tsc --noEmit && npx vitest run && node node_modules/vite/bin/vite.js build && npx vite build -c vite.mobile.config.ts
+- 安卓真机（小米，adapter serial 50950385）：bash scripts/android-build.sh --sync --install
+- 真机 CDP：adb -s 50950385 shell cat /proc/net/unix | grep -o webview_devtools_remote_[0-9a-f]* | tail -1
+  → adb -s 50950385 forward tcp:9335 localabstract:<socket>
+- S3 测试空间：bucket local-lake-hebei，prefix **lake-notes-stress2-260910**（桌面与手机同空间；lake-notes 是无关旧前缀）
+
+### 6. 本轮关键提交
+- 卡片/改名/另存为：86491e4 3565615 2c4bd45 940225e fa79763 abdbe9d 10e0996 14338c5 afc8a31 3b1a12f
+- 目录树/交互：11142a3 9dc0195 3154041 f9ceda6 b729460 4f3e740 ea78004 e85bf4a c136c16 821392b de808b7 75ef512 d1fdcb8 40eb157 58050ed
+- 同步事故：f867c7e d639b7f d91c71f fde0725 34d1a36 4c83e3b
+- lakex 契约：b3620cb（docs/LAKEX-CONTRACT.md 第 5.2 节）
