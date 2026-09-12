@@ -50,10 +50,13 @@ button { cursor: pointer; }
 .empty-list { padding: 28px 10px; color: var(--lake-text-tertiary); font-size: 12px; text-align: center; }
 .tree-list { padding-bottom: 4px; }
 .tree-item { min-width: 0; }
-.tree-row { grid-template-columns: 16px 22px minmax(0, 1fr) 20px; min-height: 27px; gap: 4px; }
-/* ⋯ 悬浮按钮：默认透明但占位（不推动超长标题，标题靠 ellipsis 截断），hover/选中时显形 */
-.tree-row-action { display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; padding: 0; border: 0; border-radius: var(--radius-sm); background: transparent; color: var(--lake-text-tertiary); cursor: pointer; opacity: 0; transition: opacity 120ms ease-out; }
-.tree-row:hover .tree-row-action, .tree-row.active .tree-row-action, .tree-row-action:focus-visible { opacity: 1; background: var(--b3-list-hover); }
+.tree-row { grid-template-columns: 16px 22px minmax(0, 1fr) 44px; min-height: 27px; gap: 4px; }
+/* 行内悬浮动作（⋯ = 右键菜单，＋ = 新建子文档，对齐思源 more-root/new）。
+   容器固定 44px 预留 → hover 显形时不会重排标题；超长标题由 ellipsis 截断，不会挤掉按钮。 */
+.tree-row-actions { display: inline-flex; align-items: center; justify-content: flex-end; gap: 2px; opacity: 0; transition: opacity 120ms ease-out; }
+.tree-row:hover .tree-row-actions, .tree-row.active .tree-row-actions, .tree-row-actions:focus-within { opacity: 1; }
+.tree-row-action { display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; padding: 0; border: 0; border-radius: var(--radius-sm); background: transparent; color: var(--lake-text-tertiary); cursor: pointer; }
+.tree-row:hover .tree-row-action { background: var(--b3-list-hover); }
 .tree-row-action:hover { background: var(--lake-accent-soft); color: var(--lake-accent); }
 .tree-row.type-notebook { min-height: 29px; margin-top: 1px; color: var(--lake-text); }
 .tree-row.type-notebook .note-row-copy strong { color: var(--lake-text); font-weight: 650; }

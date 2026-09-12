@@ -401,6 +401,12 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
     setContextMenu(null);
   };
 
+  /** 行内 ＋：在指定节点下新建文档（与右键菜单"新建文档"同一路径，只是父节点来自该行）。 */
+  const newChildOfNode = useCallback((node: TreeNode) => {
+    props.onCreate("note", node.id);
+    setExpanded((current) => expandAncestors(current, props.nodes, node.id));
+  }, [props.onCreate, props.nodes]);
+
   const menuRename = () => {
     if (!contextNode) return;
     beginRename(contextNode);
@@ -553,7 +559,8 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
     onToggle: toggleNode,
     onSelect: props.onSelect,
     onIconClick: setTreeIcon,
-  }), [treeIndex, query, props.activeId, context?.id ?? null, expanded, draggingId, dragOffsetY, dragRowHeight, siblingOffsets, dropTarget, dropParentId, draggedParentId, releaseState, pendingCreate, editingId, editingTitle, createField, submitRename, cancelRename, beginRename, beginTreeDrag, setContextNode, openContext, toggleNode, props.onSelect, setTreeIcon]);
+    onNewChild: newChildOfNode,
+  }), [treeIndex, query, props.activeId, context?.id ?? null, expanded, draggingId, dragOffsetY, dragRowHeight, siblingOffsets, dropTarget, dropParentId, draggedParentId, releaseState, pendingCreate, editingId, editingTitle, createField, submitRename, cancelRename, beginRename, beginTreeDrag, setContextNode, openContext, toggleNode, props.onSelect, setTreeIcon, newChildOfNode]);
 
   return (
     <aside
@@ -628,6 +635,8 @@ interface TreeRowProps {
   consumeSuppressedClick: () => boolean;
   onContext: (id: string) => void;
   onContextMenu: (event: React.MouseEvent, node: TreeNode) => void;
+  /** 行内 ＋：在该节点下新建文档（对齐思源 .b3-list-item__action[data-type=new] 的"新建子文档"）。 */
+  onNewChild: (node: TreeNode) => void;
   onToggle: (id: string) => void;
   onSelect: (id: string) => void;
   onIconClick?: (node: TreeNode, event: React.MouseEvent) => void;
@@ -677,18 +686,30 @@ const TreeRow = memo(function TreeRow(props: TreeRowProps) {
           ? <input className="tree-rename-input" autoFocus aria-label="节点名称" value={props.editingTitle} onChange={(event) => props.onEditingTitle(event.target.value)} onClick={(event) => event.stopPropagation()} onFocus={(event) => event.currentTarget.select()} onBlur={props.onSubmitRename} onKeyDown={(event) => { event.stopPropagation(); if (event.key === "Enter") props.onSubmitRename(); if (event.key === "Escape") props.onCancelRename(); }} />
           : <strong>{props.node.title}</strong>}
       </span>
-      {/* ⋯ 悬浮按钮 = 右键菜单（对齐思源 .b3-list-item__action：点它弹出同一个上下文菜单）。
-          悬浮才显示、占固定 20px 列不推动标题；标题超长由 .note-row-copy strong 省略号裁掉。 */}
-      <button
-        type="button"
-        className="tree-row-action"
-        aria-label="更多操作"
-        title="更多"
-        onPointerDown={(event) => event.stopPropagation()}
-        onClick={(event) => { event.stopPropagation(); props.onContextMenu(event, props.node); }}
-      >
-        <MoreVertical size={15} />
-      </button>
+      {/* 行内悬浮动作（对齐思源：⋯ = more-root 弹右键菜单，＋ = new 新建子文档）。
+          悬浮才显形，列宽固定预留，标题超长由 .note-row-copy strong 省略号裁掉、不会挤掉按钮。 */}
+      <span className="tree-row-actions">
+        <button
+          type="button"
+          className="tree-row-action"
+          aria-label="更多操作"
+          title="更多"
+          onPointerDown={(event) => event.stopPropagation()}
+          onClick={(event) => { event.stopPropagation(); props.onContextMenu(event, props.node); }}
+        >
+          <MoreVertical size={15} />
+        </button>
+        <button
+          type="button"
+          className="tree-row-action tree-row-add"
+          aria-label="新建子文档"
+          title="新建子文档"
+          onPointerDown={(event) => event.stopPropagation()}
+          onClick={(event) => { event.stopPropagation(); props.onNewChild(props.node); }}
+        >
+          <Plus size={15} />
+        </button>
+      </span>
     </div>
     {open && <div className="tree-children">
       {props.pendingCreate?.parentId === props.node.id && props.createField(props.depth + 1)}
