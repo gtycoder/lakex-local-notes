@@ -1,6 +1,6 @@
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent } from "react";
 import { createPortal } from "react-dom";
-import { BookOpen, ChevronRight, ChevronsDownUp, Copy, FilePlus2, FileText, Filter, Focus, Folder, FolderOpen, FolderPlus, History, Info, Package, Pencil, Plus, Search, Trash2, X } from "lucide-react";
+import { BookOpen, ChevronRight, ChevronsDownUp, Copy, FilePlus2, FileText, Filter, Focus, Folder, FolderOpen, FolderPlus, History, Info, MoreHorizontal, Package, Pencil, Plus, Search, Trash2, X } from "lucide-react";
 import { DockFilterRow, useDockFilter } from "./DockFilterBar";
 import { LAKE_EMOJIS } from "../lib/lakeEmojis";
 import { LAKE_EMOJI_GROUPS } from "../lib/lakeEmojiGroups";
@@ -677,6 +677,18 @@ const TreeRow = memo(function TreeRow(props: TreeRowProps) {
           ? <input className="tree-rename-input" autoFocus aria-label="节点名称" value={props.editingTitle} onChange={(event) => props.onEditingTitle(event.target.value)} onClick={(event) => event.stopPropagation()} onFocus={(event) => event.currentTarget.select()} onBlur={props.onSubmitRename} onKeyDown={(event) => { event.stopPropagation(); if (event.key === "Enter") props.onSubmitRename(); if (event.key === "Escape") props.onCancelRename(); }} />
           : <strong>{props.node.title}</strong>}
       </span>
+      {/* ⋯ 悬浮按钮 = 右键菜单（对齐思源 .b3-list-item__action：点它弹出同一个上下文菜单）。
+          悬浮才显示、占固定 20px 列不推动标题；标题超长由 .note-row-copy strong 省略号裁掉。 */}
+      <button
+        type="button"
+        className="tree-row-action"
+        aria-label="更多操作"
+        title="更多"
+        onPointerDown={(event) => event.stopPropagation()}
+        onClick={(event) => { event.stopPropagation(); props.onContextMenu(event, props.node); }}
+      >
+        <MoreHorizontal size={15} />
+      </button>
     </div>
     {open && <div className="tree-children">
       {props.pendingCreate?.parentId === props.node.id && props.createField(props.depth + 1)}

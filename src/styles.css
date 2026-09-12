@@ -48,7 +48,11 @@ button { cursor: pointer; }
 .empty-list { padding: 28px 10px; color: var(--lake-text-tertiary); font-size: 12px; text-align: center; }
 .tree-list { padding-bottom: 4px; }
 .tree-item { min-width: 0; }
-.tree-row { grid-template-columns: 16px 22px minmax(0, 1fr) auto; min-height: 27px; gap: 4px; }
+.tree-row { grid-template-columns: 16px 22px minmax(0, 1fr) 20px; min-height: 27px; gap: 4px; }
+/* ⋯ 悬浮按钮：默认透明但占位（不推动超长标题，标题靠 ellipsis 截断），hover/选中时显形 */
+.tree-row-action { display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; padding: 0; border: 0; border-radius: var(--radius-sm); background: transparent; color: var(--lake-text-tertiary); cursor: pointer; opacity: 0; transition: opacity 120ms ease-out; }
+.tree-row:hover .tree-row-action, .tree-row.active .tree-row-action, .tree-row-action:focus-visible { opacity: 1; }
+.tree-row-action:hover { background: #dfe2e6; color: var(--lake-text); }
 .tree-row.type-notebook { min-height: 29px; margin-top: 1px; color: var(--lake-text); }
 .tree-row.type-notebook .note-row-copy strong { color: var(--lake-text); font-weight: 650; }
 .tree-row.type-group { color: var(--lake-text-secondary); }
