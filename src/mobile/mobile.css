@@ -711,3 +711,8 @@ body { font-family: BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino San
 body.nb-drag-active .side-panel-body,
 body.nb-drag-active .side-panel-body .b3-list-item { touch-action: none; }
 body.nb-drag-active .side-panel-body { overscroll-behavior: none; }
+
+/* 长按拖拽：禁掉文字选择/系统 callout，否则长按会选字、弹选择手柄，盖住拖拽 */
+.side-panel-body,
+.side-panel-body .b3-list-item,
+.side-panel-body .b3-list-item__text { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
