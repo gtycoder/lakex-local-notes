@@ -445,7 +445,7 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
             onTouchMove={clearLongPress}
             onTouchEnd={clearLongPress}
             onTouchCancel={clearLongPress}
-            onContextMenu={(e) => { e.preventDefault(); setMenuFor(it); }}
+            onContextMenu={(e) => e.preventDefault()}
           >
             {hasChildren ? <ChevronRight size={16} className={expanded.has(it.id) ? "ln-chevron open" : "ln-chevron"} /> : <span className="ln-chevron-spacer" />}
             {renamingId === it.id ? (
