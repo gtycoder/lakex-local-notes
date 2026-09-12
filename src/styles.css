@@ -25,6 +25,8 @@ button { cursor: pointer; }
 .sidebar.is-collapsed .sidebar-collapse-toggle { margin: 6px 4px 6px 6px; }
 
 .create-menu-wrap { position: relative; }
+/* ＋ 快捷创建：与行内 ⋯ 同一套着重色（hover/展开时 accent） */
+.create-btn:hover, .create-btn.is-active { background: var(--lake-accent-soft); color: var(--lake-accent); }
 .create-menu { display: flex; position: absolute; top: 36px; right: 0; z-index: 1000; flex-direction: column; width: clamp(150px, calc(var(--sidebar-width, 260px) - 16px), 220px); max-width: calc(100vw - 16px); padding: 4px; border: 1px solid var(--b3-theme-surface-lighter); border-radius: var(--b3-border-radius-b); background: var(--b3-menu-background); box-shadow: var(--b3-dialog-shadow); transform-origin: top right; transition: transform 140ms var(--ease-out), opacity 140ms var(--ease-out); }
 .create-menu > button { display: grid; grid-template-columns: 20px minmax(0, 1fr); align-items: center; gap: 8px; width: 100%; min-height: 42px; padding: 5px 8px; border: 0; border-radius: var(--b3-border-radius); color: var(--b3-theme-on-surface); background: transparent; text-align: left; }
 .create-menu > button:hover { background: var(--b3-list-hover); }
@@ -51,8 +53,8 @@ button { cursor: pointer; }
 .tree-row { grid-template-columns: 16px 22px minmax(0, 1fr) 20px; min-height: 27px; gap: 4px; }
 /* ⋯ 悬浮按钮：默认透明但占位（不推动超长标题，标题靠 ellipsis 截断），hover/选中时显形 */
 .tree-row-action { display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; padding: 0; border: 0; border-radius: var(--radius-sm); background: transparent; color: var(--lake-text-tertiary); cursor: pointer; opacity: 0; transition: opacity 120ms ease-out; }
-.tree-row:hover .tree-row-action, .tree-row.active .tree-row-action, .tree-row-action:focus-visible { opacity: 1; }
-.tree-row-action:hover { background: #dfe2e6; color: var(--lake-text); }
+.tree-row:hover .tree-row-action, .tree-row.active .tree-row-action, .tree-row-action:focus-visible { opacity: 1; background: var(--b3-list-hover); }
+.tree-row-action:hover { background: var(--lake-accent-soft); color: var(--lake-accent); }
 .tree-row.type-notebook { min-height: 29px; margin-top: 1px; color: var(--lake-text); }
 .tree-row.type-notebook .note-row-copy strong { color: var(--lake-text); font-weight: 650; }
 .tree-row.type-group { color: var(--lake-text-secondary); }

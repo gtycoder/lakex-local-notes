@@ -1,6 +1,6 @@
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent } from "react";
 import { createPortal } from "react-dom";
-import { BookOpen, ChevronRight, ChevronsDownUp, Copy, FilePlus2, FileText, Filter, Focus, Folder, FolderOpen, FolderPlus, History, Info, MoreHorizontal, Package, Pencil, Plus, Search, Trash2, X } from "lucide-react";
+import { BookOpen, ChevronRight, ChevronsDownUp, Copy, FilePlus2, FileText, Filter, Focus, Folder, FolderOpen, FolderPlus, History, Info, MoreVertical, Package, Pencil, Plus, Search, Trash2, X } from "lucide-react";
 import { DockFilterRow, useDockFilter } from "./DockFilterBar";
 import { LAKE_EMOJIS } from "../lib/lakeEmojis";
 import { LAKE_EMOJI_GROUPS } from "../lib/lakeEmojiGroups";
@@ -687,7 +687,7 @@ const TreeRow = memo(function TreeRow(props: TreeRowProps) {
         onPointerDown={(event) => event.stopPropagation()}
         onClick={(event) => { event.stopPropagation(); props.onContextMenu(event, props.node); }}
       >
-        <MoreHorizontal size={15} />
+        <MoreVertical size={15} />
       </button>
     </div>
     {open && <div className="tree-children">
