@@ -680,3 +680,10 @@ body { font-family: BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino San
   content: ""; position: absolute; right: 0; bottom: 4px; left: 0; height: 2px;
   border-radius: 1px; background: var(--b3-theme-primary);
 }
+
+/* 目录树行内动作（移动端常显——无 hover，对齐思源移动端 .b3-list-item 不带 --hide-action）。
+   ⋯ = 右键菜单，＋ = 新建子文档；标题必须截断，否则超长名会盖住按钮。 */
+.nb-tree-actions { margin-left: auto; flex: 0 0 auto; display: inline-flex; align-items: center; gap: 2px; }
+.nb-tree-action { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; border-radius: 8px; color: var(--b3-theme-on-surface-light); }
+.nb-tree-action:active { background: var(--b3-list-hover); color: var(--b3-theme-primary); }
+.mobile-workspace .b3-list-item__text, .side-panel .b3-list-item__text { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

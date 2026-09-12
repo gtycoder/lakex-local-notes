@@ -5,7 +5,7 @@
  * 多 tab 的「顶部 tab 条」是桌面版；移动端是底部胶囊栏 #toolbarTabs 弹全屏列表（子代理已核对源码）。
  */
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ArrowLeft, ListTree, Files, Pencil, X, ChevronRight, FolderOpen, FileText, Plus, Check, ArrowLeftRight, Trash2, SmilePlus, Move, History, CloudUpload, MoreHorizontal, FilePlus, Search, Settings, Copy, Info } from "lucide-react";
+import { ArrowLeft, ListTree, Files, Pencil, X, ChevronRight, FolderOpen, FileText, Plus, Check, ArrowLeftRight, Trash2, SmilePlus, Move, History, CloudUpload, MoreHorizontal, MoreVertical, FilePlus, Search, Settings, Copy, Info } from "lucide-react";
 import { NoteInfoDialog } from "../../components/NoteInfoDialog";
 import { bridge } from "../bridge";
 import { LAKE_EMOJIS } from "../../lib/lakeEmojis";
@@ -223,6 +223,15 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
     } catch { /* 忽略 */ }
   }, [notebookId, loadTree, openTab]);
 
+  /** 行内 ＋：在该节点下新建子文档（对齐思源 .b3-list-item__action[data-type=new]）。 */
+  const createChildDoc = useCallback(async (parentId: string) => {
+    try {
+      const n = await bridge.createNote("无标题文档", parentId);
+      await loadTree();
+      await openTab(n.id);
+    } catch { showToast("新建失败", { type: "error" }); }
+  }, [loadTree, openTab]);
+
   // ---- 目录树长按管理 ----
   const clearLongPress = () => {
     if (longPressTimer.current !== null) { window.clearTimeout(longPressTimer.current); longPressTimer.current = null; }
@@ -375,6 +384,12 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
               <>
                 {it.icon ? <span className="ln-tree-icon">{it.icon}</span> : <NodeIcon size={16} className="ln-tree-icon" />}
                 <span className="b3-list-item__text">{it.title}</span>
+                {/* 移动端无 hover：动作常显（对齐思源移动端 .b3-list-item 不带 --hide-action）。
+                    ⋯ = 右键菜单，＋ = 新建子文档。 */}
+                <span className="nb-tree-actions">
+                  <span role="button" tabIndex={0} className="nb-tree-action" aria-label="更多" onClick={(e) => { e.stopPropagation(); setMenuFor(it); }}><MoreVertical size={17} /></span>
+                  <span role="button" tabIndex={0} className="nb-tree-action" aria-label="新建子文档" onClick={(e) => { e.stopPropagation(); void createChildDoc(it.id); }}><Plus size={17} /></span>
+                </span>
               </>
             )}
           </button>
