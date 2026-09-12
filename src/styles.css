@@ -42,8 +42,8 @@ button { cursor: pointer; }
 .note-row:hover { background: #e9ebee; }
 .note-row.active { color: var(--lake-text); background: #eff0f0; }
 .note-row-copy { display: block; min-width: 0; }
-/* 保持 strong 行内（不 display:block）：超长名就让它溢出，不加省略号（用户明确要"溢出就溢出"，点太多难看）。
-   这里 overflow/text-overflow 对行内元素本就不生效，等价于原样展示。 */
+/* 默认行内：overflow/text-overflow 对行内元素不生效 → 超长名原样溢出、不显示省略号（用户要的"平时完整展示"）。
+   hover/选中时（下方规则）才切成 block 让省略号生效，为 ⋯/＋ 腾位。 */
 .note-row-copy strong { overflow: hidden; color: var(--lake-text); font-size: 13px; font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
 .tree-rename-input { width: 100%; height: 24px; padding: 0 4px; border: 1px solid var(--b3-theme-primary-lighter); border-radius: 5px; outline: 0; background: #fff; font-size: 13px; }
 .tree-rename-input:focus { border-color: var(--b3-theme-primary); box-shadow: 0 0 0 2px var(--b3-theme-primary-lightest); }
@@ -60,6 +60,8 @@ button { cursor: pointer; }
    标题此时才被 ellipsis 截断（"需要展示时才缩略"，不是平白无故缩）。 */
 .tree-row-actions { display: none; align-items: center; justify-content: flex-end; background: inherit; }
 .tree-row:hover .tree-row-actions, .tree-row.active .tree-row-actions, .tree-row-actions:focus-within { display: inline-flex; }
+/* 关键：只在 hover/选中时才让标题缩略（block 让 ellipsis 生效）——平时不缩、hover 才缩给 ⋯/＋ 让位 */
+.tree-row:hover .note-row-copy strong, .tree-row.active .note-row-copy strong, .tree-row:focus-within .note-row-copy strong { display: block; overflow: hidden; text-overflow: ellipsis; }
 .tree-row-action { display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; padding: 0; border: 0; border-radius: var(--radius-xs); background: transparent; color: var(--lake-text-tertiary); cursor: pointer; }
 /* 着重色只给"光标所在的那一个"按钮，不是行 hover 时两个一起亮 */
 .tree-row-action:hover { background: var(--lake-accent-soft); color: var(--lake-accent); }
