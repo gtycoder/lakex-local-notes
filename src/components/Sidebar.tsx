@@ -247,10 +247,14 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
         return;
       }
       const rect = row.getBoundingClientRect();
-      const position = computeDropPosition(rect, event.clientY) ?? (dropTargetRef.current?.position ?? "inside");
-      const nextTarget = { id: row.dataset.treeNodeId!, position };
+      let position = computeDropPosition(rect, event.clientY) ?? (dropTargetRef.current?.position ?? "inside");
       const movingNode = props.nodes.find((node) => node.id === drag.id) ?? null;
-      const targetNode = props.nodes.find((node) => node.id === nextTarget.id) ?? null;
+      const targetNode = props.nodes.find((node) => node.id === row.dataset.treeNodeId) ?? null;
+      // 目标不支持 inside（如笔记本只能排序）→ 退化为上下半区 before/after，避免中段无落点（对齐思源根节点）
+      if (position === "inside" && !isValidTreeDrop(movingNode, targetNode, "inside")) {
+        position = event.clientY < rect.top + rect.height / 2 ? "before" : "after";
+      }
+      const nextTarget = { id: row.dataset.treeNodeId!, position };
       if (!isValidTreeDrop(movingNode, targetNode, nextTarget.position)) {
         dropTargetRef.current = null;
         setDropTarget(null);
