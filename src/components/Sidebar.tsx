@@ -752,15 +752,32 @@ interface ContextMenuProps {
 
 const ContextMenu = ({ node, x, y, onNewChild, onRename, onDelete, onCopyMarkdown, onExportAs, onCopyPaths, onDuplicate, onShowInfo, onOpenHistory, onRevealNoteFile, onClose }: ContextMenuProps) => {
   const [exportOpen, setExportOpen] = useState(false);
-  // 视口边缘翻转，避免菜单溢出屏幕
-  const left = Math.min(x, window.innerWidth - 232);
-  const top = Math.min(y, window.innerHeight - 220);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const [pos, setPos] = useState<{ left: number; top: number } | null>(null);
+  // 视口边缘翻转：按光标先挂载，量出菜单真实尺寸后再定位——下方放不下就向上展开，保证整张菜单可点。
+  useLayoutEffect(() => {
+    const el = menuRef.current;
+    if (!el) return;
+    const margin = 8;
+    const w = el.offsetWidth;
+    const h = el.offsetHeight;
+    let left = x;
+    if (left + w + margin > window.innerWidth) left = window.innerWidth - w - margin;
+    left = Math.max(margin, left);
+    let top = y;
+    if (top + h + margin > window.innerHeight) {
+      const above = y - h;
+      top = above >= margin ? above : Math.max(margin, window.innerHeight - h - margin);
+    }
+    top = Math.max(margin, top);
+    setPos({ left, top });
+  }, [x, y]);
   // 一级菜单靠右时二级子菜单往左弹，避免溢出屏幕右侧
-  const submenuLeft = left + 232 + 230 <= window.innerWidth;
+  const submenuLeft = (pos?.left ?? x) + 232 + 230 <= window.innerWidth;
   // Portal 到 body：侧边栏带 transform（含 translateX(0)）时，position: fixed 会退化为
   // 相对侧边栏定位，导致菜单偏离光标右下；挂到 body 后恢复真正的视口固定定位。
   return createPortal(
-    <div className="context-menu" style={{ left, top }} role="menu" data-context-menu>
+    <div ref={menuRef} className="context-menu" style={pos ? { left: pos.left, top: pos.top } : { left: x, top: y, visibility: "hidden" }} role="menu" data-context-menu>
       <button role="menuitem" onClick={() => { onNewChild("note"); onClose(); }}><FilePlus2 size={15} /><span>新建文档</span></button>
       <button role="menuitem" onClick={() => { onNewChild("group"); onClose(); }}><FolderPlus size={15} /><span>新建分组</span></button>
       <div className="context-menu-sep" />
