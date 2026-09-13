@@ -6,7 +6,7 @@
  * - 空态不做「创建」提示（默认空白即可）；
  * - 底部胶囊栏 = [筛选 | 新建 | 云同步]（新建按 tab 记性：小记=写小记、知识库=新建笔记本）。
  */
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { CloudUpload, List, LayoutGrid, ArrowUpDown, MoreHorizontal, Pencil, Plus, Search, Settings, Trash2, Paperclip, FolderOpen } from "lucide-react";
 import type { TreeNode } from "../../lib/types";
 import type { POCNoteSummary } from "../noteRepository";
@@ -82,8 +82,6 @@ export function HomePage(props: HomePageProps) {
   const [quickMenuFor, setQuickMenuFor] = useState<string | null>(null);
   const [filterOpen, setFilterOpen] = useState(false);
   const [quickSort, setQuickSort] = useState<QuickSort>("recent");
-  const [enterDir, setEnterDir] = useState<"left" | "right">("right");
-  const enteredOnceRef = useRef(false);
 
   // 离开「小记」tab（未点保存）即取消编辑：切回来是小记列表，不保留编辑框。
   // 覆盖所有离开路径（顶部 tab / 左右横滑 / 父级路由变化）。
@@ -91,10 +89,10 @@ export function HomePage(props: HomePageProps) {
     if (tab !== "quick") { setComposer(null); setEditNote(null); }
   }, [tab]);
 
-  // 左右横滑切换小记 ↔ 知识库（左滑→知识库，右滑→小记），带方向性滑动入场动效
+  // 左右横滑切换小记 ↔ 知识库（左滑→知识库，右滑→小记）
   useHorizontalSwipe((dir) => {
-    if (dir === "left" && tab === "quick") { enteredOnceRef.current = true; setEnterDir("right"); onTabChange("library"); }
-    else if (dir === "right" && tab === "library") { enteredOnceRef.current = true; setEnterDir("left"); onTabChange("quick"); }
+    if (dir === "left" && tab === "quick") onTabChange("library");
+    else if (dir === "right" && tab === "library") onTabChange("quick");
   });
 
   // 「最近文档」= 最近更新的 N 条笔记（代理；如需"最近打开"后续再加 last_opened_at 追踪）
@@ -119,7 +117,7 @@ export function HomePage(props: HomePageProps) {
     } catch { /* 读取失败忽略 */ }
   };
   const closeComposer = (): void => { setComposer(null); setEditNote(null); };
-  const switchTab = (next: "quick" | "library"): void => { tapFeedback(); enteredOnceRef.current = true; setEnterDir(next === "library" ? "right" : "left"); onTabChange(next); };
+  const switchTab = (next: "quick" | "library"): void => { tapFeedback(); onTabChange(next); };
   const runSync = async (): Promise<void> => {
     tapFeedback();
     try { const r = await bridge.syncNow(); showToast(r.message || "已同步"); }
@@ -151,7 +149,6 @@ export function HomePage(props: HomePageProps) {
   };
 
   const viewIcon = libraryView === "shelf" ? <LayoutGrid size={20} /> : <List size={20} />;
-  const animClass = enteredOnceRef.current ? (enterDir === "right" ? " mobile-tab-in-right" : " mobile-tab-in-left") : "";
 
   return (
     <div className="mobile-home">
@@ -165,7 +162,7 @@ export function HomePage(props: HomePageProps) {
         {tab === "library" && <button className="toolbar__button" onClick={toggleView} aria-label={libraryView === "shelf" ? "切换到列表" : "切换到书架"} title={libraryView === "shelf" ? "切换到列表" : "切换到书架"}>{viewIcon}</button>}
       </header>
 
-      <div key={tab} className={"mobile-tab-stage" + animClass}>
+      <div key={tab} className="mobile-tab-stage">
       {tab === "quick" ? (
         composer !== null ? (
           <div className="mobile-scroll">

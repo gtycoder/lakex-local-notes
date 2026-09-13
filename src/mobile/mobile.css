@@ -54,12 +54,8 @@ body { font-family: BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino San
 .mobile-htab { border: none; background: transparent; font-size: 16px; color: var(--b3-theme-on-surface-light); cursor: pointer; padding: 6px 2px; font-weight: 500; -webkit-tap-highlight-color: transparent; }
 .mobile-htab.active { color: var(--b3-theme-on-surface); font-weight: 700; }
 
-/* 首层 tab 切换入场动效（小记 ↔ 知识库，按滑动方向）。溢出的裁剪在根 .mobile-app 上（见上）。 */
+/* 首层 tab 舞台（小记 ↔ 知识库；用户要求去掉切换入场动效，直接切换） */
 .mobile-tab-stage { flex: 1; min-height: 0; display: flex; flex-direction: column; }
-.mobile-tab-in-right { animation: mobile-tab-slide-right var(--mobile-duration-panel) var(--mobile-ease-panel); }
-.mobile-tab-in-left { animation: mobile-tab-slide-left var(--mobile-duration-panel) var(--mobile-ease-panel); }
-@keyframes mobile-tab-slide-right { from { transform: translateX(24px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
-@keyframes mobile-tab-slide-left { from { transform: translateX(-24px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
 
 .mobile-scroll { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; overscroll-behavior: contain; padding-bottom: calc(96px + var(--mobile-bottom-safe-area)); scrollbar-width: none; }
 .mobile-scroll::-webkit-scrollbar { display: none; }
@@ -179,12 +175,6 @@ body { font-family: BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino San
 .nb-row:nth-child(6n+4) { --nb-accent: #d96a97; }
 .nb-row:nth-child(6n+5) { --nb-accent: #8f7be0; }
 .nb-row:nth-child(6n+6) { --nb-accent: #3fb0c0; }
-
-/* 首页分区入场（GPU：opacity/transform；reduced-motion 兜底） */
-@keyframes home-section-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
-.mobile-library .home-section { animation: home-section-in 320ms var(--mobile-ease-panel) both; }
-.mobile-library .home-section:nth-child(2) { animation-delay: 60ms; }
-@media (prefers-reduced-motion: reduce) { .mobile-library .home-section { animation: none; } }
 
 /* —— 带标签的底部栏（首页：筛选/新建/云同步） —— */
 .mobile-bottom-bar--labeled { width: min(calc(100% - 32px), calc(var(--mobile-bottom-bar-height) * 4 + 24px)); min-width: 232px; }
