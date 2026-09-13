@@ -548,12 +548,12 @@ body { font-family: BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino San
 .b3-list--mobile .b3-list-item__action > svg { width: 20px; height: 20px; }
 .b3-list--mobile .b3-list-item__arrow { width: 16px; height: 16px; }
 /* 树缩进：思源 .b3-list-item 用 --file-toggle-width 口径；这里用 data-depth 属性选择器，避免内联 style */
-.ln-indent { --ln-indent: 12px; padding-left: var(--ln-indent); }
-.ln-indent[data-depth="1"] { --ln-indent: 28px; }
-.ln-indent[data-depth="2"] { --ln-indent: 44px; }
-.ln-indent[data-depth="3"] { --ln-indent: 60px; }
-.ln-indent[data-depth="4"] { --ln-indent: 76px; }
-.ln-indent[data-depth="5"], .ln-indent[data-depth="6"], .ln-indent[data-depth="7"] { --ln-indent: 92px; }
+.ln-indent { --ln-indent: 12px; padding-left: 12px; }
+.ln-indent[data-depth="1"] { --ln-indent: 28px; padding-left: 28px; }
+.ln-indent[data-depth="2"] { --ln-indent: 44px; padding-left: 44px; }
+.ln-indent[data-depth="3"] { --ln-indent: 60px; padding-left: 60px; }
+.ln-indent[data-depth="4"] { --ln-indent: 76px; padding-left: 76px; }
+.ln-indent[data-depth="5"], .ln-indent[data-depth="6"], .ln-indent[data-depth="7"] { --ln-indent: 92px; padding-left: 92px; }
 
 /* 全屏 tab 列表（思源 #model） */
 .mobile-model-mask { position: fixed; inset: 0; z-index: 9; background: var(--mobile-mask); display: flex; align-items: flex-end; }

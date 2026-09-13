@@ -52,29 +52,39 @@ export function useTreeActions({
   }, []);
 
   const moveTreeNode = useCallback(async (id: string, targetId: string, position: "before" | "inside" | "after") => {
+    const moving = treeNodes.find((node) => node.id === id);
+    const target = treeNodes.find((node) => node.id === targetId);
+    if (!moving || !target) return;
+    const parentId = position === "inside" ? target.id : target.parentId;
+    // UI 会过滤非法根层落点；这里再做一次边界保护，避免 stale pointerup
+    // 或异步树刷新把 note/group 送到根层后弹出"必须位于目录节点下"。
+    if (moving.nodeType !== "notebook" && parentId === null) return;
+    if (moving.nodeType === "notebook" && parentId !== null) return;
+    const sameParent = treeNodes.filter((node) => node.parentId === parentId && node.id !== id).sort((a, b) => a.sortOrder - b.sortOrder);
+    const orderedIds = position === "inside"
+      ? [...sameParent.map((node) => node.id), id]
+      : (() => {
+          const at = sameParent.findIndex((node) => node.id === targetId);
+          const insertAt = at < 0 ? sameParent.length : position === "after" ? at + 1 : at;
+          const next = [...sameParent.map((node) => node.id)];
+          next.splice(insertAt, 0, id);
+          return next;
+        })();
+    // 乐观更新：只改受影响节点的 sortOrder/parentId，未涉及的节点保持同一引用 → memo 行不重渲染，落地即时生效。
+    // 不再 await 后全量 listTreeNodes（那会让 500+ 行全部重渲染 + FLIP，实测拖一次 ~3s）。
+    const orderIndex = new Map(orderedIds.map((childId, index) => [childId, index] as const));
+    setTreeNodes((prev) => prev.map((node) => {
+      if (node.id === id) return { ...node, parentId, sortOrder: orderIndex.get(id) ?? node.sortOrder };
+      const index = orderIndex.get(node.id);
+      return index === undefined ? node : { ...node, sortOrder: index };
+    }));
     try {
-      const moving = treeNodes.find((node) => node.id === id);
-      const target = treeNodes.find((node) => node.id === targetId);
-      if (!moving || !target) return;
-      const parentId = position === "inside" ? target.id : target.parentId;
-      // UI 会过滤非法根层落点；这里再做一次边界保护，避免 stale pointerup
-      // 或异步树刷新把 note/group 送到根层后弹出"必须位于目录节点下"。
-      if (moving.nodeType !== "notebook" && parentId === null) return;
-      if (moving.nodeType === "notebook" && parentId !== null) return;
-      const sameParent = treeNodes.filter((node) => node.parentId === parentId && node.id !== id).sort((a, b) => a.sortOrder - b.sortOrder);
-      const orderedIds = position === "inside"
-        ? [...sameParent.map((node) => node.id), id]
-        : (() => {
-            const at = sameParent.findIndex((node) => node.id === targetId);
-            const insertAt = at < 0 ? sameParent.length : position === "after" ? at + 1 : at;
-            const next = [...sameParent.map((node) => node.id)];
-            next.splice(insertAt, 0, id);
-            return next;
-          })();
       await native.moveTreeNodeOrdered(id, parentId, orderedIds);
+    } catch (reason) {
+      setError(getNativeErrorMessage(reason));
       setTreeNodes(await native.listTreeNodes());
-    } catch (reason) { setError(getNativeErrorMessage(reason)); }
-  }, [treeNodes]);
+    }
+  }, [treeNodes, setTreeNodes, setError]);
 
   // W-2-B：传给 Sidebar 的回调全部稳定化——App 每次渲染（含打字触发的 openTabs 变化）
   // 不再产生新引用，配合 memo(Sidebar) 让树行渲染彻底跳过按键路径。

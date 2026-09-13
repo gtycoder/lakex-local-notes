@@ -233,28 +233,37 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
       // 被拖动项本身会随指针移动，elementFromPoint 可能持续命中它，
       // 尤其是向上越过兄弟项时会导致永远无法得到真实落点。先排除源行，
       // 再从当前可见行中选出指针所在/最近的一行。
-      const rows = [...document.querySelectorAll<HTMLElement>("[data-tree-node-id]")]
-        .filter((candidate) => candidate.dataset.treeNodeId !== drag.id && candidate.getClientRects().length > 0);
+      // 浮层 pointer-events:none，elementFromPoint 直接命中真实行；只有命中失败才回退到就近行，
+      // 避免每次 pointermove 对全表做 getClientRects/getBoundingClientRect（实测 28ms/帧）。
       const hit = document.elementsFromPoint(event.clientX, event.clientY)
         .map((element) => element.closest<HTMLElement>("[data-tree-node-id]"))
         .find((candidate) => candidate && candidate.dataset.treeNodeId !== drag.id);
-      const row = hit ?? rows
-        .map((candidate) => ({ candidate, rect: candidate.getBoundingClientRect(), distance: Math.abs((candidate.getBoundingClientRect().top + candidate.getBoundingClientRect().height / 2) - event.clientY) }))
-        .sort((a, b) => a.distance - b.distance)[0]?.candidate;
+      let row = hit ?? null;
+      if (!row) {
+        let bestDist = Infinity;
+        document.querySelectorAll<HTMLElement>("[data-tree-node-id]").forEach((candidate) => {
+          if (candidate.dataset.treeNodeId === drag.id) return;
+          const box = candidate.getBoundingClientRect();
+          if (box.height <= 0) return;
+          const distance = Math.abs(box.top + box.height / 2 - event.clientY);
+          if (distance < bestDist) { bestDist = distance; row = candidate; }
+        });
+      }
       if (!row) {
         dropTargetRef.current = null;
         setDropTarget(null);
         return;
       }
+      const rowNodeId = row.dataset.treeNodeId;
       const rect = row.getBoundingClientRect();
       let position = computeDropPosition(rect, event.clientY) ?? (dropTargetRef.current?.position ?? "inside");
       const movingNode = props.nodes.find((node) => node.id === drag.id) ?? null;
-      const targetNode = props.nodes.find((node) => node.id === row.dataset.treeNodeId) ?? null;
+      const targetNode = props.nodes.find((node) => node.id === rowNodeId) ?? null;
       // 目标不支持 inside（如笔记本只能排序）→ 退化为上下半区 before/after，避免中段无落点（对齐思源根节点）
       if (position === "inside" && !isValidTreeDrop(movingNode, targetNode, "inside")) {
         position = event.clientY < rect.top + rect.height / 2 ? "before" : "after";
       }
-      const nextTarget = { id: row.dataset.treeNodeId!, position };
+      const nextTarget = { id: rowNodeId!, position };
       if (!isValidTreeDrop(movingNode, targetNode, nextTarget.position)) {
         dropTargetRef.current = null;
         setDropTarget(null);
@@ -455,15 +464,20 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
     const settled = currentOrder.join("|") === releaseState.expectedOrder.join("|");
     if (!settled) return;
 
-    const animated: HTMLElement[] = [];
+    // 先读后写：一次性读取所有行位置（单次布局），再统一写 transform。
+    // 原实现边写 style 边读 getBoundingClientRect → 每行强制重排一次，500+ 行时拖一次要 2s+。
+    const currentTops: Array<{ row: HTMLElement; top: number }> = [];
     rows.forEach((row) => {
       const id = row.dataset.treeNodeId;
-      const oldTop = id ? releaseState.positions[id] : undefined;
-      if (!id || oldTop === undefined) return;
-      row.style.transition = "none";
-      row.style.transform = "none";
-      const delta = oldTop - row.getBoundingClientRect().top;
+      if (!id || releaseState.positions[id] === undefined) return;
+      currentTops.push({ row, top: row.getBoundingClientRect().top });
+    });
+    const animated: HTMLElement[] = [];
+    currentTops.forEach(({ row, top }) => {
+      const id = row.dataset.treeNodeId!;
+      const delta = releaseState.positions[id] - top;
       if (Math.abs(delta) < 1) return;
+      row.style.transition = "none";
       row.style.transform = `translateY(${delta}px)`;
       animated.push(row);
     });

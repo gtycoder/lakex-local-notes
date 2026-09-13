@@ -36,6 +36,7 @@ export function usePanelDrag(handlers: PanelDragHandlers): void {
     let startX = 0;
     let startY = 0;
     let lastX = 0;
+    let startTime = 0;
     let axis: "x" | "y" | null = null;
     let side: PanelSide | null = null;
     let openAtStart = false;
@@ -64,7 +65,7 @@ export function usePanelDrag(handlers: PanelDragHandlers): void {
       if (!t) return;
       const target = e.target as HTMLElement | null;
       if (target?.closest?.('input, textarea, select, [contenteditable="true"], [data-prevent-swipe]')) { stop(); return; }
-      startX = t.clientX; startY = t.clientY; lastX = t.clientX;
+      startX = t.clientX; startY = t.clientY; lastX = t.clientX; startTime = Date.now();
       axis = null; dragging = false;
       const h = ref.current;
       side = h.isOpen("left") ? "left" : h.isOpen("right") ? "right" : null;
@@ -101,7 +102,9 @@ export function usePanelDrag(handlers: PanelDragHandlers): void {
       stop();
       if (!s) { h.getMask("left")?.classList.remove(MASK_SWIPING); h.getMask("right")?.classList.remove(MASK_SWIPING); return; }
       const moved = Math.abs(lastX - startX);
-      const passed = moved > (window.innerWidth || 1) * COMMIT_RATIO;
+      // 对齐思源 touch.ts:308-313：快速横向滑动（<1000ms）即便距离短也提交；慢拖才要求越过 1/3 屏宽。
+      const quickFlick = Date.now() - startTime < 1000 && moved > AXIS_THRESHOLD;
+      const passed = moved > (window.innerWidth || 1) * COMMIT_RATIO || quickFlick;
       const next = openAtStart ? !passed : passed;
       const panel = h.getPanel(s);
       const mask = h.getMask(s);
