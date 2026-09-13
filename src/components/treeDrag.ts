@@ -79,3 +79,43 @@ export function computeDropPosition(rect: { top: number; height: number }, clien
   if (ratio >= 1 - zone) return "after";
   return "inside";
 }
+
+// ---- 拖拽浮层（对齐思源 dragTipGhost：克隆源行跟随指针，源行留在原位只降透明度）----
+
+export interface DragGhost {
+  element: HTMLElement;
+  offsetX: number;
+  offsetY: number;
+}
+
+/** 克隆源行生成跟随指针的浮层；源行不可见时返回 null。 */
+export function createDragGhost(source: HTMLElement, clientX: number, clientY: number): DragGhost | null {
+  const rect = source.getBoundingClientRect();
+  if (rect.width <= 0 || rect.height <= 0) return null;
+  const ghost = source.cloneNode(true) as HTMLElement;
+  ghost.removeAttribute("data-tree-node-id");
+  ghost.removeAttribute("data-node-id");
+  ghost.querySelectorAll("[data-tree-node-id], [data-node-id], [id]").forEach((el) => {
+    el.removeAttribute("data-tree-node-id");
+    el.removeAttribute("data-node-id");
+    el.removeAttribute("id");
+  });
+  ghost.classList.remove("dragging", "nb-dragging", "drop-line-before", "drop-line-after", "drop-parent");
+  ghost.setAttribute("data-drag-ghost", "");
+  ghost.style.width = rect.width + "px";
+  ghost.style.height = rect.height + "px";
+  document.body.appendChild(ghost);
+  const result: DragGhost = { element: ghost, offsetX: clientX - rect.left, offsetY: clientY - rect.top };
+  moveDragGhost(result, clientX, clientY);
+  return result;
+}
+
+/** 让浮层跟手：transform 走 GPU，直接改 DOM，不触发 React 重渲染。 */
+export function moveDragGhost(ghost: DragGhost | null, clientX: number, clientY: number): void {
+  if (!ghost) return;
+  ghost.element.style.transform = "translate3d(" + (clientX - ghost.offsetX) + "px," + (clientY - ghost.offsetY) + "px,0)";
+}
+
+export function removeDragGhost(ghost: DragGhost | null): void {
+  ghost?.element.remove();
+}

@@ -548,12 +548,12 @@ body { font-family: BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino San
 .b3-list--mobile .b3-list-item__action > svg { width: 20px; height: 20px; }
 .b3-list--mobile .b3-list-item__arrow { width: 16px; height: 16px; }
 /* 树缩进：思源 .b3-list-item 用 --file-toggle-width 口径；这里用 data-depth 属性选择器，避免内联 style */
-.ln-indent { padding-left: 12px; }
-.ln-indent[data-depth="1"] { padding-left: 28px; }
-.ln-indent[data-depth="2"] { padding-left: 44px; }
-.ln-indent[data-depth="3"] { padding-left: 60px; }
-.ln-indent[data-depth="4"] { padding-left: 76px; }
-.ln-indent[data-depth="5"], .ln-indent[data-depth="6"], .ln-indent[data-depth="7"] { padding-left: 92px; }
+.ln-indent { --ln-indent: 12px; padding-left: var(--ln-indent); }
+.ln-indent[data-depth="1"] { --ln-indent: 28px; }
+.ln-indent[data-depth="2"] { --ln-indent: 44px; }
+.ln-indent[data-depth="3"] { --ln-indent: 60px; }
+.ln-indent[data-depth="4"] { --ln-indent: 76px; }
+.ln-indent[data-depth="5"], .ln-indent[data-depth="6"], .ln-indent[data-depth="7"] { --ln-indent: 92px; }
 
 /* 全屏 tab 列表（思源 #model） */
 .mobile-model-mask { position: fixed; inset: 0; z-index: 9; background: var(--mobile-mask); display: flex; align-items: flex-end; }
@@ -681,15 +681,24 @@ body { font-family: BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino San
 
 /* 长按拖拽排序：拖起的行抬起；落点线/拖入分组照搬桌面端专做的那套（ui-polish.css:271-289）
    —— ::before/::after 伪元素画 2px accent 线 + soft 光晕，而不是 box-shadow。 */
-.nb-dragging { position: relative; opacity: .92; box-shadow: 0 8px 20px rgba(16, 24, 40, .22); pointer-events: none; }
+/* 源行留在原位只降透明度（跟手的是 [data-drag-ghost] 浮层） */
+.nb-dragging { position: relative; opacity: .4; }
 .side-panel-body .b3-list-item { position: relative; }
+/* 插入线贴到目标行的层级缩进（--ln-indent 由 .ln-indent[data-depth] 提供）：
+   同级父行 bottom 与首个子行 top 是同一视觉间隙，但缩进随层级变化 → 表示落到的层级。 */
 .side-panel-body .b3-list-item.drop-line-before::before,
 .side-panel-body .b3-list-item.drop-line-after::after {
-  content: ""; position: absolute; right: 0; left: 0; height: 2px; border-radius: 999px;
-  background: var(--lake-accent); box-shadow: 0 0 0 3px var(--lake-accent-soft); pointer-events: none;
+  content: ""; position: absolute; right: 0; left: var(--ln-indent, 12px); height: 3px; border-radius: 2px;
+  background: var(--b3-theme-primary, var(--lake-accent)); pointer-events: none;
 }
 .side-panel-body .b3-list-item.drop-line-before::before { top: -1px; }
 .side-panel-body .b3-list-item.drop-line-after::after { bottom: -1px; }
+/* 拖拽浮层：克隆源行跟随手指。 */
+[data-drag-ghost] {
+  position: fixed !important; left: 0; top: 0; margin: 0; pointer-events: none; z-index: 9999;
+  border-radius: 8px; opacity: .9; box-shadow: 0 10px 28px rgba(16, 24, 40, .3);
+  transition: none !important; animation: none !important; will-change: transform; overflow: hidden;
+}
 .side-panel-body .b3-list-item.drop-parent {
   color: var(--b3-theme-on-surface) !important;
   background: color-mix(in srgb, var(--lake-accent) 12%, var(--b3-theme-surface)) !important;

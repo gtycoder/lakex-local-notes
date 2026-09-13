@@ -15,6 +15,7 @@ import { DocumentEditor } from "../editor/DocumentEditor";
 import { OutlineSheet } from "../editor/OutlineSheet";
 import type { LakeEditorInstance } from "../../features/editor/lakeRuntime";
 import { usePanelDrag, type PanelSide } from "../usePanelDrag";
+import { computeDropPosition, createDragGhost, moveDragGhost, removeDragGhost, type DragGhost } from "../../components/treeDrag";
 import { MobileSheetMenu, type MobileSheetItem } from "../ui/MobileSheetMenu";
 import { confirmMobile } from "../ui/ConfirmDialog";
 import { showToast } from "../ui/toastBus";
@@ -80,15 +81,14 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
   const [menuFor, setMenuFor] = useState<NotebookTreeItem | null>(null);
   /** 长按拖拽排序（思源口径）：长按进入拖拽，跟手位移 + 落点（前/后/内），松手重排或移入分组。 */
   const [drag, setDrag] = useState<{
-    id: string; startY: number; dy: number;
+    id: string;
     overId: string | null; position: "before" | "after" | "inside" | null;
-    /** 其他行的让位位移（id → translateY px） */
-    shift: Record<string, number>;
     /** 边缘自动滚动方向 */
     scrollDir: -1 | 0 | 1;
   } | null>(null);
   const dragRef = useRef<typeof drag>(null);
   dragRef.current = drag;
+  const ghostRef = useRef<DragGhost | null>(null);
   const [infoFor, setInfoFor] = useState<NotebookTreeItem | null>(null);
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState("");
@@ -253,20 +253,25 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
     clearLongPress();
     const touch = e.touches[0];
     if (!touch) return;
+    const startX = touch.clientX;
     const startY = touch.clientY;
     longPressTimer.current = window.setTimeout(() => {
       longPressTimer.current = null;
       longPressFeedback();
       // 关键：标记拖拽中 → CSS 给面板 touch-action:none，避免 WebView 把纵向手势判给滚动并 touchcancel 掉拖拽
       document.body.classList.add("nb-drag-active");
-      // 长按 = 进入拖拽排序（菜单改由行内 ⋯ 触发）
-      setDrag({ id: node.id, startY, dy: 0, overId: null, position: null, shift: {}, scrollDir: 0 });
+      // 长按 = 进入拖拽排序（菜单改由行内 ⋯ 触发）：克隆源行做跟手浮层，源行留在原位只降透明度（对齐思源）
+      const sourceEl = document.querySelector<HTMLElement>('.side-panel-body [data-node-id="' + node.id + '"]');
+      ghostRef.current = sourceEl ? createDragGhost(sourceEl, startX, startY) : null;
+      setDrag({ id: node.id, overId: null, position: null, scrollDir: 0 });
     }, 350);
   };
   /** 提交拖拽：同父 → reorderSiblings；跨父/拖入分组 → moveTreeNodeOrdered。 */
   const commitDrag = useCallback(async () => {
     const d = dragRef.current;
     setDrag(null);
+    removeDragGhost(ghostRef.current);
+    ghostRef.current = null;
     document.body.classList.remove("nb-drag-active");
     if (!d || !d.overId || d.overId === d.id) return;
     const dragged = tree.find((x) => x.id === d.id);
@@ -317,34 +322,15 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
     if (!drag) return;
     const panel = document.querySelector(".side-panel-body") as HTMLElement | null;
     let raf = 0;
-    /** 由手指位置算出：落点（overId/position）、其他行让位位移（shift）、边缘滚动方向（scrollDir）。 */
+    /** 由手指位置算出落点（overId/position）与边缘滚动方向；源行留在原位不参与让位（对齐思源）。 */
     const compute = (clientX: number, clientY: number, d: NonNullable<typeof dragRef.current>) => {
-      const rowEls = ([...document.querySelectorAll(".side-panel-body [data-node-id]")] as HTMLElement[])
-        .filter((el) => el.getClientRects().length > 0);
-      // 被拖起的行 pointer-events:none，elementFromPoint 会穿透到下面的行
       const hit = (document.elementFromPoint(clientX, clientY) as HTMLElement | null)?.closest("[data-node-id]") as HTMLElement | null;
       const hitId = hit?.getAttribute("data-node-id") ?? null;
       let overId: string | null = null;
       let position: "before" | "after" | "inside" | null = null;
       if (hit && hitId && hitId !== d.id) {
-        const r = hit.getBoundingClientRect();
-        const ratio = (clientY - r.top) / r.height;
         overId = hitId;
-        position = ratio < 0.28 ? "before" : ratio > 0.72 ? "after" : "inside";
-      }
-      // 让位：源行到落点之间的行整体上/下移一个行高
-      const fromIndex = rowEls.findIndex((r) => r.getAttribute("data-node-id") === d.id);
-      const overIndex = overId ? rowEls.findIndex((r) => r.getAttribute("data-node-id") === overId) : -1;
-      const rowH = rowEls[0]?.getBoundingClientRect().height ?? 44;
-      const dropIndex = overIndex < 0 ? fromIndex : overIndex + (position === "after" ? 1 : 0);
-      const shift: Record<string, number> = {};
-      if (fromIndex >= 0 && overIndex >= 0 && dropIndex !== fromIndex && dropIndex !== fromIndex + 1) {
-        rowEls.forEach((r, i) => {
-          const rid = r.getAttribute("data-node-id");
-          if (!rid || rid === d.id) return;
-          if (fromIndex < dropIndex && i > fromIndex && i < dropIndex) shift[rid] = -rowH;
-          else if (fromIndex > dropIndex && i >= dropIndex && i < fromIndex) shift[rid] = rowH;
-        });
+        position = computeDropPosition(hit.getBoundingClientRect(), clientY) ?? "inside";
       }
       // 边缘自动滚动：靠近面板上/下沿 64px 内 → 持续滚动
       let scrollDir: -1 | 0 | 1 = 0;
@@ -353,7 +339,7 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
         if (clientY < pr.top + 64) scrollDir = -1;
         else if (clientY > pr.bottom - 64) scrollDir = 1;
       }
-      return { overId, position, shift, scrollDir };
+      return { overId, position, scrollDir };
     };
     const onMove = (e: TouchEvent) => {
       const t = e.touches[0];
@@ -361,8 +347,10 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
       e.preventDefault();
       const d = dragRef.current;
       if (!d) return;
-      const dy = t.clientY - d.startY;
-      setDrag({ ...d, dy, ...compute(t.clientX, t.clientY, d) });
+      moveDragGhost(ghostRef.current, t.clientX, t.clientY);
+      const next = compute(t.clientX, t.clientY, d);
+      if (d.overId === next.overId && d.position === next.position && d.scrollDir === next.scrollDir) return;
+      setDrag({ ...d, ...next });
     };
     const tick = () => {
       const d = dragRef.current;
@@ -371,8 +359,8 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
       raf = window.requestAnimationFrame(tick);
     };
     raf = window.requestAnimationFrame(tick);
-    const onEnd = () => { void commitDrag(); };
-    const onCancel = () => { document.body.classList.remove("nb-drag-active"); void commitDrag(); };
+    const onEnd = () => { removeDragGhost(ghostRef.current); ghostRef.current = null; void commitDrag(); };
+    const onCancel = () => { removeDragGhost(ghostRef.current); ghostRef.current = null; document.body.classList.remove("nb-drag-active"); void commitDrag(); };
     document.addEventListener("touchmove", onMove, { passive: false });
     document.addEventListener("touchend", onEnd);
     document.addEventListener("touchcancel", onCancel);
@@ -384,6 +372,9 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
       document.removeEventListener("touchcancel", onCancel);
     };
   }, [drag !== null, commitDrag]);
+
+  // 组件卸载时清掉可能残留的拖拽浮层
+  useEffect(() => () => { removeDragGhost(ghostRef.current); ghostRef.current = null; }, []);
 
   const applyRename = useCallback(async () => {
     const id = renamingId; const v = renameValue.trim();
@@ -499,13 +490,6 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
         <div key={it.kind + "-" + it.id}>
           <button
             className={"b3-list-item ln-indent" + (activeId === it.id ? " b3-list-item--selected" : "") + (drag?.id === it.id ? " nb-dragging" : "") + (drag?.overId === it.id && drag.position ? (drag.position === "inside" ? " drop-parent" : " drop-line-" + drag.position) : "")}
-            style={
-              drag?.id === it.id
-                ? { transform: "translateY(" + drag.dy + "px)", zIndex: 5 }
-                : drag?.shift && drag.shift[it.id]
-                  ? { transform: "translateY(" + drag.shift[it.id] + "px)" }
-                  : undefined
-            }
             data-depth={depth}
             data-node-id={it.id}
             onClick={() => {
