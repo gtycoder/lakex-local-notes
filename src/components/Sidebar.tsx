@@ -663,7 +663,7 @@ const TreeRow = memo(function TreeRow(props: TreeRowProps) {
           : <strong>{props.node.title}</strong>}
       </span>
       {/* 行内悬浮动作（对齐思源：⋯ = more-root 弹右键菜单，＋ = new 新建子文档）。
-          悬浮才显形，列宽固定预留，标题超长由 .note-row-copy strong 省略号裁掉、不会挤掉按钮。 */}
+          悬浮才显形（选中态不常驻）；标题恒单行、列宽处直接裁切，不打省略号。 */}
       <span className="tree-row-actions">
         <button
           type="button"

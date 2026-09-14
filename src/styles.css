@@ -44,9 +44,8 @@ button { cursor: pointer; }
 .note-row:hover { background: #e9ebee; }
 .note-row.active { color: var(--lake-text); background: #eff0f0; }
 .note-row-copy { display: block; min-width: 0; }
-/* 默认行内：overflow/text-overflow 对行内元素不生效 → 超长名原样溢出、不显示省略号（用户要的"平时完整展示"）。
-   hover/选中时（下方规则）才切成 block 让省略号生效，为 ⋯/＋ 腾位。 */
-.note-row-copy strong { overflow: hidden; color: var(--lake-text); font-size: 13px; font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
+/* 标题恒为单行、超出列宽直接裁切——不打省略号（用户 260914：不要用 … 缩短标题）；hover ⋯ 出现时同样只是让位裁切 */
+.note-row-copy strong { display: block; overflow: hidden; color: var(--lake-text); font-size: 13px; font-weight: 500; white-space: nowrap; }
 .tree-rename-input { width: 100%; height: 24px; padding: 0 4px; border: 1px solid var(--b3-theme-primary-lighter); border-radius: var(--b3-border-radius); outline: 0; background: #fff; font-size: 13px; }
 .tree-rename-input:focus { border-color: var(--b3-theme-primary); box-shadow: 0 0 0 2px var(--b3-theme-primary-lightest); }
 .tree-rename-input::selection { color: #2d4968; background: #dcecf8; }
@@ -55,14 +54,11 @@ button { cursor: pointer; }
 .tree-list { padding-bottom: 4px; }
 .tree-item { min-width: 0; }
 .tree-row { grid-template-columns: 16px 22px minmax(0, 1fr) auto; min-height: 27px; gap: 4px; }
-/* 行内动作（⋯ = 右键菜单，＋ = 新建子文档，对齐思源 more-root/new）。
-   默认隐藏不占宽度、不逼标题缩略；hover/键盘聚焦时才出现并挤出位置（选中态不常驻，用户 260914）。 */
-/* 动作默认 display:none —— 不占宽度、不逼标题缩略；只有行 hover/键盘聚焦时才出现并挤出位置，
-   标题此时才被 ellipsis 截断（"需要展示时才缩略"，不是平白无故缩）。 */
+/* 行内动作（⋯ = 右键菜单，＋ = 新建子文档，对齐思源 more-root/new）：
+   默认 display:none 不占宽度；hover/键盘聚焦时才出现并挤出位置（选中态不常驻，用户 260914）。
+   标题恒单行、列宽处直接裁切不打省略号（见 .note-row-copy strong）。 */
 .tree-row-actions { display: none; align-items: center; justify-content: flex-end; background: inherit; }
-.tree-row:hover .tree-row-actions, .tree-row-actions:focus-within { display: inline-flex; } /* 仅 hover/键盘聚焦出现：选中态不再常驻（用户 260914） */
-/* 关键：只在动作按钮出现时才让标题缩略（block 让 ellipsis 生效）——平时不缩、hover 才缩给 ⋯/＋ 让位 */
-.tree-row:hover .note-row-copy strong, .tree-row:focus-within .note-row-copy strong { display: block; overflow: hidden; text-overflow: ellipsis; }
+.tree-row:hover .tree-row-actions, .tree-row-actions:focus-within { display: inline-flex; }
 .tree-row-action { display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; padding: 0; border: 0; border-radius: var(--radius-xs); background: transparent; color: var(--lake-text-tertiary); cursor: pointer; }
 /* 着重色只给"光标所在的那一个"按钮，不是行 hover 时两个一起亮 */
 .tree-row-action:hover { background: var(--lake-accent-soft); color: var(--lake-accent); }
