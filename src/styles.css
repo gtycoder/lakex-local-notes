@@ -78,7 +78,8 @@ button { cursor: pointer; }
 .tree-row.drop-before { box-shadow: inset 0 2px 0 var(--lake-accent); }
 .tree-row.drop-after { box-shadow: inset 0 -2px 0 var(--lake-accent); }
 .tree-row.drop-inside { background: var(--lake-accent-soft); box-shadow: inset 0 0 0 1px var(--lake-accent); }
-.tree-chevron { display: flex; align-items: center; justify-content: center; width: 16px; height: 100%; padding: 0; border: 0; background: transparent; cursor: pointer; transition: transform var(--lake-motion-fast) var(--lake-ease-standard); }
+.tree-chevron { display: flex; align-items: center; justify-content: center; width: 16px; height: 100%; padding: 0; border: 0; border-radius: var(--radius-xs); background: transparent; cursor: pointer; transition: transform var(--lake-motion-fast) var(--lake-ease-standard), background var(--lake-motion-fast) var(--lake-ease-standard), color var(--lake-motion-fast) var(--lake-ease-standard); }
+.tree-chevron:not(:disabled):hover { background: var(--lake-accent-soft); color: var(--lake-accent); } /* 与行内操作按钮同一套 hover 着重 */
 .tree-chevron:disabled { cursor: default; }
 .tree-chevron.open { transform: rotate(90deg); }
 .tree-spacer { width: 14px; }
