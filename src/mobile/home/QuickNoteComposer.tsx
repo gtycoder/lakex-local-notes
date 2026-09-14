@@ -6,6 +6,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Check, ImagePlus, X } from "lucide-react";
 import { bridge } from "../bridge";
+import { successFeedback, warnFeedback } from "../ui/haptics";
 import { localAssetHttpUrl } from "../../core/assetUrl.js";
 import { withAssetAccessToken } from "../../lib/assetPort";
 import {
@@ -130,9 +131,11 @@ export function QuickNoteComposer({ editNote, onSaved, onCancel }: QuickNoteComp
       const all = [...existing, ...images].map((i) => ({ filename: i.filename, mimeType: i.mimeType, width: i.width, height: i.height, bytes: i.bytes }));
       const id = editNote ? editNote.id : crypto.randomUUID();
       await bridge.saveQuickNoteWithImages(id, text, all);
+      successFeedback(); // 确定添加/保存小记
       await onSaved();
     } catch (e) {
       setError("保存失败: " + (e as Error).message);
+      warnFeedback();
     } finally {
       setSaving(false);
     }

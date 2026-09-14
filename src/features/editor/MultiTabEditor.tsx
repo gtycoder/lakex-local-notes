@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type PointerEvent as ReactPointerEvent } from "react";
-import { ChevronDown, ChevronsLeft, ChevronsRight, FileText, Pin, X, XCircle, XOctagon } from "lucide-react";
+import { ChevronDown, ChevronsLeft, ChevronsRight, File, Pin, TriangleAlert, X, XCircle, XSquare } from "lucide-react";
 import { createPortal } from "react-dom";
 import { EditorTab } from "./EditorTab";
 import type { LakeEditorPrefs } from "./lakeRuntime";
@@ -389,7 +389,7 @@ export function MultiTabEditor({
                         onClick={() => selectTab(tab.noteId)}
                         title={tab.title || "无标题"}
                       >
-                        <span className="tab-switcher-icon" aria-hidden="true">{tab.icon ?? <FileText size={15} />}</span>
+                        <span className="tab-switcher-icon" aria-hidden="true">{tab.icon ?? <File size={15} />}</span>
                         <span className="tab-switcher-status" aria-hidden="true">{tab.dirty ? "●" : ""}</span>
                         <span className="tab-switcher-title">{tab.title || "无标题"}</span>
                         {tab.deleted && <span className="tab-deleted-badge" title="文档在回收站中（本机或他端删除）：只读、编辑不会保存，恢复后才能继续写">已删除</span>}
@@ -414,14 +414,14 @@ export function MultiTabEditor({
       {breadcrumb}
       {activeTabGone && (
         <div className="tab-gone-banner" role="status">
-          <XOctagon size={14} aria-hidden="true" />
+          <TriangleAlert size={14} aria-hidden="true" />
           <span>该文档在回收站中：只读、编辑不会保存。需要继续写请先恢复。</span>
           {onOpenTrash && <button type="button" onClick={onOpenTrash}>打开回收站</button>}
         </div>
       )}
       <div className="tab-panels">
         {tabs.length === 0 ? <section className="empty-workspace">
-          <span className="empty-workspace-icon" aria-hidden="true"><FileText size={26} /></span>
+          <span className="empty-workspace-icon" aria-hidden="true"><File size={26} /></span>
           <h2>开始写第一篇笔记</h2>
           <p className="empty-workspace-hint">新建文档开始记录，或按 ⌘K 搜索已有笔记</p>
           {emptyAction}
@@ -515,7 +515,7 @@ const TabContextMenu = ({ x, y, pinned, onTogglePin, onCloseTab, onCloseOthers, 
     <div className="context-menu" style={{ left, top }} role="menu" data-context-menu>
       <button role="menuitem" onClick={() => { onCloseTab(); onClose(); }}><X size={15} /><span>关闭</span></button>
       {canCloseOthers && <button role="menuitem" onClick={() => { onCloseOthers(); onClose(); }}><XCircle size={15} /><span>关闭其他</span></button>}
-      {canCloseOthers && <button role="menuitem" onClick={() => { onCloseAll(); onClose(); }}><XOctagon size={15} /><span>关闭全部</span></button>}
+      {canCloseOthers && <button role="menuitem" onClick={() => { onCloseAll(); onClose(); }}><XSquare size={15} /><span>关闭全部</span></button>}
       {hasLeft && <button role="menuitem" onClick={() => { onCloseLeft(); onClose(); }}><ChevronsLeft size={15} /><span>关闭左侧</span></button>}
       {hasRight && <button role="menuitem" onClick={() => { onCloseRight(); onClose(); }}><ChevronsRight size={15} /><span>关闭右侧</span></button>}
       <div className="context-menu-sep" />

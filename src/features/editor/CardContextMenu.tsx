@@ -5,7 +5,7 @@
  */
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { ClipboardPaste, ChevronRight, Copy, Download, ExternalLink, FolderOpen, Pencil, Scissors, TextSelect } from "lucide-react";
+import { ClipboardPaste, ChevronRight, Copy, Download, ExternalLink, FolderOpen, Pencil, Scissors, BoxSelect } from "lucide-react";
 import type { AttachmentPreviewItem } from "../attachment/attachmentPreviewController";
 
 export interface CardMenuActions {
@@ -135,7 +135,7 @@ export function TextContextMenu({ x, y, onClose }: { x: number; y: number; onClo
       <button role="menuitem" onClick={() => run("copy")}><Copy size={15} /><span>复制</span></button>
       <button role="menuitem" onClick={() => run("cut")}><Scissors size={15} /><span>剪切</span></button>
       <button role="menuitem" onClick={paste}><ClipboardPaste size={15} /><span>粘贴</span></button>
-      <button role="menuitem" onClick={() => run("selectAll")}><TextSelect size={15} /><span>全选</span></button>
+      <button role="menuitem" onClick={() => run("selectAll")}><BoxSelect size={15} /><span>全选</span></button>
     </div>,
     document.body
   );

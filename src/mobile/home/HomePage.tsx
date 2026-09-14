@@ -7,7 +7,7 @@
  * - 底部胶囊栏 = [筛选 | 新建 | 云同步]（新建按 tab 记性：小记=写小记、知识库=新建笔记本）。
  */
 import { useEffect, useMemo, useState } from "react";
-import { CloudUpload, List, LayoutGrid, ArrowUpDown, MoreHorizontal, Pencil, Plus, Search, Settings, Trash2, Paperclip, FolderOpen } from "lucide-react";
+import { CloudUpload, List, LayoutGrid, ArrowUpDown, MoreHorizontal, Pencil, Plus, Search, Settings, Trash, Paperclip, FolderPlus } from "lucide-react";
 import type { TreeNode } from "../../lib/types";
 import type { POCNoteSummary } from "../noteRepository";
 import { NotebookGrid } from "./NotebookGrid";
@@ -228,7 +228,7 @@ export function HomePage(props: HomePageProps) {
         {tab === "quick" ? (
           <button className="mobile-bottom-bar__item" onClick={() => { tapFeedback(); setEditNote(null); setComposer({ mode: "new" }); }} aria-label="新建小记" title="新建小记"><Plus /></button>
         ) : (
-          <button className="mobile-bottom-bar__item" onClick={() => { tapFeedback(); onCreateNotebook(); }} aria-label="新建知识库" title="新建知识库"><FolderOpen /></button>
+          <button className="mobile-bottom-bar__item" onClick={() => { tapFeedback(); onCreateNotebook(); }} aria-label="新建知识库" title="新建知识库"><FolderPlus /></button>
         )}
         <button className="mobile-bottom-bar__item" onClick={() => void runSync()} aria-label="立即同步" title="立即同步"><CloudUpload /></button>
       </nav>
@@ -238,7 +238,7 @@ export function HomePage(props: HomePageProps) {
         open={!!quickMenuFor}
         items={[
           { id: "edit", label: "编辑", icon: Pencil },
-          { id: "delete", label: "删除", icon: Trash2, danger: true },
+          { id: "delete", label: "删除", icon: Trash, danger: true },
         ]}
         onClose={() => setQuickMenuFor(null)}
         onSelect={(it) => { const id = quickMenuFor; setQuickMenuFor(null); if (!id) return; if (it.id === "edit") void openEdit(id); else if (it.id === "delete") void deleteQuickNote(id); }}

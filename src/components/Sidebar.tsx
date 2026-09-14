@@ -1,6 +1,6 @@
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent } from "react";
 import { createPortal } from "react-dom";
-import { BookOpen, ChevronRight, ChevronsDownUp, Copy, FilePlus2, FileText, Filter, Focus, Folder, FolderOpen, FolderPlus, History, Info, MoreVertical, Package, Pencil, Plus, Search, Trash2, X } from "lucide-react";
+import { Book, ChevronRight, ChevronsDownUp, Copy, FilePlus, File, Filter, Focus, Folder, FolderOpen, FolderPlus, History, Info, MoreVertical, Download, Pencil, Plus, Search, Trash, X } from "lucide-react";
 import { DockFilterRow, useDockFilter } from "./DockFilterBar";
 import { LAKE_EMOJIS } from "../lib/lakeEmojis";
 import { LAKE_EMOJI_GROUPS } from "../lib/lakeEmojiGroups";
@@ -435,7 +435,7 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
 
   // depth 不再用于定位：缩进由 .tree-children margin-left + border-left 实现
   const createField = useCallback((_depth: number) => pendingCreate && <div className="inline-create" style={{ marginLeft: 8 }}>
-    {pendingCreate.kind === "notebook" ? <BookOpen size={14} /> : <FolderPlus size={14} />}
+    {pendingCreate.kind === "notebook" ? <Book size={14} /> : <FolderPlus size={14} />}
     <input autoFocus aria-label={pendingCreate.kind === "notebook" ? "笔记本名称" : "分组名称"} value={newTitle} onChange={(event) => setNewTitle(event.target.value)} onFocus={(event) => event.currentTarget.select()} onKeyDown={(event) => { if (event.key === "Enter") submitCreate(); if (event.key === "Escape") setPendingCreate(null); }} />
     <button onClick={submitCreate}>创建</button>
   </div>, [newTitle, pendingCreate, submitCreate]);
@@ -572,9 +572,9 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
             else { updateCreateMenuPosition(); setMenuOpen(true); }
           }} title="新建" aria-label="新建" aria-pressed={menuOpen}><Plus size={14} /></button>
           {menuOpen && createMenuPosition && createPortal(<div ref={createMenuRef} className="create-menu" style={{ position: "fixed", top: createMenuPosition.top, left: createMenuPosition.left, width: createMenuPosition.width, zIndex: 1000 }}>
-            <button onClick={() => create("note")} disabled={!noteParent}><FilePlus2 size={16} /><span><strong>新建文档</strong><small>{context ? `在“${context.title}”下` : "选择笔记本后创建"}</small></span></button>
+            <button onClick={() => create("note")} disabled={!noteParent}><FilePlus size={16} /><span><strong>新建文档</strong><small>{context ? `在“${context.title}”下` : "选择笔记本后创建"}</small></span></button>
             <button onClick={() => create("group")} disabled={!groupParent}><FolderPlus size={16} /><span><strong>新建分组</strong><small>{context ? `在“${context.title}”下` : "请先新建笔记本"}</small></span></button>
-            <button onClick={() => create("notebook")}><BookOpen size={16} /><span><strong>新建笔记本</strong><small>创建顶层笔记本</small></span></button>
+            <button onClick={() => create("notebook")}><Book size={16} /><span><strong>新建笔记本</strong><small>创建顶层笔记本</small></span></button>
           </div>, document.body)}
         </div>
       </div>
@@ -686,9 +686,9 @@ const TreeRow = memo(function TreeRow(props: TreeRowProps) {
 
 function nodeIcon(type: TreeNodeType, open: boolean, customIcon?: string | null) {
   if (customIcon) return <span className="tree-node-custom-icon">{customIcon}</span>;
-  if (type === "notebook") return <BookOpen size={16} />;
+  if (type === "notebook") return <Book size={16} />;
   if (type === "group") return open ? <FolderOpen size={16} /> : <Folder size={16} />;
-  return <FileText size={16} />;
+  return <File size={16} />;
 }
 
 function toggleSet(current: Set<string>, id: string): Set<string> {
@@ -762,7 +762,7 @@ const ContextMenu = ({ node, x, y, onNewChild, onRename, onDelete, onCopyMarkdow
   // 相对侧边栏定位，导致菜单偏离光标右下；挂到 body 后恢复真正的视口固定定位。
   return createPortal(
     <div ref={menuRef} className="context-menu" style={pos ? { left: pos.left, top: pos.top } : { left: x, top: y, visibility: "hidden" }} role="menu" data-context-menu>
-      <button role="menuitem" onClick={() => { onNewChild("note"); onClose(); }}><FilePlus2 size={15} /><span>新建文档</span></button>
+      <button role="menuitem" onClick={() => { onNewChild("note"); onClose(); }}><FilePlus size={15} /><span>新建文档</span></button>
       <button role="menuitem" onClick={() => { onNewChild("group"); onClose(); }}><FolderPlus size={15} /><span>新建分组</span></button>
       <div className="context-menu-sep" />
       {node.nodeType === "note" ? (
@@ -773,7 +773,7 @@ const ContextMenu = ({ node, x, y, onNewChild, onRename, onDelete, onCopyMarkdow
           <button role="menuitem" onClick={() => { onRevealNoteFile(); onClose(); }}><FolderOpen size={15} /><span>打开文件位置</span></button>
           <button role="menuitem" onClick={() => { onShowInfo(); onClose(); }}><Info size={15} /><span>属性</span></button>
           <div className="context-menu-item has-submenu" onMouseEnter={() => setExportOpen(true)} onMouseLeave={() => setExportOpen(false)}>
-            <span className="context-menu-item-label"><Package size={15} /><span>导出</span></span><ChevronRight size={14} />
+            <span className="context-menu-item-label"><Download size={15} /><span>导出</span></span><ChevronRight size={14} />
             {exportOpen && (
               <div className={`context-menu-submenu${submenuLeft ? "" : " open-left"}`} role="menu">
                 <button role="menuitem" onClick={() => { onExportAs("markdown"); onClose(); }}>导出为 Markdown 资料包</button>
@@ -792,7 +792,7 @@ const ContextMenu = ({ node, x, y, onNewChild, onRename, onDelete, onCopyMarkdow
         <button role="menuitem" onClick={() => { onRename(); onClose(); }}><Pencil size={15} /><span>重命名</span></button>
       )}
       <div className="context-menu-sep" />
-      <button role="menuitem" className="danger" onClick={() => { onDelete(); onClose(); }}><Trash2 size={15} /><span>删除</span></button>
+      <button role="menuitem" className="danger" onClick={() => { onDelete(); onClose(); }}><Trash size={15} /><span>删除</span></button>
     </div>,
     document.body
   );

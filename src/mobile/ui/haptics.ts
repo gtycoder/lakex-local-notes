@@ -13,3 +13,5 @@ export const tapFeedback = () => vibrate(8);
 export const longPressFeedback = () => vibrate(14);
 /** 危险/确认 */
 export const warnFeedback = () => vibrate([10, 40, 10]);
+/** 完成确认：保存成功/落点提交/创建成功（双击节奏，与危险三击区分） */
+export const successFeedback = () => vibrate([12, 30, 12]);

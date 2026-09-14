@@ -5,7 +5,7 @@
  */
 import { createPortal } from "react-dom";
 import type { RefObject } from "react";
-import { Focus, Lock, LockOpen, Search, Settings as Settings2Icon, Trash2 } from "lucide-react";
+import { Focus, Lock, LockOpen, Search, Settings as Settings2Icon, Trash } from "lucide-react";
 import { ConfirmDelete } from "../components/Sidebar";
 import { DraftRecoveryDialog } from "../components/DraftRecoveryDialog";
 import { SearchPanel } from "../components/SearchPanel";
@@ -105,7 +105,7 @@ export function DesktopOverlays(props: DesktopOverlaysProps) {
             <Search size={15} /><span>全文搜索<small>⇧⌘F</small></span>
           </button>
           <button role="menuitem" onClick={() => onOpenSettingsFromMenu("editor")}><Settings2Icon size={15} />偏好设置</button>
-          <button role="menuitem" onClick={onOpenTrashFromMenu}><Trash2 size={15} />回收站</button>
+          <button role="menuitem" onClick={onOpenTrashFromMenu}><Trash size={15} />回收站</button>
         </div>,
         document.body,
       )}

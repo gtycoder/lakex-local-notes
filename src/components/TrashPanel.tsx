@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { ChevronRight, Folder, FileText, RotateCcw, Trash2, Trash, X } from "lucide-react";
+import { ChevronRight, Folder, File, RotateCcw, Trash, X } from "lucide-react";
 import { native } from "../lib/native";
 import { createRequestVersion } from "../core/requestVersion";
 import { useFloatingDialog } from "./useFloatingDialog";
@@ -46,7 +46,7 @@ function TrashTreeRow({ item, items, selectedId, onSelect, onRestore, onPurge, t
         >
           {children.length > 0 ? <ChevronRight size={13} className={open ? "trash-caret-open" : ""} /> : null}
         </span>
-        <span className="b3-list-item__graphic">{item.nodeType === "note" ? <FileText size={14} /> : <Folder size={14} />}</span>
+        <span className="b3-list-item__graphic">{item.nodeType === "note" ? <File size={14} /> : <Folder size={14} />}</span>
         <div className="b3-list-item__text ln-row2__main" onClick={() => onSelect(item)} title={item.nodeType === "note" ? "点击预览内容" : ""}>
           <span className="ln-row2__title">{item.title || "无标题"}</span>
           <span className="ln-row2__meta">
@@ -69,7 +69,7 @@ function TrashTreeRow({ item, items, selectedId, onSelect, onRestore, onPurge, t
           aria-label={isRoot ? "彻底删除（含全部内容）" : "彻底删除（含子项）"}
           onClick={() => onPurge(item.id)}
         >
-          <Trash2 size={14} />
+          <Trash size={14} />
         </button>
       </div>
       {open && children.length > 0 && (
@@ -266,7 +266,7 @@ export function TrashPanel({ open, onClose, onChanged, onRestored }: {
       <section ref={floating.panelRef} className="floating-dialog trash-panel" style={floating.panelStyle} role="dialog" aria-modal="true">
         <header className="floating-dialog-header" onPointerDown={floating.startDrag}>
           <div className="panel-title">
-            <Trash2 size={17} />
+            <Trash size={17} />
             <h2>回收站</h2>
           </div>
           <div className="panel-actions">
@@ -326,14 +326,14 @@ export function TrashPanel({ open, onClose, onChanged, onRestored }: {
             {quickItems.length === 0 && <div className="ln-empty">回收站是空的</div>}
             {quickItems.map((item) => (
               <div className="b3-list-item b3-list-item--hide-action ln-row2" key={item.id}>
-                <span className="b3-list-item__graphic"><FileText size={14} /></span>
+                <span className="b3-list-item__graphic"><File size={14} /></span>
                 <div className="b3-list-item__text ln-row2__main">
                   <span className="ln-row2__title">小记</span>
                   <span className="ln-row2__meta">{new Date(item.deletedAt).toLocaleString()}</span>
                 </div>
                 <span className="fn__space" />
                 <button className="b3-list-item__action" title="恢复" aria-label="恢复" onClick={() => void restoreQuick(item.id)}><RotateCcw size={14} /></button>
-                <button className="b3-list-item__action b3-list-item__action--warning" title="彻底删除" aria-label="彻底删除" onClick={() => void purgeQuick(item.id)}><Trash2 size={14} /></button>
+                <button className="b3-list-item__action b3-list-item__action--warning" title="彻底删除" aria-label="彻底删除" onClick={() => void purgeQuick(item.id)}><Trash size={14} /></button>
               </div>
             ))}
           </div>

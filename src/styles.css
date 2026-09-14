@@ -4,6 +4,8 @@
   -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; text-rendering: optimizeLegibility;
   --topbar-height: 38px; --ease-out: var(--lake-ease-standard); --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1); --dur-press: var(--lake-motion-press); --dur-enter: var(--lake-motion-fast); --dur-drawer: var(--lake-motion-panel); }
 * { box-sizing: border-box; }
+/* 图标全局细化：lucide 默认 2px 描边在 14-20px 尺寸下显重，1.75 更轻盈干净（用户要求更简洁的图标观感） */
+svg.lucide { stroke-width: 1.75; }
 html, body, #root { width: 100%; height: 100%; }
 body { margin: 0; min-width: 320px; min-height: 100%; overflow: hidden; }
 button, input { font: inherit; letter-spacing: 0; }

@@ -2,7 +2,7 @@
  * 版式：竖向菜单列表（设置项一行一行），点某项进入新页面（带返回）；子页内容用 .config-* + .b3-* 骨架（AGENTS §3.14）。
  * 注意：全部 App 设置为竖向（无横向 tab）；「回收站」并入总回收站（见 TrashList）。 */
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ArrowLeft, ChevronRight, Cloud, DatabaseBackup, HardDrive, History, Image, Images, Info, ListTree, Palette, RefreshCw, Trash2 } from "lucide-react";
+import { ArrowLeft, ChevronRight, Cloud, HardDrive, History, Images, Info, List, Palette, Pencil, RefreshCw, Trash } from "lucide-react";
 import { loadSettings, saveSettings, fontSizeOptions, MAX_ATTACHMENT_MB_OPTIONS_SETTINGS, type AppSettings } from "../../lib/settings";
 import { Group, Item, Switch, Seg, Block, NumField } from "../../components/settingsPrimitives";
 import { bridge } from "../bridge";
@@ -24,13 +24,13 @@ export interface SettingsDrawerProps {
 type View = "menu" | "editor" | "appearance" | "history" | "resources" | "s3" | "cache" | "trash" | "about";
 
 const MENU: { key: Exclude<View, "menu">; label: string; icon: typeof Cloud }[] = [
-  { key: "editor", label: "编辑器", icon: ListTree },
+  { key: "editor", label: "编辑器", icon: List },
   { key: "appearance", label: "外观", icon: Palette },
   { key: "history", label: "历史", icon: History },
-  { key: "resources", label: "资源管理", icon: Image },
+  { key: "resources", label: "资源管理", icon: Images },
   { key: "s3", label: "同步设置", icon: Cloud },
-  { key: "cache", label: "清理缓存", icon: DatabaseBackup },
-  { key: "trash", label: "回收站", icon: Trash2 },
+  { key: "cache", label: "清理缓存", icon: HardDrive },
+  { key: "trash", label: "回收站", icon: Trash },
   { key: "about", label: "关于", icon: Info },
 ];
 
@@ -179,7 +179,7 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
       {isSub ? (
         <div className="mobile-settings-content">
           {view === "editor" && (
-            <Group title="编辑器" icon={<ListTree size={16} />}>
+            <Group title="编辑器" icon={<Pencil size={16} />}>
               <Item itemId="editor-font-size" name="正文字号" desc="作用于当前文档正文。">
                 <select className="b3-select" value={settings.fontSize} onChange={(e) => update({ fontSize: Number(e.target.value) })} aria-label="正文字号">
                   {fontSizeOptions().map((fs) => <option key={fs} value={fs}>{fs} px</option>)}
@@ -200,7 +200,7 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
           )}
 
           {view === "appearance" && (
-            <Group title="外观" icon={<Info size={16} />}>
+            <Group title="外观" icon={<Palette size={16} />}>
               <Item itemId="appearance-theme" name="主题" desc="浅色=思源 daylight / 深色=midnight。">
                 <Seg ariaLabel="主题">
                   <button className={"b3-button b3-button--outline seg__item" + (settings.theme === "light" ? " is-active" : "")} onClick={() => update({ theme: "light" })}>浅色</button>
@@ -241,7 +241,7 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
                 <div key={o.id} className="b3-list-item">
                   <span className="b3-list-item__text">{o.filename}</span>
                   <span className="b3-list-item__meta">{formatBytes(o.size)}</span>
-                  <button className="b3-list-item__action" onClick={() => { void bridge.deleteOrphanAsset(o.id).then(() => setOrphans((prev) => prev.filter((x) => x.id !== o.id))); }} aria-label="删除"><Trash2 size={16} /></button>
+                  <button className="b3-list-item__action" onClick={() => { void bridge.deleteOrphanAsset(o.id).then(() => setOrphans((prev) => prev.filter((x) => x.id !== o.id))); }} aria-label="删除"><Trash size={16} /></button>
                 </div>
               ))}
             </Group>

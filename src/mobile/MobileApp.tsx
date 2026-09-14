@@ -18,6 +18,7 @@ import { useBackHandler } from "./useBackHandler";
 import { Toasts } from "./ui/Toasts";
 import { ConfirmHost, confirmMobile } from "./ui/ConfirmDialog";
 import { showToast } from "./ui/toastBus";
+import { successFeedback, warnFeedback } from "./ui/haptics";
 import { runNativeSqliteSpike } from "./nativeSqlite";
 import { migrateSnapshotToNativeSqlite } from "./nativeSqliteMigration";
 import "./mobile.css";
@@ -176,8 +177,11 @@ export function MobileApp() {
 
   // 新建文档：归属指定父节点（home → 兜底笔记本；工作区 → 当前笔记本），随后进入工作区编辑态
   const createNoteInParent = useCallback(async (parentId: string | null) => {
-    const n = await bridge.createNote("无标题文档", parentId);
-    await openNote(n.id, "editor");
+    try {
+      const n = await bridge.createNote("无标题文档", parentId);
+      successFeedback(); // 新建文档确认
+      await openNote(n.id, "editor");
+    } catch { showToast("新建失败", { type: "error" }); warnFeedback(); }
   }, [openNote]);
 
   if (phase === "booting") return <div className="poc-center">启动中…</div>;
@@ -225,9 +229,12 @@ export function MobileApp() {
         open={createNbOpen}
         onClose={() => setCreateNbOpen(false)}
         onCreate={async (input) => {
-          await bridge.createNotebook(input);
-          await refreshAll();
-          showToast("已新建知识库");
+          try {
+            await bridge.createNotebook(input);
+            successFeedback(); // 新建知识库确认
+            await refreshAll();
+            showToast("已新建知识库");
+          } catch { showToast("新建失败", { type: "error" }); warnFeedback(); }
         }}
       />
       <SearchSheet

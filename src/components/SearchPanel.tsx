@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { FileText, Search, X } from "lucide-react";
+import { File, Search, X } from "lucide-react";
 import { native } from "../lib/native";
 import { createRequestVersion } from "../core/requestVersion";
 import { initialSearchIndex, nextSearchIndex } from "./searchNavigation";
@@ -122,7 +122,7 @@ export function SearchPanel({ open, initialQuery, onOpenNote, onClose }: {
               onMouseEnter={() => setActiveIndex(index)}
               onClick={() => { setActiveIndex(index); onOpenNote(result.id, result.matchType === "body" ? query.trim() : ""); onClose(); }}
             >
-              <span className="b3-list-item__graphic"><FileText size={14} /></span>
+              <span className="b3-list-item__graphic"><File size={14} /></span>
               <span className="b3-list-item__text ln-row2__main">
                 <span className="ln-row2__title">{result.title || "无标题"}</span>
                 {result.snippet && <span className="search-snippet" dangerouslySetInnerHTML={{ __html: result.snippet }} />}

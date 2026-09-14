@@ -7,7 +7,7 @@
  */
 import { useEffect, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { createPortal } from "react-dom";
-import { Box, ChevronRight, Clock, Copy, FileText, FolderOpen, History, Image as ImageIcon, Paperclip, X } from "lucide-react";
+import { Box, ChevronRight, Clock, Copy, File, FolderOpen, History, Image as ImageIcon, Paperclip, X } from "lucide-react";
 import { native } from "../lib/native";
 import { getNativeErrorMessage } from "../lib/nativeErrors";
 import type { NoteInfo } from "../lib/types";
@@ -140,7 +140,7 @@ export function NoteInfoDialog({ note, onClose, onRevealNoteFile, onOpenAssetsDi
     <div className="modal-backdrop" data-prevent-swipe onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
       <section className="ln-dialog note-info-dialog" data-prevent-swipe style={size ? { width: size.w, height: size.h } : undefined} role="dialog" aria-modal="true" aria-label="文档属性">
         <header className="ln-dialog__head">
-          <FileText size={16} />
+          <File size={16} />
           <h3 className="ln-dialog__title" title={info?.title ?? note.title}>{info?.title ?? note.title}</h3>
           <button className="ln-close" onClick={onClose} aria-label="关闭"><X size={16} /></button>
         </header>

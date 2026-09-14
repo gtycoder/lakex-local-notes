@@ -5,7 +5,7 @@
  * 多 tab 的「顶部 tab 条」是桌面版；移动端是底部胶囊栏 #toolbarTabs 弹全屏列表（子代理已核对源码）。
  */
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ArrowLeft, ListTree, Files, Pencil, X, ChevronRight, FolderOpen, FolderPlus, FileText, Plus, Check, ArrowLeftRight, Trash2, SmilePlus, Move, History, CloudUpload, MoreHorizontal, MoreVertical, FilePlus, Search, Settings, Copy, Info } from "lucide-react";
+import { ArrowLeft, List, Files, Pencil, X, ChevronRight, FolderOpen, FolderPlus, File, Plus, Check, ArrowLeftRight, Trash, SmilePlus, Move, History, CloudUpload, MoreHorizontal, MoreVertical, FilePlus, Search, Settings, Copy, Info } from "lucide-react";
 import { NoteInfoDialog } from "../../components/NoteInfoDialog";
 import { bridge } from "../bridge";
 import { LAKE_EMOJIS } from "../../lib/lakeEmojis";
@@ -20,7 +20,7 @@ import { MobileSheetMenu, type MobileSheetItem } from "../ui/MobileSheetMenu";
 import { useSwipeToClose } from "../ui/useSwipeToClose";
 import { confirmMobile } from "../ui/ConfirmDialog";
 import { showToast } from "../ui/toastBus";
-import { longPressFeedback, tapFeedback } from "../ui/haptics";
+import { longPressFeedback, tapFeedback, successFeedback, warnFeedback } from "../ui/haptics";
 import { useAutoSave } from "../useAutoSave";
 import type { POCNote } from "../noteRepository";
 /** 笔记本子树节点（原 NotebookPage 的类型，页面本体已随"两套壳"统一删除）。 */
@@ -228,6 +228,9 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
     if (active.editing) {
       flushAutoSave();
       void bridge.saveNote(active.id, active.title, active.content);
+      successFeedback(); // 完成编辑（保存落盘）
+    } else {
+      tapFeedback(); // 进入编辑
     }
     setTabs((prev) => prev.map((t) => (t.id === active.id ? { ...t, editing: !t.editing } : t)));
   }, [active, flushAutoSave]);
@@ -320,7 +323,8 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
       if (d.position === "inside") await bridge.moveTreeNodeOrdered(d.id, targetParent!, orderedIds);
       else if ((dragged.parentId ?? null) === (targetParent ?? null)) await bridge.reorderSiblings(targetParent, orderedIds);
       else await bridge.moveTreeNodeOrdered(d.id, targetParent, orderedIds);
-    } catch { showToast("移动失败", { type: "error" }); void loadTree(); }
+      successFeedback(); // 拖拽落点提交成功
+    } catch { showToast("移动失败", { type: "error" }); warnFeedback(); void loadTree(); }
   }, [tree, loadTree]);
 
   useEffect(() => {
@@ -442,7 +446,7 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
   const treeMenuItems = (node: NotebookTreeItem): MobileSheetItem[] => {
     const groups = tree.filter((x) => x.kind === "group" && x.id !== node.id);
     return [
-      { id: "new-note", label: "新建文档", icon: FileText },
+      { id: "new-note", label: "新建文档", icon: File },
       { id: "new-group", label: "新建分组", icon: FolderPlus },
       ...(node.kind === "note" ? [
         { id: "duplicate", label: "复制", icon: Copy },
@@ -460,7 +464,7 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
         { id: "history", label: "历史版本", icon: History },
         { id: "info", label: "属性", icon: Info },
       ] : []),
-      { id: "delete", label: node.kind === "note" ? "移入回收站" : "删除分组", icon: Trash2, danger: true },
+      { id: "delete", label: node.kind === "note" ? "移入回收站" : "删除分组", icon: Trash, danger: true },
     ];
   };
   const onTreeMenuSelect = (item: MobileSheetItem, path: MobileSheetItem[]) => {
@@ -489,7 +493,7 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
     const children = childrenOf(parentId);
     return children.map((it) => {
       const hasChildren = childrenOf(it.id).length > 0;
-      const NodeIcon = it.kind === "group" ? FolderOpen : FileText;
+      const NodeIcon = it.kind === "group" ? FolderOpen : File;
       const isNote = it.kind === "note";
       return (
         <div key={it.kind + "-" + it.id}>
@@ -587,8 +591,8 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
           编辑与同步在顶栏右侧，避免打字时误触（用户 260909）。编辑态整条下滑淡出而不是卸载。 */}
       <nav className={"mobile-bottom-bar" + ((active?.editing || navHidden) ? " mobile-bottom-bar--hidden" : "")} data-prevent-swipe aria-hidden={(active?.editing || navHidden) ? "true" : "false"}>
         <button className={"mobile-bottom-bar__item" + (sidebarOpen ? " active" : "")} onClick={() => { tapFeedback(); openSidebar(!sidebarOpen); }} aria-label="文档树" title="文档树"><Files /></button>
-        <button className={"mobile-bottom-bar__item" + (tabsOpen ? " active" : "")} onClick={() => { tapFeedback(); setTabsOpen(true); }} aria-label="标签页" title="标签页"><FileText />{tabs.length > 0 && <span className="bottom-bar-count">{tabs.length}</span>}</button>
-        <button className={"mobile-bottom-bar__item" + (outlineOpen ? " active" : "")} onClick={() => { tapFeedback(); openOutline(!outlineOpen); }} aria-label="大纲" title="大纲"><ListTree /></button>
+        <button className={"mobile-bottom-bar__item" + (tabsOpen ? " active" : "")} onClick={() => { tapFeedback(); setTabsOpen(true); }} aria-label="标签页" title="标签页"><File />{tabs.length > 0 && <span className="bottom-bar-count">{tabs.length}</span>}</button>
+        <button className={"mobile-bottom-bar__item" + (outlineOpen ? " active" : "")} onClick={() => { tapFeedback(); openOutline(!outlineOpen); }} aria-label="大纲" title="大纲"><List /></button>
         <button className={"mobile-bottom-bar__item" + (moreOpen ? " active" : "")} onClick={() => { tapFeedback(); setMoreOpen(true); }} aria-label="更多" title="更多"><MoreHorizontal /></button>
       </nav>
 
@@ -656,7 +660,7 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
         open={notebookSwitchOpen}
         items={notebooks.map((nb) => ({ id: nb.id, label: nb.title, icon: FolderOpen, note: nb.id === notebookId ? "当前" : undefined }))}
         onClose={() => setNotebookSwitchOpen(false)}
-        onSelect={(it) => { setNotebookSwitchOpen(false); if (it.id !== notebookId) onSwitchNotebook(it.id); }}
+        onSelect={(it) => { setNotebookSwitchOpen(false); if (it.id !== notebookId) { tapFeedback(); onSwitchNotebook(it.id); } }}
       />
 
       {/* 目录树长按菜单 */}

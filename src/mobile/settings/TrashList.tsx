@@ -2,7 +2,7 @@
  * 小记回收站并入总回收站：合并展示笔记/文件夹回收站（listTrashTree）与小记回收站（listQuickNoteTrash），
  * 按 deletedAt 倒序；支持恢复（同步后传播）/彻底删除；笔记行点击可预览。 */
 import { useCallback, useEffect, useState } from "react";
-import { Feather, FolderOpen, FileText, RotateCcw, Trash2 } from "lucide-react";
+import { Feather, FolderOpen, File, RotateCcw, Trash } from "lucide-react";
 import { bridge } from "../bridge";
 import { confirmMobile } from "../ui/ConfirmDialog";
 import { showToast } from "../ui/toastBus";
@@ -23,7 +23,7 @@ export interface TrashListProps {
   onPreview: (noteId: string) => void;
 }
 
-const IconFor = (k: TrashRow["kind"]) => (k === "folder" ? FolderOpen : k === "quick" ? Feather : FileText);
+const IconFor = (k: TrashRow["kind"]) => (k === "folder" ? FolderOpen : k === "quick" ? Feather : File);
 
 export function TrashList({ title, onChanged, onPreview }: TrashListProps) {
   const [rows, setRows] = useState<TrashRow[]>([]);
@@ -85,7 +85,7 @@ export function TrashList({ title, onChanged, onPreview }: TrashListProps) {
             <span className="mobile-trash-title">{row.title}</span>
             <span className="mobile-trash-date">{row.deletedAt ? row.deletedAt.slice(0, 10) : ""}</span>
             <button className="mobile-trash-action" onClick={(e) => { e.stopPropagation(); void restore(row); }} title="恢复"><RotateCcw size={16} /></button>
-            <button className="mobile-trash-action mobile-trash-danger" onClick={(e) => { e.stopPropagation(); void purge(row); }} title="彻底删除"><Trash2 size={15} /></button>
+            <button className="mobile-trash-action mobile-trash-danger" onClick={(e) => { e.stopPropagation(); void purge(row); }} title="彻底删除"><Trash size={15} /></button>
           </div>
         );
       })}

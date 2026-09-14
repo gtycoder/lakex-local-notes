@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { Camera, Clock, FileText, History, RotateCcw, Trash2, X } from "lucide-react";
+import { Camera, Clock, File, History, RotateCcw, Trash, X } from "lucide-react";
 import { native } from "../lib/native";
 import { createRequestVersion } from "../core/requestVersion";
 import { useFloatingDialog } from "./useFloatingDialog";
@@ -240,7 +240,7 @@ export function HistoryPanel({ open, noteId, onClose, onRestored }: {
             <Clock size={14} /> 文档历史
           </button>
           <button role="tab" aria-selected={tab === "orphans"} className={`ln-tabs__item${tab === "orphans" ? " is-active" : ""}`} onClick={() => switchTab("orphans")}>
-            <Trash2 size={14} /> 文档孤儿文件
+            <Trash size={14} /> 文档孤儿文件
           </button>
           </div>
           {tab === "history" && (
@@ -283,19 +283,19 @@ export function HistoryPanel({ open, noteId, onClose, onRestored }: {
                   )}
                   <span className="fn__space" />
                   <button className="b3-list-item__action" title="恢复此版本" aria-label="恢复此版本" onClick={() => void restore(h.id)}><RotateCcw size={14} /></button>
-                  <button className="b3-list-item__action b3-list-item__action--warning" title="删除快照" aria-label="删除快照" onClick={() => void removeHistory(h.id)}><Trash2 size={14} /></button>
+                  <button className="b3-list-item__action b3-list-item__action--warning" title="删除快照" aria-label="删除快照" onClick={() => void removeHistory(h.id)}><Trash size={14} /></button>
                 </div>
               );
             })}
             {!loading && tab === "orphans" && orphans.map((o) => (
               <div key={o.filename} className={`b3-list-item b3-list-item--hide-action${orphanSel === o.filename ? " b3-list-item--focus" : ""}`}>
-                <span className="b3-list-item__graphic"><FileText size={14} /></span>
+                <span className="b3-list-item__graphic"><File size={14} /></span>
                 <span className="b3-list-item__text" onClick={() => void previewOrphanFile(o)} title="点击预览文件">{o.filename}</span>
                 {o.protectedByHistory && <span className="badge badge--warn">历史保护</span>}
                 <span className="b3-list-item__meta">{(o.size / 1024).toFixed(1)} KB</span>
                 <span className="fn__space" />
                 {!o.protectedByHistory && (
-                  <button className="b3-list-item__action b3-list-item__action--warning" title="清理该文件" aria-label="清理该文件" onClick={() => void cleanOrphan(o.filename)}><Trash2 size={14} /></button>
+                  <button className="b3-list-item__action b3-list-item__action--warning" title="清理该文件" aria-label="清理该文件" onClick={() => void cleanOrphan(o.filename)}><Trash size={14} /></button>
                 )}
               </div>
             ))}

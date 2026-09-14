@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ChangeEvent, type ReactNode } from "react";
-import { Cloud, Copy, Files, FileText, FolderOpen, History, Image as ImageIcon, Info, Keyboard, Monitor, Moon, Palette, Paperclip, ScrollText, Search, Settings, Sun, Trash2, Type, X } from "lucide-react";
+import { Cloud, Copy, Files, File, FolderOpen, History, Image as ImageIcon, Info, Keyboard, Monitor, Moon, Palette, Paperclip, Terminal, Archive, HardDrive, Search, Settings, Sun, Trash, Type, X } from "lucide-react";
 import { fontSizeOptions, type AppSettings } from "../lib/settings";
 import { native } from "../lib/native";
 import type { CleanOrphanResult, DataHealthReport, S3GcPendingItem, S3Settings, SyncSettings } from "../lib/types";
@@ -311,8 +311,8 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
     { id: "history" as const, label: "文档与历史", keywords: "快照 保留 清理", icon: <History size={15} /> },
     { id: "sync" as const, label: "云端与同步", keywords: "S3 上传 下载 资源 云端 回收", icon: <Cloud size={15} /> },
     { id: "resources" as const, label: "资源", keywords: "资源 未引用 孤儿 清理 附件 图片", icon: <ImageIcon size={15} /> },
-    { id: "trash" as const, label: "回收站", keywords: "删除 恢复 清空", icon: <Trash2 size={15} /> },
-    { id: "logs" as const, label: "日志", keywords: "日志 诊断 GC 同步 调试", icon: <ScrollText size={15} /> },
+    { id: "trash" as const, label: "回收站", keywords: "删除 恢复 清空", icon: <Trash size={15} /> },
+    { id: "logs" as const, label: "日志", keywords: "日志 诊断 GC 同步 调试", icon: <Terminal size={15} /> },
     { id: "about" as const, label: "关于", keywords: "版本", icon: <Info size={15} /> },
   ];
   const filteredNav = filterSettingsNav(nav, navQuery);
@@ -560,7 +560,7 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
                       {lastCleanup && <span>上次清理 {formatDateTime(Date.parse(lastCleanup.at))} · {lastCleanup.deletedSnapshots} 份 · {formatBytes(lastCleanup.freedBytes)}</span>}
                     </div>
                     <div className="config-block__actions">
-                      <button className="b3-button b3-button--outline" onClick={() => void runCleanup()} disabled={histBusy}><Trash2 size={14} /> {histBusy ? "清理中…" : "立即清理"}</button>
+                      <button className="b3-button b3-button--outline" onClick={() => void runCleanup()} disabled={histBusy}><Trash size={14} /> {histBusy ? "清理中…" : "立即清理"}</button>
                     </div>
                     {histMsg && <div className="block__text">{histMsg}</div>}
                   </Block>
@@ -626,10 +626,10 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
                     </>
                   )}
                 </Group>
-                <Group title="备份与恢复" icon={<Files size={16} />}>
+                <Group title="备份与恢复" icon={<Archive size={16} />}>
                   <Block itemId="backup-export" name="整库备份" desc="数据库 + 全部笔记/资源/历史快照 + 小记，导出到所选目录（不覆盖非空目录）。">
                     <div className="config-block__actions">
-                      <button className="b3-button b3-button--outline" onClick={() => void runBackup()} disabled={backupBusy}><Files size={14} /> {backupBusy ? "备份中…" : "整库备份到…"}</button>
+                      <button className="b3-button b3-button--outline" onClick={() => void runBackup()} disabled={backupBusy}><Archive size={14} /> {backupBusy ? "备份中…" : "整库备份到…"}</button>
                     </div>
                   </Block>
                   <Block itemId="backup-restore" name="从云端恢复" desc="当前数据先改名隔离保存，再以全新空库从云端全量拉取（只拉不打）。用于换机或本地库损坏。">
@@ -654,7 +654,7 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
                     </div>
                   </Block>
                 </Group>
-                <Group title="云端回收（S3 GC）" icon={<Trash2 size={16} />}>
+                <Group title="云端回收（S3 GC）" icon={<Trash size={16} />}>
                   <Block itemId="gc-status" name="回收状态" desc="手动按钮会立即删除当前未被清单/历史引用的云端对象；自动对账按回收窗口到期后定期清理。结果偏少通常是被引用保护，不是漏删。">
                     <div className="config-stats">
                       <span>待回收键 <strong>{gcPending}</strong> 个</span>
@@ -663,7 +663,7 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
                       {gcSummary.unknown > 0 && <span>时间未知 {gcSummary.unknown}</span>}
                     </div>
                     <div className="config-block__actions">
-                      <button className="b3-button b3-button--outline" onClick={() => void runReconcile()} disabled={gcBusy}><Trash2 size={14} /> {gcBusy ? "处理中…" : "立即对账"}</button>
+                      <button className="b3-button b3-button--outline" onClick={() => void runReconcile()} disabled={gcBusy}><Trash size={14} /> {gcBusy ? "处理中…" : "立即对账"}</button>
                       <button className="b3-button b3-button--outline" onClick={() => void runGcAction(true)} disabled={gcBusy}>深度清理预览</button>
                       <button className="b3-button b3-button--outline ft__error" onClick={() => void runGcAction(false)} disabled={gcBusy}>执行深度清理</button>
                       <button className="b3-button b3-button--outline" onClick={() => void refreshCloudStats()} disabled={gcBusy || gcDiagBusy}>{gcDiagBusy ? "统计中…" : "刷新云端统计"}</button>
@@ -759,7 +759,7 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
                                 onClick={() => setSel(sel && sel.noteId === o.noteId && sel.filename === o.filename ? null : o)}
                                 title="点击预览"
                               >
-                                <FileText size={14} className="b3-list-item__graphic" />
+                                <File size={14} className="b3-list-item__graphic" />
                                 <span className="b3-list-item__text">{o.filename}</span>
                                 <span className={`badge ${o.status === "history" ? "badge--warn" : "badge--muted"}`}>{o.status === "history" ? "历史保护" : "未引用"}</span>
                                 <span className="b3-list-item__meta">{formatBytes(o.size)}</span>
@@ -767,7 +767,7 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
                                 <button className="b3-list-item__action" title="复制路径" aria-label="复制路径" onClick={(ev) => { ev.stopPropagation(); void copyPath(o); }}><Copy size={14} /></button>
                                 <button className="b3-list-item__action" title="在文件夹中显示" aria-label="在文件夹中显示" onClick={(ev) => { ev.stopPropagation(); void openFolder(o); }}><FolderOpen size={14} /></button>
                                 {o.orphanId != null && (
-                                  <button className="b3-list-item__action b3-list-item__action--warning" title="删除（不可撤销）" aria-label="删除" disabled={busyId !== null} onClick={(ev) => { ev.stopPropagation(); void deleteOne(o); }}><Trash2 size={14} /></button>
+                                  <button className="b3-list-item__action b3-list-item__action--warning" title="删除（不可撤销）" aria-label="删除" disabled={busyId !== null} onClick={(ev) => { ev.stopPropagation(); void deleteOne(o); }}><Trash size={14} /></button>
                                 )}
                               </div>
                             ))}
@@ -796,7 +796,7 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
             )}
 
             {category === "trash" && (
-              <Group title="回收站" icon={<Trash2 size={16} />}>
+              <Group title="回收站" icon={<Trash size={16} />}>
                 {gcCfg && (
                   <Item itemId="trash-auto-purge-days" name="回收站自动过期（天）" desc="0 = 关闭。到期后自动彻底删除（含云端），不可撤销；需要保留请在到期前恢复。">
                     <NumField label="回收站自动过期（天）" min={0} max={365} value={gcCfg.trashAutoPurgeDays} onSave={(v) => saveGcCfg({ trashAutoPurgeDays: v })}  floor={0} fallback={0} />
@@ -807,7 +807,7 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
             )}
 
             {category === "logs" && (
-              <Group title="应用日志（只读）" icon={<ScrollText size={16} />}>
+              <Group title="应用日志（只读）" icon={<Terminal size={16} />}>
                 <Block itemId="logs-main" name="主进程日志" desc="GC / 同步 / 回收站 / 历史清理写入 userData/logs/lake-notes.log。按关键字过滤，每条命中附带前后一行上下文。">
                   <div className="config-block__actions">
                     <input
@@ -869,7 +869,7 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
                       </Block>
                     </Group>
 
-                    <Group title="数据与存储" icon={<Files size={16} />}>
+                    <Group title="数据与存储" icon={<HardDrive size={16} />}>
                       <Block itemId="about-storage-stats" name="内容统计" desc="计数来自本机库与资源目录（只读遍历资源目录两层，不做全盘扫描）。">
                         <div className="config-stats">
                           <span>笔记 <strong>{sysInfo.storage.notes}</strong></span>

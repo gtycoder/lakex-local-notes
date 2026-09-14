@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type RefObject } from "react";
-import { Cloud, CloudOff, History, LoaderCircle, Settings2, TriangleAlert, UploadCloud } from "lucide-react";
+import { Cloud, CloudOff, History, LoaderCircle, Settings2, TriangleAlert, CloudUpload } from "lucide-react";
 import type { SyncStatus, SyncStatusInfo } from "../lib/types";
 import { buildSyncStatusModel } from "./syncStatusModel";
 import { native } from "../lib/native";
@@ -137,7 +137,7 @@ export function SyncStatusPopover({
   const qn = lastResult?.quickNotes;
   const stats = lastResult;
 
-  const icon = model.statusClass === "syncing" ? <LoaderCircle className="spin" size={14} /> : model.statusClass === "error" ? <TriangleAlert size={14} /> : model.statusClass === "disabled" ? <CloudOff size={14} /> : model.statusClass === "synced" ? <CloudCheckIcon size={14} /> : model.statusClass === "pending" ? <UploadCloud size={14} /> : <Cloud size={14} />;
+  const icon = model.statusClass === "syncing" ? <LoaderCircle className="spin" size={14} /> : model.statusClass === "error" ? <TriangleAlert size={14} /> : model.statusClass === "disabled" ? <CloudOff size={14} /> : model.statusClass === "synced" ? <CloudCheckIcon size={14} /> : model.statusClass === "pending" ? <CloudUpload size={14} /> : <Cloud size={14} />;
 
   return (
     <div className="sync-status-control" ref={controlRef} onMouseEnter={() => scheduleHover("open")} onMouseLeave={() => scheduleHover("close")}>

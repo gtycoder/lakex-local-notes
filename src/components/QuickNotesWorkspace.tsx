@@ -1,5 +1,5 @@
 import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
-import { Check, FilePlus2, ImagePlus, Feather, LoaderCircle, Pencil, RotateCcw, Trash2, X } from "lucide-react";
+import { Check, FilePlus, ImagePlus, Feather, LoaderCircle, Pencil, RotateCcw, Trash, X } from "lucide-react";
 import { native } from "../lib/native";
 import { createRequestVersion } from "../core/requestVersion";
 import type { NoteDocument, QuickNoteDocument, QuickNoteImage, TreeNode } from "../lib/types";
@@ -256,7 +256,7 @@ export const QuickNotesWorkspace = forwardRef<QuickNotesWorkspaceHandle, QuickNo
         <h3 id="quick-note-convert-title">转为正式笔记</h3>
         <p>选择一个笔记本。新文档将插入其中的最顶部；转化完成后，小记将从时间线移除。</p>
         <div className="quick-note-notebook-list b3-list b3-list--background">
-          {notebooks.map((notebook) => <button key={notebook.id} className="b3-list-item" disabled={saving} onClick={() => void convert(notebook.id)}><span className="b3-list-item__graphic"><FilePlus2 size={14} /></span><span className="b3-list-item__text">{notebook.title}</span></button>)}
+          {notebooks.map((notebook) => <button key={notebook.id} className="b3-list-item" disabled={saving} onClick={() => void convert(notebook.id)}><span className="b3-list-item__graphic"><FilePlus size={14} /></span><span className="b3-list-item__text">{notebook.title}</span></button>)}
           {notebooks.length === 0 && <span className="ln-empty">请先在资料库中新建一个笔记本。</span>}
         </div>
         <footer><button className="b3-button b3-button--cancel" disabled={saving} onClick={() => setConvertItem(null)}>取消</button></footer>
@@ -304,7 +304,7 @@ function QuickNoteComposer({ draft, saving, onChange, onAddFiles, onRemoveImage,
 function QuickNoteCard({ item, deletePending, onEdit, onDelete, onConvert }: { item: QuickNoteDocument; deletePending: boolean; onEdit(): void; onDelete(): void; onConvert(): void }) {
   const date = new Intl.DateTimeFormat("zh-CN", { month: "long", day: "numeric", hour: "2-digit", minute: "2-digit", hour12: false }).format(new Date(item.createdAt));
   return <article className={`quick-note-entry ${item.isConflict ? "conflict" : ""}`} onDoubleClick={onEdit}>
-    <header><time dateTime={item.createdAt}>{date}</time>{item.isConflict && <span className="badge badge--warn quick-note-conflict">同步冲突副本</span>}<div className="quick-note-card-actions"><button onClick={onConvert} title="转为正式笔记"><FilePlus2 size={15} /></button><button onClick={onEdit} title="编辑小记"><Pencil size={15} /></button><button className="danger" onClick={onDelete} disabled={deletePending} title={deletePending ? "请先完成当前删除的撤销操作" : "删除小记"}><Trash2 size={15} /></button></div></header>
+    <header><time dateTime={item.createdAt}>{date}</time>{item.isConflict && <span className="badge badge--warn quick-note-conflict">同步冲突副本</span>}<div className="quick-note-card-actions"><button onClick={onConvert} title="转为正式笔记"><FilePlus size={15} /></button><button onClick={onEdit} title="编辑小记"><Pencil size={15} /></button><button className="danger" onClick={onDelete} disabled={deletePending} title={deletePending ? "请先完成当前删除的撤销操作" : "删除小记"}><Trash size={15} /></button></div></header>
     {item.content.text && <p>{item.content.text}</p>}
     {item.content.images.length > 0 && <div className="quick-note-saved-images">{item.content.images.map((image) => <img key={image.id} src={image.url} alt="小记图片" loading="lazy" />)}</div>}
   </article>;

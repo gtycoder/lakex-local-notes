@@ -1,6 +1,6 @@
 /** 新建知识库 Sheet（§5：名称必填；默认图标不落库；自定义 Emoji 一次性提交 CreateNotebookInput）。 */
 import { useMemo, useRef, useState } from "react";
-import { BookOpen, X } from "lucide-react";
+import { Book, X } from "lucide-react";
 import { LAKE_EMOJI_GROUPS } from "../../lib/lakeEmojiGroups";
 import { useSwipeToClose } from "../ui/useSwipeToClose";
 
@@ -55,7 +55,7 @@ export function CreateNotebookSheet(props: CreateNotebookSheetProps) {
         <div className="mobile-sheet-body mobile-sheet-body--form">
           <div className="create-nb-row">
             <button className="create-nb-icon" onClick={() => setShowEmoji((v) => !v)} aria-label="选择图标">
-              {icon ? <span className="create-nb-emoji">{icon}</span> : <BookOpen size={22} />}
+              {icon ? <span className="create-nb-emoji">{icon}</span> : <Book size={22} />}
             </button>
             <input
               className="create-nb-input"

@@ -12,7 +12,7 @@
  *   使文档底部留白随面板/键盘收起动画同步增长，正文可视区尺寸全程恒定（不再从 530 骤缩再弹回）。
  */
 import { useEffect, useRef, useState, useCallback } from "react";
-import { Plus, Bold, Italic, Underline, List, ListOrdered, ListTodo, Keyboard, X, Image as ImageIcon, Paperclip, Table2, Quote, Minus, Code2, Music, Video, Undo2, Redo2, Pilcrow, Type } from "lucide-react";
+import { Plus, Bold, Italic, Underline, List, ListOrdered, ListTodo, Keyboard, X, Image as ImageIcon, Paperclip, Table2, Quote, Minus, Code2, Music, Video, Undo, Redo, Pilcrow, Type } from "lucide-react";
 import { lakeBridge, type LakeEditorInstance } from "../../features/editor/lakeRuntime";
 import { MARK_COMMANDS, BLOCK_INSERT_COMMANDS, HISTORY_COMMANDS, STYLE_BLOCKS } from "../../features/editor/editorCommands";
 import { useKeyboard } from "../useKeyboard";
@@ -37,7 +37,7 @@ function blurActiveEditable(): void {
 const COMMAND_ICONS: Record<string, typeof Bold> = {
   bold: Bold, italic: Italic, underline: Underline, code: Code2,
   quote: Quote, unorderedList: List, orderedList: ListOrdered, taskList: ListTodo,
-  hr: Minus, undo: Undo2, redo: Redo2,
+  hr: Minus, undo: Undo, redo: Redo,
 };
 
 /** 需要监测实时状态（生效高亮）的命令 */
