@@ -617,7 +617,12 @@ export class Store {
     for (const card of scanAssetCards(doc.content)) {
       if (!card.filename || seen.has(card.filename)) continue;
       seen.add(card.filename);
-      assets.push({ filename: card.filename, size: card.size, kind: fileKindOf(card.filename) });
+      // 图片/音视频卡的 value 不带 size（恒 0）：以磁盘实际大小兜底（file 卡 value.size 仍优先）。
+      let size = card.size;
+      if (!size) {
+        try { size = fs.statSync(path.join(assetsDir, card.filename)).size; } catch { /* 文件缺失保持 0 */ }
+      }
+      assets.push({ filename: card.filename, size, kind: fileKindOf(card.filename) });
     }
     const parents = this.parentChainOf(id);
     const cardCounts = new Map<string, number>();

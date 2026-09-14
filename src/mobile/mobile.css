@@ -66,14 +66,12 @@ body { font-family: BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino San
   width: var(--mobile-topbar-height); height: var(--mobile-topbar-height); border: none; background: transparent;
   border-radius: var(--b3-border-radius); display: flex; align-items: center; justify-content: center;
   cursor: pointer; color: var(--b3-theme-on-surface); -webkit-tap-highlight-color: transparent;
-  transition: background-color var(--mobile-duration-press) ease, color var(--mobile-duration-press) ease;
+  transition: background-color var(--mobile-duration-press) var(--mobile-ease-panel), color var(--mobile-duration-press) var(--mobile-ease-panel);
 }
 .mobile-icon-btn > svg { width: 20px; height: 20px; }
 .mobile-icon-btn:active, .mobile-icon-btn:focus-visible { background: var(--b3-list-hover); }
 
-.mobile-home-tabs { flex: 1; display: flex; justify-content: center; gap: 24px; }
-.mobile-htab { border: none; background: transparent; font-size: 16px; color: var(--b3-theme-on-surface-light); cursor: pointer; padding: 6px 2px; font-weight: 500; -webkit-tap-highlight-color: transparent; }
-.mobile-htab.active { color: var(--b3-theme-on-surface); font-weight: 700; }
+/* 首页顶部 tab 主体样式单一来源在下方 .mobile-home-tabs 区块 */
 
 /* 首层 tab 舞台（小记 ↔ 知识库；用户要求去掉切换入场动效，直接切换） */
 .mobile-tab-stage { flex: 1; min-height: 0; display: flex; flex-direction: column; }
@@ -84,7 +82,7 @@ body { font-family: BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino San
 
 /* 小记卡片 */
 .mobile-quick-list { padding: 10px 12px; }
-.mobile-qcard { background: var(--b3-theme-background); border: 1px solid var(--b3-border-color); border-radius: var(--b3-border-radius-b); padding: 14px 16px; margin-bottom: 8px; cursor: pointer; -webkit-tap-highlight-color: transparent; transition: background-color var(--mobile-duration-press) ease; }
+.mobile-qcard { background: var(--b3-theme-background); border: 1px solid var(--b3-border-color); border-radius: var(--b3-border-radius-b); padding: 14px 16px; margin-bottom: 8px; cursor: pointer; -webkit-tap-highlight-color: transparent; transition: background-color var(--mobile-duration-press) var(--mobile-ease-panel); }
 .mobile-qcard:active { background: var(--b3-list-hover); }
 .mobile-qcard-thumb { display: block; width: 100%; max-height: 180px; object-fit: cover; border-radius: var(--b3-border-radius); margin-bottom: 10px; background: var(--b3-theme-background-light); }
 .mobile-qcard-text { font-size: 15px; line-height: 1.6; }
@@ -121,21 +119,21 @@ body { font-family: BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino San
 /* ===== 首页卡片语言（小记卡片 + 最近文档 + 笔记本书架/列表 + 带标签底部栏） ===== */
 /* —— 小记卡片（整张白卡：图片完整展示 + 摘要 + 日期 + 「...」，仿语雀） —— */
 .mobile-quick-cards { display: flex; flex-direction: column; gap: 12px; padding: 12px 14px; }
-.qn-card { display: flex; flex-direction: column; background: var(--b3-theme-background); border-radius: 14px; overflow: hidden; cursor: pointer; -webkit-tap-highlight-color: transparent; box-shadow: 0 1px 2px rgba(16,24,40,.05), 0 10px 24px -18px rgba(16,24,40,.35); transition: transform var(--mobile-duration-press) ease; }
+.qn-card { display: flex; flex-direction: column; background: var(--b3-theme-background); border-radius: 14px; overflow: hidden; cursor: pointer; -webkit-tap-highlight-color: transparent; box-shadow: var(--lake-shadow-soft); transition: transform var(--mobile-duration-press) var(--mobile-ease-panel); }
 .qn-card:active { transform: scale(.99); }
 .qn-card__cover { position: relative; width: 100%; padding: 12px 12px 2px; display: flex; align-items: center; justify-content: center; background: var(--b3-theme-background); }
 .qn-card__img { max-width: 100%; max-height: 210px; width: auto; height: auto; object-fit: contain; border-radius: 8px; display: block; }
-.qn-card__count { position: absolute; top: 10px; right: 10px; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px; background: rgba(0,0,0,.5); color: #fff; font-size: 11px; line-height: 18px; text-align: center; }
+.qn-card__count { position: absolute; top: 10px; right: 10px; min-width: 18px; height: 18px; padding: 0 5px; border-radius: var(--radius-pill); background: rgba(0,0,0,.5); color: #fff; font-size: 11px; line-height: 18px; text-align: center; }
 .qn-card__body { padding: 10px 16px 12px; }
 .qn-card__text { font-size: 15px; line-height: 1.5; color: var(--b3-theme-on-surface); display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; word-break: break-word; }
 .qn-card__meta { display: flex; align-items: center; justify-content: space-between; margin-top: 6px; }
-.qn-card__date { font-size: 12px; color: var(--b3-theme-on-surface-light); }
+.qn-card__date { font-size: 12px; color: var(--b3-theme-on-surface-light); font-variant-numeric: tabular-nums; }
 .qn-card__more { width: 32px; height: 32px; margin-right: -6px; border: none; background: transparent; color: var(--b3-theme-on-surface-light); display: flex; align-items: center; justify-content: center; border-radius: 10px; cursor: pointer; -webkit-tap-highlight-color: transparent; }
 .qn-card__more:active { background: var(--b3-list-hover); color: var(--b3-theme-on-surface); }
 
 /* —— 首页分区：白底 + 白色分块卡片（轻投影，与小记同一套语言） —— */
 .mobile-library { background: var(--b3-theme-background); }
-.home-section { background: var(--b3-theme-background); border-radius: 14px; margin: 12px 12px 0; overflow: hidden; box-shadow: 0 1px 2px rgba(16,24,40,.05), 0 10px 24px -18px rgba(16,24,40,.35); }
+.home-section { background: var(--b3-theme-background); border-radius: 14px; margin: 12px 12px 0; overflow: hidden; box-shadow: var(--lake-shadow-soft); }
 .home-section:first-child { margin-top: 12px; }
 .home-section:last-child { margin-bottom: 12px; }
 .home-section--list { background: transparent; box-shadow: none; margin: 0; border-radius: 0; overflow: visible; }
@@ -148,12 +146,12 @@ body { font-family: BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino San
 .home-recent { display: flex; gap: 12px; overflow-x: auto; padding: 10px 16px 14px; scrollbar-width: none; }
 .home-recent::-webkit-scrollbar { display: none; }
 .doc-card { flex: 0 0 72px; width: 72px; display: flex; flex-direction: column; gap: 6px; padding: 0; border: none; background: transparent; text-align: left; cursor: pointer; -webkit-tap-highlight-color: transparent; }
-.doc-card__paper { position: relative; aspect-ratio: 3 / 3.9; border-radius: 6px; background: var(--b3-theme-background); border: 1px solid var(--b3-border-color); box-shadow: 0 1px 2px rgba(16,24,40,.05), 0 8px 16px -14px rgba(16,24,40,.28); overflow: hidden; transition: transform var(--mobile-duration-press) ease, box-shadow var(--mobile-duration-press) ease; }
+.doc-card__paper { position: relative; aspect-ratio: 3 / 3.9; border-radius: 6px; background: var(--b3-theme-background); border: 1px solid var(--b3-border-color); box-shadow: 0 1px 2px rgba(16,24,40,.05); overflow: hidden; transition: transform var(--mobile-duration-press) var(--mobile-ease-panel), box-shadow var(--mobile-duration-press) var(--mobile-ease-panel); }
 .doc-card:active .doc-card__paper { transform: scale(.96); box-shadow: 0 1px 2px rgba(16,24,40,.05); }
 .doc-card__lines { position: absolute; left: 9px; right: 9px; top: 12px; bottom: 10px; background-image: repeating-linear-gradient(to bottom, var(--b3-theme-background-light) 0 1.5px, transparent 1.5px 7px); border-radius: 2px; }
 .doc-card__clip { position: absolute; top: 5px; right: 6px; color: var(--b3-theme-on-surface-light); opacity: .85; transform: rotate(16deg); }
-.doc-card__name { font-size: 11.5px; line-height: 1.3; color: var(--b3-theme-on-surface); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; word-break: break-word; }
-.doc-card__date { font-size: 10px; color: var(--b3-theme-on-surface-light); }
+.doc-card__name { font-size: 12.5px; line-height: 1.35; color: var(--b3-theme-on-surface); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; word-break: break-word; }
+.doc-card__date { font-size: 12px; color: var(--b3-theme-on-surface-light); font-variant-numeric: tabular-nums; }
 
 /* —— 笔记本书架（简约书卡：序号角标 + 图标 + 名称 + 文档数） —— */
 .nb-shelf { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px 12px; padding: 4px 14px 22px; }
@@ -162,17 +160,17 @@ body { font-family: BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino San
   position: relative; aspect-ratio: 3 / 4; border-radius: 14px;
   background: linear-gradient(158deg, color-mix(in srgb, var(--nb-accent) 14%, var(--b3-theme-surface)) 0%, var(--b3-theme-surface) 56%, var(--b3-theme-background) 100%);
   border: 1px solid color-mix(in srgb, var(--nb-accent) 14%, var(--b3-border-color));
-  box-shadow: 0 1px 2px rgba(16, 24, 40, .04), 0 8px 18px -14px rgba(16, 24, 40, .22);
+  box-shadow: var(--lake-shadow-soft);
   display: flex; align-items: center; justify-content: center; overflow: hidden;
-  transition: transform var(--mobile-duration-press) ease;
+  transition: transform var(--mobile-duration-press) var(--mobile-ease-panel);
 }
 .nb-shelf-card:active .nb-shelf-cover { transform: scale(.965); }
-.nb-shelf-index { position: absolute; top: 9px; left: 11px; font-size: 10px; font-weight: 600; letter-spacing: .06em; color: color-mix(in srgb, var(--nb-accent) 68%, var(--b3-theme-on-surface-light)); }
+.nb-shelf-index { position: absolute; top: 9px; left: 11px; font-size: 11px; font-weight: 600; letter-spacing: .06em; color: color-mix(in srgb, var(--nb-accent) 68%, var(--b3-theme-on-surface-light)); font-variant-numeric: tabular-nums; }
 .nb-shelf-glyph { display: flex; align-items: center; justify-content: center; width: 58px; height: 58px; border-radius: 18px; background: color-mix(in srgb, var(--nb-accent) 16%, transparent); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--nb-accent) 10%, transparent); }
 .nb-shelf-emoji { font-size: 29px; line-height: 1; }
 .nb-shelf-line { color: color-mix(in srgb, var(--nb-accent) 82%, var(--b3-theme-on-surface)); }
 .nb-shelf-name { margin-top: 9px; font-size: 13px; font-weight: 500; line-height: 1.35; color: var(--b3-theme-on-surface); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; word-break: break-word; }
-.nb-shelf-count { margin-top: 2px; font-size: 11px; color: var(--b3-theme-on-surface-light); }
+.nb-shelf-count { margin-top: 2px; font-size: 12px; color: var(--b3-theme-on-surface-light); font-variant-numeric: tabular-nums; }
 .nb-shelf-card:nth-child(6n+1) { --nb-accent: #5b8def; }
 .nb-shelf-card:nth-child(6n+2) { --nb-accent: #dfa03c; }
 .nb-shelf-card:nth-child(6n+3) { --nb-accent: #48b07a; }
@@ -182,12 +180,12 @@ body { font-family: BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino San
 
 /* —— 知识库列表（仿语雀：图标块 + 标题 + 副标题「共 N 篇文档 · 更新时间」） —— */
 .nb-list { display: flex; flex-direction: column; gap: 8px; padding: 0 12px 12px; }
-.nb-row { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 12px; background: var(--b3-theme-background); box-shadow: 0 1px 2px rgba(16,24,40,.05), 0 8px 18px -14px rgba(16,24,40,.3); cursor: pointer; -webkit-tap-highlight-color: transparent; transition: background-color var(--mobile-duration-press) ease, transform var(--mobile-duration-press) ease; }
+.nb-row { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 12px; background: var(--b3-theme-background); box-shadow: var(--lake-shadow-soft); cursor: pointer; -webkit-tap-highlight-color: transparent; transition: background-color var(--mobile-duration-press) var(--mobile-ease-panel), transform var(--mobile-duration-press) var(--mobile-ease-panel); }
 .nb-row:active { background: var(--b3-list-hover); transform: scale(.99); }
 .nb-row__tile { flex: 0 0 auto; width: 44px; height: 44px; border-radius: 12px; display: flex; align-items: center; justify-content: center; background: color-mix(in srgb, var(--nb-accent) 14%, var(--b3-theme-surface)); color: color-mix(in srgb, var(--nb-accent) 84%, var(--b3-theme-on-surface)); }
 .nb-row__emoji { font-size: 22px; line-height: 1; }
 .nb-row__main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
-.nb-row__title { font-size: 15px; font-weight: 500; color: var(--b3-theme-on-surface); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nb-row__title { font-size: 16px; font-weight: 500; color: var(--b3-theme-on-surface); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .nb-row__sub { font-size: 12px; color: var(--b3-theme-on-surface-light); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .nb-row__arrow { flex: 0 0 auto; color: var(--b3-theme-on-surface-light); display: inline-flex; }
 .nb-row:nth-child(6n+1) { --nb-accent: #5b8def; }
@@ -199,19 +197,19 @@ body { font-family: BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino San
 
 /* —— 带标签的底部栏（首页：筛选/新建/云同步） —— */
 .mobile-bottom-bar--labeled { width: min(calc(100% - 32px), calc(var(--mobile-bottom-bar-height) * 4 + 24px)); min-width: 232px; }
-.mobile-bottom-bar__item .bottom-bar-label { margin-top: 1px; font-size: 10px; line-height: 1; color: inherit; opacity: .8; }
+.mobile-bottom-bar__item .bottom-bar-label { margin-top: 1px; font-size: 11px; line-height: 1; color: inherit; opacity: .85; }
 
 /* FAB */
 .mobile-fab-col { position: absolute; right: 12px; bottom: calc(var(--mobile-status-height) + var(--mobile-bar-gap) + var(--mobile-bottom-safe-area)); display: flex; flex-direction: column; gap: 10px; z-index: var(--mobile-z-fab); }
 .mobile-fab {
   width: 52px; height: 52px; border: none; border-radius: 50%; background: var(--b3-theme-primary); color: var(--b3-theme-on-primary);
   display: flex; align-items: center; justify-content: center; box-shadow: var(--b3-point-shadow); cursor: pointer;
-  transition: transform var(--mobile-duration-press) ease, background-color var(--mobile-duration-press) ease;
+  transition: transform var(--mobile-duration-press) var(--mobile-ease-panel), background-color var(--mobile-duration-press) var(--mobile-ease-panel);
 }
 .mobile-fab-secondary { width: 44px; height: 44px; background: var(--b3-theme-surface); color: var(--b3-theme-primary); box-shadow: var(--b3-select-shadow); }
 
 /* 笔记本页文档行 */
-.mobile-doc-row { display: flex; align-items: center; gap: 10px; padding: 0 16px; min-height: 40px; font-size: 16px; line-height: 40px; background: var(--b3-theme-background); border-bottom: .5px solid var(--b3-theme-background-light); cursor: pointer; -webkit-tap-highlight-color: transparent; transition: background-color var(--mobile-duration-press) ease; }
+.mobile-doc-row { display: flex; align-items: center; gap: 10px; padding: 0 16px; min-height: 40px; font-size: 16px; line-height: 40px; background: var(--b3-theme-background); border-bottom: .5px solid var(--b3-theme-background-light); cursor: pointer; -webkit-tap-highlight-color: transparent; transition: background-color var(--mobile-duration-press) var(--mobile-ease-panel); }
 .mobile-doc-row:active { background: var(--b3-list-hover); }
 
 /* 文档页 */
@@ -275,7 +273,7 @@ body { font-family: BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino San
 .mobile-dropdown-title { padding: 8px 14px; font-size: 13px; font-weight: 600; color: var(--b3-theme-on-surface-light); border-bottom: .5px solid var(--b3-theme-background-light); }
 .mobile-dropdown-body { padding: 6px 0; max-height: 320px; overflow-y: auto; }
 .mobile-dropdown-body .b3-list-item { width: 100%; text-align: left; border-radius: 0; }
-@keyframes mobile-dropdown-in { from { opacity: 0; transform: translateY(-6px) scale(.98); } to { opacity: 1; transform: translateY(0) scale(1); } }
+@keyframes mobile-dropdown-in { from { opacity: 0; transform: translateY(-4px) scale(.985); } to { opacity: 1; transform: translateY(0) scale(1); } }
 
 /* 目录树节点图标选择器（emoji 网格） */
 .mobile-emoji-grid { display: grid; grid-template-columns: repeat(8, 1fr); gap: 4px; padding: 0 16px 12px; }
@@ -384,11 +382,11 @@ body { font-family: BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino San
 @keyframes mobile-fade-in { from { opacity: 0; } to { opacity: 1; } }
 @keyframes mobile-drawer-in { from { transform: translateX(-100%); } to { transform: translateX(0); } }
 @keyframes mobile-sheet-in { from { transform: translateY(100%); } to { transform: translateY(0); } }
-.mobile-drawer-mask, .mobile-sheet-mask { animation: mobile-fade-in 200ms ease-out; }
-.mobile-drawer { animation: mobile-drawer-in 260ms cubic-bezier(.22, 1, .36, 1); }
-.mobile-sheet { animation: mobile-sheet-in 280ms cubic-bezier(.22, 1, .36, 1); }
-.mobile-htab { transition: color 150ms ease-out; }
-.mobile-fab, .mobile-icon-btn, .mobile-drawer-item, .mobile-doc-row, .mobile-qcard { transition: background-color 120ms ease-out, transform 90ms ease-out; }
+.mobile-drawer-mask, .mobile-sheet-mask { animation: mobile-fade-in var(--mobile-duration-panel) ease-out; }
+.mobile-drawer { animation: mobile-drawer-in var(--mobile-duration-panel) cubic-bezier(.22, 1, .36, 1); }
+.mobile-sheet { animation: mobile-sheet-in var(--mobile-duration-panel) cubic-bezier(.22, 1, .36, 1); }
+.mobile-htab { transition: color var(--mobile-duration-panel) var(--mobile-ease-panel); }
+.mobile-fab, .mobile-icon-btn, .mobile-drawer-item, .mobile-doc-row, .mobile-qcard { transition: background-color var(--mobile-duration-press) var(--mobile-ease-panel), transform var(--mobile-duration-press) var(--mobile-ease-panel); }
 .mobile-fab:active { transform: scale(.94); }
 .mobile-icon-btn:active { transform: scale(.9); }
 @media (prefers-reduced-motion: reduce) {
@@ -408,9 +406,9 @@ body { font-family: BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino San
   background: var(--b3-theme-background, var(--lake-shell));
   color: var(--b3-theme-on-background, var(--lake-text));
   border-radius: 0 18px 18px 0;
-  box-shadow: 0 12px 40px -12px rgba(0, 0, 0, .35);
+  box-shadow: var(--lake-shadow-panel);
   overflow: hidden;
-  animation: mobile-drawer-in 260ms cubic-bezier(.22, 1, .36, 1);
+  animation: mobile-drawer-in var(--mobile-duration-panel) cubic-bezier(.22, 1, .36, 1);
 }
 .mobile-settings-page.side-panel--swiping, .mobile-settings-mask.side-mask--swiping { transition: none; }
 /* 子页（点进某项）回到全屏，左上返回 */
@@ -439,7 +437,7 @@ body { font-family: BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino San
   border-bottom: 1px solid var(--b3-theme-surface-lighter);
   background: transparent; color: var(--b3-theme-on-background);
   font-size: 15px; cursor: pointer; text-align: left;
-  transition: background-color 100ms ease;
+  transition: background-color var(--mobile-duration-press) var(--mobile-ease-panel);
 }
 .mobile-settings-list .mobile-settings-row:last-child { border-bottom: 0; }
 .mobile-settings-list .mobile-settings-row:active { background: var(--b3-list-hover); }
@@ -484,7 +482,7 @@ body { font-family: BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino San
   border: .5px solid var(--b3-border-color);
   border-radius: calc(var(--mobile-bottom-bar-height) / 2);
   background: var(--b3-theme-background);
-  box-shadow: var(--b3-point-shadow);
+  box-shadow: var(--lake-shadow-soft);
   transition: opacity var(--mobile-duration-panel) var(--mobile-ease-panel), transform var(--mobile-duration-panel) var(--mobile-ease-panel), visibility var(--mobile-duration-panel);
 }
 /* 键盘/选区态：整条下滑淡出（思源 .mobile-keyboard--open / .mobile-selection--active） */
@@ -492,10 +490,10 @@ body { font-family: BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino San
 .bottom-bar-btn {
   position: relative; flex: 1 1 0; min-width: 40px; height: var(--mobile-bottom-bar-height);
   border: 0; border-radius: var(--b3-border-radius); padding: 2px;
-  background: transparent; background-clip: content-box; color: var(--b3-theme-on-surface-light);
+  background: transparent; background-clip: content-box; color: var(--b3-theme-on-surface);
   display: inline-flex; flex-direction: column; align-items: center; justify-content: center; gap: 0;
   overflow: hidden; cursor: pointer;
-  transition: color var(--mobile-duration-press) ease, background-color var(--mobile-duration-press) ease, transform var(--mobile-duration-press) ease;
+  transition: color var(--mobile-duration-press) var(--mobile-ease-panel), background-color var(--mobile-duration-press) var(--mobile-ease-panel), transform var(--mobile-duration-press) var(--mobile-ease-panel);
   -webkit-tap-highlight-color: transparent;
 }
 .bottom-bar-btn[disabled] { opacity: .38; }
@@ -506,17 +504,17 @@ body { font-family: BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino San
 .mobile-bottom-bar__item {
   appearance: none; position: relative; flex: 1 1 0; min-width: 40px; height: var(--mobile-bottom-bar-height);
   padding: 2px; overflow: hidden; border: 0; border-radius: var(--b3-border-radius);
-  background: transparent; background-clip: content-box; color: var(--b3-theme-on-surface-light);
+  background: transparent; background-clip: content-box; color: var(--b3-theme-on-surface);
   display: flex; align-items: center; justify-content: center; cursor: pointer;
   -webkit-tap-highlight-color: transparent;
-  transition: color var(--mobile-duration-press) ease, background-color var(--mobile-duration-press) ease, transform var(--mobile-duration-press) ease;
+  transition: color var(--mobile-duration-press) var(--mobile-ease-panel), background-color var(--mobile-duration-press) var(--mobile-ease-panel), transform var(--mobile-duration-press) var(--mobile-ease-panel);
 }
 .mobile-bottom-bar__item[disabled] { opacity: .38; cursor: default; }
 .mobile-bottom-bar__item:active:not([disabled]) { color: var(--b3-theme-on-surface); background-color: var(--b3-list-hover); transform: scale(.92); }
 .mobile-bottom-bar__item.active { color: var(--b3-theme-primary); background-color: var(--b3-theme-primary-lightest); }
 .mobile-bottom-bar__item:first-child { border-top-left-radius: calc(var(--mobile-bottom-bar-height) / 2); border-bottom-left-radius: calc(var(--mobile-bottom-bar-height) / 2); }
 .mobile-bottom-bar__item:last-child { border-top-right-radius: calc(var(--mobile-bottom-bar-height) / 2); border-bottom-right-radius: calc(var(--mobile-bottom-bar-height) / 2); }
-.bottom-bar-label { font-size: 10px; line-height: 1; }
+.bottom-bar-label { font-size: 11px; line-height: 1; }
 /* 计数 = 思源 .toolbar__tabs-count：描边小方框，不是实心圆点 */
 .bottom-bar-count {
   position: absolute; top: 5px; right: 6px; box-sizing: border-box;
@@ -637,7 +635,7 @@ body { font-family: BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino San
   color: var(--b3-theme-on-surface); border-radius: var(--b3-border-radius);
   display: inline-flex; align-items: center; justify-content: center; cursor: pointer;
   -webkit-tap-highlight-color: transparent;
-  transition: background-color var(--mobile-duration-press) ease, color var(--mobile-duration-press) ease;
+  transition: background-color var(--mobile-duration-press) var(--mobile-ease-panel), color var(--mobile-duration-press) var(--mobile-ease-panel);
 }
 .toolbar__icon > svg { width: 20px; height: 20px; }
 .toolbar__icon[disabled] { opacity: .38; cursor: not-allowed; }
@@ -649,12 +647,13 @@ body { font-family: BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino San
   width: var(--mobile-topbar-height); height: var(--mobile-topbar-height); padding: 0; flex-shrink: 0;
   border: 0; border-radius: var(--b3-border-radius); background: transparent;
   color: var(--b3-theme-on-surface); cursor: pointer; -webkit-tap-highlight-color: transparent;
-  transition: background-color var(--mobile-duration-press) ease;
+  transition: background-color var(--mobile-duration-press) var(--mobile-ease-panel);
 }
 .toolbar__button > svg { width: 20px; height: 20px; }
 .toolbar__button:active, .toolbar__button:focus-visible { background-color: var(--b3-list-hover); }
 .toolbar__title {
   flex: 1; min-width: 1px; line-height: 30px; font-size: 17px; padding: 0; border: 0; outline: none;
+  font-weight: 600; /* 页面标题加重：17px/400 偏轻，600 承担「大气」的顶栏层级 */
   background-color: transparent; color: var(--b3-theme-on-background);
 }
 .toolbar__title--readonly { -webkit-user-select: none; user-select: none; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
@@ -673,7 +672,7 @@ body { font-family: BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino San
 .mobile-nb-row, .mobile-quick-row {
   width: 100%; display: flex; align-items: center; gap: 8px;
   min-height: 44px; padding: 2px 16px; font-size: 16px; cursor: pointer;
-  -webkit-tap-highlight-color: transparent; transition: background-color var(--mobile-duration-press) ease;
+  -webkit-tap-highlight-color: transparent; transition: background-color var(--mobile-duration-press) var(--mobile-ease-panel);
 }
 .mobile-nb-row:active, .mobile-quick-row:active { background: var(--b3-list-hover); }
 .mobile-nb-row .b3-list-item__text, .mobile-quick-row .b3-list-item__text { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -689,12 +688,14 @@ body { font-family: BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino San
 .mobile-htab {
   position: relative; border: none; background: transparent; font-size: 16px; color: var(--b3-theme-on-surface-light);
   cursor: pointer; padding: 0 2px; font-weight: 500; -webkit-tap-highlight-color: transparent;
-  transition: color var(--mobile-duration-press) ease;
+  transition: color var(--mobile-duration-press) var(--mobile-ease-panel);
 }
 .mobile-htab.active { color: var(--b3-theme-on-surface); font-weight: 600; }
 .mobile-htab.active::after {
   content: ""; position: absolute; right: 0; bottom: 4px; left: 0; height: 2px;
   border-radius: 1px; background: var(--b3-theme-primary);
+  transform-origin: 50% 50%;
+  animation: ln-indicator-in var(--mobile-duration-press) var(--mobile-ease-panel) both;
 }
 
 /* 目录树行内动作（移动端常显——无 hover，对齐思源移动端 .b3-list-item 不带 --hide-action）。

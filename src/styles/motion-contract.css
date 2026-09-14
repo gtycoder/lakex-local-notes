@@ -1,7 +1,8 @@
 :root {
-  --lake-motion-fast: 120ms;
-  --lake-motion-standard: 180ms;
-  --lake-motion-panel: 260ms;
+  --lake-motion-fast: 120ms;      /* hover/颜色/透明度反馈 */
+  --lake-motion-press: 90ms;      /* 按压 transform 微缩放（必须快于 fast，保跟手感） */
+  --lake-motion-standard: 180ms;  /* 抽屉/侧栏/下拉 */
+  --lake-motion-panel: 260ms;     /* 大浮层/弹窗入场 */
   --lake-ease-standard: cubic-bezier(.22, 1, .36, 1);
 }
 

@@ -35,7 +35,7 @@
   align-items: center;
   gap: 6px;
   border: none;
-  border-radius: 7px;
+  border-radius: 6px;
   padding: 7px 12px;
   background: rgba(255, 255, 255, 0.12);
   color: #e6e8ee;
@@ -44,8 +44,8 @@
   white-space: nowrap;
 }
 .attachment-preview__btn:hover { background: rgba(255, 255, 255, 0.22); }
-.attachment-preview__btn--primary { background: #3575f0; color: #fff; }
-.attachment-preview__btn--primary:hover { background: #2c66d6; }
+.attachment-preview__btn--primary { background: var(--lake-accent, #3b5bdb); color: #fff; }
+.attachment-preview__btn--primary:hover { background: #2f47b8; }
 .attachment-preview__close { margin-left: 4px; }
 .attachment-preview__body {
   flex: 1;

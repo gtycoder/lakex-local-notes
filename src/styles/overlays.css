@@ -6,7 +6,7 @@
 .sync-status-button.pending { color: var(--lake-sync-pending); }
 .sync-status-button.error { color: var(--lake-error); }
 .sync-status-button.disabled { color: var(--lake-text-tertiary); }
-.sync-status-popover { position: fixed; z-index: 780; width: min(320px, calc(100vw - 16px)); padding: 12px; border: 1px solid var(--b3-border-color); border-radius: var(--b3-border-radius-b); color: var(--b3-theme-on-background); background: var(--b3-theme-background); box-shadow: var(--b3-dialog-shadow); animation: lake-popover-in var(--lake-motion-fast) var(--lake-ease-standard) both; }
+.sync-status-popover { position: fixed; z-index: 780; width: min(320px, calc(100vw - 16px)); padding: 12px; border: 1px solid var(--b3-border-color); border-radius: var(--b3-border-radius-b); color: var(--b3-theme-on-background); background: var(--b3-theme-background); box-shadow: var(--b3-dialog-shadow); }
 .sync-status-popover-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; padding: 2px 2px 10px; border-bottom: 1px solid var(--b3-border-color); }
 .sync-status-popover-header div { display: grid; gap: 2px; }
 .sync-status-popover-header strong { font-size: 14px; }
@@ -31,7 +31,6 @@
 .sync-status-actions .b3-button { display: inline-flex; align-items: center; gap: 5px; min-height: 30px; }
 
 
-@keyframes lake-popover-in { from { opacity: 0; transform: translateY(-4px) scale(.985); } to { opacity: 1; transform: translateY(0) scale(1); } }
 @keyframes lake-status-pulse { 50% { opacity: .42; } }
 
 .search-command-panel { width: min(680px, calc(100vw - 32px)); max-height: min(620px, calc(100vh - 96px)); }
@@ -216,6 +215,8 @@
   height: 2px;
   border-radius: 2px 2px 0 0;
   background: var(--b3-theme-primary);
+  transform-origin: 50% 50%;
+  animation: ln-indicator-in var(--lake-motion-fast) var(--lake-ease-standard) both;
 }
 .ln-tabs__action { flex: 0 0 auto; align-self: center; height: 28px; font-size: 12px; }
 
@@ -342,15 +343,18 @@ button.b3-list-item__action:disabled { opacity: .45; cursor: default; }
 .badge--accent { color: var(--b3-theme-primary); background: var(--b3-theme-primary-lightest); }
 
 /* ---------- ③ 本地小件 ---------- */
-/* 互斥选项组（字号 / 主题）：选中项填主色，其余 outline */
+/* 互斥选项组（字号 / 主题）：选中项填主色，其余 outline。
+   用 .seg 前缀提高特异性：两端 CSS 注入顺序不同（mobile.css/overlays.css 早于或晚于 vendored
+   siyuan.scss），同优先级时 .b3-button--outline 的 background:transparent 会压掉选中填充。 */
 .seg { display: inline-flex; gap: 4px; }
 .seg__item { min-width: 40px; height: 28px; padding: 0 10px; font-size: 12px; }
-.seg__item.is-active {
+.seg .seg__item.is-active {
   color: var(--b3-theme-on-primary);
   background-color: var(--b3-theme-primary);
+  border-color: var(--b3-theme-primary);
   box-shadow: none;
 }
-.seg__item.is-active:hover { color: var(--b3-theme-on-primary); }
+.seg .seg__item.is-active:hover { color: var(--b3-theme-on-primary); }
 
 /* 体检结果（数据体检 / 一致性检查） */
 .checks { display: grid; gap: 6px; margin-top: 10px; font-size: 13px; text-align: left; }
@@ -401,7 +405,7 @@ button.b3-list-item__action:disabled { opacity: .45; cursor: default; }
 .trash-panel-backdrop,
 .history-panel-backdrop,
 .search-panel-backdrop,
-.modal-backdrop { animation: lake-overlay-fade-in 160ms ease-out; }
+.modal-backdrop { animation: lake-overlay-fade-in var(--lake-motion-fast) ease-out; }
 @media (prefers-reduced-motion: reduce) {
   .settings-overlay, .trash-panel-backdrop, .history-panel-backdrop, .search-panel-backdrop, .modal-backdrop { animation: none; }
 }

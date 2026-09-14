@@ -4,7 +4,7 @@
 :root {
   /* Lake Notes 侧派生变量（基于 b3 令牌，供旧组件渐进迁移） */
   --ln-primary: var(--b3-theme-primary);
-  --ln-primary-hover: #2a5fd0;              /* 思源按钮 hover 近似 */
+  --ln-primary-hover: #2f47b8;              /* 思源按钮 hover 近似 */
   --ln-on-background: var(--b3-theme-on-background);
   --ln-on-surface: var(--b3-theme-on-surface);
   --ln-border: var(--b3-border-color);

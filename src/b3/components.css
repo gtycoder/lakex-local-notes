@@ -286,10 +286,10 @@
   color: var(--b3-theme-on-background);
   background: var(--b3-theme-surface);
   box-shadow: var(--b3-dialog-shadow);
-  animation: sync-toast-in 180ms var(--b3-transition);
+  animation: sync-toast-in var(--lake-motion-standard) var(--lake-ease-standard);
 }
 @keyframes sync-toast-in {
-  from { opacity: 0; transform: translateY(8px) scale(.98); }
+  from { opacity: 0; transform: translateY(4px) scale(.985); }
   to { opacity: 1; transform: translateY(0) scale(1); }
 }
 .sync-toast-icon {
