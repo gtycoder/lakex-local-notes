@@ -544,18 +544,21 @@ ne-card[data-card-name="codeblock"] .ne-card-resizer-mask {
 :root {
   /* font-family 单一来源：--b3-font-family（见 :root 顶部与 b3/base.css body）*/
   font-optical-sizing: auto;
+  /* 壳层令牌单一来源：一律从 tokens.css 的 --lake-* 派生（深浅主题自动跟随）。
+     历史上这里另写了一套灰/蓝字面值，深色下没有覆盖 → 某些表面会在深底上露出浅灰/深灰文字；
+     与 --lake-* 的差异也只有"是否偏冷"这一点，收敛后观感更统一。 */
   --shell-accent: var(--lake-accent);
-  --shell-accent-strong: #2f47b8;
+  --shell-accent-strong: var(--lake-accent);
   --shell-accent-soft: var(--lake-accent-soft);
-  --shell-text: #222;
-  --shell-text-secondary: #5f6368;
-  --shell-text-tertiary: rgba(95, 99, 104, .68);
-  --shell-separator: rgba(0, 0, 0, .08);
-  /* Use opaque, lightly blue-tinted surfaces so the library remains readable. */
-  --shell-material: #eff1f6;
-  --shell-toolbar: #eff1f6;
-  --shell-ease: cubic-bezier(.22, 1, .36, 1);
-  --shell-radius: 8px;
+  --shell-text: var(--lake-text);
+  --shell-text-secondary: var(--lake-text-secondary);
+  --shell-text-tertiary: var(--lake-text-tertiary);
+  --shell-separator: color-mix(in srgb, var(--lake-text) 9%, transparent);
+  /* 不透明的冷调表面，保资料库可读 */
+  --shell-material: var(--lake-surface);
+  --shell-toolbar: var(--lake-surface);
+  --shell-ease: var(--lake-ease-standard);
+  --shell-radius: var(--lake-radius-md);
   --activity-rail-width: var(--lake-rail-width, 38px); /* 左右固定 rail 共用宽度 */
 }
 
@@ -1163,10 +1166,9 @@ ne-card[data-card-name="codeblock"] .ne-card-resizer-mask {
 
 /* ===== 2026-08-06 视觉刷新：A 暖紫灰主调 + C 悬停微卡片 + 去分隔线 + 可读性 ===== */
 :root {
-  /* A：窗口级暖紫灰背景，区域靠颜色自然分隔 */
-  --shell-material: #eff1f6;
-  --shell-toolbar: #eff1f6;
-  --shell-separator: rgba(0, 0, 0, .08);
+  /* 材质/分隔线/文字已收敛到上文单一来源（--shell-* ← --lake-*），此处只保留独有的阴影令牌。
+     注意：下面这些渐变规则里的浅色起止点（#e8ebf1 / #eff1f6 / #fafbfd）历史上被 b3/base.css 与
+     quick-notes.css 的 !important 覆盖，深色下不生效；属待清理的死声明，保留原样以避免误伤浅色观感。 */
   --shell-card-shadow: 0 1px 2px rgba(0, 0, 0, .05), 0 8px 24px rgba(140, 149, 159, .18);
   --shell-micro-card: 0 1px 2px rgba(0, 0, 0, .08), 0 0 0 1px rgba(0, 0, 0, .04);
 }

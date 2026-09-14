@@ -329,18 +329,28 @@
 - 状态栏字号 10px → 11px；搜索面板去三重重复文案；移动端书架行「名称折两行导致 N 篇错位」→ 名称块固定两行高；
   书架封面由"饱和色渐变冲淡"→ 中性卡 + 淡色图标徽章（深色下原先是土黄/橄榄，发脏）。
 - `prefers-reduced-motion` 不再一刀切 1ms（保留透明度/颜色过渡，只去位移缩放）+ 补 `prefers-reduced-transparency`。
-- 门禁：tsc 0 · vitest **969 passed / 16 skipped** · 桌面 + 移动 build 绿 · APK 安装并实机（模拟器）复验。
+- 门禁：tsc 0 · vitest **969 passed / 16 skipped** · 桌面 + 移动 build 绿 · APK 安装并实机（模拟器）复验。用户已拍板：深色=冷灰蓝分层（保留本轮）、强调色=收敛口径（保留本轮）、移动端首层**保持现状**（不做缩略/摘要）。
+
+**第二批（同一分支追加）**
+- **安卓系统栏跟随主题**（用户可见硬伤）：深色下状态栏/导航栏实测 `#fafafa`、内容区 `#1e2126`，顶/底各一条硬边。
+  修法：`MainActivity` 新增 `applySystemBarTheme(boolean)` + 注入 `lakeSystemBars` 接口，渲染层 `applyTheme` 时调用
+  （`src/mobile/systemBars.ts`）。**注意**：targetSdk 35+ 会忽略 `setStatusBarColor/setNavigationBarColor`（强制 edge-to-edge），
+  所以真正生效的是 **window 背景色**（WebView 不延伸到栏下，栏后露出背景）+ 图标明暗；另需 `setNavigationBarContrastEnforced(false)` 去掉系统加的对比蒙层。
+  复验：修后 y=20…2399 全为 `#1e2126`，图标自动转亮。
+- **移动端阅读态底部让位**：`.mobile-doc-body` 原 `padding-bottom: 40px`，而底部胶囊栏顶边距视口底 80px
+  （测：滚到底最后一行 bottom=802 / 栏 top=762 → 末 1~2 行被栏压住）→ 改 `80px`。复验 overlap 0。
+- **壳层令牌单一来源**：`--shell-*` 由写死灰/蓝字面值改为从 `--lake-*` 派生（`--shell-text-secondary #5f6368 → #4d5a70` 等，
+  深色下自动拿到深色值，不再出现"深底上深灰字"的隐患）；删掉 `:root` 里的重复声明。
+- 长路径文本加 `text-wrap: balance`（属性弹窗里第二行不再只剩 2 个字符的孤儿尾巴）。
 
 **本轮审计结论（未改，等用户拍板，见会话提问）**
 1. **移动端首层排版**：知识库 4 列彩色书架；「最近文档」是 5 张一模一样的「纸片线条 + 回形针」插画卡（深色下像空盒子）。
-2. **移动端系统栏**：`styles.xml` 写死 `windowLightStatusBar=true`、状态栏背景透明而 WebView 只占 `screenY=128` 以下，
-   深色下顶部/底部系统栏仍是浅色。修它要动原生（`@capacitor/status-bar` 或 MainActivity 里加一个 setSystemBarTheme 桥），
-   属需用户确认的改动面。
-3. **代码健康**：`--shell-*`（styles.css 两个 `:root` 块）与 `--lake-*` 是两套重复令牌
-   （`--shell-text-secondary #5f6368` vs `--lake-text-secondary #4d5a70`；`--shell-accent-strong #2f47b8` vs `--lake-accent #3b5bdb`），
-   且 `--shell-material/#eff1f6` 在深色下没有覆盖。建议后续收敛成一套（本轮只动了可见问题，未做大规模令牌合并）。
-4. **移动端阅读态底部留白**：`.mobile-doc-body` 固定 `padding-bottom: 40px`，而底部胶囊栏高 48px + 离底约 32px，
-   理论上末 1~2 行可能压不到栏上方（本轮未实测到底，留待下一轮量准再改）。
+2. ~~移动端系统栏~~ **✅ 已修（第二批）**；~~移动端阅读态底部留白~~ **✅ 已修（第二批）**；~~`--shell-*` 令牌重复~~ **✅ 已收敛（第二批）**。
+3. **待清理的死声明（低优先）**：styles.css 里 5 处浅色渐变起止点（`#e8ebf1/#eff1f6/#fafbfd`）实际被
+   `b3/base.css` 与 `quick-notes.css` 的 `!important` 覆盖（深浅两套主题都不生效），属历史残留；
+   清它们要先确认没有别的选择器依赖，别顺手改（会影响浅色观感）。
+4. **编辑器内 Lake 原生控件**：工具栏左侧插入钮是内核自带的实心色圆（浅色偏绿、深色偏紫），与本工程色系不一致；
+   属 vendor 内部控件，按"不 patch 内核"原则未动，如要改需评估。
 
 ## 3. 真正的待办（已剔除全部完成项，按优先级）
 > **260904 后续评估（用户决策 + 本轮核实）**：原 §3.1 对象级 5xx 重试、§3.2 快照 gzip 异步化、§3.5 笔记本 `sort_order` 撞号 —— **已评估不做**（5xx 有"失败不 markSynced→下轮重扫"兜底；gzip 异步收益小；sort_order 撞号场景极低）。

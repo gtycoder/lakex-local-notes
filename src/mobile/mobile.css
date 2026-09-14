@@ -224,7 +224,9 @@ body { font-family: BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino San
 .mobile-title-input { flex: 1; min-width: 0; border: none; outline: none; font-size: 17px; line-height: 30px; font-weight: 400; color: var(--b3-theme-on-background); background: transparent; padding: 9px 16px; }
 
 .mobile-done-btn { border: none; background: var(--b3-theme-primary); color: var(--b3-theme-on-primary); border-radius: var(--b3-border-radius); padding: 6px 14px; font-size: 14px; cursor: pointer; }
-.mobile-doc-body { flex: 1; overflow-y: auto; background: var(--b3-theme-background); padding-bottom: calc(40px + var(--mobile-dock-space, 0px) + env(safe-area-inset-bottom, 0px)); }
+/* 底部让位：阅读态底部胶囊栏顶边距视口底 80px（栏高 48 + 离底 32）。实测滚到底时最后一行
+   bottom=802 而栏 top=762 —— 40px 让位会让末 1~2 行被栏压住（栏上滑时又复现），改为 80px。 */
+.mobile-doc-body { flex: 1; overflow-y: auto; background: var(--b3-theme-background); padding-bottom: calc(80px + var(--mobile-dock-space, 0px) + env(safe-area-inset-bottom, 0px)); }
 /* 音频/视频卡展示优化：
    1) audio 卡播放器就绪（兜底异步设置）前的 error 状态（"音频文件不能播放"/版权链接）先隐藏，
       避免进入文档/切编辑态时闪现不可用文案——兜底成功后播放器自然替换；

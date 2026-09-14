@@ -49,7 +49,8 @@
 .note-info-section { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--b3-theme-surface-lighter); }
 .note-info-section-title { display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; color: var(--b3-theme-on-background); }
 .note-info-section-title span { flex: 1 1 auto; }
-.note-info-path { margin-top: 6px; font-size: 11px; color: var(--b3-theme-on-surface); word-break: break-all; }
+/* 长路径必然要断行：balance 让两行长度接近，避免第二行只剩 "ke" 这种孤儿尾巴 */
+.note-info-path { margin-top: 6px; font-size: 11px; color: var(--b3-theme-on-surface); word-break: break-all; text-wrap: balance; }
 .note-info-assets { display: grid; grid-template-columns: repeat(auto-fill, 56px); gap: 6px; margin-top: 8px; max-height: 190px; overflow: auto; align-content: start; }
 .note-info-asset { width: 56px; height: 56px; padding: 0; border: 1px solid var(--b3-theme-surface-lighter); border-radius: 6px; background: var(--b3-theme-surface); overflow: hidden; cursor: pointer; display: grid; place-items: center; }
 .note-info-asset img { width: 100%; height: 100%; object-fit: cover; }
