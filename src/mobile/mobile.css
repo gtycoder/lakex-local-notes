@@ -119,7 +119,7 @@ body { font-family: BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino San
 /* ===== 首页卡片语言（小记卡片 + 最近文档 + 笔记本书架/列表 + 带标签底部栏） ===== */
 /* —— 小记卡片（整张白卡：图片完整展示 + 摘要 + 日期 + 「...」，仿语雀） —— */
 .mobile-quick-cards { display: flex; flex-direction: column; gap: 12px; padding: 12px 14px; }
-.qn-card { display: flex; flex-direction: column; background: var(--b3-theme-background); border-radius: 14px; overflow: hidden; cursor: pointer; -webkit-tap-highlight-color: transparent; box-shadow: var(--lake-shadow-soft); transition: transform var(--mobile-duration-press) var(--mobile-ease-panel); }
+.qn-card { display: flex; flex-direction: column; background: var(--b3-theme-background); border: 1px solid var(--b3-border-color); border-radius: 12px; overflow: hidden; cursor: pointer; -webkit-tap-highlight-color: transparent; transition: transform var(--mobile-duration-press) var(--mobile-ease-panel); }
 .qn-card:active { transform: scale(.99); }
 .qn-card__cover { position: relative; width: 100%; padding: 12px 12px 2px; display: flex; align-items: center; justify-content: center; background: var(--b3-theme-background); }
 .qn-card__img { max-width: 100%; max-height: 210px; width: auto; height: auto; object-fit: contain; border-radius: 8px; display: block; }
@@ -131,15 +131,14 @@ body { font-family: BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino San
 .qn-card__more { width: 32px; height: 32px; margin-right: -6px; border: none; background: transparent; color: var(--b3-theme-on-surface-light); display: flex; align-items: center; justify-content: center; border-radius: 10px; cursor: pointer; -webkit-tap-highlight-color: transparent; }
 .qn-card__more:active { background: var(--b3-list-hover); color: var(--b3-theme-on-surface); }
 
-/* —— 首页分区：白底 + 白色分块卡片（轻投影，与小记同一套语言） —— */
+/* —— 首页分区（墨韵书房）：整页一张纸，分区不再包白卡，信息靠排印与 hairline 组织 —— */
 .mobile-library { background: var(--b3-theme-background); }
-.home-section { background: var(--b3-theme-background); border-radius: 14px; margin: 12px 12px 0; overflow: hidden; box-shadow: var(--lake-shadow-soft); }
-.home-section:first-child { margin-top: 12px; }
-.home-section:last-child { margin-bottom: 12px; }
-.home-section--list { background: transparent; box-shadow: none; margin: 0; border-radius: 0; overflow: visible; }
-.home-section--list:first-child, .home-section--list:last-child { margin: 0; }
+.home-section { background: transparent; border-radius: 0; margin: 0; overflow: visible; }
+.home-section:first-child { margin-top: 0; }
+.home-section:last-child { margin-bottom: 0; }
+.home-section--list { margin: 0; }
 .home-section--list .home-section__head { padding: 12px 16px 6px; }
-.home-section__head { display: flex; align-items: center; padding: 14px 16px 2px; }
+.home-section__head { display: flex; align-items: baseline; justify-content: space-between; padding: 18px 16px 6px; }
 .home-section__title { font-size: 15px; font-weight: 600; color: var(--b3-theme-on-background); }
 
 /* —— 最近文档：仿语雀纸卡（纸张纹理 + 回形针 + 标题/时间） —— */
@@ -160,7 +159,7 @@ body { font-family: BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino San
   position: relative; aspect-ratio: 3 / 4; border-radius: 14px;
   background: linear-gradient(158deg, color-mix(in srgb, var(--nb-accent) 14%, var(--b3-theme-surface)) 0%, var(--b3-theme-surface) 56%, var(--b3-theme-background) 100%);
   border: 1px solid color-mix(in srgb, var(--nb-accent) 14%, var(--b3-border-color));
-  box-shadow: var(--lake-shadow-soft);
+  box-shadow: none;
   display: flex; align-items: center; justify-content: center; overflow: hidden;
   transition: transform var(--mobile-duration-press) var(--mobile-ease-panel);
 }
@@ -178,11 +177,12 @@ body { font-family: BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino San
 .nb-shelf-card:nth-child(6n+5) { --nb-accent: #8f7be0; }
 .nb-shelf-card:nth-child(6n+6) { --nb-accent: #3fb0c0; }
 
-/* —— 知识库列表（仿语雀：图标块 + 标题 + 副标题「共 N 篇文档 · 更新时间」） —— */
-.nb-list { display: flex; flex-direction: column; gap: 8px; padding: 0 12px 12px; }
-.nb-row { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 12px; background: var(--b3-theme-background); box-shadow: var(--lake-shadow-soft); cursor: pointer; -webkit-tap-highlight-color: transparent; transition: background-color var(--mobile-duration-press) var(--mobile-ease-panel), transform var(--mobile-duration-press) var(--mobile-ease-panel); }
-.nb-row:active { background: var(--b3-list-hover); transform: scale(.99); }
-.nb-row__tile { flex: 0 0 auto; width: 44px; height: 44px; border-radius: 12px; display: flex; align-items: center; justify-content: center; background: color-mix(in srgb, var(--nb-accent) 14%, var(--b3-theme-surface)); color: color-mix(in srgb, var(--nb-accent) 84%, var(--b3-theme-on-surface)); }
+/* —— 知识库列表（墨韵书房排印行：无卡、无投影，行间 hairline；hover/active 淡墨底） —— */
+.nb-list { display: flex; flex-direction: column; padding: 0 0 8px; }
+.nb-row { display: flex; align-items: center; gap: 12px; padding: 11px 16px; border-radius: 0; background: transparent; border-bottom: 1px solid var(--b3-theme-background-light); cursor: pointer; -webkit-tap-highlight-color: transparent; transition: background-color var(--mobile-duration-press) var(--mobile-ease-panel); }
+.nb-row:active { background: var(--b3-list-hover); }
+.nb-row__tile { flex: 0 0 auto; width: 32px; height: 32px; border-radius: 8px; display: flex; align-items: center; justify-content: center; color: color-mix(in srgb, var(--nb-accent) 84%, var(--b3-theme-on-surface)); }
+.nb-row__tile > svg { width: 20px; height: 20px; }
 .nb-row__emoji { font-size: 22px; line-height: 1; }
 .nb-row__main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
 .nb-row__title { font-size: 16px; font-weight: 500; color: var(--b3-theme-on-surface); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
