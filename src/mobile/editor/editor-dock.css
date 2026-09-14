@@ -68,12 +68,14 @@
 .med-btn.med-b { font-weight: 700; font-size: 18px; }
 
 .med-panel {
-  /* 展开面板：**占住输入法键盘区**（bottom:0 + 高=--kb-offset），工具栏停在它上沿不动
-     → 视觉上是"工具栏向下展开盖住键盘"；键盘是在面板背后滑走的，所以不闪。 */
+  /* 展开面板：**贴在工具栏上沿、在输入法键盘之上展开**（用户 260914 定稿）。
+     键盘全程不收不弹 —— 旧实现开面板就 blur 收键盘、关面板再 focusEditor 弹回，
+     那两步正是用户看到的"输入法弹出加载过程"。现在 bottom = 键盘上移量 + 工具栏高，
+     面板向上展开；进出场只做位移+淡入（键盘不动，不会再有动画对撞）。 */
   position: fixed;
   left: 0;
   right: 0;
-  bottom: 0;
+  bottom: calc(var(--kb-offset, 0px) + var(--mobile-bottom-bar-height, 48px));
   pointer-events: auto;
   box-sizing: border-box;
   background: var(--b3-theme-background);
@@ -81,15 +83,28 @@
   border-top: 1px solid var(--b3-theme-surface-lighter);
   box-shadow: none;
   padding: 12px 12px 14px;
-  height: calc(var(--kb-offset, 0px));
-  max-height: 60dvh;
+  height: auto;
+  /* 键盘之上还要留出正文可视区：面板最多 4 行（≈280px），更多条目在面板内滚动 */
+  max-height: min(44dvh, 280px);
   overflow-y: auto;
   overscroll-behavior: contain;
   scrollbar-width: none;
-  /* 不做入场动画：面板是"接管键盘位置"，再叠一层 translateY 会和输入法收起动画对撞成闪烁 */
+  transform: translateY(100%);
+  opacity: 0;
+  visibility: hidden;
+  transition: transform var(--mobile-duration-panel) var(--mobile-ease-out),
+              opacity var(--mobile-duration-panel) var(--mobile-ease-out),
+              visibility 0s linear var(--mobile-duration-panel);
+}
+.med-panel[data-open="1"] {
+  transform: translateY(0);
+  opacity: 1;
+  visibility: visible;
+  transition: transform var(--mobile-duration-panel) var(--mobile-ease-out),
+              opacity var(--mobile-duration-panel) var(--mobile-ease-out),
+              visibility 0s;
 }
 .med-panel::-webkit-scrollbar { display: none; }
-/* medPanelIn 已删除（见上：面板不做入场动画） */
 /* 插入面板：对齐语雀移动端——两列「浅灰底 + 图标 + 文字」条目（原先 3 列纯图标方块，
    85px 方格里只放一个图标，"引用/分割线"这类很难认）。 */
 .med-ins-grid {

@@ -378,6 +378,28 @@
 - **属性弹窗默认按内容收**：`.note-info-dialog` 高度 `min(80vh,640px)` → `auto` + `max-height: min(80vh,640px)`
   （手动拖过之后由内联尺寸接管）。实测 720×640（内容只占 423，底部一片空）→ **720×474**。
 
+**第五批（用户验收反馈）—— 含一个"整个 dock 命令全死"的 P0 修复**
+- **P0：移动端 dock 的命令通道一直是死的（除打字后）**。`DocumentEditor` 把 `editorRef.current` 当 prop 传给
+  `EditorDock`，而**ref 变化不触发重渲染**：编辑器就绪（`onEditorReady`）后父组件若不重渲染，dock 永远拿到
+  `null` → 工具栏 B/列表/待办 与面板里所有 `runPanel` 命令**静默 no-op**；只有用户打字触发一次重渲染后才"活"过来。
+  实测证据：包装 `editor.renderer.execCommand` 后点「加粗」与「引用」，调用计数为 0（命令根本没发出去）。
+  修法：`DocumentEditor` 用 state 持有编辑器实例（`editorInstance`）并传给 dock（`editorRef` 保留给命令式路径）。
+  修后实测：`["quote"]`→文档新增 `<blockquote>`、`["alert","tips"]`→`lake-alert`、`["insertCard","label"]`→状态卡。
+- **面板改「在输入法键盘之上展开」，键盘全程不收不弹**（用户 260914 定稿；旧实现是 blur 收键盘 + 面板占键盘区，
+  收起时再 `focusEditor` 弹回 → 用户看到的"输入法弹出加载过程"）：
+  - `togglePanel` 不再 blur/focus；`runPanel` 不再 `dismissIme()`；删除「面板⇄输入法硬互斥兜底」effect
+    （那是占键盘区时代的补丁）。点正文仍会关面板。
+  - `.med-panel` 改 `bottom: calc(--kb-offset + 工具栏高)`（键盘之上）+ `max-height: min(44dvh,280px)`（4 行，多则内滚）；
+    `--kb-offset` 现在恒 = 键盘上移量（不再含面板）；正文底部留白 = 上移量 + 工具栏 + **面板实测高度**（ResizeObserver）。
+  - 面板常挂载 + `data-open` 切换，进退场做 150ms ease-out 位移+淡入（键盘不动，不会再和输入法动画对撞）。
+  - 实测（emulator-5554，键盘已弹出 innerHeight=530）：开面板前后 innerHeight 恒 530、`dumpsys input_method` 的
+    `mInputShown=true` 不变、面板 bottom 与工具栏 top 差 0 → 确实是"在键盘上展开"。
+- **插入面板补齐**（用户给参考图）：新增 **拍照**（`<input type=file accept=image/* capture=environment>`）、
+  **高亮块**（内核命令是 `execCommand("alert", "tips")`，**不是** `insertCard`；落盘为
+  `<blockquote class="lake-alert lake-alert-tips">`）、**状态**（`insertCard("label")`，自带颜色选择器）。
+  不做智能识别（用户明确排除）。共 11 项，仍为两列图标+文字。
+- 标题小地图**不动**（用户明确要求）。
+
 **本轮审计结论（未改，等用户拍板，见会话提问）**
 1. **移动端首层排版**：知识库 4 列彩色书架；「最近文档」是 5 张一模一样的「纸片线条 + 回形针」插画卡（深色下像空盒子）。
 2. ~~移动端系统栏~~ **✅ 已修（第二批）**；~~移动端阅读态底部留白~~ **✅ 已修（第二批）**；~~`--shell-*` 令牌重复~~ **✅ 已收敛（第二批）**。

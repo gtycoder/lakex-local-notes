@@ -76,10 +76,13 @@ export function DocumentEditor(props: DocumentEditorProps) {
   const toggleOutline = onToggleOutline ?? (() => setOutlineOpenS((v) => !v));
   const toggleDocList = onToggleDocList ?? (() => setDocListOpenS((v) => !v));
 
-  const insertFileViaInput = (accept: string) => {
+  /** 复用隐藏 file input：`capture` 传 "environment" 时 Android 直接开相机拍照（拍完即当图片插入）。 */
+  const insertFileViaInput = (accept: string, capture?: "environment") => {
     const input = fileInputRef.current;
     if (!input) return;
     input.accept = accept;
+    if (capture) input.setAttribute("capture", capture);
+    else input.removeAttribute("capture");
     input.value = "";
     input.click();
   };
@@ -101,6 +104,13 @@ export function DocumentEditor(props: DocumentEditorProps) {
   }), []);
 
   const bodyRef = useRef<HTMLElement | null>(null);
+  /**
+   * 编辑器实例必须是**状态**而不只是 ref：`EditorDock` 通过 prop 拿它，
+   * 而 ref 变化不会触发重渲染 —— 编辑器就绪后父组件若不重渲染，dock 会一直拿到 null，
+   * 于是工具栏 B/列表/待办 与面板里的命令全部静默失效（只有用户打字触发一次重渲染后才"活"过来）。
+   * editorRef 仍保留给命令式路径（插入文件/表格/大纲）使用。
+   */
+  const [editorInstance, setEditorInstance] = useState<LakeEditorInstance | null>(null);
   // 点了可视区外的表格单元格 / 光标跑到屏外 → 自动把它滚进可视区（移动端表格必然横向溢出）
   useCaretIntoView(bodyRef, true);
 
@@ -116,6 +126,7 @@ export function DocumentEditor(props: DocumentEditorProps) {
           onEditorReady={(noteId, editor) => {
             (window as unknown as Record<string, unknown>).__mobileEditor = editor;
             editorRef.current = editor;
+            setEditorInstance(editor);
             onEditorInstance?.(editor);
           }}
           prefs={{ fontSize: loadSettings().fontSize, showToolbar: !editing, disableVirtualRendering: true, attachment: attachmentPrefs }}
@@ -123,10 +134,11 @@ export function DocumentEditor(props: DocumentEditorProps) {
       </section>
       {/* 编辑态底部 dock（app 化工具栏，悬浮输入法上方；替代 Lake 桌面样式原生工具栏） */}
       <EditorDock
-        editor={editorRef.current}
+        editor={editorInstance}
         editing={editing}
         onToggleEdit={onToggleEdit}
         onInsertImage={() => insertFileViaInput("image/*")}
+        onInsertCamera={() => insertFileViaInput("image/*", "environment")}
         onInsertAttachment={() => insertFileViaInput("")}
         onInsertAudio={() => insertFileViaInput("audio/*")}
         onInsertVideo={() => insertFileViaInput("video/*")}
