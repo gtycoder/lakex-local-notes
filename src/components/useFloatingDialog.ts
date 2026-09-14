@@ -10,19 +10,69 @@ interface DialogPoint {
   y: number;
 }
 
+export type ResizeDirection = "r" | "l" | "t" | "d" | "rd" | "rt" | "ld" | "lt";
+
 interface FloatingDialogOptions {
+  /** 本地持久化键：位置/尺寸只存本机 localStorage，**不进 S3**（对齐思源 LOCAL_DIALOGPOSITION 的本地语义）。 */
+  id: string;
   initialSize: DialogSize;
   minSize: DialogSize;
   maxWidth?: number;
 }
 
+interface StoredDialogState {
+  w: number;
+  h: number;
+  x: number;
+  y: number;
+}
+
+const STORE_KEY = "lake-notes-v3.dialog-states";
+const EDGE = 8;
+
+function readStore(): Record<string, StoredDialogState> {
+  try {
+    const raw = localStorage.getItem(STORE_KEY);
+    return raw ? (JSON.parse(raw) as Record<string, StoredDialogState>) : {};
+  } catch {
+    return {};
+  }
+}
+
+function writeStore(id: string, state: StoredDialogState): void {
+  try {
+    const store = readStore();
+    store[id] = state;
+    localStorage.setItem(STORE_KEY, JSON.stringify(store));
+  } catch {
+    // 隐私模式 / 存储被禁用：忽略，不影响弹窗使用
+  }
+}
+
 /**
- * 思源式轻量浮动窗口：默认居中，标题栏可拖动，右下角可拉伸。
- * 拖动过程中只直接更新 DOM，松手后才提交 React 状态，避免每帧重渲染。
+ * 思源式轻量浮动窗口：默认居中，标题栏可拖动，**8 个方向**可拉伸；位置/尺寸本地持久化（不进 S3）。
+ * 拖动/缩放过程中只直接更新 DOM，松手后才提交 React 状态，避免每帧重渲染。
  */
-export function useFloatingDialog({ initialSize, minSize, maxWidth = 1180 }: FloatingDialogOptions) {
-  const [size, setSize] = useState(initialSize);
-  const [position, setPosition] = useState<DialogPoint | null>(null);
+export function useFloatingDialog({ id, initialSize, minSize, maxWidth = 1180 }: FloatingDialogOptions) {
+  const [loaded] = useState(() => {
+    const maxW = Math.min(maxWidth, window.innerWidth - 32);
+    const maxH = Math.max(minSize.h, window.innerHeight - 32);
+    const fit = (size: DialogSize): DialogSize => ({
+      w: Math.min(maxW, Math.max(minSize.w, size.w)),
+      h: Math.min(maxH, Math.max(minSize.h, size.h)),
+    });
+    const stored = readStore()[id];
+    const size = fit(stored ? { w: stored.w, h: stored.h } : initialSize);
+    const position = stored
+      ? {
+          x: Math.min(Math.max(EDGE, stored.x), Math.max(EDGE, window.innerWidth - size.w - EDGE)),
+          y: Math.min(Math.max(EDGE, stored.y), Math.max(EDGE, window.innerHeight - size.h - EDGE)),
+        }
+      : null;
+    return { size, position };
+  });
+  const [size, setSize] = useState<DialogSize>(loaded.size);
+  const [position, setPosition] = useState<DialogPoint | null>(loaded.position);
   const panelRef = useRef<HTMLDivElement | null>(null);
   const interactionRef = useRef<"drag" | "resize" | null>(null);
 
@@ -31,6 +81,13 @@ export function useFloatingDialog({ initialSize, minSize, maxWidth = 1180 }: Flo
     maxH: Math.max(minSize.h, window.innerHeight - 32),
   }), [maxWidth, minSize.h]);
 
+  const persist = useCallback(() => {
+    const panel = panelRef.current;
+    if (!panel) return;
+    const rect = panel.getBoundingClientRect();
+    writeStore(id, { w: Math.round(rect.width), h: Math.round(rect.height), x: Math.round(rect.left), y: Math.round(rect.top) });
+  }, [id]);
+
   const startDrag = useCallback((event: ReactPointerEvent<HTMLElement>) => {
     if (event.button !== 0 || (event.target as HTMLElement).closest("button, input, textarea, select, a, [data-no-drag]")) return;
     const panel = panelRef.current;
@@ -38,6 +95,8 @@ export function useFloatingDialog({ initialSize, minSize, maxWidth = 1180 }: Flo
     event.preventDefault();
     event.stopPropagation();
     interactionRef.current = "drag";
+    // 关掉入场动画：它的 keyframes 强制 translate(-50%,-50%)，会覆盖拖拽用的 transform:none。
+    panel.style.animation = "none";
     const rect = panel.getBoundingClientRect();
     const startX = event.clientX;
     const startY = event.clientY;
@@ -53,14 +112,16 @@ export function useFloatingDialog({ initialSize, minSize, maxWidth = 1180 }: Flo
     panel.style.top = `${originY}px`;
     panel.style.transform = "none";
     const move = (ev: PointerEvent) => {
-      const nextX = Math.min(Math.max(8, originX + ev.clientX - startX), Math.max(8, window.innerWidth - panel.offsetWidth - 8));
-      const nextY = Math.min(Math.max(8, originY + ev.clientY - startY), Math.max(8, window.innerHeight - panel.offsetHeight - 8));
+      const nextX = Math.min(Math.max(EDGE, originX + ev.clientX - startX), Math.max(EDGE, window.innerWidth - panel.offsetWidth - EDGE));
+      const nextY = Math.min(Math.max(EDGE, originY + ev.clientY - startY), Math.max(EDGE, window.innerHeight - panel.offsetHeight - EDGE));
       panel.style.left = `${nextX}px`;
       panel.style.top = `${nextY}px`;
     };
     const up = (ev: PointerEvent) => {
       interactionRef.current = null;
-      setPosition({ x: panel.offsetLeft, y: panel.offsetTop });
+      const finalRect = panel.getBoundingClientRect();
+      setPosition({ x: Math.round(finalRect.left), y: Math.round(finalRect.top) });
+      persist();
       try { if (target.hasPointerCapture(ev.pointerId)) target.releasePointerCapture(ev.pointerId); } catch { /* best effort */ }
       window.removeEventListener("pointermove", move, true);
       window.removeEventListener("pointerup", up, true);
@@ -69,31 +130,58 @@ export function useFloatingDialog({ initialSize, minSize, maxWidth = 1180 }: Flo
     window.addEventListener("pointermove", move, true);
     window.addEventListener("pointerup", up, true);
     window.addEventListener("pointercancel", up, true);
-  }, []);
+  }, [persist]);
 
-  const startResize = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
+  const startResize = useCallback((event: ReactPointerEvent<HTMLElement>, direction: ResizeDirection) => {
     if (event.button !== 0) return;
     const panel = panelRef.current;
     if (!panel) return;
     event.preventDefault();
     event.stopPropagation();
     interactionRef.current = "resize";
+    // 同上：缩放的 left/top 锚定同样会被入场动画的 translate(-50%,-50%) 打乱。
+    panel.style.animation = "none";
     const target = event.currentTarget;
     try { target.setPointerCapture(event.pointerId); } catch { /* best effort */ }
     const startX = event.clientX;
     const startY = event.clientY;
-    const startW = panel.offsetWidth;
-    const startH = panel.offsetHeight;
+    const rect = panel.getBoundingClientRect();
+    const startW = rect.width;
+    const startH = rect.height;
+    const startLeft = rect.left;
+    const startTop = rect.top;
     const move = (ev: PointerEvent) => {
       const bounds = getBounds();
-      const w = Math.min(bounds.maxW, Math.max(minSize.w, startW + ev.clientX - startX));
-      const h = Math.min(bounds.maxH, Math.max(minSize.h, startH + ev.clientY - startY));
+      let w = startW;
+      let h = startH;
+      let left = startLeft;
+      let top = startTop;
+      if (direction.includes("r")) w = Math.min(bounds.maxW, Math.max(minSize.w, startW + ev.clientX - startX));
+      if (direction.includes("l")) {
+        w = Math.min(bounds.maxW, Math.max(minSize.w, startW - (ev.clientX - startX)));
+        left = startLeft + (startW - w);
+      }
+      if (direction.includes("d")) h = Math.min(bounds.maxH, Math.max(minSize.h, startH + ev.clientY - startY));
+      if (direction.includes("t")) {
+        h = Math.min(bounds.maxH, Math.max(minSize.h, startH - (ev.clientY - startY)));
+        top = startTop + (startH - h);
+      }
+      left = Math.min(Math.max(EDGE, left), Math.max(EDGE, window.innerWidth - w - EDGE));
+      top = Math.min(Math.max(EDGE, top), Math.max(EDGE, window.innerHeight - h - EDGE));
       panel.style.width = `${w}px`;
       panel.style.height = `${h}px`;
+      if (direction.includes("l") || direction.includes("t")) {
+        panel.style.left = `${left}px`;
+        panel.style.top = `${top}px`;
+        panel.style.transform = "none";
+      }
     };
     const up = (ev: PointerEvent) => {
       interactionRef.current = null;
-      setSize({ w: panel.offsetWidth, h: panel.offsetHeight });
+      const finalRect = panel.getBoundingClientRect();
+      setSize({ w: Math.round(finalRect.width), h: Math.round(finalRect.height) });
+      if (direction.includes("l") || direction.includes("t")) setPosition({ x: Math.round(finalRect.left), y: Math.round(finalRect.top) });
+      persist();
       try { if (target.hasPointerCapture(ev.pointerId)) target.releasePointerCapture(ev.pointerId); } catch { /* best effort */ }
       window.removeEventListener("pointermove", move, true);
       window.removeEventListener("pointerup", up, true);
@@ -102,12 +190,12 @@ export function useFloatingDialog({ initialSize, minSize, maxWidth = 1180 }: Flo
     window.addEventListener("pointermove", move, true);
     window.addEventListener("pointerup", up, true);
     window.addEventListener("pointercancel", up, true);
-  }, [getBounds, minSize.h, minSize.w]);
+  }, [getBounds, minSize.h, minSize.w, persist]);
 
   const panelStyle: CSSProperties = {
     width: size.w,
     height: size.h,
-    ...(position ? { left: position.x, top: position.y, transform: "none" } : {}),
+    ...(position ? { left: position.x, top: position.y, transform: "none", animation: "none" } : {}),
   };
 
   return {

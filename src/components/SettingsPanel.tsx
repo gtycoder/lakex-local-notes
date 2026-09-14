@@ -6,6 +6,7 @@ import type { CleanOrphanResult, DataHealthReport, S3GcPendingItem, S3Settings, 
 import type { GcDiagnostics } from "../core/gcDiagnostics";
 import { gcCutoffMs, parseIsoMs, pendingKeyReason } from "../core/gcPolicy";
 import { useFloatingDialog } from "./useFloatingDialog";
+import { DialogResizeHandles } from "./DialogResizeHandles";
 import { filterSettingsNav, searchSettingItems, type SettingItemEntry } from "./settingsSearch";
 import { getNativeErrorMessage } from "../lib/nativeErrors";
 
@@ -63,7 +64,7 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
   const [category, setCategory] = useState<SettingsCategory>(openCategory);
   const [navQuery, setNavQuery] = useState("");
   const navSearchRef = useRef<HTMLInputElement>(null);
-  const floating = useFloatingDialog({ initialSize: { w: 840, h: 600 }, minSize: { w: 620, h: 420 } });
+  const floating = useFloatingDialog({ id: "settings", initialSize: { w: 840, h: 600 }, minSize: { w: 620, h: 420 } });
 
   const [stats, setStats] = useState<{ snapshotCount: number; totalBytes: number } | null>(null);
   const [histCfg, setHistCfg] = useState<{ maxSnapshots: number; retentionDays: number; cleanupIntervalHours: number; snapshotIntervalMinutes: number } | null>(null);
@@ -927,7 +928,7 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
           </div>
         </div>
         {(syncMsg ?? diagMsg) && <p className="settings-statusbar">{syncMsg ?? diagMsg}</p>}
-        <div className="floating-dialog-resize" onPointerDown={floating.startResize} title="拖动调整大小" />
+        <DialogResizeHandles onResize={floating.startResize} />
       </div>
     </div>
   );

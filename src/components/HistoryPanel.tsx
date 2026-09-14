@@ -4,6 +4,7 @@ import { Camera, Clock, FileText, History, RotateCcw, Trash2, X } from "lucide-r
 import { native } from "../lib/native";
 import { createRequestVersion } from "../core/requestVersion";
 import { useFloatingDialog } from "./useFloatingDialog";
+import { DialogResizeHandles } from "./DialogResizeHandles";
 import { getNativeErrorMessage } from "../lib/nativeErrors";
 import { createLakeDocument, destroyLakeEditor, type LakeEditorInstance } from "../features/editor/lakeRuntime";
 import { addAssetAccessToken } from "../lib/assetPort";
@@ -41,7 +42,7 @@ export function HistoryPanel({ open, noteId, onClose, onRestored }: {
   const [inline, setInline] = useState<{ title: string; html: string; size?: number } | null>(null);
   const previewHostRef = useRef<HTMLDivElement>(null);
   const viewerRef = useRef<LakeEditorInstance | null>(null);
-  const floating = useFloatingDialog({ initialSize: { w: 900, h: 640 }, minSize: { w: 680, h: 440 } });
+  const floating = useFloatingDialog({ id: "history", initialSize: { w: 900, h: 640 }, minSize: { w: 680, h: 440 } });
   const dataVersionRef = useRef(createRequestVersion());
   const previewVersionRef = useRef(createRequestVersion());
 
@@ -323,7 +324,7 @@ export function HistoryPanel({ open, noteId, onClose, onRestored }: {
             )}
           </div>
         </div>
-        <div className="floating-dialog-resize" onPointerDown={floating.startResize} title="拖动调整大小" />
+        <DialogResizeHandles onResize={floating.startResize} />
       </section>
     </div>,
     document.body

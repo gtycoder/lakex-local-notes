@@ -4,6 +4,7 @@ import { ChevronRight, Folder, FileText, RotateCcw, Trash2, Trash, X } from "luc
 import { native } from "../lib/native";
 import { createRequestVersion } from "../core/requestVersion";
 import { useFloatingDialog } from "./useFloatingDialog";
+import { DialogResizeHandles } from "./DialogResizeHandles";
 import { getNativeErrorMessage } from "../lib/nativeErrors";
 import { createLakeDocument, destroyLakeEditor, type LakeEditorInstance } from "../features/editor/lakeRuntime";
 import { addAssetAccessToken } from "../lib/assetPort";
@@ -102,7 +103,7 @@ export function TrashPanel({ open, onClose, onChanged, onRestored }: {
   const [previewing, setPreviewing] = useState(false);
   // C1：回收站自动过期配置（trashAutoPurgeDays；0=关闭不显示倒计时/提示条）
   const [trashAutoPurgeDays, setTrashAutoPurgeDays] = useState<number | null>(null);
-  const floating = useFloatingDialog({ initialSize: { w: 1000, h: 640 }, minSize: { w: 740, h: 460 } });
+  const floating = useFloatingDialog({ id: "trash", initialSize: { w: 1000, h: 640 }, minSize: { w: 740, h: 460 } });
   const docsVersionRef = useRef(createRequestVersion());
   const previewVersionRef = useRef(createRequestVersion());
   const quickVersionRef = useRef(createRequestVersion());
@@ -337,7 +338,7 @@ export function TrashPanel({ open, onClose, onChanged, onRestored }: {
             ))}
           </div>
         )}
-        <div className="floating-dialog-resize" onPointerDown={floating.startResize} title="拖动调整大小" />
+        <DialogResizeHandles onResize={floating.startResize} />
       </section>
     </div>,
     document.body

@@ -1607,18 +1607,18 @@ ne-card[data-card-name="codeblock"] .ne-card-resizer-mask {
 .floating-dialog-header a {
   -webkit-app-region: no-drag;
 }
-.floating-dialog-resize {
-  position: absolute;
-  right: 2px;
-  bottom: 2px;
-  z-index: 3;
-  width: 20px;
-  height: 20px;
-  cursor: nwse-resize;
-  touch-action: none;
-}
-.floating-dialog-resize::before,
-.floating-dialog-resize::after {
+/* 8 向缩放手柄（对齐思源 dialog 的 .resize__r/l/t/d/rd/rt/ld/lt） */
+.floating-dialog-resize { position: absolute; z-index: 3; touch-action: none; }
+.floating-dialog-resize--r { top: 0; right: 0; width: 6px; height: 100%; cursor: ew-resize; }
+.floating-dialog-resize--l { top: 0; left: 0; width: 6px; height: 100%; cursor: ew-resize; }
+.floating-dialog-resize--t { top: 0; left: 0; width: 100%; height: 6px; cursor: ns-resize; }
+.floating-dialog-resize--d { bottom: 0; left: 0; width: 100%; height: 6px; cursor: ns-resize; }
+.floating-dialog-resize--rd { right: 2px; bottom: 2px; width: 20px; height: 20px; cursor: nwse-resize; }
+.floating-dialog-resize--ld { left: 2px; bottom: 2px; width: 20px; height: 20px; cursor: nesw-resize; }
+.floating-dialog-resize--rt { right: 2px; top: 2px; width: 20px; height: 20px; cursor: nesw-resize; }
+.floating-dialog-resize--lt { left: 2px; top: 2px; width: 20px; height: 20px; cursor: nwse-resize; }
+.floating-dialog-resize--rd::before,
+.floating-dialog-resize--rd::after {
   content: "";
   position: absolute;
   right: 4px;
@@ -1630,12 +1630,7 @@ ne-card[data-card-name="codeblock"] .ne-card-resizer-mask {
   transform: rotate(-45deg);
   transform-origin: right center;
 }
-.floating-dialog-resize::after {
-  right: 3px;
-  bottom: 8px;
-  width: 6px;
-  opacity: .72;
-}
+.floating-dialog-resize--rd::after { right: 3px; bottom: 8px; width: 6px; opacity: .72; }
 .settings-panel-large,
 .history-panel,
 .trash-panel {
