@@ -6,6 +6,7 @@ import type { OutlineMode } from "./OutlineController";
 import { OutlineList } from "./OutlineList";
 import { getOutlineTab, getOutlineTabsVersion, subscribeOutlineTabs } from "./registry";
 import { OUTLINE_HOVER_HIDE_DELAY_MS } from "./outlineInteraction";
+import { OUTLINE_SIDEBAR_DEFAULT_WIDTH } from "../../desktop/desktopTypes";
 
 function noopSubscribe(): () => void {
   return () => {};
@@ -317,6 +318,7 @@ export function OutlineSidebar({
           onPointerUp={finishResize}
           onPointerCancel={finishResize}
           onKeyDown={handleResizeKeyDown}
+          onDoubleClick={() => onWidthCommit(OUTLINE_SIDEBAR_DEFAULT_WIDTH)}
         />
       </div>
     </aside>
