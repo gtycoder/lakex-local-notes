@@ -126,7 +126,7 @@ export class SchemaInit {
     if (!cols.some((c) => c.name === "md_cache")) {
       this.ctx.db.exec("ALTER TABLE notes ADD COLUMN md_cache TEXT");
     }
-    // M1.6 文档/分组自定义图标（本地化，不进 manifest）
+    // M1.6 文档/分组自定义图标（**同步**：进 manifest icon 字段，两端 applyRemoteNoteMeta/listFoldersForSync；见 docs/STORAGE-LAYERS.md）
     const treeCols = this.ctx.db.prepare("PRAGMA table_info(tree_nodes)").all() as Array<{ name: string }>;
     if (!treeCols.some((c) => c.name === "icon")) {
       this.ctx.db.exec("ALTER TABLE tree_nodes ADD COLUMN icon TEXT");

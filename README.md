@@ -101,6 +101,7 @@ origin  git@gitee.com:gtycoder/local-lake.git
 | docs/PROGRESS.md                             | 历史会话全记录 + **经验总结（方法论/深层认识/工程实践）**（**过程记录**：当前状态/待办以 HANDOFF 为准） | 考古/复盘用       |
 | docs/DEVELOPMENT.md                          | 环境要求、开发/构建/打包命令、测试、依赖版本、提交历史                                    | 动手前读         |
 | docs/SYNC-PROTOCOL.md · docs/S3-GC-DESIGN.md | 同步协议 / GC 与保留链（**改同步、GC 前必读**，配合 AGENTS §3 原则 11\~13）           | 动同步必读        |
+| docs/STORAGE-LAYERS.md                       | 存储分层与「设备本地」契约（**新增持久化前必读**：哪些进 S3 / 哪些仅本地、三处同改规则）              | 加持久化前读       |
 | docs/TODO.md                                 | 历史待办总表（**可能过期**，权威待办 = HANDOFF §3）                              | 按需           |
 | docs/ARCHITECTURE.md                         | 进程结构、关键文件索引、图片数据流、数据与存储、S3 同步机制                                 | 改代码前读        |
 | docs/TROUBLESHOOTING.md                      | 踩过的坑（打包/CDN/剪贴板/编辑器与 CSS/环境/S3 + 虚拟渲染新坑）                        | 遇坑查          |

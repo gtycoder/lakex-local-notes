@@ -74,7 +74,8 @@ export class HistoryLifecycle {
     if (!fs.existsSync(lakePath)) return null;
     const body = content ?? fs.readFileSync(lakePath, "utf8");
     const hash = crypto.createHash("sha256").update(body).digest("hex");
-    // 恢复动作 force=true 强制写（即使同 hash，用 created_at 区分）；普通快照 24h 防抖
+    // force=true 只在"用户手动创建快照"这类显式意图下使用（同 hash 也写）；
+    // 自动快照 / 恢复前留档 / 云端覆盖留档都是 force=false，走 24h 同 hash 防抖。
     if (!force && this.hasRecentDuplicate(noteId, hash)) return null;
     const refs = [...extractAssetRefs(body)];
     const gz = this.gzipContent(body);
@@ -103,7 +104,7 @@ export class HistoryLifecycle {
   }
 
   /** 恢复历史版本。
-   * 1) 恢复前强制快照当前版本（可反悔，force=true 即使同 hash）
+   * 1) 恢复前留档当前版本（可反悔；同 hash 24h 内已有则跳过，避免重复）
    * 2) 解压写回 .lake + 更新缓存/FTS
    * 3) 重算 hash → setBaseHash + markSynced（恢复=新基线，非本地新修改，P0-1）
    */
