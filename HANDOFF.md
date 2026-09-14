@@ -26,6 +26,12 @@
 
 ## 2. 本轮已完成
 
+### 2.11 依赖升级批次（260914，A 档+B 档一次到位）
+- **Electron 43.4.0 → 44.3.0**（Chromium 152 / V8 15.2 / Node 24.20）：唯一破坏性影响 = clipboard 模块 W3C 化重构，`electron/ipc/registerNotes.ts` 两处已迁移（`writeImage` → `clipboard.write([ClipboardItem])`（PNG Blob）、`writeText` 改 await；渲染层本就走 `navigator.clipboard`，不受影响）。better-sqlite3 13 N-API 实测 44 运行时加载 OK，无需 rebuild。
+- 其余升级：electron-builder 26.15.3（--dir 打包冒烟通过）/ vitest 5.0.0（969/16 与基线持平）/ vite 8.3.0 / @vitejs/plugin-react 6.1.1 / sass 1.104.1 / sharp 0.35.4 / lucide-react 1.46.0（图标导入全兼容）/ @aws-sdk/client-s3 3.1131.0 / @capacitor 三件套 8.5.2（assembleDebug 通过）/ concurrently 10 / wait-on 9。**不动**：TypeScript 5.9.3（TS7 收益对本项目无感）、React 18.3.1（vendor lakex peerDeps 锁 ^18）、slate 0.116（闭源内核依赖链）、sql.js（移动端运行时已切原生 SQLite，仅测试 mock 用）。
+- **vendor 修复**：`vendor/npm/lakex-editor-react-component/package.json` 移除自带的 `postinstall: patch-package`（冗余且有害：它只在 vendor/node_modules 找 patch 目标，而该目录恒空；根 postinstall 才是真正生效路径。此前增量安装不触发，全量重装必炸）。
+- 坑：npm 的 allow-scripts 策略可能不跑 electron 的二进制下载，缺二进制时用 `ELECTRON_MIRROR=https://npmmirror.com/mirrors/electron/ npm rebuild electron` 补。
+
 ### 2.10 同步收敛修复 + 第三轮真实素材压测 + 安卓双修复（260910-260911，提交 2ecac39 / a18a95b）
 - **同步收敛三连修**（用户报「folder 的问题也解决了」那批，四端压测验证）：
   - **folder 墓碑跨端传播**（§3 旧待办 7 落地）：manifest 携带 folder 墓碑；收端子树移入回收站标 purged（行保留可恢复、不上传）；从未持有该目录的设备把远端删除学成 `deleted_notes(folder)` 墓碑防复活；`listFoldersForSync` 排除 purged 副本。

@@ -1,4 +1,4 @@
-import { app, BrowserWindow, clipboard, dialog, nativeImage, shell } from "electron";
+import { app, BrowserWindow, clipboard, ClipboardItem, dialog, nativeImage, shell } from "electron";
 import fs from "node:fs";
 import path from "node:path";
 import type { DraftJournal } from "../draftJournal.js";
@@ -177,20 +177,22 @@ export function registerNotesIpc(
     return { ok: true };
   });
   /** 复制资源文件绝对路径到系统剪贴板（孤儿/历史保护文件管理用）。 */
-  ipc.handle("copy_asset_path", (noteId: string, filename: string) => {
+  ipc.handle("copy_asset_path", async (noteId: string, filename: string) => {
     assertAttachmentSegments(noteId, filename);
     const full = path.join(store.noteAssetsPathFor(noteId), filename);
-    clipboard.writeText(full);
+    // Electron 44：clipboard 对齐 W3C 异步 API，await 确保 IPC 返回前已写入
+    await clipboard.writeText(full);
     return full;
   });
   /** 复制图片到系统剪贴板（粘贴到聊天/文档直接出图）。 */
-  ipc.handle("copy_asset_image", (noteId: string, filename: string) => {
+  ipc.handle("copy_asset_image", async (noteId: string, filename: string) => {
     assertAttachmentSegments(noteId, filename);
     const full = path.join(store.noteAssetsPathFor(noteId), filename);
     if (!fs.existsSync(full)) throw new IpcInputError("附件文件不存在（可能已清理）");
     const image = nativeImage.createFromPath(full);
     if (image.isEmpty()) throw new IpcInputError("该附件不是可复制的图片");
-    clipboard.writeImage(image);
+    // Electron 44：writeImage 已移除，改用 W3C ClipboardItem（MIME 制）写入 PNG
+    await clipboard.write([new ClipboardItem({ "image/png": new Blob([new Uint8Array(image.toPNG())], { type: "image/png" }) })]);
     return { ok: true };
   });
   /** 另存为：把单个附件复制到用户选择的位置。默认文件名优先用卡片展示名，缺失则随机（不再用内部时间戳名）。 */
