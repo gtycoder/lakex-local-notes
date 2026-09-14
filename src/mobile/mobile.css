@@ -256,7 +256,9 @@ body { font-family: BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino San
 .mobile-toast { position: fixed; left: 50%; top: 44%; transform: translate(-50%,-50%); background: var(--b3-tooltips-background, rgba(0,0,0,.78)); color: var(--b3-theme-on-primary); font-size: 14px; padding: 8px 16px; border-radius: var(--b3-border-radius); box-shadow: var(--b3-tooltips-shadow); z-index: var(--mobile-z-toast); max-width: 80%; text-align: center; }
 
 /* 新建知识库 Sheet */
-.mobile-sheet-mask { position: fixed; inset: 0; background: var(--b3-mask-background, rgba(0,0,0,.5)); opacity: .2; z-index: var(--mobile-z-sheet-mask); transition: opacity var(--mobile-duration-panel) linear; }
+/* 注意：遮罩与 sheet 是父子关系，绝不能给遮罩设元素 opacity——会把整张 sheet（含文字）一起压淡。
+   半透明放进背景色（等价于旧 opacity:.2 × 遮罩底色），sheet 保持完全清晰。 */
+.mobile-sheet-mask { position: fixed; inset: 0; background: color-mix(in srgb, var(--b3-mask-background, rgba(0,0,0,.5)) 20%, transparent); z-index: var(--mobile-z-sheet-mask); transition: opacity var(--mobile-duration-panel) linear; }
 .mobile-sheet { position: fixed; left: 0; right: 0; bottom: 0; background: var(--b3-theme-surface); border-radius: var(--b3-border-radius-b) var(--b3-border-radius-b) 0 0; box-shadow: var(--b3-dialog-shadow); z-index: var(--mobile-z-sheet); max-height: 90dvh; display: flex; flex-direction: column; scrollbar-width: none; }
 .mobile-sheet-grab { display: none; } /* 与 .mobile-sheet-head::before 的 grabber 重复，统一由头部提供（思源 sheet 口径） */
 .mobile-sheet-head { display: flex; align-items: center; justify-content: space-between; min-height: 56px; padding: 8px 8px 0 16px; border-bottom: 0; flex: 0 0 auto; position: relative; touch-action: none; }
@@ -288,6 +290,9 @@ body { font-family: BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino San
 .create-nb-emoji { font-size: 24px; }
 .create-nb-input { flex: 1; border: 1px solid var(--b3-border-color); border-radius: var(--b3-border-radius-b); padding: 12px 14px; font-size: 16px; outline: none; background: var(--b3-theme-background); color: var(--b3-theme-on-background); }
 .create-nb-input:focus { border-color: var(--lake-accent); }
+.create-nb-input::placeholder,
+.mobile-settings-form input::placeholder,
+.mobile-search-input::placeholder { color: var(--b3-theme-on-surface-light); opacity: 1; }
 
 .create-nb-emoji-picker { margin-top: 12px; }
 .create-nb-emoji-grid { display: grid; grid-template-columns: repeat(8, 1fr); gap: 4px; }
