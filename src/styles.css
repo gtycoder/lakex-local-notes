@@ -56,14 +56,13 @@ button { cursor: pointer; }
 .tree-item { min-width: 0; }
 .tree-row { grid-template-columns: 16px 22px minmax(0, 1fr) auto; min-height: 27px; gap: 4px; }
 /* 行内动作（⋯ = 右键菜单，＋ = 新建子文档，对齐思源 more-root/new）。
-   按钮**常显**（超长标题下也一定看得见），动作列只预留 36px（2×18，无间隙），把宽度尽量还给标题；
-   标题 minmax(0,1fr) + ellipsis 截断，永远不会盖住按钮。 */
-/* 动作默认 display:none —— 不占宽度、不逼标题缩略；只有行 hover/选中/聚焦时才出现并挤出位置，
+   默认隐藏不占宽度、不逼标题缩略；hover/键盘聚焦时才出现并挤出位置（选中态不常驻，用户 260914）。 */
+/* 动作默认 display:none —— 不占宽度、不逼标题缩略；只有行 hover/键盘聚焦时才出现并挤出位置，
    标题此时才被 ellipsis 截断（"需要展示时才缩略"，不是平白无故缩）。 */
 .tree-row-actions { display: none; align-items: center; justify-content: flex-end; background: inherit; }
-.tree-row:hover .tree-row-actions, .tree-row.active .tree-row-actions, .tree-row-actions:focus-within { display: inline-flex; }
-/* 关键：只在 hover/选中时才让标题缩略（block 让 ellipsis 生效）——平时不缩、hover 才缩给 ⋯/＋ 让位 */
-.tree-row:hover .note-row-copy strong, .tree-row.active .note-row-copy strong, .tree-row:focus-within .note-row-copy strong { display: block; overflow: hidden; text-overflow: ellipsis; }
+.tree-row:hover .tree-row-actions, .tree-row-actions:focus-within { display: inline-flex; } /* 仅 hover/键盘聚焦出现：选中态不再常驻（用户 260914） */
+/* 关键：只在动作按钮出现时才让标题缩略（block 让 ellipsis 生效）——平时不缩、hover 才缩给 ⋯/＋ 让位 */
+.tree-row:hover .note-row-copy strong, .tree-row:focus-within .note-row-copy strong { display: block; overflow: hidden; text-overflow: ellipsis; }
 .tree-row-action { display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; padding: 0; border: 0; border-radius: var(--radius-xs); background: transparent; color: var(--lake-text-tertiary); cursor: pointer; }
 /* 着重色只给"光标所在的那一个"按钮，不是行 hover 时两个一起亮 */
 .tree-row-action:hover { background: var(--lake-accent-soft); color: var(--lake-accent); }
