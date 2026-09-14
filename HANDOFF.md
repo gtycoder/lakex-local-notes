@@ -5,7 +5,8 @@
 > **§8 是移动端（安卓）专职交接**，由移动端会话维护；桌面会话不要改 §8，移动端会话不要改 §0-§7 之外的桌面文件。
 
 ## 0. 当前基线（新会话开工前）
-- **最新基线（2026-09-14）**：当前分支 **feat/drag-siyuan**，HEAD **e69d4a0**，工作区干净。它基于 feat/search-refactor（上一会话交接点，见文末「附：会话交接（2026-09-12）」），本会话在其上追加 **11 个提交**（见文末「附：会话交接（2026-09-14）」）。**未推送、未合 master**（待用户验收）。
+- **最新基线（2026-09-14 晚）**：分支 **polish/ui-ux-260914**（从 **master @83feda7** 切出，drag-siyuan 已合入 master），工作区干净。本轮做「桌面 + 移动全量 UI/交互/动效审计 + 第一批优化」，见 **§2.37**。**未推送、未合 master**（待用户验收）。
+- 上一基线：feat/drag-siyuan @e69d4a0（含 11 个提交，见文末「附：会话交接（2026-09-14）」）+ 260914 依赖升级两个提交（05bf8ee / 83feda7，即 §2.11）——两者均已合入 master。
 - 历史基线：refactor/store-split 8 commits（store.ts 2352→1103 行，见 §3.6）+ 260911 批次（2ecac39 同步收敛 / a18a95b 安卓 AssetServer 403 + Dock IME）已并入本分支祖先；feat/search-refactor（统一 FTS5(unicode61)+单字预分词+增量账本，§2.11–§2.14）在其上。
 - 质量门槛：tsc 0 error · vitest **969 passed / 16 skipped**（2026-09-14）· 桌面 vite build + 移动 vite build -c vite.mobile.config.ts 全绿 · Android assembleDebug + adb install -r 通过（计数变动见 §2；别把数字写回 AGENTS/README）。
 - **真机级验收（260910-260911，三轮）**：
@@ -309,6 +310,37 @@
 - **移动端新增**：长按菜单加 复制 / 属性（历史版本原有）。bridge 补 `duplicateNote/getNoteInfo/readAssetPreview/previewHistorySnapshot/openAttachment`；`MobileApp` 的 lakeNative 调试契约同步加。
 - **修复**：移动端 `noteRepository.readNote` 的 SQL **漏 select `parent_id`** → 属性父级链恒为空、复制的副本丢父级；已补列。
 - 门禁：`tsc` 0 · vitest **951 passed / 16 skipped** · 双端 `vite build`。实测：桌面菜单顺序 ✓、属性新字段 ✓、拖拽 720×640→860×740 ✓；移动端长按菜单 ✓、复制（含父级继承）✓、属性弹窗布局 ✓。
+
+### 2.37 UI/UX 全量审计 + 第一批优化（260914 晚，分支 `polish/ui-ux-260914`，未推送/未验收）
+> 玩法：CDP 真驱动桌面（9222）+ 安卓 WebView（9335，`adb` 截图取证），**先量再改**——过程中
+> 有多条"看起来是 bug"的判断（小记卡片留白、正文边距不对称、树行高不一致）经实测被撤回，别再凭截图下结论。
+
+**本轮已改（1 个提交 1a5592e，12 文件）**
+- **深色彻底统一**（根因：同一界面同时存在思源纯中性 `#1E1E1E/#2C2C2C/#2E3236` 与自有冷灰蓝两套黑，
+  设置弹窗的头部与内容都不是一个色系）。现在单一分层：窗口底 `#131519` → 卡片 `#1E2126` →
+  编辑纸 `#20242A` → 卡内块 `#262A31` → 抬起层 `#31363F`；`--b3-*` 表面别名与编辑器 `--lakex-*` 全部指向同一组值。
+  **坑**：`tokens.css` 的深色别名必须写字面值——移动端 `mobile-theme.css` 把 `--lake-*` 反向映射到 `--b3-*`，
+  写 `var(--lake-*)` 会成循环引用 → 变量失效 → 边框/文字回退成 `currentColor`（本轮踩到过，笔记本图标一度全变白）。
+  `mobile/main.tsx` 的 `tokens.css` import 也得晚于 `theme-midnight.css`。
+- **强调色收敛**：活动标签从"主色浅底 + 主色内描边 + 主色文字"三重信号 → 白卡 `--lake-raised` + 顶部 2px 主色指示线 +
+  中性墨色文字；左侧 rail 选中去实心主色与蓝色投影；`.seg` 按 AGENTS §3 #14 改「轨道 + 浮起滑块」；
+  移动端 dock 的 `+` 展开态由实心主色圆 → 主色浅底 + 主色图标；移动端设置行图标由"整列蓝色" → 中性墨色。
+- **暗色下的白条 bug**：历史/回收站面板头部原写死 `rgba(250,250,251,.94) !important`（深色下顶一条白条）→ 改 `--lake-surface`。
+- 状态栏字号 10px → 11px；搜索面板去三重重复文案；移动端书架行「名称折两行导致 N 篇错位」→ 名称块固定两行高；
+  书架封面由"饱和色渐变冲淡"→ 中性卡 + 淡色图标徽章（深色下原先是土黄/橄榄，发脏）。
+- `prefers-reduced-motion` 不再一刀切 1ms（保留透明度/颜色过渡，只去位移缩放）+ 补 `prefers-reduced-transparency`。
+- 门禁：tsc 0 · vitest **969 passed / 16 skipped** · 桌面 + 移动 build 绿 · APK 安装并实机（模拟器）复验。
+
+**本轮审计结论（未改，等用户拍板，见会话提问）**
+1. **移动端首层排版**：知识库 4 列彩色书架；「最近文档」是 5 张一模一样的「纸片线条 + 回形针」插画卡（深色下像空盒子）。
+2. **移动端系统栏**：`styles.xml` 写死 `windowLightStatusBar=true`、状态栏背景透明而 WebView 只占 `screenY=128` 以下，
+   深色下顶部/底部系统栏仍是浅色。修它要动原生（`@capacitor/status-bar` 或 MainActivity 里加一个 setSystemBarTheme 桥），
+   属需用户确认的改动面。
+3. **代码健康**：`--shell-*`（styles.css 两个 `:root` 块）与 `--lake-*` 是两套重复令牌
+   （`--shell-text-secondary #5f6368` vs `--lake-text-secondary #4d5a70`；`--shell-accent-strong #2f47b8` vs `--lake-accent #3b5bdb`），
+   且 `--shell-material/#eff1f6` 在深色下没有覆盖。建议后续收敛成一套（本轮只动了可见问题，未做大规模令牌合并）。
+4. **移动端阅读态底部留白**：`.mobile-doc-body` 固定 `padding-bottom: 40px`，而底部胶囊栏高 48px + 离底约 32px，
+   理论上末 1~2 行可能压不到栏上方（本轮未实测到底，留待下一轮量准再改）。
 
 ## 3. 真正的待办（已剔除全部完成项，按优先级）
 > **260904 后续评估（用户决策 + 本轮核实）**：原 §3.1 对象级 5xx 重试、§3.2 快照 gzip 异步化、§3.5 笔记本 `sort_order` 撞号 —— **已评估不做**（5xx 有"失败不 markSynced→下轮重扫"兜底；gzip 异步收益小；sort_order 撞号场景极低）。
