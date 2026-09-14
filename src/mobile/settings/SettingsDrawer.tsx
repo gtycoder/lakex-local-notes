@@ -181,11 +181,9 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
           {view === "editor" && (
             <Group title="编辑器" icon={<ListTree size={16} />}>
               <Item itemId="editor-font-size" name="正文字号" desc="作用于当前文档正文。">
-                <Seg ariaLabel="正文字号">
-                  {fontSizeOptions().map((fs) => (
-                    <button key={fs} className={"b3-button b3-button--outline seg__item" + (settings.fontSize === fs ? " is-active" : "")} onClick={() => update({ fontSize: fs })}>{fs}</button>
-                  ))}
-                </Seg>
+                <select className="b3-select" value={settings.fontSize} onChange={(e) => update({ fontSize: Number(e.target.value) })} aria-label="正文字号">
+                  {fontSizeOptions().map((fs) => <option key={fs} value={fs}>{fs} px</option>)}
+                </select>
               </Item>
               <Item itemId="editor-max-open-tabs" name="最大同时打开标签数" desc="超过上限自动关闭最旧的标签。">
                 <select className="b3-select fn__size200" value={settings.maxOpenTabs} onChange={(e) => update({ maxOpenTabs: Number(e.target.value) })} aria-label="最大同时打开标签数">

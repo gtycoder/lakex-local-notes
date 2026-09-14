@@ -4,6 +4,11 @@
 /* 指示线微入场（桌面 .ln-tabs / 移动端 .mobile-htab 共用；小元素 transform 动画） */
 @keyframes ln-indicator-in { from { transform: scaleX(0); } to { transform: scaleX(1); } }
 
+/* 阅读态正文字号跟随设置（lakeRuntime 把 prefsSize 挂在 .lake-editor-mount 根；
+   vendor 对 .ne-viewer/.ne-viewer-body 写死 14px，两层都要恢复继承——阅读/编辑同源） */
+.lake-editor-mount .ne-viewer,
+.lake-editor-mount .ne-viewer-body { font-size: inherit; }
+
 :root {
   /* 正文墨色：lakex 浅色默认偏灰，统一到品牌墨色（与 --lake-text 同源） */
   --lakex-editor-text-body: #232838;

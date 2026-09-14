@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { ArrowLeft, LoaderCircle } from "lucide-react";
 import { bridge } from "../bridge";
 import { LakeEditor } from "../../features/editor/LakeEditor";
+import { loadSettings } from "../../lib/settings";
 
 export interface TrashPreviewPageProps {
   noteId: string;
@@ -68,7 +69,7 @@ export function TrashPreviewPage({ noteId, onBack, onRestored }: TrashPreviewPag
             mode="viewer"
             tocEnabled={false}
             onChange={() => undefined}
-            prefs={{ fontSize: 18, showToolbar: false, disableVirtualRendering: true }}
+            prefs={{ fontSize: loadSettings().fontSize, showToolbar: false, disableVirtualRendering: true }}
           />
         )}
       </section>

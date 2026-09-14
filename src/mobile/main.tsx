@@ -9,6 +9,7 @@ import "../features/attachment/attachment-preview.css";
 import "../styles/tokens.css"; // 复用桌面设计令牌（--lake-*）+ focus-visible + reduced-motion
 import "../b3/theme-daylight.css"; // 思源 daylight --b3-* 令牌（视觉层移植，AGPL-3.0）
 import "../b3/theme-midnight.css"; // 思源 midnight 令牌，作用于 [data-theme="dark"]
+import "../b3/dark.css";           // 深色下 lakex 编辑器变量（正文/代码块/边框）——移动端此前缺失导致深色正文发灰
 import "../b3/siyuan.scss";         // 思源组件类 .b3-* / config-*（精仿思源，AGPL-3.0）
 import "../styles/overlays.css";    // 浮层通用件（seg/badge/ln-*）：与桌面同序，须晚于 siyuan.scss（否则 seg 选中态被 b3-button--outline 压掉）
 import "./editor/editor-dock.css";

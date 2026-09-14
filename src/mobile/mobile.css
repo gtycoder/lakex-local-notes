@@ -152,11 +152,11 @@ body { font-family: BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino San
 .doc-card__name { font-size: 12.5px; line-height: 1.35; color: var(--b3-theme-on-surface); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; word-break: break-word; }
 .doc-card__date { font-size: 12px; color: var(--b3-theme-on-surface-light); font-variant-numeric: tabular-nums; }
 
-/* —— 笔记本书架（简约书卡：序号角标 + 图标 + 名称 + 文档数） —— */
-.nb-shelf { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px 12px; padding: 4px 14px 22px; }
+/* —— 笔记本书架（简约书卡：序号角标 + 图标 + 名称 + 文档数；4 列紧凑，用户反馈书卡过大） —— */
+.nb-shelf { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px 10px; padding: 4px 14px 22px; }
 .nb-shelf-card { display: flex; flex-direction: column; cursor: pointer; -webkit-tap-highlight-color: transparent; }
 .nb-shelf-cover {
-  position: relative; aspect-ratio: 3 / 4; border-radius: 14px;
+  position: relative; aspect-ratio: 3 / 3.8; border-radius: 10px;
   background: linear-gradient(158deg, color-mix(in srgb, var(--nb-accent) 14%, var(--b3-theme-surface)) 0%, var(--b3-theme-surface) 56%, var(--b3-theme-background) 100%);
   border: 1px solid color-mix(in srgb, var(--nb-accent) 14%, var(--b3-border-color));
   box-shadow: none;
@@ -164,11 +164,12 @@ body { font-family: BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino San
   transition: transform var(--mobile-duration-press) var(--mobile-ease-panel);
 }
 .nb-shelf-card:active .nb-shelf-cover { transform: scale(.965); }
-.nb-shelf-index { position: absolute; top: 9px; left: 11px; font-size: 11px; font-weight: 600; letter-spacing: .06em; color: color-mix(in srgb, var(--nb-accent) 68%, var(--b3-theme-on-surface-light)); font-variant-numeric: tabular-nums; }
-.nb-shelf-glyph { display: flex; align-items: center; justify-content: center; width: 58px; height: 58px; border-radius: 18px; background: color-mix(in srgb, var(--nb-accent) 16%, transparent); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--nb-accent) 10%, transparent); }
-.nb-shelf-emoji { font-size: 29px; line-height: 1; }
+.nb-shelf-index { position: absolute; top: 7px; left: 9px; font-size: 10.5px; font-weight: 600; letter-spacing: .06em; color: color-mix(in srgb, var(--nb-accent) 68%, var(--b3-theme-on-surface-light)); font-variant-numeric: tabular-nums; }
+.nb-shelf-glyph { display: flex; align-items: center; justify-content: center; width: 42px; height: 42px; border-radius: 13px; background: color-mix(in srgb, var(--nb-accent) 16%, transparent); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--nb-accent) 10%, transparent); }
+.nb-shelf-emoji { font-size: 22px; line-height: 1; }
 .nb-shelf-line { color: color-mix(in srgb, var(--nb-accent) 82%, var(--b3-theme-on-surface)); }
-.nb-shelf-name { margin-top: 9px; font-size: 13px; font-weight: 500; line-height: 1.35; color: var(--b3-theme-on-surface); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; word-break: break-word; }
+.nb-shelf-line > svg { width: 22px; height: 22px; }
+.nb-shelf-name { margin-top: 8px; font-size: 12.5px; font-weight: 500; line-height: 1.35; color: var(--b3-theme-on-surface); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; word-break: break-word; }
 .nb-shelf-count { margin-top: 2px; font-size: 12px; color: var(--b3-theme-on-surface-light); font-variant-numeric: tabular-nums; }
 .nb-shelf-card:nth-child(6n+1) { --nb-accent: #5b8def; }
 .nb-shelf-card:nth-child(6n+2) { --nb-accent: #dfa03c; }

@@ -557,6 +557,9 @@ export function createLakeDocument(
   element.replaceChildren(mount);
 
   const prefsSize = typeof prefs?.fontSize === "number" ? prefs.fontSize : 18;
+  // viewer（阅读态）内核不消费 defaultFontsize，落回自身 14px 默认——字号挂到 mount 根，
+  // 阅读/编辑两态同源继承（设置里的正文字号此前在移动端阅读态从未生效）。
+  mount.style.fontSize = `${prefsSize}px`;
   const customOptions: Record<string, unknown> = {
     // 编辑态不禁用 emoji 插件：unicodeEmoji 卡片的表情选择器依赖其默认数据，
     // 禁用后选择器渲染为空（0x0）。Viewer 仍保持纯只读。

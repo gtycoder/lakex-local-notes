@@ -11,6 +11,7 @@ import "lakex-editor-react-component/style.css";
 import { OutlineSheet } from "./OutlineSheet";
 import { DocListSheet, type DocListItem } from "./DocListSheet";
 import { lakeBridge } from "../../features/editor/lakeRuntime";
+import { loadSettings } from "../../lib/settings";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { LakeEditor } from "../../features/editor/LakeEditor";
 import type { LakeEditorInstance, LakeEditorPrefs } from "../../features/editor/lakeRuntime";
@@ -117,7 +118,7 @@ export function DocumentEditor(props: DocumentEditorProps) {
             editorRef.current = editor;
             onEditorInstance?.(editor);
           }}
-          prefs={{ fontSize: 18, showToolbar: !editing, disableVirtualRendering: true, attachment: attachmentPrefs }}
+          prefs={{ fontSize: loadSettings().fontSize, showToolbar: !editing, disableVirtualRendering: true, attachment: attachmentPrefs }}
         />
       </section>
       {/* 编辑态底部 dock（app 化工具栏，悬浮输入法上方；替代 Lake 桌面样式原生工具栏） */}

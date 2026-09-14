@@ -496,11 +496,9 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
               <>
                 <Group title="编辑器" icon={<Type size={16} />}>
                   <Item itemId="editor-font-size" name="正文字号" desc="作用于当前文档正文。">
-                    <Seg ariaLabel="正文字号">
-                      {fontSizeOptions().map((fs) => (
-                        <button key={fs} className={`b3-button b3-button--outline seg__item ${settings.fontSize === fs ? "is-active" : ""}`} onClick={() => onChange({ fontSize: fs })}>{fs}</button>
-                      ))}
-                    </Seg>
+                    <select className="b3-select fn__size200" value={settings.fontSize} onChange={(e) => onChange({ fontSize: Number(e.target.value) })} aria-label="正文字号">
+                      {fontSizeOptions().map((fs) => <option key={fs} value={fs}>{fs} px</option>)}
+                    </select>
                   </Item>
                   <Switch itemId="editor-outline-enhance" name="大纲增强" desc="开启=应用自建增强大纲（筛选/折叠/级别徽标/悬停；桌面右栏）；关闭（默认）=直接使用 Lake 原生大纲。移动端始终使用应用大纲面板。" checked={settings.outlineEnhance} onChange={(e) => onChange({ outlineEnhance: e.target.checked })} />
                 </Group>
