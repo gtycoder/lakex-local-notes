@@ -22,6 +22,7 @@
   --lake-text-tertiary: #5a6880; /* 再加深一档（约 5.6 对比），仍与 secondary 分层 */
   --lake-accent: #3b5bdb;
   --lake-accent-soft: #edf0fd;
+  --lake-accent-soft-strong: #dce3fb; /* 小控件（树行 ⋯/＋/展开三角）hover 着重：比 soft 重一档，可感知（用户 260914） */
   --lake-sync-pending: #b7771e;
   --lake-sync-success: #368a61;
   --lake-error: #c94a43;
@@ -51,6 +52,7 @@
   --lake-text-tertiary: #9aa4b2; /* 深底 AA 5.70 */
   --lake-accent: #7a90ea;
   --lake-accent-soft: rgba(122, 144, 234, .18);
+  --lake-accent-soft-strong: rgba(122, 144, 234, .34); /* 深色小控件 hover 着重 */
   --lake-sync-pending: #e4af5e;
   --lake-sync-success: #63c47b;
   --lake-error: #f08078;

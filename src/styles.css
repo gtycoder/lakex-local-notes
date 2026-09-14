@@ -58,10 +58,10 @@ button { cursor: pointer; }
    默认 display:none 不占宽度；hover/键盘聚焦时才出现并挤出位置（选中态不常驻，用户 260914）。
    标题恒单行、列宽处直接裁切不打省略号（见 .note-row-copy strong）。 */
 .tree-row-actions { display: none; align-items: center; justify-content: flex-end; background: inherit; }
-.tree-row:hover .tree-row-actions, .tree-row-actions:focus-within { display: inline-flex; }
+.tree-row:hover .tree-row-actions, .tree-row-actions:has(:focus-visible) { display: inline-flex; } /* 仅行 hover / 键盘聚焦可见；鼠标点击后的残余 focus 不再钉住动作（用户 260914） */
 .tree-row-action { display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; padding: 0; border: 0; border-radius: var(--radius-xs); background: transparent; color: var(--lake-text-tertiary); cursor: pointer; }
-/* 着重色只给"光标所在的那一个"按钮，不是行 hover 时两个一起亮 */
-.tree-row-action:hover { background: var(--lake-accent-soft); color: var(--lake-accent); }
+/* 着重色只给"光标所在的那一个"按钮；用 soft-strong（比 soft 重一档）保证可感知（用户 260914） */
+.tree-row-action:hover { background: var(--lake-accent-soft-strong); color: var(--lake-accent); }
 .tree-row.type-notebook { min-height: 29px; margin-top: 1px; color: var(--lake-text); }
 .tree-row.type-notebook .note-row-copy strong { color: var(--lake-text); font-weight: 650; }
 .tree-row.type-group { color: var(--lake-text-secondary); }
@@ -74,7 +74,7 @@ button { cursor: pointer; }
 .tree-row.drop-after { box-shadow: inset 0 -2px 0 var(--lake-accent); }
 .tree-row.drop-inside { background: var(--lake-accent-soft); box-shadow: inset 0 0 0 1px var(--lake-accent); }
 .tree-chevron { display: flex; align-items: center; justify-content: center; width: 16px; height: 100%; padding: 0; border: 0; border-radius: var(--radius-xs); background: transparent; cursor: pointer; transition: transform var(--lake-motion-fast) var(--lake-ease-standard), background var(--lake-motion-fast) var(--lake-ease-standard), color var(--lake-motion-fast) var(--lake-ease-standard); }
-.tree-chevron:not(:disabled):hover { background: var(--lake-accent-soft); color: var(--lake-accent); } /* 与行内操作按钮同一套 hover 着重 */
+.tree-chevron:not(:disabled):hover { background: var(--lake-accent-soft-strong); color: var(--lake-accent); } /* 与行内操作按钮同一套 hover 着重 */
 .tree-chevron:disabled { cursor: default; }
 .tree-chevron.open { transform: rotate(90deg); }
 .tree-spacer { width: 14px; }
