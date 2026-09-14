@@ -10,6 +10,10 @@
   --mobile-bottom-safe-area: env(safe-area-inset-bottom, 0px);
   /* 思源动效：面板 150ms cubic-bezier(0,0,.2,1)；按压 80ms；遮罩 150ms linear */
   --mobile-ease-panel: cubic-bezier(0, 0, .2, 1);
+  /* 进入/退出统一用「强 ease-out」：抽屉原先进场用 ease-out、退场用思源 Material 曲线（起步慢），
+     一进一出两套手感；遮罩原先还是 linear。这里收敛成同一条曲线，退出也不再拖沓。
+     时长仍保持思源口径 150ms（面板/遮罩共用）。 */
+  --mobile-ease-out: cubic-bezier(.22, 1, .36, 1);
   --mobile-duration-panel: 150ms;
   --mobile-duration-press: 80ms;
   --mobile-mask: var(--b3-mask-background, rgba(0, 0, 0, .5));
@@ -392,9 +396,9 @@ body { font-family: BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino San
 @keyframes mobile-fade-in { from { opacity: 0; } to { opacity: 1; } }
 @keyframes mobile-drawer-in { from { transform: translateX(-100%); } to { transform: translateX(0); } }
 @keyframes mobile-sheet-in { from { transform: translateY(100%); } to { transform: translateY(0); } }
-.mobile-drawer-mask, .mobile-sheet-mask { animation: mobile-fade-in var(--mobile-duration-panel) ease-out; }
-.mobile-drawer { animation: mobile-drawer-in var(--mobile-duration-panel) cubic-bezier(.22, 1, .36, 1); }
-.mobile-sheet { animation: mobile-sheet-in var(--mobile-duration-panel) cubic-bezier(.22, 1, .36, 1); }
+.mobile-drawer-mask, .mobile-sheet-mask { animation: mobile-fade-in var(--mobile-duration-panel) var(--mobile-ease-out); }
+.mobile-drawer { animation: mobile-drawer-in var(--mobile-duration-panel) var(--mobile-ease-out); }
+.mobile-sheet { animation: mobile-sheet-in var(--mobile-duration-panel) var(--mobile-ease-out); }
 .mobile-htab { transition: color var(--mobile-duration-panel) var(--mobile-ease-panel); }
 .mobile-fab, .mobile-icon-btn, .mobile-drawer-item, .mobile-doc-row, .mobile-qcard { transition: background-color var(--mobile-duration-press) var(--mobile-ease-panel), transform var(--mobile-duration-press) var(--mobile-ease-panel); }
 .mobile-fab:active { transform: scale(.94); }
@@ -409,7 +413,7 @@ body { font-family: BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino San
 }
 
 /* ===== 设置页（左侧抽屉：非全屏 + 圆角投影 + 左滑跟手关闭） ===== */
-.mobile-settings-mask { position: fixed; inset: 0; z-index: var(--mobile-z-settings-mask); background: var(--mobile-mask); animation: mobile-fade-in 180ms ease-out; }
+.mobile-settings-mask { position: fixed; inset: 0; z-index: var(--mobile-z-settings-mask); background: var(--mobile-mask); animation: mobile-fade-in var(--mobile-duration-panel) var(--mobile-ease-out); }
 .mobile-settings-page {
   position: fixed; top: 0; bottom: 0; left: 0; width: min(86%, 360px); z-index: var(--mobile-z-settings);
   display: flex; flex-direction: column;
@@ -418,7 +422,10 @@ body { font-family: BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino San
   border-radius: 0 18px 18px 0;
   box-shadow: var(--lake-shadow-panel);
   overflow: hidden;
-  animation: mobile-drawer-in var(--mobile-duration-panel) cubic-bezier(.22, 1, .36, 1);
+  animation: mobile-drawer-in var(--mobile-duration-panel) var(--mobile-ease-out);
+  /* 跟手拖拽未达提交阈值时要「弹回去」：必须有自己的 transform transition，
+     否则 usePanelDrag 清掉内联 transform 的瞬间面板是硬跳回原位的（原先只有进入动画、没有 transition）。 */
+  transition: transform var(--mobile-duration-panel) var(--mobile-ease-out);
 }
 .mobile-settings-page.side-panel--swiping, .mobile-settings-mask.side-mask--swiping { transition: none; }
 /* 子页（点进某项）回到全屏，左上返回 */
@@ -537,7 +544,7 @@ body { font-family: BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino San
 }
 
 /* 左/右抽屉骨架（非全屏：宽度 min(86%,360px)、内侧圆角 + 投影，translateX 滑入；遮罩 z6） */
-.side-mask { position: fixed; inset: 0; z-index: var(--mobile-z-dock-mask); background: var(--mobile-mask); opacity: 0; visibility: hidden; transition: opacity var(--mobile-duration-panel) linear; }
+.side-mask { position: fixed; inset: 0; z-index: var(--mobile-z-dock-mask); background: var(--mobile-mask); opacity: 0; visibility: hidden; transition: opacity var(--mobile-duration-panel) var(--mobile-ease-out); }
 .side-mask--swiping { transition: none; will-change: opacity; }
 .side-mask.on { opacity: 1; visibility: visible; }
 .side-panel {
@@ -547,7 +554,7 @@ body { font-family: BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino San
   color: var(--b3-theme-on-surface);
   border-radius: 0 18px 18px 0;
   box-shadow: 0 12px 40px -12px rgba(0, 0, 0, .35);
-  transform: translateX(-100%); transition: transform var(--mobile-duration-panel) var(--mobile-ease-panel) 0ms;
+  transform: translateX(-100%); transition: transform var(--mobile-duration-panel) var(--mobile-ease-out) 0ms;
   will-change: transform;
   scrollbar-width: none;
 }

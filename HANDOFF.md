@@ -343,6 +343,24 @@
   深色下自动拿到深色值，不再出现"深底上深灰字"的隐患）；删掉 `:root` 里的重复声明。
 - 长路径文本加 `text-wrap: balance`（属性弹窗里第二行不再只剩 2 个字符的孤儿尾巴）。
 
+**第三批（同一分支追加）—— 清死声明 + 移动端动效一致性**
+- **浅色渐变字面值 → 令牌**：styles.css 里 5 处 `#e8ebf1/#eff1f6/#fafbfd` 起止点（rail / tab-bar /
+  quick-notes-pane / outline-sidebar / `--shell-unified-*`）实测**当前全被 `b3/base.css` 与 `quick-notes.css`
+  的 `!important` 覆盖**（深浅两套主题都不生效），换成 `var(--lake-shell)`/`--shell-material` + 新增
+  `--shell-gradient-top`（`color-mix(--lake-shell 45%, --lake-panel)`）后浅色只差 2~3 个色阶，
+  但深色下不会再冒浅色板——`.outline-sidebar` 是唯一真会踩到的（开「大纲增强」才挂载）。
+- `.orphan-list li` 的浅色描边 `#eff1f6` → `color-mix(--lake-text 8%)`（深色下原本是一条亮线）。
+- **移动端动效一致性**：新增 `--mobile-ease-out`，抽屉/遮罩/面板的**进入与退出改用同一条曲线**
+  （原先进入 `cubic-bezier(.22,1,.36,1)`、退出思源 Material `(0,0,.2,1)`、遮罩还是 `linear`；时长仍保持思源 150ms）。
+- **`.mobile-settings-page` 补上缺失的 transform transition**：跟手拖拽未达 1/3 阈值时，`usePanelDrag`
+  清掉内联 transform 会让面板**硬跳回原位**。实测修复后回弹序列 -26 → -7 → -2 → 0（150ms ease-out）。
+- **两条先前判断撤回（实测推翻，别再当问题）**：① 深色滚动条并不偏亮——`--b3-scroll-color` 深色是
+  `rgba(230,230,230,.2)`，主题感知正常；② 编辑区右上不是"游离方块"，是 Lake 的**标题小地图**（39px 轨道 +
+  当前标题高亮线）加滚动条拇指，功能正常。
+- **动效全量核对（确定性口径，逐元素读 computed transition）**：桌面/移动各关键交互时长均 ≤260ms、
+  用的是自定义 cubic-bezier，无 `transition: all` 实声明（`all 0s` 是未声明时的初值，不是问题）；
+  `.note-row` 的 250ms transform 属拖拽占用（按压反馈走 `filter:brightness`），不是按压动效。
+
 **本轮审计结论（未改，等用户拍板，见会话提问）**
 1. **移动端首层排版**：知识库 4 列彩色书架；「最近文档」是 5 张一模一样的「纸片线条 + 回形针」插画卡（深色下像空盒子）。
 2. ~~移动端系统栏~~ **✅ 已修（第二批）**；~~移动端阅读态底部留白~~ **✅ 已修（第二批）**；~~`--shell-*` 令牌重复~~ **✅ 已收敛（第二批）**。
