@@ -1,7 +1,8 @@
 /** 新建知识库 Sheet（§5：名称必填；默认图标不落库；自定义 Emoji 一次性提交 CreateNotebookInput）。 */
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { BookOpen, X } from "lucide-react";
 import { LAKE_EMOJI_GROUPS } from "../../lib/lakeEmojiGroups";
+import { useSwipeToClose } from "../ui/useSwipeToClose";
 
 export interface CreateNotebookSheetProps {
   open: boolean;
@@ -22,6 +23,8 @@ export function CreateNotebookSheet(props: CreateNotebookSheetProps) {
     () => (LAKE_EMOJI_GROUPS[0]?.emojis ?? []).slice(0, 24),
     []
   );
+  const sheetRef = useRef<HTMLDivElement>(null);
+  useSwipeToClose(sheetRef, () => { if (!saving) onClose(); }, open);
 
   if (!open) return null;
 
@@ -42,8 +45,8 @@ export function CreateNotebookSheet(props: CreateNotebookSheetProps) {
   };
 
   return (
-    <div className="mobile-sheet-mask" onClick={() => !saving && onClose()}>
-      <div className="mobile-sheet" onClick={(e) => e.stopPropagation()}>
+    <div className="mobile-sheet-mask" data-prevent-swipe onClick={() => !saving && onClose()}>
+      <div ref={sheetRef} className="mobile-sheet" data-prevent-swipe onClick={(e) => e.stopPropagation()}>
         <div className="mobile-sheet-grab" />
         <div className="mobile-sheet-head">
           <span className="mobile-sheet-title">基本信息</span>

@@ -13,6 +13,27 @@
   --mobile-duration-panel: 150ms;
   --mobile-duration-press: 80ms;
   --mobile-mask: var(--b3-mask-background, rgba(0, 0, 0, .5));
+  /* 移动端层叠层级令牌：浮层顺序的**唯一来源**，新浮层一律用这里的变量，别再写魔法数字。 */
+  --mobile-z-topbar: 3;
+  --mobile-z-dock-mask: 6;
+  --mobile-z-dock: 7;
+  --mobile-z-model-mask: 9;
+  --mobile-z-fab: 15;
+  --mobile-z-drawer-mask: 40;
+  --mobile-z-drawer: 45;
+  --mobile-z-settings-mask: 49;
+  --mobile-z-settings: 50;
+  --mobile-z-settings-preview: 55;
+  --mobile-z-toast: 60;
+  --mobile-z-sheet-mask: 70;
+  --mobile-z-sheet: 71;
+  --mobile-z-dropdown-mask: 71;
+  --mobile-z-dropdown: 72;
+  --mobile-z-menu-scrim: 80;
+  --mobile-z-menu: 81;
+  --mobile-z-dialog: 90;
+  --mobile-z-snackbar: 95;
+  --mobile-z-drag-ghost: 9999;
 }
 @media (max-width: 0px) { /* 占位：保持文件结构，勿删 */ }
 
@@ -36,7 +57,7 @@ body { font-family: BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino San
   margin-top: 8px;
   height: var(--mobile-topbar-height); background: var(--b3-theme-background);
   border-bottom: .5px solid var(--b3-theme-background-light);
-  position: sticky; top: 0; z-index: 3;
+  position: sticky; top: 0; z-index: var(--mobile-z-topbar);
 }
 .mobile-topbar-title { flex: 1; text-align: center; font-size: 17px; line-height: 30px; font-weight: 400; color: var(--b3-theme-on-background); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .mobile-topbar-actions { display: flex; gap: 0; }
@@ -181,7 +202,7 @@ body { font-family: BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino San
 .mobile-bottom-bar__item .bottom-bar-label { margin-top: 1px; font-size: 10px; line-height: 1; color: inherit; opacity: .8; }
 
 /* FAB */
-.mobile-fab-col { position: absolute; right: 12px; bottom: calc(var(--mobile-status-height) + var(--mobile-bar-gap) + var(--mobile-bottom-safe-area)); display: flex; flex-direction: column; gap: 10px; z-index: 15; }
+.mobile-fab-col { position: absolute; right: 12px; bottom: calc(var(--mobile-status-height) + var(--mobile-bar-gap) + var(--mobile-bottom-safe-area)); display: flex; flex-direction: column; gap: 10px; z-index: var(--mobile-z-fab); }
 .mobile-fab {
   width: 52px; height: 52px; border: none; border-radius: 50%; background: var(--b3-theme-primary); color: var(--b3-theme-on-primary);
   display: flex; align-items: center; justify-content: center; box-shadow: var(--b3-point-shadow); cursor: pointer;
@@ -225,18 +246,18 @@ body { font-family: BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino San
 .mobile-doc-body .ne-layout-mode-fixed .ne-editor-footer-box { max-width: 100% !important; padding-left: 0 !important; padding-right: 0 !important; }
 
 /* Drawer */
-.mobile-drawer-mask { position: fixed; inset: 0; background: var(--mobile-mask); z-index: 40; }
-.mobile-drawer { position: fixed; top: 0; bottom: 0; left: 0; width: 78%; max-width: 320px; background: var(--lake-panel); z-index: 45; display: flex; flex-direction: column; }
+.mobile-drawer-mask { position: fixed; inset: 0; background: var(--mobile-mask); z-index: var(--mobile-z-drawer-mask); }
+.mobile-drawer { position: fixed; top: 0; bottom: 0; left: 0; width: 78%; max-width: 320px; background: var(--lake-panel); z-index: var(--mobile-z-drawer); display: flex; flex-direction: column; }
 .mobile-drawer-head { padding: calc(26px + env(safe-area-inset-top, 0px)) 20px 16px; border-bottom: 1px solid var(--lake-border); font-size: 17px; font-weight: 600; }
 .mobile-drawer-item { display: flex; align-items: center; gap: 12px; padding: 14px 20px; font-size: 15px; cursor: pointer; }
 .mobile-drawer-item:active { background: var(--lake-shell); }
 
 /* Toast */
-.mobile-toast { position: fixed; left: 50%; top: 44%; transform: translate(-50%,-50%); background: var(--b3-tooltips-background, rgba(0,0,0,.78)); color: var(--b3-theme-on-primary); font-size: 14px; padding: 8px 16px; border-radius: var(--b3-border-radius); box-shadow: var(--b3-tooltips-shadow); z-index: 60; max-width: 80%; text-align: center; }
+.mobile-toast { position: fixed; left: 50%; top: 44%; transform: translate(-50%,-50%); background: var(--b3-tooltips-background, rgba(0,0,0,.78)); color: var(--b3-theme-on-primary); font-size: 14px; padding: 8px 16px; border-radius: var(--b3-border-radius); box-shadow: var(--b3-tooltips-shadow); z-index: var(--mobile-z-toast); max-width: 80%; text-align: center; }
 
 /* 新建知识库 Sheet */
-.mobile-sheet-mask { position: fixed; inset: 0; background: var(--b3-mask-background, rgba(0,0,0,.5)); opacity: .2; z-index: 70; transition: opacity var(--mobile-duration-panel) linear; }
-.mobile-sheet { position: fixed; left: 0; right: 0; bottom: 0; background: var(--b3-theme-surface); border-radius: var(--b3-border-radius-b) var(--b3-border-radius-b) 0 0; box-shadow: var(--b3-dialog-shadow); z-index: 71; max-height: 90dvh; display: flex; flex-direction: column; scrollbar-width: none; }
+.mobile-sheet-mask { position: fixed; inset: 0; background: var(--b3-mask-background, rgba(0,0,0,.5)); opacity: .2; z-index: var(--mobile-z-sheet-mask); transition: opacity var(--mobile-duration-panel) linear; }
+.mobile-sheet { position: fixed; left: 0; right: 0; bottom: 0; background: var(--b3-theme-surface); border-radius: var(--b3-border-radius-b) var(--b3-border-radius-b) 0 0; box-shadow: var(--b3-dialog-shadow); z-index: var(--mobile-z-sheet); max-height: 90dvh; display: flex; flex-direction: column; scrollbar-width: none; }
 .mobile-sheet-grab { display: none; } /* 与 .mobile-sheet-head::before 的 grabber 重复，统一由头部提供（思源 sheet 口径） */
 .mobile-sheet-head { display: flex; align-items: center; justify-content: space-between; min-height: 56px; padding: 8px 8px 0 16px; border-bottom: 0; flex: 0 0 auto; position: relative; touch-action: none; }
 .mobile-sheet-head::before { content: ""; position: absolute; top: 5px; left: calc(50% - 16px); width: 32px; height: 4px; border-radius: 2px; background-color: var(--b3-theme-on-surface-light); opacity: .45; }
@@ -247,8 +268,8 @@ body { font-family: BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino San
 .mobile-sheet-empty { text-align: center; color: var(--b3-theme-on-surface-light); padding: 24px 0; font-size: 14px; }
 
 /* 笔记本切换下拉（锚定右上角按钮，跟手弹出） */
-.mobile-dropdown-mask { position: fixed; inset: 0; z-index: 71; background: transparent; }
-.mobile-dropdown { position: fixed; z-index: 72; min-width: 180px; max-width: 260px; background: var(--b3-menu-background, var(--b3-theme-surface)); border: 1px solid var(--b3-theme-surface-lighter); border-radius: var(--b3-border-radius-b); box-shadow: var(--b3-dialog-shadow); overflow: hidden; animation: mobile-dropdown-in var(--mobile-duration-panel) var(--mobile-ease-panel); }
+.mobile-dropdown-mask { position: fixed; inset: 0; z-index: var(--mobile-z-dropdown-mask); background: transparent; }
+.mobile-dropdown { position: fixed; z-index: var(--mobile-z-dropdown); min-width: 180px; max-width: 260px; background: var(--b3-menu-background, var(--b3-theme-surface)); border: 1px solid var(--b3-theme-surface-lighter); border-radius: var(--b3-border-radius-b); box-shadow: var(--b3-dialog-shadow); overflow: hidden; animation: mobile-dropdown-in var(--mobile-duration-panel) var(--mobile-ease-panel); }
 .mobile-dropdown-title { padding: 8px 14px; font-size: 13px; font-weight: 600; color: var(--b3-theme-on-surface-light); border-bottom: .5px solid var(--b3-theme-background-light); }
 .mobile-dropdown-body { padding: 6px 0; max-height: 320px; overflow-y: auto; }
 .mobile-dropdown-body .b3-list-item { width: 100%; text-align: left; border-radius: 0; }
@@ -375,9 +396,9 @@ body { font-family: BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino San
 }
 
 /* ===== 设置页（左侧抽屉：非全屏 + 圆角投影 + 左滑跟手关闭） ===== */
-.mobile-settings-mask { position: fixed; inset: 0; z-index: 49; background: var(--mobile-mask); animation: mobile-fade-in 180ms ease-out; }
+.mobile-settings-mask { position: fixed; inset: 0; z-index: var(--mobile-z-settings-mask); background: var(--mobile-mask); animation: mobile-fade-in 180ms ease-out; }
 .mobile-settings-page {
-  position: fixed; top: 0; bottom: 0; left: 0; width: min(86%, 360px); z-index: 50;
+  position: fixed; top: 0; bottom: 0; left: 0; width: min(86%, 360px); z-index: var(--mobile-z-settings);
   display: flex; flex-direction: column;
   background: var(--b3-theme-background, var(--lake-shell));
   color: var(--b3-theme-on-background, var(--lake-text));
@@ -434,7 +455,7 @@ body { font-family: BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino San
 .mobile-settings-content .config-block { padding: 12px 16px; }
 
 /* 设置→回收站（总回收站：笔记+小记合并）+ 内嵌只读预览浮层 */
-.mobile-settings-preview { position: fixed; inset: 0; z-index: 55; background: var(--b3-theme-background, var(--lake-shell)); display: flex; }
+.mobile-settings-preview { position: fixed; inset: 0; z-index: var(--mobile-z-settings-preview); background: var(--b3-theme-background, var(--lake-shell)); display: flex; }
 .mobile-settings-preview .mobile-document { flex: 1 1 auto; }
 .mobile-trash-list { padding-top: 4px; }
 .mobile-trash-empty { padding: 40px 24px; text-align: center; color: var(--b3-theme-on-surface, var(--lake-text-tertiary)); font-size: 14px; }
@@ -502,11 +523,11 @@ body { font-family: BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino San
 }
 
 /* 左/右抽屉骨架（非全屏：宽度 min(86%,360px)、内侧圆角 + 投影，translateX 滑入；遮罩 z6） */
-.side-mask { position: fixed; inset: 0; z-index: 6; background: var(--mobile-mask); opacity: 0; visibility: hidden; transition: opacity var(--mobile-duration-panel) linear; }
+.side-mask { position: fixed; inset: 0; z-index: var(--mobile-z-dock-mask); background: var(--mobile-mask); opacity: 0; visibility: hidden; transition: opacity var(--mobile-duration-panel) linear; }
 .side-mask--swiping { transition: none; will-change: opacity; }
 .side-mask.on { opacity: 1; visibility: visible; }
 .side-panel {
-  position: fixed; top: 0; bottom: 0; left: 0; width: min(86%, 360px); z-index: 7;
+  position: fixed; top: 0; bottom: 0; left: 0; width: min(86%, 360px); z-index: var(--mobile-z-dock);
   display: flex; flex-direction: column; overflow: hidden;
   background: var(--b3-theme-surface);
   color: var(--b3-theme-on-surface);
@@ -556,7 +577,7 @@ body { font-family: BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino San
 .ln-indent[data-depth="5"], .ln-indent[data-depth="6"], .ln-indent[data-depth="7"] { --ln-indent: 92px; padding-left: 92px; }
 
 /* 全屏 tab 列表（思源 #model） */
-.mobile-model-mask { position: fixed; inset: 0; z-index: 9; background: var(--mobile-mask); display: flex; align-items: flex-end; }
+.mobile-model-mask { position: fixed; inset: 0; z-index: var(--mobile-z-model-mask); background: var(--mobile-mask); display: flex; align-items: flex-end; }
 .mobile-model { width: 100%; max-width: 480px; margin: 0 auto; max-height: 80%; display: flex; flex-direction: column; background: var(--b3-theme-background, var(--lake-shell)); border-radius: var(--b3-border-radius-b) var(--b3-border-radius-b) 0 0; overflow: hidden; scrollbar-width: none; animation: mobile-sheet-in var(--mobile-duration-panel) var(--mobile-ease-panel); }
 .mobile-model-head { display: flex; align-items: center; justify-content: space-between; min-height: var(--mobile-topbar-height); padding: 8px 8px 8px 16px; border-bottom: .5px solid var(--b3-theme-background-light); }
 .mobile-model-title { font-size: 16px; font-weight: 600; }
@@ -577,8 +598,8 @@ body { font-family: BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino San
 /* ===== 思源弹层口径接线（移动端）：sheet 菜单 / dialog 确认 / snackbar 提示 =====
    组件类本体来自 vendored 思源 _menu.scss / _dialog.scss / _snackbar.scss（AGPL-3.0，署名见 src/b3/siyuan.scss）；
    这里只补移动端需要的层叠顺序、56dvh 面板高度、进出场与图标盒，不改思源组件语义。 */
-.b3-menu__scrim { z-index: 80; }
-.b3-menu.ln-sheet { z-index: 81; height: 56dvh; max-height: 90dvh; }
+.b3-menu__scrim { z-index: var(--mobile-z-menu-scrim); }
+.b3-menu.ln-sheet { z-index: var(--mobile-z-menu); height: 56dvh; max-height: 90dvh; }
 .b3-menu.ln-sheet.is-open { transform: translateY(0); }
 /* 危险项（思源 _mobile.scss 的 .b3-menu__item--warning；该文件未 vendored，这里按同口径补齐） */
 .ln-sheet .b3-menu__item.b3-menu__item--warning { color: var(--b3-theme-error); }
@@ -590,11 +611,11 @@ body { font-family: BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino San
 .ln-sheet .b3-menu__label { flex: 1 1 auto; min-width: 0; }
 .ln-menu-note { flex: 0 0 auto; margin-left: 8px; font-size: 12px; color: var(--b3-theme-on-surface-light); }
 .ln-menu-head-action { margin-left: auto; display: inline-flex; align-items: center; }
-.b3-dialog { z-index: 90; }
+.b3-dialog { z-index: var(--mobile-z-dialog); }
 .b3-dialog__container.ln-confirm { width: 88vw; max-width: 340px; }
 .b3-button.ln-confirm__danger { background-color: var(--b3-theme-error); color: var(--b3-theme-on-primary); }
 .b3-button.ln-confirm__danger:hover { background-color: var(--b3-theme-error); }
-.b3-snackbars { z-index: 95; right: 16px; top: calc(16px + var(--mobile-top-safe-area)); }
+.b3-snackbars { z-index: var(--mobile-z-snackbar); right: 16px; top: calc(16px + var(--mobile-top-safe-area)); }
 @media (prefers-reduced-motion: reduce) {
   .ln-sheet, .ln-sheet .b3-menu__submenu, .b3-dialog__container, .b3-snackbar, .b3-snackbars { transition: none; }
 }
@@ -695,7 +716,7 @@ body { font-family: BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino San
 .side-panel-body .b3-list-item.drop-line-after::after { bottom: -1px; }
 /* 拖拽浮层：克隆源行跟随手指。 */
 [data-drag-ghost] {
-  position: fixed !important; left: 0; top: 0; margin: 0; pointer-events: none; z-index: 9999;
+  position: fixed !important; left: 0; top: 0; margin: 0; pointer-events: none; z-index: var(--mobile-z-drag-ghost);
   border-radius: 8px; opacity: .9; box-shadow: 0 10px 28px rgba(16, 24, 40, .3);
   transition: none !important; animation: none !important; will-change: transform; overflow: hidden;
 }

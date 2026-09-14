@@ -137,8 +137,8 @@ export function NoteInfoDialog({ note, onClose, onRevealNoteFile, onOpenAssetsDi
 
   // Portal 到 body：侧栏/工作区可能形成堆叠上下文，挂到 body 才能保证弹窗在目录之上（与 ContextMenu/DesktopOverlays 同款做法）。
   return createPortal(
-    <div className="modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-      <section className="ln-dialog note-info-dialog" style={size ? { width: size.w, height: size.h } : undefined} role="dialog" aria-modal="true" aria-label="文档属性">
+    <div className="modal-backdrop" data-prevent-swipe onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
+      <section className="ln-dialog note-info-dialog" data-prevent-swipe style={size ? { width: size.w, height: size.h } : undefined} role="dialog" aria-modal="true" aria-label="文档属性">
         <header className="ln-dialog__head">
           <FileText size={16} />
           <h3 className="ln-dialog__title" title={info?.title ?? note.title}>{info?.title ?? note.title}</h3>

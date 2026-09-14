@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Search, X } from "lucide-react";
 import type { SearchResult } from "../../core/searchTypes";
 import { bridge } from "../bridge";
+import { useSwipeToClose } from "../ui/useSwipeToClose";
 
 export interface SearchSheetProps {
   open: boolean;
@@ -17,6 +18,8 @@ export function SearchSheet(props: SearchSheetProps) {
   const [searching, setSearching] = useState(false);
   // 请求版本守卫：快速输入时旧响应不得覆盖新结果（防竞态）
   const requestSeq = useRef(0);
+  const sheetRef = useRef<HTMLDivElement>(null);
+  useSwipeToClose(sheetRef, onClose, open);
 
   const run = useCallback(async (q: string) => {
     const trimmed = q.trim();
@@ -44,8 +47,8 @@ export function SearchSheet(props: SearchSheetProps) {
   if (!open) return null;
 
   return (
-    <div className="mobile-sheet-mask" onClick={onClose}>
-      <div className="mobile-sheet mobile-sheet-search" onClick={(e) => e.stopPropagation()}>
+    <div className="mobile-sheet-mask" data-prevent-swipe onClick={onClose}>
+      <div ref={sheetRef} className="mobile-sheet mobile-sheet-search" data-prevent-swipe onClick={(e) => e.stopPropagation()}>
         <div className="mobile-sheet-grab" />
         <div className="mobile-sheet-head">
           <span className="mobile-sheet-title">搜索</span>

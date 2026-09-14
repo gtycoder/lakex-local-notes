@@ -17,6 +17,7 @@ import type { LakeEditorInstance } from "../../features/editor/lakeRuntime";
 import { usePanelDrag, type PanelSide } from "../usePanelDrag";
 import { computeDropPosition, createDragGhost, moveDragGhost, removeDragGhost, type DragGhost } from "../../components/treeDrag";
 import { MobileSheetMenu, type MobileSheetItem } from "../ui/MobileSheetMenu";
+import { useSwipeToClose } from "../ui/useSwipeToClose";
 import { confirmMobile } from "../ui/ConfirmDialog";
 import { showToast } from "../ui/toastBus";
 import { longPressFeedback, tapFeedback } from "../ui/haptics";
@@ -96,6 +97,10 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
   const [historyFor, setHistoryFor] = useState<NotebookTreeItem | null>(null);
   const [historyList, setHistoryList] = useState<Array<{ id: number; title: string; createdAt: string }>>([]);
   const longPressTimer = useRef<number | null>(null);
+  const iconSheetRef = useRef<HTMLDivElement>(null);
+  const historySheetRef = useRef<HTMLDivElement>(null);
+  useSwipeToClose(iconSheetRef, () => setIconFor(null), !!iconFor);
+  useSwipeToClose(historySheetRef, () => setHistoryFor(null), !!historyFor);
 
   // 跟手开合抽屉（思源 touch.ts 口径：内容区任意横滑、面板跟手、释放按 1/3 屏宽提交）
   usePanelDrag({
@@ -674,8 +679,8 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
 
       {/* 图标选择器 */}
       {iconFor && (
-        <div className="mobile-sheet-mask" onClick={() => setIconFor(null)}>
-          <div className="mobile-sheet" onClick={(e) => e.stopPropagation()}>
+        <div className="mobile-sheet-mask" data-prevent-swipe onClick={() => setIconFor(null)}>
+          <div ref={iconSheetRef} className="mobile-sheet" data-prevent-swipe onClick={(e) => e.stopPropagation()}>
             <div className="mobile-sheet-head">
               <span className="mobile-sheet-title">设置图标</span>
               <button className="mobile-icon-btn" onClick={() => setIconFor(null)} aria-label="关闭"><X size={20} /></button>
@@ -694,8 +699,8 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
 
       {/* 历史版本 sheet */}
       {historyFor && (
-        <div className="mobile-sheet-mask" onClick={() => setHistoryFor(null)}>
-          <div className="mobile-sheet" onClick={(e) => e.stopPropagation()}>
+        <div className="mobile-sheet-mask" data-prevent-swipe onClick={() => setHistoryFor(null)}>
+          <div ref={historySheetRef} className="mobile-sheet" data-prevent-swipe onClick={(e) => e.stopPropagation()}>
             <div className="mobile-sheet-head">
               <span className="mobile-sheet-title">历史版本</span>
               <button className="mobile-icon-btn" onClick={() => setHistoryFor(null)} aria-label="关闭"><X size={20} /></button>

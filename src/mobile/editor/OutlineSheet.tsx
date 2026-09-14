@@ -2,9 +2,10 @@
  * 移动端大纲面板（对齐原型 fab-outline）：读 Lake TOC（kernel.getDocExtraContent().toc）
  * → 标题列表（按 depth 缩进）→ 点击跳转（headingUnfold + scrollByNodeId）。
  */
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { X, ChevronLeft } from "lucide-react";
 import { lakeBridge, resolveScrollNode, type LakeEditorInstance } from "../../features/editor/lakeRuntime";
+import { useSwipeToClose } from "../ui/useSwipeToClose";
 
 interface TocEntry {
   id?: string;
@@ -25,6 +26,9 @@ export interface OutlineSheetProps {
 
 export function OutlineSheet({ open, editor, onClose, side }: OutlineSheetProps) {
   const [entries, setEntries] = useState<TocEntry[]>([]);
+  const sheetRef = useRef<HTMLDivElement>(null);
+  // 底部 sheet 变体：右滑关闭（side 抽屉变体由全局 usePanelDrag 处理，不重复接）
+  useSwipeToClose(sheetRef, onClose, open && !side);
 
   useEffect(() => {
     if (!open) return;
@@ -78,8 +82,8 @@ export function OutlineSheet({ open, editor, onClose, side }: OutlineSheetProps)
   };
 
   return (
-    <div className={side ? ("side-mask" + (open ? " on" : "")) : "mobile-sheet-mask"} data-panel-mask={side ? "right" : undefined} onClick={onClose}>
-      <div className={side ? ("side-panel side-panel--right" + (open ? " on" : "")) : "mobile-sheet med-outline-sheet"} onClick={(e) => e.stopPropagation()}>
+    <div className={side ? ("side-mask" + (open ? " on" : "")) : "mobile-sheet-mask"} data-panel-mask={side ? "right" : undefined} data-prevent-swipe={side ? undefined : true} onClick={onClose}>
+      <div ref={sheetRef} className={side ? ("side-panel side-panel--right" + (open ? " on" : "")) : "mobile-sheet med-outline-sheet"} data-prevent-swipe={side ? undefined : true} onClick={(e) => e.stopPropagation()}>
         {!side && <div className="mobile-sheet-grab" />}
         {side ? (
           /* 侧栏头 = 思源 #sidebarRight .toolbar 口径：标题 + 箭头关闭（左栏收右箭头、右栏收左箭头） */
