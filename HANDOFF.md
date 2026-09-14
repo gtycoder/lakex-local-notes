@@ -5,9 +5,9 @@
 > **§8 是移动端（安卓）专职交接**，由移动端会话维护；桌面会话不要改 §8，移动端会话不要改 §0-§7 之外的桌面文件。
 
 ## 0. 当前基线（新会话开工前）
-- 分支/远端：当前在 **`refactor/store-split`**（store.ts 分批重构 8 commits 已推 Gitee，终态 2352→1103 行见 §3.6）；260911 在其上追加 3 个提交：`2ecac39`（同步收敛修复）、`a18a95b`（安卓 AssetServer 403 + Dock 键盘竞态修复）、HANDOFF 文档。**未推送、未合 master**（待用户验收）。
-- **搜索重构（260911 本会话）**：在 `refactor/store-split` 之上新建 **`feat/search-refactor`** 分支完成（未推送、未合）；统一 FTS5(unicode61)+单字预分词 + 增量账本 + 桌面/移动同核心；同分支其后追加复制裂图 / 大纲 / 平台判定修复（§2.12–§2.14）。
-- 质量门槛：`tsc` 0 error · vitest **951 passed / 16 skipped**（260911）· 桌面 `vite build` + 移动 `vite build -c vite.mobile.config.ts` 全绿 · Android `assembleDebug` + `adb install -r` 通过（计数变动见 §2；别把数字写回 AGENTS/README）。
+- **最新基线（2026-09-14）**：当前分支 **feat/drag-siyuan**，HEAD **e69d4a0**，工作区干净。它基于 feat/search-refactor（上一会话交接点，见文末「附：会话交接（2026-09-12）」），本会话在其上追加 **11 个提交**（见文末「附：会话交接（2026-09-14）」）。**未推送、未合 master**（待用户验收）。
+- 历史基线：refactor/store-split 8 commits（store.ts 2352→1103 行，见 §3.6）+ 260911 批次（2ecac39 同步收敛 / a18a95b 安卓 AssetServer 403 + Dock IME）已并入本分支祖先；feat/search-refactor（统一 FTS5(unicode61)+单字预分词+增量账本，§2.11–§2.14）在其上。
+- 质量门槛：tsc 0 error · vitest **969 passed / 16 skipped**（2026-09-14）· 桌面 vite build + 移动 vite build -c vite.mobile.config.ts 全绿 · Android assembleDebug + adb install -r 通过（计数变动见 §2；别把数字写回 AGENTS/README）。
 - **真机级验收（260910-260911，三轮）**：
   - 第一轮（2 桌面 + 1 移动）：A/B 同步 push/pull、新建/删除传播、移动端 WAL 崩溃恢复、旧 IndexedDB 快照迁移 全通过。
   - 第二轮（3 桌面 + 1 移动，大数据量）：50 笔记 + 70 资源（PNG/JPEG/GIF/PDF/512KB/2MB）、23.4MB；A/B/C/移动端四端正文 sha256 完全一致；并发编辑冲突（先提交者获胜 + 被覆盖方强制留档 30 天）；批量删除 5 篇墓碑传播 全通过。
@@ -701,3 +701,84 @@ adb shell pm clear com.lakenotes.mobile                      # 清 App 数据重
 - 目录树/交互：11142a3 9dc0195 3154041 f9ceda6 b729460 4f3e740 ea78004 e85bf4a c136c16 821392b de808b7 75ef512 d1fdcb8 40eb157 58050ed
 - 同步事故：f867c7e d639b7f d91c71f fde0725 34d1a36 4c83e3b
 - lakex 契约：b3620cb（docs/LAKEX-CONTRACT.md 第 5.2 节）
+
+---
+
+## 附：会话交接（2026-09-14）—— 无上下文的新会话请先读这一节
+
+> 分支：**feat/drag-siyuan**（本地未推；**未经用户验收不要 push / merge**）。HEAD **e69d4a0**，工作区干净。
+> 门禁全绿：tsc 0 · vitest **969 passed / 16 skipped** · 桌面 + 移动构建绿 · Android assembleDebug 通过。
+> 起点：上一会话交接点 feat/search-refactor @ 0792ff7（见上一节「附（2026-09-12）」）；本会话在其上追加 **11 个提交**。
+
+### 0. 本轮任务目标（全部来自用户真机/实操反馈）
+1. 桌面目录树右键菜单超出屏幕 → 贴边翻转（下方放不下就向上展开）。
+2. 移动端首层「小记 ↔ 知识库」切换动效观感奇怪 → 去掉。
+3. 确认「加号确实没有了」（已无，无需改）。
+4. 桌面拖拽落地非常慢/卡顿（约 3s）→ 优化。
+5. 先提交、再切**拖拽专项分支**，完全复刻思源拖拽（桌面 + 移动）。
+6. 复刻思源落点语义：父行「之后」与首个子行「之前」是同一视觉间隙，但**蓝条缩进随层级变化**；「放入」用蓝色背景。
+7. 移动端目录树子级不缩进（都顶到最左）→ 修。
+8. 抽屉手势要滑很长 → 对齐思源「短滑即可」。
+9. 跨端**手势/滑动审计**（桌面 + 移动），查漏补缺并整理重复代码。
+10. **存储分层审计**（哪些进 S3、哪些仅本地；思源怎么管；值得借鉴什么）。
+11. 移动端「新建知识库」弹窗名称非常虚化看不清 → 修。
+
+### 1. 已完成（提交 0792ff7..e69d4a0，共 11 个）
+- 2fb2e0a 桌面右键菜单贴边翻转（按真实尺寸，下方不足向上）。
+- fb90d6d 移动端去掉首层 tab 滑动/分区入场动效。
+- 6f3797d **复刻思源拖拽（桌面+移动）**：新增共享 createDragGhost/moveDragGhost/removeDragGhost（克隆源行做跟手浮层，源行留原位只降透明度）；**去掉拖拽中同级「让位位移」**（连续抖动源）；落点线贴目标行层级缩进；两端边缘自动滚动。桌面 CDP 实测父行 after 线 x=69 / 子行 before 线 x=86（同间隙差 17px）。
+- 3d777fb 目标不支持 inside（如笔记本排序）时落点退化为上下半区。
+- 8b715c6 **桌面拖拽 3s→0.1s**：FLIP 改「先读后写」消除逐行强制重排（实测 DOM 换序 2109ms→115ms）；moveTreeNode 乐观本地重排（不再 await 全量 listTreeNodes）；pointermove 用 elementFromPoint 命中、去掉每帧全表扫描（28ms/帧）。**同提交**修移动端 .ln-indent 子目录不缩进（padding-left 被 vendored .b3-list-item 覆盖）与抽屉「<1s 快滑即提交」。
+- f74dad5 **手势审计**：新增 src/mobile/gestureCore.ts（轴锁/阈值/跟手进度/提交判定纯函数，对齐思源 touchGesture.ts/touch.ts）+ 10 例单测；usePanelDrag 重写（**带符号跟手**、反向不提交、多指/文本选区/横向滚动内容守卫、作废手势不再被重判为另一侧）；MobileSheetMenu 右滑关闭；OutlineSheet/SearchSheet/CreateNotebookSheet/图标/历史 sheet 接入。
+- c6f5089 桌面目录/大纲宽度手柄**双击复位**（对齐思源 resize dblclick；目录 224、大纲 280）。
+- d3e4141 浮动弹窗**本地持久化位置/尺寸**（localStorage: lake-notes-v3.dialog-states，**不进 S3**）+ **8 向缩放**；并修入场动画 floating-dialog-enter 覆盖 transform:none 导致的跳屏。
+- 96f0230 浮层契约收敛：移动端统一 **z-index 令牌 --mobile-z-**（替换 20 处魔法数字）、新增 useSwipeToClose 覆盖各 sheet、所有浮层根补 data-prevent-swipe。
+- ffdfb76 新增 **docs/STORAGE-LAYERS.md**（存储分层单一来源 + 「新增持久化必须归类」规则）+ 更正两处过时注释（图标其实进 manifest；恢复留档其实 force=false）。
+- e69d4a0 修复底部 sheet 被遮罩 opacity 整体压淡（「新建知识库」名称看不清）。
+
+### 2. 当前问题 / 未验证 / 有意不做
+- **移动端拖拽「连续手感/自动滚动」没有真机手指验证**：合成 TouchEvent 复现不了原生手势（跟手视觉、自动滚动连续性），需人手指在真机/带窗口模拟器上试。
+- **桌面标签页拖拽**未复刻思源 ghost/落点指示/自动滚动 —— **用户明确「不做」**。
+- **编辑器长按块多选** —— **用户明确「不做」**。
+- **长按阈值统一**（树 350ms vs 编辑器 450ms）—— **用户明确「先不统一」**。
+- **同步快照/回滚、每库配置同步** —— 讨论后 **用户明确「都不做了」**（不愿引入复杂度）。
+- **独立弹层不合并组件**（用户认可只收敛契约层）。后续若有新增浮层，按三条契约接入即可：--mobile-z-*、useSwipeToClose、data-prevent-swipe。
+- NoteInfoDialog 仍只有右下角缩放、不可拖（有意保留「不是所有弹窗都能拖」）。
+- 真机（小米 50950385）本会话中途掉线；最后验证用无界面模拟器 + 用户自起的带窗口模拟器 emulator-5554。
+
+### 3. 下一步计划
+1. **用户用带窗口模拟器验收最近修复**：新建知识库名称是否清晰；拖拽手感/落点层级；抽屉短滑。
+2. 若继续移动端：真机手指完整拖一遍（长按→拖到顶/底触发自动滚动→松手）。
+3. 若要收尾：把右滑关闭/data-prevent-swipe 推广到尚未接入的浮层（若有新增）。
+4. 分支验收后是否 push / 合 master 由用户决定（**红线：不擅自合**）。
+
+### 4. 关键新增文件/机制
+- src/mobile/gestureCore.ts（+ gestureCore.test.ts）：getTouchAxis、panelProgress/panelCommit、isHorizontalScrollable。
+- src/mobile/useSwipeToClose.ts：浮层右滑关闭/返回。
+- src/components/DialogResizeHandles.tsx + useFloatingDialog（id / 本地持久化 / 8 向缩放）。
+- src/components/treeDrag.ts：createDragGhost/moveDragGhost/removeDragGhost。
+- docs/STORAGE-LAYERS.md；移动端 --mobile-z-* 令牌；[data-drag-ghost] 样式。
+
+### 5. 踩过的坑（重要，别再踩）
+1. **opacity 是「分组不透明度」**：.mobile-sheet-mask{opacity:.2} 会把作为其子元素的整张 sheet（含文字）一起压到 20% —— 「名称虚化」的真因。遮罩半透明必须放**背景色**（本次用 color-mix(… 20%, transparent)）。
+2. **入场动画会覆盖内联 transform**：floating-dialog-enter 的 keyframes 恒带 translate(-50%,-50%)，与拖拽/定位用的 transform:none 打架 → 恢复位置或非右下角缩放时弹窗跳到屏幕外。拖拽/缩放/已定位时置 animation:none。
+3. **FLIP 必须「先读后写」**：边写 style 边读 getBoundingClientRect() 会逐行强制重排；500+ 行拖一次 ~3s。先一次性读所有位置，再统一写 transform。
+4. **拖拽别做「让位位移」**：源行克隆成浮层跟手、源行留原位只降透明度；去掉相邻行位移后连续抖动消失（对齐思源）。
+5. **乐观重排要改 sortOrder**：buildTreeIndex 按 sortOrder 排序；乐观更新只改受影响节点的 sortOrder（其余保留对象引用），否则 UI 不重排。
+6. **手势「作废」要上锁**：轴锁后若因「非关闭方向/纵向/滚动内容」作废，必须置 cancelled 并保持（别把 axis 重置），否则同一手势会被重判成反方向、误开另一侧（实测左抽屉被关 + 右大纲被 armed）。
+7. **别用通用祖先 overflow 遍历判断「横向可滚动」**：1px 级 scrollWidth 误差会误伤普通内容、抽屉拉不出来。只用内容件白名单（table/code/AV）。
+8. **合成 TouchEvent 要派发到真实元素**（elementFromPoint）：派发到 document 会让 e.target 是 Document，target.closest/getComputedStyle 抛错、手势静默失效。
+9. **Vite HMR 中间态会骗人**：连续编辑时页面可能停在半成品（报 dragRowHeight is not defined 之类）；**以 reload 后的结果为准**。
+10. **命令行路径**：workspace 是 /Users/admin/file/local-lake，仓库在其下 lake-notes-electron（注意 local-lake 别写成 local/lake）；bash 默认 cwd 就是 workspace，建议用 $PWD/lake-notes-electron。
+11. **Android gradle 需要写 ~/.gradle**：workspace-write 沙箱会拦成 Could not initialize native services / libnative-platform.dylib；本会话后文件策略已放宽为 full-access。
+12. **scripts/android-build.sh 把 gradle 输出 tail -6**：失败时看不到真因，必要时直接跑 gradle 或看完整日志。
+13. **emu-up.sh 会复用已跑实例**：用户「看不到模拟器窗口」多半是前一会话用 --no-window 起的 headless 实例；adb emu kill 后重跑即可（AVD 数据不丢）。
+
+### 6. 结论（用户已拍板，别再重开）
+- **存储**：我们 =「manifest 声明字段（S3）+ 本地真源/账本 + 纯本机派生」三层；思源 =「整 data/ 同步 + 忽略清单」。两边归属一致（附件/排序/图标同步；历史/孤儿/GC/配置仅本地）。**不换同步模型**，只把分层固化为 docs/STORAGE-LAYERS.md。
+- **同步快照/回滚、每库同步配置**：**不做**。
+- **标签页拖拽、编辑器长按块多选、长按阈值统一**：**不做**。
+- **独立弹层**：**不合并组件**，只维护三条契约（--mobile-z-*、useSwipeToClose、data-prevent-swipe）。
+
+### 7. 本轮关键提交
+2fb2e0a fb90d6d 6f3797d 3d777fb 8b715c6 f74dad5 c6f5089 d3e4141 96f0230 ffdfb76 e69d4a0（0792ff7..e69d4a0）
