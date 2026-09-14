@@ -101,21 +101,23 @@
 .med-panel[data-open="0"] .med-panel-inner { transform: translateY(100%); opacity: 0; }
 .med-panel::-webkit-scrollbar, .med-panel-inner::-webkit-scrollbar { display: none; }
 /* 插入面板：对齐语雀移动端——两列「浅灰底 + 图标 + 文字」条目（原先 3 列纯图标方块，
-   85px 方格里只放一个图标，"引用/分割线"这类很难认）。 */
+   85px 方格里只放一个图标，"引用/分割线"这类很难认）。
+   用户 260914：条目与间距都收紧一档，11 项尽量在键盘区（≈312px）里一次看全：
+   6 行 × 40 + 5 × 5 + 上下 16 = 281px（实测键盘区 311 → 一屏放下，不再需要滚动）。 */
 .med-ins-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 10px;
-  padding: 12px 14px;
+  gap: 5px 8px;
+  padding: 8px 12px;
 }
 .med-ins-item {
   display: flex;
   align-items: center;
-  gap: 12px;
-  height: 56px;
-  padding: 0 14px;
+  gap: 10px;
+  height: 40px;
+  padding: 0 12px;
   border: 0;
-  border-radius: 10px;
+  border-radius: 8px;
   background: var(--b3-theme-surface);
   color: var(--b3-theme-on-background);
   text-align: left;
@@ -124,8 +126,8 @@
   transition: background-color var(--mobile-duration-press) ease;
 }
 .med-ins-item:active { background: var(--b3-list-hover); }
-.med-ins-item svg { width: 22px; height: 22px; flex: 0 0 auto; color: var(--b3-theme-on-surface); }
-.med-ins-label { font-size: 15px; line-height: 1; }
+.med-ins-item svg { width: 20px; height: 20px; flex: 0 0 auto; color: var(--b3-theme-on-surface); }
+.med-ins-label { font-size: 14px; line-height: 1; }
 
 .med-font-panel { display: flex; flex-direction: column; gap: 10px; }
 .med-f-row { display: flex; gap: 8px; }

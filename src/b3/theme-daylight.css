@@ -21,7 +21,10 @@
     --b3-theme-on-secondary: #fff;
     --b3-theme-on-background: #222;
     --b3-theme-on-surface: #5f6368;
-    --b3-theme-on-surface-light: rgba(95, 99, 104, .68);
+    /* 偏离思源原值：原值 rgba(95,99,104,.68) 叠在白底上只有 3.01:1，低于 WCAG AA 的 4.5:1，
+       而移动端所有"次要文字"（最近文档日期、笔记本"N 篇"、未选中 tab、列表副标题）都用它。
+       换成冷调实色 #667085 → 白底 4.97:1、灰卡(#f6f6f6) 4.60:1（#6b7280 在灰卡上只有 4.47，仍差一点）。 */
+    --b3-theme-on-surface-light: #667085;
     --b3-theme-on-surface-lighter: #C8CCD6;
     --b3-theme-on-error: #fff;
 
