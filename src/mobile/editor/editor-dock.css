@@ -68,43 +68,38 @@
 .med-btn.med-b { font-weight: 700; font-size: 18px; }
 
 .med-panel {
-  /* 展开面板：**贴在工具栏上沿、在输入法键盘之上展开**（用户 260914 定稿）。
-     键盘全程不收不弹 —— 旧实现开面板就 blur 收键盘、关面板再 focusEditor 弹回，
-     那两步正是用户看到的"输入法弹出加载过程"。现在 bottom = 键盘上移量 + 工具栏高，
-     面板向上展开；进出场只做位移+淡入（键盘不动，不会再有动画对撞）。 */
+  /* 展开面板：**占住输入法键盘区（键盘不显示）**，工具栏停在它上沿不动（用户 260914 澄清）。
+     高度 = --kb-offset（键盘区/键盘上移量，由 EditorDock 实时算），背景不透明，
+     键盘是在这块面板背后滑走的；内容滑入/滑出见 .med-panel-inner。 */
   position: fixed;
   left: 0;
   right: 0;
-  bottom: calc(var(--kb-offset, 0px) + var(--mobile-bottom-bar-height, 48px));
+  bottom: 0;
   pointer-events: auto;
   box-sizing: border-box;
   background: var(--b3-theme-background);
   border: 0;
   border-top: 1px solid var(--b3-theme-surface-lighter);
   box-shadow: none;
+  height: var(--kb-offset, 0px);
+  max-height: 60dvh;
+  overflow: hidden; /* 内容是整块滑出，不在这里滚 */
+}
+.med-panel-inner {
+  height: 100%;
+  box-sizing: border-box;
   padding: 12px 12px 14px;
-  height: auto;
-  /* 键盘之上还要留出正文可视区：面板最多 4 行（≈280px），更多条目在面板内滚动 */
-  max-height: min(44dvh, 280px);
   overflow-y: auto;
   overscroll-behavior: contain;
   scrollbar-width: none;
-  transform: translateY(100%);
-  opacity: 0;
-  visibility: hidden;
-  transition: transform var(--mobile-duration-panel) var(--mobile-ease-out),
-              opacity var(--mobile-duration-panel) var(--mobile-ease-out),
-              visibility 0s linear var(--mobile-duration-panel);
-}
-.med-panel[data-open="1"] {
+  /* 进出场：整块内容从下方滑入 / 向下滑出。面板背景先铺满键盘区，
+     所以这段位移不会露出空档，也不与输入法收起动画对撞（原实现担心的正是这点）。 */
   transform: translateY(0);
   opacity: 1;
-  visibility: visible;
-  transition: transform var(--mobile-duration-panel) var(--mobile-ease-out),
-              opacity var(--mobile-duration-panel) var(--mobile-ease-out),
-              visibility 0s;
+  transition: transform 160ms var(--mobile-ease-out), opacity 160ms var(--mobile-ease-out);
 }
-.med-panel::-webkit-scrollbar { display: none; }
+.med-panel[data-open="0"] .med-panel-inner { transform: translateY(100%); opacity: 0; }
+.med-panel::-webkit-scrollbar, .med-panel-inner::-webkit-scrollbar { display: none; }
 /* 插入面板：对齐语雀移动端——两列「浅灰底 + 图标 + 文字」条目（原先 3 列纯图标方块，
    85px 方格里只放一个图标，"引用/分割线"这类很难认）。 */
 .med-ins-grid {

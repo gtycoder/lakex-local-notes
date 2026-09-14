@@ -1,14 +1,14 @@
 /**
  * 移动端编辑态底部 dock（app 化适配，对齐 prototype/index.html 编辑态交互）：
  * - 主工具栏悬浮在输入法上方：插入(+)、Aa（字体）、B、列表、待办、收起键盘
- * - 展开面板在**输入法键盘之上**展开（不动键盘）：insert（图片/拍照/附件/表格/音频/视频/高亮块/状态/引用/分割线/代码块）+ font（块级/行内/对齐/颜色/背景）
+ * - 展开面板**占住输入法键盘区（键盘不显示）**：insert（图片/拍照/附件/表格/音频/视频/高亮块/状态/引用/分割线/代码块）+ font（块级/行内/对齐/颜色/背景）
  * - 键盘收起（dock 隐藏 + 右下角重显按钮）
  * 格式命令走 Lake renderer.execCommand（文本 ne-* 属性；块级 style "h1"/"p" 等）。
  *
  * 2026-09 修订（对齐 Lake 官方移动工具栏）：
  * - 类别按钮（+ / Aa）展开面板时变成 ×（关闭）并触发触感反馈；
  * - 命令按钮（B/列表/待办 及面板内 mark/block）随光标/选区**实时高亮**（queryCommandState + getSelectionAttrs）；
- * - `--mobile-dock-space` = 键盘上移量 + 工具栏 + **实测面板高度**（ResizeObserver），正文底部留白始终正确。
+ * - `--mobile-dock-space` = 当前 --kb-offset（面板/键盘占位）+ 工具栏，正文底部留白始终跟着占位走。
  */
 import { useEffect, useRef, useState, useCallback } from "react";
 import { Plus, Bold, Italic, Underline, List, ListOrdered, ListTodo, Keyboard, X, Image as ImageIcon, Camera, Paperclip, Table2, Quote, Minus, Code2, Music, Video, Highlighter, Tag, Undo, Redo, Pilcrow, Type } from "lucide-react";
@@ -144,31 +144,25 @@ export function EditorDock({ editor, editing, onToggleEdit, onInsertImage, onIns
   /** 只有"用户手指点在正文里"才关面板；程序性 focusin（Lake 命令内部重新聚焦）不算 */
   const userTappedEditorRef = useRef(false);
   const dockRef = useRef<HTMLDivElement>(null);
-  const panelRef = useRef<HTMLDivElement>(null);
-  const { offset, keyboardOpen } = useKeyboard();
+  const { base, innerHeight, offset, height, keyboardOpen } = useKeyboard();
   /**
-   * 展开面板的高度（实测，0=已收起）。
+   * 展开面板占住的「键盘区」高度（打开瞬间捕获键盘高度，之后不随键盘动画变；0=已收起）。
    *
-   * 交互口径（用户 260914 定稿）：**面板在输入法键盘之上展开，键盘全程不动**。
-   * 旧实现是"面板接管键盘区"——打开时 blur 收键盘、收起时 focusEditor 弹回键盘，
-   * 于是每次开合都能看到输入法的弹出加载动画（用户明确不要）。现在键盘不再被收，
-   * 面板贴在工具栏上沿（bottom = 键盘上移量 + 工具栏高）向上展开，正文可视区相应缩短。
+   * 交互口径（用户 260914 澄清）：**面板覆盖键盘那块区域 = 键盘不显示**，工具栏停在面板上沿不动。
+   * 打开时 blur 收起键盘、面板占住腾出来的区域；收起时 focusEditor 把键盘放回来。
+   * 让这段"键盘⇄面板"的交接看起来自然的是**面板自身的进出场动画**（见 .med-panel-inner）：
+   * 面板背景整个键盘区先铺满（不露空档），内容再从下方滑入 / 滑出，不再出现"瞬间空一块再弹键盘"。
    */
-  const [panelH, setPanelH] = useState(0);
+  const [panelHeight, setPanelHeight] = useState(0);
+  /** 关闭过渡期间继续挂载面板（否则键盘上升时会先露出一块空白背景） */
+  const [closing, setClosing] = useState(false);
+  const usable = panelMode || closing
+    ? Math.max(0, Math.round(innerHeight - base + panelHeight), offset)
+    : offset;
   /** 面板内容：退场动画期间继续用上一次的模式渲染，否则收起瞬间内容先消失、滑动看不见 */
   const [renderedPanel, setRenderedPanel] = useState<Exclude<PanelMode, null>>("insert");
   useEffect(() => {
     if (panelMode) setRenderedPanel(panelMode);
-  }, [panelMode]);
-  // 实测面板高度，供正文底部留白使用（面板高度随内容/机型变化，不能写死）
-  useEffect(() => {
-    const el = panelRef.current;
-    if (!panelMode || !el) { setPanelH(0); return; }
-    const measure = () => setPanelH(Math.round(el.getBoundingClientRect().height));
-    measure();
-    const ro = typeof ResizeObserver === "function" ? new ResizeObserver(measure) : null;
-    ro?.observe(el);
-    return () => { ro?.disconnect(); };
   }, [panelMode]);
   const exec = useEditorExec(editor);
   const execRef = useRef(exec);
@@ -204,16 +198,26 @@ export function EditorDock({ editor, editing, onToggleEdit, onInsertImage, onIns
   // 内核命令后重聚焦正文只会让键盘保持原样，不再需要 blur 兜底（blur 反而会引出输入法动画）。
 
   // 把 dock 占用的底部空间暴露给正文容器，让正文底部留白（光标不被工具栏/面板盖住）。
-  // 底部被占 = 键盘上移量（adjustResize 恒 0 / edge-to-edge = 键盘高）+ 工具栏 + 展开面板实测高度。
+  // 面板⇄输入法硬互斥兜底（260911 修复，随"面板占键盘区"口径一起保留）：runPanel 执行命令后
+  // Lake 会异步重聚焦正文 → 输入法被顶回，会把占着键盘区的面板压成细条盖住工具栏。
+  // 以实测键盘状态驱动（任何机型/输入法都成立）：只要面板开着而键盘又弹出，立刻再收一次，
+  // 并把面板高度抬到实测键盘高度（打开瞬间的快照在带候选条的真机上会偏小）。
+  useEffect(() => {
+    if (!panelMode || !keyboardOpen) return;
+    setPanelHeight((h) => Math.max(h, height));
+    blurActiveEditable();
+  }, [panelMode, keyboardOpen, height]);
+
+  // 底部被占 = 当前 --kb-offset（面板=键盘区高；无面板=键盘上移量）+ 工具栏。
   // 作用域放到 dock 的父容器（.doc-pane / .mobile-document），而非全局 documentElement——避免多 tab 实例互相覆盖。
   useEffect(() => {
     if (!editing) return;
     const toolbar = 54; // .med-toolbar 高 48 + 与面板的 6px 间隙
-    const space = Math.round(offset) + toolbar + (panelMode ? panelH : 0);
+    const space = Math.round(usable) + toolbar;
     const root = dockRef.current?.parentElement ?? document.documentElement;
     root.style.setProperty("--mobile-dock-space", `${space}px`);
     return () => { root.style.removeProperty("--mobile-dock-space"); };
-  }, [editing, panelMode, panelH, offset]);
+  }, [editing, panelMode, usable]);
 
   // 编辑态常驻底部工具栏（完成/插入/字体等）；键盘弹出时悬浮在键盘上方。
   if (!editing) return null;
@@ -238,29 +242,37 @@ export function EditorDock({ editor, editing, onToggleEdit, onInsertImage, onIns
   };
 
   /**
-   * 展开/收起面板：**面板在输入法键盘之上展开，键盘全程不收不弹**（用户 260914 定稿）。
-   * 旧实现开面板就 blur 收键盘、关面板再 focusEditor 弹回，那两步正是用户看到的"输入法弹出加载过程"。
-   * 现在开合都不碰焦点：键盘原地不动，面板在工具栏上沿滑出/滑回（CSS transform），自然且无 IME 动画。
-   * 打字需求随时可切回：手指点正文（pointerdown 落在 contenteditable）即关面板，键盘本来就在。
+   * 展开/收起面板：**面板占住键盘区（键盘不显示）**，工具栏停在面板上沿不动（用户 260914 澄清口径）。
+   * 关键顺序（同原实现）：同一帧挂面板 + 抬起 --kb-offset，**下一帧才 blur** 收键盘 ——
+   * 这样键盘是在已经铺满该区域的面板背后滑走的，不会出现"面板与键盘对撞"的闪烁。
+   * 收起时改为「先动画收面板 + 同时放键盘，动画结束再清 panelHeight」：
+   * 键盘上升期间那一带仍有面板背景兜着，不会先露一块空白再弹键盘（这正是用户说的"不自然"）。
    */
   const togglePanel = (mode: Exclude<PanelMode, null>) => {
-    if (panelMode === mode) {                                         // 再点一次 = 关面板（键盘不动）
+    if (panelMode === mode) {                                         // 再点一次 = 关面板并放回键盘
       setPanelMode(null);
+      setClosing(true);
+      focusEditor();                                                  // 键盘与面板动画同时开始
+      window.setTimeout(() => { setClosing(false); setPanelHeight(0); }, 220); // 略长于 .med-panel-inner 的 160ms
       return;
     }
     snapshotSelection();
-    setPanelMode(mode);                                               // insert ↔ font 直接切换，键盘与工具栏都不动
+    setClosing(false);
+    if (!panelMode) setPanelHeight(Math.max(Math.round(height), 280)); // 只在"从关到开"时捕获键盘高度
+    setPanelMode(mode);                                               // insert ↔ font 切换沿用原高度 → 工具栏不抖
+    requestAnimationFrame(() => { if (panelMode || true) dismissIme(); });
   };
 
   // 工具栏行内命令（bold/列表/待办）：按钮 onMouseDown preventDefault 不抢焦点 →
   // 焦点/选区留在正文，命令作用在正确位置，键盘不收；执行后再记一次选区，供面板连续使用。
   const runInline = (cmd: string, ...args: unknown[]) => { exec(cmd, ...args); snapshotSelection(); refreshActive(); };
   // 面板项命令：**还原选区 → 执行 → 再记选区 → 面板保持打开**（加粗后还能接着点倾斜/下划线）。
-  // 不再 dismissIme：键盘本来就该常驻（收它=又出现输入法动画），命令后内核重聚焦正文也无需干预。
+  // dismissIme：面板占着键盘区，命令后内核会异步重聚焦正文把键盘顶回来，必须再收一次（260911 修过）。
   const runPanel = (cmd: string, ...args: unknown[]) => {
     restoreSelection();
     exec(cmd, ...args);
     snapshotSelection();
+    dismissIme();
     refreshActive();
   };
 
@@ -290,13 +302,15 @@ export function EditorDock({ editor, editing, onToggleEdit, onInsertImage, onIns
   const onKbToggle = () => { if (panelMode) dismissKeyboard(); else if (keyboardOpen) dismissKeyboard(); else showKeyboard(); };
   const kbLabel = panelMode ? "收起面板" : (keyboardOpen ? "收起键盘" : "展开键盘");
 
-  // --kb-offset = 键盘上移量（adjustResize 恒 0；edge-to-edge = 键盘高度）；面板挂在它 + 工具栏之上。
+  // --kb-offset：无面板 = 键盘上移量（adjustResize 恒 0；edge-to-edge = 键盘高度）；
+  // 面板开 = 面板占住的键盘区高度（键盘收起过程中 innerHeight 530→842 时它同步长出来，
+  // 工具栏屏幕 Y 恒定、面板"接管"键盘腾出的位置 —— HANDOFF §8.3 原始结论）。
   const isOn = (name: string) => !!activeStates[name];
   const plusCls = "med-btn med-toggle" + (panelMode === "insert" ? " med-open" : "");
   const aaCls = "med-btn med-toggle med-aa" + (panelMode === "font" ? " med-open" : "");
 
   return (
-    <div ref={dockRef} className="mobile-editor-dock" data-panel={panelMode ?? "none"} style={{ ["--kb-offset" as string]: `${Math.round(offset)}px` } as import("react").CSSProperties}>
+    <div ref={dockRef} className="mobile-editor-dock" data-panel={panelMode ?? "none"} style={{ ["--kb-offset" as string]: `${Math.round(usable)}px` } as import("react").CSSProperties}>
       {/* 主工具栏（悬浮输入法上方）；对齐 Lake 官方：类别(+/Aa)展开即变 ×，命令按钮实时高亮 */}
       <div className="med-toolbar" onMouseDown={(e) => e.preventDefault()}>
         <button className={plusCls} onClick={() => togglePanel("insert")} aria-label="插入">
@@ -311,8 +325,11 @@ export function EditorDock({ editor, editing, onToggleEdit, onInsertImage, onIns
         <button className="med-btn" onClick={onKbToggle} aria-label={kbLabel}><Keyboard size={19} /></button>
       </div>
 
-      {/* 展开面板：贴在工具栏上沿（键盘之上）展开；常挂载 + data-open 切换，才能有滑出/滑回的过渡 */}
-      <div ref={panelRef} className="med-panel" data-open={panelMode ? "1" : "0"} aria-hidden={!panelMode} onMouseDown={(e) => e.preventDefault()}>
+      {/* 展开面板：占住键盘区（键盘不显示），工具栏停在它上沿；关闭过渡期（closing）继续挂载，
+          让键盘上升时那一带仍有面板背景兜着。内容在 .med-panel-inner 里做滑入/滑出。 */}
+      {(panelMode || closing) && (
+      <div className="med-panel" data-open={panelMode ? "1" : "0"} aria-hidden={!panelMode} onMouseDown={(e) => e.preventDefault()}>
+        <div className="med-panel-inner">
           {renderedPanel === "insert" ? (
             <div className="med-ins-grid">
               {insertItems.map(({ label, Icon, run }) => (
@@ -355,7 +372,9 @@ export function EditorDock({ editor, editing, onToggleEdit, onInsertImage, onIns
               </div>
             </div>
           )}
+        </div>
       </div>
+      )}
     </div>
   );
 }

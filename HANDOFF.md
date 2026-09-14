@@ -385,15 +385,18 @@
   实测证据：包装 `editor.renderer.execCommand` 后点「加粗」与「引用」，调用计数为 0（命令根本没发出去）。
   修法：`DocumentEditor` 用 state 持有编辑器实例（`editorInstance`）并传给 dock（`editorRef` 保留给命令式路径）。
   修后实测：`["quote"]`→文档新增 `<blockquote>`、`["alert","tips"]`→`lake-alert`、`["insertCard","label"]`→状态卡。
-- **面板改「在输入法键盘之上展开」，键盘全程不收不弹**（用户 260914 定稿；旧实现是 blur 收键盘 + 面板占键盘区，
-  收起时再 `focusEditor` 弹回 → 用户看到的"输入法弹出加载过程"）：
-  - `togglePanel` 不再 blur/focus；`runPanel` 不再 `dismissIme()`；删除「面板⇄输入法硬互斥兜底」effect
-    （那是占键盘区时代的补丁）。点正文仍会关面板。
-  - `.med-panel` 改 `bottom: calc(--kb-offset + 工具栏高)`（键盘之上）+ `max-height: min(44dvh,280px)`（4 行，多则内滚）；
-    `--kb-offset` 现在恒 = 键盘上移量（不再含面板）；正文底部留白 = 上移量 + 工具栏 + **面板实测高度**（ResizeObserver）。
-  - 面板常挂载 + `data-open` 切换，进退场做 150ms ease-out 位移+淡入（键盘不动，不会再和输入法动画对撞）。
-  - 实测（emulator-5554，键盘已弹出 innerHeight=530）：开面板前后 innerHeight 恒 530、`dumpsys input_method` 的
-    `mInputShown=true` 不变、面板 bottom 与工具栏 top 差 0 → 确实是"在键盘上展开"。
+- **面板 = 覆盖键盘区（键盘随之收起不显示）**，工具栏停在面板上沿不动 —— 用户 260914 澄清后回到这个口径
+  （我先按"在键盘上方另开一块"做过一版，被用户纠正："覆盖键盘 = 不展示键盘"）。**别再把面板挪到工具栏上方**。
+  - 几何：`--kb-offset` 无面板 = 键盘上移量；面板开 = 面板占住的键盘区高度（`innerHeight - base + panelHeight`，
+    键盘收起过程中同步长出来，工具栏屏幕 Y 恒定）；`.med-panel { bottom:0; height: var(--kb-offset) }`。
+  - **本轮新增的内容滑入/滑出**（用户说"收起时要自然"的落点）：面板背景先整块铺满键盘区（不露空档），
+    内容放在 `.med-panel-inner` 里做 160ms ease-out 的 `translateY(100%) ⇄ 0` + 淡入淡出；
+    关闭时把面板多留 220ms（`closing` 状态）再清 `panelHeight` —— 键盘上升那 200ms 里那一带仍有面板背景兜着，
+    不会"先空一块再弹键盘"（这才是旧版看起来突兀的真正原因，不是元素顺序）。
+  - 实测（emulator-5554）：收起态 `innerHeight=530 / --kb-offset=0 / toolbarTop=482`；打开态 `innerHeight=842 /
+    --kb-offset=312 / 面板矩形 [530,312] = 正好键盘那块 / toolbarTop 仍 482`（工具栏不动）；
+    关闭中 120ms 采样 `data-open=0` + inner 正在位移（translateY 301px、opacity 0.03）→ 收尾 `mInputShown=true` 键盘回来。
+  - `runPanel` 里的 `dismissIme()` 与「面板⇄输入法硬互斥兜底」effect 都要保留（面板占键盘区时内核会异步重聚焦把键盘顶回来）。
 - **插入面板补齐**（用户给参考图）：新增 **拍照**（`<input type=file accept=image/* capture=environment>`）、
   **高亮块**（内核命令是 `execCommand("alert", "tips")`，**不是** `insertCard`；落盘为
   `<blockquote class="lake-alert lake-alert-tips">`）、**状态**（`insertCard("label")`，自带颜色选择器）。
