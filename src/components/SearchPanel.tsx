@@ -105,13 +105,13 @@ export function SearchPanel({ open, initialQuery, onOpenNote, onClose }: {
           {searching && <span className="search-panel-spinner" aria-label="搜索中" />}
           <button className="search-panel-close" onClick={onClose} title="关闭（Esc）" aria-label="关闭搜索"><X size={15} /></button>
         </div>
-        <div id="search-panel-help" className="search-panel-help">不搜索小记 · 标题优先，正文命中 · ↑↓ 选择 · Enter 打开并定位（已打开则切换）</div>
+        <div id="search-panel-help" className="search-panel-help">标题优先 · 正文命中后自动定位 · ↑↓ 选择 · Enter 打开</div>
         <div className="search-panel-results b3-list b3-list--background" role="listbox" aria-label="搜索结果">
           {results.length === 0 && query.trim() && !searching && (
             <div className="ln-empty"><strong>没有匹配结果</strong><span>试试文档标题或正文关键词</span></div>
           )}
           {!query.trim() && (
-            <div className="ln-empty ln-empty--idle"><Search size={18} /><span>搜索你的 Lake 文档</span><small>标题优先，正文命中后会自动定位</small></div>
+            <div className="ln-empty ln-empty--idle"><Search size={18} /><small>只搜索文档，不含小记</small></div>
           )}
           {results.map((result, index) => (
             <button

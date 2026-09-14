@@ -95,12 +95,13 @@
   .tab-item:hover {
     background-color: var(--b3-list-hover) !important;
   }
-  /* 活动标签（桌面）：合并自原 3 条桌面块规则，逐属性等价。
-     color/字重由顶层 ui-polish.css .tab-item.active 提供；position/z-index 由顶层 .tab-item.active 提供。 */
+  /* 活动标签（桌面）：白色卡片 + 顶部主色指示线（对齐思源 layout-tab-bar），
+     不再叠「主色浅底 + 主色内描边 + 主色文字」——激活态只保留一个着色信号。
+     position/z-index 由顶层 .tab-item.active 提供。 */
   .tab-item.active {
-    background-color: var(--b3-theme-primary-lightest) !important;
-    box-shadow: 0 0 0 1px var(--b3-theme-primary-lighter) inset !important;
-    border-color: rgba(59, 91, 219, .35);
+    background-color: var(--lake-raised) !important;
+    box-shadow: inset 0 2px 0 var(--b3-theme-primary) !important;
+    border-color: transparent;
   }
 
   /* 左侧固定目录：白色卡片、无强边框/阴影、顶部留 4px 灰缝（圆角可见，思源卡片从灰底"抠出"）、右侧 4px 灰缝 */

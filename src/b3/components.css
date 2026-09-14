@@ -236,8 +236,8 @@
   background-color: var(--b3-list-hover) !important;
 }
 .tab-item.active {
-  background: var(--b3-theme-background) !important;
-  color: var(--b3-theme-on-background) !important;
+  background: var(--lake-raised) !important;
+  color: var(--lake-text) !important;
   box-shadow: inset 0 2px 0 var(--b3-theme-primary) !important;
 }
 .tab-item.deleted,
@@ -361,4 +361,3 @@
 }
 .sync-toast-sub { margin-top: 4px; font-size: 11px; color: var(--b3-theme-on-surface); }
 .sync-toast-action { margin-top: 4px; align-self: flex-start; }
-

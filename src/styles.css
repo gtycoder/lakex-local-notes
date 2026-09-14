@@ -602,11 +602,11 @@ ne-card[data-card-name="codeblock"] .ne-card-resizer-mask {
     background: transparent;
     transition: color var(--lake-motion-fast) var(--lake-ease-standard), background-color var(--lake-motion-fast) var(--lake-ease-standard), box-shadow var(--lake-motion-fast) var(--lake-ease-standard), transform var(--lake-motion-press) var(--lake-ease-standard);
   }
-  .activity-button:hover { color: var(--shell-accent-strong); background: rgba(59, 91, 219, .12); }
+  .activity-button:hover:not(.active) { color: var(--lake-text); background: color-mix(in srgb, var(--lake-text) 7%, transparent); }
   .activity-button.active {
-    color: var(--shell-accent-strong);
-    background: var(--shell-accent-soft);
-    box-shadow: inset 0 0 0 1px rgba(47, 125, 94, 0.06);
+    color: var(--lake-accent);
+    background: var(--lake-accent-soft);
+    box-shadow: none;
   }
   .activity-button:active { transform: scale(.965); }
   .activity-button:focus-visible { outline: 2px solid rgba(47, 125, 94, 0.18); outline-offset: 2px; }
@@ -1180,14 +1180,18 @@ ne-card[data-card-name="codeblock"] .ne-card-resizer-mask {
   /* C：悬停微卡片（白底 + 轻阴影，仅 transform/box-shadow，不动布局） */
   .activity-button:hover,
   .tabbar-action:hover {
-    color: var(--shell-accent-strong);
-    background: #fff;
-    box-shadow: var(--shell-micro-card);
+    color: var(--lake-text);
+    background: color-mix(in srgb, var(--lake-text) 7%, transparent);
+    box-shadow: none;
+  }
+  .activity-button.active:hover {
+    color: var(--lake-accent);
+    background: var(--lake-accent-soft);
   }
   .activity-button.active {
-    color: #fff;
-    background: var(--shell-accent);
-    box-shadow: 0 1px 2px rgba(59, 91, 219, .35);
+    color: var(--lake-accent);
+    background: var(--lake-accent-soft);
+    box-shadow: none;
   }
   .note-row:hover { background: rgba(0, 0, 0, .05); }
   .note-row.active {
@@ -1401,7 +1405,7 @@ ne-card[data-card-name="codeblock"] .ne-card-resizer-mask {
 /* ===== 回收站面板（本地，不同步） ===== */
 .trash-panel-backdrop { position: fixed; inset: 0; z-index: 800; background: var(--b3-mask-background, rgba(31, 35, 41, .18)); display: flex; justify-content: center; align-items: flex-start; padding-top: 12vh; }
 .trash-panel { width: 640px; max-width: calc(100vw - 48px); max-height: 70vh; display: flex; flex-direction: column; background: var(--b3-theme-surface); border: 1px solid var(--b3-theme-surface-lighter); border-radius: var(--b3-border-radius-b); box-shadow: var(--b3-dialog-shadow); overflow: hidden; }
-.trash-panel header { display: flex; align-items: center; justify-content: space-between; padding: 14px 16px; border-bottom: 1px solid var(--b3-theme-surface-lighter); background: color-mix(in srgb, var(--b3-theme-surface) 92%, transparent); backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px); }
+.trash-panel header { display: flex; align-items: center; justify-content: space-between; padding: 14px 16px; border-bottom: 1px solid var(--b3-theme-surface-lighter); }
 .trash-panel-hint { margin: 0; padding: 10px 16px; font-size: 12px; color: var(--b3-theme-on-surface-light); border-bottom: 1px solid var(--b3-theme-surface-lighter); background: color-mix(in srgb, var(--b3-theme-surface) 96%, transparent); }
 .trash-error { margin: 10px 16px 0; padding: 8px 10px; border-radius: var(--b3-border-radius); font-size: 12px; color: var(--b3-theme-error); background: color-mix(in srgb, var(--b3-theme-error) 8%, transparent); }
 .trash-panel-notice { margin: 0; padding: 8px 16px; font-size: 12px; line-height: 1.5; color: var(--b3-card-warning-color, #92400e); background: var(--b3-card-warning-background, #fef3c7); border-bottom: 1px solid var(--b3-border-color); }
@@ -1431,7 +1435,7 @@ ne-card[data-card-name="codeblock"] .ne-card-resizer-mask {
 /* ===== 历史版本面板（两 tab：文档历史 / 文档孤儿文件） ===== */
 .history-panel-backdrop { position: fixed; inset: 0; z-index: 800; background: var(--b3-mask-background, rgba(31, 35, 41, .18)); display: flex; justify-content: center; align-items: flex-start; padding-top: 12vh; }
 .history-panel { width: 620px; max-width: calc(100vw - 48px); max-height: 70vh; display: flex; flex-direction: column; background: var(--b3-theme-surface); border: 1px solid var(--b3-theme-surface-lighter); border-radius: var(--b3-border-radius-b); box-shadow: var(--b3-dialog-shadow); overflow: hidden; }
-.history-panel header { display: flex; align-items: center; justify-content: space-between; padding: 14px 16px; border-bottom: 1px solid var(--b3-theme-surface-lighter); background: color-mix(in srgb, var(--b3-theme-surface) 92%, transparent); backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px); }
+.history-panel header { display: flex; align-items: center; justify-content: space-between; padding: 14px 16px; border-bottom: 1px solid var(--b3-theme-surface-lighter); }
 .history-create:hover { background: color-mix(in srgb, var(--b3-theme-primary) 12%, transparent); }
 .history-hint { margin: 0; padding: 8px 16px 10px; font-size: 12px; color: var(--b3-theme-on-surface-light); border-bottom: 1px solid var(--b3-theme-surface-lighter); background: color-mix(in srgb, var(--b3-theme-surface) 96%, transparent); }
 .history-error { margin: 10px 16px 0; padding: 8px 10px; border-radius: var(--radius-md); font-size: 12px; color: var(--lake-error); background: rgba(178, 94, 60, .08); }
@@ -1641,8 +1645,10 @@ ne-card[data-card-name="codeblock"] .ne-card-resizer-mask {
 .trash-panel header,
 .settings-panel-large .settings-header {
   flex: 0 0 auto;
-  background: rgba(250, 250, 251, .94) !important;
-  border-bottom: 1px solid rgba(31, 35, 41, .08) !important;
+  /* 头部与弹窗本体同源（--lake-surface 深浅两套值）——原先写死近白 rgba(250,250,251,.94)，
+     深色下历史/回收站面板顶会留一条白条（b3/components.css 只覆盖了 .settings-header）。 */
+  background: var(--lake-surface) !important;
+  border-bottom: 1px solid color-mix(in srgb, var(--lake-border) 72%, transparent) !important;
 }
 .history-panel header,
 .trash-panel header { cursor: move; user-select: none; touch-action: none; }

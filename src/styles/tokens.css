@@ -13,9 +13,10 @@
   /* 正文墨色：lakex 浅色默认偏灰，统一到品牌墨色（与 --lake-text 同源） */
   --lakex-editor-text-body: #232838;
   --lakex-editor-text-caption: #5a6880;
-  --lake-shell: #f0f2f7;
-  --lake-panel: #ffffff;
-  --lake-canvas: #ffffff;
+  --lake-shell: #ebecf0;   /* 窗口底（与 b3 daylight --b3-body-background 同值：单一来源） */
+  --lake-panel: #ffffff;   /* 卡片：侧栏 / 弹窗 / 面板 */
+  --lake-canvas: #ffffff;  /* 编辑画布（纸） */
+  --lake-surface: var(--b3-theme-surface, #f6f6f6); /* 卡内块 / 标签栏轨道 */
   --lake-border: #dde2ec;
   --lake-text: #232838;
   --lake-text-secondary: #4d5a70; /* 文字色单一来源；应反馈再加深 */
@@ -34,6 +35,8 @@
   --lake-ease-standard: cubic-bezier(.22, 1, .36, 1);
   --lake-radius-sm: 6px;
   --lake-radius-md: 8px;
+  /* 抬起的表面：激活标签 / 分段控件滑块——浅色下比轨道更亮，深色下同理（层次方向两端一致） */
+  --lake-raised: #ffffff;
   --radius-xs: 4px; --radius-sm: 6px; --radius-md: 8px; --radius-lg: 12px; --radius-xl: 16px; --radius-pill: 999px;
   /* 海拔体系（beautiful-shadows 公式本地化）：1px ring 提供卡/底分离 + 多层渐进阴影；
      浅色下白卡靠 ring 「立」在灰底上，替代单层大模糊 */
@@ -43,10 +46,16 @@
 }
 
 [data-theme="dark"] {
-  --lake-shell: #17191e;
-  --lake-panel: #202329;
-  --lake-canvas: #272a31;
-  --lake-border: #383e49;
+  /* 深色分层（冷灰蓝家族，与浅色的冷调同源）：
+     窗口底 #131519 → 卡片 #1E2126 → 编辑纸 #20242A → 卡内块/抬起 #262A31 / #31363F。
+     下面把 --b3-* 表面别名一并指到同一套值 —— 否则会同时存在「思源纯中性 #1E1E1E/#2C2C2C/#2E3236」
+     与「我们的冷灰蓝」两套黑，同一个弹窗的头部与内容都不是一个色系。 */
+  --lake-shell: #131519;   /* 窗口底（卡片之后） */
+  --lake-panel: #1e2126;   /* 卡片：侧栏 / 弹窗 / 面板 / 页面底 */
+  --lake-canvas: #20242a;  /* 编辑画布（纸）：比卡片略抬一档 */
+  --lake-surface: #262a31; /* 卡内块 / 标签栏轨道 / 设置分组 */
+  --lake-raised: #31363f;  /* 抬起层：激活标签 / 分段滑块 */
+  --lake-border: #363b45;
   --lake-text: #f3f5f8;
   --lake-text-secondary: #b8c1cf;
   --lake-text-tertiary: #9aa4b2; /* 深底 AA 5.70 */
@@ -60,6 +69,25 @@
   --lake-warning-soft: rgba(228, 175, 94, .16); --lake-success-soft: rgba(99, 196, 123, .16);
   --lake-shadow-panel: 0 0 0 1px rgba(255, 255, 255, .08), 0 8px 20px rgba(0, 0, 0, .32), 0 24px 48px -12px rgba(0, 0, 0, .40);
   --lake-shadow-soft: 0 0 0 1px rgba(255, 255, 255, .06), 0 2px 8px rgba(0, 0, 0, .28);
+
+  /* b3 表面别名 → 同一套深色分层（编辑器内部另见 src/b3/dark.css 的 --lakex-*）。
+     必须写**字面值**：移动端 mobile-theme.css 把 --lake-* 反向映射到 --b3-*，
+     这里若写 var(--lake-*) 会构成循环引用 → 变量失效 → border/文字回退成 currentColor。 */
+  --b3-body-background: #131519;
+  --b3-theme-background: #1e2126;
+  --b3-theme-surface: #262a31;
+  --b3-theme-surface-light: rgba(38, 42, 49, .86);
+  --b3-theme-surface-lighter: rgba(255, 255, 255, .09);
+  --b3-border-color: #363b45;
+  --b3-theme-on-background: #f3f5f8;
+  --b3-theme-on-surface: #9aa4b2;
+  --b3-theme-on-surface-light: #9aa4b2;
+  --b3-theme-primary: #7a90ea;
+  --b3-theme-primary-light: rgba(122, 144, 234, .72);
+  --b3-theme-primary-lighter: rgba(122, 144, 234, .48);
+  --b3-theme-primary-lightest: rgba(122, 144, 234, .24);
+  --b3-dialog-shadow: var(--lake-shadow-panel);
+  --b3-mask-background: rgba(8, 10, 14, .58);
 }
 
 :where(button, input, textarea, select, [role="button"]):focus-visible {
@@ -67,11 +95,26 @@
   outline-offset: 2px;
 }
 
+/* 减弱动态：只去掉「位移/缩放」这类前庭刺激，保留透明度与颜色过渡
+   （状态变化仍可被看懂；原先一刀切 1ms 连淡入淡出也抹掉了）。 */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     animation-duration: 1ms !important;
     animation-iteration-count: 1 !important;
     scroll-behavior: auto !important;
-    transition-duration: 1ms !important;
+    transition-property: opacity, color, background-color, border-color, box-shadow, fill, stroke !important;
+    transition-duration: 160ms !important;
+    transition-timing-function: ease-out !important;
+  }
+}
+
+/* 减弱透明度（macOS「降低透明度」/ Android 类似开关）：玻璃材质改为不透明表面
+   （只处理材质本身；.modal-backdrop 是遮罩不是材质，保持半透明） */
+@media (prefers-reduced-transparency: reduce) {
+  .create-menu,
+  .context-menu {
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+    background: var(--lake-panel) !important;
   }
 }

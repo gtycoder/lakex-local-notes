@@ -55,11 +55,13 @@
   background: var(--b3-theme-primary-lightest);
   box-shadow: inset 0 0 0 1px var(--b3-theme-primary-light);
 }
-/* 类别按钮（+ / Aa）：展开面板时图标变 ×（关闭）并高亮为实心主色圆钮（Lake 官方口径）；
+/* 类别按钮（+ / Aa）：展开面板时图标变 ×（关闭）并高亮——用主色浅底 + 主色图标，
+   不用实心主色圆钮（工具栏是通栏线性图标，实心大圆块过响且抢焦点）。
    仅"展开态"启用圆角，其余时刻与普通按钮一致，避免工具栏混用两种形状。 */
 .med-btn.med-toggle.med-open {
-  color: var(--b3-theme-on-primary);
-  background: var(--b3-theme-primary);
+  color: var(--b3-theme-primary);
+  background: var(--b3-theme-primary-lightest);
+  box-shadow: inset 0 0 0 1px var(--b3-theme-primary-lighter);
   border-radius: calc(var(--mobile-bottom-bar-height, 48px) / 2 - 4px);
 }
 .med-btn.med-aa { font-weight: 700; font-size: 17px; }

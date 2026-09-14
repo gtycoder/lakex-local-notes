@@ -1,21 +1,22 @@
-/* ── 深色主题：data-theme="dark" → 思源 midnight 令牌（应用骨架已由 b3 令牌接管）──
- * 这里额外覆盖 Lake 编辑器的 --lakex-editor-* 变量，使编辑区跟随深色。 */
+/* ── 深色主题：data-theme="dark" ──
+ * 编辑区跟随 App 的冷灰蓝深色分层（值同步 src/styles/tokens.css [data-theme=dark]），
+ * 不再各用一套中性黑——否则侧栏（冷灰蓝）与正文区（纯中性 #1E1E1E/#2C2C2C）肉眼可辨地不是一个色系。 */
 
 [data-theme="dark"] .lake-editor-mount,
 [data-theme="dark"] .lakex-default-theme {
-  --lakex-editor-background: #1e1e1e !important;
-  --lakex-editor-background-primary: #2c2c2c !important;
-  --lakex-editor-background-foreground: #2c2c2c !important;
-  --lakex-editor-background-secondary: #232323 !important;
-  --lakex-editor-background-tertiary: #2a2a2a !important;
-  --lakex-editor-background-focus: #2c2c2c !important;
-  --lakex-editor-background-primary-hover: #3a3a3a !important;
-  --lakex-editor-background-primary-hover-light: #333333 !important;
-  --lakex-editor-border-light: #3a3a3a !important;
-  --lakex-editor-border-primary: #484848 !important;
-  --lakex-editor-border-secondary: #3a3a3a !important;
-  --lakex-editor-card-background-hover: #2c2c2c !important;
-  --lakex-editor-card-border-hover: #484848 !important;
+  --lakex-editor-background: #20242a !important;          /* = --lake-canvas */
+  --lakex-editor-background-primary: #262a31 !important;  /* = --lake-surface */
+  --lakex-editor-background-foreground: #262a31 !important;
+  --lakex-editor-background-secondary: #23272e !important;
+  --lakex-editor-background-tertiary: #2a2e36 !important;
+  --lakex-editor-background-focus: #262a31 !important;
+  --lakex-editor-background-primary-hover: #31363f !important;
+  --lakex-editor-background-primary-hover-light: #2c313a !important;
+  --lakex-editor-border-light: #31363f !important;
+  --lakex-editor-border-primary: #414855 !important;
+  --lakex-editor-border-secondary: #31363f !important;
+  --lakex-editor-card-background-hover: #262a31 !important;
+  --lakex-editor-card-border-hover: #414855 !important;
   --lakex-editor-card-border-selected: var(--b3-theme-primary) !important;
   --lakex-editor-code-background: rgba(255, 255, 255, .06) !important;
   --lakex-editor-column-background-highlight: rgba(255, 255, 255, .04) !important;
@@ -23,27 +24,27 @@
   --lakex-editor-selection: rgba(122, 144, 234, .32) !important;
   --lakex-editor-table-bar-active: var(--b3-theme-primary) !important;
   --lakex-editor-table-scrollbar-thumb: var(--b3-scroll-color) !important;
-  --lakex-editor-text-body: #e8eaed !important;
-  --lakex-editor-text-caption: #a8adb5 !important;
-  --lakex-editor-text-color: #e8eaed !important;
+  --lakex-editor-text-body: #e8ecf3 !important;
+  --lakex-editor-text-caption: #9aa4b2 !important;
+  --lakex-editor-text-color: #e8ecf3 !important;
   --lakex-editor-text-danger: #d23f31 !important;
-  --lakex-editor-text-disable: #545454 !important;
+  --lakex-editor-text-disable: #5c6472 !important;
   --lakex-editor-text-link: #7a90ea !important;
   --lakex-editor-text-link-hover: #93a6f0 !important;
-  --lakex-editor-icon-primary: #dadada !important;
-  --lakex-editor-icon-secondary: #9aa0a6 !important;
-  --lakex-editor-overlay-background-tertiary: #2c2c2c !important;
-  --lakex-editor-color-black: #dadada !important;
-  --lakex-editor-color-black-f05: rgba(218, 218, 218, .05) !important;
-  --lakex-editor-color-black-f08: rgba(218, 218, 218, .08) !important;
-  --lakex-editor-color-black-f12: rgba(218, 218, 218, .12) !important;
-  --lakex-editor-color-black-f30: rgba(218, 218, 218, .30) !important;
-  --lakex-editor-color-black-f65: rgba(218, 218, 218, .65) !important;
+  --lakex-editor-icon-primary: #d5dae4 !important;
+  --lakex-editor-icon-secondary: #9aa4b2 !important;
+  --lakex-editor-overlay-background-tertiary: #2a2e36 !important;
+  --lakex-editor-color-black: #d5dae4 !important;
+  --lakex-editor-color-black-f05: rgba(213, 218, 228, .05) !important;
+  --lakex-editor-color-black-f08: rgba(213, 218, 228, .08) !important;
+  --lakex-editor-color-black-f12: rgba(213, 218, 228, .12) !important;
+  --lakex-editor-color-black-f30: rgba(213, 218, 228, .30) !important;
+  --lakex-editor-color-black-f65: rgba(213, 218, 228, .65) !important;
   --lakex-editor-color-theme: var(--b3-theme-primary) !important;
   --lakex-editor-color-theme-light: var(--b3-theme-primary-light) !important;
-  --lakex-editor-color-white: #1e1e1e !important;
-  --lakex-editor-color-white-f60: rgba(30, 30, 30, .60) !important;
-  --lakex-editor-color-white-f90: rgba(30, 30, 30, .90) !important;
+  --lakex-editor-color-white: #131519 !important;
+  --lakex-editor-color-white-f60: rgba(19, 21, 25, .60) !important;
+  --lakex-editor-color-white-f90: rgba(19, 21, 25, .90) !important;
 }
 
 [data-theme="dark"] .document-pane {

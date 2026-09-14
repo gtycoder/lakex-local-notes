@@ -343,18 +343,26 @@ button.b3-list-item__action:disabled { opacity: .45; cursor: default; }
 .badge--accent { color: var(--b3-theme-primary); background: var(--b3-theme-primary-lightest); }
 
 /* ---------- ③ 本地小件 ---------- */
-/* 互斥选项组（字号 / 主题）：选中项填主色，其余 outline。
+/* 互斥选项组（字号 / 主题）：思源式「轨道 + 浮起滑块」（AGENTS §3 #14 定稿口径）——
+   选中项不再整块填主色，改用抬起的表面 + 中性墨色；主色只留给轨道内的高亮文字可选态。
    用 .seg 前缀提高特异性：两端 CSS 注入顺序不同（mobile.css/overlays.css 早于或晚于 vendored
    siyuan.scss），同优先级时 .b3-button--outline 的 background:transparent 会压掉选中填充。 */
-.seg { display: inline-flex; gap: 4px; }
-.seg__item { min-width: 40px; height: 28px; padding: 0 10px; font-size: 12px; }
-.seg .seg__item.is-active {
-  color: var(--b3-theme-on-primary);
-  background-color: var(--b3-theme-primary);
-  border-color: var(--b3-theme-primary);
-  box-shadow: none;
+.seg {
+  display: inline-flex;
+  gap: 2px;
+  padding: 2px;
+  border-radius: calc(var(--lake-radius-md) + 2px);
+  background: color-mix(in srgb, var(--lake-text) 8%, transparent);
 }
-.seg .seg__item.is-active:hover { color: var(--b3-theme-on-primary); }
+.seg__item { min-width: 40px; height: 26px; padding: 0 10px; font-size: 12px; border: 0 !important; background: transparent !important; color: var(--b3-theme-on-surface) !important; box-shadow: none; }
+.seg .seg__item:hover { color: var(--b3-theme-on-background) !important; }
+.seg .seg__item.is-active {
+  color: var(--b3-theme-on-background) !important;
+  background-color: var(--lake-raised) !important;
+  border-color: transparent;
+  box-shadow: 0 1px 2px rgba(16, 24, 40, .10);
+}
+.seg .seg__item.is-active:hover { color: var(--b3-theme-on-background) !important; }
 
 /* 体检结果（数据体检 / 一致性检查） */
 .checks { display: grid; gap: 6px; margin-top: 10px; font-size: 13px; text-align: left; }

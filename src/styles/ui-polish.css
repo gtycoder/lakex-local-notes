@@ -333,10 +333,11 @@
   border-radius: var(--lake-radius-sm) !important;
 }
 
-/* 页签 active：accent 文字加重（思源/语雀式），保留既有底面色 */
+/* 页签 active：白卡 + 顶部主色指示线已经足够标识当前页（b3/layout.css 拥有底与指示线）；
+   文字保持中性墨色 + 略加字重，避免「浅底 + 描边 + 主色字」三重信号。 */
 .tab-item.active {
-  color: var(--lake-accent) !important;
-  font-weight: 600;
+  color: var(--lake-text) !important;
+  font-weight: 500;
 }
 
 /* 活动栏 active：更强的识别（accent 底 + 图标着色），弱化未激活项 */

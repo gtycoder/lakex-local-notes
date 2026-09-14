@@ -23,7 +23,7 @@
   box-shadow: var(--lake-shadow-soft);
   backdrop-filter: blur(10px) saturate(1.04);
   pointer-events: none;
-  font-size: 10px;
+  font-size: 11px; /* 10px 在 macOS 上已经低于可读下限（状态栏是可读信息，不是装饰） */
   font-variant-numeric: tabular-nums;
 }
 .document-statusbar-stats,
@@ -130,4 +130,3 @@
 .document-statusbar-fixed { display: flex; align-items: center; gap: 12px; min-width: 0; }
 .document-statusbar-stats { flex: 0 0 auto; }
 .document-statusbar-state { flex: 0 0 auto; }
-

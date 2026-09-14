@@ -6,9 +6,11 @@ import { loadSettings, subscribeSettings } from "../lib/settings";
 import { installPasteInterceptor } from "../features/editor/clipboardHtml"; // 与桌面 src/main.tsx 一致：粘贴前先装 getData 升级拦截器
 import "../features/editor/image-lightbox.css";
 import "../features/attachment/attachment-preview.css";
-import "../styles/tokens.css"; // 复用桌面设计令牌（--lake-*）+ focus-visible + reduced-motion
 import "../b3/theme-daylight.css"; // 思源 daylight --b3-* 令牌（视觉层移植，AGPL-3.0）
 import "../b3/theme-midnight.css"; // 思源 midnight 令牌，作用于 [data-theme="dark"]
+// tokens.css 必须晚于 midnight：深色下它把 --b3-* 表面别名指到 --lake-* 冷灰蓝分层（单一来源），
+// 早于 midnight 加载会被思源纯中性值覆盖，又回到「两套黑」。
+import "../styles/tokens.css"; // 复用桌面设计令牌（--lake-*）+ focus-visible + reduced-motion
 import "../b3/dark.css";           // 深色下 lakex 编辑器变量（正文/代码块/边框）——移动端此前缺失导致深色正文发灰
 import "../b3/siyuan.scss";         // 思源组件类 .b3-* / config-*（精仿思源，AGPL-3.0）
 import "../styles/overlays.css";    // 浮层通用件（seg/badge/ln-*）：与桌面同序，须晚于 siyuan.scss（否则 seg 选中态被 b3-button--outline 压掉）
