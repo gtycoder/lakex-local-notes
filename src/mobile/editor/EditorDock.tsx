@@ -16,7 +16,6 @@ import { Plus, Bold, Italic, Underline, List, ListOrdered, ListTodo, Keyboard, X
 import { lakeBridge, type LakeEditorInstance } from "../../features/editor/lakeRuntime";
 import { MARK_COMMANDS, BLOCK_INSERT_COMMANDS, HISTORY_COMMANDS, STYLE_BLOCKS } from "../../features/editor/editorCommands";
 import { useKeyboard } from "../useKeyboard";
-import { tapFeedback } from "../ui/haptics";
 
 type PanelMode = "insert" | "font" | null;
 
@@ -235,7 +234,6 @@ export function EditorDock({ editor, editing, onToggleEdit, onInsertImage, onIns
    * 打字需求随时可切回：手指点正文（pointerdown 落在 contenteditable）即关面板并恢复键盘。
    */
   const togglePanel = (mode: Exclude<PanelMode, null>) => {
-    tapFeedback();                                                    // 展开/收起类别面板 → 轻触感
     if (panelMode === mode) {                                         // 再点一次 = 关面板并回到打字
       setPanelMode(null);
       setPanelHeight(0);
@@ -267,6 +265,18 @@ export function EditorDock({ editor, editing, onToggleEdit, onInsertImage, onIns
     try { (document.activeElement as HTMLElement | null)?.blur?.(); } catch { /* 忽略 */ }
   };
   const showKeyboard = () => { focusEditor(); };
+
+  // 插入面板条目（对齐语雀移动端：图标 + 文字，两列）。顺序＝使用频次从高到低。
+  const insertItems: ReadonlyArray<{ label: string; Icon: typeof ImageIcon; run: () => void }> = [
+    { label: "图片", Icon: ImageIcon, run: () => onInsertImage?.() },
+    { label: "附件", Icon: Paperclip, run: () => onInsertAttachment?.() },
+    { label: "表格", Icon: Table2, run: () => onInsertTable?.() },
+    { label: "音频", Icon: Music, run: () => onInsertAudio?.() },
+    { label: "视频", Icon: Video, run: () => onInsertVideo?.() },
+    { label: "引用", Icon: Quote, run: () => runPanel("quote") },
+    { label: "分割线", Icon: Minus, run: () => runPanel("hr") },
+    { label: "代码块", Icon: Code2, run: () => runPanel("insertCard", "codeblock") },
+  ];
   // 工具栏“收起/展开键盘”按钮：无面板 = 按键盘开合切换；有面板 = 收起面板（键盘此前已收起）
   const onKbToggle = () => { if (panelMode) dismissKeyboard(); else if (keyboardOpen) dismissKeyboard(); else showKeyboard(); };
   const kbLabel = panelMode ? "收起面板" : (keyboardOpen ? "收起键盘" : "展开键盘");
@@ -299,14 +309,12 @@ export function EditorDock({ editor, editing, onToggleEdit, onInsertImage, onIns
         <div className="med-panel" onMouseDown={(e) => e.preventDefault()}>
           {panelMode === "insert" ? (
             <div className="med-ins-grid">
-              <button className="med-ins-item" onClick={() => { onInsertImage?.(); }} title="图片" aria-label="图片"><ImageIcon size={20} /></button>
-              <button className="med-ins-item" onClick={() => { onInsertAttachment?.(); }} title="附件" aria-label="附件"><Paperclip size={20} /></button>
-              <button className="med-ins-item" onClick={() => { onInsertAudio?.(); }} title="音频" aria-label="音频"><Music size={20} /></button>
-              <button className="med-ins-item" onClick={() => { onInsertVideo?.(); }} title="视频" aria-label="视频"><Video size={20} /></button>
-              <button className="med-ins-item" onClick={() => { onInsertTable?.(); }} title="表格" aria-label="表格"><Table2 size={20} /></button>
-              <button className="med-ins-item" onClick={() => runPanel("quote")} title="引用" aria-label="引用"><Quote size={20} /></button>
-              <button className="med-ins-item" onClick={() => runPanel("hr")} title="分割线" aria-label="分割线"><Minus size={20} /></button>
-              <button className="med-ins-item" onClick={() => runPanel("insertCard", "codeblock")} title="代码块" aria-label="代码块"><Code2 size={20} /></button>
+              {insertItems.map(({ label, Icon, run }) => (
+                <button key={label} className="med-ins-item" aria-label={label} onClick={run}>
+                  <Icon size={22} />
+                  <span className="med-ins-label">{label}</span>
+                </button>
+              ))}
             </div>
           ) : (
             <div className="med-font-panel">

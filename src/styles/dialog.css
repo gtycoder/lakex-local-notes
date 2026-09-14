@@ -38,8 +38,10 @@
 .ln-dialog__resize:hover { opacity: 1; }
 @media (max-width: 600px) { .ln-dialog__resize { display: none; } }
 
-/* 文档属性弹窗：表面/圆角/阴影/头体用浮层通用 .ln-dialog，这里只定默认尺寸（比旧版更大，可拖右下角调整） */
-.note-info-dialog { width: 720px; height: min(80vh, 640px); min-width: 420px; min-height: 320px; max-width: 94vw; max-height: 90vh; }
+/* 文档属性弹窗：表面/圆角/阴影/头体用浮层通用 .ln-dialog，这里只定默认尺寸。
+   高度默认 `auto`：内容少时按内容收（用户 260914 决策），超过 max-height 才由 .ln-dialog__body 滚动；
+   右下角手动拖过之后由内联 width/height 接管（NoteInfoDialog 的 size state）。 */
+.note-info-dialog { width: 720px; height: auto; min-width: 420px; min-height: 320px; max-width: 94vw; max-height: min(80vh, 640px); }
 /* 第一部分：两列并排，省纵向空间；位置独占一行 */
 .note-info-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px 20px; margin: 12px 0 4px; padding: 0; }
 .note-info-cell { display: flex; align-items: baseline; gap: 8px; min-width: 0; }

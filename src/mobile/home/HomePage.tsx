@@ -17,7 +17,6 @@ import { confirmMobile } from "../ui/ConfirmDialog";
 import { showToast } from "../ui/toastBus";
 import { bridge } from "../bridge";
 import { useHorizontalSwipe } from "../useHorizontalSwipe";
-import { tapFeedback } from "../ui/haptics";
 import { localAssetHttpUrl } from "../../core/assetUrl.js";
 import { withAssetAccessToken } from "../../lib/assetPort";
 
@@ -117,14 +116,12 @@ export function HomePage(props: HomePageProps) {
     } catch { /* 读取失败忽略 */ }
   };
   const closeComposer = (): void => { setComposer(null); setEditNote(null); };
-  const switchTab = (next: "quick" | "library"): void => { tapFeedback(); onTabChange(next); };
+  const switchTab = (next: "quick" | "library"): void => { onTabChange(next); };
   const runSync = async (): Promise<void> => {
-    tapFeedback();
     try { const r = await bridge.syncNow(); showToast(r.message || "已同步"); }
     catch (e) { showToast("同步失败：" + (e as Error).message, { type: "error" }); }
   };
   const toggleView = (): void => {
-    tapFeedback();
     setLibraryView((v) => { const nv = v === "shelf" ? "list" : "shelf"; try { localStorage.setItem(VIEW_KEY, nv); } catch { /* 忽略 */ } return nv; });
   };
 
@@ -144,7 +141,6 @@ export function HomePage(props: HomePageProps) {
   }, [quickSort]);
   const onFilterSelect = (item: MobileSheetItem): void => {
     setFilterOpen(false);
-    tapFeedback();
     setQuickSort(item.id as QuickSort);
   };
 
@@ -158,7 +154,7 @@ export function HomePage(props: HomePageProps) {
           <button className={tab === "quick" ? "mobile-htab active" : "mobile-htab"} onClick={() => switchTab("quick")}>小记</button>
           <button className={tab === "library" ? "mobile-htab active" : "mobile-htab"} onClick={() => switchTab("library")}>知识库</button>
         </div>
-        {tab === "quick" && <button className="toolbar__button" onClick={() => { tapFeedback(); setFilterOpen(true); }} aria-label="排序" title="排序"><ArrowUpDown /></button>}
+        {tab === "quick" && <button className="toolbar__button" onClick={() => setFilterOpen(true)} aria-label="排序" title="排序"><ArrowUpDown /></button>}
         {tab === "library" && <button className="toolbar__button" onClick={toggleView} aria-label={libraryView === "shelf" ? "切换到列表" : "切换到书架"} title={libraryView === "shelf" ? "切换到列表" : "切换到书架"}>{viewIcon}</button>}
       </header>
 
@@ -179,7 +175,7 @@ export function HomePage(props: HomePageProps) {
             ) : (
               <div className="mobile-quick-cards">
                 {sortedQuickNotes.map((n) => (
-                  <QuickNoteCard key={n.id} note={n} onEdit={() => { tapFeedback(); void openEdit(n.id); }} onMore={() => { tapFeedback(); setQuickMenuFor(n.id); }} />
+                  <QuickNoteCard key={n.id} note={n} onEdit={() => { void openEdit(n.id); }} onMore={() => setQuickMenuFor(n.id)} />
                 ))}
               </div>
             )}
@@ -194,7 +190,7 @@ export function HomePage(props: HomePageProps) {
               </div>
               <div className="home-recent">
                 {recentNotes.map((r) => (
-                  <button key={r.id} className="doc-card" onClick={() => { tapFeedback(); onOpenNote(r.id); }} aria-label={r.title || "文档"}>
+                  <button key={r.id} className="doc-card" onClick={() => onOpenNote(r.id)} aria-label={r.title || "文档"}>
                     <span className="doc-card__paper" aria-hidden="true">
                       <span className="doc-card__lines" />
                       <span className="doc-card__clip"><Paperclip size={10} /></span>
@@ -215,7 +211,7 @@ export function HomePage(props: HomePageProps) {
               notebooks={notebooks}
               docCounts={docCounts}
               view={libraryView}
-              onOpenNotebook={(id) => { tapFeedback(); onOpenNotebook(id); }}
+              onOpenNotebook={onOpenNotebook}
             />
           </section>
         </div>
@@ -224,11 +220,11 @@ export function HomePage(props: HomePageProps) {
 
       {/* 底部胶囊栏（首页）：搜索 | 新建 | 云同步（仿第二层悬浮栏：纯图标胶囊条）；排序已移到右上角 */}
       <nav className="mobile-bottom-bar" aria-label="首页操作">
-        <button className="mobile-bottom-bar__item" onClick={() => { tapFeedback(); onOpenSearch(); }} aria-label="搜索" title="搜索"><Search /></button>
+        <button className="mobile-bottom-bar__item" onClick={onOpenSearch} aria-label="搜索" title="搜索"><Search /></button>
         {tab === "quick" ? (
-          <button className="mobile-bottom-bar__item" onClick={() => { tapFeedback(); setEditNote(null); setComposer({ mode: "new" }); }} aria-label="新建小记" title="新建小记"><Plus /></button>
+          <button className="mobile-bottom-bar__item" onClick={() => { setEditNote(null); setComposer({ mode: "new" }); }} aria-label="新建小记" title="新建小记"><Plus /></button>
         ) : (
-          <button className="mobile-bottom-bar__item" onClick={() => { tapFeedback(); onCreateNotebook(); }} aria-label="新建知识库" title="新建知识库"><FolderPlus /></button>
+          <button className="mobile-bottom-bar__item" onClick={onCreateNotebook} aria-label="新建知识库" title="新建知识库"><FolderPlus /></button>
         )}
         <button className="mobile-bottom-bar__item" onClick={() => void runSync()} aria-label="立即同步" title="立即同步"><CloudUpload /></button>
       </nav>

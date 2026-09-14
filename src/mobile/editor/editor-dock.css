@@ -90,28 +90,32 @@
 }
 .med-panel::-webkit-scrollbar { display: none; }
 /* medPanelIn 已删除（见上：面板不做入场动画） */
+/* 插入面板：对齐语雀移动端——两列「浅灰底 + 图标 + 文字」条目（原先 3 列纯图标方块，
+   85px 方格里只放一个图标，"引用/分割线"这类很难认）。 */
 .med-ins-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr 1fr;
+  grid-template-columns: 1fr 1fr;
   gap: 10px;
+  padding: 12px 14px;
 }
 .med-ins-item {
   display: flex;
-  flex-direction: column;
   align-items: center;
-  gap: 7px;
-  background: var(--b3-theme-background);
-  border: 1px solid var(--b3-border-color);
-  border-radius: var(--b3-border-radius-b);
-  padding: 14px 8px;
-  font-size: 14px;
+  gap: 12px;
+  height: 56px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 10px;
+  background: var(--b3-theme-surface);
+  color: var(--b3-theme-on-background);
+  text-align: left;
   cursor: pointer;
-  color: var(--b3-theme-on-surface);
   -webkit-tap-highlight-color: transparent;
   transition: background-color var(--mobile-duration-press) ease;
 }
 .med-ins-item:active { background: var(--b3-list-hover); }
-.med-ins-item svg { width: 20px; height: 20px; }
+.med-ins-item svg { width: 22px; height: 22px; flex: 0 0 auto; color: var(--b3-theme-on-surface); }
+.med-ins-label { font-size: 15px; line-height: 1; }
 
 .med-font-panel { display: flex; flex-direction: column; gap: 10px; }
 .med-f-row { display: flex; gap: 8px; }

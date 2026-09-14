@@ -390,8 +390,9 @@
 }
 
 /* ---- 细滚动条（作用域：设置弹窗与浮层滚动区）----
- * 不动 .document-pane / .note-list（主编辑与目录区保留系统覆盖式，避免内容宽度被常占的轨道挤动）。
- * thumb 默认弱色、容器悬停更明显；悬停显隐是纯 CSS 能做到的上限。 */
+ * 6px 自绘细条：thumb 默认弱色、容器悬停更明显（悬停显隐是纯 CSS 能做到的上限）。
+ * 不能写 `scrollbar-width: thin`——非 auto 的标准属性会让 Chromium 忽略下面的 ::-webkit-scrollbar 自绘，
+ * 这一条曾在 03ada25 里连带上线并造成细滚动条消失（详见 b3/layout.css 顶部说明）。 */
 .settings-panel,
 .settings-content,
 .settings-nav,
@@ -400,7 +401,7 @@
 .history-list,
 .history-preview-inline,
 .history-preview-viewer,
-.trash-preview-viewer { scrollbar-width: thin; }
+.trash-preview-viewer { scrollbar-width: auto; scrollbar-color: auto; }
 .settings-panel::-webkit-scrollbar,
 .settings-content::-webkit-scrollbar,
 .settings-nav::-webkit-scrollbar,

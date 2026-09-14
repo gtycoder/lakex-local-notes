@@ -398,12 +398,13 @@
 ::-webkit-scrollbar-thumb {
   min-height: 64px;
 }
-/* 全局滚动条：标准属性做主题适配（深浅自动跟 --b3-scroll-color）；已有 ::-webkit-scrollbar
-   自定义的区域（面板/编辑器）不受影响，Chromium 对同一元素只采用其中一套。 */
-:root {
-  scrollbar-width: thin;
-  scrollbar-color: var(--b3-scroll-color) transparent;
-}
+/* 注意（260914 晚纠正）：这里**不能**再写全局 `scrollbar-width/color`。
+ * 03ada25 曾加过 `:root { scrollbar-width: thin; scrollbar-color: var(--b3-scroll-color) transparent }`，
+ * 注释里假设"已有 ::-webkit-scrollbar 自定义的区域不受影响"——前提是错的：`scrollbar-color` 是**继承属性**，
+ * 一旦在元素上取到非 auto 值，Chromium 就改用标准属性绘制并**忽略 ::-webkit-scrollbar 自绘**，
+ * 于是思源那套细滚动条（b3/siyuan/util/_scroll.scss：10px 轨道 + 内阴影细拇指 + hover 变粗，
+ * 颜色本就跟随 --b3-scroll-color 深浅自适应）全端失效，变成系统粗条/覆盖条。
+ * 现在移除，让自绘滚动条按原设计生效；个别需要标准细条的容器再单独声明。 */
 @media (min-width: 761px) {
   .ne-editor-wrap::-webkit-scrollbar,
   .note-list::-webkit-scrollbar,

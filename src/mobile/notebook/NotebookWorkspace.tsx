@@ -20,7 +20,7 @@ import { MobileSheetMenu, type MobileSheetItem } from "../ui/MobileSheetMenu";
 import { useSwipeToClose } from "../ui/useSwipeToClose";
 import { confirmMobile } from "../ui/ConfirmDialog";
 import { showToast } from "../ui/toastBus";
-import { longPressFeedback, tapFeedback, successFeedback, warnFeedback } from "../ui/haptics";
+import { longPressFeedback, successFeedback, warnFeedback } from "../ui/haptics";
 import { useAutoSave } from "../useAutoSave";
 import type { POCNote } from "../noteRepository";
 /** 笔记本子树节点（原 NotebookPage 的类型，页面本体已随"两套壳"统一删除）。 */
@@ -193,7 +193,6 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
 
   // 立即同步（思源顶栏右侧的云图标就是同步状态/触发器）
   const runSync = useCallback(async () => {
-    tapFeedback();
     try { const r = await bridge.syncNow(); showToast(r.message || "已同步"); }
     catch (e) { showToast("同步失败：" + (e as Error).message, { type: "error" }); }
   }, []);
@@ -230,7 +229,6 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
       void bridge.saveNote(active.id, active.title, active.content);
       successFeedback(); // 完成编辑（保存落盘）
     } else {
-      tapFeedback(); // 进入编辑
     }
     setTabs((prev) => prev.map((t) => (t.id === active.id ? { ...t, editing: !t.editing } : t)));
   }, [active, flushAutoSave]);
@@ -475,7 +473,7 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
     if (root === "new-note") { void createChildDoc(node.id); return; }
     if (root === "new-group") { void createChildGroup(node.id); return; }
     if (root === "move") { void applyMove(node, path[1]?.id === "__root" ? notebookId : String(path[1]?.id)); return; }
-    if (root === "rename") { tapFeedback(); setRenamingId(node.id); setRenameValue(node.title); return; }
+    if (root === "rename") { setRenamingId(node.id); setRenameValue(node.title); return; }
     if (root === "icon") { setIconFor(node); return; }
     if (root === "history") { void openHistory(node); return; }
     if (root === "duplicate") {
@@ -590,10 +588,10 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
       {/* 底部胶囊栏（思源 #mobileBottomBar：纯图标）——只放阅读相关（文档树/标签/大纲/更多）；
           编辑与同步在顶栏右侧，避免打字时误触（用户 260909）。编辑态整条下滑淡出而不是卸载。 */}
       <nav className={"mobile-bottom-bar" + ((active?.editing || navHidden) ? " mobile-bottom-bar--hidden" : "")} data-prevent-swipe aria-hidden={(active?.editing || navHidden) ? "true" : "false"}>
-        <button className={"mobile-bottom-bar__item" + (sidebarOpen ? " active" : "")} onClick={() => { tapFeedback(); openSidebar(!sidebarOpen); }} aria-label="文档树" title="文档树"><Files /></button>
-        <button className={"mobile-bottom-bar__item" + (tabsOpen ? " active" : "")} onClick={() => { tapFeedback(); setTabsOpen(true); }} aria-label="标签页" title="标签页"><File />{tabs.length > 0 && <span className="bottom-bar-count">{tabs.length}</span>}</button>
-        <button className={"mobile-bottom-bar__item" + (outlineOpen ? " active" : "")} onClick={() => { tapFeedback(); openOutline(!outlineOpen); }} aria-label="大纲" title="大纲"><List /></button>
-        <button className={"mobile-bottom-bar__item" + (moreOpen ? " active" : "")} onClick={() => { tapFeedback(); setMoreOpen(true); }} aria-label="更多" title="更多"><MoreHorizontal /></button>
+        <button className={"mobile-bottom-bar__item" + (sidebarOpen ? " active" : "")} onClick={() => openSidebar(!sidebarOpen)} aria-label="文档树" title="文档树"><Files /></button>
+        <button className={"mobile-bottom-bar__item" + (tabsOpen ? " active" : "")} onClick={() => setTabsOpen(true)} aria-label="标签页" title="标签页"><File />{tabs.length > 0 && <span className="bottom-bar-count">{tabs.length}</span>}</button>
+        <button className={"mobile-bottom-bar__item" + (outlineOpen ? " active" : "")} onClick={() => openOutline(!outlineOpen)} aria-label="大纲" title="大纲"><List /></button>
+        <button className={"mobile-bottom-bar__item" + (moreOpen ? " active" : "")} onClick={() => setMoreOpen(true)} aria-label="更多" title="更多"><MoreHorizontal /></button>
       </nav>
 
       {/* 更多（思源 #menu：主菜单承担搜索/设置等次级入口） */}
@@ -660,7 +658,7 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
         open={notebookSwitchOpen}
         items={notebooks.map((nb) => ({ id: nb.id, label: nb.title, icon: FolderOpen, note: nb.id === notebookId ? "当前" : undefined }))}
         onClose={() => setNotebookSwitchOpen(false)}
-        onSelect={(it) => { setNotebookSwitchOpen(false); if (it.id !== notebookId) { tapFeedback(); onSwitchNotebook(it.id); } }}
+        onSelect={(it) => { setNotebookSwitchOpen(false); if (it.id !== notebookId) { onSwitchNotebook(it.id); } }}
       />
 
       {/* 目录树长按菜单 */}
