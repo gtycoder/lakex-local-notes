@@ -9,6 +9,7 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { ChevronLeft, ChevronRight, type LucideIcon } from "lucide-react";
 import { pushBackHandler } from "./backStack";
+import { getTouchAxis } from "../gestureCore";
 
 export interface MobileSheetItem {
   id: string;
@@ -39,6 +40,7 @@ export function MobileSheetMenu({ open, items, onClose, onSelect, headerAction }
   const [shown, setShown] = useState(false);
   const [path, setPath] = useState<MobileSheetItem[]>([]);
   const timer = useRef<number | null>(null);
+  const sheetRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (open) {
@@ -64,6 +66,36 @@ export function MobileSheetMenu({ open, items, onClose, onSelect, headerAction }
   useEffect(() => {
     if (!mounted) return;
     return pushBackHandler(() => { if (back()) return true; close(); return true; });
+  }, [mounted, back, close]);
+
+  // 右滑关闭/返回（对齐思源 mobile/util/touch.ts：全屏 menu/model 支持右滑关闭；子层右滑 = 返回上一层）
+  useEffect(() => {
+    const el = sheetRef.current;
+    if (!mounted || !el) return;
+    let startX = 0;
+    let startY = 0;
+    const onStart = (event: TouchEvent) => {
+      const touch = event.touches[0];
+      if (!touch) return;
+      startX = touch.clientX;
+      startY = touch.clientY;
+    };
+    const onMove = (event: TouchEvent) => {
+      const touch = event.touches[0];
+      if (!touch) return;
+      const dx = touch.clientX - startX;
+      const dy = touch.clientY - startY;
+      const judged = getTouchAxis(dx, dy);
+      if (judged === undefined || judged === "y") return;
+      if (dx < 0) return; // 只认右滑
+      if (dx > 64) { if (!back()) close(); }
+    };
+    el.addEventListener("touchstart", onStart, { passive: true });
+    el.addEventListener("touchmove", onMove, { passive: true });
+    return () => {
+      el.removeEventListener("touchstart", onStart);
+      el.removeEventListener("touchmove", onMove);
+    };
   }, [mounted, back, close]);
 
   if (!mounted) return null;
@@ -97,7 +129,7 @@ export function MobileSheetMenu({ open, items, onClose, onSelect, headerAction }
   return (
     <>
       <div className="b3-menu__scrim b3-menu__scrim--open" data-prevent-swipe onClick={close} aria-hidden="true" />
-      <div className={"b3-menu b3-menu--fullscreen b3-menu--sheet ln-sheet" + (shown ? " is-open" : "")} role="menu" data-prevent-swipe>
+      <div ref={sheetRef} className={"b3-menu b3-menu--fullscreen b3-menu--sheet ln-sheet" + (shown ? " is-open" : "")} role="menu" data-prevent-swipe>
         <div className={"b3-menu__title" + (path.length === 0 ? " b3-menu__title--root" : "")} onClick={() => { back(); }} data-prevent-swipe>
           {path.length > 0 && <span className="b3-menu__icon"><ChevronLeft size={18} /></span>}
           <span className="b3-menu__label">{title ?? ""}</span>

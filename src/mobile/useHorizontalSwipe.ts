@@ -1,10 +1,11 @@
 /**
- * 移动端「左右横滑」手势（全宽水平滑动，用于在平级页签间切换：小记 ↔ 知识库）。
- * 与 useEdgeSwipe（仅屏幕边缘）不同：本 hook 在内容区任意横向滑动即触发，但纵向滚动优先、可编辑/输入区不触发。
+ * 移动端「左右横滑」手势（用于平级页签切换：小记 ↔ 知识库）。
+ * 轴锁复用 gestureCore.getTouchAxis（与抽屉手势同一套判定），纵向滚动优先。
  */
 import { useEffect, useRef } from "react";
+import { getTouchAxis } from "./gestureCore";
 
-const SWIPE_THRESHOLD = 60;  // 触发所需横向位移（px）
+const SWIPE_THRESHOLD = 60;  // 触发切换所需横向位移（px）
 
 export function useHorizontalSwipe(onSwipe: (dir: "left" | "right") => void): void {
   const ref = useRef(onSwipe);
@@ -16,6 +17,7 @@ export function useHorizontalSwipe(onSwipe: (dir: "left" | "right") => void): vo
     let tracking = false;
 
     const onStart = (e: TouchEvent) => {
+      if (e.touches.length > 1) { tracking = false; return; }
       const t = e.touches[0];
       if (!t) return;
       const el = e.target as HTMLElement | null;
@@ -36,8 +38,7 @@ export function useHorizontalSwipe(onSwipe: (dir: "left" | "right") => void): vo
       if (!t) return;
       const dx = t.clientX - startX;
       const dy = t.clientY - startY;
-      // 纵向位移占优 → 视为滚动，取消
-      if (Math.abs(dy) > Math.abs(dx)) { tracking = false; return; }
+      if (getTouchAxis(dx, dy) === "y") { tracking = false; return; } // 纵向占优 → 交给滚动
       if (Math.abs(dx) < SWIPE_THRESHOLD) return;
       tracking = false;
       ref.current(dx < 0 ? "left" : "right");

@@ -1,13 +1,13 @@
 /**
- * 移动端「跟手开合抽屉」手势（对齐思源 mobile/util/touch.ts + touchPanelGesture.ts 口径）：
- *  - 触发：内容区任意横向滑动（不限屏幕边缘）；输入框/正文/[data-prevent-swipe] 不触发；
- *  - 轴锁定：位移先越过阈值且 |dx|>|dy| 才算横滑，纵向优先交给滚动（本次手势作废）；
- *  - 拖拽中：面板 transform 跟手、遮罩透明度联动，并加 --swiping 关掉 transition（思源同名类）；
- *  - 释放：|dx| > 视口宽/3 提交（思源 touch.ts:310），否则回弹；
- *  - 提交后先按最终态摆好 transform（transition 已恢复 → 平滑归位），再清掉内联样式，把状态交还 React 类名。
- * 旧 useEdgeSwipe 只在 >48px 时"触发一次开合"，没有跟手/反悔——手感差距就在这里。
+ * 移动端「跟手开合抽屉」手势（对齐思源 mobile/util/touch.ts + touchPanelGesture.ts）：
+ *  - 触发：内容区任意横向滑动（不限屏幕边缘）；输入框/正文/[data-prevent-swipe]、多指、横向可滚动内容不触发；
+ *  - 轴锁：位移先越过阈值且 |dx|>|dy| 才算横滑，纵向优先交给滚动；
+ *  - 跟手：进度用**带符号**位移，反向滑动会跟着回退（对齐思源 offset 公式；旧版取绝对值，反向不回退）；
+ *  - 释放：快速短滑（<1s 且位移 > 阈值）或越过视口宽 1/3 才提交（思源 touch.ts:309-313），否则回弹；
+ *  - 提交后先把面板摆到最终态（transition 已恢复 → 平滑归位），再清内联样式交还 React 类名。
  */
 import { useEffect, useRef } from "react";
+import { getTouchAxis, isHorizontalScrollable, panelCommit, panelProgress } from "./gestureCore";
 
 export type PanelSide = "left" | "right";
 
@@ -20,13 +20,10 @@ export interface PanelDragHandlers {
   commit: (side: PanelSide, open: boolean) => void;
 }
 
-const AXIS_THRESHOLD = 8;      // 判定横/纵轴的位移阈值
-const COMMIT_RATIO = 1 / 3;    // 提交阈值（视口宽的 1/3）
 const SETTLE_MS = 200;         // 归位动画时长上限（CSS 是 150ms）
 const SWIPING = "side-panel--swiping";
 const MASK_SWIPING = "side-mask--swiping";
-
-const clamp01 = (v: number) => (v < 0 ? 0 : v > 1 ? 1 : v);
+const EXCLUDE = 'input, textarea, select, [contenteditable="true"], [data-prevent-swipe]';
 
 export function usePanelDrag(handlers: PanelDragHandlers): void {
   const ref = useRef(handlers);
@@ -37,10 +34,12 @@ export function usePanelDrag(handlers: PanelDragHandlers): void {
     let startY = 0;
     let lastX = 0;
     let startTime = 0;
+    let dir = 1;                  // 拉开当前侧的方向：左栏向右(+1)、右栏向左(-1)
     let axis: "x" | "y" | null = null;
     let side: PanelSide | null = null;
     let openAtStart = false;
     let dragging = false;
+    let cancelled = false;       // 本手势已作废（纵向/非关闭方向/滚动内容/多指）→ 后续 move/end 一律 inert
 
     const apply = (s: PanelSide, p: number) => {
       const h = ref.current;
@@ -59,12 +58,18 @@ export function usePanelDrag(handlers: PanelDragHandlers): void {
     };
 
     const stop = () => { side = null; axis = null; dragging = false; };
+    const targetOf = (e: TouchEvent): HTMLElement | null => (e.target instanceof HTMLElement ? e.target : null);
 
     const onStart = (e: TouchEvent) => {
+      cancelled = false;
+      // 多指（缩放等）不参与抽屉手势
+      if (e.touches.length > 1) { stop(); cancelled = true; return; }
       const t = e.touches[0];
       if (!t) return;
-      const target = e.target as HTMLElement | null;
-      if (target?.closest?.('input, textarea, select, [contenteditable="true"], [data-prevent-swipe]')) { stop(); return; }
+      const target = targetOf(e);
+      if (target?.closest?.(EXCLUDE)) { stop(); cancelled = true; return; }
+      // 存在文本选区时不滑出抽屉（对齐思源：选中内容优先）
+      if (window.getSelection()?.toString()) { stop(); cancelled = true; return; }
       startX = t.clientX; startY = t.clientY; lastX = t.clientX; startTime = Date.now();
       axis = null; dragging = false;
       const h = ref.current;
@@ -73,39 +78,44 @@ export function usePanelDrag(handlers: PanelDragHandlers): void {
     };
 
     const onMove = (e: TouchEvent) => {
+      if (axis === "y" || cancelled) return;
       const t = e.touches[0];
       if (!t) return;
-      const dx = t.clientX - startX;
-      const dy = t.clientY - startY;
       if (axis === null) {
-        if (Math.max(Math.abs(dx), Math.abs(dy)) < AXIS_THRESHOLD) return;
-        if (Math.abs(dy) >= Math.abs(dx)) { axis = "y"; side = null; return; }   // 纵向 → 交给滚动
+        if (e.touches.length > 1) { axis = "y"; side = null; cancelled = true; return; }
+        const dx = t.clientX - startX;
+        const dy = t.clientY - startY;
+        const judged = getTouchAxis(dx, dy);
+        if (judged === undefined) return;
+        if (judged === "y") { axis = "y"; side = null; cancelled = true; return; }
         axis = "x";
-        if (!side) side = dx > 0 ? "left" : "right";                             // 未展开：方向决定要拉开哪侧
-        else if (openAtStart) {
-          // 已展开：只有"关闭方向"可拖（左栏往左、右栏往右），往内滑作废
+        if (!side) {
+          side = dx > 0 ? "left" : "right";
+          // 横向可滚动内容 → 交给原生滚动，不拉抽屉（对齐思源 isHorizontalScrollable）
+          if (isHorizontalScrollable(targetOf(e), dx)) { cancelled = true; return; }
+        } else {
+          // 已展开：只有“关闭方向”可拖（左栏往左、右栏往右），往内滑作废；
+          // 注意不能重置 axis（否则同一手势会被重新判成反方向、误开另一侧）。
           const closing = side === "left" ? dx < 0 : dx > 0;
-          if (!closing) { side = null; return; }
+          if (!closing) { cancelled = true; return; }
         }
+        dir = side === "left" ? 1 : -1;
       }
-      if (!side || axis !== "x") return;
+      if (cancelled || !side || axis !== "x") return;
       lastX = t.clientX;
       const width = window.innerWidth || 1;
-      const moved = Math.abs(lastX - startX);
-      const p = openAtStart ? clamp01(1 - moved / width) : clamp01(moved / width);
-      if (apply(side, p)) e.preventDefault();
+      const raw = dir * (lastX - startX);                 // >0 = 往“拉开该侧”的方向
+      if (apply(side, panelProgress(openAtStart, raw, width))) e.preventDefault();
     };
 
     const onEnd = () => {
-      const s = side;
+      const s = cancelled ? null : side;
       const h = ref.current;
       stop();
       if (!s) { h.getMask("left")?.classList.remove(MASK_SWIPING); h.getMask("right")?.classList.remove(MASK_SWIPING); return; }
-      const moved = Math.abs(lastX - startX);
-      // 对齐思源 touch.ts:308-313：快速横向滑动（<1000ms）即便距离短也提交；慢拖才要求越过 1/3 屏宽。
-      const quickFlick = Date.now() - startTime < 1000 && moved > AXIS_THRESHOLD;
-      const passed = moved > (window.innerWidth || 1) * COMMIT_RATIO || quickFlick;
-      const next = openAtStart ? !passed : passed;
+      const width = window.innerWidth || 1;
+      const raw = dir * (lastX - startX);
+      const next = panelCommit(openAtStart, raw, Date.now() - startTime, width);
       const panel = h.getPanel(s);
       const mask = h.getMask(s);
       if (panel) {
