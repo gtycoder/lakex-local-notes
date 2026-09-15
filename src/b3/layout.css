@@ -50,7 +50,6 @@
 
 /* 左右活动轨：透明、满高、无边框，与顶部一体（内容仍在标题栏下方） */
 .activity-rail {
-  margin-top: 0;
   padding-top: var(--topbar-height);
   background: transparent;
   border-right: 0 !important;
@@ -90,7 +89,6 @@
 
 /* 标签项：思源 layout-tab-bar .item 观感（窄窗同样成立——组 4） */
 .tab-item {
-  color: var(--b3-theme-on-surface);
   border-radius: var(--b3-border-radius);
   min-height: 29px;
   line-height: 22px;
@@ -105,9 +103,7 @@
    不再叠「主色浅底 + 主色内描边 + 主色文字」——激活态只保留一个着色信号。
    position/z-index 由顶层 .tab-item.active 提供。 */
 .tab-item.active {
-  background-color: var(--lake-raised);
   box-shadow: inset 0 2px 0 var(--b3-theme-primary);
-  border-color: transparent;
 }
 
 /* 左侧固定目录：白色卡片、无强边框/阴影、顶部留 4px 灰缝（圆角可见，思源卡片从灰底"抠出"）、右侧 4px 灰缝 */
@@ -244,11 +240,9 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  cursor: pointer;
   padding: 0;
   border: 0;
   background: transparent;
-  font: inherit;
   text-align: left;
 }
 .protyle-breadcrumb__item:hover { color: var(--b3-theme-on-background); }
@@ -337,13 +331,8 @@
   display: grid;
   place-items: center;
   width: 26px;
-  height: 26px;
   padding: 0;
-  border: 0;
-  border-radius: var(--b3-border-radius);
-  color: var(--b3-theme-on-surface);
   background: transparent;
-  cursor: pointer;
   -webkit-app-region: no-drag;
   app-region: no-drag;
   transition: color var(--lake-motion-fast) var(--lake-ease-standard), background-color var(--lake-motion-fast) var(--lake-ease-standard);
@@ -367,7 +356,6 @@
 /* 标签条收口（共用作用域）：滚动只发生在 .tab-items 内，.tab-bar 自身不能成为滚动层。
  * 与上面的 fixed 几何同为"顶栏"一组，窄窗必须同样成立。 */
 .tab-bar {
-  overflow: visible;
 }
 .tab-items {
   align-self: stretch;

@@ -9,7 +9,6 @@
   background: var(--lake-sync-pending, #d29042);
 }
 .tab-item .tab-close {
-  position: static !important;
   flex: 0 0 18px !important;
   width: 18px !important;
   height: 18px !important;
@@ -63,10 +62,8 @@
   height: 24px;
   padding: 0;
   border: 0;
-  border-radius: var(--lake-radius-md);
   color: var(--lake-text-tertiary);
   background: transparent;
-  cursor: pointer;
   transition: color var(--lake-motion-fast) var(--lake-ease-standard), background-color var(--lake-motion-fast) var(--lake-ease-standard), transform var(--lake-motion-press) var(--lake-ease-standard);
 }
 .dock-icon-btn:hover:not(:disabled) {

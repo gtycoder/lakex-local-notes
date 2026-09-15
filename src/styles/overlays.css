@@ -2,7 +2,7 @@
 .sync-status-button { position: relative; width: 30px; min-width: 30px; height: 28px; padding: 0; gap: 0; justify-content: center; }
 .sync-status-button .sync-status-icon { display: inline-flex; flex: 0 0 auto; }
 .sync-status-button:hover .sync-status-icon { transform: translateY(-.5px); }
-.sync-status-visually-hidden { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+.sync-status-visually-hidden { position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); }
 .sync-status-button.pending { color: var(--lake-sync-pending); }
 .sync-status-button.error { color: var(--lake-error); }
 .sync-status-button.disabled { color: var(--lake-text-tertiary); }

@@ -1,5 +1,5 @@
 /* Quick Notes keeps its independent workspace identity while sharing shell semantics. */
-.quick-notes-pane { color: var(--lake-text); background: var(--lake-shell); }
+.quick-notes-pane { background: var(--lake-shell); }
 .quick-notes-header h1 { color: var(--lake-text); }
 .quick-note-composer,
 .quick-note-entry { border-color: var(--lake-border); background: var(--lake-panel); box-shadow: var(--lake-shadow-soft); }

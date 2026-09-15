@@ -187,15 +187,12 @@
 /* ── 标签页（思源：灰栏 + 白底激活 + 顶部主色指示线）── */
 .tab-bar {
   background: var(--b3-theme-surface);
-  border-bottom-color: var(--b3-border-color);
 }
 .tab-item:hover {
   background-color: var(--b3-list-hover);
 }
 .tab-item.active {
   background: var(--lake-raised);
-  color: var(--lake-text);
-  box-shadow: inset 0 2px 0 var(--b3-theme-primary);
 }
 .tab-item.deleted,
 .tab-item.deleted.active {
