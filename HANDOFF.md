@@ -521,6 +521,28 @@
    397 条计划合并应用时 50158 个元素变化，剔掉 216 条后才归零。
 4. **像素级兜底**：改动前/后同流程截图，7 屏共 18.26M 颜色通道 **差异 0**。
 
+**第三批（提交 `d83cf97`）+ 两条硬教训**
+
+1. **fileIdx 必须"照数不对齐就落盘改错行"**：守卫跳过未命中的 `@media` 后，浏览器侧规则序号与源码侧
+   不再一致 → 上一批 63 条只能跳过。改成「**照数**所有叶子规则、只是不对未命中的做实验」后序号对齐
+   （`v-rule-align.mjs` 可以自查：Node 解析的规则数/顺序必须等于 CSSOM）。补上后重跑 19+ 屏 × 双主题：
+   81 条候选（这次**全部两主题都判"去掉优先级无变化"**），最后按像素回归只留下 **15 条**。
+2. **合并判据不是"逐条都无变化"，而是"这一组一起应用后像素 0 差异"**——本轮有两组必须原样保留 `!important`：
+   - **壳层表面属性**（`app-shell`/`activity-rail`/`sidebar`/`workspace`/`tab-bar`/`statusbar` 的
+     `background`/`border`/`box-shadow`）：去掉后整窗出现约 **2%** 的均匀色差（材质渐变 vs 平色）；
+   - **浮动窗/设置面板表面**（`floating-dialog`/`settings-panel*`/`settings-header`）：去掉后浅色下设置弹窗
+     出现 **0.144% / maxΔ 12** 的可复现色差。
+   结论：这类"材质色"属性是**一整层**在共同决定观感（依赖注入到 `--shell-unified-*`/`--floating-dialog-*`
+   令牌的整套规则），不适合按单条 `!important` 逐个去。
+3. **像素回归必须先做"同源连跑对照"**：设置弹窗有跨运行的持久状态（`useFloatingDialog` 记住尺寸/位置），
+   我一度把 2.96% 的状态差异当成 CSS 回归。判据：同一份 CSS 连跑两次应 0 差异；差异大于该噪声才可信。
+4. **两条会让审计卡死的坑（务必避开）**：
+   - 点小记「编辑」会留下未保存草稿，之后再导航会弹 **Electron 原生确认框** → renderer 主线程阻塞、
+     CDP 全部调用超时（`Page.handleJavaScriptDialog` 无效，它不是 JS dialog）；只能屏幕外按 Esc/Cancel
+     或重启 app。审计脚本里这两个状态（`quicknote-edit`、`confirm-delete`）已移除。
+   - 杀掉 Electron 后 **vite dev(1421) 也可能一起没了**，此时 `nohup electron .` 会因连不上 dev server 直接退出；
+     正确做法是重开 `npm run dev`（tty 长驻，vite-plugin-electron 自动拉起 9222）。
+
 **第一批结果（提交 `12d5861`）**：181 条改动落地 —— 整条规则删除 99 条、单条声明删除 67 条、
 去掉多余 `!important` 15 条；`styles.css` −293 行、`b3/components.css` −47 行、`b3/layout.css` −17 行。
 真实生效（effective）的声明一条没动；`@media (prefers-reduced-motion)` 内的声明零改动
