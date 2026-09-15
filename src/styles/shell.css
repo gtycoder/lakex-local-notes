@@ -127,57 +127,47 @@ html[data-theme="dark"] .document-pane .ne-engine > ne-h6 ne-heading-content {
 }
 
 
-@media (min-width: 761px) {
-  /* Match the outline's bounded floating dock. The previous full-height fixed
-     sidebar made the panel appear to grow when it was leaving. */
-  .sidebar.sidebar-floating,
-  .sidebar.sidebar-collapsed {
-    top: 72px !important;
-    bottom: 72px !important;
-    height: calc(100vh - 144px) !important;
-    max-height: calc(100vh - 144px) !important;
-    overflow: hidden !important;
-    transition: opacity 120ms ease-out, transform 120ms var(--lake-ease-standard) !important;
-  }
-  /* 右侧大纲浮层与左侧目录浮层同高（对齐到 top/bottom 72），消除左右弹出高度不一致 */
-  .outline-sidebar--collapsed.outline-sidebar--hovered .outline-sidebar__content {
-    top: 72px !important;
-    bottom: 72px !important;
-    height: calc(100vh - 144px) !important;
-    max-height: calc(100vh - 144px) !important;
-  }
+/* ── 目录栏浮层（共用作用域；260915 窄窗彻底统一）──
+ * 原先是四个 `@media (min-width: 761px)` 块 ⇒ 窄窗悬停左轨会拉出一块没有高度约束、
+ * 被栅格撑到上万像素的面板（实测 box [38,-15838,265,16706]）。宽窄共用同一套几何。
+ * Match the outline's bounded floating dock. The previous full-height fixed
+ * sidebar made the panel appear to grow when it was leaving. */
+.sidebar.sidebar-floating,
+.sidebar.sidebar-collapsed {
+  top: 72px !important;
+  bottom: 72px !important;
+  height: calc(100vh - 144px) !important;
+  max-height: calc(100vh - 144px) !important;
+  overflow: hidden !important;
+  transition: opacity 120ms ease-out, transform 120ms var(--lake-ease-standard) !important;
+}
+/* 右侧大纲浮层与左侧目录浮层同高（对齐到 top/bottom 72），消除左右弹出高度不一致 */
+.outline-sidebar--collapsed.outline-sidebar--hovered .outline-sidebar__content {
+  top: 72px !important;
+  bottom: 72px !important;
+  height: calc(100vh - 144px) !important;
+  max-height: calc(100vh - 144px) !important;
 }
 
-@media (min-width: 761px) {
-  /* #2 浮层阴影：左右统一、更柔；阴影静态、不参与切出动画（避免逐帧重绘，保性能与速度） */
-  .sidebar.sidebar-floating {
-    box-shadow: 16px 0 26px -14px rgba(43, 50, 78, .30) !important; /* 单侧投影：负 spread 收掉上下溢出 */
-  }
-  .outline-sidebar--collapsed.outline-sidebar--hovered .outline-sidebar__content {
-    box-shadow: -16px 0 26px -14px rgba(43, 50, 78, .30) !important; /* 单侧投影（朝内容侧） */
-    transition: opacity 180ms var(--lake-ease-standard), transform 180ms var(--lake-ease-standard), visibility 180ms linear !important;
-  }
+/* #2 浮层阴影：左右统一、更柔；阴影静态、不参与切出动画（避免逐帧重绘，保性能与速度） */
+.sidebar.sidebar-floating {
+  box-shadow: 16px 0 26px -14px rgba(43, 50, 78, .30) !important; /* 单侧投影：负 spread 收掉上下溢出 */
+}
+.outline-sidebar--collapsed.outline-sidebar--hovered .outline-sidebar__content {
+  box-shadow: -16px 0 26px -14px rgba(43, 50, 78, .30) !important; /* 单侧投影（朝内容侧） */
+  transition: opacity 180ms var(--lake-ease-standard), transform 180ms var(--lake-ease-standard), visibility 180ms linear !important;
 }
 
-@media (min-width: 761px) {
-  .sidebar.sidebar-floating {
-    opacity: 1 !important;
-    transform: translateX(0) !important;
-    pointer-events: auto !important;
-  }
+/* Showing the library preview is immediate; only the collapse is animated.
+   This prevents the pointer from repeatedly crossing a moving panel edge. */
+.sidebar.sidebar-floating {
+  opacity: 1 !important;
+  transform: none !important;
+  pointer-events: auto !important;
+  transition: none !important;
 }
-
-@media (min-width: 761px) {
-  /* Showing the library preview is immediate; only the collapse is animated.
-     This prevents the pointer from repeatedly crossing a moving panel edge. */
-  .sidebar.sidebar-floating {
-    opacity: 1 !important;
-    transform: none !important;
-    transition: none !important;
-  }
-  .sidebar.sidebar-collapsed {
-    opacity: 0 !important;
-    transform: translateX(-12px) !important;
-    transition: opacity 120ms ease-out, transform 120ms var(--lake-ease-standard) !important;
-  }
+.sidebar.sidebar-collapsed {
+  opacity: 0 !important;
+  transform: translateX(-12px) !important;
+  transition: opacity 120ms ease-out, transform 120ms var(--lake-ease-standard) !important;
 }

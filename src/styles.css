@@ -523,6 +523,179 @@ ne-card[data-card-name="codeblock"] .ne-card-resizer-mask {
   --shell-radius: var(--lake-radius-md); /* 左右固定 rail 共用宽度 */
 }
 
+/* ══ 壳层几何 · 共用作用域（260915 窄窗彻底统一 · 组 1：顶栏 ↔ 让位）══
+ * 这一对原先都写在下面的 `@media (min-width: 761px)` 里：视口一旦窄于 761px，
+ * 顶栏退回 sticky、工作区让位消失 —— 宽→窄拖动时顶栏与文档区同时跳变。
+ * 按 HANDOFF §2.39 的成对清单搬到共用作用域（块内顺序一字未改，只是去掉守卫），
+ * 窄窗块里对应的手抄副本同步删除。**改这里必须两组一起看，缺一就会把面包屑压到顶栏下。 */
+.workspace {
+  grid-column: 3;
+  grid-row: 1;
+  grid-template-rows: minmax(0, 1fr);
+  margin: calc(var(--topbar-height) + 4px) 0 4px 0;
+  position: relative;
+  border: 0;
+  border-radius: var(--b3-border-radius-b);
+  background: #fff;
+  overflow: hidden;
+}
+
+/* The tab strip is a window-level title bar. It must not inherit the
+   document column's x offset when the library is docked or previewed. */
+.tab-bar {
+  position: fixed;
+  top: 0;
+  right: 0;
+  left: 0;
+  z-index: 400;
+  box-sizing: border-box;
+  display: flex;
+  gap: 6px;
+  overflow: visible;
+  padding: 4px 10px;
+  border-bottom: 1px solid var(--shell-separator);
+  background: var(--shell-toolbar);
+  box-shadow: 0 1px 0 rgba(0, 0, 0, .05);
+  -webkit-backdrop-filter: saturate(1.2) blur(20px);
+}
+.platform-mac .tab-bar {
+  padding-left: 82px;
+  -webkit-app-region: drag;
+}
+.platform-native-titlebar .tab-bar {
+  padding-left: 10px;
+  -webkit-app-region: no-drag;
+}
+
+.tab-items {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1 1 auto;
+  overflow-x: auto;
+  overflow-y: visible;
+  scrollbar-width: none;
+}
+.tab-items::-webkit-scrollbar { display: none; }
+
+/* ── 左右活动轨（260915 窄窗彻底统一 · 组 2：轨几何 ↔ 轨按钮）──
+ * A/B 成对搬运：轨的 flex 布局/居中/内边距与按钮尺寸是一对，缺一按钮就会左移 2px（实测 5→3）。 */
+.activity-rail {
+  display: flex;
+  position: relative;
+  z-index: 270;
+  grid-column: 1;
+  grid-row: 1;
+  flex-direction: column;
+  align-items: center;
+  align-self: stretch;
+  min-width: var(--activity-rail-width);
+  margin: var(--topbar-height) 0 0 0;
+  padding: 0 3px 6px;
+  border-right: 1px solid var(--shell-separator);
+  background: var(--lake-shell);
+}
+.activity-rail-spacer { display: none; }
+.activity-rail-fill { flex: 1; }
+.activity-button {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  margin: 2px 0;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  color: var(--lake-text-secondary);
+  background: transparent;
+  transition: color var(--lake-motion-fast) var(--lake-ease-standard), background-color var(--lake-motion-fast) var(--lake-ease-standard), box-shadow var(--lake-motion-fast) var(--lake-ease-standard), transform var(--lake-motion-press) var(--lake-ease-standard);
+}
+.activity-button:active { transform: scale(.965); }
+.activity-button:focus-visible { outline: 2px solid rgba(47, 125, 94, 0.18); outline-offset: 2px; }
+
+/* ── 侧栏卡片几何（260915 窄窗彻底统一 · 组 6：侧栏壳层）── */
+.sidebar {
+  position: relative;
+  z-index: 250;
+  grid-column: 2;
+  grid-row: 1;
+  width: var(--sidebar-width);
+  align-self: end;
+  padding-top: 0;
+  overflow: visible;
+  transition: opacity var(--lake-motion-standard) var(--lake-ease-standard), transform var(--lake-motion-panel) var(--lake-ease-standard), box-shadow 240ms ease-out;
+}
+.app-shell.sidebar-resizing .sidebar { transition: none; }
+.sidebar::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 0;
+  height: var(--topbar-height);
+  -webkit-app-region: drag;
+}
+/* 目录栏固定视口：容器不滚动，只有 .note-list 是垂直滚动层 */
+.sidebar.sidebar-docked,
+.sidebar.sidebar-floating {
+  min-height: 0;
+  overflow: hidden;
+}
+.sidebar.sidebar-docked {
+  height: 100% !important;
+  width: auto;
+  margin-bottom: 0;
+  max-width: none;
+  align-self: stretch;
+}
+/* 收起态 = 悬停预览（本体固定、藏在左轨里）；浮动带尺寸统一由 styles/shell.css 出。 */
+.sidebar.sidebar-floating,
+.sidebar.sidebar-collapsed {
+  position: fixed;
+  top: var(--topbar-height);
+  bottom: auto;
+  left: var(--activity-rail-width);
+  padding-top: 0;
+}
+.sidebar.sidebar-collapsed {
+  pointer-events: none;
+  box-shadow: none;
+  transition-duration: var(--lake-motion-standard);
+}
+
+/* ── 壳层材质一览（260915 窄窗彻底统一）：壳是透明底，卡片才是白面 ──
+ * 原先是 `@media (min-width: 761px)` 里的规则 ⇒ 窄窗会掉回 `.workspace { background: #fff }`，
+ * 顶栏/文档区跨断点时底色翻白（用户 260915 动图）。 */
+.workspace,
+.document-pane,
+.multi-tab-editor {
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+.statusbar {
+  border: 0 !important;
+  background: transparent;
+  box-shadow: none !important;
+}
+
+/* 桌面壳层使用一块连续材质：不再把顶栏、资料库和正文画成三张卡片。
+ * （原先在 `@media (min-width: 761px)` 里 ⇒ 窄窗侧栏会掉回基础样式的 1px 右边框。） */
+.app-shell,
+.activity-rail,
+.sidebar {
+  background: var(--shell-unified-background);
+}
+.app-shell { border: 0; }
+.activity-rail,
+.sidebar,
+.sidebar.sidebar-docked,
+.sidebar.sidebar-floating {
+  border: 0;
+  box-shadow: none;
+}
+
 @media (min-width: 761px) {
   .app-shell {
     grid-template-columns: var(--activity-rail-width) var(--sidebar-width) minmax(0, 1fr);
@@ -533,80 +706,12 @@ ne-card[data-card-name="codeblock"] .ne-card-resizer-mask {
   .app-shell.sidebar-collapsed { transition-duration: var(--lake-motion-standard); }
   .app-shell.sidebar-resizing { transition: none; }
 
-  .activity-rail {
-    display: flex;
-    position: relative;
-    z-index: 270;
-    grid-column: 1;
-    grid-row: 1;
-    flex-direction: column;
-    align-items: center;
-    align-self: stretch;
-    min-width: var(--activity-rail-width);
-    margin: var(--topbar-height) 0 0 0;
-    padding: 0 3px 6px;
-    border-right: 1px solid var(--shell-separator);
-    background: var(--lake-shell);
-  }
-  .activity-rail-spacer { display: none; }
-  .activity-rail-fill { flex: 1; }
-  .activity-button {
-    display: grid;
-    place-items: center;
-    width: 28px;
-    height: 28px;
-    margin: 2px 0;
-    padding: 0;
-    border: 0;
-    border-radius: 6px;
-    color: var(--lake-text-secondary);
-    background: transparent;
-    transition: color var(--lake-motion-fast) var(--lake-ease-standard), background-color var(--lake-motion-fast) var(--lake-ease-standard), box-shadow var(--lake-motion-fast) var(--lake-ease-standard), transform var(--lake-motion-press) var(--lake-ease-standard);
-  }
+  /* .activity-rail / .activity-rail-spacer / .activity-rail-fill / .activity-button
+     已搬到共用作用域（见上方「左右活动轨」）。 */
   
-  
-  .activity-button:active { transform: scale(.965); }
-  .activity-button:focus-visible { outline: 2px solid rgba(47, 125, 94, 0.18); outline-offset: 2px; }
 
-  .sidebar {
-    position: relative;
-    z-index: 250;
-    grid-column: 2;
-    grid-row: 1;
-    width: var(--sidebar-width);
-    align-self: end;
-    padding-top: 0;
-    overflow: visible;
-    transition: opacity var(--lake-motion-standard) var(--lake-ease-standard), transform var(--lake-motion-panel) var(--lake-ease-standard), box-shadow 240ms ease-out;
-  }
-  .app-shell.sidebar-resizing .sidebar { transition: none; }
-  .sidebar::before {
-    content: "";
-    position: absolute;
-    top: 0;
-    right: 0;
-    left: 0;
-    height: var(--topbar-height);
-    -webkit-app-region: drag;
-  }
-  .sidebar.sidebar-floating,
-  .sidebar.sidebar-collapsed {
-    position: fixed;
-    top: var(--topbar-height);
-    bottom: auto;
-    left: var(--activity-rail-width);
-    padding-top: 0;
-  }
-  .sidebar.sidebar-floating {
-    border-right-color: rgba(0, 0, 0, .18);
-    border-radius: 0 14px 14px 0;
-    box-shadow: 18px 0 50px rgba(43, 50, 78, .16), 2px 0 7px rgba(43, 50, 78, .08);
-  }
-  .sidebar.sidebar-collapsed {
-    pointer-events: none;
-    box-shadow: none;
-    transition-duration: var(--lake-motion-standard);
-  }
+  /* .sidebar / .sidebar::before / .sidebar.sidebar-floating / .sidebar.sidebar-collapsed
+     已搬到共用作用域（见上方「侧栏卡片几何」，浮动带见 b3/layout.css）。 */
 
   
   
@@ -667,56 +772,8 @@ ne-card[data-card-name="codeblock"] .ne-card-resizer-mask {
   .sidebar-resize-handle:focus-visible::after { background: rgba(59, 91, 219, .48); }
   .sidebar-resize-handle:focus-visible { outline: none; }
 
-  .workspace {
-    grid-column: 3;
-    grid-row: 1;
-    grid-template-rows: minmax(0, 1fr);
-    margin: calc(var(--topbar-height) + 4px) 0 4px 0;
-    position: relative;
-    border: 0;
-    border-radius: var(--b3-border-radius-b);
-    background: #fff;
-    overflow: hidden;
-  }
+  /* .workspace / .tab-bar / .tab-items / .tabbar-* 已搬到共用作用域（见上方「壳层几何」） */
 
-  /* The tab strip is a window-level title bar. It must not inherit the
-     document column's x offset when the library is docked or previewed. */
-  .tab-bar {
-    position: fixed;
-    top: 0;
-    right: 0;
-    left: 0;
-    z-index: 400;
-    box-sizing: border-box;
-    display: flex;
-    gap: 6px;
-    overflow: visible;
-    padding: 4px 10px;
-    border-bottom: 1px solid var(--shell-separator);
-    background: var(--shell-toolbar);
-    box-shadow: 0 1px 0 rgba(0, 0, 0, .05);
-    -webkit-backdrop-filter: saturate(1.2) blur(20px);
-  }
-  .platform-mac .tab-bar {
-    padding-left: 82px;
-    -webkit-app-region: drag;
-  }
-  .platform-native-titlebar .tab-bar {
-    padding-left: 10px;
-    -webkit-app-region: no-drag;
-  }
-  
-  .tab-items {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    flex: 1 1 auto;
-    overflow-x: auto;
-    overflow-y: visible;
-    scrollbar-width: none;
-  }
-  .tab-items::-webkit-scrollbar { display: none; }
-  
   .tabbar-action:hover { color: var(--shell-accent-strong); background: rgba(59, 91, 219, .12); }
   .tabbar-action:active { transform: scale(.94); }
   .tabbar-action:focus-visible { outline: 2px solid rgba(59, 91, 219, .22); outline-offset: 2px; }
@@ -761,194 +818,198 @@ ne-card[data-card-name="codeblock"] .ne-card-resizer-mask {
     box-sizing: border-box;
     padding-top: 0;
   }
-  .tab-item {
-    position: relative;
-    /* 不收缩：每个标签按标题内容固有宽度展示，超长标题封顶省略 */
-    flex: 0 0 auto;
-    height: 28px;
-    padding: 0 4px 0 8px;
-    border: 1px solid transparent;
-    border-radius: 8px;
-    color: #5f6368;
-    background: rgba(255, 255, 255, .42);
-    font-size: 12px;
-    font-weight: 450;
-    box-shadow: none;
-    transition: color var(--lake-motion-fast) var(--lake-ease-standard), background-color var(--lake-motion-fast) var(--lake-ease-standard), border-color var(--lake-motion-fast) var(--lake-ease-standard), box-shadow var(--lake-motion-fast) var(--lake-ease-standard), transform var(--lake-motion-press) var(--lake-ease-standard);
-  }
-  .tab-item:hover { color: #46527e; background: rgba(255, 255, 255, .78); }
-  
-  .tab-item:active { transform: scale(.98); }
-  .tab-close { position: absolute; top: 50%; right: 4px; flex: none; margin: 0; border-radius: 50%; }
-  .tab-item.active .tab-close { opacity: .38; }
-  .tab-close:hover { background: rgba(31, 35, 41, .09); }
-  .tab-switcher-wrap {
-    position: relative;
-    flex: 0 0 auto;
-    margin-left: 2px;
-    -webkit-app-region: no-drag;
-  }
-  .tab-switcher {
-    position: relative;
-    display: grid;
-    place-items: center;
-    width: 28px;
-    height: 28px;
-    padding: 0;
-    border: 1px solid transparent;
-    border-radius: var(--radius-md);
-    color: #5f6368;
-    background: rgba(255, 255, 255, .48);
-    -webkit-app-region: no-drag;
-    transition: color var(--lake-motion-fast) var(--lake-ease-standard), background-color var(--lake-motion-fast) var(--lake-ease-standard), border-color var(--lake-motion-fast) var(--lake-ease-standard), transform var(--lake-motion-press) var(--lake-ease-standard);
-  }
-  .tab-switcher:hover,
-  .tab-switcher.open { color: var(--shell-accent-strong); border-color: rgba(59, 91, 219, .18); background: rgba(255, 255, 255, .86); }
-  .tab-switcher:active { transform: scale(.94); }
-  .tab-switcher:focus-visible { outline: 2px solid rgba(59, 91, 219, .22); outline-offset: 2px; }
-  .tab-switcher[data-tooltip]::after {
-    content: attr(data-tooltip);
-    position: absolute;
-    top: calc(100% + 9px);
-    right: 0;
-    z-index: 20;
-    width: max-content;
-    max-width: 260px;
-    padding: 6px 9px;
-    border: 1px solid rgba(0, 0, 0, .16);
-    border-radius: 6px;
-    color: #f8f9ff;
-    background: #3f4868;
-    box-shadow: var(--lake-shadow-soft);
-    font-size: 11px;
-    font-weight: 500;
-    line-height: 1.25;
-    white-space: nowrap;
-    pointer-events: none;
-    opacity: 0;
-    transform: translateY(-3px);
-    transition: opacity var(--lake-motion-fast) var(--lake-ease-standard), transform var(--lake-motion-fast) var(--lake-ease-standard);
-  }
-  .tab-switcher[data-tooltip]:hover::after,
-  .tab-switcher[data-tooltip]:focus-visible::after { opacity: 1; transform: translateY(0); }
-  .tab-switcher-menu {
-    /* portal 渲染到 document.body，脱离 .tab-bar（sticky+z-index:200）层叠上下文；
-       fixed + z-index:500 保证弹窗始终在大纲 rail（z-index:250）之上。 */
-    position: fixed;
-    z-index: 500;
-    max-width: calc(100vw - 24px);
-    display: flex;
-    flex-direction: column;
-    width: min(200px, calc(100vw - 24px));
-    max-height: min(470px, calc(100vh - var(--topbar-height) - 24px));
-    padding: 8px;
-    border: 1px solid rgba(0, 0, 0, .16);
-    border-radius: var(--radius-lg);
-    background: rgba(255, 255, 255, .96);
-    box-shadow: var(--lake-shadow-panel);
-    backdrop-filter: blur(20px) saturate(1.15);
-    -webkit-backdrop-filter: blur(20px) saturate(1.15);
-    transform-origin: top right;
-  }
-  .tab-switcher-resize {
-    position: absolute;
-    left: -4px;
-    top: 0;
-    bottom: 0;
-    width: 8px;
-    cursor: ew-resize;
-    touch-action: none;
-    -webkit-app-region: no-drag;
-  }
-  .tab-switcher-resize::after {
-    content: "";
-    position: absolute;
-    left: 3px;
-    top: 50%;
-    transform: translateY(-50%);
-    width: 2px;
-    height: 40px;
-    border-radius: var(--radius-pill);
-    background: rgba(0, 0, 0, .14);
-    opacity: 0;
-    transition: opacity var(--lake-motion-fast) var(--lake-ease-standard);
-  }
-  .tab-switcher-menu:hover .tab-switcher-resize::after,
-  .tab-switcher-resize:hover::after { opacity: 1; }
-  .tab-switcher-heading {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    min-height: 28px;
-    padding: 0 7px 5px;
-    color: #495374;
-    font-size: 12px;
-  }
-  .tab-switcher-heading span { color: #929ab1; font-variant-numeric: tabular-nums; }
-  .tab-switcher-list {
-    min-height: 0;
-    overflow-y: auto;
-    overscroll-behavior: contain;
-  }
-  .tab-switcher-item {
-    display: flex;
-    align-items: center;
-    gap: 4px;
-    min-height: 32px;
-    border-radius: var(--radius-md);
-  }
-  .tab-switcher-item.active { background: rgba(59, 91, 219, .11); }
-  .tab-switcher-item:hover { background: rgba(59, 91, 219, .08); }
-  .tab-switcher-select,
-  .tab-switcher-close {
-    border: 0;
-    background: transparent;
-    color: #596481;
-    -webkit-app-region: no-drag;
-  }
-  .tab-switcher-select {
-    display: flex;
-    align-items: center;
-    flex: 1 1 auto;
-    gap: 7px;
-    min-width: 0;
-    min-height: 32px;
-    padding: 4px 6px;
-    text-align: left;
-  }
-  .tab-switcher-select:hover { color: var(--shell-text); }
-  .tab-switcher-icon {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    flex: 0 0 18px;
-    width: 18px;
-    color: #69738e;
-    font-size: 15px;
-    line-height: 1;
-  }
-  .tab-switcher-status {
-    width: 7px;
-    color: var(--lake-sync-pending);
-    font-size: 10px;
-    line-height: 1;
-  }
-  .tab-switcher-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .tab-switcher-close {
-    display: grid;
-    place-items: center;
-    flex: 0 0 auto;
-    width: 26px;
-    height: 26px;
-    margin-right: 3px;
-    border-radius: var(--radius-sm);
-    opacity: 0;
-  }
-  .tab-switcher-item:hover .tab-switcher-close,
-  .tab-switcher-close:focus-visible { opacity: .7; }
-  .tab-switcher-close:hover { color: var(--lake-error); background: rgba(194, 85, 88, .11); opacity: 1; }
-
 }
+
+/* ══ 标签项 / 标签切换器 · 共用作用域（260915 窄窗彻底统一 · 组 3/4）══
+ * 这一族原先也在下面的 `@media (min-width: 761px)` 里 ⇒ 761px 以下标签项掉回基础样式
+ * （边框/内边距/字号全变、切换器露出浏览器默认按钮框与灰底）＝宽→窄最显眼的几处跳变。
+ * 整族搬到共用作用域；窄窗块里对应的手抄副本同步删除。 */
+.tab-item {
+  position: relative;
+  /* 不收缩：每个标签按标题内容固有宽度展示，超长标题封顶省略 */
+  flex: 0 0 auto;
+  height: 28px;
+  padding: 0 4px 0 8px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  color: #5f6368;
+  background: rgba(255, 255, 255, .42);
+  font-size: 12px;
+  font-weight: 450;
+  box-shadow: none;
+  transition: color var(--lake-motion-fast) var(--lake-ease-standard), background-color var(--lake-motion-fast) var(--lake-ease-standard), border-color var(--lake-motion-fast) var(--lake-ease-standard), box-shadow var(--lake-motion-fast) var(--lake-ease-standard), transform var(--lake-motion-press) var(--lake-ease-standard);
+}
+.tab-item:hover { color: #46527e; background: rgba(255, 255, 255, .78); }
+
+.tab-item:active { transform: scale(.98); }
+.tab-close { position: absolute; top: 50%; right: 4px; flex: none; margin: 0; border-radius: 50%; }
+.tab-item.active .tab-close { opacity: .38; }
+.tab-close:hover { background: rgba(31, 35, 41, .09); }
+.tab-switcher-wrap {
+  position: relative;
+  flex: 0 0 auto;
+  margin-left: 2px;
+  -webkit-app-region: no-drag;
+}
+.tab-switcher {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  color: #5f6368;
+  background: rgba(255, 255, 255, .48);
+  -webkit-app-region: no-drag;
+  transition: color var(--lake-motion-fast) var(--lake-ease-standard), background-color var(--lake-motion-fast) var(--lake-ease-standard), border-color var(--lake-motion-fast) var(--lake-ease-standard), transform var(--lake-motion-press) var(--lake-ease-standard);
+}
+.tab-switcher:hover,
+.tab-switcher.open { color: var(--shell-accent-strong); border-color: rgba(59, 91, 219, .18); background: rgba(255, 255, 255, .86); }
+.tab-switcher:active { transform: scale(.94); }
+.tab-switcher:focus-visible { outline: 2px solid rgba(59, 91, 219, .22); outline-offset: 2px; }
+.tab-switcher[data-tooltip]::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  top: calc(100% + 9px);
+  right: 0;
+  z-index: 20;
+  width: max-content;
+  max-width: 260px;
+  padding: 6px 9px;
+  border: 1px solid rgba(0, 0, 0, .16);
+  border-radius: 6px;
+  color: #f8f9ff;
+  background: #3f4868;
+  box-shadow: var(--lake-shadow-soft);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.25;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  transform: translateY(-3px);
+  transition: opacity var(--lake-motion-fast) var(--lake-ease-standard), transform var(--lake-motion-fast) var(--lake-ease-standard);
+}
+.tab-switcher[data-tooltip]:hover::after,
+.tab-switcher[data-tooltip]:focus-visible::after { opacity: 1; transform: translateY(0); }
+.tab-switcher-menu {
+  /* portal 渲染到 document.body，脱离 .tab-bar（sticky+z-index:200）层叠上下文；
+     fixed + z-index:500 保证弹窗始终在大纲 rail（z-index:250）之上。 */
+  position: fixed;
+  z-index: 500;
+  max-width: calc(100vw - 24px);
+  display: flex;
+  flex-direction: column;
+  width: min(200px, calc(100vw - 24px));
+  max-height: min(470px, calc(100vh - var(--topbar-height) - 24px));
+  padding: 8px;
+  border: 1px solid rgba(0, 0, 0, .16);
+  border-radius: var(--radius-lg);
+  background: rgba(255, 255, 255, .96);
+  box-shadow: var(--lake-shadow-panel);
+  backdrop-filter: blur(20px) saturate(1.15);
+  -webkit-backdrop-filter: blur(20px) saturate(1.15);
+  transform-origin: top right;
+}
+.tab-switcher-resize {
+  position: absolute;
+  left: -4px;
+  top: 0;
+  bottom: 0;
+  width: 8px;
+  cursor: ew-resize;
+  touch-action: none;
+  -webkit-app-region: no-drag;
+}
+.tab-switcher-resize::after {
+  content: "";
+  position: absolute;
+  left: 3px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 2px;
+  height: 40px;
+  border-radius: var(--radius-pill);
+  background: rgba(0, 0, 0, .14);
+  opacity: 0;
+  transition: opacity var(--lake-motion-fast) var(--lake-ease-standard);
+}
+.tab-switcher-menu:hover .tab-switcher-resize::after,
+.tab-switcher-resize:hover::after { opacity: 1; }
+.tab-switcher-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 28px;
+  padding: 0 7px 5px;
+  color: #495374;
+  font-size: 12px;
+}
+.tab-switcher-heading span { color: #929ab1; font-variant-numeric: tabular-nums; }
+.tab-switcher-list {
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.tab-switcher-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 32px;
+  border-radius: var(--radius-md);
+}
+.tab-switcher-item.active { background: rgba(59, 91, 219, .11); }
+.tab-switcher-item:hover { background: rgba(59, 91, 219, .08); }
+.tab-switcher-select,
+.tab-switcher-close {
+  border: 0;
+  background: transparent;
+  color: #596481;
+  -webkit-app-region: no-drag;
+}
+.tab-switcher-select {
+  display: flex;
+  align-items: center;
+  flex: 1 1 auto;
+  gap: 7px;
+  min-width: 0;
+  min-height: 32px;
+  padding: 4px 6px;
+  text-align: left;
+}
+.tab-switcher-select:hover { color: var(--shell-text); }
+.tab-switcher-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 18px;
+  width: 18px;
+  color: #69738e;
+  font-size: 15px;
+  line-height: 1;
+}
+.tab-switcher-status {
+  width: 7px;
+  color: var(--lake-sync-pending);
+  font-size: 10px;
+  line-height: 1;
+}
+.tab-switcher-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tab-switcher-close {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 26px;
+  height: 26px;
+  margin-right: 3px;
+  border-radius: var(--radius-sm);
+  opacity: 0;
+}
+.tab-switcher-item:hover .tab-switcher-close,
+.tab-switcher-close:focus-visible { opacity: .7; }
+.tab-switcher-close:hover { color: var(--lake-error); background: rgba(194, 85, 88, .11); opacity: 1; }
 
 @keyframes shell-sync-pulse {
   0%, 100% { opacity: .62; transform: scale(.94); }
@@ -1455,32 +1516,12 @@ ne-card[data-card-name="codeblock"] .ne-card-resizer-mask {
 }
 
 @media (min-width: 761px) {
-  /* 桌面壳层使用一块连续材质：不再把顶栏、资料库和正文画成三张卡片。 */
-  .app-shell,
-  .activity-rail,
-  .sidebar {
-    background: var(--shell-unified-background);
-  }
-  .app-shell { border: 0; }
-  .activity-rail,
-  .sidebar,
-  .sidebar.sidebar-docked,
-  .sidebar.sidebar-floating {
-    border: 0;
-    box-shadow: none;
-  }
+  /* 壳层连续材质（.app-shell/.activity-rail/.sidebar）已搬到共用作用域 */
   .sidebar.sidebar-docked {
     margin: calc(var(--topbar-height) + 4px) 4px 4px 0;
     height: calc(100% - var(--topbar-height) - 8px);
   }
-  .workspace,
-  .document-pane,
-  .multi-tab-editor {
-    background: transparent;
-    border: 0;
-    border-radius: 0;
-    box-shadow: none;
-  }
+  /* .workspace / .document-pane / .multi-tab-editor 材质已搬到共用作用域 */
   .tab-bar {
     background: var(--shell-unified-topbar);
     border: 0;
@@ -1494,11 +1535,7 @@ ne-card[data-card-name="codeblock"] .ne-card-resizer-mask {
     border: 0 !important;
     box-shadow: none !important;
   }
-  .statusbar {
-    border: 0 !important;
-    background: transparent;
-    box-shadow: none !important;
-  }
+  /* .statusbar 材质已搬到共用作用域 */
 
   /* 小记页：活动轨保持透明，与壳层对角渐变一体。 */
   .app-shell.quick-notes-active .activity-rail {
@@ -1647,14 +1684,15 @@ ne-card[data-card-name="codeblock"] .ne-card-resizer-mask {
  * Keeping the base gradient on .app-shell (rather than repeating it on each
  * column) prevents the top strip from breaking at the rail boundaries.
  */
-@media (min-width: 761px) {
-  .app-shell {
-    position: relative;
-    isolation: isolate;
-    /* 壳层背景（对角氛围渐变 + 底色）单一来源见 b3/layout.css 的 .app-shell；
-     * 此处仅保留定位与层叠上下文（isolation），原 180deg 多层背景被其覆盖，已删。 */
-  }
+/* 壳层定位与层叠上下文：宽窄共用（原先只在 @media (min-width: 761px) 里）。
+ * 壳层背景（对角氛围渐变 + 底色）单一来源见 b3/layout.css 的 .app-shell；
+ * 此处只保留定位与 isolation（层叠上下文），原 180deg 多层背景被其覆盖，已删。 */
+.app-shell {
+  position: relative;
+  isolation: isolate;
+}
 
+@media (min-width: 761px) {
   .tab-bar {
     background: transparent;
     border-bottom-color: transparent;
@@ -1750,13 +1788,7 @@ ne-card[data-card-name="codeblock"] .ne-card-resizer-mask {
  * A docked directory occupies the full shell height, just like its activity
  * rail and floating preview.  The previous calc(100% - topbar) stopped it
  * above the window/status area and left a visible bottom gap. */
-@media (min-width: 761px) {
-  .sidebar.sidebar-docked {
-    height: 100% !important;
-    margin-bottom: 0;
-    align-self: stretch;
-  }
-}
+/* （原 `@media (min-width: 761px) { .sidebar.sidebar-docked { height:100% … } }` 已搬到共用作用域） */
 
 /* ── 性能与过渡（Electron 43 / Chromium 150 新能力落地） ── */
 
@@ -1892,25 +1924,16 @@ ne-card[data-card-name="file"] .ne-card-file {
   .app-shell.sidebar-collapsed {
     grid-template-columns: var(--activity-rail-width, 38px) minmax(148px, 1fr);
   }
-  .app-shell.sidebar-collapsed .sidebar { display: none; }
+  /* 收起态不再 `display:none`——宽窗那边是靠"固定本体 + opacity 0 + 悬停浮出"实现的，
+     用 display 收掉会让窄窗失去悬停预览（且断点两侧一隐一显）。几何由共用作用域负责。 */
   /* 侧栏 display:none 后必须把工作区挪到第 2 列，否则中间会留一条死列
      （实测 416px 是 38+148+230，那条 148px 就是用户看到的大空隙） */
   .app-shell.sidebar-collapsed .workspace { grid-column: 2; }
-  /* 材质语言与宽窗一致：**灰壳 + 白色圆角卡片 + 4px 灰缝**。
-     关键：卡片必须画在文档区（.document-pane / 小记面板）而**不是** .workspace——
-     顶栏（.tab-bar）是 workspace 的子元素，若把白卡画在 workspace 上，顶栏就浮在白卡上，
-     跨过断点时顶栏底色会从灰（宽窗：浮在灰壳上）翻成白（窄窗），用户看到的"颜色跳变"就是这个。 */
-  .workspace { background: transparent; }
-  /* 顶栏 fixed 之后的"让位"（成对搬运，缺一就会把面包屑压到顶栏底下） */
-  .workspace { padding-top: calc(var(--topbar-height, 38px) + 4px); }
-  .document-pane,
-  .document-pane:has(> .multi-tab-editor),
-  .quick-notes-pane {
-    background: var(--b3-theme-background);
-    border-radius: var(--b3-border-radius-b) var(--b3-border-radius-b) 0 0;
-    /* 顶部间距改由 .workspace 的 padding 让出，这里只留右侧 4px 灰缝 */
-    margin: 0 4px 0 0;
-  }
+  /* 材质语言与宽窗一致：**灰壳 + 白色圆角卡片**。关键：卡片必须画在文档区
+     （.document-pane / 小记面板）而**不是** .workspace——顶栏（.tab-bar）是 workspace 的子元素，
+     若把白卡画在 workspace 上，顶栏就浮在白卡上，跨断点时顶栏底色会从灰翻成白。
+     「顶栏 fixed + 工作区让位（margin/padding）」这一对已搬到共用作用域（styles.css 顶部
+     「壳层几何」+ b3/layout.css），窄窗不再手抄副本——**不要再在这里补 geometry**。 */
   /* 展开态：弹性列宽 + 正文档下限（对齐思源 .layout__center { min-width: 148px }）：
      侧栏列最多 --sidebar-width，空间不够时自己让位，工作区永远不被挤到 148px 以下。 */
   .app-shell,
@@ -1918,58 +1941,17 @@ ne-card[data-card-name="file"] .ne-card-file {
   .app-shell.sidebar-floating {
     grid-template-columns: var(--activity-rail-width, 38px) minmax(0, var(--sidebar-width, 265px)) minmax(148px, 1fr);
   }
-  /* 显式钉住列，防止某个子元素 display:none 后自动排布把工作区挪到窄列（416px 实测踩到过） */
-  .activity-rail { grid-column: 1; }
-  .sidebar { grid-column: 2; }
-  .workspace { grid-column: 3; }
-  /* 侧栏：铺满自己那一列（展开态就是真实宽度，树真的能看；收起态由下面那条压回 44px） */
-  .sidebar,
-  .sidebar.sidebar-docked,
-  .sidebar.sidebar-floating {
-    width: 100%;
-    max-width: 100%;
-    margin: 0;
-    border-radius: 0;
-    box-shadow: none;
-  }
-  /* 注意：这里原来有一条 `.tab-bar { position: static }`，**已删除**——它会覆盖下面的
+  /* 三列显式钉住（rail=1 / sidebar=2 / workspace=3）已由共用作用域各自承担，
+     窄窗不再重复声明——重复声明本身没有害处，但它会掩盖"谁在定列"这件事。 */
+  /* 侧栏铺满自己那一列已由共用作用域的 `.sidebar.sidebar-docked { width:auto; align-self:stretch }`
+     承担（原先这里的 `width:100%` 会把 4px 右侧灰缝吃掉 ⇒ 卡片宽度在断点处差 4px，实测 261 vs 265）。 */
+  /* 注意：这里原来有一条 `.tab-bar { position: static }`，**已删除**——它会覆盖
      "整宽 fixed 顶栏"（用户要的"红绿灯 · 空间名 · 云 · 标签 同一行"），实测顶栏会缩回左轨右边
-     （box [38,4,W-38]）。让位改由 `.workspace { padding-top }` 承担，不要再写 static。 */
-  .topbar { min-height: var(--topbar-height, 38px); }
-  /* 顶栏：**保持一行横向排布**（用户 260915 明确否掉了折行方案）。
-     窄窗里靠"工作空间名可压缩省略 + 标签条自己横向滚动"来避免挤压，而不是把标签挤到第二行。
-     macOS 左内边距 44px 让开红绿灯（灯带约 x 12–80 / y 12–40）。 */
-  /* 顶栏：与宽窗同一套行为——**一行横向**排布（空间名 + 云 + 多 tab + 右侧操作）。
-     窄窗只多两条：① 空间名可压缩、超长省略（和多 tab 同一规则）；
-     ② 左侧内边距 48px 让开 macOS 红绿灯（灯带 x≈12–80）。
-     之前窄窗把空间名与云折成了两行，是这段话漏了宽窗那套 `.tabbar-leading` 规则造成的。 */
-  .tab-bar {
-    display: flex;
-    flex-wrap: nowrap;
-    align-items: center;
-    /* 与宽窗同一套几何：**整宽 fixed 条**——红绿灯那一行不再空着，"红绿灯 · 空间名 · 云 · 标签"
-       并排一行（用户要的"融合"）。整宽后必须同时给工作区让位，见 .workspace { padding-top }。 */
-    position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    width: auto;
-    z-index: 400;
-    height: var(--topbar-height, 38px);
-    min-height: 0;
-    padding: 0 6px 0 84px;   /* 84px：让开 macOS 红绿灯（灯带 x≈12–80），与宽窗一致 */
-    overflow: hidden;
-    /* 与宽窗同色：宽窗的 `.tab-bar { background: transparent }` 写在媒体查询里，
-       窄窗会掉回基础样式的 `var(--sidebar-bg, #fafafa)` → 顶栏底色比壳层亮一档，
-       于是"宽→窄"跨断点时顶栏/左轨颜色跳变（用户 260915 动图）。 */
-    background: transparent !important;   /* 必须压过基础样式的 --sidebar-bg；否则底色比壳层亮一档 */
-    border-bottom: 0 !important;
-  }
+     （box [38,4,W-38]）。顶栏几何与让位都在共用作用域，不要再写 static。 */
+  /* （原先这里的 `.topbar` 两条规则已删：全仓没有 `.topbar` 元素，是死声明。） */
+  /* 顶栏几何（fixed 整宽条 / mac 左侧内边距 / 按钮无边框 / 一行横向排布）已搬到共用作用域，
+     这里只留**真·窄窗增量**：空间名允许被压缩省略（宽窗是 flex:0 0 auto，不压缩）。 */
   .tabbar-leading {
-    display: flex;
-    flex-direction: row;
-    align-items: center;
-    gap: 2px;
     flex: 0 1 auto;
     min-width: 0;
     max-width: 46%;           /* 够宽就完整显示，不够就压缩省略——与多 tab 同规则 */
@@ -1994,65 +1976,19 @@ ne-card[data-card-name="file"] .ne-card-file {
     text-overflow: ellipsis;
     white-space: nowrap;
   }
-  /* 顶栏里的按钮（含工作空间名旁的展开三角）在窄窗会掉回基础 button 样式 → 出现边框/底色。
-     宽窗那套 `.toolbar__item { border: 0; background: transparent }` 也在媒体查询里，这里补平。 */
-  .tabbar-leading button,
-  .tabbar-leading .toolbar__item,
-  .tabbar-leading .toolbar__menu-wrap > button {
-    border: 0 !important;
-    background: transparent !important;
-    box-shadow: none !important;
-  }
+  /* 顶栏按钮（工作空间展开三角 / 云同步）由共用作用域的 `.toolbar__item { border:0; background:transparent }`
+     覆盖——实测 `.tabbar-leading` 里的按钮全都是 `.toolbar__item`，那套 !important 补丁已删。 */
   .tab-bar > * { min-width: 0; }
-  /* 标签在 38px 顶栏里垂直居中（之前贴顶，用户 260915 截图） */
-  .tab-items { flex: 1 1 auto; min-width: 0; height: var(--topbar-height, 38px); display: flex; align-items: center; align-content: center; flex-wrap: nowrap; overflow-x: auto; overflow-y: hidden; }
-  .tab-item, .tab-switcher-wrap { flex: 0 0 auto; height: 28px; min-height: 0; margin: 0; align-self: center; }
-  /* 左轨与左轨按钮：**照抄宽窗那一套**（宽窗写在 styles.css 的 @media (min-width: 761px) 里，
-     窄窗否则会掉回基础样式 → 出现边框、错位，和宽窗长得不一样）。 */
-  .activity-rail {
-    margin: 0;
-    padding: 0 3px 6px;
-    padding-top: var(--topbar-height, 38px);   /* 与宽窗一致：不要多留 8px（否则宽→窄时轨图标下跳） */
-    min-width: var(--activity-rail-width, 38px);
-    /* 分隔线不画进标题栏：红绿灯那一带不出现竖线（用户 260915 截图#1），
-       改用从顶栏下沿开始的伪元素，视觉上等价于宽窗（宽窗那条线也被顶栏挡住） */
-    position: relative;
-    border-right: 0;
-    border-left: 0;
-    /* 与宽窗同一层壳色；`!important` 是因为别处有一条更具体的规则把它画成 surface 色
-       （实测窄窗左轨是 #f6f6f6、宽窗是 #ebecf0 → 用户动图里的颜色跳变） */
-    background: var(--b3-body-background) !important;
-  }
-  /* 此处原有 `::after` 竖分隔线已删除：宽窗没有这条线，凭空出现会造成宽→窄多一根线 */
-  .activity-button {
-    display: grid;
-    place-items: center;
-    width: 28px;
-    height: 28px;
-    margin: 2px 0;
-    padding: 0;
-    border: 0;
-    border-radius: 6px;
-    color: var(--lake-text-secondary);
-    background: transparent;
-  }
-  .sidebar.is-collapsed:hover { width: min(260px, calc(100vw - var(--activity-rail-width, 38px))); }
+  /* 标签条（flex/横向滚动/垂直居中）与标签项几何已搬到共用作用域，窄窗不再手抄副本。 */
+  /* 左轨几何与轨按钮已搬到共用作用域（组 2），窄窗不再手抄副本。 */
+  /* （原先这里的 `.sidebar.is-collapsed:hover` 已删：`is-collapsed` 只用在 `.outline-item__fold` 上。） */
   /* 右侧大纲在窄窗让位给正文（它的开关仍在顶栏，宽窗照旧） */
   .outline-sidebar { display: none; }
   /* 顶栏：标题区允许压缩，控件不换行 */
-  /* 注意：这里**只能**给 .topbar，不能给 .tab-bar——否则会把顶栏那条 mac 左侧内边距
-     （48px，用于让开红绿灯）覆盖成 8px，空间名就压到红绿灯上了（实测 firstX=46）。 */
-  .topbar { padding-left: 8px; padding-right: 8px; }
   .current-note, .tab-item .tab-title { max-width: 34vw; }
-  /* 左轨的顶部留白本来在 layout.css 的 @media (min-width: 761px) 里（padding-top: --topbar-height），
-     窄窗这一段失效 ⇒ 两个轨按钮顶到 y=0，正好压在 macOS 红绿灯上（用户 260915 截图报的错位）。
-     这里补回来，并多留 8px 让出红绿灯的下沿。 */
-  .activity-rail {
-    margin-top: 0;
-    padding-top: var(--topbar-height, 38px);   /* 与宽窗一致：不要多留 8px（否则宽→窄时轨图标下跳） */
-  }
-  /* 44px 侧栏条：横向裁掉溢出内容，避免标题/缩进线拖出一条竖线（宽窗等价规则同样在 min-width 段里） */
-  .sidebar, .sidebar.sidebar-docked, .sidebar.sidebar-floating { overflow: hidden; }
+  /* 左轨顶部留白（padding-top: --topbar-height）随组 2 一起进共用作用域，窄窗不再补副本。 */
+  /* 侧栏横向裁剪（避免标题/缩进线拖出竖线）由共用作用域的
+     `.sidebar.sidebar-docked, .sidebar.sidebar-floating { overflow: hidden }` 承担。 */
   /* 面板：窄窗铺满可用宽度，内部导航收窄 */
   .settings-panel-large,
   .history-panel,
