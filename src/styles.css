@@ -1913,43 +1913,32 @@ ne-card[data-card-name="file"] .ne-card-file {
  * `@media (min-width: 761px)` 里。视口一旦窄于 761px（DevTools 停靠、窗口拖窄、分屏），
  * 那一整层规则全部失效，只剩 `styles.css` 的基础栅格 `260px 1fr`：
  * 侧栏固定 260px + 工作区被挤到 0，实测 416px 下"只剩目录树、工作区消失、还带水平滚动"。
- * 这里补的是**最小可用几何**（只补 <761px 这段落差，宽窗行为一字不动），按思源的模型做：
- *   · 收起态 = 左轨 + 44px 侧栏条 + 工作区（工作区拿满剩余）；
- *   · 展开态 = 弹性列宽 + 正文档下限 148px（对齐思源 `.layout__center { min-width: 148px }`），
- *     侧栏列最多 --sidebar-width、空间不够自己让位；
- *   · JS 侧 ≤900px 默认收起（useDesktopShell 的 NARROW_SHELL_WIDTH），窄窗下**点左轨按钮**
- *     把目录树拉出来 / 收回去（toggleSidebarDock 在窄窗退化为这个开关）。 */
+ * 窄窗（≤760px）的模型（用户 260915 定稿）：
+ *   · 栅格**只有两列** = 左轨 + 正文（正文保底 148px，对齐思源 `.layout__center`）；
+ *   · 目录栏与右侧大纲**一律悬浮在正文之上**，不允许出现固定列（不再挤压正文）；
+ *   · `useDesktopShell` 里 `sidebarRenderMode` 把"停靠"映射成"浮动"来渲染，
+ *     左轨按钮 = 悬浮抽屉开/关（toggleSidebarDock，语义与宽窗一致：停靠 ↔ 收起）。 */
 @media (max-width: 760px) {
-  /* 收起态（窄窗默认）：只留图标轨 + 工作区——对齐思源（窄窗下 dock 面板整体收起，
-     只留图标 rail），不再留一条 44px 的"残条"（那条里只剩树的缩进箭头，等于不可用）。 */
-  .app-shell.sidebar-collapsed {
+  /* ══ 窄窗栅格：**只有两列**——左轨 + 正文 ══
+   * 用户 260915 定稿：窄窗下目录栏/大纲一律**悬浮在正文之上**，不允许出现固定列，
+   * 所以这里对**所有**侧栏模式都只声明 rail + 正文；目录栏/大纲由浮层承担（见下）。
+   * 这一条同时修掉一个真 bug：原先 `sidebar-collapsed` 时工作区被钉在第 2 列，
+   * 而窄窗三列栅格的第 2 列是**0 宽的侧栏列** ⇒ 小记页在"窄窗 + 侧栏收起"下整块工作区被塞进 0 宽列，
+   * 整个窗口只剩一层灰底（用户 260915 截图 #2）。 */
+  .app-shell,
+  .app-shell.sidebar-docked,
+  .app-shell.sidebar-floating,
+  .app-shell.sidebar-collapsed,
+  .app-shell.quick-notes-active {
     grid-template-columns: var(--activity-rail-width, 38px) minmax(148px, 1fr);
   }
-  /* 收起态不再 `display:none`——宽窗那边是靠"固定本体 + opacity 0 + 悬停浮出"实现的，
-     用 display 收掉会让窄窗失去悬停预览（且断点两侧一隐一显）。几何由共用作用域负责。 */
-  /* 侧栏 display:none 后必须把工作区挪到第 2 列，否则中间会留一条死列
-     （实测 416px 是 38+148+230，那条 148px 就是用户看到的大空隙） */
-  .app-shell.sidebar-collapsed .workspace { grid-column: 2; }
+  .workspace { grid-column: 2; }
   /* 材质语言与宽窗一致：**灰壳 + 白色圆角卡片**。关键：卡片必须画在文档区
      （.document-pane / 小记面板）而**不是** .workspace——顶栏（.tab-bar）是 workspace 的子元素，
      若把白卡画在 workspace 上，顶栏就浮在白卡上，跨断点时顶栏底色会从灰翻成白。
      「顶栏 fixed + 工作区让位（margin/padding）」这一对已搬到共用作用域（styles.css 顶部
      「壳层几何」+ b3/layout.css），窄窗不再手抄副本——**不要再在这里补 geometry**。 */
-  /* 展开态：弹性列宽 + 正文档下限（对齐思源 .layout__center { min-width: 148px }）：
-     侧栏列最多 --sidebar-width，空间不够时自己让位，工作区永远不被挤到 148px 以下。 */
-  .app-shell,
-  .app-shell.sidebar-docked,
-  .app-shell.sidebar-floating {
-    grid-template-columns: var(--activity-rail-width, 38px) minmax(0, var(--sidebar-width, 265px)) minmax(148px, 1fr);
-  }
-  /* 小记工作台没有目录树：宽窗那边把侧栏列直接写成 0（`.app-shell.quick-notes-active`），
-     窄窗如果不跟，就会被那条 265px 空列吃掉正文宽度 —— 实测 760px 下小记两栏被裁到窗外。
-     放在这条栅格规则**之后**，靠顺序压过上面的 `sidebar-docked` 三列声明。 */
-  .app-shell.quick-notes-active {
-    grid-template-columns: var(--activity-rail-width, 38px) 0 minmax(148px, 1fr);
-  }
-  /* 三列显式钉住（rail=1 / sidebar=2 / workspace=3）已由共用作用域各自承担，
-     窄窗不再重复声明——重复声明本身没有害处，但它会掩盖"谁在定列"这件事。 */
+  /* 正文档下限 148px（对齐思源 .layout__center）由上面的 `minmax(148px, 1fr)` 承担。 */
   /* 侧栏铺满自己那一列已由共用作用域的 `.sidebar.sidebar-docked { width:auto; align-self:stretch }`
      承担（原先这里的 `width:100%` 会把 4px 右侧灰缝吃掉 ⇒ 卡片宽度在断点处差 4px，实测 261 vs 265）。 */
   /* 注意：这里原来有一条 `.tab-bar { position: static }`，**已删除**——它会覆盖
@@ -1996,6 +1985,11 @@ ne-card[data-card-name="file"] .ne-card-file {
   /* 左轨顶部留白（padding-top: --topbar-height）随组 2 一起进共用作用域，窄窗不再补副本。 */
   /* 侧栏横向裁剪（避免标题/缩进线拖出竖线）由共用作用域的
      `.sidebar.sidebar-docked, .sidebar.sidebar-floating { overflow: hidden }` 承担。 */
+  /* 悬浮抽屉在窄窗不要宽过窗口本身（右侧始终留一点正文可见）。 */
+  .sidebar.sidebar-floating,
+  .sidebar.sidebar-collapsed {
+    width: min(var(--sidebar-width, 265px), calc(100vw - var(--activity-rail-width, 38px) - 32px));
+  }
   /* 面板宽度与内部导航**不再在这里改**：
      原先把四个面板一刀切成 `calc(100vw - 16px) !important`，跨断点时小记/搜索面板宽度突变
      （实测 760→761 搜索面板 744 → 680，跳 64px），导航也从 150 跳回 208。
