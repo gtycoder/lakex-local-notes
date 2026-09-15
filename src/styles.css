@@ -1962,6 +1962,18 @@ ne-card[data-card-name="file"] .ne-card-file {
     text-overflow: ellipsis;
     white-space: nowrap;
   }
+  /* 空间名实际文本比上面更深一层（.toolbar__menu-wrap 内部），把这一链也压住，
+     否则极窄时是"硬裁切"而不是省略号（用户截图里看到的截断） */
+  .tabbar-leading .toolbar__menu-wrap,
+  .tabbar-leading .toolbar__menu-wrap > * { min-width: 0; }
+  .tabbar-leading .toolbar__menu-wrap { overflow: hidden; }
+  .tabbar-leading .toolbar__menu-wrap > * {
+    /* 内层是 flex 子项，必须给 max-width:100% 才会真的被父级宽度约束（416px 实测：内层仍 192px） */
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
   .tab-bar > * { min-width: 0; }
   /* 标签在 38px 顶栏里垂直居中（之前贴顶，用户 260915 截图） */
   .tab-items { flex: 1 1 auto; min-width: 0; height: var(--topbar-height, 38px); display: flex; align-items: center; align-content: center; flex-wrap: nowrap; overflow-x: auto; overflow-y: hidden; }
