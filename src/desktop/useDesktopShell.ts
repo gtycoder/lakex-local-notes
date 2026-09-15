@@ -14,6 +14,9 @@ import type { TreeNode } from "../lib/types";
 import { initialOutlineMode, initialOutlineSidebarWidth, initialSidebarMode, initialSidebarWidth, OUTLINE_SIDEBAR_MAX_WIDTH, OUTLINE_SIDEBAR_MIN_WIDTH, SIDEBAR_HOVER_HIDE_DELAY_MS, SIDEBAR_MAX_WIDTH, SIDEBAR_MIN_WIDTH, type DesktopWorkspace, type NoticeState } from "./desktopTypes";
 import { shouldCollapseSidebarOnHoverLeave, shouldKeepSidebarPreviewOpen } from "../components/sidebarInteraction";
 
+/** 视口窄于此宽度时，桌面壳层强制按"收起态"渲染（右侧开 DevTools 也会触发）。 */
+const NARROW_SHELL_WIDTH = 900;
+
 export interface UseDesktopShellOptions {
   /** 小记工作区句柄（离开小记工作区前 confirmLeave）。 */
   quickNotesRef: RefObject<{ confirmLeave(): Promise<boolean> } | null>;
@@ -30,6 +33,18 @@ export function useDesktopShell(options: UseDesktopShellOptions) {
   const [sidebarResizing, setSidebarResizing] = useState(false);
   const sidebarResizingRef = useRef(false);
   const sidebarPreviewTimer = useRef<number | null>(null);
+
+  // ---- 窄窗自适应（260915 用户报的"右侧开 DevTools 就把窗口挤乱"）----
+  // 桌面壳层的几何（停靠边距、状态栏、顶栏等）都写在 `@media (min-width: 761px)` 里，视口一窄整套失效；
+  // 而侧栏在"停靠"态必须占一整列（265px），416px 视口下会把工作区挤没。
+  // 处理：视口 ≤900px 一律**按收起态渲染**（左轨 + 44px 侧栏条 + 工作区，侧栏 hover 时以浮层展开，
+  // 这套交互本来就存在）。只覆盖本次渲染，不写 localStorage —— 窗口拉宽后用户原偏好原样恢复。
+  const [narrowViewport, setNarrowViewport] = useState(() => typeof window !== "undefined" && window.innerWidth <= NARROW_SHELL_WIDTH);
+  useEffect(() => {
+    const onResize = () => setNarrowViewport(window.innerWidth <= NARROW_SHELL_WIDTH);
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
 
   // ---- 布局：outline ----
   const [outlineMode, setOutlineMode] = useState<OutlineMode>(initialOutlineMode);
@@ -148,7 +163,8 @@ export function useDesktopShell(options: UseDesktopShellOptions) {
 
   return {
     // sidebar
-    sidebarMode, setSidebarMode, sidebarWidth, sidebarResizing, sidebarResizingRef,
+    sidebarMode: narrowViewport ? ("collapsed" as SidebarMode) : sidebarMode,
+    setSidebarMode, sidebarWidth, sidebarResizing, sidebarResizingRef,
     updateSidebarWidth, commitSidebarWidth, handleSidebarResizeActiveChange,
     showSidebarPreview, hideSidebarPreview, toggleSidebarDock, clearSidebarPreviewTimer,
     // outline

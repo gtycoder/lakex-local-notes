@@ -1874,3 +1874,57 @@ ne-card[data-card-name="file"] .ne-card-file {
   outline: none;
   box-shadow: none;
 }
+
+/* ══ 窄窗兜底（260915 用户报："右侧开 DevTools 窗口就乱了"）══
+ * 桌面壳层的几何（停靠边距 / 状态栏 / 顶栏 / 面板卡片）全部写在 layout.css 的
+ * `@media (min-width: 761px)` 里。视口一旦窄于 761px（DevTools 停靠、窗口拖窄、分屏），
+ * 那一整层规则全部失效，只剩 `styles.css` 的基础栅格 `260px 1fr`：
+ * 侧栏固定 260px + 工作区被挤到 0，实测 416px 下"只剩目录树、工作区消失、还带水平滚动"。
+ * 这里补的是**最小可用几何**（只补 <761px 这段落差，宽窗行为一字不动）：
+ *   左轨 + 44px 侧栏条 + 工作区；侧栏 hover 时按已有实现浮层展开（不挤工作区）。
+ * JS 侧另有 ≤900px 强制收起态（useDesktopShell 的 NARROW_SHELL_WIDTH），两者配合。 */
+@media (max-width: 760px) {
+  .app-shell,
+  .app-shell.sidebar-docked,
+  .app-shell.sidebar-floating,
+  .app-shell.sidebar-collapsed {
+    /* 中间列用 auto：侧栏显示时它吃掉 44px（见下面 .sidebar 宽度），
+       侧栏被隐藏时该列自动收成 0，工作区拿满剩余宽度——避免"空一列"或"工作区掉进窄列" */
+    grid-template-columns: var(--activity-rail-width, 38px) auto minmax(0, 1fr);
+  }
+  /* 显式钉住列，防止某个子元素 display:none 后自动排布把工作区挪到窄列（416px 实测踩到过） */
+  .activity-rail { grid-column: 1; }
+  .sidebar { grid-column: 2; }
+  .workspace { grid-column: 3; }
+  /* 侧栏条：只留 44px，hover / 聚焦时按基础规则展开成 260px 浮层（不改 overflow 之外的任何视觉） */
+  .sidebar,
+  .sidebar.sidebar-docked,
+  .sidebar.sidebar-floating {
+    width: 44px;
+    margin: 0;
+    border-radius: 0;
+    box-shadow: none;
+  }
+  .sidebar.is-collapsed:hover { width: min(260px, calc(100vw - var(--activity-rail-width, 38px))); }
+  /* 右侧大纲在窄窗让位给正文（它的开关仍在顶栏，宽窗照旧） */
+  .outline-sidebar { display: none; }
+  /* 顶栏：标题区允许压缩，控件不换行 */
+  .topbar, .tab-bar { padding-left: 8px; padding-right: 8px; }
+  .current-note, .tab-item .tab-title { max-width: 34vw; }
+  /* 面板：窄窗铺满可用宽度，内部导航收窄 */
+  .settings-panel-large,
+  .history-panel,
+  .trash-panel,
+  .search-command-panel { width: calc(100vw - 16px) !important; max-width: none; }
+  .settings-panel-large .settings-nav { flex-basis: 150px; }
+}
+
+/* 小记工作台在窄窗（≤560px）：左右两栏叠成单栏、头部工具收紧，避免右侧溢出 */
+@media (max-width: 560px) {
+  .quick-notes-header { grid-template-columns: minmax(0, 1fr) auto; gap: 8px; }
+  .quick-notes-header .quick-notes-header-tools { gap: 4px; }
+  .quick-notes-tool-btn { width: 26px; height: 26px; }
+  .quick-notes-split { grid-template-columns: minmax(0, 1fr); gap: 10px; }
+  .quick-note-composer { min-height: 150px; }
+  .quick-notes-list { padding-left: 22px; }
+}

@@ -222,7 +222,7 @@ async function createWindow() {
     y: restored.y,
     width: restored.width,
     height: restored.height,
-    minWidth: 800,
+    minWidth: 560,
     minHeight: 480,
     titleBarStyle: process.platform === "darwin" ? "hiddenInset" : "default",
     // y = (顶栏 38px - 红绿灯 12px) / 2 = 13：红绿灯中心(19px)与顶栏内容中心(19px)垂直对齐
