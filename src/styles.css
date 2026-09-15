@@ -1955,7 +1955,13 @@ ne-card[data-card-name="file"] .ne-card-file {
     max-width: 46%;           /* 够宽就完整显示，不够就压缩省略——与多 tab 同规则 */
   }
   .tabbar-leading > * { min-width: 0; }
-  .tabbar-leading span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  /* 内层也要能 shrink + 省略，否则只是外层变窄、文字仍溢出到胶囊底下（416px 实测） */
+  .tabbar-leading > * > *:not(svg) {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
   .tab-bar > * { min-width: 0; }
   /* 标签在 38px 顶栏里垂直居中（之前贴顶，用户 260915 截图） */
   .tab-items { flex: 1 1 auto; min-width: 0; height: var(--topbar-height, 38px); display: flex; align-items: center; align-content: center; flex-wrap: nowrap; overflow-x: auto; overflow-y: hidden; }
