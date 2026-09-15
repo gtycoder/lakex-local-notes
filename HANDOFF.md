@@ -5,7 +5,7 @@
 > **§8 是移动端（安卓）专职交接**，由移动端会话维护；桌面会话不要改 §8，移动端会话不要改 §0-§7 之外的桌面文件。
 
 ## 0. 当前基线（新会话开工前）
-- **最新基线（2026-09-14 晚）**：分支 **polish/ui-ux-260914**（从 **master @83feda7** 切出，drag-siyuan 已合入 master），工作区干净。本轮做「桌面 + 移动全量 UI/交互/动效审计 + 第一批优化」，见 **§2.37**。**未推送、未合 master**（待用户验收）。
+- **最新基线（2026-09-15）**：**master @（UI 批次已合入）**，工作分支 `polish/ui-ux-260914`（已 fast-forward 到 master）。本分支历史：260914 全量 UI/交互/动效审计 + 13 批优化（见 **§2.37**），其中前 10 批已合 master；**第十一/十二批（小记图片完整展示 + 点击放大、草稿恢复框并入浮层通用件）已随本轮合入**。当前正在做**桌面+移动 CSS 结构性问题（!important / 多层覆盖收敛）**，见 §2.38。
 - 上一基线：feat/drag-siyuan @e69d4a0（含 11 个提交，见文末「附：会话交接（2026-09-14）」）+ 260914 依赖升级两个提交（05bf8ee / 83feda7，即 §2.11）——两者均已合入 master。
 - 历史基线：refactor/store-split 8 commits（store.ts 2352→1103 行，见 §3.6）+ 260911 批次（2ecac39 同步收敛 / a18a95b 安卓 AssetServer 403 + Dock IME）已并入本分支祖先；feat/search-refactor（统一 FTS5(unicode61)+单字预分词+增量账本，§2.11–§2.14）在其上。
 - 质量门槛：tsc 0 error · vitest **969 passed / 16 skipped**（2026-09-14）· 桌面 vite build + 移动 vite build -c vite.mobile.config.ts 全绿 · Android assembleDebug + adb install -r 通过（计数变动见 §2；别把数字写回 AGENTS/README）。
@@ -482,6 +482,19 @@
 - 桌面设置页补扫：快捷键 / 日志 / 云端与同步 / 文档与历史 / 回收站 / 资源 —— 版式、分组、数值控件右对齐、
   危险操作红色描边、快捷键胶囊均正常；标签色实测 `rgb(34,34,34)` 中性墨色（先前"看着偏蓝"是错觉）。**未发现缺陷**。
 
+**第十二批（260915，桌面）—— 小记图片点击放大 + 草稿恢复框收进 b3 套（结构性问题开工前的收尾）**
+- **小记卡片图片补「点击放大」**：复用编辑器同一套 `ImageLightbox` 单例（`openImagePreview` + 挂 `<ImageLightbox />`，
+  与 `EditorTab.tsx` / `LakeEditor.tsx` 同款挂法）；画廊只收**有 url** 的图（`url?: string`，直接 map 会 TS 报错），
+  索引按 id 找。实测：卡片内 520×1400 竖长图渲染 171×460（contain，`cursor: zoom-in`、`title=点击放大`）→
+  点击后 lightbox `1 / 1`、图 284×764（不裁切、z-index 1000）→ Esc 关闭 ✓。验证用的探查小记已删除（`deleted: 2, remaining: 0`）。
+- **草稿恢复框收进浮层通用件**（长期待办 §3.2 收口）：`.draft-recovery-backdrop/dialog/row/restore/discard` 整套自造类删除，
+  改用 `.modal-backdrop` + `.ln-dialog{__head,__title,__body}` + `.b3-list-item`（行复用回收站/历史的两行密度 `ln-row2__*`），
+  `overlays.css` 只留 6 行间距/危险色。实测（DOM 同构注入）：弹窗 520×219、圆角 12px、表面 `rgb(255,255,255)`
+  =`--b3-theme-background`、头高 49px、行高 43px、标题 13px/元信息 11px 全是 b3 令牌色 ✓。
+- **坑**：`.modal-backdrop` 的 z-index 是 30（旧自造遮罩是 900）；本对话框只在启动期单独出现，无叠层冲突。
+- **坑**：验证脚本里 `document.querySelector('.activity-button[title="小记"]')` 才是左侧 rail 的选择器——
+  rail 按钮是纯图标（`textContent` 为空，只有 `title`/`aria-label`），按文本找会静默匹配到别的按钮。
+
 **本轮审计结论（未改，等用户拍板，见会话提问）**
 1. **移动端首层排版**：知识库 4 列彩色书架；「最近文档」是 5 张一模一样的「纸片线条 + 回形针」插画卡（深色下像空盒子）。
 2. ~~移动端系统栏~~ **✅ 已修（第二批）**；~~移动端阅读态底部留白~~ **✅ 已修（第二批）**；~~`--shell-*` 令牌重复~~ **✅ 已收敛（第二批）**。
@@ -498,7 +511,7 @@
 
 **性能/健壮性**
 1. ~~**FTS 索引重做**~~ **✅ 已完成（260911，见 §2.11）**：统一 FTS5 + unicode61 + 单字预分词 + 增量账本；不再有 1/2/3 字分支。后续增强：移动端 `getDocument("text/plain")` 索引源、A+ 拉丁检索、小记搜索（二期）。
-2. 其余浮层收尾（可选，成本低）：仅**草稿恢复框**未进 b3 套；如统一照 §2.1 路子 + 同步 `settingsSearch.ts` 注册表即可。
+2. ~~其余浮层收尾：草稿恢复框进 b3 套~~ **✅ 已完成（260915，见 §2.37 第十二批）**。
 
 **移动端 UI 对齐思源 · 用户首轮验收反馈修复（260909）**
 - **用户看不到变化 = 装机包过期**：改动只在仓库/dist，安卓端必须 `bash scripts/android-build.sh --sync --install` 才进模拟器/真机（本会话已装并复验）。
