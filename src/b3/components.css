@@ -201,7 +201,7 @@
   border-bottom-color: var(--b3-border-color);
 }
 .tab-item:hover {
-  background-color: var(--b3-list-hover) !important;
+  background-color: var(--b3-list-hover);
 }
 .tab-item.active {
   background: var(--lake-raised);

@@ -79,7 +79,7 @@
   box-shadow: var(--b3-dialog-shadow) !important;
 }
 [data-theme="dark"] .quick-note-composer textarea {
-  background: transparent !important;
+  background: transparent;
   color: var(--b3-theme-on-background);
 }
 [data-theme="dark"] .quick-note-image-grid img,

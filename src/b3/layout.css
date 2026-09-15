@@ -93,7 +93,7 @@
     /* 标题完整展示：不限制标签宽度（顶栏占满时横向滚动 + 垂直 tab 兜底） */
   }
   .tab-item:hover {
-    background-color: var(--b3-list-hover) !important;
+    background-color: var(--b3-list-hover);
   }
   /* 活动标签（桌面）：白色卡片 + 顶部主色指示线（对齐思源 layout-tab-bar），
      不再叠「主色浅底 + 主色内描边 + 主色文字」——激活态只保留一个着色信号。
