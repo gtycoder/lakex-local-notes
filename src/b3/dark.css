@@ -66,9 +66,6 @@
   color: var(--b3-theme-on-background) !important;
   border-color: var(--b3-border-color) !important;
 }
-[data-theme="dark"] .secret-field input {
-  background: transparent !important;
-}
 
 [data-theme="dark"] .tab-switcher {
   background: transparent !important;

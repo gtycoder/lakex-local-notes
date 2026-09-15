@@ -8,10 +8,7 @@
 }
 
 /* ── 按钮：primary/secondary 已迁移为 .b3-button / .b3-button--cancel（见 siyuan.scss）── */
-.icon-button {
-  color: var(--b3-theme-on-surface);
-  border-radius: var(--b3-border-radius);
-}
+
 .icon-button:hover {
   background-color: var(--b3-list-hover);
 }
@@ -82,12 +79,7 @@
 }
 
 /* ── 搜索框 / 表单（思源 b3-text-field）── */
-.search-box {
-  background: var(--b3-theme-background);
-  border-color: var(--b3-border-color);
-  color: var(--b3-theme-on-surface);
-  border-radius: var(--b3-border-radius);
-}
+
 .search-box:focus-within {
   border-color: var(--b3-theme-primary);
   box-shadow: 0 0 0 2px var(--b3-theme-primary-lightest);
@@ -138,19 +130,8 @@
 .settings-header,
 .settings-panel-large .settings-header {
   background: var(--b3-theme-surface) !important;
-  backdrop-filter: none !important;
+  backdrop-filter: none;
   -webkit-backdrop-filter: none !important;
-}
-.sync-panel header {
-  background: var(--b3-theme-surface) !important;
-  backdrop-filter: none !important;
-  -webkit-backdrop-filter: none !important;
-}
-.sync-panel header > div {
-  color: var(--b3-theme-primary);
-}
-.sync-panel h2 {
-  color: var(--b3-theme-on-background);
 }
 
 .search-panel-close {
@@ -191,10 +172,7 @@
 .mode-toggle.selected {
   background-color: var(--b3-theme-primary-lightest) !important;
 }
-.sync-button {
-  border-color: var(--b3-theme-primary-light) !important;
-  background: var(--b3-theme-background) !important;
-}
+
 .sync-button:hover {
   background: var(--b3-theme-primary-lightest) !important;
 }
@@ -205,12 +183,6 @@
 }
 
 /* 同步进度（思源主色） */
-.sync-progress-bar {
-  background: var(--b3-theme-primary) !important;
-}
-.sync-progress-track {
-  background: var(--b3-theme-primary-lightest) !important;
-}
 
 /* 移动端 */
 .mobile-library-header span,
@@ -222,11 +194,7 @@
   background: var(--b3-theme-primary-lightest) !important;
   color: var(--b3-theme-primary) !important;
 }
-.mobile-create-button {
-  border: 0 !important;
-  background: var(--b3-theme-primary) !important;
-  color: var(--b3-theme-on-primary) !important;
-}
+
 /* ── 标签页（思源：灰栏 + 白底激活 + 顶部主色指示线）── */
 .tab-bar {
   background: var(--b3-theme-surface) !important;
@@ -300,10 +268,7 @@
   height: 30px;
   border-radius: 9px;
 }
-.sync-toast-icon--busy { color: var(--b3-theme-primary); background: var(--b3-theme-primary-lightest); }
-.sync-toast-icon--ok { color: var(--b3-theme-primary); background: var(--b3-theme-primary-lightest); }
-.sync-toast-icon--error { color: var(--b3-theme-error); background: color-mix(in srgb, var(--b3-theme-error) 12%, transparent); }
-.sync-toast-icon--unavailable { color: var(--b3-theme-on-surface); background: var(--b3-theme-surface-lighter); }
+
 .sync-toast-body { display: flex; flex: 1 1 auto; min-width: 0; flex-direction: column; gap: 4px; }
 .sync-toast-title { font-size: 13px; font-weight: 600; color: var(--b3-theme-on-background); }
 .sync-toast-msg { font-size: 12px; line-height: 1.5; color: var(--b3-theme-on-surface); word-break: break-word; }
