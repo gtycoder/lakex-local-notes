@@ -173,7 +173,7 @@ body { font-family: BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino San
   transition: transform var(--mobile-duration-press) var(--mobile-ease-panel);
 }
 .nb-shelf-card:active .nb-shelf-cover { transform: scale(.965); }
-.nb-shelf-index { position: absolute; top: 7px; left: 9px; font-size: 10.5px; font-weight: 600; letter-spacing: .06em; color: color-mix(in srgb, var(--nb-accent) 62%, var(--b3-theme-on-surface-light)); font-variant-numeric: tabular-nums; }
+/* 封面左上角的「01/02…」编号已按用户要求去掉（260915）；色相只留在图标徽章上。 */
 .nb-shelf-glyph {
   display: flex; align-items: center; justify-content: center; width: 42px; height: 42px; border-radius: 13px;
   /* 色相只以「淡填充 + 描边 + 图标」三层透出：直接把饱和色混进深底会变成土黄/橄榄 */

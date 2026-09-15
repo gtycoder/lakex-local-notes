@@ -40,12 +40,11 @@ export function NotebookGrid(props: NotebookGridProps) {
   if (view === "shelf") {
     return (
       <div className="nb-shelf">
-        {notebooks.map((nb, i) => {
+        {notebooks.map((nb) => {
           const count = docCounts[nb.id] ?? 0;
           return (
             <div key={nb.id} className="nb-shelf-card" role="button" tabIndex={0} onClick={() => onOpenNotebook(nb.id)}>
               <div className="nb-shelf-cover">
-                <span className="nb-shelf-index">{String(i + 1).padStart(2, "0")}</span>
                 <span className="nb-shelf-glyph">
                   {nb.icon ? <span className="nb-shelf-emoji">{nb.icon}</span> : <Book size={26} strokeWidth={1.75} className="nb-shelf-line" />}
                 </span>

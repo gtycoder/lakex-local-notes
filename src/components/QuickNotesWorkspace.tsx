@@ -218,37 +218,44 @@ export const QuickNotesWorkspace = forwardRef<QuickNotesWorkspaceHandle, QuickNo
     finally { setSaving(false); }
   }
 
+  // 左右两栏（对齐云端语雀小记）：左＝常驻写作面板 + 发布行，右＝小记卡片流（各自独立滚动）。
   return <section className="quick-notes-pane" aria-label="小记">
     <header className="quick-notes-header">
-      <div><span className="quick-notes-eyebrow">LOCAL TIMELINE</span><h1>小记</h1><p>记下当下，值得留存时再转为笔记。</p></div>
-      <span className="badge badge--muted quick-notes-count">{items.length} 条</span>
+      <h1>小记</h1>
+      <span className="quick-notes-count">{items.length} 条</span>
     </header>
     {error && <div className="quick-notes-error"><span>{error}</span><button onClick={() => setError(null)} aria-label="关闭错误"><X size={15} /></button></div>}
-    <QuickNoteComposer
-      draft={createDraft}
-      compact={false}
-      saving={saving && !activeIsEditing}
-      onChange={(text) => setCreateDraft((current) => ({ ...current, text }))}
-      onAddFiles={(files) => void addFiles(files, createDraft)}
-      onRemoveImage={(image) => void removeImage(createDraft, image)}
-      onSave={() => void saveDraft()}
-      onCancel={() => void cancelDraft()}
-      inputRef={(node) => { if (node) fileInputs.current.set(createDraft.id, node); }}
-    />
-    <div className="quick-notes-timeline" aria-live="polite">
-      {loading ? <div className="ln-empty"><LoaderCircle className="spin" size={18} /><span>正在读取小记…</span></div> : items.length === 0
-        ? <div className="ln-empty ln-empty--idle"><Feather size={25} /><strong>还没有小记</strong><span>从上面写下第一条临时记录。</span></div>
-        : items.map((item) => editingId === item.id && editingDraft
-          ? <article className="quick-note-entry editing" key={item.id}><QuickNoteComposer
-              draft={editingDraft} compact saving={saving && activeIsEditing}
-              onChange={(text) => setEditingDraft((current) => current ? { ...current, text } : current)}
-              onAddFiles={(files) => void addFiles(files, editingDraft)}
-              onRemoveImage={(image) => void removeImage(editingDraft, image)}
-              onSave={() => void saveDraft()} onCancel={() => void cancelDraft()}
-              inputRef={(node) => { if (node) fileInputs.current.set(editingDraft.id, node); }}
-            /></article>
-          : <QuickNoteCard key={item.id} item={item} deletePending={pendingDelete !== null} onEdit={() => void startEditing(item)} onDelete={() => scheduleDelete(item)} onConvert={() => setConvertItem(item)} />)
-      }
+    <div className="quick-notes-split">
+      <div className="quick-notes-compose">
+        <QuickNoteComposer
+          draft={createDraft}
+          variant="pane"
+          saving={saving && !activeIsEditing}
+          onChange={(text) => setCreateDraft((current) => ({ ...current, text }))}
+          onAddFiles={(files) => void addFiles(files, createDraft)}
+          onRemoveImage={(image) => void removeImage(createDraft, image)}
+          onSave={() => void saveDraft()}
+          onCancel={() => void cancelDraft()}
+          inputRef={(node) => { if (node) fileInputs.current.set(createDraft.id, node); }}
+        />
+      </div>
+      <div className="quick-notes-list">
+        <div className="quick-notes-timeline" aria-live="polite">
+          {loading ? <div className="ln-empty"><LoaderCircle className="spin" size={18} /><span>正在读取小记…</span></div> : items.length === 0
+            ? <div className="ln-empty ln-empty--idle"><Feather size={25} /><strong>还没有小记</strong><span>从左侧写下第一条临时记录。</span></div>
+            : items.map((item) => editingId === item.id && editingDraft
+              ? <article className="quick-note-entry editing" key={item.id}><QuickNoteComposer
+                  draft={editingDraft} variant="inline" saving={saving && activeIsEditing}
+                  onChange={(text) => setEditingDraft((current) => current ? { ...current, text } : current)}
+                  onAddFiles={(files) => void addFiles(files, editingDraft)}
+                  onRemoveImage={(image) => void removeImage(editingDraft, image)}
+                  onSave={() => void saveDraft()} onCancel={() => void cancelDraft()}
+                  inputRef={(node) => { if (node) fileInputs.current.set(editingDraft.id, node); }}
+                /></article>
+              : <QuickNoteCard key={item.id} item={item} deletePending={pendingDelete !== null} onEdit={() => void startEditing(item)} onDelete={() => scheduleDelete(item)} onConvert={() => setConvertItem(item)} />)
+          }
+        </div>
+      </div>
     </div>
     {pendingDelete && <div className="quick-notes-toast" role="status" aria-live="polite"><span>已删除一条小记</span><button onClick={undoDelete}><RotateCcw size={14} />撤销</button></div>}
     {convertItem && <div className="modal-backdrop" onMouseDown={(event) => event.target === event.currentTarget && !saving && setConvertItem(null)}>
@@ -267,7 +274,8 @@ export const QuickNotesWorkspace = forwardRef<QuickNotesWorkspaceHandle, QuickNo
 
 interface ComposerProps {
   draft: DraftState;
-  compact: boolean;
+  /** pane＝常驻写作面板（发布行在卡片外，仿语雀）；inline＝编辑既有小记（动作行留在卡片内） */
+  variant: "pane" | "inline";
   saving: boolean;
   onChange(text: string): void;
   onAddFiles(files: FileList | File[]): void;
@@ -277,7 +285,7 @@ interface ComposerProps {
   inputRef(node: HTMLInputElement | null): void;
 }
 
-function QuickNoteComposer({ draft, saving, onChange, onAddFiles, onRemoveImage, onSave, onCancel, inputRef }: ComposerProps) {
+function QuickNoteComposer({ draft, saving, variant, onChange, onAddFiles, onRemoveImage, onSave, onCancel, inputRef }: ComposerProps) {
   function pasteImages(event: React.ClipboardEvent<HTMLTextAreaElement>) {
     const files = Array.from(event.clipboardData.files).filter((file) => file.type.startsWith("image/"));
     if (files.length > 0) { event.preventDefault(); onAddFiles(files); }
@@ -286,25 +294,41 @@ function QuickNoteComposer({ draft, saving, onChange, onAddFiles, onRemoveImage,
     const files = Array.from(event.dataTransfer.files).filter((file) => file.type.startsWith("image/"));
     if (files.length > 0) { event.preventDefault(); onAddFiles(files); }
   }
-  return <div className="quick-note-composer">
-    <textarea value={draft.text} onChange={(event) => onChange(event.target.value)} onPaste={pasteImages} onDragOver={(event) => event.preventDefault()} onDrop={dropImages} placeholder="写下这一刻…" aria-label="小记正文" />
-    {draft.images.length > 0 && <div className="quick-note-image-grid">
-      {draft.images.map((draftImage) => <figure key={draftImage.image.id}><img src={draftImage.image.url} alt="小记图片" /><button type="button" onClick={() => void onRemoveImage(draftImage)} aria-label="移除图片"><X size={14} /></button></figure>)}
-    </div>}
-    <footer className="quick-note-composer-actions">
-      <label className="quick-note-image-button" title="添加图片"><ImagePlus size={17} /><input ref={inputRef} type="file" accept="image/png,image/jpeg,image/gif,image/webp,image/avif" multiple onChange={(event) => { if (event.target.files) onAddFiles(event.target.files); event.currentTarget.value = ""; }} /></label>
-      <span>可拖入或粘贴图片</span>
+  /** ⌘/Ctrl + Enter 发布（对齐语雀小记的快捷键提示） */
+  function publishOnShortcut(event: React.KeyboardEvent<HTMLTextAreaElement>) {
+    if ((event.metaKey || event.ctrlKey) && event.key === "Enter") { event.preventDefault(); onSave(); }
+  }
+  const publishLabel = variant === "pane" ? "小记一下" : "保存";
+  return <>
+    <div className="quick-note-composer">
+      {/* 工具条置顶（仿语雀：图片等在写作区上方），正文区保持整块留白 */}
+      <div className="quick-note-composer-tools">
+        <label className="quick-note-tool" title="添加图片" aria-label="添加图片"><ImagePlus size={17} /><input ref={inputRef} type="file" accept="image/png,image/jpeg,image/gif,image/webp,image/avif" multiple onChange={(event) => { if (event.target.files) onAddFiles(event.target.files); event.currentTarget.value = ""; }} /></label>
+      </div>
+      <textarea value={draft.text} onChange={(event) => onChange(event.target.value)} onKeyDown={publishOnShortcut} onPaste={pasteImages} onDragOver={(event) => event.preventDefault()} onDrop={dropImages} placeholder={variant === "pane" ? "记你想记…" : "写下这一刻…"} aria-label="小记正文" />
+      {draft.images.length > 0 && <div className="quick-note-image-grid">
+        {draft.images.map((draftImage) => <figure key={draftImage.image.id}><img src={draftImage.image.url} alt="小记图片" /><button type="button" onClick={() => void onRemoveImage(draftImage)} aria-label="移除图片"><X size={14} /></button></figure>)}
+      </div>}
+    </div>
+    <div className={`quick-note-composer-actions quick-note-composer-actions--${variant}`}>
+      <button className="b3-button quick-note-publish" disabled={saving} onClick={onSave}>{saving ? <LoaderCircle className="spin" size={15} /> : null}{saving ? "保存中" : publishLabel}</button>
+      {variant === "pane" && <span className="quick-note-publish-hint">按 ⌘ Enter 发布</span>}
+      {variant === "pane" && <span className="quick-note-publish-hint-sub">可拖入或粘贴图片</span>}
       <div className="quick-note-action-spacer" />
-      <button className="b3-button b3-button--cancel" disabled={saving} onClick={onCancel}>取消</button>
-      <button className="b3-button" disabled={saving} onClick={onSave}>{saving ? <LoaderCircle className="spin" size={15} /> : <Check size={15} />}{saving ? "保存中" : "记下"}</button>
-    </footer>
-  </div>;
+      <button className="quick-note-discard" disabled={saving} onClick={onCancel}>取消</button>
+    </div>
+  </>;
 }
 
 function QuickNoteCard({ item, deletePending, onEdit, onDelete, onConvert }: { item: QuickNoteDocument; deletePending: boolean; onEdit(): void; onDelete(): void; onConvert(): void }) {
-  const date = new Intl.DateTimeFormat("zh-CN", { month: "long", day: "numeric", hour: "2-digit", minute: "2-digit", hour12: false }).format(new Date(item.createdAt));
+  // 仿语雀：时间戳在卡片顶部（"更新于 08-04 14:16"），正文/图片在下
+  const stamp = (() => {
+    const d = new Date(item.updatedAt || item.createdAt);
+    const pad = (n: number) => String(n).padStart(2, "0");
+    return `${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  })();
   return <article className={`quick-note-entry ${item.isConflict ? "conflict" : ""}`} onDoubleClick={onEdit}>
-    <header><time dateTime={item.createdAt}>{date}</time>{item.isConflict && <span className="badge badge--warn quick-note-conflict">同步冲突副本</span>}<div className="quick-note-card-actions"><button onClick={onConvert} title="转为正式笔记"><FilePlus size={15} /></button><button onClick={onEdit} title="编辑小记"><Pencil size={15} /></button><button className="danger" onClick={onDelete} disabled={deletePending} title={deletePending ? "请先完成当前删除的撤销操作" : "删除小记"}><Trash size={15} /></button></div></header>
+    <header><time dateTime={item.updatedAt || item.createdAt}>更新于 {stamp}</time>{item.isConflict && <span className="badge badge--warn quick-note-conflict">同步冲突副本</span>}<div className="quick-note-card-actions"><button onClick={onConvert} title="转为正式笔记"><FilePlus size={15} /></button><button onClick={onEdit} title="编辑小记"><Pencil size={15} /></button><button className="danger" onClick={onDelete} disabled={deletePending} title={deletePending ? "请先完成当前删除的撤销操作" : "删除小记"}><Trash size={15} /></button></div></header>
     {item.content.text && <p>{item.content.text}</p>}
     {item.content.images.length > 0 && <div className="quick-note-saved-images">{item.content.images.map((image) => <img key={image.id} src={image.url} alt="小记图片" loading="lazy" />)}</div>}
   </article>;
