@@ -1896,6 +1896,14 @@ ne-card[data-card-name="file"] .ne-card-file {
   /* 侧栏 display:none 后必须把工作区挪到第 2 列，否则中间会留一条死列
      （实测 416px 是 38+148+230，那条 148px 就是用户看到的大空隙） */
   .app-shell.sidebar-collapsed .workspace { grid-column: 2; }
+  /* 材质语言与宽窗一致：灰壳上浮一张白色圆角卡片，左侧与左轨之间留 4px 灰缝
+     （宽窗那套写在 layout.css 的 @media (min-width: 761px) 里，窄窗否则只剩白底平铺 →
+     用户 260915 反馈"窄窗和宽窗像两套 UI"）。 */
+  .workspace {
+    background: var(--b3-theme-background);
+    border-radius: var(--b3-border-radius-b) var(--b3-border-radius-b) 0 0;
+    margin: 4px 4px 0 0;
+  }
   /* 展开态：弹性列宽 + 正文档下限（对齐思源 .layout__center { min-width: 148px }）：
      侧栏列最多 --sidebar-width，空间不够时自己让位，工作区永远不被挤到 148px 以下。 */
   .app-shell,
@@ -1949,8 +1957,9 @@ ne-card[data-card-name="file"] .ne-card-file {
   .tabbar-leading > * { min-width: 0; }
   .tabbar-leading span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .tab-bar > * { min-width: 0; }
-  .tab-items { flex: 1 1 auto; min-width: 0; height: var(--topbar-height, 38px); align-items: center; flex-wrap: nowrap; overflow-x: auto; overflow-y: hidden; }
-  .tab-item { height: 28px; min-height: 0; margin: 0; flex: 0 0 auto; }
+  /* 标签在 38px 顶栏里垂直居中（之前贴顶，用户 260915 截图） */
+  .tab-items { flex: 1 1 auto; min-width: 0; height: var(--topbar-height, 38px); display: flex; align-items: center; align-content: center; flex-wrap: nowrap; overflow-x: auto; overflow-y: hidden; }
+  .tab-item, .tab-switcher-wrap { flex: 0 0 auto; height: 28px; min-height: 0; margin: 0; align-self: center; }
   /* 左轨与左轨按钮：**照抄宽窗那一套**（宽窗写在 styles.css 的 @media (min-width: 761px) 里，
      窄窗否则会掉回基础样式 → 出现边框、错位，和宽窗长得不一样）。 */
   .activity-rail {
@@ -1958,9 +1967,22 @@ ne-card[data-card-name="file"] .ne-card-file {
     padding: 0 3px 6px;
     padding-top: calc(var(--topbar-height, 38px) + 8px);
     min-width: var(--activity-rail-width, 38px);
-    border-right: 1px solid var(--shell-separator);
+    /* 分隔线不画进标题栏：红绿灯那一带不出现竖线（用户 260915 截图#1），
+       改用从顶栏下沿开始的伪元素，视觉上等价于宽窗（宽窗那条线也被顶栏挡住） */
+    position: relative;
+    border-right: 0;
     border-left: 0;
     background: var(--lake-shell);
+  }
+  .activity-rail::after {
+    content: "";
+    position: absolute;
+    top: var(--topbar-height, 38px);
+    right: 0;
+    bottom: 0;
+    width: 1px;
+    background: var(--shell-separator);
+    pointer-events: none;
   }
   .activity-button {
     display: grid;
