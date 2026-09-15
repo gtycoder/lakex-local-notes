@@ -1140,6 +1140,8 @@ adb shell pm clear com.lakenotes.mobile                      # 清 App 数据重
 
 ### 7. 本轮关键提交
 2fb2e0a fb90d6d 6f3797d 3d777fb 8b715c6 f74dad5 c6f5089 d3e4141 96f0230 ffdfb76 e69d4a0（0792ff7..e69d4a0）
+### 窄窗彻底统一（260915，3 个提交 · 见 §2.39「施工结果」）
+7fe3e42（壳层几何成对搬进共用作用域 + 删窄窗手抄副本）→ 1962476（小记工作台骨架）→ 0455fe5（浮层/面板宽度与设置导航改连续量）
 ### 2.39 窄窗"彻底统一"施工方案（260915 用户拍板：选 B，不做东拼西凑）
 > 目标：**壳层规则只留一份**——把宽窗那层从 `@media (min-width: 761px)` 里成对搬到共用作用域，
 > 窄窗不再"抄一遍"。做完后拖动窗口只应出现"列宽线性压缩"，不允许任何位置/边框/显隐突变。
@@ -1178,9 +1180,48 @@ const m = await page.send("CSS.getMatchedStylesForNode", { nodeId: q.nodeId });
 用它查过：`.tab-switcher` 的"框"其实来自 `background: rgba(255,255,255,.48)`（不是 border）；
 `.tab-bar` 曾被窄窗块里一条 `position: static` 覆盖（已删）。
 
-**当前状态（`dbdd988` 之后）**
-- 已去掉 JS 的 900px 强制收起（那是"整片跳变"主因）；侧栏模式恒为用户选择。
-- 窄窗块里仍有手抄副本（`.tab-bar/.tabbar-leading/.activity-rail/.activity-button/.workspace`），
-  待本方案第 2 步删除。
-- 已知未解：760px 收起态下读到 `bar [38,4,718]`（应为 `[0,0,W]`），说明该状态下另有规则覆盖 fixed
-  ——用上面第 1 步的诊断先定位，再成对处理，**不要继续叠加 `!important`**。
+**施工结果（260915 本会话完成，3 个提交；`git log` 见 §7 末尾）**
+> 结论：**窄窗"手抄副本"已清零**，宽度 416→999 逐像素扫描**无任何非列宽压缩的突变**（含深浅两主题、
+> 三种侧栏模式）。原先记的两条"已知未解"都由本轮定位并修掉：`bar [38,4,718]` 是**旧状态**（`dbdd988`
+> 之后已回到 `[0,0,W]`）；`.tab-switcher` 的"框"= 但**根因是它整族规则只在 min-width 块里**，
+> 窄窗掉回浏览器默认按钮（2px 边框 + `#efefef` 底），不是那条半透明底。
+
+**搬到共用作用域（去掉 `@media (min-width: 761px)` 守卫，声明与顺序一字未改）**
+- 组 1 顶栏：`.tab-bar` fixed 几何、`.tabbar-leading/-spacer/-trailing`、`.tab-items`（`styles.css` + `b3/layout.css`）
+  × 让位：`.workspace` 的 `margin: calc(--topbar-height + 4px) 0 4px 0`（＝文档区 y=42 + 底部 4px 灰缝）
+- 组 2 左轨：`.activity-rail`（flex/居中/`padding-top: --topbar-height`）× `.activity-button`
+  （缺一就左移 2px：实测轨按钮 x 5→3）
+- 组 3/4 顶栏控件：`.tab-item*`、`.tab-close*`、`.tab-switcher*` 整族（含切换器菜单/提示）
+- 组 5 状态栏：`.statusbar` 材质（`--b3-body-background` + 边框清零）
+- 组 6 侧栏：`.sidebar`、`.sidebar::before`、`.sidebar.sidebar-docked`（卡片几何）、
+  **收起态悬停预览**（`.sidebar.sidebar-floating/.sidebar-collapsed`，原在 `styles/shell.css` 的 4 个 min-width 块里
+  ⇒ 窄窗悬停左轨会拉出一块 `box [38,-15838,265,16706]` 的面板）
+- 壳层材质一览：`.app-shell/.activity-rail/.sidebar` 连续材质、`.workspace/.document-pane/.multi-tab-editor`
+  透明、卡片圆角、`.statusbar` 边框清零
+- 小记工作台：`.quick-notes-pane` 骨架 + `.app-shell.quick-notes-active .workspace` 让位 + 栅格
+  （宽窗把目录树列写成 0；窄窗不跟就会被 265px 空列吃宽 ⇒ 760px 下小记两栏被裁到窗外）
+- 浮层：删除窄窗"四个面板一刀切 `calc(100vw - 16px) !important`"（跨断点时搜索面板 744→680 跳 64px），
+  沿用各自 `min(定宽, 100vw - 边距)`；`.settings-nav` 由"窄窗 150 / 宽窗 208"改成一条
+  `flex: 0 0 clamp(150px, 27%, 208px)` 连续量
+
+**窄窗块现在只剩"真·窄窗增量"**：收起态两列栅格（`rail + minmax(148px,1fr)`）、展开态正文档下限 148px、
+`.tabbar-leading` 压缩省略链、`.outline-sidebar { display:none }`、`≤560px` 小记叠单栏。
+顺带删掉窄窗块里的死声明：`.topbar`（全仓无此元素）、`.sidebar.is-collapsed:hover`（该类只用在
+`.outline-item__fold` 上）。
+
+**双门禁（每一步都过）**
+- 门禁 A（416/560/760/900 × 收起/展开，8 态）：`bar == [0,0,W]`、`document y == 42 && h == 822`、
+  轨按钮恒 `[5,40]`（与宽窗一致）、`scrollWidth == 视口宽`、顶栏/面包屑/文档区重叠 0、溢出元素 0。
+- 门禁 B（1315 宽窗"改动前后像素 0 差异"）：资料库 / 小记 / 设置·外观 / 设置·回收站 / 搜索
+  五屏 × 18.26M 颜色通道 **差异 0**（第三步用 `git stash` 取"改动前同源截图"再比对；噪声基线实测 0）。
+- **窄窗验收（逐像素）**：416→999 每 1px 一档（583 步/屏）——资料库（收起/停靠/浮动）、小记、设置、搜索，
+  外加深浅两主题，**非列宽压缩的突变 0 条**。工具：`/tmp/lkcdp/finesweep.mjs`（阈值 1.5px，容亚像素分配）。
+- `tsc` 0 error · vitest 969 passed / 16 skipped。
+
+**已知残留（有意保留，不是遗漏）**
+- **大纲（`outlineEnhance=true`）在窄窗整体让位**：760 及以下 `.outline-sidebar { display:none }`，
+  761 起变 38px rail ⇒ 跨断点时文档列 457→420（实测）。这是 §2.38 第八批的既决事项（窄窗正文优先，
+  且大纲增强默认关）；要改成"窄窗保留大纲"需动产品口径，**另开一轮**，别顺手改。
+- `styles.css` 开头的 `.sidebar.is-collapsed { width: 44px … }` 一族（第 16~25 行）同属死声明
+  （同上无匹配元素），本轮没动，留给下一次结构清理。
+- 移动端不在本轮范围（`src/mobile/main.tsx` 不加载 `styles.css`，本轮改动不外溢）。
