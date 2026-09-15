@@ -1,5 +1,5 @@
 import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
-import { ArrowUpDown, Check, CheckSquare, FilePlus, ImagePlus, Feather, LoaderCircle, Pencil, RotateCcw, Trash, X } from "lucide-react";
+import { ArrowUpDown, Check, FilePlus, ImagePlus, Feather, LoaderCircle, Pencil, RotateCcw, Trash, X } from "lucide-react";
 import { native } from "../lib/native";
 import { createRequestVersion } from "../core/requestVersion";
 import type { NoteDocument, QuickNoteDocument, QuickNoteImage, TreeNode } from "../lib/types";
@@ -254,6 +254,7 @@ export const QuickNotesWorkspace = forwardRef<QuickNotesWorkspaceHandle, QuickNo
   }
 
   function toggleSelected(id: string) {
+    setSelecting(true);   // 卡片左侧的勾选框随时可用：点它就进多选（无需单独的"多选"按钮）
     setSelected((current) => {
       const next = new Set(current);
       if (next.has(id)) next.delete(id); else next.add(id);
@@ -293,7 +294,6 @@ export const QuickNotesWorkspace = forwardRef<QuickNotesWorkspaceHandle, QuickNo
       <h1>小记</h1>
       <div className="quick-notes-header-tools">
         <span className="quick-notes-count">{items.length} 条</span>
-        <button className={"quick-notes-tool-btn" + (selecting ? " is-on" : "")} disabled={items.length === 0} onClick={() => (selecting ? exitSelecting() : setSelecting(true))} title="多选" aria-label="多选"><CheckSquare size={16} /></button>
         <div className="quick-notes-sort-wrap">
           <button className="quick-notes-tool-btn" onClick={() => setSortOpen((open) => !open)} aria-haspopup="menu" aria-expanded={sortOpen} title={sortBy === "updated" ? "排序：按更新时间" : "排序：按创建时间"} aria-label="排序"><ArrowUpDown size={16} /></button>
           {sortOpen && <div className="quick-notes-sort-menu" role="menu">
@@ -386,6 +386,8 @@ function QuickNoteComposer({ draft, saving, variant, onChange, onAddFiles, onRem
     if ((event.metaKey || event.ctrlKey) && event.key === "Enter") { event.preventDefault(); onSave(); }
   }
   const publishLabel = variant === "pane" ? "小记一下" : "保存";
+  /** 有内容才强调（用户 260915）：新建小记空态＝中性描边；编辑既有小记的"保存"恒强调；两者同一套样式。 */
+  const emphasized = variant === "inline" || draft.text.trim().length > 0 || draft.images.length > 0;
   return <>
     <div className="quick-note-composer">
       {/* 工具条置顶（仿语雀：图片等在写作区上方），正文区保持整块留白 */}
@@ -398,7 +400,7 @@ function QuickNoteComposer({ draft, saving, variant, onChange, onAddFiles, onRem
       </div>}
     </div>
     <div className={`quick-note-composer-actions quick-note-composer-actions--${variant}`}>
-      <button className="b3-button quick-note-publish" disabled={saving} onClick={onSave}>{saving ? <LoaderCircle className="spin" size={15} /> : null}{saving ? "保存中" : publishLabel}</button>
+      <button className={"b3-button quick-note-publish" + (emphasized ? " is-emphasized" : "")} disabled={saving} onClick={onSave}>{saving ? <LoaderCircle className="spin" size={15} /> : null}{saving ? "保存中" : publishLabel}</button>
       {variant === "pane" && <span className="quick-note-publish-hint">按 ⌘ Enter 发布</span>}
       {variant === "pane" && <span className="quick-note-publish-hint-sub">可拖入或粘贴图片</span>}
       <div className="quick-note-action-spacer" />
@@ -422,11 +424,12 @@ function QuickNoteCard({ item, deletePending, selecting, checked, onToggleSelect
     onDoubleClick={selecting ? undefined : onEdit}
     onClick={selecting ? onToggleSelect : undefined}
   >
-    {selecting && <button
+    {/* 勾选框常驻（左侧固定槽位）：默认 hover 才显形，点多选模式后常显 */}
+    <button
       className={"qn-check quick-note-select" + (checked ? " is-on" : "")}
       role="checkbox" aria-checked={checked} aria-label={checked ? "取消选择" : "选择这篇小记"}
       onClick={(event) => { event.stopPropagation(); onToggleSelect(); }}
-    >{checked && <Check size={13} />}</button>}
+    >{checked && <Check size={13} />}</button>
     <header><time dateTime={item.updatedAt || item.createdAt}>更新于 {stamp}</time>{item.isConflict && <span className="badge badge--warn quick-note-conflict">同步冲突副本</span>}<div className="quick-note-card-actions"><button onClick={onConvert} title="转为正式笔记"><FilePlus size={15} /></button><button onClick={onEdit} title="编辑小记"><Pencil size={15} /></button><button className="danger" onClick={onDelete} disabled={deletePending} title={deletePending ? "请先完成当前删除的撤销操作" : "删除小记"}><Trash size={15} /></button></div></header>
     {item.content.text && <p>{item.content.text}</p>}
     {item.content.images.length > 0 && <div className="quick-note-saved-images">{item.content.images.map((image) => <img key={image.id} src={image.url} alt="小记图片" loading="lazy" />)}</div>}
