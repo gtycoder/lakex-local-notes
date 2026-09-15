@@ -1896,13 +1896,19 @@ ne-card[data-card-name="file"] .ne-card-file {
   /* 侧栏 display:none 后必须把工作区挪到第 2 列，否则中间会留一条死列
      （实测 416px 是 38+148+230，那条 148px 就是用户看到的大空隙） */
   .app-shell.sidebar-collapsed .workspace { grid-column: 2; }
-  /* 材质语言与宽窗一致：灰壳上浮一张白色圆角卡片，左侧与左轨之间留 4px 灰缝
-     （宽窗那套写在 layout.css 的 @media (min-width: 761px) 里，窄窗否则只剩白底平铺 →
-     用户 260915 反馈"窄窗和宽窗像两套 UI"）。 */
-  .workspace {
+  /* 材质语言与宽窗一致：**灰壳 + 白色圆角卡片 + 4px 灰缝**。
+     关键：卡片必须画在文档区（.document-pane / 小记面板）而**不是** .workspace——
+     顶栏（.tab-bar）是 workspace 的子元素，若把白卡画在 workspace 上，顶栏就浮在白卡上，
+     跨过断点时顶栏底色会从灰（宽窗：浮在灰壳上）翻成白（窄窗），用户看到的"颜色跳变"就是这个。 */
+  .workspace { background: transparent; }
+  .document-pane,
+  .document-pane:has(> .multi-tab-editor),
+  .quick-notes-pane {
     background: var(--b3-theme-background);
     border-radius: var(--b3-border-radius-b) var(--b3-border-radius-b) 0 0;
-    margin: 4px 4px 0 0;
+    /* 顶栏是 workspace 的子元素（窄窗走文档流），卡片必须从顶栏下沿才开始，
+       否则白卡会垫在顶栏底下 → 窄窗顶栏显白、宽窗显灰（用户动图里的颜色跳变）。 */
+    margin: calc(var(--topbar-height, 38px) + 4px) 4px 0 0;
   }
   /* 展开态：弹性列宽 + 正文档下限（对齐思源 .layout__center { min-width: 148px }）：
      侧栏列最多 --sidebar-width，空间不够时自己让位，工作区永远不被挤到 148px 以下。 */
@@ -1944,6 +1950,11 @@ ne-card[data-card-name="file"] .ne-card-file {
     min-height: 0;
     padding: 0 6px 0 48px;
     overflow: hidden;
+    /* 与宽窗同色：宽窗的 `.tab-bar { background: transparent }` 写在媒体查询里，
+       窄窗会掉回基础样式的 `var(--sidebar-bg, #fafafa)` → 顶栏底色比壳层亮一档，
+       于是"宽→窄"跨断点时顶栏/左轨颜色跳变（用户 260915 动图）。 */
+    background: transparent !important;   /* 必须压过基础样式的 --sidebar-bg；否则底色比壳层亮一档 */
+    border-bottom: 0 !important;
   }
   .tabbar-leading {
     display: flex;
@@ -1990,7 +2001,9 @@ ne-card[data-card-name="file"] .ne-card-file {
     position: relative;
     border-right: 0;
     border-left: 0;
-    background: var(--lake-shell);
+    /* 与宽窗同一层壳色；`!important` 是因为别处有一条更具体的规则把它画成 surface 色
+       （实测窄窗左轨是 #f6f6f6、宽窗是 #ebecf0 → 用户动图里的颜色跳变） */
+    background: var(--b3-body-background) !important;
   }
   .activity-rail::after {
     content: "";
