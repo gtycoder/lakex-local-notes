@@ -293,14 +293,25 @@ export const QuickNotesWorkspace = forwardRef<QuickNotesWorkspaceHandle, QuickNo
     <header className="quick-notes-header">
       <h1>小记</h1>
       <div className="quick-notes-header-tools">
-        <span className="quick-notes-count">{items.length} 条</span>
-        <div className="quick-notes-sort-wrap">
-          <button className="quick-notes-tool-btn" onClick={() => setSortOpen((open) => !open)} aria-haspopup="menu" aria-expanded={sortOpen} title={sortBy === "updated" ? "排序：按更新时间" : "排序：按创建时间"} aria-label="排序"><ArrowUpDown size={16} /></button>
-          {sortOpen && <div className="quick-notes-sort-menu" role="menu">
-            <button role="menuitemradio" aria-checked={sortBy === "updated"} onClick={() => { setSortBy("updated"); writeSortPref("updated"); setSortOpen(false); }}>{sortBy === "updated" ? <Check size={14} /> : <span className="quick-notes-menu-gap" />}按更新时间</button>
-            <button role="menuitemradio" aria-checked={sortBy === "created"} onClick={() => { setSortBy("created"); writeSortPref("created"); setSortOpen(false); }}>{sortBy === "created" ? <Check size={14} /> : <span className="quick-notes-menu-gap" />}按创建时间</button>
-          </div>}
-        </div>
+        {/* 多选条与「N 条 / 排序」共用同一行（用户 260915：挪到上面，别占卡片区） */}
+        {selecting ? <>
+          <button className={"qn-check" + (selected.size > 0 && selected.size === items.length ? " is-on" : "")} role="checkbox" aria-checked={selected.size > 0 && selected.size === items.length} aria-label="全选" onClick={() => setSelected(selected.size === items.length ? new Set() : new Set(items.map((item) => item.id)))}>{selected.size > 0 && selected.size === items.length && <Check size={13} />}</button>
+          <span className="quick-notes-select-info">共选择了 {selected.size} 篇小记</span>
+          <span className="quick-notes-tools-divider" />
+          <button className="quick-notes-link" onClick={exitSelecting}>取消</button>
+          <span className="quick-notes-tools-spacer" />
+          <button className="quick-notes-link" disabled={selected.size === 0 || saving} onClick={() => setConvertItems(items.filter((item) => selected.has(item.id)))}>转为文档</button>
+          <button className="quick-notes-link quick-notes-link--danger" disabled={selected.size === 0 || saving} onClick={() => void deleteSelected()}>批量删除</button>
+        </> : <>
+          <span className="quick-notes-count">{items.length} 条</span>
+          <div className="quick-notes-sort-wrap">
+            <button className="quick-notes-tool-btn" onClick={() => setSortOpen((open) => !open)} aria-haspopup="menu" aria-expanded={sortOpen} title={sortBy === "updated" ? "排序：按更新时间" : "排序：按创建时间"} aria-label="排序"><ArrowUpDown size={16} /></button>
+            {sortOpen && <div className="quick-notes-sort-menu" role="menu">
+              <button role="menuitemradio" aria-checked={sortBy === "updated"} onClick={() => { setSortBy("updated"); writeSortPref("updated"); setSortOpen(false); }}>{sortBy === "updated" ? <Check size={14} /> : <span className="quick-notes-menu-gap" />}按更新时间</button>
+              <button role="menuitemradio" aria-checked={sortBy === "created"} onClick={() => { setSortBy("created"); writeSortPref("created"); setSortOpen(false); }}>{sortBy === "created" ? <Check size={14} /> : <span className="quick-notes-menu-gap" />}按创建时间</button>
+            </div>}
+          </div>
+        </>}
       </div>
     </header>
     {error && <div className="quick-notes-error"><span>{error}</span><button onClick={() => setError(null)} aria-label="关闭错误"><X size={15} /></button></div>}
@@ -319,14 +330,6 @@ export const QuickNotesWorkspace = forwardRef<QuickNotesWorkspaceHandle, QuickNo
         />
       </div>
       <div className={"quick-notes-list" + (selecting ? " selecting" : "")}>
-        {selecting && <div className="quick-notes-selectbar">
-          <button className={"qn-check" + (selected.size > 0 && selected.size === items.length ? " is-on" : "")} role="checkbox" aria-checked={selected.size > 0 && selected.size === items.length} aria-label="全选" onClick={() => setSelected(selected.size === items.length ? new Set() : new Set(items.map((item) => item.id)))}>{selected.size > 0 && selected.size === items.length && <Check size={13} />}</button>
-          <span className="quick-notes-selectbar-text">共选择了 {selected.size} 篇小记</span>
-          <button className="quick-notes-link" onClick={exitSelecting}>取消</button>
-          <div className="quick-note-action-spacer" />
-          <button className="quick-notes-link" disabled={selected.size === 0 || saving} onClick={() => setConvertItems(items.filter((item) => selected.has(item.id)))}>转为文档</button>
-          <button className="quick-notes-link quick-notes-link--danger" disabled={selected.size === 0 || saving} onClick={() => void deleteSelected()}>批量删除</button>
-        </div>}
         <div className="quick-notes-timeline" aria-live="polite">
           {loading ? <div className="ln-empty"><LoaderCircle className="spin" size={18} /><span>正在读取小记…</span></div> : items.length === 0
             ? <div className="ln-empty ln-empty--idle"><Feather size={25} /><strong>还没有小记</strong><span>从左侧写下第一条临时记录。</span></div>

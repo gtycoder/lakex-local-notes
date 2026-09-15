@@ -1127,7 +1127,11 @@ ne-card[data-card-name="codeblock"] .ne-card-resizer-mask {
 .quick-notes-pane { color: var(--b3-theme-on-background); }
 .quick-notes-header { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 12px; }
 .quick-notes-header h1 { margin: 0; color: var(--b3-theme-on-background); font-size: 20px; letter-spacing: -.02em; }
-.quick-notes-header-tools { display: flex; align-items: center; gap: 6px; }
+.quick-notes-header-tools { display: flex; align-items: center; gap: 6px; min-width: 0; }
+/* 多选态占用同一行：信息在左、动作在右（靠 spacer 撑开），不额外占卡片区高度 */
+.quick-notes-select-info { color: var(--b3-theme-on-background); font-size: 13px; white-space: nowrap; }
+.quick-notes-tools-divider { width: 1px; height: 14px; background: color-mix(in srgb, var(--lake-text) 16%, transparent); }
+.quick-notes-tools-spacer { width: 10px; }
 /* 头部小工具（多选 / 排序）：纯图标按钮，hover 才着色 */
 .quick-notes-tool-btn { display: grid; place-items: center; width: 30px; height: 30px; border: 0; border-radius: 6px; color: var(--b3-theme-on-surface); background: transparent; cursor: pointer; transition: color var(--lake-motion-fast) var(--lake-ease-standard), background-color var(--lake-motion-fast) var(--lake-ease-standard); }
 .quick-notes-tool-btn:hover:not(:disabled), .quick-notes-tool-btn.is-on { color: var(--b3-theme-primary); background: color-mix(in srgb, var(--b3-theme-primary) 10%, transparent); }
@@ -1141,9 +1145,7 @@ ne-card[data-card-name="codeblock"] .ne-card-resizer-mask {
 .qn-check { display: grid; place-items: center; width: 20px; height: 20px; padding: 0; border: 1.5px solid var(--b3-border-color); border-radius: 5px; color: #fff; background: var(--b3-theme-background); cursor: pointer; transition: background-color var(--lake-motion-fast) var(--lake-ease-standard), border-color var(--lake-motion-fast) var(--lake-ease-standard); }
 .qn-check:hover { border-color: var(--lake-sync-success); }
 .qn-check.is-on { border-color: var(--lake-sync-success); background: var(--lake-sync-success); }
-/* 多选条：占位于右栏顶部（列表滚动区之外，始终可见） */
-.quick-notes-selectbar { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; padding: 0 2px; }
-.quick-notes-selectbar-text { color: var(--b3-theme-on-background); font-size: 13px; }
+/* （多选条已并入头部那一行，见 .quick-notes-header-tools；这里只留链接按钮样式） */
 .quick-notes-link { border: 0; padding: 2px 4px; color: var(--b3-theme-primary); background: transparent; font-size: 13px; cursor: pointer; }
 .quick-notes-link:hover:not(:disabled) { text-decoration: underline; }
 .quick-notes-link:disabled { opacity: .45; cursor: default; }
