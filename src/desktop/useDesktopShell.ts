@@ -45,6 +45,9 @@ export function useDesktopShell(options: UseDesktopShellOptions) {
     window.addEventListener("resize", onResize);
     return () => window.removeEventListener("resize", onResize);
   }, []);
+  /** 窄窗下是否把目录树"拉出来"（点左轨切换）。窄窗默认收起 = 左轨 + 工作区。 */
+  const [narrowSidebarOpen, setNarrowSidebarOpen] = useState(false);
+  useEffect(() => { if (!narrowViewport) setNarrowSidebarOpen(false); }, [narrowViewport]);
 
   // ---- 布局：outline ----
   const [outlineMode, setOutlineMode] = useState<OutlineMode>(initialOutlineMode);
@@ -166,10 +169,15 @@ export function useDesktopShell(options: UseDesktopShellOptions) {
     // 窄窗一律按"收起态"渲染（左轨 + 44px 侧栏条 + 工作区）：工作区不再被 265px 停靠栏挤没。
     // 试过用 floating（浮层）替代，但 app 的"悬停才浮出"由组件状态控制、不由几何控制，
     // 窄窗下浮层会一直可见并盖住工作区，故仍用收起态。只覆盖渲染，不写 localStorage。
-    sidebarMode: narrowViewport ? ("collapsed" as SidebarMode) : sidebarMode,
+    sidebarMode: narrowViewport ? ((narrowSidebarOpen ? "docked" : "collapsed") as SidebarMode) : sidebarMode,
     setSidebarMode, sidebarWidth, sidebarResizing, sidebarResizingRef,
     updateSidebarWidth, commitSidebarWidth, handleSidebarResizeActiveChange,
-    showSidebarPreview, hideSidebarPreview, toggleSidebarDock, clearSidebarPreviewTimer,
+    showSidebarPreview, hideSidebarPreview, clearSidebarPreviewTimer,
+    // 窄窗：左轨按钮退化为"把目录树拉出来 / 收回去"（此时没有并排空间，停靠/浮动语义无意义）
+    toggleSidebarDock: useCallback(() => {
+      if (narrowViewport) { setNarrowSidebarOpen((v) => !v); return; }
+      toggleSidebarDock();
+    }, [narrowViewport, toggleSidebarDock]),
     // outline
     outlineMode, setOutlineMode, activeOutlineEmpty, setActiveOutlineEmpty,
     outlineEmptyOverride, setOutlineEmptyOverride, outlineSwitching, setOutlineSwitching,
