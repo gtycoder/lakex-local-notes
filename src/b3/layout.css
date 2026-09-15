@@ -60,6 +60,37 @@
   border-left: 0 !important;
 }
 
+/* 大纲轨：不额外加 padding-top（大纲栏本体已从顶栏下方开始）；轨自身透明，
+ * 由大纲栏本体的壳色透出——与左轨同一套。**宽窄共用**：原先这条只在宽窗媒体块里，
+ * 窄窗于是掉回 outline.css 的 `--shell-material`（#f6f6f6），比壳层亮一档 ——
+ * 用户看到的就是"最右侧那条颜色跟别人不一样"（260915 截图）。 */
+.outline-sidebar__rail {
+  margin-top: 0 !important;
+  padding-top: 0 !important;
+  background: transparent !important;
+  border-right: 0 !important;
+  border-left: 0 !important;
+}
+
+/* 右侧浮动（大纲 hover）：思源半高悬浮带。**宽窄共用**——这是大纲面板"最终长相"的
+ * 唯一来源（白面 / 0 描边 / 12px 圆角 / dock 阴影）。原先它只在宽窗媒体块里，
+ * 窄窗于是掉回 outline.css 更老的一套公式（1px 描边 + 14px 圆角），跨宽度看就是两种样式。 */
+.outline-sidebar--collapsed.outline-sidebar--hovered .outline-sidebar__content {
+  position: fixed !important;
+  top: 112px !important;
+  bottom: 82px !important;
+  right: var(--outline-collapsed-width) !important;
+  left: auto !important;
+  width: var(--outline-sidebar-width, 280px) !important;
+  height: calc(100vh - 194px) !important;
+  min-width: 0 !important;
+  background: var(--b3-theme-background) !important;
+  border-radius: var(--b3-border-radius-b) 0 0 var(--b3-border-radius-b) !important;
+  box-shadow: -8px 0 24px var(--b3-dock-shadow-color) !important;
+  border: 0 !important;
+  transition: transform .2s cubic-bezier(0, 0, .2, 1) 0ms, opacity .3s cubic-bezier(0, 0, .2, 1) 0ms !important;
+}
+
 /* 标签项：思源 layout-tab-bar .item 观感（窄窗同样成立——组 4） */
 .tab-item {
   color: var(--b3-theme-on-surface);
@@ -143,14 +174,7 @@
 
   /* .activity-rail / .tab-item* / .sidebar.sidebar-docked / 卡片圆角 / .statusbar
      已搬到共用作用域（见文件开头） */
-  /* 大纲轨：不额外加 padding-top——大纲侧栏本身已从顶栏下方开始；视觉图标由产品要求隐藏。 */
-  .outline-sidebar__rail {
-    margin-top: 0 !important;
-    padding-top: 0 !important;
-    background: transparent !important;
-    border-right: 0 !important;
-    border-left: 0 !important;
-  }
+  /* 大纲轨的几何见共用作用域（文件开头） */
 
   /* 标签栏几何 / .tabbar-* / .tab-items / 顶栏底色已搬到共用作用域（见文件开头） */
 
@@ -169,22 +193,7 @@
   /* .sidebar.sidebar-floating 已搬到共用作用域（见文件开头）
    * 注意：height 必须显式给出（height:auto + bottom 会导致浏览器忽略 top、按 bottom+内容高锚定）。 */
 
-  /* 右侧浮动（大纲 hover）：思源半高悬浮带 */
-  .outline-sidebar--collapsed.outline-sidebar--hovered .outline-sidebar__content {
-    position: fixed !important;
-    top: 112px !important;
-    bottom: 82px !important;
-    right: var(--outline-collapsed-width) !important;
-    left: auto !important;
-    width: var(--outline-sidebar-width, 280px) !important;
-    height: calc(100vh - 194px) !important;
-    min-width: 0 !important;
-    background: var(--b3-theme-background) !important;
-    border-radius: var(--b3-border-radius-b) 0 0 var(--b3-border-radius-b) !important;
-    box-shadow: -8px 0 24px var(--b3-dock-shadow-color) !important;
-    border: 0 !important;
-    transition: transform .2s cubic-bezier(0, 0, .2, 1) 0ms, opacity .3s cubic-bezier(0, 0, .2, 1) 0ms !important;
-  }
+  /* （右侧浮动大纲的公式已搬到共用作用域，见文件开头） */
 }
 
 /* 深色：dock/标签栏卡片跟随主题（覆盖 styles.css 的 #fff !important 与浅色表面） */

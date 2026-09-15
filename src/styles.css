@@ -665,6 +665,27 @@ ne-card[data-card-name="codeblock"] .ne-card-resizer-mask {
   box-shadow: none !important;
 }
 
+/* ── 大纲栏的壳层材质（与 .app-shell/.sidebar 同一处来源，宽窄共用）──
+ * 原先这一组只在 `@media (min-width: 761px)` 里 ⇒ 窄窗掉回 outline.css 自带的旧默认：
+ * 本体与轨道变成 `--shell-material`（浅一档的 #f6f6f6）而不是壳色，用户看到的就是
+ * "最右侧那条颜色跟别人不一样"。现在与其它壳层表面走同一条规则，**只有这一份**。 */
+.outline-sidebar,
+.outline-sidebar__content,
+.outline-sidebar--docked .outline-sidebar__content,
+.outline-sidebar--collapsed .outline-sidebar__content {
+  background: var(--shell-unified-background) !important;
+  border: 0 !important;
+  box-shadow: none !important;
+}
+/* 上面那条会把"真正的工作面"也刷成壳色，所以这组搭档必须同时存在（宽窄共用）：
+   固定/悬停展开的大纲面板要恢复成白色卡片。**成对改，缺一就会把面板刷成灰。** */
+/* 固定态的面板白卡：与"三栏卡片布局"（outline.css 共用作用域）同值，这里只补回被材质层刷掉的底色。 */
+.outline-sidebar--docked .outline-sidebar__content {
+  background: var(--b3-theme-background) !important;
+}
+/* 悬停展开的面板公式**不在这里**：唯一来源是 b3/layout.css 的"右侧浮动（大纲 hover）"，
+   否则窄窗会掉回 outline.css 的老公式（1px 描边 + 14px 圆角），宽窄又变成两种样式。 */
+
 /* 桌面壳层使用一块连续材质：不再把顶栏、资料库和正文画成三张卡片。
  * （原先在 `@media (min-width: 761px)` 里 ⇒ 窄窗侧栏会掉回基础样式的 1px 右边框。） */
 .app-shell,
@@ -1512,14 +1533,7 @@ ne-card[data-card-name="codeblock"] .ne-card-resizer-mask {
     border: 0;
     box-shadow: inset 0 -1px 0 rgba(31, 35, 41, .035);
   }
-  .outline-sidebar,
-  .outline-sidebar__content,
-  .outline-sidebar--docked .outline-sidebar__content,
-  .outline-sidebar--collapsed .outline-sidebar__content {
-    background: var(--shell-unified-background) !important;
-    border: 0 !important;
-    box-shadow: none !important;
-  }
+  /* 大纲材质与它的搭档（面板白卡）已搬到共用作用域（见上方「大纲栏的壳层材质」） */
   /* .statusbar 材质已搬到共用作用域 */
 
   /* 小记页：活动轨保持透明，与壳层对角渐变一体。 */
@@ -1750,23 +1764,7 @@ ne-card[data-card-name="codeblock"] .ne-card-resizer-mask {
     box-shadow: 18px 0 50px rgba(43, 50, 78, .18), 2px 0 8px rgba(43, 50, 78, .08);
   }
 
-  .outline-sidebar--docked .outline-sidebar__content {
-    background: #fff !important;
-    border-top: 1px solid rgba(0, 0, 0, .08) !important;
-    border-right: 0 !important;
-    border-bottom: 1px solid rgba(0, 0, 0, .08) !important;
-    border-left: 1px solid rgba(0, 0, 0, .08) !important;
-    border-radius: 0 !important;
-    box-shadow: none !important;
-  }
-
-  .outline-sidebar--collapsed.outline-sidebar--hovered .outline-sidebar__content {
-    background: #fff !important;
-    border: 1px solid rgba(0, 0, 0, .16) !important;
-    border-right: 0 !important;
-    border-radius: 14px 0 0 14px !important;
-    box-shadow: -18px 0 50px rgba(43, 50, 78, .18), -2px 0 8px rgba(43, 50, 78, .08) !important;
-  }
+  /* （大纲面板白卡这两条已与材质层一起搬到共用作用域） */
 }
 
 /* ===== 2026-08-13 fixed library panel bottom alignment =====
