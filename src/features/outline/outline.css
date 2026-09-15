@@ -71,7 +71,7 @@
     width: var(--outline-collapsed-width);
     min-width: var(--outline-collapsed-width);
     padding: 0 3px 6px;
-    background: linear-gradient(180deg, #f7f8fa 0%, var(--shell-material) 160px);
+    background: var(--shell-material);
     /* 视觉 rail 保持原宽度；但溢出到滚动条轨道区域的左侧部分不拦截指针，
        让鼠标能 hover 到编辑器滚动条（否则滚动条变粗触发区只剩 2px）。 */
     pointer-events: none;

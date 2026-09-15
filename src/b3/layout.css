@@ -7,19 +7,17 @@
  * - 浮动 dock：top:112px / bottom:82px、外侧圆角 + --b3-dock-shadow-color 阴影。 */
 
 @media (min-width: 761px) {
-  /* 壳层：整窗微渐变（原思源式对角紫氛围已按用户决策移除，改为纯净的灰蓝单色渐变）。
-   * 顶栏/左右轨透明共享此背景，白色工作卡片浮在上方遮住中部，
-   * 因此只有顶部与两侧轨道显色。 */
+  /* 壳层：单色（用户 260915 决策：顶部那点渐变肉眼看不出来，不值得为它留一层"互相压"的规则）。
+   * 取原渐变落定后的主体色 --b3-body-background；顶栏/左右轨透明共享此背景。 */
   .app-shell {
-    background:
-      linear-gradient(180deg, color-mix(in srgb, var(--b3-theme-background) 45%, var(--b3-body-background)) 0%, var(--b3-body-background) 160px) !important;
+    background: var(--b3-body-background);
   }
 
   /* 左右活动轨：透明、满高、无边框，与顶部一体（内容仍在标题栏下方） */
   .activity-rail {
     margin-top: 0;
     padding-top: var(--topbar-height);
-    background: transparent !important;
+    background: transparent;
     border-right: 0 !important;
     border-left: 0 !important;
   }
@@ -48,7 +46,7 @@
     height: var(--topbar-height);
     min-height: 0;
     width: auto;
-    background: transparent !important;
+    background: transparent;
     border-bottom: 0 !important;
     z-index: 400;
     box-shadow: none;
@@ -106,7 +104,7 @@
 
   /* 左侧固定目录：白色卡片、无强边框/阴影、顶部留 4px 灰缝（圆角可见，思源卡片从灰底"抠出"）、右侧 4px 灰缝 */
   .sidebar.sidebar-docked {
-    background: var(--b3-theme-background) !important;
+    background: var(--b3-theme-background);
     border: 0 !important;
     box-shadow: none !important;
     border-radius: var(--b3-border-radius-b);
@@ -144,7 +142,7 @@
     bottom: auto;
     width: auto;
     background: var(--b3-body-background) !important;
-    border-top: 0 !important;
+    border-top: 0;
   }
 
   /* 左侧浮动：思源半高悬浮带（悬停活动轨出现）
@@ -156,7 +154,7 @@
     left: var(--activity-rail-width);
     right: auto;
     height: calc(100vh - 194px);
-    background: var(--b3-theme-background) !important;
+    background: var(--b3-theme-background);
     border-radius: 0 var(--b3-border-radius-b) var(--b3-border-radius-b) 0 !important;
     box-shadow: 8px 0 24px var(--b3-dock-shadow-color);
     transition: transform .2s cubic-bezier(0, 0, .2, 1) 0ms, opacity .3s cubic-bezier(0, 0, .2, 1) 0ms;
