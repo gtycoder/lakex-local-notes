@@ -1985,6 +1985,15 @@ ne-card[data-card-name="file"] .ne-card-file {
     text-overflow: ellipsis;
     white-space: nowrap;
   }
+  /* 顶栏里的按钮（含工作空间名旁的展开三角）在窄窗会掉回基础 button 样式 → 出现边框/底色。
+     宽窗那套 `.toolbar__item { border: 0; background: transparent }` 也在媒体查询里，这里补平。 */
+  .tabbar-leading button,
+  .tabbar-leading .toolbar__item,
+  .tabbar-leading .toolbar__menu-wrap > button {
+    border: 0 !important;
+    background: transparent !important;
+    box-shadow: none !important;
+  }
   .tab-bar > * { min-width: 0; }
   /* 标签在 38px 顶栏里垂直居中（之前贴顶，用户 260915 截图） */
   .tab-items { flex: 1 1 auto; min-width: 0; height: var(--topbar-height, 38px); display: flex; align-items: center; align-content: center; flex-wrap: nowrap; overflow-x: auto; overflow-y: hidden; }
