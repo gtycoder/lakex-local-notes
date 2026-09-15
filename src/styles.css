@@ -1901,14 +1901,15 @@ ne-card[data-card-name="file"] .ne-card-file {
      顶栏（.tab-bar）是 workspace 的子元素，若把白卡画在 workspace 上，顶栏就浮在白卡上，
      跨过断点时顶栏底色会从灰（宽窗：浮在灰壳上）翻成白（窄窗），用户看到的"颜色跳变"就是这个。 */
   .workspace { background: transparent; }
+  /* 顶栏 fixed 之后的"让位"（成对搬运，缺一就会把面包屑压到顶栏底下） */
+  .workspace { padding-top: calc(var(--topbar-height, 38px) + 4px); }
   .document-pane,
   .document-pane:has(> .multi-tab-editor),
   .quick-notes-pane {
     background: var(--b3-theme-background);
     border-radius: var(--b3-border-radius-b) var(--b3-border-radius-b) 0 0;
-    /* 顶栏是 workspace 的子元素（窄窗走文档流），卡片必须从顶栏下沿才开始，
-       否则白卡会垫在顶栏底下 → 窄窗顶栏显白、宽窗显灰（用户动图里的颜色跳变）。 */
-    margin: calc(var(--topbar-height, 38px) + 4px) 4px 0 0;
+    /* 顶部间距改由 .workspace 的 padding 让出，这里只留右侧 4px 灰缝 */
+    margin: 0 4px 0 0;
   }
   /* 展开态：弹性列宽 + 正文档下限（对齐思源 .layout__center { min-width: 148px }）：
      侧栏列最多 --sidebar-width，空间不够时自己让位，工作区永远不被挤到 148px 以下。 */
@@ -1931,9 +1932,9 @@ ne-card[data-card-name="file"] .ne-card-file {
     border-radius: 0;
     box-shadow: none;
   }
-  /* 标签栏：宽窗是绝对定位在顶栏里的（那段几何在 min-width 块内），窄窗回落到文档流，
-     否则会浮在正文上方压住标题行（用户 260915 截图）。 */
-  .tab-bar { position: static; }
+  /* 注意：这里原来有一条 `.tab-bar { position: static }`，**已删除**——它会覆盖下面的
+     "整宽 fixed 顶栏"（用户要的"红绿灯 · 空间名 · 云 · 标签 同一行"），实测顶栏会缩回左轨右边
+     （box [38,4,W-38]）。让位改由 `.workspace { padding-top }` 承担，不要再写 static。 */
   .topbar { min-height: var(--topbar-height, 38px); }
   /* 顶栏：**保持一行横向排布**（用户 260915 明确否掉了折行方案）。
      窄窗里靠"工作空间名可压缩省略 + 标签条自己横向滚动"来避免挤压，而不是把标签挤到第二行。
@@ -1946,9 +1947,17 @@ ne-card[data-card-name="file"] .ne-card-file {
     display: flex;
     flex-wrap: nowrap;
     align-items: center;
+    /* 与宽窗同一套几何：**整宽 fixed 条**——红绿灯那一行不再空着，"红绿灯 · 空间名 · 云 · 标签"
+       并排一行（用户要的"融合"）。整宽后必须同时给工作区让位，见 .workspace { padding-top }。 */
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    width: auto;
+    z-index: 400;
     height: var(--topbar-height, 38px);
     min-height: 0;
-    padding: 0 6px 0 48px;
+    padding: 0 6px 0 84px;   /* 84px：让开 macOS 红绿灯（灯带 x≈12–80），与宽窗一致 */
     overflow: hidden;
     /* 与宽窗同色：宽窗的 `.tab-bar { background: transparent }` 写在媒体查询里，
        窄窗会掉回基础样式的 `var(--sidebar-bg, #fafafa)` → 顶栏底色比壳层亮一档，
