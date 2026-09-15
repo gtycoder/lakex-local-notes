@@ -77,7 +77,7 @@ export function App() {
   const shell = useDesktopShell({ quickNotesRef });
   const {
     // sidebar
-    sidebarMode, sidebarRenderMode, setSidebarMode, sidebarWidth, sidebarResizing, sidebarResizingRef,
+    sidebarMode, sidebarRenderMode, narrowOverlay, setSidebarMode, sidebarWidth, sidebarResizing, sidebarResizingRef,
     updateSidebarWidth, commitSidebarWidth, handleSidebarResizeActiveChange,
     showSidebarPreview, hideSidebarPreview, toggleSidebarDock, clearSidebarPreviewTimer,
     // outline
@@ -305,7 +305,7 @@ export function App() {
     activeNoteId, treeNodes, notes, openTabs, iconByNoteId,
     fontSize: settings.fontSize, tocEnabled, outlineEnhance,
     desktopWorkspace, activeOutlineEmpty, outlineEmptyOverride, outlineMode,
-    sidebarWidth, sidebarMode, outlineSidebarWidth,
+    sidebarWidth, sidebarMode, narrowOverlay, outlineSidebarWidth,
   });
   const topBarLeadingProps = {
     workspaceName,

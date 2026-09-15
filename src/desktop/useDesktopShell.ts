@@ -173,6 +173,8 @@ export function useDesktopShell(options: UseDesktopShellOptions) {
     // 想要更多正文宽度，用户点左轨收起即可（这是已有交互，不再由代码替他决定）。
     // 渲染用的侧栏模式：窄窗下"停靠"按"浮动"呈现（几何 = 悬浮带，不占列）。
     sidebarRenderMode: narrowOverlay && sidebarMode === "docked" ? "floating" : sidebarMode,
+    /** 窄窗（≤760px）：目录/大纲一律浮层呈现（大纲的"锁定"在窄窗按收起渲染）。 */
+    narrowOverlay,
     sidebarMode,
     setSidebarMode, sidebarWidth, sidebarResizing, sidebarResizingRef,
     updateSidebarWidth, commitSidebarWidth, handleSidebarResizeActiveChange,
