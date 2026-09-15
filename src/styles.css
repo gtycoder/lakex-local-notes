@@ -120,10 +120,10 @@ button { cursor: pointer; }
 }
 .wide-mode .lake-editor { max-width: none; }
 .lake-editor-mount { min-height: 520px; transition: opacity var(--dur-enter) var(--ease-out); }
-
+@media (min-width: 761px) {
   .lake-editor-mount .ne-editor-body { display: block; }
   .lake-editor-mount .ne-engine { padding-left: 40px; padding-right: 56px; }
-
+}
 .editor-error { display: flex; align-items: center; gap: 8px; max-width: 776px; margin: 20px auto; padding: 12px; border: 1px solid var(--lake-error-soft); border-radius: var(--radius-sm); color: var(--lake-error); background: var(--lake-error-soft); font-size: 13px; }
 /* legacy statusbar rules removed; current-document status lives in styles/document-status.css */
 .error-banner { display: flex; position: fixed; top: 50%; left: 50%; z-index: 600; align-items: center; gap: 12px; width: min(560px, calc(100vw - 32px)); max-width: calc(100vw - 32px); padding: 12px 14px; border: 1px solid var(--lake-error-soft); border-radius: 10px; color: var(--lake-error); background: var(--lake-error-soft); font-size: 12px; box-shadow: 0 18px 48px rgba(80, 35, 30, .18); transform: translate(-50%, -50%); transition: transform var(--dur-enter) var(--ease-out), opacity var(--dur-enter) var(--ease-out); }.error-banner button { border: 0; color: inherit; background: transparent; }
@@ -523,7 +523,7 @@ ne-card[data-card-name="codeblock"] .ne-card-resizer-mask {
   --shell-radius: var(--lake-radius-md); /* 左右固定 rail 共用宽度 */
 }
 
-
+@media (min-width: 761px) {
   .app-shell {
     grid-template-columns: var(--activity-rail-width) var(--sidebar-width) minmax(0, 1fr);
     background: #fff;
@@ -948,7 +948,7 @@ ne-card[data-card-name="codeblock"] .ne-card-resizer-mask {
   .tab-switcher-close:focus-visible { opacity: .7; }
   .tab-switcher-close:hover { color: var(--lake-error); background: rgba(194, 85, 88, .11); opacity: 1; }
 
-
+}
 
 @keyframes shell-sync-pulse {
   0%, 100% { opacity: .62; transform: scale(.94); }
@@ -1015,7 +1015,7 @@ ne-card[data-card-name="codeblock"] .ne-card-resizer-mask {
 .app-shell.quick-notes-active .sidebar { display: none; }
 
 /* ===== 小记工作台：独立于 Lake 编辑器，不覆盖任何 .ne-* / .lake-editor-* 选择器 ===== */
-
+@media (min-width: 761px) {
   .app-shell.quick-notes-active { grid-template-columns: var(--activity-rail-width) 0 minmax(0, 1fr); }
   .quick-notes-pane {
     min-width: 0;
@@ -1027,7 +1027,7 @@ ne-card[data-card-name="codeblock"] .ne-card-resizer-mask {
     padding: calc(var(--topbar-height) + 14px) clamp(18px, 2.4vw, 32px) 0 14px;
     background: var(--lake-shell);
   }
-
+}
 
 /* 头部与两栏同栅格：右侧工具区起点 = 卡片列起点，多选全选框因此与卡片勾选框同列（用户 260915） */
 .quick-notes-header { display: grid; grid-template-columns: minmax(290px, 36%) minmax(0, 1fr); align-items: center; gap: 18px; margin-bottom: 12px; }
@@ -1150,7 +1150,7 @@ ne-card[data-card-name="codeblock"] .ne-card-resizer-mask {
   --shell-micro-card: 0 1px 2px rgba(0, 0, 0, .08), 0 0 0 1px rgba(0, 0, 0, .04);
 }
 
-
+@media (min-width: 761px) {
   /* .app-shell 背景单一来源见 b3/layout.css（原此处 180deg 底色被其覆盖，已删） */
 
   /* 去分隔线：rail / sidebar / 顶栏 / 状态栏全部靠颜色过渡 */
@@ -1181,10 +1181,10 @@ ne-card[data-card-name="codeblock"] .ne-card-resizer-mask {
     letter-spacing: -.015em;
     color: #23272e;
   }
-
+}
 
 /* ===== 目录/大纲面板层级：与常驻 activity rail 做明显区分 ===== */
-
+@media (min-width: 761px) {
   /* 常驻 rail 保持更深的底色，固定目录作为浅色工作面板。 */
   .activity-rail {
     background: var(--lake-shell);
@@ -1230,7 +1230,7 @@ ne-card[data-card-name="codeblock"] .ne-card-resizer-mask {
   .outline-sidebar--collapsed .outline-sidebar__content {
     background: #fff;
   }
-
+}
 
 /* ===== 2026-08-06 同步视觉：弹窗/小记/按钮统一到暖紫灰体系（仅配色） ===== */
 
@@ -1246,11 +1246,11 @@ ne-card[data-card-name="codeblock"] .ne-card-resizer-mask {
 .sync-button:hover { background: #f7f7fb; }
 
 /* 小记工作台：与主界面同族的中性渐变 */
-
+@media (min-width: 761px) {
   .quick-notes-pane {
     background: var(--lake-shell);
   }
-
+}
 /* 小记工作台：身份色归入主 accent（原紫色身份随氛围渐变一并移除），一律由令牌派生 */
 
 .quick-note-composer, .quick-note-entry {
@@ -1282,7 +1282,7 @@ ne-card[data-card-name="codeblock"] .ne-card-resizer-mask {
 /* 锁定态（原生 Viewer）几何对齐编辑态：
    - .ne-viewer 作为滚动容器（编辑态是 .ne-editor-wrap），否则锁后无法滚动；
    - .ne-viewer-body 内边距对齐 .ne-engine，避免正文贴边。 */
-
+@media (min-width: 761px) {
   .lake-editor-tab .lake-editor-mount .ne-viewer {
     height: 100%;
     overflow-y: auto;
@@ -1291,7 +1291,7 @@ ne-card[data-card-name="codeblock"] .ne-card-resizer-mask {
   .lake-editor-tab .ne-viewer-body {
     padding: 28px 56px 100px 40px;
   }
-
+}
 
 /* 锁/编辑切换会重建 Lake 实例：淡入掩盖重建瞬间的空白闪烁 */
 .lake-editor-tab .lake-editor-mount {
@@ -1425,7 +1425,7 @@ ne-card[data-card-name="codeblock"] .ne-card-resizer-mask {
 .history-preview-viewer .lake-editor-mount { min-height: 100%; }
 
 /* ===== v2 UI 收紧：区域间距 / 细滚动条 / 顶栏融合 / 小记顶栏融合 ===== */
-
+@media (min-width: 761px) {
   /* 相邻区域贴边，仅外侧圆角，缩短视觉间距 */
   .workspace { border-radius: 10px 0 0 10px; border-right: 0; }
   .outline-sidebar__content { border-radius: 0 10px 10px 0; border-left: 0; }
@@ -1439,7 +1439,7 @@ ne-card[data-card-name="codeblock"] .ne-card-resizer-mask {
      再叠加纵向材质过渡。 */
   .app-shell.quick-notes-active .workspace { border: 0; border-radius: 0; box-shadow: none; background: transparent; }
   
-
+}
 
 /* 设置表单：思源式两列表单行（label 左、input 右，等宽对齐） */
 
@@ -1454,7 +1454,7 @@ ne-card[data-card-name="codeblock"] .ne-card-resizer-mask {
   --shell-unified-topbar: var(--lake-panel);
 }
 
-
+@media (min-width: 761px) {
   /* 桌面壳层使用一块连续材质：不再把顶栏、资料库和正文画成三张卡片。 */
   .app-shell,
   .activity-rail,
@@ -1505,7 +1505,7 @@ ne-card[data-card-name="codeblock"] .ne-card-resizer-mask {
     background: transparent;
   }
   
-
+}
 
 /* 三个大面板共用同一套：居中打开、可拖动、可拉伸、尺寸受视口约束。 */
 .settings-overlay,
@@ -1598,7 +1598,7 @@ ne-card[data-card-name="codeblock"] .ne-card-resizer-mask {
 .trash-panel header { cursor: move; user-select: none; touch-action: none; }
 
 /* 同步 tooltip：参考思源的深色多行提示，不再被 nowrap 吃掉换行。 */
-
+@media (min-width: 761px) {
   .sync-tab-action[data-tooltip]::after {
     max-width: 310px;
     padding: 8px 11px;
@@ -1631,7 +1631,7 @@ ne-card[data-card-name="codeblock"] .ne-card-resizer-mask {
     opacity: 1;
     transform: translate(-50%, 0) rotate(45deg);
   }
-
+}
 
 /* 浮窗（设置/回收站/历史）入场动画。必须保留 translate(-50%,-50%) 居中偏移：
  * 任何只写 translateY/scale 的位移类 keyframes（如 lake-pop-in）套到 .floating-dialog
@@ -1647,7 +1647,7 @@ ne-card[data-card-name="codeblock"] .ne-card-resizer-mask {
  * Keeping the base gradient on .app-shell (rather than repeating it on each
  * column) prevents the top strip from breaking at the rail boundaries.
  */
-
+@media (min-width: 761px) {
   .app-shell {
     position: relative;
     isolation: isolate;
@@ -1700,13 +1700,13 @@ ne-card[data-card-name="codeblock"] .ne-card-resizer-mask {
   .app-shell.quick-notes-active .quick-notes-pane {
     background: var(--lake-shell);
   }
-
+}
 
 /* ===== 2026-08-13 floating panel surface correction =====
  * The shell itself remains continuous, but an opened/floating directory or
  * outline is a real work surface.  Do not let the shell transparency rule
  * erase the white panel that is used by the docked variants. */
-
+@media (min-width: 761px) {
   .sidebar.sidebar-docked,
   .sidebar.sidebar-floating {
     background: #fff;
@@ -1744,19 +1744,19 @@ ne-card[data-card-name="codeblock"] .ne-card-resizer-mask {
     border-radius: 14px 0 0 14px !important;
     box-shadow: -18px 0 50px rgba(43, 50, 78, .18), -2px 0 8px rgba(43, 50, 78, .08) !important;
   }
-
+}
 
 /* ===== 2026-08-13 fixed library panel bottom alignment =====
  * A docked directory occupies the full shell height, just like its activity
  * rail and floating preview.  The previous calc(100% - topbar) stopped it
  * above the window/status area and left a visible bottom gap. */
-
+@media (min-width: 761px) {
   .sidebar.sidebar-docked {
     height: 100% !important;
     margin-bottom: 0;
     align-self: stretch;
   }
-
+}
 
 /* ── 性能与过渡（Electron 43 / Chromium 150 新能力落地） ── */
 
@@ -1795,24 +1795,24 @@ ne-card[data-card-name="codeblock"] .ne-card-resizer-mask {
 
 /* 工作空间菜单位于窗口级顶栏下方；打开时禁用侧栏的原生命中，
  * 避免 macOS/Electron 合成层在菜单与 sidebar-header 重叠处抢走物理鼠标事件。 */
-
+@media (min-width: 761px) {
   .app-shell.workspace-menu-open .sidebar,
   .app-shell.workspace-menu-open .activity-rail {
     pointer-events: none;
   }
+}
 
-
-
+@media (min-width: 761px) {
   .app-shell.workspace-menu-open .sidebar::before {
     -webkit-app-region: no-drag;
     pointer-events: none;
   }
-
+}
 
 /* ===== 小记：复用笔记空间的“抠出编辑区”壳层 =====
  * 小记与笔记共用同一窗口骨架：顶栏/活动轨/底栏直接透出壳层材质，
  * 中间内容单独开一块白色工作面，并在顶部留下 4px 灰缝和圆角。 */
-
+@media (min-width: 761px) {
   .app-shell.quick-notes-active .activity-rail {
     background: transparent;
     border: 0 !important;
@@ -1843,7 +1843,7 @@ ne-card[data-card-name="codeblock"] .ne-card-resizer-mask {
     border: 0 !important;
     box-shadow: none !important;
   }
-
+}
 
 /* Embedded mindmap/board cards are passive while the reader scrolls through the
    document. The gate is behavioral; this class is only a debugging/visual hook. */

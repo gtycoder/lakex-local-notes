@@ -6,7 +6,7 @@
  * - 左右 dock 栏（活动轨）透明、满高，与顶部一体；
  * - 浮动 dock：top:112px / bottom:82px、外侧圆角 + --b3-dock-shadow-color 阴影。 */
 
-
+@media (min-width: 761px) {
   /* 壳层：单色（用户 260915 决策：顶部那点渐变肉眼看不出来，不值得为它留一层"互相压"的规则）。
    * 取原渐变落定后的主体色 --b3-body-background；顶栏/左右轨透明共享此背景。 */
   .app-shell {
@@ -176,7 +176,7 @@
     border: 0 !important;
     transition: transform .2s cubic-bezier(0, 0, .2, 1) 0ms, opacity .3s cubic-bezier(0, 0, .2, 1) 0ms !important;
   }
-
+}
 
 /* 深色：dock/标签栏卡片跟随主题（覆盖 styles.css 的 #fff !important 与浅色表面） */
 [data-theme="dark"] .sidebar.sidebar-docked,
@@ -350,7 +350,7 @@
  * 顶部 tab 的滚动只允许发生在 .tab-items 内；tab-bar 自身不能成为滚动层。
  * 目录栏同理：sidebar 是固定视口，note-list 才是唯一垂直滚动层。
  * 这样长 tab/长目录不会把壳层撑高，也不会把底部状态栏推出窗口。 */
-
+@media (min-width: 761px) {
   .tab-bar {
     overflow: visible;
   }
@@ -377,16 +377,16 @@
     overflow-x: hidden !important;
     overflow-y: auto !important;
   }
-
+}
 
 /* 大纲随当前文档自动隐藏/显示：保留 grid 过渡动画（260ms），
    让右侧大纲列宽变化平滑收起/展开，避免 tab 切换时正文区瞬间跳变。
    View Transition 已收窄到 .tab-panels（正文面板），与 grid 动画互不冲突。 */
-
+@media (min-width: 761px) {
   .app-shell.outline-switching .document-pane {
     view-transition-name: none;
   }
-
+}
 
 /* ── 滚动条（2026-08-19） ───────────────────────────────────────────
  * 仅保留 thumb 最短 64px（超长文档下可点击）与基础 10px 轨道。
@@ -402,7 +402,7 @@
  * 于是思源那套细滚动条（b3/siyuan/util/_scroll.scss：10px 轨道 + 内阴影细拇指 + hover 变粗，
  * 颜色本就跟随 --b3-scroll-color 深浅自适应）全端失效，变成系统粗条/覆盖条。
  * 现在移除，让自绘滚动条按原设计生效；个别需要标准细条的容器再单独声明。 */
-
+@media (min-width: 761px) {
   .ne-editor-wrap::-webkit-scrollbar,
   .note-list::-webkit-scrollbar,
   .outline-list::-webkit-scrollbar,
@@ -412,4 +412,4 @@
     width: 10px;
     height: 10px;
   }
-
+}
