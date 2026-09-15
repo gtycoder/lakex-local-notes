@@ -1,5 +1,5 @@
 import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
-import { Check, FilePlus, ImagePlus, Feather, LoaderCircle, Pencil, RotateCcw, Trash, X } from "lucide-react";
+import { ArrowUpDown, Check, CheckSquare, FilePlus, ImagePlus, Feather, LoaderCircle, Pencil, RotateCcw, Trash, X } from "lucide-react";
 import { native } from "../lib/native";
 import { createRequestVersion } from "../core/requestVersion";
 import type { NoteDocument, QuickNoteDocument, QuickNoteImage, TreeNode } from "../lib/types";
@@ -32,6 +32,20 @@ interface QuickNotesWorkspaceProps {
 const newDraft = (): DraftState => ({ id: crypto.randomUUID(), text: "", images: [] });
 const hasDraftContent = (draft: DraftState) => draft.text.trim().length > 0 || draft.images.length > 0;
 
+/**
+ * 小记列表的排序口径（用户 260915 要求）。
+ * **纯展示偏好：只存本机 localStorage，不进 S3** —— 小记的先后顺序不重要，
+ * 各端各按自己的偏好展示即可，不构成跨端冲突（与 Android 端已有的排序同口径）。
+ */
+type QuickNoteSort = "updated" | "created";
+const SORT_KEY = "lake-notes-v3.quick-notes-sort";
+const readSortPref = (): QuickNoteSort => {
+  try { return localStorage.getItem(SORT_KEY) === "created" ? "created" : "updated"; } catch { return "updated"; }
+};
+const writeSortPref = (value: QuickNoteSort): void => {
+  try { localStorage.setItem(SORT_KEY, value); } catch { /* 隐私模式忽略 */ }
+};
+
 export const QuickNotesWorkspace = forwardRef<QuickNotesWorkspaceHandle, QuickNotesWorkspaceProps>(function QuickNotesWorkspace(props, ref) {
   const { notebooks: notebookNodes, onConverted, onDirtyChange } = props;
   const [items, setItems] = useState<QuickNoteDocument[]>([]);
@@ -42,7 +56,14 @@ export const QuickNotesWorkspace = forwardRef<QuickNotesWorkspaceHandle, QuickNo
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pendingDelete, setPendingDelete] = useState<QuickNoteDocument | null>(null);
-  const [convertItem, setConvertItem] = useState<QuickNoteDocument | null>(null);
+  /** 待转成正式笔记的小记（多选时是一批） */
+  const [convertItems, setConvertItems] = useState<QuickNoteDocument[] | null>(null);
+  /** 多选模式与已选集合（仅本机交互状态，不进 S3） */
+  const [selecting, setSelecting] = useState(false);
+  const [selected, setSelected] = useState<ReadonlySet<string>>(() => new Set());
+  /** 排序口径：更新时间 / 创建时间（纯展示偏好，存 localStorage，不参与同步） */
+  const [sortBy, setSortBy] = useState<QuickNoteSort>(() => readSortPref());
+  const [sortOpen, setSortOpen] = useState(false);
   const deleteTimer = useRef<number | null>(null);
   const fileInputs = useRef<Map<string, HTMLInputElement>>(new Map());
   const listVersionRef = useRef(createRequestVersion());
@@ -79,6 +100,17 @@ export const QuickNotesWorkspace = forwardRef<QuickNotesWorkspaceHandle, QuickNo
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // 排序菜单：点空白处收起（用 mousedown 且判断是否落在控件内，避免"点按钮先关再开"）
+  useEffect(() => {
+    if (!sortOpen) return;
+    const close = (event: MouseEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (!target?.closest?.(".quick-notes-sort-wrap")) setSortOpen(false);
+    };
+    document.addEventListener("mousedown", close);
+    return () => document.removeEventListener("mousedown", close);
+  }, [sortOpen]);
 
   useEffect(() => { onDirtyChange(dirty); }, [dirty, onDirtyChange]);
 
@@ -205,24 +237,71 @@ export const QuickNotesWorkspace = forwardRef<QuickNotesWorkspaceHandle, QuickNo
     setPendingDelete(null);
   }
 
+  /** 转成正式笔记：单选/多选共用同一条路径（逐个转换，全部进同一个笔记本）。 */
   async function convert(notebookId: string) {
-    if (!convertItem) return;
+    const targets = convertItems;
+    if (!targets || targets.length === 0) return;
     setSaving(true); setError(null);
     try {
-      const note = await native.convertQuickNote(convertItem.id, notebookId);
+      for (const item of targets) onConverted(await native.convertQuickNote(item.id, notebookId));
+      const ids = new Set(targets.map((item) => item.id));
       listVersionRef.current.invalidate();
-      setItems((current) => current.filter((item) => item.id !== convertItem.id));
-      setConvertItem(null);
-      onConverted(note);
+      setItems((current) => current.filter((item) => !ids.has(item.id)));
+      setConvertItems(null);
+      setSelected(new Set()); setSelecting(false);
     } catch (reason) { setError(`转换为正式笔记失败：${getNativeErrorMessage(reason)}`); }
     finally { setSaving(false); }
   }
+
+  function toggleSelected(id: string) {
+    setSelected((current) => {
+      const next = new Set(current);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }
+
+  function exitSelecting() { setSelecting(false); setSelected(new Set()); }
+
+  /** 批量删除：破坏性且不可恢复（小记不备份），先确认；不进撤销窗口（多选场景语义就是"确定删"）。 */
+  async function deleteSelected() {
+    const ids = [...selected];
+    if (ids.length === 0) return;
+    if (!window.confirm(`删除选中的 ${ids.length} 篇小记？小记不备份，删除后不可恢复。`)) return;
+    setSaving(true); setError(null);
+    try {
+      for (const id of ids) await native.deleteQuickNote(id);
+      const removed = new Set(ids);
+      listVersionRef.current.invalidate();
+      setItems((current) => current.filter((item) => !removed.has(item.id)));
+      exitSelecting();
+    } catch (reason) {
+      setError(`批量删除失败：${getNativeErrorMessage(reason)}`);
+      await refreshItems();
+    } finally { setSaving(false); }
+  }
+
+  /** 排序只影响本端展示顺序（不写库、不进 manifest）。 */
+  const visibleItems = useMemo(() => {
+    const key = (item: QuickNoteDocument) => (sortBy === "updated" ? item.updatedAt : item.createdAt);
+    return [...items].sort((a, b) => key(b).localeCompare(key(a)));
+  }, [items, sortBy]);
 
   // 左右两栏（对齐云端语雀小记）：左＝常驻写作面板 + 发布行，右＝小记卡片流（各自独立滚动）。
   return <section className="quick-notes-pane" aria-label="小记">
     <header className="quick-notes-header">
       <h1>小记</h1>
-      <span className="quick-notes-count">{items.length} 条</span>
+      <div className="quick-notes-header-tools">
+        <span className="quick-notes-count">{items.length} 条</span>
+        <button className={"quick-notes-tool-btn" + (selecting ? " is-on" : "")} disabled={items.length === 0} onClick={() => (selecting ? exitSelecting() : setSelecting(true))} title="多选" aria-label="多选"><CheckSquare size={16} /></button>
+        <div className="quick-notes-sort-wrap">
+          <button className="quick-notes-tool-btn" onClick={() => setSortOpen((open) => !open)} aria-haspopup="menu" aria-expanded={sortOpen} title={sortBy === "updated" ? "排序：按更新时间" : "排序：按创建时间"} aria-label="排序"><ArrowUpDown size={16} /></button>
+          {sortOpen && <div className="quick-notes-sort-menu" role="menu">
+            <button role="menuitemradio" aria-checked={sortBy === "updated"} onClick={() => { setSortBy("updated"); writeSortPref("updated"); setSortOpen(false); }}>{sortBy === "updated" ? <Check size={14} /> : <span className="quick-notes-menu-gap" />}按更新时间</button>
+            <button role="menuitemradio" aria-checked={sortBy === "created"} onClick={() => { setSortBy("created"); writeSortPref("created"); setSortOpen(false); }}>{sortBy === "created" ? <Check size={14} /> : <span className="quick-notes-menu-gap" />}按创建时间</button>
+          </div>}
+        </div>
+      </div>
     </header>
     {error && <div className="quick-notes-error"><span>{error}</span><button onClick={() => setError(null)} aria-label="关闭错误"><X size={15} /></button></div>}
     <div className="quick-notes-split">
@@ -239,11 +318,19 @@ export const QuickNotesWorkspace = forwardRef<QuickNotesWorkspaceHandle, QuickNo
           inputRef={(node) => { if (node) fileInputs.current.set(createDraft.id, node); }}
         />
       </div>
-      <div className="quick-notes-list">
+      <div className={"quick-notes-list" + (selecting ? " selecting" : "")}>
+        {selecting && <div className="quick-notes-selectbar">
+          <button className={"qn-check" + (selected.size > 0 && selected.size === items.length ? " is-on" : "")} role="checkbox" aria-checked={selected.size > 0 && selected.size === items.length} aria-label="全选" onClick={() => setSelected(selected.size === items.length ? new Set() : new Set(items.map((item) => item.id)))}>{selected.size > 0 && selected.size === items.length && <Check size={13} />}</button>
+          <span className="quick-notes-selectbar-text">共选择了 {selected.size} 篇小记</span>
+          <button className="quick-notes-link" onClick={exitSelecting}>取消</button>
+          <div className="quick-note-action-spacer" />
+          <button className="quick-notes-link" disabled={selected.size === 0 || saving} onClick={() => setConvertItems(items.filter((item) => selected.has(item.id)))}>转为文档</button>
+          <button className="quick-notes-link quick-notes-link--danger" disabled={selected.size === 0 || saving} onClick={() => void deleteSelected()}>批量删除</button>
+        </div>}
         <div className="quick-notes-timeline" aria-live="polite">
           {loading ? <div className="ln-empty"><LoaderCircle className="spin" size={18} /><span>正在读取小记…</span></div> : items.length === 0
             ? <div className="ln-empty ln-empty--idle"><Feather size={25} /><strong>还没有小记</strong><span>从左侧写下第一条临时记录。</span></div>
-            : items.map((item) => editingId === item.id && editingDraft
+            : visibleItems.map((item) => editingId === item.id && editingDraft
               ? <article className="quick-note-entry editing" key={item.id}><QuickNoteComposer
                   draft={editingDraft} variant="inline" saving={saving && activeIsEditing}
                   onChange={(text) => setEditingDraft((current) => current ? { ...current, text } : current)}
@@ -252,21 +339,21 @@ export const QuickNotesWorkspace = forwardRef<QuickNotesWorkspaceHandle, QuickNo
                   onSave={() => void saveDraft()} onCancel={() => void cancelDraft()}
                   inputRef={(node) => { if (node) fileInputs.current.set(editingDraft.id, node); }}
                 /></article>
-              : <QuickNoteCard key={item.id} item={item} deletePending={pendingDelete !== null} onEdit={() => void startEditing(item)} onDelete={() => scheduleDelete(item)} onConvert={() => setConvertItem(item)} />)
+              : <QuickNoteCard key={item.id} item={item} deletePending={pendingDelete !== null} selecting={selecting} checked={selected.has(item.id)} onToggleSelect={() => toggleSelected(item.id)} onEdit={() => void startEditing(item)} onDelete={() => scheduleDelete(item)} onConvert={() => setConvertItems([item])} />)
           }
         </div>
       </div>
     </div>
     {pendingDelete && <div className="quick-notes-toast" role="status" aria-live="polite"><span>已删除一条小记</span><button onClick={undoDelete}><RotateCcw size={14} />撤销</button></div>}
-    {convertItem && <div className="modal-backdrop" onMouseDown={(event) => event.target === event.currentTarget && !saving && setConvertItem(null)}>
+    {convertItems && convertItems.length > 0 && <div className="modal-backdrop" onMouseDown={(event) => event.target === event.currentTarget && !saving && setConvertItems(null)}>
       <section className="quick-note-convert-dialog" role="dialog" aria-modal="true" aria-labelledby="quick-note-convert-title">
-        <h3 id="quick-note-convert-title">转为正式笔记</h3>
-        <p>选择一个笔记本。新文档将插入其中的最顶部；转化完成后，小记将从时间线移除。</p>
+        <h3 id="quick-note-convert-title">{convertItems.length > 1 ? `转为正式文档（${convertItems.length} 篇）` : "转为正式笔记"}</h3>
+        <p>选择一个笔记本。{convertItems.length > 1 ? `${convertItems.length} 篇小记将依次插入该笔记本的最顶部；` : "新文档将插入其中的最顶部；"}转化完成后，小记将从时间线移除。</p>
         <div className="quick-note-notebook-list b3-list b3-list--background">
           {notebooks.map((notebook) => <button key={notebook.id} className="b3-list-item" disabled={saving} onClick={() => void convert(notebook.id)}><span className="b3-list-item__graphic"><FilePlus size={14} /></span><span className="b3-list-item__text">{notebook.title}</span></button>)}
           {notebooks.length === 0 && <span className="ln-empty">请先在资料库中新建一个笔记本。</span>}
         </div>
-        <footer><button className="b3-button b3-button--cancel" disabled={saving} onClick={() => setConvertItem(null)}>取消</button></footer>
+        <footer><button className="b3-button b3-button--cancel" disabled={saving} onClick={() => setConvertItems(null)}>取消</button></footer>
       </section>
     </div>}
   </section>;
@@ -320,14 +407,26 @@ function QuickNoteComposer({ draft, saving, variant, onChange, onAddFiles, onRem
   </>;
 }
 
-function QuickNoteCard({ item, deletePending, onEdit, onDelete, onConvert }: { item: QuickNoteDocument; deletePending: boolean; onEdit(): void; onDelete(): void; onConvert(): void }) {
+function QuickNoteCard({ item, deletePending, selecting, checked, onToggleSelect, onEdit, onDelete, onConvert }: {
+  item: QuickNoteDocument; deletePending: boolean; selecting: boolean; checked: boolean;
+  onToggleSelect(): void; onEdit(): void; onDelete(): void; onConvert(): void;
+}) {
   // 仿语雀：时间戳在卡片顶部（"更新于 08-04 14:16"），正文/图片在下
   const stamp = (() => {
     const d = new Date(item.updatedAt || item.createdAt);
     const pad = (n: number) => String(n).padStart(2, "0");
     return `${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
   })();
-  return <article className={`quick-note-entry ${item.isConflict ? "conflict" : ""}`} onDoubleClick={onEdit}>
+  return <article
+    className={`quick-note-entry${item.isConflict ? " conflict" : ""}${selecting ? " selecting" : ""}${checked ? " is-checked" : ""}`}
+    onDoubleClick={selecting ? undefined : onEdit}
+    onClick={selecting ? onToggleSelect : undefined}
+  >
+    {selecting && <button
+      className={"qn-check quick-note-select" + (checked ? " is-on" : "")}
+      role="checkbox" aria-checked={checked} aria-label={checked ? "取消选择" : "选择这篇小记"}
+      onClick={(event) => { event.stopPropagation(); onToggleSelect(); }}
+    >{checked && <Check size={13} />}</button>}
     <header><time dateTime={item.updatedAt || item.createdAt}>更新于 {stamp}</time>{item.isConflict && <span className="badge badge--warn quick-note-conflict">同步冲突副本</span>}<div className="quick-note-card-actions"><button onClick={onConvert} title="转为正式笔记"><FilePlus size={15} /></button><button onClick={onEdit} title="编辑小记"><Pencil size={15} /></button><button className="danger" onClick={onDelete} disabled={deletePending} title={deletePending ? "请先完成当前删除的撤销操作" : "删除小记"}><Trash size={15} /></button></div></header>
     {item.content.text && <p>{item.content.text}</p>}
     {item.content.images.length > 0 && <div className="quick-note-saved-images">{item.content.images.map((image) => <img key={image.id} src={image.url} alt="小记图片" loading="lazy" />)}</div>}
