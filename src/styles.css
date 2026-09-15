@@ -1,4 +1,4 @@
-:root { font-family: var(--b3-font-family); color: var(--lake-text); background: #f4f5f7; /* 字体栈统一走系统原生：macOS=SF Pro+苹方，Windows=Segoe UI+雅黑 UI；font-synthesis 不能设 none：中文字体（PingFang SC 等）无斜体变体，none 会禁止合成斜体导致 italic 失效 */
+:root { font-family: var(--b3-font-family); /* 字体栈统一走系统原生：macOS=SF Pro+苹方，Windows=Segoe UI+雅黑 UI；font-synthesis 不能设 none：中文字体（PingFang SC 等）无斜体变体，none 会禁止合成斜体导致 italic 失效 */
   font-synthesis: style weight;
   /* 文字渲染对齐思源：灰度抗锯齿 + 最优排版（macOS 下比默认 subpixel 更干净清晰） */
   -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; text-rendering: optimizeLegibility;
@@ -55,13 +55,8 @@ button { cursor: pointer; }
 .tree-row.type-notebook { margin-top: 1px; }
 .tree-row.type-notebook .note-row-copy strong { font-weight: 650; }
 .tree-row.type-group .note-row-copy strong { font-weight: 600; }
-.tree-row.context:not(.active) { box-shadow: inset 0 0 0 1px var(--b3-theme-primary-lighter); }
 .tree-row { cursor: pointer; user-select: none; touch-action: pan-y; }
 .tree-row.dragging { cursor: grabbing; }
-.tree-row.dragging { opacity: .45; }
-.tree-row.drop-before { box-shadow: inset 0 2px 0 var(--lake-accent); }
-.tree-row.drop-after { box-shadow: inset 0 -2px 0 var(--lake-accent); }
-.tree-row.drop-inside { background: var(--lake-accent-soft); box-shadow: inset 0 0 0 1px var(--lake-accent); }
 .tree-chevron { display: flex; align-items: center; justify-content: center; width: 16px; height: 100%; padding: 0; border: 0; border-radius: var(--radius-xs); background: transparent; transition: transform var(--lake-motion-fast) var(--lake-ease-standard), background var(--lake-motion-fast) var(--lake-ease-standard), color var(--lake-motion-fast) var(--lake-ease-standard); }
 .tree-chevron:not(:disabled):hover { background: var(--lake-accent-soft-strong); color: var(--lake-accent); } /* 与行内操作按钮同一套 hover 着重 */
 .tree-chevron:disabled { cursor: default; }
@@ -168,10 +163,6 @@ button { cursor: pointer; }
 .modal-backdrop { opacity: 1; }
 @starting-style { .modal-backdrop { opacity: 0; } }
 
-@media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after { animation-duration: 0.001ms !important; animation-iteration-count: 1 !important; transition-duration: 0.001ms !important; scroll-behavior: auto !important; }
-}
-
 /* ===== Multi-Tab Editor ===== */
 .multi-tab-editor {
   display: flex;
@@ -206,7 +197,6 @@ button { cursor: pointer; }
   white-space: nowrap;
 }
 .tab-item.active {
-  background: var(--workspace-bg, #fff);
   position: relative;
   z-index: 1;
 }
@@ -489,7 +479,6 @@ ne-card[data-card-name="codeblock"] .ne-card-resizer-mask {
   display: flex;
   gap: 6px;
   padding: 4px 10px;
-  -webkit-backdrop-filter: saturate(1.2) blur(20px);
 }
 .platform-mac .tab-bar {
   padding-left: 82px;
@@ -504,8 +493,6 @@ ne-card[data-card-name="codeblock"] .ne-card-resizer-mask {
   display: flex;
   align-items: center;
   gap: 6px;
-  overflow-x: auto;
-  overflow-y: visible;
   scrollbar-width: none;
 }
 .tab-items::-webkit-scrollbar { display: none; }
@@ -557,7 +544,6 @@ ne-card[data-card-name="codeblock"] .ne-card-resizer-mask {
   right: 0;
   left: 0;
   height: var(--topbar-height);
-  -webkit-app-region: drag;
 }
 /* 目录栏固定视口：容器不滚动，只有 .note-list 是垂直滚动层 */
 .sidebar.sidebar-docked,
@@ -576,8 +562,6 @@ ne-card[data-card-name="codeblock"] .ne-card-resizer-mask {
 .sidebar.sidebar-floating,
 .sidebar.sidebar-collapsed {
   position: fixed;
-  top: var(--topbar-height);
-  bottom: auto;
   left: var(--activity-rail-width);
   padding-top: 0;
 }
@@ -597,7 +581,6 @@ ne-card[data-card-name="codeblock"] .ne-card-resizer-mask {
 }
 .statusbar {
   border: 0 !important;
-  background: transparent;
   box-shadow: none !important;
 }
 
@@ -928,9 +911,6 @@ ne-card[data-card-name="codeblock"] .ne-card-resizer-mask {
 .context-menu > button:hover { background: rgba(31, 35, 41, .06); }
 
 .modal-backdrop {
-  z-index: 400;
-  padding: 20px;
-  background: rgba(31, 35, 41, .24);
   backdrop-filter: blur(8px) saturate(1.08);
   -webkit-backdrop-filter: blur(8px) saturate(1.08);
 }
@@ -1140,7 +1120,6 @@ ne-card[data-card-name="codeblock"] .ne-card-resizer-mask {
     box-shadow: 0 1px 2px rgba(0, 0, 0, .05), 0 8px 22px rgba(0, 0, 0, .05);
   }
   .outline-sidebar--docked .outline-sidebar__content {
-    background: #fff;
     border-left: 1px solid rgba(0, 0, 0, .08);
   }
   .outline-sidebar--collapsed .outline-sidebar__content {
@@ -1154,8 +1133,6 @@ ne-card[data-card-name="codeblock"] .ne-card-resizer-mask {
 
 /* 同步/设置面板：去绿、去旧边框，融入 shell */
 
-.checkbox input { accent-color: var(--shell-accent-strong, #2f47b8); }
-
 .connection-message.ok { color: var(--lake-sync-success); background: var(--lake-success-soft); }
 
 /* 小记工作台：与主界面同族的中性渐变 */
@@ -1165,13 +1142,6 @@ ne-card[data-card-name="codeblock"] .ne-card-resizer-mask {
   }
 }
 /* 小记工作台：身份色归入主 accent（原紫色身份随氛围渐变一并移除），一律由令牌派生 */
-
-.quick-note-composer, .quick-note-entry {
-  background: var(--b3-theme-background);
-  box-shadow: var(--shell-card-shadow, 0 1px 2px rgba(40, 42, 66, .06), 0 10px 30px rgba(40, 42, 66, .08));
-}
-
-.quick-note-card-actions button:hover { color: color-mix(in srgb, var(--lake-accent) 82%, var(--b3-theme-on-background)); background: color-mix(in srgb, var(--lake-accent) 10%, transparent); }
 .quick-notes-toast { background: var(--b3-theme-surface); }
 .quick-note-notebook-list { margin: 0 -20px; padding: 4px 0; }
 
@@ -1242,11 +1212,8 @@ ne-card[data-card-name="codeblock"] .ne-card-resizer-mask {
 .search-panel-input-row input { flex: 1; border: 0; outline: none; font-size: 14px; background: transparent; color: var(--b3-theme-on-background); }
 .search-panel-search-icon { color: var(--b3-theme-on-surface); flex: none; }
 .search-panel-spinner { width: 14px; height: 14px; border: 2px solid var(--b3-theme-surface-lighter); border-top-color: var(--b3-theme-primary); border-radius: 50%; animation: spin .7s linear infinite; flex: none; }
-.search-panel-close { display: flex; align-items: center; justify-content: center; width: 26px; height: 26px; border: 0; border-radius: var(--b3-border-radius); background: transparent; color: var(--b3-theme-on-surface); cursor: pointer; opacity: .68; }
-.search-panel-close:hover { opacity: 1; background: var(--b3-list-hover); color: var(--b3-theme-on-background); }
+.search-panel-close { display: flex; align-items: center; justify-content: center; width: 26px; height: 26px; border: 0; border-radius: var(--b3-border-radius); background: transparent; cursor: pointer; }
 .search-panel-results { overflow-y: auto; padding: 6px; }
-.search-snippet { font-size: 12px; color: var(--b3-theme-on-surface); line-height: 1.55; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
-.search-snippet mark { background: var(--b3-theme-primary-lightest); color: var(--b3-theme-on-background); border-radius: 2px; padding: 0 1px; }
 @keyframes spin { to { transform: rotate(360deg); } }
 
 /* ===== 弹窗统一毛玻璃表面（跟随主题：亮色半透明白、暗色半透明黑，基于 --b3-theme-surface） ===== */
@@ -1317,11 +1284,11 @@ ne-card[data-card-name="codeblock"] .ne-card-resizer-mask {
 .history-preview-text { width: 100%; margin: 0; font-size: 12.5px; line-height: 1.7; color: var(--b3-theme-on-background); white-space: pre-wrap; word-break: break-word; font-family: inherit; }
 
 /* 设置弹窗 v2：大、不透明、左导航右内容、可拖动调节 */
-.settings-panel-large { display: flex; flex-direction: column; overflow: hidden; background: var(--b3-theme-surface); border-radius: var(--b3-border-radius-b); }
+.settings-panel-large { display: flex; flex-direction: column; overflow: hidden; border-radius: var(--b3-border-radius-b); }
 .settings-layout { display: flex; flex: 1; }
-.settings-nav-item { display: flex; gap: 8px; padding: 8px 10px; border: 0; border-radius: var(--b3-border-radius); background: transparent; color: var(--b3-theme-on-surface); font-size: 13px; }
+.settings-nav-item { display: flex; gap: 8px; border: 0; border-radius: var(--b3-border-radius); background: transparent; }
 .settings-nav-item:hover { background: var(--b3-list-hover); }
-.settings-nav-item.active { background: var(--b3-theme-surface); color: var(--b3-theme-on-background); box-shadow: 0 1px 4px var(--b3-dock-shadow-color, rgba(31, 35, 41, .12)); }
+.settings-nav-item.active { box-shadow: 0 1px 4px var(--b3-dock-shadow-color, rgba(31, 35, 41, .12)); }
 
 .settings-resize::after { content: ""; position: absolute; right: 3px; bottom: 3px; width: 8px; height: 8px; border-right: 2px solid var(--b3-theme-on-surface-lighter); border-bottom: 2px solid var(--b3-theme-on-surface-lighter); }
 .settings-panel { position: relative; }
@@ -1368,7 +1335,6 @@ ne-card[data-card-name="codeblock"] .ne-card-resizer-mask {
   /* 壳层连续材质（.app-shell/.activity-rail/.sidebar）已搬到共用作用域 */
   .sidebar.sidebar-docked {
     margin: calc(var(--topbar-height) + 4px) 4px 4px 0;
-    height: calc(100% - var(--topbar-height) - 8px);
   }
   /* .workspace / .document-pane / .multi-tab-editor 材质已搬到共用作用域 */
   /* 大纲材质与它的搭档（面板白卡）已搬到共用作用域（见上方「大纲栏的壳层材质」） */
@@ -1403,7 +1369,6 @@ ne-card[data-card-name="codeblock"] .ne-card-resizer-mask {
   max-height: calc(100vh - 32px);
   overflow: hidden;
   border: 1px solid var(--floating-dialog-border) !important;
-  border-radius: 12px;
   background: var(--floating-dialog-surface);
   box-shadow: var(--floating-dialog-shadow);
   animation: floating-dialog-enter 180ms var(--ease-out);

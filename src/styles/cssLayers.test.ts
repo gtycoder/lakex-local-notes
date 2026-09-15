@@ -28,19 +28,19 @@ const FILES = [
   "styles/tokens.css", "styles/ui-polish.css",
 ];
 
-/** 基线（260916 第三轮清理后按本文件的 scan() 实测）。只允许变小。 */
+/** 基线（260916 第三/四轮清理后按本文件的 scan() 实测）。只允许变小。 */
 const BASELINE: Record<string, { decls: number; dupGroups: number }> = {
-  "styles.css": { decls: 1842, dupGroups: 35 },
+  "styles.css": { decls: 1789, dupGroups: 33 },
   "b3/animations.css": { decls: 5, dupGroups: 0 },
-  "b3/base.css": { decls: 19, dupGroups: 1 },
-  "b3/components.css": { decls: 156, dupGroups: 0 },
+  "b3/base.css": { decls: 17, dupGroups: 1 },
+  "b3/components.css": { decls: 151, dupGroups: 0 },
   "b3/dark.css": { decls: 56, dupGroups: 0 },
-  "b3/layout.css": { decls: 209, dupGroups: 1 },
+  "b3/layout.css": { decls: 201, dupGroups: 1 },
   "b3/theme-daylight.css": { decls: 163, dupGroups: 0 },
   "b3/theme-midnight.css": { decls: 163, dupGroups: 0 },
   "features/attachment/attachment-preview.css": { decls: 78, dupGroups: 0 },
   "features/editor/image-lightbox.css": { decls: 57, dupGroups: 0 },
-  "features/outline/outline.css": { decls: 258, dupGroups: 0 },
+  "features/outline/outline.css": { decls: 257, dupGroups: 0 },
   "styles/dialog.css": { decls: 227, dupGroups: 8 },
   "styles/document-status.css": { decls: 110, dupGroups: 2 },
   "styles/editor-bridge.css": { decls: 12, dupGroups: 0 },
@@ -54,10 +54,11 @@ const BASELINE: Record<string, { decls: number; dupGroups: number }> = {
 };
 
 /** 极简 CSS 扫描器：只取「叶子样式规则」的声明，跳过注释/字符串/声明型 at-rule。 */
-function scan(css: string): { decls: number; dupGroups: number; emptyRules: number } {
+function scan(css: string): { decls: number; dupGroups: number; emptyRules: number; emptyAtRules: number } {
   const props = new Map<string, number>();   // `${selector}||${prop}` → 出现次数
   let decls = 0;
   let emptyRules = 0;
+  let emptyAtRules = 0;
   let i = 0;
   const n = css.length;
   const skipWs = (j: number) => { while (j < n && /\s/.test(css[j])) j++; return j; };
@@ -82,7 +83,12 @@ function scan(css: string): { decls: number; dupGroups: number; emptyRules: numb
       const head = css.slice(j, brace).trim();
       const end = findBlockEnd(brace);
       if (head.startsWith("@")) {
-        if (!/^@(keyframes|-webkit-keyframes|font-face|page|property|charset|import|namespace|layer)\b/i.test(head)) walk(brace + 1, end);
+        if (!/^@(keyframes|-webkit-keyframes|font-face|page|property|charset|import|namespace|layer)\b/i.test(head)) {
+          // 空的 @media/@supports 块同样是"清完声明没删壳"的残骸（留了占位注释的除外）。
+          const body = css.slice(brace + 1, end);
+          if (/^@(media|supports|starting-style|container|layer)\b/i.test(head) && !body.includes("{") && !body.includes(":") && !body.includes("/*")) emptyAtRules++;
+          walk(brace + 1, end);
+        }
       } else {
         const body = css.slice(brace + 1, end);
         let declarationsInRule = 0;
@@ -106,7 +112,7 @@ function scan(css: string): { decls: number; dupGroups: number; emptyRules: numb
   walk(0, n);
   let dupGroups = 0;
   for (const count of props.values()) if (count > 1) dupGroups++;
-  return { decls, dupGroups, emptyRules };
+  return { decls, dupGroups, emptyRules, emptyAtRules };
 }
 
 describe("CSS 多层覆盖围栏", () => {
@@ -126,8 +132,9 @@ describe("CSS 多层覆盖围栏", () => {
     const shells: string[] = [];
     for (const rel of FILES) {
       const css = readFileSync(path.join(SRC, rel), "utf8");
-      const { emptyRules } = scan(css);
-      if (emptyRules) shells.push(`${rel}: ${emptyRules} 条`);
+      const { emptyRules, emptyAtRules } = scan(css);
+      if (emptyRules) shells.push(`${rel}: 空规则 ${emptyRules} 条`);
+      if (emptyAtRules) shells.push(`${rel}: 空 @media/@supports 块 ${emptyAtRules} 个`);
     }
     expect(shells, `以下文件留下空壳规则（260915 清理时留过一次，260916 已清除）：\n  ${shells.join("\n  ")}`).toEqual([]);
   });

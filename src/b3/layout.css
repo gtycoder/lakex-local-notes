@@ -73,18 +73,12 @@
  * 窄窗于是掉回 outline.css 更老的一套公式（1px 描边 + 14px 圆角），跨宽度看就是两种样式。 */
 .outline-sidebar--collapsed.outline-sidebar--hovered .outline-sidebar__content {
   position: fixed !important;
-  top: 112px !important;
-  bottom: 82px !important;
-  right: var(--outline-collapsed-width) !important;
   left: auto !important;
   width: var(--outline-sidebar-width, 280px) !important;
-  height: calc(100vh - 194px) !important;
   min-width: 0 !important;
   background: var(--b3-theme-background) !important;
   border-radius: var(--b3-border-radius-b) 0 0 var(--b3-border-radius-b) !important;
-  box-shadow: -8px 0 24px var(--b3-dock-shadow-color) !important;
   border: 0 !important;
-  transition: transform .2s cubic-bezier(0, 0, .2, 1) 0ms, opacity .3s cubic-bezier(0, 0, .2, 1) 0ms !important;
 }
 
 /* 标签项：思源 layout-tab-bar .item 观感（窄窗同样成立——组 4） */
@@ -113,7 +107,6 @@
   box-shadow: none !important;
   border-radius: var(--b3-border-radius-b);
   margin: calc(var(--topbar-height) + 4px) 4px 4px 0 !important;
-  height: calc(100% - var(--topbar-height) - 8px);
 }
 
 /* 左侧浮动：思源半高悬浮带（悬停活动轨出现）——收起态在宽窄两侧都是"悬停预览"，
@@ -129,7 +122,6 @@
   max-width: none;
   background: var(--b3-theme-background);
   border-radius: 0 var(--b3-border-radius-b) var(--b3-border-radius-b) 0 !important;
-  box-shadow: 8px 0 24px var(--b3-dock-shadow-color);
   transition: transform .2s cubic-bezier(0, 0, .2, 1) 0ms, opacity .3s cubic-bezier(0, 0, .2, 1) 0ms;
 }
 

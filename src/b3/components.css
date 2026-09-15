@@ -9,12 +9,7 @@
 
 /* ── 按钮：primary/secondary 已迁移为 .b3-button / .b3-button--cancel（见 siyuan.scss）── */
 
-
-
 /* ── 弹窗遮罩 / 浮层（思源 b3-dialog）── */
-.modal-backdrop {
-  background: var(--b3-mask-background);
-}
 .floating-dialog {
   border-radius: var(--b3-border-radius-b);
 }
@@ -65,10 +60,6 @@
 .tree-row.drop-after {
   box-shadow: inset 0 -2px 0 var(--b3-theme-primary);
 }
-.tree-row.drop-inside {
-  background: var(--b3-theme-primary-lightest);
-  box-shadow: inset 0 0 0 1px var(--b3-theme-primary);
-}
 .tree-chevron {
   color: var(--b3-theme-on-surface);
 }
@@ -77,8 +68,6 @@
 }
 
 /* ── 搜索框 / 表单（思源 b3-text-field）── */
-
-
 
 /* ── 工具提示（思源 b3-tooltips：深色、圆角、阴影）── */
 .tabbar-action[data-tooltip]::after,
@@ -164,8 +153,6 @@
   background-color: var(--b3-theme-primary-lightest) !important;
 }
 
-
-
 .tree-row.type-notebook,
 .tree-row.type-notebook .note-row-copy strong {
   color: var(--b3-theme-on-surface);
@@ -185,12 +172,6 @@
 }
 
 /* ── 标签页（思源：灰栏 + 白底激活 + 顶部主色指示线）── */
-.tab-bar {
-  background: var(--b3-theme-surface);
-}
-.tab-item:hover {
-  background-color: var(--b3-list-hover);
-}
 .tab-item.active {
   background: var(--lake-raised);
 }

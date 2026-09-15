@@ -21,12 +21,8 @@ body {
 
 /* 应用骨架：侧栏/文档区/状态栏/活动轨 */
 .statusbar {
-  background: var(--b3-theme-surface);
   border-top-color: var(--b3-border-color);
   color: var(--b3-theme-on-surface);
-}
-.activity-rail {
-  background: var(--b3-theme-surface);
 }
 
 /* 壳层材质：覆盖 styles.css 的「统一材质 !important」（2026-08-13 引入），

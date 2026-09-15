@@ -1157,6 +1157,10 @@ c071064（全仓 19 个样式文件 × 36 状态 + CDP 复核；删 85 条冗余
 ### 多层覆盖审计第三轮 + 空壳清除 + 前两轮复核（260916，见 §2.43）
 （本条提交：删 150 条层叠可证明冗余 + 29 条空壳规则 + 1 段重复 keyframes；**复核 260915 两轮的删除，追回 1 条被误删的
 统一圆角（拖拽态 6px↔8px）**；新增"会话内整页计算值 A/B"装置与"无空壳规则"围栏；围栏基线 4262→4112 声明 / 107→52 重复组）
+### 跨文件（分层加载型）冗余清理（260916，见 §2.44）
+（本条提交：删 69 条"桌面端被后加载文件整体盖住"的声明 / 18 条规则整条删空（5 个文件）+ 1 个被清空的
+`@media (prefers-reduced-motion)` 空块；**确立跨文件去重的安全边界：只删移动端入口不加载的文件**，
+因为两套入口的样式集合与顺序不同；围栏再收紧并新增"空 @media 块"检查）
 ### 2.39 窄窗"彻底统一"施工方案（260915 用户拍板：选 B，不做东拼西凑）
 > 目标：**壳层规则只留一份**——把宽窗那层从 `@media (min-width: 761px)` 里成对搬到共用作用域，
 > 窄窗不再"抄一遍"。做完后拖动窗口只应出现"列宽线性压缩"，不允许任何位置/边框/显隐突变。
@@ -1315,6 +1319,43 @@ const m = await page.send("CSS.getMatchedStylesForNode", { nodeId: q.nodeId });
   毫无变化、590 抽屉收起 —— 隔离由 `narrowOverlay` 单独把住，**改这里时别把宽窗拉进来**。
 - **内核标题小地图**：用户明确"不用动（增强大纲与原生大纲不会同时出现）"。窄窗大纲 rail 现在占列，
   本就不再压住正文右缘，这条关闭。
+
+### 2.44 第四轮：跨文件（分层加载型）冗余清理 + 桌面/移动两套级联的安全边界（260916）
+> §2.43 只清了**同一文件内**能证明的冗余（判据要求"同一个选择器字符串"）。这轮把同一判据用到
+> **跨文件**：把 21 个样式文件按**实际加载顺序**（`document.styleSheets` 里 `data-vite-dev-id` 的顺序）
+> 展平成一条级联序列，同(容器链, 属性) + 同选择器时后写的赢 ⇒ 被整体盖住的前一份可删。
+
+**结果（提交：删 69 条声明 / 18 条规则整条删空，5 个文件，净 −67 行）**
+- `styles.css` 53 · `b3/layout.css` 8 · `b3/components.css` 5 · `b3/base.css` 2 · `features/outline/outline.css` 1。
+- 典型条目：`b3/base.css` 的 `.statusbar/.activity-rail { background }`（真来源在 layout.css）、
+  `b3/components.css` 的 `.modal-backdrop { background }`（真来源 dialog.css）、
+  `.tree-row.drop-inside`（真来源 ui-polish.css）、`.tab-bar { background }`、`.tab-item:hover { background-color }`、
+  `layout.css` 里"悬停大纲面板"的 top/bottom/right/height/box-shadow/transition（真来源 shell.css）、
+  `outline.css` 的 `.app-shell { --outline-collapsed-width }`（真来源 layout-contract.css）等。
+- 顺带清掉一个**被清空的 `@media (prefers-reduced-motion: reduce) { }` 空块**（它的规则被 tokens.css 里的同名块覆盖），
+  并把"空 `@media/@supports` 块"也写进围栏（留了 `/* 占位 */` 注释的除外，`mobile/mobile.css` 那个占位就是例外）。
+
+**关键结论：跨文件去重必须过"两套构建"这一关（这是本轮最有价值的认知）**
+- 桌面入口 `src/main.tsx` 和移动入口 `src/mobile/main.tsx` **加载的样式集合与顺序完全不同**：
+  移动端根本不加载 `styles.css` / `b3/base.css` / `b3/components.css` / `b3/layout.css` / `features/outline/outline.css`
+  （只有 `src/main.tsx` 导入它们），而 `b3/dark.css`、`b3/theme-midnight.css`、`styles/tokens.css` 两边都加载。
+- 所以"桌面被后加载文件盖住"**不等于**可以删：在移动端，那条声明可能就是唯一来源。
+- 本轮的安全边界（结构性保证，不靠实测）：**只删"移动端入口完全不加载的那些文件"里的被覆盖声明**；
+  两边都加载的文件（主题/令牌/dark）本轮一律不动。这样移动端必然不受影响（那条声明在移动端根本不存在）。
+- 复核工具：`dedupe-cross.mjs`（桌面候选）→ `dedupe-cross3.mjs`（严格版：文件必须不在移动端集合里）→
+  会话内 A/B（桌面 10 状态 × ~1.0 万元素，0 差异）→ 16 屏像素批次（0 差异）。
+  另外用**移动端构建产物**复核过一遍顺序（`dist-mobile/assets/mobile-*.css`；注意产物是压缩过的，
+  选择器引号/简写/颜色都会被改写，按"值"精确匹配会全 miss，得靠结构对齐）。
+
+**门禁（双门禁口径不变）**
+- 会话内 A/B：`noise 0 / change 0`（10 个状态：浅深 × 1315/760、拖拽、悬停大纲、右键菜单、搜索、设置）。
+- 16 屏像素批次（与已提交状态对照）：**0 差异**。
+- `tsc` 0 · vitest **971 passed / 16 skipped** · 桌面 + 移动 build 通过 · `git diff --check` 干净。
+- 围栏基线再收紧（本用例自己的扫描口径）：`styles.css` 1842→1789 / `b3/base.css` 19→17 /
+  `b3/components.css` 156→151 / `b3/layout.css` 209→201 / `outline.css` 258→257；
+  新增"空 `@media/@supports` 块"检查（已用"临时插一个空块 → 用例变红 → 还原"验证过）。
+- 工具坑新增一条：**删完声明的复现脚本别忘了写回 `root.toString()`**（本轮第一遍只写了正则处理后的原文，
+  结果只改了空白，声明一条没删，靠 `git diff --stat` 与"落盘后 decls 对数"才发现）。
 
 ### 2.43 第三轮多层覆盖清理 + 空壳规则清除 + 前两轮删除的**复核**（260916，用户："重新审计类似问题，还有没有避免多层嵌套的问题，清理冗余，整理优化代码"）
 > 起点 `4a68071`（等价于 `d004e6e` 之后的工作区）。这轮做了三件事：**把上一轮没落干净的尾巴清掉**、
