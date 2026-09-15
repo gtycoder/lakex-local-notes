@@ -214,10 +214,10 @@
   background: var(--b3-card-error-background) !important;
 }
 .tab-switcher-menu {
-  background: var(--b3-menu-background) !important;
-  border: 1px solid var(--b3-theme-surface-lighter) !important;
-  border-radius: var(--b3-border-radius-b) !important;
-  box-shadow: var(--b3-dialog-shadow) !important;
+  background: var(--b3-menu-background) ;
+  border: 1px solid var(--b3-theme-surface-lighter) ;
+  border-radius: var(--b3-border-radius-b) ;
+  box-shadow: var(--b3-dialog-shadow) ;
 }
 
 /* ── 同步状态点 → b3 语义色令牌（success/error/secondary）── */

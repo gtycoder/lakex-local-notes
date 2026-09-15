@@ -171,7 +171,7 @@ button { cursor: pointer; }
 .confirm-dialog h3 { margin: 0 0 8px; font-size: 15px; font-weight: 600; color: var(--b3-theme-on-background); }
 .confirm-dialog p { margin: 0 0 18px; color: var(--b3-theme-on-surface); font-size: 12px; line-height: 1.6; }
 .confirm-dialog footer { display: flex; justify-content: flex-end; gap: 9px; }
-.danger-button { border-color: var(--lake-error) !important; color: white !important; background: var(--lake-error) !important; }
+.danger-button { border-color: var(--lake-error) ; color: white ; background: var(--lake-error) ; }
 .danger-button:hover { background: var(--lake-error-strong) !important; }
 .confirm-dialog { opacity: 1; transform: translateY(0) scale(1); }
 @starting-style { .confirm-dialog { opacity: 0; transform: translateY(8px) scale(0.98); } }
@@ -356,8 +356,8 @@ button { cursor: pointer; }
    Long code scrolls internally via max-height cap. */
 .ne-codeblock,
 .ne-codeblock.ne-codeblock-height-limit {
-  height: auto !important;
-  max-height: none !important;
+  height: auto ;
+  max-height: none ;
 }
 .ne-codeblock .ne-codeblock-inner {
   height: auto !important;
@@ -375,7 +375,7 @@ button { cursor: pointer; }
   min-height: 24px;
 }
 .ne-codeblock .CodeMirror-scroll {
-  height: auto !important;
+  height: auto ;
   overflow: visible !important;
 }
 .ne-codeblock .CodeMirror-sizer {
@@ -390,11 +390,11 @@ ne-card[data-card-name="codeblock"] .ne-card-resizer-trigger,
 ne-card[data-card-name="codeblock"] .ne-card-resizer-root,
 ne-card[data-card-name="codeblock"] .ne-card-resizer-content,
 ne-card[data-card-name="codeblock"] .ne-card-resizer-mask {
-  display: none !important;
-  height: 0 !important;
-  width: 0 !important;
-  pointer-events: none !important;
-  opacity: 0 !important;
+  display: none ;
+  height: 0 ;
+  width: 0 ;
+  pointer-events: none ;
+  opacity: 0 ;
 }
 /* Collapsed codeblock */
 .ne-codeblock.ne-codeblock-collapsed .ne-codeblock-inner {
@@ -1511,18 +1511,18 @@ ne-card[data-card-name="codeblock"] .ne-card-resizer-mask {
 .settings-overlay,
 .history-panel-backdrop,
 .trash-panel-backdrop {
-  display: grid !important;
-  position: fixed !important;
-  z-index: 800 !important;
+  display: grid ;
+  position: fixed ;
+  z-index: 800 ;
   inset: 0;
   place-items: center;
-  padding: 16px !important;
+  padding: 16px ;
   /* 遮罩底色与"无模糊"统一由 b3/components.css 的 .settings-overlay/…-backdrop 提供
    * （--b3-mask-background + backdrop-filter:none !important 覆盖本块）。此处仅负责居中布局。 */
 }
 
 .floating-dialog {
-  position: fixed !important;
+  position: fixed ;
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
@@ -1578,8 +1578,8 @@ ne-card[data-card-name="codeblock"] .ne-card-resizer-mask {
 .history-panel,
 .trash-panel {
   width: auto;
-  max-width: calc(100vw - 32px) !important;
-  max-height: calc(100vh - 32px) !important;
+  max-width: calc(100vw - 32px) ;
+  max-height: calc(100vh - 32px) ;
 }
 .settings-panel-large { min-width: 0; }
 .history-panel,
@@ -1870,7 +1870,7 @@ ne-card[data-card-name="codeblock"] .ne-card-resizer-mask {
 .ne-viewer ne-card[data-card-name="file"].ne-card-hovered .ne-card-file,
 .ne-viewer ne-card[data-card-name="file"].ne-card-hovered,
 ne-card[data-card-name="file"] .ne-card-file {
-  background: transparent !important;
-  outline: none !important;
-  box-shadow: none !important;
+  background: transparent ;
+  outline: none ;
+  box-shadow: none ;
 }
