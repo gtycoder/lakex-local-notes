@@ -2012,7 +2012,7 @@ ne-card[data-card-name="file"] .ne-card-file {
   .activity-rail {
     margin: 0;
     padding: 0 3px 6px;
-    padding-top: calc(var(--topbar-height, 38px) + 8px);
+    padding-top: var(--topbar-height, 38px);   /* 与宽窗一致：不要多留 8px（否则宽→窄时轨图标下跳） */
     min-width: var(--activity-rail-width, 38px);
     /* 分隔线不画进标题栏：红绿灯那一带不出现竖线（用户 260915 截图#1），
        改用从顶栏下沿开始的伪元素，视觉上等价于宽窗（宽窗那条线也被顶栏挡住） */
@@ -2023,16 +2023,7 @@ ne-card[data-card-name="file"] .ne-card-file {
        （实测窄窗左轨是 #f6f6f6、宽窗是 #ebecf0 → 用户动图里的颜色跳变） */
     background: var(--b3-body-background) !important;
   }
-  .activity-rail::after {
-    content: "";
-    position: absolute;
-    top: var(--topbar-height, 38px);
-    right: 0;
-    bottom: 0;
-    width: 1px;
-    background: var(--shell-separator);
-    pointer-events: none;
-  }
+  /* 此处原有 `::after` 竖分隔线已删除：宽窗没有这条线，凭空出现会造成宽→窄多一根线 */
   .activity-button {
     display: grid;
     place-items: center;
@@ -2058,7 +2049,7 @@ ne-card[data-card-name="file"] .ne-card-file {
      这里补回来，并多留 8px 让出红绿灯的下沿。 */
   .activity-rail {
     margin-top: 0;
-    padding-top: calc(var(--topbar-height, 38px) + 8px);
+    padding-top: var(--topbar-height, 38px);   /* 与宽窗一致：不要多留 8px（否则宽→窄时轨图标下跳） */
   }
   /* 44px 侧栏条：横向裁掉溢出内容，避免标题/缩进线拖出一条竖线（宽窗等价规则同样在 min-width 段里） */
   .sidebar, .sidebar.sidebar-docked, .sidebar.sidebar-floating { overflow: hidden; }
