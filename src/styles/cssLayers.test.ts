@@ -28,35 +28,36 @@ const FILES = [
   "styles/tokens.css", "styles/ui-polish.css",
 ];
 
-/** 基线（260915 清理后按本文件的 scan() 实测）。只允许变小。 */
+/** 基线（260916 第三轮清理后按本文件的 scan() 实测）。只允许变小。 */
 const BASELINE: Record<string, { decls: number; dupGroups: number }> = {
-  "styles.css": { decls: 1938, dupGroups: 59 },
+  "styles.css": { decls: 1842, dupGroups: 35 },
   "b3/animations.css": { decls: 5, dupGroups: 0 },
   "b3/base.css": { decls: 19, dupGroups: 1 },
   "b3/components.css": { decls: 156, dupGroups: 0 },
   "b3/dark.css": { decls: 56, dupGroups: 0 },
-  "b3/layout.css": { decls: 210, dupGroups: 2 },
+  "b3/layout.css": { decls: 209, dupGroups: 1 },
   "b3/theme-daylight.css": { decls: 163, dupGroups: 0 },
   "b3/theme-midnight.css": { decls: 163, dupGroups: 0 },
   "features/attachment/attachment-preview.css": { decls: 78, dupGroups: 0 },
   "features/editor/image-lightbox.css": { decls: 57, dupGroups: 0 },
-  "features/outline/outline.css": { decls: 276, dupGroups: 8 },
-  "styles/dialog.css": { decls: 229, dupGroups: 10 },
-  "styles/document-status.css": { decls: 115, dupGroups: 7 },
+  "features/outline/outline.css": { decls: 258, dupGroups: 0 },
+  "styles/dialog.css": { decls: 227, dupGroups: 8 },
+  "styles/document-status.css": { decls: 110, dupGroups: 2 },
   "styles/editor-bridge.css": { decls: 12, dupGroups: 0 },
   "styles/layout-contract.css": { decls: 5, dupGroups: 0 },
   "styles/motion-contract.css": { decls: 7, dupGroups: 0 },
-  "styles/overlays.css": { decls: 448, dupGroups: 5 },
+  "styles/overlays.css": { decls: 444, dupGroups: 1 },
   "styles/quick-notes.css": { decls: 9, dupGroups: 0 },
   "styles/shell.css": { decls: 43, dupGroups: 0 },
   "styles/tokens.css": { decls: 83, dupGroups: 0 },
-  "styles/ui-polish.css": { decls: 190, dupGroups: 15 },
+  "styles/ui-polish.css": { decls: 166, dupGroups: 5 },
 };
 
 /** 极简 CSS 扫描器：只取「叶子样式规则」的声明，跳过注释/字符串/声明型 at-rule。 */
-function scan(css: string): { decls: number; dupGroups: number } {
+function scan(css: string): { decls: number; dupGroups: number; emptyRules: number } {
   const props = new Map<string, number>();   // `${selector}||${prop}` → 出现次数
   let decls = 0;
+  let emptyRules = 0;
   let i = 0;
   const n = css.length;
   const skipWs = (j: number) => { while (j < n && /\s/.test(css[j])) j++; return j; };
@@ -84,6 +85,7 @@ function scan(css: string): { decls: number; dupGroups: number } {
         if (!/^@(keyframes|-webkit-keyframes|font-face|page|property|charset|import|namespace|layer)\b/i.test(head)) walk(brace + 1, end);
       } else {
         const body = css.slice(brace + 1, end);
+        let declarationsInRule = 0;
         for (const raw of body.split(";")) {
           const line = raw.trim();
           const k = line.indexOf(":");
@@ -91,9 +93,12 @@ function scan(css: string): { decls: number; dupGroups: number } {
           const prop = line.slice(0, k).trim();
           if (!prop || prop.startsWith("//")) continue;
           decls++;
+          declarationsInRule++;
           const key = `${head.replace(/\s+/g, " ")}||${prop}`;
           props.set(key, (props.get(key) || 0) + 1);
         }
+        // 空壳规则（`选择器 { }`）：清完重复声明后留下的残骸，白占解析与维护成本。
+        if (!declarationsInRule && !body.includes("{")) emptyRules++;
       }
       j = skipWs(end + 1);
     }
@@ -101,7 +106,7 @@ function scan(css: string): { decls: number; dupGroups: number } {
   walk(0, n);
   let dupGroups = 0;
   for (const count of props.values()) if (count > 1) dupGroups++;
-  return { decls, dupGroups };
+  return { decls, dupGroups, emptyRules };
 }
 
 describe("CSS 多层覆盖围栏", () => {
@@ -115,5 +120,15 @@ describe("CSS 多层覆盖围栏", () => {
       if (got.dupGroups > base.dupGroups) grew.push(`${rel}: 重复组 ${base.dupGroups} → ${got.dupGroups}`);
     }
     expect(grew, `以下文件新增了"多层覆盖"，请收敛到一处来源（见 HANDOFF §2.40/§2.41）：\n  ${grew.join("\n  ")}`).toEqual([]);
+  });
+
+  it("没有留下「空壳规则」（选择器 { }）——清完重复声明必须连壳一起删", () => {
+    const shells: string[] = [];
+    for (const rel of FILES) {
+      const css = readFileSync(path.join(SRC, rel), "utf8");
+      const { emptyRules } = scan(css);
+      if (emptyRules) shells.push(`${rel}: ${emptyRules} 条`);
+    }
+    expect(shells, `以下文件留下空壳规则（260915 清理时留过一次，260916 已清除）：\n  ${shells.join("\n  ")}`).toEqual([]);
   });
 });

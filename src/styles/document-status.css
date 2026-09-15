@@ -4,15 +4,10 @@
   grid-column: 1 / -1;
   position: absolute !important;
   z-index: 180;
-  right: 16px !important;
-  width: auto !important;
   top: auto !important;
   bottom: 8px !important;
-  left: 12px !important;
   display: grid;
-  grid-template-columns: minmax(0, auto) minmax(0, 1fr) auto;
   align-items: center;
-  gap: 12px;
   height: 26px;
   min-height: 26px;
   padding: 0 9px;

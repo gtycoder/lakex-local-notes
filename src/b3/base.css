@@ -20,12 +20,6 @@ body {
 }
 
 /* 应用骨架：侧栏/文档区/状态栏/活动轨 */
-.app-shell {
-}
-.sidebar {
-}
-.document-pane {
-}
 .statusbar {
   background: var(--b3-theme-surface);
   border-top-color: var(--b3-border-color);
@@ -38,14 +32,6 @@ body {
 /* 壳层材质：覆盖 styles.css 的「统一材质 !important」（2026-08-13 引入），
  * 切回思源观感——灰底（--b3-body-background）+ 白色文档区，侧栏/顶栏/状态栏同色系。 */
 @media (min-width: 761px) {
-  .app-shell,
-  .activity-rail,
-  .sidebar,
-  .sidebar.sidebar-docked,
-  .sidebar.sidebar-floating {
-  }
-  .tab-bar {
-  }
   .statusbar {
     background: var(--b3-theme-surface);
     border-top: 1px solid var(--b3-border-color);

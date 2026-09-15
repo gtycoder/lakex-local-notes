@@ -1,5 +1,5 @@
-/* 图标统一：对齐思源 litheness（同为 lucide，stroke-width 1.7） */
-.lucide { }
+/* 图标统一：stroke-width 的**唯一来源**是 styles.css 的 `svg.lucide { stroke-width: 1.75 }`
+   （此处原先还写了一份 1.7，被上面那条按特异性盖掉，属另一套默认值，已删）。 */
 
 /* 指示线微入场（桌面 .ln-tabs / 移动端 .mobile-htab 共用；小元素 transform 动画） */
 @keyframes ln-indicator-in { from { transform: scaleX(0); } to { transform: scaleX(1); } }

@@ -131,13 +131,6 @@
 /* Drag feedback: a soft lifted row plus a clear insertion guide, matching outline motion. */
 .tree-row.dragging {
   position: relative;
-  z-index: 5;
-  opacity: .92;
-  color: var(--lake-text);
-  background: var(--lake-panel) !important;
-  box-shadow: 0 5px 16px color-mix(in srgb, var(--lake-text) 14%, transparent), 0 0 0 1px color-mix(in srgb, var(--lake-accent) 30%, transparent) !important;
-  transform: scale(1.012);
-  transition: transform 120ms var(--lake-ease-standard), box-shadow 120ms var(--lake-ease-standard), opacity 120ms ease-out;
 }
 .tree-row.drop-before,
 .tree-row.drop-after {
@@ -147,21 +140,12 @@
 .tree-row.drop-after::after {
   content: "";
   position: absolute;
-  right: 8px;
-  left: 8px;
-  height: 2px;
-  border-radius: 999px;
-  background: var(--lake-accent);
-  box-shadow: 0 0 0 3px var(--lake-accent-soft);
   pointer-events: none;
 }
 .tree-row.drop-before::before { top: -1px; }
 .tree-row.drop-after::after { bottom: -1px; }
 .tree-row.drop-inside {
   color: var(--lake-text);
-  background: var(--lake-accent-soft) !important;
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--lake-accent) 62%, transparent) !important;
-  transform: scale(1.006);
 }
 @media (prefers-reduced-motion: reduce) {
   .tab-item .tab-close,
@@ -174,9 +158,6 @@
 .document-pane .lake-editor-mount .ne-viewer-body {
   color: var(--lake-text) !important;
 }
-.document-pane .lake-editor-mount .ne-engine ne-text,
-.document-pane .lake-editor-mount .ne-viewer-body ne-text {
-}
 .document-pane .lake-editor-mount .ne-engine h1,
 .document-pane .lake-editor-mount .ne-engine h2,
 .document-pane .lake-editor-mount .ne-engine h3,
@@ -186,9 +167,6 @@
   color: var(--lake-text) !important;
 }
 .tree-row.dragging {
-  opacity: .42;
-  background: transparent !important;
-  box-shadow: none !important;
   transform: none;
 }
 .tree-row.drop-inside {
@@ -219,11 +197,6 @@
 }
 .tree-row.dragging {
   z-index: 8;
-  opacity: 1 !important;
-  color: var(--lake-text) !important;
-  background: color-mix(in srgb, var(--lake-text) 10%, var(--lake-panel)) !important;
-  border-radius: 8px;
-  box-shadow: 0 3px 12px color-mix(in srgb, var(--lake-text) 18%, transparent), inset 0 0 0 1px color-mix(in srgb, var(--lake-text) 10%, transparent) !important;
   transition: none !important;
 }
 .tree-row.drop-before::before,
@@ -258,7 +231,6 @@
   opacity: .38 !important;
   color: var(--lake-text) !important;
   background: transparent !important;
-  border-radius: 8px;
   box-shadow: none !important;
 }
 /* 插入线：贴在目标行的层级缩进上（桌面缩进来自嵌套 .tree-children），
@@ -303,11 +275,14 @@
 .tab-switcher {
   border-radius: var(--lake-radius-md) !important;
 }
+/* 紧凑控件（工具条 / 页签 / 图标按钮 / 树行）统一 sm 圆角：拖拽态必须同值，
+   否则行在拖动时圆角会从 6px 跳成 8px（外部 `.tree-row.dragging` 的 8px 就是被这条压住的）。 */
 .toolbar__item,
 .tab-item,
 .icon-button,
 .note-row,
 .list-heading .icon-button {
+  border-radius: var(--lake-radius-sm) !important;
 }
 
 /* 页签 active：白卡 + 顶部主色指示线已经足够标识当前页（b3/layout.css 拥有底与指示线）；

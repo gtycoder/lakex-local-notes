@@ -176,7 +176,6 @@
 .ln-close:hover { opacity: 1; background: var(--b3-list-hover); }
 
 /* 页签：等分整行，选中灰底（思源设置面板顶部 tab 语言） */
-.ln-tabs { display: flex; align-items: center; gap: 8px; padding: 10px 12px 0; }
 /* 页签 = 底部指示线（本应用不做阴影/浮起强调）：轨道只留一条 hairline，
  * 选中项靠「主色字 + 2px 主色下划线」区分；未选中项同宽可点，hover 轻底。 */
 .ln-tabs { display: flex; align-items: stretch; gap: 4px; padding: 0 12px; border-bottom: 1px solid var(--b3-border-color); }

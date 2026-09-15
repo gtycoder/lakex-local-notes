@@ -161,8 +161,6 @@
 @media (min-width: 761px) {
   /* 壳层：单色（用户 260915 决策：顶部那点渐变肉眼看不出来，不值得为它留一层"互相压"的规则）。
    * 取原渐变落定后的主体色 --b3-body-background；顶栏/左右轨透明共享此背景。 */
-  .app-shell {
-  }
 
   /* .activity-rail / .tab-item* / .sidebar.sidebar-docked / 卡片圆角 / .statusbar
      已搬到共用作用域（见文件开头） */
@@ -251,7 +249,7 @@
   outline-offset: 1px;
   border-radius: 3px;
 }
-.protyle-breadcrumb__item--current { color: var(--b3-theme-on-background); font-weight: 500; }
+.protyle-breadcrumb__item--current { font-weight: 500; }
 
 /* ── 顶栏「更多」下拉菜单（思源 b3-menu）── */
 .toolbar__menu-wrap {
@@ -355,8 +353,6 @@
  * 这样长 tab/长目录不会把壳层撑高，也不会把底部状态栏推出窗口。 */
 /* 标签条收口（共用作用域）：滚动只发生在 .tab-items 内，.tab-bar 自身不能成为滚动层。
  * 与上面的 fixed 几何同为"顶栏"一组，窄窗必须同样成立。 */
-.tab-bar {
-}
 .tab-items {
   align-self: stretch;
   height: 100%;
