@@ -4,6 +4,8 @@ import { native } from "../lib/native";
 import { createRequestVersion } from "../core/requestVersion";
 import type { NoteDocument, QuickNoteDocument, QuickNoteImage, TreeNode } from "../lib/types";
 import { getNativeErrorMessage } from "../lib/nativeErrors";
+import { ImageLightbox } from "../features/editor/ImageLightbox";
+import { openImagePreview } from "../features/editor/imagePreview";
 
 interface DraftImage {
   image: QuickNoteImage;
@@ -346,6 +348,8 @@ export const QuickNotesWorkspace = forwardRef<QuickNotesWorkspaceHandle, QuickNo
         </div>
       </div>
     </div>
+    {/* 卡片里的图片点击放大：复用编辑器同一套 Lightbox 单例（与 EditorTab / LakeEditor 同款挂法） */}
+    <ImageLightbox />
     {pendingDelete && <div className="quick-notes-toast" role="status" aria-live="polite"><span>已删除一条小记</span><button onClick={undoDelete}><RotateCcw size={14} />撤销</button></div>}
     {convertItems && convertItems.length > 0 && <div className="modal-backdrop" onMouseDown={(event) => event.target === event.currentTarget && !saving && setConvertItems(null)}>
       <section className="quick-note-convert-dialog" role="dialog" aria-modal="true" aria-labelledby="quick-note-convert-title">
@@ -434,6 +438,14 @@ function QuickNoteCard({ item, deletePending, selecting, checked, onToggleSelect
     >{checked && <Check size={13} />}</button>
     <header><time dateTime={item.updatedAt || item.createdAt}>更新于 {stamp}</time>{item.isConflict && <span className="badge badge--warn quick-note-conflict">同步冲突副本</span>}<div className="quick-note-card-actions"><button onClick={onConvert} title="转为正式笔记"><FilePlus size={15} /></button><button onClick={onEdit} title="编辑小记"><Pencil size={15} /></button><button className="danger" onClick={onDelete} disabled={deletePending} title={deletePending ? "请先完成当前删除的撤销操作" : "删除小记"}><Trash size={15} /></button></div></header>
     {item.content.text && <p>{item.content.text}</p>}
-    {item.content.images.length > 0 && <div className="quick-note-saved-images">{item.content.images.map((image) => <img key={image.id} src={image.url} alt="小记图片" loading="lazy" />)}</div>}
+    {item.content.images.length > 0 && <div className="quick-note-saved-images">{item.content.images.map((image) => <img
+      key={image.id} src={image.url} alt="小记图片" loading="lazy"
+      title="点击放大"
+      onClick={(event) => {
+        event.stopPropagation();
+        const gallery = item.content.images.filter((it): it is QuickNoteImage & { url: string } => Boolean(it.url));
+        openImagePreview(gallery.map((it) => ({ src: it.url })), gallery.findIndex((it) => it.id === image.id));
+      }}
+    />)}</div>}
   </article>;
 }

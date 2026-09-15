@@ -1198,6 +1198,7 @@ ne-card[data-card-name="codeblock"] .ne-card-resizer-mask {
    （用户那张 1220×2656 的竖长截图被 cover 裁成中间一条，等于看不到内容）。 */
 .quick-note-image-grid img { display: block; width: 100%; max-height: 280px; object-fit: cover; border-radius: 8px; background: var(--b3-theme-surface-lighter); }
 .quick-note-saved-images img { display: block; width: auto; max-width: 100%; max-height: 460px; object-fit: contain; margin-inline: auto; border-radius: 8px; background: transparent; }
+.quick-note-saved-images img { cursor: zoom-in; }
 .quick-note-image-grid button { position: absolute; top: 5px; right: 5px; width: 22px; height: 22px; border-radius: 50%; color: var(--b3-theme-background); background: color-mix(in srgb, var(--b3-theme-on-background) 68%, transparent); }
 .quick-notes-timeline { display: grid; gap: 13px; align-content: start; padding-bottom: 4px; }
 .quick-note-entry { position: relative; padding: 14px; }

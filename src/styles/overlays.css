@@ -40,23 +40,15 @@
 
 .sync-status-history-list .b3-list-item { margin: 0 4px; font-size: 11px; line-height: 24px; min-height: 24px; }
 
-.draft-recovery-backdrop { position: fixed; z-index: 900; inset: 0; display: grid; place-items: center; padding: 24px; background: rgba(17, 22, 30, .22); }
-.draft-recovery-dialog { width: min(520px, calc(100vw - 32px)); padding: 18px; border: 1px solid var(--lake-border); border-radius: 12px; color: var(--lake-text); background: var(--lake-panel); box-shadow: var(--lake-shadow-panel); }
-.draft-recovery-dialog > header { display: flex; align-items: center; gap: 8px; }
-.draft-recovery-dialog > header button { display: inline-grid; place-items: center; width: 26px; height: 26px; margin-left: auto; border: 0; border-radius: 6px; color: var(--lake-text-secondary); background: transparent; }
-.draft-recovery-dialog > header button:hover { background: var(--lake-accent-soft); color: var(--lake-text); }
-.draft-recovery-dialog > p { margin: 10px 0 12px; color: var(--lake-text-secondary); font-size: 12px; line-height: 1.55; }
-.draft-recovery-list { display: grid; gap: 5px; max-height: 300px; overflow: auto; }
-.draft-recovery-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 48px; padding: 7px 8px; border: 1px solid var(--lake-border); border-radius: 8px; }
-.draft-recovery-row > div:first-child { display: grid; min-width: 0; gap: 2px; }
-.draft-recovery-row strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
-.draft-recovery-row span { color: var(--lake-text-tertiary); font-size: 10px; }
-.draft-recovery-row > div:last-child { display: flex; flex: 0 0 auto; gap: 4px; }
-.draft-recovery-restore, .draft-recovery-discard { display: inline-flex; align-items: center; gap: 4px; min-height: 28px; padding: 0 7px; border: 0; border-radius: 6px; font-size: 11px; cursor: pointer; }
-.draft-recovery-restore { color: var(--lake-accent); background: var(--lake-accent-soft); }
-.draft-recovery-discard { color: var(--lake-text-tertiary); background: transparent; }
-.draft-recovery-discard:hover { color: var(--lake-error); background: color-mix(in srgb, var(--lake-error) 10%, transparent); }
-.draft-recovery-dialog > small { display: block; margin-top: 9px; color: var(--lake-text-tertiary); font-size: 10px; }
+/* 草稿恢复框：表面/头体走浮层通用件 .ln-dialog，行复用思源 .b3-list-item（与回收站/历史同一套密度与 hover 语言）。
+   这里只留间距与危险操作的着色。 */
+.draft-recovery-dialog { width: min(520px, calc(100vw - 32px)); }
+.draft-recovery-hint { margin: 0 0 10px; color: var(--b3-theme-on-surface); font-size: 12px; line-height: 1.55; }
+.draft-recovery-list { max-height: 296px; overflow-y: auto; margin: 0 -6px; }
+.draft-recovery-row .b3-list-item__text { min-width: 0; }
+.draft-recovery-restore:hover { color: var(--b3-theme-primary); }
+.draft-recovery-discard:hover { color: var(--b3-theme-error); }
+.draft-recovery-more { margin: 9px 0 0; color: var(--b3-theme-on-surface-light); font-size: 11px; }
 
 /* ══ 设置面板与浮层：精仿思源版式（分组卡片 + 行 + 列表 + hover 图标操作）══
  * 组件样式来自已 vendored 的思源 SCSS（src/b3/siyuan/，AGPL-3.0，已署名），
