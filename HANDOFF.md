@@ -521,6 +521,22 @@
    397 条计划合并应用时 50158 个元素变化，剔掉 216 条后才归零。
 4. **像素级兜底**：改动前/后同流程截图，7 屏共 18.26M 颜色通道 **差异 0**。
 
+**第五批（提交 `dae9cd4`，**用户决策**）——壳层材质改单色分层，材质层 !important 随之清零**
+> **这是观感决策，不是纯重构**：用户 260915 拍板"顶部那条渐变我看不出来用在哪，做成单色"。
+> 之前四批一直压不掉的那批 `!important` 就是用来钉这条渐变的——渐变写在**最外层 `.app-shell`**，
+> 而侧栏/顶栏/状态栏/浮窗各有一层自己的单色在压它，谁想透出渐变就得抢 `!important`。
+
+- **改法**：`b3/layout.css` 的 `.app-shell` 从
+  `linear-gradient(180deg, mix(#fff 45%, #ebecf0) 0%, #ebecf0 160px) !important` → `var(--b3-body-background)`
+  （取渐变落定后的主体色；顺带去 `!important`——它本来就晚加载，靠顺序即可赢）；`styles.css` 里 7 处
+  `linear-gradient(180deg, var(--lake-shell) 0%, var(--shell-material) NNNpx)`、`--shell-unified-background`、
+  `--shell-unified-topbar`、`outline.css` 的硬编码渐变全部压平成单色。
+- **证据**：压平本身 4 屏浅 + 3 屏深，变化幅度 maxΔ ≤10（浅）/ ≤6（深），只落在顶部渐变带（"渐变没了"这一件事）；
+  压平之后再去 **47 处材质层 `!important`**，9 屏里 8 屏像素 **0 差异**、1 屏 14 个通道 Δ≤9。
+- **给后人的话**：`--shell-*` 那套"材质令牌"现在就是单色别名（`--shell-unified-background: var(--lake-shell)`）。
+  **不要再往 `.app-shell` 上加渐变/材质**——一加就会重新长出"整层互相压"的 `!important`；真要加，先把
+  谁画它收敛到一条规则。
+
 **第四批（提交见下）+ 构造状态**：靠导航到不了的状态（拖拽中 / 同步 toast / 图片 Lightbox / 删除确认框 /
 标签切换菜单 / 编辑器代码块与文件卡）改为**在页内构造等价 DOM**（`/tmp/lkcdp/inject.mjs`：给树行加
 `drop-before/drop-after/drop-inside/dragover`、往 body 注入 toast/lightbox/确认框、往 `.lake-editor-mount`
