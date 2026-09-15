@@ -10,12 +10,12 @@ html, body, #root { height: 100%; }
 body { margin: 0; min-width: 320px; min-height: 100%; overflow: hidden; }
 button, input { font: inherit; }
 button { cursor: pointer; }
-.app-shell { display: grid; height: 100%; transition: grid-template-columns var(--lake-motion-standard) var(--lake-ease-standard); }
+.app-shell { display: grid; height: 100%; }
 
 /* 侧栏：只留"结构"（flex 列）；配色/定位/内边距/栅格列都由共用作用域与 b3 层负责。
  * （原 `grid-template-columns: 260px 1fr`、`background: #f4f5f7`、`border-right`、
  *   `padding-top`、`z-index` 等早已被后面的规则整条盖住，实测计算值无变化后删除。） */
-.sidebar { display: flex; flex-direction: column; transition: width var(--lake-motion-standard) var(--lake-ease-standard), box-shadow var(--lake-motion-standard) var(--lake-ease-standard); }
+.sidebar { display: flex; flex-direction: column; }
 
 .create-menu-wrap { position: relative; }
 /* ＋ 快捷创建：与行内 ⋯ 同一套着重色（hover/展开时 accent） */
@@ -71,18 +71,18 @@ button { cursor: pointer; }
 
 .tree-children { margin-left: 16px; border-left: 1px solid rgba(225, 228, 232, 0.55); }
 
-.workspace { display: grid; grid-template-rows: minmax(0, 1fr) 28px; min-width: 0; min-height: 0; overflow: hidden; background: #fff; }
+.workspace { display: grid; min-width: 0; min-height: 0; }
 
-.current-note-input:hover { border-color: var(--lake-border); background: #fafafa; }
-.current-note-input:focus { border-color: var(--lake-accent); background: #fff; box-shadow: 0 0 0 2px var(--lake-accent-soft); }
 
-.icon-button:hover { background: #eceef1; }.danger-hover:hover { color: var(--lake-error); background: var(--lake-error-soft); }.icon-button:active { transform: scale(0.97); }
+
+
+
 .save-label.error { color: var(--lake-error); }.save-label.dirty { color: var(--lake-sync-pending); }
 
-.sync-button:hover { background: var(--lake-success-soft); }.sync-button:disabled { cursor: wait; opacity: .7; }
+
 .mode-toggle.selected { color: var(--lake-accent); background: var(--lake-accent-soft); }
 .document-pane { min-height: 0; overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; }
-.document-pane .lake-editor-mount .ne-ui { position: sticky; top: 0; z-index: 150; background: var(--lakex-editor-background, #fff); }
+.document-pane .lake-editor-mount .ne-ui { position: sticky; z-index: 150; background: var(--lakex-editor-background, #fff); }
 .document-pane .lake-editor-mount .ne-inner-overlay-container {
   /* Raise above the sticky .ne-ui toolbar (z-index: 20) so table card toolbars can receive hover. */
   z-index: 100 !important;
@@ -126,8 +126,8 @@ button { cursor: pointer; }
 .empty-workspace h2 { margin: 0; color: var(--lake-text, #252a33); font-size: 16px; font-weight: 600; letter-spacing: -.01em; }
 .empty-workspace-hint { margin: 0 0 6px; color: var(--lake-text-tertiary); font-size: 13px; }.loading-screen { height: 100vh; }.loading-screen small { color: var(--lake-error); }
 
-.form-grid .wide { grid-column: 1 / -1; }.form-grid input[type="text"], .form-grid input[type="password"], .form-grid label > input:not([type="checkbox"]) { width: 100%; height: 36px; padding: 0 10px; border: 1px solid var(--lake-border); border-radius: var(--b3-border-radius); outline: 0; font-size: 12px; font-weight: 400; }.form-grid input:focus { border-color: var(--b3-theme-primary); box-shadow: 0 0 0 2px var(--lake-accent-soft); }
-.secret-field:focus-within { border-color: var(--b3-theme-primary); box-shadow: 0 0 0 2px var(--lake-accent-soft); }.checkbox { flex-direction: row !important; align-items: center; font-weight: 400 !important; }.checkbox input { accent-color: var(--lake-accent); }
+.form-grid .wide { grid-column: 1 / -1; }.form-grid input[type="text"], .form-grid input[type="password"], .form-grid label > input:not([type="checkbox"]) { width: 100%; height: 36px; padding: 0 10px; border: 1px solid var(--lake-border); border-radius: var(--b3-border-radius); outline: 0; font-size: 12px; font-weight: 400; }
+.checkbox { flex-direction: row !important; align-items: center; font-weight: 400 !important; }.checkbox input { accent-color: var(--lake-accent); }
 /* ===== 同步进度与最近结果（S3 同步面板） ===== */
 
 .sync-progress-bar.indeterminate { width: 34% !important; animation: sync-indeterminate 1.2s ease-in-out infinite; }
@@ -203,7 +203,6 @@ button { cursor: pointer; }
 .document-pane:has(> .multi-tab-editor) { overflow: hidden; }
 
 .tab-bar {
-  display: flex;
   align-items: center;
   flex-shrink: 0;
   -webkit-app-region: drag;
@@ -217,17 +216,11 @@ button { cursor: pointer; }
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 6px 8px;
   border: none;
-  border-radius: 6px 6px 0 0;
   /* 顶栏占满时不再收缩 tab（flex:0 0 auto 保持内容宽度）；
      单个超长标题封顶 200px，省略部分用悬停 title 展示完整名称 */
   flex: 0 0 auto;
-  background: transparent;
-  color: var(--text-secondary, #666);
-  font-size: 13px;
   white-space: nowrap;
-  transition: background 0.15s, color 0.15s;
 }
 .tab-item:hover { background: rgba(0,0,0,0.04); }
 .tab-item.active {
@@ -279,7 +272,6 @@ button { cursor: pointer; }
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 3px;
   transition: opacity 0.1s, background 0.1s;
 }
 .tab-item:hover .tab-close { opacity: 0.5; }
@@ -325,10 +317,8 @@ button { cursor: pointer; }
 }
 /* .ne-editor 填满 mount（body 的 calc(100% - 50px) 以它为参照） */
 .lake-editor-tab .lake-editor-mount .ne-editor {
-  height: 100%;
 }
 .lake-editor-tab {
-  padding: 0;
 }
 /* The .lake-editor inside a tab should fill the tab without extra min-height */
 .lake-editor-tab .lake-editor {
@@ -411,7 +401,6 @@ ne-card[data-card-name="codeblock"] .ne-card-resizer-mask {
 }
 .document-pane .lake-editor-mount .ne-engine > * {
   max-width: 100%;
-  min-width: 0;
 }
 
 /* ============================================
@@ -518,9 +507,6 @@ ne-card[data-card-name="codeblock"] .ne-card-resizer-mask {
   grid-row: 1;
   grid-template-rows: minmax(0, 1fr);
   margin: calc(var(--topbar-height) + 4px) 0 4px 0;
-  position: relative;
-  border: 0;
-  border-radius: var(--b3-border-radius-b);
   background: #fff;
   overflow: hidden;
 }
@@ -528,19 +514,9 @@ ne-card[data-card-name="codeblock"] .ne-card-resizer-mask {
 /* The tab strip is a window-level title bar. It must not inherit the
    document column's x offset when the library is docked or previewed. */
 .tab-bar {
-  position: fixed;
-  top: 0;
-  right: 0;
-  left: 0;
-  z-index: 400;
-  box-sizing: border-box;
   display: flex;
   gap: 6px;
-  overflow: visible;
   padding: 4px 10px;
-  border-bottom: 1px solid var(--shell-separator);
-  background: var(--shell-toolbar);
-  box-shadow: 0 1px 0 rgba(0, 0, 0, .05);
   -webkit-backdrop-filter: saturate(1.2) blur(20px);
 }
 .platform-mac .tab-bar {
@@ -556,7 +532,6 @@ ne-card[data-card-name="codeblock"] .ne-card-resizer-mask {
   display: flex;
   align-items: center;
   gap: 6px;
-  flex: 1 1 auto;
   overflow-x: auto;
   overflow-y: visible;
   scrollbar-width: none;
@@ -575,10 +550,7 @@ ne-card[data-card-name="codeblock"] .ne-card-resizer-mask {
   align-items: center;
   align-self: stretch;
   min-width: var(--activity-rail-width);
-  margin: var(--topbar-height) 0 0 0;
   padding: 0 3px 6px;
-  border-right: 1px solid var(--shell-separator);
-  background: var(--lake-shell);
 }
 .activity-rail-spacer { display: none; }
 .activity-rail-fill { flex: 1; }
@@ -590,10 +562,7 @@ ne-card[data-card-name="codeblock"] .ne-card-resizer-mask {
   margin: 2px 0;
   padding: 0;
   border: 0;
-  border-radius: 6px;
-  color: var(--lake-text-secondary);
   background: transparent;
-  transition: color var(--lake-motion-fast) var(--lake-ease-standard), background-color var(--lake-motion-fast) var(--lake-ease-standard), box-shadow var(--lake-motion-fast) var(--lake-ease-standard), transform var(--lake-motion-press) var(--lake-ease-standard);
 }
 .activity-button:active { transform: scale(.965); }
 .activity-button:focus-visible { outline: 2px solid rgba(47, 125, 94, 0.18); outline-offset: 2px; }
@@ -606,8 +575,6 @@ ne-card[data-card-name="codeblock"] .ne-card-resizer-mask {
   grid-row: 1;
   width: var(--sidebar-width);
   align-self: end;
-  padding-top: 0;
-  overflow: visible;
   transition: opacity var(--lake-motion-standard) var(--lake-ease-standard), transform var(--lake-motion-panel) var(--lake-ease-standard), box-shadow 240ms ease-out;
 }
 .app-shell.sidebar-resizing .sidebar { transition: none; }
@@ -655,9 +622,6 @@ ne-card[data-card-name="codeblock"] .ne-card-resizer-mask {
 .document-pane,
 .multi-tab-editor {
   background: transparent;
-  border: 0;
-  border-radius: 0;
-  box-shadow: none;
 }
 .statusbar {
   border: 0 !important;
@@ -691,21 +655,17 @@ ne-card[data-card-name="codeblock"] .ne-card-resizer-mask {
 .app-shell,
 .activity-rail,
 .sidebar {
-  background: var(--shell-unified-background);
 }
-.app-shell { border: 0; }
+.app-shell { }
 .activity-rail,
 .sidebar,
 .sidebar.sidebar-docked,
 .sidebar.sidebar-floating {
   border: 0;
-  box-shadow: none;
 }
 
 @media (min-width: 761px) {
   .app-shell {
-    grid-template-columns: var(--activity-rail-width) var(--sidebar-width) minmax(0, 1fr);
-    background: #fff;
     transition: grid-template-columns var(--lake-motion-panel) var(--lake-ease-standard);
   }
   
@@ -780,9 +740,9 @@ ne-card[data-card-name="codeblock"] .ne-card-resizer-mask {
 
   /* .workspace / .tab-bar / .tab-items / .tabbar-* 已搬到共用作用域（见上方「壳层几何」） */
 
-  .tabbar-action:hover { color: var(--shell-accent-strong); background: rgba(59, 91, 219, .12); }
-  .tabbar-action:active { transform: scale(.94); }
-  .tabbar-action:focus-visible { outline: 2px solid rgba(59, 91, 219, .22); outline-offset: 2px; }
+
+
+
   
   .tabbar-action[data-tooltip]::after {
     content: attr(data-tooltip);
@@ -821,8 +781,6 @@ ne-card[data-card-name="codeblock"] .ne-card-resizer-mask {
   /* The macOS traffic-light inset is platform-owned, not sidebar-owned.
      Keeping it here prevents collapsed/floating modes from moving the tabs. */
   .tab-panels {
-    box-sizing: border-box;
-    padding-top: 0;
   }
 }
 
@@ -831,24 +789,18 @@ ne-card[data-card-name="codeblock"] .ne-card-resizer-mask {
  * （边框/内边距/字号全变、切换器露出浏览器默认按钮框与灰底）＝宽→窄最显眼的几处跳变。
  * 整族搬到共用作用域；窄窗块里对应的手抄副本同步删除。 */
 .tab-item {
-  position: relative;
   /* 不收缩：每个标签按标题内容固有宽度展示，超长标题封顶省略 */
   flex: 0 0 auto;
   height: 28px;
   padding: 0 4px 0 8px;
   border: 1px solid transparent;
-  border-radius: 8px;
-  color: #5f6368;
-  background: rgba(255, 255, 255, .42);
   font-size: 12px;
-  font-weight: 450;
-  box-shadow: none;
   transition: color var(--lake-motion-fast) var(--lake-ease-standard), background-color var(--lake-motion-fast) var(--lake-ease-standard), border-color var(--lake-motion-fast) var(--lake-ease-standard), box-shadow var(--lake-motion-fast) var(--lake-ease-standard), transform var(--lake-motion-press) var(--lake-ease-standard);
 }
 .tab-item:hover { color: #46527e; background: rgba(255, 255, 255, .78); }
 
 .tab-item:active { transform: scale(.98); }
-.tab-close { position: absolute; top: 50%; right: 4px; flex: none; margin: 0; border-radius: 50%; }
+.tab-close { top: 50%; right: 4px; border-radius: 50%; }
 .tab-item.active .tab-close { opacity: .38; }
 .tab-close:hover { background: rgba(31, 35, 41, .09); }
 .tab-switcher-wrap {
@@ -865,7 +817,6 @@ ne-card[data-card-name="codeblock"] .ne-card-resizer-mask {
   height: 28px;
   padding: 0;
   border: 1px solid transparent;
-  border-radius: var(--radius-md);
   color: #5f6368;
   background: rgba(255, 255, 255, .48);
   -webkit-app-region: no-drag;
@@ -1093,7 +1044,6 @@ ne-card[data-card-name="codeblock"] .ne-card-resizer-mask {
   overflow: hidden;
   /* 左内边距收窄：给右侧勾选框预留固定槽位后，写作栏整体左移一点，卡片位置基本不变 */
   padding: calc(var(--topbar-height) + 14px) clamp(18px, 2.4vw, 32px) 0 14px;
-  background: var(--lake-shell);
 }
 
 /* 头部与两栏同栅格：右侧工具区起点 = 卡片列起点，多选全选框因此与卡片勾选框同列（用户 260915） */
@@ -1221,7 +1171,7 @@ ne-card[data-card-name="codeblock"] .ne-card-resizer-mask {
   /* .app-shell 背景单一来源见 b3/layout.css（原此处 180deg 底色被其覆盖，已删） */
 
   /* 去分隔线：rail / sidebar / 顶栏 / 状态栏全部靠颜色过渡 */
-  .activity-rail { border-right: 0; background: var(--lake-shell); }
+  .activity-rail { border-right: 0; }
 
   /* C：悬停微卡片（白底 + 轻阴影，仅 transform/box-shadow，不动布局） */
   
@@ -1254,7 +1204,6 @@ ne-card[data-card-name="codeblock"] .ne-card-resizer-mask {
 @media (min-width: 761px) {
   /* 常驻 rail 保持更深的底色，固定目录作为浅色工作面板。 */
   .activity-rail {
-    background: var(--lake-shell);
   }
   .sidebar.sidebar-docked {
     background: #fff;
@@ -1305,12 +1254,12 @@ ne-card[data-card-name="codeblock"] .ne-card-resizer-mask {
 
 /* 同步/设置面板：去绿、去旧边框，融入 shell */
 
-.form-grid input:focus { border-color: rgba(59, 91, 219, .5); box-shadow: 0 0 0 3px rgba(59, 91, 219, .13); outline: 0; }
+
 .checkbox input { accent-color: var(--shell-accent-strong, #2f47b8); }
 
 .connection-message.ok { color: var(--lake-sync-success); background: var(--lake-success-soft); }
 
-.sync-button:hover { background: #f7f7fb; }
+
 
 /* 小记工作台：与主界面同族的中性渐变 */
 @media (min-width: 761px) {
@@ -1326,7 +1275,7 @@ ne-card[data-card-name="codeblock"] .ne-card-resizer-mask {
   box-shadow: var(--shell-card-shadow, 0 1px 2px rgba(40, 42, 66, .06), 0 10px 30px rgba(40, 42, 66, .08));
 }
 
-.quick-note-image-button:hover { background: color-mix(in srgb, var(--lake-accent) 18%, transparent); }
+
 .quick-note-card-actions button:hover { color: color-mix(in srgb, var(--lake-accent) 82%, var(--b3-theme-on-background)); background: color-mix(in srgb, var(--lake-accent) 10%, transparent); }
 .quick-notes-toast { background: var(--b3-theme-surface); }
 .quick-note-notebook-list { margin: 0 -20px; padding: 4px 0; }
@@ -1465,7 +1414,7 @@ ne-card[data-card-name="codeblock"] .ne-card-resizer-mask {
 .history-panel-backdrop { position: fixed; inset: 0; z-index: 800; background: var(--b3-mask-background, rgba(31, 35, 41, .18)); display: flex; justify-content: center; align-items: flex-start; padding-top: 12vh; }
 .history-panel { width: 620px; max-width: calc(100vw - 48px); max-height: 70vh; display: flex; flex-direction: column; background: var(--b3-theme-surface); border: 1px solid var(--b3-theme-surface-lighter); border-radius: var(--b3-border-radius-b); box-shadow: var(--b3-dialog-shadow); overflow: hidden; }
 .history-panel header { display: flex; align-items: center; justify-content: space-between; padding: 14px 16px; border-bottom: 1px solid var(--b3-theme-surface-lighter); }
-.history-create:hover { background: color-mix(in srgb, var(--b3-theme-primary) 12%, transparent); }
+
 .history-hint { margin: 0; padding: 8px 16px 10px; font-size: 12px; color: var(--b3-theme-on-surface-light); border-bottom: 1px solid var(--b3-theme-surface-lighter); background: color-mix(in srgb, var(--b3-theme-surface) 96%, transparent); }
 .history-error { margin: 10px 16px 0; padding: 8px 10px; border-radius: var(--radius-md); font-size: 12px; color: var(--lake-error); background: rgba(178, 94, 60, .08); }
 .history-list { flex: 1 1 auto; overflow-y: auto; padding: 8px; min-height: 120px; }
@@ -1494,7 +1443,7 @@ ne-card[data-card-name="codeblock"] .ne-card-resizer-mask {
 /* ===== v2 UI 收紧：区域间距 / 细滚动条 / 顶栏融合 / 小记顶栏融合 ===== */
 @media (min-width: 761px) {
   /* 相邻区域贴边，仅外侧圆角，缩短视觉间距 */
-  .workspace { border-radius: 10px 0 0 10px; border-right: 0; }
+  .workspace { border-radius: 10px 0 0 10px; }
   .outline-sidebar__content { border-radius: 0 10px 10px 0; border-left: 0; }
 
   /* 顶栏背景已单源为融合/统一材质（b3/layout.css + --shell-unified-topbar），不再就地设横向渐变。
@@ -1529,9 +1478,6 @@ ne-card[data-card-name="codeblock"] .ne-card-resizer-mask {
   }
   /* .workspace / .document-pane / .multi-tab-editor 材质已搬到共用作用域 */
   .tab-bar {
-    background: var(--shell-unified-topbar);
-    border: 0;
-    box-shadow: inset 0 -1px 0 rgba(31, 35, 41, .035);
   }
   /* 大纲材质与它的搭档（面板白卡）已搬到共用作用域（见上方「大纲栏的壳层材质」） */
   /* .statusbar 材质已搬到共用作用域 */
@@ -1693,8 +1639,6 @@ ne-card[data-card-name="codeblock"] .ne-card-resizer-mask {
 
 @media (min-width: 761px) {
   .tab-bar {
-    background: transparent;
-    border-bottom-color: transparent;
     box-shadow: none !important;
   }
 
@@ -1706,7 +1650,6 @@ ne-card[data-card-name="codeblock"] .ne-card-resizer-mask {
   .outline-sidebar__content,
   .outline-sidebar--docked .outline-sidebar__content,
   .outline-sidebar--collapsed .outline-sidebar__content {
-    background: transparent;
   }
 
   .activity-rail,
@@ -1976,7 +1919,6 @@ ne-card[data-card-name="file"] .ne-card-file {
   /* 悬浮抽屉在窄窗不要宽过窗口本身（右侧始终留一点正文可见）。 */
   .sidebar.sidebar-floating,
   .sidebar.sidebar-collapsed {
-    width: min(var(--sidebar-width, 265px), calc(100vw - var(--activity-rail-width, 38px) - 32px));
   }
   /* 面板宽度与内部导航**不再在这里改**：
      原先把四个面板一刀切成 `calc(100vw - 16px) !important`，跨断点时小记/搜索面板宽度突变

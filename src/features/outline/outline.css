@@ -10,7 +10,6 @@
 
 /* app-shell 网格：左 activity rail | 左目录 | 主区 | 右大纲（固定时 = 面板 + activity rail） */
 .app-shell {
-  --outline-sidebar-width: 280px;
   /* 右侧常驻 rail 与左侧 --activity-rail-width 一致。 */
   --outline-collapsed-width: var(--activity-rail-width, 34px);
 }

@@ -32,7 +32,6 @@
 
 .document-pane .lake-editor-mount {
   background: var(--lake-canvas) !important;
-  color: var(--lake-text);
 }
 
 .statusbar,

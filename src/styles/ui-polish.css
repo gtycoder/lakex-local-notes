@@ -14,8 +14,6 @@
   width: 18px !important;
   height: 18px !important;
   margin-left: 2px !important;
-  transform: none !important;
-  opacity: 0;
 }
 .tab-item:hover .tab-close,
 .tab-item .tab-close:focus-visible { opacity: .58; }
@@ -47,7 +45,6 @@
   justify-content: flex-end;
   gap: 1px;
   height: 100%;
-  padding: 0;
   opacity: 0;
   transition: opacity var(--lake-motion-fast) var(--lake-ease-standard);
 }
@@ -182,7 +179,6 @@
 }
 .document-pane .lake-editor-mount .ne-engine ne-text,
 .document-pane .lake-editor-mount .ne-viewer-body ne-text {
-  color: inherit !important;
 }
 .document-pane .lake-editor-mount .ne-engine h1,
 .document-pane .lake-editor-mount .ne-engine h2,
@@ -282,21 +278,7 @@
   pointer-events: none;
 }
 /* 拖拽浮层：克隆源行跟随指针。必须盖过 .tree-row 的 position/transition。 */
-[data-drag-ghost] {
-  position: fixed !important;
-  left: 0;
-  top: 0;
-  margin: 0;
-  pointer-events: none;
-  z-index: 9999;
-  border-radius: 8px;
-  opacity: .9;
-  box-shadow: 0 10px 28px color-mix(in srgb, var(--lake-text) 26%, transparent);
-  transition: none !important;
-  animation: none !important;
-  will-change: transform;
-  overflow: hidden;
-}
+
 .tree-row.drop-line-before::before { top: -1px; }
 .tree-row.drop-line-after::after { bottom: -1px; }
 .tree-row.drop-parent {
@@ -329,7 +311,6 @@
 .icon-button,
 .note-row,
 .list-heading .icon-button {
-  border-radius: var(--lake-radius-sm) !important;
 }
 
 /* 页签 active：白卡 + 顶部主色指示线已经足够标识当前页（b3/layout.css 拥有底与指示线）；

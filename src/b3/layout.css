@@ -15,13 +15,10 @@
   right: 0;
   left: 0;
   height: var(--topbar-height);
-  min-height: 0;
-  width: auto;
   background: transparent;
   border-bottom: 0 !important;
   z-index: 400;
   box-shadow: none;
-  backdrop-filter: none;
   -webkit-backdrop-filter: none !important;
 }
 /* 顶栏左侧元素：工作空间（下拉）/云同步，不参与拖拽 */
@@ -169,7 +166,6 @@
   /* 壳层：单色（用户 260915 决策：顶部那点渐变肉眼看不出来，不值得为它留一层"互相压"的规则）。
    * 取原渐变落定后的主体色 --b3-body-background；顶栏/左右轨透明共享此背景。 */
   .app-shell {
-    background: var(--b3-body-background);
   }
 
   /* .activity-rail / .tab-item* / .sidebar.sidebar-docked / 卡片圆角 / .statusbar
@@ -391,8 +387,6 @@
     height: calc(100% - var(--topbar-height) - 8px);
   }
   .sidebar .note-list {
-    flex: 1 1 0%;
-    min-height: 0;
     max-height: 100%;
     overflow-x: hidden !important;
     overflow-y: auto !important;

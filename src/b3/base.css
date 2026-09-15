@@ -22,15 +22,10 @@ body {
 
 /* 应用骨架：侧栏/文档区/状态栏/活动轨 */
 .app-shell {
-  background: var(--b3-body-background);
 }
 .sidebar {
-  background: var(--b3-theme-surface);
-  border-right-color: var(--b3-border-color);
 }
 .document-pane {
-  background: var(--b3-theme-background);
-  color: var(--b3-theme-on-background);
 }
 .statusbar {
   background: var(--b3-theme-surface);
@@ -39,7 +34,6 @@ body {
 }
 .activity-rail {
   background: var(--b3-theme-surface);
-  border-right-color: var(--b3-border-color);
 }
 
 /* 壳层材质：覆盖 styles.css 的「统一材质 !important」（2026-08-13 引入），
@@ -50,10 +44,8 @@ body {
   .sidebar,
   .sidebar.sidebar-docked,
   .sidebar.sidebar-floating {
-    background: var(--b3-body-background);
   }
   .tab-bar {
-    background: var(--b3-theme-surface);
     border-bottom: 1px solid var(--b3-border-color);
   }
   .statusbar {
@@ -69,8 +61,3 @@ body {
 }
 
 /* 焦点/选中主色统一走 b3 primary */
-.search-box:focus-within,
-.current-note-input:focus {
-  border-color: var(--b3-theme-primary) !important;
-  box-shadow: 0 0 0 2px var(--b3-theme-primary-lightest) !important;
-}
