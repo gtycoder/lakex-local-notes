@@ -1345,13 +1345,24 @@ const m = await page.send("CSS.getMatchedStylesForNode", { nodeId: q.nodeId });
 - 用法：`npx vitest run src/styles/cssLayers.test.ts`（全量 `npm test` 也会跑）。
 
 **仍保留、且**不建议**自动清理的（都已核对过原因）**
-- `background` 简写类（19 条候选）：工具无法可靠判定（见上第 3 点）。
+- `background` 简写类（**19 条候选已用"真改文件 + 18 屏批次"实测**）：删掉后**每一屏都变**
+  （浅色 Δ5 / 深色 Δ88 —— 轨/顶栏底色回落到 UA 默认）⇒ 确认**承重**，保留。
+  工具（页内实验 / CDP 复核）都判定不了它们，只有批次像素能判，所以这类只能人工 + 像素。
 - 伪元素里"未渲染"的（`content: none`）：无视觉影响但同样无法用 CDP 读值复核。
 - `.activity-button { background: transparent }`、`button, input { font: inherit }`、`* { box-sizing: border-box }`、
   `:root { color }` / `{ font-optical-sizing }`、`body { margin: 0 }`、`.activity-button { color }`：
   都被实测证明"删了就变样"（前几条还会静默回落到 UA 默认或改变字形栅格化），属**承重声明**。
 - 非壳层的"深层重复"（编辑器正文/小记卡片等）仍留 530 条候选清单（`/tmp/lkcdp/plan-full-held.json`），
   要动需继续扩状态矩阵（多标签、多选、删除态、长标题 416px…）并按同样流程（CDP 复核 + 18 屏批次 + 二分）。
+
+**下一轮从这里接着做（工具与口径本轮已备齐）**
+1. 扩状态矩阵（现 36 个）：**多标签**（注意 `nav.rail(0)` 在资料库视图里是"切换侧栏"、开不出新标签，
+   得走文档自身的多开路径或双击树行）、大纲缩放中（`outline-resizing`）、编辑器内部态（代码块/表格/
+   文件卡的 hover 与激活）、粘贴与选区态（上一轮用 `inject.mjs` 注入等价 DOM 的思路）。
+2. 流程：`duprun2.mjs`（全仓样式）跑矩阵 → `dupagg5.mjs` 出候选 → `verify-cdp.mjs` 复核 →
+   按文件分批 `apply-plan.mjs` → `shotset.mjs` 18 屏批次对照 → 不合就 `bisect2.mjs`
+   （`BISECT_SCREEN` 指定 oracle 屏；**单屏有抖动，最终判定以整批为准**）。
+3. 每清一批就把 `src/styles/cssLayers.test.ts` 的基线**调小**，围栏随即收紧一格。
 
 ### 2.41 壳层"多层覆盖"审计与冗余清理（260915，用户："重新审计类似问题，清理冗余，别再加补丁"）
 > 用户原话：*"重新审计一下类似问题……清理一下冗余的，这种浪费性能而且无用。同时整理优化一下代码。"*
