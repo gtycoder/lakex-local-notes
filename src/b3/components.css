@@ -18,7 +18,7 @@
   background: var(--b3-mask-background);
 }
 .floating-dialog {
-  border-radius: var(--b3-border-radius-b) !important;
+  border-radius: var(--b3-border-radius-b);
 }
 
 /* ── 菜单（思源 b3-menu）── */
@@ -32,7 +32,7 @@
   border-radius: var(--b3-border-radius-b);
   box-shadow: var(--b3-dialog-shadow);
   padding: 8px 0;
-  backdrop-filter: none !important;
+  backdrop-filter: none;
   -webkit-backdrop-filter: none !important;
 }
 .context-menu > button,
@@ -108,8 +108,8 @@
 .search-panel-backdrop,
 .trash-panel-backdrop,
 .history-panel-backdrop {
-  background: var(--b3-mask-background) !important;
-  backdrop-filter: none !important;
+  background: var(--b3-mask-background);
+  backdrop-filter: none;
   -webkit-backdrop-filter: none !important;
 }
 
@@ -129,7 +129,7 @@
 }
 .settings-header,
 .settings-panel-large .settings-header {
-  background: var(--b3-theme-surface) !important;
+  background: var(--b3-theme-surface);
   backdrop-filter: none;
   -webkit-backdrop-filter: none !important;
 }
@@ -179,7 +179,7 @@
 
 .tree-row.type-notebook,
 .tree-row.type-notebook .note-row-copy strong {
-  color: var(--b3-theme-on-surface) !important;
+  color: var(--b3-theme-on-surface);
 }
 
 /* 同步进度（思源主色） */
@@ -197,16 +197,16 @@
 
 /* ── 标签页（思源：灰栏 + 白底激活 + 顶部主色指示线）── */
 .tab-bar {
-  background: var(--b3-theme-surface) !important;
-  border-bottom-color: var(--b3-border-color) !important;
+  background: var(--b3-theme-surface);
+  border-bottom-color: var(--b3-border-color);
 }
 .tab-item:hover {
   background-color: var(--b3-list-hover) !important;
 }
 .tab-item.active {
-  background: var(--lake-raised) !important;
-  color: var(--lake-text) !important;
-  box-shadow: inset 0 2px 0 var(--b3-theme-primary) !important;
+  background: var(--lake-raised);
+  color: var(--lake-text);
+  box-shadow: inset 0 2px 0 var(--b3-theme-primary);
 }
 .tab-item.deleted,
 .tab-item.deleted.active {
@@ -234,7 +234,7 @@
 /* ── 精度修正：树行圆角对齐思源 b3-list-item（--b3-border-radius=6px，原 8px）── */
 .tree-row,
 .note-row {
-  border-radius: var(--b3-border-radius) !important;
+  border-radius: var(--b3-border-radius);
 }
 
 /* ── 同步状态小悬浮窗（思源观感：小卡片 + 主色进度条 + 自动消失）── */

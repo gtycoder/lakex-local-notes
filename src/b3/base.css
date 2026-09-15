@@ -50,15 +50,15 @@ body {
   .sidebar,
   .sidebar.sidebar-docked,
   .sidebar.sidebar-floating {
-    background: var(--b3-body-background) !important;
+    background: var(--b3-body-background);
   }
   .tab-bar {
-    background: var(--b3-theme-surface) !important;
-    border-bottom: 1px solid var(--b3-border-color) !important;
+    background: var(--b3-theme-surface);
+    border-bottom: 1px solid var(--b3-border-color);
   }
   .statusbar {
-    background: var(--b3-theme-surface) !important;
-    border-top: 1px solid var(--b3-border-color) !important;
+    background: var(--b3-theme-surface);
+    border-top: 1px solid var(--b3-border-color);
   }
 }
 
