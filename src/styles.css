@@ -1921,23 +1921,45 @@ ne-card[data-card-name="file"] .ne-card-file {
      否则会浮在正文上方压住标题行（用户 260915 截图）。 */
   .tab-bar { position: static; }
   .topbar { min-height: var(--topbar-height, 38px); }
-  /* 顶栏适配（用户要求）：第一行放工作空间下拉 / 同步 / 更多（允许压缩省略），
-     第二行整条给标签胶囊并允许横向滚动——窄窗下胶囊不再压住工作空间名称。 */
+  /* 顶栏：**保持一行横向排布**（用户 260915 明确否掉了折行方案）。
+     窄窗里靠"工作空间名可压缩省略 + 标签条自己横向滚动"来避免挤压，而不是把标签挤到第二行。
+     macOS 左内边距 44px 让开红绿灯（灯带约 x 12–80 / y 12–40）。 */
   .tab-bar {
-    flex-wrap: wrap;
-    row-gap: 2px;
-    padding: 2px 6px 4px;
-    height: auto;
-    min-height: var(--topbar-height, 38px);
-    align-content: flex-start;
+    flex-wrap: nowrap;
+    height: var(--topbar-height, 38px);
+    min-height: 0;
+    align-content: center;
+    padding: 0 6px 0 44px;
   }
-  /* macOS：顶栏第一行要让开红绿灯（灯带约 x 12–80 / y 12–40），否则工作空间名下压到灯上 */
-  .platform-mac .tab-bar { padding-left: 44px; }
   .tab-bar > * { min-width: 0; }
   .tab-bar > :first-child { flex: 0 1 auto; min-width: 0; overflow: hidden; }
-  .tab-items,
-  .tab-bar .tab-switcher-wrap { flex: 0 1 auto; }
-  .tab-items { flex-basis: 100%; overflow-x: auto; overflow-y: hidden; }
+  /* 标签条压在 38px 的顶栏里：胶囊高度写死、居中，避免下溢压住文档标题行 */
+  .tab-bar { align-items: center; overflow: hidden; }
+  .tab-items { flex: 1 1 auto; min-width: 0; height: var(--topbar-height, 38px); align-items: center; flex-wrap: nowrap; overflow-x: auto; overflow-y: hidden; }
+  .tab-item { height: 28px; min-height: 0; margin: 0; flex: 0 0 auto; }
+  /* 左轨与左轨按钮：**照抄宽窗那一套**（宽窗写在 styles.css 的 @media (min-width: 761px) 里，
+     窄窗否则会掉回基础样式 → 出现边框、错位，和宽窗长得不一样）。 */
+  .activity-rail {
+    margin: 0;
+    padding: 0 3px 6px;
+    padding-top: calc(var(--topbar-height, 38px) + 8px);
+    min-width: var(--activity-rail-width, 38px);
+    border-right: 1px solid var(--shell-separator);
+    border-left: 0;
+    background: var(--lake-shell);
+  }
+  .activity-button {
+    display: grid;
+    place-items: center;
+    width: 28px;
+    height: 28px;
+    margin: 2px 0;
+    padding: 0;
+    border: 0;
+    border-radius: 6px;
+    color: var(--lake-text-secondary);
+    background: transparent;
+  }
   .sidebar.is-collapsed:hover { width: min(260px, calc(100vw - var(--activity-rail-width, 38px))); }
   /* 右侧大纲在窄窗让位给正文（它的开关仍在顶栏，宽窗照旧） */
   .outline-sidebar { display: none; }
