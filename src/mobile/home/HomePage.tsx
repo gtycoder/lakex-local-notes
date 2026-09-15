@@ -193,7 +193,6 @@ export function HomePage(props: HomePageProps) {
                   <button key={r.id} className="doc-card" onClick={() => onOpenNote(r.id)} aria-label={r.title || "文档"}>
                     <span className="doc-card__paper" aria-hidden="true">
                       <span className="doc-card__lines" />
-                      <span className="doc-card__clip"><Paperclip size={10} /></span>
                     </span>
                     <span className="doc-card__name">{r.title || "无标题"}</span>
                     <span className="doc-card__date">{fmtRelative(r.updatedAt)}</span>
