@@ -100,7 +100,11 @@
   /* Most of the 38px rail is a trigger; only the editor-side safety band is
      excluded so the scrollbar remains directly operable. */
   right: 0;
-  width: var(--lake-outline-trigger-width, 25px);
+    /* 触发区宽度只有一个来源：`desktopInteraction` 的 OUTLINE_HOVER_TRIGGER_WIDTH
+       （由 shellStyle 注入 --outline-hover-trigger-width，并有单测卡着 24~25）。
+       原先这里读的是 `--lake-outline-trigger-width`（layout-contract 里另写的一份 25px），
+       于是那个"有单测的常量"其实从没进过 CSS。 */
+    width: var(--outline-hover-trigger-width, 25px);
 }
 .outline-sidebar__activity-button {
   display: grid;

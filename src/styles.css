@@ -10,19 +10,12 @@ html, body, #root { height: 100%; }
 body { margin: 0; min-width: 320px; min-height: 100%; overflow: hidden; }
 button, input { font: inherit; }
 button { cursor: pointer; }
-.app-shell { display: grid; grid-template-columns: 260px minmax(0, 1fr); height: 100%; background: #fff; transition: grid-template-columns var(--lake-motion-standard) var(--lake-ease-standard); }
+.app-shell { display: grid; height: 100%; transition: grid-template-columns var(--lake-motion-standard) var(--lake-ease-standard); }
 
-.sidebar { display: flex; position: relative; padding-top: var(--topbar-height); flex-direction: column; background: #f4f5f7; border-right: 1px solid var(--lake-border); z-index: 10; transition: width var(--lake-motion-standard) var(--lake-ease-standard), box-shadow var(--lake-motion-standard) var(--lake-ease-standard); }
-.sidebar.is-collapsed { width: 44px; overflow: hidden; border-right-color: transparent; }
-.sidebar.is-collapsed:hover { width: 260px; z-index: 30; box-shadow: 10px 0 24px #1f29331f; }
-.sidebar.is-collapsed:not(:hover) .dock-filter-row,
-.sidebar.is-collapsed:not(:hover) .list-heading,
-.sidebar.is-collapsed:not(:hover) .inline-create,
-.sidebar.is-collapsed:not(:hover) .note-list,
-.sidebar.is-collapsed:not(:hover) .settings-link { visibility: hidden; opacity: 0; }
-
-/* 收起态：折叠按钮常驻可见，hover 展开其余内容 */
-.sidebar.is-collapsed .sidebar-collapse-toggle { margin: 6px 4px 6px 6px; }
+/* 侧栏：只留"结构"（flex 列）；配色/定位/内边距/栅格列都由共用作用域与 b3 层负责。
+ * （原 `grid-template-columns: 260px 1fr`、`background: #f4f5f7`、`border-right`、
+ *   `padding-top`、`z-index` 等早已被后面的规则整条盖住，实测计算值无变化后删除。） */
+.sidebar { display: flex; flex-direction: column; transition: width var(--lake-motion-standard) var(--lake-ease-standard), box-shadow var(--lake-motion-standard) var(--lake-ease-standard); }
 
 .create-menu-wrap { position: relative; }
 /* ＋ 快捷创建：与行内 ⋯ 同一套着重色（hover/展开时 accent） */
@@ -212,16 +205,8 @@ button { cursor: pointer; }
 .tab-bar {
   display: flex;
   align-items: center;
-  padding: 4px 8px 0;
-  padding-top: var(--topbar-height);
-  border-bottom: 1px solid var(--border-color, #e5e5e5);
-  background: var(--sidebar-bg, #fafafa);
-  overflow: hidden;
   flex-shrink: 0;
   -webkit-app-region: drag;
-  position: sticky;
-  top: 0;
-  z-index: 200;
 }
 .tab-bar .tab-item,
 .tab-bar .tab-switcher-wrap,

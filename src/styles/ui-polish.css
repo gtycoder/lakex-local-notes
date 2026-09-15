@@ -205,10 +205,9 @@
 }
 
 /* The sidebar owns the window drag strip only as a visual region. Its pseudo
-   overlay must never win hit-testing over the first row of controls. */
-@media (min-width: 761px) {
-  .sidebar::before { pointer-events: none !important; -webkit-app-region: no-drag; }
-}
+   overlay must never win hit-testing over the first row of controls.
+   （宽窄共用：窄窗抽屉同样是浮层，顶部那条 38px 拖拽带不能抢头部按钮的点击。） */
+.sidebar::before { pointer-events: none !important; -webkit-app-region: no-drag; }
 
 /* A docked library must settle to its full grid track immediately. Keeping the
    grid transition active while the panel is already docked can leave Chromium
