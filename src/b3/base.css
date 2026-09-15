@@ -19,10 +19,11 @@ body {
   font-family: var(--b3-font-family);
 }
 
-/* 应用骨架：侧栏/文档区/状态栏/活动轨 */
+/* 应用骨架：侧栏/文档区/状态栏/活动轨。
+ * `.statusbar` 与 `.document-statusbar` 是同一元素上的**别名类**（DesktopStatusBar.tsx:36 写在一处），
+ * 颜色单一来源是 styles/document-status.css 的 `.document-statusbar`（更晚）。 */
 .statusbar {
   border-top-color: var(--b3-border-color);
-  color: var(--b3-theme-on-surface);
 }
 
 /* 壳层材质：覆盖 styles.css 的「统一材质 !important」（2026-08-13 引入），

@@ -436,9 +436,11 @@ ne-card[data-card-name="codeblock"] .ne-card-resizer-mask {
   border-radius: 6px;
 }
 
-/* ===== 偏好设置面板 ===== */
-.settings-panel { max-width: calc(100vw - 32px); max-height: 80vh; overflow: auto; }
-.settings-header { display: flex; align-items: center; gap: 8px; border-bottom: 1px solid var(--b3-theme-surface-lighter); color: var(--b3-theme-on-background); font-size: 14px; font-weight: 600; }
+/* ===== 偏好设置面板 =====
+ * `.settings-panel` / `.settings-panel-large` / `.floating-dialog` 是**同一元素上的别名类**
+ * （SettingsPanel.tsx:467 三个类写在一处），面板几何/材质/配色的单一来源是后段的 `.floating-dialog*`
+ * 与 styles/shell.css；这里只留排版类声明（260916 删掉 width/max-width/max-height/overflow/position/color 等重复项）。 */
+.settings-header { display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 600; }
 
 /* ===== Apple-style management shell (Lake editor internals intentionally untouched) ===== */
 :root {
@@ -919,7 +921,6 @@ ne-card[data-card-name="codeblock"] .ne-card-resizer-mask {
   border-color: rgba(31, 35, 41, .12);
 }
 .settings-header { background: rgba(250, 250, 251, .90); -webkit-backdrop-filter: blur(18px); }
-.settings-panel { width: 388px; }
 .settings-header { padding: 0 16px; border-radius: 14px 14px 0 0; }
 
 @media (prefers-reduced-motion: reduce) {
@@ -1283,15 +1284,15 @@ ne-card[data-card-name="codeblock"] .ne-card-resizer-mask {
 
 .history-preview-text { width: 100%; margin: 0; font-size: 12.5px; line-height: 1.7; color: var(--b3-theme-on-background); white-space: pre-wrap; word-break: break-word; font-family: inherit; }
 
-/* 设置弹窗 v2：大、不透明、左导航右内容、可拖动调节 */
-.settings-panel-large { display: flex; flex-direction: column; overflow: hidden; border-radius: var(--b3-border-radius-b); }
+/* 设置弹窗 v2：大、不透明、左导航右内容、可拖动调节。
+ * display / flex-direction / overflow / border-radius / width / max-* 的单一来源是下面那条 `.floating-dialog`
+ * （同一元素 + 更晚），这里只留设置面板自己的布局子件。 */
 .settings-layout { display: flex; flex: 1; }
 .settings-nav-item { display: flex; gap: 8px; border: 0; border-radius: var(--b3-border-radius); background: transparent; }
 .settings-nav-item:hover { background: var(--b3-list-hover); }
 .settings-nav-item.active { box-shadow: 0 1px 4px var(--b3-dock-shadow-color, rgba(31, 35, 41, .12)); }
 
 .settings-resize::after { content: ""; position: absolute; right: 3px; bottom: 3px; width: 8px; height: 8px; border-right: 2px solid var(--b3-theme-on-surface-lighter); border-bottom: 2px solid var(--b3-theme-on-surface-lighter); }
-.settings-panel { position: relative; }
 
 /* 历史弹窗 v2：放大 + 左目录右预览 */
 .history-panel { height: min(640px, 84vh); }

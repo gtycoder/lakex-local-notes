@@ -30,19 +30,19 @@ const FILES = [
 
 /** 基线（260916 第三/四轮清理后按本文件的 scan() 实测）。只允许变小。 */
 const BASELINE: Record<string, { decls: number; dupGroups: number }> = {
-  "styles.css": { decls: 1789, dupGroups: 33 },
+  "styles.css": { decls: 1778, dupGroups: 33 },
   "b3/animations.css": { decls: 5, dupGroups: 0 },
-  "b3/base.css": { decls: 17, dupGroups: 1 },
+  "b3/base.css": { decls: 16, dupGroups: 1 },
   "b3/components.css": { decls: 151, dupGroups: 0 },
   "b3/dark.css": { decls: 56, dupGroups: 0 },
-  "b3/layout.css": { decls: 201, dupGroups: 1 },
+  "b3/layout.css": { decls: 197, dupGroups: 1 },
   "b3/theme-daylight.css": { decls: 163, dupGroups: 0 },
   "b3/theme-midnight.css": { decls: 148, dupGroups: 0 },
   "features/attachment/attachment-preview.css": { decls: 78, dupGroups: 0 },
   "features/editor/image-lightbox.css": { decls: 57, dupGroups: 0 },
   "features/outline/outline.css": { decls: 257, dupGroups: 0 },
   "styles/dialog.css": { decls: 227, dupGroups: 8 },
-  "styles/document-status.css": { decls: 110, dupGroups: 2 },
+  "styles/document-status.css": { decls: 107, dupGroups: 2 },
   "styles/editor-bridge.css": { decls: 12, dupGroups: 0 },
   "styles/layout-contract.css": { decls: 5, dupGroups: 0 },
   "styles/motion-contract.css": { decls: 3, dupGroups: 0 },

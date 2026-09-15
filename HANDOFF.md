@@ -1161,6 +1161,9 @@ c071064（全仓 19 个样式文件 × 36 状态 + CDP 复核；删 85 条冗余
 （本条提交：删 69 条"桌面端被后加载文件整体盖住"的声明 / 18 条规则整条删空（5 个文件）+ 1 个被清空的
 `@media (prefers-reduced-motion)` 空块；**确立跨文件去重的安全边界：只删移动端入口不加载的文件**，
 因为两套入口的样式集合与顺序不同；围栏再收紧并新增"空 @media 块"检查）
+### 最后 19 条同选择器重复 + 别名类/修饰符层去重（260916，见 §2.45 / §2.46）
+a46cf8b（深色令牌 15 + 运动令牌 4；重复组 20→1）→ 本轮（别名类/修饰符层：删 19 条；状态矩阵 14→27；
+抓出"A/B 应用条数≠删对节点""采样推不出包含关系""手改注释毁 CSS"三个坑）
 ### 2.39 窄窗"彻底统一"施工方案（260915 用户拍板：选 B，不做东拼西凑）
 > 目标：**壳层规则只留一份**——把宽窗那层从 `@media (min-width: 761px)` 里成对搬到共用作用域，
 > 窄窗不再"抄一遍"。做完后拖动窗口只应出现"列宽线性压缩"，不允许任何位置/边框/显隐突变。
@@ -1319,6 +1322,55 @@ const m = await page.send("CSS.getMatchedStylesForNode", { nodeId: q.nodeId });
   毫无变化、590 抽屉收起 —— 隔离由 `narrowOverlay` 单独把住，**改这里时别把宽窗拉进来**。
 - **内核标题小地图**：用户明确"不用动（增强大纲与原生大纲不会同时出现）"。窄窗大纲 rail 现在占列，
   本就不再压住正文右缘，这条关闭。
+
+### 2.46 第六轮：**别名类/修饰符**层的去重（19 条）+ 状态矩阵 14 → 27（260916）
+> §2.45 之后，"同容器 + 同选择器 + 同属性"的重复只剩 1 组（那是设计必需的跨构建分层）。
+> 这轮处理**不同选择器之间**的覆盖：同一元素上带两个类名（`.statusbar` / `.document-statusbar`、
+> `.settings-panel` / `.settings-panel-large` / `.floating-dialog`），或 BEM 修饰符必带基类
+> （`.note-info-cell--wide` ⊆ `.note-info-cell`）——此时 A 的元素集合 ⊆ B 的元素集合，
+> 只要 B 的声明更晚/更 important，A 的声明就是死的。
+
+**判据：包含关系必须来自代码，不能来自采样**
+- 先用跨状态截图采出"哪些选择器命中的元素集合互相包含"，再**逐个回代码核查渲染点字面量**：
+  凡出现类 A 的 className 是否都同时出现 B（`/tmp/lkcdp/alias-check.mjs`）。
+- 这一步救了一次大的：只采样 DOM 时，`.floating-dialog` 看着像 `.settings-panel` 的子集
+  （因为 14 状态矩阵里**没有渲染历史/回收站面板**），照它去删 `floating-dialog` 的声明会砸掉那两个面板；
+  代码核查显示 `HistoryPanel.tsx:229` / `TrashPanel.tsx:266` 都是 `floating-dialog` 而没有 `settings-panel` ⇒ 直接否决。
+
+**结果（删 19 条，全部在桌面独占文件里 ⇒ 移动端结构性不受影响）**
+- `styles.css` 11：`.settings-panel` / `.settings-panel-large` / `.settings-header` 的
+  width / max-width / max-height / overflow / position / display / flex-direction / border-radius / color / border-bottom
+  ——这三个类与 `.floating-dialog*` 是**同一元素上的别名类**（SettingsPanel.tsx:467 写在一处），
+  真来源是后段与 `b3/components.css`。
+- `b3/layout.css` 4：`.statusbar` 的 position / right / bottom / width（真来源是 `styles/document-status.css` 的
+  `.document-statusbar`，更晚且 `!important`）。
+- `styles/document-status.css` 3：`.document-statusbar` 的 border / background / box-shadow
+  （真来源是 `styles.css:583-584` 与 `b3/layout.css:149` 那几条带 `!important` 的 `.statusbar`）。
+  这一处值得记住：**状态栏胶囊自己的描边/底色/阴影其实一直是死的**——要改外观得改那两处。
+- `b3/base.css` 1：`.statusbar` 的 color。
+  四处都补了注释写明"哪个类才是单一来源"。
+
+**状态矩阵 14 → 27（这轮的第二个产出）**
+- 新增：设置「编辑器 / 文档与历史 / 回收站 / 资源 / 关于」五页、搜索空结果、聚焦新建输入、
+  小记卡片悬停、大纲打开、小记视图、560px 浅/深、深色设置页。
+- 新矩阵下本轮 A/B：**27 个状态 × ~1.0 万元素，噪声 0 / 差异 0**。
+
+**三个新坑（比结果更重要）**
+1. **运行时采样推不出元素集合包含**：矩阵里没渲染的面板会让"子集"结论完全反过来
+   （`.floating-dialog` 那次）。必须回到渲染点字面量核查，采样只能当线索。
+2. **A/B 报"应用 N 条"≠ 删对了节点**：v1 计划用"子选择器"当定位键，而注入器是按**整条规则的选择器文本**
+   定位的，于是它去别的同名规则里删了 19 条"碰巧匹配"的声明，注入文本里其实没删目标 ⇒ 假的 0 差异。
+   修法：计划必须带**整条规则的选择器文本 + 出现序号**；而且对列表规则（`.settings-panel, .confirm-dialog { }`）
+   要求**每个选择器**都被覆盖，否则整条声明不能删（这轮因此退掉 7 条）。
+3. **手改注释会静默毁掉 CSS**：给 `b3/layout.css` 补注释时写成了 `* …` 行，而上一行已经用 `*/` 闭合了，
+   后面那行 `.statusbar { background: … !important }` 直接被当成游离文本吃掉 ⇒ 状态栏胶囊底色变了（像素差 0.3%）。
+   定位手段：**逐文件把 HEAD 文本注入回去对比计算值**（`/tmp/lkcdp/bisect-restore.mjs`）⇒ 一眼指到 layout.css。
+   教训：靠注释和声明交界处手改之后，提交前必须跑像素批次。
+
+**门禁**
+- 会话内 A/B：27 状态 0 差异；16 屏像素批次：15 屏 0 差异 + 设置屏已知抖动（23 通道 Δ≤7，与同源连跑基线一致）。
+- `tsc` 0 · vitest 971/16 · 桌面 + 移动 build 通过 · `git diff --check` 干净。
+- 围栏基线：`styles.css` 1789→1778、`b3/base.css` 17→16、`b3/layout.css` 201→197、`document-status.css` 110→107。
 
 ### 2.45 第五轮：清掉最后的同选择器重复（深色令牌 / 运动令牌），重复组 20 → 1（260916）
 > 承接 §2.43/§2.44：全仓"同容器 + 同选择器 + 同属性"的重复组已经 401（§2.41 前）→ 336（§2.42）→ 20。

@@ -140,12 +140,10 @@
 }
 
 /* 状态栏：思源全宽底部灰条——回到 workspace 两行网格的第 2 行（28px），
- * 取消原"右下浮动胶囊"（absolute;right:10px;bottom:6px），文档区在第 1 行自然收口 */
+ * 取消原"右下浮动胶囊"（absolute;right:10px;bottom:6px），文档区在第 1 行自然收口。
+ * 位置/尺寸（position/right/bottom/width）不在这里：`.statusbar` 与 `.document-statusbar` 是同一元素上的别名类，
+ * 真来源是 styles/document-status.css 的 `.document-statusbar`（更晚、带 !important）。 */
 .statusbar {
-  position: static;
-  right: auto;
-  bottom: auto;
-  width: auto;
   background: var(--b3-body-background) !important;
   border-top: 0;
 }

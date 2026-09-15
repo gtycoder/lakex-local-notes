@@ -1,4 +1,7 @@
 .workspace { position: relative; grid-template-rows: minmax(0, 1fr); }
+/* 本元素同时带 `.statusbar`（b3 骨架）与 `.document-statusbar`（本文件）两个**别名类**。
+ * border / background / box-shadow 的真来源是 styles.css:583-584 与 b3/layout.css 里那几条带 !important 的 `.statusbar` 规则，
+ * 在这里再写就是死声明（260916 已删）；要改状态栏外观请改那两处。 */
 .document-statusbar {
   grid-row: 1;
   grid-column: 1 / -1;
@@ -11,11 +14,8 @@
   height: 26px;
   min-height: 26px;
   padding: 0 9px;
-  border: 1px solid color-mix(in srgb, var(--lake-border) 80%, transparent);
   border-radius: var(--lake-shell-radius, 8px);
   color: var(--lake-text-tertiary);
-  background: color-mix(in srgb, var(--lake-panel) 92%, transparent);
-  box-shadow: var(--lake-shadow-soft);
   backdrop-filter: blur(10px) saturate(1.04);
   pointer-events: none;
   font-size: 11px; /* 10px 在 macOS 上已经低于可读下限（状态栏是可读信息，不是装饰） */
