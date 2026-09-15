@@ -1140,3 +1140,47 @@ adb shell pm clear com.lakenotes.mobile                      # 清 App 数据重
 
 ### 7. 本轮关键提交
 2fb2e0a fb90d6d 6f3797d 3d777fb 8b715c6 f74dad5 c6f5089 d3e4141 96f0230 ffdfb76 e69d4a0（0792ff7..e69d4a0）
+### 2.39 窄窗"彻底统一"施工方案（260915 用户拍板：选 B，不做东拼西凑）
+> 目标：**壳层规则只留一份**——把宽窗那层从 `@media (min-width: 761px)` 里成对搬到共用作用域，
+> 窄窗不再"抄一遍"。做完后拖动窗口只应出现"列宽线性压缩"，不允许任何位置/边框/显隐突变。
+
+**为什么必须成对（已踩过的坑）**
+- 把顶栏 `.tab-bar { position: fixed; left/right:0 }` 搬出来、却不同时搬"工作区让位"，
+  ⇒ 面包屑被顶栏压住（用户截图 15:29）。这两条**属于同一对**，必须同一次搬完。
+- 一次解开 20 块媒体查询（提交 `9399c1d`）⇒ 顶栏与面包屑叠字，**已 `c9882c1` 回滚**。
+
+**成对清单（搬一条必须搬它的搭档）**
+| 组 | A 侧（几何） | B 侧（让位/搭档） | 位置 |
+| --- | --- | --- | --- |
+| 1 顶栏 | `.tab-bar { position:fixed; top/left/right:0; height:var(--topbar-height); z-index:400; background:transparent; border-bottom:0 }`（`b3/layout.css` 第 9 块内） | 文档区顶部让位：`.document-pane { margin: calc(var(--topbar-height) + 4px) 0 0 }`（`styles.css` 约 1825 行，也在 min-width 块内） | 两文件 |
+| 2 左轨 | `.activity-rail { margin-top:0; padding-top: var(--topbar-height); background: transparent; border:0 }`（`b3/layout.css`） | `.activity-button { display:grid; place-items:center; width:28px; height:28px; margin:2px 0; border:0; border-radius:6px; color:var(--lake-text-secondary); background:transparent }`（`styles.css` 约 553 行，min-width 块内） | 两文件 |
+| 3 顶栏按钮 | `.toolbar__item { border:0; background:transparent }`、`.tab-switcher { border:1px solid transparent; background: rgba(255,255,255,.48); border-radius:8px }`（min-width 块内） | 无（自身成对） | styles.css |
+| 4 标签/关闭 | `.tab-item { height:28px; border:1px solid transparent; background: rgba(255,255,255,.42) }` + `.tab-close` 的显隐规则（min-width 块内） | 无 | styles.css |
+| 5 状态栏 | `.statusbar { position: static; background: var(--b3-body-background) }`（`b3/layout.css`） | 无 | layout.css |
+
+**施工顺序（每步都必须过两道门禁才提交）**
+1. 用 CDP `CSS.getMatchedStylesForNode` 把目标元素**在 4 种状态**下的命中规则全导出：
+   `{760, 900} × {sidebar 收起, 展开}`（脚本样例见下）。**先看清谁在赢，再动手。**
+2. 按"组"搬：把 A/B 两侧一起移出媒体查询（或一起改成共用作用域），**同时删掉窄窗块里对应的手抄副本**。
+3. 门禁 A（窄窗）：416/560/700/900 × 两状态截图 + 量 `bar box`、`document y`、`rail button y`，
+   要求：`bar box == [0,0,W]`、`document y == 42`、`rail button y` 与宽窗一致、无水平溢出、无重叠。
+4. 门禁 B（宽窗）：1315px 改动前后**像素 0 差异**（同样要"同源连跑对照"做噪声基线）。
+5. 任一门禁不过 ⇒ 该组整体回退，不提交。
+
+**诊断脚本样例（已可用）**
+```js
+await page.send("DOM.enable"); await page.send("CSS.enable");
+const doc = await page.send("DOM.getDocument", { depth: -1 });
+const q = await page.send("DOM.querySelector", { nodeId: doc.root.nodeId, selector: ".tab-bar" });
+const m = await page.send("CSS.getMatchedStylesForNode", { nodeId: q.nodeId });
+// m.matchedCSSRules[].rule.selectorList.text / .style.cssProperties[].{name,value,important}
+```
+用它查过：`.tab-switcher` 的"框"其实来自 `background: rgba(255,255,255,.48)`（不是 border）；
+`.tab-bar` 曾被窄窗块里一条 `position: static` 覆盖（已删）。
+
+**当前状态（`dbdd988` 之后）**
+- 已去掉 JS 的 900px 强制收起（那是"整片跳变"主因）；侧栏模式恒为用户选择。
+- 窄窗块里仍有手抄副本（`.tab-bar/.tabbar-leading/.activity-rail/.activity-button/.workspace`），
+  待本方案第 2 步删除。
+- 已知未解：760px 收起态下读到 `bar [38,4,718]`（应为 `[0,0,W]`），说明该状态下另有规则覆盖 fixed
+  ——用上面第 1 步的诊断先定位，再成对处理，**不要继续叠加 `!important`**。
