@@ -1996,12 +1996,10 @@ ne-card[data-card-name="file"] .ne-card-file {
   /* 左轨顶部留白（padding-top: --topbar-height）随组 2 一起进共用作用域，窄窗不再补副本。 */
   /* 侧栏横向裁剪（避免标题/缩进线拖出竖线）由共用作用域的
      `.sidebar.sidebar-docked, .sidebar.sidebar-floating { overflow: hidden }` 承担。 */
-  /* 面板：窄窗铺满可用宽度，内部导航收窄 */
-  .settings-panel-large,
-  .history-panel,
-  .trash-panel,
-  .search-command-panel { width: calc(100vw - 16px) !important; max-width: none; }
-  .settings-panel-large .settings-nav { flex-basis: 150px; }
+  /* 面板宽度与内部导航**不再在这里改**：
+     原先把四个面板一刀切成 `calc(100vw - 16px) !important`，跨断点时小记/搜索面板宽度突变
+     （实测 760→761 搜索面板 744 → 680，跳 64px），导航也从 150 跳回 208。
+     现在面板沿用各自 `min(定宽, 100vw - 边距)` 的共用规则，导航用 `clamp(150px,27%,208px)` 连续过渡。 */
 }
 
 /* 小记工作台在窄窗（≤560px）：左右两栏叠成单栏、头部工具收紧，避免右侧溢出 */

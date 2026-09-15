@@ -67,7 +67,9 @@
 .settings-panel-large .settings-layout { min-height: 0; }
 .settings-panel-large .settings-nav {
   display: flex;
-  flex: 0 0 208px;
+  /* 导航宽度连续可调（原先窄窗块把它一刀切成 150px ⇒ 跨断点时面板内容区横跳 58px）。
+     宽窗（面板 ≥770px）恒定 208px 与原值一致；窄窗随面板收窄、但保底 150px。 */
+  flex: 0 0 clamp(150px, 27%, 208px);
   flex-direction: column;
   gap: 2px;
   min-height: 0;
