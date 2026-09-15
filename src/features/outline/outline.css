@@ -29,22 +29,28 @@
     transition: none;
   }
 
-  /* 固定时整列 = 独立大纲面板 + 34px rail；收起时只保留 rail。 */
-  .outline-sidebar {
-    position: relative;
-    z-index: 250;
-    grid-column: 4;
-    grid-row: 1;
-    justify-self: stretch;
-    align-self: stretch;
-    width: 100%;
-    min-width: 0;
-    /* 与 workspace 的正文行完全同高：顶部避开标题栏，底部避开状态栏。 */
-    height: auto;
-    margin: var(--topbar-height) 0 0;
-    overflow: visible;
-    background: var(--shell-material);
-  }
+}
+
+/* 大纲栏本体：固定时整列 = 独立大纲面板 + 38px rail；收起时只保留 rail。
+ * 宽窄共用：`grid-column: -2 / -1` = "最后一列"——宽窗是 4 列（rail|目录|正文|大纲），
+ * 窄窗是 3 列（左轨|正文|大纲），同一句在两边都指向最右那一列。
+ * 窄窗之所以也**占这一列**（38px）而不是浮在正文上：悬浮 rail 必然压住正文右缘的
+ * 编辑器滚动条与面包屑右侧图标，且离开窗口右沿 13px（用户 260915 报的"边栏错位"）。
+ * 面板本身在窄窗仍是悬停浮层（见下方 floating 一族），不占正文。 */
+.outline-sidebar {
+  position: relative;
+  z-index: 250;
+  grid-column: -2 / -1;
+  grid-row: 1;
+  justify-self: stretch;
+  align-self: stretch;
+  width: 100%;
+  min-width: 0;
+  /* 与 workspace 的正文行完全同高：顶部避开标题栏，底部避开状态栏。 */
+  height: auto;
+  margin: var(--topbar-height) 0 0;
+  overflow: visible;
+  background: var(--shell-material);
 }
 
 /* ══ 大纲栏内部件（共用作用域；260915 窄窗彻底统一）══

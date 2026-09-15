@@ -1915,7 +1915,9 @@ ne-card[data-card-name="file"] .ne-card-file {
   .app-shell.sidebar-floating,
   .app-shell.sidebar-collapsed,
   .app-shell.quick-notes-active {
-    grid-template-columns: var(--activity-rail-width, 38px) minmax(148px, 1fr);
+    /* 第三列 = 右侧大纲（`--outline-grid-w` 由 shellStyle 注入：大纲不可用时为 0，
+       可用且收起时为 38px）。宽窄用同一个令牌，所以大纲宽度不会在断点处变。 */
+    grid-template-columns: var(--activity-rail-width, 38px) minmax(148px, 1fr) var(--outline-grid-w, 0px);
   }
   .workspace { grid-column: 2; }
   /* 材质语言与宽窗一致：**灰壳 + 白色圆角卡片**。关键：卡片必须画在文档区
@@ -1963,25 +1965,11 @@ ne-card[data-card-name="file"] .ne-card-file {
   /* 标签条（flex/横向滚动/垂直居中）与标签项几何已搬到共用作用域，窄窗不再手抄副本。 */
   /* 左轨几何与轨按钮已搬到共用作用域（组 2），窄窗不再手抄副本。 */
   /* （原先这里的 `.sidebar.is-collapsed:hover` 已删：`is-collapsed` 只用在 `.outline-item__fold` 上。） */
-  /* ══ 右侧大纲：窄窗同样"不占列、只悬浮"（用户 260915 定稿：与目录栏同一口径）══
-   * 原先这里是 `display:none`（窄窗直接没有大纲）。现在改成**右侧固定 rail**：
-   * 元素脱离栅格（fixed），内部仍是 rail + 悬停浮层（几何见 features/outline/outline.css，
-   * 那一族已搬进共用作用域）。停靠态由 `effectiveOutlineMode` 在窄窗降级为收起态。 */
-  .outline-sidebar {
-    display: block;
-    position: fixed;
-    top: var(--topbar-height, 38px);
-    /* 与宽窗同一意图：rail 与编辑器滚动条之间留出 clearance，正文滚动条照旧可点
-       （宽窗靠栅格列天然隔开，窄窗正文铺到窗口边，只能靠这条内缩保住滚动条）。 */
-    right: var(--outline-scrollbar-clearance, 13px);
-    bottom: 0;
-    left: auto;
-    z-index: 250;
-    width: var(--outline-collapsed-width, 38px);
-    min-width: var(--outline-collapsed-width, 38px);
-    margin: 0;
-    overflow: visible;
-  }
+  /* 右侧大纲：**宽窄同一套**（占最右那一列 38px + 悬停浮层，见 features/outline/outline.css）。
+     原先这里是 `display:none`（窄窗没有大纲），上一轮改成"脱离栅格的悬浮 rail"后
+     出现两个问题（用户 260915 截图）：rail 离开窗口右沿 13px 看着错位，且压住正文右缘的
+     编辑器滚动条与面包屑右侧图标。现在窄窗也占那一列——宽度由 `--outline-grid-w` 单一来源，
+     大纲不可用时该列就是 0，正文仍然是满宽。 */
   /* 顶栏：标题区允许压缩，控件不换行 */
   .current-note, .tab-item .tab-title { max-width: 34vw; }
   /* 左轨顶部留白（padding-top: --topbar-height）随组 2 一起进共用作用域，窄窗不再补副本。 */

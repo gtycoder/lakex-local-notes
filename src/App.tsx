@@ -354,7 +354,12 @@ export function App() {
       {/* keep-alive：Sidebar 常驻，小记模式由 .app-shell.quick-notes-active .sidebar 隐藏（避免切回时重建目录树、丢失展开状态） */}
       <Sidebar nodes={treeNodes} activeId={activeNoteId} search={search} mode={sidebarRenderMode} width={sidebarWidth} minWidth={SIDEBAR_MIN_WIDTH} maxWidth={SIDEBAR_MAX_WIDTH} onSearch={setSearch} onSelect={sidebarSelect} onCreate={sidebarCreate} onRename={sidebarRename} onMoveNode={sidebarMove} onRequestDelete={sidebarRequestDelete} onCopyMarkdown={copyMarkdownFromCache} onExportAs={exportAs} onCopyPaths={copyNotePaths} onSetIcon={sidebarSetIcon} onDuplicate={(node) => void duplicateNode(node)} onShowInfo={(node) => setInfoNote(node)} onOpenHistory={sidebarOpenHistory} onRevealNoteFile={(node) => { if (node.noteFileId) void native.revealNoteFile(node.noteFileId); }} revealNodeId={revealNodeId} onRevealConsumed={() => setRevealNodeId(null)} pendingRenameId={pendingRenameId} onPendingRenameConsumed={sidebarPendingRenameConsumed} onPreviewEnter={showSidebarPreview} onPreviewLeave={hideSidebarPreview} onResizeActiveChange={handleSidebarResizeActiveChange} onWidthChange={updateSidebarWidth} onWidthCommit={commitSidebarWidth} />
       <main className="workspace" onPointerDownCapture={(event) => {
-        if (sidebarMode === "floating" && (event.target as HTMLElement).closest(".document-pane, .empty-workspace")) setSidebarMode("collapsed");
+        const clickedDocument = (event.target as HTMLElement).closest(".document-pane, .empty-workspace");
+        // 点正文收起目录栏：宽窗沿用原语义（只有"悬停预览"那种临时浮动态会收）；
+        // 窄窗的停靠态本身就是悬浮抽屉（`sidebarRenderMode`），所以窄窗额外把停靠态也纳入——
+        // 用户 260915 定稿，且**仅窄窗生效**：宽窗停靠态点正文不会收起（隔离靠 narrowOverlay）。
+        const shouldCollapse = sidebarMode === "floating" || (narrowOverlay && sidebarMode === "docked");
+        if (clickedDocument && shouldCollapse) setSidebarMode("collapsed");
       }}>
         {error && <div className="error-banner"><span>{error}</span><button onClick={() => setError(null)}>关闭</button></div>}
         <div className={"workspace-view" + (desktopWorkspace === "quick-notes" ? " workspace-view--hidden" : "")}>
