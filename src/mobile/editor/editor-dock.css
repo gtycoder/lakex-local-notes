@@ -131,7 +131,7 @@
 
 .med-font-panel { display: flex; flex-direction: column; gap: 10px; }
 .med-f-row { display: flex; gap: 8px; }
-.med-f-align { gap: 0; }
+
 .med-f-row .med-f-btn { flex: 1; }
 .med-f-btn {
   border: 1px solid var(--b3-border-color);
@@ -169,8 +169,6 @@
 .med-doc-item:active { background: var(--b3-list-hover); }
 .med-doc-item.med-active { color: var(--b3-theme-primary); font-weight: 600; }
 .med-doc-item-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-
-
 
 /* 降低动效偏好：dock 全部关动画（与 mobile.css 的 reduced-motion 兜底同口径） */
 @media (prefers-reduced-motion: reduce) {

@@ -521,11 +521,17 @@
    397 条计划合并应用时 50158 个元素变化，剔掉 216 条后才归零。
 4. **像素级兜底**：改动前/后同流程截图，7 屏共 18.26M 颜色通道 **差异 0**。
 
-**结果（提交 `12d5861`）**：181 条改动落地 —— 整条规则删除 99 条、单条声明删除 67 条、
+**第一批结果（提交 `12d5861`）**：181 条改动落地 —— 整条规则删除 99 条、单条声明删除 67 条、
 去掉多余 `!important` 15 条；`styles.css` −293 行、`b3/components.css` −47 行、`b3/layout.css` −17 行。
 真实生效（effective）的声明一条没动；`@media (prefers-reduced-motion)` 内的声明零改动
 （`@media (min-width: 761px)` 内的 46 条在 1315×868 窗口下是匹配的，属实测有效范围）。
-门禁：`tsc` 0 · vitest 969 passed/16 skipped · 桌面 + 移动 `vite build` 通过。
+**第二批结果（提交 `91d27b3`）**：状态覆盖从 12 屏扩到 **19 屏**（新增 hover 树行 / focus 新建输入 /
+右键菜单 / 文档属性 / 搜索有结果 / 大纲 / 小记编辑态——`:hover`、`.context-menu`、`.note-info-*`
+这类选择器要真的匹配上才谈得上审计），深浅两主题各跑一遍 → 「去掉 `!important` 无变化」168 条 →
+落地 **104 条**（其余 63 条 fileIdx 对不上，主动跳过）。像素比对 11 屏（浅 7 + 深 4）× 18.26M 通道
+**差异 0**；静态复核本轮去掉的 295 处 `!important` 里 **0 处**落在非 `min-width` 媒体块内。
+`b3/layout.css` 84→44、`b3/components.css` 32→20、`b3/dark.css` 55→8、`b3/base.css` 8→3。
+门禁全程：`tsc` 0 · vitest 969 passed/16 skipped · 桌面 + 移动 `vite build` 通过。
 
 **工具（不在仓库里，重建即可）**：`/tmp/lkcdp/` 下 `css-audit3.mjs`（跑审计）+ `inpage3.mjs`（逐条实验）+
 `css-refine.mjs`（合并验证/剔重）+ `apply-plan.mjs`（落源码）+ `cssedit.mjs`（CSS 文本编辑器）。
@@ -534,12 +540,17 @@
 **关键守卫**：`v-rule-align.mjs` 会核对「Node 解析出的规则顺序」与「浏览器 CSSOM 顺序」是否一致
 （首次不一致就是 `@starting-style` 里的规则没被递归进来）；只有对齐了才能按下标改源码。
 
-**移动端（本轮只测量，未改）**：移动端加载的是**打包后的单个 bundle**（`assets/mobile-*.css`），
-没有 `data-vite-dev-id`，无法把声明映射回源码文件 ⇒ 要改先起 mobile 的 vite dev（每文件一个 style 标签）
-或按「选择器+声明文本」反查源码。本轮实测：移动端 `!important` 共 466 条（含 vendor siyuan 70 条），
-其中「去掉优先级无变化」的 9 条**全部落在 `@media (prefers-reduced-motion: reduce)` 里**（模拟器没开
-减少动态效果 ⇒ 该分支不生效 ⇒ 误判为冗余）。**所以审计器还要补一条：跳过当前未命中的 @media/@supports**，
-补上之后再跑移动端才安全。`mobile.css` 自身只有 19 处 `!important`，规模远小于桌面。
+**移动端（本轮已做，提交见下）**：移动端加载的是**打包后的单个 bundle**（`assets/mobile-*.css`），
+没有 `data-vite-dev-id` ⇒ 无法按文件归属做逐条实验，只能按「选择器是否存在」做静态+动态联合判定。
+- **静态 + 动态联合判定**：扫出「选择器里的类名在 `src/**/*.{ts,tsx}` 里一个都不出现」的规则 69 条，
+  再在模拟器上跨 5 屏（知识库/小记/文档/设置/搜索）实测 `querySelectorAll` 命中数 **全部为 0** → 删除。
+  落地：`mobile.css` −64 条、`editor-dock.css` −1、`dialog.css` −4（后两个是移动端也加载的共享文件）。
+- **移动端 `!important` 实测**：全 bundle 466 条（含 vendor siyuan 70 条），但「去掉优先级无变化」的
+  9 条**全部落在 `@media (prefers-reduced-motion: reduce)` 里**——模拟器没开减少动态效果，那个分支根本
+  不生效，属误判。**这就是给审计器补「跳过未命中的 @media/@supports」这条守卫的原因**（已补）。
+  `mobile.css` 自身只有 19 处 `!important`，量级远小于桌面，没有桌面那种多层互盖的病。
+- **移动端改动要装机才可见**：模拟器里跑的是上一次 `scripts/android-build.sh --sync --install` 的包，
+  CSS 删除属"选择器命中 0"的死代码，重新 build 即生效（本轮已过 `vite build -c vite.mobile.config.ts`）。
 
 ## 3. 真正的待办（已剔除全部完成项，按优先级）
 > **260904 后续评估（用户决策 + 本轮核实）**：原 §3.1 对象级 5xx 重试、§3.2 快照 gzip 异步化、§3.5 笔记本 `sort_order` 撞号 —— **已评估不做**（5xx 有"失败不 markSynced→下轮重扫"兜底；gzip 异步收益小；sort_order 撞号场景极低）。
