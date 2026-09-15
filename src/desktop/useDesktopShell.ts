@@ -163,6 +163,9 @@ export function useDesktopShell(options: UseDesktopShellOptions) {
 
   return {
     // sidebar
+    // 窄窗一律按"收起态"渲染（左轨 + 44px 侧栏条 + 工作区）：工作区不再被 265px 停靠栏挤没。
+    // 试过用 floating（浮层）替代，但 app 的"悬停才浮出"由组件状态控制、不由几何控制，
+    // 窄窗下浮层会一直可见并盖住工作区，故仍用收起态。只覆盖渲染，不写 localStorage。
     sidebarMode: narrowViewport ? ("collapsed" as SidebarMode) : sidebarMode,
     setSidebarMode, sidebarWidth, sidebarResizing, sidebarResizingRef,
     updateSidebarWidth, commitSidebarWidth, handleSidebarResizeActiveChange,

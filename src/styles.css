@@ -1911,6 +1911,15 @@ ne-card[data-card-name="file"] .ne-card-file {
   /* 顶栏：标题区允许压缩，控件不换行 */
   .topbar, .tab-bar { padding-left: 8px; padding-right: 8px; }
   .current-note, .tab-item .tab-title { max-width: 34vw; }
+  /* 左轨的顶部留白本来在 layout.css 的 @media (min-width: 761px) 里（padding-top: --topbar-height），
+     窄窗这一段失效 ⇒ 两个轨按钮顶到 y=0，正好压在 macOS 红绿灯上（用户 260915 截图报的错位）。
+     这里补回来，并多留 8px 让出红绿灯的下沿。 */
+  .activity-rail {
+    margin-top: 0;
+    padding-top: calc(var(--topbar-height, 38px) + 8px);
+  }
+  /* 44px 侧栏条：横向裁掉溢出内容，避免标题/缩进线拖出一条竖线（宽窗等价规则同样在 min-width 段里） */
+  .sidebar, .sidebar.sidebar-docked, .sidebar.sidebar-floating { overflow: hidden; }
   /* 面板：窄窗铺满可用宽度，内部导航收窄 */
   .settings-panel-large,
   .history-panel,
