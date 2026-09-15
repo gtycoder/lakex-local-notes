@@ -7,7 +7,7 @@
  * - 底部胶囊栏 = [筛选 | 新建 | 云同步]（新建按 tab 记性：小记=写小记、知识库=新建笔记本）。
  */
 import { useEffect, useMemo, useState } from "react";
-import { CloudUpload, List, LayoutGrid, ArrowUpDown, MoreHorizontal, Pencil, Plus, Search, Settings, Trash, Paperclip, FolderPlus } from "lucide-react";
+import { CloudUpload, List, LayoutGrid, ArrowUpDown, MoreHorizontal, Pencil, Plus, Search, Settings, Trash, FolderPlus } from "lucide-react";
 import type { TreeNode } from "../../lib/types";
 import type { POCNoteSummary } from "../noteRepository";
 import { NotebookGrid } from "./NotebookGrid";
