@@ -1887,10 +1887,15 @@ ne-card[data-card-name="file"] .ne-card-file {
  *   · JS 侧 ≤900px 默认收起（useDesktopShell 的 NARROW_SHELL_WIDTH），窄窗下**点左轨按钮**
  *     把目录树拉出来 / 收回去（toggleSidebarDock 在窄窗退化为这个开关）。 */
 @media (max-width: 760px) {
-  /* 收起态（窄窗默认）：左轨 + 44px 侧栏条 + 工作区。 */
+  /* 收起态（窄窗默认）：只留图标轨 + 工作区——对齐思源（窄窗下 dock 面板整体收起，
+     只留图标 rail），不再留一条 44px 的"残条"（那条里只剩树的缩进箭头，等于不可用）。 */
   .app-shell.sidebar-collapsed {
-    grid-template-columns: var(--activity-rail-width, 38px) 44px minmax(148px, 1fr);
+    grid-template-columns: var(--activity-rail-width, 38px) minmax(148px, 1fr);
   }
+  .app-shell.sidebar-collapsed .sidebar { display: none; }
+  /* 侧栏 display:none 后必须把工作区挪到第 2 列，否则中间会留一条死列
+     （实测 416px 是 38+148+230，那条 148px 就是用户看到的大空隙） */
+  .app-shell.sidebar-collapsed .workspace { grid-column: 2; }
   /* 展开态：弹性列宽 + 正文档下限（对齐思源 .layout__center { min-width: 148px }）：
      侧栏列最多 --sidebar-width，空间不够时自己让位，工作区永远不被挤到 148px 以下。 */
   .app-shell,
@@ -1912,7 +1917,27 @@ ne-card[data-card-name="file"] .ne-card-file {
     border-radius: 0;
     box-shadow: none;
   }
-  .app-shell.sidebar-collapsed .sidebar { width: 44px; }
+  /* 标签栏：宽窗是绝对定位在顶栏里的（那段几何在 min-width 块内），窄窗回落到文档流，
+     否则会浮在正文上方压住标题行（用户 260915 截图）。 */
+  .tab-bar { position: static; }
+  .topbar { min-height: var(--topbar-height, 38px); }
+  /* 顶栏适配（用户要求）：第一行放工作空间下拉 / 同步 / 更多（允许压缩省略），
+     第二行整条给标签胶囊并允许横向滚动——窄窗下胶囊不再压住工作空间名称。 */
+  .tab-bar {
+    flex-wrap: wrap;
+    row-gap: 2px;
+    padding: 2px 6px 4px;
+    height: auto;
+    min-height: var(--topbar-height, 38px);
+    align-content: flex-start;
+  }
+  /* macOS：顶栏第一行要让开红绿灯（灯带约 x 12–80 / y 12–40），否则工作空间名下压到灯上 */
+  .platform-mac .tab-bar { padding-left: 44px; }
+  .tab-bar > * { min-width: 0; }
+  .tab-bar > :first-child { flex: 0 1 auto; min-width: 0; overflow: hidden; }
+  .tab-items,
+  .tab-bar .tab-switcher-wrap { flex: 0 1 auto; }
+  .tab-items { flex-basis: 100%; overflow-x: auto; overflow-y: hidden; }
   .sidebar.is-collapsed:hover { width: min(260px, calc(100vw - var(--activity-rail-width, 38px))); }
   /* 右侧大纲在窄窗让位给正文（它的开关仍在顶栏，宽窗照旧） */
   .outline-sidebar { display: none; }
