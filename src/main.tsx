@@ -6,6 +6,7 @@ import { loadSettings } from "./lib/settings";
 import { applyTheme } from "./lib/theme";
 import "lakex-editor-react-component/style.css";
 import "./styles.css";
+import "./vendor/drawnix-react-text.css";   // 第三方画板 CSS 的**唯一来源**（260916：原 styles.css 里那份逐字节相同的内联副本已删）
 import "./features/outline/outline.css";
 // 思源视觉层移植：令牌（daylight/midnight）→ 基础接线（覆盖层，最后加载）
 import "./b3/theme-daylight.css";

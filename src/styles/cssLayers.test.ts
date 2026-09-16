@@ -66,7 +66,7 @@ const BASELINE: Record<string, { decls: number; dupGroups: number }> = {
   "styles/app/settings.css": { decls: 119, dupGroups: 0 },
   "styles/app/shell.css": { decls: 325, dupGroups: 10 },
   "styles/app/tabs.css": { decls: 211, dupGroups: 0 },
-  "styles/app/vendor-board.css": { decls: 182, dupGroups: 0 },
+  "styles/app/vendor-board.css": { decls: 19, dupGroups: 0 },   // 260916：84 条与 vendor/drawnix-react-text.css 逐字节相同的规则已删（改为直接 import vendor 文件），余下是我们自己的 board-card 包装层
 };
 
 /** 极简 CSS 扫描器：只取「叶子样式规则」的声明，跳过注释/字符串/声明型 at-rule。 */

@@ -6,7 +6,11 @@ import { STATES, setupState } from "./stylesnap.mjs";
 import { execSync } from "node:child_process";
 
 import { REPO, data } from "./paths.mjs";
-const FILES = (process.env.FILES || "src/styles.css,src/b3/layout.css,src/features/outline/outline.css,src/styles/dialog.css,src/styles/document-status.css,src/styles/overlays.css,src/styles/ui-polish.css").split(",");
+// 默认比对清单 = 当前实际加载顺序（.css-audit/loadorder.json）。写死清单在第二档重组后失效过一次（260916）。
+const FILES = (() => {
+  if (process.env.FILES) return process.env.FILES.split(",");
+  try { return JSON.parse(fs.readFileSync(data("loadorder.json"), "utf8")); } catch (e) { return ["src/styles.css"]; }
+})();
 // 注意：必须包含 SVG 的 stroke/fill 系列 —— 图标是 <svg>，它们的着色走 stroke/fill，
 // 不在清单里的话"改了图标描边"这类改动会被误判成 0 差异（260916 第七轮就漏过一次）。
 const PROPS = ["display","position","top","right","bottom","left","zIndex","width","height","minWidth","minHeight","maxWidth","margin","padding","gap","flex","flexDirection","alignItems","justifyContent","gridTemplateColumns","color","backgroundColor","backgroundImage","border","borderTopWidth","borderRightWidth","borderBottomWidth","borderLeftWidth","borderTopLeftRadius","borderRadius","boxShadow","opacity","visibility","transform","transformOrigin","transition","overflow","pointerEvents","cursor","fontSize","lineHeight","letterSpacing","fontWeight","textAlign","backdropFilter","filter","mixBlendMode","accentColor","willChange","contentVisibility","position","stroke","strokeWidth","strokeLinecap","strokeLinejoin","strokeDasharray","strokeOpacity","fill","fillOpacity","paintOrder"];
@@ -113,8 +117,8 @@ const buildSpec = (kind) => {
     // 与"上一个提交"对照：把 git HEAD 版本的文件文本注入回去。改完盘之后跑这个，
     // 差异必须为 0 —— 这是"落盘改动 == 原行为"的证明。
     for (const rel of FILES) {
-      const text = execSync(`git show HEAD:${rel}`, { cwd: REPO, maxBuffer: 64 * 1024 * 1024 }).toString();
-      spec.push({ file: rel, text });
+      try { spec.push({ file: rel, text: execSync(`git show HEAD:${rel}`, { cwd: REPO, maxBuffer: 64 * 1024 * 1024, stdio: ["pipe", "pipe", "pipe"] }).toString() }); }
+      catch (e) { console.log(`      （HEAD 里没有 ${rel}，跳过——新增文件）`); }
     }
     console.log(`  [head] 注入 HEAD 版本：${spec.length} 个文件`);
     return spec;

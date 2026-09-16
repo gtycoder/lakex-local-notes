@@ -8,7 +8,10 @@ import { execSync } from "node:child_process";
 import { STATES, setupState } from "./stylesnap.mjs";
 import { REPO, data } from "./paths.mjs";
 
-const FILES = (process.env.FILES || "src/styles.css,src/b3/layout.css,src/b3/components.css,src/b3/animations.css,src/features/outline/outline.css,src/styles/shell.css,src/styles/editor-bridge.css,src/styles/motion-contract.css,src/styles/ui-polish.css").split(",");
+const FILES = (() => {
+  if (process.env.FILES) return process.env.FILES.split(",");
+  try { return JSON.parse(fs.readFileSync(data("loadorder.json"), "utf8")); } catch (e) { return ["src/styles.css"]; }
+})();
 const norm = (s) => String(s).replace(/\s+/g, " ").replace(/\s*,\s*/g, ",").trim();
 
 const buildSpec = (kind, planFile) => {

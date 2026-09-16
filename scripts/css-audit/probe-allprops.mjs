@@ -8,7 +8,12 @@ import { execSync } from "node:child_process";
 import { STATES, setupState } from "./stylesnap.mjs";
 import { REPO } from "./paths.mjs";
 
-const FILES = (process.env.FILES || "src/styles.css,src/b3/layout.css,src/b3/components.css,src/b3/animations.css,src/features/outline/outline.css,src/styles/shell.css,src/styles/editor-bridge.css,src/styles/motion-contract.css,src/styles/ui-polish.css").split(",");
+// 默认比对清单 = **当前实际加载顺序**（.css-audit/loadorder.json，由 loadorder.mjs 采）。
+// 260916 教训：以前把文件清单写死在这里，第二档重组（改名/拆分）之后立刻失效、probe 直接报错。
+const FILES = (() => {
+  if (process.env.FILES) return process.env.FILES.split(",");
+  try { return JSON.parse(fs.readFileSync(data("loadorder.json"), "utf8")); } catch (e) { return ["src/styles.css"]; }
+})();
 
 const DUMP = (target) => `(() => {
   const t = ${JSON.stringify(target)};
@@ -58,7 +63,10 @@ export default async ({ page, args }) => {
   // 否则默认注入 git HEAD 版本。
   const spec = process.env.SPEC
     ? JSON.parse(fs.readFileSync(process.env.SPEC, "utf8"))
-    : FILES.map((rel) => ({ file: rel, text: execSync(`git show HEAD:${rel}`, { cwd: REPO, maxBuffer: 64 * 1024 * 1024 }).toString() }));
+    : FILES.map((rel) => {
+        try { return { file: rel, text: execSync(`git show HEAD:${rel}`, { cwd: REPO, maxBuffer: 64 * 1024 * 1024, stdio: ["pipe", "pipe", "pipe"] }).toString() }; }
+        catch (e) { return null; }   // HEAD 里没有这张表（新增文件）⇒ 跳过
+      }).filter(Boolean);
   await page.evaluate(`(() => {
     const spec = ${JSON.stringify(spec)};
     for (const ss of [...document.styleSheets]) {

@@ -56,6 +56,51 @@ const SNAP = `(() => {
 })()`;
 
 export const injectStates = async (page, kind) => {
+  if (kind === "board") {
+    // 画板卡。真实场景里由 BoardCard 懒加载 vendor 画板 CSS + @plait 组件渲染出这套 DOM，
+    // 这里按同一套类词汇注入一份**代表性子集**，让画板相关规则真的匹配到元素（CSS 不关心 DOM 是谁造的）。
+    // 用途：判断"与 vendor/drawnix-react-text.css 逐字节相同的那块内联 CSS"能不能收掉（矩阵原来没有画板态，测不到）。
+    await page.evaluate(`(() => {
+      const host = document.createElement("div");
+      host.id = "matrix-board";
+      host.className = "board-card-wrapper board-card-wrapper--editor";
+      host.style.cssText = "position:fixed;left:40px;top:120px;width:640px;height:420px;z-index:5;background:#fff";
+      host.innerHTML = \`
+        <div class="board-card-guard" style="width:100%;height:100%">
+          <div class="drawnix" style="width:100%;height:100%;position:relative">
+            <div class="plait-board-container" style="width:100%;height:100%;position:relative">
+              <svg class="board-host-svg" width="100%" height="100%">
+                <g class="element-active-host"><rect class="selection-rectangle" width="40" height="20"/></g>
+                <g plait-mind="true">
+                  <foreignObject class="text" width="120" height="30">
+                    <div class="plait-text-container">
+                      <div class="slate-editable-container" contenteditable="false">
+                        <span data-slate-node="element">画板文本</span>
+                      </div>
+                    </div>
+                  </foreignObject>
+                  <circle class="collapse-button animated"/><circle class="add-button"/>
+                </g>
+              </svg>
+              <div class="tool-icon tool-icon--plain"><span class="tool-icon__icon"></span><span class="tool-icon__label">工具</span></div>
+              <div class="slider-container slider-container--neutral"><div class="slider-track"><div class="slider-range"></div><div class="slider-thumb"></div></div></div>
+              <div class="color-select-item active"><span class="selected-icon"></span></div>
+              <div class="dx-SelectTrigger"><span class="dx-SelectTriggerInner">选择</span><span class="dx-SelectIcon"></span></div>
+            </div>
+            <div class="popup-toolbar">
+              <div class="popup-font-size"><input class="popup-font-size__input" value="14" readonly><div class="popup-font-size__stepper"><button class="popup-font-size__stepper-button"><svg class="popup-font-size__stepper-icon"/></button></div></div>
+              <div class="property-button"><span class="fill-label"></span><span class="stroke-label"></span></div>
+            </div>
+            <div class="drawnix-toast-wrapper"><div class="drawnix-toast"><div class="drawnix-toast__message">提示</div><div class="drawnix-toast__description">说明</div></div></div>
+            <div class="clean-confirm"><div class="clean-confirm__title">标题</div><p class="clean-confirm__description">描述</p><div class="clean-confirm__actions"><button class="clean-confirm__button clean-confirm__button--cancel">取消</button><button class="clean-confirm__button clean-confirm__button--ok">确定</button></div></div>
+            <div class="Dialog-overlay"><div class="Dialog ttd-dialog"><div class="ttd-dialog-tabs-root"><button class="ttd-dialog-tab-trigger" data-state="active">图</button></div><div class="ttd-dialog-content"><textarea class="ttd-dialog-input">test</textarea><div class="ttd-dialog-output-wrapper"><div class="ttd-dialog-output-canvas-container"></div></div></div><div class="ttd-dialog-panels"><div class="ttd-dialog-panel"><div class="ttd-dialog-panel__header"><label>标签</label></div></div></div></div></div>
+            <div class="laser-pointer"></div>
+          </div>
+        </div>\`;
+      document.body.appendChild(host);
+    })()`);
+    await page.sleep(600);
+  }
   if (kind === "drag") {
     await page.evaluate(`(() => {
       const rows = [...document.querySelectorAll(".tree-row")].filter((e) => e.getBoundingClientRect().width > 0);
@@ -147,6 +192,9 @@ export const STATES = [
     { name: "rm:760:light", w: 760, theme: "light", media: { "prefers-reduced-motion": "reduce" } },
     { name: "rm-quicknotes:1315:light", w: 1315, theme: "light", screen: "quicknotes", media: { "prefers-reduced-motion": "reduce" } },
     { name: "rt:1315:light", w: 1315, theme: "light", media: { "prefers-reduced-transparency": "reduce" } },
+    // 画板卡态：让画板相关规则（含"与 vendor 逐字节相同的那块内联 CSS"）真的匹配到元素。
+    { name: "board:1315:light", w: 1315, theme: "light", inject: "board" },
+    { name: "board:1315:dark", w: 1315, theme: "dark", inject: "board" },
 ];
 
 export const setupState = async (page, st) => {
