@@ -661,6 +661,32 @@
 - **移动端改动要装机才可见**：模拟器里跑的是上一次 `scripts/android-build.sh --sync --install` 的包，
   CSS 删除属"选择器命中 0"的死代码，重新 build 即生效（本轮已过 `vite build -c vite.mobile.config.ts`）。
 
+### 2.47 Web 客户端最小验证（MVP）（260916，分支 `feat/web-client-mvp`，独立 worktree `lake-notes-wt-web`，未推送/未验收）
+> 用户决策：浏览器端 = 桌面端的附属扩展窗口（同一后台同一份数据）；并发编辑、出局域网**本期不做**；
+> S3 同步仍由桌面独占（浏览器页不碰同步协议）。实施在独立 worktree（主工作区由 UI 会话占用，零干扰）。
+
+- **架构（全部复用现有层）**：① `electron/ipc/registrar.ts` 增 `registry`——`handle/handleEvent` 注册时同步登记
+  `(args) => Promise` 调用表（handleEvent 型注入 stub event，`sync_now` 的进度推送变 no-op、返回值 SyncResult 照常）；
+  ② 新增 `electron/webApiServer.ts`：`POST /api/<channel>` 通用转发到 registry（错误走 `toIpcErrorPayload` envelope）+
+  静态服务 `dist/`（index.html 注入 `<script src="/__native.js">`）+ **`/__native.js` 动态生成 `window.lakeNative` HTTP shim**
+  （方法面 = preload.cjs 全部 98 个 invoke 通道 + `onSyncProgress/onPendingSummaryChanged` no-op；token/assetPort 注入）；
+  ③ `main.ts` 启动接线（`registerIpc()` 返回 registry）。渲染层零改动——`src/` 本就无 electron 导入，桌面 React 应用整棵复用。
+- **安全口径（MVP）**：只绑 `127.0.0.1`；`/api` 强制 `x-lake-token`（跨源页面发不出带自定义头的请求 = CSRF 屏障，
+  token 本身经 `/__native.js` 下发，防的是浏览器跨源读+写，不防本机进程）；静态文件不含数据。
+- **验证（全部实测通过）**：门禁 tsc 0 · vitest **977 passed / 16 skipped**（新增 `webApiServer.test.ts` 8 例：
+  preload 通道映射一致性防漂移 + API/静态/注入行为）· vite build 绿。端到端：独立数据实例
+  （`LAKE_USER_DATA=$TMPDIR/lake-web-mvp LAKE_ASSET_PORT=19878 LAKE_WEB_PORT=19880`）→ curl
+  `bootstrap_workspace/list_tree_nodes/create_note_in/save_note/read_note` 全通；**浏览器（browser-use agent）实测**：
+  页面渲染（目录树/欢迎笔记/验证文档）、打开文档编辑器出正文、正文打字成功且**自动落库**（read_note 读回内容一致）。
+- **启动方式**：`vite build` 后正常跑 electron 即可，浏览器开 `http://127.0.0.1:19880/`（`LAKE_WEB_PORT` 可覆盖；
+  端口被占仅告警不影响桌面端）。注意 dev 模式桌面窗口仍连 1421 vite，与浏览器客户端互不相干。
+- **已知边界/坑（后续批次处理）**：① 无变更推送（浏览器页看不到桌面端的实时修改，反之亦然——各端操作后自刷新；
+  下一批做 `store-changed` 事件 + WS/SSE 扇出）；② JSON 序列化把 `undefined` 变 `null`（IPC structured clone 保留
+  undefined）——现有 handler 均按空值容忍，出现过再按通道特判；③ `public/vendor/cdn/os/`（katex 镜像）被
+  `.gitignore` 的 `dist` 规则**误伤**（路径含 `.../0.16.8/dist/`）没进 git——新克隆缺文件，worktree 是从主仓库复制的；
+  修法建议：gitignore 加反排除 `!public/vendor/cdn/os/`（属仓库卫生，单独批次做）；④ 桌面专属能力（选目录对话框/
+  showInFolder/系统剪贴板图等）在浏览器页透传到主进程照常工作（对话框弹在桌面机器上），未做降级隐藏。
+
 ## 3. 真正的待办（已剔除全部完成项，按优先级）
 > **260904 后续评估（用户决策 + 本轮核实）**：原 §3.1 对象级 5xx 重试、§3.2 快照 gzip 异步化、§3.5 笔记本 `sort_order` 撞号 —— **已评估不做**（5xx 有"失败不 markSynced→下轮重扫"兜底；gzip 异步收益小；sort_order 撞号场景极低）。
 > 原 §3.3（FTS 全量重建→增量）与 §3.4（1/2 字短词回退）**合并为一条**：计划**整体重做索引**，两件一起落地（同属 `src/core/searchRepository.ts` 的索引/搜索路径，同时覆盖 10 万文档量级）。
