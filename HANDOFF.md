@@ -1378,15 +1378,28 @@ const m = await page.send("CSS.getMatchedStylesForNode", { nodeId: q.nodeId });
 （base 36 / shell 325 / editor 45 / dialogs 167 / tabs 211 / vendor-board 182 / settings 119 / quick-notes 293 / panels 101 / misc 299 声明）。
 声明数守恒 1801 → 1801；注入式 27 状态 0 差异；像素 16 屏对两份基线 0 差异。拆分脚本 `scripts/css-audit/split-app-layer.mjs` 可一键重跑。
 
-**S4 已做一半（提交 7c2b24d）**：`overlays.css` → **`components.css`**（纯重命名，位置不变；两个入口 + 围栏 + AGENTS §3 #14 指引同步）。
-`ui-polish.css` 现在只剩 4 个 reduced-motion 块 + `@keyframes lake-pop-in`（25 行），等矩阵补 reduced-motion 状态后再定它的去处。
+**S4 已完成（提交 7c2b24d + e394190）**：
+- `overlays.css` → **`components.css`**（纯重命名，位置不变；两个入口 + 围栏 + AGENTS §3 #14 指引同步）。
+- **矩阵补 5 个媒体偏好态（27 → 32）**：`rm:1315:light|dark` / `rm:760:light` / `rm-quicknotes:1315:light` /
+  `rt:1315:light`，用 CDP `Emulation.setEmulatedMedia` 模拟 reduced-motion / reduced-transparency。
+  原来这两个条件在矩阵里**恒为假**（§2.47 的 11 条因此"证不了、不动"）。补完后 `split-file.mjs` 的
+  "媒体块能不能搬"改成**由 cond-eval.json 数据决定**（任一状态满足即可搬），不再是硬编码跳过。
+- **`ui-polish.css` 归位后删除**：4 个 reduced-motion 契约块 → `motion.css`、`@keyframes lake-pop-in` → `components.css`、
+  细滚动条 → 新建 `settings.css`。声明数守恒 468 → 468；注入式对照 **32 状态 0 差异**；像素批次 15/16 屏 0 差异
+  （余 1 屏为已证实的噪声底）。加载顺序 22 → 21 张表，**"按响应/意图命名"的层到此清空**。
 
-**下一步（S4 剩余 + 逐条二分）**
+**下一步（逐条二分 + 补矩阵 + 回填 §2.47）**
 2. **跨层合并（逐条二分）**：把 `app/*.css` 里的规则按域并进同名的壳层文件（`app/quick-notes.css` → `styles/quick-notes.css` 等）
    **只搬"27 状态 + 像素批次都 0 差异"的**；搬了会变的原地不动并注明原因。已知会变的（留证）：小记卡片 `border-color`、
    设置面板 `box-shadow`、小记 `textarea` 边框色、`.qn-check` 的 transition。
 3. **矩阵补状态**（做 1、2 的前置）：`(prefers-reduced-motion: reduce)` / `(prefers-reduced-transparency: reduce)` 模拟、
    "打开画板卡"（才能收掉 styles.css 那块与 vendor 逐字节相同的第三方 CSS）、多标签、编辑器内部态。
+   进度：**reduced-motion / reduced-transparency 已补（32 状态）**；剩下"打开画板卡"、多标签、编辑器内部态。
+4. **回填 §2.47**：矩阵补上媒体偏好后，当初被剔除的 11 条 `animation/transition: none !important`（reduced-motion 契约）
+   **现在可验证了**——可以用 LK_CSS_AUDIT_DIR 重跑 imp-scan/imp-safe/plan-imp（state 列表已含新媒体态），
+   把"确实多余"的摘掉、把"承重"的写明理由。这是一次小批量、口径已备齐的清理。
+5. **收掉第三方画板 CSS 的重复**：`app/misc.css` 里那块与 `src/vendor/drawnix-react-text.css` 逐字节相同的压缩块，
+   需要先有"打开画板卡"的可观测状态才能判定能否删。
 
 ### 2.47 第七轮：摘掉"多余的 !important"（79 条）+ 工具落库 + 抓出两个口径漏洞（260916）
 > 承接 §2.45/§2.46：同选择器重复清零后，这轮换靶子——`!important` 本身。它不产生视觉效果，只决定"谁说了算"；
