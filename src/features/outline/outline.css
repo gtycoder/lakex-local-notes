@@ -213,7 +213,8 @@
 }
 
 /* 大纲头部图标与筛选输入行改用 dock 共享样式：.dock-icon-btn / .dock-filter-row
-   （见 src/styles/ui-polish.css，2026-09-03 与目录栏对齐，避免两套视觉继续漂移）。 */
+   （260915 与目录栏对齐，避免两套视觉继续漂移；260916 第二档 S2 起这两个类在 `src/styles/shell.css`，
+   原 ui-polish.css 已按职责拆解并删除）。 */
 
 .outline-list {
   position: relative;
