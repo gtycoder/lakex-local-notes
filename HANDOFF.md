@@ -1378,9 +1378,10 @@ const m = await page.send("CSS.getMatchedStylesForNode", { nodeId: q.nodeId });
 （base 36 / shell 325 / editor 45 / dialogs 167 / tabs 211 / vendor-board 182 / settings 119 / quick-notes 293 / panels 101 / misc 299 声明）。
 声明数守恒 1801 → 1801；注入式 27 状态 0 差异；像素 16 屏对两份基线 0 差异。拆分脚本 `scripts/css-audit/split-app-layer.mjs` 可一键重跑。
 
-**下一步（S4 收口 + 逐条二分）**
-1. **S4 低风险部分**：`overlays.css` → `components.css`（纯重命名、位置不变，需同步移动端入口与围栏）；`ui-polish.css` 现在只剩
-   4 个 reduced-motion 块 + `@keyframes lake-pop-in`，等矩阵补 reduced-motion 状态后再定它的去处。
+**S4 已做一半（提交 7c2b24d）**：`overlays.css` → **`components.css`**（纯重命名，位置不变；两个入口 + 围栏 + AGENTS §3 #14 指引同步）。
+`ui-polish.css` 现在只剩 4 个 reduced-motion 块 + `@keyframes lake-pop-in`（25 行），等矩阵补 reduced-motion 状态后再定它的去处。
+
+**下一步（S4 剩余 + 逐条二分）**
 2. **跨层合并（逐条二分）**：把 `app/*.css` 里的规则按域并进同名的壳层文件（`app/quick-notes.css` → `styles/quick-notes.css` 等）
    **只搬"27 状态 + 像素批次都 0 差异"的**；搬了会变的原地不动并注明原因。已知会变的（留证）：小记卡片 `border-color`、
    设置面板 `box-shadow`、小记 `textarea` 边框色、`.qn-check` 的 transition。
