@@ -28,7 +28,9 @@ const FILES = [
   "styles/tokens.css", "styles/ui-polish.css",
 ];
 
-/** 基线（260916 第三/四轮清理后按本文件的 scan() 实测）。只允许变小。 */
+/** 基线（按本文件的 scan() 实测）。只允许变小 —— 唯一例外是「按职责归并」（HANDOFF §2.48 的 S2/S3）：
+ * 把规则从一个文件搬到另一个文件会合法地抬高接收方的计数：此时同步抬高该文件基线，
+ * 并在同一批把来源文件的基线调小（搬走多少、留下多少要对得上，让总量保持可见）。 */
 const BASELINE: Record<string, { decls: number; dupGroups: number }> = {
   "styles.css": { decls: 1778, dupGroups: 33 },
   "b3/animations.css": { decls: 5, dupGroups: 0 },
@@ -43,13 +45,13 @@ const BASELINE: Record<string, { decls: number; dupGroups: number }> = {
   "features/outline/outline.css": { decls: 257, dupGroups: 0 },
   "styles/dialog.css": { decls: 227, dupGroups: 8 },
   "styles/document-status.css": { decls: 107, dupGroups: 2 },
-  "styles/editor.css": { decls: 12, dupGroups: 0 },
+  "styles/editor.css": { decls: 14, dupGroups: 0 },   // +2 = 自 ui-polish.css 并入的编辑器正文覆盖（S2）
   "styles/motion.css": { decls: 3, dupGroups: 0 },
   "styles/overlays.css": { decls: 444, dupGroups: 1 },
-  "styles/quick-notes.css": { decls: 9, dupGroups: 0 },
-  "styles/shell.css": { decls: 48, dupGroups: 0 },   // +5 = 原 layout-contract.css 的壳层度量令牌（260916 S1 并入）
+  "styles/quick-notes.css": { decls: 11, dupGroups: 0 },   // +2 = 自 ui-polish.css 并入的小记入口（S2）
+  "styles/shell.css": { decls: 196, dupGroups: 0 },   // +5 = 原 layout-contract 的壳层度量令牌（S1）；+143 = 自 ui-polish 并入的目录栏/页签/dock 头部（S2）
   "styles/tokens.css": { decls: 83, dupGroups: 0 },
-  "styles/ui-polish.css": { decls: 166, dupGroups: 5 },
+  "styles/ui-polish.css": { decls: 18, dupGroups: 0 },   // 58 组已按职责并入 shell/editor/quick-notes（S2）；余 4 个 reduced-motion 块 + 设置滚动条，待 S3 建 settings.css 后收口
 };
 
 /** 极简 CSS 扫描器：只取「叶子样式规则」的声明，跳过注释/字符串/声明型 at-rule。 */

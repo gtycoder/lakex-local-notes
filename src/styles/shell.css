@@ -179,3 +179,339 @@ html[data-theme="dark"] .document-pane .ne-engine > ne-h6 ne-heading-content {
   --activity-rail-width: var(--lake-rail-width);
 }
 .app-shell { --outline-collapsed-width: var(--lake-rail-width); }
+
+/* ── 以下规则自 `src/styles/ui-polish.css` 按职责并入（260916 S2/S3，只搬家不改声明）：页签与紧凑控件的几何/圆角/状态 ── */
+/* Tab close controls must own their layout slot; never overlay title or dirty dot. */
+.tab-item .tab-title { flex: 1 1 auto; min-width: 0; }
+
+.tab-item .tab-dirty-dot {
+  flex: 0 0 7px;
+  width: 7px;
+  height: 7px;
+  margin-left: 1px;
+  border-radius: 50%;
+  background: var(--lake-sync-pending, #d29042);
+}
+
+.tab-item .tab-close {
+  flex: 0 0 18px;
+  width: 18px !important;
+  height: 18px !important;
+  margin-left: 2px;
+}
+
+.tab-item:hover .tab-close,
+.tab-item .tab-close:focus-visible { opacity: .58; }
+
+.tab-item .tab-close:hover { opacity: 1 !important; }
+
+/* 目录栏头部：只剩一排图标，几何与大纲头部逐项对齐（34px 高 + 1px 分隔线 + 右内缩 4px；
+ * 筛选改为点击图标展开）。两栏头部若高度/分隔线不一致，一排图标看上去就是"两个系统的产品"。 */
+.sidebar-toolbar-title {
+  flex: 0 0 auto;
+  margin-right: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: .02em;
+  color: var(--lake-text-secondary, var(--lake-text));
+}
+
+.sidebar-toolbar-row {
+  display: flex;
+  align-items: center;
+  flex: 0 0 34px;
+  min-height: 34px;
+  gap: 1px;
+  padding: 0 6px 0 12px;
+}
+
+/* 操作图标默认隐藏、悬停目录栏才显示（对齐思源）；去掉分隔线，靠留白分层 */
+.sidebar-toolbar-row .list-heading {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 1px;
+  height: 100%;
+  opacity: 0;
+  transition: opacity var(--lake-motion-fast) var(--lake-ease-standard);
+}
+
+.sidebar:hover .sidebar-toolbar-row .list-heading,
+.sidebar-toolbar-row:focus-within .list-heading { opacity: 1; }
+
+/* ---- dock 头部共享层（目录栏 / 大纲）：图标按钮 + 隐藏式筛选行 ----
+ * 两栏此前各有两套图标样式（32px 灰底 vs 22px accent 底），2026-09-03 统一到这里。
+ * 颜色一律走 --lake-* 令牌，亮/暗主题自动跟随（不再写死 #747b85 之类）。 */
+.dock-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 22px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  color: var(--lake-text-tertiary);
+  background: transparent;
+  transition: color var(--lake-motion-fast) var(--lake-ease-standard), background-color var(--lake-motion-fast) var(--lake-ease-standard), transform var(--lake-motion-press) var(--lake-ease-standard);
+}
+
+.dock-icon-btn:hover:not(:disabled) {
+  color: var(--lake-accent-strong, var(--lake-accent));
+  background: var(--lake-accent-soft);
+}
+
+.dock-icon-btn:active:not(:disabled) { transform: scale(.96); }
+
+.dock-icon-btn:disabled { opacity: .35; cursor: default; }
+
+/* 生效中的开关态（筛选有词 / 菜单展开 / 保持展开）：accent 文字 + 淡底，与大纲 is-active 一致 */
+.dock-icon-btn.is-active {
+  color: var(--lake-accent-strong, var(--lake-accent));
+  background: var(--lake-accent-soft);
+}
+
+.dock-icon-btn:focus-visible { outline: 2px solid var(--lake-accent); outline-offset: 1px; }
+
+/* 隐藏式筛选行：收起时高度 0 不占位；展开时 29px（与大纲头部原筛选行同高）。 */
+.dock-filter-row {
+  height: 0;
+  overflow: hidden;
+  opacity: 0;
+  transition: height var(--lake-motion-fast) var(--lake-ease-standard), opacity var(--lake-motion-fast) linear;
+}
+
+.dock-filter-row.is-open { height: 29px; opacity: 1; }
+
+.dock-filter-row__inner {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  height: 29px;
+  padding: 0 9px;
+  color: var(--lake-text-tertiary);
+  border-bottom: 1px solid var(--lake-border);
+}
+
+.dock-filter-input {
+  flex: 1;
+  min-width: 0;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--lake-text);
+  font-size: 12px;
+}
+
+.dock-filter-input::placeholder { color: var(--lake-text-tertiary); }
+
+/* 顶栏下拉里的快捷键提示（全文搜索 ⇧⌘F / 专注模式 ⌘⇧Enter）统一成右对齐弱文字 */
+.top-menu > button span {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 14px;
+  width: 100%;
+}
+
+.top-menu > button span small {
+  color: var(--b3-theme-on-surface-light);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+/* Drag feedback: a soft lifted row plus a clear insertion guide, matching outline motion. */
+.tree-row.dragging {
+  position: relative;
+}
+
+.tree-row.drop-before,
+.tree-row.drop-after {
+  box-shadow: none !important;
+}
+
+.tree-row.drop-before::before,
+.tree-row.drop-after::after {
+  content: "";
+  position: absolute;
+  pointer-events: none;
+}
+
+.tree-row.drop-before::before { top: -1px; }
+
+.tree-row.drop-after::after { bottom: -1px; }
+
+.tree-row.drop-inside {
+  color: var(--lake-text);
+}
+
+.tree-row.dragging {
+  transform: none;
+}
+
+.tree-row.drop-inside {
+  background: color-mix(in srgb, var(--lake-text) 8%, transparent) !important;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--lake-text) 8%, transparent) !important;
+  transform: none;
+}
+
+/* The sidebar owns the window drag strip only as a visual region. Its pseudo
+   overlay must never win hit-testing over the first row of controls.
+   （宽窄共用：窄窗抽屉同样是浮层，顶部那条 38px 拖拽带不能抢头部按钮的点击。） */
+.sidebar::before { pointer-events: none !important; -webkit-app-region: no-drag; }
+
+/* A docked library must settle to its full grid track immediately. Keeping the
+   grid transition active while the panel is already docked can leave Chromium
+   in a zero-width interpolated track, which makes the visible toolbar miss hit
+   testing. Collapse remains animated; re-open is deliberately deterministic. */
+@media (min-width: 761px) {
+  .app-shell.sidebar-docked { transition: none !important; }
+}
+
+/* Precise sortable motion: the source row is the visible dragged object and
+   moves only on Y; siblings slide by exactly one row with a calm 250ms ease. */
+.tree-row {
+  position: relative;
+  transition: transform 250ms ease, background-color 120ms ease, box-shadow 120ms ease;
+  will-change: transform;
+}
+
+.tree-row.dragging {
+  z-index: 8;
+  transition: none !important;
+}
+
+.tree-row.drop-before::before,
+.tree-row.drop-after::after,
+.tree-row.drop-crossing::before,
+.tree-row.drop-crossing::after {
+  right: 0;
+  left: 8px;
+  height: 2px;
+  border-radius: 999px;
+  background: var(--lake-accent);
+  box-shadow: 0 0 0 3px var(--lake-accent-soft);
+}
+
+.tree-row.drop-crossing::before,
+.tree-row.drop-crossing::after {
+  content: "";
+  position: absolute;
+  pointer-events: none;
+}
+
+.tree-row.drop-crossing::before { top: -1px; }
+
+.tree-row.drop-crossing::after { bottom: -1px; }
+
+/* Final drag-state contract:
+   - same-parent reorder => one insertion line only;
+   - parent change => highlight the destination parent as a blue rounded box;
+   - the source row remains the real row, translucent, and vertically movable. */
+/* 源行留在原位只降透明度（跟手的是 [data-drag-ghost] 浮层） */
+.tree-row.dragging {
+  opacity: .38 !important;
+  color: var(--lake-text) !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+/* 插入线：贴在目标行的层级缩进上（桌面缩进来自嵌套 .tree-children），
+   父行 bottom 与子行 top 是同一视觉间隙但缩进不同 → 表示落到的层级不同。 */
+.tree-row.drop-line-before::before,
+.tree-row.drop-line-after::after {
+  content: "";
+  position: absolute;
+  right: 8px;
+  left: 8px;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--b3-theme-primary, var(--lake-accent));
+  pointer-events: none;
+}
+
+/* 拖拽浮层：克隆源行跟随指针。必须盖过 .tree-row 的 position/transition。 */
+.tree-row.drop-line-before::before { top: -1px; }
+
+.tree-row.drop-line-after::after { bottom: -1px; }
+
+.tree-row.drop-parent {
+  color: var(--lake-text) !important;
+  background: color-mix(in srgb, var(--lake-accent) 12%, var(--lake-panel)) !important;
+  box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--lake-accent) 76%, transparent) !important;
+}
+
+/* Old classes are no longer emitted for active drops; keep them inert so
+   legacy cascade rules cannot bring back the two-line crossing treatment. */
+.tree-row.drop-before::before,
+.tree-row.drop-after::after,
+.tree-row.drop-crossing::before,
+.tree-row.drop-crossing::after,
+.tree-row.drop-inside::before,
+.tree-row.drop-inside::after { display: none !important; }
+
+/* ---- 视觉一致性（A）：圆角按两档 token 覆盖统一，只作用于 product shell 表面 ---- */
+.activity-button,
+.outline-sidebar__activity-button,
+.dock-icon-btn,
+.outline-sidebar__activity-button:hover,
+.tab-switcher {
+  border-radius: var(--lake-radius-md) !important;
+}
+
+/* 紧凑控件（工具条 / 页签 / 图标按钮 / 树行）统一 sm 圆角：拖拽态必须同值，
+   否则行在拖动时圆角会从 6px 跳成 8px（外部 `.tree-row.dragging` 的 8px 就是被这条压住的）。 */
+.toolbar__item,
+.tab-item,
+.icon-button,
+.note-row,
+.list-heading .icon-button {
+  border-radius: var(--lake-radius-sm) !important;
+}
+
+/* 页签 active：白卡 + 顶部主色指示线已经足够标识当前页（b3/layout.css 拥有底与指示线）；
+   文字保持中性墨色 + 略加字重，避免「浅底 + 描边 + 主色字」三重信号。 */
+.tab-item.active {
+  color: var(--lake-text) !important;
+  font-weight: 500;
+}
+
+/* 活动栏 active：更强的识别（accent 底 + 图标着色），弱化未激活项 */
+.activity-button {
+  color: var(--lake-text-tertiary);
+  transition: color var(--lake-motion-fast) var(--lake-ease-standard), background-color var(--lake-motion-fast) var(--lake-ease-standard), transform var(--lake-motion-press) var(--lake-ease-standard);
+}
+
+.activity-button:hover:not(:disabled) { color: var(--lake-text-secondary); }
+
+.activity-button.active {
+  color: var(--lake-accent) !important;
+  background: var(--lake-accent-soft) !important;
+}
+
+.activity-button:active:not(:disabled) { transform: scale(.95); }
+
+/* ---- 交互动效（B）：顶栏/图标按钮统一按压反馈 ---- */
+.toolbar__item:active:not(:disabled),
+.icon-button:active:not(:disabled),
+.tab-switcher:active:not(:disabled) {
+  transform: scale(.96);
+}
+
+/* 浮层入场统一淡入+极短位移。注意：.floating-dialog 故意不在此列——
+ * 它靠 transform: translate(-50%,-50%) 居中，而 lake-pop-in 的 keyframes 只写
+ * translateY/scale，会在动画期间覆盖掉居中偏移，导致弹窗"从右下飞入再弹回中心"。
+ * 浮窗入场改用 styles.css 的 floating-dialog-enter（保留 translate(-50%,-50%)）。 */
+.context-menu,
+.tab-switcher-menu,
+.sync-status-popover {
+  animation: lake-pop-in var(--lake-motion-fast) var(--lake-ease-standard);
+}
+
+.tree-row:active,
+.note-row:active {
+  filter: brightness(.95);
+}
