@@ -38,7 +38,7 @@ Preload (electron/preload.cjs)：原生 CJS，contextBridge 暴露 window.lakeNa
 | `src/main.tsx` | React 入口：**顶部**调用 `installPasteInterceptor()` |
 | `src/lib/native.ts` | 前端 IPC 封装 + 类型（`window.lakeNative`） |
 | `src/lib/types.ts` | 共享类型（S3Settings/SyncResult/SyncProgress/SyncStatusInfo/OrphanAsset 等） |
-| `src/features/editor/lakeRuntime.ts` | Lake 编辑器创建；`deepMerge` 深合并；**虚拟渲染/TOC 跟随/卡片水合/表格工具栏 hover 桥**（详见 PROGRESS.md ★最新交接） |
+| `src/features/editor/lakeRuntime.ts` | Lake 编辑器创建；`deepMerge` 深合并；**虚拟渲染/TOC 跟随/卡片水合/表格工具栏 hover 桥**（详见 HANDOFF §4 坑清单） |
 | `src/features/editor/BoardCard.tsx` | Drawnix 画板卡片（+ `src/vendor/drawnix*.css`） |
 | `src/features/editor/resourceUpload.ts` | 图片/附件上传管线（WebP→PNG、base64、远程下载） |
 | `src/features/editor/clipboardHtml.ts` | 粘贴拦截升级（知乎懒加载 SVG→真实 URL）+ 复制清洗（空行/零宽字符） |

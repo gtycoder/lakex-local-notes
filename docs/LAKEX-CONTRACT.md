@@ -11,7 +11,7 @@
 
 - 不是给 lakex 补文档（lakex 文件一个字节都不动）；是给**我们自己的代码**补一份"我们观测到的、可依赖的接口契约"。
 - 目的是把散落在 `lakeRuntime.ts` 等文件注释里的反编译结论，收敛成一处可被类型系统检查的"总账"，降低黑盒导致的静默失败。
-- 本文件 = 该契约的设计稿 + 维护守则 + 调试速查表；落地产物 = 新增 `src/features/editor/lakex-contract.d.ts` + 替换 `as any`（待办，见 HANDOFF §3.9）。
+- 本文件 = 该契约的设计稿 + 维护守则 + 调试速查表；落地产物 = 新增 `src/features/editor/lakex-contract.d.ts` + 替换 `as any`（待办，见 HANDOFF §3 技术债）。
 
 ---
 
@@ -22,7 +22,7 @@
   模块注释带真实 monorepo 路径，如 `framework/kernel/src/model/selection/position.ts:44`；命令/文案/i18n 全明文）。
 - 因此"很多问题查不到"的真因排序是：**1) 内核无类型（d.ts 仅 9 行 any）→ 全凭试错；2) 体量大（约 49 个插件包）无入口文档；3) 行为契约（事件负载/卡数据形状）不公开**。
 - 结论：这些痛点**不依赖换核即可缓解**——本文件就是缓解手段。换核判断与差距矩阵见评估文档 §4/§9，本文件不重复。
-- 方法论对齐：项目既定原则 = 先实测拿数据，再反编译 dist 确认机制（见 docs/PROGRESS.md 方法论节）。本文件只收录**有证据**的观测。
+- 方法论对齐：项目既定原则 = 先实测拿数据，再反编译 dist 确认机制。本文件只收录**有证据**的观测。
 
 ---
 
@@ -37,14 +37,14 @@
 | 序列化方言 | setDocument/getDocument MIME：text/lake（=落盘格式，`<card … value="data:JSON">` + `data-lake-id`/`ne-*` 类）、text/html、text/plain、text/markdown、json | 真实 .lake 样本；lakeRuntime.ts L36-39 |
 | DOM 协议 | `ne-*` 类族（滚动容器 .ne-editor-wrap/.ne-viewer、卡片 .ne-card、.ne-toc-*、.ne-codeblock 等）；应用 src 已有 119 个不同 ne-* token | 应用 src + styles.css |
 | 血统关系 | lakex 与开源 lakelib（lake-main，MIT 0.4.6）同 Lake 血统但不同代；**序列化已分叉**（lakex `<card>` vs lakelib `<lake-box>`），不可直接互换 | 评估文档 §2.3/§5 |
-| 主题 | 注入 `.lakex-default-theme`（亮）/ `lakex-dark-theme-dark`（暗）变量 | PROGRESS.md 暗色模式坑 |
+| 主题 | 注入 `.lakex-default-theme`（亮）/ `lakex-dark-theme-dark`（暗）变量 | HANDOFF §4 渲染/CSS 坑 |
 
 ---
 
 ## 3. 与既有文档/红线的关系
 
-- **AGENTS.md §3.8 / HANDOFF §3.8（Lake 内核策略）**：A 用开源 lakejs(lakelib) 源码当"机制字典"（它只是参照系，不是本运行内核）；B 版本锚点 + 最小 hack，不整体 fork。本文件是"我们自己运行的内核(lakex)的知识库"，与机制字典互补。
-- **docs/PROGRESS.md 方法论节（L366-385）**：先复现拿数据 → 反编译确认机制 → 再改。新观测回填本文件时按此流程。
+- **AGENTS.md §3 #8/#17 + HANDOFF §3（Lake 内核策略）**：A 用开源 lakejs(lakelib) 源码当"机制字典"（它只是参照系，不是本运行内核）；B 版本锚点 + 最小 hack，不整体 fork。本文件是"我们自己运行的内核(lakex)的知识库"，与机制字典互补。
+- **定位方法论**：先复现拿数据 → 反编译确认机制 → 再改；新观测回填本文件时按此流程。
 - **docs/TROUBLESHOOTING.md**：踩坑案例；本文件记录的是"机制/契约"层，坑是表现层，互不替代。
 - **红线提醒**：本文件及其契约**只新增应用侧声明**，不改 vendor、不 patch 内核本体（除既有最小 hack 模式外）、不复制大段 bundle 源码进仓库。
 
@@ -184,7 +184,7 @@
 
 ## 7. 待落地任务与关联实验
 
-- **任务 T1（待办，HANDOFF §3.9）**：新增 `src/features/editor/lakex-contract.d.ts`（§4 清单），替换 lakeRuntime 等处的 `as any`，纯类型改动 + 门禁全绿。
+- **任务 T1（待办，HANDOFF §3 技术债）**：新增 `src/features/editor/lakex-contract.d.ts`（§4 清单），替换 lakeRuntime 等处的 `as any`，纯类型改动 + 门禁全绿。
 - **实验 E1/E2（换核决策前置）**：真实 .lake ↔ lakelib 双向解析；lakelib 大文档渲染。详见工作区根 `lake-kernel-swap-analysis-260908.md` §9。
 - 本文件由 260908 只读评估生成；落地/回填后在此追加更新日志（一行一条，勿删历史）。
 - 2026-09-11：新增 §5.1（原生编辑 TOC 侧栏填充时序：空 toc 创建 + 1s 节流 + 直接 `_tocSidebar.update` 绕过节流），§4.2/§5 表补对应条目。来源：HANDOFF §2.15–2.16、lakeRuntime.ts `refreshTocSidebar`/`findNativeTocSidebar`。

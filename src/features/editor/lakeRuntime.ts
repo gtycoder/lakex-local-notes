@@ -429,7 +429,7 @@ export interface LakeEditorPrefs {
   showToolbar?: boolean;
   /**
    * 彻底禁用原生编辑 TOC 侧栏（桌面多标签自建大纲时置 true）。
-   * 仅关闭编辑模式 UI：内核 toc 数据与 tocChange 事件照常产生（详见 docs/OUTLINE-RESEARCH.md §9）。
+   * 仅关闭编辑模式 UI：内核 toc 数据与 tocChange 事件照常产生。
    * 移动端（LakeEditor）不传此字段，保持原生行为。
    */
   disableNativeToc?: boolean;

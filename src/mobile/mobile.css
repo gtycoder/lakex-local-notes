@@ -1,5 +1,5 @@
 /* 移动端样式（对齐思源移动端：度量/动效/颜色一律取 --b3-* 与 --mobile-* 令牌）
-   口径来源见 docs/MOBILE-UI-SIYUAN-AUDIT-260908.md §1（siyuan-master app/src/assets/scss/main/_mobile.scss）。 */
+   口径来源：siyuan-master app/src/assets/scss/main/_mobile.scss（见 HANDOFF §8）。 */
 :root {
   /* 思源移动端骨架度量（_mobile.scss:4-15） */
   --mobile-topbar-height: 48px;

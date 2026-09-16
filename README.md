@@ -3,7 +3,7 @@
 本地优先的 Lake（语雀）编辑器笔记应用。**本文是项目总览入口；会话交接的唯一文档是** **`HANDOFF.md`。**
 
 > 给完全没有上下文的后续会话：先读 **HANDOFF.md（唯一交接文档：当前状态 / 真正的待办 / 踩坑）**，再读
-> **AGENTS.md（项目长期记忆 / 红线，每次自动加载）**，然后按需读下面的开发/架构/踩坑文档与 `docs/TODO.md`。
+> **AGENTS.md（项目长期记忆 / 红线，每次自动加载）**，然后按需读下面的开发/架构/踩坑文档。
 > **当前主开发分支是** **`master`**（= Gitee 远程默认分支，已验证 `ls-remote --symref`；本地与远端同步）。
 
 ***
@@ -98,11 +98,9 @@ origin  git@gitee.com:gtycoder/local-lake.git
 | **HANDOFF.md**                               | 唯一交接文档（当前状态/待办/坑）                                               | **先读**       |
 | **docs/CODEX-GUIDE.md**                      | Codex 自主开发指南（Playwright 驱动真实 Electron/Computer Use/浏览器）         | **动手前必读**    |
 | docs/LAKEX-CONTRACT.md                       | 闭源 lakex 内核行为契约 + 调试速查表（会话知识库，编辑器相关先查）                          | 编辑器先读        |
-| docs/PROGRESS.md                             | 历史会话全记录 + **经验总结（方法论/深层认识/工程实践）**（**过程记录**：当前状态/待办以 HANDOFF 为准） | 考古/复盘用       |
 | docs/DEVELOPMENT.md                          | 环境要求、开发/构建/打包命令、测试、依赖版本、提交历史                                    | 动手前读         |
 | docs/SYNC-PROTOCOL.md · docs/S3-GC-DESIGN.md | 同步协议 / GC 与保留链（**改同步、GC 前必读**，配合 AGENTS §3 原则 11\~13）           | 动同步必读        |
 | docs/STORAGE-LAYERS.md                       | 存储分层与「设备本地」契约（**新增持久化前必读**：哪些进 S3 / 哪些仅本地、三处同改规则）              | 加持久化前读       |
-| docs/TODO.md                                 | 历史待办总表（**可能过期**，权威待办 = HANDOFF §3）                              | 按需           |
 | docs/ARCHITECTURE.md                         | 进程结构、关键文件索引、图片数据流、数据与存储、S3 同步机制                                 | 改代码前读        |
 | docs/TROUBLESHOOTING.md                      | 踩过的坑（打包/CDN/剪贴板/编辑器与 CSS/环境/S3 + 虚拟渲染新坑）                        | 遇坑查          |
 | VIRTUAL-RENDERING-TEST.md                    | 虚拟渲染回归清单（逐项手测）                                                  | 动虚拟渲染相关代码前后跑 |

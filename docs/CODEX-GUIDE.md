@@ -107,7 +107,7 @@ await win.screenshot({ path: "/tmp/xxx.png" });  // 截图给用户看
 3. **每个修复的闭环**：
    复现（拿数据）→ 根因（必要时反编译 Lake dist 确认）→ 改 → 实测数据 → 回归
    → 清理测试数据 → 更新交接文档 → 提交/推送（master）
-4. **会话结束**：把任务目标/已完成/当前问题/下一步/踩坑写进 `docs/PROGRESS.md`
+4. **会话结束**：把任务目标/已完成/当前问题/下一步/踩坑写进 `HANDOFF.md`
    + `docs/TROUBLESHOOTING.md`
 
 ## 环境速查

@@ -125,4 +125,4 @@
 
 ---
 
-*本文由 Lake Notes 项目会话整理（验证方案，未改动代码）。关联：`docs/OBSIDIAN-PLUGIN-PLAN.md`(若转 Obsidian 插件则另立验证)。*
+*本文由 Lake Notes 项目会话整理（验证方案，未改动代码）。*
