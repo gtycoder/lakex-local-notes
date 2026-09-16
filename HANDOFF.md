@@ -1395,9 +1395,13 @@ const m = await page.send("CSS.getMatchedStylesForNode", { nodeId: q.nodeId });
 3. **矩阵补状态**（做 1、2 的前置）：`(prefers-reduced-motion: reduce)` / `(prefers-reduced-transparency: reduce)` 模拟、
    "打开画板卡"（才能收掉 styles.css 那块与 vendor 逐字节相同的第三方 CSS）、多标签、编辑器内部态。
    进度：**reduced-motion / reduced-transparency 已补（32 状态）**；剩下"打开画板卡"、多标签、编辑器内部态。
-4. **回填 §2.47**：矩阵补上媒体偏好后，当初被剔除的 11 条 `animation/transition: none !important`（reduced-motion 契约）
-   **现在可验证了**——可以用 LK_CSS_AUDIT_DIR 重跑 imp-scan/imp-safe/plan-imp（state 列表已含新媒体态），
-   把"确实多余"的摘掉、把"承重"的写明理由。这是一次小批量、口径已备齐的清理。
+4. ~~回填 §2.47~~ **✅ 已完成（260916，只有结论、无需改代码）**：矩阵补上媒体偏好后，把当年剔除的 **11 条
+   reduced-motion 契约 `!important`**（`app/misc.css` 2 / `motion.css` 6 / `shell.css` 1 / `b3/animations.css` 2）
+   用 `ab2` 的 plan 模式**在 32 个状态下实测**：摘掉后 4 个 rm 状态共 **2159 处计算值差异**
+   （`rm:760:light` 540、`rm-quicknotes:1315:light` 539 …），其它状态 0 差异。
+   ⇒ **它们全部承重，保持原样**。§2.47 那条"媒体条件在矩阵里恒不成立 ⇒ 证不了就不动"的判断被实测证实：
+   当时若按"看着多余"删掉，真机开"减弱动态效果"的用户会直接失去运动契约。
+   （注：`tokens.css` 里另有 9 条同类声明，因该文件**双端共享**、按 §2.44 的安全边界本轮不动。）
 5. **收掉第三方画板 CSS 的重复**：`app/misc.css` 里那块与 `src/vendor/drawnix-react-text.css` 逐字节相同的压缩块，
    需要先有"打开画板卡"的可观测状态才能判定能否删。
 

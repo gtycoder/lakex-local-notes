@@ -83,8 +83,14 @@ node scripts/css-audit/drive.mjs 9222 scripts/css-audit/shotset.mjs <tag> "$(cat
 
 - 状态矩阵仍是 27 个：**多标签、大纲缩放中、编辑器内部态（代码块/表格/文件卡）、选区与粘贴态**未覆盖；
   动这几类样式前先补状态。
-- `(prefers-reduced-motion: reduce)` / `(prefers-reduced-transparency: reduce)` 在矩阵里恒为假
-  ⇒ 落在这些媒体块里的声明**当前不可验证**（§2.47 因此剔除了 11 条）；要动它们先给 `stylesnap` 补模拟偏好的状态。
+- ~~`(prefers-reduced-motion: reduce)` / `(prefers-reduced-transparency: reduce)` 恒为假~~ **260916 已补**：
+  矩阵 27 → **32**，用 CDP `Emulation.setEmulatedMedia` 加了 `rm:1315:light|dark`、`rm:760:light`、
+  `rm-quicknotes:1315:light`、`rt:1315:light`。
+  **补完立刻有了结论**：当年被剔除的 11 条 reduced-motion 契约 `!important` 摘掉后，在 4 个 rm 状态共
+  **2159 处计算值差异** ⇒ 全部承重（`ab2` plan 模式直接测得）。`split-file.mjs` 的"媒体块能不能搬"也随之
+  从"硬编码跳过"改成**由 `cond-eval.json` 数据决定**。**这是补矩阵最直接的收益：把"证不了"变成"测得准"。**
+  之后新增任何媒体偏好相关的改动，都应先确认它在矩阵里有可观测状态。
+  仍缺：**"打开画板卡"**（收第三方重复块的前置）、多标签、编辑器内部态、选区粘贴态。
 
 ## 6. 重要修订（260916 实测）：**跨层搬家不是免费的，S3 只在本层内拆**
 
