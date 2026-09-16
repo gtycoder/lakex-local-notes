@@ -23,8 +23,8 @@ const FILES = [
   "b3/animations.css", "b3/base.css", "b3/components.css", "b3/dark.css", "b3/layout.css",
   "b3/theme-daylight.css", "b3/theme-midnight.css",
   "features/attachment/attachment-preview.css", "features/editor/image-lightbox.css", "features/outline/outline.css",
-  "styles/dialog.css", "styles/document-status.css", "styles/editor-bridge.css", "styles/layout-contract.css",
-  "styles/motion-contract.css", "styles/overlays.css", "styles/quick-notes.css", "styles/shell.css",
+  "styles/dialog.css", "styles/document-status.css", "styles/editor.css",
+  "styles/motion.css", "styles/overlays.css", "styles/quick-notes.css", "styles/shell.css",
   "styles/tokens.css", "styles/ui-polish.css",
 ];
 
@@ -43,12 +43,11 @@ const BASELINE: Record<string, { decls: number; dupGroups: number }> = {
   "features/outline/outline.css": { decls: 257, dupGroups: 0 },
   "styles/dialog.css": { decls: 227, dupGroups: 8 },
   "styles/document-status.css": { decls: 107, dupGroups: 2 },
-  "styles/editor-bridge.css": { decls: 12, dupGroups: 0 },
-  "styles/layout-contract.css": { decls: 5, dupGroups: 0 },
-  "styles/motion-contract.css": { decls: 3, dupGroups: 0 },
+  "styles/editor.css": { decls: 12, dupGroups: 0 },
+  "styles/motion.css": { decls: 3, dupGroups: 0 },
   "styles/overlays.css": { decls: 444, dupGroups: 1 },
   "styles/quick-notes.css": { decls: 9, dupGroups: 0 },
-  "styles/shell.css": { decls: 43, dupGroups: 0 },
+  "styles/shell.css": { decls: 48, dupGroups: 0 },   // +5 = 原 layout-contract.css 的壳层度量令牌（260916 S1 并入）
   "styles/tokens.css": { decls: 83, dupGroups: 0 },
   "styles/ui-polish.css": { decls: 166, dupGroups: 5 },
 };

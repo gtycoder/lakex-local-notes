@@ -1,3 +1,5 @@
+/* 编辑器桥接层（原 editor-bridge.css，260916 按职责定名；后续 S3 会把 styles.css 里
+   属于编辑器域的规则一并并进来，最终成为编辑器域的唯一来源）。 */
 
 .lake-search-hit-target {
   outline: 2px solid color-mix(in srgb, var(--lake-accent) 72%, transparent);

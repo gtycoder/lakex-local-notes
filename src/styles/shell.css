@@ -170,3 +170,12 @@ html[data-theme="dark"] .document-pane .ne-engine > ne-h6 ne-heading-content {
   transform: translateX(-12px) !important;
   transition: opacity 120ms ease-out, transform 120ms var(--lake-ease-standard) !important;
 }
+
+/* ── 壳层度量令牌（原 layout-contract.css，260916 S1 并入） */
+:root {
+  --lake-rail-width: 38px;
+  --lake-floating-panel-top: 72px;
+  --lake-floating-panel-bottom: 72px;
+  --activity-rail-width: var(--lake-rail-width);
+}
+.app-shell { --outline-collapsed-width: var(--lake-rail-width); }
