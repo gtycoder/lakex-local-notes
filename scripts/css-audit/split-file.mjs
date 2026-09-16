@@ -48,6 +48,13 @@ const perTarget = {};
 
 for (const g of groups) {
   const n = g.node;
+  // 超长行（>1000 字符）= 第三方逐字节搬来的压缩块（例：styles.css L420 的 drawnix 画板 CSS，与 vendor 文件完全一致）。
+  // 这类块**原地不动**：拆它既会破坏"与 vendor 逐字节相同"的性质，也会产生无法复核的巨diff。
+  if (n.source && n.source.start.line === n.source.end.line && n.toString().length > 1000) {
+    keep.push(g);
+    console.log(`  ⚠ 超长块原地不动：L${n.source.start.line}（${n.toString().length} 字符，${n.type} ${String(n.selector || n.name || "").slice(0, 40)}）`);
+    continue;
+  }
   // 不可验证的媒体块：原地不动
   if (n.type === "atrule" && UNVERIFIABLE.test(n.params)) { keep.push(g); continue; }
   const hit = classify(n);

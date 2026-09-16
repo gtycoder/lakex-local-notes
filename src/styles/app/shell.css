@@ -1,0 +1,527 @@
+/* 基础层 · 应用外壳（活动栏 / 目录栏与目录树 / 工作区与文档面板骨架）
+   260916 第二档 S3：自 src/styles.css 按职责拆出（脚本：scripts/css-audit/split-app-layer.mjs，可重跑）。
+   本层由 src/styles.css 的 @import 编排，整体仍在 b3 之前 —— 层间先后不得改变（见 docs/CSS-LAYERS-BRIEF-260916.md §6）。 */
+
+.app-shell { display: grid; height: 100%; }
+
+/* 侧栏：只留"结构"（flex 列）；配色/定位/内边距/栅格列都由共用作用域与 b3 层负责。
+ * （原 `grid-template-columns: 260px 1fr`、`background: #f4f5f7`、`border-right`、
+ *   `padding-top`、`z-index` 等早已被后面的规则整条盖住，实测计算值无变化后删除。） */
+.sidebar { display: flex; flex-direction: column; }
+
+.create-menu-wrap { position: relative; }
+
+/* ＋ 快捷创建：与行内 ⋯ 同一套着重色（hover/展开时 accent） */
+.create-btn:hover, .create-btn.is-active { background: var(--lake-accent-soft); color: var(--lake-accent); }
+
+.create-menu { display: flex; position: absolute; top: 36px; right: 0; z-index: 1000; flex-direction: column; width: clamp(150px, calc(var(--sidebar-width, 260px) - 16px), 220px); max-width: calc(100vw - 16px); padding: 4px; transform-origin: top right; transition: transform var(--lake-motion-fast) var(--lake-ease-standard), opacity var(--lake-motion-fast) var(--lake-ease-standard); }
+
+.create-menu > button { display: grid; grid-template-columns: 20px minmax(0, 1fr); align-items: center; gap: 8px; width: 100%; min-height: 42px; padding: 5px 8px; border: 0; color: var(--b3-theme-on-surface); background: transparent; text-align: left; }
+
+.create-menu > button:disabled { cursor: default; opacity: .45; }
+
+.create-menu > button > span { display: flex; flex-direction: column; min-width: 0; }
+
+.create-menu strong { font-size: 12px; font-weight: 600; }
+
+.create-menu small { margin-top: 1px; overflow: hidden; color: var(--b3-theme-on-surface-light); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+
+.inline-create { display: grid; grid-template-columns: 16px minmax(0, 1fr) auto; align-items: center; gap: 5px; margin: 2px 7px 3px; padding: 3px 5px; border: 1px solid var(--b3-theme-primary-lighter); border-radius: var(--b3-border-radius); color: var(--lake-accent); background: #fff; box-shadow: 0 0 0 1px var(--lake-accent-soft); }
+
+.inline-create input { min-width: 0; height: 22px; padding: 0; border: 0; outline: 0; color: var(--lake-text); background: transparent; font-size: 12px; }
+
+.inline-create button { height: 22px; padding: 0 6px; border: 0; border-radius: var(--radius-xs); color: #fff; background: var(--lake-accent); font-size: 10px; }
+
+.note-list { flex: 1; min-height: 0; overflow: auto; padding: 0 5px; }
+
+.note-row { display: grid; align-items: center; width: 100%; padding: 2px 7px; color: var(--lake-text-secondary); background: transparent; text-align: left; }
+
+.note-row:hover { background: #e9ebee; }
+
+.note-row.active { background: #eff0f0; }
+
+.note-row-copy { min-width: 0; }
+
+/* 标题恒为单行、超出列宽直接裁切——不打省略号（用户 260914：不要用 … 缩短标题）；hover ⋯ 出现时同样只是让位裁切 */
+.note-row-copy strong { display: block; overflow: hidden; color: var(--lake-text); font-size: 13px; font-weight: 500; white-space: nowrap; }
+
+.tree-rename-input { width: 100%; height: 24px; padding: 0 4px; border: 1px solid var(--b3-theme-primary-lighter); border-radius: var(--b3-border-radius); outline: 0; background: #fff; font-size: 13px; }
+
+.tree-rename-input:focus { border-color: var(--b3-theme-primary); box-shadow: 0 0 0 2px var(--b3-theme-primary-lightest); }
+
+.tree-rename-input::selection { color: #2d4968; background: #dcecf8; }
+
+.tree-list { padding-bottom: 4px; }
+
+.tree-row { grid-template-columns: 16px 22px minmax(0, 1fr) auto; gap: 4px; }
+
+/* 行内动作（⋯ = 右键菜单，＋ = 新建子文档，对齐思源 more-root/new）：
+   默认 display:none 不占宽度；hover/键盘聚焦时才出现并挤出位置（选中态不常驻，用户 260914）。
+   标题恒单行、列宽处直接裁切不打省略号（见 .note-row-copy strong）。 */
+.tree-row-actions { display: none; align-items: center; justify-content: flex-end; background: inherit; }
+
+.tree-row:hover .tree-row-actions, .tree-row-actions:has(:focus-visible) { display: inline-flex; }
+
+/* 仅行 hover / 键盘聚焦可见；鼠标点击后的残余 focus 不再钉住动作（用户 260914） */
+/* ⋯/＋ 不加任何方块底（用户 260914：去掉明显的加深方块背景）；hover 反馈只变图标色 */
+.tree-row-action { display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; padding: 0; border: 0; border-radius: var(--radius-xs); background: transparent; color: var(--lake-text-tertiary); }
+
+.tree-row-action:hover { color: var(--lake-accent); }
+
+.tree-row.type-notebook { margin-top: 1px; }
+
+.tree-row.type-notebook .note-row-copy strong { font-weight: 650; }
+
+.tree-row.type-group .note-row-copy strong { font-weight: 600; }
+
+.tree-row { cursor: pointer; user-select: none; touch-action: pan-y; }
+
+.tree-row.dragging { cursor: grabbing; }
+
+.tree-chevron { display: flex; align-items: center; justify-content: center; width: 16px; height: 100%; padding: 0; border: 0; border-radius: var(--radius-xs); background: transparent; transition: transform var(--lake-motion-fast) var(--lake-ease-standard), background var(--lake-motion-fast) var(--lake-ease-standard), color var(--lake-motion-fast) var(--lake-ease-standard); }
+
+.tree-chevron:not(:disabled):hover { background: var(--lake-accent-soft-strong); color: var(--lake-accent); }
+
+/* 与行内操作按钮同一套 hover 着重 */
+.tree-chevron:disabled { cursor: default; }
+
+.tree-chevron.open { transform: rotate(90deg); }
+
+.tree-children { margin-left: 16px; border-left: 1px solid rgba(225, 228, 232, 0.55); }
+
+.workspace { display: grid; min-width: 0; min-height: 0; }
+
+.document-pane { min-height: 0; overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; }
+
+.document-pane .lake-editor-mount .ne-ui { position: sticky; z-index: 150; background: var(--lakex-editor-background, #fff); }
+
+.document-pane .lake-editor-mount .ne-inner-overlay-container {
+  /* Raise above the sticky .ne-ui toolbar (z-index: 20) so table card toolbars can receive hover. */
+  z-index: 100 !important;
+}
+
+/* Eliminate intermediate stacking contexts that Lake may create between
+   .lake-editor-mount and .ne-inner-overlay-container.  Lake often sets
+   position:relative + z-index:0 on editor wrappers, which traps
+   .ne-inner-overlay-container's z-index inside a child stacking context
+   and prevents it from competing with .ne-ui's z-index. */
+.document-pane .lake-editor-mount .ne-editor,
+.document-pane .lake-editor-mount .ne-editor-wrap,
+.document-pane .lake-editor-mount .ne-editor-body,
+.document-pane .lake-editor-mount .ne-engine,
+.document-pane .lake-editor-mount .ne-editor-outer-wrap-box,
+.document-pane .lake-editor-mount .ne-editor-wrap-box,
+.document-pane .lake-editor-mount .ne-editor-wrap-content {
+  z-index: auto;
+}
+
+.empty-workspace, .loading-screen { display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 14px; color: var(--lake-text-tertiary); }
+
+.empty-workspace { gap: 6px; }
+
+.empty-workspace-icon { display: grid; place-items: center; width: 56px; height: 56px; margin-bottom: 8px; border-radius: var(--radius-xl); color: var(--lake-accent, var(--lake-accent, #3b5bdb)); background: var(--lake-accent-soft, #edf3ff); }
+
+.empty-workspace h2 { margin: 0; color: var(--lake-text, #252a33); font-size: 16px; font-weight: 600; letter-spacing: -.01em; }
+
+.empty-workspace-hint { margin: 0 0 6px; color: var(--lake-text-tertiary); font-size: 13px; }
+
+.create-menu { opacity: 1; transform: scale(1); }
+
+@starting-style { .create-menu { opacity: 0; transform: scale(0.96); } }
+
+/* 多标签模式下 .document-pane 不再是共享滚动容器（否则所有标签共用一条滚动进度） */
+.document-pane:has(> .multi-tab-editor) { overflow: hidden; }
+
+/* 「大纲增强」开启 → 用应用自建大纲，隐藏 lakex 原生 TOC 侧栏。
+   原生侧栏始终创建（保证运行中切换即时生效），这里只做 display 隐藏。 */
+.lake-editor-tab.native-toc-hidden .ne-toc-sidebar {
+  display: none;
+}
+
+/* Same width constraints that mobile already has (line 168),
+   but applied unconditionally so desktop also respects the container. */
+.document-pane .lake-editor-mount,
+.document-pane .lake-editor-mount .ne-editor,
+.document-pane .lake-editor-mount .ne-editor-wrap,
+.document-pane .lake-editor-mount .ne-editor-wrap-content,
+.document-pane .lake-editor-mount .ne-editor-outer-wrap-box,
+.document-pane .lake-editor-mount .ne-editor-wrap-box,
+.document-pane .lake-editor-mount .ne-editor-body,
+.document-pane .lake-editor-mount .ne-engine {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+}
+
+.document-pane .lake-editor-mount .ne-engine > * {
+  max-width: 100%;
+}
+
+/* ══ 壳层几何 · 共用作用域（260915 窄窗彻底统一 · 组 1：顶栏 ↔ 让位）══
+ * 这一对原先都写在下面的 `@media (min-width: 761px)` 里：视口一旦窄于 761px，
+ * 顶栏退回 sticky、工作区让位消失 —— 宽→窄拖动时顶栏与文档区同时跳变。
+ * 按 HANDOFF §2.39 的成对清单搬到共用作用域（块内顺序一字未改，只是去掉守卫），
+ * 窄窗块里对应的手抄副本同步删除。**改这里必须两组一起看，缺一就会把面包屑压到顶栏下。 */
+.workspace {
+  grid-column: 3;
+  grid-row: 1;
+  margin: calc(var(--topbar-height) + 4px) 0 4px 0;
+  overflow: hidden;
+}
+
+/* ── 左右活动轨（260915 窄窗彻底统一 · 组 2：轨几何 ↔ 轨按钮）──
+ * A/B 成对搬运：轨的 flex 布局/居中/内边距与按钮尺寸是一对，缺一按钮就会左移 2px（实测 5→3）。 */
+.activity-rail {
+  display: flex;
+  position: relative;
+  z-index: 270;
+  grid-column: 1;
+  grid-row: 1;
+  flex-direction: column;
+  align-items: center;
+  align-self: stretch;
+  min-width: var(--activity-rail-width);
+  padding: 0 3px 6px;
+}
+
+.activity-rail-spacer { display: none; }
+
+.activity-rail-fill { flex: 1; }
+
+.activity-button {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  margin: 2px 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
+.activity-button:active { transform: scale(.965); }
+
+.activity-button:focus-visible { outline: 2px solid rgba(47, 125, 94, 0.18); outline-offset: 2px; }
+
+/* ── 侧栏卡片几何（260915 窄窗彻底统一 · 组 6：侧栏壳层）── */
+.sidebar {
+  position: relative;
+  z-index: 250;
+  grid-column: 2;
+  grid-row: 1;
+  width: var(--sidebar-width);
+  align-self: end;
+  transition: opacity var(--lake-motion-standard) var(--lake-ease-standard), transform var(--lake-motion-panel) var(--lake-ease-standard), box-shadow 240ms ease-out;
+}
+
+.app-shell.sidebar-resizing .sidebar { transition: none; }
+
+.sidebar::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 0;
+  height: var(--topbar-height);
+}
+
+/* 目录栏固定视口：容器不滚动，只有 .note-list 是垂直滚动层 */
+.sidebar.sidebar-docked,
+.sidebar.sidebar-floating {
+  min-height: 0;
+  overflow: hidden;
+}
+
+.sidebar.sidebar-docked {
+  height: 100% !important;
+  width: auto;
+  margin-bottom: 0;
+  max-width: none;
+  align-self: stretch;
+}
+
+/* 收起态 = 悬停预览（本体固定、藏在左轨里）；浮动带尺寸统一由 styles/shell.css 出。 */
+.sidebar.sidebar-floating,
+.sidebar.sidebar-collapsed {
+  position: fixed;
+  left: var(--activity-rail-width);
+  padding-top: 0;
+}
+
+.sidebar.sidebar-collapsed {
+  pointer-events: none;
+  box-shadow: none;
+  transition-duration: var(--lake-motion-standard);
+}
+
+/* ── 壳层材质一览（260915 窄窗彻底统一）：壳是透明底，卡片才是白面 ──
+ * 原先是 `@media (min-width: 761px)` 里的规则 ⇒ 窄窗会掉回 `.workspace { background: #fff }`，
+ * 顶栏/文档区跨断点时底色翻白（用户 260915 动图）。 */
+.workspace,
+.document-pane,
+.multi-tab-editor {
+  background: transparent;
+}
+
+/* ── 大纲栏的壳层材质（与 .app-shell/.sidebar 同一处来源，宽窄共用）──
+ * 原先这一组只在 `@media (min-width: 761px)` 里 ⇒ 窄窗掉回 outline.css 自带的旧默认：
+ * 本体与轨道变成 `--shell-material`（浅一档的 #f6f6f6）而不是壳色，用户看到的就是
+ * "最右侧那条颜色跟别人不一样"。现在与其它壳层表面走同一条规则，**只有这一份**。 */
+.outline-sidebar,
+.outline-sidebar__content,
+.outline-sidebar--docked .outline-sidebar__content,
+.outline-sidebar--collapsed .outline-sidebar__content {
+  background: var(--shell-unified-background);
+  border: 0;
+  box-shadow: none;
+}
+
+/* 上面那条会把"真正的工作面"也刷成壳色，所以这组搭档必须同时存在（宽窄共用）：
+   固定/悬停展开的大纲面板要恢复成白色卡片。**成对改，缺一就会把面板刷成灰。** */
+/* 固定态的面板白卡：与"三栏卡片布局"（outline.css 共用作用域）同值，这里只补回被材质层刷掉的底色。 */
+.outline-sidebar--docked .outline-sidebar__content {
+  background: var(--b3-theme-background);
+}
+
+/* 悬停展开的面板公式**不在这里**：唯一来源是 b3/layout.css 的"右侧浮动（大纲 hover）"，
+   否则窄窗会掉回 outline.css 的老公式（1px 描边 + 14px 圆角），宽窄又变成两种样式。 */
+/* 桌面壳层使用一块连续材质：不再把顶栏、资料库和正文画成三张卡片。
+ * （原先在 `@media (min-width: 761px)` 里 ⇒ 窄窗侧栏会掉回基础样式的 1px 右边框。） */
+.activity-rail,
+.sidebar,
+.sidebar.sidebar-docked,
+.sidebar.sidebar-floating {
+  border: 0;
+}
+
+/* App-owned menus and dialogs share the shell material; Lake popovers are not targeted. */
+.create-menu,
+.context-menu {
+  border-color: rgba(31, 35, 41, .12);
+}
+
+.create-menu > button,
+.context-menu > button { border-radius: 6px; }
+
+.create-menu > button:hover,
+.context-menu > button:hover { background: rgba(31, 35, 41, .06); }
+
+/* ===== 工作区 keep-alive：小记/资料库两个视图常驻 DOM（display:contents 让子节点直接参与
+   .workspace 网格），切换工作区时用 display:none 隐藏而非卸载——避免重建全部 tab 的 Lake
+   编辑器（每个 setDocument 解析整篇文档）与目录树，切回笔记即点即显。 ===== */
+.workspace-view { display: contents; }
+
+.workspace-view--hidden { display: none; }
+
+.app-shell.quick-notes-active .sidebar { display: none; }
+
+/* ===== 小记工作台：独立于 Lake 编辑器，不覆盖任何 .ne-* / .lake-editor-* 选择器 ===== */
+/* 小记页的栅格与工作台骨架宽窄共用（原先只在 `@media (min-width: 761px)` 里 ⇒
+ * 窄窗的小记面会掉回 block 布局 + 没有内边距，跨断点时 display/内边距整体跳一次）。 */
+.app-shell.quick-notes-active { grid-template-columns: var(--activity-rail-width) 0 minmax(0, 1fr); }
+
+/* ===== 目录/大纲面板层级：与常驻 activity rail 做明显区分 ===== */
+@media (min-width: 761px) {
+  /* 常驻 rail 保持更深的底色，固定目录作为浅色工作面板。 */
+  .sidebar.sidebar-docked {
+    width: auto;
+    align-self: stretch;
+  }
+  /* 中间正文与两侧面板统一内缩，三块区域顶/底对齐并拥有清晰圆角边界。 */
+  .document-pane:has(> .multi-tab-editor) {
+    height: 100%;
+  }
+  .outline-sidebar__content {
+    background: #fff;
+    border: 1px solid rgba(0, 0, 0, .08);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, .05), 0 8px 22px rgba(0, 0, 0, .05);
+  }
+  .outline-sidebar--docked .outline-sidebar__content {
+    border-left: 1px solid rgba(0, 0, 0, .08);
+  }
+  .outline-sidebar--collapsed .outline-sidebar__content {
+    background: #fff;
+  }
+}
+
+.tree-row-icon { display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; border-radius: var(--b3-border-radius); flex: none; }
+
+.tree-row-icon:hover { background: rgba(0,0,0,0.06); }
+
+/* 菜单类 */
+.create-menu,
+.context-menu,
+.tab-switcher-menu {
+  background: color-mix(in srgb, var(--b3-theme-surface) 72%, transparent);
+  border: 1px solid color-mix(in srgb, var(--b3-theme-surface-lighter) 55%, transparent);
+  border-radius: var(--b3-border-radius-b);
+  box-shadow: var(--b3-dialog-shadow), inset 0 0 0 .5px color-mix(in srgb, var(--b3-theme-surface) 35%, transparent);
+  backdrop-filter: blur(24px) saturate(1.2);
+  -webkit-backdrop-filter: blur(24px) saturate(1.2);
+}
+
+.trash-tree-children { margin-left: 18px; border-left: 1px solid var(--b3-theme-surface-lighter); padding-left: 6px; }
+
+/* ===== v2 UI 收紧：区域间距 / 细滚动条 / 顶栏融合 / 小记顶栏融合 ===== */
+@media (min-width: 761px) {
+  /* 相邻区域贴边，仅外侧圆角，缩短视觉间距 */
+  .outline-sidebar__content { border-radius: 0 10px 10px 0; border-left: 0; }
+
+  /* 顶栏背景已单源为融合/统一材质（b3/layout.css + --shell-unified-topbar），不再就地设横向渐变。
+     下面这些渐变一律用令牌（--lake-shell/--shell-material）：浅色下与原字面值只差 2~3 个色阶，
+     但深色下不会再留一块浅色板（.outline-sidebar 在开启「大纲增强」时才会挂载，属潜在坑）。 */
+  .outline-sidebar { background: var(--shell-gradient-top); }
+
+  /* 小记：左轨颜色不变；小记内容用“视口固定”的横向渐变，与顶栏逐像素对齐融合，
+     再叠加纵向材质过渡。 */
+  .app-shell.quick-notes-active .workspace { border: 0; border-radius: 0; box-shadow: none; background: transparent; }
+
+}
+
+@media (min-width: 761px) {
+  /* 壳层连续材质（.app-shell/.activity-rail/.sidebar）已搬到共用作用域 */
+  .sidebar.sidebar-docked {
+    margin: calc(var(--topbar-height) + 4px) 4px 4px 0;
+  }
+  /* .workspace / .document-pane / .multi-tab-editor 材质已搬到共用作用域 */
+  /* 大纲材质与它的搭档（面板白卡）已搬到共用作用域（见上方「大纲栏的壳层材质」） */
+  /* .statusbar 材质已搬到共用作用域 */
+
+  /* 小记页：活动轨保持透明，与壳层对角渐变一体。 */
+
+}
+
+/* ===== 2026-08-13 shell continuity pass =====
+ * The window chrome and the fixed rails share one painted surface.  The
+ * editor is intentionally the only opaque "room" opened from that surface.
+ * Keeping the base gradient on .app-shell (rather than repeating it on each
+ * column) prevents the top strip from breaking at the rail boundaries.
+ */
+/* 壳层定位与层叠上下文：宽窄共用（原先只在 @media (min-width: 761px) 里）。
+ * 壳层背景（对角氛围渐变 + 底色）单一来源见 b3/layout.css 的 .app-shell；
+ * 此处只保留定位与 isolation（层叠上下文），原 180deg 多层背景被其覆盖，已删。 */
+.app-shell {
+  position: relative;
+  isolation: isolate;
+}
+
+@media (min-width: 761px) {
+
+  .activity-rail,
+  .sidebar,
+  .outline-sidebar__rail {
+    border-color: rgba(31, 35, 41, .055) !important;
+  }
+
+  .workspace,
+  .document-pane,
+  .document-pane:has(> .multi-tab-editor) {
+    background: transparent;
+  }
+
+  .document-pane,
+  .document-pane:has(> .multi-tab-editor) {
+    background: #fff !important;
+  }
+
+  .app-shell.quick-notes-active .activity-rail {
+    background: transparent;
+  }
+
+  .app-shell.quick-notes-active .quick-notes-pane {
+    background: var(--lake-shell);
+  }
+}
+
+/* ===== 2026-08-13 floating panel surface correction =====
+ * The shell itself remains continuous, but an opened/floating directory or
+ * outline is a real work surface.  Do not let the shell transparency rule
+ * erase the white panel that is used by the docked variants. */
+@media (min-width: 761px) {
+  .sidebar.sidebar-docked,
+  .sidebar.sidebar-floating {
+    background: #fff;
+  }
+
+  .sidebar.sidebar-docked {
+    border: 1px solid rgba(0, 0, 0, .08);
+    border-radius: 12px;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, .05), 0 8px 22px rgba(0, 0, 0, .06);
+  }
+
+  .sidebar.sidebar-floating {
+    border-top: 1px solid rgba(0, 0, 0, .16);
+    border-right: 1px solid rgba(0, 0, 0, .16);
+    border-bottom: 1px solid rgba(0, 0, 0, .16);
+    border-left: 0;
+    border-radius: 0 14px 14px 0;
+    box-shadow: 18px 0 50px rgba(43, 50, 78, .18), 2px 0 8px rgba(43, 50, 78, .08);
+  }
+
+  /* （大纲面板白卡这两条已与材质层一起搬到共用作用域） */
+}
+
+/* ===== 2026-08-13 fixed library panel bottom alignment =====
+ * A docked directory occupies the full shell height, just like its activity
+ * rail and floating preview.  The previous calc(100% - topbar) stopped it
+ * above the window/status area and left a visible bottom gap. */
+/* （原 `@media (min-width: 761px) { .sidebar.sidebar-docked { height:100% … } }` 已搬到共用作用域） */
+/* ── 性能与过渡（Electron 43 / Chromium 150 新能力落地） ── */
+/* 树长列表：跳过视口外行的渲染（content-visibility） */
+.tree-row {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 28px;
+}
+
+/* 工作空间菜单位于窗口级顶栏下方；打开时禁用侧栏的原生命中，
+ * 避免 macOS/Electron 合成层在菜单与 sidebar-header 重叠处抢走物理鼠标事件。 */
+@media (min-width: 761px) {
+  .app-shell.workspace-menu-open .sidebar,
+  .app-shell.workspace-menu-open .activity-rail {
+    pointer-events: none;
+  }
+}
+
+@media (min-width: 761px) {
+  .app-shell.workspace-menu-open .sidebar::before {
+    -webkit-app-region: no-drag;
+    pointer-events: none;
+  }
+}
+
+/* ===== 小记：复用笔记空间的“抠出编辑区”壳层（共用作用域）=====
+ * 小记与笔记共用同一窗口骨架：顶栏/活动轨/底栏直接透出壳层材质，
+ * 中间内容单独开一块白色工作面，并在顶部留下 4px 灰缝和圆角。
+ * 原先在 `@media (min-width: 761px)` 里 ⇒ 窄窗的小记页会掉回灰底、丢失顶部留白与圆角、
+ * 底部还多出 4px 灰缝（实测 761/760 两侧白卡与 padding 全不一致）。 */
+.app-shell.quick-notes-active .activity-rail {
+  background: transparent;
+  border: 0 !important;
+}
+
+.app-shell.quick-notes-active .workspace {
+  /* 小记页没有状态栏内容：不再保留空的 28px 状态行（用户 260915），
+     底部 4px 也一并去掉，让工作面直接贴到窗口底。 */
+  grid-template-rows: minmax(0, 1fr);
+  /* 特异性 (0,3,0) 已经压过共用作用域里的 `.workspace { margin … 0 4px 0 }`，不需要 !important */
+  margin: calc(var(--topbar-height) + 4px) 0 0;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  overflow: hidden;
+}
+
+.app-shell.quick-notes-active .quick-notes-pane {
+  min-height: 0;
+  padding-top: 28px;
+  background: var(--b3-theme-background) !important;
+  border-radius: var(--b3-border-radius-b) var(--b3-border-radius-b) 0 0;
+  background-attachment: initial;
+}
+
+.app-shell.quick-notes-active .statusbar {
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+}

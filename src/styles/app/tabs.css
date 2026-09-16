@@ -1,0 +1,338 @@
+/* 基础层 · 页签与工具栏（.tab-* / .toolbar__item / .icon-button / .tabbar-*）
+   260916 第二档 S3：自 src/styles.css 按职责拆出（脚本：scripts/css-audit/split-app-layer.mjs，可重跑）。
+   本层由 src/styles.css 的 @import 编排，整体仍在 b3 之前 —— 层间先后不得改变（见 docs/CSS-LAYERS-BRIEF-260916.md §6）。 */
+
+.tab-bar {
+  align-items: center;
+  flex-shrink: 0;
+  -webkit-app-region: drag;
+}
+
+.tab-bar .tab-item,
+.tab-bar .tab-switcher-wrap,
+.tab-bar .tab-switcher {
+  -webkit-app-region: no-drag;
+}
+
+.tab-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  /* 顶栏占满时不再收缩 tab（flex:0 0 auto 见下方「顶栏 tab 胶囊」一处设定）；
+     单个超长标题封顶 200px，省略部分用悬停 title 展示完整名称 */
+  white-space: nowrap;
+}
+
+.tab-item.active {
+  position: relative;
+  z-index: 1;
+}
+
+.tab-title {
+  /* 未超 240px 时完整展示；超长时省略，悬停 title 显示完整名称 */
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* 未保存标记：Tab 标签上的小圆点 */
+.tab-item.pinned .tab-title { font-weight: 600; }
+
+.tab-item .tab-pin { flex: none; color: var(--lake-text-tertiary); }
+
+.tab-item .tab-custom-icon { flex: none; font-size: 13px; line-height: 1; }
+
+.tab-item.pinned .tab-pin { color: var(--lake-sync-pending); }
+
+.tab-item.pinned .tab-close { display: none; }
+
+.tab-item.pinned {
+  background: rgba(196, 154, 58, .10);
+  border-color: rgba(196, 154, 58, .26);
+}
+
+.tab-item.pinned:hover { background: rgba(196, 154, 58, .16); }
+
+.tab-item.pinned.active {
+  background: var(--shell-accent-soft);
+  border-color: rgba(59, 91, 219, .35);
+}
+
+/* 远端删除标记：标签变灰 + 红色"已删除"徽标（正文保留，供复制/从回收站恢复） */
+.tab-item.deleted { color: var(--lake-error); background: rgba(220, 38, 38, .06); }
+
+.tab-item.deleted .tab-title { text-decoration: line-through; opacity: .72; }
+
+.tab-item.deleted.active { background: rgba(220, 38, 38, .10); color: var(--lake-error); box-shadow: inset 0 -1px 0 var(--lake-error); }
+
+.tab-close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: opacity 0.1s, background 0.1s;
+}
+
+.tab-item:hover .tab-close { opacity: 0.5; }
+
+.tab-close:hover { opacity: 1 !important; }
+
+.tab-panels {
+  flex: 1;
+  display: grid;
+  grid-template-rows: 1fr;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.tab-panels { min-width: 0; max-width: 100%; }
+
+/* The tab strip is a window-level title bar. It must not inherit the
+   document column's x offset when the library is docked or previewed. */
+.tab-bar {
+  display: flex;
+  gap: 6px;
+  padding: 4px 10px;
+}
+
+.platform-mac .tab-bar {
+  padding-left: 82px;
+  -webkit-app-region: drag;
+}
+
+.platform-native-titlebar .tab-bar {
+  padding-left: 10px;
+  -webkit-app-region: no-drag;
+}
+
+.tab-items {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  scrollbar-width: none;
+}
+
+.tab-items::-webkit-scrollbar { display: none; }
+
+/* ══ 标签项 / 标签切换器 · 共用作用域（260915 窄窗彻底统一 · 组 3/4）══
+ * 这一族原先也在下面的 `@media (min-width: 761px)` 里 ⇒ 761px 以下标签项掉回基础样式
+ * （边框/内边距/字号全变、切换器露出浏览器默认按钮框与灰底）＝宽→窄最显眼的几处跳变。
+ * 整族搬到共用作用域；窄窗块里对应的手抄副本同步删除。 */
+.tab-item {
+  /* 不收缩：每个标签按标题内容固有宽度展示，超长标题封顶省略 */
+  flex: 0 0 auto;
+  height: 28px;
+  border: 1px solid transparent;
+  font-size: 12px;
+  transition: color var(--lake-motion-fast) var(--lake-ease-standard), background-color var(--lake-motion-fast) var(--lake-ease-standard), border-color var(--lake-motion-fast) var(--lake-ease-standard), box-shadow var(--lake-motion-fast) var(--lake-ease-standard), transform var(--lake-motion-press) var(--lake-ease-standard);
+}
+
+.tab-item:hover { color: #46527e; background: rgba(255, 255, 255, .78); }
+
+.tab-item:active { transform: scale(.98); }
+
+.tab-close { top: 50%; right: 4px; border-radius: 50%; }
+
+.tab-item.active .tab-close { opacity: .38; }
+
+.tab-close:hover { background: rgba(31, 35, 41, .09); }
+
+.tab-switcher-wrap {
+  position: relative;
+  flex: 0 0 auto;
+  margin-left: 2px;
+  -webkit-app-region: no-drag;
+}
+
+.tab-switcher {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid transparent;
+  color: #5f6368;
+  background: rgba(255, 255, 255, .48);
+  -webkit-app-region: no-drag;
+  transition: color var(--lake-motion-fast) var(--lake-ease-standard), background-color var(--lake-motion-fast) var(--lake-ease-standard), border-color var(--lake-motion-fast) var(--lake-ease-standard), transform var(--lake-motion-press) var(--lake-ease-standard);
+}
+
+.tab-switcher:hover,
+.tab-switcher.open { color: var(--shell-accent-strong); border-color: rgba(59, 91, 219, .18); background: rgba(255, 255, 255, .86); }
+
+.tab-switcher:active { transform: scale(.94); }
+
+.tab-switcher:focus-visible { outline: 2px solid rgba(59, 91, 219, .22); outline-offset: 2px; }
+
+.tab-switcher[data-tooltip]::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  top: calc(100% + 9px);
+  right: 0;
+  z-index: 20;
+  width: max-content;
+  max-width: 260px;
+  padding: 6px 9px;
+  border: 1px solid rgba(0, 0, 0, .16);
+  border-radius: 6px;
+  color: #f8f9ff;
+  background: #3f4868;
+  box-shadow: var(--lake-shadow-soft);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.25;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  transform: translateY(-3px);
+  transition: opacity var(--lake-motion-fast) var(--lake-ease-standard), transform var(--lake-motion-fast) var(--lake-ease-standard);
+}
+
+.tab-switcher[data-tooltip]:hover::after,
+.tab-switcher[data-tooltip]:focus-visible::after { opacity: 1; transform: translateY(0); }
+
+.tab-switcher-menu {
+  /* portal 渲染到 document.body，脱离 .tab-bar（sticky+z-index:200）层叠上下文；
+     fixed + z-index:500 保证弹窗始终在大纲 rail（z-index:250）之上。 */
+  position: fixed;
+  z-index: 500;
+  max-width: calc(100vw - 24px);
+  display: flex;
+  flex-direction: column;
+  width: min(200px, calc(100vw - 24px));
+  max-height: min(470px, calc(100vh - var(--topbar-height) - 24px));
+  padding: 8px;
+  transform-origin: top right;
+}
+
+.tab-switcher-resize {
+  position: absolute;
+  left: -4px;
+  top: 0;
+  bottom: 0;
+  width: 8px;
+  cursor: ew-resize;
+  touch-action: none;
+  -webkit-app-region: no-drag;
+}
+
+.tab-switcher-resize::after {
+  content: "";
+  position: absolute;
+  left: 3px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 2px;
+  height: 40px;
+  border-radius: var(--radius-pill);
+  background: rgba(0, 0, 0, .14);
+  opacity: 0;
+  transition: opacity var(--lake-motion-fast) var(--lake-ease-standard);
+}
+
+.tab-switcher-menu:hover .tab-switcher-resize::after,
+.tab-switcher-resize:hover::after { opacity: 1; }
+
+.tab-switcher-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 28px;
+  padding: 0 7px 5px;
+  color: #495374;
+  font-size: 12px;
+}
+
+.tab-switcher-heading span { color: #929ab1; font-variant-numeric: tabular-nums; }
+
+.tab-switcher-list {
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.tab-switcher-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 32px;
+  border-radius: var(--radius-md);
+}
+
+.tab-switcher-item.active { background: rgba(59, 91, 219, .11); }
+
+.tab-switcher-item:hover { background: rgba(59, 91, 219, .08); }
+
+.tab-switcher-select,
+.tab-switcher-close {
+  border: 0;
+  background: transparent;
+  color: #596481;
+  -webkit-app-region: no-drag;
+}
+
+.tab-switcher-select {
+  display: flex;
+  align-items: center;
+  flex: 1 1 auto;
+  gap: 7px;
+  min-width: 0;
+  min-height: 32px;
+  padding: 4px 6px;
+  text-align: left;
+}
+
+.tab-switcher-select:hover { color: var(--shell-text); }
+
+.tab-switcher-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 18px;
+  width: 18px;
+  color: #69738e;
+  font-size: 15px;
+  line-height: 1;
+}
+
+.tab-switcher-status {
+  width: 7px;
+  color: var(--lake-sync-pending);
+  font-size: 10px;
+  line-height: 1;
+}
+
+.tab-switcher-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.tab-switcher-close {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 26px;
+  height: 26px;
+  margin-right: 3px;
+  border-radius: var(--radius-sm);
+  opacity: 0;
+}
+
+.tab-switcher-item:hover .tab-switcher-close,
+.tab-switcher-close:focus-visible { opacity: .7; }
+
+.tab-switcher-close:hover { color: var(--lake-error); background: rgba(194, 85, 88, .11); opacity: 1; }
+
+/* ===== 2026-08-06 标签拖拽排序动效 ===== */
+.tab-item { cursor: default; }
+
+.tab-item.dragging {
+  cursor: grabbing;
+  background: #fff;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, .16), 0 8px 22px rgba(0, 0, 0, .14);
+  transform: scale(1.03);
+  z-index: 5;
+  position: relative;
+}
+
+.tab-panels {
+  /* 仅正文面板参与 tab 切换的淡入淡出；顶栏 .tab-bar 在 .multi-tab-editor 内但不在 .tab-panels 内，
+     因此切换标签时顶栏不再跟着闪烁。 */
+  view-transition-name: note-pane;
+}

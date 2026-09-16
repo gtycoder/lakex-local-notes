@@ -26,6 +26,10 @@ const FILES = [
   "styles/dialog.css", "styles/document-status.css", "styles/editor.css",
   "styles/motion.css", "styles/overlays.css", "styles/quick-notes.css", "styles/shell.css",
   "styles/tokens.css", "styles/ui-polish.css",
+  // 基础层（260916 第二档 S3：原 styles.css 拆成入口 + 10 个域文件；入口只剩 @import 编排，不再计声明）
+  "styles/app/base.css", "styles/app/dialogs.css", "styles/app/editor.css",
+  "styles/app/misc.css", "styles/app/panels.css", "styles/app/quick-notes.css", "styles/app/settings.css",
+  "styles/app/shell.css", "styles/app/tabs.css", "styles/app/vendor-board.css",
 ];
 
 /** 基线（按本文件的 scan() 实测）。只允许变小 —— 唯一例外是「按职责归并」（HANDOFF §2.48 的 S2/S3）：
@@ -52,6 +56,17 @@ const BASELINE: Record<string, { decls: number; dupGroups: number }> = {
   "styles/shell.css": { decls: 196, dupGroups: 0 },   // +5 = 原 layout-contract 的壳层度量令牌（S1）；+143 = 自 ui-polish 并入的目录栏/页签/dock 头部（S2）
   "styles/tokens.css": { decls: 83, dupGroups: 0 },
   "styles/ui-polish.css": { decls: 18, dupGroups: 0 },   // 58 组已按职责并入 shell/editor/quick-notes（S2）；余 4 个 reduced-motion 块 + 设置滚动条，待 S3 建 settings.css 后收口
+  // 基础层域文件（260916 S3：原 styles.css 拆成入口 + 10 个域文件；数字 = 拆分当批实测，只允许变小）
+  "styles/app/base.css": { decls: 36, dupGroups: 0 },
+  "styles/app/dialogs.css": { decls: 167, dupGroups: 7 },
+  "styles/app/editor.css": { decls: 45, dupGroups: 0 },
+  "styles/app/misc.css": { decls: 299, dupGroups: 0 },
+  "styles/app/panels.css": { decls: 101, dupGroups: 0 },
+  "styles/app/quick-notes.css": { decls: 293, dupGroups: 7 },
+  "styles/app/settings.css": { decls: 119, dupGroups: 0 },
+  "styles/app/shell.css": { decls: 325, dupGroups: 10 },
+  "styles/app/tabs.css": { decls: 211, dupGroups: 0 },
+  "styles/app/vendor-board.css": { decls: 182, dupGroups: 0 },
 };
 
 /** 极简 CSS 扫描器：只取「叶子样式规则」的声明，跳过注释/字符串/声明型 at-rule。 */

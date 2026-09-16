@@ -1,0 +1,425 @@
+/* 基础层 · 未归类的剩余规则（含超长第三方压缩块）
+   260916 第二档 S3：自 src/styles.css 按职责拆出（脚本：scripts/css-audit/split-app-layer.mjs，可重跑）。
+   本层由 src/styles.css 的 @import 编排，整体仍在 b3 之前 —— 层间先后不得改变（见 docs/CSS-LAYERS-BRIEF-260916.md §6）。 */
+
+/* 树行同步绿点已移除：自动保存窗口仅 1s，该点无实际意义。顶栏/标签的同步状态另见 .sync-state-dot。 */
+.empty-list { padding: 28px 10px; color: var(--lake-text-tertiary); font-size: 12px; text-align: center; }
+
+.save-label.error { color: var(--lake-error); }
+
+.save-label.dirty { color: var(--lake-sync-pending); }
+
+.mode-toggle.selected { color: var(--lake-accent); background: var(--lake-accent-soft); }
+
+.editor-error { display: flex; align-items: center; gap: 8px; max-width: 776px; margin: 20px auto; padding: 12px; border: 1px solid var(--lake-error-soft); border-radius: var(--radius-sm); color: var(--lake-error); background: var(--lake-error-soft); font-size: 13px; }
+
+.loading-screen { height: 100vh; }
+
+.loading-screen small { color: var(--lake-error); }
+
+.form-grid .wide { grid-column: 1 / -1; }
+
+.form-grid input[type="text"], .form-grid input[type="password"], .form-grid label > input:not([type="checkbox"]) { width: 100%; height: 36px; padding: 0 10px; border: 1px solid var(--lake-border); border-radius: var(--b3-border-radius); outline: 0; font-size: 12px; font-weight: 400; }
+
+.checkbox { flex-direction: row; align-items: center; font-weight: 400; }
+
+/* ===== 同步进度与最近结果（S3 同步面板） ===== */
+.sync-progress-bar.indeterminate { width: 34%; animation: sync-indeterminate 1.2s ease-in-out infinite; }
+
+@keyframes sync-indeterminate { 0% { transform: translateX(-110%); } 100% { transform: translateX(320%); } }
+
+/* .connection-message.ok 在下方「同步面板 v2」一处定义（此处原有一份重复的被其覆盖，已删） */
+.connection-message.error { color: var(--lake-error); background: var(--lake-error-soft); }
+
+/* ===== 孤儿资源（未引用附件）清理 ===== */
+.spin { animation: spin 1s linear infinite; }
+
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.danger-button { border-color: var(--lake-error); color: white; background: var(--lake-error); }
+
+.danger-button:hover { background: var(--lake-error-strong) !important; }
+
+/* ===== Multi-Tab Editor ===== */
+.multi-tab-editor {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  /* 虚拟渲染 + scrollNode：每个标签页独立滚动（见 .lake-editor-tab）。
+     必须用确定高度（height:100%），min-height 会让内容把容器撑高、
+     内部滚动失效（外层 .document-pane 已是 overflow:hidden 会裁剪）。
+     overflow 保持 visible：Lake 的表格工具栏渲染在 .ne-inner-overlay-container
+     （编辑器 DOM 的 absolute 子元素），overflow:hidden 会裁剪导致消失。 */
+  overflow: visible;
+}
+
+/* ===== Fix: Desktop width containment ===== */
+/* Grid children default min-width:auto lets content blow out the column.
+   Force min-width:0 on every link in the chain so the 1fr column
+   actually constrains to the available space. */
+.multi-tab-editor { max-width: 100%; }
+
+.statusbar {
+  border: 0 !important;
+  box-shadow: none !important;
+}
+
+@media (min-width: 761px) {
+
+  .app-shell.sidebar-collapsed { transition-duration: var(--lake-motion-standard); }
+  .app-shell.sidebar-resizing { transition: none; }
+
+  /* .activity-rail / .activity-rail-spacer / .activity-rail-fill / .activity-button
+     已搬到共用作用域（见上方「左右活动轨」）。 */
+
+  /* .sidebar / .sidebar::before / .sidebar.sidebar-floating / .sidebar.sidebar-collapsed
+     已搬到共用作用域（见上方「侧栏卡片几何」，浮动带见 b3/layout.css）。 */
+
+  .icon-button:focus-visible,
+  .tab-item:focus-visible,
+  .statusbar button:focus-visible,
+  .settings-panel button:focus-visible { outline: 2px solid rgba(59, 91, 219, .22); outline-offset: 2px; }
+
+  .note-list { padding: 0 6px 6px; }
+  .note-row,
+  .tree-row {
+    min-height: 27px;
+  }
+  .note-row.active {
+    color: var(--shell-text);
+  }
+  .note-row-copy strong { color: inherit; font-weight: 480; }
+  .tree-row.type-notebook { min-height: 29px; color: var(--lake-text); }
+  .tree-row.type-notebook .note-row-copy strong { color: inherit; font-weight: 620; }
+  .tree-row.type-group .note-row-copy strong { font-weight: 560; }
+  .tree-children { border-left-color: rgba(31, 35, 41, .075); transform-origin: top; animation: shell-tree-reveal 180ms var(--shell-ease); }
+
+  .sidebar-resize-handle {
+    position: absolute;
+    z-index: 3;
+    top: var(--topbar-height);
+    right: -5px;
+    bottom: 0;
+    width: 10px;
+    cursor: col-resize;
+    touch-action: none;
+  }
+  .sidebar.sidebar-floating .sidebar-resize-handle,
+  .sidebar.sidebar-collapsed .sidebar-resize-handle { top: 0; }
+  .sidebar-resize-handle::after {
+    content: "";
+    position: absolute;
+    top: 42%;
+    right: 4px;
+    width: 2px;
+    height: 48px;
+    border-radius: var(--radius-pill);
+    background: rgba(59, 91, 219, 0);
+    transform: translateY(-50%);
+    transition: background-color var(--lake-motion-fast) var(--lake-ease-standard);
+  }
+  .sidebar-resize-handle:hover::after,
+  .sidebar-resize-handle:focus-visible::after { background: rgba(59, 91, 219, .48); }
+  .sidebar-resize-handle:focus-visible { outline: none; }
+
+  /* .workspace / .tab-bar / .tab-items / .tabbar-* 已搬到共用作用域（见上方「壳层几何」） */
+
+  .tabbar-action[data-tooltip]::after {
+    content: attr(data-tooltip);
+    position: absolute;
+    top: calc(100% + 9px);
+    left: 50%;
+    z-index: 20;
+    width: max-content;
+    max-width: 260px;
+    padding: 6px 9px;
+    border: 1px solid rgba(0, 0, 0, .16);
+    border-radius: 6px;
+    color: #f8f9ff;
+    background: #3f4868;
+    box-shadow: var(--lake-shadow-soft);
+    font-size: 11px;
+    font-weight: 500;
+    line-height: 1.25;
+    white-space: nowrap;
+    pointer-events: none;
+    opacity: 0;
+    transform: translate(-50%, -3px);
+    transition: opacity var(--lake-motion-fast) var(--lake-ease-standard), transform var(--lake-motion-fast) var(--lake-ease-standard);
+  }
+  .tabbar-action[data-tooltip]:hover::after,
+  .tabbar-action[data-tooltip]:focus-visible::after { opacity: 1; transform: translate(-50%, 0); }
+
+  .sync-tab-action.syncing { color: var(--lake-accent, #3b5bdb); }
+  .sync-tab-action.syncing svg { animation: shell-sync-pulse 1.25s ease-in-out infinite; }
+  .sync-tab-action.syncing .sync-state-dot { background: var(--lake-accent, #3b5bdb); animation: shell-sync-dot 1.25s ease-in-out infinite; }
+  .sync-tab-action.success { color: var(--lake-sync-success); }
+  .sync-tab-action.success .sync-state-dot { background: var(--lake-sync-success); }
+  .sync-tab-action.error { color: var(--lake-error); }
+  .sync-tab-action.error .sync-state-dot { background: var(--lake-error); }
+}
+
+@keyframes shell-sync-pulse {
+  0%, 100% { opacity: .62; transform: scale(.94); }
+  50% { opacity: 1; transform: scale(1.06); }
+}
+
+@keyframes shell-sync-dot {
+  0%, 100% { opacity: .45; transform: scale(.8); }
+  50% { opacity: 1; transform: scale(1.1); }
+}
+
+@keyframes shell-tree-reveal {
+  from { opacity: 0; transform: translateY(-3px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-shell,
+  .sidebar,
+  .activity-button,
+  .tab-item,
+  .tab-switcher,
+  .tab-switcher-menu,
+  .tree-children,
+  .seg__item { animation: none !important; transition-duration: 1ms !important; }
+}
+
+@media (min-width: 761px) {
+  /* .app-shell 背景单一来源见 b3/layout.css（原此处 180deg 底色被其覆盖，已删） */
+
+  /* 去分隔线：rail / sidebar / 顶栏 / 状态栏全部靠颜色过渡 */
+
+  /* C：悬停微卡片（白底 + 轻阴影，仅 transform/box-shadow，不动布局） */
+
+  .note-row:hover { background: rgba(0, 0, 0, .05); }
+  .note-row.active {
+    background: var(--shell-accent-soft);
+    box-shadow: none;
+  }
+  .tab-item { background: transparent; }
+  .tab-item:hover { background: rgba(0, 0, 0, .05); }
+
+  /* 可读性：正文行高/字距/段色，标题收紧字距 */
+  .lake-editor-mount .ne-engine,
+  .lake-editor-mount .ne-viewer-body {
+    line-height: 1.85;
+    letter-spacing: .012em;
+  }
+  .lake-editor-mount .ne-engine h1, .lake-editor-mount .ne-viewer-body h1,
+  .lake-editor-mount .ne-engine h2, .lake-editor-mount .ne-viewer-body h2,
+  .lake-editor-mount .ne-engine h3, .lake-editor-mount .ne-viewer-body h3 {
+    letter-spacing: -.015em;
+    color: #23272e;
+  }
+}
+
+/* ===== 2026-08-06 同步视觉：弹窗/小记/按钮统一到暖紫灰体系（仅配色） ===== */
+/* 主/次按钮：绿 → shell 强调色；次按钮白微卡 */
+/* 同步/设置面板：去绿、去旧边框，融入 shell */
+.connection-message.ok { color: var(--lake-sync-success); background: var(--lake-success-soft); }
+
+@keyframes lake-mount-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/* M1.6 自定义图标 + emoji 选择器 */
+.tree-node-custom-icon { font-size: 15px; line-height: 1; }
+
+.emoji-picker-backdrop { position: fixed; inset: 0; z-index: 699; }
+
+.emoji-picker { position: fixed; z-index: 700; width: 550px; height: 370px; min-width: 440px; min-height: 320px; max-width: calc(100vw - 16px); max-height: calc(100vh - 16px); resize: both; overflow: hidden; padding: 12px; display: flex; flex-direction: column; gap: 10px; }
+
+.emoji-picker-tabs { display: flex; gap: 4px; overflow-x: auto; padding-bottom: 2px; }
+
+.emoji-picker-tab { flex: none; padding: 4px 10px; border: 0; border-radius: var(--radius-pill); background: var(--b3-theme-surface-lighter); color: var(--b3-theme-on-surface); font-size: 12px; cursor: pointer; white-space: nowrap; }
+
+.emoji-picker-tab:hover { background: var(--b3-list-hover); }
+
+.emoji-picker-tab.active { background: var(--b3-theme-primary-lightest); color: var(--b3-theme-primary); font-weight: 600; }
+
+.emoji-picker-empty { grid-column: 1 / -1; padding: 16px; text-align: center; color: var(--b3-theme-on-surface-light); font-size: 12px; }
+
+.emoji-picker-search { display: flex; align-items: center; gap: 6px; padding: 4px 6px; border: 1px solid var(--b3-theme-surface-lighter); border-radius: var(--b3-border-radius); color: var(--b3-theme-on-surface); }
+
+.emoji-picker-search input { flex: 1; border: 0; outline: none; font-size: 12px; background: transparent; color: var(--b3-theme-on-background); }
+
+.emoji-picker-search { flex: none; }
+
+.emoji-picker-tabs { flex: none; }
+
+.emoji-picker-clear { flex: none; }
+
+.emoji-picker-grid { display: grid; grid-template-columns: repeat(14, minmax(0, 1fr)); gap: 0; overflow-y: auto; flex: 1 1 auto; min-height: 0; padding: 2px; }
+
+.emoji-picker-cell { display: flex; align-items: center; justify-content: center; min-height: 33px; border: 0; border-radius: var(--radius-sm); background: transparent; font-size: 24px; line-height: 1; cursor: pointer; }
+
+.emoji-picker-cell:hover { background: var(--b3-list-hover); }
+
+.emoji-picker-clear { border: 0; border-radius: var(--b3-border-radius); padding: 6px; background: var(--b3-theme-surface-lighter); color: var(--b3-theme-on-surface); cursor: pointer; font-size: 12px; }
+
+.emoji-picker-clear:hover { background: var(--b3-list-hover); }
+
+/* M2 全文搜索面板（思源 b3-dialog / b3-text-field 令牌风格） */
+.search-panel-backdrop { position: fixed; inset: 0; z-index: 800; background: var(--b3-mask-background, rgba(31, 35, 41, .18)); display: flex; justify-content: center; align-items: flex-start; padding-top: 12vh; }
+
+.search-panel { width: 640px; max-width: calc(100vw - 48px); max-height: 70vh; display: flex; flex-direction: column; overflow: hidden; }
+
+.search-panel-input-row { display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-bottom: 1px solid var(--b3-theme-surface-lighter); }
+
+.search-panel-input-row input { flex: 1; border: 0; outline: none; font-size: 14px; background: transparent; color: var(--b3-theme-on-background); }
+
+.search-panel-search-icon { color: var(--b3-theme-on-surface); flex: none; }
+
+.search-panel-spinner { width: 14px; height: 14px; border: 2px solid var(--b3-theme-surface-lighter); border-top-color: var(--b3-theme-primary); border-radius: 50%; animation: spin .7s linear infinite; flex: none; }
+
+.search-panel-close { display: flex; align-items: center; justify-content: center; width: 26px; height: 26px; border: 0; border-radius: var(--b3-border-radius); background: transparent; cursor: pointer; }
+
+.search-panel-results { overflow-y: auto; padding: 6px; }
+
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* 同步 tooltip：参考思源的深色多行提示，不再被 nowrap 吃掉换行。 */
+@media (min-width: 761px) {
+  .sync-tab-action[data-tooltip]::after {
+    max-width: 310px;
+    padding: 8px 11px;
+    border: 0;
+    border-radius: var(--radius-md);
+    color: #f8f9ff;
+    background: #34333b;
+    box-shadow: var(--lake-shadow-soft);
+    font-size: 12px;
+    line-height: 1.45;
+    text-align: left;
+    white-space: pre-line;
+  }
+  .sync-tab-action[data-tooltip]::before {
+    content: "";
+    position: absolute;
+    top: calc(100% + 4px);
+    left: 50%;
+    z-index: 21;
+    width: 8px;
+    height: 8px;
+    background: #34333b;
+    opacity: 0;
+    transform: translate(-50%, -3px) rotate(45deg);
+    transition: opacity var(--lake-motion-fast) var(--lake-ease-standard), transform var(--lake-motion-fast) var(--lake-ease-standard);
+    pointer-events: none;
+  }
+  .sync-tab-action[data-tooltip]:hover::before,
+  .sync-tab-action[data-tooltip]:focus-visible::before {
+    opacity: 1;
+    transform: translate(-50%, 0) rotate(45deg);
+  }
+}
+
+/* 浮窗（设置/回收站/历史）入场动画。必须保留 translate(-50%,-50%) 居中偏移：
+ * 任何只写 translateY/scale 的位移类 keyframes（如 lake-pop-in）套到 .floating-dialog
+ * 都会在入场期吃掉居中变换，使弹窗偏右下再弹回。勿把 .floating-dialog 加回 ui-polish.css 的 lake-pop-in。 */
+@keyframes floating-dialog-enter {
+  from { opacity: 0; transform: translate(-50%, -50%) scale(.975); }
+  to { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+}
+
+/* 切换标签页：仅文档区做淡入淡出过渡，避免整页闪烁 */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation: none;
+}
+
+::view-transition-old(note-pane) {
+  animation: 55ms ease-in both vt-fade-out;
+}
+
+::view-transition-new(note-pane) {
+  animation: 85ms ease-out both vt-fade-in;
+}
+
+@keyframes vt-fade-out { to { opacity: 0; } }
+
+@keyframes vt-fade-in { from { opacity: 0; } }
+
+/* ══ 窄窗兜底（260915 用户报："右侧开 DevTools 窗口就乱了"）══
+ * 桌面壳层的几何（停靠边距 / 状态栏 / 顶栏 / 面板卡片）全部写在 layout.css 的
+ * `@media (min-width: 761px)` 里。视口一旦窄于 761px（DevTools 停靠、窗口拖窄、分屏），
+ * 那一整层规则全部失效，只剩 `styles.css` 的基础栅格 `260px 1fr`：
+ * 侧栏固定 260px + 工作区被挤到 0，实测 416px 下"只剩目录树、工作区消失、还带水平滚动"。
+ * 窄窗（≤760px）的模型（用户 260915 定稿）：
+ *   · 栅格**只有两列** = 左轨 + 正文（正文保底 148px，对齐思源 `.layout__center`）；
+ *   · 目录栏与右侧大纲**一律悬浮在正文之上**，不允许出现固定列（不再挤压正文）；
+ *   · `useDesktopShell` 里 `sidebarRenderMode` 把"停靠"映射成"浮动"来渲染，
+ *     左轨按钮 = 悬浮抽屉开/关（toggleSidebarDock，语义与宽窗一致：停靠 ↔ 收起）。 */
+@media (max-width: 760px) {
+  /* ══ 窄窗栅格：**只有两列**——左轨 + 正文 ══
+   * 用户 260915 定稿：窄窗下目录栏/大纲一律**悬浮在正文之上**，不允许出现固定列，
+   * 所以这里对**所有**侧栏模式都只声明 rail + 正文；目录栏/大纲由浮层承担（见下）。
+   * 这一条同时修掉一个真 bug：原先 `sidebar-collapsed` 时工作区被钉在第 2 列，
+   * 而窄窗三列栅格的第 2 列是**0 宽的侧栏列** ⇒ 小记页在"窄窗 + 侧栏收起"下整块工作区被塞进 0 宽列，
+   * 整个窗口只剩一层灰底（用户 260915 截图 #2）。 */
+  .app-shell,
+  .app-shell.sidebar-docked,
+  .app-shell.sidebar-floating,
+  .app-shell.sidebar-collapsed,
+  .app-shell.quick-notes-active {
+    /* 第三列 = 右侧大纲（`--outline-grid-w` 由 shellStyle 注入：大纲不可用时为 0，
+       可用且收起时为 38px）。宽窄用同一个令牌，所以大纲宽度不会在断点处变。 */
+    grid-template-columns: var(--activity-rail-width, 38px) minmax(148px, 1fr) var(--outline-grid-w, 0px);
+  }
+  .workspace { grid-column: 2; }
+  /* 材质语言与宽窗一致：**灰壳 + 白色圆角卡片**。关键：卡片必须画在文档区
+     （.document-pane / 小记面板）而**不是** .workspace——顶栏（.tab-bar）是 workspace 的子元素，
+     若把白卡画在 workspace 上，顶栏就浮在白卡上，跨断点时顶栏底色会从灰翻成白。
+     「顶栏 fixed + 工作区让位（margin/padding）」这一对已搬到共用作用域（styles.css 顶部
+     「壳层几何」+ b3/layout.css），窄窗不再手抄副本——**不要再在这里补 geometry**。 */
+  /* 正文档下限 148px（对齐思源 .layout__center）由上面的 `minmax(148px, 1fr)` 承担。 */
+  /* 侧栏铺满自己那一列已由共用作用域的 `.sidebar.sidebar-docked { width:auto; align-self:stretch }`
+     承担（原先这里的 `width:100%` 会把 4px 右侧灰缝吃掉 ⇒ 卡片宽度在断点处差 4px，实测 261 vs 265）。 */
+  /* 注意：这里原来有一条 `.tab-bar { position: static }`，**已删除**——它会覆盖
+     "整宽 fixed 顶栏"（用户要的"红绿灯 · 空间名 · 云 · 标签 同一行"），实测顶栏会缩回左轨右边
+     （box [38,4,W-38]）。顶栏几何与让位都在共用作用域，不要再写 static。 */
+  /* （原先这里的 `.topbar` 两条规则已删：全仓没有 `.topbar` 元素，是死声明。） */
+  /* 顶栏几何（fixed 整宽条 / mac 左侧内边距 / 按钮无边框 / 一行横向排布）已搬到共用作用域，
+     这里只留**真·窄窗增量**：空间名允许被压缩省略（宽窗是 flex:0 0 auto，不压缩）。 */
+  .tabbar-leading {
+    max-width: 46%;           /* 够宽就完整显示，不够就压缩省略——与多 tab 同规则 */
+  }
+  .tabbar-leading > * { min-width: 0; }
+  /* 内层也要能 shrink + 省略，否则只是外层变窄、文字仍溢出到胶囊底下（416px 实测） */
+  .tabbar-leading > * > *:not(svg) {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  /* 空间名实际文本比上面更深一层（.toolbar__menu-wrap 内部），把这一链也压住，
+     否则极窄时是"硬裁切"而不是省略号（用户截图里看到的截断） */
+  .tabbar-leading .toolbar__menu-wrap { overflow: hidden; }
+  .tabbar-leading .toolbar__menu-wrap > * {
+    /* 内层是 flex 子项，必须给 max-width:100% 才会真的被父级宽度约束（416px 实测：内层仍 192px） */
+    max-width: 100%;
+  }
+  /* 顶栏按钮（工作空间展开三角 / 云同步）由共用作用域的 `.toolbar__item { border:0; background:transparent }`
+     覆盖——实测 `.tabbar-leading` 里的按钮全都是 `.toolbar__item`，那套 !important 补丁已删。 */
+  .tab-bar > * { min-width: 0; }
+  /* 标签条（flex/横向滚动/垂直居中）与标签项几何已搬到共用作用域，窄窗不再手抄副本。 */
+  /* 左轨几何与轨按钮已搬到共用作用域（组 2），窄窗不再手抄副本。 */
+  /* （原先这里的 `.sidebar.is-collapsed:hover` 已删：`is-collapsed` 只用在 `.outline-item__fold` 上。） */
+  /* 右侧大纲：**宽窄同一套**（占最右那一列 38px + 悬停浮层，见 features/outline/outline.css）。
+     原先这里是 `display:none`（窄窗没有大纲），上一轮改成"脱离栅格的悬浮 rail"后
+     出现两个问题（用户 260915 截图）：rail 离开窗口右沿 13px 看着错位，且压住正文右缘的
+     编辑器滚动条与面包屑右侧图标。现在窄窗也占那一列——宽度由 `--outline-grid-w` 单一来源，
+     大纲不可用时该列就是 0，正文仍然是满宽。 */
+  /* 顶栏：标题区允许压缩，控件不换行 */
+  .current-note, .tab-item .tab-title { max-width: 34vw; }
+  /* 左轨顶部留白（padding-top: --topbar-height）随组 2 一起进共用作用域，窄窗不再补副本。 */
+  /* 侧栏横向裁剪（避免标题/缩进线拖出竖线）由共用作用域的
+     `.sidebar.sidebar-docked, .sidebar.sidebar-floating { overflow: hidden }` 承担。 */
+  /* 悬浮抽屉在窄窗不要宽过窗口本身（右侧始终留一点正文可见）。 */
+  /* 面板宽度与内部导航**不再在这里改**：
+     原先把四个面板一刀切成 `calc(100vw - 16px) !important`，跨断点时小记/搜索面板宽度突变
+     （实测 760→761 搜索面板 744 → 680，跳 64px），导航也从 150 跳回 208。
+     现在面板沿用各自 `min(定宽, 100vw - 边距)` 的共用规则，导航用 `clamp(150px,27%,208px)` 连续过渡。 */
+}

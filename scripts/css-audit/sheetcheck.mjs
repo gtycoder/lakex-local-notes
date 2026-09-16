@@ -4,6 +4,7 @@
 // 声明条数和 !important 个数都会被放大，历史上因此误判过）。
 // 用法：node scripts/css-audit/drive.mjs 9222 scripts/css-audit/sheetcheck.mjs
 import fs from "node:fs";
+import path from "node:path";
 import { REPO, data } from "./paths.mjs";
 
 const loadFile = data("loadorder.json");
@@ -16,6 +17,26 @@ const stat = (text) => ({
   chars: text.length,
   important: (text.match(/!important/g) || []).length,
 });
+
+// `@import` 编排入口（例：260916 S3 之后的 src/styles.css）：磁盘上是若干行 @import，
+// 浏览器里是**内联后的整份内容**，两边文本本来就不相等 —— 改判"每个被导入文件的内容都能在内联结果里按序找到"。
+const inlineCheck = (rel, diskText, liveText) => {
+  const imports = [...diskText.matchAll(/@import\s+"([^"]+)"/g)].map((m) => m[1]);
+  if (!imports.length) return null;
+  const norm = (s) => s.replace(/\s+/g, " ").trim();
+  const live = norm(liveText);
+  let cursor = 0;
+  const problems = [];
+  for (const imp of imports) {
+    const file = path.resolve(path.dirname(REPO + rel), imp);
+    if (!fs.existsSync(file)) { problems.push(`${imp} 不存在`); continue; }
+    const body = norm(fs.readFileSync(file, "utf8"));
+    const at = live.indexOf(body, cursor);
+    if (at < 0) problems.push(`${imp} 的内容没能在内联结果里按序找到`);
+    else cursor = at + body.length;
+  }
+  return { imports: imports.length, problems };
+};
 
 export default async ({ page }) => {
   const live = await page.evaluate(`(() => {
@@ -40,6 +61,13 @@ export default async ({ page }) => {
     const l = live[rel];
     if (!l) { rows.push(`${rel}: 浏览器里没有这张表`); bad++; continue; }
     const ls = stat(l);
+    const inlined = inlineCheck(rel, fs.readFileSync(REPO + rel, "utf8"), l);
+    if (inlined) {
+      const ok = inlined.problems.length === 0;
+      if (!ok) bad++;
+      rows.push(`${ok ? "✓" : "✗"} ${rel.padEnd(40)} @import ×${inlined.imports} 已按序内联${ok ? "" : " — " + inlined.problems.join("; ")}`);
+      continue;
+    }
     const ok = d.important === ls.important && d.chars === ls.chars;
     if (!ok) bad++;
     rows.push(`${ok ? "✓" : "✗"} ${rel.padEnd(40)} 字符 ${String(d.chars).padStart(6)}/${String(ls.chars).padStart(6)}   !important ${String(d.important).padStart(3)}/${String(ls.important).padStart(3)}`);
