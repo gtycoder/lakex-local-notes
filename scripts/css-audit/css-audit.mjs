@@ -1,7 +1,18 @@
 import { call, classifyImportant, fingerprint, INHERITED_PROPS } from "./inpage.mjs";
 
 const nav = {
-  rail: async (page, i) => { await page.click(19, i === 0 ? 54 : 86); await page.sleep(900); },
+  // 260916 修正：原先按写死坐标点击（x=19, y=54/86），但活动栏按钮实际在 y=2/34 —— 点击落空或点错按钮，
+  // 截图就会落到别的视图（表现为大面积假差异，曾误报 74%）。改为**按 DOM 取第 i 个按钮的中心**。
+  rail: async (page, i) => {
+    const p = await page.evaluate(`(() => {
+      const els = [...document.querySelectorAll(".activity-button")];
+      const el = els[${i}]; if (!el) return null;
+      const r = el.getBoundingClientRect();
+      return [Math.round(r.x + r.width / 2), Math.round(r.y + r.height / 2)];
+    })()`);
+    if (p) await page.click(p[0], p[1]);
+    await page.sleep(900);
+  },
   openSettings: async (page) => {
     for (let a = 0; a < 3; a++) {
       await page.click(178, 19); await page.sleep(420);

@@ -22,7 +22,7 @@ const DUMP = (target) => `(() => {
     // 纯数字 = 按 body 下的元素序号定位（与快照里的 key#n 的 n 同一套枚举口径）
     const els = [document.documentElement, ...document.querySelectorAll("body *")];
     el = els[Number(t.replace("#", ""))] || null;
-  } else if (/\\w\\.\\w*#\\d+$/.test(t) || /^\\w[\\w.-]*#\\d+$/.test(t)) {
+  } else if (/^\\.?[\\w-][\\w.-]*#\\d+$/.test(t)) {
     // 形如 div.tree-item#131 / svg.lucide.lucide-book#7：复刻快照的 key 口径
     const [head, nStr] = [t.slice(0, t.lastIndexOf("#")), Number(t.slice(t.lastIndexOf("#") + 1))];
     let n = 0;
