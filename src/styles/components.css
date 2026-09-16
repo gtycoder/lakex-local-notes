@@ -413,3 +413,11 @@ button.b3-list-item__action:disabled { opacity: .45; cursor: default; }
 /* 通用组件与浮层通用件（260916 第二档 S4：由 `overlays.css` 改名而来 —— 原名是"按响应/意图"命名，职责名才是 `components`）。
    内含：`.ln-*` 浮层通用件（`ln-tabs/ln-toolbar/ln-row2/badge/seg/checks/panel-title/ln-close/ln-empty`）、菜单、卡片、徽章等。
    **双端共享**（桌面 `src/main.tsx` 与移动 `src/mobile/main.tsx` 都加载）。新界面要补通用件时补在这里。 */
+
+/* 浮层入场：统一淡入 + 极短位移/缩放（只动 transform/opacity），克制时长。
+   260916 S4：自 ui-polish.css 并入。注意 `.floating-dialog` 不能加这个动画——它靠 transform 居中，
+   位移类 keyframes 会在入场期吃掉居中变换（见 styles/shell.css 与 app/misc.css 的说明）。 */
+@keyframes lake-pop-in {
+  from { opacity: 0; transform: translateY(4px) scale(.985); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}

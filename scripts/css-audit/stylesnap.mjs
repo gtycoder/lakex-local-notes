@@ -70,7 +70,12 @@ export const injectStates = async (page, kind) => {
   }
 };
 
-export const pin = async (page, w, theme, outlineMode) => {
+export const pin = async (page, w, theme, outlineMode, media) => {
+  // 媒体偏好（reduced-motion / reduced-transparency…）：**每个状态都显式设置**（没写 media 的就清空），
+  // 否则上一个状态的模拟会泄漏到下一个状态。（CDP 的 emulated media 是会话级、跨 reload 保留的。）
+  await page.send("Emulation.setEmulatedMedia", {
+    features: Object.entries(media || {}).map(([name, value]) => ({ name, value })),
+  });
   // 等 .app-shell 真的挂上来再往下走：写死 sleep 在机器忙时（例如同时跑构建/测试）会等到空 DOM
   // 而报 `Cannot read properties of null (reading 'className')`（260916 第七轮踩到）。
   const waitShell = async (ms = 15000) => {
@@ -134,6 +139,14 @@ export const STATES = [
     { name: "plain:560:light", w: 560, theme: "light" },
     { name: "plain:560:dark", w: 560, theme: "dark" },
     { name: "settings:1315:dark", w: 1315, theme: "dark", screen: "settings-data" },
+    // 260916 补矩阵：媒体偏好态。这两个条件在原来的 27 个状态里**恒为假**，导致落在对应媒体块里的声明
+    // 完全不可验证（§2.47 因此把 11 条 `animation/transition: none !important` 判为"证不了、不动"）。
+    // 用 CDP `Emulation.setEmulatedMedia` 把它们变成可观测状态。
+    { name: "rm:1315:light", w: 1315, theme: "light", media: { "prefers-reduced-motion": "reduce" } },
+    { name: "rm:1315:dark", w: 1315, theme: "dark", media: { "prefers-reduced-motion": "reduce" } },
+    { name: "rm:760:light", w: 760, theme: "light", media: { "prefers-reduced-motion": "reduce" } },
+    { name: "rm-quicknotes:1315:light", w: 1315, theme: "light", screen: "quicknotes", media: { "prefers-reduced-motion": "reduce" } },
+    { name: "rt:1315:light", w: 1315, theme: "light", media: { "prefers-reduced-transparency": "reduce" } },
 ];
 
 export const setupState = async (page, st) => {
@@ -153,7 +166,7 @@ export const setupState = async (page, st) => {
     }
   };
   {
-    await pin(page, st.w, st.theme, st.outline);
+    await pin(page, st.w, st.theme, st.outline, st.media);
     // 钉死"当前文档"：打开树里第一篇笔记
     const notePt = await page.evaluate(`(() => {
       const rows = [...document.querySelectorAll(".tree-row.type-note")].filter((e) => e.getBoundingClientRect().width > 0);

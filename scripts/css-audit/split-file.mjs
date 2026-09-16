@@ -19,7 +19,19 @@ if (!src || !mapFile) { console.error("用法: node scripts/css-audit/split-file
 
 const MAP = JSON.parse(fs.readFileSync(data(mapFile), "utf8")).map((m) => ({ ...m, re: new RegExp(m.match) }));
 const norm = (s) => String(s).replace(/\s+/g, " ").replace(/\s*,\s*/g, ",").trim();
-const UNVERIFIABLE = /prefers-reduced-motion\s*:\s*reduce|prefers-reduced-transparency\s*:\s*reduce/;
+// 一条媒体块能不能搬，取决于**它在当前状态矩阵里是否可观测**：用 cond-eval.json（每个状态 × 每个条件的真值）查——
+// 只要有任意状态满足它的全部条件，搬运就可验证；一个都不满足 ⇒ 原地不动（证不了就不动）。
+// 260916：矩阵补了 reduced-motion / reduced-transparency 状态后，原来"不可搬"的那几个块自动变成可搬。
+const CONDS = (() => { try { return JSON.parse(fs.readFileSync(data("cond-eval.json"), "utf8")); } catch (e) { return null; } })();
+const CONDS_N = CONDS ? Object.keys(CONDS).length : 0;
+const observable = (params) => {
+  const key = String(params).replace(/\s+/g, " ").trim();
+  if (!CONDS) return { ok: false, why: "没有 cond-eval.json（先跑 cond-eval.mjs）" };
+  const sample = CONDS[Object.keys(CONDS)[0]] || {};
+  if (!Object.prototype.hasOwnProperty.call(sample, key)) return { ok: false, why: `条件不在 cond-eval 里（${key}）` };
+  const n = Object.values(CONDS).filter((st) => st[key] === true).length;
+  return { ok: n > 0, why: `矩阵 ${n}/${CONDS_N} 个状态满足该条件` };
+};
 
 const root = postcss.parse(fs.readFileSync(REPO + src, "utf8"), { from: src });
 
@@ -55,8 +67,11 @@ for (const g of groups) {
     console.log(`  ⚠ 超长块原地不动：L${n.source.start.line}（${n.toString().length} 字符，${n.type} ${String(n.selector || n.name || "").slice(0, 40)}）`);
     continue;
   }
-  // 不可验证的媒体块：原地不动
-  if (n.type === "atrule" && UNVERIFIABLE.test(n.params)) { keep.push(g); continue; }
+  // 媒体/支持块：只有"矩阵里可观测"的才搬（见上面 observable 的说明）
+  if (n.type === "atrule" && /^(media|supports)$/i.test(n.name)) {
+    const ob = observable(n.params);
+    if (!ob.ok) { keep.push(g); console.log(`  ⚠ 媒体块原地不动（${ob.why}）：@${n.name} ${n.params.trim().slice(0, 60)}`); continue; }
+  }
   const hit = classify(n);
   if (!hit) { keep.push(g); continue; }
   const text = g.nodes.map((x) => x.toString().trimEnd()).join("\n");

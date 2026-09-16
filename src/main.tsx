@@ -23,7 +23,7 @@ import "./styles/editor.css";
 import "./styles/quick-notes.css";
 import "./styles/document-status.css";
 import "./styles/motion.css";
-import "./styles/ui-polish.css";
+import "./styles/settings.css";
 import "./styles/dialog.css";
 import "./features/editor/image-lightbox.css";
 import "./features/attachment/attachment-preview.css";

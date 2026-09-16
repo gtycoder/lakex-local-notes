@@ -25,7 +25,7 @@ const FILES = [
   "features/attachment/attachment-preview.css", "features/editor/image-lightbox.css", "features/outline/outline.css",
   "styles/dialog.css", "styles/document-status.css", "styles/editor.css",
   "styles/motion.css", "styles/components.css", "styles/quick-notes.css", "styles/shell.css",
-  "styles/tokens.css", "styles/ui-polish.css",
+  "styles/tokens.css", "styles/settings.css",
   // 基础层（260916 第二档 S3：原 styles.css 拆成入口 + 10 个域文件；入口只剩 @import 编排，不再计声明）
   "styles/app/base.css", "styles/app/dialogs.css", "styles/app/editor.css",
   "styles/app/misc.css", "styles/app/panels.css", "styles/app/quick-notes.css", "styles/app/settings.css",
@@ -50,12 +50,12 @@ const BASELINE: Record<string, { decls: number; dupGroups: number }> = {
   "styles/dialog.css": { decls: 227, dupGroups: 8 },
   "styles/document-status.css": { decls: 107, dupGroups: 2 },
   "styles/editor.css": { decls: 14, dupGroups: 0 },   // +2 = 自 ui-polish.css 并入的编辑器正文覆盖（S2）
-  "styles/motion.css": { decls: 3, dupGroups: 0 },
-  "styles/components.css": { decls: 444, dupGroups: 1 },   // 260916 S4：原 overlays.css 改名（纯重命名，位置不变）
+  "styles/motion.css": { decls: 10, dupGroups: 0 },   // +7 = 自 ui-polish.css 并入的 4 个 reduced-motion 契约块（S4；矩阵补了媒体偏好态后才可验证）
+  "styles/components.css": { decls: 451, dupGroups: 1 },   // 260916 S4：原 overlays.css 改名 + 并入 @keyframes lake-pop-in（+1 声明，位置不变）
   "styles/quick-notes.css": { decls: 11, dupGroups: 0 },   // +2 = 自 ui-polish.css 并入的小记入口（S2）
   "styles/shell.css": { decls: 196, dupGroups: 0 },   // +5 = 原 layout-contract 的壳层度量令牌（S1）；+143 = 自 ui-polish 并入的目录栏/页签/dock 头部（S2）
   "styles/tokens.css": { decls: 83, dupGroups: 0 },
-  "styles/ui-polish.css": { decls: 18, dupGroups: 0 },   // 58 组已按职责并入 shell/editor/quick-notes（S2）；余 4 个 reduced-motion 块 + 设置滚动条，待 S3 建 settings.css 后收口
+  "styles/settings.css": { decls: 7, dupGroups: 0 },   // 260916 S4 建立：吸收原 ui-polish.css 的设置/历史/回收站细滚动条
   // 基础层域文件（260916 S3：原 styles.css 拆成入口 + 10 个域文件；数字 = 拆分当批实测，只允许变小）
   "styles/app/base.css": { decls: 36, dupGroups: 0 },
   "styles/app/dialogs.css": { decls: 167, dupGroups: 7 },
