@@ -1,24 +1,9 @@
 /* 基础层 · 第三方画板（Drawnix / plait）—— 逐字节搬来，勿手改
    260916 第二档 S3：自 src/styles.css 按职责拆出（脚本：scripts/css-audit/split-app-layer.mjs，可重跑）。
-   本层由 src/styles.css 的 @import 编排，整体仍在 b3 之前 —— 层间先后不得改变（见 docs/CSS-LAYERS-BRIEF-260916.md §6）。 */
-
-/* ============================================
-
-/* ============================================
-   BoardCard (Drawnix whiteboard) styles
-   ============================================ */
-/* Keep Drawnix toolbars/overlays inside the card bounds. */
-.board-card-wrapper .drawnix {
-  overflow: hidden;
-}
-
-/* Height chain: the CardResizer sets a fixed pixel height on its root; the
-   Drawnix board must fill that root. */
-.board-card-wrapper .drawnix,
-.board-card-wrapper .drawnix .plait-board-container,
-.board-card-wrapper .drawnix .viewport-container {
-  height: 100%;
-}
+   本层由 src/styles.css 的 @import 编排，整体仍在 b3 之前 —— 层间先后不得改变（见 docs/CSS-LAYERS-BRIEF-260916.md §6）。
+   260916 合并注：自研 BoardCard 已在 lakex 迁移中删除（改用 vendor 内置画板卡），
+   原 .board-card-wrapper* / .board-card-guard 规则随之失效，已清理；被动滚轮门控归现役
+   .mindmap-interaction-gate（withCanvasWheelGate 给自定义卡编辑器包的那层）。 */
 
 /* P2: Drawnix board theme background colors. These rules ship in
    lakex-drawnix-react-board/index.css, whose package.json exports field does
@@ -44,49 +29,15 @@
   background-color: #0d2537;
 }
 
-/* Viewer mode: hide all interactive Drawnix toolbars and the laser canvas. */
-.board-card-wrapper--viewer .drawnix .app-toolbar,
-.board-card-wrapper--viewer .drawnix .draw-toolbar,
-.board-card-wrapper--viewer .drawnix .zoom-toolbar,
-.board-card-wrapper--viewer .drawnix .theme-toolbar,
-.board-card-wrapper--viewer .drawnix .popup-toolbar,
-.board-card-wrapper--viewer .drawnix .pencil-mode-toolbar,
-.board-card-wrapper--viewer .drawnix canvas[class*="laser-pointer"] {
-  display: none;
-}
-
-/*$vite$:1*/
-/* Board card visual boundary */
-.board-card-wrapper--editor {
-  border: 1px solid var(--lake-border);
-  border-radius: var(--radius-md);
-  overflow: hidden;
-  background: #fafbfc;
-  margin: 8px 0;
-  position: relative;
-  z-index: 1;
-}
-
-.board-card-wrapper--editor:hover {
-  border-color: var(--lake-border);
-}
-
-.board-card-wrapper--editor .drawnix {
-  border-radius: 6px;
-}
-
 /* Embedded mindmap/board cards are passive while the reader scrolls through the
    document. The gate is behavioral; this class is only a debugging/visual hook. */
-.mindmap-interaction-gate,
-.board-card-guard,
-.board-card-wrapper--viewer {
+.mindmap-interaction-gate {
   position: relative;
 }
 
 /* Drawnix owns an internal overflow viewport. Keep it non-scrollable while the
    card is passive so a wheel passing over the card continues to scroll the
    document; clicking the card switches the gate back to overflow:auto. */
-.board-card-guard[data-canvas-interaction="passive"] .plait-board-container .viewport-container,
-.board-card-wrapper--viewer[data-canvas-interaction="passive"] .plait-board-container .viewport-container {
-  overflow: hidden;
+.mindmap-interaction-gate[data-canvas-interaction="passive"] .plait-board-container .viewport-container {
+  overflow: hidden !important;
 }
