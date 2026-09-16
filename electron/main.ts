@@ -7,6 +7,7 @@ import { Store } from "./store.js";
 import { createSafeStorageSecretCipher } from "./secretCipher.js";
 import { QuickNotesStore } from "./quickNotes.js";
 import { startAssetServer, ASSET_PORT } from "./assetServer.js";
+import { startWebApiServer, WEB_API_PORT } from "./webApiServer.js";
 import { resolveMirroredCdnRedirect, scanMirroredCdnFiles } from "./cdnRedirect.js";
 import { syncNow, runGcReconcile, type SyncResult, type SyncProgress } from "./sync.js";
 import { syncNowViaEngine } from "./syncEngineController.js";
@@ -332,7 +333,7 @@ function isTrustedSenderFrame(frame: WebFrameMain | null, sender: Electron.WebCo
   return isAppPageUrl(frame.url);
 }
 
-function registerIpc(): void {
+function registerIpc(): ReadonlyMap<string, (args: unknown[]) => Promise<unknown>> {
   // 思源模式收敛：pending 待办计数不再依赖渲染层各操作点手动刷新（历史上有 10+ 处遗漏），
   // 改为 IPC 层单点拦截——每个调用完成后 diff 廉价指纹（微秒级 COUNT），变化才广播完整摘要。
   let lastPendingSig = "";
@@ -374,6 +375,7 @@ function registerIpc(): void {
   registerQuickNotesIpc(ipc, quickNotes, store);
   registerLogIpc(ipc);
   registerSystemInfoIpc(ipc, { store, quickNotes, workspaceRoot });
+  return ipc.registry;
 }
 
 // Increase renderer memory limit for large documents with base64 images
@@ -443,7 +445,16 @@ if (!app.requestSingleInstanceLock()) {
     registerCdnRedirect();
     registerAssetTokenRedirect();
     startAssetServer(path.join(workspaceRoot(), "note-assets"), vendorCdnDir(), path.join(workspaceRoot(), "quick-notes"), assetToken);
-    registerIpc();
+    const webApiRegistry = registerIpc();
+    // Web 客户端（附属窗口）：浏览器访问 http://127.0.0.1:19880/，复用同一批 IPC handler（MVP）。
+    startWebApiServer({
+      distDir: path.join(__dirname, "..", "dist"),
+      registry: webApiRegistry,
+      token: assetToken,
+      assetPort: ASSET_PORT,
+      port: WEB_API_PORT,
+      log: { info: (m) => log.app.info(m), warn: (m) => log.app.warn(m) },
+    });
     createWindow();
     logHeapPeak("startup");
 
