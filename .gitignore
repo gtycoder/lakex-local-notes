@@ -8,6 +8,9 @@ release
 
 test-node-abi
 
+# CSS 审计工具的中间数据（指纹/快照/截图，可达数百 MB；用 LK_CSS_AUDIT_DIR 可改到别处）
+.css-audit/
+
 # Local development credentials (never commit real values)
 .env
 .env.*

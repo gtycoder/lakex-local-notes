@@ -9,14 +9,7 @@
 
 /* ── 按钮：primary/secondary 已迁移为 .b3-button / .b3-button--cancel（见 siyuan.scss）── */
 
-.icon-button:hover {
-  background-color: var(--b3-list-hover);
-}
-
 /* ── 弹窗遮罩 / 浮层（思源 b3-dialog）── */
-.modal-backdrop {
-  background: var(--b3-mask-background);
-}
 .floating-dialog {
   border-radius: var(--b3-border-radius-b);
 }
@@ -33,7 +26,7 @@
   box-shadow: var(--b3-dialog-shadow);
   padding: 8px 0;
   backdrop-filter: none;
-  -webkit-backdrop-filter: none !important;
+  -webkit-backdrop-filter: none;
 }
 .context-menu > button,
 .context-menu-item,
@@ -67,10 +60,6 @@
 .tree-row.drop-after {
   box-shadow: inset 0 -2px 0 var(--b3-theme-primary);
 }
-.tree-row.drop-inside {
-  background: var(--b3-theme-primary-lightest);
-  box-shadow: inset 0 0 0 1px var(--b3-theme-primary);
-}
 .tree-chevron {
   color: var(--b3-theme-on-surface);
 }
@@ -79,11 +68,6 @@
 }
 
 /* ── 搜索框 / 表单（思源 b3-text-field）── */
-
-.search-box:focus-within {
-  border-color: var(--b3-theme-primary);
-  box-shadow: 0 0 0 2px var(--b3-theme-primary-lightest);
-}
 
 /* ── 工具提示（思源 b3-tooltips：深色、圆角、阴影）── */
 .tabbar-action[data-tooltip]::after,
@@ -110,7 +94,7 @@
 .history-panel-backdrop {
   background: var(--b3-mask-background);
   backdrop-filter: none;
-  -webkit-backdrop-filter: none !important;
+  -webkit-backdrop-filter: none;
 }
 
 .search-panel,
@@ -131,7 +115,7 @@
 .settings-panel-large .settings-header {
   background: var(--b3-theme-surface);
   backdrop-filter: none;
-  -webkit-backdrop-filter: none !important;
+  -webkit-backdrop-filter: none;
 }
 
 .search-panel-close {
@@ -154,11 +138,7 @@
   border-color: var(--b3-border-color);
   border-radius: var(--b3-border-radius);
 }
-.form-grid input:focus,
-.secret-field:focus-within {
-  border-color: var(--b3-theme-primary);
-  box-shadow: 0 0 0 2px var(--b3-theme-primary-lightest);
-}
+
 .checkbox input {
   accent-color: var(--b3-theme-primary);
 }
@@ -170,11 +150,7 @@
   color: var(--b3-theme-primary) !important;
 }
 .mode-toggle.selected {
-  background-color: var(--b3-theme-primary-lightest) !important;
-}
-
-.sync-button:hover {
-  background: var(--b3-theme-primary-lightest) !important;
+  background-color: var(--b3-theme-primary-lightest);
 }
 
 .tree-row.type-notebook,
@@ -188,30 +164,21 @@
 .mobile-library-header span,
 .mobile-done,
 .mobile-reader-actions button.selected {
-  color: var(--b3-theme-primary) !important;
+  color: var(--b3-theme-primary);
 }
 .mobile-note-icon {
-  background: var(--b3-theme-primary-lightest) !important;
-  color: var(--b3-theme-primary) !important;
+  background: var(--b3-theme-primary-lightest);
+  color: var(--b3-theme-primary);
 }
 
 /* ── 标签页（思源：灰栏 + 白底激活 + 顶部主色指示线）── */
-.tab-bar {
-  background: var(--b3-theme-surface);
-  border-bottom-color: var(--b3-border-color);
-}
-.tab-item:hover {
-  background-color: var(--b3-list-hover);
-}
 .tab-item.active {
   background: var(--lake-raised);
-  color: var(--lake-text);
-  box-shadow: inset 0 2px 0 var(--b3-theme-primary);
 }
 .tab-item.deleted,
 .tab-item.deleted.active {
-  color: var(--b3-theme-error) !important;
-  background: var(--b3-card-error-background) !important;
+  color: var(--b3-theme-error);
+  background: var(--b3-card-error-background);
 }
 .tab-switcher-menu {
   background: var(--b3-menu-background);
@@ -222,13 +189,13 @@
 
 /* ── 同步状态点 → b3 语义色令牌（success/error/secondary）── */
 .sync-tab-action.success .sync-state-dot {
-  background: var(--b3-theme-success) !important;
+  background: var(--b3-theme-success);
 }
 .sync-tab-action.error .sync-state-dot {
-  background: var(--b3-theme-error) !important;
+  background: var(--b3-theme-error);
 }
 .sync-tab-action.syncing .sync-state-dot {
-  background: var(--b3-theme-primary) !important;
+  background: var(--b3-theme-primary);
 }
 
 /* ── 精度修正：树行圆角对齐思源 b3-list-item（--b3-border-radius=6px，原 8px）── */
@@ -321,7 +288,7 @@
   transition: width .25s ease;
 }
 .sync-toast-bar.indeterminate {
-  width: 34% !important;
+  width: 34%;
   animation: sync-indeterminate 1.2s ease-in-out infinite;
 }
 .sync-toast-sub { margin-top: 4px; font-size: 11px; color: var(--b3-theme-on-surface); }

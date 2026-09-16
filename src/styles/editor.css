@@ -1,3 +1,5 @@
+/* 编辑器桥接层（原 editor-bridge.css，260916 按职责定名；后续 S3 会把 styles.css 里
+   属于编辑器域的规则一并并进来，最终成为编辑器域的唯一来源）。 */
 
 .lake-search-hit-target {
   outline: 2px solid color-mix(in srgb, var(--lake-accent) 72%, transparent);
@@ -18,4 +20,20 @@
 
 /* A: 编辑器正文与 UI 同源字体（消除三处 font-family 打架；vendor .ne-engine 默认栈在 mac 会回退 Helvetica） */
 .lake-editor-mount .ne-engine,
-.lake-editor-mount .ne-viewer-body { font-family: var(--b3-font-family) !important; }
+.lake-editor-mount .ne-viewer-body { font-family: var(--b3-font-family); }
+
+/* ── 以下规则自 `src/styles/ui-polish.css` 按职责并入（260916 S2/S3，只搬家不改声明）：编辑器正文覆盖 ── */
+/* 文字色令牌单一来源见 tokens.css（此处曾重复定义 :root 覆盖，已收敛） */
+.document-pane .lake-editor-mount .ne-engine,
+.document-pane .lake-editor-mount .ne-viewer-body {
+  color: var(--lake-text) !important;
+}
+
+.document-pane .lake-editor-mount .ne-engine h1,
+.document-pane .lake-editor-mount .ne-engine h2,
+.document-pane .lake-editor-mount .ne-engine h3,
+.document-pane .lake-editor-mount .ne-viewer-body h1,
+.document-pane .lake-editor-mount .ne-viewer-body h2,
+.document-pane .lake-editor-mount .ne-viewer-body h3 {
+  color: var(--lake-text);
+}

@@ -6,6 +6,7 @@ import { loadSettings } from "./lib/settings";
 import { applyTheme } from "./lib/theme";
 import "@dlient/lakex-doc-react/style.css";
 import "./styles.css";
+import "./vendor/drawnix-react-text.css";   // 第三方画板 CSS 的**唯一来源**（260916：原 styles.css 里那份逐字节相同的内联副本已删）
 import "./features/outline/outline.css";
 // 思源视觉层移植：令牌（daylight/midnight）→ 基础接线（覆盖层，最后加载）
 import "./b3/theme-daylight.css";
@@ -18,13 +19,12 @@ import "./b3/animations.css";
 import "./b3/layout.css";
 import "./styles/tokens.css";
 import "./styles/shell.css";
-import "./styles/overlays.css";
-import "./styles/editor-bridge.css";
+import "./styles/components.css";
+import "./styles/editor.css";
 import "./styles/quick-notes.css";
 import "./styles/document-status.css";
-import "./styles/layout-contract.css";
-import "./styles/motion-contract.css";
-import "./styles/ui-polish.css";
+import "./styles/motion.css";
+import "./styles/settings.css";
 import "./styles/dialog.css";
 import "./features/editor/image-lightbox.css";
 import "./features/attachment/attachment-preview.css";

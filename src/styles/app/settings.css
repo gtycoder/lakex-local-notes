@@ -1,0 +1,136 @@
+/* 基础层 · 设置面板基础（.settings-* / .config-* / .floating-dialog）
+   260916 第二档 S3：自 src/styles.css 按职责拆出（脚本：scripts/css-audit/split-app-layer.mjs，可重跑）。
+   本层由 src/styles.css 的 @import 编排，整体仍在 b3 之前 —— 层间先后不得改变（见 docs/CSS-LAYERS-BRIEF-260916.md §6）。 */
+
+/* ===== 偏好设置面板 =====
+ * `.settings-panel` / `.settings-panel-large` / `.floating-dialog` 是**同一元素上的别名类**
+ * （SettingsPanel.tsx:467 三个类写在一处），面板几何/材质/配色的单一来源是后段的 `.floating-dialog*`
+ * 与 styles/shell.css；这里只留排版类声明（260916 删掉 width/max-width/max-height/overflow/position/color 等重复项）。 */
+.settings-header { display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 600; }
+
+.settings-header { background: rgba(250, 250, 251, .90); -webkit-backdrop-filter: blur(18px); }
+
+.settings-header { padding: 0 16px; border-radius: 14px 14px 0 0; }
+
+/* 设置弹窗 v2：大、不透明、左导航右内容、可拖动调节。
+ * display / flex-direction / overflow / border-radius / width / max-* 的单一来源是下面那条 `.floating-dialog`
+ * （同一元素 + 更晚），这里只留设置面板自己的布局子件。 */
+.settings-layout { display: flex; flex: 1; }
+
+.settings-nav-item { display: flex; gap: 8px; border: 0; border-radius: var(--b3-border-radius); background: transparent; }
+
+.settings-nav-item:hover { background: var(--b3-list-hover); }
+
+.settings-nav-item.active { box-shadow: 0 1px 4px var(--b3-dock-shadow-color, rgba(31, 35, 41, .12)); }
+
+.settings-resize::after { content: ""; position: absolute; right: 3px; bottom: 3px; width: 8px; height: 8px; border-right: 2px solid var(--b3-theme-on-surface-lighter); border-bottom: 2px solid var(--b3-theme-on-surface-lighter); }
+
+.history-panel .settings-resize { position: absolute; right: 2px; bottom: 2px; }
+
+/* 三个大面板共用同一套：居中打开、可拖动、可拉伸、尺寸受视口约束。 */
+.settings-overlay,
+.history-panel-backdrop,
+.trash-panel-backdrop {
+  display: grid;
+  position: fixed;
+  z-index: 800;
+  inset: 0;
+  place-items: center;
+  padding: 16px;
+  /* 遮罩底色与"无模糊"统一由 b3/components.css 的 .settings-overlay/…-backdrop 提供
+   * （--b3-mask-background + backdrop-filter:none !important 覆盖本块）。此处仅负责居中布局。 */
+}
+
+.floating-dialog {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  display: flex;
+  flex-direction: column;
+  max-width: calc(100vw - 32px);
+  max-height: calc(100vh - 32px);
+  overflow: hidden;
+  border: 1px solid var(--floating-dialog-border) !important;
+  background: var(--floating-dialog-surface);
+  box-shadow: var(--floating-dialog-shadow);
+  animation: floating-dialog-enter 180ms var(--ease-out);
+}
+
+.floating-dialog-header {
+  flex: 0 0 auto;
+  cursor: move;
+  user-select: none;
+  touch-action: none;
+}
+
+.floating-dialog-header button,
+.floating-dialog-header input,
+.floating-dialog-header textarea,
+.floating-dialog-header select,
+.floating-dialog-header a {
+  -webkit-app-region: no-drag;
+}
+
+/* 8 向缩放手柄（对齐思源 dialog 的 .resize__r/l/t/d/rd/rt/ld/lt） */
+.floating-dialog-resize { position: absolute; z-index: 3; touch-action: none; }
+
+.floating-dialog-resize--r { top: 0; right: 0; width: 6px; height: 100%; cursor: ew-resize; }
+
+.floating-dialog-resize--l { top: 0; left: 0; width: 6px; height: 100%; cursor: ew-resize; }
+
+.floating-dialog-resize--t { top: 0; left: 0; width: 100%; height: 6px; cursor: ns-resize; }
+
+.floating-dialog-resize--d { bottom: 0; left: 0; width: 100%; height: 6px; cursor: ns-resize; }
+
+.floating-dialog-resize--rd { right: 2px; bottom: 2px; width: 20px; height: 20px; cursor: nwse-resize; }
+
+.floating-dialog-resize--ld { left: 2px; bottom: 2px; width: 20px; height: 20px; cursor: nesw-resize; }
+
+.floating-dialog-resize--rt { right: 2px; top: 2px; width: 20px; height: 20px; cursor: nesw-resize; }
+
+.floating-dialog-resize--lt { left: 2px; top: 2px; width: 20px; height: 20px; cursor: nwse-resize; }
+
+.floating-dialog-resize--rd::before,
+.floating-dialog-resize--rd::after {
+  content: "";
+  position: absolute;
+  right: 4px;
+  bottom: 4px;
+  width: 9px;
+  height: 1px;
+  border-radius: 1px;
+  background: var(--lake-text-tertiary);
+  transform: rotate(-45deg);
+  transform-origin: right center;
+}
+
+.floating-dialog-resize--rd::after { right: 3px; bottom: 8px; width: 6px; opacity: .72; }
+
+.settings-panel-large,
+.history-panel,
+.trash-panel {
+  width: auto;
+  max-width: calc(100vw - 32px);
+  max-height: calc(100vh - 32px);
+}
+
+.settings-panel-large { min-width: 0; }
+
+.history-panel header,
+.trash-panel header,
+.settings-panel-large .settings-header {
+  flex: 0 0 auto;
+  /* 头部与弹窗本体同源（--lake-surface 深浅两套值）——原先写死近白 rgba(250,250,251,.94)，
+     深色下历史/回收站面板顶会留一条白条（b3/components.css 只覆盖了 .settings-header）。 */
+  background: var(--lake-surface) !important;
+  border-bottom: 1px solid color-mix(in srgb, var(--lake-border) 72%, transparent);
+}
+
+/* UI 标题断行均衡（仅面板/页头，不作用于编辑器正文） */
+.history-panel h2,
+.trash-panel h2,
+.settings-panel h2,
+.quick-notes-header h1 {
+  text-wrap: balance;
+}

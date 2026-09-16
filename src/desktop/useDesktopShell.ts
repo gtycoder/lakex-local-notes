@@ -14,8 +14,9 @@ import type { TreeNode } from "../lib/types";
 import { initialOutlineMode, initialOutlineSidebarWidth, initialSidebarMode, initialSidebarWidth, OUTLINE_SIDEBAR_MAX_WIDTH, OUTLINE_SIDEBAR_MIN_WIDTH, SIDEBAR_HOVER_HIDE_DELAY_MS, SIDEBAR_MAX_WIDTH, SIDEBAR_MIN_WIDTH, type DesktopWorkspace, type NoticeState } from "./desktopTypes";
 import { shouldCollapseSidebarOnHoverLeave, shouldKeepSidebarPreviewOpen } from "../components/sidebarInteraction";
 
-/** 视口窄于此宽度时，桌面壳层强制按"收起态"渲染（右侧开 DevTools 也会触发）。 */
-const NARROW_SHELL_WIDTH = 900;
+/** 窄窗断点：与 `styles.css` 的 `@media (max-width: 760px)` **严格一致**（改一处必须改另一处）。
+ *  窄窗下目录栏/大纲一律以浮层呈现，不再占一列——用户 260915 定稿（"窄窗不能出现固定目录栏"）。 */
+const NARROW_OVERLAY_MEDIA = "(max-width: 760px)";
 
 export interface UseDesktopShellOptions {
   /** 小记工作区句柄（离开小记工作区前 confirmLeave）。 */
@@ -35,19 +36,19 @@ export function useDesktopShell(options: UseDesktopShellOptions) {
   const sidebarPreviewTimer = useRef<number | null>(null);
 
   // ---- 窄窗自适应（260915 用户报的"右侧开 DevTools 就把窗口挤乱"）----
-  // 桌面壳层的几何（停靠边距、状态栏、顶栏等）都写在 `@media (min-width: 761px)` 里，视口一窄整套失效；
-  // 而侧栏在"停靠"态必须占一整列（265px），416px 视口下会把工作区挤没。
-  // 处理：视口 ≤900px 一律**按收起态渲染**（左轨 + 44px 侧栏条 + 工作区，侧栏 hover 时以浮层展开，
-  // 这套交互本来就存在）。只覆盖本次渲染，不写 localStorage —— 窗口拉宽后用户原偏好原样恢复。
-  const [narrowViewport, setNarrowViewport] = useState(() => typeof window !== "undefined" && window.innerWidth <= NARROW_SHELL_WIDTH);
+  // ---- 窄窗（≤760px）：目录栏/大纲不占列，一律浮层 ----
+  // 只影响**渲染用的类名**（几何），用户真实选择（sidebarMode / localStorage）与
+  // "悬停预览延时收起"、"点正文收起"等交互语义仍按 sidebarMode 走，避免状态漂移。
+  const [narrowOverlay, setNarrowOverlay] = useState(
+    () => typeof window !== "undefined" && window.matchMedia(NARROW_OVERLAY_MEDIA).matches,
+  );
   useEffect(() => {
-    const onResize = () => setNarrowViewport(window.innerWidth <= NARROW_SHELL_WIDTH);
-    window.addEventListener("resize", onResize);
-    return () => window.removeEventListener("resize", onResize);
+    const mq = window.matchMedia(NARROW_OVERLAY_MEDIA);
+    const onChange = () => setNarrowOverlay(mq.matches);
+    onChange();
+    mq.addEventListener("change", onChange);
+    return () => mq.removeEventListener("change", onChange);
   }, []);
-  /** 窄窗下是否把目录树"拉出来"（点左轨切换）。窄窗默认收起 = 左轨 + 工作区。 */
-  const [narrowSidebarOpen, setNarrowSidebarOpen] = useState(false);
-  useEffect(() => { if (!narrowViewport) setNarrowSidebarOpen(false); }, [narrowViewport]);
 
   // ---- 布局：outline ----
   const [outlineMode, setOutlineMode] = useState<OutlineMode>(initialOutlineMode);
@@ -170,15 +171,16 @@ export function useDesktopShell(options: UseDesktopShellOptions) {
     // 标签条在同一个瞬间整片重排，用户 260915 反馈的"跳动/不像一套 UI"主要来自这里。
     // 现在窄窗纯靠 CSS 压缩（弹性列 + 正文 148px 下限），侧栏始终是用户自己选的模式；
     // 想要更多正文宽度，用户点左轨收起即可（这是已有交互，不再由代码替他决定）。
+    // 渲染用的侧栏模式：窄窗下"停靠"按"浮动"呈现（几何 = 悬浮带，不占列）。
+    sidebarRenderMode: narrowOverlay && sidebarMode === "docked" ? "floating" : sidebarMode,
+    /** 窄窗（≤760px）：目录/大纲一律浮层呈现（大纲的"锁定"在窄窗按收起渲染）。 */
+    narrowOverlay,
     sidebarMode,
     setSidebarMode, sidebarWidth, sidebarResizing, sidebarResizingRef,
     updateSidebarWidth, commitSidebarWidth, handleSidebarResizeActiveChange,
     showSidebarPreview, hideSidebarPreview, clearSidebarPreviewTimer,
-    // 窄窗：左轨按钮退化为"把目录树拉出来 / 收回去"（此时没有并排空间，停靠/浮动语义无意义）
-    toggleSidebarDock: useCallback(() => {
-      if (narrowViewport) { setNarrowSidebarOpen((v) => !v); return; }
-      toggleSidebarDock();
-    }, [narrowViewport, toggleSidebarDock]),
+    // 左轨按钮：停靠 ↔ 收起。窄窗下停靠态渲染成悬浮抽屉，所以这一个按钮就是"抽屉开/关"。
+    toggleSidebarDock,
     // outline
     outlineMode, setOutlineMode, activeOutlineEmpty, setActiveOutlineEmpty,
     outlineEmptyOverride, setOutlineEmptyOverride, outlineSwitching, setOutlineSwitching,

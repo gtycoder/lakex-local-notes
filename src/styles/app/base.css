@@ -1,0 +1,60 @@
+/* 基础层 · 复位与骨架（:root 字体栈 / * / html·body·#root / button·input / svg.lucide）
+   260916 第二档 S3：自 src/styles.css 按职责拆出（脚本：scripts/css-audit/split-app-layer.mjs，可重跑）。
+   本层由 src/styles.css 的 @import 编排，整体仍在 b3 之前 —— 层间先后不得改变（见 docs/CSS-LAYERS-BRIEF-260916.md §6）。 */
+
+:root { font-family: var(--b3-font-family); /* 字体栈统一走系统原生：macOS=SF Pro+苹方，Windows=Segoe UI+雅黑 UI；font-synthesis 不能设 none：中文字体（PingFang SC 等）无斜体变体，none 会禁止合成斜体导致 italic 失效 */
+  font-synthesis: style weight;
+  /* 文字渲染对齐思源：灰度抗锯齿 + 最优排版（macOS 下比默认 subpixel 更干净清晰） */
+  -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; text-rendering: optimizeLegibility;
+  --topbar-height: 38px; --ease-out: var(--lake-ease-standard); --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1); --dur-press: var(--lake-motion-press); --dur-enter: var(--lake-motion-fast); --dur-drawer: var(--lake-motion-panel); }
+
+* { box-sizing: border-box; }
+
+/* 图标全局细化：lucide 默认 2px 描边在 14-20px 尺寸下显重，1.75 更轻盈干净（用户要求更简洁的图标观感） */
+svg.lucide { stroke-width: 1.75; }
+
+html, body, #root { height: 100%; }
+
+body { min-width: 320px; min-height: 100%; overflow: hidden; }
+
+button, input { font: inherit; }
+
+button { cursor: pointer; }
+
+/* ===== Apple-style management shell (Lake editor internals intentionally untouched) ===== */
+:root {
+  /* font-family 单一来源：--b3-font-family（见 :root 顶部与 b3/base.css body）*/
+  font-optical-sizing: auto;
+  /* 壳层令牌单一来源：一律从 tokens.css 的 --lake-* 派生（深浅主题自动跟随）。
+     历史上这里另写了一套灰/蓝字面值，深色下没有覆盖 → 某些表面会在深底上露出浅灰/深灰文字；
+     与 --lake-* 的差异也只有"是否偏冷"这一点，收敛后观感更统一。 */
+  --shell-accent: var(--lake-accent);
+  --shell-accent-strong: var(--lake-accent);
+  --shell-accent-soft: var(--lake-accent-soft);
+  --shell-text: var(--lake-text);
+  --shell-text-secondary: var(--lake-text-secondary);
+  --shell-text-tertiary: var(--lake-text-tertiary);
+  --shell-separator: color-mix(in srgb, var(--lake-text) 9%, transparent);
+  /* 不透明的冷调表面，保资料库可读 */
+  --shell-material: var(--lake-surface);
+  --shell-toolbar: var(--lake-surface);
+  --shell-ease: var(--lake-ease-standard);
+  --shell-radius: var(--lake-radius-md); /* 左右固定 rail 共用宽度 */
+}
+
+/* ===== 2026-08-06 视觉刷新：A 暖紫灰主调 + C 悬停微卡片 + 去分隔线 + 可读性 ===== */
+:root {
+  /* 材质/分隔线/文字已收敛到上文单一来源（--shell-* ← --lake-*），此处只保留独有的阴影令牌。
+     本轮（260914 第三批）把下方渐变里的浅色字面值一并换成令牌：实测 rail / tab-bar / quick-notes-pane
+     的渐变当前都被 b3/base.css 与 quick-notes.css 的 !important 覆盖（深浅两色都不生效），
+     换令牌在浅色下只差 2~3 个色阶，但一旦哪条覆盖被移除，深色下不会再冒出一块浅色板。 */
+  --shell-card-shadow: 0 1px 2px rgba(0, 0, 0, .05), 0 8px 24px rgba(140, 149, 159, .18);
+  --shell-micro-card: 0 1px 2px rgba(0, 0, 0, .08), 0 0 0 1px rgba(0, 0, 0, .04);
+}
+
+/* ===== 2026-08-13 统一窗口材质 / 思源式浮动面板 ===== */
+:root {
+  --shell-gradient-top: color-mix(in srgb, var(--lake-shell) 45%, var(--lake-panel)); /* 浅色≈#fafbfd / 深色≈#191c21 */
+  --shell-unified-background: var(--lake-shell);
+  --shell-unified-topbar: var(--lake-panel);
+}

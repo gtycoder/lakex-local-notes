@@ -25,6 +25,8 @@ export interface DesktopViewInput {
   outlineMode: OutlineMode;
   sidebarWidth: number;
   sidebarMode: SidebarMode;
+  /** 窄窗（≤760px）：目录/大纲一律浮层呈现，不占列 —— 与 `sidebarRenderMode` 同一口径。 */
+  narrowOverlay: boolean;
   outlineSidebarWidth: number;
 }
 
@@ -34,7 +36,7 @@ export function deriveDesktopView(input: DesktopViewInput) {
     activeNoteId, treeNodes, notes, openTabs, iconByNoteId,
     fontSize, tocEnabled, outlineEnhance, desktopWorkspace,
     activeOutlineEmpty, outlineEmptyOverride, outlineMode,
-    sidebarWidth, sidebarMode, outlineSidebarWidth,
+    sidebarWidth, sidebarMode, narrowOverlay, outlineSidebarWidth,
   } = input;
 
   const activeNodeSyncState = activeNoteId ? (treeNodes.find((n) => n.noteFileId === activeNoteId)?.syncState ?? "synced") : "synced";
@@ -93,7 +95,10 @@ export function deriveDesktopView(input: DesktopViewInput) {
   // 只读锁：store 驱动（可同步），派生集合供多标签 viewer 重建
   const lockedNoteIds = new Set(notes.filter((n) => n.isLocked).map((n) => n.id));
 
-  const effectiveOutlineMode: OutlineMode = activeOutlineEmpty && !outlineEmptyOverride ? "collapsed" : outlineMode;
+  // 窄窗：锁定态（docked）也按收起态渲染 —— 窄窗不允许大纲占列，只保留右侧 rail + 悬停浮层。
+  const effectiveOutlineMode: OutlineMode = narrowOverlay && outlineMode === "docked"
+    ? "collapsed"
+    : activeOutlineEmpty && !outlineEmptyOverride ? "collapsed" : outlineMode;
 
   const shellStyle = {
     "--sidebar-width": `${sidebarWidth}px`,

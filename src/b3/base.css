@@ -17,45 +17,18 @@ body {
   background: var(--b3-body-background);
   color: var(--b3-theme-on-background);
   font-family: var(--b3-font-family);
-  font-size: var(--b3-font-size, 14px);
 }
 
-/* 应用骨架：侧栏/文档区/状态栏/活动轨 */
-.app-shell {
-  background: var(--b3-body-background);
-}
-.sidebar {
-  background: var(--b3-theme-surface);
-  border-right-color: var(--b3-border-color);
-}
-.document-pane {
-  background: var(--b3-theme-background);
-  color: var(--b3-theme-on-background);
-}
+/* 应用骨架：侧栏/文档区/状态栏/活动轨。
+ * `.statusbar` 与 `.document-statusbar` 是同一元素上的**别名类**（DesktopStatusBar.tsx:36 写在一处），
+ * 颜色单一来源是 styles/document-status.css 的 `.document-statusbar`（更晚）。 */
 .statusbar {
-  background: var(--b3-theme-surface);
   border-top-color: var(--b3-border-color);
-  color: var(--b3-theme-on-surface);
-}
-.activity-rail {
-  background: var(--b3-theme-surface);
-  border-right-color: var(--b3-border-color);
 }
 
 /* 壳层材质：覆盖 styles.css 的「统一材质 !important」（2026-08-13 引入），
  * 切回思源观感——灰底（--b3-body-background）+ 白色文档区，侧栏/顶栏/状态栏同色系。 */
 @media (min-width: 761px) {
-  .app-shell,
-  .activity-rail,
-  .sidebar,
-  .sidebar.sidebar-docked,
-  .sidebar.sidebar-floating {
-    background: var(--b3-body-background);
-  }
-  .tab-bar {
-    background: var(--b3-theme-surface);
-    border-bottom: 1px solid var(--b3-border-color);
-  }
   .statusbar {
     background: var(--b3-theme-surface);
     border-top: 1px solid var(--b3-border-color);
@@ -69,8 +42,3 @@ body {
 }
 
 /* 焦点/选中主色统一走 b3 primary */
-.search-box:focus-within,
-.current-note-input:focus {
-  border-color: var(--b3-theme-primary) !important;
-  box-shadow: 0 0 0 2px var(--b3-theme-primary-lightest) !important;
-}

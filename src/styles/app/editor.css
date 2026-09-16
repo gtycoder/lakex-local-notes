@@ -1,0 +1,147 @@
+/* 基础层 · 编辑器基础（.ne-* / lake-editor / 原生 TOC）
+   260916 第二档 S3：自 src/styles.css 按职责拆出（脚本：scripts/css-audit/split-app-layer.mjs，可重跑）。
+   本层由 src/styles.css 的 @import 编排，整体仍在 b3 之前 —— 层间先后不得改变（见 docs/CSS-LAYERS-BRIEF-260916.md §6）。 */
+
+/* 编辑器内容区字体：vendor style.css 内置栈（Chinese Quote/Segoe UI/PingFang SC...）会让拉丁字符
+   命中苹方而非 SF Pro，观感与云端 Web 版一致、不像原生应用。此处以更高特异性覆盖为系统原生栈
+   （macOS=SF Pro+苹方，Windows=Segoe UI+雅黑 UI），与外壳/思源面板字体统一。 */
+.lake-editor-mount { transition: opacity var(--dur-enter) var(--ease-out); }
+
+@media (min-width: 761px) {
+  .lake-editor-mount .ne-engine { padding-right: 56px; }
+}
+
+/* 打开/切换文档时 Lake 挂载点淡入：只动 opacity，绝不碰 Lake 内部尺寸/溢出/定位。 */
+@starting-style { .lake-editor-mount { opacity: 0; } }
+
+.lake-editor-tab {
+  grid-area: 1 / 1;
+  min-height: 0;
+  height: 100%;
+  /* 虚拟渲染 + TOC 固定定位：滚动层必须是 Lake 原生内部容器 .ne-editor-wrap。
+     TOC 侧边栏是 absolute 钉在 .ne-editor-body 上的，若外层 .lake-editor-tab
+     滚动，整个 body（含 TOC）会被滚出视口（现象：大纲只在顶部、到底消失）。
+     .lake-editor-tab 只做固定高度外壳，滚动交给 .ne-editor-wrap（见下高度链）。 */
+  overflow: hidden;
+  overscroll-behavior: contain;
+}
+
+/* ===== Fix: multi-tab layout overrides ===== */
+/* In multi-tab mode, the tab panel is absolutely positioned with its own scroll.
+   The .lake-editor min-height and padding-bottom from single-editor mode cause
+   a large blank bar at the bottom. Override them here. */
+.lake-editor-tab .lake-editor-mount {
+  min-height: auto;
+  /* 高度链（关键）：mount 填满标签 → .ne-editor 填满 mount →
+     .ne-editor-body 触发 Lake 规则 height:calc(100% - 50px) →
+     .ne-editor-wrap 触发 height:100%; overflow-y:auto 成为真实滚动容器。
+     此前 mount 高度 auto 被内容撑高，Lake 内部滚动从未生效。 */
+  height: 100%;
+}
+
+/* The .lake-editor inside a tab should fill the tab without extra min-height */
+.lake-editor-tab .lake-editor {
+  min-height: auto;
+  padding-bottom: 40px;
+}
+
+/* ===== Fix: Codeblock — pure auto-height + max-height cap ===== */
+/* No manual resize; height always follows content.
+   Long code scrolls internally via max-height cap. */
+.ne-codeblock,
+.ne-codeblock.ne-codeblock-height-limit {
+  height: auto;
+  max-height: none;
+}
+
+.ne-codeblock .ne-codeblock-inner {
+  height: auto;
+  max-height: 600px;
+  overflow-y: auto;
+  overflow-x: auto;
+  /* 空代码块也要有可点击/可编辑的空间，不能塌成细条。 */
+  min-height: 24px;
+}
+
+.ne-codeblock .CodeMirror {
+  height: auto;
+  min-height: 24px;
+}
+
+.ne-codeblock .cm-editor {
+  min-height: 24px;
+}
+
+.ne-codeblock .CodeMirror-scroll {
+  height: auto;
+  overflow: visible;
+}
+
+.ne-codeblock .CodeMirror-sizer {
+  min-height: 0;
+}
+
+/* Hide the card-resizer drag handle on codeblocks — we don't support manual resize.
+   DOM structure: ne-card[data-card-name="codeblock"] > ne-card-root > .ne-card-resizer
+   The resizer is a SIBLING of .ne-card-container (which holds .ne-codeblock),
+   so we must target it via the ne-card ancestor, NOT via .ne-codeblock. */
+ne-card[data-card-name="codeblock"] .ne-card-resizer,
+ne-card[data-card-name="codeblock"] .ne-card-resizer-trigger,
+ne-card[data-card-name="codeblock"] .ne-card-resizer-root,
+ne-card[data-card-name="codeblock"] .ne-card-resizer-content,
+ne-card[data-card-name="codeblock"] .ne-card-resizer-mask {
+  display: none;
+  height: 0;
+  width: 0;
+  pointer-events: none;
+  opacity: 0;
+}
+
+/* Collapsed codeblock */
+.ne-codeblock.ne-codeblock-collapsed .ne-codeblock-inner {
+  max-height: 200px;
+  overflow: hidden;
+}
+
+.lake-editor-tab { min-width: 0; }
+
+/* ===== 2026-08-06 只读锁（原生 Viewer）===== */
+/* 锁定标签：viewer 无工具栏；正文色略降暗示只读 */
+.lake-editor.lake-locked .ne-engine { color: #454b57; }
+
+/* 锁定态（原生 Viewer）几何对齐编辑态：
+   - .ne-viewer 作为滚动容器（编辑态是 .ne-editor-wrap），否则锁后无法滚动；
+   - .ne-viewer-body 内边距对齐 .ne-engine，避免正文贴边。 */
+@media (min-width: 761px) {
+  .lake-editor-tab .lake-editor-mount .ne-viewer {
+    height: 100%;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+  .lake-editor-tab .ne-viewer-body {
+    padding: 28px 56px 100px 40px;
+  }
+}
+
+/* 锁/编辑切换会重建 Lake 实例：淡入掩盖重建瞬间的空白闪烁 */
+.lake-editor-tab .lake-editor-mount {
+  animation: lake-mount-fade-in 180ms ease-out;
+}
+
+.trash-preview-viewer .lake-editor-mount { min-height: 100%; }
+
+.history-preview-viewer .lake-editor-mount { min-height: 100%; }
+
+/* 附件（文件）卡：无论是否 hover 都不渲染背景/描边/阴影。
+   覆盖 Lake 默认 .ne-viewer 的 :hover/.ne-card-hovered 背景，以及 block 卡的 outline。 */
+.ne-editor ne-card[data-card-name="file"] .ne-card-file,
+.ne-editor ne-card[data-card-name="file"].ne-card-hovered,
+.ne-editor ne-card[data-card-name="file"].ne-card-hovered .ne-card-file,
+.ne-viewer ne-card[data-card-name="file"]:hover .ne-card-file,
+.ne-viewer ne-card[data-card-name="file"].ne-card-hovered .ne-card-file,
+.ne-viewer ne-card[data-card-name="file"].ne-card-hovered,
+ne-card[data-card-name="file"] .ne-card-file {
+  background: transparent;
+  outline: none;
+  box-shadow: none;
+}

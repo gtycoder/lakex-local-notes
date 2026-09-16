@@ -1,0 +1,58 @@
+/* 设置面板 / 历史 / 回收站面板的共用件（260916 第二档 S4 建立：吸收原 ui-polish.css 的细滚动条规则）。
+   加载位置 = 原 ui-polish.css 处（壳层之后）。基础层的设置域规则在 `styles/app/settings.css`，
+   将来把它们并进来要按 §6 的"逐条二分"走（实测直接搬会改表现）。 */
+
+/* ── 以下规则自 `src/styles/ui-polish.css` 按职责并入（260916 S2/S3，只搬家不改声明）：细滚动条（原 ui-polish.css） ── */
+/* ---- 细滚动条（作用域：设置弹窗与浮层滚动区）----
+ * 6px 自绘细条：thumb 默认弱色、容器悬停更明显（悬停显隐是纯 CSS 能做到的上限）。
+ * 不能写 `scrollbar-width: thin`——非 auto 的标准属性会让 Chromium 忽略下面的 ::-webkit-scrollbar 自绘，
+ * 这一条曾在 03ada25 里连带上线并造成细滚动条消失（详见 b3/layout.css 顶部说明）。 */
+.settings-panel,
+.settings-content,
+.settings-nav,
+.config-assets__list,
+.config-readonly,
+.history-list,
+.history-preview-inline,
+.history-preview-viewer,
+.trash-preview-viewer { scrollbar-width: auto; scrollbar-color: auto; }
+
+.settings-panel::-webkit-scrollbar,
+.settings-content::-webkit-scrollbar,
+.settings-nav::-webkit-scrollbar,
+.config-assets__list::-webkit-scrollbar,
+.config-readonly::-webkit-scrollbar,
+.history-list::-webkit-scrollbar,
+.history-preview-inline::-webkit-scrollbar,
+.history-preview-viewer::-webkit-scrollbar,
+.trash-preview-viewer::-webkit-scrollbar { width: 6px; height: 6px; }
+
+.settings-panel::-webkit-scrollbar-track,
+.settings-content::-webkit-scrollbar-track,
+.settings-nav::-webkit-scrollbar-track,
+.config-assets__list::-webkit-scrollbar-track,
+.config-readonly::-webkit-scrollbar-track,
+.history-list::-webkit-scrollbar-track,
+.history-preview-inline::-webkit-scrollbar-track,
+.history-preview-viewer::-webkit-scrollbar-track,
+.trash-preview-viewer::-webkit-scrollbar-track { background: transparent; }
+
+.settings-panel:not(:hover)::-webkit-scrollbar-thumb,
+.settings-content:not(:hover)::-webkit-scrollbar-thumb,
+.settings-nav:not(:hover)::-webkit-scrollbar-thumb,
+.config-assets__list:not(:hover)::-webkit-scrollbar-thumb,
+.config-readonly:not(:hover)::-webkit-scrollbar-thumb,
+.history-list:not(:hover)::-webkit-scrollbar-thumb,
+.history-preview-inline:not(:hover)::-webkit-scrollbar-thumb,
+.history-preview-viewer:not(:hover)::-webkit-scrollbar-thumb,
+.trash-preview-viewer:not(:hover)::-webkit-scrollbar-thumb { background: color-mix(in srgb, var(--lake-text) 12%, transparent); }
+
+.settings-panel:hover::-webkit-scrollbar-thumb,
+.settings-content:hover::-webkit-scrollbar-thumb,
+.settings-nav:hover::-webkit-scrollbar-thumb,
+.config-assets__list:hover::-webkit-scrollbar-thumb,
+.config-readonly:hover::-webkit-scrollbar-thumb,
+.history-list:hover::-webkit-scrollbar-thumb,
+.history-preview-inline:hover::-webkit-scrollbar-thumb,
+.history-preview-viewer:hover::-webkit-scrollbar-thumb,
+.trash-preview-viewer:hover::-webkit-scrollbar-thumb { background: color-mix(in srgb, var(--lake-text) 26%, transparent); }

@@ -2,7 +2,7 @@
 .sync-status-button { position: relative; width: 30px; min-width: 30px; height: 28px; padding: 0; gap: 0; justify-content: center; }
 .sync-status-button .sync-status-icon { display: inline-flex; flex: 0 0 auto; }
 .sync-status-button:hover .sync-status-icon { transform: translateY(-.5px); }
-.sync-status-visually-hidden { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+.sync-status-visually-hidden { position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); }
 .sync-status-button.pending { color: var(--lake-sync-pending); }
 .sync-status-button.error { color: var(--lake-error); }
 .sync-status-button.disabled { color: var(--lake-text-tertiary); }
@@ -67,7 +67,9 @@
 .settings-panel-large .settings-layout { min-height: 0; }
 .settings-panel-large .settings-nav {
   display: flex;
-  flex: 0 0 208px;
+  /* 导航宽度连续可调（原先窄窗块把它一刀切成 150px ⇒ 跨断点时面板内容区横跳 58px）。
+     宽窗（面板 ≥770px）恒定 208px 与原值一致；窄窗随面板收窄、但保底 150px。 */
+  flex: 0 0 clamp(150px, 27%, 208px);
   flex-direction: column;
   gap: 2px;
   min-height: 0;
@@ -174,7 +176,6 @@
 .ln-close:hover { opacity: 1; background: var(--b3-list-hover); }
 
 /* 页签：等分整行，选中灰底（思源设置面板顶部 tab 语言） */
-.ln-tabs { display: flex; align-items: center; gap: 8px; padding: 10px 12px 0; }
 /* 页签 = 底部指示线（本应用不做阴影/浮起强调）：轨道只留一条 hairline，
  * 选中项靠「主色字 + 2px 主色下划线」区分；未选中项同宽可点，hover 轻底。 */
 .ln-tabs { display: flex; align-items: stretch; gap: 4px; padding: 0 12px; border-bottom: 1px solid var(--b3-border-color); }
@@ -408,4 +409,15 @@ button.b3-list-item__action:disabled { opacity: .45; cursor: default; }
 .modal-backdrop { animation: lake-overlay-fade-in var(--lake-motion-fast) ease-out; }
 @media (prefers-reduced-motion: reduce) {
   .settings-overlay, .trash-panel-backdrop, .history-panel-backdrop, .search-panel-backdrop, .modal-backdrop { animation: none; }
+}
+/* 通用组件与浮层通用件（260916 第二档 S4：由 `overlays.css` 改名而来 —— 原名是"按响应/意图"命名，职责名才是 `components`）。
+   内含：`.ln-*` 浮层通用件（`ln-tabs/ln-toolbar/ln-row2/badge/seg/checks/panel-title/ln-close/ln-empty`）、菜单、卡片、徽章等。
+   **双端共享**（桌面 `src/main.tsx` 与移动 `src/mobile/main.tsx` 都加载）。新界面要补通用件时补在这里。 */
+
+/* 浮层入场：统一淡入 + 极短位移/缩放（只动 transform/opacity），克制时长。
+   260916 S4：自 ui-polish.css 并入。注意 `.floating-dialog` 不能加这个动画——它靠 transform 居中，
+   位移类 keyframes 会在入场期吃掉居中变换（见 styles/shell.css 与 app/misc.css 的说明）。 */
+@keyframes lake-pop-in {
+  from { opacity: 0; transform: translateY(4px) scale(.985); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
 }

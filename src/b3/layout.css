@@ -6,176 +6,174 @@
  * - 左右 dock 栏（活动轨）透明、满高，与顶部一体；
  * - 浮动 dock：top:112px / bottom:82px、外侧圆角 + --b3-dock-shadow-color 阴影。 */
 
+/* ── 窄窗彻底统一（260915 · HANDOFF §2.39）：顶栏几何搬到共用作用域 ──
+ * 原先写在 `@media (min-width: 761px)` 里 ⇒ 761px 以下顶栏退回 sticky、红绿灯内边距消失。
+ * 与 styles.css 的 `.workspace` 让位成对搬运（同一次改），块内其余规则位置未动。 */
+.tab-bar {
+  position: fixed;
+  top: 0;
+  right: 0;
+  left: 0;
+  height: var(--topbar-height);
+  background: transparent;
+  border-bottom: 0 !important;
+  z-index: 400;
+  box-shadow: none;
+  -webkit-backdrop-filter: none;
+}
+/* 顶栏左侧元素：工作空间（下拉）/云同步，不参与拖拽 */
+.tabbar-leading {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex: 0 0 auto;
+  -webkit-app-region: no-drag;
+}
+/* 顶栏中部撑开：让最右侧元素（外观/更多）贴右（小记视图无 tab 时同样一致） */
+.tabbar-spacer {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+/* 顶栏最右侧元素：外观/更多（文档操作） */
+.tabbar-trailing {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex: 0 0 auto;
+  -webkit-app-region: no-drag;
+}
+/* 多 tab：填充顶栏右侧 */
+.tab-items {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+/* 左右活动轨：透明、满高、无边框，与顶部一体（内容仍在标题栏下方） */
+.activity-rail {
+  padding-top: var(--topbar-height);
+  background: transparent;
+  border-right: 0 !important;
+  border-left: 0 !important;
+}
+
+/* 大纲轨：不额外加 padding-top（大纲栏本体已从顶栏下方开始）；轨自身透明，
+ * 由大纲栏本体的壳色透出——与左轨同一套。**宽窄共用**：原先这条只在宽窗媒体块里，
+ * 窄窗于是掉回 outline.css 的 `--shell-material`（#f6f6f6），比壳层亮一档 ——
+ * 用户看到的就是"最右侧那条颜色跟别人不一样"（260915 截图）。 */
+.outline-sidebar__rail {
+  margin-top: 0;
+  padding-top: 0;
+  background: transparent;
+  border-right: 0;
+  border-left: 0;
+}
+
+/* 右侧浮动（大纲 hover）：思源半高悬浮带。**宽窄共用**——这是大纲面板"最终长相"的
+ * 唯一来源（白面 / 0 描边 / 12px 圆角 / dock 阴影）。原先它只在宽窗媒体块里，
+ * 窄窗于是掉回 outline.css 更老的一套公式（1px 描边 + 14px 圆角），跨宽度看就是两种样式。 */
+.outline-sidebar--collapsed.outline-sidebar--hovered .outline-sidebar__content {
+  position: fixed;
+  left: auto;
+  width: var(--outline-sidebar-width, 280px);
+  min-width: 0;
+  background: var(--b3-theme-background);
+  border-radius: var(--b3-border-radius-b) 0 0 var(--b3-border-radius-b);
+  border: 0;
+}
+
+/* 标签项：思源 layout-tab-bar .item 观感（窄窗同样成立——组 4） */
+.tab-item {
+  border-radius: var(--b3-border-radius);
+  min-height: 29px;
+  line-height: 22px;
+  margin: 6px 0;
+  padding: 0 8px;
+  /* 标题完整展示：不限制标签宽度（顶栏占满时横向滚动 + 垂直 tab 兜底） */
+}
+.tab-item:hover {
+  background-color: var(--b3-list-hover);
+}
+/* 活动标签（桌面）：白色卡片 + 顶部主色指示线（对齐思源 layout-tab-bar），
+   不再叠「主色浅底 + 主色内描边 + 主色文字」——激活态只保留一个着色信号。
+   position/z-index 由顶层 .tab-item.active 提供。 */
+.tab-item.active {
+  box-shadow: inset 0 2px 0 var(--b3-theme-primary);
+}
+
+/* 左侧固定目录：白色卡片、无强边框/阴影、顶部留 4px 灰缝（圆角可见，思源卡片从灰底"抠出"）、右侧 4px 灰缝 */
+.sidebar.sidebar-docked {
+  background: var(--b3-theme-background);
+  border: 0 !important;
+  box-shadow: none !important;
+  border-radius: var(--b3-border-radius-b);
+  margin: calc(var(--topbar-height) + 4px) 4px 4px 0;
+}
+
+/* 左侧浮动：思源半高悬浮带（悬停活动轨出现）——收起态在宽窄两侧都是"悬停预览"，
+ * 原先只在 `@media (min-width: 761px)` 里 ⇒ 窄窗悬停左轨会拉出一块被撑爆的面板。 */
+.sidebar.sidebar-floating {
+  position: fixed;
+  top: 112px;
+  bottom: 82px;
+  left: var(--activity-rail-width);
+  right: auto;
+  height: calc(100vh - 194px);
+  width: var(--sidebar-width);
+  max-width: none;
+  background: var(--b3-theme-background);
+  border-radius: 0 var(--b3-border-radius-b) var(--b3-border-radius-b) 0 !important;
+  transition: transform .2s cubic-bezier(0, 0, .2, 1) 0ms, opacity .3s cubic-bezier(0, 0, .2, 1) 0ms;
+}
+
+/* 中间文档卡片：顶部两个圆角与左右 dock 卡片一致（思源 .layout__center 四角圆角），
+ * 顶部与顶栏的拼接不再出现直角"连接线" */
+.workspace,
+.document-pane,
+.document-pane:has(> .multi-tab-editor) {
+  border-radius: var(--b3-border-radius-b) var(--b3-border-radius-b) 0 0;
+}
+/* 小记视图本身无卡片边框/圆角设计，保持直角融合 */
+.app-shell.quick-notes-active .workspace,
+.app-shell.quick-notes-active .document-pane,
+.app-shell.quick-notes-active .document-pane:has(> .multi-tab-editor) {
+  border-radius: 0 !important;
+}
+
+/* 状态栏：思源全宽底部灰条——回到 workspace 两行网格的第 2 行（28px），
+ * 取消原"右下浮动胶囊"（absolute;right:10px;bottom:6px），文档区在第 1 行自然收口。
+ * 位置/尺寸（position/right/bottom/width）不在这里：`.statusbar` 与 `.document-statusbar` 是同一元素上的别名类，
+ * 真来源是 styles/document-status.css 的 `.document-statusbar`（更晚、带 !important）。 */
+.statusbar {
+  background: var(--b3-body-background) !important;
+  border-top: 0;
+}
+
 @media (min-width: 761px) {
   /* 壳层：单色（用户 260915 决策：顶部那点渐变肉眼看不出来，不值得为它留一层"互相压"的规则）。
    * 取原渐变落定后的主体色 --b3-body-background；顶栏/左右轨透明共享此背景。 */
-  .app-shell {
-    background: var(--b3-body-background);
-  }
 
-  /* 左右活动轨：透明、满高、无边框，与顶部一体（内容仍在标题栏下方） */
-  .activity-rail {
-    margin-top: 0;
-    padding-top: var(--topbar-height);
-    background: transparent;
-    border-right: 0 !important;
-    border-left: 0 !important;
-  }
-  /* 大纲轨：不额外加 padding-top——大纲侧栏本身已从顶栏下方开始；视觉图标由产品要求隐藏。 */
-  .outline-sidebar__rail {
-    margin-top: 0 !important;
-    padding-top: 0 !important;
-    background: transparent !important;
-    border-right: 0 !important;
-    border-left: 0 !important;
-  }
+  /* .activity-rail / .tab-item* / .sidebar.sidebar-docked / 卡片圆角 / .statusbar
+     已搬到共用作用域（见文件开头） */
+  /* 大纲轨的几何见共用作用域（文件开头） */
 
-  /* 标签栏：白底顶条 + 极淡底边线（思源 layout-tab-bar），与下方 dock 一体 */
-  .tab-bar {
-    background: var(--b3-theme-background);
-    border-bottom: 1px solid var(--b3-theme-background-light);
-  }
+  /* 标签栏几何 / .tabbar-* / .tab-items / 顶栏底色已搬到共用作用域（见文件开头） */
 
-  /* 标签栏：与顶栏融合成一条（0-38 全宽）——左侧工作空间/云/外观/更多，多 tab 在其右侧；
-   * 背景透明，与左右固定轨共享壳层渐变，真正一体 */
-  .tab-bar {
-    position: fixed;
-    top: 0;
-    right: 0;
-    left: 0;
-    height: var(--topbar-height);
-    min-height: 0;
-    width: auto;
-    background: transparent;
-    border-bottom: 0 !important;
-    z-index: 400;
-    box-shadow: none;
-    backdrop-filter: none;
-    -webkit-backdrop-filter: none !important;
-  }
-  /* 顶栏左侧元素：工作空间（下拉）/云同步，不参与拖拽 */
-  .tabbar-leading {
-    display: flex;
-    align-items: center;
-    gap: 2px;
-    flex: 0 0 auto;
-    -webkit-app-region: no-drag;
-  }
-  /* 顶栏中部撑开：让最右侧元素（外观/更多）贴右（小记视图无 tab 时同样一致） */
-  .tabbar-spacer {
-    flex: 1 1 auto;
-    min-width: 0;
-  }
-  /* 顶栏最右侧元素：外观/更多（文档操作） */
-  .tabbar-trailing {
-    display: flex;
-    align-items: center;
-    gap: 2px;
-    flex: 0 0 auto;
-    -webkit-app-region: no-drag;
-  }
-  /* 多 tab：填充顶栏右侧 */
-  .tab-items {
-    flex: 1 1 auto;
-    min-width: 0;
-  }
-
-  /* 标签项：思源 layout-tab-bar .item 观感 */
-  .tab-item {
-    color: var(--b3-theme-on-surface);
-    border-radius: var(--b3-border-radius);
-    min-height: 29px;
-    line-height: 22px;
-    margin: 6px 0;
-    padding: 0 8px;
-    /* 标题完整展示：不限制标签宽度（顶栏占满时横向滚动 + 垂直 tab 兜底） */
-  }
-  .tab-item:hover {
-    background-color: var(--b3-list-hover);
-  }
-  /* 活动标签（桌面）：白色卡片 + 顶部主色指示线（对齐思源 layout-tab-bar），
-     不再叠「主色浅底 + 主色内描边 + 主色文字」——激活态只保留一个着色信号。
-     position/z-index 由顶层 .tab-item.active 提供。 */
-  .tab-item.active {
-    background-color: var(--lake-raised);
-    box-shadow: inset 0 2px 0 var(--b3-theme-primary);
-    border-color: transparent;
-  }
-
-  /* 左侧固定目录：白色卡片、无强边框/阴影、顶部留 4px 灰缝（圆角可见，思源卡片从灰底"抠出"）、右侧 4px 灰缝 */
-  .sidebar.sidebar-docked {
-    background: var(--b3-theme-background);
-    border: 0 !important;
-    box-shadow: none !important;
-    border-radius: var(--b3-border-radius-b);
-    margin: calc(var(--topbar-height) + 4px) 4px 4px 0 !important;
-    height: calc(100% - var(--topbar-height) - 8px);
-  }
+  /* .tab-item* / .sidebar.sidebar-docked 已搬到共用作用域（见文件开头） */
 
   /* 右侧大纲固定：白色卡片、无边框/阴影、左侧 4px 灰缝 */
   .outline-sidebar--docked .outline-sidebar__content {
-    background: var(--b3-theme-background) !important;
-    border: 0 !important;
-    box-shadow: none !important;
-    border-radius: var(--b3-border-radius-b) !important;
-  }
-
-  /* 中间文档卡片：顶部两个圆角与左右 dock 卡片一致（思源 .layout__center 四角圆角），
-   * 顶部与顶栏的拼接不再出现直角"连接线" */
-  .workspace,
-  .document-pane,
-  .document-pane:has(> .multi-tab-editor) {
-    border-radius: var(--b3-border-radius-b) var(--b3-border-radius-b) 0 0;
-  }
-  /* 小记视图本身无卡片边框/圆角设计，保持直角融合 */
-  .app-shell.quick-notes-active .workspace,
-  .app-shell.quick-notes-active .document-pane,
-  .app-shell.quick-notes-active .document-pane:has(> .multi-tab-editor) {
-    border-radius: 0 !important;
-  }
-
-  /* 状态栏：思源全宽底部灰条——回到 workspace 两行网格的第 2 行（28px），
-   * 取消原"右下浮动胶囊"（absolute;right:10px;bottom:6px），文档区在第 1 行自然收口 */
-  .statusbar {
-    position: static;
-    right: auto;
-    bottom: auto;
-    width: auto;
-    background: var(--b3-body-background) !important;
-    border-top: 0;
-  }
-
-  /* 左侧浮动：思源半高悬浮带（悬停活动轨出现）
-   * 注意：height 必须显式给出（height:auto + bottom 会导致浏览器忽略 top、按 bottom+内容高锚定）。 */
-  .sidebar.sidebar-floating {
-    position: fixed;
-    top: 112px;
-    bottom: 82px;
-    left: var(--activity-rail-width);
-    right: auto;
-    height: calc(100vh - 194px);
     background: var(--b3-theme-background);
-    border-radius: 0 var(--b3-border-radius-b) var(--b3-border-radius-b) 0 !important;
-    box-shadow: 8px 0 24px var(--b3-dock-shadow-color);
-    transition: transform .2s cubic-bezier(0, 0, .2, 1) 0ms, opacity .3s cubic-bezier(0, 0, .2, 1) 0ms;
+    border: 0;
+    box-shadow: none;
+    border-radius: var(--b3-border-radius-b);
   }
 
-  /* 右侧浮动（大纲 hover）：思源半高悬浮带 */
-  .outline-sidebar--collapsed.outline-sidebar--hovered .outline-sidebar__content {
-    position: fixed !important;
-    top: 112px !important;
-    bottom: 82px !important;
-    right: var(--outline-collapsed-width) !important;
-    left: auto !important;
-    width: var(--outline-sidebar-width, 280px) !important;
-    height: calc(100vh - 194px) !important;
-    min-width: 0 !important;
-    background: var(--b3-theme-background) !important;
-    border-radius: var(--b3-border-radius-b) 0 0 var(--b3-border-radius-b) !important;
-    box-shadow: -8px 0 24px var(--b3-dock-shadow-color) !important;
-    border: 0 !important;
-    transition: transform .2s cubic-bezier(0, 0, .2, 1) 0ms, opacity .3s cubic-bezier(0, 0, .2, 1) 0ms !important;
-  }
+  /* 卡片圆角 / .statusbar 已搬到共用作用域（见文件开头） */
+
+  /* .sidebar.sidebar-floating 已搬到共用作用域（见文件开头）
+   * 注意：height 必须显式给出（height:auto + bottom 会导致浏览器忽略 top、按 bottom+内容高锚定）。 */
+
+  /* （右侧浮动大纲的公式已搬到共用作用域，见文件开头） */
 }
 
 /* 深色：dock/标签栏卡片跟随主题（覆盖 styles.css 的 #fff !important 与浅色表面） */
@@ -230,11 +228,9 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  cursor: pointer;
   padding: 0;
   border: 0;
   background: transparent;
-  font: inherit;
   text-align: left;
 }
 .protyle-breadcrumb__item:hover { color: var(--b3-theme-on-background); }
@@ -243,7 +239,7 @@
   outline-offset: 1px;
   border-radius: 3px;
 }
-.protyle-breadcrumb__item--current { color: var(--b3-theme-on-background); font-weight: 500; }
+.protyle-breadcrumb__item--current { font-weight: 500; }
 
 /* ── 顶栏「更多」下拉菜单（思源 b3-menu）── */
 .toolbar__menu-wrap {
@@ -323,13 +319,8 @@
   display: grid;
   place-items: center;
   width: 26px;
-  height: 26px;
   padding: 0;
-  border: 0;
-  border-radius: var(--b3-border-radius);
-  color: var(--b3-theme-on-surface);
   background: transparent;
-  cursor: pointer;
   -webkit-app-region: no-drag;
   app-region: no-drag;
   transition: color var(--lake-motion-fast) var(--lake-ease-standard), background-color var(--lake-motion-fast) var(--lake-ease-standard);
@@ -350,18 +341,17 @@
  * 顶部 tab 的滚动只允许发生在 .tab-items 内；tab-bar 自身不能成为滚动层。
  * 目录栏同理：sidebar 是固定视口，note-list 才是唯一垂直滚动层。
  * 这样长 tab/长目录不会把壳层撑高，也不会把底部状态栏推出窗口。 */
-@media (min-width: 761px) {
-  .tab-bar {
-    overflow: visible;
-  }
+/* 标签条收口（共用作用域）：滚动只发生在 .tab-items 内，.tab-bar 自身不能成为滚动层。
+ * 与上面的 fixed 几何同为"顶栏"一组，窄窗必须同样成立。 */
+.tab-items {
+  align-self: stretch;
+  height: 100%;
+  min-height: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
 
-  .tab-items {
-    align-self: stretch;
-    height: 100%;
-    min-height: 0;
-    overflow-x: auto !important;
-    overflow-y: hidden !important;
-  }
+@media (min-width: 761px) {
   .sidebar.sidebar-docked,
   .sidebar.sidebar-floating {
     min-height: 0;
@@ -371,11 +361,9 @@
     height: calc(100% - var(--topbar-height) - 8px);
   }
   .sidebar .note-list {
-    flex: 1 1 0%;
-    min-height: 0;
     max-height: 100%;
-    overflow-x: hidden !important;
-    overflow-y: auto !important;
+    overflow-x: hidden;
+    overflow-y: auto;
   }
 }
 
