@@ -1,9 +1,11 @@
 // 按选择器把某个样式文件里的规则**整块搬到**别的文件（只搬家，不改任何声明）。
 // 用途：第二档「按职责归并样式层」的 S2/S3（HANDOFF §2.48 / docs/CSS-LAYERS-BRIEF-260916.md）。
 //
-// 用法：node scripts/css-audit/split-file.mjs <源文件> <映射.json> [--dry]
+// 用法：node scripts/css-audit/split-file.mjs <源文件> <映射.json> [--dry] [--prepend]
 //   映射.json：[{ "match": "<正则>", "target": "src/styles/shell.css", "note": "..." }, ...]
 //   未匹配任何条的规则**留在源文件**；注释跟随其后的规则一起搬；目标文件按映射顺序追加到末尾。
+//   `--prepend`：改为插到目标文件**开头**（紧跟在文件头注释之后）。跨层合并时用它：
+//   插在开头能保留"这批规则仍然输给目标文件原有规则"的关系（原来的相对关系就是"早的那个输"）。
 //
 // 两条硬约束：
 //   1. `@media (prefers-reduced-motion: reduce)` 这类**测试矩阵恒不成立**的块默认不搬（搬了无法验证，见 §2.47）。
@@ -15,6 +17,7 @@ import { REPO, data } from "./paths.mjs";
 const src = process.argv[2];
 const mapFile = process.argv[3];
 const dry = process.argv.includes("--dry");
+const prepend = process.argv.includes("--prepend");
 if (!src || !mapFile) { console.error("用法: node scripts/css-audit/split-file.mjs <源文件> <映射.json> [--dry]"); process.exit(2); }
 
 const MAP = JSON.parse(fs.readFileSync(data(mapFile), "utf8")).map((m) => ({ ...m, re: new RegExp(m.match) }));
@@ -87,8 +90,22 @@ for (const [target, items] of out) {
   const head = items[0].note ? `\n\n/* ── 以下规则自 \`${src}\` 按职责并入（260916 S2/S3，只搬家不改声明）：${items[0].note} ── */\n` : `\n\n/* ── 以下规则自 \`${src}\` 按职责并入（260916 S2/S3）── */\n`;
   const body = items.map((i) => i.text).join("\n\n");
   const cur = fs.readFileSync(REPO + target, "utf8").replace(/\s*$/, "");
-  if (!dry) fs.writeFileSync(REPO + target, cur + head + body + "\n");
-  console.log(`  → ${target.padEnd(34)} 并入 ${items.length} 组（规则 ${perTarget[target] || 0} 条）`);
+  let next;
+  if (prepend) {
+    // 跳过目标文件开头的注释块（含首个非注释行之前的所有注释）
+    const lines = cur.split("\n");
+    let i = 0;
+    if (lines[0] && lines[0].trim().startsWith("/*")) {
+      let closed = lines[0].includes("*/");
+      i = 1;
+      while (!closed && i < lines.length) { if (lines[i].includes("*/")) closed = true; i++; }
+    }
+    next = [...lines.slice(0, i), head.trimStart(), body, "", ...lines.slice(i)].join("\n");
+  } else {
+    next = cur + head + body + "\n";
+  }
+  if (!dry) fs.writeFileSync(REPO + target, next);
+  console.log(`  → ${target.padEnd(34)} 并入 ${items.length} 组（规则 ${perTarget[target] || 0} 条）${prepend ? " [插在开头]" : ""}`);
 }
 if (!dry) fs.writeFileSync(REPO + src, srcText.replace(/\n{3,}/g, "\n\n"));
 console.log(`  ↳ ${src} 剩余 ${srcText.split("\n").length - 1} 行${dry ? "（dry-run，未落盘）" : ""}`);

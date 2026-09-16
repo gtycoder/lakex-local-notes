@@ -28,7 +28,7 @@ const FILES = [
   "styles/tokens.css", "styles/settings.css",
   // 基础层（260916 第二档 S3：原 styles.css 拆成入口 + 10 个域文件；入口只剩 @import 编排，不再计声明）
   "styles/app/base.css", "styles/app/dialogs.css", "styles/app/editor.css",
-  "styles/app/misc.css", "styles/app/panels.css", "styles/app/quick-notes.css", "styles/app/settings.css",
+  "styles/app/misc.css", "styles/app/panels.css", "styles/app/settings.css",
   "styles/app/shell.css", "styles/app/tabs.css", "styles/app/vendor-board.css",
 ];
 
@@ -52,7 +52,7 @@ const BASELINE: Record<string, { decls: number; dupGroups: number }> = {
   "styles/editor.css": { decls: 14, dupGroups: 0 },   // +2 = 自 ui-polish.css 并入的编辑器正文覆盖（S2）
   "styles/motion.css": { decls: 10, dupGroups: 0 },   // +7 = 自 ui-polish.css 并入的 4 个 reduced-motion 契约块（S4；矩阵补了媒体偏好态后才可验证）
   "styles/components.css": { decls: 451, dupGroups: 1 },   // 260916 S4：原 overlays.css 改名 + 并入 @keyframes lake-pop-in（+1 声明，位置不变）
-  "styles/quick-notes.css": { decls: 11, dupGroups: 0 },   // +2 = 自 ui-polish.css 并入的小记入口（S2）
+  "styles/quick-notes.css": { decls: 304, dupGroups: 8 },   // 260916：基础层小记规则（app/quick-notes.css，293 声明）整体并入同域壳层文件，插在开头以保留"输给原有覆盖规则"的关系；+2 = S2 自 ui-polish 并入的小记入口
   "styles/shell.css": { decls: 196, dupGroups: 0 },   // +5 = 原 layout-contract 的壳层度量令牌（S1）；+143 = 自 ui-polish 并入的目录栏/页签/dock 头部（S2）
   "styles/tokens.css": { decls: 83, dupGroups: 0 },
   "styles/settings.css": { decls: 7, dupGroups: 0 },   // 260916 S4 建立：吸收原 ui-polish.css 的设置/历史/回收站细滚动条
