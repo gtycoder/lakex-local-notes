@@ -13,7 +13,21 @@ const FILES = (process.env.FILES || "src/styles.css,src/b3/layout.css,src/b3/com
 const DUMP = (target) => `(() => {
   const t = ${JSON.stringify(target)};
   let el = null;
-  if (/^-?\\d+(\\.\\d+)?,-?\\d+(\\.\\d+)?$/.test(t)) { const [x, y] = t.split(",").map(Number); el = document.elementFromPoint(x, y); }
+  if (/^#?\\d+$/.test(t)) {
+    // 纯数字 = 按 body 下的元素序号定位（与快照里的 key#n 的 n 同一套枚举口径）
+    const els = [document.documentElement, ...document.querySelectorAll("body *")];
+    el = els[Number(t.replace("#", ""))] || null;
+  } else if (/\\w\\.\\w*#\\d+$/.test(t) || /^\\w[\\w.-]*#\\d+$/.test(t)) {
+    // 形如 div.tree-item#131 / svg.lucide.lucide-book#7：复刻快照的 key 口径
+    const [head, nStr] = [t.slice(0, t.lastIndexOf("#")), Number(t.slice(t.lastIndexOf("#") + 1))];
+    let n = 0;
+    for (const e of document.querySelectorAll("body *")) {
+      const key = e.tagName.toLowerCase() + (e.id ? "$" + e.id : "") + ([...e.classList].sort().join(".") ? "." + [...e.classList].sort().join(".") : "");
+      if (key !== head) continue;
+      if (n === nStr) { el = e; break; }
+      n++;
+    }
+  } else if (/^-?\\d+(\\.\\d+)?,-?\\d+(\\.\\d+)?$/.test(t)) { const [x, y] = t.split(",").map(Number); el = document.elementFromPoint(x, y); }
   else el = document.querySelector(t);
   if (!el) return null;
   const cs = getComputedStyle(el);
@@ -34,8 +48,17 @@ export default async ({ page, args }) => {
 
   const after = await page.evaluate(DUMP(target));
   if (!after) return { error: `没找到元素：${target}` };
+  // DUMP=1：只把目标元素的全属性原样打出来（不做 HEAD 注入对照），用于"两次运行之间"比对一个元素
+  if (process.env.DUMP === "1") {
+    console.log(JSON.stringify({ sel: target, tag: after.tag, cls: after.cls, rect: after.rect, props: after.props }));
+    return { dumped: true };
+  }
 
-  const spec = FILES.map((rel) => ({ file: rel, text: execSync(`git show HEAD:${rel}`, { cwd: REPO, maxBuffer: 64 * 1024 * 1024 }).toString() }));
+  // SPEC=<json 文件> 时用指定的"另一份样式文本"对照（用于重命名/搬家这类 HEAD 路径已不存在的改动）；
+  // 否则默认注入 git HEAD 版本。
+  const spec = process.env.SPEC
+    ? JSON.parse(fs.readFileSync(process.env.SPEC, "utf8"))
+    : FILES.map((rel) => ({ file: rel, text: execSync(`git show HEAD:${rel}`, { cwd: REPO, maxBuffer: 64 * 1024 * 1024 }).toString() }));
   await page.evaluate(`(() => {
     const spec = ${JSON.stringify(spec)};
     for (const ss of [...document.styleSheets]) {

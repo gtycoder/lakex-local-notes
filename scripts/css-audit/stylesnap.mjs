@@ -137,6 +137,21 @@ export const STATES = [
 ];
 
 export const setupState = async (page, st) => {
+  // 等 DOM 静默：目录树存在异步挂载（行高随挂载时机变化），固定 sleep 会让两次快照拿到不同中间态 ——
+  // 260916 S1 实测：同一份代码连拍两份快照，13 个状态 / 47931 条指纹"不相同"，全部是这套噪声。
+  const settle = async () => {
+    let lastCount = -1, lastH = -1, stable = 0;
+    for (let i = 0; i < 32; i++) {
+      const [n, h] = await page.evaluate(`(() => {
+        const els = document.querySelectorAll("body *");
+        let sum = 0;
+        for (const el of els) sum += Math.round(el.getBoundingClientRect().height);
+        return [els.length, sum];
+      })()`);
+      if (n === lastCount && h === lastH) { if (++stable >= 4) break; } else { stable = 0; lastCount = n; lastH = h; }
+      await page.sleep(250);
+    }
+  };
   {
     await pin(page, st.w, st.theme, st.outline);
     // 钉死"当前文档"：打开树里第一篇笔记
@@ -195,6 +210,7 @@ export const setupState = async (page, st) => {
     if (st.settings) { await nav.openSettings(page); await nav.settingsNav(page, "外观"); await page.sleep(600); }
     if (st.screen && SCREENS[st.screen]) { await SCREENS[st.screen](page); await page.sleep(500); }
     if (st.inject) await injectStates(page, st.inject);
+    await settle();
   }
 };
 
