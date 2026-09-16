@@ -47,19 +47,19 @@ const BASELINE: Record<string, { decls: number; dupGroups: number }> = {
   "features/attachment/attachment-preview.css": { decls: 78, dupGroups: 0 },
   "features/editor/image-lightbox.css": { decls: 57, dupGroups: 0 },
   "features/outline/outline.css": { decls: 257, dupGroups: 0 },
-  "styles/dialog.css": { decls: 227, dupGroups: 8 },
+  "styles/dialog.css": { decls: 234, dupGroups: 8 },   // +7 = .note-info-history-viewer 容器（260916 W-10：历史内联预览改只读 viewer，替代裸 dangerouslySetInnerHTML；合法新增非覆盖回涨）
   "styles/document-status.css": { decls: 107, dupGroups: 2 },
   "styles/editor.css": { decls: 14, dupGroups: 0 },   // +2 = 自 ui-polish.css 并入的编辑器正文覆盖（S2）
   "styles/motion.css": { decls: 10, dupGroups: 0 },   // +7 = 自 ui-polish.css 并入的 4 个 reduced-motion 契约块（S4；矩阵补了媒体偏好态后才可验证）
   "styles/components.css": { decls: 451, dupGroups: 1 },   // 260916 S4：原 overlays.css 改名 + 并入 @keyframes lake-pop-in（+1 声明，位置不变）
   "styles/quick-notes.css": { decls: 11, dupGroups: 0 },   // +2 = 自 ui-polish.css 并入的小记入口（S2）
-  "styles/shell.css": { decls: 196, dupGroups: 0 },   // +5 = 原 layout-contract 的壳层度量令牌（S1）；+143 = 自 ui-polish 并入的目录栏/页签/dock 头部（S2）
+  "styles/shell.css": { decls: 200, dupGroups: 0 },   // +5 = 原 layout-contract 的壳层度量令牌（S1）；+143 = 自 ui-polish 并入的目录栏/页签/dock 头部（S2）；+4 = 顶栏文档下拉「标签+快捷键一行」与导出二级行（260916，合法新增非覆盖回涨）
   "styles/tokens.css": { decls: 83, dupGroups: 0 },
   "styles/settings.css": { decls: 7, dupGroups: 0 },   // 260916 S4 建立：吸收原 ui-polish.css 的设置/历史/回收站细滚动条
   // 基础层域文件（260916 S3：原 styles.css 拆成入口 + 10 个域文件；数字 = 拆分当批实测，只允许变小）
   "styles/app/base.css": { decls: 36, dupGroups: 0 },
-  "styles/app/dialogs.css": { decls: 167, dupGroups: 7 },
-  "styles/app/editor.css": { decls: 50, dupGroups: 0 },   // +5 = 内核「卡片/表格全屏」maxView(.ne-ui-max-view) 适配窗口外壳（260916；.document-pane 定位 + 4 条覆盖声明，非多层覆盖回涨）
+  "styles/app/dialogs.css": { decls: 169, dupGroups: 7 },   // +2 = 二级子菜单高度兜底（max-height + overflow-y，260916 修「导出选项被窗口底边裁掉」；与定位上移配套，合法新增非覆盖回涨）
+  "styles/app/editor.css": { decls: 55, dupGroups: 0 },   // +5 = maxView 适配；+4 = 锁定/解锁延迟销毁的旧实例层 .is-outgoing；+3 = 阅读态大纲只调位置（top/right）与「pinned 展开时正文让位」——阅读大纲改回内核自己挂载，官方 getContainer 自建宿主那套已删（260916）
   "styles/app/misc.css": { decls: 299, dupGroups: 0 },
   "styles/app/panels.css": { decls: 101, dupGroups: 0 },
   "styles/app/quick-notes.css": { decls: 293, dupGroups: 7 },

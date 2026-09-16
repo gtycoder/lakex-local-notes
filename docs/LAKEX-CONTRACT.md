@@ -124,8 +124,17 @@
 - **与虚拟渲染的关系**：原生 TOC 的**列表**来自内核 toc 数据（与 DOM 无关）；但**高亮/跟随** watcher 用二分
   `querySelector('[id=…]')` 探测标题（bundle `TWe._checkIndex`），虚拟渲染下视口外标题无 DOM → 永不选中，故开启虚拟渲染时
   仍需应用侧 `setupTocScrollFollow`。关闭虚拟渲染则原生 watcher 可用。
-- **点击定位**：条目是 `<a href="#id">`，hash 导航能正确滚动内层 `.ne-editor-wrap`。
-  （注意：CDP `Input.dispatchMouseEvent` 在本机 Electron 渲染进程收不到，无法用合成点击验证。）
+- **点击定位与 `allowModifyHash`（260916 修订，覆盖旧观测）**：内核 TOC 点击链路 =
+  `.ne-toc-item-text` 的 onClick（**绑在 text div，不在外层 `.ne-toc-item`**——合成 click 点外层 div 冒泡路径不经过
+  text，无效果）→ `preventDefault` + `renderer.scrollByNodeId(id)`（滚 `scrollNode`，正常跳转）
+  **+ `location.hash = id`（`toc.allowModifyHash` 默认 true）**。hash 赋值触发浏览器锚点导航，会滚锚点的**整条祖先滚动链**——
+  除 `.ne-editor-wrap` 外还把 `html` 滚满其可滚空间（我们壳里 42px = topbar 高）→ 整壳上移、topbar 滚出视野、
+  tab 栏顶到第一行（260916 用户报「点大纲布局全乱」的根因；旧观测「hash 导航能正确滚动内层」只对了半截）。
+  修复：`toc: { allowModifyHash: false }` + `html,body{overflow:hidden}` 兜底（base.css）。关闭后条目内 `<a>` 也不再渲染
+  （`allowShowHash` 与 `isAllowModifyHash()` 同源）。
+- **`toc` option 是扁平 schema（260916 实测）**：内核编辑态（`ekg`）/ 阅读态（`ezx`）两套 TOC 插件 `OptionName` 均为
+  `'toc'`，读 `option.toc.allowModifyHash/enable/normalView/...` **扁平键**；`types.ts` 的 `toc.editing/reading` 嵌套是
+  LakexEditor React 组件层的转换，**直接 `Doc.createOpenEditor` 不适用**（嵌套传法被内核忽略，实测 hash 仍被改）。
 - **应用现状**：桌面**始终创建**原生侧栏（`EditorTab` 不再传 `disableNativeToc`），`refreshTocSidebar` 照常填充；
   `outlineEnhance=false`（默认）→ 显示原生侧栏；`true` → `EditorTab` 给 host 加 `native-toc-hidden` 类，
   CSS `.lake-editor-tab.native-toc-hidden .ne-toc-sidebar{display:none}` 隐藏原生 + 显示应用自建大纲。
@@ -169,6 +178,79 @@
 - 证据：2026-09-16 lakex v1.99.0 dev 冒烟（画板 / 思维导图 / 文本绘图 3 卡，0 fallback、0 JS 异常、0 失败请求）。
 - **内置画板卡的 `$name`**（vendor `src/configs/customCard.ts` → `src/cards/DrawingBoard/index.ts`）：`drawing-board`（画板）、`flowchart-board`（流程图）、`uml-board`（UML）、`drawing-mindmap-board`（思维导图板）。画板内核（`lakex-drawnix` + `@plait/*`）由 `DrawingBoardEditor/Viewer` **懒加载**（vendor 分包出 `DrawnixBoardCore-*.js`），不随首屏加载。
 
+### 5.4 阅读态（锁定 Viewer）大纲：另一套类名/挂载时机 + 官方配置项（2026-09-16 实测）
+
+- **编辑态与阅读态是两套实现，别混用结论**：编辑态侧栏 `.ne-toc-sidebar`（absolute 钉在 `.ne-editor-body`，见 §5.1）；
+  阅读态侧栏 `.ne-viewer-toc-sidebar`，默认由阅读态 toc 插件创建并挂在 **`viewer.domRootNode`（= `.ne-viewer`，滚动容器内）**，
+  内核 CSS 为 `position:fixed; top:60px; right:0; z-index:412`（语雀"无外壳阅读页"口径）。
+- **阅读态侧栏只在"toc 非空"时才创建**（bundle 236948–236965）：插件在 `kernel.onPluginEvent('tocChange')` 里判断
+  `toc.length > 0` 才 `new ezD(...)`（侧栏实例）→ 内核首批 `tocChange` 常先于插件监听发出 ⇒ **侧栏永不创建、大纲零条目**
+  （「锁定文档大纲不渲染」的根因）。修法与编辑态同源：`kernel.emitPluginEvent("tocChange", toc)` 重放即可触发挂载 + 填充
+  （`refreshTocSidebar` 现在锁定态也调用，且不再前置检查侧栏 DOM）。
+- **官方挂载点配置**（语雀文档 65）：扁平 option `toc.getContainer = () => HTMLElement | null`（阅读模式项）；
+  内核取值处 `l = option.getContainer(); l || (l = viewer.domRootNode)`。挂到自建宿主后，`open/close/pin` 操作的
+  `_mountNode.parentNode` 变成该宿主 ⇒ **`ne-viewer-toc-visible` / `ne-viewer-toc-pin` 属性落在宿主上**（不再是 `.ne-viewer`），
+  应用侧让位/显隐 CSS 必须按宿主状态写（本项目用 `:has(.lake-toc-host.ne-viewer-toc-visible)`）。
+  注：`setOutsideStatus`（`ne-viewer-toc-outside`）bundle 里**只有定义无调用**，不会隐藏侧栏。
+- **官方阅读器配置 `boundaryTopOffset`**（语雀文档 47，顶层 option，非 toc 下）：传给 TOC 组件作 `offsetTop`
+  （bundle 236738）→ 决定 watcher 判定「当前标题」时**忽略顶部多少像素**。编辑态内核写死 **40**（bundle 179499），
+  阅读态默认 **0** ⇒ 两态高亮口径不一致；本项目阅读态显式传 40 对齐。仅当 `scrollNode === document.scrollingElement`
+  时它还参与 `_scrollTo` 的距离计算（我们下发真实滚动容器，不走该分支）。
+- **阅读态大纲点击跳转链路**：`_tocSidebar._scrollTo(id)` → `viewer.domRootNode.querySelector('[id="id"]')` +
+  `viewer.scrollNode.scrollTop = ...`（bundle 236848–236876）；**因此 `scrollNode` 必须下发到阅读态**，否则内核回退
+  `document.scrollingElement`（html，被 `overflow:hidden` 锁死）⇒ 点击只切高亮、正文不滚（260916 用户报的"点了不跳"）。
+- **阅读态实例没有 `renderer`**：`editor.renderer.scrollByNodeId` 只存在于编辑态；阅读态实例的 `_renderer` 是空壳，
+  其定位能力只在 toc 插件内部（`_scrollTo`）。拿不到 `renderer` 时按 DOM 计算滚动更可靠。
+
+### 5.5 编辑态 ↔ 阅读态：渲染模型差异（跨态恢复位置的唯一可靠依据）（2026-09-16 实测）
+
+- **两态内容总高不可比**：编辑态默认开虚拟渲染（`virtualRendering`），未渲染内容以占位符撑高，其
+  `scrollHeight` 与阅读态完整渲染差异巨大 —— 实测同一标题「05--MACD」：编辑态 `scrollTop=3016` / 阅读态 `=9209`
+  （**内核自己的 TOC 定位在阅读态给出 9209**，即 3 倍差异是真实的，不是测量误差）。因此**任何"按 scrollHeight 比例换算"
+  恢复滚动位置都必然偏**（长文档偏差数百~数千 px）。
+- **可靠做法 = 节点锚点**：内核给块挂稳定 id（`ne-p/ne-text/ne-h*/...`，形如 `ueb955b32`）。
+  取锚点用 `document.elementFromPoint(容器中心)` → 向上找 `tagName` 匹配 `/^NE-/i` 且有 id 的元素（**不能用 TOC 高亮
+  `ne-toc-selected`**：虚拟渲染下 watcher 二分探测失效，恒选中第 0 节）；恢复时编辑态用 `renderer.scrollByNodeId(id)`
+  （+ 元素对齐视口中心微调），阅读态用 DOM 直接算 offset。
+- **坑：窗口在后台时编辑态不渲染视口内容**。此时 `elementFromPoint(视口中心)` 命中的是
+  `.ne-virtual-render-placeholder` 占位符（DOM 里只有缓存区的那几十个块，`top` 全为负），锚点会取错或取空。
+  **CDP 实测必须先 `Page.bringToFront` + `Emulation.setFocusEmulationEnabled{enabled:true}`**（必要时再
+  `Page.setWebLifecycleState{active}`）解除节流，否则结论全错（本轮曾因此误判方案失效）。
+
+### 5.6 锁/解锁切态的「文字不动」口径：两态滚动盒不同盒 + 内核关了 scroll anchoring（2026-09-16 实测）
+
+- **两态滚动盒几何不同**（同一外壳 744px 高时实测）：编辑态正文滚动盒是 `.ne-editor-wrap`，**顶边在外壳 +38px**
+  （顶上 38px 是内核工具栏 `.ne-ui-toolbar`）、高 **694px**（内核 `.ne-editor-body{height:calc(100% - 50px)}`）；
+  阅读态滚动盒是 `.ne-viewer`，**从外壳顶开始**、高 **744px**（我们的 CSS 给 `height:100%`）。
+  ⇒ 「在新滚动盒里把锚点居中」在切态时会平白挪 **~46px**（实测锚点窗口坐标 453 → 407）。
+  正确口径 = **按锚点在外壳里的屏幕偏移恢复**（切前 453 → 切后 453），不是按新盒居中。
+- **内核关闭了浏览器的滚动锚定**：`lakex-doc.css` 在 `.ne-editor-wrap` 与 `.ne-engine-box` 上写 `overflow-anchor:none`，
+  所以虚拟渲染/图片水合改版式时，浏览器**不会**做「内容变了但视口不动」的补偿 —— 内容整体位移、滚动值不变。
+  实测解锁方向：旧层撤掉后 ~440ms 处正文整体上移 ~800px（`contentY` 13279→12482），锚点被推出视口。
+  切态后短窗口内需要「盯住锚点屏幕偏移、一偏就纠回」（本项目 `EditorTab` 的 `pinAnchor`，窗口 1200ms、
+  用户输入或位移 >40px 即停手），否则要等下一条固定时刻的恢复（~1.35s）才纠回，用户看到一次跳动。
+- **阅读态在切换后仍会继续改版式**：实测阅读态首帧渲染出正文后 ~90ms 处 `contentY` 还会跳变一次
+  （11883→9989）。因此「旧层撤掉的时机」必须由「位置门」（锚点已进视口）决定，且撤掉后仍需上述钉住机制。
+- **样式/内容 id 跨态同源**：同一文档两态的内核块 id 相同（实测阅读态 1125 个带 id 块与编辑态渲染出的块 id 集合
+  完全重合），可放心用 id 做跨态锚点；但**同一 id 会同时存在于过渡期的旧实例层里**，查询锚点必须限定在
+  当前实例挂载点（`.lake-editor-mount:not(.is-outgoing)`），否则取到旧层那份过期几何。
+
+### 5.7 用 CSS 隐藏原生编辑大纲 ≠ 退出其布局态：正文会留 280px 占位（2026-09-16 实测）
+
+- **现象**：「大纲增强」开启时给 host 加 `.native-toc-hidden` 把原生 `.ne-toc-sidebar` 设 `display:none`，
+  但编辑根 `.ne-editor` 上仍有 `.ne-normal-toc` ⇒ 内核按「大纲展开」给正文块设
+  `max-width:750px; margin-right:280px`（编辑态；`ne-layout-mode-adapt` 下实测正文块 662~700px，
+  去掉该类后回到 942px 全宽）⇒ **增强大纲编辑态右侧一大段空白**（260916 用户报）。
+- **判定**：`document.querySelector('.ne-normal-toc')` 存在，且正文块 computed `margin-right === '280px'` 即命中。
+- **正确修法（官方途径，语雀文档 65）**：创建编辑器时显式传扁平 `toc: { normalView: false,
+  allowAutoPin: false, rememberLastPin: false }`。三键缺一不可：
+  ① `normalView:false` 决定初始收纳态，且**显式传值时内核不读** localStorage 里的用户上次偏好（bundle 177935）；
+  ②/③ 内核在 `viewSizeChange` 时会 `isAllowAutoPin()` 自动把大纲重新展开（bundle 179780）→ 只传 normalView 会被改回展开。
+  这样 `.ne-normal-toc` 不再出现，正文恢复全宽；原生大纲仍照常创建/填充，随时可切回。
+- **联动坑**：`outlineEnhance` 必须进 `EditorTab` 重建依赖（本项目已加），否则运行中切换该设置不会重新应用配置。
+- **注意**：`.ne-normal-toc` 是**编辑根**的类（侧栏是 `.ne-normal-toc-sidebar`）；`ne-normal-toc-sidebar` 宽度读数是
+  迷你条 40px，与「内容是否留位」无关，别用它判断。
+
 ---
 
 ## 6. 使用守则（所有会话遵守）
@@ -178,7 +260,12 @@
 3. **新观测必须回填**（防止知识再次散落）：定位到新行为后，按 §6.5 的流程更新本文件对应小节，并在可写会话补 `lakex-contract.d.ts` 的类型；回填时写证据（bundle 位置/断言串/复现步骤）。
 4. **反编译定位的标准姿势**（PROGRESS 方法论）：CDP/页面内实测复现 → 在 `vendor/lakex-doc-react/src/components/lakex/lakex.js`（内核 ESM 转换产物，类名/路径/文案可搜；`doc.umd.js` 为原始 UMD）用字符串 grep 定位→ 对照断言里的源码路径 → 得出结论再改代码。
 5. **不要做**：不要给 vendor 内核打补丁（除既有最小 hack 模式，且需注释 + 记录）；不要复制大段 bundle 源码进仓库；不要在本文件写易过期事实（版本号/计数/分支放 HANDOFF §0）。
-6. **契约 vs 机制字典分工**：查"这个能力 lakex 有没有/长什么样"用本文件；查"lake 系内核理论上怎么实现/有哪些插件命令"用 lake-main（开源 lakelib 源码）当字典；两者方言已分叉，勿混用结论。
+6. **资料检索顺序（260916 用户立规，与 AGENTS §2 一致）**：涉及调用内核 API/配置项/命令时按三级走 ——
+   ① **官方出处** `/Users/admin/file/local-lake/yuque-developer-docs/`（语雀开发者文档本地副本：`65 - 大纲（toc)`、
+   `47 - 通用配置`、`07 - API与事件`、`08 - 命令列表` 等）**先确认官方有没有该能力及其语义，官方有就用官方途径**；
+   ② **本文件**（已核实契约 + 实测坑，新观测必须回填）；
+   ③ **源码字典对照** `lake-editor-main/`（VSCode yuque-editor 插件）、`lake-main/`（开源 lakelib，仅机制字典、
+   序列化方言已分叉勿套用）。最终仲裁 = vendor bundle `vendor/lakex-doc-react/src/components/lakex/lakex.js` + 运行时实测。
 
 ---
 
@@ -188,6 +275,7 @@
 - **实验 E1/E2（换核决策前置）**：真实 .lake ↔ lakelib 双向解析；lakelib 大文档渲染。详见工作区根 `lake-kernel-swap-analysis-260908.md` §9。
 - 本文件由 260908 只读评估生成；落地/回填后在此追加更新日志（一行一条，勿删历史）。
 - 2026-09-11：新增 §5.1（原生编辑 TOC 侧栏填充时序：空 toc 创建 + 1s 节流 + 直接 `_tocSidebar.update` 绕过节流），§4.2/§5 表补对应条目。来源：HANDOFF §2.15–2.16、lakeRuntime.ts `refreshTocSidebar`/`findNativeTocSidebar`。
+- 2026-09-16：§5.1 修订「点击定位」为 `allowModifyHash` 真相（内核 TOC 点击会写 `location.hash` → 触发锚点导航滚 html，导致整壳上移；修法 = 关 `allowModifyHash` + 锁 `html,body` overflow），补「`toc` option 是扁平 schema」；新增 §5.4（阅读态 Viewer 大纲：另一套类名/挂载时机、官方 `toc.getContainer` 与 `boundaryTopOffset`、点击跳转链路）与 §5.5（编辑态↔阅读态渲染模型差异、节点锚点恢复位置、窗口后台不渲染的 CDP 陷阱）；§6.6 更新为三级资料检索顺序（用户立规）。来源：260916 会话核实的 bundle 行号与 CDP 实测。
 
 ---
 

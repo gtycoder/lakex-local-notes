@@ -41,9 +41,11 @@
   align-self: stretch;
   width: 100%;
   min-width: 0;
-  /* 与 workspace 的正文行完全同高：顶部避开标题栏，底部避开状态栏。 */
+  /* 与 workspace 正文行完全同高同顶：口径一字不差地复用 .workspace 的
+     `calc(var(--topbar-height) + 4px) 0 4px 0`。此前只写 `var(--topbar-height) 0 0`
+     ⇒ 大纲面板比正文高 4px、底部直抵窗口底，与整体对不齐（260916 用户反馈）。 */
   height: auto;
-  margin: var(--topbar-height) 0 0;
+  margin: calc(var(--topbar-height) + 4px) 0 4px 0;
   overflow: visible;
 }
 
@@ -159,6 +161,8 @@
 .outline-sidebar--docked .outline-sidebar__content {
   visibility: visible;
   pointer-events: auto;
+  /* 固定态的"连体白卡"外观（圆角/分隔/去边框）写在基础层 styles/app/shell.css 的
+     `.outline-sidebar--docked` 规则里——那层是本项目最后加载的壳层材质层，写在这里会被它覆盖。 */
 }
 
 .outline-sidebar__resize-handle {
@@ -191,26 +195,11 @@
 /* 移动端不显示右侧栏 */
 
 /* ===== 侧栏内部 ===== */
-.outline-sidebar__header {
-  display: flex;
-  align-items: center;
-  gap: 1px;
-  flex: 0 0 34px;
-  min-height: 34px;
-  padding: 0 4px 0 6px;
-  border-bottom: 1px solid var(--shell-separator);
-}
-
-.outline-sidebar__title {
-  font-size: 13px;
-  font-weight: 630;
-  letter-spacing: -0.01em;
-  margin-right: 4px;
-}
-
-.outline-sidebar__spacer {
-  flex: 1;
-}
+/* 头部结构与视觉**完全复用目录栏**（Sidebar.tsx 的 .sidebar-toolbar-row / .sidebar-toolbar-title
+   / .list-heading，样式在 styles/shell.css）：此前大纲栏自写一套 header（无标题、内边距 0 4px 0 6px、
+   多一条 1px 下边框）⇒ 两栏头部不对齐、右栏像"无头面板"（260916 用户反馈"与整体明显不同"）。
+   这里只保留一处差异：大纲的图标常显（目录栏是 hover 才显图标）。 */
+.outline-sidebar__header .list-heading { opacity: 1; }
 
 /* 大纲头部图标与筛选输入行改用 dock 共享样式：.dock-icon-btn / .dock-filter-row
    （260915 与目录栏对齐，避免两套视觉继续漂移；260916 第二档 S2 起这两个类在 `src/styles/shell.css`，
@@ -356,14 +345,17 @@
   background: rgba(59, 91, 219, 0.1);
 }
 
-/* ===== 三栏卡片布局：固定与悬浮大纲保持同一张白色面板（宽窄共用）===== */
-.outline-sidebar__content,
-.outline-sidebar--docked .outline-sidebar__content,
+/* ===== 三栏卡片布局（260916 统一）=====
+ * 浮层（收起悬停）= 独立白卡（描边 + 圆角 + 投影）；
+ * 固定态 = 与正文区连成一体的"连体白卡"：右上角跟着正文 `.document-pane`（`12px 12px 0 0`）的
+ * 圆角、底部不圆、去掉四边描边，左侧只留一条 inset 分隔线（不占布局宽度）。
+ * 此前固定态也是「四角 12px 圆角 + 1px 描边 + 投影」的独立卡片 ⇒ 与正文并排看像一块游离白板、
+ * 且与左右两栏的几何都对不齐（260916 用户反馈"右边栏样式与整体明显不同"）。
+ * 注意：这段是本项目**最后加载**的大纲面板样式（基础层 styles/app/shell.css 的材质规则在它之前），
+ * 改面板外观只改这里就够，别在 outline.css 前部再加一份（会被这段覆盖）。 */
 .outline-sidebar--collapsed .outline-sidebar__content,
 .outline-sidebar--collapsed.outline-sidebar--hovered .outline-sidebar__content {
-  /* 与左侧固定目录保持同样的上下留白，形成清晰的三块卡片布局。 */
-  top: 0;
-  bottom: 0;
+  /* 只需要卡片外观；浮层的 top/bottom/height 几何在下方「Floating outline」那段（唯一来源）。 */
   background: #fff;
   border: 1px solid rgba(0, 0, 0, .08);
   border-radius: 12px 0 0 12px;
@@ -374,7 +366,10 @@
   right: var(--outline-collapsed-width);
   width: auto;
   min-width: 0;
-  border-radius: 12px 0 0 12px;
+  top: 0;
+  bottom: 0;
+  /* 固定态的底色/圆角/边框只在 b3/layout.css 的 `.outline-sidebar--docked` 那条改（它是本主题
+     最后加载的大纲面板样式）；这里只留几何，避免同一条声明写在两处互相打架。 */
 }
 .outline-sidebar--collapsed .outline-sidebar__content {
   border-right: 0;

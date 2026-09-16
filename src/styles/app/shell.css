@@ -132,9 +132,11 @@
 /* 多标签模式下 .document-pane 不再是共享滚动容器（否则所有标签共用一条滚动进度） */
 .document-pane:has(> .multi-tab-editor) { overflow: hidden; }
 
-/* 「大纲增强」开启 → 用应用自建大纲，隐藏 lakex 原生 TOC 侧栏。
-   原生侧栏始终创建（保证运行中切换即时生效），这里只做 display 隐藏。 */
-.lake-editor-tab.native-toc-hidden .ne-toc-sidebar {
+/* 「大纲增强」开启 → 两种状态都用应用自建大纲，隐藏原生大纲（编辑态 .ne-toc-sidebar /
+   锁定态阅读态 .ne-viewer-toc-sidebar）。原生侧栏始终创建（保证运行中切换开关即时生效），
+   这里只做 display 隐藏。 */
+.lake-editor-tab.native-toc-hidden .ne-toc-sidebar,
+.lake-editor-tab.native-toc-hidden .ne-viewer-toc-sidebar {
   display: none;
 }
 
@@ -279,9 +281,8 @@
 /* 上面那条会把"真正的工作面"也刷成壳色，所以这组搭档必须同时存在（宽窄共用）：
    固定/悬停展开的大纲面板要恢复成白色卡片。**成对改，缺一就会把面板刷成灰。** */
 /* 固定态的面板白卡：与"三栏卡片布局"（outline.css 共用作用域）同值，这里只补回被材质层刷掉的底色。 */
-.outline-sidebar--docked .outline-sidebar__content {
-  background: var(--b3-theme-background);
-}
+/* 固定态白卡：底色（`background: var(--b3-theme-background)`）与 `.outline-sidebar--docked` 的
+   background 在 outline.css 里同值；圆角/边框/分隔线只由 outline.css:348 那段决定（它后加载）。 */
 
 /* 悬停展开的面板公式**不在这里**：唯一来源是 b3/layout.css 的"右侧浮动（大纲 hover）"，
    否则窄窗会掉回 outline.css 的老公式（1px 描边 + 14px 圆角），宽窄又变成两种样式。 */
@@ -370,7 +371,12 @@
   /* 顶栏背景已单源为融合/统一材质（b3/layout.css + --shell-unified-topbar），不再就地设横向渐变。
      下面这些渐变一律用令牌（--lake-shell/--shell-material）：浅色下与原字面值只差 2~3 个色阶，
      但深色下不会再留一块浅色板（.outline-sidebar 在开启「大纲增强」时才会挂载，属潜在坑）。 */
-  .outline-sidebar { background: var(--shell-gradient-top); }
+  /* 大纲栏本体与顶栏/左右活动轨**同色**（260916 修正）：
+     此前用 --shell-gradient-top（= lake-shell 45% 混 lake-panel，比壳色浅一档的渐变顶色），
+     于是「大纲增强」的右栏与顶栏之间出现一条明显的横向分界线（用户反馈"和顶栏还有左边栏
+     颜色不同"）。rail 是透明的，本就靠本体透出壳色（见 b3/layout.css「大纲轨」注释），
+     所以本体必须是壳色，三者才连成一块连续材质。 */
+  .outline-sidebar { background: var(--shell-unified-background); }
 
   /* 小记：左轨颜色不变；小记内容用“视口固定”的横向渐变，与顶栏逐像素对齐融合，
      再叠加纵向材质过渡。 */

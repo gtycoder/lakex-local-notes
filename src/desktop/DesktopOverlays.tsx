@@ -7,6 +7,7 @@ import { createPortal } from "react-dom";
 import type { RefObject } from "react";
 import { Focus, Lock, LockOpen, Search, Settings as Settings2Icon, Trash } from "lucide-react";
 import { ConfirmDelete } from "../components/Sidebar";
+import { ExportSubmenuItem, type ExportFormat } from "../components/ExportSubmenuItem";
 import { DraftRecoveryDialog } from "../components/DraftRecoveryDialog";
 import { SearchPanel } from "../components/SearchPanel";
 import { TrashPanel } from "../components/TrashPanel";
@@ -38,6 +39,12 @@ export interface DesktopOverlaysProps {
   activeNoteId: string | null;
   lockedNoteIds: ReadonlySet<string>;
   onToggleNoteLock: () => void;
+  /** 顶栏「更多」里的导出（与目录树右键「导出」子菜单同一套动作，作用于当前文档） */
+  onExportAs: (format: ExportFormat) => void;
+  onCopyMarkdown: () => void;
+  onCopyPaths: () => void;
+  /** 顶栏「更多」里点了动作后收起菜单（与目录树右键 onClose 同义） */
+  onCloseTopMenu: () => void;
 
   draftEntries: DraftJournalEntry[];
   onRestoreDraft: (entry: DraftJournalEntry) => void;
@@ -78,6 +85,7 @@ export function DesktopOverlays(props: DesktopOverlaysProps) {
     workspaceMenuOpen, wsMenuWrapRef, workspaceMenuRef, moreMenuWrapRef, moreMenuRef, topMenuOpen,
     onOpenSettingsFromMenu, onOpenTrashFromMenu, onOpenSearchFromMenu,
     focusMode, onToggleFocusMode, activeNoteId, lockedNoteIds, onToggleNoteLock,
+    onExportAs, onCopyMarkdown, onCopyPaths, onCloseTopMenu,
     draftEntries, onRestoreDraft, onDiscardDraft, onCloseDrafts,
     searchPanelOpen, searchPanelQuery, onOpenNoteFromSearch, onCloseSearch,
     trashOpen, onCloseTrash, onTrashChanged, onTrashRestored,
@@ -113,7 +121,7 @@ export function DesktopOverlays(props: DesktopOverlaysProps) {
         <div ref={moreMenuRef} className="top-menu top-menu--more" role="menu" aria-label="文档操作"
           style={(() => {
             const rect = moreMenuWrapRef.current?.getBoundingClientRect();
-            return rect ? clampPopoverPosition(rect, { width: window.innerWidth, height: window.innerHeight }, { width: 180, height: 150 }, 6) : undefined;
+            return rect ? clampPopoverPosition(rect, { width: window.innerWidth, height: window.innerHeight }, { width: 236, height: 200 }, 6) : undefined;
           })()}>
           <button role="menuitem" aria-checked={focusMode} onClick={onToggleFocusMode}>
             <Focus size={15} /><span>{focusMode ? "退出专注模式" : "进入专注模式"}<small>⌘⇧Enter</small></span>
@@ -123,6 +131,15 @@ export function DesktopOverlays(props: DesktopOverlaysProps) {
               {lockedNoteIds.has(activeNoteId) ? <Lock size={15} /> : <LockOpen size={15} />}
               <span>{lockedNoteIds.has(activeNoteId) ? "解锁当前文档" : "锁定当前文档（只读）"}</span>
             </button>
+          )}
+          {/* 导出：与目录树右键「导出」子菜单同一套动作（作用于当前文档），见 ExportSubmenuItem */}
+          {activeNoteId && (
+            <ExportSubmenuItem
+              onExportAs={onExportAs}
+              onCopyMarkdown={onCopyMarkdown}
+              onCopyPaths={onCopyPaths}
+              onClose={onCloseTopMenu}
+            />
           )}
         </div>,
         document.body,

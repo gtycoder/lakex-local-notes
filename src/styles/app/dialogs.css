@@ -21,7 +21,10 @@
 
 .context-menu-item-label { display: grid; grid-template-columns: 18px minmax(0, 1fr); align-items: center; gap: 9px; }
 
-.context-menu-submenu { position: absolute; top: -4px; left: 100%; margin-left: 2px; display: flex; flex-direction: column; width: 230px; padding: 5px; border: 1px solid var(--b3-theme-surface-lighter); border-radius: var(--b3-border-radius-b); background: var(--b3-menu-background); box-shadow: var(--b3-dialog-shadow); z-index: 601; }
+.context-menu-submenu { position: absolute; top: -4px; left: 100%; margin-left: 2px; display: flex; flex-direction: column; width: 230px; padding: 5px; border: 1px solid var(--b3-theme-surface-lighter); border-radius: var(--b3-border-radius-b); background: var(--b3-menu-background); box-shadow: var(--b3-dialog-shadow); z-index: 601;
+  /* 高度兜底：比视口还高时贴顶显示并在子菜单内滚动（定位上移由 ExportSubmenuItem 计算），
+     此前只写死 top:-4px，一级菜单靠下时导出的后几项会被窗口底边整段裁掉。 */
+  max-height: calc(100vh - 16px); overflow-y: auto; }
 
 .context-menu-submenu.open-left { left: auto; right: 100%; margin-left: 0; margin-right: 2px; }
 

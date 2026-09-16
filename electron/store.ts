@@ -701,6 +701,11 @@ export class Store {
     return this.noteExport.exportNotePackage(id, baseDir);
   }
 
+  /** M3：PDF 导出内容准备（图片内嵌的自包含临时 HTML + 唯一 pdf 目标路径；渲染在 export.ts）。 */
+  exportPdfHtml(id: string, baseDir?: string): { htmlPath: string; tempDir: string; pdfPath: string; imageCount: number; skipped: number } {
+    return this.noteExport.exportPdfHtml(id, baseDir);
+  }
+
   // ===== 文档历史（快照，纯本地不参与同步） =====
 
   /** 创建历史快照。content 缺省时读磁盘 .lake；protectedDays>0 时写 protected_until（冲突归档保护，B3）。

@@ -5,12 +5,15 @@
  * 第三部分：附件网格（高度受限可滚，避免附件过多撑破布局）；第四部分：历史版本（同一处理 + 内联快照预览）。
  * 动作复用 native.*；父级路径可点击跳转目录。
  */
-import { useEffect, useState, type PointerEvent as ReactPointerEvent } from "react";
+import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { createPortal } from "react-dom";
 import { Box, ChevronRight, Clock, Copy, File, FolderOpen, History, Image as ImageIcon, Paperclip, X } from "lucide-react";
 import { native } from "../lib/native";
 import { getNativeErrorMessage } from "../lib/nativeErrors";
 import type { NoteInfo } from "../lib/types";
+import { createLakeDocument, destroyLakeEditor, type LakeEditorInstance } from "../features/editor/lakeRuntime";
+import { addAssetAccessToken } from "../lib/assetPort";
+import { isMobileEnvironment } from "../features/editor/clipboardHtml";
 
 /** 附件/历史条目的渲染上限（超出提示 +N，避免超大文档一次性渲染成千上万节点）。 */
 const ITEM_LIMIT = 200;
@@ -53,6 +56,8 @@ export function NoteInfoDialog({ note, onClose, onRevealNoteFile, onOpenAssetsDi
   const [histPreview, setHistPreview] = useState<{ id: number; html: string } | null>(null);
   const [histLoading, setHistLoading] = useState<number | null>(null);
   const [size, setSize] = useState<{ w: number; h: number } | null>(null);
+  const previewHostRef = useRef<HTMLDivElement>(null);
+  const viewerRef = useRef<LakeEditorInstance | null>(null);
 
   /** 右下角拖拽调整弹窗大小（默认尺寸见 .note-info-dialog）。 */
   const onResizeStart = (event: ReactPointerEvent<HTMLElement>): void => {
@@ -126,6 +131,33 @@ export function NoteInfoDialog({ note, onClose, onRevealNoteFile, onOpenAssetsDi
       .catch(() => setHistPreview(null))
       .finally(() => setHistLoading(null));
   };
+
+  // 内联快照预览走只读 Lake viewer（与 HistoryPanel 完全同口径，安全审计 W-10）：
+  // 原 dangerouslySetInnerHTML 直接注入快照原始 lake 正文（可能来自 S3 同步/他端/导入），
+  // 是未消毒 HTML 的 XSS 面。viewer 由内核渲染，快照正文只作为文档数据处理，不进 innerHTML。
+  useEffect(() => {
+    const host = previewHostRef.current;
+    const noteId = note.noteFileId;
+    if (!host || !histPreview || !noteId) {
+      if (viewerRef.current) { destroyLakeEditor(viewerRef.current); viewerRef.current = null; }
+      return;
+    }
+    let viewer: LakeEditorInstance | null = null;
+    try {
+      // 移动端无内部滚动容器，必须禁用虚拟渲染（同 DocumentEditor），否则正文渲染不全
+      const prefs = isMobileEnvironment()
+        ? { disableNativeToc: true, disableVirtualRendering: true, showToolbar: false }
+        : { disableNativeToc: true };
+      viewer = createLakeDocument(host, "viewer", () => {}, false, noteId, host, prefs);
+      viewerRef.current = viewer;
+      viewer.setDocument("text/lake", addAssetAccessToken(histPreview.html));
+      viewer.requestCardHydration?.();
+    } catch { /* 快照正文异常：预览留白即可，非关键路径 */ }
+    return () => {
+      if (viewer) { try { destroyLakeEditor(viewer); } catch { /* ignore */ } }
+      if (viewerRef.current === viewer) viewerRef.current = null;
+    };
+  }, [histPreview?.id, note.noteFileId]);
 
   const cells: Array<[string, string]> = info ? [
     ["创建", fmtTime(info.createdAt)],
@@ -229,7 +261,7 @@ export function NoteInfoDialog({ note, onClose, onRevealNoteFile, onOpenAssetsDi
                 </ul>
               )}
               {histPreview && (
-                <div className="note-info-history-preview" dangerouslySetInnerHTML={{ __html: histPreview.html }} />
+                <div className="note-info-history-viewer" ref={previewHostRef} />
               )}
             </div>
           </div>

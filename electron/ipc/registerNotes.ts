@@ -1,6 +1,7 @@
 import { app, BrowserWindow, clipboard, ClipboardItem, dialog, nativeImage, shell } from "electron";
 import fs from "node:fs";
 import path from "node:path";
+import sharp from "sharp";
 import type { DraftJournal } from "../draftJournal.js";
 import { Store } from "../store.js";
 import { MAX_ATTACHMENT_BYTES } from "../../src/core/storeLimits.js";
@@ -189,10 +190,23 @@ export function registerNotesIpc(
     assertAttachmentSegments(noteId, filename);
     const full = path.join(store.noteAssetsPathFor(noteId), filename);
     if (!fs.existsSync(full)) throw new IpcInputError("附件文件不存在（可能已清理）");
-    const image = nativeImage.createFromPath(full);
-    if (image.isEmpty()) throw new IpcInputError("该附件不是可复制的图片");
+    // WebP/AVIF 必须先转 PNG 再进剪贴板：① Electron 的 nativeImage 解不了 webp（createFromPath
+    // 返回空图 → 以前这里直接抛"不是可复制的图片"，用户看到的是"复制图片没反应"，因为调用处是
+    // void）；② macOS 原生应用（微信）不认 webp pasteboard 类型。统一走 sharp 解成 PNG
+    // （与 assetServer 的 webp→png 口径一致）。
+    const ext = path.extname(filename).toLowerCase();
+    let png: Buffer;
+    if (ext === ".webp" || ext === ".avif") {
+      const converted = await sharp(full).png().toBuffer().catch(() => null);
+      if (!converted) throw new IpcInputError("图片解码失败（webp/avif 转 PNG 未成功）");
+      png = converted;
+    } else {
+      const image = nativeImage.createFromPath(full);
+      if (image.isEmpty()) throw new IpcInputError("该附件不是可复制的图片");
+      png = image.toPNG();
+    }
     // Electron 44：writeImage 已移除，改用 W3C ClipboardItem（MIME 制）写入 PNG
-    await clipboard.write([new ClipboardItem({ "image/png": new Blob([new Uint8Array(image.toPNG())], { type: "image/png" }) })]);
+    await clipboard.write([new ClipboardItem({ "image/png": new Blob([new Uint8Array(png)], { type: "image/png" }) })]);
     return { ok: true };
   });
   /** 另存为：把单个附件复制到用户选择的位置。默认文件名优先用卡片展示名，缺失则随机（不再用内部时间戳名）。 */

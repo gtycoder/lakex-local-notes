@@ -1,7 +1,7 @@
 /**
- * W-10：资源服务器安全边界集成测试（纯 Node http，无需 Electron）。
- * 覆盖：token 门禁、CORS Origin 过滤、路径穿越、quick-notes 前缀隔离、
- * 畸形编码兜底、base64 转换与 50MP 上限。
+ * W-8：资源服务器安全边界集成测试（纯 Node http，无需 Electron）。
+ * 覆盖：token 门禁、CORS Origin 过滤与 ACAO 回显（不用 "*"）、路径穿越、
+ * quick-notes 前缀隔离、畸形编码兜底、base64 转换与 50MP 上限。
  */
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import fs from "node:fs";
@@ -69,6 +69,45 @@ describe("CORS token 门禁", () => {
   it("白名单外的 Origin 直接拒绝（即使带 token）", async () => {
     const res = await fetch(`${BASE}/note1/img.png?token=${TOKEN}`, { headers: { Origin: "https://evil.example" } });
     expect(res.status).toBe(403);
+  });
+});
+
+describe("ACAO 回显（W-8：不再使用 \"*\"）", () => {
+  it("dev origin (1421) + token → ACAO 回显该 Origin", async () => {
+    const res = await fetch(`${BASE}/note1/img.png?token=${TOKEN}`, { headers: { Origin: "http://127.0.0.1:1421" } });
+    expect(res.status).toBe(200);
+    expect(res.headers.get("access-control-allow-origin")).toBe("http://127.0.0.1:1421");
+    expect(res.headers.get("vary")).toContain("Origin");
+  });
+
+  it("Web 客户端 origin (19880) + token → ACAO 回显该 Origin", async () => {
+    const res = await fetch(`${BASE}/note1/img.png?token=${TOKEN}`, { headers: { Origin: "http://127.0.0.1:19880" } });
+    expect(res.status).toBe(200);
+    expect(res.headers.get("access-control-allow-origin")).toBe("http://127.0.0.1:19880");
+  });
+
+  it("非 CORS 请求（无 Origin）不发 ACAO 头", async () => {
+    const res = await fetch(`${BASE}/note1/img.png`);
+    expect(res.status).toBe(200);
+    expect(res.headers.get("access-control-allow-origin")).toBeNull();
+  });
+
+  it("Origin: null（生产 file:// 页）+ token → 200 且 ACAO 回显 null 字面值", async () => {
+    const res = await fetch(`${BASE}/note1/img.png?token=${TOKEN}`, { headers: { Origin: "null" } });
+    expect(res.status).toBe(200);
+    expect(res.headers.get("access-control-allow-origin")).toBe("null");
+  });
+
+  it("vendor/cdn 免 token（内核资源加载），白名单 Origin 回显 ACAO", async () => {
+    const res = await fetch(`${BASE}/vendor/cdn/os/lib/x.js`, { headers: { Origin: "http://127.0.0.1:1421" } });
+    expect(res.status).toBe(200);
+    expect(res.headers.get("access-control-allow-origin")).toBe("http://127.0.0.1:1421");
+  });
+
+  it("vendor/cdn 无 Origin → 不发 ACAO", async () => {
+    const res = await fetch(`${BASE}/vendor/cdn/os/lib/x.js`);
+    expect(res.status).toBe(200);
+    expect(res.headers.get("access-control-allow-origin")).toBeNull();
   });
 });
 

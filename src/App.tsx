@@ -459,6 +459,11 @@ export function App() {
         activeNoteId={activeNoteId}
         lockedNoteIds={lockedNoteIds}
         onToggleNoteLock={() => { void toggleNoteLock(); setTopMenuOpen(false); }}
+        // 文档右上角「更多」里的导出：与目录树右键同一套动作，作用于当前文档
+        onExportAs={(format) => { void exportNoteById(activeNoteId, format); }}
+        onCopyMarkdown={() => void copyMarkdownById(activeNoteId)}
+        onCopyPaths={() => void copyPathsById(activeNoteId)}
+        onCloseTopMenu={() => setTopMenuOpen(false)}
         draftEntries={draftEntries}
         onRestoreDraft={(entry) => void restoreDraft(entry)}
         onDiscardDraft={discardDraft}

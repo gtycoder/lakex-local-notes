@@ -2,22 +2,27 @@
    260916 第二档 S3：自 src/styles.css 按职责拆出（脚本：scripts/css-audit/split-app-layer.mjs，可重跑）。
    本层由 src/styles.css 的 @import 编排，整体仍在 b3 之前 —— 层间先后不得改变（见 docs/CSS-LAYERS-BRIEF-260916.md §6）。 */
 
-/* 编辑器内容区字体：vendor style.css 内置栈（Chinese Quote/Segoe UI/PingFang SC...）会让拉丁字符
-   命中苹方而非 SF Pro，观感与云端 Web 版一致、不像原生应用。此处以更高特异性覆盖为系统原生栈
-   （macOS=SF Pro+苹方，Windows=Segoe UI+雅黑 UI），与外壳/思源面板字体统一。 */
-.lake-editor-mount { transition: opacity var(--dur-enter) var(--ease-out); }
+/* 编辑器正文不单独设字体：vendor style.css 的内置栈会让拉丁字符命中苹方（观感像云端 Web 而非
+   原生应用），统一由全局 --b3-font-family 覆盖（macOS=SF Pro+苹方，Windows=Segoe UI+雅黑 UI，
+   见 styles/app/base.css 顶部），此处不再重复声明。 */
 
 @media (min-width: 761px) {
   .lake-editor-mount .ne-engine { padding-right: 56px; }
 }
 
-/* 打开/切换文档时 Lake 挂载点淡入：只动 opacity，绝不碰 Lake 内部尺寸/溢出/定位。 */
-@starting-style { .lake-editor-mount { opacity: 0; } }
+/* 打开/切换文档时**不再**给挂载点做透明度淡入（260916）：
+   早期（锁定功能引入时）虽写了 `@starting-style{.lake-editor-mount{opacity:0}}`，但当时没有配套的
+   transition/animation ⇒ 该声明无效果、切换是"直接替换"，用户观感稳定不闪。后来（SiYuan shell 改造）
+   补上了 `animation: lake-mount-fade-in 180ms`，反而把「重建期间的空档」放大成一次明显的淡入闪烁
+   —— 用户反馈"锁定/解锁太闪，早期不是这样"。故淡入（含配套 transition 与 keyframes）已全部移除，
+   空档改由旧实例延迟销毁兜住（见下方 .is-outgoing）。 */
 
 .lake-editor-tab {
   grid-area: 1 / 1;
   min-height: 0;
   height: 100%;
+  /* 定位上下文：锁定态阅读大纲（内核自己挂载、fixed 定位）位置由下方规则微调 */
+  position: relative;
   /* 虚拟渲染 + TOC 固定定位：滚动层必须是 Lake 原生内部容器 .ne-editor-wrap。
      TOC 侧边栏是 absolute 钉在 .ne-editor-body 上的，若外层 .lake-editor-tab
      滚动，整个 body（含 TOC）会被滚出视口（现象：大纲只在顶部、到底消失）。
@@ -123,9 +128,27 @@ ne-card[data-card-name="codeblock"] .ne-card-resizer-mask {
   }
 }
 
-/* 锁/编辑切换会重建 Lake 实例：淡入掩盖重建瞬间的空白闪烁 */
-.lake-editor-tab .lake-editor-mount {
-  animation: lake-mount-fade-in 180ms ease-out;
+/* 锁定态阅读大纲：样式全部沿用内核（内核把它挂在自己的 viewer 根节点里：底色/边框/悬停展开
+   都是内核的）。这里只调位置——内核默认 fixed; top:60px; right:0 是语雀「无外壳阅读页」口径，
+   我们顶上多一层 tab 栏 + 面包屑、右侧还有文档滚动条，所以下移到正文区顶部、右侧留出滚动条。 */
+.lake-editor-tab .ne-viewer-toc-sidebar {
+  top: 74px;   /* = 外壳顶(42) + 面包屑(32)，即正文区顶部 */
+  right: 15px;
+}
+/* 大纲展开（内核状态标记 ne-viewer-toc-pin="true"，305px 浮层）时正文让位；
+   收纳迷你条（39px）时正文基础内边距已够，不用另加。 */
+.lake-editor-tab:not(.native-toc-hidden) .ne-viewer[ne-viewer-toc-pin="true"] .ne-viewer-body { padding-right: 336px; }
+
+/* 锁/编辑切换会重建 Lake 实例：**不做**淡入（见文件上方说明）。
+   早期那版 180ms 淡入反而把重建空档放大成闪烁，故移除；改由「旧实例延后销毁」兜住空档。
+   旧实例层（EditorTab 标记）：绝对铺满、盖在新实例之上继续显示旧内容，等新实例首屏渲染出
+   正文后整层移除 —— 移除即切换，中间没有空白帧（260916 消除锁定/解锁白屏闪烁）。
+   期间不吃事件；旧实例自身滚动位置未被触碰，因此过渡结束时是原地切换。 */
+.lake-editor-tab > .lake-editor-main > .is-outgoing {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
 }
 
 .trash-preview-viewer .lake-editor-mount { min-height: 100%; }

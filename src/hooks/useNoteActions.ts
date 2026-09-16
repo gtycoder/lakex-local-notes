@@ -26,8 +26,8 @@ export function useNoteActions({ showNotice, setError, setTreeNodes }: UseNoteAc
     }
   }, [showNotice]);
 
-  /** M1：收口导出（按 noteId）——右键「导出」子菜单所有格式统一入口（markdown/html/lake；word/pdf 待实现） */
-  const exportNoteById = useCallback(async (noteId: string | null, format: "markdown" | "html" | "lake") => {
+  /** M1：收口导出（按 noteId）——右键「导出」子菜单所有格式统一入口（markdown/html/lake/pdf；word 待实现） */
+  const exportNoteById = useCallback(async (noteId: string | null, format: "markdown" | "html" | "lake" | "pdf") => {
     if (!noteId) { showNotice("该节点不是文档"); return; }
     try {
       const dir = await native.pickExportDir();
@@ -38,6 +38,8 @@ export function useNoteActions({ showNotice, setError, setTreeNodes }: UseNoteAc
         showNotice(`已导出 Markdown 资料包到 ${result.exportPath}（${result.imageCount} 张图片${skippedText}）`);
       } else if (format === "html") {
         showNotice(`已导出 HTML：${result.exportPath}（${result.imageCount} 张图片${skippedText}）`);
+      } else if (format === "pdf") {
+        showNotice(`已导出 PDF：${result.exportPath}（${result.imageCount} 张图片内嵌${skippedText}）`);
       } else {
         showNotice(`已导出原生 Lake：${result.exportPath}（${result.imageCount} 张图片内嵌${skippedText}）`);
       }
@@ -72,7 +74,7 @@ export function useNoteActions({ showNotice, setError, setTreeNodes }: UseNoteAc
 
   // 文档右键（TreeNode 版）包装
   const copyMarkdownFromCache = useCallback((node: TreeNode) => void copyMarkdownById(node.noteFileId), [copyMarkdownById]);
-  const exportAs = useCallback((node: TreeNode, format: "markdown" | "html" | "lake") => void exportNoteById(node.noteFileId, format), [exportNoteById]);
+  const exportAs = useCallback((node: TreeNode, format: "markdown" | "html" | "lake" | "pdf") => void exportNoteById(node.noteFileId, format), [exportNoteById]);
   const copyNotePaths = useCallback((node: TreeNode) => void copyPathsById(node.noteFileId), [copyPathsById]);
 
   return { copyMarkdownById, exportNoteById, copyPathsById, setNodeIcon, copyMarkdownFromCache, exportAs, copyNotePaths };

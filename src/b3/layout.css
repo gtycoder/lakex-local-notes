@@ -160,12 +160,15 @@
 
   /* .tab-item* / .sidebar.sidebar-docked 已搬到共用作用域（见文件开头） */
 
-  /* 右侧大纲固定：白色卡片、无边框/阴影、左侧 4px 灰缝 */
+  /* 右侧大纲固定：与正文区**连成一体**的白卡（260916 统一）。
+     · 圆角只保留右上角（跟着正文 `.document-pane` 的 `12px 12px 0 0`），左侧贴正文不圆、底部不圆；
+       —— 原为 `var(--b3-border-radius-b)` 四角圆角，与正文并排看是一块独立悬浮卡（且底部两角在壳底露缝）。
+     · 左侧 4px 灰缝（几何在 outline.css 的 `left: 4px`）已经是天然分隔，不再另加描边/投影。 */
   .outline-sidebar--docked .outline-sidebar__content {
     background: var(--b3-theme-background);
     border: 0;
     box-shadow: none;
-    border-radius: var(--b3-border-radius-b);
+    border-radius: 0 12px 0 0;
   }
 
   /* 卡片圆角 / .statusbar 已搬到共用作用域（见文件开头） */

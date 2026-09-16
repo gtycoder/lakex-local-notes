@@ -144,6 +144,69 @@ export class NoteExport {
     return { exportPath: path.join(exportDir, "index.html"), imageCount, skipped, size: page.length };
   }
 
+  /** 唯一导出文件路径（{base}/{title}.{ext}，重名 -2/-3 后缀）。 */
+  private uniqueExportFile(base: string, title: string, ext: string): string {
+    let p = path.join(base, `${title}.${ext}`);
+    let suffix = 2;
+    while (fs.existsSync(p)) {
+      p = path.join(base, `${title}-${suffix}.${ext}`);
+      suffix++;
+    }
+    return p;
+  }
+
+  /**
+   * M3：PDF 导出内容准备（本方法无 electron 依赖、可测）：缓存 Markdown → HTML →
+   * 图片 data URI 内嵌（单文件交付，临时页 loadFile 无 data URL 导航大小限制）→
+   * 自包含临时 HTML + 唯一 pdf 目标路径。渲染（隐藏窗口 printToPDF）由 electron/export.ts
+   * 完成（思源同款 printToPDF 路线），临时目录由调用方用完即删。
+   */
+  exportPdfHtml(id: string, baseDir?: string): { htmlPath: string; tempDir: string; pdfPath: string; imageCount: number; skipped: number } {
+    if (!isSafePathSegment(id)) throw new AppError("InvalidInput", `无效的笔记 ID: ${id}`);
+    const caches = this.ctx.readNoteCaches(id);
+    const markdown = caches.markdown ?? "";
+    if (!markdown.trim()) throw new AppError("InvalidInput", "该文档还没有文本缓存，请先打开并保存一次");
+    const titleRow = this.ctx.db.prepare("SELECT title FROM notes WHERE id=?").get(id) as { title: string } | undefined;
+    const title = sanitizeFileName(titleRow?.title ?? "未命名");
+    const base = baseDir ?? this.defaultExportBase();
+    fs.mkdirSync(base, { recursive: true });
+    const pdfPath = this.uniqueExportFile(base, title, "pdf");
+    let body = mdToHtml(markdown);
+    // 图片 → data URI 内嵌（同图复用缓存，避免多次读同一文件）
+    const imgRe = localAssetHtmlImgRe(ASSET_PORT);
+    const uriCache = new Map<string, string | null>();
+    const toDataUri = (noteId: string, filename: string): string | null => {
+      const key = `${noteId}/${filename}`;
+      if (uriCache.has(key)) return uriCache.get(key)!;
+      let uri: string | null = null;
+      if (isSafePathSegment(noteId) && isSafePathSegment(filename)) {
+        const file = path.join(this.ctx.noteAssetsDir, noteId, filename);
+        try {
+          if (fs.existsSync(file)) {
+            uri = `data:${mimeTypeForFilename(filename)};base64,${fs.readFileSync(file).toString("base64")}`;
+          }
+        } catch { /* 读取失败算跳过 */ }
+      }
+      uriCache.set(key, uri);
+      return uri;
+    };
+    let imageCount = 0;
+    let skipped = 0;
+    body = body.replace(imgRe, (whole: string, url: string, noteId: string, filename: string) => {
+      const uri = toDataUri(noteId, filename);
+      if (!uri) { skipped++; return whole; }
+      imageCount++;
+      return whole.replace(url, uri);
+    });
+    // 打印优化（A4 分页防断裂；页边距由 printToPDF margins 管，body 不再留白/限宽）
+    const printCss = "<style>body { max-width: none; padding: 0; } h1, h2, h3 { break-after: avoid; } pre, blockquote, img, li { break-inside: avoid; }</style>";
+    const page = wrapHtmlPage(title, body).replace("</head>", `${printCss}</head>`);
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "lake-export-pdf-"));
+    const htmlPath = path.join(tempDir, "index.html");
+    fs.writeFileSync(htmlPath, page, "utf8");
+    return { htmlPath, tempDir, pdfPath, imageCount, skipped };
+  }
+
   getNotePaths(id: string): { title: string; lakePath: string; assetsDir: string } {
     if (!isSafePathSegment(id)) throw new AppError("InvalidInput", `无效的笔记 ID: ${id}`);
     const row = this.ctx.db.prepare("SELECT title FROM notes WHERE id=?").get(id) as { title: string } | undefined;

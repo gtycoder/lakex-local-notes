@@ -82,6 +82,10 @@
 .note-info-history-preview { margin-top: 8px; max-height: 260px; overflow: auto; padding: 8px 10px; border: 1px solid var(--b3-theme-surface-lighter); border-radius: 6px; background: var(--b3-theme-surface); font-size: 12px; line-height: 1.6; }
 .note-info-history-preview img { max-width: 100%; height: auto; }
 .note-info-history-preview h1, .note-info-history-preview h2, .note-info-history-preview h3 { font-size: 14px; margin: 6px 0; }
+/* 历史快照内联预览（只读 Lake viewer，260916 W-10：替代裸 dangerouslySetInnerHTML 注入快照正文）。
+   固定高度给 .ne-viewer 内部滚动；mount 撑满容器供内核虚拟渲染测视口（对齐 HistoryPanel 口径）。 */
+.note-info-history-viewer { height: 260px; margin-top: 8px; overflow: auto; border: 1px solid var(--b3-theme-surface-lighter); border-radius: 6px; background: var(--b3-theme-surface); }
+.note-info-history-viewer .lake-editor-mount { min-height: 100%; }
 .note-info-error { margin: 12px 14px; font-size: 12px; color: var(--b3-theme-error, #d23f31); }
 
 /* 附件重命名弹窗（复用 .ln-dialog） */

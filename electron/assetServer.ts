@@ -135,12 +135,33 @@ export function startAssetServer(noteAssetsDir: string, vendorCdnDir: string, qu
   fs.mkdirSync(noteAssetsDir, { recursive: true });
   if (quickNotesDir) fs.mkdirSync(quickNotesDir, { recursive: true });
 
-  // 审计 #16：本地资源服务仅允许应用自身页面跨域读取（dev origin / file 页），
+  // 审计 #16：本地资源服务仅允许应用自身页面跨域读取（dev origin / Web 客户端 / file 页），
   // 拒绝任意网站的 CORS 读取（恶意网页无法 fetch 笔记图片）。非 CORS 请求（<img>/
   // 直接访问）不带 Origin，不构成可读数据泄露。
   const isAllowedOrigin = (origin: string | undefined): boolean => {
     if (!origin) return true; // 非 CORS 请求
-    return origin === "http://127.0.0.1:1421" || origin === "null" || origin.startsWith("file://");
+    return origin === "http://127.0.0.1:1421"
+      || origin === "http://localhost:1421"
+      || origin === "http://127.0.0.1:19880"   // Web 客户端（webApiServer）
+      || origin === "http://localhost:19880"
+      || origin === "null"
+      || origin.startsWith("file://");
+  };
+  // W-8（AUDIT-260828）：ACAO 不再用 "*"——任意站点一旦拿到 assetToken 即可带 Origin
+  // 跨源读走全部本地资源。改为只对「应用自身 origin」回显请求 Origin；非 CORS 请求
+  // （<img>/<script> 等，无 Origin 头）不参与 CORS，不发 ACAO。生产页是 file://（loadFile），
+  // 其 fetch 的 Origin 为字符串 "null"，回显该字面值；其余 Origin 已被 isAllowedOrigin 拦为 403。
+  const corsOriginOf = (origin: string | undefined): string | null => {
+    if (!origin) return null;
+    if (origin === "http://127.0.0.1:1421" || origin === "http://localhost:1421") return origin;
+    if (origin === "http://127.0.0.1:19880" || origin === "http://localhost:19880") return origin;
+    if (origin === "null") return "null";
+    if (origin.startsWith("file://")) return origin;
+    return null;
+  };
+  const corsHeaders = (origin: string | undefined): Record<string, string> => {
+    const value = corsOriginOf(origin);
+    return value ? { "Access-Control-Allow-Origin": value, Vary: "Origin" } : {};
   };
 
   const server = http.createServer(async (req, res) => {
@@ -169,7 +190,7 @@ export function startAssetServer(noteAssetsDir: string, vendorCdnDir: string, qu
         streamFile(res, vendorFile, stat, {
           "Content-Type": mime,
           "Cache-Control": "public, max-age=31536000, immutable",
-          "Access-Control-Allow-Origin": "*",
+          ...corsHeaders(req.headers.origin),
         }, req.headers.range);
         return;
       }
@@ -238,7 +259,7 @@ export function startAssetServer(noteAssetsDir: string, vendorCdnDir: string, qu
         res.writeHead(200, {
           "Content-Type": "text/plain",
           "Content-Length": Buffer.byteLength(body),
-          "Access-Control-Allow-Origin": "*",
+          ...corsHeaders(req.headers.origin),
         });
         res.end(body);
         return;
@@ -247,7 +268,7 @@ export function startAssetServer(noteAssetsDir: string, vendorCdnDir: string, qu
       streamFile(res, filePath, stat, {
         "Content-Type": mime,
         "Cache-Control": "public, max-age=31536000, immutable",
-        "Access-Control-Allow-Origin": "*",
+        ...corsHeaders(req.headers.origin),
       }, req.headers.range);
     } catch (error) {
       console.warn("[asset-server] 请求处理失败:", req.url, error);

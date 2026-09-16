@@ -1,6 +1,6 @@
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent } from "react";
 import { createPortal } from "react-dom";
-import { Book, ChevronRight, ChevronsDownUp, Copy, FilePlus, File, Filter, Focus, Folder, FolderOpen, FolderPlus, History, Info, MoreVertical, Download, Pencil, Plus, Search, Trash, X } from "lucide-react";
+import { Book, ChevronRight, ChevronsDownUp, Copy, FilePlus, File, Filter, Focus, Folder, FolderOpen, FolderPlus, History, Info, MoreVertical, Pencil, Plus, Search, Trash, X } from "lucide-react";
 import { DockFilterRow, useDockFilter } from "./DockFilterBar";
 import { LAKE_EMOJIS } from "../lib/lakeEmojis";
 import { LAKE_EMOJI_GROUPS } from "../lib/lakeEmojiGroups";
@@ -8,6 +8,7 @@ import type { TreeNode, TreeNodeType } from "../lib/types";
 import { buildTreeIndex, type TreeIndex } from "../core/treeIndex";
 import { computeDropPosition, createDragGhost, isValidTreeDrop, moveDragGhost, removeDragGhost, type DragGhost } from "./treeDrag";
 import { getCreateMenuPosition, type CreateMenuPosition } from "./createMenuPosition";
+import { ExportSubmenuItem } from "./ExportSubmenuItem";
 import { SIDEBAR_DEFAULT_WIDTH } from "../desktop/desktopTypes";
 
 type CreateKind = "notebook" | "group" | "note";
@@ -29,7 +30,7 @@ interface SidebarProps {
   onMoveNode: (id: string, targetId: string, position: DropPosition) => void;
   onRequestDelete: (node: TreeNode) => void;
   onCopyMarkdown: (node: TreeNode) => void;
-  onExportAs: (node: TreeNode, format: "markdown" | "html" | "lake") => void;
+  onExportAs: (node: TreeNode, format: "markdown" | "html" | "lake" | "pdf") => void;
   onCopyPaths: (node: TreeNode) => void;
   onSetIcon: (node: TreeNode, icon: string | null) => void;
   /** 复制文档（含附件） */
@@ -725,7 +726,7 @@ interface ContextMenuProps {
   onRename: () => void;
   onDelete: () => void;
   onCopyMarkdown: () => void;
-  onExportAs: (format: "markdown" | "html" | "lake") => void;
+  onExportAs: (format: "markdown" | "html" | "lake" | "pdf") => void;
   onCopyPaths: () => void;
   onDuplicate: () => void;
   onShowInfo: () => void;
@@ -735,7 +736,6 @@ interface ContextMenuProps {
 }
 
 const ContextMenu = ({ node, x, y, onNewChild, onRename, onDelete, onCopyMarkdown, onExportAs, onCopyPaths, onDuplicate, onShowInfo, onOpenHistory, onRevealNoteFile, onClose }: ContextMenuProps) => {
-  const [exportOpen, setExportOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState<{ left: number; top: number } | null>(null);
   // 视口边缘翻转：按光标先挂载，量出菜单真实尺寸后再定位——下方放不下就向上展开，保证整张菜单可点。
@@ -756,8 +756,6 @@ const ContextMenu = ({ node, x, y, onNewChild, onRename, onDelete, onCopyMarkdow
     top = Math.max(margin, top);
     setPos({ left, top });
   }, [x, y]);
-  // 一级菜单靠右时二级子菜单往左弹，避免溢出屏幕右侧
-  const submenuLeft = (pos?.left ?? x) + 232 + 230 <= window.innerWidth;
   // Portal 到 body：侧边栏带 transform（含 translateX(0)）时，position: fixed 会退化为
   // 相对侧边栏定位，导致菜单偏离光标右下；挂到 body 后恢复真正的视口固定定位。
   return createPortal(
@@ -772,21 +770,7 @@ const ContextMenu = ({ node, x, y, onNewChild, onRename, onDelete, onCopyMarkdow
           <button role="menuitem" onClick={() => { onOpenHistory(); onClose(); }}><History size={15} /><span>历史版本</span></button>
           <button role="menuitem" onClick={() => { onRevealNoteFile(); onClose(); }}><FolderOpen size={15} /><span>打开文件位置</span></button>
           <button role="menuitem" onClick={() => { onShowInfo(); onClose(); }}><Info size={15} /><span>属性</span></button>
-          <div className="context-menu-item has-submenu" onMouseEnter={() => setExportOpen(true)} onMouseLeave={() => setExportOpen(false)}>
-            <span className="context-menu-item-label"><Download size={15} /><span>导出</span></span><ChevronRight size={14} />
-            {exportOpen && (
-              <div className={`context-menu-submenu${submenuLeft ? "" : " open-left"}`} role="menu">
-                <button role="menuitem" onClick={() => { onExportAs("markdown"); onClose(); }}>导出为 Markdown 资料包</button>
-                <button role="menuitem" onClick={() => { onCopyMarkdown(); onClose(); }}>导出为 Markdown 文本（复制）</button>
-                <button role="menuitem" onClick={() => { onExportAs("html"); onClose(); }}>导出为 HTML</button>
-                <button role="menuitem" disabled title="开发中">导出为 Word（开发中）</button>
-                <button role="menuitem" disabled title="开发中">导出为 PDF（开发中）</button>
-                <div className="context-menu-sep" />
-                <button role="menuitem" onClick={() => { onExportAs("lake"); onClose(); }}>导出为原生 Lake（图片内嵌）</button>
-                <button role="menuitem" onClick={() => { onCopyPaths(); onClose(); }}>导出资料路径（本机 AI）</button>
-              </div>
-            )}
-          </div>
+          <ExportSubmenuItem onExportAs={onExportAs} onCopyMarkdown={onCopyMarkdown} onCopyPaths={onCopyPaths} onClose={onClose} />
         </>
       ) : (
         <button role="menuitem" onClick={() => { onRename(); onClose(); }}><Pencil size={15} /><span>重命名</span></button>

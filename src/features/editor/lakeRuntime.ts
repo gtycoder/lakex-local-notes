@@ -431,11 +431,14 @@ export function resolveScrollNode(scrollNode?: HTMLElement | null): HTMLElement 
   if (hostNode.classList?.contains("lake-editor-tab")) {
     // 编辑态滚动在 .ne-editor-wrap，锁定态原生 Viewer 没有该节点，
     // 必须回退到 .ne-viewer，否则锁定文档会把滚轮交给已被隐藏的外层 pane。
-    const wrap = (
-      hostNode.querySelector?.(".ne-editor-wrap")
-      || hostNode.querySelector?.(".ne-viewer")
-    ) as HTMLElement | null;
-    if (wrap) return wrap;
+    // 锁/解锁过渡期旧实例层（.is-outgoing）仍留在 DOM 里（见 createLakeDocument 与
+    // EditorTab 的延迟销毁），它排在前面但已是过期节点：必须跳过，否则滚动恢复、
+    // 大纲跟随、画板锚点都会拿到旧容器。
+    const candidates = hostNode.querySelectorAll?.(".ne-editor-wrap, .ne-viewer");
+    const wrap = candidates
+      ? (Array.from(candidates).find((el) => !el.closest(".is-outgoing")) ?? null)
+      : null;
+    if (wrap) return wrap as HTMLElement;
   }
   return hostNode;
 }
@@ -451,6 +454,14 @@ export interface LakeEditorPrefs {
    * 移动端（LakeEditor）不传此字段，保持原生行为。
    */
   disableNativeToc?: boolean;
+  /**
+   * 增强大纲（应用自建）开启时置 true：原生大纲只是被 CSS `display:none` 隐藏，但内核仍处于
+   * 「大纲展开」布局态（编辑根 .ne-normal-toc），会给正文块留 `max-width:750px;
+   * margin-right:280px` 的占位 → 增强大纲下出现大段空白（260916 用户报）。
+   * 置 true 后显式传官方 `toc.normalView=false`（语雀文档 65），让内核进入收纳布局态、
+   * 不再加 .ne-normal-toc；显式传值优先于内核 localStorage 里的用户偏好（bundle 177935）。
+   */
+  collapseNativeToc?: boolean;
   /** 禁用编辑态虚拟渲染（移动端用）：移动端单编辑器无 Lake 内部滚动容器（页面滚动），
    * scrollNode fallback 到 .document-pane（移动端不存在）会导致视口测量错误——编辑态只渲染
    * 视口内内容（正文不全）、保存时 getDocument 输出不完整（图片丢失）。置 true 全量渲染。 */
@@ -571,8 +582,14 @@ export function createLakeDocument(
 ): LakeEditorInstance {
   const mount = document.createElement("div");
   mount.className = "lake-editor-mount ne-doc-major-editor";
-  element.replaceChildren(mount);
-
+  // 锁/解锁是「同一文档换渲染模式」，旧实例若立刻销毁，正文区会空白数帧到数百毫秒
+  // （大文档更久）＝白屏闪烁。EditorTab 因此把旧挂载点标记 is-outgoing 交给新实例
+  // （见其 pendingDisposeRef）：这里保留这些仍在显示旧内容的节点，其余照旧清掉。
+  // outgoing 由 CSS 抬到新挂载点之上，新实例首屏渲染出正文后整层移除，中间没有空白帧。
+  for (const child of Array.from(element.children)) {
+    if (!child.classList.contains("is-outgoing")) child.remove();
+  }
+  element.appendChild(mount);
   const prefsSize = typeof prefs?.fontSize === "number" ? prefs.fontSize : 18;
   // viewer（阅读态）内核不消费 defaultFontsize，落回自身 14px 默认——字号挂到 mount 根，
   // 阅读/编辑两态同源继承（设置里的正文字号此前在移动端阅读态从未生效）。
@@ -606,7 +623,27 @@ export function createLakeDocument(
     },
     input: {},
     defaultFontsize: prefsSize,
-    toc: { enable: !!tocEnabled && !prefs?.disableNativeToc },
+    toc: {
+      enable: !!tocEnabled && !prefs?.disableNativeToc,
+      // 增强大纲 = 原生大纲被 CSS 隐藏，但必须同时让内核退出「展开」布局态，否则 .ne-normal-toc
+      // 仍给正文留 280px 占位（大段空白）。官方配置项 toc.normalView（默认 true=展开）；显式传值
+      // 时内核不读 localStorage，故能可靠压过用户上次的展开偏好。
+      // allowAutoPin/rememberLastPin 必须一起关：内核在 viewSizeChange 时会 isAllowAutoPin() 自动
+      // 把大纲展开（bundle 179780），只传 normalView=false 会在创建后又被改回展开 → 占位复发。
+      ...(prefs?.collapseNativeToc ? { normalView: false, allowAutoPin: false, rememberLastPin: false } : {}),
+      // 内核默认 allowModifyHash=true（lakex.js 编辑态 ekg / 阅读态 ezx 两套默认都是 !0）：
+      // 点击大纲会把 location.hash 改成标题节点 id → 触发浏览器锚点导航 → 浏览器滚锚点的
+      // 整条祖先滚动链（.ne-editor-wrap 之外还滚 html）→ html 被滚 42px（=topbar 高，html
+      // 未锁 overflow 时）→ 整壳上移、topbar 滚出视野、tab 栏顶到第一行（260916 实测，用户
+      // 报「点大纲布局乱套」）。关闭后走 scrollByNodeId 正常跳转、不再写 hash；base.css 的
+      // html,body{overflow:hidden} 为兜底。注意：内核 option 是扁平 schema（OptionName 'toc'，
+      // 编辑/阅读共用），allowModifyHash 直接挂在 toc 下，没有 editing/reading 嵌套。
+      allowModifyHash: false,
+    },
+    // 官方阅读器配置（语雀文档 47）：阅读态大纲判定「当前标题」时忽略顶部这么多像素。
+    // 内核编辑态写死 40（bundle 179499），阅读态默认 0 → 两态高亮口径不一致（阅读态刚滚过
+    // 标题就切高亮）。统一为 40。仅阅读态传（编辑态无此 option）。
+    ...(mode === "viewer" ? { boundaryTopOffset: 40 } : {}),
     codeblock: {
       // 使用与当前 Lake 资源链匹配的 CodeMirror 7.1.3，旧版 lakex-doc 资源
       // 在 Slash 新建代码块时可能只留下空壳而没有可编辑实例。
@@ -663,10 +700,13 @@ export function createLakeDocument(
     },
     // scrollNode 与虚拟渲染解耦：原生 TOC 的点击定位/滚动高亮需要真实滚动容器
     // （body overflow:hidden 时 Lake 默认回退 document.scrollingElement||document.body 会拿错，
-    // TROUBLESHOOTING #26）。移动端 disableVirtualRendering=true 表示无内部滚动容器，不传。
-    ...(mode === "editor" && !prefs?.disableVirtualRendering
-      ? { scrollNode: () => resolveScrollNode(scrollNode) }
-      : {}),
+    // TROUBLESHOOTING #26）。编辑态与锁定 Viewer 都要下发：阅读态 TOC 点击跳转走
+    // viewer.scrollNode.scrollTop（bundle 236871），不下发时回退 html——html 已被
+    // overflow:hidden 锁死（W-8 兜底），点击大纲正文就不滚了（260916 用户实测）。
+    // 移动端 disableVirtualRendering=true 表示无内部滚动容器，不传。
+    ...(prefs?.disableVirtualRendering
+      ? {}
+      : { scrollNode: () => resolveScrollNode(scrollNode) }),
     ...(VIRTUAL_RENDERING.enabled && mode === "editor" && !prefs?.disableVirtualRendering
       ? {
           // Viewer 不需要编辑态的卡片懒加载。原生 Viewer 在虚拟卡片节点尚未
@@ -1361,10 +1401,23 @@ function setupTocScrollFollow(
   };
 }
 
-/** 取原生 TOC 侧栏实例（bundle: 编辑器 toc 插件 afterInit `this._tocSidebar = ao(qY, …)`）。
+/** 原生 TOC 侧栏实例的应用侧可用面（编辑态/阅读态插件同构：bundle 179515 / 236760 均有 update，
+ * close/open 两态同名）。全部可选：内核 bundle 改结构时静默降级。
+ * setNormalView：展开/收纳统一入口——阅读态实例自带 setNormalViewStatus；编辑态实例没有，
+ * 但两态共用同一 React 组件（ek0），经组件 ref 的 setNormalViewStatus 等价切换。 */
+export interface NativeTocSidebar {
+  update?: (toc: unknown) => void;
+  open?: () => void;
+  close?: () => void;
+  /** 展开/收纳切换（true=展开 305px / false=收纳迷你条）。 */
+  setNormalView?: (normal: boolean) => void;
+}
+
+/** 取原生 TOC 侧栏实例（bundle: 编辑器 toc 插件 afterInit `this._tocSidebar = ao(qY, …)`；
+ * 阅读态插件同构，同挂点 `_tocSidebar`）。返回绑定包装（不改动内核实例）。
  * 插件实例挂在 editor._plugins（数组/Map/对象），逐个找带 `_tocSidebar.update` 的那个。
  * 属私有结构 hack：找不到返回 null，调用方回退到 tocChange 事件重放。 */
-function findNativeTocSidebar(editor: LakeEditorInstance | null): { update?: (toc: unknown) => void } | null {
+function findNativeTocSidebar(editor: LakeEditorInstance | null): NativeTocSidebar | null {
   try {
     const ps = (editor as any)?._plugins;
     const list: unknown[] = Array.isArray(ps)
@@ -1375,8 +1428,21 @@ function findNativeTocSidebar(editor: LakeEditorInstance | null): { update?: (to
           ? Object.values(ps as Record<string, unknown>)
           : [];
     for (const p of list) {
-      const sb = (p as { _tocSidebar?: { update?: (toc: unknown) => void } })?._tocSidebar;
-      if (sb && typeof sb.update === "function") return sb;
+      const sb = (p as { _tocSidebar?: Record<string, unknown> })?._tocSidebar;
+      if (sb && typeof sb.update === "function") {
+        const anySb = sb as any;
+        return {
+          update: (toc) => anySb.update(toc),
+          open: () => anySb.open?.(),
+          close: () => anySb.close?.(),
+          setNormalView: (normal) => {
+            if (typeof anySb.setNormalViewStatus === "function") { anySb.setNormalViewStatus(normal); return; }
+            // 编辑态：组件 ref 上 setNormalViewStatus（ek0 为编辑/阅读共用组件）
+            const ref = anySb._view?.getReactRef?.();
+            if (ref && typeof ref.setNormalViewStatus === "function") ref.setNormalViewStatus(normal);
+          },
+        };
+      }
     }
   } catch { /* 内核插件结构变化时静默降级 */ }
   return null;
@@ -1387,8 +1453,14 @@ function findNativeTocSidebar(editor: LakeEditorInstance | null): { update?: (to
  * 编辑触发新 tocChange 后才出现）。setDocument 后调用一次，把最新 toc 数据
  * 同步进侧边栏，弥补这个加载时机缺口。
  * 重试收敛：固定 120ms 轮询、上限 40 次（≈4.8s）。侧栏就绪通常 ~2s，慢速递增重试会让
- * 大纲多等 1s+（实测条目出现从 ~2.1s 拖到 ~3.1-3.6s）。 */
-export function refreshTocSidebar(editor: LakeEditorInstance | null, host?: HTMLElement | null): () => void {
+ * 大纲多等 1s+（实测条目出现从 ~2.1s 拖到 ~3.1-3.6s）。
+ * onSidebarReady：侧栏实例首次可用时回调一次（锁定态用它延续锁定前的大纲可见/展开状态——
+ * 内核阅读态 ready 时无条件 open+展开，必须在其后覆盖）。 */
+export function refreshTocSidebar(
+  editor: LakeEditorInstance | null,
+  host?: HTMLElement | null,
+  onSidebarReady?: (sidebar: NativeTocSidebar) => void,
+): () => void {
   // toc 数据权威来源是内核的 docExtraContent（TOC 管理器 setDocExtraContent({toc})）。
   // 通过内核官方事件总线重放 tocChange（与编辑触发路径一致），并重试直到条目出现。
   // 审计：重试定时器必须由调用方在 editor 销毁时取消，避免关闭文档后继续触碰旧实例。
@@ -1396,6 +1468,7 @@ export function refreshTocSidebar(editor: LakeEditorInstance | null, host?: HTML
   const timers = new Set<number>();
   let disposed = false;
   let attempt = 0;
+  let readyCallback = onSidebarReady;
   const later = (fn: () => void, ms: number): void => {
     const id = window.setTimeout(() => {
       timers.delete(id);
@@ -1408,21 +1481,28 @@ export function refreshTocSidebar(editor: LakeEditorInstance | null, host?: HTML
       const anyEditor = editor as any;
       const kernel = anyEditor?.kernel;
       const tocData = kernel?.getDocExtraContent?.()?.toc;
-      // 等原生侧栏视图挂载后再补数据，避免在空壳上重放。
-      const sidebarReady = !!scope.querySelector(".ne-toc-sidebar .ne-toc-view");
-      if (sidebarReady && Array.isArray(tocData) && tocData.length > 0) {
-        // 优先直接调侧栏实例的 update()：编辑器 toc 插件对 tocChange 的监听是 1s 节流
-        // （bundle: onPluginEvent("tocChange", cI()(…, 1e3))），而内核在侧栏挂载前就会先 emit
-        // 一次 tocChange、白白消耗 leading 边沿 → 靠事件重放必须再等一个 1s 窗口（实测大纲晚
-        // ~1.3s）。直接 update 绕过节流（实测 ~90ms）。
+      // 数据就绪即重放，不前置检查侧栏 DOM：
+      // ① 编辑态侧栏在 afterInit 就挂载（.ne-toc-sidebar），直接 update 绕过 1s 节流（实测 ~90ms）；
+      // ② 阅读态（锁定 viewer）的侧栏 DOM 只在收到 length>0 的 tocChange 时才创建
+      //    （bundle 236953：无实例则 new ezD），内核 tocChange 先于插件监听发完 → 锁定大纲永远空壳。
+      //    emitPluginEvent 重放正是触发它挂载+填充的手段（260916 锁定态大纲不渲染的修复）。
+      if (Array.isArray(tocData) && tocData.length > 0) {
         const sidebar = findNativeTocSidebar(editor);
         let done = false;
         if (sidebar?.update) {
           try { sidebar.update(tocData); done = true; } catch { done = false; }
         }
+        if (done && readyCallback && sidebar) {
+          try { readyCallback(sidebar); } catch { /* 状态应用失败不影响填充 */ }
+          readyCallback = undefined;
+        }
         if (!done && kernel?.emitPluginEvent) kernel.emitPluginEvent("tocChange", tocData);
       }
-      const itemsAfter = scope.querySelectorAll(".ne-toc-sidebar .ne-toc-item").length;
+      // 条目类名编辑态/阅读态一致（.ne-toc-item），无需限定容器。
+      // 但必须排除正在退场的旧实例层（.is-outgoing）：它的条目不代表新实例已渲染好，
+      // 否则会误判为完成而停止重试 —— 锁定后台/大纲空壳的老问题会因此复发。
+      const itemsAfter = Array.from(scope.querySelectorAll(".ne-toc-item"))
+        .filter((el) => !el.closest(".is-outgoing")).length;
       if (itemsAfter === 0 && attempt < 40) {
         attempt += 1;
         later(tryOnce, 120);

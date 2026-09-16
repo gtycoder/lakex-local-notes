@@ -315,6 +315,8 @@ html[data-theme="dark"] .document-pane .ne-engine > ne-h6 ne-heading-content {
   justify-content: space-between;
   gap: 14px;
   width: 100%;
+  /* 标签 + 快捷键强制一行：此前「进入专注模式 ⌘⇧Enter」在 170px 宽的下拉里会折成两行 */
+  white-space: nowrap;
 }
 
 .top-menu > button span small {
@@ -322,6 +324,13 @@ html[data-theme="dark"] .document-pane .ne-engine > ne-h6 ne-heading-content {
   font-size: 11px;
   white-space: nowrap;
 }
+
+/* 文档右上角「更多」：容纳「锁定当前文档（只读）」+「导出」子菜单箭头，比通用下拉宽一点 */
+.top-menu--more { min-width: 236px; }
+
+/* 该菜单里复用了目录树右键的「导出」二级行（.context-menu-item 默认 12px/36px），
+   与同级按钮的行高/字号对齐，视觉上仍是一条普通菜单项 */
+.top-menu .context-menu-item { min-height: 32px; font-size: 13px; }
 
 /* Drag feedback: a soft lifted row plus a clear insertion guide, matching outline motion. */
 .tree-row.dragging {

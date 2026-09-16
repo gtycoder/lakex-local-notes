@@ -20,7 +20,11 @@ Lake Notes 是**本地优先**笔记应用（Electron + React + better-sqlite3 +
 - **具体待办与优先级只在 `HANDOFF.md` §3 维护**（`docs/TODO.md` 已删：历史总表无独立文档，权威待办只看 HANDOFF §3）。
 - 删除/恢复语义与 Electron 43 升级均已验收，后续改动必须保持现有同步语义（§3 原则 1~17）与全绿门禁。
 - 先修 Critical/Warning，再按模块拆分大文件；不在没有测试护栏的情况下进行大规模架构重写。
-- **编辑器内核知识库**：闭源 lakex（vendor `@dlient/lakex-doc-react` 源码，内核 bundle 在 `vendor/lakex-doc-react/src/components/lakex/lakex.js`，即语雀 @alipay/lakex-doc）的行为契约与调试速查表固化在 `docs/LAKEX-CONTRACT.md`（含待落地 `lakex-contract.d.ts` 的设计）。**涉及编辑器/lakex（报错、no-op、DOM、加能力）先查它，新观测必须回填**；开源 lake-main(lakelib) 只是"机制字典"，不是本运行内核（序列化方言已分叉，勿混用结论）。
+- **编辑器内核（lakex）资料检索顺序 —— 涉及调用内核 API/配置项/命令时必走（260916 用户立规）**：
+  ① **官方出处优先** `/Users/admin/file/local-lake/yuque-developer-docs/`（语雀开发者文档本地副本；`docs/` 按主题编号，如 `65 - 大纲（toc)`、`47 - 通用配置`、`07 - API与事件`、`08 - 命令列表`、`48 - 适配器`）——**先确认官方到底有没有这个能力/配置/命令及其语义**，不要凭 bundle 反编译猜用法；官方有就用官方途径（例：阅读态大纲挂载点走 `toc.reading.getContainer`、阅读器偏移走 `boundaryTopOffset`），而不是自己写 CSS/私有 hack 绕过。
+  ② **本项目契约与踩坑** `docs/LAKEX-CONTRACT.md`（闭源 lakex 已核实的行为契约 + 调试速查表；含我们实测出的内核行为与反例）——**新观测必须回填此处**，别只留在 HANDOFF 或代码注释里。
+  ③ **更精细的源码字典对照** `/Users/admin/file/local-lake/lake-editor-main/`（第三方 VSCode yuque-editor 插件）与 `/Users/admin/file/local-lake/lake-main/`（lakejs 开源社区版，仅"机制字典"）——用于挖机制/实现细节与交叉验证；**注意 lake-main 序列化方言已与运行内核分叉，结论不得直接套用**。
+  最终仲裁 = 仓库内 vendor 内核 bundle `vendor/lakex-doc-react/src/components/lakex/lakex.js`（即语雀 @alipay/lakex-doc，实际运行的代码）+ 运行时实测；以上资料与实测冲突时以实测为准。
 - **文档分工（防漂移）**：`AGENTS.md`=长期红线/机制/坑（不写易过期事实）· `README.md`=项目概览（不维护进度/计数）·
   `HANDOFF.md`=唯一交接（当前基线/待办/本轮踩坑）。历史上本文件曾长期残留旧分支名与 188/217 测试计数，已清理，**不要写回去**。
 
@@ -117,7 +121,7 @@ node scripts/s3-ls.mjs --count | --note <id> | --prefix <prefix>   # 云端对�
 
 ## 8. 会话启动指引
 
-1. 读本文件 + `HANDOFF.md`（当前状态与真正的待办）；**涉及编辑器/lakex 先读 `docs/LAKEX-CONTRACT.md`**（闭源内核契约+速查表）。
+1. 读本文件 + `HANDOFF.md`（当前状态与真正的待办）；**涉及编辑器/lakex 一律按 §2「内核资料检索顺序」走三级检索**（官方 `yuque-developer-docs` → `docs/LAKEX-CONTRACT.md` → `lake-editor-main`/`lake-main` 源码字典），新观测回填 CONTRACT。
 2. 查 `git status`/`git log` 确认当前状态，并 **`git worktree list`** 检查有无未记录的在途 worktree 改动（2026-09-03 就漏看过一次）；
    `vite.config.ts` 不应有改动（除非多端调试中的 onstart 补丁）。
 3. 需要用户确认产品语义时，给出选项和推荐，但**当前删除/恢复语义已定稿**（见 §3），不要重新争论。

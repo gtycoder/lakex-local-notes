@@ -246,8 +246,12 @@ export function OutlineSidebar({
       </nav>
 
       <div className="outline-sidebar__content" onPointerEnter={() => { cancelHoverHide(); if (mode === "collapsed") setRailHovered(true); }}>
-        <div className="outline-sidebar__header">
-          <span className="outline-sidebar__spacer" />
+        {/* 头部与目录栏（Sidebar.tsx）同款结构：复用 .sidebar-toolbar-row / .sidebar-toolbar-title
+            / .list-heading，避免两栏头部各写一套视觉（此前大纲栏无标题、内边距/分隔线也不同，
+            与整体明显不一致）。260916 统一。 */}
+        <div className="sidebar-toolbar-row outline-sidebar__header">
+          <span className="sidebar-toolbar-title">大纲</span>
+          <div className="list-heading">
           <button
             className={`dock-icon-btn filter-btn${filter.active ? " is-active" : ""}`}
             title="筛选大纲"
@@ -296,6 +300,7 @@ export function OutlineSidebar({
                 ))}
               </div>
             )}
+          </div>
           </div>
         </div>
         <DockFilterRow filter={filter} placeholder="筛选大纲" />

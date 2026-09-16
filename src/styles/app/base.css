@@ -15,7 +15,11 @@ svg.lucide { stroke-width: 1.75; }
 
 html, body, #root { height: 100%; }
 
-body { min-width: 320px; min-height: 100%; overflow: hidden; }
+/* html 必须随 body 一并锁滚动：Lake 内核部分滚动路径（如原生大纲点击定位）会回退
+   document.scrollingElement（=html），而 html 未锁时被滚 42px（=topbar 高）→ 整壳上移、
+   topbar 滚出视野、tab 栏顶到第一行（260916 实测；TROUBLESHOOTING #26 的可见形态）。 */
+html, body { overflow: hidden; }
+body { min-width: 320px; min-height: 100%; }
 
 button, input { font: inherit; }
 
