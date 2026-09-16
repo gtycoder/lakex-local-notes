@@ -36,6 +36,17 @@ const MISC = "misc";
 
 const text = execSync(`git show HEAD:${SRC_REL}`, { cwd: REPO, maxBuffer: 64 * 1024 * 1024 }).toString();
 const root = postcss.parse(text, { from: SRC_REL });
+{
+  let n = 0;
+  root.walkRules((r) => { for (let p = r.parent; p; p = p.parent) if (p.type === "atrule" && /keyframes$/i.test(p.name)) return; n++; });
+  if (n < 100) {
+    console.error(`✗ 拒绝运行：HEAD 的 ${SRC_REL} 只有 ${n} 条规则。`);
+    console.error("  本脚本是**一次性迁移**（260916 第二档 S3）：它假定 HEAD 的 styles.css 还是那个 1766 行的大文件。");
+    console.error("  S3 之后入口只剩 @import 编排，规则在 src/styles/app/*.css —— 再跑会生成空文件。");
+    console.error("  要在旧提交上重跑：git worktree 到 8f7f732 之前，或用 `git show <commit>:src/styles.css` 喂给它。");
+    process.exit(3);
+  }
+}
 const inKf = (r) => { for (let p = r.parent; p; p = p.parent) if (p.type === "atrule" && /keyframes$/i.test(p.name)) return true; return false; };
 
 // 分组："注释 + 规则" 一起走

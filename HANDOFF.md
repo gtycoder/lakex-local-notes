@@ -1388,6 +1388,13 @@ const m = await page.send("CSS.getMatchedStylesForNode", { nodeId: q.nodeId });
   细滚动条 → 新建 `settings.css`。声明数守恒 468 → 468；注入式对照 **32 状态 0 差异**；像素批次 15/16 屏 0 差异
   （余 1 屏为已证实的噪声底）。加载顺序 22 → 21 张表，**"按响应/意图命名"的层到此清空**。
 
+**第二档端到端审计（260916，完成度证据）**：完成度不能只靠"每一步当时都验过"——本轮就出现过一次**假通过**（见下）。
+所以补了一次全量对照：把**第二档开始前**（`b1ee074`）的每一张样式表内容**按当年的位置**注入回去
+（`styles.css` 用当年那份 87KB 大文件；`components←overlays`、`editor←editor-bridge`、`motion←layout-contract+motion-contract`、
+`settings←ui-polish`、vendor 画板表置空），与当前状态在 **34 个状态**（含 5 个媒体偏好态 + 2 个画板态）
+× ~1.0 万元素逐元素比对 ⇒ **噪声 0 / 差异 0**。也就是说：从 `b1ee074` 到现在的全部结构改动**行为完全一致**。
+附带：`split-app-layer.mjs`（S3 的一次性迁移脚本）加了护栏——入口已变成 @import 后它会拒绝运行而不是生成空文件。
+
 **跨层合并的结论（260916，重要）：整批合并不可行，已回退（提交 8b25e2a）**
 试过把 `app/quick-notes.css` 并进 `styles/quick-notes.css`（提交 63b610b），另加 4 个同域合并（shell / editor / settings / dialogs）。
 **用正确口径实测 = 4906 处计算值差异**。典型后果：`.activity-rail { padding: 0 3px 6px }` 原在**基础层**（b3 之前，故意输给
