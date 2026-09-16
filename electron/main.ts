@@ -39,7 +39,8 @@ app.setPath(
       ? path.join(app.getPath("appData"), "lake-notes-dev")
       : path.join(app.getPath("appData"), "lake-notes-electron")),
 );
-const DEV_SERVER_URL = "http://127.0.0.1:1421";
+// dev server 地址可经 LAKE_DEV_SERVER_URL 覆盖：多端/隔离冒烟时避开默认 1421（IPC 信任判定同用此值）。
+const DEV_SERVER_URL = process.env.LAKE_DEV_SERVER_URL?.trim() || "http://127.0.0.1:1421";
 
 /**
  * 资产服务器访问令牌（审计：防外部网页 CORS 读本地笔记图片）。

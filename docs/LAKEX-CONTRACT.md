@@ -156,6 +156,18 @@
   `EditorTab` 重命名走 `setName(基名 + 原扩展名) + sync(true)`（扩展名锁定——附件类型按扩展名判定）；
   `setDocument` + 旧内容克隆遮罩仅作拿不到 `cardData` 的兜底。
 
+### 5.3 自定义卡片的 `.lake` 序列化：`name="customBlock"` + value 里的 `$name`（2026-09-16 实测）
+
+- **现象**：手写 `<card type="block" name="drawing-board" value="data:...">` 会被内核当**未知卡片**，渲染成 fallback「该卡片暂时无法显示」，`ne-card` 的 `data-card-name` 退化为 `block`。
+- **正确形态**（编辑态内核写出的格式）：
+  ```html
+  <card type="block" name="customBlock" value="data:%7B%22%24name%22%3A%22drawing-board%22%2C%22%24htmlStr%22%3A%22%22%2C...%7D"></card>
+  ```
+  即 `value` = `data:` + `encodeURIComponent(JSON.stringify({ $name: '<卡片名>', $htmlStr: '', ...initValue }))`；tag 的 `name` 固定 **`customBlock`**（行内卡为 `customInline`），**不是**卡片自己的名字（如 `drawing-board`/`mindmap-card`）。
+- **机制**（bundle `src/components/lakex/lakex.js`）：`registerCard(e){ this.cards[e.name] = e }`（`e` 来自 `option.cards` = `customCard.cards` 解包后的 config）；读卡时按 `this.cards[attrs.value.$name]` 查表，查不到即 fallback。
+- **应用侧对应**：`src/features/editor/lakeRuntime.ts` 的 `prepareCustomCards` 把 `{config}` 解包为 config 并注册；**config.name 必须与 value 的 $name 一致**。
+- 证据：2026-09-16 lakex v1.99.0 dev 冒烟（画板 / 思维导图 / 文本绘图 3 卡，0 fallback、0 JS 异常、0 失败请求）。
+
 ---
 
 ## 6. 使用守则（所有会话遵守）
@@ -163,7 +175,7 @@
 1. **动手前查**：改 `src/features/editor/**`、移动端 `src/mobile/editor/**`、或涉及编辑器内核行为前，先读 §2/§4/§5。
 2. **报错先查表**：lakex 抛错 / 命令 no-op / DOM 不符 → 先查 §5；查不到再做新定位。
 3. **新观测必须回填**（防止知识再次散落）：定位到新行为后，按 §6.5 的流程更新本文件对应小节，并在可写会话补 `lakex-contract.d.ts` 的类型；回填时写证据（bundle 位置/断言串/复现步骤）。
-4. **反编译定位的标准姿势**（PROGRESS 方法论）：CDP/页面内实测复现 → 在 `vendor/.../dist/lakex-editor-react-component.es.js` 用字符串 grep 定位（未加密，类名/路径/文案可搜）→ 对照断言里的源码路径 → 得出结论再改代码。
+4. **反编译定位的标准姿势**（PROGRESS 方法论）：CDP/页面内实测复现 → 在 `vendor/lakex-doc-react/src/components/lakex/lakex.js`（内核 ESM 转换产物，类名/路径/文案可搜；`doc.umd.js` 为原始 UMD）用字符串 grep 定位→ 对照断言里的源码路径 → 得出结论再改代码。
 5. **不要做**：不要给 vendor 内核打补丁（除既有最小 hack 模式，且需注释 + 记录）；不要复制大段 bundle 源码进仓库；不要在本文件写易过期事实（版本号/计数/分支放 HANDOFF §0）。
 6. **契约 vs 机制字典分工**：查"这个能力 lakex 有没有/长什么样"用本文件；查"lake 系内核理论上怎么实现/有哪些插件命令"用 lake-main（开源 lakelib 源码）当字典；两者方言已分叉，勿混用结论。
 
