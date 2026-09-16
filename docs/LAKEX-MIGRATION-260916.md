@@ -16,11 +16,11 @@
 ## 3. 构建期修复（非业务，记 LOCAL-CHANGES）
 - vendor `DrawnixBoardCore.css` 3 行相对 `node_modules` 的 `@import` 改指仓库根（vendor 深了一层；`lakex-drawnix-react-board` 未导出 `./index.css`）。
 - vendor `tsconfig.build.json` 加 `"types": []`（消除根 `@types/node` 的 `Timeout` 冲突）。
-- vendor `vite.config.ts` **外部化重型卡片依赖**（mermaid/@plait/lakex-drawnix 等），`@xiangfa/mindmap` 保持内联：规避 rolldown “重新解析自己产物” 的 emit→parse bug（`Expected ) but found in`）；且 `@xiangfa` 内嵌 react@19，外置会双 React。
+- vendor `vite.config.ts` **外部化重型卡片依赖**（mermaid/@plait/lakex-drawnix 等），`@xiangfa/mindmap` 保持内联：规避 rolldown “重新解析自己产物” 的 emit→parse bug（`Expected ) but found in`）；且 `@xiangfa` 内嵌 react@19，外置会双 React。其中 `@plantuml/core` **必须用正则**（`/^@plantuml\/core(\/|$)/`）才能匹配到 `plantuml.js`/`viz-global.js` 子路径——精确字符串匹配不到，7MB 的 `plantuml.js` 会内联进宿主主 chunk。
 - 根 `.gitignore`：裸 `dist` → 锚定 `/dist`（否则 `vendor/.../dist` 与 `public/.../katex/.../dist` 都被忽略）。
 
 ## 4. 离线本地化（本次一并做掉）
-- **P1 PlantUML**：vendor `TextToDiagramCore.tsx` 从 unpkg 动态 import → 本地 `@plantuml/core`（LOCAL-CHANGES #6）。
+- **P1 PlantUML**：vendor `TextToDiagramCore.tsx` 从 unpkg 动态 import → 本地 `@plantuml/core`（**动态**导入，保持懒加载语义；LOCAL-CHANGES #6）。
 - **drawnix 默认图**：`mdn.alipayobjects.com` → 镜像 `public/vendor/lakex/misc/drawnix-default.jpg`，构建期 `MIRROR_EXACT` 精确重写。
 - **katex/mhchem 镜像此前未被 git 跟踪**（被根 `.gitignore` 裸 `dist` 吞掉）→ 已补入。
 - 结果（桌面 + 移动产物）：`unpkg.com`=0、`mdn.alipayobjects.com`=0、`gw.alipayobjects.com`=0。**仍缺** `mass-office.alipay.com` 的文本绘图卡 AI 按钮背景（该域名本机 HTTP 000 不可达）。
@@ -28,11 +28,12 @@
 ## 5. 回归（隔离冒烟，未碰其他会话）
 - **桌面**（dev 1461 / CDP 9225 / asset 19879；数据复制到 `$TMPDIR/lake-device-lakex`）：大文档 40 标题 → 原生 TOC **40 条** + 点击跳转（scrollTop 0→13580）；虚拟渲染滚到底部 **3 卡全部水合**（drawnix 核心/导图 43 节点/文本绘图）；**锁只读 viewer**；**回收站重开只读 + "已删除"横幅**；全程 0 JS 异常 / 0 4xx。
 - **移动端**（emulator-5554；`bash scripts/android-build.sh --sync --install`）：首页 + 文档编辑器渲染、`window.__mobileEditor` 就绪、**图片经 AssetServer 全部加载（naturalWidth>0）**、0 异常 / 0 4xx。
-- 门禁：`tsc` 0 · `vitest` 969/16 · 桌面 + 移动 build 通过。
+- 门禁：`tsc` 0 · `vitest` 969/16 · 桌面 + 移动 build 通过 · `check:core` 0 违规 · `check:bundle` 通过（app-js gzip 1.89MB / 预算 2.9MB，见 §6）。
+- **产物分包实渲染**：把构建产物里的 `viz-global-*.js` + `plantuml-*.js` 在带 DOM 的环境里真实加载，PlantUML 引擎跑通（`createDiagram ok` → `SequenceDiagramFactory`）并输出 `<svg>`（2878 字符）；确认懒加载分包可执行、离线可用。
 
 ## 6. 遗留 / 注意
 - `mass-office` 图标（网络可达时补进 `MIRROR_EXACT`）。
-- PlantUML 现在打进 vendor 主 bundle（`@plantuml/core` 未被 external 匹配到子路径），首屏偏大；后续可外置/懒加载。
+- ✅ 已解决：PlantUML 曾因 `@plantuml/core` 精确匹配不到子路径而内联进主 chunk，导致 `check:bundle` 超预算；改用正则外置后拆为 `plantuml-*.js` / `viz-global-*.js` 懒加载分包（app-js gzip **3.93MB → 1.89MB**）。
 - 与 UI/Web 会话合并：仅 `src/main.tsx`、`.gitignore` 两处**行级重合**（不同 hunk，可自动合并）；`HANDOFF.md` 各会话追加，合并时按段落解冲突。
 - 内核私有字段（`_tocSidebar` / `_virtualNode.$appear` / React fiber `cardData`）在 v1.99.0 上实测仍有效（见 §5）。
 
@@ -41,3 +42,4 @@
 - `0a3b51d` katex 镜像补齐 + `LAKE_DEV_SERVER_URL` 冒烟钩子 + LAKEX-CONTRACT §5.3
 - `7e8f489` PlantUML + drawnix 默认图本地化
 - `9355337` 图标收集顺序 + v1.99.0 私有字段回归
+- （本次）PlantUML 子路径正则外置 → 懒加载分包，`check:bundle` 由红转绿

@@ -9,7 +9,7 @@
 - 上一基线：feat/drag-siyuan @e69d4a0（含 11 个提交，见文末「附：会话交接（2026-09-14）」）+ 260914 依赖升级两个提交（05bf8ee / 83feda7，即 §2.11）——两者均已合入 master。
 - 历史基线：refactor/store-split 8 commits（store.ts 2352→1103 行，见 §3.6）+ 260911 批次（2ecac39 同步收敛 / a18a95b 安卓 AssetServer 403 + Dock IME）已并入本分支祖先；feat/search-refactor（统一 FTS5(unicode61)+单字预分词+增量账本，§2.11–§2.14）在其上。
 - 质量门槛：tsc 0 error · vitest **969 passed / 16 skipped**（2026-09-14）· 桌面 vite build + 移动 vite build -c vite.mobile.config.ts 全绿 · Android assembleDebug + adb install -r 通过（计数变动见 §2；别把数字写回 AGENTS/README）。
-- **在途分支（2026-09-16）**：`feat/lakex-source-vendor`（基于 master）= **lakex 底层切换**（vendor 换上游 lakex-doc-react 源码 + 内核 v1.99.0 + 用其画板/导图/文本绘图卡片；删除旧 `lakex-editor-react-component`）。已过 tsc/vitest/双端 build + 桌面/移动隔离冒烟；做法/构建/离线修复/回归见 **`docs/LAKEX-MIGRATION-260916.md`**，本地改动见 `vendor/lakex-doc-react/LOCAL-CHANGES.md`。合并只需注意 `src/main.tsx`/`.gitignore` 两处行级重合。
+- **在途分支（2026-09-16）**：`feat/lakex-source-vendor`（基于 master）= **lakex 底层切换**（vendor 换上游 lakex-doc-react 源码 + 内核 v1.99.0 + 用其画板/导图/文本绘图卡片；删除旧 `lakex-editor-react-component`）。已过 tsc/vitest/双端 build + `check:core`/`check:bundle` + 桌面/移动隔离冒烟；做法/构建/离线修复/回归见 **`docs/LAKEX-MIGRATION-260916.md`**，本地改动见 `vendor/lakex-doc-react/LOCAL-CHANGES.md`。合并只需注意 `src/main.tsx`/`.gitignore` 两处行级重合。
 - **真机级验收（260910-260911，三轮）**：
   - 第一轮（2 桌面 + 1 移动）：A/B 同步 push/pull、新建/删除传播、移动端 WAL 崩溃恢复、旧 IndexedDB 快照迁移 全通过。
   - 第二轮（3 桌面 + 1 移动，大数据量）：50 笔记 + 70 资源（PNG/JPEG/GIF/PDF/512KB/2MB）、23.4MB；A/B/C/移动端四端正文 sha256 完全一致；并发编辑冲突（先提交者获胜 + 被覆盖方强制留档 30 天）；批量删除 5 篇墓碑传播 全通过。
@@ -668,7 +668,7 @@
 > 原 §3.6（其余浮层统一）**基本已完成**：顶栏菜单/右键菜单/标签切换器已进 b3 令牌（`src/b3/components.css` + `src/b3/layout.css`）；仅**草稿恢复框**（`draft-recovery-*`，`overlays.css` 自定义类 + `--lake-*` 令牌）未收进 b3 套，属可选小收尾。
 
 **lakex 底层切换（分支 `feat/lakex-source-vendor`，待用户验收后合 master）**
-- 详见 `docs/LAKEX-MIGRATION-260916.md`。桌面 + 移动冒烟已过（TOC/虚拟渲染水合/锁 viewer/回收站守卫/AssetServer 图片）；遗留：`mass-office` AI 图标（域名不可达）、PlantUML 首屏体积可后续外置。
+- 详见 `docs/LAKEX-MIGRATION-260916.md`。门禁 tsc/vitest/双端 build/`check:core`/`check:bundle` 全绿；桌面 + 移动冒烟已过（TOC/虚拟渲染水合/锁 viewer/回收站守卫/AssetServer 图片）；PlantUML 已改为懒加载分包（`check:bundle` 由红转绿，app-js gzip 3.93→1.89MB）。唯一遗留：`mass-office` AI 图标（该域名本机不可达）。
 
 **性能/健壮性**
 1. ~~**FTS 索引重做**~~ **✅ 已完成（260911，见 §2.11）**：统一 FTS5 + unicode61 + 单字预分词 + 增量账本；不再有 1/2/3 字分支。后续增强：移动端 `getDocument("text/plain")` 索引源、A+ 拉丁检索、小记搜索（二期）。
