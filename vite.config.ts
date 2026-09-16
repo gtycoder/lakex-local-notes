@@ -32,7 +32,7 @@ function lakexAlipayLocal(): Plugin {
       return html.replace(/(<meta http-equiv="Content-Security-Policy" content=")[^"]*(")/, `$1${csp}$2`);
     },
     transform(code, id) {
-      if (!id.includes("lakex-editor-react-component")) return;
+      if (!id.includes("lakex-doc-react")) return;
       // JS 模块 id 带 ?v= query，先剥离再判扩展名
       const cleanId = id.split("?")[0];
       if (cleanId.endsWith(".css")) {
@@ -79,7 +79,7 @@ export default defineConfig({
     // so the lazy import does not race a late dependency optimization and get
     // a stale 504 "Outdated Optimize Dep" response.
     include: ["lakex-drawnix"],
-    exclude: ["lakex-editor-react-component"],
+    exclude: ["@dlient/lakex-doc-react"],
     force: true,
   },
   server: { host: "127.0.0.1", port: 1421, strictPort: true },

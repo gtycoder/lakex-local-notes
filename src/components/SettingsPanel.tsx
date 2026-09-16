@@ -916,7 +916,7 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
 
                     <Group title="第三方与许可" icon={<Info size={16} />}>
                       <Block itemId="about-siyuan-license" name="思源笔记 SiYuan" desc="界面版式与主题令牌移植自 SiYuan（AGPL-3.0，https://github.com/siyuan-note/siyuan）：组件样式见 src/b3/siyuan/，分组版式见 src/b3/siyuan/business/_config.scss，均在文件头保留署名；本项目不构成分发思源代码。" />
-                      <Block itemId="about-lakex-license" name="语雀 Lake 内核" desc="lakex-editor-react-component / lakex-drawnix 为闭源组件（vendor 已 pin），仅按官方用法加载与最小 hack，不修改、不再分发其源码。" />
+                      <Block itemId="about-lakex-license" name="语雀 Lake 内核" desc="Lake 内核为语雀闭源产物（随 @dlient/lakex-doc-react 的 MIT wrapper 源码一并 vendor、已 pin）；wrapper 与卡片层源码可改并保留署名，内核本体内核不修改、不再分发。" />
                       <Block itemId="about-third-party" name="开源依赖" desc="better-sqlite3 (MIT) · sharp (Apache-2.0/MIT) · @aws-sdk/client-s3 (Apache-2.0) · lucide-react (ISC) · react/react-dom (MIT) · electron-log (MIT) · Typescript (Apache-2.0) · Vite (MIT)。完整清单以 package.json 与 lockfile 为准。" />
                     </Group>
                   </>

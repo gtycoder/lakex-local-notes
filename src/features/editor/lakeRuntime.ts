@@ -1,8 +1,7 @@
 import React from "react";
 import { renderToString } from "react-dom/server";
-import { Doc, DefaultEditorConfig } from "lakex-editor-react-component";
+import { Doc, GetDefaultEditorConfig } from "@dlient/lakex-doc-react";
 import { uploadLakeResource } from "./resourceUpload";
-import { BoardCard } from "./BoardCard";
 import { shouldSkipBoardCardFocus, useClickActivatedWheelGate } from "./canvasInteractionGate";
 import { ASSET_ORIGIN } from "../../lib/assetPort";
 import type { LocalAssetRef } from "../../core/assetUrl.js";
@@ -125,13 +124,13 @@ function prepareCustomCards(config: Record<string, unknown>): void {
       const r = slash.description();
       slash.description = r.zhCN;
     }
-    // lakex-editor-react-component 的默认 mindmap viewer 直接读取
+    // lakex-doc-react 的 mindmap viewer 直接读取
     // this.props.editor.theme，但 Lake 的 createOpenViewer 只注入 viewer/cardValue，
     // 不会向 viewerComponent 注入 editor。锁定态因此会在 render 阶段抛出
     // "Cannot read properties of undefined (reading 'theme')"，整张思维导图变成空白。
     // 不修改 node_modules：在注册配置边界补一个最小 editor.theme 兼容层。
     // 除了 name，同时兼容资源里使用 slash.mainSearch 标识的旧/新卡片配置，避免
-    // 依赖某个 lakex-editor-react-component 版本的字段形状。
+    // 依赖某个 lakex-doc-react 版本的字段形状。
     const isMindmap = cfg.name === "mindmap-card"
       || cfg.name === "custom-mindmap-card"
       || cfg.slash?.mainSearch === "/mindmap";
@@ -372,7 +371,7 @@ if (typeof window !== "undefined") {
  * 背景：Lake 1.6.0+ 的 virtualRendering 解决「大文档首屏图片 hydration 被拖后
  * ~3.5s」的实测问题（107 个 codeblock 卡片时，实测首图 3.5s→88ms）。
  *
- * 关键前提（来自 lakex-editor-react-component README + dist 反编译）：
+ * 关键前提（来自 lakex-doc-react README + 内核 bundle 反编译）：
  *  - scrollNode 必须指向真实滚动容器：编辑态是 .ne-editor-wrap，锁定 Viewer 是
  *    .ne-viewer（body overflow:hidden，Lake 默认回退 document.scrollingElement/body 会拿错，
  *     导致虚拟渲染视口测量错误、TOC 高亮/跳转错位）
@@ -560,6 +559,8 @@ export function createLakeDocument(
   // viewer（阅读态）内核不消费 defaultFontsize，落回自身 14px 默认——字号挂到 mount 根，
   // 阅读/编辑两态同源继承（设置里的正文字号此前在移动端阅读态从未生效）。
   mount.style.fontSize = `${prefsSize}px`;
+  // lakex-doc-react 的默认配置是函数（按语言生成）；本项目固定 zh-cn。
+  const defaultConfig = GetDefaultEditorConfig("zh-cn") as Record<string, unknown>;
   const customOptions: Record<string, unknown> = {
     // 编辑态不禁用 emoji 插件：unicodeEmoji 卡片的表情选择器依赖其默认数据，
     // 禁用后选择器渲染为空（0x0）。Viewer 仍保持纯只读。
@@ -627,30 +628,21 @@ export function createLakeDocument(
           : Promise.reject(new Error("audio url unavailable"));
       },
     },
+    // 移除第三方 embed 分组（我们不渲染外部嵌入卡）；画板/导图等分组由 lakex-doc-react 的卡片配置自带。
     slash: {
       cardSelect: {
         general: {
-          groups: (() => {
-            const groups = (DefaultEditorConfig as any).slash?.cardSelect?.general?.groups?.filter(
-              (g: any) => g.name !== "third-party-services"
-            ) || [];
-            for (const g of groups) {
-              if (g.title === "程序员" || g.name === "developer") {
-                if (!g.items.includes("custom-board-card")) { g.items = [...(g.items || []), "custom-board-card"]; }
-                break;
-              }
-            }
-            return groups;
-          })(),
+          groups: ((defaultConfig as any).slash?.cardSelect?.general?.groups || []).filter(
+            (g: any) => g.name !== "third-party-services"
+          ),
         },
         table: {
-          groups: (DefaultEditorConfig as any).slash?.cardSelect?.table?.groups?.filter(
+          groups: ((defaultConfig as any).slash?.cardSelect?.table?.groups || []).filter(
             (g: any) => g.name !== "third-party-services"
-          ) || [],
+          ),
         },
       },
     },
-    customCard: { cards: [BoardCard] },
     // scrollNode 与虚拟渲染解耦：原生 TOC 的点击定位/滚动高亮需要真实滚动容器
     // （body overflow:hidden 时 Lake 默认回退 document.scrollingElement||document.body 会拿错，
     // TROUBLESHOOTING #26）。移动端 disableVirtualRendering=true 表示无内部滚动容器，不传。
@@ -668,10 +660,7 @@ export function createLakeDocument(
       : {}),
   };
 
-  const mergedOptions = deepMerge(
-    DefaultEditorConfig as Record<string, unknown>,
-    customOptions
-  );
+  const mergedOptions = deepMerge(defaultConfig, customOptions);
 
   prepareCustomCards(mergedOptions);
   ensureCustomCardIcons(mergedOptions);

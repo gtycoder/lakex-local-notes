@@ -4,7 +4,7 @@ import { App } from "./App";
 import { installPasteInterceptor } from "./features/editor/clipboardHtml";
 import { loadSettings } from "./lib/settings";
 import { applyTheme } from "./lib/theme";
-import "lakex-editor-react-component/style.css";
+import "@dlient/lakex-doc-react/style.css";
 import "./styles.css";
 import "./features/outline/outline.css";
 // 思源视觉层移植：令牌（daylight/midnight）→ 基础接线（覆盖层，最后加载）

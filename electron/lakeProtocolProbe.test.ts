@@ -1,8 +1,8 @@
 /**
- * 探针：Lake 内核（lakex-editor-react-component 闭源 bundle）图片 URL 协议白名单行为复刻。
+ * 探针：Lake 内核（@dlient/lakex-doc-react 内嵌的闭源内核 bundle）图片 URL 协议白名单行为复刻。
  *
  * 目的：验证「图片/附件能否用比 HTTP 更轻量（无 TCP 三次握手/四次挥手）的协议」的可行性。
- * 证据来源：node_modules/lakex-editor-react-component/dist/lakex-editor-react-component.es.js
+ * 证据来源：vendor/lakex-doc-react/dist/index.es.js（旧 vendor lakex-editor-react-component 已被整体替换；下方行号来自旧 bundle，仅作来源记录，需按新 bundle 复核）
  *   - L41567-41578  qd 白名单数组（http:/https:/blob:/data:/dingtalk:/ftp:/mailto:/fleamarket:/alipays:/qinpai:）
  *   - L41579-41585  Jd(e)（validUrl 核心：白名单前缀 | ./ | / | 无冒号）
  *   - L41586-41588  Yd(e)（trim 后过 Jd，拒绝返回空串）

@@ -29,12 +29,12 @@ describe("关于页 IPC 白名单与版本读取", () => {
     const file = path.join(dir, "package.json");
     fs.writeFileSync(file, JSON.stringify({
       name: "lake-notes-electron", version: "0.1.0", description: "本地优先",
-      dependencies: { "lakex-editor-react-component": "0.1.2", "better-sqlite3": "^13.0.0" },
+      dependencies: { "@dlient/lakex-doc-react": "0.1.3", "better-sqlite3": "^13.0.0" },
       devDependencies: { electron: "43.4.0", typescript: "^5.9.0" },
     }));
     const r = readVersionsFromPackageJson(file);
     expect(r.app).toEqual({ name: "lake-notes-electron", version: "0.1.0", description: "本地优先" });
-    expect(r.deps["lakex-editor-react-component"]).toBe("0.1.2");
+    expect(r.deps["@dlient/lakex-doc-react"]).toBe("0.1.3");
     expect(r.deps.electron).toBe("43.4.0");
     expect(r.deps["not-listed"]).toBeUndefined();
     fs.rmSync(dir, { recursive: true, force: true });

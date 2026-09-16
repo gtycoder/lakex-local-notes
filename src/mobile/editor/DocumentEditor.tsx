@@ -7,7 +7,7 @@
 import { EditorDock } from "./EditorDock";
 import { useCaretIntoView } from "../useCaretIntoView";
 import { showToast } from "../ui/toastBus";
-import "lakex-editor-react-component/style.css";
+import "@dlient/lakex-doc-react/style.css";
 import { OutlineSheet } from "./OutlineSheet";
 import { DocListSheet, type DocListItem } from "./DocListSheet";
 import { lakeBridge } from "../../features/editor/lakeRuntime";

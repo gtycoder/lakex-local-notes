@@ -18,7 +18,7 @@ export interface SystemInfo {
 /** 依赖版本取自 package.json（vendor 内核是 pin 的，报 bug 时必须能看到实际版本）。 */
 export function readVersionsFromPackageJson(pkgJsonPath: string): { app: SystemInfo["app"]; deps: Record<string, string> } {
   const wanted = [
-    "lakex-editor-react-component", "lakex-drawnix", "better-sqlite3", "sharp",
+    "@dlient/lakex-doc-react", "lakex-drawnix", "better-sqlite3", "sharp",
     "@aws-sdk/client-s3", "react", "electron", "electron-log", "lucide-react", "typescript", "vite",
   ];
   try {

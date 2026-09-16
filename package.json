@@ -28,7 +28,8 @@
     "test:service-crash": "node scripts/e2e-service-crash-smoke.mjs",
     "test:sidebar-interaction": "node scripts/e2e-sidebar-interaction-smoke.mjs",
     "test:tab-switch": "node scripts/e2e-tab-switch-smoke.mjs",
-    "postinstall": "patch-package --patch-dir vendor/npm/lakex-editor-react-component/patches"
+    "postinstall": "patch-package --patch-dir vendor/lakex-doc-react/patches",
+    "build:vendor": "npm --prefix vendor/lakex-doc-react run build"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1131.0",
@@ -37,7 +38,7 @@
     "lakex-drawnix": "^0.1.0",
     "lakex-drawnix-react-board": "^0.1.0",
     "lakex-drawnix-react-text": "^0.1.0",
-    "lakex-editor-react-component": "file:./vendor/npm/lakex-editor-react-component",
+    "@dlient/lakex-doc-react": "file:./vendor/lakex-doc-react",
     "lucide-react": "^1.45.0",
     "react": "18.3.1",
     "react-dom": "18.3.1",

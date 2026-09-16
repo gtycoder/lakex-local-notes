@@ -1,8 +1,7 @@
 node_modules
-dist
-dist-mobile
-dist-electron
-!vendor/npm/lakex-editor-react-component/dist/
+/dist
+/dist-mobile
+/dist-electron
 *.log
 .DS_Store
 release

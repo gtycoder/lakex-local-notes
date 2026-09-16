@@ -80,7 +80,7 @@ function lakexAlipayLocalMobile(): Plugin {
       fs.writeFileSync("dist-mobile/preview.html", MOBILE_PREVIEW_HTML);
     },
     transform(code, id) {
-      if (!id.includes("lakex-editor-react-component")) return;
+      if (!id.includes("lakex-doc-react")) return;
       const cleanId = id.split("?")[0];
       if (cleanId.endsWith(".css")) {
         return code.replace(/url\(https:\/\/gw\.alipayobjects\.com\/[^)]+\)/g, (m) => {
@@ -108,7 +108,7 @@ export default defineConfig({
       "@plait-board/react-text": "lakex-drawnix-react-text",
     },
   },
-  optimizeDeps: { exclude: ["lakex-editor-react-component"] },
+  optimizeDeps: { exclude: ["@dlient/lakex-doc-react"] },
   build: {
     target: "chrome120",
     outDir: "dist-mobile",
