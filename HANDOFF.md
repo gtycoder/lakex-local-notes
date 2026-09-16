@@ -704,7 +704,8 @@
 - 待定：模型/服务与 endpoint、API Key 存放（**建议 Electron 主进程代理**，勿用 `VITE_` 前缀）、设置项、移动端网络；可先接 mock 把 UI 跑起来。
 
 **离线化 / 资源清单（2026-09-16 审计，详见 `docs/OFFLINE-ASSETS-AUDIT-260916.md`）**
-- **[必补]** ① 文本绘图卡 PlantUML（unpkg 运行时，唯一功能级缺口）② `__puml` 预设缩略图 8 张 ③ `.ne-text-diagram-action-ai` 图标（`mass-office.alipay.com` 未被 transform 重写）④ 思维导图 KaTeX CSS（@xiangfa 注入 jsdelivr，待运行时确认）。
+- **[必补]** ① ~~文本绘图卡 PlantUML（unpkg 运行时）~~ **✅ 已解决（260916 lakex 迁移：改本地 `@plantuml/core`，见 `docs/LAKEX-MIGRATION-260916.md` §4）** ② `__puml` 预设缩略图 8 张 ③ `.ne-text-diagram-action-ai` 图标（`mass-office.alipay.com`，内核**内联样式**，未被 transform 重写）④ 思维导图 KaTeX CSS（@xiangfa 注入 jsdelivr，待运行时确认）。
+> 注：本清单是 UI 会话 260916 的审计快照，`docs/OFFLINE-ASSETS-AUDIT-260916.md` 未回填「PlantUML 已解决」这条；以本行为准。
 - **[可删·已确定]** `public/vendor/lakex-doc/` 除 `kitchen-iconfont.js` 外 **139 个文件（≈3.7MB）**：`codemirror.js`/`katex.min.js` 与 `vendor/cdn` 逐字节重复，`assets/`+`katex-fonts/` 唯一引用者（旧 `doc.css`）已在 HEAD root commit 删除。
 - **[可删·待运行时确认]** `public/vendor/cdn/` 35 个中仅 3 个被产物引用（`as/.../7.1.3/CodeMirror.js`、`os/.../katex.min.js`、`os/.../mhchem.min.js`），其余 32 个（含 `render/.../7.1.27/CodeMirror.js` 与 31 个 gw 图标）已被构建期重写架空。
 - **[不动]** `public/vendor/lakex/alipay/` 195 文件全部在用。**[不修]** 第三方 embed 卡。
