@@ -5,8 +5,11 @@
 > **§8 是移动端（安卓）专职交接**，由移动端会话维护；桌面会话不要改 §8，移动端会话不要改 §0-§7 之外的桌面文件。
 
 ## 0. 当前基线（新会话开工前）
-- **基线（2026-09-16 三端合并，已推 master）**：`master` @ `b1d1e61` = lakex 底层切换 + UI 全量 CSS 重构 + Web 客户端 MVP + 收尾清理。门禁：tsc 0 · vitest **979 passed / 16 skipped (995)** · `check:core` 0 · 桌面 + 移动 build · `check:bundle` 绿（app-js 1.82MB / drawnix 408KB / css 190KB）；桌面 + 安卓端已实测启动。
-- 关键入口：`docs/LAKEX-MIGRATION-260916.md`（换源/懒加载/离线）· `vendor/lakex-doc-react/LOCAL-CHANGES.md`（vendor 本地改动）· `docs/OFFLINE-ASSETS-AUDIT-260916.md`（离线对账）· `docs/CSS-LAYERS-BRIEF-260916.md`（UI 样式层）· `docs/LAKEX-CONTRACT.md`（内核契约）。
+- **基线（2026-09-16 会话收尾，已在 `master` 且已推 origin）**：`master` @ `d638d7f`。本会话把 **lakex 底层换源 + UI 全量 CSS 重构 + Web 客户端 MVP** 三端合并进 master，并修了 3 个 bug。
+  - 门禁：`tsc` 0 · `vitest` **979 passed / 16 skipped (995)** · `check:core` 0 · 桌面 + 移动 build · `check:bundle` 绿（app-js gzip 1.816MB / drawnix 408KB / css 190KB）。
+  - 桌面 + 安卓端已实测启动（dev：`1421` vite / `9222` electron / `19876` asset / `19880` Web 客户端）。
+  - 关键入口：`docs/LAKEX-MIGRATION-260916.md`（换源/懒加载/离线）· `vendor/lakex-doc-react/LOCAL-CHANGES.md`（vendor 本地改动 8 条）· `docs/OFFLINE-ASSETS-AUDIT-260916.md`（离线对账）· `docs/CSS-LAYERS-BRIEF-260916.md`（UI 样式层）· `docs/LAKEX-CONTRACT.md`（内核契约，编辑器相关先读）。
+- **工作区现状（本会话清理过）**：`/Users/admin/file/local-lake/` 下只剩 `lake-notes-electron`(主仓库) + `yuque-developer-docs`(语雀开发文档库) + `design-spec` + `lake-main`/`lake-editor-main`(内核机制参考)。已删：全部 worktree、过期截图/根级分析稿、`release/`(910M)、`.css-audit/`(85M)、`test-node-abi/`、外部参考仓库副本。本地分支只剩 `master` + `refactor/store-split`(未合 master)。
 - **dev 数据现状（重要）**：`到啦领导`（ee860a19）仍在回收站（`trashed_at=09-04 10:34`），用户未决定是否恢复，**别擅自删**；安卓回收站 48 条旧测试数据 + 笔记本「20-UI编辑测试」「测试本1」（含用户笔记）保留勿删。
 
 ## 1. 项目一句话 + 铁律（详见 AGENTS.md）
@@ -16,28 +19,57 @@
 ⑤ 不为旧数据写兼容/迁移（能删重建就删重建）；⑥ 杀 Electron 只 kill 具体 PID，禁 `pkill -f Electron`；
 ⑦ 不擅自合 master（代码批次需用户验收；文档类清理可直接提交）。移动端另有铁律见 **§8.0**。
 
-## 3. 真正的待办（按优先级）
+## 2. 上次会话（2026-09-16）：任务目标 + 已完成
 
+**任务目标**（用户原话大意）：① 审计并补全「完全离线本地化」，看还差哪些资源；② 底层换成上游 lakex 源码（`@dlient/lakex-doc-react`）并借用其画板/导图/文本绘图卡；③ 把 lakex 底层、UI 重构、Web 客户端**三端合并**到 master；④ 精简文档与工作区；⑤ 修几个体验/正确性 bug。
+
+**已完成（全部在 `master`）**：
+1. **lakex 底层换源**：删旧 dist-only 的 `lakex-editor-react-component`，换上游 `Mueat/lakex-doc-react@4b068bd2` 整包源码到 `vendor/lakex-doc-react/`；内核升到 **v1.99.0**；删自研 `BoardCard.tsx`，改用 vendor 的 6 张内置卡（画板/流程图/UML/导图板/思维导图/文本绘图）。做法见 `docs/LAKEX-MIGRATION-260916.md`；本地改动见 `vendor/lakex-doc-react/LOCAL-CHANGES.md`（8 条）。
+2. **离线外链清零**：`unpkg`（PlantUML → 本地 `@plantuml/core`）、`mdn.alipayobjects.com`（drawnix 默认图 → 本地镜像）、`gw.alipayobjects.com` 在**构建产物内 = 0**（`public/vendor/lakex/alipay` 195 文件全部在用，已核）。唯一残留：`mass-office.alipay.com` 1 处 AI 图标（内网不可达，外观级）。
+3. **三端合并 + 收尾自检**：`feat/lakex-source-vendor` + `polish/ui-ux-260914` + `feat/web-client-mvp` 全并入 master。冲突 2 处（`src/styles.css` 取 UI 版、`HANDOFF` 保留双方）+ 1 处语义冲突（自研 BoardCard 删除后 `vendor-board.css` 里的死样式，已清）。顺带删 139 个死镜像（`public/vendor/lakex-doc`）与 2 个孤儿 CSS。
+4. **文档精简**：docs 62→20；HANDOFF 1873→~300 行；AGENTS 合并重复原则（#7+#10 数据兼容、#8+#17 拒绝过度设计，保留编号）。
+5. **工作区清理**：见 §0（移除 worktree、删过期截图/文档/打包产物）。
+6. **3 个体验/正确性修复（本会话末段，均已推）**：
+   - `d638d7f`：画板**拖动/缩放不再触发文档保存与 S3 同步**（vendor `DrawnixBoardCore.onViewportChange` 改 no-op；视口是纯视图状态）。
+   - `55485c7`：画板/流程图/UML/导图板纳入**点击激活滚轮门控**（光标路过滚文档，点击画布后才滚/缩放画布）。
+   - `a4aad77`+`429bb1f`：内核「卡片/表格全屏」(maxView) 适配我们的窗口外壳（限定在 `.document-pane` 内，不盖侧栏/顶栏；内核「返回文档」退出按钮恢复可见）。
+
+## 3. 下一步计划 + 当前问题（真正的待办，按优先级）
+
+### 下一步计划
 1. **画板 AI 助手接入**（真功能，待定后端）
    - 钩子：`config.drawingBoardAI.generate`（vendor `LakexEditor` 会挂到 `editor.__lakexDrawingBoardAI`）；我们不走 `LakexEditor`，是直接 `Doc.createOpenEditor`，需在 `src/features/editor/lakeRuntime.ts` 创建 editor 后**手动挂**这一行。
    - 截图那个绿色 AI 徽标是**内核**的「文本绘图 AI 助手」（`.ne-text-diagram-ai-assistant-*`，正是 `mass-office` 背景图所在元素）；vendor **无注入点**（`KernelAssistantConfig` 只有 `supportEmoji`）→ 接不了。
    - 可接的是画板卡的「AI 画板助手」（`.lakex-ai-board-*`）；未配置时面板提示「尚未配置 AI 服务」。
    - 官方示例：`vendor/lakex-doc-react/examples/`（前端 `generate` / `aiProxyPlugin.ts` 后端代理 / `mockDrawingBoardAI.ts` / `.env.example`）；契约见 `src/components/lakex/types.ts`。
    - 待定：模型/服务与 endpoint、API Key 存放（**建议 Electron 主进程代理**，勿用 `VITE_`）、设置项、移动端网络。
-2. **离线残余（均「外观级」，非功能）**——详见 `docs/OFFLINE-ASSETS-AUDIT-260916.md`：
-   - ① 文本绘图卡 PlantUML ✅ 已解决（lakex 迁移改本地 `@plantuml/core`）；② `__puml` 预设缩略图 8 张（`cdn.nlark.com` / `lark-assets-prod…`）仍外链；③ `mass-office.alipay.com` 的 AI 助手图标（内核内联 `background-image`）；④ 思维导图 KaTeX CSS（@xiangfa 注入 jsdelivr，待运行时确认）。
-   - `public/vendor/cdn` 的 32 个文件是 `electron/cdnRedirect.ts` 的**运行时兜底白名单**，**别删**。
-3. **移动端剩余批次**：B7/B8（SearchSheet / 新建知识库 / 图标选择器 / 历史 sheet 收口；插入面板 `.b3-menu` 分组；面包屑行；空块占位符）+ 真机复验缺口（B4 跟手 / B2 触感 / B6 键盘态）—— 明细见 **§8**。
-4. **产品/技术债（长期；评估后多属低/缓）**：
-   - W-8 ACAO / W-10 dompurify（**安全相关，建议优先**）；`@types/better-sqlite3` 可单升。
-   - 大纲 viewer（只读）点击标题不跳转（重做大纲时一并处理）。
-   - 回收站首拉成本（批量删除后接收端仍下全文+资产）——惰性下载**暂缓**（动恢复红线）。
-   - Word/PDF 导出（`electron/export.ts` 已预留 docx/pdf）；附件大文件 S3 分片/断点续传（nice-to-have）。
-   - `docs/LAKEX-CONTRACT.md` §4 的 `lakex-contract.d.ts` 落地（纯类型 + 门禁全绿，不碰 vendor）。
-   - **「深层重复」CSS 候选清理**：原挂起条件「等 vendor 合并到位」**已满足（`master` 已含 vendor 换源 + 样式层重组）**，可启动；做法见 `scripts/css-audit/`——**重新生成候选**（旧 `dup-agg.json` 记的是重组前路径，勿复用）。
+2. **离线残余（均「外观级」，非功能）**——详见 `docs/OFFLINE-ASSETS-AUDIT-260916.md`：① `__puml` 预设缩略图 8 张（`cdn.nlark.com` / `lark-assets-prod…`）仍外链；② `mass-office.alipay.com` 的内核内联 AI 图标；③ 思维导图 KaTeX CSS（@xiangfa 注入 jsdelivr，待运行时确认）。（PlantUML ✅ 已解决。）
+3. **移动端剩余批次**：B7/B8 + 真机复验缺口 —— 明细见 **§8**。
+4. **产品/技术债（长期）**：W-8 ACAO / W-10 dompurify（**安全，建议优先**）；大纲 viewer 只读点击不跳转；回收站首拉成本（惰性下载暂缓，动恢复红线）；Word/PDF 导出 + 附件大文件 S3 分片；`docs/LAKEX-CONTRACT.md` §4 的 `lakex-contract.d.ts` 落地；**「深层重复」CSS 候选清理**（原挂起条件「等 vendor 合并到位」**已满足**，做法见 `scripts/css-audit/`，须**重新生成**候选、勿复用旧 `dup-agg.json`）。
 5. **非代码**：安卓同步偶发 `UnknownHostException` = 设备网络（联网重试）。
 
+### 当前问题 / 已知坑（不阻塞）
+- 画板**不再记忆视口**（拖动/缩放后重开为默认/自适应）：这是 260916 为「不让视口触发保存/上传」刻意做的取舍，**用户已确认接受**（"谁知道下次进来要看什么"）。不要改回去。
+- 离线残余 3 处（见上，全外观级）。
+- `public/vendor/cdn` 的 32 个静态无引用文件**不能删**——它们是 `electron/cdnRedirect.ts` 的**运行时兜底白名单**（用「镜像里是否存在该文件」决定是否把 `gw.alipayobjects.com` 请求回本地）。
+- 桌面日志偶见 `download_remote_resource` 的 403 / INVALID_INPUT：是抓取远程图片的远端策略/格式问题，与本会话改动无关。
+
 ## 4. 踩过的坑（合并版；通用红线/环境见 AGENTS.md）
+
+### 本次会话新坑（2026-09-16，务必记住）
+- **rolldown `codeSplitting.groups`**：`includeDependenciesRecursively` 默认 `true`，会把**入口也需要的依赖**并进该分组的 chunk，令入口**重新静态引用**它（懒加载失效）。要真正惰性必须设 `false`（app `vite.config.ts` 的 drawnix 组）。
+- **vendor lib 构建默认 `inlineDynamicImports:true`**：会把动态 import 内联回单文件。画板卡懒加载要求关掉它，并**提交新增的 chunk 文件**（`DrawnixBoardCore-*.js/.cjs` 会随内容改名，旧的要删）。
+- **`external` 匹配 package 子路径必须用正则**：精确字符串 `'@plantuml/core'` 匹配不到 `@plantuml/core/plantuml.js`（7MB 会被内联进主 chunk、预算炸）。用 `/^@plantuml\/core(\/|$)/`。
+- **根 `.gitignore` 别写裸 `dist`**：会吞掉 `vendor/.../dist` 和 `public/.../katex/.../dist`（katex 镜像差点因此没进 git）。锚定 `/dist`。
+- **内核 maxView（卡片/表格全屏）**：`.ne-ui-max-view{position:fixed;inset:0;z-index:1000}` 是「无外壳独立编辑器」口径；我们带侧栏/顶栏 → 会盖住整个窗口（表格缩左上、外壳被压）。适配：`.document-pane{position:relative}` + 把 `.ne-ui-max-view` 改 `position:absolute;inset:0;z-index:30`（外壳保留，内核「返回文档」退出按钮也才有布局）。
+- **`src/styles/cssLayers.test.ts` 是 CSS 围栏**：新增声明会超基线。**合法新增**（不是多层覆盖回涨）就同步抬高该文件基线并注明原因；只允许变小。
+- **画布滚轮门控要覆盖所有 canvas 卡**：`prepareCustomCards` 原来只给 `isMindmap` 加 `withCanvasWheelGate`；Drawnix 的 `drawing-board/flowchart-board/uml-board/drawing-mindmap-board`（slash `/hb`）漏了 → 光标路过就滚画布。识别 = 卡名集合 + `slash.mainSearch === "/hb"`。
+- **画板 viewport 不是内容**：`DrawnixBoardCore.onViewportChange → onChange({plaitViewport})` 会让**每次拖动/缩放**都改卡片值 → `contentchange` → 保存 → `syncState=pending` → S3 上传。已在 vendor 改 no-op（LOCAL-CHANGES #8）。
+- **keep-alive 多编辑器**：每个打开 tab 的编辑器都在 DOM 里（隐藏）。CDP 用 `document.querySelector('.mindmap-interaction-gate' / '.ne-ui-exit-max-view-btn')` 会抓到**隐藏 tab** 的元素（尺寸 0）→ 误判。必须按「可见元素过滤 / 限定 active tab 内」再判断。
+- **CDP 测画布缩放别用 ctrl+wheel**：那是 Chromium 的**浏览器缩放**（会缩放整个 app 并卡住脚本）。测画板缩放要走画布自带缩放控件，或先**真实点击**激活门控再用普通 `mouseWheel`。
+- **CDP 探针**：Node 24 有内置 `WebSocket`（别用系统 node 18 会 `WebSocket is not defined`）；改完 vendor/app 必须 `location.reload()` 后再测，否则测到旧状态。
+- **vendor 源码改了要重建产物**：`npm run build:vendor`（`vite build` + `tsc` + postbuild），产物 `dist/**` 入库；只改源码不重建 = 运行的是旧产物。
+
 ### 同步 / 数据语义（最危险的一类）
 - **`purged_at` 不是"已彻底删除"的永久标记**：`markPurgeSynced()` 在前缀删除成功后清空它（防重复删）。任何"别让它复活"的判定必须看**永久墓碑**（folder 看 `deleted_notes.node_type='folder'`）。
 - **purge 的墓碑必须无条件写**：`notes` 行缺失时跳过 = 云端永不下架 = 之后必然复活成"父不存在的不可见文档"（本轮实数据踩到）。
