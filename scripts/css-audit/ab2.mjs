@@ -102,6 +102,13 @@ const applyPlanToText = (rel, entries) => {
 // ---- 规格构造：把"待验证的另一种 CSS 文本"算出来 ----
 const buildSpec = (kind) => {
   const spec = [];
+  if (kind === "spec") {
+    // 由 SPEC=<json> 指定"另一份样式文本"（每项 {file, text}；text 为空串表示"该表当时不存在"）。
+    // 用于重命名/新建文件这类 HEAD 路径对不上的改动。
+    const rows = JSON.parse(fs.readFileSync(process.env.SPEC, "utf8"));
+    console.log(`  [spec] 注入指定样式文本：${rows.length} 张表`);
+    return rows;
+  }
   if (kind === "head") {
     // 与"上一个提交"对照：把 git HEAD 版本的文件文本注入回去。改完盘之后跑这个，
     // 差异必须为 0 —— 这是"落盘改动 == 原行为"的证明。
