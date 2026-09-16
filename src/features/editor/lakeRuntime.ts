@@ -97,6 +97,15 @@ function deepMerge(base: Record<string, unknown>, overrides: Record<string, unkn
  * slash label/description from () => ({zhCN, enUS}) to strings.
  * Without this, registerCard() reads e.name as undefined.
  */
+/** Drawnix 画板系列卡片的注册名（`configs/customCard.ts` → `cards/DrawingBoard/index.ts`）。
+ *  它们和 @xiangfa 导图卡一样是 canvas，需要「点击激活滚轮门控」。 */
+const BOARD_CARD_NAMES = new Set([
+  "drawing-board",
+  "flowchart-board",
+  "uml-board",
+  "drawing-mindmap-board",
+]);
+
 function withCanvasWheelGate(Comp: React.ComponentType<Record<string, unknown>>): React.ComponentType<Record<string, unknown>> {
   return React.forwardRef<unknown, Record<string, unknown>>((props, forwardedRef) => {
     const rootRef = React.useRef<HTMLDivElement>(null);
@@ -134,23 +143,32 @@ function prepareCustomCards(config: Record<string, unknown>): void {
     const isMindmap = cfg.name === "mindmap-card"
       || cfg.name === "custom-mindmap-card"
       || cfg.slash?.mainSearch === "/mindmap";
+    // Canvas 类卡片（Drawnix 画板/流程图/UML/导图板 + @xiangfa 导图卡）都要走「点击激活滚轮门控」：
+    // 否则光标只是路过时，滚轮/触控板就会滚动或缩放画布，文档反而滑不动（用户 260916 反馈）。
+    // 识别：主图卡名，或 slash 主搜索词（Drawnix 的 4 张板卡共用 /hb）。
+    const isBoardCard = BOARD_CARD_NAMES.has(String(cfg.name ?? "")) || cfg.slash?.mainSearch === "/hb";
+    const isCanvasCard = isMindmap || isBoardCard;
     // Drawnix/mindmap 运行时在渲染阶段抛错时，不能让单个卡片拖垮整个编辑器：
     // 编辑态和锁定态组件都包一层错误边界，保留卡片骨架并给出可读提示。
     const cardName = String(cfg.name || "card");
     const viewerComponent = cfg.viewerComponent
       ? withCardBoundary(
-          isMindmap
-            ? withCanvasWheelGate(React.forwardRef((props: any, ref: any) => {
-                const editor = props.editor?.theme?.currentThemeSchema
-                  ? props.editor
-                  : { theme: { currentThemeSchema: { colorScheme: "auto" } } };
-                return React.createElement(cfg.viewerComponent as any, { ...props, editor, ref });
-              }))
+          isCanvasCard
+            ? withCanvasWheelGate(
+                isMindmap
+                  ? React.forwardRef((props: any, ref: any) => {
+                      const editor = props.editor?.theme?.currentThemeSchema
+                        ? props.editor
+                        : { theme: { currentThemeSchema: { colorScheme: "auto" } } };
+                      return React.createElement(cfg.viewerComponent as any, { ...props, editor, ref });
+                    })
+                  : (cfg.viewerComponent as any),
+              )
             : (cfg.viewerComponent as any),
           cardName
         )
       : undefined;
-    const editorComponent = isMindmap && cfg.editorComponent
+    const editorComponent = isCanvasCard && cfg.editorComponent
       ? withCardBoundary(withCanvasWheelGate(cfg.editorComponent as any), cardName)
       : cfg.editorComponent;
     return {
