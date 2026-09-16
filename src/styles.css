@@ -108,10 +108,10 @@ button { cursor: pointer; }
 .empty-workspace-hint { margin: 0 0 6px; color: var(--lake-text-tertiary); font-size: 13px; }.loading-screen { height: 100vh; }.loading-screen small { color: var(--lake-error); }
 
 .form-grid .wide { grid-column: 1 / -1; }.form-grid input[type="text"], .form-grid input[type="password"], .form-grid label > input:not([type="checkbox"]) { width: 100%; height: 36px; padding: 0 10px; border: 1px solid var(--lake-border); border-radius: var(--b3-border-radius); outline: 0; font-size: 12px; font-weight: 400; }
-.checkbox { flex-direction: row !important; align-items: center; font-weight: 400 !important; }
+.checkbox { flex-direction: row; align-items: center; font-weight: 400; }
 /* ===== 同步进度与最近结果（S3 同步面板） ===== */
 
-.sync-progress-bar.indeterminate { width: 34% !important; animation: sync-indeterminate 1.2s ease-in-out infinite; }
+.sync-progress-bar.indeterminate { width: 34%; animation: sync-indeterminate 1.2s ease-in-out infinite; }
 @keyframes sync-indeterminate { 0% { transform: translateX(-110%); } 100% { transform: translateX(320%); } }
 
 /* .connection-message.ok 在下方「同步面板 v2」一处定义（此处原有一份重复的被其覆盖，已删） */
@@ -269,7 +269,7 @@ button { cursor: pointer; }
 /* 「大纲增强」开启 → 用应用自建大纲，隐藏 lakex 原生 TOC 侧栏。
    原生侧栏始终创建（保证运行中切换即时生效），这里只做 display 隐藏。 */
 .lake-editor-tab.native-toc-hidden .ne-toc-sidebar {
-  display: none !important;
+  display: none;
 }
 
 /* ===== Fix: multi-tab layout overrides ===== */
@@ -299,7 +299,7 @@ button { cursor: pointer; }
   max-height: none;
 }
 .ne-codeblock .ne-codeblock-inner {
-  height: auto !important;
+  height: auto;
   max-height: 600px;
   overflow-y: auto;
   overflow-x: auto;
@@ -307,7 +307,7 @@ button { cursor: pointer; }
   min-height: 24px;
 }
 .ne-codeblock .CodeMirror {
-  height: auto !important;
+  height: auto;
   min-height: 24px;
 }
 .ne-codeblock .cm-editor {
@@ -315,10 +315,10 @@ button { cursor: pointer; }
 }
 .ne-codeblock .CodeMirror-scroll {
   height: auto;
-  overflow: visible !important;
+  overflow: visible;
 }
 .ne-codeblock .CodeMirror-sizer {
-  min-height: 0 !important;
+  min-height: 0;
 }
 /* Hide the card-resizer drag handle on codeblocks — we don't support manual resize.
    DOM structure: ne-card[data-card-name="codeblock"] > ne-card-root > .ne-card-resizer
@@ -383,7 +383,7 @@ ne-card[data-card-name="codeblock"] .ne-card-resizer-mask {
 .board-card-wrapper .drawnix,
 .board-card-wrapper .drawnix .plait-board-container,
 .board-card-wrapper .drawnix .viewport-container {
-  height: 100% !important;
+  height: 100%;
 }
 
 /* P2: Drawnix board theme background colors. These rules ship in
@@ -414,7 +414,7 @@ ne-card[data-card-name="codeblock"] .ne-card-resizer-mask {
 .board-card-wrapper--viewer .drawnix .popup-toolbar,
 .board-card-wrapper--viewer .drawnix .pencil-mode-toolbar,
 .board-card-wrapper--viewer .drawnix canvas[class*="laser-pointer"] {
-  display: none !important;
+  display: none;
 }
 
 .plait-board-container .text foreignObject{overflow-y:auto}.plait-board-container .text foreignObject::-webkit-scrollbar{display:none}.plait-board-container .text foreignObject{scrollbar-width:none}.plait-text-container{min-height:20px;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,PingFang SC,Noto Sans,Noto Sans CJK SC,Microsoft Yahei,Hiragino Sans GB,Arial,sans-serif;font-size:14px;line-height:20px;display:block}.slate-editable-container{cursor:default;outline:none;padding:0}.slate-editable-container [data-slate-node=element]{-webkit-user-select:none;user-select:none}.slate-editable-container[contenteditable=true]{cursor:text}.slate-editable-container[contenteditable=true] [data-slate-node=element]{-webkit-user-select:text;user-select:text}.slate-editable-container [plait-underlined][plait-strike]{text-decoration:underline line-through}.slate-editable-container [plait-strike]{text-decoration:line-through}.slate-editable-container [plait-underlined]{text-decoration:underline}.slate-editable-container [plait-italic]{font-style:italic}.slate-editable-container [plait-bold]{font-weight:700}.slate-editable-container [plait-font-size="8"]{font-size:8px;line-height:1.5}.slate-editable-container [plait-font-size="9"]{font-size:9px;line-height:1.5}.slate-editable-container [plait-font-size="10"]{font-size:10px;line-height:1.5}.slate-editable-container [plait-font-size="11"]{font-size:11px;line-height:1.5}.slate-editable-container [plait-font-size="12"]{font-size:12px;line-height:1.5}.slate-editable-container [plait-font-size="13"]{font-size:13px;line-height:1.5}.slate-editable-container [plait-font-size="14"]{font-size:14px;line-height:1.5}.slate-editable-container [plait-font-size="15"]{font-size:15px;line-height:1.5}.slate-editable-container [plait-font-size="16"]{font-size:16px;line-height:1.5}.slate-editable-container [plait-font-size="17"]{font-size:17px;line-height:1.5}.slate-editable-container [plait-font-size="18"]{font-size:18px;line-height:1.5}.slate-editable-container [plait-font-size="19"]{font-size:19px;line-height:1.5}.slate-editable-container [plait-font-size="20"]{font-size:20px;line-height:1.5}.slate-editable-container [plait-font-size="21"]{font-size:21px;line-height:1.5}.slate-editable-container [plait-font-size="22"]{font-size:22px;line-height:1.5}.slate-editable-container [plait-font-size="23"]{font-size:23px;line-height:1.5}.slate-editable-container [plait-font-size="24"]{font-size:24px;line-height:1.5}.slate-editable-container [plait-font-size="25"]{font-size:25px;line-height:1.5}.slate-editable-container [plait-font-size="26"]{font-size:26px;line-height:1.5}.slate-editable-container [plait-font-size="27"]{font-size:27px;line-height:1.5}.slate-editable-container [plait-font-size="28"]{font-size:28px;line-height:1.5}.slate-editable-container [plait-font-size="29"]{font-size:29px;line-height:1.5}.slate-editable-container [plait-font-size="30"]{font-size:30px;line-height:1.5}.slate-editable-container [plait-font-size="31"]{font-size:31px;line-height:1.5}.slate-editable-container [plait-font-size="32"]{font-size:32px;line-height:1.5}.slate-editable-container [plait-font-size="33"]{font-size:33px;line-height:1.5}.slate-editable-container [plait-font-size="34"]{font-size:34px;line-height:1.5}.slate-editable-container [plait-font-size="35"]{font-size:35px;line-height:1.5}.slate-editable-container [plait-font-size="36"]{font-size:36px;line-height:1.5}.slate-editable-container [plait-font-size="37"]{font-size:37px;line-height:1.5}.slate-editable-container [plait-font-size="38"]{font-size:38px;line-height:1.5}.slate-editable-container [plait-font-size="39"]{font-size:39px;line-height:1.5}.slate-editable-container [plait-font-size="40"]{font-size:40px;line-height:1.5}.slate-editable-container [plait-font-size="41"]{font-size:41px;line-height:1.5}.slate-editable-container [plait-font-size="42"]{font-size:42px;line-height:1.5}.slate-editable-container [plait-font-size="43"]{font-size:43px;line-height:1.5}.slate-editable-container [plait-font-size="44"]{font-size:44px;line-height:1.5}.slate-editable-container [plait-font-size="45"]{font-size:45px;line-height:1.5}.slate-editable-container [plait-font-size="46"]{font-size:46px;line-height:1.5}.slate-editable-container [plait-font-size="47"]{font-size:47px;line-height:1.5}.slate-editable-container [plait-font-size="48"]{font-size:48px;line-height:1.5}.slate-editable-container [plait-font-size="49"]{font-size:49px;line-height:1.5}.slate-editable-container [plait-font-size="50"]{font-size:50px;line-height:1.5}.slate-editable-container [plait-font-size="51"]{font-size:51px;line-height:1.5}.slate-editable-container [plait-font-size="52"]{font-size:52px;line-height:1.5}.slate-editable-container [plait-font-size="53"]{font-size:53px;line-height:1.5}.slate-editable-container [plait-font-size="54"]{font-size:54px;line-height:1.5}.slate-editable-container [plait-font-size="55"]{font-size:55px;line-height:1.5}.slate-editable-container [plait-font-size="56"]{font-size:56px;line-height:1.5}.slate-editable-container [plait-font-size="57"]{font-size:57px;line-height:1.5}.slate-editable-container [plait-font-size="58"]{font-size:58px;line-height:1.5}.slate-editable-container [plait-font-size="59"]{font-size:59px;line-height:1.5}.slate-editable-container [plait-font-size="60"]{font-size:60px;line-height:1.5}.slate-editable-container [plait-font-size="61"]{font-size:61px;line-height:1.5}.slate-editable-container [plait-font-size="62"]{font-size:62px;line-height:1.5}.slate-editable-container [plait-font-size="63"]{font-size:63px;line-height:1.5}.slate-editable-container [plait-font-size="64"]{font-size:64px;line-height:1.5}.slate-editable-container [plait-font-size="65"]{font-size:65px;line-height:1.5}.slate-editable-container [plait-font-size="66"]{font-size:66px;line-height:1.5}.slate-editable-container [plait-font-size="67"]{font-size:67px;line-height:1.5}.slate-editable-container [plait-font-size="68"]{font-size:68px;line-height:1.5}.slate-editable-container [plait-font-size="69"]{font-size:69px;line-height:1.5}.slate-editable-container [plait-font-size="70"]{font-size:70px;line-height:1.5}.slate-editable-container [plait-font-size="71"]{font-size:71px;line-height:1.5}.slate-editable-container [plait-font-size="72"]{font-size:72px;line-height:1.5}.slate-editable-container [plait-font-size="73"]{font-size:73px;line-height:1.5}.slate-editable-container [plait-font-size="74"]{font-size:74px;line-height:1.5}.slate-editable-container [plait-font-size="75"]{font-size:75px;line-height:1.5}.slate-editable-container [plait-font-size="76"]{font-size:76px;line-height:1.5}.slate-editable-container [plait-font-size="77"]{font-size:77px;line-height:1.5}.slate-editable-container [plait-font-size="78"]{font-size:78px;line-height:1.5}
@@ -594,15 +594,15 @@ ne-card[data-card-name="codeblock"] .ne-card-resizer-mask {
 .outline-sidebar__content,
 .outline-sidebar--docked .outline-sidebar__content,
 .outline-sidebar--collapsed .outline-sidebar__content {
-  background: var(--shell-unified-background) !important;
-  border: 0 !important;
-  box-shadow: none !important;
+  background: var(--shell-unified-background);
+  border: 0;
+  box-shadow: none;
 }
 /* 上面那条会把"真正的工作面"也刷成壳色，所以这组搭档必须同时存在（宽窄共用）：
    固定/悬停展开的大纲面板要恢复成白色卡片。**成对改，缺一就会把面板刷成灰。** */
 /* 固定态的面板白卡：与"三栏卡片布局"（outline.css 共用作用域）同值，这里只补回被材质层刷掉的底色。 */
 .outline-sidebar--docked .outline-sidebar__content {
-  background: var(--b3-theme-background) !important;
+  background: var(--b3-theme-background);
 }
 /* 悬停展开的面板公式**不在这里**：唯一来源是 b3/layout.css 的"右侧浮动（大纲 hover）"，
    否则窄窗会掉回 outline.css 的老公式（1px 描边 + 14px 圆角），宽窄又变成两种样式。 */
@@ -1537,10 +1537,10 @@ ne-card[data-card-name="codeblock"] .ne-card-resizer-mask {
   }
 
   .sidebar.sidebar-floating {
-    border-top: 1px solid rgba(0, 0, 0, .16) !important;
-    border-right: 1px solid rgba(0, 0, 0, .16) !important;
-    border-bottom: 1px solid rgba(0, 0, 0, .16) !important;
-    border-left: 0 !important;
+    border-top: 1px solid rgba(0, 0, 0, .16);
+    border-right: 1px solid rgba(0, 0, 0, .16);
+    border-bottom: 1px solid rgba(0, 0, 0, .16);
+    border-left: 0;
     border-radius: 0 14px 14px 0;
     box-shadow: 18px 0 50px rgba(43, 50, 78, .18), 2px 0 8px rgba(43, 50, 78, .08);
   }
@@ -1618,7 +1618,7 @@ ne-card[data-card-name="codeblock"] .ne-card-resizer-mask {
 .app-shell.quick-notes-active .workspace {
   /* 小记页没有状态栏内容：不再保留空的 28px 状态行（用户 260915），
      底部 4px 也一并去掉，让工作面直接贴到窗口底。 */
-  grid-template-rows: minmax(0, 1fr) !important;
+  grid-template-rows: minmax(0, 1fr);
   /* 特异性 (0,3,0) 已经压过共用作用域里的 `.workspace { margin … 0 4px 0 }`，不需要 !important */
   margin: calc(var(--topbar-height) + 4px) 0 0;
   background: transparent;
@@ -1637,9 +1637,9 @@ ne-card[data-card-name="codeblock"] .ne-card-resizer-mask {
 }
 
 .app-shell.quick-notes-active .statusbar {
-  background: transparent !important;
-  border: 0 !important;
-  box-shadow: none !important;
+  background: transparent;
+  border: 0;
+  box-shadow: none;
 }
 
 /* Embedded mindmap/board cards are passive while the reader scrolls through the
@@ -1655,7 +1655,7 @@ ne-card[data-card-name="codeblock"] .ne-card-resizer-mask {
    document; clicking the card switches the gate back to overflow:auto. */
 .board-card-guard[data-canvas-interaction="passive"] .plait-board-container .viewport-container,
 .board-card-wrapper--viewer[data-canvas-interaction="passive"] .plait-board-container .viewport-container {
-  overflow: hidden !important;
+  overflow: hidden;
 }
 
 /* 附件（文件）卡：无论是否 hover 都不渲染背景/描边/阴影。

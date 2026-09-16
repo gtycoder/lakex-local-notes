@@ -19,7 +19,7 @@
   border-bottom: 0 !important;
   z-index: 400;
   box-shadow: none;
-  -webkit-backdrop-filter: none !important;
+  -webkit-backdrop-filter: none;
 }
 /* 顶栏左侧元素：工作空间（下拉）/云同步，不参与拖拽 */
 .tabbar-leading {
@@ -61,24 +61,24 @@
  * 窄窗于是掉回 outline.css 的 `--shell-material`（#f6f6f6），比壳层亮一档 ——
  * 用户看到的就是"最右侧那条颜色跟别人不一样"（260915 截图）。 */
 .outline-sidebar__rail {
-  margin-top: 0 !important;
-  padding-top: 0 !important;
-  background: transparent !important;
-  border-right: 0 !important;
-  border-left: 0 !important;
+  margin-top: 0;
+  padding-top: 0;
+  background: transparent;
+  border-right: 0;
+  border-left: 0;
 }
 
 /* 右侧浮动（大纲 hover）：思源半高悬浮带。**宽窄共用**——这是大纲面板"最终长相"的
  * 唯一来源（白面 / 0 描边 / 12px 圆角 / dock 阴影）。原先它只在宽窗媒体块里，
  * 窄窗于是掉回 outline.css 更老的一套公式（1px 描边 + 14px 圆角），跨宽度看就是两种样式。 */
 .outline-sidebar--collapsed.outline-sidebar--hovered .outline-sidebar__content {
-  position: fixed !important;
-  left: auto !important;
-  width: var(--outline-sidebar-width, 280px) !important;
-  min-width: 0 !important;
-  background: var(--b3-theme-background) !important;
-  border-radius: var(--b3-border-radius-b) 0 0 var(--b3-border-radius-b) !important;
-  border: 0 !important;
+  position: fixed;
+  left: auto;
+  width: var(--outline-sidebar-width, 280px);
+  min-width: 0;
+  background: var(--b3-theme-background);
+  border-radius: var(--b3-border-radius-b) 0 0 var(--b3-border-radius-b);
+  border: 0;
 }
 
 /* 标签项：思源 layout-tab-bar .item 观感（窄窗同样成立——组 4） */
@@ -106,7 +106,7 @@
   border: 0 !important;
   box-shadow: none !important;
   border-radius: var(--b3-border-radius-b);
-  margin: calc(var(--topbar-height) + 4px) 4px 4px 0 !important;
+  margin: calc(var(--topbar-height) + 4px) 4px 4px 0;
 }
 
 /* 左侧浮动：思源半高悬浮带（悬停活动轨出现）——收起态在宽窄两侧都是"悬停预览"，
@@ -162,10 +162,10 @@
 
   /* 右侧大纲固定：白色卡片、无边框/阴影、左侧 4px 灰缝 */
   .outline-sidebar--docked .outline-sidebar__content {
-    background: var(--b3-theme-background) !important;
-    border: 0 !important;
-    box-shadow: none !important;
-    border-radius: var(--b3-border-radius-b) !important;
+    background: var(--b3-theme-background);
+    border: 0;
+    box-shadow: none;
+    border-radius: var(--b3-border-radius-b);
   }
 
   /* 卡片圆角 / .statusbar 已搬到共用作用域（见文件开头） */
@@ -347,8 +347,8 @@
   align-self: stretch;
   height: 100%;
   min-height: 0;
-  overflow-x: auto !important;
-  overflow-y: hidden !important;
+  overflow-x: auto;
+  overflow-y: hidden;
 }
 
 @media (min-width: 761px) {
@@ -362,8 +362,8 @@
   }
   .sidebar .note-list {
     max-height: 100%;
-    overflow-x: hidden !important;
-    overflow-y: auto !important;
+    overflow-x: hidden;
+    overflow-y: auto;
   }
 }
 

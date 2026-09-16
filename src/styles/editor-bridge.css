@@ -18,4 +18,4 @@
 
 /* A: 编辑器正文与 UI 同源字体（消除三处 font-family 打架；vendor .ne-engine 默认栈在 mac 会回退 Helvetica） */
 .lake-editor-mount .ne-engine,
-.lake-editor-mount .ne-viewer-body { font-family: var(--b3-font-family) !important; }
+.lake-editor-mount .ne-viewer-body { font-family: var(--b3-font-family); }

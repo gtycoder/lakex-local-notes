@@ -9,10 +9,10 @@
   background: var(--lake-sync-pending, #d29042);
 }
 .tab-item .tab-close {
-  flex: 0 0 18px !important;
+  flex: 0 0 18px;
   width: 18px !important;
   height: 18px !important;
-  margin-left: 2px !important;
+  margin-left: 2px;
 }
 .tab-item:hover .tab-close,
 .tab-item .tab-close:focus-visible { opacity: .58; }
@@ -164,7 +164,7 @@
 .document-pane .lake-editor-mount .ne-viewer-body h1,
 .document-pane .lake-editor-mount .ne-viewer-body h2,
 .document-pane .lake-editor-mount .ne-viewer-body h3 {
-  color: var(--lake-text) !important;
+  color: var(--lake-text);
 }
 .tree-row.dragging {
   transform: none;

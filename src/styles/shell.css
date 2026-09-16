@@ -1,7 +1,7 @@
 /* Product shell aliases. Lake's native editor toolbar remains untouched. */
 :root {
   color: var(--lake-text);
-  background: var(--lake-shell) !important;
+  background: var(--lake-shell);
 }
 
 .app-shell {
@@ -70,7 +70,7 @@
   pointer-events: none;
 }
 .app-shell.focus-mode .workspace { grid-column: 3; }
-.app-shell.focus-mode .document-pane { border-radius: 0 !important; }
+.app-shell.focus-mode .document-pane { border-radius: 0; }
 
 /* B3 dark selectors use higher specificity; these aliases intentionally win only for the shell surfaces. */
 html[data-theme="dark"] .sidebar.sidebar-docked,
@@ -111,7 +111,7 @@ html[data-theme="dark"] .document-pane .ne-engine > ne-h6 ne-heading-content {
    menu click while opacity is being animated.（宽窄共用） */
 .app-shell.focus-mode .outline-sidebar,
 .app-shell.focus-mode .outline-sidebar * {
-  pointer-events: none !important;
+  pointer-events: none;
 }
 
 
@@ -120,7 +120,7 @@ html[data-theme="dark"] .document-pane .ne-engine > ne-h6 ne-heading-content {
    the scrollbar after the outline opens. */
 /* 展开的大纲浮层同样要让开编辑器滚动条（宽窄共用；窄窗正文铺到窗口边，这条更关键）。 */
 .outline-sidebar--collapsed.outline-sidebar--hovered .outline-sidebar__content {
-  right: calc(var(--outline-collapsed-width) + var(--outline-scrollbar-clearance, 13px)) !important;
+  right: calc(var(--outline-collapsed-width) + var(--outline-scrollbar-clearance, 13px));
 }
 
 
@@ -134,16 +134,16 @@ html[data-theme="dark"] .document-pane .ne-engine > ne-h6 ne-heading-content {
   top: 72px !important;
   bottom: 72px !important;
   height: calc(100vh - 144px) !important;
-  max-height: calc(100vh - 144px) !important;
-  overflow: hidden !important;
+  max-height: calc(100vh - 144px);
+  overflow: hidden;
   transition: opacity 120ms ease-out, transform 120ms var(--lake-ease-standard) !important;
 }
 /* 右侧大纲浮层与左侧目录浮层同高（对齐到 top/bottom 72），消除左右弹出高度不一致 */
 .outline-sidebar--collapsed.outline-sidebar--hovered .outline-sidebar__content {
-  top: 72px !important;
-  bottom: 72px !important;
-  height: calc(100vh - 144px) !important;
-  max-height: calc(100vh - 144px) !important;
+  top: 72px;
+  bottom: 72px;
+  height: calc(100vh - 144px);
+  max-height: calc(100vh - 144px);
 }
 
 /* #2 浮层阴影：左右统一、更柔；阴影静态、不参与切出动画（避免逐帧重绘，保性能与速度） */
@@ -151,8 +151,8 @@ html[data-theme="dark"] .document-pane .ne-engine > ne-h6 ne-heading-content {
   box-shadow: 16px 0 26px -14px rgba(43, 50, 78, .30) !important; /* 单侧投影：负 spread 收掉上下溢出 */
 }
 .outline-sidebar--collapsed.outline-sidebar--hovered .outline-sidebar__content {
-  box-shadow: -16px 0 26px -14px rgba(43, 50, 78, .30) !important; /* 单侧投影（朝内容侧） */
-  transition: opacity 180ms var(--lake-ease-standard), transform 180ms var(--lake-ease-standard), visibility 180ms linear !important;
+  box-shadow: -16px 0 26px -14px rgba(43, 50, 78, .30); /* 单侧投影（朝内容侧） */
+  transition: opacity 180ms var(--lake-ease-standard), transform 180ms var(--lake-ease-standard), visibility 180ms linear;
 }
 
 /* Showing the library preview is immediate; only the collapse is animated.
@@ -161,7 +161,7 @@ html[data-theme="dark"] .document-pane .ne-engine > ne-h6 ne-heading-content {
    （窄窗抽屉走的就是 floating 类；实测不加前缀时专注模式里抽屉仍然可见、还能点）。 */
 .app-shell:not(.focus-mode) .sidebar.sidebar-floating {
   opacity: 1 !important;
-  transform: none !important;
+  transform: none;
   pointer-events: auto !important;
   transition: none !important;
 }
