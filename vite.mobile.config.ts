@@ -14,6 +14,10 @@ const ALIPAY_JS_REUSE: Record<string, string> = {
   "https://gw.alipayobjects.com/os/lib/katex/0.16.8/dist/katex.min.js": "/vendor/cdn/os/lib/katex/0.16.8/dist/katex.min.js",
   "https://gw.alipayobjects.com/os/lib/katex/0.16.8/dist/contrib/mhchem.min.js": "/vendor/cdn/os/lib/katex/0.16.8/dist/contrib/mhchem.min.js",
 };
+/** 少数非 gw host 的运行期图片：镜像后按完整 URL 精确重写（basename 有撞名风险，故用整串精确匹配）。 */
+const MIRROR_EXACT: Record<string, string> = {
+  "https://mdn.alipayobjects.com/huamei_0prmtq/afts/img/A*KA8xSYmgiYgAAAAAAAAAAAAADvuFAQ/original": "/vendor/lakex/misc/drawnix-default.jpg",
+};
 
 /** 移动端 CSP（M0 POC）：
  * - Capacitor Android WebView 默认 scheme：https://localhost（androidScheme=https）
@@ -81,6 +85,9 @@ function lakexAlipayLocalMobile(): Plugin {
     },
     transform(code, id) {
       if (!id.includes("lakex-doc-react")) return;
+      for (const [from, to] of Object.entries(MIRROR_EXACT)) {
+        if (code.includes(from)) code = code.replaceAll(from, to);
+      }
       const cleanId = id.split("?")[0];
       if (cleanId.endsWith(".css")) {
         return code.replace(/url\(https:\/\/gw\.alipayobjects\.com\/[^)]+\)/g, (m) => {
@@ -96,6 +103,7 @@ function lakexAlipayLocalMobile(): Plugin {
           return `/vendor/lakex/alipay/${name}`;
         });
       }
+      return code;
     },
   };
 }

@@ -12,6 +12,10 @@ const ALIPAY_JS_REUSE: Record<string, string> = {
   "https://gw.alipayobjects.com/os/lib/katex/0.16.8/dist/katex.min.js": "/vendor/cdn/os/lib/katex/0.16.8/dist/katex.min.js",
   "https://gw.alipayobjects.com/os/lib/katex/0.16.8/dist/contrib/mhchem.min.js": "/vendor/cdn/os/lib/katex/0.16.8/dist/contrib/mhchem.min.js",
 };
+/** 少数非 gw host 的运行期图片：镜像后按完整 URL 精确重写（basename 有撞名风险，故用整串精确匹配）。 */
+const MIRROR_EXACT: Record<string, string> = {
+  "https://mdn.alipayobjects.com/huamei_0prmtq/afts/img/A*KA8xSYmgiYgAAAAAAAAAAAAADvuFAQ/original": "/vendor/lakex/misc/drawnix-default.jpg",
+};
 /** V5 §5.6：dev/prod 双 CSP（构建期注入，避免 .env 依赖）。
  * dev：vite/react-refresh 内联 preamble 需要 unsafe-inline；
  * prod：script-src 无 unsafe-inline，内联 KITCHEN_URL 脚本用 sha256 hash 放行。
@@ -33,6 +37,9 @@ function lakexAlipayLocal(): Plugin {
     },
     transform(code, id) {
       if (!id.includes("lakex-doc-react")) return;
+      for (const [from, to] of Object.entries(MIRROR_EXACT)) {
+        if (code.includes(from)) code = code.replaceAll(from, to);
+      }
       // JS 模块 id 带 ?v= query，先剥离再判扩展名
       const cleanId = id.split("?")[0];
       if (cleanId.endsWith(".css")) {
@@ -49,6 +56,7 @@ function lakexAlipayLocal(): Plugin {
           return `/vendor/lakex/alipay/${name}`;
         });
       }
+      return code;
     },
   };
 }
