@@ -662,8 +662,9 @@ export function createLakeDocument(
 
   const mergedOptions = deepMerge(defaultConfig, customOptions);
 
-  prepareCustomCards(mergedOptions);
+  // 先收集图标：新 vendor 的 React `icon` 挂在 `{ config, icon }` 包装上，prepareCustomCards 解包后会丢。
   ensureCustomCardIcons(mergedOptions);
+  prepareCustomCards(mergedOptions);
 
   ensureLakeLongTaskObserver();
   lakeMark("lake:create:start");
