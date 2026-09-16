@@ -1,0 +1,912 @@
+[
+ {
+  "file": "src/styles.css",
+  "selector": ".checkbox",
+  "occ": 0,
+  "prop": "flex-direction",
+  "value": "row",
+  "important": true,
+  "dropImportant": true,
+  "line": 111
+ },
+ {
+  "file": "src/styles.css",
+  "selector": ".checkbox",
+  "occ": 0,
+  "prop": "font-weight",
+  "value": "400",
+  "important": true,
+  "dropImportant": true,
+  "line": 111
+ },
+ {
+  "file": "src/styles.css",
+  "selector": ".sync-progress-bar.indeterminate",
+  "occ": 0,
+  "prop": "width",
+  "value": "34%",
+  "important": true,
+  "dropImportant": true,
+  "line": 114
+ },
+ {
+  "file": "src/styles.css",
+  "selector": ".lake-editor-tab.native-toc-hidden .ne-toc-sidebar",
+  "occ": 0,
+  "prop": "display",
+  "value": "none",
+  "important": true,
+  "dropImportant": true,
+  "line": 272
+ },
+ {
+  "file": "src/styles.css",
+  "selector": ".ne-codeblock .ne-codeblock-inner",
+  "occ": 0,
+  "prop": "height",
+  "value": "auto",
+  "important": true,
+  "dropImportant": true,
+  "line": 302
+ },
+ {
+  "file": "src/styles.css",
+  "selector": ".ne-codeblock .CodeMirror",
+  "occ": 0,
+  "prop": "height",
+  "value": "auto",
+  "important": true,
+  "dropImportant": true,
+  "line": 310
+ },
+ {
+  "file": "src/styles.css",
+  "selector": ".ne-codeblock .CodeMirror-scroll",
+  "occ": 0,
+  "prop": "overflow",
+  "value": "visible",
+  "important": true,
+  "dropImportant": true,
+  "line": 318
+ },
+ {
+  "file": "src/styles.css",
+  "selector": ".ne-codeblock .CodeMirror-sizer",
+  "occ": 0,
+  "prop": "min-height",
+  "value": "0",
+  "important": true,
+  "dropImportant": true,
+  "line": 321
+ },
+ {
+  "file": "src/styles.css",
+  "selector": ".board-card-wrapper .drawnix,.board-card-wrapper .drawnix .plait-board-container,.board-card-wrapper .drawnix .viewport-container",
+  "occ": 0,
+  "prop": "height",
+  "value": "100%",
+  "important": true,
+  "dropImportant": true,
+  "line": 386
+ },
+ {
+  "file": "src/styles.css",
+  "selector": ".board-card-wrapper--viewer .drawnix .app-toolbar,.board-card-wrapper--viewer .drawnix .draw-toolbar,.board-card-wrapper--viewer .drawnix .zoom-toolbar,.board-card-wrapper--viewer .drawnix .theme-toolbar,.board-card-wrapper--viewer .drawnix .popup-toolbar,.board-card-wrapper--viewer .drawnix .pencil-mode-toolbar,.board-card-wrapper--viewer .drawnix canvas[class*=\"laser-pointer\"]",
+  "occ": 0,
+  "prop": "display",
+  "value": "none",
+  "important": true,
+  "dropImportant": true,
+  "line": 417
+ },
+ {
+  "file": "src/styles.css",
+  "selector": ".outline-sidebar,.outline-sidebar__content,.outline-sidebar--docked .outline-sidebar__content,.outline-sidebar--collapsed .outline-sidebar__content",
+  "occ": 0,
+  "prop": "background",
+  "value": "var(--shell-unified-background)",
+  "important": true,
+  "dropImportant": true,
+  "line": 597
+ },
+ {
+  "file": "src/styles.css",
+  "selector": ".outline-sidebar,.outline-sidebar__content,.outline-sidebar--docked .outline-sidebar__content,.outline-sidebar--collapsed .outline-sidebar__content",
+  "occ": 0,
+  "prop": "border",
+  "value": "0",
+  "important": true,
+  "dropImportant": true,
+  "line": 598
+ },
+ {
+  "file": "src/styles.css",
+  "selector": ".outline-sidebar,.outline-sidebar__content,.outline-sidebar--docked .outline-sidebar__content,.outline-sidebar--collapsed .outline-sidebar__content",
+  "occ": 0,
+  "prop": "box-shadow",
+  "value": "none",
+  "important": true,
+  "dropImportant": true,
+  "line": 599
+ },
+ {
+  "file": "src/styles.css",
+  "selector": ".outline-sidebar--docked .outline-sidebar__content",
+  "occ": 0,
+  "prop": "background",
+  "value": "var(--b3-theme-background)",
+  "important": true,
+  "dropImportant": true,
+  "line": 605
+ },
+ {
+  "file": "src/styles.css",
+  "selector": ".app-shell,.sidebar,.activity-button,.tab-item,.tab-switcher,.tab-switcher-menu,.tree-children,.seg__item",
+  "occ": 0,
+  "prop": "animation",
+  "value": "none",
+  "important": true,
+  "dropImportant": true,
+  "line": 934
+ },
+ {
+  "file": "src/styles.css",
+  "selector": ".app-shell,.sidebar,.activity-button,.tab-item,.tab-switcher,.tab-switcher-menu,.tree-children,.seg__item",
+  "occ": 0,
+  "prop": "transition-duration",
+  "value": "1ms",
+  "important": true,
+  "dropImportant": true,
+  "line": 934
+ },
+ {
+  "file": "src/styles.css",
+  "selector": ".sidebar.sidebar-floating",
+  "occ": 0,
+  "prop": "border-top",
+  "value": "1px solid rgba(0,0,0,.16)",
+  "important": true,
+  "dropImportant": true,
+  "line": 1540
+ },
+ {
+  "file": "src/styles.css",
+  "selector": ".sidebar.sidebar-floating",
+  "occ": 0,
+  "prop": "border-right",
+  "value": "1px solid rgba(0,0,0,.16)",
+  "important": true,
+  "dropImportant": true,
+  "line": 1541
+ },
+ {
+  "file": "src/styles.css",
+  "selector": ".sidebar.sidebar-floating",
+  "occ": 0,
+  "prop": "border-bottom",
+  "value": "1px solid rgba(0,0,0,.16)",
+  "important": true,
+  "dropImportant": true,
+  "line": 1542
+ },
+ {
+  "file": "src/styles.css",
+  "selector": ".sidebar.sidebar-floating",
+  "occ": 0,
+  "prop": "border-left",
+  "value": "0",
+  "important": true,
+  "dropImportant": true,
+  "line": 1543
+ },
+ {
+  "file": "src/styles.css",
+  "selector": ".app-shell.quick-notes-active .workspace",
+  "occ": 1,
+  "prop": "grid-template-rows",
+  "value": "minmax(0,1fr)",
+  "important": true,
+  "dropImportant": true,
+  "line": 1621
+ },
+ {
+  "file": "src/styles.css",
+  "selector": ".app-shell.quick-notes-active .statusbar",
+  "occ": 0,
+  "prop": "background",
+  "value": "transparent",
+  "important": true,
+  "dropImportant": true,
+  "line": 1640
+ },
+ {
+  "file": "src/styles.css",
+  "selector": ".app-shell.quick-notes-active .statusbar",
+  "occ": 0,
+  "prop": "border",
+  "value": "0",
+  "important": true,
+  "dropImportant": true,
+  "line": 1641
+ },
+ {
+  "file": "src/styles.css",
+  "selector": ".app-shell.quick-notes-active .statusbar",
+  "occ": 0,
+  "prop": "box-shadow",
+  "value": "none",
+  "important": true,
+  "dropImportant": true,
+  "line": 1642
+ },
+ {
+  "file": "src/styles.css",
+  "selector": ".board-card-guard[data-canvas-interaction=\"passive\"] .plait-board-container .viewport-container,.board-card-wrapper--viewer[data-canvas-interaction=\"passive\"] .plait-board-container .viewport-container",
+  "occ": 0,
+  "prop": "overflow",
+  "value": "hidden",
+  "important": true,
+  "dropImportant": true,
+  "line": 1658
+ },
+ {
+  "file": "src/features/outline/outline.css",
+  "selector": ".outline-sidebar--collapsed.outline-sidebar--hovered .outline-sidebar__content",
+  "occ": 0,
+  "prop": "opacity",
+  "value": "1",
+  "important": true,
+  "dropImportant": true,
+  "line": 433
+ },
+ {
+  "file": "src/features/outline/outline.css",
+  "selector": ".outline-sidebar--collapsed.outline-sidebar--hovered .outline-sidebar__content",
+  "occ": 0,
+  "prop": "visibility",
+  "value": "visible",
+  "important": true,
+  "dropImportant": true,
+  "line": 434
+ },
+ {
+  "file": "src/features/outline/outline.css",
+  "selector": ".outline-sidebar--collapsed.outline-sidebar--hovered .outline-sidebar__content",
+  "occ": 0,
+  "prop": "pointer-events",
+  "value": "auto",
+  "important": true,
+  "dropImportant": true,
+  "line": 435
+ },
+ {
+  "file": "src/features/outline/outline.css",
+  "selector": ".outline-sidebar--collapsed.outline-sidebar--hovered .outline-sidebar__content",
+  "occ": 0,
+  "prop": "transform",
+  "value": "translateX(0)",
+  "important": true,
+  "dropImportant": true,
+  "line": 436
+ },
+ {
+  "file": "src/b3/components.css",
+  "selector": ".context-menu,.context-menu-submenu,.create-menu,.tab-switcher-menu",
+  "occ": 0,
+  "prop": "-webkit-backdrop-filter",
+  "value": "none",
+  "important": true,
+  "dropImportant": true,
+  "line": 29
+ },
+ {
+  "file": "src/b3/components.css",
+  "selector": ".settings-overlay,.search-panel-backdrop,.trash-panel-backdrop,.history-panel-backdrop",
+  "occ": 0,
+  "prop": "-webkit-backdrop-filter",
+  "value": "none",
+  "important": true,
+  "dropImportant": true,
+  "line": 97
+ },
+ {
+  "file": "src/b3/components.css",
+  "selector": ".settings-header,.settings-panel-large .settings-header",
+  "occ": 0,
+  "prop": "-webkit-backdrop-filter",
+  "value": "none",
+  "important": true,
+  "dropImportant": true,
+  "line": 118
+ },
+ {
+  "file": "src/b3/components.css",
+  "selector": ".mode-toggle.selected",
+  "occ": 0,
+  "prop": "background-color",
+  "value": "var(--b3-theme-primary-lightest)",
+  "important": true,
+  "dropImportant": true,
+  "line": 153
+ },
+ {
+  "file": "src/b3/components.css",
+  "selector": ".mobile-library-header span,.mobile-done,.mobile-reader-actions button.selected",
+  "occ": 0,
+  "prop": "color",
+  "value": "var(--b3-theme-primary)",
+  "important": true,
+  "dropImportant": true,
+  "line": 167
+ },
+ {
+  "file": "src/b3/components.css",
+  "selector": ".mobile-note-icon",
+  "occ": 0,
+  "prop": "background",
+  "value": "var(--b3-theme-primary-lightest)",
+  "important": true,
+  "dropImportant": true,
+  "line": 170
+ },
+ {
+  "file": "src/b3/components.css",
+  "selector": ".mobile-note-icon",
+  "occ": 0,
+  "prop": "color",
+  "value": "var(--b3-theme-primary)",
+  "important": true,
+  "dropImportant": true,
+  "line": 171
+ },
+ {
+  "file": "src/b3/components.css",
+  "selector": ".tab-item.deleted,.tab-item.deleted.active",
+  "occ": 0,
+  "prop": "color",
+  "value": "var(--b3-theme-error)",
+  "important": true,
+  "dropImportant": true,
+  "line": 180
+ },
+ {
+  "file": "src/b3/components.css",
+  "selector": ".tab-item.deleted,.tab-item.deleted.active",
+  "occ": 0,
+  "prop": "background",
+  "value": "var(--b3-card-error-background)",
+  "important": true,
+  "dropImportant": true,
+  "line": 181
+ },
+ {
+  "file": "src/b3/components.css",
+  "selector": ".sync-tab-action.success .sync-state-dot",
+  "occ": 0,
+  "prop": "background",
+  "value": "var(--b3-theme-success)",
+  "important": true,
+  "dropImportant": true,
+  "line": 192
+ },
+ {
+  "file": "src/b3/components.css",
+  "selector": ".sync-tab-action.error .sync-state-dot",
+  "occ": 0,
+  "prop": "background",
+  "value": "var(--b3-theme-error)",
+  "important": true,
+  "dropImportant": true,
+  "line": 195
+ },
+ {
+  "file": "src/b3/components.css",
+  "selector": ".sync-tab-action.syncing .sync-state-dot",
+  "occ": 0,
+  "prop": "background",
+  "value": "var(--b3-theme-primary)",
+  "important": true,
+  "dropImportant": true,
+  "line": 198
+ },
+ {
+  "file": "src/b3/components.css",
+  "selector": ".sync-toast-bar.indeterminate",
+  "occ": 0,
+  "prop": "width",
+  "value": "34%",
+  "important": true,
+  "dropImportant": true,
+  "line": 291
+ },
+ {
+  "file": "src/b3/animations.css",
+  "selector": ".outline-item,.quick-note-card,.sync-toast,.sync-toast-bar.indeterminate,.toolbar__sync.syncing svg,.spin",
+  "occ": 0,
+  "prop": "animation",
+  "value": "none",
+  "important": true,
+  "dropImportant": true,
+  "line": 26
+ },
+ {
+  "file": "src/b3/animations.css",
+  "selector": ".sync-toast-bar",
+  "occ": 0,
+  "prop": "transition",
+  "value": "none",
+  "important": true,
+  "dropImportant": true,
+  "line": 30
+ },
+ {
+  "file": "src/b3/layout.css",
+  "selector": ".tab-bar",
+  "occ": 0,
+  "prop": "-webkit-backdrop-filter",
+  "value": "none",
+  "important": true,
+  "dropImportant": true,
+  "line": 22
+ },
+ {
+  "file": "src/b3/layout.css",
+  "selector": ".activity-rail",
+  "occ": 0,
+  "prop": "border-left",
+  "value": "0",
+  "important": true,
+  "dropImportant": true,
+  "line": 56
+ },
+ {
+  "file": "src/b3/layout.css",
+  "selector": ".outline-sidebar__rail",
+  "occ": 0,
+  "prop": "margin-top",
+  "value": "0",
+  "important": true,
+  "dropImportant": true,
+  "line": 64
+ },
+ {
+  "file": "src/b3/layout.css",
+  "selector": ".outline-sidebar__rail",
+  "occ": 0,
+  "prop": "padding-top",
+  "value": "0",
+  "important": true,
+  "dropImportant": true,
+  "line": 65
+ },
+ {
+  "file": "src/b3/layout.css",
+  "selector": ".outline-sidebar__rail",
+  "occ": 0,
+  "prop": "background",
+  "value": "transparent",
+  "important": true,
+  "dropImportant": true,
+  "line": 66
+ },
+ {
+  "file": "src/b3/layout.css",
+  "selector": ".outline-sidebar__rail",
+  "occ": 0,
+  "prop": "border-right",
+  "value": "0",
+  "important": true,
+  "dropImportant": true,
+  "line": 67
+ },
+ {
+  "file": "src/b3/layout.css",
+  "selector": ".outline-sidebar__rail",
+  "occ": 0,
+  "prop": "border-left",
+  "value": "0",
+  "important": true,
+  "dropImportant": true,
+  "line": 68
+ },
+ {
+  "file": "src/b3/layout.css",
+  "selector": ".outline-sidebar--collapsed.outline-sidebar--hovered .outline-sidebar__content",
+  "occ": 0,
+  "prop": "position",
+  "value": "fixed",
+  "important": true,
+  "dropImportant": true,
+  "line": 75
+ },
+ {
+  "file": "src/b3/layout.css",
+  "selector": ".outline-sidebar--collapsed.outline-sidebar--hovered .outline-sidebar__content",
+  "occ": 0,
+  "prop": "left",
+  "value": "auto",
+  "important": true,
+  "dropImportant": true,
+  "line": 76
+ },
+ {
+  "file": "src/b3/layout.css",
+  "selector": ".outline-sidebar--collapsed.outline-sidebar--hovered .outline-sidebar__content",
+  "occ": 0,
+  "prop": "width",
+  "value": "var(--outline-sidebar-width,280px)",
+  "important": true,
+  "dropImportant": true,
+  "line": 77
+ },
+ {
+  "file": "src/b3/layout.css",
+  "selector": ".outline-sidebar--collapsed.outline-sidebar--hovered .outline-sidebar__content",
+  "occ": 0,
+  "prop": "min-width",
+  "value": "0",
+  "important": true,
+  "dropImportant": true,
+  "line": 78
+ },
+ {
+  "file": "src/b3/layout.css",
+  "selector": ".outline-sidebar--collapsed.outline-sidebar--hovered .outline-sidebar__content",
+  "occ": 0,
+  "prop": "background",
+  "value": "var(--b3-theme-background)",
+  "important": true,
+  "dropImportant": true,
+  "line": 79
+ },
+ {
+  "file": "src/b3/layout.css",
+  "selector": ".outline-sidebar--collapsed.outline-sidebar--hovered .outline-sidebar__content",
+  "occ": 0,
+  "prop": "border-radius",
+  "value": "var(--b3-border-radius-b) 0 0 var(--b3-border-radius-b)",
+  "important": true,
+  "dropImportant": true,
+  "line": 80
+ },
+ {
+  "file": "src/b3/layout.css",
+  "selector": ".outline-sidebar--collapsed.outline-sidebar--hovered .outline-sidebar__content",
+  "occ": 0,
+  "prop": "border",
+  "value": "0",
+  "important": true,
+  "dropImportant": true,
+  "line": 81
+ },
+ {
+  "file": "src/b3/layout.css",
+  "selector": ".sidebar.sidebar-docked",
+  "occ": 0,
+  "prop": "margin",
+  "value": "calc(var(--topbar-height) + 4px) 4px 4px 0",
+  "important": true,
+  "dropImportant": true,
+  "line": 109
+ },
+ {
+  "file": "src/b3/layout.css",
+  "selector": ".outline-sidebar--docked .outline-sidebar__content",
+  "occ": 0,
+  "prop": "background",
+  "value": "var(--b3-theme-background)",
+  "important": true,
+  "dropImportant": true,
+  "line": 165
+ },
+ {
+  "file": "src/b3/layout.css",
+  "selector": ".outline-sidebar--docked .outline-sidebar__content",
+  "occ": 0,
+  "prop": "border",
+  "value": "0",
+  "important": true,
+  "dropImportant": true,
+  "line": 166
+ },
+ {
+  "file": "src/b3/layout.css",
+  "selector": ".outline-sidebar--docked .outline-sidebar__content",
+  "occ": 0,
+  "prop": "box-shadow",
+  "value": "none",
+  "important": true,
+  "dropImportant": true,
+  "line": 167
+ },
+ {
+  "file": "src/b3/layout.css",
+  "selector": ".outline-sidebar--docked .outline-sidebar__content",
+  "occ": 0,
+  "prop": "border-radius",
+  "value": "var(--b3-border-radius-b)",
+  "important": true,
+  "dropImportant": true,
+  "line": 168
+ },
+ {
+  "file": "src/b3/layout.css",
+  "selector": ".tab-items",
+  "occ": 1,
+  "prop": "overflow-x",
+  "value": "auto",
+  "important": true,
+  "dropImportant": true,
+  "line": 350
+ },
+ {
+  "file": "src/b3/layout.css",
+  "selector": ".tab-items",
+  "occ": 1,
+  "prop": "overflow-y",
+  "value": "hidden",
+  "important": true,
+  "dropImportant": true,
+  "line": 351
+ },
+ {
+  "file": "src/b3/layout.css",
+  "selector": ".sidebar .note-list",
+  "occ": 0,
+  "prop": "overflow-x",
+  "value": "hidden",
+  "important": true,
+  "dropImportant": true,
+  "line": 365
+ },
+ {
+  "file": "src/b3/layout.css",
+  "selector": ".sidebar .note-list",
+  "occ": 0,
+  "prop": "overflow-y",
+  "value": "auto",
+  "important": true,
+  "dropImportant": true,
+  "line": 366
+ },
+ {
+  "file": "src/styles/shell.css",
+  "selector": ":root",
+  "occ": 0,
+  "prop": "background",
+  "value": "var(--lake-shell)",
+  "important": true,
+  "dropImportant": true,
+  "line": 4
+ },
+ {
+  "file": "src/styles/shell.css",
+  "selector": ".app-shell,.sidebar,.outline-sidebar,.tab-item,.floating-dialog",
+  "occ": 0,
+  "prop": "transition",
+  "value": "none",
+  "important": true,
+  "dropImportant": true,
+  "line": 57
+ },
+ {
+  "file": "src/styles/shell.css",
+  "selector": ".app-shell.focus-mode .document-pane",
+  "occ": 0,
+  "prop": "border-radius",
+  "value": "0",
+  "important": true,
+  "dropImportant": true,
+  "line": 73
+ },
+ {
+  "file": "src/styles/shell.css",
+  "selector": ".app-shell.focus-mode .outline-sidebar,.app-shell.focus-mode .outline-sidebar *",
+  "occ": 0,
+  "prop": "pointer-events",
+  "value": "none",
+  "important": true,
+  "dropImportant": true,
+  "line": 114
+ },
+ {
+  "file": "src/styles/shell.css",
+  "selector": ".outline-sidebar--collapsed.outline-sidebar--hovered .outline-sidebar__content",
+  "occ": 0,
+  "prop": "right",
+  "value": "calc(var(--outline-collapsed-width) + var(--outline-scrollbar-clearance,13px))",
+  "important": true,
+  "dropImportant": true,
+  "line": 123
+ },
+ {
+  "file": "src/styles/shell.css",
+  "selector": ".sidebar.sidebar-floating,.sidebar.sidebar-collapsed",
+  "occ": 0,
+  "prop": "max-height",
+  "value": "calc(100vh - 144px)",
+  "important": true,
+  "dropImportant": true,
+  "line": 137
+ },
+ {
+  "file": "src/styles/shell.css",
+  "selector": ".sidebar.sidebar-floating,.sidebar.sidebar-collapsed",
+  "occ": 0,
+  "prop": "overflow",
+  "value": "hidden",
+  "important": true,
+  "dropImportant": true,
+  "line": 138
+ },
+ {
+  "file": "src/styles/shell.css",
+  "selector": ".outline-sidebar--collapsed.outline-sidebar--hovered .outline-sidebar__content",
+  "occ": 1,
+  "prop": "top",
+  "value": "72px",
+  "important": true,
+  "dropImportant": true,
+  "line": 143
+ },
+ {
+  "file": "src/styles/shell.css",
+  "selector": ".outline-sidebar--collapsed.outline-sidebar--hovered .outline-sidebar__content",
+  "occ": 1,
+  "prop": "bottom",
+  "value": "72px",
+  "important": true,
+  "dropImportant": true,
+  "line": 144
+ },
+ {
+  "file": "src/styles/shell.css",
+  "selector": ".outline-sidebar--collapsed.outline-sidebar--hovered .outline-sidebar__content",
+  "occ": 1,
+  "prop": "height",
+  "value": "calc(100vh - 144px)",
+  "important": true,
+  "dropImportant": true,
+  "line": 145
+ },
+ {
+  "file": "src/styles/shell.css",
+  "selector": ".outline-sidebar--collapsed.outline-sidebar--hovered .outline-sidebar__content",
+  "occ": 1,
+  "prop": "max-height",
+  "value": "calc(100vh - 144px)",
+  "important": true,
+  "dropImportant": true,
+  "line": 146
+ },
+ {
+  "file": "src/styles/shell.css",
+  "selector": ".outline-sidebar--collapsed.outline-sidebar--hovered .outline-sidebar__content",
+  "occ": 2,
+  "prop": "box-shadow",
+  "value": "-16px 0 26px -14px rgba(43,50,78,.30)",
+  "important": true,
+  "dropImportant": true,
+  "line": 154
+ },
+ {
+  "file": "src/styles/shell.css",
+  "selector": ".outline-sidebar--collapsed.outline-sidebar--hovered .outline-sidebar__content",
+  "occ": 2,
+  "prop": "transition",
+  "value": "opacity 180ms var(--lake-ease-standard),transform 180ms var(--lake-ease-standard),visibility 180ms linear",
+  "important": true,
+  "dropImportant": true,
+  "line": 155
+ },
+ {
+  "file": "src/styles/shell.css",
+  "selector": ".app-shell:not(.focus-mode) .sidebar.sidebar-floating",
+  "occ": 0,
+  "prop": "transform",
+  "value": "none",
+  "important": true,
+  "dropImportant": true,
+  "line": 164
+ },
+ {
+  "file": "src/styles/editor-bridge.css",
+  "selector": ".lake-editor-mount .ne-engine,.lake-editor-mount .ne-viewer-body",
+  "occ": 0,
+  "prop": "font-family",
+  "value": "var(--b3-font-family)",
+  "important": true,
+  "dropImportant": true,
+  "line": 21
+ },
+ {
+  "file": "src/styles/motion-contract.css",
+  "selector": ".app-shell,.sidebar,.outline-sidebar,.outline-sidebar__content,.tab-item,.document-statusbar,.sync-status-popover,.floating-dialog",
+  "occ": 0,
+  "prop": "animation",
+  "value": "none",
+  "important": true,
+  "dropImportant": true,
+  "line": 16
+ },
+ {
+  "file": "src/styles/motion-contract.css",
+  "selector": ".app-shell,.sidebar,.outline-sidebar,.outline-sidebar__content,.tab-item,.document-statusbar,.sync-status-popover,.floating-dialog",
+  "occ": 0,
+  "prop": "transition",
+  "value": "none",
+  "important": true,
+  "dropImportant": true,
+  "line": 17
+ },
+ {
+  "file": "src/styles/ui-polish.css",
+  "selector": ".tab-item .tab-close",
+  "occ": 0,
+  "prop": "flex",
+  "value": "0 0 18px",
+  "important": true,
+  "dropImportant": true,
+  "line": 12
+ },
+ {
+  "file": "src/styles/ui-polish.css",
+  "selector": ".tab-item .tab-close",
+  "occ": 0,
+  "prop": "margin-left",
+  "value": "2px",
+  "important": true,
+  "dropImportant": true,
+  "line": 15
+ },
+ {
+  "file": "src/styles/ui-polish.css",
+  "selector": ".tab-item .tab-close,.tree-row.dragging,.tree-row.drop-inside",
+  "occ": 0,
+  "prop": "transition",
+  "value": "none",
+  "important": true,
+  "dropImportant": true,
+  "line": 153
+ },
+ {
+  "file": "src/styles/ui-polish.css",
+  "selector": ".tab-item .tab-close,.tree-row.dragging,.tree-row.drop-inside",
+  "occ": 0,
+  "prop": "transform",
+  "value": "none",
+  "important": true,
+  "dropImportant": true,
+  "line": 153
+ },
+ {
+  "file": "src/styles/ui-polish.css",
+  "selector": ".document-pane .lake-editor-mount .ne-engine h1,.document-pane .lake-editor-mount .ne-engine h2,.document-pane .lake-editor-mount .ne-engine h3,.document-pane .lake-editor-mount .ne-viewer-body h1,.document-pane .lake-editor-mount .ne-viewer-body h2,.document-pane .lake-editor-mount .ne-viewer-body h3",
+  "occ": 0,
+  "prop": "color",
+  "value": "var(--lake-text)",
+  "important": true,
+  "dropImportant": true,
+  "line": 167
+ },
+ {
+  "file": "src/styles/ui-polish.css",
+  "selector": ".tree-row",
+  "occ": 1,
+  "prop": "transition",
+  "value": "none",
+  "important": true,
+  "dropImportant": true,
+  "line": 222
+ },
+ {
+  "file": "src/styles/ui-polish.css",
+  "selector": ".tree-row.dragging",
+  "occ": 4,
+  "prop": "transition",
+  "value": "none",
+  "important": true,
+  "dropImportant": true,
+  "line": 267
+ }
+]
