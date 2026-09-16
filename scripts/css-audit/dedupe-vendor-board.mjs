@@ -4,7 +4,7 @@
 // 背景（260916）：`src/styles.css` 原先内联了一整块 6795 字符的第三方画板 CSS，与 `src/vendor/drawnix-react-text.css`
 // 去掉空白后**逐字节相同**（6701 字符）。第二档 S3 拆分时按选择器把它机械分到了 `app/vendor-board.css` 与 `app/misc.css`。
 // 两份来源的坏处：改动要改两处、且"同一个东西两个值"。做法：删内联、改由 `src/main.tsx` **直接 import vendor 文件**
-// （仍是同一层：紧跟 `src/styles.css` 之后、b3 之前），保证首帧就有样式（不会因为 BoardCard 懒加载而 FOUC）。
+// （仍是同一层：紧跟 `src/styles.css` 之后、b3 之前），保证首帧就有样式（不会因为 vendor 画板卡懒加载 DrawnixBoardCore 而 FOUC）。
 //
 // 用法：node scripts/css-audit/dedupe-vendor-board.mjs [--dry]
 import fs from "node:fs";

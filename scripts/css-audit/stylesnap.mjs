@@ -57,16 +57,16 @@ const SNAP = `(() => {
 
 export const injectStates = async (page, kind) => {
   if (kind === "board") {
-    // 画板卡。真实场景里由 BoardCard 懒加载 vendor 画板 CSS + @plait 组件渲染出这套 DOM，
+    // 画板卡。真实场景里由 vendor 画板卡（React.lazy 懒加载 DrawnixBoardCore）+ @plait 组件渲染出这套 DOM，
     // 这里按同一套类词汇注入一份**代表性子集**，让画板相关规则真的匹配到元素（CSS 不关心 DOM 是谁造的）。
     // 用途：判断"与 vendor/drawnix-react-text.css 逐字节相同的那块内联 CSS"能不能收掉（矩阵原来没有画板态，测不到）。
     await page.evaluate(`(() => {
       const host = document.createElement("div");
       host.id = "matrix-board";
-      host.className = "board-card-wrapper board-card-wrapper--editor";
+      host.className = "mindmap-interaction-gate";   // 现役：withCanvasWheelGate 包在画板卡编辑器外的那层（board-card-wrapper 已随自研 BoardCard 删除）
       host.style.cssText = "position:fixed;left:40px;top:120px;width:640px;height:420px;z-index:5;background:#fff";
       host.innerHTML = \`
-        <div class="board-card-guard" style="width:100%;height:100%">
+        <div style="width:100%;height:100%">
           <div class="drawnix" style="width:100%;height:100%;position:relative">
             <div class="plait-board-container" style="width:100%;height:100%;position:relative">
               <svg class="board-host-svg" width="100%" height="100%">

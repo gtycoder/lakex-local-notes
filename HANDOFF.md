@@ -5,10 +5,11 @@
 > **§8 是移动端（安卓）专职交接**，由移动端会话维护；桌面会话不要改 §8，移动端会话不要改 §0-§7 之外的桌面文件。
 
 ## 0. 当前基线（新会话开工前）
-- **最新基线（2026-09-15）**：工作分支 `polish/ui-ux-260914`（= master + 本轮改动）。本轮两件事：① 收尾（小记图片完整展示 + 点击放大、草稿恢复框并入浮层通用件）= §2.37 第十一/十二批；② **CSS 结构性问题收敛第一批（桌面已完成并实测零差异）**= 提交 `12d5861` + **§2.38**（含可复用审计工具与移动端待办：移动端只做了测量，改动留待补 `@media` 守卫后再做）。
+- **最新基线（2026-09-16，三端合并）**：工作分支 `feat/lakex-full-260916` @ `4bc0e08`（= master + lakex 底层切换 + UI 全量 CSS 重构 + Web 客户端 MVP，61 个提交）。门禁：tsc 0 · vitest **979 passed / 16 skipped (995)** · `check:core` 0 · 桌面 + 移动 build · `check:bundle` 绿（app-js 1.82MB / drawnix 408KB / css 190KB）；桌面 + 安卓端已实测启动。合并冲突 2 处（`src/styles.css` 取 UI 版、`HANDOFF` 保留双方）+ 语义冲突 1 处（自研 BoardCard 删除后 `vendor-board.css` 死样式，已清）。**master 仍是 `9361741`，未合并**；收尾自检见 `docs/OFFLINE-ASSETS-AUDIT-260916.md` 顶部对账。
+- **上一基线（2026-09-15）**：工作分支 `polish/ui-ux-260914`（= master + 本轮改动）。本轮两件事：① 收尾（小记图片完整展示 + 点击放大、草稿恢复框并入浮层通用件）= §2.37 第十一/十二批；② **CSS 结构性问题收敛第一批（桌面已完成并实测零差异）**= 提交 `12d5861` + **§2.38**（含可复用审计工具与移动端待办：移动端只做了测量，改动留待补 `@media` 守卫后再做）。
 - 上一基线：feat/drag-siyuan @e69d4a0（含 11 个提交，见文末「附：会话交接（2026-09-14）」）+ 260914 依赖升级两个提交（05bf8ee / 83feda7，即 §2.11）——两者均已合入 master。
 - 历史基线：refactor/store-split 8 commits（store.ts 2352→1103 行，见 §3.6）+ 260911 批次（2ecac39 同步收敛 / a18a95b 安卓 AssetServer 403 + Dock IME）已并入本分支祖先；feat/search-refactor（统一 FTS5(unicode61)+单字预分词+增量账本，§2.11–§2.14）在其上。
-- 质量门槛：tsc 0 error · vitest **969 passed / 16 skipped**（2026-09-14）· 桌面 vite build + 移动 vite build -c vite.mobile.config.ts 全绿 · Android assembleDebug + adb install -r 通过（计数变动见 §2；别把数字写回 AGENTS/README）。
+- 质量门槛：tsc 0 error · vitest **979 passed / 16 skipped**（2026-09-16，三端合并后）· 桌面 vite build + 移动 vite build -c vite.mobile.config.ts 全绿 · Android assembleDebug + adb install -r 通过（计数变动见 §2；别把数字写回 AGENTS/README）。
 - **在途分支（2026-09-16）**：`feat/lakex-source-vendor`（基于 master）= **lakex 底层切换**（vendor 换上游 lakex-doc-react 源码 + 内核 v1.99.0 + 用其画板/导图/文本绘图卡片；删除旧 `lakex-editor-react-component`）。已过 tsc/vitest/双端 build + `check:core`/`check:bundle` + 桌面/移动隔离冒烟；自检又修掉「画板引擎随首屏加载」回归（vendor 画板卡懒加载 + app 分组 `includeDependenciesRecursively:false`）。做法/构建/离线修复/回归见 **`docs/LAKEX-MIGRATION-260916.md`**，本地改动见 `vendor/lakex-doc-react/LOCAL-CHANGES.md`。合并只需注意 `src/main.tsx`/`.gitignore` 两处行级重合。
 - **真机级验收（260910-260911，三轮）**：
   - 第一轮（2 桌面 + 1 移动）：A/B 同步 push/pull、新建/删除传播、移动端 WAL 崩溃恢复、旧 IndexedDB 快照迁移 全通过。
@@ -706,8 +707,8 @@
 **离线化 / 资源清单（2026-09-16 审计，详见 `docs/OFFLINE-ASSETS-AUDIT-260916.md`）**
 - **[必补]** ① ~~文本绘图卡 PlantUML（unpkg 运行时）~~ **✅ 已解决（260916 lakex 迁移：改本地 `@plantuml/core`，见 `docs/LAKEX-MIGRATION-260916.md` §4）** ② `__puml` 预设缩略图 8 张 ③ `.ne-text-diagram-action-ai` 图标（`mass-office.alipay.com`，内核**内联样式**，未被 transform 重写）④ 思维导图 KaTeX CSS（@xiangfa 注入 jsdelivr，待运行时确认）。
 > 注：本清单是 UI 会话 260916 的审计快照，`docs/OFFLINE-ASSETS-AUDIT-260916.md` 未回填「PlantUML 已解决」这条；以本行为准。
-- **[可删·已确定]** `public/vendor/lakex-doc/` 除 `kitchen-iconfont.js` 外 **139 个文件（≈3.7MB）**：`codemirror.js`/`katex.min.js` 与 `vendor/cdn` 逐字节重复，`assets/`+`katex-fonts/` 唯一引用者（旧 `doc.css`）已在 HEAD root commit 删除。
-- **[可删·待运行时确认]** `public/vendor/cdn/` 35 个中仅 3 个被产物引用（`as/.../7.1.3/CodeMirror.js`、`os/.../katex.min.js`、`os/.../mhchem.min.js`），其余 32 个（含 `render/.../7.1.27/CodeMirror.js` 与 31 个 gw 图标）已被构建期重写架空。
+- ✅ **已删（260916 合并后收尾）**：`public/vendor/lakex-doc/` 除 `kitchen-iconfont.js` 外 **139 个文件已删除**（4.0MB→316K）。按「产物 + 源码」路径级复扫 0 引用；其中 138 个在 `lakex/alipay`/`vendor/cdn` 有逐字节副本，1 个（`assets/139561c7….svg`）无任何引用。
+- ❌ **不删（核实后推翻「可删」结论）**：`public/vendor/cdn/` 35 个中 3 个被产物引用、另 32 个静态扫描无引用，但 `electron/cdnRedirect.ts` 用「镜像里是否存在该文件」作为 `gw.alipayobjects.com` 请求的**运行时兜底白名单**（构建期 transform 漏掉的 URL 靠它回本地）——删了会缩小离线覆盖，**保留**。
 - **[不动]** `public/vendor/lakex/alipay/` 195 文件全部在用。**[不修]** 第三方 embed 卡。
 
 **性能/健壮性**

@@ -3,6 +3,8 @@
 > 背景：逆向 lake 内核那轮曾给出"思维导图/画板未完全离线"的结论，本轮用**静态抽取 + 构建产物复扫 + git 考古**重新核实。
 > 结论：**画板完全没问题**（误判）；思维导图只差一个外链；真正会"功能坏掉"的是**文本绘图卡的 PlantUML**；另有 ~7MB 冗余镜像可清理。
 > 本文只记录事实与证据；执行顺序见文末。相关红线：本地优先、不整体 fork 闭源内核、NGPL/许可署名。
+>
+> **260916 三端合并后对账（本分支的最新结论，覆盖本文旧判断）**：① 本文「唯一功能级缺口 PlantUML」**已由 lakex 迁移解决**（改本地 `@plantuml/core`，见 `docs/LAKEX-MIGRATION-260916.md` §4）；② `public/vendor/lakex-doc` 139 个死文件**已删除**（留 `kitchen-iconfont.js`，4.0MB→316K）；③ `public/vendor/cdn` 的 32 个**保留**——`electron/cdnRedirect.ts` 用「镜像里是否存在该文件」作为 gw 请求的运行时兜底白名单，删了会缩小离线覆盖；④ 内核已换成 `@dlient/lakex-doc-react` 源码（v1.99.0），本文第 0/5 节里的旧包名/旧 bundle 行号均已作废。
 
 ## 0. 方法与证据来源
 
@@ -58,7 +60,7 @@ grep -rl 'lakex-doc' dist dist-mobile                  # 仅 index.html / mobile
 grep -rlE '1e138d3507744f84|b12244086060102e|b200d4e68012bbf7|bf93147ee907ac03' dist dist-mobile  # 0
 ```
 
-### B. `public/vendor/cdn/`（3.5MB / 35 文件）→ 仅 3 个被产物引用，其余 32 个冗余（待运行时确认再删）
+### B. `public/vendor/cdn/`（3.5MB / 35 文件）→ 仅 3 个被产物引用，其余 32 个冗余 —— **结论：保留（运行时兜底，见顶部对账 ③）**
 
 **来历**：`74062e3`（2026-08-02，"阶段B收尾：资源本地化+同步进度UI+dmg打包"）引入，作为"CDN 镜像 + 主进程 `onBeforeRequest` 重定向"的唯一目录。
 
