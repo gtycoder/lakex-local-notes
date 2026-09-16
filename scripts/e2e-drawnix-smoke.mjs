@@ -1,14 +1,17 @@
 #!/usr/bin/env node
 /**
- * First-use smoke for the lazy Drawnix card.
+ * First-use smoke for the lazy Drawnix board card (vendor `drawing-board`).
  * Requires the dev Electron window (`npm run dev`) on LAKE_CDP_PORT (default 9222).
- * Creates a uniquely named temporary note through the exposed native bridge, reloads
- * the renderer, opens the card, verifies the lazy JS/CSS resources and removes it.
+ *
+ * 方案（2026-09-16 重写）：
+ *   临时把 `drawing-board` 自定义块注入「欢迎」笔记（reload 后必重开，确定性最好），
+ *   校验画板渲染 + 懒加载 Drawnix chunk 真被请求，最后还原「欢迎」笔记正文。
+ * 自定义卡序列化见 docs/LAKEX-CONTRACT.md §5.3
+ * （value = "data:" + encodeURIComponent(JSON)，tag 的 name 恒为 `customBlock`）。
  */
 import fs from "node:fs/promises";
 
 const port = Number(process.env.LAKE_CDP_PORT || 9222);
-const fixtureTitle = `__drawnix-smoke-${Date.now()}`;
 const list = await (await fetch(`http://127.0.0.1:${port}/json/list`)).json();
 const page = list.find((target) => target.type === "page");
 if (!page) throw new Error(`没有找到 CDP page（端口 ${port}）`);
@@ -33,7 +36,7 @@ async function evaluate(expression) {
   return result.result?.result?.value;
 }
 async function wait(ms) { await new Promise((resolve) => setTimeout(resolve, ms)); }
-async function waitFor(expression, timeout = 12000) {
+async function waitFor(expression, timeout = 20000) {
   const started = Date.now();
   while (Date.now() - started < timeout) {
     const value = await evaluate(expression);
@@ -43,39 +46,44 @@ async function waitFor(expression, timeout = 12000) {
   throw new Error(`等待超时: ${expression}`);
 }
 
-let fixtureId = null;
+let welcomeBackup = null;
 try {
-  fixtureId = await evaluate(`(async()=>{
-    const note = await window.lakeNative.createNote(${JSON.stringify(fixtureTitle)});
-    const value = encodeURIComponent(JSON.stringify({$name:"board-card",$htmlStr:"",elements:[],cardHeight:400}));
-    const content = '<p id="' + note.id + '-body" class="ne-p"><br></p><p id="drawnix-smoke-board"><card type="block" name="customBlock" value="' + value + '"></card></p>';
-    await window.lakeNative.saveNote(note.id, ${JSON.stringify(fixtureTitle)}, content);
-    return note.id;
+  // 1) 读取「欢迎」笔记并把 drawing-board 卡追加进去（返回备份用于还原）
+  welcomeBackup = await evaluate(`(async()=>{
+    const n = await window.lakeNative.readNote('welcome-note');
+    const initValue = {
+      $name: "drawing-board",
+      $htmlStr: "",
+      version: 2,
+      engine: "drawnix",
+      preset: "drawing",
+      plaitValue: [],
+      plaitViewport: { x: 0, y: 0, zoom: 1 },
+      cardHeight: 560,
+    };
+    const value = "data:" + encodeURIComponent(JSON.stringify(initValue));
+    const card = '<p><card type="block" name="customBlock" value="' + value + '"></card></p>';
+    await window.lakeNative.saveNote('welcome-note', n.title, n.content + card);
+    return JSON.stringify({ title: n.title, content: n.content });
   })()`);
 
+  // 2) reload：欢迎笔记必重开，编辑器从磁盘读到含画板卡的正文
   await evaluate("location.reload(); true");
   await waitFor(`document.readyState === "complete" && document.querySelectorAll(".lake-editor-tab").length > 0`);
-  await wait(1200);
-  await evaluate(`(()=>{ const el = document.querySelector('[data-note-id="${fixtureId}"]'); if (el && !el.classList.contains("active")) el.click(); return true; })()`);
-  await waitFor(`document.querySelector('[data-note-id="${fixtureId}"]')?.classList.contains("active") || document.querySelector(".board-card-wrapper")`);
-  await waitFor(`document.querySelectorAll(".board-card-wrapper").length > 0 && document.querySelectorAll(".plait-board-container").length > 0`);
-  await wait(300);
+  await waitFor(`document.querySelectorAll(".drawing-board-resizer").length > 0 && document.querySelectorAll(".plait-board-container").length > 0`, 30000);
+  await wait(800);
   const result = await evaluate(`JSON.stringify({
-    fixtureId: ${JSON.stringify(fixtureId)},
-    boardWrappers: document.querySelectorAll(".board-card-wrapper").length,
+    boardResizers: document.querySelectorAll(".drawing-board-resizer").length,
     plaitBoards: document.querySelectorAll(".plait-board-container").length,
-    drawnixJs: performance.getEntriesByType("resource").map(e=>e.name).filter(n=>/drawnix|plait/i.test(n)&&/\\.js/.test(n)),
-    drawnixCss: [...new Set([
-      ...[...document.styleSheets].map(s=>s.href || ""),
-      ...performance.getEntriesByType("resource").map(e=>e.name),
-    ])].filter(n=>/drawnix/i.test(n)&&/\.css/.test(n)),
+    drawnixJs: performance.getEntriesByType("resource").map(e=>e.name).filter(n=>/lakex-drawnix|DrawnixBoardCore|\\/drawnix-|plait/i.test(n)&&/\\.js/.test(n)),
     drawnixModuleRendered: document.querySelectorAll(".plait-board-container, .drawnix").length > 0,
     fallback: Boolean(document.querySelector('[aria-label="画板加载中"]')),
     status: document.querySelector(".document-statusbar")?.innerText || ""
   })`);
   const parsed = JSON.parse(result);
-  if (parsed.boardWrappers < 1 || parsed.plaitBoards < 1) throw new Error("Drawnix 画板未渲染");
-  if (!parsed.drawnixModuleRendered || parsed.drawnixCss.length < 3) throw new Error("Drawnix 首次加载资源不完整");
+  if (parsed.boardResizers < 1 || parsed.plaitBoards < 1) throw new Error("Drawnix 画板未渲染");
+  if (!parsed.drawnixModuleRendered) throw new Error("Drawnix 模块未渲染");
+  if (parsed.drawnixJs.length < 1) throw new Error("懒加载 Drawnix JS 未被请求");
   if (parsed.fallback) throw new Error("Drawnix 仍停留在加载占位");
   console.log(result);
   const output = process.env.LAKE_UI_EVIDENCE_DIR;
@@ -86,10 +94,10 @@ try {
     await fs.writeFile(`${output}/drawnix-first-use.json`, result);
   }
 } finally {
-  if (fixtureId) {
+  if (welcomeBackup) {
+    const backup = JSON.parse(welcomeBackup);
     await evaluate(`(async()=>{
-      try { await window.lakeNative.deleteNote(${JSON.stringify(fixtureId)}); } catch {}
-      try { const items = await window.lakeNative.listTrash(); const item = items.find(x => x.noteFileId === ${JSON.stringify(fixtureId)}); if (item) await window.lakeNative.purgeTrash(item.id); } catch {}
+      try { await window.lakeNative.saveNote('welcome-note', ${JSON.stringify(backup.title)}, ${JSON.stringify(backup.content)}); } catch {}
       try { location.reload(); } catch {}
       return true;
     })()`).catch(() => undefined);

@@ -1,6 +1,6 @@
 # LAKEX-CONTRACT.md — 闭源 lakex 内核：行为契约 + 调试速查表（会话必读）
 
-> **本文件是给"所有会话"的知识库**：把我们对**闭源 lakex 内核**（`lakex-editor-react-component@0.1.2`，即语雀 `@alipay/lakex-doc` 打包品）
+> **本文件是给"所有会话"的知识库**：把我们对**闭源 lakex 内核**（vendor `@dlient/lakex-doc-react` 源码里转换出的内核 bundle，即语雀 `@alipay/lakex-doc` 打包品；2026-09-16 起内核 **v1.99.0**）
 > 通过实测 + 反编译**已经观测到的行为**固化成：① 结构化的接口契约（设计为 `lakex-contract.d.ts`，待落地）；② 一张报错定位速查表。
 > **什么时候看本文件**：只要会话涉及 lakex 编辑器——遇到内核报错、命令点了没反应（no-op）、DOM/CSS 不对、
 > 要新加编辑器能力、要改 `src/features/editor/**` ——先查本文件，再动手。
@@ -30,9 +30,9 @@
 
 | 事实 | 内容 | 证据位置 |
 |---|---|---|
-| 内核身份 | 语雀商业内核 `@alipay/lakex-doc`，打包为自包含 ESM；无类型、无反编译加密 | vendor dist/components/lakex/lakex.d.ts（自白） |
-| bundle 位置 | `vendor/npm/lakex-editor-react-component/dist/lakex-editor-react-component.es.js`（12.5MB / 33.8 万行，未压缩）+ cjs 压缩版 | vendor 目录 |
-| 版本线索 | 内核特性标注 1.6.0+/1.7.0+/1.34.0+；katex 0.16.8；lake-codemirror 7.1.3；antd 4.24.13（css 版权 Alipay） | dist types.d.ts、bundle 常量 |
+| 内核身份 | 语雀商业内核 `@alipay/lakex-doc`，打包为自包含 ESM；无类型、无反编译加密 | `vendor/lakex-doc-react/src/components/lakex/lakex.d.ts`（自白） |
+| bundle 位置 | `vendor/lakex-doc-react/src/components/lakex/lakex.js`（内核 ESM 转换产物，未压缩）+ 同目录 `doc.umd.js`（原始 UMD） | vendor 目录 |
+| 版本线索 | 内核 **v1.99.0**（`lakex.js` 头部自证；与 `@lakex-react/core@0.2.1` 内核指纹一致）；特性标注 1.6.0+/1.7.0+/1.34.0+；katex 0.16.8；lake-codemirror 7.1.3；antd 4.24.13（css 版权 Alipay） | `lakex.js` 头部、dist types.d.ts |
 | 外部运行时 | 引擎按需注入 gw.alipayobjects.com 的 katex/mhchem + CodeMirror；**应用已本地镜像并用 cdnRedirect 重写** | lakeRuntime.ts L12-34/582-591；electron/cdnRedirect.ts |
 | 序列化方言 | setDocument/getDocument MIME：text/lake（=落盘格式，`<card … value="data:JSON">` + `data-lake-id`/`ne-*` 类）、text/html、text/plain、text/markdown、json | 真实 .lake 样本；lakeRuntime.ts L36-39 |
 | DOM 协议 | `ne-*` 类族（滚动容器 .ne-editor-wrap/.ne-viewer、卡片 .ne-card、.ne-toc-*、.ne-codeblock 等）；应用 src 已有 119 个不同 ne-* token | 应用 src + styles.css |
@@ -167,6 +167,7 @@
 - **机制**（bundle `src/components/lakex/lakex.js`）：`registerCard(e){ this.cards[e.name] = e }`（`e` 来自 `option.cards` = `customCard.cards` 解包后的 config）；读卡时按 `this.cards[attrs.value.$name]` 查表，查不到即 fallback。
 - **应用侧对应**：`src/features/editor/lakeRuntime.ts` 的 `prepareCustomCards` 把 `{config}` 解包为 config 并注册；**config.name 必须与 value 的 $name 一致**。
 - 证据：2026-09-16 lakex v1.99.0 dev 冒烟（画板 / 思维导图 / 文本绘图 3 卡，0 fallback、0 JS 异常、0 失败请求）。
+- **内置画板卡的 `$name`**（vendor `src/configs/customCard.ts` → `src/cards/DrawingBoard/index.ts`）：`drawing-board`（画板）、`flowchart-board`（流程图）、`uml-board`（UML）、`drawing-mindmap-board`（思维导图板）。画板内核（`lakex-drawnix` + `@plait/*`）由 `DrawingBoardEditor/Viewer` **懒加载**（vendor 分包出 `DrawnixBoardCore-*.js`），不随首屏加载。
 
 ---
 
@@ -192,8 +193,8 @@
 
 ## 8. 证据来源与复查方法
 
-- bundle：`vendor/npm/lakex-editor-react-component/dist/lakex-editor-react-component.es.js`（grep 类名/路径/断言串采样即可，勿整读）。
-- 类型/README：同目录 dist/components/lakex/*.d.ts（含 9 行 lakex.d.ts 自白）、dist/index.d.ts、README.md、LICENSE。
-- 应用锚点：`src/features/editor/lakeRuntime.ts`（实例化 540-815、私有字段 466-905、命令 454-538）、`EditorTab.tsx`、`LakeEditor.tsx`、`editorCommands.ts`、`BoardCard.tsx`、`mediaCardRouting.ts`、`attachmentPreviewController.ts`。
+- bundle：`vendor/lakex-doc-react/src/components/lakex/lakex.js`（内核 ESM 转换产物；grep 类名/路径/断言串采样即可，勿整读）；原始 UMD 为同目录 `doc.umd.js`。
+- 类型/README：`vendor/lakex-doc-react/src/components/lakex/*.d.ts`（含 9 行 lakex.d.ts 自白）、`vendor/lakex-doc-react/dist/index.d.ts`、`README.md`、`LICENSE`。
+- 应用锚点：`src/features/editor/lakeRuntime.ts`（实例化 540-815、私有字段 466-905、命令 454-538）、`EditorTab.tsx`、`LakeEditor.tsx`、`editorCommands.ts`、`canvasInteractionGate.tsx`、`mediaCardRouting.ts`、`attachmentPreviewController.ts`。
 - 镜像/注入：`public/vendor/cdn/**`、`electron/cdnRedirect.ts`、`electron/assetServer.ts`。
 - 评估全文档：工作区根 `lake-kernel-swap-analysis-260908.md`（差距矩阵/换核结论/许可观察）。

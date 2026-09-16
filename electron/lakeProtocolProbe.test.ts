@@ -2,13 +2,11 @@
  * 探针：Lake 内核（@dlient/lakex-doc-react 内嵌的闭源内核 bundle）图片 URL 协议白名单行为复刻。
  *
  * 目的：验证「图片/附件能否用比 HTTP 更轻量（无 TCP 三次握手/四次挥手）的协议」的可行性。
- * 证据来源：vendor/lakex-doc-react/dist/index.es.js（旧 vendor lakex-editor-react-component 已被整体替换；下方行号来自旧 bundle，仅作来源记录，需按新 bundle 复核）
- *   - L41567-41578  qd 白名单数组（http:/https:/blob:/data:/dingtalk:/ftp:/mailto:/fleamarket:/alipays:/qinpai:）
- *   - L41579-41585  Jd(e)（validUrl 核心：白名单前缀 | ./ | / | 无冒号）
- *   - L41586-41588  Yd(e)（trim 后过 Jd，拒绝返回空串）
- *   - L41531-41535  sanitizeImageSrc(e)（data:image/ 直接放行，其余过 Yd）
- *   - L58095        编辑态 markdown 图片识别：isBase64ImageURL || isFullHttpURL
- *   - L115605/609/654 图片渲染链：sanitizeImageSrc(generateDisplayUrl(width)) → img src
+ * 证据来源：vendor/lakex-doc-react/src/components/lakex/lakex.js（内核 ESM 转换产物；行号为本版本采样位置，升级内核后需复核）
+ *   - L53900-53905 / L95009-95014  协议白名单数组（http:/https:/blob:/data:/dingtalk:/ftp:/mailto:/fleamarket:/alipays:/qinpai:）
+ *   - L53802-53808  isBase64ImageURL / isFullHttpURL
+ *   - L53858-53860  sanitizeImageSrc(e)（data:image/ 直接放行，其余过 URL 校验）
+ *   - L72227 / L75681  图片/markdown 渲染处对 isBase64ImageURL / isFullHttpURL 的判定
  */
 import { describe, expect, it } from "vitest";
 
@@ -27,7 +25,7 @@ const LAKE_PROTOCOL_WHITELIST = [
 ];
 
 /**
- * 复刻 L41579-41585：Jd(e) —— Lake 内核的 URL 合法性判定。
+ * 复刻内核 URL 合法性判定（lakex.js 采样：L53858 附近 sanitize 链）。
  * 返回 true 表示该 URL 被 Lake 接受（不会在 sanitize 时被清空）。
  */
 function lakeValidUrl(raw: string): boolean {
@@ -40,13 +38,13 @@ function lakeValidUrl(raw: string): boolean {
       || raw.indexOf(":") < 0);
 }
 
-/** 复刻 L41586-41588：Yd(e) —— sanitize 后保留原 URL，否则返回空串。 */
+/** 复刻内核 sanitize：合法则保留原 URL，否则返回空串。 */
 function lakeSanitizeUrl(raw: string): string {
   const trimmed = typeof raw === "string" ? raw.trim() : raw;
   return lakeValidUrl(trimmed) ? trimmed : "";
 }
 
-/** 复刻 L41531-41535：sanitizeImageSrc(e) —— 图片 src 专用清洗。 */
+/** 复刻内核 sanitizeImageSrc(e)（lakex.js L53858）—— 图片 src 专用清洗。 */
 function lakeSanitizeImageSrc(raw: string): string {
   return /^data:image\//i.test(raw) ? raw : lakeSanitizeUrl(raw);
 }
@@ -54,7 +52,7 @@ function lakeSanitizeImageSrc(raw: string): string {
 /** 当前生产形态（基线）：本地 assetServer URL。 */
 const HTTP_ASSET = "http://127.0.0.1:19876/note123/1735000000000_abcd1234.png";
 
-describe("Lake 内核协议白名单探针（复刻 lakex bundle L41567-41588）", () => {
+describe("Lake 内核协议白名单探针（复刻 lakex 内核，lakex.js L53900/L95009 白名单）", () => {
   it("基线：http assetServer URL 被放行", () => {
     expect(lakeSanitizeImageSrc(HTTP_ASSET)).toBe(HTTP_ASSET);
   });
@@ -95,7 +93,7 @@ describe("Lake 内核协议白名单探针（复刻 lakex bundle L41567-41588）
     expect(lakeSanitizeImageSrc("data:text/html,<script>")).toBe("");
   });
 
-  it("编辑态 markdown 图片识别只认 base64 或完整 http(s)（L58095）", () => {
+  it("编辑态 markdown 图片识别只认 base64 或完整 http(s)（lakex.js L72227/L75681）", () => {
     const mdUrl = (raw: string) => {
       const m = /!\[([^\]]*?)\]\(([^\]]+?)\)$/.exec("![](" + raw + ")");
       if (!m) return null;

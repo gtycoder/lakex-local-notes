@@ -80,7 +80,7 @@ PATH="$HOME/.nvm/versions/node/v24.18.0/bin:$PATH" npm test   # vitest run，82 
 | better-sqlite3 | 13.0.3 | N-API 单二进制，无需 rebuild |
 | sharp | 0.35.3 | 原生，webp→png |
 | @aws-sdk/client-s3 | 3.1101.0 | S3 同步 |
-| lakex-editor-react-component | 0.1.2 | Lake 编辑器 ESM |
+| @dlient/lakex-doc-react（vendor 源码） | 0.1.3（内核 v1.99.0） | Lake 编辑器 ESM |
 | lakex-drawnix / -react-board / -react-text | 0.1.0 | 画板 |
 | vitest | 4.x | 测试 |
 

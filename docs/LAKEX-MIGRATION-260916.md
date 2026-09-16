@@ -12,12 +12,19 @@
 ## 2. vendor 产物怎么出（C1：产物入库）
 - `npm run build:vendor`（= `npm --prefix vendor/lakex-doc-react run build`：`vite build` + `tsc -p tsconfig.build.json` + `postbuild`）。
 - 产物 `vendor/lakex-doc-react/dist/{index.es.js,index.cjs.js,index.d.ts,style.css}` **已提交**；改了 vendor 源码必须重跑并提交产物。
+- 移除 `inlineDynamicImports` 后还会产出懒加载 chunk（`DrawnixBoardCore-*.js` / `katex-*.js` / `MindMap*.js` / `icons-*.js` / `tree-ops-*.js`，ES+CJS 各一份），**同样必须提交**（漏提交 → 消费端动态 import 404）。
 
 ## 3. 构建期修复（非业务，记 LOCAL-CHANGES）
 - vendor `DrawnixBoardCore.css` 3 行相对 `node_modules` 的 `@import` 改指仓库根（vendor 深了一层；`lakex-drawnix-react-board` 未导出 `./index.css`）。
 - vendor `tsconfig.build.json` 加 `"types": []`（消除根 `@types/node` 的 `Timeout` 冲突）。
 - vendor `vite.config.ts` **外部化重型卡片依赖**（mermaid/@plait/lakex-drawnix 等），`@xiangfa/mindmap` 保持内联：规避 rolldown “重新解析自己产物” 的 emit→parse bug（`Expected ) but found in`）；且 `@xiangfa` 内嵌 react@19，外置会双 React。其中 `@plantuml/core` **必须用正则**（`/^@plantuml\/core(\/|$)/`）才能匹配到 `plantuml.js`/`viz-global.js` 子路径——精确字符串匹配不到，7MB 的 `plantuml.js` 会内联进宿主主 chunk。
 - 根 `.gitignore`：裸 `dist` → 锚定 `/dist`（否则 `vendor/.../dist` 与 `public/.../katex/.../dist` 都被忽略）。
+
+### 3.1 首屏回归修复（自检发现）：vendor 画板卡必须懒加载
+- **问题**：新 vendor 默认 `customCard` **静态**引入 4 张画板卡 → `DrawingBoardEditor/Viewer` 静态 import `DrawnixBoardCore` → `lakex-drawnix` + `@plait/*`（~4.2MB raw / 1.25MB gzip）随宿主**首屏**加载。master 上旧自研 `BoardCard` 本是 `React.lazy`，且 `scripts/e2e-electron-smoke.mjs` 有硬断言「普通文本启动不加载 Drawnix JS」——迁移把它打挂了。
+- **修法（vendor）**：`DrawingBoardEditor/Viewer` 改 `React.lazy(() => import('./DrawnixBoardCore'))` + 局部 `Suspense`；移除 vendor `output.inlineDynamicImports`，产出 `DrawnixBoardCore-*.js` 懒加载 chunk（LOCAL-CHANGES #7）。
+- **修法（app）**：`vite.config.ts` 的 `codeSplitting` 组加 `includeDependenciesRecursively: false`——默认 `true` 会把入口也需要的依赖并进 `drawnix` chunk，令入口**重新静态引用**它（对照实验：去掉该项后入口即出现 `from"./drawnix-*.js"`）。
+- **效果**：入口不再静态引用 `drawnix-*.js`（`saveAsPng`/Drawnix 代码计数 0）；`app-js` gzip 1.89 → **1.82MB**；画板首次使用时才请求 `DrawnixBoardCore-*.js` + `drawnix-*.js` + `@plait_*.js`。
 
 ## 4. 离线本地化（本次一并做掉）
 - **P1 PlantUML**：vendor `TextToDiagramCore.tsx` 从 unpkg 动态 import → 本地 `@plantuml/core`（**动态**导入，保持懒加载语义；LOCAL-CHANGES #6）。
@@ -29,7 +36,8 @@
 ## 5. 回归（隔离冒烟，未碰其他会话）
 - **桌面**（dev 1461 / CDP 9225 / asset 19879；数据复制到 `$TMPDIR/lake-device-lakex`）：大文档 40 标题 → 原生 TOC **40 条** + 点击跳转（scrollTop 0→13580）；虚拟渲染滚到底部 **3 卡全部水合**（drawnix 核心/导图 43 节点/文本绘图）；**锁只读 viewer**；**回收站重开只读 + "已删除"横幅**；全程 0 JS 异常 / 0 4xx。
 - **移动端**（emulator-5554；`bash scripts/android-build.sh --sync --install`）：首页 + 文档编辑器渲染、`window.__mobileEditor` 就绪、**图片经 AssetServer 全部加载（naturalWidth>0）**、0 异常 / 0 4xx。
-- 门禁：`tsc` 0 · `vitest` 969/16 · 桌面 + 移动 build 通过 · `check:core` 0 违规 · `check:bundle` 通过（app-js gzip 1.89MB / 预算 2.9MB，见 §6）。
+- 门禁：`tsc` 0 · `vitest` 969/16 · 桌面 + 移动 build 通过 · `check:core` 0 违规 · `check:bundle` 通过（app-js gzip **1.82MB** / 预算 2.9MB、drawnix-js 408KB / 预算 1.4MB）。
+- **画板懒加载复验**（隔离 dev 1461 / CDP 9225）：`scripts/e2e-drawnix-smoke.mjs` 通过——`drawing-board-resizer`=1、`.plait-board-container`=1，按需请求 `DrawnixBoardCore-*.js` + `lakex-drawnix.js` + `@plait_{core,common,draw,mind,text-plugins}.js`，0 fallback；**普通文本打开后 `drawnixJs=[]`**（`e2e-electron-smoke` 的关键断言通过；其 rail 宽恒 38px 断言在隔离窗口尺寸下失败，与本迁移无关）。
 - **产物分包实渲染**：把构建产物里的 `viz-global-*.js` + `plantuml-*.js` 在带 DOM 的环境里真实加载，PlantUML 引擎跑通（`createDiagram ok` → `SequenceDiagramFactory`）并输出 `<svg>`（2878 字符）；确认懒加载分包可执行、离线可用。
 
 ## 6. 遗留 / 注意
@@ -37,6 +45,8 @@
 - ✅ 已解决：PlantUML 曾因 `@plantuml/core` 精确匹配不到子路径而内联进主 chunk，导致 `check:bundle` 超预算；改用正则外置后拆为 `plantuml-*.js` / `viz-global-*.js` 懒加载分包（app-js gzip **3.93MB → 1.89MB**）。
 - 与 UI/Web 会话合并：仅 `src/main.tsx`、`.gitignore` 两处**行级重合**（不同 hunk，可自动合并）；`HANDOFF.md` 各会话追加，合并时按段落解冲突。
 - 内核私有字段（`_tocSidebar` / `_virtualNode.$appear` / React fiber `cardData`）在 v1.99.0 上实测仍有效（见 §5）。
+- ✅ 自检一并清理：删掉随自研 `BoardCard` 变死的 CSS（`src/styles.css` 的 `.board-card-wrapper*` / `.board-card-guard`，并把「被动滚轮」规则重定向到现役 `.mindmap-interaction-gate`）；`e2e-drawnix-smoke.mjs` 旧写法依赖 `.board-card-wrapper` 与裸 IPC `createNote`（不刷新渲染层 store、点不到树节点）已重写。
+- 文档同步：`LAKEX-CONTRACT.md`（内核路径/版本/画板卡 `$name`）、`README.md`、`AGENTS.md`、`DEVELOPMENT.md`、`electron/lakeProtocolProbe.test.ts` 注释都从旧包名/旧 bundle 行号更新到新 vendor。
 
 ## 7. 关键提交（`feat/lakex-source-vendor`）
 - `d90b390` 底层切换（vendor 源码 + 应用适配 + 门禁）
@@ -44,3 +54,4 @@
 - `7e8f489` PlantUML + drawnix 默认图本地化
 - `9355337` 图标收集顺序 + v1.99.0 私有字段回归
 - （本次）PlantUML 子路径正则外置 → 懒加载分包，`check:bundle` 由红转绿
+- （本次）自检修复：画板引擎首屏回归（vendor 懒加载 + app `includeDependenciesRecursively:false`）+ e2e 冒烟重写 + 死 CSS/过期文档清理

@@ -41,7 +41,7 @@
 ## 三、技术栈
 
 Electron 43.4 + React 18.3 + TypeScript 5.9 + better-sqlite3 13（N-API，无需 rebuild）+ Lake 编辑器
-（`lakex-editor-react-component@0.1.2` ESM，vendor 已 pin、勿随意升级）+ Drawnix 画板（`lakex-drawnix@0.1.0`）+
+（`@dlient/lakex-doc-react` 上游源码 vendor（产物入库），内核 v1.99.0，已 pin、勿随意升级）+ Drawnix 画板（`lakex-drawnix@0.1.0`）+
 sharp（图片转换）+ @aws-sdk/client-s3；移动端 = Vite + Capacitor（安卓）。准确版本以 `package.json` 为准。
 
 ## 四、已完成里程碑（事实性，不含当前进度）

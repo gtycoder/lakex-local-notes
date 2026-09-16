@@ -100,10 +100,12 @@ export default defineConfig({
         codeSplitting: {
           groups: [
             {
-              // 画板（drawnix + @plait）独立 chunk：不改变加载时机（仍随入口加载），
-              // 只把 10MB 单 chunk 中的白板引擎拆出去，为后续懒加载留结构
+              // 画板（drawnix + @plait）独立 chunk。
+              // 注意：includeDependenciesRecursively 必须为 false —— 默认 true 会把被匹配模块的
+              // 依赖一并并入该 chunk，其中含入口也需要的模块，导致入口静态引用它（画板引擎被迫首屏加载）。
               name: "drawnix",
-              test: /node_modules\/(lakex-drawnix|@plait|@plait-board)/,
+              test: /node_modules[\\/](lakex-drawnix|@plait|@plait-board)/,
+              includeDependenciesRecursively: false,
             },
           ],
         },
