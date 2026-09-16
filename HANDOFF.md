@@ -1374,10 +1374,18 @@ const m = await page.send("CSS.getMatchedStylesForNode", { nodeId: q.nodeId });
 **逐字节相同**（6701 字符，去掉空白后完全一致）——典型的"同一个东西两份来源"。但画板只在打开画板卡时才有 DOM，
 测试矩阵覆盖不到 ⇒ 按"证不了就不动"先记录，不删；要收它得先给矩阵补一个"打开画板卡"的状态。
 
-**下一步（S3 → S4）**
-- **S3**：`styles.css` **同层内**分域拆成 base / 域文件（582 条、8 个域：小记 98 / 设置 29 / 历史回收站 29 / 编辑器 28 / 画板第三方 97 / 页签 68 / 侧栏 86 / 浮层 38 / 骨架 28 / 未归类 65）。
-- **S4**：删空文件 + 更新两个入口 import 顺序 + 回填围栏与文档；`ui-polish.css` 收口（其剩余内容只剩不可验证的 reduced-motion 块 + keyframes，
-  等矩阵补 reduced-motion 状态后随同收编）。
+**S3 已完成（提交 b6eaa8e）**：`src/styles.css` 1766 行的大杂烩 → **编排入口（10 行 @import）+ `src/styles/app/` 下 10 个域文件**
+（base 36 / shell 325 / editor 45 / dialogs 167 / tabs 211 / vendor-board 182 / settings 119 / quick-notes 293 / panels 101 / misc 299 声明）。
+声明数守恒 1801 → 1801；注入式 27 状态 0 差异；像素 16 屏对两份基线 0 差异。拆分脚本 `scripts/css-audit/split-app-layer.mjs` 可一键重跑。
+
+**下一步（S4 收口 + 逐条二分）**
+1. **S4 低风险部分**：`overlays.css` → `components.css`（纯重命名、位置不变，需同步移动端入口与围栏）；`ui-polish.css` 现在只剩
+   4 个 reduced-motion 块 + `@keyframes lake-pop-in`，等矩阵补 reduced-motion 状态后再定它的去处。
+2. **跨层合并（逐条二分）**：把 `app/*.css` 里的规则按域并进同名的壳层文件（`app/quick-notes.css` → `styles/quick-notes.css` 等）
+   **只搬"27 状态 + 像素批次都 0 差异"的**；搬了会变的原地不动并注明原因。已知会变的（留证）：小记卡片 `border-color`、
+   设置面板 `box-shadow`、小记 `textarea` 边框色、`.qn-check` 的 transition。
+3. **矩阵补状态**（做 1、2 的前置）：`(prefers-reduced-motion: reduce)` / `(prefers-reduced-transparency: reduce)` 模拟、
+   "打开画板卡"（才能收掉 styles.css 那块与 vendor 逐字节相同的第三方 CSS）、多标签、编辑器内部态。
 
 ### 2.47 第七轮：摘掉"多余的 !important"（79 条）+ 工具落库 + 抓出两个口径漏洞（260916）
 > 承接 §2.45/§2.46：同选择器重复清零后，这轮换靶子——`!important` 本身。它不产生视觉效果，只决定"谁说了算"；
