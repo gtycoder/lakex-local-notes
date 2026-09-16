@@ -145,3 +145,17 @@ ne-card[data-card-name="file"] .ne-card-file {
   outline: none;
   box-shadow: none;
 }
+
+/* ===== 卡片/表格「全屏」(内核 maxView) 适配我们的窗口外壳 =====
+   内核 `.ne-ui-max-view{position:fixed;inset:0;z-index:1000}` 是为「无外壳的独立编辑器」设计的；
+   在我们带 activity rail / 侧栏 / 顶栏标签的窗口里，它会盖住整个窗口（现象：表格缩在左上、外壳被压在
+   下面 → "窗口错乱"）。适配：把 maxView 限定在文档区（`.document-pane`）内绝对定位，保留外壳；
+   顺带让内核的「返回文档」退出按钮有正常布局（不限定定位时它实测是 0×0，用户没有可见的退出入口，
+   只能盲按 Esc）；Esc 退出本就可用于内核。 */
+.document-pane { position: relative; }
+.document-pane .lake-editor-mount.ne-ui-max-view {
+  position: absolute !important;
+  inset: 0 !important;
+  z-index: 30 !important; /* 低于顶栏标签(z400)/侧栏(z250)/状态栏(z180)：外壳始终可见 */
+  height: auto !important;
+}
