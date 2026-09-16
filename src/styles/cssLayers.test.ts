@@ -59,7 +59,7 @@ const BASELINE: Record<string, { decls: number; dupGroups: number }> = {
   // 基础层域文件（260916 S3：原 styles.css 拆成入口 + 10 个域文件；数字 = 拆分当批实测，只允许变小）
   "styles/app/base.css": { decls: 36, dupGroups: 0 },
   "styles/app/dialogs.css": { decls: 167, dupGroups: 7 },
-  "styles/app/editor.css": { decls: 45, dupGroups: 0 },
+  "styles/app/editor.css": { decls: 50, dupGroups: 0 },   // +5 = 内核「卡片/表格全屏」maxView(.ne-ui-max-view) 适配窗口外壳（260916；.document-pane 定位 + 4 条覆盖声明，非多层覆盖回涨）
   "styles/app/misc.css": { decls: 299, dupGroups: 0 },
   "styles/app/panels.css": { decls: 101, dupGroups: 0 },
   "styles/app/quick-notes.css": { decls: 293, dupGroups: 7 },
