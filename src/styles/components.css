@@ -410,3 +410,6 @@ button.b3-list-item__action:disabled { opacity: .45; cursor: default; }
 @media (prefers-reduced-motion: reduce) {
   .settings-overlay, .trash-panel-backdrop, .history-panel-backdrop, .search-panel-backdrop, .modal-backdrop { animation: none; }
 }
+/* 通用组件与浮层通用件（260916 第二档 S4：由 `overlays.css` 改名而来 —— 原名是"按响应/意图"命名，职责名才是 `components`）。
+   内含：`.ln-*` 浮层通用件（`ln-tabs/ln-toolbar/ln-row2/badge/seg/checks/panel-title/ln-close/ln-empty`）、菜单、卡片、徽章等。
+   **双端共享**（桌面 `src/main.tsx` 与移动 `src/mobile/main.tsx` 都加载）。新界面要补通用件时补在这里。 */

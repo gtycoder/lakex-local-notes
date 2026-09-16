@@ -24,7 +24,7 @@ const FILES = [
   "b3/theme-daylight.css", "b3/theme-midnight.css",
   "features/attachment/attachment-preview.css", "features/editor/image-lightbox.css", "features/outline/outline.css",
   "styles/dialog.css", "styles/document-status.css", "styles/editor.css",
-  "styles/motion.css", "styles/overlays.css", "styles/quick-notes.css", "styles/shell.css",
+  "styles/motion.css", "styles/components.css", "styles/quick-notes.css", "styles/shell.css",
   "styles/tokens.css", "styles/ui-polish.css",
   // 基础层（260916 第二档 S3：原 styles.css 拆成入口 + 10 个域文件；入口只剩 @import 编排，不再计声明）
   "styles/app/base.css", "styles/app/dialogs.css", "styles/app/editor.css",
@@ -51,7 +51,7 @@ const BASELINE: Record<string, { decls: number; dupGroups: number }> = {
   "styles/document-status.css": { decls: 107, dupGroups: 2 },
   "styles/editor.css": { decls: 14, dupGroups: 0 },   // +2 = 自 ui-polish.css 并入的编辑器正文覆盖（S2）
   "styles/motion.css": { decls: 3, dupGroups: 0 },
-  "styles/overlays.css": { decls: 444, dupGroups: 1 },
+  "styles/components.css": { decls: 444, dupGroups: 1 },   // 260916 S4：原 overlays.css 改名（纯重命名，位置不变）
   "styles/quick-notes.css": { decls: 11, dupGroups: 0 },   // +2 = 自 ui-polish.css 并入的小记入口（S2）
   "styles/shell.css": { decls: 196, dupGroups: 0 },   // +5 = 原 layout-contract 的壳层度量令牌（S1）；+143 = 自 ui-polish 并入的目录栏/页签/dock 头部（S2）
   "styles/tokens.css": { decls: 83, dupGroups: 0 },

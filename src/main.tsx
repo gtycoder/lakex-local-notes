@@ -18,7 +18,7 @@ import "./b3/animations.css";
 import "./b3/layout.css";
 import "./styles/tokens.css";
 import "./styles/shell.css";
-import "./styles/overlays.css";
+import "./styles/components.css";
 import "./styles/editor.css";
 import "./styles/quick-notes.css";
 import "./styles/document-status.css";
