@@ -670,6 +670,13 @@
 **lakex 底层切换（分支 `feat/lakex-source-vendor`，待用户验收后合 master）**
 - 详见 `docs/LAKEX-MIGRATION-260916.md`。门禁 tsc/vitest(969/16)/双端 build/`check:core`/`check:bundle` 全绿；桌面 + 移动冒烟已过（TOC/虚拟渲染水合/锁 viewer/回收站守卫/AssetServer 图片）；PlantUML 与画板引擎均已懒加载分包（app-js gzip 3.93→**1.82MB**）。自检修复：vendor 画板卡 `React.lazy` + 移除 `inlineDynamicImports`（vendor），app `codeSplitting` 组 `includeDependenciesRecursively:false`；`e2e-drawnix-smoke` 重写并通过（画板按需加载、普通文本 0 drawnix JS）。唯一遗留：`mass-office` AI 图标（该域名本机不可达）。
 
+**AI 接入（画板 AI 助手；待定后端，260916 记录）**
+- 钩子：`config.drawingBoardAI.generate`（vendor 的 `LakexEditor` 会挂到 `editor.__lakexDrawingBoardAI`）；我们不走 `LakexEditor`，是直接 `Doc.createOpenEditor`，需在 `src/features/editor/lakeRuntime.ts` 创建 editor 后**手动挂**这一行。
+- 截图那个绿色 AI 徽标是**内核**的「文本绘图 AI 助手」（`.ne-text-diagram-ai-assistant-*`，正是 `mass-office` 背景图所在元素）；vendor **无注入点**（`KernelAssistantConfig` 只有 `supportEmoji`）→ **接不了**。
+- 能接的是画板卡的「AI 画板助手」（`.lakex-ai-board-*`）；未配置时面板内置文案提示「尚未配置 AI 服务。请通过 config.drawingBoardAI.generate 注入项目的模型调用。」。
+- 官方示例：`vendor/lakex-doc-react/examples/`（`src/drawingBoardAI.ts` 前端 generate / `aiProxyPlugin.ts` 后端代理 / `src/mockDrawingBoardAI.ts` 假数据 / `.env.example`）。契约见 `src/components/lakex/types.ts`（DrawingBoardAIRequest/Response/Config）。
+- 待定：模型/服务与 endpoint、API Key 存放（**建议 Electron 主进程代理**，勿用 `VITE_` 前缀）、设置项、移动端网络；可先接 mock 把 UI 跑起来。
+
 **性能/健壮性**
 1. ~~**FTS 索引重做**~~ **✅ 已完成（260911，见 §2.11）**：统一 FTS5 + unicode61 + 单字预分词 + 增量账本；不再有 1/2/3 字分支。后续增强：移动端 `getDocument("text/plain")` 索引源、A+ 拉丁检索、小记搜索（二期）。
 2. ~~其余浮层收尾：草稿恢复框进 b3 套~~ **✅ 已完成（260915，见 §2.37 第十二批）**。
