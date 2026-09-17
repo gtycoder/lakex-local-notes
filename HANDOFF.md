@@ -5,12 +5,19 @@
 > **§8 是移动端（安卓）专职交接**，由移动端会话维护；桌面会话不要改 §8，移动端会话不要改 §0-§7 之外的桌面文件。
 
 ## 0. 当前基线（新会话开工前）
-- **基线（最新一批，已在 `master` 且已推 origin）**：`master` @ `9daa73e`（本批修复提交 `eaf1537`；其上 `9daa73e` 为交接文档更新）。本批修了 **「增强大纲 + 编辑态」大段空白**（根因：增强态只用 CSS `display:none` 隐藏原生大纲，内核编辑根仍留 `.ne-normal-toc` → 正文块被 `max-width:750px; margin-right:280px` 预留 280px 占位；修法 = 官方 `toc:{normalView:false,allowAutoPin:false,rememberLastPin:false}` + `outlineEnhance` 纳入重建依赖，见 `docs/LAKEX-CONTRACT.md §5.7`）；并随批次带入上一会话未提交 WIP（Word/PDF 导出、统一「导出」子菜单、历史快照只读 viewer、`allowModifyHash` 修复、大纲栏样式对齐等）。更早一批（260916）为 lakex 底层换源 + UI 全量 CSS 重构 + Web 客户端 MVP 三端合并。
-  - 门禁（本批）：`tsc` 0 · `vitest` **985 passed / 16 skipped (1001)**（桌面单测全量）；桌面 build / `check:bundle` 本批未重跑（上一批基线：`check:core` 0 · 桌面 + 移动 build · `check:bundle` 绿 app-js gzip 1.816MB / drawnix 408KB / css 190KB）。
-  - 桌面 + 安卓端已实测启动（dev：`1421` vite / `9222` electron / `19876` asset / `19880` Web 客户端）。
-  - 关键入口：`docs/LAKEX-MIGRATION-260916.md`（换源/懒加载/离线）· `vendor/lakex-doc-react/LOCAL-CHANGES.md`（vendor 本地改动 8 条）· `docs/OFFLINE-ASSETS-AUDIT-260916.md`（离线对账）· `docs/CSS-LAYERS-BRIEF-260916.md`（UI 样式层）· `docs/LAKEX-CONTRACT.md`（内核契约，编辑器相关先读）。
+- **基线（最新一批，已在 `master` 且已推 origin）**：`master` @ `80a15e5`。本批 = **桌面端 UI/交互收口 + Lake 正文写入形态治理**（5 个代码提交 + 1 个文档提交）：
+  ① 顶栏「全文搜索」从左上角下拉**搬到文档页右上角**（右上顺序 = 标签切换三角 → 搜索）；外观切换移出顶栏，只保留在「偏好设置 → 外观 → 主题」；
+  ② 去掉右键弹窗左侧 3px 蓝条（根因：`b3/components.css` 里 `.context-menu/.create-menu/.tab-switcher-menu` 共用规则的 `border-left`）+ 去掉活动标签顶部主色指示线；
+  ③ **去掉标签切换的 View Transition**（含 Chromium 默认 250ms `::view-transition-group` 形变），切换回归"一次 commit 内 toggle display"，不再有交叉淡化；
+  ④ 目录栏**跟随标签定位**（含"停靠 ↔ 浮动"重定位）+ 清掉 `.context` 蓝框残留 + `html/body` 改 `overflow: clip`（从根上杜绝程序化滚动顶走外壳）；
+  ⑤ **Lake 正文写入收口**：`src/core/lakeDocForm.ts`（写入形态单一来源）+ `docs/LAKE-CONTENT-WRITING.md`（写入契约）+ `scripts/lake-roundtrip-check.mjs`（打开对拍检查）。
+  - 门禁（本批）：`tsc` 0 · `vitest` **989 passed / 16 skipped (1005)** · 桌面 `vite build` + `vite build -c vite.mobile.config.ts` 全绿 · `git diff --check` 干净。
+  - 桌面 dev 实测端口：`1421` vite / `9222` electron（CDP）/ `19876` asset。
+  - 关键入口（本批新增，**写 Lake 正文前必读**）：`docs/LAKE-CONTENT-WRITING.md` · `src/core/lakeDocForm.ts` · `scripts/lake-roundtrip-check.mjs` · `docs/TROUBLESHOOTING.md #56`。
+  - 关键入口（承前）：`docs/LAKEX-CONTRACT.md`（内核契约，编辑器相关先读）· `docs/LAKEX-MIGRATION-260916.md`（换源/懒加载/离线）· `vendor/lakex-doc-react/LOCAL-CHANGES.md` · `docs/CSS-LAYERS-BRIEF-260916.md` · `docs/OFFLINE-ASSETS-AUDIT-260916.md`。
 - **工作区现状（本会话清理过）**：`/Users/admin/file/local-lake/` 下只剩 `lake-notes-electron`(主仓库) + `yuque-developer-docs`(语雀开发文档库/内核官方出处) + `lake-main`/`lake-editor-main`(内核机制参考) + `siyuan-master`(思源 v3.8.0 参考，AGPL-3.0)。已删：全部 worktree、过期截图/根级分析稿、`design-spec`、`release/`(910M)、`.css-audit/`(85M)、`test-node-abi/`、外部参考仓库副本（含 `lake-notes-tauri-poc`、`drawnix-develop`）。本地分支只剩 `master` + `refactor/store-split`(未合 master)。
 - **dev 数据现状（重要）**：`到啦领导`（ee860a19）仍在回收站（`trashed_at=09-04 10:34`），用户未决定是否恢复，**别擅自删**；安卓回收站 48 条旧测试数据 + 笔记本「20-UI编辑测试」「测试本1」（含用户笔记）保留勿删。
+- **本会话留下的测试产物（都在回收站，可清空）**：1 篇 `TMP-P2-verify-*`（P2 端到端探针）+ 4 份对拍脚本产生的副本（`… 副本`）。另注意：为排查"打开即重写"，本会话打开过几篇测试文档（`压测3-图片-神里凌华/温迪/bilibili (26)`），它们因此已被内核归一化、图片降级成失败卡片并变成 `待同步`（**S3 未动**，本会话没跑同步）。
 
 ## 1. 项目一句话 + 铁律（详见 AGENTS.md）
 本地优先笔记应用（Electron 43 + React 18.3 + better-sqlite3 + 语雀 Lake 内核），S3（七牛 Kodo 兼容）同步。
@@ -19,20 +26,20 @@
 ⑤ 不为旧数据写兼容/迁移（能删重建就删重建）；⑥ 杀 Electron 只 kill 具体 PID，禁 `pkill -f Electron`；
 ⑦ 不擅自合 master（代码批次需用户验收；文档类清理可直接提交）。移动端另有铁律见 **§8.0**。
 
-## 2. 上次会话（2026-09-16）：任务目标 + 已完成
+## 2. 本会话（2026-09-17）：任务目标 + 已完成
 
-**任务目标**（用户原话大意）：① 审计并补全「完全离线本地化」，看还差哪些资源；② 底层换成上游 lakex 源码（`@dlient/lakex-doc-react`）并借用其画板/导图/文本绘图卡；③ 把 lakex 底层、UI 重构、Web 客户端**三端合并**到 master；④ 精简文档与工作区；⑤ 修几个体验/正确性 bug。
+**任务目标**（用户逐步提出，原话大意）：① 把「全文搜索」从左上角下拉**搬到文档页右上角**（右上顺序 = 垂直页签三角 → 搜索），并去掉顶栏的外观（夜间）切换；② 去掉右键弹窗**左侧蓝色竖条**（目录栏文档右键 / 编辑区域右键 / 多 tab，无论文本·图片·附件），并要求"UI 改动尽量找根位置，别一层层套 CSS"；③「多 tab 切换有点慢 / 闪一下太难看」→ 先定位是不是动效，最终**去掉切换动效**；④ 修「切标签时目录栏不跟随定位」与「`.context` 蓝框残留」，并解决「停靠 → 浮动后最下方选中文档高亮不可见」；⑤ 排查「首次打开某文档出现脏点并被自动保存，会不会导致 S3 更新」；⑥ 由此立规 **「能走内核 API 就不要手拼 Lake 正文」**，按顺序做 P1~P4。
 
 **已完成（全部在 `master`）**：
-1. **lakex 底层换源**：删旧 dist-only 的 `lakex-editor-react-component`，换上游 `Mueat/lakex-doc-react@4b068bd2` 整包源码到 `vendor/lakex-doc-react/`；内核升到 **v1.99.0**；删自研 `BoardCard.tsx`，改用 vendor 的 6 张内置卡（画板/流程图/UML/导图板/思维导图/文本绘图）。做法见 `docs/LAKEX-MIGRATION-260916.md`；本地改动见 `vendor/lakex-doc-react/LOCAL-CHANGES.md`（8 条）。
-2. **离线外链清零**：`unpkg`（PlantUML → 本地 `@plantuml/core`）、`mdn.alipayobjects.com`（drawnix 默认图 → 本地镜像）、`gw.alipayobjects.com` 在**构建产物内 = 0**（`public/vendor/lakex/alipay` 195 文件全部在用，已核）。唯一残留：`mass-office.alipay.com` 1 处 AI 图标（内网不可达，外观级）。
-3. **三端合并 + 收尾自检**：`feat/lakex-source-vendor` + `polish/ui-ux-260914` + `feat/web-client-mvp` 全并入 master。冲突 2 处（`src/styles.css` 取 UI 版、`HANDOFF` 保留双方）+ 1 处语义冲突（自研 BoardCard 删除后 `vendor-board.css` 里的死样式，已清）。顺带删 139 个死镜像（`public/vendor/lakex-doc`）与 2 个孤儿 CSS。
-4. **文档精简**：docs 62→20；HANDOFF 1873→~300 行；AGENTS 合并重复原则（#7+#10 数据兼容、#8+#17 拒绝过度设计，保留编号）。
-5. **工作区清理**：见 §0（移除 worktree、删过期截图/文档/打包产物）。
-6. **3 个体验/正确性修复（本会话末段，均已推）**：
-   - `d638d7f`：画板**拖动/缩放不再触发文档保存与 S3 同步**（vendor `DrawnixBoardCore.onViewportChange` 改 no-op；视口是纯视图状态）。
-   - `55485c7`：画板/流程图/UML/导图板纳入**点击激活滚轮门控**（光标路过滚文档，点击画布后才滚/缩放画布）。
-   - `a4aad77`+`429bb1f`：内核「卡片/表格全屏」(maxView) 适配我们的窗口外壳（限定在 `.document-pane` 内，不盖侧栏/顶栏；内核「返回文档」退出按钮恢复可见）。
+
+1. **顶栏搜索搬位 + 清蓝色残留**（`b695890`）：右上角顺序 = 标签切换三角 → 搜索；小记页右上不再有槽位；工作空间下拉只剩「偏好设置/回收站」；删掉 `b3/components.css` 里菜单家族的 `border-left: 3px`（一次覆盖三处右键菜单）与活动标签顶部指示线。实测三处菜单 `border-left` = 1px 浅灰（与其余三边一致）、`.tab-item.active` 的 `boxShadow` = none。
+2. **去掉标签切换 View Transition**（`e03b31c`）：点击→动画结束从 **536ms → 275ms → 现在无动画**（首帧 = 一次 React commit ≈63ms）；`startViewTransition` 调用 0 次、view-transition 动画 0 条；删除 `src/lib/viewTransition.ts` 与只为它服务的 `outlineSwitching` 状态。**这是"拿掉"不是"调快"**（用户嫌它闪）。
+3. **目录栏跟随标签定位**（`5941c23`）：抽出 `revealNode()`；**只滚目录栏自己的容器**（不能用 `scrollIntoView`，见 §4）；可见区取"列表矩形 ∩ 窗口"；上下留 16px 余量；`mode` 变化（停靠↔浮动）也重定位；同一 effect 复位 `context` 残留。实测：目标行在窗口下方 → 切过去 `rowBottom` 精确落在窗口底；已可见不滚；6/6 稳定。
+4. **`overflow: clip` 硬化**（`275e195`）：`html, body` 由 `hidden` 改 `clip`（`hidden` 仍建立滚动容器，`body.scrollTop=42` 依然可设 → 任何 `scrollIntoView` 都能把整壳顶走）。实测：`body` 程序化滚动 40 → **0**；强行 `scrollIntoView` 整壳不动；弹层/浮层/各面板自身滚动/窄窗 600×800 全部照常。
+5. **Lake 正文写入收口 + 打开对拍**（`80a15e5`）：根因链见 §3.7 —— 自动化脚本**绕过应用**直接写库 + 手写**裸 `<img src="http://127.0.0.1:19876/…">`** → 内核打开时判为远程图片去抓 → 主进程 SSRF 护栏拒（`INVALID_INPUT`）→ 内核回写**失败态卡片** → 正文变化被当成用户编辑 → 1s 防抖保存 → `syncState: synced→local` → 随下次同步上传。实测 `压测3-图片-神里凌华.png` **438B→1365B**；全库 **287/511** 篇含裸 `<img>`；**纯文本旧形态**与**卡片形态（小记转换产物）实测零重写**。仓库内 4 处手拼收口到 `src/core/lakeDocForm.ts`。
+6. **文档对齐 + 交接维护**：`5b943f5`（README/HANDOFF/TROUBLESHOOTING 与工作区实际对齐）；本批新建 `docs/LAKE-CONTENT-WRITING.md`、加 `docs/TROUBLESHOOTING.md #56`、更正 HANDOFF §3 旧定性。
+
+> **两处自我纠错，新会话务必引以为戒**：① 先误判"目录树全量重渲"，后又误判"显形面板的 layout/paint"，都被实测否掉（`TreeRow` 自身仅 2.3–3.4ms，`memo` 早在位）；② 对拍脚本等待窗口一度只有 ~3.2s → 给出**假 PASS**，实测内核水合改写延迟 **0.5s / 3.3s / 7.8s** 都出现过。
 
 ## 3. 下一步计划 + 当前问题（真正的待办，按优先级）
 
@@ -48,17 +55,30 @@
 4. **产品/技术债（长期）**：W-8 ACAO / W-10 dompurify（**安全，建议优先**）；大纲 viewer 只读点击不跳转；回收站首拉成本（惰性下载暂缓，动恢复红线）；Word/PDF 导出 + 附件大文件 S3 分片；`docs/LAKEX-CONTRACT.md` §4 的 `lakex-contract.d.ts` 落地；**「深层重复」CSS 候选清理**（原挂起条件「等 vendor 合并到位」**已满足**，做法见 `scripts/css-audit/`，须**重新生成**候选、勿复用旧 `dup-agg.json`）。
 5. **非代码**：安卓同步偶发 `UnknownHostException` = 设备网络（联网重试）。
 6. **小记（Quick Notes）设计取舍 —— 是否直接挂 Lake 内核底座**（用户 260917 提出，**待讨论后再动**）：挂上后「小记→文档」转换天然就是内核规范形态，且小记本身能支持更多格式/样式；代价是更重（每条小记都要起内核实例）。当前 `electron/quickNoteConversion.ts` 产出的是「内核**容忍**并原样保留」的形态，不是「内核**产出**」的形态（字段口径差异见 `docs/LAKE-CONTENT-WRITING.md`）。
-7. **Lake 正文写入收口**（约定见 `docs/LAKE-CONTENT-WRITING.md`）：① 自动化程序（不在仓库）**直接写库 + 手写裸 `<img>`**，导致 287 篇测试文档一被打开就被内核重写（图片降级成失败卡片 + 变待同步 → 随下次同步上传）→ **必须改成走应用写入路径，或只写纯文本**；② 仓库内 4 处手拼写入者收口到共享模块；③ 旧数据按 §3 原则 7 **不写归一化兼容**，用修好的姿势重建。
+7. **Lake 正文写入收口**（约定见 `docs/LAKE-CONTENT-WRITING.md`）：① 自动化程序（不在仓库）**直接写库 + 手写裸 `<img>`**，导致 287 篇测试文档一被打开就被内核重写（图片降级成失败卡片 + 变待同步 → 随下次同步上传）→ **必须改成走应用写入路径，或只写纯文本**；② 仓库内 4 处手拼写入者**已收口**到 `src/core/lakeDocForm.ts`，并加了"绝不产出裸 `<img>`"的单测围栏；③ 旧数据按 §3 原则 7 **不写归一化兼容**，用修好的姿势重建（见第 8 条）。
+8. **旧数据处置 —— 等用户决定，别擅自动数据**：287 篇含裸 `<img>`（+7 篇已降级成失败卡片）。选项：**A 删掉重播（推荐，符合原则 7）** / B 留着但别打开 / C 就地改写成卡片（= 为损坏数据写代码，与原则 7 冲突，不推荐）。
+9. **「深层重复」CSS 候选清理（长期，已按实测估算）**：口径 = 29 个 CSS 文件 / 3835 条声明、跨文件争用 **184** 处（其中 **147** 处跨层）、涉及 92 个选择器；估 **8–12 人日**（工具与清单重建 0.5–1 天 · 分层归属定调 0.5 天 · 分批清理 6–8.5 天 · 收口 1–1.5 天）。**建议先做"菜单/浮层"族**：A 层 `.context-menu/.create-menu/.tab-switcher-menu` 已被 C 层整段压掉（纯死代码），半天可交付且几乎零视觉风险；**不要一次性大重写**（风险在"某个宽度 × 主题 × dock 态"才暴露）。
 
 ### 当前问题 / 已知坑（不阻塞）
 - 画板**不再记忆视口**（拖动/缩放后重开为默认/自适应）：这是 260916 为「不让视口触发保存/上传」刻意做的取舍，**用户已确认接受**（"谁知道下次进来要看什么"）。不要改回去。
 - 离线残余 3 处（见上，全外观级）。
 - `public/vendor/cdn` 的 32 个静态无引用文件**不能删**——它们是 `electron/cdnRedirect.ts` 的**运行时兜底白名单**（用「镜像里是否存在该文件」决定是否把 `gw.alipayobjects.com` 请求回本地）。
 - 桌面日志里的 `download_remote_resource` **INVALID_INPUT（不允许下载本机或私网地址）不是"无关噪声"**（260917 更正）：它标记着「打开了自动化手写裸 `<img>` 的文档」→ 内核回写失败态卡片 + 该文档变待同步，**打开即发生**。详见 §3.7 与 `docs/LAKE-CONTENT-WRITING.md`。（403 仍是远端策略问题。）
+- **小记转换产物是"内核容忍"而非"内核产出"**：`electron/quickNoteConversion.ts` 写的图片卡片是 `originalType:"url"` + `originWidth/originHeight` + `from:"quick-note"`，内核自产卡片是 `originalType:"binary"` + `width/height` + OCR 字段（`search/ocrLocations`）。今天**实测稳定**（`.lake` mtime 停在转换时刻、无脏点、无快照、对拍 PASS），但依赖内核容忍度 → 与 §3.6 的取舍一起讨论。
+- **判定"是否被内核重写"的口径**（别再靠肉眼）：`.lake` 的 **mtime 不变** + 标签无脏点 + 无新增历史快照 + 正文里 `status%22%3A%22error%22` 为 0；批量判断用 `scripts/lake-roundtrip-check.mjs`（只动副本）。
+- **`vitest` 是 `node` 环境，跑不了内核**：涉及内核行为的验证只能 CDP 驱真实 Electron；不要试图为它写单测（对拍脚本就是这种模式）。
 
 ## 4. 踩过的坑（合并版；通用红线/环境见 AGENTS.md）
 
-### 本次会话新坑（2026-09-16，务必记住）
+### 本次会话新坑（2026-09-17，务必记住）
+- **`scrollIntoView` 会滚动"所有"可滚动祖先**：它不认"我只想滚这个容器"。本会话因此把 `body` 滚了 42px（`.sidebar` 的 `margin-top: 42px` 让外壳多出 42px 可滚区间）→ 整个 `.app-shell` 被顶上去 → 固定顶栏与壳内容错位（侧栏头钻进顶栏下、面包屑挤进 tab 行）。**要滚就只改目标容器的 `scrollTop`**；已把 `html/body` 改 `overflow: clip` 兜底（`hidden` 挡不住程序化滚动）。
+- **可见区要按"窗口"裁剪，不能只看容器矩形**：停靠目录栏底边在窗口外 42px（`.sidebar` 的 `height: 100% !important` 没补偿自己的 `margin-top: 42px` —— 见 `app/shell.css:238` 的 2026-08-13 注释）→ 只用 `listRect.bottom` 判断"是否可见"会**永远少滚 42px**（症状："向上定位正常、向下永远差一截"）。副作用：目录栏最后 ~42px 内容看不全（既有布局债，未修）。
+- **Chromium 给 `::view-transition-group` 默认 250ms 形变动画**：只压 `::view-transition-old/new` 不够 —— 这个默认 group 动画才是"切标签慢"的主因（实测占掉 anim 阶段 276ms 里的 ~250ms）。我们最终**整个 View Transition 都不要**。
+- **对拍/等待窗口别拍脑袋定**：内核水合改写延迟 **0.5s～7.8s 不定**，短窗口会给**假 PASS**。高风险形态（正文含裸 `<img>`）必须等满上限。
+- **加"对拍单测"是死路**：`vitest` environment = `node`，内核要 DOM → 只能用 CDP 脚本（`scripts/lake-roundtrip-check.mjs`）。
+- **改 `electron/**` 会触发 vite-plugin-electron 重启 Electron**（老坑见下），本会话改了 `store.ts`/`schemaInit.ts`/`quickNoteConversion.ts`，构建与重启实测正常；仍按老规矩：改完别再频繁动主进程文件。
+
+### 更早新坑（2026-09-16，仍需记住）
 - **rolldown `codeSplitting.groups`**：`includeDependenciesRecursively` 默认 `true`，会把**入口也需要的依赖**并进该分组的 chunk，令入口**重新静态引用**它（懒加载失效）。要真正惰性必须设 `false`（app `vite.config.ts` 的 drawnix 组）。
 - **vendor lib 构建默认 `inlineDynamicImports:true`**：会把动态 import 内联回单文件。画板卡懒加载要求关掉它，并**提交新增的 chunk 文件**（`DrawnixBoardCore-*.js/.cjs` 会随内容改名，旧的要删）。
 - **`external` 匹配 package 子路径必须用正则**：精确字符串 `'@plantuml/core'` 匹配不到 `@plantuml/core/plantuml.js`（7MB 会被内联进主 chunk、预算炸）。用 `/^@plantuml\/core(\/|$)/`。
@@ -118,6 +138,8 @@
 3. 任何同步/GC 改动**先读** `AGENTS.md §3 #11/#12/#13/#15/#16` + `docs/SYNC-PROTOCOL.md` + `docs/S3-GC-DESIGN.md`，改前想清"声明是否仍全、被引用对象会不会被 GC 删、跨端自愈是否成立、复活路径在哪"。
 4. UI 改动先看 `AGENTS.md §3 #14`（思源版式语法），别再造第四套类名、别写内联样式。
 5. 移动端一律按 **§8**（`§8.0` 移动端/桌面硬隔离已解除——桌面与移动可自由改；仅 `src/b3/**` 思源 vendored 等共享/合规件仍须谨慎）。
+6. **写任何 Lake 正文之前先读** `docs/LAKE-CONTENT-WRITING.md`：禁手拼媒体（裸 `<img>`）；无内核的主进程只写纯文本；写完用 `scripts/lake-roundtrip-check.mjs --note <id>` 对拍。
+7. §3.6（小记是否挂 Lake 内核底座）与 §3.8（旧数据处置）都**等用户决定**：不要擅自大改小记，也不要擅自删/改数据。
 
 ## 6. 环境与命令
 ```bash
@@ -144,6 +166,7 @@ node scripts/lake-roundtrip-check.mjs --note <id>   # 对拍「这篇一打开�
 ## 7. 文档索引（`docs/` 按需查）
 - **契约/规格（单一来源）**：`STORAGE-LAYERS.md`（存储分层 + 设备本地契约）· `SYNC-PROTOCOL.md`（同步协议 v4）· `S3-GC-DESIGN.md`（存储/删除 GC v4）· `HISTORY-DESIGN.md`（历史快照）· `TRASH-NOTEBOOK-DESIGN.md`（回收站）· `QUICK-NOTES-SPEC.md`（小记）。
 - **内核**：`LAKEX-CONTRACT.md`（闭源 lakex 行为契约 + 速查表，编辑器相关**先读**）· `LAKEX-MIGRATION-260916.md`（换源/懒加载/离线）。
+- **正文写入（写 `.lake` 前必读）**：`LAKE-CONTENT-WRITING.md`（约定 + 反例 + 校验判据；配套 `src/core/lakeDocForm.ts` 与 `scripts/lake-roundtrip-check.mjs`）。
 - **指南**：`CODEX-GUIDE.md`（CDP 驱动真实 Electron，动手前必读）· `DEVELOPMENT.md` · `ARCHITECTURE.md` · `TROUBLESHOOTING.md` · `RELEASE.md` · `SYNC-RELIABILITY-VERIFY.md`（数据完整性门禁）。
 - **移动端**：`MOBILE-TECH-STACK.md` · `ANDROID-TECH-SCHEME.md` · `ASSET-URL-MOBILE-PLAN.md`。
 - **近期简报/对账**：`CSS-LAYERS-BRIEF-260916.md`（UI 样式层）· `OFFLINE-ASSETS-AUDIT-260916.md`（离线清理对账）· `NARROW-UNIFY-BRIEF-260915.md`（窄窗统一）。
