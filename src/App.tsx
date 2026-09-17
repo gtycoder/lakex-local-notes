@@ -82,7 +82,7 @@ export function App() {
     showSidebarPreview, hideSidebarPreview, toggleSidebarDock, clearSidebarPreviewTimer,
     // outline
     outlineMode, setOutlineMode, activeOutlineEmpty, setActiveOutlineEmpty,
-    outlineEmptyOverride, setOutlineEmptyOverride, outlineSwitching, setOutlineSwitching,
+    outlineEmptyOverride, setOutlineEmptyOverride,
     outlineTabsVersion, outlineSidebarWidth, outlineResizing, setOutlineResizing,
     setOutlineModeForActive, collapseOutline, pinOutline,
     updateOutlineSidebarWidth, commitOutlineSidebarWidth,
@@ -212,7 +212,7 @@ export function App() {
   });
 
   useOutlineSync({
-    activeNoteId, outlineTabsVersion, setOutlineSwitching, setOutlineEmptyOverride, setActiveOutlineEmpty,
+    activeNoteId, outlineTabsVersion, setOutlineEmptyOverride, setActiveOutlineEmpty,
   });
 
   const { refreshPendingSummary, refreshDraftEntries, handleTrashRestored, handleHistoryRestored, reloadNoteTab } = useSyncRefresh({
@@ -340,7 +340,7 @@ export function App() {
   );
 
   return (
-    <div className={`app-shell ${shellPlatformClass} sidebar-${sidebarRenderMode} outline-${effectiveOutlineMode} ${workspaceMenuOpen ? "workspace-menu-open" : ""} ${focusMode ? "focus-mode" : ""} ${desktopWorkspace === "quick-notes" ? "quick-notes-active" : ""} ${sidebarResizing ? "sidebar-resizing" : ""} ${outlineResizing ? "outline-resizing" : ""} ${outlineSwitching ? "outline-switching" : ""}`} style={shellStyle}>
+    <div className={`app-shell ${shellPlatformClass} sidebar-${sidebarRenderMode} outline-${effectiveOutlineMode} ${workspaceMenuOpen ? "workspace-menu-open" : ""} ${focusMode ? "focus-mode" : ""} ${desktopWorkspace === "quick-notes" ? "quick-notes-active" : ""} ${sidebarResizing ? "sidebar-resizing" : ""} ${outlineResizing ? "outline-resizing" : ""}`} style={shellStyle}>
       <DesktopActivityRail
         desktopWorkspace={desktopWorkspace}
         sidebarMode={sidebarMode}

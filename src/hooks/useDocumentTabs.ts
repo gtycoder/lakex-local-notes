@@ -1,5 +1,4 @@
 import { useCallback, type Dispatch, type MutableRefObject, type SetStateAction } from "react";
-import { withViewTransition } from "../lib/viewTransition";
 
 export interface DocumentTabLike {
   noteId: string;
@@ -33,10 +32,8 @@ export function useDocumentTabs<T extends DocumentTabLike>({
   clearScrollMemory,
 }: UseDocumentTabsInput<T>) {
   const handleTabChange = useCallback((noteId: string) => {
-    withViewTransition(() => {
-      setActiveNoteId(noteId);
-      setTabs((tabs) => tabs.map((tab) => tab.noteId === noteId ? { ...tab, lastAccessedAt: Date.now() } : tab));
-    });
+    setActiveNoteId(noteId);
+    setTabs((tabs) => tabs.map((tab) => tab.noteId === noteId ? { ...tab, lastAccessedAt: Date.now() } : tab));
     const tab = tabsRef.current.find((item) => item.noteId === noteId);
     setSaveState(tab?.dirty ? "dirty" : "idle");
   }, [setActiveNoteId, setTabs, setSaveState, tabsRef]);

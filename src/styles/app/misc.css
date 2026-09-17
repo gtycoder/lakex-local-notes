@@ -319,24 +319,6 @@
   to { opacity: 1; transform: translate(-50%, -50%) scale(1); }
 }
 
-/* 切换标签页：仅文档区做淡入淡出过渡，避免整页闪烁 */
-::view-transition-old(root),
-::view-transition-new(root) {
-  animation: none;
-}
-
-::view-transition-old(note-pane) {
-  animation: 55ms ease-in both vt-fade-out;
-}
-
-::view-transition-new(note-pane) {
-  animation: 85ms ease-out both vt-fade-in;
-}
-
-@keyframes vt-fade-out { to { opacity: 0; } }
-
-@keyframes vt-fade-in { from { opacity: 0; } }
-
 /* ══ 窄窗兜底（260915 用户报："右侧开 DevTools 窗口就乱了"）══
  * 桌面壳层的几何（停靠边距 / 状态栏 / 顶栏 / 面板卡片）全部写在 layout.css 的
  * `@media (min-width: 761px)` 里。视口一旦窄于 761px（DevTools 停靠、窗口拖窄、分屏），

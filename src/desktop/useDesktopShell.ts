@@ -54,7 +54,6 @@ export function useDesktopShell(options: UseDesktopShellOptions) {
   const [outlineMode, setOutlineMode] = useState<OutlineMode>(initialOutlineMode);
   const [activeOutlineEmpty, setActiveOutlineEmpty] = useState(false);
   const [outlineEmptyOverride, setOutlineEmptyOverride] = useState(false);
-  const [outlineSwitching, setOutlineSwitching] = useState(false);
   const outlineTabsVersion = useSyncExternalStore(subscribeOutlineTabs, getOutlineTabsVersion, getOutlineTabsVersion);
   const [outlineSidebarWidth, setOutlineSidebarWidth] = useState(initialOutlineSidebarWidth);
   const [outlineResizing, setOutlineResizing] = useState(false);
@@ -183,7 +182,7 @@ export function useDesktopShell(options: UseDesktopShellOptions) {
     toggleSidebarDock,
     // outline
     outlineMode, setOutlineMode, activeOutlineEmpty, setActiveOutlineEmpty,
-    outlineEmptyOverride, setOutlineEmptyOverride, outlineSwitching, setOutlineSwitching,
+    outlineEmptyOverride, setOutlineEmptyOverride,
     outlineTabsVersion, outlineSidebarWidth, outlineResizing, setOutlineResizing,
     setOutlineModeForActive, collapseOutline, pinOutline,
     updateOutlineSidebarWidth, commitOutlineSidebarWidth,
