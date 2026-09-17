@@ -4,17 +4,23 @@ import path from "node:path";
 import { type ImportedNoteAsset, Store } from "./store.js";
 import { type QuickNoteDocument, QuickNotesStore } from "./quickNotes.js";
 import { ASSET_PORT } from "./assetServer.js";
-
-function escapeHtml(value: string): string {
-  return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
-}
+import {
+  buildLakeImageCardValue,
+  emptyLakeBody,
+  lakeEmptyParagraph,
+  lakeImageCardParagraph,
+  lakeTextParagraph,
+} from "../src/core/lakeDocForm.js";
 
 function lakeId(prefix = "u"): string { return `${prefix}${crypto.randomBytes(5).toString("hex")}`; }
 
 /**
  * 小记 V1 → Lake 的单向映射。
  * V1 只有纯文本与图片：每个物理换行保留为独立普通段落（空行保留为空段落），每张图片生成一张
- * Lake inline image card。这里是唯一允许了解 Lake 内部 image card 序列化的隔离模块。
+ * Lake inline image card。
+ *
+ * 序列化细节**不在这里手拼**：统一走 `src/core/lakeDocForm.ts`（写入形态单一来源），
+ * 约定与反例见 `docs/LAKE-CONTENT-WRITING.md`（媒体必须用 `<card>` 容器，绝不能裸 `<img>`）。
  */
 export function quickNoteToLakeContent(targetNoteId: string, source: QuickNoteDocument): string {
   const blocks: string[] = [];
@@ -23,42 +29,26 @@ export function quickNoteToLakeContent(targetNoteId: string, source: QuickNoteDo
     // 转换后应用 Lake 的有序/无序列表时，每一行都会成为单独列表项，符合编辑器语义。
     for (const line of source.content.text.split(/\r?\n/)) {
       const paragraphId = lakeId();
-      if (line) {
-        const textId = lakeId();
-        blocks.push(`<p data-lake-id="${paragraphId}" id="${paragraphId}" class="ne-p"><span data-lake-id="${textId}" id="${textId}">${escapeHtml(line)}</span></p>`);
-      } else {
-        blocks.push(`<p data-lake-id="${paragraphId}" id="${paragraphId}" class="ne-p"><br /></p>`);
-      }
+      if (line) blocks.push(lakeTextParagraph(paragraphId, lakeId(), line));
+      else blocks.push(lakeEmptyParagraph(paragraphId));
     }
   }
   for (const image of source.content.images) {
     const cardId = lakeId();
     const paragraphId = lakeId();
-    const sourceUrl = `http://127.0.0.1:${ASSET_PORT}/${targetNoteId}/${image.filename}`;
-    const cardValue = {
-      src: sourceUrl,
+    blocks.push(lakeImageCardParagraph(paragraphId, buildLakeImageCardValue({
+      src: `http://127.0.0.1:${ASSET_PORT}/${targetNoteId}/${image.filename}`,
+      cardId,
       taskId: lakeId(),
       clientId: targetNoteId,
-      originalType: "url",
-      linkTarget: "_blank",
       name: image.filename,
       size: image.size,
       from: "quick-note",
       originWidth: image.width ?? undefined,
       originHeight: image.height ?? undefined,
-      ratio: 1,
-      status: "done",
-      style: "none",
-      showTitle: false,
-      title: "",
-      rotation: 0,
-      crop: [0, 0, 1, 1],
-      id: cardId,
-      margin: { top: true, bottom: true },
-    };
-    blocks.push(`<p data-lake-id="${paragraphId}" id="${paragraphId}" class="ne-p"><card type="inline" name="image" value="data:${encodeURIComponent(JSON.stringify(cardValue))}"></card></p>`);
+    })));
   }
-  return blocks.join("") || `<p id="${targetNoteId}-body" class="ne-p"><br></p>`;
+  return blocks.join("") || emptyLakeBody(targetNoteId);
 }
 
 function titleForQuickNote(source: QuickNoteDocument): string {

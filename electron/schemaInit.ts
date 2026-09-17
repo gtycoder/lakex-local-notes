@@ -1,4 +1,5 @@
 import type { DbLike } from "./dbLike.js";
+import { WELCOME_NOTE_BODY } from "../src/core/lakeDocForm.js";
 
 function nowIso(): string {
   return new Date().toISOString();
@@ -221,8 +222,7 @@ export class SchemaInit {
       const parent = this.ctx.defaultNotebookId;
       const updatedAt = nowIso();
       const sortOrder = this.ctx.nextSortOrder(parent);
-      const content =
-        `<h1 id="welcome" class="ne-h1">欢迎来到 Lake Notes</h1><p id="welcome-body" class="ne-p">这是一个基于 Lake 编辑器的本地优先笔记应用（Electron 桌面端）。</p>`;
+      const content = WELCOME_NOTE_BODY;
       const tx = this.ctx.db.transaction(() => {
         this.ctx.db.prepare("INSERT INTO notes(id,title,parent_id,sort_order,updated_at,sync_state) VALUES(?,?,?,?,?,'local')")
           .run(id, "欢迎来到 Lake Notes", parent, sortOrder, updatedAt);

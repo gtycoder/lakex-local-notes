@@ -11,6 +11,7 @@ import { createSilentLoggerScopes, type LoggerScopes } from "../src/core/logger.
 import { AppError } from "../src/core/storeErrors.js";
 import { extractAssetRefs, isSafePathSegment, sanitizeFileName, selectHistoryDrops } from "../src/core/storeUtils.js";
 import { readNoteDigest, type NoteDigest } from "./storeQueries.js";
+import { emptyLakeBody } from "../src/core/lakeDocForm.js";
 import { SearchRepository } from "./searchRepository.js";
 import type { SearchResult } from "../src/core/searchTypes.js";
 import { HistoryRepository, type HistorySnapshotPreview, type HistorySnapshotSummary } from "./historyRepository.js";
@@ -372,7 +373,7 @@ export class Store {
 
   createNoteIn(parentId: string | null, title: string): NoteDocument {
     const id = uuid();
-    return this.createNoteInWithContent(parentId, title, `<p id="${id}-body" class="ne-p"><br></p>`, [], id, "bottom");
+    return this.createNoteInWithContent(parentId, title, emptyLakeBody(id), [], id, "bottom");
   }
 
   /**

@@ -46,6 +46,11 @@
 33. **埋点/日志坑**：`console.debug` 被 DevTools 默认过滤（改用 `console.log`）；HMR 不重建已创建的编辑器实例（测新埋点必须 Cmd+R 或重启）；`editor.on("tocChange")` 收不到内核事件（要走 `editor.kernel.onPluginEvent`）。
 34. **docInitPerf 探针**：monitorLog 走内核 emitter，`editor.on("monitorLog")` 收不到（facade 不转发）；当前 `__lakePerfReport` 的 docInitPerf 采集是否生效取决于订阅路径，非功能问题。
 55. **原生大纲点击把整个壳滚乱（260916）**：内核 TOC 点击除 `scrollByNodeId` 外还会 `location.hash = 标题节点id`（`toc.allowModifyHash` 内核默认 true）→ 浏览器锚点导航滚锚点的**整条祖先滚动链** → `html` 被滚满 42px（=topbar 高，html 未锁 overflow）→ 整壳上移、topbar 滚出视野、tab 栏顶到第一行、fixed 状态栏不动（观感即「点一下大纲布局全乱」）。双层修复：① `toc: { allowModifyHash: false }`（**扁平 schema**——`toc.editing/reading` 嵌套是 LakexEditor 组件层转换，直传 `Doc.createOpenEditor` 无效）；② `html,body { overflow: hidden }`（base.css，原来只锁 body）兜底一切内核误滚 html 的路径。详见 LAKEX-CONTRACT §5.1。
+56. **首次打开「非内核写入」的文档会被内核重写（260917）**：外部脚本/自动化若**绕过应用**直接写库 + 写 `.lake`，并把图片写成**裸 `<img src="http://127.0.0.1:19876/<noteId>/<file>">`**，桌面内核打开时会把它判为**远程图片**去抓 → 主进程 SSRF 护栏拒（`[LAKE_IPC_CODE:INVALID_INPUT] 不允许下载本机或私网地址`）→ 内核回写**失败态卡片**（`"src":"","status":"error"`）→ 正文变化被当成用户编辑 → 1s 防抖保存 → `syncState: synced→local` → 随下次同步**上传**（把"图已失效"传播到其他端）。实测：`压测3-图片-神里凌华.png` 438B→1365B；全库 **287/511** 篇含裸 `<img>`。
+    - **分界线是"容器"，不是"新旧形态"**：`<card type="inline" name="image" value="data:…">` → 内核认作**本地资产**（不下载、零重写；小记转换产物实测如此）；裸 `<img>` → 判为远程资源，必踩护栏。纯文本旧形态（`<p class="ne-p"><br></p>`、手写 `<h1>/<p>`）内核**原样保留**，无害。
+    - 写入约定 / 反例 / 校验判据见 **`docs/LAKE-CONTENT-WRITING.md`**；仓库内 4 处手拼写入者已收口到 `src/core/lakeDocForm.ts`（含"绝不产出裸 `<img>`"的单测围栏）。
+    - **排查提示**：直接打开这类文档 = 触发上面的重写（不可逆地把图降级）。要验证用 `node scripts/lake-roundtrip-check.mjs --note <id>`（**只动副本、原件不打开**；退出码 1 = 该文档一打开就会被改写）。
+    - 判定"是否被重写"的口径：`.lake` 的 **mtime 不变** + 标签无脏点 + 无新增历史快照 + 正文里 `status%22%3A%22error%22` 为 0。
 
 ## E. 环境与工具
 

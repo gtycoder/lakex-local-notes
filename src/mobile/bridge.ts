@@ -19,6 +19,7 @@ import type { Manifest } from "../core/manifestTypes.js";
 import { KeyedAsyncQueue } from "../core/keyedAsyncQueue.js";
 import type { QuickNotesSyncResult } from "../core/quickNotesSyncEngine.js";
 import { TRASH_NOTEBOOK_ID } from "../core/syncDecisions.js";
+import { emptyLakeBody } from "../core/lakeDocForm.js";
 import { createCapacitorS3Store } from "./s3Store";
 import { buildAssetFilename, extOf } from "../core/assetNaming.js";
 import { readImageDimensions, sniffImageFormat, mimeTypeForFilename } from "../core/imageUtils.js";
@@ -66,8 +67,7 @@ export interface MobileSyncResult {
 const DEFAULT_S3_PREFIX = "lake-notes";
 
 const S3_STORAGE_KEY = "lake-notes-mobile.s3";
-/** 与桌面一致的初始 Lake 内容（store.ts createNoteInWithContent） */
-export const INITIAL_LAKE_CONTENT = `<p class="ne-p"><br></p>`;
+/* 初始 Lake 正文与桌面同一来源：src/core/lakeDocForm.ts（勿在此手拼正文）。 */
 
 let db: NativeSqliteDb | null = null;
 let dbInitialization: Promise<NativeSqliteDb> | null = null;
@@ -598,8 +598,9 @@ export const bridge = {
     const now = new Date().toISOString();
     // 无父新建 → 兜底父笔记本（存在的笔记本；无则自动创建"未分类"）
     const pid = parentId ?? await dbPort.defaultNotebookId();
-    await bridge.saveNote(id, title, INITIAL_LAKE_CONTENT, pid);
-    return { id, title, content: INITIAL_LAKE_CONTENT, updatedAt: now, parentId: pid };
+    const content = emptyLakeBody(id);
+    await bridge.saveNote(id, title, content, pid);
+    return { id, title, content, updatedAt: now, parentId: pid };
   },
 
   /** 本地软删（入回收站）：同步时上传墓碑（删除压编辑） */

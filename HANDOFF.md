@@ -47,12 +47,14 @@
 3. **移动端剩余批次**：B7/B8 + 真机复验缺口 —— 明细见 **§8**。
 4. **产品/技术债（长期）**：W-8 ACAO / W-10 dompurify（**安全，建议优先**）；大纲 viewer 只读点击不跳转；回收站首拉成本（惰性下载暂缓，动恢复红线）；Word/PDF 导出 + 附件大文件 S3 分片；`docs/LAKEX-CONTRACT.md` §4 的 `lakex-contract.d.ts` 落地；**「深层重复」CSS 候选清理**（原挂起条件「等 vendor 合并到位」**已满足**，做法见 `scripts/css-audit/`，须**重新生成**候选、勿复用旧 `dup-agg.json`）。
 5. **非代码**：安卓同步偶发 `UnknownHostException` = 设备网络（联网重试）。
+6. **小记（Quick Notes）设计取舍 —— 是否直接挂 Lake 内核底座**（用户 260917 提出，**待讨论后再动**）：挂上后「小记→文档」转换天然就是内核规范形态，且小记本身能支持更多格式/样式；代价是更重（每条小记都要起内核实例）。当前 `electron/quickNoteConversion.ts` 产出的是「内核**容忍**并原样保留」的形态，不是「内核**产出**」的形态（字段口径差异见 `docs/LAKE-CONTENT-WRITING.md`）。
+7. **Lake 正文写入收口**（约定见 `docs/LAKE-CONTENT-WRITING.md`）：① 自动化程序（不在仓库）**直接写库 + 手写裸 `<img>`**，导致 287 篇测试文档一被打开就被内核重写（图片降级成失败卡片 + 变待同步 → 随下次同步上传）→ **必须改成走应用写入路径，或只写纯文本**；② 仓库内 4 处手拼写入者收口到共享模块；③ 旧数据按 §3 原则 7 **不写归一化兼容**，用修好的姿势重建。
 
 ### 当前问题 / 已知坑（不阻塞）
 - 画板**不再记忆视口**（拖动/缩放后重开为默认/自适应）：这是 260916 为「不让视口触发保存/上传」刻意做的取舍，**用户已确认接受**（"谁知道下次进来要看什么"）。不要改回去。
 - 离线残余 3 处（见上，全外观级）。
 - `public/vendor/cdn` 的 32 个静态无引用文件**不能删**——它们是 `electron/cdnRedirect.ts` 的**运行时兜底白名单**（用「镜像里是否存在该文件」决定是否把 `gw.alipayobjects.com` 请求回本地）。
-- 桌面日志偶见 `download_remote_resource` 的 403 / INVALID_INPUT：是抓取远程图片的远端策略/格式问题，与本会话改动无关。
+- 桌面日志里的 `download_remote_resource` **INVALID_INPUT（不允许下载本机或私网地址）不是"无关噪声"**（260917 更正）：它标记着「打开了自动化手写裸 `<img>` 的文档」→ 内核回写失败态卡片 + 该文档变待同步，**打开即发生**。详见 §3.7 与 `docs/LAKE-CONTENT-WRITING.md`。（403 仍是远端策略问题。）
 
 ## 4. 踩过的坑（合并版；通用红线/环境见 AGENTS.md）
 
@@ -133,6 +135,7 @@ LAKE_RUN_BENCHMARK=1 npx vitest run src/core/syncEngine.dualStress.benchmark.tes
 LAKE_RUN_BENCHMARK=1 LAKE_STRESS_S3_ENDPOINT=... _REGION=... _BUCKET=... _AK=... _SK=... npx vitest run electron/syncStress.benchmark.test.ts
 # 云端对象查看
 node scripts/s3-ls.mjs --count | --note <id> | --prefix <prefix>
+node scripts/lake-roundtrip-check.mjs --note <id>   # 对拍「这篇一打开会不会被内核改写」（只动副本，退出码 1=会被改写）
 ```
 - **UI 实测姿势**：`curl http://127.0.0.1:9222/json` 拿 page target → Node 24 内置 `WebSocket` 直驱 `Runtime.evaluate` / `Page.captureScreenshot{clip}` / `Input.*`（本会话用这套量出了预览闪烁的逐帧数据）。详见 `docs/CODEX-GUIDE.md`。
 - 日志：A `~/Library/Application Support/lake-notes-dev/logs/lake-notes.log`；B `$TMPDIR/lake-device-b/logs/lake-notes.log`。数据目录见 `AGENTS.md §5`（**正式数据禁碰**）。
