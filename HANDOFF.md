@@ -5,8 +5,8 @@
 > **§8 是移动端（安卓）专职交接**，由移动端会话维护；桌面会话不要改 §8，移动端会话不要改 §0-§7 之外的桌面文件。
 
 ## 0. 当前基线（新会话开工前）
-- **基线（2026-09-16 会话收尾，已在 `master` 且已推 origin）**：`master` @ `d638d7f`。本会话把 **lakex 底层换源 + UI 全量 CSS 重构 + Web 客户端 MVP** 三端合并进 master，并修了 3 个 bug。
-  - 门禁：`tsc` 0 · `vitest` **979 passed / 16 skipped (995)** · `check:core` 0 · 桌面 + 移动 build · `check:bundle` 绿（app-js gzip 1.816MB / drawnix 408KB / css 190KB）。
+- **基线（最新一批，已在 `master` 且已推 origin）**：`master` @ `eaf1537`。本批修了 **「增强大纲 + 编辑态」大段空白**（根因：增强态只用 CSS `display:none` 隐藏原生大纲，内核编辑根仍留 `.ne-normal-toc` → 正文块被 `max-width:750px; margin-right:280px` 预留 280px 占位；修法 = 官方 `toc:{normalView:false,allowAutoPin:false,rememberLastPin:false}` + `outlineEnhance` 纳入重建依赖，见 `docs/LAKEX-CONTRACT.md §5.7`）；并随批次带入上一会话未提交 WIP（Word/PDF 导出、统一「导出」子菜单、历史快照只读 viewer、`allowModifyHash` 修复、大纲栏样式对齐等）。更早一批（260916）为 lakex 底层换源 + UI 全量 CSS 重构 + Web 客户端 MVP 三端合并。
+  - 门禁（本批）：`tsc` 0 · `vitest` **985 passed / 16 skipped (1001)**（桌面单测全量）；桌面 build / `check:bundle` 本批未重跑（上一批基线：`check:core` 0 · 桌面 + 移动 build · `check:bundle` 绿 app-js gzip 1.816MB / drawnix 408KB / css 190KB）。
   - 桌面 + 安卓端已实测启动（dev：`1421` vite / `9222` electron / `19876` asset / `19880` Web 客户端）。
   - 关键入口：`docs/LAKEX-MIGRATION-260916.md`（换源/懒加载/离线）· `vendor/lakex-doc-react/LOCAL-CHANGES.md`（vendor 本地改动 8 条）· `docs/OFFLINE-ASSETS-AUDIT-260916.md`（离线对账）· `docs/CSS-LAYERS-BRIEF-260916.md`（UI 样式层）· `docs/LAKEX-CONTRACT.md`（内核契约，编辑器相关先读）。
 - **工作区现状（本会话清理过）**：`/Users/admin/file/local-lake/` 下只剩 `lake-notes-electron`(主仓库) + `yuque-developer-docs`(语雀开发文档库) + `design-spec` + `lake-main`/`lake-editor-main`(内核机制参考)。已删：全部 worktree、过期截图/根级分析稿、`release/`(910M)、`.css-audit/`(85M)、`test-node-abi/`、外部参考仓库副本。本地分支只剩 `master` + `refactor/store-split`(未合 master)。
