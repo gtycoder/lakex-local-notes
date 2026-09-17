@@ -126,6 +126,9 @@ contextBridge.exposeInMainWorld("lakeNative", {
   runS3GcReconcile: (ignoreRetention = false) => invoke("run_s3_gc_reconcile", ignoreRetention),
   runS3DeepCleanup: (dryRun, ignoreRetention = false) => invoke("run_s3_deep_cleanup", dryRun, ignoreRetention),
   getTrashReminder: () => invoke("get_trash_reminder"),
+  getWebStatus: () => invoke("get_web_status"),
+  setWebEnabled: (enabled) => invoke("set_web_enabled", enabled),
+  openWebClient: () => invoke("open_web_client"),
   onSyncProgress: (callback) => {
     const listener = (_event, progress) => callback(progress);
     ipcRenderer.on("sync-progress", listener);

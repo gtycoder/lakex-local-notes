@@ -70,6 +70,9 @@ export const WEB_METHODS: Record<string, string> = {
   getHistorySettings: "get_history_settings",
   saveHistorySettings: "save_history_settings",
   getHistoryStats: "get_history_stats",
+  getWebStatus: "get_web_status",
+  setWebEnabled: "set_web_enabled",
+  openWebClient: "open_web_client",
   listNoteOrphans: "list_note_orphans",
   previewHistorySnapshot: "preview_history_snapshot",
   previewNoteOrphan: "preview_note_orphan",
@@ -331,4 +334,45 @@ export function startWebApiServer(opts: WebApiServerOptions): http.Server {
     log.info(`[web-api] Web 客户端已就绪: http://127.0.0.1:${port}/`);
   });
   return server;
+}
+
+export interface WebServerStatus {
+  enabled: boolean;
+  port: number;
+  url: string;
+}
+
+/**
+ * 运行期起停控制器（**不落盘**）：进程启动时默认不监听；
+ * 设置里打开/关闭即时起停服务，无需重启应用；应用重启后恢复为关闭。
+ */
+export interface WebServerController {
+  getStatus(): WebServerStatus;
+  setEnabled(enabled: boolean): Promise<WebServerStatus>;
+}
+
+export function createWebServerController(opts: WebApiServerOptions): WebServerController {
+  const port = opts.port ?? WEB_API_PORT;
+  const url = `http://127.0.0.1:${port}/`;
+  let server: http.Server | null = null;
+  const status = (): WebServerStatus => ({ enabled: server !== null && server.listening, port, url });
+  return {
+    getStatus: status,
+    setEnabled(enabled: boolean): Promise<WebServerStatus> {
+      if (enabled) {
+        if (server) return Promise.resolve(status());
+        const s = startWebApiServer(opts);
+        s.once("close", () => { if (server === s) server = null; });
+        server = s;
+        return new Promise((resolve) => {
+          if (s.listening) { resolve(status()); return; }
+          const done = () => resolve(status());
+          s.once("listening", done);
+          s.once("error", () => { if (server === s) server = null; done(); });
+        });
+      }
+      if (server) { const s = server; server = null; s.close(); }
+      return Promise.resolve(status());
+    },
+  };
 }

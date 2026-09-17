@@ -7,7 +7,7 @@ import { Store } from "./store.js";
 import { createSafeStorageSecretCipher } from "./secretCipher.js";
 import { QuickNotesStore } from "./quickNotes.js";
 import { startAssetServer, ASSET_PORT } from "./assetServer.js";
-import { startWebApiServer, WEB_API_PORT } from "./webApiServer.js";
+import { createWebServerController, type WebServerController, WEB_API_PORT } from "./webApiServer.js";
 import { resolveMirroredCdnRedirect, scanMirroredCdnFiles } from "./cdnRedirect.js";
 import { syncNow, runGcReconcile, type SyncResult, type SyncProgress } from "./sync.js";
 import { syncNowViaEngine } from "./syncEngineController.js";
@@ -19,6 +19,7 @@ import { createIpcRegistrar } from "./ipc/registrar.js";
 import { registerNotesIpc } from "./ipc/registerNotes.js";
 import { DraftJournal } from "./draftJournal.js";
 import { registerHistoryIpc } from "./ipc/registerHistory.js";
+import { registerWebIpc } from "./ipc/registerWeb.js";
 import { registerSyncIpc } from "./ipc/registerSync.js";
 import { registerQuickNotesIpc } from "./ipc/registerQuickNotes.js";
 import { registerLogIpc } from "./ipc/registerLogIpc.js";
@@ -54,6 +55,8 @@ process.env.LAKE_ASSET_TOKEN = assetToken;
 
 let store: Store;
 let quickNotes: QuickNotesStore;
+/** 浏览器端服务控制器（内存态；启动时默认不监听）。 */
+let webServerController: WebServerController | null = null;
 let drafts: DraftJournal;
 /** 历史定时器重启函数（配置变更时调用，见 save_history_settings IPC） */
 let restartHistoryTimers: (() => void) | null = null;
@@ -363,6 +366,7 @@ function registerIpc(): ReadonlyMap<string, (args: unknown[]) => Promise<unknown
     quickNotes.backupDatabaseTo(path.join(quickDir, "metadata.sqlite3"));
   }, enqueueMaintenance);
   registerHistoryIpc(ipc, store, () => restartHistoryTimers?.());
+  registerWebIpc(ipc, () => webServerController);
   registerSyncIpc(ipc, {
     store,
     quickNotes,
@@ -446,8 +450,9 @@ if (!app.requestSingleInstanceLock()) {
     registerAssetTokenRedirect();
     startAssetServer(path.join(workspaceRoot(), "note-assets"), vendorCdnDir(), path.join(workspaceRoot(), "quick-notes"), assetToken);
     const webApiRegistry = registerIpc();
-    // Web 客户端（附属窗口）：浏览器访问 http://127.0.0.1:19880/，复用同一批 IPC handler（MVP）。
-    startWebApiServer({
+    // 浏览器端（桌面附属窗口）：默认不启动（纯内存态，不落盘；每次启动都从关闭开始）。
+    // 设置里打开/关闭即时起停服务；只绑 127.0.0.1、不做局域网伺服；复用同一批 IPC handler。
+    webServerController = createWebServerController({
       distDir: path.join(__dirname, "..", "dist"),
       registry: webApiRegistry,
       token: assetToken,

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ChangeEvent, type ReactNode } from "react";
-import { Cloud, Copy, Files, File, FolderOpen, History, Image as ImageIcon, Info, Keyboard, Monitor, Moon, Palette, Paperclip, Terminal, Archive, HardDrive, Search, Settings, Sun, Trash, Type, X } from "lucide-react";
+import { Cloud, Copy, ExternalLink, Files, File, FolderOpen, Globe, History, Image as ImageIcon, Info, Keyboard, Monitor, Moon, Palette, Paperclip, Terminal, Archive, HardDrive, Search, Settings, Sun, Trash, Type, X } from "lucide-react";
 import { fontSizeOptions, type AppSettings } from "../lib/settings";
 import { native } from "../lib/native";
 import type { CleanOrphanResult, DataHealthReport, S3GcPendingItem, S3Settings, SyncSettings } from "../lib/types";
@@ -10,7 +10,7 @@ import { DialogResizeHandles } from "./DialogResizeHandles";
 import { filterSettingsNav, searchSettingItems, type SettingItemEntry } from "./settingsSearch";
 import { getNativeErrorMessage } from "../lib/nativeErrors";
 
-export type SettingsCategory = "editor" | "appearance" | "shortcuts" | "history" | "sync" | "resources" | "trash" | "logs" | "about";
+export type SettingsCategory = "editor" | "appearance" | "shortcuts" | "history" | "sync" | "resources" | "trash" | "browser" | "logs" | "about";
 
 interface SettingsPanelProps {
   open: boolean;
@@ -93,6 +93,9 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
   const [gcDiag, setGcDiag] = useState<GcDiagnostics | null>(null);
   const [gcDiagBusy, setGcDiagBusy] = useState(false);
   const [syncMsg, setSyncMsg] = useState<string | null>(null);
+  const [webStatus, setWebStatus] = useState<{ enabled: boolean; port: number; url: string } | null>(null);
+  const [webBusy, setWebBusy] = useState(false);
+  const [webMsg, setWebMsg] = useState<string | null>(null);
   const [syncCfg, setSyncCfg] = useState<SyncSettings | null>(null);
   const [syncCfgBusy, setSyncCfgBusy] = useState(false);
   const [gcPendingRows, setGcPendingRows] = useState<S3GcPendingItem[]>([]);
@@ -219,6 +222,7 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
     void native.getS3Settings().then((v) => v && setS3(v)).catch(() => undefined);
     void native.getS3GcSettings().then(setGcCfg).catch(() => undefined);
     void native.getSyncSettings().then(setSyncCfg).catch(() => undefined);
+    void native.getWebStatus().then(setWebStatus).catch(() => undefined);
     void refreshGcPending();
     void native.listS3GcLog().then(setGcLog).catch(() => undefined);
   }, [open, openCategory]);
@@ -312,6 +316,7 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
     { id: "sync" as const, label: "云端与同步", keywords: "S3 上传 下载 资源 云端 回收", icon: <Cloud size={15} /> },
     { id: "resources" as const, label: "资源", keywords: "资源 未引用 孤儿 清理 附件 图片", icon: <ImageIcon size={15} /> },
     { id: "trash" as const, label: "回收站", keywords: "删除 恢复 清空", icon: <Trash size={15} /> },
+    { id: "browser" as const, label: "浏览器端", keywords: "浏览器 网页 web 附属窗口 端口 局域网 伺服", icon: <Globe size={15} /> },
     { id: "logs" as const, label: "日志", keywords: "日志 诊断 GC 同步 调试", icon: <Terminal size={15} /> },
     { id: "about" as const, label: "关于", keywords: "版本", icon: <Info size={15} /> },
   ];
@@ -375,6 +380,30 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
       void native.getSyncSettings().then(setSyncCfg).catch(() => undefined);
     } finally {
       setSyncCfgBusy(false);
+    }
+  };
+
+  const setWeb = async (enabled: boolean) => {
+    if (webBusy) return;
+    setWebBusy(true); setWebMsg(null);
+    try {
+      const st = await native.setWebEnabled(enabled);
+      setWebStatus(st);
+      setWebMsg(st.enabled ? null : "已关闭");
+    } catch (e) {
+      setWebMsg(getNativeErrorMessage(e));
+      void native.getWebStatus().then(setWebStatus).catch(() => undefined);
+    } finally {
+      setWebBusy(false);
+    }
+  };
+
+  const openWeb = async () => {
+    try {
+      const r = await native.openWebClient();
+      if (!r.ok) setWebMsg(r.reason ?? "打开失败");
+    } catch (e) {
+      setWebMsg(getNativeErrorMessage(e));
     }
   };
 
@@ -803,6 +832,20 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
                   </Item>
                 )}
                 <Block desc="回收站内容随云同步到所有设备；彻底删除会同时删除云端数据且不可撤销。" />
+              </Group>
+            )}
+
+            {category === "browser" && (
+              <Group title="浏览器端" icon={<Globe size={16} />}>
+                <Switch itemId="browser-enabled" name="启用浏览器端" desc="在本机浏览器中打开 Lake Notes（与桌面端同一份本地数据）。仅监听 127.0.0.1，不做局域网伺服、不允许其它设备访问。开关即时生效、无需重启；应用重启后恢复为关闭。" checked={webStatus?.enabled ?? false} disabled={!webStatus || webBusy} onChange={(e) => void setWeb(e.target.checked)} />
+                <Block name="这是什么" desc="浏览器端不是「伺服」：不对外开放、不监听局域网。它只是把桌面端这一份本地库（同一个数据库、同一批文件）通过回环地址 http://127.0.0.1:19880/ 交给本机浏览器，数据不经过网络。打开开关后，用 Chrome 等浏览器打开该地址即可。" />
+                <Block name="现状" desc="最小验证阶段：只打通了与本机同一份数据的读写，实时推送等细化能力尚未做。此开关不落盘（每次启动应用都从关闭开始）。" />
+                {webStatus?.enabled && (
+                  <Item itemId="browser-open" name="在本机浏览器打开" desc={webStatus.url}>
+                    <button className="b3-button b3-button--outline" onClick={() => void openWeb()}><ExternalLink size={14} /> 打开浏览器</button>
+                  </Item>
+                )}
+                {webMsg && <Block desc={webMsg} />}
               </Group>
             )}
 

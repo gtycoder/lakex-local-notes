@@ -64,6 +64,8 @@ export const SETTING_ITEMS: SettingItemEntry[] = [
   { id: "gc-pending-list", category: "sync", label: "待回收键明细", keywords: "待回收 明细 键 pending", platform: "desktop" },
   { id: "gc-log", category: "sync", label: "删除记录", keywords: "删除记录 审计 日志 GC", platform: "desktop" },
   { id: "trash-auto-purge-days", category: "trash", label: "回收站自动过期（天）", keywords: "回收站 自动过期 天数 彻底删除" },
+  { id: "browser-enabled", category: "browser", label: "浏览器端", keywords: "浏览器 网页 web 附属窗口 端口 局域网 伺服 127.0.0.1", platform: "desktop" },
+  { id: "browser-open", category: "browser", label: "打开浏览器", keywords: "打开 浏览器 chrome 网页 访问 地址", platform: "desktop" },
   { id: "logs-main", category: "logs", label: "主进程日志", keywords: "日志 主进程 log 过滤 关键字", platform: "desktop" },
   { id: "about-app", category: "about", label: "Lake Notes", keywords: "版本 简介", platform: "desktop" },
   { id: "about-version", category: "about", label: "应用版本", keywords: "版本号 version", platform: "desktop" },

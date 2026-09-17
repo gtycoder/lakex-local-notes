@@ -117,6 +117,11 @@ export interface LakeNative {
   runS3GcReconcile(ignoreRetention?: boolean): Promise<{ deleted: number; kept: number; clearedReferenced: number; ageUnknown: number }>;
   runS3DeepCleanup(dryRun: boolean, ignoreRetention?: boolean): Promise<DeepCleanupResult>;
   getTrashReminder(): Promise<Array<{ id: string; title: string; deletedAt: string }>>;
+  /** 浏览器端服务（桌面附属窗口；仅本机、不落盘、每次启动默认关闭）。 */
+  getWebStatus(): Promise<{ enabled: boolean; port: number; url: string }>;
+  setWebEnabled(enabled: boolean): Promise<{ enabled: boolean; port: number; url: string }>;
+  /** 用系统默认浏览器打开浏览器端地址（由主进程构造，失败返回 reason）。 */
+  openWebClient(): Promise<{ ok: boolean; reason?: string }>;
   onSyncProgress(callback: (progress: SyncProgress) => void): () => void;
   onPendingSummaryChanged(callback: (summary: import("./types").SyncPendingSummary) => void): () => void;
 }
@@ -247,6 +252,9 @@ export const native = {
   runS3GcReconcile: (ignoreRetention = false) => api().runS3GcReconcile(ignoreRetention),
   runS3DeepCleanup: (dryRun: boolean, ignoreRetention = false) => api().runS3DeepCleanup(dryRun, ignoreRetention),
   getTrashReminder: () => api().getTrashReminder(),
+  getWebStatus: () => api().getWebStatus(),
+  setWebEnabled: (enabled: boolean) => api().setWebEnabled(enabled),
+  openWebClient: () => api().openWebClient(),
   onSyncProgress: (callback: (progress: SyncProgress) => void) => api().onSyncProgress(callback),
   onPendingSummaryChanged: (callback: (summary: import("./types").SyncPendingSummary) => void) => api().onPendingSummaryChanged(callback),
 };
