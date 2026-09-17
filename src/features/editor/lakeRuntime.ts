@@ -1,6 +1,7 @@
 import React from "react";
 import { renderToString } from "react-dom/server";
 import { Doc, GetDefaultEditorConfig } from "@dlient/lakex-doc-react";
+import { mountBlockHoverHandle } from "./blockHandleMount";
 import { uploadLakeResource } from "./resourceUpload";
 import { shouldSkipBoardCardFocus, useClickActivatedWheelGate } from "./canvasInteractionGate";
 import { ASSET_ORIGIN } from "../../lib/assetPort";
@@ -32,8 +33,17 @@ function injectKatexScriptsInOrder(): void {
   ensure(LAKE_MHCHEM_SCRIPT);
 }
 
+export interface LakeKernelInstance {
+  /** 内核命令入口（style/insertCard/insertAtSelection/delete… 与编辑器同一套命令）。 */
+  execCommand?(name: string, ...args: unknown[]): unknown;
+}
+
 export interface LakeEditorInstance {
   setDocument(type: "text/lake", content: string): void;
+  /** 编辑器命令入口（等同内核命令，用于 blockMenuHelpers 等处的 style/insertCard 调用）。 */
+  execCommand?(name: string, ...args: unknown[]): unknown;
+  /** 内核实例（命令/选区都挂在这里）。 */
+  kernel?: LakeKernelInstance;
   /** 锁定态 Viewer 可能不完整支持 markdown/plain（调用方需 typeof 守卫 + try/catch）。 */
   getDocument(type: "text/lake" | "text/markdown" | "text/plain"): string;
   on(event: string, listener: () => void): void;
@@ -462,6 +472,12 @@ export interface LakeEditorPrefs {
    * 不再加 .ne-normal-toc；显式传值优先于内核 localStorage 里的用户偏好（bundle 177935）。
    */
   collapseNativeToc?: boolean;
+  /**
+   * 块悬浮手柄 + 块操作菜单（桌面编辑态专用，默认关）。
+   * 菜单动作全部走内核原生命令（转化/删除/复制/剪切/缩进/在下方添加），不含拖拽移动。
+   * 只在桌面编辑态传 true：移动端无 hover 语义，锁定态是 viewer。
+   */
+  blockHandle?: boolean;
   /** 禁用编辑态虚拟渲染（移动端用）：移动端单编辑器无 Lake 内部滚动容器（页面滚动），
    * scrollNode fallback 到 .document-pane（移动端不存在）会导致视口测量错误——编辑态只渲染
    * 视口内内容（正文不全）、保存时 getDocument 输出不完整（图片丢失）。置 true 全量渲染。 */
@@ -866,6 +882,15 @@ export function createLakeDocument(
     (editor as any).__disposeExtras = () => {
       try { if (typeof prevDispose === "function") prevDispose(); } catch { /* ignore */ }
       audioTimers.forEach((t) => window.clearTimeout(t));
+    };
+  }
+  // 块悬浮手柄 + 块操作菜单（桌面编辑态 opt-in；见 blockHandleMount 的安全边界说明）
+  if (mode === "editor" && prefs?.blockHandle) {
+    const disposeHandle = mountBlockHoverHandle(element, mount, editor);
+    const prevDispose = (editor as any).__disposeExtras;
+    (editor as any).__disposeExtras = () => {
+      try { if (typeof prevDispose === "function") prevDispose(); } catch { /* ignore */ }
+      disposeHandle();
     };
   }
   return editor;

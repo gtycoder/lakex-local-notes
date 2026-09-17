@@ -41,7 +41,8 @@ export function deriveDesktopView(input: DesktopViewInput) {
 
   const activeNodeSyncState = activeNoteId ? (treeNodes.find((n) => n.noteFileId === activeNoteId)?.syncState ?? "synced") : "synced";
 
-  const editorPrefs = { fontSize };
+  // blockHandle：桌面编辑态的块悬浮手柄/块操作菜单（菜单只走内核原生命令，见 blockHandleMount）
+  const editorPrefs = { fontSize, blockHandle: true };
 
   // 编辑器面包屑：活动文档路径（思源 protyle-breadcrumb）
   const activePath = activeNoteId ? treeNodePath(treeNodes, activeNoteId) : [];

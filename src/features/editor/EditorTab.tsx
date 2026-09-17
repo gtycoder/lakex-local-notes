@@ -238,8 +238,12 @@ export function EditorTab({ noteId, content, visible, tocEnabled, outlineEnhance
       const upgraded = upgradePastedHtml(html);
       if (upgraded !== html) dt.setData("text/html", upgraded);
     };
-    // 剪切：与 copy 同源序列化写入剪贴板，再删除选区（走 execCommand 的 input 路径，编辑器模型才跟得上）。
-    // 没有这个 handler 时依赖浏览器默认 cut，Lake 未实现剪贴板 cut，快捷键/菜单都无效。
+    // 剪切：与 copy 同源序列化写入剪贴板，再删除选区。
+    // ⚠️ 删除必须走**内核命令**（`kernel.execCommand("delete")`）让模型同步：早前用
+    // `document.execCommand("delete")` 只删 DOM、内核模型不变，点击块时被模型重绘回来
+    // （260917 实测：选区文字消失 → 点块恢复），转换后的内容同样受影响。
+    // 本 handler 在 capture 阶段 stopImmediatePropagation，会抢在内核 cut 事件处理之前，
+    // 所以要自己调用内核命令，不能依赖内核默认 cut 路径（那会把剪贴板改写成内核序列化）。
     const cutHandler = (event: ClipboardEvent) => {
       const selection = window.getSelection();
       if (!event.clipboardData || !selection || selection.isCollapsed || selection.rangeCount === 0) return;
@@ -249,7 +253,15 @@ export function EditorTab({ noteId, content, visible, tocEnabled, outlineEnhance
       event.clipboardData.setData("text/plain", selection.toString());
       event.preventDefault();
       event.stopImmediatePropagation();
-      try { document.execCommand("delete"); } catch { /* 忽略 */ }
+      try {
+        // 删除必须走内核命令（与 style/insertCard 同一入口），内核模型才会同步
+        const ed = editorRef.current;
+        if (ed?.kernel?.execCommand) ed.kernel.execCommand("delete");
+        else if (ed?.execCommand) ed.execCommand("delete");
+        else document.execCommand("delete");
+      } catch {
+        try { document.execCommand("delete"); } catch { /* 忽略 */ }
+      }
     };
     // 画板卡片交互（选择、删除、工具栏）偶发把 Lake 滚动容器重置到顶部。
     // 先记录交互前位置，若后续渲染发生大幅回跳则恢复；仅作用于画板卡片。

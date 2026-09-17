@@ -253,6 +253,127 @@
 
 ---
 
+### 5.8 块级编辑（悬浮手柄 + 块操作菜单）：能力在 wrapper 层，动作必须走原生命令（2026-09-17 实测）
+
+**定位（结论）**：云端语雀的「块锚点 + 块操作菜单」**不在内核**，实现在 vendor 包装层
+`src/components/BlockHoverHandle/`（悬浮手柄，含拖拽）+ `src/components/BlockContextMenu/`（菜单）；
+唯一挂载点是 vendor 的 `LakexEditor.tsx`。本应用是直接 `Doc.createOpenEditor`，从未经过那层 ⇒
+手柄一直不存在（**不是开关、不是内核版本问题**；`disabledPlugins` 与内核 config 里都无相关开关）。
+内核侧 grep `moveBlock|convertBlock|insertBlock|blockHandle` **0 命中**，可证明非内核能力。
+
+**动作 → 实现路径（原始实现，务必区分）**：
+
+| 动作 | 原实现 | 是否安全 |
+|---|---|---|
+| 删除 | `kernel.execCommand("deleteByRange", modelRange)`（range 由 `engine.transformDOMRange` + `renderer.kernel.createModelRange` 构造） | ✅ 原生 |
+| 复制 / 剪切 | `renderer.execCommand('copy', range)`；剪切 = 复制 + 上面那条删除 | ✅ 原生 |
+| 缩进 / 取消缩进 | `selectBlockInEditor` → `editor.execCommand('indent'\|'outdent')` | ✅ 原生 |
+| 转化 | `blockDoc.convertBlock`（JSON 优先）→ 回退 `runNativeConvert` | ⚠️ 见下 |
+| 在下方/上方添加 | `blockDoc.insertBlock` | ⚠️ 见下 |
+| 复制块(duplicate) | `blockDoc.duplicateBlock` | ⚠️ 见下 |
+| 拖拽移动块 | `blockDoc.moveBlock` | ⚠️ 见下 |
+
+**为什么 JSON 路径被全面弃用（实测证据）**：`utils/blockDoc.ts` 的五个函数都是「整篇 JSON 读改写」
+（`getDocument('json')` → 改树 → `setDocument('json')`）。副本实测一次「剪切」：
+正文 6032B → **12288B**；`customBlock customName="mindmap-card"` 载荷 634B → **8859B**
+（`$htmlStr` 被重写成 base64 内联 SVG 的「水合形态」）；内核未注册的 `customBlock customName="board-card"`
+**整张消失**并残留内部段落（`<p id="…">画板</p>`）。
+**对照实验**：纯原生 `editor.execCommand('indent')` 只 +26B（缩进属性），上述所有卡片片段 hash 一字不变
+⇒ 破坏确由 JSON 路径引入，与「保存管线」无关（native 卡 codeblock/hr 在 JSON 路径下也逐字节保真，
+被改写/丢失的只有 `customBlock` 自定义卡与未注册卡）。
+
+**「转化为」各目标的内核原生命令（副本实测，`selectBlockInEditor` 后执行）**：
+
+| 目标 | 命令 | 实测 |
+|---|---|---|
+| 正文 / H1–H6 | `editor.execCommand('style', 'p'\|'h1'…'h6')` | ✅ 成功 |
+| 无序 / 有序 / 任务 | `unorderedList` / `orderedList` / `taskList` | ✅ 成功（任务会新增 `checkbox` 卡） |
+| 引用 | `quote` | ✅ 成功 |
+| 高亮块 | `alert` | ✅ 成功（`ne-alert-hole`） |
+| 分栏 | `columns`（第二参 2） | ✅ 成功（`ne-container-hole`） |
+| 折叠块 | `collapse` | ✅ 成功（`ne-container-hole`） |
+| **代码块** | 内核**没有**「转代码块」命令；只能按插卡落卡：`editor.execCommand('insertCard', 'codeblock')` | ⚠️ 已按用户 260917 指示**加回菜单**：`codeblock` 命令返回 false、`style 'codeblock'` 抛 `invalid node insert: #root can't contain codeblock`，故走 `insertCard`。现状＝「在原段落旁插入**空**代码块卡，原文留在原段落」（不丢数据、但不是真转换，同下面容器类的残留问题） |
+
+**其它实测**：
+- **「转化为卡片/容器类」为什么会吃掉/搬不动文本（260917 定位，含修法与残留问题）**：
+  - 内核这些命令是**替换/插入**语义，不是"原地换类型"：`alert`/`columns`/`collapse` 在**整块选中**时＝用空容器**替换选区**（实测：高亮块/分栏转换后原文在 DOM、模型 JSON、落盘正文三处全无 ⇒ 用户报的"内容消失"）；而 `quote` 是**包住**原内容（落盘可见 `blockquote > p > span`，文本保留）——所以「通病」里引用是例外。
+  - **修法（已落地）**：非 `style` 目标改用**折叠光标**（`collapseCaretAtBlockEnd`）再执行命令 ⇒ 不再丢文本。
+  - **残留问题（未解决）**：折叠光标下 `alert`/`columns`/`collapse`/`insertCard('codeblock')` 变成「**在原文旁插入一个空容器/空卡**」，原文段落保持原样（落盘实测：`<p id="ucfd561e7">…自动保存验证ZZZ…</p><blockquote class="lake-alert …">`）⇒ **不丢数据，但转换语义没达成**（云端的"转化为高亮块"是把段落搬进容器）。
+    **✅ 260917 已解决**：改走 §5.8.1 的通用插入通道（`getNodeContent` + 一次 `insertAtSelection`），把原块替换成「含原文的容器/卡片」，不再插空容器。
+  - **建议修法（⚠️ 已被 §5.8.1 取代，不需要）**：命令后把内容"搬家"——① 记录原段落文本 → ② 折光标执行命令（容器/卡片就位、光标在其内部，待验证）→ ③ `insertText` 写入原文 → ④ `deleteBlockByRange` 删除原段落；全程原生命令，仍不碰整篇 JSON。代价：行内标记（加粗/链接等）会退化为纯文本，需按需处理。
+  - **✅ 已解除暂停（260917）**：外部复核结论见 **`docs/BLOCK-CONVERT-ANSWER-260917.md`** —— 内核确有正规通道（官方 `insertAtSelection` 会自动补 hole 并包裹内容），**已按此实现**（vendor `convertBlockPreservingContent`，见 §5.8.1）；**没有**采用上面那条"搬家"编排。
+- 「在下方添加」的原生实现 = 把光标收到块首/尾 → `editor.execCommand('breakLine')`（紧邻生成新 `ne-p`）→
+  需要类型时再对新块执行 `style`/`quote`/`hr`。官方 `insertAtSelection(format, data)` 实测**可用**（**更正**：早前「返回节点但文档无变化」是误判 —— 传的是空 `<p><br></p>`、且只比对文本；见 §5.8.1），已用它做容器/卡片转换。
+- **`editor.execCommand` ≠ `renderer.execCommand`**：`indent/outdent` 在 `editor.execCommand` 上有效（本批实测 +26B），
+  而 `src/features/editor/editorCommands.ts` 历史结论记的「indent/outdent 是 no-op」针对 **`renderer.execCommand`**（移动端 dock 走的路径）。
+  新增块级命令时先确认走哪条路径。
+- 官方命令列表（`yuque-developer-docs/docs/08 - 命令列表`，29 条）**无**代码块转化命令，也无 `insertCard`（后者是 wrapper 内部用法）。
+
+**本仓库的落地与护栏（260917）**：
+- 挂载：`src/features/editor/blockHandleMount.ts`（`prefs.blockHandle`，仅桌面编辑态），宿主 `div.lake-block-handle-host` 挂在编辑器挂载容器，清理链进 `editor.__disposeExtras`。
+- vendor 改动：`BlockHoverHandle` 的动作改原生 + **拖拽移动停用**；`BlockContextMenu` 加 `SAFE_BLOCK_ACTIONS` 白名单（`convert/delete/copy/cut/indent/outdent/addAfter`）、去掉「复制链接 / 插卡」入口；「转化为」按云端保留 15 项（**代码块已在，走 `insertCard`**）——排版天然是 6 紧凑 + 5 紧凑 + 4 功能卡片两两一行，**无需改 CSS**。登记见 `vendor/lakex-doc-react/LOCAL-CHANGES.md` #9/#10。
+- 护栏：`src/features/editor/blockMenuNative.test.ts`（源码级断言：不得再出现 blockDoc 的 JSON 函数调用、白名单收敛、代码块走 `insertCard`）；端到端 `scripts/e2e-block-menu-smoke.mjs`（副本上逐项点菜单 + 每次比对卡片片段 hash）。
+
+**已知独立问题（与块操作无关，待单独立项）**：内核**未注册的遗留卡**（如换源前自研画板的 `board-card`）
+在任何一次编辑保存后都会丢 —— 实测纯原生 `style h1` 也让文件 6032B→4166B 且 `board-card` 消失（已注册卡 hash 全不变）。
+原因是保存走 `editor.getDocument('text/lake')`，序列化自内核模型，而未注册卡不在模型里（DOM 里也不渲染）。
+**这条与「转化后文本可能消失」高度相关**：保存 = 按模型序列化，DOM 里出现而模型里没有的内容会在保存时蒸发
+（排查方向：转换后先看 `getDocument('json')` 里新容器是否含原文本，再看保存后的 `.lake`）。
+
+**§5.8.1 复核更正（260917，副本实测 + bundle 源码）** —— 回答 `docs/BLOCK-CONVERT-QUESTION-260917.md`（完整配方/§7 复核表见 `docs/BLOCK-CONVERT-ANSWER-260917.md`）：
+
+1. **`insertAtSelection` 有效**（更正 §5.8 里「实测无效」的结论）：签名 `execCommand('insertAtSelection', format, data[, modelRange])`，
+   实现 = `kernel.readData(format,data)` → `iD.insertINode(editing, selection, inode)` → commit；解析失败返回 `null`（不落库），成功返回解析出的 INode。
+   **折叠光标 = 插入**（原块保留、作为同级兄弟）；**非折叠选区 = 替换**。支持 `text/html|text/markdown|text/plain|text/lake|text/ne-inode|Files`。
+2. **它是「插入带内容容器」的正规通道**：内核在插入 alert/columns/collapse 时按 `insert-inode-by-position.ts` **自动补 `alertHole`/`containerHole` 并包裹**。
+   实测：`insertAtSelection('text/lake','<blockquote class="lake-alert lake-alert-info"><p>…</p></blockquote>')` 落盘得到**含内容高亮块**；
+   配合 `getNodeContent(blockId,'text/lake')` + 非折叠选中该块，可**一次性把段落替换成「含原文的容器」**（DOM / `getDocument('json')` / 落盘 `.lake` 三处均含原文；分栏/折叠同理）。
+3. **命令级仍无「转换并保留内容」**：`alert`/`columns`/`collapse` 源码语义 = 删选区 + 插**空**容器（内含新建空段落），从不搬运已有节点；只有 `quote` 走 `ia.wrapRootNode` 真包裹。
+   `wrapRootNode`（`framework/kernel/src/model/utils/range/wrap-root-node.ts`）是**内部工具，未暴露**成命令/服务。
+4. **代码块有解**：`insertAtSelection('text/markdown', <三反引号围栏> + 代码 + <三反引号围栏>)` 一次生成**含内容**代码块卡；
+   或 `insertCard('codeblock')`（返回卡 id）+ `setCardValue(false, id, { code })` ⇒ 卡值归一为 `{"search":"","code":…,"heightLimit":true,"id":…}`。
+   `queryCommandValue('cardValue', id)` 实测返回 `undefined`，读值看 `getDocument('json')`/落盘。
+5. **规范 lake markup（实测落盘）**：高亮块 `<blockquote class="lake-alert lake-alert-info">`（type 见 `lake-alert-<type>`，默认 `info`）；
+   分栏 `<article class="lake-columns">` + 子 `<article class="lake-column-item" style="width: 50.000000%">`；
+   折叠块 `<details class="lake-collapse" open="true"><summary class="lake-summary">…</summary>…</details>`；
+   代码块卡 `<card type="inline" name="codeblock" value="data:{…}">`。
+6. **`queryCommandEnabled(name)` 不能用来判断命令是否存在**：`insertAtSelection`/`getNodeContent`/`setCardValue`/`moveCard` 返回 `false`，但 `execCommand` 实测生效（其 `getState` 恒为 `NOT_EXECUTED`）。
+7. **命令注册表**：bundle 内约 **147 个命令名**（`kO({command:{…}})` 映射 + 命令式 `registerCommand('…')`，alert 族 `alert/alertDelete/alertType/alertMove` 走后者）；
+   `editor._$commands` 只有 4 个编辑器级命令，不是内核注册表。**无** `convertBlock/wrapBlock/turnInto/toggleBlock/changeBlockType/callout`。
+8. **原生移动命令确实存在**（更正 §5.8「内核没有移动块原生命令」）：`moveCard/moveCollapse/moveColumns/moveColumn/moveTable/moveImage`（及 `tableRowMoveTo`/`tableColumnMoveTo`）；
+   但它们是**节点类型专属**且接收**模型 Position**，**没有通用「移动任意块」命令** —— vendor 拖拽停用的结论不变（原实现走整篇 JSON 路径）。
+9. 官方文档无「转化/turn into」条目；`55 - 斜杠命令` 只把 `alert/columns/collapse` 作为斜杠**插入项**。`lake-main` 无 columns/collapse/alert 插件、无「转容器」实现可借鉴。
+
+10. **260917 二次修正（用户实测三个问题，均已修，副本 e2e 覆盖）**：
+    - **代码块要按卡片 value 生成**：`editor.execCommand('insertCard', cardName, value)` 的**第二参就是卡片 value**（`insert-card-command` 源码 `iP.insertCardNode(o, selection, t, n)`）；
+      用 `insertAtSelection('text/lake', <card name="codeblock" value="data:{…}">)` 亦可。payload **不带 `hideToolbar`** ⇒ 内核物化时补 `hideToolbar:false`、`mode`、`lineNumbers`、`autoWrap` 等 ⇒ **工具栏与代码名称正常展示**。
+      早前走的 markdown 围栏会写 `hideToolbar:true / mode:'plain'` ⇒ 不是完整展示（**已弃用**）。
+    - **卡片源转「容器/正文/标题/引用/列表」一律先抽取文本**：代码块是**块卡**（DOM 里是 engine 直接子级，不在 `ne-p` 内；lake 虽写 `type="inline"`），
+      把它整张塞进 alert 会**直接丢失**（实测卡计数 1→0 且文本无）；`getNodeContent(源id,'text/plain')` 能取到代码文本 ⇒
+      用 `<p><span>line1<br />line2</span></p>`（换行转 `<br />`、文本转义）作为内容。容器/正文/标题走一次 `insertAtSelection`；
+      **引用/列表**（`quote`/`unorderedList`/`orderedList`/`taskList`）对卡片源本身无效（引用 no-op、列表抛 `Cannot read properties of undefined (reading 'nodeName')`）⇒ 先抽取成段落（新段落会被自动选中）再执行内核命令。
+    - **图片/文件是内联卡**（在 `ne-p` 内，`getNodeContent` 的 `text/plain` 为空）⇒ 沿用原 frag 嵌进容器**不会丢**（实测卡计数不变），无需抽取。
+    - 规范引号/列表 markup（实测落盘）：引用 `<blockquote><p>…</p></blockquote>`；无序 `<ul list="…"><li fid="…">…</li></ul>`；有序 `<ol list="…">…`；
+      任务 `<ul class="lake-list"><li class="lake-list-node lake-list-task"><card type="inline" name="checkbox" value="data:false"></card>…`。
+
+### 5.8.2 块菜单归属 / 按块类型配置 / 剪切（260917 三次修正）
+
+- **归属**：带「转化为」的**块悬浮手柄 + 块操作菜单不是内核能力**，是 vendor React 层（`BlockHoverHandle`/`BlockContextMenu`，我们 `blockHandleMount.ts` 手动挂载），内核只提供被调用的**命令**。
+  内核自带的是**卡片/容器工具栏**（`.ne-card-toolbar`/`.ne-ui-toolbar`；`getCardToolbarConfig`/`getContainerToolbarConfig`/`registerToolbarWidget`，各处 `toolbar`/`cardSelect` 描述符）与**斜杠菜单**（`cardSelectItems`）——不受我们的块菜单控制，只能通过 `disabledPlugins`/config 有限影响。
+- **按块类型配置菜单**：`MENU_CONFIGS` 的 key = 块标签；卡片（`ne-card`）额外按 `data-card-name` 细分（`getBlockMenuKey` → `ne-card:<name>`，回退 `ne-card` → `default`）。
+  `default` 已收敛为**基础项（无「转化为」）**——图表类/未知块不硬转；需要「转化为」的块必须显式登记（p/h/quote/list/codeblock/容器 `ne-alert-hole`/`ne-container-hole`/`ne-hole`）。要单独配某类卡片，加 `'ne-card:<name>'` 即可。
+  ⚠️ **块卡的真实类型在内部 `ne-card` 上**：代码块/分割线/思维导图/画板等**块卡**在 DOM 里都是 `ne-card[data-card-type=block]` 包在 `ne-hole` 内，`findBlockNode` 解析出的是 `ne-hole`
+  ⇒ 只按外层标签取菜单会让"图表类不给转化为"失效（全部命中同一菜单）。修法：`getBlockMenuKey` 对 `ne-card`/`ne-hole` **读内部 `ne-card` 的 `data-card-name`**，
+  已知可转化的（`codeblock`/`hr`）映射到既有配置，其余走 `ne-card` 基础菜单（无「转化为」）。实测：思维导图卡 `[删除,复制,剪切,在下方添加]`；代码块 `[转化为,删除,复制代码,剪切,在下方添加]`。
+- **容器源不能被"再套一层"**：容器 hole 的 `selectNodeContents` 只选到容器**内部**，插入新容器就成了「分栏套高亮块」（用户实测）。修法 = 容器源选中**容器节点本身**（`selectNodeInEditor` → `range.selectNode(blockquote/article/details)`）。
+- **cmd+X 剪切失效（严重，已修）**：根因在**应用层**而非内核 —— `src/features/editor/EditorTab.tsx` 的 `cutHandler` 在 capture 阶段 `stopImmediatePropagation()` 抢在内核 `cut` 事件处理（`clipboard` 插件的 `_handleCut`，内核里确实有）之前，却用 `document.execCommand("delete")` 做 **DOM 级删除** ⇒ 现象 = 选区文字消失（DOM 删了）→ 点块后被内核模型重绘回来（模型没删，`bytes` 不变），转换后的内容同样受影响。
+  修法 = 删除改走内核命令（`ed.kernel.execCommand("delete")`，`execCommand`/`document.execCommand` 仅兜底）；副本实测：cut 后**内存模型 + 落盘都删掉**（4400→4381B）。护栏：`src/features/editor/editorCut.test.ts`。
+- **原生移动块 / 拖拽（260917 已实现，分支 `feat/block-drag-native`）**：内核**有**移动能力 —— `moveCard(cardId, position)`（卡片，实测**逐字节保真**，含卡 id）、`moveCollapse`/`moveColumns`/`moveColumn`/`moveTable`/`moveImage`（各自类型）；**通用文字块无 move 命令**，用纯原生「读-插-删」（`getNodeContent('text/lake')` + `insertAtSelection` + `deleteByRange`）。
+  落点 `position` 由「目标元素前/后的折叠 DOM range」`transformDOMRange(...).start` 得到。注意：插入的副本会复用原块 id，**必须插入前固化原块模型 range** 再 `deleteByRange`，否则按 id 反查会删到副本（表现＝没移动）。
+  实测：拖思维导图卡后仍 634B/hash 不变；拖段落成功且卡片零改动。**禁用** `blockDoc.moveBlock` 的整篇 JSON 读改写（实测自定义卡 634B→8859B、抹掉未注册卡）。完整调研见 `docs/BLOCK-DRAG-RESEARCH-260917.md`。
+
+---
+
 ## 6. 使用守则（所有会话遵守）
 
 1. **动手前查**：改 `src/features/editor/**`、移动端 `src/mobile/editor/**`、或涉及编辑器内核行为前，先读 §2/§4/§5。
@@ -276,6 +397,8 @@
 - 本文件由 260908 只读评估生成；落地/回填后在此追加更新日志（一行一条，勿删历史）。
 - 2026-09-11：新增 §5.1（原生编辑 TOC 侧栏填充时序：空 toc 创建 + 1s 节流 + 直接 `_tocSidebar.update` 绕过节流），§4.2/§5 表补对应条目。来源：HANDOFF §2.15–2.16、lakeRuntime.ts `refreshTocSidebar`/`findNativeTocSidebar`。
 - 2026-09-16：§5.1 修订「点击定位」为 `allowModifyHash` 真相（内核 TOC 点击会写 `location.hash` → 触发锚点导航滚 html，导致整壳上移；修法 = 关 `allowModifyHash` + 锁 `html,body` overflow），补「`toc` option 是扁平 schema」；新增 §5.4（阅读态 Viewer 大纲：另一套类名/挂载时机、官方 `toc.getContainer` 与 `boundaryTopOffset`、点击跳转链路）与 §5.5（编辑态↔阅读态渲染模型差异、节点锚点恢复位置、窗口后台不渲染的 CDP 陷阱）；§6.6 更新为三级资料检索顺序（用户立规）。来源：260916 会话核实的 bundle 行号与 CDP 实测。
+- 2026-09-17：新增 §5.8（块级编辑：能力在 wrapper 层而非内核；动作→实现路径映射；`utils/blockDoc` 整篇 JSON 读改写的实测破坏 —— 正文 6032B→12288B、思维导图卡载荷 634B→8859B、未注册卡被整张抹掉；「转化为」各目标的原生命令实测表与代码块缺口；`editor.execCommand` 与 `renderer.execCommand` 在 indent/outdent 上的差异；`breakLine` 实现「在下方添加」而官方 `insertAtSelection` 实测无效；未注册遗留卡在任何一次保存后丢失）。来源：260917 会话在副本上的实测（`scripts/e2e-block-menu-smoke.mjs`）+ `yuque-developer-docs` 命令列表三级检索。
+- 2026-09-17（复核）：新增 **§5.8.1** —— **更正**「`insertAtSelection` 实测无效」为**有效**（`readData`→`insertINode`；折叠=插入、非折叠=替换、失败返回 `null`）；确认它是「插入带内容容器」的正规通道（内核自动补 `alertHole`/`containerHole`），配 `getNodeContent` 可一次性把段落替换成含原文的 alert/columns/collapse；命令级仍无转换命令（`quote` 是唯一 wrap）；代码块可用 markdown 围栏或 `insertCard`+`setCardValue` 写入；补规范 lake markup、`queryCommandEnabled` 不可靠、147 命令注册表、原生 `moveCard/moveCollapse/moveColumns/...` 的存在。来源：`docs/BLOCK-CONVERT-ANSWER-260917.md`（副本 CDP 实测 + bundle 源码）。
 
 ---
 

@@ -15,8 +15,9 @@
   - 关键入口（本批）：`electron/webApiServer.ts`（`startWebApiServer` / `createWebServerController`）· `electron/ipc/registerWeb.ts` · `src/components/SettingsPanel.tsx`（分类 `browser`）· `docs/TROUBLESHOOTING.md` #59/#60。
   - 关键入口（承前）：`scripts/css-audit/README.md`（CSS 审计，**动样式前必读**；含 §七 内联陷阱 + 34 状态矩阵）· `docs/LAKE-CONTENT-WRITING.md`（**写 Lake 正文前必读**）· `docs/LAKEX-CONTRACT.md`（内核契约，编辑器相关先读）· `docs/LAKEX-MIGRATION-260916.md`（换源/懒加载/离线）· `vendor/lakex-doc-react/LOCAL-CHANGES.md` · `docs/OFFLINE-ASSETS-AUDIT-260916.md`。
 - **工作区现状（本会话清理过）**：`/Users/admin/file/local-lake/` 下只剩 `lake-notes-electron`(主仓库) + `yuque-developer-docs`(语雀开发文档库/内核官方出处) + `lake-main`/`lake-editor-main`(内核机制参考) + `siyuan-master`(思源 v3.8.0 参考，AGPL-3.0)。已删：全部 worktree、过期截图/根级分析稿、`design-spec`、`release/`(910M)、`.css-audit/`(85M)、`test-node-abi/`、外部参考仓库副本（含 `lake-notes-tauri-poc`、`drawnix-develop`）。本地分支只剩 `master` + `refactor/store-split`(未合 master)。
+- **⚠️ 未提交改动（260917 第三批 · 块级编辑菜单，待用户验收）**：vendor 源码 + 重建的 `dist/**`；新增 `src/features/editor/blockHandleMount.ts`、`src/features/editor/blockMenuNative.test.ts`、`scripts/e2e-block-menu-smoke.mjs`；改动 `lakeRuntime.ts`、`src/hooks/desktopDerivedState.ts`、`src/desktop/DesktopLibrary.tsx`、`docs/LAKEX-CONTRACT.md`(§5.8)、`HANDOFF.md`(§2/§3)。**别在这批上直接合 master，等用户验收。**
 - **dev 数据现状（重要）**：`到啦领导`（ee860a19）仍在回收站（`trashed_at=09-04 10:34`），用户未决定是否恢复，**别擅自删**；安卓回收站 48 条旧测试数据 + 笔记本「20-UI编辑测试」「测试本1」（含用户笔记）保留勿删。
-- **测试产物**：上一会话的 1 篇 `TMP-P2-verify-*` + 4 份对拍脚本副本仍在回收站（可清空）；**本会话未新建任何测试数据**。注意：为排查"打开即重写"，早前打开过几篇测试文档（`压测3-图片-神里凌华/温迪/bilibili (26)`），它们已被内核归一化、图片降级成失败卡片并变成 `待同步`（**S3 未动**）。
+- **测试产物**：上一会话的 1 篇 `TMP-P2-verify-*` + 4 份对拍脚本副本仍在回收站（可清空）；本会话第三批的块菜单验证又在回收站留下 **3 份 `clean-test-1788770558737` 副本**（可一起清空；原件全程未被打开，hash 复核未变）。注意：为排查"打开即重写"，早前打开过几篇测试文档（`压测3-图片-神里凌华/温迪/bilibili (26)`），它们已被内核归一化、图片降级成失败卡片并变成 `待同步`（**S3 未动**）。
 
 ## 1. 项目一句话 + 铁律（详见 AGENTS.md）
 本地优先笔记应用（Electron 43 + React 18.3 + better-sqlite3 + 语雀 Lake 内核），S3（七牛 Kodo 兼容）同步。
@@ -25,7 +26,7 @@
 ⑤ 不为旧数据写兼容/迁移（能删重建就删重建）；⑥ 杀 Electron 只 kill 具体 PID，禁 `pkill -f Electron`；
 ⑦ 不擅自合 master（代码批次需用户验收；文档类清理可直接提交）。移动端另有铁律见 **§8.0**。
 
-## 2. 本会话（2026-09-17）：任务目标 + 已完成（两批）
+## 2. 本会话（2026-09-17）：任务目标 + 已完成（三批；第三批未提交）
 
 **任务目标**：① 修「文档页最底部一条很窄的灰条」，遵守"UI 改动找根位置、别一层层套 CSS"；② 推进"层级冗余清理"的 **档0**（修围栏虚高基线）与 **档1**（只清可证死的重复声明）；③ 评估"浏览器端"现状，并按用户要求加一个**是否开启浏览器端**的开关（**不做伺服**、仅本机浏览器使用；**不落盘、即时生效**，具体功能待用户想清楚）。
 
@@ -44,6 +45,21 @@
 8. **「打开浏览器」按钮**：新 IPC `open_web_client` → 主进程 `shell.openExternal(url)`；**URL 由主进程按固定端口构造、不接受渲染层传 URL**（防开放重定向）。桥接三处齐（`preload.cjs` / `WEB_METHODS` / `src/lib/native.ts`，方法面 `getWebStatus` / `setWebEnabled` / `openWebClient`）。
 9. **浏览器端实测**：启动后 `getWebStatus()={enabled:false}` 且 19880 无监听；开 → 19880 起、`GET /` 200、UI 出现「打开浏览器」行；点按钮 `openWebClient()={ok:true}`（真实拉起系统默认浏览器）；关 → 19880 立即消失。`settings` 表**不写任何 `web_settings` 行**。
 10. **浏览器端后续（用户明确"先不做功能、待想清楚"）**：见 §3.10。
+
+**第三批 · 块级编辑（悬浮手柄 + 块操作菜单）——⚠️ 未提交，待用户验收（工作区改动即本批）**：
+
+11. **调研结论**：云端语雀的块锚点/块菜单**不在内核**，在 vendor 包装层 `BlockHoverHandle` + `BlockContextMenu`；唯一挂载点是 vendor 的 `LakexEditor`，而我们直连 `Doc.createOpenEditor` ⇒ 手柄一直没挂上（不是开关、不是版本问题）。
+12. **安全红线（实测证据）**：菜单原实现里「转化 / 剪切 / 在下方添加 / 复制块 / 拖拽」走 `utils/blockDoc` 的**整篇 JSON 读改写**（`getDocument('json')`→改树→`setDocument('json')`）。副本实测一次「剪切」：正文 6032B→**12288B**、思维导图卡载荷 634B→**8859B**、**未注册卡 `board-card` 整张消失**；对照实验（纯原生 `indent`）只 +26B 且卡片 hash 全同 ⇒ 破坏来自 JSON 路径。内核另**无移动块原生命令**，故拖拽停用。
+13. **本批交付（对齐用户给的云端菜单截图，只用内核原生命令）**：
+    - vendor：`BlockHoverHandle` 动作全改原生（`deleteByRange` / `runNativeConvert` / `breakLine` 组合 + 拖拽停用）；`BlockContextMenu` 新增并导出 `SAFE_BLOCK_ACTIONS` 白名单、去掉「复制链接 / 插卡」入口 → 菜单 = 转化为（H1–H6/正文/有序/无序/任务/**代码**/高亮块/引用/分栏/折叠块）+ 删除 + 复制 + 剪切 + 缩进 + 在下方添加。登记 `vendor/lakex-doc-react/LOCAL-CHANGES.md` #9/#10，并已 `npm run build:vendor` 重建 `dist/**`。
+    - 应用：`src/features/editor/blockHandleMount.ts`（新）+ `lakeRuntime.ts` 加 `prefs.blockHandle` 并在 `__disposeExtras` 链上挂载/清理 + `desktopDerivedState.ts` 传 `blockHandle: true`（移动端不传 → 不挂）。
+    - 护栏/验证：`src/features/editor/blockMenuNative.test.ts`（源码级断言禁 JSON 路径 + 白名单）+ `scripts/e2e-block-menu-smoke.mjs`（副本逐项点菜单，**每次比对卡片片段 hash**，原件不打开）——实测 **PASS**（21 个动作全部生效、已有卡片逐字节未变、拖拽不动数据、原件 6032B/hash 未变）。
+    - 门禁：`tsc` 0 · `vitest` **996 passed / 16 skipped** · 桌面 + 移动 build 全绿。（`git diff --check` 只报 vendor 生成产物里**原本就有**的 2 处行尾空格。）
+14. **代码块已按用户指示加回（260917 二次确认）**：菜单与云端一致（15 项，排版天然 6/5/2/2，**未改任何 CSS**）。「转化为 → 代码」走 `editor.execCommand('insertCard','codeblock')` 落卡；「在下方添加 → 代码块」同理。拖拽移动块仍停用（内核无原生命令）。
+16. **文本丢失已定位并修掉数据丢失部分（260917）**：根因 = 容器类命令是**替换/插入**语义，我们原先**全选块内容**再执行 ⇒ 原文本被空容器替换（实测高亮块/分栏的 DOM、模型、落盘三处全无）。**修法**：非 `style` 目标改用**折叠光标**（vendor `blockMenuHelpers.collapseCaretAtBlockEnd`）⇒ e2e 硬断言（新增「原文本仍在正文里」）全部通过：高亮块/引用/分栏/折叠块/代码 + 缩进/在下方添加/剪切/删除。**残留（未解决）**：折叠光标下 `alert`/`columns`/`collapse`/`insertCard('codeblock')` 变成「在原文旁插入**空**容器/空卡，原段落不动」（落盘实测 `<p id="ucfd561e7">…</p><blockquote class="lake-alert …">`）—— 不丢数据，但**转换语义没达成**；`quote` 是例外（真包住内容）。**建议修法**：命令后「搬家」（记录原文 → 执行命令 → `insertText` 写入容器/卡片 → `deleteBlockByRange` 删原段落），仍全程原生命令；代价是行内标记会退化为纯文本。详见 `docs/LAKEX-CONTRACT.md` §5.8。 **✅ 260917 已解决（不再需要"搬家"）**：外部复核确认内核有正规通道 —— 官方 `getNodeContent` + 一次 `insertAtSelection`（内核自动补 hole 并包裹内容）即可把原块替换成「含原文的容器/卡片」；vendor 新增 `convertBlockPreservingContent`（代码块走 markdown 围栏）。e2e 硬断言「原文在容器内部」全部通过。见 §5.8.1 与 `docs/BLOCK-CONVERT-ANSWER-260917.md`。 **260917 二次修正**：① 代码块改为按「卡片 value」生成（不带 hideToolbar ⇒ 工具栏/代码名称完整展示）；② 代码块是块卡，整张塞进 alert 会丢 ⇒ 卡片源转容器/正文/引用/列表一律先「抽取文本」；③ 图片/文件是内联卡，嵌容器不丢、保持原样。e2e 新增「卡片源」用例（含卡计数 1→0 断言）全绿。
+17. **✅ 已复核并落地（260917）**：外部复核结论 = 内核**命令级没有**「转换并保留内容」，但有官方正规通道 `insertAtSelection`（插入带内容容器时自动补 `alertHole`/`containerHole`；配 `getNodeContent` 可一次把段落替换成含原文容器）。**已按此实现**（vendor `convertBlockPreservingContent`，四个目标：高亮块/分栏/折叠块/代码块），**未采用**用户此前不接受的"自组装多步搬家"。完整结论/§3/§7 复核表见 `docs/BLOCK-CONVERT-ANSWER-260917.md`，问题清单留档 `docs/BLOCK-CONVERT-QUESTION-260917.md`。
+18. **260917 三次修正（用户实测）**：① 「转化为」菜单归属确认 = 我们的 wrapper 层（**非内核**）；新增**按块类型/卡片名**配置菜单（`getBlockMenuKey`），`default` 不再给「转化为」——图表类不硬转。② 容器源（高亮块/引用/折叠块）转容器/正文/引用/列表改为**抽取文本** + 选中「容器节点本身」，修掉「分栏套高亮块」。③ **cmd+X 剪切失效根因 = 应用层**：`EditorTab.cutHandler` 用 `document.execCommand("delete")` 只删 DOM（内核 `_handleCut` 被 capture 阶段 `stopImmediatePropagation` 抢掉）⇒ 文字消失、点块恢复；改走内核 `delete`，副本实测内存模型 + 落盘都删。护栏 `src/features/editor/editorCut.test.ts`。 ④ **块卡菜单按内部 `ne-card` 的 `data-card-name` 区分**（此前所有块卡都解析成 `ne-hole`，导致图表类也出现「转化为」）；⑤ **拖拽调研结论**：毁数据的是 `blockDoc` 的 JSON 路径、不是拖拽；内核有原生 `moveCard`（实测逐字节保真）与各 `move*`，文字块可"读-插-删" ⇒ 拖拽**能做**，详见 `docs/BLOCK-DRAG-RESEARCH-260917.md`。 **已在分支 `feat/block-drag-native` 实现原生拖拽**：卡片 `moveCard`（逐字节保真）/ 其它块「读-插-删」；e2e 新增拖拽用例（文档变化+卡片不丢+文本保留）。
+15. **顺带挖到的独立数据问题（与块操作无关，建议单列待办）**：内核**未注册的遗留卡**（如换源前自研画板的 `board-card`）在**任何一次编辑保存后都会丢** —— 纯原生 `style h1` 也让文件 6032B→4166B 且该卡消失（已注册卡 hash 全不变）。原因是保存走 `getDocument('text/lake')`（序列化自内核模型），而未注册卡不在模型里。详见 `docs/LAKEX-CONTRACT.md` §5.8 末段。
 
 ## 3. 下一步计划 + 当前问题（真正的待办，按优先级）
 
