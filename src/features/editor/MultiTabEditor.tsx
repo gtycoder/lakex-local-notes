@@ -355,7 +355,6 @@ export function MultiTabEditor({
             </button>
           ))}
         </div>
-        {topbarTrailing && <div className="tabbar-trailing">{topbarTrailing}</div>}
         {tabs.length > 0 && (
           <div className="tab-switcher-wrap" ref={switcherRef}>
             <button
@@ -410,6 +409,7 @@ export function MultiTabEditor({
             )}
           </div>
         )}
+        {topbarTrailing && <div className="tabbar-trailing">{topbarTrailing}</div>}
       </div>
       {breadcrumb}
       {activeTabGone && (

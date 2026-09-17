@@ -45,7 +45,7 @@ import { DesktopOverlays } from "./desktop/DesktopOverlays";
 import { DesktopLibrary } from "./desktop/DesktopLibrary";
 import { DesktopQuickNotes } from "./desktop/DesktopQuickNotes";
 import { useDesktopShell } from "./desktop/useDesktopShell";
-import { DesktopTopBarLeading, DesktopTopBarTrailing } from "./desktop/DesktopTopBar";
+import { DesktopTopBarLeading, DesktopTopBarSearch } from "./desktop/DesktopTopBar";
 import { DesktopActivityRail } from "./desktop/DesktopActivityRail";
 
 export function App() {
@@ -334,11 +334,9 @@ export function App() {
       syncBtnRef={desktopWorkspace === "quick-notes" ? syncBtnRef : undefined}
     />
   );
-  const topBarTrailing = (
-    <DesktopTopBarTrailing
-      theme={settings.theme}
-      onToggleTheme={() => saveSettings({ theme: settings.theme === "dark" ? "light" : "dark" })}
-    />
+  /** 文档页顶栏最右侧：全文搜索（原在左侧工作空间下拉里；⇧⌘F 亦可）。 */
+  const topBarSearch = (
+    <DesktopTopBarSearch onOpenSearch={() => sidebarOpenSearch(search)} />
   );
 
   return (
@@ -370,7 +368,7 @@ export function App() {
             tocEnabled={tocEnabled}
             outlineEnhance={outlineEnhance}
             topbarLeading={libraryTopBarLeading}
-            topbarTrailing={topBarTrailing}
+            topbarTrailing={topBarSearch}
             wideMode={wideMode}
             editorPrefs={editorPrefs}
             activePathTitle={activePath.length > 0 ? (activePath[0].title || "无标题") : null}
@@ -397,7 +395,6 @@ export function App() {
             notebooks={treeNodes}
             quickNotesRef={quickNotesRef}
             topbarLeading={quickNotesTopBarLeading}
-            topbarTrailing={topBarTrailing}
             onDirtyChange={setQuickNotesDirty}
             onConverted={(note) => void handleQuickNoteConverted(note)}
             />
@@ -452,8 +449,6 @@ export function App() {
         topMenuOpen={topMenuOpen}
         onOpenSettingsFromMenu={(category) => { setSettingsCategory(category); setSettingsOpen(true); setWorkspaceMenuOpen(false); }}
         onOpenTrashFromMenu={() => { setTrashOpen(true); setWorkspaceMenuOpen(false); }}
-        // 全局筛选入口从目录栏头部移到顶栏下拉（目录栏只做目录筛选）；带上当前目录筛选词
-        onOpenSearchFromMenu={() => { sidebarOpenSearch(search); closeMenus(); }}
         focusMode={focusMode}
         onToggleFocusMode={() => { setFocusMode((value) => !value); setTopMenuOpen(false); }}
         activeNoteId={activeNoteId}

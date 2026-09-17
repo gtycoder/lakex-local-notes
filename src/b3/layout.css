@@ -29,12 +29,7 @@
   flex: 0 0 auto;
   -webkit-app-region: no-drag;
 }
-/* 顶栏中部撑开：让最右侧元素（外观/更多）贴右（小记视图无 tab 时同样一致） */
-.tabbar-spacer {
-  flex: 1 1 auto;
-  min-width: 0;
-}
-/* 顶栏最右侧元素：外观/更多（文档操作） */
+/* 顶栏最右侧元素：全文搜索（文档页；小记页无右侧槽位） */
 .tabbar-trailing {
   display: flex;
   align-items: center;
@@ -92,12 +87,6 @@
 }
 .tab-item:hover {
   background-color: var(--b3-list-hover);
-}
-/* 活动标签（桌面）：白色卡片 + 顶部主色指示线（对齐思源 layout-tab-bar），
-   不再叠「主色浅底 + 主色内描边 + 主色文字」——激活态只保留一个着色信号。
-   position/z-index 由顶层 .tab-item.active 提供。 */
-.tab-item.active {
-  box-shadow: inset 0 2px 0 var(--b3-theme-primary);
 }
 
 /* 左侧固定目录：白色卡片、无强边框/阴影、顶部留 4px 灰缝（圆角可见，思源卡片从灰底"抠出"）、右侧 4px 灰缝 */

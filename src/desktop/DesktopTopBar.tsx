@@ -1,5 +1,5 @@
-/** 桌面顶栏（§20 Phase C 收尾：topBarLeading/topBarTrailing 从 App.tsx 移出）。 */
-import { ChevronDown, Moon, Sun } from "lucide-react";
+/** 桌面顶栏（§20 Phase C 收尾：topBarLeading 与右侧搜索钮从 App.tsx 移出）。 */
+import { ChevronDown, Search } from "lucide-react";
 import type { Ref, RefObject } from "react";
 import { SyncStatusPopover } from "../components/SyncStatusPopover";
 import type { SyncStatus, SyncPendingSummary } from "../lib/types";
@@ -51,17 +51,16 @@ export function DesktopTopBarLeading(props: DesktopTopBarLeadingProps) {
   );
 }
 
-export interface DesktopTopBarTrailingProps {
-  theme: "light" | "dark";
-  onToggleTheme: () => void;
+export interface DesktopTopBarSearchProps {
+  onOpenSearch: () => void;
 }
 
-/** 顶栏最右侧：外观模式（浅色/深色切换）。 */
-export function DesktopTopBarTrailing(props: DesktopTopBarTrailingProps) {
-  const { theme, onToggleTheme } = props;
+/** 顶栏最右侧：全文搜索（原在左侧工作空间下拉里；⇧⌘F 亦可）。外观切换见「偏好设置 → 外观」。 */
+export function DesktopTopBarSearch(props: DesktopTopBarSearchProps) {
+  const { onOpenSearch } = props;
   return (
-    <button className="toolbar__item" onClick={onToggleTheme} title="外观模式（浅色/深色）" aria-label="外观模式">
-      {theme === "dark" ? <Sun size={15} /> : <Moon size={15} />}
+    <button className="toolbar__item" onClick={onOpenSearch} title="全文搜索（⇧⌘F）" aria-label="全文搜索">
+      <Search size={15} />
     </button>
   );
 }

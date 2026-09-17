@@ -481,8 +481,8 @@ html[data-theme="dark"] .document-pane .ne-engine > ne-h6 ne-heading-content {
   border-radius: var(--lake-radius-sm) !important;
 }
 
-/* 页签 active：白卡 + 顶部主色指示线已经足够标识当前页（b3/layout.css 拥有底与指示线）；
-   文字保持中性墨色 + 略加字重，避免「浅底 + 描边 + 主色字」三重信号。 */
+/* 页签 active：白卡底（b3/components.css 的 .tab-item.active 提供）已足够标识当前页；
+   文字保持中性墨色 + 略加字重，避免「浅底 + 描边 + 主色字」多重信号。 */
 .tab-item.active {
   color: var(--lake-text) !important;
   font-weight: 500;

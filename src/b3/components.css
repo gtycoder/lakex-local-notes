@@ -21,7 +21,6 @@
 .tab-switcher-menu {
   background: var(--b3-menu-background);
   border: 1px solid var(--b3-theme-surface-lighter);
-  border-left: 3px solid var(--b3-theme-primary);
   border-radius: var(--b3-border-radius-b);
   box-shadow: var(--b3-dialog-shadow);
   padding: 8px 0;
@@ -171,7 +170,7 @@
   color: var(--b3-theme-primary);
 }
 
-/* ── 标签页（思源：灰栏 + 白底激活 + 顶部主色指示线）── */
+/* ── 标签页（思源：灰栏 + 白底激活）── */
 .tab-item.active {
   background: var(--lake-raised);
 }
