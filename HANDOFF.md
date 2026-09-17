@@ -5,7 +5,7 @@
 > **§8 是移动端（安卓）专职交接**，由移动端会话维护；桌面会话不要改 §8，移动端会话不要改 §0-§7 之外的桌面文件。
 
 ## 0. 当前基线（新会话开工前）
-- **基线（最新一批，已在 `master` 且已推 origin）**：`master` @ `<HASH>`（本批代码末提交见 git log）。本批 = **壳层底部灰缝根修 + CSS 层级冗余收口（档0/档1）+ 审计装置漂移修复**：
+- **基线（最新一批，已在 `master` 且已推 origin）**：`master` @ `4faa5e1`（本批代码末提交；其上为本文档更新）。本批 = **壳层底部灰缝根修 + CSS 层级冗余收口（档0/档1）+ 审计装置漂移修复**：
   ① **底部灰缝根修**：`.workspace` 底部 `4px` margin 去掉（`src/styles/app/shell.css`）→ 文档页齐壳底；小记视图早已单独修过、基础层漏改（见 `docs/TROUBLESHOOTING.md` #57）；
   ② **档0（围栏纠偏）**：`src/styles/cssLayers.test.ts` 基线按实测收紧 —— `styles.css` **1778→0**（S3 拆分后入口只剩 `@import`，基线未同步下调），另 11 文件同步；此前"围栏卡住增长"是打折的；
   ③ **档1（层级冗余收口）**：新增 `scripts/css-audit/plan-dup-decls.mjs`（单选择器 + 同 at-rule 上下文判"后者恒胜"）· `build-spec-dup.mjs`（把 `app/*.css` 拼回 `src/styles.css` 注入，绕开内联陷阱）· `apply-dup-decls.mjs`；删 **55 条**可证死声明（含 A 层菜单盒视觉族、`.sidebar-floating` 旧几何 112/82px），**ab2 全矩阵 34 状态噪声 0 / 差异 0**；
