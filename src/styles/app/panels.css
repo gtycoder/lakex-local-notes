@@ -3,7 +3,7 @@
    本层由 src/styles.css 的 @import 编排，整体仍在 b3 之前 —— 层间先后不得改变（见 docs/CSS-LAYERS-BRIEF-260916.md §6）。 */
 
 /* ===== 回收站面板（本地，不同步） ===== */
-.trash-panel-backdrop { background: var(--b3-mask-background, rgba(31, 35, 41, .18)); justify-content: center; align-items: flex-start; padding-top: 12vh; }
+.trash-panel-backdrop { justify-content: center; align-items: flex-start; padding-top: 12vh; }
 
 .trash-panel { display: flex; flex-direction: column; background: var(--b3-theme-surface); border: 1px solid var(--b3-theme-surface-lighter); border-radius: var(--b3-border-radius-b); box-shadow: var(--b3-dialog-shadow); overflow: hidden; }
 
@@ -39,7 +39,7 @@
 }
 
 /* ===== 历史版本面板（两 tab：文档历史 / 文档孤儿文件） ===== */
-.history-panel-backdrop { background: var(--b3-mask-background, rgba(31, 35, 41, .18)); justify-content: center; align-items: flex-start; padding-top: 12vh; }
+.history-panel-backdrop { justify-content: center; align-items: flex-start; padding-top: 12vh; }
 
 .history-panel { display: flex; flex-direction: column; background: var(--b3-theme-surface); border: 1px solid var(--b3-theme-surface-lighter); border-radius: var(--b3-border-radius-b); box-shadow: var(--b3-dialog-shadow); overflow: hidden; }
 

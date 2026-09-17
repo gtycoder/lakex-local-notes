@@ -39,7 +39,7 @@
 .document-statusbar-status-icon { display: inline-flex; align-items: center; gap: 4px; }
 
 @media (prefers-reduced-motion: reduce) {
-  .document-statusbar { backdrop-filter: none; transition: none; }
+  .document-statusbar { backdrop-filter: none; }
 }
 
 .document-statusbar-state.synced-history {

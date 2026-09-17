@@ -49,10 +49,18 @@ const nav = {
     if (t) { await page.click(t[0], t[1]); await page.sleep(700); }
     await nav.closeAll(page);
   },
+  // 260917 修正：全文搜索已从左上角下拉搬到**文档页右上角**（见 HANDOFF §0/b695890），
+  // 下拉里再没有"全文搜索"菜单项 ⇒ 旧实现直接抛 no 全文搜索。改为按 title/aria 找右上角的搜索按钮。
   search: async (page) => {
-    await page.click(178, 19); await page.sleep(400);
-    const p = await page.evaluate(`(() => { const el = [...document.querySelectorAll('button,[role=menuitem]')].find(e => (e.textContent||'').includes('全文搜索')); if(!el) return null; const r = el.getBoundingClientRect(); return [Math.round(r.x+r.width/2), Math.round(r.y+r.height/2)]; })()`);
-    if (!p) throw new Error("no 全文搜索");
+    const p = await page.evaluate(`(() => {
+      const el = [...document.querySelectorAll('button')].find(e => {
+        const t = (e.title || '') + ' ' + (e.getAttribute('aria-label') || '');
+        return /搜索/.test(t) && e.getBoundingClientRect().width > 0;
+      });
+      if (!el) return null; const r = el.getBoundingClientRect();
+      return [Math.round(r.x + r.width / 2), Math.round(r.y + r.height / 2)];
+    })()`);
+    if (!p) throw new Error("no 搜索 button");
     await page.click(p[0], p[1]); await page.sleep(800);
   },
   noteInfo: async (page) => {

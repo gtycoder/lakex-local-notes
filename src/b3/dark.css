@@ -52,9 +52,6 @@
 }
 
 /* ── 深色边界修复（审计发现）：html 背景 / 表单控件 / tab-switcher / 小记 ── */
-:root {
-  background: var(--b3-body-background);
-}
 
 [data-theme="dark"] input[type="text"],
 [data-theme="dark"] input[type="password"],

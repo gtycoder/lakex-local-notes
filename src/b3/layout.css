@@ -78,7 +78,6 @@
 
 /* 标签项：思源 layout-tab-bar .item 观感（窄窗同样成立——组 4） */
 .tab-item {
-  border-radius: var(--b3-border-radius);
   min-height: 29px;
   line-height: 22px;
   margin: 6px 0;
@@ -102,16 +101,12 @@
  * 原先只在 `@media (min-width: 761px)` 里 ⇒ 窄窗悬停左轨会拉出一块被撑爆的面板。 */
 .sidebar.sidebar-floating {
   position: fixed;
-  top: 112px;
-  bottom: 82px;
   left: var(--activity-rail-width);
   right: auto;
-  height: calc(100vh - 194px);
   width: var(--sidebar-width);
   max-width: none;
   background: var(--b3-theme-background);
   border-radius: 0 var(--b3-border-radius-b) var(--b3-border-radius-b) 0 !important;
-  transition: transform .2s cubic-bezier(0, 0, .2, 1) 0ms, opacity .3s cubic-bezier(0, 0, .2, 1) 0ms;
 }
 
 /* 中间文档卡片：顶部两个圆角与左右 dock 卡片一致（思源 .layout__center 四角圆角），
@@ -183,7 +178,6 @@
   height: 26px;
   padding: 0 8px;
   border: 0;
-  border-radius: var(--b3-border-radius);
   color: var(--b3-theme-on-surface);
   background: transparent;
   white-space: nowrap;

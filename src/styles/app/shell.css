@@ -14,7 +14,7 @@
 /* ＋ 快捷创建：与行内 ⋯ 同一套着重色（hover/展开时 accent） */
 .create-btn:hover, .create-btn.is-active { background: var(--lake-accent-soft); color: var(--lake-accent); }
 
-.create-menu { display: flex; position: absolute; top: 36px; right: 0; z-index: 1000; flex-direction: column; width: clamp(150px, calc(var(--sidebar-width, 260px) - 16px), 220px); max-width: calc(100vw - 16px); padding: 4px; transform-origin: top right; transition: transform var(--lake-motion-fast) var(--lake-ease-standard), opacity var(--lake-motion-fast) var(--lake-ease-standard); }
+.create-menu { display: flex; position: absolute; top: 36px; right: 0; z-index: 1000; flex-direction: column; width: clamp(150px, calc(var(--sidebar-width, 260px) - 16px), 220px); max-width: calc(100vw - 16px); transform-origin: top right; transition: transform var(--lake-motion-fast) var(--lake-ease-standard), opacity var(--lake-motion-fast) var(--lake-ease-standard); }
 
 .create-menu > button { display: grid; grid-template-columns: 20px minmax(0, 1fr); align-items: center; gap: 8px; width: 100%; min-height: 42px; padding: 5px 8px; border: 0; color: var(--b3-theme-on-surface); background: transparent; text-align: left; }
 
@@ -167,7 +167,9 @@
 .workspace {
   grid-column: 3;
   grid-row: 1;
-  margin: calc(var(--topbar-height) + 4px) 0 4px 0;
+  /* 底部不留缝（原 4px）：正文卡底部两角是直角、本就该齐壳底；留 4px 会在窗口最底露一条 shell 灰条。
+     顶部那 4px 是有意的（固定 .tab-bar 与卡片的拼接缝），保留。 */
+  margin: calc(var(--topbar-height) + 4px) 0 0 0;
   overflow: hidden;
 }
 
@@ -350,16 +352,6 @@
 .tree-row-icon:hover { background: rgba(0,0,0,0.06); }
 
 /* 菜单类 */
-.create-menu,
-.context-menu,
-.tab-switcher-menu {
-  background: color-mix(in srgb, var(--b3-theme-surface) 72%, transparent);
-  border: 1px solid color-mix(in srgb, var(--b3-theme-surface-lighter) 55%, transparent);
-  border-radius: var(--b3-border-radius-b);
-  box-shadow: var(--b3-dialog-shadow), inset 0 0 0 .5px color-mix(in srgb, var(--b3-theme-surface) 35%, transparent);
-  backdrop-filter: blur(24px) saturate(1.2);
-  -webkit-backdrop-filter: blur(24px) saturate(1.2);
-}
 
 .trash-tree-children { margin-left: 18px; border-left: 1px solid var(--b3-theme-surface-lighter); padding-left: 6px; }
 
@@ -506,14 +498,11 @@
 }
 
 .app-shell.quick-notes-active .workspace {
-  /* 小记页没有状态栏内容：不再保留空的 28px 状态行（用户 260915），
-     底部 4px 也一并去掉，让工作面直接贴到窗口底。 */
+  /* 小记页没有状态栏内容：不再保留空的 28px 状态行（用户 260915）。
+     底部 4px 灰缝 260917 已在基础 .workspace 统一去掉，这里不再重复覆盖 margin。 */
   grid-template-rows: minmax(0, 1fr);
-  /* 特异性 (0,3,0) 已经压过共用作用域里的 `.workspace { margin … 0 4px 0 }`，不需要 !important */
-  margin: calc(var(--topbar-height) + 4px) 0 0;
   background: transparent;
   border: 0;
-  border-radius: 0;
   box-shadow: none;
   overflow: hidden;
 }

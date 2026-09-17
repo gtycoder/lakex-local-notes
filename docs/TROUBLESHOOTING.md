@@ -52,6 +52,9 @@
     - **排查提示**：直接打开这类文档 = 触发上面的重写（不可逆地把图降级）。要验证用 `node scripts/lake-roundtrip-check.mjs --note <id>`（**只动副本、原件不打开**；退出码 1 = 该文档一打开就会被改写）。
     - 判定"是否被重写"的口径：`.lake` 的 **mtime 不变** + 标签无脏点 + 无新增历史快照 + 正文里 `status%22%3A%22error%22` 为 0。
 
+57. **壳层底部一条很窄的灰缝（260917）**：文档页最底露出约 4px 的 `.app-shell` 灰底（`rgb(235,236,240)`）。根因 = `src/styles/app/shell.css` 的 `.workspace { margin: calc(var(--topbar-height) + 4px) 0 4px 0 }` 底部那个 `4px`：`.app-shell` 是单行网格（852px），工作区被底部 margin 收到 848 → 最底 4px 露灰。**这是"同一几何只修了一处视图"的漂移**：小记视图早已单独覆盖 `margin: … 0 0` 去掉这 4px（注释："让工作面直接贴到窗口底"），基础 `.workspace` 漏改。修法 = 基础层底部改 `0`（顶部那 4px 是固定 `.tab-bar` 的拼接缝，保留）+ 收掉小记里已**逐字等价**的 margin 覆盖。**不要**用"给 `.app-shell` 加白底/加高度"这类叠层补丁绕开——根在 `margin`。实测：底部 dy=1..4 命中从 `.app-shell`（灰）变为白色 `.ne-editor`（bottom=852）；文档/小记两视图都齐底。
+58. **审计装置会随 UI 批次漂移（260917）**：`scripts/css-audit/css-audit.mjs` 的 `nav.search` 一直在左上角下拉里找"全文搜索"菜单项，而 260917 该入口已搬到文档页右上角 → 跑 `ab2` 全矩阵时 `search-empty` 状态**在装置准备阶段直接抛 `no 全文搜索`**（崩的是状态准备、不是比对结果，容易误读成"清理导致回归"）。修法 = 按 `title/aria` 找右上角搜索按钮。**两个连带坑**：① 跑审计装置前先确认它跟得上最近的 UI 搬位；② `ab2` 的 `only` 过滤是**状态全名精确匹配**（传 `search-empty` 匹配不到 `search-empty:1315:light`，会被**静默跳过**）。另外 `ab2 plan` 模式**测不了 `app/*.css`**（被 Vite 内联进 `src/styles.css` 那张表）——必须用 `SPEC` 注入整份内联内容，否则给假 PASS（见 `scripts/css-audit/README.md` §七）。
+
 ## E. 环境与工具
 
 35. **杀进程误杀 Trae CN**：永远用 `grep "lake-notes-electron"` 精确匹配，禁 `pkill -f Electron`。

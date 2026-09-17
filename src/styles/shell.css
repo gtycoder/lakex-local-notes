@@ -49,16 +49,6 @@
   border-color: var(--lake-border);
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .app-shell,
-  .sidebar,
-  .outline-sidebar,
-  .tab-item,
-  .floating-dialog {
-    transition: none !important;
-  }
-}
-
 /* 专注模式：宽窄共用。原先只在 `@media (min-width: 761px)` 里 ⇒ 窄窗按 ⌘⇧Enter 只加了类名、
  * 界面毫无变化（实测 590px 下 rail/抽屉/正文全都没动）。窄窗下三列定义里的前两列都是 0，
  * 正文仍落在第 3 列，所以同一套规则直接可用，不需要窄窗副本。 */

@@ -5,19 +5,18 @@
 > **§8 是移动端（安卓）专职交接**，由移动端会话维护；桌面会话不要改 §8，移动端会话不要改 §0-§7 之外的桌面文件。
 
 ## 0. 当前基线（新会话开工前）
-- **基线（最新一批，已在 `master` 且已推 origin）**：`master` @ `d8480ee`（本批**代码末提交** `80a15e5`；其上 `d8480ee` 为本文档更新）。本批 = **桌面端 UI/交互收口 + Lake 正文写入形态治理**（5 个代码提交 + 2 个文档提交）：
-  ① 顶栏「全文搜索」从左上角下拉**搬到文档页右上角**（右上顺序 = 标签切换三角 → 搜索）；外观切换移出顶栏，只保留在「偏好设置 → 外观 → 主题」；
-  ② 去掉右键弹窗左侧 3px 蓝条（根因：`b3/components.css` 里 `.context-menu/.create-menu/.tab-switcher-menu` 共用规则的 `border-left`）+ 去掉活动标签顶部主色指示线；
-  ③ **去掉标签切换的 View Transition**（含 Chromium 默认 250ms `::view-transition-group` 形变），切换回归"一次 commit 内 toggle display"，不再有交叉淡化；
-  ④ 目录栏**跟随标签定位**（含"停靠 ↔ 浮动"重定位）+ 清掉 `.context` 蓝框残留 + `html/body` 改 `overflow: clip`（从根上杜绝程序化滚动顶走外壳）；
-  ⑤ **Lake 正文写入收口**：`src/core/lakeDocForm.ts`（写入形态单一来源）+ `docs/LAKE-CONTENT-WRITING.md`（写入契约）+ `scripts/lake-roundtrip-check.mjs`（打开对拍检查）。
+- **基线（最新一批，已在 `master` 且已推 origin）**：`master` @ `<HASH>`（本批代码末提交见 git log）。本批 = **壳层底部灰缝根修 + CSS 层级冗余收口（档0/档1）+ 审计装置漂移修复**：
+  ① **底部灰缝根修**：`.workspace` 底部 `4px` margin 去掉（`src/styles/app/shell.css`）→ 文档页齐壳底；小记视图早已单独修过、基础层漏改（见 `docs/TROUBLESHOOTING.md` #57）；
+  ② **档0（围栏纠偏）**：`src/styles/cssLayers.test.ts` 基线按实测收紧 —— `styles.css` **1778→0**（S3 拆分后入口只剩 `@import`，基线未同步下调），另 11 文件同步；此前"围栏卡住增长"是打折的；
+  ③ **档1（层级冗余收口）**：新增 `scripts/css-audit/plan-dup-decls.mjs`（单选择器 + 同 at-rule 上下文判"后者恒胜"）· `build-spec-dup.mjs`（把 `app/*.css` 拼回 `src/styles.css` 注入，绕开内联陷阱）· `apply-dup-decls.mjs`；删 **55 条**可证死声明（含 A 层菜单盒视觉族、`.sidebar-floating` 旧几何 112/82px），**ab2 全矩阵 34 状态噪声 0 / 差异 0**；
+  ④ **装置漂移修复**：`scripts/css-audit/css-audit.mjs` 的 `nav.search` 跟上"搜索入口搬到文档页右上角"（见 TROUBLESHOOTING #58）。
   - 门禁（本批）：`tsc` 0 · `vitest` **989 passed / 16 skipped (1005)** · 桌面 `vite build` + `vite build -c vite.mobile.config.ts` 全绿 · `git diff --check` 干净。
   - 桌面 dev 实测端口：`1421` vite / `9222` electron（CDP）/ `19876` asset。
-  - 关键入口（本批新增，**写 Lake 正文前必读**）：`docs/LAKE-CONTENT-WRITING.md` · `src/core/lakeDocForm.ts` · `scripts/lake-roundtrip-check.mjs` · `docs/TROUBLESHOOTING.md #56`。
-  - 关键入口（承前）：`docs/LAKEX-CONTRACT.md`（内核契约，编辑器相关先读）· `docs/LAKEX-MIGRATION-260916.md`（换源/懒加载/离线）· `vendor/lakex-doc-react/LOCAL-CHANGES.md` · `docs/CSS-LAYERS-BRIEF-260916.md` · `docs/OFFLINE-ASSETS-AUDIT-260916.md`。
+  - 关键入口（本批新增，**动样式前必读**）：`scripts/css-audit/README.md`（含 §七 内联陷阱 + 34 状态矩阵）· `docs/CSS-LAYERS-BRIEF-260916.md` · `src/styles/cssLayers.test.ts`。
+  - 关键入口（承前）：`docs/LAKE-CONTENT-WRITING.md`（**写 Lake 正文前必读**）· `docs/LAKEX-CONTRACT.md`（内核契约，编辑器相关先读）· `docs/LAKEX-MIGRATION-260916.md`（换源/懒加载/离线）· `vendor/lakex-doc-react/LOCAL-CHANGES.md` · `docs/OFFLINE-ASSETS-AUDIT-260916.md`。
 - **工作区现状（本会话清理过）**：`/Users/admin/file/local-lake/` 下只剩 `lake-notes-electron`(主仓库) + `yuque-developer-docs`(语雀开发文档库/内核官方出处) + `lake-main`/`lake-editor-main`(内核机制参考) + `siyuan-master`(思源 v3.8.0 参考，AGPL-3.0)。已删：全部 worktree、过期截图/根级分析稿、`design-spec`、`release/`(910M)、`.css-audit/`(85M)、`test-node-abi/`、外部参考仓库副本（含 `lake-notes-tauri-poc`、`drawnix-develop`）。本地分支只剩 `master` + `refactor/store-split`(未合 master)。
 - **dev 数据现状（重要）**：`到啦领导`（ee860a19）仍在回收站（`trashed_at=09-04 10:34`），用户未决定是否恢复，**别擅自删**；安卓回收站 48 条旧测试数据 + 笔记本「20-UI编辑测试」「测试本1」（含用户笔记）保留勿删。
-- **本会话留下的测试产物（都在回收站，可清空）**：1 篇 `TMP-P2-verify-*`（P2 端到端探针）+ 4 份对拍脚本产生的副本（`… 副本`）。另注意：为排查"打开即重写"，本会话打开过几篇测试文档（`压测3-图片-神里凌华/温迪/bilibili (26)`），它们因此已被内核归一化、图片降级成失败卡片并变成 `待同步`（**S3 未动**，本会话没跑同步）。
+- **测试产物**：上一会话的 1 篇 `TMP-P2-verify-*` + 4 份对拍脚本副本仍在回收站（可清空）；**本会话未新建任何测试数据**。注意：为排查"打开即重写"，早前打开过几篇测试文档（`压测3-图片-神里凌华/温迪/bilibili (26)`），它们已被内核归一化、图片降级成失败卡片并变成 `待同步`（**S3 未动**）。
 
 ## 1. 项目一句话 + 铁律（详见 AGENTS.md）
 本地优先笔记应用（Electron 43 + React 18.3 + better-sqlite3 + 语雀 Lake 内核），S3（七牛 Kodo 兼容）同步。
@@ -26,20 +25,17 @@
 ⑤ 不为旧数据写兼容/迁移（能删重建就删重建）；⑥ 杀 Electron 只 kill 具体 PID，禁 `pkill -f Electron`；
 ⑦ 不擅自合 master（代码批次需用户验收；文档类清理可直接提交）。移动端另有铁律见 **§8.0**。
 
-## 2. 本会话（2026-09-17）：任务目标 + 已完成
+## 2. 本会话（2026-09-17 · 第二批）：任务目标 + 已完成
 
-**任务目标**（用户逐步提出，原话大意）：① 把「全文搜索」从左上角下拉**搬到文档页右上角**（右上顺序 = 垂直页签三角 → 搜索），并去掉顶栏的外观（夜间）切换；② 去掉右键弹窗**左侧蓝色竖条**（目录栏文档右键 / 编辑区域右键 / 多 tab，无论文本·图片·附件），并要求"UI 改动尽量找根位置，别一层层套 CSS"；③「多 tab 切换有点慢 / 闪一下太难看」→ 先定位是不是动效，最终**去掉切换动效**；④ 修「切标签时目录栏不跟随定位」与「`.context` 蓝框残留」，并解决「停靠 → 浮动后最下方选中文档高亮不可见」；⑤ 排查「首次打开某文档出现脏点并被自动保存，会不会导致 S3 更新」；⑥ 由此立规 **「能走内核 API 就不要手拼 Lake 正文」**，按顺序做 P1~P4。
+**任务目标**：① 修「文档页最底部一条很窄的灰条」，遵守"UI 改动找根位置、别一层层套 CSS"；② 推进"层级冗余清理"的 **档0**（修围栏虚高基线）与 **档1**（只清可证死的重复声明）。
 
 **已完成（全部在 `master`）**：
 
-1. **顶栏搜索搬位 + 清蓝色残留**（`b695890`）：右上角顺序 = 标签切换三角 → 搜索；小记页右上不再有槽位；工作空间下拉只剩「偏好设置/回收站」；删掉 `b3/components.css` 里菜单家族的 `border-left: 3px`（一次覆盖三处右键菜单）与活动标签顶部指示线。实测三处菜单 `border-left` = 1px 浅灰（与其余三边一致）、`.tab-item.active` 的 `boxShadow` = none。
-2. **去掉标签切换 View Transition**（`e03b31c`）：点击→动画结束从 **536ms → 275ms → 现在无动画**（首帧 = 一次 React commit ≈63ms）；`startViewTransition` 调用 0 次、view-transition 动画 0 条；删除 `src/lib/viewTransition.ts` 与只为它服务的 `outlineSwitching` 状态。**这是"拿掉"不是"调快"**（用户嫌它闪）。
-3. **目录栏跟随标签定位**（`5941c23`）：抽出 `revealNode()`；**只滚目录栏自己的容器**（不能用 `scrollIntoView`，见 §4）；可见区取"列表矩形 ∩ 窗口"；上下留 16px 余量；`mode` 变化（停靠↔浮动）也重定位；同一 effect 复位 `context` 残留。实测：目标行在窗口下方 → 切过去 `rowBottom` 精确落在窗口底；已可见不滚；6/6 稳定。
-4. **`overflow: clip` 硬化**（`275e195`）：`html, body` 由 `hidden` 改 `clip`（`hidden` 仍建立滚动容器，`body.scrollTop=42` 依然可设 → 任何 `scrollIntoView` 都能把整壳顶走）。实测：`body` 程序化滚动 40 → **0**；强行 `scrollIntoView` 整壳不动；弹层/浮层/各面板自身滚动/窄窗 600×800 全部照常。
-5. **Lake 正文写入收口 + 打开对拍**（`80a15e5`）：根因链见 §3.7 —— 自动化脚本**绕过应用**直接写库 + 手写**裸 `<img src="http://127.0.0.1:19876/…">`** → 内核打开时判为远程图片去抓 → 主进程 SSRF 护栏拒（`INVALID_INPUT`）→ 内核回写**失败态卡片** → 正文变化被当成用户编辑 → 1s 防抖保存 → `syncState: synced→local` → 随下次同步上传。实测 `压测3-图片-神里凌华.png` **438B→1365B**；全库 **287/511** 篇含裸 `<img>`；**纯文本旧形态**与**卡片形态（小记转换产物）实测零重写**。仓库内 4 处手拼收口到 `src/core/lakeDocForm.ts`。
-6. **文档对齐 + 交接维护**：`5b943f5`（README/HANDOFF/TROUBLESHOOTING 与工作区实际对齐）；本批新建 `docs/LAKE-CONTENT-WRITING.md`、加 `docs/TROUBLESHOOTING.md #56`、更正 HANDOFF §3 旧定性。
-
-> **两处自我纠错，新会话务必引以为戒**：① 先误判"目录树全量重渲"，后又误判"显形面板的 layout/paint"，都被实测否掉（`TreeRow` 自身仅 2.3–3.4ms，`memo` 早在位）；② 对拍脚本等待窗口一度只有 ~3.2s → 给出**假 PASS**，实测内核水合改写延迟 **0.5s / 3.3s / 7.8s** 都出现过。
+1. **底部灰缝根修**（`src/styles/app/shell.css`）：根因 = `.workspace` 的 `margin: calc(var(--topbar-height) + 4px) 0 4px 0` 底部的 `4px`（shell 852、工作区被收到 848、最底 4px 露 `.app-shell` 灰底）。**小记视图早已单独去掉这 4px、基础层漏改**。只把底部改 `0`（顶部 4px 是固定 `.tab-bar` 的拼接缝，保留）+ 收掉小记里逐字等价的 margin 覆盖。实测底部命中从灰底 `.app-shell` 变为白色 `.ne-editor`（bottom=852），文档/小记两视图都齐底。
+2. **档0 围栏纠偏**（`src/styles/cssLayers.test.ts`）：基线按实测收紧，`styles.css` **1778→0**（S3 拆分后入口只剩 `@import`），另 11 文件同步；围栏从"允许 1819 条增长"回到真实值。这是后续任何 CSS 清理的安全网前置。
+3. **档1 层级冗余收口**：新增 `scripts/css-audit/plan-dup-decls.mjs` / `build-spec-dup.mjs` / `apply-dup-decls.mjs`；按"同 at-rule 上下文 + 同单选择器 + 同属性 ⇒ 后者恒胜"生成候选，删 **55 条**（12 文件），并用 `ab2` SPEC 整份注入跑**全矩阵 34 状态**证明**噪声 0 / 差异 0**（先跑"无删除重建"证明口径可信，再跑删除计划）。含 A 层菜单盒视觉族死代码、`b3/layout.css` 里 `.sidebar-floating` 旧几何。
+4. **装置漂移修复**（`scripts/css-audit/css-audit.mjs`）：`nav.search` 跟上"搜索入口已搬到文档页右上角"，否则 `search-empty` 状态在准备阶段崩。
+5. **本会话结论（已回填 §3.9）**：按严格口径，**全库只有这 55 条可安全删**；估算里的 184/147/92 大多把**不同 `@media` 条件**（宽/窄两套）算成"争用"，那些**不能删**。⇒ 不再推进 8–12 人日的整批清理。
 
 ## 3. 下一步计划 + 当前问题（真正的待办，按优先级）
 
@@ -52,12 +48,12 @@
    - 待定：模型/服务与 endpoint、API Key 存放（**建议 Electron 主进程代理**，勿用 `VITE_`）、设置项、移动端网络。
 2. **离线残余（均「外观级」，非功能）**——详见 `docs/OFFLINE-ASSETS-AUDIT-260916.md`：① `__puml` 预设缩略图 8 张（`cdn.nlark.com` / `lark-assets-prod…`）仍外链；② `mass-office.alipay.com` 的内核内联 AI 图标；③ 思维导图 KaTeX CSS（@xiangfa 注入 jsdelivr，待运行时确认）。（PlantUML ✅ 已解决。）
 3. **移动端剩余批次**：B7/B8 + 真机复验缺口 —— 明细见 **§8**。
-4. **产品/技术债（长期）**：W-8 ACAO / W-10 dompurify（**安全，建议优先**）；大纲 viewer 只读点击不跳转；回收站首拉成本（惰性下载暂缓，动恢复红线）；Word/PDF 导出 + 附件大文件 S3 分片；`docs/LAKEX-CONTRACT.md` §4 的 `lakex-contract.d.ts` 落地；**「深层重复」CSS 候选清理**（原挂起条件「等 vendor 合并到位」**已满足**，做法见 `scripts/css-audit/`，须**重新生成**候选、勿复用旧 `dup-agg.json`）。
+4. **产品/技术债（长期）**：W-8 ACAO / W-10 dompurify（**安全，建议优先**）；大纲 viewer 只读点击不跳转；回收站首拉成本（惰性下载暂缓，动恢复红线）；Word/PDF 导出 + 附件大文件 S3 分片；`docs/LAKEX-CONTRACT.md` §4 的 `lakex-contract.d.ts` 落地。CSS 层级冗余见 §3.9（260917 已收口）。
 5. **非代码**：安卓同步偶发 `UnknownHostException` = 设备网络（联网重试）。
 6. **小记（Quick Notes）设计取舍 —— 是否直接挂 Lake 内核底座**（用户 260917 提出，**待讨论后再动**）：挂上后「小记→文档」转换天然就是内核规范形态，且小记本身能支持更多格式/样式；代价是更重（每条小记都要起内核实例）。当前 `electron/quickNoteConversion.ts` 产出的是「内核**容忍**并原样保留」的形态，不是「内核**产出**」的形态（字段口径差异见 `docs/LAKE-CONTENT-WRITING.md`）。
 7. **Lake 正文写入收口**（约定见 `docs/LAKE-CONTENT-WRITING.md`）：① 自动化程序（不在仓库）**直接写库 + 手写裸 `<img>`**，导致 287 篇测试文档一被打开就被内核重写（图片降级成失败卡片 + 变待同步 → 随下次同步上传）→ **必须改成走应用写入路径，或只写纯文本**；② 仓库内 4 处手拼写入者**已收口**到 `src/core/lakeDocForm.ts`，并加了"绝不产出裸 `<img>`"的单测围栏；③ 旧数据按 §3 原则 7 **不写归一化兼容**，用修好的姿势重建（见第 8 条）。
 8. **旧数据处置 —— 等用户决定，别擅自动数据**：287 篇含裸 `<img>`（+7 篇已降级成失败卡片）。选项：**A 删掉重播（推荐，符合原则 7）** / B 留着但别打开 / C 就地改写成卡片（= 为损坏数据写代码，与原则 7 冲突，不推荐）。
-9. **「深层重复」CSS 候选清理（长期，已按实测估算）**：口径 = 29 个 CSS 文件 / 3835 条声明、跨文件争用 **184** 处（其中 **147** 处跨层）、涉及 92 个选择器；估 **8–12 人日**（工具与清单重建 0.5–1 天 · 分层归属定调 0.5 天 · 分批清理 6–8.5 天 · 收口 1–1.5 天）。**建议先做"菜单/浮层"族**：A 层 `.context-menu/.create-menu/.tab-switcher-menu` 已被 C 层整段压掉（纯死代码），半天可交付且几乎零视觉风险；**不要一次性大重写**（风险在"某个宽度 × 主题 × dock 态"才暴露）。
+9. **「深层重复」CSS 候选清理（260917 已收口；结论：不做整批）**：档0（围栏基线纠偏）+ 档1（可证死声明清理）已完成，见 §2。按严格口径（同 at-rule 上下文 + 同单选择器 + 同属性）**全库只有 55 条可安全删**，已删并 ab2 全矩阵 34 状态证 0 差异。此前估算的"29 文件 / 3835 声明 / 184 争用（147 跨层）/ 92 选择器"**大多是把不同 `@media` 条件（宽/窄两套）算成争用**——那些不能删。**结论：不再推进 8–12 人日的整批清理**；若日后新增重复，围栏 `src/styles/cssLayers.test.ts` 会卡住，`scripts/css-audit/plan-dup-decls.mjs` 可随时重生成候选。
 
 ### 当前问题 / 已知坑（不阻塞）
 - 画板**不再记忆视口**（拖动/缩放后重开为默认/自适应）：这是 260916 为「不让视口触发保存/上传」刻意做的取舍，**用户已确认接受**（"谁知道下次进来要看什么"）。不要改回去。
@@ -69,6 +65,12 @@
 - **`vitest` 是 `node` 环境，跑不了内核**：涉及内核行为的验证只能 CDP 驱真实 Electron；不要试图为它写单测（对拍脚本就是这种模式）。
 
 ## 4. 踩过的坑（合并版；通用红线/环境见 AGENTS.md）
+
+### 本次会话新坑（2026-09-17 第二批）
+- **"同一几何只修了一处视图"的漂移**：底部 4px 灰缝在小记视图早已单独去掉，基础 `.workspace` 却还留着 `margin-bottom: 4px` → 文档页最底露灰条。**修共享几何前先 grep 有没有"某个状态单独覆盖过同一属性"**（那通常说明基础层漏改了），别只改报障的那一处。
+- **审计装置会随 UI 批次漂移**：`scripts/css-audit/css-audit.mjs` 的 `nav.search` 还在找左上角下拉（入口已搬右上角）→ `ab2` 在**状态准备阶段**抛错（不是比对差异，易误读成回归）。跑审计装置前先确认它跟得上最近 UI 搬位。
+- **`ab2 plan` 测不了 `app/*.css`**：它们被 Vite 内联进 `src/styles.css` 那张表（dev-id 实测 424 规则）；按文件名注入会 `missing` → **假 PASS**（见 `scripts/css-audit/README.md` §七）。必须用 `SPEC` 注入"整份内联内容"（本会话 `build-spec-dup.mjs` 即此）。
+- **`ab2` 的 `only` 过滤是状态全名精确匹配**：传 `search-empty` 匹配不到 `search-empty:1315:light`，会被**静默跳过**（本会话白跑一轮）。
 
 ### 本次会话新坑（2026-09-17，务必记住）
 - **`scrollIntoView` 会滚动"所有"可滚动祖先**：它不认"我只想滚这个容器"。本会话因此把 `body` 滚了 42px（`.sidebar` 的 `margin-top: 42px` 让外壳多出 42px 可滚区间）→ 整个 `.app-shell` 被顶上去 → 固定顶栏与壳内容错位（侧栏头钻进顶栏下、面包屑挤进 tab 行）。**要滚就只改目标容器的 `scrollTop`**；已把 `html/body` 改 `overflow: clip` 兜底（`hidden` 挡不住程序化滚动）。

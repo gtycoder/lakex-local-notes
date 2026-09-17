@@ -36,37 +36,37 @@ const FILES = [
  * 把规则从一个文件搬到另一个文件会合法地抬高接收方的计数：此时同步抬高该文件基线，
  * 并在同一批把来源文件的基线调小（搬走多少、留下多少要对得上，让总量保持可见）。 */
 const BASELINE: Record<string, { decls: number; dupGroups: number }> = {
-  "styles.css": { decls: 1778, dupGroups: 33 },
+  "styles.css": { decls: 0, dupGroups: 0 },   // 260917 校正：S3 拆分后入口只剩 @import（实测 0 声明），旧基线 1778/33 是没同步下调的虚高余量
   "b3/animations.css": { decls: 5, dupGroups: 0 },
-  "b3/base.css": { decls: 16, dupGroups: 1 },
-  "b3/components.css": { decls: 151, dupGroups: 0 },
-  "b3/dark.css": { decls: 56, dupGroups: 0 },
-  "b3/layout.css": { decls: 197, dupGroups: 1 },
+  "b3/base.css": { decls: 16, dupGroups: 0 },
+  "b3/components.css": { decls: 148, dupGroups: 0 },
+  "b3/dark.css": { decls: 55, dupGroups: 0 },
+  "b3/layout.css": { decls: 187, dupGroups: 0 },
   "b3/theme-daylight.css": { decls: 163, dupGroups: 0 },
   "b3/theme-midnight.css": { decls: 148, dupGroups: 0 },
   "features/attachment/attachment-preview.css": { decls: 78, dupGroups: 0 },
   "features/editor/image-lightbox.css": { decls: 57, dupGroups: 0 },
-  "features/outline/outline.css": { decls: 257, dupGroups: 0 },
+  "features/outline/outline.css": { decls: 244, dupGroups: 0 },
   "styles/dialog.css": { decls: 234, dupGroups: 8 },   // +7 = .note-info-history-viewer 容器（260916 W-10：历史内联预览改只读 viewer，替代裸 dangerouslySetInnerHTML；合法新增非覆盖回涨）
-  "styles/document-status.css": { decls: 107, dupGroups: 2 },
+  "styles/document-status.css": { decls: 106, dupGroups: 2 },
   "styles/editor.css": { decls: 14, dupGroups: 0 },   // +2 = 自 ui-polish.css 并入的编辑器正文覆盖（S2）
   "styles/motion.css": { decls: 10, dupGroups: 0 },   // +7 = 自 ui-polish.css 并入的 4 个 reduced-motion 契约块（S4；矩阵补了媒体偏好态后才可验证）
-  "styles/components.css": { decls: 451, dupGroups: 1 },   // 260916 S4：原 overlays.css 改名 + 并入 @keyframes lake-pop-in（+1 声明，位置不变）
+  "styles/components.css": { decls: 444, dupGroups: 1 },   // 260916 S4：原 overlays.css 改名 + 并入 @keyframes lake-pop-in（+1 声明，位置不变）
   "styles/quick-notes.css": { decls: 11, dupGroups: 0 },   // +2 = 自 ui-polish.css 并入的小记入口（S2）
-  "styles/shell.css": { decls: 200, dupGroups: 0 },   // +5 = 原 layout-contract 的壳层度量令牌（S1）；+143 = 自 ui-polish 并入的目录栏/页签/dock 头部（S2）；+4 = 顶栏文档下拉「标签+快捷键一行」与导出二级行（260916，合法新增非覆盖回涨）
+  "styles/shell.css": { decls: 199, dupGroups: 0 },   // +5 = 原 layout-contract 的壳层度量令牌（S1）；+143 = 自 ui-polish 并入的目录栏/页签/dock 头部（S2）；+4 = 顶栏文档下拉「标签+快捷键一行」与导出二级行（260916，合法新增非覆盖回涨）
   "styles/tokens.css": { decls: 83, dupGroups: 0 },
   "styles/settings.css": { decls: 7, dupGroups: 0 },   // 260916 S4 建立：吸收原 ui-polish.css 的设置/历史/回收站细滚动条
   // 基础层域文件（260916 S3：原 styles.css 拆成入口 + 10 个域文件；数字 = 拆分当批实测，只允许变小）
   "styles/app/base.css": { decls: 36, dupGroups: 0 },
-  "styles/app/dialogs.css": { decls: 169, dupGroups: 7 },   // +2 = 二级子菜单高度兜底（max-height + overflow-y，260916 修「导出选项被窗口底边裁掉」；与定位上移配套，合法新增非覆盖回涨）
+  "styles/app/dialogs.css": { decls: 152, dupGroups: 7 },   // +2 = 二级子菜单高度兜底（max-height + overflow-y，260916 修「导出选项被窗口底边裁掉」；与定位上移配套，合法新增非覆盖回涨）
   "styles/app/editor.css": { decls: 55, dupGroups: 0 },   // +5 = maxView 适配；+4 = 锁定/解锁延迟销毁的旧实例层 .is-outgoing；+3 = 阅读态大纲只调位置（top/right）与「pinned 展开时正文让位」——阅读大纲改回内核自己挂载，官方 getContainer 自建宿主那套已删（260916）
-  "styles/app/misc.css": { decls: 299, dupGroups: 0 },
-  "styles/app/panels.css": { decls: 101, dupGroups: 0 },
+  "styles/app/misc.css": { decls: 293, dupGroups: 0 },
+  "styles/app/panels.css": { decls: 99, dupGroups: 0 },
   "styles/app/quick-notes.css": { decls: 293, dupGroups: 7 },
-  "styles/app/settings.css": { decls: 119, dupGroups: 0 },
-  "styles/app/shell.css": { decls: 325, dupGroups: 10 },
-  "styles/app/tabs.css": { decls: 211, dupGroups: 0 },
-  "styles/app/vendor-board.css": { decls: 19, dupGroups: 0 },   // 260916：84 条与 vendor/drawnix-react-text.css 逐字节相同的规则已删（改为直接 import vendor 文件），余下是我们自己的 board-card 包装层
+  "styles/app/settings.css": { decls: 116, dupGroups: 0 },
+  "styles/app/shell.css": { decls: 316, dupGroups: 9 },   // 260917：另收掉 quick-notes 与基础层逐字重复的 margin 覆盖
+  "styles/app/tabs.css": { decls: 200, dupGroups: 0 },
+  "styles/app/vendor-board.css": { decls: 7, dupGroups: 0 },   // 260916：84 条与 vendor/drawnix-react-text.css 逐字节相同的规则已删（改为直接 import vendor 文件），余下是我们自己的 board-card 包装层
 };
 
 /** 极简 CSS 扫描器：只取「叶子样式规则」的声明，跳过注释/字符串/声明型 at-rule。 */

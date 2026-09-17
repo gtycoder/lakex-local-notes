@@ -9,7 +9,7 @@
 
 .save-label.dirty { color: var(--lake-sync-pending); }
 
-.mode-toggle.selected { color: var(--lake-accent); background: var(--lake-accent-soft); }
+.mode-toggle.selected { background: var(--lake-accent-soft); }
 
 .editor-error { display: flex; align-items: center; gap: 8px; max-width: 776px; margin: 20px auto; padding: 12px; border: 1px solid var(--lake-error-soft); border-radius: var(--radius-sm); color: var(--lake-error); background: var(--lake-error-soft); font-size: 13px; }
 
@@ -19,7 +19,7 @@
 
 .form-grid .wide { grid-column: 1 / -1; }
 
-.form-grid input[type="text"], .form-grid input[type="password"], .form-grid label > input:not([type="checkbox"]) { width: 100%; height: 36px; padding: 0 10px; border: 1px solid var(--lake-border); border-radius: var(--b3-border-radius); outline: 0; font-size: 12px; font-weight: 400; }
+.form-grid input[type="text"], .form-grid input[type="password"], .form-grid label > input:not([type="checkbox"]) { width: 100%; height: 36px; padding: 0 10px; border: 1px solid var(--lake-border); outline: 0; font-size: 12px; font-weight: 400; }
 
 .checkbox { flex-direction: row; align-items: center; font-weight: 400; }
 
@@ -257,7 +257,7 @@
 .emoji-picker-clear:hover { background: var(--b3-list-hover); }
 
 /* M2 全文搜索面板（思源 b3-dialog / b3-text-field 令牌风格） */
-.search-panel-backdrop { position: fixed; inset: 0; z-index: 800; background: var(--b3-mask-background, rgba(31, 35, 41, .18)); display: flex; justify-content: center; align-items: flex-start; padding-top: 12vh; }
+.search-panel-backdrop { position: fixed; inset: 0; z-index: 800; display: flex; justify-content: center; align-items: flex-start; padding-top: 12vh; }
 
 .search-panel { width: 640px; max-width: calc(100vw - 48px); max-height: 70vh; display: flex; flex-direction: column; overflow: hidden; }
 

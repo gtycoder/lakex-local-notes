@@ -58,11 +58,10 @@
 }
 
 /* 远端删除标记：标签变灰 + 红色"已删除"徽标（正文保留，供复制/从回收站恢复） */
-.tab-item.deleted { color: var(--lake-error); background: rgba(220, 38, 38, .06); }
 
 .tab-item.deleted .tab-title { text-decoration: line-through; opacity: .72; }
 
-.tab-item.deleted.active { background: rgba(220, 38, 38, .10); color: var(--lake-error); box-shadow: inset 0 -1px 0 var(--lake-error); }
+.tab-item.deleted.active { box-shadow: inset 0 -1px 0 var(--lake-error); }
 
 .tab-close {
   display: flex;
@@ -70,8 +69,6 @@
   justify-content: center;
   transition: opacity 0.1s, background 0.1s;
 }
-
-.tab-item:hover .tab-close { opacity: 0.5; }
 
 .tab-close:hover { opacity: 1 !important; }
 
@@ -173,10 +170,6 @@
   max-width: 260px;
   padding: 6px 9px;
   border: 1px solid rgba(0, 0, 0, .16);
-  border-radius: 6px;
-  color: #f8f9ff;
-  background: #3f4868;
-  box-shadow: var(--lake-shadow-soft);
   font-size: 11px;
   font-weight: 500;
   line-height: 1.25;
@@ -200,7 +193,6 @@
   flex-direction: column;
   width: min(200px, calc(100vw - 24px));
   max-height: min(470px, calc(100vh - var(--topbar-height) - 24px));
-  padding: 8px;
   transform-origin: top right;
 }
 
