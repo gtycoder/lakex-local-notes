@@ -5,11 +5,11 @@
 > **§8 是移动端（安卓）专职交接**，由移动端会话维护；桌面会话不要改 §8，移动端会话不要改 §0-§7 之外的桌面文件。
 
 ## 0. 当前基线（新会话开工前）
-- **基线（最新一批，已在 `master` 且已推 origin）**：`master` @ `eaf1537`。本批修了 **「增强大纲 + 编辑态」大段空白**（根因：增强态只用 CSS `display:none` 隐藏原生大纲，内核编辑根仍留 `.ne-normal-toc` → 正文块被 `max-width:750px; margin-right:280px` 预留 280px 占位；修法 = 官方 `toc:{normalView:false,allowAutoPin:false,rememberLastPin:false}` + `outlineEnhance` 纳入重建依赖，见 `docs/LAKEX-CONTRACT.md §5.7`）；并随批次带入上一会话未提交 WIP（Word/PDF 导出、统一「导出」子菜单、历史快照只读 viewer、`allowModifyHash` 修复、大纲栏样式对齐等）。更早一批（260916）为 lakex 底层换源 + UI 全量 CSS 重构 + Web 客户端 MVP 三端合并。
+- **基线（最新一批，已在 `master` 且已推 origin）**：`master` @ `9daa73e`（本批修复提交 `eaf1537`；其上 `9daa73e` 为交接文档更新）。本批修了 **「增强大纲 + 编辑态」大段空白**（根因：增强态只用 CSS `display:none` 隐藏原生大纲，内核编辑根仍留 `.ne-normal-toc` → 正文块被 `max-width:750px; margin-right:280px` 预留 280px 占位；修法 = 官方 `toc:{normalView:false,allowAutoPin:false,rememberLastPin:false}` + `outlineEnhance` 纳入重建依赖，见 `docs/LAKEX-CONTRACT.md §5.7`）；并随批次带入上一会话未提交 WIP（Word/PDF 导出、统一「导出」子菜单、历史快照只读 viewer、`allowModifyHash` 修复、大纲栏样式对齐等）。更早一批（260916）为 lakex 底层换源 + UI 全量 CSS 重构 + Web 客户端 MVP 三端合并。
   - 门禁（本批）：`tsc` 0 · `vitest` **985 passed / 16 skipped (1001)**（桌面单测全量）；桌面 build / `check:bundle` 本批未重跑（上一批基线：`check:core` 0 · 桌面 + 移动 build · `check:bundle` 绿 app-js gzip 1.816MB / drawnix 408KB / css 190KB）。
   - 桌面 + 安卓端已实测启动（dev：`1421` vite / `9222` electron / `19876` asset / `19880` Web 客户端）。
   - 关键入口：`docs/LAKEX-MIGRATION-260916.md`（换源/懒加载/离线）· `vendor/lakex-doc-react/LOCAL-CHANGES.md`（vendor 本地改动 8 条）· `docs/OFFLINE-ASSETS-AUDIT-260916.md`（离线对账）· `docs/CSS-LAYERS-BRIEF-260916.md`（UI 样式层）· `docs/LAKEX-CONTRACT.md`（内核契约，编辑器相关先读）。
-- **工作区现状（本会话清理过）**：`/Users/admin/file/local-lake/` 下只剩 `lake-notes-electron`(主仓库) + `yuque-developer-docs`(语雀开发文档库) + `design-spec` + `lake-main`/`lake-editor-main`(内核机制参考)。已删：全部 worktree、过期截图/根级分析稿、`release/`(910M)、`.css-audit/`(85M)、`test-node-abi/`、外部参考仓库副本。本地分支只剩 `master` + `refactor/store-split`(未合 master)。
+- **工作区现状（本会话清理过）**：`/Users/admin/file/local-lake/` 下只剩 `lake-notes-electron`(主仓库) + `yuque-developer-docs`(语雀开发文档库/内核官方出处) + `lake-main`/`lake-editor-main`(内核机制参考) + `siyuan-master`(思源 v3.8.0 参考，AGPL-3.0)。已删：全部 worktree、过期截图/根级分析稿、`design-spec`、`release/`(910M)、`.css-audit/`(85M)、`test-node-abi/`、外部参考仓库副本（含 `lake-notes-tauri-poc`、`drawnix-develop`）。本地分支只剩 `master` + `refactor/store-split`(未合 master)。
 - **dev 数据现状（重要）**：`到啦领导`（ee860a19）仍在回收站（`trashed_at=09-04 10:34`），用户未决定是否恢复，**别擅自删**；安卓回收站 48 条旧测试数据 + 笔记本「20-UI编辑测试」「测试本1」（含用户笔记）保留勿删。
 
 ## 1. 项目一句话 + 铁律（详见 AGENTS.md）
@@ -318,7 +318,7 @@ node /tmp/lkm/cdp.mjs --shot /tmp/lkm/x.png '<js>' ; node /tmp/lkm/walk.mjs step
 adb shell pm clear com.lakenotes.mobile                      # 清 App 数据重建种子（dev 才做）
 ```
 
-### 2.36 目录树交互对齐思源：桌面 ⋯＋ / 移动端 ⋯＋ + 长按拖拽（260912）
+### 8.10 目录树交互对齐思源：桌面 ⋯＋ / 移动端 ⋯＋ + 长按拖拽（260912）
 - **桌面**：每行 ⋯（竖向 lucide-ellipsis-vertical，= 右键菜单，弹出位置在按钮处）+ ＋（= 新建子文档）。动作默认 display:none 不占宽度（不逼标题缩略），行 hover/选中/聚焦才显形，此时标题才 ellipsis 截断让位；着重色只给光标所在的那个按钮。对齐思源 .b3-list-item__action / more-root / new（见 siyuan-master/app/src/layout/dock/Files.ts:1448-1451）。
 - **移动端**：行内 ⋯ + ＋ 常显（触屏无 hover；对齐思源移动端 MobileFiles.ts:1505-1509——移动端行 class 不带 --hide-action）。⋯ → setMenuFor（现有 MobileSheetMenu）；＋ → 弹「新建文档 / 新建分组」再建（bridge.createNote / bridge.createGroup）。标题 min-width:0 + ellipsis 防超长名盖住按钮。
 - **长按拖拽排序**：长按 350ms 进入拖拽（haptic），长按不再弹菜单（菜单交给 ⋯）；document 级 touchmove 跟手位移，用 elementFromPoint + 落点比例（<28% before / >72% after / 中间 inside）定落点，视觉 .nb-dragging / .nb-drop-before|after|inside；松手：同父 → bridge.reorderSiblings，跨父/拖入分组 → bridge.moveTreeNodeOrdered。真机实测：把「安卓上行-2」拖到「安卓上行-1」前，顺序生效。

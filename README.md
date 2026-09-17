@@ -74,8 +74,7 @@ origin  git@gitee.com:gtycoder/local-lake.git
 
 **推送**：`git push origin master`
 
-**在途 worktree**：`/Users/admin/file/local-lake/lake-notes-wt-android`（分支 `feat/android-mobile-editing`，
-安卓编辑改动，可能含未提交 WIP——开工前先 `git worktree list` + 进该目录 `git status`）。
+**在途 worktree / 本地分支清理现状**：属易过期事实，**以 `HANDOFF.md` §0 为准**（本文不维护）；开工前先跑 `git worktree list` + `git status` 核对。
 
 **历史分支**（均已合入/删除，勿基于它们开发）：`feat/electron-43-upgrade`、`perf/s3-sync-asset-dedup`、
 `fix/bookmark-paste-crash`、`audit/code-optimization`、`experiment/virtual-rendering`、`feature/electron`、
@@ -85,11 +84,10 @@ origin  git@gitee.com:gtycoder/local-lake.git
 
 | 仓库                                                   | 用途                                                                |
 | ---------------------------------------------------- | ----------------------------------------------------------------- |
-| `/Users/admin/file/local-lake/lake-notes-tauri-poc/` | Tauri 版源码：Rust 后端下载逻辑参考、**CSS 基准**                                |
+| `/Users/admin/file/local-lake/yuque-developer-docs/` | 语雀开发者文档本地副本（**lakex 内核官方出处 / 检索第一顺位**，见 `AGENTS.md` §2）：`47 - 通用配置`、`08 - 命令列表`、`65 - 大纲（toc)` 等 |
 | `/Users/admin/file/local-lake/siyuan-master/`        | 思源笔记 v3.8.0（**AGPL-3.0**，移植样式需留 NOTICE）：S3 同步/dejavu、资源管理、UI 视觉基准 |
 | `/Users/admin/file/local-lake/lake-main/`            | lakejs 开源社区版内核（MIT）：**当"机制字典"读源码**，不是我们实际运行的 lakex 内核             |
 | `/Users/admin/file/local-lake/lake-editor-main/`     | 第三方 VSCode yuque-editor 插件（参考价值低）                                 |
-| `/Users/admin/file/local-lake/drawnix-develop/`      | Drawnix 画板源码参考                                                    |
 
 ## 七、文档索引
 
