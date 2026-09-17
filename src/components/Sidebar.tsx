@@ -15,6 +15,9 @@ type CreateKind = "notebook" | "group" | "note";
 type DropPosition = "before" | "inside" | "after";
 export type SidebarMode = "docked" | "floating" | "collapsed";
 
+/** 定位时的上下余量：不把选中行正好贴在可视边界上 —— 目录栏一"变矮"（停靠↔浮动）就会立刻又掉出去。 */
+const REVEAL_SLACK = 16;
+
 interface SidebarProps {
   nodes: TreeNode[];
   activeId: string | null;
@@ -386,29 +389,57 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
 
   const contextNode = props.nodes.find((node) => node.id === contextMenu?.id) ?? null;
 
-  /** M1.5：定位到当前打开的文档：展开祖先 + 高亮 + 滚动到可见 */
-  const locateActive = () => {
-    const id = props.activeId;
+  /** 展开祖先 + 高亮 + 滚动到可见（已在视口内则不滚，只定位）。
+   *  **只动目录栏自己的滚动容器，不能用 `scrollIntoView`**：它会连带滚动所有可滚动祖先，
+   *  而 `body` 虽 `overflow:hidden` 仍可被程序化滚动（`.sidebar` 的 `margin-top: 42px`
+   *  让外壳多出 42px 溢出）⇒ 实测整个 `.app-shell` 被顶上去 42px、顶栏让位失效、
+   *  面包屑挤进 tab 行（user 260917 报）。 */
+  const revealNode = useCallback((id: string | null) => {
     if (!id) return;
     setExpanded((current) => expandAncestors(current, props.nodes, id));
     // 展开是异步渲染，滚动等下一帧
     window.setTimeout(() => {
-      const row = treeRef.current?.querySelector<HTMLElement>(`[data-tree-node-id="${CSS.escape(id)}"]`);
-      row?.scrollIntoView({ block: "nearest", inline: "nearest" });
+      const list = treeRef.current;
+      const row = list?.querySelector<HTMLElement>(`[data-tree-node-id="${CSS.escape(id)}"]`);
+      if (!list || !row) return;
+      const listRect = list.getBoundingClientRect();
+      const rowRect = row.getBoundingClientRect();
+      // 可见区 = 「列表矩形 ∩ 窗口」。停靠目录的底边落在窗口外（.sidebar 的 height:100% 没补偿
+      // 自己 42px 的 margin-top ⇒ 底边溢出 42px），只按 listRect.bottom 判断会少滚 42px ——
+      // 表现为「向上定位正常、向下定位永远差一截」（user 260917 报）。
+      const visibleTop = Math.max(listRect.top, 0);
+      const visibleBottom = Math.min(listRect.bottom, window.innerHeight);
+      // 再留半行余量（不贴边）：停靠栏可视 ~767px，浮动栏 top/bottom 各 72px ⇒ 只有 ~699px，
+      // 贴边的行切过去会立刻掉出可见区。余量封顶为可见区一半，避免抖动。
+      const slack = Math.max(0, Math.min(REVEAL_SLACK, Math.floor((visibleBottom - visibleTop - rowRect.height) / 2)));
+      if (rowRect.top < visibleTop + slack) list.scrollTop -= (visibleTop + slack) - rowRect.top;
+      else if (rowRect.bottom > visibleBottom - slack) list.scrollTop += rowRect.bottom - (visibleBottom - slack);
     }, 60);
-  };
+  }, [props.nodes]);
+  // 供「只认 activeId 变化」的 effect 调用（目录树因同步刷新换引用时不该跟着乱滚）
+  const revealNodeRef = useRef(revealNode);
+  useEffect(() => { revealNodeRef.current = revealNode; }, [revealNode]);
+
+  /** M1.5：定位到当前打开的文档 */
+  const locateActive = useCallback(() => revealNode(props.activeId), [revealNode, props.activeId]);
+
+  // 目录栏跟随定位：① 多 tab 切换（activeId 变化）；② 停靠 ↔ 浮动切换（mode 变化）。
+  // ② 是必须的：浮动栏比停靠栏矮 ~68px，不重定位的话「原先停在最下方的选中文档」会掉出可见区、
+  // 蓝色高亮看不见（user 260917 报）。收起态没有可见列表，跳过。
+  // 同时把上一次点击留下的 context 复位：它已不是"当前文档"了，再留主色内描边是残留。
+  useEffect(() => {
+    setContextId(props.activeId ?? null);
+    if (props.mode === "collapsed") return;
+    revealNodeRef.current(props.activeId);
+  }, [props.activeId, props.mode]);
 
   // 属性面板父级路径点击 → 展开到目标节点并滚动可见（消费后清空，避免重复触发）
   useEffect(() => {
     const id = props.revealNodeId;
     if (!id) return;
-    setExpanded((current) => expandAncestors(current, props.nodes, id));
-    window.setTimeout(() => {
-      const row = treeRef.current?.querySelector<HTMLElement>(`[data-tree-node-id="${CSS.escape(id)}"]`);
-      row?.scrollIntoView({ block: "nearest", inline: "nearest" });
-    }, 60);
+    revealNodeRef.current(id);
     props.onRevealConsumed();
-  }, [props.revealNodeId, props.nodes, props.onRevealConsumed]);
+  }, [props.revealNodeId, props.onRevealConsumed]);
 
   const menuNewChild = (kind: "group" | "note") => {
     if (!contextNode) return;
