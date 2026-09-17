@@ -369,7 +369,7 @@
 - **cmd+X 剪切失效（严重，已修）**：根因在**应用层**而非内核 —— `src/features/editor/EditorTab.tsx` 的 `cutHandler` 在 capture 阶段 `stopImmediatePropagation()` 抢在内核 `cut` 事件处理（`clipboard` 插件的 `_handleCut`，内核里确实有）之前，却用 `document.execCommand("delete")` 做 **DOM 级删除** ⇒ 现象 = 选区文字消失（DOM 删了）→ 点块后被内核模型重绘回来（模型没删，`bytes` 不变），转换后的内容同样受影响。
   修法 = 删除改走内核命令（`ed.kernel.execCommand("delete")`，`execCommand`/`document.execCommand` 仅兜底）；副本实测：cut 后**内存模型 + 落盘都删掉**（4400→4381B）。护栏：`src/features/editor/editorCut.test.ts`。
 - **原生移动块 / 拖拽（260917 已实现，分支 `feat/block-drag-native`）**：内核**有**移动能力 —— `moveCard(cardId, position)`（卡片，实测**逐字节保真**，含卡 id）、`moveCollapse`/`moveColumns`/`moveColumn`/`moveTable`/`moveImage`（各自类型）；**通用文字块无 move 命令**，用纯原生「读-插-删」（`getNodeContent('text/lake')` + `insertAtSelection` + `deleteByRange`）。
-  落点 `position` 由「目标元素前/后的折叠 DOM range」`transformDOMRange(...).start` 得到。注意：插入的副本会复用原块 id，**必须插入前固化原块模型 range** 再 `deleteByRange`，否则按 id 反查会删到副本（表现＝没移动）。
+  落点 `position` 由「目标元素前/后的折叠 DOM range」`transformDOMRange(...).start` 得到。注意：插入的副本会复用原块 id，**必须插入前固化原块模型 range** 再 `deleteByRange`，否则按 id 反查会删到副本（表现＝没移动）。 **不要用 `insertAtSelection` 折叠光标做块移动**：它会把内容吸附进相邻块（段落融合丢换行、列表项文本追加到目标项）；改用 `insertAtPosition(position, format, data)`（走 `insertINodeByPosition` 的块级插入/补 hole）。列表项要抽**裸 `<li>`**（`getNodeContent` 返回的是整段 `<ul>` 包一个 `<li>`）且**先删源再插**（插入同列表会重建节点、源 range 失效）；其它块**先插后按插入前固化的源 range 删**（段落删除会留一个空段落）。
   实测：拖思维导图卡后仍 634B/hash 不变；拖段落成功且卡片零改动。**禁用** `blockDoc.moveBlock` 的整篇 JSON 读改写（实测自定义卡 634B→8859B、抹掉未注册卡）。完整调研见 `docs/BLOCK-DRAG-RESEARCH-260917.md`。
 
 ---

@@ -531,6 +531,7 @@ async function main() {
         const handle = await evalJs("window.__handleRect()");
         const dst = await evalJs("window.__dragTargetRect()");
         if (handle && dst) {
+          const pCountBefore = await evalJs(`(async () => { const l = await window.__read(); return (l.match(/<p[\\s>]/g) || []).length; })()`);
           await send("Input.dispatchMouseEvent", { type: "mousePressed", x: handle.x, y: handle.y, button: "left", clickCount: 1, buttons: 1 });
           await sleep(80);
           const dropY = Math.round(dst.bottom - 2);
@@ -540,6 +541,8 @@ async function main() {
           }
           await send("Input.dispatchMouseEvent", { type: "mouseReleased", x: dst.left + 120, y: dropY, button: "left", clickCount: 1, buttons: 0 });
           await sleep(2200);
+          const pCountAfter = await evalJs(`(async () => { const l = await window.__read(); return (l.match(/<p[\\s>]/g) || []).length; })()`);
+          check(pCountAfter >= pCountBefore, `拖拽移动: 段落块数未减少（${pCountBefore} → ${pCountAfter}；融合会 -1）`);
           current = await evalJs("window.__snap()");
           check(current.hash !== before, "拖拽移动: 文档已变化（原生移动生效）");
           const missing = registeredFrags(beforeSnap).filter((f) => !registeredFrags(current).includes(f));
