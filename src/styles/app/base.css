@@ -17,8 +17,16 @@ html, body, #root { height: 100%; }
 
 /* html 必须随 body 一并锁滚动：Lake 内核部分滚动路径（如原生大纲点击定位）会回退
    document.scrollingElement（=html），而 html 未锁时被滚 42px（=topbar 高）→ 整壳上移、
-   topbar 滚出视野、tab 栏顶到第一行（260916 实测；TROUBLESHOOTING #26 的可见形态）。 */
-html, body { overflow: hidden; }
+   topbar 滚出视野、tab 栏顶到第一行（260916 实测；TROUBLESHOOTING #26 的可见形态）。
+
+   **必须是 `clip`，不能退回 `hidden`**：`hidden` 仍会建立滚动容器，只挡用户滚动、挡不住
+   程序化滚动 —— `.sidebar` 的 `margin-top: 42px` 让外壳多出 42px 可滚区间，于是
+   `body.scrollTop = 42` 依然生效（实测可设），任何 `scrollIntoView` 都会顺手把整壳顶走
+   （260917 实测：切标签触发目录栏跟随定位，顶栏让位失效、面包屑挤进 tab 行）。
+   `clip` 不建立滚动容器 ⇒ 从根上不可滚；**裁剪区域与 `hidden` 完全一致**，弹层（portal +
+   fixed）、各面板自身滚动、sticky 后代均不受影响（260917 实测：下拉/设置浮层/右键菜单/
+   目录栏/编辑区滚动/小记页全部照常）。 */
+html, body { overflow: clip; }
 body { min-width: 320px; min-height: 100%; }
 
 button, input { font: inherit; }
