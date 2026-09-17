@@ -372,6 +372,103 @@
   落点 `position` 由「目标元素前/后的折叠 DOM range」`transformDOMRange(...).start` 得到。注意：插入的副本会复用原块 id，**必须插入前固化原块模型 range** 再 `deleteByRange`，否则按 id 反查会删到副本（表现＝没移动）。 **不要用 `insertAtSelection` 折叠光标做块移动**：它会把内容吸附进相邻块（段落融合丢换行、列表项文本追加到目标项）；改用 `insertAtPosition(position, format, data)`（走 `insertINodeByPosition` 的块级插入/补 hole）。列表项要抽**裸 `<li>`**（`getNodeContent` 返回的是整段 `<ul>` 包一个 `<li>`）且**先删源再插**（插入同列表会重建节点、源 range 失效）；其它块**先插后按插入前固化的源 range 删**（段落删除会留一个空段落）。
   实测：拖思维导图卡后仍 634B/hash 不变；拖段落成功且卡片零改动。**禁用** `blockDoc.moveBlock` 的整篇 JSON 读改写（实测自定义卡 634B→8859B、抹掉未注册卡）。完整调研见 `docs/BLOCK-DRAG-RESEARCH-260917.md`。
 
+### 5.9 内核命令注册表（43 插件 / 147 条 kO 命令 + 4 条命令式 = 151，bundle 实测枚举，260917）
+
+来源 = `vendor/lakex-doc-react/src/components/lakex/lakex.js` 里 `kO({ pluginName:'X', command:{…} })` 的**括号配对解析**（脚本见本节末），补上 §5.8.1 第 7 条「只给计数、没给清单」的缺口。**新增块级能力前先在这张表里找命令；表里没有才写 wrapper 层。**
+
+| 插件 | 命令 |
+|---|---|
+| alignment | `alignment` |
+| basicTextStyle | `bold`, `italic`, `underline`, `strikethrough` |
+| bgColor | `bgColor`, `clearBgColor` |
+| breakLine | `breakLine` |
+| card | `setCardValue`, `insertCard`, `insertCardAfter`, `focusCard`, `deleteCard`, `cardValue`, `moveCard`, `cardIsExist`, `cardBatchApply` |
+| clearFormat | `clearFormat` |
+| clipboard | `copy`, `cut`, `paste` |
+| code | `code` |
+| collapse | `collapse`, `moveCollapse`, `deleteCollapse`, `collapseOpen`, `collspseClosable`, `collapseBreakLine`, `collapseToggleWidthMode`, `tryUnfoldCollapse` |
+| color | `color`, `clearColor` |
+| columns | `columns`, `columnsWidths`, `columnsAddColumn`, `columnDelete`, `columnDeleteByIndex`, `selectColumnEnd`, `deleteColumns`, `moveColumns`, `moveColumn`, `columnsToggleWidthMode` |
+| content | `wordCount`, `wordCountSelection`, `isEmpty`, `getNodeContent`, `getSelectionContent`, `insertAtSelection`, `insertAtPosition`, `markdownSplit` |
+| correction | `applyCorrection`, `editorApplyCorrection`, `editorIgnoreCorrection`, `correctSelection` |
+| dateCard | `dateCard`, `getSelectDateCard` |
+| delete | `delete`, `deleteByRange`, `deleteToBlockEnd` |
+| dropFile | `dropFile` |
+| file | `insertFile` |
+| focus | `focus` |
+| fontsize | `fontsize`, `defaultFontsize`, `clearDefaultFontsize` |
+| formatPainter | `paintFormat` |
+| history | `redo`, `undo`, `rollbackHistory` |
+| hr | `hr` |
+| image | `image`, `imageTask`, `moveImage`, `insertImage`, `imageTitleBreakLine`, `updateImageData`, `insertAfterImage` |
+| indent | `indent`, `outdent`, `canIndent`, `firstIndent` |
+| input | `input`, `canInput`, `insertText`, `autoSpacing`, `autoClosing` |
+| layout | `layout` |
+| lineHeight | `lineHeight` |
+| link | `link`, `unlink`, `insertLink`, `linkText`, `updateLink`, `cardToLink`, `selectionPureLink` |
+| list | `orderedList`, `unorderedList`, `taskList`, `orderedListIndexType`, `orderedListIndexQuery`, `taskStatus` |
+| markdownDataSource | `markdownStream` |
+| markdownPasteParse | `markdownPasteParse` |
+| paragraph | `plainText`, `deleteEmptyParagraphs` |
+| quote | `quote` |
+| save | `save` |
+| search | `search`, `replaceText`, `replaceAll` |
+| selectAll | `selectAll`, `selectAllDoc` |
+| selection | `selection` |
+| slash | `insertSlash`, `canInsertSlash` |
+| subscript | `sup`, `sub` |
+| table | `tableBorderVisible`, `tableClearContent`, `tableColumnMoveTo`, `tableColumnWidth`, `tableDeleteColumn`, `tableDeleteRow`, `deleteTable`, `tableEquallyColumn`, `tableInsertBeforeColumn`, `tableInsertAfterColumn`, `tableInsertBeforeRow`, `tableInsertAfterRow`, `tableMergeCell`, `moveTable`, `tableRowHeight`, `tableRowMoveTo`, `tableSpacing`, `tableCellBgColor`, `tableSetQueueNo`, `table`, `tableToggleWidthMode`, `tableUnmergeCell`, `tableVerticalAlign`, `tableRowHead`, `tableColHead`, `tableColumnAdaptation` |
+| textDataSource | `text` |
+| thirdparty | `linkToThirdparty` |
+| typography | `typography`, `paragraphSpacing` |
+
+命令式注册（**不在**上表，走 `registerCommand({…})`）：`alert`、`alertDelete`、`alertType`、`alertMove` ⇒ 合计 **151**。
+
+**块编辑相关命令 → 我们现状**：
+
+| 我们的动作 | 内核命令 | 现状 |
+|---|---|---|
+| 删除块 / 剪切 | `delete`, `deleteByRange`, `deleteToBlockEnd` | ✅ 已用（`deleteBlockByRange`） |
+| 复制/剪切到剪贴板 | `copy`, `cut`, `paste` | ✅ 已用 |
+| 取块内容 | `getNodeContent`, `getSelectionContent` | ✅ `getNodeContent` 已用；`getSelectionContent` **未用** |
+| 插入/替换块 | `insertAtSelection`, `insertAtPosition` | ✅ 已用 |
+| 「转化为」容器/卡片 | **无** convert 命令；= `getNodeContent` + `insertAtSelection` | ✅ 已用（`convertBlockPreservingContent`） |
+| 卡片移动 | `moveCard`（+`cardValue`/`setCardValue`/`insertCard`/`insertCardAfter`/`focusCard`/`deleteCard`） | ✅ `moveCard` 已用 |
+| 容器/表格移动 | `moveCollapse`, `moveColumns`, `moveColumn`, `moveTable`, `moveImage` | ⚠️ **未用**：`moveBlockNative` 目前对非卡片块统一「读-插-删」 |
+| 全选 | `selectAll`（上下文感知）, `selectAllDoc` | ⚠️ **未用**：目前手工 `createRange` + `transformDOMRange` + `selection` |
+| 选区内写入模型 | `selection` | ✅ 已用 |
+| 缩进 | `indent`/`outdent`/`canIndent`/`firstIndent` | ✅ 已用 |
+| 行内样式 / 列表 / 引用 | `bold`/`italic`/…, `unorderedList`/`orderedList`/`taskList`, `quote`, `plainText`, `hr` | ✅ 已用 |
+| 选区字数 / 空判 | `wordCount`/`wordCountSelection`, `isEmpty` | ⚠️ **未用** |
+| 批量卡片应用 | `cardBatchApply` | ⚠️ 语义**待实测**：当前只查到 `getValue` = `getNodesByName(name).some(isConnected)`（工具栏 enable 判定） |
+
+**两条容易踩空推断**：
+- `ISelectionHelperService`（bundle 类 `eRD`）实例方法只有 `registerToolbar`/`closeToolbar`/`destroy`/`disable`/`enable`/`init`/`isSame` ⇒ 它是**卡片/容器工具栏注册服务**，**不是块选择 API**；不要拿它做「多选块」。
+- 多块选择的运行时信号 = **跨多个顶层块的 DOM Range** + 插件事件 `blockSelectionChange`/`unblockSelectionChange`（内核按 `_blockReset` 标记区分块选区/普通选区）；`selectAll` 上下文感知（表格单元格/整列/容器 hole 时选上层结构，否则根节点内容），`selectAllDoc` 整篇。**内核没有**「把块选区批量转成某类型」的命令 ⇒ 批量转化只能对每个选中块逐个走 `convertBlockPreservingContent`（app 层编排，不是重复造内核）。
+
+**候选原生化改造（未做，按用户「能走内核就走内核」原则登记）**：
+1. `selectBlockInEditor`/`selectNodeInEditor`：把光标放进目标块后可直接 `execCommand('selectAll')`（上下文感知、容器 hole 自动选对层级）；仅「选中节点本身（非内容）」无对应命令，仍需手工 range。
+2. 容器重排优先用 `moveCollapse`/`moveColumns`/`moveColumn`/`moveTable`/`moveImage`，而非统一「读-插-删」（更省且保内部节点 id）。
+3. 选区取内容/字数改用 `getSelectionContent`/`wordCountSelection`。
+
+**枚举脚本（可复现）**：
+
+```js
+const s = require('fs').readFileSync('vendor/lakex-doc-react/src/components/lakex/lakex.js', 'utf8');
+const plugs = [...s.matchAll(/pluginName: '([^']+)'/g)].map((m) => ({ name: m[1], idx: m.index }));
+const balanced = (from) => { let d = 0; for (let i = from; i < s.length; i++) { if (s[i] === '{') d++; else if (s[i] === '}' && --d === 0) return s.slice(from, i + 1); } };
+const out = {};
+for (let k = 0; k < plugs.length; k++) {
+  const seg = s.slice(plugs[k].idx, k + 1 < plugs.length ? plugs[k + 1].idx : s.length);
+  const ci = seg.indexOf('command: {');
+  if (ci < 0) continue;
+  const block = balanced(plugs[k].idx + ci + 'command: '.length);
+  if (!block) continue;
+  out[plugs[k].name] = [...new Set([...block.matchAll(/[A-Za-z_$][\w$]*\s*:\s*'([^']+)'/g)].map((x) => x[1]))];
+}
+console.log(out); // 43 插件 / 147 条
+```
+
 ---
 
 ## 6. 使用守则（所有会话遵守）
@@ -399,6 +496,7 @@
 - 2026-09-16：§5.1 修订「点击定位」为 `allowModifyHash` 真相（内核 TOC 点击会写 `location.hash` → 触发锚点导航滚 html，导致整壳上移；修法 = 关 `allowModifyHash` + 锁 `html,body` overflow），补「`toc` option 是扁平 schema」；新增 §5.4（阅读态 Viewer 大纲：另一套类名/挂载时机、官方 `toc.getContainer` 与 `boundaryTopOffset`、点击跳转链路）与 §5.5（编辑态↔阅读态渲染模型差异、节点锚点恢复位置、窗口后台不渲染的 CDP 陷阱）；§6.6 更新为三级资料检索顺序（用户立规）。来源：260916 会话核实的 bundle 行号与 CDP 实测。
 - 2026-09-17：新增 §5.8（块级编辑：能力在 wrapper 层而非内核；动作→实现路径映射；`utils/blockDoc` 整篇 JSON 读改写的实测破坏 —— 正文 6032B→12288B、思维导图卡载荷 634B→8859B、未注册卡被整张抹掉；「转化为」各目标的原生命令实测表与代码块缺口；`editor.execCommand` 与 `renderer.execCommand` 在 indent/outdent 上的差异；`breakLine` 实现「在下方添加」而官方 `insertAtSelection` 实测无效；未注册遗留卡在任何一次保存后丢失）。来源：260917 会话在副本上的实测（`scripts/e2e-block-menu-smoke.mjs`）+ `yuque-developer-docs` 命令列表三级检索。
 - 2026-09-17（复核）：新增 **§5.8.1** —— **更正**「`insertAtSelection` 实测无效」为**有效**（`readData`→`insertINode`；折叠=插入、非折叠=替换、失败返回 `null`）；确认它是「插入带内容容器」的正规通道（内核自动补 `alertHole`/`containerHole`），配 `getNodeContent` 可一次性把段落替换成含原文的 alert/columns/collapse；命令级仍无转换命令（`quote` 是唯一 wrap）；代码块可用 markdown 围栏或 `insertCard`+`setCardValue` 写入；补规范 lake markup、`queryCommandEnabled` 不可靠、147 命令注册表、原生 `moveCard/moveCollapse/moveColumns/...` 的存在。来源：`docs/BLOCK-CONVERT-ANSWER-260917.md`（副本 CDP 实测 + bundle 源码）。
+- 2026-09-17（命令清单）：新增 **§5.9** —— 用 balanced-brace 解析 bundle 的 `kO({pluginName, command})`，落地**完整命令注册表 = 43 插件 / 147 条 kO 命令 + 4 条命令式（alert 族）= 151**；给出「块编辑命令 → 我们现状」（已用 / 未用 / 内核无对应）与三条候选原生化改造；澄清 `ISelectionHelperService` 是**工具栏注册服务、不是块选择 API**；记录多块选择 = DOM Range + `blockSelectionChange`/`unblockSelectionChange`，**内核无批量转化命令**。来源：`vendor/lakex-doc-react/src/components/lakex/lakex.js` 静态解析（脚本随 §5.9）。
 
 ---
 
