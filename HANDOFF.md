@@ -122,6 +122,10 @@
 4. 多块选区拖拽：仅当用户确实需要批量拖动整段时再做（§3 第 11 条）。
 5. 其余长期待办见 §3（画板 AI、离线残余、移动端、产品/技术债、小记底座等）。
 6. **【内存回收专项 · 下一个会话做（260919 用户指名）】编辑器开关后的「该回收没回收」复核** —— 依据 `docs/QUICK-NOTE-LAKE-MEMORY-SPIKE-260919.md`（分支 `spike/quick-note-lake-memory`，实测：关 20 个标签只回收 ≈18MB；0 标签稳态 ≈113MB vs fresh ≈84MB ⇒ 残留 ≈+30MB）。
+7. **【小记编辑器接入 · 进行中（260919 起）】把「正在写的那一条小记」换成 1 个 Lake 实例** —— 数据层已就位（`.qnote` v2 内核形态正文，转换 = 搬运；见 `docs/QUICK-NOTE-LAKE-BODY-260919.md`）。
+   - **本轮已试并回退**（master 保持干净）：上传管线加 `saveResource` 出口 + `createLakeDocument` 加 `uploadResource` 覆盖参数 + 新组件 `QuickNoteEditor` + 把 `QuickNoteComposer` 的 `<textarea>` 换成编辑器。**tsc/1014 测试/双端 build 全绿，但真机冒烟没通过**：编辑器能挂载（1 实例）、能聚焦、能输入、`emphasized` 能亮，**但点「小记一下」不生成小记**（`listQuickNotes()` 仍 0 条）⇒「编辑器内容 → 保存参数」这条链路在运行时没对齐。
+   - **下一步的修正方向（已定位）**：① 内容判定与取正文**收敛到同一个来源** —— 让 `QuickNoteEditor` 交出 `getText()/getBody()`，父组件的 `hasDraftContent` 与 `saveDraft` 都用这个句柄，不再依赖 `draft.text` 镜像更新；② 怀疑 `editor.getDocument("text/plain")` 在小记上下文不可用（本轮已加 DOM `innerText` 兜底，但仍要与保存口径统一）；③ 验证要用**真实键盘输入**（CDP 合成输入会得到假象：既可能不触发内核 `contentchange`，也可能与 DOM 状态不一致）。
+   - 完成后再补：转换端到端（小记→文档，含图片）、回收专项（见第 6 条）里的「小记编辑态挂/卸」触发面。
    - **① churn soak（预留 30 分钟）**：反复开关同一批标签 N 轮（建议 ≥10 轮 × ≥20 个标签），每轮记录「连跑两次 `HeapProfiler.collectGarbage` 后」的 JS 堆 / DOM 节点数 / 事件监听数，看是否**随轮次线性上升**（线性 = 泄漏；有上限后收敛 = 正常缓存）。
    - **② 三条触发面都要覆盖**：普通文档开关 · **小记编辑态挂/卸 Lake 实例**（本批新增）· 小记→文档转换。
    - **③ 出现线性增长再用 heap snapshot 找 retained path**，判定是内核侧保留（回填 `docs/LAKEX-CONTRACT.md`）还是我们的引用残留（直接修）。
