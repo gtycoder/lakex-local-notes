@@ -81,6 +81,13 @@
 10. **浏览器端（本机附属窗口）后续 —— 等用户决定是否做**：本次只交付"开关 + 说明 + 打开按钮"，功能未细化。若要做，已知缺口按此顺序：① **推送**（最大）：浏览器收不到 `sync-progress`/`pending-summary-changed`（shim 里是 no-op）→ 需给 `webApiServer` 加 SSE + 在 `main.ts` 两处广播点接 sink（事件少、广播集中，约 0.5–1 天）；② **宿主能力浏览器化**：导出/备份走 `dialog`、`openAttachment`/`reveal*` 走 `shell`、`copyAsset*` 走 `clipboard`/`nativeImage`——在浏览器里语义错（会去操作桌面机），需换下载 / `navigator.clipboard` / `<input type=file>` 或隐藏；③ **开发体验**：只服务构建产物 `dist/`（无 HMR），无 `npm run dev:web` 脚本；④ **安全**：`/api/*` 只校验 `x-lake-token`（复用 assetToken）、不校验 Origin，`/__native.js` 不校验 token（与 W-8 ACAO 同类，建议一起定调）。
     - **AI 生成的文档能否"各端发现"（用户 260917 提问 → 结论）**：只要 AI **走应用写入路径**（`createNote` + `saveNote`，媒体让内核产出——**禁直写库/手拼 `.lake`**，见 `docs/LAKE-CONTENT-WRITING.md`），就会以 `sync_state='local'` 落库 → **跨设备**靠现有 S3 同步天然可见（无需新机制）；**同机多窗口/浏览器**要"立即看到"则需再加一个 `library-changed` 事件（复用同一 SSE 通道）。**浏览器端本身只覆盖本机**（绑 127.0.0.1，不是同步参与者）；AI 若在云端生成属另一套设计（走同步协议或把 webApiServer 暴露到网络 = 需单独的安全方案）。
 
+11. **多块选区「批量拖拽」（用户 260917 记录；云端 Lake 也未实现 ⇒ 低优先级 / 可选）**
+    - **现状**：Issue 4 已支持多块选区的聚合手柄 + 批量删除/复制/剪切/转化；**拖拽仍按单块**（moveBlockNative 遇到多块选区直接返回 false），手柄在拖拽时不进入拖拽态。
+    - **难度：中等偏易**，可复用现有原语、无需新内核能力：selectedTopBlocks + selectBlocksInEditor 取整段选区 → getSelectionContent('text/lake') 取整段 fragment → deleteByRange 删除整段 → insertAtPosition(dropPos, 'text/lake', frag)。与单块「读-插-删」同一套路，只是把「一个块」换成「一个选区」。
+    - **三个真实风险（决定工作量）**：① **卡片保真**：单块卡片走 moveCard 逐字节保真；整段 fragment 里含卡片时只能走 lake 序列化再插入 ⇒ 卡 id 会重发（已注册卡字节应保真，**未注册卡会丢**，与「打开即保存」同因）；要跟单块一样保真，需在移动前把选区里的卡片逐个 moveCard 或按卡类型分流。② **列表层级/顺序**：整段跨列表时 data-lake-indent 依赖 fragment 顺序，删+插后要复核层级不被压平（Issue 3 只验证了单个父项）。③ **落点边界**：落点落在选区内部要拒绝（现有 self/span 判断需扩展到整段选区）。
+    - **UI**：ghost 需渲染整段（多块）预览；落点线 / 边缘自动滚动可复用（ghost 已支持「列表父项整段」，扩展到多块改动不大）。
+    - **结论**：超出云端能力范围，**先记为待办、不做**；若做，预计 0.5–1 天（含 e2e）。触发条件 = 用户确实需要批量拖动整段。
+
 ### 当前问题 / 已知坑（不阻塞）
 - 画板**不再记忆视口**（拖动/缩放后重开为默认/自适应）：这是 260916 为「不让视口触发保存/上传」刻意做的取舍，**用户已确认接受**（"谁知道下次进来要看什么"）。不要改回去。
 - 离线残余 3 处（见上，全外观级）。
