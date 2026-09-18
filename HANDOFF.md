@@ -122,9 +122,10 @@
 4. 多块选区拖拽：仅当用户确实需要批量拖动整段时再做（§3 第 11 条）。
 5. 其余长期待办见 §3（画板 AI、离线残余、移动端、产品/技术债、小记底座等）。
 6. **【内存回收专项 · 下一个会话做（260919 用户指名）】编辑器开关后的「该回收没回收」复核** —— 依据 `docs/QUICK-NOTE-LAKE-MEMORY-SPIKE-260919.md`（分支 `spike/quick-note-lake-memory`，实测：关 20 个标签只回收 ≈18MB；0 标签稳态 ≈113MB vs fresh ≈84MB ⇒ 残留 ≈+30MB）。
-7. **【小记编辑器接入 · 进行中（260919 起）】把「正在写的那一条小记」换成 1 个 Lake 实例** —— 数据层已就位（`.qnote` v2 内核形态正文，转换 = 搬运；见 `docs/QUICK-NOTE-LAKE-BODY-260919.md`）。
-   - **本轮已试并回退**（master 保持干净）：上传管线加 `saveResource` 出口 + `createLakeDocument` 加 `uploadResource` 覆盖参数 + 新组件 `QuickNoteEditor` + 把 `QuickNoteComposer` 的 `<textarea>` 换成编辑器。**tsc/1014 测试/双端 build 全绿，但真机冒烟没通过**：编辑器能挂载（1 实例）、能聚焦、能输入、`emphasized` 能亮，**但点「小记一下」不生成小记**（`listQuickNotes()` 仍 0 条）⇒「编辑器内容 → 保存参数」这条链路在运行时没对齐。
-   - **下一步的修正方向（已定位）**：① 内容判定与取正文**收敛到同一个来源** —— 让 `QuickNoteEditor` 交出 `getText()/getBody()`，父组件的 `hasDraftContent` 与 `saveDraft` 都用这个句柄，不再依赖 `draft.text` 镜像更新；② 怀疑 `editor.getDocument("text/plain")` 在小记上下文不可用（本轮已加 DOM `innerText` 兜底，但仍要与保存口径统一）；③ 验证要用**真实键盘输入**（CDP 合成输入会得到假象：既可能不触发内核 `contentchange`，也可能与 DOM 状态不一致）。
+7. **【小记编辑器接入 · ✅ 已落地（260919，commit `5a774c3`）】把「正在写的那一条小记」换成 1 个 Lake 实例** —— 数据层已就位（`.qnote` v2 内核形态正文，转换 = 搬运；见 `docs/QUICK-NOTE-LAKE-BODY-260919.md`）。
+   - **已实现**：上传管线加 `saveResource` 出口（可覆盖落盘）+ `createLakeDocument` 加 `uploadResource` 覆盖参数 + 新组件 `src/features/quickNotes/QuickNoteEditor.tsx` + `QuickNoteComposer` 的 `<textarea>` 换成该组件（编辑时挂、离开即销毁）+ `.quick-note-editor` CSS。图片走 staging（`stageQuickNoteImage`），卡片 src 用 staging URL，保存时主进程改写成 `/quick-notes/<id>/`。
+   - **已验证（真机冒烟）**：编辑器只挂 **1 个实例**；内核 `contentchange` 在小记上下文**不保证回传文本**、`getDocument("text/plain")` 也可能取不到 ⇒ 组件加了 **DOM `input` 兜底 + DOM `innerText` 回退**（这是能不能「有内容 → 发布」的关键）；发布后小记是 **v2**，正文是**内核形态**（`<p data-lake-id … class="ne-p"><span …>`）。
+   - **⚠️ 仍未验证（需要人眼+真键盘）**：① **真实键盘输入**（CDP 的 `Input.dispatchKeyEvent/insertText` 打不到 contenteditable —— 与「窗口非激活时 Input 事件失效」同源，HANDOFF 老坑；本次是用 `document.execCommand('insertText')` 注入验证的保存链路）；② **粘贴/拖入图片**走 staging 的完整链路（含保存时的作用域改写与转换后图片可达）；③ 移动端不受影响（仍是输入框 + 保存时合成 body）。
    - 完成后再补：转换端到端（小记→文档，含图片）、回收专项（见第 6 条）里的「小记编辑态挂/卸」触发面。
    - **① churn soak（预留 30 分钟）**：反复开关同一批标签 N 轮（建议 ≥10 轮 × ≥20 个标签），每轮记录「连跑两次 `HeapProfiler.collectGarbage` 后」的 JS 堆 / DOM 节点数 / 事件监听数，看是否**随轮次线性上升**（线性 = 泄漏；有上限后收敛 = 正常缓存）。
    - **② 三条触发面都要覆盖**：普通文档开关 · **小记编辑态挂/卸 Lake 实例**（本批新增）· 小记→文档转换。

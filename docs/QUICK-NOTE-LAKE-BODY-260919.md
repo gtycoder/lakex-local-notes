@@ -61,9 +61,9 @@ body = rewriteQuickNoteAssetScope(source.content.body, `/quick-notes/${source.id
 
 ---
 
-## 5. 本批**没有**做的事（下一步）
+## 5. 后续（部分已落地，见 git）
 
-1. **桌面编辑态挂 Lake 实例**（用户点名的核心）：`QuickNotesWorkspace` 的 `QuickNoteComposer` 目前仍是 `<textarea>`；
+1. ✅ **桌面编辑态挂 Lake 实例**（260919 落地，commit `5a774c3`）：`QuickNoteEditor.tsx` + 上传钩子 + `QuickNoteComposer` 接线已完成；原描述如下（供回溯）：
    下一步把「正在编辑的那一条」换成**一个** Lake 实例（编辑时挂、关掉即销毁，时间线卡片保持轻量），复用 `createLakeDocument(mode:"editor")` 与 `__disposeExtras` 清理链。
 2. **图片上传钩子**：编辑态图片插入要走 `stageQuickNoteImage(draftId, …)`（而不是 `note-assets`），
    即给内核传自定义 `createUploadPromise`，返回 `{ url: <staging URL>, resourceRef, filename, mimeType, size }`。
