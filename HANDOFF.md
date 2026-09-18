@@ -5,6 +5,7 @@
 > **§8 是移动端（安卓）专职交接**，由移动端会话维护；桌面会话不要改 §8，移动端会话不要改 §0-§7 之外的桌面文件。
 
 ## 0. 当前基线（新会话开工前）
+- **本会话（260919）完整交接 = §2.9**（表格内核换代 FortuneSheet + UI/文档收口 + 崩溃修复；含任务目标/已完成/当前问题/下一步/踩坑）。表格批次完整背景 = §2.8。
 - **本批（表格文档接入 kind=sheet，✅ 已提交并推 origin：`master` @ `71c2d90`；⚠️ 尚未真机验收）**：分支 `feat/sheet-document` 已 **ff 合入 `master`**（旧调研分支 `spike/sheet-ce` 已删）。**写给零上下文新会话的完整交接 = §2.8（新会话从这里读）**；设计/选型/实测数据全表 = `docs/SHEET-BITABLE-DESIGN-260918.md` + `docs/FORTUNESHEET-FEASIBILITY-260919.md`（260919 换内核）。
   - 一句话：新增**文档类型** `kind = doc | sheet | bitable`（只加在 `notes.kind` + `manifest.kind`，**不动 `tree_nodes.node_type`**）；表格正文落 `sheets/{id}.sheet.json`；**manifest 升 v6**（带 kind）；编辑器 = **FortuneSheet 1.0.4**（260919 由 jspreadsheet CE 换掉；CSP / 图片 input / 编辑态限宽 / setCellFormat 判空 走 `patches/`）；**多维表(bitable)本批不做**。
   - 门禁（本批实测）：`tsc` 0 · `vitest` **1025 passed / 16 skipped (1041)** · 桌面 + 移动 `vite build` 全绿 · `check:bundle` app-js gzip **1.82MB / 预算 2.90MB** · `check:core` 0 · 懒加载分包 `SheetEditor-*.js` ≈ **580KB gzip，首屏 index chunk 不含它**。
@@ -401,6 +402,86 @@
 - **修法**：patch `@fortune-sheet/react` 的 InputBox inner style，按 `cell.tb` 追加 `width/maxWidth=firstSelection.width` + `whiteSpace`（react patch 现 4 hunk）。core `getStyleByCell` 那条试过不生效，已留在 patch 里但非关键。
 - **实测**：编辑 `tb:"2"` 单元格 → 编辑框 `max-width:80px`、`pre-wrap`，格内折行不再覆盖邻格。
 - 门禁同上全绿；两个 patch 均 `patch-package` 可重放。
+
+## 2.9 本会话总交接（260919 · 表格内核换代 FortuneSheet + UI/文档收口 + 崩溃修复）—— 新会话从这里读
+
+> 前置：**§2.8 是 260918「表格文档接入」一批的总交接**（kind=sheet 的由来、manifest v6、设计文档）；本 §2.9 是**同一批的 260919 续做**，两者合起来才是完整表格文档。
+> 状态：**已全部提交并推 origin**（`master` 基线见 §0）；**唯一没做的是真机验收**。
+
+### 一、任务目标（用户本次要求，按顺序）
+1. **调研并替换表格内核**：CE（jspreadsheet-ce）太简陋 → 调研 FortuneSheet 可行性 → 用户拍板「开始做」。
+2. **用户实测报 5 点 UI 问题**（工具栏没占满 / 滚动条不在最右 / 左上角与【50】行重边框 / sheet1 只到 H 列 / 自动换行不能用）→ 逐项修。
+3. 多轮细化：默认 **15 列 × 50 行**；默认**自动换行 + 行高自适应**；工具栏按清单增删；去掉函数栏；默认 110% 缩放；工具栏紧凑。
+4. **编辑态宽度语义**（用户定，与云端一致）：换行=**溢出** → 编辑框也溢出；**截断/自动换行** → 编辑框限宽在单元格内。
+5. **修窗口崩溃**（编辑时整窗挂）。
+6. **非 doc 的 UI 收口**：导出/大纲/字数/复制 Markdown 对 kind≠doc 隐藏或替换；`noteExport` 加 kind 守卫。
+7. **文档回填** `SYNC-PROTOCOL` / `STORAGE-LAYERS`。
+8. **图片独立管理立项**（只出规范，未实施）。
+9. 提交、合入 `master`、推 origin。
+
+### 二、已完成内容（全部已提交并推 origin）
+**A. 内核换代（CE → FortuneSheet 1.0.4）**
+- 正文仍 `sheets/{id}.sheet.json`，结构换成 FortuneSheet workbook（`{kind:"sheet",version:2,sheets:Sheet[]}`）；`src/core/sheetDoc.ts` 重写（`emptySheetBody`/`parseSheetBody`/`sheetsToBody`/`sheetToSearchText`/`sanitizeSheetWorksheet`：剔 `luckysheet_select_save` 等运行时字段 + dense `data`→sparse `celldata`）。
+- `src/features/sheet/SheetEditor.tsx` 重写：`<Workbook>`、everVisible 延迟挂载（隐藏态 canvas 量成 0）、非受控 data、防抖 flush + `lastSerializedRef` 去重。
+- **patch-package 两个补丁**（`patches/`，`postinstall` 自动重放）：
+  - `@fortune-sheet/core`：① `insertRowOrCol` 的 `new Function` → `apply`（严格 CSP 无 unsafe-eval）；② `setCellFormat` 判空 `sheet.data[row]`（防崩）。
+  - `@fortune-sheet/react`：① 图片按钮改为点**自己**的子 input（脱离全局 `getElementById`）；② `InputBox` 按 `tb` 限宽（编辑态语义）。
+
+**B. 表格 UI/交互（用户逐条验收过）**
+- 默认网格 **15×50**；默认 **110% 缩放**（`initialSheets` 补 `zoomRatio`，不覆盖已有）。
+- **默认自动换行 + 行高自适应**：`tb:"2"` 补缺省单元格（已有内容 `withSheetDefaults` + 新编辑 `hooks.afterUpdateCell`）；行高由 `estimateWrappedRowHeight`（离屏 canvas 按列宽估行数）后 `setRowHeight`。
+- **默认全局字体**（`ff` 缺省补 app `--b3-font-family`），**去掉字体选择**。
+- **工具栏白名单** `TOOLBAR_ITEMS`（撤销/重做 · 格式刷/清除格式 · 字号 · 粗斜删下 · 字色/背景 · 对齐/换行 · 边框/合并 · 筛选/图片 · 冻结/求和/查找）；CSS 紧凑（高 41→33）。
+- **去掉函数栏**（`showFormulaBar={false}`）。
+- 工作表标签样式改过又**按用户要求回滚**（保持 FortuneSheet 默认）。
+- 输入框（底部「添加 N 行」、右键「插入行/行高」）补弱边框。
+- 图片**本地插入可用**；**粘贴图片不支持**（FortuneSheet `onPaste` 只读文本）。
+- **编辑态按换行语义限宽**（溢出=不限宽；截断=限宽不折；换行/未设=限宽折行）。
+
+**C. 崩溃修复（严重）**
+- 现象：编辑时整窗崩；栈 `setCellFormat` 读 `undefined[row]`。根因：内核 `setCellFormat` **不判空** `sheet.data[row]`（`setCellValue` 有 fallback，它没有），空表/切表瞬间即抛；且抛在 `setContext` 的 updater 里，**绕过 hook 的 try/catch** → React 卸载整树。
+- 修：① patch core 补判空；② `MultiTabEditor.tsx` 加 `SheetEditorErrorBoundary`（按 tab 隔离，单表崩只显占位）。
+
+**D. 非 doc 的 UI/文档收口**
+- `electron/noteExport.ts` 三导出加 `assertDocKind`（非 doc 抛 `InvalidInput`）；测试 `electron/store.test.ts`。
+- 桌面 `TreeNode` 加 `kind`（`src/lib/types.ts` + `electron/noteQueries.ts`：`listTreeNodes` LEFT JOIN `notes` + `mapTreeNode`）。
+- 目录树右键「导出」子菜单、文档 ⋯ 菜单对非 doc **隐藏**；**大纲**对非 doc 隐藏；**状态栏**非 doc 把「字数/图片」替换为「表格/多维表」。
+
+**E. 文档**
+- 新增 `docs/FORTUNESHEET-FEASIBILITY-260919.md`（选型 + 各轮落地）、`docs/SHEET-IMAGE-MANAGEMENT-260919.md`（图片独立管理 P1/P2/P3 规范）、`docs/BITABLE-PRODUCT-SPEC-260919.md`、`docs/FLOATING-TOOLBAR-DESIGN-260919.md`。
+- 回填 `docs/SYNC-PROTOCOL.md`（manifest v6 + kind）、`docs/STORAGE-LAYERS.md`（`sheets/` + kind 路径 + `sheetToSearchText`）。
+
+**门禁（最终）**：`tsc` 0 · `vitest` **1025 passed / 16 skipped (1041)** · 桌面 + 移动 build 全绿 · `check:bundle` app-js 1.82MB/2.90MB · `check:core` 0 · `git diff --check` 干净；两个 patch-package 补丁可重放。
+
+### 三、当前问题（均不阻塞）
+1. **真机验收未做**（最该先做）：完整链路没在真实应用跑过（观察点见 §2.8 四.1）。
+2. **图片是 base64 内联进正文**（`sheets[].images[].src`）→ 正文膨胀、随同步/历史走、无 GC 关联；**规范已出但未实施**（见 §2.9 四.2 与 `docs/SHEET-IMAGE-MANAGEMENT-260919.md`）。
+3. **粘贴图片不支持**；**单元格图片不支持**（FortuneSheet 无 in-cell 图片字段）。
+4. **全选角（左上角）边框**由内核 canvas 画，CSS 改不了（用户已同意不改）。
+5. **旧表格不会自动迁移**：旧 CE v1 正文 `parseSheetBody` 返回 null → 打开按空表；按红线 #7 **直接重建**（开发版数据可删可重建，不写迁移）。
+
+### 四、下一步计划（按优先级）
+1. **真机验收**：新建/编辑/插行列/冻结/多 tab 切换/保存/同步/移动端只读占位。
+2. **图片独立管理 P1**（浮动图落资产管线：正文存 filename、复用 `note-assets`/`manifest.assets`/GC）→ P2 单元格图 → P3 移动端/浏览器；规范 `docs/SHEET-IMAGE-MANAGEMENT-260919.md`。
+3. 可选：粘贴图片拦截器；给懒加载 `SheetEditor-*.js` 加 `check:bundle` 预算。
+4. 更老的待办见 §3。
+
+### 五、踩过的坑（本批新增，务必记住）
+1. **FortuneSheet 图片按钮用固定 `id="fortune-img-upload"` + 全局 `document.getElementById`** ⇒ keep-alive 多实例永远命中第一个 → **图片插到别的表格**。修：patch react 让它点**自己**的子 input。
+2. **`setCellFormat` 不判空 `sheet.data[row]`** ⇒ 空表/切表时抛错，且抛在 `setContext` updater 里 **try/catch 抓不到** → 整窗崩。修：patch core 判空 + 错误边界。
+3. **行高自适应只在「旧值已存在 + 带 canvas」的编辑路径跑**、公开 API 触发不到 ⇒ 首次录入不调行高。修：自己按列宽估算后 `setRowHeight`。
+4. **编辑框没有 max-width**（CSS 给到 9900px）⇒ 编辑态文字横向盖住邻格。修：react patch 按 `tb` 限宽；**注入点别选 core `getStyleByCell`**（编辑态那个 memo 常返回 `{}`，改了不生效），要注入到 react `InputBox`。
+5. **改了 node_modules 依赖后必须 `rm -rf node_modules/.vite` 再重启**：否则 Vite 用旧依赖缓存（表现为 `jspreadsheet-ce ENOENT` 之类）甚至 HMR 崩渲染树。
+6. **patch-package 流程**：改两个 dist（`index.js` + `index.esm.js`）→ `npx patch-package <pkg> --patch-dir patches`；`postinstall` 会重放；用 `npx patch-package --patch-dir patches` 验证。
+7. **后台 `npm run dev` 会被会话回收**；Electron 只能按**具体 PID** kill（别 `pkill -f Electron`）。
+8. **HMR 瞬态**：改 `toolbarItems` 等在 HMR 中途会出现「useMemo deps 长度变化」告警甚至 update-depth；**干净重启即消失，不是真 bug**。
+9. **写补丁脚本别用 TS 模板拼接**（`` ` ` 与 `${` 会被抢先解释）；且**变量名会被压缩器重命名**，grep 变量名验证补丁是否进 bundle **不可靠**（改查字符串字面量 / 直接看 on-disk `.vite/deps` bundle）。
+
+### 六、关键文件定位
+- 正文模型 `src/core/sheetDoc.ts`；编辑器 `src/features/sheet/SheetEditor.tsx` + `sheetEditor.css`；类型 `src/core/noteKind.ts`。
+- 补丁 `patches/@fortune-sheet+core+1.0.4.patch`、`patches/@fortune-sheet+react+1.0.4.patch`。
+- 收口 `electron/noteExport.ts`、`electron/noteQueries.ts`、`src/components/Sidebar.tsx`、`src/desktop/DesktopOverlays.tsx`、`src/components/DesktopStatusBar.tsx`、`src/hooks/desktopDerivedState.ts`。
+- 规范 `docs/FORTUNESHEET-FEASIBILITY-260919.md`、`docs/SHEET-IMAGE-MANAGEMENT-260919.md`。
 
 ## 3. 下一步计划 + 当前问题（真正的待办，按优先级）
 
