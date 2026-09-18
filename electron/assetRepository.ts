@@ -28,6 +28,8 @@ interface AssetRepositoryDeps {
   db: DbLike;
   notePathFor(noteId: string): string;
   extractAssetRefs(content: string): Set<string>;
+  /** 未保存草稿（draft-journal）引用的资源文件名；缺省 = 不做草稿保护。 */
+  draftRefsFor?(noteId: string): Set<string>;
 }
 
 /** Read-only asset reference/orphan queries; cleanup and upload writes remain in Store. */
@@ -35,11 +37,13 @@ export class AssetRepository {
   private readonly db: DbLike;
   private readonly notePathFor: AssetRepositoryDeps["notePathFor"];
   private readonly extractAssetRefs: AssetRepositoryDeps["extractAssetRefs"];
+  private readonly draftRefsFor: AssetRepositoryDeps["draftRefsFor"];
 
-  constructor({ db, notePathFor, extractAssetRefs }: AssetRepositoryDeps) {
+  constructor({ db, notePathFor, extractAssetRefs, draftRefsFor }: AssetRepositoryDeps) {
     this.db = db;
     this.notePathFor = notePathFor;
     this.extractAssetRefs = extractAssetRefs;
+    this.draftRefsFor = draftRefsFor;
   }
 
   listOrphanAssets(): OrphanAsset[] {
@@ -77,6 +81,14 @@ export class AssetRepository {
   getProtectedRefs(noteId: string): Set<string> {
     const refs = this.getCurrentContentRefs(noteId);
     for (const filename of this.getHistoryRefs(noteId)) refs.add(filename);
+    // 未保存草稿引用的资源同受保护。粘贴图落盘即登记孤儿、正文要等防抖保存（1s）才引用它，
+    // 草稿正是这段窗口里"用户还要它"的唯一记录（审计 260918 D3/F6：崩溃/强制退出后重启，
+    // 历史清理会把草稿里的图物理删掉 → 草稿恢复即死链，且孤儿不上传 ⇒ 云端也没有 = 真丢）。
+    // 放在这个单点上 ⇒ 所有删除路径（自动 cleanupUnreferencedAssetsForNote / 全局 cleanOrphanAssets /
+    // 单条 deleteOrphanAsset）与云端 GC（keep 集、待回收标记）口径一致。
+    // 例外：listNoteOrphans/listRemovedAssets 是纯展示，仍按「当前正文 ∪ 历史」判定，
+    // 所以草稿期的文件会显示为孤儿但清理会跳过它（宁可不删，不可误删）。
+    for (const filename of this.draftRefsFor?.(noteId) ?? []) refs.add(filename);
     return refs;
   }
 

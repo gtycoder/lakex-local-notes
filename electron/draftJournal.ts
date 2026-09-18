@@ -27,6 +27,22 @@ export function isValidDraftJournalEntry(value: unknown): value is DraftJournalE
     && isValidUpdatedAt(entry.updatedAt);
 }
 
+/** 草稿日志目录（workspace root 下固定子目录）。main.ts 装配与 Store 的「资源保护集」查询共用此口径。 */
+export function draftJournalDir(workspaceRoot: string): string {
+  return path.join(workspaceRoot, "draft-journal");
+}
+
+/** 只读读取某文档草稿（不存在/损坏/非法 ID → null）；不建目录、不写盘。
+ * 用途：把「未保存编辑」引用的资源纳入保护集——粘贴图片会立即落盘并登记孤儿，正文要等防抖保存
+ * 才引用它，这段窗口里崩溃/保存失败后重启，历史清理会把草稿里的图物理删掉（审计 260918 D3/F6）。 */
+export function readDraftEntry(journalDir: string, noteId: string): DraftJournalEntry | null {
+  if (!isSafePathSegment(noteId)) return null;
+  try {
+    const parsed: unknown = JSON.parse(fs.readFileSync(path.join(journalDir, `${noteId}.json`), "utf8"));
+    return isValidDraftJournalEntry(parsed) ? parsed : null;
+  } catch { return null; }
+}
+
 export class DraftJournal {
   constructor(private readonly root: string) {
     fs.mkdirSync(root, { recursive: true });

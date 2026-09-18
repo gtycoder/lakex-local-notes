@@ -113,11 +113,13 @@ export async function syncNow(cfg: SyncConfig, s3: S3Store, db: SyncDbPort, opts
     }
   } catch (e) {
     const msg = (e as Error).message;
-    // 结构校验错误（清单版本不兼容/格式字段非法）→ 协议级损坏，整轮中止并抛出（对齐桌面审计#19）；
-    // "不是合法 JSON"（JSON.parse 失败）与网络/对象缺失 → 记录 message 返回（移动端容忍，下次再试）。
-    if (/版本不兼容|清单格式/.test(msg)) throw e;
-    report.message = `拉取 manifest 失败: ${msg}`;
-    return report;
+    // 拉取清单失败一律中止整轮并抛出。对象缺失（= 首次同步）不是异常：S3 端口对 NoSuchKey 返回 null，
+    // 走上面的 else 分支，所以到这里的全是真失败（网络/权限/限流、非法 JSON、清单过大、版本不兼容）。
+    // 旧实现只重抛「版本不兼容|清单格式」、其余降级成 report.message + return，而桌面 Controller
+    // 不检查该字段 → UI 显示「同步完成、上传 0 下载 0」（假安全，审计 260918 F2）。
+    // 中止同时避免了 Controller 在引擎早退后仍执行 purge 前缀删除 + markPurgeSynced。
+    await db.log(`[sync] 拉取 manifest 失败，整轮中止: ${msg}`);
+    throw new Error(`拉取同步清单失败：${msg}`);
   }
 
   // 本地目录树 vs 远端语义差异（早退与发布共用）：folders 变更（回收站笔记本 / 移动 / 改名 / 图标）

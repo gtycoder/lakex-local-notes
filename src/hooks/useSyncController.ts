@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, type Dispatch, type SetStateAction } from "react";
 import { native } from "../lib/native";
-import { getNativeErrorCode } from "../lib/nativeErrors";
+import { getNativeErrorCode, getNativeErrorMessage } from "../lib/nativeErrors";
 import type { SettingsCategory } from "../components/SettingsPanel";
 import type { SyncToastData } from "../components/SyncToast";
 import type { SyncStatus } from "../lib/types";
@@ -88,7 +88,10 @@ export function useSyncController({
         setSync((current) => ({ ...current, phase: "idle", message: "尚未配置云同步" }));
         showSyncToast({ kind: "unavailable", title: "尚未配置云同步", message: "请先配置 S3，完成后即可开始同步。", onConfigure: () => { setSettingsCategory("sync"); setSettingsOpen(true); } });
       } else {
-        const errorMessage = "同步失败，请检查网络或 S3 配置";
+        // 真实原因必须可见（审计 260918 F2/D1）：留档失败、清单不可读等同样走这条路径，
+        // 统一成"检查网络或 S3 配置"会把用户引向错误方向（自动同步路径本就广播真实 error 文案）。
+        const detail = getNativeErrorMessage(error).trim();
+        const errorMessage = detail ? `同步失败：${detail}` : "同步失败，请检查网络或 S3 配置";
         setSync((current) => ({ ...current, phase: "error", message: errorMessage }));
         showSyncToast({ kind: "error", title: "同步失败", message: errorMessage });
       }

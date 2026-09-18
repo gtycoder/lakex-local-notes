@@ -6,6 +6,8 @@ import crypto from "node:crypto";
 import zlib from "node:zlib";
 import Database from "better-sqlite3";
 import { Store, AppError, selectHistoryDrops, isoWeekKey } from "./store.js";
+import { createStoreSyncPort } from "./syncAdapters.js";
+import { draftJournalDir } from "./draftJournal.js";
 import { createSafeStorageSecretCipher } from "./secretCipher.js";
 import { SQL_PARAMETER_BATCH_SIZE } from "../src/core/sqlParameterBatch.js";
 
@@ -808,6 +810,55 @@ describe("文档历史（快照，纯本地）", () => {
     expect(store.listNoteHistory(id).some((h) => h.id === pid)).toBe(false);
   });
 
+
+  it("审计 260918 D3：未保存草稿（draft-journal）引用的资源不被历史清理物理删除", () => {
+    const { id } = makeNote();
+    const assetsDir = path.join(dir, "note-assets", id);
+    fs.mkdirSync(assetsDir, { recursive: true });
+    // 粘贴即落盘（正文尚未引用 ⇒ 保存对账后是孤儿，且孤儿不上传 ⇒ 云端也没有）
+    const pasted = "1786123456789_aa11bb22.png";
+    fs.writeFileSync(path.join(assetsDir, pasted), "pasted");
+    store.saveNote(id, "草稿保护", "<p>正文还没引用图</p>");
+    // 收紧保留策略 ⇒ 本轮必有快照被删（cleanupUnreferencedAssetsForNote 的触发前提）
+    store.saveHistorySettings({ maxSnapshots: 1, retentionDays: 0, cleanupIntervalHours: 0, snapshotIntervalMinutes: 0 });
+    store.createHistorySnapshot(id, "<p>旧快照1</p>", true);
+    store.createHistorySnapshot(id, "<p>旧快照2</p>", true);
+    // 崩溃/强制退出前渲染层写下的草稿：引用了刚粘贴、还没保存进正文的图
+    const journalDir = draftJournalDir(dir);
+    fs.mkdirSync(journalDir, { recursive: true });
+    const draftFile = path.join(journalDir, `${id}.json`);
+    fs.writeFileSync(draftFile, JSON.stringify({
+      noteId: id, title: "草稿保护",
+      content: `<p><img src="http://127.0.0.1:19876/${id}/${pasted}"></p>`,
+      updatedAt: new Date().toISOString(),
+    }), "utf8");
+    const r = store.cleanupHistory();
+    expect(r.deletedSnapshots).toBeGreaterThan(0);                     // 前提成立：确有快照被删
+    expect(fs.existsSync(path.join(assetsDir, pasted))).toBe(true);    // 草稿引用的图必须还在
+    // 草稿清掉后（= 已保存或已丢弃）恢复原语义：无引用 → 随下一轮清理删掉，不留永久孤儿
+    fs.rmSync(draftFile);
+    store.createHistorySnapshot(id, "<p>旧快照3</p>", true);
+    store.cleanupHistory();
+    expect(fs.existsSync(path.join(assetsDir, pasted))).toBe(false);
+  });
+
+  it("审计 260918 D1/D2：桌面留档 adapter 不再静默吞失败（空正文 / 写盘失败都抛）", async () => {
+    const { id } = makeNote();
+    store.saveNote(id, "留档", "<p>本地编辑</p>");
+    const port = createStoreSyncPort(store);
+    const meta = { title: "留档", parentId: null, sortOrder: 0, protectedDays: 7 };
+    // 空正文 = 正文缺失/读盘失败（应用永不产出空 .lake：新建文档是 emptyLakeBody）→ 视为留档失败
+    await expect(port.createHistorySnapshot(id, "", meta)).rejects.toThrow(/留档内容为空/);
+    // 快照写盘失败（history/{id} 被同名文件占位）→ 必须抛出，绝不静默覆盖后谎报"已存历史"
+    fs.mkdirSync(path.join(dir, "history"), { recursive: true });
+    fs.writeFileSync(path.join(dir, "history", id), "blocker");
+    await expect(port.createHistorySnapshot(id, "<p>本地编辑</p>", meta)).rejects.toThrow();
+    fs.rmSync(path.join(dir, "history", id));
+    // 正常路径仍可留档；24h 同 hash 去重（返回 null）不算失败
+    await expect(port.createHistorySnapshot(id, "<p>本地编辑</p>", meta)).resolves.toBeUndefined();
+    await expect(port.createHistorySnapshot(id, "<p>本地编辑</p>", meta)).resolves.toBeUndefined();
+    expect(store.listNoteHistory(id).length).toBe(1);
+  });
 
   it("listNoteOrphans / cleanNoteOrphans：被历史引用保护，未引用可清", () => {
     const { id } = makeNote();

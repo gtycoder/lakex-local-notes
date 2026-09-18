@@ -143,7 +143,13 @@ export function createStoreSyncPort(store: Store): SyncDbPort {
       }));
     },
     async createHistorySnapshot(noteId: string, content: string, meta: { title: string; parentId: string | null; sortOrder: number; protectedDays?: number }): Promise<void> {
-      try { store.createHistorySnapshot(noteId, content, false, meta.protectedDays); } catch { /* 留档失败不阻断 */ }
+      // 留档是「被远端覆盖的本地编辑」的唯一副本（AGENTS §3 #1/#3）：失败必须抛出、让整轮同步中止，
+      // 绝不静默覆盖后再提示「已存历史」（审计 260918 D1/F1；移动端 syncDbPort 一直是抛出语义）。
+      // 空正文 = 正文文件缺失或读取失败（getNote 的 readFileSync 被 catch 成 ""）——应用永不产出空 .lake
+      //（新建文档是 emptyLakeBody 的 `<p><br></p>`），所以拒空不会误伤（审计 260918 D2）。
+      // 24h 同 hash 去重返回 null 不算失败：等价快照已在。
+      if (content.trim() === "") throw new Error(`留档内容为空（正文缺失或读取失败）: ${noteId}`);
+      store.createHistorySnapshot(noteId, content, false, meta.protectedDays);
     },
     async saveAsset(noteId: string, filename: string, bytes: Uint8Array): Promise<void> {
       const dir = store.noteAssetsPathFor(noteId);

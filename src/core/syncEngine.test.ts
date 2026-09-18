@@ -510,11 +510,32 @@ describe("syncEngine（共享编排）", () => {
   it("D2：远端 manifest 是非法 JSON → 整轮中止报错，不覆盖本地", async () => {
     const s3 = new MemS3();
     const db = new MemDb();
+    db.notes.set("n1", row({ id: "n1", syncState: "synced" }));
     s3.map.set("p/manifests/latest.json", new TextEncoder().encode("not-json"));
-    const r = await syncNow(CFG, s3, db);
-    expect(r.pulled).toBe(false);
-    expect(r.message).toContain("拉取 manifest 失败");
-    expect(r.published).toBe(false);
+    // 审计 260918 F2：清单拉取失败不得降级成"同步完成、0/0"——必须抛出，让两端 UI 都报失败。
+    await expect(syncNow(CFG, s3, db)).rejects.toThrow(/拉取同步清单失败/);
+    expect(db.notes.get("n1")!.syncState).toBe("synced");   // 本地未被改动
+    expect(s3.map.has("p/manifests/latest.json")).toBe(true); // 未覆盖坏清单
+  });
+
+  it("审计 260918 D1：留档失败 → 整轮中止抛出，本地编辑不被覆盖（不谎报 superseded）", async () => {
+    const s3 = new MemS3();
+    const db = new MemDb();
+    db.notes.set("n1", row({ id: "n1", content: "<p>local-edit</p>", title: "本地", syncState: "synced" }));
+    db.bases.set("n1", { contentHash: hashOf("<p>base</p>"), lastUploadedHash: null, lastSyncedMetaAt: "2026-01-01T00:00:00.000Z" });
+    const H = hashOf("<p>remote-final</p>");
+    s3.map.set("p/objects/n1-" + H + ".lake", new TextEncoder().encode("<p>remote-final</p>"));
+    s3.map.set("p/manifests/latest.json", new TextEncoder().encode(JSON.stringify({
+      version: 4, workspaceId: "default", commitId: "c1", prevCommitId: null, createdAt: "2026-01-01T00:00:00.000Z",
+      notes: [{ id: "n1", title: "远端", parentId: null, sortOrder: 0, updatedAt: "2026-01-03T00:00:00.000Z", contentHash: H, isConflict: false, assets: [], trashedAt: "2026-01-03T00:00:00.000Z", deletedFromParentId: null }],
+      folders: [],
+    })));
+    db.createHistorySnapshot = async () => { throw new Error("磁盘满"); };
+    await expect(syncNow(CFG, s3, db)).rejects.toThrow(/磁盘满/);
+    // 覆盖没发生：本地仍是自己的编辑，且没有"已存历史"的假提示
+    expect(db.notes.get("n1")!.content).toBe("<p>local-edit</p>");
+    expect(db.notes.get("n1")!.trashedAt).toBeNull();
+    expect(db.history.length).toBe(0);
   });
 
   it("B1：本地软删（回收站）上传条目用 buildUploadEntry——parentId=TRASH + trashedAt，无 deleted:true", async () => {

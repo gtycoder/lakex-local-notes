@@ -17,7 +17,7 @@ import { readDevS3Settings } from "./devConfig.js";
 import { readAndRemoveS3RestoreSeed } from "./workspaceBackup.js";
 import { createIpcRegistrar } from "./ipc/registrar.js";
 import { registerNotesIpc } from "./ipc/registerNotes.js";
-import { DraftJournal } from "./draftJournal.js";
+import { DraftJournal, draftJournalDir } from "./draftJournal.js";
 import { registerHistoryIpc } from "./ipc/registerHistory.js";
 import { registerWebIpc } from "./ipc/registerWeb.js";
 import { registerSyncIpc } from "./ipc/registerSync.js";
@@ -444,7 +444,7 @@ if (!app.requestSingleInstanceLock()) {
       else log.app.info("dev S3 seed skipped: credentials are not configured");
     }
     quickNotes = new QuickNotesStore(workspaceRoot(), log);
-    drafts = new DraftJournal(path.join(workspaceRoot(), "draft-journal"));
+    drafts = new DraftJournal(draftJournalDir(workspaceRoot()));
     quickNotes.recoverConversions((noteId) => store.hasNote(noteId), (noteId) => store.removeUntrackedNoteArtifacts(noteId));
     registerCdnRedirect();
     registerAssetTokenRedirect();

@@ -35,6 +35,7 @@ import { mimeTypeForFilename } from "../src/core/imageUtils.js";
 import { createPlaintextSecretCipher, type SecretCipher } from "../src/core/secretCipher.js";
 import type { DbLike } from "./dbLike.js";
 import { ResourceRepository } from "./resourceRepository.js";
+import { draftJournalDir, readDraftEntry } from "./draftJournal.js";
 import { RemoteImportRepository } from "./remoteImportRepository.js";
 import type { ResourceUploadOutput, HistorySettings, HistoryCleanupResult, S3Settings, SyncSettings, S3GcSettings } from "./storeTypes.js";
 import { sqlParameterBatches } from "../src/core/sqlParameterBatch.js";
@@ -208,6 +209,12 @@ export class Store {
       db: this.db,
       notePathFor: (noteId) => this.notePath(noteId),
       extractAssetRefs,
+      // 未保存草稿引用的资源纳入保护集（审计 260918 D3）：草稿文件由渲染层经 save_draft_journal 写入，
+      // 保存成功即删除 ⇒ 保护是瞬时的，不会让真孤儿永久留下。只读，不建目录。
+      draftRefsFor: (noteId) => {
+        const draft = readDraftEntry(draftJournalDir(this.root), noteId);
+        return draft ? extractAssetRefs(draft.content) : new Set<string>();
+      },
     });
     this.orphanLifecycle = new OrphanLifecycle({
       db: this.db,
