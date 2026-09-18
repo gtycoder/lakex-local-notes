@@ -3,52 +3,27 @@ import fs from "node:fs";
 import path from "node:path";
 import { type ImportedNoteAsset, Store } from "./store.js";
 import { type QuickNoteDocument, QuickNotesStore } from "./quickNotes.js";
-import { ASSET_PORT } from "./assetServer.js";
-import {
-  buildLakeImageCardValue,
-  emptyLakeBody,
-  lakeEmptyParagraph,
-  lakeImageCardParagraph,
-  lakeTextParagraph,
-} from "../src/core/lakeDocForm.js";
-
-function lakeId(prefix = "u"): string { return `${prefix}${crypto.randomBytes(5).toString("hex")}`; }
+import { emptyLakeBody } from "../src/core/lakeDocForm.js";
+import { rewriteQuickNoteAssetScope } from "../src/core/quickNoteModel.js";
 
 /**
- * 小记 V1 → Lake 的单向映射。
- * V1 只有纯文本与图片：每个物理换行保留为独立普通段落（空行保留为空段落），每张图片生成一张
- * Lake inline image card。
+ * 小记 → Lake 的单向映射（v2：**搬运**而不是序列化）。
  *
- * 序列化细节**不在这里手拼**：统一走 `src/core/lakeDocForm.ts`（写入形态单一来源），
- * 约定与反例见 `docs/LAKE-CONTENT-WRITING.md`（媒体必须用 `<card>` 容器，绝不能裸 `<img>`）。
+ * v2 起小记正文本身就是内核产出的 Lake 正文（`.qnote.body`），转换只需要：
+ *   ① 把小记资源作用域 `/quick-notes/<quickNoteId>/` 改写成目标文档作用域 `/<targetNoteId>/`
+ *      （图片文件由既有 journal 流程复制到 `note-assets/<targetNoteId>/`）；
+ *   ② 其它什么都不用做 —— 段落/列表/待办/引用/加粗/代码块/图片卡片都是内核自己的形态。
+ *
+ * 这消掉了旧实现（手拼段落 + 手拼图片卡片）带来的「内核容忍形态」风险：产物字段与内核自产一致。
+ * 写入形态约定见 `docs/LAKE-CONTENT-WRITING.md`（媒体必须走卡片容器，绝不能裸 `<img>`）。
  */
 export function quickNoteToLakeContent(targetNoteId: string, source: QuickNoteDocument): string {
-  const blocks: string[] = [];
-  if (source.content.text) {
-    // 每个物理换行都落为独立 Lake 段落，而不是同一段中的 <br>。这样用户在
-    // 转换后应用 Lake 的有序/无序列表时，每一行都会成为单独列表项，符合编辑器语义。
-    for (const line of source.content.text.split(/\r?\n/)) {
-      const paragraphId = lakeId();
-      if (line) blocks.push(lakeTextParagraph(paragraphId, lakeId(), line));
-      else blocks.push(lakeEmptyParagraph(paragraphId));
-    }
-  }
-  for (const image of source.content.images) {
-    const cardId = lakeId();
-    const paragraphId = lakeId();
-    blocks.push(lakeImageCardParagraph(paragraphId, buildLakeImageCardValue({
-      src: `http://127.0.0.1:${ASSET_PORT}/${targetNoteId}/${image.filename}`,
-      cardId,
-      taskId: lakeId(),
-      clientId: targetNoteId,
-      name: image.filename,
-      size: image.size,
-      from: "quick-note",
-      originWidth: image.width ?? undefined,
-      originHeight: image.height ?? undefined,
-    })));
-  }
-  return blocks.join("") || emptyLakeBody(targetNoteId);
+  const body = rewriteQuickNoteAssetScope(
+    source.content.body,
+    `/quick-notes/${source.id}/`,
+    `/${targetNoteId}/`,
+  );
+  return body.trim() ? body : emptyLakeBody(targetNoteId);
 }
 
 function titleForQuickNote(source: QuickNoteDocument): string {

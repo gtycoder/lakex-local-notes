@@ -85,7 +85,7 @@ describe("QuickNotesStore", () => {
   });
 
   it("拒绝远端多余的不安全文件名，且不留下小记资源目录", () => {
-    const raw = Buffer.from(JSON.stringify({ version: 1, text: "远端文本", images: [] }));
+    const raw = Buffer.from(JSON.stringify({ version: 2, text: "远端文本", body: "<p><br></p>", images: [] }));
     const contentHash = crypto.createHash("sha256").update(raw).digest("hex");
     expect(() => quickNotes.importRemoteQuickNote(
       { id: crypto.randomUUID(), createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), contentHash, isConflict: false },
@@ -263,7 +263,7 @@ describe("R3：save staging 恢复（V5 §5.3）", () => {
 describe("R4：import_remote 4 态 journal 恢复（V5 §5.4）", () => {
   function rawQnDb() { return new Database(path.join(root, "quick-notes", "metadata.sqlite3")); }
   function makeItem(text: string) {
-    const body = Buffer.from(JSON.stringify({ version: 1, text, images: [] }), "utf8");
+    const body = Buffer.from(JSON.stringify({ version: 2, text, body: "<p><br></p>", images: [] }), "utf8");
     return { item: { id: crypto.randomUUID(), createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), contentHash: crypto.createHash("sha256").update(body).digest("hex"), isConflict: false }, body };
   }
   function insertJournal(db: Database.Database, id: string, itemPath: string, stagingDir: string, stagingKey: string, contentHash: string, state: string) {

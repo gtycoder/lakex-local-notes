@@ -7,6 +7,7 @@ import type { S3Store, SyncConfig } from "../core/syncEngine.js";
 import type { ManifestItem } from "../core/manifestTypes.js";
 import {
   normalizeQuickNoteContent,
+  quickNoteBodyFromTextAndImages,
   serializeQuickNoteContent,
 } from "../core/quickNoteModel.js";
 import { sha256Sync } from "../core/sha256Sync.js";
@@ -126,8 +127,9 @@ export async function runQuickNotesRemoteImportRollbackContract(
     hash: sha256Sync(imageBytes),
   };
   const content = serializeQuickNoteContent({
-    version: 1,
+    version: 2,
     text: "remote body",
+    body: "<p><br></p>",
     images: [image],
   });
   const bytes = new TextEncoder().encode(content);
@@ -148,5 +150,5 @@ export async function runQuickNotesRemoteImportRollbackContract(
 }
 
 export function contractQuickNoteContent(text: string): string {
-  return serializeQuickNoteContent(normalizeQuickNoteContent(text, []));
+  return serializeQuickNoteContent(normalizeQuickNoteContent(text, quickNoteBodyFromTextAndImages(text, [], () => "", () => "u-sync"), []));
 }

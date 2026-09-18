@@ -25,24 +25,24 @@ const image = {
 
 describe("quickNoteModel", () => {
   it("normalizes valid content and rejects empty/oversized text", () => {
-    expect(normalizeQuickNoteContent(" hello ", [])).toEqual({ version: 1, text: " hello ", images: [] });
-    expect(() => normalizeQuickNoteContent("", [])).toThrow("请至少记录文字或一张图片");
-    expect(() => normalizeQuickNoteContent("x".repeat(MAX_QUICK_NOTE_TEXT_LENGTH + 1), [])).toThrow("小记正文过长");
+    expect(normalizeQuickNoteContent(" hello ", "<p><br></p>", [])).toEqual({ version: 2, text: " hello ", body: "<p><br></p>", images: [] });
+    expect(() => normalizeQuickNoteContent("", "<p><br></p>", [])).toThrow("请至少记录文字或一张图片");
+    expect(() => normalizeQuickNoteContent("x".repeat(MAX_QUICK_NOTE_TEXT_LENGTH + 1), "", [])).toThrow("小记正文过长");
   });
 
   it("validates image metadata, duplicate IDs, and unsafe paths", () => {
-    expect(validateQuickNoteContent({ version: 1, text: "", images: [image] }).images[0]).toEqual(image);
-    expect(() => validateQuickNoteContent({ version: 1, text: "x", images: [{ ...image, id: "../bad" }] })).toThrow("小记图片元数据无效");
-    expect(() => validateQuickNoteContent({ version: 1, text: "x", images: [image, image] })).toThrow("小记图片元数据无效");
-    expect(() => validateQuickNoteContent({ version: 1, text: "x", images: [{ ...image, mimeType: "text/plain" }] })).toThrow("小记图片元数据无效");
+    expect(validateQuickNoteContent({ version: 2, text: "", body: "<p><br></p>", images: [image] }).images[0]).toEqual(image);
+    expect(() => validateQuickNoteContent({ version: 2, text: "x", body: "<p><br></p>", images: [{ ...image, id: "../bad" }] })).toThrow("小记图片元数据无效");
+    expect(() => validateQuickNoteContent({ version: 2, text: "x", body: "<p><br></p>", images: [image, image] })).toThrow("小记图片元数据无效");
+    expect(() => validateQuickNoteContent({ version: 2, text: "x", body: "<p><br></p>", images: [{ ...image, mimeType: "text/plain" }] })).toThrow("小记图片元数据无效");
   });
 
   it("round-trips canonical JSON without runtime URLs", () => {
-    const content = normalizeQuickNoteContent("hello", [image]);
+    const content = normalizeQuickNoteContent("hello", "<p><br></p>", [image]);
     const encoded = serializeQuickNoteContent(content);
     const parsed = validateQuickNoteContent(parseQuickNoteContent(encoded));
     expect(parsed).toEqual(content);
-    expect(encoded).toContain('"version": 1');
+    expect(encoded).toContain('"version": 2');
     expect(encoded).not.toContain("url");
   });
 
@@ -94,7 +94,7 @@ describe("buildQuickNoteImageFiles", () => {
     const { images } = buildQuickNoteImageFiles([
       { filename: "ok.png", mimeType: "image/png", width: 5, height: 5, bytes: bytes(3) },
     ]);
-    const content = normalizeQuickNoteContent("带图", images);
+    const content = normalizeQuickNoteContent("带图", "<p><br></p>", images);
     const serialized = serializeQuickNoteContent(content);
     expect(validateQuickNoteContent(JSON.parse(serialized)).images[0].filename).toBe(images[0].filename);
   });

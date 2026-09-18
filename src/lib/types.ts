@@ -286,7 +286,10 @@ export interface QuickNoteImage {
 
 export interface QuickNoteContent {
   version: number;
+  /** 纯文本镜像（预览/搜索/移动端降级显示）；v2 起不再是唯一真相。 */
   text: string;
+  /** v2：内核形态正文（Lake HTML）。桌面编辑态由内核产出，其它入口由 text 合成。 */
+  body: string;
   images: QuickNoteImage[];
 }
 
@@ -307,6 +310,8 @@ export interface QuickNoteDocument extends QuickNoteSummary {
 
 export interface SaveQuickNoteInput {
   text: string;
+  /** 内核形态正文。缺省时主进程按 text 合成（见 quickNoteModel.quickNoteBodyFromText）。 */
+  body?: string;
   draftId: string;
   stagedImageIds: string[];
   retainedImageIds?: string[];

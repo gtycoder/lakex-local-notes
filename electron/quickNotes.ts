@@ -14,6 +14,8 @@ import {
   normalizeQuickNoteContent,
   parseQuickNoteContent,
   previewQuickNote,
+  quickNoteBodyFromTextAndImages,
+  rewriteQuickNoteAssetScope,
   serializeQuickNoteContent,
   validateQuickNoteContent,
   validateQuickNoteImageBytes,
@@ -271,7 +273,20 @@ export class QuickNotesStore {
 
     const stagingDir = this.stagingDirFor(input.draftId);
     const stagedMetadata = this.readStagedMetadata(stagingDir, input.stagedImageIds);
-    const content = toStoreValidation(() => normalizeQuickNoteContent(input.text, [...retained, ...stagedMetadata]));
+    // v2：正文一律是内核形态。调用方没给（移动端输入框 / 旧调用点）→ 按 text 合成；
+    // 给了（桌面编辑态）→ 原样采用，但要把 staging 资源作用域改写成正式小记作用域。
+    const makeId = () => `u${crypto.randomBytes(5).toString("hex")}`;
+    const allImages = [...retained, ...stagedMetadata];
+    const rawBody = typeof input.body === "string" && input.body.trim()
+      ? input.body
+      : quickNoteBodyFromTextAndImages(
+          input.text,
+          allImages,
+          (filename) => this.quickImageUrl(id, filename),
+          makeId,
+        );
+    const body = rewriteQuickNoteAssetScope(rawBody, `/quick-notes/staging/${input.draftId}/`, `/quick-notes/${id}/`);
+    const content = toStoreValidation(() => normalizeQuickNoteContent(input.text, body, allImages));
     const encoded = Buffer.from(serializeQuickNoteContent(content), "utf8");
     const contentHash = hash(encoded);
     const targetAssets = this.assetDirFor(id);
@@ -371,7 +386,7 @@ export class QuickNotesStore {
       const metaPath = path.join(stagingDir, `.${assetId}.json`);
       let raw: unknown;
       try { raw = parseQuickNoteContent(fs.readFileSync(metaPath, "utf8")); } catch { throw new AppError("NotFound", "暂存图片已失效，请重新添加"); }
-      const image = this.validateStoredContent({ version: QUICK_NOTE_VERSION, text: "x", images: [raw] }).images[0];
+      const image = this.validateStoredContent({ version: QUICK_NOTE_VERSION, text: "x", body: "<p><br></p>", images: [raw] }).images[0];
       const imagePath = path.join(stagingDir, image.filename);
       if (!fs.existsSync(imagePath)) throw new AppError("NotFound", "暂存图片文件不存在");
       const bytes = fs.readFileSync(imagePath);
@@ -387,7 +402,7 @@ export class QuickNotesStore {
     const metaPath = path.join(dir, `.${assetId}.json`);
     try {
       const raw = parseQuickNoteContent(fs.readFileSync(metaPath, "utf8"));
-      const image = this.validateStoredContent({ version: QUICK_NOTE_VERSION, text: "x", images: [raw] }).images[0];
+      const image = this.validateStoredContent({ version: QUICK_NOTE_VERSION, text: "x", body: "<p><br></p>", images: [raw] }).images[0];
       fs.rmSync(path.join(dir, image.filename), { force: true });
     } catch { /* metadata/file may already be gone */ }
     fs.rmSync(metaPath, { force: true });

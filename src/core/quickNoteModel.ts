@@ -1,11 +1,15 @@
 import { buildAssetFilename } from "./assetNaming.js";
+import { buildLakeImageCardValue, lakeEmptyParagraph, lakeImageCardParagraph, lakeTextParagraph } from "./lakeDocForm.js";
 import { sniffImageFormat, type ImageDimensions, type ImageFormat } from "./imageUtils.js";
 import { sha256Sync } from "./sha256Sync.js";
 import { MAX_IMAGE_BYTES, MAX_IMAGE_PIXELS } from "./storeLimits.js";
 import type { QuickNoteImage } from "./types.js";
 
-export const QUICK_NOTE_VERSION = 1;
+/** v2 起小记正文是**内核形态的 Lake 正文**（`body`），`text` 退化为派生镜像（预览/搜索/移动端降级）。 */
+export const QUICK_NOTE_VERSION = 2;
 export const MAX_QUICK_NOTE_TEXT_LENGTH = 200_000;
+/** 正文（Lake HTML，含图片卡片的 JSON 载荷）上限；比纯文本宽，但仍远低于同步侧硬上限。 */
+export const MAX_QUICK_NOTE_BODY_LENGTH = 4_000_000;
 
 /** Shared quick-note image gate: size, magic bytes, and MIME are platform-independent. */
 export function validateQuickNoteImageBytes(bytes: Uint8Array): ImageFormat {
@@ -34,7 +38,10 @@ export function validateQuickNoteImageDimensions(dimensions: ImageDimensions): v
 export type StoredQuickNoteImage = Omit<QuickNoteImage, "url">;
 export interface StoredQuickNoteContent {
   version: number;
+  /** 纯文本镜像：由写作者提供（桌面由内核正文抽取、移动端由输入框内容），供预览/搜索/降级显示。 */
   text: string;
+  /** 内核形态正文（Lake HTML）。新建时若调用方没给，按 text 合成（见 quickNoteBodyFromText）。 */
+  body: string;
   images: StoredQuickNoteImage[];
 }
 
@@ -48,11 +55,71 @@ export class QuickNoteModelError extends Error {
 }
 
 /** Model-level validation for text/image content; no database, filesystem, or Electron access. */
-export function normalizeQuickNoteContent(text: string, images: StoredQuickNoteImage[]): StoredQuickNoteContent {
+export function normalizeQuickNoteContent(text: string, body: string, images: StoredQuickNoteImage[]): StoredQuickNoteContent {
   if (typeof text !== "string") throw new QuickNoteModelError("小记正文必须是文本");
   if (text.length > MAX_QUICK_NOTE_TEXT_LENGTH) throw new QuickNoteModelError("小记正文过长");
+  if (typeof body !== "string") throw new QuickNoteModelError("小记正文格式无效");
+  if (body.length > MAX_QUICK_NOTE_BODY_LENGTH) throw new QuickNoteModelError("小记正文过长");
   if (!text.trim() && images.length === 0) throw new QuickNoteModelError("请至少记录文字或一张图片");
-  return { version: QUICK_NOTE_VERSION, text, images };
+  return { version: QUICK_NOTE_VERSION, text, body, images };
+}
+
+/**
+ * 由纯文本合成一份内核形态正文（每个物理换行 = 一个段落，空行 = 空段落）。
+ * 用途：没有富文本编辑能力的一端（移动端输入框）与「调用方只给了 text」的兼容入口。
+ * 注意：媒体必须走卡片，这里**不产出**任何 `<img>`（见 docs/LAKE-CONTENT-WRITING.md）。
+ */
+export interface QuickNoteBodyImage {
+  filename: string;
+  size: number;
+  width: number | null;
+  height: number | null;
+}
+
+export function quickNoteBodyFromTextAndImages(
+  text: string,
+  images: readonly QuickNoteBodyImage[],
+  imageUrl: (filename: string) => string,
+  makeId: () => string,
+): string {
+  const blocks: string[] = [];
+  for (const line of text.split(/\r?\n/)) {
+    const paragraphId = makeId();
+    // 写入形态复用单一来源（src/core/lakeDocForm.ts），避免各处手拼漂移。
+    blocks.push(line ? lakeTextParagraph(paragraphId, makeId(), line) : lakeEmptyParagraph(paragraphId));
+  }
+  for (const image of images) {
+    const cardId = makeId();
+    blocks.push(
+      lakeImageCardParagraph(
+        makeId(),
+        buildLakeImageCardValue({
+          src: imageUrl(image.filename),
+          cardId,
+          taskId: makeId(),
+          clientId: cardId,
+          name: image.filename,
+          size: image.size,
+          from: "quick-note",
+          originWidth: image.width ?? undefined,
+          originHeight: image.height ?? undefined,
+        }),
+      ),
+    );
+  }
+  return blocks.join("");
+}
+
+/**
+ * 正文里的资源作用域改写：`/quick-notes/staging/<draftId>/` → `/quick-notes/<noteId>/`（保存时），
+ * 或 `/quick-notes/<quickNoteId>/` → `/<noteId>/`（转换为正式文档时，见 convertQuickNoteScope）。
+ * 同时处理卡片值里 URL-encoded 的形态（内核把卡片 value 编码进 `data:` 载荷）。
+ */
+export function rewriteQuickNoteAssetScope(body: string, fromScope: string, toScope: string): string {
+  const encodedFrom = encodeURIComponent(fromScope);
+  const encodedTo = encodeURIComponent(toScope);
+  // 卡片 value 是 `data:` + encodeURIComponent(JSON) ⇒ 正文里两种形态都可能出现，两种都要换。
+  return body.split(fromScope).join(toScope).split(encodedFrom).join(encodedTo);
 }
 
 /** 兼容 Web/Node 的 UUID（小记图片 id）。 */
@@ -95,12 +162,12 @@ export function buildQuickNoteImageFiles(
 export function validateQuickNoteContent(raw: unknown): StoredQuickNoteContent {
   if (!raw || typeof raw !== "object") throw new QuickNoteModelError("小记内容格式无效");
   const value = raw as Partial<StoredQuickNoteContent>;
-  if (value.version !== QUICK_NOTE_VERSION || typeof value.text !== "string" || !Array.isArray(value.images)) {
+  if (value.version !== QUICK_NOTE_VERSION || typeof value.text !== "string" || typeof value.body !== "string" || !Array.isArray(value.images)) {
     throw new QuickNoteModelError("小记内容版本或字段无效");
   }
   const seen = new Set<string>();
   const images = value.images.map((image) => validateQuickNoteImage(image, seen));
-  return normalizeQuickNoteContent(value.text, images);
+  return normalizeQuickNoteContent(value.text, value.body, images);
 }
 
 export function parseQuickNoteContent(json: string): unknown {

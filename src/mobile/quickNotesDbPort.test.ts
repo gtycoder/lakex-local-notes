@@ -130,7 +130,7 @@ async function openQuickNotesDb(): Promise<{ db: Database; d: DbLike }> {
 function createQuickNote(d: DbLike, text: string): { id: string; contentHash: string } {
   const id = crypto.randomUUID();
   const now = new Date().toISOString();
-  const serialized = serializeQuickNoteContent(normalizeQuickNoteContent(text, []));
+  const serialized = serializeQuickNoteContent(normalizeQuickNoteContent(text, "<p><br></p>", []));
   const contentHash = sha256Sync(new TextEncoder().encode(serialized));
   d.prepare(
     `INSERT INTO quick_notes (id, created_at, updated_at, preview_text, image_count, content_hash, content, sync_state, is_conflict)
@@ -141,7 +141,7 @@ function createQuickNote(d: DbLike, text: string): { id: string; contentHash: st
 
 function editQuickNote(d: DbLike, id: string, text: string): void {
   const now = new Date().toISOString();
-  const serialized = serializeQuickNoteContent(normalizeQuickNoteContent(text, []));
+  const serialized = serializeQuickNoteContent(normalizeQuickNoteContent(text, "<p><br></p>", []));
   const contentHash = sha256Sync(new TextEncoder().encode(serialized));
   d.prepare("UPDATE quick_notes SET updated_at=?, preview_text=?, content_hash=?, content=?, sync_state='local' WHERE id=?").run(now, previewQuickNote(text, 0), contentHash, serialized, id);
 }
@@ -260,7 +260,7 @@ describe("移动端 Quick Notes 同步端口 + 共享引擎", () => {
   it("远端小记写入失败时端口事务回滚正文与图片", async () => {
     const { d } = await openQuickNotesDb();
     const created = createQuickNote(d, "本地正文");
-    const content = serializeQuickNoteContent(normalizeQuickNoteContent("远端正文", [{
+    const content = serializeQuickNoteContent(normalizeQuickNoteContent("远端正文", "<p><br></p>", [{
       id: "img-1", filename: "image.png", mimeType: "image/png", width: 1, height: 1, size: 1, hash: "b".repeat(64),
     }]));
     const bytes = new TextEncoder().encode(content);
@@ -291,7 +291,7 @@ describe("移动端 Quick Notes 同步端口 + 共享引擎", () => {
       size: imageBytes.length,
       hash: sha256Sync(imageBytes),
     };
-    const content = serializeQuickNoteContent({ version: 1, text: "远端正文", images: [image] });
+    const content = serializeQuickNoteContent({ version: 2, body: "<p><br></p>", text: "远端正文", images: [image] });
     const bytes = new TextEncoder().encode(content);
     const item: ManifestItem = {
       id: created.id,
@@ -351,7 +351,7 @@ describe("移动端 Quick Notes 同步端口 + 共享引擎", () => {
       size: imageBytes.length,
       hash: sha256Sync(imageBytes),
     };
-    const serialized = serializeQuickNoteContent({ version: 1, text: "冲突本地版", images: [image] });
+    const serialized = serializeQuickNoteContent({ version: 2, body: "<p><br></p>", text: "冲突本地版", images: [image] });
     const id = crypto.randomUUID();
     const now = new Date().toISOString();
     d.prepare(
@@ -416,7 +416,7 @@ describe("移动端 Quick Notes 同步端口 + 共享引擎", () => {
     const aDeps = makeAssetFsDeps();
     const imgBytes = new Uint8Array([137, 80, 78, 71, 1, 2, 3, 4]);
     const img = { id: "img-1", filename: "a.png", mimeType: "image/png", width: 10, height: 10, size: imgBytes.length, hash: sha256Sync(imgBytes) };
-    const serialized = serializeQuickNoteContent({ version: 1, text: "带图", images: [img] });
+    const serialized = serializeQuickNoteContent({ version: 2, body: "<p><br></p>", text: "带图", images: [img] });
     const hash = sha256Sync(new TextEncoder().encode(serialized));
     const id = crypto.randomUUID();
     const now = new Date().toISOString();
@@ -453,7 +453,7 @@ describe("移动端 Quick Notes 同步端口 + 共享引擎", () => {
     const aDeps = makeAssetFsDeps();
     const imgBytes = new Uint8Array([9, 8, 7, 6, 5]);
     const img = { id: "img-t", filename: "t.png", mimeType: "image/png", width: 3, height: 3, size: imgBytes.length, hash: sha256Sync(imgBytes) };
-    const serialized = serializeQuickNoteContent({ version: 1, text: "待删带图", images: [img] });
+    const serialized = serializeQuickNoteContent({ version: 2, body: "<p><br></p>", text: "待删带图", images: [img] });
     const hash = sha256Sync(new TextEncoder().encode(serialized));
     const id = crypto.randomUUID();
     const now = new Date().toISOString();

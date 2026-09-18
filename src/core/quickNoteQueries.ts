@@ -49,7 +49,7 @@ export function mapQuickNoteRow(row: QuickNoteRowShape, parts: QuickNoteDocument
     contentHash: row.content_hash,
     syncState: row.sync_state,
     isConflict: !!row.is_conflict,
-    content: { version: parts.content.version, text: parts.content.text, images },
+    content: { version: parts.content.version, text: parts.content.text, body: parts.content.body, images },
   };
 }
 

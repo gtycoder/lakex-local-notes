@@ -1,6 +1,7 @@
 import {
   buildQuickNoteImageFiles,
   normalizeQuickNoteContent,
+  quickNoteBodyFromTextAndImages,
   previewQuickNote,
   serializeQuickNoteContent,
   validateQuickNoteContent,
@@ -62,7 +63,7 @@ export async function readQuickNote(d: MobileDb, id: string): Promise<QuickNoteR
 
 export async function saveQuickNote(d: MobileDb, id: string, text: string, images: StoredQuickNoteImage[] = []): Promise<string> {
   const now = new Date().toISOString();
-  const content = normalizeQuickNoteContent(text, images);
+  const content = normalizeQuickNoteContent(text, quickNoteBodyFromTextAndImages(text, images, (filename) => `http://127.0.0.1:19876/quick-notes/${id}/${filename}`, () => crypto.randomUUID()), images);
   const serialized = serializeQuickNoteContent(content);
   const contentHash = sha256Sync(new TextEncoder().encode(serialized));
   const preview = previewQuickNote(text, images.length);
@@ -95,7 +96,7 @@ export async function saveQuickNoteWithImages(
   });
   const { images, files: imageFilesWithKey } = buildQuickNoteImageFiles(validatedImageFiles);
   const now = new Date().toISOString();
-  const content = normalizeQuickNoteContent(text, images);
+  const content = normalizeQuickNoteContent(text, quickNoteBodyFromTextAndImages(text, images, (filename) => `http://127.0.0.1:19876/quick-notes/${id}/${filename}`, () => crypto.randomUUID()), images);
   const serialized = serializeQuickNoteContent(content);
   const contentHash = sha256Sync(new TextEncoder().encode(serialized));
   const preview = previewQuickNote(text, images.length);

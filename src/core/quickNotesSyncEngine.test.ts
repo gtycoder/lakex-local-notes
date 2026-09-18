@@ -128,7 +128,7 @@ function promisifyPort(port: QuickNotesSyncDbPort): QuickNotesSyncDbPort {
 }
 
 function makeContent(text: string): { serialized: string; hash: string } {
-  const serialized = serializeQuickNoteContent(normalizeQuickNoteContent(text, []));
+  const serialized = serializeQuickNoteContent(normalizeQuickNoteContent(text, "<p><br></p>", []));
   return { serialized, hash: sha256Sync(new TextEncoder().encode(serialized)) };
 }
 
@@ -269,7 +269,7 @@ describe("quickNotesSyncEngine（共享引擎独立测试）", () => {
     const id = createLocal(a, "带图小记");
     const imgBytes = new Uint8Array([1, 2, 3, 4, 5]);
     const img = { id: "img-1", filename: "a.png", mimeType: "image/png", width: 4, height: 4, size: imgBytes.length, hash: sha256Sync(imgBytes) };
-    const serialized = serializeQuickNoteContent(normalizeQuickNoteContent("带图小记", [img]));
+    const serialized = serializeQuickNoteContent(normalizeQuickNoteContent("带图小记", "<p><br></p>", [img]));
     const hash = sha256Sync(new TextEncoder().encode(serialized));
     const n = a.notes.get(id)!;
     n.content = new TextEncoder().encode(serialized);
