@@ -1,0 +1,51 @@
+/* 表格编辑器容器（FortuneSheet）。.tab-panels 是 grid-template-rows:1fr，可见 tab 占同一格。 */
+.sheet-editor {
+  grid-area: 1 / 1;
+  min-height: 0;
+  min-width: 0;
+  height: 100%;
+  width: 100%;
+  overflow: hidden;
+}
+.sheet-editor .fortune-container {
+  height: 100%;
+}
+/* 工具栏更紧凑（260919 用户要求）：收内边距、缩按钮间距与高度。 */
+.sheet-editor .fortune-toolbar {
+  padding: 2px 0 2px 8px;
+  min-height: 30px;
+}
+.sheet-editor .fortune-toolbar-button,
+.sheet-editor .fortune-toolbar-combo {
+  margin: 0 1px;
+  padding: 2px;
+}
+.sheet-editor .fortune-toolbar-divider {
+  margin: 0 3px;
+  height: 16px;
+}
+.sheet-editor .fortune-toolbar .material-icons,
+.sheet-editor .fortune-toolbar [class*="icon"] {
+  font-size: 16px;
+}
+/* FortuneSheet 的「添加 N 行」<input> 无 class、无自带样式 ⇒ 吃浏览器默认 2px inset 粗边框。 */
+.sheet-editor .luckysheet-bottom-controll-row input {
+  border: 1px solid var(--b3-border-color, #d0d0d0);
+  border-radius: 3px;
+  box-sizing: border-box;
+  padding: 0 4px;
+  outline: none;
+}
+/* 右键菜单（行/列头）里的「插入行」「行高」输入框同样只给了 width/居中、没给边框 ⇒ 默认粗边框。 */
+.sheet-editor .fortune-context-menu input,
+.sheet-editor .luckysheet-cols-menu input {
+  border: 1px solid var(--b3-border-color, #d0d0d0);
+  border-radius: 3px;
+  box-sizing: border-box;
+  outline: none;
+}
+.sheet-editor .luckysheet-bottom-controll-row input:focus,
+.sheet-editor .fortune-context-menu input:focus,
+.sheet-editor .luckysheet-cols-menu input:focus {
+  border-color: var(--b3-theme-primary, #3b5bdb);
+}

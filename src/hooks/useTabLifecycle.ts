@@ -86,7 +86,7 @@ export function useTabLifecycle({
       resetRevision(note.id, 0);
       // 打开即判定：回收站里 / 已被他端 purge 的文档直接以"已删除"标签打开（只读 + 不保存），
       // 不等下一次同步才标记——否则重启自动重开"最后文档"时会看到能编辑的已删文档。
-      const newTab: OpenTab = { noteId: note.id, title: note.title, content: note.content, dirty: false, lastAccessedAt: Date.now(), deleted: isGoneNote(note) };
+      const newTab: OpenTab = { noteId: note.id, title: note.title, content: note.content, dirty: false, lastAccessedAt: Date.now(), deleted: isGoneNote(note), kind: note.kind ?? "doc" };
       const nextForEvict = openTabsRef.current.some((t) => t.noteId === id)
         ? openTabsRef.current
         : [...openTabsRef.current, newTab];

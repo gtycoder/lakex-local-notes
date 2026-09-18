@@ -23,6 +23,7 @@ const FILES = [
   "b3/animations.css", "b3/base.css", "b3/components.css", "b3/dark.css", "b3/layout.css",
   "b3/theme-daylight.css", "b3/theme-midnight.css",
   "features/attachment/attachment-preview.css", "features/editor/image-lightbox.css", "features/outline/outline.css",
+  "features/sheet/sheetEditor.css",
   "styles/dialog.css", "styles/document-status.css", "styles/editor.css",
   "styles/motion.css", "styles/components.css", "styles/quick-notes.css", "styles/shell.css",
   "styles/tokens.css", "styles/settings.css",
@@ -47,6 +48,8 @@ const BASELINE: Record<string, { decls: number; dupGroups: number }> = {
   "features/attachment/attachment-preview.css": { decls: 78, dupGroups: 0 },
   "features/editor/image-lightbox.css": { decls: 57, dupGroups: 0 },
   "features/outline/outline.css": { decls: 244, dupGroups: 0 },
+  // 260919：换成 FortuneSheet；容器尺寸 + 工具栏紧凑 + 无样式输入框补边框（标签样式已按用户要求回滚）
+  "features/sheet/sheetEditor.css": { decls: 24, dupGroups: 0 },
   "styles/dialog.css": { decls: 234, dupGroups: 8 },   // +7 = .note-info-history-viewer 容器（260916 W-10：历史内联预览改只读 viewer，替代裸 dangerouslySetInnerHTML；合法新增非覆盖回涨）
   "styles/document-status.css": { decls: 106, dupGroups: 2 },
   "styles/editor.css": { decls: 14, dupGroups: 0 },   // +2 = 自 ui-polish.css 并入的编辑器正文覆盖（S2）

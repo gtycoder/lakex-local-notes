@@ -34,7 +34,8 @@
 ├─ logs/lake-notes.log                 # 日志（不属于工作区）
 └─ workspace-default/                   # 工作区根
    ├─ metadata.sqlite3 (+ -wal/-shm)    # 主库
-   ├─ notes/{noteId}.lake               # 正文                        L1（对象）
+   ├─ notes/{noteId}.lake               # 文档正文（kind=doc）        L1（对象）
+   ├─ sheets/{noteId}.sheet.json         # 表格正文（kind=sheet，FortuneSheet v2）L1（对象）
    ├─ note-assets/{noteId}/{filename}   # 附件/图片                    L1（assets/）
    ├─ quick-notes/
    │  ├─ metadata.sqlite3              # 小记独立库
@@ -47,6 +48,9 @@
 ```
 
 ---
+
+> **表格文档（`kind="sheet"`，260918 引入；260919 换内核）**：正文落 `sheets/{noteId}.sheet.json`，路径由 `notes.kind` 决定（`store.bodyPathFor`）。
+> 正文格式 = **v2 FortuneSheet workbook**（`{kind:"sheet",version:2,sheets:Sheet[]}`；保存时剔 `luckysheet_select_save` 等运行时字段 + dense `data`→sparse `celldata`）。搜索文本由 `sheetToSearchText`（遍历 celldata）派生，**不进 Lake HTML 解析器**。见 `docs/SHEET-BITABLE-DESIGN-260918.md`。
 
 ## 3. 移动端磁盘布局
 

@@ -52,6 +52,7 @@ export function createStoreSyncPort(store: Store): SyncDbPort {
     restorePendingAt: store.isRestorePending(n.id) ? n.updatedAt : null,
     isLocked: !!n.isLocked, lockedAt: n.lockedAt ?? null, icon: n.icon ?? null, isConflict: n.isConflict,
     deletedFromParentId: n.deletedFromParentId ?? null,
+    kind: n.kind,
     content: "",
   });
 

@@ -578,6 +578,64 @@ for (let k = 0; k < plugs.length; k++) {
 console.log(out); // 43 插件 / 147 条
 ```
 
+### 5.10 浮动工具栏：内核有什么、没有什么（260919 bundle 枚举 + 三端实机）
+
+> 起因：用户要「钉钉那种选中文本弹出的浮动工具栏」，问内核是否自带、能否扩展。
+
+**结论先行（三条）**
+
+1. 内核**有**浮动工具栏基建，但**只有卡片/容器那一类**（复制/剪切/删除/复制链接/间距/全屏/宽度/评论）——它是「块级操作栏」，不是「文字格式栏」。
+2. 内核**没有文本选区的浮动格式栏**（bundle 里不存在 selection bubble 这类浮层类型；`FrameworkUiLib` 的浮层原语里也没有）。
+3. 语雀云端（编辑态 + 阅读态实测）**同样没有**选区浮栏 —— 与内核一致；云端选择文本时只有顶部固定工具栏（编辑态）与产品级 AI 入口。⇒ **要钉钉那种，只能在 wrapper 层自研。**
+
+**一、内核 miniToolbar 插件（卡片/容器浮动栏）**（bundle 枚举）
+
+- 插件名 `miniToolbar`；服务 `IMiniToolbarService`。命名空间 `MiniToolbar` 的导出：`MiniToolbarEditorPlugin` / `MiniToolbarViewerPlugin` / `IMiniToolbarService` / `cardToolbarCardUIAddon` / `containerToolbarCardUIAddon` / `containerRightToolbarCardUIAddon` / `toolbarControllerCardUIAddon` / `toolbarBoxUIAddon` / `editToolbarPresetAddon`。
+- 插件 option：`miniToolbar: { disabledItems: [...] }`（`OptionName = 'miniToolbar'`）。
+- service 方法：`setDisabledMiniToolbarItems` / `addDisabledMiniToolbarItems` / `removeDisabledMiniToolbarItems` / `registerFilterMiniToolbarItems`；改完发 `miniToolbar.requestRefreshToolbar` 事件刷新。
+- 触发时机：**`showMiniToolbarWhen` ∈ `hover | never | focus | always`**（常量 `MINI_TOOLBAR_TRIGGER`，由 toolbar 插件命名空间导出）。浮层类型按触发器动态拼名：`${trigger}CardToolbar` / `${trigger}ContainerBar`。
+- 内置条目（uilib 的 `itemConfig`，即「卡片浮栏能放什么」）：
+  `copy(复制) · delete(删除) · copyLink(复制链接) · cut(剪切) · spacing(添加间距, switch) · maximize(全屏) · widthMode(标宽/全宽展示) · comment(评论)`
+  ⇒ 全是**结构性操作**，一条文本格式命令都没有。
+
+**二、uilib 浮层原语：可以从 `Doc.FrameworkUiLib` 拿到**（bundle 枚举）
+
+`Doc.FrameworkUiLib`（bundle 内变量 `td`）导出：`OverlayBar` / `OverlayBarButton` / `OverlayBarDivider` / `OverlayManager`、
+`MiniToolbar` / `CardToolbar(+View)` / `ContainerToolbar(+View)` / `ContainerRightToolbar(+View)`、
+`BoundaryPopover`（定位实现 `calc-position-by-node.ts` / `calc-position-by-point.ts`）、以及 `Button/Dropdown/Menu/Popover/Checkbox` 等。
+
+⇒ 想省样式，可以用 `OverlayBar` + `BoundaryPopover` 拼一个浮栏。但注意层级：`FrameworkUiLib` 本身在 `Doc` 顶层导出表里，而 `OverlayBar` / `MiniToolbar` / `BoundaryPopover` **只是这一层的成员**（不在顶层表里）⇒ 属**内部件**，升级内核时要复核。
+
+**三、固定工具栏的两条官方路（与浮栏无关，别混）**
+
+- 配置：`toolbar: { agentConfig: { default|table|codeblock|simple|note: { items: [...] } } }`（官方文档 04；`TOOLBAR_AGENT` 的五个 agent 名）。
+- 增删：`ToolbarOptionHelper.start().removeItems(...).insertBefore([...], anchor).getOption()`（官方文档 05）。
+- 自定义按钮：继承 `ToolbarUIDescriptor<'Button'|'StatusButton'|...>`，实现 `getInitUIState / getUIState / onEvent`（`onEvent` 里调 `editor.execCommand(...)`）。
+- ⚠️ 官方 `toolbarItems` 清单里**没有 `code`（行内代码）**，但内核有 `code` 命令 —— 官方文档 05 的示例正是用自定义 `StatusButton` 调 `execCommand('code')` 做出来的。要做钉钉那种 `</>` 按钮，走自定义 descriptor 或 wrapper 自研按钮。
+
+**四、钉钉的选区浮栏（对照基线，260919 实机）**
+
+- 条目（截图实测）：`正文(段落样式) | 字号 | B 加粗 | I 斜体 | S 删除线 | U 下划线 | 链接 | </> 行内代码 | A 字体色 | 对齐 | ⋮ 更多 | ↗`
+- 实现在钉钉自己的 `wd3-*` 设计系统组件里（`BaseTextSelect` / `wd3-toolbar-item` 等），**不是 lakex**。
+- 触发：选中文本后浮在选区上方；固定顶栏同时在（顶栏样式/字号下拉会变成"正文 / 字号"占位态）。
+
+**五、我们这边的现状（260919 实机）**
+
+- 我们的应用选中文本后**没有任何浮层**（DOM 实测 `.ne-card-toolbar` / `.ne-ui-overlay-bar-wrap` / `MiniToolbar` 计数全 0）。
+- 我们已有的自研浮层只有：**块悬浮手柄 + 块菜单**（wrapper `BlockHoverHandle`，§5.8）、**卡片右键菜单**（`CardContextMenu`）、**卡片悬浮桥**（`setupCardToolbarHoverBridge`，`lakeRuntime.ts`）。
+- ⇒ 要做钉钉式选区浮栏，落在 wrapper 层，做法与 §5.8 同型：监听选区变化 → 定位（`FrameworkUiLib.BoundaryPopover` 或自算）→ 按钮调 `editor.execCommand`（可用命令见 §5.9 与官方 `toolbarItems`）。注意沿用 §5.8 的两条经验：`onMouseDownCapture` 保选区、多 tab keep-alive 下按「当前可见 engine 根」取元素。
+
+**证据（复查方法）**
+
+```bash
+cd vendor/lakex-doc-react/src/components/lakex
+rg -o --text "plugins/[a-z0-9-]+/src" lakex.js | sort -u | grep toolbar     # plugins/toolbar
+rg -o --text "framework/uilib/src/[A-Za-z0-9/._-]+" lakex.js | sort -u      # mini-toolbar / overlay-bar / boundary-popover
+python3 -  # 搜 showMiniToolbarWhen / MINI_TOOLBAR_TRIGGER / itemConfig / IMiniToolbarService
+```
+
+实机：语雀编辑态与阅读态选中文本均无浮栏（编辑态只出现分栏容器工具「列等宽/自适应宽度」）；钉钉选区浮栏见上文条目；我们应用选区后 DOM 无浮层。
+
 ---
 
 ## 6. 使用守则（所有会话遵守）

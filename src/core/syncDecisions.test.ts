@@ -155,6 +155,7 @@ describe("rowToLocalState", () => {
     expect(state).toEqual({
       id: "n1", title: "t", parentId: "p", sortOrder: 2, updatedAt: T1, syncState: "synced",
       isConflict: true, isLocked: true, lockedAt: T1, icon: "📁", trashedAt: null, deletedFromParentId: null,
+      kind: "doc",
     });
   });
 });

@@ -5,7 +5,13 @@
 > **§8 是移动端（安卓）专职交接**，由移动端会话维护；桌面会话不要改 §8，移动端会话不要改 §0-§7 之外的桌面文件。
 
 ## 0. 当前基线（新会话开工前）
-- **本批（S3 审计三条错误处理修复，✅ 已提交并推 origin，260918 用户验收）**：本批代码末提交 = `master` @ `2f46784`（其上为 HANDOFF 更新 `54b84dd`）；上一批代码基线 `e873809`。本批 = 审计文档 `docs/S3-STORAGE-AUDIT-260918.md` 的**三次复核 + 三条落地**（详细勘误与证据见该文档 **§8**）：
+- **本批（表格文档接入 SheetDocument = 电子表格 kind=sheet，⚠️ 代码已写完、门禁全绿、但【未提交】【未真机验收】）**：分支 `feat/sheet-document`（从 master `f39b968` 切出；调研分支 `spike/sheet-ce` 已删——它 0 个独有提交，调研产物都在工作区）。**写给零上下文新会话的完整交接 = §2.8（新会话从这里读）**；设计/选型/实测数据全表 = `docs/SHEET-BITABLE-DESIGN-260918.md`。
+  - 一句话：新增**文档类型** `kind = doc | sheet | bitable`（只加在 `notes.kind` + `manifest.kind`，**不动 `tree_nodes.node_type`**）；表格正文落 `sheets/{id}.sheet.json`（jspreadsheet CE 快照 JSON）；**manifest 升 v6**（带 kind）；编辑器用 **CE + `parseFormulas:false`**（规避严格 CSP 下的 eval）；**多维表(bitable)本批不做**。
+  - 门禁（本批实测）：`tsc` 0 · `vitest` **1014 passed / 16 skipped (1030)** · `vite build` exit 0 · `check:bundle` app-js gzip **1.82MB / 预算 2.90MB** · CE 走懒加载分包 `SheetEditor-*.js` = 468KB raw / **124KB gzip，首屏 index chunk 不含 CE**。
+  - ⚠️ **manifest v6 ⇒ 所有端必须一起升级**：旧端读到 v6 会显式拒绝同步（`READABLE_MANIFEST_VERSIONS={4,5,6}`，未知 kind 也拒绝）——这是**刻意**的安全闸，防止旧端把表格 JSON 当 Lake 文档打开、保存即写坏正文。
+  - ⚠️ **未做**：真机验收（新增/编辑/保存/同步/移动端占位全链路没在真实应用跑过）、SheetEditor 的 2 处内联样式（**违反 AGENTS §3 #14**）、非 doc 类型的导出/复制 Markdown 守卫、`docs/SYNC-PROTOCOL.md`+`docs/STORAGE-LAYERS.md` 回填、spike 调研产物清理。**清单见 §3 第 13 条。**
+  - **提交前必做**：删 `spike.html`、`src/spike/`、`scripts/spike-sheet-ce.mjs`、`vite.spike.config.ts`、`vite.spike.build.config.ts`（**两份设计文档保留**：`docs/SHEET-BITABLE-DESIGN-260918.md`、`docs/ASSET-HOST-FEASIBILITY-260918.md`）。
+- **上一批（S3 审计三条错误处理修复，✅ 已提交并推 origin，260918 用户验收）**：本批代码末提交 = `master` @ `2f46784`（其上为 HANDOFF 更新 `54b84dd`）；上一批代码基线 `e873809`。本批 = 审计文档 `docs/S3-STORAGE-AUDIT-260918.md` 的**三次复核 + 三条落地**（详细勘误与证据见该文档 **§8**）：
   ① **F2**：清单拉取失败 ⇒ 整轮中止并抛出（`src/core/syncEngine.ts` pull 的 catch 删掉「降级成 return」分支；对象缺失=首次同步走 null 分支不受影响）——顺带修掉「引擎早退后 Controller 仍删 purge 前缀 + `markPurgeSynced`」的顺序问题；
   ② **D1/F1/D2**：桌面留档不再静默吞（`electron/syncAdapters.ts` `createHistorySnapshot` 删整体 catch）+ 拒空正文（`.lake` 缺失被 catch 成 "" 时抛「留档内容为空」）；手动同步 UI（`src/hooks/useSyncController.ts`）catch 透出真实原因；
   ③ **D3/F6**：`AssetRepository.getProtectedRefs` 单点扩成「当前正文 ∪ 历史 refs ∪ **未保存草稿 refs**」（`electron/draftJournal.ts` 新增 `draftJournalDir`/`readDraftEntry` 只读助手；`store.ts` 装配注入；`main.ts` 改用共享目录函数）⇒ 自动清理/全局清孤儿/单条删孤儿/云端 GC keep 集/待回收标记五处口径一致。
@@ -114,6 +120,11 @@
 3. 可选：把 §5.9 的 3 处候选原生化改造做掉。
 4. 多块选区拖拽：仅当用户确实需要批量拖动整段时再做（§3 第 11 条）。
 5. 其余长期待办见 §3（画板 AI、离线残余、移动端、产品/技术债、小记底座等）。
+6. **【内存回收专项 · 下一个会话做（260919 用户指名）】编辑器开关后的「该回收没回收」复核** —— 依据 `docs/QUICK-NOTE-LAKE-MEMORY-SPIKE-260919.md`（分支 `spike/quick-note-lake-memory`，实测：关 20 个标签只回收 ≈18MB；0 标签稳态 ≈113MB vs fresh ≈84MB ⇒ 残留 ≈+30MB）。
+   - **① churn soak（预留 30 分钟）**：反复开关同一批标签 N 轮（建议 ≥10 轮 × ≥20 个标签），每轮记录「连跑两次 `HeapProfiler.collectGarbage` 后」的 JS 堆 / DOM 节点数 / 事件监听数，看是否**随轮次线性上升**（线性 = 泄漏；有上限后收敛 = 正常缓存）。
+   - **② 三条触发面都要覆盖**：普通文档开关 · **小记编辑态挂/卸 Lake 实例**（本批新增）· 小记→文档转换。
+   - **③ 出现线性增长再用 heap snapshot 找 retained path**，判定是内核侧保留（回填 `docs/LAKEX-CONTRACT.md`）还是我们的引用残留（直接修）。
+   - 与 §3.6「小记是否挂 Lake 底座」是同一批：本批已按「编辑态单实例」实现，回收行为需要这轮专项确认。
 
 ### 踩过的坑（本批新增，务必记住）
 - **内核列表 DOM 是「平」的**：所有列表项都是 `.ne-engine` 直接子级，没有列表容器元素、没有 `data-lake-indent`；层级在项自身 `ne-level`（一级缺省 = 0）。`getNodeContent(父项id)` 只返回父项那一行 ⇒ 任何「按 id 读写单个列表项」都会丢子项。
@@ -230,6 +241,167 @@
 - **CDP `Page.captureScreenshot` 的 `clip` 会截到空白**：本次给"重命名框"截图连续两次全白 —— 真因是**侧栏当时被合成点击折叠了**（`sidebar-collapsed`：行仍有布局矩形、但不绘制）。截图前先确认目标容器可见（`.sidebar` 不是 `sidebar-collapsed`），比反复调 clip 有效。
 - **合成点击会误折叠侧栏**：诊断脚本点活动栏附近的坐标有可能切到 `collapsed`；跑完要检查并恢复（点 `title="资料库"` 的 `.activity-button`）。**别把用户的应用留在非预期 UI 状态**。
 
+## 2.8 本会话总交接（260918 · 表格文档接入 SheetDocument 一批）—— 新会话从这里读
+
+> **写给完全没有上下文的新会话。** 本批在分支 `feat/sheet-document` 上，**全部改动未提交**（AGENTS 铁律⑦：代码批次等用户验收）。
+> 三份必读：本文件 → `AGENTS.md`（长期红线）→ **`docs/SHEET-BITABLE-DESIGN-260918.md`**（本批全部选型论证 + 实测数据：CE vs Univer vs FortuneSheet vs 自研、CSP 论证、开源多维表逐项核实、体积/内存实测、CSP「独立沙箱」代价量化）。
+
+### 一、任务目标（用户本次要求，按顺序）
+1. 给 Lake Notes 增加**表格（电子表格）**能力，作为**新的文档类型**与 Lake 文档/小记共存于同一目录树，**复用既有 S3 同步管线**。
+2. 用户对功能范围的定稿（原话）：「一般这种笔记大部分都是只要结构化存储和简单的公式，真正用 excel，可以在文档里挂附件，所以我认为不需要实现完全的 excel 功能」。
+3. 选型过程（用户全程参与，结论已定）：评估过 **Univer / FortuneSheet / jspreadsheet CE / 自研**；用户最后定：**表格用 CE，Univer 整个不用**（原话：「我还是倾向于用 ce 来做表格，Univer 太重了就不用了，用 Univer 主要是看上了多维表」）。
+4. **多维表（bitable）本批不做**，只做表格。后续自研方向（已论证）：`@tanstack/react-table`（网格）+ **`@teable/core`（MIT，含 models/field、formula/evaluate、convert）** + 我们已有的存储/同步/UI，v1 估 1,500–2,500 行 / 3–5 天（对比参考实现 `local-lake-notes-tauir` 自研多维表 ≈5,360 行）。
+5. 收尾时用户明确：「这些剩下的先不做，我验收一下，先列入待办」→ 所以**本批的收口项全部在下文「当前问题」里，不要以为是遗漏**。
+
+### 二、已完成内容（❌ 全部未提交，分支 `feat/sheet-document`；tsc 0 + 1014 测试全绿）
+**A. 存储层（本批地基）**
+- 新增 `src/core/noteKind.ts`：`NoteKind = "doc" | "sheet" | "bitable"` + `normalizeNoteKind()`（非法/缺失一律回退 `doc`）——两端共享的单一事实源。
+- 新增 `src/core/sheetDoc.ts`：表格正文格式与序列化。`SheetDoc = { kind:"sheet", version:1, worksheets:[{name,data,columns?}], activeWorksheet? }`；`emptySheetBody()`（8 列 × 30 行空网格）、`parseSheetBody()`（非法/版本不符返回 null，不抛）、`sheetToSearchText()`（单元格文本 → 全文搜索用）。
+- `electron/schemaInit.ts`：`notes` 表加 `kind TEXT NOT NULL DEFAULT 'doc'`（CREATE + 旧库 `ALTER` 迁移）。**未动 `tree_nodes.node_type`**（那套约束被回收站/两端映射依赖，新增取值回归面最大）。
+- `electron/store.ts`：
+  - 新增 `noteKindCache` / `kindOf(id)` / `bodyPathFor(id, kind)` / `candidateBodyPaths(id)` / `searchTextFor(id, content)`；
+  - **`notePath(id)` 改为 kind 感知的单一出口**（`notes/{id}.lake` / `sheets/{id}.sheet.json` / `bitables/{id}.bitable.json`；行已删/未登记时回退 doc 路径 = 与旧行为一致）——全仓 37 处 `notePathFor` 调用点自动受益；
+  - 构造函数新增 `sheets/` 目录；
+  - 新增 `createSheetIn(parentId, title)`；`createNoteInWithContent(..., kind)` 写入 DB 并缓存 kind；`duplicateNote` 带类型复制；
+  - **`searchTextFor` 按类型分派**，替换 4 处「把正文喂给 Lake HTML 解析器」的调用点（`duplicateNote` 索引 / `derivePlainText` / `ensureNoteCaches` / `getNoteInfo`）——**表格 JSON 绝不再进 `lakeHtmlToMarkdown/Plain`**；
+  - `saveNote`：非 doc 类型且渲染层没给缓存时，由主进程用 `searchTextFor` 派生（**doc 行为逐字节不变**，仍用内核缓存）；
+  - `removeUntrackedNoteArtifacts` 逐个候选路径清理（doc/sheet/bitable 都可能残留）。
+**B. 协议层（manifest v6 + kind 贯通两端）**
+- `src/core/manifestTypes.ts`：`ManifestNote.kind?: NoteKind`。
+- `src/core/syncUtils.ts`：`MANIFEST_VERSION = 6`；`READABLE_MANIFEST_VERSIONS = {4,5,6}`；`validateManifest` **未知 kind 显式抛错**。
+- `src/core/syncDecisions.ts`：`LocalNoteState.kind` / `SyncNoteRowShape.kind` / `rowToLocalState` 映射 / `buildUploadEntry` **只写非 doc**（`...(note.kind !== "doc" ? { kind } : {})` ⇒ 纯文档库的清单条目保持逐字节不变）。
+- `electron/noteQueries.ts`：`SyncNote.kind` + `SyncNoteRow.kind` + `SYNC_NOTE_COLUMNS` 增 `n.kind`；**`NoteSummary.kind` + `mapSummary` 映射**；`listNoteSummaries` SELECT 增 `kind`。
+- `src/core/syncEngineTypes.ts`：`LocalNoteRow.kind`；`electron/syncAdapters.ts`：`rowFromSync` 透传 `kind`。
+- `electron/remoteImportRepository.ts`：**新增 `bodyPathFor(noteId, kind)` 依赖**，导入按 manifest 的 kind 解析路径（此刻 DB 还没行，用 `notePathFor` 会回退 doc 把表格写到错位置），并在 INSERT/UPDATE 里持久化 `kind`。
+- 测试 fixture 同步更新（版本 5→6、`rowToLocalState` 多 `kind`、测试替身补 `bodyPathFor`）；**v4/v5 旧清单读取兼容用例保持不动、仍全绿**。
+**C. 移动端（kind 贯通 + 防腐坏）**
+- `src/mobile/schema.ts`：`doc_kind TEXT NOT NULL DEFAULT 'doc'`（CREATE + `addNoteColumn` 迁移）。
+- `src/mobile/noteRepository.ts`：`POCNote.kind` + `rowToNote` 映射 + `readNote` SELECT 增 `doc_kind`。
+- `src/mobile/syncDbPort.ts`：`rowToLocal` 映射 kind（注意 TS 字面量放宽坑，见下文踩坑 3）；`getNote`/`getAllNotes` SELECT 增 `doc_kind`；`applyRemoteNote` INSERT/UPDATE 增 `doc_kind`。
+- `src/mobile/notebook/NotebookWorkspace.tsx`：`TabState.kind` + openTab 带 kind + **非 doc 类型渲染只读占位（"请在桌面端打开"），绝不挂 Lake 编辑器**（AGENTS §3 #16 防腐坏）。
+**D. 桌面端链路（新建 → tab → 编辑器）**
+- **三处桥 + IPC**：`electron/ipc/registerNotes.ts` 新增 `create_sheet_in`；`electron/preload.cjs` `createSheetIn`；`electron/webApiServer.ts` 频道映射；`src/lib/native.ts` 类型 + 封装。
+- **新建入口**：`src/hooks/useNoteLifecycle.ts` 新增 `createSheetIn`（与 `createNoteIn` 同流程：进树 → 开 tab → 待重命名）；`src/hooks/useTreeActions.ts` 的 `createTreeItem`/`sidebarCreate` 支持 `"sheet"`；`src/App.tsx` 装配；`src/components/Sidebar.tsx` **目录树右键新增「新建表格」**（`lucide` `Table` 图标；注意：左上「＋」仍只有「新建笔记本」——那是用户先前定的口径，未改）。
+- **tab 路由**：`src/desktop/desktopTypes.ts` `OpenTab.kind`；`src/hooks/useTabLifecycle.ts` 打开时写入 `note.kind ?? "doc"`；`src/features/editor/MultiTabEditor.tsx` 定义 `TabInfo.kind` 并按 `tab.kind === "sheet"` 路由到 `SheetEditor`（其余仍 `EditorTab`）。
+- **编辑器**：新增 `src/features/sheet/SheetEditor.tsx`（jspreadsheet CE 接入）：
+  - `parseFormulas: false`（**唯一会触发 eval 的路径**，严格 CSP 下必须关，见踩坑 6）；
+  - 自动保存：CE `onchange` → **800ms 防抖** → 序列化 `SheetDoc` → `onChange(json)`（走既有 `handleContentChange` → dirty → 保存/草稿/同步管线）；
+  - **正文体积护栏 32MiB**（`MAX_SHEET_BODY_BYTES`，超限停存 + `badge badge--error` 提示；同步侧硬上限是 64MiB）；
+  - 列配置（类型/宽度/换行）沿用解析结果原样回写（v1 不提供列配置编辑 ⇒ 往返无损）；
+  - 只读：`readOnly` 时屏蔽指针事件且不挂自动保存（回收站/锁定/被他端删除）；
+  - keep-alive：宿主用 `fn__none` 隐藏而非卸载；卸载/切走前补一次未落盘改动；
+  - **懒加载**：`MultiTabEditor` 用 `React.lazy` + `Suspense` 引入 ⇒ 生产分包 `SheetEditor-*.js`（468KB raw / 124KB gzip），**首屏 index chunk 不含 CE**（已实测）。
+
+### 三、当前问题（均不阻塞；用户已同意「先列入待办」）
+1. **⚠️ 运行时链路未验收（最该先做）**：`tsc`/`vitest`/`vite build` 全绿，但**没有在真实应用里跑过**完整链路：右键「新建表格」→ 落盘 `sheets/{id}.sheet.json` → 打开 tab → CE 渲染 → 编辑 → 自动保存 → 同步上传 → 另一端拉取仍是表格 → 移动端显示只读占位。
+2. **⚠️ SheetEditor 有 2 处内联样式（违反 AGENTS §3 #14）**：容器 `height/width/overflow`、CE host 的 `pointerEvents`（只读时）。合法收口路径（未做）：优先复用现成类（`.lake-editor-main` 或 `fn__*`/隐藏用原生 `hidden` 属性），否则往 `src/styles/components.css` 补最小 `.sheet-editor` 块——**但那是新增声明，`src/styles/cssLayers.test.ts` 的基线只允许"按职责归并"上调，需先与用户确认口径**。
+3. **非 doc 类型的文档型入口未收口**：`electron/noteExport.ts` 的 `exportHtmlNote`/`exportPdfHtml`/`exportNotePackage` 会对表格 JSON 走 `lakeHtmlToMarkdown` → 垃圾产物或报错；侧栏「复制 Markdown」「导出 Markdown/HTML/PDF」对 sheet 节点仍可见。收口方案（未做）：① `noteExport` 加 kind 守卫（非 doc 明确抛 `AppError("InvalidInput", "表格文档暂不支持导出为 Markdown/HTML/PDF")`）；② 侧栏菜单按 kind 隐藏（需要给桌面 `TreeNode` 加 `kind`——树查询要 join `notes.kind`——或只靠 ① 的报错兜底）。
+4. 其它文档型入口对 sheet 的表现未逐一核对（`EditorTab` 不渲染 ✅，但大纲/字数/状态栏等入口未逐个走查）。
+5. **spike 调研产物仍在工作区**，提交前必须删：`spike.html`、`src/spike/`（`sheet-spike.tsx`）、`scripts/spike-sheet-ce.mjs`、`vite.spike.config.ts`、`vite.spike.build.config.ts`；**保留** `docs/SHEET-BITABLE-DESIGN-260918.md` 与 `docs/ASSET-HOST-FEASIBILITY-260918.md`。
+6. **文档回填未做**：`docs/SYNC-PROTOCOL.md`（升 v6 + `kind` 语义 + 端版本门槛）、`docs/STORAGE-LAYERS.md`（`notes.kind` / 按 kind 分目录 / `searchTextFor` 分派）。
+7. 未提交（**等用户验收**；AGENTS 铁律⑦：代码批次不擅自合 master）。
+
+### 四、下一步计划（按优先级）
+1. **真机验收**（用户先点一遍，或新会话用 CDP 驱真实 Electron）：重点看 ① 右键新建表格是否出现在树里、② CE 是否渲染且可编辑、③ 编辑后 `sheets/{id}.sheet.json` 是否落盘且 `sync_state='local'`、④ 同步后云端 `objects/{id}-{hash}.lake` 与 `manifest.notes[].kind="sheet"`、⑤ 另一端/移动端表现（移动端应显示只读占位）。
+2. 收口 §三.2（内联样式）与 §三.3（导出/复制 MD 守卫）。
+3. 回填 §三.6 的两份文档。
+4. 清理 §三.5 的 spike 产物 → 请用户验收 → 提交。
+5. 之后才考虑**多维表（bitable）**（本批不做；方向见 §一.4 与设计文档 §6.2/§13）。
+
+### 五、踩过的坑（本批新增，务必记住）
+1. **`NoteSummary` 有两份**：渲染层 `src/lib/types.ts` 与主进程 `electron/noteQueries.ts` 各定义一份 —— 加字段必须**两处都加**（本批先只加了渲染层 ⇒ tsc 报 `kind does not exist in type NoteSummary`）。
+2. **`mapSummary` 有三处 SELECT**：`noteQueries.listNoteSummaries` + `store.ts` 回收站列表 + `store.ts` `saveNote` 回读 —— 漏任何一处就会出现「保存后类型丢成 doc」，症状极具迷惑性。
+3. **TS 会在"推断的返回类型"里放宽字面量**：`{ kind: cond ? "sheet" : "doc" }` 被推断为 `string` ⇒ 外层 `SyncDbPort` 不兼容。修法：嵌套三元 / `as "doc"|"sheet"|"bitable"` / 显式标注返回类型。
+4. **远端导入必须按 manifest 的 `kind` 解析路径**：`remoteImportRepository.importNote` 在新导入时 DB 还没这行，`notePathFor` 会回退 doc 路径 ⇒ 表格被写到 `notes/{id}.lake`（错位置且难发现）。已改为注入 `bodyPathFor(noteId, kind)`。
+5. **多维表选型的事实（供后续自研）**：`@teable/core` 是 **MIT**，含 `models/field`、`formula/evaluate`、`convert`（可当自研底座）；`@teable/sdk` 同为 MIT 但**强绑 Teable 服务端**（解包后 119 文件引用 `@teable/openapi`、19 用 `axios`、带 websocket）；NocoDB 是 **Sustainable Use License**（非 OSI 开源、限商用）；APITable/Undb 是 AGPL；Grist 是 Apache-2.0 但客户端用 GrainJS（非 React）；成熟开源多维表**全是服务端应用**，没有「可嵌 + 自带数据层 + 本地优先」的现成件。
+6. **CE 的公式引擎走 `eval`**：`parseFormulas: true` 在严格 CSP 下会让**整张表崩**（只渲染出表头，第二张表都建不出来）；`parseFormulas: false` ⇒ 完整渲染（2 sheet / 17 行 / 115 单元格）+ **0 条 CSP 违规**。`=` 开头当文本存。
+7. **CE 的 image 列只认 `data:image`**（源码 `if (s && "data:image" == s.substr(0,10))`）⇒ 图片只能**内联 base64**；好消息：base64 不匹配 `ASSET_NAME_RE`，因此**不会污染 `manifest.assets`**，只让正文对象变大（故有 32MiB 护栏）。
+8. **Univer 的实测代价（若日后重新评估多维表/表格）**：生产产物 **9.77MiB raw / 2.48MiB gzip**（含 **55 个 locale chunk ≈4.3MiB**，只留 zh/en 可裁）；依赖 **20 个 `@univerjs` 包 = 118MB** + **`rxjs` 11MB（本项目原本没有）** + `opentype.js` 3.7MB；JS 堆 **23.76MiB**（CE 只有 4.38MiB，增量 20.5 vs 1.3 MiB）；**≈20MB/实例 ⇒ 与本项目 keep-alive 多 tab 现状冲突（10 个表格标签 ≈200MB+）**。且 Univer 的「多维表」本体在 **Pro/商业版**（开源侧只有可扩展架构），照 Sheets 反推 unit/command 体系属无文档逆向。
+9. **CSP「独立沙箱」方案的代价量级（本轮实测）**：postMessage 语义 = `structuredClone`，**1MiB 0.135ms / 5MiB 0.698ms**（Node 24 实测，Electron 同 V8）；跨源**没有网络成本**（loopback），固定成本 = 一次页面加载 + 一个独立 JS realm（CE 实测 ≈1.3MiB 堆增量）；开发态 `127.0.0.1:1421` 与 `:19876` 是**同 site**（site 不看端口）⇒ 通常同 renderer 进程、无 IPC；生产 `file://` 父页 ⇒ 很可能 OOPIF 独立进程（**本轮探针超时，未实测**）。**结论：该方案性能代价可忽略，代价在工程复杂度**；且**当前 CE 路线不需要它**（CE 关了公式即可）。
+10. **`npx vite dev` 会自己拉起第二个 Electron** 抢 CDP 9222 ⇒ 探针看到 `chrome-error://` 页面。调研期用**独立 spike config（不挂 electron 插件）+ 1422 端口**规避（本批无 spike 文件时可忽略此坑）。
+11. **本机 Electron 数量不是固定的**：用户会关掉 dev 实例；任何依赖 CDP 9222 的脚本**先探测**再跑（本会话就遇到「主进程 0 / 9222 拒连」，一次长探针因此挂到 600s 上限才被回收）。
+12. **改 `schemaInit.ts` 的建表 SQL 后，旧库靠 `PRAGMA table_info` + `ALTER` 补列**（本批照抄既有 `is_locked`/`md_cache` 的写法）；移动端同理走 `addNoteColumn`。
+
+### 补充（260918 首轮运行时验收：3 个修复，均未提交）
+用户点开表格后报 3 个问题，均已定位并修复（CDP 驱真实 Electron 复验）：
+1. **右键新建表格打开的是 Lake 文档**：不是存储问题（`notes.kind='sheet'`、正文在 `sheets/{id}.sheet.json` 都正确），而是 `src/hooks/desktopDerivedState.ts` 把 `openTabs` 投影成 `TabInfo` 时**漏传 `kind`** ⇒ `MultiTabEditor` 收不到 `kind=sheet`，走 `EditorTab`。修：`kind: tab.kind ?? "doc"` + 护栏 `src/hooks/desktopDerivedState.test.ts`。
+2. **同一页出现 2 张表 / 点单元格不能编辑 / 「Sheet1」栏巨大**（开工具栏后又变成 **2 条工具栏**）：React.StrictMode（dev）双跑 effect；`jspreadsheet` 会把 worksheet / toolbar / contextmenu 追加到「传入的元素」上，且追加**不保证在 `jspreadsheet()` 返回前完成** —— 只在 host 上 `destroy` + `host.replaceChildren()` 会漏掉迟到的追加 ⇒ 叠加成孤儿（可见的那张表点它不进编辑态；worksheet 反而只有 1 张，因为被第二次 init 重建）。修：`SheetEditor.tsx` **每轮 effect 用独立 `mount` 子节点承载 CE**，`teardown()` = `jspreadsheet.destroy(mount)` + `mount.remove()`，进入 effect 先调一次（重入保护）、卸载再调一次；护栏 `src/features/sheet/sheetEditorMount.test.ts`。
+3. **没有工具栏**：CE 默认无工具栏；且 npm 包内无 Material Icons 字体文件（`jsuites.css` 只声明字体族、不给 `font-family`），直接 `toolbar: true` 会退化成裸文字。已按用户选定的 **A 方案**本地化 `src/features/sheet/MaterialIcons-Regular.woff2`（Apache-2.0）+ `sheetEditor.css` 的 `@font-face`/`.material-icons` 规则并开 `toolbar: true`；CSP `font-src 'self'` 已放行、离线可用。设计文档 §7 已回填。
+4. **单元格内不能换行**（用户报"是不是不支持"）：CE 默认用单行 `<input>` 编辑器，Alt+Enter 无反应。CE 源码里只有**列级** `wordWrap:true` 才走多行 `<textarea>` 编辑器（顶层 `wordWrap` 到不了 worksheet 编辑路径，实测无效）。修：`SheetEditor.tsx` 逐列补 `wordWrap:true`（`withWordWrap`/`sheetColumnWidth`，保留正文已有列配置）⇒ Alt+Enter 插换行、Enter/失焦提交、长文本自动折行。
+5. **换行后编辑中看不到第二行**：CE 只在**提交后**才按内容自动调行高，编辑中的 textarea 固定 22px。修：mount 上代理 `input`/`keyup`（Alt+Enter 靠 keyup），用 `height:0` 量 `scrollHeight` 后撑高 textarea + `setHeight(row,h+4)`。实测单行行高不变(26)、两行 39。
+6. **工具栏自定义 / 冻结**（用户问可行性，**未落地，待确认**）：CE `toolbar` 的数组形式**有效**（实测可把 30 项覆盖成任意项），但 CE 5.0.4 **不暴露默认项的 onclick**，自建工具栏=要自己重写各动作；`freezeColumns`（仅列、无行冻结）在 init / 选格 / `tableOverflow` 下均**未生效**（`jss_freezed` 始终 0）。若要冻结，倾向自研 sticky CSS（首行/首列）另立项。
+- 门禁：`tsc` 0 · `vitest` **1019 passed / 16 skipped (1035)** · 桌面 + 移动 `vite build` 全绿 · `check:bundle` app-js gzip 1.82MB/2.90MB · `check:core` 0 违规 · `git diff --check` 干净。
+
+### 补充（260919：表格内核 jspreadsheet CE → FortuneSheet，未提交）
+用户点名换 FortuneSheet（「CE 太简陋」）。选型/实测/落地见 `docs/FORTUNESHEET-FEASIBILITY-260919.md`。
+- **CSP 补丁**：`patches/@fortune-sheet+core+1.0.4.patch` 把 `insertRowOrColumn` 的 3 处 `new Function` 换成 `apply`（真 CSP 下实测插行列 0 violation）；`postinstall` 追加 `&& patch-package --patch-dir patches`。
+- **正文 v2**：`src/core/sheetDoc.ts` = `{kind:"sheet",version:2,sheets:Sheet[]}`；`sheetsToBody()` 保存时规范化（剔 `luckysheet_select_save` 等运行时字段、dense `data`→sparse `celldata`）并跳过无变化保存。
+- **编辑器**：`src/features/sheet/SheetEditor.tsx` 重写为 `<Workbook>`；keep-alive 用 `everVisible` 保证**首次可见才挂载**（canvas 隐藏态初始化会 0 尺寸）；只读 `allowEdit=false`；`sheetEditor.css` 改为容器尺寸（CE 的 Material Icons 字体已删）。
+- **清理**：删 `jspreadsheet-ce`/`jsuites` 依赖、CE spike 文件与字体资源；`MultiTabEditor` 注释同步。
+- 门禁：`tsc` 0 · `vitest` **1024 passed / 16 skipped (1040)** · 桌面+移动 build 全绿 · 懒加载 `SheetEditor-*.js` **580 KB gzip** · `check:bundle` app-js 1.82MB/2.90MB · `check:core` 0 · `git diff --check` 干净。
+- **待办**：真机验收；`SYNC-PROTOCOL`/`STORAGE-LAYERS` 的表格正文 v2 回填；给懒加载 chunk 加 `check:bundle` 预算。
+
+### 补充（260919 首轮 UI 优化，用户实测 5 点后）
+- **列数（关键）**：`emptySheetBody` 原写死 `column:8,row:30` → canvas 只按 8 列算宽（976px < 容器 1202）⇒ 右侧留白、横向滚动条不在最右、只显示到 H 列。已改为**不写 row/column**，用 FortuneSheet 默认（60×84）。**旧测试表需重建**（历史 body 保留 8 列，遵红线 #7 不写迁移）。
+- **「添加 N 行」输入框**：FortuneSheet 自带 `<input>` 无 class、无样式 → 浏览器默认 `2px inset` 粗边框；已在 `sheetEditor.css` 补 `.luckysheet-bottom-controll-row input` 弱边框。
+- **自动换行**：实测**可用**（工具栏「文本换行 → 自动换行」会单元格内换行且行高自适应）；默认是「溢出」。若要求「默认就换行」，FortuneSheet 没有全局默认 wrap 选项，需另做。
+- 门禁：`tsc` 0 · `vitest` **1024 passed / 16 skipped (1040)** · 桌面 build 全绿 · `check:bundle` app-js 1.82MB/2.90MB · `check:core` 0 · `git diff --check` 干净。
+
+### 补充（260919 第二轮 UI 优化）
+- **右键菜单输入框**（插入行/行高）与「添加 N 行」同源：FortuneSheet 无边框样式 → 补 `.fortune-context-menu input, .luckysheet-cols-menu input` 弱边框。
+- **工具栏精简**：`<Workbook toolbarItems={TOOLBAR_ITEMS}>`，只留 18 项高频（见 `SheetEditor.tsx` 的 `TOOLBAR_ITEMS` 注释）。实测可见 18。
+- **默认 110% 缩放**：`initialSheets` 给缺省 `zoomRatio` 补 1.1（已有值不覆盖）。实测状态栏 110%。
+- 门禁：`tsc` 0 · `vitest` 1024/16 skipped · 桌面 build 全绿 · `SheetEditor-*.js` 580KB gzip · `check:core` 0。
+
+### 补充（260919 第三轮：用户定稿）
+- **默认自动换行**：`initialSheets` 给已有单元格补 `tb:"2"`（wrap），`hooks.afterUpdateCell` 给新编辑单元格补（只补缺省）。实测 A1 打 30 W → 折 2 行。
+- **默认 20 列**：`emptySheetBody` 加 `column: 20`。
+- **工具栏**：+格式刷/清除格式/条件格式/筛选/图片/定位；**−字体**（默认全局字体，不可改）。
+- **默认字体**：`ff` 缺省时补 app 的 `--b3-font-family` 栈。
+- 门禁：`tsc` 0 · `vitest` 1024/16 skipped · 桌面 build 全绿 · `check:bundle` 1.82MB/2.90MB · `check:core` 0 · `git diff --check` 干净。
+
+### 补充（260919 第四轮：换行后行高自适应）
+- **根因**：FortuneSheet 的行高自适应只在 `updateCell` 且 **旧单元格已有 `tb==="2"` 且有值**、并且带 `canvas` 时才跑；首次录入空单元格不调，公开 API 也不带 canvas。
+- **修法**：`SheetEditor` 的 `hooks.afterUpdateCell` 补默认 `tb:"2"`/`ff` 后，用离屏 canvas 按列宽估算行数（`estimateWrappedRowHeight`），超过当前行高就 `setRowHeight({[row]: h})`。**实测** A3 打 44 字符 → `config.rowlen` 写高、换行完整可见。
+- 门禁同上全绿。
+
+### 补充（260919 第五轮：工具栏/公式栏/图片）
+- **工具栏**：去掉 `conditionFormat`/`locationCondition`；CSS 收紧凑（高度 41→33）。
+- **公式栏**：`<Workbook showFormulaBar={false}>`（原生支持），已去掉。
+- **图片**：本地插入**可用**（隐藏 file input → `insertImage` → `sheet.images` + DOM `<img>` 覆盖层，实测通过）；**粘贴图片不生效**——FortuneSheet 的 `onPaste` 只读文本，要支持得自研 paste 拦截。
+- 门禁：`tsc` 0 · `vitest` 1024/16 skipped · build 全绿 · `check:core` 0 · `git diff --check` 干净。
+
+### 补充（260919 第六轮：跨表图片 bug + 默认尺寸 + 标签样式）
+- **图片串表（严重）**：FortuneSheet 用固定 id `fortune-img-upload` + 全局 `document.getElementById` 选文件，keep-alive 多实例会命中第一个别的表格。修：`SheetEditor` 只让可见实例保留该 id（隐藏实例摘掉）。实测两表同挂时图片进正确的表。
+- **默认网格**：`emptySheetBody` → `column:15, row:50`。
+- **工作表标签**：曾改为透明底 + accent 线，用户要求回滚 → 保持 FortuneSheet 默认。
+- **图片**：仅浮动图；无单元格图；粘贴图片需自研；全选角边框是 canvas 画的、CSS 改不了。
+- 门禁同上全绿。
+
+### 补充（260919 第七轮：patch react 图片 input + 图片管理立项）
+- **图片串表修法升级**：patch `@fortune-sheet/react@1.0.4`（`patches/@fortune-sheet+react+1.0.4.patch`），图片按钮点击**自己的子 input**（`e.currentTarget.querySelector('input[type=file]')`），不再依赖全局 `getElementById`。实测 3 实例同挂仍插当前可见表；原 visibility id 补丁已删。
+- **图片独立管理已立项**：规范 `docs/SHEET-IMAGE-MANAGEMENT-260919.md`（正文改存 filename、复用 note-assets/manifest/GC；P1 浮动图 ~1–1.5 天，P2 单元格图 ~3–5 天）。**其他会话按该文件实施**。
+- 门禁：`tsc` 0 · `vitest` 1024/16 skipped · build 全绿 · `check:core` 0 · `git diff --check` 干净。
+
+### 补充（260919 第八轮：修窗口崩溃）
+- **现象**：编辑单元格时窗口整崩；非 OOM（Electron rss≈190MB）；日志 `setCellFormat` 抛 `reading '2'`。
+- **根因**：内核 `setCellFormat` 不判空 `sheet.data[row]`（`setCellValue` 有 fallback），空表/切表瞬间未定义；且抛在 `setContext` updater 里，绕过了 hook 的 try/catch → React 未捕获 → 卸载整树。
+- **修**：① patch core 补 `if (targetSheetData == null || targetSheetData[row] == null) return;`（core patch 现 4 hunk）；② `MultiTabEditor` 加 `SheetEditorErrorBoundary`（按 tab 隔离，单表崩只显占位）。实测连打多行无异常、默认换行/行高仍生效。
+- 门禁同上全绿。
+
+### 补充（260919 第十轮：非 doc 的 UI 收口）
+- **导出 kind 守卫**：`electron/noteExport.ts` 加 `assertDocKind(id)`，`exportHtmlNote`/`exportPdfHtml`/`exportNotePackage` 入口拦截非 doc（抛 `InvalidInput`，兜底防 IPC 直调）。测试：`store.test.ts`「非 doc（表格）导出被 kind 守卫拦截」。
+- **桌面 `TreeNode.kind`**：`src/lib/types.ts` + `electron/noteQueries.ts` 的 `TreeNode` 加 `kind`；`listTreeNodes` LEFT JOIN `notes` 取 `kind`，`mapTreeNode` 透传。
+- **UI**：目录树右键「导出」子菜单 + 文档右上角 ⋯ 菜单对非 doc **隐藏**（`activeKind` 经 `deriveDesktopView` 下发）；**大纲侧栏**对非 doc 隐藏（`outlineVisible` 加 `activeKind==="doc"`）；**状态栏**非 doc 把「字数/图片」替换为「表格/多维表」。
+- **实测**：WRAPCHK（表格）状态栏显示「表格」、无大纲；探针笔记（文档）显示「字数/图片」。
+- 门禁：`tsc` 0 · `vitest` **1025 passed / 16 skipped (1041)** · build 全绿 · `check:core` 0 · `git diff --check` 干净。
+
+### 补充（260919 第九轮：编辑态限宽）
+- **语义**：`tb==="1"`（溢出）编辑态也溢出；`"0"`截断 / `"2"`换行 / 未设（默认换行）→ 编辑框限宽在单元格内。
+- **修法**：patch `@fortune-sheet/react` 的 InputBox inner style，按 `cell.tb` 追加 `width/maxWidth=firstSelection.width` + `whiteSpace`（react patch 现 4 hunk）。core `getStyleByCell` 那条试过不生效，已留在 patch 里但非关键。
+- **实测**：编辑 `tb:"2"` 单元格 → 编辑框 `max-width:80px`、`pre-wrap`，格内折行不再覆盖邻格。
+- 门禁同上全绿；两个 patch 均 `patch-package` 可重放。
+
 ## 3. 下一步计划 + 当前问题（真正的待办，按优先级）
 
 ### 下一步计划
@@ -268,6 +440,20 @@
 
 12. **【S3 审计遗留 · 低优先级】**（260918 审计三条 P0/P1 已落地，见 §0 本批 + `docs/S3-STORAGE-AUDIT-260918.md` §7.5/§8）：① **B4 实测**——该篇附件哈希全量重算在上传**和下载**两侧都会发生，有痛感再做 `(filename,size,mtime)→hash` 缓存（贴 AGENTS §3 #11 红线，**单独立项**）；② **D4** purge 文件删除失败 → 阻断云端前缀删除；③ 移动端 `note_history` 补 `refs_json`/`protected_until`（建议并入 §8.7 真机验收批次）。
 
+13. **【表格文档（kind=sheet）收口 · 进行中 · 260918】分支 `feat/sheet-document` 上已写完且门禁全绿，但【未提交】【未真机验收】** —— 完整交接见 **§2.8**，设计/实测见 `docs/SHEET-BITABLE-DESIGN-260918.md`。
+    - **（260919 已变更）**：表格内核已由 **jspreadsheet-ce 换成 FortuneSheet 1.0.4**；下面 CE 相关的收口项部分已随迁移作废/改写，**当前表格状态一律以 §2.8 的 260919 各轮补充 + `docs/FORTUNESHEET-FEASIBILITY-260919.md` 为准**；图片相关见第 **14** 条。剩余项（用户已同意先列入待办）：
+    - **（必做）真机验收**：新建表格 → CE 渲染 → 编辑 → 落盘 `sheets/{id}.sheet.json` → 自动保存 → 同步 → 另一端/移动端表现。见 §2.8 四.1 的 5 个观察点。
+    - **（必做）`SheetEditor.tsx` 去掉 2 处内联样式**（违反 AGENTS §3 #14）：容器尺寸用现成类，隐藏优先用原生 `hidden` 属性；若要新增 `.sheet-editor` 规则需先与用户确认（`cssLayers.test.ts` 基线只允许"按职责归并"上调）。
+    - **（✅ 260919 已完成）非 doc 类型的导出/MD 守卫**：`electron/noteExport.ts` 的 `exportHtmlNote`/`exportPdfHtml`/`exportNotePackage` 已加 `assertDocKind` 前置守卫（非 doc 抛 `InvalidInput`）；桌面 `TreeNode` 已加 `kind`（`listTreeNodes` LEFT JOIN notes + `mapTreeNode`），目录树右键「导出」子菜单与文档 ⋯ 菜单对非 doc **隐藏**；状态栏对非 doc 把「字数/图片」**替换为「表格/多维表」**；大纲侧栏对非 doc 隐藏。回归测试见 `electron/store.test.ts`。
+    - **（✅ 260919 已确认）文档回填**：`docs/SYNC-PROTOCOL.md` 已有 260919 段（manifest **v6** + 每条 note 可选 `kind` + 旧端读 v6 显式拒绝）；`docs/STORAGE-LAYERS.md` 已有 `sheets/{id}.sheet.json` + `notes.kind` 决定路径 + `sheetToSearchText` 段。无需再改。
+    - **（提交前）清理 spike 产物**：`spike.html`、`src/spike/`、`scripts/spike-sheet-ce.mjs`、`vite.spike.config.ts`、`vite.spike.build.config.ts`（保留两份 `docs/*-260918.md` 设计文档）。
+    - **（提醒）manifest v6 ⇒ 所有端一起升级**：旧端读到 v6 显式拒绝同步（刻意安全闸）。
+
+14. **【表格图片独立管理 · 已立项 260919】浮动图 P1 / 单元格图 P2** —— 规范见 **`docs/SHEET-IMAGE-MANAGEMENT-260919.md`（其他会话按此实施，勿另起炉灶）**。
+    - **目标**：正文 `sheets[].images[].src` 由 **base64 内联**改为 **filename 引用**（正文 `version:2→3`）；文件落 `note-assets/{noteId}/`，`manifest.assets` 声明，同步/GC/历史**复用现有资产管线**（红线 #11/#17）；旧 base64 表**删了重建**（#7）。
+    - **分阶段**：**P1 浮动图独立资产 ~1–1.5 天**（写文件 IPC + 正文改 filename + 清单声明 + 读回拼 URL；粘贴图可并入）· **P2 单元格图 ~3–5 天**（FortuneSheet 无 in-cell 字段 → 方案 A：`cell.img` + 自绘 overlay 锚定单元格）· **P3 移动端/浏览器渲染 + 对拍 + 压测 ~1 天**。
+    - **前置已做**：图片按钮按实例定位（patch react）、本地插入可用（见第七轮）。
+
 ### 当前问题 / 已知坑（不阻塞）
 - 画板**不再记忆视口**（拖动/缩放后重开为默认/自适应）：这是 260916 为「不让视口触发保存/上传」刻意做的取舍，**用户已确认接受**（"谁知道下次进来要看什么"）。不要改回去。
 - 离线残余 3 处（见上，全外观级）。
@@ -278,6 +464,15 @@
 - **`vitest` 是 `node` 环境，跑不了内核**：涉及内核行为的验证只能 CDP 驱真实 Electron；不要试图为它写单测（对拍脚本就是这种模式）。
 
 ## 4. 踩过的坑（合并版；通用红线/环境见 AGENTS.md）
+
+### 本批（260918 表格文档 SheetDocument）新坑 —— 完整版见 §2.8 五
+- **`NoteSummary` 有两份**（渲染层 `src/lib/types.ts` + 主进程 `electron/noteQueries.ts`）、**`mapSummary` 有三处 SELECT**（`noteQueries.listNoteSummaries` + `store.ts` 回收站列表 + `store.ts` saveNote 回读）：加字段漏一处 = "保存后类型丢成 doc"，症状极隐蔽。
+- **TS 推断返回类型会放宽字面量**：`{ kind: cond ? "sheet" : "doc" }` ⇒ `string`，外层端口类型不兼容。用嵌套三元/`as`/显式返回类型。
+- **远端导入必须按 manifest 的 `kind` 解析路径**：导入时 DB 还没行，`notePathFor` 会回退 doc ⇒ 表格写到 `notes/{id}.lake`。已注入 `bodyPathFor(noteId, kind)`。
+- **CE `parseFormulas: true` 在严格 CSP 下整表崩**（只出表头）；`false` 则完整渲染 + 0 违规。CE image 列只认 `data:image`（图片只能内联 base64，且 base64 不匹配 `ASSET_NAME_RE` ⇒ 不污染 `manifest.assets`）。
+- **Univer 实测过重**：产物 9.77MiB/2.48MiB gzip（55 个 locale chunk ≈4.3MiB）、依赖 118MB（含本项目原本没有的 `rxjs` 11MB）、堆 23.76MiB、**≈20MB/实例（与 keep-alive 多 tab 冲突）**；其多维表本体在 Pro。
+- **开源多维表选型事实**：`@teable/core` 是 MIT（field/formula/convert，可当自研底座）；`@teable/sdk` MIT 但强绑 Teable 服务端；NocoDB 是 Sustainable Use License；成熟开源多维表全是服务端应用。
+- **`npx vite dev` 会拉起第二个 Electron 抢 CDP 9222**（探针会看到 `chrome-error://`）——调研用独立 config + 1422 端口规避；**依赖 9222 的脚本先探测本机 Electron 是否在跑**（用户会关掉 dev 实例）。
 
 ### 本次会话新坑（2026-09-18 S3 审计批次）
 - **验证「清单拉取失败」不能只改错密钥/endpoint**：桌面同步先 `remote.test()`（ListObjectsV2），坏凭据/不可达都在那里抛、UI 本就正确报失败。只有「清单非法 JSON / 解压后 >20MiB / `test()` 之后那次 GET 瞬时失败」才会走到引擎 pull 的 catch。**写审计复现步骤前先确认「实际在哪一层抛」**（本次审计 §7.4 的 F2/D2 两步复现都因此验不出来，已按 §8 更正）。

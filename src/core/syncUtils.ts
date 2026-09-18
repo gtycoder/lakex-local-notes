@@ -20,13 +20,13 @@ export interface S3Settings {
 }
 
 // ===== 常量（随迁，原值不变） =====
-export const MANIFEST_VERSION = 5;
+export const MANIFEST_VERSION = 6;
 /**
  * 读兼容窗口：v5 = v4 + manifest.folders 条目可选 deleted 墓碑字段（纯 additive），v5 端可安全读 v4
  * （升级期云端 latest 未重写前同步不中断）；发布恒写 MANIFEST_VERSION。
  * 旧端（v4 代码）读 v5 清单按版本不兼容整轮拒绝——防其把 folder 墓碑当活跃目录导入复活。
  */
-const READABLE_MANIFEST_VERSIONS = new Set([4, 5]);
+const READABLE_MANIFEST_VERSIONS = new Set([4, 5, 6]);
 export const MAX_MANIFEST_BYTES = 20 * 1024 * 1024;
 export const MAX_MANIFEST_NOTES = 200_000;
 export const MAX_MANIFEST_FOLDERS = 50_000;
@@ -214,6 +214,10 @@ export function validateManifest(manifest: unknown, limits: { maxNotes: number; 
       throw new Error(`清单格式无效：contentHash 非法（id=${String(n.id)}）`);
     }
     if (n.parentId !== null && typeof n.parentId !== "string") throw new Error("清单格式无效：parentId 非法");
+    // 未知 kind 显式拒绝（不静默当 doc，否则会把表格正文喂给 Lake 编辑器 → 保存即毁数据）
+    if (n.kind !== undefined && n.kind !== "doc" && n.kind !== "sheet" && n.kind !== "bitable") {
+      throw new Error(`清单格式无效：kind 非法（id=${String(n.id)}）`);
+    }
     if (typeof n.sortOrder !== "number" || typeof n.updatedAt !== "string") throw new Error("清单格式无效：sortOrder/updatedAt 非法");
     if (n.assets !== undefined && !Array.isArray(n.assets)) throw new Error("清单格式无效：assets 非数组");
     for (const asset of n.assets ?? []) {

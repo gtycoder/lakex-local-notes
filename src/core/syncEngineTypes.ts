@@ -65,6 +65,8 @@ export interface LocalNoteRow {
   contentHash?: string;
   /** 删除前父目录（回收站条目恢复位置；软删上传必须用它而非删除后的 parentId=TRASH）。 */
   deletedFromParentId?: string | null;
+  /** v6：文档类型（缺省 doc）。 */
+  kind?: "doc" | "sheet" | "bitable";
 }
 
 export interface SyncDbPort {

@@ -40,6 +40,8 @@ export interface LakeNative {
   createGroup(parentId: string, title: string): Promise<TreeNode>;
   renameTreeNode(id: string, title: string): Promise<TreeNode>;
   createNoteIn(parentId: string | null, title: string): Promise<NoteDocument>;
+  /** 新建表格文档（kind=sheet，v6）。 */
+  createSheetIn(parentId: string | null, title: string): Promise<NoteDocument>;
   moveTreeNode(id: string, parentId: string | null, sortOrder: number): Promise<TreeNode>;
   moveTreeNodeOrdered(id: string, parentId: string | null, orderedIds: string[]): Promise<TreeNode>;
   reorderTreeNodes(parentId: string | null, orderedIds: string[]): Promise<void>;
@@ -184,6 +186,7 @@ export const native = {
   createGroup: (parentId: string, title: string) => api().createGroup(parentId, title),
   renameTreeNode: (id: string, title: string) => api().renameTreeNode(id, title),
   createNoteIn: (parentId: string | null, title: string) => api().createNoteIn(parentId, title),
+  createSheetIn: (parentId: string | null, title: string) => api().createSheetIn(parentId, title),
   moveTreeNode: (id: string, parentId: string | null, sortOrder: number) => api().moveTreeNode(id, parentId, sortOrder),
   moveTreeNodeOrdered: (id: string, parentId: string | null, orderedIds: string[]) => api().moveTreeNodeOrdered(id, parentId, orderedIds),
   reorderTreeNodes: (parentId: string | null, orderedIds: string[]) => api().reorderTreeNodes(parentId, orderedIds),

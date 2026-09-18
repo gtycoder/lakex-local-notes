@@ -102,11 +102,25 @@ export class NoteExport {
   }
 
   /**
+   * kind 守卫：非 doc 类型（表格/多维表）正文不是 Lake 文档格式，缓存 markdown 为空/无意义，
+   * 导出会产出坏文件或无语义内容 → 统一前置拦截。
+   * UI 侧（目录树右键「导出」子菜单 / 文档 ⋯ 菜单）对非 doc 已隐藏入口，这里做**兜底**（防 IPC 直调）。
+   */
+  private assertDocKind(id: string): void {
+    const row = this.ctx.db.prepare("SELECT kind FROM notes WHERE id=?").get(id) as { kind?: string | null } | undefined;
+    const kind = row?.kind ?? "doc";
+    if (kind === "doc") return;
+    const label = kind === "sheet" ? "表格" : kind === "bitable" ? "多维表" : kind;
+    throw new AppError("InvalidInput", `${label}文档暂不支持导出（仅文档可导出 Markdown/HTML/PDF/资料包）`);
+  }
+
+  /**
    * M1：导出 HTML（收口导出的一环）：读缓存 Markdown → 轻量转 HTML →
    * 复制本地图片到 images/ 并改写相对引用 → 写 {标题}/index.html。
    */
   exportHtmlNote(id: string, baseDir?: string): { exportPath: string; imageCount: number; skipped: number; size: number } {
     if (!isSafePathSegment(id)) throw new AppError("InvalidInput", `无效的笔记 ID: ${id}`);
+    this.assertDocKind(id);
     const caches = this.ctx.readNoteCaches(id);
     const markdown = caches.markdown ?? "";
     if (!markdown.trim()) throw new AppError("InvalidInput", "该文档还没有文本缓存，请先打开并保存一次");
@@ -163,6 +177,7 @@ export class NoteExport {
    */
   exportPdfHtml(id: string, baseDir?: string): { htmlPath: string; tempDir: string; pdfPath: string; imageCount: number; skipped: number } {
     if (!isSafePathSegment(id)) throw new AppError("InvalidInput", `无效的笔记 ID: ${id}`);
+    this.assertDocKind(id);
     const caches = this.ctx.readNoteCaches(id);
     const markdown = caches.markdown ?? "";
     if (!markdown.trim()) throw new AppError("InvalidInput", "该文档还没有文本缓存，请先打开并保存一次");
@@ -221,6 +236,7 @@ export class NoteExport {
    */
   exportNotePackage(id: string, baseDir?: string): { exportDir: string; imageCount: number; skipped: number; size: number } {
     if (!isSafePathSegment(id)) throw new AppError("InvalidInput", `无效的笔记 ID: ${id}`);
+    this.assertDocKind(id);
     const caches = this.ctx.readNoteCaches(id);
     const markdown = caches.markdown ?? "";
     if (!markdown.trim()) throw new AppError("InvalidInput", "该文档还没有文本缓存，请先打开并保存一次");

@@ -6,6 +6,7 @@
  * 执行（store 写 / S3 IO）留在各端执行壳，由判定结果驱动——两端共享同一批函数实例。
  */
 import type { ManifestNote } from "./manifestTypes.js";
+import { normalizeNoteKind, type NoteKind } from "./noteKind.js";
 
 /** 回收站笔记本（对齐桌面 electron/store.ts:33 TRASH_NOTEBOOK_ID）。
  * v4 协议：软删（回收站）= parentId 指向此 + trashedAt；deleted:true 仅用于 purge。 */
@@ -17,6 +18,8 @@ export interface LocalNoteState {
   updatedAt: string; syncState?: string; isConflict: boolean;
   isLocked?: boolean; lockedAt?: string | null; icon?: string | null;
   trashedAt?: string | null; deletedFromParentId?: string | null;
+  /** v6：文档类型（缺省 doc）。 */
+  kind?: NoteKind;
 }
 
 /** 行映射输入（对齐桌面 noteQueries.ts SyncNoteRow 字段形态）。 */
@@ -25,6 +28,7 @@ export interface SyncNoteRowShape {
   updated_at: string; sync_state: string; is_conflict: number;
   is_locked: number; locked_at: string | null; icon: string | null;
   trashed_at: string | null; deleted_from_parent_id: string | null;
+  kind?: string | null;
 }
 
 // ===== G5：行映射（两端同一映射，避免"同一状态两种解读"） =====
@@ -34,6 +38,7 @@ export function rowToLocalState(row: SyncNoteRowShape): LocalNoteState {
     updatedAt: row.updated_at, syncState: row.sync_state, isConflict: !!row.is_conflict,
     isLocked: !!row.is_locked, lockedAt: row.locked_at ?? null, icon: row.icon ?? null,
     trashedAt: row.trashed_at ?? null, deletedFromParentId: row.deleted_from_parent_id ?? null,
+    kind: normalizeNoteKind(row.kind),
   };
 }
 
@@ -97,6 +102,8 @@ export function buildUploadEntry(input: UploadEntryInput): ManifestNote {
     id: note.id, title: note.title, parentId: note.parentId, sortOrder: note.sortOrder,
     updatedAt: note.updatedAt, contentHash, isConflict: note.isConflict,
     isLocked: !!note.isLocked, lockedAt: note.lockedAt ?? null, icon: note.icon ?? null, assets,
+    // 只写非 doc：键缺席 = doc（旧端/旧清单兼容，且纯文档库的条目保持逐字节不变）
+    ...(note.kind && note.kind !== "doc" ? { kind: note.kind } : {}),
     trashedAt: inTrash ? (input.trashedAt ?? null) : undefined,
     deletedFromParentId: inTrash ? (input.deletedFromParentId ?? null) : undefined,
   };

@@ -34,7 +34,8 @@ export class SchemaInit {
         id TEXT PRIMARY KEY, title TEXT NOT NULL, parent_id TEXT,
         sort_order INTEGER NOT NULL, updated_at TEXT NOT NULL,
         sync_state TEXT NOT NULL DEFAULT 'local', is_conflict INTEGER NOT NULL DEFAULT 0,
-        deleted_at TEXT
+        deleted_at TEXT,
+        kind TEXT NOT NULL DEFAULT 'doc'
       );
       CREATE TABLE IF NOT EXISTS device_state (key TEXT PRIMARY KEY, value TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
@@ -117,6 +118,11 @@ export class SchemaInit {
     }
     if (!cols.some((c) => c.name === "locked_at")) {
       this.ctx.db.exec("ALTER TABLE notes ADD COLUMN locked_at TEXT");
+    }
+    // 文档类型（doc | sheet | bitable）：进 manifest.kind 跨端同步（见 docs/SHEET-BITABLE-DESIGN-260918.md §4.3）。
+    // 缺省 'doc' 兼容旧库；tree_nodes.node_type 仍只区分 notebook/group/note（不新增 node_type，避免动目录约束）。
+    if (!cols.some((c) => c.name === "kind")) {
+      this.ctx.db.exec("ALTER TABLE notes ADD COLUMN kind TEXT NOT NULL DEFAULT 'doc'");
     }
     // B3（冲突归档保护）：superseded 快照保护窗口（protected_until 未到不自动清理；手动删除不受限）
     const histCols = this.ctx.db.prepare("PRAGMA table_info(note_history)").all() as Array<{ name: string }>;

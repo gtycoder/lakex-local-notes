@@ -52,6 +52,7 @@ export const WEB_METHODS: Record<string, string> = {
   createGroup: "create_group",
   renameTreeNode: "rename_tree_node",
   createNoteIn: "create_note_in",
+  createSheetIn: "create_sheet_in",
   moveTreeNode: "move_tree_node",
   moveTreeNodeOrdered: "move_tree_node_ordered",
   reorderTreeNodes: "reorder_tree_nodes",

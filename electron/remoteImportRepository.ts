@@ -4,6 +4,7 @@ import path from "node:path";
 import crypto from "node:crypto";
 import type { SyncNote } from "./noteQueries.js";
 import { AppError } from "../src/core/storeErrors.js";
+import { normalizeNoteKind } from "../src/core/noteKind.js";
 
 interface RemoteAsset {
   filename: string;
@@ -15,6 +16,8 @@ interface RemoteImportDeps {
   workspaceId: string;
   trashNotebookId: string;
   notePathFor(noteId: string): string;
+  /** v6：按 manifest 的 kind 解析正文路径（导入时 DB 尚未建行，notePathFor 会回退 doc）。 */
+  bodyPathFor(noteId: string, kind: "doc" | "sheet" | "bitable"): string;
   assetDirFor(noteId: string): string;
   isSafeSegment(value: string): boolean;
   detectOrphans(noteId: string, content: string): void;
@@ -69,7 +72,8 @@ export class RemoteImportRepository {
 
   importNote(note: SyncNote, content: Buffer, assets: RemoteAsset[]): void {
     const startedAt = Date.now();
-    const lakePath = this.deps.notePathFor(note.id);
+    const noteKind = normalizeNoteKind(note.kind);
+    const lakePath = this.deps.bodyPathFor(note.id, noteKind);
     for (const asset of assets) {
       if (!this.deps.isSafeSegment(asset.filename)) {
         throw new AppError("InvalidInput", `无效的资源文件名: ${asset.filename}`);
@@ -110,15 +114,16 @@ export class RemoteImportRepository {
         const trashedAt = trashed ? (note.trashedAt ?? null) : null;
         const deletedFrom = trashed ? (note.deletedFromParentId ?? null) : null;
         this.deps.db.prepare(
-          `INSERT INTO notes(id,title,parent_id,sort_order,updated_at,sync_state,is_conflict,deleted_at,is_locked,locked_at,trashed_at,deleted_from_parent_id)
-           VALUES(?,?,?,?,?,'synced',?,NULL,?,?,?,?)
+          `INSERT INTO notes(id,title,parent_id,sort_order,updated_at,sync_state,is_conflict,deleted_at,is_locked,locked_at,trashed_at,deleted_from_parent_id,kind)
+           VALUES(?,?,?,?,?,'synced',?,NULL,?,?,?,?,?)
            ON CONFLICT(id) DO UPDATE SET title=excluded.title,parent_id=excluded.parent_id,
              sort_order=excluded.sort_order,updated_at=excluded.updated_at,
              is_locked=excluded.is_locked,locked_at=excluded.locked_at,
              sync_state='synced',is_conflict=excluded.is_conflict,deleted_at=NULL,
-             trashed_at=excluded.trashed_at,deleted_from_parent_id=excluded.deleted_from_parent_id`
+             trashed_at=excluded.trashed_at,deleted_from_parent_id=excluded.deleted_from_parent_id,
+             kind=excluded.kind`
         ).run(note.id, note.title, note.parentId, note.sortOrder, note.updatedAt, note.isConflict ? 1 : 0,
-          note.isLocked ? 1 : 0, note.lockedAt ?? null, trashedAt, deletedFrom);
+          note.isLocked ? 1 : 0, note.lockedAt ?? null, trashedAt, deletedFrom, noteKind);
         this.deps.db.prepare(
           `INSERT INTO tree_nodes(id,workspace_id,parent_id,node_type,title,note_file_id,sort_order,created_at,updated_at,deleted_at,sync_state,is_conflict,icon,trashed_at,deleted_from_parent_id)
            VALUES(?,?,?,'note',?,?,?,?,?,NULL,'synced',?,?,?,?)

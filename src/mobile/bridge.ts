@@ -600,7 +600,7 @@ export const bridge = {
     const pid = parentId ?? await dbPort.defaultNotebookId();
     const content = emptyLakeBody(id);
     await bridge.saveNote(id, title, content, pid);
-    return { id, title, content, updatedAt: now, parentId: pid };
+    return { id, title, content, updatedAt: now, parentId: pid, kind: "doc" };
   },
 
   /** 本地软删（入回收站）：同步时上传墓碑（删除压编辑） */

@@ -4,6 +4,8 @@
  * 供移动端与同步对账纯函数（lakeReconcile / quickNoteReconcile）复用。
  */
 
+import type { NoteKind } from "./noteKind.js";
+
 /** Lake 笔记清单条目。 */
 export interface ManifestNote {
   id: string; title: string; parentId: string | null; sortOrder: number;
@@ -13,6 +15,9 @@ export interface ManifestNote {
   lockedAt?: string | null;
   /** 文档自定义图标（可选字段，旧清单无此字段时本地保持原样） */
   icon?: string | null;
+  /** v6：文档类型（doc | sheet | bitable）。缺省/缺失 = doc（兼容旧清单与旧端）。
+   * 只写非 doc 值，使纯文档库的清单保持逐字节不变。 */
+  kind?: NoteKind;
   assets: { filename: string; size: number; hash: string }[];
   deleted?: boolean;
   deletedAt?: string;

@@ -28,6 +28,8 @@ function rowToLocal(r: Record<string, unknown>) {
     lockedAt: r.locked_at ? String(r.locked_at) : null,
     icon: r.icon ? String(r.icon) : null,
     isConflict: !!r.is_conflict,
+    // TS 会在推断的返回类型里放宽字面量 → 显式标注联合类型（否则外层 SyncDbPort 不兼容）
+    kind: (r.doc_kind === "sheet" ? "sheet" : r.doc_kind === "bitable" ? "bitable" : "doc") as "doc" | "sheet" | "bitable",
   };
 }
 
@@ -42,12 +44,12 @@ export function createMobileSyncDbPort(getDb: () => MobileDb, deps: MobileSyncDb
   return {
     async getNote(id) {
       const d = getDb();
-      const row = await d.prepare("SELECT id, title, content, updated_at, sync_state, trashed_at, restore_pending_at, parent_id, sort_order, is_locked, locked_at, icon, is_conflict FROM notes WHERE id = ?").get(id);
+      const row = await d.prepare("SELECT id, title, content, updated_at, sync_state, trashed_at, restore_pending_at, parent_id, sort_order, is_locked, locked_at, icon, is_conflict, doc_kind FROM notes WHERE id = ?").get(id);
       return row ? rowToLocal(row) : null;
     },
     async getAllNotes() {
       const d = getDb();
-      const rows = await d.prepare("SELECT id, title, updated_at, sync_state, trashed_at, restore_pending_at, parent_id, sort_order, is_locked, locked_at, icon, is_conflict, content_hash FROM notes").all();
+      const rows = await d.prepare("SELECT id, title, updated_at, sync_state, trashed_at, restore_pending_at, parent_id, sort_order, is_locked, locked_at, icon, is_conflict, content_hash, doc_kind FROM notes").all();
       return rows.map(rowToLocalMetadata);
     },
     async getSyncBase(id) {
@@ -76,12 +78,12 @@ export function createMobileSyncDbPort(getDb: () => MobileDb, deps: MobileSyncDb
       // 全新导入的回收站条目（L339 分支）靠它恢复原父——硬编码 NULL 会让"安卓首次同步拉到
       // 他端已删笔记 → 恢复"后 parent 卡在 TRASH 容器，上传条目 parentId=TRASH 传染他端（260910 实测）。
       await d.prepare(
-        `INSERT INTO notes (id, title, content, parent_id, sort_order, updated_at, content_hash, sync_state, is_conflict, is_locked, locked_at, icon, trashed_at, deleted_from_parent_id, restore_pending_at)
-         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+        `INSERT INTO notes (id, title, content, parent_id, sort_order, updated_at, content_hash, sync_state, is_conflict, is_locked, locked_at, icon, trashed_at, deleted_from_parent_id, restore_pending_at, doc_kind)
+         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
          ON CONFLICT(id) DO UPDATE SET title=excluded.title, content=excluded.content, parent_id=excluded.parent_id,
            sort_order=excluded.sort_order, updated_at=excluded.updated_at, content_hash=excluded.content_hash,
-           sync_state=excluded.sync_state, is_conflict=excluded.is_conflict, is_locked=excluded.is_locked, locked_at=excluded.locked_at, icon=excluded.icon, trashed_at=excluded.trashed_at, deleted_from_parent_id=excluded.deleted_from_parent_id, restore_pending_at=NULL`
-      ).run(note.id, note.title, content, note.parentId, note.sortOrder, note.updatedAt, note.contentHash, "synced", note.isConflict ? 1 : 0, note.isLocked ? 1 : 0, note.lockedAt ?? null, note.icon ?? null, note.trashedAt ?? null, note.deletedFromParentId ?? null, null);
+           sync_state=excluded.sync_state, is_conflict=excluded.is_conflict, is_locked=excluded.is_locked, locked_at=excluded.locked_at, icon=excluded.icon, trashed_at=excluded.trashed_at, deleted_from_parent_id=excluded.deleted_from_parent_id, restore_pending_at=NULL, doc_kind=excluded.doc_kind`
+      ).run(note.id, note.title, content, note.parentId, note.sortOrder, note.updatedAt, note.contentHash, "synced", note.isConflict ? 1 : 0, note.isLocked ? 1 : 0, note.lockedAt ?? null, note.icon ?? null, note.trashedAt ?? null, note.deletedFromParentId ?? null, null, note.kind === "sheet" || note.kind === "bitable" ? note.kind : "doc");
     },
     async applyRemoteTrash(id, content, title, trashedAt, deletedFromParentId, parentId, sortOrder) {
       const d = getDb();

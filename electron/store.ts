@@ -12,6 +12,8 @@ import { AppError } from "../src/core/storeErrors.js";
 import { extractAssetRefs, isSafePathSegment, sanitizeFileName, selectHistoryDrops } from "../src/core/storeUtils.js";
 import { readNoteDigest, type NoteDigest } from "./storeQueries.js";
 import { emptyLakeBody } from "../src/core/lakeDocForm.js";
+import { type NoteKind, normalizeNoteKind } from "../src/core/noteKind.js";
+import { emptySheetBody, sheetToSearchText } from "../src/core/sheetDoc.js";
 import { SearchRepository } from "./searchRepository.js";
 import type { SearchResult } from "../src/core/searchTypes.js";
 import { HistoryRepository, type HistorySnapshotPreview, type HistorySnapshotSummary } from "./historyRepository.js";
@@ -147,6 +149,8 @@ export class Store {
     this.logScopes = logScopes;
     this.noteAssetsDir = path.join(root, "note-assets");
     fs.mkdirSync(path.join(root, "notes"), { recursive: true });
+    // 表格（kind=sheet）正文独立目录：notes/ 仍是 doc 的容器，互不混淆（docs/SHEET-BITABLE-DESIGN-260918.md §4.1）
+    fs.mkdirSync(path.join(root, "sheets"), { recursive: true });
     fs.mkdirSync(this.noteAssetsDir, { recursive: true });
     this.db = new Database(path.join(root, "metadata.sqlite3"));
     this.db.pragma("journal_mode = WAL");
@@ -199,6 +203,7 @@ export class Store {
       workspaceId: DEFAULT_WORKSPACE_ID,
       trashNotebookId: TRASH_NOTEBOOK_ID,
       notePathFor: (noteId) => this.notePath(noteId),
+      bodyPathFor: (noteId, kind) => this.bodyPathFor(noteId, kind),
       assetDirFor: (noteId) => this.noteAssetsDirFor(noteId),
       isSafeSegment: isSafePathSegment,
       detectOrphans: (noteId, content) => this.orphanLifecycle.detectOrphans(noteId, content),
@@ -287,13 +292,55 @@ export class Store {
     }
   }
 
-  private notePath(id: string): string {
+  /** 文档类型缓存（kind 创建后不可变，可长期缓存；避免每次拼路径都查库）。 */
+  private readonly noteKindCache = new Map<string, NoteKind>();
+
+  /** 读取笔记类型；行不存在（已 purge/未登记）时返回 null。 */
+  private kindOf(id: string): NoteKind | null {
+    const cached = this.noteKindCache.get(id);
+    if (cached) return cached;
+    const row = this.db.prepare("SELECT kind FROM notes WHERE id=?").get(id) as { kind?: string | null } | undefined;
+    if (!row) return null;
+    const kind = normalizeNoteKind(row.kind);
+    this.noteKindCache.set(id, kind);
+    return kind;
+  }
+
+  /** 按类型构造正文路径（唯一出口：37 处 notePathFor 调用点全部经此）。 */
+  private bodyPathFor(id: string, kind: NoteKind): string {
     // 审计 #3/#17：校验下沉到路径构造本身——manifest（sync 导入）与 IPC（save/read）
     // 的 id 都可能来自外部，必须保证是安全单路径段，否则 ../ 可逃逸工作区
     if (!isSafePathSegment(id)) {
       throw new AppError("InvalidInput", `无效的笔记 ID: ${id}`);
     }
+    if (kind === "sheet") return path.join(this.root, "sheets", `${id}.sheet.json`);
+    if (kind === "bitable") return path.join(this.root, "bitables", `${id}.bitable.json`);
     return path.join(this.root, "notes", `${id}.lake`);
+  }
+
+  /**
+   * 正文路径（kind 感知）：kind 存在 notes.kind；行已删（purge 后残留墓碑）时回退 doc 路径——
+   * purge 本来就把正文删了，返回 doc 路径与旧行为一致。
+   */
+  private notePath(id: string): string {
+    if (!isSafePathSegment(id)) {
+      throw new AppError("InvalidInput", `无效的笔记 ID: ${id}`);
+    }
+    return this.bodyPathFor(id, this.kindOf(id) ?? "doc");
+  }
+
+  /** 该类型是否有独立正文目录（用于「未登记残留」清理时逐个候选路径尝试）。 */
+  private candidateBodyPaths(id: string): string[] {
+    const kinds: NoteKind[] = ["doc", "sheet", "bitable"];
+    return kinds.map((kind) => this.bodyPathFor(id, kind));
+  }
+
+  /** 正文 → 搜索/缓存文本（按类型分派：doc 走 Lake HTML 解析，sheet 走单元格抽取，bitable v1 只索引标题）。 */
+  private searchTextFor(id: string, content: string): { markdown: string | null; plain: string | null } {
+    const kind = this.kindOf(id);
+    if (kind === "sheet") return { markdown: null, plain: sheetToSearchText(content) };
+    if (kind === "bitable") return { markdown: null, plain: "" };
+    return { markdown: lakeHtmlToMarkdown(content), plain: lakeHtmlToPlain(content) };
   }
 
   private atomicWrite(filePath: string, data: string) {
@@ -332,7 +379,7 @@ export class Store {
 
   bootstrap() {
     const notes = this.db.prepare(
-      "SELECT id,title,parent_id,sort_order,updated_at,sync_state,is_conflict,is_locked,locked_at FROM notes WHERE deleted_at IS NULL AND parent_id != ? ORDER BY sort_order"
+      "SELECT id,title,parent_id,sort_order,updated_at,sync_state,is_conflict,is_locked,locked_at,kind FROM notes WHERE deleted_at IS NULL AND parent_id != ? ORDER BY sort_order"
     ).all(TRASH_NOTEBOOK_ID).map((r) => this.noteQueries.mapSummary(r as SummaryRow));
     const last = this.db.prepare("SELECT value FROM device_state WHERE key='last_opened_note_id'").get() as { value: string } | undefined;
     return {
@@ -357,7 +404,7 @@ export class Store {
 
   readNote(id: string): NoteDocument {
     const row = this.db.prepare(
-      "SELECT id,title,parent_id,sort_order,updated_at,sync_state,is_conflict,is_locked,locked_at FROM notes WHERE id=? AND deleted_at IS NULL"
+      "SELECT id,title,parent_id,sort_order,updated_at,sync_state,is_conflict,is_locked,locked_at,kind FROM notes WHERE id=? AND deleted_at IS NULL"
     ).get(id);
     if (!row) throw new AppError("NotFound", `笔记不存在: ${id}`);
     const content = fs.readFileSync(this.notePath(id), "utf8");
@@ -384,14 +431,23 @@ export class Store {
   }
 
   /**
+   * 新建表格文档（kind="sheet"）：正文是 `sheets/{id}.sheet.json`（CE 快照 JSON），
+   * 其余全部复用文档管线（目录/回收站/历史/同步/GC）。
+   */
+  createSheetIn(parentId: string | null, title: string): NoteDocument {
+    const id = uuid();
+    return this.createNoteInWithContent(parentId, title, emptySheetBody(), [], id, "bottom", "sheet");
+  }
+
+  /**
    * 在指定目录的顶部创建正式笔记。它是目录排序的底层通用能力：未来普通“新建文档”
    * 也可选择 top / bottom；小记转换仅是第一个使用者。
    *
    * sourcePath 只允许由主进程内部传入，先复制并验证目标资源，再写入元数据。若进程
    * 在跨空间转换中断，调用方的 conversion journal 会负责识别并清理未登记的目标文件。
    */
-  createNoteInAtTopWithContent(parentId: string | null, title: string, content: string, assets: ImportedNoteAsset[], id = uuid()): NoteDocument {
-    return this.createNoteInWithContent(parentId, title, content, assets, id, "top");
+  createNoteInAtTopWithContent(parentId: string | null, title: string, content: string, assets: ImportedNoteAsset[], id = uuid(), kind: NoteKind = "doc"): NoteDocument {
+    return this.createNoteInWithContent(parentId, title, content, assets, id, "top", kind);
   }
 
   /**
@@ -409,10 +465,11 @@ export class Store {
         assets.push({ filename: entry.name, sourcePath: path.join(assetsDir, entry.name) });
       }
     }
+    const sourceKind = this.kindOf(id) ?? "doc";
     const content = source.content.split(id).join(newId);
-    const created = this.createNoteInAtTopWithContent(source.parentId, `${source.title} 副本`, content, assets, newId);
+    const created = this.createNoteInAtTopWithContent(source.parentId, `${source.title} 副本`, content, assets, newId, sourceKind);
     // createNoteInWithContent 只按标题入索引（body=""），复制是整篇正文，必须补一次全量索引，否则副本正文搜不到。
-    try { this.searchRepository.upsert(newId, created.title, lakeHtmlToPlain(content)); } catch { /* 索引失败可由全量重建修复 */ }
+    try { this.searchRepository.upsert(newId, created.title, this.searchTextFor(newId, content).plain ?? ""); } catch { /* 索引失败可由全量重建修复 */ }
     return created;
   }
 
@@ -423,6 +480,7 @@ export class Store {
     assets: ImportedNoteAsset[],
     id: string,
     position: "top" | "bottom",
+    kind: NoteKind = "doc",
   ): NoteDocument {
     const parent = parentId ?? this.resolveParentNotebook();
     this.ensureParent(parent);
@@ -432,7 +490,7 @@ export class Store {
     const updatedAt = nowIso();
     const sortOrder = position === "top" ? 0 : this.nextSortOrder(parent);
     const targetAssetsDir = this.noteAssetsDirFor(id);
-    const targetNotePath = this.notePath(id);
+    const targetNotePath = this.bodyPathFor(id, kind);
 
     // 资源副本先完整落盘；任何失败都在写数据库前回收，保证源小记绝不被影响。
     try {
@@ -457,8 +515,9 @@ export class Store {
           this.db.prepare("UPDATE notes SET sort_order=sort_order+1,updated_at=?,sync_state='local' WHERE parent_id=? AND deleted_at IS NULL")
             .run(updatedAt, parent);
         }
-        this.db.prepare("INSERT INTO notes(id,title,parent_id,sort_order,updated_at,sync_state) VALUES(?,?,?,?,?,'local')")
-          .run(id, normalizedTitle, parent, sortOrder, updatedAt);
+        this.db.prepare("INSERT INTO notes(id,title,parent_id,sort_order,updated_at,sync_state,kind) VALUES(?,?,?,?,?,'local',?)")
+          .run(id, normalizedTitle, parent, sortOrder, updatedAt, kind);
+        this.noteKindCache.set(id, kind);
         this.db.prepare("INSERT INTO tree_nodes(id,workspace_id,parent_id,node_type,title,note_file_id,sort_order,created_at,updated_at,sync_state,is_conflict) VALUES(?,?,?,'note',?,?,?,?,?,'local',0)")
           .run(id, DEFAULT_WORKSPACE_ID, parent, normalizedTitle, id, sortOrder, updatedAt, updatedAt);
       });
@@ -482,7 +541,9 @@ export class Store {
     if (!isSafePathSegment(id)) return;
     const exists = this.db.prepare("SELECT 1 FROM notes WHERE id=? AND deleted_at IS NULL").get(id);
     if (exists) return;
-    try { fs.rmSync(this.notePath(id), { force: true }); } catch { /* best effort */ }
+    for (const candidate of this.candidateBodyPaths(id)) {
+      try { fs.rmSync(candidate, { force: true }); } catch { /* best effort */ }
+    }
     try { fs.rmSync(this.noteAssetsDirFor(id), { force: true, recursive: true }); } catch { /* best effort */ }
   }
 
@@ -504,12 +565,14 @@ export class Store {
   }
 
   saveNote(id: string, title: string, content: string, caches?: NoteCacheInput): NoteDocument {
-    this.noteContent.save(id, title, content, caches);
+    // 非文档类型的正文不是 Lake HTML：缓存由主进程按类型派生；doc 仍沿用渲染层从内核带来的缓存（不改旧行为）
+    const kind = this.kindOf(id);
+    this.noteContent.save(id, title, content, caches ?? (kind === "doc" ? undefined : this.searchTextFor(id, content)));
     // P1-2a：免回读——正文即入参 content（刚写入的同一字符串），不再 readFileSync 全文重读 +
     // IPC 全文回传；轻量 SELECT 只取元数据（无文件 IO）。副作用修正：保存不再误写
     // last_opened_note_id（那是「打开」语义，保存非活动文档不应改「最后打开」记录）。
     const row = this.db.prepare(
-      "SELECT id,title,parent_id,sort_order,updated_at,sync_state,is_conflict,is_locked,locked_at FROM notes WHERE id=? AND deleted_at IS NULL"
+      "SELECT id,title,parent_id,sort_order,updated_at,sync_state,is_conflict,is_locked,locked_at,kind FROM notes WHERE id=? AND deleted_at IS NULL"
     ).get(id);
     if (!row) throw new AppError("NotFound", `笔记不存在: ${id}`);
     return { ...this.noteQueries.mapSummary(row as SummaryRow), content };
@@ -549,8 +612,7 @@ export class Store {
     if (!row) return null;
     if (row.text_cache != null) return row.text_cache;
     const content = fs.existsSync(this.notePath(id)) ? fs.readFileSync(this.notePath(id), "utf8") : "";
-    const markdown = lakeHtmlToMarkdown(content);
-    const plain = lakeHtmlToPlain(content);
+    const { markdown, plain } = this.searchTextFor(id, content);
     if (!markdown && !plain) return null;
     this.db.prepare("UPDATE notes SET md_cache=?, text_cache=? WHERE id=?").run(markdown, plain, id);
     return plain;
@@ -569,8 +631,7 @@ export class Store {
       if (!fs.existsSync(this.notePath(id))) return "";
       return fs.readFileSync(this.notePath(id), "utf8");
     })();
-    const markdown = lakeHtmlToMarkdown(content);
-    const plain = lakeHtmlToPlain(content);
+    const { markdown, plain } = this.searchTextFor(id, content);
     if (!markdown && !plain) return false;
     this.updateNoteCaches(id, markdown, plain);
     return true;
@@ -617,7 +678,7 @@ export class Store {
     const created = this.db.prepare("SELECT created_at FROM tree_nodes WHERE id=?").get(id) as { created_at: string } | undefined;
     const { lakePath, assetsDir } = this.getNotePaths(id);
     const sizeBytes = fs.existsSync(lakePath) ? fs.statSync(lakePath).size : 0;
-    const plain = this.readNoteCaches(id).plain ?? lakeHtmlToPlain(doc.content);
+    const plain = this.readNoteCaches(id).plain ?? this.searchTextFor(id, doc.content).plain ?? "";
     const charCount = plain.replace(/\s+/g, "").length;
     const wordCount = (plain.match(/[\u4e00-\u9fff]/g)?.length ?? 0) + (plain.match(/[A-Za-z0-9]+/g)?.length ?? 0);
     const seen = new Set<string>();

@@ -10,6 +10,8 @@ export interface NoteSummary {
   syncState: string;
   isConflict: boolean;
   isLocked?: boolean;
+  /** v6 文档类型（缺省 doc；渲染层据此选择编辑器）。 */
+  kind?: "doc" | "sheet" | "bitable";
   lockedAt?: string | null;
 }
 
@@ -26,6 +28,8 @@ export interface TreeNode {
   syncState: string;
   isConflict: boolean;
   icon: string | null;
+  /** v6 文档类型（doc | sheet | bitable；缺省 doc）。 */
+  kind?: "doc" | "sheet" | "bitable";
 }
 
 export interface SyncNote {
@@ -42,6 +46,8 @@ export interface SyncNote {
   icon?: string | null;
   trashedAt?: string | null;
   deletedFromParentId?: string | null;
+  /** v6 文档类型（listNotesForSync/getNoteForSync 提供；缺省 doc）。 */
+  kind?: "doc" | "sheet" | "bitable";
 }
 
 export interface SyncFolder {
@@ -66,6 +72,7 @@ export interface SummaryRow {
   is_conflict: number;
   is_locked: number;
   locked_at: string | null;
+  kind?: string | null;
 }
 
 export interface TreeNodeRow {
@@ -81,6 +88,8 @@ export interface TreeNodeRow {
   sync_state: string;
   is_conflict: number;
   icon: string | null;
+  /** LEFT JOIN notes 带来的文档类型（v6）；非 note 节点为 undefined。 */
+  note_kind?: string | null;
 }
 
 interface SyncNoteRow {
@@ -96,6 +105,7 @@ interface SyncNoteRow {
   icon: string | null;
   trashed_at: string | null;
   deleted_from_parent_id: string | null;
+  kind: string | null;
 }
 
 interface SyncFolderRow {
@@ -133,6 +143,8 @@ export class NoteQueries {
       isConflict: !!row.is_conflict,
       isLocked: !!row.is_locked,
       lockedAt: row.locked_at ?? null,
+      // v6 文档类型（渲染层据此选择编辑器；缺省 doc）
+      kind: (row.kind === "sheet" ? "sheet" : row.kind === "bitable" ? "bitable" : "doc") as "doc" | "sheet" | "bitable",
     };
   }
 
@@ -150,6 +162,8 @@ export class NoteQueries {
       syncState: row.sync_state,
       isConflict: !!row.is_conflict,
       icon: row.icon ?? null,
+      // v6：渲染层据此对非 doc 隐藏导出/大纲等（缺省 doc）
+      kind: (row.note_kind === "sheet" ? "sheet" : row.note_kind === "bitable" ? "bitable" : "doc") as "doc" | "sheet" | "bitable",
     };
   }
 
@@ -159,7 +173,8 @@ export class NoteQueries {
          SELECT ? FROM tree_nodes WHERE id=?
          UNION ALL SELECT t.id FROM tree_nodes t JOIN trash_ids ti ON t.parent_id=ti.id
        )
-       SELECT t.* FROM tree_nodes t
+       SELECT t.*, n.kind AS note_kind FROM tree_nodes t
+       LEFT JOIN notes n ON n.id = t.note_file_id
        WHERE t.workspace_id=? AND t.deleted_at IS NULL AND t.id NOT IN (SELECT id FROM trash_ids)
        ORDER BY t.sort_order`
     ).all(this.trashNotebookId, this.trashNotebookId, this.workspaceId) as TreeNodeRow[];
@@ -168,13 +183,13 @@ export class NoteQueries {
 
   listNoteSummaries(): NoteSummary[] {
     const rows = this.db.prepare(
-      "SELECT id,title,parent_id,sort_order,updated_at,sync_state,is_conflict,is_locked,locked_at FROM notes WHERE deleted_at IS NULL ORDER BY sort_order"
+      "SELECT id,title,parent_id,sort_order,updated_at,sync_state,is_conflict,is_locked,locked_at,kind FROM notes WHERE deleted_at IS NULL ORDER BY sort_order"
     ).all() as SummaryRow[];
     return rows.map((row) => this.mapSummary(row));
   }
 
   private static readonly SYNC_NOTE_COLUMNS =
-    `SELECT n.id,n.title,n.parent_id,n.sort_order,n.updated_at,n.sync_state,n.is_conflict,n.is_locked,n.locked_at,t.icon,n.trashed_at,n.deleted_from_parent_id
+    `SELECT n.id,n.title,n.parent_id,n.sort_order,n.updated_at,n.sync_state,n.is_conflict,n.is_locked,n.locked_at,t.icon,n.trashed_at,n.deleted_from_parent_id,n.kind
      FROM notes n LEFT JOIN tree_nodes t ON t.note_file_id = n.id`;
 
   listNotesForSync(): SyncNote[] {

@@ -133,6 +133,8 @@ export function registerNotesIpc(
   ipc.handle("create_group", (parentId: string, title: unknown) => store.createGroup(parentId, assertTitle(title)));
   ipc.handle("rename_tree_node", (id: string, title: unknown) => store.renameTreeNode(id, assertTitle(title)));
   ipc.handle("create_note_in", (parentId: string | null, title: unknown) => store.createNoteIn(parentId, assertTitle(title)));
+  // v6：新建表格文档（kind=sheet）；正文落 sheets/{id}.sheet.json，其余复用文档管线
+  ipc.handle("create_sheet_in", (parentId: string | null, title: unknown) => store.createSheetIn(parentId, assertTitle(title)));
   ipc.handle("move_tree_node", (id: string, parentId: string | null, sortOrder: number) => store.moveTreeNode(id, parentId, sortOrder));
   ipc.handle("move_tree_node_ordered", (id: string, parentId: string | null, orderedIds: string[]) => store.moveTreeNodeOrdered(id, parentId, orderedIds));
   ipc.handle("reorder_tree_nodes", (parentId: string | null, orderedIds: string[]) => store.reorderTreeNodes(parentId, orderedIds));

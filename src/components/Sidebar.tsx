@@ -7,11 +7,12 @@ import { LAKE_EMOJI_GROUPS } from "../lib/lakeEmojiGroups";
 import type { TreeNode, TreeNodeType } from "../lib/types";
 import { buildTreeIndex, type TreeIndex } from "../core/treeIndex";
 import { computeDropPosition, createDragGhost, isValidTreeDrop, moveDragGhost, removeDragGhost, type DragGhost } from "./treeDrag";
+import { Table } from "lucide-react";
 import { getCreateMenuPosition, type CreateMenuPosition } from "./createMenuPosition";
 import { ExportSubmenuItem } from "./ExportSubmenuItem";
 import { SIDEBAR_DEFAULT_WIDTH } from "../desktop/desktopTypes";
 
-type CreateKind = "notebook" | "group" | "note";
+type CreateKind = "notebook" | "group" | "note" | "sheet";
 type DropPosition = "before" | "inside" | "after";
 export type SidebarMode = "docked" | "floating" | "collapsed";
 
@@ -359,7 +360,7 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
   const create = (kind: CreateKind) => {
     setMenuOpen(false);
     const parentId = kind === "notebook" ? null : kind === "group" ? groupParent : noteParent;
-    if (kind === "note") {
+    if (kind === "note" || kind === "sheet") {
       props.onCreate(kind, parentId);
       if (parentId) setExpanded((current) => expandAncestors(current, props.nodes, parentId));
     } else {
@@ -480,10 +481,11 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
     props.onRevealConsumed();
   }, [props.revealNodeId, props.onRevealConsumed]);
 
-  const menuNewChild = (kind: "group" | "note") => {
+  const menuNewChild = (kind: "group" | "note" | "sheet") => {
     if (!contextNode) return;
-    // 支持多层嵌套：在目标节点下直接创建（文档也可包含分组/文档）。
+    // 支持多层嵌套：在目标节点下直接创建（文档也可包含分组/文档/表格）。
     const parentId = contextNode.id;
+    if (kind === "sheet") { props.onCreate("sheet", parentId); setExpanded((current) => expandAncestors(current, props.nodes, parentId)); setContextMenu(null); return; }
     if (kind === "note") { props.onCreate("note", parentId); setExpanded((current) => expandAncestors(current, props.nodes, parentId)); setContextMenu(null); return; }
     setPendingCreate({ kind, parentId });
     setNewTitle("新建分组");
@@ -803,7 +805,7 @@ interface ContextMenuProps {
   node: TreeNode;
   x: number;
   y: number;
-  onNewChild: (kind: "group" | "note") => void;
+  onNewChild: (kind: "group" | "note" | "sheet") => void;
   onRename: () => void;
   onDelete: () => void;
   onCopyMarkdown: () => void;
@@ -842,6 +844,7 @@ const ContextMenu = ({ node, x, y, onNewChild, onRename, onDelete, onCopyMarkdow
   return createPortal(
     <div ref={menuRef} className="context-menu" style={pos ? { left: pos.left, top: pos.top } : { left: x, top: y, visibility: "hidden" }} role="menu" data-context-menu>
       <button role="menuitem" onClick={() => { onNewChild("note"); onClose(); }}><FilePlus size={15} /><span>新建文档</span></button>
+      <button role="menuitem" onClick={() => { onNewChild("sheet"); onClose(); }}><Table size={15} /><span>新建表格</span></button>
       <button role="menuitem" onClick={() => { onNewChild("group"); onClose(); }}><FolderPlus size={15} /><span>新建分组</span></button>
       <div className="context-menu-sep" />
       {node.nodeType === "note" ? (
@@ -851,7 +854,10 @@ const ContextMenu = ({ node, x, y, onNewChild, onRename, onDelete, onCopyMarkdow
           <button role="menuitem" onClick={() => { onOpenHistory(); onClose(); }}><History size={15} /><span>历史版本</span></button>
           <button role="menuitem" onClick={() => { onRevealNoteFile(); onClose(); }}><FolderOpen size={15} /><span>打开文件位置</span></button>
           <button role="menuitem" onClick={() => { onShowInfo(); onClose(); }}><Info size={15} /><span>属性</span></button>
-          <ExportSubmenuItem onExportAs={onExportAs} onCopyMarkdown={onCopyMarkdown} onCopyPaths={onCopyPaths} onClose={onClose} />
+          {/* v6：非 doc（表格/多维表）正文不是 Lake 文档格式，导出会产出坏文件 → 隐藏入口 */}
+          {(node.kind ?? "doc") === "doc" && (
+            <ExportSubmenuItem onExportAs={onExportAs} onCopyMarkdown={onCopyMarkdown} onCopyPaths={onCopyPaths} onClose={onClose} />
+          )}
         </>
       ) : (
         <button role="menuitem" onClick={() => { onRename(); onClose(); }}><Pencil size={15} /><span>重命名</span></button>

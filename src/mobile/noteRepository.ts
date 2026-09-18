@@ -13,6 +13,8 @@ export interface POCNote {
   content: string;
   updatedAt: string;
   parentId: string | null;
+  /** v6 文档类型（缺省 doc）。非 doc 类型移动端只读占位，**不得**交给 Lake 编辑器（会写坏正文）。 */
+  kind: "doc" | "sheet" | "bitable";
 }
 
 /** 列表页只需要元数据；正文在 readNote() 打开文档时按需读取。 */
@@ -23,8 +25,12 @@ export interface POCNoteSummary {
   parentId: string | null;
 }
 
+function normalizeDocKind(value: unknown): "doc" | "sheet" | "bitable" {
+  return value === "sheet" || value === "bitable" ? value : "doc";
+}
+
 function rowToNote(r: Record<string, unknown>): POCNote {
-  return { id: String(r.id), title: String(r.title), content: String(r.content), updatedAt: String(r.updated_at), parentId: r.parent_id ? String(r.parent_id) : null };
+  return { id: String(r.id), title: String(r.title), content: String(r.content), updatedAt: String(r.updated_at), parentId: r.parent_id ? String(r.parent_id) : null, kind: normalizeDocKind(r.doc_kind) };
 }
 
 function rowToNoteSummary(r: Record<string, unknown>): POCNoteSummary {
@@ -86,7 +92,7 @@ export async function listNotes(d: MobileDb): Promise<POCNoteSummary[]> {
 }
 
 export async function readNote(d: MobileDb, id: string): Promise<POCNote | null> {
-  const row = await d.prepare("SELECT id, title, content, updated_at, parent_id FROM notes WHERE id = ?").get(id);
+  const row = await d.prepare("SELECT id, title, content, updated_at, parent_id, doc_kind FROM notes WHERE id = ?").get(id);
   return row ? rowToNote(row) : null;
 }
 

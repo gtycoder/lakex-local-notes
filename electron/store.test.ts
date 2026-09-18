@@ -354,6 +354,15 @@ describe("目录树操作", () => {
     fs.rmSync(assetsDir, { recursive: true, force: true });
   });
 
+  it("非 doc（表格）导出被 kind 守卫拦截（HTML/PDF/资料包）", () => {
+    const sheet = store.createSheetIn(null, "表格导出守卫");
+    const base = fs.mkdtempSync(path.join(os.tmpdir(), "lake-kind-"));
+    expect(() => store.exportHtmlNote(sheet.id, base)).toThrow(/表格文档暂不支持导出/);
+    expect(() => store.exportPdfHtml(sheet.id, base)).toThrow(/表格文档暂不支持导出/);
+    expect(() => store.exportNotePackage(sheet.id, base)).toThrow(/表格文档暂不支持导出/);
+    fs.rmSync(base, { recursive: true, force: true });
+  });
+
   it("全文搜索：标题优先、正文命中 + 高亮，1/2/3 字统一，删除后消失", () => {
     const note = store.createNote("搜索引擎笔记");
     store.saveNote(note.id, "搜索引擎笔记", "<p>全文搜索与回收站方案</p>", { markdown: "# 搜索引擎笔记\n\n全文搜索与回收站方案", plain: "搜索引擎笔记\n全文搜索与回收站方案" });

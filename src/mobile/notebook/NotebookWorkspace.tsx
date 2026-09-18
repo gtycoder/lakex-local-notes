@@ -35,7 +35,7 @@ export interface NotebookTreeItem {
 import type { TreeNode } from "../../lib/types";
 
 /** 打开文档 tab 的内容状态（按 tab 缓存，切换不丢草稿） */
-interface TabState { id: string; title: string; content: string; editing: boolean; lastAccessedAt: number; }
+interface TabState { id: string; title: string; content: string; editing: boolean; lastAccessedAt: number; kind: "doc" | "sheet" | "bitable"; }
 
 export interface NotebookWorkspaceProps {
   notebookId: string;
@@ -155,7 +155,7 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
       if (!n) return;
       setTabs((prev) => {
         if (prev.some((t) => t.id === id)) return prev;
-        const added = [...prev, { id, title: n.title, content: n.content, editing: pendingEditRef.current, lastAccessedAt: Date.now() }];
+        const added = [...prev, { id, title: n.title, content: n.content, editing: pendingEditRef.current, lastAccessedAt: Date.now(), kind: n.kind }];
         pendingEditRef.current = false;
         const evicted = selectEvictionIds(added.map((t) => ({ noteId: t.id, lastAccessedAt: t.lastAccessedAt })), { limit: loadSettings().maxOpenTabs, activeNoteId: id, pinnedNoteIds: new Set() });
         if (evicted.length === 0) return added;
@@ -570,6 +570,15 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
         ) : tabs.map((t) => (
           <div key={t.id} className={"doc-pane" + (t.id === activeId ? " active" : "")}>
             {/* 标题只在顶栏（思源 #toolbarName 口径）；正文区不再重复一个标题输入框 */}
+            {t.kind !== "doc" ? (
+              // 防腐坏（AGENTS §3）：非文档类型的正文不是 Lake HTML，**绝不允许** Lake 编辑器打开/保存。
+              <div className="mobile-empty">
+                {t.title || "此文档"}
+                {"："}
+                {t.kind === "sheet" ? "表格" : "多维表"}
+                暂不支持在移动端编辑，请在桌面端打开。
+              </div>
+            ) : (
             <DocumentEditor
               note={{ id: t.id, title: t.title, content: t.content } as POCNote}
               content={t.content}
@@ -581,6 +590,7 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
               hidePanels
               onEditorInstance={(ed) => { editorsRef.current.set(t.id, ed); }}
             />
+            )}
           </div>
         ))}
       </section>

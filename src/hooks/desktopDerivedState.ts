@@ -89,10 +89,15 @@ export function deriveDesktopView(input: DesktopViewInput) {
     noteId: tab.noteId, title: tab.title, content: tab.content, dirty: tab.dirty, deleted: tab.deleted,
     icon: iconByNoteId.get(tab.noteId) ?? null,
     reloadKey: tab.reloadKey ?? 0,
+    // v6：必须透传文档类型。漏掉它 ⇒ MultiTabEditor 收不到 kind=sheet，表格会被当成 Lake 文档用 EditorTab 渲染。
+    kind: tab.kind ?? "doc",
   }));
 
   // 大纲增强=开 → 应用自建大纲侧栏；关 → 用 Lake 原生大纲（此侧栏隐藏），原生 by toc.enable。
-  const outlineVisible = tocEnabled && outlineEnhance && desktopWorkspace === "library";
+  // v6：非 doc（表格/多维表）没有可导航大纲，且统计口径不适用 → 一律隐藏大纲侧栏。
+  const activeKind: "doc" | "sheet" | "bitable" =
+    (activeNoteId ? openTabs.find((t) => t.noteId === activeNoteId)?.kind : undefined) ?? "doc";
+  const outlineVisible = tocEnabled && outlineEnhance && desktopWorkspace === "library" && activeKind === "doc";
   // 只读锁：store 驱动（可同步），派生集合供多标签 viewer 重建
   const lockedNoteIds = new Set(notes.filter((n) => n.isLocked).map((n) => n.id));
 
@@ -116,6 +121,6 @@ export function deriveDesktopView(input: DesktopViewInput) {
 
   return {
     activeNodeSyncState, editorPrefs, activePath, scrollActiveEditorToTop, navigateToHeading,
-    headingPath, tabInfos, outlineVisible, lockedNoteIds, effectiveOutlineMode, shellStyle,
+    headingPath, tabInfos, outlineVisible, lockedNoteIds, effectiveOutlineMode, shellStyle, activeKind,
   };
 }

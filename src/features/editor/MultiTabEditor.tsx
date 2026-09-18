@@ -1,7 +1,10 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type PointerEvent as ReactPointerEvent } from "react";
+import { Component, Suspense, lazy, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ErrorInfo, type ReactNode, type PointerEvent as ReactPointerEvent } from "react";
 import { ChevronDown, ChevronsLeft, ChevronsRight, File, Pin, TriangleAlert, X, XCircle, XSquare } from "lucide-react";
 import { createPortal } from "react-dom";
 import { EditorTab } from "./EditorTab";
+
+/** 表格编辑器（FortuneSheet，~0.6MiB gzip）按需加载：只在真的打开表格文档时才进首屏之外的分包。 */
+const SheetEditor = lazy(() => import("../sheet/SheetEditor").then((m) => ({ default: m.SheetEditor })));
 import type { LakeEditorPrefs } from "./lakeRuntime";
 
 const EMPTY_PINNED: ReadonlySet<string> = new Set();
@@ -17,6 +20,8 @@ export interface TabInfo {
   reloadKey?: number;
   /** 远端已删除（软删/墓碑/purge）：tab 显示"已删除"标记，正文保留供复制/恢复。 */
   deleted?: boolean;
+  /** v6 文档类型（doc | sheet | bitable；缺省 doc）。 */
+  kind?: "doc" | "sheet" | "bitable";
 }
 
 interface MultiTabEditorProps {
@@ -425,7 +430,18 @@ export function MultiTabEditor({
           <h2>开始写第一篇笔记</h2>
           <p className="empty-workspace-hint">新建文档开始记录，或按 ⌘K 搜索已有笔记</p>
           {emptyAction}
-        </section> : tabs.map((tab) => (
+        </section> : <Suspense fallback={<div className="empty-workspace-hint">正在加载表格编辑器…</div>}>{tabs.map((tab) => (
+          tab.kind === "sheet" ? (
+            <SheetEditorErrorBoundary key={`${tab.noteId}-${tab.reloadKey ?? 0}`} noteId={tab.noteId}>
+              <SheetEditor
+                noteId={tab.noteId}
+                content={contentFor(tab)}
+                visible={visible && tab.noteId === activeNoteId}
+                readOnly={(lockedNoteIds?.has(tab.noteId) ?? false) || tab.deleted === true}
+                onChange={(content) => handleChange(tab.noteId, content)}
+              />
+            </SheetEditorErrorBoundary>
+          ) : (
           <EditorTab
             key={`${tab.noteId}-${tab.reloadKey ?? 0}`}
             noteId={tab.noteId}
@@ -439,7 +455,8 @@ export function MultiTabEditor({
             onEditorReady={onEditorReady}
             onReloadNote={onReloadNote}
           />
-        ))}
+          )
+        ))}</Suspense>}
       </div>
       {tabCtx && (
         <TabContextMenu
@@ -490,6 +507,27 @@ export function MultiTabEditor({
       )}
     </div>
   );
+}
+
+/**
+ * 表格编辑器错误边界（260919 用户报窗口被 FortuneSheet 异常打崩）。
+ * 第三方 canvas 内核的渲染/状态异常不应连累整个窗口：单表崩了只显示占位，切标签/重开即恢复。
+ * key 由调用方按 noteId-reloadKey 给，切换文档时边界状态自然重置。
+ */
+class SheetEditorErrorBoundary extends Component<{ noteId: string; children: ReactNode }, { failed: boolean }> {
+  state = { failed: false };
+  static getDerivedStateFromError() {
+    return { failed: true };
+  }
+  componentDidCatch(error: unknown, info: ErrorInfo) {
+    console.error("[sheet] editor crashed", this.props.noteId, error, info.componentStack);
+  }
+  render() {
+    if (this.state.failed) {
+      return <div className="empty-workspace-hint">表格渲染出错（已隔离，未影响其他文档）。切换标签或重新打开该表格即可恢复。</div>;
+    }
+    return this.props.children;
+  }
 }
 
 interface TabContextMenuProps {

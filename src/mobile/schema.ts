@@ -20,7 +20,8 @@ export async function applyMobileSchema(db: MobileDb): Promise<void> {
     content_hash TEXT,
     sync_state TEXT NOT NULL DEFAULT 'local',
     is_conflict INTEGER NOT NULL DEFAULT 0,
-    deleted_at TEXT
+    deleted_at TEXT,
+    doc_kind TEXT NOT NULL DEFAULT 'doc'
   )`);
   const noteColumns = (
     (await db.prepare("PRAGMA table_info(notes)").all()) as Array<{ name: string }>
@@ -42,6 +43,8 @@ export async function applyMobileSchema(db: MobileDb): Promise<void> {
   await addNoteColumn("is_locked", "INTEGER NOT NULL DEFAULT 0");
   await addNoteColumn("locked_at", "TEXT");
   await addNoteColumn("icon", "TEXT");
+  // v6 文档类型（doc | sheet | bitable）：与桌面 notes.kind 对应，随 manifest 同步
+  await addNoteColumn("doc_kind", "TEXT NOT NULL DEFAULT 'doc'");
   await addNoteColumn("text_cache", "TEXT");
 
   // 全文搜索 v2：FTS5 + unicode61（中文单字预分词，src/core/search）。旧库若为 trigram 则重建。

@@ -1,0 +1,50 @@
+diff --git a/node_modules/@fortune-sheet/react/dist/index.esm.js b/node_modules/@fortune-sheet/react/dist/index.esm.js
+index c4486a2..838a3ae 100644
+--- a/node_modules/@fortune-sheet/react/dist/index.esm.js
++++ b/node_modules/@fortune-sheet/react/dist/index.esm.js
+@@ -1126,7 +1126,7 @@ var InputBox = function InputBox() {
+     style: firstSelection ? _objectSpread2({
+       minWidth: (firstSelection === null || firstSelection === void 0 ? void 0 : firstSelection.width) || 0,
+       minHeight: (firstSelection === null || firstSelection === void 0 ? void 0 : firstSelection.height) || 0
+-    }, inputBoxStyle) : {}
++    }, inputBoxStyle, (function () { var _fd = getFlowdata(context); var _row = _fd && _fd[row_index]; var _cell = _row && _row[col_index]; var _tbv = _cell && _cell.tb; if (_tbv != null && String(_tbv) === "1") return {}; return { width: firstSelection.width, maxWidth: firstSelection.width, whiteSpace: String(_tbv) === "0" ? "nowrap" : "pre-wrap" }; })()) : {}
+   }, /*#__PURE__*/React.createElement(ContentEditable, {
+     innerRef: function innerRef(e) {
+       inputRef.current = e;
+@@ -6128,10 +6128,7 @@ var Toolbar = function Toolbar(_ref) {
+         iconId: name,
+         tooltip: toolbar.insertImage,
+         key: name,
+-        onClick: function onClick() {
+-          if (context.allowEdit === false) return;
+-          showImgChooser();
+-        }
++        onClick: function onClick(e) { var _btn = e && (e.currentTarget || e.target); var _inp = _btn && _btn.querySelector && _btn.querySelector('input[type=file]'); if (_inp) _inp.click(); else showImgChooser(); }
+       }, /*#__PURE__*/React.createElement("input", {
+         id: "fortune-img-upload",
+         type: "file",
+diff --git a/node_modules/@fortune-sheet/react/dist/index.js b/node_modules/@fortune-sheet/react/dist/index.js
+index e404551..8b40b3d 100644
+--- a/node_modules/@fortune-sheet/react/dist/index.js
++++ b/node_modules/@fortune-sheet/react/dist/index.js
+@@ -1137,7 +1137,7 @@ var InputBox = function InputBox() {
+     style: firstSelection ? _objectSpread2({
+       minWidth: (firstSelection === null || firstSelection === void 0 ? void 0 : firstSelection.width) || 0,
+       minHeight: (firstSelection === null || firstSelection === void 0 ? void 0 : firstSelection.height) || 0
+-    }, inputBoxStyle) : {}
++    }, inputBoxStyle, (function () { var _fd = getFlowdata(context); var _row = _fd && _fd[row_index]; var _cell = _row && _row[col_index]; var _tbv = _cell && _cell.tb; if (_tbv != null && String(_tbv) === "1") return {}; return { width: firstSelection.width, maxWidth: firstSelection.width, whiteSpace: String(_tbv) === "0" ? "nowrap" : "pre-wrap" }; })()) : {}
+   }, /*#__PURE__*/React__default['default'].createElement(ContentEditable, {
+     innerRef: function innerRef(e) {
+       inputRef.current = e;
+@@ -6139,10 +6139,7 @@ var Toolbar = function Toolbar(_ref) {
+         iconId: name,
+         tooltip: toolbar.insertImage,
+         key: name,
+-        onClick: function onClick() {
+-          if (context.allowEdit === false) return;
+-          core.showImgChooser();
+-        }
++        onClick: function onClick(e) { var _btn = e && (e.currentTarget || e.target); var _inp = _btn && _btn.querySelector && _btn.querySelector('input[type=file]'); if (_inp) _inp.click(); else core.showImgChooser(); }
+       }, /*#__PURE__*/React__default['default'].createElement("input", {
+         id: "fortune-img-upload",
+         type: "file",

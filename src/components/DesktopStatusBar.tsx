@@ -8,6 +8,8 @@ export interface StatusBarNotice {
 
 export interface DesktopStatusBarProps {
   showDocumentStats: boolean;
+  /** 当前文档类型（v6）：非 doc 时「字数/图片」口径不适用（正文不是 Lake 文本），改为显示类型标签。 */
+  docKind?: "doc" | "sheet" | "bitable";
   wordCount: number;
   imageCount: number;
   notice: StatusBarNotice | null;
@@ -29,7 +31,7 @@ function StatusIcon({ status }: { status: DocumentStatusModel }) {
   }
 }
 
-export function DesktopStatusBar({ showDocumentStats, wordCount, imageCount, notice, documentStatus, locked = false }: DesktopStatusBarProps) {
+export function DesktopStatusBar({ showDocumentStats, docKind = "doc", wordCount, imageCount, notice, documentStatus, locked = false }: DesktopStatusBarProps) {
   if (!showDocumentStats) return null;
   return (
     <>
@@ -45,8 +47,14 @@ export function DesktopStatusBar({ showDocumentStats, wordCount, imageCount, not
         </div>
         <div className="document-statusbar-fixed">
           <div className="document-statusbar-stats" aria-label="文档统计">
-            <span>字数 {Math.max(0, wordCount)}</span>
-            <span>图片 {Math.max(0, imageCount)}</span>
+            {docKind === "doc" ? (
+              <>
+                <span>字数 {Math.max(0, wordCount)}</span>
+                <span>图片 {Math.max(0, imageCount)}</span>
+              </>
+            ) : (
+              <span>{docKind === "sheet" ? "表格" : "多维表"}</span>
+            )}
           </div>
           <div className={`document-statusbar-state ${documentStatus.kind}`} title={documentStatus.label} aria-label={documentStatus.label}>
             <span className="document-statusbar-status-icon" aria-hidden="true"><StatusIcon status={documentStatus} /></span>

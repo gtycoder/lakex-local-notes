@@ -138,7 +138,7 @@ export function App() {
     setDraftEntries,
     setSaveState,
   });
-  const { handleContentChange, createNoteIn, createNote, deleteTreeNode } = useNoteLifecycle({
+  const { handleContentChange, createNoteIn, createNote, createSheetIn, deleteTreeNode } = useNoteLifecycle({
     bumpRevision,
     resetRevision,
     clearNote,
@@ -265,7 +265,7 @@ export function App() {
     sidebarSelect, sidebarCreate, sidebarRename, sidebarMove,
     sidebarRequestDelete, sidebarSetIcon, sidebarOpenHistory, sidebarOpenSearch, sidebarPendingRenameConsumed,
   } = useTreeActions({
-    createNoteIn, openNote, setNodeIcon, treeNodes,
+    createNoteIn, createSheetIn, openNote, setNodeIcon, treeNodes,
     setTreeNodes, setNotes, setOpenTabs, setConfirmDelete,
     setHistoryNoteId, setHistoryOpen, setSearchPanelQuery, setSearchPanelOpen,
     setPendingRenameId, setError,
@@ -300,7 +300,7 @@ export function App() {
   // 字数/图片统计（W-2-A）：从渲染体移出，避免每次按键对整篇正文跑两次 O(n) 正则。
   const {
     activeNodeSyncState, editorPrefs, activePath, scrollActiveEditorToTop, navigateToHeading,
-    headingPath, tabInfos, outlineVisible, lockedNoteIds, effectiveOutlineMode, shellStyle,
+    headingPath, tabInfos, outlineVisible, lockedNoteIds, effectiveOutlineMode, shellStyle, activeKind,
   } = deriveDesktopView({
     activeNoteId, treeNodes, notes, openTabs, iconByNoteId,
     fontSize: settings.fontSize, tocEnabled, outlineEnhance,
@@ -401,6 +401,7 @@ export function App() {
         </div>
         <DesktopStatusBar
           showDocumentStats={desktopWorkspace === "library"}
+          docKind={activeKind}
           wordCount={docStats.wordCount}
           imageCount={docStats.imageCount}
           locked={activeNoteId !== null && lockedNoteIds.has(activeNoteId)}
@@ -452,6 +453,7 @@ export function App() {
         focusMode={focusMode}
         onToggleFocusMode={() => { setFocusMode((value) => !value); setTopMenuOpen(false); }}
         activeNoteId={activeNoteId}
+        activeKind={activeKind}
         lockedNoteIds={lockedNoteIds}
         onToggleNoteLock={() => { void toggleNoteLock(); setTopMenuOpen(false); }}
         // 文档右上角「更多」里的导出：与目录树右键同一套动作，作用于当前文档

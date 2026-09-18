@@ -35,6 +35,8 @@ export interface DesktopOverlaysProps {
   focusMode: boolean;
   onToggleFocusMode: () => void;
   activeNoteId: string | null;
+  /** 当前活动文档类型（v6）；非 doc 时隐藏导出入口（导出会产出坏文件）。 */
+  activeKind: "doc" | "sheet" | "bitable";
   lockedNoteIds: ReadonlySet<string>;
   onToggleNoteLock: () => void;
   /** 顶栏「更多」里的导出（与目录树右键「导出」子菜单同一套动作，作用于当前文档） */
@@ -82,7 +84,7 @@ export function DesktopOverlays(props: DesktopOverlaysProps) {
     confirmDelete, onConfirmDelete, onCancelDelete,
     workspaceMenuOpen, wsMenuWrapRef, workspaceMenuRef, moreMenuWrapRef, moreMenuRef, topMenuOpen,
     onOpenSettingsFromMenu, onOpenTrashFromMenu,
-    focusMode, onToggleFocusMode, activeNoteId, lockedNoteIds, onToggleNoteLock,
+    focusMode, onToggleFocusMode, activeNoteId, activeKind, lockedNoteIds, onToggleNoteLock,
     onExportAs, onCopyMarkdown, onCopyPaths, onCloseTopMenu,
     draftEntries, onRestoreDraft, onDiscardDraft, onCloseDrafts,
     searchPanelOpen, searchPanelQuery, onOpenNoteFromSearch, onCloseSearch,
@@ -128,7 +130,7 @@ export function DesktopOverlays(props: DesktopOverlaysProps) {
             </button>
           )}
           {/* 导出：与目录树右键「导出」子菜单同一套动作（作用于当前文档），见 ExportSubmenuItem */}
-          {activeNoteId && (
+          {activeNoteId && activeKind === "doc" && (
             <ExportSubmenuItem
               onExportAs={onExportAs}
               onCopyMarkdown={onCopyMarkdown}
