@@ -5,7 +5,14 @@
 > **§8 是移动端（安卓）专职交接**，由移动端会话维护；桌面会话不要改 §8，移动端会话不要改 §0-§7 之外的桌面文件。
 
 ## 0. 当前基线（新会话开工前）
-- **基线（最新一批，已在 `master` 且已推 origin）**：`master` @ `e873809`（本批代码末提交；其上为本条 §0 更新）。本批 = **块级编辑三批收口 + 目录栏收口**（原在途分支 `feat/block-drag-native` 已**合入并删本地分支**）：
+- **本批（S3 审计三条错误处理修复，⚠️ 未提交，工作区改动即本批，等用户验收）**：代码基线 = `master` @ `e873809`（§0 上一条），另有一篇文档提交 `3105dfe`。本批 = 审计文档 `docs/S3-STORAGE-AUDIT-260918.md` 的**三次复核 + 三条落地**（详细勘误与证据见该文档 **§8**）：
+  ① **F2**：清单拉取失败 ⇒ 整轮中止并抛出（`src/core/syncEngine.ts` pull 的 catch 删掉「降级成 return」分支；对象缺失=首次同步走 null 分支不受影响）——顺带修掉「引擎早退后 Controller 仍删 purge 前缀 + `markPurgeSynced`」的顺序问题；
+  ② **D1/F1/D2**：桌面留档不再静默吞（`electron/syncAdapters.ts` `createHistorySnapshot` 删整体 catch）+ 拒空正文（`.lake` 缺失被 catch 成 "" 时抛「留档内容为空」）；手动同步 UI（`src/hooks/useSyncController.ts`）catch 透出真实原因；
+  ③ **D3/F6**：`AssetRepository.getProtectedRefs` 单点扩成「当前正文 ∪ 历史 refs ∪ **未保存草稿 refs**」（`electron/draftJournal.ts` 新增 `draftJournalDir`/`readDraftEntry` 只读助手；`store.ts` 装配注入；`main.ts` 改用共享目录函数）⇒ 自动清理/全局清孤儿/单条删孤儿/云端 GC keep 集/待回收标记五处口径一致。
+  - 护栏：`src/core/syncEngine.test.ts`（D2 测试改 rejects 断言 + 新增「审计 260918 D1 留档失败整轮中止」）· `electron/store.test.ts`（新增「审计 260918 D3 草稿引用不被清理」+「D1/D2 留档 adapter 拒空/写盘失败抛出」）。
+  - 门禁（本批实测）：`tsc` 0 · `vitest` **1014 passed / 16 skipped (1030)** · 桌面 + 移动 `vite build` 全绿。
+  - 审计文档同步更新：`docs/S3-STORAGE-AUDIT-260918.md` 新增 **§8**（§7 勘误 + 落地记录），§7.1–7.5 按 §8 更正（F2/D2 复现步骤原文验不出来、D5 降为 Info、B4 补下载侧触发面与内存上界、F7/F9 明确不做）。
+- **基线（上一批，已在 `master` 且已推 origin）**：`master` @ `e873809`（本批代码末提交；其上为本条 §0 更新）。本批 = **块级编辑三批收口 + 目录栏收口**（原在途分支 `feat/block-drag-native` 已**合入并删本地分支**）：
   ① **块手柄锚点**改锚「**项目符号 marker 左缘**」（原锚内容左缘 ⇒ 手柄压在符号上，实测 icon 中心落在 marker 内 16px；改后 = `marker.left − 16`）；
   ② **删除/剪切/拖拽不再留空行**：`deleteByRange` 语义是「删内容」，范围覆盖根级整块时内核会在原位补一个默认段落（实测删除 `63→63` 空段落+1、拖拽 `63→64`）⇒ 改走内核**模型事务节点级删除**（`removeBlockNodesNative`：`_model.editing` → `getNodeById/removeChild` → **选区复位** → `commitJob`），拖拽改「**先摘源节点 → 按删除后落点 `insertAtPosition`**」；修复后删除 `63→62`、拖拽 `63→63`、空段落不变；
   ③ **目录栏收口**：新增「**刷新**」按钮（**置于图标组最左**）、「＋」只留「新建笔记本」并收小弹窗（220×60/行高42 → **150×50/行高32**）、**点文档不再自动展开子项**（`expandAncestorChain` + 跟随定位 `expandSelf:false` + `autoExpanded` 只展开容器）、**自动定位去跳动**（改 `useLayoutEffect` 布局前同帧滚动；A/B 逐帧实测错位帧 **2 → 0**）、**重命名只留一个焦点环**（去 b3 outline + box-shadow + 重命名行的 `context` 环）；
@@ -259,6 +266,8 @@
     - **UI**：ghost 需渲染整段（多块）预览；落点线 / 边缘自动滚动可复用（ghost 已支持「列表父项整段」，扩展到多块改动不大）。
     - **代价**：约 **0.5–1 天**（含 e2e）。
 
+12. **【S3 审计遗留 · 低优先级】**（260918 审计三条 P0/P1 已落地，见 §0 本批 + `docs/S3-STORAGE-AUDIT-260918.md` §7.5/§8）：① **B4 实测**——该篇附件哈希全量重算在上传**和下载**两侧都会发生，有痛感再做 `(filename,size,mtime)→hash` 缓存（贴 AGENTS §3 #11 红线，**单独立项**）；② **D4** purge 文件删除失败 → 阻断云端前缀删除；③ 移动端 `note_history` 补 `refs_json`/`protected_until`（建议并入 §8.7 真机验收批次）。
+
 ### 当前问题 / 已知坑（不阻塞）
 - 画板**不再记忆视口**（拖动/缩放后重开为默认/自适应）：这是 260916 为「不让视口触发保存/上传」刻意做的取舍，**用户已确认接受**（"谁知道下次进来要看什么"）。不要改回去。
 - 离线残余 3 处（见上，全外观级）。
@@ -269,6 +278,13 @@
 - **`vitest` 是 `node` 环境，跑不了内核**：涉及内核行为的验证只能 CDP 驱真实 Electron；不要试图为它写单测（对拍脚本就是这种模式）。
 
 ## 4. 踩过的坑（合并版；通用红线/环境见 AGENTS.md）
+
+### 本次会话新坑（2026-09-18 S3 审计批次）
+- **验证「清单拉取失败」不能只改错密钥/endpoint**：桌面同步先 `remote.test()`（ListObjectsV2），坏凭据/不可达都在那里抛、UI 本就正确报失败。只有「清单非法 JSON / 解压后 >20MiB / `test()` 之后那次 GET 瞬时失败」才会走到引擎 pull 的 catch。**写审计复现步骤前先确认「实际在哪一层抛」**（本次审计 §7.4 的 F2/D2 两步复现都因此验不出来，已按 §8 更正）。
+- **同步失败语义已改「真失败一律抛」**：`syncEngine` pull manifest 的 catch 不再有「降级成 return」分支（对象缺失=首次同步走 null 分支，不是异常）。改这段代码若加回吞错，会退回「同步成功、0/0」假安全；且引擎早退后 Controller 的 purge 前缀删除/`markPurgeSynced` 也会跟着执行（顺序问题）。
+- **留档快照是「被覆盖编辑」的唯一保障，不许吞错**：`syncAdapters.createHistorySnapshot` 的空正文（""）= `.lake` 读失败（应用永不产出空 `.lake`，`emptyLakeBody` 是 `<p><br></p>`），必须抛；`createHistorySnapshot` 遇 `.lake` 缺失是**静默 return null**（不留档）——「无空快照」≠「无问题」。
+- **「资源能否被删」的单一真相 = `AssetRepository.getProtectedRefs`**（当前正文 ∪ 历史 refs ∪ 未保存草稿 refs）。任何新的删除路径（自动/手动清理、GC）都走它，**不要**自己另写「当前正文引用」判定——草稿引用这层就是这么漏掉的（审计 D3）。
+- **给审计文档下结论前跑独立复测脚本**：清单体积这类估算用 `crypto.randomUUID()` 按 `buildUploadEntry` 字段构造实测（本批 `/tmp` 脚本复测 5K+2万附件 = 4.30MiB，与文档 4.08MiB 同口径）；纯文字估算容易把「字节余量」和「条数余量」混着说。
 
 ### 本次会话新坑（2026-09-17 第三批：浏览器端）
 - **dev 改 `electron/preload.cjs` 不会热重启**：vite-plugin-electron 只 watch 入口 `electron/main.ts`；dev 下 preload 是**直接读源文件** `../electron/preload.cjs`（不在 `dist-electron/` 里）。改完 preload 必须**手动重启 Electron**（或 `touch electron/main.ts` 触发重建）才生效，否则渲染层还是旧方法（症状：`window.lakeNative.getWebStatus is not a function`）。
