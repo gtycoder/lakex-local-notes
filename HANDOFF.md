@@ -5,12 +5,12 @@
 > **§8 是移动端（安卓）专职交接**，由移动端会话维护；桌面会话不要改 §8，移动端会话不要改 §0-§7 之外的桌面文件。
 
 ## 0. 当前基线（新会话开工前）
-- **本批（表格文档接入 SheetDocument = 电子表格 kind=sheet，⚠️ 代码已写完、门禁全绿、但【未提交】【未真机验收】）**：分支 `feat/sheet-document`（从 master `f39b968` 切出；调研分支 `spike/sheet-ce` 已删——它 0 个独有提交，调研产物都在工作区）。**写给零上下文新会话的完整交接 = §2.8（新会话从这里读）**；设计/选型/实测数据全表 = `docs/SHEET-BITABLE-DESIGN-260918.md`。
-  - 一句话：新增**文档类型** `kind = doc | sheet | bitable`（只加在 `notes.kind` + `manifest.kind`，**不动 `tree_nodes.node_type`**）；表格正文落 `sheets/{id}.sheet.json`（jspreadsheet CE 快照 JSON）；**manifest 升 v6**（带 kind）；编辑器用 **CE + `parseFormulas:false`**（规避严格 CSP 下的 eval）；**多维表(bitable)本批不做**。
-  - 门禁（本批实测）：`tsc` 0 · `vitest` **1014 passed / 16 skipped (1030)** · `vite build` exit 0 · `check:bundle` app-js gzip **1.82MB / 预算 2.90MB** · CE 走懒加载分包 `SheetEditor-*.js` = 468KB raw / **124KB gzip，首屏 index chunk 不含 CE**。
+- **本批（表格文档接入 kind=sheet，✅ 已提交并推 origin：`master` @ `71c2d90`；⚠️ 尚未真机验收）**：分支 `feat/sheet-document` 已 **ff 合入 `master`**（旧调研分支 `spike/sheet-ce` 已删）。**写给零上下文新会话的完整交接 = §2.8（新会话从这里读）**；设计/选型/实测数据全表 = `docs/SHEET-BITABLE-DESIGN-260918.md` + `docs/FORTUNESHEET-FEASIBILITY-260919.md`（260919 换内核）。
+  - 一句话：新增**文档类型** `kind = doc | sheet | bitable`（只加在 `notes.kind` + `manifest.kind`，**不动 `tree_nodes.node_type`**）；表格正文落 `sheets/{id}.sheet.json`；**manifest 升 v6**（带 kind）；编辑器 = **FortuneSheet 1.0.4**（260919 由 jspreadsheet CE 换掉；CSP / 图片 input / 编辑态限宽 / setCellFormat 判空 走 `patches/`）；**多维表(bitable)本批不做**。
+  - 门禁（本批实测）：`tsc` 0 · `vitest` **1025 passed / 16 skipped (1041)** · 桌面 + 移动 `vite build` 全绿 · `check:bundle` app-js gzip **1.82MB / 预算 2.90MB** · `check:core` 0 · 懒加载分包 `SheetEditor-*.js` ≈ **580KB gzip，首屏 index chunk 不含它**。
   - ⚠️ **manifest v6 ⇒ 所有端必须一起升级**：旧端读到 v6 会显式拒绝同步（`READABLE_MANIFEST_VERSIONS={4,5,6}`，未知 kind 也拒绝）——这是**刻意**的安全闸，防止旧端把表格 JSON 当 Lake 文档打开、保存即写坏正文。
-  - ⚠️ **未做**：真机验收（新增/编辑/保存/同步/移动端占位全链路没在真实应用跑过）、SheetEditor 的 2 处内联样式（**违反 AGENTS §3 #14**）、非 doc 类型的导出/复制 Markdown 守卫、`docs/SYNC-PROTOCOL.md`+`docs/STORAGE-LAYERS.md` 回填、spike 调研产物清理。**清单见 §3 第 13 条。**
-  - **提交前必做**：删 `spike.html`、`src/spike/`、`scripts/spike-sheet-ce.mjs`、`vite.spike.config.ts`、`vite.spike.build.config.ts`（**两份设计文档保留**：`docs/SHEET-BITABLE-DESIGN-260918.md`、`docs/ASSET-HOST-FEASIBILITY-260918.md`）。
+  - ⚠️ **未做 / 待办**：① **真机验收**；② `SheetEditor.tsx` 的 2 处内联样式（**违反 AGENTS §3 #14**，改 CSS 基线需用户确认）。**清单见 §3 第 13 条。**
+  - ✅ 已随本批完成：非 doc 导出 kind 守卫 + 目录树/⋯ 菜单/大纲/字数 的 kind 收口；`docs/SYNC-PROTOCOL.md`+`docs/STORAGE-LAYERS.md` 回填；spike 产物清理（`spike.html`/`src/spike/`/`scripts/spike-sheet-ce.mjs`/`vite.spike*.ts` 已删，**设计文档保留**）。
 - **上一批（S3 审计三条错误处理修复，✅ 已提交并推 origin，260918 用户验收）**：本批代码末提交 = `master` @ `2f46784`（其上为 HANDOFF 更新 `54b84dd`）；上一批代码基线 `e873809`。本批 = 审计文档 `docs/S3-STORAGE-AUDIT-260918.md` 的**三次复核 + 三条落地**（详细勘误与证据见该文档 **§8**）：
   ① **F2**：清单拉取失败 ⇒ 整轮中止并抛出（`src/core/syncEngine.ts` pull 的 catch 删掉「降级成 return」分支；对象缺失=首次同步走 null 分支不受影响）——顺带修掉「引擎早退后 Controller 仍删 purge 前缀 + `markPurgeSynced`」的顺序问题；
   ② **D1/F1/D2**：桌面留档不再静默吞（`electron/syncAdapters.ts` `createHistorySnapshot` 删整体 catch）+ 拒空正文（`.lake` 缺失被 catch 成 "" 时抛「留档内容为空」）；手动同步 UI（`src/hooks/useSyncController.ts`）catch 透出真实原因；
