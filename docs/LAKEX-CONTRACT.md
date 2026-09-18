@@ -372,6 +372,33 @@
   落点 `position` 由「目标元素前/后的折叠 DOM range」`transformDOMRange(...).start` 得到。注意：插入的副本会复用原块 id，**必须插入前固化原块模型 range** 再 `deleteByRange`，否则按 id 反查会删到副本（表现＝没移动）。 **不要用 `insertAtSelection` 折叠光标做块移动**：它会把内容吸附进相邻块（段落融合丢换行、列表项文本追加到目标项）；改用 `insertAtPosition(position, format, data)`（走 `insertINodeByPosition` 的块级插入/补 hole）。列表项要抽**裸 `<li>`**（`getNodeContent` 返回的是整段 `<ul>` 包一个 `<li>`）且**先删源再插**（插入同列表会重建节点、源 range 失效）；其它块**先插后按插入前固化的源 range 删**（段落删除会留一个空段落）。
   实测：拖思维导图卡后仍 634B/hash 不变；拖段落成功且卡片零改动。**禁用** `blockDoc.moveBlock` 的整篇 JSON 读改写（实测自定义卡 634B→8859B、抹掉未注册卡）。完整调研见 `docs/BLOCK-DRAG-RESEARCH-260917.md`。
 
+### 5.8.3 列表父项 = 一个整块：嵌套在 `ne-level` 上，整段用跨元素 range（Issue 3，260917 实测）
+
+**内核列表的 DOM 形态（关键）**：所有列表项都是 `.ne-engine` 的**平级子节点**（`NE-ULI`/`NE-OLI`/`NE-TLI`），
+DOM 里**没有**列表容器元素、也没有 `data-lake-indent`；嵌套层级渲染在**项自身**的 `ne-level="N"`
+（一级缺省 = 0）。模型里同样是平级兄弟，缩进编码在 `attrs.level` / `parentIndex`。
+
+**由此产生的坑**：`getNodeContent(父项id, 'text/lake')` 只返回父项那一行（`<ul><li>父项</li></ul>`），
+**不含任何子项** ⇒ 删除/转化/复制/拖拽父项时子项被落下（与云端「父项手柄代表整个条目」不一致）。
+
+**整段口径（已落地，纯 DOM、不读整篇 JSON）**：
+- `blockSpanElements(el)`：非列表项返回 `[el]`；列表项返回「自身 + 紧随其后、`ne-level` 更大且同族
+  （`ne-uli-c`/`ne-oli-c`/`ne-tli-c`）的连续项」。
+- `spanDomRange(span)`：`setStartBefore(首)` / `setEndAfter(末)` 的跨元素 outer range（**恒为非折叠**；
+  列表项用 `selectNode` 变换后是折叠的，会触发 `deleteByRange` 断言）。
+- `selectBlockSpanInEditor` / `selectWholeBlockForEdit`：多元素时把该 range 设为内核选区。
+- **读取整段用 `getSelectionContent(format)`**（`getNodeContent` 只能取单节点）。
+- `deleteBlockByRange` / `copyDomBlock` / `movableFragment` / `moveBlockNative` /
+  `convertBlockPreservingContent` 全部改走整段；手柄高亮与拖拽 ghost 也覆盖整段。
+
+**实测（副本，`scripts/e2e-block-list-span.mjs`）**：三级父项（level 0/1/2）→ 手柄高亮 3 项；
+「转化为 → 高亮块」后落盘 `<blockquote class="lake-alert lake-alert-info"><ul list=…>…</ul>…</blockquote>`
+且**父项 + 2 子项文本都在容器内**；「删除」整段全部移除；原件 hash 不变。
+- ⚠️ alert 的落盘形态属性顺序是 `<blockquote data-lake-id="…" id="…" class="lake-alert …">`
+  （`class` **不在**第一个属性）⇒ 断言正则要写 `<blockquote[^>]*class="lake-alert`。
+
+**未做**：多块选区（跨多个顶层块）的聚合手柄 / 批量转化 —— 内核无批量转化命令，方案见 §5.9。
+
 ### 5.9 内核命令注册表（43 插件 / 147 条 kO 命令 + 4 条命令式 = 151，bundle 实测枚举，260917）
 
 来源 = `vendor/lakex-doc-react/src/components/lakex/lakex.js` 里 `kO({ pluginName:'X', command:{…} })` 的**括号配对解析**（脚本见本节末），补上 §5.8.1 第 7 条「只给计数、没给清单」的缺口。**新增块级能力前先在这张表里找命令；表里没有才写 wrapper 层。**

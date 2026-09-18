@@ -108,3 +108,38 @@ describe("块操作菜单：白名单收敛", () => {
     expect(HELPERS_SRC).toMatch(/CONTAINER_TAGS/);
   });
 });
+
+describe("块操作菜单：列表父项 = 一个整块（Issue 3）", () => {
+  it("用 ne-level 计算「父项 + 子项」整段（不读整篇 JSON）", () => {
+    expect(HELPERS_SRC).toMatch(/export function blockSpanElements\(/);
+    // 列表层级由内核渲染在 ne-level 上；子项 = 紧随其后、层级更大的同族项
+    expect(HELPERS_SRC).toMatch(/getAttribute\("ne-level"\)/);
+    expect(HELPERS_SRC).toMatch(/listItemLevel\(sibling\) > baseLevel/);
+  });
+
+  it("整段选取走跨元素 outer range（setStartBefore/setEndAfter）", () => {
+    expect(HELPERS_SRC).toMatch(/function spanDomRange\(/);
+    expect(HELPERS_SRC).toMatch(/setStartBefore\(span\[0\]\)/);
+    expect(HELPERS_SRC).toMatch(/setEndAfter\(span\[span\.length - 1\]\)/);
+    expect(HELPERS_SRC).toMatch(/export function selectBlockSpanInEditor\(/);
+  });
+
+  it("读取/转化/删除/复制/移动都按整段处理", () => {
+    // 列表父项的内容必须用整块选区 + getSelectionContent（getNodeContent(id) 只有父项那行）
+    expect(HELPERS_SRC).toMatch(/blockSpanElements\(blockElement\)\.length > 1/);
+    expect(HELPERS_SRC).toMatch(/execCommand\("getSelectionContent", format\)/);
+    // 替换/改样式前的选中口径
+    expect(HELPERS_SRC).toMatch(/function selectWholeBlockForEdit\(/);
+    // 删除 / 复制 / 移动都引用整段
+    expect(HELPERS_SRC).toMatch(/const span = blockSpanElements\(blockElement\)/);
+    expect(HELPERS_SRC).toMatch(/const sourceSpan = blockSpanElements\(sourceEl\)/);
+    expect(HELPERS_SRC).toMatch(/spanDomRange\(sourceSpan\)/);
+  });
+
+  it("手柄高亮与拖拽预览覆盖整段", () => {
+    expect(HANDLE_SRC).toMatch(/blockSpanElements,/);
+    expect(HANDLE_SRC).toMatch(/for \(const node of blockSpanElements\(el\)\)/);
+    expect(HANDLE_SRC).toMatch(/const draggedSpan = blockSpanElements\(draggedEl\)/);
+    expect(HANDLE_SRC).toMatch(/draggedSpan\.includes\(targetBlock\)/);
+  });
+});
