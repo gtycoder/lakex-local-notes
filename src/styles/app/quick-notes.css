@@ -91,9 +91,10 @@
 
 .quick-note-tool input { display: none; }
 
-.quick-note-composer textarea { flex: 1; width: 100%; min-height: 200px; resize: none; border: 0; outline: 0; background: transparent; font: 450 14px/1.7 -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", sans-serif; }
+/* 写作区 = 单个 Lake 内核实例（260919）：外层撑开、内层编辑器滚动，替代原 textarea。 */
+.quick-note-composer .quick-note-editor { flex: 1; width: 100%; min-height: 200px; display: flex; flex-direction: column; overflow: auto; font: 450 14px/1.7 -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", sans-serif; }
 
-.quick-note-composer textarea::placeholder { color: var(--b3-theme-on-surface-light); }
+.quick-note-composer .quick-note-editor > .lake-editor-mount { flex: 1; min-height: 200px; }
 
 .quick-note-composer-actions { display: flex; align-items: center; gap: 10px; margin-top: 10px; color: var(--lake-text-tertiary, #5f6a78); font-size: 12px; }
 

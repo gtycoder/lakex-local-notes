@@ -3,6 +3,7 @@ import { renderToString } from "react-dom/server";
 import { Doc, GetDefaultEditorConfig } from "@dlient/lakex-doc-react";
 import { mountBlockHoverHandle } from "./blockHandleMount";
 import { uploadLakeResource } from "./resourceUpload";
+import type { ResourceUploadOutput } from "../../lib/types";
 import { shouldSkipBoardCardFocus, useClickActivatedWheelGate } from "./canvasInteractionGate";
 import { ASSET_ORIGIN } from "../../lib/assetPort";
 import type { LocalAssetRef } from "../../core/assetUrl.js";
@@ -594,7 +595,9 @@ export function createLakeDocument(
   tocEnabled: boolean,
   noteId: string,
   scrollNode?: HTMLElement | null,
-  prefs?: LakeEditorPrefs
+  prefs?: LakeEditorPrefs,
+  /** 覆盖资源上传落盘（小记编辑态用它把图片写进 quick-notes 空间；缺省走文档资源空间）。 */
+  uploadResource?: (request: unknown) => Promise<ResourceUploadOutput>
 ): LakeEditorInstance {
   const mount = document.createElement("div");
   mount.className = "lake-editor-mount ne-doc-major-editor";
@@ -671,21 +674,21 @@ export function createLakeDocument(
       KaTexURL: [LAKE_KATEX_SCRIPT, LAKE_MHCHEM_SCRIPT],
     },
     image: {
-      createUploadPromise: (request: unknown) => uploadLakeResource(request, noteId),
+      createUploadPromise: (request: unknown) => (uploadResource ?? ((req: unknown) => uploadLakeResource(req, noteId)))(request),
       // 本地资源服务器 URL 必须排除，否则 Lake 每次 setDocument 都会重新下载并上传本地图片
       isCaptureImageURL: (url: string) => !url.startsWith("data:") && !url.startsWith("blob:") && !url.startsWith(`${ASSET_ORIGIN}/`),
     },
     file: {
-      createUploadPromise: (request: unknown) => uploadLakeResource(request, noteId),
+      createUploadPromise: (request: unknown) => (uploadResource ?? ((req: unknown) => uploadLakeResource(req, noteId)))(request),
     },
     // 视频/音频卡片：必须配 createUploadPromise，否则 Lake 走默认 uploadFileURL（/api/upload/video，
     // 应用内不存在）→ 上传失败/一直"上传中"。uploadLakeResource 对非图片 File 走附件落盘
     // （note-assets + canonical URL），video/audio 卡片 src=canonical 本地可达、持久可加载。
     video: {
-      createUploadPromise: (request: unknown) => uploadLakeResource(request, noteId),
+      createUploadPromise: (request: unknown) => (uploadResource ?? ((req: unknown) => uploadLakeResource(req, noteId)))(request),
     },
     audio: {
-      createUploadPromise: (request: unknown) => uploadLakeResource(request, noteId),
+      createUploadPromise: (request: unknown) => (uploadResource ?? ((req: unknown) => uploadLakeResource(req, noteId)))(request),
       // audio 卡上传成功后 setId(audioId = canonical URL)，播放地址 = canonical（本地可达，持久）。
       // 不配 queryAudioUrl 时 Lake 走 queryURL 轮询（应用无此端点）→ 永远"上传中"。
       // allowAudioPlayer=false（Lake 默认，版权保护）会把卡片渲染成"版权限制"链接（点击跳系统

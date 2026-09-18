@@ -1,10 +1,12 @@
 import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
-import { ArrowUpDown, Check, FilePlus, ImagePlus, Feather, LoaderCircle, Pencil, RotateCcw, Trash, X } from "lucide-react";
+import { ArrowUpDown, Check, FilePlus, Feather, LoaderCircle, Pencil, RotateCcw, Trash, X } from "lucide-react";
 import { native } from "../lib/native";
 import { createRequestVersion } from "../core/requestVersion";
-import type { NoteDocument, QuickNoteDocument, QuickNoteImage, TreeNode } from "../lib/types";
+import type { NoteDocument, QuickNoteDocument, QuickNoteImage, ResourceUploadOutput, TreeNode } from "../lib/types";
 import { getNativeErrorMessage } from "../lib/nativeErrors";
 import { ImageLightbox } from "../features/editor/ImageLightbox";
+import { uploadLakeResource } from "../features/editor/resourceUpload";
+import { QuickNoteEditor, type QuickNoteEditorApi } from "../features/quickNotes/QuickNoteEditor";
 import { openImagePreview } from "../features/editor/imagePreview";
 
 interface DraftImage {
@@ -14,7 +16,10 @@ interface DraftImage {
 
 interface DraftState {
   id: string;
+  /** 纯文本镜像（由编辑器产出；判定「有内容」与预览）。 */
   text: string;
+  /** 内核形态正文（编辑器产出；保存写入 `.qnote.body`）。 */
+  body: string;
   images: DraftImage[];
 }
 
@@ -31,7 +36,7 @@ interface QuickNotesWorkspaceProps {
   onDirtyChange(dirty: boolean): void;
 }
 
-const newDraft = (): DraftState => ({ id: crypto.randomUUID(), text: "", images: [] });
+const newDraft = (): DraftState => ({ id: crypto.randomUUID(), text: "", body: "", images: [] });
 const hasDraftContent = (draft: DraftState) => draft.text.trim().length > 0 || draft.images.length > 0;
 
 /**
@@ -67,7 +72,8 @@ export const QuickNotesWorkspace = forwardRef<QuickNotesWorkspaceHandle, QuickNo
   const [sortBy, setSortBy] = useState<QuickNoteSort>(() => readSortPref());
   const [sortOpen, setSortOpen] = useState(false);
   const deleteTimer = useRef<number | null>(null);
-  const fileInputs = useRef<Map<string, HTMLInputElement>>(new Map());
+  /** 当前写作区的编辑器句柄（保存时取实时正文）。 */
+  const draftEditorRef = useRef<QuickNoteEditorApi | null>(null);
   const listVersionRef = useRef(createRequestVersion());
   // 撤销窗口内「尚未落盘删除」的小记 id：外部刷新（如同步完成）不得让它重新出现。
   const pendingDeleteIdRef = useRef<string | null>(null);
@@ -143,27 +149,33 @@ export const QuickNotesWorkspace = forwardRef<QuickNotesWorkspaceHandle, QuickNo
     setEditingDraft(null);
   }
 
-  async function addFiles(files: FileList | File[], draft: DraftState) {
-    const candidates = Array.from(files).filter((file) => file.type.startsWith("image/"));
-    if (candidates.length === 0) return;
-    setError(null);
-    try {
-      const staged = await Promise.all(candidates.map(async (file) => {
-        const bytes = Array.from(new Uint8Array(await file.arrayBuffer()));
-        return native.stageQuickNoteImage(draft.id, { bytes, filename: file.name });
-      }));
-      // 若编辑状态在 await 期间变化，只将图片追加到开始上传时所属的草稿。
-      if (editingDraft?.id === draft.id) setEditingDraft((current) => current ? { ...current, images: [...current.images, ...staged.map((image) => ({ image, source: "staged" as const }))] } : current);
-      else if (createDraft.id === draft.id) setCreateDraft((current) => ({ ...current, images: [...current.images, ...staged.map((image) => ({ image, source: "staged" as const }))] }));
-      else await native.discardQuickNoteDraft(draft.id);
-    } catch (reason) { setError(`添加图片失败：${getNativeErrorMessage(reason)}`); }
+  /** 把刚落入 staging 的图片追加到对应草稿的图片清单（保存时据此 promote 文件）。 */
+  function appendStagedImage(draftId: string, image: QuickNoteImage) {
+    const entry = { image, source: "staged" as const };
+    if (editingDraft?.id === draftId) setEditingDraft((current) => current ? { ...current, images: [...current.images, entry] } : current);
+    else if (createDraft.id === draftId) setCreateDraft((current) => ({ ...current, images: [...current.images, entry] }));
   }
 
-  async function removeImage(draft: DraftState, draftImage: DraftImage) {
-    if (draftImage.source === "staged") await native.discardStagedQuickNoteImage(draft.id, draftImage.image.id).catch(() => undefined);
-    const next = draft.images.filter((candidate) => candidate.image.id !== draftImage.image.id);
-    if (editingDraft?.id === draft.id) setEditingDraft((current) => current ? { ...current, images: next } : current);
-    else if (createDraft.id === draft.id) setCreateDraft((current) => ({ ...current, images: next }));
+  /**
+   * 小记编辑态的资源上传钩子（交给 Lake 编辑器）：图片落小记 staging 空间，卡片 src 用 staging URL；
+   * 保存时主进程把作用域改写成 `/quick-notes/<小记id>/`。网络图片 v1 拒绝（提示先存本地再拖入）。
+   */
+  function quickNoteUploader(draftId: string) {
+    return (request: unknown) => uploadLakeResource(request, draftId, {
+      allowRemoteDownload: false,
+      saveResource: async (input) => {
+        setError(null);
+        try {
+          const image = await native.stageQuickNoteImage(draftId, { bytes: Array.from(input.bytes), filename: input.filename });
+          if (!image.url) throw new Error("小记图片暂存地址缺失");
+          appendStagedImage(draftId, image);
+          return { url: image.url, resourceRef: image.url, filename: image.filename, mimeType: image.mimeType, size: image.size };
+        } catch (reason) {
+          setError(`添加图片失败：${getNativeErrorMessage(reason)}`);
+          throw reason;
+        }
+      },
+    });
   }
 
   async function saveDraft() {
@@ -173,9 +185,14 @@ export const QuickNotesWorkspace = forwardRef<QuickNotesWorkspaceHandle, QuickNo
     try {
       const stagedImageIds = draft.images.filter((item) => item.source === "staged").map((item) => item.image.id);
       const retainedImageIds = draft.images.filter((item) => item.source === "saved").map((item) => item.image.id);
+      // 正文以编辑器实时内容为准；编辑器取不到时回落到镜像（两者同源，见 QuickNoteEditor）。
+      const api = draftEditorRef.current;
+      const editorText = api ? api.getText() : "";
+      const text = editorText.trim() ? editorText : draft.text;
+      const body = api ? api.getBody() : draft.body;
       const saved = activeIsEditing && editingId
-        ? await native.updateQuickNote(editingId, { text: draft.text, draftId: draft.id, stagedImageIds, retainedImageIds })
-        : await native.createQuickNote({ text: draft.text, draftId: draft.id, stagedImageIds });
+        ? await native.updateQuickNote(editingId, { text, body, draftId: draft.id, stagedImageIds, retainedImageIds })
+        : await native.createQuickNote({ text, body, draftId: draft.id, stagedImageIds });
       listVersionRef.current.invalidate();
       setItems((current) => {
         const without = current.filter((item) => item.id !== saved.id);
@@ -199,7 +216,7 @@ export const QuickNotesWorkspace = forwardRef<QuickNotesWorkspaceHandle, QuickNo
     if (editingId === item.id) return;
     if (dirty && !(await confirmSwitchDraft("切换到另一条小记将放弃当前未保存内容，是否继续？"))) return;
     const draft: DraftState = {
-      id: crypto.randomUUID(), text: item.content.text,
+      id: crypto.randomUUID(), text: item.content.text, body: item.content.body,
       images: item.content.images.map((image) => ({ image, source: "saved" })),
     };
     setEditingId(item.id); setEditingDraft(draft);
@@ -322,12 +339,11 @@ export const QuickNotesWorkspace = forwardRef<QuickNotesWorkspaceHandle, QuickNo
           draft={createDraft}
           variant="pane"
           saving={saving && !activeIsEditing}
-          onChange={(text) => setCreateDraft((current) => ({ ...current, text }))}
-          onAddFiles={(files) => void addFiles(files, createDraft)}
-          onRemoveImage={(image) => void removeImage(createDraft, image)}
+          uploadResource={quickNoteUploader(createDraft.id)}
+          onTextChange={(text) => setCreateDraft((current) => ({ ...current, text }))}
+          onEditorReady={(api) => { draftEditorRef.current = api; }}
           onSave={() => void saveDraft()}
           onCancel={() => void cancelDraft()}
-          inputRef={(node) => { if (node) fileInputs.current.set(createDraft.id, node); }}
         />
       </div>
       <div className={"quick-notes-list" + (selecting ? " selecting" : "")}>
@@ -337,11 +353,10 @@ export const QuickNotesWorkspace = forwardRef<QuickNotesWorkspaceHandle, QuickNo
             : visibleItems.map((item) => editingId === item.id && editingDraft
               ? <article className="quick-note-entry editing" key={item.id}><QuickNoteComposer
                   draft={editingDraft} variant="inline" saving={saving && activeIsEditing}
-                  onChange={(text) => setEditingDraft((current) => current ? { ...current, text } : current)}
-                  onAddFiles={(files) => void addFiles(files, editingDraft)}
-                  onRemoveImage={(image) => void removeImage(editingDraft, image)}
+                  uploadResource={quickNoteUploader(editingDraft.id)}
+                  onTextChange={(text) => setEditingDraft((current) => current ? { ...current, text } : current)}
+                  onEditorReady={(api) => { draftEditorRef.current = api; }}
                   onSave={() => void saveDraft()} onCancel={() => void cancelDraft()}
-                  inputRef={(node) => { if (node) fileInputs.current.set(editingDraft.id, node); }}
                 /></article>
               : <QuickNoteCard key={item.id} item={item} deletePending={pendingDelete !== null} selecting={selecting} checked={selected.has(item.id)} onToggleSelect={() => toggleSelected(item.id)} onEdit={() => void startEditing(item)} onDelete={() => scheduleDelete(item)} onConvert={() => setConvertItems([item])} />)
           }
@@ -370,40 +385,32 @@ interface ComposerProps {
   /** pane＝常驻写作面板（发布行在卡片外，仿语雀）；inline＝编辑既有小记（动作行留在卡片内） */
   variant: "pane" | "inline";
   saving: boolean;
-  onChange(text: string): void;
-  onAddFiles(files: FileList | File[]): void;
-  onRemoveImage(image: DraftImage): void;
+  /** 图片上传落盘（写进该草稿的 staging 空间）。 */
+  uploadResource(request: unknown): Promise<ResourceUploadOutput>;
+  onTextChange(text: string): void;
+  onEditorReady(api: QuickNoteEditorApi | null): void;
   onSave(): void;
   onCancel(): void;
-  inputRef(node: HTMLInputElement | null): void;
 }
 
-function QuickNoteComposer({ draft, saving, variant, onChange, onAddFiles, onRemoveImage, onSave, onCancel, inputRef }: ComposerProps) {
-  function pasteImages(event: React.ClipboardEvent<HTMLTextAreaElement>) {
-    const files = Array.from(event.clipboardData.files).filter((file) => file.type.startsWith("image/"));
-    if (files.length > 0) { event.preventDefault(); onAddFiles(files); }
-  }
-  function dropImages(event: React.DragEvent<HTMLTextAreaElement>) {
-    const files = Array.from(event.dataTransfer.files).filter((file) => file.type.startsWith("image/"));
-    if (files.length > 0) { event.preventDefault(); onAddFiles(files); }
-  }
-  /** ⌘/Ctrl + Enter 发布（对齐语雀小记的快捷键提示） */
-  function publishOnShortcut(event: React.KeyboardEvent<HTMLTextAreaElement>) {
+function QuickNoteComposer({ draft, saving, variant, uploadResource, onTextChange, onEditorReady, onSave, onCancel }: ComposerProps) {
+  /** ⌘/Ctrl + Enter 发布（对齐语雀小记的快捷键提示）：编辑器可能吞键，故挂捕获阶段兜底。 */
+  function publishOnShortcut(event: React.KeyboardEvent<HTMLDivElement>) {
     if ((event.metaKey || event.ctrlKey) && event.key === "Enter") { event.preventDefault(); onSave(); }
   }
   const publishLabel = variant === "pane" ? "小记一下" : "保存";
-  /** 有内容才强调（用户 260915）：新建小记空态＝中性描边；编辑既有小记的"保存"恒强调；两者同一套样式。 */
+  /** 有内容才强调（用户 260915）：新建空态＝中性描边；编辑既有小记的"保存"恒强调。 */
   const emphasized = variant === "inline" || draft.text.trim().length > 0 || draft.images.length > 0;
   return <>
-    <div className="quick-note-composer">
-      {/* 工具条置顶（仿语雀：图片等在写作区上方），正文区保持整块留白 */}
-      <div className="quick-note-composer-tools">
-        <label className="quick-note-tool" title="添加图片" aria-label="添加图片"><ImagePlus size={17} /><input ref={inputRef} type="file" accept="image/png,image/jpeg,image/gif,image/webp,image/avif" multiple onChange={(event) => { if (event.target.files) onAddFiles(event.target.files); event.currentTarget.value = ""; }} /></label>
-      </div>
-      <textarea value={draft.text} onChange={(event) => onChange(event.target.value)} onKeyDown={publishOnShortcut} onPaste={pasteImages} onDragOver={(event) => event.preventDefault()} onDrop={dropImages} placeholder={variant === "pane" ? "记你想记…" : "写下这一刻…"} aria-label="小记正文" />
-      {draft.images.length > 0 && <div className="quick-note-image-grid">
-        {draft.images.map((draftImage) => <figure key={draftImage.image.id}><img src={draftImage.image.url} alt="小记图片" /><button type="button" onClick={() => void onRemoveImage(draftImage)} aria-label="移除图片"><X size={14} /></button></figure>)}
-      </div>}
+    <div className="quick-note-composer" onKeyDownCapture={publishOnShortcut}>
+      {/* 写作区 = 一个 Lake 内核实例（编辑时挂、离开即销毁）；图片直接拖入或粘贴 */}
+      <QuickNoteEditor
+        ownerId={draft.id}
+        initialBody={draft.body}
+        uploadResource={uploadResource}
+        onTextChange={onTextChange}
+        onReady={onEditorReady}
+      />
     </div>
     <div className={`quick-note-composer-actions quick-note-composer-actions--${variant}`}>
       <button className={"b3-button quick-note-publish" + (emphasized ? " is-emphasized" : "")} disabled={saving} onClick={onSave}>{saving ? <LoaderCircle className="spin" size={15} /> : null}{saving ? "保存中" : publishLabel}</button>

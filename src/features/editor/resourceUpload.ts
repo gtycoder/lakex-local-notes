@@ -30,9 +30,16 @@ function decodedBase64Length(encoded: string): number {
   return Math.floor(len / 4) * 3 + (len % 4 === 2 ? 1 : len % 4 === 3 ? 2 : 0);
 }
 
-export async function uploadLakeResource(request: unknown, noteId: string): Promise<ResourceUploadOutput> {
+export interface ResourceUploadOptions {
+  /** 覆盖默认落盘（默认 = `native.uploadResource(input, noteId)`）。小记用它把图片写进 quick-notes 空间。 */
+  saveResource?: (input: ResourceUploadInput) => Promise<ResourceUploadOutput>;
+  /** 是否允许「网络图片 URL」走主进程下载。小记 v1 关闭（避免写进文档资源空间）。默认 true。 */
+  allowRemoteDownload?: boolean;
+}
+
+export async function uploadLakeResource(request: unknown, noteId: string, options: ResourceUploadOptions = {}): Promise<ResourceUploadOutput> {
   return uploadQueue.add(() =>
-    withRetry(() => performUpload(request, noteId), {
+    withRetry(() => performUpload(request, noteId, options), {
       maxRetries: 2,
       delayMs: 1000,
       backoffMultiplier: 2,
@@ -77,7 +84,7 @@ async function uploadAttachmentFile(file: File, noteId: string): Promise<Resourc
   return out;
 }
 
-async function performUpload(request: unknown, noteId: string): Promise<ResourceUploadOutput> {
+async function performUpload(request: unknown, noteId: string, options: ResourceUploadOptions = {}): Promise<ResourceUploadOutput> {
   const normalized = request as LakeUploadRequest;
   const payload = request instanceof File ? request : normalized.data ?? normalized.file;
 
@@ -89,7 +96,7 @@ async function performUpload(request: unknown, noteId: string): Promise<Resource
     }
     // Image files → preserve the detected source format (including animated GIF/WebP)
     const input = normalizeImageInput(new Uint8Array(await payload.arrayBuffer()), payload.name || "image");
-    return uploadWithOriginalFormat(input, noteId);
+    return uploadWithOriginalFormat(input, noteId, options);
   }
 
   // Already-local data URL: pasted base64 image from local clipboard
@@ -114,6 +121,9 @@ async function performUpload(request: unknown, noteId: string): Promise<Resource
   //   与桌面同构（不能内嵌 base64 进正文，否则文档膨胀且不走 S3 同步）。
   // - 纯浏览器演示模式（无原生桥）：尽力而为的直连并内嵌 data URL，仍带大小限制与字面私网/本机拦截。
   if (typeof payload === "string" && (payload.startsWith("http://") || payload.startsWith("https://"))) {
+    if (options.allowRemoteDownload === false) {
+      throw new Error("这里暂不支持直接插入网络图片，请先把图片保存到本地再拖入或粘贴");
+    }
     if (isDesktop()) {
       return native.downloadRemoteResource(payload, noteId);
     }
@@ -145,11 +155,11 @@ function dataUrlInput(value: string): ResourceUploadInput {
   return normalizeImageInput(bytes, "image");
 }
 
-async function uploadWithOriginalFormat(input: ResourceUploadInput, noteId: string): Promise<ResourceUploadOutput> {
+async function uploadWithOriginalFormat(input: ResourceUploadInput, noteId: string, options: ResourceUploadOptions = {}): Promise<ResourceUploadOutput> {
   // Do not rasterize WebP/AVIF here: an animated WebP/GIF must remain animated.
   // PNG conversion is still intentionally kept in electron/assetServer.ts for
   // clipboard export to applications that cannot consume WebP/AVIF data URLs.
-  return native.uploadResource(input, noteId);
+  return options.saveResource ? options.saveResource(input) : native.uploadResource(input, noteId);
 }
 
 const MAX_BROWSER_REDIRECTS = 5;
