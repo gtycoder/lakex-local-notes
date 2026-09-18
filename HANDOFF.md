@@ -9,7 +9,7 @@
   - 一句话：新增**文档类型** `kind = doc | sheet | bitable`（只加在 `notes.kind` + `manifest.kind`，**不动 `tree_nodes.node_type`**）；表格正文落 `sheets/{id}.sheet.json`；**manifest 升 v6**（带 kind）；编辑器 = **FortuneSheet 1.0.4**（260919 由 jspreadsheet CE 换掉；CSP / 图片 input / 编辑态限宽 / setCellFormat 判空 走 `patches/`）；**多维表(bitable)本批不做**。
   - 门禁（本批实测）：`tsc` 0 · `vitest` **1025 passed / 16 skipped (1041)** · 桌面 + 移动 `vite build` 全绿 · `check:bundle` app-js gzip **1.82MB / 预算 2.90MB** · `check:core` 0 · 懒加载分包 `SheetEditor-*.js` ≈ **580KB gzip，首屏 index chunk 不含它**。
   - ⚠️ **manifest v6 ⇒ 所有端必须一起升级**：旧端读到 v6 会显式拒绝同步（`READABLE_MANIFEST_VERSIONS={4,5,6}`，未知 kind 也拒绝）——这是**刻意**的安全闸，防止旧端把表格 JSON 当 Lake 文档打开、保存即写坏正文。
-  - ⚠️ **未做 / 待办**：① **真机验收**；② `SheetEditor.tsx` 的 2 处内联样式（**违反 AGENTS §3 #14**，改 CSS 基线需用户确认）。**清单见 §3 第 13 条。**
+  - ⚠️ **未做 / 待办**：**只剩真机验收**（全链路没在真实应用跑过）。内联样式一条已随 FortuneSheet 重写解决（`src/features/sheet/` 已无 `style=`）。**清单见 §3 第 13 条。**
   - ✅ 已随本批完成：非 doc 导出 kind 守卫 + 目录树/⋯ 菜单/大纲/字数 的 kind 收口；`docs/SYNC-PROTOCOL.md`+`docs/STORAGE-LAYERS.md` 回填；spike 产物清理（`spike.html`/`src/spike/`/`scripts/spike-sheet-ce.mjs`/`vite.spike*.ts` 已删，**设计文档保留**）。
 - **上一批（S3 审计三条错误处理修复，✅ 已提交并推 origin，260918 用户验收）**：本批代码末提交 = `master` @ `2f46784`（其上为 HANDOFF 更新 `54b84dd`）；上一批代码基线 `e873809`。本批 = 审计文档 `docs/S3-STORAGE-AUDIT-260918.md` 的**三次复核 + 三条落地**（详细勘误与证据见该文档 **§8**）：
   ① **F2**：清单拉取失败 ⇒ 整轮中止并抛出（`src/core/syncEngine.ts` pull 的 catch 删掉「降级成 return」分支；对象缺失=首次同步走 null 分支不受影响）——顺带修掉「引擎早退后 Controller 仍删 purge 前缀 + `markPurgeSynced`」的顺序问题；
@@ -294,10 +294,10 @@
 
 ### 三、当前问题（均不阻塞；用户已同意「先列入待办」）
 1. **⚠️ 运行时链路未验收（最该先做）**：`tsc`/`vitest`/`vite build` 全绿，但**没有在真实应用里跑过**完整链路：右键「新建表格」→ 落盘 `sheets/{id}.sheet.json` → 打开 tab → CE 渲染 → 编辑 → 自动保存 → 同步上传 → 另一端拉取仍是表格 → 移动端显示只读占位。
-2. **⚠️ SheetEditor 有 2 处内联样式（违反 AGENTS §3 #14）**：容器 `height/width/overflow`、CE host 的 `pointerEvents`（只读时）。合法收口路径（未做）：优先复用现成类（`.lake-editor-main` 或 `fn__*`/隐藏用原生 `hidden` 属性），否则往 `src/styles/components.css` 补最小 `.sheet-editor` 块——**但那是新增声明，`src/styles/cssLayers.test.ts` 的基线只允许"按职责归并"上调，需先与用户确认口径**。
-3. **非 doc 类型的文档型入口未收口**：`electron/noteExport.ts` 的 `exportHtmlNote`/`exportPdfHtml`/`exportNotePackage` 会对表格 JSON 走 `lakeHtmlToMarkdown` → 垃圾产物或报错；侧栏「复制 Markdown」「导出 Markdown/HTML/PDF」对 sheet 节点仍可见。收口方案（未做）：① `noteExport` 加 kind 守卫（非 doc 明确抛 `AppError("InvalidInput", "表格文档暂不支持导出为 Markdown/HTML/PDF")`）；② 侧栏菜单按 kind 隐藏（需要给桌面 `TreeNode` 加 `kind`——树查询要 join `notes.kind`——或只靠 ① 的报错兜底）。
-4. 其它文档型入口对 sheet 的表现未逐一核对（`EditorTab` 不渲染 ✅，但大纲/字数/状态栏等入口未逐个走查）。
-5. **spike 调研产物仍在工作区**，提交前必须删：`spike.html`、`src/spike/`（`sheet-spike.tsx`）、`scripts/spike-sheet-ce.mjs`、`vite.spike.config.ts`、`vite.spike.build.config.ts`；**保留** `docs/SHEET-BITABLE-DESIGN-260918.md` 与 `docs/ASSET-HOST-FEASIBILITY-260918.md`。
+2. **✅ 已解决（260919）**：原 2 处内联样式（容器 `height/width/overflow`、CE host `pointerEvents`）随 FortuneSheet 重写消失——容器尺寸走 `.sheet-editor` CSS（`src/features/sheet/sheetEditor.css`），CE host 的 `pointerEvents` 随 CE 删除；`grep -rn "style=" src/features/sheet/` = 0。（`cssLayers.test.ts` fence 已同步。）
+3. **✅ 已解决（260919）**：非 doc 的文档型入口已收口（`noteExport.assertDocKind` 守卫 + 目录树/⋯ 菜单隐藏导出 + 大纲隐藏 + 状态栏改「表格/多维表」）；桌面 `TreeNode` 已带 `kind`。见 §3 第 13 条。
+4. **✅ 已走查（260919）**：`EditorTab` 不渲染 ✅、导出隐藏 ✅、大纲隐藏 ✅、字数/图片对表格不计算 ✅。
+5. **✅ 已清理（260919）**：spike 产物已删（`spike.html`、`src/spike/`、`scripts/spike-sheet-ce.mjs`、`vite.spike.config.ts`、`vite.spike.build.config.ts`）；设计文档保留。
 6. **文档回填未做**：`docs/SYNC-PROTOCOL.md`（升 v6 + `kind` 语义 + 端版本门槛）、`docs/STORAGE-LAYERS.md`（`notes.kind` / 按 kind 分目录 / `searchTextFor` 分派）。
 7. 未提交（**等用户验收**；AGENTS 铁律⑦：代码批次不擅自合 master）。
 
@@ -443,7 +443,7 @@
 13. **【表格文档（kind=sheet）收口 · 进行中 · 260918】分支 `feat/sheet-document` 上已写完且门禁全绿，但【未提交】【未真机验收】** —— 完整交接见 **§2.8**，设计/实测见 `docs/SHEET-BITABLE-DESIGN-260918.md`。
     - **（260919 已变更）**：表格内核已由 **jspreadsheet-ce 换成 FortuneSheet 1.0.4**；下面 CE 相关的收口项部分已随迁移作废/改写，**当前表格状态一律以 §2.8 的 260919 各轮补充 + `docs/FORTUNESHEET-FEASIBILITY-260919.md` 为准**；图片相关见第 **14** 条。剩余项（用户已同意先列入待办）：
     - **（必做）真机验收**：新建表格 → CE 渲染 → 编辑 → 落盘 `sheets/{id}.sheet.json` → 自动保存 → 同步 → 另一端/移动端表现。见 §2.8 四.1 的 5 个观察点。
-    - **（必做）`SheetEditor.tsx` 去掉 2 处内联样式**（违反 AGENTS §3 #14）：容器尺寸用现成类，隐藏优先用原生 `hidden` 属性；若要新增 `.sheet-editor` 规则需先与用户确认（`cssLayers.test.ts` 基线只允许"按职责归并"上调）。
+    - **（✅ 260919 已解决）`SheetEditor.tsx` 的 2 处内联样式**：CE→FortuneSheet 重写后消失——容器尺寸走 `.sheet-editor` CSS（`src/features/sheet/sheetEditor.css`，fence 基线已同步），CE host `pointerEvents` 随 CE 删除；`grep -rn "style=" src/features/sheet/` = 0。
     - **（✅ 260919 已完成）非 doc 类型的导出/MD 守卫**：`electron/noteExport.ts` 的 `exportHtmlNote`/`exportPdfHtml`/`exportNotePackage` 已加 `assertDocKind` 前置守卫（非 doc 抛 `InvalidInput`）；桌面 `TreeNode` 已加 `kind`（`listTreeNodes` LEFT JOIN notes + `mapTreeNode`），目录树右键「导出」子菜单与文档 ⋯ 菜单对非 doc **隐藏**；状态栏对非 doc 把「字数/图片」**替换为「表格/多维表」**；大纲侧栏对非 doc 隐藏。回归测试见 `electron/store.test.ts`。
     - **（✅ 260919 已确认）文档回填**：`docs/SYNC-PROTOCOL.md` 已有 260919 段（manifest **v6** + 每条 note 可选 `kind` + 旧端读 v6 显式拒绝）；`docs/STORAGE-LAYERS.md` 已有 `sheets/{id}.sheet.json` + `notes.kind` 决定路径 + `sheetToSearchText` 段。无需再改。
     - **（提交前）清理 spike 产物**：`spike.html`、`src/spike/`、`scripts/spike-sheet-ce.mjs`、`vite.spike.config.ts`、`vite.spike.build.config.ts`（保留两份 `docs/*-260918.md` 设计文档）。
