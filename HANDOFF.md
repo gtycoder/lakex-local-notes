@@ -5,19 +5,25 @@
 > **§8 是移动端（安卓）专职交接**，由移动端会话维护；桌面会话不要改 §8，移动端会话不要改 §0-§7 之外的桌面文件。
 
 ## 0. 当前基线（新会话开工前）
-- **基线（最新一批，已在 `master` 且已推 origin）**：`master` @ `a3596ad`（本批代码末提交；其上为本文档更新）。本批 = **浏览器端（本机附属窗口）开关**；同会话上一批（壳层底部灰缝根修 + CSS 层级冗余收口 档0/档1 + 审计装置漂移）见 §2 第 1~5 条，代码末提交 `4faa5e1`：
+- **基线（最新一批，已在 `master` 且已推 origin）**：`master` @ `e873809`（本批代码末提交；其上为本条 §0 更新）。本批 = **块级编辑三批收口 + 目录栏收口**（原在途分支 `feat/block-drag-native` 已**合入并删本地分支**）：
+  ① **块手柄锚点**改锚「**项目符号 marker 左缘**」（原锚内容左缘 ⇒ 手柄压在符号上，实测 icon 中心落在 marker 内 16px；改后 = `marker.left − 16`）；
+  ② **删除/剪切/拖拽不再留空行**：`deleteByRange` 语义是「删内容」，范围覆盖根级整块时内核会在原位补一个默认段落（实测删除 `63→63` 空段落+1、拖拽 `63→64`）⇒ 改走内核**模型事务节点级删除**（`removeBlockNodesNative`：`_model.editing` → `getNodeById/removeChild` → **选区复位** → `commitJob`），拖拽改「**先摘源节点 → 按删除后落点 `insertAtPosition`**」；修复后删除 `63→62`、拖拽 `63→63`、空段落不变；
+  ③ **目录栏收口**：新增「**刷新**」按钮（**置于图标组最左**）、「＋」只留「新建笔记本」并收小弹窗（220×60/行高42 → **150×50/行高32**）、**点文档不再自动展开子项**（`expandAncestorChain` + 跟随定位 `expandSelf:false` + `autoExpanded` 只展开容器）、**自动定位去跳动**（改 `useLayoutEffect` 布局前同帧滚动；A/B 逐帧实测错位帧 **2 → 0**）、**重命名只留一个焦点环**（去 b3 outline + box-shadow + 重命名行的 `context` 环）；
+  ④ 「**拖拽改层级 + 蓝色导引线**」经评估可做（0.5–1 天）但**用户决定先不做**，已并入 §3 第 11 条的**优化项**（与多块选区批量拖拽同项）。
+  - **写给零上下文新会话的完整交接 = §2.7**（任务目标/已完成/当前问题/下一步/踩坑）；逐条过程见 §2.6；内核行为结论见 `docs/LAKEX-CONTRACT.md` **§5.8.5**；厂商改动见 `vendor/lakex-doc-react/LOCAL-CHANGES.md` **#17**。
+  - 门禁（本批）：`tsc` 0 · `vitest` **1011 passed / 16 skipped (1027)** · 桌面 + 移动 `vite build` 全绿 · **三个块编辑 e2e 全绿**（`e2e-block-list-span` / `e2e-block-menu-smoke` / `e2e-block-multi-select`）· `git diff --check` 只报 vendor 生成产物里**原本就有**的行尾空格（HEAD 上同样 2 处，已核对）。
+  - 关键入口（本批）：`vendor/lakex-doc-react/src/components/BlockHoverHandle/BlockHoverHandle.tsx`（`updateHandlePosition` 锚 marker）· 同目录 `blockMenuHelpers.ts`（`removeBlockNodesNative` / `deleteBlockByRange` / `moveBlockNative`）· `src/components/Sidebar.tsx`（刷新按钮 / `scrollRowIntoView` / `revealNode` / `expandAncestorChain` / `autoExpanded`）· `src/hooks/useTreeActions.ts`（`refreshTree`）· `src/styles/app/shell.css`（`.create-menu` / `.tree-rename-input`）· `src/features/editor/blockMenuNative.test.ts`（护栏）。
+- **上一批（浏览器端「本机附属窗口」开关）**：代码末提交 `a3596ad`；同会话再上一批（壳层底部灰缝根修 + CSS 层级冗余收口 档0/档1 + 审计装置漂移）见 §2 第 1~5 条，代码末提交 `4faa5e1`：
   ① **定位**：浏览器端**不是移动预览**（那是 `mobile.html`/`preview.html`），而是桌面主进程起的**本机附属窗口**（`electron/webApiServer.ts`，初版 260916 `a481d08`）：`POST /api/<channel>` 复用同一批 IPC handler + 静态服务 `dist/` + `/__native.js` 注入 `window.lakeNative` 的 HTTP shim；**只绑 127.0.0.1**；
   ② **不做伺服（用户 260917 决定）**：不监听局域网、不对外开放、不允许其它设备访问，只供**本机**浏览器使用；
   ③ **新增「设置 → 浏览器端」开关**：`electron/ipc/registerWeb.ts` + `createWebServerController`（`electron/webApiServer.ts`）。**不落盘**（内存态，每次启动默认关闭）、**打开/关闭即时起停服务、无需重启**（旧的"启动时读落盘开关 + 需重启"写法已废弃）；
   ④ **「打开浏览器」按钮**：新 IPC `open_web_client` → 主进程 `shell.openExternal(url)`；**URL 由主进程按固定端口构造、不接受渲染层传 URL**（防开放重定向）。
-  - 门禁（本批）：`tsc` 0 · `vitest` **989 passed / 16 skipped (1005)** · 桌面 `vite build` + `vite build -c vite.mobile.config.ts` 全绿 · `git diff --check` 干净。
+  - 门禁（浏览器端那批）：`tsc` 0 · `vitest` **989 passed / 16 skipped (1005)** · 桌面 `vite build` + `vite build -c vite.mobile.config.ts` 全绿 · `git diff --check` 干净。
   - 桌面 dev 实测端口：`1421` vite / `9222` electron（CDP）/ `19876` asset / `19880` 浏览器端（默认关）。
-  - 关键入口（本批）：`electron/webApiServer.ts`（`startWebApiServer` / `createWebServerController`）· `electron/ipc/registerWeb.ts` · `src/components/SettingsPanel.tsx`（分类 `browser`）· `docs/TROUBLESHOOTING.md` #59/#60。
+  - 关键入口（浏览器端那批）：`electron/webApiServer.ts`（`startWebApiServer` / `createWebServerController`）· `electron/ipc/registerWeb.ts` · `src/components/SettingsPanel.tsx`（分类 `browser`）· `docs/TROUBLESHOOTING.md` #59/#60。
   - 关键入口（承前）：`scripts/css-audit/README.md`（CSS 审计，**动样式前必读**；含 §七 内联陷阱 + 34 状态矩阵）· `docs/LAKE-CONTENT-WRITING.md`（**写 Lake 正文前必读**）· `docs/LAKEX-CONTRACT.md`（内核契约，编辑器相关先读）· `docs/LAKEX-MIGRATION-260916.md`（换源/懒加载/离线）· `vendor/lakex-doc-react/LOCAL-CHANGES.md` · `docs/OFFLINE-ASSETS-AUDIT-260916.md`。
 - **工作区现状（本会话清理过）**：`/Users/admin/file/local-lake/` 下只剩 `lake-notes-electron`(主仓库) + `yuque-developer-docs`(语雀开发文档库/内核官方出处) + `lake-main`/`lake-editor-main`(内核机制参考) + `siyuan-master`(思源 v3.8.0 参考，AGPL-3.0)。已删：全部 worktree、过期截图/根级分析稿、`design-spec`、`release/`(910M)、`.css-audit/`(85M)、`test-node-abi/`、外部参考仓库副本（含 `lake-notes-tauri-poc`、`drawnix-develop`）。本地分支只剩 `master` + `refactor/store-split`(未合 master)。
-- **⚠️ 在途分支 `feat/block-drag-native`（260917 块级编辑，待用户验收；不要直接合 master）**：原生拖拽 + 块菜单/转化/剪切收口 + **列表父项 = 一个整块（Issue 3）** + **多块选区/批量操作（Issue 4）**。新增 `src/features/editor/blockHandleMount.ts`、`blockMenuNative.test.ts`、`scripts/e2e-block-menu-smoke.mjs`、`scripts/e2e-block-list-span.mjs`、`scripts/e2e-block-multi-select.mjs`；vendor 源码 + 重建 `dist/**`；文档 `docs/LAKEX-CONTRACT.md`(§5.8/§5.8.1/§5.8.2/§5.8.3/§5.8.4/§5.9)、`docs/BLOCK-*-260917.md`、`vendor/lakex-doc-react/LOCAL-CHANGES.md`(#9–#16)。**下一步：用户验收后合 master。详细交接见 §2.5（任务目标/已完成/当前问题/下一步/踩坑）。**
-  - **（260918 追加，见 §2.6）** 用户实测三问：① 手柄压住列表项目符号、② 删除/剪切/拖拽每次都多留一条空行 —— **已修并复验**（三个 e2e 全绿）；③ 「拖拽改层级 + 蓝色导引线」经评估**可做（约 0.5–1 天）但用户决定先不做**，已并入 §3 第 11 条的**优化项**（与多块选区批量拖拽同项）。
-  - 另按用户要求新增**目录栏「刷新」按钮**（外部命令改动库后 UI 目录会滞后）：`useTreeActions.refreshTree` + `Sidebar` 头部按钮，实测刷新后 DOM 与库内真值对齐 —— 见 §2.6 追加。
+- **✅ 分支 `feat/block-drag-native` 已合入 master 并删除本地分支（260918 用户指示）**：原生拖拽 + 块菜单/转化/剪切收口 + **列表父项 = 一个整块（Issue 3）** + **多块选区/批量操作（Issue 4）**。新增 `src/features/editor/blockHandleMount.ts`、`blockMenuNative.test.ts`、`scripts/e2e-block-menu-smoke.mjs`、`scripts/e2e-block-list-span.mjs`、`scripts/e2e-block-multi-select.mjs`；vendor 源码 + 重建 `dist/**`；文档 `docs/LAKEX-CONTRACT.md`(§5.8/§5.8.1/§5.8.2/§5.8.3/§5.8.4/§5.9)、`docs/BLOCK-*-260917.md`、`vendor/lakex-doc-react/LOCAL-CHANGES.md`(#9–#16)。**交接：本批 §2.7（写给零上下文新会话）· 过程 §2.6 · 前段 §2.5。**
 - **dev 数据现状（重要）**：`到啦领导`（ee860a19）仍在回收站（`trashed_at=09-04 10:34`），用户未决定是否恢复，**别擅自删**；安卓回收站 48 条旧测试数据 + 笔记本「20-UI编辑测试」「测试本1」（含用户笔记）保留勿删。
 - **测试产物**：上一会话的 1 篇 `TMP-P2-verify-*` + 4 份对拍脚本副本仍在回收站（可清空）；本会话第三批的块菜单验证又在回收站留下 **3 份 `clean-test-1788770558737` 副本**（可一起清空；原件全程未被打开，hash 复核未变）。注意：为排查"打开即重写"，早前打开过几篇测试文档（`压测3-图片-神里凌华/温迪/bilibili (26)`），它们已被内核归一化、图片降级成失败卡片并变成 `待同步`（**S3 未动**）。
 
@@ -90,7 +96,7 @@
 6. **门禁**：`tsc` 0 · `vitest` **1008 passed / 16 skipped (1024)** · 桌面 + 移动 `vite build` 全绿；`git diff --check` 只有 vendor 生成产物里原本就有的行尾空格。
 
 ### 当前问题 / 已知坑（不阻塞）
-- 分支 `feat/block-drag-native` **未合 master**（红线：需用户验收）；`HANDOFF.md` §0/§2 的部分旧描述已过时，**以 §0 的在途分支条目和本 §2.5 为准**。
+- ~~分支 `feat/block-drag-native` 未合 master~~ **（已过时：260918 已合入 master 并删除本地分支）**；本 §2.5 记录的是该分支**当时**的状态，当前基线以 **§0** 为准、本批交接看 **§2.7**。
 - **多块选区拖拽未做**（云端 Lake 也未实现）：见 §3 第 11 条（含难度评估与三个风险）。
 - §5.9 登记的 3 处「未原生化」仍存在：`selectBlockInEditor` 手工 range（可直接 `execCommand('selectAll')`）、容器重排可优先用 `moveCollapse`/`moveColumns`/…（现在统一「读-插-删」）、`getSelectionContent`/`wordCountSelection` 未用。
 - Issue 4 的 e2e 需要源文档有**足够多的纯文本段落**（脚本只取视口内完全可见的段落定位拖选）；本次用 `详细测试1`（`4a606dfa-…`）跑通。
