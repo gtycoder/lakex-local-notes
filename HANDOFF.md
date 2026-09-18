@@ -15,7 +15,7 @@
   - 关键入口（本批）：`electron/webApiServer.ts`（`startWebApiServer` / `createWebServerController`）· `electron/ipc/registerWeb.ts` · `src/components/SettingsPanel.tsx`（分类 `browser`）· `docs/TROUBLESHOOTING.md` #59/#60。
   - 关键入口（承前）：`scripts/css-audit/README.md`（CSS 审计，**动样式前必读**；含 §七 内联陷阱 + 34 状态矩阵）· `docs/LAKE-CONTENT-WRITING.md`（**写 Lake 正文前必读**）· `docs/LAKEX-CONTRACT.md`（内核契约，编辑器相关先读）· `docs/LAKEX-MIGRATION-260916.md`（换源/懒加载/离线）· `vendor/lakex-doc-react/LOCAL-CHANGES.md` · `docs/OFFLINE-ASSETS-AUDIT-260916.md`。
 - **工作区现状（本会话清理过）**：`/Users/admin/file/local-lake/` 下只剩 `lake-notes-electron`(主仓库) + `yuque-developer-docs`(语雀开发文档库/内核官方出处) + `lake-main`/`lake-editor-main`(内核机制参考) + `siyuan-master`(思源 v3.8.0 参考，AGPL-3.0)。已删：全部 worktree、过期截图/根级分析稿、`design-spec`、`release/`(910M)、`.css-audit/`(85M)、`test-node-abi/`、外部参考仓库副本（含 `lake-notes-tauri-poc`、`drawnix-develop`）。本地分支只剩 `master` + `refactor/store-split`(未合 master)。
-- **⚠️ 在途分支 `feat/block-drag-native`（260917 块级编辑，待用户验收；不要直接合 master）**：原生拖拽 + 块菜单/转化/剪切收口 + **列表父项 = 一个整块（Issue 3）** + **多块选区/批量操作（Issue 4）**。新增 `src/features/editor/blockHandleMount.ts`、`blockMenuNative.test.ts`、`scripts/e2e-block-menu-smoke.mjs`、`scripts/e2e-block-list-span.mjs`、`scripts/e2e-block-multi-select.mjs`；vendor 源码 + 重建 `dist/**`；文档 `docs/LAKEX-CONTRACT.md`(§5.8/§5.8.1/§5.8.2/§5.8.3/§5.8.4/§5.9)、`docs/BLOCK-*-260917.md`、`vendor/lakex-doc-react/LOCAL-CHANGES.md`(#9–#16)。**下一步：用户验收后合 master。**
+- **⚠️ 在途分支 `feat/block-drag-native`（260917 块级编辑，待用户验收；不要直接合 master）**：原生拖拽 + 块菜单/转化/剪切收口 + **列表父项 = 一个整块（Issue 3）** + **多块选区/批量操作（Issue 4）**。新增 `src/features/editor/blockHandleMount.ts`、`blockMenuNative.test.ts`、`scripts/e2e-block-menu-smoke.mjs`、`scripts/e2e-block-list-span.mjs`、`scripts/e2e-block-multi-select.mjs`；vendor 源码 + 重建 `dist/**`；文档 `docs/LAKEX-CONTRACT.md`(§5.8/§5.8.1/§5.8.2/§5.8.3/§5.8.4/§5.9)、`docs/BLOCK-*-260917.md`、`vendor/lakex-doc-react/LOCAL-CHANGES.md`(#9–#16)。**下一步：用户验收后合 master。详细交接见 §2.5（任务目标/已完成/当前问题/下一步/踩坑）。**
 - **dev 数据现状（重要）**：`到啦领导`（ee860a19）仍在回收站（`trashed_at=09-04 10:34`），用户未决定是否恢复，**别擅自删**；安卓回收站 48 条旧测试数据 + 笔记本「20-UI编辑测试」「测试本1」（含用户笔记）保留勿删。
 - **测试产物**：上一会话的 1 篇 `TMP-P2-verify-*` + 4 份对拍脚本副本仍在回收站（可清空）；本会话第三批的块菜单验证又在回收站留下 **3 份 `clean-test-1788770558737` 副本**（可一起清空；原件全程未被打开，hash 复核未变）。注意：为排查"打开即重写"，早前打开过几篇测试文档（`压测3-图片-神里凌华/温迪/bilibili (26)`），它们已被内核归一化、图片降级成失败卡片并变成 `待同步`（**S3 未动**）。
 
@@ -26,7 +26,7 @@
 ⑤ 不为旧数据写兼容/迁移（能删重建就删重建）；⑥ 杀 Electron 只 kill 具体 PID，禁 `pkill -f Electron`；
 ⑦ 不擅自合 master（代码批次需用户验收；文档类清理可直接提交）。移动端另有铁律见 **§8.0**。
 
-## 2. 本会话（2026-09-17）：任务目标 + 已完成（三批；第三批未提交）
+## 2. 更早的会话（2026-09-17 早段）：任务目标 + 已完成（三批；背景，非本批）
 
 **任务目标**：① 修「文档页最底部一条很窄的灰条」，遵守"UI 改动找根位置、别一层层套 CSS"；② 推进"层级冗余清理"的 **档0**（修围栏虚高基线）与 **档1**（只清可证死的重复声明）；③ 评估"浏览器端"现状，并按用户要求加一个**是否开启浏览器端**的开关（**不做伺服**、仅本机浏览器使用；**不落盘、即时生效**，具体功能待用户想清楚）。
 
@@ -60,6 +60,55 @@
 17. **✅ 已复核并落地（260917）**：外部复核结论 = 内核**命令级没有**「转换并保留内容」，但有官方正规通道 `insertAtSelection`（插入带内容容器时自动补 `alertHole`/`containerHole`；配 `getNodeContent` 可一次把段落替换成含原文容器）。**已按此实现**（vendor `convertBlockPreservingContent`，四个目标：高亮块/分栏/折叠块/代码块），**未采用**用户此前不接受的"自组装多步搬家"。完整结论/§3/§7 复核表见 `docs/BLOCK-CONVERT-ANSWER-260917.md`，问题清单留档 `docs/BLOCK-CONVERT-QUESTION-260917.md`。
 18. **260917 三次修正（用户实测）**：① 「转化为」菜单归属确认 = 我们的 wrapper 层（**非内核**）；新增**按块类型/卡片名**配置菜单（`getBlockMenuKey`），`default` 不再给「转化为」——图表类不硬转。② 容器源（高亮块/引用/折叠块）转容器/正文/引用/列表改为**抽取文本** + 选中「容器节点本身」，修掉「分栏套高亮块」。③ **cmd+X 剪切失效根因 = 应用层**：`EditorTab.cutHandler` 用 `document.execCommand("delete")` 只删 DOM（内核 `_handleCut` 被 capture 阶段 `stopImmediatePropagation` 抢掉）⇒ 文字消失、点块恢复；改走内核 `delete`，副本实测内存模型 + 落盘都删。护栏 `src/features/editor/editorCut.test.ts`。 ④ **块卡菜单按内部 `ne-card` 的 `data-card-name` 区分**（此前所有块卡都解析成 `ne-hole`，导致图表类也出现「转化为」）；⑤ **拖拽调研结论**：毁数据的是 `blockDoc` 的 JSON 路径、不是拖拽；内核有原生 `moveCard`（实测逐字节保真）与各 `move*`，文字块可"读-插-删" ⇒ 拖拽**能做**，详见 `docs/BLOCK-DRAG-RESEARCH-260917.md`。 **已在分支 `feat/block-drag-native` 实现原生拖拽**：卡片 `moveCard`（逐字节保真）/ 其它块「读-插-删」；e2e 新增拖拽用例（文档变化+卡片不丢+文本保留）。 **（260917 修正）**：列表子项/段落拖拽曾被「融合」（第 4 项并进第 1 项、段落丢换行）——根因是 `insertAtSelection` 折叠光标把内容吸附进相邻块；改用 `insertAtPosition`，列表项抽裸 `<li>` 且先删后插、其它块先插后删。实测列表 [1,4,2,3] 格式完整、段落不再融合。 **（二次修正）**：列表项保留 `data-lake-indent` 包装以保层级（抽裸 `<li>` 会把二级拖成一级）；源块删除 range 优先 `selectNodeContents`（列表项 `selectNode` 是折叠的，会触发 deleteByRange 断言）。实测二级项拖拽仍为二级。
 15. **顺带挖到的独立数据问题（与块操作无关，建议单列待办）**：内核**未注册的遗留卡**（如换源前自研画板的 `board-card`）在**任何一次编辑保存后都会丢** —— 纯原生 `style h1` 也让文件 6032B→4166B 且该卡消失（已注册卡 hash 全不变）。原因是保存走 `getDocument('text/lake')`（序列化自内核模型），而未注册卡不在模型里。详见 `docs/LAKEX-CONTRACT.md` §5.8 末段。
+
+## 2.5 本会话（260917 续 · 编辑器块级编辑二批）：原生拖拽修复 + 列表整块（Issue 3）+ 多块选区（Issue 4）
+
+> 会话结尾交接，写给**完全没有上下文**的新会话。本批全部在 **分支 `feat/block-drag-native`**（**未合 master**，等用户验收）；commit 链：`f38ceb7`（块菜单/转化/原生拖拽收口）→ `eacece9`/`f0a463b`/`fb0b753`（拖拽三次修正）→ `e3ec693`（§5.9 命令表）→ `73ce4e5`（Issue 3）→ `1b2afde`（Issue 4）→ `ff9b840`（拖拽待办文档）。
+> 承接上一批（§2 第 11–18 条：块菜单/「转化为」已全部改原生）：本批修**拖拽的三个实测 bug**，并补齐「父项 + 子项是一个整块」「多块选区批量操作」。
+
+### 任务目标
+- 修用户实测的拖拽问题：① 列表二级项拖动丢层级；② 手柄不跟随列表缩进；③ 列表**父项拖动/删除/转化时子项被落下**；④ 跨多块选区希望有**聚合手柄 + 批量删除/复制/剪切/转化**。
+- 用户反思「是不是一开始跑偏了、很多操作该用内核 API 却自己实现」⇒ 要求做一次**内核命令全量盘点**。
+
+### 已完成内容（全部已提交、门禁绿）
+1. **拖拽三个修正**（`f0a463b` / `fb0b753` / `eacece9`）：
+   - 列表项移动保留 `getNodeContent` 返回的**整段 `<ul data-lake-indent=N>` 包装**（抽裸 `<li>` 会丢层级，二级拖完变一级）；
+   - 源块删除 range 优先 `selectNodeContents`（列表项 `selectNode` 变换后是**折叠**的，`deleteByRange` 要求非折叠，否则触发内核断言）；
+   - 非卡片移动改用 `insertAtPosition(position, 'text/lake', frag)`（`insertAtSelection` 折叠光标会把内容吸附进相邻块：段落融合、列表项文本并进目标项）；
+   - 手柄定位对列表项锚到**内容元素左缘**（`ne-uli-c`/`ne-oli-c`/`ne-tli-c`）—— 外层 `ne-tli` 的 left 不含缩进，三级项手柄会落到最左；实测长大纲三级项手柄 353 → 449。
+2. **§5.9 内核命令注册表**（`e3ec693`，写入 `docs/LAKEX-CONTRACT.md`）：balanced-brace 解析 bundle，落地 **43 插件 / 147 条 kO 命令 + 4 条命令式（alert 族）= 151**；给出「块编辑命令 → 我们现状（已用 / 未用 / 内核无对应）」对照；澄清 `ISelectionHelperService` 是**工具栏注册服务、不是块选择 API**。这是对「内核优先」反思的正式回应。
+3. **Issue 3：列表父项 = 一个整块**（`73ce4e5`）：
+   - 关键事实：内核把列表项都渲染成 `.ne-engine` 的**平级**子节点，嵌套只体现在项自身 `ne-level`；`getNodeContent(父项id)` **只返回父项那一行、不含任何子项**；
+   - 新增 `blockSpanElements`（父项 + 紧随其后、`ne-level` 更深的同族项）/ `spanDomRange`（跨元素 outer range，恒非折叠）/ `selectBlockSpanInEditor` / `selectWholeBlockForEdit`；整段读取用 `getSelectionContent`；`delete`/`copy`/`move`/`convert` 的选中口径全部按整段；手柄高亮与拖拽 ghost 覆盖整段。
+4. **Issue 4：多块选区聚合手柄 + 批量操作**（`1b2afde`）：
+   - 关键认识：**内核不需要「批量命令」** —— 跨块选区在内核里就是块选区，`selection` 命令设好后 `getSelectionContent` / `deleteByRange` / `insertAtSelection` 以及所有作用于选区的命令都按**整个选区**工作；
+   - 新增 `selectedTopBlocks` / `hasMultiBlockSelection`（≥2 顶层块且非同一列表父项整段）/ `selectBlocksInEditor`（还原选区）/ `runMultiBlockConvert`；
+   - 交互坑：点击手柄会让编辑区失焦、浏览器清掉选区 ⇒ `onMouseDownCapture` + `handleMenuAction` 两次还原选区。
+5. **验证与护栏**：新增 2 个 e2e（`scripts/e2e-block-list-span.mjs`、`scripts/e2e-block-multi-select.mjs`，均在副本上、真实鼠标事件、原件 hash 不变）+ `src/features/editor/blockMenuNative.test.ts` 新增 7 条源码断言。
+6. **门禁**：`tsc` 0 · `vitest` **1008 passed / 16 skipped (1024)** · 桌面 + 移动 `vite build` 全绿；`git diff --check` 只有 vendor 生成产物里原本就有的行尾空格。
+
+### 当前问题 / 已知坑（不阻塞）
+- 分支 `feat/block-drag-native` **未合 master**（红线：需用户验收）；`HANDOFF.md` §0/§2 的部分旧描述已过时，**以 §0 的在途分支条目和本 §2.5 为准**。
+- **多块选区拖拽未做**（云端 Lake 也未实现）：见 §3 第 11 条（含难度评估与三个风险）。
+- §5.9 登记的 3 处「未原生化」仍存在：`selectBlockInEditor` 手工 range（可直接 `execCommand('selectAll')`）、容器重排可优先用 `moveCollapse`/`moveColumns`/…（现在统一「读-插-删」）、`getSelectionContent`/`wordCountSelection` 未用。
+- Issue 4 的 e2e 需要源文档有**足够多的纯文本段落**（脚本只取视口内完全可见的段落定位拖选）；本次用 `详细测试1`（`4a606dfa-…`）跑通。
+
+### 下一步计划（按优先级）
+1. **用户验收这批块编辑改动**；验收后把 `feat/block-drag-native` 合回 master（红线：**不擅自合**，等用户接受）。
+2. 若验收有问题 → 按现象回到本 §2.5 对应条目 + `docs/LAKEX-CONTRACT.md` §5.8.3/§5.8.4 定位。
+3. 可选：把 §5.9 的 3 处候选原生化改造做掉。
+4. 多块选区拖拽：仅当用户确实需要批量拖动整段时再做（§3 第 11 条）。
+5. 其余长期待办见 §3（画板 AI、离线残余、移动端、产品/技术债、小记底座等）。
+
+### 踩过的坑（本批新增，务必记住）
+- **内核列表 DOM 是「平」的**：所有列表项都是 `.ne-engine` 直接子级，没有列表容器元素、没有 `data-lake-indent`；层级在项自身 `ne-level`（一级缺省 = 0）。`getNodeContent(父项id)` 只返回父项那一行 ⇒ 任何「按 id 读写单个列表项」都会丢子项。
+- **列表项的 `selectNode` 变换后是折叠的**：`deleteByRange` 要求非折叠 range，否则触发 `lakex_editor_assert_error plugins/delete/src/kernel/commands/delete-by-range-command.ts`（删不掉、留副本）。要用 `setStartBefore`/`setEndAfter` 或 `selectNodeContents`。
+- **`insertAtSelection` 折叠光标 ≠ 块级插入**：会把内容吸附进相邻块（段落融合丢换行、列表项文本并进目标项）；块移动必须用 `insertAtPosition`。
+- **点击块手柄会清掉 DOM 选区**（编辑区失焦）：多块选区做批量动作前必须 `selectBlocksInEditor` 还原；且**不能**写「选区一收缩就清多选状态」（会误伤点击手柄），要改成「编辑区内按下鼠标（非手柄）才清」。
+- **元素「有正确 inline style」≠「getBoundingClientRect 非 0」**：若祖先 `display:none`，rect 全是 0。CDP 诊断手柄位置时要过滤 `rect.width > 0`。
+- **CDP 拖选文字要带 `button:'left'` 的 mouseMoved**（只给 `buttons:1` 可能选不中）；拖选端点若落到视口外会触发浏览器自动滚动 → 选中远超预期、手柄跑到屏外；e2e 里只取「视口内完全可见」的段落。
+- **alert 落盘属性顺序**：`<blockquote data-lake-id=… id=… class="lake-alert …">`，`class` **不在**第一个属性 ⇒ 断言正则要写 `<blockquote[^>]*class="lake-alert`。
+- **e2e 断言文案要去掉列表项目符号**：`textContent` 带 `●/○/■`，序列化 HTML 里符号在独立 marker 上 ⇒ 比对前剥前导符号。
 
 ## 3. 下一步计划 + 当前问题（真正的待办，按优先级）
 
