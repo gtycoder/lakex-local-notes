@@ -24,7 +24,7 @@ export function getCreateMenuPosition(
   button: CreateMenuRect,
   sidebar: SidebarRect,
   viewport: CreateMenuViewport,
-  preferredWidth = 220,
+  preferredWidth = 150,
   minWidth = 150,
   gap = 8,
 ): CreateMenuPosition {

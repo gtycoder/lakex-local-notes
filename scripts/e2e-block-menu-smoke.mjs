@@ -512,12 +512,22 @@ async function main() {
       check(ok, "折叠块 → 正文: 内容变成正文段落（脱离折叠块）");
     }, false, () => evalJs("window.__focusContainer('collapse')"));
 
+    /** 顶层块统计（以落盘正文为准）：total = 顶层块数，emptyP = 空段落数。
+     *  260918 用户实测：删除/拖拽若只清空内容而没摘掉节点，原位会多一条空行。 */
+    const blockStats = () => evalJs(`(async () => { const l = await window.__read(); const d = new DOMParser().parseFromString(l, 'text/html'); const els = [...d.body.children]; return { total: els.length, emptyP: els.filter((e) => e.tagName === 'P' && !(e.textContent || '').replace(/\u200b/g, '').trim()).length }; })()`);
     const runTop = (label, expectChange = true, expectTextInBody = true) => runAction(label, async () => await evalJs(`window.__clickItem(${JSON.stringify(label)})`), expectChange, null, expectTextInBody);
     await runTop("复制", false);
-    await runTop("剪切", true, false);
-    await runTop("删除", true, false);
+    // 剪切 / 删除：必须真把整块节点摘掉 —— 顶层块 -1 且不新增空段落
+    // （旧实现走 deleteByRange 只删内容，原位补一个空段落：顶层块数不变、空段落 +1）
+    for (const label of ["剪切", "删除"]) {
+      const s0 = await blockStats();
+      await runTop(label, true, false);
+      const s1 = await blockStats();
+      check(s1.total === s0.total - 1, `${label}: 顶层块 -1（${s0.total} → ${s1.total}；不变 = 只清空内容、原位留下空段落）`);
+      check(s1.emptyP <= s0.emptyP, `${label}: 未新增空段落（${s0.emptyP} → ${s1.emptyP}）`);
+    }
 
-    // 5) 拖拽移动（内核原生：卡片 moveCard / 其它块「读-插-删」）
+    // 5) 拖拽移动（内核原生：卡片 moveCard / 其它块「摘节点 → 落点插入」）
     console.log("\n拖拽移动（原生）：");
     {
       const beforeSnap = current;
@@ -531,7 +541,7 @@ async function main() {
         const handle = await evalJs("window.__handleRect()");
         const dst = await evalJs("window.__dragTargetRect()");
         if (handle && dst) {
-          const pCountBefore = await evalJs(`(async () => { const l = await window.__read(); return (l.match(/<p[\\s>]/g) || []).length; })()`);
+          const statsBefore = await blockStats();
           await send("Input.dispatchMouseEvent", { type: "mousePressed", x: handle.x, y: handle.y, button: "left", clickCount: 1, buttons: 1 });
           await sleep(80);
           const dropY = Math.round(dst.bottom - 2);
@@ -541,8 +551,11 @@ async function main() {
           }
           await send("Input.dispatchMouseEvent", { type: "mouseReleased", x: dst.left + 120, y: dropY, button: "left", clickCount: 1, buttons: 0 });
           await sleep(2200);
-          const pCountAfter = await evalJs(`(async () => { const l = await window.__read(); return (l.match(/<p[\\s>]/g) || []).length; })()`);
-          check(pCountAfter >= pCountBefore, `拖拽移动: 段落块数未减少（${pCountBefore} → ${pCountAfter}；融合会 -1）`);
+          const statsAfter = await blockStats();
+          // 移动 = 搬运，不是增删：顶层块数必须守恒。
+          // （旧的 `>=` 断言放过了「原位留一条空段落」——那正是用户实测的空行 bug。）
+          check(statsAfter.total === statsBefore.total, `拖拽移动: 顶层块数守恒（${statsBefore.total} → ${statsAfter.total}；+1 = 原位留空段落，-1 = 段落被融合）`);
+          check(statsAfter.emptyP <= statsBefore.emptyP, `拖拽移动: 未新增空段落（${statsBefore.emptyP} → ${statsAfter.emptyP}）`);
           current = await evalJs("window.__snap()");
           check(current.hash !== before, "拖拽移动: 文档已变化（原生移动生效）");
           const missing = registeredFrags(beforeSnap).filter((f) => !registeredFrags(current).includes(f));

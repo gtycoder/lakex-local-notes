@@ -1,6 +1,6 @@
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent } from "react";
 import { createPortal } from "react-dom";
-import { Book, ChevronRight, ChevronsDownUp, Copy, FilePlus, File, Filter, Focus, Folder, FolderOpen, FolderPlus, History, Info, MoreVertical, Pencil, Plus, Search, Trash, X } from "lucide-react";
+import { Book, ChevronRight, ChevronsDownUp, Copy, FilePlus, File, Filter, Focus, Folder, FolderOpen, FolderPlus, History, Info, MoreVertical, Pencil, Plus, RefreshCw, Search, Trash, X } from "lucide-react";
 import { DockFilterRow, useDockFilter } from "./DockFilterBar";
 import { LAKE_EMOJIS } from "../lib/lakeEmojis";
 import { LAKE_EMOJI_GROUPS } from "../lib/lakeEmojiGroups";
@@ -27,6 +27,8 @@ interface SidebarProps {
   minWidth: number;
   maxWidth: number;
   onSearch: (value: string) => void;
+  /** 刷新目录树（从库里重读整棵树）：外部命令改动过库后，UI 目录可能滞后。 */
+  onRefreshTree: () => void | Promise<void>;
   onSelect: (id: string) => void;
   onCreate: (kind: CreateKind, parentId: string | null, title?: string) => void;
   onRename: (id: string, title: string) => void;
@@ -76,6 +78,7 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
   const [contextMenu, setContextMenu] = useState<{ id: string; x: number; y: number } | null>(null);
   const [iconPicker, setIconPicker] = useState<{ node: TreeNode; x: number; y: number } | null>(null);
   const [createMenuPosition, setCreateMenuPosition] = useState<CreateMenuPosition | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const createButtonRef = useRef<HTMLButtonElement>(null);
   const createMenuRef = useRef<HTMLDivElement>(null);
@@ -92,6 +95,12 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
   const filter = useDockFilter(props.search, props.onSearch);
   const treeIndex = useMemo(() => buildTreeIndex(props.nodes, query), [props.nodes, query]);
   const roots = (treeIndex.childrenByParent.get(null) ?? []).filter((node) => treeIndex.visibleIds.has(node.id));
+
+  /** 目录刷新（右上角刷新按钮）：重读整棵树，进行中把图标转起来并禁用，避免连点。 */
+  const refreshTree = useCallback(async () => {
+    setRefreshing(true);
+    try { await props.onRefreshTree(); } finally { setRefreshing(false); }
+  }, [props.onRefreshTree]);
 
   const updateCreateMenuPosition = useCallback(() => {
     const button = createButtonRef.current;
@@ -389,33 +398,62 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
 
   const contextNode = props.nodes.find((node) => node.id === contextMenu?.id) ?? null;
 
-  /** 展开祖先 + 高亮 + 滚动到可见（已在视口内则不滚，只定位）。
+  /** 把某一行滚进目录栏自己的可见区（已在视口内则不滚，只定位）。
    *  **只动目录栏自己的滚动容器，不能用 `scrollIntoView`**：它会连带滚动所有可滚动祖先，
    *  而 `body` 虽 `overflow:hidden` 仍可被程序化滚动（`.sidebar` 的 `margin-top: 42px`
    *  让外壳多出 42px 溢出）⇒ 实测整个 `.app-shell` 被顶上去 42px、顶栏让位失效、
    *  面包屑挤进 tab 行（user 260917 报）。 */
-  const revealNode = useCallback((id: string | null) => {
+  const scrollRowIntoView = useCallback((id: string): boolean => {
+    const list = treeRef.current;
+    const row = list?.querySelector<HTMLElement>(`[data-tree-node-id="${CSS.escape(id)}"]`);
+    if (!list || !row) return false;
+    const listRect = list.getBoundingClientRect();
+    const rowRect = row.getBoundingClientRect();
+    // 可见区 = 「列表矩形 ∩ 窗口」。停靠目录的底边落在窗口外（.sidebar 的 height:100% 没补偿
+    // 自己 42px 的 margin-top ⇒ 底边溢出 42px），只按 listRect.bottom 判断会少滚 42px ——
+    // 表现为「向上定位正常、向下定位永远差一截」（user 260917 报）。
+    const visibleTop = Math.max(listRect.top, 0);
+    const visibleBottom = Math.min(listRect.bottom, window.innerHeight);
+    // 再留半行余量（不贴边）：停靠栏可视 ~767px，浮动栏 top/bottom 各 72px ⇒ 只有 ~699px，
+    // 贴边的行切过去会立刻掉出可见区。余量封顶为可见区一半，避免抖动。
+    const slack = Math.max(0, Math.min(REVEAL_SLACK, Math.floor((visibleBottom - visibleTop - rowRect.height) / 2)));
+    if (rowRect.top < visibleTop + slack) list.scrollTop -= (visibleTop + slack) - rowRect.top;
+    else if (rowRect.bottom > visibleBottom - slack) list.scrollTop += rowRect.bottom - (visibleBottom - slack);
+    return true;
+  }, []);
+
+  /**
+   * 展开（默认含自身）+ 滚动定位到某节点。
+   *
+   * 滚动**放在 useLayoutEffect 里**（提交 DOM 后、浏览器绘制前）由 `revealNonce` 驱动，
+   * 不再用 `setTimeout(60)`：展开会重排上面的行，若「先绘制未滚动状态、再跳过去」，
+   * 用户看到的就是闪一下/跳一下（user 260918 报）；同帧完成则中间态从不绘制，也没有固定延迟。
+   *
+   * `expandSelf: false` 用于「跟随当前文档」——只展开祖先让目标可见，**不展开文档自身的子项**
+   * （user 260918：点文档不该自动展开子项；要展开用下拉箭头或「定位到当前文档」按钮）。
+   */
+  const pendingRevealRef = useRef<string | null>(null);
+  const [revealNonce, setRevealNonce] = useState(0);
+  const revealNode = useCallback((id: string | null, options?: { expandSelf?: boolean }) => {
     if (!id) return;
-    setExpanded((current) => expandAncestors(current, props.nodes, id));
-    // 展开是异步渲染，滚动等下一帧
-    window.setTimeout(() => {
-      const list = treeRef.current;
-      const row = list?.querySelector<HTMLElement>(`[data-tree-node-id="${CSS.escape(id)}"]`);
-      if (!list || !row) return;
-      const listRect = list.getBoundingClientRect();
-      const rowRect = row.getBoundingClientRect();
-      // 可见区 = 「列表矩形 ∩ 窗口」。停靠目录的底边落在窗口外（.sidebar 的 height:100% 没补偿
-      // 自己 42px 的 margin-top ⇒ 底边溢出 42px），只按 listRect.bottom 判断会少滚 42px ——
-      // 表现为「向上定位正常、向下定位永远差一截」（user 260917 报）。
-      const visibleTop = Math.max(listRect.top, 0);
-      const visibleBottom = Math.min(listRect.bottom, window.innerHeight);
-      // 再留半行余量（不贴边）：停靠栏可视 ~767px，浮动栏 top/bottom 各 72px ⇒ 只有 ~699px，
-      // 贴边的行切过去会立刻掉出可见区。余量封顶为可见区一半，避免抖动。
-      const slack = Math.max(0, Math.min(REVEAL_SLACK, Math.floor((visibleBottom - visibleTop - rowRect.height) / 2)));
-      if (rowRect.top < visibleTop + slack) list.scrollTop -= (visibleTop + slack) - rowRect.top;
-      else if (rowRect.bottom > visibleBottom - slack) list.scrollTop += rowRect.bottom - (visibleBottom - slack);
-    }, 60);
+    pendingRevealRef.current = id;
+    const expandSelf = options?.expandSelf !== false;
+    setExpanded((current) => (expandSelf
+      ? expandAncestors(current, props.nodes, id)
+      : expandAncestorChain(current, props.nodes, id)));
+    // 祖先本来就都展开时 expanded 不变 ⇒ 用 nonce 保证布局滚动仍然跑一次
+    setRevealNonce((n) => n + 1);
   }, [props.nodes]);
+
+  useLayoutEffect(() => {
+    const id = pendingRevealRef.current;
+    if (!id) return undefined;
+    pendingRevealRef.current = null;
+    if (scrollRowIntoView(id)) return undefined;
+    // 行还没进 DOM（可能还要再渲染一层）：下一帧补一次；rAF 仍在绘制前，不会闪
+    const raf = window.requestAnimationFrame(() => { scrollRowIntoView(id); });
+    return () => window.cancelAnimationFrame(raf);
+  }, [revealNonce, expanded, scrollRowIntoView]);
   // 供「只认 activeId 变化」的 effect 调用（目录树因同步刷新换引用时不该跟着乱滚）
   const revealNodeRef = useRef(revealNode);
   useEffect(() => { revealNodeRef.current = revealNode; }, [revealNode]);
@@ -427,10 +465,11 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
   // ② 是必须的：浮动栏比停靠栏矮 ~68px，不重定位的话「原先停在最下方的选中文档」会掉出可见区、
   // 蓝色高亮看不见（user 260917 报）。收起态没有可见列表，跳过。
   // 同时把上一次点击留下的 context 复位：它已不是"当前文档"了，再留主色内描边是残留。
+  // `expandSelf: false`：点开一个带子项的文档只**打开它**，不顺手把它的子项摊开（user 260918）。
   useEffect(() => {
     setContextId(props.activeId ?? null);
     if (props.mode === "collapsed") return;
-    revealNodeRef.current(props.activeId);
+    revealNodeRef.current(props.activeId, { expandSelf: false });
   }, [props.activeId, props.mode]);
 
   // 属性面板父级路径点击 → 展开到目标节点并滚动可见（消费后清空，避免重复触发）
@@ -594,6 +633,7 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
       <div className="sidebar-toolbar-row desktop-only">
         <span className="sidebar-toolbar-title">目录</span>
         <div className="list-heading">
+        <button className="dock-icon-btn refresh-btn" onClick={() => void refreshTree()} title="刷新目录" aria-label="刷新目录" disabled={refreshing}><RefreshCw size={14} className={refreshing ? "spin" : undefined} /></button>
         <button className={`dock-icon-btn filter-btn${filter.active ? " is-active" : ""}`} onClick={filter.toggle}
           title="筛选目录" aria-label="筛选目录" aria-pressed={filter.open}><Filter size={14} /></button>
         <button className="dock-icon-btn collapse-all-btn" onClick={() => setExpanded(new Set())} title="全部收起" disabled={expanded.size === 0}><ChevronsDownUp size={14} /></button>
@@ -604,9 +644,8 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
             else { updateCreateMenuPosition(); setMenuOpen(true); }
           }} title="新建" aria-label="新建" aria-pressed={menuOpen}><Plus size={14} /></button>
           {menuOpen && createMenuPosition && createPortal(<div ref={createMenuRef} className="create-menu" style={{ position: "fixed", top: createMenuPosition.top, left: createMenuPosition.left, width: createMenuPosition.width, zIndex: 1000 }}>
-            <button onClick={() => create("note")} disabled={!noteParent}><FilePlus size={16} /><span><strong>新建文档</strong><small>{context ? `在“${context.title}”下` : "选择笔记本后创建"}</small></span></button>
-            <button onClick={() => create("group")} disabled={!groupParent}><FolderPlus size={16} /><span><strong>新建分组</strong><small>{context ? `在“${context.title}”下` : "请先新建笔记本"}</small></span></button>
-            <button onClick={() => create("notebook")}><Book size={16} /><span><strong>新建笔记本</strong><small>创建顶层笔记本</small></span></button>
+            {/* 「+」只保留新建笔记本（user 260918）：文档/分组的创建走选中节点后的右键「新建文档/新建分组」。 */}
+            <button onClick={() => create("notebook")}><Book size={16} /><span><strong>新建笔记本</strong></span></button>
           </div>, document.body)}
         </div>
       </div>
@@ -672,7 +711,7 @@ const TreeRow = memo(function TreeRow(props: TreeRowProps) {
       role="treeitem"
       tabIndex={0}
       data-tree-node-id={props.node.id}
-      className={`note-row tree-row type-${props.node.nodeType} ${props.node.id === props.activeId ? "active" : ""} ${props.node.id === props.contextId ? "context" : ""} ${isDragging ? "dragging" : ""} ${props.releasingId === props.node.id ? "releasing" : ""} ${isDropParent ? "drop-parent" : ""} ${sameLevelLine ? `drop-line-${dropPosition}` : ""}`}
+      className={`note-row tree-row type-${props.node.nodeType} ${props.node.id === props.activeId ? "active" : ""} ${props.node.id === props.contextId && props.editingId !== props.node.id ? "context" : ""} ${isDragging ? "dragging" : ""} ${props.releasingId === props.node.id ? "releasing" : ""} ${isDropParent ? "drop-parent" : ""} ${sameLevelLine ? `drop-line-${dropPosition}` : ""}`}
       style={{ paddingLeft: 8 }}
       onClick={() => {
         if (props.consumeSuppressedClick()) return;
@@ -741,11 +780,22 @@ function expandAncestors(current: Set<string>, nodes: TreeNode[], targetId: stri
 }
 
 function autoExpanded(nodes: TreeNode[]): Set<string> {
-  // 默认展开笔记本和有子项的分组/文档，首帧即正确，避免 effect 回填闪烁。
+  // 默认只展开笔记本/分组（首帧即正确，避免 effect 回填闪烁）。
+  // **文档不自动展开子项**（user 260918）：文档的子项只在「点下拉箭头」或「自动定位」时展开。
   const next = new Set<string>();
-  nodes.forEach((node) => {
-    if (node.nodeType !== "note" || nodes.some((child) => child.parentId === node.id)) next.add(node.id);
-  });
+  nodes.forEach((node) => { if (node.nodeType !== "note") next.add(node.id); });
+  return next;
+}
+
+/** 只展开 targetId 的**祖先**（不含自身）：点击文档时保证它可见，但不展开它的子项（user 260918）。 */
+function expandAncestorChain(current: Set<string>, nodes: TreeNode[], targetId: string): Set<string> {
+  const next = new Set(current);
+  const target = nodes.find((n) => n.id === targetId);
+  let cursor = target?.parentId ? nodes.find((n) => n.id === target.parentId) : undefined;
+  while (cursor) {
+    next.add(cursor.id);
+    cursor = cursor.parentId ? nodes.find((n) => n.id === cursor!.parentId) : undefined;
+  }
   return next;
 }
 

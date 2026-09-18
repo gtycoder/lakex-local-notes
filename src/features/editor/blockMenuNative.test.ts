@@ -133,7 +133,7 @@ describe("块操作菜单：列表父项 = 一个整块（Issue 3）", () => {
     // 删除 / 复制 / 移动都引用整段
     expect(HELPERS_SRC).toMatch(/const span = blockSpanElements\(blockElement\)/);
     expect(HELPERS_SRC).toMatch(/const sourceSpan = blockSpanElements\(sourceEl\)/);
-    expect(HELPERS_SRC).toMatch(/spanDomRange\(sourceSpan\)/);
+    expect(HELPERS_SRC).toMatch(/spanDomRange\(span\)/);
   });
 
   it("手柄高亮与拖拽预览覆盖整段", () => {
@@ -167,5 +167,46 @@ describe("块操作菜单：多块选区 / 批量操作（Issue 4）", () => {
     expect(HANDLE_SRC).toMatch(/selectedTopBlocks\(\)/);
     expect(HANDLE_SRC).toMatch(/selectBlocksInEditor\(editor, multi\)/);
     expect(HANDLE_SRC).toMatch(/multiSelectionRef\.current = blocks/);
+  });
+});
+
+describe("块操作菜单：删除/拖拽不留空行 + 手柄不压项目符号（260918 用户实测）", () => {
+  /** moveBlockNative 的函数体（截到下一个 export 前），用于「不得回退到旧写法」的断言。 */
+  const moveBody = (() => {
+    const i = HELPERS_SRC.indexOf("export function moveBlockNative(");
+    const j = HELPERS_SRC.indexOf("\nexport function", i + 10);
+    return HELPERS_SRC.slice(i, j < 0 ? undefined : j);
+  })();
+
+  it("整块删除走内核「模型事务」摘节点，而不是只删内容的 deleteByRange", () => {
+    // deleteByRange 覆盖根级整块时内核会在原位补一个空段落（顶层块数不变、空段落 +1）——
+    // 用户实测症状：菜单删除/剪切/拖拽每次都多留一条空行。
+    expect(HELPERS_SRC).toMatch(/function removeBlockNodesNative\(/);
+    // 命令上下文 = kernel._model.editing（与内核 deleteAlert/deleteCollapse/deleteCard 同款）
+    expect(HELPERS_SRC).toMatch(/_model\?\.editing/);
+    expect(HELPERS_SRC).toMatch(/job\.getNodeById/);
+    expect(HELPERS_SRC).toMatch(/job\.removeChild\(/);
+    expect(HELPERS_SRC).toMatch(/commitJob\(/);
+    // 菜单「删除 / 剪切」优先走节点级删除
+    expect(HELPERS_SRC).toMatch(/if \(removeBlockNodesNative\(editor, targets\)\) return true;/);
+  });
+
+  it("拖拽先摘源节点、再按「删除后」的目标位置插入（落点索引不漂移）", () => {
+    expect(moveBody).toMatch(/removeBlockNodesNative\(editor, sourceSpan\)/);
+    // 不得回退到「先插后删 + deleteByRange」的老路径
+    expect(moveBody).not.toMatch(/deleteByRange/);
+    expect(moveBody).not.toMatch(/sourceRange/);
+    const removeAt = moveBody.indexOf("removeBlockNodesNative(editor, sourceSpan)");
+    const dropAt = moveBody.indexOf("dropPositionOf(editor, targetNow, before)");
+    expect(removeAt).toBeGreaterThan(-1);
+    expect(dropAt).toBeGreaterThan(removeAt);
+  });
+
+  it("列表手柄锚在项目符号（marker）左侧，而不是内容左缘", () => {
+    // 贴内容左缘会把手柄正好画在符号上（实测 icon 中心落在 marker 内 16px）；
+    // 贴外层 ne-tli 的 left 又会让三级项手柄落到最左。
+    expect(HANDLE_SRC).toMatch(/ne-uli-i, ne-oli-i, ne-tli-i/);
+    expect(HANDLE_SRC).toMatch(/const anchorEl = marker \|\| content;/);
+    expect(HANDLE_SRC).toMatch(/anchorLeft = anchorEl\.getBoundingClientRect\(\)\.left/);
   });
 });

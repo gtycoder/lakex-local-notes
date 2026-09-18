@@ -426,6 +426,61 @@ DOM 里**没有**列表容器元素、也没有 `data-lake-indent`；嵌套层�
 
 **未做**：多块选区的**拖拽**（批量拖动整段）—— 菜单批量删除/复制/剪切/转化已可用；拖拽仍按单块。云端 Lake 也未实现此交互；可行性/风险/触发条件记录在 `HANDOFF.md` §3 第 11 条（低优先级，暂不做）。
 
+### 5.8.5 整块删除 / 拖拽的「多出一条空行」根因 + 内核节点级删除（260918 实测）
+
+**用户实测现象**：菜单「删除 / 剪切」与**拖拽**都会在原位留下一条空行（拖拽 上→下 时空行在原位上方、下→上 时在原位下方）。
+
+**根因（bundle 复读 + 落盘实测）**：`kernel.execCommand('deleteByRange', range)` 的语义是**删内容**，不是删节点。
+`framework/kernel/src/model/utils/range/delete-content.ts` → `delete-content-by-range.ts` 尾部：
+
+```js
+h = !u.node.hasCategory([Root, LikeRoot]);
+return ( h ? n && (u = oB(e, u, !0))
+           : e.acceptNode(u.node.nodeName, e.defaultElementName)
+             && (u = e.insertNodeByPosition(u, e.createElement(e.defaultElementName))), ... );
+```
+
+即：范围覆盖**根级整块**时，内核会在删除位置**补插一个默认段落**（保证光标有落点）。
+实测（副本、以落盘正文解析）：删一个段落 → `顶层块 63→63、空段落 +1`；拖拽 → `63→64`。
+（列表项的 `deleteByRange` 能整项消失 —— 差别在是否落在 Root/LikeRoot 层。）
+
+**正规替代 = 内核自己的节点级删除（命令上下文就是模型事务）**：`CommandManager.execute` 里
+`n.execute(this._model.editing, ...args)` ⇒ 命令的 `e` 参数 = **`kernel._model.editing`**，它提供
+`startTransaction/commit/rollback` 与 `newJob()`；job 提供 `getNodeById(id)` / `removeChild(parent, node)` /
+`newPosition` / `newRange` / `newSelection` / `setSelection`（`deleteAlert` / `deleteCollapse` / `deleteCard` /
+`deleteEmptyParagraphs` 全部是这套）。宿主侧同一条路径：
+
+```js
+const editing = editor.kernel._model.editing;
+const txn = editing.startTransaction();
+const job = editing.newJob();
+const node = job.getNodeById(blockId);            // blockId = DOM 上的 id（= data-lake-id）
+job.removeChild(node.parentNode, node);
+job.setSelection([job.newRange(job.newPosition(node.parentNode, node.offset))]); // ← 必须
+editing.commitJob(job);
+txn.commit();
+```
+
+**⚠️ 必须先把内核算子挪出被删节点**：否则 `commitJob` 在 `framework/engine/src/view/selection/index.ts` 断言失败，
+**整个事务回滚** —— 症状是「点了删除没反应」，且**此后所有块操作继续报错**（实测「复制 → 剪切 → 删除」序列 100% 复现；
+删除后的下一次拖拽一并失败），渲染层异常还会让页面重载（CDP 侧表现为 `window.__xxx is not a function`）。
+内核自己的命令同理：`alert-command`/`alert-delete-command` 都是先 `deleteContent` 把选区挪走、再 `removeChild`。
+
+**`deleteEmptyParagraphs` 不能拿来兜底**：它是 `job.getNodesByName('p')` 全篇扫描并删除**所有**空段落
+（`paragraph` 插件），会把文档里有意为之的空行一起删掉。
+
+**拖拽的顺序口径（260918 改）**：落点 position 是 `(父节点, 子索引)` 形式，**先插后删会让落点索引位移** ⇒ 改为
+「**先摘掉源节点 → 再按删除后的目标位置 `insertAtPosition`**」。目标元素在内核重渲染后可能换 DOM 节点，要按 id
+在**同一个 engine 根**内重新取（多 tab 同时打开时 `document.getElementById` 会取到隐藏 tab 的同 id 元素 → 误删/误改）。
+
+**列表手柄锚点（260918 修正 §5.8.3 的结论）**：手柄要锚 **项目符号（`ne-uli-i/ne-oli-i/ne-tli-i`）的左缘**。
+§5.8.3 曾锚「内容元素（`ne-uli-c`）左缘」，但符号本身占的就是内容左侧那 32px ⇒ 手柄正好压在符号上
+（实测 icon 中心落在 marker 内 16px）。锚 marker 后 icon 中心 = `marker.left − 16`，与段落一致
+（三级实测 marker.left 387/419/451 → iconCenter 371/403/435）。
+
+**实测（修复后）**：删除 `顶层块 63→62`、拖拽 `63→63`、空段落两者都不变；三个 e2e 套件
+（`e2e-block-list-span` / `e2e-block-menu-smoke` / `e2e-block-multi-select`）全绿。
+
 ### 5.9 内核命令注册表（43 插件 / 147 条 kO 命令 + 4 条命令式 = 151，bundle 实测枚举，260917）
 
 来源 = `vendor/lakex-doc-react/src/components/lakex/lakex.js` 里 `kO({ pluginName:'X', command:{…} })` 的**括号配对解析**（脚本见本节末），补上 §5.8.1 第 7 条「只给计数、没给清单」的缺口。**新增块级能力前先在这张表里找命令；表里没有才写 wrapper 层。**
@@ -482,13 +537,13 @@ DOM 里**没有**列表容器元素、也没有 `data-lake-indent`；嵌套层�
 
 | 我们的动作 | 内核命令 | 现状 |
 |---|---|---|
-| 删除块 / 剪切 | `delete`, `deleteByRange`, `deleteToBlockEnd` | ✅ 已用（`deleteBlockByRange`） |
+| 删除块 / 剪切 | `delete`, `deleteByRange`, `deleteToBlockEnd` | ⚠️ `deleteByRange` **只删内容**（根级整块会在原位补空段落，见 §5.8.5）；整块删除改走**模型事务** `job.removeChild` + 选区复位（`removeBlockNodesNative`），`deleteByRange` 仅兜底 |
 | 复制/剪切到剪贴板 | `copy`, `cut`, `paste` | ✅ 已用 |
 | 取块内容 | `getNodeContent`, `getSelectionContent` | ✅ `getNodeContent` 已用；`getSelectionContent` **未用** |
 | 插入/替换块 | `insertAtSelection`, `insertAtPosition` | ✅ 已用 |
 | 「转化为」容器/卡片 | **无** convert 命令；= `getNodeContent` + `insertAtSelection` | ✅ 已用（`convertBlockPreservingContent`） |
 | 卡片移动 | `moveCard`（+`cardValue`/`setCardValue`/`insertCard`/`insertCardAfter`/`focusCard`/`deleteCard`） | ✅ `moveCard` 已用 |
-| 容器/表格移动 | `moveCollapse`, `moveColumns`, `moveColumn`, `moveTable`, `moveImage` | ⚠️ **未用**：`moveBlockNative` 目前对非卡片块统一「读-插-删」 |
+| 容器/表格移动 | `moveCollapse`, `moveColumns`, `moveColumn`, `moveTable`, `moveImage` | ⚠️ **未用**：`moveBlockNative` 对非卡片块统一「摘节点 → 落点插入」（260918 起为节点级删除，见 §5.8.5） |
 | 全选 | `selectAll`（上下文感知）, `selectAllDoc` | ⚠️ **未用**：目前手工 `createRange` + `transformDOMRange` + `selection` |
 | 选区内写入模型 | `selection` | ✅ 已用 |
 | 缩进 | `indent`/`outdent`/`canIndent`/`firstIndent` | ✅ 已用 |

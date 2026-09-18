@@ -16,6 +16,8 @@
   - 关键入口（承前）：`scripts/css-audit/README.md`（CSS 审计，**动样式前必读**；含 §七 内联陷阱 + 34 状态矩阵）· `docs/LAKE-CONTENT-WRITING.md`（**写 Lake 正文前必读**）· `docs/LAKEX-CONTRACT.md`（内核契约，编辑器相关先读）· `docs/LAKEX-MIGRATION-260916.md`（换源/懒加载/离线）· `vendor/lakex-doc-react/LOCAL-CHANGES.md` · `docs/OFFLINE-ASSETS-AUDIT-260916.md`。
 - **工作区现状（本会话清理过）**：`/Users/admin/file/local-lake/` 下只剩 `lake-notes-electron`(主仓库) + `yuque-developer-docs`(语雀开发文档库/内核官方出处) + `lake-main`/`lake-editor-main`(内核机制参考) + `siyuan-master`(思源 v3.8.0 参考，AGPL-3.0)。已删：全部 worktree、过期截图/根级分析稿、`design-spec`、`release/`(910M)、`.css-audit/`(85M)、`test-node-abi/`、外部参考仓库副本（含 `lake-notes-tauri-poc`、`drawnix-develop`）。本地分支只剩 `master` + `refactor/store-split`(未合 master)。
 - **⚠️ 在途分支 `feat/block-drag-native`（260917 块级编辑，待用户验收；不要直接合 master）**：原生拖拽 + 块菜单/转化/剪切收口 + **列表父项 = 一个整块（Issue 3）** + **多块选区/批量操作（Issue 4）**。新增 `src/features/editor/blockHandleMount.ts`、`blockMenuNative.test.ts`、`scripts/e2e-block-menu-smoke.mjs`、`scripts/e2e-block-list-span.mjs`、`scripts/e2e-block-multi-select.mjs`；vendor 源码 + 重建 `dist/**`；文档 `docs/LAKEX-CONTRACT.md`(§5.8/§5.8.1/§5.8.2/§5.8.3/§5.8.4/§5.9)、`docs/BLOCK-*-260917.md`、`vendor/lakex-doc-react/LOCAL-CHANGES.md`(#9–#16)。**下一步：用户验收后合 master。详细交接见 §2.5（任务目标/已完成/当前问题/下一步/踩坑）。**
+  - **（260918 追加，见 §2.6）** 用户实测三问：① 手柄压住列表项目符号、② 删除/剪切/拖拽每次都多留一条空行 —— **已修并复验**（三个 e2e 全绿）；③ 「拖拽改层级 + 蓝色导引线」经评估**可做（约 0.5–1 天）但用户决定先不做**，已并入 §3 第 11 条的**优化项**（与多块选区批量拖拽同项）。
+  - 另按用户要求新增**目录栏「刷新」按钮**（外部命令改动库后 UI 目录会滞后）：`useTreeActions.refreshTree` + `Sidebar` 头部按钮，实测刷新后 DOM 与库内真值对齐 —— 见 §2.6 追加。
 - **dev 数据现状（重要）**：`到啦领导`（ee860a19）仍在回收站（`trashed_at=09-04 10:34`），用户未决定是否恢复，**别擅自删**；安卓回收站 48 条旧测试数据 + 笔记本「20-UI编辑测试」「测试本1」（含用户笔记）保留勿删。
 - **测试产物**：上一会话的 1 篇 `TMP-P2-verify-*` + 4 份对拍脚本副本仍在回收站（可清空）；本会话第三批的块菜单验证又在回收站留下 **3 份 `clean-test-1788770558737` 副本**（可一起清空；原件全程未被打开，hash 复核未变）。注意：为排查"打开即重写"，早前打开过几篇测试文档（`压测3-图片-神里凌华/温迪/bilibili (26)`），它们已被内核归一化、图片降级成失败卡片并变成 `待同步`（**S3 未动**）。
 
@@ -110,6 +112,111 @@
 - **alert 落盘属性顺序**：`<blockquote data-lake-id=… id=… class="lake-alert …">`，`class` **不在**第一个属性 ⇒ 断言正则要写 `<blockquote[^>]*class="lake-alert`。
 - **e2e 断言文案要去掉列表项目符号**：`textContent` 带 `●/○/■`，序列化 HTML 里符号在独立 marker 上 ⇒ 比对前剥前导符号。
 
+## 2.6 本会话（260918 · 块级编辑三批）：用户实测三问 —— 手柄压符号 / 删除拖拽留空行 / 层级拖拽
+
+> 承接 §2.5（**同一分支** `feat/block-drag-native`，仍未合 master）。用户给三张图报：① 手柄盖住无序/有序/待办列表的项目符号；② **每次拖拽都多一个回车**（被拖项原位没清干净）；③ 想要云端那种「拖拽改层级 + 蓝色导引线随层级变长变短」。①② 已修并复验，③ 已评估（结论见下）。
+
+### 已完成（① ②，均在本分支、门禁绿）
+1. **①「手柄压住列表符号」= 锚点选错元素**（`BlockHoverHandle.updateHandlePosition`）。列表项外层 `ne-tli` 的 left 不含缩进（缩进在内容元素上），§2.5 为此把手柄锚到**内容元素（`ne-uli-c`）左缘**；但**项目符号 `ne-uli-i`（宽 32px）占的就是内容左侧那一段** ⇒ 手柄 icon 中心落在符号**内部** 16px（压住 ●/○/■/ⅰ，正是截图现象）。改为锚 **marker 左缘**后 icon 中心 = `marker.left − 16`，与段落口径一致。实测三级 marker.left 387/419/451 → iconCenter 371/403/435；截图核对与云端一致（手柄在符号左侧 gutter）。
+2. **②「拖拽多一个回车」= `deleteByRange` 的语义是「删内容」而不是「删节点」**：范围覆盖**根级整块**时，内核会在原位**补插一个默认段落**（`delete-content-by-range.ts` 尾部 `insertNodeByPosition(u, e.createElement(e.defaultElementName))`）⇒ 菜单删除 / 剪切 / 拖拽**每次都在原位留一条空行**（实测：删一个段落 顶层块 63→63、空段落 +1；拖拽 63→64）。改为内核**模型事务的节点级删除**：新增 `removeBlockNodesNative`（`kernel._model.editing` → `newJob` → `getNodeById` → `removeChild` → **选区复位 `setSelection`** → `commitJob`），`deleteBlockByRange` 优先用它、`deleteByRange` 仅兜底；拖拽 `moveBlockNative` 改为「**先摘掉源节点 → 再按删除后的目标位置 `insertAtPosition`**」（落点是 `(父节点,子索引)`，先插后删会让索引位移）。修复后：删除 63→62、拖拽 63→63、空段落两者都不变、原位不再留行。
+2b. **⚠️ 同一处的第二个坑（更隐蔽，务必记住）**：删节点前**必须把内核算子挪出被删节点**，否则 `commitJob` 在 `framework/engine/src/view/selection/index.ts` 断言失败并**整个事务回滚** —— 症状是「点了删除没反应」，且**此后所有块操作继续报错**（连拖拽一起挂），渲染层异常还会让页面重载（CDP 脚本里表现为 `window.__xxx is not a function`）。实测「复制 → 剪切 → 删除」序列 100% 复现；这正是本轮最初看到的「e2e 后半程全挂」假象的真因。内核自己的 `deleteAlert`/`alert-delete-command`/`deleteCard` 同样是「**先安置选区，再 removeChild**」。完整代码级结论见 `docs/LAKEX-CONTRACT.md` §5.8.5。
+3. **验证与护栏**：三个 e2e 套件全绿——`scripts/e2e-block-list-span.mjs`、`e2e-block-menu-smoke.mjs`、`e2e-block-multi-select.mjs`（都在**副本**上跑、原件 hash 不变）。门禁：`tsc` 0 · `vitest` **1011 passed / 16 skipped (1027)** · 桌面 + 移动 `vite build` 全绿。
+   - `src/features/editor/blockMenuNative.test.ts` 新增 3 组源码级断言（禁回退到「先插后删 + deleteByRange」、必须有 `removeChild`/`commitJob`/选区复位、手柄必须锚 marker）。
+   - `scripts/e2e-block-menu-smoke.mjs` 的拖拽断言从 `pCountAfter >= pCountBefore` **收紧为守恒式**「顶层块数不变 + 空段落不增」，并给「剪切/删除」加了同样的两条断言 —— **旧断言正是这个 bug 溜过去的原因**（`>=` 放过了「原位留一条空段落」）。
+   - **归因方法（值得复用）**：`git checkout HEAD -- vendor/lakex-doc-react/dist` 只回滚**产物**（源码不动）再跑同一套 e2e，即可判定失败是「本批引入」还是「既有」：本轮据此确认 8 条「转化为 → 代码/容器」失败在 HEAD 上**一模一样**（既有 flaky），而删除/拖拽 4 条只在 HEAD 失败（本批修掉）。
+   - 厂商改动登记见 `vendor/lakex-doc-react/LOCAL-CHANGES.md` **#17**。
+
+### ③ 拖拽改层级（云端那种蓝色导引线）—— **能做，本轮未做**
+- **能力齐备**：纵向移动已可用；层级 = 列表项 `ne-level`（模型里是 `attrs.level`/`parentIndex`）；内核有 `indent`/`outdent`/`canIndent`/`firstIndent`（§5.9 注册表；**`editor.execCommand` 上有效、移动端 `renderer.execCommand` 上无效**），菜单「缩进」已在用。
+- **要补的是交互与落点语义**：① 拖拽时按光标**水平偏移**算目标层级（候选 `0..(上方块层级+1)`，按列表缩进宽度 32px 量化）；② 导引线按层级改 `left/width`（现有 `positionIndicator` 已画 2px 横线，扩展很小）；③ 落点 = 垂直照旧 + 层级差用 `indent`/`outdent` 补齐（或在同一模型事务里改 `level`）；④ 顺序要实测：先移动后改层级 vs 先改层级后移动（插入同列表会重建列表节点、range/选区失效——§2.5 的坑）。
+- **代价/风险**：约 **0.5–1 天**（含新 e2e：拖后断言 `ne-level` 与顺序）。风险集中在「跨列表拖拽 + 同级/子级边界」与「层级变更后子项是否跟着走」（云端按「父项 = 整段」，我们已有 `blockSpanElements` 可复用）。
+- **用户决策（260918）：先不做**（「我感觉现在就挺好的，云端的跨层级有点乱，并不是很好用」），已与「多块选区批量拖拽」**合并记入 §3 第 11 条（优化项）**；本轮**未写任何 ③ 的代码**。
+- **若日后要做**：不要把云端那套交互照搬 —— 用户明确觉得它乱，先定交互再动手。
+
+### 本轮新增的坑（务必记住）
+- **`deleteByRange` 在根级整块上 = 「删内容 + 原位补一个空段落」**；要真删节点只能走模型事务（§5.8.5）。
+- **内核模型事务的入口 = `kernel._model.editing`**（命令的 `e` 参数就是它）：`startTransaction/newJob/getNodeById/removeChild/setSelection/commitJob`。**`kernel.newJob` 不存在**。
+- **删/改节点后内核算子会失效**：不先 `setSelection` 挪走 → 断言 + 回滚 + **连累后续所有块操作**（见 2b）。
+- **多 tab 同开时禁用 `document.getElementById`**：复制的文档**块 id 与原件相同**，隐藏 tab 里有同 id 元素 ⇒ 会取到错的那个（本轮诊断脚本因此假报过 `isConnected`/`isCardNode` 错）。要按「当前可见 engine 根」内取。
+- **`deleteEmptyParagraphs` 是全篇删除所有空段落**（`job.getNodesByName('p')`），会把有权保留的空行一起删——**不能当兜底**。
+- **写 e2e 断言要问「它抓得住我今天修的这个 bug 吗」**：方向性断言（`>=`）会放过「原位留空段落」；块级动作要用**守恒式**（`===`）。
+
+### 追加（260918）：目录栏「刷新」按钮（用户要求）
+- **动机/现象**：用命令（IPC 直调 `deleteTreeNode` / `createNote`）改动库时，UI 目录**不会**跟着变 —— 用户看到「已经删掉的测试副本还挂在目录里」，要求目录栏右上角加一个刷新。
+- **根因**：前端树状态只在「走应用自己的动作 / 同步事件」时更新（`setTreeNodes(await native.listTreeNodes())` 只出现在那些路径）；**外部改动没有任何广播**（与 §3.10 提到的 `library-changed` 缺口同源）。
+- **实现（三层，均未新增 CSS）**：`src/hooks/useTreeActions.ts` 新增 `refreshTree`（重读 `listTreeNodes`，失败走 `setError`）→ `src/App.tsx` 传 `onRefreshTree` → `src/components/Sidebar.tsx` 头部 `.list-heading` 里在「筛选」右侧加按钮（`RefreshCw`，复用既有 `.dock-icon-btn` 与 `.spin`），进行中 `disabled` + 图标旋转，避免连点。
+- **实测（CDP 真实鼠标点按钮）**：① 外部新建 → 库内有 / DOM 无（滞后）→ 点刷新 → **DOM 出现**；② 外部删除 → 库内无 / DOM 仍在（**正是用户看到的现象**）→ 点刷新 → **DOM 消失**。结论：**刷新后 DOM 与库内真值对齐**。
+- **有意未做**：不给「外部改动」加自动广播刷新（那是 `library-changed` 事件的设计，见 §3.10，属更大改动）；移动端目录栏没有这条工具条（交互另套），本轮未改。
+- 顺手清掉本轮遗留的 4 个**活跃**测试副本（`安卓上行-1 副本` ×3、`详细测试1 副本`；此前回收站里的 58 份测试副本属 e2e 正常产物，未动）。
+
+- **追加（260918，用户点名 4 项 UI）**：
+  1. **「刷新」移到图标组最左**（现在顺序：刷新 | 筛选 | 全部收起 | 定位 | ＋）。
+  2. **「＋」菜单只保留「新建笔记本」**，并去掉条目说明文案；文档/分组的创建仍走节点右键「新建文档 / 新建分组」（那条路径的 `create`/`pendingCreate` 逻辑未动）。
+  3. **点文档不再自动展开子项**：根因是跟随当前文档的 effect 调 `revealNode(activeId)`，而它用的 `expandAncestors` **把目标节点自身也加进了 expanded**，同时 `autoExpanded` 也默认展开「有子项的文档」。改法：新增 `expandAncestorChain`（**只展开祖先、不含自身**）供跟随定位用；跟随定位改调 `revealNode(id, { expandSelf: false })`；`autoExpanded` 只展开笔记本/分组。于是「展开文档子项」只剩两条路：**点下拉箭头**、**「定位到当前文档」按钮**（后者仍会展开自身，符合用户口径）。
+  4. **自动定位的跳动**：旧实现是「先 `setExpanded` 渲染 → `setTimeout(60)` 再滚」，展开插行与滚动分属两帧 ⇒ 用户先看到错位再被拽回（实测**旧代码有 2 帧绘制在错误位置**：`rowTop=-15225`，随后 snap 到 92）。改为**在 `useLayoutEffect` 里滚动**（提交 DOM 后、绘制前，由 `revealNonce` 驱动，`expanded` 无变化也会跑），并保留「行还没进 DOM 就下一帧补一次」的兜底。**A/B 实测**：旧 `offFrames=2` → 新 `offFrames=0`（首个 rAF 采样时已滚到位 `scroll=419/581, rowTop=92`）。
+  - 验证：4 项均在真实 Electron 上按「断言真实状态」跑过（工具条顺序 / 菜单项与 `small` 计数 / 点文档 `open=false,kidRows=0` → 点下拉 `open=true,kidRows=1` → 再点收起 / 定位 `offBefore=true` 且 `offFrames=0`）。
+- **追加（260918，再两项 UI 收口）**：
+  5. **「＋」菜单收小**：`createMenuPosition` 的 `preferredWidth` 220 → **150**、`.create-menu` 宽度同步、菜单项 `min-height` 42 → **32**（与全局菜单项一致）。实测 220×60（行高 42）→ **150×50（行高 32）**。
+  6. **重命名只有一个焦点环**：之前是 **3~4 层同心蓝框**叠加 —— ① b3 的 `input:focus-visible` 描边（`outline: … 2px` + offset 2）、② 本文件 `.tree-rename-input:focus` 的 `box-shadow`、③ 输入框自身 `border`、④ 所在行 `.tree-row.context` 的 inset 环。改法：输入框只留 `border` 主色（`:focus/:focus-visible` 里 `outline: 0`、去掉 box-shadow），并让**重命名中的行不再挂 `context` 类**（纯 JS 条件，不动 b3 层 CSS、不碰 CSS 围栏基线）。实测改后可见环 = `[{input.border: 1px rgb(59,91,219)}]` 唯一一条，截图核对无误。
+
+## 2.7 本会话总交接（260918 · 块级编辑三批 + 目录栏收口）—— 新会话从这里读
+
+> **写给完全没有上下文的新会话。** 本批已**合入 master**（原在途分支 `feat/block-drag-native` 已并、已删本地分支）。
+> 深度细节按需跳转：内核行为 → `docs/LAKEX-CONTRACT.md` **§5.8.5**；厂商改动清单 → `vendor/lakex-doc-react/LOCAL-CHANGES.md` **#17**；本批逐条过程 → 上面 **§2.6**；待办全表 → **§3**（本批相关的是第 11 条「优化项」）。
+
+### 一、任务目标（用户本次要求，按顺序）
+1. **块手柄位置错**：手柄盖住了无序/有序/待办列表的**项目符号**，云端是落在符号**左侧**的 gutter。
+2. **块拖拽每次都多一个回车**：被拖项**原位置**没清干净（下→上拖，空行在原位下方；上→下拖，空行在原位上方）。
+3. 问「**能否做云端那种拖拽改层级 + 蓝色导引线**（线长表示父级/同级/子级）」。
+4. 目录栏右上角**加「刷新」**（此前用命令直删的测试副本仍挂在目录里）。
+5. 目录栏四项交互：**刷新放最左**；**「＋」弹窗只留「新建笔记本」并去掉说明**；**点文档不自动展开子项**（只有分组/笔记本才展开，文档只在点下拉或自动定位时展开）；**自动定位展开目录有跳动，要优化**。
+6. 两项视觉：**「新建笔记本」弹窗偏大**；**重命名出现多层蓝色边框嵌套**。
+
+### 二、已完成内容（全部已提交并合入 master）
+**A. 块编辑两个 bug（②③ 之外的两个真 bug，已修）**
+- **① 列表手柄锚点**：由「内容元素（`ne-uli-c`）左缘」改为「**项目符号 marker（`ne-uli-i/ne-oli-i/ne-tli-i`）左缘**」。原因：符号本身占的就是内容左侧那 32px，锚内容 ⇒ icon 中心落在符号**内部** 16px。改后 icon 中心 = `marker.left − 16`，三级实测 marker 387/419/451 → iconCenter **371/403/435**，与段落口径一致，截图与云端一致。入口：`vendor/.../BlockHoverHandle.tsx` 的 `updateHandlePosition`。
+- **② 删除/剪切/拖拽留空行**：根因 = `kernel.execCommand('deleteByRange')` 的语义是**删内容**，范围覆盖**根级整块**时内核会在原位**补插一个默认段落**（`delete-content-by-range.ts` 尾部 `insertNodeByPosition(u, createElement(defaultElementName))`）⇒ 实测删除 `顶层块 63→63、空段落+1`、拖拽 `63→64`。
+  改法：新增 `removeBlockNodesNative`，走内核**模型事务**节点级删除（`kernel._model.editing` → `newJob` → `getNodeById` → `removeChild` → **选区复位 `setSelection`** → `commitJob`），`deleteBlockByRange` 优先用它、`deleteByRange` 仅兜底；`moveBlockNative` 改为「**先摘源节点 → 再按删除后的目标位置 `insertAtPosition`**」（落点是 `(父节点,子索引)`，先插后删会位移）。
+  修复后实测：删除 `63→62`、拖拽 `63→63`、空段落**两处都不变**。
+- **③ 拖拽改层级 + 蓝色导引线：未做（用户决定）**。已评估为**可做（约 0.5–1 天）**：纵向移动已可用、层级在 `ne-level`（模型 `attrs.level`）、内核有 `indent/outdent/canIndent/firstIndent`；缺的是「按光标水平偏移算层级 + 导引线按层级改 left/width + 落点补层级差」。用户原话「现在就挺好的，云端的跨层级有点乱，并不是很好用」⇒ **已与「多块选区批量拖拽」合并记为 §3 第 11 条的优化项**，本轮**未写任何 ③ 的代码**。⚠️ 若日后要做：**不要照搬云端交互**。
+
+**B. 目录栏（用户第 4/5/6 项）**
+- **刷新按钮**：`useTreeActions.refreshTree`（重读 `listTreeNodes`）→ `App.tsx` 传 `onRefreshTree` → `Sidebar` 头部按钮（`RefreshCw`，复用既有 `.dock-icon-btn`/`.spin`，**未新增 CSS**）。**位置在最左**（现在顺序：刷新 | 筛选 | 全部收起 | 定位 | ＋）。实测不变式：API 新建/删除后 DOM 与库内真值**对齐**（外部新建 → DOM 无 → 点刷新 → 出现；外部删除 → DOM 仍在 → 点刷新 → 消失）。
+- **「＋」弹窗**：只保留「新建笔记本」、去掉说明文案；尺寸 220×60（行高 42）→ **150×50（行高 32）**。改动：`createMenuPosition.ts` 的 `preferredWidth` 220→150（`minWidth=150` 不动，围栏测试仍绿）、`.create-menu` 宽度与菜单项 `min-height`。**文档/分组的创建仍在节点右键「新建文档/新建分组」**（那条路径未动）。
+- **点文档不再自动展开子项**：根因 = 跟随当前文档的 effect 调 `revealNode(activeId)`，而它用的 `expandAncestors` **把目标自身也加进 expanded**；且 `autoExpanded` 也默认展开「有子项的文档」。改法：新增 `expandAncestorChain`（**只展开祖先、不含自身**）+ 跟随定位改调 `revealNode(id, { expandSelf: false })` + `autoExpanded` 只展开笔记本/分组。**展开文档子项只剩两条路：点下拉箭头、按「定位到当前文档」**（后者仍展开自身，符合用户口径）。
+- **自动定位跳动**：旧实现「先 setExpanded 渲染 → `setTimeout(60)` 再滚」= 两帧中间态。改为**在 `useLayoutEffect` 里滚动**（提交后、绘制前；`revealNonce` 驱动，`expanded` 无变化也会跑），保留「行还没进 DOM 就下一帧补一次」兜底。**A/B 逐帧实测**：旧 `offFrames=2`（`rowTop=-15225` 画了两帧再 snap）→ 新 `offFrames=0`（首个 rAF 采样已 `scroll=419/581, rowTop=92`）。
+- **重命名多层蓝框**：实测是 **3~4 层同心环** —— b3 `input:focus-visible` 描边（2px+offset2）、本文件 `:focus` 的 `box-shadow`、输入框自身 `border`、所在行 `.tree-row.context` 的 inset 环。改法：输入框只留 `border` 主色（`:focus,:focus-visible` 里 `outline:0`、去 box-shadow）+ **重命名中的行不挂 `context` 类**（纯 JS 条件，**不动 b3 层 CSS、不碰 CSS 围栏基线**）。实测可见环只剩 `input.border: 1px rgb(59,91,219)` 一条。
+
+**C. 护栏与文档**
+- `src/features/editor/blockMenuNative.test.ts`：新增 3 组源码级断言（禁回退「先插后删 + deleteByRange」、必须 `removeChild`/`commitJob`/选区复位、手柄必须锚 marker）。
+- `scripts/e2e-block-menu-smoke.mjs`：拖拽断言由 `pCountAfter >= pCountBefore` **收紧为守恒式**（顶层块数不变 + 空段落不增），并给「剪切/删除」加同样两条 —— **旧断言正是这个 bug 溜过去的原因**。
+- `docs/LAKEX-CONTRACT.md` 新增 **§5.8.5**（根因 + 模型事务写法 + 选区复位 + 手柄锚点修正）；`vendor/lakex-doc-react/LOCAL-CHANGES.md` **#17**；本文件 §0/§2.6/§2.7。
+- 门禁（合入前实测）：`tsc` 0 · `vitest` **1011 passed / 16 skipped (1027)** · 桌面 + 移动 `vite build` 全绿 · 三个块编辑 e2e（list-span / menu-smoke / multi-select）**全绿** · `git diff --check` 只报 vendor 生成产物里**原本就有**的行尾空格（HEAD 上同样 2 处，已核对）。
+
+### 三、当前问题（均不阻塞）
+- **没有已知回归**。唯一"看起来像回归"的是 `e2e-block-menu-smoke` 里 8 条「转化为 → 代码/容器」断言会**偶发失败**：已用「回滚 vendor 产物到 HEAD 再跑同一套」证明**在 HEAD 上一模一样**（既有 flaky，与本批无关）。
+- **移动端未做任何改动**（本轮全部是桌面目录栏 + 桌面块编辑）。移动端目录栏没有这条工具条（交互另套）。
+- **外部改动不会自动刷新目录**（本批只加了手动刷新按钮）：根因是前端树状态只在「应用自己的动作 / 同步事件」时更新，没有 `library-changed` 广播 —— 与 §3.10 的浏览器端推送缺口同源，属更大改动。
+- 回收站里累积了本会话 e2e/诊断产生的一次性副本（正常产物，未清；要清需用户决定）。
+
+### 四、下一步计划
+1. **等用户验收本批**（已合 master，若验收有问题按现象回到 §2.6 / §5.8.5 定位）。
+2. 其余待办见 **§3**：其中与本批直接相关的是**第 11 条优化项**（多块选区批量拖拽 + 拖拽改层级，均「先不做」）。
+3. 若要继续块编辑方向：把 §5.9 里"容器重排可优先用 `moveCollapse/moveColumns/moveTable/moveImage`"这条候选原生化做掉（现统一「摘节点 → 落点插入」）。
+4. 与目录栏相关的可选优化：给外部改动加 `library-changed` 事件自动刷新（见上面"当前问题"）。
+
+### 五、踩过的坑（本批新增，务必记住）
+- **`deleteByRange` 在根级整块上 = 「删内容 + 原位补一个空段落」**；想真删节点只能走模型事务 `job.removeChild`。完整代码级结论见 §5.8.5。
+- **删节点前必须把内核算子挪出被删节点**（`job.setSelection(...)`）：否则 `commitJob` 在 `framework/engine/src/view/selection/index.ts` 断言失败、**整个事务回滚** —— 症状是「点了删除没反应」，且**此后所有块操作继续报错**（连拖拽一起挂），渲染层异常还会**让页面重载**（CDP 脚本里表现为 `window.__xxx is not a function`）。实测「复制 → 剪切 → 删除」序列 100% 复现 —— 这正是本批最初误判「e2e 后半程全挂是既有问题」的真因。
+- **内核模型事务入口 = `kernel._model.editing`**（命令的 `e` 参数就是它）：`startTransaction/newJob/getNodeById/removeChild/setSelection/commitJob`。**`kernel.newJob` 不存在**。
+- **多 tab 同开时禁用 `document.getElementById`**：复制出来的文档**块 id 与原件相同**，隐藏 tab 里有同 id 元素 ⇒ 会取到错的那个（本批诊断脚本因此假报过 `isConnected`/`isCardNode` 错）。要按「当前可见 engine 根」内取。
+- **`deleteEmptyParagraphs` 是全篇删除所有空段落**（`job.getNodesByName('p')`），会把有意保留的空行一起删 —— **不能当兜底**。
+- **写 e2e 断言要问「它抓得住我今天修的这个 bug 吗」**：方向性断言（`>=`）会放过「原位留空段落」；块级动作要用**守恒式**（`===`）。
+- **归因方法（值得复用）**：只回滚**产物** `git checkout HEAD -- vendor/lakex-doc-react/dist`（源码不动）再跑同一套 e2e，即可判定失败是「本批引入」还是「既有」。
+- **量"视觉跳动/逐帧"必须先解除后台节流**：窗口不可见时 rAF 一帧不跑（本次第一版测量 `frames:0` 白跑）。要 `Page.bringToFront` + `Emulation.setFocusEmulationEnabled{enabled:true}` + `Page.setWebLifecycleState{state:'active'}`（**`/tmp` 里的 `lk-cdp.mjs` 已内置这三条**）。
+- **CDP `Page.captureScreenshot` 的 `clip` 会截到空白**：本次给"重命名框"截图连续两次全白 —— 真因是**侧栏当时被合成点击折叠了**（`sidebar-collapsed`：行仍有布局矩形、但不绘制）。截图前先确认目标容器可见（`.sidebar` 不是 `sidebar-collapsed`），比反复调 clip 有效。
+- **合成点击会误折叠侧栏**：诊断脚本点活动栏附近的坐标有可能切到 `collapsed`；跑完要检查并恢复（点 `title="资料库"` 的 `.activity-button`）。**别把用户的应用留在非预期 UI 状态**。
+
 ## 3. 下一步计划 + 当前问题（真正的待办，按优先级）
 
 ### 下一步计划
@@ -130,12 +237,21 @@
 10. **浏览器端（本机附属窗口）后续 —— 等用户决定是否做**：本次只交付"开关 + 说明 + 打开按钮"，功能未细化。若要做，已知缺口按此顺序：① **推送**（最大）：浏览器收不到 `sync-progress`/`pending-summary-changed`（shim 里是 no-op）→ 需给 `webApiServer` 加 SSE + 在 `main.ts` 两处广播点接 sink（事件少、广播集中，约 0.5–1 天）；② **宿主能力浏览器化**：导出/备份走 `dialog`、`openAttachment`/`reveal*` 走 `shell`、`copyAsset*` 走 `clipboard`/`nativeImage`——在浏览器里语义错（会去操作桌面机），需换下载 / `navigator.clipboard` / `<input type=file>` 或隐藏；③ **开发体验**：只服务构建产物 `dist/`（无 HMR），无 `npm run dev:web` 脚本；④ **安全**：`/api/*` 只校验 `x-lake-token`（复用 assetToken）、不校验 Origin，`/__native.js` 不校验 token（与 W-8 ACAO 同类，建议一起定调）。
     - **AI 生成的文档能否"各端发现"（用户 260917 提问 → 结论）**：只要 AI **走应用写入路径**（`createNote` + `saveNote`，媒体让内核产出——**禁直写库/手拼 `.lake`**，见 `docs/LAKE-CONTENT-WRITING.md`），就会以 `sync_state='local'` 落库 → **跨设备**靠现有 S3 同步天然可见（无需新机制）；**同机多窗口/浏览器**要"立即看到"则需再加一个 `library-changed` 事件（复用同一 SSE 通道）。**浏览器端本身只覆盖本机**（绑 127.0.0.1，不是同步参与者）；AI 若在云端生成属另一套设计（走同步协议或把 webApiServer 暴露到网络 = 需单独的安全方案）。
 
-11. **多块选区「批量拖拽」（用户 260917 记录；云端 Lake 也未实现 ⇒ 低优先级 / 可选）**
-    - **现状**：Issue 4 已支持多块选区的聚合手柄 + 批量删除/复制/剪切/转化；**拖拽仍按单块**（moveBlockNative 遇到多块选区直接返回 false），手柄在拖拽时不进入拖拽态。
-    - **难度：中等偏易**，可复用现有原语、无需新内核能力：selectedTopBlocks + selectBlocksInEditor 取整段选区 → getSelectionContent('text/lake') 取整段 fragment → deleteByRange 删除整段 → insertAtPosition(dropPos, 'text/lake', frag)。与单块「读-插-删」同一套路，只是把「一个块」换成「一个选区」。
-    - **三个真实风险（决定工作量）**：① **卡片保真**：单块卡片走 moveCard 逐字节保真；整段 fragment 里含卡片时只能走 lake 序列化再插入 ⇒ 卡 id 会重发（已注册卡字节应保真，**未注册卡会丢**，与「打开即保存」同因）；要跟单块一样保真，需在移动前把选区里的卡片逐个 moveCard 或按卡类型分流。② **列表层级/顺序**：整段跨列表时 data-lake-indent 依赖 fragment 顺序，删+插后要复核层级不被压平（Issue 3 只验证了单个父项）。③ **落点边界**：落点落在选区内部要拒绝（现有 self/span 判断需扩展到整段选区）。
+11. **【优化项 · 用户 260918 决定「先不做」】块拖拽的两个进阶能力：多块选区批量拖拽 + 拖拽改层级（蓝色导引线）**
+    - **用户决策（260918 原话）**：「拖拽改层级 + 蓝色导引线 这个列入待办吧，我感觉现在就挺好的，云端的跨层级有点乱，并不是很好用。先不做了」；并要求与「多块选区的批量拖拽」**合并成一项优化项**记录（非 bug、不进主线待办）。
+    - **共同触发条件**：用户明确需要时再做；不做不影响现有功能（现有拖拽=单块+整段列表父项，已满足日常）。
+
+    **(a) 拖拽改层级（云端那种蓝色导引线）—— 已调研：可做**
+    - **能力齐备，不用新内核能力**：纵向移动已可用；层级 = 列表项 `ne-level`（模型 `attrs.level`/`parentIndex`）；内核有 `indent`/`outdent`/`canIndent`/`firstIndent`（§5.9 注册表；**`editor.execCommand` 上有效、移动端 `renderer.execCommand` 上无效**），菜单「缩进」已在用。
+    - **要补的是交互与落点语义**：① 拖拽时按光标**水平偏移**算目标层级（候选 `0..(上方块层级+1)`，按列表缩进宽度 32px 量化）；② 导引线按层级改 `left/width`（现有 `positionIndicator` 已画 2px 横线，扩展很小）；③ 落点 = 垂直照旧 + 层级差用 `indent`/`outdent` 补齐（或同一模型事务里改 `level`）；④ 顺序要实测：先移动后改层级 vs 先改层级后移动（插入同列表会重建列表节点、range/选区失效——§2.5 的坑）。
+    - **代价/风险**：约 **0.5–1 天**（含新 e2e：拖后断言 `ne-level` 与顺序）。风险集中在跨列表边界与「层级变更后子项是否跟着走」（云端按「父项 = 整段」，我们已有 `blockSpanElements` 可复用）。用户主观评价：**云端这套跨层级交互偏乱、不算好用** ⇒ 做的话不要照搬，要先定交互。
+
+    **(b) 多块选区「批量拖拽」（260917 记录；云端 Lake 也未实现）**
+    - **现状**：Issue 4 已支持多块选区的聚合手柄 + 批量删除/复制/剪切/转化；**拖拽仍按单块**（`moveBlockNative` 遇到多块选区直接返回 false），手柄在拖拽时不进入拖拽态。
+    - **难度：中等偏易**，可复用现有原语、无需新内核能力：`selectedTopBlocks` + `selectBlocksInEditor` 取整段选区 → `getSelectionContent('text/lake')` 取整段 fragment → **节点级删除整段**（`removeBlockNodesNative`，260918 起；**不要**用 `deleteByRange`——它在根级整块上会补空段落，见 §5.8.5）→ `insertAtPosition(dropPos, 'text/lake', frag)`。与单块「摘节点 → 落点插入」同一套路，只是把「一个块」换成「一个选区」。
+    - **三个真实风险（决定工作量）**：① **卡片保真**：单块卡片走 `moveCard` 逐字节保真；整段 fragment 里含卡片时只能走 lake 序列化再插入 ⇒ 卡 id 会重发（已注册卡字节应保真，**未注册卡会丢**，与「打开即保存」同因）；要跟单块一样保真，需在移动前把选区里的卡片逐个 `moveCard` 或按卡类型分流。② **列表层级/顺序**：整段跨列表时层级依赖 fragment 顺序与 `data-lake-indent`，删+插后要复核层级不被压平（Issue 3 只验证了单个父项）。③ **落点边界**：落点落在选区内部要拒绝（现有 self/span 判断需扩展到整段选区）。
     - **UI**：ghost 需渲染整段（多块）预览；落点线 / 边缘自动滚动可复用（ghost 已支持「列表父项整段」，扩展到多块改动不大）。
-    - **结论**：超出云端能力范围，**先记为待办、不做**；若做，预计 0.5–1 天（含 e2e）。触发条件 = 用户确实需要批量拖动整段。
+    - **代价**：约 **0.5–1 天**（含 e2e）。
 
 ### 当前问题 / 已知坑（不阻塞）
 - 画板**不再记忆视口**（拖动/缩放后重开为默认/自适应）：这是 260916 为「不让视口触发保存/上传」刻意做的取舍，**用户已确认接受**（"谁知道下次进来要看什么"）。不要改回去。

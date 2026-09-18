@@ -124,8 +124,19 @@ export function useTreeActions({
     } catch (reason) { setError(getNativeErrorMessage(reason)); }
   }, [openNote, setTreeNodes, setError]);
 
+  /**
+   * 手动刷新目录：从库里重读整棵树。
+   *
+   * 为什么需要它：UI 的树状态只在「走应用自己的动作 / 同步事件」时更新；外部改动
+   * （脚本、IPC 直调 deleteTreeNode 之类）不会触发前端刷新 ⇒ 目录会残留已删条目。
+   */
+  const refreshTree = useCallback(async () => {
+    try { setTreeNodes(await native.listTreeNodes()); }
+    catch (reason) { setError(getNativeErrorMessage(reason)); }
+  }, [setTreeNodes, setError]);
+
   return {
-    createTreeItem, renameTreeNode, moveTreeNode, duplicateNode,
+    createTreeItem, renameTreeNode, moveTreeNode, duplicateNode, refreshTree,
     sidebarSelect, sidebarCreate, sidebarRename, sidebarMove,
     sidebarRequestDelete, sidebarSetIcon, sidebarOpenHistory, sidebarOpenSearch, sidebarPendingRenameConsumed,
   };
