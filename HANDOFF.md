@@ -5,6 +5,7 @@
 > **§8 是移动端（安卓）专职交接**，由移动端会话维护；桌面会话不要改 §8，移动端会话不要改 §0-§7 之外的桌面文件。
 
 ## 0. 当前基线（新会话开工前）
+- **本会话（260919 晚）完整交接 = §2.10（小记挂 Lake 内核编辑器）——⚠️ 下一会话最高优先级，用户已报「问题很多」但未逐条给**。所有改动已提交并推 origin：`master` @ `0d442a8`，工作区干净、单 worktree（本会话不再使用分支树）。
 - **本会话（260919）完整交接 = §2.9**（表格内核换代 FortuneSheet + UI/文档收口 + 崩溃修复；含任务目标/已完成/当前问题/下一步/踩坑）。表格批次完整背景 = §2.8。
 - **本批（表格文档接入 kind=sheet，✅ 已提交并推 origin：`master` @ `71c2d90`；⚠️ 尚未真机验收）**：分支 `feat/sheet-document` 已 **ff 合入 `master`**（旧调研分支 `spike/sheet-ce` 已删）。**写给零上下文新会话的完整交接 = §2.8（新会话从这里读）**；设计/选型/实测数据全表 = `docs/SHEET-BITABLE-DESIGN-260918.md` + `docs/FORTUNESHEET-FEASIBILITY-260919.md`（260919 换内核）。
   - 一句话：新增**文档类型** `kind = doc | sheet | bitable`（只加在 `notes.kind` + `manifest.kind`，**不动 `tree_nodes.node_type`**）；表格正文落 `sheets/{id}.sheet.json`；**manifest 升 v6**（带 kind）；编辑器 = **FortuneSheet 1.0.4**（260919 由 jspreadsheet CE 换掉；CSP / 图片 input / 编辑态限宽 / setCellFormat 判空 走 `patches/`）；**多维表(bitable)本批不做**。
@@ -122,11 +123,7 @@
 4. 多块选区拖拽：仅当用户确实需要批量拖动整段时再做（§3 第 11 条）。
 5. 其余长期待办见 §3（画板 AI、离线残余、移动端、产品/技术债、小记底座等）。
 6. **【内存回收专项 · 下一个会话做（260919 用户指名）】编辑器开关后的「该回收没回收」复核** —— 依据 `docs/QUICK-NOTE-LAKE-MEMORY-SPIKE-260919.md`（分支 `spike/quick-note-lake-memory`，实测：关 20 个标签只回收 ≈18MB；0 标签稳态 ≈113MB vs fresh ≈84MB ⇒ 残留 ≈+30MB）。
-7. **【小记编辑器接入 · ✅ 已落地（260919，commit `5a774c3`）】把「正在写的那一条小记」换成 1 个 Lake 实例** —— 数据层已就位（`.qnote` v2 内核形态正文，转换 = 搬运；见 `docs/QUICK-NOTE-LAKE-BODY-260919.md`）。
-   - **已实现**：上传管线加 `saveResource` 出口（可覆盖落盘）+ `createLakeDocument` 加 `uploadResource` 覆盖参数 + 新组件 `src/features/quickNotes/QuickNoteEditor.tsx` + `QuickNoteComposer` 的 `<textarea>` 换成该组件（编辑时挂、离开即销毁）+ `.quick-note-editor` CSS。图片走 staging（`stageQuickNoteImage`），卡片 src 用 staging URL，保存时主进程改写成 `/quick-notes/<id>/`。
-   - **已验证（真机冒烟）**：编辑器只挂 **1 个实例**；内核 `contentchange` 在小记上下文**不保证回传文本**、`getDocument("text/plain")` 也可能取不到 ⇒ 组件加了 **DOM `input` 兜底 + DOM `innerText` 回退**（这是能不能「有内容 → 发布」的关键）；发布后小记是 **v2**，正文是**内核形态**（`<p data-lake-id … class="ne-p"><span …>`）。
-   - **⚠️ 仍未验证（需要人眼+真键盘）**：① **真实键盘输入**（CDP 的 `Input.dispatchKeyEvent/insertText` 打不到 contenteditable —— 与「窗口非激活时 Input 事件失效」同源，HANDOFF 老坑；本次是用 `document.execCommand('insertText')` 注入验证的保存链路）；② **粘贴/拖入图片**走 staging 的完整链路（含保存时的作用域改写与转换后图片可达）；③ 移动端不受影响（仍是输入框 + 保存时合成 body）。
-   - 完成后再补：转换端到端（小记→文档，含图片）、回收专项（见第 6 条）里的「小记编辑态挂/卸」触发面。
+7. **【小记编辑器接入 · ⚠️ 已落地但未通过验收（260919，commit `5a774c3` / `0d442a8`）】小记写作区挂 1 个 Lake 实例** —— **完整交接见 §2.10（新会话先读它）**；用户点了几下反馈「问题很多」但未逐条给，默认不通过。已知必修项：①「添加图片」文件选择按钮被删没了；② 真实键盘输入/贴图链路/编辑已有小记未验证；③ `draftEditorRef` 共用竞态、面板常驻实例、删图留孤儿。**本项优先级最高。**
    - **① churn soak（预留 30 分钟）**：反复开关同一批标签 N 轮（建议 ≥10 轮 × ≥20 个标签），每轮记录「连跑两次 `HeapProfiler.collectGarbage` 后」的 JS 堆 / DOM 节点数 / 事件监听数，看是否**随轮次线性上升**（线性 = 泄漏；有上限后收敛 = 正常缓存）。
    - **② 三条触发面都要覆盖**：普通文档开关 · **小记编辑态挂/卸 Lake 实例**（本批新增）· 小记→文档转换。
    - **③ 出现线性增长再用 heap snapshot 找 retained path**，判定是内核侧保留（回填 `docs/LAKEX-CONTRACT.md`）还是我们的引用残留（直接修）。
@@ -487,6 +484,96 @@
 - 补丁 `patches/@fortune-sheet+core+1.0.4.patch`、`patches/@fortune-sheet+react+1.0.4.patch`。
 - 收口 `electron/noteExport.ts`、`electron/noteQueries.ts`、`src/components/Sidebar.tsx`、`src/desktop/DesktopOverlays.tsx`、`src/components/DesktopStatusBar.tsx`、`src/hooks/desktopDerivedState.ts`。
 - 规范 `docs/FORTUNESHEET-FEASIBILITY-260919.md`、`docs/SHEET-IMAGE-MANAGEMENT-260919.md`。
+
+## 2.10 本会话总交接（260919 晚 · 小记挂 Lake 内核编辑器）—— 新会话从这里读
+
+> 写给**完全没有上下文的新会话**。本批**已提交并推送**（`master` @ `0d442a8`），工作区干净、无在途分支/worktree。
+> **⚠️ 验收状态：用户简单点了几下，反馈「问题很多」，但**没有逐条给出**——本批**默认不通过**。新会话第一件事是拿现象清单（或按 §三/§四 自查清单逐条走查）。
+> 关联：`docs/QUICK-NOTE-LAKE-BODY-260919.md`（数据格式与改动清单）· `docs/QUICK-NOTE-LAKE-MEMORY-SPIKE-260919.md`（实例内存/延迟量化）· `docs/QUICK-NOTES-SPEC.md`（小记产品规格，注意其「不复用 Lake 编辑器」的结论**已被本批推翻**，需要它跟着改）。
+
+### 一、任务目标（用户本次要求）
+
+1. **给小记支持更多格式**：用户定稿要的是「（有序/无序）列表 / 待办 / 引用 / 加粗 / 代码 / 图片 / 附件」——都是内核原生能力。
+2. **方案定稿**：小记写作区挂**一个** Lake 内核实例（**编辑时挂、其余不挂**），**不要**每条小记常驻实例。
+   - 量化依据（本会话实测）：单实例 ≈ **+1.3~5MB JS 堆 / ≈+5MB RSS**、冷开 ≈ **150ms**；24 tab 场景下 24 个实例共 +58.9MB 堆、RSS 725→925MB。⇒「相当于多开一个 tab」成立。
+3. **格式升级的顺带收益**：小记正文变成**内核形态**后，「小记 → 正式文档」从「手拼序列化」退化成「**搬运**（只改写资源作用域）」，消掉旧的「内核容忍形态」隐患。
+4. 交付要求：三条链路可用 —— ① 新建（打字/贴图 → 记下）② 编辑已有小记 → 保存 ③ 转为正式笔记（含图片）。
+
+### 二、已完成内容（全部已提交并推送）
+
+**A. 数据层：`.qnote` v2 = 内核形态正文（commit `c08f711`）**
+
+- `QuickNoteContent` 新增 **`body`**（内核形态 Lake 正文，唯一真相）；`text` 退化为**纯文本镜像**（预览/搜索/无富文本端降级）。
+- `QUICK_NOTE_VERSION = 2`；`src/core/quickNoteModel.ts` 新增 `quickNoteBodyFromTextAndImages(text, images, imageUrl, makeId)`（**没有内核编辑能力的一端**——移动端/只给 text 的调用——按此合成正文：每行一个 `ne-p` 段落 + 每图一张 inline image 卡片）与 `rewriteQuickNoteAssetScope(body, from, to)`（资源作用域改写，**同时处理卡片 value 里 URL-encoded 的形态**）。
+- **转换退化为搬运**：`electron/quickNoteConversion.ts` 现在只做 `body` 的 `/quick-notes/<小记id>/` → `/<目标文档id>/` 改写（图片文件仍由既有 journal 复制），删掉了原来手拼段落/手拼图片卡片的实现。
+- **保存时作用域改写**：桌面编辑态图片先落 staging（卡片 src 指向 `/quick-notes/staging/<draftId>/`），`electron/quickNotes.ts` 保存时改写成 `/quick-notes/<小记id>/`。
+- 移动端保存时同样合成 body（`src/mobile/quickNotesRepository.ts`）⇒ **移动端建的小记转换后不丢图**。
+- **数据兼容按红线不做**（AGENTS §3 #7）：v1 `.qnote` 直接不可读；dev 库里原有 7 条 v1 测试小记**已清理**（含墓碑）。
+
+**B. 量化报告 + 可复现脚本（commit `dd7e62d` / `a4e25f9`）**
+
+- `docs/QUICK-NOTE-LAKE-MEMORY-SPIKE-260919.md`：1→24 实例的堆/DOM/监听/RSS 全表、冷开延迟、以及「关标签内存不完全归还」的观测；`scripts/spike-lake-memory/{cdp,measure,cycle}.mjs` + `results-1to24.json`。
+- 关键结论：成本**线性**（第 14→24 个每个 +1.2~1.4MB 堆），内容相关（44k 字大文档 +10.3MB）；`maxOpenTabs` 档位 `0/4/6/8/12/16/24`（**0 = 不限**，默认 8）。
+
+**C. 编辑器接线（commit `5a774c3`）**
+
+| 文件 | 改动 |
+|---|---|
+| `src/features/quickNotes/QuickNoteEditor.tsx` | **新增**：挂 1 个 Lake 实例（`createLakeDocument(host,"editor",…)`），交出 `getText()/getBody()` 句柄；含 DOM `input` 兜底 + DOM `innerText` 回退（见 §五坑 1/2） |
+| `src/components/QuickNotesWorkspace.tsx` | `DraftState` 加 `body`；`<textarea>` → `QuickNoteEditor`；新增 `quickNoteUploader(draftId)`（图片 → `stageQuickNoteImage` → 追加到 `draft.images`）；保存时正文取编辑器句柄（空则回落镜像）；`startEditing` 带上 `body` |
+| `src/features/editor/resourceUpload.ts` | `uploadLakeResource(request, noteId, options)` 新增 `saveResource`（覆盖落盘）/`allowRemoteDownload`（小记 v1 关闭网络图片直插） |
+| `src/features/editor/lakeRuntime.ts` | `createLakeDocument(..., uploadResource?)` 第 8 参数：覆盖 4 处 `createUploadPromise`（image/file/video/audio） |
+| `src/styles/app/quick-notes.css` | `.quick-note-editor` / `> .lake-editor-mount` 替换原 textarea 规则 |
+
+**D. 文档（commit `0d442a8`）**：本文件 §2.10 + §3 第 6/7 条 + `docs/QUICK-NOTE-LAKE-BODY-260919.md`。
+
+**门禁（本批实测）**：`tsc` 0 · `vitest` **1025 passed / 16 skipped (1041)** · 桌面 + 移动 `vite build` 全绿 · `check:bundle` app-js gzip **1.82MB / 2.90MB** · `check:core` 0 违规 · `git diff --check` 干净。
+
+### 三、当前问题（⚠️ 用户报「问题很多」，未逐条给）
+
+**已确认的回归（我自己发现的，必修）**
+
+1. **「添加图片」文件选择按钮没了**：原来 textarea 上方工具条里的文件选择入口随 textarea 一起删掉，现在只能**粘贴/拖入**图片。用户若习惯点按钮加图，就是「加不了图」。
+
+**未验证（我没能验完，极可能就藏在这里）**
+
+2. **真实键盘输入**：CDP 的 `Input.dispatchKeyEvent/insertText` 打不进 contenteditable（见 §五坑 3），我只用 `document.execCommand('insertText')` 验证了**保存链路**。人用键盘打字是否正常**未经真机确认**。
+3. **粘贴/拖入图片的完整链路**（staging → 保存时作用域改写 → 转换后图片可达）从未验过。
+4. **编辑已有小记 → 保存**（只验过「新建 → 记下」）。
+5. **取消/放弃草稿**时的 staging 清理（`discardQuickNoteDraft`）与「有内容才确认」的弹窗路径未验。
+6. **⌘Enter 发布**（挂在 `onKeyDownCapture`，内核可能吞键）未验。
+
+**潜在缺陷（自查发现，需评估）**
+
+7. **`draftEditorRef` 是 pane 与 inline 两个 composer 共用的单个 ref**：切换/卸载顺序可能互相覆盖（建议按草稿 id 存 Map，或把句柄收进 composer）。
+8. **小记面板一打开就常驻 1 个内核实例**（pane 里的新建写作区始终渲染）——与「编辑时挂」的预期不完全一致，内存/首开延迟要复核（并可纳入 §3 第 6 条的回收专项）。
+9. **编辑器里删掉图片卡片后 `retainedImageIds` 仍保留该图**（文件不随之回收，可能留孤儿）。
+10. **`getBody()` 取不到时静默返回空串**：主进程会按 text 合成正文 —— 这会让「有格式但取不到 body」的情况下**静默丢格式**（不报错）。属于取舍，但要意识到。
+11. **inline 变体（卡片内编辑）的样式/高度**没量过（只在 pane 变体看过）。
+12. **`docs/QUICK-NOTES-SPEC.md` 已与实现冲突**（该文档写着「小记不复用 Lake 编辑器」），需要同步更新，否则后续会话会按旧规格判断。
+
+### 四、下一步计划（按优先级）
+
+1. **先拿现象清单**：请用户把「点出来的问题」逐条列出（或截图）。若拿不到，就按 §三 的 2~12 条**逐条真机走查**并记录现象，别猜。
+2. **真机走通三条链路**（用真实键鼠 + 真实粘贴）：
+   - ① 小记面板新建：键盘打字（含换行、列表、加粗、行内代码）→ 记下 → 重开看格式是否保留；
+   - ② 编辑已有小记 → 保存（看格式与图片是否都在）；
+   - ③ 贴图 → 记下 → 「转为正式笔记」→ 图片在文档里能显示（`note-assets/<新文档id>/` 里应有同名文件）。
+3. **修掉 §三 第 1 条**（把「添加图片」按钮加回来）：走 `stageQuickNoteImage` + 内核 image 命令（**先用官方 `docs/05 - 自定义工具栏（高级用法）`/`08 - 命令列表` 确认插入图片卡片的命令名与参数，别猜**）。
+4. 修 §三 7~9 三个潜在缺陷（ref 竞态 / 常驻实例 / 图片孤儿）。
+5. 更新 `docs/QUICK-NOTES-SPEC.md`（v2 格式 + 「写作区挂单个内核实例」的新结论）。
+6. 把「小记编辑器挂/卸」纳入 §3 第 6 条的**内存回收专项**（churn soak 三条触发面之一）。
+
+### 五、踩过的坑（本批新增，务必记住）
+
+1. **内核 `contentchange` 在小记上下文不保证回传文本**，`editor.getDocument("text/plain")` 也可能取不到 ⇒ **必须再加 DOM `input` 监听 + DOM `innerText` 回退**。否则症状是「明明输入了字，但发布按钮不点亮、点了提示『请至少记录文字或一张图片』」。
+2. **`getBody()` 取不到时不要抛错**：抛错会直接打断保存（症状：点发布无反应/报「保存小记失败」）。返回空串即可 —— 主进程本来就会按 `text` 合成正文。
+3. **CDP 的 `Input` 键鼠事件在窗口非激活时不可靠**：鼠标有时能行（点侧栏开标签可以），**键盘基本打不进 contenteditable**（`Input.insertText` 与逐字符 `dispatchKeyEvent` 都试过，DOM 仍是空）。⇒ 验证「打字」只能用真实键盘；验证「保存链路」可以用内核接受的 `document.execCommand('insertText', false, …)` 注入内容。
+4. **内核聚焦要走它自己的入口**：官方文档（`08 - 命令列表`）有 `editor.execCommand("focus", "end")`、事件 `focusstatuschange`。DOM `focus()` 让 `.ne-engine` 变成 `document.activeElement` 也**不足以**让合成按键生效。
+5. **`.qnote` v1 不再可读**（校验只认 v2）——若 dev 库又出现 v1 小记，小记面板会**整列表报错**（`listQuickNotes` 逐条校验）。清理办法：走应用 IPC `deleteQuickNote`；已被 v2 校验挡住时，按同样语义用 sqlite3 处理（`quick_note_deleted` 墓碑 + 删 `quick_notes` 行，文件按约定保留待 GC）。
+6. **量化/隔离环境**（复用这套姿势）：独立 worktree + 独立 `LAKE_USER_DATA`（APFS `cp -Rc` 克隆 + `sqlite3 .backup` 快照）+ 独立端口（vite 1431 / CDP 9232 / asset 19877）+ `LAKE_DEV_SERVER_URL` 指 1431 + 把克隆数据里的资源端口从 19876 改写成 19877（**含 `%3A19876%2F` 编码形态**）。详细命令见 spike 报告 §6。
+
+---
 
 ## 3. 下一步计划 + 当前问题（真正的待办，按优先级）
 
