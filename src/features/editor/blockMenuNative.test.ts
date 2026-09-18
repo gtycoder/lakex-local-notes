@@ -138,8 +138,34 @@ describe("块操作菜单：列表父项 = 一个整块（Issue 3）", () => {
 
   it("手柄高亮与拖拽预览覆盖整段", () => {
     expect(HANDLE_SRC).toMatch(/blockSpanElements,/);
-    expect(HANDLE_SRC).toMatch(/for \(const node of blockSpanElements\(el\)\)/);
+    expect(HANDLE_SRC).toMatch(/blockSpanElements\(hoverStateRef\.current\.blockElement\)/);
     expect(HANDLE_SRC).toMatch(/const draggedSpan = blockSpanElements\(draggedEl\)/);
     expect(HANDLE_SRC).toMatch(/draggedSpan\.includes\(targetBlock\)/);
+  });
+});
+
+describe("块操作菜单：多块选区 / 批量操作（Issue 4）", () => {
+  it("用 DOM 选区识别多块选区（≥2 顶层块，且不属于同一列表父项整段）", () => {
+    expect(HELPERS_SRC).toMatch(/export function selectedTopBlocks\(/);
+    expect(HELPERS_SRC).toMatch(/export function hasMultiBlockSelection\(/);
+    expect(HELPERS_SRC).toMatch(/range\.intersectsNode\(el\)/);
+    expect(HELPERS_SRC).toMatch(/TOP_BLOCK_TAGS/);
+  });
+
+  it("批量动作按「当前整段选区」走内核命令，不逐块搬运", () => {
+    expect(HELPERS_SRC).toMatch(/function currentSelectionRange\(/);
+    expect(HELPERS_SRC).toMatch(/function runMultiBlockConvert\(/);
+    // 仍是内核命令，一次调用作用于整个选区
+    expect(HELPERS_SRC).toMatch(/execCommand\("getSelectionContent", format\)/);
+    expect(HELPERS_SRC).toMatch(/execCommand\("deleteByRange"/);
+    expect(HELPERS_SRC).toMatch(/execCommand\("insertAtSelection"/);
+  });
+
+  it("手柄聚合到首块 + 选区还原（点手柄会让编辑区失焦、清掉选区）", () => {
+    expect(HELPERS_SRC).toMatch(/export function selectBlocksInEditor\(/);
+    expect(HANDLE_SRC).toMatch(/multiSelectionRef/);
+    expect(HANDLE_SRC).toMatch(/selectedTopBlocks\(\)/);
+    expect(HANDLE_SRC).toMatch(/selectBlocksInEditor\(editor, multi\)/);
+    expect(HANDLE_SRC).toMatch(/multiSelectionRef\.current = blocks/);
   });
 });

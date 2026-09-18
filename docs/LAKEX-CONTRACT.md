@@ -397,7 +397,34 @@ DOM 里**没有**列表容器元素、也没有 `data-lake-indent`；嵌套层�
 - ⚠️ alert 的落盘形态属性顺序是 `<blockquote data-lake-id="…" id="…" class="lake-alert …">`
   （`class` **不在**第一个属性）⇒ 断言正则要写 `<blockquote[^>]*class="lake-alert`。
 
-**未做**：多块选区（跨多个顶层块）的聚合手柄 / 批量转化 —— 内核无批量转化命令，方案见 §5.9。
+**多块选区（跨多个顶层块）的聚合手柄 / 批量操作**见 §5.8.4。
+
+### 5.8.4 多块选区 / 批量操作：整段选区就是「批量」原语（Issue 4，260917 实测）
+
+**结论**：内核不需要「批量命令」。跨多个顶层块的 DOM 选区在内核里是**块选区**；用 `selection` 命令设好模型选区后，
+`getSelectionContent` / `deleteByRange` / `insertAtSelection` 以及所有作用于选区的命令（`style`/`quote`/
+`unorderedList`/`alert`/`columns`/`collapse`…）都**按整个选区**工作 ⇒ 批量 = 一次命令，不逐块搬运。
+
+**识别（纯 DOM，不读 JSON）**：
+- `selectedTopBlocks()`：从 `window.getSelection()` 的 range 起点找到 `.ne-engine`，返回**与 range 相交**的顶层块（`TOP_BLOCK_TAGS` 过滤）。
+- `hasMultiBlockSelection()`：选到 ≥2 个顶层块，且它们**不属于同一个列表父项整段**（否则按 §5.8.3 的「一个整块」处理）。
+
+**批量动作落点**：
+- 读取：`readBlockContent` 在多块选区时直接 `getSelectionContent(format)`；
+- 复制/删除：`copyDomBlock` / `deleteBlockByRange` 用 `currentSelectionRange()`；
+- 转化：`runMultiBlockConvert` —— `p/h` 走 `style`、引用/列表走 `quote`/`unorderedList`/`orderedList`/`taskList`、
+  容器/代码块走 `convertBlockPreservingContent`（`insertAtSelection` 一次替换整个选区）。
+
+**手柄聚合（关键交互坑）**：跨块拖选后手柄要落在**首块**（`selectionchange` 监听）；但**点击手柄会让编辑区失焦、
+浏览器清掉选区** ⇒ 手柄的 `onMouseDownCapture` 先 `preventDefault` 并 `selectBlocksInEditor(editor, blocks)` 还原选区，
+`handleMenuAction` 在执行前再还原一次；动作完成后退出多块选区。
+（「选区一收缩就清 multi」的写法会误伤点击手柄 —— 已改为「在编辑区内按下鼠标（非手柄）才清」。）
+
+**实测（副本，`scripts/e2e-block-multi-select.mjs`，真实鼠标拖选）**：拖选 3 段（诊断显示相交 4 块）→ 聚合手柄
+`@353,391`、高亮 4 块；批量「删除」3 段文本全部消失；批量「转化为 → 高亮块」后 3 段文本都在**同一个**
+`<blockquote class="lake-alert lake-alert-info">` 内。
+
+**未做**：多块选区的**拖拽**（批量拖动整段）—— 菜单批量删除/复制/剪切/转化已可用；拖拽仍按单块。
 
 ### 5.9 内核命令注册表（43 插件 / 147 条 kO 命令 + 4 条命令式 = 151，bundle 实测枚举，260917）
 
