@@ -8,7 +8,11 @@ export type {
 } from "../src/lib/types.js";
 
 export interface QuickNoteImageInput {
-  bytes: number[];
+  /**
+   * 文件字节。桌面走 Electron IPC 结构化克隆 ⇒ 传 `Uint8Array`（避免 `number[]` 的高内存/慢序列化，
+   * 附件上限 100MiB 时差别是几百 MB 的临时数组）；移动端走 HTTP JSON ⇒ 仍是 `number[]`，两种都收。
+   */
+  bytes: Uint8Array | number[];
   filename: string;
 }
 

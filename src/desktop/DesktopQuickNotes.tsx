@@ -7,6 +7,8 @@ import type { TreeNode } from "../lib/types";
 
 export interface DesktopQuickNotesProps {
   notebooks: TreeNode[];
+  /** 工作区级可见性（keep-alive：隐藏时不建内核实例，避免按 0 宽度算死工具条布局） */
+  visible?: boolean;
   quickNotesRef: RefObject<QuickNotesWorkspaceHandle | null>;
   topbarLeading: ReactNode;
   onDirtyChange: (dirty: boolean) => void;
@@ -14,13 +16,13 @@ export interface DesktopQuickNotesProps {
 }
 
 export function DesktopQuickNotes(props: DesktopQuickNotesProps) {
-  const { notebooks, quickNotesRef, topbarLeading, onDirtyChange, onConverted } = props;
+  const { notebooks, visible = true, quickNotesRef, topbarLeading, onDirtyChange, onConverted } = props;
   return (
     <>
       <header className="tab-bar desktop-only" aria-label="顶栏">
         <div className="tabbar-leading">{topbarLeading}</div>
       </header>
-      <QuickNotesWorkspace ref={quickNotesRef as Ref<QuickNotesWorkspaceHandle>} notebooks={notebooks} onDirtyChange={onDirtyChange} onConverted={onConverted} />
+      <QuickNotesWorkspace ref={quickNotesRef as Ref<QuickNotesWorkspaceHandle>} notebooks={notebooks} visible={visible} onDirtyChange={onDirtyChange} onConverted={onConverted} />
     </>
   );
 }

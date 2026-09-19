@@ -3,6 +3,7 @@ import { renderToString } from "react-dom/server";
 import { Doc, GetDefaultEditorConfig } from "@dlient/lakex-doc-react";
 import { mountBlockHoverHandle } from "./blockHandleMount";
 import { uploadLakeResource } from "./resourceUpload";
+import { filterQuickNoteInsert } from "../quickNotes/quickNoteInsertFilter";
 import type { ResourceUploadOutput } from "../../lib/types";
 import { shouldSkipBoardCardFocus, useClickActivatedWheelGate } from "./canvasInteractionGate";
 import { ASSET_ORIGIN } from "../../lib/assetPort";
@@ -494,7 +495,63 @@ export interface LakeEditorPrefs {
     onOpenAttachment?: (item: AttachmentPreviewItem) => void;
     directOpen?: boolean;
   };
+  /**
+   * 小记编辑器的版式（260919 用户定稿）：
+   * - `card`：小卡片（最小工具条 + 右上角展开 → 同一实例切完整工具条），用于**分块视图**的写作卡；
+   * - `full`：**直接就是文档样式**（完整工具条、无展开按钮），用于**列表视图**右侧的编辑器。
+   * 两者都只把「+」插入面板收成白名单（预览显示不了的不给插）；卡片注册保持全量。
+   *
+   * 传了这个字段就代表"这是小记编辑器"；文档编辑器不传 ⇒ 能力与外观完全不受影响。
+   *
+   * 分工：小记的**存储**永远由内核产出（标准 lake 标记，不手拼），**卡片预览**是我们自己的只读渲染器
+   * （不挂内核，见 `src/features/quickNotes/quickNotePreviewParser.ts`）。两边要对齐，就把"预览显示不了的"
+   * 从**工具栏**（`toolbar.agentConfig.default`）和**「+」插入面板**（`slash.filterOption`）里收掉 ——
+   * 用户口径：「不能预览展示的就不让插入」。**卡片注册照旧全量**（否则已有小记里的表格/自定义卡一旦编辑
+   * 就会被内核丢弃，见 docs/LAKEX-CONTRACT.md §5.8）。
+   *
+   */
+  quickNoteUi?: "card" | "full";
 }
+
+/**
+ * **小卡片（未展开）**的工具条 = 用户指定的最小集（260919 定稿）：
+ * 图片 · 待办 · 有序列表 · 无序列表 · 分割线。
+ *
+ * 展开（fullscreen）后切到**完整工具栏**（`DEFAULT_TOOLBAR_ITEMS` = 内核内置默认），
+ * 与文档页一致；「+」插入面板在两种状态下都由 `filterQuickNoteInsert` 收成白名单。
+ *
+ * 注：图片/待办用**标准项**（`image` / `taskList`）——内核 note 专用项 `note-image`/`notetaskList`
+ * 画的是语雀 App 私有 symbol，本地会渲染成空白按钮（见 docs/LAKEX-CONTRACT.md §5.11 三）。
+ */
+export const QUICK_NOTE_TOOLBAR_ITEMS = ["image", "taskList", "orderedList", "unorderedList", "hr"] as const;
+
+/**
+ * 展开态（fullscreen）用的完整工具栏 = **逐字等于内核内置默认**（bundle `xP`）。
+ * 内核合并 toolbar option 时 `agentConfig` 这一层是**整体替换**（实测：只传 note 项 ⇒ 默认工具条变空），
+ * 所以补 note 项时必须把默认项一并带上。内核版本已 pin（v1.99.0，勿随意升级）。
+ */
+const DEFAULT_TOOLBAR_ITEMS = [
+  "cardSelect", "|", "undo", "redo", "formatPainter", "clearFormat", "|",
+  "style", "fontsize", "bold", "italic", "strikethrough", "underline", "mixedTextStyle", "|",
+  "color", "bgColor", "|",
+  "alignment", "unorderedList", "orderedList", "indent", "lineHeight", "|",
+  "taskList", "link", "quote", "hr", "|",
+  "search", "correction", "arrangement", "translate", "toc", "materialLibrary",
+] as const;
+
+/**
+ * 小记展开态（fullscreen）的工具条 = 内核默认工具栏 **再收掉两个"能往正文里插、预览却还原不了"的入口**：
+ * - `toc`：插大纲卡（小记没有大纲，预览也只能给占位条）；
+ * - `materialLibrary`：素材库（云端服务，本地无内容，同样属于插入入口）。
+ *
+ * 为什么收这里就够（用户 260920「工具栏的『…』溢出菜单也要收一下」）：工具条塞不下时，剩下的项是收进
+ * 「…」浮层里的**同一批工具项**（bundle 实测：`ne-ui-toolbar-more-button` 的 overlay `content: props.widgets`），
+ * 并不是另一套插入面板 ⇒ 从 items 里去掉即同时从「…」里消失。
+ * 文档编辑器不传 `quickNoteUi`，用的仍是内核默认项（这条只看小记）。
+ */
+const QUICK_NOTE_FULL_TOOLBAR_ITEMS = DEFAULT_TOOLBAR_ITEMS.filter(
+  (item) => item !== "toc" && item !== "materialLibrary",
+);
 
 // 语雀/Lake 导出的 bookmark 卡（bookmarkInline 标题样式 / bookmark 块卡样式）在本地
 // 无法展示完整详情（无语雀 API），会渲染成"无标题 + 不可点击 + 无样式浮窗"的死卡。
@@ -539,6 +596,31 @@ function readBookmarkCardInfo(
   const detail = data?.getDetail?.() ?? {};
   const title = (detail.title as string) || data?.getCardValue?.()?.text || src;
   return { id, src, title };
+}
+
+/**
+ * 内核兼容补丁：**实例销毁后，工具条的 tooltip 仍会查一次热键表**。
+ *
+ * 内核 hotkey 插件的 `destroy()` 会 `delete this._named`（bundle 实测），但工具条每个按钮渲染时都会走
+ * `getTooltip → renderer.getHotKeyByName(name) → this._named[name]` ⇒ 销毁之后再渲染一次就
+ * `TypeError: Cannot read properties of undefined (reading 'undo'/'slash'/…)`，
+ * 而这是 **React 渲染期抛错**：整棵工具条（进而整个小记面板）崩掉、不断重试 ⇒ 用户看到"反复闪烁、
+ * 保存/取消都点不动"（260920 实测：列表视图里保存/取消/换条目连续操作，12 秒内 20+ 条同类错误）。
+ *
+ * 我们的编辑器生命周期里"销毁旧实例"是常态（小记切草稿、换条目、保存后重建），所以这里给
+ * `renderer.getHotKeyByName` 包一层：**拿不到就返回 null**（工具条少一个快捷键提示），
+ * 不再让一次迟到渲染炸掉整棵 UI。对健康实例是完全透明的（正常路径直接透传返回值）。
+ */
+function hardenDestroyedHotKeyLookup(editor: unknown): void {
+  try {
+    const renderer = (editor as { renderer?: Record<string, unknown> } | null | undefined)?.renderer;
+    const original = renderer?.getHotKeyByName;
+    if (!renderer || typeof original !== "function") return;
+    renderer.getHotKeyByName = function hardened(this: unknown, name: unknown) {
+      try { return (original as (this: unknown, value: unknown) => unknown).call(this, name) ?? null; }
+      catch { return null; }
+    };
+  } catch { /* 拿不到 renderer 就跳过：补丁只是兜底，不改变正常路径 */ }
 }
 
 /** 监听编辑器挂载容器的粘贴事件，把新出现的 bookmark 卡降级为普通超链接。 */
@@ -599,8 +681,22 @@ export function createLakeDocument(
   /** 覆盖资源上传落盘（小记编辑态用它把图片写进 quick-notes 空间；缺省走文档资源空间）。 */
   uploadResource?: (request: unknown) => Promise<ResourceUploadOutput>
 ): LakeEditorInstance {
+  /** 小记版式：仅编辑态可用（阅读态是 viewer，没有工具条/展开语义）。 */
+  /**
+   * 小记专用：文档编辑器外观 + 受限格式（只影响小记，文档编辑器不传这个开关）。
+   * 注意两个 default：
+   * - 挂载点仍是文档版式（`ne-doc-major-editor`）⇒ 小记编辑态与文档页长得一样；
+   * - 只裁剪「工具栏 items」与「+ 面板 filterOption」，卡片注册、上传钩子、其余 option 全部照旧。
+   */
+  const quickNoteUi = mode === "editor" ? prefs?.quickNoteUi : undefined;
   const mount = document.createElement("div");
-  mount.className = "lake-editor-mount ne-doc-major-editor";
+  // 小记走内核 note 版式（小卡片外观 + 展开按钮）；`.ne-doc-note-editor` 是小记版式的挂载点前缀
+  // （内核 fullscreen 把 `.ne-ui-fullscreen` 加到 editorNode 的父节点 = 本 mount，小记的展开整窗规则
+  // `.ne-doc-note-editor.ne-ui-fullscreen` 也以此为前缀）；`.lakex-note-editor` 命中内核唯一的
+  // `.lakex-note-editor .ne-ui-enter-fullscreen{top:6px;right:6px}`（展开按钮内缩量）。
+  mount.className = quickNoteUi === "card"
+    ? "lake-editor-mount ne-doc-note-editor lakex-note-editor"
+    : "lake-editor-mount ne-doc-major-editor";
   // 锁/解锁是「同一文档换渲染模式」，旧实例若立刻销毁，正文区会空白数帧到数百毫秒
   // （大文档更久）＝白屏闪烁。EditorTab 因此把旧挂载点标记 is-outgoing 交给新实例
   // （见其 pendingDisposeRef）：这里保留这些仍在显示旧内容的节点，其余照旧清掉。
@@ -642,6 +738,20 @@ export function createLakeDocument(
     },
     input: {},
     defaultFontsize: prefsSize,
+    // 小记专用：**只裁剪入口**（工具栏 items + 「+」面板 filterOption），外观与文档页完全一致。
+    // 文档编辑器不传 `restrictedFormats` ⇒ 这段完全不生效（红线：不要影响文档）。
+    ...(quickNoteUi
+      ? {
+          // 两种版式的工具条：card＝小卡片最小集 + 展开后完整；full＝直接完整（文档样式）。
+          ...(quickNoteUi === "card" ? { uiSwitch: { default: "note" }, fullscreen: { enable: true } } : {}),
+          toolbar: {
+            agentConfig: {
+              ...(quickNoteUi === "card" ? { note: { items: [...QUICK_NOTE_TOOLBAR_ITEMS] } } : {}),
+              default: { items: [...QUICK_NOTE_FULL_TOOLBAR_ITEMS] },
+            },
+          },
+        }
+      : {}),
     toc: {
       enable: !!tocEnabled && !prefs?.disableNativeToc,
       // 增强大纲 = 原生大纲被 CSS 隐藏，但必须同时让内核退出「展开」布局态，否则 .ne-normal-toc
@@ -704,6 +814,8 @@ export function createLakeDocument(
     },
     // 移除第三方 embed 分组（我们不渲染外部嵌入卡）；画板/导图等分组由 lakex-doc-react 的卡片配置自带。
     slash: {
+      // 小记专用：「+」面板收成白名单（官方钩子；文档编辑器不传 restrictedFormats ⇒ 保持全量）。
+      ...(quickNoteUi ? { filterOption: filterQuickNoteInsert } : {}),
       cardSelect: {
         general: {
           groups: ((defaultConfig as any).slash?.cardSelect?.general?.groups || []).filter(
@@ -757,6 +869,7 @@ export function createLakeDocument(
 
   lakeMark("lake:create:end");
   lakeMeasure("lake:create:openEditor", "lake:create:start", "lake:create:end");
+  hardenDestroyedHotKeyLookup(editor);
   if (mode === "editor") {
     editor.on("contentchange", onChange);
   }

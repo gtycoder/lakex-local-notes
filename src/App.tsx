@@ -393,6 +393,7 @@ export function App() {
         <div className={"workspace-view" + (desktopWorkspace === "quick-notes" ? "" : " workspace-view--hidden")}>
           <DesktopQuickNotes
             notebooks={treeNodes}
+            visible={desktopWorkspace === "quick-notes"}
             quickNotesRef={quickNotesRef}
             topbarLeading={quickNotesTopBarLeading}
             onDirtyChange={setQuickNotesDirty}

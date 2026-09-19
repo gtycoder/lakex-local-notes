@@ -6,6 +6,8 @@
   min-width: 0;
   display: flex;
   flex-direction: column;
+  /* 小记编辑器的「展开」(内核 fullscreen) 以本容器为定位基准，见下方 .ne-ui-fullscreen 规则 */
+  position: relative;
   /* 两栏各自滚动，外框不再整页滚（仿语雀小记：左写作面板常驻，右卡片流滚动） */
   overflow: hidden;
   /* 左内边距收窄：给右侧勾选框预留固定槽位后，写作栏整体左移一点，卡片位置基本不变 */
@@ -16,6 +18,10 @@
 .quick-notes-header { display: grid; grid-template-columns: minmax(290px, 36%) minmax(0, 1fr); align-items: center; gap: 18px; margin-bottom: 12px; }
 
 .quick-notes-header h1 { margin: 0; font-size: 20px; letter-spacing: -.02em; }
+
+/* 标题 + 版式切换（对齐云端小记：分段控件紧挨标题右侧） */
+.quick-notes-title { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.quick-notes-view-switch .seg__item { min-width: 32px; padding: 0 8px; }
 
 .quick-notes-header-tools { display: flex; align-items: center; gap: 6px; min-width: 0; }
 
@@ -70,13 +76,55 @@
 /* 勾选框固定槽位（勾选框在卡片外侧，与语雀一致）：常驻 30px，不再随多选态伸缩 */
 .quick-notes-list { display: flex; flex-direction: column; min-width: 0; overflow-y: auto; padding-left: 30px; }
 
+/* 列表版式（对齐云端）：左＝索引列表（窄列），右＝全尺寸编辑器（各自独立滚动） */
+.quick-notes-split--list { grid-template-columns: minmax(220px, 300px) minmax(0, 1fr); gap: 14px; }
+.quick-notes-index-wrap { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+/* 标签行（对齐云端）：左侧「标签 ▾」，右侧条数/排序 */
+.quick-notes-index-tools { display: flex; align-items: center; gap: 6px; padding: 0 2px 6px; border-bottom: 1px solid var(--b3-theme-surface-lighter); margin-bottom: 6px; }
+.quick-notes-filter { display: inline-flex; align-items: center; gap: 4px; padding: 3px 6px; border: 0; border-radius: 6px; color: var(--b3-theme-on-surface); background: transparent; font-size: 13px; cursor: pointer; }
+.quick-notes-filter:hover { background: var(--b3-list-hover); }
+/* 批量条（对齐云端图1）：勾选框 + N 篇 + 取消 + 动作图标 */
+.quick-notes-batch { display: flex; align-items: center; gap: 8px; padding: 4px 2px 8px; }
+.quick-notes-tool-btn--danger { color: var(--lake-error); }
+/* 行内「⋯」与复选框：默认隐藏，hover/选中/菜单展开时显形（对齐云端） */
+.quick-note-index-row { position: relative; display: flex; align-items: center; gap: 4px; padding-right: 4px; }
+.quick-note-index-check { flex: 0 0 auto; opacity: 0; }
+.quick-note-index-row:hover .quick-note-index-check,
+.quick-note-index-row.b3-list-item--focus .quick-note-index-check,
+.quick-note-index-row.is-selecting .quick-note-index-check,
+.quick-note-index-row.is-checked .quick-note-index-check { opacity: 1; }
+.quick-note-index-main { display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0; padding: 6px 4px; border: 0; background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+/* 行标题只显示前几个字（JS 已截断），这里保证不横向滚动、不换行 */
+.quick-note-index-main .b3-list-item__text { min-width: 0; flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.quick-note-index-main .b3-list-item__meta { flex: 0 0 auto; white-space: nowrap; }
+.quick-note-index-actions { position: relative; flex: 0 0 auto; display: flex; align-items: center; opacity: 0; }
+.quick-note-index-row:hover .quick-note-index-actions,
+.quick-note-index-row.b3-list-item--focus .quick-note-index-actions { opacity: 1; }
+.quick-note-row-menu { position: absolute; top: 26px; right: 0; z-index: 30; display: grid; gap: 1px; min-width: 132px; padding: 4px; border: 1px solid var(--b3-border-color); border-radius: 8px; background: var(--b3-theme-background); box-shadow: var(--lake-shadow-panel); }
+.quick-note-row-menu button { padding: 6px 10px; border: 0; border-radius: 5px; color: var(--b3-theme-on-background); background: transparent; font-size: 13px; text-align: left; cursor: pointer; }
+.quick-note-row-menu button:hover:not(:disabled) { background: var(--b3-list-hover); }
+.quick-note-row-menu button:disabled { opacity: .45; cursor: default; }
+/* 顶部「新建小记」（对齐云端图3：绿色羽毛 + 号） */
+.quick-notes-new { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; border: 0; border-radius: 8px; background: transparent; cursor: pointer; }
+.quick-notes-new:hover { background: color-mix(in srgb, var(--b3-theme-primary) 12%, transparent); }
+.quick-notes-new__icon { position: relative; display: inline-flex; align-items: center; color: var(--b3-theme-primary); }
+.quick-notes-new__icon > svg:last-child { position: absolute; right: -3px; bottom: -3px; }
+.quick-notes-hint { margin-bottom: 8px; padding: 6px 10px; border-radius: var(--b3-border-radius); color: var(--b3-theme-on-surface); background: var(--b3-list-hover); font-size: 12px; }
+.quick-notes-index { display: flex; flex-direction: column; gap: 2px; min-width: 0; min-height: 0; overflow-y: auto; overflow-x: hidden; padding-right: 4px; }
+.quick-notes-index .b3-list-item { width: 100%; text-align: left; }
+.quick-notes-index .b3-list-item.is-checked { background: var(--b3-list-hover); }
+.quick-notes-detail { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+/* 列表视图右侧：去掉卡片边框/圆角，编辑器直接铺开（对齐文档页观感，用户 260919 要求试试） */
+.quick-notes-detail .quick-note-composer { border: 0; border-radius: 0; padding: 0; }
+.quick-notes-detail .quick-note-composer { flex: 1; min-height: 320px; }
+
 .quick-notes-list .quick-notes-timeline { flex: 1; }
 
 .quick-notes-count { flex: 0 0 auto; padding: 5px 9px; border-radius: var(--radius-pill); color: var(--b3-theme-primary); background: color-mix(in srgb, var(--b3-theme-primary) 12%, transparent); font-size: 11px; font-weight: 650; }
 
 .quick-notes-error { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; padding: 9px 11px; border: 1px solid color-mix(in srgb, var(--b3-theme-error) 20%, transparent); border-radius: var(--b3-border-radius); color: var(--b3-theme-error); background: color-mix(in srgb, var(--b3-theme-error) 6%, transparent); font-size: 12px; }
 
-.quick-notes-error button, .quick-note-card-actions button, .quick-note-image-grid button { display: grid; place-items: center; border: 0; background: transparent; }
+.quick-notes-error button, .quick-note-card-actions button { display: grid; place-items: center; border: 0; background: transparent; }
 
 .quick-note-composer, .quick-note-entry { border: 1px solid var(--b3-theme-surface-lighter); border-radius: var(--b3-border-radius-b); }
 
@@ -98,7 +146,45 @@
 
 .quick-note-composer-actions { display: flex; align-items: center; gap: 10px; margin-top: 10px; color: var(--lake-text-tertiary, #5f6a78); font-size: 12px; }
 
-.quick-note-action-spacer { flex: 1; }
+/* 动作行按版式分组（260920）：写作卡＝「小记一下 / 取消 / 提示」靠左；编辑既有小记＝「取消 / 保存」整组靠右下。
+   改前用一个 `flex: 1` 的空占位把「取消」顶到最右，保存和取消分居两个角落（用户反馈太偏僻）。 */
+.quick-note-composer-actions--inline { justify-content: flex-end; gap: 8px; }
+
+/* 卡片内编辑（分块视图）：动作行落在卡片页脚位置，补上与正文一致的左右/下内边距，避免贴住卡片边框。 */
+.quick-note-entry.editing .quick-note-composer-actions { padding: 0 12px 12px; }
+
+/* 展开态（内核 fullscreen）：动作行必须浮在展开层之上，否则「保存 / 取消」既看不到也点不到
+   —— `.ne-ui-fullscreen` 的定位基准就是动作行所在的盒子（面板 / 卡片），z-index 30 会整个盖住它。
+   浮层贴该盒子右下角成一组；展开后工具栏已可见，提示文案隐去（否则压在正文上是噪音）。 */
+.quick-notes-compose:has(.ne-ui-fullscreen) .quick-note-composer-actions,
+.quick-notes-detail:has(.ne-ui-fullscreen) .quick-note-composer-actions,
+.quick-note-entry.editing:has(.ne-ui-fullscreen) .quick-note-composer-actions {
+  position: absolute; right: 16px; bottom: 14px; z-index: 31; margin: 0;
+  padding: 6px 8px; border: 1px solid var(--b3-border-color); border-radius: 10px;
+  background: var(--b3-theme-background); box-shadow: var(--lake-shadow-soft);
+}
+
+/* 展开态下的**反馈**（保存失败/提示条）同样不能被展开层盖住：展开层铺满面板 + z-index:30
+   ⇒ 错误条原本在面板里是普通流内容，整块被盖住，用户只会看到按钮闪、看不到失败原因（260920 用户报「点保存反复闪、退不出去」）。
+   抬到 z-index:32 并改成贴面板左下角的浮层，与右下角的动作行成一对。 */
+.quick-notes-pane:has(.ne-ui-fullscreen) .quick-notes-error,
+.quick-notes-pane:has(.ne-ui-fullscreen) .quick-notes-hint {
+  position: absolute; left: 16px; bottom: 14px; z-index: 32; margin: 0;
+  max-width: min(520px, calc(100% - 240px)); box-shadow: var(--lake-shadow-soft);
+}
+
+.quick-notes-compose:has(.ne-ui-fullscreen) .quick-note-publish-hint,
+.quick-notes-compose:has(.ne-ui-fullscreen) .quick-note-publish-hint-sub { display: none; }
+
+/* 分块视图的**编辑态卡片**自身不做定位上下文（不是只在展开时）：内核的展开层 `.ne-ui-fullscreen`
+   是 `position:absolute; inset:0`，按最近的定位祖先定位 —— 卡片若仍是 `position:relative`，
+   展开就只覆盖**卡片那一小块**（实测 793×274，工具条被挤成溢出、页脚压正文，用户 260920 截图 3）。
+   ⚠️ 必须常驻、不能用 `:has(.ne-ui-fullscreen)`：内核在"点击编辑器外部"时会**瞬间摘掉再装回**
+   fullscreen 类，`:has()` 随之在"匹配/不匹配"之间跳 ⇒ 展开层高度在 810 ↔ 222 之间抖
+   （实测一帧内掉到 222、约 150ms 后弹回），鼠标下的「保存/取消」跟着跑掉 ⇒ **真鼠标点了没反应**
+   （合成 `.click()` 因为不经过命中测试反而正常）。常驻后容器尺寸全程稳定。
+   编辑态不渲染卡片预览/勾选框，退出定位上下文不影响别的东西。 */
+.quick-note-entry.editing { position: static; }
 
 /* 左侧发布行（仿语雀）：[小记一下] + 快捷键提示；右侧仅留「取消」。
    仿语雀的发布键是中性描边胶囊（不是主色实心）——写作区才是主角，按钮退一档更安静。
@@ -118,25 +204,52 @@
 
 .quick-note-publish-hint + .quick-note-publish-hint-sub { border-left: 1px solid color-mix(in srgb, var(--lake-text) 14%, transparent); padding-left: 10px; }
 
-.quick-note-discard { border: 0; background: transparent; transition: color var(--lake-motion-fast) var(--lake-ease-standard); }
+/* 「取消」= 与主按钮同组的次级描边按钮（选择器带父级是为了压过 b3 的 .b3-button 边框）。 */
+.quick-note-composer-actions .quick-note-discard {
+  border: 1px solid var(--b3-border-color); background: var(--b3-theme-background); color: var(--b3-theme-on-background);
+  transition: background var(--lake-motion-fast) var(--lake-ease-standard);
+}
 
-.quick-note-discard:hover { color: var(--lake-text); }
+.quick-note-composer-actions .quick-note-discard:hover { background: var(--b3-list-hover); color: var(--b3-theme-on-background); }
 
 .quick-note-composer-actions .b3-button, .quick-note-composer-actions .b3-button--cancel, .quick-note-convert-dialog .b3-button--cancel { min-height: 28px; padding: 0 10px; border-radius: 6px; font-size: 12px; }
 
-.quick-note-image-grid, .quick-note-saved-images { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 8px; margin-top: 11px; }
+/* 260920 清理：早期的「草稿图片网格 / 已存图片网格 / 已存媒体列」三套类已随卡片预览改自研只读渲染而废弃
+   （`QuickNotePreview` 用 .quick-note-preview-* 一套），删掉其遗留规则，媒体样式只剩下面这一套。 */
+.quick-note-file-chip { display: inline-flex; align-items: center; gap: 6px; min-width: 0; max-width: 100%; padding: 8px 10px; border: 1px solid var(--b3-theme-surface-lighter); border-radius: 8px; color: var(--b3-theme-on-background); font-size: 13px; }
+.quick-note-file-chip__name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-.quick-note-image-grid figure { position: relative; margin: 0; overflow: hidden; border-radius: 8px; background: var(--b3-theme-surface-lighter); }
+/* 卡片预览（自研只读渲染，零内核实例）：块级结构 + 行内格式 + 媒体就地渲染 */
+.quick-note-preview { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
+.quick-note-preview.is-collapsed { overflow: hidden; position: relative; }
+.quick-note-preview.is-collapsed::after { content: ""; position: absolute; inset: auto 0 0 0; height: 44px; background: linear-gradient(to bottom, transparent, var(--b3-theme-background)); pointer-events: none; }
+.quick-note-preview-toggle { align-self: flex-start; display: inline-flex; align-items: center; gap: 4px; margin-top: 2px; padding: 2px 4px; border: 0; color: var(--b3-theme-primary); background: transparent; font-size: 12px; cursor: pointer; }
+.quick-note-preview-paragraph { margin: 0; white-space: pre-wrap; }
+.quick-note-preview-heading { margin: 2px 0 0; font-size: 15px; }
+.quick-note-preview h1.quick-note-preview-heading { font-size: 20px; }
+.quick-note-preview h2.quick-note-preview-heading { font-size: 17px; }
+.quick-note-preview-list { margin: 0; padding-left: 22px; }
+.quick-note-preview-list li { margin: 1px 0; }
+.quick-note-preview-task { list-style: none; display: flex; align-items: flex-start; gap: 6px; margin-left: -18px; }
+.quick-note-preview-task input { margin-top: 4px; }
+.quick-note-preview-quote { margin: 0; padding: 4px 10px; border-left: 3px solid var(--b3-theme-surface-lighter); color: var(--b3-theme-on-surface); }
+.quick-note-preview-divider { width: 100%; margin: 4px 0; border: none; border-top: 1px solid var(--b3-theme-surface-lighter); }
+.quick-note-preview-image { display: block; width: auto; max-width: 100%; max-height: 460px; object-fit: contain; border-radius: 8px; cursor: zoom-in; }
+.quick-note-preview-video { display: block; width: 100%; max-width: 420px; max-height: 260px; border-radius: 8px; background: #000; }
+.quick-note-preview-audio { width: 100%; max-width: 420px; height: 36px; }
+.quick-note-preview-unsupported { align-self: flex-start; padding: 4px 8px; border: 1px dashed var(--b3-theme-surface-lighter); border-radius: 6px; color: var(--b3-theme-on-surface); font-size: 12px; }
 
-/* 编辑草稿里的图片格 = 缩略图（裁切填满）；卡片里的已存图片 = 内容，**完整展示不裁切**
-   （用户那张 1220×2656 的竖长截图被 cover 裁成中间一条，等于看不到内容）。 */
-.quick-note-image-grid img { display: block; width: 100%; max-height: 280px; object-fit: cover; border-radius: 8px; background: var(--b3-theme-surface-lighter); }
-
-.quick-note-saved-images img { display: block; width: auto; max-width: 100%; max-height: 460px; object-fit: contain; margin-inline: auto; border-radius: 8px; background: transparent; }
-
-.quick-note-saved-images img { cursor: zoom-in; }
-
-.quick-note-image-grid button { position: absolute; top: 5px; right: 5px; width: 22px; height: 22px; border-radius: 50%; color: var(--b3-theme-background); background: color-mix(in srgb, var(--b3-theme-on-background) 68%, transparent); }
+/* 小记编辑器的「展开」(内核 fullscreen) 适配窗口外壳：
+   内核 `.ne-ui-fullscreen{position:fixed;inset:0;z-index:1000}` 是为「无外壳编辑器」设计的，
+   直接用在我们的窗口里会盖住红绿灯/顶栏/侧栏（用户 260919 报「样式错乱、收起不了」）。
+   适配：把它限定在小记面板内绝对定位，外壳与窗口控件始终可见；退出按钮随之改为面板内右上角。 */
+.quick-notes-pane .lake-editor-mount.ne-ui-fullscreen {
+  position: absolute !important;
+  inset: 0 !important;
+  z-index: 30 !important; /* 低于顶栏标签/侧栏：外壳始终可见 */
+  height: auto !important;
+}
+.quick-notes-pane .ne-ui-exit-fullscreen { position: absolute; top: 6px; right: 6px; }
 
 .quick-notes-timeline { display: grid; gap: 13px; align-content: start; padding-bottom: 4px; }
 

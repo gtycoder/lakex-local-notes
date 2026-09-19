@@ -8,6 +8,9 @@ import crypto from "node:crypto";
 import sharp from "sharp";
 import { ASSET_PORT } from "./assetServer.js";
 import { localAssetHttpUrl } from "../src/core/assetUrl.js";
+import { buildAssetFilename, mimeTypeForFilename } from "../src/core/assetNaming.js";
+import { MAX_ATTACHMENT_BYTES } from "../src/core/storeLimits.js";
+import { sanitizeDisplayName } from "./resourceRepository.js";
 import { AppError } from "../src/core/storeErrors.js";
 import {
   QUICK_NOTE_VERSION,
@@ -31,6 +34,7 @@ export type { QuickNoteContent, QuickNoteConversion, QuickNoteDeleted, QuickNote
 export type { StoredQuickNoteContent } from "./quickNoteModel.js";
 
 export { MAX_IMAGE_BYTES as MAX_QUICK_NOTE_IMAGE_BYTES } from "../src/core/storeLimits.js";
+export { MAX_ATTACHMENT_BYTES as MAX_QUICK_NOTE_ATTACHMENT_BYTES } from "../src/core/storeLimits.js";
 /** V5 §5.3：save 轻量 staging 文件约定（staging/{draftId}/ 内） */
 const SAVE_BODY_FILE = "content.qnote";
 const SAVE_META_FILE = "meta.json";
@@ -221,7 +225,7 @@ export class QuickNotesStore {
   }
 
   async stageImage(draftId: string, input: QuickNoteImageInput): Promise<QuickNoteImage> {
-    if (!input || !Array.isArray(input.bytes)) throw new AppError("InvalidInput", "图片数据无效");
+    if (!input || !(input.bytes instanceof Uint8Array) && !Array.isArray(input.bytes)) throw new AppError("InvalidInput", "图片数据无效");
     const bytes = Buffer.from(input.bytes);
     const format = toStoreValidation(() => validateQuickNoteImageBytes(bytes));
     const metadata = await sharp(bytes, { animated: true }).metadata().catch(() => null);
@@ -238,6 +242,34 @@ export class QuickNotesStore {
     this.atomicWrite(path.join(stagingDir, filename), bytes);
     this.atomicWrite(path.join(stagingDir, `.${id}.json`), JSON.stringify(staged));
     return { ...staged, url: this.stagingImageUrl(draftId, filename) };
+  }
+
+  /**
+   * 暂存一个**附件**（内核 file 卡：pdf/zip/docx/…）。与图片共用同一 staging 空间与 promote 路径，
+   * 差别只在：不做图片校验（无 sharp、无像素上限），宽高恒为 null，MIME 由扩展名兜底。
+   * 硬上限 = `MAX_ATTACHMENT_BYTES`（协议上限）；渲染层还会按用户设置的上传上限先拦一道。
+   */
+  stageFile(draftId: string, input: QuickNoteImageInput): QuickNoteImage {
+    if (!input || !(input.bytes instanceof Uint8Array) && !Array.isArray(input.bytes)) throw new AppError("InvalidInput", "附件数据无效");
+    const bytes = Buffer.from(input.bytes);
+    if (bytes.length === 0) throw new AppError("InvalidInput", "附件内容为空");
+    if (bytes.length > MAX_ATTACHMENT_BYTES) {
+      throw new AppError("InvalidInput", `附件超过 ${MAX_ATTACHMENT_BYTES / 1024 / 1024} MiB 上限`);
+    }
+    const original = typeof input.filename === "string" && input.filename.trim() ? input.filename : "attachment";
+    const id = uuid();
+    // 磁盘名用 buildAssetFilename（同步/引用提取统一），**卡片展示名 = 原始文件名**（与文档附件卡同口径，
+    // 见 electron/resourceRepository.ts 的 attachmentOutput）；URL 里才是磁盘名。
+    const stored = buildAssetFilename(original);
+    const stagingDir = this.stagingDirFor(draftId);
+    fs.mkdirSync(stagingDir, { recursive: true });
+    const staged = {
+      id, filename: stored, mimeType: mimeTypeForFilename(stored), width: null, height: null,
+      size: bytes.length, hash: hash(bytes),
+    };
+    this.atomicWrite(path.join(stagingDir, stored), bytes);
+    this.atomicWrite(path.join(stagingDir, `.${id}.json`), JSON.stringify(staged));
+    return { ...staged, filename: sanitizeDisplayName(original), url: this.stagingImageUrl(draftId, stored) };
   }
 
   discardDraft(draftId: string): void {
@@ -272,11 +304,24 @@ export class QuickNotesStore {
     });
 
     const stagingDir = this.stagingDirFor(input.draftId);
-    const stagedMetadata = this.readStagedMetadata(stagingDir, input.stagedImageIds);
     // v2：正文一律是内核形态。调用方没给（移动端输入框 / 旧调用点）→ 按 text 合成；
     // 给了（桌面编辑态）→ 原样采用，但要把 staging 资源作用域改写成正式小记作用域。
     const makeId = () => `u${crypto.randomBytes(5).toString("hex")}`;
-    const allImages = [...retained, ...stagedMetadata];
+    const rawBodyInput = typeof input.body === "string" ? input.body : "";
+    // 资源清单以**正文引用**为准（260919）：staging 目录里的 sidecar 是落盘事实，
+    // 渲染层给的 ids 只当"点名"，并集后再按 `rawBody.includes(filename)` 过滤 ——
+    // 既补上"卡已在正文、id 还没到"的时序缺口，也顺手丢掉"编辑器里已删卡但清单还在"的幽灵资源。
+    const stagedById = new Map<string, Omit<QuickNoteImage, "url">>();
+    for (const item of [...this.readStagedMetadata(stagingDir, input.stagedImageIds), ...this.readAllStagedMetadata(stagingDir)]) {
+      if (!stagedById.has(item.id)) stagedById.set(item.id, item);
+    }
+    const stagedMetadata = rawBodyInput.trim()
+      ? [...stagedById.values()].filter((item) => rawBodyInput.includes(item.filename))
+      : [...stagedById.values()];
+    const referencedRetained = rawBodyInput.trim()
+      ? retained.filter((item) => rawBodyInput.includes(item.filename))
+      : retained;
+    const allImages = [...referencedRetained, ...stagedMetadata];
     const rawBody = typeof input.body === "string" && input.body.trim()
       ? input.body
       : quickNoteBodyFromTextAndImages(
@@ -290,7 +335,9 @@ export class QuickNotesStore {
     const encoded = Buffer.from(serializeQuickNoteContent(content), "utf8");
     const contentHash = hash(encoded);
     const targetAssets = this.assetDirFor(id);
-    const removed = existing.filter((image) => !retainedIds.includes(image.id));
+    // 已被正文遗弃的资源（编辑器里删了卡）连同文件一起清掉，避免幽灵资源占位（HANDOFF §2.10 三.9）。
+    const keptIds = new Set(allImages.map((image) => image.id));
+    const removed = existing.filter((image) => !keptIds.has(image.id));
 
     // V5 §5.3：staging 全量组装 → DB 事务提交 → promote（文件绝不先于 DB 落正式路径；
     // DB 失败时正式路径保持旧内容 + 旧索引一致，staging 残留由启动恢复清理）。
@@ -393,6 +440,28 @@ export class QuickNotesStore {
       if (bytes.length !== image.size || hash(bytes) !== image.hash) throw new AppError("InvalidInput", "暂存图片校验失败");
       return image;
     });
+  }
+
+  /**
+   * 读取该 staging 目录里**全部**已落盘的资源 sidecar（按文件名排序保证确定性）。
+   *
+   * 260919：资源清单改以**正文引用**为准。渲染层传来的 `stagedImageIds` 会受"点击保存早于
+   * 上传/插卡落地"的时序影响（用户实测：卡片流正常、一进编辑视频/附件就没了 —— 正文里有卡片、
+   * 资源清单里却没有该资源，promote 也就没发生）。staging 目录是落盘事实，这里补齐"正文引用到
+   * 但没在 ids 里"的资源；保存时再统一按正文过滤，两个方向的不一致都能收敛。
+   */
+  private readAllStagedMetadata(stagingDir: string): Omit<QuickNoteImage, "url">[] {
+    if (!fs.existsSync(stagingDir)) return [];
+    const ids = fs.readdirSync(stagingDir)
+      .filter((name) => name.startsWith(".") && name.endsWith(".json"))
+      .map((name) => name.slice(1, -".json".length))
+      .filter((id) => isSafeSegment(id))
+      .sort();
+    const out: Omit<QuickNoteImage, "url">[] = [];
+    for (const id of ids) {
+      try { out.push(...this.readStagedMetadata(stagingDir, [id])); } catch { /* 半截/损坏的 sidecar 直接跳过 */ }
+    }
+    return out;
   }
 
   /** 删除单张未保存暂存图片。 */

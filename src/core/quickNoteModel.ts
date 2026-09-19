@@ -42,6 +42,12 @@ export interface StoredQuickNoteContent {
   text: string;
   /** 内核形态正文（Lake HTML）。新建时若调用方没给，按 text 合成（见 quickNoteBodyFromText）。 */
   body: string;
+  /**
+   * **资源清单**（字段名沿用 v2 的 `images`，语义已放宽为「正文引用的小记资源」）：
+   * 图片（`image/*`，带 width/height）与**附件**（其它 MIME，width/height 为 null）混在同一个数组里。
+   * staging / promote / 转换搬运 / 孤儿清理都按「文件名清单」处理，与 MIME 无关；
+   * 需要"当图片渲染"的地方用 `isQuickNoteImageMime(mimeType)` 过滤（缩略图、图片网格）。
+   */
   images: StoredQuickNoteImage[];
 }
 
@@ -60,7 +66,7 @@ export function normalizeQuickNoteContent(text: string, body: string, images: St
   if (text.length > MAX_QUICK_NOTE_TEXT_LENGTH) throw new QuickNoteModelError("小记正文过长");
   if (typeof body !== "string") throw new QuickNoteModelError("小记正文格式无效");
   if (body.length > MAX_QUICK_NOTE_BODY_LENGTH) throw new QuickNoteModelError("小记正文过长");
-  if (!text.trim() && images.length === 0) throw new QuickNoteModelError("请至少记录文字或一张图片");
+  if (!text.trim() && images.length === 0) throw new QuickNoteModelError("请至少记录文字、一张图片或一个附件");
   return { version: QUICK_NOTE_VERSION, text, body, images };
 }
 
@@ -74,6 +80,8 @@ export interface QuickNoteBodyImage {
   size: number;
   width: number | null;
   height: number | null;
+  /** 资源 MIME；缺省按图片处理（移动端合成路径不传）。非 `image/*` 的条目不会变成图片卡。 */
+  mimeType?: string;
 }
 
 export function quickNoteBodyFromTextAndImages(
@@ -89,6 +97,8 @@ export function quickNoteBodyFromTextAndImages(
     blocks.push(line ? lakeTextParagraph(paragraphId, makeId(), line) : lakeEmptyParagraph(paragraphId));
   }
   for (const image of images) {
+    // 附件（非图片）没有图片卡形态，合成路径只处理图片；桌面端正文由内核产出，不走这里。
+    if (image.mimeType && !isQuickNoteImageMime(image.mimeType)) continue;
     const cardId = makeId();
     blocks.push(
       lakeImageCardParagraph(
@@ -189,17 +199,26 @@ export function isQuickNoteImageMime(value: string): boolean {
   return ["image/png", "image/jpeg", "image/gif", "image/webp", "image/avif"].includes(value);
 }
 
+/** 小记资源（图片或附件）允许的 MIME 形态：`type/subtype`、长度受限，避免任意串进库。 */
+export function isSafeAssetMime(value: string): boolean {
+  return value.length > 0 && value.length <= 120 && /^[a-z0-9][a-z0-9!#$&^_.+-]*\/[a-z0-9][a-z0-9!#$&^_.+-]*$/i.test(value);
+}
+
 function validateQuickNoteImage(raw: unknown, seen: Set<string>): StoredQuickNoteImage {
-  if (!raw || typeof raw !== "object") throw new QuickNoteModelError("小记图片字段无效");
+  if (!raw || typeof raw !== "object") throw new QuickNoteModelError("小记资源字段无效");
   const image = raw as Partial<StoredQuickNoteImage>;
   if (
     typeof image.id !== "string" || !isSafeSegment(image.id) || seen.has(image.id) ||
     typeof image.filename !== "string" || !isSafeSegment(image.filename) ||
-    typeof image.mimeType !== "string" || !isQuickNoteImageMime(image.mimeType) ||
+    // 资源 MIME：图片走白名单；**附件**（内核 file 卡：pdf/zip/docx…）允许任意合法 MIME，
+    // 但它们没有像素尺寸 ⇒ 强制 width/height 为 null（图片仍可有值）。
+    typeof image.mimeType !== "string" || !isSafeAssetMime(image.mimeType) ||
+    (!isQuickNoteImageMime(image.mimeType) && (image.width ?? null) !== null) ||
+    (!isQuickNoteImageMime(image.mimeType) && (image.height ?? null) !== null) ||
     typeof image.size !== "number" || !Number.isSafeInteger(image.size) || image.size <= 0 ||
     typeof image.hash !== "string" || !/^[a-f0-9]{64}$/.test(image.hash)
   ) {
-    throw new QuickNoteModelError("小记图片元数据无效");
+    throw new QuickNoteModelError("小记资源元数据无效");
   }
   if (image.width !== null && image.width !== undefined && (!Number.isInteger(image.width) || image.width <= 0)) {
     throw new QuickNoteModelError("图片宽度无效");

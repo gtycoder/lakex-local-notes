@@ -162,7 +162,7 @@ function attachmentOutput(bytes: Buffer, requestedFilename: string, assetsDir: s
 }
 
 /** 展示名清洗：去掉路径分隔/控制字符（展示用；磁盘名独立生成不受影响）。 */
-function sanitizeDisplayName(name: string): string {
+export function sanitizeDisplayName(name: string): string {
   const cleaned = name.replace(/[\/:*?"<>|\u0000-\u001f]/g, "_").trim();
   return cleaned || "附件";
 }

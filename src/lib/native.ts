@@ -2,6 +2,12 @@ import type { CleanOrphanResult, DataHealthReport, DeepCleanupResult, DraftJourn
 import type { TrashItem } from "../core/trashPolicy";
 import type { GcDiagnostics } from "../core/gcDiagnostics";
 
+/** 小记 staging 入参：桌面传 `Uint8Array`（IPC 结构化克隆），移动端走 HTTP JSON 传 `number[]`。 */
+export interface QuickNoteStageInput {
+  bytes: Uint8Array | number[];
+  filename: string;
+}
+
 export interface LakeNative {
   /** 本地资源服务器端口（可被 LAKE_ASSET_PORT 覆盖，多端同机双开用）。 */
   assetPort: number;
@@ -98,7 +104,10 @@ export interface LakeNative {
   createQuickNote(input: SaveQuickNoteInput): Promise<QuickNoteDocument>;
   updateQuickNote(id: string, input: SaveQuickNoteInput): Promise<QuickNoteDocument>;
   deleteQuickNote(id: string): Promise<void>;
-  stageQuickNoteImage(draftId: string, input: { bytes: number[]; filename: string }): Promise<QuickNoteImage>;
+  /** 字节走 Electron 结构化克隆：传 Uint8Array（大附件时 number[] 会凭空多出几百 MB 的数组）。 */
+  stageQuickNoteImage(draftId: string, input: QuickNoteStageInput): Promise<QuickNoteImage>;
+  /** 小记附件（内核 file 卡）暂存：与图片同一 staging 空间，宽高为 null。 */
+  stageQuickNoteFile(draftId: string, input: QuickNoteStageInput): Promise<QuickNoteImage>;
   discardQuickNoteDraft(draftId: string): Promise<void>;
   discardStagedQuickNoteImage(draftId: string, imageId: string): Promise<void>;
   convertQuickNote(quickNoteId: string, notebookId: string): Promise<NoteDocument>;
@@ -236,7 +245,8 @@ export const native = {
   createQuickNote: (input: SaveQuickNoteInput) => api().createQuickNote(input),
   updateQuickNote: (id: string, input: SaveQuickNoteInput) => api().updateQuickNote(id, input),
   deleteQuickNote: (id: string) => api().deleteQuickNote(id),
-  stageQuickNoteImage: (draftId: string, input: { bytes: number[]; filename: string }) => api().stageQuickNoteImage(draftId, input),
+  stageQuickNoteImage: (draftId: string, input: QuickNoteStageInput) => api().stageQuickNoteImage(draftId, input),
+  stageQuickNoteFile: (draftId: string, input: QuickNoteStageInput) => api().stageQuickNoteFile(draftId, input),
   discardQuickNoteDraft: (draftId: string) => api().discardQuickNoteDraft(draftId),
   discardStagedQuickNoteImage: (draftId: string, imageId: string) => api().discardStagedQuickNoteImage(draftId, imageId),
   convertQuickNote: (quickNoteId: string, notebookId: string) => api().convertQuickNote(quickNoteId, notebookId),

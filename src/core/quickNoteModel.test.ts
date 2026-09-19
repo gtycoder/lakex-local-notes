@@ -26,15 +26,19 @@ const image = {
 describe("quickNoteModel", () => {
   it("normalizes valid content and rejects empty/oversized text", () => {
     expect(normalizeQuickNoteContent(" hello ", "<p><br></p>", [])).toEqual({ version: 2, text: " hello ", body: "<p><br></p>", images: [] });
-    expect(() => normalizeQuickNoteContent("", "<p><br></p>", [])).toThrow("请至少记录文字或一张图片");
+    expect(() => normalizeQuickNoteContent("", "<p><br></p>", [])).toThrow("请至少记录文字、一张图片或一个附件");
     expect(() => normalizeQuickNoteContent("x".repeat(MAX_QUICK_NOTE_TEXT_LENGTH + 1), "", [])).toThrow("小记正文过长");
   });
 
   it("validates image metadata, duplicate IDs, and unsafe paths", () => {
     expect(validateQuickNoteContent({ version: 2, text: "", body: "<p><br></p>", images: [image] }).images[0]).toEqual(image);
-    expect(() => validateQuickNoteContent({ version: 2, text: "x", body: "<p><br></p>", images: [{ ...image, id: "../bad" }] })).toThrow("小记图片元数据无效");
-    expect(() => validateQuickNoteContent({ version: 2, text: "x", body: "<p><br></p>", images: [image, image] })).toThrow("小记图片元数据无效");
-    expect(() => validateQuickNoteContent({ version: 2, text: "x", body: "<p><br></p>", images: [{ ...image, mimeType: "text/plain" }] })).toThrow("小记图片元数据无效");
+    expect(() => validateQuickNoteContent({ version: 2, text: "x", body: "<p><br></p>", images: [{ ...image, id: "../bad" }] })).toThrow("小记资源元数据无效");
+    expect(() => validateQuickNoteContent({ version: 2, text: "x", body: "<p><br></p>", images: [image, image] })).toThrow("小记资源元数据无效");
+    // 图片 MIME 白名单仍然生效（不在白名单里 ⇒ 只能按附件形态存：宽高必须为 null）
+    expect(() => validateQuickNoteContent({ version: 2, text: "x", body: "<p><br></p>", images: [{ ...image, mimeType: "text/plain" }] })).toThrow("小记资源元数据无效");
+    expect(validateQuickNoteContent({ version: 2, text: "x", body: "<p><br></p>", images: [{ ...image, mimeType: "application/pdf", width: null, height: null }] }).images[0])
+      .toMatchObject({ mimeType: "application/pdf", width: null, height: null });
+    expect(() => validateQuickNoteContent({ version: 2, text: "x", body: "<p><br></p>", images: [{ ...image, mimeType: "not a mime" }] })).toThrow("小记资源元数据无效");
   });
 
   it("round-trips canonical JSON without runtime URLs", () => {

@@ -638,6 +638,295 @@ python3 -  # 搜 showMiniToolbarWhen / MINI_TOOLBAR_TRIGGER / itemConfig / IMini
 
 ---
 
+### 5.11 小记版式（note UI）：`uiSwitch` + `fullscreen` + note 工具条（260919 实机 + bundle 实测）
+
+> 起因：把小记写作区做成「默认一小块（图片/待办 + 右上角展开）→ 展开成完整 Lake 编辑器」，
+> 对齐语雀云端小记。**结论：这一整套都在内核里，三条 option 就能开出来；但有两个坑会让它"看起来完全没生效"。**
+
+**一、开 note 版式的三件套（缺一不可）**
+
+```ts
+{
+  uiSwitch: { default: "note" },            // OptionName = 'uiSwitch'；值 ∈ 'simple' | 'note' | 'small' | null
+  fullscreen: { enable: true },             // OptionName = 'fullscreen'；uiType ∈ 'flow'(默认) | 'toolbar'
+  toolbar: { agentConfig: { note: { items: [...] }, default: { items: [...] } } },
+}
+```
+
+- `uiSwitch.default='note'` 的作用（handler 类 `EDITOR_CLASSNAME='ne-note-ui'`）：给编辑根加 `.ne-note-ui`
+  （版式 CSS 全挂在它下面）、用 `toolbarType='note'` 注册工具条、并把 `.ne-ui` 里的工具条改成**静态极简**
+  版式（图片/待办等 note 项，其余按钮由 CSS 收掉）；同时扩展 `editor.isMiniEditor()/isNoteMiniEditor()`。
+- **挂载点必须带 `ne-doc-note-editor`**：note 版式 CSS 全写成 `.ne-doc-note-editor .ne-note-ui …`，
+  展开整窗规则是 `.ne-doc-note-editor.ne-ui-fullscreen{position:fixed;z-index:1010}`。内核把
+  `.ne-ui-fullscreen` 加在 **`editorNode.parentNode`**（= 我们传给 `createOpenEditor` 的 mount），
+  所以这个类必须打在 mount 上（我们：`lake-editor-mount ne-doc-note-editor lakex-note-editor`；
+  其中 `lakex-note-editor` 只用来命中内核唯一一条 `.lakex-note-editor .ne-ui-enter-fullscreen{top:6px;right:6px}`）。
+- **展开/收起是同一实例切 UI**：`fullscreen` 插件（uiType=`flow`）在 init 时把 `.ne-ui-enter-fullscreen`
+  / `.ne-ui-exit-fullscreen` 两个浮动盒挂到编辑根；点击 → `editorNode.parentNode` 加 `.ne-ui-fullscreen`
+  （内核 CSS：`position:fixed!important; inset:0; z-index:1000`）→ 发 `enterFullscreen` → note handler
+  `hide()`（摘掉 `.ne-note-ui`）⇒ 工具条自动切回 `agentConfig.default`（完整工具栏）、正文回到文档版式；
+  收起反向 `show()`。**别用 `uiType:'toolbar'`**：那样退出按钮是 note 工具条里的一项，而展开后工具条
+  已切走 ⇒ 没有退出入口。
+
+**二、两个"看起来完全没生效"的坑（都是本轮实际踩到的）**
+
+1. **`document.ready` 不触发 ⇒ note 版式整块失效**。`uiSwitch` 的注册动作、`fullscreen` 的图标渲染
+   都挂在 `kernel.once('document.ready')` 上；而**空编辑器不调用 `setDocument` 就永远不会 ready** ——
+   症状是「工具条整条空白、右上角展开按钮不渲染、键入也不回传（contentchange 不来）」。
+   ⇒ 小记这种"新建即空"的场景必须**无条件 `setDocument` 一次**（我们传单一来源的空正文
+   `emptyLakeBody(ownerId)`，见 `src/core/lakeDocForm.ts`）。这也是 HANDOFF §2.10「输入了字但判定为空」
+   的真因。判据：DOM 里 `.ne-editor` 有 `ne-note-ui` 且 `.ne-ui-enter-fullscreen` 有子节点（图标）。
+2. **`toolbar.agentConfig` 是整体替换，不是深合并**。只传 `agentConfig.note` ⇒ `getConfig('default')`
+   返回 `{}` ⇒ **展开后是一条空工具栏**。必须把 `default` 项一起给出（= 内核内置 `xP` 那一套，
+   我们抄成 `DEFAULT_TOOLBAR_ITEMS` 并加护栏单测；内核已 pin，暂不担心漂移）。
+
+**三、note 专用图标不可用（重要）**
+
+内核给 note 版式定义了专属项 `note-image` / `notetaskList` / `note-file`（图标 `note-image` /
+`note-checkbox` / `note-file`），但**这些 symbol 不在 kernel bundle 的图标表里**（实测我们页面 416 个
+symbol 无一个 `note-*`；语雀页面里的 `#ne-note-image` / `#ne-note-checkbox` 是**语雀 App 自己的 sprite**）。
+用了它们 = 按钮有布局、无图形（呈现为空白工具条）。
+⇒ 我们改用标准项 **`image`（`#icon-image`）+ `taskList`（`#icon-editor-taskList`）**，二者在 note 版式下
+样式与 note 项同源（都带 `ne-ui-toolbar-image` / `ne-ui-toolbar-list` / `ne-ui-toolbar-toggle-button`）。
+
+**附件是例外：必须用 `note-file`**（file 插件只注册了这一个工具项，`toolbar: 'note-file'`，没有别名；
+它的 `getInitUIState()` 写死 `icon: 'note-file'`，`onEvent('file', file)` → `insertCardByUI{type:'FileItem'}`）。
+缺的那枚 symbol 我们**自补**：`ensureNoteFileIcon()` 往 `<body>` 注入一个同 id 的 `<symbol>`（lucide 纸夹
+路径）—— `use` 的片段 id 在**同一文档**内解析，所以不需要任何内核 API 或补丁。多实例幂等（按 id 判重）。
+
+**四、语雀云端小记的两种版式（对照基线，260919 实测）**
+
+- **小记视图**：左＝写作卡（工具条 = 图片/待办/书签/附件；右上角展开）+ 发布行，右＝卡片流（时间 + 正文 + 勾选框）。
+- **列表视图**（标题右侧分段控件切换）：左＝**索引列表**（约 254px：标题/预览 + 右对齐时间「今天 HH:MM」或「MM-DD」，
+  选中行灰底）+ 标签/搜索/更多工具行；右＝**全尺寸编辑器**（完整默认工具栏，无发布按钮 ⇒ 云端是自动保存）。
+- 我们按同一套做：`小记` = 写作卡 + 卡片流；`列表` = `b3-list--background` 索引 + `editorMode="document"` 编辑器
+  （完整工具栏）；版式是**本机展示偏好**（localStorage，不进 S3）。差异：我们保留显式「保存/小记一下 + 取消」
+  （小记是手动保存语义，见 `docs/QUICK-NOTES-SPEC.md`），云端无此按钮。
+
+**五、附件「按类型成卡」的路由在内核哪里（260919 实测）**
+
+- file 插件的工具项固定发 `insertCardByUI{ item:{type:'FileItem', name:'file'} }` ⇒ **一定落附件卡**；
+  类型分流在**前置文件读取器**（preFileReader）里，判据是 `category` 与 `from`（`from` 常量 `'ui'`）：
+  - image：`from !== 'ui' || category === 'image'` → `uploadImageByFile`
+  - video：`(category ∈ {localDoc, video} || useMediaCard) && (from === 'ui' || useMediaCard)` → `uploadVideoByFile`
+  - audio：`(category ∈ {audio, localDoc}) && from === 'ui'` → `uploadAudioFile`
+  - file：后缀在附件白名单（`acceptUtil.getAttachmentFileAccept`）内 → 附件卡
+  file 插件监听**泛化事件** `insertCardByUI`：`execCommand('insertFiles', files, { from: 'ui', category: item.category || item.name })`。
+- ⇒ 想让附件按类型成卡，**只需带上正确的 `category` 重发一次 `insertCardByUI`**；`from` 由 file 插件自己补
+  （我们拿不到那个常量，也不需要）。两个必须注意的点：
+  ① **`name` 必须给**（`{item, name, args:[[file]]}`）——custom-card 插件也监听泛化 `insertCardByUI`
+     并执行 `t.name.replace(/^custom-/, "")`，缺 `name` 直接抛 `Cannot read properties of undefined (reading 'replace')`；
+  ② 直接 `execCommand('insertFiles', files, {category})` **不带 `from:'ui'` 时不生效**（video/audio 读取器会跳过）。
+- 我们落在 `installAttachmentTypeRouting()`（`lakeRuntime.ts`）：在捕获阶段拦「附件」按钮（`.ne-ui-toolbar-file`）
+  的 `change`，按 MIME/扩展名算出 image/video/audio/file，非 file 时 `stopPropagation` 后重发上面那条事件；
+  图片按钮不接管（内核自己就走图片卡）。实测：paperclip 选 png/mp3/mp4 分别得到图片卡/音频卡/视频卡，
+  pdf 仍走附件卡；视频卡拿到 `<video>`、音频卡拿到 `<audio>`（走我们配置的 `createUploadPromise` → 小记 staging）。
+- 上传响应约定（沿用文档侧）：**`filename` = 展示名（原始文件名）**、**URL/磁盘名 = `{13ts}_{8hex}.ext`**
+  （`electron/resourceRepository.ts` 的 `attachmentOutput` 同口径；小记 `stageFile` 已对齐，展示名经
+  `sanitizeDisplayName` 清洗）。
+- ⚠️ **媒体卡是两阶段的（260919 实测，写 `.lake` 前必须知道）**：插入图片/视频/音频/附件时，内核**先落一张
+  `status:"pending"` 的卡片节点**（`url: null`、只有 `taskId/taskType`），**上传 promise 完成后才回填 url**
+  （成功 `status:"done"`，失败 `status:"error"`）。⇒ 在这中间调 `getDocument('text/lake')` 会拿到
+  「有卡无 url」的正文：存下来就是一张**永久 pending 的坏卡**（卡片流看不到、一进编辑器就"消失"）。
+  判据（`category` 与状态都在卡片值里，两种编码形态都要认）：
+  `%22status%22%3A%22pending%22` / `%22status%22%3A%22uploading%22`。
+  **结论（我们已落地）：保存前必须等正文里没有 pending/uploading 的媒体卡**（`QuickNotesWorkspace.saveDraft`），
+  并且**资源清单以正文引用为准**（`electron/quickNotes.ts`：staging 目录 sidecar ∪ 渲染层 ids，再按
+  `body.includes(filename)` 过滤）——两个方向的不一致都能收敛。
+
+**六、我们这边的入口**
+
+**七、小记的白名单与「内核写 / 我们读」分工（260919 用户定稿）**
+
+- **分工**：小记**编辑态挂内核**（保证产出是标准 lake 标记，不手拼），**卡片预览不挂内核**（自研只读渲染）。
+  ⇒ 代价从"每张卡一个内核实例（≈+5MB RSS/实例，见 `docs/QUICK-NOTE-LAKE-MEMORY-SPIKE-260919.md`）"
+  变成"一个纯字符串解析器"；同时因为没有手拼标记，也就没有"被内核改写"的风险。
+- **编辑态外观（260919 最终定稿）**：小记走内核 **note 版式**（`mount.ne-doc-note-editor.lakex-note-editor`
+  + `uiSwitch.default='note'` + `fullscreen.enable`）——
+  **小卡片 = 最小工具条**（图片 / 待办 / 有序 / 无序 / 分割线，实测 6 个按钮），
+  **展开 = 完整工具栏**（`DEFAULT_TOOLBAR_ITEMS` 逐字等于内核默认 `xP`，实测 27 个按钮，与文档页一致）。
+  文档编辑器**一个 option 都不加**（挂载点 `ne-doc-major-editor`，能力全量）。
+- **对齐手段 = 「+」面板白名单**（`QUICK_NOTE_TOOLBAR_ITEMS` 只管小卡片那条最小工具条；
+  「+」面板由 `filterQuickNoteInsert` 过滤，两种状态都生效）：能插的只有
+  图片 / 附件 / 视频 / 音频 / 正文·标题 / 有序·无序·任务列表 / 引用 / 分割线。
+  **已有内容里的超范围块**（表格/代码块/公式/自定义卡）在预览里降级为占位条，编辑态与保存**原文原样保留**。
+  ⚠️ 展开态的完整工具栏里仍有**预览不覆盖**的格式（字号/颜色/背景/对齐/行高/删除线/缩进/素材库/大纲）——
+  内容不丢，只是卡片预览看不到这些样式；若要"所见即所得"，可把这些也从展开态工具条收掉。
+- **两个裁剪点**（都只在 `restrictedFormats` 分支里；注释见 `lakeRuntime.ts`）：
+  ① 工具栏 `toolbar.agentConfig.default.items`（内核这一层是**整体替换**，必须显式给 default）；
+  ② 「+」插入面板 `slash.filterOption`（内核官方钩子，签名 `(parsedConfig) => parsedConfig`）
+     → `src/features/quickNotes/quickNoteInsertFilter.ts`（按 `mainSearch` 前缀 + 中文 label 兜底过滤）。
+  ⚠️ **不要**为了"不给插"而摘掉 `customCard` 注册 —— 未注册的卡在任何一次编辑保存后都会丢（§5.8 末段）。
+- **预览解析器的规格 = 内核真实输出**（fixture 见 `src/features/quickNotes/quickNotePreview.test.ts`）：
+
+| 白名单格式 | 内核实际标记 |
+|---|---|
+| 标题 | `<h1 data-lake-id id><span …>文字</span></h1>`（h1–h6 同形） |
+| 无序/有序列表 | `<ul list="u…"><li fid data-lake-id id><span …>…</span></li></ul>`（有序为 `<ol>`） |
+| 待办 | `<ul list="u…" class="lake-list"><li … class="lake-list-node lake-list-task"><card type="inline" name="checkbox" value="data:true\|false"></card><span …>…</span></li></ul>` |
+| 引用 | `<blockquote data-lake-id id>…内部仍是 p/ul/ol…</blockquote>`（高亮块是 `class="lake-alert …"` 变体） |
+| 分割线 | **是块卡**：`<card type="block" name="hr" value="data:%7B%22id%22…"></card>`（不是 `<hr>` 标签） |
+| 加粗/斜体/下划线/行内代码 | `<strong>` / `<em>` / `<u>` / `<code>` |
+| 删除线 | `<del>…</del>` |
+| 字号 | `<span … class="lake-fontsize-18">`（类名里的数字 = px） |
+| 字体色 / 背景色 | `<span … style="color: #FF0000">` / `<span … style="background-color: #FFFF00">`（可嵌套，合并时后者覆盖） |
+| 对齐 / 行高 | 写在**段落或列表项**上：`style="text-align: center"` / `class="lake-lineheight-2"` |
+| 缩进（列表层级） | `<ul list="u…" data-lake-indent="1">`（层级在**列表容器**上；实时 DOM 里是项自身的 `ne-level`） |
+| 图片/附件/视频/音频 | `<card type="inline" name="image\|file\|video\|audio" value="data:%7B%22src%22…">`（`src` 里是资源 URL，文件名用于在资源清单里取回真实资源） |
+
+（仍不覆盖：`materialLibrary`（素材库）、`toc`（大纲）——卡片预览里显示占位条。）
+
+- **反向约束**：内核 note 版式工具条项若用 `note-image` / `notetaskList` 等**语雀私有图标**项，本地会渲染成空白
+  （见 §5.11 三）；白名单里除 `note-file`（file 插件唯一工具项，自补 symbol）外全部用标准项。
+- **展开（fullscreen）必须限定在我们的内容区**（260919 用户报「盖住红绿灯、顶栏也看不到、收起不了」）：
+  内核 `.ne-ui-fullscreen{position:fixed;inset:0;z-index:1000}` 是"无外壳编辑器"口径 ⇒
+  在小记面板里改成 `position:absolute; inset:0; z-index:30`（容器 `.quick-notes-pane` 加 `position:relative`），
+  退出按钮 `.ne-ui-exit-fullscreen` 从 `fixed` 改为面板内 `absolute; top/right:6px`
+  （与文档侧 `.ne-ui-max-view` 的适配同款，见 `src/styles/app/editor.css`）。
+- ⚠️ **小记编辑器必须 `disableVirtualRendering: true`**（260919 用户报「输入一个字整片空白 + 编辑态顶部大空白」）：
+  虚拟渲染靠 `scrollNode` 量视口，小记没有 Lake 内部滚动容器、fallback 到 `.document-pane` 会量错 ⇒
+  正文被替换成 `.ne-virtual-render-placeholder`（顶部被顶下 190px；一输入触发重渲染就整片变占位）。
+  移动端早已为此置位（HANDOFF §8.8 同款坑）——**任何"非文档页里的 Lake 编辑器"都要记得关虚拟渲染**。
+
+- `src/features/editor/lakeRuntime.ts`：`LakeEditorPrefs.quickNoteUi`（`"card" | "full"`）/ `QUICK_NOTE_TOOLBAR_ITEMS` /
+  `DEFAULT_TOOLBAR_ITEMS` / mount 类名分支 / `customOptions` 的 note 三件套 / `ensureNoteFileIcon()`。
+- `src/features/quickNotes/QuickNoteEditor.tsx`：`{ disableNativeToc:true, quickNoteUi: ui, disableVirtualRendering:true }`
+  + 无条件 `setDocument` + **首次可见后才建实例**（`active` 闩，见 §5.12.1）。
+- `src/components/QuickNotesWorkspace.tsx`：版式切换（`VIEW_KEY`）+ 列表索引 + 附件上传分流（`stageQuickNoteFile`）
+  + 卡片交给 `QuickNotePreview`（自研只读渲染，零内核实例）+ 保存前 `hasPendingMediaCard()` 等待
+  + 编辑器句柄按草稿 id 存（`draftEditorsRef`）。
+- `src/features/quickNotes/quickNotePreviewParser.ts`（只读解析）+ `QuickNotePreview.tsx`（渲染）+ 同名测试（fixture 取自内核真实输出）。
+- 护栏：`quickNoteNoteUi.test.ts` / `quickNotesView.test.ts`（源码级）、`electron/quickNotes.test.ts`（stageFile 往返）。
+- 卡片预览 = **自研只读渲染器**（零内核实例）：按 `body` 解析白名单块（段落/标题/列表/待办/引用/分割线/
+  行内格式/媒体卡），白名单外的块显示占位条。**不挂 viewer/viewer 的替代路线已被用户否掉**
+  （每卡一实例 ≈ +5MB RSS，见 `docs/QUICK-NOTE-LAKE-MEMORY-SPIKE-260919.md`）；
+  因此「预览显示不了的格式」必须同时从**工具栏**与**「+」面板**收掉（`filterQuickNoteInsert`），
+  卡片注册保持全量（§5.8：不能摘，否则老内容里的表/自定义卡一编辑就被内核丢弃）。
+
+**证据（复查方法）**
+
+```bash
+cd vendor/lakex-doc-react/src/components/lakex
+python3 -  # 搜 uiSwitch / EDITOR_CLASSNAME / 'ne-note-ui' / initFlowButton / enterFullscreen 附近
+rg -o --text "ne-doc-note-editor[^{]*\{" ../assets/lakex-doc.css | head
+```
+
+实机：小记卡 DOM = `mount.ne-doc-note-editor.lakex-note-editor` > `.ne-editor.ne-note-ui`；
+note 工具条 `data-toolbar-name="note"`（2 项），default 工具条 `display:none`；
+点展开后 mount 加 `.ne-ui-fullscreen`、`.ne-editor` 摘掉 `ne-note-ui`、工具栏切回 default（27 钮）、
+右上角出现 `.ne-ui-exit-fullscreen`（42×42，fixed）。
+
+---
+
+### 5.12 小记二审（260920）实测出的三个内核行为坑
+
+> 起因：用户报「列表页**第一次**打开小记，右侧编辑区左右宽度不适配（换一条小记就正常）」。
+> 三条都是"只看源码看不出来、必须实测"的结论，改动前务必先读。
+
+**1) 工具条溢出布局**只在**实例创建时算一次**，之后不随容器宽度重算。**
+实测（本机 1413px 窗口、列表视图右侧 1015px）：实例若在 **0 宽**容器里创建，
+`.ne-ui-toolbar` 的 `scrollWidth=1064 > clientWidth=961`、`.ne-editor` 横向溢出 76px
+（工具条右端被裁、正文区可横向滚动）；容器随后变成 1015px 也不重算，派发 `window resize` 同样不重算，
+只有**换一条小记（= 重建实例）**才正常。
+⇒ **绝不要在隐藏容器里创建 Lake 实例**。本项目 App 的 keep-alive 视图正是 `display:none`
+（`.workspace-view--hidden`，小记工作区在应用启动时就已经挂载、宽度 0），
+所以 `QuickNoteEditor` 用 `active`（一路来自 `App.tsx` 的 `visible={desktopWorkspace === "quick-notes"}`）
+闩到**首次可见之后**才建实例；并且**一旦建过就不再销毁**（卸载会用陈旧的 `initialBody` 重建 ⇒ 丢正在写的正文）。
+判据（复查脚本）：`document.querySelector(".ne-editor").scrollWidth === clientWidth`
+且 `.ne-ui-toolbar` 的 `clientWidth === scrollWidth`；任一不等 = 曾在错误宽度下创建过。
+
+**2) 媒体卡 value 的字段名按卡类型不同**（真实 `.qnote` 采样，9 张卡实测）：
+
+| 卡 | 资源 URL 字段 | 展示名字段 |
+| --- | --- | --- |
+| `image`（行内） | `src` | 无（`name` 也是磁盘名） |
+| `file`（行内附件） | `src` | `name`（"报告.pdf"） |
+| `video`（块卡） | **`url`** | `name` |
+| `audio`（行内） | **`audioId`**（= canonical URL） | `fileName` |
+
+只读 `src` ⇒ 视频/音频卡解析不出文件名 ⇒ 卡片预览一律显示「附件（资源缺失）」（二审现场：一条小记 9 个资源只有 1 个能显示）。
+另外 `width/height`：图片才有，附件/视频/音频恒为 `null`（`validateQuickNoteImage` 已按此校验）。
+
+**3) 行内媒体卡是插进「当前段落」的**：「先打字、再点图片/附件」产出的正文形如
+`<p><span>文字</span><card type="inline" name="image" …></card><card type="inline" name="file" …></card></p>`；
+多张卡也可能落在同一个 `<p>` 里。⇒ 解析段落时**不能**假设"段落里只有一张卡"
+（旧实现这么假设，混排段落的卡片会被整段静默丢掉；现改为按卡切分、文字与媒体各自成节点）。
+
+**4) 「附件」按类型成卡要**每个编辑器实例**自己装路由**（260920 用户报「插入附件 mp4 没转视频卡」）：
+内核「附件」路径的原始调用是 `execCommand("insertFiles", files, {from:"ui", category:"file"})` ⇒ 一律产出 file 卡
+（图片/音频/视频都落成附件条），而原生卡片才内嵌播放/显示。按类型改写 category 的路由在
+`src/features/editor/mediaCardRouting.ts`（听 `editing.on("beforeExecCommand")`，改 `args` 或按连续类型段重发），
+**仓库里文档侧（`EditorTab`）与移动端各自装了它，小记这套新编辑器当时漏挂** ⇒ 小记里 mp4 永远是附件条、
+但卡片预览（按 MIME 渲染）却是可播放的视频 ⇒ 两边观感不一致。修法：`QuickNoteEditor` 里同样
+`const detach = installMediaCardCategoryRouter(editor)` 并在卸载时 `detach()`。
+实测（小记编辑器内直接 `insertFiles(...,{from:"ui",category:"file"})`）：mp4→`video` 卡、mp3→`audio` 卡、
+png→`image` 卡、pdf→仍是 `file` 卡，全部符合预期。
+
+**5) 工具条的「…」溢出菜单没有独立内容**：它是 `ne-ui-toolbar-more-button` 打开的浮层，
+`content: this.props.widgets`（bundle 实测）⇒ **装的就是同一批工具项**。所以"收工具栏入口"只要收
+`toolbar.agentConfig.*.items`，溢出里自然一起消失（小记因此再去掉 `toc` / `materialLibrary` 两个会插入
+预览还原不了内容的入口）。
+
+**6) 卡片里的「展开」定位基准 = 最近的定位祖先**：`.ne-ui-fullscreen` 是 `position:absolute; inset:0`，
+而分块视图的卡片 `.quick-note-entry` 是 `position:relative` ⇒ 展开只覆盖**卡片那一小块**（实测 793×274），
+工具条被挤成溢出、正文区不够高，页脚动作行还压在正文上（用户 260920 截图 3）。
+修法：展开期间让卡片退出定位上下文（`.quick-note-entry.editing:has(.ne-ui-fullscreen){position:static}`）⇒
+展开层与页脚都落到 `.quick-notes-pane`，与左侧写作卡展开的观感一致（整面板编辑器 + 右下角动作行 + 右上角收起）。
+
+**7) ⚠️ 实例销毁后热键查表会炸整棵工具条**（260920 实测，用户报「点保存反复闪、保存/取消都点不动」）：
+内核 hotkey 插件的 `destroy()` 会 **`delete this._named`**（bundle line ~154560），而工具条每个按钮渲染时都要
+`getTooltip → renderer.getHotKeyByName(name) → this._named[name]`（line ~112132 / 154613）⇒ **销毁之后再渲染一次**
+就抛 `TypeError: Cannot read properties of undefined (reading 'undo'/'slash'/'hr'/…)`。
+这是 **React 渲染期抛错**：整棵工具条（进而整个小记面板）崩掉并不断重试 ⇒ 用户看到面板**反复闪烁**、
+而且 `hasExtendMethod("getHotKeyByName")` 仍为 true（插件先于 hub 销毁），所以每次渲染都会再抛。
+现象特征：控制台/日志里出现**一串**（每个工具项一条）同名错误，而不是一条。
+复现：列表视图里连续「保存 → 取消 → 换条目」（本会话实测 12 秒内 20+ 条，脚本化复现一次 41 条）。
+**修法**（`src/features/editor/lakeRuntime.ts` 的 `hardenDestroyedHotKeyLookup`，对每个实例生效、对健康实例透明）：
+
+```ts
+const r = editor.renderer;
+const orig = r.getHotKeyByName;
+r.getHotKeyByName = function (name) { try { return orig.call(this, name) ?? null; } catch { return null; } };
+```
+
+⇒ 迟到的渲染只丢一个快捷键提示，不再炸 UI（实测同一压力脚本错误数 41 → **0**，分块视图 4 轮编辑/展开/保存/取消同样 0）。
+**任何"销毁旧实例 + 立刻重建新实例"的编辑器生命周期都有这个风险**（小记切草稿、换条目、保存后重建都算），
+所以补丁挂在 `createLakeDocument`（文档与小记共用）而不是只挂小记。
+
+**8) ⚠️⚠️ 展开层的定位基准会被**任意祖先的 `transform` 悄悄改掉**（260920 最终定位的真凶）：
+`.ne-ui-fullscreen` 是 `position:absolute; inset:0`，按**最近的定位祖先**定位；而 CSS 规范里
+**`transform`（以及 `filter`/`perspective`/`contain:paint`/`will-change:transform`）会让元素成为
+绝对定位后代的定位基准** —— 即使它是 `position:static`。
+我们的卡片有一条「按压缩放」反馈（`src/styles/quick-notes.css` 的 `.quick-note-entry:active{transform:scale(.98)}`）
+⇒ **鼠标一按下**，卡片瞬间变成展开层的定位基准 ⇒ 展开层高度 810 → 约 220（塌回卡片那一小块）、
+鼠标下的「保存/取消」跟着跑掉 ⇒ **真鼠标点击完全没反应**（mousedown 落在按钮上、mouseup 时同一点已经是卡片，
+`click` 派发到共同祖先，按钮的 onClick 永不触发），而且伴随**面板一闪一闪**（按压缩放来回切换）。
+⚠️ 迷惑点：**合成 `element.click()` 绕过命中测试，所以脚本/自动化测着是"好的"** —— 这类问题必须用
+**真鼠标事件**验证（CDP `Input.dispatchMouseEvent` 或人手点）。
+修法：编辑态卡片禁止按压缩放（`.quick-note-entry.editing, .quick-note-entry.editing:active { transform: none }`）。
+排查口径：任何"挂在内核展开层/绝对定位层旁边的自定义 UI 点不动"，先量**祖先的 computed transform**
+（`getComputedStyle(el).transform !== "none"`）+ 对比 `mousedown`/`mouseup` 两帧的 `elementFromPoint`。
+
+**9) 媒体卡是"两阶段"的：先 `status:"pending"` + `url:null`，上传完成后才回填 `url`**（260919/260920 实测）。
+⇒ 保存策略要和大盘对齐：**文档侧（`useWorkspaceState`/`EditorTab`）对 pending 卡不做任何等待/拒绝**，正文原样存下；
+小记同理 —— 只有"本会话真的在传"才等（15s 上限 + 刚传完 2s 内的 1.2s 收尾窗口），
+**上次会话中断留下的死卡**（无上传在传）直接照存 + 提示，绝不把编辑器锁死。
+死卡的判据：正文里能搜到 `%22status%22%3A%22pending%22` / `"status":"pending"`（或 uploading）而本次会话没有上传在进行。
+
+```bash
+# 复查：直接读某条小记的正文/资源清单（dev 库）
+cd ~/Library/Application\ Support/lake-notes-dev/workspace-default/quick-notes
+python3 - <<'PY'
+import json,re,urllib.parse
+d=json.load(open('items/<id>.qnote'))
+for m in re.finditer(r'<card\b[^>]*>', d['body']):
+    tag=m.group(0); raw=re.search(r'value="([^"]*)"',tag).group(1)
+    print(re.search(r'name="([^"]*)"',tag).group(1), json.loads(urllib.parse.unquote(raw[5:])))
+PY
+```
+
+---
+
 ## 6. 使用守则（所有会话遵守）
 
 1. **动手前查**：改 `src/features/editor/**`、移动端 `src/mobile/editor/**`、或涉及编辑器内核行为前，先读 §2/§4/§5。
@@ -664,6 +953,7 @@ python3 -  # 搜 showMiniToolbarWhen / MINI_TOOLBAR_TRIGGER / itemConfig / IMini
 - 2026-09-17：新增 §5.8（块级编辑：能力在 wrapper 层而非内核；动作→实现路径映射；`utils/blockDoc` 整篇 JSON 读改写的实测破坏 —— 正文 6032B→12288B、思维导图卡载荷 634B→8859B、未注册卡被整张抹掉；「转化为」各目标的原生命令实测表与代码块缺口；`editor.execCommand` 与 `renderer.execCommand` 在 indent/outdent 上的差异；`breakLine` 实现「在下方添加」而官方 `insertAtSelection` 实测无效；未注册遗留卡在任何一次保存后丢失）。来源：260917 会话在副本上的实测（`scripts/e2e-block-menu-smoke.mjs`）+ `yuque-developer-docs` 命令列表三级检索。
 - 2026-09-17（复核）：新增 **§5.8.1** —— **更正**「`insertAtSelection` 实测无效」为**有效**（`readData`→`insertINode`；折叠=插入、非折叠=替换、失败返回 `null`）；确认它是「插入带内容容器」的正规通道（内核自动补 `alertHole`/`containerHole`），配 `getNodeContent` 可一次性把段落替换成含原文的 alert/columns/collapse；命令级仍无转换命令（`quote` 是唯一 wrap）；代码块可用 markdown 围栏或 `insertCard`+`setCardValue` 写入；补规范 lake markup、`queryCommandEnabled` 不可靠、147 命令注册表、原生 `moveCard/moveCollapse/moveColumns/...` 的存在。来源：`docs/BLOCK-CONVERT-ANSWER-260917.md`（副本 CDP 实测 + bundle 源码）。
 - 2026-09-17（命令清单）：新增 **§5.9** —— 用 balanced-brace 解析 bundle 的 `kO({pluginName, command})`，落地**完整命令注册表 = 43 插件 / 147 条 kO 命令 + 4 条命令式（alert 族）= 151**；给出「块编辑命令 → 我们现状」（已用 / 未用 / 内核无对应）与三条候选原生化改造；澄清 `ISelectionHelperService` 是**工具栏注册服务、不是块选择 API**；记录多块选择 = DOM Range + `blockSelectionChange`/`unblockSelectionChange`，**内核无批量转化命令**。来源：`vendor/lakex-doc-react/src/components/lakex/lakex.js` 静态解析（脚本随 §5.9）。
+- 2026-09-19：新增 **§5.10**（浮动工具栏：内核 miniToolbar 只覆盖卡片/容器，无文本选区浮栏；`Doc.FrameworkUiLib` 浮层原语；固定工具栏的两条官方路；对照钉钉/云端实测）与 **§5.11**（小记版式 note UI：`uiSwitch.default='note'` + `fullscreen.enable` + `toolbar.agentConfig.note` 三件套；`ne-doc-note-editor` 挂载点类；展开 = `.ne-ui-fullscreen` 挂 `editorNode.parentNode` 且同一实例切回默认工具栏；**两个坑** —— 空编辑器不 `setDocument` 则 `document.ready` 不触发导致 note 版式整块失效、`agentConfig` 是整体替换导致展开后工具栏为空；**note 专用图标 `note-*` 不在 kernel sprite**（语雀 App 私有）⇒ 图片/待办改用 `image`/`taskList`、**附件只能自补 `#note-file` symbol**；附录一：云端小记「小记视图 / 列表视图」两种版式的对照基线；附录二：**附件按类型成卡的路由**（pre-reader 按 `category`+`from:'ui'` 分流、泛化 `insertCardByUI` 必须带 `name`、直接 `insertFiles` 不带 `from` 不生效、展示名 vs 磁盘名约定））。来源：本会话 bundle 静态解析 + 真实 Electron 实测 + 语雀云端小记对照（browser-skill 观察）。
 
 ---
 

@@ -106,6 +106,7 @@ export const WEB_METHODS: Record<string, string> = {
   updateQuickNote: "update_quick_note",
   deleteQuickNote: "delete_quick_note",
   stageQuickNoteImage: "stage_quick_note_image",
+  stageQuickNoteFile: "stage_quick_note_file",
   discardQuickNoteDraft: "discard_quick_note_draft",
   discardStagedQuickNoteImage: "discard_staged_quick_note_image",
   convertQuickNote: "convert_quick_note",

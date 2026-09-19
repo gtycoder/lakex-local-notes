@@ -20,3 +20,13 @@
 .quick-note-entry:active {
   transform: scale(.98);
 }
+
+/* 编辑态卡片**禁止**按压缩放（260920 实测的真凶）：
+   `transform` 会让元素成为绝对定位后代的**定位基准**（CSS 规范），而卡片编辑态里挂着
+   内核的展开层 `.ne-ui-fullscreen`（`position:absolute; inset:0`，本应相对小记面板铺满）。
+   一旦按下鼠标触发 `:active` 的 scale，定位基准瞬间变成卡片 ⇒ 展开层高度从 810 掉到 ~220、
+   鼠标下的「保存/取消」跑掉 ⇒ **真鼠标点了没反应、面板一闪一闪**（合成 `.click()` 绕过命中测试，所以脚本测着是好的）。 */
+.quick-note-entry.editing,
+.quick-note-entry.editing:active {
+  transform: none;
+}

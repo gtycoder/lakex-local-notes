@@ -41,7 +41,7 @@ const BASELINE: Record<string, { decls: number; dupGroups: number }> = {
   "b3/animations.css": { decls: 5, dupGroups: 0 },
   "b3/base.css": { decls: 16, dupGroups: 0 },
   "b3/components.css": { decls: 148, dupGroups: 0 },
-  "b3/dark.css": { decls: 55, dupGroups: 0 },
+  "b3/dark.css": { decls: 54, dupGroups: 0 },   // 260920：删掉已废弃的 .quick-note-image-grid / .quick-note-saved-images 深色覆盖（卡片预览改自研渲染）
   "b3/layout.css": { decls: 187, dupGroups: 0 },
   "b3/theme-daylight.css": { decls: 163, dupGroups: 0 },
   "b3/theme-midnight.css": { decls: 148, dupGroups: 0 },
@@ -55,7 +55,7 @@ const BASELINE: Record<string, { decls: number; dupGroups: number }> = {
   "styles/editor.css": { decls: 14, dupGroups: 0 },   // +2 = 自 ui-polish.css 并入的编辑器正文覆盖（S2）
   "styles/motion.css": { decls: 10, dupGroups: 0 },   // +7 = 自 ui-polish.css 并入的 4 个 reduced-motion 契约块（S4；矩阵补了媒体偏好态后才可验证）
   "styles/components.css": { decls: 444, dupGroups: 1 },   // 260916 S4：原 overlays.css 改名 + 并入 @keyframes lake-pop-in（+1 声明，位置不变）
-  "styles/quick-notes.css": { decls: 11, dupGroups: 0 },   // +2 = 自 ui-polish.css 并入的小记入口（S2）
+  "styles/quick-notes.css": { decls: 12, dupGroups: 0 },   // +2 = 自 ui-polish.css 并入的小记入口（S2）；+1 = 编辑态卡片禁止按压缩放（transform 会成为展开层定位基准，260920）
   "styles/shell.css": { decls: 199, dupGroups: 0 },   // +5 = 原 layout-contract 的壳层度量令牌（S1）；+143 = 自 ui-polish 并入的目录栏/页签/dock 头部（S2）；+4 = 顶栏文档下拉「标签+快捷键一行」与导出二级行（260916，合法新增非覆盖回涨）
   "styles/tokens.css": { decls: 83, dupGroups: 0 },
   "styles/settings.css": { decls: 7, dupGroups: 0 },   // 260916 S4 建立：吸收原 ui-polish.css 的设置/历史/回收站细滚动条
@@ -65,7 +65,7 @@ const BASELINE: Record<string, { decls: number; dupGroups: number }> = {
   "styles/app/editor.css": { decls: 55, dupGroups: 0 },   // +5 = maxView 适配；+4 = 锁定/解锁延迟销毁的旧实例层 .is-outgoing；+3 = 阅读态大纲只调位置（top/right）与「pinned 展开时正文让位」——阅读大纲改回内核自己挂载，官方 getContainer 自建宿主那套已删（260916）
   "styles/app/misc.css": { decls: 293, dupGroups: 0 },
   "styles/app/panels.css": { decls: 99, dupGroups: 0 },
-  "styles/app/quick-notes.css": { decls: 293, dupGroups: 7 },
+  "styles/app/quick-notes.css": { decls: 507, dupGroups: 7 },   // +24 列表版式、+30 媒体按类型、+49 卡片预览、+8 展开层限定、+19 卡片收起/展开、+98 列表页对齐云端（标签行/批量条/行⋯菜单/新建按钮）；+15 = 动作行改版（去掉两角布局的空占位，换成 --inline 靠右下 + 「取消」次级描边 + 卡片页脚内边距 + 展开态浮层）；260920：-48 = 删掉随「卡片预览改自研渲染」废弃的 .quick-note-image-grid / .quick-note-saved-images / .quick-note-saved-media 三套遗留规则；+1 = 分块视图卡片展开时退出定位上下文（展开层/页脚落到小记面板）；+8 = 展开态把保存失败/提示条抬到展开层之上（贴面板左下角的浮层）
   "styles/app/settings.css": { decls: 116, dupGroups: 0 },
   "styles/app/shell.css": { decls: 316, dupGroups: 9 },   // 260917：另收掉 quick-notes 与基础层逐字重复的 margin 覆盖
   "styles/app/tabs.css": { decls: 200, dupGroups: 0 },

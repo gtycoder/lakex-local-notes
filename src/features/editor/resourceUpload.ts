@@ -68,14 +68,18 @@ function isAudioFile(file: File): boolean {
 
 /** 非图片附件：作为资产落盘（note-assets/{noteId}/{file}），返回 canonical URL —— 不再 base64 内嵌正文。
  * 上传上限取用户配置（maxAttachmentBytes，默认 25MiB，可到 100MiB）。 */
-async function uploadAttachmentFile(file: File, noteId: string): Promise<ResourceUploadOutput> {
+async function uploadAttachmentFile(file: File, noteId: string, options: ResourceUploadOptions = {}): Promise<ResourceUploadOutput> {
   const maxBytes = configuredMaxAttachmentBytes();
   if (file.size > maxBytes) {
     throw new Error(`附件超过 ${maxBytes / 1024 / 1024} MiB 上限（可在设置中调整）`);
   }
   const bytes = new Uint8Array(await file.arrayBuffer());
   const mime = mimeForExtension(file.name, file.type);
-  const out = await native.uploadResource({ bytes, filename: file.name }, noteId);
+  // `saveResource`（小记注入）必须同样覆盖附件：否则小记的附件会落到 `note-assets/<draftId>/`
+  // （文档资源空间）而不是小记 staging ⇒ 保存时 promote 找不到文件、转换也搬不走。
+  const out = options.saveResource
+    ? await options.saveResource({ bytes, filename: file.name })
+    : await native.uploadResource({ bytes, filename: file.name }, noteId);
   // Lake audio 卡 handleUploadSuccess 读 video_id/audioId（播放源 id）→ 传 canonical URL，
   // filesize 供 audioInfo.fileSize 显示；否则 audio 卡 setId(null) → 永远"上传中"。
   if (isAudioFile(file)) {
@@ -92,7 +96,7 @@ async function performUpload(request: unknown, noteId: string, options: Resource
   if (payload instanceof File) {
     // Non-image files (PDF, doc, zip, audio, video, etc.) → 资产落盘（与图片同构的附件）
     if (!isImageFile(payload)) {
-      return uploadAttachmentFile(payload, noteId);
+      return uploadAttachmentFile(payload, noteId, options);
     }
     // Image files → preserve the detected source format (including animated GIF/WebP)
     const input = normalizeImageInput(new Uint8Array(await payload.arrayBuffer()), payload.name || "image");

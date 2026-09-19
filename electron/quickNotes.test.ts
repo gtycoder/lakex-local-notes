@@ -57,6 +57,67 @@ describe("QuickNotesStore", () => {
     expect(saved.content.images[0]).toMatchObject({ id: image.id, hash: image.hash, filename: image.filename });
   });
 
+  it("暂存附件（内核 file 卡）与图片共用 staging/promote，宽高为 null", () => {
+    const draftId = crypto.randomUUID();
+    const bytes = Buffer.from("attachment body", "utf8");
+    const file = quickNotes.stageFile(draftId, { bytes: [...bytes], filename: "报告 v1.pdf" });
+    expect(file).toMatchObject({ mimeType: "application/pdf", width: null, height: null, size: bytes.length });
+    // 展示名 = 原始文件名（与文档附件卡同口径）；磁盘名是 {13ts}_{8hex}.pdf，只出现在 URL 与资源清单里。
+    expect(file.filename).toBe("报告 v1.pdf");
+    expect(file.url ?? "").toMatch(/\.pdf$/);
+    expect(file.url ?? "").not.toContain("报告");
+    const saved = quickNotes.createQuickNote({
+      text: "带附件",
+      // 资源清单以**正文引用**为准 ⇒ 正文必须引用到该资源的 URL（否则视为幽灵资源被清掉）。
+      body: `<p class="ne-p"><card type="inline" name="file" value="data:${encodeURIComponent(JSON.stringify({ src: file.url }))}"></card></p>`,
+      draftId,
+      stagedImageIds: [file.id],
+    });
+    expect(saved.content.images[0]).toMatchObject({ id: file.id, mimeType: "application/pdf", width: null });
+    const stored = saved.content.images[0].filename;
+    expect(stored).not.toBe(file.filename);
+    expect(fs.existsSync(path.join(root, "quick-notes", "assets", saved.id, stored))).toBe(true);
+    // 往返读取（校验放宽后附件条目仍合法）
+    expect(quickNotes.readQuickNote(saved.id).content.images[0].filename).toBe(stored);
+  });
+
+  it("正文引用了暂存资源但 stagedImageIds 为空 ⇒ 仍按正文补齐清单（260919 时序修复）", () => {
+    const draftId = crypto.randomUUID();
+    const bytes = Buffer.from("video body", "utf8");
+    const file = quickNotes.stageFile(draftId, { bytes: [...bytes], filename: "v.mp4" });
+    const stored = file.url!.split("/").pop()!;
+    // 渲染层"点击保存早于上传/插卡落地"时 ids 会是空的，但正文已经引用了该资源。
+    const body = `<p class="ne-p"><card type="block" name="video" value="data:${encodeURIComponent(JSON.stringify({ src: file.url }))}"></card></p>`;
+    const saved = quickNotes.createQuickNote({ text: "带视频", body, draftId, stagedImageIds: [] });
+    expect(saved.content.images.map((item) => item.mimeType)).toEqual(["video/mp4"]);
+    expect(fs.existsSync(path.join(root, "quick-notes", "assets", saved.id, stored))).toBe(true);
+    expect(fs.existsSync(path.join(root, "quick-notes", "staging", draftId))).toBe(false);
+  });
+
+  it("正文不再引用的资源不进清单，且旧文件随保存清掉（幽灵资源）", async () => {
+    const draftId = crypto.randomUUID();
+    const image = await quickNotes.stageImage(draftId, { bytes: [...PNG], filename: "drop.png" });
+    const saved = quickNotes.createQuickNote({
+      text: "有图",
+      body: `<p class="ne-p"><card type="inline" name="image" value="data:${encodeURIComponent(JSON.stringify({ src: image.url }))}"></card></p>`,
+      draftId,
+      stagedImageIds: [image.id],
+    });
+    const storedName = saved.content.images[0].filename;
+    const assetPath = path.join(root, "quick-notes", "assets", saved.id, storedName);
+    expect(fs.existsSync(assetPath)).toBe(true);
+    // 再存一次：正文里没有那张卡了（模拟编辑器里删卡）
+    const updated = quickNotes.updateQuickNote(saved.id, {
+      text: "没图了",
+      body: `<p class="ne-p"><span>没图了</span></p>`,
+      draftId: crypto.randomUUID(),
+      stagedImageIds: [],
+      retainedImageIds: [saved.content.images[0].id],
+    });
+    expect(updated.content.images).toEqual([]);
+    expect(fs.existsSync(assetPath)).toBe(false);
+  });
+
   it("拒绝伪装成图片的 SVG，不落 staging 文件", async () => {
     const draftId = crypto.randomUUID();
     const svg = Array.from(new TextEncoder().encode("<svg xmlns='http://www.w3.org/2000/svg'/>"));
