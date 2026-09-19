@@ -6,7 +6,8 @@
 
 ## 0. 当前基线（新会话开工前）
 - **本会话（260920，已收尾）完整交接 = §2.11（小记内核化收尾：附件按类型成卡 / 卡片预览保真 / 展开层与保存策略 / 内核三个坑）—— 新会话从这里读。**
-  ✅ **已合并 `master` 并推 origin**（`feat(quick-notes): …` + `docs(handoff): §2.11 …`）；工作区干净、单 worktree。
+  ✅ **已合并 `master` 并推 origin**：代码批 = `e2f0a4d`（feat(quick-notes)…），交接 = `c4d5abc`（docs(handoff): §2.11）；
+  `master == origin/master`、工作区干净、单 worktree。
   一句话状态：小记编辑态=文档式内核编辑器（白名单入口 + 展开成完整工具栏），卡片预览=自研只读渲染（零内核实例），
   附件按类型成卡（与文档同一模块），列表视图右侧=文档式编辑器，保存策略对齐文档（不因 pending 卡拒绝保存）；
   **待用户真机点验的清单见 §2.11 三.1**，内核行为结论见 `docs/LAKEX-CONTRACT.md` §5.11/§5.12。
@@ -1086,7 +1087,7 @@ npm run check:bundle && npm run check:core && git diff --check
 # CDP 走查脚本（临时件，不在仓库）：/tmp/qn.mjs  →  eval / evalfile / shot / click(真鼠标) / reload / prescript-reload / dismiss
 ```
 
-- 提交记录：本批 = `feat(quick-notes): …` + `docs(handoff): §2.11 …`（见 `git log --oneline -5`），已 `git push origin master`。
+- 提交记录（已 `git push origin master`，`master == origin/master`）：`e2f0a4d` 代码批（feat(quick-notes)…）、`c4d5abc` 本交接（docs(handoff): §2.11）。
 - 用户红线（沿用）：不擅自 `git commit`（**本批是用户明确要求合并推送**）；开发数据只用 `lake-notes-dev`；只 kill 具体 PID。
 
 ---
