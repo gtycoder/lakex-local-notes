@@ -5,6 +5,12 @@
 > **§8 是移动端（安卓）专职交接**，由移动端会话维护；桌面会话不要改 §8，移动端会话不要改 §0-§7 之外的桌面文件。
 
 ## 0. 当前基线（新会话开工前）
+- **本会话（260920，已收尾）完整交接 = §2.11（小记内核化收尾：附件按类型成卡 / 卡片预览保真 / 展开层与保存策略 / 内核三个坑）—— 新会话从这里读。**
+  ✅ **已合并 `master` 并推 origin**（`feat(quick-notes): …` + `docs(handoff): §2.11 …`）；工作区干净、单 worktree。
+  一句话状态：小记编辑态=文档式内核编辑器（白名单入口 + 展开成完整工具栏），卡片预览=自研只读渲染（零内核实例），
+  附件按类型成卡（与文档同一模块），列表视图右侧=文档式编辑器，保存策略对齐文档（不因 pending 卡拒绝保存）；
+  **待用户真机点验的清单见 §2.11 三.1**，内核行为结论见 `docs/LAKEX-CONTRACT.md` §5.11/§5.12。
+- **上一段（260919 晚 · 续）在小记方向上的交接 = §2.10 末尾「2.10 续做」**（内核 note 版式 + 展开 + 列表/小记版式切换 + 附件管线；当时代码在工作区未提交，现已被 §2.11 取代并提交）。
 - **本会话（260919 晚）完整交接 = §2.10（小记挂 Lake 内核编辑器）——⚠️ 下一会话最高优先级，用户已报「问题很多」但未逐条给**。所有改动已提交并推 origin：`master` @ `0d442a8`，工作区干净、单 worktree（本会话不再使用分支树）。
 - **本会话（260919）完整交接 = §2.9**（表格内核换代 FortuneSheet + UI/文档收口 + 崩溃修复；含任务目标/已完成/当前问题/下一步/踩坑）。表格批次完整背景 = §2.8。
 - **本批（表格文档接入 kind=sheet，✅ 已提交并推 origin：`master` @ `71c2d90`；⚠️ 尚未真机验收）**：分支 `feat/sheet-document` 已 **ff 合入 `master`**（旧调研分支 `spike/sheet-ce` 已删）。**写给零上下文新会话的完整交接 = §2.8（新会话从这里读）**；设计/选型/实测数据全表 = `docs/SHEET-BITABLE-DESIGN-260918.md` + `docs/FORTUNESHEET-FEASIBILITY-260919.md`（260919 换内核）。
@@ -531,13 +537,25 @@
 
 ### 三、当前问题（⚠️ 用户报「问题很多」，未逐条给）
 
+> **（260919 晚 · 本会话续做，未提交、待验收）**：用户本轮把方向定为「小记底层换用 Lake 内核 +
+> 对齐语雀云端小记（红框：小记卡工具条「图片/待办」+ 展开」）」，已按此落地并实测通过：
+> ① 小记写作卡改成**内核 note 版式**（工具条只剩「图片」「待办」，右上角是「展开」）；
+> ② 点展开 = 内核 fullscreen，**同一实例**切成完整工具栏的整窗编辑器，右上角可收起；
+> ③ **修掉下面第 1 条**（图片按钮回来了：文件选择 → staging → 卡片 → 记下，实测图片落盘 + 正文含 image 卡）；
+> ④ **修掉第 2 条的根因**（空小记不 `setDocument` ⇒ 内核 `document.ready` 不触发 ⇒ note 版式/工具条/
+> 展开按钮/键入回传整块失效 —— 见 `docs/LAKEX-CONTRACT.md` **§5.11**）。
+> 详细交接见本文件 §2.10 末尾「本会话续做」段；门禁：tsc 0 · vitest 1025+4 passed/16 skipped ·
+> 桌面+移动 build 全绿 · check:bundle 1.82MB/2.90MB · check:core 0 · git diff --check 干净。
+
 **已确认的回归（我自己发现的，必修）**
 
-1. **「添加图片」文件选择按钮没了**：原来 textarea 上方工具条里的文件选择入口随 textarea 一起删掉，现在只能**粘贴/拖入**图片。用户若习惯点按钮加图，就是「加不了图」。
+1. **✅ 已修（260919 晚）**「添加图片」文件选择按钮没了：原来 textarea 上方工具条里的文件选择入口随 textarea 一起删掉，现在只能**粘贴/拖入**图片。用户若习惯点按钮加图，就是「加不了图」。
+   → 现由内核 note 工具条的 `image` 项提供（自带 file input，走 `image.createUploadPromise` → 小记 staging），实测可用。
 
 **未验证（我没能验完，极可能就藏在这里）**
 
 2. **真实键盘输入**：CDP 的 `Input.dispatchKeyEvent/insertText` 打不进 contenteditable（见 §五坑 3），我只用 `document.execCommand('insertText')` 验证了**保存链路**。人用键盘打字是否正常**未经真机确认**。
+   → **（260919 晚）根因已定位并修掉一半**：空小记不 `setDocument` ⇒ 内核 `document.ready` 不触发 ⇒ `contentchange` 不来（这才是 §五坑 1「输入了字却不回传」的真因）；现已无条件装载空正文。**真实键盘仍待用户点一下确认。**
 3. **粘贴/拖入图片的完整链路**（staging → 保存时作用域改写 → 转换后图片可达）从未验过。
 4. **编辑已有小记 → 保存**（只验过「新建 → 记下」）。
 5. **取消/放弃草稿**时的 staging 清理（`discardQuickNoteDraft`）与「有内容才确认」的弹窗路径未验。
@@ -555,11 +573,13 @@
 ### 四、下一步计划（按优先级）
 
 1. **先拿现象清单**：请用户把「点出来的问题」逐条列出（或截图）。若拿不到，就按 §三 的 2~12 条**逐条真机走查**并记录现象，别猜。
+   → **（260919 晚）用户已给方向**（小记对齐云端 + 红框项），本会话据此落地了 note 版式与展开流程；
+   下一轮请用户**点一遍**，重点是键盘打字、贴图、编辑已有小记、⌘Enter 发布这几条真机项。
 2. **真机走通三条链路**（用真实键鼠 + 真实粘贴）：
    - ① 小记面板新建：键盘打字（含换行、列表、加粗、行内代码）→ 记下 → 重开看格式是否保留；
    - ② 编辑已有小记 → 保存（看格式与图片是否都在）；
    - ③ 贴图 → 记下 → 「转为正式笔记」→ 图片在文档里能显示（`note-assets/<新文档id>/` 里应有同名文件）。
-3. **修掉 §三 第 1 条**（把「添加图片」按钮加回来）：走 `stageQuickNoteImage` + 内核 image 命令（**先用官方 `docs/05 - 自定义工具栏（高级用法）`/`08 - 命令列表` 确认插入图片卡片的命令名与参数，别猜**）。
+3. **~~修掉 §三 第 1 条~~（260919 晚已修）**：图片按钮 = 内核 note 工具条的 `image` 项（无需自研按钮/命令名）。
 4. 修 §三 7~9 三个潜在缺陷（ref 竞态 / 常驻实例 / 图片孤儿）。
 5. 更新 `docs/QUICK-NOTES-SPEC.md`（v2 格式 + 「写作区挂单个内核实例」的新结论）。
 6. 把「小记编辑器挂/卸」纳入 §3 第 6 条的**内存回收专项**（churn soak 三条触发面之一）。
@@ -572,6 +592,502 @@
 4. **内核聚焦要走它自己的入口**：官方文档（`08 - 命令列表`）有 `editor.execCommand("focus", "end")`、事件 `focusstatuschange`。DOM `focus()` 让 `.ne-engine` 变成 `document.activeElement` 也**不足以**让合成按键生效。
 5. **`.qnote` v1 不再可读**（校验只认 v2）——若 dev 库又出现 v1 小记，小记面板会**整列表报错**（`listQuickNotes` 逐条校验）。清理办法：走应用 IPC `deleteQuickNote`；已被 v2 校验挡住时，按同样语义用 sqlite3 处理（`quick_note_deleted` 墓碑 + 删 `quick_notes` 行，文件按约定保留待 GC）。
 6. **量化/隔离环境**（复用这套姿势）：独立 worktree + 独立 `LAKE_USER_DATA`（APFS `cp -Rc` 克隆 + `sqlite3 .backup` 快照）+ 独立端口（vite 1431 / CDP 9232 / asset 19877）+ `LAKE_DEV_SERVER_URL` 指 1431 + 把克隆数据里的资源端口从 19876 改写成 19877（**含 `%3A19876%2F` 编码形态**）。详细命令见 spike 报告 §6。
+
+### 2.10 续做（260919 晚 · 小记对齐云端：note 版式 + 展开成完整编辑器）—— ⚠️ 未提交，待用户点验
+
+> 本段是 §2.10 的**后续一轮**。用户本轮定的方向：「小记底层换用 Lake 内核 → 功能仿照语雀云端小记实现」
+> （明确允许用 browser-skill 驱动本地 Edge 观察云端小记；截图标了红框 = **小记卡工具条「图片/待办」+ 展开**，
+> 并强调「默认一小块、能展开成完整 Lake 编辑器」的流程；**标签类不做、不额外增加功能**）。
+
+**一、做了什么（代码在 `master` 工作区，未提交）**
+
+1. **小记写作卡改用内核 note 版式**：`src/features/editor/lakeRuntime.ts` 新增 `LakeEditorPrefs.noteUi`；
+   `QuickNoteEditor.tsx` 传 `noteUi: true`。内核侧 = `uiSwitch.default='note'` + `fullscreen.enable` +
+   `toolbar.agentConfig.note = ['image','taskList']`（并显式给出 `default` 项），mount 类名换成
+   `lake-editor-mount ne-doc-note-editor lakex-note-editor`。
+   ⇒ 卡片工具条 = **图片 + 待办**，右上角 = 内核**展开**按钮（与云端小记一致）。
+2. **展开 = 内核 fullscreen，同一实例切 UI**：点开后 mount 加 `.ne-ui-fullscreen`（`position:fixed;inset:0`），
+   note 版式类被摘掉 ⇒ 工具条自动切回**完整默认工具栏**（27 项）、正文回文档版式；右上角
+   `.ne-ui-exit-fullscreen` 可收起。**不能用 `uiType:'toolbar'`**（那样展开后没有退出入口）。
+3. **修掉 §三 第 1 条**（图片入口）+ **第 2 条的根因**：空小记不 `setDocument` ⇒ 内核 `document.ready`
+   不触发 ⇒ note 版式/工具条/展开按钮/`contentchange` 整块失效。`QuickNoteEditor` 现在**无条件**
+   `setDocument`（空正文用 `emptyLakeBody(ownerId)`）。
+4. **护栏**：`src/features/quickNotes/quickNoteNoteUi.test.ts`（源码级 4 条）。
+5. **文档**：内核结论回填 `docs/LAKEX-CONTRACT.md` **§5.11**（三件套 + 两个坑 + 图标结论）。
+
+**二、实测（CDP 驱真实 Electron，dev 数据）**
+
+- 卡片结构：`mount.ne-doc-note-editor.lakex-note-editor` > `.ne-editor.ne-note-ui`；note 工具条
+  `data-toolbar-name="note"`（2 钮；symbol 命中 `#icon-image` / `#icon-editor-taskList`）；default 工具条隐藏。
+- 展开/收起：展开后 `.ne-editor` 摘掉 `ne-note-ui`、工具栏切默认（27 钮）、`.ne-ui-exit-fullscreen`
+  42×42 出现在窗口右上；收起后回到 note 版式。
+- **功能链路**：`execCommand('focus','end')` + `insertText` 打字 → 点「待办」→ 发布 ⇒ 落盘正文
+  `<ul class="lake-list"><li class="lake-list-task"><card name="checkbox" …>`（内核形态 ✓）；
+  合成 `File` 触发工具条 file input ⇒ 图片进 staging → 发布 ⇒ `images[]` 有记录 + 正文含 image 卡 +
+  `quick-notes/staging/` 清空（promote 成功）。
+- 门禁：`tsc` 0 · `vitest` **1029 passed / 16 skipped** · 桌面 + 移动 `vite build` 全绿 ·
+  `check:bundle` app-js 1.82MB/2.90MB · `check:core` 0 · `git diff --check` 干净。
+
+**三、第二轮（用户 260919 确认「两个都要做」后补做：版式切换 + 附件）**
+
+1. **「列表 / 小记」版式切换**（云端 `#switch-listType-wrapper`）——标题右侧分段控件，复用既有 `.seg`/`.seg__item`
+   思源件（未新造视觉）：
+   - `小记`（note）＝写作卡（图片/待办/附件 + 展开）+ 卡片流（原有版式）；
+   - `列表`（list）＝**索引列表（`.quick-notes-index`，复用 `b3-list b3-list--background`，宽 200–260px）
+     + 右侧全尺寸编辑器**（`editorMode="document"` ⇒ 完整工具栏），点行切换、当前行高亮，行内时间口径
+     对齐云端（今天 = 「今天 HH:MM」，其余 = 「MM-DD」），顶部一行「新建小记」。
+   - **纯展示偏好**：存本机 `localStorage: lake-notes-v3.quick-notes-view`，不进 S3（与排序同口径）。
+2. **附件（挂纸夹）**：内核 file 插件的工具项 `note-file` 直接可用（自带 file input + `file.createUploadPromise`），
+   **但它画的 `note-file` symbol 是语雀 App 私有的**（kernel sprite 无 `note-*`）⇒ 我们自补一枚同 id 的
+   symbol（lucide 纸夹路径，`ensureNoteFileIcon()`，幂等）。落盘链路：
+   渲染层 `uploadAttachmentFile` 现在也走 `options.saveResource`（**否则附件会落进文档资源空间**）→
+   主进程新增 `stage_quick_note_file` / `stageFile()`（与图片共用 staging + promote，宽高 null，走附件硬上限）→
+   发布时随图片一起 promote、转换时随图片一起搬运（`content.images` 就是资源清单，MIME 放宽为「合法 MIME +
+   非图片必须宽高为 null」；`isQuickNoteImageMime` 仍用于"当图片渲染"的过滤）。
+   - 实测：贴一个 .txt → 发布 ⇒ 资源记录 `{mime:text/plain,w:null,h:null}` + 正文含 `<card name="file">`；
+     「转为正式文档」⇒ 文件出现在 `note-assets/<新文档id>/`、正文引用改写正确。
+3. 云端卡片里还有个「书签」按钮（未在红框内）：仍未加（会插入 bookmark 卡）。
+4. §三 7~9（`draftEditorRef` 共用竞态 / pane 常驻实例 / 删图留孤儿）与第 12 条（`QUICK-NOTES-SPEC.md` 过期）：
+   第 12 条已更新（QUICK-NOTES-SPEC 顶部加"结论已推翻"说明）；7~9 仍未动。
+5. **第三轮（用户 260919 反馈两条后的补做）**：
+   - **① 附件按类型成卡**：附件按钮选中的文件按类型落到对应卡片 —— 图片→图片卡、视频→视频卡（带播放器）、
+     音频→音频卡、其它→附件卡。内核侧机制与两个坑（泛化 `insertCardByUI` 必须带 `name`；`category` 决定卡片类型）
+     见 `docs/LAKEX-CONTRACT.md` **§5.11 五**；实现 = `installAttachmentTypeRouting()`（`lakeRuntime.ts`，拦截
+     `.ne-ui-toolbar-file` 的 change 后按 category 重发）。实测：paperclip 选 png/mp3/mp4 → 图片/音频/视频卡 ✓、
+     pdf → 附件卡 ✓。顺带把暂存附件的**展示名=原始文件名**（磁盘名仍是时间戳名，与文档附件卡同口径）。
+   - **② 已保存小记的卡片展示**：此前把所有资源都当 `<img>` 渲染 ⇒ 视频/附件显示成"小记图片"碎图（用户截图）。
+     现在按类型渲染：图片网格（可点开大图）、`<video>`/`<audio>` 可播放、其它给附件条（`.quick-note-file-chip`）。
+     用户那条测试小记复验：图片正常 + 视频出播放器、无碎图 ✓。
+   - ⚠️ 已知边界（有意不做）：卡片只渲染 `text` 镜像 + 资源清单，**不渲染 `body` 富格式**；要看列表/待办/引用等
+     真实样式请进编辑态（内核渲染）。卡片内挂 viewer 的内存代价见 `docs/QUICK-NOTE-LAKE-MEMORY-SPIKE-260919.md`。
+6. **第四轮（用户 260919「可以正常展示了，但是一编辑视频或者说附件还是消失」）**：
+   - **真因**：内核**媒体卡是两阶段的** —— 插入时先落一张 `status:"pending"`、`url:null` 的卡，
+     上传 promise 完成后才回填 url。此时（或更早）保存 ⇒ 正文里是一张**永久 pending 的坏卡**：
+     卡片流按资源清单渲染所以"看着正常"，一进编辑就没有可渲染的卡 ⇒ 用户看到的"消失"。
+     叠加两个既有缺陷：`draftEditorRef` 单 ref 被两个 composer 共用（HANDOFF §2.10 三.7）、
+     资源清单只信渲染层传来的 ids。
+   - **修复（三层）**：① `QuickNotesWorkspace.saveDraft` 保存前**等正文里没有 pending/uploading 的媒体卡**
+     （≤15s，超时提示"有媒体还没上传完"，绝不写坏卡）+ 等进行中的上传任务归零 + 资源按草稿 id 汇总；
+     ② 编辑器句柄改**按草稿 id 存**（`draftEditorsRef`），且**保存的是点击那个 composer 的草稿**
+     （从前写作面板的「小记一下」在内联编辑打开时会去存被编辑的那条小记）；
+     ③ `electron/quickNotes.ts` 的**资源清单改以正文引用为准**（staging sidecar ∪ 渲染层 ids →
+     按 `body.includes(filename)` 过滤），并顺手清掉"编辑器里删了卡但清单还在"的幽灵资源（含文件）。
+   - **实测**：贴视频→**立刻**保存 ⇒ 正文是真卡（非 pending）+ 清单有该资源 ✓；打开编辑 → 视频在 ✓；
+     改字再存 ⇒ 视频与资源都还在 ✓。
+   - **遗留**：用户那条旧小记（`a38c7397`）的正文里本来就是坏卡（视频丢在清单外），按红线 #7 不写修复代码，
+     重新拖一次即可。
+7. **第五轮（用户 260919 定稿：内核当"写入器"，我们自己当"读取器"）**：
+   - **决策**：小记**编辑态继续挂内核**（所以产出永远是标准 lake 标记，手拼格式被内核改写的风险不存在）；
+     **卡片预览不挂内核**（性能：每卡一实例 ≈ +5MB RSS，等于开一堆 tab）——改成**自研只读渲染器**；
+     两边对齐的办法是**把可插入格式收成封闭白名单**（"预览显示不了的就不给插"）。
+   - **白名单**（= `QUICK_NOTE_TOOLBAR_ITEMS`，也用于展开态，避免展开后又漏出白名单外的格式）：
+     `style`(正文/标题) · `bold` · `italic` · `unorderedList` · `orderedList` · `taskList` · `quote` · `hr` ·
+     `image` · `note-file`。白名单外不给入口；**已有小记里的超范围内容**（表格/代码块/自定义卡）在卡片里降级成
+     占位条、保存时**原文原样保留**（不改写、不丢）。
+   - **新增**：`src/features/quickNotes/quickNotePreviewParser.ts`（把内核产出的正文解析成块/行内节点，
+     零内核实例、纯字符串解析）+ `src/features/quickNotes/QuickNotePreview.tsx`（渲染，媒体按 MIME 就地渲染）
+     + 卡片接上（`QuickNotesWorkspace` 的 `QuickNoteCard`）。解析器的 fixture **全部取自真实内核输出**。
+   - **实测**：用户那条 7 项待办的小记，卡片里现在显示**真复选框**（以前只能看到纯文本）+ 图片 ✓；
+     段落/标题/有序无序/引用/分割线/行内格式同理。
+   - **数据格式未变**：`body` 仍是内核产出的 lake 标记 ⇒ 不需要迁移，「小记 → 正式文档」仍是搬运 + 作用域改写。
+   - 门禁：`tsc` 0 · `vitest` **1048 passed / 16 skipped** · 桌面 + 移动 build 全绿 ·
+     `check:bundle` app-js 1.82MB/2.90MB · `check:core` 0 · `git diff --check` 干净。
+8. **第六轮（用户 260919 定稿：小记编辑态直接复用文档页外观，只收入口）**：
+   - **决策**：既然编辑态本来就挂内核 ⇒ 外观/手感**与文档页完全一致**（挂载点仍是 `ne-doc-major-editor`，
+     不再有 note 版式 / 展开按钮 / note 专用图标那一套）；只把「预览显示不了的」从**两个入口**收掉。
+   - **两处裁剪（仅小记，`restrictedFormats: true`）**：
+     ① 工具栏 `toolbar.agentConfig.default.items` = 白名单
+        `cardSelect · undo · redo · style · bold · italic · underline · unorderedList · orderedList · taskList · quote · hr · link`；
+     ② 「+」面板用内核官方钩子 `slash.filterOption` → `filterQuickNoteInsert`（新模块
+        `src/features/quickNotes/quickNoteInsertFilter.ts`，按 `mainSearch` 前缀 + 中文 label 兜底，
+        隐藏表格/代码块/公式/画板/思维导图/日历/折叠块/第三方服务等）。
+     ⚠️ **卡片注册照旧全量**（`customCard` 不动）：否则已有小记里的表格/自定义卡一进编辑就会被内核丢弃（§5.8 的坑）。
+   - **不影响文档**（用户明确要求）：`restrictedFormats` 只由 `QuickNoteEditor` 传；文档编辑器不加任何 option。
+     实测：小记编辑器工具条 **14** 个按钮，文档编辑器仍是内核默认 **27** 个 ✓。
+   - 删掉的东西（本轮简化）：`uiSwitch`/`fullscreen` note 版式、`ensureNoteFileIcon`（附件按钮不再单独放）、
+     `installAttachmentTypeRouting`（附件/视频/音频改由「+」面板各条目走内核原生路径）、`editorMode` 双版式。
+   - 数据零影响：`.qnote` 仍是 `quick-notes/` 独立空间里的 lake 形态正文，与文档存储/同步完全分离。
+   - 门禁：`tsc` 0 · `vitest` **1053 passed / 16 skipped** · 桌面 + 移动 build 全绿 ·
+     `check:bundle` app-js 1.83MB/2.90MB · `check:core` 0 · `git diff --check` 干净。
+9. **第七轮（用户 260919 再定稿：小卡片最小工具条 + 展开用完整工具栏）**：
+   - **小卡片（未展开）**工具条 = `QUICK_NOTE_TOOLBAR_ITEMS` = **图片 · 待办 · 有序列表 · 无序列表 · 分割线**
+     （实测 6 个按钮，含有序列表的下拉箭头）。
+   - **展开（fullscreen，同一实例切 UI）** = **完整工具栏**（`DEFAULT_TOOLBAR_ITEMS` 逐字等于内核默认 `xP`，
+     实测 27 个按钮，与文档页一致）；收起回到最小工具条。
+   - **「+」插入面板**：两种状态都由 `filterQuickNoteInsert` 收成白名单（唯一受"预览不支持"约束的入口）。
+   - ⚠️ **已知取舍（要跟用户对齐）**：展开态完整工具栏里的 **字号 / 颜色 / 背景 / 对齐 / 行高 / 删除线 /
+     缩进 / 素材库 / 大纲** 这些，卡片预览还原不了（内容不丢，只是卡片里看不到这些样式）——用户口径是
+     「除了 + 号里的内容都可以实现预览」，实际这几项不在预览覆盖内；要收掉随时说。
+   - 另：图片/待办用标准项 `image` / `taskList`（note 专用图标是语雀私有 symbol，本地会空白）。
+   - 门禁：`tsc` 0 · `vitest` **1053 passed / 16 skipped** · 桌面 + 移动 build 全绿 ·
+     `check:bundle` app-js 1.83MB/2.90MB · `check:core` 0 · `git diff --check` 干净。
+10. **第八轮（用户 260919 四条反馈）**：
+   - **#4 全屏错乱（真 bug，已修）**：内核 `.ne-ui-fullscreen` 是 `position:fixed;inset:0;z-index:1000`
+     （"无外壳编辑器"口径）⇒ 在小记里展开会盖住红绿灯/顶栏/侧栏，且退出按钮落在窗口右上角、难以收起。
+     修法（`src/styles/app/quick-notes.css`）：`.quick-notes-pane` 加 `position: relative`，
+     把 `.lake-editor-mount.ne-ui-fullscreen` 限定为**面板内绝对定位**（`inset:0; z-index:30`），
+     `.ne-ui-exit-fullscreen` 随之改为面板内右上角（`absolute; top/right:6px`）。实测：展开后顶栏/红绿灯可见、
+     退出按钮可点、收起回到小卡片 ✓（与文档侧 `.ne-ui-max-view` 的适配同款）。
+   - **#2 展开态每一项都要能预览（已做）**：新增这些格式的解析与渲染（fixture 全部取自真实内核输出）：
+     删除线 `<del>`、字号 `class="lake-fontsize-N"`、颜色/背景 `style="color|background-color: …"`（可嵌套）、
+     对齐 `style="text-align: …"`、行高 `class="lake-lineheight-N"`、缩进 `<ul data-lake-indent="N">`（列表左缩进）。
+     ⚠️ 仍**不覆盖**：`materialLibrary`（素材库）、`toc`（大纲）→ 在卡片里显示占位条（用户口径：大纲可做可不做）。
+   - **#1「不全量注册会不会更省内存」——结论：省不了什么，不建议为省内存摘注册**：
+     重模块（mermaid/flowchart/@viz-js/Drawnix）本来就是懒加载或文档侧已加载（进程内共享），
+     注册本身只是 class/registry 引用（几十 KB 级/实例），而小记同时只挂 1 个实例。
+     **唯一的取舍**是：摘掉注册后，粘贴进来的表格/卡片会在保存时被**静默丢弃**（§5.8 的坑）。
+     ⇒ 保持现状（注册全量、"不给插"只做在「+」面板与工具条上）。
+   - **#3 移动端复用这套能力**：已记入待办（§3 第 15 条），后期按移动端工具条形态调整。
+   - 门禁：`tsc` 0 · `vitest` **1054 passed / 16 skipped** · 桌面 + 移动 build 全绿 ·
+     `check:bundle` app-js 1.83MB/2.90MB · `check:core` 0 · `git diff --check` 干净。
+11. **第九轮（用户 260919 五条反馈）**：
+   - **#1 输入一个字就整片空白 + #2 编辑态顶部大空白 —— 同一根因：小记编辑器没关虚拟渲染。**
+     虚拟渲染靠 `scrollNode` 量视口，小记没有 Lake 内部滚动容器（fallback 到 `.document-pane` 会量错）
+     ⇒ 正文被换成 `.ne-virtual-render-placeholder`（实测顶部被顶下 190px；一输入触发重渲染就整片变占位）。
+     修法：`QuickNoteEditor` 传 `disableVirtualRendering: true`（与移动端当年的同款处置，§8.8）。
+     实测：占位节点归零、内容从顶部开始、输入正常落字 ✓。
+   - **#4 切换小记总弹「是否放弃编辑」+ 无改动也触发同步 —— 脏判定错了。** 从前 `dirty = hasDraftContent()`
+     ⇒ 编辑一条**本来就有内容**的小记 → 永远"脏" ⇒ 切来切去都弹窗、还每次重写正文（`sync_state` 被打回
+     `local` → 平白触发 S3）。修法：`DraftState.baseline`（载入时的 text/body/资源数）做**基线比较**；
+     切换小记/新建/离开小记页一律**默认保存**（不再弹窗）；保存前若**正文与基线一致**则**直接退出编辑态、
+     不发任何 IPC**。实测：编辑→切另一条 → 无弹窗、三条小记的 `updatedAt` 全部未变（未写库、未触发同步）✓。
+   - **#3 卡片预览里的待办可点**：解析器给每个待办项带 `checkboxIndex`（正文里第 N 个 checkbox 卡），
+     新增纯函数 `toggleTaskInBody(body, index, checked)` 精确翻转那一个卡片值；卡片里点复选框 → 走既有
+     `updateQuickNote`（正文/资源/同步链路一致）→ 就地刷新该卡片。实测：点第一项 → 变勾选、正文出现
+     `data:true` ✓。用户口径：预览只做这一个交互。
+   - **#5 卡片「收起/展开」**：预览超过 220px 自动收起（底部渐变遮罩）+「展开/收起」按钮（复用 `.quick-note-link`
+     风格的 `.quick-note-preview-toggle`），ResizeObserver 自动判断是否需要收起。实测：收起 220px / 展开 857px /
+     可反复切换 ✓。
+   - 门禁：`tsc` 0 · `vitest` **1055 passed / 16 skipped** · 桌面 + 移动 build 全绿 ·
+     `check:bundle` app-js 1.83MB/2.90MB · `check:core` 0 · `git diff --check` 干净。
+12. **第十轮（用户 260919：列表页对齐云端小记）**：用 browser-skill 观察了 `https://www.yuque.com/dashboard/notes`
+    的列表视图后按同款结构补齐 UI（功能全部复用分块视图已有动作，未新增能力）：
+    - **标题行**：右侧「**新建小记**」按钮（绿色羽毛 + 号，对齐云端图3）→ 切到右侧编辑器的新建草稿。
+    - **筛选行**（对齐云端）：左侧「**标签 ▾ = 全部**」（点击提示"分组功能后期做"）+ 右侧条数/排序；
+      按用户口径**标签暂固定「全部」**。
+    - **行**：复选框（hover / 选中态 / 批量模式显形，对齐云端）+ 标题 + 时间；hover 出现「⋯」，
+      菜单 = **编辑 · 复制文本 · 转为正式笔记 · 删除**（云端那套里我们没有的：置顶/分享/添加标签/归档/
+      查看历史/复制链接——「复制链接」按本地语义换成了**复制文本**；**置顶是新增能力，需 pin 标记 + 同步协议，
+      本轮未做，等用户决定**）。
+    - **批量条**（对齐云端图1）：复选框(全选) + 「N 篇」+ 取消 + 右侧图标动作「转为正式文档 / 批量删除」。
+      列表视图不再复用卡片视图顶部那条多选工具（避免两处重复）。
+    - 门禁：`tsc` 0 · `vitest` **1055 passed / 16 skipped** · 桌面 + 移动 build 全绿 ·
+      `check:bundle` app-js 1.83MB/2.90MB · `check:core` 0 · `git diff --check` 干净。
+13. **第十一轮（用户 260919 三条补充）**：
+   - **#1 置顶改成纯本地（已实现）+ 代码核查结论**：小记的同步清单只带
+     `{id, createdAt, updatedAt, contentHash, isConflict, images}`，**没有任何顺序/置顶字段**；
+     排序是各端本机偏好（桌面存 localStorage、移动端按 `updated_at`）⇒ **顺序本来就不跨端**，
+     所以置顶**不写 manifest、不进 S3**：存在 `localStorage: lake-notes-v3.quick-notes-pinned`，
+     排序时置顶组优先、组内再按所选顺序。行内 ⋯ 菜单加「置顶 / 取消置顶」。实测：置顶某条后它跳到置顶组内 ✓。
+   - **#2 列表页右侧直接用文档式完整编辑器**：新增 prefs `quickNoteUi: "card" | "full"`
+     （取代原 `restrictedFormats: boolean`）——`card`＝分块视图的小卡片（最小工具条 + 展开）；
+     `full`＝列表视图右侧**直接完整工具栏、无展开按钮、文档样式**（实测 27 个按钮，非 note 版式）。
+     两者都只收「+」面板白名单、都不挂第二个内核实例（同一时刻只有一个）。
+   - **#3 列表行不再横向滚动**：行标题改用主进程已算好的 `previewText` **只取前 10 个字**（+ 省略号，
+     并剥掉内核 text/plain 的待办前缀 `[ ]`），不再整段渲染再靠 CSS 省略；索引列加宽到 220–300px，
+     `.quick-notes-index` 加 `overflow-x: hidden`。
+   - 门禁：`tsc` 0 · `vitest` **1055 passed / 16 skipped** · 桌面 + 移动 build 全绿 ·
+     `check:bundle` app-js 1.83MB/2.90MB · `check:core` 0 · `git diff --check` 干净。
+14. **第十二轮（用户 260919：列表页点条目打不开 + 弹「请至少记录文字或一张图片」）—— 已修**：
+   根因是**空草稿的文本镜像噪声**：内核空文档的 `text/plain` 是 `"\uFEFF\n"`（零宽 BOM + 换行），
+    脏判定用字符串全等比较 ⇒ 没动过的新草稿被判成"脏" ⇒ 点列表里某条时先走"切换前保存"
+      ⇒ `saveDraft` 又按 `hasDraftContent()`（trim 后为空）判空并**报错 + 中止切换** ⇒ 条目打不开。
+    修法两处：① `isDraftDirty` 前先做**去噪归一**（剥 `\uFEFF`/`\u200B` 再 trim）；
+    ② 新增 `saveBeforeSwitch()`：**空白草稿直接放行**（不写库、不报错），只有真有内容才走 `saveDraft`；
+    三处切换入口（点条目 / 新建小记 / 离开小记页）统一走它。实测：连点三条都正常打开、无报错；
+    「打字后切走」仍会正确保存那一篇（`updatedAt` 变化，只动被编辑的那条）✓。
+15. **第十三轮（用户 260919 两条微调）**：
+   - **列表页进来默认选中第一条**：进列表视图 / 首次加载时若没有正在编辑的小记，自动打开第一条
+     （没有小记则保持空态）——这样进来就是「左列表 + 右内容」，不再是一张空白编辑器。
+     ⚠️ 副作用：在列表页点「取消」会立刻重新打开同一条（= 放弃改动后回到已保存状态），符合"默认选中"的口径。
+   - **去掉列表页右侧编辑器的卡片边框/圆角**（`.quick-notes-detail .quick-note-composer { border:0; border-radius:0; padding:0 }`），
+     编辑器直接铺开、更贴近文档页观感（用户要求先看效果，不满意可以一行回退）。
+   - 门禁：`tsc` 0 · `vitest` **1055 passed / 16 skipped** · 桌面 + 移动 build 全绿 ·
+     `check:bundle` app-js 1.83MB/2.90MB · `check:core` 0 · `git diff --check` 干净。
+16. **待用户点验**（真机/真实键鼠）：列表页（新建小记按钮 / 标签行 / 行内复选框与 ⋯ 菜单（含置顶）/ 批量条）、
+    列表页点击条目打开与切换、
+    列表页右侧的文档式编辑器、
+    编辑小记（打字/换行/列表/待办）、切换小记不再弹窗且未改动不写库、卡片预览勾选待办、卡片收起/展开、
+    小卡片工具条与展开后的完整工具栏（含收起）、「+」面板、两端版式切换、贴完立刻保存、⌘Enter 发布；
+    **顺带确认文档页一切照旧**。
+17. **第十四轮（用户 260920：「编辑小记的保存/取消都在角落里太偏僻，优化位置」）—— 已改**：
+    截图是**块状视图（小记视图）左侧写作卡展开后**：保存被 `flex:1` 的空白占位顶到卡片最左、取消甩到最右。
+    - **动作行按版式分组**（`QuickNoteComposer` + `.quick-note-composer-actions--{pane,inline}`）：
+      写作卡（pane）= `[小记一下] [取消] 按 ⌘ Enter 发布｜可拖入或粘贴图片` 靠左成组（取消紧跟主按钮）；
+      编辑既有小记（inline）= `[取消] [保存]` 整组靠右下（对话框底栏惯例）。**删掉 `.quick-note-action-spacer`**。
+    - **「取消」升为次级描边按钮**（`.quick-note-composer-actions .quick-note-discard`，选择器带父级压过 b3 的
+      `.b3-button` 边框）；卡片内编辑补页脚内边距 `.quick-note-entry.editing .quick-note-composer-actions`。
+    - **修掉一个连带 bug：展开态点不到保存/取消**。`.ne-ui-fullscreen` 的定位基准（`.quick-notes-pane` /
+      卡片 `.quick-note-entry`）**正好就是动作行所在的盒子**，`z-index:30` 把动作行整个盖住 ⇒
+      展开后「保存/取消」既看不见也点不到（`elementsFromPoint` 实测命中的是编辑器内部节点）。
+      修：`.quick-notes-compose|.quick-notes-detail|.quick-note-entry.editing:has(.ne-ui-fullscreen)`
+      下把动作行改成 `position:absolute; right:16px; bottom:14px; z-index:31` 的浮层页脚（展开态提示文案隐去）。
+      ⇒ 展开后按钮浮在编辑器右下角，实测可点。`cdp` 实测四种状态：写作卡（常态/展开）、卡片内编辑（常态/展开）、
+      列表页右侧编辑器，按钮均可见且可点。
+    - 门禁：`tsc` 0 · `vitest` **1055 passed / 16 skipped** · 桌面 + 移动 build 全绿 ·
+      `check:bundle` app-js 1.83MB/2.90MB · `check:core` 0 · `git diff --check` 干净；
+      CSS 围栏基线 `styles/app/quick-notes.css` 532 → **547**（动作行 +4、展开态浮层 +11）。
+18. **第十五轮（用户 260920：先报「列表页第一次打开小记、右侧编辑器左右宽度不适配，换一条就正常」+ 要求本批代码自审）**：
+    自审发现并修掉 **4 个真 bug**（都有实测证据），另做了一批整洁化。
+    - **① 首次打开宽度错乱（用户报的现象，根因已定位）**：内核的「工具条塞不下就折叠进 ⋯」**只在实例创建时算一次**，
+      之后不随容器宽度重算（实测容器 1015px 时 `.ne-ui-toolbar` 内容 1064px、`.ne-editor` 横向溢出 76px；
+      容器 0→1015 后不重算，派发 `window resize` 也不重算，只有换条目=重建实例才正常）。
+      而小记工作区是 App 的 keep-alive 视图（`display:none` ⇒ **0 宽**），启动时就把列表页的编辑器建出来了 ⇒
+      实例按 0 宽度算死布局。**修**：`App.tsx` 已在传 `visible={desktopWorkspace === "quick-notes"}` 的先例，
+      现在一路透传到 `QuickNoteEditor.active`，**首次可见后才建内核实例**；且用「见过一次可见」的闩，
+      隐藏时**不卸载**（卸载会用陈旧 `initialBody` 重建 ⇒ 丢正在写的正文）。
+      实测：冷启动（列表版式）隐藏时 **0 个内核实例**；点开小记 → 工具条 `961/961`、编辑器 `1015/1015`（修前 `961/1064`、`1015/1091`）。
+      ⚠️ 同源风险：文档页的隐藏标签（`EditorTab` 用 `display:none`）理论上也可能踩这个坑，本批未动（见 §3 待办）。
+    - **② 视频/音频卡在卡片预览里显示「附件（资源缺失）」**：内核卡片 value 的字段名**按卡类型不同** ——
+      图片/附件卡 `src`、**视频块卡 `url`**、**音频卡 `audioId`**（=canonical URL）；展示名：附件卡 `name`、音频卡 `fileName`。
+      旧解析只读 `src` ⇒ 一条实测小记 9 个资源只认出 1 个。**修**：三字段取一 + 用卡里的原始展示名做文件条文案
+      （修后同一 fixture **9/9 命中**，见 `quickNotePreview.test.ts` 新增用例）。
+    - **③ 段落里文字与行内卡混排时卡片被整段丢掉**：「先打字、再点图片/附件」产出的正文就是
+      `<p><span>文字</span><card image/><card file/></p>`（真实采样），旧实现只在"段落里只有一张卡"时才当媒体渲染
+      ⇒ 图片/附件静默消失（用户上一轮「附件卡片展示不对」的另一个真因）。**修**：按卡切分段落，文字与媒体各自成节点。
+    - **④ 写作卡的「取消」会误关右侧正在编辑的小记**：`cancelDraft()` 用的是 `activeDraft = editingDraft ?? createDraft`
+      （save 路径 260919 已修过同一个坑，cancel 漏了）⇒ 块状视图里点左侧「取消」，被取消的是右边那条。
+      **修**：`cancelDraft(draft)` 由点击的那个 composer 传自己那份；顺带清掉该草稿的 staging 登记。
+      实测：点左侧取消后卡片仍处于编辑态、卡片草稿 id 不变，写作卡自己换成新草稿 id。
+    - **整洁化**：删掉随「卡片预览改自研渲染」废弃的三套 CSS（`.quick-note-image-grid` / `-saved-images` /
+      `-saved-media`，含 `b3/dark.css` 里的深色覆盖）与两个未使用 import；`hasDraftContent` 的报错文案与模型口径统一
+      （"文字、一张图片或一个附件"）；`waitForPendingUploads` 注释 8s→15s（代码本来就是 15s）。
+      CSS 围栏基线：`styles/app/quick-notes.css` 547 → **499**、`b3/dark.css` 55 → **54**。
+    - 门禁（本轮改完复跑）：`tsc` 0 · `vitest` **1057 passed / 16 skipped** · 桌面 + 移动 build 全绿 ·
+      `check:bundle` app-js 1.83MB/2.90MB · `check:core` 0 · `git diff --check` 干净。
+    - **自审里"看到但本批没改"的项（留作待办，见 §3）**：小记附件走 `Array.from(bytes)` 的 number[] IPC（大文件内存/耗时）；
+      永久 pending 的媒体卡会让该条小记**无法保存**（等 15s 后报错，弱网/中断场景）；`DEFAULT_TOOLBAR_ITEMS` 是内核默认的硬拷贝
+      （内核升级会静默漂移）；「+」面板白名单只有代码级证据（本机合成点击打不开内核面板，未做 UI 实测）；
+      展开态工具栏的「…」溢出菜单仍可能给出表格/代码块等插入入口（用户只要求收「+」面板）。
+19. **第十六轮（用户 260920 逐条回复上轮自审 + 报「附件没转成视频卡」「展开后 UI 乱」）**：
+    - **① 附件按类型成卡：小记漏挂路由（真 bug，已修）**。内核「附件」路径是
+      `insertFiles(files,{from:'ui',category:'file'})` ⇒ 一律 file 卡；按类型分发（音频/视频/图片 → 原生卡）
+      的路由 `src/features/editor/mediaCardRouting.ts` **文档侧与移动端各自装了，小记这套新编辑器当时漏挂**
+      ⇒ 小记里 mp4 只是附件条，而卡片预览按 MIME 渲染出可播放视频（用户截图 1 vs 2 的不一致根因）。
+      修：`QuickNoteEditor` 里 `installMediaCardCategoryRouter(editor)` + 卸载 detach。
+      **实测**（小记编辑器内直接走附件路径 `insertFiles(...,{category:'file'})`）：mp4→`video` 卡、mp3→`audio` 卡、
+      png→`image` 卡、pdf→`file` 卡 ✓（用户截图里那条老小记的附件是**修前**写进去的 file 卡，不会自动改写）。
+    - **② IPC 传字节不再 `Array.from`（真问题，已修）**：`saveResource` 收到的 `input.bytes` 本就是 `Uint8Array`，
+      早前沿用旧图片路径转成了 `number[]` ⇒ 附件上限 100MiB 时凭空多出几百 MB 的 JS 数组。
+      现原样走结构化克隆；`QuickNoteStageInput` / `QuickNoteImageInput` / IPC 校验都改成「`Uint8Array` 或 `number[]`」
+      （移动端 HTTP JSON 仍是数组，两条路都通）。
+    - **③ 工具条入口再收两个（用户「5 也需要收一下」）**：小记展开态工具条 = 内核默认项 **减去 `toc` / `materialLibrary`**
+      （`QUICK_NOTE_FULL_TOOLBAR_ITEMS`）——这两个能往正文插预览还原不了的块。核对过：工具栏的「…」溢出菜单
+      `content: props.widgets` 就是同一批 items（bundle 实测），所以从 items 去掉，溢出里同时消失；文档页不受影响。
+    - **④ 分块视图「卡片展开」UI 乱（真 bug，已修）**：`.ne-ui-fullscreen` 是 `position:absolute; inset:0`，
+      而卡片 `.quick-note-entry` 是 `position:relative` ⇒ 展开只覆盖卡片那一小块（793×274），工具条挤成溢出、
+      页脚动作行压正文（用户截图 3）。修：展开期间 `.quick-note-entry.editing:has(.ne-ui-fullscreen){position:static}`
+      ⇒ 展开层 + 页脚都落到小记面板（1375×810 实测），工具条 `1285/1285` 不再溢出，右下角「取消/保存」浮层不压内容。
+    - **⑤ 用户对"内核默认工具栏硬拷贝"表示接受**（漂移 = 跟着内核升级对齐，不算问题）⇒ 不改，本轮只补注释说明。
+    - **⑥ 文档页隐藏标签的"0 宽创建"风险：实测当前不可达**。`EditorTab` 确实用 `display:none` 隐藏非活动标签、
+      且它的补丁只在可见时做 hydration（`requestCardHydration` / codeblock heal），**不重算工具条布局**；
+      但文档标签只在**打开时**创建（那一刻就是活动的），重启只会恢复**当前活动标签**（实测：5 个标签重启后只剩活动那个）
+      ⇒ 现状不会出现"隐藏里创建"。**若以后加"后台打开标签 / 全量恢复标签"，必须照小记这样加可见性闩**，
+      否则会复现同款工具条/布局错乱。
+    - 门禁（本轮）：`tsc` 0 · `vitest` **1061 passed / 16 skipped** · 桌面 + 移动 build 全绿 ·
+      `check:bundle` app-js 1.83MB/2.90MB · `check:core` 0 · `git diff --check` 干净；
+      CSS 围栏基线 `styles/app/quick-notes.css` 499 → **507**。
+20. **第十七轮（用户 260920：附件路由对齐文档 + 报「点保存反复闪、退不出去」）**：
+    - **① 附件按类型成卡：文档侧本来就是这套逻辑**（`EditorTab` 装 `installMediaCardCategoryRouter`，移动端同款实现），
+      小记上一轮已改成**复用它**（同一个模块，不是另写一套）⇒ 这条不需要再动。
+    - **② 点保存反复闪、退不出去（真 bug，已修）**：**只在列表视图**出现。`saveDraft` 存成功后关掉编辑态，
+      而列表视图的"默认选中第一条"兜底（用户 260919 要求）立刻又把该条重新打开 ⇒ **两次提交 = 连拆两次内核编辑器**
+      （先换回"新建小记"面板、再重开该条）⇒ DOM 变更实测 **103 次**，肉眼一闪一闪且看起来"保存退不出去"。
+      修法：列表视图保存后**留在编辑器里**（云端语义：右侧始终是打开的那条），只把基线刷成刚存下的内容 ——
+      统一收口到 `settleAfterSave()`（⚠️ **"没改动不写库"的早退分支也必须走它**：第一版只改了真保存那条，实测仍在闪）；
+      取消同理：列表视图**原地重开**该条（一次提交）。实测：保存 DOM 变更 **103 → 7/8 次**、草稿 id 不变；
+      再点一次保存 `updatedAt` 不变（没改动不写库）；分块视图保存仍照旧关闭编辑态（回归通过）。
+    - **③ 展开态下的反馈被展开层盖住（真隐患，已修）**：错误条/提示条是面板里的普通流内容，而展开层铺满面板且
+      `z-index:30` ⇒ 一旦保存失败，用户只看到按钮闪、看不到原因。修：展开态把 `.quick-notes-error` / `.quick-notes-hint`
+      抬到 `z-index:32`，并改成贴面板左下角的浮层（与右下角动作行成一对）。
+    - **⚠️ 本轮踩的坑（写下来别再犯）**：① **`window.lakeNative`（contextBridge）对象是冻结的**，
+      `bridge.xxx = ...` 静默失败 ⇒ 想"注入失败"做实验时执行的是**真实保存**，把测试字写进了用户小记
+      （已用同一套 IPC 精确回滚：删掉插入的 `<span>Z</span>` + 还原 text，三份资源与正文逐字核对一致）。
+      要造失败场景请走真实路径（超限/断网）或临时改渲染层代码。② dev 实例是**用户与自动化共用**的：
+      在同一实例上跑 CDP 点击会污染用户的操作与录屏（用户 01:16 的 gif 里"视图来回切换"就是我点击造成的）——
+      只读排查没问题，**会点 UI 的实验要先和用户错开**。
+21. **第十八轮（用户 260920 回：「没报错，还是闪烁无法保存，连取消都取消不了了」）—— 真凶找到并修掉**：
+    - 上一轮修的"列表视图保存后连拆两次编辑器"是真问题，但**不是**用户看到的那一条。这轮从**日志**里抓到关键证据：
+      `~/Library/Application Support/lake-notes-dev/logs/lake-notes.log`（以及 dev 终端）在 01:25:19–01:25:30 连续出现
+      **20+ 条** `Uncaught TypeError: Cannot read properties of undefined (reading 'undo'/'redo'/…/'hr'/'slash')`，
+      **每个工具项一条**。
+    - 根因（内核行为）：hotkey 插件 `destroy()` 里 `delete this._named`（bundle ~154560），而工具条按钮渲染时必调
+      `getTooltip → renderer.getHotKeyByName(name) → this._named[name]`（~112132 / ~154613）⇒ **实例销毁后再渲染一次**
+      就抛错；且插件先于 hub 销毁 ⇒ `hasExtendMethod("getHotKeyByName")` 仍为 true ⇒ 每次渲染都再抛一次。
+      这是 **React 渲染期抛错**：整棵工具条→整个小记面板崩掉并反复重试 ⇒ 用户看到"面板反复闪 + 保存/取消/取消都点不动"。
+      我们的生命周期里"销毁旧实例 + 重建"是常态（切草稿/换条目/保存后重建），所以很容易踩到。
+    - **修法**：`createLakeDocument` 里对每个实例装 `hardenDestroyedHotKeyLookup(editor)` —— 给
+      `renderer.getHotKeyByName` 包一层 `try/catch → null`（迟到的渲染只丢一个快捷键提示，不再炸 UI）。
+      挂在共用入口而不是只挂小记：文档侧同样有销毁/重建路径。
+    - **实测**：脚本化压力（列表视图连续 保存→取消→换条目 ×5）错误数 **41 → 0**；分块视图（编辑→展开→保存→编辑→取消 ×4）
+      也是 **0**，面板全程存活、保存/取消都生效。日志里那串错误是**每条工具项一条**，以后排查"闪+按钮失灵"先看这个特征。
+22. **第十九轮（用户 260920 补全复现路径：「块状小记 → 编辑 → 右上角全屏 → 点保存/取消」；这才定位到真凶）**：
+    - 前面两轮（列表视图连拆两次编辑器 / 热键补丁）都是**真问题但不是这条**。这轮按用户路径逐步采样，抓到决定性证据：
+      **真鼠标**点「保存」时 `mousedown` 落在按钮上、`mouseup` 时同一点已经变成卡片（`click` 派发到共同祖先
+      `quick-notes-timeline`，按钮 onClick 永不触发）；逐帧采样显示展开层高度 **810 → 约 220 → 810**（约 150ms）。
+    - **真凶（CSS 规范级）**：`.ne-ui-fullscreen` 是 `position:absolute; inset:0`，按最近定位祖先定位；而
+      **`transform` 会让元素成为绝对定位后代的定位基准**（即使 `position:static`）。我们卡片有按压缩放
+      `src/styles/quick-notes.css` 的 `.quick-note-entry:active{transform:scale(.98)}` ⇒ **按下鼠标那一瞬**
+      卡片成了定位基准 ⇒ 展开层塌回卡片大小、鼠标下的按钮跑掉 ⇒ 真鼠标点不动 + 面板闪。
+      实测抖动帧里卡片 computed transform = `matrix(0.992536, ...)`，`classList` 钩子显示 fullscreen 类**根本没被切换**。
+    - **修法**：编辑态卡片禁止按压缩放（`.quick-note-entry.editing, .quick-note-entry.editing:active { transform: none }`）。
+    - **实测（全部真鼠标 CDP 事件）**：块状小记→编辑→全屏→点保存：`clickHandlerFired=1`、`editing=false`、回到卡片列表 ✓；
+      点取消：`cancelHandlerFired=1`、`editing=false`、卡片数与内容不变 ✓；帧采样 406 帧只有**一个**稳定状态（不再抖）；
+      列表视图真鼠标点保存/取消：草稿 id 分别**不变**（原地留存）/换新（原地重开），均无报错 ✓。
+    - **教训（写给下个会话）**：① **合成 `.click()` 绕过命中测试** —— 任何"点了没反应"的问题必须用真鼠标事件
+      （`Input.dispatchMouseEvent`）复现，否则会误判成"已修好"；② 自定义 UI 贴在内核展开层旁边时，先量**祖先的
+      computed transform/filter/perspective/contain**；③ 逐帧采样（rAF）+ `elementFromPoint` 对比 mousedown/mouseup
+      是定位这类"按钮从鼠标下跑掉"的最快手段。
+23. **第二十轮（用户 260920：「永久 pending 我给了方案了，看文档那边怎么做的，复用就行」）—— 已按文档口径重写保存策略**：
+    - **先查文档侧**：`useWorkspaceState` / `EditorTab` / `MultiTabEditor` 里**没有任何 pending/uploading 判断**（命中的
+      `pendingChanges`/`pendingDispose`/`heal.pending` 都与上传无关）⇒ **文档保存从不因为"卡还在上传中"而等待或拒绝**，
+      正文原样存下（两阶段卡：内核先落 `status:"pending"` + `url:null`，上传完再回填）。
+    - **小记改法**（`saveDraft` 三处）：
+      ① 只有**本会话真的在传**（`pendingUploadsRef.current > 0`）才等上传落地（最多 15s），等不到也**不再拒绝**、只提示；
+      ② 正文里有 pending 卡：有上传在传→等满；没有在传→只在"**刚上传完 2s 内**"等 1.2s 收尾窗口
+      （`lastUploadSettledAtRef`，覆盖"内核回填 url"那几十毫秒，防止把 `url:null` 写进正文 = 260919 那个"一编辑就消失"复发），
+      否则**直接存**；存完若卡仍是 pending → `setViewHint("有媒体还没上传完，已按当前内容保存")`（**不再 return false**）；
+      ③ 暂存文件没落进正文同理：只提示"有 N 个附件还没落到正文，已按当前内容保存"，不再拒绝保存。
+    - **实测**（造一条带 pending 死卡的小记，`createQuickNote` 直接写 `status:pending/url:null` 的 video 卡）：
+      点保存 → **编辑器正常退出**（原来会卡死在编辑器里出不来）、耗时 ~1s（不再是 15s 阻塞）、
+      提示 `有媒体还没上传完，已按当前内容保存`、**卡片原样保留**（与文档一致）、零报错；用完已删掉该测试小记。
+    - **测试环境坑（写下来）**：窗口在后台时 `document.visibilityState === "hidden"` ⇒ Chromium **丢弃 CDP 合成鼠标输入**
+      并节流 rAF（document 级监听一个事件都收不到）。所以"真鼠标点击没反应"必须**先确认窗口在前台**
+      （本会话就因此误判过一次）；验证保存策略本身可以用 DOM `.click()`，但验证命中/几何必须真鼠标 + 前台窗口。
+
+**四、交接要点**
+
+- 小记版式的机制与两个坑：`docs/LAKEX-CONTRACT.md` **§5.11**（改这块前先读）。
+- 判据（note 版式是否真生效）：`.ne-editor` 有 `ne-note-ui` + `.ne-ui-enter-fullscreen` 有子节点 +
+  工具条 `data-toolbar-name="note"`；任一不满足 = `document.ready` 没来或 toolbar 配置被整体替换。
+- **别用** note 专用图标项（`note-image` / `notetaskList` / `note-file`）：语雀 App 私有 symbol，本地渲染为空白按钮。
+- `note-file`（附件）**必须用**（file 插件没有别的工具项）⇒ 用 `ensureNoteFileIcon()` 自补 symbol；
+  改工具条后先看 `.ne-ui-toolbar[data-toolbar-name="note"]` 里每个按钮的 `<use href>` 是否命中 symbol。
+
+---
+
+## 2.11 本会话总交接（260920 · 小记内核化收尾：附件路由 / 预览保真 / 展开层与保存策略）——新会话从这里读
+
+> **给零上下文的新会话**：先读本段的「一 ~ 五」，需要细节再回 §2.10 / §2.10 续做 / §5.11 / §5.12。
+> 本会话所有改动**已提交并推送到 origin/master**（见 §六 的 commit 记录）。
+
+### 一、任务目标（用户口径，原话要点）
+
+1. **小记（Quick Notes）底层换用 Lake 内核**，功能仿照语雀云端小记（`https://www.yuque.com/dashboard/notes`）：
+   - **默认是一小块写作卡**（图片 · 待办 · 有序 · 无序 · 分割线），**也能展开成完整 Lake 编辑器**做完整功能；
+   - 列表视图右侧**直接复用文档样式的完整编辑器**（不挂小框、也不每卡一个内核实例）；
+   - 上传附件要**接入"附件按类型成卡"的能力**：视频→视频卡、音频→音频卡、图片→图片卡，其它保持附件卡（**对齐文档侧**）。
+2. **不做标签/分组，不额外增加功能**；只把我们已有的功能对齐样式与细节。
+3. **绝对不能影响文档**；小记数据独立存放（`quick-notes/` 前缀 + `.qnote`），顺序/置顶等展示偏好只存本机 localStorage、不进 S3。
+
+### 二、已完成（本会话与上一段 §2.10 续做合起来的最终形态）
+
+**A. 编辑态（内核）**
+- 小记编辑器 = **Lake 文档编辑器外观**（同一套内核），只用**两个白名单**收窄入口：
+  小卡片工具条 `QUICK_NOTE_TOOLBAR_ITEMS`（图片/待办/有序/无序/分割线）；「+」插入面板 `slash.filterOption = filterQuickNoteInsert`
+  （`src/features/quickNotes/quickNoteInsertFilter.ts`）。**卡片注册保持全量**（摘了会让老内容里的表格/自定义卡一编辑就被内核丢弃，见 §5.8）。
+- 列表视图的编辑器直接用**完整默认工具栏**；展开态工具栏 = 内核默认项**减去 `toc`/`materialLibrary`**
+  （`QUICK_NOTE_FULL_TOOLBAR_ITEMS`，这两个能插预览还原不了的块；「…」溢出菜单就是同一批 items，收 items 即收它）。
+- 展开 = 内核 fullscreen：限定在小记面板内（`position:absolute; inset:0; z-index:30`），退出按钮在面板右上角；
+  分块视图的**编辑卡片常驻 `position:static`**（否则展开层只覆盖卡片那一小块）+ **编辑态禁止按压缩放**（见坑 3）。
+- 展开态把「取消/保存」浮层（z-index 31）与错误/提示条浮层（z-index 32）都抬到展开层之上，贴面板右下/左下角。
+- **隐藏视图不建内核实例**：`App.tsx` 的 `visible={desktopWorkspace === "quick-notes"}` → `DesktopQuickNotes` → `QuickNotesWorkspace`
+  → `QuickNoteComposer.active` → `QuickNoteEditor`（`everActive` 闩：首次可见后建实例，之后隐藏不销毁）。
+
+**B. 卡片预览（自研只读渲染，零内核实例）**
+- `src/features/quickNotes/quickNotePreviewParser.ts` + `QuickNotePreview.tsx`：按 `body` 解析白名单块
+  （段落/标题 H1-H6/有序无序列表/待办/引用/分割线/行内格式：加粗·斜体·下划线·删除线·行内代码·链接·字号·颜色·背景·对齐·行高·缩进/媒体卡）。
+  白名单外的块显示占位条；**绝不改写原文**。
+- 媒体卡字段**按卡类型不同**：图片/附件 `src`、**视频块卡 `url`**、**音频卡 `audioId`**；展示名 `name`/`fileName`（坑 6）。
+- 行内媒体卡常与文字同段（`splitParagraphCards` 按卡切开，历史 bug：整段被丢）；超长卡片默认收起 220px + 「展开/收起」；
+  图片点击放大（复用 Lightbox）；**待办可点**（`toggleTaskInBody` 精确翻转正文里第 N 个 checkbox 卡）。
+
+**C. 附件链路**
+- **附件按类型成卡**：小记编辑器挂 `installMediaCardCategoryRouter(editor)`（与文档 `EditorTab`、移动端**同一个模块**，本轮只是把漏挂补上）。
+  实测：mp4→`video` 卡、mp3→`audio` 卡、png→`image` 卡、pdf→`file` 卡。
+- 附件与图片共用 staging/promote：`stageQuickNoteFile`（附件，协议上限 100MiB、宽高 null）与 `stageQuickNoteImage`（图片，25MiB、走 sharp 校验）。
+- IPC 传字节统一用 **`Uint8Array`**（`QuickNoteStageInput`；`Array.from(number[])` 会让 100MiB 附件凭空多出几百 MB 数组）；移动端 HTTP 仍传数组，两条路都收。
+- 资源清单**以正文引用为准**（`body.includes(filename)`）：补齐"卡已在正文、id 还没到"，并清掉"编辑器里删了卡但清单还在"的幽灵资源。
+
+**D. 数据与保存**
+- `.qnote` v2：`{ version:2, text(纯文本镜像), body(内核 lake 标记), images(资源清单，允许非图片/附件宽高 null) }`。
+- 保存策略（**本轮按文档侧口径重写**，见坑 7）：只有**本会话真的在传**的上传才等（15s 上限）；正文里若有**历史遗留的 pending 死卡** ⇒ **照存 + 一行提示**，绝不拒绝/锁死编辑器；"刚上传完 2s 内"保留 1.2s 收尾窗口（防把 `url:null` 写进正文）。
+- `settleAfterSave`：**列表视图保存后留在编辑器里**（原地刷基线，对齐云端右侧常开）；分块视图保存后关闭回到卡片列表；取消在列表视图＝原地重开该条。
+- **没改动就不写库**（与基线比正文 + 资源数）；避免"点开编辑再切走"平白触发 S3。
+- 「小记 → 正式文档」= 正文搬运 + 资源作用域改写（`convertQuickNoteToLake`），本轮未回归验证。
+
+**E. 列表视图（对齐云端）**
+索引列（标题**只取前 10 字** + 时间）、右侧文档式编辑器、默认选中第一条、标签行固定「全部」、行内 ⋯ 菜单（置顶/取消置顶 · 编辑 · 复制文本 · 转为正式笔记 · 删除）、批量条（全选 + N 篇 + 取消 + 转为正式文档/批量删除）。
+置顶**纯本地**（`localStorage: lake-notes-v3.quick-notes-pinned`，顺序不跨端，已核查同步清单只带 `{id,createdAt,updatedAt,contentHash,isConflict,images}`）。
+
+**F. 内核兼容补丁（挂在共用入口 `createLakeDocument`，文档同样受益）**
+`hardenDestroyedHotKeyLookup(editor)`：给 `renderer.getHotKeyByName` 包一层 `try/catch → null`（坑 5）。
+
+**G. 文档与测试**
+`docs/LAKEX-CONTRACT.md` §5.11（note 版式三件套）与 **§5.12（本轮新增 9 条内核行为坑/口径）**；`docs/QUICK-NOTES-SPEC.md` 更新；
+源码级护栏测试 `quickNoteNoteUi.test.ts` / `quickNotesView.test.ts` / `quickNoteInsertFilter.test.ts` + 解析器单测 `quickNotePreview.test.ts` + 主进程 `electron/quickNotes.test.ts`。
+门禁（提交前实测）：`tsc` 0 · `vitest` **1065 passed / 16 skipped** · 桌面 + 移动 build 全绿 · `check:bundle` app-js 1.83MB/2.90MB · `check:core` 0 · `git diff --check` 干净。
+
+### 三、当前问题（已知未解决 / 待用户确认）
+
+1. **待用户真机点验（最高优先级）**：块状小记「编辑 → 展开 → 保存/取消」；列表视图保存/取消；四类附件插入（视频/音频/图片/其它）；
+   贴完立刻保存；⌘Enter 发布；「小记 → 正式文档」后附件可达；文档页一切照旧。
+2. **「+」面板白名单只有代码级证据**：内核插入面板用合成点击打不开，未做 UI 实测（逻辑与文档同源、风险低）——建议用户手点一次确认条目。
+3. **死卡（永久 pending）现在"照存 + 提示"，但卡本身仍是坏的**（`url:null`）。若用户要更友好，可考虑保存时把死卡降级为附件条或直接移除（**未做，需用户拍板**）。
+4. **移动端（安卓）本轮未跑真机**：类型改动向后兼容，但无实机证据。
+5. `DEFAULT_TOOLBAR_ITEMS` 是内核默认工具栏的**硬拷贝**（内核升级不会自动跟）——用户已明确"漂移=跟着内核升级对齐，不算问题"，故保持。
+6. 编辑器实例挂/卸的**内存 churn soak**（§3 第 6 条）仍未做量化。
+
+### 四、下一步计划（按优先级）
+
+1. 让用户按 §三.1 逐条点验；有现象就按"是应用问题还是内核行为"分流（内核结论沉淀进 §5.12）。
+2. 补「+」面板 UI 实测（或直接问用户点验结果）。
+3. 移动端复用同一套（用户口径：按安卓工具栏改，后期做）。
+4. 若用户要：死卡处理升级、小记→文档转换回归、展开态「素材库/大纲」是否回归。
+5. 把"小记编辑器挂/卸"纳入内存回收专项（churn soak 三条触发面之一）。
+
+### 五、踩过的坑（本会话新增，**最有价值的部分**）
+
+1. **合成 `element.click()` 会骗过验证**：它绕过命中测试 ⇒ "点了没反应"类问题**必须用真鼠标事件**（CDP `Input.dispatchMouseEvent`，本会话脚本 `/tmp/qn.mjs click <selector>`）。
+   本会话就是先被它骗过两次（脚本测着"好了"，用户点着没反应）。
+2. **窗口在后台时 CDP 合成鼠标输入会被直接丢弃**：`document.visibilityState === "hidden"` 时 document 级监听一个事件都收不到、rAF 也被节流
+   ⇒ 验证前先 `Page.bringToFront` + 检查 `visibilityState`。用 DOM `.click()` 可以验证"行为/逻辑"，但**不能**验证命中与几何。
+3. **`transform` 会成为绝对定位后代的定位基准（即使 `position:static`）**：卡片的按压缩放 `.quick-note-entry:active{transform:scale(.98)}`
+   一按下就把内核展开层的定位基准从面板换成卡片 ⇒ 展开层高度 810 → 约 220、鼠标下的「保存/取消」跑掉 ⇒ 真鼠标点不动 + 面板闪。
+   修：`.quick-note-entry.editing, .quick-note-entry.editing:active { transform: none }`。**任何贴在内核展开层/绝对定位层旁边的自定义 UI 都要先查祖先 transform**。
+4. **内核工具条溢出布局只在实例创建时算一次**（之后容器变宽/派发 window resize 都不重算）⇒ **隐藏（0 宽）容器里不要创建 Lake 实例**
+   （App 的 keep-alive 视图就是 `display:none`）。判据：`.ne-editor.scrollWidth === clientWidth` 且 `.ne-ui-toolbar` 两个值相等。
+5. **内核 hotkey 服务在 `destroy()` 里 `delete this._named`**，而工具条每个按钮渲染都会 `getTooltip → renderer.getHotKeyByName(name) → this._named[name]`
+   ⇒ 实例销毁后再渲染一次就 **React 渲染期抛错**、整棵工具条/面板崩掉并反复重试（现象：面板闪 + 保存/取消全失灵；
+   日志特征：**每个工具项一条** `Uncaught TypeError: Cannot read properties of undefined (reading 'undo'/'slash'/…)`）。
+   修：`hardenDestroyedHotKeyLookup`。任何"销毁旧实例并重建"的生命周期都可能踩到。
+6. **媒体卡是两阶段的**（先 `status:"pending"`+`url:null`，上传完回填 `url`）⇒ 保存时若不管，会把 `url:null` 写进正文（用户 260919 报的"一编辑视频/附件就消失"）。
+7. **文档保存路径里没有任何 pending 检查**（`useWorkspaceState`/`EditorTab` 命中的 `pending*` 与上传无关）⇒ "复用文档口径" = **不等、不拒绝、正文原样存**；
+   小记据此改成"只有本会话在传才等，死卡照存 + 提示"。
+8. **不要用 `:has(.ne-ui-fullscreen)` 做展开态的条件样式**：内核会在"点击编辑器外部"时**瞬间摘掉再装回** fullscreen 类，
+   条件样式随之跳变 ⇒ 布局抖动（这次抖动的表层原因）。需要稳定的布局条件就写成常驻规则（如编辑态卡片恒 `position:static`）。
+9. **dev 实例是用户与自动化共用的**：会点 UI 的脚本会污染用户操作与录屏（本会话发生过一次，用户 gif 里的"视图来回切换"就是我的点击）。
+   只读排查没问题；**会点 UI 的实验先跟用户错开**。
+10. **`window.lakeNative`（contextBridge）对象是冻结的**：`bridge.xxx = ...` 静默失败 ⇒ 想"注入失败"做实验时实际执行的是**真实保存**
+    （本会话误把测试字写进用户小记，已用同一套 IPC 精确回滚）。要造失败场景请走真实路径（超限/断网）或临时改渲染层代码。
+11. 改 `electron/**` 会触发 vite-plugin-electron **重启 Electron**（可能 9222 端口冲突 / `ERR_CONNECTION_REFUSED` 白屏）：
+    别 `pkill -f Electron`，按具体 PID 杀 + 重启 `npm run dev`。
+
+### 六、环境、命令与提交记录
+
+```bash
+export PATH="$HOME/.nvm/versions/node/v24.18.0/bin:$PATH"   # 必须 Node 24（项目 vitest/vite 要求）
+cd /Users/admin/file/local-lake/lake-notes-electron
+npm run dev                                                  # vite 1421 + Electron CDP 9222 + asset 19876
+npx tsc --noEmit && npx vitest run                           # 门禁 1/2
+npx vite build && node node_modules/vite/bin/vite.js build --config vite.mobile.config.ts   # 桌面 + 移动 bundle
+npm run check:bundle && npm run check:core && git diff --check
+# 小记开发数据：~/Library/Application Support/lake-notes-dev/workspace-default/quick-notes/{items,assets,staging} + metadata.sqlite3
+# CDP 走查脚本（临时件，不在仓库）：/tmp/qn.mjs  →  eval / evalfile / shot / click(真鼠标) / reload / prescript-reload / dismiss
+```
+
+- 提交记录：本批 = `feat(quick-notes): …` + `docs(handoff): §2.11 …`（见 `git log --oneline -5`），已 `git push origin master`。
+- 用户红线（沿用）：不擅自 `git commit`（**本批是用户明确要求合并推送**）；开发数据只用 `lake-notes-dev`；只 kill 具体 PID。
 
 ---
 
@@ -588,7 +1104,7 @@
 3. **移动端剩余批次**：B7/B8 + 真机复验缺口 —— 明细见 **§8**。
 4. **产品/技术债（长期）**：W-8 ACAO / W-10 dompurify（**安全，建议优先**）；大纲 viewer 只读点击不跳转；回收站首拉成本（惰性下载暂缓，动恢复红线）；Word/PDF 导出 + 附件大文件 S3 分片；`docs/LAKEX-CONTRACT.md` §4 的 `lakex-contract.d.ts` 落地。CSS 层级冗余见 §3.9（260917 已收口）。
 5. **非代码**：安卓同步偶发 `UnknownHostException` = 设备网络（联网重试）。
-6. **小记（Quick Notes）设计取舍 —— 是否直接挂 Lake 内核底座**（用户 260917 提出，**待讨论后再动**）：挂上后「小记→文档」转换天然就是内核规范形态，且小记本身能支持更多格式/样式；代价是更重（每条小记都要起内核实例）。当前 `electron/quickNoteConversion.ts` 产出的是「内核**容忍**并原样保留」的形态，不是「内核**产出**」的形态（字段口径差异见 `docs/LAKE-CONTENT-WRITING.md`）。
+6. **小记（Quick Notes）设计取舍 —— 是否直接挂 Lake 内核底座**（用户 260917 提出）：**260919 已定稿并落地 =「挂」**。小记正文升 v2（内核形态 `body`，`docs/QUICK-NOTE-LAKE-BODY-260919.md`），写作区**编辑时挂一个**内核实例（`src/features/quickNotes/QuickNoteEditor.tsx`），转换退化为「搬运 + 资源作用域改写」。**260919 晚又续做 note 版式对齐云端**（工具条「图片/待办」+ 展开成完整编辑器，内核机制见 `docs/LAKEX-CONTRACT.md` §5.11）。剩余：真机点验 + 上一条的 7~9 潜在缺陷 + `QUICK-NOTES-SPEC.md` 文档过期。
 7. **Lake 正文写入收口**（约定见 `docs/LAKE-CONTENT-WRITING.md`）：① 自动化程序（不在仓库）**直接写库 + 手写裸 `<img>`**，导致 287 篇测试文档一被打开就被内核重写（图片降级成失败卡片 + 变待同步 → 随下次同步上传）→ **必须改成走应用写入路径，或只写纯文本**；② 仓库内 4 处手拼写入者**已收口**到 `src/core/lakeDocForm.ts`，并加了"绝不产出裸 `<img>`"的单测围栏；③ 旧数据按 §3 原则 7 **不写归一化兼容**，用修好的姿势重建（见第 8 条）。
 8. **旧数据处置 —— 等用户决定，别擅自动数据**：287 篇含裸 `<img>`（+7 篇已降级成失败卡片）。选项：**A 删掉重播（推荐，符合原则 7）** / B 留着但别打开 / C 就地改写成卡片（= 为损坏数据写代码，与原则 7 冲突，不推荐）。
 9. **「深层重复」CSS 候选清理（260917 已收口；结论：不做整批）**：档0（围栏基线纠偏）+ 档1（可证死声明清理）已完成，见 §2。按严格口径（同 at-rule 上下文 + 同单选择器 + 同属性）**全库只有 55 条可安全删**，已删并 ab2 全矩阵 34 状态证 0 差异。此前估算的"29 文件 / 3835 声明 / 184 争用（147 跨层）/ 92 选择器"**大多是把不同 `@media` 条件（宽/窄两套）算成争用**——那些不能删。**结论：不再推进 8–12 人日的整批清理**；若日后新增重复，围栏 `src/styles/cssLayers.test.ts` 会卡住，`scripts/css-audit/plan-dup-decls.mjs` 可随时重生成候选。
@@ -623,6 +1139,10 @@
     - **（提醒）manifest v6 ⇒ 所有端一起升级**：旧端读到 v6 显式拒绝同步（刻意安全闸）。
 
 14. **【表格图片独立管理 · 已立项 260919】浮动图 P1 / 单元格图 P2** —— 规范见 **`docs/SHEET-IMAGE-MANAGEMENT-260919.md`（其他会话按此实施，勿另起炉灶）**。
+15. **【移动端复用小记能力 · 后期】** 桌面小记已定稿为「内核当写入器 + 自研读取器（白名单）」（见 §2.10 续做第五~八轮）。
+    移动端小记目前是纯文本输入 + 合成 lake 段落/图片卡（`src/mobile/quickNotesRepository.ts`）；
+    用户要求后期**复用同一套能力**（同一份白名单 + 同一个预览读取器 `quickNotePreviewParser.ts`），
+    工具栏形态可按移动端（`EditorDock`）调整。做之前先读 §2.10 续做 + `docs/LAKEX-CONTRACT.md` §5.11。
     - **目标**：正文 `sheets[].images[].src` 由 **base64 内联**改为 **filename 引用**（正文 `version:2→3`）；文件落 `note-assets/{noteId}/`，`manifest.assets` 声明，同步/GC/历史**复用现有资产管线**（红线 #11/#17）；旧 base64 表**删了重建**（#7）。
     - **分阶段**：**P1 浮动图独立资产 ~1–1.5 天**（写文件 IPC + 正文改 filename + 清单声明 + 读回拼 URL；粘贴图可并入）· **P2 单元格图 ~3–5 天**（FortuneSheet 无 in-cell 字段 → 方案 A：`cell.img` + 自绘 overlay 锚定单元格）· **P3 移动端/浏览器渲染 + 对拍 + 压测 ~1 天**。
     - **前置已做**：图片按钮按实例定位（patch react）、本地插入可用（见第七轮）。
