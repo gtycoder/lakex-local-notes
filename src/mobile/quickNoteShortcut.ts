@@ -46,14 +46,22 @@ export function isQuickNoteShortcutUrl(url: string | null | undefined): boolean 
 export function subscribeQuickNoteShortcut(onTrigger: () => void): () => void {
   if (!isNativePlatform()) return () => undefined;
   let disposed = false;
-  let triggered = false;
+  /** 冷启动轮询是否已拿到 launch url（拿到就停；不影响之后的热启动 appUrlOpen）。 */
+  let launchConsumed = false;
+  /** 上一次触发时刻：只对"同一次点击被两条路径各触发一次"做短去重，**不能永久去重**。 */
+  let lastTriggerAt = 0;
   let retryTimer: number | null = null;
+  /** 冷启动的双触发窗口：getLaunchUrl 与 appUrlOpen 通常在同一两秒内各来一次。 */
+  const DEDUP_MS = 1500;
 
   const handle = (url: string | null | undefined) => {
     if (disposed) return;
     if (!isQuickNoteShortcutUrl(url)) return;
-    if (triggered) return;
-    triggered = true;
+    const now = Date.now();
+    // ⚠️ 这里**不能**用一个永久布尔量：那样一次冷启动触发之后，进程存活期间
+    // 再长按图标（热启动 appUrlOpen）就永远被忽略（260920 CDP 实测复现）。
+    if (now - lastTriggerAt < DEDUP_MS) return;
+    lastTriggerAt = now;
     onTrigger();
   };
 
@@ -63,10 +71,11 @@ export function subscribeQuickNoteShortcut(onTrigger: () => void): () => void {
    */
   let attempts = 0;
   const readLaunchUrl = () => {
-    if (disposed || triggered) return;
+    if (disposed || launchConsumed) return;
     void App.getLaunchUrl()
       .then((result) => {
         if (result?.url) {
+          launchConsumed = true;
           handle(result.url);
           return;
         }
