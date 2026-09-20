@@ -110,7 +110,7 @@ export class NoteExport {
     const row = this.ctx.db.prepare("SELECT kind FROM notes WHERE id=?").get(id) as { kind?: string | null } | undefined;
     const kind = row?.kind ?? "doc";
     if (kind === "doc") return;
-    const label = kind === "sheet" ? "表格" : kind === "bitable" ? "多维表" : kind;
+    const label = kind === "sheet" ? "表格" : kind === "bitable" ? "多维表" : kind === "board" ? "画板" : kind;
     throw new AppError("InvalidInput", `${label}文档暂不支持导出（仅文档可导出 Markdown/HTML/PDF/资料包）`);
   }
 

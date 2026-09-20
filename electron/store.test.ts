@@ -375,6 +375,20 @@ describe("目录树操作", () => {
     expect((store as any).searchTextFor(bitable.id, bitable.content).plain).toContain("数据表");
   });
 
+  it("新建画板：kind=board、正文落 boards/{id}.board.json、空白画布 + 不写卡片专用字段", () => {
+    const board = store.createBoardIn(null, "无标题画板");
+    const bodyPath = (store as any).notePath(board.id);
+    expect(bodyPath).toContain(path.join("boards", board.id + ".board.json"));
+    const doc = JSON.parse(fs.readFileSync(bodyPath, "utf8"));
+    expect(doc.kind).toBe("board");
+    expect(doc.preset).toBe("drawing");
+    expect(doc.elements).toEqual([]);
+    // 卡片专用的 previewImage（整幅 PNG data URL，实测占带画板文档 90%+ 体积）不进独立画板正文
+    expect(board.content).not.toContain("previewImage");
+    // 空画布没有可索引文字；关键是不能把 JSON 当 Lake 正文解析
+    expect((store as any).searchTextFor(board.id, board.content).plain).toBe("");
+  });
+
   it("全文搜索：标题优先、正文命中 + 高亮，1/2/3 字统一，删除后消失", () => {
     const note = store.createNote("搜索引擎笔记");
     store.saveNote(note.id, "搜索引擎笔记", "<p>全文搜索与回收站方案</p>", { markdown: "# 搜索引擎笔记\n\n全文搜索与回收站方案", plain: "搜索引擎笔记\n全文搜索与回收站方案" });
@@ -751,6 +765,24 @@ describe("文档历史（快照，纯本地）", () => {
     expect(caches.plain).toContain("北斗七星持仓");
     expect(caches.plain).not.toContain('"kind":"bitable"');
     expect(store.searchNotes("北斗七星持仓").some((h) => h.id === bitable.id)).toBe(true);
+  });
+
+  it("画板 restoreHistory 后搜索缓存走 boardToSearchText（场景文字，不是 JSON 碎片）", () => {
+    const board = store.createBoardIn(null, "画板历史");
+    const doc = JSON.parse(board.content);
+    doc.elements = [{ id: "n1", type: "geometry", text: "北斗七星画板" }];
+    const withShape = JSON.stringify(doc);
+    store.saveNote(board.id, "画板历史", withShape);
+    store.createHistorySnapshot(board.id, withShape, true);
+    store.saveNote(board.id, "画板历史", board.content); // 版本2：清空画布
+    const hist = store.listNoteHistory(board.id);
+    store.restoreHistory(hist[hist.length - 1].id);
+    expect(store.readNote(board.id).content).toContain("北斗七星画板");
+    const caches = store.readNoteCaches(board.id);
+    expect(caches.markdown).toBeNull();
+    expect(caches.plain).toContain("北斗七星画板");
+    expect(caches.plain).not.toContain('"kind":"board"');
+    expect(store.searchNotes("北斗七星画板").some((h) => h.id === board.id)).toBe(true);
   });
 
   it("restoreHistory 后 last_uploaded_hash 重置为恢复版 hash（P0-1 语义）", () => {

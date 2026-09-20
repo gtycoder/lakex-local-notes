@@ -35,7 +35,7 @@ export interface NotebookTreeItem {
 import type { TreeNode } from "../../lib/types";
 
 /** 打开文档 tab 的内容状态（按 tab 缓存，切换不丢草稿） */
-interface TabState { id: string; title: string; content: string; editing: boolean; lastAccessedAt: number; kind: "doc" | "sheet" | "bitable"; }
+interface TabState { id: string; title: string; content: string; editing: boolean; lastAccessedAt: number; kind: "doc" | "sheet" | "bitable" | "board"; }
 
 export interface NotebookWorkspaceProps {
   notebookId: string;
@@ -575,7 +575,7 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
               <div className="mobile-empty">
                 {t.title || "此文档"}
                 {"："}
-                {t.kind === "sheet" ? "表格" : "多维表"}
+                {t.kind === "sheet" ? "表格" : t.kind === "bitable" ? "多维表" : "画板"}
                 暂不支持在移动端编辑，请在桌面端打开。
               </div>
             ) : (

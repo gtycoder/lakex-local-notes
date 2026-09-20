@@ -45,6 +45,11 @@ quick-notes/assets/{quickNoteId}/{filename}  小记资源
 > **260919 说明：表格文档（`kind="sheet"`）复用同一条正文对象管线**（正文=内容寻址 JSON）。
 > 清单已升 **v6**：每条 note 多一个可选 `kind?: "doc" | "sheet" | "bitable"`（缺省 doc，**只有非 doc 才写**；纯文档库的清单条目逐字节不变）。旧端读到 v6 会**显式拒绝同步**（刻意安全闸）。
 > 表格正文格式 = **v2 FortuneSheet workbook**（`{kind:"sheet",version:2,sheets:Sheet[]}`）；本地 `sheets/{id}.sheet.json` → S3 `objects/{id}-{hash}.lake`。详见 `docs/SHEET-BITABLE-DESIGN-260918.md` 与 `docs/FORTUNESHEET-FEASIBILITY-260919.md`。
+>
+> **260920 补充：画板文档（`kind="board"`）走同一条管线**，清单独占 **v7**（`kind` 多一个取值 `board`）。
+> **为什么加个取值也要升版本**：旧端 `normalizeNoteKind` 对未知取值一律回退 `doc` ⇒ v6 端读 v7 清单会把画板 JSON 当 Lake 文档导入并保存 = 毁正文；
+> 升版本后 v6 端按既有「版本不兼容」整轮拒绝（`syncUtils.ts` 的 `READABLE_MANIFEST_VERSIONS={4,5,6,7}`）。
+> 画板正文 = Drawnix/Plait 场景 JSON（`{kind:"board",version:1,engine:"drawnix",preset,elements[],viewport?}`）；本地 `boards/{id}.board.json` → S3 `objects/{id}-{hash}.lake`。详见 `docs/BOARD-DOC-FEASIBILITY-260920.md`。
 
 ## 3. Manifest v4 schema（代码 sync.ts:74-80 + 645-697 实测）
 

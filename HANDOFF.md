@@ -5,6 +5,11 @@
 > **§8 是移动端（安卓）专职交接**，由移动端会话维护；桌面会话不要改 §8，移动端会话不要改 §0-§7 之外的桌面文件。
 
 ## 0. 当前基线（新会话开工前）
+- **本会话（260920 · 独立画板）完整交接 = §2.13（kind=board 画板文档：调研 + v1 实现 + 隔离实例实测）—— 在分支 `feat/board-document`，工作区未提交、未合 master，待用户验收。**
+  - 分支关系：`master`(79e4d0d) →（多维表检查点提交 **`b1355de`** 在 `feat/bitable`）→ **`feat/board-document` = b1355de + 画板批次（未提交）**。
+  - ⚠️ **实况更正**：`master` / `origin/master` **仍是 79e4d0d**，多维表那批之前一直躺在工作区未提交（会话间会丢），本会话为切干净的分支把它**代为提交**成 `feat/bitable` 上的检查点 `b1355de`（内容一字未改）。
+    若不需要这个提交：`git checkout feat/bitable && git reset --mixed 79e4d0d`（工作区即回到「未提交」原状）。
+  - 一句话状态：画板引擎（Drawnix/Plait，MIT）**不依赖 Lake 内核**，新 kind `board` 走既有 kind 管线（正文 `boards/{id}.board.json`、manifest **v7**、侧栏「新建画板」、tab 内整屏画布、零内核实例、只存场景+视口）；**编译/单测/双端 build/隔离实例实测全绿**，剩余风险（AB 同步、图片内联、实例记忆 soak）见 §2.13 五。
 - **本会话（260920 · 多维表）完整交接 = §2.12（自研多维表 bitable，9 轮迭代 + 附件公共化）—— 在分支 feat/bitable，未提交、未合 master，待用户验收；已做多轮真机点验。**
 - **上一段（260920，已收尾）完整交接 = §2.11（小记内核化收尾：附件按类型成卡 / 卡片预览保真 / 展开层与保存策略 / 内核三个坑）。**
   ✅ **已合并 `master` 并推 origin**：代码批 = `e2f0a4d`（feat(quick-notes)…），交接 = `c4d5abc`（docs(handoff): §2.11），
@@ -1184,6 +1189,72 @@ tsc 0 · vitest 1095 passed / 16 skipped (1111) · 桌面 + 移动 vite build �
 - 数据模型 src/core/bitableDoc.ts；编辑器 src/features/bitable/**；公共附件入口 src/features/attachment/openAssetEntry.ts；路由 src/features/editor/MultiTabEditor.tsx；主进程 electron/store.ts（createBitableIn / bodyPathFor / searchTextFor）。
 - 产品规范 docs/BITABLE-PRODUCT-SPEC-260919.md；设计 docs/SHEET-BITABLE-DESIGN-260918.md；存储分层 docs/STORAGE-LAYERS.md。
 - 门禁：export PATH="$HOME/.nvm/versions/node/v24.18.0/bin:$PATH"; npx tsc --noEmit; npx vitest run; node node_modules/vite/bin/vite.js build; node node_modules/vite/bin/vite.js build --config vite.mobile.config.ts; npm run check:bundle; npm run check:core; git diff --check。
+
+## 2.13 本会话总交接（260920 · 独立画板文档 kind=board）—— 新会话从这里读
+
+> 写给零上下文新会话。分支 `feat/board-document`（基于 `feat/bitable` 检查点 `b1355de`），**工作区未提交、未合 master**（红线：代码批次等用户验收）。
+> 起因：用户问「当前 lake 资源下，画板和思维导图能不能做成单独的目录，新建一个画板、只做画图」→ 调研后按用户指示切分支做验证。
+> 完整调研 + 实测数据 + 剩余风险 = **`docs/BOARD-DOC-FEASIBILITY-260920.md`**；内核侧结论 = `docs/LAKEX-CONTRACT.md` §5.13；vendor 改动 = LOCAL-CHANGES **#18**。
+
+### 一、任务目标（用户原话要点）
+画板/思维导图能否独立成「目录里的一个文档类型」：新建一个画板 → 打开就是一张整屏画布，**只做画图**（不夹 Lake 正文）。
+
+### 二、调研结论
+- **能做，且比表格/多维表更轻**：画布引擎是独立 npm 包（`lakex-drawnix` + `@plait/*`，MIT），vendor 的 `DrawnixBoardCore` 只吃 `{value, readOnly, locale, theme, ai, onChange}`，**运行时不 import 内核**；它的 5 个子组件也不碰内核。
+- 「只做画图」是原设计：`.lakex-drawnix-core .app-toolbar{display:none!important}`（文件/分享菜单在卡片阶段就被隐藏）。
+- 语雀自己也把它们当文档类型：内核 `getIconClassName` 白名单 `['doc','sheet','design','thread','board','mind']` + 镜像里的 `doc-type-board.svg`。
+- **思维导图两条路**（未做，见 §五.5）：走画板 preset `mindmap`（`@plait/mind`，+0.5 天）；或独立 `kind=mindmap` 挂 `@xiangfa/mindmap`（markdown 进/出，+1~2 天）。
+
+### 三、已完成（本批，全部在工作区）
+**A. 数据层** `src/core/boardDoc.ts`（纯核心）：`BoardDoc = {kind:"board",version:1,engine:"drawnix",preset,elements[],viewport?}`；`emptyBoardBody` / `parseBoardBody`（坏数据退化成空白画板，不抛错）/ `boardToBody` / `boardToSearchText`（形状文字/文本块/思维导图节点/连线标签）/ `boardDocFromCardValue`+`cardValueFromBoardDoc`（卡片 ↔ 独立文档无损互搬）。单测 `boardDoc.test.ts` 7 条。
+
+**B. 主进程 / 协议**：`store.createBoardIn` + `bodyPathFor` 加 `boards/{id}.board.json` + 构造时 `mkdir boards/` + `searchTextFor` 分派 `boardToSearchText`；IPC `create_board_in`（`registerNotes.ts` + `preload.cjs` + `webApiServer.ts` + `src/lib/native.ts` 三处齐）；`noteExport.assertDocKind` 标签加「画板」。
+
+**C. 渲染层**：`Sidebar` 右键「新建画板」（`PenTool` 图标 + 行图标按 kind 区分）→ `useNoteLifecycle.createBoardIn`（**必须显式给 `OpenTab.kind`**）→ `MultiTabEditor` 按 kind 懒加载 `src/features/board/BoardEditor.tsx`（复用 SheetEditorErrorBoundary 隔离）。状态栏非 doc 分支加「画板」。
+
+**D. 编辑器 `src/features/board/BoardEditor.tsx` 的四条硬约束**（护栏 `boardEditorMount.test.ts` 6 条）：① 零内核实例（不 import lakeRuntime/EditorTab）；② 只存场景+视口（卡片专用 `previewImage`/`cardHeight` 收到即丢）；③ 视口走 `onViewportPersist` 存 ref、**不回灌 value**（pan/zoom 不触发保存）；④ 首次可见才挂画布 + 800ms 防抖自动保存 + 与上次序列化比较。
+
+**E. 协议安全闸**：`kind` 新增取值 ⇒ **`MANIFEST_VERSION 6 → 7`**（`READABLE_MANIFEST_VERSIONS={4,5,6,7}`）。理由：旧端对未知 kind 静默回退 `doc` ⇒ 会把画板 JSON 当 Lake 文档导入保存 = 毁正文；升版本让旧端整轮拒绝（代价：所有端一起升级）。同步补：`syncEngine.test.ts` / `sync.test.ts` 的版本断言、`syncDecisions.test.ts` 的 kind 传播用例。
+
+**F. 移动端**：`syncDbPort` 映射 + `noteRepository.normalizeDocKind` + `NotebookWorkspace` 占位文案；**顺手修了既有缺口** —— `mobile/trash/TrashPreviewPage.tsx` 原先**无条件挂 LakeEditor**，现在非 doc（表格/多维表/画板）一律挡成占位。
+
+**G. vendor（`vendor/lakex-doc-react/`，已重建 `dist/**`）**：`src/index.ts` 新增 **`loadDrawnixBoardCore()` 懒加载器** + 导出类型 `DrawnixBoardCoreProps`；`DrawnixBoardCore.tsx` 的 `Props` 改名导出 + 新增可选 **`onViewportPersist`**（`onViewportChange` 由 no-op 改为转调它）。LOCAL-CHANGES #18 记录。
+
+### 四、门禁 + 实测
+- **门禁（本批实测全绿）**：`tsc` 0 · `vitest` **1112 passed / 16 skipped** · 桌面 + 移动 `vite build` 全绿 · `check:bundle` app-js gzip **1.784MB / 2.90MB** · `check:core` 0 · CSS 围栏已加 `features/board/boardEditor.css`（11 声明/0 重复组）· `git diff --check` 干净。
+- **运行时（隔离 `LAKE_USER_DATA=$TMPDIR/lake-board-smoke-a1` + `LAKE_ASSET_PORT=19879` + CDP 9222，真实数据未读写）**：
+  1. 右键「新建画板」→ 目录出现（`lucide-pen-tool`）+ 打开的就是画板，画布 1082×778 铺满 tab，`tab-panels` 内无 Lake 编辑器；
+  2. 懒加载：首次打开才请求 `DrawnixBoardCore-*.js`（118KB gzip）+ `drawnix-*`（415KB gzip）；
+  3. 画图：形状库 → 矩形 → 拖拽 ⇒ 落盘 `elements:[geometry]`，正文 **271B**，**无 previewImage**（对照文档内画板卡 `.lake` = 455KB，其中 413KB 是那张 PNG）；
+  4. 落盘/DB：`boards/{id}.board.json` + `notes.kind='board'`（`sheets/`、`bitables/` 未污染）；
+  5. 关标签→从目录重开 = 场景恢复；切标签 keep-alive 切走 0×0 / 切回 1082×778 且图形还在；
+  6. **只读**（锁定后重开）：自研工具（素材库/AI/导出）不注入，试画矩形后 `elements` 不变；
+  7. 4 个画板 tab = 4 个实例，渲染进程 JS 堆 251→249MB（无明显增长）；
+  8. 全流程 `Runtime.exceptionThrown` = 0；`npm run test:drawnix` 通过 ⇒ **文档内画板卡未被本批影响**。
+- 证据：截图 `/tmp/lake-board-evidence/board-{4-rect,6-multi,8-locked}.png`；脚本 `/tmp/board-smoke{1..7}.mjs`（临时件未入库）。
+
+### 五、当前问题 / 未做（按优先级）
+1. **AB 多端 S3 往返未测**（正文+kind 走既有管线，已单测；但没跑 A→B）。v7 清单在旧端整轮拒绝 ⇒ **升级期必须所有端一起升**。
+2. **图片不进资产管线**：画板工具条自带图片入口（选择/粘贴/拖放），引擎把图**内联成 data URL** 写进 elements（代码级证据 `data/image.d.ts`）。对同步/GC 无害（引用在正文里、`ASSET_NAME_RE` 匹配不到 data URL），代价是正文变大 + 图片不能单独预览/重命名。要接管线属 P2。
+3. **画布实例 soak 未做**：建议合入前跑「连续开关 20 个画板」看堆/DOM 释放。
+4. **preset 无 UI**：数据层支持 `flowchart|uml|mindmap` 起始模板（由 `afterInit` 插 + `presetInitialized` 防重复），入口只建空白画板；要「新建 → 选模板」加个二级菜单即可。
+5. **思维导图未做**（两条路见 §二）；**移动端只做占位**（想真渲染只读画板，`DrawnixBoardCore` 已在移动分包里，≈+0.5 天）。
+6. 画板正文的 **viewport 目前只在「内容变化时」落盘**（pan/zoom 单独发生不写盘，换标签不丢场景但会丢视角）。要不要「纯看不动也记住视角」= 产品决策。
+
+### 六、踩过的坑（本批新增）
+- **vendor 暴露画布核心必须用懒加载器**：写 `export { DrawnixBoardCore }` 会让 vendor 入口静态依赖它 ⇒ 构建报 `INEFFECTIVE_DYNAMIC_IMPORT`、`DrawnixBoardCore-*.js` 分包消失、首屏多背 ≈500KB gzip。已实测复现并改回 `loadDrawnixBoardCore()`（LOCAL-CHANGES #18）。**改 vendor 后一定要看构建有没有这条警告 + `dist/` 里 chunk 还在不在。**
+- **新增 kind 取值不止改 `noteKind.ts`**：TS 会在「窄联合类型」处报错（`syncEngineTypes.LocalNoteRow`、`mobile/NotebookWorkspace.TabState`、`electron/syncAdapters` 的 `rowFromSync`、`noteQueries` 的 mapSummary/mapTreeNode、`desktopDerivedState.activeKind`、`DesktopOverlays.activeKind`、`lib/types.ts` 两处）——**run `tsc` 会一次性把它们全列出来**，别只改类型定义。
+- **`noteQueries` 的两处映射**（`kind: row.kind === "sheet" ? … : "doc"`）不做会静默降级成 doc ⇒ 目录/打开路径会把画板交给 Lake 编辑器。**这是毁正文级别的坑，必须改。**
+- **新建入口必须显式给 `OpenTab.kind`**（`create*` 返回的 `NoteDocument` 不带 kind），否则退回 Lake 编辑器（与 §2.12 同坑）。
+- **移动端回收站预览原先无条件挂 LakeEditor**（表格/多维表也中招），本批一并按 kind 挡住。
+- **vite 会在 dev 首启时 reload 页面**（`optimized dependencies changed. reloading`）：首轮 CDP 操作如果撞上它，会看到「窗口里啥都没有」的假象 —— 复测/等待后再判定（本批踩过一次）。
+
+### 七、关键文件
+- 数据模型 `src/core/boardDoc.ts`；编辑器 `src/features/board/BoardEditor.tsx`(+css)；路由 `src/features/editor/MultiTabEditor.tsx`；主进程 `electron/store.ts`（createBoardIn/bodyPathFor/searchTextFor）；协议 `src/core/noteKind.ts` + `src/core/syncUtils.ts`；vendor `vendor/lakex-doc-react/src/index.ts` + `src/cards/DrawingBoard/DrawnixBoardCore.tsx`。
+- 文档：`docs/BOARD-DOC-FEASIBILITY-260920.md`（主交付）· `docs/STORAGE-LAYERS.md` · `docs/SYNC-PROTOCOL.md` · `docs/LAKEX-CONTRACT.md` §5.13。
+- 复现命令：见 §六 的隔离实例起法（上面 §四 顶部）+ 门禁命令同 §2.12 八。
+
+---
 
 ## 3. 下一步计划 + 当前问题（真正的待办，按优先级）
 

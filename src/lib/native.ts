@@ -50,6 +50,8 @@ export interface LakeNative {
   createSheetIn(parentId: string | null, title: string): Promise<NoteDocument>;
   /** 新建多维表文档（kind=bitable，v6）。 */
   createBitableIn(parentId: string | null, title: string): Promise<NoteDocument>;
+  /** 新建画板文档（kind=board，v7）：正文是 Drawnix/Plait 场景 JSON。 */
+  createBoardIn(parentId: string | null, title: string): Promise<NoteDocument>;
   moveTreeNode(id: string, parentId: string | null, sortOrder: number): Promise<TreeNode>;
   moveTreeNodeOrdered(id: string, parentId: string | null, orderedIds: string[]): Promise<TreeNode>;
   reorderTreeNodes(parentId: string | null, orderedIds: string[]): Promise<void>;
@@ -199,6 +201,7 @@ export const native = {
   createNoteIn: (parentId: string | null, title: string) => api().createNoteIn(parentId, title),
   createSheetIn: (parentId: string | null, title: string) => api().createSheetIn(parentId, title),
   createBitableIn: (parentId: string | null, title: string) => api().createBitableIn(parentId, title),
+  createBoardIn: (parentId: string | null, title: string) => api().createBoardIn(parentId, title),
   moveTreeNode: (id: string, parentId: string | null, sortOrder: number) => api().moveTreeNode(id, parentId, sortOrder),
   moveTreeNodeOrdered: (id: string, parentId: string | null, orderedIds: string[]) => api().moveTreeNodeOrdered(id, parentId, orderedIds),
   reorderTreeNodes: (parentId: string | null, orderedIds: string[]) => api().reorderTreeNodes(parentId, orderedIds),

@@ -1,0 +1,20 @@
+/* 独立画板文档（kind=board）容器：与 sheet/bitable 同构 —— .tab-panels 是 grid，可见 tab 占同一格。 */
+.board-editor {
+  grid-area: 1 / 1;
+  min-height: 0;
+  min-width: 0;
+  height: 100%;
+  width: 100%;
+  overflow: hidden;
+}
+/* 文档级画布铺满整格：去掉卡片态的边框/圆角（那是文档内嵌卡片的框）。 */
+.board-editor .lakex-drawnix-core {
+  height: 100%;
+  border: none;
+  border-radius: 0;
+}
+/* 画布内核分包加载中（懒加载：DrawnixBoardCore ≈113KB gzip + drawnix ≈398KB gzip）。 */
+.board-editor-loading {
+  height: 100%;
+  background: transparent;
+}

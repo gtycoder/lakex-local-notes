@@ -36,7 +36,7 @@ export interface DesktopOverlaysProps {
   onToggleFocusMode: () => void;
   activeNoteId: string | null;
   /** 当前活动文档类型（v6）；非 doc 时隐藏导出入口（导出会产出坏文件）。 */
-  activeKind: "doc" | "sheet" | "bitable";
+  activeKind: "doc" | "sheet" | "bitable" | "board";
   lockedNoteIds: ReadonlySet<string>;
   onToggleNoteLock: () => void;
   /** 顶栏「更多」里的导出（与目录树右键「导出」子菜单同一套动作，作用于当前文档） */

@@ -95,7 +95,7 @@ export function deriveDesktopView(input: DesktopViewInput) {
 
   // 大纲增强=开 → 应用自建大纲侧栏；关 → 用 Lake 原生大纲（此侧栏隐藏），原生 by toc.enable。
   // v6：非 doc（表格/多维表）没有可导航大纲，且统计口径不适用 → 一律隐藏大纲侧栏。
-  const activeKind: "doc" | "sheet" | "bitable" =
+  const activeKind: "doc" | "sheet" | "bitable" | "board" =
     (activeNoteId ? openTabs.find((t) => t.noteId === activeNoteId)?.kind : undefined) ?? "doc";
   const outlineVisible = tocEnabled && outlineEnhance && desktopWorkspace === "library" && activeKind === "doc";
   // 只读锁：store 驱动（可同步），派生集合供多标签 viewer 重建

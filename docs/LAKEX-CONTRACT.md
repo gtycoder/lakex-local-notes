@@ -955,6 +955,30 @@ PY
 - 2026-09-17（命令清单）：新增 **§5.9** —— 用 balanced-brace 解析 bundle 的 `kO({pluginName, command})`，落地**完整命令注册表 = 43 插件 / 147 条 kO 命令 + 4 条命令式（alert 族）= 151**；给出「块编辑命令 → 我们现状」（已用 / 未用 / 内核无对应）与三条候选原生化改造；澄清 `ISelectionHelperService` 是**工具栏注册服务、不是块选择 API**；记录多块选择 = DOM Range + `blockSelectionChange`/`unblockSelectionChange`，**内核无批量转化命令**。来源：`vendor/lakex-doc-react/src/components/lakex/lakex.js` 静态解析（脚本随 §5.9）。
 - 2026-09-19：新增 **§5.10**（浮动工具栏：内核 miniToolbar 只覆盖卡片/容器，无文本选区浮栏；`Doc.FrameworkUiLib` 浮层原语；固定工具栏的两条官方路；对照钉钉/云端实测）与 **§5.11**（小记版式 note UI：`uiSwitch.default='note'` + `fullscreen.enable` + `toolbar.agentConfig.note` 三件套；`ne-doc-note-editor` 挂载点类；展开 = `.ne-ui-fullscreen` 挂 `editorNode.parentNode` 且同一实例切回默认工具栏；**两个坑** —— 空编辑器不 `setDocument` 则 `document.ready` 不触发导致 note 版式整块失效、`agentConfig` 是整体替换导致展开后工具栏为空；**note 专用图标 `note-*` 不在 kernel sprite**（语雀 App 私有）⇒ 图片/待办改用 `image`/`taskList`、**附件只能自补 `#note-file` symbol**；附录一：云端小记「小记视图 / 列表视图」两种版式的对照基线；附录二：**附件按类型成卡的路由**（pre-reader 按 `category`+`from:'ui'` 分流、泛化 `insertCardByUI` 必须带 `name`、直接 `insertFiles` 不带 `from` 不生效、展示名 vs 磁盘名约定））。来源：本会话 bundle 静态解析 + 真实 Electron 实测 + 语雀云端小记对照（browser-skill 观察）。
 
+### 5.13 画板（Drawnix/Plait）：内核卡片 ↔ 独立画板文档（260920 调研 + 实机）
+
+**结论：画布引擎与 Lake 内核完全解耦，可以脱离编辑器独立挂载（`kind=board` 独立画板文档）。**
+
+1. **组件契约**：`vendor/lakex-doc-react/src/cards/DrawingBoard/DrawnixBoardCore.tsx` 的 props = `{ value, readOnly, locale, theme, ai, onChange, onViewportPersist }`。
+   它**不 import 内核**（`lakex.js` / `Doc` 计数 0），其 5 个本地子组件也只依赖 `@plait/*` + `lakex-drawnix` + `react-dom`。
+   卡片侧那层 `DrawingBoardEditor` 才需要 `ICardProps`（`cardValue`/`updateCardValue`/`editor`）与 `CardResizer` —— 独立文档用不到。
+2. **「只做画图」是原设计的自然结果**：`.lakex-drawnix-core .app-toolbar { display:none !important }`（文件/分享菜单在卡片阶段就被隐藏）。
+   实机工具条 = 手型 / 选择 / 思维导图 / AI 助手 / 文本 / 画笔 / 箭头 / 形状 / 图片 / 导出（PNG·SVG）；「形状」开图形库（基础图形 + 流程图 + UML 符号）。
+3. **数据格式互通**：卡片值 `plaitValue` == 独立正文的 `elements`；`src/core/boardDoc.ts` 提供双向搬运 + 归一化。
+4. **`previewImage` 是卡片专用**：卡片每次改动 250ms 后把整幅画布导出成 PNG data URL 写回卡片值；
+   实测一篇带画板卡的 `.lake` = **455KB，其中 413KB（91%）是这张 PNG**，而 `plaitValue` 只有 10KB 级。
+   独立画板正文（1 个矩形）= **271 字节**，只有 `kind/version/engine/preset/elements`。
+5. **分包与懒加载（务必守住）**：`DrawnixBoardCore-*.js` 343KB raw / 118KB gzip + `drawnix-*.js` 1488KB / 415KB gzip，**必须留在独立 chunk**。
+   ⇒ vendor 对外暴露画布核心**只能用懒加载器**（`loadDrawnixBoardCore()`）；写成 `export { DrawnixBoardCore }` 会让 vendor 入口静态依赖它，
+   构建立刻报 `INEFFECTIVE_DYNAMIC_IMPORT`，`DrawnixBoardCore-*.js` 分包消失、首屏多背 ≈500KB gzip（实测复现过）。
+6. **CSP**：`lakex-drawnix` / `lakex-drawnix-react-board` / `@xiangfa/mindmap` 的 `eval`、`new Function` 计数均为 0（与 FortuneSheet/CE 那类坑不同，画板不受无 `unsafe-eval` 约束影响）。
+7. **视口**：`onViewportChange` 是 no-op（LOCAL-CHANGE #8，防 pan/zoom 触发保存）。独立画板若要「记住上次看到哪」，
+   用**被动回调** `onViewportPersist` 存 ref、只在保存时写进正文，**不要回灌 value**。
+8. **图片**：工具条有图片入口（文件选择 / 粘贴 / 拖放），但引擎把图**内联成 data URL**（`data/image.d.ts` 的 `insertImage`/`buildImage`，代码级证据）⇒ 不进资产管线、不会出现在 `manifest.assets`。
+9. **语雀侧的文档类型枚举**：内核 `getIconClassName` 白名单 = `['doc','sheet','design','thread','board','mind']`，镜像含 `doc-type-{default,sheet,table,board}.svg` ⇒ 画板/思维导图在官方形态里本就是文档类型。
+
+实机验证（隔离 userData + CDP 驱动真实 Electron）与剩余风险见 `docs/BOARD-DOC-FEASIBILITY-260920.md`。
+
 ---
 
 ## 8. 证据来源与复查方法

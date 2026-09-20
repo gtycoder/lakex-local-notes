@@ -13,8 +13,8 @@ export interface POCNote {
   content: string;
   updatedAt: string;
   parentId: string | null;
-  /** v6 文档类型（缺省 doc）。非 doc 类型移动端只读占位，**不得**交给 Lake 编辑器（会写坏正文）。 */
-  kind: "doc" | "sheet" | "bitable";
+  /** v6/v7 文档类型（缺省 doc）。非 doc 类型移动端只读占位，**不得**交给 Lake 编辑器（会写坏正文）。 */
+  kind: "doc" | "sheet" | "bitable" | "board";
 }
 
 /** 列表页只需要元数据；正文在 readNote() 打开文档时按需读取。 */
@@ -25,8 +25,8 @@ export interface POCNoteSummary {
   parentId: string | null;
 }
 
-function normalizeDocKind(value: unknown): "doc" | "sheet" | "bitable" {
-  return value === "sheet" || value === "bitable" ? value : "doc";
+function normalizeDocKind(value: unknown): "doc" | "sheet" | "bitable" | "board" {
+  return value === "sheet" || value === "bitable" || value === "board" ? value : "doc";
 }
 
 function rowToNote(r: Record<string, unknown>): POCNote {

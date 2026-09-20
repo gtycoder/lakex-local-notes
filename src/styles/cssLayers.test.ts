@@ -25,6 +25,7 @@ const FILES = [
   "features/attachment/attachment-preview.css", "features/editor/image-lightbox.css", "features/outline/outline.css",
   "features/sheet/sheetEditor.css",
   "features/bitable/bitableEditor.css",
+  "features/board/boardEditor.css",
   "styles/dialog.css", "styles/document-status.css", "styles/editor.css",
   "styles/motion.css", "styles/components.css", "styles/quick-notes.css", "styles/shell.css",
   "styles/tokens.css", "styles/settings.css",
@@ -53,6 +54,8 @@ const BASELINE: Record<string, { decls: number; dupGroups: number }> = {
   "features/sheet/sheetEditor.css": { decls: 24, dupGroups: 0 },
   // 260920：多维表编辑器（自研，v1）；+63 = 文本「扩大」浮窗；+37 = 行手柄/右键菜单/数据表列表；+82 = 网格线/列选择/列宽拖拽/日期选择器/范围选择/全收起切换（合法新增）
   "features/bitable/bitableEditor.css": { decls: 856, dupGroups: 0 },
+  // 260920：独立画板文档（kind=board）容器（铺满 tab 格 + 去掉卡片态边框/圆角 + 内核分包加载占位）
+  "features/board/boardEditor.css": { decls: 11, dupGroups: 0 },
   "styles/dialog.css": { decls: 234, dupGroups: 8 },   // +7 = .note-info-history-viewer 容器（260916 W-10：历史内联预览改只读 viewer，替代裸 dangerouslySetInnerHTML；合法新增非覆盖回涨）
   "styles/document-status.css": { decls: 106, dupGroups: 2 },
   "styles/editor.css": { decls: 14, dupGroups: 0 },   // +2 = 自 ui-polish.css 并入的编辑器正文覆盖（S2）

@@ -15,6 +15,8 @@ export interface TrashPreviewPageProps {
 export function TrashPreviewPage({ noteId, onBack, onRestored }: TrashPreviewPageProps) {
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
+  // v6/v7：非 doc（表格/多维表/画板）正文不是 Lake 格式 → 预览一律挡住，**不挂 Lake 编辑器**。
+  const [kind, setKind] = useState<"doc" | "sheet" | "bitable" | "board">("doc");
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
@@ -26,7 +28,7 @@ export function TrashPreviewPage({ noteId, onBack, onRestored }: TrashPreviewPag
       // 回收站惰性下载补偿：预览前按需补拉该笔记本地缺失资源（best-effort，失败仍显示本地内容）
       await bridge.ensureTrashNoteAssets(noteId).catch(() => undefined);
       const n = await bridge.readNote(noteId);
-      if (n) { setTitle(n.title); setContent(n.content); }
+      if (n) { setTitle(n.title); setContent(n.content); setKind(n.kind); }
     } catch (e) {
       setMsg("预览失败: " + (e as Error).message);
     } finally {
@@ -62,6 +64,10 @@ export function TrashPreviewPage({ noteId, onBack, onRestored }: TrashPreviewPag
       <section className="mobile-doc-body">
         {loading ? (
           <div className="poc-center"><LoaderCircle className="spin" /><span>正在加载资源…</span></div>
+        ) : kind !== "doc" ? (
+          <div className="poc-center">
+            <span>{kind === "sheet" ? "表格" : kind === "bitable" ? "多维表" : "画板"}暂不支持在移动端预览，请在桌面端打开。</span>
+          </div>
         ) : (
           <LakeEditor
             noteId={noteId}

@@ -206,7 +206,7 @@ describe("syncEngine（共享编排）", () => {
     const manifestBytes = await s3.getObject("p/manifests/latest.json");
     expect(manifestBytes).not.toBeNull();
     const manifest = JSON.parse(decode(manifestBytes!));
-    expect(manifest.version).toBe(6);
+    expect(manifest.version).toBe(7);   // 260920：v7 = kind 新增 board（画板文档）
     expect(manifest.notes[0].id).toBe("n1");
     expect(db.notes.get("n1")!.syncState).toBe("synced");
   });
@@ -633,7 +633,7 @@ describe("syncEngine（共享编排）", () => {
     const r = await syncNow(CFG, s3, db);
     expect(r.published).toBe(true);
     const manifest = JSON.parse(decode((await s3.getObject("p/manifests/latest.json"))!));
-    expect(manifest.version).toBe(6);
+    expect(manifest.version).toBe(7);
     const entry = manifest.folders.find((f: any) => f.id === "nb1");
     expect(entry).toBeDefined();
     expect(entry.deleted).toBe(true);

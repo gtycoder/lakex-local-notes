@@ -9,7 +9,7 @@ export interface StatusBarNotice {
 export interface DesktopStatusBarProps {
   showDocumentStats: boolean;
   /** 当前文档类型（v6）：非 doc 时「字数/图片」口径不适用（正文不是 Lake 文本），改为显示类型标签。 */
-  docKind?: "doc" | "sheet" | "bitable";
+  docKind?: "doc" | "sheet" | "bitable" | "board";
   wordCount: number;
   imageCount: number;
   notice: StatusBarNotice | null;
@@ -53,7 +53,7 @@ export function DesktopStatusBar({ showDocumentStats, docKind = "doc", wordCount
                 <span>图片 {Math.max(0, imageCount)}</span>
               </>
             ) : (
-              <span>{docKind === "sheet" ? "表格" : "多维表"}</span>
+              <span>{docKind === "sheet" ? "表格" : docKind === "bitable" ? "多维表" : "画板"}</span>
             )}
           </div>
           <div className={`document-statusbar-state ${documentStatus.kind}`} title={documentStatus.label} aria-label={documentStatus.label}>

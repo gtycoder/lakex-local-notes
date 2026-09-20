@@ -10,8 +10,8 @@ export interface NoteSummary {
   syncState: string;
   isConflict: boolean;
   isLocked?: boolean;
-  /** v6 文档类型（缺省 doc；渲染层据此选择编辑器）。 */
-  kind?: "doc" | "sheet" | "bitable";
+  /** v6/v7 文档类型（缺省 doc；渲染层据此选择编辑器）。 */
+  kind?: "doc" | "sheet" | "bitable" | "board";
   lockedAt?: string | null;
 }
 
@@ -28,8 +28,8 @@ export interface TreeNode {
   syncState: string;
   isConflict: boolean;
   icon: string | null;
-  /** v6 文档类型（doc | sheet | bitable；缺省 doc）。 */
-  kind?: "doc" | "sheet" | "bitable";
+  /** v6/v7 文档类型（doc | sheet | bitable | board；缺省 doc）。 */
+  kind?: "doc" | "sheet" | "bitable" | "board";
 }
 
 export interface SyncNote {
@@ -46,8 +46,8 @@ export interface SyncNote {
   icon?: string | null;
   trashedAt?: string | null;
   deletedFromParentId?: string | null;
-  /** v6 文档类型（listNotesForSync/getNoteForSync 提供；缺省 doc）。 */
-  kind?: "doc" | "sheet" | "bitable";
+  /** v6/v7 文档类型（listNotesForSync/getNoteForSync 提供；缺省 doc）。 */
+  kind?: "doc" | "sheet" | "bitable" | "board";
 }
 
 export interface SyncFolder {
@@ -143,8 +143,8 @@ export class NoteQueries {
       isConflict: !!row.is_conflict,
       isLocked: !!row.is_locked,
       lockedAt: row.locked_at ?? null,
-      // v6 文档类型（渲染层据此选择编辑器；缺省 doc）
-      kind: (row.kind === "sheet" ? "sheet" : row.kind === "bitable" ? "bitable" : "doc") as "doc" | "sheet" | "bitable",
+      // v6/v7 文档类型（渲染层据此选择编辑器；缺省 doc）
+      kind: (row.kind === "sheet" ? "sheet" : row.kind === "bitable" ? "bitable" : row.kind === "board" ? "board" : "doc") as "doc" | "sheet" | "bitable" | "board",
     };
   }
 
@@ -162,8 +162,8 @@ export class NoteQueries {
       syncState: row.sync_state,
       isConflict: !!row.is_conflict,
       icon: row.icon ?? null,
-      // v6：渲染层据此对非 doc 隐藏导出/大纲等（缺省 doc）
-      kind: (row.note_kind === "sheet" ? "sheet" : row.note_kind === "bitable" ? "bitable" : "doc") as "doc" | "sheet" | "bitable",
+      // v6/v7：渲染层据此对非 doc 隐藏导出/大纲等（缺省 doc）
+      kind: (row.note_kind === "sheet" ? "sheet" : row.note_kind === "bitable" ? "bitable" : row.note_kind === "board" ? "board" : "doc") as "doc" | "sheet" | "bitable" | "board",
     };
   }
 

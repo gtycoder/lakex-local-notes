@@ -39,8 +39,8 @@ export interface OpenTab {
   deleted?: boolean;
   /** 上次同步后记录的轻量状态摘要（title+updatedAt），用于跳过未变化的全量重载。 */
   lastDigest?: { title: string; updatedAt: string } | null;
-  /** v6 文档类型（doc | sheet | bitable；缺省 doc）：宿主据此选择编辑器。 */
-  kind?: "doc" | "sheet" | "bitable";
+  /** v6/v7 文档类型（doc | sheet | bitable | board；缺省 doc）：宿主据此选择编辑器。 */
+  kind?: "doc" | "sheet" | "bitable" | "board";
 }
 
 /** 状态栏提示：可选"点击动作"（查看历史/回收站）。 */

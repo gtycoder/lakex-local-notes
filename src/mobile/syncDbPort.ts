@@ -29,7 +29,7 @@ function rowToLocal(r: Record<string, unknown>) {
     icon: r.icon ? String(r.icon) : null,
     isConflict: !!r.is_conflict,
     // TS 会在推断的返回类型里放宽字面量 → 显式标注联合类型（否则外层 SyncDbPort 不兼容）
-    kind: (r.doc_kind === "sheet" ? "sheet" : r.doc_kind === "bitable" ? "bitable" : "doc") as "doc" | "sheet" | "bitable",
+    kind: (r.doc_kind === "sheet" ? "sheet" : r.doc_kind === "bitable" ? "bitable" : r.doc_kind === "board" ? "board" : "doc") as "doc" | "sheet" | "bitable" | "board",
   };
 }
 
@@ -83,7 +83,7 @@ export function createMobileSyncDbPort(getDb: () => MobileDb, deps: MobileSyncDb
          ON CONFLICT(id) DO UPDATE SET title=excluded.title, content=excluded.content, parent_id=excluded.parent_id,
            sort_order=excluded.sort_order, updated_at=excluded.updated_at, content_hash=excluded.content_hash,
            sync_state=excluded.sync_state, is_conflict=excluded.is_conflict, is_locked=excluded.is_locked, locked_at=excluded.locked_at, icon=excluded.icon, trashed_at=excluded.trashed_at, deleted_from_parent_id=excluded.deleted_from_parent_id, restore_pending_at=NULL, doc_kind=excluded.doc_kind`
-      ).run(note.id, note.title, content, note.parentId, note.sortOrder, note.updatedAt, note.contentHash, "synced", note.isConflict ? 1 : 0, note.isLocked ? 1 : 0, note.lockedAt ?? null, note.icon ?? null, note.trashedAt ?? null, note.deletedFromParentId ?? null, null, note.kind === "sheet" || note.kind === "bitable" ? note.kind : "doc");
+      ).run(note.id, note.title, content, note.parentId, note.sortOrder, note.updatedAt, note.contentHash, "synced", note.isConflict ? 1 : 0, note.isLocked ? 1 : 0, note.lockedAt ?? null, note.icon ?? null, note.trashedAt ?? null, note.deletedFromParentId ?? null, null, note.kind === "sheet" || note.kind === "bitable" || note.kind === "board" ? note.kind : "doc");
     },
     async applyRemoteTrash(id, content, title, trashedAt, deletedFromParentId, parentId, sortOrder) {
       const d = getDb();

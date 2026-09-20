@@ -7,6 +7,8 @@ import { EditorTab } from "./EditorTab";
 const SheetEditor = lazy(() => import("../sheet/SheetEditor").then((m) => ({ default: m.SheetEditor })));
 /** 多维表编辑器（自研，懒加载）：同样只在真的打开多维表文档时才进分包。 */
 const BitableEditor = lazy(() => import("../bitable/BitableEditor").then((m) => ({ default: m.BitableEditor })));
+/** 画板编辑器（Drawnix/Plait 引擎，懒加载）：只在真的打开画板文档时才进分包（≈511KB gzip）。 */
+const BoardEditor = lazy(() => import("../board/BoardEditor").then((m) => ({ default: m.BoardEditor })));
 import type { LakeEditorPrefs } from "./lakeRuntime";
 
 const EMPTY_PINNED: ReadonlySet<string> = new Set();
@@ -22,8 +24,8 @@ export interface TabInfo {
   reloadKey?: number;
   /** 远端已删除（软删/墓碑/purge）：tab 显示"已删除"标记，正文保留供复制/恢复。 */
   deleted?: boolean;
-  /** v6 文档类型（doc | sheet | bitable；缺省 doc）。 */
-  kind?: "doc" | "sheet" | "bitable";
+  /** v6/v7 文档类型（doc | sheet | bitable | board；缺省 doc）。 */
+  kind?: "doc" | "sheet" | "bitable" | "board";
 }
 
 interface MultiTabEditorProps {
@@ -446,6 +448,16 @@ export function MultiTabEditor({
           ) : tab.kind === "bitable" ? (
             <SheetEditorErrorBoundary key={"bt-" + tab.noteId + "-" + (tab.reloadKey ?? 0)} noteId={tab.noteId}>
               <BitableEditor
+                noteId={tab.noteId}
+                content={contentFor(tab)}
+                visible={visible && tab.noteId === activeNoteId}
+                readOnly={(lockedNoteIds?.has(tab.noteId) ?? false) || tab.deleted === true}
+                onChange={(content) => handleChange(tab.noteId, content)}
+              />
+            </SheetEditorErrorBoundary>
+          ) : tab.kind === "board" ? (
+            <SheetEditorErrorBoundary key={"bd-" + tab.noteId + "-" + (tab.reloadKey ?? 0)} noteId={tab.noteId}>
+              <BoardEditor
                 noteId={tab.noteId}
                 content={contentFor(tab)}
                 visible={visible && tab.noteId === activeNoteId}

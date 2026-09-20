@@ -20,13 +20,17 @@ export interface S3Settings {
 }
 
 // ===== 常量（随迁，原值不变） =====
-export const MANIFEST_VERSION = 6;
+export const MANIFEST_VERSION = 7;
 /**
  * 读兼容窗口：v5 = v4 + manifest.folders 条目可选 deleted 墓碑字段（纯 additive），v5 端可安全读 v4
  * （升级期云端 latest 未重写前同步不中断）；发布恒写 MANIFEST_VERSION。
  * 旧端（v4 代码）读 v5 清单按版本不兼容整轮拒绝——防其把 folder 墓碑当活跃目录导入复活。
+ * v6 = + 每条 note 可选 `kind`（sheet | bitable）；v7 = kind 增加 `board`（画板文档）。
+ * **为什么新增 kind 取值也要升版本**：旧端 normalizeNoteKind 对未知取值一律回退 `doc`
+ * （src/core/noteKind.ts）⇒ v6 端读 v7 清单会把画板 JSON 当 Lake 文档导入并保存 = 毁正文。
+ * 升版本后旧端按同一条「版本不兼容」整轮拒绝，升级期不静默毁数据（代价：所有端要一起升级）。
  */
-const READABLE_MANIFEST_VERSIONS = new Set([4, 5, 6]);
+const READABLE_MANIFEST_VERSIONS = new Set([4, 5, 6, 7]);
 export const MAX_MANIFEST_BYTES = 20 * 1024 * 1024;
 export const MAX_MANIFEST_NOTES = 200_000;
 export const MAX_MANIFEST_FOLDERS = 50_000;

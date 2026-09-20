@@ -15,6 +15,7 @@ import { emptyLakeBody } from "../src/core/lakeDocForm.js";
 import { type NoteKind, normalizeNoteKind } from "../src/core/noteKind.js";
 import { emptySheetBody, sheetToSearchText } from "../src/core/sheetDoc.js";
 import { emptyBitableBody, bitableToSearchText } from "../src/core/bitableDoc.js";
+import { emptyBoardBody, boardToSearchText } from "../src/core/boardDoc.js";
 import { SearchRepository } from "./searchRepository.js";
 import type { SearchResult } from "../src/core/searchTypes.js";
 import { HistoryRepository, type HistorySnapshotPreview, type HistorySnapshotSummary } from "./historyRepository.js";
@@ -150,9 +151,10 @@ export class Store {
     this.logScopes = logScopes;
     this.noteAssetsDir = path.join(root, "note-assets");
     fs.mkdirSync(path.join(root, "notes"), { recursive: true });
-    // 表格（kind=sheet）/ 多维表（kind=bitable）正文独立目录：notes/ 仍是 doc 的容器（docs/SHEET-BITABLE-DESIGN-260918.md §4.1）
+    // 表格（sheet）/ 多维表（bitable）/ 画板（board）正文独立目录：notes/ 仍是 doc 的容器（docs/SHEET-BITABLE-DESIGN-260918.md §4.1）
     fs.mkdirSync(path.join(root, "sheets"), { recursive: true });
     fs.mkdirSync(path.join(root, "bitables"), { recursive: true });
+    fs.mkdirSync(path.join(root, "boards"), { recursive: true });
     fs.mkdirSync(this.noteAssetsDir, { recursive: true });
     this.db = new Database(path.join(root, "metadata.sqlite3"));
     this.db.pragma("journal_mode = WAL");
@@ -318,6 +320,7 @@ export class Store {
     }
     if (kind === "sheet") return path.join(this.root, "sheets", `${id}.sheet.json`);
     if (kind === "bitable") return path.join(this.root, "bitables", `${id}.bitable.json`);
+    if (kind === "board") return path.join(this.root, "boards", `${id}.board.json`);
     return path.join(this.root, "notes", `${id}.lake`);
   }
 
@@ -334,7 +337,7 @@ export class Store {
 
   /** 该类型是否有独立正文目录（用于「未登记残留」清理时逐个候选路径尝试）。 */
   private candidateBodyPaths(id: string): string[] {
-    const kinds: NoteKind[] = ["doc", "sheet", "bitable"];
+    const kinds: NoteKind[] = ["doc", "sheet", "bitable", "board"];
     return kinds.map((kind) => this.bodyPathFor(id, kind));
   }
 
@@ -343,6 +346,7 @@ export class Store {
     const kind = this.kindOf(id);
     if (kind === "sheet") return { markdown: null, plain: sheetToSearchText(content) };
     if (kind === "bitable") return { markdown: null, plain: bitableToSearchText(content) };
+    if (kind === "board") return { markdown: null, plain: boardToSearchText(content) };
     return { markdown: lakeHtmlToMarkdown(content), plain: lakeHtmlToPlain(content) };
   }
 
@@ -449,6 +453,15 @@ export class Store {
   createBitableIn(parentId: string | null, title: string): NoteDocument {
     const id = uuid();
     return this.createNoteInWithContent(parentId, title, emptyBitableBody(), [], id, "bottom", "bitable");
+  }
+
+  /**
+   * 新建画板文档（kind="board"）：正文是 boards/{id}.board.json（Drawnix/Plait 场景 JSON），
+   * 其余全部复用文档管线（目录/回收站/历史/同步/GC）。v1 默认 = 空白画布（preset=drawing）。
+   */
+  createBoardIn(parentId: string | null, title: string): NoteDocument {
+    const id = uuid();
+    return this.createNoteInWithContent(parentId, title, emptyBoardBody(), [], id, "bottom", "board");
   }
 
   /**

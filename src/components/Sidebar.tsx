@@ -7,12 +7,12 @@ import { LAKE_EMOJI_GROUPS } from "../lib/lakeEmojiGroups";
 import type { TreeNode, TreeNodeType } from "../lib/types";
 import { buildTreeIndex, type TreeIndex } from "../core/treeIndex";
 import { computeDropPosition, createDragGhost, isValidTreeDrop, moveDragGhost, removeDragGhost, type DragGhost } from "./treeDrag";
-import { Database, Table } from "lucide-react";
+import { Database, PenTool, Table } from "lucide-react";
 import { getCreateMenuPosition, type CreateMenuPosition } from "./createMenuPosition";
 import { ExportSubmenuItem } from "./ExportSubmenuItem";
 import { SIDEBAR_DEFAULT_WIDTH } from "../desktop/desktopTypes";
 
-type CreateKind = "notebook" | "group" | "note" | "sheet" | "bitable";
+type CreateKind = "notebook" | "group" | "note" | "sheet" | "bitable" | "board";
 type DropPosition = "before" | "inside" | "after";
 export type SidebarMode = "docked" | "floating" | "collapsed";
 
@@ -360,7 +360,7 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
   const create = (kind: CreateKind) => {
     setMenuOpen(false);
     const parentId = kind === "notebook" ? null : kind === "group" ? groupParent : noteParent;
-    if (kind === "note" || kind === "sheet" || kind === "bitable") {
+    if (kind === "note" || kind === "sheet" || kind === "bitable" || kind === "board") {
       props.onCreate(kind, parentId);
       if (parentId) setExpanded((current) => expandAncestors(current, props.nodes, parentId));
     } else {
@@ -481,12 +481,13 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
     props.onRevealConsumed();
   }, [props.revealNodeId, props.onRevealConsumed]);
 
-  const menuNewChild = (kind: "group" | "note" | "sheet" | "bitable") => {
+  const menuNewChild = (kind: "group" | "note" | "sheet" | "bitable" | "board") => {
     if (!contextNode) return;
     // 支持多层嵌套：在目标节点下直接创建（文档也可包含分组/文档/表格）。
     const parentId = contextNode.id;
     if (kind === "sheet") { props.onCreate("sheet", parentId); setExpanded((current) => expandAncestors(current, props.nodes, parentId)); setContextMenu(null); return; }
     if (kind === "bitable") { props.onCreate("bitable", parentId); setExpanded((current) => expandAncestors(current, props.nodes, parentId)); setContextMenu(null); return; }
+    if (kind === "board") { props.onCreate("board", parentId); setExpanded((current) => expandAncestors(current, props.nodes, parentId)); setContextMenu(null); return; }
     if (kind === "note") { props.onCreate("note", parentId); setExpanded((current) => expandAncestors(current, props.nodes, parentId)); setContextMenu(null); return; }
     setPendingCreate({ kind, parentId });
     setNewTitle("新建分组");
@@ -764,6 +765,7 @@ function nodeIcon(type: TreeNodeType, open: boolean, customIcon?: string | null,
   if (type === "group") return open ? <FolderOpen size={16} /> : <Folder size={16} />;
   if (kind === "sheet") return <Table size={16} />;
   if (kind === "bitable") return <Database size={16} />;
+  if (kind === "board") return <PenTool size={16} />;
   return <File size={16} />;
 }
 
@@ -808,7 +810,7 @@ interface ContextMenuProps {
   node: TreeNode;
   x: number;
   y: number;
-  onNewChild: (kind: "group" | "note" | "sheet" | "bitable") => void;
+  onNewChild: (kind: "group" | "note" | "sheet" | "bitable" | "board") => void;
   onRename: () => void;
   onDelete: () => void;
   onCopyMarkdown: () => void;
@@ -849,6 +851,7 @@ const ContextMenu = ({ node, x, y, onNewChild, onRename, onDelete, onCopyMarkdow
       <button role="menuitem" onClick={() => { onNewChild("note"); onClose(); }}><FilePlus size={15} /><span>新建文档</span></button>
       <button role="menuitem" onClick={() => { onNewChild("sheet"); onClose(); }}><Table size={15} /><span>新建表格</span></button>
       <button role="menuitem" onClick={() => { onNewChild("bitable"); onClose(); }}><Database size={15} /><span>新建数据表</span></button>
+      <button role="menuitem" onClick={() => { onNewChild("board"); onClose(); }}><PenTool size={15} /><span>新建画板</span></button>
       <button role="menuitem" onClick={() => { onNewChild("group"); onClose(); }}><FolderPlus size={15} /><span>新建分组</span></button>
       <div className="context-menu-sep" />
       {node.nodeType === "note" ? (
