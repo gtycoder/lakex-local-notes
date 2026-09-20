@@ -126,6 +126,12 @@ export default defineConfig({
       input: { mobile: "mobile.html" },
       // 不手动把 Drawnix 合并为共享 chunk：文档页是懒加载路由，
       // 手动分组会让 Drawnix 被首页 HTML modulepreload，抵消懒加载收益。
+      //
+      // ⚠️ 也不要给 @dlient/lakex-doc-react 加 codeSplitting 分组：实测会把 vendor 内部的
+      // 懒加载 chunk（DrawnixBoardCore）的 export 绑定拆坏 —— 打开编辑器即
+      // "SyntaxError: Export 'DrawnixBoardCore_..._exports' is not defined in module"、整页白屏。
+      // 内核脱离入口的正确做法是**懒加载边界**（NotebookWorkspace / QuickNoteComposer / TrashPreviewPage
+      // 都用 React.lazy），不需要手动分组。
     },
   },
 });

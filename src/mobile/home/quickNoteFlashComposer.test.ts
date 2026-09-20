@@ -2,8 +2,14 @@
  * 闪念速记轻量框（长按桌面图标 / `lakenotes://quick-note` 深链路径）护栏（260920）。
  *
  * 用户 260920 定稿的分工：
- * - **长按速记那条路径 = 轻量速记框**（`textarea` + 图片，零内核实例、**不可展开**）—— 要的是秒开；
+ * - **长按速记那条路径 = 轻量速记框**（`textarea` + 图片，零内核实例、**不可展开**）——要的是秒开；
  * - **工作台里的「新建小记」/「编辑」仍是完整内核编辑器**（`QuickNoteComposer` → `QuickNoteEditor`）。
+ *
+ * 启动路径（260920 优化）：
+ * - 轻量框挂在 `MobileApp` 的**独立入口**（`captureOpen`），在 `bridge.init()`/`refreshAll()` **之前**渲染
+ *   ⇒ 输入框最早出现（保存时才按需 `ensureDb()`）；
+ * - Lake 内核（6.7MB）已从入口 chunk 拆出（`NotebookWorkspace`/`QuickNoteComposer`/`TrashPreviewPage` 按需加载），
+ *   入口不再静态引用内核。
  *
  * 内核**没有**"不建实例就把文本转成 Lake 正文"的能力（`setDocument('text/*')` 要编辑器实例、
  * `markdownStream` 要阅读器实例；见 docs/LAKEX-CONTRACT.md §5.12）⇒ 轻量框的正文只能走无内核写入者
@@ -20,7 +26,8 @@ const read = (rel: string) => readFileSync(new URL(rel, import.meta.url), "utf8"
 const code = (src: string) => src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
 
 const FLASH_CODE = code(read("./QuickNoteFlashComposer.tsx"));
-const HOME_SRC = read("./HomePage.tsx");
+const HOME_CODE = code(read("./HomePage.tsx"));
+const MOBILE_APP_CODE = code(read("../MobileApp.tsx"));
 const REPO_SRC = read("../quickNotesRepository.ts");
 const MODEL_CODE = code(read("../../core/quickNoteModel.ts"));
 
@@ -46,13 +53,19 @@ describe("闪念速记：轻量框不挂内核", () => {
     expect(MODEL_CODE).not.toMatch(/<img\b/);
   });
 
-  it("深链请求 → 轻量框；工作台「新建小记」仍是完整内核编辑器", () => {
-    // 深链（newQuickNoteRequest）走 lite
-    expect(HOME_SRC).toMatch(/setComposer\(\{ mode: "new", lite: true \}\)/);
-    expect(HOME_SRC).toMatch(/composer\.mode === "new" && composer\.lite/);
-    // 底部胶囊栏「新建小记」不传 lite（走 QuickNoteComposer → 内核）
-    expect(HOME_SRC).toMatch(/setComposer\(\{ mode: "new" \}\)/);
-    // key = 请求计数：每次长按重开空框，不串上一次输入
-    expect(HOME_SRC).toMatch(/key=\{newQuickNoteRequest\}/);
+  it("长按/深链 → MobileApp 独立入口，且在 bridge.init/refreshAll 之前渲染", () => {
+    // 深链回调 = 打开独立入口
+    expect(MOBILE_APP_CODE).toMatch(/setCaptureOpen\(true\)/);
+    expect(MOBILE_APP_CODE).toMatch(/if \(captureOpen\) \{/);
+    expect(MOBILE_APP_CODE).toMatch(/<QuickNoteFlashComposer/);
+    // 轻量框分支必须在启动门（phase === "booting"）之前 ⇒ 不等 bridge.init/refreshAll
+    const captureIdx = MOBILE_APP_CODE.indexOf("if (captureOpen)");
+    const bootingIdx = MOBILE_APP_CODE.indexOf('if (phase === "booting")');
+    expect(captureIdx).toBeGreaterThan(-1);
+    expect(bootingIdx).toBeGreaterThan(-1);
+    expect(captureIdx).toBeLessThan(bootingIdx);
+    // HomePage 里的「新建小记」/「编辑」仍走完整内核编辑器（懒加载），不再是轻量框
+    expect(HOME_CODE).toMatch(/QuickNoteComposer/);
+    expect(HOME_CODE).not.toContain("QuickNoteFlashComposer");
   });
 });

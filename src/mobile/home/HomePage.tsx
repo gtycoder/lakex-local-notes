@@ -6,14 +6,12 @@
  * - 空态不做「创建」提示（默认空白即可）；
  * - 底部胶囊栏 = [筛选 | 新建 | 云同步]（新建按 tab 记性：小记=写小记、知识库=新建笔记本）。
  */
-import { useEffect, useMemo, useState } from "react";
+import { Suspense, lazy, useEffect, useMemo, useState } from "react";
 import { CloudUpload, List, LayoutGrid, ArrowUpDown, MoreHorizontal, Pencil, Plus, Search, Settings, Trash, FolderPlus } from "lucide-react";
 import type { TreeNode } from "../../lib/types";
 import type { POCNoteSummary } from "../noteRepository";
 import { NotebookGrid } from "./NotebookGrid";
-import { QuickNoteComposer } from "./QuickNoteComposer";
 import { QuickNotePreview } from "../../features/quickNotes/QuickNotePreview";
-import { QuickNoteFlashComposer } from "./QuickNoteFlashComposer";
 import { MobileSheetMenu, type MobileSheetItem } from "../ui/MobileSheetMenu";
 import { confirmMobile } from "../ui/ConfirmDialog";
 import { showToast } from "../ui/toastBus";
@@ -21,6 +19,9 @@ import { bridge } from "../bridge";
 import { useHorizontalSwipe } from "../useHorizontalSwipe";
 import { localAssetHttpUrl } from "../../core/assetUrl.js";
 import { withAssetAccessToken } from "../../lib/assetPort";
+
+/** 完整小记编辑器（内含 Lake 内核）：**按需加载**——首屏/闪念速记都不需要内核。 */
+const QuickNoteComposer = lazy(() => import("./QuickNoteComposer").then((m) => ({ default: m.QuickNoteComposer })));
 
 export interface MobileQuickNote {
   id: string;
@@ -39,8 +40,6 @@ type QuickSort = "recent" | "oldest";
 
 export interface HomePageProps {
   tab: "quick" | "library";
-  /** 递增计数：变化即打开「新建小记」写作区（长按桌面图标的闪念速记快捷方式用）。 */
-  newQuickNoteRequest?: number;
   notebooks: TreeNode[];
   /** 全部笔记（「最近文档」用，按 updatedAt 取最近 N 条） */
   notes: POCNoteSummary[];
@@ -56,8 +55,7 @@ export interface HomePageProps {
   onQuickNotesChanged: () => Promise<void>;
 }
 
-/** `lite: true` = 闪念速记（长按桌面图标进来）：不挂内核的轻量速记框，且不可展开。 */
-type ComposerState = { mode: "new"; lite?: boolean } | { mode: "edit"; id: string } | null;
+type ComposerState = { mode: "new" } | { mode: "edit"; id: string } | null;
 
 const VIEW_KEY = "lake-notes-mobile.libraryView";
 
@@ -80,7 +78,7 @@ function fmtRelative(iso: string): string {
 
 export function HomePage(props: HomePageProps) {
   const {
-    tab, newQuickNoteRequest = 0, notebooks, notes, quickNotes, docCounts, onTabChange, onOpenNotebook,
+    tab, notebooks, notes, quickNotes, docCounts, onTabChange, onOpenNotebook,
     onOpenNote, onOpenDrawer, onOpenSearch, onCreateNotebook, onQuickNotesChanged,
   } = props;
   const [composer, setComposer] = useState<ComposerState>(null);
@@ -124,13 +122,6 @@ export function HomePage(props: HomePageProps) {
     } catch { /* 读取失败忽略 */ }
   };
   const closeComposer = (): void => { setComposer(null); setEditNote(null); };
-  /** 闪念速记：请求计数变化 ⇒ 直接打开新建写作区（首次挂载的非 0 值也要响应，例如冷启动）。 */
-  useEffect(() => {
-    if (!newQuickNoteRequest) return;
-    setEditNote(null);
-    // 闪念速记走**轻量速记框**（不挂内核）；工作台里的「新建」仍用完整内核编辑器。
-    setComposer({ mode: "new", lite: true });
-  }, [newQuickNoteRequest]);
   const switchTab = (next: "quick" | "library"): void => { onTabChange(next); };
   const runSync = async (): Promise<void> => {
     try { const r = await bridge.syncNow(); showToast(r.message || "已同步"); }
@@ -176,21 +167,14 @@ export function HomePage(props: HomePageProps) {
       <div key={tab} className="mobile-tab-stage">
       {tab === "quick" ? (
         composer !== null ? (
-          <div className={composer.mode === "new" && composer.lite ? "mobile-qn-flash-wrap" : "mobile-scroll"}>
-            {composer.mode === "new" && composer.lite ? (
-              // key = 请求计数：每次深链/长按都重开一个空框（否则复用同一实例会串上一次的输入）
-              <QuickNoteFlashComposer
-                key={newQuickNoteRequest}
-                onSaved={async () => { closeComposer(); await onQuickNotesChanged(); }}
-                onCancel={closeComposer}
-              />
-            ) : (
+          <div className="mobile-scroll">
+            <Suspense fallback={<div className="mobile-empty">正在加载编辑器…</div>}>
               <QuickNoteComposer
                 editNote={editNote}
                 onSaved={async () => { closeComposer(); await onQuickNotesChanged(); }}
                 onCancel={closeComposer}
               />
-            )}
+            </Suspense>
           </div>
         ) : (
           <div className="mobile-scroll">

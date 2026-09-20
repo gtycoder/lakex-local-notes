@@ -4,13 +4,13 @@
  * - 数据：直接走 bridge 真实端口（folders CRUD/notes/搜索/同步已就绪），不做 fixture。
  * - 复杂卡片（画板/思维导图/流程图）：viewer 只读渲染（§19.1），编辑入口置灰。
  */
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { bridge } from "./bridge";
 import type { POCNoteSummary } from "./noteRepository";
 import { isGoneNote } from "../core/syncDecisions";
 import type { TreeNode } from "../lib/types";
 import { HomePage } from "./home/HomePage";
-import { NotebookWorkspace } from "./notebook/NotebookWorkspace";
+import { QuickNoteFlashComposer } from "./home/QuickNoteFlashComposer";
 import { CreateNotebookSheet } from "./settings/CreateNotebookSheet";
 import { SearchSheet } from "./settings/SearchSheet";
 import { SettingsDrawer } from "./settings/SettingsDrawer";
@@ -25,14 +25,18 @@ import { runNativeSqliteSpike } from "./nativeSqlite";
 import { migrateSnapshotToNativeSqlite } from "./nativeSqliteMigration";
 import "./mobile.css";
 
+/** 第二层工作区（内含 Lake 内核编辑器）：**按需加载**。
+ * 冷启动不需要内核；静态引入会把整个内核打进入口 chunk（实测 6.7MB），拖慢所有启动路径。 */
+const NotebookWorkspace = lazy(() => import("./notebook/NotebookWorkspace").then((m) => ({ default: m.NotebookWorkspace })));
+
 export type Route =
   | { kind: "home"; tab: "quick" | "library" }
   | { kind: "notebook"; notebookId: string; initialNoteId?: string | null; initialMode?: "viewer" | "editor" };
 
 export function MobileApp() {
   const [route, setRoute] = useState<Route>({ kind: "home", tab: "library" });
-  /** 闪念速记（长按桌面图标的快捷方式）请求计数：变化即让首页直接打开「新建小记」。 */
-  const [quickNoteRequest, setQuickNoteRequest] = useState(0);
+  /** 闪念速记（长按桌面图标的快捷方式）：独立入口，不等启动完成即可输入。 */
+  const [captureOpen, setCaptureOpen] = useState(false);
   const [treeNodes, setTreeNodes] = useState<TreeNode[]>([]);
   const [notes, setNotes] = useState<POCNoteSummary[]>([]);
   const activeIdRef = useRef<string | null>(null);
@@ -133,11 +137,11 @@ export function MobileApp() {
     return () => { if (timer != null) window.clearInterval(timer); };
   }, []);
 
-  // 长按桌面图标 →「闪念速记」：冷启动（getLaunchUrl）与热启动（appUrlOpen）都收敛到这里，
-  // 切到「小记」标签并请求首页打开新建写作区。
+  // 长按桌面图标 →「闪念速记」：冷启动（getLaunchUrl）与热启动（appUrlOpen）都收敛到这里。
+  // 直接打开**独立入口**（见下方 captureOpen 分支）——不等 bridge.init()/refreshAll()，做到最早可输入。
   useEffect(() => subscribeQuickNoteShortcut(() => {
     setRoute({ kind: "home", tab: "quick" });
-    setQuickNoteRequest((value) => value + 1);
+    setCaptureOpen(true);
   }), []);
 
   const notebooks = useMemo(() => treeNodes.filter((n) => n.nodeType === "notebook"), [treeNodes]);
@@ -154,6 +158,8 @@ export function MobileApp() {
     drawerOpen,
     createNbOpen,
     searchOpen,
+    captureOpen,
+    onCloseCapture: () => setCaptureOpen(false),
     onBackFromNotebook: () => setRoute({ kind: "home", tab: "library" }),
     onCloseDrawer: () => setDrawerOpen(false),
     onCloseSheets: () => { setCreateNbOpen(false); setSearchOpen(false); },
@@ -195,6 +201,21 @@ export function MobileApp() {
     } catch { showToast("新建失败", { type: "error" }); warnFeedback(); }
   }, [openNote]);
 
+  // 闪念速记独立入口：在 bridge.init()/refreshAll() 之前就渲染轻量框（输入框最早出现）。
+  // 保存时才按需打开 DB（saveQuickNoteWithImages → ensureDb()），所以不必等启动完成。
+  if (captureOpen) {
+    return (
+      <div className="mobile-app">
+        <div className="mobile-qn-flash-wrap">
+          <QuickNoteFlashComposer
+            onSaved={async () => { setCaptureOpen(false); void refreshAll(); }}
+            onCancel={() => setCaptureOpen(false)}
+          />
+        </div>
+      </div>
+    );
+  }
+
   if (phase === "booting") return <div className="poc-center">启动中…</div>;
   if (error) return <div className="poc-center poc-error">{error}</div>;
 
@@ -208,7 +229,6 @@ export function MobileApp() {
       {route.kind === "home" && (
         <HomePage
           tab={route.tab}
-          newQuickNoteRequest={quickNoteRequest}
           notebooks={notebooks}
           notes={notes}
           quickNotes={quickNotes}
@@ -223,6 +243,7 @@ export function MobileApp() {
         />
       )}
       {route.kind === "notebook" && (
+        <Suspense fallback={<div className="poc-center">加载中…</div>}>
         <NotebookWorkspace
           key={route.notebookId}
           notebookId={route.notebookId}
@@ -236,6 +257,7 @@ export function MobileApp() {
           onCreateNote={() => void createNoteInParent(route.notebookId)}
           onActiveNoteChange={(id) => { activeIdRef.current = id; }}
         />
+        </Suspense>
       )}
       <CreateNotebookSheet
         open={createNbOpen}

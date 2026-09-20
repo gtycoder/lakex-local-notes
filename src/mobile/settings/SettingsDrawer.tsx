@@ -1,7 +1,7 @@
 /** 移动端设置页（§6：同步设置 S3 / 清理缓存 / 回收站 / 关于）。
  * 版式：竖向菜单列表（设置项一行一行），点某项进入新页面（带返回）；子页内容用 .config-* + .b3-* 骨架（AGENTS §3.14）。
  * 注意：全部 App 设置为竖向（无横向 tab）；「回收站」并入总回收站（见 TrashList）。 */
-import { useCallback, useEffect, useRef, useState } from "react";
+import { Suspense, lazy, useCallback, useEffect, useRef, useState } from "react";
 import { ArrowLeft, ChevronRight, Cloud, HardDrive, History, Images, Info, List, Palette, Pencil, RefreshCw, Trash } from "lucide-react";
 import { loadSettings, saveSettings, fontSizeOptions, MAX_ATTACHMENT_MB_OPTIONS_SETTINGS, type AppSettings } from "../../lib/settings";
 import { Group, Item, Switch, Seg, Block, NumField } from "../../components/settingsPrimitives";
@@ -11,10 +11,12 @@ import type { HistoryMobileSettings } from "../bridge";
 import { mobileCachePort } from "../cachePort";
 import { mobileAppInfoPort } from "../appInfoPort";
 import { TrashList } from "./TrashList";
-import { TrashPreviewPage } from "../trash/TrashPreviewPage";
 import { probePinShortcut, requestPinQuickNoteShortcut } from "../quickNoteShortcut";
 import type { AppInfo } from "../../core/ports";
 import type { S3Settings } from "../../lib/types";
+
+/** 回收站只读预览（内含 Lake 内核编辑器）：**按需加载**——设置页/首屏都不需要内核。 */
+const TrashPreviewPage = lazy(() => import("../trash/TrashPreviewPage").then((m) => ({ default: m.TrashPreviewPage })));
 
 export interface SettingsDrawerProps {
   open: boolean;
@@ -390,11 +392,13 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
 
       {previewNoteId && (
         <div className="mobile-settings-preview">
-          <TrashPreviewPage
-            noteId={previewNoteId}
-            onBack={() => setPreviewNoteId(null)}
-            onRestored={() => { setPreviewNoteId(null); setListKey((k) => k + 1); void onRefresh(); }}
-          />
+          <Suspense fallback={<div className="mobile-empty">正在加载预览…</div>}>
+            <TrashPreviewPage
+              noteId={previewNoteId}
+              onBack={() => setPreviewNoteId(null)}
+              onRestored={() => { setPreviewNoteId(null); setListKey((k) => k + 1); void onRefresh(); }}
+            />
+          </Suspense>
         </div>
       )}
       </div>
