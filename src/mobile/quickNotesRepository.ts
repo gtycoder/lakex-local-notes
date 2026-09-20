@@ -210,6 +210,8 @@ export interface QuickNoteDraft {
   /** 草稿对应的小记 id：一开始就固定，保存时沿用，避免每次重开换 id。 */
   id: string;
   text: string;
+  /** 草稿引用的图片（图片加入时已落盘到 quick-notes/{id}/，这里只记元数据/文件名）。 */
+  images: StoredQuickNoteImage[];
   updatedAt: string;
 }
 
@@ -221,7 +223,12 @@ export async function readQuickNoteDraft(d: MobileDb): Promise<QuickNoteDraft | 
   try {
     const parsed = JSON.parse(row.value) as Partial<QuickNoteDraft>;
     if (typeof parsed?.id === "string" && parsed.id && typeof parsed?.text === "string") {
-      return { id: parsed.id, text: parsed.text, updatedAt: typeof parsed.updatedAt === "string" ? parsed.updatedAt : "" };
+      return {
+        id: parsed.id,
+        text: parsed.text,
+        images: Array.isArray(parsed.images) ? (parsed.images as StoredQuickNoteImage[]) : [],
+        updatedAt: typeof parsed.updatedAt === "string" ? parsed.updatedAt : "",
+      };
     }
   } catch { /* 坏草稿：忽略 */ }
   return null;

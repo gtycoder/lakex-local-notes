@@ -36,8 +36,9 @@ describe("闪念速记草稿（device_state，纯本地）", () => {
     const { db, rows } = fakeDb();
     expect(await readQuickNoteDraft(db)).toBeNull();
 
-    await writeQuickNoteDraft(db, { id: "draft-1", text: "随手一句", updatedAt: "2026-09-20T00:00:00.000Z" });
-    expect(await readQuickNoteDraft(db)).toEqual({ id: "draft-1", text: "随手一句", updatedAt: "2026-09-20T00:00:00.000Z" });
+    const img = { id: "img-1", filename: "1789_x.png", mimeType: "image/png", width: 4, height: 4, size: 89, hash: "a".repeat(64) };
+    await writeQuickNoteDraft(db, { id: "draft-1", text: "随手一句", images: [img], updatedAt: "2026-09-20T00:00:00.000Z" });
+    expect(await readQuickNoteDraft(db)).toEqual({ id: "draft-1", text: "随手一句", images: [img], updatedAt: "2026-09-20T00:00:00.000Z" });
     expect(rows.get("quick-note-draft")).toContain("draft-1");
 
     await clearQuickNoteDraft(db);
@@ -53,6 +54,6 @@ describe("闪念速记草稿（device_state，纯本地）", () => {
     expect(await readQuickNoteDraft(db)).toBeNull();
 
     rows.set("quick-note-draft", JSON.stringify({ id: "a", text: "x" }));
-    expect(await readQuickNoteDraft(db)).toEqual({ id: "a", text: "x", updatedAt: "" });
+    expect(await readQuickNoteDraft(db)).toEqual({ id: "a", text: "x", images: [], updatedAt: "" });
   });
 });

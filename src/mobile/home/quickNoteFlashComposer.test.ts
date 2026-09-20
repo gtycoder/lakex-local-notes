@@ -40,7 +40,8 @@ describe("小记：轻量框不挂内核", () => {
   });
 
   it("保存走无内核写入通道（saveQuickNoteWithImages），不在组件里手拼正文", () => {
-    expect(FLASH_CODE).toMatch(/bridge\.saveQuickNoteWithImages\(/);
+    expect(FLASH_CODE).toMatch(/bridge\.stageQuickNoteAsset\(/);
+    expect(FLASH_CODE).toMatch(/bridge\.saveQuickNoteContent\(/);
     // 组件只给 text + 图片字节；body 由 core 合成 ⇒ 代码里不应出现正文标签
     for (const tag of ["<card", "data-lake-id", "ne-p"]) {
       expect(FLASH_CODE, `轻量框不应手拼正文：${tag}`).not.toContain(tag);

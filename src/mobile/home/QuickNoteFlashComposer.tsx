@@ -18,18 +18,28 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Check, ImagePlus, X } from "lucide-react";
 import { bridge } from "../bridge";
 import { successFeedback, warnFeedback } from "../ui/haptics";
+import { localAssetHttpUrl } from "../../core/assetUrl.js";
+import { withAssetAccessToken } from "../../lib/assetPort";
+import { sha256Sync } from "../../core/sha256Sync.js";
 import {
+  quickNoteBodyFromTextAndImages,
   validateQuickNoteImageBytes,
   validateQuickNoteImageDimensions,
+  type StoredQuickNoteImage,
 } from "../../core/quickNoteModel.js";
 
 interface FlashImage {
+  id: string;
+  /** 已落盘的唯一文件名（quick-notes/{noteId}/ 下）。 */
   filename: string;
+  /** 原文件名（仅用于展示）。 */
+  displayName: string;
   mimeType: string;
   width: number | null;
   height: number | null;
-  bytes: Uint8Array;
-  /** 预览用 objectURL（本地文件还没落盘）。 */
+  size: number;
+  hash: string;
+  /** 预览 URL：新加的是 objectURL，从草稿恢复的是 canonical URL。 */
   url: string;
 }
 
@@ -72,7 +82,21 @@ export function QuickNoteFlashComposer({ onSaved, onCancel, autoFocus = true }: 
     void (async () => {
       try {
         const draft = await bridge.getQuickNoteDraft();
-        if (alive && draft) { setNoteId(draft.id); setText(draft.text); }
+        if (alive && draft) {
+          setNoteId(draft.id);
+          setText(draft.text);
+          setImages(draft.images.map((img) => ({
+            id: img.id,
+            filename: img.filename,
+            displayName: img.filename,
+            mimeType: img.mimeType,
+            width: img.width,
+            height: img.height,
+            size: img.size,
+            hash: img.hash,
+            url: withAssetAccessToken(localAssetHttpUrl(draft.id, img.filename, { space: "quick-notes" })),
+          })));
+        }
       } catch { /* 读草稿失败不阻断输入 */ }
       finally { if (alive) setDraftLoaded(true); }
     })();
@@ -84,10 +108,14 @@ export function QuickNoteFlashComposer({ onSaved, onCancel, autoFocus = true }: 
     if (!draftLoaded || committedRef.current) return;
     const timer = window.setTimeout(() => {
       if (committedRef.current) return;
-      void bridge.saveQuickNoteDraft({ id: noteId, text });
+      void bridge.saveQuickNoteDraft({
+        id: noteId,
+        text,
+        images: images.map((i) => ({ id: i.id, filename: i.filename, mimeType: i.mimeType, width: i.width, height: i.height, size: i.size, hash: i.hash })),
+      });
     }, 300);
     return () => window.clearTimeout(timer);
-  }, [text, noteId, draftLoaded]);
+  }, [text, images, noteId, draftLoaded]);
 
   const addFiles = useCallback(async (files: FileList | File[]) => {
     const candidates = Array.from(files);
@@ -103,20 +131,32 @@ export function QuickNoteFlashComposer({ onSaved, onCancel, autoFocus = true }: 
         const dimensions = { width: bitmap.width, height: bitmap.height };
         bitmap.close();
         validateQuickNoteImageDimensions(dimensions);
+        // 图片一加入就落盘（quick-notes/{id}/）：草稿只记引用，进程被杀图片也能恢复。
+        const stored = await bridge.stageQuickNoteAsset(noteId, { filename: file.name, bytes });
         const url = URL.createObjectURL(blob);
         urlsRef.current.push(url);
-        next.push({ filename: file.name, mimeType: format.mimeType, width: dimensions.width, height: dimensions.height, bytes, url });
+        next.push({
+          id: crypto.randomUUID(),
+          filename: stored.filename,
+          displayName: file.name,
+          mimeType: stored.mimeType || format.mimeType,
+          width: dimensions.width,
+          height: dimensions.height,
+          size: stored.size,
+          hash: sha256Sync(bytes),
+          url,
+        });
       } catch (reason) {
         setError("图片读取失败: " + (reason as Error).message);
       }
     }
     if (next.length > 0) setImages((prev) => [...prev, ...next]);
-  }, []);
+  }, [noteId]);
 
   const removeImage = (index: number) => {
     setImages((prev) => {
       const target = prev[index];
-      if (target) {
+      if (target && target.url.startsWith("blob:")) {
         URL.revokeObjectURL(target.url);
         urlsRef.current = urlsRef.current.filter((url) => url !== target.url);
       }
@@ -140,17 +180,25 @@ export function QuickNoteFlashComposer({ onSaved, onCancel, autoFocus = true }: 
     setSaving(true);
     setError(null);
     try {
-      await bridge.saveQuickNoteWithImages(
-        noteId,
+      const body = quickNoteBodyFromTextAndImages(
         plain,
-        images.map((image) => ({
+        images.map((image) => ({ filename: image.filename, size: image.size, width: image.width, height: image.height, mimeType: image.mimeType })),
+        (filename) => localAssetHttpUrl(noteId, filename, { space: "quick-notes" }),
+        () => crypto.randomUUID(),
+      );
+      await bridge.saveQuickNoteContent(noteId, {
+        text: plain,
+        body,
+        images: images.map((image): StoredQuickNoteImage => ({
+          id: image.id,
           filename: image.filename,
           mimeType: image.mimeType,
           width: image.width,
           height: image.height,
-          bytes: image.bytes,
+          size: image.size,
+          hash: image.hash,
         })),
-      );
+      });
       committedRef.current = true;
       await bridge.clearQuickNoteDraft().catch(() => undefined);
       successFeedback();
@@ -177,7 +225,7 @@ export function QuickNoteFlashComposer({ onSaved, onCancel, autoFocus = true }: 
         <div className="mobile-qn-flash__images">
           {images.map((image, index) => (
             <figure key={image.url} className="mobile-qn-flash__thumb">
-              <img src={image.url} alt={image.filename} />
+              <img src={image.url} alt={image.displayName} />
               <button type="button" onClick={() => removeImage(index)} aria-label="移除图片"><X size={13} /></button>
             </figure>
           ))}
