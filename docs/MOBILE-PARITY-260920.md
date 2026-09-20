@@ -74,7 +74,7 @@
 **实测（模拟器）**：种一张锚在 A1、显示 80×50 的图 ⇒ `.mst-image-layer` 存在、图片渲染成功；
 图片矩形与 A1 单元格**逐像素对齐**（`alignedX=0, alignedY=0`）。截图 `/tmp/lake-board-evidence/mobile-sheet-image.png`。
 
-## 七、长按桌面图标 → 闪念速记（260920，对齐思源）
+## 七、长按桌面图标 → 小记（260920，对齐思源）
 
 **参考实现（`/Users/admin/file/local-lake/siyuan-android-main`，AGPL-3.0，仅参考不抄代码）**：
 - 入口两条腿：① **静态 App Shortcut** `res/xml/shortcuts.xml`（`shortcutId=shorthand`，`action=VIEW` + `data="shorthand"`，
@@ -90,20 +90,20 @@
   本项目的对应能力是**小记**（Quick Notes，独立库 + 随时预览/编辑）⇒ 我们把快捷方式落到「新建小记」。
 
 **我们的实现（v1）**：
-1. `res/xml/shortcuts.xml`：`quick-note` 静态快捷方式（`action=VIEW` + `data=lakenotes://quick-note`，label「闪念速记」）；
+1. `res/xml/shortcuts.xml`：`quick-note` 静态快捷方式（`action=VIEW` + `data=lakenotes://quick-note`，label「小记」）；
 2. `AndroidManifest.xml`：launcher activity 挂 `android.app.shortcuts` meta-data + 注册 `lakenotes://` 深链 intent-filter；
 3. JS：`src/mobile/quickNoteShortcut.ts` 统一收口 —— **冷启动** `App.getLaunchUrl()`（启动瞬间可能还没就绪 ⇒ 前 3 秒短轮询重试）
    + **热启动** `App.appUrlOpen`；命中即让 `MobileApp` 切到「小记」标签并请求 `HomePage` 直接打开新建写作区；
 4. **机型兜底（对齐思源第 ② 条）**：新增原生插件 `PinShortcutPlugin`（`isAvailable` / `isPinned` / `requestPin`），
-   设置 → 编辑器 →「闪念速记快捷方式」在「可固定且未固定」时显示 **「添加到桌面」**（系统会弹确认框）。
+   设置 → 编辑器 →「小记快捷方式」在「可固定且未固定」时显示 **「添加到桌面」**（系统会弹确认框）。
 
 **实测（模拟器 API36）**：
 | 验证项 | 结果 |
 |---|---|
-| 静态快捷方式注册 | ✅ `adb shell cmd shortcut get-shortcuts` 列出 `id=quick-note`、shortLabel=闪念速记、longLabel=闪念速记：直接写一条小记、intent=VIEW→MainActivity |
+| 静态快捷方式注册 | ✅ `adb shell cmd shortcut get-shortcuts` 列出 `id=quick-note`、shortLabel=小记、longLabel=小记：直接写一条小记、intent=VIEW→MainActivity |
 | 冷启动 | ✅ `force-stop` → `am start -a VIEW -d lakenotes://quick-note` ⇒ 直接进入「小记」标签 + 新建写作区（内核编辑器已挂） |
 | 热启动（后台 → 再触发） | ✅ 回到前台并打开新建写作区（输入框为空，不串上一次内容） |
-| 机型兜底「添加到桌面」 | ✅ `PinShortcut.isAvailable()={available:true}` → `requestPin()`={requested:true} → 系统弹出「闪念速记 / Add to home screen」确认框（截图 `/tmp/lake-board-evidence/mobile-pin-dialog.png`）→ 确认后 `cmd shortcut` 该条目 flags 变为 **`Pin`**（已固定到桌面） |
+| 机型兜底「添加到桌面」 | ✅ `PinShortcut.isAvailable()={available:true}` → `requestPin()`={requested:true} → 系统弹出「小记 / Add to home screen」确认框（截图 `/tmp/lake-board-evidence/mobile-pin-dialog.png`）→ 确认后 `cmd shortcut` 该条目 flags 变为 **`Pin`**（已固定到桌面） |
 | 报错 | ✅ 全流程 0 未捕获异常 |
 
 > **踩坑（重要）**：订阅不能用 `hasNativeBridge()`（它判的是 `window.lakeNative`，而移动端这个调试契约是在
@@ -133,7 +133,7 @@
 - **① 内核按需加载**：`MobileApp → NotebookWorkspace`、`HomePage → QuickNoteComposer`、`SettingsDrawer → TrashPreviewPage`
   三条**静态**路径把内核拖进入口；全部改 `React.lazy` 后 **入口 6.7MB → 80KB**，内核进独立懒 chunk（不 modulepreload），
   `effectStart` **712 → ~200ms**。
-- **② 闪念速记独立入口**：轻量框改挂 `MobileApp` 的 `captureOpen` 分支，**在 `bridge.init()/refreshAll()` 之前**渲染
+- **② 小记独立入口**：轻量框改挂 `MobileApp` 的 `captureOpen` 分支，**在 `bridge.init()/refreshAll()` 之前**渲染
   （保存时才 `ensureDb()`；返回键先关它）。实测 `initDone = null`（框已能输入时 DB 还没打开）。
 - **实测**：`appMsToFlash` **305 / 337 / 428ms**（改前 ~1250–1500ms）、`flashMount` 214–248ms（改前 ~850ms）。
 - **⚠️ 踩坑**：**不要**用 rolldown `codeSplitting.groups` 给 `\@dlient/lakex-doc-react` 分组 —— 实测会把 vendor 内部

@@ -20,7 +20,7 @@ import { useHorizontalSwipe } from "../useHorizontalSwipe";
 import { localAssetHttpUrl } from "../../core/assetUrl.js";
 import { withAssetAccessToken } from "../../lib/assetPort";
 
-/** 完整小记编辑器（内含 Lake 内核）：**按需加载**——首屏/闪念速记都不需要内核。 */
+/** 完整小记编辑器（内含 Lake 内核）：**按需加载**——首屏/小记都不需要内核。 */
 const QuickNoteComposer = lazy(() => import("./QuickNoteComposer").then((m) => ({ default: m.QuickNoteComposer })));
 
 export interface MobileQuickNote {

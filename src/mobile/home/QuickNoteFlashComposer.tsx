@@ -1,5 +1,5 @@
 /**
- * 闪念速记（长按桌面图标 / `lakenotes://quick-note` 深链进来的那条路径）—— **不挂 Lake 内核**的轻量速记框。
+ * 小记（长按桌面图标 / `lakenotes://quick-note` 深链进来的那条路径）—— **不挂 Lake 内核**的轻量速记框。
  *
  * 为什么单独做一个：挂内核的完整编辑器（`QuickNoteComposer` → `QuickNoteEditor`）冷启动要等内核 bundle +
  * 实例化（实测 ~1–2s），而"随手记一句"要的是秒开。这里就是一个 `textarea` + 图片按钮，形态对齐桌面端
@@ -134,7 +134,7 @@ export function QuickNoteFlashComposer({ onSaved, onCancel, autoFocus = true }: 
         value={text}
         onChange={(event) => setText(event.target.value)}
         placeholder="写下这一刻…"
-        aria-label="闪念速记"
+        aria-label="小记"
       />
       {images.length > 0 && (
         <div className="mobile-qn-flash__images">
@@ -157,7 +157,7 @@ export function QuickNoteFlashComposer({ onSaved, onCancel, autoFocus = true }: 
             onChange={(event) => { if (event.target.files) void addFiles(event.target.files); event.currentTarget.value = ""; }}
           />
         </label>
-        <span className="mobile-qn-hint">速记：只记文字与图片</span>
+        <span className="mobile-qn-hint">小记：只记文字与图片</span>
         <div className="mobile-qn-spacer" />
         <button type="button" className="mobile-qn-btn" onClick={onCancel} disabled={saving}>取消</button>
         <button type="button" className="mobile-qn-btn mobile-qn-primary" onClick={() => void save()} disabled={saving}>

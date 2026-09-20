@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- 长按桌面图标出现的静态快捷方式（Android App Shortcuts）。
-     「闪念速记」= 直接进入新建小记：走 lakenotes://quick-note 深链，App 侧由 @capacitor/app 的
+     「小记」= 直接进入新建小记：走 lakenotes://quick-note 深链，App 侧由 @capacitor/app 的
      appUrlOpen / getLaunchUrl 接住（见 src/mobile/quickNoteShortcut.ts）。 -->
 <shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
     <shortcut

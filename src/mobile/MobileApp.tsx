@@ -35,7 +35,7 @@ export type Route =
 
 export function MobileApp() {
   const [route, setRoute] = useState<Route>({ kind: "home", tab: "library" });
-  /** 闪念速记（长按桌面图标的快捷方式）：独立入口，不等启动完成即可输入。 */
+  /** 小记（长按桌面图标的快捷方式）：独立入口，不等启动完成即可输入。 */
   const [captureOpen, setCaptureOpen] = useState(false);
   const [treeNodes, setTreeNodes] = useState<TreeNode[]>([]);
   const [notes, setNotes] = useState<POCNoteSummary[]>([]);
@@ -137,7 +137,7 @@ export function MobileApp() {
     return () => { if (timer != null) window.clearInterval(timer); };
   }, []);
 
-  // 长按桌面图标 →「闪念速记」：冷启动（getLaunchUrl）与热启动（appUrlOpen）都收敛到这里。
+  // 长按桌面图标 →「小记」：冷启动（getLaunchUrl）与热启动（appUrlOpen）都收敛到这里。
   // 直接打开**独立入口**（见下方 captureOpen 分支）——不等 bridge.init()/refreshAll()，做到最早可输入。
   useEffect(() => subscribeQuickNoteShortcut(() => {
     setRoute({ kind: "home", tab: "quick" });
@@ -201,7 +201,7 @@ export function MobileApp() {
     } catch { showToast("新建失败", { type: "error" }); warnFeedback(); }
   }, [openNote]);
 
-  // 闪念速记独立入口：在 bridge.init()/refreshAll() 之前就渲染轻量框（输入框最早出现）。
+  // 小记独立入口：在 bridge.init()/refreshAll() 之前就渲染轻量框（输入框最早出现）。
   // 保存时才按需打开 DB（saveQuickNoteWithImages → ensureDb()），所以不必等启动完成。
   if (captureOpen) {
     return (

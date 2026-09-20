@@ -1,5 +1,5 @@
 /**
- * 闪念速记轻量框（长按桌面图标 / `lakenotes://quick-note` 深链路径）护栏（260920）。
+ * 小记轻量框（长按桌面图标 / `lakenotes://quick-note` 深链路径）护栏（260920）。
  *
  * 用户 260920 定稿的分工：
  * - **长按速记那条路径 = 轻量速记框**（`textarea` + 图片，零内核实例、**不可展开**）——要的是秒开；
@@ -31,7 +31,7 @@ const MOBILE_APP_CODE = code(read("../MobileApp.tsx"));
 const REPO_SRC = read("../quickNotesRepository.ts");
 const MODEL_CODE = code(read("../../core/quickNoteModel.ts"));
 
-describe("闪念速记：轻量框不挂内核", () => {
+describe("小记：轻量框不挂内核", () => {
   it("不引内核编辑器 / 运行时，也不做展开（零内核实例）", () => {
     for (const forbidden of ["QuickNoteEditor", "lakeRuntime", "createLakeDocument", "fullscreen", "ne-ui-"]) {
       expect(FLASH_CODE, `轻量框不应出现 ${forbidden}`).not.toContain(forbidden);

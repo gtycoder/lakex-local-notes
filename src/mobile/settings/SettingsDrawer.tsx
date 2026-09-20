@@ -52,7 +52,7 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
   const { open, onClose, onRefresh } = props;
   const [view, setView] = useState<View>("menu");
 
-  /** 闪念速记桌面快捷方式：部分机型不展示静态快捷方式，这里给「添加到桌面」兜底（对齐思源）。 */
+  /** 小记桌面快捷方式：部分机型不展示静态快捷方式，这里给「添加到桌面」兜底（对齐思源）。 */
   const [pinState, setPinState] = useState<{ available: boolean; pinned: boolean } | null>(null);
   const [pinMsg, setPinMsg] = useState("");
   useEffect(() => { void probePinShortcut().then(setPinState); }, []);  const [previewNoteId, setPreviewNoteId] = useState<string | null>(null);
@@ -204,7 +204,7 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
                 </select>
               </Item>
               {pinState?.available && !pinState.pinned && (
-                <Item itemId="editor-pin-quick-note" name="闪念速记快捷方式" desc="长按桌面图标即可速记。部分机型不展示系统快捷方式，这里可手动添加到桌面。">
+                <Item itemId="editor-pin-quick-note" name="小记快捷方式" desc="长按桌面图标即可记一条小记。部分机型不展示系统快捷方式，这里可手动添加到桌面。">
                   <button
                     className="b3-button b3-button--outline"
                     onClick={() => {

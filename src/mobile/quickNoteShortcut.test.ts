@@ -1,5 +1,5 @@
 /**
- * 「闪念速记」深链订阅护栏（260920）。
+ * 「小记」深链订阅护栏（260920）。
  *
  * 覆盖一个**实测复现过的真 bug**：早先用一个永久布尔量去重冷启动的"双触发"（getLaunchUrl + appUrlOpen），
  * 结果**一次冷启动之后，进程存活期间再长按图标（热启动）就永远被忽略**。正确口径 = 只对"同一次点击的
@@ -30,7 +30,7 @@ vi.mock("@capacitor/app", () => ({
 
 import { isQuickNoteShortcutUrl, subscribeQuickNoteShortcut } from "./quickNoteShortcut";
 
-describe("闪念速记深链订阅", () => {
+describe("小记深链订阅", () => {
   beforeEach(() => {
     vi.useFakeTimers();
     h.getLaunchUrl.mockReset();

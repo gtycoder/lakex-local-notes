@@ -14,10 +14,10 @@ import com.getcapacitor.PluginMethod;
 import com.getcapacitor.annotation.CapacitorPlugin;
 
 /**
- * 「闪念速记」桌面快捷方式（对齐思源 siyuan-android 的机型兼容做法）。
+ * 「小记」桌面快捷方式（对齐思源 siyuan-android 的机型兼容做法）。
  *
  * 背景：Android 的**静态** App Shortcut（res/xml/shortcuts.xml）在原生与多数 ROM 上长按图标即可见，
- * 但部分机型/launcher 不展示或用户找不到入口。思源的兜底是在「闪念速记」界面放一个「添加到桌面」按钮，
+ * 但部分机型/launcher 不展示或用户找不到入口。思源的兜底是在「小记」界面放一个「添加到桌面」按钮，
  * 调 `ShortcutManager.requestPinShortcut` 让系统**直接固定一个快捷方式**到桌面（并检测是否已固定）。
  * 本插件提供同一套能力的三个方法：
  *   - isAvailable：`isRequestPinShortcutSupported()`（机型/launcher 是否支持固定）

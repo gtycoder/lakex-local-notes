@@ -23,7 +23,7 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
 
-            <!-- 深链：lakenotes://quick-note（长按图标的「闪念速记」快捷方式走这里；@capacitor/app 读取） -->
+            <!-- 深链：lakenotes://quick-note（长按图标的「小记」快捷方式走这里；@capacitor/app 读取） -->
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />

@@ -1,6 +1,6 @@
 /**
  * Android 返回键处理（§9.2，Phase B1）。
- * 优先级：关闭闪念速记 → 关闭 Sheet → 关闭 Drawer → 退出编辑态 → 文档页回笔记本 → 笔记本页回首页 → 首页交给系统。
+ * 优先级：关闭小记 → 关闭 Sheet → 关闭 Drawer → 退出编辑态 → 文档页回笔记本 → 笔记本页回首页 → 首页交给系统。
  * 实现：@capacitor/app 的 backButton 监听；Web 浏览器环境（预览）无此插件时静默跳过（不注册）。
  * P1-1（GPT 审计）：listener 只注册一次，handler 通过 ref 读取最新 state/回调，
  * 避免"进入编辑态时的旧闭包丢失后续输入"的 stale closure 数据丢失。
@@ -14,7 +14,7 @@ export interface BackHandlerState {
   drawerOpen: boolean;
   createNbOpen: boolean;
   searchOpen: boolean;
-  /** 闪念速记独立入口（全屏）是否打开：返回键必须能先关它，否则会直接退出 App、丢掉正在写的速记。 */
+  /** 小记独立入口（全屏）是否打开：返回键必须能先关它，否则会直接退出 App、丢掉正在写的速记。 */
   captureOpen?: boolean;
   onCloseCapture?: () => void;
   onBackFromNotebook: () => void;
@@ -37,7 +37,7 @@ export function useBackHandler(state: BackHandlerState) {
         const mod = await import("@capacitor/app");
         const l = await mod.App.addListener("backButton", () => {
           const s = stateRef.current;
-          // 0) 闪念速记（全屏独立入口，最上层）：先关它
+          // 0) 小记（全屏独立入口，最上层）：先关它
           if (s.captureOpen) { s.onCloseCapture?.(); return; }
           // 1) 浮层返回栈（思源：#model / .b3-menu--fullscreen / side-panel 谁在上层谁先吃返回）
           if (consumeBack()) return;

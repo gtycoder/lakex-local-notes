@@ -1,5 +1,5 @@
 /**
- * 长按桌面图标 →「闪念速记」静态快捷方式（Android App Shortcuts）的深链处理。
+ * 长按桌面图标 →「小记」静态快捷方式（Android App Shortcuts）的深链处理。
  *
  * 链路：`res/xml/shortcuts.xml` 的快捷方式发 `ACTION_VIEW` + `lakenotes://quick-note` ⇒
  * MainActivity（singleTask）⇒ `@capacitor/app` 的 `getLaunchUrl()`（冷启动）/ `appUrlOpen`（已在运行）。
@@ -31,7 +31,7 @@ interface PinShortcutPluginApi {
 }
 const PinShortcut = registerPlugin<PinShortcutPluginApi>("PinShortcut");
 
-/** 深链 URL 是否是「闪念速记」（容错尾斜杠 / query / host 大小写）。 */
+/** 深链 URL 是否是「小记」（容错尾斜杠 / query / host 大小写）。 */
 export function isQuickNoteShortcutUrl(url: string | null | undefined): boolean {
   if (!url) return false;
   const normalized = url.trim().toLowerCase();
@@ -39,7 +39,7 @@ export function isQuickNoteShortcutUrl(url: string | null | undefined): boolean 
 }
 
 /**
- * 订阅「闪念速记」快捷方式。返回取消订阅函数。
+ * 订阅「小记」快捷方式。返回取消订阅函数。
  * `onTrigger` 可能被调用多次（冷启动补读 + appUrlOpen），调用方自行幂等。
  */
 export function subscribeQuickNoteShortcut(onTrigger: () => void): () => void {

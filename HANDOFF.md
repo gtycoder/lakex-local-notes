@@ -1293,7 +1293,7 @@ tsc 0 · vitest 1095 passed / 16 skipped (1111) · 桌面 + 移动 vite build �
   - 小记编辑：内核编辑器 + 粘贴 PNG → 保存 → `content.body` 含图片卡、`images` 1 条（120×80、size 1341）、文件落 `quick-notes/{id}/` 且 AssetServer 能渲染；重开编辑态正文与图片都在；0 异常。
 
 7. **表格图片（浮动图）移动端只读渲染（260920 追加）**：`src/core/sheetDoc.ts` 新增 `sheetImages` / `sheetImageSrc`（三种 src 形态都认 ⇒ 桌面 P1 落地后零改动）；`MobileSheetViewer` 加图片叠层，偏移用**实测网格原点**（ResizeObserver 量 A1；顺带修行号列被通用 `th` 规则撑到 84px 的优先级问题）。实测图片矩形与 A1 **逐像素对齐**（alignedX/Y=0）。
-8. **长按桌面图标 →「闪念速记」（260920 追加，对齐思源）**：静态 App Shortcut（`res/xml/shortcuts.xml`，`lakenotes://quick-note` 深链）+ 宿主侧 `src/mobile/quickNoteShortcut.ts`（冷启动 `App.getLaunchUrl()` **短轮询重试** + 热启动 `appUrlOpen`）⇒ 直接进「小记」标签并打开新建写作区；**机型兜底** = 新原生插件 `PinShortcutPlugin`（`isAvailable/isPinned/requestPin`）+ 设置 → 编辑器 →「添加到桌面」（对齐思源的 `requestPinShortcut`，实测系统弹窗确认后 flags 变 `Pin`）。
+8. **长按桌面图标 →「小记」（260920 追加，对齐思源）**：静态 App Shortcut（`res/xml/shortcuts.xml`，`lakenotes://quick-note` 深链）+ 宿主侧 `src/mobile/quickNoteShortcut.ts`（冷启动 `App.getLaunchUrl()` **短轮询重试** + 热启动 `appUrlOpen`）⇒ 直接进「小记」标签并打开新建写作区；**机型兜底** = 新原生插件 `PinShortcutPlugin`（`isAvailable/isPinned/requestPin`）+ 设置 → 编辑器 →「添加到桌面」（对齐思源的 `requestPinShortcut`，实测系统弹窗确认后 flags 变 `Pin`）。
    ⚠️ **坑**：订阅**不能**用 `hasNativeBridge()`（判 `window.lakeNative`，移动端是启动流程之后才注入 ⇒ 冷启动瞬间判假、订阅被跳过）；要用 `window.Capacitor.isNativePlatform()`。思源参考实现见 `/Users/admin/file/local-lake/siyuan-android-main`（AGPL-3.0，只参考不抄）；与思源的差距（原生轻量 Activity 秒开 + 草稿 + inbox 转入、系统分享入口）估 1.5–2 天，见 `docs/MOBILE-PARITY-260920.md` §七。
 
 9. **深链/长按那条路径 = 不挂内核的轻量速记框（260920 续，收尾）**：`src/mobile/home/QuickNoteFlashComposer.tsx`
@@ -1314,7 +1314,7 @@ tsc 0 · vitest 1095 passed / 16 skipped (1111) · 桌面 + 移动 vite build �
    ⚠️ 别用 `codeSplitting.groups` 拆内核（会拆坏 vendor 的 DrawnixBoardCore 懒 chunk、白屏）；护栏 `src/mobile/mobileLazyChunks.test.ts`。
 
 ### 三、下一步（详见 `docs/MOBILE-PARITY-260920.md` §五）
-1. 小记**音视频/PDF 附件**在真机点一次确认四类卡；2. ~~移动端新建 sheet/bitable/board~~（**用户定稿：不做，除文档外一律只读**）；3. 表格 100% 保真是否引入 FortuneSheet（+0.5MB gzip 懒加载，用于公式求值/条件格式/冻结窗格）；4. **AB 多端 S3 往返**（画板图片/表格/多维表/小记资源）；5. 移动端小记工作台能力（→正式文档、批量、置顶/列表视图）；6. 【可选】闪念速记对齐思源的原生轻量 Activity + 系统分享入口（1.5–2 天）。
+1. 小记**音视频/PDF 附件**在真机点一次确认四类卡；2. ~~移动端新建 sheet/bitable/board~~（**用户定稿：不做，除文档外一律只读**）；3. 表格 100% 保真是否引入 FortuneSheet（+0.5MB gzip 懒加载，用于公式求值/条件格式/冻结窗格）；4. **AB 多端 S3 往返**（画板图片/表格/多维表/小记资源）；5. 移动端小记工作台能力（→正式文档、批量、置顶/列表视图）；6. 【可选】小记对齐思源的原生轻量 Activity + 系统分享入口（1.5–2 天）。
 
 ---
 

@@ -801,7 +801,7 @@ body.nb-drag-active .side-panel-body { overscroll-behavior: none; }
   text-align: center;
 }
 
-/* 闪念速记：不挂内核的轻量速记框（长按桌面图标 / `lakenotes://quick-note` 深链路径）。 */
+/* 小记：不挂内核的轻量速记框（长按桌面图标 / `lakenotes://quick-note` 深链路径）。 */
 .mobile-qn-flash {
   display: flex;
   flex-direction: column;
