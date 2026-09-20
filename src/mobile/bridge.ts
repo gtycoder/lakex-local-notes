@@ -21,6 +21,7 @@ import type { QuickNotesSyncResult } from "../core/quickNotesSyncEngine.js";
 import { TRASH_NOTEBOOK_ID } from "../core/syncDecisions.js";
 import { emptyLakeBody } from "../core/lakeDocForm.js";
 import { createCapacitorS3Store } from "./s3Store";
+import { CapacitorHttpHandler } from "./capacitorHttpHandler";
 import { buildAssetFilename, extOf } from "../core/assetNaming.js";
 import { readImageDimensions, sniffImageFormat, mimeTypeForFilename } from "../core/imageUtils.js";
 import { localAssetHttpUrl } from "../core/assetUrl.js";
@@ -134,10 +135,9 @@ async function ensureDb(): Promise<NativeSqliteDb> {
 }
 
 async function createS3Client(cfg: S3Settings): Promise<import("@aws-sdk/client-s3").S3Client> {
-  const [{ S3Client }, { CapacitorHttpHandler }] = await Promise.all([
-    import("@aws-sdk/client-s3"),
-    import("./capacitorHttpHandler"),
-  ]);
+  // @aws-sdk/client-s3 保持动态（懒加载）；CapacitorHttpHandler 已是静态依赖（s3Store.ts 也静态用），
+  // 这里再动态 import 只会触发 INEFFECTIVE_DYNAMIC_IMPORT，故提到模块顶部静态引入。
+  const { S3Client } = await import("@aws-sdk/client-s3");
   return new S3Client({
     region: cfg.region,
     endpoint: cfg.endpoint,

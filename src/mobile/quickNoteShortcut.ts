@@ -8,7 +8,6 @@
  * 为什么要单开一个模块：深链可能在**冷启动**（插件尚未 ready，需要 getLaunchUrl 补读）也可能在
  * **热启动**（onNewIntent ⇒ appUrlOpen）；两处都要接，且必须防重复（冷启动时两条路径可能都触发一次）。
  */
-import { App } from "@capacitor/app";
 import { registerPlugin } from "@capacitor/core";
 
 const QUICK_NOTE_URL = "lakenotes://quick-note";
@@ -51,6 +50,7 @@ export function subscribeQuickNoteShortcut(onTrigger: () => void): () => void {
   /** 上一次触发时刻：只对"同一次点击被两条路径各触发一次"做短去重，**不能永久去重**。 */
   let lastTriggerAt = 0;
   let retryTimer: number | null = null;
+  let listener: { remove(): void } | null = null;
   /** 冷启动的双触发窗口：getLaunchUrl 与 appUrlOpen 通常在同一两秒内各来一次。 */
   const DEDUP_MS = 1500;
 
@@ -65,39 +65,52 @@ export function subscribeQuickNoteShortcut(onTrigger: () => void): () => void {
     onTrigger();
   };
 
-  /**
-   * 冷启动：Activity 是用深链拉起来的（getLaunchUrl 只在有 launch intent 时返回 url）。
-   * 启动瞬间插件/桥可能还没就绪（实测偶发返回空）⇒ 前几秒做几次短轮询重试，拿到就停。
-   */
-  let attempts = 0;
-  const readLaunchUrl = () => {
-    if (disposed || launchConsumed) return;
-    void App.getLaunchUrl()
-      .then((result) => {
-        if (result?.url) {
-          launchConsumed = true;
-          handle(result.url);
-          return;
-        }
-        attempts += 1;
-        if (attempts >= 10) return; // 约 3s 内没有深链 ⇒ 视为普通启动
-        retryTimer = window.setTimeout(readLaunchUrl, 300);
-      })
-      .catch(() => {
-        attempts += 1;
-        if (attempts >= 10) return;
-        retryTimer = window.setTimeout(readLaunchUrl, 300);
-      });
-  };
-  readLaunchUrl();
+  // 动态 import @capacitor/app：本模块被 MobileApp **静态**引入，若这里也静态引插件，
+  // 会让其它模块对 @capacitor/app 的懒加载分包失效（构建报 INEFFECTIVE_DYNAMIC_IMPORT）。
+  void (async () => {
+    try {
+      const { App } = await import("@capacitor/app");
+      if (disposed) return;
 
-  // 热启动 / 已在后台：onNewIntent ⇒ appUrlOpen
-  const listener = App.addListener("appUrlOpen", (event) => handle(event?.url));
+      /**
+       * 冷启动：Activity 是用深链拉起来的（getLaunchUrl 只在有 launch intent 时返回 url）。
+       * 启动瞬间插件/桥可能还没就绪（实测偶发返回空）⇒ 前几秒做几次短轮询重试，拿到就停。
+       */
+      let attempts = 0;
+      const readLaunchUrl = () => {
+        if (disposed || launchConsumed) return;
+        void App.getLaunchUrl()
+          .then((result) => {
+            if (result?.url) {
+              launchConsumed = true;
+              handle(result.url);
+              return;
+            }
+            attempts += 1;
+            if (attempts >= 10) return; // 约 3s 内没有深链 ⇒ 视为普通启动
+            retryTimer = window.setTimeout(readLaunchUrl, 300);
+          })
+          .catch(() => {
+            attempts += 1;
+            if (attempts >= 10) return;
+            retryTimer = window.setTimeout(readLaunchUrl, 300);
+          });
+      };
+      readLaunchUrl();
+
+      // 热启动 / 已在后台：onNewIntent ⇒ appUrlOpen
+      const l = await App.addListener("appUrlOpen", (event) => handle(event?.url));
+      if (disposed) { void l.remove(); return; }
+      listener = l;
+    } catch {
+      // 非 Capacitor 环境（Web 预览/测试）：不订阅
+    }
+  })();
 
   return () => {
     disposed = true;
     if (retryTimer !== null) window.clearTimeout(retryTimer);
-    void listener.then((handle_) => handle_.remove()).catch(() => undefined);
+    void listener?.remove();
   };
 }
 
