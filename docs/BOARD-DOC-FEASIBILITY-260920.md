@@ -181,15 +181,30 @@ IPC `create_board_in`（`registerNotes.ts` + `preload.cjs` + `webApiServer.ts` +
 `withArrowLineAutoComplete` 提交时用的是 `createDefaultGeometry(board, points, originElement.shape)`，
 而 plait 没有「先选形状再创建」的钩子。画流程图时每建一个节点都要再手动改形状，很费事。
 
-**做法（不 patch `@plait/*`，只在 vendor 适配层接）**：
-1. `DrawnixBoardCore` 记「选择态下的 pointerdown 快照」（pointer 是 `selection` 且事件不在自研 UI 内）；
+**做法：给 plait 打一个极小补丁，把「提交形状的决定权」交给宿主（B 档 = 真·先选后建）**：
+
+`patches/@plait+draw+0.93.4.patch`（仓库根，postinstall 自动 apply）只做三件事：
+```js
+const AUTO_COMPLETE_COMMIT_HOSTS = new WeakMap();
+const setAutoCompleteCommitHost = (board, host) => { /* set / delete */ };   // + 导出
+// withArrowLineAutoComplete 的 globalPointerUp：pre-commit 插入块改为
+if (commitHost?.requestShapeChoice) commitHost.requestShapeChoice({ clientX, clientY, shapeElement, arrowLineElement,
+    commit: (shape) => { insertNode(arrow); insertElement(shape ? {...shapeElement, shape} : shapeElement); } });
+else { /* 上游原行为：直接插入源形状副本 + 连线 */ }
+```
+`commit` 内部复用上游原来的两次插入（箭头 → 形状，元素 id 不变 ⇒ 连线绑定不破），只是**形状可换**。
+
+宿主侧（vendor 适配层）：
+
+1. （**兜底路径**，补丁缺失时仍可用）`DrawnixBoardCore` 记「选择态下的 pointerdown 快照」（pointer 是 `selection` 且事件不在自研 UI 内）；
    在 pointerup 后（`setTimeout(0)`，等 plait 的 `globalPointerUp` 提交完）比对画布子节点 ——
    **新增了恰好一个 geometry** = 刚发生蓝点快创 ⇒ 弹出 `LakexQuickShapePicker`（锚在指针位置）。
-2. 面板 = **最近使用**（localStorage `lake-notes-v3.board-recent-shapes`，最多 7 个，本机偏好不进文档）
+2. **主路径**：`setAutoCompleteCommitHost(board, { requestShapeChoice })` ⇒ 点蓝点只弹面板、画布上还没有新形状；选完 `commit(shape)` 才落地；Esc/点外面 = `commit()`（源形状副本）。
+3. 面板 = **最近使用**（localStorage `lake-notes-v3.board-recent-shapes`，最多 7 个，本机偏好不进文档）
    + **基础图形 / 流程图 / Smart** 三节网格（图标与「形状」图形库共用 `categories` + `ShapePreview`）。
-3. 选中后：`clearSelectedElement` → `addSelectedElement(新形状)` → `DrawTransforms.switchGeometryShape(board, shape)`
+4. 兜底路径选中后：`clearSelectedElement` → `addSelectedElement(新形状)` → `DrawTransforms.switchGeometryShape(board, shape)`
    → `memorizeLatestShape`；已绑定在源形状与目标形状之间的连线会自动重算（plait 内部处理），选择状态与改造前一致。
-4. **不选 = 保持复制出来的形状**（Esc / 点面板外即关）⇒ 老习惯不受影响，行为与改造前完全一致。
+5. **最近使用第一位固定放源形状**（“和自己一样”一键复用，替代悬停预览）；**不选 = 保持复制出来的形状** ⇒ 老习惯不受影响。
 
 **实机验证**（隔离 userData + CDP 真实 Electron）：
 

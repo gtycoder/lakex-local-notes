@@ -981,10 +981,16 @@ PY
     plait 的 `withArrowLineAutoComplete`（`@plait/draw`）分两条路——① 在蓝点上**按下并拖动**（> `PRESS_AND_MOVE_BUFFER*2`）只建**连线**；
     ② **悬停**蓝点会出现幽灵形状（`BOARD_TO_PRE_COMMIT`），**再单击**才同时插入「连线 + 形状」。
     提交时的形状由 `createDefaultGeometry(board, points, originElement.shape)` 决定 ⇒ **永远复制源形状的类型**（圆→圆、方→方），
-    plait 没有提供「先选形状再创建」的钩子。云端语雀的做法是提交后弹「最近使用 / 基础图形」面板让用户改。
-    宿主侧可接：判定「选择态下 pointerup 后画布新增了单个 geometry」= 快创提交 → 弹面板 → 选中后
-    `addSelectedElement` + `DrawTransforms.switchGeometryShape(board, shape)`（内部 `Transforms.setNode({shape})` + 重算已绑定连线）
-    + `memorizeLatestShape`（plait 自己的「最近使用」记忆，`insertElement` 也会写）。见 LOCAL-CHANGES #20。
+    plait **没有**「先选形状再创建」的钩子。云端语雀的做法是弹「最近使用 / 基础图形」面板让用户挑。
+    - **不补丁的做法（LOCAL-CHANGES #20，兜底/或不想动上游时）**：判定「选择态下 pointerup 后画布新增了单个 geometry」= 快创提交 →
+      弹面板 → 选中后 `addSelectedElement` + `DrawTransforms.switchGeometryShape(board, shape)`
+      （内部 `Transforms.setNode({shape})` + 重算已绑定连线）+ `memorizeLatestShape`。缺点：形状先落地成副本、选完再替换。
+    - **补丁的做法（LOCAL-CHANGES #21，当前采用）**：`patches/@plait+draw+0.93.4.patch` 给上游加一个注册表
+      `setAutoCompleteCommitHost(board, host)`：`globalPointerUp` 里 pre-commit 的插入块改为「有 host 就交给 host」，
+      host 拿到 `{clientX, clientY, shapeElement, arrowLineElement, commit(shape?)}` —— 宿主弹面板，**选完才 `commit(shape)`**，
+      `commit()` 不带形状 = 上游原行为（源形状副本）。补丁不碰几何/连线/绑定：`commit` 内部仍复用原来的
+      `Transforms.insertNode(arrow)` + `insertElement(shape)`（只是把 `shape` 换掉，元素 id 不变 ⇒ 绑定不破）。
+      效果：**点蓝点只弹面板、画布上还没有新形状**；Esc/点外面 = 落地源形状副本（老习惯不变）。
 
 实机验证（隔离 userData + CDP 驱动真实 Electron）与剩余风险见 `docs/BOARD-DOC-FEASIBILITY-260920.md`。
 

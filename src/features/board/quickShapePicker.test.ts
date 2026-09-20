@@ -28,6 +28,10 @@ const CSS = readFileSync(
   new URL("../../../vendor/lakex-doc-react/src/cards/DrawingBoard/DrawnixBoardCore.css", import.meta.url),
   "utf8",
 );
+const PLAIT_PATCH = readFileSync(
+  new URL("../../../patches/@plait+draw+0.93.4.patch", import.meta.url),
+  "utf8",
+);
 
 describe("蓝点快创图形选择面板", () => {
   it("只在「选择态 + 新增单个 geometry」时弹出（画形状/粘贴/复制不会误触发）", () => {
@@ -63,5 +67,24 @@ describe("蓝点快创图形选择面板", () => {
     expect(CSS).toMatch(/\.lakex-quick-shape \{/);
     expect(CSS).toMatch(/\[data-theme="dark"\] \.lakex-quick-shape/);
     expect(CSS).toMatch(/@keyframes lakex-quick-shape-in/);
+  });
+
+  it("先选后建：plait 补丁把提交权交给宿主（点蓝点只弹面板，选完才落地）", () => {
+    // 补丁必须存在且挂在仓库 patches/（postinstall 已 apply）
+    expect(PLAIT_PATCH).toMatch(/setAutoCompleteCommitHost/);
+    expect(PLAIT_PATCH).toMatch(/requestShapeChoice/);
+    expect(PLAIT_PATCH).toMatch(/AUTO_COMPLETE_COMMIT_HOSTS/);
+    // 宿主注入 host，并在面板选择/关闭时决定何时落地
+    expect(CORE).toMatch(/setAutoCompleteCommitHost\(board, \{/);
+    expect(CORE).toMatch(/requestShapeChoice: \(context\) =>/);
+    expect(CORE).toMatch(/target\.commit\(shape\)/);
+    // 关掉面板不选 = 保持上游行为（落地源形状副本）
+    expect(CORE).toMatch(/target\?\.commit\?\.\(\)/);
+  });
+
+  it("最近使用里永远有「和自己一样」的源形状（一键复用源形状，替代悬停预览）", () => {
+    expect(CORE).toMatch(/sourceShape: \(context\.shapeElement as \{ shape\?: DrawPointerType \}\)\.shape/);
+    expect(PICKER).toMatch(/sourceShape\?: DrawPointerType/);
+    expect(PICKER).toMatch(/\.\.\.\(sourceShape \? \[sourceShape\] : \[\]\)/);
   });
 });
