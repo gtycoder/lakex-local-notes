@@ -1296,6 +1296,18 @@ tsc 0 · vitest 1095 passed / 16 skipped (1111) · 桌面 + 移动 vite build �
 8. **长按桌面图标 →「闪念速记」（260920 追加，对齐思源）**：静态 App Shortcut（`res/xml/shortcuts.xml`，`lakenotes://quick-note` 深链）+ 宿主侧 `src/mobile/quickNoteShortcut.ts`（冷启动 `App.getLaunchUrl()` **短轮询重试** + 热启动 `appUrlOpen`）⇒ 直接进「小记」标签并打开新建写作区；**机型兜底** = 新原生插件 `PinShortcutPlugin`（`isAvailable/isPinned/requestPin`）+ 设置 → 编辑器 →「添加到桌面」（对齐思源的 `requestPinShortcut`，实测系统弹窗确认后 flags 变 `Pin`）。
    ⚠️ **坑**：订阅**不能**用 `hasNativeBridge()`（判 `window.lakeNative`，移动端是启动流程之后才注入 ⇒ 冷启动瞬间判假、订阅被跳过）；要用 `window.Capacitor.isNativePlatform()`。思源参考实现见 `/Users/admin/file/local-lake/siyuan-android-main`（AGPL-3.0，只参考不抄）；与思源的差距（原生轻量 Activity 秒开 + 草稿 + inbox 转入、系统分享入口）估 1.5–2 天，见 `docs/MOBILE-PARITY-260920.md` §七。
 
+9. **深链/长按那条路径 = 不挂内核的轻量速记框（260920 续，收尾）**：`src/mobile/home/QuickNoteFlashComposer.tsx`
+   —— `textarea` + 图片按钮、**不可展开**、零内核实例；`HomePage` 只把 `newQuickNoteRequest`（深链）路由到它
+   （`key={newQuickNoteRequest}` 保证每次重开是空框），工作台底部「新建小记」与「编辑」仍是完整内核编辑器。
+   正文走无内核写入者唯一被认可的通道 `core/quickNoteModel.quickNoteBodyFromTextAndImages` → `core/lakeDocForm`
+   （`<p>` + 图片 `<card>` 容器，**无裸 `<img>`**），图片按 `quick-notes/{id}/` 落盘。
+   ⚠️ **核实结论**：内核**没有**"不建实例就把文本转成 Lake 正文"的能力（`setDocument('text/*')` 要编辑器实例、
+   `markdownStream` 要阅读器实例）—— 已回填 `docs/LAKEX-CONTRACT.md` §5.12.10；护栏
+   `src/mobile/home/quickNoteFlashComposer.test.ts`。
+   ⚠️ **顺带修掉一个真 bug（CDP 复现）**：`quickNoteShortcut.subscribeQuickNoteShortcut` 原用**永久布尔量**去重冷启动双触发
+   ⇒ 一次冷启动后进程存活期间再长按图标（热启动）被永久忽略；改为 **1.5s 短窗口去重**，护栏
+   `src/mobile/quickNoteShortcut.test.ts`。
+
 ### 三、下一步（详见 `docs/MOBILE-PARITY-260920.md` §五）
 1. 小记**音视频/PDF 附件**在真机点一次确认四类卡；2. ~~移动端新建 sheet/bitable/board~~（**用户定稿：不做，除文档外一律只读**）；3. 表格 100% 保真是否引入 FortuneSheet（+0.5MB gzip 懒加载，用于公式求值/条件格式/冻结窗格）；4. **AB 多端 S3 往返**（画板图片/表格/多维表/小记资源）；5. 移动端小记工作台能力（→正式文档、批量、置顶/列表视图）；6. 【可选】闪念速记对齐思源的原生轻量 Activity + 系统分享入口（1.5–2 天）。
 

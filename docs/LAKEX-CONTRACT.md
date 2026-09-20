@@ -925,6 +925,13 @@ for m in re.finditer(r'<card\b[^>]*>', d['body']):
 PY
 ```
 
+**10) 内核没有"不建实例就把文本转成 Lake 正文"的能力**（260920，闪念速记轻量框选型核实）：
+官方两条路都依赖实例 —— `setDocument('text/markdown'|'text/plain'|…)` 需要**编辑器实例**
+（`yuque-developer-docs/docs/07 - API与事件`）；`markdownStream`（`markdownDataSource` 插件）需要先创建
+**阅读器实例**（官方 `docs/09 - markdown流展示`：*"在完成阅读器的创建之后"*）。
+⇒ 没有内核实例的写入者（移动端轻量速记框、主进程）**无法让内核产出正文**，只能走
+`src/core/lakeDocForm.ts` 的**卡片容器**单一来源（`quickNoteBodyFromTextAndImages` 即此），**绝不自造裸标签媒体**。
+
 ---
 
 ## 6. 使用守则（所有会话遵守）

@@ -114,3 +114,15 @@
 冷启动不等 WebView/内核；我们 v1 是「深链 → App → 内核小记编辑器」，冷启动约 1–2s。
 要做到思源那种"秒开输入框"，需要：原生 Activity（输入框 + 草稿 + 提交写入 inbox 目录）+ App 侧启动时把 inbox 导入为小记，
 估 **1–1.5 天**；另外系统分享（`ACTION_SEND` 文本/图片 → 小记）约 **0.5 天**（思源两个入口都做了）。
+
+**v1.1（260920 续，轻量速记框）**：深链那条路径已从「内核小记编辑器」改为 **不挂内核的轻量速记框**
+（`src/mobile/home/QuickNoteFlashComposer.tsx`：`textarea` + 图片、不可展开），冷启动不再等内核 bundle/实例化；
+工作台里的「新建小记」/「编辑」仍是完整内核编辑器。上面的「与思源的差距」只剩原生 Activity 秒开 + 草稿 + 系统分享。
+- **正文口径（核实结论）**：内核**没有**"不建实例就把文本转成 Lake 正文"的能力（`setDocument('text/*')` 要编辑器实例、
+  `markdownStream` 要阅读器实例；见 `docs/LAKEX-CONTRACT.md` §5.12.10）⇒ 轻量框走无内核写入者唯一被认可的通道
+  `core/quickNoteModel.quickNoteBodyFromTextAndImages` → `core/lakeDocForm`（`<p>` + 图片 `<card>`，无裸 `<img>`）。
+- **护栏**：`src/mobile/home/quickNoteFlashComposer.test.ts`（零内核/不可展开/保存通道/路由分工的源码级断言）。
+- **修掉一个真 bug（260920 CDP 复现）**：`subscribeQuickNoteShortcut` 原先用**永久布尔量**去重冷启动的"双触发"
+  （`getLaunchUrl` + `appUrlOpen`）⇒ **一次冷启动之后，进程存活期间再长按图标（热启动 appUrlOpen）被永久忽略**
+  （第二次长按无任何反应）。改为 **1.5s 短窗口去重**（只压同一次点击的两条路径），并补行为护栏
+  `src/mobile/quickNoteShortcut.test.ts`（冷启动触发 → 立即重复被去重 → 1.5s 后热启动仍能触发）。
