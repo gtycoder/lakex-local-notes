@@ -139,3 +139,14 @@
 - **⚠️ 踩坑**：**不要**用 rolldown `codeSplitting.groups` 给 `\@dlient/lakex-doc-react` 分组 —— 实测会把 vendor 内部
   `DrawnixBoardCore` 懒 chunk 的 export 绑定拆坏，打开编辑器即 `SyntaxError: Export '..._exports' is not defined in module`、
   整页白屏。正确做法是**懒加载边界**；已加护栏 `src/mobile/mobileLazyChunks.test.ts` 卡住这三条 lazy 与"别加分组"。
+
+**v1.3（260920 续，改名 + 草稿防丢）**：
+- **用户可见名 = 「新建小记」**：快捷方式短/长标签（`strings.xml`）、设置项名；去掉多余说明文案，
+  轻量框底部只留「只记文字与图片」。
+  ⚠️ 同类坑：`shortcuts.xml` 的深链**必须用** `<intent android:data="…">` 属性 —— 写成嵌套 `<data>` 元素会被 Android
+  `ShortcutParser` 忽略，注册出来的快捷方式 intent 没有 `dat`，点开只开 App、进不了速记框（护栏已加）。
+- **未提交草稿防丢（对齐思源闪念的"不丢"效果）**：轻量框挂载时从 `device_state`（纯本地，不进 S3、不是小记本体）
+  恢复上次未提交的文字；输入 **300ms 防抖**落库；保存/主动取消后清除。note id 挂载即固定、保存沿用。
+  桥接 `getQuickNoteDraft/saveQuickNoteDraft/clearQuickNoteDraft`；单测 `quickNoteDraft.test.ts`。
+  实测（模拟器）：输入 → `force-stop` 杀进程 → 重开 → 文字原样恢复；点取消后重开为空。
+- 仍缺：图片纳入草稿（当前仅文字，图片在内存、被杀会丢）；系统分享入口；原生秒开 Activity。
