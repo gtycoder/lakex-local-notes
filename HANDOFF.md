@@ -1243,6 +1243,11 @@ tsc 0 · vitest 1095 passed / 16 skipped (1111) · 桌面 + 移动 vite build �
    - **移动端只读画板已做**：`src/mobile/board/MobileBoardViewer.tsx`（`readOnly` + `fitOnInit` + 隐藏工具条 + 不保存），
      顶栏「编辑」对非 doc 禁用；**Android 模拟器真机实测通过**（画布 412×786、0 个 Lake 编辑器、正文 419B 全程不变）。
 6. **viewport 只在「内容变化时」落盘**（pan/zoom 单独发生不写盘）。**用户 260920 决定：不做「纯看也记住视角」**。
+7. **蓝点快创的图形选择面板（260920 已做）**：plait 的快创提交永远复制源形状类型（`createDefaultGeometry(..., originElement.shape)`），
+   现已在 vendor 适配层接住 —— 判定「选择态下 pointerup 后新增单个 geometry」= 快创提交 ⇒ 弹面板
+   （最近使用 / 基础图形 / 流程图 / Smart；图标与「形状」图形库共用），选中后 `DrawTransforms.switchGeometryShape` 改形状、连线自动重算；
+   **不选 = 保持复制出来的形状**（Esc/点外面关闭）。实机验证：源形状=圆形 → 快创 → 选「判断」⇒ 新形状为菱形 + elbow 连线；0 异常。
+   见 LOCAL-CHANGES #20、`docs/LAKEX-CONTRACT.md` §5.13.10、`docs/BOARD-DOC-FEASIBILITY-260920.md` §十。
 
 ### 六、踩过的坑（本批新增）
 - **vendor 暴露画布核心必须用懒加载器**：写 `export { DrawnixBoardCore }` 会让 vendor 入口静态依赖它 ⇒ 构建报 `INEFFECTIVE_DYNAMIC_IMPORT`、`DrawnixBoardCore-*.js` 分包消失、首屏多背 ≈500KB gzip。已实测复现并改回 `loadDrawnixBoardCore()`（LOCAL-CHANGES #18）。**改 vendor 后一定要看构建有没有这条警告 + `dist/` 里 chunk 还在不在。**

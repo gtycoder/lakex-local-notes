@@ -977,6 +977,14 @@ PY
 8. **图片**：工具条有图片入口（文件选择 / 粘贴 / 拖放），引擎把图**内联成 data URL** 写进场景元素（`data/image.d.ts` 的 `insertImage`/`buildImage`）。独立画板文档由宿主做**提升**：data URL → `note-assets/{noteId}/` 资产文件（写盘口径 = canonical URL，内存口径 = data URL，见 `docs/BOARD-DOC-FEASIBILITY-260920.md` §九）。
    ⚠️ **导出/预览会 fetch `<img src>`**（`convertImageToBase64`）⇒ ① 跨源资产 URL 会被资产服务的 CORS 规则拦（所以内存保留 data URL）；② `connect-src` 必须放行 `data:`，否则画板带图导出 PNG/SVG 静默失败（既有缺陷，260920 已修）。
 9. **语雀侧的文档类型枚举**：内核 `getIconClassName` 白名单 = `['doc','sheet','design','thread','board','mind']`，镜像含 `doc-type-{default,sheet,table,board}.svg` ⇒ 画板/思维导图在官方形态里本就是文档类型。
+10. **蓝点快创（auto-complete）的提交语义**（260920 bundle 静态解析 + 实机）：
+    plait 的 `withArrowLineAutoComplete`（`@plait/draw`）分两条路——① 在蓝点上**按下并拖动**（> `PRESS_AND_MOVE_BUFFER*2`）只建**连线**；
+    ② **悬停**蓝点会出现幽灵形状（`BOARD_TO_PRE_COMMIT`），**再单击**才同时插入「连线 + 形状」。
+    提交时的形状由 `createDefaultGeometry(board, points, originElement.shape)` 决定 ⇒ **永远复制源形状的类型**（圆→圆、方→方），
+    plait 没有提供「先选形状再创建」的钩子。云端语雀的做法是提交后弹「最近使用 / 基础图形」面板让用户改。
+    宿主侧可接：判定「选择态下 pointerup 后画布新增了单个 geometry」= 快创提交 → 弹面板 → 选中后
+    `addSelectedElement` + `DrawTransforms.switchGeometryShape(board, shape)`（内部 `Transforms.setNode({shape})` + 重算已绑定连线）
+    + `memorizeLatestShape`（plait 自己的「最近使用」记忆，`insertElement` 也会写）。见 LOCAL-CHANGES #20。
 
 实机验证（隔离 userData + CDP 驱动真实 Electron）与剩余风险见 `docs/BOARD-DOC-FEASIBILITY-260920.md`。
 

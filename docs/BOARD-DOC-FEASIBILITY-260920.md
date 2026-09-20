@@ -172,3 +172,35 @@ IPC `create_board_in`（`registerNotes.ts` + `preload.cjs` + `webApiServer.ts` +
 
 证据截图 `/tmp/lake-board-evidence/board-img-5.png`（画布里渲染出的红色 IMG 图，来自重开后的资产 hydrate）；
 脚本 `/tmp/board-img-smoke{1..5}.mjs`（临时件，未入库）。
+
+---
+
+## 十、画板交互补充：蓝点快创「图形选择面板」（260920，用户提出）
+
+**问题**：从形状的蓝点快创出来的新形状，永远**复制源形状的类型**（圆→圆、方→方）——因为 plait 的
+`withArrowLineAutoComplete` 提交时用的是 `createDefaultGeometry(board, points, originElement.shape)`，
+而 plait 没有「先选形状再创建」的钩子。画流程图时每建一个节点都要再手动改形状，很费事。
+
+**做法（不 patch `@plait/*`，只在 vendor 适配层接）**：
+1. `DrawnixBoardCore` 记「选择态下的 pointerdown 快照」（pointer 是 `selection` 且事件不在自研 UI 内）；
+   在 pointerup 后（`setTimeout(0)`，等 plait 的 `globalPointerUp` 提交完）比对画布子节点 ——
+   **新增了恰好一个 geometry** = 刚发生蓝点快创 ⇒ 弹出 `LakexQuickShapePicker`（锚在指针位置）。
+2. 面板 = **最近使用**（localStorage `lake-notes-v3.board-recent-shapes`，最多 7 个，本机偏好不进文档）
+   + **基础图形 / 流程图 / Smart** 三节网格（图标与「形状」图形库共用 `categories` + `ShapePreview`）。
+3. 选中后：`clearSelectedElement` → `addSelectedElement(新形状)` → `DrawTransforms.switchGeometryShape(board, shape)`
+   → `memorizeLatestShape`；已绑定在源形状与目标形状之间的连线会自动重算（plait 内部处理），选择状态与改造前一致。
+4. **不选 = 保持复制出来的形状**（Esc / 点面板外即关）⇒ 老习惯不受影响，行为与改造前完全一致。
+
+**实机验证**（隔离 userData + CDP 真实 Electron）：
+
+| 验证项 | 结果 |
+|---|---|
+| 画一个「圆形」（源形状 = 圆）→ 底部蓝点悬停 → 单击提交 | ✅ 面板弹出（`最近使用 / 基础图形 / 流程图 / Smart`，40 个图标项） |
+| 面板里选「判断」 | ✅ 元素序列 `[rect, rect, elbow, decision, ellipse]` → `[rect, rect, elbow, decision, ellipse, elbow, decision]`：**新形状变成菱形**且连线为 `elbow`（不再是圆的复制） |
+| 最近使用 | ✅ 选完后 `localStorage = ["decision"]`，第二次快创面板出现「最近使用」一节 |
+| 关闭 | ✅ Esc / 点面板外关闭，不选则保持副本 |
+| 主题 | ✅ 深色下背景 `#242424` / 文字 `#ddd` / 边框 `#3d3d3d`（portal 到 body 后用宿主 `[data-theme="dark"]` 判定）；z-index 160 压过画布浮动样式条 |
+| 报错 | ✅ 0 未捕获异常 |
+
+证据截图：`/tmp/lake-board-evidence/quick-4-picker.png`（面板形态）、`quick-5-after.png`（选「判断」后）、`quick-7-dark.png`。
+护栏：`src/features/board/quickShapePicker.test.ts`（源码级断言：判定条件、`switchGeometryShape` 接线、最近使用落 localStorage、样式/主题）。
