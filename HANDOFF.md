@@ -5,7 +5,7 @@
 > **§8 是移动端（安卓）专职交接**，由移动端会话维护；桌面会话不要改 §8，移动端会话不要改 §0-§7 之外的桌面文件。
 
 ## 0. 当前基线（新会话开工前）
-- **本会话（260920 · 独立画板）完整交接 = §2.13（kind=board 画板文档：调研 + v1 实现 + 隔离实例实测）—— 在分支 `feat/board-document`，工作区未提交、未合 master，待用户验收。**
+- **本会话（260920 · 独立画板）完整交接 = §2.13（kind=board 画板文档：调研 + v1 实现 + 隔离实例实测）—— 分支 `feat/board-document` @ `5da17cd`，**未合 master**，待用户验收。**
   - 分支关系：`master`(79e4d0d) →（多维表检查点提交 **`b1355de`** 在 `feat/bitable`）→ **`feat/board-document` = b1355de + 画板批次（未提交）**。
   - ⚠️ **实况更正**：`master` / `origin/master` **仍是 79e4d0d**，多维表那批之前一直躺在工作区未提交（会话间会丢），本会话为切干净的分支把它**代为提交**成 `feat/bitable` 上的检查点 `b1355de`（内容一字未改）。
     若不需要这个提交：`git checkout feat/bitable && git reset --mixed 79e4d0d`（工作区即回到「未提交」原状）。
@@ -1192,7 +1192,7 @@ tsc 0 · vitest 1095 passed / 16 skipped (1111) · 桌面 + 移动 vite build �
 
 ## 2.13 本会话总交接（260920 · 独立画板文档 kind=board）—— 新会话从这里读
 
-> 写给零上下文新会话。分支 `feat/board-document`（基于 `feat/bitable` 检查点 `b1355de`），**工作区未提交、未合 master**（红线：代码批次等用户验收）。
+> 写给零上下文新会话。分支 `feat/board-document` @ **`5da17cd`**（基于 `feat/bitable` 检查点 `b1355de`），**未合 master**（红线：代码批次等用户验收）。
 > 起因：用户问「当前 lake 资源下，画板和思维导图能不能做成单独的目录，新建一个画板、只做画图」→ 调研后按用户指示切分支做验证。
 > 完整调研 + 实测数据 + 剩余风险 = **`docs/BOARD-DOC-FEASIBILITY-260920.md`**；内核侧结论 = `docs/LAKEX-CONTRACT.md` §5.13；vendor 改动 = LOCAL-CHANGES **#18**。
 
