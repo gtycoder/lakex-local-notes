@@ -150,3 +150,16 @@
   桥接 `getQuickNoteDraft/saveQuickNoteDraft/clearQuickNoteDraft`；单测 `quickNoteDraft.test.ts`。
   实测（模拟器）：输入 → `force-stop` 杀进程 → 重开 → 文字原样恢复；点取消后重开为空。
 - 仍缺：图片纳入草稿（当前仅文字，图片在内存、被杀会丢）；系统分享入口；原生秒开 Activity。
+  ✅ 260920 续做已全部落地（见 v1.4）。
+
+**v1.4（260920 续，分享 + 原生秒开）**：
+- **图片纳入草稿**：轻量框图片一加入就 `stageQuickNoteAsset` 落 `quick-notes/{id}/`，草稿只记引用；重开用 canonical URL 恢复缩略图；
+  保存改走 `saveQuickNoteContent`（不重传字节）。实测 输入+图→杀进程→重开 文字与图都在。
+- **系统分享（ACTION_SEND）**：MainActivity 加 SEND intent-filter（text/plain、image/*）→ `SharedContentPlugin` 接住
+  （文本原样；图片/文件复制到 `filesDir/shared-inbox/`，按 URI 去重避免 load/onNewIntent 双触发重复复制）
+  → JS 冷启动 `consume` / 热启动 `shared` 事件 → 打开轻量框预填（seed：文本 + 图片字节；读完删临时文件）。实测文本（冷/热）+ 图片均通过。
+- **原生秒开「新建小记」**：长按快捷方式改为直开 `QuickCaptureActivity`（纯文本 EditText，**不走 WebView/内核**），
+  提交写 `filesDir/quick-capture-inbox/<uuid>.txt`（草稿存 SharedPreferences）；App 启动/回前台由 `quickCaptureInbox.ts` 导入为小记并删文件。
+  实测首帧 `Displayed` ~0.87–0.99s（MainActivity 冷启动 ~1.5s 且其后才加载 JS），提交→inbox→导入为小记链路通过。
+- ⚠️ 代价/现状：原生框是**纯文本**（图片/富文本仍走分享或 App 内完整编辑器）；WebView 轻量框保留作分享/深链入口；
+  快捷方式不再走 `lakenotes://quick-note` 深链（`quickNoteShortcut.ts` 只对显式深链生效）。
