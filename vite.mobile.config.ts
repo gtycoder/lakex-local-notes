@@ -31,7 +31,8 @@ const MOBILE_CSP =
   // 本地资源服务（http://127.0.0.1:19876）是 canonical URL 的真实来源：img/media 都要放行
   "img-src 'self' data: blob: https://localhost http://127.0.0.1:*; " +
   "font-src 'self' data:; " +
-  "connect-src 'self' blob: https://localhost https://*.s3.cn-north-1.qiniucs.com https://s3.cn-north-1.qiniucs.com http://127.0.0.1:* ws://127.0.0.1:*; " +
+  // data:（260920）：与桌面同因——画板/文档里的 data URL 图片在引擎导出/预览路径要 fetch 成 blob，不放行会静默失败。
+  "connect-src 'self' data: blob: https://localhost https://*.s3.cn-north-1.qiniucs.com https://s3.cn-north-1.qiniucs.com http://127.0.0.1:* ws://127.0.0.1:*; " +
   "media-src 'self' data: blob: http://127.0.0.1:*; " +
   "worker-src 'self' blob:; object-src 'none'; base-uri 'none'; form-action 'none'";
 

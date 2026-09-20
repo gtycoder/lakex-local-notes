@@ -114,3 +114,18 @@
 - **验证**：同一行中文 normal vs italic 截图像素差异率 92.2%（合成斜体生效）。
 - **Lake 侧确认**：Lake 斜体用 `ne-text[ne-italic="true"]` 标记（不是 em/i），
   CSS 有 `[ne-italic] { font-style: italic }`；`i`/`em` 标签会被 Lake 解析为 ne-italic。
+
+## J. 2026-09-20 画板（Drawnix/Plait）带图片导出静默失败：CSP 拦掉 `fetch(data:)`
+
+- **现象**：画板里有图片时点「导出 → 导出 PNG / 导出 SVG」没反应，控制台一串
+  `Connecting to 'data:image/png;base64,…' violates the following Content Security Policy directive` +
+  `Fetch API cannot load data:image/…`（3 张图 = 9 条）。
+- **根因**：plait 的导出/预览路径 `convertImageToBase64(url)`（`@plait/core` 的 `cloneImageNodes`）是
+  `fetch(url)` → `blob()` → `FileReader`；而我们的 `connect-src` 只放行 `'self' http://127.0.0.1:*`
+  （`img-src`/`font-src`/`media-src` 才放行 `data:`）⇒ **data URL 也被 CSP 拦**。
+  改造前画板图片本来就是 data URL，所以这是**既有缺陷**，不是画板资产化引入的。
+- **修复**：`vite.config.ts` 的 DEV_CSP/PROD_CSP 与 `vite.mobile.config.ts` 的 MOBILE_CSP
+  在 `connect-src` 加 `data:`（data: 无网络来源 ⇒ 不构成外发通道）。改后导出 SVG/PNG 各 0 报错。
+- **相关**：同一路径若拿**跨源**资产 URL（`http://127.0.0.1:19876/…`）去 fetch，会被资产服务的
+  CORS 规则拦掉（`Access to fetch … blocked`）⇒ 独立画板文档因此采用「**写盘 = 资产 URL / 内存 = data URL**」
+  的口径（见 `docs/BOARD-DOC-FEASIBILITY-260920.md` §九）。

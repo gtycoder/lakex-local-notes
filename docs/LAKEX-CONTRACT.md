@@ -974,7 +974,8 @@ PY
 6. **CSP**：`lakex-drawnix` / `lakex-drawnix-react-board` / `@xiangfa/mindmap` 的 `eval`、`new Function` 计数均为 0（与 FortuneSheet/CE 那类坑不同，画板不受无 `unsafe-eval` 约束影响）。
 7. **视口**：`onViewportChange` 是 no-op（LOCAL-CHANGE #8，防 pan/zoom 触发保存）。独立画板若要「记住上次看到哪」，
    用**被动回调** `onViewportPersist` 存 ref、只在保存时写进正文，**不要回灌 value**。
-8. **图片**：工具条有图片入口（文件选择 / 粘贴 / 拖放），但引擎把图**内联成 data URL**（`data/image.d.ts` 的 `insertImage`/`buildImage`，代码级证据）⇒ 不进资产管线、不会出现在 `manifest.assets`。
+8. **图片**：工具条有图片入口（文件选择 / 粘贴 / 拖放），引擎把图**内联成 data URL** 写进场景元素（`data/image.d.ts` 的 `insertImage`/`buildImage`）。独立画板文档由宿主做**提升**：data URL → `note-assets/{noteId}/` 资产文件（写盘口径 = canonical URL，内存口径 = data URL，见 `docs/BOARD-DOC-FEASIBILITY-260920.md` §九）。
+   ⚠️ **导出/预览会 fetch `<img src>`**（`convertImageToBase64`）⇒ ① 跨源资产 URL 会被资产服务的 CORS 规则拦（所以内存保留 data URL）；② `connect-src` 必须放行 `data:`，否则画板带图导出 PNG/SVG 静默失败（既有缺陷，260920 已修）。
 9. **语雀侧的文档类型枚举**：内核 `getIconClassName` 白名单 = `['doc','sheet','design','thread','board','mind']`，镜像含 `doc-type-{default,sheet,table,board}.svg` ⇒ 画板/思维导图在官方形态里本就是文档类型。
 
 实机验证（隔离 userData + CDP 驱动真实 Electron）与剩余风险见 `docs/BOARD-DOC-FEASIBILITY-260920.md`。

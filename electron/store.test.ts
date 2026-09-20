@@ -10,6 +10,7 @@ import { createStoreSyncPort } from "./syncAdapters.js";
 import { draftJournalDir } from "./draftJournal.js";
 import { createSafeStorageSecretCipher } from "./secretCipher.js";
 import { SQL_PARAMETER_BATCH_SIZE } from "../src/core/sqlParameterBatch.js";
+import { extractAssetRefs } from "../src/core/storeUtils.js";
 
 // ===== electron mock（Store 模块加载即需要；DB 用例只用 safeStorage 的 S3 密钥加解密） =====
 const electronMock = vi.hoisted(() => {
@@ -1437,6 +1438,24 @@ describe("同步状态 / 导入", () => {
     const out = await store.uploadResource({ bytes: new Uint8Array(png), filename: "hello.png" }, id);
     expect(out.url).toContain(`127.0.0.1:19876/${id}/`);
     expect(fs.existsSync(path.join(dir, "note-assets", id, out.filename))).toBe(true);
+  });
+
+  it("画板图片走资产管线：正文里的 canonical URL 算引用（声明/GC 保护自动生效，不进待清理）", async () => {
+    const board = store.createBoardIn(null, "画板图片");
+    const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==", "base64");
+    // 与宿主提升路径同一条通道（BoardEditor → uploadLakeResource → 这里）
+    const written = await store.uploadResource({ bytes: new Uint8Array(png), filename: "board-photo.png" }, board.id);
+    const doc = JSON.parse(board.content);
+    doc.elements = [{ id: "img-1", type: "image", url: written.url, width: 1, height: 1 }];
+    const body = JSON.stringify(doc);
+    store.saveNote(board.id, "画板图片", body);
+
+    // ① 资产引用提取是全文本正则 ⇒ 画板 JSON 里的文件名同样被声明（manifest.assets / GC keep 集 / 孤儿判定无需按 kind 分支）
+    expect(extractAssetRefs(body)).toContain(written.filename);
+    // ② 被正文引用的资产不进「孤儿/待清理」清单
+    expect(store.listRemovedAssets().filter((a) => a.filename === written.filename)).toHaveLength(0);
+    // ③ 正文里没有内联 base64（提升后的形态）
+    expect(store.readNote(board.id).content).not.toContain("data:image");
   });
 
   it("审计：uploadResource 拒绝解码后超 50MP 的图片（防解压炸弹）", async () => {

@@ -107,10 +107,8 @@ IPC `create_board_in`（`registerNotes.ts` + `preload.cjs` + `webApiServer.ts` +
 
 1. **AB 多端 S3 往返未测**：正文与 `kind` 走既有对象管线（`buildUploadEntry` 已单测带 `kind`、`rowToLocalState` 已认 `board`），
    但没跑过 A→B。v7 清单在旧端会整轮拒绝——**升级期必须所有端一起升**。
-2. **图片仍不进资产管线**：画板工具条自带图片入口（文件选择 / 粘贴 / 拖放），引擎把图**内联成 data URL**
-   写进 `elements`（`data/image.d.ts` 的 `insertImage`/`buildImage`，代码级证据；未做运行时核对）。
-   对同步/GC **无害**（引用都在正文里、`ASSET_NAME_RE` 也匹配不到 data URL ⇒ 不会污染 `manifest.assets`），
-   代价是正文变大、图片不能单独预览/重命名。要接资产管线属 P2，需另设计（对齐 `docs/SHEET-IMAGE-MANAGEMENT-260919.md` 的思路）。
+2. ~~图片仍不进资产管线~~ **已做（260920，用户定稿「走独立管理」）**，见 **§九**：
+   写盘/同步口径 = 资产文件（`note-assets/{noteId}/` + `manifest.assets` 声明），内存口径 = data URL（引擎导出/预览要用）。
 3. **画布实例内存 soak**：建议正式合入前跑一轮「连续开关 20 个画板」看堆/DOM 是否释放。
 4. **preset 没有 UI**：数据层已支持 `flowchart | uml | mindmap`（起始模板由 `DrawnixBoardCore` 的 `afterInit` 插入、`presetInitialized` 落盘防重复），
    但入口只建空白画板。**用户 260920 定稿：不做模板 UI（空白就行）**；将来要「新建 → 选模板」再加二级菜单即可（≈0.5 天，未排期）。
@@ -128,3 +126,49 @@ IPC `create_board_in`（`registerNotes.ts` + `preload.cjs` + `webApiServer.ts` +
 - 主进程：`electron/store.ts`（`createBoardIn` / `bodyPathFor` / `searchTextFor`）、`electron/ipc/registerNotes.ts`
 - 协议：`src/core/noteKind.ts`、`src/core/syncUtils.ts`（`MANIFEST_VERSION = 7`）
 - vendor：`vendor/lakex-doc-react/src/index.ts` 的 `loadDrawnixBoardCore()`（**必须懒加载导出**，见 LOCAL-CHANGES #18）
+
+---
+
+## 九、画板图片走资产管线（260920，用户定稿「独立管理」后落地）
+
+### 问题
+画板引擎插入图片（工具条图片入口 / 粘贴 / 拖放）走 Drawnix 的 `insertImage`：读成 **data URL** 塞进场景元素。
+一张 1MB 照片 ≈ 1.37MB base64 常驻正文；画板天生「一堆图」⇒ 正文膨胀、每次编辑都重传整个正文对象、图片不进
+`manifest.assets`（不能单独预览/重命名、跨端只能靠正文搬运）。
+
+### 方案（宿主侧提升，不动引擎）
+- **写盘/同步口径 = 资产 URL**：把场景里的 data URL 交给内核插图用的同一条通道
+  `uploadLakeResource({type:"base64"}, noteId)`（含 sharp 归一化 / 25MiB 上限 / 并发队列 / 重试）⇒ 落
+  `note-assets/{noteId}/{13位时间戳}_{8位hash}.{ext}`，元素里的 URL 在**写盘时**换成 canonical URL。
+  之后声明、云端差集同步、GC keep 集、孤儿清理、他端按需下载**全部复用现成能力**（`extractAssetRefs` 是全文本正则，
+  命中 JSON 里的文件名 —— 与多维表附件同一结论，已加主进程单测）。
+- **内存口径 = data URL**：引擎的导出/预览会把 `<img>` 转 base64（`convertImageToBase64` → `fetch(url)`），
+  跨源 fetch 资产 URL 会被资产服务的 CORS 规则拦掉 ⇒ 内存保持 data URL，「导出 PNG/SVG」与预览快照行为与改造前一致。
+  打开画板时用 `native.readAssetPreview` 把资产读回 data URL（hydrate），并把映射反向登记 ⇒ 下次保存写回**同一个**资产 URL
+  （不重复上传、不改内容 hash、不「打开即标脏」）。
+- 配套：提升未落地前**推迟保存**（正文里永远不会出现 base64）；同一 data URL 的并发提升去重；单张失败保留内联形态（不丢图）。
+- 老画板里遗留的内联图片：打开时走同一条提升路径自然收敛（**不写任何旧数据兼容代码**，AGENTS §3 #7）。
+
+### 顺带修掉的既有缺陷：CSP 拦掉 `fetch(data:)`
+- 现象：画板带图片时「导出 PNG/SVG」静默失败（控制台 `Connecting to 'data:image/png;base64,…' violates CSP` +
+  `Fetch API cannot load data:image/…`）。根因：`connect-src` 只放行 `'self' http://127.0.0.1:*`，而 plait 的
+  `convertImageToBase64` 是 `fetch(url)` → blob → FileReader ⇒ **data URL 也被拦**。这是**改造前就存在**的缺陷
+  （当时的图片本来就是 data URL），不是本批引入。
+- 修法：`vite.config.ts` 的 DEV/PROD CSP 与 `vite.mobile.config.ts` 的移动 CSP 在 `connect-src` 放行 `data:`。
+  理由：data: 无网络来源，不构成外发通道（`img-src`/`font-src` 早已放行 data:）。改后实测导出 SVG/PNG 各 0 报错。
+
+### 实测（隔离 userData `$TMPDIR/lake-board-img-a1` + CDP 驱动真实 Electron）
+
+| 验证项 | 结果 |
+|---|---|
+| 真实插入路径（向画布 `drop` 一个 96×64 PNG） | ✅ 引擎产出 data URL 元素 → 提升为资产 |
+| 写盘口径 | ✅ `boards/{id}.board.json` 里是 `http://127.0.0.1:19879/{id}/{时间戳}_{hash}.png`，**0 处 base64**，正文 569B（3 张图） |
+| 资产文件 | ✅ `note-assets/{noteId}/` 落盘（文件名 `{13位时间戳}_{8位hash}.png`；被正文引用后判定为「已引用」而非孤儿） |
+| 声明 / GC | ✅ 主进程单测：`extractAssetRefs(画板正文)` 命中文件名；`listRemovedAssets()` 不含它 |
+| 内存口径 | ✅ 画布 `<img src>` 全是 data URL（`liveAllDataUrls: true`） |
+| 重开（hydrate） | ✅ 资产 → data URL 读回成功；**不标脏**（`dirty: false`）、磁盘正文不变（无 hash churn） |
+| 导出 | ✅ 导出 SVG / PNG 各 **0 报错**（修 CSP 前同操作是 9 条 CSP 错误） |
+| 控制台 | ✅ 0 未捕获异常 |
+
+证据截图 `/tmp/lake-board-evidence/board-img-5.png`（画布里渲染出的红色 IMG 图，来自重开后的资产 hydrate）；
+脚本 `/tmp/board-img-smoke{1..5}.mjs`（临时件，未入库）。

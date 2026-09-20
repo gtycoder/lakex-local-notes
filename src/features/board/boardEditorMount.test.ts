@@ -18,6 +18,7 @@ const STORE = readFileSync(new URL("../../../electron/store.ts", import.meta.url
 const KINDS = readFileSync(new URL("../../core/noteKind.ts", import.meta.url), "utf8");
 const MOBILE_VIEWER = readFileSync(new URL("../../mobile/board/MobileBoardViewer.tsx", import.meta.url), "utf8");
 const MOBILE_WORKSPACE = readFileSync(new URL("../../mobile/notebook/NotebookWorkspace.tsx", import.meta.url), "utf8");
+const IMAGE_ASSETS = readFileSync(new URL("./boardImageAssets.ts", import.meta.url), "utf8");
 
 describe("画板编辑器护栏", () => {
   it("MultiTabEditor 按 kind=board 懒加载 BoardEditor", () => {
@@ -68,5 +69,20 @@ describe("画板编辑器护栏", () => {
     expect(MOBILE_VIEWER).toMatch(/fitOnInit/);
     expect(MOBILE_VIEWER).toMatch(/loadDrawnixBoardCore/);
     expect(MOBILE_VIEWER).not.toMatch(/DocumentEditor|LakeEditor|lakeRuntime|saveNote/);
+  });
+
+  it("画板图片走资产管线：内联 data URL 提升为 note-assets 文件 + canonical URL", () => {
+    // 复用内核插图同一条通道（不新增 IPC、不动引擎）
+    expect(EDITOR).toMatch(/uploadLakeResource/);
+    expect(EDITOR).toMatch(/promoteInlineImages/);
+    expect(IMAGE_ASSETS).toMatch(/collectInlineImageUrls/);
+    expect(IMAGE_ASSETS).toMatch(/replaceInlineImageUrls/);
+    // 提升未落地前不保存 ⇒ 正文里永远不会出现 base64 图片
+    expect(EDITOR).toMatch(/promoteInFlightRef\.current > 0/);
+    // 打开已有画板时先 hydrate（资产 URL → data URL）再 promote（老正文里的内联图自然收敛，不写兼容代码）
+    expect(EDITOR).toMatch(/await hydrateBoardAssets\(cardValueRef\.current\.plaitValue\)/);
+    expect(EDITOR).toMatch(/await promoteInlineImages\(cardValueRef\.current\.plaitValue\)/);
+    // 内存 data URL / 磁盘资产 URL：写盘前用 promotedRef 映射换口径
+    expect(EDITOR).toMatch(/replaceInlineImageUrls\(cardValueRef\.current\.plaitValue, promotedRef\.current\)/);
   });
 });

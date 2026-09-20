@@ -1235,7 +1235,7 @@ tsc 0 · vitest 1095 passed / 16 skipped (1111) · 桌面 + 移动 vite build �
 
 ### 五、当前问题 / 未做（按优先级）
 1. **AB 多端 S3 往返未测**（正文+kind 走既有管线，已单测；但没跑 A→B）。v7 清单在旧端整轮拒绝 ⇒ **升级期必须所有端一起升**。
-2. **图片不进资产管线**：画板工具条自带图片入口（选择/粘贴/拖放），引擎把图**内联成 data URL** 写进 elements（代码级证据 `data/image.d.ts`）。对同步/GC 无害（引用在正文里、`ASSET_NAME_RE` 匹配不到 data URL），代价是正文变大 + 图片不能单独预览/重命名。要接管线属 P2。
+2. ~~图片不进资产管线~~ **已做（260920 用户定稿「走独立管理」）**：**磁盘/同步口径 = 资产文件**（data URL 经内核同一条 `uploadLakeResource` 通道落 `note-assets/{noteId}/`，写盘时把元素 URL 换成 canonical URL ⇒ 声明/GC/S3/移动端全复用现成能力），**内存口径 = data URL**（引擎导出/预览要把 `<img>` fetch 成 base64，跨源资产 URL 会被资产服务 CORS 拦）；打开画板用 `readAssetPreview` hydrate 回 data URL 并反向登记映射 ⇒ 不重复上传、不改 hash、不「打开即标脏」。**顺带修掉的既有缺陷**：`connect-src` 不放行 `data:` 会让 plait 的 `convertImageToBase64` 被 CSP 拦 ⇒ 画板带图导出 PNG/SVG 静默失败（改造前就存在）；现已在桌面 DEV/PROD + 移动 CSP 放行 `data:`，实测导出 0 报错。详见 `docs/BOARD-DOC-FEASIBILITY-260920.md` §九。
 3. **画布实例 soak 未做**：建议合入前跑「连续开关 20 个画板」看堆/DOM 释放。
 4. ~~preset 无 UI~~ **用户 260920 定稿：不做模板 UI，新建一律空白画板**（数据层四条 preset 保留，将来要再加二级菜单）。
 5. ~~思维导图独立 kind / 移动端只做占位~~ **用户 260920 定稿并已落地**：
