@@ -16,6 +16,8 @@ const TABS = readFileSync(new URL("../editor/MultiTabEditor.tsx", import.meta.ur
 const DOC = readFileSync(new URL("../../core/boardDoc.ts", import.meta.url), "utf8");
 const STORE = readFileSync(new URL("../../../electron/store.ts", import.meta.url), "utf8");
 const KINDS = readFileSync(new URL("../../core/noteKind.ts", import.meta.url), "utf8");
+const MOBILE_VIEWER = readFileSync(new URL("../../mobile/board/MobileBoardViewer.tsx", import.meta.url), "utf8");
+const MOBILE_WORKSPACE = readFileSync(new URL("../../mobile/notebook/NotebookWorkspace.tsx", import.meta.url), "utf8");
 
 describe("画板编辑器护栏", () => {
   it("MultiTabEditor 按 kind=board 懒加载 BoardEditor", () => {
@@ -55,5 +57,16 @@ describe("画板编辑器护栏", () => {
     expect(STORE).toMatch(/path\.join\(this\.root, "boards", `\$\{id\}\.board\.json`\)/);
     expect(STORE).toMatch(/boardToSearchText/);
     expect(STORE).toMatch(/createBoardIn\(/);
+  });
+
+  it("移动端：kind=board 走进只读画板查看器（绝不挂 Lake 编辑器、不保存）", () => {
+    // 路由：board 分支必须在「非 doc 占位」之前，否则画板会被挡成占位
+    expect(MOBILE_WORKSPACE).toMatch(/t\.kind === "board" \? \(/);
+    expect(MOBILE_WORKSPACE).toMatch(/<MobileBoardViewer content=\{t\.content\}/);
+    // 查看器：只读 + 自适应 + 懒加载同一份引擎分包；不碰 Lake 编辑器/保存
+    expect(MOBILE_VIEWER).toMatch(/readOnly/);
+    expect(MOBILE_VIEWER).toMatch(/fitOnInit/);
+    expect(MOBILE_VIEWER).toMatch(/loadDrawnixBoardCore/);
+    expect(MOBILE_VIEWER).not.toMatch(/DocumentEditor|LakeEditor|lakeRuntime|saveNote/);
   });
 });

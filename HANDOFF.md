@@ -1237,9 +1237,12 @@ tsc 0 · vitest 1095 passed / 16 skipped (1111) · 桌面 + 移动 vite build �
 1. **AB 多端 S3 往返未测**（正文+kind 走既有管线，已单测；但没跑 A→B）。v7 清单在旧端整轮拒绝 ⇒ **升级期必须所有端一起升**。
 2. **图片不进资产管线**：画板工具条自带图片入口（选择/粘贴/拖放），引擎把图**内联成 data URL** 写进 elements（代码级证据 `data/image.d.ts`）。对同步/GC 无害（引用在正文里、`ASSET_NAME_RE` 匹配不到 data URL），代价是正文变大 + 图片不能单独预览/重命名。要接管线属 P2。
 3. **画布实例 soak 未做**：建议合入前跑「连续开关 20 个画板」看堆/DOM 释放。
-4. **preset 无 UI**：数据层支持 `flowchart|uml|mindmap` 起始模板（由 `afterInit` 插 + `presetInitialized` 防重复），入口只建空白画板；要「新建 → 选模板」加个二级菜单即可。
-5. **思维导图未做**（两条路见 §二）；**移动端只做占位**（想真渲染只读画板，`DrawnixBoardCore` 已在移动分包里，≈+0.5 天）。
-6. 画板正文的 **viewport 目前只在「内容变化时」落盘**（pan/zoom 单独发生不写盘，换标签不丢场景但会丢视角）。要不要「纯看不动也记住视角」= 产品决策。
+4. ~~preset 无 UI~~ **用户 260920 定稿：不做模板 UI，新建一律空白画板**（数据层四条 preset 保留，将来要再加二级菜单）。
+5. ~~思维导图独立 kind / 移动端只做占位~~ **用户 260920 定稿并已落地**：
+   - **思维导图就在画板里做**（自由画布，用工具栏自带的「思维导图」工具；**不新增 `kind=mindmap`**）；
+   - **移动端只读画板已做**：`src/mobile/board/MobileBoardViewer.tsx`（`readOnly` + `fitOnInit` + 隐藏工具条 + 不保存），
+     顶栏「编辑」对非 doc 禁用；**Android 模拟器真机实测通过**（画布 412×786、0 个 Lake 编辑器、正文 419B 全程不变）。
+6. **viewport 只在「内容变化时」落盘**（pan/zoom 单独发生不写盘）。**用户 260920 决定：不做「纯看也记住视角」**。
 
 ### 六、踩过的坑（本批新增）
 - **vendor 暴露画布核心必须用懒加载器**：写 `export { DrawnixBoardCore }` 会让 vendor 入口静态依赖它 ⇒ 构建报 `INEFFECTIVE_DYNAMIC_IMPORT`、`DrawnixBoardCore-*.js` 分包消失、首屏多背 ≈500KB gzip。已实测复现并改回 `loadDrawnixBoardCore()`（LOCAL-CHANGES #18）。**改 vendor 后一定要看构建有没有这条警告 + `dist/` 里 chunk 还在不在。**

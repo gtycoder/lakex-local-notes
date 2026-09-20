@@ -76,6 +76,27 @@ IPC `create_board_in`（`registerNotes.ts` + `preload.cjs` + `webApiServer.ts` +
 证据截图：`/tmp/lake-board-evidence/board-4-rect.png`（画了矩形 + 完整工具条）、`board-8-locked.png`（锁定态）、
 `board-6-multi.png`（多画板）。脚本 `/tmp/board-smoke{1..7}.mjs`（临时件，未入库）。
 
+## 八、移动端只读查看器实测（260920，Android 模拟器 lake_mobile / API36）
+
+起法：`bash scripts/emu-up.sh --no-window` → `bash scripts/android-build.sh --install` → `bash scripts/emu-cdp.sh`
+（WebView socket 会变，按 HANDOFF §8.1 逐个 forward 到 9335 再校验 `/json/list`）。
+**测试数据构造**：模拟器上是真实 dev 数据（555 篇，含用户笔记）⇒ **只插一条临时笔记**
+（`doc_kind='board'`、正文 419B = 一个矩形 + 一段自由文字，parent = 「Native SQLite Test」测试笔记本），
+验证完**已删除**，并清掉探查时误建的空库文件。
+
+| 验证项 | 结果 |
+|---|---|
+| 打开画板笔记 | ✅ 走 `MobileBoardViewer`（`.mobile-board-viewer` 存在），画布 412×786 铺满文档层 |
+| 只读 | ✅ 活动面板内 **0 个 Lake 编辑器**；画布工具条 `display:none`；顶栏「编辑」按钮 `disabled`（title「该文档类型在移动端只读」） |
+| 渲染内容 | ✅ 矩形 + 两段文字（「移动端只读画板」/「平板/手机只看不改」）正常显示；`fitOnInit` 生效（打开即自适应到内容） |
+| 不动数据 | ✅ 全程正文长度 419B 不变（移动端不保存、不写库） |
+| 证据 | 截图 `/tmp/lake-board-evidence/mobile-3-board.png`；另有 jsdom 挂载护栏 `src/mobile/board/mobileBoardViewer.test.ts`（2 条） |
+
+> 两端复用同一份 `DrawnixBoardCore-*.js` 懒加载分包（移动产物里 738.8KB raw / 232.9KB gzip，只在真的打开画板时请求）。
+> **顺带发现的既有缺口**：浏览器版预览页（`scripts/mobile-preview.sh`）跑不起来 —— Capacitor SQLite 的 web 实现要求
+> `<jeep-sqlite>` 元素，而 `mobile.html` 里没有它（DevTools 报 “The jeep-sqlite element is not present in the DOM!”），
+> 应用停在「启动中…」。与画板无关；要不要补上让移动端浏览器速测恢复可用，可另立小项。
+
 ## 五、门禁（本分支实测，全绿）
 
 `tsc` 0 · `vitest` **1112 passed / 16 skipped**（新增 `boardDoc.test.ts` 7 条、`boardEditorMount.test.ts` 6 条、
@@ -92,13 +113,12 @@ IPC `create_board_in`（`registerNotes.ts` + `preload.cjs` + `webApiServer.ts` +
    代价是正文变大、图片不能单独预览/重命名。要接资产管线属 P2，需另设计（对齐 `docs/SHEET-IMAGE-MANAGEMENT-260919.md` 的思路）。
 3. **画布实例内存 soak**：建议正式合入前跑一轮「连续开关 20 个画板」看堆/DOM 是否释放。
 4. **preset 没有 UI**：数据层已支持 `flowchart | uml | mindmap`（起始模板由 `DrawnixBoardCore` 的 `afterInit` 插入、`presetInitialized` 落盘防重复），
-   但入口只建空白画板。要「新建 → 选画板/流程图/UML/思维导图」只需在侧栏菜单加一个二级选择。
-5. **思维导图的两条路**（调研结论，未做）：
-   - 走画板 preset `mindmap`（`@plait/mind`，与画板同一引擎）≈ **+0.5 天**，形态是「可自由加图形的画布」；
-   - 走独立 `kind=mindmap` 挂 `@xiangfa/mindmap 0.7.1`（markdown 进 / markdown+SVG 出，自带 viewer，已在本仓库且有本地 patch）
-     ≈ **+1–2 天**，形态是「纯思维导图编辑器」。两者都可离线、CSP 干净。
-6. **移动端只做占位**：`kind !== "doc"` 显示「请在桌面端打开」。若要移动端只读看画板，`DrawnixBoardCore` 已在移动分包里，
-   直接复用 `readOnly` 即可（≈ +0.5 天）。
+   但入口只建空白画板。**用户 260920 定稿：不做模板 UI（空白就行）**；将来要「新建 → 选模板」再加二级菜单即可（≈0.5 天，未排期）。
+5. ~~思维导图要不要独立 kind~~ **用户 260920 定稿：就在画板里做，不要独立 kind** —— 画板 = 自由画布（什么都能画），
+   思维导图用画布工具条自带的「思维导图」工具（`@plait/mind`）画。**不新增 `kind=mindmap`**；`preset` 字段与四条起始模板保留在数据层（已单测）。
+6. ~~移动端只做占位~~ **已做（260920）**：`src/mobile/board/MobileBoardViewer.tsx` —— 移动端 `kind=board` 走进**只读画板查看器**
+   （同一份懒加载引擎分包、`readOnly` + `fitOnInit`、隐藏工具条、不保存不写库）；顶栏「编辑」对非 doc 类型统一禁用。
+   真机（Android 模拟器）实测见 **§八**。
 
 ## 七、关键文件
 

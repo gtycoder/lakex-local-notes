@@ -23,6 +23,7 @@ import { showToast } from "../ui/toastBus";
 import { longPressFeedback, successFeedback, warnFeedback } from "../ui/haptics";
 import { useAutoSave } from "../useAutoSave";
 import type { POCNote } from "../noteRepository";
+import { MobileBoardViewer } from "../board/MobileBoardViewer";
 /** 笔记本子树节点（原 NotebookPage 的类型，页面本体已随"两套壳"统一删除）。 */
 export interface NotebookTreeItem {
   id: string;
@@ -558,8 +559,14 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
             scheduleAutoSave(id, t, tabs.find((x) => x.id === id)?.content ?? "");
           }}
         />
-        <button className={"toolbar__button" + (active?.editing ? " toolbar__icon--active" : "")} onClick={toggleEdit} disabled={!active}
-          aria-label={active?.editing ? "完成" : "编辑"} title={active?.editing ? "完成" : "编辑"}>{active?.editing ? <Check /> : <Pencil />}</button>
+        {/* 只有 doc 可编辑：表格/多维表/画板在移动端是只读（kind=board 走画板查看器，其余占位） */}
+        <button
+          className={"toolbar__button" + (active?.editing ? " toolbar__icon--active" : "")}
+          onClick={toggleEdit}
+          disabled={!active || (active.kind ?? "doc") !== "doc"}
+          aria-label={active?.editing ? "完成" : "编辑"}
+          title={(active?.kind ?? "doc") !== "doc" ? "该文档类型在移动端只读" : active?.editing ? "完成" : "编辑"}
+        >{active?.editing ? <Check /> : <Pencil />}</button>
         <button className="toolbar__button" onClick={() => void runSync()} aria-label="立即同步" title="立即同步"><CloudUpload /></button>
       </header>
 
@@ -570,12 +577,15 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
         ) : tabs.map((t) => (
           <div key={t.id} className={"doc-pane" + (t.id === activeId ? " active" : "")}>
             {/* 标题只在顶栏（思源 #toolbarName 口径）；正文区不再重复一个标题输入框 */}
-            {t.kind !== "doc" ? (
+            {t.kind === "board" ? (
+              // 画板：移动端只读查看（同一套 Drawnix 引擎，绝不给 Lake 编辑器；也不保存）
+              <MobileBoardViewer content={t.content} active={t.id === activeId} />
+            ) : t.kind !== "doc" ? (
               // 防腐坏（AGENTS §3）：非文档类型的正文不是 Lake HTML，**绝不允许** Lake 编辑器打开/保存。
               <div className="mobile-empty">
                 {t.title || "此文档"}
                 {"："}
-                {t.kind === "sheet" ? "表格" : t.kind === "bitable" ? "多维表" : "画板"}
+                {t.kind === "sheet" ? "表格" : "多维表"}
                 暂不支持在移动端编辑，请在桌面端打开。
               </div>
             ) : (
