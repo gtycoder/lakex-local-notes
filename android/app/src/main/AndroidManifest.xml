@@ -31,6 +31,18 @@
                 <data android:scheme="lakenotes" android:host="quick-note" />
             </intent-filter>
 
+            <!-- 系统分享 → Lake Notes（文本 / 图片）：@capacitor 的 SharedContentPlugin 接住后再打开「小记」框 -->
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="text/plain" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="image/*" />
+            </intent-filter>
+
             <!-- 长按桌面图标 → 静态快捷方式列表（res/xml/shortcuts.xml） -->
             <meta-data
                 android:name="android.app.shortcuts"

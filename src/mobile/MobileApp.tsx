@@ -10,7 +10,8 @@ import type { POCNoteSummary } from "./noteRepository";
 import { isGoneNote } from "../core/syncDecisions";
 import type { TreeNode } from "../lib/types";
 import { HomePage } from "./home/HomePage";
-import { QuickNoteFlashComposer } from "./home/QuickNoteFlashComposer";
+import { QuickNoteFlashComposer, type QuickNoteSeed } from "./home/QuickNoteFlashComposer";
+import { consumeSharedContent, sharedContentToSeed, subscribeSharedContent } from "./sharedContent";
 import { CreateNotebookSheet } from "./settings/CreateNotebookSheet";
 import { SearchSheet } from "./settings/SearchSheet";
 import { SettingsDrawer } from "./settings/SettingsDrawer";
@@ -37,6 +38,10 @@ export function MobileApp() {
   const [route, setRoute] = useState<Route>({ kind: "home", tab: "library" });
   /** 小记（长按桌面图标的快捷方式）：独立入口，不等启动完成即可输入。 */
   const [captureOpen, setCaptureOpen] = useState(false);
+  /** 系统分享带入的初始内容（文本 + 图片）；null = 空白/恢复草稿。 */
+  const [captureSeed, setCaptureSeed] = useState<QuickNoteSeed | null>(null);
+  /** 每次打开「小记」框递增：作为 key 强制重挂载，保证 seed/草稿各自生效。 */
+  const [captureNonce, setCaptureNonce] = useState(0);
   const [treeNodes, setTreeNodes] = useState<TreeNode[]>([]);
   const [notes, setNotes] = useState<POCNoteSummary[]>([]);
   const activeIdRef = useRef<string | null>(null);
@@ -141,7 +146,27 @@ export function MobileApp() {
   // 直接打开**独立入口**（见下方 captureOpen 分支）——不等 bridge.init()/refreshAll()，做到最早可输入。
   useEffect(() => subscribeQuickNoteShortcut(() => {
     setRoute({ kind: "home", tab: "quick" });
+    setCaptureSeed(null);
+    setCaptureNonce((n) => n + 1);
     setCaptureOpen(true);
+  }), []);
+
+  // 系统分享（ACTION_SEND）→ 打开「小记」框并预填：冷启动读一次性内容，热启动订阅 "shared"。
+  useEffect(() => {
+    let alive = true;
+    void (async () => {
+      const content = await consumeSharedContent();
+      if (!alive || !content) return;
+      const seed = await sharedContentToSeed(content);
+      if (alive && seed) { setCaptureSeed(seed); setCaptureNonce((n) => n + 1); setCaptureOpen(true); }
+    })();
+    return () => { alive = false; };
+  }, []);
+  useEffect(() => subscribeSharedContent((content) => {
+    void (async () => {
+      const seed = await sharedContentToSeed(content);
+      if (seed) { setCaptureSeed(seed); setCaptureNonce((n) => n + 1); setCaptureOpen(true); }
+    })();
   }), []);
 
   const notebooks = useMemo(() => treeNodes.filter((n) => n.nodeType === "notebook"), [treeNodes]);
@@ -208,8 +233,10 @@ export function MobileApp() {
       <div className="mobile-app">
         <div className="mobile-qn-flash-wrap">
           <QuickNoteFlashComposer
-            onSaved={async () => { setCaptureOpen(false); void refreshAll(); }}
-            onCancel={() => setCaptureOpen(false)}
+            key={captureNonce}
+            seed={captureSeed}
+            onSaved={async () => { setCaptureOpen(false); setCaptureSeed(null); void refreshAll(); }}
+            onCancel={() => { setCaptureOpen(false); setCaptureSeed(null); }}
           />
         </div>
       </div>

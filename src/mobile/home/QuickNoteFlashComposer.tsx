@@ -10,9 +10,10 @@
  *   `markdownStream` 要一个阅读器实例（官方 docs/09，二者都依赖 DOM）—— 260920 核实；
  * - 因此正文走**无内核写入者唯一被认可的通道** `core/quickNoteModel.quickNoteBodyFromTextAndImages`
  *   → `core/lakeDocForm`（`<p>` + 图片 `<card>` 容器，**绝不产出裸 `<img>`**，见
- *   `docs/LAKE-CONTENT-WRITING.md` §1 ③）。它本就是移动端小记的写入口径
- *   （`quickNotesRepository.saveQuickNoteWithImages`），图片按 `quick-notes/{id}/` 落盘。
- *   ⇒ 之后在小记列表里点开，完整内核编辑器能正常打开并继续富编辑（两端互认）。
+ *   `docs/LAKE-CONTENT-WRITING.md` §1 ③）。图片加入即按 `quick-notes/{id}/` 落盘。
+ *
+ * 草稿防丢：文字 + 图片引用写本机 `device_state`（纯本地、不进 S3、不是小记本体），进程被杀可恢复。
+ * 外部带入（系统分享）：`seed` 提供文本与图片字节，挂载时套用为**一条新小记**。
  */
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Check, ImagePlus, X } from "lucide-react";
@@ -43,14 +44,22 @@ interface FlashImage {
   url: string;
 }
 
+/** 外部带入的初始内容（系统分享）：文本 + 图片字节。 */
+export interface QuickNoteSeed {
+  text: string;
+  images: Array<{ filename: string; mimeType: string; bytes: Uint8Array }>;
+}
+
 export interface QuickNoteFlashComposerProps {
   onSaved: () => Promise<void>;
   onCancel: () => void;
   /** 打开后是否自动聚焦并弹键盘（深链冷启动想要；从别处进来也可关掉）。 */
   autoFocus?: boolean;
+  /** 系统分享带入的初始内容：挂载时套用为一条新小记（不读上次草稿）。 */
+  seed?: QuickNoteSeed | null;
 }
 
-export function QuickNoteFlashComposer({ onSaved, onCancel, autoFocus = true }: QuickNoteFlashComposerProps) {
+export function QuickNoteFlashComposer({ onSaved, onCancel, autoFocus = true, seed = null }: QuickNoteFlashComposerProps) {
   const [text, setText] = useState("");
   const [images, setImages] = useState<FlashImage[]>([]);
   const [saving, setSaving] = useState(false);
@@ -59,12 +68,12 @@ export function QuickNoteFlashComposer({ onSaved, onCancel, autoFocus = true }: 
   const urlsRef = useRef<string[]>([]);
   /** 草稿 id：挂载即固定（保存也沿用），恢复草稿时换成草稿里的 id。 */
   const [noteId, setNoteId] = useState<string>(() => crypto.randomUUID());
-  /** 草稿读取完成前不写草稿，避免用空文本覆盖上次未保存的内容。 */
+  /** 草稿/seed 处理完成前不写草稿，避免用空文本覆盖上次未保存的内容。 */
   const [draftLoaded, setDraftLoaded] = useState(false);
   /** 已提交（保存/取消）：之后不再写草稿。 */
   const committedRef = useRef(false);
 
-  // 卸载时释放预览 URL
+  // 卸载时释放预览 objectURL
   useEffect(() => () => {
     for (const url of urlsRef.current) URL.revokeObjectURL(url);
     urlsRef.current = [];
@@ -76,11 +85,47 @@ export function QuickNoteFlashComposer({ onSaved, onCancel, autoFocus = true }: 
     return () => window.clearTimeout(timer);
   }, [autoFocus]);
 
-  // 未提交草稿：挂载时把上次遗留的内容捞回来（进程被杀也不丢文字）。
+  /** 校验 + 落盘一张图（quick-notes/{forNoteId}/），返回可展示/可保存的条目。 */
+  const stageImage = useCallback(async (forNoteId: string, filename: string, bytes: Uint8Array): Promise<FlashImage> => {
+    const format = validateQuickNoteImageBytes(bytes);
+    const blob = new Blob([bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer], { type: format.mimeType });
+    const bitmap = await createImageBitmap(blob);
+    const dimensions = { width: bitmap.width, height: bitmap.height };
+    bitmap.close();
+    validateQuickNoteImageDimensions(dimensions);
+    const stored = await bridge.stageQuickNoteAsset(forNoteId, { filename, bytes });
+    const url = URL.createObjectURL(blob);
+    urlsRef.current.push(url);
+    return {
+      id: crypto.randomUUID(),
+      filename: stored.filename,
+      displayName: filename,
+      mimeType: stored.mimeType || format.mimeType,
+      width: dimensions.width,
+      height: dimensions.height,
+      size: stored.size,
+      hash: sha256Sync(bytes),
+      url,
+    };
+  }, []);
+
+  // 挂载：系统分享优先（= 一条新小记）；否则恢复上次未提交草稿（文字 + 图片引用）。
   useEffect(() => {
     let alive = true;
     void (async () => {
       try {
+        if (seed && (seed.text.trim() || seed.images.length > 0)) {
+          const id = crypto.randomUUID();
+          if (!alive) return;
+          setNoteId(id);
+          setText(seed.text);
+          const staged: FlashImage[] = [];
+          for (const img of seed.images) {
+            try { staged.push(await stageImage(id, img.filename, img.bytes)); } catch { /* 坏图跳过 */ }
+          }
+          if (alive) setImages(staged);
+          return;
+        }
         const draft = await bridge.getQuickNoteDraft();
         if (alive && draft) {
           setNoteId(draft.id);
@@ -97,13 +142,15 @@ export function QuickNoteFlashComposer({ onSaved, onCancel, autoFocus = true }: 
             url: withAssetAccessToken(localAssetHttpUrl(draft.id, img.filename, { space: "quick-notes" })),
           })));
         }
-      } catch { /* 读草稿失败不阻断输入 */ }
+      } catch { /* 读草稿/seed 失败不阻断输入 */ }
       finally { if (alive) setDraftLoaded(true); }
     })();
     return () => { alive = false; };
+    // 只在挂载时跑一次：seed 是一次性带入
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // 输入 300ms 防抖写草稿（纯本地 device_state；保存/取消后不再写）。
+  // 输入/图片变化后 300ms 防抖写草稿（纯本地 device_state；保存/取消后不再写）。
   useEffect(() => {
     if (!draftLoaded || committedRef.current) return;
     const timer = window.setTimeout(() => {
@@ -125,33 +172,13 @@ export function QuickNoteFlashComposer({ onSaved, onCancel, autoFocus = true }: 
     for (const file of candidates) {
       try {
         const bytes = new Uint8Array(await file.arrayBuffer());
-        const format = validateQuickNoteImageBytes(bytes);
-        const blob = new Blob([bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer], { type: format.mimeType });
-        const bitmap = await createImageBitmap(blob);
-        const dimensions = { width: bitmap.width, height: bitmap.height };
-        bitmap.close();
-        validateQuickNoteImageDimensions(dimensions);
-        // 图片一加入就落盘（quick-notes/{id}/）：草稿只记引用，进程被杀图片也能恢复。
-        const stored = await bridge.stageQuickNoteAsset(noteId, { filename: file.name, bytes });
-        const url = URL.createObjectURL(blob);
-        urlsRef.current.push(url);
-        next.push({
-          id: crypto.randomUUID(),
-          filename: stored.filename,
-          displayName: file.name,
-          mimeType: stored.mimeType || format.mimeType,
-          width: dimensions.width,
-          height: dimensions.height,
-          size: stored.size,
-          hash: sha256Sync(bytes),
-          url,
-        });
+        next.push(await stageImage(noteId, file.name, bytes));
       } catch (reason) {
         setError("图片读取失败: " + (reason as Error).message);
       }
     }
     if (next.length > 0) setImages((prev) => [...prev, ...next]);
-  }, [noteId]);
+  }, [noteId, stageImage]);
 
   const removeImage = (index: number) => {
     setImages((prev) => {
