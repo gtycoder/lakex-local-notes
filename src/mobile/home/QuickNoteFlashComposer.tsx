@@ -47,6 +47,12 @@ export function QuickNoteFlashComposer({ onSaved, onCancel, autoFocus = true }: 
   const [error, setError] = useState<string | null>(null);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
   const urlsRef = useRef<string[]>([]);
+  /** 草稿 id：挂载即固定（保存也沿用），恢复草稿时换成草稿里的 id。 */
+  const [noteId, setNoteId] = useState<string>(() => crypto.randomUUID());
+  /** 草稿读取完成前不写草稿，避免用空文本覆盖上次未保存的内容。 */
+  const [draftLoaded, setDraftLoaded] = useState(false);
+  /** 已提交（保存/取消）：之后不再写草稿。 */
+  const committedRef = useRef(false);
 
   // 卸载时释放预览 URL
   useEffect(() => () => {
@@ -59,6 +65,29 @@ export function QuickNoteFlashComposer({ onSaved, onCancel, autoFocus = true }: 
     const timer = window.setTimeout(() => inputRef.current?.focus(), 250);
     return () => window.clearTimeout(timer);
   }, [autoFocus]);
+
+  // 未提交草稿：挂载时把上次遗留的内容捞回来（进程被杀也不丢文字）。
+  useEffect(() => {
+    let alive = true;
+    void (async () => {
+      try {
+        const draft = await bridge.getQuickNoteDraft();
+        if (alive && draft) { setNoteId(draft.id); setText(draft.text); }
+      } catch { /* 读草稿失败不阻断输入 */ }
+      finally { if (alive) setDraftLoaded(true); }
+    })();
+    return () => { alive = false; };
+  }, []);
+
+  // 输入 300ms 防抖写草稿（纯本地 device_state；保存/取消后不再写）。
+  useEffect(() => {
+    if (!draftLoaded || committedRef.current) return;
+    const timer = window.setTimeout(() => {
+      if (committedRef.current) return;
+      void bridge.saveQuickNoteDraft({ id: noteId, text });
+    }, 300);
+    return () => window.clearTimeout(timer);
+  }, [text, noteId, draftLoaded]);
 
   const addFiles = useCallback(async (files: FileList | File[]) => {
     const candidates = Array.from(files);
@@ -95,6 +124,13 @@ export function QuickNoteFlashComposer({ onSaved, onCancel, autoFocus = true }: 
     });
   };
 
+  /** 主动取消 = 丢弃草稿（进程被杀不经过这里，草稿会保留）。 */
+  const cancel = (): void => {
+    committedRef.current = true;
+    void bridge.clearQuickNoteDraft().catch(() => undefined);
+    onCancel();
+  };
+
   const save = async () => {
     const plain = text.trim();
     if (!plain && images.length === 0) {
@@ -104,9 +140,8 @@ export function QuickNoteFlashComposer({ onSaved, onCancel, autoFocus = true }: 
     setSaving(true);
     setError(null);
     try {
-      const id = crypto.randomUUID();
       await bridge.saveQuickNoteWithImages(
-        id,
+        noteId,
         plain,
         images.map((image) => ({
           filename: image.filename,
@@ -116,6 +151,8 @@ export function QuickNoteFlashComposer({ onSaved, onCancel, autoFocus = true }: 
           bytes: image.bytes,
         })),
       );
+      committedRef.current = true;
+      await bridge.clearQuickNoteDraft().catch(() => undefined);
       successFeedback();
       await onSaved();
     } catch (reason) {
@@ -157,9 +194,9 @@ export function QuickNoteFlashComposer({ onSaved, onCancel, autoFocus = true }: 
             onChange={(event) => { if (event.target.files) void addFiles(event.target.files); event.currentTarget.value = ""; }}
           />
         </label>
-        <span className="mobile-qn-hint">小记：只记文字与图片</span>
+        <span className="mobile-qn-hint">只记文字与图片</span>
         <div className="mobile-qn-spacer" />
-        <button type="button" className="mobile-qn-btn" onClick={onCancel} disabled={saving}>取消</button>
+        <button type="button" className="mobile-qn-btn" onClick={cancel} disabled={saving}>取消</button>
         <button type="button" className="mobile-qn-btn mobile-qn-primary" onClick={() => void save()} disabled={saving}>
           <Check size={15} />{saving ? "保存中…" : "保存"}
         </button>

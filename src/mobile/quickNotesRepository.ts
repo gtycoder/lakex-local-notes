@@ -199,3 +199,39 @@ export async function purgeQuickNote(
     }
   } catch { /* 内容解析失败不阻断 purge */ }
 }
+
+/* ---------------------------------------------------------------------------
+ * 闪念速记「未提交草稿」：纯本地 device_state（**不进 S3、不是小记**）。
+ * 目的：随手写到一半被系统杀进程时，下次打开还能把内容捞回来。
+ * 《小记》本体仍是手动保存语义；草稿只在保存/取消后清除。
+ * ------------------------------------------------------------------------- */
+
+export interface QuickNoteDraft {
+  /** 草稿对应的小记 id：一开始就固定，保存时沿用，避免每次重开换 id。 */
+  id: string;
+  text: string;
+  updatedAt: string;
+}
+
+const QUICK_NOTE_DRAFT_KEY = "quick-note-draft";
+
+export async function readQuickNoteDraft(d: MobileDb): Promise<QuickNoteDraft | null> {
+  const row = await d.prepare("SELECT value FROM device_state WHERE key=?").get(QUICK_NOTE_DRAFT_KEY) as { value?: string } | undefined;
+  if (!row?.value) return null;
+  try {
+    const parsed = JSON.parse(row.value) as Partial<QuickNoteDraft>;
+    if (typeof parsed?.id === "string" && parsed.id && typeof parsed?.text === "string") {
+      return { id: parsed.id, text: parsed.text, updatedAt: typeof parsed.updatedAt === "string" ? parsed.updatedAt : "" };
+    }
+  } catch { /* 坏草稿：忽略 */ }
+  return null;
+}
+
+export async function writeQuickNoteDraft(d: MobileDb, draft: QuickNoteDraft): Promise<void> {
+  await d.prepare("INSERT INTO device_state(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value")
+    .run(QUICK_NOTE_DRAFT_KEY, JSON.stringify(draft));
+}
+
+export async function clearQuickNoteDraft(d: MobileDb): Promise<void> {
+  await d.prepare("DELETE FROM device_state WHERE key=?").run(QUICK_NOTE_DRAFT_KEY);
+}

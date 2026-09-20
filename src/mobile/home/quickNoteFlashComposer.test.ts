@@ -47,6 +47,12 @@ describe("小记：轻量框不挂内核", () => {
     }
   });
 
+  it("有本地草稿防丢（挂载恢复 + 防抖落库 + 保存/取消清除）", () => {
+    expect(FLASH_CODE).toMatch(/bridge\.getQuickNoteDraft\(/);
+    expect(FLASH_CODE).toMatch(/bridge\.saveQuickNoteDraft\(/);
+    expect(FLASH_CODE).toMatch(/bridge\.clearQuickNoteDraft\(/);
+  });
+
   it("合成路径复用内核写入形态单一来源（lakeDocForm），媒体是 card 不是裸 img", () => {
     expect(REPO_SRC).toMatch(/quickNoteBodyFromTextAndImages/);
     expect(MODEL_CODE).toMatch(/lakeImageCardParagraph\(/);

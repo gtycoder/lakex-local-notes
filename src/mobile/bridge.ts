@@ -317,6 +317,24 @@ export const bridge = {
     });
   },
 
+  /** 闪念速记未提交草稿（纯本地 device_state，不进 S3）：进程被杀后能恢复。 */
+  async getQuickNoteDraft(): Promise<{ id: string; text: string; updatedAt: string } | null> {
+    const d = await ensureDb();
+    return await quickNotesRepository.readQuickNoteDraft(d);
+  },
+
+  /** 写草稿（写作者已在输入侧做防抖，这里只落库）。 */
+  async saveQuickNoteDraft(draft: { id: string; text: string }): Promise<void> {
+    const d = await ensureDb();
+    await quickNotesRepository.writeQuickNoteDraft(d, { id: draft.id, text: draft.text, updatedAt: new Date().toISOString() });
+  },
+
+  /** 清除草稿（保存成功 / 用户主动取消后）。 */
+  async clearQuickNoteDraft(): Promise<void> {
+    const d = await ensureDb();
+    await quickNotesRepository.clearQuickNoteDraft(d);
+  },
+
   /**
    * 小记资源落盘（内核编辑器插入图片/附件时调用）：直接写**正式目录** `quick-notes/{id}/{资产名}`，
    * 返回 canonical URL（局域网外的可达性由本机 AssetServer 负责）。

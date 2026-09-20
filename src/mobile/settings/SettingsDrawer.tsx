@@ -204,7 +204,7 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
                 </select>
               </Item>
               {pinState?.available && !pinState.pinned && (
-                <Item itemId="editor-pin-quick-note" name="小记快捷方式" desc="长按桌面图标即可记一条小记。部分机型不展示系统快捷方式，这里可手动添加到桌面。">
+                <Item itemId="editor-pin-quick-note" name="新建小记" desc="添加到桌面。">
                   <button
                     className="b3-button b3-button--outline"
                     onClick={() => {
