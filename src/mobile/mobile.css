@@ -853,6 +853,22 @@ body.nb-drag-active .side-panel-body { overscroll-behavior: none; }
   border: 1px solid var(--b3-border-color, #e3e6eb);
   border-radius: 8px 8px 0 0;
 }
+/* 画布容器：表格与"浮动图叠层"共用同一坐标系（图片按网格内容原点定位）。 */
+.mst-canvas {
+  position: relative;
+  width: max-content;
+  min-width: 100%;
+}
+.mst-image-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.mst-image {
+  position: absolute;
+  object-fit: contain;
+  border-radius: 2px;
+}
 .mst-grid {
   border-collapse: separate;
   border-spacing: 0;
@@ -869,6 +885,16 @@ body.nb-drag-active .side-panel-body { overscroll-behavior: none; }
   text-overflow: ellipsis;
   vertical-align: top;
   white-space: nowrap;
+}
+/* 行号列 / 表头行的尺寸必须压过通用 `.mst-grid th` 的 min-width（否则行号列会变成 84px、
+   与图片叠层的坐标原点错位）⇒ 这里用 `.mst-grid th.xxx` 提高优先级。 */
+.mst-grid th.mst-col-head {
+  min-width: 84px;
+}
+.mst-grid th.mst-row-head,
+.mst-grid th.mst-corner {
+  min-width: 44px;
+  max-width: 44px;
 }
 .mst-col-head,
 .mst-row-head,

@@ -591,7 +591,7 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
             ) : t.kind === "sheet" ? (
               // 表格：移动端只读网格（共享 core 正文模型；不求值公式、不渲染单元格图片）
               <Suspense fallback={<div className="mobile-empty">正在加载表格…</div>}>
-                <MobileSheetViewer content={t.content} />
+                <MobileSheetViewer noteId={t.id} content={t.content} />
               </Suspense>
             ) : t.kind !== "doc" ? (
               // 兜底防腐坏（AGENTS §3）：未知类型的正文不是 Lake HTML，**绝不允许** Lake 编辑器打开/保存。

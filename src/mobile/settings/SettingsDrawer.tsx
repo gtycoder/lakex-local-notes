@@ -12,6 +12,7 @@ import { mobileCachePort } from "../cachePort";
 import { mobileAppInfoPort } from "../appInfoPort";
 import { TrashList } from "./TrashList";
 import { TrashPreviewPage } from "../trash/TrashPreviewPage";
+import { probePinShortcut, requestPinQuickNoteShortcut } from "../quickNoteShortcut";
 import type { AppInfo } from "../../core/ports";
 import type { S3Settings } from "../../lib/types";
 
@@ -48,7 +49,11 @@ function formatBytes(n: number): string {
 export function SettingsDrawer(props: SettingsDrawerProps) {
   const { open, onClose, onRefresh } = props;
   const [view, setView] = useState<View>("menu");
-  const [previewNoteId, setPreviewNoteId] = useState<string | null>(null);
+
+  /** 闪念速记桌面快捷方式：部分机型不展示静态快捷方式，这里给「添加到桌面」兜底（对齐思源）。 */
+  const [pinState, setPinState] = useState<{ available: boolean; pinned: boolean } | null>(null);
+  const [pinMsg, setPinMsg] = useState("");
+  useEffect(() => { void probePinShortcut().then(setPinState); }, []);  const [previewNoteId, setPreviewNoteId] = useState<string | null>(null);
   const [listKey, setListKey] = useState(0);
   const [s3, setS3] = useState<S3Settings | null>(null);
   const [s3Test, setS3Test] = useState("");
@@ -196,6 +201,21 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
                   {MAX_ATTACHMENT_MB_OPTIONS_SETTINGS.map((mb) => <option key={mb} value={mb}>{mb} MiB</option>)}
                 </select>
               </Item>
+              {pinState?.available && !pinState.pinned && (
+                <Item itemId="editor-pin-quick-note" name="闪念速记快捷方式" desc="长按桌面图标即可速记。部分机型不展示系统快捷方式，这里可手动添加到桌面。">
+                  <button
+                    className="b3-button b3-button--outline"
+                    onClick={() => {
+                      void requestPinQuickNoteShortcut().then((requested) => {
+                        setPinMsg(requested ? "已请求，请在系统弹窗中确认" : "该机型不支持固定快捷方式");
+                        // 系统弹窗确认后会有延迟，稍后复查一次固定状态
+                        setTimeout(() => { void probePinShortcut().then(setPinState); }, 2500);
+                      });
+                    }}
+                  >添加到桌面</button>
+                </Item>
+              )}
+              {pinMsg && <div className="b3-label__text">{pinMsg}</div>}
             </Group>
           )}
 

@@ -6,12 +6,14 @@
  * 显示值 / 粗斜体 / 字色底色 / 对齐 / 合并单元格 / 行列号，横向纵向滚动 + 表头吸顶。
  * 公式只显示已存的显示值（不求值）、单元格图片与条件格式不渲染（属「完整版」范围，见 HANDOFF §2.14 待办）。
  */
-import { useMemo, useState } from "react";
-import { parseSheetBody, type SheetCell, type SheetWorksheet } from "../../core/sheetDoc.js";
+import { useLayoutEffect, useMemo, useRef, useState } from "react";
+import { parseSheetBody, sheetImageSrc, sheetImages, type SheetCell, type SheetWorksheet } from "../../core/sheetDoc.js";
 
 /** 只读预览渲染上限：手机屏幕看不清更多，也能避免超大表把 DOM 撑爆。 */
 const MAX_ROWS = 500;
 const MAX_COLS = 60;
+/** 网格原点兜底偏移（行号列宽 / 表头行高）：首帧尚未量到实测值时先用它，量到后以实测为准。 */
+const FALLBACK_ORIGIN = { x: 44, y: 30 };
 
 function columnLabel(index: number): string {
   let label = "";
@@ -94,14 +96,41 @@ function buildGrid(sheet: SheetWorksheet): SheetGrid {
 }
 
 export interface MobileSheetViewerProps {
+  noteId: string;
   content: string;
 }
 
-export function MobileSheetViewer({ content }: MobileSheetViewerProps) {
+export function MobileSheetViewer({ noteId, content }: MobileSheetViewerProps) {
   const doc = useMemo(() => parseSheetBody(content), [content]);
   const [activeIndex, setActiveIndex] = useState(0);
   const sheet = doc?.sheets[activeIndex] ?? doc?.sheets[0];
   const grid = useMemo(() => (sheet ? buildGrid(sheet) : null), [sheet]);
+  const images = useMemo(
+    () => (sheet ? sheetImages(sheet)
+      .map((image) => ({ ...image, url: sheetImageSrc(image.src, noteId) }))
+      .filter((image): image is typeof image & { url: string } => !!image.url) : []),
+    [sheet, noteId],
+  );
+  /** 网格内容原点（A1 左上角相对画布容器）：图片坐标是「相对网格内容原点」的像素，必须按实测偏移。 */
+  const canvasRef = useRef<HTMLDivElement | null>(null);
+  const [gridOrigin, setGridOrigin] = useState<{ x: number; y: number } | null>(null);
+  useLayoutEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const measure = () => {
+      const a1 = canvas.querySelector<HTMLElement>(".mst-grid tbody tr td");
+      if (!a1) return;
+      const canvasBox = canvas.getBoundingClientRect();
+      const a1Box = a1.getBoundingClientRect();
+      const next = { x: Math.round(a1Box.left - canvasBox.left), y: Math.round(a1Box.top - canvasBox.top) };
+      setGridOrigin((prev) => (prev && prev.x === next.x && prev.y === next.y ? prev : next));
+    };
+    measure();
+    const observer = typeof ResizeObserver !== "undefined" ? new ResizeObserver(measure) : null;
+    observer?.observe(canvas);
+    return () => observer?.disconnect();
+  }, [sheet, grid]);
+  const origin = gridOrigin ?? FALLBACK_ORIGIN;
 
   if (!doc || !sheet || !grid) {
     return <div className="mobile-empty">这张表格还没有工作表。</div>;
@@ -109,6 +138,12 @@ export function MobileSheetViewer({ content }: MobileSheetViewerProps) {
 
   const rowIndexes = Array.from({ length: grid.rows }, (_, index) => index);
   const colIndexes = Array.from({ length: grid.cols }, (_, index) => index);
+  /** 有图但数据为空/不覆盖图片位置时，按图片范围撑开画布（只读预览只求"看得见图"）。 */
+  const imageExtent = images.reduce(
+    (acc, image) => ({ width: Math.max(acc.width, image.left + image.width), height: Math.max(acc.height, image.top + image.height) }),
+    { width: 0, height: 0 },
+  );
+  const hasImages = images.length > 0;
 
   return (
     <div className="mobile-sheet" data-mobile-sheet>
@@ -135,37 +170,65 @@ export function MobileSheetViewer({ content }: MobileSheetViewerProps) {
         <span className="mst-readonly">只读</span>
       </div>
       <div className="mst-wrap">
-        <table className="mst-grid">
-          <thead>
-            <tr>
-              <th className="mst-corner" aria-hidden="true" />
-              {colIndexes.map((col) => (
-                <th key={col} className="mst-col-head">{columnLabel(col)}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {rowIndexes.map((row) => (
-              <tr key={row}>
-                <th className="mst-row-head" scope="row">{row + 1}</th>
-                {colIndexes.map((col) => {
-                  const cell = grid.cells.get(`${row}:${col}`);
-                  if (cell?.hidden) return null;
-                  return (
-                    <td
-                      key={col}
-                      style={cell?.style}
-                      rowSpan={cell?.rowSpan}
-                      colSpan={cell?.colSpan}
-                    >
-                      {cell?.text ?? ""}
-                    </td>
-                  );
-                })}
+        <div
+          ref={canvasRef}
+          className="mst-canvas"
+          style={hasImages
+            ? { minWidth: origin.x + imageExtent.width, minHeight: origin.y + imageExtent.height }
+            : undefined}
+        >
+          <table className="mst-grid">
+            <thead>
+              <tr>
+                <th className="mst-corner" aria-hidden="true" />
+                {colIndexes.map((col) => (
+                  <th key={col} className="mst-col-head">{columnLabel(col)}</th>
+                ))}
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {rowIndexes.map((row) => (
+                <tr key={row}>
+                  <th className="mst-row-head" scope="row">{row + 1}</th>
+                  {colIndexes.map((col) => {
+                    const cell = grid.cells.get(`${row}:${col}`);
+                    if (cell?.hidden) return null;
+                    return (
+                      <td
+                        key={col}
+                        style={cell?.style}
+                        rowSpan={cell?.rowSpan}
+                        colSpan={cell?.colSpan}
+                      >
+                        {cell?.text ?? ""}
+                      </td>
+                    );
+                  })}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {/* 浮动图叠层：图片几何是"相对网格内容原点"的像素 ⇒ 偏移掉行号列宽与表头行高即可对齐单元格。 */}
+          {hasImages && (
+            <div className="mst-image-layer" aria-hidden="true">
+              {images.map((image) => (
+                <img
+                  key={image.id}
+                  className="mst-image"
+                  src={image.url}
+                  alt=""
+                  loading="lazy"
+                  style={{
+                    left: origin.x + image.left,
+                    top: origin.y + image.top,
+                    width: image.width,
+                    height: image.height,
+                  }}
+                />
+              ))}
+            </div>
+          )}
+        </div>
       </div>
       {grid.truncated && (
         <div className="mst-truncated">只读预览仅显示前 {MAX_ROWS} 行 / {MAX_COLS} 列，完整表格请在桌面端查看。</div>

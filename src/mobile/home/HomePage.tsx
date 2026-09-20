@@ -38,6 +38,8 @@ type QuickSort = "recent" | "oldest";
 
 export interface HomePageProps {
   tab: "quick" | "library";
+  /** 递增计数：变化即打开「新建小记」写作区（长按桌面图标的闪念速记快捷方式用）。 */
+  newQuickNoteRequest?: number;
   notebooks: TreeNode[];
   /** 全部笔记（「最近文档」用，按 updatedAt 取最近 N 条） */
   notes: POCNoteSummary[];
@@ -76,7 +78,7 @@ function fmtRelative(iso: string): string {
 
 export function HomePage(props: HomePageProps) {
   const {
-    tab, notebooks, notes, quickNotes, docCounts, onTabChange, onOpenNotebook,
+    tab, newQuickNoteRequest = 0, notebooks, notes, quickNotes, docCounts, onTabChange, onOpenNotebook,
     onOpenNote, onOpenDrawer, onOpenSearch, onCreateNotebook, onQuickNotesChanged,
   } = props;
   const [composer, setComposer] = useState<ComposerState>(null);
@@ -120,6 +122,12 @@ export function HomePage(props: HomePageProps) {
     } catch { /* 读取失败忽略 */ }
   };
   const closeComposer = (): void => { setComposer(null); setEditNote(null); };
+  /** 闪念速记：请求计数变化 ⇒ 直接打开新建写作区（首次挂载的非 0 值也要响应，例如冷启动）。 */
+  useEffect(() => {
+    if (!newQuickNoteRequest) return;
+    setEditNote(null);
+    setComposer({ mode: "new" });
+  }, [newQuickNoteRequest]);
   const switchTab = (next: "quick" | "library"): void => { onTabChange(next); };
   const runSync = async (): Promise<void> => {
     try { const r = await bridge.syncNow(); showToast(r.message || "已同步"); }

@@ -4,4 +4,6 @@
     <string name="title_activity_main">Lake Notes Mobile</string>
     <string name="package_name">com.lakenotes.mobile</string>
     <string name="custom_url_scheme">com.lakenotes.mobile</string>
+    <string name="shortcut_quick_note_short">闪念速记</string>
+    <string name="shortcut_quick_note_long">闪念速记：直接写一条小记</string>
 </resources>

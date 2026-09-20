@@ -12,6 +12,7 @@
  * 边界：本文件属 `src/core`（禁平台/第三方依赖），因此这里只声明「结构上兼容 FortuneSheet 的最小类型」，
  * 不 import `@fortune-sheet/core`；编辑器侧负责 `Sheet[]` 与本类型的互转（结构兼容，直接断言）。
  */
+import { localAssetHttpUrl } from "./assetUrl.js";
 
 export const SHEET_DOC_KIND = "sheet" as const;
 export const SHEET_DOC_VERSION = 2 as const;
@@ -42,6 +43,62 @@ export interface SheetWorksheet {
   name: string;
   celldata?: SheetCell[];
   [key: string]: unknown;
+}
+
+/**
+ * 工作表里的**浮动图**（FortuneSheet `sheets[].images[]`）：几何是**像素**，相对网格内容原点（A1 左上）。
+ * 实测形态（260920 真插一张 160×100 PNG 落盘）：
+ * `{ id, src:"data:image/png;base64,…", left:0, top:0, width:80, height:50, originWidth:160, originHeight:100 }`。
+ */
+export interface SheetImageRef {
+  id: string;
+  /** 原始 src：当前是 base64 data URL；`SHEET-IMAGE-MANAGEMENT-260919.md` 的 P1 落地后会变成资产 filename。 */
+  src: string;
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+}
+
+/** 读出一张工作表的浮动图（按 id 去重；几何非法或缺 src 的项跳过）。 */
+export function sheetImages(sheet: SheetWorksheet | null | undefined): SheetImageRef[] {
+  const raw = (sheet as { images?: unknown } | null | undefined)?.images;
+  if (!Array.isArray(raw)) return [];
+  const out: SheetImageRef[] = [];
+  const seen = new Set<string>();
+  for (const item of raw) {
+    if (!item || typeof item !== "object") continue;
+    const value = item as Record<string, unknown>;
+    const src = typeof value.src === "string" ? value.src.trim() : "";
+    if (!src) continue;
+    const left = Number(value.left);
+    const top = Number(value.top);
+    const width = Number(value.width);
+    const height = Number(value.height);
+    if (!Number.isFinite(left) || !Number.isFinite(top) || !(width > 0) || !(height > 0)) continue;
+    const id = typeof value.id === "string" && value.id ? value.id : `${left}:${top}:${src.length}`;
+    if (seen.has(id)) continue;
+    seen.add(id);
+    out.push({ id, src, left, top, width, height });
+  }
+  return out;
+}
+
+/**
+ * 图片 src → 可渲染 URL：
+ * - `data:` / `http(s):` 原样返回；
+ * - 其余（资产 filename —— P1 之后的形态）拼本机资产 canonical URL；
+ * - 空/非法返回 null（调用方跳过）。
+ *
+ * 之所以现在就认三种形态：`SHEET-IMAGE-MANAGEMENT-260919.md` 的 P1（正文改存 filename）落地后，
+ * 渲染层**零改动**即可切过去。
+ */
+export function sheetImageSrc(src: string | null | undefined, noteId: string): string | null {
+  const value = typeof src === "string" ? src.trim() : "";
+  if (!value) return null;
+  if (value.startsWith("data:") || value.startsWith("http://") || value.startsWith("https://")) return value;
+  if (!noteId) return null;
+  return localAssetHttpUrl(noteId, value);
 }
 
 export interface SheetDoc {

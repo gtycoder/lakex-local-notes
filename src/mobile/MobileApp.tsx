@@ -17,6 +17,7 @@ import { SettingsDrawer } from "./settings/SettingsDrawer";
 import { useBackHandler } from "./useBackHandler";
 import { Toasts } from "./ui/Toasts";
 import { ImageLightbox } from "../features/editor/ImageLightbox";
+import { subscribeQuickNoteShortcut } from "./quickNoteShortcut";
 import { ConfirmHost, confirmMobile } from "./ui/ConfirmDialog";
 import { showToast } from "./ui/toastBus";
 import { successFeedback, warnFeedback } from "./ui/haptics";
@@ -30,6 +31,8 @@ export type Route =
 
 export function MobileApp() {
   const [route, setRoute] = useState<Route>({ kind: "home", tab: "library" });
+  /** 闪念速记（长按桌面图标的快捷方式）请求计数：变化即让首页直接打开「新建小记」。 */
+  const [quickNoteRequest, setQuickNoteRequest] = useState(0);
   const [treeNodes, setTreeNodes] = useState<TreeNode[]>([]);
   const [notes, setNotes] = useState<POCNoteSummary[]>([]);
   const activeIdRef = useRef<string | null>(null);
@@ -130,6 +133,13 @@ export function MobileApp() {
     return () => { if (timer != null) window.clearInterval(timer); };
   }, []);
 
+  // 长按桌面图标 →「闪念速记」：冷启动（getLaunchUrl）与热启动（appUrlOpen）都收敛到这里，
+  // 切到「小记」标签并请求首页打开新建写作区。
+  useEffect(() => subscribeQuickNoteShortcut(() => {
+    setRoute({ kind: "home", tab: "quick" });
+    setQuickNoteRequest((value) => value + 1);
+  }), []);
+
   const notebooks = useMemo(() => treeNodes.filter((n) => n.nodeType === "notebook"), [treeNodes]);
   // 笔记本 → 直接文档数（首页列表行 .counter；与 listNotebookTree 的归属口径一致：parent 为笔记本）
   const docCounts = useMemo(() => {
@@ -198,6 +208,7 @@ export function MobileApp() {
       {route.kind === "home" && (
         <HomePage
           tab={route.tab}
+          newQuickNoteRequest={quickNoteRequest}
           notebooks={notebooks}
           notes={notes}
           quickNotes={quickNotes}

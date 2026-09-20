@@ -8,7 +8,7 @@
 
 | 能力 | 本轮前（移动端） | 本轮后 | 仍缺 |
 |---|---|---|---|
-| 表格 `kind=sheet` | **完全看不到**（占位「暂不支持在移动端编辑」） | **只读网格**：值/粗斜体/字色底色/对齐/合并单元格/行列号 + 吸顶表头 + 横向纵向滚动（上限 500×60，超出提示） | 公式求值、单元格图片、条件格式、冻结窗格、**编辑** |
+| 表格 `kind=sheet` | **完全看不到**（占位「暂不支持在移动端编辑」） | **只读网格**：值/粗斜体/字色底色/对齐/合并单元格/行列号 + 吸顶表头 + 双向滚动（上限 500×60）**+ 图片叠层**（`sheets[].images[]` 按像素几何锚到单元格） | 公式求值（只显示已存显示值）、条件格式、冻结窗格、**编辑** |
 | 多维表 `kind=bitable` | 占位 | **只读视图**：多表切换 + 视图口径（筛选/排序/隐藏列/列顺序）+ 选项色块 + 附件缩略图 + 「只读」角标 | 编辑、表单视图、记录详情抽屉、单元格范围复制 |
 | 画板 `kind=board` | 本轮早些时候补了**只读查看器** | 只读查看器 + 图片走本机 AssetServer（`fitOnInit` 打开即自适应） | 移动端**新建**画板；画板图片依赖 AB 同步（未测） |
 | 小记（Quick Notes） | 纯 `textarea` + 图片列表；保存会用 `quickNoteBodyFromTextAndImages` 合成正文 ⇒ **把桌面端排版的富内容压平** | **完整编辑**：桌面同款内核编辑器（白名单工具条：图片/待办/有序/无序/分割线）+ 附件按类型成卡（视频/音频/图片/附件）+ `body/text/images` 与桌面 `.qnote` v2 同格式；卡片预览改用桌面同一套只读渲染器；纯文本未变时**不再压平 body** | 「小记→正式文档」转换入口、批量操作、置顶/列表视图等桌面工作台能力；音视频/PDF 附件未实测 |
@@ -51,7 +51,66 @@
 ## 五、下一步（按价值排序，待用户拍板）
 
 1. **小记附件实测**：图片已验；音视频/PDF 走的是同一个内核 file input（WebView 里能拉起系统文件选择器），建议真机点一次确认四类卡都对。
-2. **移动端新建 sheet / bitable / board**：现在是「桌面创建、移动端只读」。要做成完整端，需要：创建入口（目录 + 新建菜单/首页）、以及各自的**移动端编辑**能力（表格=FortuneSheet 或自研编辑、多维表=录入、画板=绘制）。
-3. **表格 100% 保真（可选）**：把 FortuneSheet 也打进移动端（懒加载独立分包 ≈ +0.5MB gzip）即可拿回公式/图片/条件格式/冻结窗格；需要你决定是否接受这个体积。
+2. ~~移动端新建 sheet / bitable / board~~ **用户 260920 定稿：先不做，除文档外一律只读。**
+3. **表格 100% 保真（可选）**：把 FortuneSheet 也打进移动端（懒加载独立分包 ≈ +0.5MB gzip）即可拿回公式求值/条件格式/冻结窗格；需要你决定是否接受这个体积。
 4. **AB 多端 S3 往返**（画板图片 / 表格 / 多维表 / 小记资源）仍未测 —— 与桌面批次点名的 AB 同步是同一件事，建议一起做。
 5. **移动端小记工作台的桌面能力**：小记→正式文档、批量选择、置顶/列表视图等（桌面 `QuickNotesWorkspace` 已有）。
+
+## 六、表格图片（浮动图）在移动端的只读渲染 —— 260920
+
+**存储事实（实测）**：桌面插入图片后，正文是 `sheets[].images[]`：
+`{ id, src:"data:image/png;base64,…", left, top, width, height, originWidth, originHeight }` ——
+`left/top` 是**相对网格内容原点（A1 左上）的像素**，FortuneSheet 已经算好；`src` 目前仍是 base64 内联
+（`docs/SHEET-IMAGE-MANAGEMENT-260919.md` 的 P1「落资产管线」尚未实施）。
+
+**实现（≈0.5 天，不引依赖、不动数据格式）**：
+- 纯核心 `src/core/sheetDoc.ts`：`sheetImages(sheet)` 归一化浮动图（过滤非法项/按 id 去重）+ `sheetImageSrc(src, noteId)`
+  解析器（`data:`/`http:` 原样；**filename 形态拼 canonical URL ⇒ 桌面 P1 落地后渲染层零改动**）；
+- 移动端 `MobileSheetViewer`：在表格滚动容器里加**图片叠层**，偏移量用**实测的网格原点**
+  （`ResizeObserver` 量 A1 相对画布的位置，兜底 44/30）而不是写死常量 —— 实测同时修掉了行号列被通用 `th`
+  规则撑到 84px 的问题（`.mst-grid th.mst-row-head` 提高优先级后回到 44px）；
+- 图片超出数据范围时按图片范围撑开画布（只求"看得见图"）。
+
+**实测（模拟器）**：种一张锚在 A1、显示 80×50 的图 ⇒ `.mst-image-layer` 存在、图片渲染成功；
+图片矩形与 A1 单元格**逐像素对齐**（`alignedX=0, alignedY=0`）。截图 `/tmp/lake-board-evidence/mobile-sheet-image.png`。
+
+## 七、长按桌面图标 → 闪念速记（260920，对齐思源）
+
+**参考实现（`/Users/admin/file/local-lake/siyuan-android-main`，AGPL-3.0，仅参考不抄代码）**：
+- 入口两条腿：① **静态 App Shortcut** `res/xml/shortcuts.xml`（`shortcutId=shorthand`，`action=VIEW` + `data="shorthand"`，
+  `targetClass=ShortcutActivity`，专用图标 `@drawable/shorthand_icon`，short/long label 同文案）；② **应用内「添加到桌面」**
+  （`ShortcutManager.requestPinShortcut` + `getPinnedShortcuts()` 判断是否已固定 ⇒ 已固定就隐藏按钮；固定后延迟 1s 复查并给成功/失败提示）。
+  **没有按品牌分支的黑魔法**：`flavors.gradle` 的 cn/googleplay/huawei/official 只是商店分发渠道，与长按无关。
+- 体验：`ShortcutActivity` 是**独立轻量 Activity**（原生 `EditText` + 提交，**不走主 App/WebView**），
+  `launchMode=singleTask` + `taskAffinity=…shorthand`（独立任务栈）、键盘自动弹、透明状态栏/刘海屏适配；
+  **草稿**用 `ShorthandDraftStore`（250ms 防抖 + `onStop` flush + 提交后清空）⇒ 进程被杀也不丢；
+  提交写 `{timestamp}.md`（AtomicFile：tmp→rename）到 `shorthands/` 目录，内核每 7 秒转入文档；
+  同一 Activity 还接 `ACTION_SEND`（文本/图片/音视频/文件）⇒ 也是系统分享目标。
+- 语义差异：思源的闪念速记是「**本地暂存 → 自动追加/生成到指定文档**」（路径模板可配），
+  本项目的对应能力是**小记**（Quick Notes，独立库 + 随时预览/编辑）⇒ 我们把快捷方式落到「新建小记」。
+
+**我们的实现（v1）**：
+1. `res/xml/shortcuts.xml`：`quick-note` 静态快捷方式（`action=VIEW` + `data=lakenotes://quick-note`，label「闪念速记」）；
+2. `AndroidManifest.xml`：launcher activity 挂 `android.app.shortcuts` meta-data + 注册 `lakenotes://` 深链 intent-filter；
+3. JS：`src/mobile/quickNoteShortcut.ts` 统一收口 —— **冷启动** `App.getLaunchUrl()`（启动瞬间可能还没就绪 ⇒ 前 3 秒短轮询重试）
+   + **热启动** `App.appUrlOpen`；命中即让 `MobileApp` 切到「小记」标签并请求 `HomePage` 直接打开新建写作区；
+4. **机型兜底（对齐思源第 ② 条）**：新增原生插件 `PinShortcutPlugin`（`isAvailable` / `isPinned` / `requestPin`），
+   设置 → 编辑器 →「闪念速记快捷方式」在「可固定且未固定」时显示 **「添加到桌面」**（系统会弹确认框）。
+
+**实测（模拟器 API36）**：
+| 验证项 | 结果 |
+|---|---|
+| 静态快捷方式注册 | ✅ `adb shell cmd shortcut get-shortcuts` 列出 `id=quick-note`、shortLabel=闪念速记、longLabel=闪念速记：直接写一条小记、intent=VIEW→MainActivity |
+| 冷启动 | ✅ `force-stop` → `am start -a VIEW -d lakenotes://quick-note` ⇒ 直接进入「小记」标签 + 新建写作区（内核编辑器已挂） |
+| 热启动（后台 → 再触发） | ✅ 回到前台并打开新建写作区（输入框为空，不串上一次内容） |
+| 机型兜底「添加到桌面」 | ✅ `PinShortcut.isAvailable()={available:true}` → `requestPin()`={requested:true} → 系统弹出「闪念速记 / Add to home screen」确认框（截图 `/tmp/lake-board-evidence/mobile-pin-dialog.png`）→ 确认后 `cmd shortcut` 该条目 flags 变为 **`Pin`**（已固定到桌面） |
+| 报错 | ✅ 全流程 0 未捕获异常 |
+
+> **踩坑（重要）**：订阅不能用 `hasNativeBridge()`（它判的是 `window.lakeNative`，而移动端这个调试契约是在
+> MobileApp 启动流程**之后**才注入的）⇒ 冷启动瞬间判假、订阅被跳过，长按图标永远不生效。改成按
+> `window.Capacitor.isNativePlatform()` 判断后正常（`quickNoteShortcut.ts` 里有注释）。
+
+**与思源的差距（可选下一步）**：思源是「原生轻量 Activity 秒开 + 草稿 + 文件暂存 + 内核每 7 秒转入」，
+冷启动不等 WebView/内核；我们 v1 是「深链 → App → 内核小记编辑器」，冷启动约 1–2s。
+要做到思源那种"秒开输入框"，需要：原生 Activity（输入框 + 草稿 + 提交写入 inbox 目录）+ App 侧启动时把 inbox 导入为小记，
+估 **1–1.5 天**；另外系统分享（`ACTION_SEND` 文本/图片 → 小记）约 **0.5 天**（思源两个入口都做了）。
