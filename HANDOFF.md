@@ -5,57 +5,20 @@
 > **§8 是移动端（安卓）专职交接**，由移动端会话维护；桌面会话不要改 §8，移动端会话不要改 §0-§7 之外的桌面文件。
 
 ## 0. 当前基线（新会话开工前）
-- **本会话（260920 · 独立画板）完整交接 = §2.13（kind=board 画板文档：调研 + v1 实现 + 隔离实例实测）—— 分支 `feat/board-document` @ `5da17cd`，**未合 master**，待用户验收。**
-  - 分支关系：`master`(79e4d0d) →（多维表检查点提交 **`b1355de`** 在 `feat/bitable`）→ **`feat/board-document` = b1355de + 画板批次（未提交）**。
-  - ⚠️ **实况更正**：`master` / `origin/master` **仍是 79e4d0d**，多维表那批之前一直躺在工作区未提交（会话间会丢），本会话为切干净的分支把它**代为提交**成 `feat/bitable` 上的检查点 `b1355de`（内容一字未改）。
-    若不需要这个提交：`git checkout feat/bitable && git reset --mixed 79e4d0d`（工作区即回到「未提交」原状）。
-  - 一句话状态：画板引擎（Drawnix/Plait，MIT）**不依赖 Lake 内核**，新 kind `board` 走既有 kind 管线（正文 `boards/{id}.board.json`、manifest **v7**、侧栏「新建画板」、tab 内整屏画布、零内核实例、只存场景+视口）；**编译/单测/双端 build/隔离实例实测全绿**，剩余风险（AB 同步、图片内联、实例记忆 soak）见 §2.13 五。
-- **本会话（260920 · 多维表）完整交接 = §2.12（自研多维表 bitable，9 轮迭代 + 附件公共化）—— 在分支 feat/bitable，未提交、未合 master，待用户验收；已做多轮真机点验。**
-- **上一段（260920，已收尾）完整交接 = §2.11（小记内核化收尾：附件按类型成卡 / 卡片预览保真 / 展开层与保存策略 / 内核三个坑）。**
-  ✅ **已合并 `master` 并推 origin**：代码批 = `e2f0a4d`（feat(quick-notes)…），交接 = `c4d5abc`（docs(handoff): §2.11），
-  其后还有一个只补哈希的 docs 小提交（= 当前 HEAD，`git log --oneline -1` 看）；
-  `master == origin/master`、工作区干净、单 worktree。
-  一句话状态：小记编辑态=文档式内核编辑器（白名单入口 + 展开成完整工具栏），卡片预览=自研只读渲染（零内核实例），
-  附件按类型成卡（与文档同一模块），列表视图右侧=文档式编辑器，保存策略对齐文档（不因 pending 卡拒绝保存）；
-  **待用户真机点验的清单见 §2.11 三.1**，内核行为结论见 `docs/LAKEX-CONTRACT.md` §5.11/§5.12。
-- **上一段（260919 晚 · 续）在小记方向上的交接 = §2.10 末尾「2.10 续做」**（内核 note 版式 + 展开 + 列表/小记版式切换 + 附件管线；当时代码在工作区未提交，现已被 §2.11 取代并提交）。
-- **本会话（260919 晚）完整交接 = §2.10（小记挂 Lake 内核编辑器）——⚠️ 下一会话最高优先级，用户已报「问题很多」但未逐条给**。所有改动已提交并推 origin：`master` @ `0d442a8`，工作区干净、单 worktree（本会话不再使用分支树）。
-- **本会话（260919）完整交接 = §2.9**（表格内核换代 FortuneSheet + UI/文档收口 + 崩溃修复；含任务目标/已完成/当前问题/下一步/踩坑）。表格批次完整背景 = §2.8。
-- **本批（表格文档接入 kind=sheet，✅ 已提交并推 origin：`master` @ `71c2d90`；⚠️ 尚未真机验收）**：分支 `feat/sheet-document` 已 **ff 合入 `master`**（旧调研分支 `spike/sheet-ce` 已删）。**写给零上下文新会话的完整交接 = §2.8（新会话从这里读）**；设计/选型/实测数据全表 = `docs/SHEET-BITABLE-DESIGN-260918.md` + `docs/FORTUNESHEET-FEASIBILITY-260919.md`（260919 换内核）。
-  - 一句话：新增**文档类型** `kind = doc | sheet | bitable`（只加在 `notes.kind` + `manifest.kind`，**不动 `tree_nodes.node_type`**）；表格正文落 `sheets/{id}.sheet.json`；**manifest 升 v6**（带 kind）；编辑器 = **FortuneSheet 1.0.4**（260919 由 jspreadsheet CE 换掉；CSP / 图片 input / 编辑态限宽 / setCellFormat 判空 走 `patches/`）；**多维表(bitable)本批不做**。
-  - 门禁（本批实测）：`tsc` 0 · `vitest` **1025 passed / 16 skipped (1041)** · 桌面 + 移动 `vite build` 全绿 · `check:bundle` app-js gzip **1.82MB / 预算 2.90MB** · `check:core` 0 · 懒加载分包 `SheetEditor-*.js` ≈ **580KB gzip，首屏 index chunk 不含它**。
-  - ⚠️ **manifest v6 ⇒ 所有端必须一起升级**：旧端读到 v6 会显式拒绝同步（`READABLE_MANIFEST_VERSIONS={4,5,6}`，未知 kind 也拒绝）——这是**刻意**的安全闸，防止旧端把表格 JSON 当 Lake 文档打开、保存即写坏正文。
-  - ⚠️ **未做 / 待办**：**只剩真机验收**（全链路没在真实应用跑过）。内联样式一条已随 FortuneSheet 重写解决（`src/features/sheet/` 已无 `style=`）。**清单见 §3 第 13 条。**
-  - ✅ 已随本批完成：非 doc 导出 kind 守卫 + 目录树/⋯ 菜单/大纲/字数 的 kind 收口；`docs/SYNC-PROTOCOL.md`+`docs/STORAGE-LAYERS.md` 回填；spike 产物清理（`spike.html`/`src/spike/`/`scripts/spike-sheet-ce.mjs`/`vite.spike*.ts` 已删，**设计文档保留**）。
-- **上一批（S3 审计三条错误处理修复，✅ 已提交并推 origin，260918 用户验收）**：本批代码末提交 = `master` @ `2f46784`（其上为 HANDOFF 更新 `54b84dd`）；上一批代码基线 `e873809`。本批 = 审计文档 `docs/S3-STORAGE-AUDIT-260918.md` 的**三次复核 + 三条落地**（详细勘误与证据见该文档 **§8**）：
-  ① **F2**：清单拉取失败 ⇒ 整轮中止并抛出（`src/core/syncEngine.ts` pull 的 catch 删掉「降级成 return」分支；对象缺失=首次同步走 null 分支不受影响）——顺带修掉「引擎早退后 Controller 仍删 purge 前缀 + `markPurgeSynced`」的顺序问题；
-  ② **D1/F1/D2**：桌面留档不再静默吞（`electron/syncAdapters.ts` `createHistorySnapshot` 删整体 catch）+ 拒空正文（`.lake` 缺失被 catch 成 "" 时抛「留档内容为空」）；手动同步 UI（`src/hooks/useSyncController.ts`）catch 透出真实原因；
-  ③ **D3/F6**：`AssetRepository.getProtectedRefs` 单点扩成「当前正文 ∪ 历史 refs ∪ **未保存草稿 refs**」（`electron/draftJournal.ts` 新增 `draftJournalDir`/`readDraftEntry` 只读助手；`store.ts` 装配注入；`main.ts` 改用共享目录函数）⇒ 自动清理/全局清孤儿/单条删孤儿/云端 GC keep 集/待回收标记五处口径一致。
-  - 护栏：`src/core/syncEngine.test.ts`（D2 测试改 rejects 断言 + 新增「审计 260918 D1 留档失败整轮中止」）· `electron/store.test.ts`（新增「审计 260918 D3 草稿引用不被清理」+「D1/D2 留档 adapter 拒空/写盘失败抛出」）。
-  - 门禁（本批实测）：`tsc` 0 · `vitest` **1014 passed / 16 skipped (1030)** · 桌面 + 移动 `vite build` 全绿。
-  - 审计文档同步更新：`docs/S3-STORAGE-AUDIT-260918.md` 新增 **§8**（§7 勘误 + 落地记录），§7.1–7.5 按 §8 更正（F2/D2 复现步骤原文验不出来、D5 降为 Info、B4 补下载侧触发面与内存上界、F7/F9 明确不做）。
-- **基线（上一批，已在 `master` 且已推 origin）**：`master` @ `e873809`（本批代码末提交；其上为本条 §0 更新）。本批 = **块级编辑三批收口 + 目录栏收口**（原在途分支 `feat/block-drag-native` 已**合入并删本地分支**）：
-  ① **块手柄锚点**改锚「**项目符号 marker 左缘**」（原锚内容左缘 ⇒ 手柄压在符号上，实测 icon 中心落在 marker 内 16px；改后 = `marker.left − 16`）；
-  ② **删除/剪切/拖拽不再留空行**：`deleteByRange` 语义是「删内容」，范围覆盖根级整块时内核会在原位补一个默认段落（实测删除 `63→63` 空段落+1、拖拽 `63→64`）⇒ 改走内核**模型事务节点级删除**（`removeBlockNodesNative`：`_model.editing` → `getNodeById/removeChild` → **选区复位** → `commitJob`），拖拽改「**先摘源节点 → 按删除后落点 `insertAtPosition`**」；修复后删除 `63→62`、拖拽 `63→63`、空段落不变；
-  ③ **目录栏收口**：新增「**刷新**」按钮（**置于图标组最左**）、「＋」只留「新建笔记本」并收小弹窗（220×60/行高42 → **150×50/行高32**）、**点文档不再自动展开子项**（`expandAncestorChain` + 跟随定位 `expandSelf:false` + `autoExpanded` 只展开容器）、**自动定位去跳动**（改 `useLayoutEffect` 布局前同帧滚动；A/B 逐帧实测错位帧 **2 → 0**）、**重命名只留一个焦点环**（去 b3 outline + box-shadow + 重命名行的 `context` 环）；
-  ④ 「**拖拽改层级 + 蓝色导引线**」经评估可做（0.5–1 天）但**用户决定先不做**，已并入 §3 第 11 条的**优化项**（与多块选区批量拖拽同项）。
-  - **写给零上下文新会话的完整交接 = §2.7**（任务目标/已完成/当前问题/下一步/踩坑）；逐条过程见 §2.6；内核行为结论见 `docs/LAKEX-CONTRACT.md` **§5.8.5**；厂商改动见 `vendor/lakex-doc-react/LOCAL-CHANGES.md` **#17**。
-  - 门禁（本批）：`tsc` 0 · `vitest` **1011 passed / 16 skipped (1027)** · 桌面 + 移动 `vite build` 全绿 · **三个块编辑 e2e 全绿**（`e2e-block-list-span` / `e2e-block-menu-smoke` / `e2e-block-multi-select`）· `git diff --check` 只报 vendor 生成产物里**原本就有**的行尾空格（HEAD 上同样 2 处，已核对）。
-  - 关键入口（本批）：`vendor/lakex-doc-react/src/components/BlockHoverHandle/BlockHoverHandle.tsx`（`updateHandlePosition` 锚 marker）· 同目录 `blockMenuHelpers.ts`（`removeBlockNodesNative` / `deleteBlockByRange` / `moveBlockNative`）· `src/components/Sidebar.tsx`（刷新按钮 / `scrollRowIntoView` / `revealNode` / `expandAncestorChain` / `autoExpanded`）· `src/hooks/useTreeActions.ts`（`refreshTree`）· `src/styles/app/shell.css`（`.create-menu` / `.tree-rename-input`）· `src/features/editor/blockMenuNative.test.ts`（护栏）。
-- **上一批（浏览器端「本机附属窗口」开关）**：代码末提交 `a3596ad`；同会话再上一批（壳层底部灰缝根修 + CSS 层级冗余收口 档0/档1 + 审计装置漂移）见 §2 第 1~5 条，代码末提交 `4faa5e1`：
-  ① **定位**：浏览器端**不是移动预览**（那是 `mobile.html`/`preview.html`），而是桌面主进程起的**本机附属窗口**（`electron/webApiServer.ts`，初版 260916 `a481d08`）：`POST /api/<channel>` 复用同一批 IPC handler + 静态服务 `dist/` + `/__native.js` 注入 `window.lakeNative` 的 HTTP shim；**只绑 127.0.0.1**；
-  ② **不做伺服（用户 260917 决定）**：不监听局域网、不对外开放、不允许其它设备访问，只供**本机**浏览器使用；
-  ③ **新增「设置 → 浏览器端」开关**：`electron/ipc/registerWeb.ts` + `createWebServerController`（`electron/webApiServer.ts`）。**不落盘**（内存态，每次启动默认关闭）、**打开/关闭即时起停服务、无需重启**（旧的"启动时读落盘开关 + 需重启"写法已废弃）；
-  ④ **「打开浏览器」按钮**：新 IPC `open_web_client` → 主进程 `shell.openExternal(url)`；**URL 由主进程按固定端口构造、不接受渲染层传 URL**（防开放重定向）。
-  - 门禁（浏览器端那批）：`tsc` 0 · `vitest` **989 passed / 16 skipped (1005)** · 桌面 `vite build` + `vite build -c vite.mobile.config.ts` 全绿 · `git diff --check` 干净。
-  - 桌面 dev 实测端口：`1421` vite / `9222` electron（CDP）/ `19876` asset / `19880` 浏览器端（默认关）。
-  - 关键入口（浏览器端那批）：`electron/webApiServer.ts`（`startWebApiServer` / `createWebServerController`）· `electron/ipc/registerWeb.ts` · `src/components/SettingsPanel.tsx`（分类 `browser`）· `docs/TROUBLESHOOTING.md` #59/#60。
-  - 关键入口（承前）：`scripts/css-audit/README.md`（CSS 审计，**动样式前必读**；含 §七 内联陷阱 + 34 状态矩阵）· `docs/LAKE-CONTENT-WRITING.md`（**写 Lake 正文前必读**）· `docs/LAKEX-CONTRACT.md`（内核契约，编辑器相关先读）· `docs/LAKEX-MIGRATION-260916.md`（换源/懒加载/离线）· `vendor/lakex-doc-react/LOCAL-CHANGES.md` · `docs/OFFLINE-ASSETS-AUDIT-260916.md`。
-- **工作区现状（本会话清理过）**：`/Users/admin/file/local-lake/` 下只剩 `lake-notes-electron`(主仓库) + `yuque-developer-docs`(语雀开发文档库/内核官方出处) + `lake-main`/`lake-editor-main`(内核机制参考) + `siyuan-master`(思源 v3.8.0 参考，AGPL-3.0)。已删：全部 worktree、过期截图/根级分析稿、`design-spec`、`release/`(910M)、`.css-audit/`(85M)、`test-node-abi/`、外部参考仓库副本（含 `lake-notes-tauri-poc`、`drawnix-develop`）。本地分支只剩 `master` + `refactor/store-split`(未合 master)。
-- **✅ 分支 `feat/block-drag-native` 已合入 master 并删除本地分支（260918 用户指示）**：原生拖拽 + 块菜单/转化/剪切收口 + **列表父项 = 一个整块（Issue 3）** + **多块选区/批量操作（Issue 4）**。新增 `src/features/editor/blockHandleMount.ts`、`blockMenuNative.test.ts`、`scripts/e2e-block-menu-smoke.mjs`、`scripts/e2e-block-list-span.mjs`、`scripts/e2e-block-multi-select.mjs`；vendor 源码 + 重建 `dist/**`；文档 `docs/LAKEX-CONTRACT.md`(§5.8/§5.8.1/§5.8.2/§5.8.3/§5.8.4/§5.9)、`docs/BLOCK-*-260917.md`、`vendor/lakex-doc-react/LOCAL-CHANGES.md`(#9–#16)。**交接：本批 §2.7（写给零上下文新会话）· 过程 §2.6 · 前段 §2.5。**
-- **dev 数据现状（重要）**：`到啦领导`（ee860a19）仍在回收站（`trashed_at=09-04 10:34`），用户未决定是否恢复，**别擅自删**；安卓回收站 48 条旧测试数据 + 笔记本「20-UI编辑测试」「测试本1」（含用户笔记）保留勿删。
-- **测试产物**：上一会话的 1 篇 `TMP-P2-verify-*` + 4 份对拍脚本副本仍在回收站（可清空）；本会话第三批的块菜单验证又在回收站留下 **3 份 `clean-test-1788770558737` 副本**（可一起清空；原件全程未被打开，hash 复核未变）。注意：为排查"打开即重写"，早前打开过几篇测试文档（`压测3-图片-神里凌华/温迪/bilibili (26)`），它们已被内核归一化、图片降级成失败卡片并变成 `待同步`（**S3 未动**）。
-
+- **✅ 分支 `feat/board-document` 已 fast-forward 合入 `master` 并 push origin**（用户 260920 收尾指示）。这一次把三大块一起带进 `master`：
+  1. **自研多维表 `kind=bitable`**（§2.12）· 2. **独立画板文档 `kind=board`**（§2.13）· 3. **移动端对账补齐 + 小记完善**（§2.14 / **§2.15**）。
+- **本会话（260920 晚 · 移动端小记完善）完整交接 = §2.15（任务目标/已完成/当前问题/下一步/踩坑）—— 新会话从这里读。**
+- **manifest = v7**（`MANIFEST_VERSION=7`，`READABLE_MANIFEST_VERSIONS={4,5,6,7}`）：`kind` 新增 `sheet`/`bitable`/`board`；旧端读到 v7 **整轮拒绝同步**
+  ⇒ **所有端必须一起升级**（刻意安全闸，防旧端把非 doc 正文当 Lake 文档打开写坏）。
+- 一句话状态（移动端小记）：长按桌面图标「**新建小记**」→ **不挂内核的轻量框**（零内核实例，冷启动到可输入实测 **~0.30–0.43s**）；
+  轻量框支持 **文字 + 图片（含未提交草稿防丢，纯本地 `device_state`）**；新增 **系统分享（ACTION_SEND）→ 小记**。
+  ⚠️ 一条**做过又删掉**的弯路：原生秒开 `QuickCaptureActivity`（用户觉得丑、WebView 框够快 ⇒ 代码全删、快捷方式切回深链；见 §2.15）。
+- **门禁（合并前实测，全绿）**：`tsc` 0 · `vitest` **1150 passed / 16 skipped (1166)** · 桌面 + 移动 `vite build` 全绿 ·
+  `check:bundle` app-js gzip **1.784MB / 2.90MB** · `check:core` 0 · `git diff --check` 干净。
+- **工作区**：单 worktree、干净。本地分支：`master`（= 合并后）、`feat/board-document`（= master），另有旧检查点 `feat/bitable`(b1355de)、`feat/sheet-document`(71c2d90)（可删）。
+- **dev 数据现状（重要，别擅自删）**：桌面 `到啦领导`(ee860a19) 仍在回收站；安卓回收站旧测试数据 + 笔记本「20-UI编辑测试」「测试本1」（含用户笔记）保留。
+  本会话在安卓 dev 数据里建的测试小记均已 purge；原生框遗留（`shared_prefs/quick_capture.xml`、`files/quick-capture-inbox`、`files/shared-inbox`）已清。
+- 历史批次交接：§2.8 表格 · §2.9 FortuneSheet 换代 · §2.10/§2.11 小记内核化 · §2.12 多维表 · §2.13 画板 · §2.14 移动端对账。
 ## 1. 项目一句话 + 铁律（详见 AGENTS.md）
 本地优先笔记应用（Electron 43 + React 18.3 + better-sqlite3 + 语雀 Lake 内核），S3（七牛 Kodo 兼容）同步。
 **红线**：① 本地是真相、S3 只是镜像（云端备份绝不反噬本地）；② 目录/删除强一致（删除传播、墓碑权威）；
@@ -1327,6 +1290,103 @@ tsc 0 · vitest 1095 passed / 16 skipped (1111) · 桌面 + 移动 vite build �
 
 ---
 
+## 2.15 本会话总交接（260920 晚 · 移动端小记完善）—— 新会话从这里读
+
+> 本会话承接 §2.14 之后，专注把**移动端「小记 / 长按新建小记」**这条路做扎实：
+> 清构建告警 → 冷启动提速 → 改名「新建小记」→ 修快捷方式深链 bug → 草稿（文字+图片）防丢 → 系统分享 → 试做原生秒开框（**已回退删除**）。
+> 全部在 `feat/board-document` 提交，收尾 fast-forward 合入 `master` 并 push。
+
+### 一、任务目标（用户口径，按顺序）
+1. 先修移动端构建的 `INEFFECTIVE_DYNAMIC_IMPORT` 告警。
+2. 把「深链 → WebView → 轻量框」这条长链路的冷启动做快（用户："实现更快的速度/快速响应"）。
+3. 用户可见名 = 「**新建小记**」，不要多余说明。
+4. 草稿防丢（先文字、后图片）——对齐思源闪念的"不丢"。
+5. 系统分享（ACTION_SEND）→ 直接记一条小记（文本/图片）。
+6. 原生秒开 Activity（用户点名）——**试用后决定不做，已回退删除**。
+7. 移动端小记工作台能力（转正式文档/批量/置顶/列表视图）——**只记待办，先不做**。
+
+### 二、已完成内容（均已提交）
+
+**A. 构建告警（`871163e`）**
+- `quickNoteShortcut` 改为动态 `import("@capacitor/app")`（它被 `MobileApp` 静态引入，会让其它模块对 `@capacitor/app` 的懒加载分包失效）；
+- `bridge.createS3Client` 去掉对 `capacitorHttpHandler` 的冗余动态 import（`s3Store.ts` 已静态引入）。移动 bundle **0 告警**。
+
+**B. 冷启动提速（`2d962a8`，1.3s → 0.30–0.43s）—— 先量再改，本会话最关键的一条**
+- 实测分解：`bridge.init()` **87ms**、`refreshAll()` **11ms** —— **都不是瓶颈**。真正的大头是**入口 chunk 6.7MB** + React 挂载 ≈**712ms**；
+  内核是被三条**静态 import** 拖进入口的：`MobileApp → NotebookWorkspace`、`HomePage → QuickNoteComposer`、`SettingsDrawer → TrashPreviewPage`。
+- **① 内核按需加载**：三条改 `React.lazy` ⇒ 入口 chunk **6.7MB → 80KB**，内核进独立懒 chunk（不 modulepreload），`effectStart` **712→~200ms**。
+- **② 闪念速记独立入口**：轻量框改挂 `MobileApp` 的 `captureOpen` 分支，**在 `bridge.init()/refreshAll()` 之前**渲染（保存才 `ensureDb()`），返回键先关它。
+- 实测（模拟器 API36，3 次冷启动到可输入）：**305 / 337 / 428ms**（改前 ~1250–1500ms）。
+- 护栏 `src/mobile/mobileLazyChunks.test.ts`；⚠️ 坑见「五·1/2」。
+
+**C. 改名 + 修快捷方式深链（`e08d3d4` / `f7e2af4` / `54bc861`）**
+- 用户可见名统一「**新建小记**」：`strings.xml` 的快捷方式短/长标签、设置项名、轻量框 aria/hint；去掉多余说明。
+- **修「快捷方式丢深链」**：`shortcuts.xml` 原把深链写成 `<intent>` 的**嵌套 `<data>` 子元素**，而 Android `ShortcutParser` 只读 `android:data` 属性
+  ⇒ 注册出的 intent 没有 `dat`，点开只开 App、进不了速记框。改为 `android:data="lakenotes://quick-note"`（`dumpsys shortcut` 复查已带 `dat`）。
+
+**D. 未提交草稿防丢（`54bc861` / `d4f5c35`）**
+- 轻量框挂载时从本机 `device_state`（**纯本地、不进 S3、不是小记本体**）恢复上次未提交内容；输入 **300ms 防抖**落库；保存/主动取消后清除；note id 挂载即固定。
+- **图片也进草稿**：图片一加入就 `bridge.stageQuickNoteAsset` 落 `quick-notes/{id}/`，草稿只记引用（filename/mime/size/hash/宽高）；
+  重开用 canonical URL 恢复缩略图；保存改走 `saveQuickNoteContent` + `quickNoteBodyFromTextAndImages`（不重传字节、不二次落盘）。
+- 桥接 `getQuickNoteDraft / saveQuickNoteDraft / clearQuickNoteDraft`；单测 `quickNoteDraft.test.ts`。
+- 实测：输入（文字+图）→ `force-stop` 杀进程 → 重开 → **文字与图都在**；取消后重开为空。
+
+**E. 系统分享（ACTION_SEND）→ 小记（`bc41d4f`）**
+- MainActivity 加 SEND intent-filter（`text/plain`、`image/*`）→ 原生 `SharedContentPlugin` 接住（文本原样；图片/文件复制到
+  `filesDir/shared-inbox/`，按 URI 去重避免 `load`/`onNewIntent` 双触发重复复制）→ JS 冷启动 `consume` / 热启动 `shared` 事件
+  → 打开轻量框预填（`seed`：文本 + 图片字节；读完删临时文件）。
+- 单测 `sharedContent.test.ts`；实测分享文本（冷/热）、分享图片（`thumbs=1`、保存后 `imageCount=1`）均通过。
+
+**F. ❌ 原生秒开框（`QuickCaptureActivity`）—— 做过、试用后回退并彻底删除（`3c7d740` → `d04d020`）**
+- 曾做原生纯文本 Activity（长按直开、提交写 `filesDir/quick-capture-inbox/`、App 启动/回前台导入、草稿存 SharedPreferences），首帧 `Displayed` ~0.87–0.99s。
+- 用户试用后觉得**原生框太丑**、**原来 WebView 轻量框的速度可以接受** ⇒ 决定不做。**代码全部删除**：
+  `QuickCaptureActivity.java` / `res/layout/activity_quick_capture.xml` / `src/mobile/quickCaptureInbox.ts`(+测试) / manifest 声明 / `MobileApp` 接线；
+  快捷方式切回 `MainActivity` + `lakenotes://quick-note` 深链。**系统分享 + 图片草稿保留。**
+
+**G. 移动端小记工作台能力 —— 只记待办**（用户 260920 定）：见 §3 第 15 条 + `docs/MOBILE-PARITY-260920.md` §五。
+
+**H. 关键文件 / 护栏**
+- 轻量框：`src/mobile/home/QuickNoteFlashComposer.tsx`（零内核、图片草稿、分享 seed）；入口 `src/mobile/MobileApp.tsx`（`captureOpen` 独立入口 + 懒加载）。
+- 草稿：`src/mobile/quickNotesRepository.ts`（`read/write/clearQuickNoteDraft`）+ `bridge.ts` 三方法。
+- 分享：`android/.../SharedContentPlugin.java`、`src/mobile/sharedContent.ts`。
+- 深链：`src/mobile/quickNoteShortcut.ts`（1.5s 短窗口去重 + `getLaunchUrl` 轮询）。
+- 护栏：`mobileLazyChunks.test.ts` / `quickNoteShortcut.test.ts` / `quickNoteFlashComposer.test.ts` / `quickNoteDraft.test.ts` / `sharedContent.test.ts`。
+- 文档：`docs/MOBILE-PARITY-260920.md` §七（v1.1–v1.4）· `docs/LAKEX-CONTRACT.md` §5.12.10（内核无 headless 文本转正文）。
+
+### 三、当前问题（不阻塞）
+1. **真机未验**：以上都在**模拟器 API36**实测；真机（小米，可能 **edge-to-edge** 键盘模式）没跑过。
+2. **分享图片的 CDP harness 限制**：shell `am start` 分享 `content://` URI **不会真正授予读权限**（SecurityException），
+   用 App 自有 `file://` URI 才测通；**真实 App 分享会带 grant**，但没在真实第三方 App 上点过。
+3. **轻量框是"不挂内核"的取舍**：只文字+图片；待办/有序/无序/分割线等富格式只在 App 内完整编辑器（有意的）。
+4. **`quickNoteShortcut.ts` 的深链目前只由快捷方式触发**（无其它触发方）——是保留路径，别删。
+5. **小记音视频/PDF 附件**四类卡只在移动端内核编辑器路径验过图片，其余未真机点。
+6. **AB 多端 S3 往返**（画板图片/表格/多维表/小记资源）仍未测。
+
+### 四、下一步计划（按优先级）
+1. **真机验收本批移动端小记改动**：长按「新建小记」→ 轻量框（文字+图片/草稿/系统分享）；文档页与分享入口照旧。
+2. **移动端小记工作台能力**（转正式文档 / 批量选择 / 置顶 / 列表视图；桌面 `QuickNotesWorkspace` 已有）—— §3 第 15 条。
+3. **AB 多端 S3 往返**（画板图片/表格/多维表/小记资源）。
+4. 小记**音视频/PDF 附件**四类卡真机确认。
+5. 其余长期项见 **§3**。
+
+### 五、踩过的坑（本会话新增，务必记住）
+1. **入口 chunk 6.7MB 的元凶是三条静态 import，不是 `bridge.init/refreshAll`** —— 先量再改：init 87ms、refresh 11ms、`effectStart` 712ms。用 `React.lazy` 拆路径即可。
+2. **⚠️ 不要给 `@dlient/lakex-doc-react` 加 rolldown `codeSplitting.groups`**：实测拆坏 vendor 内部 `DrawnixBoardCore` 懒 chunk 的 export 绑定
+   —— 打开编辑器即 `SyntaxError: Export '..._exports' is not defined in module`、整页白屏。正确做法是**懒加载边界**；护栏 `mobileLazyChunks.test.ts`（连 `codeSplitting:` 配置都禁）。
+3. **Android 静态快捷方式的深链必须用 `<intent android:data="…">` 属性**；嵌套 `<data>` 元素会被 `ShortcutParser` 忽略 ⇒ 快捷方式点开丢深链
+   （`dumpsys shortcut` 看 `intents=[Intent { act=VIEW … cmp=MainActivity }]` 没有 `dat=`）。
+4. **冷启动去重不能用永久布尔量**：`subscribeQuickNoteShortcut` 原一次冷启动后把热启动也永久忽略；改 **1.5s 短窗口去重**（护栏 `quickNoteShortcut.test.ts`）。
+5. **轻量框两个启动竞态**：① 草稿读取完成前不能写草稿（否则空文本覆盖）；② `captureOpen` 分支必须放在 `phase === "booting"` 门**之前**才真正早渲染。
+6. **`device_state` 是纯本地键值表**（草稿/设置/同步游标），**不进 S3**、不是小记本体。
+7. **图片草稿要"加入即落盘"**：草稿只记 meta；重开用 canonical URL 恢复缩略图；保存走 `saveQuickNoteContent` 不重传字节。
+8. **`am start` 分享 `content://` URI 不给读权限**（`SecurityException: no access to content://media/...`）：测试要用 `--grant-read-uri-permission` + 真实分享，或改用 App 自有 `file://` 绕过。
+9. **`createImageBitmap` 会拒绝损坏/手拼的 PNG**（"The source image could not be decoded"）—— 测试图片用真图（`adb exec-out screencap -p`）。
+10. **原生 Activity 计时口径**：`am start -W TotalTime`（含 IME/idle）与系统 `Displayed`（首帧）不同，别混着比；本机原生 ~0.87–0.99s、MainActivity 冷启动 ~1.5s，
+    但**最终结论是 WebView 轻量框更快更漂亮 ⇒ 原生这条路不做**。
+11. **切回/改快捷方式要同时改三处**：`shortcuts.xml`、`PinShortcutPlugin`（固定到桌面那条）、真机 launcher 缓存；reinstall 后 `dumpsys shortcut` 确认 intent。
+12. **`android/app/src/main/assets/public/` 是 `cap sync` 产物**：只改 `src/` 后必须走 `scripts/android-build.sh --sync`，否则会测到旧 bundle。
+13. **不要对 HANDOFF.md 这类大文件做「整文件 read→write」**：`read` 可能只返回**部分**内容（本会话把 1707 行读成 ~218 行、写回后截断，已用 `git checkout` 恢复）。要改大文件用 `edit` 或「写临时文件 + 按行区间 `head/tail` 拼接」。
+
 ## 3. 下一步计划 + 当前问题（真正的待办，按优先级）
 
 ### 下一步计划
@@ -1527,6 +1587,8 @@ node scripts/lake-roundtrip-check.mjs --note <id>   # 对拍「这篇一打开�
 > 历史审计/研究/计划（`*-AUDIT`/`*-REVIEW`/`*-PLAN` 等）已删除（git 历史可查）；权威待办以本文件 §3 为准，移动端以 §8 为准。
 
 ## 8. 移动端（安卓模拟器 + 编辑器）专职交接（260908 收尾）
+
+> **260920 晚更新**：移动端小记完善（不挂内核轻量框 / 图片草稿 / 系统分享 / 冷启动提速 / 用户可见名「新建小记」）本会话交接见 **§2.15**；本节其余内容仍是移动端长期基线。
 
 > 本节是移动端（安卓模拟器 + 编辑器）交接：如何用**本机安卓模拟器**熟练验证移动端 UI/编辑，以及移动端任务的目标/已完成/遗留/坑。桌面 Electron 工作见 §0-§7。**注（260907）：原「只做移动端、别碰桌面」的硬隔离已解除**——现在桌面与移动可自由改动（见 §8.0）。
 
