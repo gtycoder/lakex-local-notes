@@ -204,7 +204,10 @@ else { /* 上游原行为：直接插入源形状副本 + 连线 */ }
    + **基础图形 / 流程图 / Smart** 三节网格（图标与「形状」图形库共用 `categories` + `ShapePreview`）。
 4. 兜底路径选中后：`clearSelectedElement` → `addSelectedElement(新形状)` → `DrawTransforms.switchGeometryShape(board, shape)`
    → `memorizeLatestShape`；已绑定在源形状与目标形状之间的连线会自动重算（plait 内部处理），选择状态与改造前一致。
-5. **最近使用第一位固定放源形状**（“和自己一样”一键复用，替代悬停预览）；**不选 = 保持复制出来的形状** ⇒ 老习惯不受影响。
+5. **最近使用第一位固定放源形状**（“和自己一样”一键复用）；**不选 = 保持复制出来的形状** ⇒ 老习惯不受影响。
+6. **悬停预览已关闭**（用户 260920 追加要求）：同一补丁支持 `host.hoverPreview === false` —— 去掉放大蓝点 / crosshair / 幽灵形状 / 预览连线，但保留状态机（悬停→预提交、单击→提交），所以「点蓝点才弹面板」照常。实测悬停期间画布 SVG 元素数 104→104、`crosshair=false`。
+7. **文档内嵌的画板卡同样可用**：卡片与独立画板共用同一个 `DrawnixBoardCore`（同一份 host 注入 + 面板），卡片实测：卡内画矩形 → 点蓝点（面板开、最近使用=矩形）→ 选「判断」⇒ 卡片 value = `[rectangle, elbow, decision]`；验证用的临时卡片已从欢迎笔记还原移除。
+8. **升级提醒**：补丁打在 `@plait/draw` 的编译产物上，`npm install` 的 postinstall 会自动 apply；升 `@plait/*` 必须重做补丁（apply 失败会直接报错，不会静默）。
 
 **实机验证**（隔离 userData + CDP 真实 Electron）：
 

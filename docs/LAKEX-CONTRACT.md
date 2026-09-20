@@ -991,6 +991,8 @@ PY
       `commit()` 不带形状 = 上游原行为（源形状副本）。补丁不碰几何/连线/绑定：`commit` 内部仍复用原来的
       `Transforms.insertNode(arrow)` + `insertElement(shape)`（只是把 `shape` 换掉，元素 id 不变 ⇒ 绑定不破）。
       效果：**点蓝点只弹面板、画布上还没有新形状**；Esc/点外面 = 落地源形状副本（老习惯不变）。
+      补丁另给 host 加了 `hoverPreview: false`：**关掉悬停预览的全部视觉**（放大蓝点 / crosshair / 幽灵形状 / 预览连线；连线预览由 `handleArrowLineCreating` 自己 append，补丁给它加了 `suppressPreview` 形参），但保留「悬停→预提交、单击→提交」的状态机 —— 实测悬停期间画布 SVG 元素数不变（104→104）、无 crosshair；我们传了 `hoverPreview: false`。
+      文档内嵌的画板卡与独立画板共用同一个 `DrawnixBoardCore` ⇒ **该能力两端同时生效**（卡片实测：卡内画矩形 → 点蓝点 → 选「判断」⇒ 卡片 value 变为 `[rectangle, elbow, decision]`）。
 
 实机验证（隔离 userData + CDP 驱动真实 Electron）与剩余风险见 `docs/BOARD-DOC-FEASIBILITY-260920.md`。
 

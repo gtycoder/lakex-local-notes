@@ -1250,6 +1250,9 @@ tsc 0 · vitest 1095 passed / 16 skipped (1111) · 桌面 + 移动 vite build �
    面板「最近使用」第一位固定放**源形状**（一键"和自己一样"，替代悬停预览）+ 基础图形 / 流程图 / Smart（图标与「形状」图形库共用）。
    补丁只改提交块、不碰几何/连线/绑定（`commit` 内部仍是上游那两次插入，元素 id 不变 ⇒ 绑定不破）；**升级 `@plait/*` 必须重做补丁**。
    实机验证：画圆 → 点蓝点（面板开、画布仍只有 1 个圆）→ 选「判断」⇒ `[ellipse, elbow, decision]`；再点蓝点按 Esc ⇒ `[..., elbow, ellipse]`；0 异常。
+   **追加（同日）**：① **悬停预览已彻底关掉**（`host.hoverPreview:false`：放大蓝点 / crosshair / 幽灵形状 / 预览连线都不再出现；实测悬停期间 SVG 元素数 104→104）——
+   现在只有「点蓝点」才有反应，最大程度避免误弹；② **文档内嵌的画板卡同样生效**（卡片与独立画板共用 `DrawnixBoardCore`；
+   卡片实测：卡内画矩形 → 点蓝点 → 选「判断」⇒ 卡片 value = `[rectangle, elbow, decision]`）。
    见 LOCAL-CHANGES #20/#21、`docs/LAKEX-CONTRACT.md` §5.13.10、`docs/BOARD-DOC-FEASIBILITY-260920.md` §十。
 
 ### 六、踩过的坑（本批新增）
