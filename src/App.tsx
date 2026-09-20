@@ -138,7 +138,7 @@ export function App() {
     setDraftEntries,
     setSaveState,
   });
-  const { handleContentChange, createNoteIn, createNote, createSheetIn, deleteTreeNode } = useNoteLifecycle({
+  const { handleContentChange, createNoteIn, createNote, createSheetIn, createBitableIn, deleteTreeNode } = useNoteLifecycle({
     bumpRevision,
     resetRevision,
     clearNote,
@@ -265,7 +265,7 @@ export function App() {
     sidebarSelect, sidebarCreate, sidebarRename, sidebarMove,
     sidebarRequestDelete, sidebarSetIcon, sidebarOpenHistory, sidebarOpenSearch, sidebarPendingRenameConsumed,
   } = useTreeActions({
-    createNoteIn, createSheetIn, openNote, setNodeIcon, treeNodes,
+    createNoteIn, createSheetIn, createBitableIn, openNote, setNodeIcon, treeNodes,
     setTreeNodes, setNotes, setOpenTabs, setConfirmDelete,
     setHistoryNoteId, setHistoryOpen, setSearchPanelQuery, setSearchPanelOpen,
     setPendingRenameId, setError,

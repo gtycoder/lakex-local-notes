@@ -5,6 +5,8 @@ import { EditorTab } from "./EditorTab";
 
 /** 表格编辑器（FortuneSheet，~0.6MiB gzip）按需加载：只在真的打开表格文档时才进首屏之外的分包。 */
 const SheetEditor = lazy(() => import("../sheet/SheetEditor").then((m) => ({ default: m.SheetEditor })));
+/** 多维表编辑器（自研，懒加载）：同样只在真的打开多维表文档时才进分包。 */
+const BitableEditor = lazy(() => import("../bitable/BitableEditor").then((m) => ({ default: m.BitableEditor })));
 import type { LakeEditorPrefs } from "./lakeRuntime";
 
 const EMPTY_PINNED: ReadonlySet<string> = new Set();
@@ -416,7 +418,7 @@ export function MultiTabEditor({
         )}
         {topbarTrailing && <div className="tabbar-trailing">{topbarTrailing}</div>}
       </div>
-      {breadcrumb}
+      {(tabs.find((t) => t.noteId === activeNoteId)?.kind ?? "doc") === "doc" && breadcrumb}
       {activeTabGone && (
         <div className="tab-gone-banner" role="status">
           <TriangleAlert size={14} aria-hidden="true" />
@@ -434,6 +436,16 @@ export function MultiTabEditor({
           tab.kind === "sheet" ? (
             <SheetEditorErrorBoundary key={`${tab.noteId}-${tab.reloadKey ?? 0}`} noteId={tab.noteId}>
               <SheetEditor
+                noteId={tab.noteId}
+                content={contentFor(tab)}
+                visible={visible && tab.noteId === activeNoteId}
+                readOnly={(lockedNoteIds?.has(tab.noteId) ?? false) || tab.deleted === true}
+                onChange={(content) => handleChange(tab.noteId, content)}
+              />
+            </SheetEditorErrorBoundary>
+          ) : tab.kind === "bitable" ? (
+            <SheetEditorErrorBoundary key={"bt-" + tab.noteId + "-" + (tab.reloadKey ?? 0)} noteId={tab.noteId}>
+              <BitableEditor
                 noteId={tab.noteId}
                 content={contentFor(tab)}
                 visible={visible && tab.noteId === activeNoteId}
@@ -524,7 +536,7 @@ class SheetEditorErrorBoundary extends Component<{ noteId: string; children: Rea
   }
   render() {
     if (this.state.failed) {
-      return <div className="empty-workspace-hint">表格渲染出错（已隔离，未影响其他文档）。切换标签或重新打开该表格即可恢复。</div>;
+      return <div className="empty-workspace-hint">该类型编辑器渲染出错（已隔离，未影响其他文档）。切换标签或重新打开该文档即可恢复。</div>;
     }
     return this.props.children;
   }

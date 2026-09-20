@@ -363,6 +363,18 @@ describe("目录树操作", () => {
     fs.rmSync(base, { recursive: true, force: true });
   });
 
+  it("新建多维表：kind=bitable、正文落 bitables/{id}.bitable.json、默认 1 张数据表 3 字段", () => {
+    const bitable = store.createBitableIn(null, "无标题数据表");
+    const bodyPath = (store as any).notePath(bitable.id);
+    expect(bodyPath).toContain(path.join("bitables", bitable.id + ".bitable.json"));
+    const doc = JSON.parse(fs.readFileSync(bodyPath, "utf8"));
+    expect(doc.kind).toBe("bitable");
+    expect(doc.tables).toHaveLength(1);
+    expect(doc.tables[0].fields.map((f: { type: string }) => f.type)).toEqual(["text", "select", "date"]);
+    // 搜索文本按 kind 分派到 bitableToSearchText（不是 JSON 碎片）
+    expect((store as any).searchTextFor(bitable.id, bitable.content).plain).toContain("数据表");
+  });
+
   it("全文搜索：标题优先、正文命中 + 高亮，1/2/3 字统一，删除后消失", () => {
     const note = store.createNote("搜索引擎笔记");
     store.saveNote(note.id, "搜索引擎笔记", "<p>全文搜索与回收站方案</p>", { markdown: "# 搜索引擎笔记\n\n全文搜索与回收站方案", plain: "搜索引擎笔记\n全文搜索与回收站方案" });
@@ -720,6 +732,25 @@ describe("文档历史（快照，纯本地）", () => {
     // 恢复前留档：版本2 已在历史（去重后不新增重复快照，但版本2 快照本身可反悔）
     const after = store.listNoteHistory(id);
     expect(after.some((h) => h.contentHash !== v1.contentHash)).toBe(true);
+  });
+
+  it("多维表 restoreHistory 后搜索缓存走 bitableToSearchText（不是 Lake/JSON 碎片）", () => {
+    const bitable = store.createBitableIn(null, "多维表历史");
+    const doc = JSON.parse(bitable.content);
+    const primaryId = doc.tables[0].fields[0].id;
+    doc.tables[0].records.push({ id: "rec-1", values: { [primaryId]: "北斗七星持仓" }, createdAt: "2026-01-01T00:00:00.000Z", updatedAt: "2026-01-01T00:00:00.000Z" });
+    const withRecord = JSON.stringify(doc);
+    store.saveNote(bitable.id, "多维表历史", withRecord);
+    store.createHistorySnapshot(bitable.id, withRecord, true);
+    store.saveNote(bitable.id, "多维表历史", bitable.content); // 版本2：清空记录
+    const hist = store.listNoteHistory(bitable.id);
+    store.restoreHistory(hist[hist.length - 1].id);
+    expect(store.readNote(bitable.id).content).toContain("北斗七星持仓");
+    const caches = store.readNoteCaches(bitable.id);
+    expect(caches.markdown).toBeNull();
+    expect(caches.plain).toContain("北斗七星持仓");
+    expect(caches.plain).not.toContain('"kind":"bitable"');
+    expect(store.searchNotes("北斗七星持仓").some((h) => h.id === bitable.id)).toBe(true);
   });
 
   it("restoreHistory 后 last_uploaded_hash 重置为恢复版 hash（P0-1 语义）", () => {

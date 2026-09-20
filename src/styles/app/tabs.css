@@ -80,7 +80,7 @@
   overflow: hidden;
 }
 
-.tab-panels { min-width: 0; max-width: 100%; }
+.tab-panels { min-width: 0; max-width: 100%; grid-template-columns: minmax(0, 1fr); }
 
 /* The tab strip is a window-level title bar. It must not inherit the
    document column's x offset when the library is docked or previewed. */

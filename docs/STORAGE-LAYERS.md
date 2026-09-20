@@ -36,6 +36,7 @@
    ├─ metadata.sqlite3 (+ -wal/-shm)    # 主库
    ├─ notes/{noteId}.lake               # 文档正文（kind=doc）        L1（对象）
    ├─ sheets/{noteId}.sheet.json         # 表格正文（kind=sheet，FortuneSheet v2）L1（对象）
+   ├─ bitables/{noteId}.bitable.json     # 多维表正文（kind=bitable，自研 v1）L1（对象）
    ├─ note-assets/{noteId}/{filename}   # 附件/图片                    L1（assets/）
    ├─ quick-notes/
    │  ├─ metadata.sqlite3              # 小记独立库
@@ -51,6 +52,9 @@
 
 > **表格文档（`kind="sheet"`，260918 引入；260919 换内核）**：正文落 `sheets/{noteId}.sheet.json`，路径由 `notes.kind` 决定（`store.bodyPathFor`）。
 > 正文格式 = **v2 FortuneSheet workbook**（`{kind:"sheet",version:2,sheets:Sheet[]}`；保存时剔 `luckysheet_select_save` 等运行时字段 + dense `data`→sparse `celldata`）。搜索文本由 `sheetToSearchText`（遍历 celldata）派生，**不进 Lake HTML 解析器**。见 `docs/SHEET-BITABLE-DESIGN-260918.md`。
+>
+> **多维表文档（`kind="bitable"`，260920 实现 v1）**：正文落 `bitables/{noteId}.bitable.json`，路径同样由 `notes.kind` 决定（`store.bodyPathFor`）。
+> 正文格式 = **自研 record-based JSON**（`{kind:"bitable",version:1,tables[],activeTableId}`；一个文档可含多张数据表，为后期多表联合预留）。搜索文本由 `bitableToSearchText`（表名 + 各字段展示值）派生，**不进 Lake HTML 解析器**。附件字段存 filename，复用 `assets/{noteId}/{filename}` 资产管线。产品口径见 `docs/BITABLE-PRODUCT-SPEC-260919.md`。
 
 ## 3. 移动端磁盘布局
 
@@ -80,7 +84,7 @@ databases/lake-notes-mobile              # 主库（Capacitor SQLite, WAL）
 ```
 
 manifest 字段（`src/core/manifestTypes.ts`）：
-- `ManifestNote`：id/title/parentId/**sortOrder**/updatedAt/contentHash/isConflict/isLocked/lockedAt/**icon**/assets[]/墓碑
+- `ManifestNote`：id/title/parentId/**sortOrder**/updatedAt/contentHash/isConflict/isLocked/lockedAt/**icon**/**kind**（doc|sheet|bitable，缺省 doc 不写）/assets[]/墓碑
 - `ManifestFolder`：id/title/parentId/**sortOrder**/nodeType/**icon**/updatedAt/墓碑
 
 ---

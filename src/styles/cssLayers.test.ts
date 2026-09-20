@@ -24,6 +24,7 @@ const FILES = [
   "b3/theme-daylight.css", "b3/theme-midnight.css",
   "features/attachment/attachment-preview.css", "features/editor/image-lightbox.css", "features/outline/outline.css",
   "features/sheet/sheetEditor.css",
+  "features/bitable/bitableEditor.css",
   "styles/dialog.css", "styles/document-status.css", "styles/editor.css",
   "styles/motion.css", "styles/components.css", "styles/quick-notes.css", "styles/shell.css",
   "styles/tokens.css", "styles/settings.css",
@@ -50,6 +51,8 @@ const BASELINE: Record<string, { decls: number; dupGroups: number }> = {
   "features/outline/outline.css": { decls: 244, dupGroups: 0 },
   // 260919：换成 FortuneSheet；容器尺寸 + 工具栏紧凑 + 无样式输入框补边框（标签样式已按用户要求回滚）
   "features/sheet/sheetEditor.css": { decls: 24, dupGroups: 0 },
+  // 260920：多维表编辑器（自研，v1）；+63 = 文本「扩大」浮窗；+37 = 行手柄/右键菜单/数据表列表；+82 = 网格线/列选择/列宽拖拽/日期选择器/范围选择/全收起切换（合法新增）
+  "features/bitable/bitableEditor.css": { decls: 856, dupGroups: 0 },
   "styles/dialog.css": { decls: 234, dupGroups: 8 },   // +7 = .note-info-history-viewer 容器（260916 W-10：历史内联预览改只读 viewer，替代裸 dangerouslySetInnerHTML；合法新增非覆盖回涨）
   "styles/document-status.css": { decls: 106, dupGroups: 2 },
   "styles/editor.css": { decls: 14, dupGroups: 0 },   // +2 = 自 ui-polish.css 并入的编辑器正文覆盖（S2）
@@ -68,7 +71,7 @@ const BASELINE: Record<string, { decls: number; dupGroups: number }> = {
   "styles/app/quick-notes.css": { decls: 507, dupGroups: 7 },   // +24 列表版式、+30 媒体按类型、+49 卡片预览、+8 展开层限定、+19 卡片收起/展开、+98 列表页对齐云端（标签行/批量条/行⋯菜单/新建按钮）；+15 = 动作行改版（去掉两角布局的空占位，换成 --inline 靠右下 + 「取消」次级描边 + 卡片页脚内边距 + 展开态浮层）；260920：-48 = 删掉随「卡片预览改自研渲染」废弃的 .quick-note-image-grid / .quick-note-saved-images / .quick-note-saved-media 三套遗留规则；+1 = 分块视图卡片展开时退出定位上下文（展开层/页脚落到小记面板）；+8 = 展开态把保存失败/提示条抬到展开层之上（贴面板左下角的浮层）
   "styles/app/settings.css": { decls: 116, dupGroups: 0 },
   "styles/app/shell.css": { decls: 316, dupGroups: 9 },   // 260917：另收掉 quick-notes 与基础层逐字重复的 margin 覆盖
-  "styles/app/tabs.css": { decls: 200, dupGroups: 0 },
+  "styles/app/tabs.css": { decls: 201, dupGroups: 0 },   // +1 = .tab-panels grid-template-columns:minmax(0,1fr)（根修：面板不被内容撑宽，多维表/表格才能横向滚动）
   "styles/app/vendor-board.css": { decls: 7, dupGroups: 0 },   // 260916：84 条与 vendor/drawnix-react-text.css 逐字节相同的规则已删（改为直接 import vendor 文件），余下是我们自己的 board-card 包装层
 };
 

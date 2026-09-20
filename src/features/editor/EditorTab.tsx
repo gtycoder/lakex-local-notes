@@ -16,7 +16,8 @@ import { useOutline } from "../outline/useOutline";
 import { native } from "../../lib/native";
 import { attachImagePreviewClick } from "./imagePreview";
 import { ImageLightbox } from "./ImageLightbox";
-import { attachFileCardClick, buildAttachmentPreviewItem, openAttachmentPreview, createCardHoverResidueCleaner, resolveCardAsset, findCardData, type AttachmentPreviewItem } from "../attachment/attachmentPreviewController";
+import { attachFileCardClick, buildAttachmentPreviewItem, createCardHoverResidueCleaner, resolveCardAsset, findCardData, type AttachmentPreviewItem } from "../attachment/attachmentPreviewController";
+import { openAssetEntry } from "../attachment/openAssetEntry";
 import { CardContextMenu, TextContextMenu, cutCardElement } from "./CardContextMenu";
 import { AssetRenameDialog } from "./AssetRenameDialog";
 import { installMediaCardCategoryRouter } from "./mediaCardRouting";
@@ -804,21 +805,9 @@ export function EditorTab({ noteId, content, visible, tocEnabled, outlineEnhance
 
     // 图片点击放大预览（桌面编辑/锁定态共用）：宿主级点击监听 + 共享 Lightbox
     const detachImagePreview = attachImagePreviewClick(host);
-    // 附件：file 卡片点击 → 媒体内嵌播放 overlay；非媒体直接系统应用打开（少预览弹窗，对齐移动端）
+    // 附件：file 卡片点击 → 公共入口 openAssetEntry（与多维表/小记同一套分流）
     const detachFileCard = attachFileCardClick(host, (src, name, size) => {
-      const item = buildAttachmentPreviewItem(src, name, size);
-      const openSystem = (it: typeof item): void => {
-        if (it.ref) void native.openAttachment(it.ref.noteId, it.ref.filename).then((r) => { if (!r.ok) console.warn("[attach] 打开失败:", r.error); });
-      };
-      // 媒体判定用 item.kind（buildAttachmentPreviewItem 已按 name||src 判定，canonical src 带扩展名），
-      // 避免卡片名缺扩展名/异常时误判为非媒体而落到系统打开（webview 弹窗）。
-      if (item.kind === "audio" || item.kind === "video" || isMediaFilename(name)) {
-        // 媒体附件：应用内嵌播放（audio/video 元素，不跳系统浏览器）
-        openAttachmentPreview(item, openSystem, (it) => { if (it.ref) void native.showAttachmentInFolder(it.ref.noteId, it.ref.filename); });
-        return;
-      }
-      // 非媒体附件：直接系统应用打开
-      openSystem(item);
+      openAssetEntry(src, name, size);
     });
 
     return () => {

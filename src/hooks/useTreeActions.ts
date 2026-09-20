@@ -9,6 +9,8 @@ export interface UseTreeActionsOptions {
   createNoteIn: (parentId: string | null) => Promise<void>;
   /** v6：新建表格文档（kind=sheet）。 */
   createSheetIn: (parentId: string | null) => Promise<void>;
+  /** v6：新建多维表文档（kind=bitable）。 */
+  createBitableIn: (parentId: string | null) => Promise<void>;
   openNote: (id: string) => void;
   setNodeIcon: (node: TreeNode, icon: string | null) => void;
   treeNodes: TreeNode[];
@@ -26,15 +28,16 @@ export interface UseTreeActionsOptions {
 
 /** 树 CRUD 与 Sidebar 操作回调（从 App.tsx 收拢）。 */
 export function useTreeActions({
-  createNoteIn, createSheetIn, openNote, setNodeIcon, treeNodes,
+  createNoteIn, createSheetIn, createBitableIn, openNote, setNodeIcon, treeNodes,
   setTreeNodes, setNotes, setOpenTabs, setConfirmDelete,
   setHistoryNoteId, setHistoryOpen, setSearchPanelQuery, setSearchPanelOpen,
   setPendingRenameId, setError,
 }: UseTreeActionsOptions) {
-  const createTreeItem = useCallback(async (kind: "notebook" | "group" | "note" | "sheet", parentId: string | null, title?: string) => {
+  const createTreeItem = useCallback(async (kind: "notebook" | "group" | "note" | "sheet" | "bitable", parentId: string | null, title?: string) => {
     try {
       if (kind === "note") { await createNoteIn(parentId); return; }
       if (kind === "sheet") { await createSheetIn(parentId); return; }
+      if (kind === "bitable") { await createBitableIn(parentId); return; }
       const resolvedTitle = title?.trim();
       if (!resolvedTitle) return;
       if (kind === "notebook") await native.createNotebook(resolvedTitle);
@@ -94,7 +97,7 @@ export function useTreeActions({
   const sidebarSelect = useCallback((id: string) => {
     void openNote(id);
   }, [openNote]);
-  const sidebarCreate = useCallback((kind: "notebook" | "group" | "note" | "sheet", parentId: string | null, title?: string) => {
+  const sidebarCreate = useCallback((kind: "notebook" | "group" | "note" | "sheet" | "bitable", parentId: string | null, title?: string) => {
     void createTreeItem(kind, parentId, title);
   }, [createTreeItem]);
   const sidebarRename = useCallback((id: string, title: string) => {

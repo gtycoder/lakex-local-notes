@@ -102,6 +102,30 @@ export function useNoteLifecycle({
     setPendingRenameId(note.id);
   }
 
+  /** 新建多维表文档（kind=bitable）：正文是自研 record-based JSON；与文档同流程（进树、开 tab、可重命名）。 */
+  async function createBitableIn(parentId: string | null) {
+    const note = await native.createBitableIn(parentId, "无标题数据表");
+    setNotes((items) => [...items, summaryOf(note)]);
+    setTreeNodes(await native.listTreeNodes());
+    resetRevision(note.id, 0);
+    const newTab: OpenTab = { noteId: note.id, title: note.title, content: note.content, dirty: false, lastAccessedAt: Date.now(), kind: "bitable" };
+    const evictedIds = await evictTabsForLimit([...openTabsRef.current, newTab], note.id);
+    setOpenTabs((tabs) => {
+      const base = tabs.some((t) => t.noteId === note.id) ? tabs : [...tabs, newTab];
+      return trimTabsToLimit(base, { limit: settingsMaxOpenTabs, activeNoteId: note.id, pinnedNoteIds });
+    });
+    if (evictedIds.length > 0) {
+      setPinnedNoteIds((prev) => {
+        const next = new Set(prev);
+        for (const ev of evictedIds) next.delete(ev);
+        return next.size === prev.size ? prev : next;
+      });
+      showNotice("已自动关闭最旧的标签（上限 " + settingsMaxOpenTabs + "）");
+    }
+    setActiveNoteId(note.id);
+    setPendingRenameId(note.id);
+  }
+
   async function deleteTreeNode(id: string) {
     try {
       const removedNodeIds = subtreeIds(treeNodes, id);
@@ -126,5 +150,5 @@ export function useNoteLifecycle({
     } catch (reason) { setError(getNativeErrorMessage(reason)); }
   }
 
-  return { handleContentChange, createNoteIn, createNote, createSheetIn, deleteTreeNode };
+  return { handleContentChange, createNoteIn, createNote, createSheetIn, createBitableIn, deleteTreeNode };
 }

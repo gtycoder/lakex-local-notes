@@ -5,7 +5,8 @@
 > **§8 是移动端（安卓）专职交接**，由移动端会话维护；桌面会话不要改 §8，移动端会话不要改 §0-§7 之外的桌面文件。
 
 ## 0. 当前基线（新会话开工前）
-- **本会话（260920，已收尾）完整交接 = §2.11（小记内核化收尾：附件按类型成卡 / 卡片预览保真 / 展开层与保存策略 / 内核三个坑）—— 新会话从这里读。**
+- **本会话（260920 · 多维表）完整交接 = §2.12（自研多维表 bitable，9 轮迭代 + 附件公共化）—— 在分支 feat/bitable，未提交、未合 master，待用户验收；已做多轮真机点验。**
+- **上一段（260920，已收尾）完整交接 = §2.11（小记内核化收尾：附件按类型成卡 / 卡片预览保真 / 展开层与保存策略 / 内核三个坑）。**
   ✅ **已合并 `master` 并推 origin**：代码批 = `e2f0a4d`（feat(quick-notes)…），交接 = `c4d5abc`（docs(handoff): §2.11），
   其后还有一个只补哈希的 docs 小提交（= 当前 HEAD，`git log --oneline -1` 看）；
   `master == origin/master`、工作区干净、单 worktree。
@@ -1093,6 +1094,96 @@ npm run check:bundle && npm run check:core && git diff --check
 - 用户红线（沿用）：不擅自 `git commit`（**本批是用户明确要求合并推送**）；开发数据只用 `lake-notes-dev`；只 kill 具体 PID。
 
 ---
+
+## 2.12 本会话总交接（260920 · 自研多维表 bitable，9 轮迭代）—— 新会话从这里读
+
+> 写给完全没有上下文的新会话。本会话把「自研多维表（kind=bitable）」从零做到 v1，并按用户多轮真机反馈做了 9 轮打磨。
+> 状态：分支 feat/bitable，**未提交、未合 master**（红线：代码批次需用户验收，不擅自 commit/merge）。基于 master 79e4d0d。
+> 产品口径 = docs/BITABLE-PRODUCT-SPEC-260919.md（用户定义的「完成」判据）；技术设计 = docs/SHEET-BITABLE-DESIGN-260918.md §3.2/§6.2/§7。
+
+### 一、任务目标（原始目标 + 历轮追加，均已实现）
+1. 自研多维表 kind=bitable，对齐语雀云端「数据表」；形态参考钉钉：**一个文档 = 多张数据表**（为后期多表联合预留）。
+2. v1 视图 = 表格视图 + 表单视图；7 种字段（文本 / 数字 / 单选 / 多选 / 日期 / 图片和附件 / 关联占位）；字段必填 + 默认值；视图级筛选 / 排序 / 行高 / 隐藏列 / 列顺序 / 列宽；记录增删改 + 记录详情抽屉；附件走资产管线；移动端只读占位；搜索走 searchTextFor 抽文本。
+3. 历轮追加（用户真机反馈，都已做）：横向滚动可用；文本单元格「扩大」按钮 + 贴单元格可拖动/缩放的全文本浮窗；严格对齐云端观感（索引列、网格线、表头、行 hover、批量选择、右键菜单、行手柄拖拽、数据表列表可调可收、顶栏快速切换、去非 doc 面包屑）；列选择、列宽拖拽、单元格范围选择 + 复制粘贴、自研日期选择器、视图标签拖拽排序；选项颜色（默认给色 + hover 色卡 + 选项拖拽排序）；行号默认只显示序号、hover 才出多选框（居中覆盖序号）；筛选/排序等一律自研下拉；附件打开与文档侧统一并公共化。
+
+### 二、已完成（按层）
+**A. 数据层 src/core/bitableDoc.ts（纯核心、可单测）**
+- BitableDoc = { kind:"bitable", version:1, tables[], activeTableId }；BitableTable = { fields, records, views, activeViewId }。
+- 字段类型开放字符串（未知类型只读展示、不清空）；值按 fieldId 存；附件存 filename 数组。
+- 工厂 + parseBitableBody（归一化）+ bitablesToBody + bitableToSearchText + orderedTableFields / applyViewToRecords / evaluateFilter / defaultRecordValues。
+- 选项调色板 BITABLE_OPTION_PALETTE（18 色 hex）+ optionColorHex / optionChipStyle（兼容旧 gray/blue 命名色键）。
+- 单测 src/core/bitableDoc.test.ts（往返、非法、未知类型、搜索、视图求值、默认值、附件 refs 提取）。
+
+**B. 主进程 / 协议**
+- electron/store.ts：createBitableIn + bodyPathFor 含 bitables/ 路径 + **构造时 mkdir bitables/** + searchTextFor 分派 bitableToSearchText。
+- electron/historyLifecycle.ts：restoreHistory 搜索缓存改为按 kind 分派（ctx.deriveSearchText → Store.searchTextFor），修掉「非 doc 恢复把 JSON 喂 Lake 解析器」。
+- IPC create_bitable_in（electron/ipc/registerNotes.ts）+ preload.cjs + webApiServer + src/lib/native.ts。
+
+**C. 渲染层新建入口**
+- src/hooks/useNoteLifecycle.ts::createBitableIn；useTreeActions 支持 "bitable"；App.tsx 装配；Sidebar 右键「新建数据表」（Database 图标）+ 行图标按 kind 区分。
+
+**D. 编辑器 src/features/bitable/**
+- MultiTabEditor 按 tab.kind 懒加载 BitableEditor（与 SheetEditor 同一错误边界隔离）。
+- BitableEditor.tsx（多数据表左栏 + 视图标签 + 工具栏 + 网格 + 记录详情抽屉 + 表单视图 + 字段编辑器）、bitableCells.tsx（Popover / SelectMenu / OptionPicker / CellEditor / AttachmentCell / DatePicker / ColorPalette / TextExpandPopover）、BitableRecordDrawer.tsx、BitableFormView.tsx、bitableEditor.css。
+- 只读（回收站/锁定/他端删除）禁用编辑 + 不自动保存；自动保存 800ms 防抖 + 与上次序列化比较（不打开即标脏）。
+- 视图配置：筛选 / 排序 / 行高（低中高）/ 隐藏列 / 列宽 / 列顺序（视图级 fieldOrder）都在视图上。
+- 交互：行手柄拖拽排序（指针式）、列宽拖拽、列选择、单元格范围选择 + 复制粘贴（TSV）、多数据表拖拽排序、数据表列表可拖宽（140–420）+ 完全收起（顶栏展开 + 名称下拉切换）、视图标签拖拽排序、右键行菜单（复制/粘贴/删除）。
+- 文本单元格「扩大」按钮 + 贴单元格浮窗（可拖动/缩放、编辑回写并持久化）。
+- 索引列：默认只显示序号、hover 出多选框（居中覆盖序号）+ 行手柄；表头保留全选。
+
+**E. 公共化（第九轮）**
+- 新增 src/features/attachment/openAssetEntry.ts = 统一附件打开入口：图片→应用内 Lightbox；音视频→内嵌预览；其它→系统默认应用（directOpen:false 时→信息预览层）。
+- EditorTab / LakeEditor / BitableEditor 三处重复的「按类型分流」已全部收敛到它；内核 DOM/fiber 卡片解析（resolveCardAsset / attachFileCardClick）仍留文档侧，不公共化。
+- 多维表内挂同一套 ImageLightbox / AttachmentPreview 单例。
+
+**F. 测试 / 文档**
+- src/features/bitable/bitableEditorMount.test.ts（路由、不碰 Lake 内核、多表、只读、防抖、各轮对齐点的源码级护栏）。
+- src/features/attachment/openAssetEntry.test.ts（4 条分流）。
+- electron/store.test.ts（新建多维表；多维表 restoreHistory 搜索缓存）。
+- docs/STORAGE-LAYERS.md 补 bitables/ 正文层与 ManifestNote.kind。
+
+### 三、门禁（最近一次实测，全绿）
+tsc 0 · vitest 1095 passed / 16 skipped (1111) · 桌面 + 移动 vite build 全绿 · check:bundle app-js gzip 1.826MB / 2.90MB · check:core 0 · git diff --check 干净。
+懒加载分包：BitableEditor-*.js ≈ 45KB raw + 14KB CSS，不在首屏 index chunk。
+
+### 四、真机点验（已做多轮，隔离 userData + CDP，全部通过）
+起法：LAKE_USER_DATA=$TMPDIR/lake-bitable-smoke LAKE_ASSET_PORT=19879 npm run dev（独立于 lake-notes-dev；跑完按端口 kill 具体 PID 并 rm 临时目录，真实数据未被读写）。
+- 主干 12/12：右键新建数据表→目录出现 + 打开的是多维表编辑器（无可见 Lake 编辑器）；默认 1 表 3 字段；文本编辑持久化；新增附件字段；附件真实上传落 note-assets 并写入正文；落盘 kind=bitable。
+- 视图/记录 21/21：多表切换（activeTableId）、行高持久化、筛选/排序持久化、记录详情抽屉、表单提交、多表拖拽排序。
+- 横向滚动 + 文本扩大浮窗通过；云端对齐两批通过（网格线、无批量浮条 + 底部状态、右键删除、行手柄拖拽、表名去边框、数据表列表收起 + 顶栏切换、列选择/列宽/范围复制/日期选择器/视图拖拽）；选项色卡/拖拽/行号 hover 覆盖序号通过；附件打开（图片 Lightbox / 音频内嵌）通过；附件公共化后复测 6/6，行为不变。
+- 脚本（临时件，未入库）：/tmp/bitable-smoke5/7/8/9/10/11/12/13.mjs；截图 /tmp/lake-bitable-smoke-evidence/*.png。
+
+### 五、当前问题（已知缺口 / 未测）
+1. **AB 多端 S3 同步往返 sha256 未测**：正文/附件走既有同步管线（对象内容寻址 + manifest.kind），但没跑过 A→B 跨端；「附件他端可达」同属此项。
+2. Excel 导入导出、新版小记：用户点名「回头一起测」。
+3. 单元格范围复制/粘贴只覆盖 text/number/date/select/multiSelect（select 按选项名匹配）；attachment/relation 未纳入。
+4. 列选择目前只高亮，未做「整列批量操作」菜单。
+5. 表单「新增题目」只能从已有字段勾选，不能在建表单时新建字段。
+6. 代码未提交（分支 feat/bitable）。
+
+### 六、下一步计划（按优先级）
+1. 用户真机验收本会话全部改动；有问题按现象定位（多为 CSS/交互细节）。
+2. 跑 AB 多端同步（建议照 electron/sync.integration.test.ts 用两个 store/桶，或起 A/B 双实例），确认：kind 往返、正文 sha256 不变、附件可下载、搜索无 JSON 碎片。
+3. Excel 导入导出 + 新版小记 一起测。
+4. 可选补齐：范围粘贴纳入 attachment/relation；列选择批量操作；表单内新建字段。
+5. 验收通过后再提交（不擅自合 master）。
+
+### 七、踩过的坑（本会话，务必记住）
+- **新建 kind 正文目录必须显式建**：只改 bodyPathFor 不够；store 构造里要 mkdir sheets/ 与 bitables/，否则 createBitableIn 写盘 ENOENT。
+- **create* 返回的 NoteDocument 不带 kind**：新建入口（useNoteLifecycle）必须显式给 OpenTab.kind，否则退回 Lake 编辑器（打开已有文档走 useTabLifecycle，读 note.kind）。
+- **CSS 围栏 src/styles/cssLayers.test.ts**：新增文件要加进 FILES + BASELINE 实测值；**同一文件里同 (选择器,属性) 出现 ≥2 次会算重复组** —— 别用「文件末尾追加覆盖」改样式，要改原规则（本会话踩过一次，追加覆盖导致 6 个重复组）。
+- **.tab-panels 是 grid**：面板宽被子元素内容撑宽（实测到 2985px，grid 永不横向滚动）；根修 = .tab-panels 加 grid-template-columns:minmax(0,1fr) + 面板 min-width:0 / width:100% / overflow:hidden。
+- **td 改 display:flex 会失去表格拉伸**：行号单元格因此只有 22px（比同行 32px 矮一半）；要显式 height:var(--bt-row-h)。
+- **组件里别用 window.lakeNative 直调**（无类型）；用 src/lib/native.ts 的 native.*。
+- **历史恢复也要按 kind 派生搜索缓存**：historyLifecycle.restoreHistory 原硬编码 lakeHtmlTo*，非 doc 会写坏缓存。
+- **资产引用提取是全文本正则**（ASSET_NAME_RE = {13ts}_{8hex}.{ext}）：多维表把附件名存 JSON 字符串里同样被 extractAssetRefs 命中 ⇒ 声明 / GC / 孤儿无需按 kind 分支。
+- **CDP 自动化测试**：① 合成 .click() 会绕过命中测试，验证「点了有没有反应」要用真事件；纯 onClick 逻辑用 .click() 可测。② :hover 在窗口非前台时 Input.dispatchMouseEvent(mouseMoved) 不一定生效，别用 hover 断言，改断 CSS 规则存在 + 默认态。③ 弹层 portal 到 body，R.querySelector('.bt-popover ...') 取不到，要用 document 或「最后一个 .bt-popover」。④ 上一轮的隐藏标签/隐藏编辑器会污染选择器，测试要按「新建后的新 tab id」精确作用域，或每次起干净实例。⑤ 窗口失焦时 navigator.clipboard 报 Document is not focused，需 Emulation.setFocusEmulationEnabled。
+- **dev 进程会被 exec 会话回收 / 端口残留**：重起前先按端口 kill 具体 PID（lsof -ti），别 pkill -f Electron；测试完 rm 隔离 userData。
+
+### 八、关键文件定位 + 复现命令
+- 数据模型 src/core/bitableDoc.ts；编辑器 src/features/bitable/**；公共附件入口 src/features/attachment/openAssetEntry.ts；路由 src/features/editor/MultiTabEditor.tsx；主进程 electron/store.ts（createBitableIn / bodyPathFor / searchTextFor）。
+- 产品规范 docs/BITABLE-PRODUCT-SPEC-260919.md；设计 docs/SHEET-BITABLE-DESIGN-260918.md；存储分层 docs/STORAGE-LAYERS.md。
+- 门禁：export PATH="$HOME/.nvm/versions/node/v24.18.0/bin:$PATH"; npx tsc --noEmit; npx vitest run; node node_modules/vite/bin/vite.js build; node node_modules/vite/bin/vite.js build --config vite.mobile.config.ts; npm run check:bundle; npm run check:core; git diff --check。
 
 ## 3. 下一步计划 + 当前问题（真正的待办，按优先级）
 

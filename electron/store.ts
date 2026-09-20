@@ -14,6 +14,7 @@ import { readNoteDigest, type NoteDigest } from "./storeQueries.js";
 import { emptyLakeBody } from "../src/core/lakeDocForm.js";
 import { type NoteKind, normalizeNoteKind } from "../src/core/noteKind.js";
 import { emptySheetBody, sheetToSearchText } from "../src/core/sheetDoc.js";
+import { emptyBitableBody, bitableToSearchText } from "../src/core/bitableDoc.js";
 import { SearchRepository } from "./searchRepository.js";
 import type { SearchResult } from "../src/core/searchTypes.js";
 import { HistoryRepository, type HistorySnapshotPreview, type HistorySnapshotSummary } from "./historyRepository.js";
@@ -149,8 +150,9 @@ export class Store {
     this.logScopes = logScopes;
     this.noteAssetsDir = path.join(root, "note-assets");
     fs.mkdirSync(path.join(root, "notes"), { recursive: true });
-    // 表格（kind=sheet）正文独立目录：notes/ 仍是 doc 的容器，互不混淆（docs/SHEET-BITABLE-DESIGN-260918.md §4.1）
+    // 表格（kind=sheet）/ 多维表（kind=bitable）正文独立目录：notes/ 仍是 doc 的容器（docs/SHEET-BITABLE-DESIGN-260918.md §4.1）
     fs.mkdirSync(path.join(root, "sheets"), { recursive: true });
+    fs.mkdirSync(path.join(root, "bitables"), { recursive: true });
     fs.mkdirSync(this.noteAssetsDir, { recursive: true });
     this.db = new Database(path.join(root, "metadata.sqlite3"));
     this.db.pragma("journal_mode = WAL");
@@ -264,6 +266,7 @@ export class Store {
       notePathFor: (noteId) => this.notePath(noteId),
       atomicWrite: (filePath, content) => this.atomicWrite(filePath, content),
       updateNoteCaches: (noteId, markdown, plain) => this.updateNoteCaches(noteId, markdown, plain),
+      deriveSearchText: (noteId, content) => this.searchTextFor(noteId, content),
       getHistorySettings: () => this.getHistorySettings(),
       cleanupUnreferencedAssetsForNote: (noteId) => this.orphanLifecycle.cleanupUnreferencedAssetsForNote(noteId),
     });
@@ -339,7 +342,7 @@ export class Store {
   private searchTextFor(id: string, content: string): { markdown: string | null; plain: string | null } {
     const kind = this.kindOf(id);
     if (kind === "sheet") return { markdown: null, plain: sheetToSearchText(content) };
-    if (kind === "bitable") return { markdown: null, plain: "" };
+    if (kind === "bitable") return { markdown: null, plain: bitableToSearchText(content) };
     return { markdown: lakeHtmlToMarkdown(content), plain: lakeHtmlToPlain(content) };
   }
 
@@ -437,6 +440,15 @@ export class Store {
   createSheetIn(parentId: string | null, title: string): NoteDocument {
     const id = uuid();
     return this.createNoteInWithContent(parentId, title, emptySheetBody(), [], id, "bottom", "sheet");
+  }
+
+  /**
+   * 新建多维表文档（kind="bitable"）：正文是 bitables/{id}.bitable.json（自研 record-based JSON），
+   * 其余全部复用文档管线（目录/回收站/历史/同步/GC）。v1 默认 = 1 张数据表（3 字段 + 表格视图）。
+   */
+  createBitableIn(parentId: string | null, title: string): NoteDocument {
+    const id = uuid();
+    return this.createNoteInWithContent(parentId, title, emptyBitableBody(), [], id, "bottom", "bitable");
   }
 
   /**

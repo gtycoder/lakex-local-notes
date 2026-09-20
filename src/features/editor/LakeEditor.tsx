@@ -7,12 +7,12 @@ import { getNativeErrorMessage } from "../../lib/nativeErrors";
 import { shouldAcceptEditorChange } from "../../core/editorChangeGuard";
 import { ImageLightbox } from "./ImageLightbox";
 import { attachImagePreviewClick } from "./imagePreview";
-import { attachFileCardClick, buildAttachmentPreviewItem, openAttachmentPreview, createCardHoverResidueCleaner, resolveCardAsset, findCardData, type AttachmentPreviewItem } from "../attachment/attachmentPreviewController";
+import { attachFileCardClick, buildAttachmentPreviewItem, createCardHoverResidueCleaner, resolveCardAsset, findCardData, type AttachmentPreviewItem } from "../attachment/attachmentPreviewController";
+import { openAssetEntry } from "../attachment/openAssetEntry";
 import { CardContextMenu, cutCardElement } from "./CardContextMenu";
 import { AssetRenameDialog } from "./AssetRenameDialog";
 import { attachLongPress } from "./longPress";
 import { installMediaCardCategoryRouter } from "./mediaCardRouting";
-import { isMediaFilename } from "../../core/assetNaming.js";
 import { AttachmentPreview } from "../attachment/AttachmentPreview";
 import { isDesktop, native } from "../../lib/native";
 
@@ -123,20 +123,12 @@ export function LakeEditor({ noteId, content, mode = "editor", tocEnabled, onCha
       const displaySrc = (attachment?.resolveDisplayUrl && base.ref)
         ? (attachment.resolveDisplayUrl(base.ref) ?? base.src)
         : base.src;
-      const item = { ...base, src: displaySrc };
-      // 媒体判定用 base.kind（buildAttachmentPreviewItem 已按 name||src 判定，canonical src 带扩展名），
-      // 避免卡片名缺扩展名/异常时误判为非媒体而落到系统打开（webview 弹窗）。
-      if (base.kind === "audio" || base.kind === "video" || isMediaFilename(name)) {
-        // 媒体附件：内嵌播放 overlay（不跳系统浏览器）
-        openAttachmentPreview(item, attachment?.onOpenAttachment ?? openAttachmentDefault, isDesktop() ? showInFolder : null);
-        return;
-      }
-      // 非媒体附件：直接系统应用打开
-      if (directOpen) {
-        (attachment?.onOpenAttachment ?? openAttachmentDefault)(base);
-        return;
-      }
-      openAttachmentPreview(item, attachment?.onOpenAttachment ?? openAttachmentDefault, isDesktop() ? showInFolder : null);
+      // 公共入口：媒体→内嵌预览；非媒体→directOpen ? 系统打开 : 信息预览层
+      openAssetEntry(displaySrc, name, size, {
+        openSystem: attachment?.onOpenAttachment ?? openAttachmentDefault,
+        showInFolder: isDesktop() ? showInFolder : null,
+        directOpen,
+      });
     });
 
     let editor: LakeEditorInstance | null = null;

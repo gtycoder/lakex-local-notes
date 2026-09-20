@@ -5,7 +5,6 @@ import zlib from "node:zlib";
 import type { DbLike } from "./dbLike.js";
 import { AppError } from "../src/core/storeErrors.js";
 import { extractAssetRefs, isSafePathSegment, selectHistoryDrops } from "../src/core/storeUtils.js";
-import { lakeHtmlToMarkdown, lakeHtmlToPlain } from "../src/core/lakeCaches.js";
 import type { LoggerScopes } from "../src/core/logger.js";
 import type { HistoryCleanupResult, HistorySettings } from "./storeTypes.js";
 
@@ -21,6 +20,8 @@ export interface HistoryLifecycleContext {
   atomicWrite: (filePath: string, data: string) => void;
   /** 更新笔记缓存（md/plain，restoreHistory 用恢复后的正文重算） */
   updateNoteCaches: (noteId: string, markdown: string | null, plain: string | null) => void;
+  /** 按文档类型派生搜索缓存（非 doc 的正文是 JSON，绝不能喂给 Lake HTML 解析器；restoreHistory 用） */
+  deriveSearchText: (noteId: string, content: string) => { markdown: string | null; plain: string | null };
   /** 历史保留策略配置（settings 表） */
   getHistorySettings: () => HistorySettings;
   /** 清理某文档"当前正文不引用 + 无历史快照引用"的资源（方案 A，cleanupHistory 逐文档调用） */
@@ -124,8 +125,7 @@ export class HistoryLifecycle {
     // 3) 更新缓存/FTS（用恢复的正文）
     const titleRow = this.ctx.db.prepare("SELECT title FROM notes WHERE id=?").get(noteId) as { title: string } | undefined;
     if (titleRow) {
-      const markdown = lakeHtmlToMarkdown(body);
-      const plain = lakeHtmlToPlain(body);
+      const { markdown, plain } = this.ctx.deriveSearchText(noteId, body);
       this.ctx.updateNoteCaches(noteId, markdown, plain);
     }
     // 4) 同步语义（P0-1，与 S3-GC v4 §5.2 一致）：恢复 = 本地写回 + 待上传。
