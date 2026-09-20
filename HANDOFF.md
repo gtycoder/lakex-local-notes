@@ -1307,6 +1307,11 @@ tsc 0 · vitest 1095 passed / 16 skipped (1111) · 桌面 + 移动 vite build �
    ⚠️ **顺带修掉一个真 bug（CDP 复现）**：`quickNoteShortcut.subscribeQuickNoteShortcut` 原用**永久布尔量**去重冷启动双触发
    ⇒ 一次冷启动后进程存活期间再长按图标（热启动）被永久忽略；改为 **1.5s 短窗口去重**，护栏
    `src/mobile/quickNoteShortcut.test.ts`。
+   🚀 **冷启动提速（260920 续）**：先量后改——`bridge.init()` 87ms、`refreshAll()` 11ms，真正大头是**入口 chunk 6.7MB**
+   （整个 Lake 内核被三条静态路径拖入）。① 内核按需加载（`NotebookWorkspace`/`QuickNoteComposer`/`TrashPreviewPage` 改 `React.lazy`）
+   ⇒ 入口 **6.7MB → 80KB**、`effectStart` **712→200ms**；② 轻量框改挂 `MobileApp` 独立入口，**在 `bridge.init/refreshAll` 之前**渲染
+   （保存才 `ensureDb`）。冷启动到可输入 **~1.3s → 0.30–0.43s**（实测）；
+   ⚠️ 别用 `codeSplitting.groups` 拆内核（会拆坏 vendor 的 DrawnixBoardCore 懒 chunk、白屏）；护栏 `src/mobile/mobileLazyChunks.test.ts`。
 
 ### 三、下一步（详见 `docs/MOBILE-PARITY-260920.md` §五）
 1. 小记**音视频/PDF 附件**在真机点一次确认四类卡；2. ~~移动端新建 sheet/bitable/board~~（**用户定稿：不做，除文档外一律只读**）；3. 表格 100% 保真是否引入 FortuneSheet（+0.5MB gzip 懒加载，用于公式求值/条件格式/冻结窗格）；4. **AB 多端 S3 往返**（画板图片/表格/多维表/小记资源）；5. 移动端小记工作台能力（→正式文档、批量、置顶/列表视图）；6. 【可选】闪念速记对齐思源的原生轻量 Activity + 系统分享入口（1.5–2 天）。

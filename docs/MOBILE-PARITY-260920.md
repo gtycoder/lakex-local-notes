@@ -126,3 +126,16 @@
   （`getLaunchUrl` + `appUrlOpen`）⇒ **一次冷启动之后，进程存活期间再长按图标（热启动 appUrlOpen）被永久忽略**
   （第二次长按无任何反应）。改为 **1.5s 短窗口去重**（只压同一次点击的两条路径），并补行为护栏
   `src/mobile/quickNoteShortcut.test.ts`（冷启动触发 → 立即重复被去重 → 1.5s 后热启动仍能触发）。
+
+**v1.2（260920 续，冷启动提速）**：把「深链 → WebView → 轻量框」的冷启动从 **~1.3s 压到 ~0.30–0.43s**（模拟器 API36 实测 3 次）。
+- **先量再改（关键）**：`bridge.init()` 只 **87ms**、`refreshAll()` 只 **11ms** —— 真正的大头是 **WebView + JS bundle**：
+  入口 chunk **6.7MB**（含整个 Lake 内核）+ React 挂载 ≈ **712ms**。原以为要拆 `bridge.init/refreshAll`，量完发现方向错了。
+- **① 内核按需加载**：`MobileApp → NotebookWorkspace`、`HomePage → QuickNoteComposer`、`SettingsDrawer → TrashPreviewPage`
+  三条**静态**路径把内核拖进入口；全部改 `React.lazy` 后 **入口 6.7MB → 80KB**，内核进独立懒 chunk（不 modulepreload），
+  `effectStart` **712 → ~200ms**。
+- **② 闪念速记独立入口**：轻量框改挂 `MobileApp` 的 `captureOpen` 分支，**在 `bridge.init()/refreshAll()` 之前**渲染
+  （保存时才 `ensureDb()`；返回键先关它）。实测 `initDone = null`（框已能输入时 DB 还没打开）。
+- **实测**：`appMsToFlash` **305 / 337 / 428ms**（改前 ~1250–1500ms）、`flashMount` 214–248ms（改前 ~850ms）。
+- **⚠️ 踩坑**：**不要**用 rolldown `codeSplitting.groups` 给 `\@dlient/lakex-doc-react` 分组 —— 实测会把 vendor 内部
+  `DrawnixBoardCore` 懒 chunk 的 export 绑定拆坏，打开编辑器即 `SyntaxError: Export '..._exports' is not defined in module`、
+  整页白屏。正确做法是**懒加载边界**；已加护栏 `src/mobile/mobileLazyChunks.test.ts` 卡住这三条 lazy 与"别加分组"。
