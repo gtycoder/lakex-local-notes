@@ -12,7 +12,6 @@ import type { TreeNode } from "../lib/types";
 import { HomePage } from "./home/HomePage";
 import { QuickNoteFlashComposer, type QuickNoteSeed } from "./home/QuickNoteFlashComposer";
 import { consumeSharedContent, sharedContentToSeed, subscribeSharedContent } from "./sharedContent";
-import { importQuickCaptureInbox } from "./quickCaptureInbox";
 import { CreateNotebookSheet } from "./settings/CreateNotebookSheet";
 import { SearchSheet } from "./settings/SearchSheet";
 import { SettingsDrawer } from "./settings/SettingsDrawer";
@@ -151,25 +150,6 @@ export function MobileApp() {
     setCaptureNonce((n) => n + 1);
     setCaptureOpen(true);
   }), []);
-
-  // 原生秒开框（QuickCaptureActivity）提交的内容：App 启动时导入为小记。
-  useEffect(() => {
-    void (async () => {
-      const count = await importQuickCaptureInbox();
-      if (count > 0) await refreshAll();
-    })();
-  }, [refreshAll]);
-
-  // App 回前台时也导入（原生框提交后 App 可能还在后台）。
-  useEffect(() => {
-    let disposed = false;
-    let handle: { remove(): Promise<void> } | null = null;
-    void import("@capacitor/app").then(({ App }) => App.addListener("appStateChange", (state) => {
-      if (!state.isActive) return;
-      void importQuickCaptureInbox().then((count) => { if (count > 0) void refreshAll(); });
-    })).then((h) => { if (disposed) void h.remove(); else handle = h; }).catch(() => undefined);
-    return () => { disposed = true; void handle?.remove(); };
-  }, [refreshAll]);
 
   // 系统分享（ACTION_SEND）→ 打开「小记」框并预填：冷启动读一次性内容，热启动订阅 "shared"。
   useEffect(() => {

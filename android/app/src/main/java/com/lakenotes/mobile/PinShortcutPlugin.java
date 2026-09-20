@@ -3,6 +3,7 @@ package com.lakenotes.mobile;
 import android.content.Intent;
 import android.content.pm.ShortcutInfo;
 import android.content.pm.ShortcutManager;
+import android.net.Uri;
 import android.graphics.drawable.Icon;
 import android.os.Build;
 
@@ -30,6 +31,7 @@ import com.getcapacitor.annotation.CapacitorPlugin;
 public class PinShortcutPlugin extends Plugin {
 
     private static final String SHORTCUT_ID = "quick-note";
+    private static final String DEEP_LINK = "lakenotes://quick-note";
 
     private ShortcutManager shortcutManager() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return null;
@@ -73,7 +75,7 @@ public class PinShortcutPlugin extends Plugin {
             return;
         }
         try {
-            Intent intent = new Intent(Intent.ACTION_VIEW, null, getContext(), QuickCaptureActivity.class);
+            Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse(DEEP_LINK), getContext(), MainActivity.class);
             intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
             ShortcutInfo info = new ShortcutInfo.Builder(getContext(), SHORTCUT_ID)
                     .setShortLabel(getContext().getString(R.string.shortcut_quick_note_short))

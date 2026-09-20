@@ -152,16 +152,15 @@
 - 仍缺：图片纳入草稿（当前仅文字，图片在内存、被杀会丢）；系统分享入口；原生秒开 Activity。
   ✅ 260920 续做已全部落地（见 v1.4）。
 
-**v1.4（260920 续，分享 + 原生秒开）**：
+**v1.4（260920 续，图片草稿 + 系统分享；原生秒开已回退删除）**：
 - **图片纳入草稿**：轻量框图片一加入就 `stageQuickNoteAsset` 落 `quick-notes/{id}/`，草稿只记引用；重开用 canonical URL 恢复缩略图；
   保存改走 `saveQuickNoteContent`（不重传字节）。实测 输入+图→杀进程→重开 文字与图都在。
 - **系统分享（ACTION_SEND）**：MainActivity 加 SEND intent-filter（text/plain、image/*）→ `SharedContentPlugin` 接住
   （文本原样；图片/文件复制到 `filesDir/shared-inbox/`，按 URI 去重避免 load/onNewIntent 双触发重复复制）
   → JS 冷启动 `consume` / 热启动 `shared` 事件 → 打开轻量框预填（seed：文本 + 图片字节；读完删临时文件）。实测文本（冷/热）+ 图片均通过。
-- **原生秒开「新建小记」**：长按快捷方式改为直开 `QuickCaptureActivity`（纯文本 EditText，**不走 WebView/内核**），
-  提交写 `filesDir/quick-capture-inbox/<uuid>.txt`（草稿存 SharedPreferences）；App 启动/回前台由 `quickCaptureInbox.ts` 导入为小记并删文件。
-  实测首帧 `Displayed` ~0.87–0.99s（MainActivity 冷启动 ~1.5s 且其后才加载 JS），提交→inbox→导入为小记链路通过。
-- ✅ **用户 260920 定稿：保留原生框** —— 与思源一致（思源的闪念速记同样是原生框、快捷方式这条路径不加图片）。
-  快捷方式路径 = **纯文本**；要图片/富文本走**系统分享**或 App 内完整编辑器。
-  WebView 轻量框保留作分享入口；快捷方式不再走 `lakenotes://quick-note` 深链
-  （`quickNoteShortcut.ts` 只对显式深链生效，目前无触发方 —— 属可选清理项）。
+- ❌ **原生秒开「新建小记」（QuickCaptureActivity）—— 试过之后已回退并彻底删除（260920）**：
+  曾做原生纯文本框（提交写 inbox、App 启动/回前台导入），实测首帧 ~0.87–0.99s。用户试用后**觉得原生框太丑**、
+  且**原来 WebView 轻量框的速度可以接受** ⇒ 决定不做，**代码全部删除**：
+  `QuickCaptureActivity.java` / `res/layout/activity_quick_capture.xml` / `src/mobile/quickCaptureInbox.ts`(+ 测试)、
+  manifest 的 Activity 声明、MobileApp 的导入接线；快捷方式**切回** `MainActivity` + `lakenotes://quick-note` 深链。
+  教训：快捷方式这条路径**继续用 WebView 轻量框**（图片/草稿都有）；要"更快"再议，不重复造原生 UI。

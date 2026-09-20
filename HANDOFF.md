@@ -1315,18 +1315,15 @@ tsc 0 · vitest 1095 passed / 16 skipped (1111) · 桌面 + 移动 vite build �
    🧭(v1.3) 改名「新建小记」+ 未提交草稿防丢：快捷方式深链**必须用 intent 的 `android:data` 属性**（嵌套 `<data>` 被
    ShortcutParser 忽略 ⇒ 快捷方式丢深链）；轻量框挂载从 `device_state` 恢复未提交文字、300ms 防抖落库、保存/取消清除
    （纯本地不进 S3）。实测模拟器：输入→force-stop→重开文字还在；取消后重开为空。护栏 `quickNoteDraft.test.ts`。
-   🚀(v1.4) 草稿纳入图片；系统分享（ACTION_SEND）→ 小记（`SharedContentPlugin` 接住文本/图片 + 轻量框 seed）；
-   原生秒开「新建小记」（`QuickCaptureActivity` 直开、纯文本、写 inbox，App 启动/回前台导入）。实测首帧 ~0.87–0.99s
-   （MainActivity 冷启动 ~1.5s 且后加载 JS）。⚠️ 原生框纯文本；快捷方式不再走 `lakenotes://quick-note` 深链
-   （WebView 轻量框保留作分享/深链入口）。护栏 `sharedContent.test.ts` / `quickCaptureInbox.test.ts`。
-   ✅ **用户 260920 定稿：保留原生框**（与思源一致，快捷方式纯文本；图片走分享或 App 内编辑器）。
-   原生框草稿实测：输入→返回→重开恢复；取消后 prefs 清空。
-   ↩ **切回 WebView 富文本框（用户若试后不满意）**：`shortcuts.xml` 的 `targetClass` 改回 `MainActivity` +
-   加回 `android:data="lakenotes://quick-note"`；`PinShortcutPlugin` 的 intent 改回 `MainActivity` + 深链。
-   WebView 轻量框、深链处理、草稿/图片/分享能力都还在，切回只需这两处。
+   🚀(v1.4) 草稿纳入图片；系统分享（ACTION_SEND）→ 小记（`SharedContentPlugin` 接住文本/图片 + 轻量框 seed）。
+   护栏 `sharedContent.test.ts` / `quickNoteDraft.test.ts`。
+   ❌ **原生秒开「新建小记」（QuickCaptureActivity）—— 试过后已回退并彻底删除（260920）**：用户试用觉得原生框太丑、
+   原来 WebView 轻量框速度可以接受 ⇒ 决定不做。快捷方式**切回** `MainActivity` + `lakenotes://quick-note` 深链；
+   `QuickCaptureActivity.java` / `res/layout/activity_quick_capture.xml` / `src/mobile/quickCaptureInbox.ts`(+测试) /
+   manifest 声明 / MobileApp 接线**全部删除**。⚠️ 以后别重复造原生快捷方式 UI。
 
 ### 三、下一步（详见 `docs/MOBILE-PARITY-260920.md` §五）
-1. 小记**音视频/PDF 附件**在真机点一次确认四类卡；2. ~~移动端新建 sheet/bitable/board~~（**用户定稿：不做，除文档外一律只读**）；3. 表格 100% 保真是否引入 FortuneSheet（+0.5MB gzip 懒加载，用于公式求值/条件格式/冻结窗格）；4. **AB 多端 S3 往返**（画板图片/表格/多维表/小记资源）；5. 移动端小记工作台能力（→正式文档、批量、置顶/列表视图）；6. ~~【可选】小记对齐思源的原生轻量 Activity + 系统分享入口~~ ✅ 260920 已做（QuickCaptureActivity + SharedContentPlugin）。
+1. 小记**音视频/PDF 附件**在真机点一次确认四类卡；2. ~~移动端新建 sheet/bitable/board~~（**用户定稿：不做，除文档外一律只读**）；3. 表格 100% 保真是否引入 FortuneSheet（+0.5MB gzip 懒加载，用于公式求值/条件格式/冻结窗格）；4. **AB 多端 S3 往返**（画板图片/表格/多维表/小记资源）；5. 移动端小记工作台能力（→正式文档、批量、置顶/列表视图）；6. ~~【可选】小记对齐思源的原生轻量 Activity + 系统分享入口~~ 系统分享（SharedContentPlugin）已做；**原生轻量 Activity 试过后已回退删除**（用户 260920：太丑、WebView 框速度可接受）。
 
 ---
 
