@@ -50,6 +50,16 @@
 
         </activity>
 
+        <!-- 「新建小记」原生秒开输入：长按快捷方式直达，不走 WebView/内核 -->
+        <activity
+            android:name=".QuickCaptureActivity"
+            android:exported="true"
+            android:theme="@style/AppTheme.NoActionBar"
+            android:windowSoftInputMode="stateVisible|adjustResize"
+            android:launchMode="singleTask"
+            android:taskAffinity=""
+            android:excludeFromRecents="true" />
+
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.fileprovider"

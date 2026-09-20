@@ -9,12 +9,11 @@
         android:icon="@mipmap/ic_launcher"
         android:shortcutShortLabel="@string/shortcut_quick_note_short"
         android:shortcutLongLabel="@string/shortcut_quick_note_long">
-        <!-- 深链必须用 intent 的 android:data 属性；嵌套 <data> 会被 ShortcutParser 忽略（快捷方式就会丢深链） -->
+        <!-- 原生秒开：直接开 QuickCaptureActivity（不走 WebView/内核）；提交写 inbox 由 App 导入为小记 -->
         <intent
             android:action="android.intent.action.VIEW"
             android:targetPackage="com.lakenotes.mobile"
-            android:targetClass="com.lakenotes.mobile.MainActivity"
-            android:data="lakenotes://quick-note" />
+            android:targetClass="com.lakenotes.mobile.QuickCaptureActivity" />
         <categories android:name="android.shortcut.conversation" />
     </shortcut>
 </shortcuts>
