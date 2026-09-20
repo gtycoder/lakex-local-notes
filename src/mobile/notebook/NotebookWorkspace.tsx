@@ -4,7 +4,7 @@
  * 骨架 .mobile-topbar/.mobile-bottom-bar/.side-panel(.side-panel--right)/.side-mask/.model。
  * 多 tab 的「顶部 tab 条」是桌面版；移动端是底部胶囊栏 #toolbarTabs 弹全屏列表（子代理已核对源码）。
  */
-import { useCallback, useEffect, useRef, useState } from "react";
+import { Suspense, lazy, useCallback, useEffect, useRef, useState } from "react";
 import { ArrowLeft, List, Files, Pencil, X, ChevronRight, FolderOpen, FolderPlus, File, Plus, Check, ArrowLeftRight, Trash, SmilePlus, Move, History, CloudUpload, MoreHorizontal, MoreVertical, FilePlus, Search, Settings, Copy, Info } from "lucide-react";
 import { NoteInfoDialog } from "../../components/NoteInfoDialog";
 import { bridge } from "../bridge";
@@ -24,6 +24,9 @@ import { longPressFeedback, successFeedback, warnFeedback } from "../ui/haptics"
 import { useAutoSave } from "../useAutoSave";
 import type { POCNote } from "../noteRepository";
 import { MobileBoardViewer } from "../board/MobileBoardViewer";
+/** 表格/多维表只读视图按需加载：只有真的打开这类文档才进分包（首屏不含它们）。 */
+const MobileBitableViewer = lazy(() => import("../bitable/MobileBitableViewer").then((m) => ({ default: m.MobileBitableViewer })));
+const MobileSheetViewer = lazy(() => import("../sheet/MobileSheetViewer").then((m) => ({ default: m.MobileSheetViewer })));
 /** 笔记本子树节点（原 NotebookPage 的类型，页面本体已随"两套壳"统一删除）。 */
 export interface NotebookTreeItem {
   id: string;
@@ -580,13 +583,20 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
             {t.kind === "board" ? (
               // 画板：移动端只读查看（同一套 Drawnix 引擎，绝不给 Lake 编辑器；也不保存）
               <MobileBoardViewer content={t.content} active={t.id === activeId} />
+            ) : t.kind === "bitable" ? (
+              // 多维表：移动端只读视图（同一份 core 数据模型求值，绝不写库）
+              <Suspense fallback={<div className="mobile-empty">正在加载多维表…</div>}>
+                <MobileBitableViewer noteId={t.id} content={t.content} />
+              </Suspense>
+            ) : t.kind === "sheet" ? (
+              // 表格：移动端只读网格（共享 core 正文模型；不求值公式、不渲染单元格图片）
+              <Suspense fallback={<div className="mobile-empty">正在加载表格…</div>}>
+                <MobileSheetViewer content={t.content} />
+              </Suspense>
             ) : t.kind !== "doc" ? (
-              // 防腐坏（AGENTS §3）：非文档类型的正文不是 Lake HTML，**绝不允许** Lake 编辑器打开/保存。
+              // 兜底防腐坏（AGENTS §3）：未知类型的正文不是 Lake HTML，**绝不允许** Lake 编辑器打开/保存。
               <div className="mobile-empty">
-                {t.title || "此文档"}
-                {"："}
-                {t.kind === "sheet" ? "表格" : "多维表"}
-                暂不支持在移动端编辑，请在桌面端打开。
+                {t.title || "此文档"}：该类型暂不支持在移动端查看，请在桌面端打开。
               </div>
             ) : (
             <DocumentEditor

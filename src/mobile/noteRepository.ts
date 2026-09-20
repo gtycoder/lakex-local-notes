@@ -1,5 +1,6 @@
 import { extractAssetRefs, extOf } from "../core/assetNaming.js";
 import { lakeHtmlToPlain } from "../core/lakeCaches.js";
+import { searchTextForKind } from "../core/noteSearchText.js";
 import { indexNote, removeNoteFromIndex, searchNotes as searchNotesIndexed } from "./searchIndex.js";
 import type { SearchResult } from "../core/searchTypes.js";
 import { hasNoteSaveChanges } from "../core/noteSaveDecision.js";
@@ -121,8 +122,11 @@ export async function saveNote(
   const safeTitle = title.trim() ? title.trim() : "无标题文档";
   const existing = await d.prepare("SELECT title, content FROM notes WHERE id=? AND trashed_at IS NULL").get(id) as { title: string; content: string } | undefined;
   if (existing && !hasNoteSaveChanges(existing, { title: safeTitle, content })) return false;
-  // 首选编辑器 getDocument("text/plain")（与桌面同源）；缺省回退共享 lakeHtmlToPlain。
-  const bodyPlain = plain ?? lakeHtmlToPlain(content);
+  // 首选编辑器 getDocument("text/plain")（与桌面同源）；缺省按 **kind** 派生（sheet/bitable/board 的正文是 JSON，
+  // 直接 lakeHtmlToPlain 会把 JSON 碎片写进 text_cache ⇒ 搜索索引与摘要全脏）。口径见 src/core/noteSearchText.ts。
+  const kindRow = await d.prepare("SELECT doc_kind FROM notes WHERE id=?").get(id) as { doc_kind?: string | null } | undefined;
+  const kind = normalizeDocKind(kindRow?.doc_kind);
+  const bodyPlain = plain ?? searchTextForKind(kind, content).plain ?? "";
 
   await d.prepare(
     `INSERT INTO notes (id, title, content, parent_id, updated_at, content_hash, sync_state, text_cache) VALUES (?,?,?,?,?,?,'local',?)

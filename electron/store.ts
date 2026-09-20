@@ -16,6 +16,7 @@ import { type NoteKind, normalizeNoteKind } from "../src/core/noteKind.js";
 import { emptySheetBody, sheetToSearchText } from "../src/core/sheetDoc.js";
 import { emptyBitableBody, bitableToSearchText } from "../src/core/bitableDoc.js";
 import { emptyBoardBody, boardToSearchText } from "../src/core/boardDoc.js";
+import { searchTextForKind } from "../src/core/noteSearchText.js";
 import { SearchRepository } from "./searchRepository.js";
 import type { SearchResult } from "../src/core/searchTypes.js";
 import { HistoryRepository, type HistorySnapshotPreview, type HistorySnapshotSummary } from "./historyRepository.js";
@@ -344,10 +345,8 @@ export class Store {
   /** 正文 → 搜索/缓存文本（按类型分派：doc 走 Lake HTML 解析，sheet 走单元格抽取，bitable v1 只索引标题）。 */
   private searchTextFor(id: string, content: string): { markdown: string | null; plain: string | null } {
     const kind = this.kindOf(id);
-    if (kind === "sheet") return { markdown: null, plain: sheetToSearchText(content) };
-    if (kind === "bitable") return { markdown: null, plain: bitableToSearchText(content) };
-    if (kind === "board") return { markdown: null, plain: boardToSearchText(content) };
-    return { markdown: lakeHtmlToMarkdown(content), plain: lakeHtmlToPlain(content) };
+    // 口径与移动端共用同一来源（src/core/noteSearchText.ts）
+    return searchTextForKind(kind ?? "doc", content);
   }
 
   private atomicWrite(filePath: string, data: string) {

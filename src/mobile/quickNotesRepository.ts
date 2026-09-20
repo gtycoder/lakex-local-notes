@@ -26,6 +26,9 @@ export interface QuickNoteListItem {
   imageCount: number;
   updatedAt: string;
   firstImage: string | null;
+  /** 内核形态正文 + 资源清单：供卡片用桌面同一套只读预览渲染（列表一次取回，避免逐条再查库）。 */
+  body: string;
+  images: StoredQuickNoteImage[];
 }
 
 export interface QuickNoteReadResult {
@@ -47,8 +50,15 @@ export async function listQuickNotes(d: MobileDb): Promise<QuickNoteListItem[]> 
   const rows = await d.prepare("SELECT id, preview_text, image_count, updated_at, content FROM quick_notes WHERE deleted_at IS NULL AND restore_pending_at IS NULL ORDER BY updated_at DESC").all() as Array<{ id: string; preview_text: string; image_count: number; updated_at: string; content: string }>;
   return rows.map((r) => {
     let firstImage: string | null = null;
-    try { firstImage = (JSON.parse(r.content) as StoredQuickNoteContent).images?.[0]?.filename ?? null; } catch { /* 解析失败无缩略图 */ }
-    return { id: r.id, previewText: r.preview_text, imageCount: r.image_count, updatedAt: r.updated_at, firstImage };
+    let body = "";
+    let images: StoredQuickNoteImage[] = [];
+    try {
+      const parsed = JSON.parse(r.content) as StoredQuickNoteContent;
+      firstImage = parsed.images?.[0]?.filename ?? null;
+      body = parsed.body ?? "";
+      images = parsed.images ?? [];
+    } catch { /* 解析失败走纯文本摘要 */ }
+    return { id: r.id, previewText: r.preview_text, imageCount: r.image_count, updatedAt: r.updated_at, firstImage, body, images };
   });
 }
 
@@ -63,7 +73,18 @@ export async function readQuickNote(d: MobileDb, id: string): Promise<QuickNoteR
 
 export async function saveQuickNote(d: MobileDb, id: string, text: string, images: StoredQuickNoteImage[] = []): Promise<string> {
   const now = new Date().toISOString();
-  const content = normalizeQuickNoteContent(text, quickNoteBodyFromTextAndImages(text, images, (filename) => `http://127.0.0.1:19876/quick-notes/${id}/${filename}`, () => crypto.randomUUID()), images);
+  // 正文（body）口径：移动端只有纯文本编辑器，合成 body 会把桌面端排版的富内容（标题/列表/引用/表格/卡片）
+  // 压成纯段落。所以 —— 若**纯文本没变**（用户只是打开又保存、或只调整了图片顺序），沿用原有 body，不压平。
+  const existingRow = await d.prepare("SELECT content FROM quick_notes WHERE id=?").get(id) as { content: string } | undefined;
+  let preservedBody = "";
+  if (existingRow) {
+    try {
+      const previous = JSON.parse(existingRow.content) as StoredQuickNoteContent;
+      if (previous.text === text && typeof previous.body === "string" && previous.body) preservedBody = previous.body;
+    } catch { /* 旧数据/坏数据：走合成路径 */ }
+  }
+  const body = preservedBody || quickNoteBodyFromTextAndImages(text, images, (filename) => `http://127.0.0.1:19876/quick-notes/${id}/${filename}`, () => crypto.randomUUID());
+  const content = normalizeQuickNoteContent(text, body, images);
   const serialized = serializeQuickNoteContent(content);
   const contentHash = sha256Sync(new TextEncoder().encode(serialized));
   const preview = previewQuickNote(text, images.length);
@@ -114,6 +135,32 @@ export async function saveQuickNoteWithImages(
       "VALUES (?,?,?,?,?,?,?,'local',0,NULL,1) " +
       "ON CONFLICT(id) DO UPDATE SET updated_at=excluded.updated_at, preview_text=excluded.preview_text, image_count=excluded.image_count, content_hash=excluded.content_hash, content=excluded.content, sync_state='local', deleted_at=NULL, restore_pending_at=NULL, ready_to_sync=1"
     ).run(id, now, now, preview, images.length, contentHash, serialized);
+  });
+  return id;
+}
+
+/**
+ * 保存**由内核编辑器产出的正文**（移动端小记编辑态用，对齐桌面口径）：
+ * `body` = 内核形态（`.lake` 同构），`text` = 纯文本镜像，`images` = 正文引用到的资源清单。
+ * 与 `saveQuickNote` 的区别：不再用 `quickNoteBodyFromTextAndImages` 合成正文（那会把富内容压平）。
+ */
+export async function saveQuickNoteContent(
+  d: MobileDb,
+  id: string,
+  payload: { text: string; body: string; images: StoredQuickNoteImage[] },
+): Promise<string> {
+  const now = new Date().toISOString();
+  const content = normalizeQuickNoteContent(payload.text, payload.body, payload.images);
+  const serialized = serializeQuickNoteContent(content);
+  const contentHash = sha256Sync(new TextEncoder().encode(serialized));
+  const preview = previewQuickNote(content.text, content.images.length);
+  await d.transaction(async () => {
+    await d.prepare(
+      `INSERT INTO quick_notes (id, created_at, updated_at, preview_text, image_count, content_hash, content, sync_state, is_conflict, restore_pending_at, ready_to_sync)
+       VALUES (?,?,?,?,?,?,?,'local',0,NULL,1)
+       ON CONFLICT(id) DO UPDATE SET updated_at=excluded.updated_at, preview_text=excluded.preview_text, image_count=excluded.image_count, content_hash=excluded.content_hash, content=excluded.content, sync_state='local', deleted_at=NULL, restore_pending_at=NULL, ready_to_sync=1`
+    ).run(id, now, now, preview, content.images.length, contentHash, serialized);
+    await d.prepare("DELETE FROM quick_note_deleted WHERE id=?").run(id);
   });
   return id;
 }

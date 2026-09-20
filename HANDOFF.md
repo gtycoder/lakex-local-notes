@@ -1270,6 +1270,33 @@ tsc 0 · vitest 1095 passed / 16 skipped (1111) · 桌面 + 移动 vite build �
 
 ---
 
+## 2.14 本会话批次（260920 · 移动端对账补齐 + 小记完整编辑）—— 新会话从这里读
+
+> 起因：用户要求盘点「表格 / 多维表 / 画板 / 小记」三批桌面功能在移动端还缺什么并补齐；随后追加要求
+> **移动端小记编辑必须完整**（小记是移动端核心场景）。完整对账表 = **`docs/MOBILE-PARITY-260920.md`**。
+> 分支 `feat/board-document`（与画板批次同一分支、同一工作区），**未合 master**；移动端专职交接仍在 §8（本批未改 §8）。
+
+### 一、已完成（全部已提交并实测）
+1. **表格 `kind=sheet` 移动端只读视图**（`src/mobile/sheet/MobileSheetViewer.tsx`，懒加载分包）：值/粗斜体/字色底色/对齐/合并单元格/行列号 + 吸顶表头 + 双向滚动（上限 500×60）。桌面 FortuneSheet 未进移动分包（要 100% 保真需另议）。
+2. **多维表 `kind=bitable` 移动端只读视图**（`src/mobile/bitable/MobileBitableViewer.tsx`，懒加载）：多表切换 + 视图口径（筛选/排序/隐藏列/列顺序，全部复用 `core/bitableDoc`）+ 选项色块（共享 `optionChipStyle`）+ 附件缩略图（canonical URL）+ 只读角标。
+3. **非 doc 搜索/缓存口径统一**（`src/core/noteSearchText.ts` 的 `searchTextForKind`）：桌面 `Store.searchTextFor` 与移动端**搜索索引 / `saveNote` / 历史恢复**共用 ⇒ 表格/多维表/画板的 JSON 碎片不再进 FTS（旧行为会把 `drawnix`、`activeTableId` 这类键名也索引进去）。
+4. **小记卡片预览对齐桌面**：移动端卡片改用桌面 `QuickNotePreview`（同一份白名单渲染）+ `listQuickNotes` 返回 `body/images`；并让卡片上的图片点击**回到「打开编辑」**（否则点图只会弹放大预览、进不去编辑）。
+5. **小记完整编辑（重点）**：`src/mobile/home/QuickNoteComposer.tsx` 重写 —— 直接复用桌面 `QuickNoteEditor`（内核实例 + 白名单工具条：图片/待办/有序/无序/分割线）；附件按类型成卡（`installMediaCardCategoryRouter`，与文档同一模块）；新增 bridge `stageQuickNoteAsset`（**直接写正式目录** `quick-notes/{id}/`，移动端没有桌面那套 staging/draft-journal）与 `saveQuickNoteContent`（body+text+按正文引用派生的资源清单）；`saveQuickNote` 在**纯文本未变**时保留原 body（不再压平桌面排版的富内容）。
+6. **共享图片放大浮层**：`MobileApp` 挂上 `<ImageLightbox />`（此前只 import 样式未挂组件）。
+
+### 二、门禁 + 实测
+- 门禁：`tsc` 0 · `vitest` **1129 passed / 16 skipped** · 桌面 + 移动 build 全绿 · `check:bundle` app-js gzip 1.784MB/2.90MB · `check:core` 0。
+- 移动端实测（模拟器 + CDP，真实 dev 数据，测试行验证后已删）：
+  - 表格：`.mst-grid` 渲染全部单元格 + 行列号 + 只读角标，0 个 Lake 编辑器；
+  - 多维表：表头/记录/选项色块/只读角标，0 个 Lake 编辑器；
+  - 小记卡片：标题/列表/引用/加粗由 `quick-note-preview-*` 渲染；
+  - 小记编辑：内核编辑器 + 粘贴 PNG → 保存 → `content.body` 含图片卡、`images` 1 条（120×80、size 1341）、文件落 `quick-notes/{id}/` 且 AssetServer 能渲染；重开编辑态正文与图片都在；0 异常。
+
+### 三、下一步（详见 `docs/MOBILE-PARITY-260920.md` §五）
+1. 小记**音视频/PDF 附件**在真机点一次确认四类卡；2. 移动端**新建** sheet/bitable/board；3. 表格 100% 保真是否引入 FortuneSheet（+0.5MB gzip 懒加载）；4. **AB 多端 S3 往返**（画板图片/表格/多维表/小记资源）；5. 移动端小记工作台能力（→正式文档、批量、置顶/列表视图）。
+
+---
+
 ## 3. 下一步计划 + 当前问题（真正的待办，按优先级）
 
 ### 下一步计划

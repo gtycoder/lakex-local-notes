@@ -317,6 +317,35 @@ export const bridge = {
     });
   },
 
+  /**
+   * 小记资源落盘（内核编辑器插入图片/附件时调用）：直接写**正式目录** `quick-notes/{id}/{资产名}`，
+   * 返回 canonical URL（局域网外的可达性由本机 AssetServer 负责）。
+   *
+   * 与桌面的差异：桌面走「staging → 保存时 promote」（有草稿日志/崩溃恢复那套基建），移动端没有这套基建，
+   * 编辑目标 id 一开始就已知 ⇒ 直接写正式目录；用户中途取消留下的文件由既有孤儿/GC 清理回收（与文档资源同口径）。
+   */
+  async stageQuickNoteAsset(id: string, input: { filename: string; bytes: Uint8Array }): Promise<{ filename: string; mimeType: string; size: number; url: string }> {
+    if (!input || !(input.bytes instanceof Uint8Array) || input.bytes.length === 0) throw new Error("资源数据无效");
+    const stored = buildAssetFilename(input.filename);
+    const key = `quick-notes/${id}/${stored}`;
+    assets.set(key, input.bytes);
+    await saveAssetBytesFs(key, input.bytes);
+    return {
+      filename: stored,
+      mimeType: mimeTypeForFilename(stored),
+      size: input.bytes.length,
+      url: localAssetHttpUrl(id, stored, { space: "quick-notes" }),
+    };
+  },
+
+  /** 保存内核编辑器产出的小记正文（body + text 镜像 + 资源清单）。 */
+  async saveQuickNoteContent(id: string, payload: { text: string; body: string; images: StoredQuickNoteImage[] }): Promise<string> {
+    return maintenance.run("main", async () => {
+      const d = await ensureDb();
+      return await quickNotesRepository.saveQuickNoteContent(d, id, payload);
+    });
+  },
+
   async createQuickNote(text: string): Promise<string> {
     return maintenance.run("main", async () => {
       const d = await ensureDb();

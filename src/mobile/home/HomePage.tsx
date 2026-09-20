@@ -12,6 +12,7 @@ import type { TreeNode } from "../../lib/types";
 import type { POCNoteSummary } from "../noteRepository";
 import { NotebookGrid } from "./NotebookGrid";
 import { QuickNoteComposer } from "./QuickNoteComposer";
+import { QuickNotePreview } from "../../features/quickNotes/QuickNotePreview";
 import { MobileSheetMenu, type MobileSheetItem } from "../ui/MobileSheetMenu";
 import { confirmMobile } from "../ui/ConfirmDialog";
 import { showToast } from "../ui/toastBus";
@@ -27,6 +28,9 @@ export interface MobileQuickNote {
   updatedAt: string;
   /** 首图文件名（listQuickNotes 一次返回，卡片不再逐条 readQuickNote） */
   firstImage: string | null;
+  /** 内核形态正文：有它就用桌面同一套只读预览渲染（富文本/卡片/待办），没有则回退纯文本摘要。 */
+  body?: string;
+  images?: Array<import("../../core/quickNoteModel.js").StoredQuickNoteImage>;
 }
 
 export type LibraryView = "shelf" | "list";
@@ -76,7 +80,7 @@ export function HomePage(props: HomePageProps) {
     onOpenNote, onOpenDrawer, onOpenSearch, onCreateNotebook, onQuickNotesChanged,
   } = props;
   const [composer, setComposer] = useState<ComposerState>(null);
-  const [editNote, setEditNote] = useState<{ id: string; text: string; images: import("../../core/quickNoteModel.js").StoredQuickNoteImage[] } | null>(null);
+  const [editNote, setEditNote] = useState<{ id: string; text: string; body?: string; images: import("../../core/quickNoteModel.js").StoredQuickNoteImage[] } | null>(null);
   const [libraryView, setLibraryView] = useState<LibraryView>(() => (localStorage.getItem(VIEW_KEY) === "list" ? "list" : "shelf"));
   const [quickMenuFor, setQuickMenuFor] = useState<string | null>(null);
   const [filterOpen, setFilterOpen] = useState(false);
@@ -111,7 +115,7 @@ export function HomePage(props: HomePageProps) {
     try {
       const full = await bridge.readQuickNote(id);
       if (!full) return;
-      setEditNote({ id, text: full.content.text, images: full.content.images });
+      setEditNote({ id, text: full.content.text, body: full.content.body, images: full.content.images });
       setComposer({ mode: "edit", id });
     } catch { /* 读取失败忽略 */ }
   };
@@ -252,6 +256,11 @@ export function HomePage(props: HomePageProps) {
 
 /** 小记卡片：大图 + 摘要 + 日期 + 「...」（有图必展示，无图留中性占位）。 */
 function QuickNoteCard({ note, onEdit, onMore }: { note: MobileQuickNote; onEdit: () => void; onMore: () => void }) {
+  /** 预览用资源（canonical URL + token）：图片卡/附件卡都靠它渲染。 */
+  const previewAssets = (note.images ?? []).map((image) => ({
+    ...image,
+    url: withAssetAccessToken(localAssetHttpUrl(note.id, image.filename, { space: "quick-notes" })),
+  }));
   const thumbUrl = note.firstImage
     ? withAssetAccessToken(localAssetHttpUrl(note.id, note.firstImage, { space: "quick-notes" }))
     : null;
@@ -264,7 +273,17 @@ function QuickNoteCard({ note, onEdit, onMore }: { note: MobileQuickNote; onEdit
         </div>
       )}
       <div className="qn-card__body">
-        <div className="qn-card__text">{note.previewText || (note.imageCount > 0 ? "[图片]" : "（空白小记）")}</div>
+        {note.body ? (
+          <QuickNotePreview
+            body={note.body}
+            assets={previewAssets}
+            // 卡片是「打开编辑」的入口：预览里的图片不抢点击（否则点图上只会弹放大预览、进不去编辑），
+            // 需要放大看图时进编辑态点图（内核/浅色预览层在编辑态仍可用）。
+            onImageClick={() => undefined}
+          />
+        ) : (
+          <div className="qn-card__text">{note.previewText || (note.imageCount > 0 ? "[图片]" : "（空白小记）")}</div>
+        )}
         <div className="qn-card__meta">
           <span className="qn-card__date">{fmtDate(note.updatedAt)}</span>
           <button className="qn-card__more" onClick={(e) => { e.stopPropagation(); onMore(); }} aria-label="更多"><MoreHorizontal size={18} /></button>

@@ -1,140 +1,169 @@
 /**
- * 移动端小记 composer（新建/编辑共用）：textarea + 图片选择/预览/移除 + 保存/取消。
- * 图片字节经 bridge.saveQuickNoteWithImages 落盘为文件（canonical URL 由 AssetServer 服务，无 BLOB）；
- * 编辑时已有图片字节从文件读回（getQuickNoteImage），保存时全量重写。
+ * 移动端小记 composer（新建/编辑共用）——**完整编辑能力**，与桌面共用同一套小记编辑器：
+ *
+ * - 写作区 = 桌面同款 `QuickNoteEditor`（一个 Lake 内核实例 + 小记白名单工具条：图片/待办/有序/无序/分割线；
+ *   `disableVirtualRendering` 必须开 —— 小记没有内核内部滚动容器，虚拟渲染会量错视口）；
+ * - 附件按类型成卡：内核 file input 交给我们 `uploadResource`，经 `bridge.stageQuickNoteAsset` 落盘
+ *   `quick-notes/{id}/`，mp4→视频卡、mp3→音频卡、png→图片卡、其它→附件卡（`installMediaCardCategoryRouter`
+ *   由 `QuickNoteEditor` 挂好，与文档侧同一模块）；
+ * - 保存 = 内核 `text/lake`（body）+ 纯文本镜像 + **按正文引用派生的资源清单**（正文说什么就是什么，
+ *   不依赖 UI 时序），与桌面 `.qnote` v2 同格式 ⇒ 两端互开互认。
  */
-import { useCallback, useEffect, useRef, useState } from "react";
-import { Check, ImagePlus, X } from "lucide-react";
+import { useCallback, useMemo, useRef, useState } from "react";
+import { Check } from "lucide-react";
 import { bridge } from "../bridge";
 import { successFeedback, warnFeedback } from "../ui/haptics";
-import { localAssetHttpUrl } from "../../core/assetUrl.js";
-import { withAssetAccessToken } from "../../lib/assetPort";
-import {
-  validateQuickNoteImageBytes,
-  validateQuickNoteImageDimensions,
-  type StoredQuickNoteImage,
-} from "../../core/quickNoteModel.js";
-
-export interface ComposerImage {
-  filename: string;
-  mimeType: string;
-  width: number | null;
-  height: number | null;
-  bytes: Uint8Array;
-  url: string; // 预览 objectURL
-}
+import { addAssetAccessToken, stripAssetAccessToken } from "../../lib/assetPort";
+import { uploadLakeResource } from "../../features/editor/resourceUpload";
+import { QuickNoteEditor, type QuickNoteEditorApi } from "../../features/quickNotes/QuickNoteEditor";
+import { emptyLakeBody } from "../../core/lakeDocForm.js";
+import { extractAssetRefs, mimeTypeForFilename } from "../../core/assetNaming.js";
+import { sha256Sync } from "../../core/sha256Sync.js";
+import { isQuickNoteImageMime, type StoredQuickNoteImage } from "../../core/quickNoteModel.js";
 
 export interface QuickNoteComposerProps {
-  /** 编辑目标（已有小记 id + 内容）；null = 新建 */
-  editNote?: { id: string; text: string; images: StoredQuickNoteImage[] } | null;
+  /** 编辑目标（已有小记 id + 正文）；null = 新建 */
+  editNote?: { id: string; text: string; body?: string; images: StoredQuickNoteImage[] } | null;
   onSaved: () => Promise<void>;
   onCancel: () => void;
 }
 
+interface AssetMeta {
+  mimeType: string;
+  width: number | null;
+  height: number | null;
+  size: number;
+  hash: string;
+}
+
+/** 图片字节 → 尺寸（非图片/解码失败返回 null —— 模型允许附件宽高为空）。 */
+async function readDimensions(bytes: Uint8Array, mimeType: string): Promise<{ width: number | null; height: number | null }> {
+  if (!isQuickNoteImageMime(mimeType)) return { width: null, height: null };
+  try {
+    const blob = new Blob([bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer], { type: mimeType });
+    const bitmap = await createImageBitmap(blob);
+    const size = { width: bitmap.width, height: bitmap.height };
+    bitmap.close();
+    return size;
+  } catch {
+    return { width: null, height: null };
+  }
+}
+
 export function QuickNoteComposer({ editNote, onSaved, onCancel }: QuickNoteComposerProps) {
+  const noteId = useMemo(() => editNote?.id ?? crypto.randomUUID(), [editNote]);
+  const initialBody = editNote?.body && editNote.body.trim() ? editNote.body : emptyLakeBody(noteId);
   const [text, setText] = useState(editNote?.text ?? "");
-  const [existing, setExisting] = useState<ComposerImage[]>([]);
-  const [images, setImages] = useState<ComposerImage[]>([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const fileRef = useRef<HTMLInputElement>(null);
-  const urlsRef = useRef<string[]>([]);
+  const apiRef = useRef<QuickNoteEditorApi | null>(null);
+  /** 本会话上传过的资源元数据（filename → meta）：正文引用提取据此补齐清单。 */
+  const uploadedRef = useRef<Map<string, AssetMeta>>(new Map());
+  const pendingUploadsRef = useRef(0);
+  /** 已有资源（编辑态）：保留 id 与元数据，正文里仍有引用时免去重算。 */
+  const existingRef = useRef<Map<string, StoredQuickNoteImage>>(
+    new Map((editNote?.images ?? []).map((image) => [image.filename, image])),
+  );
 
-  /** Uint8Array → Blob（处理 TS5.7 泛型 ArrayBufferLike 与 BlobPart 不兼容：切片到独立 ArrayBuffer） */
-  const toBlob = (bytes: Uint8Array, mimeType: string): Blob =>
-    new Blob([bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer], { type: mimeType });
-  const makeUrl = useCallback((bytes: Uint8Array, mimeType: string): string => {
-    const url = URL.createObjectURL(toBlob(bytes, mimeType));
-    urlsRef.current.push(url);
-    return url;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  // 卸载时统一释放 objectURL
-  useEffect(() => () => {
-    for (const u of urlsRef.current) URL.revokeObjectURL(u);
-    urlsRef.current = [];
-  }, []);
-
-  // 编辑态：从文件读回已有图片字节（保存用）；预览走 canonical URL 直显（本地 AssetServer
-  // 服务 quick-notes/，与桌面一致），加载失败时 onError 回退文件字节的 objectURL
-  useEffect(() => {
-    if (!editNote) return;
-    let alive = true;
-    (async () => {
-      const loaded: ComposerImage[] = [];
-      for (const img of editNote.images) {
-        try {
-          const bytes = await bridge.getQuickNoteImage(editNote.id, img.filename);
-          if (bytes && alive) {
-            loaded.push({
-              filename: img.filename,
-              mimeType: img.mimeType,
-              width: img.width,
-              height: img.height,
-              bytes,
-              url: withAssetAccessToken(localAssetHttpUrl(editNote.id, img.filename, { space: "quick-notes" })),
+  const uploadResource = useCallback(
+    (request: unknown) =>
+      uploadLakeResource(request, noteId, {
+        // 小记 v1 不下载网络图片（与桌面一致：避免把外链写进小记资源空间）
+        allowRemoteDownload: false,
+        saveResource: async (input) => {
+          pendingUploadsRef.current += 1;
+          try {
+            const stored = await bridge.stageQuickNoteAsset(noteId, { filename: input.filename, bytes: input.bytes });
+            const mimeType = stored.mimeType || mimeTypeForFilename(stored.filename);
+            const dimensions = await readDimensions(input.bytes, mimeType);
+            uploadedRef.current.set(stored.filename, {
+              mimeType,
+              width: dimensions.width,
+              height: dimensions.height,
+              size: stored.size,
+              hash: sha256Sync(input.bytes),
             });
+            return {
+              // 内核要能直接渲染：URL 带访问 token（保存时统一 strip）
+              url: addAssetAccessToken(stored.url),
+              resourceRef: stored.url,
+              filename: stored.filename,
+              mimeType,
+              size: stored.size,
+            };
+          } finally {
+            pendingUploadsRef.current = Math.max(0, pendingUploadsRef.current - 1);
           }
-        } catch { /* 单张读失败跳过 */ }
-      }
-      if (alive) setExisting(loaded);
-    })();
-    return () => { alive = false; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [editNote]);
+        },
+      }),
+    [noteId],
+  );
 
-  const addFiles = async (files: FileList | File[]): Promise<void> => {
-    const candidates = Array.from(files);
-    if (candidates.length === 0) return;
-    setError(null);
-    const next: ComposerImage[] = [];
-    for (const file of candidates) {
-      try {
-        const bytes = new Uint8Array(await file.arrayBuffer());
-        const format = validateQuickNoteImageBytes(bytes);
-        const bitmap = await createImageBitmap(toBlob(bytes, format.mimeType));
-        const dimensions = { width: bitmap.width, height: bitmap.height };
-        bitmap.close();
-        validateQuickNoteImageDimensions(dimensions);
-        next.push({
-          filename: file.name,
-          mimeType: format.mimeType,
-          width: dimensions.width,
-          height: dimensions.height,
-          bytes,
-          url: makeUrl(bytes, format.mimeType),
-        });
-      } catch (e) {
-        setError("图片读取失败: " + (e as Error).message);
+  /** 正文引用 → 资源清单：优先本会话上传的元数据，其次已有清单，最后读回文件兜底。 */
+  const collectImages = useCallback(async (body: string): Promise<StoredQuickNoteImage[]> => {
+    const refs = extractAssetRefs(body);
+    const images: StoredQuickNoteImage[] = [];
+    for (const filename of refs) {
+      const existing = existingRef.current.get(filename);
+      let meta = uploadedRef.current.get(filename);
+      if (!meta && existing) {
+        meta = {
+          mimeType: existing.mimeType,
+          width: existing.width,
+          height: existing.height,
+          size: existing.size,
+          hash: existing.hash,
+        };
       }
+      if (!meta) {
+        // 兜底（桌面端插入 / 同步过来的资源）：读回文件算 size/hash，宽高允许为空
+        const bytes = await bridge.getQuickNoteImage(noteId, filename).catch(() => null);
+        if (!bytes) continue;
+        const mimeType = mimeTypeForFilename(filename);
+        const dimensions = await readDimensions(bytes, mimeType);
+        meta = { mimeType, width: dimensions.width, height: dimensions.height, size: bytes.length, hash: sha256Sync(bytes) };
+      }
+      images.push({
+        id: existing?.id ?? crypto.randomUUID(),
+        filename,
+        mimeType: meta.mimeType,
+        width: meta.width,
+        height: meta.height,
+        size: meta.size,
+        hash: meta.hash,
+      });
     }
-    if (next.length > 0) setImages((prev) => [...prev, ...next]);
-  };
-
-  const removeImage = (index: number): void => {
-    const all = [...existing, ...images];
-    const target = all[index];
-    if (!target) return;
-    URL.revokeObjectURL(target.url);
-    const i = urlsRef.current.indexOf(target.url);
-    if (i >= 0) urlsRef.current.splice(i, 1);
-    if (index < existing.length) setExisting((prev) => prev.filter((_, k) => k !== index));
-    else setImages((prev) => prev.filter((_, k) => k !== index - existing.length));
-  };
+    return images;
+  }, [noteId]);
 
   const save = async (): Promise<void> => {
-    if (!text.trim() && images.length + existing.length === 0) { setError("请至少记录文字或一张图片"); return; }
-    setSaving(true);
     setError(null);
+    const api = apiRef.current;
+    let body = "";
     try {
-      const all = [...existing, ...images].map((i) => ({ filename: i.filename, mimeType: i.mimeType, width: i.width, height: i.height, bytes: i.bytes }));
-      const id = editNote ? editNote.id : crypto.randomUUID();
-      await bridge.saveQuickNoteWithImages(id, text, all);
-      successFeedback(); // 确定添加/保存小记
+      body = stripAssetAccessToken(api?.getBody() ?? "");
+    } catch {
+      body = "";
+    }
+    const plain = (api?.getText() ?? text).trim();
+    // 内核插卡是异步的（视频/音频/附件卡要等上传完成）⇒ 保存前等本会话上传归零（最多 15s，与桌面同口径）。
+    const deadline = Date.now() + 15_000;
+    while (pendingUploadsRef.current > 0 && Date.now() < deadline) {
+      await new Promise((resolve) => setTimeout(resolve, 120));
+    }
+    setSaving(true);
+    try {
+      const images = await collectImages(body);
+      if (!plain && images.length === 0) {
+        setError("请至少记录文字、一张图片或一个附件");
+        setSaving(false);
+        return;
+      }
+      await bridge.saveQuickNoteContent(noteId, { text: plain, body, images });
+      successFeedback();
       await onSaved();
-    } catch (e) {
-      setError("保存失败: " + (e as Error).message);
+    } catch (reason) {
+      setError("保存失败: " + (reason as Error).message);
       warnFeedback();
     } finally {
       setSaving(false);
@@ -143,46 +172,18 @@ export function QuickNoteComposer({ editNote, onSaved, onCancel }: QuickNoteComp
 
   return (
     <div className="mobile-qn-composer">
-      <textarea
-        className="mobile-qn-textarea"
-        value={text}
-        onChange={(e) => setText(e.target.value)}
-        placeholder="写下这一刻…"
-        aria-label="小记正文"
+      <QuickNoteEditor
+        ownerId={noteId}
+        initialBody={addAssetAccessToken(initialBody)}
+        ui="card"
+        active
+        uploadResource={uploadResource}
+        onTextChange={setText}
+        onReady={(api) => { apiRef.current = api; }}
       />
-      {existing.length + images.length > 0 && (
-        <div className="mobile-qn-images">
-          {[...existing, ...images].map((img, i) => (
-            <figure key={img.url} className="mobile-qn-img">
-              <img
-                src={img.url}
-                alt={img.filename}
-                onError={(e) => {
-                  // canonical 加载失败（文件缺失）→ 回退文件字节 objectURL
-                  const target = e.currentTarget;
-                  if (target.src.startsWith("http://127.0.0.1:19876") && img.bytes) {
-                    target.src = makeUrl(img.bytes, img.mimeType);
-                  }
-                }}
-              />
-              <button type="button" onClick={() => removeImage(i)} aria-label="移除图片"><X size={14} /></button>
-            </figure>
-          ))}
-        </div>
-      )}
       {error && <div className="mobile-qn-error">{error}</div>}
       <footer className="mobile-qn-actions">
-        <label className="mobile-qn-add" title="添加图片">
-          <ImagePlus size={18} />
-          <input
-            ref={fileRef}
-            type="file"
-            accept="image/png,image/jpeg,image/gif,image/webp,image/avif"
-            multiple
-            onChange={(e) => { if (e.target.files) void addFiles(e.target.files); e.currentTarget.value = ""; }}
-          />
-        </label>
-        <span className="mobile-qn-hint">可添加图片</span>
+        <span className="mobile-qn-hint">工具条：图片 · 待办 · 有序 · 无序 · 分割线</span>
         <div className="mobile-qn-spacer" />
         <button type="button" className="mobile-qn-btn" onClick={onCancel} disabled={saving}>取消</button>
         <button type="button" className="mobile-qn-btn mobile-qn-primary" onClick={() => void save()} disabled={saving}>

@@ -698,3 +698,206 @@ body.nb-drag-active .side-panel-body { overscroll-behavior: none; }
 .mobile-board-loading {
   height: 100%;
 }
+
+/* 多维表只读视图（kind=bitable）：表名/视图元信息 + 横向滚动网格 + 选项色块 + 附件缩略图。 */
+.mobile-bitable {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  padding: 10px 10px 0;
+  overflow: hidden;
+}
+.mbt-tables {
+  display: flex;
+  gap: 6px;
+  padding-bottom: 8px;
+  overflow-x: auto;
+}
+.mbt-table-tab {
+  flex: none;
+  padding: 5px 12px;
+  border: 1px solid var(--b3-border-color, #e3e6eb);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--b3-theme-on-surface, #333);
+  font-size: 13px;
+}
+.mbt-table-tab.is-active {
+  border-color: var(--b3-theme-primary, #3b5bdb);
+  color: var(--b3-theme-primary, #3b5bdb);
+}
+.mbt-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding-bottom: 8px;
+  color: var(--b3-theme-on-surface-variant, #7d8590);
+  font-size: 12px;
+}
+.mbt-meta-sep {
+  opacity: 0.5;
+}
+.mbt-readonly {
+  margin-left: auto;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: var(--b3-theme-surface-lighter, #f1f3f5);
+}
+.mbt-grid-wrap {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  border: 1px solid var(--b3-border-color, #e3e6eb);
+  border-radius: 8px 8px 0 0;
+}
+.mbt-grid {
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 13px;
+  table-layout: fixed;
+}
+.mbt-grid th,
+.mbt-grid td {
+  max-width: 240px;
+  padding: 7px 10px;
+  border-right: 1px solid var(--b3-border-color, #e9ecef);
+  border-bottom: 1px solid var(--b3-border-color, #e9ecef);
+  overflow: hidden;
+  text-align: left;
+  text-overflow: ellipsis;
+  vertical-align: top;
+  white-space: nowrap;
+}
+.mbt-grid th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--b3-theme-surface-lighter, #f6f7f9);
+  font-weight: 600;
+}
+.mbt-cell-empty {
+  color: var(--b3-theme-on-surface-variant, #adb5bd);
+}
+.mbt-option {
+  display: inline-block;
+  margin: 0 4px 0 0;
+  padding: 1px 8px;
+  border-radius: 6px;
+  font-size: 12px;
+}
+.mbt-attachments {
+  display: inline-flex;
+  gap: 4px;
+}
+.mbt-attachment {
+  width: 34px;
+  height: 34px;
+  border-radius: 4px;
+  object-fit: cover;
+}
+.mbt-empty {
+  color: var(--b3-theme-on-surface-variant, #adb5bd);
+  text-align: center;
+}
+
+/* 表格只读视图（kind=sheet）：行列号 + 吸顶表头 + 横向滚动 + 合并单元格。 */
+.mobile-sheet {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  padding: 10px 10px 0;
+  overflow: hidden;
+}
+.mst-sheets {
+  display: flex;
+  gap: 6px;
+  padding-bottom: 8px;
+  overflow-x: auto;
+}
+.mst-sheet-tab {
+  flex: none;
+  padding: 5px 12px;
+  border: 1px solid var(--b3-border-color, #e3e6eb);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--b3-theme-on-surface, #333);
+  font-size: 13px;
+}
+.mst-sheet-tab.is-active {
+  border-color: var(--b3-theme-primary, #3b5bdb);
+  color: var(--b3-theme-primary, #3b5bdb);
+}
+.mst-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding-bottom: 8px;
+  color: var(--b3-theme-on-surface-variant, #7d8590);
+  font-size: 12px;
+}
+.mst-meta-sep {
+  opacity: 0.5;
+}
+.mst-readonly {
+  margin-left: auto;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: var(--b3-theme-surface-lighter, #f1f3f5);
+}
+.mst-wrap {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  border: 1px solid var(--b3-border-color, #e3e6eb);
+  border-radius: 8px 8px 0 0;
+}
+.mst-grid {
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 13px;
+}
+.mst-grid th,
+.mst-grid td {
+  min-width: 84px;
+  max-width: 220px;
+  padding: 6px 8px;
+  border-right: 1px solid var(--b3-border-color, #e9ecef);
+  border-bottom: 1px solid var(--b3-border-color, #e9ecef);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: top;
+  white-space: nowrap;
+}
+.mst-col-head,
+.mst-row-head,
+.mst-corner {
+  position: sticky;
+  background: var(--b3-theme-surface-lighter, #f6f7f9);
+  color: var(--b3-theme-on-surface-variant, #7d8590);
+  font-weight: 500;
+  text-align: center;
+}
+.mst-col-head {
+  top: 0;
+  z-index: 2;
+}
+.mst-row-head {
+  left: 0;
+  z-index: 1;
+  min-width: 44px;
+  max-width: 44px;
+}
+.mst-corner {
+  top: 0;
+  left: 0;
+  z-index: 3;
+  min-width: 44px;
+  max-width: 44px;
+}
+.mst-truncated {
+  padding: 8px 4px;
+  color: var(--b3-theme-on-surface-variant, #7d8590);
+  font-size: 12px;
+}

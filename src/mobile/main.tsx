@@ -16,6 +16,7 @@ import "../b3/dark.css";           // 深色下 lakex 编辑器变量（正文/�
 import "../b3/siyuan.scss";         // 思源组件类 .b3-* / config-*（精仿思源，AGPL-3.0）
 import "../styles/components.css";    // 浮层通用件（seg/badge/ln-*）：与桌面同序，须晚于 siyuan.scss（否则 seg 选中态被 b3-button--outline 压掉）
 import "./editor/editor-dock.css";
+import "../styles/app/quick-notes.css"; // 小记编辑器容器 + 卡片只读预览（与桌面同一套类）
 import "./mobile-theme.css"; // 精仿思源调色板（--lake-* -> --b3-*），晚于 tokens.css 加载以覆盖其 :root 值
 import "../styles/dialog.css"; // 浮层通用弹窗（属性等）：与桌面共用同一套样式
 

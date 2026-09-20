@@ -16,6 +16,7 @@ import { SearchSheet } from "./settings/SearchSheet";
 import { SettingsDrawer } from "./settings/SettingsDrawer";
 import { useBackHandler } from "./useBackHandler";
 import { Toasts } from "./ui/Toasts";
+import { ImageLightbox } from "../features/editor/ImageLightbox";
 import { ConfirmHost, confirmMobile } from "./ui/ConfirmDialog";
 import { showToast } from "./ui/toastBus";
 import { successFeedback, warnFeedback } from "./ui/haptics";
@@ -244,6 +245,8 @@ export function MobileApp() {
       />
       <Toasts />
       <ConfirmHost />
+      {/* 共享图片预览浮层（桌面/移动同一套控制器）：小记卡片、文档内图片点开都是它。 */}
+      <ImageLightbox />
     </div>
   );
 

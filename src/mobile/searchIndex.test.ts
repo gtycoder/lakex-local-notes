@@ -33,7 +33,7 @@ function adapt(raw: Database.Database): MobileDb {
 function makeDb(): MobileDb {
   const raw = new Database(":memory:");
   raw.exec([
-    "CREATE TABLE notes (id TEXT PRIMARY KEY, title TEXT NOT NULL, content TEXT NOT NULL, parent_id TEXT, updated_at TEXT NOT NULL, content_hash TEXT, text_cache TEXT, trashed_at TEXT);",
+    "CREATE TABLE notes (id TEXT PRIMARY KEY, title TEXT NOT NULL, content TEXT NOT NULL, parent_id TEXT, updated_at TEXT NOT NULL, content_hash TEXT, text_cache TEXT, trashed_at TEXT, doc_kind TEXT NOT NULL DEFAULT 'doc');",
     "CREATE TABLE folders (id TEXT PRIMARY KEY, title TEXT NOT NULL, parent_id TEXT);",
     "CREATE VIRTUAL TABLE notes_fts USING fts5(title, body, tokenize='unicode61');",
     "CREATE TABLE search_index (note_id TEXT PRIMARY KEY, fts_rowid INTEGER NOT NULL, title TEXT NOT NULL, raw_hash TEXT, title_hash TEXT NOT NULL, body_hash TEXT NOT NULL, indexed_at TEXT NOT NULL);",
@@ -42,12 +42,31 @@ function makeDb(): MobileDb {
   return adapt(raw);
 }
 
-async function addNote(d: MobileDb, id: string, title: string, content: string, parentId: string | null = "nb", updatedAt = "2026-01-01T00:00:00Z"): Promise<void> {
-  await d.prepare("INSERT INTO notes (id,title,content,parent_id,updated_at,content_hash,trashed_at) VALUES (?,?,?,?,?,?,NULL)")
-    .run(id, title, content, parentId, updatedAt, sha256Sync(new TextEncoder().encode(content)));
+async function addNote(d: MobileDb, id: string, title: string, content: string, parentId: string | null = "nb", updatedAt = "2026-01-01T00:00:00Z", docKind = "doc"): Promise<void> {
+  await d.prepare("INSERT INTO notes (id,title,content,parent_id,updated_at,content_hash,trashed_at,doc_kind) VALUES (?,?,?,?,?,?,NULL,?)")
+    .run(id, title, content, parentId, updatedAt, sha256Sync(new TextEncoder().encode(content)), docKind);
 }
 
 describe("mobile searchIndex（better-sqlite3 FTS5 验证）", () => {
+  it("非 doc（sheet/bitable/board）按 kind 派生搜索文本：不把 JSON 碎片塞进索引", async () => {
+    const d = makeDb();
+    const sheetBody = JSON.stringify({ kind: "sheet", version: 2, sheets: [{ name: "Sheet1", celldata: [{ r: 0, c: 0, v: { v: "季度预算表" } }, { r: 1, c: 0, v: { v: "差旅报销 1200" } }] }] });
+    const bitableBody = JSON.stringify({ kind: "bitable", version: 1, activeTableId: "t1", tables: [{ id: "t1", name: "持仓", fields: [{ id: "f1", name: "名称", type: "text" }], records: [{ id: "r1", values: { f1: "北斗七星持仓" }, createdAt: "2026-01-01T00:00:00Z", updatedAt: "2026-01-01T00:00:00Z" }], views: [{ id: "v1", type: "grid", name: "表格" }], activeViewId: "v1" }] });
+    const boardBody = JSON.stringify({ kind: "board", version: 1, engine: "drawnix", preset: "drawing", elements: [{ id: "n1", type: "geometry", shape: "rectangle", text: { children: [{ text: "画板里的形状文字" }], type: "paragraph" } }] });
+    await addNote(d, "s1", "预算", sheetBody, "nb", "2026-01-01T00:00:00Z", "sheet");
+    await addNote(d, "b1", "持仓表", bitableBody, "nb", "2026-01-01T00:00:00Z", "bitable");
+    await addNote(d, "p1", "我的画板", boardBody, "nb", "2026-01-01T00:00:00Z", "board");
+    await reconcileIndex(d);
+    // 正文文字能搜到
+    expect((await searchNotes(d, "季度预算")).some((r) => r.id === "s1")).toBe(true);
+    expect((await searchNotes(d, "差旅报销")).some((r) => r.id === "s1")).toBe(true);
+    expect((await searchNotes(d, "北斗七星")).some((r) => r.id === "b1")).toBe(true);
+    expect((await searchNotes(d, "形状文字")).some((r) => r.id === "p1")).toBe(true);
+    // JSON 结构碎片不应进索引（"drawnix"/"activeTableId" 这类键名搜不到）
+    expect((await searchNotes(d, "drawnix")).length).toBe(0);
+    expect((await searchNotes(d, "activeTableId")).length).toBe(0);
+  });
+
   it("1/2/3 字统一；正文命中；短语相邻", async () => {
     const d = makeDb();
     await addNote(d, "n1", "Lake", "<p>欢迎使用Lake编辑器性能测试</p>");
