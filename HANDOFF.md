@@ -1756,7 +1756,7 @@ lsof -ti:1432 -ti:9231 | sort -u | xargs kill
 > 设计规格（外部）= `/Users/admin/file/local-lake/ui-design-inputs/out/design-system/`（8 项交付，**只作参考**）。
 > 分支 `feat/ui-redesign`，基线 `origin/master` = `17bafbe`；**未 push、未合 master**。
 
-### 一、已完成（3 个提交）
+### 一、已完成（4 个提交）
 - **b53a456 docs**：元素底账 + 实现方案（阶段 P0–P8 / 层序 / 主题即数据 / 硬指标 / 验收口径变更）。
 - **e5f171e P1 @layer 层骨架**：新增 `src/styles/index.css` 单入口，`@layer legacy,tokens,reset,kit,shell,feature,overlay,a11y`；旧样式（含内核 style.css / 思源 / 旧壳层）**按原顺序整体入 legacy 层**；删 `src/styles.css`；围栏 `cssLayers.test.ts` 入口项同步。
   - 关键机制：**legacy 最低 ⇒ 新层写入即压过旧样式**，迁移期不靠特异性取胜。
@@ -1767,16 +1767,21 @@ lsof -ti:1432 -ti:9231 | sort -u | xargs kill
 - **P3 字体可替换**：`src/styles/feature.css`（layer feature）把**正文**字体接到 `--lake-font-family-reading`，与界面(`--lake-font-family`)/等宽(`--lake-font-family-mono`)分离；`src/lib/fontTrial.ts` = **仅 dev** 的试用切换器（不进设置项、不落盘、**生产已 tree-shake**，实测产物搜不到 `__lakeFontTrial`）。
   - 候选清单 + 本机可用性实测见 `docs/UI-REDESIGN-260921/02-FONTS.md`（本机有 冬青黑/宋体/黑体-简，未见苹方独立字体文件）。
   - 实测：三个令牌一旦改值，界面/目录/编辑器正文三处同时生效（截图全文宋体）。
+- **P4 组件库 14 件**：`src/styles/kit.css`（layer kit，422 声明）——按钮/图标钮/列表项/菜单/对话框/提示条/输入/下拉/开关/徽章/卡片/气泡/分段/滚动条/表单行；
+  命名 `ln-*` 但**刻意避开 legacy 已占用的名字**（ln-dialog*/ln-tabs*/ln-toolbar*/ln-row2*/ln-empty*/ln-close/badge/seg/checks/panel-title），
+  且**现有 TSX 未把任何 kit 类名当作完整 token 使用** ⇒ 加入当天零视觉回归；P5 才逐屏迁移过来。
+  - 规格保真：**43/43 项关键数值核对通过**（对照 COMPONENTS.md）；**0 颜色字面量、0 `!important`**（为此给三套主题补了 `--lake-accent-ink-hover/-press`、`--lake-shadow-knob`）。
+  - 视觉验证：`docs/UI-REDESIGN-260921/kit-demo.html`（独立 demo，直接引用源 CSS，三套主题切换）已渲染截图核对。
 
 ### 二、过渡桥接（P7 删 legacy 时一并移除）
 - 旧 `--lake-*` 名字（`--lake-shell/panel/canvas/surface/accent-soft/shadow-* …`）→ 指向新令牌。
 - 思源 `--b3-*` 关键表面/主色/文字/边框/阴影/字体 → 桥接到新令牌（避免新旧两套配色并存）。
 - lakex 编辑器外围变量按设计 MIGRATION §3 映射（背景/边框/正文色/光标）；**选区色按用户决策刻意不动**。
 
-### 三、门禁（P3 后实测）
+### 三、门禁（P4 后实测）
 `tsc` 0 · `vitest` **1210 passed / 16 skipped (1226)** · `check:core` 0 · `check:bundle` app-css **195KB**/2MB · `git diff --check` 干净。
 
-### 四、下一步（P4 起）
+### 四、下一步（P5 起）
 P4 组件库 14 件 → P5 逐屏迁移（每屏对照底账打勾）→ P6 第三方容器壳统一 → P7 收尾（删源/归并 4 对同名文件/hex-rgb 收口/`!important` ≤10）→ P8 验收交付。
 
 ### 五、坑（本批新增）

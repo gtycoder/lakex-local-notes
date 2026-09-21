@@ -23,6 +23,8 @@
   /* 主色 */
   --lake-accent: #6f552e;
   --lake-accent-ink: #4f3c1f;
+  --lake-accent-ink-hover: #64533a;
+  --lake-accent-ink-press: #413119;
   --lake-accent-tint: #f0e8d8;
   --lake-accent-text: #4f3c1f;
   /* 状态色 */
@@ -45,6 +47,7 @@
   --lake-shadow-popover: 0 0 0 1px rgba(40,32,20,.06), 0 12px 28px -10px rgba(40,32,20,.18), 0 28px 60px -20px rgba(40,32,20,.16);
   --lake-shadow-dialog: 0 0 0 1px rgba(40,32,20,.07), 0 24px 48px -16px rgba(40,32,20,.22), 0 48px 96px -32px rgba(40,32,20,.18);
   --lake-shadow-drag: 0 8px 24px -8px rgba(40,32,20,.24);
+  --lake-shadow-knob: 0 1px 2px rgba(40,32,20,.18);
 
   /* ---- 过渡别名：旧 --lake-* 名字 → 新令牌 ---- */
   --lake-shell: var(--lake-bg-window);
