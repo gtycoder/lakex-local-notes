@@ -1756,7 +1756,7 @@ lsof -ti:1432 -ti:9231 | sort -u | xargs kill
 > 设计规格（外部）= `/Users/admin/file/local-lake/ui-design-inputs/out/design-system/`（8 项交付，**只作参考**）。
 > 分支 `feat/ui-redesign`，基线 `origin/master` = `17bafbe`；**未 push、未合 master**。
 
-### 一、已完成（13 个提交）
+### 一、已完成（14 个提交）
 - **b53a456 docs**：元素底账 + 实现方案（阶段 P0–P8 / 层序 / 主题即数据 / 硬指标 / 验收口径变更）。
 - **e5f171e P1 @layer 层骨架**：新增 `src/styles/index.css` 单入口，`@layer legacy,tokens,reset,kit,shell,feature,overlay,a11y`；旧样式（含内核 style.css / 思源 / 旧壳层）**按原顺序整体入 legacy 层**；删 `src/styles.css`；围栏 `cssLayers.test.ts` 入口项同步。
   - 关键机制：**legacy 最低 ⇒ 新层写入即压过旧样式**，迁移期不靠特异性取胜。
@@ -1822,11 +1822,17 @@ lsof -ti:1432 -ti:9231 | sort -u | xargs kill
   - **`.b3-text-field` / `.b3-select` → 设计 07 / 08**：高 27 / radius sm / 1px `--lake-border-1` / 画布底 / hover 边 `--lake-border-strong` / focus = accent 边 + 2px 光晕。
   - 实测：回收站「清空」= 27px·0 11·radius 8·12px·500（且保留危险色）；设置面板 `.b3-select` 三套主题均 27px/8px 内边距/radius 8/1px border-1/画布底/12px。截图核对（暗色设置面板）无破版。
   - ⚠️ 分段控件的段也带 `.b3-button--outline`，但 `.seg__item` 的 `!important`（共享层）压过本层 ⇒ 段外观维持现状（同「待移动端批次」第 2 条）。
-  - 仍待（P5 收尾）：**小记工作台**、**搜索面板**。
+  - ~~仍待（P5 收尾）：小记工作台、搜索面板~~ → **P5-j 已完成**（见下）。
 - **P5-i 逐屏迁移（开关 + 页签溢出菜单项）**：kit.css 525 → **547 声明**、chrome.css 244 → **252 声明**（均 0 `!important` / 0 颜色字面量）。
   - **`.b3-switch` → 设计 09 开关**（桌面专属层）：轨 **32×19** capsule；关 = 透明 + 1px `--lake-border-1`、hover 边 `--lake-border-strong`；开 = `--lake-accent` 底 + 边；钮（`::after`）**15px**、关 `left 10.5px` / 开 `left 21.5px`、底 `--lake-bg-raised` + `--lake-shadow-knob`；按下钮宽 16；隐藏原 hover 光晕（`::before`）。
   - **页签溢出菜单项**：min-height 32 → **27px**、radius xs、hover `bg-hover`、选中 `accent-tint` + `accent-text` + 600；并删掉 `app/tabs.css` 两条**旧品牌色字面量**（`rgba(59,91,219,.11/.08)`）。
   - 实测：开关轨 32×19/radius 999、开态 `rgb(91,111,150)`（浅色 accent）、钮 15×15 且 left 10.5↔21.5、暗色钮底 `rgb(43,48,55)` + knob 阴影；截图核对（暗色设置面板）。
+
+- **P5-j 逐屏迁移（搜索面板 + 小记工作台）—— P5 收尾**：overlay.css 57 → **83 声明**、feature.css 50 → **67 声明**（均 0 `!important` / 0 颜色字面量）。
+  - **搜索面板**：面板表面沿用 overlay 层（**并覆盖掉 `app/dialogs.css` 里那条残留的「弹窗毛玻璃」**）；输入行改 `--lake-border-2` 分隔；输入字 `--lake-text-1`、占位 `--lake-text-4`；spinner 走 accent；关闭钮 22px/xs 圆角 + hover bg-hover；help 10.5px `--lake-text-4`；`.search-snippet` hover/选中按列表项规格。
+  - **小记工作台**：`.quick-note-convert-dialog` 去毛玻璃 → 实心 panel + border-1 + radius-lg + dialog 阴影；卡片 `.quick-note-entry` = `bg-canvas` + 1px `--lake-border-2` + radius md + `--lake-shadow-card`（选中/多选 = accent 边 + tint）；`h1` 17px/600；索引行 hover/选中按列表项规格。
+  - 实测：搜索面板 bg=panel、1px border-1、radius **14**、dialog 阴影、输入行 12px、help 10.5px/text-4；小记卡片 1px border-2 + radius **10** + 卡片阴影、h1 **17px/600**、5 张卡片渲染正常；暖色截图核对无破版。
+  - **P5（逐屏迁移）到此收尾**；仅剩两项被共享层 `!important` 挡住（分段控件段态、设置项说明字号），已记入「待移动端批次」。
 
 ### 二、过渡桥接（P7 删 legacy 时一并移除）
 - 旧 `--lake-*` 名字（`--lake-shell/panel/canvas/surface/accent-soft/shadow-* …`）→ 指向新令牌。

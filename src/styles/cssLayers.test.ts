@@ -44,10 +44,10 @@ const FILES = [
  * 并在同一批把来源文件的基线调小（搬走多少、留下多少要对得上，让总量保持可见）。 */
 const BASELINE: Record<string, { decls: number; dupGroups: number }> = {
   "styles/index.css": { decls: 0, dupGroups: 0 },   // UI 重设计 P1：单入口（@layer 声明 + @import 编排，0 声明）
-  "styles/feature.css": { decls: 50, dupGroups: 0 },  // P3 字体 + P5-d 设置面板 + P5-f 大纲（实测）
+  "styles/feature.css": { decls: 67, dupGroups: 0 },  // P3 字体 + P5-d 设置 + P5-f 大纲 + P5-j 小记（实测）
   "styles/kit.css": { decls: 547, dupGroups: 0 },     // P4 组件库 + P5-g 面板件 + P5-h 控件 + P5-i 开关（实测）
   "styles/chrome.css": { decls: 252, dupGroups: 0 },  // P5：外壳 + 顶栏/标签页/面包屑 + 目录树行 + 页签菜单项（实测）
-  "styles/overlay.css": { decls: 57, dupGroups: 0 },  // P5-c：对话框（ln-dialog + floating-dialog）/ 菜单 / 气泡（实测）
+  "styles/overlay.css": { decls: 83, dupGroups: 0 },  // P5-c 浮层 + P5-j 搜索面板内层（实测）
   "b3/animations.css": { decls: 5, dupGroups: 0 },
   "b3/base.css": { decls: 16, dupGroups: 0 },
   "b3/components.css": { decls: 148, dupGroups: 0 },

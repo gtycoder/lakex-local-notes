@@ -122,3 +122,29 @@
 .context-menu-item.danger:hover { color: var(--lake-status-error); background: var(--lake-status-error-soft); }
 .context-menu-sep { height: 1px; margin: 5px 0; background: var(--lake-border-2); }
 .top-menu > button span small { color: var(--lake-text-4); font-size: var(--lake-font-size-tiny); }
+
+/* ── 全文搜索面板内层（P5-j；设计 05/07）───────────────────────────────
+ * 面板表面已由本文件的 .search-panel 规则统一（并**覆盖掉 app/dialogs.css 里那条残留毛玻璃**）。 */
+.search-panel-backdrop { background: var(--lake-scrim); }
+.search-panel { border: 1px solid var(--lake-border-1); box-shadow: var(--lake-shadow-dialog); }
+.search-panel-input-row {
+  gap: var(--lake-space-md);
+  padding: var(--lake-space-lg);
+  border-bottom: 1px solid var(--lake-border-2);
+}
+.search-panel-input-row input { color: var(--lake-text-1); font-size: var(--lake-font-size-body); }
+.search-panel-input-row input::placeholder { color: var(--lake-text-4); }
+.search-panel-search-icon { color: var(--lake-text-3); }
+.search-panel-spinner { border-color: var(--lake-border-2); border-top-color: var(--lake-accent); }
+.search-panel-close {
+  width: 22px;
+  height: 22px;
+  border-radius: var(--lake-radius-xs);
+  color: var(--lake-text-3);
+}
+.search-panel-close:hover { color: var(--lake-text-1); background: var(--lake-bg-hover); }
+.search-panel-results { padding: var(--lake-space-sm); }
+.search-panel-help { padding: 7px 14px 5px; color: var(--lake-text-4); font-size: var(--lake-font-size-micro); }
+.search-snippet { border-radius: var(--lake-radius-xs); }
+.search-snippet:hover { background: var(--lake-bg-hover); }
+.search-snippet.is-active, .search-snippet.active { background: var(--lake-accent-tint); color: var(--lake-accent-text); }
