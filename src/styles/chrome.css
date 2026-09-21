@@ -200,3 +200,68 @@
 .tab-item .tab-dirty-dot { flex: 0 0 6px; width: 6px; height: 6px; background: var(--lake-status-pending); }
 .tab-item .tab-pin { color: var(--lake-text-4); }
 .tab-item:focus-visible { outline: var(--lake-focus-ring-width) solid var(--lake-accent); outline-offset: -2px; }
+
+/* ── 目录树行（P5-e；设计 COMPONENTS.md 03 列表与列表项）─────────────────
+ * 产品既有决策一律保留：标题超长**直接裁切不打省略号**；行内动作（⋯ ＋）**仅 hover/聚焦显形**
+ * （选中态不常驻，用户 260914）；拖拽落点样式不动。 */
+.note-list { padding: 0 var(--lake-space-xs); }
+.note-row {
+  min-height: 27px;
+  padding: 0 6px;
+  border-radius: var(--lake-radius-sm);
+  color: var(--lake-text-1);
+  background: transparent;
+}
+.tree-row.type-notebook { min-height: 29px; }
+.note-row:hover { background: var(--lake-bg-hover); }
+.note-row:active { background: var(--lake-bg-press); filter: none; }
+.note-row.active { color: var(--lake-accent-text); background: var(--lake-accent-tint); }
+.note-row-copy strong {
+  color: inherit;
+  font-size: var(--lake-font-size-small);
+  font-weight: var(--lake-font-weight-regular);
+  white-space: nowrap;
+  overflow: hidden;
+}
+.tree-row.type-notebook .note-row-copy strong { font-weight: var(--lake-font-weight-semibold); }
+.tree-row.type-group .note-row-copy strong { font-weight: var(--lake-font-weight-medium); }
+.note-row.active .note-row-copy strong { font-weight: var(--lake-font-weight-semibold); }
+.tree-row-icon { color: var(--lake-text-3); }
+.note-row.active .tree-row-icon { color: var(--lake-accent); }
+.tree-chevron {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--lake-radius-xs);
+  color: var(--lake-text-4);
+  background: transparent;
+  cursor: pointer;
+  transition: color var(--lake-motion-fast) var(--lake-ease-standard),
+    background-color var(--lake-motion-fast) var(--lake-ease-standard);
+}
+.tree-chevron:hover:not(:disabled) { color: var(--lake-text-2); background: var(--lake-bg-hover); }
+.tree-chevron:disabled { cursor: default; }
+.tree-row-actions { display: none; }
+.note-row:hover .tree-row-actions,
+.note-row:focus-within .tree-row-actions { display: flex; }
+.tree-row-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--lake-radius-xs);
+  color: var(--lake-text-3);
+  background: transparent;
+  cursor: pointer;
+  transition: color var(--lake-motion-fast) var(--lake-ease-standard),
+    background-color var(--lake-motion-fast) var(--lake-ease-standard);
+}
+.tree-row-action:hover { color: var(--lake-text-1); background: var(--lake-bg-hover); }
+.tree-row-action:focus-visible { outline: var(--lake-focus-ring-width) solid var(--lake-accent); outline-offset: -2px; }

@@ -36,9 +36,9 @@
 
 .note-row { display: grid; align-items: center; width: 100%; padding: 2px 7px; color: var(--lake-text-secondary); background: transparent; text-align: left; }
 
-.note-row:hover { background: #e9ebee; }
-
-.note-row.active { background: #eff0f0; }
+/* P5-e：原 `.note-row:hover { background: #e9ebee }` 与 `.note-row.active { background: #eff0f0 }`
+ * 两条**颜色字面量**已删 —— 行态（hover = --lake-bg-hover / 选中 = --lake-accent-tint）单一来源
+ * = src/styles/chrome.css（shell 层）。 */
 
 .note-row-copy { min-width: 0; }
 

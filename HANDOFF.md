@@ -1756,7 +1756,7 @@ lsof -ti:1432 -ti:9231 | sort -u | xargs kill
 > 设计规格（外部）= `/Users/admin/file/local-lake/ui-design-inputs/out/design-system/`（8 项交付，**只作参考**）。
 > 分支 `feat/ui-redesign`，基线 `origin/master` = `17bafbe`；**未 push、未合 master**。
 
-### 一、已完成（8 个提交）
+### 一、已完成（9 个提交）
 - **b53a456 docs**：元素底账 + 实现方案（阶段 P0–P8 / 层序 / 主题即数据 / 硬指标 / 验收口径变更）。
 - **e5f171e P1 @layer 层骨架**：新增 `src/styles/index.css` 单入口，`@layer legacy,tokens,reset,kit,shell,feature,overlay,a11y`；旧样式（含内核 style.css / 思源 / 旧壳层）**按原顺序整体入 legacy 层**；删 `src/styles.css`；围栏 `cssLayers.test.ts` 入口项同步。
   - 关键机制：**legacy 最低 ⇒ 新层写入即压过旧样式**，迁移期不靠特异性取胜。
@@ -1797,6 +1797,13 @@ lsof -ti:1432 -ti:9231 | sort -u | xargs kill
   - 实测三套主题 `getComputedStyle`：title 12/600、items bg=block+radius 10、item 44px+分隔、name 12/600/text-1、ctl 200px、navActive tint —— 全部达标；设置面板截图核对。
   - **设置项存在性全量核对：56/56 全部存在**（默认可见 54 条；`sync-auto-interval`、`browser-open` 为**条件渲染**，已在源码核对条件）⇒ 底账 **C 区 56 条全部打勾**。
   - ⚠️ **两项被共享层 `!important` 挡住，本批刻意未迁**（见下文「待移动端批次」）。
+- **P5-e 逐屏迁移（目录树行）**：chrome.css 189 → **244 声明**（仍 **0 `!important` / 0 颜色字面量**）。
+  - 行：min-height **27px**（笔记本 29px）、圆角 sm、字 `--lake-text-1`、hover `--lake-bg-hover`、按下 `--lake-bg-press`（去掉原来的 `filter: brightness()`）。
+  - **选中 = `--lake-accent-tint` 底 + `--lake-accent-text` 字 + 600（无左条）**；图标 `--lake-text-3`（选中转 accent）；展开箭头 16px/`--lake-text-4`；行内动作钮 20×20/xs 圆角。
+  - **产品既有决策保留**：标题超长**直接裁切（`text-overflow: clip`）不打省略号**；行内动作（⋯ ＋）**仅 hover/聚焦显形**（选中不常驻）。
+  - 删掉 `styles/app/shell.css` 里两条**颜色字面量**（`.note-row:hover #e9ebee` / `.note-row.active #eff0f0`）——行态单一来源改为 chrome.css。
+  - 实测（三套主题 + **真实鼠标 hover**）：行 27/29px·圆角 8·字 text-1；选中底 tint（light rgb(236,239,245) / dark rgba(147,169,207,.14) / warm rgb(240,232,216)）+ accent-text + 标题 600；title `overflow: clip`；图标 text-3；箭头 16px；动作钮 20×20·6px；**hover 时 bg=bg-hover 且动作 display=flex**。
+  - 仍待：**大纲内层**、**回收站/历史面板内层**（下一轮）。
 
 ### 二、过渡桥接（P7 删 legacy 时一并移除）
 - 旧 `--lake-*` 名字（`--lake-shell/panel/canvas/surface/accent-soft/shadow-* …`）→ 指向新令牌。
