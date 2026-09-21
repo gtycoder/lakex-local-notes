@@ -131,7 +131,7 @@ describe("小记附件（内核 file 卡）", () => {
   it("编辑态卡片禁止按压缩放（transform 会把展开层的定位基准变成卡片 ⇒ 真鼠标点不到保存/取消）", () => {
     // 260920 真凶：`.quick-note-entry:active { transform: scale(.98) }` 一按下就把卡片变成
     // 绝对定位后代的定位基准，展开层高度 810 → 约 220、按钮从鼠标下跑掉。
-    const quickNotesCss = read("../../styles/quick-notes.css");
+    const quickNotesCss = read("../../styles/app/quick-notes.css");   // P7-c：styles/quick-notes.css 已并入此处
     expect(quickNotesCss).toMatch(/\.quick-note-entry\.editing,[\s\S]{0,60}\.quick-note-entry\.editing:active\s*\{\s*transform: none;/);
   });
 

@@ -27,10 +27,7 @@ const FILES = [
   "features/sheet/sheetEditor.css",
   "features/bitable/bitableEditor.css",
   "features/board/boardEditor.css",
-  "styles/dialog.css", "styles/document-status.css", "styles/editor.css",
-  "styles/motion.css", "styles/components.css", "styles/quick-notes.css", "styles/shell.css",
-  "styles/tokens.css", "styles/settings.css",
-  "styles/feature.css",   // P3 起：功能域层（正文/等宽字体等）
+  "styles/dialog.css", "styles/document-status.css",   "styles/motion.css", "styles/components.css",   "styles/tokens.css",   "styles/feature.css",   // P3 起：功能域层（正文/等宽字体等）
   "styles/kit.css",       // P4 起：自有组件库（14 件）
   "styles/chrome.css",    // P5 起：应用外壳（活动栏/目录栏头部/状态栏 …）
   "styles/overlay.css",   // P5-c 起：浮层（对话框 / 菜单 / 气泡）
@@ -72,22 +69,18 @@ const BASELINE: Record<string, { decls: number; dupGroups: number }> = {
   "features/board/boardEditor.css": { decls: 11, dupGroups: 0 },
   "styles/dialog.css": { decls: 234, dupGroups: 8 },   // +7 = .note-info-history-viewer 容器（260916 W-10：历史内联预览改只读 viewer，替代裸 dangerouslySetInnerHTML；合法新增非覆盖回涨）
   "styles/document-status.css": { decls: 106, dupGroups: 2 },
-  "styles/editor.css": { decls: 14, dupGroups: 0 },   // +2 = 自 ui-polish.css 并入的编辑器正文覆盖（S2）
   "styles/motion.css": { decls: 10, dupGroups: 0 },   // +7 = 自 ui-polish.css 并入的 4 个 reduced-motion 契约块（S4；矩阵补了媒体偏好态后才可验证）
   "styles/components.css": { decls: 444, dupGroups: 1 },   // 260916 S4：原 overlays.css 改名 + 并入 @keyframes lake-pop-in（+1 声明，位置不变）
-  "styles/quick-notes.css": { decls: 12, dupGroups: 0 },   // +2 = 自 ui-polish.css 并入的小记入口（S2）；+1 = 编辑态卡片禁止按压缩放（transform 会成为展开层定位基准，260920）
-  "styles/shell.css": { decls: 199, dupGroups: 0 },   // +5 = 原 layout-contract 的壳层度量令牌（S1）；+143 = 自 ui-polish 并入的目录栏/页签/dock 头部（S2）；+4 = 顶栏文档下拉「标签+快捷键一行」与导出二级行（260916，合法新增非覆盖回涨）
   "styles/tokens.css": { decls: 83, dupGroups: 0 },
-  "styles/settings.css": { decls: 7, dupGroups: 0 },   // 260916 S4 建立：吸收原 ui-polish.css 的设置/历史/回收站细滚动条
   // 基础层域文件（260916 S3：原 styles.css 拆成入口 + 10 个域文件；数字 = 拆分当批实测，只允许变小）
   "styles/app/base.css": { decls: 36, dupGroups: 0 },
   "styles/app/dialogs.css": { decls: 152, dupGroups: 7 },   // +2 = 二级子菜单高度兜底（max-height + overflow-y，260916 修「导出选项被窗口底边裁掉」；与定位上移配套，合法新增非覆盖回涨）
-  "styles/app/editor.css": { decls: 55, dupGroups: 0 },   // +5 = maxView 适配；+4 = 锁定/解锁延迟销毁的旧实例层 .is-outgoing；+3 = 阅读态大纲只调位置（top/right）与「pinned 展开时正文让位」——阅读大纲改回内核自己挂载，官方 getContainer 自建宿主那套已删（260916）
+  "styles/app/editor.css": { decls: 69, dupGroups: 0 },   // P7-c：并入 styles/editor.css（选择器无交集 ⇒ 层叠等价）；+5 = maxView 适配；+4 = 锁定/解锁延迟销毁的旧实例层 .is-outgoing；+3 = 阅读态大纲只调位置（top/right）与「pinned 展开时正文让位」（260916）
   "styles/app/misc.css": { decls: 293, dupGroups: 0 },
   "styles/app/panels.css": { decls: 99, dupGroups: 0 },
-  "styles/app/quick-notes.css": { decls: 507, dupGroups: 7 },   // +24 列表版式、+30 媒体按类型、+49 卡片预览、+8 展开层限定、+19 卡片收起/展开、+98 列表页对齐云端（标签行/批量条/行⋯菜单/新建按钮）；+15 = 动作行改版（去掉两角布局的空占位，换成 --inline 靠右下 + 「取消」次级描边 + 卡片页脚内边距 + 展开态浮层）；260920：-48 = 删掉随「卡片预览改自研渲染」废弃的 .quick-note-image-grid / .quick-note-saved-images / .quick-note-saved-media 三套遗留规则；+1 = 分块视图卡片展开时退出定位上下文（展开层/页脚落到小记面板）；+8 = 展开态把保存失败/提示条抬到展开层之上（贴面板左下角的浮层）
-  "styles/app/settings.css": { decls: 116, dupGroups: 0 },
-  "styles/app/shell.css": { decls: 316, dupGroups: 9 },   // 260917：另收掉 quick-notes 与基础层逐字重复的 margin 覆盖
+  "styles/app/quick-notes.css": { decls: 519, dupGroups: 8 },   // P7-c：并入 styles/quick-notes.css（选择器无交集 ⇒ 层叠等价）；原有：+24 列表版式、+30 媒体按类型、+49 卡片预览、+8 展开层限定、+19 卡片收起/展开、+98 列表页对齐云端（标签行/批量条/行⋯菜单/新建按钮）；+15 = 动作行改版（去掉两角布局的空占位，换成 --inline 靠右下 + 「取消」次级描边 + 卡片页脚内边距 + 展开态浮层）；260920：-48 = 删掉随「卡片预览改自研渲染」废弃的 .quick-note-image-grid / .quick-note-saved-images / .quick-note-saved-media 三套遗留规则；+1 = 分块视图卡片展开时退出定位上下文（展开层/页脚落到小记面板）；+8 = 展开态把保存失败/提示条抬到展开层之上（贴面板左下角的浮层）
+  "styles/app/settings.css": { decls: 122, dupGroups: 0 },   // P7-c：并入 styles/settings.css（选择器无交集 ⇒ 层叠等价）
+  "styles/app/shell.css": { decls: 511, dupGroups: 10 },   // P7-c：并入 styles/shell.css（属性级交集为 0 ⇒ 层叠等价）；260917：另收掉 quick-notes 与基础层逐字重复的 margin 覆盖
   "styles/app/tabs.css": { decls: 201, dupGroups: 0 },   // +1 = .tab-panels grid-template-columns:minmax(0,1fr)（根修：面板不被内容撑宽，多维表/表格才能横向滚动）
   "styles/app/vendor-board.css": { decls: 7, dupGroups: 0 },   // 260916：84 条与 vendor/drawnix-react-text.css 逐字节相同的规则已删（改为直接 import vendor 文件），余下是我们自己的 board-card 包装层
 };

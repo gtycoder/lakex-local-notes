@@ -1756,7 +1756,7 @@ lsof -ti:1432 -ti:9231 | sort -u | xargs kill
 > 设计规格（外部）= `/Users/admin/file/local-lake/ui-design-inputs/out/design-system/`（8 项交付，**只作参考**）。
 > 分支 `feat/ui-redesign`，基线 `origin/master` = `17bafbe`；**未 push、未合 master**。
 
-### 一、已完成（18 个提交）
+### 一、已完成（19 个提交）
 - **b53a456 docs**：元素底账 + 实现方案（阶段 P0–P8 / 层序 / 主题即数据 / 硬指标 / 验收口径变更）。
 - **e5f171e P1 @layer 层骨架**：新增 `src/styles/index.css` 单入口，`@layer legacy,tokens,reset,kit,shell,feature,overlay,a11y`；旧样式（含内核 style.css / 思源 / 旧壳层）**按原顺序整体入 legacy 层**；删 `src/styles.css`；围栏 `cssLayers.test.ts` 入口项同步。
   - 关键机制：**legacy 最低 ⇒ 新层写入即压过旧样式**，迁移期不靠特异性取胜。
@@ -1858,7 +1858,14 @@ lsof -ti:1432 -ti:9231 | sort -u | xargs kill
   - **对拍结果**（同一套 6 屏快照）：**元素消失 0 个**；差异从 22 → **8 处，且全部是有意的设计取值**：侧栏圆角 12→10（设计 radius md）、`.note-row`/`.quick-note-entry` 宽 −5px（P5 的行内距）、`.b3-select` 由内阴影环改为真 1px 描边（设计）、设置项高度 −20px（**说明文字从 13px 改为设计的小字号**）。
   - 🎁 **顺带解除「待移动端批次」阻塞项 ①**：原先 `.config-items .b3-label__text { font-size: 13px !important }` 在共享层挡住设计的小字号；删掉思源层后该 `!important` 不复存在 ⇒ 设置项说明**终于可以按设计显示小字号**。
   - **硬指标达成**：桌面侧 `var(--b3-*)` 引用 **200 → 0** ✅、入口 b3 import 行数 **8 → 0** ✅。度量口径同步升级为**「入口可达的桌面样式图」**（`ui-metrics.mjs` 沿 `@import` 求可达集）：`src/b3/*.css` 已只被移动端 import，故不再计入桌面指标（否则"保留给移动端的思源文件"会让指标永远归不了零）。
-  - 剩余（P7 续）：颜色字面量 **109 hex + 102 rgb**（大头是 `styles/tokens.css` 65、`outline.css` 31）、`!important` **95**、同名文件对 4。
+  - 剩余（P7 续）：颜色字面量 **109 hex + 102 rgb**（大头是 `styles/tokens.css` 65、`outline.css` 31）、`!important` **95**。
+- **P7-c 归并 4 对同名文件 —— ✅ 完成（同名文件对 4 → 0，且用对拍证明零视觉变化）**：
+  - **先证后动**：写脚本比对「被后移文件」与**所有中间文件**的 (选择器,属性) 交集 ——
+    `editor` / `quick-notes` / `settings` 三对**选择器级交集为 0**；`shell` 对选择器级有重叠（`motion.css` 6 个），但**属性级交集为 0**（`styles/shell.css` 与 `motion.css` 那 5 条 `transition` 本来 motion 就在后面、本来就在赢）⇒ 四对都可安全前移。
+  - 做法：`cat styles/X.css >> styles/app/X.css`（app 在前、polish 在后，保持文件内相对顺序），删掉 4 个 `styles/X.css` 与入口里对应的 4 行 `@import`。
+  - **对拍**：同一套 6 屏计算值快照，**missing 0 / diffs 0** ⇒ 层叠等价，零视觉变化。
+  - 同步更新：`cssLayers.test.ts` 的 FILES/BASELINE（去掉 4 个已删文件，`app/{editor,quick-notes,settings,shell}.css` 基线改为 69/519,8/122/511,10）、`quickNotesView.test.ts` 读的文件路径。
+  - 指标：桌面样式文件 32 → **28**（入口可达）。
 
 ### 二、过渡桥接（P7 删 legacy 时一并移除）
 - 旧 `--lake-*` 名字（`--lake-shell/panel/canvas/surface/accent-soft/shadow-* …`）→ 指向新令牌。

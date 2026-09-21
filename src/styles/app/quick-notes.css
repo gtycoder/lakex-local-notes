@@ -326,3 +326,38 @@
   .quick-note-composer { min-height: 150px; }
   .quick-notes-list { padding-left: 22px; }
 }
+
+/* ── P7-c 归并：原 src/styles/quick-notes.css 的内容并入此处（两者在 legacy 层内原本相邻，
+ * 且经选择器比对**无中间文件重叠** ⇒ 层叠等价；同名文件对 4 → 3）。 ── */
+/* Quick Notes keeps its independent workspace identity while sharing shell semantics. */
+.quick-notes-pane { background: var(--lake-shell); }
+.quick-notes-header h1 { color: var(--lake-text); }
+.quick-note-composer,
+.quick-note-entry { border-color: var(--lake-border); background: var(--lake-panel); box-shadow: var(--lake-shadow-soft); }
+.quick-note-composer textarea,
+.quick-note-entry p { color: var(--lake-text); }
+.quick-note-entry time { color: var(--lake-text-tertiary); }
+.quick-note-card-actions button:hover { color: var(--lake-accent); background: var(--lake-accent-soft); }
+
+/* ── 以下规则自 `src/styles/ui-polish.css` 按职责并入（260916 S2/S3，只搬家不改声明）：小记入口 ── */
+/* ---- 跨屏微交互一致性收口（仅渲染层 CSS，不重排布局 / 不动内核） ----
+ * 按压反馈只给独立卡片（小记）。设置/历史/回收站的密集列表行用思源式 hover 底色反馈，
+ * 不做 scale：一行只有 28~40px，按压缩放会让文字抖动，还与滚动条抢空间。
+ * 侧栏 note-row / tree-row 的 transform 被拖拽占用，按压改用 filter:brightness。 */
+.quick-note-entry {
+  transition: transform var(--lake-motion-press) var(--lake-ease-standard), background-color var(--lake-motion-fast) var(--lake-ease-standard);
+}
+
+.quick-note-entry:active {
+  transform: scale(.98);
+}
+
+/* 编辑态卡片**禁止**按压缩放（260920 实测的真凶）：
+   `transform` 会让元素成为绝对定位后代的**定位基准**（CSS 规范），而卡片编辑态里挂着
+   内核的展开层 `.ne-ui-fullscreen`（`position:absolute; inset:0`，本应相对小记面板铺满）。
+   一旦按下鼠标触发 `:active` 的 scale，定位基准瞬间变成卡片 ⇒ 展开层高度从 810 掉到 ~220、
+   鼠标下的「保存/取消」跑掉 ⇒ **真鼠标点了没反应、面板一闪一闪**（合成 `.click()` 绕过命中测试，所以脚本测着是好的）。 */
+.quick-note-entry.editing,
+.quick-note-entry.editing:active {
+  transform: none;
+}

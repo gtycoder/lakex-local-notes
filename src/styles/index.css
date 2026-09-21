@@ -48,11 +48,7 @@
 
 /* ---- 旧壳层/打磨层（顺序不变） ---- */
 @import "./tokens.css" layer(legacy);
-@import "./shell.css" layer(legacy);
 @import "./components.css" layer(legacy);
-@import "./editor.css" layer(legacy);
-@import "./quick-notes.css" layer(legacy);
 @import "./document-status.css" layer(legacy);
 @import "./motion.css" layer(legacy);
-@import "./settings.css" layer(legacy);
 @import "./dialog.css" layer(legacy);

@@ -521,3 +521,518 @@
   border: 0;
   box-shadow: none;
 }
+
+/* ── P7-c 归并：原 src/styles/shell.css 的内容并入此处。
+ * 经**属性级**比对：本文件（原在 styles/shell.css，legacy 层内位于其后的位置）
+ * 与所有「中间文件」的 (选择器,属性) 交集为 **0** ⇒ 前移后层叠结果不变；同名文件对 4 → 0。 ── */
+/* Product shell aliases. Lake's native editor toolbar remains untouched. */
+:root {
+  color: var(--lake-text);
+  background: var(--lake-shell);
+}
+
+.app-shell {
+  color: var(--lake-text);
+  background: var(--lake-shell);
+  /* 保留大纲列宽的 grid 过渡（260ms）：随当前文档有无大纲平滑收起/展开，避免正文区瞬间跳变 */
+  transition: grid-template-columns var(--lake-motion-panel) var(--lake-ease-standard);
+}
+
+.sidebar,
+.document-pane,
+.quick-notes-pane,
+.outline-sidebar__content,
+.floating-dialog,
+.settings-panel,
+.search-panel {
+  border-color: var(--lake-border);
+}
+
+.sidebar,
+.document-pane,
+.outline-sidebar__content,
+.floating-dialog,
+.settings-panel,
+.search-panel {
+  background: var(--lake-panel) !important;
+  color: var(--lake-text);
+}
+
+.document-pane .lake-editor-mount {
+  background: var(--lake-canvas) !important;
+}
+
+.statusbar,
+.tab-bar {
+  color: var(--lake-text-secondary);
+}
+
+[data-theme="dark"] .sidebar,
+[data-theme="dark"] .document-pane,
+[data-theme="dark"] .outline-sidebar__content,
+[data-theme="dark"] .floating-dialog,
+[data-theme="dark"] .settings-panel,
+[data-theme="dark"] .search-panel {
+  border-color: var(--lake-border);
+}
+
+/* 专注模式：宽窄共用。原先只在 `@media (min-width: 761px)` 里 ⇒ 窄窗按 ⌘⇧Enter 只加了类名、
+ * 界面毫无变化（实测 590px 下 rail/抽屉/正文全都没动）。窄窗下三列定义里的前两列都是 0，
+ * 正文仍落在第 3 列，所以同一套规则直接可用，不需要窄窗副本。 */
+.app-shell.focus-mode { grid-template-columns: 0 0 minmax(0, 1fr); }
+.app-shell.focus-mode .activity-rail,
+.app-shell.focus-mode .sidebar,
+.app-shell.focus-mode .outline-sidebar,
+.app-shell.focus-mode .statusbar {
+  opacity: 0;
+  pointer-events: none;
+}
+.app-shell.focus-mode .workspace { grid-column: 3; }
+.app-shell.focus-mode .document-pane { border-radius: 0; }
+
+/* B3 dark selectors use higher specificity; these aliases intentionally win only for the shell surfaces. */
+html[data-theme="dark"] .sidebar.sidebar-docked,
+html[data-theme="dark"] .sidebar.sidebar-floating,
+html[data-theme="dark"] .document-pane,
+html[data-theme="dark"] .outline-sidebar__content,
+html[data-theme="dark"] .floating-dialog,
+html[data-theme="dark"] .settings-panel,
+html[data-theme="dark"] .search-panel {
+  background: var(--lake-panel) !important;
+  border-color: var(--lake-border) !important;
+}
+html[data-theme="dark"] .document-pane .lake-editor,
+html[data-theme="dark"] .document-pane .lake-editor-main {
+  background: var(--lake-canvas) !important;
+}
+
+html[data-theme="dark"] .document-pane .ne-engine,
+html[data-theme="dark"] .document-pane .ne-engine > ne-h1,
+html[data-theme="dark"] .document-pane .ne-engine > ne-h2,
+html[data-theme="dark"] .document-pane .ne-engine > ne-h3,
+html[data-theme="dark"] .document-pane .ne-engine > ne-h4,
+html[data-theme="dark"] .document-pane .ne-engine > ne-h5,
+html[data-theme="dark"] .document-pane .ne-engine > ne-h6,
+html[data-theme="dark"] .document-pane .ne-engine > ne-p,
+html[data-theme="dark"] .document-pane .ne-engine > ne-p ne-text,
+html[data-theme="dark"] .document-pane .ne-engine > ne-h1 ne-heading-content,
+html[data-theme="dark"] .document-pane .ne-engine > ne-h2 ne-heading-content,
+html[data-theme="dark"] .document-pane .ne-engine > ne-h3 ne-heading-content,
+html[data-theme="dark"] .document-pane .ne-engine > ne-h4 ne-heading-content,
+html[data-theme="dark"] .document-pane .ne-engine > ne-h5 ne-heading-content,
+html[data-theme="dark"] .document-pane .ne-engine > ne-h6 ne-heading-content {
+  color: var(--lake-text) !important;
+}
+
+/* Focus mode keeps the document breadcrumb/menu usable. The collapsed outline
+   rail is visually hidden too; its child hitbox must not steal the top-right
+   menu click while opacity is being animated.（宽窄共用） */
+.app-shell.focus-mode .outline-sidebar,
+.app-shell.focus-mode .outline-sidebar * {
+  pointer-events: none;
+}
+
+
+/* The floating panel must stop before the editor's 10px scrollbar track.
+   Otherwise the panel itself becomes the hit target and the user cannot grab
+   the scrollbar after the outline opens. */
+/* 展开的大纲浮层同样要让开编辑器滚动条（宽窄共用；窄窗正文铺到窗口边，这条更关键）。 */
+.outline-sidebar--collapsed.outline-sidebar--hovered .outline-sidebar__content {
+  right: calc(var(--outline-collapsed-width) + var(--outline-scrollbar-clearance, 13px));
+}
+
+
+/* ── 目录栏浮层（共用作用域；260915 窄窗彻底统一）──
+ * 原先是四个 `@media (min-width: 761px)` 块 ⇒ 窄窗悬停左轨会拉出一块没有高度约束、
+ * 被栅格撑到上万像素的面板（实测 box [38,-15838,265,16706]）。宽窄共用同一套几何。
+ * Match the outline's bounded floating dock. The previous full-height fixed
+ * sidebar made the panel appear to grow when it was leaving. */
+.sidebar.sidebar-floating,
+.sidebar.sidebar-collapsed {
+  top: 72px !important;
+  bottom: 72px !important;
+  height: calc(100vh - 144px) !important;
+  max-height: calc(100vh - 144px);
+  overflow: hidden;
+  transition: opacity 120ms ease-out, transform 120ms var(--lake-ease-standard) !important;
+}
+/* 右侧大纲浮层与左侧目录浮层同高（对齐到 top/bottom 72），消除左右弹出高度不一致 */
+.outline-sidebar--collapsed.outline-sidebar--hovered .outline-sidebar__content {
+  top: 72px;
+  bottom: 72px;
+  height: calc(100vh - 144px);
+  max-height: calc(100vh - 144px);
+}
+
+/* #2 浮层阴影：左右统一、更柔；阴影静态、不参与切出动画（避免逐帧重绘，保性能与速度） */
+.sidebar.sidebar-floating {
+  box-shadow: 16px 0 26px -14px rgba(43, 50, 78, .30) !important; /* 单侧投影：负 spread 收掉上下溢出 */
+}
+.outline-sidebar--collapsed.outline-sidebar--hovered .outline-sidebar__content {
+  box-shadow: -16px 0 26px -14px rgba(43, 50, 78, .30); /* 单侧投影（朝内容侧） */
+  transition: opacity 180ms var(--lake-ease-standard), transform 180ms var(--lake-ease-standard), visibility 180ms linear;
+}
+
+/* Showing the library preview is immediate; only the collapse is animated.
+   This prevents the pointer from repeatedly crossing a moving panel edge. */
+/* 加 `:not(.focus-mode)` 前缀：专注模式下这套 `!important` 不能把抽屉又"点回来"
+   （窄窗抽屉走的就是 floating 类；实测不加前缀时专注模式里抽屉仍然可见、还能点）。 */
+.app-shell:not(.focus-mode) .sidebar.sidebar-floating {
+  opacity: 1 !important;
+  transform: none;
+  pointer-events: auto !important;
+  transition: none !important;
+}
+.sidebar.sidebar-collapsed {
+  opacity: 0 !important;
+  transform: translateX(-12px) !important;
+  transition: opacity 120ms ease-out, transform 120ms var(--lake-ease-standard) !important;
+}
+
+/* ── 壳层度量令牌（原 layout-contract.css，260916 S1 并入） */
+:root {
+  --lake-rail-width: 38px;
+  --lake-floating-panel-top: 72px;
+  --lake-floating-panel-bottom: 72px;
+  --activity-rail-width: var(--lake-rail-width);
+}
+.app-shell { --outline-collapsed-width: var(--lake-rail-width); }
+
+/* ── 以下规则自 `src/styles/ui-polish.css` 按职责并入（260916 S2/S3，只搬家不改声明）：页签与紧凑控件的几何/圆角/状态 ── */
+/* Tab close controls must own their layout slot; never overlay title or dirty dot. */
+.tab-item .tab-title { flex: 1 1 auto; min-width: 0; }
+
+.tab-item .tab-dirty-dot {
+  flex: 0 0 7px;
+  width: 7px;
+  height: 7px;
+  margin-left: 1px;
+  border-radius: 50%;
+  background: var(--lake-sync-pending, #d29042);
+}
+
+.tab-item .tab-close {
+  flex: 0 0 18px;
+  width: 18px !important;
+  height: 18px !important;
+  margin-left: 2px;
+}
+
+.tab-item:hover .tab-close,
+.tab-item .tab-close:focus-visible { opacity: .58; }
+
+.tab-item .tab-close:hover { opacity: 1 !important; }
+
+/* 目录栏头部：只剩一排图标，几何与大纲头部逐项对齐（34px 高 + 1px 分隔线 + 右内缩 4px；
+ * 筛选改为点击图标展开）。两栏头部若高度/分隔线不一致，一排图标看上去就是"两个系统的产品"。 */
+.sidebar-toolbar-title {
+  flex: 0 0 auto;
+  margin-right: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: .02em;
+  color: var(--lake-text-secondary, var(--lake-text));
+}
+
+.sidebar-toolbar-row {
+  display: flex;
+  align-items: center;
+  flex: 0 0 34px;
+  min-height: 34px;
+  gap: 1px;
+  padding: 0 6px 0 12px;
+}
+
+/* 操作图标默认隐藏、悬停目录栏才显示（对齐思源）；去掉分隔线，靠留白分层 */
+.sidebar-toolbar-row .list-heading {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 1px;
+  height: 100%;
+  opacity: 0;
+  transition: opacity var(--lake-motion-fast) var(--lake-ease-standard);
+}
+
+.sidebar:hover .sidebar-toolbar-row .list-heading,
+.sidebar-toolbar-row:focus-within .list-heading { opacity: 1; }
+
+/* ---- dock 头部共享层（目录栏 / 大纲）：图标按钮 + 隐藏式筛选行 ----
+ * 两栏此前各有两套图标样式（32px 灰底 vs 22px accent 底），2026-09-03 统一到这里。
+ * 颜色一律走 --lake-* 令牌，亮/暗主题自动跟随（不再写死 #747b85 之类）。 */
+.dock-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 22px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  color: var(--lake-text-tertiary);
+  background: transparent;
+  transition: color var(--lake-motion-fast) var(--lake-ease-standard), background-color var(--lake-motion-fast) var(--lake-ease-standard), transform var(--lake-motion-press) var(--lake-ease-standard);
+}
+
+.dock-icon-btn:hover:not(:disabled) {
+  color: var(--lake-accent-strong, var(--lake-accent));
+  background: var(--lake-accent-soft);
+}
+
+.dock-icon-btn:active:not(:disabled) { transform: scale(.96); }
+
+.dock-icon-btn:disabled { opacity: .35; cursor: default; }
+
+/* 生效中的开关态（筛选有词 / 菜单展开 / 保持展开）：accent 文字 + 淡底，与大纲 is-active 一致 */
+.dock-icon-btn.is-active {
+  color: var(--lake-accent-strong, var(--lake-accent));
+  background: var(--lake-accent-soft);
+}
+
+.dock-icon-btn:focus-visible { outline: 2px solid var(--lake-accent); outline-offset: 1px; }
+
+/* 隐藏式筛选行：收起时高度 0 不占位；展开时 29px（与大纲头部原筛选行同高）。 */
+.dock-filter-row {
+  height: 0;
+  overflow: hidden;
+  opacity: 0;
+  transition: height var(--lake-motion-fast) var(--lake-ease-standard), opacity var(--lake-motion-fast) linear;
+}
+
+.dock-filter-row.is-open { height: 29px; opacity: 1; }
+
+.dock-filter-row__inner {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  height: 29px;
+  padding: 0 9px;
+  color: var(--lake-text-tertiary);
+  border-bottom: 1px solid var(--lake-border);
+}
+
+.dock-filter-input {
+  flex: 1;
+  min-width: 0;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--lake-text);
+  font-size: 12px;
+}
+
+.dock-filter-input::placeholder { color: var(--lake-text-tertiary); }
+
+/* 顶栏下拉里的快捷键提示（全文搜索 ⇧⌘F / 专注模式 ⌘⇧Enter）统一成右对齐弱文字 */
+.top-menu > button span {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 14px;
+  width: 100%;
+  /* 标签 + 快捷键强制一行：此前「进入专注模式 ⌘⇧Enter」在 170px 宽的下拉里会折成两行 */
+  white-space: nowrap;
+}
+
+.top-menu > button span small {
+  color: var(--lake-text-4);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+/* 文档右上角「更多」：容纳「锁定当前文档（只读）」+「导出」子菜单箭头，比通用下拉宽一点 */
+.top-menu--more { min-width: 236px; }
+
+/* 该菜单里复用了目录树右键的「导出」二级行（.context-menu-item 默认 12px/36px），
+   与同级按钮的行高/字号对齐，视觉上仍是一条普通菜单项 */
+.top-menu .context-menu-item { min-height: 32px; font-size: 13px; }
+
+/* Drag feedback: a soft lifted row plus a clear insertion guide, matching outline motion. */
+.tree-row.dragging {
+  position: relative;
+}
+
+.tree-row.drop-before,
+.tree-row.drop-after {
+  box-shadow: none !important;
+}
+
+.tree-row.drop-before::before,
+.tree-row.drop-after::after {
+  content: "";
+  position: absolute;
+  pointer-events: none;
+}
+
+.tree-row.drop-before::before { top: -1px; }
+
+.tree-row.drop-after::after { bottom: -1px; }
+
+.tree-row.drop-inside {
+  color: var(--lake-text);
+}
+
+.tree-row.dragging {
+  transform: none;
+}
+
+.tree-row.drop-inside {
+  background: color-mix(in srgb, var(--lake-text) 8%, transparent) !important;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--lake-text) 8%, transparent) !important;
+  transform: none;
+}
+
+/* The sidebar owns the window drag strip only as a visual region. Its pseudo
+   overlay must never win hit-testing over the first row of controls.
+   （宽窄共用：窄窗抽屉同样是浮层，顶部那条 38px 拖拽带不能抢头部按钮的点击。） */
+.sidebar::before { pointer-events: none !important; -webkit-app-region: no-drag; }
+
+/* A docked library must settle to its full grid track immediately. Keeping the
+   grid transition active while the panel is already docked can leave Chromium
+   in a zero-width interpolated track, which makes the visible toolbar miss hit
+   testing. Collapse remains animated; re-open is deliberately deterministic. */
+@media (min-width: 761px) {
+  .app-shell.sidebar-docked { transition: none !important; }
+}
+
+/* Precise sortable motion: the source row is the visible dragged object and
+   moves only on Y; siblings slide by exactly one row with a calm 250ms ease. */
+.tree-row {
+  position: relative;
+  transition: transform 250ms ease, background-color 120ms ease, box-shadow 120ms ease;
+  will-change: transform;
+}
+
+.tree-row.dragging {
+  z-index: 8;
+  transition: none !important;
+}
+
+.tree-row.drop-before::before,
+.tree-row.drop-after::after,
+.tree-row.drop-crossing::before,
+.tree-row.drop-crossing::after {
+  right: 0;
+  left: 8px;
+  height: 2px;
+  border-radius: 999px;
+  background: var(--lake-accent);
+  box-shadow: 0 0 0 3px var(--lake-accent-soft);
+}
+
+.tree-row.drop-crossing::before,
+.tree-row.drop-crossing::after {
+  content: "";
+  position: absolute;
+  pointer-events: none;
+}
+
+.tree-row.drop-crossing::before { top: -1px; }
+
+.tree-row.drop-crossing::after { bottom: -1px; }
+
+/* Final drag-state contract:
+   - same-parent reorder => one insertion line only;
+   - parent change => highlight the destination parent as a blue rounded box;
+   - the source row remains the real row, translucent, and vertically movable. */
+/* 源行留在原位只降透明度（跟手的是 [data-drag-ghost] 浮层） */
+.tree-row.dragging {
+  opacity: .38 !important;
+  color: var(--lake-text) !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+/* 插入线：贴在目标行的层级缩进上（桌面缩进来自嵌套 .tree-children），
+   父行 bottom 与子行 top 是同一视觉间隙但缩进不同 → 表示落到的层级不同。 */
+.tree-row.drop-line-before::before,
+.tree-row.drop-line-after::after {
+  content: "";
+  position: absolute;
+  right: 8px;
+  left: 8px;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--lake-accent);
+  pointer-events: none;
+}
+
+/* 拖拽浮层：克隆源行跟随指针。必须盖过 .tree-row 的 position/transition。 */
+.tree-row.drop-line-before::before { top: -1px; }
+
+.tree-row.drop-line-after::after { bottom: -1px; }
+
+.tree-row.drop-parent {
+  color: var(--lake-text) !important;
+  background: color-mix(in srgb, var(--lake-accent) 12%, var(--lake-panel)) !important;
+  box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--lake-accent) 76%, transparent) !important;
+}
+
+/* Old classes are no longer emitted for active drops; keep them inert so
+   legacy cascade rules cannot bring back the two-line crossing treatment. */
+.tree-row.drop-before::before,
+.tree-row.drop-after::after,
+.tree-row.drop-crossing::before,
+.tree-row.drop-crossing::after,
+.tree-row.drop-inside::before,
+.tree-row.drop-inside::after { display: none !important; }
+
+/* P5（UI 重设计）：原「product shell 表面圆角统一 md !important」已删 ——
+ * 各控件按自身规格给圆角（活动栏按钮 md / dock 图标钮 xs / 页签与树行由下方 sm 规则决定）。 */
+
+/* 紧凑控件（工具条 / 页签 / 图标按钮 / 树行）统一 sm 圆角：拖拽态必须同值，
+   否则行在拖动时圆角会从 6px 跳成 8px（外部 `.tree-row.dragging` 的 8px 就是被这条压住的）。 */
+.toolbar__item,
+.tab-item,
+.icon-button,
+.note-row,
+.list-heading .icon-button {
+  border-radius: var(--lake-radius-sm) !important;
+}
+
+/* 页签 active：白卡底（b3/components.css 的 .tab-item.active 提供）已足够标识当前页；
+   文字保持中性墨色 + 略加字重，避免「浅底 + 描边 + 主色字」多重信号。 */
+.tab-item.active {
+  color: var(--lake-text) !important;
+  font-weight: 500;
+}
+
+/* 活动栏 active：更强的识别（accent 底 + 图标着色），弱化未激活项 */
+.activity-button {
+  color: var(--lake-text-tertiary);
+  transition: color var(--lake-motion-fast) var(--lake-ease-standard), background-color var(--lake-motion-fast) var(--lake-ease-standard), transform var(--lake-motion-press) var(--lake-ease-standard);
+}
+
+.activity-button:hover:not(:disabled) { color: var(--lake-text-secondary); }
+
+.activity-button.active {
+  color: var(--lake-accent) !important;
+  background: var(--lake-accent-soft) !important;
+}
+
+.activity-button:active:not(:disabled) { transform: scale(.95); }
+
+/* ---- 交互动效（B）：顶栏/图标按钮统一按压反馈 ---- */
+.toolbar__item:active:not(:disabled),
+.icon-button:active:not(:disabled),
+.tab-switcher:active:not(:disabled) {
+  transform: scale(.96);
+}
+
+/* 浮层入场统一淡入+极短位移。注意：.floating-dialog 故意不在此列——
+ * 它靠 transform: translate(-50%,-50%) 居中，而 lake-pop-in 的 keyframes 只写
+ * translateY/scale，会在动画期间覆盖掉居中偏移，导致弹窗"从右下飞入再弹回中心"。
+ * 浮窗入场改用 styles.css 的 floating-dialog-enter（保留 translate(-50%,-50%)）。 */
+.context-menu,
+.tab-switcher-menu,
+.sync-status-popover {
+  animation: lake-pop-in var(--lake-motion-fast) var(--lake-ease-standard);
+}
+
+.tree-row:active,
+.note-row:active {
+  filter: brightness(.95);
+}
