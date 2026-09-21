@@ -1,5 +1,5 @@
 diff --git a/node_modules/@fortune-sheet/core/dist/index.esm.js b/node_modules/@fortune-sheet/core/dist/index.esm.js
-index 5c9820b..51c2b82 100644
+index 5c9820b..2eb1ecc 100644
 --- a/node_modules/@fortune-sheet/core/dist/index.esm.js
 +++ b/node_modules/@fortune-sheet/core/dist/index.esm.js
 @@ -61295,6 +61295,7 @@ function getStyleByCell(ctx, d, r, c) {
@@ -35,8 +35,74 @@ index 5c9820b..51c2b82 100644
    var cellData = (targetSheetData === null || targetSheetData === void 0 ? void 0 : (_targetSheetData$row = targetSheetData[row]) === null || _targetSheetData$row === void 0 ? void 0 : _targetSheetData$row[column]) || {};
    var cfg = sheet.config || {};
    if (attr === "ct" && (!value || value.fa == null || value.t == null)) {
+@@ -77022,6 +77023,7 @@ function handleWithCtrlOrMetaKey(ctx, cache, e, cellInput, fxInput, handleUndo,
+     return;
+   } else if (e.code === "KeyA") {
+     selectAll(ctx);
++    e.preventDefault();
+   } else if (e.code === "KeyD") {
+     if (!ctx.luckysheet_select_save || ctx.luckysheet_select_save.length === 0) {
+       return;
+@@ -77265,31 +77267,38 @@ function handleGlobalWheel(ctx, e, cache, scrollbarX, scrollbarY) {
+   var row_st = _.sortedIndex(visibledatarow_c, scrollTop) + 1;
+   var rowscroll = 0;
+   var scrollNum = 1;
++  // 260921: 先累计滚动量、跨过阈值才动一格，横向改为 1:1 跟随（原实现每个 wheel 事件都动一行/20px，触控板下过快）。
++  // 阈值取鼠标滚轮一格的实际像素量：鼠标滚轮手感不变、触控板明显变缓。
++  var LAKE_WHEEL_ROW_THRESHOLD = 100;
+   if (e.deltaY !== 0 && !cache.verticalScrollLock) {
+     cache.horizontalScrollLock = true;
+-    var row_ed;
+-    var step = Math.round(scrollNum / ctx.zoomRatio);
+-    step = step < 1 ? 1 : step;
+-    if (e.deltaY > 0) {
+-      row_ed = row_st + step;
+-      if (row_ed >= visibledatarow_c.length) {
+-        row_ed = visibledatarow_c.length - 1;
+-      }
+-    } else {
+-      row_ed = row_st - step;
+-      if (row_ed < 0) {
+-        row_ed = 0;
++    cache.lakeWheelY = (Number(cache.lakeWheelY) || 0) + e.deltaY;
++    var rowSteps = 0;
++    if (Math.abs(cache.lakeWheelY) >= LAKE_WHEEL_ROW_THRESHOLD) {
++      rowSteps = cache.lakeWheelY > 0 ? Math.floor(cache.lakeWheelY / LAKE_WHEEL_ROW_THRESHOLD) : Math.ceil(cache.lakeWheelY / LAKE_WHEEL_ROW_THRESHOLD);
++      cache.lakeWheelY -= rowSteps * LAKE_WHEEL_ROW_THRESHOLD;
++    }
++    if (rowSteps !== 0) {
++      var row_ed;
++      var step = Math.round((scrollNum * Math.abs(rowSteps)) / ctx.zoomRatio);
++      step = step < 1 ? 1 : step;
++      if (rowSteps > 0) {
++        row_ed = row_st + step;
++        if (row_ed >= visibledatarow_c.length) {
++          row_ed = visibledatarow_c.length - 1;
++        }
++      } else {
++        row_ed = row_st - step;
++        if (row_ed < 0) {
++          row_ed = 0;
++        }
+       }
++      rowscroll = row_ed === 0 ? 0 : visibledatarow_c[row_ed - 1];
++      scrollbarY.scrollTop = rowscroll;
+     }
+-    rowscroll = row_ed === 0 ? 0 : visibledatarow_c[row_ed - 1];
+-    scrollbarY.scrollTop = rowscroll;
+   } else if (e.deltaX !== 0 && !cache.horizontalScrollLock) {
+     cache.verticalScrollLock = true;
+-    if (e.deltaX > 0) {
+-      scrollLeft += 20 * ctx.zoomRatio;
+-    } else {
+-      scrollLeft -= 20 * ctx.zoomRatio;
+-    }
++    scrollLeft += e.deltaX;
+     scrollbarX.scrollLeft = scrollLeft;
+   }
+   mouseWheelUniqueTimeout = setTimeout(function () {
 diff --git a/node_modules/@fortune-sheet/core/dist/index.js b/node_modules/@fortune-sheet/core/dist/index.js
-index 04113a1..00bace2 100644
+index 04113a1..c98d68f 100644
 --- a/node_modules/@fortune-sheet/core/dist/index.js
 +++ b/node_modules/@fortune-sheet/core/dist/index.js
 @@ -61305,6 +61305,7 @@ function getStyleByCell(ctx, d, r, c) {
@@ -72,3 +138,69 @@ index 04113a1..00bace2 100644
    var cellData = (targetSheetData === null || targetSheetData === void 0 ? void 0 : (_targetSheetData$row = targetSheetData[row]) === null || _targetSheetData$row === void 0 ? void 0 : _targetSheetData$row[column]) || {};
    var cfg = sheet.config || {};
    if (attr === "ct" && (!value || value.fa == null || value.t == null)) {
+@@ -77032,6 +77033,7 @@ function handleWithCtrlOrMetaKey(ctx, cache, e, cellInput, fxInput, handleUndo,
+     return;
+   } else if (e.code === "KeyA") {
+     selectAll(ctx);
++    e.preventDefault();
+   } else if (e.code === "KeyD") {
+     if (!ctx.luckysheet_select_save || ctx.luckysheet_select_save.length === 0) {
+       return;
+@@ -77275,31 +77277,38 @@ function handleGlobalWheel(ctx, e, cache, scrollbarX, scrollbarY) {
+   var row_st = ___default['default'].sortedIndex(visibledatarow_c, scrollTop) + 1;
+   var rowscroll = 0;
+   var scrollNum = 1;
++  // 260921: 先累计滚动量、跨过阈值才动一格，横向改为 1:1 跟随（原实现每个 wheel 事件都动一行/20px，触控板下过快）。
++  // 阈值取鼠标滚轮一格的实际像素量：鼠标滚轮手感不变、触控板明显变缓。
++  var LAKE_WHEEL_ROW_THRESHOLD = 100;
+   if (e.deltaY !== 0 && !cache.verticalScrollLock) {
+     cache.horizontalScrollLock = true;
+-    var row_ed;
+-    var step = Math.round(scrollNum / ctx.zoomRatio);
+-    step = step < 1 ? 1 : step;
+-    if (e.deltaY > 0) {
+-      row_ed = row_st + step;
+-      if (row_ed >= visibledatarow_c.length) {
+-        row_ed = visibledatarow_c.length - 1;
+-      }
+-    } else {
+-      row_ed = row_st - step;
+-      if (row_ed < 0) {
+-        row_ed = 0;
++    cache.lakeWheelY = (Number(cache.lakeWheelY) || 0) + e.deltaY;
++    var rowSteps = 0;
++    if (Math.abs(cache.lakeWheelY) >= LAKE_WHEEL_ROW_THRESHOLD) {
++      rowSteps = cache.lakeWheelY > 0 ? Math.floor(cache.lakeWheelY / LAKE_WHEEL_ROW_THRESHOLD) : Math.ceil(cache.lakeWheelY / LAKE_WHEEL_ROW_THRESHOLD);
++      cache.lakeWheelY -= rowSteps * LAKE_WHEEL_ROW_THRESHOLD;
++    }
++    if (rowSteps !== 0) {
++      var row_ed;
++      var step = Math.round((scrollNum * Math.abs(rowSteps)) / ctx.zoomRatio);
++      step = step < 1 ? 1 : step;
++      if (rowSteps > 0) {
++        row_ed = row_st + step;
++        if (row_ed >= visibledatarow_c.length) {
++          row_ed = visibledatarow_c.length - 1;
++        }
++      } else {
++        row_ed = row_st - step;
++        if (row_ed < 0) {
++          row_ed = 0;
++        }
+       }
++      rowscroll = row_ed === 0 ? 0 : visibledatarow_c[row_ed - 1];
++      scrollbarY.scrollTop = rowscroll;
+     }
+-    rowscroll = row_ed === 0 ? 0 : visibledatarow_c[row_ed - 1];
+-    scrollbarY.scrollTop = rowscroll;
+   } else if (e.deltaX !== 0 && !cache.horizontalScrollLock) {
+     cache.verticalScrollLock = true;
+-    if (e.deltaX > 0) {
+-      scrollLeft += 20 * ctx.zoomRatio;
+-    } else {
+-      scrollLeft -= 20 * ctx.zoomRatio;
+-    }
++    scrollLeft += e.deltaX;
+     scrollbarX.scrollLeft = scrollLeft;
+   }
+   mouseWheelUniqueTimeout = setTimeout(function () {

@@ -52,4 +52,38 @@ public class AssetServerTest {
         URI uri = new URI("/note-1/pic.jpg?token=x");
         assertFalse(AssetServer.isAuthorized(uri, "http://evil.com"));
     }
+
+    // ---- 按需缩略图（?w=，与桌面 assetServer 同口径）----
+
+    @Test
+    public void thumbWidthOnlyAcceptsWhitelistedTiers() throws Exception {
+        assertNull(AssetServer.thumbWidthFor(new URI("/n/a.png")));
+        assertEquals(Integer.valueOf(128), AssetServer.thumbWidthFor(new URI("/n/a.png?w=128")));
+        assertEquals(Integer.valueOf(1024), AssetServer.thumbWidthFor(new URI("/n/a.png?token=t&w=1024")));
+        // 非档位值当没传：连续值会把 WebView 磁盘缓存（immutable）打散
+        assertNull(AssetServer.thumbWidthFor(new URI("/n/a.png?w=100")));
+        assertNull(AssetServer.thumbWidthFor(new URI("/n/a.png?w=abc")));
+        assertNull(AssetServer.thumbWidthFor(new URI("/n/a.png?w=")));
+    }
+
+    /** GIF（多帧会被压成首帧）与 SVG（矢量）必须跳过；Android 侧其它格式编解码支持不一，也不碰。 */
+    @Test
+    public void thumbOnlyResizesSafeRasterFormats() {
+        assertTrue(AssetServer.isThumbResizable("pic.png"));
+        assertTrue(AssetServer.isThumbResizable("PIC.JPG"));
+        assertTrue(AssetServer.isThumbResizable("pic.jpeg"));
+        assertFalse(AssetServer.isThumbResizable("anim.gif"));
+        assertFalse(AssetServer.isThumbResizable("icon.svg"));
+        assertFalse(AssetServer.isThumbResizable("pic.webp"));
+        assertFalse(AssetServer.isThumbResizable("noext"));
+    }
+
+    /** inSampleSize 只取 2 的幂，且「解出来仍不小于目标宽」（宁可略大、绝不小于）。 */
+    @Test
+    public void sampleSizeNeverUndershootsTarget() {
+        assertEquals(1, AssetServer.sampleSizeFor(300, 256));
+        assertEquals(2, AssetServer.sampleSizeFor(4000, 1024)); // 4000/4=1000 < 1024 ⇒ 停在 2
+        assertEquals(16, AssetServer.sampleSizeFor(4000, 128)); // 4000/32=125 < 128 ⇒ 停在 16
+        assertEquals(1, AssetServer.sampleSizeFor(100, 100));
+    }
 }

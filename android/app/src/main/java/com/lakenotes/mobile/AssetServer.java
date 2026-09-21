@@ -1,11 +1,14 @@
 package com.lakenotes.mobile;
 
 import android.content.Context;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import android.util.Log;
 import android.webkit.MimeTypeMap;
 
 import java.io.BufferedInputStream;
 import java.io.BufferedReader;
+import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
@@ -19,6 +22,8 @@ import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.SecureRandom;
+import java.util.Locale;
+import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ThreadFactory;
@@ -46,6 +51,15 @@ public final class AssetServer {
     private static final int POOL_SIZE = 4;
     /** Capacitor 当前配置 androidScheme=http，页面固定 origin 是 http://localhost。 */
     private static final String ALLOWED_ORIGIN = "http://localhost";
+
+    /**
+     * 缩略图档位（宽，px）。**必须与桌面 `src/core/assetUrl.ts` 的 `ASSET_THUMB_WIDTHS` 一致**
+     * （两端同 URL 语义：同一个 `?w=128` 在桌面/安卓都取同一档）。档位离散是关键——连续值会把
+     * WebView 磁盘缓存与桌面内存缓存一起打散。
+     */
+    private static final Set<Integer> THUMB_WIDTHS = Set.of(128, 256, 512, 1024);
+    /** JPEG 缩略图质量（PNG 忽略该参数）。 */
+    private static final int THUMB_JPEG_QUALITY = 85;
 
     private static volatile ServerSocket sServerSocket;
     private static volatile ExecutorService sExecutor;
@@ -122,8 +136,9 @@ public final class AssetServer {
             // 用 URI.getPath() 解码路径：URLDecoder 会把 '+' 解码成空格（小记文件名可能含 '+'），
             // URI.getPath() 保留 '+' 且自动剥离 query 段
             String decoded;
+            URI uri;
             try {
-                URI uri = new URI(target);
+                uri = new URI(target);
                 decoded = uri.getPath() != null ? uri.getPath() : target;
                 if (!isAuthorized(uri, originHeader)) {
                     writeError(out, 403, "forbidden");
@@ -153,6 +168,16 @@ public final class AssetServer {
             if ("application/octet-stream".equals(mime)) {
                 String sniffed = sniffMime(file);
                 if (sniffed != null) mime = sniffed;
+            }
+            // ?w=<档位>：按需缩略图（不落盘、不上传、可重建）。失败或格式不支持 → 落到下面的原图分支。
+            // 缩略图不参与 Range（没有 seek 需求），直接整段返回。
+            Integer thumbWidth = thumbWidthFor(uri);
+            if (thumbWidth != null && isThumbResizable(file.getName())) {
+                byte[] thumb = thumbBytes(file, thumbWidth);
+                if (thumb != null) {
+                    writeBody(out, thumb, mime, isHead);
+                    return;
+                }
             }
             // Range 支持（音频/视频 seek、PDF 分页）：浏览器 seek 需要 206 Partial Content + Accept-Ranges，
             // 否则 seekable 只有 [0,0]，进度条无法拖动。解析 bytes=start-end / bytes=-N / bytes=start-
@@ -237,6 +262,95 @@ public final class AssetServer {
         } catch (Exception e) {
             Log.e(TAG, "handle error: " + e.getMessage(), e);
         }
+    }
+
+    /** `?w=` → 档位；非法/缺省/不在白名单 → null（走原图）。与桌面 assetServer 同口径。 */
+    static Integer thumbWidthFor(URI uri) {
+        String raw = queryParameter(uri, "w");
+        if (raw == null) return null;
+        try {
+            int width = Integer.parseInt(raw.trim());
+            return THUMB_WIDTHS.contains(width) ? width : null;
+        } catch (NumberFormatException e) {
+            return null;
+        }
+    }
+
+    /**
+     * 只对可安全重编码的位图生效。刻意排除：
+     * - GIF：多帧动画 resize 后只剩首帧（宁可不缩，也不能把动图弄坏）；
+     * - SVG：矢量，本就没有解码内存问题。
+     * 其余（webp/avif/bmp/tiff 等）Android 侧编解码支持不一，一律不碰 ⇒ 落回原图。
+     */
+    static boolean isThumbResizable(String name) {
+        int dot = name.lastIndexOf('.');
+        if (dot < 0) return false;
+        String ext = name.substring(dot + 1).toLowerCase(Locale.ROOT);
+        return "png".equals(ext) || "jpg".equals(ext) || "jpeg".equals(ext);
+    }
+
+    /**
+     * 按需缩略图。先用 `inJustDecodeBounds` 只读尺寸、再按 `inSampleSize` 只解 1/N —— 这是关键：
+     * 直接 `decodeFile` 一张 4000×3000 就是 48MB 位图进内存，正是我们要省掉的那笔开销。
+     * 任何失败都返回 null，调用方落回原图：缩略图是纯优化，绝不能因为它把图弄没。
+     */
+    private static byte[] thumbBytes(File file, int targetWidth) {
+        try {
+            String path = file.getAbsolutePath();
+            BitmapFactory.Options probe = new BitmapFactory.Options();
+            probe.inJustDecodeBounds = true;
+            BitmapFactory.decodeFile(path, probe);
+            if (probe.outWidth <= 0 || probe.outHeight <= 0) return null;
+            // 不放大：原图不比目标宽就直接落回原图（桌面侧是 withoutEnlargement，同语义）
+            if (probe.outWidth <= targetWidth) return null;
+
+            BitmapFactory.Options opts = new BitmapFactory.Options();
+            opts.inSampleSize = sampleSizeFor(probe.outWidth, targetWidth);
+            Bitmap decoded = BitmapFactory.decodeFile(path, opts);
+            if (decoded == null) return null;
+            Bitmap scaled = decoded;
+            try {
+                if (decoded.getWidth() != targetWidth) {
+                    int height = Math.max(1, Math.round(targetWidth * (float) decoded.getHeight() / decoded.getWidth()));
+                    scaled = Bitmap.createScaledBitmap(decoded, targetWidth, height, true);
+                }
+                String name = file.getName().toLowerCase(Locale.ROOT);
+                Bitmap.CompressFormat format = name.endsWith(".png")
+                        ? Bitmap.CompressFormat.PNG
+                        : Bitmap.CompressFormat.JPEG;
+                ByteArrayOutputStream out = new ByteArrayOutputStream();
+                scaled.compress(format, THUMB_JPEG_QUALITY, out);
+                return out.toByteArray();
+            } finally {
+                if (scaled != decoded) scaled.recycle();
+                decoded.recycle();
+            }
+        } catch (Throwable t) {
+            Log.w(TAG, "thumbnail failed, fallback to original: " + file.getName(), t);
+            return null;
+        }
+    }
+
+    /** inSampleSize 只能取 2 的幂：取「解出来仍不小于目标宽」的最大值（少解、但绝不小于目标）。 */
+    static int sampleSizeFor(int sourceWidth, int targetWidth) {
+        int sample = 1;
+        while (targetWidth > 0 && sourceWidth / (sample * 2) >= targetWidth) sample *= 2;
+        return sample;
+    }
+
+    /** 整段返回一个内存里的字节体（缩略图用；带 immutable 缓存头，与文件路径同缓存语义）。 */
+    private static void writeBody(OutputStream out, byte[] body, String mime, boolean isHead) throws IOException {
+        StringBuilder head = new StringBuilder(192);
+        head.append("HTTP/1.1 200 OK\r\n");
+        head.append("Content-Length: ").append(body.length).append("\r\n");
+        head.append("Content-Type: ").append(mime).append("\r\n");
+        head.append("Access-Control-Allow-Origin: ").append(ALLOWED_ORIGIN).append("\r\n");
+        head.append("Access-Control-Allow-Methods: GET, HEAD\r\n");
+        head.append("Cache-Control: public, max-age=31536000, immutable\r\n");
+        head.append("Connection: close\r\n\r\n");
+        out.write(head.toString().getBytes(StandardCharsets.UTF_8));
+        if (!isHead) out.write(body);
+        out.flush();
     }
 
     private static void writeError(OutputStream out, int code, String msg) throws IOException {

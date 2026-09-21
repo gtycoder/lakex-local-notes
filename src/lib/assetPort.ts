@@ -1,8 +1,26 @@
-/** 本地资源服务器 Origin（端口可由主进程 LAKE_ASSET_PORT 覆盖，多端同机双开用）。 */
-export const ASSET_ORIGIN: string = (() => {
-  const port = (typeof window !== "undefined" && (window as { lakeNative?: { assetPort?: number } }).lakeNative?.assetPort) || 19876;
-  return `http://127.0.0.1:${port}`;
-})();
+import { assetThumbWidthFor } from "../core/assetUrl.js";
+
+/**
+ * 本地资源服务器端口（可由主进程 LAKE_ASSET_PORT 覆盖，多端同机双开用）。
+ */
+export const ASSET_PORT: number =
+  (typeof window !== "undefined" && (window as { lakeNative?: { assetPort?: number } }).lakeNative?.assetPort) || 19876;
+
+/**
+ * 按 **CSS 显示宽度**选缩略图档位（自动乘 DPR，上限 3×）。
+ *
+ * 放在 `src/lib` 而不是 `src/core`：它要读 `devicePixelRatio`（DOM 依赖），core 层禁止 DOM。
+ * 渲染层统一入口——别在各调用点自己读 `devicePixelRatio`，否则同一台机器上不同面板会选出不同档位。
+ * 入参是 CSS px（`getBoundingClientRect().width` 或 CSS 里写死的显示宽度）。
+ * 超过档位表上限返回 null = 用原图（此时多半是"面太大、缩了也不划算"）。
+ */
+export function assetThumbWidthForCss(cssWidth: number): number | null {
+  const dpr = Math.max(1, Math.min(3, window.devicePixelRatio || 1));
+  return assetThumbWidthFor(cssWidth * dpr);
+}
+
+/** 本地资源服务器 Origin。 */
+export const ASSET_ORIGIN = `http://127.0.0.1:${ASSET_PORT}`;
 
 export const LOCAL_ASSET_PREFIX = `${ASSET_ORIGIN}/`;
 

@@ -7,18 +7,27 @@
 ## 0. 当前基线（新会话开工前）
 - **✅ 分支 `feat/board-document` 已 fast-forward 合入 `master` 并 push origin**（用户 260920 收尾指示）。这一次把三大块一起带进 `master`：
   1. **自研多维表 `kind=bitable`**（§2.12）· 2. **独立画板文档 `kind=board`**（§2.13）· 3. **移动端对账补齐 + 小记完善**（§2.14 / **§2.15**）。
-- **本会话（260920 晚 · 移动端小记完善）完整交接 = §2.15（任务目标/已完成/当前问题/下一步/踩坑）—— 新会话从这里读。**
+- **最新会话（260921 · 表格图片 P2 单元格图片 + 缩略图）完整交接 = §2.19（先读它；P2 细节在 §2.18）**（同批 §2.16 表格图片 P1 · §2.17 工具栏/侧栏留白修复）。
+- **紧随其后同批（仍未提交）：§2.20 = 表格「完全去掉浮动图片 + 单元格图片工具弹窗 + 右键清除连带清图 / 细滚动条 / 滚动速度 / 色条修复」**（含两份 `patches/@fortune-sheet+*` 重新生成）。
 - **manifest = v7**（`MANIFEST_VERSION=7`，`READABLE_MANIFEST_VERSIONS={4,5,6,7}`）：`kind` 新增 `sheet`/`bitable`/`board`；旧端读到 v7 **整轮拒绝同步**
   ⇒ **所有端必须一起升级**（刻意安全闸，防旧端把非 doc 正文当 Lake 文档打开写坏）。
 - 一句话状态（移动端小记）：长按桌面图标「**新建小记**」→ **不挂内核的轻量框**（零内核实例，冷启动到可输入实测 **~0.30–0.43s**）；
   轻量框支持 **文字 + 图片（含未提交草稿防丢，纯本地 `device_state`）**；新增 **系统分享（ACTION_SEND）→ 小记**。
   ⚠️ 一条**做过又删掉**的弯路：原生秒开 `QuickCaptureActivity`（用户觉得丑、WebView 框够快 ⇒ 代码全删、快捷方式切回深链；见 §2.15）。
-- **门禁（合并前实测，全绿）**：`tsc` 0 · `vitest` **1150 passed / 16 skipped (1166)** · 桌面 + 移动 `vite build` 全绿 ·
-  `check:bundle` app-js gzip **1.784MB / 2.90MB** · `check:core` 0 · `git diff --check` 干净。
-- **工作区**：单 worktree、干净。本地分支：`master`（= 合并后）、`feat/board-document`（= master），另有旧检查点 `feat/bitable`(b1355de)、`feat/sheet-document`(71c2d90)（可删）。
+- **门禁（260921 续 3 最新实测，全绿）**：`tsc` 0 · `vitest` **1205 passed / 16 skipped (1221)** · 桌面 + 移动 build +
+  **Android `testDebugUnitTest`(AssetServerTest 8/0) + `assembleDebug` BUILD SUCCESSFUL** ·
+  `check:bundle` app-js gzip **1.78MB / 2.90MB**（raw 6.61MB）· `check:core` 0 违规 · `git diff --check` 干净。
+- **工作区（260921 续 2 更新）**：**不干净** —— 表格图片 **P1 + P2 + 缩略图（含多维表/移动端/安卓）** 改动**未提交**：
+  `src/core/sheetDoc(.test).ts`、`src/core/sheetGeometry(.test).ts`（新）、`src/core/assetUrl(.test).ts`、
+  `electron/assetServer(.test).ts`、`android/.../AssetServer.java(+Test)`、`src/features/sheet/SheetEditor.tsx`、
+  `src/features/sheet/sheetEditor(.Mount.test).css/tsx`、`src/features/bitable/bitableCells.tsx(+Mount.test)`、
+  `src/mobile/home/HomePage.tsx`、`src/lib/assetPort(.test).ts`、`src/styles/cssLayers.test.ts` + 4 个 docs；
+  另加 §2.20 的 `patches/@fortune-sheet+{react,core}+1.0.4.patch`（重新生成）；
+  见 **§2.16 / §2.17 / §2.18 / §2.19 / §2.20**），等用户验收（**未 push、未合 master**）。
+  其余：单 worktree；`master` = `origin/master` = **649819a**（未提交改动都在工作区）、`feat/board-document`（= master），另有旧检查点 `feat/bitable`(b1355de)、`feat/sheet-document`(71c2d90)（可删）。
 - **dev 数据现状（重要，别擅自删）**：桌面 `到啦领导`(ee860a19) 仍在回收站；安卓回收站旧测试数据 + 笔记本「20-UI编辑测试」「测试本1」（含用户笔记）保留。
   本会话在安卓 dev 数据里建的测试小记均已 purge；原生框遗留（`shared_prefs/quick_capture.xml`、`files/quick-capture-inbox`、`files/shared-inbox`）已清。
-- 历史批次交接：§2.8 表格 · §2.9 FortuneSheet 换代 · §2.10/§2.11 小记内核化 · §2.12 多维表 · §2.13 画板 · §2.14 移动端对账。
+- 历史批次交接：§2.8 表格 · §2.9 FortuneSheet 换代 · §2.10/§2.11 小记内核化 · §2.12 多维表 · §2.13 画板 · §2.14 移动端对账 · §2.15 移动端小记 · §2.16 表格图片 P1 · §2.17 工具栏 + 侧栏留白 · §2.18 表格单元格图片 P2 · §2.19 单元格图片缩略图 · **§2.20 去浮动图 + 单元格图片工具弹窗**。
 ## 1. 项目一句话 + 铁律（详见 AGENTS.md）
 本地优先笔记应用（Electron 43 + React 18.3 + better-sqlite3 + 语雀 Lake 内核），S3（七牛 Kodo 兼容）同步。
 **红线**：① 本地是真相、S3 只是镜像（云端备份绝不反噬本地）；② 目录/删除强一致（删除传播、墓碑权威）；
@@ -1387,6 +1396,362 @@ tsc 0 · vitest 1095 passed / 16 skipped (1111) · 桌面 + 移动 vite build �
 12. **`android/app/src/main/assets/public/` 是 `cap sync` 产物**：只改 `src/` 后必须走 `scripts/android-build.sh --sync`，否则会测到旧 bundle。
 13. **不要对 HANDOFF.md 这类大文件做「整文件 read→write」**：`read` 可能只返回**部分**内容（本会话把 1707 行读成 ~218 行、写回后截断，已用 `git checkout` 恢复）。要改大文件用 `edit` 或「写临时文件 + 按行区间 `head/tail` 拼接」。
 
+## 2.16 本会话批次（260920/21 · 表格图片独立管理 P1）—— 未提交，等用户验收
+
+> 写给零上下文新会话。用户在新会话接手时点名做这一项（源自 §3 第 14 条的立项规范）。
+> 工作区改动 5 个文件（全在 `master` 上、**未提交**）；规范与落地记录见 **`docs/SHEET-IMAGE-MANAGEMENT-260919.md` §12**。
+
+### 一、任务目标
+把表格浮动图从「base64 内联进正文」改成「资产文件 + 正文只存 filename」，复用现有资产管线（声明/GC/同步/历史/移动端）。
+
+### 二、已完成（全部在工作区，未提交）
+1. **`src/core/sheetDoc.ts`**：新增 `sheetImageDiskSrc`（本地资产 URL（含 `?token=`）→ filename）；`sanitizeSheetWorksheet` 落盘时把 `images[].src` 统一磁盘化；
+   `sheetImageSrc(src, noteId, port?)` 加端口参数（A=19876 / B=19877 各用各的）。
+2. **`src/features/sheet/SheetEditor.tsx`**：`initialSheets` 把磁盘 filename 拼成渲染 URL（`withRenderableImageSrc`）；
+   `Workbook.onChange` 里 `promoteInlineImages` 把内核刚插入的 `data:image/*` 提升成资产（复用 `uploadLakeResource`，与画板同一套路）；
+   `flush` 提升未落地前**推迟保存**（`promoteInFlightRef > 0`），保存时 `withPromotedImageSrc` 换写盘口径；**挂载时也跑一次提升 ⇒ 老正文里的 base64 自愈**。
+3. **`src/lib/assetPort.ts`**：新增 `ASSET_PORT` 导出（`ASSET_ORIGIN` 由它派生）。
+4. 测试：`sheetDoc.test.ts`（URL→filename、端口、base64 保持）+ `sheetEditorMount.test.ts` 新增 5 条源码级护栏。
+5. 门禁：`tsc` 0 · `vitest` **1157 passed / 16 skipped (1173)** · 桌面 + 移动 build 全绿 · `check:bundle` app-js gzip **1.784MB / 2.90MB** · `check:core` 0 · `git diff --check` 干净。
+
+### 三、实测（隔离实例 `LAKE_USER_DATA=$TMPDIR/lake-sheet-img-smoke` + `LAKE_ASSET_PORT=19879` + CDP；真实数据未读写，跑完已删隔离目录）
+右键「新建表格」→ 真实插图链路（构造 1600×1200 PNG 塞进 `#fortune-img-upload`）⇒ 正文 `sheets/{id}.sheet.json` **323B**、
+`images[0].src="1789954950409_1a1b16c1.png"`（无 base64、无 URL）、资源落 `note-assets/{id}/`（42319B）；
+`notes.kind='sheet'`+`sync_state='local'`；`orphan_assets` 为空；`Page.reload` 重开后图片从
+`http://127.0.0.1:**19879**/{id}/1789954950409_1a1b16c1.png` 正常渲染（`naturalWidth>0`）。
+
+### 四、与原规范的**两处刻意差异**（用户如不同意可回退）
+1. **不加新 IPC**：`native.uploadResource` / `ResourceRepository.upload` 已经就是「写 note-assets + 孤儿登记」，无需 `assets.putImage`。
+2. **正文版本号不升**（仍 `version:2`，原稿写 2→3）：结构未变、`src` 两种形态读写天然都支持，升版本会让**既有表格静默变空表**（零收益破坏）。
+   ⇒ 原稿「旧 v2 表删了重建」也不再需要。
+
+### 五、当前问题 / 未做
+1. **AB 多端 S3 往返**未跑（图片他端可达、正文 sha256 不变）——沿用 §3 的既有缺口。
+2. **删除图片后的 GC 回收**未跑实测（机制是现有 GC + 年龄保护 + 孤儿保护，未另写）。
+3. **粘贴图片未做**：内核 `onPaste` 只读文本，且没暴露 `insertImage`（要自研粘贴拦截 + 自己算落点几何）⇒ 单独立项。
+4. **P2 单元格图 / P3 移动端渲染**未做（规范 §5/§8）。
+5. 未提交（红线：代码批次等用户验收）。
+
+### 六、踩过的坑（本会话新增）
+- **内核插图没有可复用的「提升钩子」**：FortuneSheet 的 `insertImage` 不外露、`applyOp` 也没必要用 ⇒ 走「插完 base64 再由宿主提升」（与画板 `BoardEditor` 同一套路，已验证）。
+- **`manifest.assets` 不是从正文抽的、是磁盘实扫**（`scanLocalAssets` → `listLocalAssets`）：新 kind/新形态的图片只要落进 `note-assets/{noteId}/` 就天然被声明 —— 别再为「声明」写代码。
+- **`orphan_assets` 的写时登记会被 `saveNote` 按正文引用撤销**：验证「保存链路是否真的把 filename 写进正文」，查 `orphan_assets` 是否为空是个很快的判据。
+- **新建后目录行处于「待重命名」输入态**（`innerText` 为空）：CDP 脚本里靠文本找节点会失败，要用 `listNoteSummaries()`/`listTreeNodes()` 的真值取 id（本会话因此白跑一轮）。
+- **`Page.reload` 后要重新 `Emulation.setFocusEmulationEnabled`**、且 `window.lakeNative` 要等一会儿才可用：poll 表达式要包 try/catch，否则 `Runtime.evaluate` 直接抛错打断脚本。
+
+## 2.17 本会话续（260921 · 表格工具栏加回 4 项 + overlay 方案性能量测）
+
+> 承接 §2.16（表格图片 P1）。本轮只动 `SheetEditor.tsx` 的一处常量 + 文档；代码改动未提交。
+
+### 一、工具栏加回 4 项（用户点名）
+- **加回**：`format`（单元格格式：数字格式/对齐/字体/边框）· `link`（插入链接）· `comment`（批注）· `locationCondition`（定位）——
+  各自按**内核默认顺序**插进现有分组（18 → **22 项**）。
+- **仍隐藏**（相对内核默认 41 项）：`currency-format`/`percentage-format`/`number-decrease`/`number-increase`（数字格式快捷键）、
+  `font`（用户要求默认全局字体、不可改）、`text-rotation`、`conditionFormat`、`dataVerification`、`splitColumn`、`screenshot`。
+- 核对结论：内核语言包里还有「图表 / 数据透视表 / 保护工作表」，但**这个版本的 Toolbar 没有实现**（只有翻译串）⇒ 加不进来。
+- 门禁：`tsc` 0 · `vitest` **1157 passed / 16 skipped (1173)** · 双端 build 全绿 · `check:bundle` 1.784MB/2.90MB · `check:core` 0 · `git diff --check` 干净。
+
+### 二、单元格图「overlay 方案（不改内核）」性能量测 —— **结论：不卡；唯一的成本是图片解码内存**
+隔离实例 + 注入式近似（每张图一个「尺寸=单元格 + `overflow:hidden`」的盒子 + `max-width/height:100%` 的 `<img>`，
+图 1200×900、全部 `decode()` 强制解码），滚动 1.6s 采样 rAF：
+
+| 锚定图数 | renderer RSS | 帧 P50 | 帧 P95 | 最长帧 | 滚动期间 overlay DOM 变更 |
+|---|---|---|---|---|---|
+| 0 | 179 MB | 16.7 ms | 18.4 ms | 21.3 ms | 0 |
+| 50 | 435 MB | 16.7 ms | 18.7 ms | 36.0 ms | 0 |
+| 200 | 664 MB | 16.7 ms | 18.6 ms | 37.9 ms | 0 |
+
+- **帧耗时与空表完全一致**（P50 16.7ms = 满 60fps）⇒ 多一层 overlay **不带来卡顿/响应变慢**。
+- **滚动期间 overlay 零 DOM 变更** ⇒ FortuneSheet 的滚动是容器级移动，锚定图**不需要在滚动热路径上重算几何**
+  （只在行列尺寸/冻结/隐藏/切表变化时算）。
+- **成本全在解码内存**：≈ 像素数 × 4B（1200×900 → **5.1 MB/张**；50 张 +256MB、200 张 +485MB）。
+  ⇒ **缩略图管线是 P2 的必须项**（不是可选优化）：单元格图渲染缩略图（≤512px ≈ 1MB/张，≤256px ≈ 0.26MB/张），点开再看原图；
+  否则大表（几十张 4000×3000 图 = 48MB/张）会线性吃内存。这条与「overlay 还是 canvas 补丁」无关，两条路都要解码。
+- 量测方式：临时脚本 `/tmp/overlay-perf.mjs`（未入库）；隔离实例用备用端口（1432/9233/19881），真实数据未读写，跑完已清理。
+
+### 三、顺带修掉的 bug：目录栏切「收起/悬浮」后表格右侧留白（用户 260921 报，图见对话）
+- **现象**：目录栏从固定切到悬浮收起后，表格右侧留一条**正好等于目录栏宽度**的白条。
+- **根因（实测几何）**：`.fortune-sheet-overlay` 宽 **1074**，而容器 `.fortune-sheet-container` 是 **1375**；差 **301px = `--sidebar-width`**。
+  FortuneSheet **只在 `window.resize` 时重算容器尺寸、没有 ResizeObserver**（`react/dist/index.esm.js:3978`）⇒ 壳层几何变化（目录栏固定↔悬浮↔收起、拖宽目录栏、轨道切换）不触发它，画布/内容宽停在旧值。
+- **修法（不改内核）**：`SheetEditor` 观察自身宿主宽度（`ResizeObserver`），宽度变化时 **rAF 内合并补发一次 `window.resize`**，
+  让内核重算；内核重算不改宿主宽度 ⇒ 不自激。顺带覆盖「隐藏标签 0 宽 → 显示」这条。
+  护栏：`sheetEditorMount.test.ts` 新增断言（`new ResizeObserver` + `dispatchEvent(new Event("resize"))` + `ref={hostRef}`）。
+- **实测（隔离实例）**：固定态 `workspace/container/overlay/canvas = 1082`、`cellArea = 1031`；点活动栏「资料库」切收起后
+  全部同步涨到 **1242 / 1242 / 1242 / 1191** ⇒ 不再留白。
+- ⚠️ 同类风险面：凡是「内核按容器宽度算一次」的东西都可能踩这个坑（Lake 内核的工具条折叠也是同源，见 §2.10 坑 4）。本次只修了表格这一处。
+
+### 四、渲染层选型（本会话结论，P2 据此开工）
+- 走 **DOM overlay（不改内核）**：零补丁、可回退，几何只有「行列尺寸变化」等少数触发面；
+- 悬崖点已排掉两个（**滚动跟随** ✓ 实测逐像素一致、**视口裁剪** ✓ `.fortune-cell-area{overflow:hidden}`），
+  仍待实测：**冻结窗格坐标**、**列宽拖拽逐帧同步**（→ 放在 P2 第一步的 spike 里）；
+- 数据模型走「单元格持有图片」（`v.img = { asset, fit }` 或 `images[].cell = {r,c}`，二选一待定），
+  ⚠️ 必须先实测「编辑单元格时内核会不会丢掉未知字段」（同当年"未注册卡片一编辑就丢"的坑）。
+
+## 2.18 本会话续（260921 · 表格**单元格图片 P2** 落地）—— 未提交，等用户验收
+
+> 承接 §2.16（P1 浮动图）/§2.17（工具栏 + 侧栏留白修复）。**用户 260921「可以开始做吧」= 开工 P2**。
+> 规范与实测记录全文见 **`docs/SHEET-IMAGE-MANAGEMENT-260919.md` §5 / §13**；这里只留要点。
+
+### 一、定案：**不再走原稿的 overlay/canvas 两条路**，复用内核「浮动图」通道
+| | 原稿 | 落地 |
+|---|---|---|
+| 数据 | `cell.v.img = {asset, fit}` | **`sheets[].images[].cell = {r,c}`**（带它就是单元格图片；与浮动图共用一个数组） |
+| 渲染 | 自建绝对定位 overlay + 自己跟滚动/裁剪 | **内核自己的图通道**（滚动跟随 / `.fortune-cell-area` 裁剪 / `×zoomRatio` 全免费） |
+| 缩放/对齐 | 自研 fit 数学 | **CSS `object-fit: scale-down`**（等比缩进格内 + 不放大） |
+| 几何 | `getCellRect` | **`src/core/sheetGeometry.ts`** 复刻内核 `calcRowColSize` 口径，随模型变化重算 |
+
+- 写回模型用 `applyOp([{op:"replace", id:sheetId, path:["images"], value:next}])`：**整数组 replace 幂等**
+  （`opToPatch` 会把同一份 patch 同时打到 `luckysheetfile[i].images` 与渲染源 `insertedImgs`，用 `add` 单元素会被打两次），
+  且 `applyOp` 内部 `noHistory` ⇒ **不污染撤销栈**、也不回灌非受控 `data`。
+- 指针事件关闭（`pointer-events: none`）：单元格图片是「单元格的内容」，点它要命中单元格，不能被当浮动图拖走/加手柄。
+
+### 二、四个踩坑（都写进了代码注释，别再踩）
+1. **几何取整必须在累加内层**：内核是 `ch_width += Math.round((len+1)*zoomRatio)`。按「先累加再取整」算，
+   第 31 列就差 **12px**（实测 2430 vs 2442）——第一版就是这么错的，靠「图片 vs 内核选区 `style` 逐像素比对」抓出来。
+2. **`.luckysheet-cell-input` 是 contenteditable div**（不是 `<input>`，没有 `.value`）⇒「用户是否在打字」只能看 `textContent`。
+3. **内核在 `.fortune-container` 的 keydown 里 `stopPropagation()`** ⇒ React 合成事件收不到 `Delete`（实测 document 捕获能收到、
+   冒泡收不到）⇒ 键盘/粘贴一律挂 **document 捕获阶段 + `host.contains(target)` 限流**。
+4. **几何同步不能只靠 `onOp`**：实测拖列宽**有时一个 op 都不发**（内核 mouseup 直接改 config）⇒ 主触发点改 `onChange`
+   （模型变了必回调），`onOp` 只作附带。同理，`.fortune-cell-area` 与冻结数据都要等首次 commit 之后才存在 ⇒
+   滚动监听挂**宿主 + capture**，直接挂该节点会永远挂不上（冻结偏移静默失效）。
+
+### 三、隔离实例实测（21 项断言全绿；端口 1432 preview / 19881 asset / 9231 CDP，未碰用户实例）
+几何逐像素对齐内核选区（243.001/154/81.004/22 vs 243/154/80+1/21）· 指针穿透 · `scale-down` · 拖宽列跟格（81→131）·
+`Page.reload` 后逐像素一致 · 冻结行 `translate(0px, scrollTop)` · Delete 删（2→1）· 粘贴插图（1→2）。
+落盘：`images[0] = { id:"cellimg_…", src:"1789964532780_2c98163f.png", left:220.91, top:140, width:119.09, height:20, cell:{r:7,c:3} }`
+（只有 filename + 模型单位几何，无 base64/URL/运行时字段；正文仍 `version:2`）。
+
+### 四、门禁（260921）
+`tsc` 0 · `vitest` **1177 passed / 16 skipped (1193)** · 桌面 build + **Android `assembleDebug` BUILD SUCCESSFUL** ·
+`check:bundle` app-js 6.61MB raw/1.78MB gzip（预算 2.90MB）· drawnix 0.41MB · app-css 0.19MB · `check:core` 0 违规 · `git diff --check` 干净。
+（`src/styles/cssLayers.test.ts` 基线 `features/sheet/sheetEditor.css` 24 → **26**：单元格图片两条规则，合法新增。）
+
+### 五、P2 边界（未做，别当成已完成）
+~~**缩略图管线**~~（**260921 续已做，见 §2.19**）· **移动端只读渲染（P3）** ·
+「单元格格式 → 图片」对话框入口（要 patch 内核 React 弹窗，本批刻意不 patch）· AB 多端往返 + 删图后 GC 回收实测。
+
+## 2.19 本会话续（260921 · 表格单元格图片**缩略图** 落地）—— 未提交，等用户验收
+
+### 零、任务目标（按用户原话顺序，全部已完成）
+1. `可以开始做吧。在此之前先解决一个问题，当固定目录栏改成悬浮目录栏且收起的时候，表格右侧没有自适应，留了一个目录栏宽度的留白` → 见 §2.17（已修）；
+2. `format，locationCondition，comment，link 加回来这4个吧，就按照内核的顺序就行` → 见 §2.17（已做，工具栏 22 项）；
+3. `关于上一个问题，如果使用B方案不改内核，是否有性能问题…先看是否会导致卡顿和响应慢的问题` → 实测帧耗时与空表一致，
+   滚动期 overlay DOM 变更 0；**真正的成本在解码内存（像素 × 4B），不是帧率** —— 这就是本节的立项依据；
+4. `先调研一下现有资产管线的缩略图能力。` → 结论：**全管线五层（写入/存储/服务/渲染/同步 GC）没有任何缩略图**（见下方「先调研后动手」）；
+5. `多维表好像有缩略图，你看看是怎么做的，还是说我看到的小图片其时也是原图大小。` → **确实是原图**，26px 的格子解码整张；
+6. `可以做。` → 落地 `?w=` 按需缩略图（本节一~五）；
+7. `移动首页封面是什么意思这是哪里，另外两个没有问题可以做。` → 见本节六（多维表附件格 + 移动端封面 + 安卓 Java 侧）。
+
+**先调研后动手**：用户先让「调研现有资产管线的缩略图能力」→ 结论是**全管线没有任何缩略图**（写入/存储/服务/渲染/同步 GC 五层全无）。
+唯一的图片处理是 `?base64=1` 的 webp→png（尺寸不变）与 `imageConverter.worker` 的**原尺寸**转 PNG（给微信复制用）。
+用户看到的「小图」全是 CSS 压的：多维表附件格 26px（`bitableEditor.css`）、移动首页封面 210px、闪记缩略条 88px、
+表格单元格图片 —— **全都解码原图**。`NoteInfoDialog` 的 `thumbs`/`readAssetPreview` 名字最像缩略图，其实是主进程读整文件
+→ base64 dataUrl → IPC 全量回传（比走 URL 更贵），别被命名误导。文档里两处已记过这个空白（`S3-GC-DESIGN.md` 319、本方案 §11）。
+
+### 一、已完成①选型决策：按需缩放，**不落盘派生文件**
+**为什么不落盘**：`manifest.assets` 是磁盘实扫、GC 保护是正文 filename 正则 ⇒ 派生文件会被当资产声明/上传，
+却又不在正文引用集里，**注定被判孤儿回收**。真要保护就得把派生 filename 写进正文（结构变 + AB 往返都要管 + 删除要成对维护）。
+⇒ 给 `electron/assetServer.ts` 加 `?w=<档位>` **按需生成、不落盘、不上传、可随时重建**，不碰数据格式/同步协议/GC。
+
+### 二、已完成②实现（4 处，正文一个字节没变）
+1. `src/core/assetUrl.ts`（**纯逻辑，禁 DOM**）：`ASSET_THUMB_WIDTHS = [128,256,512,1024]`（**离散**是关键，连续值会把浏览器 immutable 缓存
+   与服务端缓存一起打散）+ `assetThumbWidthFor(设备px)`（取不小于目标的最接近档位；超最大档位 → null 用原图）+
+   `withAssetWidth(url, w)`（改写/去掉 `?w=`，**保留 token**，非本地资产原样）。
+   `src/lib/assetPort.ts`：`assetThumbWidthForCss(cssWidth)`（× DPR，封顶 3×）—— **它读 `devicePixelRatio`，属 DOM 依赖，
+   只能放 lib 不能放 core**（`check:core` 会卡，见七）；
+2. `electron/assetServer.ts`：`sharp(file).resize({width, withoutEnlargement:true})`，**保持原格式**（目标是解码内存，
+   而内存只取决于像素数，与编码格式无关；保格式还避开 alpha/动画/编解码器一堆边界）。GIF（多帧会被压成首帧）与
+   SVG（矢量无解码问题）**跳过**；解码失败落回原图（缩略图是纯优化，不能让它把图弄没）。内存 LRU 64 项（键含 mtime+size）
+   + 并发闸 4 路（sharp 解一张大图峰值就是像素×4B，突发批量会打爆内存）。
+3. `src/core/sheetDoc.ts`：`sheetImageSrc(src, noteId, port, width?)` —— 对 `http(s):` 输入也要能改写档位
+   （渲染层拿到的是**已拼好的 URL**，不是 filename）。`sheetImageDiskSrc`/`sanitizeSheetWorksheet` **一行没改**
+   （`parseLocalAssetUrl` 只取路径段、忽略 query ⇒ 带档位 URL 存盘照样换回 filename）。
+4. `src/features/sheet/SheetEditor.tsx`：`cellImageThumbWidth(模型宽度, zoom) = assetThumbWidthForCss(模型宽度 × zoom)`
+   （`sheetZoom` 从 `sheetGeometry` 导出，别自己读 `zoomRatio`）。三个触发点：挂载期 `withRenderableImageSrc`（阅读态也吃到，
+   不用等几何同步）、插入时 `insertCellImage`（省掉「先按原图加载再换缩略图」那次多余解码）、列宽/行高变化后
+   `syncCellImageGeometry` 一并改写 src（**早退条件必须把 src 也算进去**：`image.src === sized`）。
+   **浮动图不带档位**（能被用户任意拖大，档位会连续抖动）。
+
+### 三、已完成③端到端实测（隔离实例 1432 preview / 19881 asset / 9231 CDP，`/tmp/lake-thumb-verify.mjs`）
+1. 注入 **2400×1600** PNG → `src` 带 `?w=256`，`img.naturalWidth = 256` ⇒ 浏览器解码的是缩略图：
+   **位图 15.4MB → 175KB**（这才是省下来的东西，帧率本来就不是瓶颈）；
+2. 几何仍与内核选区一致（676.005/66/81.004/22 vs 676/66/81/22，≤1px），`object-fit: scale-down` 仍在；
+3. **拖宽列 81 → 257** ⇒ 档位 `256 → 1024`、`naturalWidth 1024`（这条路径会走 `applyOp` 改写 src，最容易写成死循环）；
+4. **无死循环**：`?w=` 请求共 4 条 / 去重 4 个 URL；600ms 内 rAF **38 帧**（≈63fps）；
+5. **落盘正文 745B 不含 `?w=`**，`images[].src` 全是裸 filename；
+6. `Page.reload` → 重开仍是缩略图（挂载期就带档位），几何逐像素一致；
+7. **几何同步改写 src 的档位**（把落盘几何改成与真实列宽不一致 → 挂载取宽档、同步后必须改写成真实档位）：
+   `requested tiers=["1024","256"] final=256`，**两条请求即收敛**（确定性触发那条 `applyOp` 改写路径）。
+证据截图 `/tmp/lake-thumb-evidence/{01-thumb-inserted,02-thumb-resized-column,03-thumb-after-reload}.png`。
+**唯一未复现**：`拖宽列 → 档位换代`（列头 hover 拖拽在窗口被遮挡时不落点，属实测环境限制，非产品问题；已用第 7 条确定性替代）。
+
+### 四、门禁（260921 续 2，全绿；与 §0 一致）
+`tsc` 0 · `vitest` **1200 passed / 16 skipped (1216)** · 桌面 `vite build` 绿 ·
+**Android `testDebugUnitTest`(AssetServerTest 8/0) + `assembleDebug` BUILD SUCCESSFUL** ·
+`check:bundle` app-js raw 6608559 / gzip **1.78MB**（预算 2.90MB）· drawnix 0.41MB · app-css 0.19MB ·
+`check:core` **65 文件 / 0 违规** · `git diff --check` 干净。
+新增单测：`assetServer.test.ts`（真 PNG 缩到 128 且字节变小 / `?w=1024` 在 400px 原图**不放大** / 非档位值当没传 /
+**GIF 直通**（不能把多帧压成首帧）/ 解不了码落回原图 / 同档位二次一致 / 换文件后缓存按 mtime+size 失效）、
+`assetUrl.test.ts`（档位边界 + 保留 token + 非本地资产原样）、`assetPort.test.ts`（CSS×DPR 选档、封顶 3×）、
+`sheetDoc.test.ts`（带档位 URL 落盘仍取 filename）、`sheetGeometry.test.ts`（`sheetZoom`）、
+`sheetEditorMount.test.ts`（三处拼装都带档位、`image.src === sized` 计入变更判定、浮动图不带档位）、
+`bitableEditorMount.test.ts`（附件格带档位 + 预览不带档位）、`AssetServerTest.java`（档位白名单/格式规则/`inSampleSize` 不下冲）。
+注：既有护栏 `sheetImageSrc\(src, noteId, ASSET_PORT\)` 随签名加了 `width` 一并更新。
+
+### 五、当前问题（**不阻塞**：本批没有已知缺陷，只有「未做」与「未验」两项）
+**未验**：移动端缩略图**真机未验收**（唯一没验过的面，见八.1）· 表格侧「拖拽列宽换档」在实测里未复现
+（环境限制，已用确定性替代，见三.7）。
+
+**未做（边界，动手前先跟用户确认）**：
+浮动图缩略图（可被任意拖大 ⇒ 档位会连续抖动）· 磁盘缩略图缓存（同会话重复请求已被浏览器 immutable 缓存吃掉，先不做）·
+输出格式统一为 WebP（收益只在传输字节，与解码内存无关）。
+
+### 六、已完成④扩展面（260921 续 2，用户确认「另外两个可以做」）
+1. **多维表附件格（桌面）**：`bitableCells.tsx` 的格子显示 26px 却解码整张原图 ⇒
+   `chipUrlOf = withAssetWidth(urlOf(f), assetThumbWidthForCss(ATTACHMENT_CHIP_PX))`。
+   **关键不变量**：`onOpen`（放大预览 → `ImageLightbox`）继续走原图 —— 预览借道缩略图就是糊的。
+   **实测 6/6**（`/tmp/lake-thumb-bitable.mjs`）：用应用自己的 API `lakeNative.createBitableIn` 建多维表
+   （正文结构由应用产出，只补「附件字段 + 记录 + 大图资源」），`src` 带 `?w=128`（token 保留）·
+   `naturalWidth 128`（原图 2400）· 格子仍 26px · **预览 `naturalWidth 2400` 且 URL 无 `?w=`**。
+2. **移动端小记卡片封面**：`HomePage.tsx` 的 `.qn-card__img`（整列宽 × 最高 210px）取**最大档位 1024**。
+   ⚠️ 这里**不能**用 `assetThumbWidthForCss`：整列宽 ≈ 360 CSS px、dpr 3 需要 1080 设备像素，
+   按它算会**超过档位表上限而退回原图**（静默不优化）——固定最大档位才对。手机照片 48MB 位图 → ~3MB。
+3. **移动端必须改 Java**：`src/mobile/**` 走 `android/.../AssetServer.java`（不是桌面那个 Node 服务）。
+   已按同一语义实现：`?w=` 白名单（与 `ASSET_THUMB_WIDTHS` 同值）+ `inJustDecodeBounds` 读尺寸 +
+   `inSampleSize`（只取 2 的幂、"解出来仍不小于目标宽"的最大值）+ `createScaledBitmap` + `compress`；
+   **只对 png/jpg/jpeg 生效**（GIF 多帧/SVG 矢量/其余 Android 编解码支持不一的一律落回原图），失败也落回原图。
+   `./gradlew testDebugUnitTest` → AssetServerTest **8 项 / 0 失败**；`assembleDebug` BUILD SUCCESSFUL。
+   **⚠️ 真机未验**（生成走 `android.graphics`，JVM 单测覆盖不到）：请在设备上看一次小记封面/表格图片是否正常显示。
+4. 顺手抽出 `assetThumbWidthForCss()`（CSS 宽度 × DPR，封顶 3×）作**唯一 DPR 入口**，各调用点不再自己读
+   `devicePixelRatio`（`SheetEditor` 的内联 dpr 计算已改用它）。
+
+### 七、踩过的坑（本批新增，务必记住）
+- **Java 的 `URI uri` 原本声明在 `try { ... }` 内部**，函数后半段引用不到（编译期"找不到符号"）⇒ 提到 try 之前；
+- **`dist/` 忘重建就跑去实测**：改动在构建之后做的话，页面上还是旧 bundle（表现为「代码明明改了但 `?w=` 没出现」）；
+- 页面查询要挑**可见**元素：多 tab 会保留隐藏 DOM（`getBoundingClientRect().width === 0`），`querySelector`
+  会命中旧 tab 那份，点击坐标就成了 (0,0)；
+- **窗口被别的 App 遮挡时 `document.visibilityState === "hidden"`**：rAF 被节流到 ≈1 帧/600ms、
+  列头 hover 拖拽也不落点（不是产品问题，但会让断言假红）⇒ 实测前先把窗口抬到最前（`osascript ... activate`；
+  CDP 的 `Page.setWebLifecycleState("active")` **盖不住遮挡**）；
+- **列宽换代不一定要靠拖拽验证**：把**落盘几何**改成与真实列宽不一致即可确定性触发 —— 挂载按落盘宽度取档、
+  几何同步后必须改写成真实档位。实测 `requested tiers=["1024","256"] final=256`，**两条请求即收敛**（无抖动）；
+- **`check:core` 抓到过一次真违规**：`assetThumbWidthForCss`（读 `devicePixelRatio`）一开始写在 `src/core/assetUrl.ts` ——
+  DOM 依赖不许进 core，已挪到 **`src/lib/assetPort.ts`**（core 只留纯逻辑 `assetThumbWidthFor`/`withAssetWidth`，
+  测试挪到 `assetPort.test.ts`）。**`tsc`/`vitest` 都不报，只有 `npm run check:core` 会卡** —— 别省这一步。
+
+### 八、下一步计划（按优先级；**都未做，动手前先跟用户确认**）
+1. **【需用户操作】移动端缩略图真机验收**：设备上看一眼小记卡片封面、表格里的图片是否正常显示。
+   代码有「任何失败落回原图」兜底，但缩略图生成走 `android.graphics`，JVM 单测覆盖不到 —— **这是唯一没验过的面**。
+2. **P3：移动端表格只读渲染**（`kind=sheet` 的 `sheets[].images[]` 叠层）+ 对拍 + 压测（大图/多图），见 §8 移动端交接。
+3. **删图后的 GC 回收实测** + AB 多端 S3 往返（图片可达）—— 机制复用现有资产管线，只需跑一次实测。
+4. **「单元格格式 → 图片」对话框入口**（要 patch 内核 React 弹窗，本批刻意不做）。
+5. 可选：把小记闪记框的 88px 缩略条也接上 `?w=`（`QuickNoteFlashComposer`，一行）；浮动图缩略图；
+   磁盘缩略图缓存；输出统一 WebP。
+6. 用户验收通过后：**这批改动要提交**（22 个文件，未 push 未合 master）—— 提交前记得跑完整门禁
+   （`tsc` + `vitest` + `check:core` + `check:bundle` + 桌面 build + `android/./gradlew testDebugUnitTest assembleDebug`）。
+
+### 九、隔离实测怎么搭（下个会话可直接复用）
+```
+npx vite build                                    # 必须先重建！改了 TS 不重建，页面还是旧 bundle
+npx vite preview --port 1432                      # 另开一个终端/后台
+LAKE_DEV_SERVER_URL=http://127.0.0.1:1432 LAKE_USER_DATA=/tmp/lake-cellimage-iso \
+  LAKE_ASSET_PORT=19881 npx electron --remote-debugging-port=9231 .
+osascript -e 'tell application "Electron" to activate'   # 抬到最前，否则 rAF 被节流、hover 拖拽失效
+node /tmp/lake-thumb-verify.mjs                   # 表格单元格图片缩略图
+node /tmp/lake-thumb-bitable.mjs                  # 多维表附件格缩略图
+# 收尾：按端口 PID 精确 kill（绝不 pkill -f Electron，用户的实例在 9222/1421）
+lsof -ti:1432 -ti:9231 | sort -u | xargs kill
+```
+数据全在 `/tmp/lake-cellimage-iso`（可删可重建），**从未碰用户实例与正式数据**。
+脚本都在 `/tmp`（不入库），要长期保留就搬进 `scripts/`。
+
+**归档进去的踩坑**：① 同步函数的**早退条件必须把 src 也算进去**（`image.src === sized`），只比几何的话列宽变化后档位换代会被早退吃掉；
+② 渲染层拿到的是**已拼好的 URL**，所以 `sheetImageSrc` 对 `http(s):` 输入也要能改写档位；③ 服务端并发闸要**移交槽位**
+（`releaseThumbSlot` 直接把槽给下一个 waiter，`running` 不变），先减后加会留窗口让超量请求挤进来。
+
+## 2.20 本会话续（260921 · 表格去掉浮动图 + 单元格图片工具弹窗 + 右键/滚动/色条）—— 未提交，等用户验收
+
+> 承接 §2.19。用户在表格上点名 7 项（1 项大改 + 6 个 bug）。改动全在桌面表格编辑器 + 两份 FortuneSheet dist 补丁；**工作区未提交**（与 P1/P2/缩略图同批）。
+> **最重要教训先说**：内核 `onChange` 的 effect 依赖 `onChange` 的**身份**（`useEffect(..., [context.luckysheetfile, onChange])`，而 `<Workbook>` 每次 render 都拿到新箭头函数）⇒ 任何「读 DOM 后 `setState` 新对象」的刷新 effect 都会与 rAF 形成 **60fps 死循环**（实测 TaskDuration 打满）。修法：值没变时 `setState` 返回 `prev`。
+
+### 一、已完成（按用户原话顺序）
+1. **完全去掉浮动图片**（工具栏 + 右键）：`TOOLBAR_ITEMS` 与 `CELL_CONTEXT_MENU` 里的 `"image"` 全部换成 `"cell-image"`；原在工具栏**最左**的单元格图片工具，现在正好占原「插入图片」位（自定义项按 `toolbarItems` 里的 key 就位）。`#fortune-img-upload`（内核浮动图 file input）不再渲染。
+2. **单元格右键「插入图片」改走单元格图片**：内核 `ContextMenu` 补丁按 `customToolbarItems` 里同 key 的项渲染菜单项（`_lakeCustomMenu`，label 取 `label || tooltip`）。
+3. **右键「清除内容」连带清除单元格图片**：内核只删文字、不动 `images[]`（`activeImg` 只管浮动图）⇒ 补丁在 `clear` 分支调 `settings.hooks.afterClearCellContent()`；宿主 defer 一轮后 `removeCellImageAtSelection()`（**不在 `setContext` 更新器里改模型**）。
+4. **单元格图片工具弹窗**（对齐云端截图）：`hooks.afterSelectionChange` + 几何 rAF + 滚动/resize 触发 `refreshCellImageMenu`；位置取图片元素**实测矩形**（合并/冻结/缩放都不用重算），滚出可视区隐藏；三个按钮 = **查看大图**（共享 `ImageLightbox`）/ **下载原图**（`native.saveAssetAs`）/ **删除**（`applyOp` 删 `images[]` 项；只读态不显示删除）。
+5. **表格细滚动条**（对齐文档/多维表）：`.sheet-editor .luckysheet-scrollbar-ltr::-webkit-scrollbar` 改 10px + 透明边框内阴影拇指（复刻 `src/b3/siyuan/util/_scroll.scss` 那套），覆盖内核自带 8px 实心 `#babac0`。
+6. **滚动速度调低**：补丁改 core `handleGlobalWheel` —— 竖向累计 `deltaY` 过 **100px** 才动一格（鼠标滚轮手感不变、触控板明显变缓）；横向改 **1:1 跟随 `e.deltaX`**（原实现每个事件固定 `20*zoomRatio`）。
+7. **修「文字色/背景色两条色条」**：内核这两个图标自身带一条灰底线，选中颜色后宿主再画一条色条 ⇒ 用 CSS `clip-path` 裁掉图标底线（`.fortune-toolbar > div:has(> div[style*="absolute"]) svg`），只留宿主色条（位置与原底线基本重合）。
+8. **浮动图删除钮接上**（顺带定位的 bug）：内核 `ImgBoxs` 的裁剪/恢复/**删除**三个控制钮**原本没有 onClick** —— 这就是「浮动图片无法删除」的真因 ⇒ 补丁给两个 `.luckysheet-modal-controll-del` 加 `removeActiveImage + jfrefreshgrid`。
+
+### 二、补丁（`patches/` 已重新生成，勿手改 patch 文件）
+- `@fortune-sheet+react+1.0.4.patch`：① 允许 `toolbarItems` 引用 `customToolbarItems`（按 key 就位，领头自定义块过滤掉已引用的）；② 右键菜单自定义项；③ 清除内容 hook；④ 删除钮 onClick。（原有 InputBox 宽度、图片 input 两个 hunk 保留。）
+- `@fortune-sheet+core+1.0.4.patch`：`handleGlobalWheel` 滚动累计 + 横向 1:1。（原有三个 hunk 保留。）
+- 重生成命令：`npx patch-package @fortune-sheet/react @fortune-sheet/core --patch-dir patches`（会联网装一份干净 1.0.4 做 diff）。**esm 与 cjs 两份都要改**，且变量名不同（`React` vs `React__default['default']`、`toolbarItemSelectedFunc` vs `core.toolbarItemSelectedFunc`、`removeActiveImage` vs `core.removeActiveImage`）。
+
+### 三、验证（隔离实例，**未碰用户实例/正式数据**）
+- `LAKE_USER_DATA=/tmp/lake-sheet-menu-iso` + `LAKE_ASSET_PORT=19881` + CDP 9231；**CDP 真实鼠标**（`Input.dispatchMouseEvent`）+ **真实粘贴**（`ClipboardEvent` 带 `DataTransfer`）驱 9 项断言全绿：无 `#fortune-img-upload` · 工具栏 cell-image 唯一 · 单元格图片落格内 · 弹窗三按钮 · 右键菜单含「插入图片」 · **弹窗打开 1.5s `TaskDuration` 增量 0.037s（无死循环）** · 弹窗删除生效。
+- 门禁：`tsc` 0 · `vitest` **1205 passed / 16 skipped (1221)** · 桌面 + 移动 build 绿 · `check:core` 0 · `check:bundle` app-js gzip 1.78MB/2.90MB · `git diff --check` 干净。
+
+### 四、当前问题 / 未做（都不阻塞）
+- 「插入图片」**按钮/右键的真实文件选择对话框**未走通自动化（隔离实例只验了粘贴链路；按钮与右键都只是 `cellImageInputRef.click()`）。
+- 老文档里**已有的浮动图仍会渲染**（只是不能再新建）；删除钮已修，但不会自动转成单元格图片（数据迁移未做，等用户决定）。
+- 弹窗**只认焦点格**：合并单元格内、多选区间里的图不弹（单独点中才弹）。
+- 拖拽列宽换档在隔离实例里仍受窗口遮挡影响（同 §2.19 五）。
+
+### 五、踩过的坑（本批新增，务必记住）
+- **内核 `onChange` effect 依赖 `onChange` 身份**：`useEffect(..., [context.luckysheetfile, onChange])`，Workbook 每次 render 传新箭头函数 ⇒ **任何刷新 effect 的 `setState` 新对象都会变成 60fps 死循环**（症状：CPU 打满、`Performance.getMetrics` 的 TaskDuration 线性增长）。刷新类 effect 必须「值没变返回 `prev`」，或把 `onChange` memo 化。
+- **窗口被遮挡时 rAF 被节流**（同 §2.19）：CDP 实测弹窗/几何同步前先 `osascript -e 'tell application "Electron" to activate'`，否则假红（本次一度误判「弹窗不出现」）。
+- **`customToolbarItems` 项没有 `label` 字段**（只有 `tooltip`）⇒ 右键菜单 label 必须 `label || tooltip`，否则菜单项渲染成**空白**（`innerText` 里看不到，极易误判「补丁没生效」）。
+- **改内核 dist 后必须重新生成 patch**，否则下次 `npm i`（postinstall 打 patch）会退回未打补丁状态；只改 `node_modules` 不重生成 = 别人拉下来没这个行为。
+- **`vitest` 跑不了内核**：这类行为只能 CDP 驱真 Electron 验（本次脚本在 `/tmp`，未入库）。
+
+### 六、同会话第二轮（用户 4 项反馈：多选清图 / 插入数量 / 行列拖拽 / 图片跟随）
+- **✅ 多选区域「清除内容」连带清图片**：原 `removeCellImageAtSelection` 只按**焦点格**删（单格 OK、多选漏）⇒ 改为按 `wb.getSelection()` 的**所有选区范围**删（`imageAnchorInRanges`；整行/整列的范围内核已给全）。隔离实例 shift 多选 4 行实测：图片被清掉。
+- **✅ 右键「向上/向下插入」默认数量 = 选中行/列数**：内核 insert-row/column 输入框写死 `defaultValue:"1"` ⇒ 补丁改成按 `context.luckysheet_select_save[0]` 的 `row`/`column` 跨度算。实测：单击 = 1/1；shift 选 4 行 = 4/1（**选中即整批**，用户口径）。
+- **✅ 拖拽列宽换档**：用户复测**没问题**，无需改。
+- **整行/整列拖拽 —— 内核不支持（结论）**：FortuneSheet 行/列头只有「选择 / 边界拖拽改尺寸 / 右键菜单（插入·删除·隐藏·复制·粘贴·清除·排序）」；`handleRowHeaderMouseDown`/`handleColumnHeaderMouseDown` 只做选区，core 里**没有** `moveRow`/`moveColumn` 之类 API。要换行/列位置只能用剪切粘贴、或「插入 + 删除」。
+- **✅ 已实现「图片跟随 cell 移动」**（用户 260921 选 A+B）。根因仍是：单元格图片是宿主扩展（`sheets[].images[]` + `{r,c}`），内核行列操作只重排 `data`/`celldata`/`config`、**从不碰 `images[]`**。
+  - **A（插入/删除行列）**：应用层 `onOp` 识别 `insertRowCol`/`deleteRowCol` op，延迟一 tick 后按 (type,index,count,direction / start,end) 平移或删除受影响锚点（撤销会以相反 op 再发一次，天然对称）。实测「向上插入一行」图片下移 22px。
+  - **B（内部 copy/cut + paste）**：**应用层剪贴板桥**（不依赖内核剪贴板内部状态）：`copy`/`cut` 捕获阶段记下选区内单元格图片与源左上角 → 粘贴（剪贴板 HTML 含内核标记 `fortune-copy-action-table`）后 `setTimeout(0)` 按 (目标−源) 偏移搬迁（copy 复制 / cut 移走源图）。实测 copy 多一张、cut 源图移走且目标出现。
+  - **⚠️ 为什么没走内核补丁（弯路，务必记住）**：先给 core 的 `pasteHandlerOfCutPaste`/`pasteHandlerOfCopyPaste` 打补丁搬迁 `insertedImgs`，**copy 能过、cut 不行** —— CDP 实测 `handlePaste` 进入时 `ctx.luckysheet_paste_iscut` 恒为 `false`（内核公开粘贴入口对 cut 标志/`isEqual` 的时序不稳），该补丁已**回退**（core patch 只剩滚动那一处）。应用层桥只依赖 `copy`/`cut`/`paste` 三个 DOM 事件，确定性可测。
+  - **仍不支持**：整行/整列**拖拽**（内核无此能力）；跨表 / 粘贴到不同 sheet；只含图片、没有文字的单元格，内核自身的 cut/paste 可能抛错（与本改动无关）。
+- **✅ 同会话第三轮（用户 3 项反馈：多选 / 右键粘贴 / Cmd+A）**：
+  - **多选、整行整列 copy-cut-paste**：`recordClipboardCellImages`/`pasteClipboardCellImages` 去掉「只认单块选区」，改为取**所有选区的包围盒左上角**（`rangeBoundingBox`）⇒ 多块选区 / 整行 / 整列都跟随。实测整行 copy（目标行出现副本）、整行 cut（源图移走、目标出现）均通过。
+  - **右键菜单「粘贴」不可用（内核 bug）**：内核 `ContextMenu` 的粘贴项把系统剪贴板**纯文本**回写 `#fortune-copy-content`，冲掉内部表格标记 `fortune-copy-action-table` ⇒ 内部内容被当外部文本粘贴。补丁：当 `#fortune-copy-content` 含该标记且系统文本 == `sessionStorage.localClipboard`（即内部内容）时传 `null`（不覆盖，走内部 HTML）。另：右键粘贴**不走 `paste` DOM 事件** ⇒ 应用层监听右键菜单「粘贴」点击，补一次图片搬迁。
+  - **Cmd/Ctrl+A 偶发选中整页（含目录栏文字）**：内核 `handleGlobalKeyDown` 的 `KeyA` 分支调 `selectAll(ctx)` 但**没有 `preventDefault`** ⇒ 浏览器原生全选把整页 DOM 文本（含侧栏）一起选中。补丁加 `e.preventDefault()`。**注意**：编辑单元格文字时内核在 77150 行已对非方向键 `return`，走不到这里 ⇒ 单元格内 Cmd+A 选文字不受影响。
+
+- **🔬 Spike（260921）：自定义 cell 字段穿透性 —— ✅ 通过，路 2 的 2A 可行**（完整报告 `docs/CELL-IMAGE-SPIKE-260921.md`）：
+  - 运行期实测（用户实例上的临时表，跑完已删）：**插入/删除行列、`setCellValue` 编辑、序列化都保留 `__probe`**；copy/paste 因探针里用了 `wb.setSelection`（把 `luckysheet_select_save` 弄成非数组）没验完，但**源码判定通过** —— `getdatabyselection` 按引用取 cell、`setCellValue`/`updateCell` 原地改已有对象、`insertRowCol/deleteRowCol` 用 `unshift/splice` 搬 cell。
+  - **顺带修掉一个真 bug**：内核 `getSelection()` 在选区非数组时抛 `TypeError: ...map is not a function` ⇒ 冒到 `SheetEditorErrorBoundary`，**整个表格编辑器被卸载**（用户视角「表格突然没了」/「偶发」）。新增 `safeGetSelection(wb)`（try/catch + `Array.isArray` 兜底）替换全部调用点，护栏已加。
+  - **结论**：走 **2A**（图片进 cell 附加字段如 `cell.img`，宿主在 `onChange` 从 cell 反推 `images[]` 渲染条目与几何）；copy/cut/paste、插入删除行列、撤销、跨表、序列化全部由内核负责，**结构性**消除这一类 bug。2B（canvas 原生渲染）暂不做。预计 vendor+构建 1–2 天、2A 实现 3–5 天。
+  - 遗留：回收站里有临时表 `SPIKE-临时` / `SPIKE-临时2`（只有 `__probe`），用户可自行清空。
+
+## 2.21 本会话总交接（260921 · 单元格图片方案 2A：`cell.img` 成为唯一真相）—— 未提交，等用户验收
+
+> 承接 §2.20 六的 Spike（自定义 cell 字段能穿过内核搬运）。本批把单元格图片从「宿主扩展的 `images[].cell` 锚点」改成 **`cell.img` 为唯一真相**，让 copy/cut/paste、插入删除行列、编辑、撤销、跨 sheet、序列化**全部由内核负责**。
+
+### 一、改了什么
+- **数据**：插入单元格图片写 `cell.img = { id, src }`（src = 资产 filename），同时立即写一份 `images[]` 渲染条目（不等 rAF，窗口被遮时 rAF 会停）。
+- **派生**：`reconcileCellImages()` 在每次模型变化（rAF + 120ms 兜底定时器）后，从「格子上有 img」反推 `images[]` 的 cell 条目（浮动图原样保留）；同一 id 被 copy 到多格时补新 id（内核 copy 会连带复制 `img.id`）。不变时返回 prev 早退（防环）。
+- **删除**：内核 `deleteSelectedCellText` 把 cell 换成 `{}`（`modules/selection.ts:2101`）⇒ Delete/「清除内容」自动带走 `img`；弹窗「删除」逐个清格子的 `img`。**删掉了** Delete 捕获、`afterClearCellContent`、`removeCellImageAtSelection`。
+- **删除旧桥**：`applyRowColImageShifts`（onOp 平移）、`recordClipboardCellImages`/`pasteClipboardCellImages`（应用层剪贴板桥）、右键粘贴点击桥、`imageAnchorInRanges`/`rangeBoundingBox` 全删 —— 不再需要宿主搬图。
+- **保留**：两处独立内核补丁（右键「粘贴」用内部 HTML、Cmd+A preventDefault）、`safeGetSelection`、几何同步/缩略图/弹窗/冻结偏移。
+
+### 二、验证（隔离实例，未碰用户数据/实例）
+- 2A e2e **5/5**：粘贴图渲染 · 正文 `celldata[].v.img` 落盘 · **copy/paste 图跟随到目标格** · **插入行后图跟随下移（96→118）** · **清除内容后图消失（2→1）**。
+- 模型级（临时探针，跑完已删）：**编辑（setCellValue）后 img 保留** · **插入行后 `cell(3,1)`→`cell(4,1)`、`images[].cell.r=4`** · **Cmd+Z 撤销后 img 回原行**（需先把焦点点回网格，否则 Cmd+Z 到不了内核）· **跨 sheet copy/paste 图跟随**（点 sheet 标签切表；`addSheet` 也会切当前表）。
+- **顺带修掉一个真 bug**：内核切换 sheet 只改 `currentSheetId`、**不更新 `status`** ⇒ 原来的 `activeSheetOf`（`status===1`）在多表下**永远认第一张**（人在第二张表，插入/几何/弹窗却作用在第一张）。新增 `activeSheet(wb, sheets)`：优先 `wb.getSheet()`（跟 `currentSheetId`），退化才用 status；所有调用点已改。
+- **跨表 id 去重**：copy/paste 会连 `img.id` 一起复制（含跨 sheet）⇒ `reconcileCellImages` 的 id 去重从「单表内」改成「**跨表全局**」，否则两张表会出现同 id 图片。
+
+### 三、门禁
+`tsc` 0 · `vitest` **1210 passed / 16 skipped (1226)** · 桌面 + 移动 build · `check:core` 0 · `check:bundle` app-js gzip 1.78MB/2.90MB · `git diff --check` 干净。
+
+### 四、当前问题 / 未验
+- **含图单元格 cut**（Cmd+X 后粘贴）只跑了 copy 路径 + 撤销；2A 下无论内核把它当 copy 还是 cut，图片都随 cell 到目标；「源是否清空」取决于内核剪贴板行为（§2.20 六的 `luckysheet_paste_iscut` 不稳），未单独断言。
+- 正文同时保留 `images[]`（含派生 cell 条目）与 `cell.img`：冗余但安全；将来可只在保存时剔除 cell 条目（以 `cell.img` 为准）。**遗留浮动图仍原样保留**（不再新建）。
+- 老 P2 数据（只有 `images[].cell`、无 `cell.img`）**不做自动回填**（Spike 扫描用户数据里没有这种；红线 #7 不写兼容）。
+
 ## 3. 下一步计划 + 当前问题（真正的待办，按优先级）
 
 ### 下一步计划
@@ -1434,16 +1799,28 @@ tsc 0 · vitest 1095 passed / 16 skipped (1111) · 桌面 + 移动 vite build �
     - **（提交前）清理 spike 产物**：`spike.html`、`src/spike/`、`scripts/spike-sheet-ce.mjs`、`vite.spike.config.ts`、`vite.spike.build.config.ts`（保留两份 `docs/*-260918.md` 设计文档）。
     - **（提醒）manifest v6 ⇒ 所有端一起升级**：旧端读到 v6 显式拒绝同步（刻意安全闸）。
 
-14. **【表格图片独立管理 · 已立项 260919】浮动图 P1 / 单元格图 P2** —— 规范见 **`docs/SHEET-IMAGE-MANAGEMENT-260919.md`（其他会话按此实施，勿另起炉灶）**。
+14. **【表格图片独立管理】浮动图 P1 ✅ 260920 / 单元格图片 P2 ✅ 260921 / 缩略图 ✅ 260921 续（均未提交，见 §2.16 / §2.18 / §2.19）** —— 规范与落地记录见 **`docs/SHEET-IMAGE-MANAGEMENT-260919.md` §5 / §13 / §14**。
+    - **✅ P1（本会话）**：正文 `sheets[].images[].src` 存 **filename**（**版本号不变**，仍 v2 —— 结构未变、两种形态读写都支持，升版本会让既有表格变空表）；
+      文件落 `note-assets/{noteId}/`，**清单声明无需改（磁盘实扫）**，同步/GC/历史复用现有资产管线（红线 #11/#17）；老正文里的 base64 在**打开时**自愈（同一条提升路径，不是兼容分支）。
+      实机实测：正文 323B 只有 filename、资源落盘、reload 后按**本实例端口**渲染。
+    - **✅ P2（本会话）**：单元格图片 = `images[].cell = {r,c}` 锚点 + 几何跟单元格走（`src/core/sheetGeometry.ts` 复刻内核口径）+
+      CSS `object-fit: scale-down` 锁比例不放大 + 指针事件关闭；插入/替换/Delete 删除/粘贴插入/冻结窗格偏移都做了；
+      **不走原稿的 overlay/canvas 两条路**（复用内核浮动图通道，滚动/裁剪/缩放全免费）。见 §2.18。
+    - **✅ 缩略图（260921 续）**：assetServer `?w=` 按需缩放（`sharp` + 原格式 + GIF/SVG 跳过 + 内存 LRU + 并发闸 4），
+      档位随显示宽度换代；**不落盘派生文件**（会被磁盘实扫声明成资产、却不在正文引用集里 ⇒ 注定被判孤儿回收）。
+      实测 2400×1600 在 81px 格里解码成 256px（位图 15.4MB → 175KB），落盘正文不含 `?w=`。
+      **续 2**：同一套已接**多维表附件格**（26px 取 128 档，放大预览仍原图）与**移动端小记封面**（最大档位 1024），
+      安卓 Java AssetServer 同语义实现（`inSampleSize`，只认 png/jpg/jpeg，8 项 JVM 单测过，**真机未验**）。见 §2.19。
+    - **仍待做**：**P3 移动端表格只读渲染 + 对拍 + 压测** · **移动端缩略图真机验收**（设备上看小记封面/表格图片）·
+      AB 多端往返 + 删图后 GC 回收实测 · 「单元格格式 → 图片」对话框入口（要 patch 内核 React 弹窗，本批刻意不做）·
+      浮动图缩略图。
+    - **前置已做**：图片按钮按实例定位（patch react）、本地插入可用（见第七轮）。
 15. **【移动端小记工作台能力 · 待办 · 用户 260920「先计入待办，先不做」】**：移动端小记目前只有 编辑/删除/排序；桌面的**转正式文档 / 批量选择 / 置顶 / 列表视图**尚未搬过来。详见 `docs/MOBILE-PARITY-260920.md` §五。
 
 16. **【移动端复用小记能力 · 后期】** 桌面小记已定稿为「内核当写入器 + 自研读取器（白名单）」（见 §2.10 续做第五~八轮）。
     移动端小记目前是纯文本输入 + 合成 lake 段落/图片卡（`src/mobile/quickNotesRepository.ts`）；
     用户要求后期**复用同一套能力**（同一份白名单 + 同一个预览读取器 `quickNotePreviewParser.ts`），
     工具栏形态可按移动端（`EditorDock`）调整。做之前先读 §2.10 续做 + `docs/LAKEX-CONTRACT.md` §5.11。
-    - **目标**：正文 `sheets[].images[].src` 由 **base64 内联**改为 **filename 引用**（正文 `version:2→3`）；文件落 `note-assets/{noteId}/`，`manifest.assets` 声明，同步/GC/历史**复用现有资产管线**（红线 #11/#17）；旧 base64 表**删了重建**（#7）。
-    - **分阶段**：**P1 浮动图独立资产 ~1–1.5 天**（写文件 IPC + 正文改 filename + 清单声明 + 读回拼 URL；粘贴图可并入）· **P2 单元格图 ~3–5 天**（FortuneSheet 无 in-cell 字段 → 方案 A：`cell.img` + 自绘 overlay 锚定单元格）· **P3 移动端/浏览器渲染 + 对拍 + 压测 ~1 天**。
-    - **前置已做**：图片按钮按实例定位（patch react）、本地插入可用（见第七轮）。
 
 ### 当前问题 / 已知坑（不阻塞）
 - 画板**不再记忆视口**（拖动/缩放后重开为默认/自适应）：这是 260916 为「不让视口触发保存/上传」刻意做的取舍，**用户已确认接受**（"谁知道下次进来要看什么"）。不要改回去。

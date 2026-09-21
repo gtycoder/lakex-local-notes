@@ -8,7 +8,8 @@
 import { useEffect, useLayoutEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { Calendar, Check, ChevronDown, ChevronLeft, ChevronRight, CircleDot, Hash, HelpCircle, Link2, Maximize2, Paperclip, Plus, Search, Tags, Type, X } from "lucide-react";
-import { ASSET_ORIGIN, withAssetAccessToken } from "../../lib/assetPort.js";
+import { ASSET_ORIGIN, assetThumbWidthForCss, withAssetAccessToken } from "../../lib/assetPort.js";
+import { withAssetWidth } from "../../core/assetUrl.js";
 import { BITABLE_OPTION_PALETTE, bitableDisplayValue, isKnownFieldType, optionChipStyle, optionColorHex, type BitableField, type BitableFieldOption } from "../../core/bitableDoc.js";
 
 /** 字段类型图标（未知类型给 HelpCircle）。 */
@@ -153,6 +154,9 @@ export function OptionPicker({ field, value, multiple, disabled, onToggle, onAdd
   );
 }
 
+/** 附件单元格里图片的显示边长（px）—— 必须与 `bitableEditor.css` 的 `.bt-attachment-chip img` 一致。 */
+const ATTACHMENT_CHIP_PX = 26;
+
 export interface AttachmentCellProps {
   noteId: string;
   value: unknown;
@@ -167,13 +171,20 @@ export function AttachmentCell({ noteId, value, readOnly, onUpload, onRemove, on
   const files = Array.isArray(value) ? value.filter((v): v is string => typeof v === "string") : [];
   const inputRef = useRef<HTMLInputElement>(null);
   const urlOf = (filename: string) => withAssetAccessToken(ASSET_ORIGIN + "/" + noteId + "/" + filename);
+  /**
+   * 格子里的缩略图：显示尺寸只有 26px（`bitableEditor.css` 的 `.bt-attachment-chip img`），
+   * 但 `<img>` 会解码整张原图（解码内存 ≈ 像素 × 4B，手机照片 4000×3000 就是 48MB 位图）——
+   * 一屏十几个附件格就是几百 MB。按档位取缩略图把这个数降到几十 KB。
+   * 放大预览（onOpen → ImageLightbox）走 `urlOf` 的**原图**，不能借道缩略图。
+   */
+  const chipUrlOf = (filename: string) => withAssetWidth(urlOf(filename), assetThumbWidthForCss(ATTACHMENT_CHIP_PX));
   const isImage = (filename: string) => /\.(png|jpe?g|gif|webp|avif|bmp|svg|ico)$/i.test(filename);
   return (
     <div className="bt-attachment-cell">
       {files.map((filename) => (
         <div key={filename} className="bt-attachment-chip" title={filename}>
           {isImage(filename)
-            ? <img src={urlOf(filename)} alt={filename} onClick={() => onOpen(filename)} />
+            ? <img src={chipUrlOf(filename)} alt={filename} loading="lazy" onClick={() => onOpen(filename)} />
             : <button type="button" className="bt-attachment-name" onClick={() => onOpen(filename)}>{filename}</button>}
           {!readOnly && <button type="button" className="bt-attachment-remove" aria-label={"移除 " + filename} onClick={() => onRemove(filename)}>×</button>}
         </div>

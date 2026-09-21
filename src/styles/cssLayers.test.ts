@@ -51,7 +51,11 @@ const BASELINE: Record<string, { decls: number; dupGroups: number }> = {
   "features/editor/image-lightbox.css": { decls: 57, dupGroups: 0 },
   "features/outline/outline.css": { decls: 244, dupGroups: 0 },
   // 260919：换成 FortuneSheet；容器尺寸 + 工具栏紧凑 + 无样式输入框补边框（标签样式已按用户要求回滚）
-  "features/sheet/sheetEditor.css": { decls: 24, dupGroups: 0 },
+  // 260921：+2 = 单元格图片（禁指针事件 + object-fit: scale-down）——合法新增，非覆盖回涨
+  // 260921：+2 = 单元格图片（禁指针事件 + object-fit: scale-down）
+  // 260921 续：+35 = 去掉浮动图后新增的单元格图片工具弹窗（11 条）+ 细滚动条（11 条）+ 色条裁切与定位基准（2 条）
+  //          —— 合法新增，非覆盖回涨
+  "features/sheet/sheetEditor.css": { decls: 61, dupGroups: 0 },
   // 260920：多维表编辑器（自研，v1）；+63 = 文本「扩大」浮窗；+37 = 行手柄/右键菜单/数据表列表；+82 = 网格线/列选择/列宽拖拽/日期选择器/范围选择/全收起切换（合法新增）
   "features/bitable/bitableEditor.css": { decls: 856, dupGroups: 0 },
   // 260920：独立画板文档（kind=board）容器（铺满 tab 格 + 去掉卡片态边框/圆角 + 内核分包加载占位）

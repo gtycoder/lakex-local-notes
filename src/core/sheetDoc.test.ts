@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   emptySheetBody,
   parseSheetBody,
+  sheetImageDiskSrc,
   sheetImageSrc,
   sheetImages,
   sheetToSearchText,
@@ -9,7 +10,7 @@ import {
   SHEET_DOC_VERSION,
 } from "./sheetDoc.js";
 
-describe("sheetDoc v2（FortuneSheet 正文格式）", () => {
+describe("sheetDoc v2（FortuneSheet 正文格式 + 图片资产化）", () => {
   it("emptySheetBody 可被 parse 往返", () => {
     const doc = parseSheetBody(emptySheetBody());
     expect(doc).not.toBeNull();
@@ -21,7 +22,7 @@ describe("sheetDoc v2（FortuneSheet 正文格式）", () => {
     expect(parseSheetBody(JSON.stringify({ kind: "sheet", version: 1, worksheets: [] }))).toBeNull();
     expect(parseSheetBody("{bad json")).toBeNull();
     expect(parseSheetBody("")).toBeNull();
-    expect(parseSheetBody(JSON.stringify({ kind: "sheet", version: 2, sheets: [] }))).toBeNull();
+    expect(parseSheetBody(JSON.stringify({ kind: "sheet", version: SHEET_DOC_VERSION, sheets: [] }))).toBeNull();
   });
 
   it("sheetToSearchText 按行列拼 celldata 的显示值/原值", () => {
@@ -81,23 +82,81 @@ describe("表格浮动图（sheets[].images）解析", () => {
     expect(images[1]).toMatchObject({ left: 180, top: 90, width: 120, height: 80 });
   });
 
+  it("单元格图片（P2）：带合法 cell 锚点的读出锚点；非法锚点当浮动图", () => {
+    const withAnchors = {
+      name: "Sheet1",
+      images: [
+        { id: "cellimg_1", src: "a.png", left: 0, top: 0, width: 74, height: 20, cell: { r: 1, c: 2 } },
+        { id: "cellimg_bad", src: "b.png", left: 0, top: 0, width: 74, height: 20, cell: { r: -1, c: 0 } },
+        { id: "cellimg_bad2", src: "c.png", left: 0, top: 0, width: 74, height: 20, cell: "A1" },
+      ],
+    };
+    const images = sheetImages(withAnchors as never);
+    expect(images[0].cell).toEqual({ r: 1, c: 2 });
+    expect(images[1].cell).toBeUndefined();
+    expect(images[2].cell).toBeUndefined();
+  });
+
   it("没有 images / 非法结构 ⇒ 空数组（不抛错）", () => {
     expect(sheetImages({ name: "S" })).toEqual([]);
     expect(sheetImages(null)).toEqual([]);
     expect(sheetImages({ name: "S", images: "nope" } as never)).toEqual([]);
   });
 
-  it("src 解析：data/http 原样，filename 拼 canonical URL（为桌面 P1 预留）", () => {
+  it("src 解析：data/http 原样，filename 拼 canonical URL（端口随实例）", () => {
     expect(sheetImageSrc("data:image/png;base64,AAAA", "note-1")).toBe("data:image/png;base64,AAAA");
     expect(sheetImageSrc("http://127.0.0.1:19876/note-1/a.png", "note-1")).toBe("http://127.0.0.1:19876/note-1/a.png");
     expect(sheetImageSrc("1712345678_ab12cd34.png", "note-1")).toBe("http://127.0.0.1:19876/note-1/1712345678_ab12cd34.png");
+    // 多端同机双开（B 端 LAKE_ASSET_PORT=19877）：URL 必须带本实例端口
+    expect(sheetImageSrc("1712345678_ab12cd34.png", "note-1", 19877)).toBe("http://127.0.0.1:19877/note-1/1712345678_ab12cd34.png");
     expect(sheetImageSrc("", "note-1")).toBeNull();
     expect(sheetImageSrc("1712345678_ab12cd34.png", "")).toBeNull();
   });
 
+  it("缩略图档位只落在 query 上：落盘仍是 filename，正文里永远不出现 ?w=", () => {
+    expect(sheetImageSrc("1712345678_ab12cd34.png", "note-1", undefined, 128))
+      .toBe("http://127.0.0.1:19876/note-1/1712345678_ab12cd34.png?w=128");
+    // 已是 URL（上一轮拼过档位、或被渲染层注入过 token）：原地改写，不重复拼路径，也不冲掉 token
+    expect(sheetImageSrc("http://127.0.0.1:19876/note-1/a.png?w=512&token=t", "note-1", undefined, 256))
+      .toBe("http://127.0.0.1:19876/note-1/a.png?w=256&token=t");
+    // data:/外部 http 没有档位可言（外部图我们无权也无需缩放）
+    expect(sheetImageSrc("data:image/png;base64,AAAA", "note-1", undefined, 128)).toBe("data:image/png;base64,AAAA");
+    expect(sheetImageSrc("https://example.com/x.png", "note-1", undefined, 128)).toBe("https://example.com/x.png");
+    // 落盘只取路径段：档位（和 token 一样）是运行时产物，不进正文
+    expect(sheetImageDiskSrc("http://127.0.0.1:19876/note-1/a.png?w=128&token=t")).toBe("a.png");
+  });
+
   it("正文快照里的 images 能被 parseSheetBody 保留（sanitize 不裁字段）", () => {
-    const body = JSON.stringify({ kind: "sheet", version: 2, sheets: [sheet] });
+    const body = JSON.stringify({ kind: "sheet", version: SHEET_DOC_VERSION, sheets: [sheet] });
     const parsed = parseSheetBody(body);
     expect(sheetImages(parsed?.sheets[0])).toHaveLength(2);
+  });
+
+  it("落盘口径：资产 URL（含 token）→ filename；几何与其余字段逐字节保留", () => {
+    const body = sheetsToBody([
+      {
+        name: "Sheet1",
+        images: [
+          { id: "img_1", src: "http://127.0.0.1:19876/note-1/1712345678_ab12cd34.png?token=SECRET", left: 10, top: 20, width: 80, height: 50, originWidth: 160, originHeight: 100 },
+          { id: "img_2", src: "1712345678_ab12cd34.png", left: 0, top: 0, width: 10, height: 10 },
+          { id: "img_3", src: "https://example.test/remote.png", left: 0, top: 0, width: 10, height: 10 },
+        ],
+      } as never,
+    ]);
+    expect(body).not.toContain("base64");
+    expect(body).not.toContain("token");
+    expect(body).not.toContain("127.0.0.1");
+    const images = (parseSheetBody(body)?.sheets[0] as unknown as { images: Array<Record<string, unknown>> }).images;
+    expect(images[0]).toEqual({ id: "img_1", src: "1712345678_ab12cd34.png", left: 10, top: 20, width: 80, height: 50, originWidth: 160, originHeight: 100 });
+    expect(images[1].src).toBe("1712345678_ab12cd34.png");
+    expect(images[2].src).toBe("https://example.test/remote.png"); // 外部图原样（不是本地资产）
+  });
+
+  it("落盘口径：内核刚插入的 base64 保持原样（由编辑器负责在保存前提升，不在这里丢图）", () => {
+    const body = sheetsToBody([
+      { name: "Sheet1", images: [{ id: "img_1", src: "data:image/png;base64,AAAA", left: 0, top: 0, width: 80, height: 50 }] } as never,
+    ]);
+    const images = (parseSheetBody(body)?.sheets[0] as unknown as { images: Array<{ src: string }> }).images;
+    expect(images[0].src).toBe("data:image/png;base64,AAAA");
   });
 });

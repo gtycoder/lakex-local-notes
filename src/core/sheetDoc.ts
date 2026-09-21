@@ -9,10 +9,17 @@
  * （FortuneSheet 是 sparse `celldata` + config/frozen/images/...）。按 AGENTS §3 #7：开发版数据可删可重建，
  * **不写兼容**——v1 正文 parse 返回 null → 按空表打开。
  *
+ * 图片（260920 表格图片独立管理 P1，见 `docs/SHEET-IMAGE-MANAGEMENT-260919.md`）：浮动图
+ * `sheets[].images[].src` **存资产 filename**（文件落 `note-assets/{noteId}/`，复用资产管线：声明/GC/同步/
+ * 历史/移动端 AssetServer）；渲染时由 `sheetImageSrc` 拼 URL，落盘时由 `sanitizeSheetWorksheet` 换回 filename。
+ * **刻意不升版本号**：结构没变，`src` 的两种形态（filename / 内核刚插入的 `data:`）读写两侧天然都支持
+ * （`sheetImageSrc` 一律放行 data:，编辑器打开时把遗留的 base64 提升成资产）——升版本只会让既有表格静默变空表，
+ * 零收益破坏。
+ *
  * 边界：本文件属 `src/core`（禁平台/第三方依赖），因此这里只声明「结构上兼容 FortuneSheet 的最小类型」，
  * 不 import `@fortune-sheet/core`；编辑器侧负责 `Sheet[]` 与本类型的互转（结构兼容，直接断言）。
  */
-import { localAssetHttpUrl } from "./assetUrl.js";
+import { localAssetHttpUrl, parseLocalAssetUrl, withAssetWidth } from "./assetUrl.js";
 
 export const SHEET_DOC_KIND = "sheet" as const;
 export const SHEET_DOC_VERSION = 2 as const;
@@ -46,21 +53,39 @@ export interface SheetWorksheet {
 }
 
 /**
- * 工作表里的**浮动图**（FortuneSheet `sheets[].images[]`）：几何是**像素**，相对网格内容原点（A1 左上）。
- * 实测形态（260920 真插一张 160×100 PNG 落盘）：
- * `{ id, src:"data:image/png;base64,…", left:0, top:0, width:80, height:50, originWidth:160, originHeight:100 }`。
+ * 工作表里的图片（FortuneSheet `sheets[].images[]`，两种形态共用同一个数组）：几何是**像素**，
+ * 相对网格内容原点（A1 左上），**zoom=1 单位**（内核渲染时统一乘 `zoomRatio`）。
+ * 插入瞬间内核产出的是 `{ id, src:"data:image/png;base64,…", left, top, width, height, originWidth, originHeight }`，
+ * 宿主在保存前把 `src` 提升成资产 filename（见 `SHEET-IMAGE-MANAGEMENT-260919.md` P1）。
+ * 带 `cell` 的是单元格图片（P2），几何由宿主一直跟着单元格矩形走。
  */
 export interface SheetImageRef {
   id: string;
-  /** 原始 src：当前是 base64 data URL；`SHEET-IMAGE-MANAGEMENT-260919.md` 的 P1 落地后会变成资产 filename。 */
+  /** 正文里的 src：**资产 filename**（`1712345678_ab12cd34.png`）；渲染时经 `sheetImageSrc` 拼 URL。 */
   src: string;
   left: number;
   top: number;
   width: number;
   height: number;
+  /**
+   * 单元格锚点（260921 P2「单元格图片」）：**带它就是单元格图片**——几何由宿主按
+   * `sheetRangeRect` 一直跟着单元格走（列宽/行高/隐藏/合并变化都重算），渲染时等比缩进格内、不超过原图；
+   * 不带则是浮动图（P1，用户可拖拽缩放）。带合并单元格时 `r/c` 记的是用户点选的那一格，渲染范围取整块。
+   */
+  cell?: { r: number; c: number };
 }
 
-/** 读出一张工作表的浮动图（按 id 去重；几何非法或缺 src 的项跳过）。 */
+/** 读出一个单元格锚点；非法/不存在返回 undefined。 */
+function imageCellAnchor(value: Record<string, unknown>): { r: number; c: number } | undefined {
+  const cell = value.cell;
+  if (!cell || typeof cell !== "object") return undefined;
+  const r = Number((cell as { r?: unknown }).r);
+  const c = Number((cell as { c?: unknown }).c);
+  if (!Number.isInteger(r) || !Number.isInteger(c) || r < 0 || c < 0) return undefined;
+  return { r, c };
+}
+
+/** 读出一张工作表的图片（按 id 去重；几何非法或缺 src 的项跳过）。 */
 export function sheetImages(sheet: SheetWorksheet | null | undefined): SheetImageRef[] {
   const raw = (sheet as { images?: unknown } | null | undefined)?.images;
   if (!Array.isArray(raw)) return [];
@@ -79,26 +104,48 @@ export function sheetImages(sheet: SheetWorksheet | null | undefined): SheetImag
     const id = typeof value.id === "string" && value.id ? value.id : `${left}:${top}:${src.length}`;
     if (seen.has(id)) continue;
     seen.add(id);
-    out.push({ id, src, left, top, width, height });
+    const cell = imageCellAnchor(value);
+    out.push(cell ? { id, src, left, top, width, height, cell } : { id, src, left, top, width, height });
   }
   return out;
 }
 
 /**
- * 图片 src → 可渲染 URL：
- * - `data:` / `http(s):` 原样返回；
- * - 其余（资产 filename —— P1 之后的形态）拼本机资产 canonical URL；
+ * 图片 src → 可渲染 URL（正文存 filename，URL 只在内存里存在）：
+ * - `data:` / `http(s):` 原样返回（外部图片、内核刚插入还没提升的 base64）——已是 URL，只按需改写档位；
+ * - 资产 filename 拼本机资产 canonical URL（端口取实例实际端口，A/B 双开各用各的）；
  * - 空/非法返回 null（调用方跳过）。
  *
- * 之所以现在就认三种形态：`SHEET-IMAGE-MANAGEMENT-260919.md` 的 P1（正文改存 filename）落地后，
- * 渲染层**零改动**即可切过去。
+ * `width`：缩略图档位（见 `assetUrl.ASSET_THUMB_WIDTHS`），只在**本地资产**上生效；
+ * 对大图按档位取缩略图能省掉渲染进程的解码内存（像素 × 4B），显示尺寸只有几十像素时尤其可观。
+ * 传 null/缺省 = 原图。
  */
-export function sheetImageSrc(src: string | null | undefined, noteId: string): string | null {
+export function sheetImageSrc(
+  src: string | null | undefined,
+  noteId: string,
+  port?: number,
+  width?: number | null,
+): string | null {
   const value = typeof src === "string" ? src.trim() : "";
   if (!value) return null;
-  if (value.startsWith("data:") || value.startsWith("http://") || value.startsWith("https://")) return value;
-  if (!noteId) return null;
-  return localAssetHttpUrl(noteId, value);
+  const base = value.startsWith("data:") || value.startsWith("http://") || value.startsWith("https://")
+    ? value
+    : (noteId ? localAssetHttpUrl(noteId, value, port == null ? {} : { port }) : null);
+  if (base == null) return null;
+  return width == null ? base : withAssetWidth(base, width);
+}
+
+/**
+ * 图片 src → **磁盘形态**（正文里能出现什么）：
+ * - 本地资产 URL（含可能带的 `?token=`）→ 换回 filename —— 正文只存 filename（换端/换端口不失效，与
+ *   `manifest.assets` 的 filename 语义一致）；
+ * - `data:` / 外部 `http(s):` / 其它 → 原样（内核刚插入的 base64 由编辑器负责在保存前提升成资产）。
+ */
+export function sheetImageDiskSrc(src: unknown): unknown {
+  if (typeof src !== "string") return src;
+  const ref = parseLocalAssetUrl(src);
+  if (ref && ref.space === "note" && !ref.staging) return ref.filename;
+  return src;
 }
 
 export interface SheetDoc {
@@ -170,7 +217,8 @@ function denseToCelldata(data: Array<Array<SheetCellValue | null>>): SheetCell[]
 /**
  * 把编辑器返回的 sheet 规范化成可持久化形态：
  * - 剔除选区/滚动等运行时字段（否则每次点选都会改正文 ⇒ 内容寻址对象无端膨胀、跨端无意义 diff）；
- * - dense `data` → sparse `celldata`（正文体积正比于「非空格子数」而不是网格面积）。
+ * - dense `data` → sparse `celldata`（正文体积正比于「非空格子数」而不是网格面积）；
+ * - 浮动图 `images[].src`：本地资产 URL → filename（正文不存 URL、不存 base64；几何/其余字段逐字节保留）。
  */
 export function sanitizeSheetWorksheet(sheet: SheetWorksheet): SheetWorksheet {
   const source = sheet as SheetWorksheet & { data?: Array<Array<SheetCellValue | null>> };
@@ -178,6 +226,13 @@ export function sanitizeSheetWorksheet(sheet: SheetWorksheet): SheetWorksheet {
   for (const key of TRANSIENT_SHEET_KEYS) delete rest[key];
   const celldata = Array.isArray(source.data) ? denseToCelldata(source.data) : (source.celldata ?? []);
   delete rest.data;
+  if (Array.isArray(rest.images)) {
+    rest.images = (rest.images as unknown[]).map((item) => {
+      if (!item || typeof item !== "object") return item;
+      const image = item as Record<string, unknown>;
+      return { ...image, src: sheetImageDiskSrc(image.src) };
+    });
+  }
   return { ...rest, celldata } as SheetWorksheet;
 }
 

@@ -17,7 +17,7 @@ import { confirmMobile } from "../ui/ConfirmDialog";
 import { showToast } from "../ui/toastBus";
 import { bridge } from "../bridge";
 import { useHorizontalSwipe } from "../useHorizontalSwipe";
-import { localAssetHttpUrl } from "../../core/assetUrl.js";
+import { localAssetHttpUrl, withAssetWidth } from "../../core/assetUrl.js";
 import { withAssetAccessToken } from "../../lib/assetPort";
 
 /** 完整小记编辑器（内含 Lake 内核）：**按需加载**——首屏/小记都不需要内核。 */
@@ -58,6 +58,14 @@ export interface HomePageProps {
 type ComposerState = { mode: "new" } | { mode: "edit"; id: string } | null;
 
 const VIEW_KEY = "lake-notes-mobile.libraryView";
+
+/**
+ * 卡片封面缩略图档位。封面是整列宽、最高 210px（`.qn-card__img` max-width 100% / max-height 210px），
+ * 手机宽屏约 360 CSS px ⇒ dpr 2~3 需要 720~1080 设备像素，**只有最大档位 1024 不会发虚**
+ * （再往上会超过档位表上限、反而退回原图）。
+ * 一张手机照片 4000×3000 是 48MB 位图，1024 档只剩 ~3MB —— 一屏多张封面的差别是几百 MB。
+ */
+const COVER_THUMB_PX = 1024;
 
 function fmtDate(iso: string): string {
   try { const d = new Date(iso); return `${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")} ${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}`; }
@@ -266,7 +274,10 @@ function QuickNoteCard({ note, onEdit, onMore }: { note: MobileQuickNote; onEdit
     url: withAssetAccessToken(localAssetHttpUrl(note.id, image.filename, { space: "quick-notes" })),
   }));
   const thumbUrl = note.firstImage
-    ? withAssetAccessToken(localAssetHttpUrl(note.id, note.firstImage, { space: "quick-notes" }))
+    ? withAssetWidth(
+        withAssetAccessToken(localAssetHttpUrl(note.id, note.firstImage, { space: "quick-notes" })),
+        COVER_THUMB_PX,
+      )
     : null;
   return (
     <div className="qn-card" role="button" tabIndex={0} onClick={onEdit}>

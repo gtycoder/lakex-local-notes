@@ -17,6 +17,15 @@ const CARDS = readFileSync(new URL("./bitableCells.tsx", import.meta.url), "utf8
 const ATTACH = readFileSync(new URL("../attachment/openAssetEntry.ts", import.meta.url), "utf8");
 
 describe("多维表编辑器护栏", () => {
+  it("附件格的缩略图：格子取 ?w= 档位，放大预览仍走原图", () => {
+    // 格子显示 26px 却会解码整张原图（手机照片 4000×3000 = 48MB 位图）
+    expect(CARDS).toContain("assetThumbWidthForCss(ATTACHMENT_CHIP_PX)");
+    expect(CARDS).toContain('const ATTACHMENT_CHIP_PX = 26');
+    expect(CARDS).toContain("withAssetWidth(");
+    // 关键不变量：onOpen（ImageLightbox）那一路不能被带上档位，否则放大预览是糊的
+    expect(CARDS).toMatch(/<img src=\{chipUrlOf\(filename\)\}[^>]*onClick=\{\(\) => onOpen\(filename\)\}/);
+    expect(EDITOR).not.toContain("?w=");
+  });
   it("MultiTabEditor 按 kind=bitable 懒加载 BitableEditor", () => {
     expect(TABS).toMatch(/tab\.kind === "bitable"/);
     expect(TABS).toMatch(/import\("\.\.\/bitable\/BitableEditor"\)/);

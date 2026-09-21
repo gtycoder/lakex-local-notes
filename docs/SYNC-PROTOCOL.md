@@ -45,6 +45,8 @@ quick-notes/assets/{quickNoteId}/{filename}  小记资源
 > **260919 说明：表格文档（`kind="sheet"`）复用同一条正文对象管线**（正文=内容寻址 JSON）。
 > 清单已升 **v6**：每条 note 多一个可选 `kind?: "doc" | "sheet" | "bitable"`（缺省 doc，**只有非 doc 才写**；纯文档库的清单条目逐字节不变）。旧端读到 v6 会**显式拒绝同步**（刻意安全闸）。
 > 表格正文格式 = **v2 FortuneSheet workbook**（`{kind:"sheet",version:2,sheets:Sheet[]}`）；本地 `sheets/{id}.sheet.json` → S3 `objects/{id}-{hash}.lake`。详见 `docs/SHEET-BITABLE-DESIGN-260918.md` 与 `docs/FORTUNESHEET-FEASIBILITY-260919.md`。
+> **260920 补充（表格图片，无协议变更）**：表格浮动图 `sheets[].images[].src` 存**资产 filename**（不再内联 base64），文件按既有
+> `note-assets/{noteId}/{filename}` 走同步；`manifest.assets` 声明照旧（**磁盘实扫**，正文不需要额外声明），**版本号不变、协议零改动**。见 `docs/SHEET-IMAGE-MANAGEMENT-260919.md`。
 >
 > **260920 补充：画板文档（`kind="board"`）走同一条管线**，清单独占 **v7**（`kind` 多一个取值 `board`）。
 > **为什么加个取值也要升版本**：旧端 `normalizeNoteKind` 对未知取值一律回退 `doc` ⇒ v6 端读 v7 清单会把画板 JSON 当 Lake 文档导入并保存 = 毁正文；

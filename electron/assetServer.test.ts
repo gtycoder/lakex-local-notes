@@ -1,13 +1,14 @@
 /**
  * W-8：资源服务器安全边界集成测试（纯 Node http，无需 Electron）。
  * 覆盖：token 门禁、CORS Origin 过滤与 ACAO 回显（不用 "*"）、路径穿越、
- * quick-notes 前缀隔离、畸形编码兜底、base64 转换与 50MP 上限。
+ * quick-notes 前缀隔离、畸形编码兜底、base64 转换与 50MP 上限、按需缩略图（?w=）。
  */
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import type http from "node:http";
+import sharp from "sharp";
 
 const TEST_PORT = 19976;
 process.env.LAKE_ASSET_PORT = String(TEST_PORT);
@@ -35,6 +36,15 @@ beforeAll(async () => {
   fs.writeFileSync(path.join(vendorDir, "os/lib/x.js"), "console.log(1)");
   fs.mkdirSync(path.join(quickDir, "assets", "q1"), { recursive: true });
   fs.writeFileSync(path.join(quickDir, "assets", "q1", "q.png"), Buffer.from("qpng"));
+  // 缩略图素材：必须是 sharp 真能解码的图片（"png-bytes" 那种假字节解不了码，只能用来测直通）
+  await sharp({ create: { width: 400, height: 300, channels: 3, background: { r: 200, g: 30, b: 30 } } })
+    .png().toFile(path.join(noteAssetsDir, "note1", "big.png"));
+  await sharp({ create: { width: 400, height: 300, channels: 3, background: { r: 30, g: 30, b: 200 } } })
+    .png().toFile(path.join(noteAssetsDir, "note1", "swap.png"));
+  // 扩展名不在可缩放白名单里（GIF 多帧）→ 内容无所谓，断言的是「直通不发虚」
+  fs.writeFileSync(path.join(noteAssetsDir, "note1", "anim.gif"), Buffer.from("GIF89a-fake-bytes"));
+  // 扩展名在白名单里但字节解不了码 → 必须落回原图，绝不能让图片显示不出来
+  fs.writeFileSync(path.join(noteAssetsDir, "note1", "broken.png"), Buffer.from("not-really-a-png"));
   server = startAssetServer(noteAssetsDir, vendorDir, quickDir, TOKEN);
   await new Promise<void>((resolve) => server.once("listening", resolve));
 });
@@ -169,5 +179,65 @@ describe("base64 转换", () => {
     const body = await res.text();
     expect(body.startsWith("data:image/png;base64,")).toBe(true);
     expect(Buffer.from(body.split(",")[1], "base64").toString()).toBe("png-bytes");
+  });
+});
+
+describe("按需缩略图（?w=）", () => {
+  const getBytes = async (url: string): Promise<{ res: Response; buf: Buffer }> => {
+    const res = await fetch(url);
+    return { res, buf: Buffer.from(await res.arrayBuffer()) };
+  };
+
+  it("?w=128 → 真缩到 128 宽，字节数远小于原图，并带 immutable 缓存头", async () => {
+    const original = await getBytes(`${BASE}/note1/big.png`);
+    const { res, buf } = await getBytes(`${BASE}/note1/big.png?w=128`);
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-type")).toBe("image/png");
+    expect((await sharp(buf).metadata()).width).toBe(128);
+    expect(buf.length).toBeLessThan(original.buf.length);
+    expect(res.headers.get("cache-control")).toContain("immutable");
+  });
+
+  it("请求宽度超过原图（withoutEnlargement）→ 不放大，仍是原尺寸", async () => {
+    const { buf } = await getBytes(`${BASE}/note1/big.png?w=1024`);
+    expect((await sharp(buf).metadata()).width).toBe(400);
+  });
+
+  it("非档位值当没传（防连续值把缓存打散）→ 原字节直通", async () => {
+    const original = await getBytes(`${BASE}/note1/big.png`);
+    const { res, buf } = await getBytes(`${BASE}/note1/big.png?w=100`);
+    expect(res.status).toBe(200);
+    expect(buf.equals(original.buf)).toBe(true);
+  });
+
+  it("GIF 不缩放（resize 会把多帧动画压成首帧）→ 原字节直通", async () => {
+    const original = await getBytes(`${BASE}/note1/anim.gif`);
+    const { buf } = await getBytes(`${BASE}/note1/anim.gif?w=128`);
+    expect(buf.equals(original.buf)).toBe(true);
+  });
+
+  it("字节解不了码 → 落回原图（缩略图是纯优化，不能让它把图弄没）", async () => {
+    const original = await getBytes(`${BASE}/note1/broken.png`);
+    const { res, buf } = await getBytes(`${BASE}/note1/broken.png?w=128`);
+    expect(res.status).toBe(200);
+    expect(buf.equals(original.buf)).toBe(true);
+  });
+
+  it("同一档位重复请求结果一致（走缓存）", async () => {
+    const first = await getBytes(`${BASE}/note1/big.png?w=256`);
+    const second = await getBytes(`${BASE}/note1/big.png?w=256`);
+    expect(second.buf.equals(first.buf)).toBe(true);
+  });
+
+  it("换掉文件内容后，同一档位拿到新图的缩略图（缓存键含 mtime+size）", async () => {
+    const before = await getBytes(`${BASE}/note1/swap.png?w=128`);
+    expect((await sharp(before.buf).metadata()).width).toBe(128);
+    // 换成绿色小图（尺寸不同 ⇒ size/mtime 变 ⇒ 缓存键变）
+    await sharp({ create: { width: 90, height: 60, channels: 3, background: { r: 30, g: 200, b: 30 } } })
+      .png().toFile(path.join(noteAssetsDir, "note1", "swap.png"));
+    const after = await getBytes(`${BASE}/note1/swap.png?w=128`);
+    const meta = await sharp(after.buf).metadata();
+    expect(meta.width).toBe(90);
+    expect(after.buf.equals(before.buf)).toBe(false);
   });
 });

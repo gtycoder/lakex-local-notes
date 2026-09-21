@@ -80,6 +80,102 @@ async function statFile(filePath: string): Promise<fs.Stats | null> {
   }
 }
 
+// ---------------------------------------------------------------------------
+// 按需缩略图（?w=<档位>）
+//
+// 为什么按需而不是预生成派生文件：`manifest.assets` 是磁盘实扫、GC 保护是正文 filename 正则，
+// 落盘的派生文件会被当资产声明/上传，却又不在正文引用集里 ⇒ 注定被判孤儿回收。按需生成
+// 「不落盘、不上传、可随时重建」，完全不碰数据格式、同步协议与 GC。
+// 收益：渲染进程的图片内存 ≈ 像素 × 4B，一张 4000×3000（~48MB 位图）显示在 80px 宽的单元格里
+// 就是纯浪费；按档位取 128px 只剩 ~65KB。
+// ---------------------------------------------------------------------------
+
+/** 允许的档位；非档位值一律当没传（防任意值把缓存打散/打满）。与 src/core/assetUrl.ts 的 ASSET_THUMB_WIDTHS 一致。 */
+const THUMB_WIDTHS = new Set([128, 256, 512, 1024]);
+
+/**
+ * 可安全重编码的位图格式。刻意排除：
+ * - GIF：多帧动画 resize 后只剩首帧（宁可不缩，也不能把动图弄坏）；
+ * - SVG：矢量，本就没有解码内存问题，且 sharp 栅格化会丢掉矢量特性。
+ */
+const THUMB_RESIZABLE_EXTS = new Set([".png", ".jpg", ".jpeg", ".webp", ".avif", ".bmp", ".tif", ".tiff"]);
+
+/** 缓存条目上限；键含 mtime+size，文件被替换即自然失效。 */
+const THUMB_CACHE_LIMIT = 64;
+/** 并发闸：sharp 解码一张大图的峰值就是像素 × 4B，突发几十张同时解码会直接把内存打爆。 */
+const THUMB_CONCURRENCY = 4;
+
+const thumbCache = new Map<string, Buffer>();
+let thumbRunning = 0;
+const thumbWaiters: Array<() => void> = [];
+
+/** 取槽；满载则排队（槽位由 releaseThumbSlot 直接移交，交接期间不改变计数）。 */
+async function acquireThumbSlot(): Promise<void> {
+  if (thumbRunning < THUMB_CONCURRENCY) {
+    thumbRunning += 1;
+    return;
+  }
+  await new Promise<void>((resolve) => thumbWaiters.push(resolve));
+}
+
+function releaseThumbSlot(): void {
+  const next = thumbWaiters.shift();
+  if (next) next();
+  else thumbRunning -= 1;
+}
+
+/** LRU：命中即移到队尾（Map 保持插入序）。 */
+function readThumbCache(key: string): Buffer | null {
+  const hit = thumbCache.get(key);
+  if (!hit) return null;
+  thumbCache.delete(key);
+  thumbCache.set(key, hit);
+  return hit;
+}
+
+function writeThumbCache(key: string, buf: Buffer): void {
+  thumbCache.set(key, buf);
+  while (thumbCache.size > THUMB_CACHE_LIMIT) {
+    const oldest = thumbCache.keys().next().value;
+    if (oldest == null) break;
+    thumbCache.delete(oldest);
+  }
+}
+
+/** `?w=` → 档位；非法/缺省 → null（走原图）。 */
+function thumbWidthOf(raw: string | null): number | null {
+  if (raw == null) return null;
+  const width = Number(raw);
+  return THUMB_WIDTHS.has(width) ? width : null;
+}
+
+/**
+ * 生成缩略图（保持原格式：我们的目标是解码内存，而内存只取决于像素数，与编码格式无关；
+ * 保持原格式还能避开 alpha/动画/编解码器支持等一堆边界）。
+ * 任何失败都返回 null，调用方落回原图——缩略图是纯优化，绝不能因为它让图片显示不出来。
+ */
+async function thumbnailBuffer(filePath: string, width: number, stat: fs.Stats): Promise<Buffer | null> {
+  const key = `${filePath}:${stat.mtimeMs}:${stat.size}:${width}`;
+  const cached = readThumbCache(key);
+  if (cached) return cached;
+  await acquireThumbSlot();
+  try {
+    // 等槽期间可能已被并发请求算好
+    const again = readThumbCache(key);
+    if (again) return again;
+    try {
+      const buf = await sharp(filePath).resize({ width, withoutEnlargement: true }).toBuffer();
+      writeThumbCache(key, buf);
+      return buf;
+    } catch (error) {
+      console.warn("[asset-server] 缩略图生成失败，落回原图:", filePath, error);
+      return null;
+    }
+  } finally {
+    releaseThumbSlot();
+  }
+}
+
 function streamFile(
   res: http.ServerResponse,
   filePath: string,
@@ -263,6 +359,22 @@ export function startAssetServer(noteAssetsDir: string, vendorCdnDir: string, qu
         });
         res.end(body);
         return;
+      }
+
+      // ?w=<档位>：按需缩略图（不落盘、不上传、可重建）。失败或格式不支持 → 落到下面的原图分支。
+      const thumbWidth = THUMB_RESIZABLE_EXTS.has(ext) ? thumbWidthOf(parsed.searchParams.get("w")) : null;
+      if (thumbWidth != null) {
+        const thumb = await thumbnailBuffer(filePath, thumbWidth, stat);
+        if (thumb) {
+          res.writeHead(200, {
+            "Content-Type": mime,
+            "Content-Length": thumb.length,
+            "Cache-Control": "public, max-age=31536000, immutable",
+            ...corsHeaders(req.headers.origin),
+          });
+          res.end(thumb);
+          return;
+        }
       }
 
       streamFile(res, filePath, stat, {

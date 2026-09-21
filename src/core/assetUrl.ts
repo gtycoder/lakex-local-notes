@@ -96,3 +96,43 @@ export function httpToLakeAsset(raw: string): string {
   const prefix = ref.space === "quick-notes" ? "quick-notes/" : "";
   return `${NOTE_ASSET_SCHEME}://${prefix}${ref.noteId}/${ref.filename}`;
 }
+
+/**
+ * 缩略图档位（宽，px）。**离散**是关键：档位固定 ⇒ 同一张图在任何显示宽度下只产生有限的几个 URL，
+ * 浏览器的 immutable 缓存与服务端内存缓存都不会被连续值打散（否则「按需缩放」等于没有缓存）。
+ * 服务端只认这几个值，其余一律当没传（见 electron/assetServer.ts）。
+ */
+export const ASSET_THUMB_WIDTHS = [128, 256, 512, 1024] as const;
+
+/**
+ * 按目标显示宽度选档位：取**不小于**目标的最接近档位（宁可略大、绝不小到发虚）。
+ * 入参单位是**设备像素**（调用方自行乘 DPR）。超过最大档位返回 null = 直接用原图
+ * （不为一张几乎等于原图的图白编一次码）。
+ */
+export function assetThumbWidthFor(targetPx: number): number | null {
+  if (!Number.isFinite(targetPx) || targetPx <= 0) return null;
+  for (const width of ASSET_THUMB_WIDTHS) {
+    if (targetPx <= width) return width;
+  }
+  return null;
+}
+
+/**
+ * 给本地资产 URL 加/去 `?w=`（缩略图档位）；`width = null` 表示去掉档位。
+ * 非本地资产（data:/外部 http/lake-asset 之外的形态）原样返回——外部图我们无权也无需缩放。
+ * 其余 query（如渲染层注入的 token）**保留**，不能被这里冲掉。
+ *
+ * 落盘安全：`sheetImageDiskSrc` / `parseLocalAssetUrl` 只取路径段、忽略 query，
+ * 所以带档位的 URL 存盘时照样换回 filename，正文里永远不会出现 `?w=`。
+ */
+export function withAssetWidth(raw: string, width: number | null): string {
+  if (!parseLocalAssetUrl(raw)) return raw;
+  try {
+    const parsed = new URL(raw);
+    if (width == null) parsed.searchParams.delete("w");
+    else parsed.searchParams.set("w", String(width));
+    return parsed.toString();
+  } catch {
+    return raw;
+  }
+}

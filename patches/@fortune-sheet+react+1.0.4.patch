@@ -1,5 +1,5 @@
 diff --git a/node_modules/@fortune-sheet/react/dist/index.esm.js b/node_modules/@fortune-sheet/react/dist/index.esm.js
-index c4486a2..838a3ae 100644
+index c4486a2..a17e788 100644
 --- a/node_modules/@fortune-sheet/react/dist/index.esm.js
 +++ b/node_modules/@fortune-sheet/react/dist/index.esm.js
 @@ -1126,7 +1126,7 @@ var InputBox = function InputBox() {
@@ -11,7 +11,23 @@ index c4486a2..838a3ae 100644
    }, /*#__PURE__*/React.createElement(ContentEditable, {
      innerRef: function innerRef(e) {
        inputRef.current = e;
-@@ -6128,10 +6128,7 @@ var Toolbar = function Toolbar(_ref) {
+@@ -2061,6 +2061,7 @@ var ImgBoxs = function ImgBoxs() {
+     className: "luckysheet-modal-controll-btn luckysheet-modal-controll-del",
+     role: "button",
+     tabIndex: 0,
++    onClick: function () { setContext(function (draftCtx) { removeActiveImage(draftCtx); jfrefreshgrid(draftCtx, null, undefined); }); },
+     "aria-label": "\u5220\u9664",
+     title: "\u5220\u9664"
+   }, /*#__PURE__*/React.createElement("i", {
+@@ -2185,6 +2186,7 @@ var ImgBoxs = function ImgBoxs() {
+     className: "luckysheet-modal-controll-btn luckysheet-modal-controll-del",
+     role: "button",
+     tabIndex: 0,
++    onClick: function () { setContext(function (draftCtx) { removeActiveImage(draftCtx); jfrefreshgrid(draftCtx, null, undefined); }); },
+     "aria-label": "\u5220\u9664",
+     title: "\u5220\u9664"
+   }, /*#__PURE__*/React.createElement("i", {
+@@ -6128,10 +6130,7 @@ var Toolbar = function Toolbar(_ref) {
          iconId: name,
          tooltip: toolbar.insertImage,
          key: name,
@@ -23,8 +39,77 @@ index c4486a2..838a3ae 100644
        }, /*#__PURE__*/React.createElement("input", {
          id: "fortune-img-upload",
          type: "file",
+@@ -6624,6 +6623,10 @@ var Toolbar = function Toolbar(_ref) {
+         }));
+       });
+     }
++    var _lakeCustomTb = (settings.customToolbarItems || []).filter(function (n) { return n.key === name; })[0];
++    if (_lakeCustomTb) {
++      return React.createElement(CustomButton, { tooltip: _lakeCustomTb.tooltip, onClick: _lakeCustomTb.onClick, key: name, icon: _lakeCustomTb.icon, iconName: _lakeCustomTb.iconName }, _lakeCustomTb.children);
++    }
+     return /*#__PURE__*/React.createElement(Button, {
+       iconId: name,
+       tooltip: tooltip,
+@@ -6642,7 +6645,7 @@ var Toolbar = function Toolbar(_ref) {
+     className: "fortune-toolbar",
+     role: "toolbar",
+     "aria-label": toolbar.toolbar
+-  }, settings.customToolbarItems.map(function (n) {
++  }, settings.customToolbarItems.filter(function (n) { return settings.toolbarItems.indexOf(n.key) < 0; }).map(function (n) {
+     return /*#__PURE__*/React.createElement(CustomButton, {
+       tooltip: n.tooltip,
+       onClick: n.onClick,
+@@ -7567,8 +7570,10 @@ var ContextMenu = function ContextMenu() {
+                   console.warn("Clipboard access blocked. Attempting to use sessionStorage fallback.");
+                 case 4:
+                   finalText = clipboardText || sessionClipboardText;
++                  var _lakeCopyEl = document.getElementById("fortune-copy-content");
++                  var _lakeUseInternal = !!_lakeCopyEl && _lakeCopyEl.innerHTML.indexOf("fortune-copy-action-table") > -1 && (!clipboardText || clipboardText === sessionClipboardText);
+                   setContext(function (draftCtx) {
+-                    handlePasteByClick(draftCtx, finalText);
++                    handlePasteByClick(draftCtx, _lakeUseInternal ? null : finalText);
+                     draftCtx.contextMenu = {};
+                   });
+                 case 5:
+@@ -7629,7 +7634,7 @@ var ContextMenu = function ContextMenu() {
+           type: "text",
+           className: "luckysheet-mousedown-cancel",
+           placeholder: rightclick.number,
+-          defaultValue: "1"
++          defaultValue: String(selection && selection.column ? Math.max(1, (selection.column[1] == null ? selection.column[0] : selection.column[1]) - selection.column[0] + 1) : 1)
+         }), /*#__PURE__*/React.createElement("span", {
+           className: "luckysheet-cols-rows-shift-word luckysheet-mousedown-cancel"
+         }, "".concat(rightclick.column, "  ")), !_.startsWith((_context$lang2 = context.lang) !== null && _context$lang2 !== void 0 ? _context$lang2 : "", "zh") && (/*#__PURE__*/React.createElement("span", {
+@@ -7683,7 +7688,7 @@ var ContextMenu = function ContextMenu() {
+           type: "text",
+           className: "luckysheet-mousedown-cancel",
+           placeholder: rightclick.number,
+-          defaultValue: "1"
++          defaultValue: String(selection && selection.row ? Math.max(1, (selection.row[1] == null ? selection.row[0] : selection.row[1]) - selection.row[0] + 1) : 1)
+         }), /*#__PURE__*/React.createElement("span", {
+           className: "luckysheet-cols-rows-shift-word luckysheet-mousedown-cancel"
+         }, "".concat(rightclick.row, "  ")), !_.startsWith((_context$lang4 = context.lang) !== null && _context$lang4 !== void 0 ? _context$lang4 : "", "zh") && (/*#__PURE__*/React.createElement("span", {
+@@ -7926,6 +7931,7 @@ var ContextMenu = function ContextMenu() {
+             if (draftCtx.activeImg != null) {
+               removeActiveImage(draftCtx);
+             } else {
++              if (settings && settings.hooks && typeof settings.hooks.afterClearCellContent === "function") { try { settings.hooks.afterClearCellContent(); } catch (e) {} }
+               var msg = deleteSelectedCellText(draftCtx);
+               if (msg === "partMC") {
+                 showDialog(generalDialog.partiallyError, "ok");
+@@ -8007,6 +8013,10 @@ var ContextMenu = function ContextMenu() {
+         }
+       }, rightclick.link);
+     }
++    var _lakeCustomMenu = (settings.customToolbarItems || []).filter(function (n) { return n.key === name; })[0];
++    if (_lakeCustomMenu) {
++      return React.createElement(Menu, { key: name, onClick: function () { _lakeCustomMenu.onClick(); setContext(function (draftCtx) { draftCtx.contextMenu = {}; }); } }, (_lakeCustomMenu.label || _lakeCustomMenu.tooltip));
++    }
+     return null;
+   }, [context.currentSheetId, context.lang, context.luckysheet_select_save, context.defaultrowlen, context.defaultcollen, rightclick, info, setContext, showAlert, showDialog, drag, generalDialog]);
+   useLayoutEffect(function () {
 diff --git a/node_modules/@fortune-sheet/react/dist/index.js b/node_modules/@fortune-sheet/react/dist/index.js
-index e404551..8b40b3d 100644
+index e404551..37d9e51 100644
 --- a/node_modules/@fortune-sheet/react/dist/index.js
 +++ b/node_modules/@fortune-sheet/react/dist/index.js
 @@ -1137,7 +1137,7 @@ var InputBox = function InputBox() {
@@ -36,7 +121,23 @@ index e404551..8b40b3d 100644
    }, /*#__PURE__*/React__default['default'].createElement(ContentEditable, {
      innerRef: function innerRef(e) {
        inputRef.current = e;
-@@ -6139,10 +6139,7 @@ var Toolbar = function Toolbar(_ref) {
+@@ -2072,6 +2072,7 @@ var ImgBoxs = function ImgBoxs() {
+     className: "luckysheet-modal-controll-btn luckysheet-modal-controll-del",
+     role: "button",
+     tabIndex: 0,
++    onClick: function () { setContext(function (draftCtx) { removeActiveImage(draftCtx); jfrefreshgrid(draftCtx, null, undefined); }); },
+     "aria-label": "\u5220\u9664",
+     title: "\u5220\u9664"
+   }, /*#__PURE__*/React__default['default'].createElement("i", {
+@@ -2196,6 +2197,7 @@ var ImgBoxs = function ImgBoxs() {
+     className: "luckysheet-modal-controll-btn luckysheet-modal-controll-del",
+     role: "button",
+     tabIndex: 0,
++    onClick: function () { setContext(function (draftCtx) { removeActiveImage(draftCtx); jfrefreshgrid(draftCtx, null, undefined); }); },
+     "aria-label": "\u5220\u9664",
+     title: "\u5220\u9664"
+   }, /*#__PURE__*/React__default['default'].createElement("i", {
+@@ -6139,10 +6141,7 @@ var Toolbar = function Toolbar(_ref) {
          iconId: name,
          tooltip: toolbar.insertImage,
          key: name,
@@ -48,3 +149,72 @@ index e404551..8b40b3d 100644
        }, /*#__PURE__*/React__default['default'].createElement("input", {
          id: "fortune-img-upload",
          type: "file",
+@@ -6635,6 +6634,10 @@ var Toolbar = function Toolbar(_ref) {
+         }));
+       });
+     }
++    var _lakeCustomTb = (settings.customToolbarItems || []).filter(function (n) { return n.key === name; })[0];
++    if (_lakeCustomTb) {
++      return React__default['default'].createElement(CustomButton, { tooltip: _lakeCustomTb.tooltip, onClick: _lakeCustomTb.onClick, key: name, icon: _lakeCustomTb.icon, iconName: _lakeCustomTb.iconName }, _lakeCustomTb.children);
++    }
+     return /*#__PURE__*/React__default['default'].createElement(Button, {
+       iconId: name,
+       tooltip: tooltip,
+@@ -6653,7 +6656,7 @@ var Toolbar = function Toolbar(_ref) {
+     className: "fortune-toolbar",
+     role: "toolbar",
+     "aria-label": toolbar.toolbar
+-  }, settings.customToolbarItems.map(function (n) {
++  }, settings.customToolbarItems.filter(function (n) { return settings.toolbarItems.indexOf(n.key) < 0; }).map(function (n) {
+     return /*#__PURE__*/React__default['default'].createElement(CustomButton, {
+       tooltip: n.tooltip,
+       onClick: n.onClick,
+@@ -7578,8 +7581,10 @@ var ContextMenu = function ContextMenu() {
+                   console.warn("Clipboard access blocked. Attempting to use sessionStorage fallback.");
+                 case 4:
+                   finalText = clipboardText || sessionClipboardText;
++                  var _lakeCopyEl = document.getElementById("fortune-copy-content");
++                  var _lakeUseInternal = !!_lakeCopyEl && _lakeCopyEl.innerHTML.indexOf("fortune-copy-action-table") > -1 && (!clipboardText || clipboardText === sessionClipboardText);
+                   setContext(function (draftCtx) {
+-                    core.handlePasteByClick(draftCtx, finalText);
++                    core.handlePasteByClick(draftCtx, _lakeUseInternal ? null : finalText);
+                     draftCtx.contextMenu = {};
+                   });
+                 case 5:
+@@ -7640,7 +7645,7 @@ var ContextMenu = function ContextMenu() {
+           type: "text",
+           className: "luckysheet-mousedown-cancel",
+           placeholder: rightclick.number,
+-          defaultValue: "1"
++          defaultValue: String(selection && selection.column ? Math.max(1, (selection.column[1] == null ? selection.column[0] : selection.column[1]) - selection.column[0] + 1) : 1)
+         }), /*#__PURE__*/React__default['default'].createElement("span", {
+           className: "luckysheet-cols-rows-shift-word luckysheet-mousedown-cancel"
+         }, "".concat(rightclick.column, "  ")), !___default['default'].startsWith((_context$lang2 = context.lang) !== null && _context$lang2 !== void 0 ? _context$lang2 : "", "zh") && (/*#__PURE__*/React__default['default'].createElement("span", {
+@@ -7694,7 +7699,7 @@ var ContextMenu = function ContextMenu() {
+           type: "text",
+           className: "luckysheet-mousedown-cancel",
+           placeholder: rightclick.number,
+-          defaultValue: "1"
++          defaultValue: String(selection && selection.row ? Math.max(1, (selection.row[1] == null ? selection.row[0] : selection.row[1]) - selection.row[0] + 1) : 1)
+         }), /*#__PURE__*/React__default['default'].createElement("span", {
+           className: "luckysheet-cols-rows-shift-word luckysheet-mousedown-cancel"
+         }, "".concat(rightclick.row, "  ")), !___default['default'].startsWith((_context$lang4 = context.lang) !== null && _context$lang4 !== void 0 ? _context$lang4 : "", "zh") && (/*#__PURE__*/React__default['default'].createElement("span", {
+@@ -7937,6 +7942,7 @@ var ContextMenu = function ContextMenu() {
+             if (draftCtx.activeImg != null) {
+               core.removeActiveImage(draftCtx);
+             } else {
++              if (settings && settings.hooks && typeof settings.hooks.afterClearCellContent === "function") { try { settings.hooks.afterClearCellContent(); } catch (e) {} }
+               var msg = core.deleteSelectedCellText(draftCtx);
+               if (msg === "partMC") {
+                 showDialog(generalDialog.partiallyError, "ok");
+@@ -8018,6 +8024,10 @@ var ContextMenu = function ContextMenu() {
+         }
+       }, rightclick.link);
+     }
++    var _lakeCustomMenu = (settings.customToolbarItems || []).filter(function (n) { return n.key === name; })[0];
++    if (_lakeCustomMenu) {
++      return React__default['default'].createElement(Menu, { key: name, onClick: function () { _lakeCustomMenu.onClick(); setContext(function (draftCtx) { draftCtx.contextMenu = {}; }); } }, (_lakeCustomMenu.label || _lakeCustomMenu.tooltip));
++    }
+     return null;
+   }, [context.currentSheetId, context.lang, context.luckysheet_select_save, context.defaultrowlen, context.defaultcollen, rightclick, info, setContext, showAlert, showDialog, drag, generalDialog]);
+   React.useLayoutEffect(function () {
