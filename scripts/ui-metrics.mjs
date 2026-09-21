@@ -32,7 +32,8 @@ function scan(list) {
   let b3 = 0, hex = 0, rgb = 0, imp = 0;
   const b3Top = [], litTop = [];
   for (const p of list) {
-    const s = readFileSync(p, 'utf8');
+    // 先剥掉块注释：注释里提到 !important / #hex 不算真声明（早期口径把它们算进去过）
+    const s = readFileSync(p, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
     const refs = count(s, /var\(--b3-[a-z0-9-]+/g);
     if (refs) { b3 += refs; b3Top.push([relative(ROOT, p), refs]); }
     imp += count(s, /!important/g);

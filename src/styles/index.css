@@ -9,6 +9,7 @@
 @import "./kit.css" layer(kit);
 @import "./chrome.css" layer(shell);   /* 应用外壳（P5 逐屏迁移） */
 @import "./feature.css" layer(feature);
+@import "./overlay.css" layer(overlay);   /* 浮层（P5-c：对话框 / 菜单 / 气泡） */
 
 /* ---- 主题即数据（P2）：三套主题只定义变量，结构/几何/动效不随主题变 ---- */
 @import "./themes/base.css" layer(tokens);

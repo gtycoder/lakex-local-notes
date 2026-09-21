@@ -6,13 +6,13 @@
 
 ## 1. 硬指标（完成判据）
 
-> **进度看板**：`node scripts/ui-metrics.mjs`（P5 新增；口径见下）。基线 = P5 第 1 片后实测。
+> **进度看板**：`node scripts/ui-metrics.mjs`（P5 新增；口径见下）。基线 = **P5-c 后实测**（口径修正：**先剥块注释再计数**，早期把注释里的 `!important`/#hex 也算进去了）。
 
-| # | 指标 | 现状（P5 后实测） | 目标 |
+| # | 指标 | 现状（P5-c 后实测） | 目标 |
 | --- | --- | --- | --- |
-| 1 | 桌面侧 `var(--b3-*)` 引用 | **611**（top：bitableEditor 114 / styles/components 95 / b3/components 74） | **0** |
-| 2 | 颜色字面量（非主题文件） | **hex 394 · rgb 234**（top：bitableEditor 124 / b3 两主题 119+96 / styles/tokens 74） | **只允许出现在 `src/styles/themes/*.css`** |
-| 3 | `!important`（桌面侧） | **124**（另：思源层 32、移动端 19） | **≤10** |
+| 1 | 桌面侧 `var(--b3-*)` 引用 | **604**（top：bitableEditor 114 / styles/components 95 / b3/components 71） | **0** |
+| 2 | 颜色字面量（非主题文件） | **hex 370 · rgb 230**（top：bitableEditor 124 / b3 两主题 114+96 / styles/tokens 66） | **只允许出现在 `src/styles/themes/*.css`** |
+| 3 | `!important`（桌面侧） | **103**（另：思源层 32、移动端 19） | **≤10** |
 | 4 | 入口 `styles/index.css` 引用 b3 的行数 | **8** | **0**（文件保留给移动端 import） |
 | 5 | 同名 CSS 文件对 | 4 对：editor / quick-notes / settings / shell | **归并**（`styles/app/*` → `styles/*`） |
 | 5b（记录） | 移动端 `var(--b3-*)` | 233（3 文件）——**本批不动**，桌面完成后再单独立项 | — |

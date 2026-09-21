@@ -32,6 +32,7 @@ const FILES = [
   "styles/feature.css",   // P3 起：功能域层（正文/等宽字体等）
   "styles/kit.css",       // P4 起：自有组件库（14 件）
   "styles/chrome.css",    // P5 起：应用外壳（活动栏/目录栏头部/状态栏 …）
+  "styles/overlay.css",   // P5-c 起：浮层（对话框 / 菜单 / 气泡）
   // 基础层（260916 第二档 S3：原 styles.css 拆成入口 + 10 个域文件；入口只剩 @import 编排，不再计声明）
   "styles/app/base.css", "styles/app/dialogs.css", "styles/app/editor.css",
   "styles/app/misc.css", "styles/app/panels.css", "styles/app/quick-notes.css", "styles/app/settings.css",
@@ -46,6 +47,7 @@ const BASELINE: Record<string, { decls: number; dupGroups: number }> = {
   "styles/feature.css": { decls: 2, dupGroups: 0 },   // P3：正文/等宽字体两处（实测）
   "styles/kit.css": { decls: 422, dupGroups: 0 },     // P4：组件库 14 件（实测）
   "styles/chrome.css": { decls: 189, dupGroups: 0 },  // P5：活动栏/目录栏头部/状态栏 + 顶栏/标签页/面包屑（实测）
+  "styles/overlay.css": { decls: 57, dupGroups: 0 },  // P5-c：对话框（ln-dialog + floating-dialog）/ 菜单 / 气泡（实测）
   "b3/animations.css": { decls: 5, dupGroups: 0 },
   "b3/base.css": { decls: 16, dupGroups: 0 },
   "b3/components.css": { decls: 148, dupGroups: 0 },

@@ -49,7 +49,8 @@
   max-width: calc(100vw - 32px);
   max-height: calc(100vh - 32px);
   overflow: hidden;
-  border: 1px solid var(--floating-dialog-border) !important;
+  /* P5-c：原 `border: 1px solid var(--floating-dialog-border) !important` 已删 ——
+   * 表面（1px --lake-border-1 + radius-lg + dialog 阴影）单一来源 = src/styles/overlay.css。 */
   box-shadow: var(--floating-dialog-shadow);
   animation: floating-dialog-enter 180ms var(--ease-out);
 }

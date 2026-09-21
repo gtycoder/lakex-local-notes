@@ -1756,7 +1756,7 @@ lsof -ti:1432 -ti:9231 | sort -u | xargs kill
 > 设计规格（外部）= `/Users/admin/file/local-lake/ui-design-inputs/out/design-system/`（8 项交付，**只作参考**）。
 > 分支 `feat/ui-redesign`，基线 `origin/master` = `17bafbe`；**未 push、未合 master**。
 
-### 一、已完成（6 个提交）
+### 一、已完成（7 个提交）
 - **b53a456 docs**：元素底账 + 实现方案（阶段 P0–P8 / 层序 / 主题即数据 / 硬指标 / 验收口径变更）。
 - **e5f171e P1 @layer 层骨架**：新增 `src/styles/index.css` 单入口，`@layer legacy,tokens,reset,kit,shell,feature,overlay,a11y`；旧样式（含内核 style.css / 思源 / 旧壳层）**按原顺序整体入 legacy 层**；删 `src/styles.css`；围栏 `cssLayers.test.ts` 入口项同步。
   - 关键机制：**legacy 最低 ⇒ 新层写入即压过旧样式**，迁移期不靠特异性取胜。
@@ -1785,6 +1785,13 @@ lsof -ti:1432 -ti:9231 | sort -u | xargs kill
   - 面包屑（原样式**整段在思源层 `b3/layout.css`**）：新规则落 shell 层 —— 32px / 11px / text-3、下缘 1px `--lake-border-2`、笔记本名 text-2+600、分隔符 text-4、尾部「更多」按钮 26×24 xs 圆角；仍守「超长直接裁切不打省略号」。
   - 实测三套主题 `getComputedStyle`：面包屑 32px/11px/令牌色；页签 active 底=canvas、边=border-2、阴影=card；顶栏钮 26px；同步钮状态色随主题。
   - 底账：**A8–A10、A15 打勾；A11 记 `[~]`（页签本体已迁，溢出切换器菜单留 P5-c）**。
+- **P5-c 逐屏迁移（浮层：对话框 / 菜单 / 气泡）**：新增 `src/styles/overlay.css`（layer overlay，57 声明，**0 `!important` / 0 颜色字面量**）。
+  - 统一三类浮层表面：**实心底 `--lake-bg-panel` + 1px `--lake-border-1` + 抬升阴影**（`popover` / `dialog`），对应设计「全实心」决策。
+  - 菜单项统一规格：高 **27px**、圆角 xs(6)、hover = `accent-tint` + `accent-text` + 600、危险项 = `status-error`；覆盖 `.top-menu` / `.context-menu` / `.context-menu-item` / `.create-menu` / `.tab-switcher-menu`。
+  - 对话框：`.ln-dialog`（属性/历史）与 **`.floating-dialog`**（设置/回收站/历史面板，两套历史实现）统一到 radius-lg(14) + 面板底 + border-1 + dialog 阴影；`.modal-backdrop` 等遮罩走 `--lake-scrim`。
+  - **拆掉阻塞的 legacy `!important` 1 处**：`styles/app/settings.css` 的 `border: 1px solid var(--floating-dialog-border) !important`（并把 `b3/components.css` 里三个 `--floating-dialog-*` 变量从 b3 令牌改指新令牌）。
+  - 实测三套主题：菜单 面/边/圆角 10/内边距 6、项 27+6；`.floating-dialog` 底=panel、边=**border-1**（light rgb(231,233,236) / dark rgb(42,47,53) / warm rgb(231,223,208)）、圆角 **14**、dialog 阴影。
+  - 底账：**B1 打勾**（工作空间菜单两项均实测存在）。
 
 ### 二、过渡桥接（P7 删 legacy 时一并移除）
 - 旧 `--lake-*` 名字（`--lake-shell/panel/canvas/surface/accent-soft/shadow-* …`）→ 指向新令牌。
@@ -1793,7 +1800,7 @@ lsof -ti:1432 -ti:9231 | sort -u | xargs kill
 
 ### 二·补 硬指标度量（P5 起随手可跑）
 `node scripts/ui-metrics.mjs`（P5 新增）：桌面侧 `var(--b3-*)` 引用 / 颜色字面量（非主题）/ `!important` / 入口 b3 import 行数 / 同名文件对，并**分开**统计移动端（本批不动）。
-- **基线（P5 第 1 片后实测）**：桌面侧 样式文件 40 · `var(--b3-*)` **611** · 颜色字面量 **hex 394 / rgb 234** · `!important` **124** · 入口 b3 行数 **8** · 同名文件对 4；移动端 `--b3-*` 233、`!important` 19；思源层 `!important` 32。
+- **基线（P5-c 后实测；口径已修正为「先剥块注释再计数」——早期把注释里的 `!important`/#hex 也算进去了）**：桌面侧 样式文件 41 · `var(--b3-*)` **604** · 颜色字面量 **hex 370 / rgb 230** · `!important` **103** · 入口 b3 行数 **8** · 同名文件对 4；移动端 `--b3-*` 233、`!important` 19；思源层 `!important` 32。
 - **最大头（P7 优先）**：`features/bitable/bitableEditor.css`（b3 114 / 颜色 124）、`styles/components.css`（b3 95）、`b3/components.css`·`b3/layout.css`·两个 `b3/theme-*.css`（随 b3 一起删）、`styles/tokens.css`（颜色 74）。
 
 ### 三、门禁（P4 后实测）

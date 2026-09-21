@@ -1,10 +1,10 @@
 /* ── 组件样式移植：思源 b3 组件 → Lake Notes 类名映射（覆盖层）── */
 
 :root {
-  /* 浮层面板变量改走 b3 令牌（.floating-dialog 已用这些 var） */
-  --floating-dialog-surface: var(--b3-theme-surface);
-  --floating-dialog-border: var(--b3-theme-surface-lighter);
-  --floating-dialog-shadow: var(--b3-dialog-shadow);
+  /* P5-c（UI 重设计）：浮层面板变量改指新令牌（不再经 b3），供仍读它们的旧规则平滑过渡。 */
+  --floating-dialog-surface: var(--lake-bg-block);
+  --floating-dialog-border: var(--lake-border-1);
+  --floating-dialog-shadow: var(--lake-shadow-dialog);
 }
 
 /* ── 按钮：primary/secondary 已迁移为 .b3-button / .b3-button--cancel（见 siyuan.scss）── */
