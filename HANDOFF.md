@@ -1756,7 +1756,7 @@ lsof -ti:1432 -ti:9231 | sort -u | xargs kill
 > 设计规格（外部）= `/Users/admin/file/local-lake/ui-design-inputs/out/design-system/`（8 项交付，**只作参考**）。
 > 分支 `feat/ui-redesign`，基线 `origin/master` = `17bafbe`；**未 push、未合 master**。
 
-### 一、已完成（10 个提交）
+### 一、已完成（11 个提交）
 - **b53a456 docs**：元素底账 + 实现方案（阶段 P0–P8 / 层序 / 主题即数据 / 硬指标 / 验收口径变更）。
 - **e5f171e P1 @layer 层骨架**：新增 `src/styles/index.css` 单入口，`@layer legacy,tokens,reset,kit,shell,feature,overlay,a11y`；旧样式（含内核 style.css / 思源 / 旧壳层）**按原顺序整体入 legacy 层**；删 `src/styles.css`；围栏 `cssLayers.test.ts` 入口项同步。
   - 关键机制：**legacy 最低 ⇒ 新层写入即压过旧样式**，迁移期不靠特异性取胜。
@@ -1808,7 +1808,14 @@ lsof -ti:1432 -ti:9231 | sort -u | xargs kill
   - 项高 26 → **25px**、字 13 → **11px**；默认 text-3、hover `bg-hover`+text-1、**选中 = accent-tint + accent-text + 600**；级别徽标 text-4 + `bg-block`；头部 12px/600。
   - **去掉选中项左侧竖条**（用户确认）：`.outline-item--selected::before { display: none }`，并清掉 `.outline-item` 的 `border-left`。
   - 实测（三套主题）：item 25px/11px/border-left 0/radius 6；selected 底 tint + accent-text + 600 + **`::before` = none**；level text-4。
-  - ⚠️ **重要发现**：**默认配置下的大纲是内核原生 TOC**（设置项 `editor-outline-enhance` 默认 false ⇒ 直接用 Lake 原生大纲），不是我们的 `.outline-item`；上面这套只在用户开启「大纲增强」后生效。**内核原生大纲属编辑器外观（第三方），不在本次重做范围**。
+  - ⚠️ **重要发现（先记录，正文在下）**：**默认配置下的大纲是内核原生 TOC**（设置项 `editor-outline-enhance` 默认 false ⇒ 直接用 Lake 原生大纲），不是我们的 `.outline-item`；上面这套只在用户开启「大纲增强」后生效。**内核原生大纲属编辑器外观（第三方），不在本次重做范围**。
+- **P5-g 逐屏迁移（回收站 / 历史 / 搜索 面板共享件）**：kit.css 422 → **466 声明**（仍 0 `!important` / 0 颜色字面量）。
+  - `.ln-tabs` **从「下划线页签」改成设计要求的「分段控件」**：轨道 `--lake-bg-block` + radius sm + 2px 内边距；选中段 `--lake-bg-raised` + `--lake-shadow-card` + 600；旧 `::after` 下划线隐藏。
+  - `.ln-row2`（回收站/历史/搜索/草稿共用的两行行）：4/6 内边距 + sm 圆角 + `--lake-text-1`；hover `bg-hover`；选中（与思源 `--focus` 叠用）→ `accent-tint` + `accent-text`。
+  - `.ln-toolbar` / `.ln-empty` 改走间距与文字令牌。
+  - **实现要点**：这些类常与思源 `.b3-list-item` 叠用，但**本层高于 legacy ⇒ 普通规则即可胜出**，所以既没改 TSX、也没加 `!important`。
+  - 实测（三套主题 + 截图）：tabs 底 = block、radius 8、内边距 2px、**下划线圈 `::after` = none**；选中段 22px 高 / `bg-raised`（light #fff / dark rgb(43,48,55) / warm #fffefb）/ 600 / radius 6；行 4/6 + radius 8 + text-1（回收站 274 行渲染正常）。
+  - 仍待：面板内的 `.b3-button` 动作钮（清空 / 恢复 / 彻底删除）—— 属「01 按钮」批次。
 
 ### 二、过渡桥接（P7 删 legacy 时一并移除）
 - 旧 `--lake-*` 名字（`--lake-shell/panel/canvas/surface/accent-soft/shadow-* …`）→ 指向新令牌。
