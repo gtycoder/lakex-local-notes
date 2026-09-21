@@ -1756,7 +1756,7 @@ lsof -ti:1432 -ti:9231 | sort -u | xargs kill
 > 设计规格（外部）= `/Users/admin/file/local-lake/ui-design-inputs/out/design-system/`（8 项交付，**只作参考**）。
 > 分支 `feat/ui-redesign`，基线 `origin/master` = `17bafbe`；**未 push、未合 master**。
 
-### 一、已完成（16 个提交）
+### 一、已完成（17 个提交）
 - **b53a456 docs**：元素底账 + 实现方案（阶段 P0–P8 / 层序 / 主题即数据 / 硬指标 / 验收口径变更）。
 - **e5f171e P1 @layer 层骨架**：新增 `src/styles/index.css` 单入口，`@layer legacy,tokens,reset,kit,shell,feature,overlay,a11y`；旧样式（含内核 style.css / 思源 / 旧壳层）**按原顺序整体入 legacy 层**；删 `src/styles.css`；围栏 `cssLayers.test.ts` 入口项同步。
   - 关键机制：**legacy 最低 ⇒ 新层写入即压过旧样式**，迁移期不靠特异性取胜。
@@ -1845,6 +1845,12 @@ lsof -ti:1432 -ti:9231 | sort -u | xargs kill
   - **值等价**：这些映射与 P2 主题里的 b3→lake 桥接**完全一致**，所以是零视觉变化；仅 1 处源码级断言写死了旧令牌名（`sheetEditorMount.test.ts` 的细滚动条），已同步更新。
   - 实测（三套主题 `getComputedStyle`）：lake 令牌、`.note-row` 字色、`.tab-item.active` 底色、状态栏底全部正常。
   - **效果**：桌面侧 `var(--b3-*)` 引用 **599 → 200**（**剩余 200 全部在 `src/b3/*.css` 自身**，即下一步要删的思源层）；颜色字面量 **365+227 → 294+176**。
+- **P7-b 删源（第一次尝试 —— 已回退，附完整归因 + 草稿）**：
+  - 已把 b3 的**承重规则**与仍在用的**思源类**复刻到 `src/styles/compat.css`（**暂未导入**）：A. 壳层几何（`.tab-bar` fixed/尺寸、`.activity-rail` padding-top、`.tab-item` 行高/margin、`.sidebar.sidebar-docked` 卡片几何与 `!important` 抑制、`.workspace/.document-pane` 圆角）；B. `.b3-list-item*` / `.b3-label*` / `.b3-menu*` / `.b3-snackbar*` / `.b3-dialog` / `.b3-switch` 基础 / `fn__*` 工具类（`fn__none` 必须 `!important`，它负责隐藏 keep-alive 编辑器）。
+  - 用**删前/删后计算值快照**（6 屏 × ~15 选择器 × 18 属性，脚本 `/tmp/lake-ui-shot/p7b-*.mjs`）逐项对拍：删源后**标签栏/活动轨/页签/侧栏的差异全部消失**（compat 生效），只剩 6 处（多为**有意的设计取值**：侧栏圆角 10、P5 的行内距）。
+  - ⚠️ **但出现一处真实回归**：**工作区下拉菜单被定位到窗口底部**（`偏好设置` 的 rect y≈876，而触发按钮在 y=6）⇒ **设置面板打不开**。已排除视口覆盖假象（清掉 `setDeviceMetricsOverride` 后同样 876）。
+  - **按「绝不丢功能」先回退**（`styles/index.css` 恢复 8 行 b3 导入），实测恢复：菜单回到 **y=58.5**、设置面板正常打开（`nav: 11 / title: 编辑器`）、vitest 全绿。
+  - **下次继续的关键线索**：DOM 里存在**两个** `[data-top-menu-trigger="workspace"]`（一个 192×? @82,6、一个 0×0 @0,0）；菜单定位读的是 `wsMenuWrapRef` 的 rect，删源后它似乎指向了一个**底边=视口底**的元素。优先查「为什么会有第二个 trigger / ref 指向谁」，很可能与某个只在 b3 里存在的 `display/position` 规则有关。
 
 ### 二、过渡桥接（P7 删 legacy 时一并移除）
 - 旧 `--lake-*` 名字（`--lake-shell/panel/canvas/surface/accent-soft/shadow-* …`）→ 指向新令牌。

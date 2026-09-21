@@ -1,0 +1,223 @@
+/* ⚠️ P7-b 草稿：**暂未导入**（src/styles/index.css 里仍是 b3 原样导入）。
+ * 启用前必须先解决「删源后工作区下拉菜单被定位到窗口底部」的回归。保留本文件以免重复劳动。
+ *
+ * 桌面兼容层（P7-b）：把原先由 src/b3/*.css 与 src/b3/siyuan.scss 提供的、
+ * **桌面仍在使用**的规则收编到我们自己的文件里。本文件在 src/styles/index.css 里
+ * **导入到与原 b3 相同的位置（layer legacy 的第 42 行处）** ⇒ 层内相对顺序不变 ⇒ 层叠等价。
+ *
+ * 两部分：
+ *  A. 承重的壳层几何：原先借住在 b3/layout.css（标签栏 fixed 定位/尺寸、活动轨 padding-top、页签 margin 等）
+ *  B. 思源组件类复刻：桌面 TSX 仍在用的 .b3-list-item / .b3-label / .b3-menu / .b3-snackbar /
+ *     .b3-dialog / .b3-switch 基础件 / fn__* 工具类（值一律走 --lake-* 令牌）
+ * 移动端不加载本文件（它仍直接 import src/b3/*），所以移动端不受影响。
+ */
+
+/* ══ A. 承重壳层几何（原 b3/layout.css） ══════════════════════════════ */
+.tab-bar {
+  position: fixed;
+  top: 0;
+  right: 0;
+  left: 0;
+  height: var(--topbar-height);
+  background: transparent;
+  border-bottom: 0 !important;
+  z-index: 400;
+  box-shadow: none;
+  -webkit-backdrop-filter: none;
+}
+.tabbar-leading {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex: 0 0 auto;
+  -webkit-app-region: no-drag;
+}
+.tab-items {
+  flex: 1 1 auto;
+  min-width: 0;
+  align-self: stretch;
+  height: 100%;
+  min-height: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+.activity-rail {
+  padding-top: var(--topbar-height);
+  background: transparent;
+}
+.tab-item {
+  min-height: 29px;
+  line-height: 22px;
+  margin: 6px 0;
+  padding: 0 8px;
+}
+.workspace,
+.document-pane,
+.document-pane:has(> .multi-tab-editor) {
+  border-radius: var(--lake-radius-md) var(--lake-radius-md) 0 0;
+}
+
+/* ══ B. 思源组件类复刻（原 src/b3/siyuan.scss） ═══════════════════════ */
+
+/* 工具类（原 _function.scss；fn__none 是**承重**的：隐藏 keep-alive 的表格/画板/多维表编辑器） */
+.fn__none { display: none !important; }
+.fn__space { width: 8px; display: inline-block; flex-shrink: 0; }
+.fn__size200 { width: 200px; }
+.fn__flex-1 { flex: 1; }
+.fn__flex-center { align-self: center; }
+.fn__ellipsis { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fn__kbd {
+  padding: 2px 4px;
+  border: 1px solid var(--lake-border-2);
+  border-radius: var(--lake-radius-xs);
+  color: var(--lake-text-2);
+  background: var(--lake-bg-block);
+  font: 75% var(--lake-font-family-mono);
+  line-height: 1;
+}
+.ft__error { color: var(--lake-status-error); }
+
+/* 列表与列表项（回收站 / 历史 / 小记索引共用） */
+.b3-list { display: flex; flex-direction: column; }
+.b3-list--background .b3-list-item { border-radius: var(--lake-radius-sm); }
+.b3-list-item {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  border-radius: var(--lake-radius-sm);
+  color: var(--lake-text-1);
+  line-height: 20px;
+}
+.b3-list-item:hover { background: var(--lake-bg-hover); }
+.b3-list-item--focus { background: var(--lake-accent-tint); }
+.b3-list-item__text { flex: 1 1 auto; min-width: 0; }
+.b3-list-item__graphic { flex: 0 0 auto; display: inline-flex; align-items: center; }
+.b3-list-item__meta { flex: 0 0 auto; color: var(--lake-text-3); font-size: var(--lake-font-size-micro); }
+.b3-list-item__action {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: var(--lake-radius-xs);
+  color: var(--lake-text-3);
+}
+.b3-list-item__action:hover { color: var(--lake-text-1); background: var(--lake-bg-hover); }
+.b3-list-item__action--warning { color: var(--lake-status-pending); }
+.b3-list-item--hide-action .b3-list-item__action { opacity: 0; }
+.b3-list-item:hover .b3-list-item__action,
+.b3-list-item--focus .b3-list-item__action { opacity: 1; }
+.b3-list-item--selected { color: var(--lake-accent-text); background: var(--lake-accent-tint); }
+
+/* 表单标签行（设置面板） */
+.b3-label {
+  display: flex;
+  align-items: center;
+  padding: 8px 12px;
+  line-height: 20px;
+}
+.b3-label__text { color: var(--lake-text-3); font-size: var(--lake-font-size-micro); }
+
+/* 开关基础（外观细节见 kit.css 的 .b3-switch 规格） */
+.b3-switch {
+  flex-shrink: 0;
+  -webkit-appearance: none;
+  appearance: none;
+  margin: 0;
+  outline: none;
+  display: inline-block;
+  position: relative;
+  cursor: pointer;
+  overflow: inherit;
+  user-select: none;
+}
+
+/* 菜单（思源 b3-menu；桌面用于移动风格菜单/子菜单） */
+.b3-menu {
+  display: flex;
+  flex-direction: column;
+  min-width: 206px;
+  padding: 6px;
+  border: 1px solid var(--lake-border-1);
+  border-radius: var(--lake-radius-md);
+  background: var(--lake-bg-panel);
+  box-shadow: var(--lake-shadow-popover);
+}
+.b3-menu__items { display: flex; flex-direction: column; }
+.b3-menu__item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 27px;
+  padding: 0 8px;
+  border-radius: var(--lake-radius-xs);
+  color: var(--lake-text-1);
+}
+.b3-menu__item:hover { color: var(--lake-accent-text); background: var(--lake-accent-tint); }
+.b3-menu__item--warning { color: var(--lake-status-error); }
+.b3-menu__label { flex: 1 1 auto; min-width: 0; }
+.b3-menu__icon { flex: 0 0 auto; color: var(--lake-text-3); }
+.b3-menu__submenu { position: relative; }
+
+/* 提示条（SyncToast 等） */
+.b3-snackbars { display: flex; flex-direction: column; gap: 8px; }
+.b3-snackbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+  padding: 10px 12px;
+  border: 1px solid var(--lake-border-1);
+  border-radius: var(--lake-radius-md);
+  background: var(--lake-bg-panel);
+  box-shadow: var(--lake-shadow-popover);
+  color: var(--lake-text-1);
+}
+.b3-snackbar__content { flex: 1 1 auto; min-width: 0; }
+.b3-snackbar--error { border-left: 3px solid var(--lake-status-error); }
+
+/* 对话框容器（属性弹窗等） */
+.b3-dialog {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--lake-border-1);
+  border-radius: var(--lake-radius-lg);
+  background: var(--lake-bg-panel);
+  box-shadow: var(--lake-shadow-dialog);
+}
+
+/* 侧栏卡片几何（原 b3/layout.css：docked 形态的 margin 制造顶部 4px 缝 + 左右 4px，且抑制边框/阴影） */
+.sidebar.sidebar-docked {
+  background: var(--lake-bg-panel);
+  border: 0 !important;
+  box-shadow: none !important;
+  border-radius: var(--lake-radius-md);
+  margin: calc(var(--topbar-height) + 4px) 4px 4px 0;
+}
+.sidebar.sidebar-floating {
+  position: fixed;
+  left: var(--activity-rail-width);
+  right: auto;
+  width: var(--sidebar-width);
+  max-width: none;
+  background: var(--lake-bg-panel);
+  border-radius: 0 var(--lake-radius-md) var(--lake-radius-md) 0 !important;
+}
+[data-theme="dark"] .sidebar.sidebar-docked,
+[data-theme="dark"] .sidebar.sidebar-floating,
+[data-theme="dark"] .outline-sidebar__content {
+  background: var(--lake-bg-panel);
+  border-color: var(--lake-border-2);
+}
+.app-shell.quick-notes-active .workspace,
+.app-shell.quick-notes-active .document-pane,
+.app-shell.quick-notes-active .document-pane:has(> .multi-tab-editor) {
+  border-radius: 0 !important;
+}
+
+/* 注：.note-list 的横向不出滚动（原 b3/layout.css 的 overflow 形态）——只保真这一条，
+ * 行内距/圆角是 P5 有意的设计取值（见 chrome.css）。 */
+.note-list { overflow: hidden auto; }
