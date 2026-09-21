@@ -250,9 +250,9 @@
   border-radius: var(--radius-md);
 }
 
-.tab-switcher-item.active { background: rgba(59, 91, 219, .11); }
-
-.tab-switcher-item:hover { background: rgba(59, 91, 219, .08); }
+/* P5-i：原 `.tab-switcher-item.active { background: rgba(59,91,219,.11) }` 与
+ * `:hover { rgba(59,91,219,.08) }` 两条**旧品牌色字面量**已删 —— 菜单项态单一来源
+ * = src/styles/chrome.css（hover = --lake-bg-hover / 选中 = --lake-accent-tint）。 */
 
 .tab-switcher-select,
 .tab-switcher-close {

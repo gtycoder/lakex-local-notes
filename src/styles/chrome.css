@@ -265,3 +265,16 @@
 }
 .tree-row-action:hover { color: var(--lake-text-1); background: var(--lake-bg-hover); }
 .tree-row-action:focus-visible { outline: var(--lake-focus-ring-width) solid var(--lake-accent); outline-offset: -2px; }
+
+/* ── 页签溢出菜单项（P5-i；设计 04 菜单项规格）────────────────────────── */
+.tab-switcher-item {
+  min-height: 27px;
+  border-radius: var(--lake-radius-xs);
+  color: var(--lake-text-2);
+}
+.tab-switcher-item:hover { color: var(--lake-text-1); background: var(--lake-bg-hover); }
+.tab-switcher-item.active {
+  color: var(--lake-accent-text);
+  background: var(--lake-accent-tint);
+  font-weight: var(--lake-font-weight-semibold);
+}

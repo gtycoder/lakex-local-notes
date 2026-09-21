@@ -500,3 +500,32 @@
 }
 .b3-select:hover { border-color: var(--lake-border-strong); }
 .b3-select:focus-visible { outline: var(--lake-focus-ring-width) solid var(--lake-accent); outline-offset: var(--lake-focus-ring-offset); }
+
+/* ── 开关（P5-i：思源 .b3-switch → 设计 COMPONENTS 09）────────────────────
+ * 它是 -webkit-appearance:none 的 checkbox：轨 = 元素本身，钮 = ::after，
+ * 原 ::before 是 hover 光晕（本设计不要光晕，改 hover 边色/底色）。 */
+.b3-switch {
+  width: 32px;
+  height: 19px;
+  border: 1px solid var(--lake-border-1);
+  border-radius: var(--lake-radius-pill);
+  background-color: transparent;
+}
+.b3-switch::after {
+  width: 15px;
+  height: 15px;
+  left: 10.5px;
+  background-color: var(--lake-bg-raised);
+  box-shadow: var(--lake-shadow-knob);
+  transition: left var(--lake-motion-fast) var(--lake-ease-standard),
+    width var(--lake-motion-fast) var(--lake-ease-standard),
+    background-color var(--lake-motion-fast) var(--lake-ease-standard);
+}
+.b3-switch::before { display: none; }
+.b3-switch:hover { border-color: var(--lake-border-strong); }
+.b3-switch:active::after { width: 16px; }
+.b3-switch:checked { background-color: var(--lake-accent); border-color: var(--lake-accent); }
+.b3-switch:checked::after { left: 21.5px; }
+.b3-switch:checked:hover { border-color: var(--lake-accent); }
+.b3-switch:focus-visible { outline: var(--lake-focus-ring-width) solid var(--lake-accent); outline-offset: var(--lake-focus-ring-offset); }
+.b3-switch:disabled { opacity: .4; cursor: default; }
