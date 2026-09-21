@@ -26,11 +26,11 @@
 
 .create-menu small { margin-top: 1px; overflow: hidden; color: var(--lake-text-4); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
 
-.inline-create { display: grid; grid-template-columns: 16px minmax(0, 1fr) auto; align-items: center; gap: 5px; margin: 2px 7px 3px; padding: 3px 5px; border: 1px solid var(--lake-accent-tint); border-radius: var(--lake-radius-sm); color: var(--lake-accent); background: #fff; box-shadow: 0 0 0 1px var(--lake-accent-soft); }
+.inline-create { display: grid; grid-template-columns: 16px minmax(0, 1fr) auto; align-items: center; gap: 5px; margin: 2px 7px 3px; padding: 3px 5px; border: 1px solid var(--lake-accent-tint); border-radius: var(--lake-radius-sm); color: var(--lake-accent); background: var(--lake-bg-panel); box-shadow: 0 0 0 1px var(--lake-accent-soft); }
 
 .inline-create input { min-width: 0; height: 22px; padding: 0; border: 0; outline: 0; color: var(--lake-text); background: transparent; font-size: 12px; }
 
-.inline-create button { height: 22px; padding: 0 6px; border: 0; border-radius: var(--radius-xs); color: #fff; background: var(--lake-accent); font-size: 10px; }
+.inline-create button { height: 22px; padding: 0 6px; border: 0; border-radius: var(--radius-xs); color: var(--lake-text-on-accent); background: var(--lake-accent); font-size: 10px; }
 
 .note-list { flex: 1; min-height: 0; overflow: auto; padding: 0 5px; }
 
@@ -45,14 +45,14 @@
 /* 标题恒为单行、超出列宽直接裁切——不打省略号（用户 260914：不要用 … 缩短标题）；hover ⋯ 出现时同样只是让位裁切 */
 .note-row-copy strong { display: block; overflow: hidden; color: var(--lake-text); font-size: 13px; font-weight: 500; white-space: nowrap; }
 
-.tree-rename-input { width: 100%; height: 24px; padding: 0 4px; border: 1px solid var(--lake-accent-tint); border-radius: var(--lake-radius-sm); outline: 0; background: #fff; font-size: 13px; }
+.tree-rename-input { width: 100%; height: 24px; padding: 0 4px; border: 1px solid var(--lake-accent-tint); border-radius: var(--lake-radius-sm); outline: 0; background: var(--lake-bg-panel); font-size: 13px; }
 
 /* 只保留**一个**焦点环：输入框自带 border + 这里换主色即可。
    原先再加 box-shadow 会和 b3 的 `input:focus-visible` 描边叠成 2~3 层同心蓝框（user 260918 报）。 */
 .tree-rename-input:focus,
 .tree-rename-input:focus-visible { border-color: var(--lake-accent); outline: 0; }
 
-.tree-rename-input::selection { color: #2d4968; background: #dcecf8; }
+.tree-rename-input::selection { color: var(--lake-accent-ink); background: var(--lake-accent-tint); }
 
 .tree-list { padding-bottom: 4px; }
 
@@ -90,7 +90,7 @@
 
 .tree-chevron.open { transform: rotate(90deg); }
 
-.tree-children { margin-left: 16px; border-left: 1px solid rgba(225, 228, 232, 0.55); }
+.tree-children { margin-left: 16px; border-left: 1px solid var(--lake-hairline-soft); }
 
 .workspace { display: grid; min-width: 0; min-height: 0; }
 
@@ -208,7 +208,7 @@
 
 .activity-button:active { transform: scale(.965); }
 
-.activity-button:focus-visible { outline: 2px solid rgba(47, 125, 94, 0.18); outline-offset: 2px; }
+.activity-button:focus-visible { outline: var(--lake-focus-ring-width) solid var(--lake-focus-halo); outline-offset: 2px; }
 
 /* ── 侧栏卡片几何（260915 窄窗彻底统一 · 组 6：侧栏壳层）── */
 .sidebar {
@@ -262,7 +262,7 @@
 }
 
 /* ── 壳层材质一览（260915 窄窗彻底统一）：壳是透明底，卡片才是白面 ──
- * 原先是 `@media (min-width: 761px)` 里的规则 ⇒ 窄窗会掉回 `.workspace { background: #fff }`，
+ * 原先是 `@media (min-width: 761px)` 里的规则 ⇒ 窄窗会掉回 `.workspace { background: var(--lake-bg-panel) }`，
  * 顶栏/文档区跨断点时底色翻白（用户 260915 动图）。 */
 .workspace,
 .document-pane,
@@ -303,14 +303,14 @@
 /* App-owned menus and dialogs share the shell material; Lake popovers are not targeted. */
 .create-menu,
 .context-menu {
-  border-color: rgba(31, 35, 41, .12);
+  border-color: var(--lake-neutral-veil-1);
 }
 
 .create-menu > button,
 .context-menu > button { border-radius: 6px; }
 
 .create-menu > button:hover,
-.context-menu > button:hover { background: rgba(31, 35, 41, .06); }
+.context-menu > button:hover { background: var(--lake-neutral-veil-2); }
 
 /* ===== 工作区 keep-alive：小记/资料库两个视图常驻 DOM（display:contents 让子节点直接参与
    .workspace 网格），切换工作区时用 display:none 隐藏而非卸载——避免重建全部 tab 的 Lake
@@ -338,21 +338,21 @@
     height: 100%;
   }
   .outline-sidebar__content {
-    background: #fff;
-    border: 1px solid rgba(0, 0, 0, .08);
-    box-shadow: 0 1px 2px rgba(0, 0, 0, .05), 0 8px 22px rgba(0, 0, 0, .05);
+    background: var(--lake-bg-panel);
+    border: 1px solid var(--lake-border-1);
+    box-shadow: 0 1px 2px var(--lake-shadow-color-1), 0 8px 22px var(--lake-shadow-color-1);
   }
   .outline-sidebar--docked .outline-sidebar__content {
-    border-left: 1px solid rgba(0, 0, 0, .08);
+    border-left: 1px solid var(--lake-border-1);
   }
   .outline-sidebar--collapsed .outline-sidebar__content {
-    background: #fff;
+    background: var(--lake-bg-panel);
   }
 }
 
 .tree-row-icon { display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; border-radius: var(--lake-radius-sm); flex: none; }
 
-.tree-row-icon:hover { background: rgba(0,0,0,0.06); }
+.tree-row-icon:hover { background: var(--lake-bg-hover); }
 
 /* 菜单类 */
 
@@ -420,7 +420,7 @@
 
   .document-pane,
   .document-pane:has(> .multi-tab-editor) {
-    background: #fff !important;
+    background: var(--lake-bg-canvas) !important;
   }
 
   .app-shell.quick-notes-active .activity-rail {
@@ -439,22 +439,22 @@
 @media (min-width: 761px) {
   .sidebar.sidebar-docked,
   .sidebar.sidebar-floating {
-    background: #fff;
+    background: var(--lake-bg-panel);
   }
 
   .sidebar.sidebar-docked {
-    border: 1px solid rgba(0, 0, 0, .08);
+    border: 1px solid var(--lake-border-1);
     border-radius: 12px;
-    box-shadow: 0 1px 2px rgba(0, 0, 0, .05), 0 8px 22px rgba(0, 0, 0, .06);
+    box-shadow: 0 1px 2px var(--lake-shadow-color-1), 0 8px 22px var(--lake-shadow-color-2);
   }
 
   .sidebar.sidebar-floating {
-    border-top: 1px solid rgba(0, 0, 0, .16);
-    border-right: 1px solid rgba(0, 0, 0, .16);
-    border-bottom: 1px solid rgba(0, 0, 0, .16);
+    border-top: 1px solid var(--lake-border-strong);
+    border-right: 1px solid var(--lake-border-strong);
+    border-bottom: 1px solid var(--lake-border-strong);
     border-left: 0;
     border-radius: 0 14px 14px 0;
-    box-shadow: 18px 0 50px rgba(43, 50, 78, .18), 2px 0 8px rgba(43, 50, 78, .08);
+    box-shadow: 18px 0 50px var(--lake-shadow-color-4), 2px 0 8px var(--lake-shadow-color-3);
   }
 
   /* （大纲面板白卡这两条已与材质层一起搬到共用作用域） */
@@ -666,10 +666,10 @@ html[data-theme="dark"] .document-pane .ne-engine > ne-h6 ne-heading-content {
 
 /* #2 浮层阴影：左右统一、更柔；阴影静态、不参与切出动画（避免逐帧重绘，保性能与速度） */
 .sidebar.sidebar-floating {
-  box-shadow: 16px 0 26px -14px rgba(43, 50, 78, .30) !important; /* 单侧投影：负 spread 收掉上下溢出 */
+  box-shadow: 16px 0 26px -14px var(--lake-shadow-color-5) !important; /* 单侧投影：负 spread 收掉上下溢出 */
 }
 .outline-sidebar--collapsed.outline-sidebar--hovered .outline-sidebar__content {
-  box-shadow: -16px 0 26px -14px rgba(43, 50, 78, .30); /* 单侧投影（朝内容侧） */
+  box-shadow: -16px 0 26px -14px var(--lake-shadow-color-5); /* 单侧投影（朝内容侧） */
   transition: opacity 180ms var(--lake-ease-standard), transform 180ms var(--lake-ease-standard), visibility 180ms linear;
 }
 

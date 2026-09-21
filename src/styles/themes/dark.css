@@ -104,4 +104,22 @@
   --lakex-editor-text-body: var(--lake-text-1);
   --lakex-editor-text-caption: var(--lake-text-3);
   --lakex-editor-cursor: var(--lake-accent);
+  /* 阴影色 / 中性叠层 / 半透明遮罩（P7-d，深色：更重的黑 + 更亮的叠层） */
+  --lake-shadow-color-1: rgba(0, 0, 0, .40);
+  --lake-shadow-color-2: rgba(0, 0, 0, .45);
+  --lake-shadow-color-3: rgba(0, 0, 0, .35);
+  --lake-shadow-color-4: rgba(0, 0, 0, .50);
+  --lake-shadow-color-5: rgba(0, 0, 0, .55);
+  --lake-shadow-color-6: rgba(0, 0, 0, .50);
+  --lake-shadow-color-7: rgba(0, 0, 0, .60);
+  --lake-neutral-veil-1: rgba(255, 255, 255, .14);
+  --lake-neutral-veil-2: rgba(255, 255, 255, .06);
+  --lake-neutral-veil-3: rgba(255, 255, 255, .10);
+  --lake-veil-strong: rgba(255, 255, 255, .10);
+  --lake-veil-soft: rgba(255, 255, 255, .06);
+  --lake-veil-open: rgba(255, 255, 255, .12);
+  --lake-hairline-soft: rgba(255, 255, 255, .07);
+  --lake-pinned-tint: rgba(228, 175, 94, .16);
+  --lake-pinned-border: rgba(228, 175, 94, .38);
+  --lake-pinned-tint-hover: rgba(228, 175, 94, .24);
 }

@@ -105,4 +105,23 @@
   --lakex-editor-text-body: var(--lake-text-1);
   --lakex-editor-text-caption: var(--lake-text-3);
   --lakex-editor-cursor: var(--lake-accent);
+  /* 阴影色 / 中性叠层 / 半透明遮罩（P7-d）：需要**保留方向**的阴影与叠层在这里取色，
+   * 字面量只允许出现在主题文件；使用处一律引用令牌。 */
+  --lake-shadow-color-1: rgba(0, 0, 0, .05);
+  --lake-shadow-color-2: rgba(0, 0, 0, .06);
+  --lake-shadow-color-3: rgba(43, 50, 78, .08);
+  --lake-shadow-color-4: rgba(43, 50, 78, .18);
+  --lake-shadow-color-5: rgba(43, 50, 78, .30);
+  --lake-shadow-color-6: rgba(0, 0, 0, .14);
+  --lake-shadow-color-7: rgba(0, 0, 0, .16);
+  --lake-neutral-veil-1: rgba(31, 35, 41, .12);
+  --lake-neutral-veil-2: rgba(31, 35, 41, .06);
+  --lake-neutral-veil-3: rgba(0, 0, 0, .14);
+  --lake-veil-strong: rgba(255, 255, 255, .78);
+  --lake-veil-soft: rgba(255, 255, 255, .48);
+  --lake-veil-open: rgba(255, 255, 255, .86);
+  --lake-hairline-soft: rgba(225, 228, 232, .55);
+  --lake-pinned-tint: rgba(196, 154, 58, .10);
+  --lake-pinned-border: rgba(196, 154, 58, .26);
+  --lake-pinned-tint-hover: rgba(196, 154, 58, .16);
 }

@@ -46,15 +46,15 @@
 .tab-item.pinned .tab-close { display: none; }
 
 .tab-item.pinned {
-  background: rgba(196, 154, 58, .10);
-  border-color: rgba(196, 154, 58, .26);
+  background: var(--lake-pinned-tint);
+  border-color: var(--lake-pinned-border);
 }
 
-.tab-item.pinned:hover { background: rgba(196, 154, 58, .16); }
+.tab-item.pinned:hover { background: var(--lake-pinned-tint-hover); }
 
 .tab-item.pinned.active {
   background: var(--shell-accent-soft);
-  border-color: rgba(59, 91, 219, .35);
+  border-color: var(--lake-accent);
 }
 
 /* 远端删除标记：标签变灰 + 红色"已删除"徽标（正文保留，供复制/从回收站恢复） */
@@ -122,7 +122,7 @@
   transition: color var(--lake-motion-fast) var(--lake-ease-standard), background-color var(--lake-motion-fast) var(--lake-ease-standard), border-color var(--lake-motion-fast) var(--lake-ease-standard), box-shadow var(--lake-motion-fast) var(--lake-ease-standard), transform var(--lake-motion-press) var(--lake-ease-standard);
 }
 
-.tab-item:hover { color: #46527e; background: rgba(255, 255, 255, .78); }
+.tab-item:hover { color: var(--lake-accent-text); background: var(--lake-veil-strong); }
 
 .tab-item:active { transform: scale(.98); }
 
@@ -130,7 +130,7 @@
 
 .tab-item.active .tab-close { opacity: .38; }
 
-.tab-close:hover { background: rgba(31, 35, 41, .09); }
+.tab-close:hover { background: var(--lake-neutral-veil-2); }
 
 .tab-switcher-wrap {
   position: relative;
@@ -147,18 +147,18 @@
   height: 28px;
   padding: 0;
   border: 1px solid transparent;
-  color: #5f6368;
-  background: rgba(255, 255, 255, .48);
+  color: var(--lake-text-2);
+  background: var(--lake-veil-soft);
   -webkit-app-region: no-drag;
   transition: color var(--lake-motion-fast) var(--lake-ease-standard), background-color var(--lake-motion-fast) var(--lake-ease-standard), border-color var(--lake-motion-fast) var(--lake-ease-standard), transform var(--lake-motion-press) var(--lake-ease-standard);
 }
 
 .tab-switcher:hover,
-.tab-switcher.open { color: var(--shell-accent-strong); border-color: rgba(59, 91, 219, .18); background: rgba(255, 255, 255, .86); }
+.tab-switcher.open { color: var(--shell-accent-strong); border-color: var(--lake-accent-tint); background: var(--lake-veil-open); }
 
 .tab-switcher:active { transform: scale(.94); }
 
-.tab-switcher:focus-visible { outline: 2px solid rgba(59, 91, 219, .22); outline-offset: 2px; }
+.tab-switcher:focus-visible { outline: var(--lake-focus-ring-width) solid var(--lake-accent-tint); outline-offset: 2px; }
 
 .tab-switcher[data-tooltip]::after {
   content: attr(data-tooltip);
@@ -169,7 +169,7 @@
   width: max-content;
   max-width: 260px;
   padding: 6px 9px;
-  border: 1px solid rgba(0, 0, 0, .16);
+  border: 1px solid var(--lake-border-strong);
   font-size: 11px;
   font-weight: 500;
   line-height: 1.25;
@@ -216,7 +216,7 @@
   width: 2px;
   height: 40px;
   border-radius: var(--radius-pill);
-  background: rgba(0, 0, 0, .14);
+  background: var(--lake-neutral-veil-3);
   opacity: 0;
   transition: opacity var(--lake-motion-fast) var(--lake-ease-standard);
 }
@@ -230,11 +230,11 @@
   justify-content: space-between;
   min-height: 28px;
   padding: 0 7px 5px;
-  color: #495374;
+  color: var(--lake-text-2);
   font-size: 12px;
 }
 
-.tab-switcher-heading span { color: #929ab1; font-variant-numeric: tabular-nums; }
+.tab-switcher-heading span { color: var(--lake-text-4); font-variant-numeric: tabular-nums; }
 
 .tab-switcher-list {
   min-height: 0;
@@ -258,7 +258,7 @@
 .tab-switcher-close {
   border: 0;
   background: transparent;
-  color: #596481;
+  color: var(--lake-text-3);
   -webkit-app-region: no-drag;
 }
 
@@ -281,7 +281,7 @@
   justify-content: center;
   flex: 0 0 18px;
   width: 18px;
-  color: #69738e;
+  color: var(--lake-text-3);
   font-size: 15px;
   line-height: 1;
 }
@@ -309,15 +309,15 @@
 .tab-switcher-item:hover .tab-switcher-close,
 .tab-switcher-close:focus-visible { opacity: .7; }
 
-.tab-switcher-close:hover { color: var(--lake-error); background: rgba(194, 85, 88, .11); opacity: 1; }
+.tab-switcher-close:hover { color: var(--lake-error); background: var(--lake-error-soft); opacity: 1; }
 
 /* ===== 2026-08-06 标签拖拽排序动效 ===== */
 .tab-item { cursor: default; }
 
 .tab-item.dragging {
   cursor: grabbing;
-  background: #fff;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, .16), 0 8px 22px rgba(0, 0, 0, .14);
+  background: var(--lake-bg-panel);
+  box-shadow: 0 2px 6px var(--lake-shadow-color-7), 0 8px 22px var(--lake-shadow-color-6);
   transform: scale(1.03);
   z-index: 5;
   position: relative;

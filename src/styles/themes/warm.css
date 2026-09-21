@@ -104,4 +104,22 @@
   --lakex-editor-text-body: var(--lake-text-1);
   --lakex-editor-text-caption: var(--lake-text-3);
   --lakex-editor-cursor: var(--lake-accent);
+  /* 阴影色 / 中性叠层 / 半透明遮罩（P7-d，暖色：阴影带暖调，叠层用暖白） */
+  --lake-shadow-color-1: rgba(74, 60, 38, .07);
+  --lake-shadow-color-2: rgba(74, 60, 38, .09);
+  --lake-shadow-color-3: rgba(74, 60, 38, .10);
+  --lake-shadow-color-4: rgba(74, 60, 38, .16);
+  --lake-shadow-color-5: rgba(74, 60, 38, .22);
+  --lake-shadow-color-6: rgba(74, 60, 38, .18);
+  --lake-shadow-color-7: rgba(74, 60, 38, .20);
+  --lake-neutral-veil-1: rgba(90, 74, 48, .16);
+  --lake-neutral-veil-2: rgba(90, 74, 48, .08);
+  --lake-neutral-veil-3: rgba(74, 60, 38, .16);
+  --lake-veil-strong: rgba(255, 254, 251, .80);
+  --lake-veil-soft: rgba(255, 254, 251, .55);
+  --lake-veil-open: rgba(255, 254, 251, .88);
+  --lake-hairline-soft: rgba(231, 223, 208, .60);
+  --lake-pinned-tint: rgba(176, 132, 40, .12);
+  --lake-pinned-border: rgba(176, 132, 40, .30);
+  --lake-pinned-tint-hover: rgba(176, 132, 40, .20);
 }
