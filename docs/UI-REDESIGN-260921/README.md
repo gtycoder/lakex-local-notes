@@ -6,13 +6,16 @@
 
 ## 1. 硬指标（完成判据）
 
-| # | 指标 | 现状 | 目标 |
+> **进度看板**：`node scripts/ui-metrics.mjs`（P5 新增；口径见下）。基线 = P5 第 1 片后实测。
+
+| # | 指标 | 现状（P5 后实测） | 目标 |
 | --- | --- | --- | --- |
-| 1 | 桌面侧 `--b3-*` 引用 | 1275 处 / 89 变量 | **0** |
-| 2 | 颜色字面量位置 | 434 hex + 243 rgb/rgba 散落各文件 | **只允许出现在 `src/styles/themes/*.css`** |
-| 3 | `!important` | 141（不含思源层） | **≤10** |
-| 4 | `src/b3/siyuan.scss` + `src/b3/*.css` 桌面引用 | 全部引用 | **桌面侧不再引用**（文件保留给移动端 import） |
-| 5 | 同名 CSS 文件对 | 4 对并存 | **归并**（`styles/app/*` → `styles/*`） |
+| 1 | 桌面侧 `var(--b3-*)` 引用 | **611**（top：bitableEditor 114 / styles/components 95 / b3/components 74） | **0** |
+| 2 | 颜色字面量（非主题文件） | **hex 394 · rgb 234**（top：bitableEditor 124 / b3 两主题 119+96 / styles/tokens 74） | **只允许出现在 `src/styles/themes/*.css`** |
+| 3 | `!important`（桌面侧） | **124**（另：思源层 32、移动端 19） | **≤10** |
+| 4 | 入口 `styles/index.css` 引用 b3 的行数 | **8** | **0**（文件保留给移动端 import） |
+| 5 | 同名 CSS 文件对 | 4 对：editor / quick-notes / settings / shell | **归并**（`styles/app/*` → `styles/*`） |
+| 5b（记录） | 移动端 `var(--b3-*)` | 233（3 文件）——**本批不动**，桌面完成后再单独立项 | — |
 | 6 | 层序 | 靠加载顺序 + 特异性 | **CSS `@layer` 显式声明** |
 | 7 | 组件库 | 无（`.ln-*` 雏形） | **14 件自有组件** |
 | 8 | 换肤 | 浅/深硬编码 | **主题即数据**（新增主题 = 新增一个令牌文件，不改组件代码） |

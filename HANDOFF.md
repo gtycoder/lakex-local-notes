@@ -1785,6 +1785,11 @@ lsof -ti:1432 -ti:9231 | sort -u | xargs kill
 - 思源 `--b3-*` 关键表面/主色/文字/边框/阴影/字体 → 桥接到新令牌（避免新旧两套配色并存）。
 - lakex 编辑器外围变量按设计 MIGRATION §3 映射（背景/边框/正文色/光标）；**选区色按用户决策刻意不动**。
 
+### 二·补 硬指标度量（P5 起随手可跑）
+`node scripts/ui-metrics.mjs`（P5 新增）：桌面侧 `var(--b3-*)` 引用 / 颜色字面量（非主题）/ `!important` / 入口 b3 import 行数 / 同名文件对，并**分开**统计移动端（本批不动）。
+- **基线（P5 第 1 片后实测）**：桌面侧 样式文件 40 · `var(--b3-*)` **611** · 颜色字面量 **hex 394 / rgb 234** · `!important` **124** · 入口 b3 行数 **8** · 同名文件对 4；移动端 `--b3-*` 233、`!important` 19；思源层 `!important` 32。
+- **最大头（P7 优先）**：`features/bitable/bitableEditor.css`（b3 114 / 颜色 124）、`styles/components.css`（b3 95）、`b3/components.css`·`b3/layout.css`·两个 `b3/theme-*.css`（随 b3 一起删）、`styles/tokens.css`（颜色 74）。
+
 ### 三、门禁（P4 后实测）
 `tsc` 0 · `vitest` **1210 passed / 16 skipped (1226)** · `check:core` 0 · `check:bundle` app-css **195KB**/2MB · `git diff --check` 干净。
 
