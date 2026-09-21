@@ -6,7 +6,7 @@
 
 ## 0. 当前基线（新会话开工前）
 - **🚧 在途分支 `feat/ui-redesign`（260921 起，用户授权自主执行）**：桌面端 UI 重设计 = 彻底剥离思源样式层 + 自有设计系统 + 换肤。
-  进度见 **§2.22**；方案/硬指标/阶段 = `docs/UI-REDESIGN-260921/README.md`；**元素底账（防丢）** = `docs/UI-REDESIGN-260921/01-ELEMENT-LEDGER.md`。
+  **✅ 本批已完成（P0–P8）**：进度与收尾见 **§2.22**；方案/硬指标/阶段 = `docs/UI-REDESIGN-260921/README.md`；**元素底账（防丢，346 条全部打勾）** = `01-ELEMENT-LEDGER.md`；**验收报告（含硬指标表 + 三种验证方法 + 19 张截图矩阵）** = `03-ACCEPTANCE.md`。**五项硬指标全部达成**：桌面 `var(--b3-*)` 604→**0**、非主题颜色字面量 624→**0**、`!important` 141→**9**、入口 b3 import 8→**0**、同名文件对 4→**0**；app-css gzip 197→**182 KB**。
   设计规格（外部，只作参考）= `/Users/admin/file/local-lake/ui-design-inputs/out/design-system/`。**未 push、未合 master**。
 - **✅ 分支 `feat/board-document` 已 fast-forward 合入 `master` 并 push origin**（用户 260920 收尾指示）。这一次把三大块一起带进 `master`：
   1. **自研多维表 `kind=bitable`**（§2.12）· 2. **独立画板文档 `kind=board`**（§2.13）· 3. **移动端对账补齐 + 小记完善**（§2.14 / **§2.15**）。
@@ -1756,7 +1756,7 @@ lsof -ti:1432 -ti:9231 | sort -u | xargs kill
 > 设计规格（外部）= `/Users/admin/file/local-lake/ui-design-inputs/out/design-system/`（8 项交付，**只作参考**）。
 > 分支 `feat/ui-redesign`，基线 `origin/master` = `17bafbe`；**未 push、未合 master**。
 
-### 一、已完成（24 个提交）
+### 一、已完成（25 个提交）· ✅ 本批（P0–P8）收尾
 - **b53a456 docs**：元素底账 + 实现方案（阶段 P0–P8 / 层序 / 主题即数据 / 硬指标 / 验收口径变更）。
 - **e5f171e P1 @layer 层骨架**：新增 `src/styles/index.css` 单入口，`@layer legacy,tokens,reset,kit,shell,feature,overlay,a11y`；旧样式（含内核 style.css / 思源 / 旧壳层）**按原顺序整体入 legacy 层**；删 `src/styles.css`；围栏 `cssLayers.test.ts` 入口项同步。
   - 关键机制：**legacy 最低 ⇒ 新层写入即压过旧样式**，迁移期不靠特异性取胜。
