@@ -73,3 +73,30 @@ pre {
   background: var(--lake-accent-tint);
   font-weight: var(--lake-font-weight-semibold);
 }
+
+/* ── 大纲侧栏（P5-f；设计 LAYOUT.md「大纲侧栏」）────────────────────────
+ * outline.css 是桌面专属且落在 legacy 层，这里同选择器、更高层 ⇒ 天然胜出。
+ * 用户已确认：**去掉选中项左侧竖条**（原 .outline-item--selected::before）。 */
+.outline-sidebar__header {
+  color: var(--lake-text-2);
+  font-size: var(--lake-font-size-small);
+  font-weight: var(--lake-font-weight-semibold);
+}
+.outline-list { padding: var(--lake-space-sm) 0; }
+.outline-item {
+  height: 25px;
+  padding-right: var(--lake-space-md);
+  border-left: 0;
+  border-radius: var(--lake-radius-xs);
+  color: var(--lake-text-3);
+  font-size: var(--lake-font-size-tiny);
+}
+.outline-item:hover { color: var(--lake-text-1); background: var(--lake-bg-hover); }
+.outline-item--selected {
+  color: var(--lake-accent-text);
+  background: var(--lake-accent-tint);
+  font-weight: var(--lake-font-weight-semibold);
+}
+.outline-item--selected::before { display: none; }
+.outline-item__level { color: var(--lake-text-4); background: var(--lake-bg-block); }
+.outline-panel__empty { color: var(--lake-text-4); }

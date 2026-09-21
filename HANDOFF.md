@@ -1756,7 +1756,7 @@ lsof -ti:1432 -ti:9231 | sort -u | xargs kill
 > 设计规格（外部）= `/Users/admin/file/local-lake/ui-design-inputs/out/design-system/`（8 项交付，**只作参考**）。
 > 分支 `feat/ui-redesign`，基线 `origin/master` = `17bafbe`；**未 push、未合 master**。
 
-### 一、已完成（9 个提交）
+### 一、已完成（10 个提交）
 - **b53a456 docs**：元素底账 + 实现方案（阶段 P0–P8 / 层序 / 主题即数据 / 硬指标 / 验收口径变更）。
 - **e5f171e P1 @layer 层骨架**：新增 `src/styles/index.css` 单入口，`@layer legacy,tokens,reset,kit,shell,feature,overlay,a11y`；旧样式（含内核 style.css / 思源 / 旧壳层）**按原顺序整体入 legacy 层**；删 `src/styles.css`；围栏 `cssLayers.test.ts` 入口项同步。
   - 关键机制：**legacy 最低 ⇒ 新层写入即压过旧样式**，迁移期不靠特异性取胜。
@@ -1803,7 +1803,12 @@ lsof -ti:1432 -ti:9231 | sort -u | xargs kill
   - **产品既有决策保留**：标题超长**直接裁切（`text-overflow: clip`）不打省略号**；行内动作（⋯ ＋）**仅 hover/聚焦显形**（选中不常驻）。
   - 删掉 `styles/app/shell.css` 里两条**颜色字面量**（`.note-row:hover #e9ebee` / `.note-row.active #eff0f0`）——行态单一来源改为 chrome.css。
   - 实测（三套主题 + **真实鼠标 hover**）：行 27/29px·圆角 8·字 text-1；选中底 tint（light rgb(236,239,245) / dark rgba(147,169,207,.14) / warm rgb(240,232,216)）+ accent-text + 标题 600；title `overflow: clip`；图标 text-3；箭头 16px；动作钮 20×20·6px；**hover 时 bg=bg-hover 且动作 display=flex**。
-  - 仍待：**大纲内层**、**回收站/历史面板内层**（下一轮）。
+  - 仍待：**回收站/历史面板内层**（下一轮）。
+- **P5-f 逐屏迁移（大纲侧栏）**：规格写在 `src/styles/feature.css`（桌面专属；outline.css 在 legacy 层 ⇒ 同选择器更高层天然胜出）。
+  - 项高 26 → **25px**、字 13 → **11px**；默认 text-3、hover `bg-hover`+text-1、**选中 = accent-tint + accent-text + 600**；级别徽标 text-4 + `bg-block`；头部 12px/600。
+  - **去掉选中项左侧竖条**（用户确认）：`.outline-item--selected::before { display: none }`，并清掉 `.outline-item` 的 `border-left`。
+  - 实测（三套主题）：item 25px/11px/border-left 0/radius 6；selected 底 tint + accent-text + 600 + **`::before` = none**；level text-4。
+  - ⚠️ **重要发现**：**默认配置下的大纲是内核原生 TOC**（设置项 `editor-outline-enhance` 默认 false ⇒ 直接用 Lake 原生大纲），不是我们的 `.outline-item`；上面这套只在用户开启「大纲增强」后生效。**内核原生大纲属编辑器外观（第三方），不在本次重做范围**。
 
 ### 二、过渡桥接（P7 删 legacy 时一并移除）
 - 旧 `--lake-*` 名字（`--lake-shell/panel/canvas/surface/accent-soft/shadow-* …`）→ 指向新令牌。
