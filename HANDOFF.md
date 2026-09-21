@@ -5,6 +5,9 @@
 > **§8 是移动端（安卓）专职交接**，由移动端会话维护；桌面会话不要改 §8，移动端会话不要改 §0-§7 之外的桌面文件。
 
 ## 0. 当前基线（新会话开工前）
+- **🚧 在途分支 `feat/ui-redesign`（260921 起，用户授权自主执行）**：桌面端 UI 重设计 = 彻底剥离思源样式层 + 自有设计系统 + 换肤。
+  进度见 **§2.22**；方案/硬指标/阶段 = `docs/UI-REDESIGN-260921/README.md`；**元素底账（防丢）** = `docs/UI-REDESIGN-260921/01-ELEMENT-LEDGER.md`。
+  设计规格（外部，只作参考）= `/Users/admin/file/local-lake/ui-design-inputs/out/design-system/`。**未 push、未合 master**。
 - **✅ 分支 `feat/board-document` 已 fast-forward 合入 `master` 并 push origin**（用户 260920 收尾指示）。这一次把三大块一起带进 `master`：
   1. **自研多维表 `kind=bitable`**（§2.12）· 2. **独立画板文档 `kind=board`**（§2.13）· 3. **移动端对账补齐 + 小记完善**（§2.14 / **§2.15**）。
 - **最新会话（260921 · 单元格图片方案 2A：`cell.img` 成为唯一真相）完整交接 = §2.21（先读它）**；同批承接 §2.20（去浮动图 + 单元格图片工具弹窗 + 滚动/色条修复）与 §2.16–§2.19（表格图片 P1/P2/缩略图）。
@@ -1745,6 +1748,38 @@ lsof -ti:1432 -ti:9231 | sort -u | xargs kill
 - **含图单元格 cut**（Cmd+X 后粘贴）只跑了 copy 路径 + 撤销；2A 下无论内核把它当 copy 还是 cut，图片都随 cell 到目标；「源是否清空」取决于内核剪贴板行为（§2.20 六的 `luckysheet_paste_iscut` 不稳），未单独断言。
 - 正文同时保留 `images[]`（含派生 cell 条目）与 `cell.img`：冗余但安全；将来可只在保存时剔除 cell 条目（以 `cell.img` 为准）。**遗留浮动图仍原样保留**（不再新建）。
 - 老 P2 数据（只有 `images[].cell`、无 `cell.img`）**不做自动回填**（Spike 扫描用户数据里没有这种；红线 #7 不写兼容）。
+
+## 2.22 本会话批次（260921 · UI 重设计 P1/P2：@layer 层骨架 + 主题即数据）—— 在途分支 feat/ui-redesign
+
+> **写给完全没有上下文的新会话**。本批是「彻底剥离思源样式层 + 重做套壳 UI」的开始，用户已授权自主执行。
+> 方案/硬指标/阶段/验收口径 = `docs/UI-REDESIGN-260921/README.md`；**元素底账（防丢）** = `docs/UI-REDESIGN-260921/01-ELEMENT-LEDGER.md`。
+> 设计规格（外部）= `/Users/admin/file/local-lake/ui-design-inputs/out/design-system/`（8 项交付，**只作参考**）。
+> 分支 `feat/ui-redesign`，基线 `origin/master` = `17bafbe`；**未 push、未合 master**。
+
+### 一、已完成（2 个提交）
+- **b53a456 docs**：元素底账 + 实现方案（阶段 P0–P8 / 层序 / 主题即数据 / 硬指标 / 验收口径变更）。
+- **e5f171e P1 @layer 层骨架**：新增 `src/styles/index.css` 单入口，`@layer legacy,tokens,reset,kit,shell,feature,overlay,a11y`；旧样式（含内核 style.css / 思源 / 旧壳层）**按原顺序整体入 legacy 层**；删 `src/styles.css`；围栏 `cssLayers.test.ts` 入口项同步。
+  - 关键机制：**legacy 最低 ⇒ 新层写入即压过旧样式**，迁移期不靠特异性取胜。
+  - 实测：Vite 正确内联 `@import ... layer()`（输出 0 残留 @import）；3 个未分层组件 CSS 与 legacy **零选择器重叠** ⇒ 语义透明；截图与基线一致。
+- **bf8bfde P2 主题即数据**：`src/styles/themes/{base,light,dark,warm}.css`（layer tokens）+ `src/lib/themes.ts` 注册表；`ThemeMode` 收敛为 `LakeThemeId`；`applyTheme` 按注册表设 `colorScheme`；设置面板主题控件按 `LAKE_THEMES` 渲染（浅/深/**暖色纸质**）；`settingsSearch` 关键词补充。
+  - 对比度脚本校验 **42 项全过 AA**（含把 `text-3` 在卡内块上从 4.21 修到 ≥4.5）。
+  - 隔离实例实测：设置按钮 → `data-theme=warm` 且 `colorScheme=light`（warm 属 light 系）。
+
+### 二、过渡桥接（P7 删 legacy 时一并移除）
+- 旧 `--lake-*` 名字（`--lake-shell/panel/canvas/surface/accent-soft/shadow-* …`）→ 指向新令牌。
+- 思源 `--b3-*` 关键表面/主色/文字/边框/阴影/字体 → 桥接到新令牌（避免新旧两套配色并存）。
+- lakex 编辑器外围变量按设计 MIGRATION §3 映射（背景/边框/正文色/光标）；**选区色按用户决策刻意不动**。
+
+### 三、门禁（P2 后实测）
+`tsc` 0 · `vitest` **1210 passed / 16 skipped (1226)** · `check:core` 0 · `check:bundle` app-css **193KB**/2MB · `git diff --check` 干净。
+
+### 四、下一步（P3 起）
+P3 字体令牌 + 开发期试用切换器 → P4 组件库 14 件 → P5 逐屏迁移（每屏对照底账打勾）→ P6 第三方容器壳统一 → P7 收尾（删源/归并 4 对同名文件/hex-rgb 收口/`!important` ≤10）→ P8 验收交付。
+
+### 五、坑（本批新增）
+- **不要用反引号包裹内容去 `git commit -m`**：bash 会做命令替换，提交信息被吞（本批踩一次，已 `--amend -F` 修正）。
+- 隔离实例克隆 dev 数据时**必须删 `SingletonLock/Socket/Cookie`**，否则 Electron 单实例锁判定「已有实例」直接退出。
+- `@layer` 的 `!important` 层序是**反的**（早层重要声明赢）：迁移某元素时必须把 legacy 里的 `!important` 一起删干净。
 
 ## 3. 下一步计划 + 当前问题（真正的待办，按优先级）
 
