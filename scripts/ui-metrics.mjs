@@ -45,7 +45,29 @@ function scan(list) {
   }
   return { b3, hex, rgb, imp, b3Top: b3Top.sort((a, b) => b[1] - a[1]), litTop: litTop.sort((a, b) => b[1] - a[1]) };
 }
-const d = scan(desktopCss);
+// 桌面样式图 = 从 src/styles/index.css 出发、沿 @import 可达的 .css。
+// P7-b 起 src/b3/*.css **桌面已不再加载**（只被移动端入口 import），所以不计入桌面指标 —— 否则会
+// 把"保留给移动端的思源文件"算成桌面残留，指标永远归不了零。
+function reachableCss(entry) {
+  const seen = new Set();
+  const queue = [entry];
+  while (queue.length) {
+    const p = queue.pop();
+    if (seen.has(p) || !existsSync(p) || !p.endsWith('.css')) continue;
+    seen.add(p);
+    const src = readFileSync(p, 'utf8');
+    for (const mm of src.matchAll(/@import\s+(?:url\()?["']([^"']+)["']/g)) {
+      const spec = mm[1];
+      if (spec.startsWith('.')) queue.push(resolve(join(p, '..'), spec));
+      else if (spec.startsWith('/')) queue.push(join(ROOT, spec));
+      // 裸包名（如 @dlient/lakex-doc-react/style.css）是第三方，不入我们的指标
+    }
+  }
+  return seen;
+}
+const desktopGraph = desktopCss.filter((p) => reachableCss(join(ROOT, 'src/styles/index.css')).has(resolve(p)));
+const onlyMobileB3 = desktopCss.filter((p) => p.includes('/src/b3/') && !desktopGraph.includes(p));
+const d = scan(desktopGraph);
 const m = scan(mobileCss);
 const siyuanImportant = files.filter(isSiyuan).reduce((a, p) => a + count(readFileSync(p, 'utf8'), /!important/g), 0);
 const appDir = join(ROOT, 'src/styles/app');
@@ -53,7 +75,8 @@ const pairs = existsSync(appDir) ? readdirSync(appDir).filter((f) => f.endsWith(
 const entry = readFileSync(join(ROOT, 'src/styles/index.css'), 'utf8');
 const b3ImportLines = entry.split('\n').filter((l) => l.includes('b3/')).length;
 const r = {
-  desktop: { files: desktopCss.length, b3VarRefs: d.b3, colorHex: d.hex, colorRgb: d.rgb, important: d.imp },
+  desktop: { files: desktopGraph.length, b3VarRefs: d.b3, colorHex: d.hex, colorRgb: d.rgb, important: d.imp },
+  desktopOnlyMobileB3: onlyMobileB3.map((p) => relative(ROOT, p)),
   mobileUntouched: { files: mobileCss.length, b3VarRefs: m.b3, important: m.imp },
   targets: { b3VarRefs: 0, colorLiterals: 0, important: 10, b3ImportLines: 0, sameNamePairs: 0 },
   b3TopTen: d.b3Top.slice(0, 10),
@@ -65,7 +88,7 @@ const r = {
 if (process.argv.includes('--json')) console.log(JSON.stringify(r, null, 2));
 else {
   console.log('== 桌面侧（目标口径） ==');
-  console.log('  样式文件            ', r.desktop.files, '（含 b3 旧层/主题）');
+  console.log('  样式文件            ', r.desktop.files, '（入口可达；另有', r.desktopOnlyMobileB3.length, '个 b3 文件已仅移动端加载）');
   console.log('  var(--b3-*) 引用    ', r.desktop.b3VarRefs, ' / 目标 0');
   console.log('     top:', r.b3TopTen.map(([f, n]) => f + ':' + n).join('  ') || '（无）');
   console.log('  颜色字面量(非主题)  ', 'hex=' + r.desktop.colorHex, 'rgb=' + r.desktop.colorRgb, ' / 目标 0');

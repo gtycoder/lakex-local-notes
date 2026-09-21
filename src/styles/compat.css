@@ -84,7 +84,8 @@
   position: relative;
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 8px;
+  margin: 1px 8px;
   padding: 4px 8px;
   border-radius: var(--lake-radius-sm);
   color: var(--lake-text-1);
@@ -119,7 +120,7 @@
   padding: 8px 12px;
   line-height: 20px;
 }
-.b3-label__text { color: var(--lake-text-3); font-size: var(--lake-font-size-micro); }
+.b3-label__text { margin-top: 4px; color: var(--lake-text-3); font-size: var(--lake-font-size-micro); }
 
 /* 开关基础（外观细节见 kit.css 的 .b3-switch 规格） */
 .b3-switch {
@@ -221,3 +222,50 @@
 /* 注：.note-list 的横向不出滚动（原 b3/layout.css 的 overflow 形态）——只保真这一条，
  * 行内距/圆角是 P5 有意的设计取值（见 chrome.css）。 */
 .note-list { overflow: hidden auto; }
+
+/* 设置页版式骨架（原 b3/siyuan/business/_config.scss）—— P7-b 首次删源时漏搬，
+ * 症状：.config-name 宽度从 510px 塌成 105px（设置行版式坏） */
+.config-group { margin: 0 0 24px; }
+.config-group:last-child { margin-bottom: 0; }
+.config-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 4px 12px;
+  color: var(--lake-text-1);
+  font-size: 15px;
+  font-weight: bold;
+}
+.config-title svg { width: 16px; height: 16px; color: var(--lake-text-3); }
+.config-items {
+  overflow: hidden;
+  border-radius: var(--lake-radius-md);
+  background-color: var(--lake-bg-block);
+}
+.config-items > .config-item:last-child,
+.config-items > .b3-label:last-child,
+.config-items > .config-block:last-child { border-bottom: 0; }
+/* 注：原先此处是思源的 `.config-items .b3-label__text { font-size: 13px !important }`。
+ * 删掉思源层后该 !important 不再存在 ⇒ **设置项说明终于可以按设计走小字号**
+ * （原「待移动端批次」阻塞项 ① 就此解除，见 HANDOFF）。 */
+.config-item { display: flex; align-items: center; }
+.config-item__main { flex: 1 1 auto; min-width: 0; }
+.config-item__ctl { display: flex; flex: 0 0 auto; align-items: center; gap: 8px; }
+.config-name { color: var(--lake-text-1); font-size: 14px; }
+.config-block { padding: 16px 24px; border-bottom: 1px solid var(--lake-border-1); line-height: 20px; }
+.config-block:last-child { border-bottom: 0; }
+.config-block__name { color: var(--lake-text-1); font-size: 14px; }
+.config-empty { padding: 24px 0; color: var(--lake-text-4); font-size: 13px; text-align: center; }
+
+/* 下拉基础（原 b3/siyuan/component/_select.scss）：外观其余部分由 kit.css 的新规格给 */
+.b3-select {
+  border: 0;
+  border-radius: var(--lake-radius-sm);
+  padding: 4px 26px 4px 8px;
+  box-sizing: border-box;
+  line-height: 20px;
+  color: var(--lake-text-1);
+  -webkit-appearance: none;
+  appearance: none;
+  display: block;
+}

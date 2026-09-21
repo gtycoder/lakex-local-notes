@@ -1756,7 +1756,7 @@ lsof -ti:1432 -ti:9231 | sort -u | xargs kill
 > 设计规格（外部）= `/Users/admin/file/local-lake/ui-design-inputs/out/design-system/`（8 项交付，**只作参考**）。
 > 分支 `feat/ui-redesign`，基线 `origin/master` = `17bafbe`；**未 push、未合 master**。
 
-### 一、已完成（17 个提交）
+### 一、已完成（18 个提交）
 - **b53a456 docs**：元素底账 + 实现方案（阶段 P0–P8 / 层序 / 主题即数据 / 硬指标 / 验收口径变更）。
 - **e5f171e P1 @layer 层骨架**：新增 `src/styles/index.css` 单入口，`@layer legacy,tokens,reset,kit,shell,feature,overlay,a11y`；旧样式（含内核 style.css / 思源 / 旧壳层）**按原顺序整体入 legacy 层**；删 `src/styles.css`；围栏 `cssLayers.test.ts` 入口项同步。
   - 关键机制：**legacy 最低 ⇒ 新层写入即压过旧样式**，迁移期不靠特异性取胜。
@@ -1851,6 +1851,14 @@ lsof -ti:1432 -ti:9231 | sort -u | xargs kill
   - ⚠️ **但出现一处真实回归**：**工作区下拉菜单被定位到窗口底部**（`偏好设置` 的 rect y≈876，而触发按钮在 y=6）⇒ **设置面板打不开**。已排除视口覆盖假象（清掉 `setDeviceMetricsOverride` 后同样 876）。
   - **按「绝不丢功能」先回退**（`styles/index.css` 恢复 8 行 b3 导入），实测恢复：菜单回到 **y=58.5**、设置面板正常打开（`nav: 11 / title: 编辑器`）、vitest 全绿。
   - **下次继续的关键线索**：DOM 里存在**两个** `[data-top-menu-trigger="workspace"]`（一个 192×? @82,6、一个 0×0 @0,0）；菜单定位读的是 `wsMenuWrapRef` 的 rect，删源后它似乎指向了一个**底边=视口底**的元素。优先查「为什么会有第二个 trigger / ref 指向谁」，很可能与某个只在 b3 里存在的 `display/position` 规则有关。
+- **P7-b 删源（第二次尝试 —— ✅ 成功）**：
+  - **真因**（上一轮线索的答案）：`clampPopoverPosition` 的公式是 `top = max(6, min(anchor.bottom+6, maxTop))`，观测到 876 已超过 `maxTop=782` ⇒ 说明**内联坐标根本没生效**。根因是 **`.top-menu` 的 `position: fixed` 只写在 `b3/layout.css`**（注释写明"fixed + 内联坐标：逃离 document-pane 的 overflow 裁剪"），我们的 `overlay.css` 从未设过 `position` ⇒ 删源后菜单变 static、内联 top/left 被忽略、portal 落到 body 末尾（y≈视口高）。
+  - **修法**：把这条定位搬进 `src/styles/overlay.css`（`position: fixed; top: 0; left: 0; z-index: 1000; display: flex; flex-direction: column; min-width: 170px`）。注意**只给 `.top-menu`**——`.context-menu`/`.create-menu`/`.tab-switcher-menu` 的定位在各自 legacy 规则里，不能一刀切。
+  - **同时补齐首轮漏搬的**：`.config-*` 整套设置页骨架（漏搬时 `.config-name` 宽度从 510px 塌成 105px）、`.b3-select` 基础、`.b3-list-item` 的 `gap: 8px / margin: 1px 8px`、`.b3-label__text` 的 `margin-top: 4px`。
+  - **对拍结果**（同一套 6 屏快照）：**元素消失 0 个**；差异从 22 → **8 处，且全部是有意的设计取值**：侧栏圆角 12→10（设计 radius md）、`.note-row`/`.quick-note-entry` 宽 −5px（P5 的行内距）、`.b3-select` 由内阴影环改为真 1px 描边（设计）、设置项高度 −20px（**说明文字从 13px 改为设计的小字号**）。
+  - 🎁 **顺带解除「待移动端批次」阻塞项 ①**：原先 `.config-items .b3-label__text { font-size: 13px !important }` 在共享层挡住设计的小字号；删掉思源层后该 `!important` 不复存在 ⇒ 设置项说明**终于可以按设计显示小字号**。
+  - **硬指标达成**：桌面侧 `var(--b3-*)` 引用 **200 → 0** ✅、入口 b3 import 行数 **8 → 0** ✅。度量口径同步升级为**「入口可达的桌面样式图」**（`ui-metrics.mjs` 沿 `@import` 求可达集）：`src/b3/*.css` 已只被移动端 import，故不再计入桌面指标（否则"保留给移动端的思源文件"会让指标永远归不了零）。
+  - 剩余（P7 续）：颜色字面量 **109 hex + 102 rgb**（大头是 `styles/tokens.css` 65、`outline.css` 31）、`!important` **95**、同名文件对 4。
 
 ### 二、过渡桥接（P7 删 legacy 时一并移除）
 - 旧 `--lake-*` 名字（`--lake-shell/panel/canvas/surface/accent-soft/shadow-* …`）→ 指向新令牌。

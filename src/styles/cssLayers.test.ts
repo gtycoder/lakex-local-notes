@@ -20,6 +20,7 @@ const SRC = path.resolve(HERE, "..");
 /** 我们自己的样式文件（不含 vendor：src/b3/siyuan/** 与 lakex 包内样式）。 */
 const FILES = [
   "styles/index.css",   // UI 重设计 P1：单入口，只 @layer 声明 + @import 编排（0 声明）
+  "styles/compat.css",  // P7-b：桌面兼容层（从 b3 收编的承重规则 + 仍在用的思源类）
   "b3/animations.css", "b3/base.css", "b3/components.css", "b3/dark.css", "b3/layout.css",
   "b3/theme-daylight.css", "b3/theme-midnight.css",
   "features/attachment/attachment-preview.css", "features/editor/image-lightbox.css", "features/outline/outline.css",
@@ -47,7 +48,8 @@ const BASELINE: Record<string, { decls: number; dupGroups: number }> = {
   "styles/feature.css": { decls: 71, dupGroups: 0 },  // P3/P5 各屏 + P6 第三方容器壳（实测）
   "styles/kit.css": { decls: 547, dupGroups: 0 },     // P4 组件库 + P5-g 面板件 + P5-h 控件 + P5-i 开关（实测）
   "styles/chrome.css": { decls: 252, dupGroups: 0 },  // P5：外壳 + 顶栏/标签页/面包屑 + 目录树行 + 页签菜单项（实测）
-  "styles/overlay.css": { decls: 83, dupGroups: 0 },  // P5-c 浮层 + P5-j 搜索面板内层（实测）
+  "styles/overlay.css": { decls: 91, dupGroups: 0 },  // P5-c 浮层 + P5-j 搜索 + P7-b .top-menu 定位（实测）
+  "styles/compat.css": { decls: 210, dupGroups: 0 },  // P7-b：从 b3 收编的承重规则 + 仍在用的思源类（实测；只允许变小）
   "b3/animations.css": { decls: 5, dupGroups: 0 },
   "b3/base.css": { decls: 16, dupGroups: 0 },
   "b3/components.css": { decls: 148, dupGroups: 0 },

@@ -43,17 +43,8 @@
  * 桌面需要的类与工具类已由 src/styles/compat.css（桌面专属）复刻 ⇒ 桌面侧 --b3-* 引用归零。
  * ⚠️ 移动端入口 src/mobile/main.tsx 仍直接 import 这些文件，**本批不动**。
  *
- * P7-b 进展（未完成，已回退）：承重规则与仍在用的思源类已复刻到 src/styles/compat.css，
- * 但删源后出现**工作区下拉菜单定位回归**（菜单被放到窗口底部 y≈876，与视口无关）
- * ⇒ 按"绝不丢功能"先回退，等定位回归查清再启用 compat.css。 */
-@import "../b3/theme-daylight.css" layer(legacy);
-@import "../b3/theme-midnight.css" layer(legacy);
-@import "../b3/base.css" layer(legacy);
-@import "../b3/components.css" layer(legacy);
-@import "../b3/siyuan.scss" layer(legacy);
-@import "../b3/dark.css" layer(legacy);
-@import "../b3/animations.css" layer(legacy);
-@import "../b3/layout.css" layer(legacy);
+ * P7-b：承重规则与仍在用的思源类已复刻到 src/styles/compat.css（在此导入，层内位置等价）。 */
+@import "./compat.css" layer(legacy);
 
 /* ---- 旧壳层/打磨层（顺序不变） ---- */
 @import "./tokens.css" layer(legacy);

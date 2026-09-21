@@ -77,6 +77,20 @@
 .create-menu,
 .tab-switcher-menu { padding: var(--lake-space-sm); }
 
+/* 顶栏下拉必须 fixed + 内联 top/left：**逃离 .document-pane 的 overflow 裁剪**。
+ * 原先这条只写在 src/b3/layout.css，P7-b 删源时漏搬 ⇒ 内联坐标被忽略、菜单落到文档流末尾
+ * （症状：菜单出现在窗口底部、设置面板打不开）。其余菜单的定位在各自 legacy 规则里，别一刀切。 */
+.top-menu {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  min-width: 170px;
+  font-size: var(--lake-font-size-small);
+}
+
 /* ── 菜单项统一规格 ───────────────────────────────────────────────── */
 .top-menu > button,
 .context-menu > button,
