@@ -3,15 +3,17 @@
  * 参考 lake-editor-main 的配置项（defaultFontsize/toc/toolbar）+ 深色模式。
  */
 import { DEFAULT_MAX_ATTACHMENT_BYTES, MAX_ATTACHMENT_MB_OPTIONS } from "../core/storeLimits.js";
+import { DEFAULT_THEME_ID, isLakeThemeId, type LakeThemeId } from "./themes";
 
-export type ThemeMode = "light" | "dark";
+/** 主题 id（主题即数据：见 src/lib/themes.ts；本轮 浅/深/暖色纸质 三套） */
+export type ThemeMode = LakeThemeId;
 
 export interface AppSettings {
   /** 正文默认字号（内核支持 12/13/14/15/16/19/22/24） */
   fontSize: number;
   /** 大纲增强：true=应用自建增强大纲（筛选/折叠/H 徽标/悬停/移动端大纲面板）；false=直接使用 Lake 原生大纲（对此不做任何改动）。 */
   outlineEnhance: boolean;
-  /** 主题：light=思源 daylight / dark=思源 midnight */
+  /** 主题：见 src/lib/themes.ts 的 LAKE_THEMES（light/dark/warm），只本机、不跨端 */
   theme: ThemeMode;
   /** 最大同时打开标签数（0=不限；超限自动关闭最旧标签，当前标签与钉住标签除外）。 */
   maxOpenTabs: number;
@@ -67,7 +69,7 @@ export function loadSettings(): AppSettings {
       cached = {
         fontSize: FONT_SIZES.includes(parsed.fontSize ?? -1) ? (parsed.fontSize as number) : DEFAULT_SETTINGS.fontSize,
         outlineEnhance: parsed.outlineEnhance === true,
-        theme: parsed.theme === "dark" ? "dark" : "light",
+        theme: isLakeThemeId(parsed.theme) ? parsed.theme : DEFAULT_THEME_ID,
         maxOpenTabs: MAX_OPEN_TAB_OPTIONS.includes(parsed.maxOpenTabs as number)
           ? (parsed.maxOpenTabs as number)
           : DEFAULT_SETTINGS.maxOpenTabs,

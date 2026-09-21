@@ -1,0 +1,104 @@
+/* 暖色纸质（第 3 套验证主题：证明换肤是真能换；低饱和暖白底 + 古铜主色）。 */
+[data-theme="warm"] {
+  color-scheme: light;
+  /* 表面 */
+  --lake-bg-window: #f6f3ec;
+  --lake-bg-panel: #fdfbf6;
+  --lake-bg-canvas: #fffefb;
+  --lake-bg-block: #f1ece1;
+  --lake-bg-raised: #fffefb;
+  --lake-bg-sunken: #efe9dd;
+  --lake-bg-hover: rgba(60,48,28,.055);
+  --lake-bg-press: rgba(60,48,28,.09);
+  /* 文字 */
+  --lake-text-1: #2a2318;
+  --lake-text-2: #564c3c;
+  --lake-text-3: #6a6051;
+  --lake-text-4: #948872;
+  --lake-text-on-accent: #ffffff;
+  /* 边框 */
+  --lake-border-1: #e7dfd0;
+  --lake-border-2: #f0e9dd;
+  --lake-border-strong: #d6cbb6;
+  /* 主色 */
+  --lake-accent: #6f552e;
+  --lake-accent-ink: #4f3c1f;
+  --lake-accent-tint: #f0e8d8;
+  --lake-accent-text: #4f3c1f;
+  /* 状态色 */
+  --lake-status-sync: #2f6b74;
+  --lake-status-pending: #8a5a12;
+  --lake-status-ok: #2f6d4c;
+  --lake-status-error: #a83f38;
+  --lake-status-sync-soft: #e8f0f0;
+  --lake-status-pending-soft: #f6efe1;
+  --lake-status-ok-soft: #e9f1ec;
+  --lake-status-error-soft: #f8eae8;
+  /* 选区 / 遮罩 / 滚动条 / 焦点 */
+  --lake-select-bg: rgba(111,85,46,.16);
+  --lake-scrim: rgba(40,32,20,.28);
+  --lake-scrollbar-thumb: rgba(60,48,28,.22);
+  --lake-scrollbar-thumb-hover: #8c8274;
+  --lake-focus-halo: rgba(60,48,28,.20);
+  /* 阴影 */
+  --lake-shadow-card: 0 1px 2px rgba(40,32,20,.06), 0 4px 12px -6px rgba(40,32,20,.10);
+  --lake-shadow-popover: 0 0 0 1px rgba(40,32,20,.06), 0 12px 28px -10px rgba(40,32,20,.18), 0 28px 60px -20px rgba(40,32,20,.16);
+  --lake-shadow-dialog: 0 0 0 1px rgba(40,32,20,.07), 0 24px 48px -16px rgba(40,32,20,.22), 0 48px 96px -32px rgba(40,32,20,.18);
+  --lake-shadow-drag: 0 8px 24px -8px rgba(40,32,20,.24);
+
+  /* ---- 过渡别名：旧 --lake-* 名字 → 新令牌 ---- */
+  --lake-shell: var(--lake-bg-window);
+  --lake-panel: var(--lake-bg-panel);
+  --lake-canvas: var(--lake-bg-canvas);
+  --lake-surface: var(--lake-bg-block);
+  --lake-raised: var(--lake-bg-raised);
+  --lake-border: var(--lake-border-1);
+  --lake-text: var(--lake-text-1);
+  --lake-text-secondary: var(--lake-text-2);
+  --lake-text-tertiary: var(--lake-text-3);
+  --lake-accent-soft: var(--lake-accent-tint);
+  --lake-accent-soft-strong: var(--lake-select-bg);
+  --lake-sync-pending: var(--lake-status-pending);
+  --lake-sync-success: var(--lake-status-ok);
+  --lake-error: var(--lake-status-error);
+  --lake-error-strong: var(--lake-status-error);
+  --lake-error-soft: var(--lake-status-error-soft);
+  --lake-warning-soft: var(--lake-status-pending-soft);
+  --lake-success-soft: var(--lake-status-ok-soft);
+  --lake-shadow-panel: var(--lake-shadow-popover);
+  --lake-shadow-soft: var(--lake-shadow-card);
+
+  /* ---- 过渡桥接：思源 --b3-* → 新令牌（P7 删思源层时一并移除） ---- */
+  --b3-body-background: var(--lake-bg-window);
+  --b3-theme-background: var(--lake-bg-panel);
+  --b3-theme-background-light: var(--lake-bg-block);
+  --b3-theme-surface: var(--lake-bg-block);
+  --b3-theme-surface-light: var(--lake-bg-panel);
+  --b3-theme-surface-lighter: var(--lake-border-2);
+  --b3-border-color: var(--lake-border-1);
+  --b3-theme-on-background: var(--lake-text-1);
+  --b3-theme-on-surface: var(--lake-text-3);
+  --b3-theme-on-surface-light: var(--lake-text-4);
+  --b3-theme-primary: var(--lake-accent);
+  --b3-theme-primary-light: var(--lake-select-bg);
+  --b3-theme-primary-lighter: var(--lake-accent-tint);
+  --b3-theme-primary-lightest: var(--lake-accent-tint);
+  --b3-theme-error: var(--lake-status-error);
+  --b3-dialog-shadow: var(--lake-shadow-popover);
+  --b3-mask-background: var(--lake-scrim);
+  --b3-list-hover: var(--lake-bg-hover);
+  --b3-scroll-color: var(--lake-scrollbar-thumb);
+  --b3-border-radius: var(--lake-radius-sm);
+  --b3-font-family: var(--lake-font-family);
+  --b3-font-family-code: var(--lake-font-family-mono);
+
+  /* ---- 过渡桥接：lakex 编辑器外围（设计 MIGRATION §3 批准的变量映射；选区色刻意不动） ---- */
+  --lakex-editor-background: var(--lake-bg-canvas);
+  --lakex-editor-background-primary: var(--lake-bg-block);
+  --lakex-editor-background-secondary: var(--lake-bg-block);
+  --lakex-editor-border-primary: var(--lake-border-1);
+  --lakex-editor-border-light: var(--lake-border-2);
+  --lakex-editor-text-body: var(--lake-text-1);
+  --lakex-editor-text-caption: var(--lake-text-3);
+  --lakex-editor-cursor: var(--lake-accent);
+}

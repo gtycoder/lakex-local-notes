@@ -1,0 +1,73 @@
+/* 生成物：主题无关令牌（P2）。改令牌请改 src/styles/themes/*.css 的源模板或直接编辑本文件。 */
+/* 主题无关令牌（P2 主题即数据）：几何/动效/层级/字体不随主题变 */
+:root {
+  /* 间距 */
+  --lake-space-xxs: 2px;
+  --lake-space-xs: 4px;
+  --lake-space-sm: 6px;
+  --lake-space-md: 8px;
+  --lake-space-lg: 12px;
+  --lake-space-xl: 16px;
+  --lake-space-xxl: 20px;
+  --lake-space-xxxl: 24px;
+  --lake-space-huge: 32px;
+  --lake-space-giant: 40px;
+  /* 圆角 */
+  --lake-radius-xs: 6px;
+  --lake-radius-sm: 8px;
+  --lake-radius-md: 10px;
+  --lake-radius-lg: 14px;
+  --lake-radius-xl: 20px;
+  --lake-radius-pill: 999px;
+  /* 动效 */
+  --lake-motion-instant: 80ms;
+  --lake-motion-fast: 130ms;
+  --lake-motion-panel: 190ms;
+  --lake-motion-slow: 240ms;
+  --lake-ease-standard: cubic-bezier(.2,.8,.24,1);
+  --lake-ease-exit: cubic-bezier(.4,0,1,1);
+  --lake-ease-emphasized: cubic-bezier(.2,.9,.2,1);
+  /* 层级 */
+  --lake-z-base: 0;
+  --lake-z-sticky: 10;
+  --lake-z-dropdown: 100;
+  --lake-z-scrim: 200;
+  --lake-z-dialog: 210;
+  --lake-z-toast: 300;
+  --lake-z-tooltip: 400;
+  /* 字号/字重/行高 */
+  --lake-font-size-micro: 10.5px;
+  --lake-font-size-tiny: 11px;
+  --lake-font-size-small: 12px;
+  --lake-font-size-body: 13px;
+  --lake-font-size-bodyLg: 14.5px;
+  --lake-font-size-title: 17px;
+  --lake-font-size-h1: 23px;
+  --lake-font-weight-regular: 400;
+  --lake-font-weight-medium: 500;
+  --lake-font-weight-semibold: 600;
+  --lake-font-weight-bold: 700;
+  --lake-line-height-tight: 1.35;
+  --lake-line-height-snug: 1.5;
+  --lake-line-height-normal: 1.6;
+  --lake-line-height-reading: 1.85;
+  /* 字体（P3 可替换：界面 / 正文 / 等宽） */
+  --lake-font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei UI", "Noto Sans CJK SC", sans-serif;
+  --lake-font-family-reading: var(--lake-font-family);
+  --lake-font-family-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  /* 滚动条 / 焦点环 */
+  --lake-scrollbar-width: 10px;
+  --lake-scrollbar-radius: 999px;
+  --lake-focus-ring-width: 2px;
+  --lake-focus-ring-offset: 0px;
+
+  /* ---- 过渡别名：旧代码仍读这些名字（P7 删 legacy 后可移除） ---- */
+  --radius-xs: var(--lake-radius-xs);
+  --radius-sm: var(--lake-radius-sm);
+  --radius-md: var(--lake-radius-md);
+  --radius-lg: var(--lake-radius-lg);
+  --radius-xl: var(--lake-radius-xl);
+  --radius-pill: var(--lake-radius-pill);
+  --lake-motion-standard: var(--lake-motion-panel);
+}
+

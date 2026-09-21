@@ -5,6 +5,12 @@
 
 @layer legacy, tokens, reset, kit, shell, feature, overlay, a11y;
 
+/* ---- 主题即数据（P2）：三套主题只定义变量，结构/几何/动效不随主题变 ---- */
+@import "./themes/base.css" layer(tokens);
+@import "./themes/light.css" layer(tokens);
+@import "./themes/dark.css" layer(tokens);
+@import "./themes/warm.css" layer(tokens);
+
 /* ---- 第三方（内核正文 130 万字符 + 画板） ---- */
 @import "@dlient/lakex-doc-react/style.css" layer(legacy);
 @import "../vendor/drawnix-react-text.css" layer(legacy);

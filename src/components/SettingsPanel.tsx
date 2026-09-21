@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type ChangeEvent, type ReactNode } from "react";
-import { Cloud, Copy, ExternalLink, Files, File, FolderOpen, Globe, History, Image as ImageIcon, Info, Keyboard, Monitor, Moon, Palette, Paperclip, Terminal, Archive, HardDrive, Search, Settings, Sun, Trash, Type, X } from "lucide-react";
+import { Cloud, Coffee, Copy, ExternalLink, Files, File, FolderOpen, Globe, History, Image as ImageIcon, Info, Keyboard, Monitor, Moon, Palette, Paperclip, Terminal, Archive, HardDrive, Search, Settings, Sun, Trash, Type, X } from "lucide-react";
 import { fontSizeOptions, type AppSettings } from "../lib/settings";
+import { LAKE_THEMES } from "../lib/themes";
 import { native } from "../lib/native";
 import type { CleanOrphanResult, DataHealthReport, S3GcPendingItem, S3Settings, SyncSettings } from "../lib/types";
 import type { GcDiagnostics } from "../core/gcDiagnostics";
@@ -560,8 +561,11 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
               <Group title="外观" icon={<Monitor size={16} />}>
                 <Item itemId="appearance-theme" name="主题">
                   <Seg ariaLabel="主题">
-                    <button className={`b3-button b3-button--outline seg__item ${settings.theme === "light" ? "is-active" : ""}`} onClick={() => onChange({ theme: "light" })}><Sun size={14} /> 浅色</button>
-                    <button className={`b3-button b3-button--outline seg__item ${settings.theme === "dark" ? "is-active" : ""}`} onClick={() => onChange({ theme: "dark" })}><Moon size={14} /> 深色</button>
+                    {LAKE_THEMES.map((t) => (
+                      <button key={t.id} className={`b3-button b3-button--outline seg__item ${settings.theme === t.id ? "is-active" : ""}`} onClick={() => onChange({ theme: t.id })}>
+                        {t.id === "dark" ? <Moon size={14} /> : t.id === "warm" ? <Coffee size={14} /> : <Sun size={14} />} {t.label}
+                      </button>
+                    ))}
                   </Seg>
                 </Item>
               </Group>
