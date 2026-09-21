@@ -5,6 +5,9 @@
 
 @layer legacy, tokens, reset, kit, shell, feature, overlay, a11y;
 
+/* ---- 新层：kit / shell / feature / overlay（P4 起逐步填充；目前只有 feature 的字体规则） ---- */
+@import "./feature.css" layer(feature);
+
 /* ---- 主题即数据（P2）：三套主题只定义变量，结构/几何/动效不随主题变 ---- */
 @import "./themes/base.css" layer(tokens);
 @import "./themes/light.css" layer(tokens);

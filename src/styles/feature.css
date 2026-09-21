@@ -1,0 +1,21 @@
+/* 功能域层（feature）：编辑器外围 / 非 doc 只读渲染 / 第三方容器壳 等
+ * 与 kit（通用组件）分开：这里的规则服务具体功能域，读代码时能一眼看出归属。
+ * 层序见 src/styles/index.css（feature 高于 legacy/shell，所以能直接压过旧规则）。 */
+
+/* 正文（编辑器）字体：与"界面字体"分开成两个令牌 ⇒ 可只换正文字体。
+ * 旧规则在 legacy 层的 styles/editor.css，这里同选择器、更高层，天然胜出。
+ * （内核不暴露字体变量，但这一处一直是我们的规则 ⇒ 属外围，不算改内核。） */
+.lake-editor-mount .ne-viewer-body,
+.lake-editor-mount .ne-engine {
+  font-family: var(--lake-font-family-reading);
+}
+
+/* 等宽：代码块与键名（旧规则读 --b3-font-family-code，已桥接到 --lake-font-family-mono） */
+.ne-code,
+.ne-codeblock,
+code,
+kbd,
+samp,
+pre {
+  font-family: var(--lake-font-family-mono);
+}

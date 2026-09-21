@@ -29,6 +29,7 @@ const FILES = [
   "styles/dialog.css", "styles/document-status.css", "styles/editor.css",
   "styles/motion.css", "styles/components.css", "styles/quick-notes.css", "styles/shell.css",
   "styles/tokens.css", "styles/settings.css",
+  "styles/feature.css",   // P3 起：功能域层（正文/等宽字体等）
   // 基础层（260916 第二档 S3：原 styles.css 拆成入口 + 10 个域文件；入口只剩 @import 编排，不再计声明）
   "styles/app/base.css", "styles/app/dialogs.css", "styles/app/editor.css",
   "styles/app/misc.css", "styles/app/panels.css", "styles/app/quick-notes.css", "styles/app/settings.css",
@@ -40,6 +41,7 @@ const FILES = [
  * 并在同一批把来源文件的基线调小（搬走多少、留下多少要对得上，让总量保持可见）。 */
 const BASELINE: Record<string, { decls: number; dupGroups: number }> = {
   "styles/index.css": { decls: 0, dupGroups: 0 },   // UI 重设计 P1：单入口（@layer 声明 + @import 编排，0 声明）
+  "styles/feature.css": { decls: 2, dupGroups: 0 },   // P3：正文/等宽字体两处（实测）
   "b3/animations.css": { decls: 5, dupGroups: 0 },
   "b3/base.css": { decls: 16, dupGroups: 0 },
   "b3/components.css": { decls: 148, dupGroups: 0 },
