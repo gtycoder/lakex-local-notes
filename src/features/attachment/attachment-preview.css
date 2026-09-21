@@ -3,7 +3,7 @@
   position: fixed;
   inset: 0;
   z-index: 1000;
-  background: rgba(20, 22, 28, 0.9);
+  background: var(--lake-media-surface);
   display: flex;
   flex-direction: column;
   animation: image-lightbox-fade .16s ease;
@@ -13,8 +13,8 @@
   align-items: center;
   gap: 8px;
   padding: 10px 16px;
-  background: rgba(0, 0, 0, 0.35);
-  color: #e6e8ee;
+  background: var(--lake-media-toolbar);
+  color: var(--lake-media-on);
   flex: 0 0 auto;
 }
 .attachment-preview__title {
@@ -28,7 +28,7 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.attachment-preview__title small { color: #a7adb8; font-weight: 400; margin-left: 8px; }
+.attachment-preview__title small { color: var(--lake-media-on-dim); font-weight: 400; margin-left: 8px; }
 .attachment-preview__spacer { flex: 1; }
 .attachment-preview__btn {
   display: inline-flex;
@@ -37,15 +37,15 @@
   border: none;
   border-radius: 6px;
   padding: 7px 12px;
-  background: rgba(255, 255, 255, 0.12);
-  color: #e6e8ee;
+  background: var(--lake-media-btn);
+  color: var(--lake-media-on);
   font-size: 13px;
   cursor: pointer;
   white-space: nowrap;
 }
-.attachment-preview__btn:hover { background: rgba(255, 255, 255, 0.22); }
-.attachment-preview__btn--primary { background: var(--lake-accent); color: #fff; }
-.attachment-preview__btn--primary:hover { background: #2f47b8; }
+.attachment-preview__btn:hover { background: var(--lake-media-btn-hover); }
+.attachment-preview__btn--primary { background: var(--lake-accent); color: var(--lake-text-on-accent); }
+.attachment-preview__btn--primary:hover { background: var(--lake-accent-ink-hover); }
 .attachment-preview__close { margin-left: 4px; }
 .attachment-preview__body {
   flex: 1;
@@ -59,13 +59,13 @@
   width: 100%;
   height: 100%;
   border: none;
-  background: #fff;
+  background: var(--lake-media-embed);
   border-radius: 4px;
 }
 .attachment-preview__video {
   max-width: 96vw;
   max-height: 92vh;
-  background: #000;
+  background: var(--lake-media-video);
   border-radius: 4px;
 }
 .attachment-preview__media { display: flex; flex-direction: column; align-items: center; gap: 14px; }
@@ -75,15 +75,15 @@
   flex-direction: column;
   align-items: center;
   gap: 12px;
-  color: #c3c7d0;
+  color: var(--lake-media-on-soft);
   max-width: 80vw;
 }
 .attachment-preview__fallback-name {
   font-size: 15px;
-  color: #e6e8ee;
+  color: var(--lake-media-on);
   max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.attachment-preview__hint { color: #8f96a3; font-size: 13px; margin: 0; }
+.attachment-preview__hint { color: var(--lake-media-on-faint); font-size: 13px; margin: 0; }

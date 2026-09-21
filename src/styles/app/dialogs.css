@@ -3,7 +3,7 @@
    本层由 src/styles.css 的 @import 编排，整体仍在 b3 之前 —— 层间先后不得改变（见 docs/CSS-LAYERS-BRIEF-260916.md §6）。 */
 
 /* legacy statusbar rules removed; current-document status lives in styles/document-status.css */
-.error-banner { display: flex; position: fixed; top: 50%; left: 50%; z-index: 600; align-items: center; gap: 12px; width: min(560px, calc(100vw - 32px)); max-width: calc(100vw - 32px); padding: 12px 14px; border: 1px solid var(--lake-error-soft); border-radius: 10px; color: var(--lake-error); background: var(--lake-error-soft); font-size: 12px; box-shadow: 0 18px 48px rgba(80, 35, 30, .18); transform: translate(-50%, -50%); transition: transform var(--dur-enter) var(--ease-out), opacity var(--dur-enter) var(--ease-out); }
+.error-banner { display: flex; position: fixed; top: 50%; left: 50%; z-index: 600; align-items: center; gap: 12px; width: min(560px, calc(100vw - 32px)); max-width: calc(100vw - 32px); padding: 12px 14px; border: 1px solid var(--lake-error-soft); border-radius: 10px; color: var(--lake-error); background: var(--lake-error-soft); font-size: 12px; box-shadow: var(--lake-error-shadow); transform: translate(-50%, -50%); transition: transform var(--dur-enter) var(--ease-out), opacity var(--dur-enter) var(--ease-out); }
 
 .error-banner button { border: 0; color: inherit; background: transparent; }
 
@@ -71,7 +71,7 @@
   flex: none;
   padding: 0 4px;
   border-radius: 3px;
-  background: rgba(220, 38, 38, .12);
+  background: var(--lake-error-soft);
   color: var(--lake-error);
   font-size: 10px;
   line-height: 1.5;
@@ -84,10 +84,10 @@
 
 .settings-panel,
 .confirm-dialog {
-  border-color: rgba(31, 35, 41, .12);
+  border-color: var(--lake-neutral-veil-1);
 }
 
-.quick-notes-toast { position: fixed; z-index: 760; top: calc(var(--topbar-height) + 12px); right: 24px; display: flex; align-items: center; gap: 12px; min-height: 40px; padding: 10px 12px 10px 14px; border: 1px solid color-mix(in srgb, var(--lake-accent) 28%, var(--lake-border-2)); border-left: 3px solid var(--lake-accent); border-radius: var(--lake-radius-md); color: var(--lake-text-1); box-shadow: 0 14px 34px rgba(31, 38, 60, .22), 0 2px 8px rgba(31, 38, 60, .08); font-size: 12px; }
+.quick-notes-toast { position: fixed; z-index: 760; top: calc(var(--topbar-height) + 12px); right: 24px; display: flex; align-items: center; gap: 12px; min-height: 40px; padding: 10px 12px 10px 14px; border: 1px solid color-mix(in srgb, var(--lake-accent) 28%, var(--lake-border-2)); border-left: 3px solid var(--lake-accent); border-radius: var(--lake-radius-md); color: var(--lake-text-1); box-shadow: 0 14px 34px var(--lake-shadow-color-4), 0 2px 8px var(--lake-shadow-color-3); font-size: 12px; }
 
 .quick-notes-toast button { display: inline-flex; align-items: center; gap: 4px; border: 0; color: var(--lake-accent); background: transparent; cursor: pointer; font-size: 12px; font-weight: 650; }
 

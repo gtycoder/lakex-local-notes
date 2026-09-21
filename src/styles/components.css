@@ -353,7 +353,7 @@ button.b3-list-item__action:disabled { opacity: .45; cursor: default; }
   color: var(--lake-text-1) !important;
   background-color: var(--lake-raised) !important;
   border-color: transparent;
-  box-shadow: 0 1px 2px rgba(16, 24, 40, .10);
+  box-shadow: 0 1px 2px var(--lake-shadow-color-3);
 }
 .seg .seg__item.is-active:hover { color: var(--lake-text-1) !important; }
 

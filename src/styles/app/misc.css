@@ -76,7 +76,7 @@
   .icon-button:focus-visible,
   .tab-item:focus-visible,
   .statusbar button:focus-visible,
-  .settings-panel button:focus-visible { outline: 2px solid rgba(59, 91, 219, .22); outline-offset: 2px; }
+  .settings-panel button:focus-visible { outline: var(--lake-focus-ring-width) solid var(--lake-accent-tint); outline-offset: 2px; }
 
   .note-list { padding: 0 6px 6px; }
   .note-row,
@@ -90,7 +90,7 @@
   .tree-row.type-notebook { min-height: 29px; color: var(--lake-text); }
   .tree-row.type-notebook .note-row-copy strong { color: inherit; font-weight: 620; }
   .tree-row.type-group .note-row-copy strong { font-weight: 560; }
-  .tree-children { border-left-color: rgba(31, 35, 41, .075); transform-origin: top; animation: shell-tree-reveal 180ms var(--shell-ease); }
+  .tree-children { border-left-color: var(--lake-border-2); transform-origin: top; animation: shell-tree-reveal 180ms var(--shell-ease); }
 
   .sidebar-resize-handle {
     position: absolute;
@@ -112,12 +112,12 @@
     width: 2px;
     height: 48px;
     border-radius: var(--radius-pill);
-    background: rgba(59, 91, 219, 0);
+    background: transparent;
     transform: translateY(-50%);
     transition: background-color var(--lake-motion-fast) var(--lake-ease-standard);
   }
   .sidebar-resize-handle:hover::after,
-  .sidebar-resize-handle:focus-visible::after { background: rgba(59, 91, 219, .48); }
+  .sidebar-resize-handle:focus-visible::after { background: var(--lake-accent); }
   .sidebar-resize-handle:focus-visible { outline: none; }
 
   /* .workspace / .tab-bar / .tab-items / .tabbar-* 已搬到共用作用域（见上方「壳层几何」） */
@@ -131,10 +131,10 @@
     width: max-content;
     max-width: 260px;
     padding: 6px 9px;
-    border: 1px solid rgba(0, 0, 0, .16);
+    border: 1px solid var(--lake-border-strong);
     border-radius: 6px;
-    color: #f8f9ff;
-    background: #3f4868;
+    color: var(--lake-tooltip-fg);
+    background: var(--lake-tooltip-bg);
     box-shadow: var(--lake-shadow-soft);
     font-size: 11px;
     font-weight: 500;
@@ -190,13 +190,13 @@
 
   /* C：悬停微卡片（白底 + 轻阴影，仅 transform/box-shadow，不动布局） */
 
-  .note-row:hover { background: rgba(0, 0, 0, .05); }
+  .note-row:hover { background: var(--lake-bg-hover); }
   .note-row.active {
     background: var(--shell-accent-soft);
     box-shadow: none;
   }
   .tab-item { background: transparent; }
-  .tab-item:hover { background: rgba(0, 0, 0, .05); }
+  .tab-item:hover { background: var(--lake-bg-hover); }
 
   /* 可读性：正文行高/字距/段色，标题收紧字距 */
   .lake-editor-mount .ne-engine,
@@ -208,7 +208,7 @@
   .lake-editor-mount .ne-engine h2, .lake-editor-mount .ne-viewer-body h2,
   .lake-editor-mount .ne-engine h3, .lake-editor-mount .ne-viewer-body h3 {
     letter-spacing: -.015em;
-    color: #23272e;
+    color: var(--lake-text-1);
   }
 }
 
@@ -280,8 +280,8 @@
     padding: 8px 11px;
     border: 0;
     border-radius: var(--radius-md);
-    color: #f8f9ff;
-    background: #34333b;
+    color: var(--lake-tooltip-fg);
+    background: var(--lake-tooltip-bg);
     box-shadow: var(--lake-shadow-soft);
     font-size: 12px;
     line-height: 1.45;
@@ -296,7 +296,7 @@
     z-index: 21;
     width: 8px;
     height: 8px;
-    background: #34333b;
+    background: var(--lake-tooltip-bg);
     opacity: 0;
     transform: translate(-50%, -3px) rotate(45deg);
     transition: opacity var(--lake-motion-fast) var(--lake-ease-standard), transform var(--lake-motion-fast) var(--lake-ease-standard);

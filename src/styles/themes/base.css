@@ -78,4 +78,32 @@
   --lake-outline-lv4: #315fc4; --lake-outline-lv4-bg: rgba(63, 112, 214, .16);
   --lake-outline-lv5: #c25b43; --lake-outline-lv5-bg: rgba(212, 112, 82, .14);
   --lake-outline-lv6: #397f98; --lake-outline-lv6-bg: rgba(74, 151, 176, .14);
+  /* 媒体查看器 / 工具提示 / 冲突态取色（P7-d 收尾）：媒体层**任何主题下都是暗底**（全屏遮罩上的
+   * 一层），所以放主题无关的 base；字面量只允许出现在主题文件，使用处一律引用令牌。 */
+  --lake-media-scrim: rgba(0, 0, 0, .08);
+  --lake-media-surface: rgba(20, 22, 28, .90);
+  --lake-media-toolbar: rgba(24, 26, 32, .72);
+  --lake-media-toolbar-shadow: 0 4px 18px rgba(0, 0, 0, .35);
+  --lake-media-img-shadow: 0 6px 40px rgba(0, 0, 0, .50);
+  --lake-media-btn: rgba(255, 255, 255, .12);
+  --lake-media-btn-hover: rgba(255, 255, 255, .22);
+  --lake-media-btn-hover-2: rgba(255, 255, 255, .14);
+  --lake-media-divider: rgba(255, 255, 255, .18);
+  --lake-media-on: #e6e8ee;
+  --lake-media-on-soft: #c3c7d0;
+  --lake-media-on-faint: #8f96a3;
+  --lake-media-on-dim: #a7adb8;
+  --lake-media-danger: #ff9f9f;
+  --lake-media-video: #000;
+  --lake-media-embed: #fff;
+  --lake-tooltip-bg: #3f4868;
+  --lake-tooltip-fg: #f8f9ff;
+  --lake-conflict-border: rgba(211, 160, 68, .38);
+  /* 画板（drawnix）各 vendor 主题的画布底色 + 错误横幅阴影（P7-d 收尾）：vendor 自带调色板，
+   * 主题无关，按硬指标把字面量收在主题文件里。 */
+  --lake-board-canvas-default: #fff;
+  --lake-board-canvas-soft: #f5f5f5;
+  --lake-board-canvas-dark: #141414;
+  --lake-board-canvas-starry: #0d2537;
+  --lake-error-shadow: 0 18px 48px rgba(80, 35, 30, .18);
 }

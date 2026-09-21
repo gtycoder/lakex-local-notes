@@ -10,11 +10,11 @@
    not expose CSS, so they must be re-declared here. */
 .plait-board-container.theme-colorful .board-host-svg,
 .plait-board-container.theme-default .board-host-svg {
-  background-color: #fff;
+  background-color: var(--lake-board-canvas-default);
 }
 
 .plait-board-container.theme-soft .board-host-svg {
-  background-color: #f5f5f5;
+  background-color: var(--lake-board-canvas-soft);
 }
 
 .plait-board-container.theme-retro .board-host-svg {
@@ -22,11 +22,11 @@
 }
 
 .plait-board-container.theme-dark .board-host-svg {
-  background-color: #141414;
+  background-color: var(--lake-board-canvas-dark);
 }
 
 .plait-board-container.theme-starry .board-host-svg {
-  background-color: #0d2537;
+  background-color: var(--lake-board-canvas-starry);
 }
 
 /* Embedded mindmap/board cards are passive while the reader scrolls through the

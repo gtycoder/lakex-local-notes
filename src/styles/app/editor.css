@@ -112,7 +112,7 @@ ne-card[data-card-name="codeblock"] .ne-card-resizer-mask {
 
 /* ===== 2026-08-06 只读锁（原生 Viewer）===== */
 /* 锁定标签：viewer 无工具栏；正文色略降暗示只读 */
-.lake-editor.lake-locked .ne-engine { color: #454b57; }
+.lake-editor.lake-locked .ne-engine { color: var(--lake-text-2); }
 
 /* 锁定态（原生 Viewer）几何对齐编辑态：
    - .ne-viewer 作为滚动容器（编辑态是 .ne-editor-wrap），否则锁后无法滚动；

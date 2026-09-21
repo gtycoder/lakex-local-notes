@@ -60,8 +60,8 @@ button { cursor: pointer; }
      本轮（260914 第三批）把下方渐变里的浅色字面值一并换成令牌：实测 rail / tab-bar / quick-notes-pane
      的渐变当前都被 b3/base.css 与 quick-notes.css 的 !important 覆盖（深浅两色都不生效），
      换令牌在浅色下只差 2~3 个色阶，但一旦哪条覆盖被移除，深色下不会再冒出一块浅色板。 */
-  --shell-card-shadow: 0 1px 2px rgba(0, 0, 0, .05), 0 8px 24px rgba(140, 149, 159, .18);
-  --shell-micro-card: 0 1px 2px rgba(0, 0, 0, .08), 0 0 0 1px rgba(0, 0, 0, .04);
+  --shell-card-shadow: 0 1px 2px var(--lake-shadow-color-1), 0 8px 24px var(--lake-shadow-color-4);
+  --shell-micro-card: 0 1px 2px var(--lake-shadow-color-3), 0 0 0 1px var(--lake-shadow-color-1);
 }
 
 /* ===== 2026-08-13 统一窗口材质 / 思源式浮动面板 ===== */
