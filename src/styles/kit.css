@@ -422,3 +422,81 @@
 }
 .ln-empty strong { color: var(--lake-text-1); font-size: var(--lake-font-size-small); font-weight: var(--lake-font-weight-semibold); }
 .ln-empty small { font-size: var(--lake-font-size-micro); }
+
+/* ── 通用按钮（P5-h：思源 .b3-button 家族 → 设计 COMPONENTS 01 按钮规格）────────
+ * 桌面专属层（移动端不加载本层 ⇒ 移动端的 .b3-button 不受影响）。
+ * 变体映射：.b3-button = primary（实心 ink）/ --outline = secondary（描边）/ --cancel = ghost。
+ * ⚠️ 分段控件的段也带 .b3-button--outline，但 .seg__item 的 border/background/color 在共享层是
+ *    !important（见「待移动端批次」），legacy 的 !important 压过本层 ⇒ 段的外观维持现状。 */
+.b3-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  height: 27px;
+  padding: 0 11px;
+  border: 1px solid transparent;
+  border-radius: var(--lake-radius-sm);
+  color: var(--lake-text-on-accent);
+  background: var(--lake-accent-ink);
+  font-family: inherit;
+  font-size: var(--lake-font-size-small);
+  font-weight: var(--lake-font-weight-medium);
+  line-height: 1;
+  cursor: pointer;
+  transition: background-color var(--lake-motion-fast) var(--lake-ease-standard),
+    border-color var(--lake-motion-fast) var(--lake-ease-standard),
+    color var(--lake-motion-fast) var(--lake-ease-standard);
+}
+.b3-button:hover { background: var(--lake-accent-ink-hover); }
+.b3-button:active { background: var(--lake-accent-ink-press); }
+.b3-button:focus-visible { outline: var(--lake-focus-ring-width) solid var(--lake-accent); outline-offset: var(--lake-focus-ring-offset); }
+.b3-button:disabled { opacity: .4; cursor: default; }
+.b3-button--outline {
+  color: var(--lake-text-1);
+  background: transparent;
+  border-color: var(--lake-border-1);
+}
+.b3-button--outline:hover { background: var(--lake-bg-hover); }
+.b3-button--outline:active { background: var(--lake-bg-press); }
+.b3-button--cancel {
+  color: var(--lake-text-2);
+  background: transparent;
+  border-color: transparent;
+}
+.b3-button--cancel:hover { color: var(--lake-text-1); background: var(--lake-bg-hover); }
+
+/* ── 输入框 / 下拉（P5-h：思源 .b3-text-field / .b3-select → 设计 07 / 08）────────
+ * 桌面专属层。设置面板的字号/标签数/附件上限下拉与 S3 输入框、搜索框都走这两个类。 */
+.b3-text-field {
+  height: 27px;
+  padding: 0 9px;
+  border: 1px solid var(--lake-border-1);
+  border-radius: var(--lake-radius-sm);
+  color: var(--lake-text-1);
+  background: var(--lake-bg-canvas);
+  font-family: inherit;
+  font-size: var(--lake-font-size-small);
+  transition: border-color var(--lake-motion-fast) var(--lake-ease-standard),
+    box-shadow var(--lake-motion-fast) var(--lake-ease-standard);
+}
+.b3-text-field:hover { border-color: var(--lake-border-strong); }
+.b3-text-field:focus {
+  border-color: var(--lake-accent);
+  box-shadow: 0 0 0 2px var(--lake-focus-halo);
+  outline: 0;
+}
+.b3-text-field::placeholder { color: var(--lake-text-4); }
+.b3-text-field:disabled { color: var(--lake-text-4); background: var(--lake-bg-sunken); }
+.b3-select {
+  height: 27px;
+  padding: 0 8px;
+  border: 1px solid var(--lake-border-1);
+  border-radius: var(--lake-radius-sm);
+  color: var(--lake-text-1);
+  background: var(--lake-bg-canvas);
+  font-family: inherit;
+  font-size: var(--lake-font-size-small);
+}
+.b3-select:hover { border-color: var(--lake-border-strong); }
+.b3-select:focus-visible { outline: var(--lake-focus-ring-width) solid var(--lake-accent); outline-offset: var(--lake-focus-ring-offset); }
