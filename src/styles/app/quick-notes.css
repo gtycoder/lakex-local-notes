@@ -26,38 +26,38 @@
 .quick-notes-header-tools { display: flex; align-items: center; gap: 6px; min-width: 0; }
 
 /* 多选态占用同一行：信息在左、动作在右（靠 spacer 撑开），不额外占卡片区高度 */
-.quick-notes-select-info { color: var(--b3-theme-on-background); font-size: 13px; white-space: nowrap; margin-left: 2px; }
+.quick-notes-select-info { color: var(--lake-text-1); font-size: 13px; white-space: nowrap; margin-left: 2px; }
 
 .quick-notes-tools-divider { width: 1px; height: 14px; background: color-mix(in srgb, var(--lake-text) 16%, transparent); }
 
 .quick-notes-tools-spacer { flex: 1 1 auto; min-width: 12px; }
 
 /* 头部小工具（多选 / 排序）：纯图标按钮，hover 才着色 */
-.quick-notes-tool-btn { display: grid; place-items: center; width: 30px; height: 30px; border: 0; border-radius: 6px; color: var(--b3-theme-on-surface); background: transparent; transition: color var(--lake-motion-fast) var(--lake-ease-standard), background-color var(--lake-motion-fast) var(--lake-ease-standard); }
+.quick-notes-tool-btn { display: grid; place-items: center; width: 30px; height: 30px; border: 0; border-radius: 6px; color: var(--lake-text-3); background: transparent; transition: color var(--lake-motion-fast) var(--lake-ease-standard), background-color var(--lake-motion-fast) var(--lake-ease-standard); }
 
-.quick-notes-tool-btn:hover:not(:disabled), .quick-notes-tool-btn.is-on { color: var(--b3-theme-primary); background: color-mix(in srgb, var(--b3-theme-primary) 10%, transparent); }
+.quick-notes-tool-btn:hover:not(:disabled), .quick-notes-tool-btn.is-on { color: var(--lake-accent); background: color-mix(in srgb, var(--lake-accent) 10%, transparent); }
 
 .quick-notes-tool-btn:disabled { opacity: .4; cursor: default; }
 
 .quick-notes-sort-wrap { position: relative; }
 
-.quick-notes-sort-menu { position: absolute; top: 34px; right: 0; z-index: 30; display: grid; gap: 1px; min-width: 132px; padding: 4px; border: 1px solid var(--b3-border-color); border-radius: 8px; background: var(--b3-theme-background); box-shadow: var(--lake-shadow-panel); }
+.quick-notes-sort-menu { position: absolute; top: 34px; right: 0; z-index: 30; display: grid; gap: 1px; min-width: 132px; padding: 4px; border: 1px solid var(--lake-border-1); border-radius: 8px; background: var(--lake-bg-panel); box-shadow: var(--lake-shadow-panel); }
 
-.quick-notes-sort-menu button { display: flex; align-items: center; gap: 6px; padding: 6px 8px; border: 0; border-radius: 5px; color: var(--b3-theme-on-background); background: transparent; font-size: 13px; text-align: left; cursor: pointer; }
+.quick-notes-sort-menu button { display: flex; align-items: center; gap: 6px; padding: 6px 8px; border: 0; border-radius: 5px; color: var(--lake-text-1); background: transparent; font-size: 13px; text-align: left; cursor: pointer; }
 
-.quick-notes-sort-menu button:hover { background: var(--b3-list-hover); }
+.quick-notes-sort-menu button:hover { background: var(--lake-bg-hover); }
 
 .quick-notes-menu-gap { width: 14px; }
 
 /* 多选：勾选框（仿语雀：绿色实心方块 + 白勾） */
-.qn-check { display: grid; place-items: center; width: 20px; height: 20px; padding: 0; border: 1.5px solid var(--b3-border-color); border-radius: 5px; color: #fff; background: var(--b3-theme-background); transition: background-color var(--lake-motion-fast) var(--lake-ease-standard), border-color var(--lake-motion-fast) var(--lake-ease-standard); }
+.qn-check { display: grid; place-items: center; width: 20px; height: 20px; padding: 0; border: 1.5px solid var(--lake-border-1); border-radius: 5px; color: #fff; background: var(--lake-bg-panel); transition: background-color var(--lake-motion-fast) var(--lake-ease-standard), border-color var(--lake-motion-fast) var(--lake-ease-standard); }
 
 .qn-check:hover { border-color: var(--lake-sync-success); }
 
 .qn-check.is-on { border-color: var(--lake-sync-success); background: var(--lake-sync-success); }
 
 /* （多选条已并入头部那一行，见 .quick-notes-header-tools；这里只留链接按钮样式） */
-.quick-notes-link { border: 0; padding: 2px 4px; color: var(--b3-theme-primary); background: transparent; font-size: 13px; cursor: pointer; }
+.quick-notes-link { border: 0; padding: 2px 4px; color: var(--lake-accent); background: transparent; font-size: 13px; cursor: pointer; }
 
 .quick-notes-link:hover:not(:disabled) { text-decoration: underline; }
 
@@ -80,9 +80,9 @@
 .quick-notes-split--list { grid-template-columns: minmax(220px, 300px) minmax(0, 1fr); gap: 14px; }
 .quick-notes-index-wrap { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
 /* 标签行（对齐云端）：左侧「标签 ▾」，右侧条数/排序 */
-.quick-notes-index-tools { display: flex; align-items: center; gap: 6px; padding: 0 2px 6px; border-bottom: 1px solid var(--b3-theme-surface-lighter); margin-bottom: 6px; }
-.quick-notes-filter { display: inline-flex; align-items: center; gap: 4px; padding: 3px 6px; border: 0; border-radius: 6px; color: var(--b3-theme-on-surface); background: transparent; font-size: 13px; cursor: pointer; }
-.quick-notes-filter:hover { background: var(--b3-list-hover); }
+.quick-notes-index-tools { display: flex; align-items: center; gap: 6px; padding: 0 2px 6px; border-bottom: 1px solid var(--lake-border-2); margin-bottom: 6px; }
+.quick-notes-filter { display: inline-flex; align-items: center; gap: 4px; padding: 3px 6px; border: 0; border-radius: 6px; color: var(--lake-text-3); background: transparent; font-size: 13px; cursor: pointer; }
+.quick-notes-filter:hover { background: var(--lake-bg-hover); }
 /* 批量条（对齐云端图1）：勾选框 + N 篇 + 取消 + 动作图标 */
 .quick-notes-batch { display: flex; align-items: center; gap: 8px; padding: 4px 2px 8px; }
 .quick-notes-tool-btn--danger { color: var(--lake-error); }
@@ -100,19 +100,19 @@
 .quick-note-index-actions { position: relative; flex: 0 0 auto; display: flex; align-items: center; opacity: 0; }
 .quick-note-index-row:hover .quick-note-index-actions,
 .quick-note-index-row.b3-list-item--focus .quick-note-index-actions { opacity: 1; }
-.quick-note-row-menu { position: absolute; top: 26px; right: 0; z-index: 30; display: grid; gap: 1px; min-width: 132px; padding: 4px; border: 1px solid var(--b3-border-color); border-radius: 8px; background: var(--b3-theme-background); box-shadow: var(--lake-shadow-panel); }
-.quick-note-row-menu button { padding: 6px 10px; border: 0; border-radius: 5px; color: var(--b3-theme-on-background); background: transparent; font-size: 13px; text-align: left; cursor: pointer; }
-.quick-note-row-menu button:hover:not(:disabled) { background: var(--b3-list-hover); }
+.quick-note-row-menu { position: absolute; top: 26px; right: 0; z-index: 30; display: grid; gap: 1px; min-width: 132px; padding: 4px; border: 1px solid var(--lake-border-1); border-radius: 8px; background: var(--lake-bg-panel); box-shadow: var(--lake-shadow-panel); }
+.quick-note-row-menu button { padding: 6px 10px; border: 0; border-radius: 5px; color: var(--lake-text-1); background: transparent; font-size: 13px; text-align: left; cursor: pointer; }
+.quick-note-row-menu button:hover:not(:disabled) { background: var(--lake-bg-hover); }
 .quick-note-row-menu button:disabled { opacity: .45; cursor: default; }
 /* 顶部「新建小记」（对齐云端图3：绿色羽毛 + 号） */
 .quick-notes-new { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; border: 0; border-radius: 8px; background: transparent; cursor: pointer; }
-.quick-notes-new:hover { background: color-mix(in srgb, var(--b3-theme-primary) 12%, transparent); }
-.quick-notes-new__icon { position: relative; display: inline-flex; align-items: center; color: var(--b3-theme-primary); }
+.quick-notes-new:hover { background: color-mix(in srgb, var(--lake-accent) 12%, transparent); }
+.quick-notes-new__icon { position: relative; display: inline-flex; align-items: center; color: var(--lake-accent); }
 .quick-notes-new__icon > svg:last-child { position: absolute; right: -3px; bottom: -3px; }
-.quick-notes-hint { margin-bottom: 8px; padding: 6px 10px; border-radius: var(--b3-border-radius); color: var(--b3-theme-on-surface); background: var(--b3-list-hover); font-size: 12px; }
+.quick-notes-hint { margin-bottom: 8px; padding: 6px 10px; border-radius: var(--lake-radius-sm); color: var(--lake-text-3); background: var(--lake-bg-hover); font-size: 12px; }
 .quick-notes-index { display: flex; flex-direction: column; gap: 2px; min-width: 0; min-height: 0; overflow-y: auto; overflow-x: hidden; padding-right: 4px; }
 .quick-notes-index .b3-list-item { width: 100%; text-align: left; }
-.quick-notes-index .b3-list-item.is-checked { background: var(--b3-list-hover); }
+.quick-notes-index .b3-list-item.is-checked { background: var(--lake-bg-hover); }
 .quick-notes-detail { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
 /* 列表视图右侧：去掉卡片边框/圆角，编辑器直接铺开（对齐文档页观感，用户 260919 要求试试） */
 .quick-notes-detail .quick-note-composer { border: 0; border-radius: 0; padding: 0; }
@@ -120,22 +120,22 @@
 
 .quick-notes-list .quick-notes-timeline { flex: 1; }
 
-.quick-notes-count { flex: 0 0 auto; padding: 5px 9px; border-radius: var(--radius-pill); color: var(--b3-theme-primary); background: color-mix(in srgb, var(--b3-theme-primary) 12%, transparent); font-size: 11px; font-weight: 650; }
+.quick-notes-count { flex: 0 0 auto; padding: 5px 9px; border-radius: var(--radius-pill); color: var(--lake-accent); background: color-mix(in srgb, var(--lake-accent) 12%, transparent); font-size: 11px; font-weight: 650; }
 
-.quick-notes-error { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; padding: 9px 11px; border: 1px solid color-mix(in srgb, var(--b3-theme-error) 20%, transparent); border-radius: var(--b3-border-radius); color: var(--b3-theme-error); background: color-mix(in srgb, var(--b3-theme-error) 6%, transparent); font-size: 12px; }
+.quick-notes-error { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; padding: 9px 11px; border: 1px solid color-mix(in srgb, var(--lake-status-error) 20%, transparent); border-radius: var(--lake-radius-sm); color: var(--lake-status-error); background: color-mix(in srgb, var(--lake-status-error) 6%, transparent); font-size: 12px; }
 
 .quick-notes-error button, .quick-note-card-actions button { display: grid; place-items: center; border: 0; background: transparent; }
 
-.quick-note-composer, .quick-note-entry { border: 1px solid var(--b3-theme-surface-lighter); border-radius: var(--b3-border-radius-b); }
+.quick-note-composer, .quick-note-entry { border: 1px solid var(--lake-border-2); border-radius: var(--lake-radius-md); }
 
 .quick-note-composer { display: flex; flex-direction: column; padding: 10px 12px 12px; }
 
 /* 工具条在写作区上方（仿语雀小记的图片/待办/书签那一行；我们目前只有图片能力） */
 .quick-note-composer-tools { display: flex; align-items: center; gap: 2px; margin-bottom: 8px; }
 
-.quick-note-tool { display: grid; place-items: center; width: 30px; height: 30px; border-radius: 6px; color: var(--b3-theme-on-surface); cursor: pointer; transition: color var(--lake-motion-fast) var(--lake-ease-standard), background-color var(--lake-motion-fast) var(--lake-ease-standard); }
+.quick-note-tool { display: grid; place-items: center; width: 30px; height: 30px; border-radius: 6px; color: var(--lake-text-3); cursor: pointer; transition: color var(--lake-motion-fast) var(--lake-ease-standard), background-color var(--lake-motion-fast) var(--lake-ease-standard); }
 
-.quick-note-tool:hover { color: var(--b3-theme-primary); background: color-mix(in srgb, var(--b3-theme-primary) 10%, transparent); }
+.quick-note-tool:hover { color: var(--lake-accent); background: color-mix(in srgb, var(--lake-accent) 10%, transparent); }
 
 .quick-note-tool input { display: none; }
 
@@ -160,8 +160,8 @@
 .quick-notes-detail:has(.ne-ui-fullscreen) .quick-note-composer-actions,
 .quick-note-entry.editing:has(.ne-ui-fullscreen) .quick-note-composer-actions {
   position: absolute; right: 16px; bottom: 14px; z-index: 31; margin: 0;
-  padding: 6px 8px; border: 1px solid var(--b3-border-color); border-radius: 10px;
-  background: var(--b3-theme-background); box-shadow: var(--lake-shadow-soft);
+  padding: 6px 8px; border: 1px solid var(--lake-border-1); border-radius: 10px;
+  background: var(--lake-bg-panel); box-shadow: var(--lake-shadow-soft);
 }
 
 /* 展开态下的**反馈**（保存失败/提示条）同样不能被展开层盖住：展开层铺满面板 + z-index:30
@@ -190,40 +190,40 @@
    仿语雀的发布键是中性描边胶囊（不是主色实心）——写作区才是主角，按钮退一档更安静。
    选择器带父级是为了压过 b3 的 .b3-button（styles.css 早于 b3/components.css 加载）。 */
 .quick-note-composer-actions .quick-note-publish {
-  border: 1px solid var(--b3-border-color); background: var(--b3-theme-background); color: var(--b3-theme-on-background);
+  border: 1px solid var(--lake-border-1); background: var(--lake-bg-panel); color: var(--lake-text-1);
 }
 
-.quick-note-composer-actions .quick-note-publish:hover { background: var(--b3-list-hover); color: var(--b3-theme-on-background); }
+.quick-note-composer-actions .quick-note-publish:hover { background: var(--lake-bg-hover); color: var(--lake-text-1); }
 
 /* 有内容（或编辑既有小记）→ 同一个强调样式：主色实心（用户 260915：两种按钮强调保持一致） */
 .quick-note-composer-actions .quick-note-publish.is-emphasized {
-  border-color: transparent; background: var(--b3-theme-primary); color: var(--b3-theme-on-primary);
+  border-color: transparent; background: var(--lake-accent); color: var(--lake-text-on-accent);
 }
 
-.quick-note-composer-actions .quick-note-publish.is-emphasized:hover { background: color-mix(in srgb, var(--b3-theme-primary) 88%, #000); color: var(--b3-theme-on-primary); }
+.quick-note-composer-actions .quick-note-publish.is-emphasized:hover { background: color-mix(in srgb, var(--lake-accent) 88%, #000); color: var(--lake-text-on-accent); }
 
 .quick-note-publish-hint + .quick-note-publish-hint-sub { border-left: 1px solid color-mix(in srgb, var(--lake-text) 14%, transparent); padding-left: 10px; }
 
 /* 「取消」= 与主按钮同组的次级描边按钮（选择器带父级是为了压过 b3 的 .b3-button 边框）。 */
 .quick-note-composer-actions .quick-note-discard {
-  border: 1px solid var(--b3-border-color); background: var(--b3-theme-background); color: var(--b3-theme-on-background);
+  border: 1px solid var(--lake-border-1); background: var(--lake-bg-panel); color: var(--lake-text-1);
   transition: background var(--lake-motion-fast) var(--lake-ease-standard);
 }
 
-.quick-note-composer-actions .quick-note-discard:hover { background: var(--b3-list-hover); color: var(--b3-theme-on-background); }
+.quick-note-composer-actions .quick-note-discard:hover { background: var(--lake-bg-hover); color: var(--lake-text-1); }
 
 .quick-note-composer-actions .b3-button, .quick-note-composer-actions .b3-button--cancel, .quick-note-convert-dialog .b3-button--cancel { min-height: 28px; padding: 0 10px; border-radius: 6px; font-size: 12px; }
 
 /* 260920 清理：早期的「草稿图片网格 / 已存图片网格 / 已存媒体列」三套类已随卡片预览改自研只读渲染而废弃
    （`QuickNotePreview` 用 .quick-note-preview-* 一套），删掉其遗留规则，媒体样式只剩下面这一套。 */
-.quick-note-file-chip { display: inline-flex; align-items: center; gap: 6px; min-width: 0; max-width: 100%; padding: 8px 10px; border: 1px solid var(--b3-theme-surface-lighter); border-radius: 8px; color: var(--b3-theme-on-background); font-size: 13px; }
+.quick-note-file-chip { display: inline-flex; align-items: center; gap: 6px; min-width: 0; max-width: 100%; padding: 8px 10px; border: 1px solid var(--lake-border-2); border-radius: 8px; color: var(--lake-text-1); font-size: 13px; }
 .quick-note-file-chip__name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* 卡片预览（自研只读渲染，零内核实例）：块级结构 + 行内格式 + 媒体就地渲染 */
 .quick-note-preview { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
 .quick-note-preview.is-collapsed { overflow: hidden; position: relative; }
-.quick-note-preview.is-collapsed::after { content: ""; position: absolute; inset: auto 0 0 0; height: 44px; background: linear-gradient(to bottom, transparent, var(--b3-theme-background)); pointer-events: none; }
-.quick-note-preview-toggle { align-self: flex-start; display: inline-flex; align-items: center; gap: 4px; margin-top: 2px; padding: 2px 4px; border: 0; color: var(--b3-theme-primary); background: transparent; font-size: 12px; cursor: pointer; }
+.quick-note-preview.is-collapsed::after { content: ""; position: absolute; inset: auto 0 0 0; height: 44px; background: linear-gradient(to bottom, transparent, var(--lake-bg-panel)); pointer-events: none; }
+.quick-note-preview-toggle { align-self: flex-start; display: inline-flex; align-items: center; gap: 4px; margin-top: 2px; padding: 2px 4px; border: 0; color: var(--lake-accent); background: transparent; font-size: 12px; cursor: pointer; }
 .quick-note-preview-paragraph { margin: 0; white-space: pre-wrap; }
 .quick-note-preview-heading { margin: 2px 0 0; font-size: 15px; }
 .quick-note-preview h1.quick-note-preview-heading { font-size: 20px; }
@@ -232,12 +232,12 @@
 .quick-note-preview-list li { margin: 1px 0; }
 .quick-note-preview-task { list-style: none; display: flex; align-items: flex-start; gap: 6px; margin-left: -18px; }
 .quick-note-preview-task input { margin-top: 4px; }
-.quick-note-preview-quote { margin: 0; padding: 4px 10px; border-left: 3px solid var(--b3-theme-surface-lighter); color: var(--b3-theme-on-surface); }
-.quick-note-preview-divider { width: 100%; margin: 4px 0; border: none; border-top: 1px solid var(--b3-theme-surface-lighter); }
+.quick-note-preview-quote { margin: 0; padding: 4px 10px; border-left: 3px solid var(--lake-border-2); color: var(--lake-text-3); }
+.quick-note-preview-divider { width: 100%; margin: 4px 0; border: none; border-top: 1px solid var(--lake-border-2); }
 .quick-note-preview-image { display: block; width: auto; max-width: 100%; max-height: 460px; object-fit: contain; border-radius: 8px; cursor: zoom-in; }
 .quick-note-preview-video { display: block; width: 100%; max-width: 420px; max-height: 260px; border-radius: 8px; background: #000; }
 .quick-note-preview-audio { width: 100%; max-width: 420px; height: 36px; }
-.quick-note-preview-unsupported { align-self: flex-start; padding: 4px 8px; border: 1px dashed var(--b3-theme-surface-lighter); border-radius: 6px; color: var(--b3-theme-on-surface); font-size: 12px; }
+.quick-note-preview-unsupported { align-self: flex-start; padding: 4px 8px; border: 1px dashed var(--lake-border-2); border-radius: 6px; color: var(--lake-text-3); font-size: 12px; }
 
 /* 小记编辑器的「展开」(内核 fullscreen) 适配窗口外壳：
    内核 `.ne-ui-fullscreen{position:fixed;inset:0;z-index:1000}` 是为「无外壳编辑器」设计的，
@@ -260,7 +260,7 @@
 
 .quick-note-entry.selecting .quick-note-card-actions { display: none; }
 
-.quick-note-entry.is-checked { border-color: color-mix(in srgb, var(--lake-sync-success) 55%, var(--b3-border-color)); }
+.quick-note-entry.is-checked { border-color: color-mix(in srgb, var(--lake-sync-success) 55%, var(--lake-border-1)); }
 
 .quick-note-select { position: absolute; left: -30px; top: 13px; opacity: 0; transition: opacity var(--lake-motion-fast) var(--lake-ease-standard); }
 
@@ -292,9 +292,9 @@
 .quick-note-entry:hover .quick-note-card-actions,
 .quick-note-entry:focus-within .quick-note-card-actions { opacity: 1; }
 
-.quick-note-card-actions button { width: 26px; height: 26px; border-radius: 6px; color: var(--b3-theme-on-surface); }
+.quick-note-card-actions button { width: 26px; height: 26px; border-radius: 6px; color: var(--lake-text-3); }
 
-.quick-note-card-actions button.danger:hover { color: var(--b3-theme-error); background: color-mix(in srgb, var(--b3-theme-error) 10%, transparent); }
+.quick-note-card-actions button.danger:hover { color: var(--lake-status-error); background: color-mix(in srgb, var(--lake-status-error) 10%, transparent); }
 
 .quick-note-conflict { padding: 2px 6px; border-radius: var(--radius-pill); color: var(--lake-sync-pending); background: var(--lake-warning-soft); font-size: 10px; }
 
@@ -302,9 +302,9 @@
 
 .quick-note-convert-dialog { width: min(390px, 100%); padding: 20px; }
 
-.quick-note-convert-dialog h3 { margin: 0; color: var(--b3-theme-on-background); font-size: 17px; }
+.quick-note-convert-dialog h3 { margin: 0; color: var(--lake-text-1); font-size: 17px; }
 
-.quick-note-convert-dialog p { margin: 8px 0 15px; color: var(--b3-theme-on-surface); font-size: 12px; line-height: 1.55; }
+.quick-note-convert-dialog p { margin: 8px 0 15px; color: var(--lake-text-3); font-size: 12px; line-height: 1.55; }
 
 .quick-note-convert-dialog footer { display: flex; justify-content: flex-end; margin-top: 14px; }
 

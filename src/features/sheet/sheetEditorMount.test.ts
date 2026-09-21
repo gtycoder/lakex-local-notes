@@ -209,7 +209,7 @@ describe("SheetEditor 单元格图片（P2）", () => {
 
   it("细滚动条与色条裁切：CSS 覆盖内核自带样式", () => {
     expect(CSS).toContain(".sheet-editor .luckysheet-scrollbar-ltr::-webkit-scrollbar {");
-    expect(CSS).toContain("box-shadow: inset 0 0 5px 5px var(--b3-scroll-color");
+    expect(CSS).toContain("box-shadow: inset 0 0 5px 5px var(--lake-scrollbar-thumb");   // P7：令牌已由 --b3-scroll-color 迁到 --lake-scrollbar-thumb
     expect(CSS).toContain('[style*="absolute"]) svg {');
     expect(CSS).toContain("clip-path: inset(0 0 26% 0);");
   });

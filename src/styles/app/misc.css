@@ -226,17 +226,17 @@
 
 .emoji-picker-tabs { display: flex; gap: 4px; overflow-x: auto; padding-bottom: 2px; }
 
-.emoji-picker-tab { flex: none; padding: 4px 10px; border: 0; border-radius: var(--radius-pill); background: var(--b3-theme-surface-lighter); color: var(--b3-theme-on-surface); font-size: 12px; cursor: pointer; white-space: nowrap; }
+.emoji-picker-tab { flex: none; padding: 4px 10px; border: 0; border-radius: var(--radius-pill); background: var(--lake-border-2); color: var(--lake-text-3); font-size: 12px; cursor: pointer; white-space: nowrap; }
 
-.emoji-picker-tab:hover { background: var(--b3-list-hover); }
+.emoji-picker-tab:hover { background: var(--lake-bg-hover); }
 
-.emoji-picker-tab.active { background: var(--b3-theme-primary-lightest); color: var(--b3-theme-primary); font-weight: 600; }
+.emoji-picker-tab.active { background: var(--lake-accent-tint); color: var(--lake-accent); font-weight: 600; }
 
-.emoji-picker-empty { grid-column: 1 / -1; padding: 16px; text-align: center; color: var(--b3-theme-on-surface-light); font-size: 12px; }
+.emoji-picker-empty { grid-column: 1 / -1; padding: 16px; text-align: center; color: var(--lake-text-4); font-size: 12px; }
 
-.emoji-picker-search { display: flex; align-items: center; gap: 6px; padding: 4px 6px; border: 1px solid var(--b3-theme-surface-lighter); border-radius: var(--b3-border-radius); color: var(--b3-theme-on-surface); }
+.emoji-picker-search { display: flex; align-items: center; gap: 6px; padding: 4px 6px; border: 1px solid var(--lake-border-2); border-radius: var(--lake-radius-sm); color: var(--lake-text-3); }
 
-.emoji-picker-search input { flex: 1; border: 0; outline: none; font-size: 12px; background: transparent; color: var(--b3-theme-on-background); }
+.emoji-picker-search input { flex: 1; border: 0; outline: none; font-size: 12px; background: transparent; color: var(--lake-text-1); }
 
 .emoji-picker-search { flex: none; }
 
@@ -248,26 +248,26 @@
 
 .emoji-picker-cell { display: flex; align-items: center; justify-content: center; min-height: 33px; border: 0; border-radius: var(--radius-sm); background: transparent; font-size: 24px; line-height: 1; cursor: pointer; }
 
-.emoji-picker-cell:hover { background: var(--b3-list-hover); }
+.emoji-picker-cell:hover { background: var(--lake-bg-hover); }
 
-.emoji-picker-clear { border: 0; border-radius: var(--b3-border-radius); padding: 6px; background: var(--b3-theme-surface-lighter); color: var(--b3-theme-on-surface); cursor: pointer; font-size: 12px; }
+.emoji-picker-clear { border: 0; border-radius: var(--lake-radius-sm); padding: 6px; background: var(--lake-border-2); color: var(--lake-text-3); cursor: pointer; font-size: 12px; }
 
-.emoji-picker-clear:hover { background: var(--b3-list-hover); }
+.emoji-picker-clear:hover { background: var(--lake-bg-hover); }
 
 /* M2 全文搜索面板（思源 b3-dialog / b3-text-field 令牌风格） */
 .search-panel-backdrop { position: fixed; inset: 0; z-index: 800; display: flex; justify-content: center; align-items: flex-start; padding-top: 12vh; }
 
 .search-panel { width: 640px; max-width: calc(100vw - 48px); max-height: 70vh; display: flex; flex-direction: column; overflow: hidden; }
 
-.search-panel-input-row { display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-bottom: 1px solid var(--b3-theme-surface-lighter); }
+.search-panel-input-row { display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-bottom: 1px solid var(--lake-border-2); }
 
-.search-panel-input-row input { flex: 1; border: 0; outline: none; font-size: 14px; background: transparent; color: var(--b3-theme-on-background); }
+.search-panel-input-row input { flex: 1; border: 0; outline: none; font-size: 14px; background: transparent; color: var(--lake-text-1); }
 
-.search-panel-search-icon { color: var(--b3-theme-on-surface); flex: none; }
+.search-panel-search-icon { color: var(--lake-text-3); flex: none; }
 
-.search-panel-spinner { width: 14px; height: 14px; border: 2px solid var(--b3-theme-surface-lighter); border-top-color: var(--b3-theme-primary); border-radius: 50%; animation: spin .7s linear infinite; flex: none; }
+.search-panel-spinner { width: 14px; height: 14px; border: 2px solid var(--lake-border-2); border-top-color: var(--lake-accent); border-radius: 50%; animation: spin .7s linear infinite; flex: none; }
 
-.search-panel-close { display: flex; align-items: center; justify-content: center; width: 26px; height: 26px; border: 0; border-radius: var(--b3-border-radius); background: transparent; cursor: pointer; }
+.search-panel-close { display: flex; align-items: center; justify-content: center; width: 26px; height: 26px; border: 0; border-radius: var(--lake-radius-sm); background: transparent; cursor: pointer; }
 
 .search-panel-results { overflow-y: auto; padding: 6px; }
 

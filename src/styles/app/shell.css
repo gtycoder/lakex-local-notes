@@ -16,7 +16,7 @@
 
 .create-menu { display: flex; position: absolute; top: 36px; right: 0; z-index: 1000; flex-direction: column; width: 150px; max-width: calc(100vw - 16px); transform-origin: top right; transition: transform var(--lake-motion-fast) var(--lake-ease-standard), opacity var(--lake-motion-fast) var(--lake-ease-standard); }
 
-.create-menu > button { display: grid; grid-template-columns: 20px minmax(0, 1fr); align-items: center; gap: 8px; width: 100%; min-height: 32px; padding: 4px 8px; border: 0; color: var(--b3-theme-on-surface); background: transparent; text-align: left; }
+.create-menu > button { display: grid; grid-template-columns: 20px minmax(0, 1fr); align-items: center; gap: 8px; width: 100%; min-height: 32px; padding: 4px 8px; border: 0; color: var(--lake-text-3); background: transparent; text-align: left; }
 
 .create-menu > button:disabled { cursor: default; opacity: .45; }
 
@@ -24,9 +24,9 @@
 
 .create-menu strong { font-size: 12px; font-weight: 600; }
 
-.create-menu small { margin-top: 1px; overflow: hidden; color: var(--b3-theme-on-surface-light); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+.create-menu small { margin-top: 1px; overflow: hidden; color: var(--lake-text-4); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
 
-.inline-create { display: grid; grid-template-columns: 16px minmax(0, 1fr) auto; align-items: center; gap: 5px; margin: 2px 7px 3px; padding: 3px 5px; border: 1px solid var(--b3-theme-primary-lighter); border-radius: var(--b3-border-radius); color: var(--lake-accent); background: #fff; box-shadow: 0 0 0 1px var(--lake-accent-soft); }
+.inline-create { display: grid; grid-template-columns: 16px minmax(0, 1fr) auto; align-items: center; gap: 5px; margin: 2px 7px 3px; padding: 3px 5px; border: 1px solid var(--lake-accent-tint); border-radius: var(--lake-radius-sm); color: var(--lake-accent); background: #fff; box-shadow: 0 0 0 1px var(--lake-accent-soft); }
 
 .inline-create input { min-width: 0; height: 22px; padding: 0; border: 0; outline: 0; color: var(--lake-text); background: transparent; font-size: 12px; }
 
@@ -45,12 +45,12 @@
 /* 标题恒为单行、超出列宽直接裁切——不打省略号（用户 260914：不要用 … 缩短标题）；hover ⋯ 出现时同样只是让位裁切 */
 .note-row-copy strong { display: block; overflow: hidden; color: var(--lake-text); font-size: 13px; font-weight: 500; white-space: nowrap; }
 
-.tree-rename-input { width: 100%; height: 24px; padding: 0 4px; border: 1px solid var(--b3-theme-primary-lighter); border-radius: var(--b3-border-radius); outline: 0; background: #fff; font-size: 13px; }
+.tree-rename-input { width: 100%; height: 24px; padding: 0 4px; border: 1px solid var(--lake-accent-tint); border-radius: var(--lake-radius-sm); outline: 0; background: #fff; font-size: 13px; }
 
 /* 只保留**一个**焦点环：输入框自带 border + 这里换主色即可。
    原先再加 box-shadow 会和 b3 的 `input:focus-visible` 描边叠成 2~3 层同心蓝框（user 260918 报）。 */
 .tree-rename-input:focus,
-.tree-rename-input:focus-visible { border-color: var(--b3-theme-primary); outline: 0; }
+.tree-rename-input:focus-visible { border-color: var(--lake-accent); outline: 0; }
 
 .tree-rename-input::selection { color: #2d4968; background: #dcecf8; }
 
@@ -286,7 +286,7 @@
 /* 上面那条会把"真正的工作面"也刷成壳色，所以这组搭档必须同时存在（宽窄共用）：
    固定/悬停展开的大纲面板要恢复成白色卡片。**成对改，缺一就会把面板刷成灰。** */
 /* 固定态的面板白卡：与"三栏卡片布局"（outline.css 共用作用域）同值，这里只补回被材质层刷掉的底色。 */
-/* 固定态白卡：底色（`background: var(--b3-theme-background)`）与 `.outline-sidebar--docked` 的
+/* 固定态白卡：底色（`background: var(--lake-bg-panel)`）与 `.outline-sidebar--docked` 的
    background 在 outline.css 里同值；圆角/边框/分隔线只由 outline.css:348 那段决定（它后加载）。 */
 
 /* 悬停展开的面板公式**不在这里**：唯一来源是 b3/layout.css 的"右侧浮动（大纲 hover）"，
@@ -350,13 +350,13 @@
   }
 }
 
-.tree-row-icon { display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; border-radius: var(--b3-border-radius); flex: none; }
+.tree-row-icon { display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; border-radius: var(--lake-radius-sm); flex: none; }
 
 .tree-row-icon:hover { background: rgba(0,0,0,0.06); }
 
 /* 菜单类 */
 
-.trash-tree-children { margin-left: 18px; border-left: 1px solid var(--b3-theme-surface-lighter); padding-left: 6px; }
+.trash-tree-children { margin-left: 18px; border-left: 1px solid var(--lake-border-2); padding-left: 6px; }
 
 /* ===== v2 UI 收紧：区域间距 / 细滚动条 / 顶栏融合 / 小记顶栏融合 ===== */
 @media (min-width: 761px) {
@@ -511,8 +511,8 @@
 .app-shell.quick-notes-active .quick-notes-pane {
   min-height: 0;
   padding-top: 28px;
-  background: var(--b3-theme-background) !important;
-  border-radius: var(--b3-border-radius-b) var(--b3-border-radius-b) 0 0;
+  background: var(--lake-bg-panel) !important;
+  border-radius: var(--lake-radius-md) var(--lake-radius-md) 0 0;
   background-attachment: initial;
 }
 

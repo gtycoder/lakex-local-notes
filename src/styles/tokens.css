@@ -16,7 +16,7 @@
   --lake-shell: #ebecf0;   /* 窗口底（与 b3 daylight --b3-body-background 同值：单一来源） */
   --lake-panel: #ffffff;   /* 卡片：侧栏 / 弹窗 / 面板 */
   --lake-canvas: #ffffff;  /* 编辑画布（纸） */
-  --lake-surface: var(--b3-theme-surface, #f6f6f6); /* 卡内块 / 标签栏轨道 */
+  --lake-surface: var(--lake-bg-block); /* 卡内块 / 标签栏轨道 */
   --lake-border: #dde2ec;
   --lake-text: #232838;
   --lake-text-secondary: #4d5a70; /* 文字色单一来源；应反馈再加深 */

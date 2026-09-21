@@ -48,7 +48,7 @@
 }
 /* FortuneSheet 的「添加 N 行」<input> 无 class、无自带样式 ⇒ 吃浏览器默认 2px inset 粗边框。 */
 .sheet-editor .luckysheet-bottom-controll-row input {
-  border: 1px solid var(--b3-border-color, #d0d0d0);
+  border: 1px solid var(--lake-border-1);
   border-radius: 3px;
   box-sizing: border-box;
   padding: 0 4px;
@@ -57,7 +57,7 @@
 /* 右键菜单（行/列头）里的「插入行」「行高」输入框同样只给了 width/居中、没给边框 ⇒ 默认粗边框。 */
 .sheet-editor .fortune-context-menu input,
 .sheet-editor .luckysheet-cols-menu input {
-  border: 1px solid var(--b3-border-color, #d0d0d0);
+  border: 1px solid var(--lake-border-1);
   border-radius: 3px;
   box-sizing: border-box;
   outline: none;
@@ -65,7 +65,7 @@
 .sheet-editor .luckysheet-bottom-controll-row input:focus,
 .sheet-editor .fortune-context-menu input:focus,
 .sheet-editor .luckysheet-cols-menu input:focus {
-  border-color: var(--b3-theme-primary, #3b5bdb);
+  border-color: var(--lake-accent);
 }
 
 /*
@@ -80,7 +80,7 @@
   gap: 2px;
   padding: 3px;
   border-radius: 6px;
-  background: var(--b3-theme-background, #fff);
+  background: var(--lake-bg-panel);
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.18);
   transform: translate(-50%, 6px);
 }
@@ -93,7 +93,7 @@
   border: none;
   border-radius: 4px;
   background: transparent;
-  color: var(--b3-theme-on-background, #333);
+  color: var(--lake-text-1);
   cursor: pointer;
 }
 .sheet-cell-image-menu button:hover {
@@ -116,8 +116,8 @@
   background-color: transparent;
   box-sizing: content-box;
   border: 4px solid transparent;
-  border-radius: var(--b3-border-radius, 4px);
-  box-shadow: inset 0 0 5px 5px var(--b3-scroll-color, rgba(0, 0, 0, 0.25));
+  border-radius: var(--lake-radius-sm);
+  box-shadow: inset 0 0 5px 5px var(--lake-scrollbar-thumb);
   cursor: default;
 }
 .sheet-editor .luckysheet-scrollbar-ltr::-webkit-scrollbar-thumb:hover {

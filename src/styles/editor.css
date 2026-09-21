@@ -20,7 +20,7 @@
 
 /* A: 编辑器正文与 UI 同源字体（消除三处 font-family 打架；vendor .ne-engine 默认栈在 mac 会回退 Helvetica） */
 .lake-editor-mount .ne-engine,
-.lake-editor-mount .ne-viewer-body { font-family: var(--b3-font-family); }
+.lake-editor-mount .ne-viewer-body { font-family: var(--lake-font-family); }
 
 /* ── 以下规则自 `src/styles/ui-polish.css` 按职责并入（260916 S2/S3，只搬家不改声明）：编辑器正文覆盖 ── */
 /* 文字色令牌单一来源见 tokens.css（此处曾重复定义 :root 覆盖，已收敛） */

@@ -15,13 +15,13 @@
  * （同一元素 + 更晚），这里只留设置面板自己的布局子件。 */
 .settings-layout { display: flex; flex: 1; }
 
-.settings-nav-item { display: flex; gap: 8px; border: 0; border-radius: var(--b3-border-radius); background: transparent; }
+.settings-nav-item { display: flex; gap: 8px; border: 0; border-radius: var(--lake-radius-sm); background: transparent; }
 
-.settings-nav-item:hover { background: var(--b3-list-hover); }
+.settings-nav-item:hover { background: var(--lake-bg-hover); }
 
-.settings-nav-item.active { box-shadow: 0 1px 4px var(--b3-dock-shadow-color, rgba(31, 35, 41, .12)); }
+.settings-nav-item.active { box-shadow: var(--lake-shadow-card); }
 
-.settings-resize::after { content: ""; position: absolute; right: 3px; bottom: 3px; width: 8px; height: 8px; border-right: 2px solid var(--b3-theme-on-surface-lighter); border-bottom: 2px solid var(--b3-theme-on-surface-lighter); }
+.settings-resize::after { content: ""; position: absolute; right: 3px; bottom: 3px; width: 8px; height: 8px; border-right: 2px solid var(--lake-text-4); border-bottom: 2px solid var(--lake-text-4); }
 
 .history-panel .settings-resize { position: absolute; right: 2px; bottom: 2px; }
 

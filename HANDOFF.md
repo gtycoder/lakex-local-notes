@@ -1756,7 +1756,7 @@ lsof -ti:1432 -ti:9231 | sort -u | xargs kill
 > 设计规格（外部）= `/Users/admin/file/local-lake/ui-design-inputs/out/design-system/`（8 项交付，**只作参考**）。
 > 分支 `feat/ui-redesign`，基线 `origin/master` = `17bafbe`；**未 push、未合 master**。
 
-### 一、已完成（15 个提交）
+### 一、已完成（16 个提交）
 - **b53a456 docs**：元素底账 + 实现方案（阶段 P0–P8 / 层序 / 主题即数据 / 硬指标 / 验收口径变更）。
 - **e5f171e P1 @layer 层骨架**：新增 `src/styles/index.css` 单入口，`@layer legacy,tokens,reset,kit,shell,feature,overlay,a11y`；旧样式（含内核 style.css / 思源 / 旧壳层）**按原顺序整体入 legacy 层**；删 `src/styles.css`；围栏 `cssLayers.test.ts` 入口项同步。
   - 关键机制：**legacy 最低 ⇒ 新层写入即压过旧样式**，迁移期不靠特异性取胜。
@@ -1839,6 +1839,12 @@ lsof -ti:1432 -ti:9231 | sort -u | xargs kill
   - 实测：**表格**容器 1px border-1 + radius 10 + canvas 底（网格铺在圆角内，截图核对）；**多维表**容器同样 1px border-1 + radius 10 + canvas 底（改令牌后底色由 bg-panel 变为 canvas）。
   - ⚠️ **画板没能完成视觉验证：打开画板会落进错误边界**（"该类型编辑器渲染出错（已隔离…）"，控制台 `TypeError: Wt is not a function @ BoardEditor-*.js`）。
     **已做归因**：在 `git worktree` 里构建 **origin/master（未改动基线）** 并打开同一个画板 —— **同样报错** ⇒ **既有 bug，非本次重构引入**；另核对本分支 diff 完全没碰 `src/features/board/**`、`editor/**`、`sheet/**`、`bitable/**`、`lakeRuntime.ts`。**待用户/后续会话单项处理**（可能与本项目 §2.15 记录过的 vendor 懒 chunk 打包问题同类）。
+- **P7-a 令牌换血（为删 b3 铺路）**：把**我们自己 CSS 里**的 `var(--b3-*)` 全部换成等价的 `--lake-*`。
+  - 先清点：我们自己的 CSS 只用到 **25 个不同 `--b3-*` 变量 / 401 处**（最大：`--b3-theme-on-surface` 68、`--b3-border-color` 50、`--b3-theme-primary` 45）。
+  - 用**平衡括号**的脚本替换（连 `var(--b3-x, 字面量回退)` 的**回退一起删掉**），14 个文件 **399 处**；`--b3-dock-shadow-color`（被当阴影色用）特殊处理为 `--lake-shadow-card`。
+  - **值等价**：这些映射与 P2 主题里的 b3→lake 桥接**完全一致**，所以是零视觉变化；仅 1 处源码级断言写死了旧令牌名（`sheetEditorMount.test.ts` 的细滚动条），已同步更新。
+  - 实测（三套主题 `getComputedStyle`）：lake 令牌、`.note-row` 字色、`.tab-item.active` 底色、状态栏底全部正常。
+  - **效果**：桌面侧 `var(--b3-*)` 引用 **599 → 200**（**剩余 200 全部在 `src/b3/*.css` 自身**，即下一步要删的思源层）；颜色字面量 **365+227 → 294+176**。
 
 ### 二、过渡桥接（P7 删 legacy 时一并移除）
 - 旧 `--lake-*` 名字（`--lake-shell/panel/canvas/surface/accent-soft/shadow-* …`）→ 指向新令牌。

@@ -13,11 +13,11 @@
 
 .context-menu > button { display: grid; grid-template-columns: 18px minmax(0, 1fr); align-items: center; gap: 9px; width: 100%; border: 0; background: transparent; text-align: left; font-size: 12px; }
 
-.context-menu > button.danger { color: var(--b3-theme-error); }
+.context-menu > button.danger { color: var(--lake-status-error); }
 
 .context-menu-item { display: flex; align-items: center; justify-content: space-between; width: 100%; cursor: pointer; font-size: 12px; position: relative; box-sizing: border-box; }
 
-.context-menu-item:hover { background: var(--b3-list-hover); }
+.context-menu-item:hover { background: var(--lake-bg-hover); }
 
 .context-menu-item-label { display: grid; grid-template-columns: 18px minmax(0, 1fr); align-items: center; gap: 9px; }
 
@@ -30,13 +30,13 @@
 
 .context-menu-submenu > button { display: block; width: 100%; border: 0; background: transparent; text-align: left; font-size: 12px; white-space: nowrap; }
 
-.context-menu-submenu > button:hover:not(:disabled) { background: var(--b3-list-hover); }
+.context-menu-submenu > button:hover:not(:disabled) { background: var(--lake-bg-hover); }
 
-.context-menu-submenu > button:disabled { color: var(--b3-theme-on-surface-light); cursor: not-allowed; }
+.context-menu-submenu > button:disabled { color: var(--lake-text-4); cursor: not-allowed; }
 
-.context-menu > button.danger:hover { background: color-mix(in srgb, var(--b3-theme-error) 12%, transparent); }
+.context-menu > button.danger:hover { background: color-mix(in srgb, var(--lake-status-error) 12%, transparent); }
 
-.context-menu-sep { height: 1px; margin: 4px 0; background: var(--b3-theme-surface-lighter); }
+.context-menu-sep { height: 1px; margin: 4px 0; background: var(--lake-border-2); }
 
 .context-menu { opacity: 1; transform: scale(1); }
 
@@ -45,9 +45,9 @@
 /* 删除确认对话框（思源 b3-dialog 风格：表面色 + 12px 圆角 + 柔和阴影，无彩色边框） */
 .confirm-dialog { width: min(420px, 100%); padding: 20px; transition: transform var(--dur-drawer) var(--ease-out), opacity var(--dur-drawer) var(--ease-out); }
 
-.confirm-dialog h3 { margin: 0 0 8px; font-size: 15px; font-weight: 600; color: var(--b3-theme-on-background); }
+.confirm-dialog h3 { margin: 0 0 8px; font-size: 15px; font-weight: 600; color: var(--lake-text-1); }
 
-.confirm-dialog p { margin: 0 0 18px; color: var(--b3-theme-on-surface); font-size: 12px; line-height: 1.6; }
+.confirm-dialog p { margin: 0 0 18px; color: var(--lake-text-3); font-size: 12px; line-height: 1.6; }
 
 .confirm-dialog footer { display: flex; justify-content: flex-end; gap: 9px; }
 
@@ -59,7 +59,7 @@
 
 .error-banner > span { min-width: 0; overflow-wrap: anywhere; }
 
-.error-banner button { flex: 0 0 auto; padding: 3px 7px; border-radius: var(--b3-border-radius); }
+.error-banner button { flex: 0 0 auto; padding: 3px 7px; border-radius: var(--lake-radius-sm); }
 
 @starting-style { .error-banner { opacity: 0; transform: translate(-50%, calc(-50% - 6px)); } }
 
@@ -87,12 +87,12 @@
   border-color: rgba(31, 35, 41, .12);
 }
 
-.quick-notes-toast { position: fixed; z-index: 760; top: calc(var(--topbar-height) + 12px); right: 24px; display: flex; align-items: center; gap: 12px; min-height: 40px; padding: 10px 12px 10px 14px; border: 1px solid color-mix(in srgb, var(--b3-theme-primary) 28%, var(--b3-theme-surface-lighter)); border-left: 3px solid var(--b3-theme-primary); border-radius: var(--b3-border-radius-b); color: var(--b3-theme-on-background); box-shadow: 0 14px 34px rgba(31, 38, 60, .22), 0 2px 8px rgba(31, 38, 60, .08); font-size: 12px; }
+.quick-notes-toast { position: fixed; z-index: 760; top: calc(var(--topbar-height) + 12px); right: 24px; display: flex; align-items: center; gap: 12px; min-height: 40px; padding: 10px 12px 10px 14px; border: 1px solid color-mix(in srgb, var(--lake-accent) 28%, var(--lake-border-2)); border-left: 3px solid var(--lake-accent); border-radius: var(--lake-radius-md); color: var(--lake-text-1); box-shadow: 0 14px 34px rgba(31, 38, 60, .22), 0 2px 8px rgba(31, 38, 60, .08); font-size: 12px; }
 
-.quick-notes-toast button { display: inline-flex; align-items: center; gap: 4px; border: 0; color: var(--b3-theme-primary); background: transparent; cursor: pointer; font-size: 12px; font-weight: 650; }
+.quick-notes-toast button { display: inline-flex; align-items: center; gap: 4px; border: 0; color: var(--lake-accent); background: transparent; cursor: pointer; font-size: 12px; font-weight: 650; }
 
 /* 小记工作台：身份色归入主 accent（原紫色身份随氛围渐变一并移除），一律由令牌派生 */
-.quick-notes-toast { background: var(--b3-theme-surface); }
+.quick-notes-toast { background: var(--lake-bg-block); }
 
 /* ===== 弹窗统一毛玻璃表面（跟随主题：亮色半透明白、暗色半透明黑，基于 --b3-theme-surface） ===== */
 /* 对话框类 */
@@ -101,10 +101,10 @@
 .settings-panel,
 .confirm-dialog,
 .quick-note-convert-dialog {
-  background: color-mix(in srgb, var(--b3-theme-surface) 74%, transparent);
-  border: 1px solid color-mix(in srgb, var(--b3-theme-surface-lighter) 55%, transparent);
-  border-radius: var(--b3-border-radius-b);
-  box-shadow: var(--b3-dialog-shadow), inset 0 0 0 .5px color-mix(in srgb, var(--b3-theme-surface) 35%, transparent);
+  background: color-mix(in srgb, var(--lake-bg-block) 74%, transparent);
+  border: 1px solid color-mix(in srgb, var(--lake-border-2) 55%, transparent);
+  border-radius: var(--lake-radius-md);
+  box-shadow: var(--lake-shadow-popover), inset 0 0 0 .5px color-mix(in srgb, var(--lake-bg-block) 35%, transparent);
   backdrop-filter: blur(24px) saturate(1.2);
   -webkit-backdrop-filter: blur(24px) saturate(1.2);
 }

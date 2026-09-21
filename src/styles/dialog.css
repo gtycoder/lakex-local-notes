@@ -1,5 +1,5 @@
 /* 浮层通用弹窗（属性等）：桌面/移动共用，保证同一套表面、间距、尺寸与拖拽调整 */
-.modal-backdrop { display: grid; position: fixed; z-index: 30; inset: 0; place-items: center; padding: 20px; background: var(--b3-mask-background, rgba(32, 36, 44, .33)); transition: opacity var(--dur-drawer) var(--ease-out); }
+.modal-backdrop { display: grid; position: fixed; z-index: 30; inset: 0; place-items: center; padding: 20px; background: var(--lake-scrim); transition: opacity var(--dur-drawer) var(--ease-out); }
 
 /* ---- 浮层通用弹窗（属性等同类弹窗统一用它，别再各写一套表面/圆角/阴影） ---- */
 .ln-dialog {
@@ -7,11 +7,11 @@
   display: flex;
   flex-direction: column;
   padding: 0;
-  border: 1px solid var(--b3-border-color, var(--b3-theme-surface-lighter));
+  border: 1px solid var(--lake-border-1);
   border-radius: 12px;
-  color: var(--b3-theme-on-background);
-  background: var(--b3-theme-background);
-  box-shadow: var(--b3-dialog-shadow, 0 8px 24px color-mix(in srgb, #000 18%, transparent));
+  color: var(--lake-text-1);
+  background: var(--lake-bg-panel);
+  box-shadow: var(--lake-shadow-popover);
   overflow: hidden;
 }
 .ln-dialog__head {
@@ -20,7 +20,7 @@
   gap: 8px;
   flex: 0 0 auto;
   padding: 12px 14px;
-  border-bottom: 1px solid var(--b3-theme-surface-lighter);
+  border-bottom: 1px solid var(--lake-border-2);
 }
 .ln-dialog__title {
   flex: 1 1 auto;
@@ -33,7 +33,7 @@
 }
 .ln-dialog__body { flex: 1 1 auto; min-height: 0; padding: 12px 14px; overflow: auto; }
 /* 右下角拖拽调整大小（默认大尺寸，见具体弹窗） */
-.ln-dialog__resize { position: absolute; right: 0; bottom: 0; width: 16px; height: 16px; cursor: nwse-resize; color: var(--b3-theme-on-surface); opacity: .5; touch-action: none; }
+.ln-dialog__resize { position: absolute; right: 0; bottom: 0; width: 16px; height: 16px; cursor: nwse-resize; color: var(--lake-text-3); opacity: .5; touch-action: none; }
 .ln-dialog__resize::after { content: ""; position: absolute; right: 3px; bottom: 3px; width: 8px; height: 8px; border-right: 2px solid currentColor; border-bottom: 2px solid currentColor; border-radius: 0 0 3px 0; }
 .ln-dialog__resize:hover { opacity: 1; }
 @media (max-width: 600px) { .ln-dialog__resize { display: none; } }
@@ -46,54 +46,54 @@
 .note-info-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px 20px; margin: 12px 0 4px; padding: 0; }
 .note-info-cell { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
 .note-info-cell--wide { grid-column: 1 / -1; }
-.note-info-cell dt { flex: 0 0 auto; color: var(--b3-theme-on-surface); font-size: 12px; }
-.note-info-cell dd { flex: 1 1 auto; min-width: 0; margin: 0; color: var(--b3-theme-on-background); font-size: 12px; word-break: break-all; }
-.note-info-section { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--b3-theme-surface-lighter); }
-.note-info-section-title { display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; color: var(--b3-theme-on-background); }
+.note-info-cell dt { flex: 0 0 auto; color: var(--lake-text-3); font-size: 12px; }
+.note-info-cell dd { flex: 1 1 auto; min-width: 0; margin: 0; color: var(--lake-text-1); font-size: 12px; word-break: break-all; }
+.note-info-section { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--lake-border-2); }
+.note-info-section-title { display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; color: var(--lake-text-1); }
 .note-info-section-title span { flex: 1 1 auto; }
 /* 长路径必然要断行：balance 让两行长度接近，避免第二行只剩 "ke" 这种孤儿尾巴 */
-.note-info-path { margin-top: 6px; font-size: 11px; color: var(--b3-theme-on-surface); word-break: break-all; text-wrap: balance; }
+.note-info-path { margin-top: 6px; font-size: 11px; color: var(--lake-text-3); word-break: break-all; text-wrap: balance; }
 .note-info-assets { display: grid; grid-template-columns: repeat(auto-fill, 56px); gap: 6px; margin-top: 8px; max-height: 190px; overflow: auto; align-content: start; }
-.note-info-asset { width: 56px; height: 56px; padding: 0; border: 1px solid var(--b3-theme-surface-lighter); border-radius: 6px; background: var(--b3-theme-surface); overflow: hidden; cursor: pointer; display: grid; place-items: center; }
+.note-info-asset { width: 56px; height: 56px; padding: 0; border: 1px solid var(--lake-border-2); border-radius: 6px; background: var(--lake-bg-block); overflow: hidden; cursor: pointer; display: grid; place-items: center; }
 .note-info-asset img { width: 100%; height: 100%; object-fit: cover; }
-.note-info-asset-glyph { color: var(--b3-theme-on-surface); }
-.note-info-asset-more { align-self: center; font-size: 11px; color: var(--b3-theme-on-surface); }
-.note-info-history { list-style: none; margin: 8px 0 0; padding: 0; font-size: 12px; color: var(--b3-theme-on-surface); max-height: 200px; overflow: auto; }
+.note-info-asset-glyph { color: var(--lake-text-3); }
+.note-info-asset-more { align-self: center; font-size: 11px; color: var(--lake-text-3); }
+.note-info-history { list-style: none; margin: 8px 0 0; padding: 0; font-size: 12px; color: var(--lake-text-3); max-height: 200px; overflow: auto; }
 .note-info-history li { align-items: center; gap: 6px; }
 .note-info-history em { margin-left: auto; font-style: normal; opacity: .7; }
-.note-info-empty { margin: 8px 0 0; font-size: 12px; color: var(--b3-theme-on-surface); }
+.note-info-empty { margin: 8px 0 0; font-size: 12px; color: var(--lake-text-3); }
 
 .note-info-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; }
 
 .note-info-breadcrumb { display: flex; align-items: center; flex-wrap: wrap; gap: 2px; }
 .note-info-crumb-wrap { display: inline-flex; align-items: center; }
-.note-info-crumb { padding: 0; border: 0; background: transparent; font-size: 12px; color: var(--b3-theme-primary); cursor: pointer; }
-.note-info-crumb.is-current { color: var(--b3-theme-on-background); cursor: default; }
-.note-info-crumb-sep { color: var(--b3-theme-on-surface); }
+.note-info-crumb { padding: 0; border: 0; background: transparent; font-size: 12px; color: var(--lake-accent); cursor: pointer; }
+.note-info-crumb.is-current { color: var(--lake-text-1); cursor: default; }
+.note-info-crumb-sep { color: var(--lake-text-3); }
 
 .note-info-stats { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
-.note-info-stat { display: inline-flex; align-items: center; gap: 4px; padding: 2px 9px; border-radius: 999px; background: var(--b3-theme-surface); font-size: 12px; color: var(--b3-theme-on-background); }
-.note-info-stat em { font-style: normal; color: var(--b3-theme-on-surface); }
+.note-info-stat { display: inline-flex; align-items: center; gap: 4px; padding: 2px 9px; border-radius: 999px; background: var(--lake-bg-block); font-size: 12px; color: var(--lake-text-1); }
+.note-info-stat em { font-style: normal; color: var(--lake-text-3); }
 .note-info-history li { display: block; padding: 0; }
-.note-info-history-row { display: flex; align-items: center; gap: 6px; width: 100%; padding: 4px 6px; border: 0; border-radius: 4px; background: transparent; font-size: 12px; color: var(--b3-theme-on-surface); cursor: pointer; text-align: left; }
-.note-info-history-row:hover, .note-info-history-row.is-active { background: var(--b3-theme-surface); }
+.note-info-history-row { display: flex; align-items: center; gap: 6px; width: 100%; padding: 4px 6px; border: 0; border-radius: 4px; background: transparent; font-size: 12px; color: var(--lake-text-3); cursor: pointer; text-align: left; }
+.note-info-history-row:hover, .note-info-history-row.is-active { background: var(--lake-bg-block); }
 .note-info-history-row em { margin-left: auto; font-style: normal; opacity: .7; }
-.note-info-history-hint { color: var(--b3-theme-primary); }
-.note-info-history-preview { margin-top: 8px; max-height: 260px; overflow: auto; padding: 8px 10px; border: 1px solid var(--b3-theme-surface-lighter); border-radius: 6px; background: var(--b3-theme-surface); font-size: 12px; line-height: 1.6; }
+.note-info-history-hint { color: var(--lake-accent); }
+.note-info-history-preview { margin-top: 8px; max-height: 260px; overflow: auto; padding: 8px 10px; border: 1px solid var(--lake-border-2); border-radius: 6px; background: var(--lake-bg-block); font-size: 12px; line-height: 1.6; }
 .note-info-history-preview img { max-width: 100%; height: auto; }
 .note-info-history-preview h1, .note-info-history-preview h2, .note-info-history-preview h3 { font-size: 14px; margin: 6px 0; }
 /* 历史快照内联预览（只读 Lake viewer，260916 W-10：替代裸 dangerouslySetInnerHTML 注入快照正文）。
    固定高度给 .ne-viewer 内部滚动；mount 撑满容器供内核虚拟渲染测视口（对齐 HistoryPanel 口径）。 */
-.note-info-history-viewer { height: 260px; margin-top: 8px; overflow: auto; border: 1px solid var(--b3-theme-surface-lighter); border-radius: 6px; background: var(--b3-theme-surface); }
+.note-info-history-viewer { height: 260px; margin-top: 8px; overflow: auto; border: 1px solid var(--lake-border-2); border-radius: 6px; background: var(--lake-bg-block); }
 .note-info-history-viewer .lake-editor-mount { min-height: 100%; }
-.note-info-error { margin: 12px 14px; font-size: 12px; color: var(--b3-theme-error, #d23f31); }
+.note-info-error { margin: 12px 14px; font-size: 12px; color: var(--lake-status-error); }
 
 /* 附件重命名弹窗（复用 .ln-dialog） */
 .asset-rename-dialog { width: min(420px, 92vw); }
 .asset-rename-field { display: flex; align-items: center; gap: 6px; }
 .asset-rename-field .b3-text-field { flex: 1 1 auto; min-width: 0; }
-.asset-rename-ext { flex: 0 0 auto; font-size: 12px; color: var(--b3-theme-on-surface); }
-.asset-rename-hint { margin: 8px 0 0; font-size: 11px; color: var(--b3-theme-on-surface); }
+.asset-rename-ext { flex: 0 0 auto; font-size: 12px; color: var(--lake-text-3); }
+.asset-rename-hint { margin: 8px 0 0; font-size: 11px; color: var(--lake-text-3); }
 .asset-rename-actions { display: flex; justify-content: flex-end; gap: 9px; margin-top: 14px; }
 
 /* 窄屏（移动端）：两列折成一列 */

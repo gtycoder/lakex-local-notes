@@ -311,7 +311,7 @@ html[data-theme="dark"] .document-pane .ne-engine > ne-h6 ne-heading-content {
 }
 
 .top-menu > button span small {
-  color: var(--b3-theme-on-surface-light);
+  color: var(--lake-text-4);
   font-size: 11px;
   white-space: nowrap;
 }
@@ -429,7 +429,7 @@ html[data-theme="dark"] .document-pane .ne-engine > ne-h6 ne-heading-content {
   left: 8px;
   height: 3px;
   border-radius: 2px;
-  background: var(--b3-theme-primary, var(--lake-accent));
+  background: var(--lake-accent);
   pointer-events: none;
 }
 
