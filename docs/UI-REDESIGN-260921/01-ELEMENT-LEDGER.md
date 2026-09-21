@@ -361,82 +361,84 @@
 - [ ] 有内容
 - [ ] 看不见却在筛选
 
+> **✅ P5-d 实测：56/56 条设置项全部存在**（默认配置下可见 54 条；2 条为条件渲染 —— `sync-auto-interval` 仅在自动同步模式=按固定间隔时出现、`browser-open` 仅在浏览器端开关打开时出现，均已在源码核对）。
+
 ## C. 设置项（56 条 / 10 分类）
 
 打勾标准：设置面板中仍存在，且设置搜索能用 `data-set-id` 命中。
 
 ### editor（4）
-- [ ] `editor-font-size` 正文字号（both）
-- [ ] `editor-outline-enhance` 大纲增强（desktop）
-- [ ] `editor-max-open-tabs` 最大同时打开标签数（both）
-- [ ] `editor-max-attachment` 附件大小上限（both）
+- [x] `editor-font-size` 正文字号（both）
+- [x] `editor-outline-enhance` 大纲增强（desktop）
+- [x] `editor-max-open-tabs` 最大同时打开标签数（both）
+- [x] `editor-max-attachment` 附件大小上限（both）
 
 ### appearance（1）
-- [ ] `appearance-theme` 主题（both）
+- [x] `appearance-theme` 主题（both）
 
 ### shortcuts（6）
-- [ ] `shortcut-search` 打开全局搜索（标题和正文）（desktop）
-- [ ] `shortcut-focus` 进入或退出专注模式（desktop）
-- [ ] `shortcut-move` 在搜索结果中移动（desktop）
-- [ ] `shortcut-open` 打开搜索结果并定位命中（desktop）
-- [ ] `shortcut-open-tab` 在新标签打开并定位命中（desktop）
-- [ ] `shortcut-esc` 关闭当前菜单或浮层（desktop）
+- [x] `shortcut-search` 打开全局搜索（标题和正文）（desktop）
+- [x] `shortcut-focus` 进入或退出专注模式（desktop）
+- [x] `shortcut-move` 在搜索结果中移动（desktop）
+- [x] `shortcut-open` 打开搜索结果并定位命中（desktop）
+- [x] `shortcut-open-tab` 在新标签打开并定位命中（desktop）
+- [x] `shortcut-esc` 关闭当前菜单或浮层（desktop）
 
 ### resources（1）
-- [ ] `search-rebuild` 重建全文搜索索引（desktop）
+- [x] `search-rebuild` 重建全文搜索索引（desktop）
 
 ### history（6）
-- [ ] `history-stats` 快照占用（desktop）
-- [ ] `history-max-snapshots` 每文档上限（desktop）
-- [ ] `history-retention-days` 保留天数（desktop）
-- [ ] `history-cleanup-interval` 定期清理（小时）（desktop）
-- [ ] `history-snapshot-interval` 自动快照（分钟）（desktop）
-- [ ] `history-data-health` 一致性检查（desktop）
+- [x] `history-stats` 快照占用（desktop）
+- [x] `history-max-snapshots` 每文档上限（desktop）
+- [x] `history-retention-days` 保留天数（desktop）
+- [x] `history-cleanup-interval` 定期清理（小时）（desktop）
+- [x] `history-snapshot-interval` 自动快照（分钟）（desktop）
+- [x] `history-data-health` 一致性检查（desktop）
 
 ### sync（19）
-- [ ] `sync-enabled` 启用云同步（both）
-- [ ] `sync-auto-mode` 自动同步模式（both）
-- [ ] `sync-auto-interval` 自动同步间隔（分钟）（both）
-- [ ] `backup-export` 整库备份（desktop）
-- [ ] `backup-restore` 从云端恢复（desktop）
-- [ ] `s3-endpoint` Endpoint（both）
-- [ ] `s3-access-key` Access Key（both）
-- [ ] `s3-secret-key` Secret Key（both）
-- [ ] `s3-bucket` Bucket（both）
-- [ ] `s3-region` Region（both）
-- [ ] `s3-prefix` 对象前缀（both）
-- [ ] `s3-path-style` 使用 Path-style URL（both）
-- [ ] `s3-connection` 连接（both）
-- [ ] `gc-status` 回收状态（desktop）
-- [ ] `gc-retention-days` 回收窗口（天）（desktop）
-- [ ] `gc-interval-hours` 自动对账周期（小时）（desktop）
-- [ ] `gc-mirror` 云端只是镜像（desktop）
-- [ ] `gc-pending-list` 待回收键明细（desktop）
-- [ ] `gc-log` 删除记录（desktop）
+- [x] `sync-enabled` 启用云同步（both）
+- [x] `sync-auto-mode` 自动同步模式（both）
+- [x] `sync-auto-interval` 自动同步间隔（分钟）（both）
+- [x] `backup-export` 整库备份（desktop）
+- [x] `backup-restore` 从云端恢复（desktop）
+- [x] `s3-endpoint` Endpoint（both）
+- [x] `s3-access-key` Access Key（both）
+- [x] `s3-secret-key` Secret Key（both）
+- [x] `s3-bucket` Bucket（both）
+- [x] `s3-region` Region（both）
+- [x] `s3-prefix` 对象前缀（both）
+- [x] `s3-path-style` 使用 Path-style URL（both）
+- [x] `s3-connection` 连接（both）
+- [x] `gc-status` 回收状态（desktop）
+- [x] `gc-retention-days` 回收窗口（天）（desktop）
+- [x] `gc-interval-hours` 自动对账周期（小时）（desktop）
+- [x] `gc-mirror` 云端只是镜像（desktop）
+- [x] `gc-pending-list` 待回收键明细（desktop）
+- [x] `gc-log` 删除记录（desktop）
 
 ### trash（1）
-- [ ] `trash-auto-purge-days` 回收站自动过期（天）（both）
+- [x] `trash-auto-purge-days` 回收站自动过期（天）（both）
 
 ### browser（2）
-- [ ] `browser-enabled` 浏览器端（desktop）
-- [ ] `browser-open` 打开浏览器（desktop）
+- [x] `browser-enabled` 浏览器端（desktop）
+- [x] `browser-open` 打开浏览器（desktop）
 
 ### logs（1）
-- [ ] `logs-main` 主进程日志（desktop）
+- [x] `logs-main` 主进程日志（desktop）
 
 ### about（15）
-- [ ] `about-app` Lake Notes（desktop）
-- [ ] `about-version` 应用版本（desktop）
-- [ ] `about-runtime` 运行时（desktop）
-- [ ] `about-deps` 内核与关键依赖（desktop）
-- [ ] `about-storage-stats` 内容统计（desktop）
-- [ ] `about-data-dir` 数据目录（desktop）
-- [ ] `about-workspace-dir` 工作空间（desktop）
-- [ ] `about-assets-dir` 资源目录（desktop）
-- [ ] `about-history-dir` 历史快照目录（desktop）
-- [ ] `about-logs-dir` 日志目录（desktop）
-- [ ] `about-diagnostics` 复制诊断信息（desktop）
-- [ ] `about-health-entry` 一致性检查（desktop）
-- [ ] `about-siyuan-license` 思源笔记 SiYuan（desktop）
-- [ ] `about-lakex-license` 语雀 Lake 内核（desktop）
-- [ ] `about-third-party` 开源依赖（desktop）
+- [x] `about-app` Lake Notes（desktop）
+- [x] `about-version` 应用版本（desktop）
+- [x] `about-runtime` 运行时（desktop）
+- [x] `about-deps` 内核与关键依赖（desktop）
+- [x] `about-storage-stats` 内容统计（desktop）
+- [x] `about-data-dir` 数据目录（desktop）
+- [x] `about-workspace-dir` 工作空间（desktop）
+- [x] `about-assets-dir` 资源目录（desktop）
+- [x] `about-history-dir` 历史快照目录（desktop）
+- [x] `about-logs-dir` 日志目录（desktop）
+- [x] `about-diagnostics` 复制诊断信息（desktop）
+- [x] `about-health-entry` 一致性检查（desktop）
+- [x] `about-siyuan-license` 思源笔记 SiYuan（desktop）
+- [x] `about-lakex-license` 语雀 Lake 内核（desktop）
+- [x] `about-third-party` 开源依赖（desktop）

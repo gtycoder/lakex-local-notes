@@ -44,7 +44,7 @@ const FILES = [
  * 并在同一批把来源文件的基线调小（搬走多少、留下多少要对得上，让总量保持可见）。 */
 const BASELINE: Record<string, { decls: number; dupGroups: number }> = {
   "styles/index.css": { decls: 0, dupGroups: 0 },   // UI 重设计 P1：单入口（@layer 声明 + @import 编排，0 声明）
-  "styles/feature.css": { decls: 2, dupGroups: 0 },   // P3：正文/等宽字体两处（实测）
+  "styles/feature.css": { decls: 31, dupGroups: 0 },  // P3 字体 2 处 + P5-d 设置面板版式（实测）
   "styles/kit.css": { decls: 422, dupGroups: 0 },     // P4：组件库 14 件（实测）
   "styles/chrome.css": { decls: 189, dupGroups: 0 },  // P5：活动栏/目录栏头部/状态栏 + 顶栏/标签页/面包屑（实测）
   "styles/overlay.css": { decls: 57, dupGroups: 0 },  // P5-c：对话框（ln-dialog + floating-dialog）/ 菜单 / 气泡（实测）

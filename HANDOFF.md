@@ -1756,7 +1756,7 @@ lsof -ti:1432 -ti:9231 | sort -u | xargs kill
 > 设计规格（外部）= `/Users/admin/file/local-lake/ui-design-inputs/out/design-system/`（8 项交付，**只作参考**）。
 > 分支 `feat/ui-redesign`，基线 `origin/master` = `17bafbe`；**未 push、未合 master**。
 
-### 一、已完成（7 个提交）
+### 一、已完成（8 个提交）
 - **b53a456 docs**：元素底账 + 实现方案（阶段 P0–P8 / 层序 / 主题即数据 / 硬指标 / 验收口径变更）。
 - **e5f171e P1 @layer 层骨架**：新增 `src/styles/index.css` 单入口，`@layer legacy,tokens,reset,kit,shell,feature,overlay,a11y`；旧样式（含内核 style.css / 思源 / 旧壳层）**按原顺序整体入 legacy 层**；删 `src/styles.css`；围栏 `cssLayers.test.ts` 入口项同步。
   - 关键机制：**legacy 最低 ⇒ 新层写入即压过旧样式**，迁移期不靠特异性取胜。
@@ -1792,6 +1792,11 @@ lsof -ti:1432 -ti:9231 | sort -u | xargs kill
   - **拆掉阻塞的 legacy `!important` 1 处**：`styles/app/settings.css` 的 `border: 1px solid var(--floating-dialog-border) !important`（并把 `b3/components.css` 里三个 `--floating-dialog-*` 变量从 b3 令牌改指新令牌）。
   - 实测三套主题：菜单 面/边/圆角 10/内边距 6、项 27+6；`.floating-dialog` 底=panel、边=**border-1**（light rgb(231,233,236) / dark rgb(42,47,53) / warm rgb(231,223,208)）、圆角 **14**、dialog 阴影。
   - 底账：**B1 打勾**（工作空间菜单两项均实测存在）。
+- **P5-d 逐屏迁移（设置面板内层）**：规格写进桌面专属的 `src/styles/feature.css`（限定 `.settings-panel` 作用域，**不改类名、不动移动端也加载的共享文件**）。
+  - 分组标题 12px/600 text-2；分组卡 `--lake-bg-block` + radius 10；行 **≥44px** + 8/12 内边距 + 1px `--lake-border-2` 分隔；标签 12px/600 text-1；控件列 `min-width: 200px` 右对齐；左侧分类导航选中 = accent-tint + accent-text + 600。
+  - 实测三套主题 `getComputedStyle`：title 12/600、items bg=block+radius 10、item 44px+分隔、name 12/600/text-1、ctl 200px、navActive tint —— 全部达标；设置面板截图核对。
+  - **设置项存在性全量核对：56/56 全部存在**（默认可见 54 条；`sync-auto-interval`、`browser-open` 为**条件渲染**，已在源码核对条件）⇒ 底账 **C 区 56 条全部打勾**。
+  - ⚠️ **两项被共享层 `!important` 挡住，本批刻意未迁**（见下文「待移动端批次」）。
 
 ### 二、过渡桥接（P7 删 legacy 时一并移除）
 - 旧 `--lake-*` 名字（`--lake-shell/panel/canvas/surface/accent-soft/shadow-* …`）→ 指向新令牌。
@@ -1808,6 +1813,13 @@ lsof -ti:1432 -ti:9231 | sort -u | xargs kill
 
 ### 四、下一步（P5 起）
 P4 组件库 14 件 → P5 逐屏迁移（每屏对照底账打勾）→ P6 第三方容器壳统一 → P7 收尾（删源/归并 4 对同名文件/hex-rgb 收口/`!important` ≤10）→ P8 验收交付。
+
+### 五·补 待移动端批次（本批刻意未做，桌面侧已就绪但被共享文件挡住）
+
+> 这两条的 CSS 声明在**移动端也会加载的共享文件**里，且用了 `!important`（`@layer` 下 legacy 层的 `!important` 会压过任何新层，所以只能删、不能对压）。删了会让移动端外观发生变化 ⇒ 按「桌面做完再做移动端」的决策，**留到移动端批次一起处理**。
+
+1. `b3/siyuan/business/_config.scss` 的 `.config-items .b3-label__text { font-size: 13px !important }` —— 挡住设计要求的**设置项说明文字 10.5px**（现为 13px）。
+2. `styles/components.css` 的 `.seg__item` **5 处 `!important`**（`border/background/color` 与 `.is-active`）—— 挡住**分段控件 22px 高 / raised 选中**的设计规格；该 `!important` 是移动端用来压 `b3-button--outline` 的，动了会影响移动端。
 
 ### 五、坑（本批新增）
 - **不要用反引号包裹内容去 `git commit -m`**：bash 会做命令替换，提交信息被吞（本批踩一次，已 `--amend -F` 修正）。

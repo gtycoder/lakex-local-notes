@@ -19,3 +19,57 @@ samp,
 pre {
   font-family: var(--lake-font-family-mono);
 }
+
+/* ── 设置面板版式（P5-d）─────────────────────────────────────────────
+ * 类名是共享原语（src/components/settingsPrimitives.tsx，移动端 SettingsDrawer 也用），
+ * 所以**不改类名、也不动共享文件**：规格写在桌面专属的 feature 层并限定 .settings-panel 作用域
+ * ⇒ 移动端不加载本层（它只 import styles/components.css 等），天然不受影响。
+ * 规格来源：设计 COMPONENTS.md 15 表单行（卡 = --lake-bg-block / radius 10；行 ≥44px；
+ * 标签 12/600 --lake-text-1；说明 10.5 --lake-text-3；控件右对齐固定列 200px）。
+ *
+ * ⚠️ 仍有两项被共享层的 !important 挡住、**本批未迁**（见 HANDOFF「待移动端批次」）：
+ *   ① 【.config-items .b3-label__text】的 font-size: 13px !important（在 b3/siyuan/business/_config.scss）
+ *   ② 【.seg__item】的 5 处 !important（在 styles/components.css，移动端靠它压 b3-button--outline）
+ *   两处都在移动端也会加载的共享文件里，动了会影响移动端 ⇒ 留到移动端批次一起处理。 */
+.settings-panel .config-group { margin: 0 0 var(--lake-space-xxl); }
+.settings-panel .config-group:last-child { margin-bottom: 0; }
+.settings-panel .config-title {
+  margin: 0 0 var(--lake-space-sm);
+  color: var(--lake-text-2);
+  font-size: var(--lake-font-size-small);
+  font-weight: var(--lake-font-weight-semibold);
+}
+.settings-panel .config-items {
+  border-radius: var(--lake-radius-md);
+  background: var(--lake-bg-block);
+}
+.settings-panel .config-item,
+.settings-panel .config-block {
+  min-height: 44px;
+  padding: var(--lake-space-md) var(--lake-space-lg);
+  border-bottom: 1px solid var(--lake-border-2);
+}
+.settings-panel .config-item:last-child,
+.settings-panel .config-block:last-child { border-bottom: 0; }
+.settings-panel .config-item:hover { background: var(--lake-bg-hover); }
+.settings-panel .config-name,
+.settings-panel .config-block__name {
+  color: var(--lake-text-1);
+  font-size: var(--lake-font-size-small);
+  font-weight: var(--lake-font-weight-semibold);
+}
+.settings-panel .config-block__text { color: var(--lake-text-3); font-size: var(--lake-font-size-micro); }
+.settings-panel .config-item__ctl { flex: 0 0 auto; min-width: 200px; justify-content: flex-end; }
+
+/* 左侧分类导航 */
+.settings-panel .settings-nav-item {
+  border-radius: var(--lake-radius-sm);
+  color: var(--lake-text-2);
+  font-size: var(--lake-font-size-small);
+}
+.settings-panel .settings-nav-item:hover { color: var(--lake-text-1); background: var(--lake-bg-hover); }
+.settings-panel .settings-nav-item.active {
+  color: var(--lake-accent-text);
+  background: var(--lake-accent-tint);
+  font-weight: var(--lake-font-weight-semibold);
+}
