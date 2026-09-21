@@ -69,5 +69,13 @@
   --radius-xl: var(--lake-radius-xl);
   --radius-pill: var(--lake-radius-pill);
   --lake-motion-standard: var(--lake-motion-panel);
-}
 
+  /* 大纲级别的 6 色调色板（P7-d）：级别是**语义**不是主题色 ⇒ 不随主题变，但按硬指标
+   * 「颜色字面量只允许出现在主题文件」，字面量统一收在这里，使用处只引用令牌。 */
+  --lake-outline-lv1: #a47716; --lake-outline-lv1-bg: rgba(224, 177, 45, .20);
+  --lake-outline-lv2: #21816d; --lake-outline-lv2-bg: rgba(56, 166, 134, .16);
+  --lake-outline-lv3: #8351a6; --lake-outline-lv3-bg: rgba(151, 99, 191, .16);
+  --lake-outline-lv4: #315fc4; --lake-outline-lv4-bg: rgba(63, 112, 214, .16);
+  --lake-outline-lv5: #c25b43; --lake-outline-lv5-bg: rgba(212, 112, 82, .14);
+  --lake-outline-lv6: #397f98; --lake-outline-lv6-bg: rgba(74, 151, 176, .14);
+}

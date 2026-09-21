@@ -1756,7 +1756,7 @@ lsof -ti:1432 -ti:9231 | sort -u | xargs kill
 > 设计规格（外部）= `/Users/admin/file/local-lake/ui-design-inputs/out/design-system/`（8 项交付，**只作参考**）。
 > 分支 `feat/ui-redesign`，基线 `origin/master` = `17bafbe`；**未 push、未合 master**。
 
-### 一、已完成（20 个提交）
+### 一、已完成（21 个提交）
 - **b53a456 docs**：元素底账 + 实现方案（阶段 P0–P8 / 层序 / 主题即数据 / 硬指标 / 验收口径变更）。
 - **e5f171e P1 @layer 层骨架**：新增 `src/styles/index.css` 单入口，`@layer legacy,tokens,reset,kit,shell,feature,overlay,a11y`；旧样式（含内核 style.css / 思源 / 旧壳层）**按原顺序整体入 legacy 层**；删 `src/styles.css`；围栏 `cssLayers.test.ts` 入口项同步。
   - 关键机制：**legacy 最低 ⇒ 新层写入即压过旧样式**，迁移期不靠特异性取胜。
@@ -1871,6 +1871,12 @@ lsof -ti:1432 -ti:9231 | sort -u | xargs kill
   - 做法：把 `tokens.css` 精简为**只留 4 段非令牌规则**（`@keyframes ln-indicator-in`、`.lake-editor-mount` 阅读态字号继承、`:where(...):focus-visible` 焦点环、两个无障碍媒体偏好块），删掉 `:root` 与 `[data-theme="dark"]` 两段共 50 个定义。
   - **文件位置不变** ⇒ 层叠等价；对拍 **missing 0 / diffs 0**。
   - 指标：颜色字面量 **109+102 → 67+79**。剩余大头：`app/shell.css` 33、`outline.css` 31、`app/tabs.css` 22、`attachment-preview.css` 15、`app/misc.css` 15。
+- **P7-d 续（第二步）**：颜色字面量 **109+102 → 43+63**。
+  - **删死回退**（机械且可证）：`var(--x, 字面量)` 里，只要 `--x` 在桌面可达集合里**有定义**，回退就是死代码 ⇒ 共删 **17 处**（shell 5 / misc 2 / quick-notes 1 / attachment-preview 1 / outline 8）。
+  - **大纲 6 级调色板令牌化**：`outline.css` 的 6 组「级别色 + 级别底」（级别是**语义**不是主题色）收进 `themes/base.css` 的 `--lake-outline-lv{1..6}(-bg)` —— 字面量只允许出现在主题文件，使用处只引用令牌。`outline.css` 现 **0 字面量**。
+  - 其余旧品牌蓝/中性色按语义换成 `--lake-accent-tint` / `--lake-bg-panel` / `--lake-bg-block` / `--lake-border-1` 等。
+  - 对拍：**missing 0 / diffs 0**（大纲侧栏默认不渲染，故这批换色在快照里无差异）。
+  - 剩余 43+63 大头：`app/shell.css` 28（多为**带方向的阴影**）、`app/tabs.css` 22（旧品牌蓝 + 白/黑透明叠层）、`attachment-preview.css` 14、`app/misc.css` 13、`image-lightbox.css` 9。
   - ⚠️ 注意 `tokens.css` 里还压着 **11 个 `!important`**（reduced-motion 6 + reduced-transparency 5），是 P7-e 的大头；其中 reduced-transparency 那两条 `backdrop-filter: none !important` 在"全实心"决策后本就多余（应改为删掉 `app/dialogs.css` 里的玻璃规则）。
 
 ### 二、过渡桥接（P7 删 legacy 时一并移除）

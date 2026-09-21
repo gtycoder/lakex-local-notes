@@ -148,9 +148,9 @@
   .tabbar-action[data-tooltip]:hover::after,
   .tabbar-action[data-tooltip]:focus-visible::after { opacity: 1; transform: translate(-50%, 0); }
 
-  .sync-tab-action.syncing { color: var(--lake-accent, #3b5bdb); }
+  .sync-tab-action.syncing { color: var(--lake-accent); }
   .sync-tab-action.syncing svg { animation: shell-sync-pulse 1.25s ease-in-out infinite; }
-  .sync-tab-action.syncing .sync-state-dot { background: var(--lake-accent, #3b5bdb); animation: shell-sync-dot 1.25s ease-in-out infinite; }
+  .sync-tab-action.syncing .sync-state-dot { background: var(--lake-accent); animation: shell-sync-dot 1.25s ease-in-out infinite; }
   .sync-tab-action.success { color: var(--lake-sync-success); }
   .sync-tab-action.success .sync-state-dot { background: var(--lake-sync-success); }
   .sync-tab-action.error { color: var(--lake-error); }

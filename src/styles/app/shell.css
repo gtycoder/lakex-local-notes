@@ -96,7 +96,7 @@
 
 .document-pane { min-height: 0; overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; }
 
-.document-pane .lake-editor-mount .ne-ui { position: sticky; z-index: 150; background: var(--lakex-editor-background, #fff); }
+.document-pane .lake-editor-mount .ne-ui { position: sticky; z-index: 150; background: var(--lakex-editor-background); }
 
 .document-pane .lake-editor-mount .ne-inner-overlay-container {
   /* Raise above the sticky .ne-ui toolbar (z-index: 20) so table card toolbars can receive hover. */
@@ -122,9 +122,9 @@
 
 .empty-workspace { gap: 6px; }
 
-.empty-workspace-icon { display: grid; place-items: center; width: 56px; height: 56px; margin-bottom: 8px; border-radius: var(--radius-xl); color: var(--lake-accent, var(--lake-accent, #3b5bdb)); background: var(--lake-accent-soft, #edf3ff); }
+.empty-workspace-icon { display: grid; place-items: center; width: 56px; height: 56px; margin-bottom: 8px; border-radius: var(--radius-xl); color: var(--lake-accent); background: var(--lake-accent-soft); }
 
-.empty-workspace h2 { margin: 0; color: var(--lake-text, #252a33); font-size: 16px; font-weight: 600; letter-spacing: -.01em; }
+.empty-workspace h2 { margin: 0; color: var(--lake-text); font-size: 16px; font-weight: 600; letter-spacing: -.01em; }
 
 .empty-workspace-hint { margin: 0 0 6px; color: var(--lake-text-tertiary); font-size: 13px; }
 
@@ -708,7 +708,7 @@ html[data-theme="dark"] .document-pane .ne-engine > ne-h6 ne-heading-content {
   height: 7px;
   margin-left: 1px;
   border-radius: 50%;
-  background: var(--lake-sync-pending, #d29042);
+  background: var(--lake-sync-pending);
 }
 
 .tab-item .tab-close {
