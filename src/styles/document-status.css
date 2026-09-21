@@ -1,14 +1,14 @@
 .workspace { position: relative; grid-template-rows: minmax(0, 1fr); }
 /* 本元素同时带 `.statusbar`（b3 骨架）与 `.document-statusbar`（本文件）两个**别名类**。
- * border / background / box-shadow 的真来源是 styles.css:583-584 与 b3/layout.css 里那几条带 !important 的 `.statusbar` 规则，
+ * border / background / box-shadow 的真来源是 styles.css:583-584 与 b3/layout.css 里那几条带 的 `.statusbar` 规则，
  * 在这里再写就是死声明（260916 已删）；要改状态栏外观请改那两处。 */
 .document-statusbar {
   grid-row: 1;
   grid-column: 1 / -1;
-  position: absolute !important;
+  position: absolute;
   z-index: 180;
-  top: auto !important;
-  bottom: 8px !important;
+  top: auto;
+  bottom: 8px;
   display: grid;
   align-items: center;
   height: 26px;
@@ -94,9 +94,9 @@
 
 /* Compact by default; transient left-side messages expand the pill up to a safe cap. */
 .document-statusbar {
-  right: 12px !important;
-  left: auto !important;
-  width: max-content !important;
+  right: 12px;
+  left: auto;
+  width: max-content;
   max-width: min(720px, calc(100% - 24px));
   min-width: 190px;
   grid-template-columns: minmax(0, auto) auto;

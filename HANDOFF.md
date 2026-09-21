@@ -1756,7 +1756,7 @@ lsof -ti:1432 -ti:9231 | sort -u | xargs kill
 > 设计规格（外部）= `/Users/admin/file/local-lake/ui-design-inputs/out/design-system/`（8 项交付，**只作参考**）。
 > 分支 `feat/ui-redesign`，基线 `origin/master` = `17bafbe`；**未 push、未合 master**。
 
-### 一、已完成（23 个提交）
+### 一、已完成（24 个提交）
 - **b53a456 docs**：元素底账 + 实现方案（阶段 P0–P8 / 层序 / 主题即数据 / 硬指标 / 验收口径变更）。
 - **e5f171e P1 @layer 层骨架**：新增 `src/styles/index.css` 单入口，`@layer legacy,tokens,reset,kit,shell,feature,overlay,a11y`；旧样式（含内核 style.css / 思源 / 旧壳层）**按原顺序整体入 legacy 层**；删 `src/styles.css`；围栏 `cssLayers.test.ts` 入口项同步。
   - 关键机制：**legacy 最低 ⇒ 新层写入即压过旧样式**，迁移期不靠特异性取胜。
@@ -1885,6 +1885,17 @@ lsof -ti:1432 -ti:9231 | sort -u | xargs kill
     - 逐文件映射：`attachment-preview.css` 14→0、`misc.css` 13→0、`image-lightbox.css` 9→0、`dialogs.css` 5→0、`base.css`(两个 legacy 阴影变量)4→0、`quick-notes.css` 4→0、`vendor-board.css` 4→0、`editor.css` / `panels.css` / `components.css` 各 1→0。
     - 对拍：**missing 0 / diffs 0**。
   - ✅ **硬指标「颜色字面量只出现在主题文件」达成**：桌面颜色字面量 **394+234 → 0**。
+- **P7-e `!important` 95 → 9 —— ✅ 达成（五项硬指标全部达成）**：
+  - **先删玻璃**：删掉 `tokens.css` 的 `prefers-reduced-transparency` 块与 `app/dialogs.css` 的「弹窗统一毛玻璃」规则（用户决策是**全实心**，实心表面早已由 overlay 层给出）——正解是删掉源头，而不是继续用 `!important` 压制。
+  - **批量去 `!important`**：桌面各域文件 **95 → 16**（思源层已删，绝大部分 `!important` 已无对手）。**用对拍找出真需要保留的 3 处**：
+    - `components.css` 的 `.settings-panel-large { width: … !important }` —— 面板宽度由 JS 的 FloatingPanel 以 **inline style** 给出，**只有 `!important` 能压过 inline**（删掉后对拍立刻显示宽度 1000 → 840）⇒ 保留并加注释。
+    - `components.css` 的 `.seg__item` 5 条 —— 与 `.b3-button--outline` 同元素、且该文件**双端共享**（原先记录的「阻塞项 ②」）⇒ 保留并加注释。
+    - compat 的 `.fn__none { display: none !important }` —— 工具类语义要求 ⇒ 保留。
+  - **a11y 改造（本步最漂亮的一处）**：把散在 `tokens.css` / `motion.css` 的 reduced-motion 契约**合并进新的最高层 `src/styles/a11y.css`**（`@import "./a11y.css" layer(a11y)`）。层序声明里 `a11y` 本来就是最后一层 ⇒ 这些规则天然压过所有其它层（含内核 legacy），**因此一个 `!important` 都不需要**，比原来靠 `!important` 取胜更正确、也不再和组件规则打架。
+    - **实测验证**（CDP `Emulation.setEmulatedMedia` 模拟 `prefers-reduced-motion: reduce`）：正常态 `.tab-item`/`.sidebar`/`.tab-close`/`.tree-row`/`.dock-icon-btn` 过渡分别为 0.13s/0.19s/0.1s/0.25s/0.13s；**reduced 态全部变 0s** ⇒ a11y 契约仍然生效。
+  - **顺手修一个真回归**：批量去 `!important` 时误删了 `.seg__item` 的必需项，对拍发现「分段控件变成描边按钮」⇒ 已恢复并在注释里写明原因。
+  - 顺带：`.ft__error`（破坏性动作，如回收站「清空」）的红色此前被 kit 层的 `.b3-button--outline` 压过 ⇒ 在 kit 层补 `.b3-button.ft__error` 危险变体（**用层序/特异性取胜，不用 `!important`**）。
+  - ⚠️ **围栏盲区（已修）**：`cssLayers.test.ts` 的扫描器**不进入 `@layer {}` 块**，所以「文件内自包 `@layer`」会被漏检 —— `a11y.css` 最初就是自包写法（围栏里声明数恒为 0）。已改为**与其它新层一致**（文件内不写 `@layer`，由入口的 `@import … layer(a11y)` 指定），围栏随即报出真实值 **9** 并纳入基线。
   - ⚠️ 注意 `tokens.css` 里还压着 **11 个 `!important`**（reduced-motion 6 + reduced-transparency 5），是 P7-e 的大头；其中 reduced-transparency 那两条 `backdrop-filter: none !important` 在"全实心"决策后本就多余（应改为删掉 `app/dialogs.css` 里的玻璃规则）。
 
 ### 二、过渡桥接（P7 删 legacy 时一并移除）

@@ -94,17 +94,4 @@
 /* 小记工作台：身份色归入主 accent（原紫色身份随氛围渐变一并移除），一律由令牌派生 */
 .quick-notes-toast { background: var(--lake-bg-block); }
 
-/* ===== 弹窗统一毛玻璃表面（跟随主题：亮色半透明白、暗色半透明黑，基于 --b3-theme-surface） ===== */
-/* 对话框类 */
-.emoji-picker,
-.search-panel,
-.settings-panel,
-.confirm-dialog,
-.quick-note-convert-dialog {
-  background: color-mix(in srgb, var(--lake-bg-block) 74%, transparent);
-  border: 1px solid color-mix(in srgb, var(--lake-border-2) 55%, transparent);
-  border-radius: var(--lake-radius-md);
-  box-shadow: var(--lake-shadow-popover), inset 0 0 0 .5px color-mix(in srgb, var(--lake-bg-block) 35%, transparent);
-  backdrop-filter: blur(24px) saturate(1.2);
-  -webkit-backdrop-filter: blur(24px) saturate(1.2);
-}
+/* P7-e: glass surfaces deleted — user decision is fully opaque; opaque surfaces are already provided by src/styles/overlay.css. */

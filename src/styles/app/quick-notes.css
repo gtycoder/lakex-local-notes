@@ -244,10 +244,10 @@
    直接用在我们的窗口里会盖住红绿灯/顶栏/侧栏（用户 260919 报「样式错乱、收起不了」）。
    适配：把它限定在小记面板内绝对定位，外壳与窗口控件始终可见；退出按钮随之改为面板内右上角。 */
 .quick-notes-pane .lake-editor-mount.ne-ui-fullscreen {
-  position: absolute !important;
-  inset: 0 !important;
-  z-index: 30 !important; /* 低于顶栏标签/侧栏：外壳始终可见 */
-  height: auto !important;
+  position: absolute;
+  inset: 0;
+  z-index: 30; /* 低于顶栏标签/侧栏：外壳始终可见 */
+  height: auto;
 }
 .quick-notes-pane .ne-ui-exit-fullscreen { position: absolute; top: 6px; right: 6px; }
 

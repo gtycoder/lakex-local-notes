@@ -38,7 +38,7 @@
 
 .danger-button { border-color: var(--lake-error); color: white; background: var(--lake-error); }
 
-.danger-button:hover { background: var(--lake-error-strong) !important; }
+.danger-button:hover { background: var(--lake-error-strong); }
 
 /* ===== Multi-Tab Editor ===== */
 .multi-tab-editor {
@@ -59,7 +59,7 @@
    actually constrains to the available space. */
 .multi-tab-editor { max-width: 100%; }
 
-/* P5：原 `.statusbar { border: 0 !important; box-shadow: none !important }` 已删
+/* P5：原 `.statusbar { border: 0; box-shadow: none }` 已删
  * —— 状态栏要有 1px 描边 + 卡片阴影，外观来源 = src/styles/chrome.css（shell 层）。 */
 
 @media (min-width: 761px) {
@@ -180,7 +180,7 @@
   .tab-switcher,
   .tab-switcher-menu,
   .tree-children,
-  .seg__item { animation: none !important; transition-duration: 1ms !important; }
+  .seg__item { animation: none; transition-duration: 1ms; }
 }
 
 @media (min-width: 761px) {
@@ -377,7 +377,7 @@
     max-width: 100%;
   }
   /* 顶栏按钮（工作空间展开三角 / 云同步）由共用作用域的 `.toolbar__item { border:0; background:transparent }`
-     覆盖——实测 `.tabbar-leading` 里的按钮全都是 `.toolbar__item`，那套 !important 补丁已删。 */
+     覆盖——实测 `.tabbar-leading` 里的按钮全都是 `.toolbar__item`，那套 补丁已删。 */
   .tab-bar > * { min-width: 0; }
   /* 标签条（flex/横向滚动/垂直居中）与标签项几何已搬到共用作用域，窄窗不再手抄副本。 */
   /* 左轨几何与轨按钮已搬到共用作用域（组 2），窄窗不再手抄副本。 */
@@ -394,7 +394,7 @@
      `.sidebar.sidebar-docked, .sidebar.sidebar-floating { overflow: hidden }` 承担。 */
   /* 悬浮抽屉在窄窗不要宽过窗口本身（右侧始终留一点正文可见）。 */
   /* 面板宽度与内部导航**不再在这里改**：
-     原先把四个面板一刀切成 `calc(100vw - 16px) !important`，跨断点时小记/搜索面板宽度突变
+     原先把四个面板一刀切成 `calc(100vw - 16px)`，跨断点时小记/搜索面板宽度突变
      （实测 760→761 搜索面板 744 → 680，跳 64px），导航也从 150 跳回 208。
      现在面板沿用各自 `min(定宽, 100vw - 边距)` 的共用规则，导航用 `clamp(150px,27%,208px)` 连续过渡。 */
 }

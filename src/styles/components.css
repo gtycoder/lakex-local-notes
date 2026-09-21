@@ -59,10 +59,12 @@
  * 一律走 --b3-* / --lake-* 令牌，不写死颜色，深浅主题自动跟随。 */
 
 /* ---------- ① 设置弹窗骨架 ---------- */
+/* ⚠️ P7-e：这里的 !important 是**必需**的 —— 面板宽度由 JS 的 FloatingPanel 以 **inline style** 给出，
+ * 只有 !important 能压过 inline（P7-e 批量去 !important 时曾误删，对拍立刻发现宽度 1000 → 840）。 */
 .settings-panel-large {
   width: min(1000px, calc(100vw - 32px)) !important;
   min-height: min(660px, calc(100vh - 32px));
-  background: var(--lake-bg-panel) !important;
+  background: var(--lake-bg-panel);
 }
 .settings-panel-large .settings-layout { min-height: 0; }
 .settings-panel-large .settings-nav {
@@ -291,7 +293,7 @@
 .history-preview-inline { display: flex; flex-direction: column; align-items: center; }
 .history-preview-inline > * { width: 100%; }
 .history-preview-inline-title { align-self: flex-start; }
-.history-preview-image { flex: 1 1 auto; min-height: 0; width: auto !important; max-width: 100%; max-height: 100%; object-fit: contain; align-self: center; animation: ln-preview-fade-in var(--lake-motion-standard) var(--lake-ease-standard); }
+.history-preview-image { flex: 1 1 auto; min-height: 0; width: auto; max-width: 100%; max-height: 100%; object-fit: contain; align-self: center; animation: ln-preview-fade-in var(--lake-motion-standard) var(--lake-ease-standard); }
 .history-preview-image.is-loading { opacity: .55; transition: opacity var(--lake-motion-fast) ease-out; }
 
 /* 两行列表行（回收站 / 文档历史）：沿用思源 .b3-list-item 的密度与 hover 语言 */
@@ -347,15 +349,19 @@ button.b3-list-item__action:disabled { opacity: .45; cursor: default; }
   border-radius: calc(var(--lake-radius-md) + 2px);
   background: color-mix(in srgb, var(--lake-text) 8%, transparent);
 }
+/* ⚠️ P7-e：这几条 !important 是**必需**的（原先记录的「阻塞项 ②」）——
+ * .seg__item 与 .b3-button--outline 同元素，本文件是**双端共享**，桌面端现在有 kit 层、
+ * 但移动端没有，为了让两端表现一致，这里继续用 !important 压过 .b3-button--outline。
+ * （P7-e 批量去 !important 时曾误删，对拍发现分段控件变成描边按钮后已恢复。） */
 .seg__item { min-width: 40px; height: 26px; padding: 0 10px; font-size: 12px; border: 0 !important; background: transparent !important; color: var(--lake-text-3) !important; box-shadow: none; }
 .seg .seg__item:hover { color: var(--lake-text-1) !important; }
 .seg .seg__item.is-active {
-  color: var(--lake-text-1) !important;
-  background-color: var(--lake-raised) !important;
+  color: var(--lake-text-1);
+  background-color: var(--lake-raised);
   border-color: transparent;
   box-shadow: 0 1px 2px var(--lake-shadow-color-3);
 }
-.seg .seg__item.is-active:hover { color: var(--lake-text-1) !important; }
+.seg .seg__item.is-active:hover { color: var(--lake-text-1); }
 
 /* 体检结果（数据体检 / 一致性检查） */
 .checks { display: grid; gap: 6px; margin-top: 10px; font-size: 13px; text-align: left; }

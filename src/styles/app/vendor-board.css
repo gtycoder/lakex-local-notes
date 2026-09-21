@@ -39,5 +39,5 @@
    card is passive so a wheel passing over the card continues to scroll the
    document; clicking the card switches the gate back to overflow:auto. */
 .mindmap-interaction-gate[data-canvas-interaction="passive"] .plait-board-container .viewport-container {
-  overflow: hidden !important;
+  overflow: hidden;
 }

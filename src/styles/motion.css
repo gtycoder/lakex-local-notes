@@ -5,37 +5,7 @@
   --lake-motion-press: 90ms;      /* 按压 transform 微缩放（必须快于 fast，保跟手感） */
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .app-shell,
-  .sidebar,
-  .outline-sidebar,
-  .outline-sidebar__content,
-  .tab-item,
-  .document-statusbar,
-  .sync-status-popover,
-  .floating-dialog {
-    animation: none !important;
-    transition: none !important;
-  }
-}
 
 /* ── 以下规则自 `src/styles/ui-polish.css` 按职责并入（260916 S2/S3，只搬家不改声明）：reduced-motion 契约（原 ui-polish.css） ── */
-@media (prefers-reduced-motion: reduce) {
-  .dock-filter-row { transition: none; }
-  .dock-icon-btn { transition: none; }
-  .dock-icon-btn:active:not(:disabled) { transform: none; }
-}
 
-@media (prefers-reduced-motion: reduce) {
-  .tab-item .tab-close,
-  .tree-row.dragging,
-  .tree-row.drop-inside { transition: none !important; transform: none !important; }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .tree-row { transition: none !important; }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .tree-row.dragging { transition: none !important; }
-}
+/* P7-e: all reduced-motion contracts merged into the highest layer (src/styles/a11y.css). */

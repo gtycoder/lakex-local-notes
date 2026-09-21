@@ -70,7 +70,7 @@
   transition: opacity 0.1s, background 0.1s;
 }
 
-.tab-close:hover { opacity: 1 !important; }
+.tab-close:hover { opacity: 1; }
 
 .tab-panels {
   flex: 1;

@@ -52,3 +52,6 @@
 @import "./document-status.css" layer(legacy);
 @import "./motion.css" layer(legacy);
 @import "./dialog.css" layer(legacy);
+
+/* ---- a11y layer (highest; reduced-motion contract, no !important needed) ---- */
+@import "./a11y.css" layer(a11y);

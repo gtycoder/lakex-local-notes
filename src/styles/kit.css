@@ -529,3 +529,8 @@
 .b3-switch:checked:hover { border-color: var(--lake-accent); }
 .b3-switch:focus-visible { outline: var(--lake-focus-ring-width) solid var(--lake-accent); outline-offset: var(--lake-focus-ring-offset); }
 .b3-switch:disabled { opacity: .4; cursor: default; }
+
+/* Destructive-action button (P7-e): .ft__error is the existing semantic class used by buttons like 清空;
+ * living in the kit layer lets the LAYER ORDER (not !important) beat .b3-button--outline neutrals. */
+.b3-button.ft__error { color: var(--lake-status-error); border-color: color-mix(in srgb, var(--lake-status-error) 42%, transparent); }
+.b3-button.ft__error:hover { background: var(--lake-error-soft); }

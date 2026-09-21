@@ -100,7 +100,7 @@
 
 .document-pane .lake-editor-mount .ne-inner-overlay-container {
   /* Raise above the sticky .ne-ui toolbar (z-index: 20) so table card toolbars can receive hover. */
-  z-index: 100 !important;
+  z-index: 100;
 }
 
 /* Eliminate intermediate stacking contexts that Lake may create between
@@ -240,7 +240,7 @@
 }
 
 .sidebar.sidebar-docked {
-  height: 100% !important;
+  height: 100%;
   width: auto;
   margin-bottom: 0;
   max-width: none;
@@ -409,8 +409,8 @@
 @media (min-width: 761px) {
 
   /* P5（UI 重设计）：原
-   *   .activity-rail, .sidebar, .outline-sidebar__rail { border-color: rgba(31,35,41,.055) !important }
-   * 已删（既硬编码颜色、又用 !important 压住新层）—— 活动轨描边单一来源 = src/styles/chrome.css。 */
+   *   .activity-rail, .sidebar, .outline-sidebar__rail { border-color: rgba(31,35,41,.055) }
+   * 已删（既硬编码颜色、又用 压住新层）—— 活动轨描边单一来源 = src/styles/chrome.css。 */
 
   .workspace,
   .document-pane,
@@ -420,7 +420,7 @@
 
   .document-pane,
   .document-pane:has(> .multi-tab-editor) {
-    background: var(--lake-bg-canvas) !important;
+    background: var(--lake-bg-canvas);
   }
 
   .app-shell.quick-notes-active .activity-rail {
@@ -495,7 +495,7 @@
  * 底部还多出 4px 灰缝（实测 761/760 两侧白卡与 padding 全不一致）。 */
 .app-shell.quick-notes-active .activity-rail {
   background: transparent;
-  /* P5：原 `border: 0 !important` 已删 —— 小记页与资料库页保持一致（保留 1px 右描边）。 */
+  /* P5：原 `border: 0` 已删 —— 小记页与资料库页保持一致（保留 1px 右描边）。 */
 }
 
 .app-shell.quick-notes-active .workspace {
@@ -511,7 +511,7 @@
 .app-shell.quick-notes-active .quick-notes-pane {
   min-height: 0;
   padding-top: 28px;
-  background: var(--lake-bg-panel) !important;
+  background: var(--lake-bg-panel);
   border-radius: var(--lake-radius-md) var(--lake-radius-md) 0 0;
   background-attachment: initial;
 }
@@ -554,12 +554,12 @@
 .floating-dialog,
 .settings-panel,
 .search-panel {
-  background: var(--lake-panel) !important;
+  background: var(--lake-panel);
   color: var(--lake-text);
 }
 
 .document-pane .lake-editor-mount {
-  background: var(--lake-canvas) !important;
+  background: var(--lake-canvas);
 }
 
 .statusbar,
@@ -598,12 +598,12 @@ html[data-theme="dark"] .outline-sidebar__content,
 html[data-theme="dark"] .floating-dialog,
 html[data-theme="dark"] .settings-panel,
 html[data-theme="dark"] .search-panel {
-  background: var(--lake-panel) !important;
-  border-color: var(--lake-border) !important;
+  background: var(--lake-panel);
+  border-color: var(--lake-border);
 }
 html[data-theme="dark"] .document-pane .lake-editor,
 html[data-theme="dark"] .document-pane .lake-editor-main {
-  background: var(--lake-canvas) !important;
+  background: var(--lake-canvas);
 }
 
 html[data-theme="dark"] .document-pane .ne-engine,
@@ -621,7 +621,7 @@ html[data-theme="dark"] .document-pane .ne-engine > ne-h3 ne-heading-content,
 html[data-theme="dark"] .document-pane .ne-engine > ne-h4 ne-heading-content,
 html[data-theme="dark"] .document-pane .ne-engine > ne-h5 ne-heading-content,
 html[data-theme="dark"] .document-pane .ne-engine > ne-h6 ne-heading-content {
-  color: var(--lake-text) !important;
+  color: var(--lake-text);
 }
 
 /* Focus mode keeps the document breadcrumb/menu usable. The collapsed outline
@@ -649,12 +649,12 @@ html[data-theme="dark"] .document-pane .ne-engine > ne-h6 ne-heading-content {
  * sidebar made the panel appear to grow when it was leaving. */
 .sidebar.sidebar-floating,
 .sidebar.sidebar-collapsed {
-  top: 72px !important;
-  bottom: 72px !important;
-  height: calc(100vh - 144px) !important;
+  top: 72px;
+  bottom: 72px;
+  height: calc(100vh - 144px);
   max-height: calc(100vh - 144px);
   overflow: hidden;
-  transition: opacity 120ms ease-out, transform 120ms var(--lake-ease-standard) !important;
+  transition: opacity 120ms ease-out, transform 120ms var(--lake-ease-standard);
 }
 /* 右侧大纲浮层与左侧目录浮层同高（对齐到 top/bottom 72），消除左右弹出高度不一致 */
 .outline-sidebar--collapsed.outline-sidebar--hovered .outline-sidebar__content {
@@ -666,7 +666,7 @@ html[data-theme="dark"] .document-pane .ne-engine > ne-h6 ne-heading-content {
 
 /* #2 浮层阴影：左右统一、更柔；阴影静态、不参与切出动画（避免逐帧重绘，保性能与速度） */
 .sidebar.sidebar-floating {
-  box-shadow: 16px 0 26px -14px var(--lake-shadow-color-5) !important; /* 单侧投影：负 spread 收掉上下溢出 */
+  box-shadow: 16px 0 26px -14px var(--lake-shadow-color-5); /* 单侧投影：负 spread 收掉上下溢出 */
 }
 .outline-sidebar--collapsed.outline-sidebar--hovered .outline-sidebar__content {
   box-shadow: -16px 0 26px -14px var(--lake-shadow-color-5); /* 单侧投影（朝内容侧） */
@@ -678,15 +678,15 @@ html[data-theme="dark"] .document-pane .ne-engine > ne-h6 ne-heading-content {
 /* 加 `:not(.focus-mode)` 前缀：专注模式下这套 `!important` 不能把抽屉又"点回来"
    （窄窗抽屉走的就是 floating 类；实测不加前缀时专注模式里抽屉仍然可见、还能点）。 */
 .app-shell:not(.focus-mode) .sidebar.sidebar-floating {
-  opacity: 1 !important;
+  opacity: 1;
   transform: none;
-  pointer-events: auto !important;
-  transition: none !important;
+  pointer-events: auto;
+  transition: none;
 }
 .sidebar.sidebar-collapsed {
-  opacity: 0 !important;
-  transform: translateX(-12px) !important;
-  transition: opacity 120ms ease-out, transform 120ms var(--lake-ease-standard) !important;
+  opacity: 0;
+  transform: translateX(-12px);
+  transition: opacity 120ms ease-out, transform 120ms var(--lake-ease-standard);
 }
 
 /* ── 壳层度量令牌（原 layout-contract.css，260916 S1 并入） */
@@ -713,15 +713,15 @@ html[data-theme="dark"] .document-pane .ne-engine > ne-h6 ne-heading-content {
 
 .tab-item .tab-close {
   flex: 0 0 18px;
-  width: 18px !important;
-  height: 18px !important;
+  width: 18px;
+  height: 18px;
   margin-left: 2px;
 }
 
 .tab-item:hover .tab-close,
 .tab-item .tab-close:focus-visible { opacity: .58; }
 
-.tab-item .tab-close:hover { opacity: 1 !important; }
+.tab-item .tab-close:hover { opacity: 1; }
 
 /* 目录栏头部：只剩一排图标，几何与大纲头部逐项对齐（34px 高 + 1px 分隔线 + 右内缩 4px；
  * 筛选改为点击图标展开）。两栏头部若高度/分隔线不一致，一排图标看上去就是"两个系统的产品"。 */
@@ -857,7 +857,7 @@ html[data-theme="dark"] .document-pane .ne-engine > ne-h6 ne-heading-content {
 
 .tree-row.drop-before,
 .tree-row.drop-after {
-  box-shadow: none !important;
+  box-shadow: none;
 }
 
 .tree-row.drop-before::before,
@@ -880,22 +880,22 @@ html[data-theme="dark"] .document-pane .ne-engine > ne-h6 ne-heading-content {
 }
 
 .tree-row.drop-inside {
-  background: color-mix(in srgb, var(--lake-text) 8%, transparent) !important;
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--lake-text) 8%, transparent) !important;
+  background: color-mix(in srgb, var(--lake-text) 8%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--lake-text) 8%, transparent);
   transform: none;
 }
 
 /* The sidebar owns the window drag strip only as a visual region. Its pseudo
    overlay must never win hit-testing over the first row of controls.
    （宽窄共用：窄窗抽屉同样是浮层，顶部那条 38px 拖拽带不能抢头部按钮的点击。） */
-.sidebar::before { pointer-events: none !important; -webkit-app-region: no-drag; }
+.sidebar::before { pointer-events: none; -webkit-app-region: no-drag; }
 
 /* A docked library must settle to its full grid track immediately. Keeping the
    grid transition active while the panel is already docked can leave Chromium
    in a zero-width interpolated track, which makes the visible toolbar miss hit
    testing. Collapse remains animated; re-open is deliberately deterministic. */
 @media (min-width: 761px) {
-  .app-shell.sidebar-docked { transition: none !important; }
+  .app-shell.sidebar-docked { transition: none; }
 }
 
 /* Precise sortable motion: the source row is the visible dragged object and
@@ -908,7 +908,7 @@ html[data-theme="dark"] .document-pane .ne-engine > ne-h6 ne-heading-content {
 
 .tree-row.dragging {
   z-index: 8;
-  transition: none !important;
+  transition: none;
 }
 
 .tree-row.drop-before::before,
@@ -940,10 +940,10 @@ html[data-theme="dark"] .document-pane .ne-engine > ne-h6 ne-heading-content {
    - the source row remains the real row, translucent, and vertically movable. */
 /* 源行留在原位只降透明度（跟手的是 [data-drag-ghost] 浮层） */
 .tree-row.dragging {
-  opacity: .38 !important;
-  color: var(--lake-text) !important;
-  background: transparent !important;
-  box-shadow: none !important;
+  opacity: .38;
+  color: var(--lake-text);
+  background: transparent;
+  box-shadow: none;
 }
 
 /* 插入线：贴在目标行的层级缩进上（桌面缩进来自嵌套 .tree-children），
@@ -966,9 +966,9 @@ html[data-theme="dark"] .document-pane .ne-engine > ne-h6 ne-heading-content {
 .tree-row.drop-line-after::after { bottom: -1px; }
 
 .tree-row.drop-parent {
-  color: var(--lake-text) !important;
-  background: color-mix(in srgb, var(--lake-accent) 12%, var(--lake-panel)) !important;
-  box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--lake-accent) 76%, transparent) !important;
+  color: var(--lake-text);
+  background: color-mix(in srgb, var(--lake-accent) 12%, var(--lake-panel));
+  box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--lake-accent) 76%, transparent);
 }
 
 /* Old classes are no longer emitted for active drops; keep them inert so
@@ -978,9 +978,9 @@ html[data-theme="dark"] .document-pane .ne-engine > ne-h6 ne-heading-content {
 .tree-row.drop-crossing::before,
 .tree-row.drop-crossing::after,
 .tree-row.drop-inside::before,
-.tree-row.drop-inside::after { display: none !important; }
+.tree-row.drop-inside::after { display: none; }
 
-/* P5（UI 重设计）：原「product shell 表面圆角统一 md !important」已删 ——
+/* P5（UI 重设计）：原「product shell 表面圆角统一 md」已删 ——
  * 各控件按自身规格给圆角（活动栏按钮 md / dock 图标钮 xs / 页签与树行由下方 sm 规则决定）。 */
 
 /* 紧凑控件（工具条 / 页签 / 图标按钮 / 树行）统一 sm 圆角：拖拽态必须同值，
@@ -990,13 +990,13 @@ html[data-theme="dark"] .document-pane .ne-engine > ne-h6 ne-heading-content {
 .icon-button,
 .note-row,
 .list-heading .icon-button {
-  border-radius: var(--lake-radius-sm) !important;
+  border-radius: var(--lake-radius-sm);
 }
 
 /* 页签 active：白卡底（b3/components.css 的 .tab-item.active 提供）已足够标识当前页；
    文字保持中性墨色 + 略加字重，避免「浅底 + 描边 + 主色字」多重信号。 */
 .tab-item.active {
-  color: var(--lake-text) !important;
+  color: var(--lake-text);
   font-weight: 500;
 }
 
@@ -1009,8 +1009,8 @@ html[data-theme="dark"] .document-pane .ne-engine > ne-h6 ne-heading-content {
 .activity-button:hover:not(:disabled) { color: var(--lake-text-secondary); }
 
 .activity-button.active {
-  color: var(--lake-accent) !important;
-  background: var(--lake-accent-soft) !important;
+  color: var(--lake-accent);
+  background: var(--lake-accent-soft);
 }
 
 .activity-button:active:not(:disabled) { transform: scale(.95); }

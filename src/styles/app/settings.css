@@ -36,7 +36,7 @@
   place-items: center;
   padding: 16px;
   /* 遮罩底色与"无模糊"统一由 b3/components.css 的 .settings-overlay/…-backdrop 提供
-   * （--b3-mask-background + backdrop-filter:none !important 覆盖本块）。此处仅负责居中布局。 */
+   * （--b3-mask-background + backdrop-filter:none 覆盖本块）。此处仅负责居中布局。 */
 }
 
 .floating-dialog {
@@ -49,7 +49,7 @@
   max-width: calc(100vw - 32px);
   max-height: calc(100vh - 32px);
   overflow: hidden;
-  /* P5-c：原 `border: 1px solid var(--floating-dialog-border) !important` 已删 ——
+  /* P5-c：原 `border: 1px solid var(--floating-dialog-border)` 已删 ——
    * 表面（1px --lake-border-1 + radius-lg + dialog 阴影）单一来源 = src/styles/overlay.css。 */
   box-shadow: var(--floating-dialog-shadow);
   animation: floating-dialog-enter 180ms var(--ease-out);
@@ -121,7 +121,7 @@
   flex: 0 0 auto;
   /* 头部与弹窗本体同源（--lake-surface 深浅两套值）——原先写死近白 rgba(250,250,251,.94)，
      深色下历史/回收站面板顶会留一条白条（b3/components.css 只覆盖了 .settings-header）。 */
-  background: var(--lake-surface) !important;
+  background: var(--lake-surface);
   border-bottom: 1px solid color-mix(in srgb, var(--lake-border) 72%, transparent);
 }
 

@@ -186,7 +186,8 @@
 /* ── 标签页 ─────────────────────────────────────────────────────────── */
 .tab-item {
   border: 1px solid transparent;
-  border-radius: var(--lake-radius-md);
+  /* P7-e：活动页签的卡圆角按设计取 sm(8px)；此前被 legacy 的 !important 压着，现由本层单一来源表达 */
+  border-radius: var(--lake-radius-sm);
   color: var(--lake-text-3);
   background: transparent;
 }
