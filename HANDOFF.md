@@ -1756,7 +1756,7 @@ lsof -ti:1432 -ti:9231 | sort -u | xargs kill
 > 设计规格（外部）= `/Users/admin/file/local-lake/ui-design-inputs/out/design-system/`（8 项交付，**只作参考**）。
 > 分支 `feat/ui-redesign`，基线 `origin/master` = `17bafbe`；**未 push、未合 master**。
 
-### 一、已完成（19 个提交）
+### 一、已完成（20 个提交）
 - **b53a456 docs**：元素底账 + 实现方案（阶段 P0–P8 / 层序 / 主题即数据 / 硬指标 / 验收口径变更）。
 - **e5f171e P1 @layer 层骨架**：新增 `src/styles/index.css` 单入口，`@layer legacy,tokens,reset,kit,shell,feature,overlay,a11y`；旧样式（含内核 style.css / 思源 / 旧壳层）**按原顺序整体入 legacy 层**；删 `src/styles.css`；围栏 `cssLayers.test.ts` 入口项同步。
   - 关键机制：**legacy 最低 ⇒ 新层写入即压过旧样式**，迁移期不靠特异性取胜。
@@ -1866,6 +1866,12 @@ lsof -ti:1432 -ti:9231 | sort -u | xargs kill
   - **对拍**：同一套 6 屏计算值快照，**missing 0 / diffs 0** ⇒ 层叠等价，零视觉变化。
   - 同步更新：`cssLayers.test.ts` 的 FILES/BASELINE（去掉 4 个已删文件，`app/{editor,quick-notes,settings,shell}.css` 基线改为 69/519,8/122/511,10）、`quickNotesView.test.ts` 读的文件路径。
   - 指标：桌面样式文件 32 → **28**（入口可达）。
+- **P7-d 颜色字面量（第一步：`styles/tokens.css`）**：
+  - 先证：脚本比对 `tokens.css` 定义的 50 个变量 vs `themes/{base,light,dark,warm}.css` 的定义集 —— **50 个全被主题覆盖**（主题在 tokens 层，更高）⇒ 桌面端 100% 是死代码。
+  - 做法：把 `tokens.css` 精简为**只留 4 段非令牌规则**（`@keyframes ln-indicator-in`、`.lake-editor-mount` 阅读态字号继承、`:where(...):focus-visible` 焦点环、两个无障碍媒体偏好块），删掉 `:root` 与 `[data-theme="dark"]` 两段共 50 个定义。
+  - **文件位置不变** ⇒ 层叠等价；对拍 **missing 0 / diffs 0**。
+  - 指标：颜色字面量 **109+102 → 67+79**。剩余大头：`app/shell.css` 33、`outline.css` 31、`app/tabs.css` 22、`attachment-preview.css` 15、`app/misc.css` 15。
+  - ⚠️ 注意 `tokens.css` 里还压着 **11 个 `!important`**（reduced-motion 6 + reduced-transparency 5），是 P7-e 的大头；其中 reduced-transparency 那两条 `backdrop-filter: none !important` 在"全实心"决策后本就多余（应改为删掉 `app/dialogs.css` 里的玻璃规则）。
 
 ### 二、过渡桥接（P7 删 legacy 时一并移除）
 - 旧 `--lake-*` 名字（`--lake-shell/panel/canvas/surface/accent-soft/shadow-* …`）→ 指向新令牌。
