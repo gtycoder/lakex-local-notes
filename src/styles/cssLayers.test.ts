@@ -19,7 +19,7 @@ const SRC = path.resolve(HERE, "..");
 
 /** 我们自己的样式文件（不含 vendor：src/b3/siyuan/** 与 lakex 包内样式）。 */
 const FILES = [
-  "styles.css",
+  "styles/index.css",   // UI 重设计 P1：单入口，只 @layer 声明 + @import 编排（0 声明）
   "b3/animations.css", "b3/base.css", "b3/components.css", "b3/dark.css", "b3/layout.css",
   "b3/theme-daylight.css", "b3/theme-midnight.css",
   "features/attachment/attachment-preview.css", "features/editor/image-lightbox.css", "features/outline/outline.css",
@@ -39,7 +39,7 @@ const FILES = [
  * 把规则从一个文件搬到另一个文件会合法地抬高接收方的计数：此时同步抬高该文件基线，
  * 并在同一批把来源文件的基线调小（搬走多少、留下多少要对得上，让总量保持可见）。 */
 const BASELINE: Record<string, { decls: number; dupGroups: number }> = {
-  "styles.css": { decls: 0, dupGroups: 0 },   // 260917 校正：S3 拆分后入口只剩 @import（实测 0 声明），旧基线 1778/33 是没同步下调的虚高余量
+  "styles/index.css": { decls: 0, dupGroups: 0 },   // UI 重设计 P1：单入口（@layer 声明 + @import 编排，0 声明）
   "b3/animations.css": { decls: 5, dupGroups: 0 },
   "b3/base.css": { decls: 16, dupGroups: 0 },
   "b3/components.css": { decls: 148, dupGroups: 0 },

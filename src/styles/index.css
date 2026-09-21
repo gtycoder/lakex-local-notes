@@ -1,0 +1,48 @@
+/* 样式入口（UI 重设计 P1）
+ * 层序显式声明：legacy 最低 ⇒ 新层写入即自动压过旧样式，迁移期不靠特异性/顺序取胜。
+ * legacy 层内部相对顺序 = 原 main.tsx 的 import 顺序，逐字不变（引入当天应 0 视觉变化）。
+ * 详见 docs/UI-REDESIGN-260921/README.md §3.1。 */
+
+@layer legacy, tokens, reset, kit, shell, feature, overlay, a11y;
+
+/* ---- 第三方（内核正文 130 万字符 + 画板） ---- */
+@import "@dlient/lakex-doc-react/style.css" layer(legacy);
+@import "../vendor/drawnix-react-text.css" layer(legacy);
+
+/* ---- 旧基础层（原 src/styles.css 的 10 个域文件，顺序不变） ---- */
+@import "./app/base.css" layer(legacy);
+@import "./app/shell.css" layer(legacy);
+@import "./app/editor.css" layer(legacy);
+@import "./app/dialogs.css" layer(legacy);
+@import "./app/tabs.css" layer(legacy);
+@import "./app/vendor-board.css" layer(legacy);
+@import "./app/settings.css" layer(legacy);
+@import "./app/quick-notes.css" layer(legacy);
+@import "./app/panels.css" layer(legacy);
+@import "./app/misc.css" layer(legacy);
+
+/* ---- 功能域（旧） ---- */
+@import "../features/outline/outline.css" layer(legacy);
+@import "../features/editor/image-lightbox.css" layer(legacy);
+@import "../features/attachment/attachment-preview.css" layer(legacy);
+
+/* ---- 思源移植层（旧，桌面侧最终要清零；文件保留给移动端 import） ---- */
+@import "../b3/theme-daylight.css" layer(legacy);
+@import "../b3/theme-midnight.css" layer(legacy);
+@import "../b3/base.css" layer(legacy);
+@import "../b3/components.css" layer(legacy);
+@import "../b3/siyuan.scss" layer(legacy);
+@import "../b3/dark.css" layer(legacy);
+@import "../b3/animations.css" layer(legacy);
+@import "../b3/layout.css" layer(legacy);
+
+/* ---- 旧壳层/打磨层（顺序不变） ---- */
+@import "./tokens.css" layer(legacy);
+@import "./shell.css" layer(legacy);
+@import "./components.css" layer(legacy);
+@import "./editor.css" layer(legacy);
+@import "./quick-notes.css" layer(legacy);
+@import "./document-status.css" layer(legacy);
+@import "./motion.css" layer(legacy);
+@import "./settings.css" layer(legacy);
+@import "./dialog.css" layer(legacy);

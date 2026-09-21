@@ -4,30 +4,7 @@ import { App } from "./App";
 import { installPasteInterceptor } from "./features/editor/clipboardHtml";
 import { loadSettings } from "./lib/settings";
 import { applyTheme } from "./lib/theme";
-import "@dlient/lakex-doc-react/style.css";
-import "./styles.css";
-import "./vendor/drawnix-react-text.css";   // 第三方画板 CSS 的**唯一来源**（260916：原 styles.css 里那份逐字节相同的内联副本已删）
-import "./features/outline/outline.css";
-// 思源视觉层移植：令牌（daylight/midnight）→ 基础接线（覆盖层，最后加载）
-import "./b3/theme-daylight.css";
-import "./b3/theme-midnight.css";
-import "./b3/base.css";
-import "./b3/components.css";
-import "./b3/siyuan.scss";
-import "./b3/dark.css";
-import "./b3/animations.css";
-import "./b3/layout.css";
-import "./styles/tokens.css";
-import "./styles/shell.css";
-import "./styles/components.css";
-import "./styles/editor.css";
-import "./styles/quick-notes.css";
-import "./styles/document-status.css";
-import "./styles/motion.css";
-import "./styles/settings.css";
-import "./styles/dialog.css";
-import "./features/editor/image-lightbox.css";
-import "./features/attachment/attachment-preview.css";
+import "./styles/index.css";   // 样式单入口：@layer 层序 + 旧样式整体入 legacy 层（见 docs/UI-REDESIGN-260921/README.md §3.1）
 
 // 首帧前应用主题，避免闪烁（App 挂载后的 settings 订阅会继续跟随变化）
 applyTheme(loadSettings().theme);
