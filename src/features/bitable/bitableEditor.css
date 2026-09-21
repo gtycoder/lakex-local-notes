@@ -11,9 +11,10 @@
   min-height: 0;
   min-width: 0;
   overflow: hidden;
-  background: var(--b3-theme-background, #fff);
-  color: var(--b3-theme-on-background, #202124);
-  font-family: var(--b3-font-family, inherit);
+  /* P6：容器壳统一 —— 底色/文字/字体改走新令牌（原 var(--b3-theme-background, #fff) 等） */
+  background: var(--lake-bg-canvas);
+  color: var(--lake-text-1);
+  font-family: var(--lake-font-family);
   position: relative;
 }
 
@@ -24,8 +25,8 @@
   display: flex;
   flex-direction: column;
   min-height: 0;
-  border-right: 1px solid var(--b3-border-color, rgba(0, 0, 0, .09));
-  background: var(--b3-theme-surface, #f7f7f8);
+  border-right: 1px solid var(--lake-border-1);
+  background: var(--lake-bg-block);
 }
 
 .bt-tables-head {

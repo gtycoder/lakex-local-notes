@@ -1756,7 +1756,7 @@ lsof -ti:1432 -ti:9231 | sort -u | xargs kill
 > 设计规格（外部）= `/Users/admin/file/local-lake/ui-design-inputs/out/design-system/`（8 项交付，**只作参考**）。
 > 分支 `feat/ui-redesign`，基线 `origin/master` = `17bafbe`；**未 push、未合 master**。
 
-### 一、已完成（14 个提交）
+### 一、已完成（15 个提交）
 - **b53a456 docs**：元素底账 + 实现方案（阶段 P0–P8 / 层序 / 主题即数据 / 硬指标 / 验收口径变更）。
 - **e5f171e P1 @layer 层骨架**：新增 `src/styles/index.css` 单入口，`@layer legacy,tokens,reset,kit,shell,feature,overlay,a11y`；旧样式（含内核 style.css / 思源 / 旧壳层）**按原顺序整体入 legacy 层**；删 `src/styles.css`；围栏 `cssLayers.test.ts` 入口项同步。
   - 关键机制：**legacy 最低 ⇒ 新层写入即压过旧样式**，迁移期不靠特异性取胜。
@@ -1833,6 +1833,12 @@ lsof -ti:1432 -ti:9231 | sort -u | xargs kill
   - **小记工作台**：`.quick-note-convert-dialog` 去毛玻璃 → 实心 panel + border-1 + radius-lg + dialog 阴影；卡片 `.quick-note-entry` = `bg-canvas` + 1px `--lake-border-2` + radius md + `--lake-shadow-card`（选中/多选 = accent 边 + tint）；`h1` 17px/600；索引行 hover/选中按列表项规格。
   - 实测：搜索面板 bg=panel、1px border-1、radius **14**、dialog 阴影、输入行 12px、help 10.5px/text-4；小记卡片 1px border-2 + radius **10** + 卡片阴影、h1 **17px/600**、5 张卡片渲染正常；暖色截图核对无破版。
   - **P5（逐屏迁移）到此收尾**；仅剩两项被共享层 `!important` 挡住（分段控件段态、设置项说明字号），已记入「待移动端批次」。
+- **P6 第三方容器壳统一**：`feature.css` 67 → **71 声明**。
+  - `.sheet-editor` / `.bitable-editor` / `.board-editor` 三类编辑器容器统一成 **radius md + 1px `--lake-border-1` + 画布底**（只统一容器层，**内部观感一律不动**；三个编辑器 CSS 是**未分层**的，所以只新增它们没设过的属性）。
+  - 顺手把 `bitableEditor.css` 容器/左栏那几处 `var(--b3-theme-background, #fff)` / `var(--b3-border-color, rgba(...))` 等改成新令牌（少 4 条 b3 引用 + 若干字面量）。
+  - 实测：**表格**容器 1px border-1 + radius 10 + canvas 底（网格铺在圆角内，截图核对）；**多维表**容器同样 1px border-1 + radius 10 + canvas 底（改令牌后底色由 bg-panel 变为 canvas）。
+  - ⚠️ **画板没能完成视觉验证：打开画板会落进错误边界**（"该类型编辑器渲染出错（已隔离…）"，控制台 `TypeError: Wt is not a function @ BoardEditor-*.js`）。
+    **已做归因**：在 `git worktree` 里构建 **origin/master（未改动基线）** 并打开同一个画板 —— **同样报错** ⇒ **既有 bug，非本次重构引入**；另核对本分支 diff 完全没碰 `src/features/board/**`、`editor/**`、`sheet/**`、`bitable/**`、`lakeRuntime.ts`。**待用户/后续会话单项处理**（可能与本项目 §2.15 记录过的 vendor 懒 chunk 打包问题同类）。
 
 ### 二、过渡桥接（P7 删 legacy 时一并移除）
 - 旧 `--lake-*` 名字（`--lake-shell/panel/canvas/surface/accent-soft/shadow-* …`）→ 指向新令牌。
