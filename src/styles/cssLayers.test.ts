@@ -45,7 +45,7 @@ const BASELINE: Record<string, { decls: number; dupGroups: number }> = {
   "styles/index.css": { decls: 0, dupGroups: 0 },   // UI 重设计 P1：单入口（@layer 声明 + @import 编排，0 声明）
   "styles/feature.css": { decls: 2, dupGroups: 0 },   // P3：正文/等宽字体两处（实测）
   "styles/kit.css": { decls: 422, dupGroups: 0 },     // P4：组件库 14 件（实测）
-  "styles/chrome.css": { decls: 87, dupGroups: 0 },   // P5：活动栏/目录栏头部/状态栏（实测）
+  "styles/chrome.css": { decls: 189, dupGroups: 0 },  // P5：活动栏/目录栏头部/状态栏 + 顶栏/标签页/面包屑（实测）
   "b3/animations.css": { decls: 5, dupGroups: 0 },
   "b3/base.css": { decls: 16, dupGroups: 0 },
   "b3/components.css": { decls: 148, dupGroups: 0 },

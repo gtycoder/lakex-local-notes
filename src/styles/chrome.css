@@ -100,3 +100,103 @@
 @media (prefers-reduced-motion: reduce) {
   .document-statusbar, .document-notice-toast { backdrop-filter: none; }
 }
+
+/* ── 顶栏：工作空间触发按钮与右侧图标按钮（同一类 .toolbar__item） ───────── */
+.toolbar__item {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  height: 26px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: var(--lake-radius-sm);
+  color: var(--lake-text-1);
+  background: transparent;
+  font-family: inherit;
+  font-size: var(--lake-font-size-small);
+  cursor: pointer;
+  transition: background-color var(--lake-motion-fast) var(--lake-ease-standard),
+    color var(--lake-motion-fast) var(--lake-ease-standard);
+}
+.toolbar__item:hover { background: var(--lake-bg-hover); }
+.toolbar__item:active { background: var(--lake-bg-press); }
+.toolbar__item:focus-visible { outline: var(--lake-focus-ring-width) solid var(--lake-accent); outline-offset: var(--lake-focus-ring-offset); }
+.toolbar__item:disabled { opacity: .4; cursor: default; }
+.toolbar__text { max-width: 180px; overflow: hidden; white-space: nowrap; }
+
+/* 同步入口：状态色直接取令牌（不依赖旧别名） */
+.sync-status-button.pending { color: var(--lake-status-pending); }
+.sync-status-button.error { color: var(--lake-status-error); }
+.sync-status-button.disabled { color: var(--lake-text-3); }
+.sync-status-button { border-radius: var(--lake-radius-sm); }
+.sync-status-button:hover { background: var(--lake-bg-hover); }
+
+/* ── 面包屑（工作区顶部；原样式整段在思源层 b3/layout.css） ─────────────── */
+.protyle-breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  height: 32px;
+  min-height: 32px;
+  padding: 0 16px;
+  border-bottom: 1px solid var(--lake-border-2);
+  background: transparent;
+  color: var(--lake-text-3);
+  font-size: var(--lake-font-size-tiny);
+}
+.protyle-breadcrumb__item {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  /* 产品既有决策：超长直接裁切，不打省略号 */
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: clip;
+}
+.protyle-breadcrumb__item:hover { color: var(--lake-text-1); }
+.protyle-breadcrumb__item--notebook { color: var(--lake-text-2); font-weight: var(--lake-font-weight-semibold); }
+.protyle-breadcrumb__item--current { color: var(--lake-text-2); font-weight: var(--lake-font-weight-semibold); }
+.protyle-breadcrumb__divider { display: inline-flex; align-items: center; margin: 0 2px; color: var(--lake-text-4); }
+.protyle-breadcrumb__outline { display: inline-flex; align-items: center; gap: 2px; min-width: 0; }
+.protyle-breadcrumb__h { margin-right: 3px; font-weight: var(--lake-font-weight-semibold); color: var(--lake-text-2); }
+.protyle-breadcrumb__more { margin-left: auto; flex: 0 0 auto; display: flex; align-items: center; }
+.protyle-breadcrumb__more-btn {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--lake-radius-xs);
+  background: transparent;
+  color: var(--lake-text-3);
+  cursor: pointer;
+}
+.protyle-breadcrumb__more-btn:hover { color: var(--lake-text-1); background: var(--lake-bg-hover); }
+.protyle-breadcrumb button:focus-visible { outline: var(--lake-focus-ring-width) solid var(--lake-accent); outline-offset: var(--lake-focus-ring-offset); }
+
+/* ── 标签页 ─────────────────────────────────────────────────────────── */
+.tab-item {
+  border: 1px solid transparent;
+  border-radius: var(--lake-radius-md);
+  color: var(--lake-text-3);
+  background: transparent;
+}
+.tab-item:hover { color: var(--lake-text-1); background: var(--lake-bg-hover); }
+.tab-item.active {
+  color: var(--lake-text-1);
+  background: var(--lake-bg-canvas);
+  border-color: var(--lake-border-2);
+  box-shadow: var(--lake-shadow-card);
+}
+.tab-item .tab-dirty-dot { flex: 0 0 6px; width: 6px; height: 6px; background: var(--lake-status-pending); }
+.tab-item .tab-pin { color: var(--lake-text-4); }
+.tab-item:focus-visible { outline: var(--lake-focus-ring-width) solid var(--lake-accent); outline-offset: -2px; }

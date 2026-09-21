@@ -1756,7 +1756,7 @@ lsof -ti:1432 -ti:9231 | sort -u | xargs kill
 > 设计规格（外部）= `/Users/admin/file/local-lake/ui-design-inputs/out/design-system/`（8 项交付，**只作参考**）。
 > 分支 `feat/ui-redesign`，基线 `origin/master` = `17bafbe`；**未 push、未合 master**。
 
-### 一、已完成（5 个提交）
+### 一、已完成（6 个提交）
 - **b53a456 docs**：元素底账 + 实现方案（阶段 P0–P8 / 层序 / 主题即数据 / 硬指标 / 验收口径变更）。
 - **e5f171e P1 @layer 层骨架**：新增 `src/styles/index.css` 单入口，`@layer legacy,tokens,reset,kit,shell,feature,overlay,a11y`；旧样式（含内核 style.css / 思源 / 旧壳层）**按原顺序整体入 legacy 层**；删 `src/styles.css`；围栏 `cssLayers.test.ts` 入口项同步。
   - 关键机制：**legacy 最低 ⇒ 新层写入即压过旧样式**，迁移期不靠特异性取胜。
@@ -1779,6 +1779,12 @@ lsof -ti:1432 -ti:9231 | sort -u | xargs kill
   - **拆掉的 legacy `!important`（4 处）**：`b3/layout.css` 活动轨两根 border 与状态栏底色、`b3/base.css` 状态栏两条、`app/misc.css` 状态栏 border/shadow、`app/shell.css` 硬编码 `rgba(31,35,41,.055) !important` 描边色、`styles/shell.css` 圆角统一 `!important`。
   - 实测（三套主题 `getComputedStyle`）：轨道描边 = 令牌色（light `rgb(231,233,236)` / dark `rgb(42,47,53)` / warm `rgb(231,223,208)`）；rail 按钮 32px/10px；dock 6px；状态栏实心 + 1px 描边、状态药丸软底。
   - 底账已打勾：**A1–A7、A12–A14**（见 `docs/UI-REDESIGN-260921/01-ELEMENT-LEDGER.md`）。
+- **P5 逐屏迁移（第 2 片：顶栏 / 标签页 / 面包屑）**：chrome.css 87 → **189 声明**（仍 **0 `!important` / 0 颜色字面量**）。
+  - 顶栏：`.toolbar__item`（工作空间触发 + 右侧搜索/同步钮）26px 高、sm 圆角、hover/active/焦点环按规格；同步钮状态色直连 `--lake-status-pending/error`（不再经旧别名）。
+  - 标签页：`.tab-item` 圆角 md、默认 text-3、hover bg-hover、**active = 画布底 + 1px `--lake-border-2` + `--lake-shadow-card`**；脏点 7→**6px** + `--lake-status-pending`；固定图标 text-4。
+  - 面包屑（原样式**整段在思源层 `b3/layout.css`**）：新规则落 shell 层 —— 32px / 11px / text-3、下缘 1px `--lake-border-2`、笔记本名 text-2+600、分隔符 text-4、尾部「更多」按钮 26×24 xs 圆角；仍守「超长直接裁切不打省略号」。
+  - 实测三套主题 `getComputedStyle`：面包屑 32px/11px/令牌色；页签 active 底=canvas、边=border-2、阴影=card；顶栏钮 26px；同步钮状态色随主题。
+  - 底账：**A8–A10、A15 打勾；A11 记 `[~]`（页签本体已迁，溢出切换器菜单留 P5-c）**。
 
 ### 二、过渡桥接（P7 删 legacy 时一并移除）
 - 旧 `--lake-*` 名字（`--lake-shell/panel/canvas/surface/accent-soft/shadow-* …`）→ 指向新令牌。
