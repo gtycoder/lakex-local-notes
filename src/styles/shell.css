@@ -453,14 +453,8 @@ html[data-theme="dark"] .document-pane .ne-engine > ne-h6 ne-heading-content {
 .tree-row.drop-inside::before,
 .tree-row.drop-inside::after { display: none !important; }
 
-/* ---- 视觉一致性（A）：圆角按两档 token 覆盖统一，只作用于 product shell 表面 ---- */
-.activity-button,
-.outline-sidebar__activity-button,
-.dock-icon-btn,
-.outline-sidebar__activity-button:hover,
-.tab-switcher {
-  border-radius: var(--lake-radius-md) !important;
-}
+/* P5（UI 重设计）：原「product shell 表面圆角统一 md !important」已删 ——
+ * 各控件按自身规格给圆角（活动栏按钮 md / dock 图标钮 xs / 页签与树行由下方 sm 规则决定）。 */
 
 /* 紧凑控件（工具条 / 页签 / 图标按钮 / 树行）统一 sm 圆角：拖拽态必须同值，
    否则行在拖动时圆角会从 6px 跳成 8px（外部 `.tree-row.dragging` 的 8px 就是被这条压住的）。 */

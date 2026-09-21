@@ -408,11 +408,9 @@
 
 @media (min-width: 761px) {
 
-  .activity-rail,
-  .sidebar,
-  .outline-sidebar__rail {
-    border-color: rgba(31, 35, 41, .055) !important;
-  }
+  /* P5（UI 重设计）：原
+   *   .activity-rail, .sidebar, .outline-sidebar__rail { border-color: rgba(31,35,41,.055) !important }
+   * 已删（既硬编码颜色、又用 !important 压住新层）—— 活动轨描边单一来源 = src/styles/chrome.css。 */
 
   .workspace,
   .document-pane,
@@ -497,7 +495,7 @@
  * 底部还多出 4px 灰缝（实测 761/760 两侧白卡与 padding 全不一致）。 */
 .app-shell.quick-notes-active .activity-rail {
   background: transparent;
-  border: 0 !important;
+  /* P5：原 `border: 0 !important` 已删 —— 小记页与资料库页保持一致（保留 1px 右描边）。 */
 }
 
 .app-shell.quick-notes-active .workspace {

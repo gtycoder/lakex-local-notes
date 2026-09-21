@@ -59,10 +59,8 @@
    actually constrains to the available space. */
 .multi-tab-editor { max-width: 100%; }
 
-.statusbar {
-  border: 0 !important;
-  box-shadow: none !important;
-}
+/* P5：原 `.statusbar { border: 0 !important; box-shadow: none !important }` 已删
+ * —— 状态栏要有 1px 描边 + 卡片阴影，外观来源 = src/styles/chrome.css（shell 层）。 */
 
 @media (min-width: 761px) {
 

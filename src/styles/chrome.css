@@ -1,0 +1,102 @@
+/* 应用外壳（chrome，layer shell，P5 逐屏迁移）
+ *
+ * 只放"套壳"规则：活动栏 / 目录栏头部 / 状态栏 ……（顶栏·标签页 / 工作区 / 大纲 后续同文件补）
+ * 规律：这里用普通规则即可压过 legacy（shell 层高于 legacy）；**只有当 legacy 用了 !important 时**
+ *       才需要先把那条 legacy 声明删掉（比"我们也加 !important"更符合硬指标 !important ≤10）。
+ * 几何尽量沿用产品现状（用户口径：设计是参考、以实际产品为准）；本文件主要对齐令牌与规格。
+ */
+
+/* ── 活动栏 ─────────────────────────────────────────────── */
+.activity-rail {
+  border-right: 1px solid var(--lake-border-1);
+  background: transparent;
+}
+.activity-button {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  margin: 2px 0;
+  padding: 0;
+  border: 0;
+  border-radius: var(--lake-radius-md);
+  color: var(--lake-text-3);
+  background: transparent;
+  cursor: pointer;
+  transition: color var(--lake-motion-fast) var(--lake-ease-standard),
+    background-color var(--lake-motion-fast) var(--lake-ease-standard);
+}
+.activity-button:hover:not(:disabled) { color: var(--lake-text-1); background: var(--lake-bg-hover); }
+.activity-button:active:not(:disabled) { background: var(--lake-bg-press); }
+.activity-button:focus-visible { outline: var(--lake-focus-ring-width) solid var(--lake-accent); outline-offset: var(--lake-focus-ring-offset); }
+.activity-button:disabled { opacity: .35; cursor: default; }
+.activity-button.active { color: var(--lake-accent); background: var(--lake-accent-tint); }
+
+/* ── 目录栏头部（5 个紧凑图标按钮；沿用产品既有"悬停才显形"） ─────────── */
+.dock-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 22px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--lake-radius-xs);
+  color: var(--lake-text-3);
+  background: transparent;
+  cursor: pointer;
+  transition: color var(--lake-motion-fast) var(--lake-ease-standard),
+    background-color var(--lake-motion-fast) var(--lake-ease-standard);
+}
+.dock-icon-btn:hover:not(:disabled) { color: var(--lake-text-1); background: var(--lake-bg-hover); }
+.dock-icon-btn:active:not(:disabled) { background: var(--lake-bg-press); }
+.dock-icon-btn:disabled { opacity: .35; cursor: default; }
+.dock-icon-btn.is-active { color: var(--lake-accent); background: var(--lake-accent-tint); }
+.dock-icon-btn:focus-visible { outline: var(--lake-focus-ring-width) solid var(--lake-accent); outline-offset: var(--lake-focus-ring-offset); }
+
+/* ── 状态栏（保留产品既有形态：右下浮动胶囊；设计稿的"全宽底栏"属结构改动，按"以产品为准"不采纳） ── */
+.document-statusbar {
+  height: 26px;
+  min-height: 26px;
+  border: 1px solid var(--lake-border-1);
+  border-radius: var(--lake-radius-md);
+  background: var(--lake-bg-panel);
+  box-shadow: var(--lake-shadow-card);
+  color: var(--lake-text-3);
+  backdrop-filter: none;
+  font-size: var(--lake-font-size-tiny);
+}
+.document-statusbar-stats { gap: var(--lake-space-lg); color: var(--lake-text-3); }
+.document-statusbar-state {
+  gap: 5px;
+  height: 20px;
+  padding: 0 7px;
+  border-radius: var(--lake-radius-pill);
+  color: var(--lake-text-2);
+  background: var(--lake-bg-block);
+}
+.document-statusbar-state.pending, .document-statusbar-state.dirty { color: var(--lake-status-pending); background: var(--lake-status-pending-soft); }
+.document-statusbar-state.synced, .document-statusbar-state.synced-history { color: var(--lake-status-ok); background: var(--lake-status-ok-soft); }
+.document-statusbar-state.saving { color: var(--lake-status-sync); background: var(--lake-status-sync-soft); }
+.document-statusbar-state.conflict, .document-statusbar-state.save-error { color: var(--lake-status-error); background: var(--lake-status-error-soft); }
+.document-statusbar-state.local-only { color: var(--lake-text-3); background: var(--lake-bg-block); }
+.document-statusbar-lock { color: var(--lake-accent); }
+.document-statusbar-message { color: var(--lake-text-2); }
+.document-statusbar-state.synced-history { border: 0; font-weight: var(--lake-font-weight-semibold); }
+
+/* 底部提示条（复用提示条规格：实心 + 1px 边 + 浮层阴影） */
+.document-notice-toast {
+  border: 1px solid var(--lake-border-1);
+  border-radius: var(--lake-radius-md);
+  background: var(--lake-bg-panel);
+  box-shadow: var(--lake-shadow-popover);
+  backdrop-filter: none;
+  color: var(--lake-text-2);
+  font-size: var(--lake-font-size-tiny);
+}
+.document-notice-toast button { border-radius: var(--lake-radius-xs); color: var(--lake-accent); }
+.document-notice-toast button:hover { background: var(--lake-accent-tint); }
+@media (prefers-reduced-motion: reduce) {
+  .document-statusbar, .document-notice-toast { backdrop-filter: none; }
+}

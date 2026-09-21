@@ -47,8 +47,8 @@
 .activity-rail {
   padding-top: var(--topbar-height);
   background: transparent;
-  border-right: 0 !important;
-  border-left: 0 !important;
+  /* P5（UI 重设计）：原 `border-right/left: 0 !important` 已删 —— 外观单一来源改为
+   * src/styles/chrome.css（shell 层）给右侧 1px 描边。 */
 }
 
 /* 大纲轨：不额外加 padding-top（大纲栏本体已从顶栏下方开始）；轨自身透明，
@@ -127,10 +127,8 @@
  * 取消原"右下浮动胶囊"（absolute;right:10px;bottom:6px），文档区在第 1 行自然收口。
  * 位置/尺寸（position/right/bottom/width）不在这里：`.statusbar` 与 `.document-statusbar` 是同一元素上的别名类，
  * 真来源是 styles/document-status.css 的 `.document-statusbar`（更晚、带 !important）。 */
-.statusbar {
-  background: var(--b3-body-background) !important;
-  border-top: 0;
-}
+/* P5：原 `.statusbar { background: var(--b3-body-background) !important; border-top: 0 }` 已删
+ * —— 状态栏外观（实心底 + 1px 描边 + 卡片阴影）改由 src/styles/chrome.css（shell 层）单一来源。 */
 
 @media (min-width: 761px) {
   /* 壳层：单色（用户 260915 决策：顶部那点渐变肉眼看不出来，不值得为它留一层"互相压"的规则）。

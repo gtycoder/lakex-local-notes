@@ -1756,7 +1756,7 @@ lsof -ti:1432 -ti:9231 | sort -u | xargs kill
 > 设计规格（外部）= `/Users/admin/file/local-lake/ui-design-inputs/out/design-system/`（8 项交付，**只作参考**）。
 > 分支 `feat/ui-redesign`，基线 `origin/master` = `17bafbe`；**未 push、未合 master**。
 
-### 一、已完成（4 个提交）
+### 一、已完成（5 个提交）
 - **b53a456 docs**：元素底账 + 实现方案（阶段 P0–P8 / 层序 / 主题即数据 / 硬指标 / 验收口径变更）。
 - **e5f171e P1 @layer 层骨架**：新增 `src/styles/index.css` 单入口，`@layer legacy,tokens,reset,kit,shell,feature,overlay,a11y`；旧样式（含内核 style.css / 思源 / 旧壳层）**按原顺序整体入 legacy 层**；删 `src/styles.css`；围栏 `cssLayers.test.ts` 入口项同步。
   - 关键机制：**legacy 最低 ⇒ 新层写入即压过旧样式**，迁移期不靠特异性取胜。
@@ -1772,6 +1772,13 @@ lsof -ti:1432 -ti:9231 | sort -u | xargs kill
   且**现有 TSX 未把任何 kit 类名当作完整 token 使用** ⇒ 加入当天零视觉回归；P5 才逐屏迁移过来。
   - 规格保真：**43/43 项关键数值核对通过**（对照 COMPONENTS.md）；**0 颜色字面量、0 `!important`**（为此给三套主题补了 `--lake-accent-ink-hover/-press`、`--lake-shadow-knob`）。
   - 视觉验证：`docs/UI-REDESIGN-260921/kit-demo.html`（独立 demo，直接引用源 CSS，三套主题切换）已渲染截图核对。
+- **P5 逐屏迁移（第 1 片：活动栏 / 目录栏头部 / 状态栏）**：新增 `src/styles/chrome.css`（layer shell，87 声明，**0 `!important` / 0 颜色字面量**）。
+  - 活动栏：右侧 1px `--lake-border-1`；按钮 28→**32px** + md 圆角；hover/active/选中按规格（选中 = accent-tint + accent，无左条）。
+  - 目录栏头部：5 个紧凑图标钮改 `--lake-radius-xs`（6px，原来被 `!important` 统一压成 md）。
+  - 状态栏：从 b3 的 `!important` 底色改为**实心底 `--lake-bg-panel` + 1px 描边 + 卡片阴影**；同步状态改**软底药丸**（4 态走 `--lake-status-*-soft`）；底部提示条同规格。
+  - **拆掉的 legacy `!important`（4 处）**：`b3/layout.css` 活动轨两根 border 与状态栏底色、`b3/base.css` 状态栏两条、`app/misc.css` 状态栏 border/shadow、`app/shell.css` 硬编码 `rgba(31,35,41,.055) !important` 描边色、`styles/shell.css` 圆角统一 `!important`。
+  - 实测（三套主题 `getComputedStyle`）：轨道描边 = 令牌色（light `rgb(231,233,236)` / dark `rgb(42,47,53)` / warm `rgb(231,223,208)`）；rail 按钮 32px/10px；dock 6px；状态栏实心 + 1px 描边、状态药丸软底。
+  - 底账已打勾：**A1–A7、A12–A14**（见 `docs/UI-REDESIGN-260921/01-ELEMENT-LEDGER.md`）。
 
 ### 二、过渡桥接（P7 删 legacy 时一并移除）
 - 旧 `--lake-*` 名字（`--lake-shell/panel/canvas/surface/accent-soft/shadow-* …`）→ 指向新令牌。
