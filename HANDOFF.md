@@ -7,27 +7,21 @@
 ## 0. 当前基线（新会话开工前）
 - **✅ 分支 `feat/board-document` 已 fast-forward 合入 `master` 并 push origin**（用户 260920 收尾指示）。这一次把三大块一起带进 `master`：
   1. **自研多维表 `kind=bitable`**（§2.12）· 2. **独立画板文档 `kind=board`**（§2.13）· 3. **移动端对账补齐 + 小记完善**（§2.14 / **§2.15**）。
-- **最新会话（260921 · 表格图片 P2 单元格图片 + 缩略图）完整交接 = §2.19（先读它；P2 细节在 §2.18）**（同批 §2.16 表格图片 P1 · §2.17 工具栏/侧栏留白修复）。
-- **紧随其后同批（仍未提交）：§2.20 = 表格「完全去掉浮动图片 + 单元格图片工具弹窗 + 右键清除连带清图 / 细滚动条 / 滚动速度 / 色条修复」**（含两份 `patches/@fortune-sheet+*` 重新生成）。
+- **最新会话（260921 · 单元格图片方案 2A：`cell.img` 成为唯一真相）完整交接 = §2.21（先读它）**；同批承接 §2.20（去浮动图 + 单元格图片工具弹窗 + 滚动/色条修复）与 §2.16–§2.19（表格图片 P1/P2/缩略图）。
+- **✅ 本批已提交并 push origin**（用户 260921 验收通过后指示提交）：`master` = `origin/master` = **`779c393`**，工作区干净。
 - **manifest = v7**（`MANIFEST_VERSION=7`，`READABLE_MANIFEST_VERSIONS={4,5,6,7}`）：`kind` 新增 `sheet`/`bitable`/`board`；旧端读到 v7 **整轮拒绝同步**
   ⇒ **所有端必须一起升级**（刻意安全闸，防旧端把非 doc 正文当 Lake 文档打开写坏）。
 - 一句话状态（移动端小记）：长按桌面图标「**新建小记**」→ **不挂内核的轻量框**（零内核实例，冷启动到可输入实测 **~0.30–0.43s**）；
   轻量框支持 **文字 + 图片（含未提交草稿防丢，纯本地 `device_state`）**；新增 **系统分享（ACTION_SEND）→ 小记**。
   ⚠️ 一条**做过又删掉**的弯路：原生秒开 `QuickCaptureActivity`（用户觉得丑、WebView 框够快 ⇒ 代码全删、快捷方式切回深链；见 §2.15）。
-- **门禁（260921 续 3 最新实测，全绿）**：`tsc` 0 · `vitest` **1205 passed / 16 skipped (1221)** · 桌面 + 移动 build +
-  **Android `testDebugUnitTest`(AssetServerTest 8/0) + `assembleDebug` BUILD SUCCESSFUL** ·
+- **门禁（260921 续 4 = 提交前最新实测，全绿）**：`tsc` 0 · `vitest` **1210 passed / 16 skipped (1226)** · 桌面 + 移动 build ·
   `check:bundle` app-js gzip **1.78MB / 2.90MB**（raw 6.61MB）· `check:core` 0 违规 · `git diff --check` 干净。
-- **工作区（260921 续 2 更新）**：**不干净** —— 表格图片 **P1 + P2 + 缩略图（含多维表/移动端/安卓）** 改动**未提交**：
-  `src/core/sheetDoc(.test).ts`、`src/core/sheetGeometry(.test).ts`（新）、`src/core/assetUrl(.test).ts`、
-  `electron/assetServer(.test).ts`、`android/.../AssetServer.java(+Test)`、`src/features/sheet/SheetEditor.tsx`、
-  `src/features/sheet/sheetEditor(.Mount.test).css/tsx`、`src/features/bitable/bitableCells.tsx(+Mount.test)`、
-  `src/mobile/home/HomePage.tsx`、`src/lib/assetPort(.test).ts`、`src/styles/cssLayers.test.ts` + 4 个 docs；
-  另加 §2.20 的 `patches/@fortune-sheet+{react,core}+1.0.4.patch`（重新生成）；
-  见 **§2.16 / §2.17 / §2.18 / §2.19 / §2.20**），等用户验收（**未 push、未合 master**）。
-  其余：单 worktree；`master` = `origin/master` = **649819a**（未提交改动都在工作区）、`feat/board-document`（= master），另有旧检查点 `feat/bitable`(b1355de)、`feat/sheet-document`(71c2d90)（可删）。
+  （Android `AssetServerTest 8/0` + `assembleDebug` 在本会话更早一轮为绿；2A 未改 Android 侧，提交前未重跑。）
+- **工作区**：**干净**（提交前基线 `649819a` → 提交 `779c393`）。单 worktree；`master` = `origin/master` = **`779c393`**。
+  旧检查点分支仍在本地：`feat/board-document`(649819a)、`feat/bitable`(b1355de)、`feat/sheet-document`(71c2d90)（可删）；`refactor/store-split` 远端已 gone。
 - **dev 数据现状（重要，别擅自删）**：桌面 `到啦领导`(ee860a19) 仍在回收站；安卓回收站旧测试数据 + 笔记本「20-UI编辑测试」「测试本1」（含用户笔记）保留。
   本会话在安卓 dev 数据里建的测试小记均已 purge；原生框遗留（`shared_prefs/quick_capture.xml`、`files/quick-capture-inbox`、`files/shared-inbox`）已清。
-- 历史批次交接：§2.8 表格 · §2.9 FortuneSheet 换代 · §2.10/§2.11 小记内核化 · §2.12 多维表 · §2.13 画板 · §2.14 移动端对账 · §2.15 移动端小记 · §2.16 表格图片 P1 · §2.17 工具栏 + 侧栏留白 · §2.18 表格单元格图片 P2 · §2.19 单元格图片缩略图 · **§2.20 去浮动图 + 单元格图片工具弹窗**。
+- 历史批次交接：§2.8 表格 · §2.9 FortuneSheet 换代 · §2.10/§2.11 小记内核化 · §2.12 多维表 · §2.13 画板 · §2.14 移动端对账 · §2.15 移动端小记 · §2.16 表格图片 P1 · §2.17 工具栏 + 侧栏留白 · §2.18 表格单元格图片 P2 · §2.19 单元格图片缩略图 · §2.20 去浮动图 + 单元格图片工具弹窗 · **§2.21 单元格图片 2A（`cell.img` 唯一真相）**。
 ## 1. 项目一句话 + 铁律（详见 AGENTS.md）
 本地优先笔记应用（Electron 43 + React 18.3 + better-sqlite3 + 语雀 Lake 内核），S3（七牛 Kodo 兼容）同步。
 **红线**：① 本地是真相、S3 只是镜像（云端备份绝不反噬本地）；② 目录/删除强一致（删除传播、墓碑权威）；
