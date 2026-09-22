@@ -140,6 +140,8 @@ export const pin = async (page, w, theme, outlineMode, media) => {
   await page.evaluate(`(() => {
     const k = "lake-notes-v1.settings";
     const s = JSON.parse(localStorage.getItem(k) || "{}");
+    // ⚠️ 所有状态都钉 outlineEnhance=false ⇒ 增强大纲（.outline-sidebar 等）在本矩阵中**不可达**，
+    // L3 的 DOM 零命中对它无效（须叠加代码生产者过滤，见 README §状态矩阵 / l3-plan.mjs）。
     s.theme = ${JSON.stringify(theme)}; s.outlineEnhance = false;
     localStorage.setItem(k, JSON.stringify(s));
     localStorage.setItem("lake-notes-v2.sidebar-mode", "docked");
