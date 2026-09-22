@@ -6,6 +6,12 @@
    原生应用），统一由全局 --b3-font-family 覆盖（macOS=SF Pro+苹方，Windows=Segoe UI+雅黑 UI，
    见 styles/app/base.css 顶部），此处不再重复声明。 */
 
+/* 正文左内距：内核默认只给 40px，而块手柄簇需要 54px（命中区 34 + 标题折叠钮 20）⇒
+   实测 H1 手柄会被画到 x=-14（半个出窗口）。这里显式给 56px（54 + 2 余量），让手柄簇始终
+   留在窗口内，也给左侧目录的隐形热区（8px）留出安全边界。属压内核默认（40px 写在内核样式里）。
+   移动端不受影响：mobile.css 对 .ne-engine 的 padding 有 !important 归零。 */
+.lake-editor-mount .ne-engine { padding-left: 56px; }
+
 @media (min-width: 761px) {
   .lake-editor-mount .ne-engine { padding-right: 56px; }
 }

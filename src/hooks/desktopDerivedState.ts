@@ -4,7 +4,7 @@ import { resolveScrollNode } from "../features/editor/lakeRuntime";
 import type { TabInfo } from "../features/editor/MultiTabEditor";
 import type { OutlineMode } from "../features/outline/OutlineController";
 import { getOutlineTab } from "../features/outline/registry";
-import { OUTLINE_HOVER_TRIGGER_WIDTH } from "../features/outline/outlineInteraction";
+import { OUTLINE_HOVER_TRIGGER_WIDTH, OUTLINE_SCROLLBAR_CLEARANCE } from "../features/outline/outlineInteraction";
 import { treeNodePath, type DesktopWorkspace, type OpenTab } from "../desktop/desktopTypes";
 import type { NoteSummary, TreeNode } from "../lib/types";
 import type { SidebarMode } from "../components/Sidebar";
@@ -110,11 +110,13 @@ export function deriveDesktopView(input: DesktopViewInput) {
     "--sidebar-grid-w": sidebarMode === "docked" ? `${sidebarWidth}px` : "0px",
     "--outline-sidebar-width": `${outlineSidebarWidth}px`,
     "--outline-hover-trigger-width": `${OUTLINE_HOVER_TRIGGER_WIDTH}px`,
+    // 与内核原生大纲同口径：面板整体右让，给编辑器垂直滚动条留出可点/可拖的位置。
+    "--lake-outline-clearance": `${OUTLINE_SCROLLBAR_CLEARANCE}px`,
     // 04 §4：收起**不占列**（整边触发悬浮）；固定只占面板宽（无右侧固定轨）
-    "--outline-grid-w": outlineVisible
-      ? effectiveOutlineMode === "docked"
-        ? `${outlineSidebarWidth}px`
-        : "0px"
+    // 260922：大纲搬进编辑区 —— 不再占栅格列；固定态 = pane 右内推（= 面板宽，正文被推开），
+    // 收起/悬停 = 0（浮层覆盖）。同一变量也供状态栏让位（document-status.css）使用。
+    "--lake-outline-inset": outlineVisible && effectiveOutlineMode === "docked"
+      ? `${outlineSidebarWidth}px`
       : "0px",
   } as CSSProperties;
 

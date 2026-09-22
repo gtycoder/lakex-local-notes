@@ -339,9 +339,8 @@
   .app-shell.sidebar-floating,
   .app-shell.sidebar-collapsed,
   .app-shell.quick-notes-active {
-    /* 第三列 = 右侧大纲（`--outline-grid-w` 由 shellStyle 注入：大纲不可用时为 0，
-       可用且收起时为 38px）。宽窄用同一个令牌，所以大纲宽度不会在断点处变。 */
-    grid-template-columns: var(--activity-rail-width, 38px) minmax(148px, 1fr) var(--outline-grid-w, 0px);
+    /* 260922：大纲已搬进编辑区（不占列）⇒ 窄窗同样只剩「轨 + 正文」两列。 */
+    grid-template-columns: var(--activity-rail-width, 38px) minmax(148px, 1fr);
   }
   .workspace { grid-column: 2; }
   /* 材质语言与宽窗一致：**灰壳 + 白色圆角卡片**。关键：卡片必须画在文档区
@@ -385,7 +384,7 @@
   /* 右侧大纲：**宽窄同一套**（占最右那一列 38px + 悬停浮层，见 features/outline/outline.css）。
      原先这里是 `display:none`（窄窗没有大纲），上一轮改成"脱离栅格的悬浮 rail"后
      出现两个问题（用户 260915 截图）：rail 离开窗口右沿 13px 看着错位，且压住正文右缘的
-     编辑器滚动条与面包屑右侧图标。现在窄窗也占那一列——宽度由 `--outline-grid-w` 单一来源，
+     编辑器滚动条与面包屑右侧图标。260922 起大纲搬进编辑区、不再占列（宽度由 pane 的右内推承担），
      大纲不可用时该列就是 0，正文仍然是满宽。 */
   /* 顶栏：标题区允许压缩，控件不换行 */
   .current-note, .tab-item .tab-title { max-width: 34vw; }

@@ -2089,6 +2089,67 @@ P4 组件库 14 件 → P5 逐屏迁移（每屏对照底账打勾）→ P6 第�
 15. **停靠/非停靠必须分开写**：目录停靠时左侧条被目录卡盖住（z-index 250 > 30），编辑区不需要让位；写成无条件 `padding-left` 会让停靠态白吃 53px、正文无谓变窄。
 
 
+## 2.25 本会话批次（260922 · 增强大纲「进编辑区」A 方案第一步）—— 分支 `feat/ui-opt-260922`
+
+> 用户 260922 定调：**先只做增强大纲**（原生大纲、目录树都不动）。参照飞书 wiki 的「文档目录」形态：面板是**编辑区内部的一块**（不是 app 第 4 列），顶边**运行时动态量**、绝不盖住内核工具条。
+> 分支：`feat/ui-opt-260922`（= 交接基线 `604913a` + 本批提交）；基线备份 `backup/ui-theme-abc-handoff-260922` / `feat/ui-theme-abc`。
+
+### 一、改了什么
+1. **动态顶 `--lake-editor-top`**（新 `src/hooks/useEditorTopVar.ts`，写回 `.document-pane`）：量 pane 内**从顶部连续停靠**的 chrome 栈底边（`.protyle-breadcrumb` + `.ne-ui`），ResizeObserver + MutationObserver + window resize 驱动；工具条隐藏/换高自动跟随，明显有间隙的浮动元素（将来）不计入。
+2. **DOM 搬家**：`<OutlineSidebar>` 由 App 顶层改为经 `DesktopLibrary` 的 `outlineSlot` 渲染进 `.document-pane`（**仍是单实例**，不是每标签一个；`.tab-panels` 是它的兄弟）。
+3. **几何（以内核原生大纲为基准；260922 二次修正）**：`.outline-sidebar` = pane 右缘的绝对定位**槽位**（宽 `--outline-sidebar-width`，整体 `right: var(--lake-outline-clearance)`=13px 给垂直滚动条）；内容/触发器/桥 `top: var(--lake-editor-top)` + 显式 `height: calc(100% - …)`；**固定态的「让位」只加在正文块上**（`.ne-engine { padding-right: calc(56px + var(--lake-outline-inset)) }`，原生是 `ne-normal-toc .ne-engine > * { margin-right: 280px }`）⇒ 面包屑与内核工具条保持**满宽**（不出现右上角缺口），状态栏 `right` 同步让位。
+4. **删栅格列**：`--outline-grid-w` 取消（`desktopDerivedState` 改注入 `--lake-outline-inset`），`outline.css` 4 列→3 列、`misc.css` 3 列→2 列。
+5. **固定态与悬停态同一个盒**（用户 260922 定稿，替代先前「固定态填满槽位」的错误做法）：两者都 `top: var(--lake-editor-top)`、底 = pane 底、整体右让 13px；唯一区别是固定态把正文推开（引擎右内距），悬停态浮在正文上。
+
+### 二、实测（隔离实例 1280×820；原生基准与增强版同实例对照）
+**原生大纲基准（`outlineEnhance=false`）**：`.ne-toc-sidebar` x1225..1265 / y**112**..808（`right:15px` 让滚动条）、`.ne-ui` x53..**1280**（**满宽、不被大纲收窄**）、正文块 `margin-right: 280px`。
+**增强版（`outlineEnhance=true`）**：
+
+| 状态 | `--lake-editor-top` | 面板盒 | 面包屑/工具栏 | 正文块 |
+|---|---|---|---|---|
+| 收起 + 悬停 | 70px | x1067 **y112** w200 h708 b820（右让 13） | r=**1280**（满宽） | r=1214（不让位） |
+| 固定 | 70px | x1067 **y112** w200 h708 b820 | r=**1280**（满宽） | 引擎右内距 256 ⇒ r=**1014**（让位） |
+| 工具条 `display:none`（只读/隐藏/未来浮动） | **32px**（回退到面包屑底） | y**74**..820 | 满宽 | 同上 |
+
+固定态触发器 `display:none`；滚动条 10px 在 1270..1280，面板右缘 1267 ⇒ 可点可拖。**原生大纲、目录树未动**。
+
+### 三、坑（本批新增，务必记住）
+- **动态顶必须「从 pane 顶连续」地量**：工具条顶在 pane 顶下 32px，只判「贴近 pane 顶」会把它整个漏掉（本批踩过）。做法 = 候选按 top 排序、只收与当前栈底相接（tol 8px）的。
+- **绝对/固定定位 + `height: auto` + `top/bottom` 在 Chromium 下不撑满**（会被内容顶出视口）→ 必须显式 `height: calc(100% - var(--lake-editor-top))`。
+- **同文件里更早的高特异性规则会赢**：旧 `.outline-sidebar--docked .outline-sidebar__content { top:0; bottom:0 }` 把新的固定态几何覆盖回 0（已改写）。改大纲几何要全文件搜同一选择器。
+- **「让位」只能加在正文块上，不能推 pane**：推 pane 会把面包屑/内核工具条一起收窄、面板顶边上方出现空白缺口。内核原生的做法就是只推正文（`ne-normal-toc .ne-engine > * { margin-right: 280px }`）、工具条满宽。
+- **面板要整体右让滚动条宽度**：原生 `.ne-ui-scrollbar-visible .ne-toc-sidebar { right: 15px }`；我们 `right: var(--lake-outline-clearance)`（13px，单一来源 `OUTLINE_SCROLLBAR_CLEARANCE`）。否则面板会盖住垂直滚动条、拖不动。
+- **面板必须盖住缩略图**：`.outline-sidebar__content` 的 z-index 必须 > 触发器(3) 与桥(4)（现为 **5**）。用户 260922 报的「悬浮大纲右侧被缩略图横线压住」就是这个层序问题；收起态因为 `visibility:hidden` + `pointer-events:none` 不挡缩略图命中（实测 `elementFromPoint` 仍命中 trigger）。
+
+### 四、下一步
+1. 用户真机点验：固定/悬停/收起三态手感、缩放手柄、筛选/展开级别、窄窗、专注模式。
+2. 目录树**暂不动**（用户明确）；将来若做，复用同一 `useEditorTopVar` + 同一「槽位」模型。
+3. **待用户定的偏差**：本批按原生「工具栏满宽、只推正文」实现 ⇒ 大纲**不会**让内核工具条压缩。若用户要「打开大纲时工具栏也变窄、触发内核压缩/更多」，把内推从引擎挪回 pane 即可（2 行），代价是右上角会留一块空白。
+
+## 2.26 本会话批次（260922 · 目录栏：去缩略图 + 壳层回归满宽 + 触发条/块手柄边界）—— 分支 `feat/ui-opt-260922`
+
+> 用户 260922 定稿的**第一步**（三态大方案见原型 `docs/UI-REDESIGN-260921/dir-panel-3states.html`，**已认可但暂不实施**）。
+
+### 一、改了什么
+1. **去掉目录栏缩略图**：`App.tsx` 中 `.edge-hotzone-l` 内的 `.toc-minimap` 整块删除（热区与 hover/click 交互保留）。`.toc-minimap` 样式保留——右侧大纲触发器仍在用。
+2. **热区收窄 39px → 8px**（`chrome.css`）：旧 39px 既画缩略图、又会和「伸手去抓块手柄」的指针路径打架。
+3. **面包屑 / 内核工具条回归满宽**：删掉上批的 `.app-shell.sidebar-floating/.sidebar-collapsed .document-pane { padding-left: 53px }` 让位 hack。
+4. **正文左内距 40 → 56**（`editor.css`，压内核默认）：块手柄簇要 54px（命中区 34 + 标题折叠钮 20），内核只给 40 ⇒ 实测 H1 手柄 x=-14（出窗口）。给 56 后手柄簇恒在窗口内，也给 8px 热区留出边界。
+   - 替代关系：**旧 = 热区占位 53px 内推（正文左缘 93）；新 = 只留手柄槽 56px（正文左缘 56）⇒ 收回 37px**。
+
+### 二、实测（隔离实例 1280×820，CDP）
+- 面包屑右缘 **1280**、内核工具条右缘 **1280**（满宽）；左侧 `.toc-minimap` 数量 **0**；热区宽 **8**；`ne-engine` padding-left **56**。
+- 块手柄：H1 **x=2..36**（旧 -14..20，已不出窗）；段落 **22..56**。
+- **指针落在手柄上**（x=39,y=192）→ 目录**不弹出**（`app-shell` 保持 `sidebar-collapsed`）；**指针到最左 3px** → 目录浮出（`sidebar-floating`）。⇒「抓手柄」与「唤目录」不再打架。
+
+### 三、坑（本批）
+- **左缘热区不能宽**：只要 > 手柄簇左缘（H1 为 2px、段落为 22px），就会在「伸手去抓手柄」的路上误触发目录浮层。
+- **手柄簇 54px 是内核常数**（`hitAreaWidth=34` + `ne-heading-fold` 20）⇒ 正文左内距必须 ≥ 54；「左缘要有触发条」与「手柄要够位置」是天生的张力，只能靠**窄热区 + 手柄槽**共存。
+
+### 四、下一步
+1. 三态大方案按原型实施：**SidePanel 原语 + 目录栏三态（固定/悬浮/隐藏触发把手）**，等用户发话。
+2. 目录栏面板顶边目前仍是用 `--lake-floating-panel-top`（常量 112）；将来搬进编辑区时改用 `--lake-editor-top`（现成 hook）。
+
 ## 3. 下一步计划 + 当前问题（真正的待办，按优先级）
 
 ### 下一步计划

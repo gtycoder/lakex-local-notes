@@ -195,7 +195,9 @@
   border-radius: var(--lake-radius-md) var(--lake-radius-md) 0 0;
 }
 
-/* ── 整边触发区：承载原生式 minimap（条目横线见 outline.css .toc-minimap） ── */
+/* ── 整边触发区（左）：只做「隐形热区」，不画缩略图（260922 用户定稿）──
+ * 热区收窄到 8px。为什么必须窄：块手柄簇要占块左缘外 54px（命中区 34 + 标题折叠钮 20），
+ * 热区一宽就会和「伸手去抓手柄」的指针路径打架（旧 39px 版还会把缩略图线画在手柄底下）。 */
 .app-shell {
   position: relative;
 }
@@ -204,16 +206,10 @@
   /* 与浮层同源：整边热区从编辑器工具条下缘起（不越过工具条），底到窗口底（260922）。 */
   top: var(--lake-floating-panel-top);
   bottom: 0;
-  width: 39px;
+  width: 8px;
   z-index: 30;
   cursor: default;
   background: transparent;
-  overflow: hidden;
-}
-.edge-hotzone .toc-minimap {
-  align-items: flex-start;
-  padding: 10px 8px 10px 12px;
-  pointer-events: none;
 }
 .edge-hotzone-l { left: 0; }
 .app-shell.sidebar-docked .edge-hotzone-l { left: 0; }

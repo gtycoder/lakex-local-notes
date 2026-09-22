@@ -11,12 +11,13 @@
 /* app-shell 网格：左 activity rail | 左目录 | 主区 | 右大纲（固定时 = 面板 + activity rail） */
 
 @media (min-width: 761px) {
+  /* 260922：大纲**不再是第 4 列** —— 它搬进 .document-pane 内部（见下方「编辑区内部的一块」）。
+     固定态用 pane 的 padding-right 把正文推开，收起/悬停态悬浮；所以这里只剩「轨 | 目录 | 正文」三列。 */
   .app-shell,
   .app-shell.sidebar-floating,
   .app-shell.sidebar-collapsed {
     grid-template-columns:
-      var(--activity-rail-width) var(--sidebar-grid-w, var(--sidebar-width)) minmax(0, 1fr)
-      var(--outline-grid-w, var(--outline-collapsed-width));
+      var(--activity-rail-width) var(--sidebar-grid-w, var(--sidebar-width)) minmax(0, 1fr);
   }
   .app-shell.outline-resizing,
   .app-shell.outline-resizing .outline-sidebar,
@@ -26,36 +27,28 @@
 
 }
 
-/* 大纲栏：04 §4 整边触发 + 悬浮/固定（**无右侧固定轨**）
- * - collapsed：不占 grid 列宽；仅右缘 14px 热区 hover 弹出悬浮面板
- * - docked：只占面板宽（📌 固定推开正文）
- * 旧「38px 常驻 rail」已去掉。 */
+/* 260922（A 方案）：大纲栏 = **编辑区内部的一块**。
+ * 它不再是 app-shell 的第 4 列，而是 .document-pane 的绝对定位子节点：
+ *  - 槽位 = pane 右缘、宽 `--outline-sidebar-width`；内容底边贴 pane 底；
+ *  - 顶边 = `--lake-editor-top`（运行时量出的「顶部停靠 chrome 底边」，见 src/hooks/useEditorTopVar.ts）
+ *    ⇒ 无论内核工具条换高/隐藏、将来是否浮动，面板都压不到它；
+ *  - 固定(docked) = pane 付右内推把正文推开（同一块表面）；悬停(collapsed+hovered) = 浮在正文上。
+ * 本栏本体只提供「槽位 + 层叠上下文」，交互全在 trigger / content 上。 */
 .outline-sidebar {
-  position: relative;
-  z-index: 250;
-  grid-column: -2 / -1;
-  grid-row: 1;
-  justify-self: stretch;
-  align-self: stretch;
-  width: 100%;
-  min-width: 0;
-  height: auto;
-  margin: calc(var(--topbar-height) + 4px) 0 4px 0;
-  overflow: visible;
-}
-
-/* collapsed：列宽为 0 —— aside 变成贴右缘的触发层容器 */
-.outline-sidebar--collapsed {
   position: absolute;
-  /* 与目录浮层同源：触发层从编辑器工具条下缘起，不再越过/压住工具条（260922）。 */
-  top: var(--lake-floating-panel-top);
-  right: 0;
+  top: 0;
+  /* 与内核原生大纲同一口径：整体右让 --lake-outline-clearance（13px），把垂直滚动条留在面板右侧、可拖可点
+     （原生：`.ne-ui-scrollbar-visible .ne-toc-sidebar { right: 15px }`）。 */
+  right: var(--lake-outline-clearance, 13px);
   bottom: 0;
-  width: 0;
+  width: var(--outline-sidebar-width, 280px);
+  min-width: 0;
   margin: 0;
+  padding: 0;
   z-index: 260;
   overflow: visible;
   pointer-events: none;
+  background: transparent;
 }
 
 /* ── minimap：完全仿 .ne-toc-small-view（vendor lakex-doc.css 10762+）──
@@ -98,7 +91,8 @@
 .outline-sidebar__trigger {
   position: absolute;
   z-index: 3;
-  top: 0;
+  /* 顶边跟随动态 chrome 底边（--lake-editor-top），不再写死 topbar+28 */
+  top: var(--lake-editor-top, 112px);
   bottom: 0;
   right: 0;
   width: 39px;
@@ -106,13 +100,9 @@
   cursor: default;
   overflow: hidden;
 }
-/* 固定时热区贴在面板左外侧，仍可再触发 */
-.outline-sidebar--docked .outline-sidebar__trigger {
-  right: auto;
-  left: -14px;
-  border-left: 0;
-  border-right: 0;
-}
+/* 固定态：面板已占住右缘槽位、正文被推开，热区/缩略图收起
+   （否则会盖住编辑器滚动条与正文右缘的点击）。 */
+.outline-sidebar--docked .outline-sidebar__trigger { display: none; }
 
 /* ── 旧常驻 rail：视觉隐藏（只留触发层/桥） ── */
 .outline-sidebar__rail {
@@ -131,7 +121,7 @@
 .outline-sidebar__bridge {
   position: absolute;
   z-index: 4;
-  top: 0;
+  top: var(--lake-editor-top, 112px);
   left: 0;
   bottom: 0;
   width: 4px;
@@ -166,15 +156,22 @@
   outline: var(--lake-focus-ring-width) solid var(--lake-accent-tint);
   outline-offset: 2px;
 }
-/* 内容锚定右缘（无常驻 rail）。收起时覆盖正文；固定时参与 grid，编辑器自行收缩。 */
+/* 内容盒：顶 = 动态 chrome 底边，底 = pane 底；宽度 = aside 槽宽。
+ * 固定态由 pane 的 padding-right 把正文推开；收起悬停态是浮在正文上的浮层。
+ * z-index 必须高于触发器（缩略图，z=3）与桥（z=4）：**面板一出来就盖住缩略图**
+ * （用户 260922 报：悬浮大纲的右侧被缩略图横线压住）。收起态面板 visibility:hidden +
+ * pointer-events:none，不挡缩略图命中。 */
 .outline-sidebar__content {
   position: absolute;
-  z-index: 1;
+  z-index: 5;
+  top: var(--lake-editor-top, 112px);
   right: 0;
   display: flex;
   flex-direction: column;
-  width: var(--outline-sidebar-width, 280px);
-  min-width: var(--outline-sidebar-width, 280px);
+  width: 100%;
+  min-width: 0;
+  /* 显式高度：绝对定位 + height:auto 在 Chromium 下不会按 top/bottom 撑满（实测会被内容顶出视口） */
+  height: calc(100% - var(--lake-editor-top, 112px));
   min-height: 0;
   overflow: hidden;
   opacity: 1;
@@ -189,12 +186,14 @@
   transform: translateX(10px);
 }
 
-/* 固定：面板与 rail 同列，不再覆盖正文。 */
+/* 固定：面板占住 pane 右缘槽位、正文被 pane 的右内推挤开（与编辑区同一块表面）。 */
 .outline-sidebar--docked .outline-sidebar__content {
   visibility: visible;
   pointer-events: auto;
-  /* 固定态的"连体白卡"外观（圆角/分隔/去边框）写在基础层 styles/app/shell.css 的
-     `.outline-sidebar--docked` 规则里——那层是本项目最后加载的壳层材质层，写在这里会被它覆盖。 */
+  background: var(--lake-bg-panel);
+  border-left: 1px solid var(--lake-border-1);
+  border-radius: 0;
+  box-shadow: none;
 }
 
 .outline-sidebar__resize-handle {
@@ -390,13 +389,9 @@
   /* 卡片投影；面/边/圆角的唯一来源见下方「大纲轨 / 收起后悬停展开」段 */
   box-shadow: var(--lake-shadow-soft);
 }
+/* 260922 固定态**与悬停态同一个盒**：几何由上面的内容盒统一给（顶 = --lake-editor-top 动态、底 = pane 底），
+   这里只保留「不浮」的外观（面/分隔线/去投影）。用户 260922 定稿：两种形态都不能盖住工具栏。 */
 .outline-sidebar--docked .outline-sidebar__content {
-  left: 0;
-  right: 0;
-  width: auto;
-  min-width: 0;
-  top: 0;
-  bottom: 0;
   position: absolute;
 }
 .outline-sidebar--collapsed .outline-sidebar__content {
@@ -419,16 +414,10 @@
 .outline-item--selected { color: var(--lake-text); background: var(--lake-accent-soft); }
 .outline-item--selected { box-shadow: inset 3px 0 var(--lake-accent); }
 
-/* Floating outline: keep the preview inside a bounded dock instead of growing to
-   the full app column, and let pointer travel from rail to content without a
-   leave/re-enter race.（宽窄共用：窄窗同样只保留右侧 rail + 悬停预览） */
+/* 收起（悬停预览）：盒几何完全由上方内容盒决定（顶 = --lake-editor-top、底 = pane 底），
+   这里只留过渡与「从触发条滑进面板」的走廊（宽窄共用）。 */
 .outline-sidebar--collapsed .outline-sidebar__content,
 .outline-sidebar--collapsed.outline-sidebar--hovered .outline-sidebar__content {
-  top: var(--lake-floating-panel-top, 112px);
-  bottom: var(--lake-floating-panel-bottom, 0px);
-  /* 与左侧目录浮层同源：显式高度（固定定位 + auto 不撑满，见 styles/app/shell.css 注释）。 */
-  height: calc(100vh - var(--lake-floating-panel-top, 112px) - var(--lake-floating-panel-bottom, 0px));
-  max-height: none;
   transition: opacity 180ms var(--lake-ease-standard), transform 180ms var(--lake-ease-standard), visibility 180ms linear, box-shadow 180ms ease-out;
 }
 .outline-sidebar--collapsed:not(.outline-sidebar--hovered) .outline-sidebar__content {
@@ -452,6 +441,17 @@
   user-select: none;
 }
 
+/* 260922：大纲在编辑区里占的横向空间由它自己声明 —— 固定态把**正文**推开（面板宽），
+   收起/悬停态为 0（浮层覆盖）。--lake-outline-inset 由 desktopDerivedState 注入。
+   ★ 学内核原生大纲：让位只加在**正文块**上（原生 `ne-normal-toc .ne-engine > * { margin-right: 280px }`），
+   不要推 pane —— 推 pane 会把面包屑/内核工具条一起收窄，面板顶上就会出现一块空白缺口。
+   （56px 是我们原有的正文右内距，见 styles/app/editor.css；这里叠加大纲占位。） */
+@media (min-width: 761px) {
+  .document-pane .lake-editor-mount .ne-engine {
+    padding-right: calc(56px + var(--lake-outline-inset, 0px));
+  }
+}
+
 /* The panel becomes interactive as soon as the trigger is entered; delaying
    opacity made the panel visually present but not reliably hit-testable. */
 .outline-sidebar--collapsed.outline-sidebar--hovered .outline-sidebar__content {
@@ -472,11 +472,13 @@
   border-left: 0;
 }
 .outline-sidebar--collapsed.outline-sidebar--hovered .outline-sidebar__content {
-  position: fixed;
+  position: absolute;
   left: auto;
-  width: var(--outline-sidebar-width, 280px);
+  right: 0;
+  width: 100%;
   min-width: 0;
   background: var(--lake-bg-panel);
   border: 0;
   border-radius: var(--lake-radius-md) 0 0 var(--lake-radius-md);
+  box-shadow: var(--lake-shadow-soft);
 }

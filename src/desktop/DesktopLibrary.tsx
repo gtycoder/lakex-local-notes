@@ -3,7 +3,8 @@
  * 渲染 MultiTabEditor + 思源式面包屑 + 空态。所有状态/回调由 App 注入，本组件不持有业务状态。
  */
 import { ChevronRight, File } from "lucide-react";
-import type { ReactNode, Ref, RefObject } from "react";
+import { useRef, type ReactNode, type Ref, type RefObject } from "react";
+import { useEditorTopVar } from "../hooks/useEditorTopVar";
 import { MultiTabEditor, type TabInfo } from "../features/editor/MultiTabEditor";
 import type { LakeEditorInstance } from "../features/editor/lakeRuntime";
 
@@ -43,6 +44,12 @@ export interface DesktopLibraryProps {
   /** 外部改动正文后重载该文档 tab（附件重命名用） */
   onReloadNote: (noteId: string) => void;
   onCreateNote: () => void;
+  /**
+   * 增强大纲：作为「编辑区内部的一块」渲染在 .document-pane 里（260922 A 方案）。
+   * 由 App 传入（它持有大纲状态/回调），但 DOM 落在编辑区内 ⇒ 与编辑区同一块表面、
+   * 受同一裁剪/层叠上下文，顶边由 --lake-editor-top 动态给。
+   */
+  outlineSlot?: ReactNode;
 }
 
 export function DesktopLibrary(props: DesktopLibraryProps) {
@@ -53,9 +60,14 @@ export function DesktopLibrary(props: DesktopLibraryProps) {
     onScrollToTop, onNavigateToHeading,
     lockedNoteIds, pinnedNoteIds,
     onTabChange, onTabClose, onTabsReorder, onTogglePin, onContentChange,
-    onEditorReady, onReloadNote, onCreateNote, onOpenTrash,
+    onEditorReady, onReloadNote, onCreateNote, onOpenTrash, outlineSlot,
     visible = true,
   } = props;
+
+  // 动态顶：把 pane 内顶部停靠 chrome（面包屑 + 内核工具条）的底边写进 --lake-editor-top，
+  // 供「编辑区内部」的大纲面板使用（工具条换高/隐藏/将来浮动都能跟上）。
+  const paneRef = useRef<HTMLElement | null>(null);
+  useEditorTopVar(paneRef, activeNoteId);
 
   const breadcrumb = activePathTitle !== null ? (
     <nav className="protyle-breadcrumb" aria-label="文档路径">
@@ -88,7 +100,7 @@ export function DesktopLibrary(props: DesktopLibraryProps) {
   ) : undefined;
 
   return (
-    <section className={`document-pane${wideMode ? " wide-mode" : ""}`}>
+    <section ref={paneRef} className={`document-pane${wideMode ? " wide-mode" : ""}`}>
       <MultiTabEditor
         visible={visible}
         tabs={tabs}
@@ -111,6 +123,7 @@ export function DesktopLibrary(props: DesktopLibraryProps) {
         onReloadNote={onReloadNote}
         emptyAction={<button className="b3-button" onClick={onCreateNote}>新建文档</button>}
       />
+      {outlineSlot}
     </section>
   );
 }

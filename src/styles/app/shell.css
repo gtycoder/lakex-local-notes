@@ -633,13 +633,6 @@ html[data-theme="dark"] .document-pane .ne-engine > ne-h6 ne-heading-content {
 }
 
 
-/* 浮动大纲贴窗口右缘（04 §4：无常驻轨，悬浮覆盖）。
- * 根规则：right 只写这一处。曾为「让开编辑器滚动条」留 38+13px 空隙，导致面板不贴边。 */
-.outline-sidebar--collapsed.outline-sidebar--hovered .outline-sidebar__content {
-  right: 0;
-}
-
-
 /* ── 目录栏浮层（共用作用域；260915 窄窗彻底统一）──
  * 原先是四个 `@media (min-width: 761px)` 块 ⇒ 窄窗悬停左轨会拉出一块没有高度约束、
  * 被栅格撑到上万像素的面板（实测 box [38,-15838,265,16706]）。宽窄共用同一套几何。
@@ -656,34 +649,13 @@ html[data-theme="dark"] .document-pane .ne-engine > ne-h6 ne-heading-content {
   overflow: hidden;
   transition: opacity 120ms ease-out, transform 120ms var(--lake-ease-standard);
 }
-/* 右侧大纲浮层与左侧目录浮层同源同几何（令牌单一来源），消除左右弹出高度不一致 */
-.outline-sidebar--collapsed.outline-sidebar--hovered .outline-sidebar__content {
-  top: var(--lake-floating-panel-top);
-  bottom: var(--lake-floating-panel-bottom);
-  height: calc(100vh - var(--lake-floating-panel-top) - var(--lake-floating-panel-bottom));
-  max-height: none;
-}
 
-/* ── 非停靠态：编辑区整体右移，给左侧整边热区/缩略图条让位（260922）──
- * 热区 `.edge-hotzone` 是浮在壳上的 39px 覆盖层（宽度见 chrome.css），
- * 而正文块手柄是 `position: fixed` 画在块左缘外 34px（标题还要再让 20px 折叠钮）——
- * 不右移时实测段落手柄 x=6..40、H1 手柄 x=-14（既压住缩略图，又跑出窗口）。
- * 位移 = 条宽 39 + 块操作槽 54（手柄命中区 34 + 标题折叠钮 20）− 内核正文左内距 40 = 53
- * ⇒ 正文块左缘落在 93、手柄命中区 ≥ 39，与缩略图条严格不重叠。
- * 停靠态（sidebar-docked）目录自己占列、条被目录卡盖住，故不加。 */
-.app-shell.sidebar-floating .document-pane,
-.app-shell.sidebar-collapsed .document-pane {
-  padding-left: 53px;
-}
 
 /* #2 浮层阴影：左右统一、更柔；阴影静态、不参与切出动画（避免逐帧重绘，保性能与速度） */
 .sidebar.sidebar-floating {
   box-shadow: 16px 0 26px -14px var(--lake-shadow-color-5); /* 单侧投影：负 spread 收掉上下溢出 */
 }
-.outline-sidebar--collapsed.outline-sidebar--hovered .outline-sidebar__content {
-  box-shadow: -16px 0 26px -14px var(--lake-shadow-color-5); /* 单侧投影（朝内容侧） */
-  transition: opacity 180ms var(--lake-ease-standard), transform 180ms var(--lake-ease-standard), visibility 180ms linear;
-}
+
 
 /* Showing the library preview is immediate; only the collapse is animated.
    This prevents the pointer from repeatedly crossing a moving panel edge. */
@@ -711,7 +683,7 @@ html[data-theme="dark"] .document-pane .ne-engine > ne-h6 ne-heading-content {
   --lake-floating-panel-bottom: 0px;
   --activity-rail-width: var(--lake-rail-width);
 }
-.app-shell { --outline-collapsed-width: var(--lake-rail-width); }
+/* （260922 删掉 .app-shell { --outline-collapsed-width }：大纲已不占栅格列，该令牌无引用。） */
 
 /* ── 以下规则自 `src/styles/ui-polish.css` 按职责并入（260916 S2/S3，只搬家不改声明）：页签与紧凑控件的几何/圆角/状态 ── */
 /* Tab close controls must own their layout slot; never overlay title or dirty dot. */

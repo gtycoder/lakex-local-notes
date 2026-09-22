@@ -94,7 +94,8 @@
 
 /* Compact by default; transient left-side messages expand the pill up to a safe cap. */
 .document-statusbar {
-  right: 12px;
+  /* 大纲固定态会占住编辑区右缘（--lake-outline-inset）：状态栏随之左让，别被压在大纲底下。 */
+  right: calc(12px + var(--lake-outline-inset, 0px));
   left: auto;
   width: max-content;
   max-width: min(720px, calc(100% - 24px));

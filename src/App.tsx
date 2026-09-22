@@ -363,17 +363,7 @@ export function App() {
             hideSidebarPreview();
           }}
           onClick={() => toggleSidebarDock()}
-        >
-          <div className="toc-minimap" aria-hidden="true">
-            {treeNodes.slice(0, 80).map((n, i) => (
-              <span
-                key={n.id}
-                className={`toc-minimap__item toc-minimap__item--d${n.nodeType === "notebook" ? 1 : n.nodeType === "group" ? 2 : 3}${n.id === activeNoteId || n.noteFileId === activeNoteId ? " is-selected" : ""}`}
-                style={{ marginTop: i === 0 ? 10 : undefined }}
-              />
-            ))}
-          </div>
-        </div>
+        />
       )}
       {/* 空间切换已并入顶栏工作空间菜单（S1+A）；活动栏不再渲染（壳层导航，功能见菜单 ⌘1–3） */}
       {/* keep-alive：Sidebar 常驻，小记/回收站空间由 shell class 隐藏（避免切回时重建目录树） */}
@@ -415,6 +405,20 @@ export function App() {
             onEditorReady={handleEditorReady}
             onReloadNote={reloadNoteTab}
             onCreateNote={() => void createNote()}
+            outlineSlot={outlineVisible ? (
+              <OutlineSidebar
+                mode={effectiveOutlineMode}
+                activeNoteId={activeNoteId}
+                width={outlineSidebarWidth}
+                minWidth={OUTLINE_SIDEBAR_MIN_WIDTH}
+                maxWidth={OUTLINE_SIDEBAR_MAX_WIDTH}
+                onCollapse={collapseOutline}
+                onPin={pinOutline}
+                onResizeActiveChange={setOutlineResizing}
+                onWidthChange={updateOutlineSidebarWidth}
+                onWidthCommit={commitOutlineSidebarWidth}
+              />
+            ) : null}
           />
         </div>
         <div className={"workspace-view" + (desktopWorkspace === "quick-notes" ? "" : " workspace-view--hidden")}>
@@ -457,20 +461,6 @@ export function App() {
           })}
         />
       </main>
-      {outlineVisible && (
-        <OutlineSidebar
-          mode={effectiveOutlineMode}
-          activeNoteId={activeNoteId}
-          width={outlineSidebarWidth}
-          minWidth={OUTLINE_SIDEBAR_MIN_WIDTH}
-          maxWidth={OUTLINE_SIDEBAR_MAX_WIDTH}
-          onCollapse={collapseOutline}
-          onPin={pinOutline}
-          onResizeActiveChange={setOutlineResizing}
-          onWidthChange={updateOutlineSidebarWidth}
-          onWidthCommit={commitOutlineSidebarWidth}
-        />
-      )}
       {infoNote && (
         <NoteInfoDialog
           note={{ noteFileId: infoNote.noteFileId, title: infoNote.title }}
