@@ -184,6 +184,15 @@ export const STATES = [
     { name: "plain:560:light", w: 560, theme: "light" },
     { name: "plain:560:dark", w: 560, theme: "dark" },
     { name: "settings:1315:dark", w: 1315, theme: "dark", screen: "settings-data" },
+  // ── 主题 C（warm）：重设计有三套主题，浅/深之外必须覆盖 warm，否则 warm 下的回归无人看守（260923 W0-a）──
+  { name: "plain:1315:warm", w: 1315, theme: "warm" },
+  { name: "plain:560:warm", w: 560, theme: "warm" },
+  { name: "hover-row:1315:warm", w: 1315, theme: "warm", hover: ".tree-row" },
+  { name: "menus:1315:warm", w: 1315, theme: "warm", menus: true },
+  { name: "search:1315:warm", w: 1315, theme: "warm", search: true },
+  { name: "settings:1315:warm", w: 1315, theme: "warm", screen: "settings-data" },
+  { name: "quicknotes:1315:warm", w: 1315, theme: "warm", screen: "quicknotes" },
+  { name: "outline-open:1315:warm", w: 1315, theme: "warm", screen: "outline" },
     // 260916 补矩阵：媒体偏好态。这两个条件在原来的 27 个状态里**恒为假**，导致落在对应媒体块里的声明
     // 完全不可验证（§2.47 因此把 11 条 `animation/transition: none !important` 判为"证不了、不动"）。
     // 用 CDP `Emulation.setEmulatedMedia` 把它们变成可观测状态。

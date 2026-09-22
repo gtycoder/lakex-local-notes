@@ -46,30 +46,23 @@ await send("Runtime.enable");
 await send("Page.enable");
 await send("Page.bringToFront");
 await waitFor('Boolean(document.querySelector(".sidebar") && document.querySelector(".sidebar-toolbar-row"))');
+// 260923：活动栏已下线 ⇒ 用 ⌘]（toggleSidebarDock，见 PANEL-CONTRACT §5）恢复「固定」态。
+// 本脚本会把自己留在「收起」态，所以每次开跑先自愈，保证可重复运行（状态泄漏曾是本脚本的坑）。
 if (!(await evaluate('Boolean(document.querySelector(".app-shell")?.classList.contains("sidebar-docked"))'))) {
-  const activityRect = await evaluate('document.querySelectorAll(".activity-button")[0]?.getBoundingClientRect()?.toJSON()');
-  if (!activityRect) throw new Error("资料库 activity button 不存在");
-  await clickRect(activityRect);
+  await send("Input.dispatchKeyEvent", { type: "rawKeyDown", modifiers: 4, key: "]", code: "BracketRight", windowsVirtualKeyCode: 221, nativeVirtualKeyCode: 221 });
+  await wait(70);
+  await send("Input.dispatchKeyEvent", { type: "keyUp", modifiers: 4, key: "]", code: "BracketRight", windowsVirtualKeyCode: 221, nativeVirtualKeyCode: 221 });
   await waitFor('Boolean(document.querySelector(".app-shell")?.classList.contains("sidebar-docked"))');
 }
 
-const searchRect = await evaluate(`document.querySelector('.sidebar-docked .search-box input')?.getBoundingClientRect()?.toJSON()`);
-if (!searchRect) throw new Error("固定资料库搜索框不存在");
-await clickRect(searchRect);
-await wait(120);
-const fixedHit = await evaluate(`(()=>{ const input=document.querySelector('.sidebar-docked .search-box input'); const r=input?.getBoundingClientRect(); const hit=r ? document.elementFromPoint(r.x+r.width/2,r.y+r.height/2) : null; input?.focus(); return { hitInput: hit === input || Boolean(hit?.closest('.search-box')) }; })()`);
-await send("Input.insertText", { text: "pointer" });
-const fixedSearch = await evaluate(`JSON.stringify({ mode: document.querySelector('.app-shell')?.className || '', value: document.querySelector('.sidebar-docked .search-box input')?.value || '', focused: document.activeElement === document.querySelector('.sidebar-docked .search-box input'), pointer: getComputedStyle(document.querySelector('.sidebar-docked .search-box input')).pointerEvents, hitInput: ${JSON.stringify(fixedHit.hitInput)} })`);
-// Clear through real keyboard input so React state is cleared as well, not just the DOM value.
-await send("Input.dispatchKeyEvent", { type: "keyDown", key: "a", code: "KeyA", modifiers: 4, windowsVirtualKeyCode: 65 });
-await send("Input.dispatchKeyEvent", { type: "keyUp", key: "a", code: "KeyA", modifiers: 4 });
-await send("Input.dispatchKeyEvent", { type: "keyDown", key: "Backspace", code: "Backspace" });
-await send("Input.dispatchKeyEvent", { type: "keyUp", key: "Backspace", code: "Backspace" });
-await wait(180);
+// 260923：目录栏头部的搜索框已随 UI 重设计移除（全局搜索移到顶栏，见提交 85a4ed5；src 已无 .search-box）
+// ⇒ 原「固定资料库搜索未命中」用例删除；顶栏搜索的无障碍/行为断言由 e2e-electron-smoke.mjs 覆盖。
 
 const fixedButtons = await evaluate(`JSON.stringify([...document.querySelectorAll('.sidebar-docked .sidebar-toolbar-row > .list-heading > button, .sidebar-docked .sidebar-toolbar-row > .list-heading > .create-menu-wrap > .create-btn')].map((button)=>({ title: button.title, rect: button.getBoundingClientRect().toJSON(), disabled: button.disabled })))`);
 for (const button of JSON.parse(fixedButtons)) {
   if (button.disabled) continue;
+  // 📌 会切走「固定」态（本用例接着要测固定态），其余按钮点完都必须仍是 docked（260923）。
+  if ((button.title || '').includes('固定')) continue;
   await clickRect(button.rect);
   if (button.title.includes('全文搜索')) {
     await wait(120);
@@ -84,33 +77,35 @@ const fixedButtonsResult = await evaluate(`JSON.stringify({ buttons: [...documen
 await evaluate(`document.querySelector('.create-menu-wrap > button')?.click(); true`);
 
 // Switch to collapsed, enter the rail, then move into toolbar: it must remain floating.
-await evaluate(`document.querySelector('.activity-button[aria-label="资料库"]')?.click(); true`);
-await wait(180);
-await mouse("mouseMoved", 20, 120);
-await wait(180);
+// 260923：活动栏已下线 ⇒ 改用面板头 📌 把「固定」切成「收起」（PANEL-CONTRACT §3 记录的可靠入口）。
+await evaluate(`document.querySelector('.sidebar-docked .pin-btn')?.click(); true`);
+await wait(200);
+// A3 冻结交互：隐形热区 **10px** + 驻留 **240ms** 才浮出预览 ⇒ 悬停点必须在热区内、等待必须 > 240ms。
+await mouse("mouseMoved", 5, 120);
+await wait(450);
 const floatingToolbarRect = await evaluate(`document.querySelector('.sidebar-floating .sidebar-toolbar-row')?.getBoundingClientRect()?.toJSON()`);
-if (!floatingToolbarRect) throw new Error("悬浮资料库工具栏不存在");
+if (!floatingToolbarRect) throw new Error("悬浮资料库工具栏不存在（热区 10px / 驻留 240ms 契约）");
 await mouse("mouseMoved", floatingToolbarRect.x + 25, floatingToolbarRect.y + 20);
 await wait(80);
-const floating = await evaluate(`JSON.stringify({ mode: document.querySelector('.app-shell')?.className || '', toolbar: Boolean(document.querySelector('.sidebar-floating .sidebar-toolbar-row')), hitToolbar: Boolean(document.elementFromPoint(${floatingToolbarRect.x + 25},${floatingToolbarRect.y + 20})?.closest('.sidebar-toolbar-row')), hit: document.elementFromPoint(${floatingToolbarRect.x + 25},${floatingToolbarRect.y + 20})?.tagName || '' })`);
+const floating = await evaluate(`JSON.stringify({ mode: document.querySelector('.app-shell')?.className || '', toolbar: Boolean(document.querySelector('.sidebar-floating .sidebar-toolbar-row')), hitToolbar: Boolean(document.elementFromPoint(${floatingToolbarRect.x + 25},${floatingToolbarRect.y + 20})?.closest('.sidebar-toolbar-row')), hit: document.elementFromPoint(${floatingToolbarRect.x + 25},${floatingToolbarRect.y + 20})?.tagName || '', panelLeft: Math.round(document.querySelector('.sidebar-floating')?.getBoundingClientRect().left ?? -1) })`);
 
-// Static transition contract: avoid relying on a full page screenshot for timing.
-const transition = await evaluate(`JSON.stringify({
-  name: getComputedStyle(document.querySelector('.tab-panels')).viewTransitionName,
-  css: [...document.styleSheets].flatMap(sheet=>{ try{return [...sheet.cssRules].map(rule=>rule.cssText)}catch{return[]} }).join(' ')
-})`);
-const transitionData = JSON.parse(transition);
 const result = {
-  fixed: JSON.parse(fixedSearch),
   fixedButtons: JSON.parse(fixedButtonsResult),
   floating: JSON.parse(floating),
-  transition: { name: transitionData.name, fastOld: transitionData.css.includes('55ms ease-in'), fastNew: transitionData.css.includes('85ms ease-out') },
 };
 console.log(JSON.stringify(result, null, 2));
-if (!result.fixed.mode.includes('sidebar-docked') || !result.fixed.value.includes('pointer') || !result.fixed.focused) throw new Error("固定资料库搜索未命中");
-if (!result.fixedButtons.mode.includes('sidebar-docked') || result.fixedButtons.buttons.length !== 4) throw new Error("固定资料库按钮未命中");
+// 260923：原「tab 快速动画契约」（viewTransitionName=note-pane + 55ms/85ms 字符串）已随 UI 重设计移除
+// （src 已无 view-transition / 这些字符串）⇒ 删该断言；保留活契约：固定态按钮齐全、悬浮态生命周期、面板贴左缘。
+if (!result.fixedButtons.mode.includes('sidebar-docked') || result.fixedButtons.buttons.length < 4) throw new Error("固定资料库按钮未命中");
 if (!result.floating.mode.includes('sidebar-floating') || !result.floating.hitToolbar) throw new Error("悬浮资料库顶部命中或生命周期失败");
-if (result.transition.name !== 'note-pane' || !result.transition.fastOld || !result.transition.fastNew) throw new Error("tab 切换快速动画契约缺失");
+if (result.floating.panelLeft !== 0) throw new Error("悬浮面板必须贴左缘 left:0（PANEL-CONTRACT §3）");
+// 收尾把侧栏恢复「固定」：否则下次运行从「收起」态开始（本脚本自身依赖 docked 起步）。
+if (!(await evaluate('Boolean(document.querySelector(".app-shell")?.classList.contains("sidebar-docked"))'))) {
+  await send("Input.dispatchKeyEvent", { type: "rawKeyDown", modifiers: 4, key: "]", code: "BracketRight", windowsVirtualKeyCode: 221, nativeVirtualKeyCode: 221 });
+  await wait(70);
+  await send("Input.dispatchKeyEvent", { type: "keyUp", modifiers: 4, key: "]", code: "BracketRight", windowsVirtualKeyCode: 221, nativeVirtualKeyCode: 221 });
+  await wait(300);
+}
 await evaluate("location.reload(); true");
-await wait(400);
+await wait(600);
 socket.close();

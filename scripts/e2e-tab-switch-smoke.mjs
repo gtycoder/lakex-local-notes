@@ -73,9 +73,9 @@ for (const noteId of noteIds) {
   timings.push({ noteId, elapsedMs: Math.round((await evaluate("performance.now()")) - started) });
   await wait(120);
 }
-const css = await evaluate(`(()=>{ const text=[...document.styleSheets].flatMap(sheet=>{try{return [...sheet.cssRules].map(rule=>rule.cssText)}catch{return[]}}).join(' '); return JSON.stringify({ old: text.includes('55ms ease-in'), fresh: text.includes('85ms ease-out')}); })()`);
-const result = { timings, css: JSON.parse(css) };
+const result = { timings };
 console.log(JSON.stringify(result, null, 2));
+// 260923：原「55ms ease-in / 85ms ease-out」CSS 契约已随 UI 重设计移除（现行切换是瞬时 + 令牌过渡，
+// src 里已无这些字符串与 view-transition）⇒ 只保留本脚本的真实契约：切换耗时。
 if (!timings.every((sample) => sample.elapsedMs < 700)) throw new Error("tab 切换耗时超出 700ms");
-if (!result.css.old || !result.css.fresh) throw new Error("tab 快速动画 CSS 合约缺失");
 socket.close();

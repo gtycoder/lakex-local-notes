@@ -98,6 +98,6 @@ W0 双端门禁 → W0.5 抽两端共享入口 → W1 桌面专属零耦合清�
 
 ## 10. 立即开始的前三步
 
-1. **W0-a（半天）**：`stylesnap.STATES` 补 **warm**；把三条失效冒烟**修或退役**（否则门禁不可信）。
+1. **W0-a — ✅ 已完成（260923）**：`stylesnap.STATES` 补 **warm 8 态**（实测可 pin：`data-theme=warm`）；三条失效冒烟按"**修**"处理并**全部实跑通过**：`test:sidebar-interaction`（改用面板头 📌 + 按现行 10px 热区/240ms 驻留悬停 + 断言贴左缘 `left:0`，并加自愈/收尾恢复「固定」避免状态泄漏）、`test:tab-switch`（去掉已消失的 55ms/85ms 契约，保留耗时契约）、`test:ui`（活动栏断言换成"不再渲染 `.activity-rail`"+"顶栏高 == `--topbar-height` 令牌"，并修工作空间触发器选择器）。
 2. **W0-b（半天~1 天）**：**重建**移动端走查 harness（`/tmp/lkm` 已丢失）到 `scripts/mobile-audit/`，跑通移动端快照。
 3. **W1（0.5~1 天）**：桌面专属零风险清理（kit 466 条死声明 + `reset` 空层），用 W0 的门禁证明 0 差异。
