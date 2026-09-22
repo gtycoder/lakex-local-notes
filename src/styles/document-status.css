@@ -28,19 +28,7 @@
 .document-statusbar-state { pointer-events: auto; -webkit-user-select: text; user-select: text; }
 .document-statusbar-stats { gap: 10px; white-space: nowrap; }
 .document-statusbar-state { justify-content: flex-end; color: var(--lake-text-secondary); white-space: nowrap; }
-.document-statusbar-state.local-only { color: var(--lake-text-tertiary); }
-.document-statusbar-state.pending,
-.document-statusbar-state.dirty { color: var(--lake-sync-pending); }
-.document-statusbar-state.synced,
-.document-statusbar-state.synced-history { color: var(--lake-sync-success); }
-.document-statusbar-state.conflict,
-.document-statusbar-state.save-error { color: var(--lake-error); }
-.document-statusbar-state.saving { color: var(--lake-accent); }
 .document-statusbar-status-icon { display: inline-flex; align-items: center; gap: 4px; }
-
-@media (prefers-reduced-motion: reduce) {
-  .document-statusbar { backdrop-filter: none; }
-}
 
 .document-statusbar-state.synced-history {
   padding: 2px 7px;
@@ -86,12 +74,6 @@
   cursor: pointer;
   font: inherit;
 }
-.document-notice-toast button:hover { background: color-mix(in srgb, var(--lake-accent) 10%, transparent); }
-
-@media (prefers-reduced-motion: reduce) {
-  .document-notice-toast { backdrop-filter: none; }
-}
-
 /* Compact by default; transient left-side messages expand the pill up to a safe cap. */
 .document-statusbar {
   /* 大纲固定态会占住编辑区右缘（--lake-outline-inset）：状态栏随之左让，别被压在大纲底下。 */

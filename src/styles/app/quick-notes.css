@@ -112,7 +112,6 @@
 .quick-notes-hint { margin-bottom: 8px; padding: 6px 10px; border-radius: var(--lake-radius-sm); color: var(--lake-text-3); background: var(--lake-bg-hover); font-size: 12px; }
 .quick-notes-index { display: flex; flex-direction: column; gap: 2px; min-width: 0; min-height: 0; overflow-y: auto; overflow-x: hidden; padding-right: 4px; }
 .quick-notes-index .b3-list-item { width: 100%; text-align: left; }
-.quick-notes-index .b3-list-item.is-checked { background: var(--lake-bg-hover); }
 .quick-notes-detail { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
 /* 列表视图右侧：去掉卡片边框/圆角，编辑器直接铺开（对齐文档页观感，用户 260919 要求试试） */
 .quick-notes-detail .quick-note-composer { border: 0; border-radius: 0; padding: 0; }
@@ -260,8 +259,6 @@
 
 .quick-note-entry.selecting .quick-note-card-actions { display: none; }
 
-.quick-note-entry.is-checked { border-color: color-mix(in srgb, var(--lake-sync-success) 55%, var(--lake-border-1)); }
-
 .quick-note-select { position: absolute; left: -30px; top: 13px; opacity: 0; transition: opacity var(--lake-motion-fast) var(--lake-ease-standard); }
 
 /* 勾选框默认藏在左侧槽位里，hover / 键盘聚焦 / 已选 / 多选态才显形。
@@ -331,7 +328,6 @@
  * 且经选择器比对**无中间文件重叠** ⇒ 层叠等价；同名文件对 4 → 3）。 ── */
 /* Quick Notes keeps its independent workspace identity while sharing shell semantics. */
 .quick-notes-pane { background: var(--lake-shell); }
-.quick-notes-header h1 { color: var(--lake-text); }
 .quick-note-composer,
 .quick-note-entry { border-color: var(--lake-border); background: var(--lake-panel); box-shadow: var(--lake-shadow-soft); }
 .quick-note-composer textarea,

@@ -35,27 +35,11 @@
 }
 
 /* 未保存标记：Tab 标签上的小圆点 */
-.tab-item.pinned .tab-title { font-weight: 600; }
-
 .tab-item .tab-pin { flex: none; color: var(--lake-text-tertiary); }
 
 .tab-item .tab-custom-icon { flex: none; font-size: 13px; line-height: 1; }
 
-.tab-item.pinned .tab-pin { color: var(--lake-accent); }
-
 .tab-item.pinned .tab-close { display: none; }
-
-.tab-item.pinned {
-  background: var(--lake-accent-tint);
-  border-color: transparent;
-}
-
-.tab-item.pinned:hover { background: color-mix(in srgb, var(--lake-accent-tint) 70%, var(--lake-bg-hover)); }
-
-.tab-item.pinned.active {
-  background: var(--shell-accent-soft);
-  border-color: var(--lake-accent);
-}
 
 /* 远端删除标记：标签变灰 + 红色"已删除"徽标（正文保留，供复制/从回收站恢复） */
 
@@ -128,8 +112,6 @@
   font-size: 12px;
   transition: color var(--lake-motion-fast) var(--lake-ease-standard), background-color var(--lake-motion-fast) var(--lake-ease-standard), border-color var(--lake-motion-fast) var(--lake-ease-standard), box-shadow var(--lake-motion-fast) var(--lake-ease-standard), transform var(--lake-motion-press) var(--lake-ease-standard);
 }
-
-.tab-item:hover { color: var(--lake-accent-text); background: var(--lake-veil-strong); }
 
 .tab-item:active { transform: scale(.98); }
 

@@ -18,8 +18,6 @@
 
 .create-menu > button { display: grid; grid-template-columns: 20px minmax(0, 1fr); align-items: center; gap: 8px; width: 100%; min-height: 32px; padding: 4px 8px; border: 0; color: var(--lake-text-3); background: transparent; text-align: left; }
 
-.create-menu > button:disabled { cursor: default; opacity: .45; }
-
 .create-menu > button > span { display: flex; flex-direction: column; min-width: 0; }
 
 .create-menu strong { font-size: 12px; font-weight: 600; }
@@ -65,29 +63,13 @@
 
 .tree-row:hover .tree-row-actions, .tree-row-actions:has(:focus-visible) { display: inline-flex; }
 
-/* 仅行 hover / 键盘聚焦可见；鼠标点击后的残余 focus 不再钉住动作（用户 260914） */
-/* ⋯/＋ 不加任何方块底（用户 260914：去掉明显的加深方块背景）；hover 反馈只变图标色 */
-.tree-row-action { display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; padding: 0; border: 0; border-radius: var(--radius-xs); background: transparent; color: var(--lake-text-tertiary); }
-
-.tree-row-action:hover { color: var(--lake-accent); }
-
-.tree-row.type-notebook { margin-top: 1px; }
-
-.tree-row.type-notebook .note-row-copy strong { font-weight: 650; }
-
-.tree-row.type-group .note-row-copy strong { font-weight: 600; }
-
 .tree-row { cursor: pointer; user-select: none; touch-action: pan-y; }
 
 .tree-row.dragging { cursor: grabbing; }
 
-.tree-chevron { display: flex; align-items: center; justify-content: center; width: 16px; height: 100%; padding: 0; border: 0; border-radius: var(--radius-xs); background: transparent; transition: transform var(--lake-motion-fast) var(--lake-ease-standard), background var(--lake-motion-fast) var(--lake-ease-standard), color var(--lake-motion-fast) var(--lake-ease-standard); }
-
 .tree-chevron:not(:disabled):hover { background: var(--lake-accent-soft-strong); color: var(--lake-accent); }
 
 /* 与行内操作按钮同一套 hover 着重 */
-.tree-chevron:disabled { cursor: default; }
-
 .tree-chevron.open { transform: rotate(90deg); }
 
 .tree-children { margin-left: 16px; border-left: 1px solid var(--lake-hairline-soft); }
@@ -195,20 +177,7 @@
 
 .activity-rail-fill { flex: 1; }
 
-.activity-button {
-  display: grid;
-  place-items: center;
-  width: 28px;
-  height: 28px;
-  margin: 2px 0;
-  padding: 0;
-  border: 0;
-  background: transparent;
-}
-
 .activity-button:active { transform: scale(.965); }
-
-.activity-button:focus-visible { outline: var(--lake-focus-ring-width) solid var(--lake-focus-halo); outline-offset: 2px; }
 
 /* ── 侧栏卡片几何（260915 窄窗彻底统一 · 组 6：侧栏壳层）── */
 .sidebar {
@@ -305,9 +274,6 @@
 .context-menu {
   border-color: var(--lake-neutral-veil-1);
 }
-
-.create-menu > button,
-.context-menu > button { border-radius: 6px; }
 
 .create-menu > button:hover,
 .context-menu > button:hover { background: var(--lake-neutral-veil-2); }
@@ -651,11 +617,6 @@ html[data-theme="dark"] .document-pane .ne-engine > ne-h6 ne-heading-content {
 }
 
 
-/* #2 浮层阴影：左右统一、更柔；阴影静态、不参与切出动画（避免逐帧重绘，保性能与速度） */
-.sidebar.sidebar-floating {
-  box-shadow: 16px 0 26px -14px var(--lake-shadow-color-5); /* 单侧投影：负 spread 收掉上下溢出 */
-}
-
 
 /* Showing the library preview is immediate; only the collapse is animated.
    This prevents the pointer from repeatedly crossing a moving panel edge. */
@@ -744,40 +705,6 @@ html[data-theme="dark"] .document-pane .ne-engine > ne-h6 ne-heading-content {
 
 .sidebar:hover .sidebar-toolbar-row .list-heading,
 .sidebar-toolbar-row:focus-within .list-heading { opacity: 1; }
-
-/* ---- dock 头部共享层（目录栏 / 大纲）：图标按钮 + 隐藏式筛选行 ----
- * 两栏此前各有两套图标样式（32px 灰底 vs 22px accent 底），2026-09-03 统一到这里。
- * 颜色一律走 --lake-* 令牌，亮/暗主题自动跟随（不再写死 #747b85 之类）。 */
-.dock-icon-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex: 0 0 auto;
-  width: 22px;
-  height: 24px;
-  padding: 0;
-  border: 0;
-  color: var(--lake-text-tertiary);
-  background: transparent;
-  transition: color var(--lake-motion-fast) var(--lake-ease-standard), background-color var(--lake-motion-fast) var(--lake-ease-standard), transform var(--lake-motion-press) var(--lake-ease-standard);
-}
-
-.dock-icon-btn:hover:not(:disabled) {
-  color: var(--lake-accent-strong, var(--lake-accent));
-  background: var(--lake-accent-soft);
-}
-
-.dock-icon-btn:active:not(:disabled) { transform: scale(.96); }
-
-.dock-icon-btn:disabled { opacity: .35; cursor: default; }
-
-/* 生效中的开关态（筛选有词 / 菜单展开 / 保持展开）：accent 文字 + 淡底，与大纲 is-active 一致 */
-.dock-icon-btn.is-active {
-  color: var(--lake-accent-strong, var(--lake-accent));
-  background: var(--lake-accent-soft);
-}
-
-.dock-icon-btn:focus-visible { outline: 2px solid var(--lake-accent); outline-offset: 1px; }
 
 /* 隐藏式筛选行：收起时高度 0 不占位；展开时 29px（与大纲头部原筛选行同高）。 */
 .dock-filter-row {
@@ -986,21 +913,6 @@ html[data-theme="dark"] .document-pane .ne-engine > ne-h6 ne-heading-content {
   color: var(--lake-text);
   font-weight: 500;
 }
-
-/* 活动栏 active：更强的识别（accent 底 + 图标着色），弱化未激活项 */
-.activity-button {
-  color: var(--lake-text-tertiary);
-  transition: color var(--lake-motion-fast) var(--lake-ease-standard), background-color var(--lake-motion-fast) var(--lake-ease-standard), transform var(--lake-motion-press) var(--lake-ease-standard);
-}
-
-.activity-button:hover:not(:disabled) { color: var(--lake-text-secondary); }
-
-.activity-button.active {
-  color: var(--lake-accent);
-  background: var(--lake-accent-soft);
-}
-
-.activity-button:active:not(:disabled) { transform: scale(.95); }
 
 /* ---- 交互动效（B）：顶栏/图标按钮统一按压反馈 ---- */
 .toolbar__item:active:not(:disabled),

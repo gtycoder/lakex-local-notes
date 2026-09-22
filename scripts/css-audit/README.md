@@ -54,6 +54,8 @@ node scripts/css-audit/drive.mjs 9222 scripts/css-audit/shotset.mjs before "<屏
 | `plan-imp.mjs` | 生成可执行清单 `plan-imp.json`（剔除移动端入口也加载的文件） |
 | `allsel.mjs` / `condcollect.mjs` | 收集全部选择器 / 全部 `@media` 条件 |
 | `fingerprint-all.mjs` | 为每个选择器跨状态打"命中了哪些元素"的指纹 → `fingerprints-all.json`（~3.4 MB，按需重生成） |
+| `plan-l2-shadowed.mjs` | 找"整条规则被更高层同名选择器完全压制"的可删规则（同 `@media` + 同单选择器 + 高层覆盖全部属性）；`--apply` 按源码区间删除并剪掉变空的 `@media` 壳 |
+| `l3-plan.mjs` | L3 安全筛选（260923）：零命中 **且** 类名在应用代码里无生产者（含动态模板串前缀，保守）才判可删；依赖 `fingerprints-all.json` |
 
 典型链路：`loadorder` → `allsel` → `fingerprint-all` → `condcollect` →（`drive` 跑 `cond-eval`）→ `imp-scan` → `imp-safe` → `plan-imp`。
 
@@ -96,3 +98,8 @@ node scripts/css-audit/drive.mjs 9222 scripts/css-audit/shotset.mjs before "<屏
 （资料库 / 小记 / 搜索 / 设置九个页 / 悬停行 / 右键菜单 / 属性面板 / 大纲展开 / 拖拽注入 / 已删标签 / 浮侧栏…）。
 **已知空缺**（要动编辑器内部或标签相关样式时先补）：多标签、大纲缩放中、编辑器内部态（代码块/表格/文件卡）、
 选区与粘贴态。
+
+**⚠️ 覆盖不足 ⇒ L3「零命中」会假阳性（260923 实测）**：`fingerprint-all` 的 42 态**不覆盖**"大纲增强=开"、多维表、编辑器内部态，
+于是 `.outline-sidebar`、`.bt-*`、quick-notes 内部类等**活功能**在全部 42 态都零命中——直接按 L3 删会误删这些功能的样式
+（`outline.css` 253 声明、`bitableEditor.css` 856 声明都会被带出）。**L3 必须叠加"类名在应用代码里没有生产者"过滤**
+（`l3-plan.mjs`），或先把状态矩阵补到覆盖这些功能；否则只能用 L2（层叠判定，与状态覆盖弱相关）。

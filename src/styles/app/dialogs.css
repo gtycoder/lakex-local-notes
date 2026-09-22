@@ -13,11 +13,7 @@
 
 .context-menu > button { display: grid; grid-template-columns: 18px minmax(0, 1fr); align-items: center; gap: 9px; width: 100%; border: 0; background: transparent; text-align: left; font-size: 12px; }
 
-.context-menu > button.danger { color: var(--lake-status-error); }
-
 .context-menu-item { display: flex; align-items: center; justify-content: space-between; width: 100%; cursor: pointer; font-size: 12px; position: relative; box-sizing: border-box; }
-
-.context-menu-item:hover { background: var(--lake-bg-hover); }
 
 .context-menu-item-label { display: grid; grid-template-columns: 18px minmax(0, 1fr); align-items: center; gap: 9px; }
 
@@ -29,14 +25,6 @@
 .context-menu-submenu.open-left { left: auto; right: 100%; margin-left: 0; margin-right: 2px; }
 
 .context-menu-submenu > button { display: block; width: 100%; border: 0; background: transparent; text-align: left; font-size: 12px; white-space: nowrap; }
-
-.context-menu-submenu > button:hover:not(:disabled) { background: var(--lake-bg-hover); }
-
-.context-menu-submenu > button:disabled { color: var(--lake-text-4); cursor: not-allowed; }
-
-.context-menu > button.danger:hover { background: color-mix(in srgb, var(--lake-status-error) 12%, transparent); }
-
-.context-menu-sep { height: 1px; margin: 4px 0; background: var(--lake-border-2); }
 
 .context-menu { opacity: 1; transform: scale(1); }
 
