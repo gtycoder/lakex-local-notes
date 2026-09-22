@@ -25,6 +25,7 @@ import { registerQuickNotesIpc } from "./ipc/registerQuickNotes.js";
 import { registerLogIpc } from "./ipc/registerLogIpc.js";
 import { registerSystemInfoIpc } from "./ipc/registerSystemInfo.js";
 import { clampWindowState, readWindowState, writeWindowState } from "./windowState.js";
+import { TOPBAR_HEIGHT, TRAFFIC_LIGHT_DIAMETER } from "../src/lib/layoutMetrics.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const isDev = !app.isPackaged;
@@ -230,8 +231,10 @@ async function createWindow() {
     minWidth: 560,
     minHeight: 480,
     titleBarStyle: process.platform === "darwin" ? "hiddenInset" : "default",
-    // y = (顶栏 38px - 红绿灯 12px) / 2 = 13：红绿灯中心(19px)与顶栏内容中心(19px)垂直对齐
-    trafficLightPosition: { x: 14, y: 13 },
+    // 红绿灯垂直居中到顶栏内容中心：y + 直径/2 = TOPBAR_HEIGHT/2。
+    // **别再把 y 写成常数**：曾因顶栏 38→32 而红绿灯没跟、中心错位 3px（用户 260923 报）。
+    // 顶栏高单一来源 = src/lib/layoutMetrics.ts 的 TOPBAR_HEIGHT（与 base.css 的 --topbar-height 有单测对齐）。
+    trafficLightPosition: { x: 14, y: (TOPBAR_HEIGHT - TRAFFIC_LIGHT_DIAMETER) / 2 },
     webPreferences: {
       // 打包版直接指向 app.asar.unpacked 里的真实文件（asar 内 preload 在 Electron 33 有解析 Bug）
       preload: app.isPackaged

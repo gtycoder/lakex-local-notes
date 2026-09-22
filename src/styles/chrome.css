@@ -223,7 +223,7 @@
  * 四角圆角 + 投影 = 一眼就是"临时层"，与「固定态 = 贴边、满高、无投影的连体列」明确区分。
  * 固定态不走这里（它占栅格列），所以这套几何只作用于悬浮/收起态。 */
 :root {
-  --lake-dir-peek-top: calc(var(--topbar-height) + 42px); /* 38 顶栏 + 4 pane 顶 + 32 面包屑 + 6 缝 = 80 */
+  --lake-dir-peek-top: calc(var(--topbar-height) + 4px + var(--breadcrumb-height) + 6px); /* 顶栏 + pane 拼接缝(4) + 面包屑 + 6 缝；260923 起随令牌联动，不再写死 80 */
   /* 高度 = 一直延伸到离窗口底 12px（"贴底浮卡"）：既保住"卡片身份"（四角圆角 + 投影 + 离边留白），
      又几乎不牺牲可见行数（820 窗口下 728px，比原来的 min(60vh,560) 多 236px）。不用做任何高度适配。 */
   --lake-dir-peek-height: calc(100vh - var(--lake-dir-peek-top) - 12px);
@@ -371,9 +371,9 @@
   display: flex;
   align-items: center;
   gap: 4px;
-  height: 32px;
-  min-height: 32px;
-  padding: 0 16px;
+  height: var(--breadcrumb-height);
+  min-height: var(--breadcrumb-height);
+  padding: 0 12px;
   border-bottom: 1px solid var(--lake-border-2);
   background: transparent;
   color: var(--lake-text-3);

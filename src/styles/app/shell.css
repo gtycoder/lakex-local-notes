@@ -677,9 +677,9 @@ html[data-theme="dark"] .document-pane .ne-engine > ne-h6 ne-heading-content {
 :root {
   --lake-rail-width: 38px;
   /* 浮层（目录/大纲）几何单一来源：顶 = 编辑器工具条下缘（不能盖住工具条），底 = 窗口底。
-     = 顶栏 38 + 面包屑行 36 + 内核工具条 38 = 112（1280×820 实测；内核工具条 sticky 恒在此）。
+     = 顶栏 + pane 拼接缝(4) + 面包屑 + 内核工具条（全部走令牌，260923 起不再写死 112）。
      旧值 72/72 是"半幅"：底部空出 72px，左侧整边热区的 minimap 尾巴会露在窗口底部（用户 260922 报的"横条"）。 */
-  --lake-floating-panel-top: calc(var(--topbar-height) + 36px + 38px);
+  --lake-floating-panel-top: calc(var(--topbar-height) + 4px + var(--breadcrumb-height) + var(--editor-toolbar-height));
   --lake-floating-panel-bottom: 0px;
   --activity-rail-width: var(--lake-rail-width);
 }

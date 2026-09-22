@@ -65,11 +65,6 @@ export function App() {
     workspaceMenuRef,
     moreMenuRef,
   });
-  useWindowShortcuts({
-    onOpenSearch: () => { setSearchPanelQuery(""); setSearchPanelOpen(true); closeMenus(); },
-    onToggleFocus: () => { setFocusMode((value) => !value); closeMenus(); },
-    onEscape: closeMenus,
-  });
   const [infoNote, setInfoNote] = useState<TreeNode | null>(null);
   const [revealNodeId, setRevealNodeId] = useState<string | null>(null);
   const { syncToast, setSyncToast, showSyncToast } = useSyncShell();
@@ -94,6 +89,13 @@ export function App() {
     settingsOpen, setSettingsOpen, settingsCategory, setSettingsCategory,
     confirmDelete, setConfirmDelete,
   } = shell;
+  // 快捷键注册放在 shell 之后：⌘] 需要 toggleSidebarDock —— 目录栏此前只有鼠标入口（260923）。
+  useWindowShortcuts({
+    onOpenSearch: () => { setSearchPanelQuery(""); setSearchPanelOpen(true); closeMenus(); },
+    onToggleFocus: () => { setFocusMode((value) => !value); closeMenus(); },
+    onToggleSidebarDock: () => { toggleSidebarDock(); closeMenus(); },
+    onEscape: closeMenus,
+  });
   const layoutWidthsRef = useRef({ sidebar: sidebarWidth, outline: outlineSidebarWidth });
   layoutWidthsRef.current = { sidebar: sidebarWidth, outline: outlineSidebarWidth };
   // V5 Phase 4：保存管线（串行队列 + 防抖定时器 + revision 竞态保护）收拢到 useSavePipeline。

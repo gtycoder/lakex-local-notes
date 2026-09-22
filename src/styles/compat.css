@@ -45,12 +45,8 @@
   padding-top: var(--topbar-height);
   background: transparent;
 }
-.tab-item {
-  min-height: 29px;
-  line-height: 22px;
-  margin: 6px 0;
-  padding: 0 8px;
-}
+/* .tab-item 的盒（高/内距/外边距）已收编到 styles/app/tabs.css 单一来源（260923）：
+   原先这里的 min-height:29px 会赢过 tabs.css 的 height，导致改顶栏高度时标签被裁。 */
 .workspace,
 .document-pane,
 .document-pane:has(> .multi-tab-editor) {

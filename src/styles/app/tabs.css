@@ -87,7 +87,9 @@
 .tab-bar {
   display: flex;
   gap: 6px;
-  padding: 4px 10px;
+  /* 垂直内距 = (顶栏 − 标签高)/2：标签恒居中、顶栏贴合标签。
+     左右内距不含在内（mac 红绿灯让位由 .platform-mac .tab-bar 的 padding-left 单独给）。 */
+  padding: calc((var(--topbar-height) - var(--tab-item-height)) / 2) 10px;
 }
 
 .platform-mac .tab-bar {
@@ -116,7 +118,12 @@
 .tab-item {
   /* 不收缩：每个标签按标题内容固有宽度展示，超长标题封顶省略 */
   flex: 0 0 auto;
-  height: 28px;
+  /* 标签盒**单一来源**（260923 从 compat.css 收编）：高度走独立令牌，与顶栏解耦 ——
+     顶栏收窄不再牵动标签；内距由 .tab-bar 按 (顶栏 − 标签)/2 派生，标签恒居中不被裁。 */
+  height: var(--tab-item-height);
+  min-height: 0;
+  margin: 0;
+  padding: 0 8px;
   border: 1px solid transparent;
   font-size: 12px;
   transition: color var(--lake-motion-fast) var(--lake-ease-standard), background-color var(--lake-motion-fast) var(--lake-ease-standard), border-color var(--lake-motion-fast) var(--lake-ease-standard), box-shadow var(--lake-motion-fast) var(--lake-ease-standard), transform var(--lake-motion-press) var(--lake-ease-standard);

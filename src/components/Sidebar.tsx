@@ -644,8 +644,9 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
           <button
             className={`dock-icon-btn pin-btn${props.docked ? " is-active" : ""}`}
             onClick={props.onToggleDock}
-            title={props.docked ? "取消固定目录（改悬浮）" : "固定目录"}
+            title={props.docked ? "取消固定目录（⌘]）" : "固定目录（⌘]）"}
             aria-label={props.docked ? "取消固定目录" : "固定目录"}
+            aria-keyshortcuts="Meta+]"
             aria-pressed={!!props.docked}
           ><Pin size={14} /></button>
         )}

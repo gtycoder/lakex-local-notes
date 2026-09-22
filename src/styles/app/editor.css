@@ -138,7 +138,7 @@ ne-card[data-card-name="codeblock"] .ne-card-resizer-mask {
    都是内核的）。这里只调位置——内核默认 fixed; top:60px; right:0 是语雀「无外壳阅读页」口径，
    我们顶上多一层 tab 栏 + 面包屑、右侧还有文档滚动条，所以下移到正文区顶部、右侧留出滚动条。 */
 .lake-editor-tab .ne-viewer-toc-sidebar {
-  top: 74px;   /* = 外壳顶(42) + 面包屑(32)，即正文区顶部 */
+  top: calc(var(--topbar-height) + 4px + var(--breadcrumb-height));   /* = 顶栏 + pane 拼接缝 + 面包屑（正文区顶部）；随令牌联动 */
   right: 15px;
 }
 /* 大纲展开（内核状态标记 ne-viewer-toc-pin="true"，305px 浮层）时正文让位；
@@ -204,11 +204,11 @@ ne-card[data-card-name="file"] .ne-card-file {
 
 .board-card-loading { display: grid; place-items: center; min-height: 200px; color: var(--lake-text-tertiary); background: color-mix(in srgb, var(--lake-panel) 88%, transparent); font-size: 12px; }
 
-/* #6b 桌面编辑器工具栏变窄：vendor 默认 .ne-ui-toolbar{height:50px}，压到 38px（仍 > 面包屑 32px）。
-   内部按钮最高 32px（.ne-ui-toolbar-button/color-button），40px 容器 flex 居中不裁切。
+/* #6b 桌面编辑器工具栏变窄：vendor 默认 .ne-ui-toolbar{height:50px}，压到 --editor-toolbar-height（34px）。
+   内部按钮最高 32px（.ne-ui-toolbar-button/color-button），34px 容器 flex 居中不裁切（1px 余量，已是下限）。
    仅桌面生效；editor-bridge.css 晚于 vendor 加载，!important 稳定覆盖。 */
 @media (min-width: 761px) {
-  .lake-editor-mount .ne-ui-toolbar { height: 38px; }
+  .lake-editor-mount .ne-ui-toolbar { height: var(--editor-toolbar-height); }
 }
 
 /* A: 编辑器正文与 UI 同源字体（消除三处 font-family 打架；vendor .ne-engine 默认栈在 mac 会回退 Helvetica） */

@@ -33,6 +33,7 @@ export const SETTING_ITEMS: SettingItemEntry[] = [
   { id: "appearance-theme", category: "appearance", label: "主题", keywords: "主题 深色 浅色 暖色 纸质 护眼 换肤 dark light warm 夜间 亮蓝 亮橙 暗紫" },
   { id: "shortcut-search", category: "shortcuts", label: "打开全局搜索（标题和正文）", keywords: "搜索 快捷键 ⌘K", platform: "desktop" },
   { id: "shortcut-focus", category: "shortcuts", label: "进入或退出专注模式", keywords: "专注模式 全屏写作", platform: "desktop" },
+  { id: "shortcut-sidebar", category: "shortcuts", label: "收起或固定目录栏", keywords: "目录 面板 侧栏 收起 固定 ⌘] 快捷键", platform: "desktop" },
   { id: "shortcut-move", category: "shortcuts", label: "在搜索结果中移动", keywords: "上下 选择", platform: "desktop" },
   { id: "shortcut-open", category: "shortcuts", label: "打开搜索结果并定位命中", keywords: "打开 定位 命中", platform: "desktop" },
   { id: "shortcut-open-tab", category: "shortcuts", label: "在新标签打开并定位命中", keywords: "新标签 打开", platform: "desktop" },

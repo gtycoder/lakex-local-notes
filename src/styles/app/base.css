@@ -6,7 +6,15 @@
   font-synthesis: style weight;
   /* 文字渲染对齐思源：灰度抗锯齿 + 最优排版（macOS 下比默认 subpixel 更干净清晰） */
   -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; text-rendering: optimizeLegibility;
-  --topbar-height: 38px; --ease-out: var(--lake-ease-standard); --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1); --dur-press: var(--lake-motion-press); --dur-enter: var(--lake-motion-fast); --dur-drawer: var(--lake-motion-panel); }
+  /* 垂直几何栈（单一来源，260923）：顶栏 → 4px 拼接缝 → 面包屑 → 内核工具条。
+     目录 peek 顶边 / 浮层顶 / 阅读态大纲顶都由这三者派生 ⇒ 改高度只改这里（见 docs/PANEL-CONTRACT.md）。
+     --tab-item-height 与顶栏**解耦**（用户 260923：顶栏收窄但标签高度不变）：
+     标签条垂直内距 = (--topbar-height - --tab-item-height)/2，自动居中、不会再裁标签。 */
+  --topbar-height: 32px;
+  --breadcrumb-height: 30px;
+  --editor-toolbar-height: 34px;
+  --tab-item-height: 28px;
+  --ease-out: var(--lake-ease-standard); --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1); --dur-press: var(--lake-motion-press); --dur-enter: var(--lake-motion-fast); --dur-drawer: var(--lake-motion-panel); }
 
 * { box-sizing: border-box; }
 
