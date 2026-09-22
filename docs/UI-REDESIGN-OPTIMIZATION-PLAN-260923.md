@@ -97,7 +97,7 @@ W0 双端门禁 → W0.5 抽两端共享入口 → W1 桌面专属零耦合清�
 - **去思源**：移动 TSX 内 `b3-*` 类**清零**；自有样式表 `--b3-*` **0**（mobile.css 185 + editor-dock 31 全映射到 `--lake-*`）；`src/b3/**`（含 AGPL `siyuan/**`，27 文件）**整体删除**；自写深色桥移至 `src/mobile/editor-dark.css`；`compat.css` 复用给移动端提供 config/fn/b3-label/b3-switch。
 - **指标**：桌面 `!important` 9 · 颜色 0 · `--b3-*` 0 · 入口 b3 import 0；**移动端 `--b3-*`=0 · 思源层 `!important` 32→0 · b3 文件 7→0**。
 - **门禁**：`tsc`/vitest 全绿；`check:mobilesnap` 每片重设基线后 **6 态 0 差异**。
-- **移动端 `!important` = 25**（mobile.css 19 + editor-dark 6）：其中**编辑器内核覆盖 7 条**（`.mobile-doc-body .ne-*`）、**拖拽浮层/落点 5 条**（`[data-drag-ghost]`/`.drop-parent`）、**reduced-motion 1 条**、editor-dark 6 条为压 lakex/内联样式——均属 §3 #14 允许的"压内核/内联"例外，按 §3 #17 保留并在代码注明，不做无谓去 `!important`（与桌面 W4 同口径）。
+- **移动端 `!important` = 14（260923 按规则收敛：25→14），且全部为"压 lakex 内核"**：`.mobile-doc-body .ne-*` 12 条（编辑器盒铺满）+ `--lakex-editor-background-*` 2 条（深色桥内核变量）。原 25 条中属"非内核/组件"的 11 条已改掉：reduced-motion `.side-panel/.side-mask` 改特异性；`.drop-parent` 加 `:hover` 变体；`[data-drag-ghost]` 去非必要 `!important`（**已实测**：克隆浮层仍 `position:fixed`、内联 `transform` 跟手 `matrix(1,0,0,1,40,60)`）；深色桥里覆盖共享类的 `.quick-note-*` 4 条去 `!important`（主题感知基样式 + `[data-theme=dark]` 特异性已足够）。用户 260923 口径：**除压内核/组件外不得用样式嵌套**。
 - **待你验收**：安卓观感（模拟器/真机）。
 
 **260923 现状核查（可自主部分已清完，观感重做待你验收）**：
