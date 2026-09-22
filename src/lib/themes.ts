@@ -11,9 +11,9 @@ export interface LakeTheme {
 }
 
 export const LAKE_THEMES: LakeTheme[] = [
-  { id: "light", label: "浅色", colorScheme: "light", preview: { bg: "#f6f7f8", panel: "#ffffff", accent: "#5b6f96", text: "#1c1f24" } },
-  { id: "dark", label: "深色", colorScheme: "dark", preview: { bg: "#16181b", panel: "#1f2227", accent: "#93a9cf", text: "#eef0f3" } },
-  { id: "warm", label: "暖色纸质", colorScheme: "light", preview: { bg: "#f6f3ec", panel: "#fffefb", accent: "#6f552e", text: "#2a2318" } },
+  { id: "light", label: "亮 · 蓝", colorScheme: "light", preview: { bg: "#f4f5f7", panel: "#ffffff", accent: "#3d7eff", text: "#17191c" } },
+  { id: "dark", label: "暗 · 紫", colorScheme: "dark", preview: { bg: "#1a1b1e", panel: "#25262b", accent: "#9b94ff", text: "#e3e4e6" } },
+  { id: "warm", label: "亮 · 橙", colorScheme: "light", preview: { bg: "#f6f7f8", panel: "#ffffff", accent: "#ff6a00", text: "#1a1d21" } },
 ];
 
 export const DEFAULT_THEME_ID: LakeThemeId = "light";

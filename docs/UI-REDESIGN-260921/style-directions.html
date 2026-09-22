@@ -1,0 +1,593 @@
+<!-- AI生成 -->
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lake Notes · 视觉方向三版对照</title>
+<style>
+  /* ═══════════════════════════════════════════════════════
+   * 独立预览页：不引用 src/**，不参与应用构建。
+   * 三版方向共用同一套壳结构，只换设计令牌与少量几何。
+   * ═══════════════════════════════════════════════════════ */
+  *, *::before, *::after { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC",
+      "Microsoft YaHei", "Segoe UI", sans-serif;
+    font-size: 13px;
+    line-height: 1.45;
+    color: #1c1f24;
+    background: #e8eaed;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* ── 控制条（页面壳，不属于产品） ───────────────────── */
+  .toolbar {
+    position: sticky; top: 0; z-index: 100;
+    display: flex; flex-wrap: wrap; gap: 10px; align-items: center;
+    padding: 10px 16px;
+    background: rgba(255,255,255,.92);
+    backdrop-filter: blur(10px);
+    border-bottom: 1px solid #e2e5e9;
+    box-shadow: 0 1px 0 rgba(0,0,0,.02);
+  }
+  .toolbar h1 { margin: 0; font-size: 13px; font-weight: 600; letter-spacing: .01em; }
+  .toolbar .hint { color: #6d757e; font-size: 11px; margin-left: 4px; }
+  .spacer { flex: 1; }
+  .seg {
+    display: inline-flex; gap: 2px; padding: 3px;
+    background: #f0f2f5; border-radius: 9px;
+  }
+  .seg button {
+    appearance: none; border: 0; cursor: pointer;
+    height: 26px; padding: 0 12px; border-radius: 7px;
+    font: inherit; font-size: 12px; font-weight: 500;
+    color: #5a6169; background: transparent;
+    transition: background .12s, color .12s, box-shadow .12s;
+  }
+  .seg button:hover { color: #1c1f24; }
+  .seg button.on {
+    background: #fff; color: #1c1f24;
+    box-shadow: 0 1px 2px rgba(0,0,0,.06), 0 0 0 1px rgba(0,0,0,.04);
+  }
+  .note-badge {
+    font-size: 11px; font-weight: 500;
+    padding: 3px 8px; border-radius: 999px;
+    background: #eef1f6; color: #3a4a68;
+  }
+
+  /* ── 预览舞台 ───────────────────────────────────────── */
+  .stage {
+    padding: 20px;
+    min-height: calc(100vh - 48px);
+  }
+  .frame {
+    max-width: 1180px; margin: 0 auto;
+    height: 720px;
+    border-radius: 14px;
+    overflow: hidden;
+    display: grid;
+    grid-template-columns: 200px 1fr 240px;
+    grid-template-rows: 44px 1fr 28px;
+    box-shadow: 0 20px 50px -20px rgba(0,0,0,.25), 0 0 0 1px rgba(0,0,0,.06);
+    /* 令牌由方向类注入 */
+    background: var(--bg-window);
+    color: var(--text-1);
+    font-family: var(--font);
+  }
+
+  /* ── 方向令牌 ───────────────────────────────────────── */
+
+  /* A · MiMo Desktop —— 简洁大气、大留白、软表面、点缀橙 */
+  .dir-a {
+    --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Segoe UI", sans-serif;
+    --bg-window: #f4f5f7;
+    --bg-sidebar: #fafbfc;
+    --bg-main: #ffffff;
+    --bg-panel: #ffffff;
+    --bg-elevated: #ffffff;
+    --bg-hover: rgba(28,31,36,.05);
+    --bg-press: rgba(28,31,36,.08);
+    --bg-selected: rgba(28,31,36,.07);
+    --text-1: #17191c;
+    --text-2: #4a5158;
+    --text-3: #7a828c;
+    --text-4: #9aa1aa;
+    --border: #e8eaee;
+    --border-soft: #f0f2f5;
+    --accent: #3d7eff;
+    --accent-ink: #2f66e0;
+    --accent-text: #1f4fc2;
+    --accent-tint: rgba(61,126,255,.10);
+    --accent-warm: #ff6a00;       /* MiMo 橙：仅关键动作 */
+    --radius-row: 8px;
+    --radius-card: 12px;
+    --radius-panel: 14px;
+    --shadow-card: 0 1px 2px rgba(16,24,40,.04), 0 4px 12px -4px rgba(16,24,40,.06);
+    --shadow-pop: 0 0 0 1px rgba(16,24,40,.04), 0 12px 28px -8px rgba(16,24,40,.12);
+    --row-h: 30px;
+    --sidebar-w: 200px;
+    --density: 1.05;
+  }
+
+  /* B · Obsidian 向 —— 更高密度、紫点缀、工具感 */
+  .dir-b {
+    --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Segoe UI", sans-serif;
+    --bg-window: #1e1e1e;
+    --bg-sidebar: #191919;
+    --bg-main: #1e1e1e;
+    --bg-panel: #252525;
+    --bg-elevated: #2a2a2a;
+    --bg-hover: rgba(255,255,255,.06);
+    --bg-press: rgba(255,255,255,.10);
+    --bg-selected: rgba(155,148,255,.16);
+    --text-1: #dcddde;
+    --text-2: #a0a0a0;
+    --text-3: #7a7a7a;
+    --text-4: #5c5c5c;
+    --border: #2f2f2f;
+    --border-soft: #262626;
+    --accent: #9b94ff;
+    --accent-ink: #7f76ff;
+    --accent-text: #b7b1ff;
+    --accent-tint: rgba(155,148,255,.14);
+    --accent-warm: #9b94ff;
+    --radius-row: 6px;
+    --radius-card: 8px;
+    --radius-panel: 10px;
+    --shadow-card: 0 1px 2px rgba(0,0,0,.35);
+    --shadow-pop: 0 0 0 1px rgba(255,255,255,.06), 0 12px 28px -8px rgba(0,0,0,.5);
+    --row-h: 28px;
+    --sidebar-w: 200px;
+    --density: 0.95;
+  }
+
+  /* C · MiMo × 笔记 —— 亮面 + 软橙点缀 + 纸感阅读区（推荐候选） */
+  .dir-c {
+    --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Segoe UI", sans-serif;
+    --bg-window: #f6f7f8;
+    --bg-sidebar: #f0f2f4;
+    --bg-main: #ffffff;
+    --bg-panel: #ffffff;
+    --bg-elevated: #ffffff;
+    --bg-hover: rgba(28,31,36,.055);
+    --bg-press: rgba(28,31,36,.09);
+    --bg-selected: #ff6a0014;
+    --text-1: #1a1d21;
+    --text-2: #495057;
+    --text-3: #6f7780;
+    --text-4: #939aa3;
+    --border: #e4e6ea;
+    --border-soft: #eef0f3;
+    --accent: #ff6a00;
+    --accent-ink: #e85d00;
+    --accent-text: #c44e00;
+    --accent-tint: #ff6a0016;
+    --accent-warm: #ff6a00;
+    --radius-row: 8px;
+    --radius-card: 12px;
+    --radius-panel: 16px;
+    --shadow-card: 0 1px 2px rgba(28,31,36,.05), 0 6px 16px -6px rgba(28,31,36,.08);
+    --shadow-pop: 0 0 0 1px rgba(28,31,36,.05), 0 16px 36px -10px rgba(28,31,36,.14);
+    --row-h: 32px;
+    --sidebar-w: 210px;
+    --density: 1.08;
+  }
+
+  /* ── 壳：顶栏 ───────────────────────────────────────── */
+  .traffic {
+    grid-column: 1 / -1; grid-row: 1;
+    display: flex; align-items: center; gap: 8px;
+    padding: 0 14px;
+    background: var(--bg-sidebar);
+    border-bottom: 1px solid var(--border-soft);
+  }
+  .dots { display: flex; gap: 7px; margin-right: 10px; }
+  .dots i {
+    width: 11px; height: 11px; border-radius: 50%;
+    display: block;
+  }
+  .dots i:nth-child(1) { background: #ff5f57; }
+  .dots i:nth-child(2) { background: #febc2e; }
+  .dots i:nth-child(3) { background: #28c840; }
+  .crumb {
+    font-size: 12px; color: var(--text-3);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .crumb strong { color: var(--text-1); font-weight: 600; }
+  .top-actions { margin-left: auto; display: flex; gap: 6px; align-items: center; }
+  .pill-btn {
+    height: 26px; padding: 0 10px;
+    display: inline-flex; align-items: center; gap: 6px;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    background: var(--bg-elevated);
+    color: var(--text-2);
+    font: inherit; font-size: 11.5px; font-weight: 500;
+    cursor: default;
+  }
+  .pill-btn.accent {
+    border-color: transparent;
+    background: var(--accent-tint);
+    color: var(--accent-text);
+  }
+  .icon-sq {
+    width: 26px; height: 26px;
+    display: grid; place-items: center;
+    border-radius: 8px;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border);
+    color: var(--text-3);
+    font-size: 12px;
+  }
+
+  /* ── 壳：侧栏 ───────────────────────────────────────── */
+  .side {
+    grid-column: 1; grid-row: 2;
+    background: var(--bg-sidebar);
+    border-right: 1px solid var(--border-soft);
+    padding: 12px 10px;
+    display: flex; flex-direction: column; gap: 4px;
+    overflow: hidden;
+  }
+  .brand {
+    display: flex; align-items: center; gap: 8px;
+    padding: 4px 8px 14px;
+    font-weight: 700; font-size: 14px; letter-spacing: -.02em;
+    color: var(--text-1);
+  }
+  .brand-mark {
+    width: 22px; height: 22px; border-radius: 7px;
+    background: linear-gradient(135deg, var(--accent), color-mix(in srgb, var(--accent) 50%, #fff));
+    box-shadow: 0 2px 6px color-mix(in srgb, var(--accent) 35%, transparent);
+  }
+  .side-label {
+    padding: 10px 8px 4px;
+    font-size: 10.5px; font-weight: 600;
+    letter-spacing: .06em; text-transform: uppercase;
+    color: var(--text-4);
+  }
+  .nav-item {
+    display: flex; align-items: center; gap: 8px;
+    height: var(--row-h);
+    padding: 0 10px;
+    border-radius: var(--radius-row);
+    color: var(--text-2);
+    font-size: 13px; font-weight: 500;
+    cursor: default;
+    white-space: nowrap; overflow: hidden;
+  }
+  .nav-item .ico {
+    width: 16px; text-align: center;
+    color: var(--text-3); font-size: 13px; flex: 0 0 auto;
+  }
+  .nav-item:hover { background: var(--bg-hover); color: var(--text-1); }
+  .nav-item.on {
+    background: var(--bg-selected);
+    color: var(--text-1);
+    font-weight: 600;
+  }
+  .nav-item.on .ico { color: var(--accent); }
+  .tree { display: flex; flex-direction: column; gap: 1px; }
+  .tree .nav-item { font-weight: 400; font-size: 12.5px; }
+  .tree .nav-item.folder { color: var(--text-1); font-weight: 600; }
+  .tree .nav-item.child { padding-left: 26px; }
+  .tree .nav-item.on { font-weight: 600; }
+
+  /* ── 壳：主区 ───────────────────────────────────────── */
+  .main {
+    grid-column: 2; grid-row: 2;
+    background: var(--bg-main);
+    display: flex; flex-direction: column;
+    overflow: hidden;
+    min-width: 0;
+  }
+  .tabs {
+    display: flex; gap: 4px; align-items: flex-end;
+    padding: 8px 12px 0;
+    border-bottom: 1px solid var(--border-soft);
+    background: var(--bg-window);
+  }
+  .tab {
+    height: 30px; padding: 0 12px;
+    display: inline-flex; align-items: center; gap: 6px;
+    border-radius: 8px 8px 0 0;
+    font-size: 12px; color: var(--text-3);
+    background: transparent;
+    border: 1px solid transparent;
+    border-bottom: 0;
+  }
+  .tab.on {
+    background: var(--bg-main);
+    color: var(--text-1);
+    font-weight: 600;
+    border-color: var(--border-soft);
+    box-shadow: 0 -1px 0 var(--bg-main);
+  }
+  .tab .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent-warm); opacity: .7; }
+  .doc {
+    flex: 1; overflow: auto;
+    padding: calc(28px * var(--density)) calc(48px * var(--density));
+  }
+  .doc-inner { max-width: 640px; margin: 0 auto; }
+  .doc h1 {
+    margin: 0 0 8px;
+    font-size: calc(26px * var(--density));
+    font-weight: 700; letter-spacing: -.03em;
+    color: var(--text-1);
+  }
+  .doc .meta {
+    font-size: 12px; color: var(--text-4);
+    margin-bottom: 22px;
+  }
+  .doc h2 {
+    margin: 22px 0 8px;
+    font-size: 15px; font-weight: 650;
+    color: var(--text-1); letter-spacing: -.01em;
+  }
+  .doc p {
+    margin: 0 0 12px;
+    font-size: calc(14px * var(--density));
+    line-height: 1.65;
+    color: var(--text-2);
+  }
+  .doc .callout {
+    margin: 16px 0; padding: 12px 14px;
+    border-radius: var(--radius-card);
+    background: var(--bg-selected);
+    border: 1px solid color-mix(in srgb, var(--accent) 22%, transparent);
+    color: var(--text-1);
+    font-size: 13px;
+  }
+  .doc .callout strong { color: var(--accent-text); }
+  .doc ul { margin: 0 0 12px; padding-left: 1.2em; color: var(--text-2); }
+  .doc li { margin: 4px 0; font-size: calc(13.5px * var(--density)); }
+  .doc code {
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    font-size: 12px;
+    padding: 1px 5px; border-radius: 4px;
+    background: var(--bg-hover); color: var(--text-1);
+  }
+
+  /* ── 壳：右栏 ───────────────────────────────────────── */
+  .right {
+    grid-column: 3; grid-row: 2;
+    background: var(--bg-window);
+    border-left: 1px solid var(--border-soft);
+    padding: 14px 12px;
+    display: flex; flex-direction: column; gap: 10px;
+    overflow: auto;
+  }
+  .card {
+    background: var(--bg-panel);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-card);
+    box-shadow: var(--shadow-card);
+    padding: 12px 14px;
+  }
+  .card h3 {
+    margin: 0 0 8px;
+    font-size: 12px; font-weight: 650;
+    color: var(--text-1);
+    display: flex; align-items: center; gap: 6px;
+  }
+  .card h3 .chev { color: var(--text-4); font-size: 10px; }
+  .muted { color: var(--text-4); font-size: 12px; }
+  .line {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 6px 0;
+    font-size: 12.5px; color: var(--text-2);
+    border-top: 1px solid var(--border-soft);
+  }
+  .line:first-of-type { border-top: 0; }
+  .badge {
+    font-size: 10px; font-weight: 600;
+    padding: 2px 6px; border-radius: 999px;
+    background: var(--accent-tint); color: var(--accent-text);
+  }
+
+  /* ── 状态栏 ─────────────────────────────────────────── */
+  .status {
+    grid-column: 1 / -1; grid-row: 3;
+    display: flex; align-items: center; gap: 14px;
+    padding: 0 14px;
+    background: var(--bg-sidebar);
+    border-top: 1px solid var(--border-soft);
+    font-size: 11px; color: var(--text-3);
+  }
+  .status .ok { color: #2e7b54; }
+  .dir-b .status .ok { color: #6cc392; }
+
+  /* ── 方向说明卡（舞台下方） ─────────────────────────── */
+  .legend {
+    max-width: 1180px; margin: 16px auto 40px;
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px;
+  }
+  .legend article {
+    background: #fff; border: 1px solid #e4e7eb;
+    border-radius: 12px; padding: 14px 16px;
+    cursor: pointer;
+    transition: border-color .15s, box-shadow .15s, transform .15s;
+  }
+  .legend article:hover {
+    border-color: #c5cad3;
+    box-shadow: 0 8px 20px -8px rgba(0,0,0,.12);
+    transform: translateY(-1px);
+  }
+  .legend article.on {
+    border-color: #3d7eff;
+    box-shadow: 0 0 0 3px rgba(61,126,255,.18);
+  }
+  .legend h4 { margin: 0 0 6px; font-size: 13px; font-weight: 700; }
+  .legend p { margin: 0; font-size: 12px; color: #5a6169; line-height: 1.5; }
+  .swatches { display: flex; gap: 6px; margin-top: 10px; }
+  .swatches i {
+    width: 18px; height: 18px; border-radius: 5px;
+    border: 1px solid rgba(0,0,0,.08);
+    display: block;
+  }
+
+  @media (max-width: 960px) {
+    .frame { grid-template-columns: 170px 1fr; height: 640px; }
+    .right { display: none; }
+    .legend { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<p data-aigc-mark="1" style="margin:0 0 8px;font-size:10px;line-height:1.3;color:#6b6560;font-weight:400;">AI生成</p>
+
+
+<div class="toolbar">
+  <h1>视觉方向对照</h1>
+  <span class="hint">三版共用同一壳 · 只换令牌与密度 · 点击下方卡片或按钮切换</span>
+  <span class="note-badge">docs-only · 不碰 src/</span>
+  <div class="spacer"></div>
+  <div class="seg" id="dirSeg">
+    <button data-d="a">A · MiMo 亮面</button>
+    <button data-d="b">B · Obsidian 暗面</button>
+    <button data-d="c" class="on">C · MiMo×笔记</button>
+  </div>
+</div>
+
+<div class="stage">
+  <div class="frame dir-c" id="frame">
+    <!-- 顶栏 -->
+    <div class="traffic">
+      <div class="dots"><i></i><i></i><i></i></div>
+      <div class="crumb">笔记本 · <strong>产品笔记</strong> · UI 重构方向</div>
+      <div class="top-actions">
+        <span class="pill-btn accent">● 本地已同步</span>
+        <span class="pill-btn">分享</span>
+        <span class="icon-sq">⋯</span>
+        <span class="icon-sq">▣</span>
+      </div>
+    </div>
+
+    <!-- 侧栏 -->
+    <aside class="side">
+      <div class="brand"><span class="brand-mark"></span> Lake Notes</div>
+      <div class="nav-item on"><span class="ico">◈</span> 资料库</div>
+      <div class="nav-item"><span class="ico">☰</span> 小记</div>
+      <div class="nav-item"><span class="ico">↺</span> 回收站</div>
+      <div class="side-label">知识库</div>
+      <div class="tree">
+        <div class="nav-item folder"><span class="ico">▾</span> 产品笔记</div>
+        <div class="nav-item child on">UI 重构方向</div>
+        <div class="nav-item child">同步协议备忘</div>
+        <div class="nav-item child">小记规格</div>
+        <div class="nav-item folder"><span class="ico">▾</span> 技术库</div>
+        <div class="nav-item child">Lake 内核契约</div>
+        <div class="nav-item child">S3 GC 设计</div>
+        <div class="nav-item folder"><span class="ico">▸</span> 随手存</div>
+      </div>
+    </aside>
+
+    <!-- 主区 -->
+    <main class="main">
+      <div class="tabs">
+        <div class="tab on">UI 重构方向 <span class="dot"></span></div>
+        <div class="tab">同步协议备忘</div>
+        <div class="tab">小记规格</div>
+      </div>
+      <div class="doc">
+        <div class="doc-inner">
+          <h1>UI 重构方向</h1>
+          <div class="meta">今天 09:18 · 已同步 · 1,284 字</div>
+          <p>目标是精简套壳层数，几乎完全剥离思源样式；刚需件（细滚动条等）仿照自研，先收口结构，再重做更高级的视觉。</p>
+          <div class="callout"><strong>当前判断</strong>　架构（@layer + 令牌 + kit）可续用；视觉层需要换方向。下面三版是令牌级对照，不改业务逻辑。</div>
+          <h2>为什么不是推倒重来</h2>
+          <ul>
+            <li>桌面 <code>var(--b3-*)</code> 已归零，加样式不会再叠级打架</li>
+            <li>新层选择器平均特异性 1.1–1.6，嵌套深度 1–2</li>
+            <li>主题即数据：换肤只动 <code>themes/*.css</code></li>
+          </ul>
+          <h2>下一步</h2>
+          <p>选定方向后，把色板与组件规格写回主题文件，并继续把 legacy 屏迁到单轨 <code>ln-*</code>。</p>
+        </div>
+      </div>
+    </main>
+
+    <!-- 右栏 -->
+    <aside class="right">
+      <div class="card">
+        <h3>任务清单 <span class="chev">▾</span></h3>
+        <div class="line">选定视觉方向 <span class="badge">进行中</span></div>
+        <div class="line">令牌写回 themes</div>
+        <div class="line">legacy 屏迁单轨</div>
+        <div class="line">移动端批次</div>
+      </div>
+      <div class="card">
+        <h3>大纲 <span class="chev">▾</span></h3>
+        <div class="line">为什么不是推倒重来</div>
+        <div class="line">下一步</div>
+        <div class="line">验收口径</div>
+      </div>
+      <div class="card">
+        <h3>最近 <span class="chev">▾</span></h3>
+        <div class="muted">同步协议备忘 · 2 小时前</div>
+        <div class="muted" style="margin-top:6px">小记规格 · 昨天</div>
+        <div class="muted" style="margin-top:6px">S3 GC 设计 · 3 天前</div>
+      </div>
+    </aside>
+
+    <!-- 状态栏 -->
+    <div class="status">
+      <span class="ok">● 已同步</span>
+      <span>1,284 字</span>
+      <span>3 张图</span>
+      <span style="margin-left:auto">浅色 · Lake Notes</span>
+    </div>
+  </div>
+</div>
+
+<div class="legend" id="legend">
+  <article data-d="a">
+    <h4>A · MiMo Desktop 亮面</h4>
+    <p>照你截图气质：近白侧栏、大留白、软阴影卡片、蓝点缀。最接近「简洁大气」，适合先做默认浅色。</p>
+    <div class="swatches">
+      <i style="background:#f4f5f7"></i><i style="background:#fafbfc"></i>
+      <i style="background:#fff"></i><i style="background:#3d7eff"></i><i style="background:#ff6a00"></i>
+    </div>
+  </article>
+  <article data-d="b">
+    <h4>B · Obsidian 暗面</h4>
+    <p>更高密度、紫点缀、深底。工具感更强，适合当深色主题基线（或独立「专注」皮肤）。</p>
+    <div class="swatches">
+      <i style="background:#1e1e1e"></i><i style="background:#191919"></i>
+      <i style="background:#252525"></i><i style="background:#9b94ff"></i>
+    </div>
+  </article>
+  <article data-d="c" class="on">
+    <h4>C · MiMo × 笔记（推荐）</h4>
+    <p>在 A 的结构上把主色换成 MiMo 橙、侧栏略沉一档、阅读区保持纯白纸面。更有记忆点，也更像个人笔记。</p>
+    <div class="swatches">
+      <i style="background:#f6f7f8"></i><i style="background:#f0f2f4"></i>
+      <i style="background:#fff"></i><i style="background:#ff6a00"></i><i style="background:#1a1d21"></i>
+    </div>
+  </article>
+</div>
+
+<script>
+  const frame = document.getElementById('frame');
+  const seg = document.getElementById('dirSeg');
+  const legend = document.getElementById('legend');
+
+  function setDir(d) {
+    frame.className = 'frame dir-' + d;
+    seg.querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.d === d));
+    legend.querySelectorAll('article').forEach(a => a.classList.toggle('on', a.dataset.d === d));
+  }
+
+  seg.addEventListener('click', e => {
+    const b = e.target.closest('button[data-d]');
+    if (b) setDir(b.dataset.d);
+  });
+  legend.addEventListener('click', e => {
+    const a = e.target.closest('article[data-d]');
+    if (a) setDir(a.dataset.d);
+  });
+</script>
+</body>
+</html>

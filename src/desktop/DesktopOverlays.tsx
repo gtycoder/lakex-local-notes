@@ -5,7 +5,7 @@
  */
 import { createPortal } from "react-dom";
 import type { RefObject } from "react";
-import { Focus, Lock, LockOpen, Settings as Settings2Icon, Trash } from "lucide-react";
+import { Focus, Lock, LockOpen } from "lucide-react";
 import { ConfirmDelete } from "../components/Sidebar";
 import { ExportSubmenuItem, type ExportFormat } from "../components/ExportSubmenuItem";
 import { DraftRecoveryDialog } from "../components/DraftRecoveryDialog";
@@ -14,6 +14,8 @@ import { TrashPanel } from "../components/TrashPanel";
 import { HistoryPanel } from "../components/HistoryPanel";
 import { SyncToast, type SyncToastData } from "../components/SyncToast";
 import { SettingsPanel, type SettingsCategory } from "../components/SettingsPanel";
+import { DesktopWorkspaceMenuItems } from "./DesktopTopBar";
+import type { DesktopWorkspace } from "./desktopTypes";
 import type { AppSettings } from "../lib/settings";
 import type { DraftJournalEntry, S3Settings, TreeNode } from "../lib/types";
 import { clampPopoverPosition } from "../hooks/topMenuPosition";
@@ -29,8 +31,11 @@ export interface DesktopOverlaysProps {
   moreMenuWrapRef: RefObject<HTMLDivElement>;
   moreMenuRef: RefObject<HTMLDivElement>;
   topMenuOpen: boolean;
+  desktopWorkspace: DesktopWorkspace;
+  onSwitchWorkspace: (workspace: DesktopWorkspace) => void;
   onOpenSettingsFromMenu: (category: SettingsCategory) => void;
   onOpenTrashFromMenu: () => void;
+  onOpenHistoryFromMenu: () => void;
 
   focusMode: boolean;
   onToggleFocusMode: () => void;
@@ -60,6 +65,8 @@ export interface DesktopOverlaysProps {
   onCloseTrash: () => void;
   onTrashChanged: () => void;
   onTrashRestored: () => void;
+  /** 成页回收站（空间）：embed 布局与弹窗一致 */
+  trashEmbed?: boolean;
 
   historyOpen: boolean;
   historyNoteId: string | null;
@@ -83,12 +90,13 @@ export function DesktopOverlays(props: DesktopOverlaysProps) {
   const {
     confirmDelete, onConfirmDelete, onCancelDelete,
     workspaceMenuOpen, wsMenuWrapRef, workspaceMenuRef, moreMenuWrapRef, moreMenuRef, topMenuOpen,
-    onOpenSettingsFromMenu, onOpenTrashFromMenu,
+    desktopWorkspace, onSwitchWorkspace,
+    onOpenSettingsFromMenu, onOpenTrashFromMenu, onOpenHistoryFromMenu,
     focusMode, onToggleFocusMode, activeNoteId, activeKind, lockedNoteIds, onToggleNoteLock,
     onExportAs, onCopyMarkdown, onCopyPaths, onCloseTopMenu,
     draftEntries, onRestoreDraft, onDiscardDraft, onCloseDrafts,
     searchPanelOpen, searchPanelQuery, onOpenNoteFromSearch, onCloseSearch,
-    trashOpen, onCloseTrash, onTrashChanged, onTrashRestored,
+    trashOpen, onCloseTrash, onTrashChanged, onTrashRestored, trashEmbed = false,
     historyOpen, historyNoteId, onCloseHistory, onHistoryRestored,
     syncToast, syncAnchorRect, onCloseSyncToast,
     settingsOpen, settingsCategory, settings, onCloseSettings, onSettingsChange,
@@ -107,10 +115,13 @@ export function DesktopOverlays(props: DesktopOverlaysProps) {
         <div ref={workspaceMenuRef} className="top-menu top-menu--workspace" role="menu" aria-label="工作空间"
           style={(() => {
             const rect = wsMenuWrapRef.current?.getBoundingClientRect();
-            return rect ? clampPopoverPosition(rect, { width: window.innerWidth, height: window.innerHeight }, { width: 180, height: 88 }, 6) : undefined;
+            return rect ? clampPopoverPosition(rect, { width: window.innerWidth, height: window.innerHeight }, { width: 220, height: 260 }, 6) : undefined;
           })()}>
-          <button role="menuitem" onClick={() => onOpenSettingsFromMenu("editor")}><Settings2Icon size={15} />偏好设置</button>
-          <button role="menuitem" onClick={onOpenTrashFromMenu}><Trash size={15} />回收站</button>
+          <DesktopWorkspaceMenuItems
+            desktopWorkspace={desktopWorkspace}
+            onSwitchWorkspace={onSwitchWorkspace}
+            onOpenSettings={() => onOpenSettingsFromMenu("editor")}
+          />
         </div>,
         document.body,
       )}
@@ -143,7 +154,10 @@ export function DesktopOverlays(props: DesktopOverlaysProps) {
       )}
       <DraftRecoveryDialog entries={draftEntries} onRestore={onRestoreDraft} onDiscard={onDiscardDraft} onClose={onCloseDrafts} />
       <SearchPanel open={searchPanelOpen} initialQuery={searchPanelQuery} onOpenNote={onOpenNoteFromSearch} onClose={onCloseSearch} />
-      <TrashPanel open={trashOpen} onClose={onCloseTrash} onChanged={onTrashChanged} onRestored={onTrashRestored} />
+      {/* 弹窗形态：仅当非 embed 空间仍需浮层时；空间成页在 App 工作区渲染 */}
+      {!trashEmbed && (
+        <TrashPanel open={trashOpen} onClose={onCloseTrash} onChanged={onTrashChanged} onRestored={onTrashRestored} />
+      )}
       <HistoryPanel open={historyOpen} noteId={historyNoteId} onClose={onCloseHistory} onRestored={onHistoryRestored} />
       {syncToast && <SyncToast data={syncToast} onClose={onCloseSyncToast} anchorRect={syncAnchorRect} />}
       <SettingsPanel open={settingsOpen} openCategory={settingsCategory} settings={settings}

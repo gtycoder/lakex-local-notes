@@ -1,11 +1,14 @@
-/** 桌面顶栏（§20 Phase C 收尾：topBarLeading 与右侧搜索钮从 App.tsx 移出）。 */
-import { ChevronDown, Search } from "lucide-react";
+/** 桌面顶栏（§20 Phase C 收尾：topBarLeading 与右侧搜索钮从 App.tsx 移出）。
+ *  260922 S1+A：工作空间钮内嵌「当前空间」图标（18px 软底），点开合一菜单（空间 + 工作空间）。 */
+import { Check, ChevronDown, Feather, Files, Search, Settings, Trash } from "lucide-react";
 import type { Ref, RefObject } from "react";
 import { SyncStatusPopover } from "../components/SyncStatusPopover";
+import type { DesktopWorkspace } from "./desktopTypes";
 import type { SyncStatus, SyncPendingSummary } from "../lib/types";
 
 export interface DesktopTopBarLeadingProps {
   workspaceName: string;
+  desktopWorkspace: DesktopWorkspace;
   wsMenuWrapRef?: RefObject<HTMLDivElement>;
   syncBtnRef?: RefObject<HTMLButtonElement>;
   visible?: boolean;
@@ -14,22 +17,32 @@ export interface DesktopTopBarLeadingProps {
   cloudEnabled: boolean;
   conflictSnapshots: Array<{ noteId: string; title: string }>;
   onToggleWorkspaceMenu: () => void;
+  onSwitchWorkspace: (workspace: DesktopWorkspace) => void;
   onSync: () => void;
   onOpenSettings: () => void;
   onOpenHistory: (noteId: string) => void;
 }
 
-/** 顶栏左侧：工作空间（下拉：设置/回收站）+ 云同步状态。 */
+const SPACE_META: Record<DesktopWorkspace, { label: string; Icon: typeof Files }> = {
+  library: { label: "资料库", Icon: Files },
+  "quick-notes": { label: "小记", Icon: Feather },
+  trash: { label: "回收站", Icon: Trash },
+};
+
+/** 顶栏左侧：工作空间（A 嵌法：空间图标 + 名 + ▾；菜单含空间分组）+ 云同步状态。 */
 export function DesktopTopBarLeading(props: DesktopTopBarLeadingProps) {
   const {
-    workspaceName, wsMenuWrapRef, syncBtnRef, visible = true, sync,
+    workspaceName, desktopWorkspace, wsMenuWrapRef, syncBtnRef, visible = true, sync,
     pendingSummary, cloudEnabled, conflictSnapshots,
-    onToggleWorkspaceMenu, onSync, onOpenSettings, onOpenHistory,
+    onToggleWorkspaceMenu, onSwitchWorkspace, onSync, onOpenSettings, onOpenHistory,
   } = props;
+  const space = SPACE_META[desktopWorkspace] ?? SPACE_META.library;
   return (
     <>
       <div className="toolbar__menu-wrap" data-top-menu-trigger="workspace" ref={wsMenuWrapRef as Ref<HTMLDivElement> | undefined}>
-        <button className="toolbar__item" onClick={onToggleWorkspaceMenu} title="工作空间" aria-label="工作空间">
+        <button className="toolbar__item toolbar__workspace" onClick={onToggleWorkspaceMenu}
+          title={`空间：${space.label} · 工作空间`} aria-label="工作空间与空间切换">
+          <span className="toolbar__space-ico" aria-hidden="true"><space.Icon size={12} /></span>
           <span className="toolbar__text">{workspaceName}</span><ChevronDown size={13} />
         </button>
       </div>
@@ -47,6 +60,37 @@ export function DesktopTopBarLeading(props: DesktopTopBarLeadingProps) {
         onOpenSettings={onOpenSettings}
         onOpenHistory={onOpenHistory}
       />
+    </>
+  );
+}
+
+export interface DesktopWorkspaceMenuProps {
+  desktopWorkspace: DesktopWorkspace;
+  onSwitchWorkspace: (workspace: DesktopWorkspace) => void;
+  onOpenSettings: () => void;
+}
+
+/** 合一菜单条目（空间 ⊕ 工作空间）；由 DesktopOverlays 的 top-menu 渲染。 */
+export function DesktopWorkspaceMenuItems({ desktopWorkspace, onSwitchWorkspace, onOpenSettings }: DesktopWorkspaceMenuProps) {
+  const spaces: Array<{ id: DesktopWorkspace; label: string; Icon: typeof Files; hint: string }> = [
+    { id: "library", label: "资料库", Icon: Files, hint: "⌘1" },
+    { id: "quick-notes", label: "小记", Icon: Feather, hint: "⌘2" },
+    { id: "trash", label: "回收站", Icon: Trash, hint: "⌘3" },
+  ];
+  return (
+    <>
+      <div className="top-menu__label" role="presentation">空间</div>
+      {spaces.map(({ id, label, Icon, hint }) => (
+        <button key={id} role="menuitemradio" aria-checked={desktopWorkspace === id}
+          onClick={() => onSwitchWorkspace(id)}>
+          <Icon size={15} />
+          <span>{label}<small>{hint}</small></span>
+          {desktopWorkspace === id && <Check size={14} className="top-menu__check" aria-hidden="true" />}
+        </button>
+      ))}
+      <div className="top-menu__sep" role="separator" />
+      <div className="top-menu__label" role="presentation">工作空间</div>
+      <button role="menuitem" onClick={onOpenSettings}><Settings size={15} /><span>偏好设置</span></button>
     </>
   );
 }

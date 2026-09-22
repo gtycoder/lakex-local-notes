@@ -129,6 +129,161 @@
 .toolbar__item:disabled { opacity: .4; cursor: default; }
 .toolbar__text { max-width: 180px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 
+/* S1+A：工作空间钮内嵌当前空间图标（18px 软底方块） */
+.toolbar__workspace { gap: 6px; padding-left: 5px; }
+.toolbar__space-ico {
+  width: 18px;
+  height: 18px;
+  border-radius: 5px;
+  display: inline-grid;
+  place-items: center;
+  flex: 0 0 auto;
+  color: var(--lake-accent-text);
+  background: var(--lake-accent-tint);
+}
+
+/* 合一菜单：空间分组标签 / 分隔 / 勾选 */
+.top-menu__label {
+  padding: 6px 10px 4px;
+  font-size: 10px;
+  font-weight: var(--lake-font-weight-semibold);
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: var(--lake-text-4);
+  user-select: none;
+}
+.top-menu__sep {
+  height: 1px;
+  margin: 5px 4px;
+  background: var(--lake-border-2);
+}
+.top-menu__check {
+  margin-left: auto;
+  color: var(--lake-accent);
+  flex: 0 0 auto;
+}
+.top-menu--workspace {
+  min-width: 220px;
+}
+
+/* 壳：隐藏活动栏 —— 左侧不占列（彻底去掉左边栏） */
+.app-shell.activity-rail-hidden {
+  --activity-rail-width: 0px;
+}
+.app-shell.activity-rail-hidden .activity-rail { display: none; }
+
+/* 壳：回收站空间 —— 与小记同款：藏目录/大纲，正文铺满 */
+.app-shell.trash-space-active .sidebar { display: none; }
+.app-shell.trash-space-active {
+  grid-template-columns: var(--activity-rail-width) 0 minmax(0, 1fr);
+}
+.app-shell.trash-space-active .workspace {
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  background: transparent;
+}
+.app-shell.trash-space-active .statusbar { display: none; }
+.app-shell.trash-space-active .workspace {
+  grid-template-rows: minmax(0, 1fr);
+}
+.app-shell.trash-space-active .trash-space-pane {
+  grid-column: 1 / -1;
+  grid-row: 1;
+  min-height: 0;
+  background: var(--lake-bg-panel);
+  border-radius: var(--lake-radius-md) var(--lake-radius-md) 0 0;
+}
+
+/* ── 整边触发区：承载原生式 minimap（条目横线见 outline.css .toc-minimap） ── */
+.app-shell {
+  position: relative;
+}
+.edge-hotzone {
+  position: absolute;
+  top: calc(var(--topbar-height, 38px) + 28px);
+  bottom: 0;
+  width: 39px;
+  z-index: 30;
+  cursor: default;
+  background: transparent;
+  overflow: hidden;
+}
+.edge-hotzone .toc-minimap {
+  align-items: flex-start;
+  padding: 10px 8px 10px 12px;
+  pointer-events: none;
+}
+.edge-hotzone-l { left: 0; }
+.app-shell.sidebar-docked .edge-hotzone-l { left: 0; }
+
+/* 目录栏 📌（固定/悬浮） */
+.dock-icon-btn.pin-btn.is-active {
+  color: var(--lake-accent-text);
+  background: var(--lake-accent-tint);
+}
+
+/* 回收站整页空间（对齐 .quick-notes-pane）：不是 floating-dialog */
+.trash-space-pane {
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  overflow: hidden;
+  flex: 1 1 auto;
+  background: var(--lake-bg-window);
+  padding: calc(var(--topbar-height) + 14px) clamp(18px, 2.4vw, 32px) 0 14px;
+}
+.trash-space-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex: 0 0 auto;
+  padding: 0 2px 12px;
+  cursor: default;
+  user-select: none;
+}
+.trash-space-header .panel-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.trash-space-header .panel-title h2 {
+  margin: 0;
+  font-size: 20px;
+  letter-spacing: -.02em;
+  font-weight: 700;
+  color: var(--lake-text-1);
+}
+.trash-space-header .panel-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.trash-space-pane > .ln-tabs,
+.trash-space-pane > .trash-panel-hint,
+.trash-space-pane > .trash-panel-notice,
+.trash-space-pane > .trash-error {
+  flex: 0 0 auto;
+}
+.trash-space-pane > .history-split {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+}
+.trash-space-pane > .history-list {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+}
+.trash-space-pane .history-split .history-list,
+.trash-space-pane .history-split .history-preview-inline {
+  min-height: 0;
+}
+
 /* 同步入口：状态色直接取令牌（不依赖旧别名） */
 .sync-status-button.pending { color: var(--lake-status-pending); }
 .sync-status-button.error { color: var(--lake-status-error); }
@@ -204,6 +359,21 @@
 .tab-item .tab-dirty-dot { flex: 0 0 6px; width: 6px; height: 6px; background: var(--lake-status-pending); }
 .tab-item .tab-pin { color: var(--lake-text-4); }
 .tab-item:focus-visible { outline: var(--lake-focus-ring-width) solid var(--lake-accent); outline-offset: -2px; }
+/* 钉住页签（多标签）：主题色浅染（同大纲选中）；chrome 高于 legacy，必须在本层表达 */
+.tab-item.pinned {
+  background: var(--lake-accent-tint);
+  border-color: transparent;
+}
+.tab-item.pinned .tab-pin { color: var(--lake-accent); }
+.tab-item.pinned .tab-title { font-weight: var(--lake-font-weight-semibold); }
+.tab-item.pinned:hover {
+  color: var(--lake-text-1);
+  background: color-mix(in srgb, var(--lake-accent-tint) 70%, var(--lake-bg-hover));
+}
+.tab-item.pinned.active {
+  background: var(--lake-accent-tint);
+  border-color: transparent;
+}
 
 /* ── 目录树行（P5-e；设计 COMPONENTS.md 03 列表与列表项）─────────────────
  * 产品既有决策一律保留：标题超长**直接裁切不打省略号**；行内动作（⋯ ＋）**仅 hover/聚焦显形**

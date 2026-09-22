@@ -1,32 +1,32 @@
-/* 深色主题。 */
+/* B · 暗 · 紫（深色基线；05-THEME-TOKENS-ABC.md）：Obsidian 向，深底分层 + 紫点缀。 */
 [data-theme="dark"] {
   color-scheme: dark;
   /* 表面 */
-  --lake-bg-window: #16181b;
-  --lake-bg-panel: #1e2126;
-  --lake-bg-canvas: #1f2227;
-  --lake-bg-block: #262a31;
-  --lake-bg-raised: #2b3037;
-  --lake-bg-sunken: #141619;
-  --lake-bg-hover: rgba(255,255,255,.075);
-  --lake-bg-press: rgba(255,255,255,.12);
+  --lake-bg-window: #1a1b1e;
+  --lake-bg-panel: #25262b;
+  --lake-bg-canvas: #1e1f22;
+  --lake-bg-block: #2a2b30;
+  --lake-bg-raised: #2a2b30;
+  --lake-bg-sunken: #141517;
+  --lake-bg-hover: rgba(255,255,255,.06);
+  --lake-bg-press: rgba(255,255,255,.10);
   /* 文字 */
-  --lake-text-1: #eef0f3;
-  --lake-text-2: #b6bdc6;
-  --lake-text-3: #8f98a3;
-  --lake-text-4: #6b7480;
+  --lake-text-1: #e3e4e6;
+  --lake-text-2: #a8a9ad;
+  --lake-text-3: #7c7d82;
+  --lake-text-4: #5c5d62;
   --lake-text-on-accent: #ffffff;
   /* 边框 */
-  --lake-border-1: #2a2f35;
-  --lake-border-2: #23272c;
-  --lake-border-strong: #3a4048;
-  /* 主色 */
-  --lake-accent: #8ba4e6;
-  --lake-accent-ink: #3f5fae;
-  --lake-accent-ink-hover: #4a6cc4;
-  --lake-accent-ink-press: #35509a;
-  --lake-accent-tint: rgba(139,164,230,.16);
-  --lake-accent-text: #e9eef6;
+  --lake-border-1: #2e2f34;
+  --lake-border-2: #242528;
+  --lake-border-strong: #3a3b42;
+  /* 主色（B 紫） */
+  --lake-accent: #9b94ff;
+  --lake-accent-ink: #7f76ff;
+  --lake-accent-ink-hover: #8f87ff;
+  --lake-accent-ink-press: #6f66f0;
+  --lake-accent-tint: rgba(155,148,255,.14);
+  --lake-accent-text: #b7b1ff;
   /* 状态色 */
   --lake-status-sync: #6fc0cc;
   --lake-status-pending: #e0ac63;
@@ -37,14 +37,14 @@
   --lake-status-ok-soft: rgba(108,195,146,.14);
   --lake-status-error-soft: rgba(239,139,132,.14);
   /* 选区 / 遮罩 / 滚动条 / 焦点 */
-  --lake-select-bg: rgba(147,169,207,.22);
+  --lake-select-bg: rgba(155,148,255,.22);
   --lake-scrim: rgba(6,8,10,.55);
   --lake-scrollbar-thumb: rgba(230,235,242,.22);
   --lake-scrollbar-thumb-hover: #7d8695;
   --lake-focus-halo: rgba(230,235,242,.20);
   /* 阴影 */
-  --lake-shadow-card: 0 1px 3px rgba(0,0,0,.36), 0 6px 16px -8px rgba(0,0,0,.50);
-  --lake-shadow-popover: 0 0 0 1px rgba(255,255,255,.08), 0 14px 30px -10px rgba(0,0,0,.55), 0 30px 60px -20px rgba(0,0,0,.50);
+  --lake-shadow-card: 0 1px 2px rgba(0,0,0,.40);
+  --lake-shadow-popover: 0 0 0 1px rgba(255,255,255,.07), 0 24px 56px -18px rgba(0,0,0,.62);
   --lake-shadow-dialog: 0 0 0 1px rgba(255,255,255,.09), 0 28px 56px -18px rgba(0,0,0,.60), 0 56px 104px -36px rgba(0,0,0,.55);
   --lake-shadow-drag: 0 10px 28px -10px rgba(0,0,0,.55);
   --lake-shadow-knob: 0 1px 2px rgba(0,0,0,.45);

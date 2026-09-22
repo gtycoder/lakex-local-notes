@@ -39,14 +39,13 @@ import { NoteInfoDialog } from "./components/NoteInfoDialog";
 import { loadSettings, saveSettings, type AppSettings } from "./lib/settings";
 import { subtreeIds } from "./core/tree";
 import { DOCK_GUTTER } from "./lib/layoutMetrics";
-import { OUTLINE_HOVER_TRIGGER_WIDTH, OUTLINE_SCROLLBAR_CLEARANCE } from "./features/outline/outlineInteraction";
-import { type OpenTab, OUTLINE_SIDEBAR_MAX_WIDTH, OUTLINE_SIDEBAR_MIN_WIDTH, SIDEBAR_MAX_WIDTH, SIDEBAR_MIN_WIDTH } from "./desktop/desktopTypes";
+import { type DesktopWorkspace, type OpenTab, OUTLINE_SIDEBAR_MAX_WIDTH, OUTLINE_SIDEBAR_MIN_WIDTH, SIDEBAR_MAX_WIDTH, SIDEBAR_MIN_WIDTH } from "./desktop/desktopTypes";
 import { DesktopOverlays } from "./desktop/DesktopOverlays";
 import { DesktopLibrary } from "./desktop/DesktopLibrary";
 import { DesktopQuickNotes } from "./desktop/DesktopQuickNotes";
 import { useDesktopShell } from "./desktop/useDesktopShell";
 import { DesktopTopBarLeading, DesktopTopBarSearch } from "./desktop/DesktopTopBar";
-import { DesktopActivityRail } from "./desktop/DesktopActivityRail";
+import { TrashPanel } from "./components/TrashPanel";
 
 export function App() {
   const {
@@ -204,6 +203,7 @@ export function App() {
 
   // bootstrap 首拉 + 主进程广播订阅（写操作后的刷新由 pending-summary-changed 事件驱动，单点更新）
   const { handleTogglePin } = useDesktopLifecycle({
+    onSwitchDesktopWorkspace: (w) => void switchDesktopWorkspace(w),
     syncToast, syncBtnRef, setSyncAnchorRect, activeNoteId,
     conflictSnapshotCount: conflictSnapshotNotice.length, historyOpen, setActiveHistoryCount,
     openTabs, setPinnedNoteIds, theme: settings.theme, setSettings,
@@ -309,11 +309,13 @@ export function App() {
   });
   const topBarLeadingProps = {
     workspaceName,
+    desktopWorkspace,
     sync: sync,
     pendingSummary,
     cloudEnabled,
     conflictSnapshots: conflictSnapshotNotice,
     onToggleWorkspaceMenu: () => { setWorkspaceMenuOpen((o) => !o); setTopMenuOpen(false); },
+    onSwitchWorkspace: (w: DesktopWorkspace) => void switchDesktopWorkspace(w),
     onSync: () => { void runSync(); },
     onOpenSettings: () => { setSettingsCategory("sync"); setSettingsOpen(true); },
     onOpenHistory: (noteId: string) => { setHistoryNoteId(noteId); setHistoryOpen(true); },
@@ -334,23 +336,48 @@ export function App() {
       syncBtnRef={desktopWorkspace === "quick-notes" ? syncBtnRef : undefined}
     />
   );
+  const trashTopBarLeading = (
+    <DesktopTopBarLeading
+      {...topBarLeadingProps}
+      visible={desktopWorkspace === "trash"}
+      wsMenuWrapRef={desktopWorkspace === "trash" ? wsMenuWrapRef : undefined}
+      syncBtnRef={desktopWorkspace === "trash" ? syncBtnRef : undefined}
+    />
+  );
   /** 文档页顶栏最右侧：全文搜索（原在左侧工作空间下拉里；⇧⌘F 亦可）。 */
   const topBarSearch = (
     <DesktopTopBarSearch onOpenSearch={() => sidebarOpenSearch(search)} />
   );
 
   return (
-    <div className={`app-shell ${shellPlatformClass} sidebar-${sidebarRenderMode} outline-${effectiveOutlineMode} ${workspaceMenuOpen ? "workspace-menu-open" : ""} ${focusMode ? "focus-mode" : ""} ${desktopWorkspace === "quick-notes" ? "quick-notes-active" : ""} ${sidebarResizing ? "sidebar-resizing" : ""} ${outlineResizing ? "outline-resizing" : ""}`} style={shellStyle}>
-      <DesktopActivityRail
-        desktopWorkspace={desktopWorkspace}
-        sidebarMode={sidebarMode}
-        onToggleSidebarDock={toggleSidebarDock}
-        onSwitchWorkspace={(w) => void switchDesktopWorkspace(w)}
-        onPreviewEnter={showSidebarPreview}
-        onPreviewLeave={hideSidebarPreview}
-      />
-      {/* keep-alive：Sidebar 常驻，小记模式由 .app-shell.quick-notes-active .sidebar 隐藏（避免切回时重建目录树、丢失展开状态） */}
-      <Sidebar nodes={treeNodes} activeId={activeNoteId} search={search} mode={sidebarRenderMode} width={sidebarWidth} minWidth={SIDEBAR_MIN_WIDTH} maxWidth={SIDEBAR_MAX_WIDTH} onSearch={setSearch} onRefreshTree={refreshTree} onSelect={sidebarSelect} onCreate={sidebarCreate} onRename={sidebarRename} onMoveNode={sidebarMove} onRequestDelete={sidebarRequestDelete} onCopyMarkdown={copyMarkdownFromCache} onExportAs={exportAs} onCopyPaths={copyNotePaths} onSetIcon={sidebarSetIcon} onDuplicate={(node) => void duplicateNode(node)} onShowInfo={(node) => setInfoNote(node)} onOpenHistory={sidebarOpenHistory} onRevealNoteFile={(node) => { if (node.noteFileId) void native.revealNoteFile(node.noteFileId); }} revealNodeId={revealNodeId} onRevealConsumed={() => setRevealNodeId(null)} pendingRenameId={pendingRenameId} onPendingRenameConsumed={sidebarPendingRenameConsumed} onPreviewEnter={showSidebarPreview} onPreviewLeave={hideSidebarPreview} onResizeActiveChange={handleSidebarResizeActiveChange} onWidthChange={updateSidebarWidth} onWidthCommit={commitSidebarWidth} />
+    <div className={`app-shell ${shellPlatformClass} sidebar-${sidebarRenderMode} outline-${effectiveOutlineMode} ${workspaceMenuOpen ? "workspace-menu-open" : ""} ${focusMode ? "focus-mode" : ""} ${desktopWorkspace === "quick-notes" ? "quick-notes-active" : ""} ${desktopWorkspace === "trash" ? "trash-space-active" : ""} ${sidebarResizing ? "sidebar-resizing" : ""} ${outlineResizing ? "outline-resizing" : ""} activity-rail-hidden`} style={shellStyle}>
+      {/* 整边触发（左）：hover 浮出目录，点击固定/取消 —— 资料库空间 */}
+      {desktopWorkspace === "library" && (
+        <div
+          className="edge-hotzone edge-hotzone-l"
+          title="目录：悬停展开 · 点击固定/取消"
+          onPointerEnter={showSidebarPreview}
+          onPointerLeave={(e) => {
+            const to = e.relatedTarget as Node | null;
+            if (to && e.currentTarget.closest(".app-shell")?.contains(to)) return;
+            hideSidebarPreview();
+          }}
+          onClick={() => toggleSidebarDock()}
+        >
+          <div className="toc-minimap" aria-hidden="true">
+            {treeNodes.slice(0, 80).map((n, i) => (
+              <span
+                key={n.id}
+                className={`toc-minimap__item toc-minimap__item--d${n.nodeType === "notebook" ? 1 : n.nodeType === "group" ? 2 : 3}${n.id === activeNoteId || n.noteFileId === activeNoteId ? " is-selected" : ""}`}
+                style={{ marginTop: i === 0 ? 10 : undefined }}
+              />
+            ))}
+          </div>
+        </div>
+      )}
+      {/* 空间切换已并入顶栏工作空间菜单（S1+A）；活动栏不再渲染（壳层导航，功能见菜单 ⌘1–3） */}
+      {/* keep-alive：Sidebar 常驻，小记/回收站空间由 shell class 隐藏（避免切回时重建目录树） */}
+      <Sidebar nodes={treeNodes} activeId={activeNoteId} search={search} mode={sidebarRenderMode} width={sidebarWidth} minWidth={SIDEBAR_MIN_WIDTH} maxWidth={SIDEBAR_MAX_WIDTH} onSearch={setSearch} onRefreshTree={refreshTree} onSelect={sidebarSelect} onCreate={sidebarCreate} onRename={sidebarRename} onMoveNode={sidebarMove} onRequestDelete={sidebarRequestDelete} onCopyMarkdown={copyMarkdownFromCache} onExportAs={exportAs} onCopyPaths={copyNotePaths} onSetIcon={sidebarSetIcon} onDuplicate={(node) => void duplicateNode(node)} onShowInfo={(node) => setInfoNote(node)} onOpenHistory={sidebarOpenHistory} onRevealNoteFile={(node) => { if (node.noteFileId) void native.revealNoteFile(node.noteFileId); }} revealNodeId={revealNodeId} onRevealConsumed={() => setRevealNodeId(null)} pendingRenameId={pendingRenameId} onPendingRenameConsumed={sidebarPendingRenameConsumed} onPreviewEnter={showSidebarPreview} onPreviewLeave={hideSidebarPreview} onResizeActiveChange={handleSidebarResizeActiveChange} onWidthChange={updateSidebarWidth} onWidthCommit={commitSidebarWidth} onToggleDock={toggleSidebarDock} docked={sidebarMode === "docked"} />
       <main className="workspace" onPointerDownCapture={(event) => {
         const clickedDocument = (event.target as HTMLElement).closest(".document-pane, .empty-workspace");
         // 点正文收起目录栏：宽窗沿用原语义（只有"悬停预览"那种临时浮动态会收）；
@@ -360,7 +387,7 @@ export function App() {
         if (clickedDocument && shouldCollapse) setSidebarMode("collapsed");
       }}>
         {error && <div className="error-banner"><span>{error}</span><button onClick={() => setError(null)}>关闭</button></div>}
-        <div className={"workspace-view" + (desktopWorkspace === "quick-notes" ? " workspace-view--hidden" : "")}>
+        <div className={"workspace-view" + (desktopWorkspace === "library" ? "" : " workspace-view--hidden")}>
           <DesktopLibrary
             visible={desktopWorkspace === "library"}
             tabs={tabInfos}
@@ -378,7 +405,7 @@ export function App() {
             onScrollToTop={scrollActiveEditorToTop}
             onNavigateToHeading={navigateToHeading}
             lockedNoteIds={lockedNoteIds}
-            onOpenTrash={() => setTrashOpen(true)}
+            onOpenTrash={() => void switchDesktopWorkspace("trash")}
             pinnedNoteIds={pinnedNoteIds}
             onTabChange={handleTabChange}
             onTabClose={closeTab}
@@ -399,6 +426,21 @@ export function App() {
             onDirtyChange={setQuickNotesDirty}
             onConverted={(note) => void handleQuickNoteConverted(note)}
             />
+        </div>
+        {/* 回收站空间：与小记同构（顶栏 + 整页 pane），非弹窗 */}
+        <div className={"workspace-view" + (desktopWorkspace === "trash" ? "" : " workspace-view--hidden")}>
+          <header className="tab-bar desktop-only" aria-label="顶栏">
+            <div className="tabbar-leading">{trashTopBarLeading}</div>
+            <div className="tab-items" />
+            <div className="tabbar-trailing">{topBarSearch}</div>
+          </header>
+          <TrashPanel
+            open={desktopWorkspace === "trash"}
+            embed
+            onClose={() => void switchDesktopWorkspace("library")}
+            onChanged={() => void refreshDraftEntries()}
+            onRestored={handleTrashRestored}
+          />
         </div>
         <DesktopStatusBar
           showDocumentStats={desktopWorkspace === "library"}
@@ -449,8 +491,14 @@ export function App() {
         moreMenuWrapRef={moreMenuWrapRef}
         moreMenuRef={moreMenuRef}
         topMenuOpen={topMenuOpen}
+        desktopWorkspace={desktopWorkspace}
+        onSwitchWorkspace={(w) => void switchDesktopWorkspace(w)}
         onOpenSettingsFromMenu={(category) => { setSettingsCategory(category); setSettingsOpen(true); setWorkspaceMenuOpen(false); }}
-        onOpenTrashFromMenu={() => { setTrashOpen(true); setWorkspaceMenuOpen(false); }}
+        onOpenTrashFromMenu={() => { void switchDesktopWorkspace("trash"); setWorkspaceMenuOpen(false); }}
+        onOpenHistoryFromMenu={() => {
+          if (activeNoteId) { setHistoryNoteId(activeNoteId); setHistoryOpen(true); }
+          setWorkspaceMenuOpen(false);
+        }}
         focusMode={focusMode}
         onToggleFocusMode={() => { setFocusMode((value) => !value); setTopMenuOpen(false); }}
         activeNoteId={activeNoteId}
@@ -470,8 +518,9 @@ export function App() {
         searchPanelQuery={searchPanelQuery}
         onOpenNoteFromSearch={(id, query) => void openNote(id, query)}
         onCloseSearch={() => setSearchPanelOpen(false)}
-        trashOpen={trashOpen}
-        onCloseTrash={() => setTrashOpen(false)}
+        trashOpen={desktopWorkspace === "trash"}
+        trashEmbed
+        onCloseTrash={() => void switchDesktopWorkspace("library")}
         onTrashChanged={() => void refreshDraftEntries()}
         onTrashRestored={handleTrashRestored}
         historyOpen={historyOpen}

@@ -633,12 +633,10 @@ html[data-theme="dark"] .document-pane .ne-engine > ne-h6 ne-heading-content {
 }
 
 
-/* The floating panel must stop before the editor's 10px scrollbar track.
-   Otherwise the panel itself becomes the hit target and the user cannot grab
-   the scrollbar after the outline opens. */
-/* 展开的大纲浮层同样要让开编辑器滚动条（宽窄共用；窄窗正文铺到窗口边，这条更关键）。 */
+/* 浮动大纲贴窗口右缘（04 §4：无常驻轨，悬浮覆盖）。
+ * 根规则：right 只写这一处。曾为「让开编辑器滚动条」留 38+13px 空隙，导致面板不贴边。 */
 .outline-sidebar--collapsed.outline-sidebar--hovered .outline-sidebar__content {
-  right: calc(var(--outline-collapsed-width) + var(--outline-scrollbar-clearance, 13px));
+  right: 0;
 }
 
 

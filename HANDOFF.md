@@ -9,7 +9,8 @@
 - **🚧 在途分支 `feat/ui-redesign`（260921 起，用户授权自主执行）**：桌面端 UI 重设计 = 彻底剥离思源样式层 + 自有设计系统 + 换肤。
   **✅ 本批已完成（P0–P8）**：进度与收尾见 **§2.22**；方案/硬指标/阶段 = `docs/UI-REDESIGN-260921/README.md`；**元素底账（防丢，346 条全部打勾）** = `01-ELEMENT-LEDGER.md`；**验收报告（含硬指标表 + 三种验证方法 + 19 张截图矩阵）** = `03-ACCEPTANCE.md`。**五项硬指标全部达成**：桌面 `var(--b3-*)` 604→**0**、非主题颜色字面量 624→**0**、`!important` 141→**9**、入口 b3 import 8→**0**、同名文件对 4→**0**；app-css gzip 197→**182 KB**。
   设计规格（外部，只作参考）= `/Users/admin/file/local-lake/ui-design-inputs/out/design-system/`。
-- **👉 最新会话从这里读：§2.23（260921-2 · UI 视觉优化批次，14 个提交）**：用户验收后反馈「太丑」→ 批量视觉回修 + 顺手修掉一批 **P7-b 删源漏搬的真 bug**（菜单项图标贴字 / 活动栏右侧竖线 / 同步浮窗完全没样式 / 顶栏右槽位没样式 / 滚动条回落系统 15px）。**已 push origin 备份**（用户指示），**未合 master**（用户明确：「绝对不能合并到 master，你这版是备选」）。
+- **👉 最新会话从这里读：§2.24（260922 · UI 主题 A/B/C + 空间切换 + minimap，分支 `feat/ui-theme-abc` 未提交）**
+- 上一批：§2.23（260921-2 · UI 视觉优化批次，14 个提交）：用户验收后反馈「太丑」→ 批量视觉回修 + 顺手修掉一批 **P7-b 删源漏搬的真 bug**（菜单项图标贴字 / 活动栏右侧竖线 / 同步浮窗完全没样式 / 顶栏右槽位没样式 / 滚动条回落系统 15px）。**已 push origin 备份**（用户指示），**未合 master**（用户明确：「绝对不能合并到 master，你这版是备选」）。
 - **✅ 分支 `feat/board-document` 已 fast-forward 合入 `master` 并 push origin**（用户 260920 收尾指示）。这一次把三大块一起带进 `master`：
   1. **自研多维表 `kind=bitable`**（§2.12）· 2. **独立画板文档 `kind=board`**（§2.13）· 3. **移动端对账补齐 + 小记完善**（§2.14 / **§2.15**）。
 - **最新会话（260921 · 单元格图片方案 2A：`cell.img` 成为唯一真相）完整交接 = §2.21（先读它）**；同批承接 §2.20（去浮动图 + 单元格图片工具弹窗 + 滚动/色条修复）与 §2.16–§2.19（表格图片 P1/P2/缩略图）。
@@ -2003,6 +2004,85 @@ P4 组件库 14 件 → P5 逐屏迁移（每屏对照底账打勾）→ P6 第�
 11. **在 worktree 里的改动，用户在主检出看不到**。本批末按用户要求把 `feat/ui-redesign-opt` **FF 合回 `feat/ui-redesign`** 并 `git worktree remove`；用户随后可自行测试。（另：worktree 会让某些 GUI 的分支树显示异常。）
 12. **bash heredoc 里写 JS 模板串/正则极易写坏命令**（本批踩多次：`\n` 被展开、双引号未转义、`$` 插值）⇒ 改用 `tools.write` 落一个脚本文件再执行；**不要在 JS 双引号串里写未转义的引号，也不要在模板串里写未转义的反引号**。
 13. **导出子菜单在底账里曾经过时**（漏记「导出为 Word（开发中）」「导出为原生 Lake」）⇒ 「以现网为准」不只是口号，核对时要按实际项更新底账。
+
+## 2.24 本会话总交接（260922 · UI 主题 A/B/C + 空间切换 + minimap）—— 新会话从这里读
+
+> **写给完全没有上下文的新会话。** 分支 **`feat/ui-theme-abc`**（自 `feat/ui-redesign` @ `d3bfc56` 切出）。
+> **全部未提交**（铁律⑦：等用户验收）；**绝对不要合 master**（用户红线：`feat/ui-redesign` 仍是备选）。
+> 规格：`docs/UI-REDESIGN-260921/04-LAYOUT-SPACE-SPEC.md` · `05-THEME-TOKENS-ABC.md` · `06-BASELINE-REVIEW.md`。
+
+### 一、任务目标（用户 260922）
+
+1. 基于 `feat/ui-redesign` 做**视觉层重构**（架构续用，不改业务逻辑）。
+2. **绝对不改功能**；**小记布局结构不动**（仿云端 Lake，只对齐主题质感）。
+3. **回收站做成与小记同级的独立空间**（成页，布局贴近原弹窗，可微调留白）。
+4. 重点做好 **目录栏 + 增强大纲**：整边触发 / 悬浮与固定 / 可调宽。
+5. 主题：**A 亮·蓝（默认 light）· C 亮·橙（warm）· B 暗·紫（dark）** 全保留。
+6. 空间切换 **S1 + A 图标**：并进工作空间菜单 + 顶栏嵌当前空间图标；**去掉活动栏**；⌘1/2/3。
+7. **UI 改动必须改根位置，禁止一层层套 CSS**（已写入 `AGENTS.md` §3 #14「改动落点」硬约束）；唯一例外 = 压内核/第三方无层样式。
+
+### 二、已完成（`feat/ui-theme-abc` 工作区，未提交）
+
+**A. 主题 A/B/C（只改值）**
+- `themes/light.css` = A 亮蓝（`#3d7eff` 族）· `themes/warm.css` = C 亮橙（`#ff6a00`）· `themes/dark.css` = B 暗紫（`#9b94ff`）。
+- `src/lib/themes.ts` 显示名：亮 · 蓝 / 暗 · 紫 / 亮 · 橙。
+- 硬指标仍全绿：b3=0、颜色字面量=0、`!important`=9。
+
+**B. 空间模型 S1+A**
+- `DesktopWorkspace` 增加 `"trash"`；三空间：资料库 / 小记 / 回收站。
+- 顶栏工作空间钮内嵌 **18px 软底空间图标**（Files/Feather/Trash）+ 合一菜单（空间 ⌘1–3 + 偏好设置）。
+- **去掉「历史快照…」菜单项**（用户要求）；活动栏不再渲染（`activity-rail-hidden`）。
+- ⌘1/2/3 在 `useDesktopLifecycle`。
+
+**C. 回收站成页**
+- `TrashPanel` 增加 `embed`：`trash-space-pane`（对齐 `quick-notes-pane`），**不是** `floating-dialog`。
+- 布局沿用弹窗（文档/小记页签、列表+预览、恢复/彻底删除）；打开回收站 = 切空间。
+
+**D. 目录 / 增强大纲**
+- 左 `edge-hotzone` + 右 `outline-sidebar__trigger` **整边触发**；📌 在面板头固定（无空白叠宽）。
+- **去掉右侧 38px 常驻轨**；收起不占列。
+- 调宽 200–420 仍可用；大纲 `right: 0` 贴窗口右缘（修空隙）。
+- **minimap 按条目画横线**（完全仿内核 `.ne-toc-small-view`）：22px+6 间距、2px 线、depth 定宽 24/16/12/8/4/2、选中 accent；条数=真实条目数。组件 `OutlineMinimap.tsx`；左目录用 `treeNodes` 同款。
+
+**E. 钉住页签**
+- `.tab-item.pinned` = `--lake-accent-tint` 浅染 + 图钉 accent（根规则在 **chrome.css**，因 shell 层会盖掉 legacy 的 tabs.css）。
+
+**F. 文档**
+- `AGENTS.md` #14 改动落点强化；`settingsSearch` 主题关键词；`cssLayers` 基线已按需上调。
+
+**门禁（会话末）**：`tsc` 0 · `vitest` 1210 passed / 16 skipped · `ui-metrics` 五项全绿。
+
+### 三、当前问题 / 待用户确认
+
+1. **「继续优化…」三条未做**（用户要求回滚该消息之后改动，故这三条**故意未落地**）：
+   - 窗口底部**不可见横条**（未定位根因；疑 statusbar / workspace/outline 的 bottom 4px 缝）。
+   - 目录/大纲浮层**半幅（top/bottom 72px）** → 应改为：顶到工具栏下缘、底到窗口底（**不能盖住工具栏**）。
+   - 大纲同上。
+2. **正文右移让 minimap**（编辑区右移、**不缩正文列宽**、**不要再加宽横线**）未做——用户强调「不是高度，是宽度」（面包屑/工具栏是**收左右留白**，高度 32/38 **绝不能动**）。
+3. 用户对误解「收窄=高度」发火：**高度一律不动**；收窄只指水平留白。
+4. 未 commit / 未 push；`docs/UI-REDESIGN-260921/*.html` 原型仍 untracked。
+5. 画板 BoardEditor 崩溃 = master 既有问题，与本批无关。
+
+### 四、下一步计划
+
+1. 按用户口径做「继续优化」三条：① 查底部空条根因 ② 目录全高（工具栏下→窗口底）③ 大纲同规格；**从根规则改**。
+2. 正文右移：建议 `document-pane` 或编辑容器 `margin/padding-left` 一列槽，**不改** ne-* 正文列宽规则。
+3. 用户真机点验主题 / 空间菜单 / 回收站成页 / minimap 条数随大纲变化 / 钉住页签。
+4. 验收后整理 commit（**不 push master**）。
+
+### 五、踩过的坑（本批，务必记住）
+
+1. **`workspace-view` 是 `display: contents`**：子节点直接进 `.workspace` grid；成页要像 `DesktopQuickNotes` 那样「tab-bar + pane」兄弟节点，不要再包一层浮层壳。
+2. **`floating-dialog` 不要挂在成页上**：会居中/浮层/可拖，看起来永远像弹窗。
+3. **chrome.css（shell 层）会盖掉 legacy 的 tabs.css**：`.tab-item` 在 chrome 写 `background: transparent`，legacy 的 `.tab-item.pinned` **输在层序**（层序优先于特异性）→ 钉住样式必须写在 chrome。
+4. **outline 右缘空隙的根**在 `shell.css` 浮动定位：`right: calc(rail + scrollbar-clearance)`；要贴边就改**这一处** `right: 0`，不要再叠规则。
+5. **热区与浮层重叠会闪烁**：浮出面板盖住 edge → leave → 收起 → enter → 弹出。修法：edge `pointerLeave` 时 `relatedTarget` 仍在 shell 内则不收 + 延时 220ms。
+6. **`LAKE_DEV_SERVER_URL` 不能带尾斜杠**（`isAppPageUrl` 比的是 `URL.origin`）；隔离实例：`vite preview` + `LAKE_USER_DATA` + 独立 CDP，**勿用用户 9222**。
+7. **cssLayers 围栏**：加 CSS 后声明数会红；要么收敛重复，要么只上调该文件基线并注明理由。
+8. **用户沟通**：「收窄」= 宽度/留白；「不要越过工具栏」= 热区最高到工具栏；高度不要自作主张改。**听不懂就问，不要连改三轮。**
+9. **工具调用会被 flood 取消**：批量改文件时 **1–3 个/步**；heredoc/正则搬 CSS 仍易写坏（沿用 §2.23 教训）。
+10. **内核原生 TOC minimap 几何**（`vendor/.../lakex-doc.css` `.ne-toc-small-view`）：item 高 22 + 下距 6；`:before` 线 2px，depth1–6 宽 24/16/12/8/4/2；选中主题色。仿它就按**条目**渲染，不要 repeating-gradient。
+
 
 ## 3. 下一步计划 + 当前问题（真正的待办，按优先级）
 

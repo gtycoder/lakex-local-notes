@@ -26,6 +26,8 @@ export interface UseDesktopLifecycleOptions {
   layoutWidthsRef: MutableRefObject<{ sidebar: number; outline: number }>;
   quickNotesDirty: boolean;
   persistTab: (noteId: string, title: string, content: string) => Promise<unknown>;
+  /** ⌘1/2/3 切空间（S1+A）；不传则不注册 */
+  onSwitchDesktopWorkspace?: (workspace: "library" | "quick-notes" | "trash") => void;
 }
 
 /** 桌面全局/窗口生命周期：同步锚点、活动历史计数、草稿落盘、设置订阅、钉住清理、主题、快捷键、beforeunload。 */
@@ -33,7 +35,7 @@ export function useDesktopLifecycle({
   syncToast, syncBtnRef, setSyncAnchorRect, activeNoteId, conflictSnapshotCount, historyOpen,
   setActiveHistoryCount, openTabs, setPinnedNoteIds, theme, setSettings,
   setSearchPanelQuery, setSearchPanelOpen, flushTimers, openTabsRef, draftTimers, saveTimers,
-  layoutWidthsRef, quickNotesDirty, persistTab,
+  layoutWidthsRef, quickNotesDirty, persistTab, onSwitchDesktopWorkspace,
 }: UseDesktopLifecycleOptions) {
   useEffect(() => {
     if (!syncToast) { setSyncAnchorRect(null); return; }
@@ -102,11 +104,23 @@ export function useDesktopLifecycle({
         event.preventDefault();
         setSearchPanelQuery("");
         setSearchPanelOpen(true);
+        return;
       }
+      if (!onSwitchDesktopWorkspace) return;
+      if (!(event.metaKey || event.ctrlKey) || event.altKey || event.shiftKey) return;
+      const map: Record<string, "library" | "quick-notes" | "trash"> = {
+        "1": "library",
+        "2": "quick-notes",
+        "3": "trash",
+      };
+      const next = map[event.key];
+      if (!next) return;
+      event.preventDefault();
+      onSwitchDesktopWorkspace(next);
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [setSearchPanelQuery, setSearchPanelOpen]);
+  }, [setSearchPanelQuery, setSearchPanelOpen, onSwitchDesktopWorkspace]);
 
   useEffect(() => {
     // 审计 #23：窗口/应用关闭时若有未保存草稿，阻止关闭并提示（Electron 显示原生对话框）；

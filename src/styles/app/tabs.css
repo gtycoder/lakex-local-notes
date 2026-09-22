@@ -41,16 +41,16 @@
 
 .tab-item .tab-custom-icon { flex: none; font-size: 13px; line-height: 1; }
 
-.tab-item.pinned .tab-pin { color: var(--lake-sync-pending); }
+.tab-item.pinned .tab-pin { color: var(--lake-accent); }
 
 .tab-item.pinned .tab-close { display: none; }
 
 .tab-item.pinned {
-  background: var(--lake-pinned-tint);
-  border-color: var(--lake-pinned-border);
+  background: var(--lake-accent-tint);
+  border-color: transparent;
 }
 
-.tab-item.pinned:hover { background: var(--lake-pinned-tint-hover); }
+.tab-item.pinned:hover { background: color-mix(in srgb, var(--lake-accent-tint) 70%, var(--lake-bg-hover)); }
 
 .tab-item.pinned.active {
   background: var(--shell-accent-soft);

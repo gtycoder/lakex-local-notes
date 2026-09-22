@@ -30,7 +30,7 @@ export const SETTING_ITEMS: SettingItemEntry[] = [
   { id: "editor-outline-enhance", category: "editor", label: "大纲增强", keywords: "大纲 增强 原生 目录 TOC 侧栏", platform: "desktop" },
   { id: "editor-max-open-tabs", category: "editor", label: "最大同时打开标签数", keywords: "标签 页签 tab 上限" },
   { id: "editor-max-attachment", category: "editor", label: "附件大小上限", keywords: "附件 上传 大小 上限 MiB" },
-  { id: "appearance-theme", category: "appearance", label: "主题", keywords: "主题 深色 浅色 暖色 纸质 护眼 换肤 dark light warm 夜间" },
+  { id: "appearance-theme", category: "appearance", label: "主题", keywords: "主题 深色 浅色 暖色 纸质 护眼 换肤 dark light warm 夜间 亮蓝 亮橙 暗紫" },
   { id: "shortcut-search", category: "shortcuts", label: "打开全局搜索（标题和正文）", keywords: "搜索 快捷键 ⌘K", platform: "desktop" },
   { id: "shortcut-focus", category: "shortcuts", label: "进入或退出专注模式", keywords: "专注模式 全屏写作", platform: "desktop" },
   { id: "shortcut-move", category: "shortcuts", label: "在搜索结果中移动", keywords: "上下 选择", platform: "desktop" },

@@ -1,0 +1,1060 @@
+<!-- AI生成 -->
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lake Notes · 产品级壳原型（顶栏元素齐全）</title>
+<style>
+  /* docs-only · 对照 DesktopTopBar / SyncStatusPopover / MultiTabEditor / workspaceName
+   * 保留真实顶栏元素：本地空间▾ · 云同步 · 页签(脏点/钉/关闭) · 标签切换器 · 全文搜索
+   * 叠加本轮布局：空间切换 · 整边触发 · 悬浮/固定 · 可调宽 · lucide 图标 */
+  *, *::before, *::after { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Segoe UI", sans-serif;
+    font-size: 13px; color: #1c1f24; background: #e6e8ec;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .page-top {
+    position: sticky; top: 0; z-index: 300;
+    display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center;
+    padding: 10px 16px;
+    background: rgba(255,255,255,.94);
+    backdrop-filter: blur(12px);
+    border-bottom: 1px solid #e2e5ea;
+  }
+  .page-top h1 { margin: 0; font-size: 13px; font-weight: 700; }
+  .page-top .sub { color: #6d757e; font-size: 11px; margin-top: 2px; }
+  .grow { flex: 1; }
+  .seg {
+    display: inline-flex; gap: 2px; padding: 3px;
+    background: #eef0f4; border-radius: 10px;
+  }
+  .seg button {
+    appearance: none; border: 0; cursor: pointer;
+    height: 28px; padding: 0 11px; border-radius: 8px;
+    font: inherit; font-size: 12px; font-weight: 500;
+    color: #5a6169; background: transparent; white-space: nowrap;
+  }
+  .seg button:hover { color: #111; }
+  .seg button.on {
+    background: #fff; color: #111; font-weight: 600;
+    box-shadow: 0 1px 2px rgba(0,0,0,.06), 0 0 0 1px rgba(0,0,0,.04);
+  }
+  .hint {
+    max-width: 1280px; margin: 12px auto 0; padding: 0 16px;
+    display: flex; flex-wrap: wrap; gap: 8px;
+    font-size: 12px; color: #5a6169;
+  }
+  .chip {
+    display: inline-flex; align-items: center; gap: 6px;
+    height: 26px; padding: 0 10px; border-radius: 999px;
+    background: #fff; border: 1px solid #e2e5ea; font-size: 11.5px;
+  }
+  .chip b { color: #111; font-weight: 600; font-variant-numeric: tabular-nums; }
+
+  .stage { padding: 14px 16px 28px; max-width: 1280px; margin: 0 auto; }
+
+  /* ═══════════ 应用壳 ═══════════ */
+  .app {
+    --bg-window:#f4f5f7; --bg-side:#fafbfc; --bg-main:#fff; --bg-panel:#fff; --bg-elev:#fff;
+    --bg-hover:rgba(28,31,36,.05); --bg-press:rgba(28,31,36,.08);
+    --bg-sel:rgba(61,126,255,.10);
+    --text-1:#17191c; --text-2:#4a5158; --text-3:#7a828c; --text-4:#9aa1aa;
+    --border:#e8eaee; --border-soft:#f0f2f5;
+    --accent:#3d7eff; --accent-ink:#2f66e0; --accent-text:#1f4fc2;
+    --accent-tint:rgba(61,126,255,.10); --warm:#ff6a00;
+    --glass:rgba(255,255,255,.88);
+    --shadow-card:0 1px 2px rgba(16,24,40,.05), 0 8px 24px -10px rgba(16,24,40,.14);
+    --shadow-pop:0 0 0 1px rgba(16,24,40,.06), 0 24px 56px -18px rgba(16,24,40,.24);
+    --radius-row:8px; --radius-card:12px; --radius-lg:14px;
+    --row-h:30px;
+    --top-h:44px;          /* 真实产品 tab-bar ≈ 38–44 */
+    --panel-w:280px;
+    --toc-w:250px;
+
+    position: relative;
+    height: min(800px, calc(100vh - 160px));
+    min-height: 600px;
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+    background: var(--bg-window);
+    box-shadow: 0 24px 60px -24px rgba(0,0,0,.28), 0 0 0 1px rgba(0,0,0,.06);
+    isolation: isolate;
+    display: flex; flex-direction: column;
+    color-scheme: light;
+  }
+  .app.theme-a {
+    --bg-window:#f4f5f7; --bg-side:#fafbfc; --bg-main:#fff; --bg-panel:#fff; --bg-elev:#fff;
+    --bg-hover:rgba(28,31,36,.05); --bg-press:rgba(28,31,36,.08);
+    --bg-sel:rgba(61,126,255,.10);
+    --text-1:#17191c; --text-2:#4a5158; --text-3:#7a828c; --text-4:#9aa1aa;
+    --border:#e8eaee; --border-soft:#f0f2f5;
+    --accent:#3d7eff; --accent-ink:#2f66e0; --accent-text:#1f4fc2;
+    --accent-tint:rgba(61,126,255,.10); --warm:#ff6a00;
+    --glass:rgba(255,255,255,.88);
+  }
+  .app.theme-c {
+    --bg-window:#f6f7f8; --bg-side:#f0f2f4; --bg-main:#fff; --bg-panel:#fff; --bg-elev:#fff;
+    --bg-hover:rgba(28,31,36,.055); --bg-press:rgba(28,31,36,.09);
+    --bg-sel:#ff6a0014;
+    --text-1:#1a1d21; --text-2:#495057; --text-3:#6f7780; --text-4:#939aa3;
+    --border:#e4e6ea; --border-soft:#eef0f3;
+    --accent:#ff6a00; --accent-ink:#e85d00; --accent-text:#c44e00;
+    --accent-tint:#ff6a0016; --warm:#ff6a00;
+    --glass:rgba(255,255,255,.90);
+    --shadow-pop:0 0 0 1px rgba(28,31,36,.06), 0 24px 52px -16px rgba(28,31,36,.20);
+  }
+  .app.theme-b {
+    --bg-window:#1a1b1e; --bg-side:#141517; --bg-main:#1e1f22; --bg-panel:#25262b; --bg-elev:#2a2b30;
+    --bg-hover:rgba(255,255,255,.06); --bg-press:rgba(255,255,255,.10);
+    --bg-sel:rgba(155,148,255,.16);
+    --text-1:#e3e4e6; --text-2:#a8a9ad; --text-3:#7c7d82; --text-4:#5c5d62;
+    --border:#2e2f34; --border-soft:#242528;
+    --accent:#9b94ff; --accent-ink:#7f76ff; --accent-text:#b7b1ff;
+    --accent-tint:rgba(155,148,255,.14); --warm:#ffb020;
+    --glass:rgba(30,31,34,.86);
+    --shadow-card:0 1px 2px rgba(0,0,0,.4);
+    --shadow-pop:0 0 0 1px rgba(255,255,255,.07), 0 24px 56px -18px rgba(0,0,0,.62);
+    color-scheme: dark;
+  }
+
+  .i { display: inline-flex; width: 16px; height: 16px; align-items: center; justify-content: center; flex: 0 0 auto; }
+  .i svg { width: 100%; height: 100%; stroke: currentColor; fill: none; stroke-width: 1.75; stroke-linecap: round; stroke-linejoin: round; }
+  .i.sm { width: 13px; height: 13px; }
+  .i.xs { width: 11px; height: 11px; }
+
+  /* ── 顶栏 = 真实产品 tab-bar 融合结构 ─────────────────── */
+  .tab-bar {
+    display: flex; align-items: stretch;
+    height: var(--top-h); padding: 0 6px 0 10px;
+    background: var(--glass);
+    backdrop-filter: blur(14px) saturate(1.2);
+    border-bottom: 1px solid color-mix(in srgb, var(--border) 85%, transparent);
+    flex: 0 0 auto; z-index: 50;
+    min-width: 0;
+    gap: 4px;
+  }
+
+  /* 左：traffic + 工作空间 + 云同步（tabbar-leading 对应） */
+  .tabbar-leading {
+    display: flex; align-items: center; gap: 4px;
+    flex: 0 0 auto; padding-right: 8px;
+  }
+  .traffic { display: flex; gap: 7px; margin: 0 8px 0 2px; align-items: center; }
+  .traffic i { width: 11px; height: 11px; border-radius: 50%; display: block; }
+  .traffic i:nth-child(1){background:#ff5f57}
+  .traffic i:nth-child(2){background:#febc2e}
+  .traffic i:nth-child(3){background:#28c840}
+
+  .toolbar__item {
+    height: 28px; min-width: 28px; padding: 0 8px;
+    display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+    border: 0; border-radius: 8px;
+    background: transparent;
+    color: var(--text-2);
+    font: inherit; font-size: 12px; font-weight: 550;
+    cursor: default;
+  }
+  .toolbar__item:hover { background: var(--bg-hover); color: var(--text-1); }
+  .toolbar__item:active { background: var(--bg-press); }
+  .toolbar__text { max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  /* 云同步状态（对齐 SyncStatusPopover 的 statusClass） */
+  .toolbar__sync { position: relative; }
+  .toolbar__sync.synced { color: var(--text-2); }
+  .toolbar__sync.pending { color: var(--warm); }
+  .toolbar__sync.syncing { color: var(--accent-text); }
+  .toolbar__sync.error { color: #b3413b; }
+  .toolbar__sync.disabled { color: var(--text-4); }
+  .theme-b .toolbar__sync.error { color: #ef8b84; }
+
+  /* 空间切换（本轮：三个独立空间） */
+  .spaces {
+    display: flex; gap: 2px; padding: 3px;
+    background: color-mix(in srgb, var(--text-3) 10%, transparent);
+    border-radius: 10px;
+    flex: 0 0 auto; margin-left: 4px;
+  }
+  .spaces button {
+    appearance: none; border: 0; cursor: default;
+    height: 26px; padding: 0 10px; border-radius: 8px;
+    font: inherit; font-size: 12px; font-weight: 550;
+    color: var(--text-3); background: transparent;
+    display: inline-flex; align-items: center; gap: 5px;
+  }
+  .spaces button.on {
+    background: var(--bg-elev); color: var(--text-1); font-weight: 650;
+    box-shadow: var(--shadow-card);
+  }
+
+  /* 页签区（tab-items 对应） */
+  .tab-items {
+    flex: 1 1 auto; min-width: 0;
+    display: flex; align-items: stretch; gap: 3px;
+    overflow-x: auto; overflow-y: hidden;
+    scrollbar-width: none;
+  }
+  .tab-items::-webkit-scrollbar { display: none; }
+  .tab-item {
+    display: inline-flex; align-items: center; gap: 6px;
+    height: 34px; margin: 5px 0 0;
+    padding: 0 10px;
+    border: 1px solid transparent; border-bottom: 0;
+    border-radius: 10px 10px 0 0;
+    background: transparent;
+    color: var(--text-3);
+    font: inherit; font-size: 12.5px; font-weight: 500;
+    cursor: default;
+    max-width: 180px; min-width: 96px;
+    flex: 0 0 auto;
+  }
+  .tab-item.active {
+    background: var(--bg-main);
+    color: var(--text-1);
+    font-weight: 600;
+    border-color: var(--border-soft);
+    box-shadow: 0 -1px 0 var(--bg-main);
+  }
+  .tab-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; text-align: left; }
+  .tab-dirty-dot {
+    width: 6px; height: 6px; border-radius: 50%;
+    background: var(--warm); flex: 0 0 auto;
+  }
+  .tab-close {
+    width: 18px; height: 18px; border-radius: 5px;
+    display: grid; place-items: center;
+    color: var(--text-4); flex: 0 0 auto;
+  }
+  .tab-close:hover { background: var(--bg-hover); color: var(--text-1); }
+  .tab-pin { color: var(--text-4); }
+  .tab-item.pinned .tab-close { display: none; }
+  .tab-deleted-badge {
+    font-size: 9px; font-weight: 700;
+    padding: 1px 5px; border-radius: 999px;
+    background: color-mix(in srgb, #b3413b 14%, transparent);
+    color: #b3413b;
+  }
+  .theme-b .tab-deleted-badge { color: #ef8b84; }
+
+  /* 标签切换器（tab-switcher） */
+  .tab-switcher {
+    height: 28px; width: 28px;
+    display: grid; place-items: center;
+    border: 0; border-radius: 8px;
+    background: transparent; color: var(--text-3);
+    align-self: center; margin-bottom: 3px;
+  }
+  .tab-switcher:hover { background: var(--bg-hover); color: var(--text-1); }
+
+  /* 右：全文搜索（tabbar-trailing） */
+  .tabbar-trailing {
+    display: flex; align-items: center; gap: 2px;
+    flex: 0 0 auto; padding-left: 4px;
+  }
+
+  /* 工作空间下拉菜单（top-menu--workspace） */
+  .ws-menu {
+    display: none;
+    position: absolute; top: calc(var(--top-h) + 4px); left: 56px;
+    z-index: 80;
+    min-width: 180px; padding: 6px;
+    background: var(--bg-elev);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    box-shadow: var(--shadow-pop);
+  }
+  .ws-menu.open { display: block; }
+  .ws-menu button {
+    display: flex; width: 100%; align-items: center; gap: 8px;
+    height: 30px; padding: 0 10px;
+    border: 0; border-radius: 7px;
+    background: transparent; color: var(--text-2);
+    font: inherit; font-size: 12.5px; text-align: left;
+    cursor: default;
+  }
+  .ws-menu button:hover { background: var(--bg-hover); color: var(--text-1); }
+  .ws-menu .sep { height: 1px; margin: 5px 4px; background: var(--border-soft); }
+
+  /* 云同步 popover（SyncStatusPopover 简化） */
+  .sync-pop {
+    display: none;
+    position: absolute; top: calc(var(--top-h) + 4px); left: 210px;
+    z-index: 80;
+    width: 280px; padding: 12px 14px;
+    background: var(--bg-elev);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    box-shadow: var(--shadow-pop);
+  }
+  .sync-pop.open { display: block; }
+  .sync-pop h4 { margin: 0 0 8px; font-size: 12.5px; font-weight: 700; color: var(--text-1); }
+  .sync-pop .line {
+    display: flex; justify-content: space-between; gap: 8px;
+    padding: 5px 0; font-size: 12px; color: var(--text-2);
+    border-top: 1px solid var(--border-soft);
+  }
+  .sync-pop .line:first-of-type { border-top: 0; }
+  .sync-pop .line b { color: var(--text-1); font-weight: 600; font-variant-numeric: tabular-nums; }
+  .sync-pop .actions { display: flex; gap: 6px; margin-top: 10px; }
+  .sync-pop .actions button {
+    height: 28px; padding: 0 12px; border-radius: 8px;
+    border: 1px solid var(--border); background: var(--bg-panel);
+    color: var(--text-2); font: inherit; font-size: 12px; font-weight: 550;
+  }
+  .sync-pop .actions button.primary {
+    border-color: transparent;
+    background: var(--accent-ink); color: #fff;
+  }
+
+  /* ── 主体 ───────────────────────────────────────────── */
+  .body { flex: 1; position: relative; overflow: hidden; display: flex; min-height: 0; }
+
+  .main {
+    flex: 1; min-width: 0;
+    position: relative;
+    background: var(--bg-main);
+    display: flex; flex-direction: column;
+    overflow: hidden;
+    z-index: 1;
+  }
+
+  .edge {
+    position: absolute; top: 0; bottom: 0; width: 14px;
+    z-index: 42; cursor: default;
+  }
+  .edge-l { left: 0; }
+  .edge-r { right: 0; }
+  .edge::before {
+    content: ""; position: absolute; inset: 0;
+    opacity: 0; transition: opacity .15s; pointer-events: none;
+  }
+  .edge-l::before {
+    background: linear-gradient(90deg, color-mix(in srgb, var(--accent) 22%, transparent), transparent 85%);
+  }
+  .edge-r::before {
+    background: linear-gradient(270deg, color-mix(in srgb, var(--accent) 22%, transparent), transparent 85%);
+  }
+  .edge:hover::before { opacity: 1; }
+  .edge-mark {
+    position: absolute; top: 50%; transform: translateY(-50%);
+    display: flex; flex-direction: column; align-items: center; gap: 8px;
+    opacity: .35; transition: opacity .15s; pointer-events: none;
+  }
+  .edge-l .edge-mark { left: 2px; }
+  .edge-r .edge-mark { right: 2px; }
+  .edge:hover .edge-mark { opacity: .9; }
+  .edge-icon {
+    width: 22px; height: 22px; display: grid; place-items: center;
+    border-radius: 6px;
+    background: var(--glass); backdrop-filter: blur(8px);
+    border: 1px solid var(--border); box-shadow: var(--shadow-card);
+    color: var(--text-3);
+  }
+  .edge-icon .i { width: 12px; height: 12px; }
+  .edge-hint {
+    writing-mode: vertical-rl;
+    font-size: 10px; font-weight: 650; letter-spacing: .14em;
+    color: var(--text-4); text-shadow: 0 0 8px var(--bg-main);
+  }
+  .app.side-pinned.open-side .edge-l { left: var(--panel-w); }
+  .app.toc-pinned.open-toc .edge-r { right: var(--toc-w); }
+
+  .panel {
+    display: flex; flex-direction: column;
+    background: var(--bg-panel); overflow: hidden;
+    transition: transform .22s cubic-bezier(.2,0,0,1);
+  }
+  .panel-float {
+    position: absolute; top: 0; bottom: 0; z-index: 40;
+    box-shadow: var(--shadow-pop); border: 1px solid var(--border);
+  }
+  .panel-float.panel-l {
+    left: 0; width: var(--panel-w);
+    border-radius: 0 var(--radius-lg) var(--radius-lg) 0; border-left: 0;
+    transform: translateX(-101%);
+  }
+  .panel-float.panel-r {
+    right: 0; width: var(--toc-w);
+    border-radius: var(--radius-lg) 0 0 var(--radius-lg); border-right: 0;
+    transform: translateX(101%);
+  }
+  .app.open-side .panel-float.panel-l,
+  .app.open-toc  .panel-float.panel-r { transform: translateX(0); }
+
+  .panel-dock {
+    position: relative; flex: 0 0 auto;
+    transform: none !important;
+    box-shadow: none; border: 0; border-radius: 0;
+    background: var(--bg-side); z-index: 5;
+    width: 0; overflow: hidden;
+  }
+  .app.side-pinned.open-side .panel-dock.panel-l {
+    width: var(--panel-w); border-right: 1px solid var(--border-soft);
+  }
+  .app.toc-pinned.open-toc .panel-dock.panel-r {
+    width: var(--toc-w); border-left: 1px solid var(--border-soft);
+  }
+
+  .resize { position: absolute; top: 0; bottom: 0; width: 6px; z-index: 3; cursor: col-resize; }
+  .panel-l .resize, .panel-dock.panel-l .resize { right: -3px; }
+  .panel-r .resize, .panel-dock.panel-r .resize { left: -3px; }
+  .resize::after {
+    content: ""; position: absolute; top: 50%; left: 50%;
+    transform: translate(-50%,-50%);
+    width: 3px; height: 28px; border-radius: 2px;
+    background: color-mix(in srgb, var(--text-4) 45%, transparent);
+    opacity: 0; transition: opacity .12s;
+  }
+  .resize:hover::after, body.resizing .resize::after { opacity: 1; }
+  body.resizing { cursor: col-resize; user-select: none; }
+
+  .panel-head {
+    display: flex; align-items: center; gap: 2px;
+    height: 40px; padding: 0 6px 0 12px;
+    border-bottom: 1px solid var(--border-soft); flex: 0 0 auto;
+  }
+  .panel-head h2 {
+    margin: 0 0 0 2px; flex: 1; min-width: 0;
+    font-size: 12.5px; font-weight: 700; color: var(--text-1);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .panel-head .sub {
+    font-size: 10px; font-weight: 600; letter-spacing: .04em;
+    color: var(--text-4); text-transform: uppercase;
+    padding: 2px 6px; border-radius: 999px;
+    background: color-mix(in srgb, var(--text-3) 10%, transparent);
+    flex: 0 0 auto;
+  }
+  .icon-btn {
+    width: 28px; height: 28px; border: 0; border-radius: 8px;
+    display: grid; place-items: center;
+    background: transparent; color: var(--text-3); cursor: default;
+  }
+  .icon-btn:hover { background: var(--bg-hover); color: var(--text-1); }
+  .icon-btn.on { background: var(--accent-tint); color: var(--accent-text); }
+
+  .panel-body { flex: 1; overflow: auto; padding: 8px 8px 20px; }
+
+  .nav {
+    display: flex; align-items: center; gap: 8px;
+    height: var(--row-h); padding: 0 10px;
+    border-radius: var(--radius-row);
+    color: var(--text-2); font-size: 13px; font-weight: 500;
+    white-space: nowrap; overflow: hidden;
+  }
+  .nav .i { width: 15px; height: 15px; color: var(--text-3); }
+  .nav:hover { background: var(--bg-hover); color: var(--text-1); }
+  .nav.on { background: var(--bg-sel); color: var(--text-1); font-weight: 600; }
+  .nav.on .i { color: var(--accent); }
+  .nav.folder { color: var(--text-1); font-weight: 600; margin-top: 6px; }
+  .nav.child { padding-left: 28px; font-weight: 400; font-size: 12.5px; }
+  .nav.lv2 { padding-left: 22px; font-weight: 400; color: var(--text-3); font-size: 12.5px; height: 28px; }
+
+  .note-strip {
+    margin: 8px; padding: 10px 12px; border-radius: 10px;
+    background: color-mix(in srgb, var(--text-3) 8%, transparent);
+    border: 1px dashed color-mix(in srgb, var(--text-3) 28%, transparent);
+    font-size: 11.5px; color: var(--text-3); line-height: 1.45;
+  }
+  .note-strip strong { color: var(--text-2); }
+
+  /* 面包屑（真实产品有） */
+  .breadcrumb {
+    display: flex; align-items: center; gap: 6px;
+    height: 32px; padding: 0 16px;
+    border-bottom: 1px solid var(--border-soft);
+    font-size: 11.5px; color: var(--text-3);
+    flex: 0 0 auto;
+  }
+  .breadcrumb strong { color: var(--text-2); font-weight: 600; }
+  .breadcrumb .more {
+    margin-left: auto; width: 24px; height: 22px;
+    display: grid; place-items: center;
+    border: 0; border-radius: 6px;
+    background: transparent; color: var(--text-4);
+  }
+
+  .doc { flex: 1; overflow: auto; padding: 28px 48px 72px; position: relative; }
+  .doc-inner { max-width: 680px; margin: 0 auto; }
+  .doc h1 { margin: 0 0 6px; font-size: 26px; font-weight: 750; letter-spacing: -.03em; color: var(--text-1); }
+  .doc .meta { font-size: 12px; color: var(--text-4); margin-bottom: 20px; }
+  .doc h2 { margin: 22px 0 10px; font-size: 15.5px; font-weight: 700; color: var(--text-1); }
+  .doc p { margin: 0 0 12px; font-size: 14px; line-height: 1.65; color: var(--text-2); }
+  .doc ul { margin: 0 0 12px; padding-left: 1.2em; color: var(--text-2); }
+  .doc li { margin: 5px 0; font-size: 13.5px; line-height: 1.5; }
+  .doc .callout {
+    margin: 16px 0; padding: 12px 14px; border-radius: var(--radius-card);
+    background: var(--bg-sel);
+    border: 1px solid color-mix(in srgb, var(--accent) 25%, transparent);
+    font-size: 13px; color: var(--text-1);
+  }
+  .doc .callout strong { color: var(--accent-text); }
+
+  .kernel-toc {
+    position: absolute; top: 12px; right: 16px; z-index: 12;
+    display: inline-flex; align-items: center; gap: 6px;
+    height: 28px; padding: 0 10px; border-radius: 8px;
+    background: var(--glass); backdrop-filter: blur(10px);
+    border: 1px solid var(--border); box-shadow: var(--shadow-card);
+    font-size: 11px; color: var(--text-3);
+  }
+  .kernel-toc b { color: var(--text-2); font-weight: 600; }
+
+  .space-meter {
+    display: flex; align-items: center; gap: 10px;
+    margin: 0 0 18px; padding: 10px 12px; border-radius: 10px;
+    background: color-mix(in srgb, var(--accent) 8%, var(--bg-main));
+    border: 1px dashed color-mix(in srgb, var(--accent) 35%, transparent);
+    font-size: 12px; color: var(--text-2);
+  }
+  .space-meter b { color: var(--accent-text); font-variant-numeric: tabular-nums; min-width: 36px; }
+  .bar { flex: 1; height: 6px; border-radius: 99px; background: color-mix(in srgb, var(--text-3) 18%, transparent); overflow: hidden; }
+  .bar > i {
+    display: block; height: 100%; width: var(--p, 70%);
+    background: linear-gradient(90deg, var(--accent), color-mix(in srgb, var(--accent) 50%, var(--warm)));
+    border-radius: 99px; transition: width .25s ease;
+  }
+
+  /* 状态栏（DesktopStatusBar） */
+  .statusbar {
+    height: 28px; padding: 0 12px;
+    display: flex; align-items: center; gap: 12px;
+    background: var(--bg-side);
+    border-top: 1px solid var(--border-soft);
+    font-size: 11px; color: var(--text-3);
+    flex: 0 0 auto;
+  }
+  .statusbar .ok { color: #2e7b54; font-weight: 600; display: inline-flex; align-items: center; gap: 4px; }
+  .theme-b .statusbar .ok { color: #6cc392; }
+  .statusbar .nums { font-variant-numeric: tabular-nums; display: inline-flex; gap: 10px; }
+  .statusbar .right { margin-left: auto; display: inline-flex; gap: 10px; }
+
+  /* 小记 / 回收站工作台 */
+  .ws-main { display: none; flex: 1; overflow: auto; padding: 24px 28px 64px; }
+  .app.space-qn .ws-main, .app.space-trash .ws-main { display: block; }
+  .app.space-qn .doc, .app.space-trash .doc,
+  .app.space-qn .breadcrumb, .app.space-trash .breadcrumb { display: none; }
+  .app.space-qn .edge, .app.space-trash .edge,
+  .app.space-qn .panel, .app.space-trash .panel { display: none !important; }
+
+  .ws-main h1 { margin: 0 0 8px; font-size: 22px; font-weight: 750; letter-spacing: -.02em; }
+  .ws-main .meta { font-size: 12px; color: var(--text-4); margin-bottom: 18px; }
+  .qn-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; }
+  .qn-card {
+    background: var(--bg-panel); border: 1px solid var(--border);
+    border-radius: var(--radius-card); box-shadow: var(--shadow-card);
+    padding: 14px; min-height: 110px;
+  }
+  .qn-card h4 { margin: 0 0 8px; font-size: 13px; font-weight: 650; color: var(--text-1); }
+  .qn-card p { margin: 0; font-size: 12.5px; color: var(--text-2); line-height: 1.5; }
+  .trash-list {
+    background: var(--bg-panel); border: 1px solid var(--border);
+    border-radius: var(--radius-card); box-shadow: var(--shadow-card); overflow: hidden;
+  }
+  .trash-list .row {
+    display: flex; align-items: center; gap: 10px;
+    padding: 12px 16px; border-top: 1px solid var(--border-soft);
+    font-size: 13px; color: var(--text-2);
+  }
+  .trash-list .row:first-child { border-top: 0; }
+  .trash-list .row:hover { background: var(--bg-hover); }
+  .trash-list .row .when { margin-left: auto; font-size: 11.5px; color: var(--text-4); }
+
+  .cards {
+    max-width: 1280px; margin: 8px auto 48px; padding: 0 16px;
+    display: grid; grid-template-columns: 1fr 1fr; gap: 12px;
+  }
+  .cards article {
+    background: #fff; border: 1px solid #e2e5ea;
+    border-radius: 14px; padding: 14px 16px;
+  }
+  .cards h4 { margin: 0 0 6px; font-size: 13px; font-weight: 700; }
+  .cards p, .cards li { margin: 0; font-size: 12px; color: #5a6169; line-height: 1.55; }
+  .cards ul { margin: 6px 0 0; padding-left: 1.1em; }
+
+  @media (max-width: 980px) {
+    .cards { grid-template-columns: 1fr; }
+    .spaces button .label { display: none; }
+  }
+</style>
+</head>
+<body>
+<p data-aigc-mark="1" style="margin:0 0 8px;font-size:10px;line-height:1.3;color:#6b6560;font-weight:400;">AI生成</p>
+
+
+<svg style="display:none" xmlns="http://www.w3.org/2000/svg">
+  <symbol id="ic-menu" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></symbol>
+  <symbol id="ic-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></symbol>
+  <symbol id="ic-cloud" viewBox="0 0 24 24"><path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z"/></symbol>
+  <symbol id="ic-cloud-check" viewBox="0 0 24 24"><path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z"/><path d="m9.5 14.5 2 2 3.5-3.5"/></symbol>
+  <symbol id="ic-cloud-off" viewBox="0 0 24 24"><path d="m2 2 20 20"/><path d="M5.8 5.8A7 7 0 0 0 9 19h8.5a4.5 4.5 0 0 0 1.3-.2"/><path d="M21.5 15.5A4.5 4.5 0 0 0 17.5 10h-1.1A7 7 0 0 0 10 5.1"/></symbol>
+  <symbol id="ic-cloud-up" viewBox="0 0 24 24"><path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z"/><path d="M12 12v5"/><path d="m9 14 3-3 3 3"/></symbol>
+  <symbol id="ic-chev-down" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
+  <symbol id="ic-chev-right" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></symbol>
+  <symbol id="ic-x" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></symbol>
+  <symbol id="ic-pin" viewBox="0 0 24 24"><path d="M12 17v5"/><path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z"/></symbol>
+  <symbol id="ic-file" viewBox="0 0 24 24"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M16 13H8M16 17H8M10 9H8"/></symbol>
+  <symbol id="ic-folder" viewBox="0 0 24 24"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></symbol>
+  <symbol id="ic-note" viewBox="0 0 24 24"><path d="M15.5 3H5a2 2 0 0 0-2 2v14c0 1.1.9 2 2 2h14a2 2 0 0 0 2-2V8.5L15.5 3Z"/><path d="M15 3v6h6"/></symbol>
+  <symbol id="ic-trash" viewBox="0 0 24 24"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/></symbol>
+  <symbol id="ic-compass" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="m16.24 7.76-2.12 6.36-6.36 2.12 2.12-6.36 6.36-2.12Z"/></symbol>
+  <symbol id="ic-toc" viewBox="0 0 24 24"><path d="M3 6h18M3 12h12M3 18h18"/></symbol>
+  <symbol id="ic-settings" viewBox="0 0 24 24"><path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3h.1a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5h.1a1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8v.1a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z"/></symbol>
+  <symbol id="ic-more" viewBox="0 0 24 24"><circle cx="6" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="18" cy="12" r="1"/></symbol>
+  <symbol id="ic-check" viewBox="0 0 24 24"><path d="m5 12 5 5L20 7"/></symbol>
+  <symbol id="ic-history" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 3v5h5"/><path d="M12 7v5l3 2"/></symbol>
+</svg>
+
+<div class="page-top">
+  <div>
+    <h1>产品级壳原型 · 顶栏元素齐全</h1>
+    <div class="sub">对照 DesktopTopBar / SyncStatusPopover / MultiTabEditor · 叠加整边触发 + 悬浮/固定 + 可调宽</div>
+  </div>
+  <div class="grow"></div>
+  <div class="seg" id="themeSeg">
+    <button data-t="a" class="on">A 蓝</button>
+    <button data-t="c">C 橙</button>
+    <button data-t="b">B 暗</button>
+  </div>
+  <div class="seg" id="cloudSeg" title="云同步状态（可切换演示）">
+    <button data-c="synced" class="on">已同步</button>
+    <button data-c="pending">待同步</button>
+    <button data-c="syncing">同步中</button>
+    <button data-c="disabled">未启用</button>
+  </div>
+</div>
+
+<div class="hint">
+  <span class="chip">顶栏 = 真实产品：<b>本地空间▾</b> · <b>云同步</b> · 页签 · 标签切换器 · 搜索</span>
+  <span class="chip">点「本地空间」出工作空间菜单 · 点云图标出同步面板</span>
+  <span class="chip">左右整边触发 · 📌固定 · 拖缘调宽</span>
+  <span class="chip">内容宽 <b id="spacePct">—</b></span>
+</div>
+
+<div class="stage">
+  <div class="app theme-a space-notes open-side" id="app">
+
+    <!-- 顶栏（融合 tab-bar） -->
+    <div class="tab-bar">
+      <div class="tabbar-leading">
+        <div class="traffic"><i></i><i></i><i></i></div>
+        <button class="toolbar__item" id="wsBtn" title="工作空间" aria-label="工作空间">
+          <span class="toolbar__text" id="wsName">本地空间</span>
+          <span class="i sm"><svg><use href="#ic-chev-down"/></svg></span>
+        </button>
+        <button class="toolbar__item toolbar__sync synced" id="syncBtn" title="云同步" aria-label="云同步">
+          <span class="i sm" id="syncIcon"><svg><use href="#ic-cloud-check"/></svg></span>
+        </button>
+        <div class="spaces" id="spaces" title="空间切换">
+          <button data-sp="notes" class="on"><span class="i xs"><svg><use href="#ic-compass"/></svg></span><span class="label">资料库</span></button>
+          <button data-sp="qn"><span class="i xs"><svg><use href="#ic-note"/></svg></span><span class="label">小记</span></button>
+          <button data-sp="trash"><span class="i xs"><svg><use href="#ic-trash"/></svg></span><span class="label">回收站</span></button>
+        </div>
+      </div>
+
+      <div class="tab-items" role="tablist" aria-label="打开的文档">
+        <button class="tab-item active dirty" role="tab">
+          <span class="i xs tab-pin"><svg><use href="#ic-pin"/></svg></span>
+          <span class="tab-title">大模型RAG技术从小白到深</span>
+          <span class="tab-dirty-dot" title="有未保存更改"></span>
+          <span class="tab-close"><span class="i xs"><svg><use href="#ic-x"/></svg></span></span>
+        </button>
+        <button class="tab-item" role="tab">
+          <span class="tab-title">同步协议备忘</span>
+          <span class="tab-close"><span class="i xs"><svg><use href="#ic-x"/></svg></span></span>
+        </button>
+        <button class="tab-item pinned" role="tab" title="钉住的标签不显示关闭">
+          <span class="i xs tab-pin"><svg><use href="#ic-pin"/></svg></span>
+          <span class="tab-title">表格111</span>
+          <span class="tab-close"><span class="i xs"><svg><use href="#ic-x"/></svg></span></span>
+        </button>
+        <button class="tab-item" role="tab">
+          <span class="tab-title">已删除草稿</span>
+          <span class="tab-deleted-badge">已删除</span>
+          <span class="tab-close"><span class="i xs"><svg><use href="#ic-x"/></svg></span></span>
+        </button>
+      </div>
+
+      <button class="tab-switcher" title="切换标签（4）" aria-label="切换标签，共 4 个">
+        <span class="i sm"><svg><use href="#ic-chev-down"/></svg></span>
+      </button>
+
+      <div class="tabbar-trailing">
+        <button class="toolbar__item" title="全文搜索（⇧⌘F）" aria-label="全文搜索">
+          <span class="i sm"><svg><use href="#ic-search"/></svg></span>
+        </button>
+      </div>
+    </div>
+
+    <!-- 工作空间下拉（真实菜单项：设置 / 回收站等） -->
+    <div class="ws-menu" id="wsMenu">
+      <button><span class="i sm"><svg><use href="#ic-settings"/></svg></span> 偏好设置</button>
+      <button><span class="i sm"><svg><use href="#ic-trash"/></svg></span> 回收站</button>
+      <div class="sep"></div>
+      <button><span class="i sm"><svg><use href="#ic-history"/></svg></span> 历史快照…</button>
+    </div>
+
+    <!-- 云同步面板（SyncStatusPopover 核心信息） -->
+    <div class="sync-pop" id="syncPop">
+      <h4>云同步</h4>
+      <div class="line"><span>状态</span><b id="syncPopStatus">已同步</b></div>
+      <div class="line"><span>待上传</span><b>文档 0 · 小记 0</b></div>
+      <div class="line"><span>最近结果</span><b>成功 · 今天 09:12</b></div>
+      <div class="line"><span>对象前缀</span><b id="syncPrefix">lake-notes</b></div>
+      <div class="actions">
+        <button class="primary">立即同步</button>
+        <button>同步设置</button>
+      </div>
+    </div>
+
+    <div class="body">
+      <div class="edge edge-l" id="edgeL" title="左缘整条：悬停弹出目录">
+        <div class="edge-mark">
+          <div class="edge-icon"><span class="i"><svg><use href="#ic-menu"/></svg></span></div>
+          <div class="edge-hint">目录</div>
+        </div>
+      </div>
+
+      <aside class="panel panel-float panel-l" id="panelFloatL">
+        <div class="panel-head">
+          <h2>资料库</h2>
+          <span class="sub">目录</span>
+          <button class="icon-btn" id="pinFloatL" title="固定"><span class="i sm"><svg><use href="#ic-pin"/></svg></span></button>
+          <button class="icon-btn" id="closeFloatL" title="收起"><span class="i sm"><svg><use href="#ic-x"/></svg></span></button>
+        </div>
+        <div class="panel-body">
+          <div class="nav folder"><span class="i"><svg><use href="#ic-chev-down"/></svg></span> 产品笔记</div>
+          <div class="nav child on"><span class="i"><svg><use href="#ic-file"/></svg></span> 大模型RAG技术从小白到深</div>
+          <div class="nav child"><span class="i"><svg><use href="#ic-file"/></svg></span> 同步协议备忘与长标题示例很长很长</div>
+          <div class="nav child"><span class="i"><svg><use href="#ic-file"/></svg></span> 小记规格</div>
+          <div class="nav folder"><span class="i"><svg><use href="#ic-chev-down"/></svg></span> 技术库</div>
+          <div class="nav child"><span class="i"><svg><use href="#ic-file"/></svg></span> Lake 内核契约</div>
+          <div class="nav child"><span class="i"><svg><use href="#ic-file"/></svg></span> S3 GC 设计</div>
+          <div class="nav folder"><span class="i"><svg><use href="#ic-chev-right"/></svg></span> 随手存</div>
+        </div>
+        <div class="resize" id="resizeL"></div>
+      </aside>
+      <aside class="panel panel-dock panel-l" id="panelDockL">
+        <div class="panel-head">
+          <h2>资料库</h2>
+          <span class="sub">目录</span>
+          <button class="icon-btn on" id="pinDockL" title="取消固定"><span class="i sm"><svg><use href="#ic-pin"/></svg></span></button>
+          <button class="icon-btn" id="closeDockL" title="收起"><span class="i sm"><svg><use href="#ic-x"/></svg></span></button>
+        </div>
+        <div class="panel-body">
+          <div class="nav folder"><span class="i"><svg><use href="#ic-chev-down"/></svg></span> 产品笔记</div>
+          <div class="nav child on"><span class="i"><svg><use href="#ic-file"/></svg></span> 大模型RAG技术从小白到深</div>
+          <div class="nav child"><span class="i"><svg><use href="#ic-file"/></svg></span> 同步协议备忘与长标题示例很长很长</div>
+          <div class="nav child"><span class="i"><svg><use href="#ic-file"/></svg></span> 小记规格</div>
+          <div class="nav folder"><span class="i"><svg><use href="#ic-chev-down"/></svg></span> 技术库</div>
+          <div class="nav child"><span class="i"><svg><use href="#ic-file"/></svg></span> Lake 内核契约</div>
+          <div class="nav child"><span class="i"><svg><use href="#ic-file"/></svg></span> S3 GC 设计</div>
+          <div class="nav folder"><span class="i"><svg><use href="#ic-chev-right"/></svg></span> 随手存</div>
+        </div>
+        <div class="resize" id="resizeDockL"></div>
+      </aside>
+
+      <div class="main">
+        <!-- 面包屑（真实产品 protyle-breadcrumb） -->
+        <div class="breadcrumb">
+          <span>产品笔记</span>
+          <span class="i xs" style="opacity:.5"><svg><use href="#ic-chev-right"/></svg></span>
+          <strong>大模型RAG技术从小白到深</strong>
+          <button class="more" title="更多"><span class="i sm"><svg><use href="#ic-more"/></svg></span></button>
+        </div>
+
+        <div class="kernel-toc" title="内核原生大纲：零改动">
+          <span class="i sm"><svg><use href="#ic-toc"/></svg></span>
+          <b>原生大纲</b> · 内核 · 不改
+        </div>
+
+        <div class="doc">
+          <div class="doc-inner">
+            <div class="space-meter">
+              <span>可视内容</span>
+              <div class="bar"><i id="spaceBar"></i></div>
+              <b id="spaceLabel">—</b>
+            </div>
+            <h1>产品级壳原型</h1>
+            <div class="meta">顶栏元素与真实产品对齐 · 布局按「最大可视 + 整边触发」重做</div>
+            <div class="callout">
+              <strong>本版补齐的顶栏元素</strong>（对照 <code>DesktopTopBar.tsx</code> / <code>MultiTabEditor.tsx</code>）：
+              <b>本地空间 ▾</b>（工作空间，可显示 S3 前缀）· <b>云同步</b>（已同步/待同步/同步中/未启用四态 + 面板）·
+              页签（<b>脏点 · 钉住 · 关闭 · 已删除徽标</b>）· <b>标签切换器 ▾</b> · <b>全文搜索</b> · 面包屑。
+            </div>
+            <h2>可点交互</h2>
+            <ul>
+              <li>点「<b>本地空间</b>」→ 工作空间菜单（偏好设置 / 回收站 / 历史）</li>
+              <li>点「<b>云同步</b>」→ 同步面板；上方分段可切四态看图标变化</li>
+              <li>页签：钉住的「表格111」无关闭钮；「已删除草稿」带徽标</li>
+              <li>左右整边弹目录/增强大纲 · 📌固定 · 拖缘调宽</li>
+            </ul>
+            <h2>实现边界</h2>
+            <p>原生内核大纲不改；目录与增强大纲为外壳自研；图标 lucide（与产品一致）。</p>
+          </div>
+        </div>
+
+        <div class="ws-main" id="wsQn">
+          <h1>小记</h1>
+          <div class="meta">独立空间 · 无目录 · 无大纲</div>
+          <div class="qn-grid">
+            <div class="qn-card"><h4>今天想到的</h4><p>整边触发更顺手</p></div>
+            <div class="qn-card"><h4>待办</h4><p>对齐另一会话 · 写回令牌</p></div>
+          </div>
+        </div>
+        <div class="ws-main" id="wsTrash">
+          <h1>回收站</h1>
+          <div class="meta">独立空间 · 纯工作台</div>
+          <div class="trash-list">
+            <div class="row">旧测试副本 <span class="when">3 天前</span></div>
+            <div class="row">详细测试1 <span class="when">5 天前</span></div>
+          </div>
+        </div>
+      </div>
+
+      <aside class="panel panel-float panel-r" id="panelFloatR">
+        <div class="panel-head">
+          <h2>大纲</h2>
+          <span class="sub">增强</span>
+          <button class="icon-btn" id="pinFloatR" title="固定"><span class="i sm"><svg><use href="#ic-pin"/></svg></span></button>
+          <button class="icon-btn" id="closeFloatR" title="收起"><span class="i sm"><svg><use href="#ic-x"/></svg></span></button>
+        </div>
+        <div class="note-strip"><strong>原生内核大纲</strong>不在此（右上角入口，零改动）。</div>
+        <div class="panel-body">
+          <div class="nav on">产品级壳原型</div>
+          <div class="nav lv2">可点交互</div>
+          <div class="nav lv2">实现边界</div>
+        </div>
+        <div class="resize" id="resizeR"></div>
+      </aside>
+      <aside class="panel panel-dock panel-r" id="panelDockR">
+        <div class="panel-head">
+          <h2>大纲</h2>
+          <span class="sub">增强</span>
+          <button class="icon-btn on" id="pinDockR" title="取消固定"><span class="i sm"><svg><use href="#ic-pin"/></svg></span></button>
+          <button class="icon-btn" id="closeDockR" title="收起"><span class="i sm"><svg><use href="#ic-x"/></svg></span></button>
+        </div>
+        <div class="panel-body">
+          <div class="nav on">产品级壳原型</div>
+          <div class="nav lv2">可点交互</div>
+          <div class="nav lv2">实现边界</div>
+        </div>
+        <div class="resize" id="resizeDockR"></div>
+      </aside>
+
+      <div class="edge edge-r" id="edgeR" title="右缘整条：悬停弹出大纲">
+        <div class="edge-mark">
+          <div class="edge-icon"><span class="i"><svg><use href="#ic-menu"/></svg></span></div>
+          <div class="edge-hint">大纲</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 状态栏（DesktopStatusBar） -->
+    <div class="statusbar">
+      <span class="ok"><span class="i xs"><svg><use href="#ic-cloud-check"/></svg></span> 已同步</span>
+      <span class="nums"><span>1,284 字</span><span>3 张图</span></span>
+      <span class="right"><span>A 蓝 · 桌面</span></span>
+    </div>
+  </div>
+</div>
+
+<div class="cards">
+  <article>
+    <h4>顶栏元素对齐清单（真实产品）</h4>
+    <ul>
+      <li><b>工作空间</b>：本地空间 ▾（云开且有 prefix 时显示 S3 前缀）</li>
+      <li><b>云同步</b>：CloudCheck / Cloud / CloudUpload / Loader / CloudOff 四态</li>
+      <li><b>页签</b>：脏点 · 钉 · 自定义图标位 · 关闭 · 已删除徽标 · 拖拽位</li>
+      <li><b>标签切换器</b> ▾ · <b>全文搜索</b> · 面包屑 + 更多</li>
+    </ul>
+  </article>
+  <article>
+    <h4>本轮布局叠加</h4>
+    <ul>
+      <li>空间：资料库 / 小记 / 回收站（整空间切换）</li>
+      <li>整边触发 · 📌固定无空白 · 拖缘调宽 200–420</li>
+      <li>目录 + 增强大纲外壳自研；原生大纲不改</li>
+    </ul>
+  </article>
+</div>
+
+<script>
+  const app = document.getElementById('app');
+  const state = {
+    theme: 'a', space: 'notes', cloud: 'synced',
+    openL: true, openR: false, pinL: false, pinR: false,
+    panelW: 280, tocW: 250,
+  };
+  try {
+    const saved = JSON.parse(localStorage.getItem('lake-preview-panel-w') || '{}');
+    if (saved.panelW) state.panelW = saved.panelW;
+    if (saved.tocW) state.tocW = saved.tocW;
+  } catch (_) {}
+
+  const CLOUD = {
+    synced:   { icon: 'ic-cloud-check', label: '已同步', cls: 'synced' },
+    pending:  { icon: 'ic-cloud-up',    label: '待同步', cls: 'pending' },
+    syncing:  { icon: 'ic-cloud',       label: '同步中', cls: 'syncing' },
+    disabled: { icon: 'ic-cloud-off',   label: '未启用云同步', cls: 'disabled' },
+  };
+
+  function pct() {
+    const body = app.querySelector('.body');
+    const main = app.querySelector('.main');
+    const p = Math.round((main.getBoundingClientRect().width / body.clientWidth) * 100);
+    document.getElementById('spacePct').textContent = p + '%';
+    document.getElementById('spaceLabel').textContent = p + '%';
+    document.getElementById('spaceBar').style.setProperty('--p', Math.min(100, p) + '%');
+  }
+
+  function apply() {
+    app.className = [
+      'app', 'theme-' + state.theme, 'space-' + state.space,
+      state.openL ? 'open-side' : '',
+      state.openR ? 'open-toc' : '',
+      state.pinL ? 'side-pinned' : '',
+      state.pinR ? 'toc-pinned' : '',
+    ].filter(Boolean).join(' ');
+    app.style.setProperty('--panel-w', state.panelW + 'px');
+    app.style.setProperty('--toc-w', state.tocW + 'px');
+
+    // 云同步
+    const c = CLOUD[state.cloud];
+    const syncBtn = document.getElementById('syncBtn');
+    syncBtn.className = 'toolbar__item toolbar__sync ' + c.cls;
+    document.getElementById('syncIcon').innerHTML = '<svg><use href="#' + c.icon + '"/></svg>';
+    document.getElementById('syncPopStatus').textContent = c.label;
+    // 工作空间名：未启用云同步 → 本地空间
+    document.getElementById('wsName').textContent =
+      state.cloud === 'disabled' ? '本地空间' : (state.cloud === 'synced' ? 'lake-notes' : '本地空间');
+
+    document.getElementById('pinFloatL').classList.toggle('on', state.pinL);
+    document.getElementById('pinDockL').classList.toggle('on', state.pinL);
+    document.getElementById('pinFloatR').classList.toggle('on', state.pinR);
+    document.getElementById('pinDockR').classList.toggle('on', state.pinR);
+
+    document.querySelectorAll('#themeSeg button').forEach(b =>
+      b.classList.toggle('on', b.dataset.t === state.theme));
+    document.querySelectorAll('#cloudSeg button').forEach(b =>
+      b.classList.toggle('on', b.dataset.c === state.cloud));
+    document.querySelectorAll('#spaces button').forEach(b =>
+      b.classList.toggle('on', b.dataset.sp === state.space));
+
+    requestAnimationFrame(pct);
+  }
+
+  function openL(v) { state.openL = v; if (!v) state.pinL = false; apply(); }
+  function openR(v) { state.openR = v; if (!v) state.pinR = false; apply(); }
+  function togglePinL() { state.pinL = !state.pinL; if (state.pinL) state.openL = true; else state.openL = true; apply(); }
+  function togglePinR() { state.pinR = !state.pinR; if (state.pinR) state.openR = true; else state.openR = true; apply(); }
+
+  let tL, tR;
+  document.getElementById('edgeL').addEventListener('mouseenter', () => {
+    if (state.space !== 'notes' || state.openL) return;
+    tL = setTimeout(() => openL(true), 120);
+  });
+  document.getElementById('edgeR').addEventListener('mouseenter', () => {
+    if (state.space !== 'notes' || state.openR) return;
+    tR = setTimeout(() => openR(true), 120);
+  });
+  document.getElementById('edgeL').addEventListener('click', () => {
+    if (state.space !== 'notes') return;
+    openL(!state.openL);
+  });
+  document.getElementById('edgeR').addEventListener('click', () => {
+    if (state.space !== 'notes') return;
+    openR(!state.openR);
+  });
+
+  function bindHide(el, side) {
+    el.addEventListener('mouseleave', () => setTimeout(() => {
+      if (side === 'l' && state.pinL) return;
+      if (side === 'r' && state.pinR) return;
+      if (el.matches(':hover')) return;
+      side === 'l' ? openL(false) : openR(false);
+    }, 420));
+  }
+  bindHide(document.getElementById('panelFloatL'), 'l');
+  bindHide(document.getElementById('panelFloatR'), 'r');
+
+  document.getElementById('pinFloatL').onclick = togglePinL;
+  document.getElementById('pinDockL').onclick = togglePinL;
+  document.getElementById('pinFloatR').onclick = togglePinR;
+  document.getElementById('pinDockR').onclick = togglePinR;
+  document.getElementById('closeFloatL').onclick = () => openL(false);
+  document.getElementById('closeDockL').onclick = () => openL(false);
+  document.getElementById('closeFloatR').onclick = () => openR(false);
+  document.getElementById('closeDockR').onclick = () => openR(false);
+
+  function bindResize(handle, side) {
+    handle.addEventListener('pointerdown', e => {
+      e.preventDefault(); e.stopPropagation();
+      document.body.classList.add('resizing');
+      handle.setPointerCapture(e.pointerId);
+      const sx = e.clientX;
+      const sw = side === 'l' ? state.panelW : state.tocW;
+      const move = ev => {
+        const dx = ev.clientX - sx;
+        let w = Math.max(200, Math.min(420, side === 'l' ? sw + dx : sw - dx));
+        if (side === 'l') state.panelW = w; else state.tocW = w;
+        app.style.setProperty('--panel-w', state.panelW + 'px');
+        app.style.setProperty('--toc-w', state.tocW + 'px');
+        pct();
+      };
+      const up = () => {
+        document.body.classList.remove('resizing');
+        handle.removeEventListener('pointermove', move);
+        handle.removeEventListener('pointerup', up);
+        try {
+          localStorage.setItem('lake-preview-panel-w',
+            JSON.stringify({ panelW: state.panelW, tocW: state.tocW }));
+        } catch (_) {}
+      };
+      handle.addEventListener('pointermove', move);
+      handle.addEventListener('pointerup', up);
+    });
+  }
+  ['resizeL','resizeDockL'].forEach(id => bindResize(document.getElementById(id), 'l'));
+  ['resizeR','resizeDockR'].forEach(id => bindResize(document.getElementById(id), 'r'));
+
+  // 顶栏交互
+  document.getElementById('wsBtn').onclick = () => {
+    document.getElementById('wsMenu').classList.toggle('open');
+    document.getElementById('syncPop').classList.remove('open');
+  };
+  document.getElementById('syncBtn').onclick = () => {
+    document.getElementById('syncPop').classList.toggle('open');
+    document.getElementById('wsMenu').classList.remove('open');
+  };
+  document.getElementById('themeSeg').onclick = e => {
+    const b = e.target.closest('button[data-t]'); if (!b) return;
+    state.theme = b.dataset.t; apply();
+  };
+  document.getElementById('cloudSeg').onclick = e => {
+    const b = e.target.closest('button[data-c]'); if (!b) return;
+    state.cloud = b.dataset.c; apply();
+  };
+  function setSpace(sp) {
+    state.space = sp;
+    if (sp !== 'notes') { state.openL = state.openR = false; state.pinL = state.pinR = false; }
+    else { state.openL = true; state.pinL = false; }
+    apply();
+  }
+  document.getElementById('spaces').onclick = e => {
+    const b = e.target.closest('button[data-sp]'); if (!b) return;
+    setSpace(b.dataset.sp);
+  };
+
+  apply();
+  window.addEventListener('resize', pct);
+  document.addEventListener('click', e => {
+    if (!e.target.closest('#wsBtn, #wsMenu')) document.getElementById('wsMenu').classList.remove('open');
+    if (!e.target.closest('#syncBtn, #syncPop')) document.getElementById('syncPop').classList.remove('open');
+  });
+</script>
+</body>
+</html>

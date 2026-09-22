@@ -12,10 +12,10 @@ import { FIXED_RAIL_WIDTH } from "../lib/layoutMetrics";
 import type { NoteDocument, NoteSummary, TreeNode } from "../lib/types";
 import type { SidebarMode } from "../components/Sidebar";
 
-export const SIDEBAR_HOVER_HIDE_DELAY_MS = 120;
+export const SIDEBAR_HOVER_HIDE_DELAY_MS = 220;
 
 export type SaveState = "idle" | "dirty" | "saving" | "saved" | "error";
-export type DesktopWorkspace = "library" | "quick-notes";
+export type DesktopWorkspace = "library" | "quick-notes" | "trash";
 
 // 左侧资料库与右侧大纲面板各自维护宽度；两侧常驻 activity rail 才保持同宽。
 export const SIDEBAR_DEFAULT_WIDTH = 224;

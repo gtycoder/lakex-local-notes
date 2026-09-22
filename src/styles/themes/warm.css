@@ -1,53 +1,53 @@
-/* 暖色纸质（第 3 套验证主题：证明换肤是真能换；低饱和暖白底 + 古铜主色）。 */
+/* C · 亮 · 橙（warm 槽位；05-THEME-TOKENS-ABC.md）：MiMo×笔记，同 A 结构 + 橙主色。 */
 [data-theme="warm"] {
   color-scheme: light;
   /* 表面 */
-  --lake-bg-window: #f6f3ec;
-  --lake-bg-panel: #fffefb;
-  --lake-bg-canvas: #fffefb;
-  --lake-bg-block: #f4efe6;
-  --lake-bg-raised: #fffefb;
-  --lake-bg-sunken: #efe9dd;
-  --lake-bg-hover: #eee7da;
-  --lake-bg-press: #e5dccb;
+  --lake-bg-window: #f6f7f8;
+  --lake-bg-panel: #ffffff;
+  --lake-bg-canvas: #ffffff;
+  --lake-bg-block: #f0f2f4;
+  --lake-bg-raised: #ffffff;
+  --lake-bg-sunken: #eef0f3;
+  --lake-bg-hover: #e9ebee;
+  --lake-bg-press: #e4e7eb;
   /* 文字 */
-  --lake-text-1: #2a2318;
-  --lake-text-2: #564c3c;
-  --lake-text-3: #6a6051;
-  --lake-text-4: #948872;
+  --lake-text-1: #1a1d21;
+  --lake-text-2: #495057;
+  --lake-text-3: #6f7780;
+  --lake-text-4: #939aa3;
   --lake-text-on-accent: #ffffff;
   /* 边框 */
-  --lake-border-1: #e7dfd0;
-  --lake-border-2: #f0e9dd;
-  --lake-border-strong: #d6cbb6;
-  /* 主色 */
-  --lake-accent: #7a5a24;
-  --lake-accent-ink: #4f3c1f;
-  --lake-accent-ink-hover: #64533a;
-  --lake-accent-ink-press: #413119;
-  --lake-accent-tint: #f0e8d8;
-  --lake-accent-text: #4f3c1f;
+  --lake-border-1: #e4e6ea;
+  --lake-border-2: #eef0f3;
+  --lake-border-strong: #d0d4da;
+  /* 主色（C 橙） */
+  --lake-accent: #ff6a00;
+  --lake-accent-ink: #e85d00;
+  --lake-accent-ink-hover: #d15400;
+  --lake-accent-ink-press: #b84a00;
+  --lake-accent-tint: #fff1e6;
+  --lake-accent-text: #c44e00;
   /* 状态色 */
-  --lake-status-sync: #2f6b74;
-  --lake-status-pending: #8a5a12;
-  --lake-status-ok: #2f6d4c;
-  --lake-status-error: #a83f38;
-  --lake-status-sync-soft: #e8f0f0;
-  --lake-status-pending-soft: #f6efe1;
-  --lake-status-ok-soft: #e9f1ec;
-  --lake-status-error-soft: #f8eae8;
+  --lake-status-sync: #2c7684;
+  --lake-status-pending: #9b610e;
+  --lake-status-ok: #2e7b54;
+  --lake-status-error: #b3413b;
+  --lake-status-sync-soft: #e8f1f2;
+  --lake-status-pending-soft: #f7f0e3;
+  --lake-status-ok-soft: #e9f2ec;
+  --lake-status-error-soft: #f8eae9;
   /* 选区 / 遮罩 / 滚动条 / 焦点 */
-  --lake-select-bg: rgba(111,85,46,.16);
-  --lake-scrim: rgba(40,32,20,.28);
-  --lake-scrollbar-thumb: rgba(60,48,28,.22);
-  --lake-scrollbar-thumb-hover: #8c8274;
-  --lake-focus-halo: rgba(60,48,28,.20);
+  --lake-select-bg: rgba(255,106,0,.16);
+  --lake-scrim: rgba(24,27,32,.28);
+  --lake-scrollbar-thumb: rgba(28,31,36,.22);
+  --lake-scrollbar-thumb-hover: #8c94a0;
+  --lake-focus-halo: rgba(28,31,36,.20);
   /* 阴影 */
-  --lake-shadow-card: 0 1px 3px rgba(40,32,20,.08), 0 6px 16px -8px rgba(40,32,20,.14);
-  --lake-shadow-popover: 0 0 0 1px rgba(40,32,20,.06), 0 12px 28px -10px rgba(40,32,20,.18), 0 28px 60px -20px rgba(40,32,20,.16);
-  --lake-shadow-dialog: 0 0 0 1px rgba(40,32,20,.07), 0 24px 48px -16px rgba(40,32,20,.22), 0 48px 96px -32px rgba(40,32,20,.18);
-  --lake-shadow-drag: 0 8px 24px -8px rgba(40,32,20,.24);
-  --lake-shadow-knob: 0 1px 2px rgba(40,32,20,.18);
+  --lake-shadow-card: 0 1px 2px rgba(28,31,36,.05), 0 8px 24px -10px rgba(28,31,36,.14);
+  --lake-shadow-popover: 0 0 0 1px rgba(28,31,36,.06), 0 24px 56px -18px rgba(28,31,36,.24);
+  --lake-shadow-dialog: 0 0 0 1px rgba(28,31,36,.07), 0 24px 48px -16px rgba(28,31,36,.22), 0 48px 96px -32px rgba(28,31,36,.18);
+  --lake-shadow-drag: 0 8px 24px -8px rgba(28,31,36,.24);
+  --lake-shadow-knob: 0 1px 2px rgba(28,31,36,.18);
 
   /* ---- 过渡别名：旧 --lake-* 名字 → 新令牌 ---- */
   --lake-shell: var(--lake-bg-window);
@@ -104,22 +104,22 @@
   --lakex-editor-text-body: var(--lake-text-1);
   --lakex-editor-text-caption: var(--lake-text-3);
   --lakex-editor-cursor: var(--lake-accent);
-  /* 阴影色 / 中性叠层 / 半透明遮罩（P7-d，暖色：阴影带暖调，叠层用暖白） */
-  --lake-shadow-color-1: rgba(74, 60, 38, .07);
-  --lake-shadow-color-2: rgba(74, 60, 38, .09);
-  --lake-shadow-color-3: rgba(74, 60, 38, .10);
-  --lake-shadow-color-4: rgba(74, 60, 38, .16);
-  --lake-shadow-color-5: rgba(74, 60, 38, .22);
-  --lake-shadow-color-6: rgba(74, 60, 38, .18);
-  --lake-shadow-color-7: rgba(74, 60, 38, .20);
-  --lake-neutral-veil-1: rgba(90, 74, 48, .16);
-  --lake-neutral-veil-2: rgba(90, 74, 48, .08);
-  --lake-neutral-veil-3: rgba(74, 60, 38, .16);
-  --lake-veil-strong: rgba(255, 254, 251, .80);
-  --lake-veil-soft: rgba(255, 254, 251, .55);
-  --lake-veil-open: rgba(255, 254, 251, .88);
-  --lake-hairline-soft: rgba(231, 223, 208, .60);
-  --lake-pinned-tint: rgba(176, 132, 40, .12);
-  --lake-pinned-border: rgba(176, 132, 40, .30);
-  --lake-pinned-tint-hover: rgba(176, 132, 40, .20);
+  /* 阴影色 / 中性叠层 / 半透明遮罩（P7-d，C 亮橙：中性偏暖灰，不带青铜） */
+  --lake-shadow-color-1: rgba(28, 31, 36, .05);
+  --lake-shadow-color-2: rgba(28, 31, 36, .06);
+  --lake-shadow-color-3: rgba(28, 31, 36, .08);
+  --lake-shadow-color-4: rgba(28, 31, 36, .16);
+  --lake-shadow-color-5: rgba(28, 31, 36, .24);
+  --lake-shadow-color-6: rgba(28, 31, 36, .14);
+  --lake-shadow-color-7: rgba(28, 31, 36, .16);
+  --lake-neutral-veil-1: rgba(26, 29, 33, .12);
+  --lake-neutral-veil-2: rgba(26, 29, 33, .06);
+  --lake-neutral-veil-3: rgba(0, 0, 0, .14);
+  --lake-veil-strong: rgba(255, 255, 255, .80);
+  --lake-veil-soft: rgba(255, 255, 255, .50);
+  --lake-veil-open: rgba(255, 255, 255, .88);
+  --lake-hairline-soft: rgba(228, 230, 234, .55);
+  --lake-pinned-tint: rgba(255, 106, 0, .10);
+  --lake-pinned-border: rgba(255, 106, 0, .28);
+  --lake-pinned-tint-hover: rgba(255, 106, 0, .16);
 }

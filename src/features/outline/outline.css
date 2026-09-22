@@ -26,12 +26,10 @@
 
 }
 
-/* 大纲栏本体：固定时整列 = 独立大纲面板 + 38px rail；收起时只保留 rail。
- * 宽窄共用：`grid-column: -2 / -1` = "最后一列"——宽窗是 4 列（rail|目录|正文|大纲），
- * 窄窗是 3 列（左轨|正文|大纲），同一句在两边都指向最右那一列。
- * 窄窗之所以也**占这一列**（38px）而不是浮在正文上：悬浮 rail 必然压住正文右缘的
- * 编辑器滚动条与面包屑右侧图标，且离开窗口右沿 13px（用户 260915 报的"边栏错位"）。
- * 面板本身在窄窗仍是悬停浮层（见下方 floating 一族），不占正文。 */
+/* 大纲栏：04 §4 整边触发 + 悬浮/固定（**无右侧固定轨**）
+ * - collapsed：不占 grid 列宽；仅右缘 14px 热区 hover 弹出悬浮面板
+ * - docked：只占面板宽（📌 固定推开正文）
+ * 旧「38px 常驻 rail」已去掉。 */
 .outline-sidebar {
   position: relative;
   z-index: 250;
@@ -41,72 +39,106 @@
   align-self: stretch;
   width: 100%;
   min-width: 0;
-  /* 与 workspace 正文行完全同高同顶：口径一字不差地复用 .workspace 的
-     `calc(var(--topbar-height) + 4px) 0 4px 0`。此前只写 `var(--topbar-height) 0 0`
-     ⇒ 大纲面板比正文高 4px、底部直抵窗口底，与整体对不齐（260916 用户反馈）。 */
   height: auto;
   margin: calc(var(--topbar-height) + 4px) 0 4px 0;
   overflow: visible;
 }
 
-/* ══ 大纲栏内部件（共用作用域；260915 窄窗彻底统一）══
- * 这一族（bridge / rail / 触发层 / 活动按钮 / 内容面板的三种状态 / 缩放手柄）原先在
- * `@media (min-width: 761px)` 里 ⇒ 窄窗完全没有可用的悬浮预览几何。
- * 现在宽窄共用：窄窗把 `.outline-sidebar` 本身改成右侧固定 rail（见 styles.css 窄窗块），
- * 内部件照旧按"rail + 绝对定位面板"工作。 */
-/* Four pixels connect the rail to the panel after the scrollbar track. It
-   keeps the pointer path alive without covering the editor scrollbar. */
-.outline-sidebar__bridge {
+/* collapsed：列宽为 0 —— aside 变成贴右缘的触发层容器 */
+.outline-sidebar--collapsed {
   position: absolute;
-  z-index: 4;
-  top: 36px;
-  left: 0;
+  top: calc(var(--topbar-height) + 28px);
+  right: 0;
   bottom: 0;
-  width: 4px;
+  width: 0;
+  margin: 0;
+  z-index: 260;
+  overflow: visible;
   pointer-events: none;
 }
 
-/* 这是一整条 activity rail，只负责 hover 预览；可继续容纳其它按钮。 */
+/* ── minimap：完全仿 .ne-toc-small-view（vendor lakex-doc.css 10762+）──
+ * 每条 22px 高 + 6px 间距；横线 2px，按 depth 定宽 24/16/12/8/4/2；选中用主题色。 */
+.toc-minimap {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+  padding: 10px 8px;
+  pointer-events: auto;
+}
+.toc-minimap__item {
+  display: block;
+  height: 2px;
+  padding: 0;
+  border: 0;
+  border-radius: 1px;
+  background: var(--lake-border-strong);
+  flex: 0 0 auto;
+  cursor: default;
+  /* 原生：item 高 22 + 下距 6，线在中部 ⇒ 上下各 10px */
+  margin: 10px 0;
+  width: 8px;
+}
+.toc-minimap__item--d1 { width: 24px; }
+.toc-minimap__item--d2 { width: 16px; }
+.toc-minimap__item--d3 { width: 12px; }
+.toc-minimap__item--d4 { width: 8px; }
+.toc-minimap__item--d5 { width: 4px; }
+.toc-minimap__item--d6 { width: 2px; }
+.toc-minimap__item.is-selected {
+  background: var(--lake-accent);
+}
+.toc-minimap__item:hover {
+  background: var(--lake-text-4);
+}
+
+/* ── 整边触发区：只承载 minimap ── */
+.outline-sidebar__trigger {
+  position: absolute;
+  z-index: 3;
+  top: 0;
+  bottom: 0;
+  right: 0;
+  width: 39px;
+  pointer-events: auto;
+  cursor: default;
+  overflow: hidden;
+}
+/* 固定时热区贴在面板左外侧，仍可再触发 */
+.outline-sidebar--docked .outline-sidebar__trigger {
+  right: auto;
+  left: -14px;
+  border-left: 0;
+  border-right: 0;
+}
+
+/* ── 旧常驻 rail：视觉隐藏（只留触发层/桥） ── */
 .outline-sidebar__rail {
   position: absolute;
   z-index: 2;
   top: 0;
   right: 0;
   bottom: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  width: var(--outline-collapsed-width);
-  min-width: var(--outline-collapsed-width);
-  padding: 0 3px 6px;
-  /* 视觉 rail 保持原宽度；但溢出到滚动条轨道区域的左侧部分不拦截指针，
-    让鼠标能 hover 到编辑器滚动条（否则滚动条变粗触发区只剩 2px）。 */
+  width: 0;
+  min-width: 0;
+  padding: 0;
   pointer-events: none;
 }
-.outline-sidebar__rail .outline-sidebar__activity-button,
-.outline-sidebar__rail .outline-sidebar__trigger {
-  pointer-events: auto;
-}
-.outline-sidebar__rail-fill { flex: 1; }
-
-/* 悬浮触发层：rail 视觉保持原宽度（--outline-collapsed-width），
-   但只有右侧窄条（独立于 rail 视觉宽度）负责感应鼠标进入。
-   解决「鼠标未到 rail 就触发悬浮」——触发区与视觉 rail 解耦。 */
-.outline-sidebar__trigger {
+.outline-sidebar__rail .outline-sidebar__activity-button { display: none; }
+.outline-sidebar__rail-fill { display: none; }
+.outline-sidebar__bridge {
   position: absolute;
-  z-index: 3;
-  /* 顶部避开 activity-button（约 32px），按钮区域点击优先，不触发悬浮 */
-  top: 36px;
+  z-index: 4;
+  top: 0;
+  left: 0;
   bottom: 0;
-  /* Most of the 38px rail is a trigger; only the editor-side safety band is
-     excluded so the scrollbar remains directly operable. */
-  right: 0;
-    /* 触发区宽度只有一个来源：`desktopInteraction` 的 OUTLINE_HOVER_TRIGGER_WIDTH
-       （由 shellStyle 注入 --outline-hover-trigger-width，并有单测卡着 24~25）。
-       原先这里读的是 `--lake-outline-trigger-width`（layout-contract 里另写的一份 25px），
-       于是那个"有单测的常量"其实从没进过 CSS。 */
-    width: var(--outline-hover-trigger-width, 25px);
+  width: 4px;
+  pointer-events: none;
 }
+
+/* ══ 大纲栏内部件 ══
+ * bridge / 触发层 / 内容面板 / 缩放手柄（无常驻 rail）。 */
 .outline-sidebar__activity-button {
   display: grid;
   place-items: center;
@@ -133,11 +165,11 @@
   outline: var(--lake-focus-ring-width) solid var(--lake-accent-tint);
   outline-offset: 2px;
 }
-/* 内容始终锚定 rail 左侧。收起时覆盖正文；固定时参与 grid，编辑器自行收缩。 */
+/* 内容锚定右缘（无常驻 rail）。收起时覆盖正文；固定时参与 grid，编辑器自行收缩。 */
 .outline-sidebar__content {
   position: absolute;
   z-index: 1;
-  right: var(--outline-collapsed-width);
+  right: 0;
   display: flex;
   flex-direction: column;
   width: var(--outline-sidebar-width, 280px);
@@ -354,21 +386,17 @@
  * 改面板外观只改这里就够，别在 outline.css 前部再加一份（会被这段覆盖）。 */
 .outline-sidebar--collapsed .outline-sidebar__content,
 .outline-sidebar--collapsed.outline-sidebar--hovered .outline-sidebar__content {
-  /* 只需要卡片外观；浮层的 top/bottom/height 几何在下方「Floating outline」那段（唯一来源）。 */
-  background: var(--lake-bg-panel);
-  border: 1px solid var(--lake-border-1);
-  border-radius: 12px 0 0 12px;
+  /* 卡片投影；面/边/圆角的唯一来源见下方「大纲轨 / 收起后悬停展开」段 */
   box-shadow: var(--lake-shadow-soft);
 }
 .outline-sidebar--docked .outline-sidebar__content {
-  left: 4px;
-  right: var(--outline-collapsed-width);
+  left: 0;
+  right: 0;
   width: auto;
   min-width: 0;
   top: 0;
   bottom: 0;
-  /* 固定态的底色/圆角/边框只在 b3/layout.css 的 `.outline-sidebar--docked` 那条改（它是本主题
-     最后加载的大纲面板样式）；这里只留几何，避免同一条声明写在两处互相打架。 */
+  position: absolute;
 }
 .outline-sidebar--collapsed .outline-sidebar__content {
   border-right: 0;
@@ -380,9 +408,9 @@
   contain-intrinsic-size: auto 26px;
 }
 
-/* Lake semantic outline layer: preserves existing rail trigger geometry and dock behavior. */
+/* Lake semantic outline layer: colors only (geometry/materials owned above). */
 .outline-sidebar__content,
-.outline-sidebar__panel { color: var(--lake-text); background: var(--lake-panel); border-color: var(--lake-border); }
+.outline-sidebar__panel { color: var(--lake-text); border-color: var(--lake-border); }
 .outline-sidebar__header,
 .outline-sidebar__toolbar { color: var(--lake-text-secondary); border-color: var(--lake-border); }
 .outline-item { color: var(--lake-text-secondary); }

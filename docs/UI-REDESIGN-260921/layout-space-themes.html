@@ -1,0 +1,826 @@
+<!-- AI生成 -->
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lake Notes · 布局 × 主题 综合预览</title>
+<style>
+  /* docs-only 预览：不引用 src/**，不参与构建 */
+  *, *::before, *::after { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Segoe UI", sans-serif;
+    font-size: 13px; color: #1c1f24; background: #e6e8ec;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* ── 页头控制条 ─────────────────────────────────────── */
+  .top {
+    position: sticky; top: 0; z-index: 200;
+    display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: center;
+    padding: 10px 16px;
+    background: rgba(255,255,255,.94);
+    backdrop-filter: blur(12px);
+    border-bottom: 1px solid #e2e5ea;
+  }
+  .top h1 { margin: 0; font-size: 13px; font-weight: 700; }
+  .top .sub { color: #6d757e; font-size: 11px; }
+  .grow { flex: 1; }
+  .seg {
+    display: inline-flex; gap: 2px; padding: 3px;
+    background: #eef0f4; border-radius: 10px;
+  }
+  .seg button {
+    appearance: none; border: 0; cursor: pointer;
+    height: 28px; padding: 0 12px; border-radius: 8px;
+    font: inherit; font-size: 12px; font-weight: 500;
+    color: #5a6169; background: transparent;
+    white-space: nowrap;
+  }
+  .seg button:hover { color: #111; }
+  .seg button.on {
+    background: #fff; color: #111; font-weight: 600;
+    box-shadow: 0 1px 2px rgba(0,0,0,.06), 0 0 0 1px rgba(0,0,0,.04);
+  }
+  .hintbar {
+    max-width: 1200px; margin: 14px auto 0; padding: 0 16px;
+    display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
+    font-size: 12px; color: #5a6169;
+  }
+  .chip {
+    display: inline-flex; align-items: center; gap: 6px;
+    height: 26px; padding: 0 10px; border-radius: 999px;
+    background: #fff; border: 1px solid #e2e5ea;
+    font-size: 11.5px; color: #3a4149;
+  }
+  .chip b { color: #111; font-weight: 600; }
+  .chip .dot { width: 8px; height: 8px; border-radius: 50%; background: #3d7eff; }
+  .chip.warn .dot { background: #ff6a00; }
+
+  /* ── 舞台 ───────────────────────────────────────────── */
+  .stage { padding: 14px 16px 40px; max-width: 1200px; margin: 0 auto; }
+
+  /* ═══════════ 统一壳：用 CSS 变量表切换 布局×主题 ═══════════ */
+  .app {
+    --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Segoe UI", sans-serif;
+    /* 默认 = 布局 L1 × 主题 T-A */
+    --bg-window: #f4f5f7;
+    --bg-side: #fafbfc;
+    --bg-main: #ffffff;
+    --bg-panel: #ffffff;
+    --bg-elev: #ffffff;
+    --bg-hover: rgba(28,31,36,.05);
+    --bg-press: rgba(28,31,36,.08);
+    --bg-sel: rgba(61,126,255,.10);
+    --text-1: #17191c;
+    --text-2: #4a5158;
+    --text-3: #7a828c;
+    --text-4: #9aa1aa;
+    --border: #e8eaee;
+    --border-soft: #f0f2f5;
+    --accent: #3d7eff;
+    --accent-ink: #2f66e0;
+    --accent-text: #1f4fc2;
+    --accent-tint: rgba(61,126,255,.10);
+    --warm: #ff6a00;
+    --radius-row: 8px;
+    --radius-card: 12px;
+    --radius-panel: 14px;
+    --shadow-card: 0 1px 2px rgba(16,24,40,.04), 0 4px 12px -4px rgba(16,24,40,.06);
+    --shadow-pop: 0 0 0 1px rgba(16,24,40,.05), 0 16px 40px -12px rgba(16,24,40,.18);
+    --glass: rgba(255,255,255,.72);
+    --row-h: 30px;
+    --rail-w: 0px;          /* 布局决定 */
+    --side-w: 240px;
+    --toc-w: 0px;
+    --top-h: 40px;
+    --status-h: 0px;        /* 可选浮动状态 */
+    --content-pad: 48px;
+
+    position: relative;
+    height: min(760px, calc(100vh - 140px));
+    min-height: 560px;
+    border-radius: 16px;
+    overflow: hidden;
+    display: grid;
+    grid-template-columns: var(--rail-w) var(--side-w) 1fr var(--toc-w);
+    grid-template-rows: var(--top-h) 1fr var(--status-h);
+    background: var(--bg-window);
+    color: var(--text-1);
+    font-family: var(--font);
+    box-shadow: 0 24px 60px -24px rgba(0,0,0,.28), 0 0 0 1px rgba(0,0,0,.06);
+    transition: grid-template-columns .22s ease, grid-template-rows .22s ease;
+  }
+
+  /* ── 主题覆盖 ───────────────────────────────────────── */
+  .app.theme-a { /* MiMo 亮面蓝 */
+    --bg-window:#f4f5f7; --bg-side:#fafbfc; --bg-main:#fff; --bg-panel:#fff; --bg-elev:#fff;
+    --bg-hover:rgba(28,31,36,.05); --bg-press:rgba(28,31,36,.08);
+    --bg-sel:rgba(61,126,255,.10);
+    --text-1:#17191c; --text-2:#4a5158; --text-3:#7a828c; --text-4:#9aa1aa;
+    --border:#e8eaee; --border-soft:#f0f2f5;
+    --accent:#3d7eff; --accent-ink:#2f66e0; --accent-text:#1f4fc2;
+    --accent-tint:rgba(61,126,255,.10); --warm:#ff6a00;
+    --glass:rgba(255,255,255,.78);
+    --shadow-card:0 1px 2px rgba(16,24,40,.04), 0 4px 12px -4px rgba(16,24,40,.06);
+    --shadow-pop:0 0 0 1px rgba(16,24,40,.05), 0 16px 40px -12px rgba(16,24,40,.18);
+  }
+  .app.theme-c { /* MiMo × 笔记 橙 */
+    --bg-window:#f6f7f8; --bg-side:#f0f2f4; --bg-main:#fff; --bg-panel:#fff; --bg-elev:#fff;
+    --bg-hover:rgba(28,31,36,.055); --bg-press:rgba(28,31,36,.09);
+    --bg-sel:#ff6a0014;
+    --text-1:#1a1d21; --text-2:#495057; --text-3:#6f7780; --text-4:#939aa3;
+    --border:#e4e6ea; --border-soft:#eef0f3;
+    --accent:#ff6a00; --accent-ink:#e85d00; --accent-text:#c44e00;
+    --accent-tint:#ff6a0016; --warm:#ff6a00;
+    --glass:rgba(255,255,255,.80);
+    --shadow-card:0 1px 2px rgba(28,31,36,.05), 0 6px 16px -6px rgba(28,31,36,.08);
+    --shadow-pop:0 0 0 1px rgba(28,31,36,.05), 0 16px 36px -10px rgba(28,31,36,.14);
+  }
+  .app.theme-b { /* Obsidian 暗面 —— 深色模式基线 */
+    --bg-window:#1a1b1e; --bg-side:#141517; --bg-main:#1e1f22; --bg-panel:#25262b; --bg-elev:#2a2b30;
+    --bg-hover:rgba(255,255,255,.06); --bg-press:rgba(255,255,255,.10);
+    --bg-sel:rgba(155,148,255,.16);
+    --text-1:#e3e4e6; --text-2:#a8a9ad; --text-3:#7c7d82; --text-4:#5c5d62;
+    --border:#2e2f34; --border-soft:#242528;
+    --accent:#9b94ff; --accent-ink:#7f76ff; --accent-text:#b7b1ff;
+    --accent-tint:rgba(155,148,255,.14); --warm:#ffb020;
+    --glass:rgba(30,31,34,.72);
+    --shadow-card:0 1px 2px rgba(0,0,0,.4);
+    --shadow-pop:0 0 0 1px rgba(255,255,255,.06), 0 16px 40px -12px rgba(0,0,0,.55);
+    color-scheme: dark;
+  }
+
+  /* ── 布局 L1：思源式常驻（基线对照） ────────────────── */
+  .app.layout-l1 { --rail-w: 48px; --side-w: 236px; --toc-w: 0px; --status-h: 28px; }
+  .app.layout-l1.side-off { --side-w: 0px; }
+  .app.layout-l1.toc-on { --toc-w: 220px; }
+
+  /* ── 布局 L2：极简顶栏 + 全悬浮（推荐 · 最大可视） ──── */
+  .app.layout-l2 { --rail-w: 0px; --side-w: 0px; --toc-w: 0px; --status-h: 0px; --top-h: 36px; }
+  .app.layout-l2.side-on { --side-w: 0px; } /* 侧栏悬浮覆盖，不占 grid */
+
+  /* ── 布局 L3：边缘热区 · 按需滑出（VS Code / Obsidian 混合） */
+  .app.layout-l3 { --rail-w: 0px; --side-w: 0px; --toc-w: 0px; --status-h: 0px; --top-h: 36px; }
+  .app.layout-l3.side-on { --side-w: 260px; }
+  .app.layout-l3.toc-on { --toc-w: 240px; }
+
+  /* ── 顶栏 ───────────────────────────────────────────── */
+  .titlebar {
+    grid-column: 1 / -1; grid-row: 1;
+    display: flex; align-items: center; gap: 8px;
+    padding: 0 12px;
+    background: var(--bg-side);
+    border-bottom: 1px solid var(--border-soft);
+    min-width: 0;
+    z-index: 5;
+  }
+  .layout-l2 .titlebar,
+  .layout-l3 .titlebar {
+    background: var(--glass);
+    backdrop-filter: blur(14px) saturate(1.2);
+    border-bottom-color: color-mix(in srgb, var(--border) 80%, transparent);
+  }
+  .traffic { display: flex; gap: 7px; margin-right: 6px; flex: 0 0 auto; }
+  .traffic i { width: 11px; height: 11px; border-radius: 50%; display: block; }
+  .traffic i:nth-child(1){background:#ff5f57} .traffic i:nth-child(2){background:#febc2e} .traffic i:nth-child(3){background:#28c840}
+  .tb-btn {
+    height: 26px; min-width: 26px; padding: 0 8px;
+    display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+    border-radius: 8px; border: 0;
+    background: transparent; color: var(--text-3);
+    font: inherit; font-size: 12px; cursor: default;
+  }
+  .tb-btn:hover { background: var(--bg-hover); color: var(--text-1); }
+  .tb-btn.on { background: var(--accent-tint); color: var(--accent-text); font-weight: 600; }
+  .tb-brand {
+    display: flex; align-items: center; gap: 7px;
+    font-weight: 700; font-size: 13px; letter-spacing: -.02em;
+    color: var(--text-1); padding: 0 4px;
+  }
+  .tb-brand .mark {
+    width: 18px; height: 18px; border-radius: 6px;
+    background: linear-gradient(135deg, var(--accent), color-mix(in srgb, var(--accent) 40%, #fff));
+  }
+  .crumb {
+    flex: 1; min-width: 0;
+    font-size: 12px; color: var(--text-3);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    text-align: center; padding: 0 8px;
+  }
+  .crumb strong { color: var(--text-1); font-weight: 600; }
+  .tb-right { display: flex; gap: 4px; align-items: center; flex: 0 0 auto; }
+  .pill {
+    height: 24px; padding: 0 9px; border-radius: 999px;
+    display: inline-flex; align-items: center; gap: 5px;
+    font-size: 11px; font-weight: 500;
+    border: 1px solid var(--border);
+    background: var(--bg-elev); color: var(--text-2);
+  }
+  .pill.accent { border-color: transparent; background: var(--accent-tint); color: var(--accent-text); }
+  .pill.warm { border-color: transparent; background: color-mix(in srgb, var(--warm) 14%, transparent); color: var(--warm); }
+
+  /* ── 活动栏（仅 L1） ────────────────────────────────── */
+  .rail {
+    grid-column: 1; grid-row: 2;
+    background: var(--bg-side);
+    border-right: 1px solid var(--border-soft);
+    display: flex; flex-direction: column; align-items: center;
+    padding: 10px 0; gap: 4px;
+    overflow: hidden;
+  }
+  .app:not(.layout-l1) .rail { display: none; }
+  .rail-btn {
+    width: 34px; height: 34px; border-radius: 10px;
+    display: grid; place-items: center;
+    color: var(--text-3); font-size: 14px;
+    background: transparent; border: 0; cursor: default;
+  }
+  .rail-btn:hover { background: var(--bg-hover); color: var(--text-1); }
+  .rail-btn.on { background: var(--accent-tint); color: var(--accent); }
+  .rail-sp { flex: 1; }
+
+  /* ── 侧栏（常驻 or 悬浮） ───────────────────────────── */
+  .side {
+    grid-column: 2; grid-row: 2;
+    background: var(--bg-side);
+    border-right: 1px solid var(--border-soft);
+    display: flex; flex-direction: column;
+    overflow: hidden;
+    min-width: 0;
+    z-index: 4;
+  }
+  /* L1 收起时宽度 0，内容隐藏 */
+  .layout-l1.side-off .side { display: none; }
+
+  /* L2/L3：侧栏 = 悬浮覆盖层，不占内容宽度 */
+  .layout-l2 .side,
+  .layout-l3:not(.side-on) .side {
+    position: absolute;
+    top: var(--top-h); bottom: 0; left: 0;
+    width: 260px;
+    z-index: 30;
+    background: var(--bg-panel);
+    border-right: 1px solid var(--border);
+    box-shadow: var(--shadow-pop);
+    transform: translateX(-105%);
+    transition: transform .2s ease;
+  }
+  .layout-l2.side-on .side,
+  .layout-l3.side-on .side {
+    position: absolute;
+    top: var(--top-h); bottom: 0; left: 0;
+    width: 260px;
+    z-index: 30;
+    background: var(--bg-panel);
+    border-right: 1px solid var(--border);
+    box-shadow: var(--shadow-pop);
+    transform: translateX(0);
+  }
+  /* L3 side-on 时占 grid 位（推开内容）—— 更适合钉住 */
+  .layout-l3.side-on.side-docked .side {
+    position: relative;
+    top: auto; bottom: auto; left: auto;
+    grid-column: 2; grid-row: 2;
+    width: auto;
+    transform: none;
+    box-shadow: none;
+    background: var(--bg-side);
+    border-right: 1px solid var(--border-soft);
+  }
+
+  .side-head {
+    display: flex; align-items: center; gap: 6px;
+    height: 36px; padding: 0 10px 0 12px;
+    border-bottom: 1px solid var(--border-soft);
+    flex: 0 0 auto;
+  }
+  .side-head h2 {
+    margin: 0; flex: 1;
+    font-size: 11.5px; font-weight: 700;
+    letter-spacing: .04em; text-transform: uppercase;
+    color: var(--text-4);
+  }
+  .mini {
+    width: 22px; height: 22px; border-radius: 6px;
+    display: grid; place-items: center;
+    border: 0; background: transparent;
+    color: var(--text-3); font-size: 11px; cursor: default;
+  }
+  .mini:hover { background: var(--bg-hover); color: var(--text-1); }
+  .side-body {
+    flex: 1; overflow: auto;
+    padding: 8px 8px 16px;
+  }
+  .nav {
+    display: flex; align-items: center; gap: 8px;
+    height: var(--row-h); padding: 0 10px;
+    border-radius: var(--radius-row);
+    color: var(--text-2); font-size: 13px; font-weight: 500;
+    white-space: nowrap; overflow: hidden;
+  }
+  .nav .ico { width: 16px; text-align: center; color: var(--text-3); flex: 0 0 auto; }
+  .nav:hover { background: var(--bg-hover); color: var(--text-1); }
+  .nav.on { background: var(--bg-sel); color: var(--text-1); font-weight: 600; }
+  .nav.on .ico { color: var(--accent); }
+  .nav.folder { color: var(--text-1); font-weight: 600; margin-top: 4px; }
+  .nav.child { padding-left: 28px; font-weight: 400; font-size: 12.5px; }
+  .side-label {
+    padding: 12px 10px 4px;
+    font-size: 10px; font-weight: 700; letter-spacing: .08em;
+    text-transform: uppercase; color: var(--text-4);
+  }
+
+  /* ── 主区 ───────────────────────────────────────────── */
+  .main {
+    grid-column: 3; grid-row: 2;
+    position: relative;
+    background: var(--bg-main);
+    display: flex; flex-direction: column;
+    overflow: hidden; min-width: 0;
+    z-index: 1;
+  }
+  /* L1 在 side-off 时 main 应占第2列 —— 用 grid 重排 */
+  .layout-l1.side-off .main { grid-column: 2 / -1; }
+  .layout-l1.toc-on .main { grid-column: 3; }
+  .layout-l1.side-off.toc-on .main { grid-column: 2; }
+
+  .tabs {
+    display: flex; gap: 4px; align-items: flex-end;
+    padding: 6px 10px 0;
+    background: var(--bg-window);
+    border-bottom: 1px solid var(--border-soft);
+    overflow: hidden; flex: 0 0 auto;
+  }
+  .layout-l2 .tabs, .layout-l3 .tabs {
+    background: transparent;
+    /* 标签叠在玻璃顶栏下？独立一行更清晰 —— 紧贴 */
+    background: color-mix(in srgb, var(--bg-window) 70%, transparent);
+  }
+  .tab {
+    height: 28px; padding: 0 11px;
+    display: inline-flex; align-items: center; gap: 6px;
+    border-radius: 8px 8px 0 0;
+    font-size: 12px; color: var(--text-3);
+    border: 1px solid transparent; border-bottom: 0;
+    max-width: 160px; overflow: hidden; white-space: nowrap;
+  }
+  .tab.on {
+    background: var(--bg-main); color: var(--text-1);
+    font-weight: 600; border-color: var(--border-soft);
+  }
+  .tab .dirty { width: 6px; height: 6px; border-radius: 50%; background: var(--warm); flex: 0 0 auto; }
+
+  .doc {
+    flex: 1; overflow: auto;
+    padding: 32px var(--content-pad) 64px;
+  }
+  .layout-l2 .doc { padding-top: 36px; }
+  .doc-inner { max-width: 680px; margin: 0 auto; }
+  .doc h1 {
+    margin: 0 0 6px;
+    font-size: 28px; font-weight: 750; letter-spacing: -.03em;
+    color: var(--text-1);
+  }
+  .doc .meta { font-size: 12px; color: var(--text-4); margin-bottom: 24px; }
+  .doc h2 { margin: 26px 0 10px; font-size: 16px; font-weight: 700; color: var(--text-1); }
+  .doc p { margin: 0 0 14px; font-size: 14.5px; line-height: 1.7; color: var(--text-2); }
+  .doc .callout {
+    margin: 18px 0; padding: 14px 16px;
+    border-radius: var(--radius-card);
+    background: var(--bg-sel);
+    border: 1px solid color-mix(in srgb, var(--accent) 25%, transparent);
+    font-size: 13.5px; color: var(--text-1);
+  }
+  .doc .callout strong { color: var(--accent-text); }
+  .doc ul { margin: 0 0 14px; padding-left: 1.25em; color: var(--text-2); }
+  .doc li { margin: 6px 0; font-size: 14px; line-height: 1.55; }
+  .doc code {
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    font-size: 12.5px; padding: 1px 6px; border-radius: 4px;
+    background: var(--bg-hover); color: var(--text-1);
+  }
+  .space-meter {
+    display: flex; align-items: center; gap: 10px;
+    margin: 0 0 22px; padding: 10px 12px;
+    border-radius: 10px;
+    background: color-mix(in srgb, var(--accent) 8%, var(--bg-main));
+    border: 1px dashed color-mix(in srgb, var(--accent) 35%, transparent);
+    font-size: 12px; color: var(--text-2);
+  }
+  .space-meter b { color: var(--accent-text); font-variant-numeric: tabular-nums; }
+  .bar {
+    flex: 1; height: 6px; border-radius: 99px;
+    background: color-mix(in srgb, var(--text-3) 18%, transparent);
+    overflow: hidden;
+  }
+  .bar > i {
+    display: block; height: 100%;
+    background: linear-gradient(90deg, var(--accent), color-mix(in srgb, var(--accent) 50%, var(--warm)));
+    border-radius: 99px;
+    width: var(--p, 70%);
+    transition: width .25s ease;
+  }
+
+  /* ── 大纲 ───────────────────────────────────────────── */
+  .toc {
+    grid-column: 4; grid-row: 2;
+    background: var(--bg-side);
+    border-left: 1px solid var(--border-soft);
+    padding: 10px;
+    overflow: auto;
+    display: none;
+  }
+  .layout-l1.toc-on .toc,
+  .layout-l3.toc-on .toc { display: block; }
+  /* L2：大纲永远悬浮 */
+  .layout-l2 .toc {
+    display: block;
+    position: absolute; top: var(--top-h); right: 0; bottom: 0;
+    width: 240px; z-index: 28;
+    background: var(--bg-panel);
+    border-left: 1px solid var(--border);
+    box-shadow: var(--shadow-pop);
+    transform: translateX(105%);
+    transition: transform .2s ease;
+  }
+  .layout-l2.toc-on .toc { transform: translateX(0); }
+  .toc h3 {
+    margin: 0 0 8px; font-size: 11px; font-weight: 700;
+    letter-spacing: .06em; text-transform: uppercase; color: var(--text-4);
+  }
+  .toc a {
+    display: block; padding: 5px 8px;
+    border-radius: 6px;
+    font-size: 12.5px; color: var(--text-3);
+    text-decoration: none;
+  }
+  .toc a:hover { background: var(--bg-hover); color: var(--text-1); }
+  .toc a.on { background: var(--bg-sel); color: var(--accent-text); font-weight: 600; }
+  .toc a.lv2 { padding-left: 18px; }
+
+  /* ── 浮动状态条（L2/L3） ────────────────────────────── */
+  .float-status {
+    display: none;
+    position: absolute; right: 16px; bottom: 14px;
+    z-index: 20;
+    height: 28px; padding: 0 12px;
+    align-items: center; gap: 12px;
+    border-radius: 999px;
+    background: var(--glass);
+    backdrop-filter: blur(12px);
+    border: 1px solid var(--border);
+    box-shadow: var(--shadow-card);
+    font-size: 11px; color: var(--text-3);
+  }
+  .layout-l2 .float-status,
+  .layout-l3 .float-status { display: inline-flex; }
+  .float-status .ok { color: #2e7b54; font-weight: 600; }
+  .theme-b .float-status .ok { color: #6cc392; }
+
+  /* ── 常驻状态栏（L1） ───────────────────────────────── */
+  .statusbar {
+    grid-column: 1 / -1; grid-row: 3;
+    display: flex; align-items: center; gap: 14px;
+    padding: 0 14px;
+    background: var(--bg-side);
+    border-top: 1px solid var(--border-soft);
+    font-size: 11px; color: var(--text-3);
+  }
+  .app:not(.layout-l1) .statusbar { display: none; }
+  .app.layout-l1 { --status-h: 28px; }
+
+  /* ── 边缘热区指示（L3 提示可点开） ──────────────────── */
+  .hotzone {
+    display: none;
+    position: absolute; top: var(--top-h); bottom: 28px; left: 0;
+    width: 6px; z-index: 15;
+    background: linear-gradient(90deg, color-mix(in srgb, var(--accent) 45%, transparent), transparent);
+    opacity: 0; transition: opacity .15s;
+  }
+  .layout-l3:not(.side-on) .hotzone { display: block; opacity: .55; }
+  .hotzone-r {
+    display: none;
+    position: absolute; top: var(--top-h); bottom: 28px; right: 0;
+    width: 6px; z-index: 15;
+    background: linear-gradient(270deg, color-mix(in srgb, var(--accent) 45%, transparent), transparent);
+    opacity: 0;
+  }
+  .layout-l3:not(.toc-on) .hotzone-r,
+  .layout-l2:not(.toc-on) .hotzone-r { display: block; opacity: .55; }
+  .layout-l2:not(.side-on) .hotzone { display: block; opacity: .55; }
+
+  /* ── 说明网格 ───────────────────────────────────────── */
+  .cards {
+    max-width: 1200px; margin: 8px auto 48px; padding: 0 16px;
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px;
+  }
+  .cards article {
+    background: #fff; border: 1px solid #e2e5ea;
+    border-radius: 14px; padding: 14px 16px;
+    cursor: pointer;
+    transition: border .15s, box-shadow .15s, transform .15s;
+  }
+  .cards article:hover { border-color: #b8bec8; transform: translateY(-1px); box-shadow: 0 10px 24px -10px rgba(0,0,0,.12); }
+  .cards article.on { border-color: #3d7eff; box-shadow: 0 0 0 3px rgba(61,126,255,.16); }
+  .cards h4 { margin: 0 0 6px; font-size: 13px; font-weight: 700; }
+  .cards p { margin: 0; font-size: 12px; color: #5a6169; line-height: 1.5; }
+  .cards .tag {
+    display: inline-block; margin-top: 8px;
+    font-size: 10px; font-weight: 700; letter-spacing: .04em;
+    padding: 2px 7px; border-radius: 999px;
+    background: #eef2ff; color: #3d5afe;
+  }
+  .cards .tag.rec { background: #fff0e6; color: #e85d00; }
+
+  .theme-row {
+    max-width: 1200px; margin: 0 auto 6px; padding: 0 16px;
+    display: flex; flex-wrap: wrap; gap: 10px; align-items: center;
+  }
+
+  @media (max-width: 900px) {
+    .cards { grid-template-columns: 1fr; }
+    .app { border-radius: 12px; }
+  }
+</style>
+</head>
+<body>
+<p data-aigc-mark="1" style="margin:0 0 8px;font-size:10px;line-height:1.3;color:#6b6560;font-weight:400;">AI生成</p>
+
+
+<div class="top">
+  <div>
+    <h1>布局 × 主题 综合预览</h1>
+    <div class="sub">依据 ui-design-inputs/PROMPT.md · 最大化可视 + 可收起/悬浮 · 保留 A/B/C 三套色</div>
+  </div>
+  <div class="grow"></div>
+
+  <div class="seg" id="layoutSeg" title="布局">
+    <button data-l="l1">L1 思源式常驻</button>
+    <button data-l="l2" class="on">L2 极简悬浮（荐）</button>
+    <button data-l="l3">L3 边缘热区</button>
+  </div>
+
+  <div class="seg" id="themeSeg" title="主题">
+    <button data-t="a" class="on">A 亮·蓝</button>
+    <button data-t="c">C 亮·橙</button>
+    <button data-t="b">B 暗·紫</button>
+  </div>
+
+  <div class="seg" id="sideSeg" title="目录栏">
+    <button data-s="on">目录开</button>
+    <button data-s="off" class="on">目录收</button>
+  </div>
+
+  <div class="seg" id="tocSeg" title="大纲">
+    <button data-o="on">大纲开</button>
+    <button data-o="off" class="on">大纲收</button>
+  </div>
+</div>
+
+<div class="hintbar">
+  <span class="chip"><span class="dot"></span> 点按钮或下方布局卡切换</span>
+  <span class="chip">内容区宽度 <b id="spacePct">—</b></span>
+  <span class="chip warn"><span class="dot"></span> L2/L3：侧栏与大纲为<strong style="margin:0 2px">悬浮覆盖</strong>，不挤压正文</span>
+  <span class="chip">状态栏：L1 常驻底栏 · L2/L3 右下胶囊</span>
+</div>
+
+<div class="stage">
+  <div class="app layout-l2 theme-a" id="app">
+    <!-- 顶栏 -->
+    <div class="titlebar">
+      <div class="traffic"><i></i><i></i><i></i></div>
+      <div class="tb-brand"><span class="mark"></span> Lake</div>
+      <button class="tb-btn" id="btnSide" title="目录">☰</button>
+      <button class="tb-btn" id="btnToc" title="大纲">☰</button>
+      <div class="crumb">产品笔记 · <strong>UI 重构方向</strong></div>
+      <div class="tb-right">
+        <span class="pill accent">● 已同步</span>
+        <span class="pill">⌕</span>
+        <span class="pill warm">✦</span>
+      </div>
+    </div>
+
+    <!-- 活动栏 L1 only -->
+    <div class="rail">
+      <div class="rail-btn on">◈</div>
+      <div class="rail-btn">☰</div>
+      <div class="rail-btn">↺</div>
+      <div class="rail-sp"></div>
+      <div class="rail-btn">⚙</div>
+    </div>
+
+    <!-- 侧栏 -->
+    <div class="side">
+      <div class="side-head">
+        <h2>资料库</h2>
+        <button class="mini">⟳</button>
+        <button class="mini">＋</button>
+        <button class="mini" id="closeSide">✕</button>
+      </div>
+      <div class="side-body">
+        <div class="nav on"><span class="ico">◈</span> 资料库</div>
+        <div class="nav"><span class="ico">☰</span> 小记</div>
+        <div class="nav"><span class="ico">↺</span> 回收站</div>
+        <div class="side-label">知识库</div>
+        <div class="nav folder"><span class="ico">▾</span> 产品笔记</div>
+        <div class="nav child on">UI 重构方向</div>
+        <div class="nav child">同步协议备忘</div>
+        <div class="nav child">小记规格</div>
+        <div class="nav folder"><span class="ico">▾</span> 技术库</div>
+        <div class="nav child">Lake 内核契约</div>
+        <div class="nav child">S3 GC 设计</div>
+        <div class="nav folder"><span class="ico">▸</span> 随手存</div>
+        <div class="nav folder"><span class="ico">▸</span> 归档 2025</div>
+      </div>
+    </div>
+
+    <!-- 主区 -->
+    <div class="main">
+      <div class="tabs">
+        <div class="tab on"><span class="dirty"></span> UI 重构方向</div>
+        <div class="tab">同步协议备忘</div>
+        <div class="tab">小记规格</div>
+      </div>
+      <div class="doc">
+        <div class="doc-inner">
+          <div class="space-meter">
+            <span>可视内容宽度</span>
+            <div class="bar"><i id="spaceBar" style="--p:92%"></i></div>
+            <b id="spaceLabel">92%</b>
+          </div>
+          <h1>最大化可视空间</h1>
+          <div class="meta">设计目标 · 全部边栏可收起 · 默认悬浮弹出 · 阅读优先</div>
+          <div class="callout">
+            <strong>L2 推荐</strong>　顶栏仅 36px 玻璃条；目录 / 大纲 / 状态全部悬浮或胶囊，正文铺满。
+            这是对你「可视空间最大化」最直接的布局；L1 作对照，L3 介于两者之间（可钉住推开）。
+          </div>
+          <h2>三套布局怎么选</h2>
+          <ul>
+            <li><strong>L1 思源式常驻</strong> —— 与当前产品一致：活动栏 + 目录 + 正文 + 底栏；收起目录即变宽。稳妥、迁移成本最低。</li>
+            <li><strong>L2 极简悬浮（推荐）</strong> —— 无常驻侧轨；目录/大纲为<strong>覆盖层</strong>，状态栏变右下胶囊。正文宽度最大（约 92–100%）。</li>
+            <li><strong>L3 边缘热区</strong> —— 默认全宽；左缘 hover/点击滑出目录，可「钉住」推开内容；大纲同理。接近 VS Code / Obsidian。</li>
+          </ul>
+          <h2>主题映射（A/B/C 全保留）</h2>
+          <ul>
+            <li><strong>A 亮·蓝</strong> —— MiMo Desktop 气质，近白侧栏 + 蓝点缀 → 默认浅色</li>
+            <li><strong>C 亮·橙</strong> —— 同结构换 MiMo 橙主色，更有笔记记忆点 → 浅色备选</li>
+            <li><strong>B 暗·紫</strong> —— Obsidian 向深色，分层 + 1px 描边，避免糊成一团 → <strong>深色模式基线</strong></li>
+          </ul>
+          <p>风格基调遵循设计包：「清透质感 · 轻玻璃只在外壳/浮层 · 正文区不用毛玻璃 · 留白拉开层级」。</p>
+        </div>
+      </div>
+
+      <!-- 浮动状态胶囊 -->
+      <div class="float-status">
+        <span class="ok">● 已同步</span>
+        <span>1,284 字</span>
+        <span>3 图</span>
+      </div>
+
+      <!-- 边缘热区示意 -->
+      <div class="hotzone" id="hzL" title="点此打开目录"></div>
+      <div class="hotzone-r" id="hzR" title="点此打开大纲"></div>
+    </div>
+
+    <!-- 大纲 -->
+    <div class="toc">
+      <h3>大纲</h3>
+      <a href="#" class="on">最大化可视空间</a>
+      <a href="#" class="lv2">三套布局怎么选</a>
+      <a href="#" class="lv2">主题映射</a>
+      <a href="#" class="lv2">信息架构不变</a>
+      <a href="#">下一步</a>
+    </div>
+
+    <!-- L1 状态栏 -->
+    <div class="statusbar">
+      <span style="color:#2e7b54">● 已同步</span>
+      <span>1,284 字</span>
+      <span>3 张图</span>
+      <span style="margin-left:auto">L1 · 常驻状态栏</span>
+    </div>
+  </div>
+</div>
+
+<div class="cards" id="layoutCards">
+  <article data-l="l1">
+    <h4>L1 · 思源式常驻</h4>
+    <p>活动栏 48 + 目录 236 + 正文 + 底栏 28。与现网一致，迁移最稳；收起目录后正文约 <b>~78%</b>。</p>
+    <span class="tag">对照基线</span>
+  </article>
+  <article data-l="l2" class="on">
+    <h4>L2 · 极简悬浮 · 推荐</h4>
+    <p>顶栏 36 玻璃；无常驻侧轨；目录/大纲悬浮覆盖；状态右下胶囊。正文默认约 <b>~92–100%</b>，最符合「最大化可视」。</p>
+    <span class="tag rec">最贴需求</span>
+  </article>
+  <article data-l="l3">
+    <h4>L3 · 边缘热区</h4>
+    <p>默认全宽 + 左右 6px 热区；点开可悬浮或<strong>钉住推开</strong>。接近 Obsidian/VS Code，交互最「工具感」。</p>
+    <span class="tag">可钉住</span>
+  </article>
+</div>
+
+<script>
+  const app = document.getElementById('app');
+  const state = { layout: 'l2', theme: 'a', side: 'off', toc: 'off', dock: false };
+
+  function pct() {
+    // 量内容区相对 app 宽度
+    const aw = app.clientWidth;
+    const main = app.querySelector('.main');
+    const mw = main.getBoundingClientRect().width;
+    const p = Math.round((mw / aw) * 100);
+    document.getElementById('spacePct').textContent = p + '%';
+    document.getElementById('spaceLabel').textContent = p + '%';
+    document.getElementById('spaceBar').style.setProperty('--p', p + '%');
+  }
+
+  function apply() {
+    app.className = 'app layout-' + state.layout + ' theme-' + state.theme;
+    // side/toc
+    if (state.layout === 'l1') {
+      app.classList.toggle('side-off', state.side === 'off');
+      app.classList.toggle('toc-on', state.toc === 'on');
+    } else if (state.layout === 'l2') {
+      app.classList.toggle('side-on', state.side === 'on');
+      app.classList.toggle('toc-on', state.toc === 'on');
+    } else {
+      app.classList.toggle('side-on', state.side === 'on');
+      app.classList.toggle('toc-on', state.toc === 'on');
+      app.classList.toggle('side-docked', state.dock && state.side === 'on');
+    }
+
+    // seg active
+    const setOn = (id, key, val) => {
+      document.querySelectorAll('#' + id + ' button').forEach(b => {
+        const v = b.dataset[key];
+        b.classList.toggle('on', v === val || (key === 's' && ((v === 'on' && val === 'on') || (v === 'off' && val === 'off'))));
+      });
+    };
+    setOn('layoutSeg', 'l', state.layout);
+    setOn('themeSeg', 't', state.theme);
+    setOn('sideSeg', 's', state.side);
+    setOn('tocSeg', 'o', state.toc);
+
+    document.querySelectorAll('#layoutCards article').forEach(a => {
+      a.classList.toggle('on', a.dataset.l === state.layout);
+    });
+
+    requestAnimationFrame(pct);
+  }
+
+  document.getElementById('layoutSeg').onclick = e => {
+    const b = e.target.closest('button[data-l]'); if (!b) return;
+    state.layout = b.dataset.l;
+    // L1 默认打开目录更合理
+    if (state.layout === 'l1') { state.side = 'on'; state.toc = 'off'; }
+    if (state.layout === 'l2') { state.side = 'off'; state.toc = 'off'; state.dock = false; }
+    if (state.layout === 'l3') { state.side = 'off'; state.toc = 'off'; }
+    apply();
+  };
+  document.getElementById('themeSeg').onclick = e => {
+    const b = e.target.closest('button[data-t]'); if (!b) return;
+    state.theme = b.dataset.t; apply();
+  };
+  document.getElementById('sideSeg').onclick = e => {
+    const b = e.target.closest('button[data-s]'); if (!b) return;
+    state.side = b.dataset.s; apply();
+  };
+  document.getElementById('tocSeg').onclick = e => {
+    const b = e.target.closest('button[data-o]'); if (!b) return;
+    state.toc = b.dataset.o; apply();
+  };
+  document.getElementById('layoutCards').onclick = e => {
+    const a = e.target.closest('article[data-l]'); if (!a) return;
+    state.layout = a.dataset.l;
+    if (state.layout === 'l1') { state.side = 'on'; state.toc = 'off'; }
+    if (state.layout === 'l2') { state.side = 'off'; state.toc = 'off'; state.dock = false; }
+    if (state.layout === 'l3') { state.side = 'off'; state.toc = 'off'; }
+    apply();
+  };
+
+  document.getElementById('btnSide').onclick = () => {
+    state.side = state.side === 'on' ? 'off' : 'on'; apply();
+  };
+  document.getElementById('btnToc').onclick = () => {
+    state.toc = state.toc === 'on' ? 'off' : 'on'; apply();
+  };
+  document.getElementById('closeSide').onclick = () => {
+    state.side = 'off'; apply();
+  };
+  document.getElementById('hzL').onclick = () => { state.side = 'on'; apply(); };
+  document.getElementById('hzR').onclick = () => { state.toc = 'on'; apply(); };
+
+  // L3：双击侧栏头部 = 钉住/取消钉住
+  document.querySelector('.side-head').ondblclick = () => {
+    if (state.layout !== 'l3') return;
+    state.dock = !state.dock; apply();
+  };
+
+  apply();
+  window.addEventListener('resize', pct);
+</script>
+</body>
+</html>

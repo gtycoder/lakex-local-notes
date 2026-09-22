@@ -4,9 +4,8 @@ import { resolveScrollNode } from "../features/editor/lakeRuntime";
 import type { TabInfo } from "../features/editor/MultiTabEditor";
 import type { OutlineMode } from "../features/outline/OutlineController";
 import { getOutlineTab } from "../features/outline/registry";
-import { DOCK_GUTTER } from "../lib/layoutMetrics";
-import { OUTLINE_HOVER_TRIGGER_WIDTH, OUTLINE_SCROLLBAR_CLEARANCE } from "../features/outline/outlineInteraction";
-import { treeNodePath, OUTLINE_COLLAPSED_WIDTH, type DesktopWorkspace, type OpenTab } from "../desktop/desktopTypes";
+import { OUTLINE_HOVER_TRIGGER_WIDTH } from "../features/outline/outlineInteraction";
+import { treeNodePath, type DesktopWorkspace, type OpenTab } from "../desktop/desktopTypes";
 import type { NoteSummary, TreeNode } from "../lib/types";
 import type { SidebarMode } from "../components/Sidebar";
 
@@ -111,11 +110,11 @@ export function deriveDesktopView(input: DesktopViewInput) {
     "--sidebar-grid-w": sidebarMode === "docked" ? `${sidebarWidth}px` : "0px",
     "--outline-sidebar-width": `${outlineSidebarWidth}px`,
     "--outline-hover-trigger-width": `${OUTLINE_HOVER_TRIGGER_WIDTH}px`,
-    "--outline-scrollbar-clearance": `${OUTLINE_SCROLLBAR_CLEARANCE}px`,
+    // 04 §4：收起**不占列**（整边触发悬浮）；固定只占面板宽（无右侧固定轨）
     "--outline-grid-w": outlineVisible
       ? effectiveOutlineMode === "docked"
-        ? `${outlineSidebarWidth + OUTLINE_COLLAPSED_WIDTH + DOCK_GUTTER}px`
-        : `${OUTLINE_COLLAPSED_WIDTH}px`
+        ? `${outlineSidebarWidth}px`
+        : "0px"
       : "0px",
   } as CSSProperties;
 

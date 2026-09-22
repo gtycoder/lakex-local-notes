@@ -4,7 +4,7 @@ import { OUTLINE_HOVER_HIDE_DELAY_MS, OUTLINE_HOVER_TRIGGER_WIDTH, OUTLINE_SCROL
 describe("outline hover hitbox contract", () => {
   it("keeps the trigger narrower than the editor scrollbar track", () => {
     expect(OUTLINE_HOVER_TRIGGER_WIDTH).toBeLessThanOrEqual(25);
-    expect(OUTLINE_HOVER_TRIGGER_WIDTH).toBeGreaterThanOrEqual(24);
+    expect(OUTLINE_HOVER_TRIGGER_WIDTH).toBeGreaterThanOrEqual(14);
   });
 
   it("keeps the editor scrollbar outside the floating panel", () => {

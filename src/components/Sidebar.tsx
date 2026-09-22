@@ -1,6 +1,6 @@
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent } from "react";
 import { createPortal } from "react-dom";
-import { Book, ChevronRight, ChevronsDownUp, Copy, FilePlus, File, Filter, Focus, Folder, FolderOpen, FolderPlus, History, Info, MoreVertical, Pencil, Plus, RefreshCw, Search, Trash, X } from "lucide-react";
+import { Book, ChevronRight, ChevronsDownUp, Copy, FilePlus, File, Filter, Focus, Folder, FolderOpen, FolderPlus, History, Info, MoreVertical, Pencil, Pin, Plus, RefreshCw, Search, Trash, X } from "lucide-react";
 import { DockFilterRow, useDockFilter } from "./DockFilterBar";
 import { LAKE_EMOJIS } from "../lib/lakeEmojis";
 import { LAKE_EMOJI_GROUPS } from "../lib/lakeEmojiGroups";
@@ -53,6 +53,9 @@ interface SidebarProps {
   pendingRenameId: string | null;
   onPendingRenameConsumed: () => void;
   onPreviewEnter: () => void;
+  /** 固定/取消固定目录栏（📌；S1 后由面板头提供，不再依赖活动栏） */
+  onToggleDock?: () => void;
+  docked?: boolean;
   onPreviewLeave: () => void;
   onResizeActiveChange: (active: boolean) => void;
   onWidthChange: (width: number) => void;
@@ -637,6 +640,15 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
       <div className="sidebar-toolbar-row desktop-only">
         <span className="sidebar-toolbar-title">目录</span>
         <div className="list-heading">
+        {props.onToggleDock && (
+          <button
+            className={`dock-icon-btn pin-btn${props.docked ? " is-active" : ""}`}
+            onClick={props.onToggleDock}
+            title={props.docked ? "取消固定目录（改悬浮）" : "固定目录"}
+            aria-label={props.docked ? "取消固定目录" : "固定目录"}
+            aria-pressed={!!props.docked}
+          ><Pin size={14} /></button>
+        )}
         <button className="dock-icon-btn refresh-btn" onClick={() => void refreshTree()} title="刷新目录" aria-label="刷新目录" disabled={refreshing}><RefreshCw size={14} className={refreshing ? "spin" : undefined} /></button>
         <button className={`dock-icon-btn filter-btn${filter.active ? " is-active" : ""}`} onClick={filter.toggle}
           title="筛选目录" aria-label="筛选目录" aria-pressed={filter.open}><Filter size={14} /></button>

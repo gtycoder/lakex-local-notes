@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState, useSyncExternalStore, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent } from "react";
-import { ChevronsDownUp, ChevronsUpDown, Filter, Focus, List } from "lucide-react";
+import { ChevronsDownUp, ChevronsUpDown, Filter, Focus, Pin } from "lucide-react";
 import { ExpandLevelIcon } from "./ExpandLevelIcon";
 import { DockFilterRow, useDockFilter } from "../../components/DockFilterBar";
 import type { OutlineMode } from "./OutlineController";
 import { OutlineList } from "./OutlineList";
+import { OutlineMinimap } from "./OutlineMinimap";
 import { getOutlineTab, getOutlineTabsVersion, subscribeOutlineTabs } from "./registry";
 import { OUTLINE_HOVER_HIDE_DELAY_MS } from "./outlineInteraction";
 import { OUTLINE_SIDEBAR_DEFAULT_WIDTH } from "../../desktop/desktopTypes";
@@ -224,34 +225,35 @@ export function OutlineSidebar({
       className={`outline-sidebar outline-sidebar--${mode}${railHovered ? " outline-sidebar--hovered" : ""}`}
       onPointerEnter={cancelHoverHide}
     >
-      {/* 右侧 rail 顶部图标按钮：收起/固定大纲切换。 */}
+      {/* 整边触发（04 §4）：上到下全高，hover 弹出；📌 在面板头固定；minimap 按条目画线 */}
+      <div
+        className="outline-sidebar__trigger"
+        onPointerEnter={() => { cancelHoverHide(); if (mode === "collapsed") setRailHovered(true); }}
+        onPointerLeave={scheduleHoverHide}
+        title="大纲：悬停展开"
+      >
+        {controller && (
+          <OutlineMinimap
+            items={controller.getVisibleItems()}
+            selectedId={controller.getSelectedId()}
+          />
+        )}
+      </div>
       <div className="outline-sidebar__bridge" onPointerEnter={cancelHoverHide} onPointerLeave={scheduleHoverHide} aria-hidden="true" />
-      <nav className="outline-sidebar__rail" aria-label="右侧工具栏">
-        <button
-          type="button"
-          className={`outline-sidebar__activity-button${mode === "docked" ? " active" : ""}`}
-          title={mode === "collapsed" ? "固定大纲" : "取消固定大纲"}
-          aria-label={mode === "collapsed" ? "固定大纲" : "取消固定大纲，改为悬停"}
-          aria-pressed={mode === "docked"}
-          onClick={handleOutlineButtonClick}
-        >
-          <List size={16} />
-        </button>
-        <div className="outline-sidebar__rail-fill" />
-        {/* 独立触发区：只有右侧窄条感应鼠标进入（rail 视觉宽度与其解耦）。 */}
-        <div
-          className="outline-sidebar__trigger"
-          onPointerEnter={() => { cancelHoverHide(); if (mode === "collapsed") setRailHovered(true); }}
-        />
-      </nav>
 
       <div className="outline-sidebar__content" onPointerEnter={() => { cancelHoverHide(); if (mode === "collapsed") setRailHovered(true); }}>
-        {/* 头部与目录栏（Sidebar.tsx）同款结构：复用 .sidebar-toolbar-row / .sidebar-toolbar-title
-            / .list-heading，避免两栏头部各写一套视觉（此前大纲栏无标题、内边距/分隔线也不同，
-            与整体明显不一致）。260916 统一。 */}
         <div className="sidebar-toolbar-row outline-sidebar__header">
           <span className="sidebar-toolbar-title">大纲</span>
           <div className="list-heading">
+          <button
+            className={`dock-icon-btn pin-btn${mode === "docked" ? " is-active" : ""}`}
+            title={mode === "collapsed" ? "固定大纲" : "取消固定大纲"}
+            aria-label={mode === "collapsed" ? "固定大纲" : "取消固定大纲，改为悬停"}
+            aria-pressed={mode === "docked"}
+            onClick={handleOutlineButtonClick}
+          >
+            <Pin size={14} />
+          </button>
           <button
             className={`dock-icon-btn filter-btn${filter.active ? " is-active" : ""}`}
             title="筛选大纲"

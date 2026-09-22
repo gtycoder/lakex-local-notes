@@ -85,8 +85,10 @@ function TrashTreeRow({ item, items, selectedId, onSelect, onRestore, onPurge, t
   );
 }
 
-export function TrashPanel({ open, onClose, onChanged, onRestored }: {
+export function TrashPanel({ open, embed = false, onClose, onChanged, onRestored }: {
   open: boolean;
+  /** 成页嵌入工作区（空间形态）：布局与弹窗一致，只去掉遮罩/拖拽壳。 */
+  embed?: boolean;
   onClose: () => void;
   /** 彻底删除/清空后通知外部清理与文档关联的本地草稿。 */
   onChanged?: () => void;
@@ -261,84 +263,103 @@ export function TrashPanel({ open, onClose, onChanged, onRestored }: {
   const canPreview = !!selected?.noteId;
 
   if (!open) return null;
+
+  /** 主体（弹窗 / 成页共用；布局不改） */
+  const body = (
+    <>
+      <header className={embed ? "trash-space-header" : "floating-dialog-header"} {...(embed ? {} : { onPointerDown: floating.startDrag })}>
+        <div className="panel-title">
+          <Trash size={17} />
+          <h2>回收站</h2>
+        </div>
+        <div className="panel-actions">
+          {items.length > 0 && (
+            <button className="b3-button b3-button--outline ft__error" onClick={() => void empty()}>
+              <Trash size={14} /> 清空
+            </button>
+          )}
+          {!embed && (
+            <button className="ln-close" onClick={onClose} aria-label="关闭"><X size={16} /></button>
+          )}
+        </div>
+      </header>
+      <div className="ln-tabs">
+        <div className="ln-tabs__track" role="tablist" aria-label="回收站">
+          <button role="tab" aria-selected={tab === "docs"} className={`ln-tabs__item${tab === "docs" ? " is-active" : ""}`} onClick={() => setTab("docs")}>文档</button>
+          <button role="tab" aria-selected={tab === "quick"} className={`ln-tabs__item${tab === "quick" ? " is-active" : ""}`} onClick={() => setTab("quick")}>小记</button>
+        </div>
+      </div>
+      <p className="trash-panel-hint">回收站随云同步到所有设备。被删文档下的分组/文档随父级联（可展开查看），恢复仅对顶层生效（整棵恢复），子项可单独彻底删除。</p>
+      {trashAutoPurgeDays != null && trashAutoPurgeDays > 0 && tab === "docs" && items.some((it) => {
+        const d = it.deletedAt ? trashDaysUntilPurge(it.deletedAt, trashAutoPurgeDays) : null;
+        return d != null && d <= 7;
+      }) && (
+        <p className="trash-panel-notice">
+          开启自动过期（{trashAutoPurgeDays} 天）：部分条目将在 7 天内自动彻底删除（含云端）。需要保留请在到期前恢复。
+        </p>
+      )}
+      {error && <div className="trash-error">{error}</div>}
+      <div className="history-split" style={{ display: tab === "docs" ? undefined : "none" }}>
+        <div className="history-list b3-list b3-list--background history-list-left">
+          {loading && <div className="ln-empty">加载中…</div>}
+          {!loading && items.length === 0 && <div className="ln-empty">回收站是空的</div>}
+          {!loading && roots.map((item) => (
+            <TrashTreeRow key={item.id} item={item} items={items} selectedId={selected?.id ?? null}
+              trashAutoPurgeDays={trashAutoPurgeDays}
+              onSelect={(it) => void preview(it)} onRestore={(id) => void restore(id)} onPurge={(id) => void purge(id)} />
+          ))}
+        </div>
+        <div className="history-preview-inline trash-preview">
+          {previewing ? (
+            <div className="ln-empty">正在加载资源…</div>
+          ) : selected ? (
+            <>
+              <div className="history-preview-inline-title">{selected.title}</div>
+              {canPreview ? (
+                <div className="trash-preview-viewer" ref={previewHostRef} />
+              ) : (
+                <div className="ln-empty">该节点无可预览内容（目录或正文已删）</div>
+              )}
+            </>
+          ) : (
+            <div className="ln-empty">选择左侧文档查看内容</div>
+          )}
+        </div>
+      </div>
+      {tab === "quick" && (
+        <div className="history-list b3-list b3-list--background">
+          {quickItems.length === 0 && <div className="ln-empty">回收站是空的</div>}
+          {quickItems.map((item) => (
+            <div className="b3-list-item b3-list-item--hide-action ln-row2" key={item.id}>
+              <span className="b3-list-item__graphic"><File size={14} /></span>
+              <div className="b3-list-item__text ln-row2__main">
+                <span className="ln-row2__title">小记</span>
+                <span className="ln-row2__meta">{new Date(item.deletedAt).toLocaleString()}</span>
+              </div>
+              <span className="fn__space" />
+              <button className="b3-list-item__action" title="恢复" aria-label="恢复" onClick={() => void restoreQuick(item.id)}><RotateCcw size={14} /></button>
+              <button className="b3-list-item__action b3-list-item__action--warning" title="彻底删除" aria-label="彻底删除" onClick={() => void purgeQuick(item.id)}><Trash size={14} /></button>
+            </div>
+          ))}
+        </div>
+      )}
+      {!embed && <DialogResizeHandles onResize={floating.startResize} />}
+    </>
+  );
+
+  if (embed) {
+    // 成页空间（对齐小记 quick-notes-pane）：**不要**挂 floating-dialog（那是弹窗壳）
+    return (
+      <section className="trash-space-pane" role="region" aria-label="回收站">
+        {body}
+      </section>
+    );
+  }
+
   return createPortal(
     <div className="trash-panel-backdrop" onMouseDown={(e) => { if (e.target === e.currentTarget && !floating.interactionRef.current) onClose(); }}>
       <section ref={floating.panelRef} className="floating-dialog trash-panel" style={floating.panelStyle} role="dialog" aria-modal="true">
-        <header className="floating-dialog-header" onPointerDown={floating.startDrag}>
-          <div className="panel-title">
-            <Trash size={17} />
-            <h2>回收站</h2>
-          </div>
-          <div className="panel-actions">
-            {items.length > 0 && (
-              <button className="b3-button b3-button--outline ft__error" onClick={() => void empty()}>
-                <Trash size={14} /> 清空
-              </button>
-            )}
-            <button className="ln-close" onClick={onClose} aria-label="关闭"><X size={16} /></button>
-          </div>
-        </header>
-        <div className="ln-tabs">
-          <div className="ln-tabs__track" role="tablist" aria-label="回收站">
-            <button role="tab" aria-selected={tab === "docs"} className={`ln-tabs__item${tab === "docs" ? " is-active" : ""}`} onClick={() => setTab("docs")}>文档</button>
-            <button role="tab" aria-selected={tab === "quick"} className={`ln-tabs__item${tab === "quick" ? " is-active" : ""}`} onClick={() => setTab("quick")}>小记</button>
-          </div>
-        </div>
-        <p className="trash-panel-hint">回收站随云同步到所有设备。被删文档下的分组/文档随父级联（可展开查看），恢复仅对顶层生效（整棵恢复），子项可单独彻底删除。</p>
-        {trashAutoPurgeDays != null && trashAutoPurgeDays > 0 && tab === "docs" && items.some((it) => {
-          const d = it.deletedAt ? trashDaysUntilPurge(it.deletedAt, trashAutoPurgeDays) : null;
-          return d != null && d <= 7;
-        }) && (
-          <p className="trash-panel-notice">
-            开启自动过期（{trashAutoPurgeDays} 天）：部分条目将在 7 天内自动彻底删除（含云端）。需要保留请在到期前恢复。
-          </p>
-        )}
-        {error && <div className="trash-error">{error}</div>}
-        <div className="history-split" style={{ display: tab === "docs" ? undefined : "none" }}>
-          <div className="history-list b3-list b3-list--background history-list-left">
-            {loading && <div className="ln-empty">加载中…</div>}
-            {!loading && items.length === 0 && <div className="ln-empty">回收站是空的</div>}
-            {!loading && roots.map((item) => (
-              <TrashTreeRow key={item.id} item={item} items={items} selectedId={selected?.id ?? null}
-                trashAutoPurgeDays={trashAutoPurgeDays}
-                onSelect={(it) => void preview(it)} onRestore={(id) => void restore(id)} onPurge={(id) => void purge(id)} />
-            ))}
-          </div>
-          <div className="history-preview-inline trash-preview">
-            {previewing ? (
-              <div className="ln-empty">正在加载资源…</div>
-            ) : selected ? (
-              <>
-                <div className="history-preview-inline-title">{selected.title}</div>
-                {canPreview ? (
-                  <div className="trash-preview-viewer" ref={previewHostRef} />
-                ) : (
-                  <div className="ln-empty">该节点无可预览内容（目录或正文已删）</div>
-                )}
-              </>
-            ) : (
-              <div className="ln-empty">选择左侧文档查看内容</div>
-            )}
-          </div>
-        </div>
-        {tab === "quick" && (
-          <div className="history-list b3-list b3-list--background">
-            {quickItems.length === 0 && <div className="ln-empty">回收站是空的</div>}
-            {quickItems.map((item) => (
-              <div className="b3-list-item b3-list-item--hide-action ln-row2" key={item.id}>
-                <span className="b3-list-item__graphic"><File size={14} /></span>
-                <div className="b3-list-item__text ln-row2__main">
-                  <span className="ln-row2__title">小记</span>
-                  <span className="ln-row2__meta">{new Date(item.deletedAt).toLocaleString()}</span>
-                </div>
-                <span className="fn__space" />
-                <button className="b3-list-item__action" title="恢复" aria-label="恢复" onClick={() => void restoreQuick(item.id)}><RotateCcw size={14} /></button>
-                <button className="b3-list-item__action b3-list-item__action--warning" title="彻底删除" aria-label="彻底删除" onClick={() => void purgeQuick(item.id)}><Trash size={14} /></button>
-              </div>
-            ))}
-          </div>
-        )}
-        <DialogResizeHandles onResize={floating.startResize} />
+        {body}
       </section>
     </div>,
     document.body
