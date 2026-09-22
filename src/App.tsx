@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { LoaderCircle, PanelLeft } from "lucide-react";
 import { Sidebar } from "./components/Sidebar";
+import { SIDEBAR_CORRIDOR_SELECTORS, isInSidebarCorridor, reduceHover, type HoverEffect, type HoverEvent } from "./components/sidebarHoverMachine";
 import type { QuickNotesWorkspaceHandle } from "./components/QuickNotesWorkspace";
 import { useWindowShortcuts } from "./hooks/useWindowShortcuts";
 import { useTopMenus } from "./hooks/useTopMenus";
@@ -282,7 +283,8 @@ export function App() {
     const onPointerMove = (event: PointerEvent) => {
       if (sidebarResizingRef.current) return;
       // 热区（0..8px）也算"留在目录里"：贴边面板虽然会盖住它，但鼠标在面板内边缘来回时不该被自动收起。
-      if (isInside(event.clientX, event.clientY, ".activity-rail") || isInside(event.clientX, event.clientY, ".sidebar") || isInside(event.clientX, event.clientY, ".edge-hotzone")) {
+      const inCorridor = isInSidebarCorridor(SIDEBAR_CORRIDOR_SELECTORS.map((selector) => isInside(event.clientX, event.clientY, selector)));
+      if (inCorridor) {
         clearSidebarPreviewTimer();
       } else {
         hideSidebarPreview();
@@ -324,6 +326,24 @@ export function App() {
     }, EDGE_HANDLE_DWELL_MS);
   }, [cancelEdgePreview, showSidebarPreview]);
   useEffect(() => () => cancelEdgePreview(), [cancelEdgePreview]);
+  // W5：把手相位机（纯决策在 ./components/sidebarHoverMachine；相位从 DOM/定时器真实来源读取，不额外持有 state）
+  const edgeHandleShown = useCallback(() => Boolean(edgeHotzoneRef.current?.classList.contains("is-active")), []);
+  const edgeDwellArmed = useCallback(() => edgePreviewTimer.current !== null, []);
+  const applyEdgeEffects = useCallback((effects: HoverEffect[], clientY: number) => {
+    for (const effect of effects) {
+      if (effect === "showHandle") showEdgeHandle(clientY);
+      else if (effect === "hideHandle") hideEdgeHandle();
+      else if (effect === "armDwell") armEdgePreview();
+      else if (effect === "cancelDwell") cancelEdgePreview();
+      else if (effect === "showPreview") showSidebarPreview();
+      else if (effect === "hidePreview") hideSidebarPreview();
+      else if (effect === "toggleDock") toggleSidebarDock();
+    }
+  }, [showEdgeHandle, hideEdgeHandle, armEdgePreview, cancelEdgePreview, showSidebarPreview, hideSidebarPreview, toggleSidebarDock]);
+  const dispatchEdge = useCallback((event: HoverEvent, clientY: number) => {
+    const { effects } = reduceHover({ handleShown: edgeHandleShown(), dwellArmed: edgeDwellArmed() }, event);
+    applyEdgeEffects(effects, clientY);
+  }, [applyEdgeEffects, edgeHandleShown, edgeDwellArmed]);
 
   // 切换标签时，大纲数据会在编辑器注册后异步更新；期间禁止壳层 grid 动画，
   // 避免“旧列宽 → 新列宽”与正文淡入同时发生，造成 tab 切换时主区横向抖动。
@@ -393,21 +413,15 @@ export function App() {
           ref={edgeHotzoneRef}
           className="edge-hotzone edge-hotzone-l"
           title="目录：悬停展开 · 点击固定/取消"
-          onPointerEnter={(e) => { showEdgeHandle(e.clientY); armEdgePreview(); }}
-          onPointerMove={(e) => {
-            showEdgeHandle(e.clientY);
-            // 自愈：指针始终没离开热区时 pointerenter 不会再触发；只要计时没在跑就重新武装，
-            // 这样"面板被误收掉"之后继续在热区里动一下就能重新唤出。
-            if (edgePreviewTimer.current === null) armEdgePreview();
-          }}
+          onPointerEnter={(e) => dispatchEdge({ type: "enter" }, e.clientY)}
+          onPointerMove={(e) => dispatchEdge({ type: "move" }, e.clientY)}
           onPointerLeave={(e) => {
             // 把手先收（不带条件）：只要指针离开热区/把手就退场——否则移到正文后把手会赖着不走。
-            hideEdgeHandle();
             const to = e.relatedTarget as Node | null;
-            if (to && e.currentTarget.closest(".app-shell")?.contains(to)) return;
-            hideSidebarPreview();
+            const staysInShell = Boolean(to && e.currentTarget.closest(".app-shell")?.contains(to));
+            dispatchEdge({ type: "leave", staysInShell }, e.clientY);
           }}
-          onClick={() => toggleSidebarDock()}
+          onClick={() => dispatchEdge({ type: "click" }, 0)}
         >
           {/* 跟手把手：默认不可见；指针进热区才浮出。点击 = 固定/取消固定。 */}
           <span
