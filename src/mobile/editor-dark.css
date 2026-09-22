@@ -72,14 +72,14 @@
 [data-theme="dark"] .quick-note-composer,
 [data-theme="dark"] .quick-note-entry {
   background: var(--lake-panel);
-  border-color: var(--lake-border) !important;
-  box-shadow: var(--lake-shadow-popover) !important;
+  border-color: var(--lake-border);
+  box-shadow: var(--lake-shadow-popover);
 }
 [data-theme="dark"] .quick-note-composer textarea {
   background: transparent;
   color: var(--lake-text-1);
 }
 [data-theme="dark"] .quick-note-conflict {
-  background: var(--lake-status-pending-soft) !important;
-  color: var(--lake-status-pending) !important;
+  background: var(--lake-status-pending-soft);
+  color: var(--lake-status-pending);
 }

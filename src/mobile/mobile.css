@@ -351,7 +351,7 @@ body { font-family: BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino San
   .mobile-htab, .mobile-fab, .mobile-icon-btn, .mobile-drawer-item, .mobile-doc-row, .mobile-qcard,
   .bottom-bar-btn, .ln-chevron, .mobile-bottom-bar, .med-btn, .med-ins-item, .med-f-btn { transition: none; }
   .mobile-fab:active, .bottom-bar-btn:active { transform: none; }
-  .side-panel, .side-mask { transition: none !important; }
+  .side-panel.side-panel, .side-mask.side-mask { transition: none; }
 }
 
 /* ===== 设置页（左侧抽屉：非全屏 + 圆角投影 + 左滑跟手关闭） ===== */
@@ -642,14 +642,15 @@ body { font-family: BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino San
 .side-panel-body .ln-row.drop-line-after::after { bottom: -1px; }
 /* 拖拽浮层：克隆源行跟随手指。 */
 [data-drag-ghost] {
-  position: fixed !important; left: 0; top: 0; margin: 0; pointer-events: none; z-index: var(--mobile-z-drag-ghost);
+  position: fixed; left: 0; top: 0; margin: 0; pointer-events: none; z-index: var(--mobile-z-drag-ghost);
   border-radius: 8px; opacity: .9; box-shadow: 0 10px 28px rgba(16, 24, 40, .3);
-  transition: none !important; animation: none !important; will-change: transform; overflow: hidden;
+  transition: none; animation: none; will-change: transform; overflow: hidden;
 }
-.side-panel-body .ln-row.drop-parent {
-  color: var(--lake-text-2) !important;
-  background: color-mix(in srgb, var(--lake-accent) 12%, var(--lake-panel)) !important;
-  box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--lake-accent) 76%, transparent) !important;
+.side-panel-body .ln-row.drop-parent,
+.side-panel-body .ln-row.drop-parent:hover {
+  color: var(--lake-text-2);
+  background: color-mix(in srgb, var(--lake-accent) 12%, var(--lake-panel));
+  box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--lake-accent) 76%, transparent);
 }
 
 /* 拖拽中：禁掉原生手势，避免 WebView 把纵向滑动判给滚动 → 触发 touchcancel 取消拖拽（真机不重排的根因）。
