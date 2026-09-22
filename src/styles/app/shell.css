@@ -647,19 +647,33 @@ html[data-theme="dark"] .document-pane .ne-engine > ne-h6 ne-heading-content {
  * sidebar made the panel appear to grow when it was leaving. */
 .sidebar.sidebar-floating,
 .sidebar.sidebar-collapsed {
-  top: 72px;
-  bottom: 72px;
-  height: calc(100vh - 144px);
-  max-height: calc(100vh - 144px);
+  top: var(--lake-floating-panel-top);
+  bottom: var(--lake-floating-panel-bottom);
+  /* 必须给显式高度：固定定位 + height:auto 在 Chromium 下不会按 top/bottom 撑满，
+     内容会把盒子顶到视口外（实测 y=0/h=957）。旧的"半幅"也是显式 calc。 */
+  height: calc(100vh - var(--lake-floating-panel-top) - var(--lake-floating-panel-bottom));
+  max-height: none;
   overflow: hidden;
   transition: opacity 120ms ease-out, transform 120ms var(--lake-ease-standard);
 }
-/* 右侧大纲浮层与左侧目录浮层同高（对齐到 top/bottom 72），消除左右弹出高度不一致 */
+/* 右侧大纲浮层与左侧目录浮层同源同几何（令牌单一来源），消除左右弹出高度不一致 */
 .outline-sidebar--collapsed.outline-sidebar--hovered .outline-sidebar__content {
-  top: 72px;
-  bottom: 72px;
-  height: calc(100vh - 144px);
-  max-height: calc(100vh - 144px);
+  top: var(--lake-floating-panel-top);
+  bottom: var(--lake-floating-panel-bottom);
+  height: calc(100vh - var(--lake-floating-panel-top) - var(--lake-floating-panel-bottom));
+  max-height: none;
+}
+
+/* ── 非停靠态：编辑区整体右移，给左侧整边热区/缩略图条让位（260922）──
+ * 热区 `.edge-hotzone` 是浮在壳上的 39px 覆盖层（宽度见 chrome.css），
+ * 而正文块手柄是 `position: fixed` 画在块左缘外 34px（标题还要再让 20px 折叠钮）——
+ * 不右移时实测段落手柄 x=6..40、H1 手柄 x=-14（既压住缩略图，又跑出窗口）。
+ * 位移 = 条宽 39 + 块操作槽 54（手柄命中区 34 + 标题折叠钮 20）− 内核正文左内距 40 = 53
+ * ⇒ 正文块左缘落在 93、手柄命中区 ≥ 39，与缩略图条严格不重叠。
+ * 停靠态（sidebar-docked）目录自己占列、条被目录卡盖住，故不加。 */
+.app-shell.sidebar-floating .document-pane,
+.app-shell.sidebar-collapsed .document-pane {
+  padding-left: 53px;
 }
 
 /* #2 浮层阴影：左右统一、更柔；阴影静态、不参与切出动画（避免逐帧重绘，保性能与速度） */
@@ -690,8 +704,11 @@ html[data-theme="dark"] .document-pane .ne-engine > ne-h6 ne-heading-content {
 /* ── 壳层度量令牌（原 layout-contract.css，260916 S1 并入） */
 :root {
   --lake-rail-width: 38px;
-  --lake-floating-panel-top: 72px;
-  --lake-floating-panel-bottom: 72px;
+  /* 浮层（目录/大纲）几何单一来源：顶 = 编辑器工具条下缘（不能盖住工具条），底 = 窗口底。
+     = 顶栏 38 + 面包屑行 36 + 内核工具条 38 = 112（1280×820 实测；内核工具条 sticky 恒在此）。
+     旧值 72/72 是"半幅"：底部空出 72px，左侧整边热区的 minimap 尾巴会露在窗口底部（用户 260922 报的"横条"）。 */
+  --lake-floating-panel-top: calc(var(--topbar-height) + 36px + 38px);
+  --lake-floating-panel-bottom: 0px;
   --activity-rail-width: var(--lake-rail-width);
 }
 .app-shell { --outline-collapsed-width: var(--lake-rail-width); }

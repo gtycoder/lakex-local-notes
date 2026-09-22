@@ -201,7 +201,8 @@
 }
 .edge-hotzone {
   position: absolute;
-  top: calc(var(--topbar-height, 38px) + 28px);
+  /* 与浮层同源：整边热区从编辑器工具条下缘起（不越过工具条），底到窗口底（260922）。 */
+  top: var(--lake-floating-panel-top);
   bottom: 0;
   width: 39px;
   z-index: 30;

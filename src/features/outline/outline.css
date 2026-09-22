@@ -47,7 +47,8 @@
 /* collapsed：列宽为 0 —— aside 变成贴右缘的触发层容器 */
 .outline-sidebar--collapsed {
   position: absolute;
-  top: calc(var(--topbar-height) + 28px);
+  /* 与目录浮层同源：触发层从编辑器工具条下缘起，不再越过/压住工具条（260922）。 */
+  top: var(--lake-floating-panel-top);
   right: 0;
   bottom: 0;
   width: 0;
@@ -423,10 +424,11 @@
    leave/re-enter race.（宽窄共用：窄窗同样只保留右侧 rail + 悬停预览） */
 .outline-sidebar--collapsed .outline-sidebar__content,
 .outline-sidebar--collapsed.outline-sidebar--hovered .outline-sidebar__content {
-  top: var(--lake-floating-panel-top, 72px);
-  bottom: var(--lake-floating-panel-bottom, 72px);
-  height: auto;
-  max-height: calc(100% - 144px);
+  top: var(--lake-floating-panel-top, 112px);
+  bottom: var(--lake-floating-panel-bottom, 0px);
+  /* 与左侧目录浮层同源：显式高度（固定定位 + auto 不撑满，见 styles/app/shell.css 注释）。 */
+  height: calc(100vh - var(--lake-floating-panel-top, 112px) - var(--lake-floating-panel-bottom, 0px));
+  max-height: none;
   transition: opacity 180ms var(--lake-ease-standard), transform 180ms var(--lake-ease-standard), visibility 180ms linear, box-shadow 180ms ease-out;
 }
 .outline-sidebar--collapsed:not(.outline-sidebar--hovered) .outline-sidebar__content {
