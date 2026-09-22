@@ -221,3 +221,14 @@ pre {
 [data-theme="warm"] .ne-ui svg.ne-icon-symbol,
 [data-theme="dark"] .ne-ui svg.ne-icon-symbol use,
 [data-theme="warm"] .ne-ui svg.ne-icon-symbol use { fill: currentColor; color: inherit; }
+/* 内核另一处写死白底：.ne-ui-toolbar（小记/文档编辑器共用的工具条），以及文档内的图片占位块。
+ * 与上面的 .ne-ui 同一处修复（同一个桥，单一来源）。 */
+[data-theme="dark"] .ne-ui-toolbar,
+[data-theme="warm"] .ne-ui-toolbar {
+  background: var(--lake-bg-canvas);
+  color: var(--lake-text-1);
+}
+[data-theme="dark"] .ne-image-error,
+[data-theme="dark"] .ne-mock-image {
+  background: var(--lake-bg-block);
+}

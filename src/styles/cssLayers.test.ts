@@ -43,7 +43,7 @@ const FILES = [
  * 并在同一批把来源文件的基线调小（搬走多少、留下多少要对得上，让总量保持可见）。 */
 const BASELINE: Record<string, { decls: number; dupGroups: number }> = {
   "styles/index.css": { decls: 0, dupGroups: 0 },   // UI 重设计 P1：单入口（@layer 声明 + @import 编排，0 声明）
-  "styles/feature.css": { decls: 118, dupGroups: 0 },  // 视觉优化批次 + 内核编辑器主题桥（lakex 跟随深色/暖色）
+  "styles/feature.css": { decls: 121, dupGroups: 0 },  // 视觉优化 + 内核编辑器主题桥（lakex 跟随深色/暖色：含 .ne-ui-toolbar）
   "styles/kit.css": { decls: 550, dupGroups: 0 },     // P4 组件库 + P5-g 面板件 + P5-h 控件 + P5-i 开关（实测）
   "styles/chrome.css": { decls: 253, dupGroups: 0 },  // P5 外壳/页签/目录树 + 视觉优化（按压反馈）
   "styles/overlay.css": { decls: 91, dupGroups: 0 },  // P5-c 浮层 + P5-j 搜索 + P7-b .top-menu 定位（实测）
