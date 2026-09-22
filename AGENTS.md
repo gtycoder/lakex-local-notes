@@ -52,6 +52,7 @@ Lake Notes 是**本地优先**笔记应用（Electron + React + better-sqlite3 +
     - **思源层已从桌面移除**：`src/b3/*` 现在**只被移动端入口** `src/mobile/main.tsx` 加载（桌面侧不再 import）。桌面若还要用某个 b3 类，走 `src/styles/compat.css`（桌面兼容层），**不要**再把 `src/b3/*` 加回桌面入口。移动端样式不在本套内，改动要单独验证。
     - **设置页骨架**仍是 `.config-group / .config-title / .config-items / .config-item / .config-name / .config-block / .config-empty`（分组标题在灰卡外、卡内一行一项、行间 1px 分隔）—— 这组类现在由 `compat.css` 定义。**设置页每加/改一行都要同步 `settingsSearch.ts` 的 `SETTING_ITEMS`**（行原语带 `itemId` → `data-set-id`，支撑条目级搜索定位；漂移有单测卡住，改完跑 `vitest src/components/settingsSearch.test.ts` 即知）。
     - **不要**在组件里写 `style={{...}}`，也不要再造第五套视觉类；**横向 tab 一律分段控件**（轨道 + 浮起白段），只给选中项灰底会被判读成「看不出这是 tab」。
+    - **改动落点（用户 260921 立规）**：优先改**单一来源**的那处规则，**不要**为了改观感再往更高层加一条覆盖 —— 层压层会越积越多、越来越难查。只有目标是**内核(lakex) / 第三方组件**（其样式往往是运行时注入的**无层**样式、或写在 element 上的 inline style，层序压不过）时，才动用更高层或 !important。同一选择器也不要再多处重复声明。
     - **`!important` 是例外而非手段**：当前全桌面只允许 **9 条**（每条都在代码里注明为何必需，典型是「要压过 JS 写进 element 的 inline style」如 `.settings-panel-large` 宽度，和双端共享文件里必须压住 `.b3-button--outline` 的 `.seg__item`）。目标 ≤10，**新增任何一条都要写明理由**。
     - **两条护栏**（改样式后必跑）：① `src/styles/cssLayers.test.ts` —— 逐文件「声明数 / 重复(选择器,属性)组数」基线上限，只允许变小；**注意它的扫描器不进入 `@layer {}` 块，所以新层文件要由入口 `@import … layer(x)` 指定层，不要在文件内自包 `@layer`**；② `node scripts/ui-metrics.mjs` —— 硬指标（桌面 `var(--b3-*)`=0、非主题颜色字面量=0、`!important`≤10、入口 b3 import=0、同名文件对=0）。
 

@@ -14,8 +14,8 @@
 .activity-button {
   display: grid;
   place-items: center;
-  width: 32px;
-  height: 32px;
+  width: 28px;
+  height: 28px;
   margin: 2px 0;
   padding: 0;
   border: 0;
@@ -27,7 +27,7 @@
     background-color var(--lake-motion-fast) var(--lake-ease-standard);
 }
 .activity-button:hover:not(:disabled) { color: var(--lake-text-1); background: var(--lake-bg-hover); }
-.activity-button:active:not(:disabled) { background: var(--lake-bg-press); }
+.activity-button:active:not(:disabled) { background: var(--lake-bg-press); transform: scale(.965); }
 .activity-button:focus-visible { outline: var(--lake-focus-ring-width) solid var(--lake-accent); outline-offset: var(--lake-focus-ring-offset); }
 .activity-button:disabled { opacity: .35; cursor: default; }
 .activity-button.active { color: var(--lake-accent); background: var(--lake-accent-tint); }
@@ -49,8 +49,9 @@
   transition: color var(--lake-motion-fast) var(--lake-ease-standard),
     background-color var(--lake-motion-fast) var(--lake-ease-standard);
 }
-.dock-icon-btn:hover:not(:disabled) { color: var(--lake-text-1); background: var(--lake-bg-hover); }
-.dock-icon-btn:active:not(:disabled) { background: var(--lake-bg-press); }
+/* 目录栏图标钮 hover 用主色淡底（= 改造前观感；中性底显得没反应） */
+.dock-icon-btn:hover:not(:disabled) { color: var(--lake-accent); background: var(--lake-accent-tint); }
+.dock-icon-btn:active:not(:disabled) { background: var(--lake-bg-press); transform: scale(.96); }
 .dock-icon-btn:disabled { opacity: .35; cursor: default; }
 .dock-icon-btn.is-active { color: var(--lake-accent); background: var(--lake-accent-tint); }
 .dock-icon-btn:focus-visible { outline: var(--lake-focus-ring-width) solid var(--lake-accent); outline-offset: var(--lake-focus-ring-offset); }
