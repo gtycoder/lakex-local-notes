@@ -232,7 +232,6 @@ pre {
 [data-theme="dark"] .ne-mock-image {
   background: var(--lake-bg-block);
 }
-/* 已知（既有问题，非本次引入）：深色下内核工具条图标偏暗 —— 内核给它自己的按钮写了深灰字色
- * （实测 .ne-ui button color = rgb(88,90,90)），而图标是 fill: currentColor。
- * 试过用 [data-theme=dark] .ne-ui button { color: ... !important } 覆盖，**未生效**（原因待查），
- * 且改造前的深色基线同样偏暗（像素统计 p99 都在 40-53）⇒ 不是本批回归，暂记录不改。 */
+/* 深色工具条图标」曾被我记为缺陷 —— 实为误判：内核工具条那 33 个按钮在测试状态下全部 disabled:true
+ * （antd 禁用态 color = rgb(88,90,90)），是禁用色而非主题没跟上；改造前的深色基线同样如此。
+ * 因此**不加**任何覆盖（否则会把真正禁用的按钮也照亮）。 */
