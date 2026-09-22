@@ -92,6 +92,12 @@ W0 双端门禁 → W0.5 抽两端共享入口 → W1 桌面专属零耦合清�
 
 **DoD**：移动端 `var(--b3-*)`=0、`!important` 19→0、`@layer` 接入、双端 `check:stylesnap`/`check:pixel` 0 差异、你在真机/模拟器验收观感。
 
+**260923 现状核查（可自主部分已清完，观感重做待你验收）**：
+- 移动端 harness 在线，`check:mobilesnap` **6 态 0 差异**（本轮复核）。
+- W1-L2 在**共享文件** `components.css`/`quick-notes.css` 删的规则，其类名在 `src/mobile/**` **全部零使用**（逐一核查 `sync-status-button`/`search-panel-help`/`ln-tabs__item`/`ln-empty`/`ln-row2`/`ln-noscrollbar`）⇒ **无移动端回归**（此前只按"桌面专属"推断，现已有实测）。
+- b3 依赖清点：TSX 侧 **44 个不同 `b3-*` 类**（8 个 TSX + `backStack.ts`/`useBackHandler.ts`），CSS 侧大量 `--b3-*`/`--b3-list-*` 变量；`kit.css` **移动端未加载**，且 kit 含 `.b3-button:not(...)` 桌面规格 ⇒ **"采纳 kit" 必须与 `mobile.css` 的 `.b3-button` 重写同步进行**，否则按钮观感会被两套规则打架。
+- **结论**：W2 的"复用同套设计系统"本质是**观感重做**，DoD 明写"你在真机/模拟器验收观感"⇒ 在拿到你的设计方向/验收节奏前**不做盲改**（否则按 §3 #17 属不可验证、大概率返工）。可自主的等价清理（6 共享文件的桌面被覆盖声明）已随 W1-L2 一并完成。
+
 ## 7. W3–W6（与安卓无耦合，可穿插）
 
 - **W3 几何/层序护栏**：`src/styles/geometrySources.test.ts` —— 4 个令牌各只定义一次、全部消费者引用令牌（裸 px 仅白名单 4/6/12）、`.tab-bar` 内距 === (顶栏−标签)/2、红绿灯 y === (TOPBAR_HEIGHT−12)/2；并把散落的 z 序（手柄 100 / 热区 110 / 目录 250 / 大纲 260 / 顶栏 400 + 编辑器内 5/4/3）收进 `--lake-z-*` 并加**顺序断言**（`handle < hotzone < sidebar < outline < topbar`）。`PANEL-CONTRACT.md` 标注"由该测试强制"。**（260923 已完成外壳子集**：9 个 `--lake-z-*` 令牌 + `src/styles/zOrder.test.ts` 三层断言（定义唯一 / 顺序稳定 / 消费者无字面量），迁移 8 处消费者；剩余大纲内部 2/3/4/5 与浮层菜单级 600+ 未收，按需再做。）
