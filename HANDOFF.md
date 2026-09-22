@@ -5,9 +5,11 @@
 > **§8 是移动端（安卓）专职交接**，由移动端会话维护；桌面会话不要改 §8，移动端会话不要改 §0-§7 之外的桌面文件。
 
 ## 0. 当前基线（新会话开工前）
+- **分支状态（260921 收尾）**：`feat/ui-redesign` @ **`fc04ac9`**，**已 push origin 备份**（用户指示）；`origin/master` 仍 **`17bafbe`**（未合、未动）。工作区只剩用户新会话的探路文件（未跟踪，**不要动**）。worktree 已撤（`git worktree list` 只剩主检出一项）；冗余分支 `feat/ui-redesign-opt` 与 `feat/ui-redesign` 同提交（可删）。
 - **🚧 在途分支 `feat/ui-redesign`（260921 起，用户授权自主执行）**：桌面端 UI 重设计 = 彻底剥离思源样式层 + 自有设计系统 + 换肤。
   **✅ 本批已完成（P0–P8）**：进度与收尾见 **§2.22**；方案/硬指标/阶段 = `docs/UI-REDESIGN-260921/README.md`；**元素底账（防丢，346 条全部打勾）** = `01-ELEMENT-LEDGER.md`；**验收报告（含硬指标表 + 三种验证方法 + 19 张截图矩阵）** = `03-ACCEPTANCE.md`。**五项硬指标全部达成**：桌面 `var(--b3-*)` 604→**0**、非主题颜色字面量 624→**0**、`!important` 141→**9**、入口 b3 import 8→**0**、同名文件对 4→**0**；app-css gzip 197→**182 KB**。
-  设计规格（外部，只作参考）= `/Users/admin/file/local-lake/ui-design-inputs/out/design-system/`。**未 push、未合 master**。
+  设计规格（外部，只作参考）= `/Users/admin/file/local-lake/ui-design-inputs/out/design-system/`。
+- **👉 最新会话从这里读：§2.23（260921-2 · UI 视觉优化批次，14 个提交）**：用户验收后反馈「太丑」→ 批量视觉回修 + 顺手修掉一批 **P7-b 删源漏搬的真 bug**（菜单项图标贴字 / 活动栏右侧竖线 / 同步浮窗完全没样式 / 顶栏右槽位没样式 / 滚动条回落系统 15px）。**已 push origin 备份**（用户指示），**未合 master**（用户明确：「绝对不能合并到 master，你这版是备选」）。
 - **✅ 分支 `feat/board-document` 已 fast-forward 合入 `master` 并 push origin**（用户 260920 收尾指示）。这一次把三大块一起带进 `master`：
   1. **自研多维表 `kind=bitable`**（§2.12）· 2. **独立画板文档 `kind=board`**（§2.13）· 3. **移动端对账补齐 + 小记完善**（§2.14 / **§2.15**）。
 - **最新会话（260921 · 单元格图片方案 2A：`cell.img` 成为唯一真相）完整交接 = §2.21（先读它）**；同批承接 §2.20（去浮动图 + 单元格图片工具弹窗 + 滚动/色条修复）与 §2.16–§2.19（表格图片 P1/P2/缩略图）。
@@ -1925,6 +1927,82 @@ P4 组件库 14 件 → P5 逐屏迁移（每屏对照底账打勾）→ P6 第�
 - **不要用反引号包裹内容去 `git commit -m`**：bash 会做命令替换，提交信息被吞（本批踩一次，已 `--amend -F` 修正）。
 - 隔离实例克隆 dev 数据时**必须删 `SingletonLock/Socket/Cookie`**，否则 Electron 单实例锁判定「已有实例」直接退出。
 - `@layer` 的 `!important` 层序是**反的**（早层重要声明赢）：迁移某元素时必须把 legacy 里的 `!important` 一起删干净。
+
+## 2.23 本会话总交接（260921-2 · UI 视觉优化批次，14 个提交）—— 新会话从这里读
+
+> 承接 §2.22（UI 重设计 P0–P8：剥离思源层 + 自有设计系统，五项硬指标已达成）。
+> 本批是**用户验收后反馈「太丑」引发的视觉回修 + 顺手挖出并修掉的一批真 bug**。
+> 分支：`feat/ui-redesign`（**已 push origin 备份**）@ `fc04ac9`；**未合 master**；`origin/master` 仍是 `17bafbe`。
+
+### 一、任务目标（用户本批原话与约束）
+
+1. 用户看过后说「**这个版UI太丑了啊，怎么会这个样子**」→ 要求**批量优化**。
+2. 约束（**用户明确立规，后续必须遵守**）：
+   - 选中态**蓝底保留**（不要改回中性灰）；
+   - 「**除非要压内核和组件的样式，否则尽量不要层级压层级，同时要注意规范**」→ 已写进 `AGENTS.md §3 #14` 的「改动落点」条；
+   - 「**绝对不能合并到 master，你这版是备选**」；
+   - 用户同时在**另一个会话重做**（主检出里有其探路文件 `style-directions.html` / `handle-variants.html` / `layout-space-*.html` / `product-shell.html` / `real-shots/` 等，**不要动**）。
+3. 用户在过程中两次用截图直接指出真 bug（这是本批最有效的发现链路，见「踩过的坑」）。
+
+### 二、已完成内容（14 个提交，均在 `feat/ui-redesign`，已 push origin）
+
+**A. 视觉优化 3 批（对齐「改造前观感」，不动架构）**
+- `5d98854` 第一批：**字号阶梯整体 +1px**（micro 10.5→11.5 / tiny 11→12 / small 12→13 / body 13→14 / bodyLg 14.5→15.5 / title 17→18 / h1 23→24，目录树行与设置说明**回到 13px**）；**层次恢复**（`--lake-bg-panel` → `#ffffff`、`bg-block` 更明确、卡片阴影加强、深色 panel 比 window 亮一档）；**hover 由 5% 透明叠层改实色** `#e9ebee`；**主色提饱和**（`#5b6f96→#4f6bb8`、深色 `#93a9cf→#8ba4e6`）；**深色下内核编辑器纯白修复**（见 D）。
+- `8d0fdf3` 第二批：对齐 master 取值（`.note-list` 内距 5px、`.note-row` `padding: 2px 7px` 去掉 min-height、行色 text-2 / 标题 text-1、`.tree-row-action` 18px、选中页签纯 raised 底）；**修回归**：动作按钮显形条件由 `:focus-within` 改回 master 的 `has(:focus-visible)`（否则鼠标点击后的残余 focus 会把 ⋯ 钉住、把标题从 49px 挤到 31px）。
+- `ce60395` 第三批：活动栏按钮 32→**28px**、补 `transform: scale(.965)` 按压反馈、目录栏图标钮 hover 由中性底改**主色淡底**（master 就是 accent-soft）；并把「改动落点」规矩写进 `AGENTS.md §3 #14`。
+
+**B. 深色主题逐屏体检**
+- `a2628f8` 深色下内核 **`.ne-ui-toolbar` 纯白 452×38** 与文档内图片占位块发白 → 补进「内核主题桥」（feature.css）。复测：主界面/设置/回收站/搜索/**小记** 五屏扫描**全部为空**。
+- 暖色主题 5 屏 + 深色下表格/多维表容器：同样扫过，**干净**（只剩有意项：暖色青铜强调按钮、黑视频底）。
+
+**C. 小记按钮语义回归**
+- `e0a4433` master 的「小记一下 / 取消」是**中性描边胶囊**（有内容时 `.is-emphasized` 才变主色实心），我的 kit 把 `.b3-button` 一律做成实心 → 两个都变大蓝按钮。修法按用户规矩：在 kit.css 用 `:not()` 把这两类**从通用按钮规格排除**（**不新增层**、不动双端共享的 `app/quick-notes.css`）。实测：空输入=白底+1px 描边；有内容 publish=`rgb(79,107,184)` 强调实心。
+
+**D. P7-b「删源」漏搬样式的一批真 bug（用户截图触发，本批最有价值的产出）**
+- `2b6cd20` **菜单项布局三件套**（`display:flex / align-items:center / gap:8px`）——用户截图报「图标和文字贴在一起」；同批补回 `.tabbar-trailing`（顶栏右槽位，**之前完全没样式**）、**`.sync-toast*` 12 条 + 入场关键帧**（同步浮窗，**之前完全没样式**）、`.toolbar__sync.syncing svg` 转圈 / `.error` 变红、空间名 `text-overflow: ellipsis`、三个提示气泡圆角、`.context-menu-submenu` 内边距圆角。
+- `f5cc383` **活动栏右侧那条 1px 竖线**（用户报「顶部红绿灯区域没有融合」）—— 那是 **P5 我自己加的**，master 本是 `border-left/right: 0`；删掉后分界改由目录栏卡片边提供。
+- `fa778ef` **大纲轨 / 收起悬停展开**（大纲增强态，用户可开启）。
+- `651c926` **全局细滚动条**：实测 `.note-list` 滚动条 **15px（系统默认）**，设计是 **10px** —— 自绘在 `siyuan/util/_scroll.scss` + `b3/layout.css`，同样漏搬。补回后实测 **10px**。⚠️ 沿用 260914 结论：**绝不写全局 `scrollbar-width/color`**（标准属性会让 Chromium 忽略 `::-webkit-scrollbar` 自绘）。
+- `4011e68` 审计剩余 5 条：`.toolbar__item{white-space:nowrap}`、`.toolbar__menu-wrap{position:relative}`（下拉锚点）、`.top-menu > button span{min-width:0}`、`.protyle-breadcrumb{flex-shrink:0}`、面包屑 focus 圆角。
+
+**E. 误判更正 / 死代码清理 / 交付文档**
+- `89301c7` + `c6d32fe` 深色工具条图标「发暗」——**实为 antd 禁用态**（33 个按钮全部 `disabled: true`，禁用色 `rgb(88,90,90)`），**不是主题 bug**；改造前基线同样。**结论：不加任何覆盖**（否则会把真正禁用的按钮照亮）。曾误记为「已知缺陷」，已更正。
+- `954d24d` 删掉 `app/misc.css` 里 3 条与 `chrome.css` **逐字重复**的死声明（`.note-row:hover` / `.tab-item{background:transparent}` / `.tab-item:hover`）。
+- `fc04ac9` **「改造前 vs 现在」逐屏并排对比页**：`docs/UI-REDESIGN-260921/compare/index.html`（10 组：主界面/工作空间菜单/偏好设置/回收站/小记 × 浅·深，左=master 基线、右=现在，点图放大；每组附一句「这屏改了什么」）。
+
+**F. 审计方法（本批遗产，建议固化）**
+把 master `src/b3/*.css` 里**打向我们自己类**的规则（不含 `.b3-`/`fn__`/`__`）**展开逗号选择器**后，按 `(选择器, 属性)` 与当前分支桌面样式全集比对，只看**布局类属性**（display/position/gap/padding/margin/width/height/flex/overflow/white-space/animation/border-radius/top/left/z-index…）→ 找出「漏搬」。本批 **71 → 15 → 5 条**，其余经核对为**假阳性**（选择器写法不同如裸类 vs 带父级、同元素多类、TSX 已不使用、脚本把注释当选择器）。临时脚本见 `/tmp/lake-ui-shot/b3gap3.py`（临时目录，重写约 30 行）。
+
+### 三、当前问题（均已知、不阻塞）
+
+1. **画板（drawnix）打不开 = 既有 bug，非本批引入**：打开画板落进错误边界，控制台 `TypeError: Wt is not a function @ BoardEditor-*.js`。已用 **origin/master 未改动基线**复现同样的错 → **建议单独立项**（可能与本项目 §2.15 记录的 vendor 懒 chunk 打包问题同类）。因为渲染不出来，画板容器壳**未做视觉验证**（表格/多维表已验证）。
+2. **默认配置下的大纲是内核原生 TOC**（`editor-outline-enhance` 默认 false）→ **编辑器外观（第三方）**，不在本次重做范围；我们自建大纲（增强态）已迁移并通过实测。
+3. **审计剩余**：`.tree-row{border-radius}`（与 `.note-row` 同元素，已覆盖）、`.sync-panel` / `.form-grid` / `.secret-field`（TSX 已不使用）——**无需处理**；如后续要再查，按 F 的方法重跑即可。
+4. **冗余分支**：`feat/ui-redesign-opt` 与 `feat/ui-redesign` 指向同一提交（收尾时已 FF 合并、worktree 已撤），**可删**。
+5. **移动端零改动**：`src/mobile/**` 未动；`src/b3/*` 仅保留给移动端加载。
+
+### 四、下一步计划（按优先级）
+
+1. **等用户测试反馈**（本批证明：用户截图链路比自动体检有效 —— 两次真 bug 都是这么发现的）。用户若在另一会话定稿了设计方向，在这个备选分支上**只改 tokens/kit 即可**（架构不动）。
+2. **顶栏 / 标签页观感细调**：目前几何仍是 master 原值（`.tab-item` 29px/6px margin/8px padding），若用户觉得仍偏重可再收。
+3. **把 F 的「漏搬审计」固化进 `scripts/ui-metrics.mjs`**（或新脚本 + 单测）：防止将来再有「删样式层漏搬」。这是本批最有复用价值的资产。
+4. 继续收「贴近改造前」的细节：`.toolbar__text` 宽度（现 180px / master 160px）、`.tree-row.type-notebook` 行高与图标对齐等。
+
+### 五、踩过的坑（本批新增，务必记住）
+
+1. **删一个样式层后，必须逐属性比对，不能只看「页面没坏」**。P7-b 把 `src/b3/*` 移出桌面入口时只搬了部分承重规则，之后用户陆续发现：菜单项图标贴字、活动栏竖线、同步浮窗**完全没样式**、`.tabbar-trailing` **完全没样式**、滚动条回落系统 15px。
+2. **「颜色/背景」逐屏体检抓不到布局丢失**。我扫 `backgroundColor` 的体检报告五屏全绿，但 `gap/display/padding/border` 全丢了 ⇒ 体检要按 **(选择器, 属性) 属性集**比对。
+3. **测试环境借用了用户的端口，验的是别人的构建**。我一连几轮用 `http://127.0.0.1:1442`，而那个端口是**用户会话从主检出起的 preview**（`lsof -p <pid> -a -d cwd` 才看出 cwd 是主检出）⇒ 部分「验证通过」其实验的是主检出的旧产物，还让我误判「改了我这边没生效」。**教训**：用**独立端口**（本批后段改用 1452）；先确认 `dist` 与 `lsof cwd` 一致；`vite preview --strictPort` **报端口占用要当错误处理**，不要忽略。
+4. **围栏基线没同步就提交**（`cssLayers.test.ts` 的逐文件声明数上限）：本批**两次**在红着的时候提交，都是发现后 `--amend` 修基线。**规范：先跑绿、再 commit**。
+5. **「正则 + 花括号配平」搬 CSS 规则太脆弱**：批量搬页签规则时，`.tab-items`（轨道）被 `.tab-item*` 前缀误匹配删掉、`@media` 内嵌套规则漏掉 ⇒ 发现后立即 `git checkout` 回滚。**教训**：跨文件搬规则要么不做，要么**先干跑 + 精确白名单匹配 + 每步对拍**。
+6. **`var(--x, 字面量)` 的回退是死代码**（只要 `--x` 在桌面可达集合里有定义）——本批删 17 处，颜色字面量直接下降，且**零视觉变化**。
+7. **省略号会白吃一个字宽**：窄容器里 `text-overflow: ellipsis` 比 `clip` 少显示一个字（49px 时：3 字+… vs 4 字）⇒ 目录树标题最终**按产品既有决策保留 `clip`**（面包屑保留省略号）。
+8. **antd 禁用态会被误判成 bug**：深色下工具条图标「发暗」其实是那 33 个按钮 `disabled: true`（禁用色 `rgb(88,90,90)`）；注入同样的 `color` 规则能改，说明选择器没问题 ⇒ **先查元素状态，再改样式**。
+9. **`:focus-within` ≠ `:focus-visible`**：用前者会把「鼠标点击后的残余 focus」也当成显形条件（动作按钮常驻、标题被挤窄）。master 用的是 `.tree-row-actions:has(:focus-visible)`。
+10. **内核运行时注入的「无层」样式层序压不过**（如 `.ne-editor-wrap-box{background:#fff}`、antd/内核给元件写的 inline style）⇒ 只能 `!important` 或改内核；但 `!important` 有预算（全桌面 ≤10，当前 9）。
+11. **在 worktree 里的改动，用户在主检出看不到**。本批末按用户要求把 `feat/ui-redesign-opt` **FF 合回 `feat/ui-redesign`** 并 `git worktree remove`；用户随后可自行测试。（另：worktree 会让某些 GUI 的分支树显示异常。）
+12. **bash heredoc 里写 JS 模板串/正则极易写坏命令**（本批踩多次：`\n` 被展开、双引号未转义、`$` 插值）⇒ 改用 `tools.write` 落一个脚本文件再执行；**不要在 JS 双引号串里写未转义的引号，也不要在模板串里写未转义的反引号**。
+13. **导出子菜单在底账里曾经过时**（漏记「导出为 Word（开发中）」「导出为原生 Lake」）⇒ 「以现网为准」不只是口号，核对时要按实际项更新底账。
 
 ## 3. 下一步计划 + 当前问题（真正的待办，按优先级）
 
