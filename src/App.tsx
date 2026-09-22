@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
-import { LoaderCircle } from "lucide-react";
+import { LoaderCircle, PanelLeft } from "lucide-react";
 import { Sidebar } from "./components/Sidebar";
 import type { QuickNotesWorkspaceHandle } from "./components/QuickNotesWorkspace";
 import { useWindowShortcuts } from "./hooks/useWindowShortcuts";
@@ -39,7 +39,7 @@ import { NoteInfoDialog } from "./components/NoteInfoDialog";
 import { loadSettings, saveSettings, type AppSettings } from "./lib/settings";
 import { subtreeIds } from "./core/tree";
 import { DOCK_GUTTER } from "./lib/layoutMetrics";
-import { type DesktopWorkspace, type OpenTab, OUTLINE_SIDEBAR_MAX_WIDTH, OUTLINE_SIDEBAR_MIN_WIDTH, SIDEBAR_MAX_WIDTH, SIDEBAR_MIN_WIDTH } from "./desktop/desktopTypes";
+import { type DesktopWorkspace, type OpenTab, EDGE_HANDLE_DWELL_MS, OUTLINE_SIDEBAR_MAX_WIDTH, OUTLINE_SIDEBAR_MIN_WIDTH, SIDEBAR_MAX_WIDTH, SIDEBAR_MIN_WIDTH } from "./desktop/desktopTypes";
 import { DesktopOverlays } from "./desktop/DesktopOverlays";
 import { DesktopLibrary } from "./desktop/DesktopLibrary";
 import { DesktopQuickNotes } from "./desktop/DesktopQuickNotes";
@@ -279,7 +279,8 @@ export function App() {
     };
     const onPointerMove = (event: PointerEvent) => {
       if (sidebarResizingRef.current) return;
-      if (isInside(event.clientX, event.clientY, ".activity-rail") || isInside(event.clientX, event.clientY, ".sidebar")) {
+      // 热区（0..8px）也算"留在目录里"：贴边面板虽然会盖住它，但鼠标在面板内边缘来回时不该被自动收起。
+      if (isInside(event.clientX, event.clientY, ".activity-rail") || isInside(event.clientX, event.clientY, ".sidebar") || isInside(event.clientX, event.clientY, ".edge-hotzone")) {
         clearSidebarPreviewTimer();
       } else {
         hideSidebarPreview();
@@ -288,6 +289,39 @@ export function App() {
     window.addEventListener("pointermove", onPointerMove, true);
     return () => window.removeEventListener("pointermove", onPointerMove, true);
   }, [sidebarMode, clearSidebarPreviewTimer, hideSidebarPreview]);
+
+  // ── 左缘触发把手（260922 用户定稿：隐形 8px 热区 + 跟手把手）──
+  // 指针进入热区 → 立刻淡入把手（Y 跟随指针，钳制在热区内）；**驻留 EDGE_HANDLE_DWELL_MS** 后
+  // 才浮出目录面板预览（防止只是划过左缘就弹）。把手点击 = 固定/取消固定（与热区点击同语义）。
+  // 只用 ref + class 操作 DOM：mousemove 高频，不能每次 setState 触发整棵 App 重渲染。
+  const edgeHotzoneRef = useRef<HTMLDivElement | null>(null);
+  const edgePreviewTimer = useRef<number | null>(null);
+  const cancelEdgePreview = useCallback(() => {
+    if (edgePreviewTimer.current !== null) {
+      window.clearTimeout(edgePreviewTimer.current);
+      edgePreviewTimer.current = null;
+    }
+  }, []);
+  const showEdgeHandle = useCallback((clientY: number) => {
+    const el = edgeHotzoneRef.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    const y = Math.max(rect.top + 40, Math.min(rect.bottom - 40, clientY));
+    el.style.setProperty("--edge-handle-y", `${Math.round(y)}px`);
+    el.classList.add("is-active");
+  }, []);
+  const hideEdgeHandle = useCallback(() => {
+    cancelEdgePreview();
+    edgeHotzoneRef.current?.classList.remove("is-active");
+  }, [cancelEdgePreview]);
+  const armEdgePreview = useCallback(() => {
+    cancelEdgePreview();
+    edgePreviewTimer.current = window.setTimeout(() => {
+      edgePreviewTimer.current = null;
+      showSidebarPreview();
+    }, EDGE_HANDLE_DWELL_MS);
+  }, [cancelEdgePreview, showSidebarPreview]);
+  useEffect(() => () => cancelEdgePreview(), [cancelEdgePreview]);
 
   // 切换标签时，大纲数据会在编辑器注册后异步更新；期间禁止壳层 grid 动画，
   // 避免“旧列宽 → 新列宽”与正文淡入同时发生，造成 tab 切换时主区横向抖动。
@@ -351,19 +385,39 @@ export function App() {
 
   return (
     <div className={`app-shell ${shellPlatformClass} sidebar-${sidebarRenderMode} outline-${effectiveOutlineMode} ${workspaceMenuOpen ? "workspace-menu-open" : ""} ${focusMode ? "focus-mode" : ""} ${desktopWorkspace === "quick-notes" ? "quick-notes-active" : ""} ${desktopWorkspace === "trash" ? "trash-space-active" : ""} ${sidebarResizing ? "sidebar-resizing" : ""} ${outlineResizing ? "outline-resizing" : ""} activity-rail-hidden`} style={shellStyle}>
-      {/* 整边触发（左）：hover 浮出目录，点击固定/取消 —— 资料库空间 */}
+      {/* 整边触发（左）：隐形 8px 热区 + 跟手把手 —— 资料库空间（260922） */}
       {desktopWorkspace === "library" && (
         <div
+          ref={edgeHotzoneRef}
           className="edge-hotzone edge-hotzone-l"
           title="目录：悬停展开 · 点击固定/取消"
-          onPointerEnter={showSidebarPreview}
+          onPointerEnter={(e) => { showEdgeHandle(e.clientY); armEdgePreview(); }}
+          onPointerMove={(e) => {
+            showEdgeHandle(e.clientY);
+            // 自愈：指针始终没离开热区时 pointerenter 不会再触发；只要计时没在跑就重新武装，
+            // 这样"面板被误收掉"之后继续在热区里动一下就能重新唤出。
+            if (edgePreviewTimer.current === null) armEdgePreview();
+          }}
           onPointerLeave={(e) => {
+            // 把手先收（不带条件）：只要指针离开热区/把手就退场——否则移到正文后把手会赖着不走。
+            hideEdgeHandle();
             const to = e.relatedTarget as Node | null;
             if (to && e.currentTarget.closest(".app-shell")?.contains(to)) return;
             hideSidebarPreview();
           }}
           onClick={() => toggleSidebarDock()}
-        />
+        >
+          {/* 跟手把手：默认不可见；指针进热区才浮出。点击 = 固定/取消固定。 */}
+          <span
+            className="edge-hotzone-handle"
+            aria-hidden="true"
+            title="点击固定/取消固定目录"
+            onClick={(e) => { e.stopPropagation(); toggleSidebarDock(); }}
+          >
+            <PanelLeft size={15} className="edge-hotzone-handle__icon" />
+            <span className="edge-hotzone-handle__label">目录</span>
+          </span>
+        </div>
       )}
       {/* 空间切换已并入顶栏工作空间菜单（S1+A）；活动栏不再渲染（壳层导航，功能见菜单 ⌘1–3） */}
       {/* keep-alive：Sidebar 常驻，小记/回收站空间由 shell class 隐藏（避免切回时重建目录树） */}

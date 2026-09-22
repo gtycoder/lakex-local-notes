@@ -14,6 +14,10 @@ import type { SidebarMode } from "../components/Sidebar";
 
 export const SIDEBAR_HOVER_HIDE_DELAY_MS = 220;
 
+/** 左缘触发把手（260922）：指针进入隐形热区后，先浮出把手，**驻留**这么久才浮出目录面板预览。
+ *  避免"只是从屏幕左缘划过"就弹面板；把手本身跟手（Y 跟随指针）。 */
+export const EDGE_HANDLE_DWELL_MS = 240;
+
 export type SaveState = "idle" | "dirty" | "saving" | "saved" | "error";
 export type DesktopWorkspace = "library" | "quick-notes" | "trash";
 
@@ -63,14 +67,19 @@ export function initialSidebarMode(): SidebarMode {
 }
 
 export function initialSidebarWidth(): number {
-  const stored = Number(localStorage.getItem("lake-notes-v3.sidebar-width"));
+  // ⚠️ 不能直接 Number(localStorage.getItem(...))：没存过时 getItem 返回 null，而 Number(null) === 0，
+  // Number.isFinite(0) 为真 ⇒ 首次启动会被钳到**最小值**（实测：目录一直是 160 而不是默认 224）。
+  const raw = localStorage.getItem("lake-notes-v3.sidebar-width");
+  const stored = raw === null || raw.trim() === "" ? Number.NaN : Number(raw);
   return Number.isFinite(stored)
     ? Math.min(SIDEBAR_MAX_WIDTH, Math.max(SIDEBAR_MIN_WIDTH, stored))
     : SIDEBAR_DEFAULT_WIDTH;
 }
 
 export function initialOutlineSidebarWidth(): number {
-  const stored = Number(localStorage.getItem("lake-notes-v3.outline-sidebar-width"));
+  // 同上：Number(null) === 0 会把首次启动钳到最小值（大纲一直 200 而不是默认 280）。
+  const raw = localStorage.getItem("lake-notes-v3.outline-sidebar-width");
+  const stored = raw === null || raw.trim() === "" ? Number.NaN : Number(raw);
   return Number.isFinite(stored)
     ? Math.min(OUTLINE_SIDEBAR_MAX_WIDTH, Math.max(OUTLINE_SIDEBAR_MIN_WIDTH, stored))
     : OUTLINE_SIDEBAR_DEFAULT_WIDTH;

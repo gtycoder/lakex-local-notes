@@ -207,11 +207,89 @@
   top: var(--lake-floating-panel-top);
   bottom: 0;
   width: 8px;
-  z-index: 30;
+  /* 110：要在块手柄（vendor `position:fixed; z-index:100`）之上——否则"跟手把手"会被手柄盖住。
+     仍低于目录浮层(250)/大纲(260)/顶栏(400)，所以面板一出现就把热区压住。 */
+  z-index: 110;
   cursor: default;
   background: transparent;
 }
 .edge-hotzone-l { left: 0; }
+
+/* ── 目录「悬浮」= 半幅浮卡（260922 用户定稿）──
+ * 为什么不跟工具栏做高度适配：peek 是**临时**的（用完就收）——做成固定高度的浮卡，就不必关心
+ * 「只读没有工具条 / 表格工具条 / 画板」这些随文档类型变的高度。
+ * 顶边 = 面包屑下缘 + 6px（面包屑是我们自己的固定元素，不随类型变）：比原来贴工具条下缘高 30px，
+ * 不再"偏下"；盖住工具条是有意的（反正一收就没）。
+ * 四角圆角 + 投影 = 一眼就是"临时层"，与「固定态 = 贴边、满高、无投影的连体列」明确区分。
+ * 固定态不走这里（它占栅格列），所以这套几何只作用于悬浮/收起态。 */
+:root {
+  --lake-dir-peek-top: calc(var(--topbar-height) + 42px); /* 38 顶栏 + 4 pane 顶 + 32 面包屑 + 6 缝 = 80 */
+  /* 高度 = 一直延伸到离窗口底 12px（"贴底浮卡"）：既保住"卡片身份"（四角圆角 + 投影 + 离边留白），
+     又几乎不牺牲可见行数（820 窗口下 728px，比原来的 min(60vh,560) 多 236px）。不用做任何高度适配。 */
+  --lake-dir-peek-height: calc(100vh - var(--lake-dir-peek-top) - 12px);
+}
+.sidebar.sidebar-floating,
+.sidebar.sidebar-collapsed {
+  /* ⚠️ 必须贴左缘（left: 0）：因为热区是窗口最左 0..8px。
+     曾经写 left: 8px（离边留白）⇒ 面板浮出时指针还停在 0..8 的缝里、不在面板内，
+     被 App 的「指针不在 .sidebar 里就收起」守卫立刻收掉；而指针没离开热区 ⇒ pointerenter 不再触发、
+     驻留计时也不会重新武装 ⇒ 那一轮再也唤不出面板（用户 260922 实测的 bug）。贴边后面板天然盖住热区。 */
+  left: var(--activity-rail-width, 0px);
+  top: var(--lake-dir-peek-top);
+  bottom: auto;
+  height: var(--lake-dir-peek-height);
+  max-height: none; /* 高度公式已含视口，别再用另一个数值钳（否则底缝会被 max-height 改成 16px） */
+  /* 贴边 ⇒ 左侧直角、只圆右侧；底缝 12px + 投影仍保住「浮卡」观感。 */
+  border: 1px solid var(--lake-border-strong);
+  border-left: 0;
+  border-radius: 0 var(--lake-radius-md) var(--lake-radius-md) 0;
+  box-shadow: var(--lake-shadow-soft);
+}
+
+/* ── 左缘「跟手把手」(260922)：隐形热区里浮出的小把手 ──
+ * 默认完全不可见（热区 8px、无图形）；指针进入热区才淡入，Y 跟随指针（var 由 App 直接写，避免重渲染）。
+ * 点击 = 固定/取消固定；面板一浮出（sidebar-floating/docked）立刻把把手压掉——把手只负责"召唤"。
+ * ⚠️ 宽度压在 30px 内：块手柄簇占块左缘外 54px，把手再宽就会挡"伸手去抓手柄"。 */
+.edge-hotzone .edge-hotzone-handle {
+  position: fixed;
+  left: 0;
+  top: var(--edge-handle-y, 50%);
+  transform: translateY(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  width: 28px;
+  height: 56px;
+  border: 1px solid var(--lake-border-strong);
+  border-left: 0;
+  border-radius: 0 10px 10px 0;
+  color: var(--lake-text-3);
+  background: color-mix(in srgb, var(--lake-bg-panel) 92%, transparent);
+  box-shadow: var(--lake-shadow-soft);
+  font-size: 9px;
+  line-height: 1;
+  opacity: 0;
+  pointer-events: none;
+  cursor: pointer;
+  user-select: none;
+  /* 入场：从窗口外滑进来一点点 + 轻微缩放（比单纯淡入更有"召唤"感）。 */
+  transform: translate(-6px, -50%) scale(.96);
+  transition: opacity 130ms var(--lake-ease-standard), transform 130ms var(--lake-ease-standard), top 80ms linear, width 130ms var(--lake-ease-standard), color 120ms ease-out, border-color 120ms ease-out;
+}
+.edge-hotzone.is-active .edge-hotzone-handle {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translate(0, -50%) scale(1);
+}
+/* hover：稍微长胖一点 + 主色，明确"可以点" */
+.edge-hotzone .edge-hotzone-handle:hover { width: 34px; color: var(--lake-accent); border-color: var(--lake-accent); }
+/* 面板已经出来了 ⇒ 把手退场（它只负责把面板叫出来）。 */
+.app-shell.sidebar-floating .edge-hotzone .edge-hotzone-handle,
+.app-shell.sidebar-docked .edge-hotzone .edge-hotzone-handle { opacity: 0; pointer-events: none; }
+.edge-hotzone-handle__icon { opacity: .9; }
+.edge-hotzone-handle__label { letter-spacing: .04em; }
 .app-shell.sidebar-docked .edge-hotzone-l { left: 0; }
 
 /* 目录栏 📌（固定/悬浮） */
