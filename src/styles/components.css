@@ -349,10 +349,16 @@ button.b3-list-item__action:disabled { opacity: .45; cursor: default; }
   border-radius: calc(var(--lake-radius-md) + 2px);
   background: color-mix(in srgb, var(--lake-text) 8%, transparent);
 }
-/* ⚠️ P7-e：这几条 !important 是**必需**的（原先记录的「阻塞项 ②」）——
- * .seg__item 与 .b3-button--outline 同元素，本文件是**双端共享**，桌面端现在有 kit 层、
- * 但移动端没有，为了让两端表现一致，这里继续用 !important 压过 .b3-button--outline。
- * （P7-e 批量去 !important 时曾误删，对拍发现分段控件变成描边按钮后已恢复。） */
+/* ⚠️ 这 4 条 !important 是**必需**的，且不能用"搬进 kit 层"消除（260923 W4 结论，已实测）——
+ * ① 层叠规则：@layer 中 !important 会**反转层序** ⇒ legacy 的 !important 必压 kit 的普通声明。
+ *    故「components.css 保留 !important」与「kit.css 写桌面版取胜」不可能同时成立（原计划矛盾点）。
+ * ② 双端约束：本文件双端共享。去掉 !important 后移动端只能靠特异性压 siyuan 的 .b3-button--outline，
+ *    而 .quick-notes-view-switch .seg__item（0,2,0 覆写）与两端注入顺序都会跟着变——收益仅"少 4 条
+ *    !important"（当前 9 条已在 ≤10 预算内），风险却是移动端观感回归 ⇒ §3 #17：不做。
+ * ③ 正解 = 按端拆文件 / 段控件改用 kit 的 ln-segment（移动端不再复用 b3-button--outline）⇒ 并入 W2。
+ * 实测（260923，桌面 5 个段项）：段项全部 background 透明、text-3 墨色、border 0；.is-active 与之**只差**
+ * 一条 box-shadow ⇒ 下面 .is-active 里声明的 color / background-color / border-color 是被上面 !important
+ * 压死的**死声明**（注释曾宣称的"抬起表面 + 中性墨色"并未生效）；保留仅为记录设计意图，待 W2 修正。 */
 .seg__item { min-width: 40px; height: 26px; padding: 0 10px; font-size: 12px; border: 0 !important; background: transparent !important; color: var(--lake-text-3) !important; box-shadow: none; }
 .seg .seg__item:hover { color: var(--lake-text-1) !important; }
 .seg .seg__item.is-active {

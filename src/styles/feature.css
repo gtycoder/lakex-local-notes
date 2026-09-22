@@ -29,8 +29,10 @@ pre {
  *
  * ⚠️ 仍有两项被共享层的 !important 挡住、**本批未迁**（见 HANDOFF「待移动端批次」）：
  *   ① 【.config-items .b3-label__text】的 font-size: 13px !important（在 b3/siyuan/business/_config.scss）
- *   ② 【.seg__item】的 5 处 !important（在 styles/components.css，移动端靠它压 b3-button--outline）
- *   两处都在移动端也会加载的共享文件里，动了会影响移动端 ⇒ 留到移动端批次一起处理。 */
+ *   ② 【.seg__item】的 4 处 !important（在 styles/components.css，移动端靠它压 b3-button--outline）
+ *   两处都在移动端也会加载的共享文件里，动了会影响移动端 ⇒ 留到移动端批次一起处理。
+ *   （260923 W4 已评估：② 无法在"移动端文件一字不动"前提下用 kit 层去掉——@layer 的 !important
+ *    反转层序，legacy !important 必压 kit 普通声明；正解是按端拆 / 段控件改用 ln-segment，并入 W2。） */
 .settings-panel .config-group { margin: 0 0 var(--lake-space-xxl); }
 .settings-panel .config-group:last-child { margin-bottom: 0; }
 .settings-panel .config-title {

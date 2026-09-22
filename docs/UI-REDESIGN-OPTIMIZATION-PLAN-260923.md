@@ -90,7 +90,7 @@ W0 双端门禁 → W0.5 抽两端共享入口 → W1 桌面专属零耦合清�
 ## 7. W3–W6（与安卓无耦合，可穿插）
 
 - **W3 几何/层序护栏**：`src/styles/geometrySources.test.ts` —— 4 个令牌各只定义一次、全部消费者引用令牌（裸 px 仅白名单 4/6/12）、`.tab-bar` 内距 === (顶栏−标签)/2、红绿灯 y === (TOPBAR_HEIGHT−12)/2；并把散落的 z 序（手柄 100 / 热区 110 / 目录 250 / 大纲 260 / 顶栏 400 + 编辑器内 5/4/3）收进 `--lake-z-*` 并加**顺序断言**（`handle < hotzone < sidebar < outline < topbar`）。`PANEL-CONTRACT.md` 标注"由该测试强制"。
-- **W4 `!important` 9→5**（只动桌面）：把**桌面端** `.seg__item` 规则搬进桌面专属 `kit.css`（layer kit > legacy ⇒ 无需 `!important`），`components.css` 的**移动端那份一字不动**（`src/mobile/main.tsx:17` 有明确注释）。tokens 那 3 条压内核运行时注入的毛玻璃 ⇒ **保留并写明理由**。
+- **W4 `!important` 9→5 —— 260923 评估后【不做，并入 W2】**。原方案（桌面段移入 `kit.css`、`components.css` 移动端那份一字不动）**与层叠规则矛盾**：`@layer` 中 `!important` **反转层序**，legacy 的 `!important` 必压 kit 的普通声明 ⇒ kit 版无法生效；真去掉 `!important` 则移动端失去对 siyuan `.b3-button--outline` 的压制，且 `.quick-notes-view-switch .seg__item`（0,2,0 覆写）的特异性与两端注入顺序全变。收益仅"少 4 条 `!important`"（当前 9 ≤ 10 已达标），风险是移动端观感回归 ⇒ §3 #17 不做。**桌面实测（5 个段项）**：段项全部 background 透明 / text-3 墨色 / border 0，`.is-active` 与之只差一条 `box-shadow` ⇒ `.is-active` 的 color/background-color/border-color 是**死声明**（"抬起表面"意图未生效）。正解 = W2 把段控件改用 `ln-segment`、移动端不再复用 `b3-button--outline`，4 条 `!important` 随之自然消失（已写进 components.css / kit.css / feature.css 注释）。tokens 那 3 条压内核运行时注入的毛玻璃 ⇒ **保留并写明理由**。
 - **W5 A3 内部优化（行为逐项不变）**：抽纯状态机 `sidebarHoverMachine.ts`（enter/move/leave/dwell/click/dock-change × idle/handle-shown/preview-armed/preview-shown → 输出），把 §2.28 的 7 条坑写成**转移表 + 单测**；统一走廊并集谓词到 `sidebarInteraction.ts`；新增 `scripts/e2e-sidebar-hover.mjs`（真实指针，断言"进场→把手、≥240ms→面板、移开→收、点把手→固定、`⌘]`→翻转"，且**与改动前逐项同值**）。
 - **W6 增强大纲关闭时零成本**：核验 `editor-outline-enhance=false`（默认）时不挂载、样式不生效、无额外计算；有副作用按等价重构修掉。
 

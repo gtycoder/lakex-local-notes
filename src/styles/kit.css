@@ -427,7 +427,8 @@
  * 桌面专属层（移动端不加载本层 ⇒ 移动端的 .b3-button 不受影响）。
  * 变体映射：.b3-button = primary（实心 ink）/ --outline = secondary（描边）/ --cancel = ghost。
  * ⚠️ 分段控件的段也带 .b3-button--outline，但 .seg__item 的 border/background/color 在共享层是
- *    !important（见「待移动端批次」），legacy 的 !important 压过本层 ⇒ 段的外观维持现状。 */
+ *    !important；@layer 中 !important **反转层序** ⇒ legacy 的 !important 压过本层，段的外观维持现状。
+ *    这是**有意**的：去掉它会牵动移动端（详见 components.css 顶部注释；260923 W4 已评估并并入 W2）。 */
 /* 小记编辑器的「小记一下 / 取消」不套通用按钮规格：它们由 app/quick-notes.css 定义
  * （中性描边胶囊；有内容时才 .is-emphasized 变主色实心 —— 双端一致，含移动端）。
  * 这里用 :not() 排除，而不是在更高层再压一条（用户 260921 立规：不要层压层）。 */

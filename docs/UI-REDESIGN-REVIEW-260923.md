@@ -117,6 +117,7 @@ git diff --check             → 干净
 
 9. **`!important` 只降到 9、没降到底：其中 4 条是 `.seg__item`**（另 1 条是面板宽度压 JS inline style，属合理）。
    原因是规则所在的 `components.css` **双端共享**，移动端靠它压 `.b3-button--outline`。桌面已经有 `@layer` 了，正解是**把分段控件按端拆文件**，而不是两端共用 + `!important`。
+   **260923 复评（W4 结案）**：原 W4 方案"桌面版搬 `kit.css`、移动端那份一字不动"**不可行**——`@layer` 的 `!important` **反转层序**，legacy `!important` 必压 kit 普通声明，两者不能共存；已决定不做、并入 W2。实测还发现一个**注释与实现不符**：`.is-active` 的 `color/background-color/border-color` 被同一条 `!important` 压成**死声明**，段控件的选中态实际**只靠一条 `box-shadow` 区分**（与注释宣称的"抬起表面 + 中性墨色"不符），已在三处 CSS 注释里更正、并留待 W2 一并修正。
 
 10. **增强大纲"进编辑区"投在了非默认路径上**：只在 `editor-outline-enhance=true`（默认 **false**）时生效，默认走内核原生 TOC（第三方外观，不在重做范围）。
     不是错，但**优先级判断可以更早**：先确认用户到底用不用它，再决定投入。
