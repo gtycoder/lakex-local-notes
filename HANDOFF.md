@@ -5,7 +5,7 @@
 > **§8 是移动端（安卓）专职交接**，由移动端会话维护；桌面会话不要改 §8，移动端会话不要改 §0-§7 之外的桌面文件。
 
 ## 0. 当前基线（新会话开工前）
-- **分支状态（260921 收尾）**：`feat/ui-redesign` @ **`fc04ac9`**，**已 push origin 备份**（用户指示）；`origin/master` 仍 **`17bafbe`**（未合、未动）。工作区只剩用户新会话的探路文件（未跟踪，**不要动**）。worktree 已撤（`git worktree list` 只剩主检出一项）；冗余分支 `feat/ui-redesign-opt` 与 `feat/ui-redesign` 同提交（可删）。
+- **分支状态（260921 收尾）**：`feat/ui-redesign`，**已 push origin 备份**（用户指示）；**本批 14 个优化提交的末提交 = `fc04ac9`**（其后为本交接文档提交）；`origin/master` 仍 **`17bafbe`**（未合、未动）。工作区只剩用户新会话的探路文件（未跟踪，**不要动**）。worktree 已撤（`git worktree list` 只剩主检出一项）；冗余分支 `feat/ui-redesign-opt` 与 `feat/ui-redesign` 同提交（可删）。
 - **🚧 在途分支 `feat/ui-redesign`（260921 起，用户授权自主执行）**：桌面端 UI 重设计 = 彻底剥离思源样式层 + 自有设计系统 + 换肤。
   **✅ 本批已完成（P0–P8）**：进度与收尾见 **§2.22**；方案/硬指标/阶段 = `docs/UI-REDESIGN-260921/README.md`；**元素底账（防丢，346 条全部打勾）** = `01-ELEMENT-LEDGER.md`；**验收报告（含硬指标表 + 三种验证方法 + 19 张截图矩阵）** = `03-ACCEPTANCE.md`。**五项硬指标全部达成**：桌面 `var(--b3-*)` 604→**0**、非主题颜色字面量 624→**0**、`!important` 141→**9**、入口 b3 import 8→**0**、同名文件对 4→**0**；app-css gzip 197→**182 KB**。
   设计规格（外部，只作参考）= `/Users/admin/file/local-lake/ui-design-inputs/out/design-system/`。
@@ -1932,7 +1932,7 @@ P4 组件库 14 件 → P5 逐屏迁移（每屏对照底账打勾）→ P6 第�
 
 > 承接 §2.22（UI 重设计 P0–P8：剥离思源层 + 自有设计系统，五项硬指标已达成）。
 > 本批是**用户验收后反馈「太丑」引发的视觉回修 + 顺手挖出并修掉的一批真 bug**。
-> 分支：`feat/ui-redesign`（**已 push origin 备份**）@ `fc04ac9`；**未合 master**；`origin/master` 仍是 `17bafbe`。
+> 分支：`feat/ui-redesign`（**已 push origin 备份**）。**本批 14 个优化提交的末提交 = `fc04ac9`**，其后是本交接文档提交；**未合 master**；`origin/master` 仍是 `17bafbe`。
 
 ### 一、任务目标（用户本批原话与约束）
 
