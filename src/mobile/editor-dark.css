@@ -17,13 +17,13 @@
   --lakex-editor-border-secondary: #31363f;
   --lakex-editor-card-background-hover: #262a31;
   --lakex-editor-card-border-hover: #414855;
-  --lakex-editor-card-border-selected: var(--b3-theme-primary);
+  --lakex-editor-card-border-selected: var(--lake-accent);
   --lakex-editor-code-background: rgba(255, 255, 255, .06);
   --lakex-editor-column-background-highlight: rgba(255, 255, 255, .04);
-  --lakex-editor-cursor: var(--b3-theme-primary);
+  --lakex-editor-cursor: var(--lake-accent);
   --lakex-editor-selection: rgba(122, 144, 234, .32);
-  --lakex-editor-table-bar-active: var(--b3-theme-primary);
-  --lakex-editor-table-scrollbar-thumb: var(--b3-scroll-color);
+  --lakex-editor-table-bar-active: var(--lake-accent);
+  --lakex-editor-table-scrollbar-thumb: var(--lake-text-4);
   --lakex-editor-text-body: #e8ecf3;
   --lakex-editor-text-caption: #9aa4b2;
   --lakex-editor-text-color: #e8ecf3;
@@ -40,15 +40,15 @@
   --lakex-editor-color-black-f12: rgba(213, 218, 228, .12);
   --lakex-editor-color-black-f30: rgba(213, 218, 228, .30);
   --lakex-editor-color-black-f65: rgba(213, 218, 228, .65);
-  --lakex-editor-color-theme: var(--b3-theme-primary);
-  --lakex-editor-color-theme-light: var(--b3-theme-primary-light);
+  --lakex-editor-color-theme: var(--lake-accent);
+  --lakex-editor-color-theme-light: var(--lake-accent-soft);
   --lakex-editor-color-white: #131519;
   --lakex-editor-color-white-f60: rgba(19, 21, 25, .60);
   --lakex-editor-color-white-f90: rgba(19, 21, 25, .90);
 }
 
 [data-theme="dark"] .document-pane {
-  background: var(--b3-theme-background);
+  background: var(--lake-shell);
 }
 
 /* ── 深色边界修复（审计发现）：html 背景 / 表单控件 / tab-switcher / 小记 ── */
@@ -59,27 +59,27 @@
 [data-theme="dark"] select,
 [data-theme="dark"] textarea,
 [data-theme="dark"] .secret-field {
-  background: var(--b3-theme-background);
-  color: var(--b3-theme-on-background);
-  border-color: var(--b3-border-color);
+  background: var(--lake-shell);
+  color: var(--lake-text-1);
+  border-color: var(--lake-border);
 }
 
 [data-theme="dark"] .tab-switcher {
   background: transparent;
-  color: var(--b3-theme-on-surface);
+  color: var(--lake-text-2);
 }
 
 [data-theme="dark"] .quick-note-composer,
 [data-theme="dark"] .quick-note-entry {
-  background: var(--b3-theme-surface);
-  border-color: var(--b3-border-color) !important;
-  box-shadow: var(--b3-dialog-shadow) !important;
+  background: var(--lake-panel);
+  border-color: var(--lake-border) !important;
+  box-shadow: var(--lake-shadow-popover) !important;
 }
 [data-theme="dark"] .quick-note-composer textarea {
   background: transparent;
-  color: var(--b3-theme-on-background);
+  color: var(--lake-text-1);
 }
 [data-theme="dark"] .quick-note-conflict {
-  background: var(--b3-card-warning-background) !important;
-  color: var(--b3-card-warning-color) !important;
+  background: var(--lake-status-pending-soft) !important;
+  color: var(--lake-status-pending) !important;
 }

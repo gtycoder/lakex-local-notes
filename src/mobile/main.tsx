@@ -14,10 +14,8 @@ import "../styles/themes/light.css";
 import "../styles/themes/dark.css";
 import "../styles/themes/warm.css";
 import "../styles/tokens.css"; // 非令牌基础规则（关键帧/焦点环/reduced-motion）
-import "../b3/theme-daylight.css"; // ⚠️ 迁移期过渡（下同）：未迁移屏幕仍需要 --b3-*
-import "../b3/theme-midnight.css";
-import "../b3/dark.css";
-import "../b3/siyuan.scss";
+import "./editor-dark.css"; // 自写：桌面同源深色桥（已去 --b3-*，走 --lake-*）
+import "../styles/compat.css"; // 复用桌面兼容层（config-*/b3-label/b3-switch/fn__*，值走 --lake-*）
 import "../styles/kit.css"; // 自有组件库（ln-* 14 件）——新 UI 组件来源
 import "../styles/components.css"; // 共用浮层件（seg/badge/ln-*），须晚于 siyuan.scss（seg 选中态要压过 b3-button--outline）
 import "./editor/editor-dock.css";

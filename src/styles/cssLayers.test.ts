@@ -17,13 +17,11 @@ import { describe, expect, it } from "vitest";
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const SRC = path.resolve(HERE, "..");
 
-/** 我们自己的样式文件（不含 vendor：src/b3/siyuan/** 与 lakex 包内样式）。 */
+/** 我们自己的样式文件（不含 vendor：lakex 包内样式）。260923 W2：src/b3/** 已整体下线（含 AGPL 思源移植层）。 */
 const FILES = [
   "styles/index.css",   // UI 重设计 P1：单入口，只 @layer 声明 + @import 编排（0 声明）
   "styles/compat.css",  // P7-b：桌面兼容层（从 b3 收编的承重规则 + 仍在用的思源类）
   "styles/a11y.css",    // P7-e：无障碍最高层（reduced-motion 契约，靠层序取胜）
-  "b3/animations.css", "b3/base.css", "b3/components.css", "b3/dark.css", "b3/layout.css",
-  "b3/theme-daylight.css", "b3/theme-midnight.css",
   "features/attachment/attachment-preview.css", "features/editor/image-lightbox.css", "features/outline/outline.css",
   "features/sheet/sheetEditor.css",
   "features/bitable/bitableEditor.css",
@@ -49,13 +47,6 @@ const BASELINE: Record<string, { decls: number; dupGroups: number }> = {
   "styles/overlay.css": { decls: 94, dupGroups: 0 },  // P5-c 浮层 + P5-j 搜索 + P7-b .top-menu 定位 + 菜单项布局三件套
   "styles/compat.css": { decls: 205, dupGroups: 0 },  // 260923：-4 = .tab-item 盒（min-height/line-height/margin/padding）收编到 styles/app/tabs.css 单一来源
   "styles/a11y.css": { decls: 9, dupGroups: 0 },   // P7-e：无障碍最高层（reduced-motion 契约；靠层序而非 !important 取胜）
-  "b3/animations.css": { decls: 5, dupGroups: 0 },
-  "b3/base.css": { decls: 13, dupGroups: 0 },   // 260923 审计：按实测收紧
-  "b3/components.css": { decls: 148, dupGroups: 0 },
-  "b3/dark.css": { decls: 54, dupGroups: 0 },   // 260920：删掉已废弃的 .quick-note-image-grid / .quick-note-saved-images 深色覆盖（卡片预览改自研渲染）
-  "b3/layout.css": { decls: 184, dupGroups: 0 },   // 260923 审计：按实测收紧
-  "b3/theme-daylight.css": { decls: 163, dupGroups: 0 },
-  "b3/theme-midnight.css": { decls: 148, dupGroups: 0 },
   "features/attachment/attachment-preview.css": { decls: 78, dupGroups: 0 },
   "features/editor/image-lightbox.css": { decls: 57, dupGroups: 0 },
   "features/outline/outline.css": { decls: 274, dupGroups: 0 },   // 260923 W1-L2：-3   // 整边触发 + 去固定轨（合并重复材质规则）
