@@ -17,6 +17,10 @@ curl -s http://127.0.0.1:9335/json/list         # 校验 type==page
 ```
 收尾：`adb emu kill`（**不要** pkill emulator / Electron）。
 
+> ⚠️ **每次 `android-build.sh --install` 之后必须重跑 `emu-cdp.sh`**：APK 重装会重启 App，
+> WebView 的 devtools socket 名会变 ⇒ 旧的 9335 转发指向**死 socket**（实测：重装后直接快照会让 Node 直接崩，
+> 快照文件缺失，进而把门禁误报成"未报差异"）。
+
 ## 实测设备事实（260923）
 - viewport **412×842**（dpr 2.625；设备 1080×2209）
 - `#root` → `div.mobile-app`（已过 booting）；`window.lakeNative` 存在
