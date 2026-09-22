@@ -29,3 +29,23 @@
 /* 危险主按钮（确认框的「删除」）：实心 error 底 + on-accent 字（kit 的 --danger 单独用是描边风格）。 */
 .ln-btn--primary.ln-btn--danger { color: var(--lake-text-on-accent); background: var(--lake-error); border-color: transparent; }
 .ln-btn--primary.ln-btn--danger:hover { background: var(--lake-error-strong, var(--lake-error)); }
+
+/* ── W2 移动端弹层菜单（替代思源 .b3-menu--sheet*）────────────────── */
+.mobile-menu__scrim { position: fixed; inset: 0; z-index: var(--mobile-z-menu-scrim); background: var(--mobile-mask); opacity: 0; transition: opacity var(--mobile-duration-panel) linear; }
+.mobile-menu__scrim.is-open { opacity: .2; }
+.mobile-menu { position: fixed; left: 0; right: 0; bottom: 0; z-index: var(--mobile-z-menu); height: 56dvh; max-height: 90dvh; display: flex; flex-direction: column; overflow: hidden; background: var(--lake-bg-panel); color: var(--lake-text-1); border-radius: 16px 16px 0 0; box-shadow: var(--lake-shadow-popover); transform: translateY(100%); transition: transform var(--mobile-duration-panel) var(--mobile-ease-panel); }
+.mobile-menu.is-open { transform: translateY(0); }
+.mobile-menu__title { display: flex; align-items: center; gap: 4px; min-height: 48px; padding: 0 12px; font-size: var(--lake-font-size-body); font-weight: var(--lake-font-weight-semibold); border-bottom: 1px solid var(--lake-border-2); }
+.mobile-menu__title--root { min-height: 10px; border-bottom: 0; }
+.mobile-menu__items { flex: 1 1 auto; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: none; padding: 8px 0; }
+.mobile-menu__items::-webkit-scrollbar { display: none; }
+.mobile-menu__item { position: relative; display: flex; align-items: center; gap: 10px; width: 100%; min-height: 48px; padding: 0 16px; border: 0; background: transparent; color: var(--lake-text-1); font-size: var(--lake-font-size-body); text-align: left; }
+.mobile-menu__item:active { background: var(--lake-bg-press); }
+.mobile-menu__item:disabled { color: var(--lake-text-4); }
+.mobile-menu__item.is-danger { color: var(--lake-error); }
+.mobile-menu__item.is-danger .mobile-menu__icon { color: var(--lake-error); }
+.mobile-menu__icon { flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center; width: 20px; color: var(--lake-text-3); }
+.mobile-menu__icon > svg { width: 18px; height: 18px; display: block; }
+.mobile-menu__label { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mobile-menu__submenu { position: fixed; top: 48px; left: 100vw; width: 100vw; bottom: 0; z-index: var(--mobile-z-menu); background: var(--lake-bg-panel); overflow-y: auto; overscroll-behavior: contain; transition: transform var(--mobile-duration-panel) var(--mobile-ease-panel); }
+.mobile-menu__item.is-show > .mobile-menu__submenu { transform: translateX(-100vw); }

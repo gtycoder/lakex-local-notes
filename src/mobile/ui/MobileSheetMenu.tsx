@@ -80,19 +80,19 @@ export function MobileSheetMenu({ open, items, onClose, onSelect, headerAction }
     const Icon = it.icon;
     return (
       <button key={it.id} role="menuitem" disabled={it.disabled}
-        className={"b3-menu__item" + (expanded ? " b3-menu__item--show" : "") + (it.danger ? " b3-menu__item--warning" : "")}
+        className={"mobile-menu__item" + (expanded ? " is-show" : "") + (it.danger ? " is-danger" : "")}
         onClick={() => {
           if (it.disabled) return;
           if (hasChildren) { setPath((p) => [...p.slice(0, depth), it]); return; }
           onSelect(it, [...path.slice(0, depth), it]);
         }}>
-        {Icon ? <span className="b3-menu__icon"><Icon size={18} /></span> : <span className="b3-menu__icon" aria-hidden="true" />}
-        <span className="b3-menu__label">{it.label}</span>
+        {Icon ? <span className="mobile-menu__icon"><Icon size={18} /></span> : <span className="mobile-menu__icon" aria-hidden="true" />}
+        <span className="mobile-menu__label">{it.label}</span>
         {it.note && <span className="ln-menu-note">{it.note}</span>}
-        {hasChildren && <span className="b3-menu__icon"><ChevronRight size={16} /></span>}
+        {hasChildren && <span className="mobile-menu__icon"><ChevronRight size={16} /></span>}
         {hasChildren && (
-          <div className="b3-menu__submenu">
-            <div className="b3-menu__items">{renderLevel(it.children!, depth + 1)}</div>
+          <div className="mobile-menu__submenu">
+            <div className="mobile-menu__items">{renderLevel(it.children!, depth + 1)}</div>
           </div>
         )}
       </button>
@@ -102,14 +102,14 @@ export function MobileSheetMenu({ open, items, onClose, onSelect, headerAction }
   const title = path.length === 0 ? null : path[path.length - 1].label;
   return (
     <>
-      <div className="b3-menu__scrim b3-menu__scrim--open" data-prevent-swipe onClick={close} aria-hidden="true" />
-      <div ref={sheetRef} className={"b3-menu b3-menu--fullscreen b3-menu--sheet ln-sheet" + (shown ? " is-open" : "")} role="menu" data-prevent-swipe>
-        <div className={"b3-menu__title" + (path.length === 0 ? " b3-menu__title--root" : "")} onClick={() => { back(); }} data-prevent-swipe>
-          {path.length > 0 && <span className="b3-menu__icon"><ChevronLeft size={18} /></span>}
-          <span className="b3-menu__label">{title ?? ""}</span>
+      <div className="mobile-menu__scrim is-open" data-prevent-swipe onClick={close} aria-hidden="true" />
+      <div ref={sheetRef} className={"mobile-menu" + (shown ? " is-open" : "")} role="menu" data-prevent-swipe>
+        <div className={"mobile-menu__title" + (path.length === 0 ? " mobile-menu__title--root" : "")} onClick={() => { back(); }} data-prevent-swipe>
+          {path.length > 0 && <span className="mobile-menu__icon"><ChevronLeft size={18} /></span>}
+          <span className="mobile-menu__label">{title ?? ""}</span>
           {headerAction && <span className="ln-menu-head-action">{headerAction}</span>}
         </div>
-        <div className="b3-menu__items">{renderLevel(items, 0)}</div>
+        <div className="mobile-menu__items">{renderLevel(items, 0)}</div>
       </div>
     </>
   );

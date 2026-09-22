@@ -547,21 +547,11 @@ body { font-family: BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino San
 /* ===== 思源弹层口径接线（移动端）：sheet 菜单 / dialog 确认 / snackbar 提示 =====
    组件类本体来自 vendored 思源 _menu.scss / _dialog.scss / _snackbar.scss（AGPL-3.0，署名见 src/b3/siyuan.scss）；
    这里只补移动端需要的层叠顺序、56dvh 面板高度、进出场与图标盒，不改思源组件语义。 */
-.b3-menu__scrim { z-index: var(--mobile-z-menu-scrim); }
-.b3-menu.ln-sheet { z-index: var(--mobile-z-menu); height: 56dvh; max-height: 90dvh; }
-.b3-menu.ln-sheet.is-open { transform: translateY(0); }
-/* 危险项（思源 _mobile.scss 的 .b3-menu__item--warning；该文件未 vendored，这里按同口径补齐） */
-.ln-sheet .b3-menu__item.b3-menu__item--warning { color: var(--b3-theme-error); }
-.ln-sheet .b3-menu__item.b3-menu__item--warning .b3-menu__icon { color: var(--b3-theme-error); }
-.ln-sheet .b3-menu__items { overflow-y: auto; overscroll-behavior: contain; scrollbar-width: none; }
-.ln-sheet .b3-menu__items::-webkit-scrollbar { display: none; }
-.ln-sheet .b3-menu__icon { display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto; }
-.ln-sheet .b3-menu__icon > svg { width: 18px; height: 18px; display: block; }
-.ln-sheet .b3-menu__label { flex: 1 1 auto; min-width: 0; }
+/* 弹层菜单样式见 mobile-kit.css（W2 去思源后自带） */
 .ln-menu-note { flex: 0 0 auto; margin-left: 8px; font-size: 12px; color: var(--b3-theme-on-surface-light); }
 .ln-menu-head-action { margin-left: auto; display: inline-flex; align-items: center; }
 @media (prefers-reduced-motion: reduce) {
-  .ln-sheet, .ln-sheet .b3-menu__submenu, .mobile-dialog__box, .mobile-toast { transition: none; }
+  .mobile-menu, .mobile-menu__submenu, .mobile-dialog__box, .mobile-toast { transition: none; }
 }
 
 /* ===== 思源移动端 .toolbar 口径（移植自 siyuan-master app/src/assets/scss/main/_mobile.scss:157-300，AGPL-3.0）=====
