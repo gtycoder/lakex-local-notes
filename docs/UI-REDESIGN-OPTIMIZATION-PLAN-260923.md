@@ -92,6 +92,14 @@ W0 双端门禁 → W0.5 抽两端共享入口 → W1 桌面专属零耦合清�
 
 **DoD**：移动端 `var(--b3-*)`=0、`!important` 19→0、`@layer` 接入、双端 `check:stylesnap`/`check:pixel` 0 差异、你在真机/模拟器验收观感。
 
+**260923 执行结果（W2 主体完成）**：
+- **设计系统接入**：移动端颜色统一走 `themes/*`（`--lake-*`）；接入 `kit.css`；新增 `mobile-kit.css` 移动密度层；迁移按钮/输入/列表行/浮层/弹层菜单到 `ln-*` 与自有 `mobile-*` 类。
+- **去思源**：移动 TSX 内 `b3-*` 类**清零**；自有样式表 `--b3-*` **0**（mobile.css 185 + editor-dock 31 全映射到 `--lake-*`）；`src/b3/**`（含 AGPL `siyuan/**`，27 文件）**整体删除**；自写深色桥移至 `src/mobile/editor-dark.css`；`compat.css` 复用给移动端提供 config/fn/b3-label/b3-switch。
+- **指标**：桌面 `!important` 9 · 颜色 0 · `--b3-*` 0 · 入口 b3 import 0；**移动端 `--b3-*`=0 · 思源层 `!important` 32→0 · b3 文件 7→0**。
+- **门禁**：`tsc`/vitest 全绿；`check:mobilesnap` 每片重设基线后 **6 态 0 差异**。
+- **移动端 `!important` = 25**（mobile.css 19 + editor-dark 6）：其中**编辑器内核覆盖 7 条**（`.mobile-doc-body .ne-*`）、**拖拽浮层/落点 5 条**（`[data-drag-ghost]`/`.drop-parent`）、**reduced-motion 1 条**、editor-dark 6 条为压 lakex/内联样式——均属 §3 #14 允许的"压内核/内联"例外，按 §3 #17 保留并在代码注明，不做无谓去 `!important`（与桌面 W4 同口径）。
+- **待你验收**：安卓观感（模拟器/真机）。
+
 **260923 现状核查（可自主部分已清完，观感重做待你验收）**：
 - 移动端 harness 在线，`check:mobilesnap` **6 态 0 差异**（本轮复核）。
 - W1-L2 在**共享文件** `components.css`/`quick-notes.css` 删的规则，其类名在 `src/mobile/**` **全部零使用**（逐一核查 `sync-status-button`/`search-panel-help`/`ln-tabs__item`/`ln-empty`/`ln-row2`/`ln-noscrollbar`）⇒ **无移动端回归**（此前只按"桌面专属"推断，现已有实测）。

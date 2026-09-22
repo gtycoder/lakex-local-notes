@@ -1,4 +1,4 @@
-/* 移动端样式（对齐思源移动端：度量/动效/颜色一律取 --b3-* 与 --mobile-* 令牌）
+/* 移动端样式（W2：度量/动效/颜色一律取 --lake-* 与 --mobile-* 令牌；思源层已下线）
    口径来源：siyuan-master app/src/assets/scss/main/_mobile.scss（见 HANDOFF §8）。 */
 :root {
   /* 思源移动端骨架度量（_mobile.scss:4-15） */
@@ -388,7 +388,7 @@ body { font-family: BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino San
 
 /* 竖向设置菜单：设置项一行一行（思源移动端式），点某项进入新页面 */
 .mobile-settings-list { flex: 1; overflow-y: auto; background: var(--lake-shell); padding: 4px 0 calc(24px + env(safe-area-inset-bottom, 0px)); }
-/* 注意：菜单行是 b3-list-item + mobile-settings-row。b3-list-item 由 siyuan.scss 在移动壳之后加载，
+/* 注意：菜单行是 ln-row + mobile-settings-row。ln-row 由 siyuan.scss 在移动壳之后加载，
    会用默认 padding/height 覆盖单类选择器；这里用父级作用域提高特异性保证生效（否则行高被压成 28px、又矮又挤）。 */
 .mobile-settings-list .mobile-settings-row {
   width: 100%; display: flex; align-items: center; gap: 14px;
@@ -401,9 +401,9 @@ body { font-family: BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino San
 .mobile-settings-list .mobile-settings-row:last-child { border-bottom: 0; }
 .mobile-settings-list .mobile-settings-row:active { background: var(--lake-bg-hover); }
 /* 图标保持中性墨色：整列蓝色图标会让每一行都像"已选中"，反而看不出层级（桌面设置页同口径） */
-.mobile-settings-list .mobile-settings-row .b3-list-item__graphic { color: var(--lake-text-2); flex: 0 0 auto; }
-.mobile-settings-list .mobile-settings-row .b3-list-item__text { flex: 1 1 auto; min-width: 0; }
-.mobile-settings-list .mobile-settings-row .b3-list-item__arrow { color: var(--lake-text-2-light); flex: 0 0 auto; }
+.mobile-settings-list .mobile-settings-row .ln-row__icon { color: var(--lake-text-2); flex: 0 0 auto; }
+.mobile-settings-list .mobile-settings-row .ln-row__title { flex: 1 1 auto; min-width: 0; }
+.mobile-settings-list .mobile-settings-row .ln-row__chevron { color: var(--lake-text-2-light); flex: 0 0 auto; }
 .mobile-settings-spacer { flex: 0 0 auto; width: 40px; }
 .mobile-settings-spacer--sm { width: 18px; }
 
@@ -500,26 +500,26 @@ body { font-family: BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino San
 
 .side-panel-body { flex: 1; overflow-y: auto; overscroll-behavior: contain; padding: 8px 0 calc(24px + var(--mobile-bottom-safe-area)); scrollbar-width: none; }
 
-/* 目录树（b3-list-item 行） */
+/* 目录树（ln-row 行） */
 .ln-chevron { flex: 0 0 auto; color: var(--lake-text-2, var(--lake-text-tertiary)); transition: transform 120ms ease; }
 .ln-chevron.open { transform: rotate(90deg); }
 .ln-chevron-spacer { flex: 0 0 auto; width: 16px; }
 .ln-tree-icon { flex: 0 0 auto; margin-right: 8px; color: var(--lake-text-2, var(--lake-text-secondary)); }
-/* 列表密度 = 思源 .b3-list--mobile：16px 字号 / 40px 行高 / 18px 图标；触屏不给 hover 底色 */
-.side-panel-body .b3-list-item, .mobile-model-body .b3-list-item, .mobile-dropdown-body .b3-list-item, .mobile-sheet-body .b3-list-item, .mobile-settings-list .b3-list-item {
+/* 列表密度 = 思源 .ln-list：16px 字号 / 40px 行高 / 18px 图标；触屏不给 hover 底色 */
+.side-panel-body .ln-row, .mobile-model-body .ln-row, .mobile-dropdown-body .ln-row, .mobile-sheet-body .ln-row, .mobile-settings-list .ln-row {
   width: 100%; border: 0; background: transparent; cursor: pointer; gap: 4px;
   min-height: 40px; padding-top: 0; padding-bottom: 0; font-size: 16px; line-height: 40px;
   -webkit-tap-highlight-color: transparent;
 }
-.side-panel-body .b3-list-item:not(.b3-list-item--focus):hover,
-.mobile-model-body .b3-list-item:not(.b3-list-item--focus):hover,
-.mobile-settings-list .b3-list-item:not(.b3-list-item--focus):hover { background-color: transparent; }
-.b3-list--mobile .b3-list-item__graphic { width: 18px; height: 18px; font-size: 18px; line-height: 18px; margin-right: 0; margin-inline-end: 8px; }
-.b3-list--mobile .b3-list-item__graphic > svg, .b3-list--mobile svg.b3-list-item__graphic { width: 18px; height: 18px; }
-.b3-list--mobile .b3-list-item__action { padding: 6px; height: 20px; }
-.b3-list--mobile .b3-list-item__action > svg { width: 20px; height: 20px; }
-.b3-list--mobile .b3-list-item__arrow { width: 16px; height: 16px; }
-/* 树缩进：思源 .b3-list-item 用 --file-toggle-width 口径；这里用 data-depth 属性选择器，避免内联 style */
+.side-panel-body .ln-row:not(.ln-row--focus):hover,
+.mobile-model-body .ln-row:not(.ln-row--focus):hover,
+.mobile-settings-list .ln-row:not(.ln-row--focus):hover { background-color: transparent; }
+.ln-list .ln-row__icon { width: 18px; height: 18px; font-size: 18px; line-height: 18px; margin-right: 0; margin-inline-end: 8px; }
+.ln-list .ln-row__icon > svg, .ln-list svg.ln-row__icon { width: 18px; height: 18px; }
+.ln-list .ln-row__action { padding: 6px; height: 20px; }
+.ln-list .ln-row__action > svg { width: 20px; height: 20px; }
+.ln-list .ln-row__chevron { width: 16px; height: 16px; }
+/* 树缩进：思源 .ln-row 用 --file-toggle-width 口径；这里用 data-depth 属性选择器，避免内联 style */
 .ln-indent { --ln-indent: 12px; padding-left: 12px; }
 .ln-indent[data-depth="1"] { --ln-indent: 28px; padding-left: 28px; }
 .ln-indent[data-depth="2"] { --ln-indent: 44px; padding-left: 44px; }
@@ -533,15 +533,15 @@ body { font-family: BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino San
 .mobile-model-head { display: flex; align-items: center; justify-content: space-between; min-height: var(--mobile-topbar-height); padding: 8px 8px 8px 16px; border-bottom: .5px solid var(--lake-shell-light); }
 
 .mobile-model-body { overflow-y: auto; padding: 14px 16px calc(16px + env(safe-area-inset-bottom, 0px)); }
-.mobile-model-body .b3-list-item {
+.mobile-model-body .ln-row {
   width: 100%; display: flex; align-items: center; gap: 10px;
   min-height: 48px; margin-bottom: 8px; padding: 10px 14px;
   border: 1px solid var(--lake-border); border-radius: var(--lake-radius-md);
   background: var(--lake-shell); cursor: pointer;
 }
-.mobile-model-body .b3-list-item--selected { border-color: var(--lake-accent); background: var(--lake-accent-lightest); }
-.mobile-model-body .b3-list-item__text { flex: 1; min-width: 0; }
-.mobile-model-body .b3-list-item__action { border: 0; background: transparent; color: var(--lake-text-2-light); cursor: pointer; }
+.mobile-model-body .ln-row.is-selected { border-color: var(--lake-accent); background: var(--lake-accent-lightest); }
+.mobile-model-body .ln-row__title { flex: 1; min-width: 0; }
+.mobile-model-body .ln-row__action { border: 0; background: transparent; color: var(--lake-text-2-light); cursor: pointer; }
 .model-add { margin: 12px 20px 0; width: calc(100% - 40px); }
 
 /* ===== 思源弹层口径接线（移动端）：sheet 菜单 / dialog 确认 / snackbar 提示 =====
@@ -619,34 +619,34 @@ body { font-family: BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino San
   animation: ln-indicator-in var(--mobile-duration-press) var(--mobile-ease-panel) both;
 }
 
-/* 目录树行内动作（移动端常显——无 hover，对齐思源移动端 .b3-list-item 不带 --hide-action）。
+/* 目录树行内动作（移动端常显——无 hover，对齐思源移动端 .ln-row 不带 --hide-action）。
    ⋯ = 右键菜单，＋ = 新建子文档；标题必须截断，否则超长名会盖住按钮。 */
 .nb-tree-actions { margin-left: auto; flex: 0 0 auto; display: inline-flex; align-items: center; gap: 2px; }
 .nb-tree-action { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; border-radius: 8px; color: var(--lake-text-2-light); }
 .nb-tree-action:active { background: var(--lake-bg-hover); color: var(--lake-accent); }
-.mobile-workspace .b3-list-item__text, .side-panel .b3-list-item__text { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mobile-workspace .ln-row__title, .side-panel .ln-row__title { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* 长按拖拽排序：拖起的行抬起；落点线/拖入分组照搬桌面端专做的那套（ui-polish.css:271-289）
    —— ::before/::after 伪元素画 2px accent 线 + soft 光晕，而不是 box-shadow。 */
 /* 源行留在原位只降透明度（跟手的是 [data-drag-ghost] 浮层） */
 .nb-dragging { position: relative; opacity: .4; }
-.side-panel-body .b3-list-item { position: relative; }
+.side-panel-body .ln-row { position: relative; }
 /* 插入线贴到目标行的层级缩进（--ln-indent 由 .ln-indent[data-depth] 提供）：
    同级父行 bottom 与首个子行 top 是同一视觉间隙，但缩进随层级变化 → 表示落到的层级。 */
-.side-panel-body .b3-list-item.drop-line-before::before,
-.side-panel-body .b3-list-item.drop-line-after::after {
+.side-panel-body .ln-row.drop-line-before::before,
+.side-panel-body .ln-row.drop-line-after::after {
   content: ""; position: absolute; right: 0; left: var(--ln-indent, 12px); height: 3px; border-radius: 2px;
   background: var(--lake-accent, var(--lake-accent)); pointer-events: none;
 }
-.side-panel-body .b3-list-item.drop-line-before::before { top: -1px; }
-.side-panel-body .b3-list-item.drop-line-after::after { bottom: -1px; }
+.side-panel-body .ln-row.drop-line-before::before { top: -1px; }
+.side-panel-body .ln-row.drop-line-after::after { bottom: -1px; }
 /* 拖拽浮层：克隆源行跟随手指。 */
 [data-drag-ghost] {
   position: fixed !important; left: 0; top: 0; margin: 0; pointer-events: none; z-index: var(--mobile-z-drag-ghost);
   border-radius: 8px; opacity: .9; box-shadow: 0 10px 28px rgba(16, 24, 40, .3);
   transition: none !important; animation: none !important; will-change: transform; overflow: hidden;
 }
-.side-panel-body .b3-list-item.drop-parent {
+.side-panel-body .ln-row.drop-parent {
   color: var(--lake-text-2) !important;
   background: color-mix(in srgb, var(--lake-accent) 12%, var(--lake-panel)) !important;
   box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--lake-accent) 76%, transparent) !important;
@@ -655,13 +655,13 @@ body { font-family: BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino San
 /* 拖拽中：禁掉原生手势，避免 WebView 把纵向滑动判给滚动 → 触发 touchcancel 取消拖拽（真机不重排的根因）。
    拖拽激活才加这个 class，不影响平时列表滚动。 */
 body.nb-drag-active .side-panel-body,
-body.nb-drag-active .side-panel-body .b3-list-item { touch-action: none; }
+body.nb-drag-active .side-panel-body .ln-row { touch-action: none; }
 body.nb-drag-active .side-panel-body { overscroll-behavior: none; }
 
 /* 长按拖拽：禁掉文字选择/系统 callout，否则长按会选字、弹选择手柄，盖住拖拽 */
 .side-panel-body,
-.side-panel-body .b3-list-item,
-.side-panel-body .b3-list-item__text { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+.side-panel-body .ln-row,
+.side-panel-body .ln-row__title { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
 /* 画板查看器（kind=board，移动端只读）：占满文档层，去掉卡片态边框/圆角，隐藏编辑工具条。 */
 .mobile-board-viewer {
   height: 100%;
