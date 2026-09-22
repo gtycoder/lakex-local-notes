@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8">
+<title>UI 重设计 · 改造前 vs 现在</title>
+<style>
+body{font:14px/1.6 -apple-system,"PingFang SC",sans-serif;margin:0;padding:32px 40px;background:#f6f7f8;color:#1c1f24}
+h1{font-size:22px;margin:0 0 6px}
+.lead{color:#4a5158;margin:0 0 24px}
+.pair{background:#fff;border:1px solid #e7e9ec;border-radius:10px;padding:16px 18px;margin:0 0 18px}
+.pair h2{font-size:16px;margin:0 0 4px}
+.note{color:#656d76;font-size:13px;margin:0 0 12px}
+.row{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+figure{margin:0}
+figure img{width:100%;height:auto;display:block;border:1px solid #e7e9ec;border-radius:8px;background:#fff}
+figcaption{margin-top:6px;color:#656d76;font-size:12px}
+code{background:#f2f3f5;padding:1px 4px;border-radius:4px;font-size:12px}
+</style></head><body>
+<h1>改造前 vs 现在（逐屏对照）</h1>
+<p class="lead">左 = <b>改造前</b>（master 基线截图，<code>ui-design-inputs/shots</code>）；右 = <b>现在</b>（分支 <code>feat/ui-redesign-opt</code>，视觉优化 + P7-b 漏搬补回之后）。两张图都在 1440×900 下截取，点图可看原图。</p>
+<section class="pair">
+<h2>主界面 · 浅色</h2>
+<p class="note">字号阶梯整体 +1px（目录树行回到 13px）；hover 更明确；细滚动条修回 10px（修前是系统 15px）；活动栏去掉了顶部那条竖线</p>
+<div class="row">
+<figure><a href="before/main-light.png"><img src="before/main-light.png" alt="改造前 主界面 · 浅色"></a><figcaption>改造前</figcaption></figure>
+<figure><a href="after/main-light.png"><img src="after/main-light.png" alt="现在 主界面 · 浅色"></a><figcaption>现在（feat/ui-redesign-opt）</figcaption></figure>
+</div></section>
+<section class="pair">
+<h2>主界面 · 深色</h2>
+<p class="note">同上，且**深色下正文区不再纯白**（P7-b 漏搬的 lakex 主题桥已补回）</p>
+<div class="row">
+<figure><a href="before/main-dark.png"><img src="before/main-dark.png" alt="改造前 主界面 · 深色"></a><figcaption>改造前</figcaption></figure>
+<figure><a href="after/main-dark.png"><img src="after/main-dark.png" alt="现在 主界面 · 深色"></a><figcaption>现在（feat/ui-redesign-opt）</figcaption></figure>
+</div></section>
+<section class="pair">
+<h2>工作空间菜单 · 浅色</h2>
+<p class="note">菜单项补回布局三件套（display:flex / align-items:center / gap:8px）—— 修前图标与文字是贴在一起的</p>
+<div class="row">
+<figure><a href="before/menu-light.png"><img src="before/menu-light.png" alt="改造前 工作空间菜单 · 浅色"></a><figcaption>改造前</figcaption></figure>
+<figure><a href="after/menu-light.png"><img src="after/menu-light.png" alt="现在 工作空间菜单 · 浅色"></a><figcaption>现在（feat/ui-redesign-opt）</figcaption></figure>
+</div></section>
+<section class="pair">
+<h2>工作空间菜单 · 深色</h2>
+<p class="note">同上</p>
+<div class="row">
+<figure><a href="before/menu-dark.png"><img src="before/menu-dark.png" alt="改造前 工作空间菜单 · 深色"></a><figcaption>改造前</figcaption></figure>
+<figure><a href="after/menu-dark.png"><img src="after/menu-dark.png" alt="现在 工作空间菜单 · 深色"></a><figcaption>现在（feat/ui-redesign-opt）</figcaption></figure>
+</div></section>
+<section class="pair">
+<h2>偏好设置 · 浅色</h2>
+<p class="note">灰卡层次回来（面板=白、分组=灰）；行高 44→56px、内距 8/12→14/20px；说明字号回到 13px</p>
+<div class="row">
+<figure><a href="before/settings-light.png"><img src="before/settings-light.png" alt="改造前 偏好设置 · 浅色"></a><figcaption>改造前</figcaption></figure>
+<figure><a href="after/settings-light.png"><img src="after/settings-light.png" alt="现在 偏好设置 · 浅色"></a><figcaption>现在（feat/ui-redesign-opt）</figcaption></figure>
+</div></section>
+<section class="pair">
+<h2>偏好设置 · 深色</h2>
+<p class="note">同上，且设置项说明不再是 10.5px 小字</p>
+<div class="row">
+<figure><a href="before/settings-dark.png"><img src="before/settings-dark.png" alt="改造前 偏好设置 · 深色"></a><figcaption>改造前</figcaption></figure>
+<figure><a href="after/settings-dark.png"><img src="after/settings-dark.png" alt="现在 偏好设置 · 深色"></a><figcaption>现在（feat/ui-redesign-opt）</figcaption></figure>
+</div></section>
+<section class="pair">
+<h2>回收站 · 浅色</h2>
+<p class="note">页签改为分段控件；行规格统一；「清空」保留危险色</p>
+<div class="row">
+<figure><a href="before/trash-light.png"><img src="before/trash-light.png" alt="改造前 回收站 · 浅色"></a><figcaption>改造前</figcaption></figure>
+<figure><a href="after/trash-light.png"><img src="after/trash-light.png" alt="现在 回收站 · 浅色"></a><figcaption>现在（feat/ui-redesign-opt）</figcaption></figure>
+</div></section>
+<section class="pair">
+<h2>回收站 · 深色</h2>
+<p class="note">同上</p>
+<div class="row">
+<figure><a href="before/trash-dark.png"><img src="before/trash-dark.png" alt="改造前 回收站 · 深色"></a><figcaption>改造前</figcaption></figure>
+<figure><a href="after/trash-dark.png"><img src="after/trash-dark.png" alt="现在 回收站 · 深色"></a><figcaption>现在（feat/ui-redesign-opt）</figcaption></figure>
+</div></section>
+<section class="pair">
+<h2>小记工作台 · 浅色</h2>
+<p class="note">「小记一下 / 取消」恢复为中性描边胶囊（有内容时「小记一下」自动变主色实心）；卡片圆角/阴影对齐</p>
+<div class="row">
+<figure><a href="before/quicknotes-light.png"><img src="before/quicknotes-light.png" alt="改造前 小记工作台 · 浅色"></a><figcaption>改造前</figcaption></figure>
+<figure><a href="after/quicknotes-light.png"><img src="after/quicknotes-light.png" alt="现在 小记工作台 · 浅色"></a><figcaption>现在（feat/ui-redesign-opt）</figcaption></figure>
+</div></section>
+<section class="pair">
+<h2>小记工作台 · 深色</h2>
+<p class="note">同上，且内核工具条（.ne-ui-toolbar）不再发白</p>
+<div class="row">
+<figure><a href="before/quicknotes-dark.png"><img src="before/quicknotes-dark.png" alt="改造前 小记工作台 · 深色"></a><figcaption>改造前</figcaption></figure>
+<figure><a href="after/quicknotes-dark.png"><img src="after/quicknotes-dark.png" alt="现在 小记工作台 · 深色"></a><figcaption>现在（feat/ui-redesign-opt）</figcaption></figure>
+</div></section>
+<p class="lead">说明：颜色/圆角/间距一律走 <code>--lake-*</code> 令牌（主题即数据）；本页只用于逐屏对照，断言与度量见 <code>../03-ACCEPTANCE.md</code> 与 <code>node scripts/ui-metrics.mjs</code>。</p>
+</body></html>
