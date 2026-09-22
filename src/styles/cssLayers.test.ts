@@ -26,7 +26,7 @@ const FILES = [
   "features/sheet/sheetEditor.css",
   "features/bitable/bitableEditor.css",
   "features/board/boardEditor.css",
-  "styles/dialog.css", "styles/document-status.css",   "styles/motion.css", "styles/components.css",   "styles/tokens.css",   "styles/feature.css",   // P3 起：功能域层（正文/等宽字体等）
+  "styles/dialog.css", "styles/document-status.css",   "styles/components.css",   "styles/tokens.css",   "styles/feature.css",   // P3 起：功能域层（正文/等宽字体等）
   "styles/kit.css",       // P4 起：自有组件库（14 件）
   "styles/chrome.css",    // P5 起：应用外壳（活动栏/目录栏头部/状态栏 …）
   "styles/overlay.css",   // P5-c 起：浮层（对话框 / 菜单 / 气泡）
@@ -62,7 +62,6 @@ const BASELINE: Record<string, { decls: number; dupGroups: number }> = {
   "features/board/boardEditor.css": { decls: 11, dupGroups: 0 },
   "styles/dialog.css": { decls: 234, dupGroups: 8 },   // +7 = .note-info-history-viewer 容器（260916 W-10：历史内联预览改只读 viewer，替代裸 dangerouslySetInnerHTML；合法新增非覆盖回涨）
   "styles/document-status.css": { decls: 98, dupGroups: 2 },   // 260923 W1-L2：-8 = 被 shell 层 chrome.css 同名选择器覆盖
-  "styles/motion.css": { decls: 1, dupGroups: 0 },   // 260923 审计：reduced-motion 契约搬到 a11y.css 后按实测收紧   // +7 = 自 ui-polish.css 并入的 4 个 reduced-motion 契约块（S4；矩阵补了媒体偏好态后才可验证）
   "styles/components.css": { decls: 429, dupGroups: 1 },   // 260923 W1-L2：-15 = 被更高层同名选择器完全压制的规则（kit/shell 层已定义）   // 260916 S4：原 overlays.css 改名 + 并入 @keyframes lake-pop-in（+1 声明，位置不变）
   "styles/tokens.css": { decls: 6, dupGroups: 0 },   // 260923 审计：按实测收紧（隔离/桥接规则拆走后基线一直是 83，围栏形同虚设）
   // 基础层域文件（260916 S3：原 styles.css 拆成入口 + 10 个域文件；数字 = 拆分当批实测，只允许变小）

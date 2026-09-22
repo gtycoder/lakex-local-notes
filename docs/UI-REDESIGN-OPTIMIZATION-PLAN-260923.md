@@ -71,7 +71,7 @@ W0 双端门禁 → W0.5 抽两端共享入口 → W1 桌面专属零耦合清�
 1. **~~删 `kit.css` 的 466 条 app 内零引用声明~~ —— ⚠️ **260923 撤销（重要更正）**：`docs/UI-REDESIGN-260921/kit-demo.html` 有 **59 处** `ln-*` 引用（≥20 个类）、`03-ACCEPTANCE.md`/`04-LAYOUT-SPACE-SPEC.md` 也引用 ⇒ kit 是**本设计系统的组件词汇表 + living demo**，且已定「安卓复用同套设计系统」⇒ **保留 kit**；W2 安卓端**采纳它**（或明确降级为 demo-only 并在文档标注）。真正要清的是下面第 4 条的 **legacy 桌面专属声明**。
    - （260923 撤销原「纯清理」判断：kit 保留，见上。）
 2. **✅ `reset` 空层（260923 已做）**：`index.css` 的 `@layer` 声明里已删掉 `reset`（声明了没人 import 比没有更糟）。
-3. **文件归并（可选）**：`tokens.css`(6 声明)/`motion.css`(1 声明) 并入相邻文件，同步围栏 `FILES/BASELINE`。
+3. **文件归并（可选）—— 260923 已做**：`motion.css`（仅剩 1 条 `--lake-motion-press`）并入 `themes/base.css`（令牌唯一来源）并**删除该文件**，同步 `index.css` import 与围栏 `FILES/BASELINE`；`tokens.css` 保留（其关键帧/阅读态字号继承/焦点环/reduced-transparency 规则均在使用，非死代码）。
 4. **legacy 桌面专属逐域清**：`document-status` → `app/dialogs`/`app/panels` → `app/tabs` → `app/shell` → `compat` → `app/misc` → `app/base` → `editor`。三级口径：**L1 严格重复**（`plan-dup-decls`）· **L2 整条规则被高层完全覆盖**（新脚本 + `ab2` 逐条判定）· **L3 跨全部状态零命中**（`fingerprint-all`）。
    ⚠️ **跨层搬家不做整批**（README §七：那是"自愿认输"的规则，只能逐条二分）。
 5. 每片跑完**把围栏基线按实测收紧**（`cssLayers.test.ts`）。

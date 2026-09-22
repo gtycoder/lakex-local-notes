@@ -21,6 +21,7 @@
   --lake-radius-pill: 999px;
   /* 动效 */
   --lake-motion-instant: 80ms;
+  --lake-motion-press: 90ms;   /* 按压 transform 微缩放（必须快于 fast，保跟手感）；260923 自 motion.css 并入 */
   --lake-motion-fast: 130ms;
   --lake-motion-panel: 190ms;
   --lake-motion-slow: 240ms;

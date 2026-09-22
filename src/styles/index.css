@@ -38,19 +38,15 @@
 @import "../features/editor/image-lightbox.css" layer(legacy);
 @import "../features/attachment/attachment-preview.css" layer(legacy);
 
-/* ---- 思源移植层：P7-b 起**桌面侧不再加载**（文件保留给移动端 import） ----
- * 原先 8 行：theme-daylight / theme-midnight / base / components / siyuan.scss / dark / animations / layout。
- * 桌面需要的类与工具类已由 src/styles/compat.css（桌面专属）复刻 ⇒ 桌面侧 --b3-* 引用归零。
- * ⚠️ 移动端入口 src/mobile/main.tsx 仍直接 import 这些文件，**本批不动**。
- *
- * P7-b：承重规则与仍在用的思源类已复刻到 src/styles/compat.css（在此导入，层内位置等价）。 */
+/* ---- 思源移植层：260923 W2 起 **本层文件已全部删除**（原 `src/b3` 目录，含 AGPL siyuan 移植层）。
+ * 桌面侧与移动侧的承重规则/仍在用的思源类名都收编到 src/styles/compat.css（本层导入，位置等价）。
+ * 移动端入口现同样 import compat.css（见 src/mobile/main.tsx），不再有任何 b3 import。 */
 @import "./compat.css" layer(legacy);
 
 /* ---- 旧壳层/打磨层（顺序不变） ---- */
 @import "./tokens.css" layer(legacy);
 @import "./components.css" layer(legacy);
 @import "./document-status.css" layer(legacy);
-@import "./motion.css" layer(legacy);
 @import "./dialog.css" layer(legacy);
 
 /* ---- a11y layer (highest; reduced-motion contract, no !important needed) ---- */
