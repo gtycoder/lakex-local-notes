@@ -97,6 +97,9 @@
 .context-menu-item,
 .context-menu-submenu > button,
 .create-menu > button {
+  display: flex;
+  align-items: center;
+  gap: var(--lake-space-md);   /* 图标与文字的间距（P7-b 从 b3/layout.css 漏搬，导致两者贴在一起） */
   min-height: 27px;
   padding: 0 var(--lake-space-md);
   border: 0;

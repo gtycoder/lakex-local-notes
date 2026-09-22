@@ -124,7 +124,7 @@
 .toolbar__item:active { background: var(--lake-bg-press); }
 .toolbar__item:focus-visible { outline: var(--lake-focus-ring-width) solid var(--lake-accent); outline-offset: var(--lake-focus-ring-offset); }
 .toolbar__item:disabled { opacity: .4; cursor: default; }
-.toolbar__text { max-width: 180px; overflow: hidden; white-space: nowrap; }
+.toolbar__text { max-width: 180px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 
 /* 同步入口：状态色直接取令牌（不依赖旧别名） */
 .sync-status-button.pending { color: var(--lake-status-pending); }
@@ -280,4 +280,106 @@
   color: var(--lake-accent-text);
   background: var(--lake-accent-tint);
   font-weight: var(--lake-font-weight-semibold);
+}
+
+/* ══ P7-b 漏搬补回（用户截图发现：菜单项图标与文字贴在一起 ⇒ 顺藤查出这一类）══════
+ * 起因：P7-b 把 src/b3/* 移出桌面入口时，只搬了「承重的壳层几何」的一部分；
+ *      这次逐个核对了 master b3 里**打向我们自己的类**的 103 条规则，补回真正丢掉的样式。
+ * 落点：顶栏/外壳相关，统一放本文件（chrome.css = 外壳单一来源，不新增层）。 */
+
+/* 1) 顶栏最右侧槽位（全文搜索）。原 b3/layout.css —— 之前**完全没有任何样式**。 */
+.tabbar-trailing {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex: 0 0 auto;
+  -webkit-app-region: no-drag;
+}
+
+/* 2) 同步入口：同步中图标转圈 / 出错变红（原 b3/layout.css；@keyframes spin 在 app/misc.css）。 */
+.toolbar__sync.syncing svg { animation: spin 1s linear infinite; }
+.toolbar__sync.error { color: var(--lake-status-error); }
+
+/* 3) 同步进度小悬浮窗（原 b3/components.css）—— 之前 .sync-toast* **完全没有任何样式**，
+ *    等于悬浮窗没有定位/卡片外观。值改走令牌，结构照搬。 */
+.sync-toast {
+  display: flex;
+  position: fixed;
+  top: calc(var(--topbar-height) + 12px);
+  right: 16px;
+  z-index: 760;
+  align-items: flex-start;
+  gap: 11px;
+  width: min(360px, calc(100vw - 32px));
+  padding: 12px 12px 12px 14px;
+  border: 1px solid var(--lake-border-1);
+  border-left: 3px solid var(--lake-accent);
+  border-radius: var(--lake-radius-md);
+  color: var(--lake-text-1);
+  background: var(--lake-bg-panel);
+  box-shadow: var(--lake-shadow-popover);
+  animation: sync-toast-in var(--lake-motion-standard) var(--lake-ease-standard);
+}
+@keyframes sync-toast-in {
+  from { opacity: 0; transform: translateY(4px) scale(.985); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+.sync-toast-icon {
+  display: grid;
+  flex: 0 0 30px;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: var(--lake-radius-sm);
+}
+.sync-toast-body { display: flex; flex: 1 1 auto; min-width: 0; flex-direction: column; gap: 4px; }
+.sync-toast-title { color: var(--lake-text-1); font-size: var(--lake-font-size-small); font-weight: var(--lake-font-weight-semibold); }
+.sync-toast-msg { color: var(--lake-text-3); font-size: var(--lake-font-size-small); line-height: var(--lake-line-height-snug); word-break: break-word; }
+.sync-toast-detail {
+  margin-top: 2px;
+  padding: 6px 8px;
+  border-radius: var(--lake-radius-xs);
+  color: var(--lake-text-3);
+  background: var(--lake-bg-block);
+  font-size: var(--lake-font-size-micro);
+  line-height: var(--lake-line-height-snug);
+}
+.sync-toast-close {
+  display: grid;
+  flex: 0 0 22px;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--lake-radius-xs);
+  color: var(--lake-text-3);
+  background: transparent;
+  opacity: .68;
+  cursor: pointer;
+}
+.sync-toast-close:hover { color: var(--lake-text-1); background: var(--lake-bg-hover); opacity: 1; }
+.sync-toast-progress { margin-top: 3px; }
+.sync-toast-progress-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--lake-text-3);
+  font-size: var(--lake-font-size-micro);
+}
+.sync-toast-track { height: 5px; margin-top: 5px; border-radius: 3px; background: var(--lake-accent-tint); overflow: hidden; }
+.sync-toast-bar { height: 100%; border-radius: 3px; background: var(--lake-accent); transition: width .25s ease; }
+.sync-toast-bar.indeterminate { width: 34%; animation: sync-indeterminate 1.2s ease-in-out infinite; }
+.sync-toast-sub { margin-top: 4px; color: var(--lake-text-3); font-size: var(--lake-font-size-micro); }
+.sync-toast-action { margin-top: 4px; align-self: flex-start; }
+
+/* 4) 提示气泡圆角 + 二级菜单表面（同样属 P7-b 漏搬：原在 b3/components.css；
+ *    色/底已在 app/misc.css 与 overlay 层，仅圆角/内边距缺失 ⇒ 气泡曾是直角）。 */
+.tabbar-action[data-tooltip]::after,
+.tab-switcher[data-tooltip]::after,
+.sync-tab-action[data-tooltip]::after { border-radius: var(--lake-radius-sm); }
+.context-menu-submenu {
+  padding: var(--lake-space-sm) 0;
+  border-radius: var(--lake-radius-md);
 }
