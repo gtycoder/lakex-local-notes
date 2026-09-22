@@ -3,7 +3,7 @@
  * legacy 层内部相对顺序 = 原 main.tsx 的 import 顺序，逐字不变（引入当天应 0 视觉变化）。
  * 详见 docs/UI-REDESIGN-260921/README.md §3.1。 */
 
-@layer legacy, tokens, reset, kit, shell, feature, overlay, a11y;
+@layer legacy, tokens, kit, shell, feature, overlay, a11y;   /* 260923：删掉声明了却没人 import 的 reset 空层 */
 
 /* ---- 新层：kit / shell / feature / overlay（P4 起逐步填充；目前只有 feature 的字体规则） ---- */
 @import "./kit.css" layer(kit);
