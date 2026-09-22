@@ -4,6 +4,61 @@
 > 历史所有 dated handoff 已合并进本文件（内容在 git 历史可查）。本文件只保留**当前状态 + 真正的待办 + 有价值的坑**。
 > **§8 是移动端（安卓）专职交接**，由移动端会话维护；桌面会话不要改 §8，移动端会话不要改 §0-§7 之外的桌面文件。
 
+## 0. 最新交接 · 260923 UI 优化与收尾（新会话先读这一节）
+
+> 本节写给完全没有上下文的新会话，覆盖本批（260923 UI 优化与收尾）的目标 / 已完成 / 当前问题 / 下一步 / 踩坑。
+> **原 §0 基线（上一批）紧随本节之后，仍有效**；本批提交链见 0.2。
+
+### 0.1 任务目标
+- 总目标：按 `docs/UI-REDESIGN-OPTIMIZATION-PLAN-260923.md` 完成 UI 优化与收尾（不改变功能）：W1 legacy 桌面声明清理（L1 严格重复 / L2 整条被覆盖 / L3 零命中）→ W0-b 重建移动端走查 harness → W2 安卓 UI 重做（复用同套设计系统 + 采纳 kit + b3 下线 + 6 个共享文件清理）→ W3 几何/层序护栏 → W4 `!important` 9→5 → W5 A3 悬停召唤内部优化（行为不变）→ W6 增强大纲关闭零成本；每步跑 `tsc`/`vitest`/`ui-metrics`/`check:stylesnap` 并提交推送。
+- 用户中途决策：W4 **不做**（结案并入 W2）；W2 选 **1a 全量重做**——彻底剔除思源样式、重新接入自有 UI（骨架 + 样式一起）；收尾时要求自检审计、删除不需要的样式文件（含思源）。最终用户实测后回复「没什么问题」= 安卓观感验收通过。
+
+### 0.2 已完成（全部已推送，`local == origin/master`，最新 e754dda）
+- **W0-b 移动端 harness**：模拟器 + CDP（`scripts/emu-cdp.sh`，端口 9335）+ `check:mobilesnap` 门禁（`scripts/mobile-audit/`，6 态）。
+- **W1-L1**：删同层严格重复声明 2 条。
+- **W1-L2**：删「整条被更高层同名选择器完全压制」的规则 **57 条 / 113 声明**（桌面 `check:stylesnap` 34 态 0 差异）；新工具 `scripts/css-audit/plan-l2-shadowed.mjs`。
+- **W1-L3**：结案——叠加「类名在应用代码无生产者（含动态模板串前缀）」过滤后**无可证死代码**（1112 个零命中里 1099 个有生产者）；新工具 `scripts/css-audit/l3-plan.mjs`。
+- **W3**：外壳层序收进 9 个 `--lake-z-*` 令牌 + `src/styles/zOrder.test.ts` 三层断言；`docs/PANEL-CONTRACT.md` 标注「由测试强制」。
+- **W4**：结案（并入 W2）——实测 + 层叠证明「桌面版搬 kit、移动端一字不动」不可能（`@layer` 的 `!important` 反转层序），段控件 4 条 `!important` 保留。
+- **W5**：抽纯状态机 `src/components/sidebarHoverMachine.ts` + 8 条转移表单测；真实指针 e2e `scripts/e2e-sidebar-hover.mjs`（8 项），重构前后均 8/8 同值。
+- **W6**：核验 `editor-outline-enhance=false`（默认）零成本（不挂载 / 原生不受影响 / 不让位）+ 2 条护栏单测。
+- **W2 安卓 UI 全量重做**：移动端接入 `themes/*`（`--lake-*`）+ `styles/kit.css` + 新 `src/mobile/mobile-kit.css` 密度层；移动 TSX 内 `b3-*` 类**清零**；自有样式表（`mobile.css` 185 + `editor-dock.css` 31）`--b3-*` **归零**；**`src/b3/**`（含 AGPL `siyuan/**`，27 文件）整体删除**（自写深色桥移至 `src/mobile/editor-dark.css`）；`compat.css` 复用给移动端；浮层/菜单改为自有 `mobile-toast*`/`mobile-dialog*`/`mobile-menu*`；`mobile.css` 死规则 `.b3-list-item*`→`ln-row*` 改指 48 处。
+- **收尾审计整理**：全量 CSS 文件引用审计**无孤儿文件**；`motion.css`（仅 1 条令牌）并入 `themes/base.css` 后删除；清理指向已删 b3 的过期注释。
+- **最终指标**：`ui-metrics` 桌面样式文件 28 · `!important` 9 · 颜色字面量 0 · `var(--b3-*)` 0 · 入口 b3 import 0；移动 `var(--b3-*)` 0 · `!important` 14（全为压 lakex 内核）；思源层 `!important` 0 · b3 文件 0。门禁：`tsc` 0 · vitest 1229/16(1245) · 桌面 `check:stylesnap` 34 态 0 差异 · 移动 `check:mobilesnap` 6 态 0 差异。
+
+### 0.3 当前问题（无功能性未决；以下为已记录的遗留/取舍）
+- `compat.css` 里 `.b3-*`/`config-*`/`fn__*` 类名仍是思源式命名（实现已走 `--lake-*`）；彻底改名到 kit/自有类需迁移桌面 `SettingsPanel` 与共享 `src/components/settingsPrimitives.tsx` 等 TSX，属桌面重构，**未做**（`compat.css` 仍有 60 个两端口径在用的类名，删不得）。
+- 移动端 14 条 `!important` 全为「压 lakex 内核」（`.ne-*` 12 + `--lakex-editor-*` 2），按规则**保留**；移动端**未接入 `@layer`**（决定不做：会打乱未分层 kit/compat 优先级，风险高收益低）。
+- `check:stylesnap` 跳过 8 个窄窗态（装置不稳定，脚本头有 TODO）；`check:mobilesnap` 基线**不锁数据**（用户在模拟器新增小记会漂移，需重设）。
+- 设置面板打开不把焦点移入 `navSearchRef`（真实 a11y 缺口，属功能改动，未修；详见 §2.28 第 ⑧ 条）。
+- 环境：模拟器 AVD `lake_mobile` 当前为**带窗口**运行、CDP 9335 已转发；桌面审计实例 CDP 9231 + `vite preview` 1432 可能仍在跑。
+
+### 0.4 下一步计划（建议，非必须）
+1.（可选）彻底去思源类名：迁移桌面 + `src/components/settingsPrimitives.tsx` 的 `b3-*`/`config-*`/`fn__*` 到 kit（`ln-form__*`/`ln-switch`/`ln-input`/`ln-row*`），随后删除 `src/styles/compat.css`（双端验证）。
+2.（可选）修复 `check:stylesnap` 的 8 个窄窗不稳定态（去抖 / 时序）。
+3.（可选）修设置面板 focus a11y 缺口。
+4. 回到长期焦点：同步/存储热路径性能与健壮性、移动端编辑收口（见 §2 与 `AGENTS.md` §2）。
+
+### 0.5 踩过的坑（本批新增，务必先读）
+- **移动端 UI 改动必须真机/模拟器验证**：浏览器预览跑不起来（依赖 Capacitor 原生 SQLite）。流程：`scripts/android-build.sh --sync --install` → **每次装完必须重跑 `scripts/emu-cdp.sh`**（WebView devtools socket 名会变，否则连不上 9335）。
+- **模拟器默认 `--no-window`（headless）**：用户看不到界面（App 其实在跑）。要让用户测试必须 `./scripts/emu-up.sh`（不带 `--no-window`）；headless 进程名 `qemu-system-aarch64-headless`，带窗口是 `qemu-system-aarch64`。用户反馈「没有界面」就是此因。
+- **`check:mobilesnap` 不锁数据**：用户在模拟器新增/编辑小记会使 `home-quicknotes` 元素数漂移（非样式回归）⇒ 重设基线即可。
+- **`@layer` 会反转 `!important` 的层序**（W4 结案的根据）：legacy 的 `!important` 必压更高层的普通声明。
+- **`src/styles/cssLayers.test.ts` 扫描器不剥注释**：注释里写 `prop: value;` 会被误计；新增注释须避免。围栏只允许计数变小，删文件要同步 `FILES/BASELINE`。
+- **删 b3**：`git mv src/b3/dark.css src/mobile/editor-dark.css` + `git rm -r src/b3`；`git add -A src/b3` 会因目录已删报错，改用 `git add -A`。
+- **移动端 `--b3-*` 替换**：`themes/*` 已定义移动端用到的全部 `--lake-*` 别名（`--lake-shell`/`panel`/`border`/`text`/`text-secondary`/…），故可把 `mobile.css` 的 `--b3-*` 直接映射到 `--lake-*`。
+- **board 文档的 drawnix `.laser-pointer`**（`fixed`/`inset:0`/`pointer-events:auto`）会吞掉左缘热区 ⇒ A3 e2e 必须跑在普通文档上。
+- **`run_code` 工具坑**：模板串里 `${...}` 会被求值（写文件内容时用双引号字符串或转义）；`edit` 的 `old_string` 必须逐字匹配（含全角引号/空格）。
+- **进程管理红线**：杀 Electron 只 kill 具体 PID，禁 `pkill -f Electron`；模拟器用 `adb emu kill`。
+
+### 0.6 关键文件与命令
+- 计划：`docs/UI-REDESIGN-OPTIMIZATION-PLAN-260923.md`（§6 有 W2 执行结果）；复盘：`docs/UI-REDESIGN-REVIEW-260923.md`；面板契约：`docs/PANEL-CONTRACT.md`。
+- 审计/工具：`scripts/css-audit/{plan-l2-shadowed.mjs,l3-plan.mjs,check-stylesnap.mjs}`、`scripts/mobile-audit/`、`scripts/e2e-sidebar-hover.mjs`。
+- 门禁：`npx tsc --noEmit` · `npx vitest run` · `node scripts/ui-metrics.mjs` · `npm run check:stylesnap` · `npm run check:mobilesnap`。
+- 移动端：`scripts/emu-up.sh`（带窗口）→ `scripts/android-build.sh --sync --install` → `scripts/emu-cdp.sh`。
+- 本批新增/改动：`src/components/sidebarHoverMachine.ts(+.test.ts)`、`src/styles/zOrder.test.ts`、`src/mobile/mobile-kit.css`、`src/mobile/editor-dark.css`（自 `src/b3/dark.css` 迁入）、`scripts/css-audit/{plan-l2-shadowed,l3-plan}.mjs`、`scripts/e2e-sidebar-hover.mjs`；删除 `src/b3/**`、`src/mobile/mobile-theme.css`、`src/styles/motion.css`。
+
+
 ## 0. 当前基线（新会话开工前）
 - **分支**：`master` = `origin/master`，**已包含本轮全部工作**；所有功能/检查点分支**已合并并删除**，只留一个纯备份分支 `backup/ui-theme-abc-handoff-260922`（= 260922 接手前的状态 `604913a`）。
 - **master 提交链（本轮）**：`d3bfc56`（UI 重设计末批 + 文档）→ `604913a`（§2.24 主题 A/B/C + 三空间 + minimap）→ `106d2c2`（浮层铺满 + 编辑区右移）→ `12e60eb`（增强大纲进编辑区 + 目录去缩略图/壳层满宽）→ `443b367`「左缘跟手把手 + 贴底浮卡 + 宽度 bug 修复」→ **`8e31fce`（260923：面板契约 + `⌘]` + 垂直几何令牌化收窄 + macOS 红绿灯对齐）**→ **`681997a`（260923 收尾审计：围栏基线收紧 / 死令牌清理 + 热区 10px + 块手柄贴正文 + 复盘文档）**（`git log --oneline -6` 看全）。
