@@ -32,7 +32,7 @@
 
 .inline-create button { height: 22px; padding: 0 6px; border: 0; border-radius: var(--radius-xs); color: var(--lake-text-on-accent); background: var(--lake-accent); font-size: 10px; }
 
-.note-list { flex: 1; min-height: 0; overflow: auto; padding: 0 5px; }
+.note-list { flex: 1; min-height: 0; padding: 0 5px; }
 
 .note-row { display: grid; align-items: center; width: 100%; padding: 2px 7px; color: var(--lake-text-secondary); background: transparent; text-align: left; }
 

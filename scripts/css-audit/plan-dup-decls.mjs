@@ -7,6 +7,7 @@
 //
 // 用法：node scripts/css-audit/plan-dup-decls.mjs [--write] [--dbg=<substr>]
 import fs from "node:fs";
+import path from "node:path";
 import postcss from "postcss";
 import { REPO, data } from "./paths.mjs";
 
@@ -16,12 +17,24 @@ const ctxOf = (r) => { const chain = []; for (let p = r.parent; p; p = p.parent)
 const splitSels = (sel) => { const out = []; let depth = 0, cur = ""; for (const ch of sel) { if (ch === "(" || ch === "[") depth++; else if (ch === ")" || ch === "]") depth--; if (ch === "," && depth === 0) { out.push(cur); cur = ""; } else cur += ch; } out.push(cur); return out.map((s) => norm(s)).filter(Boolean); };
 
 const loadorder = JSON.parse(fs.readFileSync(data("loadorder.json"), "utf8"));
-const appFiles = [...fs.readFileSync(REPO + "src/styles.css", "utf8").matchAll(/@import\s+"([^"]+)"/g)].map((m) => "src/" + m[1].replace(/^\.\//, ""));
-const order = [...appFiles, ...loadorder.filter((f) => f !== "src/styles.css")];
+// 260923：入口已从 src/styles.css 改为 src/styles/index.css，且 import 带 layer(x) ⇒ **级联上下文必须含层**，
+// 不能再用"文件顺序 = 级联顺序"（有了 @layer，层序优先于文件顺序）。TS 直接 import 的 CSS 不在入口 import 里
+// ⇒ 它们是**未分层**的，优先级高于所有层。
+const ENTRY = fs.existsSync(REPO + "src/styles/index.css") ? "src/styles/index.css" : "src/styles.css";
+const entryText = fs.readFileSync(REPO + ENTRY, "utf8");
+const ENTRY_DIR = ENTRY.slice(0, ENTRY.lastIndexOf("/"));   // src/styles
+const imports = [...entryText.matchAll(/@import\s+"([^"]+)"\s*(?:layer\(([^)]+)\))?/g)]
+  .map((m) => ({ rel: path.posix.normalize(ENTRY_DIR + "/" + m[1]), layer: m[2] || null }))
+  .filter((i) => fs.existsSync(REPO + i.rel));
+const inEntry = new Set(imports.map((i) => i.rel));
+const order = [...imports, ...loadorder
+  .filter((f) => !inEntry.has(f) && f !== ENTRY && /\.css$/.test(f) && fs.existsSync(REPO + f))
+  .map((rel) => ({ rel, layer: null }))];
 
 const entries = [];
 for (let fi = 0; fi < order.length; fi++) {
-  const rel = order[fi];
+  const rel = order[fi].rel;
+  const layer = order[fi].layer;
   const root = postcss.parse(fs.readFileSync(REPO + rel, "utf8"), { from: rel });
   const bySel = new Map();
   root.walkRules((r) => {
@@ -30,14 +43,15 @@ for (let fi = 0; fi < order.length; fi++) {
     const occ = bySel.get(fullSel) || 0; bySel.set(fullSel, occ + 1);
     const ctx = ctxOf(r);
     r.walkDecls((d) => {
-      entries.push({ file: rel, fi, fullSel, occ, ctx, indSels: splitSels(fullSel), prop: d.prop.toLowerCase(), value: norm(d.value), important: !!d.important, line: d.source.start.line });
+      entries.push({ file: rel, layer, fi, fullSel, occ, ctx, indSels: splitSels(fullSel), prop: d.prop.toLowerCase(), value: norm(d.value), important: !!d.important, line: d.source.start.line });
     });
   });
 }
 
 // 单选择器 × 属性 的级联组
 const groups = new Map();
-for (const e of entries) for (const s of new Set(e.indSels)) { const k = e.ctx + "\u0000" + s + "\u0000" + e.prop; if (!groups.has(k)) groups.set(k, []); groups.get(k).push(e); }
+// 级联组必须按【层】分组：同层内"后者胜"成立；跨层优先级不同，属需实测的 L2（README §七），不在此工具判定。
+for (const e of entries) for (const s of new Set(e.indSels)) { const k = e.ctx + "\u0000" + (e.layer || "(unlayered)") + "\u0000" + s + "\u0000" + e.prop; if (!groups.has(k)) groups.set(k, []); groups.get(k).push(e); }
 
 if (process.argv.some((a) => a.startsWith("--dbg="))) {
   const q = process.argv.find((a) => a.startsWith("--dbg=")).slice(6);
@@ -59,7 +73,7 @@ for (const list of groups.values()) {
 const plan = []; const kept = [];
 for (const e of entries) {
   const allDom = e.indSels.every((s) => {
-    const list = groups.get(e.ctx + "\u0000" + s + "\u0000" + e.prop) || [];
+    const list = groups.get(e.ctx + "\u0000" + (e.layer || "(unlayered)") + "\u0000" + s + "\u0000" + e.prop) || [];
     if (list.length < 2) return false;
     const importants = list.filter((x) => x.important);
     const winner = importants.length ? importants[importants.length - 1] : list[list.length - 1];

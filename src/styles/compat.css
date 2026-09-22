@@ -89,7 +89,7 @@
 }
 .b3-list-item:hover { background: var(--lake-bg-hover); }
 .b3-list-item--focus { background: var(--lake-accent-tint); }
-.b3-list-item__text { flex: 1 1 auto; min-width: 0; }
+.b3-list-item__text { flex: 1 1 auto; }
 .b3-list-item__graphic { flex: 0 0 auto; display: inline-flex; align-items: center; }
 .b3-list-item__meta { flex: 0 0 auto; color: var(--lake-text-3); font-size: var(--lake-font-size-micro); }
 .b3-list-item__action {
