@@ -430,3 +430,23 @@
   pointer-events: auto;
   transform: translateX(0);
 }
+
+/* ── 大纲轨 / 收起后悬停展开（P7-b 漏搬；原 b3/layout.css）─────────────────
+ * 这两条决定「最右侧大纲轨」与「hover 展开的浮动大纲」的最终长相；漏搬后轨会掉回本文件里
+ * 更老的一套公式（描边/圆角不同、颜色偏亮一档），跨宽度看就是两种样式。 */
+.outline-sidebar__rail {
+  margin-top: 0;
+  padding-top: 0;
+  background: transparent;
+  border-right: 0;
+  border-left: 0;
+}
+.outline-sidebar--collapsed.outline-sidebar--hovered .outline-sidebar__content {
+  position: fixed;
+  left: auto;
+  width: var(--outline-sidebar-width, 280px);
+  min-width: 0;
+  background: var(--lake-bg-panel);
+  border: 0;
+  border-radius: var(--lake-radius-md) 0 0 var(--lake-radius-md);
+}

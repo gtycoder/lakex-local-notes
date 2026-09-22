@@ -58,7 +58,7 @@ const BASELINE: Record<string, { decls: number; dupGroups: number }> = {
   "b3/theme-midnight.css": { decls: 148, dupGroups: 0 },
   "features/attachment/attachment-preview.css": { decls: 78, dupGroups: 0 },
   "features/editor/image-lightbox.css": { decls: 57, dupGroups: 0 },
-  "features/outline/outline.css": { decls: 244, dupGroups: 0 },
+  "features/outline/outline.css": { decls: 256, dupGroups: 0 },   // 原样式 + P7-b 漏搬补回（大纲轨 / 收起悬停展开）
   // 260919：换成 FortuneSheet；容器尺寸 + 工具栏紧凑 + 无样式输入框补边框（标签样式已按用户要求回滚）
   // 260921：+2 = 单元格图片（禁指针事件 + object-fit: scale-down）——合法新增，非覆盖回涨
   // 260921：+2 = 单元格图片（禁指针事件 + object-fit: scale-down）
