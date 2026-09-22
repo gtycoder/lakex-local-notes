@@ -47,11 +47,14 @@ W0 双端门禁 → W0.5 抽两端共享入口 → W1 桌面专属零耦合清�
    - `test:ui`(`e2e-electron-smoke`)：断言活动栏 rail 宽 = 38，而**活动栏不再渲染**（`App.tsx:424`，shell 恒带 `activity-rail-hidden`）。
    - `test:tab-switch`：断言样式表含 `55ms ease-in`/`85ms ease-out`，而这两个字符串**只存在于脚本自身**，CSS 里已随重设计消失（我的批次也未动 `tabs.css`）。
 5. **固定环境**：一律隔离实例（`LAKE_USER_DATA=$TMPDIR/lake-*` + `vite preview` 独立端口 + 独立 CDP 端口），**绝不用 9222**；快照前注入 `transition:none/animation:none` + `bringToFront` + focus 模拟。
-6. **两条 npm script**：`check:stylesnap`（桌面+移动端逐元素 0 容差）与 `check:pixel`（同批同序 + 像素比对）；先跑 `self`（噪声必须 0）与 `control`（必须能抓真改动）自证。
+6. **门禁脚本（260923 落地）**：
+   - **`check:stylesnap`（已落地）**：`scripts/css-audit/check-stylesnap.mjs` —— 先做 **CDP 存活检查**（不健康 exit 2，避免把死实例误读成脚本失败）→ 生成 **42 态**整页计算值快照 → 与**已入库的紧凑基线** `scripts/css-audit/baseline/stylesnap.json`（**2.8KB**：每态元素数 + 全态合并哈希）比对 → **有差异 exit 1**。`--from <snap.json>` 可不重跑直接比对；`--write-baseline` 写基线。npm script：`npm run check:stylesnap`。
+   - **`check:pixel`（后备，未落地）**：`shotset`+`pixdiff` 的像素批次；基线 PNG 数百 KB ⇒ **不入库**、按需本地生成，仅在需要像素级证据时用。注意 `pixdiff` 只打印差异、**不返回非零** ⇒ 要当门禁需再包一层。
 7. **装置可信配方（260923 实测验证，两条缺一不可）**：
    - **快照 key 必须排除内核随机 id**：内核给正文文本节点发的 id 形如 `ne-text$u<hex>`，**跨 reload 不稳定** ⇒ 不排除时同一份代码连拍会得到"**每态恒定 2 条差异 + 2 个新增**"（`stylesnap.mjs` 已按 `/^u[0-9a-f]{6,}$/` 排除）。
    - **每次跑快照必须用全新同构实例**（独立 `LAKE_USER_DATA`）：否则**首个状态会继承上一轮的标签集**（实测首态差 **386 条**、元素数 2310 vs 2135）；`pin()` 只重置主题/侧栏/大纲，管不到主进程里的标签集。
-   - 两条都满足后：**两个独立实例的 warm 8 态实测 `0 个状态有差异 / 0 条指纹差异`**。
+   - 两条都满足后：**两个独立实例的 warm 8 态实测 `0 个状态有差异 / 0 条指纹差异`**；**全量 42 态**实测 41/42 一致。
+   - **已知装置噪声（唯一一处，显式点名不静默）**：`rm:760:light` —— 内核**原生大纲**的展开/收起是 hover/resize 时序驱动的运行时态（不在 localStorage、`pin()` 管不到），跨实例不一致（`ne-normal-toc-sidebar` vs `ne-small-toc-sidebar`，连带 26 条衍生差异）。`check-stylesnap.mjs` 的 `KNOWN_FLAKY` 跳过它并在输出里点名；**TODO**：在 `pin()` 里钉死内核原生 TOC 态后删掉该条。
 
 **DoD**：`self` 0 差异、`control` 有差异、桌面含 warm、移动端态齐备、三条失效脚本已修或已退役、两条 script 一键可跑。
 

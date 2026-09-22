@@ -1,0 +1,172 @@
+{
+ "states": {
+  "plain:1315:light": {
+   "n": 2120,
+   "hash": "watzur"
+  },
+  "plain:760:light": {
+   "n": 2084,
+   "hash": "tonrdp"
+  },
+  "plain:1315:dark": {
+   "n": 2120,
+   "hash": "re8zmw"
+  },
+  "plain:760:dark": {
+   "n": 2084,
+   "hash": "1fezuxh"
+  },
+  "drag:1315:light": {
+   "n": 2122,
+   "hash": "1fuep9x"
+  },
+  "drag:1315:dark": {
+   "n": 2122,
+   "hash": "rbhskk"
+  },
+  "outline-docked:760:light": {
+   "n": 2084,
+   "hash": "tonrdp"
+  },
+  "hover-row:1315:light": {
+   "n": 2120,
+   "hash": "l6oeqn"
+  },
+  "hover-tab:1315:light": {
+   "n": 2120,
+   "hash": "tcrbab"
+  },
+  "hover-rail:760:light": {
+   "n": 2084,
+   "hash": "1cw40fs"
+  },
+  "menus:1315:light": {
+   "n": 2199,
+   "hash": "stqds6"
+  },
+  "note-info:1315:light": {
+   "n": 2180,
+   "hash": "1sqqf2r"
+  },
+  "search:1315:light": {
+   "n": 2138,
+   "hash": "xamb0k"
+  },
+  "settings:1315:light": {
+   "n": 2247,
+   "hash": "1nejv4s"
+  },
+  "settings-editor:1315:light": {
+   "n": 2279,
+   "hash": "f3b3ky"
+  },
+  "settings-data:1315:light": {
+   "n": 2280,
+   "hash": "19599k8"
+  },
+  "settings-trash:1315:light": {
+   "n": 2232,
+   "hash": "94l7xy"
+  },
+  "settings-assets:1315:light": {
+   "n": 2249,
+   "hash": "1natheo"
+  },
+  "settings-about:1315:light": {
+   "n": 2386,
+   "hash": "1esscx4"
+  },
+  "search-empty:1315:light": {
+   "n": 2138,
+   "hash": "xamb0k"
+  },
+  "focus-create:1315:light": {
+   "n": 2126,
+   "hash": "1tp87xy"
+  },
+  "hover-card:1315:light": {
+   "n": 2120,
+   "hash": "watzur"
+  },
+  "outline-open:1315:light": {
+   "n": 2127,
+   "hash": "1mw2osv"
+  },
+  "quicknotes:1315:light": {
+   "n": 2120,
+   "hash": "watzur"
+  },
+  "plain:560:light": {
+   "n": 2048,
+   "hash": "1vfg1p2"
+  },
+  "plain:560:dark": {
+   "n": 2048,
+   "hash": "iidqt8"
+  },
+  "settings:1315:dark": {
+   "n": 2280,
+   "hash": "rlepo5"
+  },
+  "plain:1315:warm": {
+   "n": 2120,
+   "hash": "v3wvyj"
+  },
+  "plain:560:warm": {
+   "n": 2048,
+   "hash": "1hzvkyh"
+  },
+  "hover-row:1315:warm": {
+   "n": 2120,
+   "hash": "1hqong2"
+  },
+  "menus:1315:warm": {
+   "n": 2199,
+   "hash": "bu4dxo"
+  },
+  "search:1315:warm": {
+   "n": 2138,
+   "hash": "awrtq9"
+  },
+  "settings:1315:warm": {
+   "n": 2280,
+   "hash": "txnk7h"
+  },
+  "quicknotes:1315:warm": {
+   "n": 2120,
+   "hash": "v3wvyj"
+  },
+  "outline-open:1315:warm": {
+   "n": 2127,
+   "hash": "mrqq8q"
+  },
+  "rm:1315:light": {
+   "n": 2120,
+   "hash": "4agliu"
+  },
+  "rm:1315:dark": {
+   "n": 2120,
+   "hash": "10g21rq"
+  },
+  "rm:760:light": {
+   "n": 2084,
+   "hash": "1e0o3tx"
+  },
+  "rm-quicknotes:1315:light": {
+   "n": 2120,
+   "hash": "4agliu"
+  },
+  "rt:1315:light": {
+   "n": 2120,
+   "hash": "watzur"
+  },
+  "board:1315:light": {
+   "n": 2178,
+   "hash": "c6l0j6"
+  },
+  "board:1315:dark": {
+   "n": 2178,
+   "hash": "1rqhvn6"
+  }
+ }
+}
