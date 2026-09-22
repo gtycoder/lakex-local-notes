@@ -10,7 +10,7 @@ export function Toasts() {
   const items = useSyncExternalStore(subscribeToasts, getToastSnapshot, getToastSnapshot);
   if (items.length === 0) return null;
   return (
-    <div className="b3-snackbars b3-snackbars--show" role="status" aria-live="polite">
+    <div className="mobile-toast-host is-show" role="status" aria-live="polite">
       <div className="fn__flex-1">
         {items.map((t) => <Snackbar key={t.id} item={t} />)}
       </div>
@@ -23,15 +23,15 @@ function Snackbar({ item }: { item: ToastItem }) {
   useEffect(() => {
     const el = document.getElementById("ln-sn-" + item.id);
     if (!el) return;
-    const raf = requestAnimationFrame(() => el.classList.remove("b3-snackbar--hide"));
+    const raf = requestAnimationFrame(() => el.classList.remove("is-hide"));
     return () => cancelAnimationFrame(raf);
   }, [item.id]);
   return (
     <div id={"ln-sn-" + item.id} data-id={item.id}
-      className={"b3-snackbar b3-snackbar--hide" + (item.type === "error" ? " b3-snackbar--error" : "")}
+      className={"mobile-toast is-hide" + (item.type === "error" ? " mobile-toast--error" : "")}
       onClick={() => hideToast(item.id)}>
-      <div className="b3-snackbar__content">{item.text}</div>
-      {item.timeout === 0 && <button className="b3-snackbar__close" aria-label="关闭" onClick={(e) => { e.stopPropagation(); hideToast(item.id); }}><X size={16} /></button>}
+      <div className="mobile-toast__text">{item.text}</div>
+      {item.timeout === 0 && <button className="mobile-toast__close" aria-label="关闭" onClick={(e) => { e.stopPropagation(); hideToast(item.id); }}><X size={16} /></button>}
     </div>
   );
 }

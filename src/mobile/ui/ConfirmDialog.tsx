@@ -59,12 +59,12 @@ export function ConfirmHost() {
 
   if (!req) return null;
   return (
-    <div className={"b3-dialog" + (shown ? " b3-dialog--open" : "")}>
-      <div className="b3-dialog__scrim" data-prevent-swipe onClick={() => close(false)} />
-      <div className="b3-dialog__container ln-confirm" role="alertdialog" aria-label={req.title} data-prevent-swipe>
-        <div className="b3-dialog__header">{req.title}</div>
-        {req.body && <div className="b3-dialog__content">{req.body}</div>}
-        <div className="b3-dialog__action">
+    <div className={"mobile-dialog" + (shown ? " is-open" : "")}>
+      <div className="mobile-dialog__scrim" data-prevent-swipe onClick={() => close(false)} />
+      <div className="mobile-dialog__box" role="alertdialog" aria-label={req.title} data-prevent-swipe>
+        <div className="mobile-dialog__head">{req.title}</div>
+        {req.body && <div className="mobile-dialog__body">{req.body}</div>}
+        <div className="mobile-dialog__actions">
           <button className="ln-btn ln-btn--secondary" onClick={() => close(false)}>{req.cancelText ?? "取消"}</button>
           <div className="fn__space" />
           <button className={"ln-btn ln-btn--primary" + (req.danger ? " ln-btn--danger" : "")} onClick={() => close(true)}>{req.confirmText ?? "确定"}</button>

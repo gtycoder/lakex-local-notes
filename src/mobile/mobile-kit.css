@@ -7,3 +7,25 @@
 /* 触屏无 hover ⇒ 行内动作常驻可见（桌面 kit 默认 hover 才显示） */
 .ln-row__actions { opacity: 1; }
 .ln-input, .ln-select { height: 40px; font-size: var(--lake-font-size-body); }
+
+/* ── W2 移动端提示条（替代思源 .b3-snackbar*）──────────────────────── */
+.mobile-toast-host { position: fixed; z-index: var(--mobile-z-snackbar); right: 16px; left: 16px; top: calc(16px + var(--mobile-top-safe-area)); display: flex; flex-direction: column; align-items: flex-end; gap: 8px; pointer-events: none; }
+.mobile-toast { pointer-events: auto; max-width: min(420px, 100%); display: flex; align-items: center; gap: 8px; padding: 10px 12px; border: 1px solid var(--lake-border-1); border-left: 3px solid var(--lake-accent); border-radius: var(--lake-radius-md); background: var(--lake-bg-panel); color: var(--lake-text-1); box-shadow: var(--lake-shadow-popover); font-size: var(--lake-font-size-small); transition: transform var(--mobile-duration-panel) var(--mobile-ease-out), opacity var(--mobile-duration-panel) var(--mobile-ease-out); }
+.mobile-toast.is-hide { transform: translateX(calc(100% + 16px)); opacity: 0; }
+.mobile-toast--error { border-left-color: var(--lake-error); }
+.mobile-toast__text { flex: 1 1 auto; min-width: 0; }
+.mobile-toast__close { flex: 0 0 auto; border: 0; background: transparent; color: var(--lake-text-3); cursor: pointer; }
+
+/* ── W2 移动端确认框（替代思源 .b3-dialog*）────────────────────────── */
+.mobile-dialog { position: fixed; inset: 0; z-index: var(--mobile-z-dialog); display: flex; align-items: center; justify-content: center; }
+.mobile-dialog__scrim { position: absolute; inset: 0; background: var(--mobile-mask); opacity: 0; transition: opacity var(--mobile-duration-panel) linear; }
+.mobile-dialog.is-open .mobile-dialog__scrim { opacity: 1; }
+.mobile-dialog__box { position: relative; width: 88vw; max-width: 340px; background: var(--lake-bg-panel); color: var(--lake-text-1); border-radius: var(--lake-radius-md); box-shadow: var(--lake-shadow-popover); transform: scale(.8); opacity: 0; transition: transform var(--mobile-duration-panel) var(--mobile-ease-panel), opacity var(--mobile-duration-panel) var(--mobile-ease-panel); }
+.mobile-dialog.is-open .mobile-dialog__box { transform: none; opacity: 1; }
+.mobile-dialog__head { padding: 16px 16px 0; font-size: 16px; font-weight: var(--lake-font-weight-semibold); }
+.mobile-dialog__body { padding: 10px 16px 0; color: var(--lake-text-2); font-size: var(--lake-font-size-body); line-height: var(--lake-line-height-normal); }
+.mobile-dialog__actions { display: flex; justify-content: flex-end; align-items: center; gap: 8px; padding: 16px; }
+
+/* 危险主按钮（确认框的「删除」）：实心 error 底 + on-accent 字（kit 的 --danger 单独用是描边风格）。 */
+.ln-btn--primary.ln-btn--danger { color: var(--lake-text-on-accent); background: var(--lake-error); border-color: transparent; }
+.ln-btn--primary.ln-btn--danger:hover { background: var(--lake-error-strong, var(--lake-error)); }

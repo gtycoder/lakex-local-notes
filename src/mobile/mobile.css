@@ -243,8 +243,7 @@ body { font-family: BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino San
 
 .mobile-drawer-item:active { background: var(--lake-shell); }
 
-/* Toast */
-.mobile-toast { position: fixed; left: 50%; top: 44%; transform: translate(-50%,-50%); background: var(--b3-tooltips-background, rgba(0,0,0,.78)); color: var(--b3-theme-on-primary); font-size: 14px; padding: 8px 16px; border-radius: var(--b3-border-radius); box-shadow: var(--b3-tooltips-shadow); z-index: var(--mobile-z-toast); max-width: 80%; text-align: center; }
+/* Toast：样式见 mobile-kit.css（W2 去思源后自带；原 .mobile-toast 居中黑胶囊已废弃） */
 
 /* 新建知识库 Sheet */
 /* 注意：遮罩与 sheet 是父子关系，绝不能给遮罩设元素 opacity——会把整张 sheet（含文字）一起压淡。
@@ -348,7 +347,7 @@ body { font-family: BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino San
 .mobile-icon-btn:active { transform: scale(.9); }
 @media (prefers-reduced-motion: reduce) {
   .mobile-drawer-mask, .mobile-sheet-mask, .mobile-drawer, .mobile-sheet,
-  .mobile-model, .mobile-model-mask, .mobile-dropdown, .side-panel, .side-mask, .mobile-toast, .mobile-settings-page, .mobile-settings-mask { animation: none; }
+  .mobile-model, .mobile-model-mask, .mobile-dropdown, .side-panel, .side-mask, .mobile-settings-page, .mobile-settings-mask { animation: none; }
   .mobile-htab, .mobile-fab, .mobile-icon-btn, .mobile-drawer-item, .mobile-doc-row, .mobile-qcard,
   .bottom-bar-btn, .ln-chevron, .mobile-bottom-bar, .med-btn, .med-ins-item, .med-f-btn { transition: none; }
   .mobile-fab:active, .bottom-bar-btn:active { transform: none; }
@@ -561,13 +560,8 @@ body { font-family: BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino San
 .ln-sheet .b3-menu__label { flex: 1 1 auto; min-width: 0; }
 .ln-menu-note { flex: 0 0 auto; margin-left: 8px; font-size: 12px; color: var(--b3-theme-on-surface-light); }
 .ln-menu-head-action { margin-left: auto; display: inline-flex; align-items: center; }
-.b3-dialog { z-index: var(--mobile-z-dialog); }
-.b3-dialog__container.ln-confirm { width: 88vw; max-width: 340px; }
-.b3-button.ln-confirm__danger { background-color: var(--b3-theme-error); color: var(--b3-theme-on-primary); }
-.b3-button.ln-confirm__danger:hover { background-color: var(--b3-theme-error); }
-.b3-snackbars { z-index: var(--mobile-z-snackbar); right: 16px; top: calc(16px + var(--mobile-top-safe-area)); }
 @media (prefers-reduced-motion: reduce) {
-  .ln-sheet, .ln-sheet .b3-menu__submenu, .b3-dialog__container, .b3-snackbar, .b3-snackbars { transition: none; }
+  .ln-sheet, .ln-sheet .b3-menu__submenu, .mobile-dialog__box, .mobile-toast { transition: none; }
 }
 
 /* ===== 思源移动端 .toolbar 口径（移植自 siyuan-master app/src/assets/scss/main/_mobile.scss:157-300，AGPL-3.0）=====
