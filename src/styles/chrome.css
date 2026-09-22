@@ -107,6 +107,7 @@
 /* ── 顶栏：工作空间触发按钮与右侧图标按钮（同一类 .toolbar__item） ───────── */
 .toolbar__item {
   display: inline-flex;
+  white-space: nowrap;
   align-items: center;
   justify-content: center;
   gap: 5px;
@@ -406,3 +407,11 @@
   border-width: 1px;
   box-shadow: inset 0 0 5px 5px var(--lake-scrollbar-thumb-hover);
 }
+
+/* ── 审计剩余 5 条真缺失（P7-b 漏搬；其余 10 条经核对为假阳性/TSX 已不使用）────────
+ * 说明：.toolbar__item .toolbar__text 的 max-width/overflow/ellipsis 已由裸类 .toolbar__text 提供；
+ * .tree-row 与 .note-row 同元素（半径已由后者给到）；.sync-panel / .form-grid / .secret-field 已无组件使用。 */
+.toolbar__menu-wrap { position: relative; -webkit-app-region: no-drag; }
+.top-menu > button span { min-width: 0; }
+.protyle-breadcrumb { flex-shrink: 0; }
+.protyle-breadcrumb__item:focus-visible { border-radius: var(--lake-radius-xs); }

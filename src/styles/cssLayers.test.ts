@@ -45,7 +45,7 @@ const BASELINE: Record<string, { decls: number; dupGroups: number }> = {
   "styles/index.css": { decls: 0, dupGroups: 0 },   // UI 重设计 P1：单入口（@layer 声明 + @import 编排，0 声明）
   "styles/feature.css": { decls: 121, dupGroups: 0 },  // 视觉优化 + 内核编辑器主题桥（lakex 跟随深色/暖色：含 .ne-ui-toolbar）
   "styles/kit.css": { decls: 550, dupGroups: 0 },     // P4 组件库 + P5-g 面板件 + P5-h 控件 + P5-i 开关（实测）
-  "styles/chrome.css": { decls: 353, dupGroups: 0 },  // P5 外壳 + 视觉优化 + P7-b 漏搬补回（同步浮窗/顶栏槽位/气泡/活动栏/全局细滚动条）
+  "styles/chrome.css": { decls: 359, dupGroups: 0 },  // P5 外壳 + 视觉优化 + P7-b 漏搬补回（同步浮窗/顶栏槽位/气泡/活动栏/滚动条/审计剩余 5 条）
   "styles/overlay.css": { decls: 94, dupGroups: 0 },  // P5-c 浮层 + P5-j 搜索 + P7-b .top-menu 定位 + 菜单项布局三件套
   "styles/compat.css": { decls: 210, dupGroups: 0 },
   "styles/a11y.css": { decls: 9, dupGroups: 0 },   // P7-e：无障碍最高层（reduced-motion 契约；靠层序而非 !important 取胜）
