@@ -7,8 +7,10 @@
  */
 
 /* ── 活动栏 ─────────────────────────────────────────────── */
+/* 260921 用户反馈：活动栏右侧那条 1px 竖线从 y=0 一直画到顶（伸进 macOS 红绿灯区域），
+ * 与顶栏没有融合。P5 时为了给右侧描边自行加的，master 本来是 border-left/right: 0 —— 去掉。
+ * 活动栏与目录栏的分界改由目录栏自身的卡片边（它的 margin 4px + 圆角）提供，与改造前一致。 */
 .activity-rail {
-  border-right: 1px solid var(--lake-border-1);
   background: transparent;
 }
 .activity-button {
