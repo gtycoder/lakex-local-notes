@@ -83,6 +83,9 @@
   .tree-row {
     min-height: 27px;
   }
+  /* 260921 合并：原先这里的 3 条与 src/styles/chrome.css（shell 层）**逐字相同**：
+     .note-row:hover / .tab-item { background: transparent } / .tab-item:hover ——
+     按「同一选择器不要多处重复声明」删掉，观感零变化（chrome 层本就覆盖它们）。 */
   .note-row.active {
     color: var(--shell-text);
   }
@@ -190,13 +193,10 @@
 
   /* C：悬停微卡片（白底 + 轻阴影，仅 transform/box-shadow，不动布局） */
 
-  .note-row:hover { background: var(--lake-bg-hover); }
   .note-row.active {
     background: var(--shell-accent-soft);
     box-shadow: none;
   }
-  .tab-item { background: transparent; }
-  .tab-item:hover { background: var(--lake-bg-hover); }
 
   /* 可读性：正文行高/字距/段色，标题收紧字距 */
   .lake-editor-mount .ne-engine,
