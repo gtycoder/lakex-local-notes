@@ -92,7 +92,7 @@
   position: absolute;
   z-index: 3;
   /* 顶边跟随动态 chrome 底边（--lake-editor-top），不再写死 topbar+28 */
-  top: var(--lake-editor-top, 112px);
+  top: var(--lake-editor-top, calc(var(--breadcrumb-height) + var(--editor-toolbar-height)));
   bottom: 0;
   right: 0;
   width: 39px;
@@ -121,7 +121,7 @@
 .outline-sidebar__bridge {
   position: absolute;
   z-index: 4;
-  top: var(--lake-editor-top, 112px);
+  top: var(--lake-editor-top, calc(var(--breadcrumb-height) + var(--editor-toolbar-height)));
   left: 0;
   bottom: 0;
   width: 4px;
@@ -164,14 +164,14 @@
 .outline-sidebar__content {
   position: absolute;
   z-index: 5;
-  top: var(--lake-editor-top, 112px);
+  top: var(--lake-editor-top, calc(var(--breadcrumb-height) + var(--editor-toolbar-height)));
   right: 0;
   display: flex;
   flex-direction: column;
   width: 100%;
   min-width: 0;
   /* 显式高度：绝对定位 + height:auto 在 Chromium 下不会按 top/bottom 撑满（实测会被内容顶出视口） */
-  height: calc(100% - var(--lake-editor-top, 112px));
+  height: calc(100% - var(--lake-editor-top, calc(var(--breadcrumb-height) + var(--editor-toolbar-height))));
   min-height: 0;
   overflow: hidden;
   opacity: 1;

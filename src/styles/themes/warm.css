@@ -120,6 +120,4 @@
   --lake-veil-open: rgba(255, 255, 255, .88);
   --lake-hairline-soft: rgba(228, 230, 234, .55);
   --lake-pinned-tint: rgba(255, 106, 0, .10);
-  --lake-pinned-border: rgba(255, 106, 0, .28);
-  --lake-pinned-tint-hover: rgba(255, 106, 0, .16);
 }

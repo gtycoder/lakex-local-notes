@@ -14,7 +14,7 @@
   --breadcrumb-height: 30px;
   --editor-toolbar-height: 34px;
   --tab-item-height: 28px;
-  --ease-out: var(--lake-ease-standard); --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1); --dur-press: var(--lake-motion-press); --dur-enter: var(--lake-motion-fast); --dur-drawer: var(--lake-motion-panel); }
+  --ease-out: var(--lake-ease-standard); --dur-enter: var(--lake-motion-fast); --dur-drawer: var(--lake-motion-panel); }
 
 * { box-sizing: border-box; }
 
@@ -57,20 +57,14 @@ button { cursor: pointer; }
   --shell-separator: color-mix(in srgb, var(--lake-text) 9%, transparent);
   /* 不透明的冷调表面，保资料库可读 */
   --shell-material: var(--lake-surface);
-  --shell-toolbar: var(--lake-surface);
   --shell-ease: var(--lake-ease-standard);
-  --shell-radius: var(--lake-radius-md); /* 左右固定 rail 共用宽度 */
 }
 
-/* ===== 2026-08-06 视觉刷新：A 暖紫灰主调 + C 悬停微卡片 + 去分隔线 + 可读性 ===== */
-:root {
-  /* 材质/分隔线/文字已收敛到上文单一来源（--shell-* ← --lake-*），此处只保留独有的阴影令牌。
-     本轮（260914 第三批）把下方渐变里的浅色字面值一并换成令牌：实测 rail / tab-bar / quick-notes-pane
-     的渐变当前都被 b3/base.css 与 quick-notes.css 的 !important 覆盖（深浅两色都不生效），
-     换令牌在浅色下只差 2~3 个色阶，但一旦哪条覆盖被移除，深色下不会再冒出一块浅色板。 */
-  --shell-card-shadow: 0 1px 2px var(--lake-shadow-color-1), 0 8px 24px var(--lake-shadow-color-4);
-  --shell-micro-card: 0 1px 2px var(--lake-shadow-color-3), 0 0 0 1px var(--lake-shadow-color-1);
-}
+/* ===== 2026-08-06 视觉刷新：A 暖紫灰主调 + C 悬停微卡片 + 去分隔线 + 可读性 =====
+   本轮（260914 第三批）把下方渐变里的浅色字面值一并换成令牌：实测 rail / tab-bar / quick-notes-pane
+   的渐变当前都被 b3/base.css 与 quick-notes.css 的 !important 覆盖（深浅两色都不生效），
+   换令牌在浅色下只差 2~3 个色阶，但一旦哪条覆盖被移除，深色下不会再冒出一块浅色板。
+   260923 审计：本块原来的 --shell-card-shadow / --shell-micro-card 全仓零引用，已删（整块随之移除）。 */
 
 /* ===== 2026-08-13 统一窗口材质 / 思源式浮动面板 ===== */
 :root {

@@ -8,9 +8,17 @@
 
 /* 正文左内距：内核默认只给 40px，而块手柄簇需要 54px（命中区 34 + 标题折叠钮 20）⇒
    实测 H1 手柄会被画到 x=-14（半个出窗口）。这里显式给 56px（54 + 2 余量），让手柄簇始终
-   留在窗口内，也给左侧目录的隐形热区（8px）留出安全边界。属压内核默认（40px 写在内核样式里）。
+   留在窗口内，也给左侧目录的隐形热区（10px）留出安全边界。属压内核默认（40px 写在内核样式里）。
    移动端不受影响：mobile.css 对 .ne-engine 的 padding 有 !important 归零。 */
 .lake-editor-mount .ne-engine { padding-left: 56px; }
+
+/* 块手柄「可见图标」在命中盒内右移、贴紧正文（260923 用户要求：只往右挪、尺寸不变）。
+   vendor 的排布 = 外层 .ne-block-hover-handle（34px 命中盒，left 由 JS inline 算）+ 内层
+   .ne-block-handle-inner（24px 图标，靠 padding-left: 6px 靠左）⇒ 图标右缘离正文还差 4px。
+   **只挪图标、不挪命中盒**：盒子右缘本就与正文齐平，再往右会盖住正文首字、抢掉首字点击。
+   上限就是这 4px（标题块同理：图标右缘与 20px 折叠钮之间也是 4px）；这里取 3px、留 1px 呼吸。
+   用 translate（transform 属性，vendor 未声明该属性）⇒ 不受「unlayered 胜 layered」影响、无需 !important。 */
+.ne-block-hover-handle .ne-block-handle-inner { translate: 3px 0; }
 
 @media (min-width: 761px) {
   .lake-editor-mount .ne-engine { padding-right: 56px; }
