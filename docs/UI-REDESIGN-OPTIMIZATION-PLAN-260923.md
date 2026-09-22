@@ -48,6 +48,10 @@ W0 双端门禁 → W0.5 抽两端共享入口 → W1 桌面专属零耦合清�
    - `test:tab-switch`：断言样式表含 `55ms ease-in`/`85ms ease-out`，而这两个字符串**只存在于脚本自身**，CSS 里已随重设计消失（我的批次也未动 `tabs.css`）。
 5. **固定环境**：一律隔离实例（`LAKE_USER_DATA=$TMPDIR/lake-*` + `vite preview` 独立端口 + 独立 CDP 端口），**绝不用 9222**；快照前注入 `transition:none/animation:none` + `bringToFront` + focus 模拟。
 6. **两条 npm script**：`check:stylesnap`（桌面+移动端逐元素 0 容差）与 `check:pixel`（同批同序 + 像素比对）；先跑 `self`（噪声必须 0）与 `control`（必须能抓真改动）自证。
+7. **装置可信配方（260923 实测验证，两条缺一不可）**：
+   - **快照 key 必须排除内核随机 id**：内核给正文文本节点发的 id 形如 `ne-text$u<hex>`，**跨 reload 不稳定** ⇒ 不排除时同一份代码连拍会得到"**每态恒定 2 条差异 + 2 个新增**"（`stylesnap.mjs` 已按 `/^u[0-9a-f]{6,}$/` 排除）。
+   - **每次跑快照必须用全新同构实例**（独立 `LAKE_USER_DATA`）：否则**首个状态会继承上一轮的标签集**（实测首态差 **386 条**、元素数 2310 vs 2135）；`pin()` 只重置主题/侧栏/大纲，管不到主进程里的标签集。
+   - 两条都满足后：**两个独立实例的 warm 8 态实测 `0 个状态有差异 / 0 条指纹差异`**。
 
 **DoD**：`self` 0 差异、`control` 有差异、桌面含 warm、移动端态齐备、三条失效脚本已修或已退役、两条 script 一键可跑。
 

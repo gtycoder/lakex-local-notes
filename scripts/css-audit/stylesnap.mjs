@@ -33,7 +33,10 @@ const SNAP = `(() => {
   };
   for (const el of els) {
     const cls = [...el.classList].sort().join(".");
-    const key = el.tagName.toLowerCase() + (el.id ? "$" + el.id : "") + (cls ? "." + cls : "");
+    // 260923：内核给正文文本节点发的 id 形如 u<hex>，**跨 reload 不稳定** ⇒ 不入 key。
+    // 不排除的话，同一份代码连拍两份快照会得到"每态恒定 2 条差异 + 2 个新增"，噪声淹没真信号。
+    const stableId = /^u[0-9a-f]{6,}$/.test(el.id) ? "" : el.id;
+    const key = el.tagName.toLowerCase() + (stableId ? "$" + stableId : "") + (cls ? "." + cls : "");
     const cs = getComputedStyle(el);
     const parts = [];
     for (const p of PROPS) parts.push(cs[p]);
