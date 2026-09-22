@@ -237,7 +237,7 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
     setTabs((prev) => prev.map((t) => (t.id === active.id ? { ...t, editing: !t.editing } : t)));
   }, [active, flushAutoSave]);
 
-  /** 行内 ＋ → 新建文档：在该节点下建子文档（对齐思源 .b3-list-item__action[data-type=new]）。 */
+  /** 行内 ＋ → 新建文档：在该节点下建子文档（对齐思源 .ln-iconbtn ln-row__action[data-type=new]）。 */
   const createChildDoc = useCallback(async (parentId: string) => {
     try {
       const n = await bridge.createNote("无标题文档", parentId);
@@ -500,7 +500,7 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
       return (
         <div key={it.kind + "-" + it.id}>
           <button
-            className={"b3-list-item ln-indent" + (activeId === it.id ? " b3-list-item--selected" : "") + (drag?.id === it.id ? " nb-dragging" : "") + (drag?.overId === it.id && drag.position ? (drag.position === "inside" ? " drop-parent" : " drop-line-" + drag.position) : "")}
+            className={"ln-row ln-indent" + (activeId === it.id ? " is-selected" : "") + (drag?.id === it.id ? " nb-dragging" : "") + (drag?.overId === it.id && drag.position ? (drag.position === "inside" ? " drop-parent" : " drop-line-" + drag.position) : "")}
             data-depth={depth}
             data-node-id={it.id}
             onClick={() => {
@@ -517,7 +517,7 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
             {hasChildren ? <ChevronRight size={16} className={expanded.has(it.id) ? "ln-chevron open" : "ln-chevron"} /> : <span className="ln-chevron-spacer" />}
             {renamingId === it.id ? (
               <input
-                className="b3-text-field"
+                className="ln-input"
                 autoFocus
                 value={renameValue}
                 onChange={(e) => setRenameValue(e.target.value)}
@@ -528,7 +528,7 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
             ) : (
               <>
                 {it.icon ? <span className="ln-tree-icon">{it.icon}</span> : <NodeIcon size={16} className="ln-tree-icon" />}
-                <span className="b3-list-item__text">{it.title}</span>
+                <span className="ln-row__title">{it.title}</span>
                 {/* 移动端无 hover：动作常显（对齐思源移动端 .b3-list-item 不带 --hide-action）。
                     ⋯ = 右键菜单，＋ = 新建子文档。 */}
                 <span className="nb-tree-actions">
@@ -672,9 +672,9 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
             <div className="mobile-model-body">
               {tabs.length === 0 && <div className="mobile-empty">暂无打开的文档</div>}
               {tabs.map((t) => (
-                <div key={t.id} className={"b3-list-item" + (t.id === activeId ? " b3-list-item--selected" : "")} onClick={() => { openTab(t.id); setTabsOpen(false); }}>
-                  <span className="b3-list-item__text">{t.title || "无标题"}</span>
-                  <button className="b3-list-item__action" onClick={(e) => { e.stopPropagation(); closeTab(t.id); }} aria-label="关闭"><X size={16} /></button>
+                <div key={t.id} className={"ln-row" + (t.id === activeId ? " is-selected" : "")} onClick={() => { openTab(t.id); setTabsOpen(false); }}>
+                  <span className="ln-row__title">{t.title || "无标题"}</span>
+                  <button className="ln-iconbtn ln-row__action" onClick={(e) => { e.stopPropagation(); closeTab(t.id); }} aria-label="关闭"><X size={16} /></button>
                 </div>
               ))}
               <button className="ln-btn ln-btn--secondary model-add" onClick={() => { setTabsOpen(false); openSidebar(true); }}><Plus size={16} />打开文档</button>
@@ -737,13 +737,13 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
               <span className="mobile-sheet-title">历史版本</span>
               <button className="mobile-icon-btn" onClick={() => setHistoryFor(null)} aria-label="关闭"><X size={20} /></button>
             </div>
-            <div className="mobile-sheet-body b3-list--mobile">
+            <div className="mobile-sheet-body ln-list">
               {historyList.length === 0 && <p className="mobile-sheet-empty">暂无历史版本</p>}
               {historyList.map((h) => (
-                <div key={h.id} className="b3-list-item" onClick={() => void applyRestoreHistory(h.id)}>
-                  <span className="b3-list-item__text">{h.title || "无标题"}</span>
-                  <span className="b3-list-item__meta">{new Date(h.createdAt).toLocaleString("zh-CN")}</span>
-                  <button className="b3-list-item__action" onClick={(e) => { e.stopPropagation(); void deleteHistory(h.id); }} aria-label="删除"><X size={16} /></button>
+                <div key={h.id} className="ln-row" onClick={() => void applyRestoreHistory(h.id)}>
+                  <span className="ln-row__title">{h.title || "无标题"}</span>
+                  <span className="ln-row__meta">{new Date(h.createdAt).toLocaleString("zh-CN")}</span>
+                  <button className="ln-iconbtn ln-row__action" onClick={(e) => { e.stopPropagation(); void deleteHistory(h.id); }} aria-label="删除"><X size={16} /></button>
                 </div>
               ))}
             </div>

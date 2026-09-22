@@ -188,18 +188,18 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
           {view === "editor" && (
             <Group title="编辑器" icon={<Pencil size={16} />}>
               <Item itemId="editor-font-size" name="正文字号" desc="作用于当前文档正文。">
-                <select className="b3-select" value={settings.fontSize} onChange={(e) => update({ fontSize: Number(e.target.value) })} aria-label="正文字号">
+                <select className="ln-select" value={settings.fontSize} onChange={(e) => update({ fontSize: Number(e.target.value) })} aria-label="正文字号">
                   {fontSizeOptions().map((fs) => <option key={fs} value={fs}>{fs} px</option>)}
                 </select>
               </Item>
               <Item itemId="editor-max-open-tabs" name="最大同时打开标签数" desc="超过上限自动关闭最旧的标签。">
-                <select className="b3-select fn__size200" value={settings.maxOpenTabs} onChange={(e) => update({ maxOpenTabs: Number(e.target.value) })} aria-label="最大同时打开标签数">
+                <select className="ln-select fn__size200" value={settings.maxOpenTabs} onChange={(e) => update({ maxOpenTabs: Number(e.target.value) })} aria-label="最大同时打开标签数">
                   <option value={0}>不限</option>
                   {[4, 6, 8, 12, 16, 24].map((n) => <option key={n} value={n}>{n} 个</option>)}
                 </select>
               </Item>
               <Item itemId="editor-max-attachment" name="附件大小上限" desc="仅影响本机上传校验。">
-                <select className="b3-select fn__size200" value={Math.round(settings.maxAttachmentBytes / (1024 * 1024))} onChange={(e) => update({ maxAttachmentBytes: Number(e.target.value) * 1024 * 1024 })} aria-label="附件大小上限">
+                <select className="ln-select fn__size200" value={Math.round(settings.maxAttachmentBytes / (1024 * 1024))} onChange={(e) => update({ maxAttachmentBytes: Number(e.target.value) * 1024 * 1024 })} aria-label="附件大小上限">
                   {MAX_ATTACHMENT_MB_OPTIONS_SETTINGS.map((mb) => <option key={mb} value={mb}>{mb} MiB</option>)}
                 </select>
               </Item>
@@ -217,7 +217,7 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
                   >添加到桌面</button>
                 </Item>
               )}
-              {pinMsg && <div className="b3-label__text">{pinMsg}</div>}
+              {pinMsg && <div className="ln-form__desc">{pinMsg}</div>}
             </Group>
           )}
 
@@ -256,14 +256,14 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
               </Block>
               <Block itemId="resources-gc" name="云端未引用对象" desc="删除云端未被任何清单/历史快照引用且超过 7 天的对象（对齐桌面深度清理）。">
                 <button className="ln-btn ln-btn--primary" disabled={orphanBusy} onClick={() => { setGcMsg("清理中…"); setOrphanBusy(true); void bridge.gcDeepCleanup().then((r) => setGcMsg("已清理 " + r.deletedCount + " 个对象（候选 " + r.candidateCount + "）")).catch(() => setGcMsg("清理失败")).finally(() => setOrphanBusy(false)); }}>清理云端</button>
-                {gcMsg && <div className="b3-label__text">{gcMsg}</div>}
+                {gcMsg && <div className="ln-form__desc">{gcMsg}</div>}
               </Block>
               {orphans.length === 0 && <div className="config-empty">暂无冗余资源</div>}
               {orphans.map((o) => (
-                <div key={o.id} className="b3-list-item">
-                  <span className="b3-list-item__text">{o.filename}</span>
-                  <span className="b3-list-item__meta">{formatBytes(o.size)}</span>
-                  <button className="b3-list-item__action" onClick={() => { void bridge.deleteOrphanAsset(o.id).then(() => setOrphans((prev) => prev.filter((x) => x.id !== o.id))); }} aria-label="删除"><Trash size={16} /></button>
+                <div key={o.id} className="ln-row">
+                  <span className="ln-row__title">{o.filename}</span>
+                  <span className="ln-row__meta">{formatBytes(o.size)}</span>
+                  <button className="ln-iconbtn ln-row__action" onClick={() => { void bridge.deleteOrphanAsset(o.id).then(() => setOrphans((prev) => prev.filter((x) => x.id !== o.id))); }} aria-label="删除"><Trash size={16} /></button>
                 </div>
               ))}
             </Group>
@@ -276,27 +276,27 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
                 <div className="config-items">
                   <div className="config-item">
                     <div className="config-item__main"><div className="config-name">Endpoint</div></div>
-                    <div className="config-item__ctl"><input className="b3-text-field" value={endpoint} onChange={(e) => setEndpoint(e.target.value)} /></div>
+                    <div className="config-item__ctl"><input className="ln-input" value={endpoint} onChange={(e) => setEndpoint(e.target.value)} /></div>
                   </div>
                   <div className="config-item">
                     <div className="config-item__main"><div className="config-name">Region</div></div>
-                    <div className="config-item__ctl"><input className="b3-text-field" value={region} onChange={(e) => setRegion(e.target.value)} /></div>
+                    <div className="config-item__ctl"><input className="ln-input" value={region} onChange={(e) => setRegion(e.target.value)} /></div>
                   </div>
                   <div className="config-item">
                     <div className="config-item__main"><div className="config-name">Bucket</div></div>
-                    <div className="config-item__ctl"><input className="b3-text-field" value={bucket} onChange={(e) => setBucket(e.target.value)} /></div>
+                    <div className="config-item__ctl"><input className="ln-input" value={bucket} onChange={(e) => setBucket(e.target.value)} /></div>
                   </div>
                   <div className="config-item">
                     <div className="config-item__main"><div className="config-name">Object prefix</div></div>
-                    <div className="config-item__ctl"><input className="b3-text-field" value={prefix} onChange={(e) => setPrefix(e.target.value)} /></div>
+                    <div className="config-item__ctl"><input className="ln-input" value={prefix} onChange={(e) => setPrefix(e.target.value)} /></div>
                   </div>
                   <div className="config-item">
                     <div className="config-item__main"><div className="config-name">Access Key</div></div>
-                    <div className="config-item__ctl"><input className="b3-text-field" value={ak} onChange={(e) => setAk(e.target.value)} /></div>
+                    <div className="config-item__ctl"><input className="ln-input" value={ak} onChange={(e) => setAk(e.target.value)} /></div>
                   </div>
                   <div className="config-item">
                     <div className="config-item__main"><div className="config-name">Secret Key</div></div>
-                    <div className="config-item__ctl"><input className="b3-text-field" type="password" value={sk} onChange={(e) => setSk(e.target.value)} /></div>
+                    <div className="config-item__ctl"><input className="ln-input" type="password" value={sk} onChange={(e) => setSk(e.target.value)} /></div>
                   </div>
                 </div>
               </div>
@@ -380,10 +380,10 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
           {MENU.map((m) => {
             const Icon = m.icon;
             return (
-              <button key={m.key} className="b3-list-item mobile-settings-row" onClick={() => { setView(m.key); setPreviewNoteId(null); }}>
-                <Icon size={20} className="b3-list-item__graphic" />
-                <span className="b3-list-item__text">{m.label}</span>
-                <ChevronRight size={18} className="b3-list-item__arrow" />
+              <button key={m.key} className="ln-row mobile-settings-row" onClick={() => { setView(m.key); setPreviewNoteId(null); }}>
+                <Icon size={20} className="ln-row__icon" />
+                <span className="ln-row__title">{m.label}</span>
+                <ChevronRight size={18} className="ln-row__chevron" />
               </button>
             );
           })}

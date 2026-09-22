@@ -1,0 +1,9 @@
+/* 移动端 kit 密度层（260923 W2）：桌面 kit 是鼠标密度；触屏需要更大的点按目标与常驻动作。
+   组件外观的单一来源仍是 styles/kit.css，这里只做移动端必要覆盖（不复制组件规格）。 */
+.ln-row { min-height: 44px; gap: 8px; font-size: var(--lake-font-size-body); }
+.ln-row__title { text-overflow: ellipsis; }
+.ln-row__meta { flex: 0 0 auto; color: var(--lake-text-4); font-size: var(--lake-font-size-tiny); }
+.ln-row__chevron { flex: 0 0 auto; color: var(--lake-text-4); }
+/* 触屏无 hover ⇒ 行内动作常驻可见（桌面 kit 默认 hover 才显示） */
+.ln-row__actions { opacity: 1; }
+.ln-input, .ln-select { height: 40px; font-size: var(--lake-font-size-body); }

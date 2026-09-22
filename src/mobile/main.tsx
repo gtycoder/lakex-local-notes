@@ -23,6 +23,7 @@ import "../styles/components.css"; // 共用浮层件（seg/badge/ln-*），须�
 import "./editor/editor-dock.css";
 import "../styles/app/quick-notes.css"; // 小记编辑器容器 + 卡片只读预览（与桌面同一套类）
 import "../styles/dialog.css"; // 浮层通用弹窗（属性等）：与桌面共用同一套样式
+import "./mobile-kit.css"; // 移动端 kit 密度层（触屏点按目标 / 常驻动作）
 
 // M3：移动端深色模式——与桌面同语义：settings.theme 为权威（light=daylight / dark=midnight）。
 // 启动即应用；saveSettings 的订阅回调让设置面板切换立即生效（桌面此前一直如此，移动端曾缺失
