@@ -1,0 +1,7 @@
+{
+  "name": "lake-mobile-audit-shell",
+  "private": true,
+  "version": "0.0.0",
+  "description": "移动端 UI 走查用的最小 Electron 手机壳（390x844）。用法：LAKE_MOBILE_URL=http://127.0.0.1:1422/index.html ./node_modules/.bin/electron scripts/mobile-audit/shell --remote-debugging-port=9336",
+  "main": "main.js"
+}
