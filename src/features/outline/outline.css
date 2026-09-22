@@ -1,5 +1,10 @@
 /* ===== 右侧大纲栏：与左侧同宽的常驻 activity rail + 悬停预览 ===== */
 
+/* ⚠️ 260923 W6：本文件也承载两条**无条件**的基础布局规则（下面的 .lake-editor-main 尺寸；
+   第 450 行 .ne-engine 的 padding-right = 56px 基础内距 + 大纲让位）——它们在
+   editor-outline-enhance=false（默认）时同样生效。这是有意的基础值（56px 见 app/editor.css），
+   不是"增强大纲关闭时的副作用"；搬家属洁癖（§3 #17），故仅在此标注归属。 */
+
 /* 编辑器挂载列：必须 flex:1 + min-width:0，否则内容最小宽度会把编辑器撑出主列 */
 .lake-editor-tab > .lake-editor-main {
   height: 100%;

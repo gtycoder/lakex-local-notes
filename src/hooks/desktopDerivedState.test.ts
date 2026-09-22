@@ -51,3 +51,27 @@ describe("deriveDesktopView — tabInfos 文档类型透传", () => {
     expect(tabInfos[0].kind).toBe("doc");
   });
 });
+
+/**
+ * 260923 W6：大纲增强（`editor-outline-enhance`，默认 **false**）关闭时零占位护栏。
+ * `App.tsx` 用 `outlineVisible` 决定是否挂载 `OutlineSidebar`（未挂载 ⇒ 无控制器/监听/计时器）；
+ * `--lake-outline-inset` 是唯一会"占住编辑区右缘"的量，关闭时必须为 0。
+ * 锁死：默认关闭 ⇒ 不挂载且不让位；开启 + 固定态 ⇒ 按面板宽让位。
+ */
+describe("deriveDesktopView — 大纲增强关闭时的零占位（260923 W6）", () => {
+  const insetOf = (style: unknown) => (style as Record<string, string>)["--lake-outline-inset"];
+
+  it("outlineEnhance=false ⇒ 不挂载大纲，且正文不让位", () => {
+    const r = deriveDesktopView(input([]));
+    expect(r.outlineVisible).toBe(false);
+    expect(insetOf(r.shellStyle)).toBe("0px");
+  });
+
+  it("outlineEnhance=true + toc + 文档 + 固定态 ⇒ 挂载且按面板宽让位", () => {
+    const r = deriveDesktopView({
+      ...input([]), tocEnabled: true, outlineEnhance: true, activeOutlineEmpty: false, outlineMode: "docked",
+    });
+    expect(r.outlineVisible).toBe(true);
+    expect(insetOf(r.shellStyle)).toBe("280px");
+  });
+});
