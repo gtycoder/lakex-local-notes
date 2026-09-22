@@ -206,7 +206,7 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
               {pinState?.available && !pinState.pinned && (
                 <Item itemId="editor-pin-quick-note" name="新建小记" desc="添加到桌面。">
                   <button
-                    className="b3-button b3-button--outline"
+                    className="ln-btn ln-btn--secondary"
                     onClick={() => {
                       void requestPinQuickNoteShortcut().then((requested) => {
                         setPinMsg(requested ? "已请求，请在系统弹窗中确认" : "该机型不支持固定快捷方式");
@@ -225,8 +225,8 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
             <Group title="外观" icon={<Palette size={16} />}>
               <Item itemId="appearance-theme" name="主题" desc="浅色=思源 daylight / 深色=midnight。">
                 <Seg ariaLabel="主题">
-                  <button className={"b3-button b3-button--outline seg__item" + (settings.theme === "light" ? " is-active" : "")} onClick={() => update({ theme: "light" })}>浅色</button>
-                  <button className={"b3-button b3-button--outline seg__item" + (settings.theme === "dark" ? " is-active" : "")} onClick={() => update({ theme: "dark" })}>深色</button>
+                  <button className={"ln-btn ln-btn--secondary seg__item" + (settings.theme === "light" ? " is-active" : "")} onClick={() => update({ theme: "light" })}>浅色</button>
+                  <button className={"ln-btn ln-btn--secondary seg__item" + (settings.theme === "dark" ? " is-active" : "")} onClick={() => update({ theme: "dark" })}>深色</button>
                 </Seg>
               </Item>
             </Group>
@@ -252,10 +252,10 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
           {view === "resources" && (
             <Group title="资源管理" icon={<Images size={16} />}>
               <Block itemId="resources-clean" name="未引用资源" desc="删除正文图片后残留的本地文件（不会被上传，可安全清理）。">
-                <button className="b3-button" disabled={orphans.length === 0 || orphanBusy} onClick={() => { setOrphanBusy(true); void bridge.cleanOrphanAssets().then(() => setOrphans([])).finally(() => setOrphanBusy(false)); }}>清理全部（{orphans.length}）</button>
+                <button className="ln-btn ln-btn--primary" disabled={orphans.length === 0 || orphanBusy} onClick={() => { setOrphanBusy(true); void bridge.cleanOrphanAssets().then(() => setOrphans([])).finally(() => setOrphanBusy(false)); }}>清理全部（{orphans.length}）</button>
               </Block>
               <Block itemId="resources-gc" name="云端未引用对象" desc="删除云端未被任何清单/历史快照引用且超过 7 天的对象（对齐桌面深度清理）。">
-                <button className="b3-button" disabled={orphanBusy} onClick={() => { setGcMsg("清理中…"); setOrphanBusy(true); void bridge.gcDeepCleanup().then((r) => setGcMsg("已清理 " + r.deletedCount + " 个对象（候选 " + r.candidateCount + "）")).catch(() => setGcMsg("清理失败")).finally(() => setOrphanBusy(false)); }}>清理云端</button>
+                <button className="ln-btn ln-btn--primary" disabled={orphanBusy} onClick={() => { setGcMsg("清理中…"); setOrphanBusy(true); void bridge.gcDeepCleanup().then((r) => setGcMsg("已清理 " + r.deletedCount + " 个对象（候选 " + r.candidateCount + "）")).catch(() => setGcMsg("清理失败")).finally(() => setOrphanBusy(false)); }}>清理云端</button>
                 {gcMsg && <div className="b3-label__text">{gcMsg}</div>}
               </Block>
               {orphans.length === 0 && <div className="config-empty">暂无冗余资源</div>}
@@ -307,9 +307,9 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
                     <div className="config-block__name">保存并测试连接</div>
                     <div className="config-block__text">配置将由本地保存为真相，S3 仅作同步镜像。</div>
                     <div className="config-block__actions">
-                      <button className="b3-button" onClick={saveS3}>保存</button>
-                      <button className="b3-button" onClick={() => void testS3()}>测试连接</button>
-                      <button className="b3-button b3-button--outline" onClick={() => void runSync()}><RefreshCw size={14} />立即同步</button>
+                      <button className="ln-btn ln-btn--primary" onClick={saveS3}>保存</button>
+                      <button className="ln-btn ln-btn--primary" onClick={() => void testS3()}>测试连接</button>
+                      <button className="ln-btn ln-btn--secondary" onClick={() => void runSync()}><RefreshCw size={14} />立即同步</button>
                     </div>
                     {s3Test && <div className="config-block__text">{s3Test}</div>}
                     {syncMsg && <div className="config-block__text">{syncMsg}</div>}
@@ -333,7 +333,7 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
                     </div>
                   )}
                   <div className="config-block__actions">
-                    <button className="b3-button" onClick={() => void clearCache()}>清理缓存</button>
+                    <button className="ln-btn ln-btn--primary" onClick={() => void clearCache()}>清理缓存</button>
                   </div>
                   {cacheMsg && <div className="config-block__text">{cacheMsg}</div>}
                 </div>

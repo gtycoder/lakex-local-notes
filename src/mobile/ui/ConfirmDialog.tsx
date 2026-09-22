@@ -65,9 +65,9 @@ export function ConfirmHost() {
         <div className="b3-dialog__header">{req.title}</div>
         {req.body && <div className="b3-dialog__content">{req.body}</div>}
         <div className="b3-dialog__action">
-          <button className="b3-button b3-button--outline" onClick={() => close(false)}>{req.cancelText ?? "取消"}</button>
+          <button className="ln-btn ln-btn--secondary" onClick={() => close(false)}>{req.cancelText ?? "取消"}</button>
           <div className="fn__space" />
-          <button className={"b3-button" + (req.danger ? " ln-confirm__danger" : "")} onClick={() => close(true)}>{req.confirmText ?? "确定"}</button>
+          <button className={"ln-btn ln-btn--primary" + (req.danger ? " ln-btn--danger" : "")} onClick={() => close(true)}>{req.confirmText ?? "确定"}</button>
         </div>
       </div>
     </div>

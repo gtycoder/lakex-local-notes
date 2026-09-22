@@ -677,7 +677,7 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
                   <button className="b3-list-item__action" onClick={(e) => { e.stopPropagation(); closeTab(t.id); }} aria-label="关闭"><X size={16} /></button>
                 </div>
               ))}
-              <button className="b3-button b3-button--outline model-add" onClick={() => { setTabsOpen(false); openSidebar(true); }}><Plus size={16} />打开文档</button>
+              <button className="ln-btn ln-btn--secondary model-add" onClick={() => { setTabsOpen(false); openSidebar(true); }}><Plus size={16} />打开文档</button>
             </div>
           </div>
         </div>
@@ -723,7 +723,7 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
                   <button key={e.name + e.char} className="mobile-emoji-cell" onClick={() => void applyIcon(e.char)} title={e.name}>{e.char}</button>
                 ))}
               </div>
-              <button className="b3-button b3-button--outline" onClick={() => void applyIcon(null)}>清除图标</button>
+              <button className="ln-btn ln-btn--secondary" onClick={() => void applyIcon(null)}>清除图标</button>
             </div>
           </div>
         </div>
