@@ -36,7 +36,7 @@ pre {
 .settings-panel .config-title {
   margin: 0 0 var(--lake-space-sm);
   color: var(--lake-text-2);
-  font-size: var(--lake-font-size-small);
+  font-size: var(--lake-font-size-body);
   font-weight: var(--lake-font-weight-semibold);
 }
 .settings-panel .config-items {
@@ -45,8 +45,8 @@ pre {
 }
 .settings-panel .config-item,
 .settings-panel .config-block {
-  min-height: 44px;
-  padding: var(--lake-space-md) var(--lake-space-lg);
+  min-height: 56px;
+  padding: 14px 20px;
   border-bottom: 1px solid var(--lake-border-2);
 }
 .settings-panel .config-item:last-child,
@@ -55,10 +55,10 @@ pre {
 .settings-panel .config-name,
 .settings-panel .config-block__name {
   color: var(--lake-text-1);
-  font-size: var(--lake-font-size-small);
+  font-size: var(--lake-font-size-body);
   font-weight: var(--lake-font-weight-semibold);
 }
-.settings-panel .config-block__text { color: var(--lake-text-3); font-size: var(--lake-font-size-micro); }
+.settings-panel .config-block__text { color: var(--lake-text-3); font-size: var(--lake-font-size-small); }
 .settings-panel .config-item__ctl { flex: 0 0 auto; min-width: 200px; justify-content: flex-end; }
 
 /* 左侧分类导航 */
@@ -79,7 +79,7 @@ pre {
  * 用户已确认：**去掉选中项左侧竖条**（原 .outline-item--selected::before）。 */
 .outline-sidebar__header {
   color: var(--lake-text-2);
-  font-size: var(--lake-font-size-small);
+  font-size: var(--lake-font-size-body);
   font-weight: var(--lake-font-weight-semibold);
 }
 .outline-list { padding: var(--lake-space-sm) 0; }
@@ -143,3 +143,81 @@ pre {
   background: var(--lake-bg-canvas);
   overflow: hidden;
 }
+
+/* ── 内核（lakex）编辑器跟随 App 主题（补 P7-b 漏搬的 b3/dark.css 桥）────────────
+ * 原 `src/b3/dark.css` 用 ~40 个 `--lakex-editor-*` 变量把正文纸面/工具条/代码块/边框
+ * 从内核默认的「纯白亮色」切到深色；P7-b 把 `src/b3/*` 移出桌面入口时**漏搬了这一块**，
+ * 后果：**深色主题下正文区仍是纯白 `#fff`**（像素实测 `.ne-editor-wrap-box` = rgb(255,255,255)）。
+ * 这里改写成走我们的令牌，并**同时覆盖暖色主题**（原来只有深色有桥）。
+ * 放在 feature 层（高于内核所在的 legacy 层）⇒ 不需要 !important。
+ * 浅色不写：内核默认就是浅色且与 --lake-bg-canvas 一致。 */
+[data-theme="dark"] .lake-editor-mount,
+[data-theme="dark"] .lakex-default-theme,
+[data-theme="warm"] .lake-editor-mount,
+[data-theme="warm"] .lakex-default-theme {
+  --lakex-editor-background: var(--lake-bg-canvas);
+  --lakex-editor-background-primary: var(--lake-bg-block);
+  --lakex-editor-background-foreground: var(--lake-bg-block);
+  --lakex-editor-background-secondary: var(--lake-bg-block);
+  --lakex-editor-background-tertiary: var(--lake-bg-block);
+  --lakex-editor-background-focus: var(--lake-bg-block);
+  --lakex-editor-background-primary-hover: var(--lake-bg-hover);
+  --lakex-editor-background-primary-hover-light: var(--lake-bg-block);
+  --lakex-editor-border-light: var(--lake-border-2);
+  --lakex-editor-border-primary: var(--lake-border-strong);
+  --lakex-editor-border-secondary: var(--lake-border-2);
+  --lakex-editor-card-background-hover: var(--lake-bg-block);
+  --lakex-editor-card-border-hover: var(--lake-border-strong);
+  --lakex-editor-card-border-selected: var(--lake-accent);
+  --lakex-editor-code-background: var(--lake-bg-block);
+  --lakex-editor-column-background-highlight: var(--lake-bg-hover);
+  --lakex-editor-cursor: var(--lake-accent);
+  --lakex-editor-selection: var(--lake-accent-tint);
+  --lakex-editor-table-bar-active: var(--lake-accent);
+  --lakex-editor-table-scrollbar-thumb: var(--lake-scrollbar-thumb);
+  --lakex-editor-text-body: var(--lake-text-1);
+  --lakex-editor-text-color: var(--lake-text-1);
+  --lakex-editor-text-caption: var(--lake-text-3);
+  --lakex-editor-text-danger: var(--lake-status-error);
+  --lakex-editor-text-disable: var(--lake-text-4);
+  --lakex-editor-text-link: var(--lake-accent);
+  --lakex-editor-text-link-hover: var(--lake-accent);
+  --lakex-editor-icon-primary: var(--lake-text-2);
+  --lakex-editor-icon-secondary: var(--lake-text-3);
+  --lakex-editor-overlay-background-tertiary: var(--lake-bg-block);
+  /* 语义色反相组（原 b3/dark.css 的关键一组：深色下"黑"要变浅、"白"要变深；漏了它 ⇒
+   * 内核里用 --lakex-editor-color-black 的文字/工具条图标在深色下几乎看不见）。
+   * 透明度用 color-mix 从令牌派生，避免颜色字面量出现在主题文件之外。 */
+  --lakex-editor-color-black: var(--lake-text-2);
+  --lakex-editor-color-black-f05: color-mix(in srgb, var(--lakex-editor-color-black) 5%, transparent);
+  --lakex-editor-color-black-f08: color-mix(in srgb, var(--lakex-editor-color-black) 8%, transparent);
+  --lakex-editor-color-black-f12: color-mix(in srgb, var(--lakex-editor-color-black) 12%, transparent);
+  --lakex-editor-color-black-f30: color-mix(in srgb, var(--lakex-editor-color-black) 30%, transparent);
+  --lakex-editor-color-black-f65: color-mix(in srgb, var(--lakex-editor-color-black) 65%, transparent);
+  --lakex-editor-color-white: var(--lake-bg-canvas);
+  --lakex-editor-color-white-f60: color-mix(in srgb, var(--lake-bg-canvas) 60%, transparent);
+  --lakex-editor-color-white-f90: color-mix(in srgb, var(--lake-bg-canvas) 90%, transparent);
+  --lakex-editor-color-theme: var(--lake-accent);
+  --lakex-editor-color-theme-light: var(--lake-accent-tint);
+}
+/* 正文区容器本身（内核在 legacy 层给了浅色底，这里按主题改） */
+[data-theme="dark"] .document-pane .lake-editor-mount,
+[data-theme="warm"] .document-pane .lake-editor-mount {
+  background: var(--lake-bg-canvas);
+  color: var(--lake-text-1);
+}
+[data-theme="dark"] .lake-editor-mount .ne-editor-wrap-box,
+[data-theme="dark"] .lake-editor-mount .ne-editor,
+[data-theme="dark"] .lake-editor-mount .ne-ui,
+[data-theme="warm"] .lake-editor-mount .ne-editor-wrap-box,
+[data-theme="warm"] .lake-editor-mount .ne-editor,
+[data-theme="warm"] .lake-editor-mount .ne-ui {
+  background: var(--lake-bg-canvas);
+  color: var(--lake-text-1);
+}
+/* 深色/暖色下内核工具条图标：sprite（<use>）默认 fill 是黑，深色底上等于隐形。
+ * 用 currentColor 让它们跟随 .ne-ui 的文字色（若 sprite 内部写死了 fill 则无效，届时另议）。 */
+[data-theme="dark"] .ne-ui svg.ne-icon-symbol,
+[data-theme="warm"] .ne-ui svg.ne-icon-symbol,
+[data-theme="dark"] .ne-ui svg.ne-icon-symbol use,
+[data-theme="warm"] .ne-ui svg.ne-icon-symbol use { fill: currentColor; color: inherit; }

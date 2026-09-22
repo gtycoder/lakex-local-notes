@@ -3,13 +3,13 @@
   color-scheme: light;
   /* 表面 */
   --lake-bg-window: #f6f3ec;
-  --lake-bg-panel: #fdfbf6;
+  --lake-bg-panel: #fffefb;
   --lake-bg-canvas: #fffefb;
-  --lake-bg-block: #f1ece1;
+  --lake-bg-block: #f4efe6;
   --lake-bg-raised: #fffefb;
   --lake-bg-sunken: #efe9dd;
-  --lake-bg-hover: rgba(60,48,28,.055);
-  --lake-bg-press: rgba(60,48,28,.09);
+  --lake-bg-hover: #eee7da;
+  --lake-bg-press: #e5dccb;
   /* 文字 */
   --lake-text-1: #2a2318;
   --lake-text-2: #564c3c;
@@ -21,7 +21,7 @@
   --lake-border-2: #f0e9dd;
   --lake-border-strong: #d6cbb6;
   /* 主色 */
-  --lake-accent: #6f552e;
+  --lake-accent: #7a5a24;
   --lake-accent-ink: #4f3c1f;
   --lake-accent-ink-hover: #64533a;
   --lake-accent-ink-press: #413119;
@@ -43,7 +43,7 @@
   --lake-scrollbar-thumb-hover: #8c8274;
   --lake-focus-halo: rgba(60,48,28,.20);
   /* 阴影 */
-  --lake-shadow-card: 0 1px 2px rgba(40,32,20,.06), 0 4px 12px -6px rgba(40,32,20,.10);
+  --lake-shadow-card: 0 1px 3px rgba(40,32,20,.08), 0 6px 16px -8px rgba(40,32,20,.14);
   --lake-shadow-popover: 0 0 0 1px rgba(40,32,20,.06), 0 12px 28px -10px rgba(40,32,20,.18), 0 28px 60px -20px rgba(40,32,20,.16);
   --lake-shadow-dialog: 0 0 0 1px rgba(40,32,20,.07), 0 24px 48px -16px rgba(40,32,20,.22), 0 48px 96px -32px rgba(40,32,20,.18);
   --lake-shadow-drag: 0 8px 24px -8px rgba(40,32,20,.24);

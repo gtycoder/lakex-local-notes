@@ -156,10 +156,10 @@
   color: inherit;
   font: inherit;
   cursor: pointer;
-  /* 产品既有决策：超长直接裁切，不打省略号 */
+  /* 超长用省略号（硬切看起来像渲染 bug） */
   white-space: nowrap;
   overflow: hidden;
-  text-overflow: clip;
+  text-overflow: ellipsis;
 }
 .protyle-breadcrumb__item:hover { color: var(--lake-text-1); }
 .protyle-breadcrumb__item--notebook { color: var(--lake-text-2); font-weight: var(--lake-font-weight-semibold); }
@@ -195,8 +195,7 @@
 .tab-item.active {
   color: var(--lake-text-1);
   background: var(--lake-bg-canvas);
-  border-color: var(--lake-border-2);
-  box-shadow: var(--lake-shadow-card);
+  border-color: var(--lake-border-strong);
 }
 .tab-item .tab-dirty-dot { flex: 0 0 6px; width: 6px; height: 6px; background: var(--lake-status-pending); }
 .tab-item .tab-pin { color: var(--lake-text-4); }
@@ -205,10 +204,10 @@
 /* ── 目录树行（P5-e；设计 COMPONENTS.md 03 列表与列表项）─────────────────
  * 产品既有决策一律保留：标题超长**直接裁切不打省略号**；行内动作（⋯ ＋）**仅 hover/聚焦显形**
  * （选中态不常驻，用户 260914）；拖拽落点样式不动。 */
-.note-list { padding: 0 var(--lake-space-xs); }
+.note-list { padding: 0 var(--lake-space-sm); }
 .note-row {
-  min-height: 27px;
-  padding: 0 6px;
+  min-height: 30px;
+  padding: 0 8px;
   border-radius: var(--lake-radius-sm);
   color: var(--lake-text-1);
   background: transparent;
@@ -223,6 +222,7 @@
   font-weight: var(--lake-font-weight-regular);
   white-space: nowrap;
   overflow: hidden;
+  text-overflow: ellipsis;
 }
 .tree-row.type-notebook .note-row-copy strong { font-weight: var(--lake-font-weight-semibold); }
 .tree-row.type-group .note-row-copy strong { font-weight: var(--lake-font-weight-medium); }

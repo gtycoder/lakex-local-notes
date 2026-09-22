@@ -36,13 +36,13 @@
   --lake-z-toast: 300;
   --lake-z-tooltip: 400;
   /* 字号/字重/行高 */
-  --lake-font-size-micro: 10.5px;
-  --lake-font-size-tiny: 11px;
-  --lake-font-size-small: 12px;
-  --lake-font-size-body: 13px;
-  --lake-font-size-bodyLg: 14.5px;
-  --lake-font-size-title: 17px;
-  --lake-font-size-h1: 23px;
+  --lake-font-size-micro: 11.5px;
+  --lake-font-size-tiny: 12px;
+  --lake-font-size-small: 13px;
+  --lake-font-size-body: 14px;
+  --lake-font-size-bodyLg: 15.5px;
+  --lake-font-size-title: 18px;
+  --lake-font-size-h1: 24px;
   --lake-font-weight-regular: 400;
   --lake-font-weight-medium: 500;
   --lake-font-weight-semibold: 600;

@@ -3,13 +3,13 @@
   color-scheme: dark;
   /* 表面 */
   --lake-bg-window: #16181b;
-  --lake-bg-panel: #1b1e22;
+  --lake-bg-panel: #1e2126;
   --lake-bg-canvas: #1f2227;
-  --lake-bg-block: #24282e;
+  --lake-bg-block: #262a31;
   --lake-bg-raised: #2b3037;
   --lake-bg-sunken: #141619;
-  --lake-bg-hover: rgba(255,255,255,.055);
-  --lake-bg-press: rgba(255,255,255,.09);
+  --lake-bg-hover: rgba(255,255,255,.075);
+  --lake-bg-press: rgba(255,255,255,.12);
   /* 文字 */
   --lake-text-1: #eef0f3;
   --lake-text-2: #b6bdc6;
@@ -21,11 +21,11 @@
   --lake-border-2: #23272c;
   --lake-border-strong: #3a4048;
   /* 主色 */
-  --lake-accent: #93a9cf;
-  --lake-accent-ink: #46597b;
-  --lake-accent-ink-hover: #5c6d8b;
-  --lake-accent-ink-press: #394965;
-  --lake-accent-tint: rgba(147,169,207,.14);
+  --lake-accent: #8ba4e6;
+  --lake-accent-ink: #3f5fae;
+  --lake-accent-ink-hover: #4a6cc4;
+  --lake-accent-ink-press: #35509a;
+  --lake-accent-tint: rgba(139,164,230,.16);
   --lake-accent-text: #e9eef6;
   /* 状态色 */
   --lake-status-sync: #6fc0cc;
@@ -43,7 +43,7 @@
   --lake-scrollbar-thumb-hover: #7d8695;
   --lake-focus-halo: rgba(230,235,242,.20);
   /* 阴影 */
-  --lake-shadow-card: 0 1px 2px rgba(0,0,0,.30), 0 4px 12px -6px rgba(0,0,0,.40);
+  --lake-shadow-card: 0 1px 3px rgba(0,0,0,.36), 0 6px 16px -8px rgba(0,0,0,.50);
   --lake-shadow-popover: 0 0 0 1px rgba(255,255,255,.08), 0 14px 30px -10px rgba(0,0,0,.55), 0 30px 60px -20px rgba(0,0,0,.50);
   --lake-shadow-dialog: 0 0 0 1px rgba(255,255,255,.09), 0 28px 56px -18px rgba(0,0,0,.60), 0 56px 104px -36px rgba(0,0,0,.55);
   --lake-shadow-drag: 0 10px 28px -10px rgba(0,0,0,.55);
