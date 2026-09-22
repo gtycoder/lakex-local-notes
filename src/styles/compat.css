@@ -21,7 +21,7 @@
   height: var(--topbar-height);
   background: transparent;
   border-bottom: 0;
-  z-index: 400;
+  z-index: var(--lake-z-topbar);
   box-shadow: none;
   -webkit-backdrop-filter: none;
 }

@@ -35,6 +35,18 @@
   --lake-z-dialog: 210;
   --lake-z-toast: 300;
   --lake-z-tooltip: 400;
+  /* 外壳层序（260923 W3：从散落字面量收拢；顺序由 src/styles/zOrder.test.ts 强制）——
+     只描述外壳各面之间的遮挡关系，数值本身无意义，只要求相对顺序稳定。
+     大纲内部 minimap（2/3/4/5）与浮层菜单级（600+）不在此表，按需再收。 */
+  --lake-z-block-handle: 100;      /* 内核块手柄（vendor 值，仅作基准，不改） */
+  --lake-z-edge-hotzone: 110;      /* 目录栏左缘触发热区：须高于块手柄 */
+  --lake-z-editor-sticky: 150;     /* 编辑区 sticky 工具条 .ne-ui */
+  --lake-z-statusbar: 180;         /* 底部文档状态栏 */
+  --lake-z-statusbar-popover: 190; /* 状态栏浮层（提示条） */
+  --lake-z-sidebar: 250;           /* 侧栏（目录树浮层） */
+  --lake-z-outline: 260;           /* 整边大纲 rail */
+  --lake-z-activity-rail: 270;     /* 左右活动轨 */
+  --lake-z-topbar: 400;            /* 顶栏 .tab-bar：外壳最高，始终可见 */
   /* 字号/字重/行高 */
   --lake-font-size-micro: 11.5px;
   --lake-font-size-tiny: 12px;

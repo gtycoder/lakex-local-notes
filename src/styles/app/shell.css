@@ -96,7 +96,7 @@
 
 .document-pane { min-height: 0; overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; }
 
-.document-pane .lake-editor-mount .ne-ui { position: sticky; z-index: 150; background: var(--lakex-editor-background); }
+.document-pane .lake-editor-mount .ne-ui { position: sticky; z-index: var(--lake-z-editor-sticky); background: var(--lakex-editor-background); }
 
 .document-pane .lake-editor-mount .ne-inner-overlay-container {
   /* Raise above the sticky .ne-ui toolbar (z-index: 20) so table card toolbars can receive hover. */
@@ -181,7 +181,7 @@
 .activity-rail {
   display: flex;
   position: relative;
-  z-index: 270;
+  z-index: var(--lake-z-activity-rail);
   grid-column: 1;
   grid-row: 1;
   flex-direction: column;
@@ -213,7 +213,7 @@
 /* ── 侧栏卡片几何（260915 窄窗彻底统一 · 组 6：侧栏壳层）── */
 .sidebar {
   position: relative;
-  z-index: 250;
+  z-index: var(--lake-z-sidebar);
   grid-column: 2;
   grid-row: 1;
   width: var(--sidebar-width);

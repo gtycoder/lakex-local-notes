@@ -114,6 +114,7 @@ git diff --check             → 干净
 
 8. **`PANEL-CONTRACT.md` 只是散文，没有可执行性。** 面板几何是本批最大坑源，但 z 序（110/100/250/260/400）散在 4 个文件、顶边两套机制。
    **能被测试的约束才是约束** ⇒ z 序与顶边口径应落成常量/单测（现在只有 `--topbar-height` ↔ `layoutMetrics.TOPBAR_HEIGHT` 这一条一致性单测）。
+   **260923 部分落实**：外壳 z 序已令牌化（`themes/base.css` 的 9 个 `--lake-z-*`）+ `src/styles/zOrder.test.ts` 强制顺序与"无字面量"；顶边口径仍以散文（`PANEL-CONTRACT.md`）+ `geometrySources.test.ts` 部分断言为准。
 
 9. **`!important` 只降到 9、没降到底：其中 4 条是 `.seg__item`**（另 1 条是面板宽度压 JS inline style，属合理）。
    原因是规则所在的 `components.css` **双端共享**，移动端靠它压 `.b3-button--outline`。桌面已经有 `@layer` 了，正解是**把分段控件按端拆文件**，而不是两端共用 + `!important`。

@@ -214,8 +214,8 @@
   bottom: 0;
   width: 10px;
   /* 110：要在块手柄（vendor `position:fixed; z-index:100`）之上——否则"跟手把手"会被手柄盖住。
-     仍低于目录浮层(250)/大纲(260)/顶栏(400)，所以面板一出现就把热区压住。 */
-  z-index: 110;
+     仍低于目录浮层/大纲/顶栏（全部见 themes/base.css 的 --lake-z-*）⇒ 面板一出现就把热区压住。 */
+  z-index: var(--lake-z-edge-hotzone);
   cursor: default;
   background: transparent;
 }
