@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { LakeEditorInstance } from "../lakeRuntime";
+import { isImageCropping } from "./imageCardOps";
 import { isMarkActive, toFontSize, unwrapValue, type Rect } from "./selectionToolbarModel";
 
 export interface TextTarget { kind: "text"; rect: Rect; }
@@ -77,6 +78,7 @@ export function useSelectionToolbar(editor: LakeEditorInstance, container: HTMLE
     }
     const img = imageRef.current;
     if (img && img.cardEl.isConnected && container.contains(img.cardEl)) {
+      if (isImageCropping(img.cardEl)) return null;   // 内核裁剪态：浮框让位给裁剪框
       const r = img.cardEl.getBoundingClientRect();
       if (r.width > 0 && r.height > 0) return { ...img, rect: toRect(r) };
     }

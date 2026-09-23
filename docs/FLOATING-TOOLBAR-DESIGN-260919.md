@@ -53,15 +53,15 @@
 
 | 按钮 | 内核调用 | 实测状态 |
 |---|---|---|
-| **裁剪** | `updateImageData(cardId, { crop: [l,t,r,b] })` | ✅ 数据可写；**交互态裁剪框入口未找到** ⇒ v1 置灰 |
+| **裁剪** | 卡实例 `_$cardUI.setCro(true)`（内核交互式裁剪框） | ✅ 弹出 `.ne-ui-image-crop-box`；浮框让位 |
 | **旋转** | `{ rotation: (current+90)%360 }` | ✅ `getRotation()=90` |
 | **宽高** | `{ width: N }`（小/中/大/原始 + 自定义 px） | ✅ `img[width]` / `getUserWidth()` |
 | **链接** | `{ link, linkTarget }` | ✅ 序列化含 link |
 | **描述** | `{ title, showTitle }` | ✅ `getTitle()/showTitle()` |
 | **对齐** | `{ style: "left"\|"center"\|"right"\|"none" }` | ✅ `ne-image-style-*` |
-| **样式** | 云端独立子项未取到；我方 `style` 即对齐通道 | ⏳ 待确认子项后再定 |
+| **样式** | `{ style: "none"｜"stroke"｜"shadow" }`（云端文案 无样式/图片描边/图片阴影） | ✅ 内核 CSS 均生效 |
 | **边距** | `{ margin: { top, bottom } }` | ✅ 命令返回 true |
-| **批量应用** | `cardBatchApply` | ⏳ 语义待细验 |
+| **批量应用** | `cardBatchApply("image", { style }｜{ width })` | ✅ = 同步到全文（同名卡片合并 patch） |
 | **下载** | `native.saveAssetAs(noteId, filename)` | ✅ canonical URL 可解析时可用 |
 | **复制** | `native.copyAssetImage(noteId, filename)` | ✅ 同上 |
 | **删除** | `ed.execCommand("deleteCard", cardId)` | ✅ 实测卡片移除 |

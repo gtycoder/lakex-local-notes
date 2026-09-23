@@ -29,7 +29,8 @@
 - 文件：`SelectionToolbar.tsx`（UI）· `useSelectionToolbar.ts`（显隐+定位+active）· `selectionToolbarModel.ts(+.test.ts)`（纯逻辑）· `mountSelectionToolbar.ts` · `selectionToolbar.css`（overlay 层）。
 - 挂载：`lakeRuntime.ts` 的 `__disposeExtras` 链（`mode==="editor" && prefs?.floatingToolbar`），与 `mountBlockHoverHandle` 同型。
 - **文字形态**：正文(style) · 字号(fontsize) · B · I · S · U · 行内代码 · 字体色 · 对齐 · ⋮(引用/清除格式/背景色)。
-- **图片形态**（对齐云端语雀图片浮栏）：裁剪(交互态入口未接入，置灰) · 旋转(90°) · 宽高(小/中/大/原始 + 自定义 px) · 链接 · 描述 · 对齐(左/中/右/默认) · 边距(默认/紧凑) · 复制 · 下载 · 删除。全部实测通过（`updateImageData{rotation|width|link|title|margin|style}`）。**样式子项、批量应用、交互态裁剪**待确认/待 spike。
+- **图片形态**（完全对齐云端语雀，260924 实测通过）：裁剪（内核 `_$cardUI.setCro(true)` 弹裁剪框，浮框自动让位） · 旋转(90°) · 宽高(小/中/大/原始 + 自定义 px) · 链接 · 描述 · 对齐 · **样式(无样式/图片描边/图片阴影 = style none/stroke/shadow)** · 边距(默认/紧凑) · **批量应用(同步样式/宽度到全文 = cardBatchApply('image',patch))** · 复制 · 下载 · 删除。
+- **文字形态补链接**：走内核 `link`(有选区)/`insertLink`(光标)，先用 `queryCommandEnabled` 把门（禁止静默 no-op）。至此文字弹窗全部按钮均内核驱动。
 - 定位自算 + 顶界取内核固定工具栏底边（空间不足翻到下方）+ 左右不越出编辑器内容区；容器 `onMouseDown preventDefault` 保选区。
 
 ### 三、P0 实测（隔离实例；已回填 `LAKEX-CONTRACT.md §5.10 六/七`）

@@ -669,13 +669,18 @@ python3 -  # 搜 showMiniToolbarWhen / MINI_TOOLBAR_TRIGGER / itemConfig / IMini
 | 能力 | 调用 | 实测 |
 |---|---|---|
 | 旋转 | `updateImageData(id, { rotation: 90 })` | ✅ `getRotation()=90` |
-| 裁剪 | `updateImageData(id, { crop: [0,0,.5,.5] })` | ✅ `getCrop()` 更新；交互态裁剪框（`ne-ui-image-crop-box`）入口未在卡实例上暴露（`_setCroping` 不存在） |
+| 裁剪（交互） | 卡实例 `_$cardUI.setCro(true)` | ✅ 实测弹出 `.ne-ui-image-crop-box`、`getCroping()=true`；退出用 `_setCroping({croping:false})`。数据裁剪另可 `{ crop }` |
 | 宽高 | `updateImageData(id, { width: N })` | ✅ `img[width]` / `getUserWidth()` |
 | 链接 | `updateImageData(id, { link, linkTarget })` | ✅ lake 序列化含 link |
 | 描述 | `updateImageData(id, { title, showTitle })` | ✅ `getTitle()/showTitle()` |
 | 边距 | `updateImageData(id, { margin: { top, bottom } })` | ✅ 命令返回 true |
-| 样式 | `updateImageData(id, { style })` | ✅ 落成 `ne-image-style-{value}`（left/center/right/none…） |
-| 批量 | `cardBatchApply` | 返回 true；语义未细验 |
+| 样式 | `updateImageData(id, { style })` | ✅ 内核 CSS 值：`none` 无样式 / `stroke` 图片描边 / `shadow` 图片阴影（dist/style.css 已定义）；另有 left/center/right |
+| 批量 | `cardBatchApply(name, patch)` | ✅ = 把 patch 合并进**同名所有卡片**（bundle：`getNodesByName` → `setAttribute(l,'value',{...l.attrs.value,...patch})`）。`cardBatchApply('image',{style})` / `{width}` = 云端「同步到全文」 |
+
+**文字链接（260924 实测，补齐）**：内核 `link` / `insertLink` 都可用，**先用 `queryCommandEnabled` 把门**——
+有选区时 `queryCommandEnabled('link')=true` → `execCommand('link', url, true, true)` 把选区包成 `<a target="_blank">`；
+光标折叠时 `link` 为 false 而 `queryCommandEnabled('insertLink')=true` → `execCommand('insertLink', text, url, true, true)`。
+（此前误判「link 是 no-op」是因为既没按 4 参契约调、也没先查 enabled。）
 
 **前端坑（260924，务必记住）**：用 `requestAnimationFrame` 合并刷新，在 **Electron 窗口未绘制/被遮挡时会暂停** ⇒ 首次刷新永不执行、后续全被 in-flight 守卫吞掉 ⇒ 选区内联浮层**完全不出现**。这类"事件驱动 + 轻量 DOM 读取"的 UI 应**同步刷新**，不要用 rAF 合并。
 

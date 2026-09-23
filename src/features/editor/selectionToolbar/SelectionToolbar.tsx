@@ -1,24 +1,26 @@
 /**
  * 桌面编辑态「浮动工具栏」（选区气泡）——两种形态（触发见 useSelectionToolbar）：
  *   · 文字选区：正文样式 / 字号 / B I S U / 行内代码 / 字体色 / 对齐 / 更多（背景色·引用·清除格式）
- *   · 图片选中：裁剪(待接入) / 旋转 / 宽高 / 链接 / 描述 / 对齐 / 边距 / 复制 / 下载 / 删除
+ *   · 图片选中：裁剪 / 旋转 / 宽高 / 链接 / 描述 / 对齐 / 样式 / 边距 / 批量应用 / 复制 / 下载 / 删除
  *
  * 规则（docs/FLOATING-TOOLBAR-DESIGN-260919.md + LAKEX-CONTRACT §5.10）：
  *   - 全部走内核原生命令（execCommand / queryCommandValue / updateImageData），不碰模型文件。
  *   - 容器 onMouseDown preventDefault：点按钮不丢选区（与块菜单/移动 dock 同一套经验）。
  *   - 定位自算（computeToolbarPosition），不依赖内核内部件；表格 / 代码块内不出现。
- *   - 「链接」文字命令内核未验通（禁止静默 no-op）；图片的 link/title/margin/rotation/crop 走
- *     updateImageData（260924 实测有效）。裁剪的交互态入口、样式子项、批量语义待确认，先置灰。
+ *   - 图片能力全走内核：updateImageData（style/width/link/title/margin/rotation）、
+ *     cardBatchApply('image', patch)（同步样式/宽度到全文）、卡 UI 的 setCro（交互式裁剪）。
+ *   - 文字链接走内核 link / insertLink（先用 queryCommandEnabled 把门；260924 实测两者各自可用）。
  */
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import {
   ALargeSmall, AlignCenter, AlignLeft, AlignRight, Bold, ChevronDown, Code, Copy, Crop, Download,
-  Eraser, Italic, Link2, MoreHorizontal, MoveVertical, Palette, Quote, RotateCw, Scaling,
+  Eraser, Italic, Layers, Link2, MoreHorizontal, MoveVertical, Palette, Quote, RotateCw, Scaling,
   Strikethrough, Trash2, Type, Underline,
 } from "lucide-react";
 import { native } from "../../../lib/native";
 import { FONT_SIZE_OPTIONS, STYLE_BLOCKS } from "../editorCommands";
 import type { LakeEditorInstance } from "../lakeRuntime";
+import { IMAGE_STYLE_OPTIONS, enterImageCrop, readImageMeta } from "./imageCardOps";
 import { computeToolbarPosition, imageSizeWidth, parseAssetRef, TOOLBAR_MARGIN, type ImageSizePreset } from "./selectionToolbarModel";
 import { useSelectionToolbar, type ImageTarget } from "./useSelectionToolbar";
 
@@ -44,41 +46,10 @@ function IconButton({ label, active, disabled, onClick, children }: {
   );
 }
 
-interface ImageCardData {
-  getOriginalWidth?: () => number;
-  getUserWidth?: () => number;
-  getRotation?: () => number;
-  getStyle?: () => string;
-  getLink?: () => string;
-  getTitle?: () => string;
-  showTitle?: () => boolean;
-}
-interface ImageMeta {
-  originalWidth: number; width: number; rotation: number; style: string; link: string; title: string; showTitle: boolean;
-}
-
-/** 从内核图片卡实例读当前状态（priority: cardData getters → DOM 回退）。 */
-function readImageMeta(cardEl: HTMLElement): ImageMeta {
-  const ref = (cardEl as unknown as { _neRef?: { _virtualNode?: { _instance?: unknown }; _instance?: unknown } })._neRef;
-  const inst = (ref?._virtualNode?._instance ?? ref?._instance) as { cardData?: ImageCardData; _cardData?: ImageCardData } | undefined;
-  const cd = inst?.cardData ?? inst?._cardData;
-  const img = cardEl.querySelector("img");
-  const num = (v: unknown): number | null => (typeof v === "number" && Number.isFinite(v) ? v : null);
-  return {
-    originalWidth: num(cd?.getOriginalWidth?.()) ?? img?.naturalWidth ?? 320,
-    width: num(cd?.getUserWidth?.()) ?? num(img?.clientWidth) ?? 0,
-    rotation: num(cd?.getRotation?.()) ?? 0,
-    style: (cd?.getStyle?.() as string) || "none",
-    link: (cd?.getLink?.() as string) || "",
-    title: (cd?.getTitle?.() as string) || "",
-    showTitle: cd?.showTitle?.() === true,
-  };
-}
-
 export function SelectionToolbar({ editor, container, noteId }: {
   editor: LakeEditorInstance; container: HTMLElement; noteId: string;
 }) {
-  const { target, state, run, toolbarRef } = useSelectionToolbar(editor, container);
+  const { target, state, run, refresh, toolbarRef } = useSelectionToolbar(editor, container);
   const [menu, setMenu] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
   const [pos, setPos] = useState<{ left: number; top: number } | null>(null);
@@ -108,6 +79,24 @@ export function SelectionToolbar({ editor, container, noteId }: {
   }, [key]);
 
   const pick = useCallback((name: string, value: unknown) => { run(name, value); setMenu(null); }, [run]);
+
+  const openWithDraft = useCallback((m: string, value: string) => {
+    setDraft(value);
+    setMenu((current) => (current === m ? null : m));
+  }, []);
+
+  const canCommand = (name: string): boolean => {
+    try { return editor.queryCommandEnabled?.(name) === true; } catch { return false; }
+  };
+
+  /** 文字链接：有选区走 link（包住选区），否则走 insertLink（在光标处插入）。 */
+  const applyTextLink = useCallback(() => {
+    const url = draft.trim();
+    if (!url) return;
+    if (canCommand("link")) run("link", url, true, true);
+    else if (canCommand("insertLink")) run("insertLink", String(window.getSelection() ?? "").trim() || "链接", url, true, true);
+    setMenu(null);
+  }, [draft, run]);
 
   if (!target) return null;
 
@@ -148,6 +137,17 @@ export function SelectionToolbar({ editor, container, noteId }: {
         </div>
       );
     }
+    if (menu === "txtlink") {
+      return (
+        <div className="selection-toolbar__menu" role="menu" data-menu="txtlink">
+          <div className="selection-toolbar__row">
+            <input className="selection-toolbar__input" type="text" placeholder="https://…" value={draft} onChange={(e) => setDraft(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") applyTextLink(); }} />
+            <button type="button" className="selection-toolbar__apply" onClick={applyTextLink}>应用</button>
+          </div>
+          <button type="button" role="menuitem" className="selection-toolbar__item" onClick={() => { run("unlink"); setMenu(null); }}>移除链接</button>
+        </div>
+      );
+    }
     if (menu === "more") {
       return (
         <div className="selection-toolbar__menu" role="menu" data-menu="more">
@@ -180,6 +180,7 @@ export function SelectionToolbar({ editor, container, noteId }: {
         <IconButton label="行内代码" active={state.marks.code} onClick={() => run("code")}><Code size={15} /></IconButton>
         <span className="selection-toolbar__sep" />
         <IconButton label="字体颜色" active={Boolean(state.color)} onClick={() => setMenu(menu === "color" ? null : "color")}><Palette size={15} /></IconButton>
+        <IconButton label="链接" active={menu === "txtlink"} onClick={() => openWithDraft("txtlink", "")}><Link2 size={15} /></IconButton>
         <IconButton label="对齐" active={alignValue !== "left"} onClick={() => setMenu(menu === "align" ? null : "align")}><AlignLeft size={15} /></IconButton>
         <IconButton label="更多" active={menu === "more"} onClick={() => setMenu(menu === "more" ? null : "more")}><MoreHorizontal size={15} /></IconButton>
       </>
@@ -190,14 +191,15 @@ export function SelectionToolbar({ editor, container, noteId }: {
     const asset = parseAssetRef(t.src);
     const meta = readImageMeta(t.cardEl);
     const apply = (data: Record<string, unknown>) => { run("updateImageData", t.cardId, data); setMenu(null); };
-    const openWithDraft = (m: string, value: string) => { setDraft(value); setMenu(menu === m ? null : m); };
+    /** 内核 cardBatchApply(name, patch)：把 patch 合并进本文档所有同名卡片（= 云端「同步到全文」）。 */
+    const batch = (patch: Record<string, unknown>) => { run("cardBatchApply", "image", patch); setMenu(null); };
     const sizeItem = (p: ImageSizePreset, label: string) => (
       <button key={p} type="button" role="menuitem" className="selection-toolbar__item" onClick={() => apply({ width: imageSizeWidth(p, meta.originalWidth) })}>{label}</button>
     );
     const applyDraft = (fn: (v: string) => void) => { fn(draft); };
     return (
       <>
-        <IconButton label="裁剪（交互态入口待接入）" disabled><Crop size={15} /></IconButton>
+        <IconButton label="裁剪" onClick={() => { enterImageCrop(t.cardEl); refresh(); }}><Crop size={15} /></IconButton>
         <IconButton label="旋转 90°" onClick={() => apply({ rotation: ((meta.rotation || 0) + 90) % 360 })}><RotateCw size={15} /></IconButton>
         <IconButton label="宽高" active={menu === "imgsize"} onClick={() => openWithDraft("imgsize", meta.width ? String(meta.width) : "")}><Scaling size={15} /></IconButton>
         <span className="selection-toolbar__sep" />
@@ -205,7 +207,9 @@ export function SelectionToolbar({ editor, container, noteId }: {
         <IconButton label="描述" active={menu === "imgtitle" || Boolean(meta.title)} onClick={() => openWithDraft("imgtitle", meta.title)}><Type size={15} /></IconButton>
         <span className="selection-toolbar__sep" />
         <IconButton label="对齐" active={menu === "imgalign"} onClick={() => setMenu(menu === "imgalign" ? null : "imgalign")}><AlignLeft size={15} /></IconButton>
+        <IconButton label="样式" active={menu === "imgstyle"} onClick={() => setMenu(menu === "imgstyle" ? null : "imgstyle")}><Palette size={15} /></IconButton>
         <IconButton label="边距" active={menu === "imgmargin"} onClick={() => setMenu(menu === "imgmargin" ? null : "imgmargin")}><MoveVertical size={15} /></IconButton>
+        <IconButton label="批量应用（同步样式/宽度到全文）" active={menu === "imgbatch"} onClick={() => setMenu(menu === "imgbatch" ? null : "imgbatch")}><Layers size={15} /></IconButton>
         <span className="selection-toolbar__sep" />
         <IconButton label={asset ? "复制图片" : "复制（非本机资源不可用）"} disabled={!asset} onClick={() => { if (asset) void native.copyAssetImage(asset.noteId, asset.filename); }}><Copy size={15} /></IconButton>
         <IconButton label={asset ? "另存为" : "下载（非本机资源不可用）"} disabled={!asset} onClick={() => { if (asset) void native.saveAssetAs(asset.noteId, asset.filename, asset.filename); }}><Download size={15} /></IconButton>
@@ -250,6 +254,20 @@ export function SelectionToolbar({ editor, container, noteId }: {
           <div className="selection-toolbar__menu" role="menu" data-menu="imgmargin">
             <button type="button" role="menuitem" className="selection-toolbar__item" onClick={() => apply({ margin: { top: true, bottom: true } })}>默认间距</button>
             <button type="button" role="menuitem" className="selection-toolbar__item" onClick={() => apply({ margin: { top: false, bottom: false } })}>紧凑（无间距）</button>
+          </div>
+        )}
+        {menu === "imgstyle" && (
+          <div className="selection-toolbar__menu" role="menu" data-menu="imgstyle">
+            {IMAGE_STYLE_OPTIONS.map((s) => (
+              <button key={s.value} type="button" role="menuitem" className={"selection-toolbar__item" + (meta.style === s.value ? " is-active" : "")} onClick={() => apply({ style: s.value })}>{meta.style === s.value ? "✓ " : "　"}{s.label}</button>
+            ))}
+          </div>
+        )}
+        {menu === "imgbatch" && (
+          <div className="selection-toolbar__menu" role="menu" data-menu="imgbatch">
+            <div className="selection-toolbar__menu-label">批量应用格式：对本文档的图片一键应用样式和宽度</div>
+            <button type="button" role="menuitem" className="selection-toolbar__item" onClick={() => batch({ style: meta.style })}>同步图片样式到全文</button>
+            <button type="button" role="menuitem" className="selection-toolbar__item" onClick={() => batch({ width: meta.width || imageSizeWidth("medium", meta.originalWidth) })}>同步图片宽度到全文</button>
           </div>
         )}
       </>

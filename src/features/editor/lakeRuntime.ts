@@ -47,6 +47,8 @@ export interface LakeEditorInstance {
   execCommand?(name: string, ...args: unknown[]): unknown;
   /** 读取命令当前值（active 态/字号/样式：bold→"true"、style→"p"/"h1"、fontsize→px 或 "null"）。 */
   queryCommandValue?(name: string, ...args: unknown[]): unknown;
+  /** 命令是否可用（链接等先用它把门：link 需选区、insertLink 需光标）。 */
+  queryCommandEnabled?(name: string): unknown;
   /** 内核实例（命令/选区都挂在这里）。 */
   kernel?: LakeKernelInstance;
   /** 锁定态 Viewer 可能不完整支持 markdown/plain（调用方需 typeof 守卫 + try/catch）。 */
