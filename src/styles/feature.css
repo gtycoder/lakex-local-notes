@@ -57,7 +57,8 @@ pre {
 .settings-panel .config-block__name {
   color: var(--lake-text-1);
   font-size: var(--lake-font-size-body);
-  font-weight: var(--lake-font-weight-semibold);
+  /* 用户 260923：具体设置项名字（编辑器-正文字号 / 关于-字体…）600 显得过重，降一档为 medium(500) */
+  font-weight: var(--lake-font-weight-medium);
 }
 .settings-panel .config-block__text { color: var(--lake-text-3); font-size: var(--lake-font-size-small); }
 .settings-panel .config-item__ctl { flex: 0 0 auto; min-width: 200px; justify-content: flex-end; }
