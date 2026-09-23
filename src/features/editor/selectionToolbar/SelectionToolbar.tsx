@@ -210,6 +210,7 @@ export function SelectionToolbar({ editor, container, noteId }: {
       return (
         <div className="selection-toolbar__colorpop ne-ui-toolbar-color-picker-overlay" data-menu={menu}>
           <LakeColorBoard
+            variant={isColor ? "text" : "bg"}
             value={isColor ? state.color : state.bgColor}
             onSelect={(c) => { if (c) pick(isColor ? "color" : "bgColor", c); else pick(isColor ? "clearColor" : "clearBgColor", undefined); }}
           />

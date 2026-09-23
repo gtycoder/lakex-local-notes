@@ -6,7 +6,11 @@
  * FrameworkUiLib 都没有颜色面板（只有 fontColorIcon/bgColorIcon 两个图标）。故这里只做
  * 「用内核自己的类名与调色板组合」，不另造视觉。
  */
-const DEFAULT_LABEL = "默认";
+/** 文字色 = 默认；背景色 = 无填充色（内核 i18n defaultColor / nonFillColor）。 */
+const TEXT_DEFAULT_LABEL = "默认";
+const BG_NO_FILL_LABEL = "无填充色";
+const RECENT_LABEL = "最近使用自定义颜色";
+const RECENT_EMPTY = "暂无";
 
 /** 内核调色板（bundle 常量 Zc，经 Zd.getColors() 使用）：中性 10 + 6 组彩色各 10。 */
 export const KERNEL_COLOR_GROUPS: string[][] = [
@@ -56,22 +60,35 @@ function Swatch({ color, active, onSelect }: { color: string; active: boolean; o
   );
 }
 
-/** 与内核一致的颜色面板：默认行 + 调色板分组 +（更多颜色改由上层输入处理）。 */
-export function LakeColorBoard({ value, onSelect }: { value: string; onSelect: (color: string) => void }) {
+/** 与内核一致的颜色面板：默认/无填充行 + 调色板分组 + 最近使用 + 更多颜色。
+ * variant="text" → 默认（文字色）；variant="bg" → 无填充色（背景色，带斜线，内核 nonFillColor）。 */
+export function LakeColorBoard({ value, onSelect, variant = "text" }: { value: string; onSelect: (color: string) => void; variant?: "text" | "bg" }) {
   const v = (value || "").toLowerCase();
+  const noFill = variant === "bg";
+  const rowLabel = noFill ? BG_NO_FILL_LABEL : TEXT_DEFAULT_LABEL;
+  const rowActive = !v;
   return (
     <div className="lake-colorboard">
       <div className="lake-colorboard-default" onClick={() => onSelect("")}>
-        <span className="lake-colorboard-group-item lake-colorboard-group-item-border" title={DEFAULT_LABEL}>
-          <span style={{ backgroundColor: "#000000" }} />
+        <span
+          className={"lake-colorboard-group-item"
+            + (noFill ? " lake-colorboard-group-item-special" : " lake-colorboard-group-item-border")
+            + (rowActive ? " lake-colorboard-group-item-active" : "")}
+          title={rowLabel}
+        >
+          <span style={noFill ? undefined : { backgroundColor: "#000000" }}>
+            {rowActive && !noFill ? <svg viewBox="0 0 18 18"><path fill="#FFFFFF" d="M21,7L9,19L3.5,13.5L4.91,12.09L9,16.17L19.59,5.59L21,7Z" /></svg> : null}
+          </span>
         </span>
-        <span className="selection-toolbar__colorboard-label">{DEFAULT_LABEL}</span>
+        <span className="selection-toolbar__colorboard-label">{rowLabel}</span>
       </div>
       {KERNEL_COLOR_GROUPS.map((row, i) => (
         <div className="lake-colorboard-group" key={i}>
           {row.map((c) => <Swatch key={c} color={c} active={v === c.toLowerCase()} onSelect={onSelect} />)}
         </div>
       ))}
+      <div className="lake-color-history">{RECENT_LABEL}</div>
+      <div className="lake-none-custom-color">{RECENT_EMPTY}</div>
       <div className="lake-more-color">
         <label className="lake-more-color-container">
           <span className="lake-more-color-preview" />
