@@ -20,12 +20,9 @@ import { native } from "../../../lib/native";
 import { CONVERT_ITEMS, FONT_SIZE_OPTIONS, PARAGRAPH_STYLES } from "../editorCommands";
 import type { LakeEditorInstance } from "../lakeRuntime";
 import { IMAGE_STYLE_OPTIONS, enterImageCrop, readImageMeta } from "./imageCardOps";
+import { LakeColorBoard } from "./LakeColorBoard";
 import { computeToolbarPosition, imageSizeWidth, parseAssetRef, TOOLBAR_MARGIN, type ImageSizePreset } from "./selectionToolbarModel";
 import { useSelectionToolbar, type ImageTarget } from "./useSelectionToolbar";
-
-/** 正文颜色 / 背景色板：内核 color / bgColor 命令的实参（文档内容色，非 UI 主题色）。 */
-const TEXT_COLORS = ["#1f2329", "#646a73", "#d83931", "#de7802", "#ffc60a", "#2ea121", "#245bdb", "#6425d0"];
-const BG_COLORS = ["#fff3c1", "#d9f2d0", "#d4e8ff", "#ffded6", "#f0f0f2"];
 
 /** 内核图标（sprite）：与固定工具栏同一套 ne-icon + #icon-*。 */
 function KIcon({ name }: { name: string }) {
@@ -186,14 +183,13 @@ export function SelectionToolbar({ editor, container, noteId }: {
       );
     }
     if (menu === "color" || menu === "bgcolor") {
-      const colors = menu === "color" ? TEXT_COLORS : BG_COLORS;
+      const isColor = menu === "color";
       return (
-        <div className="selection-toolbar__popover" data-menu={menu}>
-          <div className="selection-toolbar__swatches">
-            {colors.map((c) => (
-              <button key={c} type="button" aria-label={(menu === "color" ? "字体色 " : "背景色 ") + c} className="selection-toolbar__swatch" style={{ background: c }} onClick={() => pick(menu === "color" ? "color" : "bgColor", c)} />
-            ))}
-          </div>
+        <div className="selection-toolbar__colorpop ne-ui-toolbar-color-picker-overlay" data-menu={menu}>
+          <LakeColorBoard
+            value={isColor ? state.color : state.bgColor}
+            onSelect={(c) => { if (c) pick(isColor ? "color" : "bgColor", c); else pick(isColor ? "clearColor" : "clearBgColor", undefined); }}
+          />
         </div>
       );
     }

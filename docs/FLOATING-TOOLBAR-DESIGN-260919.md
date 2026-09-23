@@ -47,6 +47,11 @@
 **样式实现**：复用内核固定工具栏的类名与图标 sprite（`ant-btn` / `ne-ui-toolbar-*` / `ne-icon-*` / `#icon-*`），
 下拉菜单用内核的 `ant-dropdown-menu + ne-ui-select-*` 结构，active 态用内核 `.checked` 类；**不引入钉钉 `wd3-*` 风格**。
 
+**颜色/背景面板**：内核的大色板组件（bundle 内 `erD`，面板类 `lake-colorboard*`）是**模块内部件、未导出**——
+`Doc` 的 120 个顶层导出与 `FrameworkUiLib` 都没有颜色面板（只有 `fontColorIcon/bgColorIcon` 图标），调色板 `Zc` 也未导出。
+因此`LakeColorBoard` 采用**内核的 CSS 组件类（`lake-colorboard*` / `lake-color-history` / `lake-more-color*`）+ 内核调色板数据（`Zc.getColors()` 的 7 组）**组合，
+得到与固定工具栏一致的颜色面板（默认行 + 7 组色板 + 更多颜色）；**没有另造视觉**。渐变数据内核无独立常量，暂缺。
+
 ## 2b. 图片形态按钮清单（260924 定稿）
 
 云端语雀实机顺序：裁剪 · 旋转 · 宽高 · 链接 · 描述 · 对齐 · 样式 · 边距 · 批量应用。全部走 `updateImageData`（260924 实测）。

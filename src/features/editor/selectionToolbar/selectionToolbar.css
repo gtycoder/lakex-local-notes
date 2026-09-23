@@ -32,21 +32,6 @@
 .selection-toolbar__btn.is-active { background: var(--lake-accent-tint); color: var(--lake-accent); }
 .selection-toolbar__btn:disabled { opacity: .35; cursor: default; }
 .selection-toolbar__btn:focus-visible { outline: 2px solid var(--lake-accent); outline-offset: 1px; }
-.selection-toolbar__text {
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
-  height: 28px;
-  padding: 0 6px;
-  border: 0;
-  border-radius: var(--lake-radius-sm);
-  background: transparent;
-  color: var(--lake-text-2);
-  cursor: pointer;
-  font: inherit;
-  font-size: 12px;
-}
-.selection-toolbar__text:hover { background: var(--lake-bg-hover); color: var(--lake-text-1); }
 .selection-toolbar__sep { width: 1px; height: 18px; margin: 0 4px; background: var(--lake-border-2); }
 .selection-toolbar__menu {
   position: absolute;
@@ -62,8 +47,6 @@
   background: var(--lake-bg-raised);
   box-shadow: var(--lake-shadow-popover);
 }
-.selection-toolbar__menu--grid { display: grid; grid-template-columns: repeat(5, 1fr); }
-.selection-toolbar__menu--swatch { display: flex; flex-flow: row wrap; gap: 4px; }
 .selection-toolbar__item {
   display: flex;
   align-items: center;
@@ -82,14 +65,6 @@
 .selection-toolbar__item:hover { background: var(--lake-bg-hover); }
 .selection-toolbar__item.is-active { color: var(--lake-accent); background: var(--lake-accent-tint); }
 .selection-toolbar__menu-label { padding: 4px 8px 0; color: var(--lake-text-3); font-size: 12px; }
-.selection-toolbar__swatch {
-  width: 20px;
-  height: 20px;
-  padding: 0;
-  border: 1px solid var(--lake-border-2);
-  border-radius: var(--lake-radius-xs);
-  cursor: pointer;
-}
 .selection-toolbar__menu--row { display: flex; flex-direction: row; gap: 2px; }
 .selection-toolbar__row { display: flex; align-items: center; gap: 4px; padding: 2px; }
 .selection-toolbar__input {
@@ -130,5 +105,7 @@
   background: var(--lake-bg-raised);
   box-shadow: var(--lake-shadow-popover);
 }
-.selection-toolbar__swatches { display: flex; flex-flow: row wrap; gap: 4px; }
+.selection-toolbar__colorpop { position: absolute; top: calc(100% + 6px); left: 0; z-index: 1; width: max-content; padding: 4px 0; border-radius: var(--lake-radius-md); }
+.selection-toolbar__colorboard-label { margin-left: 8px; font-size: 13px; color: var(--lake-text-1); }
+.selection-toolbar__nativecolor { position: absolute; width: 1px; height: 1px; padding: 0; border: 0; opacity: 0; pointer-events: none; }
 .selection-toolbar__trigger-label { padding: 0 2px; font-size: 12px; line-height: 1; white-space: nowrap; }
