@@ -6,62 +6,95 @@
 
 ## 0. 最新交接 · 260924 · 浮动工具栏（文字选区 + 图片选中）+ 固定/浮动工具栏开关（新会话先读这一节）
 
-> 分支 `feat/floating-toolbar`（基于当时 master `a2f70b1`）。**未合 master、未推送**，等用户验收。
-> 一句话：按用户 260924 需求做「选中文字**或图片**弹出的浮动工具栏」（两形态不同），并把被 `ea35aaa` 删掉的「显示固定工具栏」开关加回来；两个开关**互相独立**（可同开 / 只开一个 / 都不开）。
-> **260924 续（重做，`0d63b53`）**：用户否掉「自造 DOM + 钉钉风」，要求**直接复用内核组件、样式与功能都对齐固定工具栏**。文字形态已改由内核 `FrameworkUiLib.ToolbarButton/Icon` 装配，类名逐个对齐 `.ne-ui-toolbar` 实测真身；图片形态不动（已对齐云端语雀）。
+> 分支 `feat/floating-toolbar`（基点 master `a2f70b1`）。**未合 master、未推送**；提交见 §八（功能线 13 个 + 文档提交）。
+> 一句话：做一个「选中文字**或图片**都弹出浮动工具栏」的功能（**两种形态不同**），并加回被 `ea35aaa` 删掉的「显示固定工具栏」开关；两个开关**互相独立**（可同开 / 只开一个 / 都不开）。
+> **本批共两轮**：第一轮「自己造 DOM + 钉钉风」被用户否掉（原话「不验收了，做的太差了」）；最后 3 个提交是**重做**——「直接用内核组件，样式和风格都要对齐固定工具栏」。图片形态保留第一轮成果（已按云端语雀定稿）。
 
 ### 一、任务目标（用户原话要点）
-1. 新建分支做浮动工具栏；**选中文字或图片**都弹浮框，**两种形态不同**（文字对钉钉文字浮栏、图片对钉钉图片浮栏）。
-2. 设置里能开/关：固定工具栏 + 浮动工具栏，各自独立。
-3. 以前有个「关闭固定工具栏」的功能被误删（实为 `ea35aaa` 移除 `showToolbar`），要加回来。
+1. 新建分支做浮动工具栏；**选中文字或图片**都弹浮框，**两种形态不同**。
+2. 设置里能开/关：固定工具栏 + 浮动工具栏，各自独立（可同开 / 只开一个 / 都不开）。
+3. 「显示固定工具栏」开关以前被删（实为 `ea35aaa` 移除 `showToolbar`），要加回来。
+4. **最终定调（260924 续）**：文字浮栏「**完全抛弃钉钉风格，从风格、样式和功能上对齐固定工具栏**」；**能走内核的一定走内核**，不要自己造 DOM、子菜单也不要另起一套样式。
 
 ### 二、已完成
-**A. 设置**
+
+**A. 设置开关**
 - `src/lib/settings.ts`：恢复 `showToolbar`（默认 true）；新增 `floatingToolbar`（默认 true）。
-- 接线：`settings.ts` → `deriveDesktopView` 的 `editorPrefs` → `App.tsx` → `DesktopLibrary`（类型）→ `lakeRuntime` 的 `LakeEditorPrefs`。
-- 设置面板「编辑器」组加两行：`editor-toolbar`（显示固定工具栏）、`editor-floating-toolbar`（浮动工具栏）；`settingsSearch.ts` 同步（漂移单测过）。
-- 固定工具栏关闭仍走既有机制：`disabledPlugins: [..., showToolbar===false ? "toolbar" : []]`。
+- 接线：`settings.ts` → `deriveDesktopView.editorPrefs` → `App.tsx` → `DesktopLibrary`（类型）→ `lakeRuntime` 的 `LakeEditorPrefs`。
+- 设置面板「编辑器」组两行：`editor-toolbar`（显示固定工具栏）、`editor-floating-toolbar`（浮动工具栏）；`settingsSearch.ts` 同步（漂移单测过）。
+- 关固定工具栏走既有机制：`disabledPlugins: [..., showToolbar===false ? "toolbar" : []]`。
 
 **B. 命令字典更正（`editorCommands.ts`）**
-- 推翻「strikethrough/fontsize/clearFormat/indent/outdent 是 no-op」的旧注释——那条来自**移动端 `renderer.execCommand`**，不能套桌面。
-- `strikethrough` 进 `MARK_COMMANDS`；`KNOWN_COMMAND_NAMES` 补 fontsize/indent/outdent/link/unlink/clearFormat/alignment/color 系列；新增 `FONT_SIZE_OPTIONS`。单测更新。
+- 推翻「strikethrough/fontsize/clearFormat/indent/outdent 是 no-op」的旧注释——那条来自**移动端** `renderer.execCommand`，不能套桌面。
+- `strikethrough` 进 `MARK_COMMANDS`；`KNOWN_COMMAND_NAMES` 补 fontsize/indent/outdent/link/unlink/clearFormat/alignment/color 系列；新增 `FONT_SIZE_OPTIONS`（12,13,14,15,16,19,22,24,29,32,40）。
 
 **C. 浮动工具栏（`src/features/editor/selectionToolbar/`）**
-- 文件：`SelectionToolbar.tsx`（UI）· `useSelectionToolbar.ts`（显隐+定位+active）· `selectionToolbarModel.ts(+.test.ts)`（纯逻辑）· `mountSelectionToolbar.ts` · `selectionToolbar.css`（overlay 层）。
+- 文件：`SelectionToolbar.tsx`（UI）· **`kernelUiAtoms.tsx`（本批新增：内核原语）** · `useSelectionToolbar.ts`（显隐/定位/active）· `selectionToolbarModel.ts(+.test.ts)`（纯逻辑）· `LakeColorBoard.tsx`（颜色面板）· `imageCardOps.ts`（图片内核桥）· `mountSelectionToolbar.ts` · `selectionToolbar.css`（overlay 层）。
 - 挂载：`lakeRuntime.ts` 的 `__disposeExtras` 链（`mode==="editor" && prefs?.floatingToolbar`），与 `mountBlockHoverHandle` 同型。
-- **文字形态**（260924 续重做：内核原语装配，弃自造 DOM/钉钉风）：清除格式 · 段落样式(正文/H1–6) · 字号 · 加粗 · 倾斜 · 中划线 · 下划线 · 文字颜色 · 背景色 · 转为(有序/无序/待办/引用/代码块=行内代码/高亮块) · 超链接。骨架走内核 `FrameworkUiLib.ToolbarButton`（自补 `ant-btn ne-ui-t-button`），图标走 `FrameworkUiLib.Icon`；**其余类名逐个对齐固定工具栏实测真身**（`ne-ui-toolbar-clear-format` / `ne-ui-toolbar-select-button`+`-format`/`-fontsize` / `ne-ui-toolbar-status-button`+`-toggle-button` / 颜色 show+dropdown 分裂 / `ne-ui-toolbar-dropdown-button`+`-arrow-button`），选中态沿用内核 `.checked`。原子件在 `kernelUiAtoms.tsx`。
-- **拖选时不弹**：指针按住期间浮框隐藏，松开（pointerup/mouseup）后才弹 —— 避免「从下往上选」时浮框遮挡落点（用户 260924 反馈）。
-- **图片形态**（完全对齐云端语雀，260924 实测通过）：裁剪（内核 `_$cardUI.setCro(true)` 弹裁剪框，浮框自动让位） · 旋转(90°) · 宽高(小/中/大/原始 + 自定义 px) · 链接 · 描述 · 对齐 · **样式(无样式/图片描边/图片阴影 = style none/stroke/shadow)** · 边距(默认/紧凑) · **批量应用(同步样式/宽度到全文 = cardBatchApply('image',patch))** · 复制 · 下载 · 删除。
-- **文字形态补链接**：走内核 `link`(有选区)/`insertLink`(光标)，先用 `queryCommandEnabled` 把门（禁止静默 no-op）。至此文字弹窗全部按钮均内核驱动。
+- **触发**：选中文字**或**图片；**点击**触发（用户选定「点击」，不是 hover）；**指针按住期间不弹**，pointerup/mouseup 后才弹（避免「从下往上选」时浮框遮挡落点）。
+- **文字形态**（第二轮重做，**与固定工具栏同款 Lake 样式**）：清除格式 · 段落样式(正文/H1–6) · 字号 · 加粗 · 倾斜 · 中划线 · 下划线 · 文字颜色 · 背景色 · 转为(有序/无序/待办/引用/行内代码/高亮块) · 超链接。
+  - 骨架用内核 `FrameworkUiLib.ToolbarButton`（它自补 `ant-btn ne-ui-t-button`），图标用 `FrameworkUiLib.Icon`（**必须带 `icon-` 前缀**，见 §五）。
+  - 其余类名**逐个对着 `.ne-ui-toolbar` 运行时真身抄**：`ne-ui-toolbar-clear-format`、`ne-ui-toolbar-select-button`+`-format`/`-fontsize`、`ne-ui-toolbar-status-button`+`-toggle-button`、颜色 show+dropdown 分裂、`ne-ui-toolbar-dropdown-button`+`-arrow-button`；选中态用内核 `.checked`。
+  - 段落样式/字号是**文本下拉按钮**（不是 antd Select）——固定工具栏真身就是 `ne-ui-toolbar-select-value` + caret。
+  - 子菜单（段落样式/字号/颜色/背景/转为/超链接）仍用**我们自锚定的菜单**：内核 `Dropdown/Menu` 原语与固定工具栏装配方式不同、spike 里 overlay 打不开（`exp/kernel-ui-primitives`）。菜单 surface/hover/标题字号已对齐内核 `ant-dropdown-menu`+`ne-ui-select-*` 类；锚点贴触发项（`offsetLeft`），越界左移。
+  - 超链接走内核 `link`(有选区)/`insertLink`(光标)，用 `queryCommandEnabled` 把门（禁止静默 no-op）。
+- **图片形态**（第一轮成果，**完全对齐云端语雀**，实测通过）：裁剪（内核 `_$cardUI.setCro(true)` 弹裁剪框，浮框自动让位）· 旋转 90° · 宽高（小/中/大/原始 + 自定义 px）· 链接 · 描述 · 对齐 · 样式（无样式/图片描边/图片阴影 = `style:none|stroke|shadow`）· 边距（默认/紧凑）· 批量应用（`cardBatchApply('image',patch)`）· 复制 · 下载 · 删除（`deleteCard`）。按钮用 lucide 图标 + 自有 `.selection-toolbar__btn`（图片栏按云端语雀定稿，本轮未改）。
 - 定位自算 + 顶界取内核固定工具栏底边（空间不足翻到下方）+ 左右不越出编辑器内容区；容器 `onMouseDown preventDefault` 保选区。
 
-### 三、P0 实测（隔离实例；已回填 `LAKEX-CONTRACT.md §5.10 六/七`）
-- `queryCommandValue` **返回数组**（`[true]`/`["center"]`/`[null]`/`[]`），`String([true])=="true"` 会骗过标量判断 ⇒ 必须解数组（已修 `isMarkActive`/`unwrapValue`）。
+**D. 本轮验证方式（真机实拍，不是只看编译过）**
+- 隔离实例：`vite preview --port 1439` + `LAKE_USER_DATA="$TMPDIR/lake-pX" LAKE_ASSET_PORT=198xx LAKE_DEV_SERVER_URL="http://127.0.0.1:1439" ./node_modules/.bin/electron --disable-gpu --remote-debugging-port=92xx .`
+- CDP（`http://127.0.0.1:92xx/json/list` → WebSocket）：`Runtime.evaluate` 造选区，`Input.dispatchMouseEvent` 真点击，`Page.captureScreenshot` 出图与固定工具栏逐像素比对。
+- 实测结论：加粗点击生效且 `.checked` 高亮、段落样式选「标题1」标签随之更新、字号菜单 11 项、转为 6 项、超链接弹层、颜色面板 81 色块；**子菜单锚点误差 0px**；浮栏各按钮尺寸与固定栏一致（toggle 26×26、format 71×32、颜色分裂 25+16）。
+
+### 三、当前问题（已知缺口 / 未解决）
+1. **用户尚未点验第二轮观感**（浅/深/暖三主题；顶/底翻转；图片 1px 场景）——这是唯一的验收阻塞项。
+2. **颜色面板「渐变色」缺失**：内核渐变常量抠不出来；**「最近使用」目前是标签 + 「暂无」占位**，没有真实记忆。
+3. **字号显示与选项不一致**：H1 落在 28px，但 `FONT_SIZE_OPTIONS` 没有 28 ⇒ 标签显示 `28px`、菜单里选不到 28（固定工具栏此时显示空白）。属显示差异，非 bug。
+4. **图片替换（换图）未做**：`updateImageData{src/url}` 无效、`setImageInfo` 断言失败 ⇒ 没找到正确载荷。
+5. **`check:stylesnap` 未跑**（新增设置行是否影响快照待确认；脚本 42 态里没搜到 settings 面板态）；**打包冒烟未跑**。
+6. 分支**未合 master、未推送**；实验分支 `exp/kernel-ui-primitives`（spike）还留着，验收后应删。
+
+### 四、下一步计划（按优先级）
+1. **等用户验收第二轮浮栏**（重点看文字形态与固定栏的观感差异）。若有偏差：先定位**单一来源**（内核类的作用域 / 令牌 / 布局常量）**就地改**，不要层层加覆盖（AGENTS §3.14）。
+2. 验收通过后：删 `exp/kernel-ui-primitives` → `git checkout master && git merge feat/floating-toolbar` → 推送。
+3. 若仍要「渐变色」/「最近使用」：按 AGENTS §2「内核资料检索顺序」找内核渐变常量与颜色历史组件；找不到就明确「不做」，不要自己造（§3.17）。
+4. 补跑 `npm run check:stylesnap`（有漂移先确认是否设置面板态再刷新基线）与打包冒烟。
+5. 可选：图片「换图」——继续找 `updateImageData`/`setImageInfo` 正确载荷，或明确砍掉。
+
+### 五、踩过的坑（务必记住）
+
+**内核 UI 复刻类**
+- **图标 sprite 的 symbol id 一律是 `icon-<name>`**，而 `FrameworkUiLib.Icon` 内部按 `#<type>` 取用 ⇒ 用内核 Icon 必须传 `type="icon-bold"`（`kernelUiAtoms.tsx` 的 `KIcon` 已统一补前缀）。否则 `use` 指空、**图标整个不画**：DOM 在、命中框在、`computedStyle` 一切正常，只是视觉空白——极易误判成配色/尺寸问题。现场验证：把 `use` 的 href 改成 `#icon-xxx` 立刻显形。
+- **内核大量样式被 `.ne-ui-toolbar` 限定作用域**（工具条图标色、颜色分裂按钮 25/16 尺寸…）⇒ 浮栏不在该容器内就「长得不一样」。按**同一语义/同值**在 `.selection-toolbar` 下补齐即可；不要改内核，也不要靠提高特异性硬压。
+- **内核 `ToolbarButton` 未承诺透传 `onClick`** ⇒ 外面套一层 `display:contents` 的 span 承接冒泡（不生成盒子，不影响 flex 的 gap 与相邻选择器），且**只在外层挂一次** onClick，避免「透传+冒泡」双触发。
+- 深/暖色桥里 `--lakex-editor-overlay-background-tertiary` 与 `--lakex-editor-background-primary-hover-light` 原先都指 `--lake-bg-block` = **工具条自身底色** ⇒ 内核工具条 hover/选中态看不见，已改指 `--lake-bg-hover`。
+- 内核 `FrameworkUiLib.Select` 是 antd Select，外观与固定栏的「正文 ▾」文本下拉**不一致** ⇒ 不要拿它做段落样式/字号。
+- 内核 `Dropdown`+`Menu` 原语 overlay 在 spike 里打不开 ⇒ 子菜单暂用自锚定实现，**但视觉必须继续用内核类名**。
+
+**内核命令/数据类**
+- `queryCommandValue` **返回数组**（`[true]`/`["center"]`/`[null]`/`[]`）；`String([true])=="true"` 会骗过标量判断 ⇒ 必须解数组（`isMarkActive`/`unwrapValue`）。
+- `queryCommandState` 返回 0/1/2（**不是 active**）；active 一律看 `queryCommandValue`。
 - `fontsize` 传 px，落成 `class="lake-fontsize-{px*0.75}"`；`queryCommandValue('fontsize')` 返回 px。
-- `code` 需**内核自己的选区**（DOM Range 伪造会插入空 `<code>`，实测）。
-- `link`/`unlink`/`insertLink`/`linkText` 多形态均返回 false ⇒ **链接按钮未上**（禁止静默 no-op）。
-- inline 图片卡片**没有** `.ne-card-toolbar`，只有 28×28 `.ne-ui-image-more` → popover（删除/复制）。
+- `code` 需**内核自己的选区**（DOM Range 伪造会插入空 `<code>`）。
 - 内核 `style` 命令把段落转 H1 时会**丢掉行内 mark**（`<strong>` 消失）——内核行为，非本批 bug。
-- **内核图标 sprite 的 symbol id 一律是 `icon-<name>`**，而 `FrameworkUiLib.Icon` 内部按 `#<type>` 取用 ⇒ 用内核 Icon 必须传 `type="icon-bold"`（本批在 `KIcon` 内统一补前缀）；否则 `use` 指空、**图标整个不画**（DOM 在、命中框在，只是视觉空白，极易误判成配色/尺寸问题）。运行时把 `use` 的 href 改对即可当场验证。
-- **内核大量样式被 `.ne-ui-toolbar` 限定作用域**（工具条图标色、颜色分裂按钮 25/16 尺寸…）⇒ 浮栏不在该容器内会「长得不一样」；按**同一语义/同值**在 `.selection-toolbar` 下补齐，不要改内核、也不要靠提高特异性硬压。
-- **内核 `ToolbarButton` 未承诺透传 `onClick`**：用一层 `display:contents` 的 span 承接冒泡（不生成盒子，不影响 flex 布局与相邻选择器），且只在外层挂一次 onClick，避免「透传+冒泡」双触发。
-- 深/暖色桥里 `--lakex-editor-overlay-background-tertiary` 与 `--lakex-editor-background-primary-hover-light` 原先都指 `--lake-bg-block` = **工具条自身底色** ⇒ 内核工具条 hover/选中态不可见，已改指 `--lake-bg-hover`。
-- **链接按钮已上**（`link` 有选区 / `insertLink` 光标，`queryCommandEnabled` 把门）⇒ 本节旧条目「链接按钮未上」作废。
-- **Electron 窗口未绘制/被遮挡时 rAF 会暂停**：用 rAF 合并「选区变化 → 刷新浮框」会导致首次刷新永不执行、浮框完全不出现（本批踩到并改为同步刷新）。隔离实例调试浮层务必注意。
+- inline 图片卡片**没有** `.ne-card-toolbar`，只有 28×28 `.ne-ui-image-more` → popover。
 
-### 四、门禁（本批实测）
-- `tsc` 0 · `vitest` **1260 passed / 16 skipped** · `ui-metrics` 全绿（颜色字面量 0、`!important` 9、未定义令牌 0）· `vite build` ✓ · `cssLayers` 基线 `selectionToolbar.css: 159`（260924 续重做后实测值；均为新增选择器，非覆盖既有声明）。
-- **未跑**：`check:stylesnap`（新增设置行是否影响快照待确认；脚本 42 态里未搜到 settings 面板态）· 打包冒烟。
+**Electron / 调试类**
+- **窗口未绘制或被遮挡时 rAF 会暂停** ⇒ 用 rAF 合并「选区变化 → 刷新浮框」会导致首次刷新永不执行、浮框完全不出现（本批踩到，已改同步刷新）。隔离实例调试浮层务必注意。
+- active 态依赖内核 query 缓存，命令执行后要稍等再刷新（本批 `setTimeout(refreshNow, 80)`）。
+- macOS 下 `base64 -d` 解 CDP 截图会得到空文件，用 node/python 解。
+- 起隔离实例后要 `Page.bringToFront` + `Emulation.setFocusEmulationEnabled`，否则真鼠标事件打不进；结束**按 job/PID 杀**，不要 `pkill -f Electron`（机器上还有别的 Electron 应用）。
 
-### 五、待用户验收 / 待办
-1. 用户点验浮框观感（浅/深/暖三主题；顶/底翻转；图片 1px 场景）。
-2. **链接按钮**：需先找到内核链接入口（官方 docs/08 有但 `execCommand` 未通）。
-3. **图片替换**：`updateImageData{src/url}` 无效、`setImageInfo` 断言失败 ⇒ 待找正确载荷（或改走重新上传成卡）。
-4. `check:stylesnap` 基线（若设置面板态被采样则需重刷）。
-5. 合并 master（待验收后）。
+### 六、门禁（本批实测）
+- `tsc` 0 · `vitest` **1260 passed / 16 skipped** · `ui-metrics` 全绿（`var(--b3-*)` 0、颜色字面量 0、`!important` 9、未定义令牌 0）· `vite build` ✓ · `git diff --check` clean。
+- `cssLayers` 基线：`features/editor/selectionToolbar/selectionToolbar.css: 159`（第二轮实测值；**全是新增选择器**，没有覆盖既有声明）。这条基线历史上被反复调整（91→…→159），本批两轮都在注释里写明了原因。
+- **未跑**：`check:stylesnap`、打包冒烟（见 §三）。
 
-### 六、关键文件
-`src/features/editor/selectionToolbar/**` · `src/features/editor/lakeRuntime.ts` · `src/lib/settings.ts` · `src/hooks/desktopDerivedState.ts` · `src/App.tsx` · `src/desktop/DesktopLibrary.tsx` · `src/components/SettingsPanel.tsx` · `src/components/settingsSearch.ts` · `src/features/editor/editorCommands.ts(+.test)` · `src/styles/index.css` · `src/styles/cssLayers.test.ts` · `docs/FLOATING-TOOLBAR-DESIGN-260919.md` · `docs/LAKEX-CONTRACT.md §5.10`。
+### 七、关键文件
+`src/features/editor/selectionToolbar/**`（含新增 `kernelUiAtoms.tsx`）· `src/features/editor/lakeRuntime.ts` · `src/features/editor/editorCommands.ts(+.test)` · `src/lib/settings.ts` · `src/hooks/desktopDerivedState.ts` · `src/App.tsx` · `src/desktop/DesktopLibrary.tsx` · `src/components/SettingsPanel.tsx` · `src/components/settingsSearch.ts` · `src/styles/index.css` · `src/styles/feature.css` · `src/styles/cssLayers.test.ts` · `docs/FLOATING-TOOLBAR-DESIGN-260919.md` · `docs/LAKEX-CONTRACT.md §5.10`。
+
+### 八、分支提交（`master..feat/floating-toolbar`）
+**功能线 13 个**：`e4ee89c` 浮栏+开关 → `0c844c7` 图片能力 → `936ad47` 裁剪/样式/批量/链接 → `c1f3b54` 文字改 Lake 风 → `86afe7a` 拖选不弹 → `b97e00a` 颜色面板内核样式 → `205e194` 子菜单按触发项定位 → `953e541` 颜色面板补背景/箭头 → `5fa6834` 子菜单对齐 Lake → `9dbed06` 背景色「无填充色」 → `9a03f13` caret+颜色分裂 → **`0d63b53` 第二轮重做（内核原语装配）** → **`675a091` HANDOFF 回填**。
 
 ## 0. 最新交接 · 260923 续 · 桌面 UI 细节优化批次（顶栏真居中 / 页签配色 / 目录浮层 / 目录栏文字 / 增强大纲收敛与配色 / dev 首开画板 reload）（新会话先读这一节）
 
