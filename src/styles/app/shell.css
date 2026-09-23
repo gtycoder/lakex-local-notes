@@ -911,7 +911,6 @@ html[data-theme="dark"] .document-pane .ne-engine > ne-h6 ne-heading-content {
    文字保持中性墨色 + 略加字重，避免「浅底 + 描边 + 主色字」多重信号。 */
 .tab-item.active {
   color: var(--lake-text);
-  font-weight: 500;
 }
 
 /* ---- 交互动效（B）：顶栏/图标按钮统一按压反馈 ---- */

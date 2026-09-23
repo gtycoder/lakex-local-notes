@@ -447,6 +447,9 @@
 }
 .tab-item.pinned .tab-pin { color: var(--lake-accent); }
 .tab-item.pinned .tab-title { font-weight: var(--lake-font-weight-semibold); }
+/* 多标签统一（用户 260923）：未选中 medium(500) / 选中 semibold(600) / 钉住 semibold(600) */
+.tab-item .tab-title { font-weight: var(--lake-font-weight-medium); }
+.tab-item.active .tab-title { font-weight: var(--lake-font-weight-semibold); }
 .tab-item.pinned:hover {
   color: var(--lake-text-1);
   background: color-mix(in srgb, var(--lake-accent-tint) 70%, var(--lake-bg-hover));
@@ -473,13 +476,13 @@
 .note-row-copy strong {
   color: var(--lake-text-1);
   font-size: var(--lake-font-size-small);
-  font-weight: var(--lake-font-weight-regular);
+  font-weight: var(--lake-font-weight-medium);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: clip;
 }
-.tree-row.type-notebook .note-row-copy strong { font-weight: var(--lake-font-weight-semibold); }
-.tree-row.type-group .note-row-copy strong { font-weight: var(--lake-font-weight-medium); }
+/* 目录行统一（用户 260923）：所有行——笔记本 / 分组 / 笔记——同一标准，
+   不再按行类型区分字重：未选中 medium(500) / 选中 semibold(600)（与大纲一致）。 */
 .note-row.active .note-row-copy strong { font-weight: var(--lake-font-weight-semibold); }
 .tree-row-icon { color: var(--lake-text-3); }
 .note-row.active .tree-row-icon { color: var(--lake-accent); }
