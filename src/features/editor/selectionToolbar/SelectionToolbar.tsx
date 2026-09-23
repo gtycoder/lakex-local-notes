@@ -11,7 +11,7 @@
  *     不用第三方（钉钉）风格；active 态用内核的 .checked 类。
  *   - 容器 onMouseDown preventDefault：点按钮不丢选区；定位自算 + 避开固定工具栏；表格/代码块内不出现。
  */
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
 import {
   AlignCenter, AlignLeft, AlignRight, Copy, Crop, Download, Layers, Link2,
   MoveVertical, Palette, RotateCw, Scaling, Trash2, Type,
@@ -56,7 +56,7 @@ function KToggleButton({ label, icon, active, onClick }: { label: string; icon: 
 
 /** 内核工具栏下拉触发按钮（段落样式 / 字号 / 颜色 / 转为 / 超链接）。 */
 function KDropdownButton({ label, icon, active, onClick, extra, children }: {
-  label: string; icon?: string; active?: boolean; onClick?: () => void; extra?: string; children?: ReactNode;
+  label: string; icon?: string; active?: boolean; onClick?: (event: ReactMouseEvent<HTMLButtonElement>) => void; extra?: string; children?: ReactNode;
 }) {
   return (
     <button type="button" title={label} aria-label={label}
@@ -95,7 +95,7 @@ function KMenuItem({ label, icon, selected, shortcut, onClick }: {
 
 /** 图片形态沿用自有按钮（图片浮栏风格此前已按云端语雀定稿）。 */
 function IconButton({ label, active, disabled, onClick, children }: {
-  label: string; active?: boolean; disabled?: boolean; onClick?: () => void; children: ReactNode;
+  label: string; active?: boolean; disabled?: boolean; onClick?: (event: ReactMouseEvent<HTMLButtonElement>) => void; children: ReactNode;
 }) {
   return (
     <button
@@ -118,6 +118,8 @@ export function SelectionToolbar({ editor, container, noteId }: {
   const { target, state, run, refresh, toolbarRef } = useSelectionToolbar(editor, container);
   const [menu, setMenu] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
+  const [menuAnchor, setMenuAnchor] = useState(0);
+  const [menuLeft, setMenuLeft] = useState<number | null>(null);
   const [pos, setPos] = useState<{ left: number; top: number } | null>(null);
   const keyRef = useRef<string>("none");
 
@@ -136,6 +138,17 @@ export function SelectionToolbar({ editor, container, noteId }: {
     setPos({ left, top: p.top });
   }, [target, menu, toolbarRef, container]);
 
+  // 子菜单定位：左侧贴触发按钮 offsetLeft，右侧越界则左移，保证不超出浮栏宽度。
+  useLayoutEffect(() => {
+    if (!menu) { setMenuLeft(null); return; }
+    const root = toolbarRef.current;
+    const el = root?.querySelector('[data-menu="' + menu + '"]') as HTMLElement | null;
+    if (!root || !el) return;
+    const rootW = root.getBoundingClientRect().width;
+    const menuW = el.getBoundingClientRect().width;
+    setMenuLeft(Math.max(0, Math.min(menuAnchor, Math.max(0, rootW - menuW))));
+  }, [menu, menuAnchor, toolbarRef]);
+
   const key = target ? target.kind + ":" + Math.round(target.rect.top) + ":" + Math.round(target.rect.left) : "none";
   useEffect(() => {
     if (keyRef.current !== key) { keyRef.current = key; setMenu(null); setDraft(""); }
@@ -143,7 +156,15 @@ export function SelectionToolbar({ editor, container, noteId }: {
 
   const pick = useCallback((name: string, value: unknown) => { run(name, value); setMenu(null); }, [run]);
 
-  const openWithDraft = useCallback((m: string, value: string) => {
+  /** 打开/切换菜单；记录触发按钮的左偏移，子菜单以该「主菜单项」定位。 */
+  const toggleMenu = useCallback((m: string, trigger?: HTMLElement | null) => {
+    if (trigger) setMenuAnchor(trigger.offsetLeft);
+    setMenuLeft(null);
+    setMenu((current) => (current === m ? null : m));
+  }, []);
+  const openWithDraft = useCallback((m: string, value: string, trigger?: HTMLElement | null) => {
+    if (trigger) setMenuAnchor(trigger.offsetLeft);
+    setMenuLeft(null);
     setDraft(value);
     setMenu((current) => (current === m ? null : m));
   }, []);
@@ -223,11 +244,11 @@ export function SelectionToolbar({ editor, container, noteId }: {
       <>
         <KToolButton label="清除格式" icon="editor-clearFormat" onClick={() => run("clearFormat")} />
         <span className="selection-toolbar__sep" />
-        <KDropdownButton label="段落样式" active={menu === "style"} extra="ne-ui-toolbar-select-button ne-ui-toolbar-format" onClick={() => setMenu(menu === "style" ? null : "style")}>
+        <KDropdownButton label="段落样式" active={menu === "style"} extra="ne-ui-toolbar-select-button ne-ui-toolbar-format" onClick={(e) => toggleMenu("style", e.currentTarget)}>
           <span className="selection-toolbar__trigger-label">{styleLabel}</span>
           <span className="ne-ui-toolbar-status-dropdown-arrow" />
         </KDropdownButton>
-        <KDropdownButton label="字号" active={menu === "fontsize"} extra="ne-ui-toolbar-select-button ne-ui-toolbar-fontsize" onClick={() => setMenu(menu === "fontsize" ? null : "fontsize")}>
+        <KDropdownButton label="字号" active={menu === "fontsize"} extra="ne-ui-toolbar-select-button ne-ui-toolbar-fontsize" onClick={(e) => toggleMenu("fontsize", e.currentTarget)}>
           <span className="selection-toolbar__trigger-label">{sizeLabel}</span>
           <span className="ne-ui-toolbar-status-dropdown-arrow" />
         </KDropdownButton>
@@ -237,11 +258,11 @@ export function SelectionToolbar({ editor, container, noteId }: {
         <KToggleButton label="中划线" icon="strikethrough" active={state.marks.strikethrough} onClick={() => run("strikethrough")} />
         <KToggleButton label="下划线" icon="underline" active={state.marks.underline} onClick={() => run("underline")} />
         <span className="selection-toolbar__sep" />
-        <KDropdownButton label="文字颜色" icon="editor-color" active={menu === "color" || Boolean(state.color)} onClick={() => setMenu(menu === "color" ? null : "color")} />
-        <KDropdownButton label="背景色" icon="editor-bgColor" active={menu === "bgcolor" || Boolean(state.bgColor)} onClick={() => setMenu(menu === "bgcolor" ? null : "bgcolor")} />
+        <KDropdownButton label="文字颜色" icon="editor-color" active={menu === "color" || Boolean(state.color)} onClick={(e) => toggleMenu("color", e.currentTarget)} />
+        <KDropdownButton label="背景色" icon="editor-bgColor" active={menu === "bgcolor" || Boolean(state.bgColor)} onClick={(e) => toggleMenu("bgcolor", e.currentTarget)} />
         <span className="selection-toolbar__sep" />
-        <KDropdownButton label="转为" icon="t-moremark" active={menu === "convert"} onClick={() => setMenu(menu === "convert" ? null : "convert")} />
-        <KDropdownButton label="超链接" icon="editor-link" active={menu === "txtlink"} onClick={() => openWithDraft("txtlink", "")} />
+        <KDropdownButton label="转为" icon="t-moremark" active={menu === "convert"} onClick={(e) => toggleMenu("convert", e.currentTarget)} />
+        <KDropdownButton label="超链接" icon="editor-link" active={menu === "txtlink"} onClick={(e) => openWithDraft("txtlink", "", e.currentTarget)} />
       </>
     );
   };
@@ -258,15 +279,15 @@ export function SelectionToolbar({ editor, container, noteId }: {
       <>
         <IconButton label="裁剪" onClick={() => { enterImageCrop(t.cardEl); refresh(); }}><Crop size={15} /></IconButton>
         <IconButton label="旋转 90°" onClick={() => apply({ rotation: ((meta.rotation || 0) + 90) % 360 })}><RotateCw size={15} /></IconButton>
-        <IconButton label="宽高" active={menu === "imgsize"} onClick={() => openWithDraft("imgsize", meta.width ? String(meta.width) : "")}><Scaling size={15} /></IconButton>
+        <IconButton label="宽高" active={menu === "imgsize"} onClick={(e) => openWithDraft("imgsize", meta.width ? String(meta.width) : "", e.currentTarget)}><Scaling size={15} /></IconButton>
         <span className="selection-toolbar__sep" />
-        <IconButton label="链接" active={menu === "imglink" || Boolean(meta.link)} onClick={() => openWithDraft("imglink", meta.link)}><Link2 size={15} /></IconButton>
-        <IconButton label="描述" active={menu === "imgtitle" || Boolean(meta.title)} onClick={() => openWithDraft("imgtitle", meta.title)}><Type size={15} /></IconButton>
+        <IconButton label="链接" active={menu === "imglink" || Boolean(meta.link)} onClick={(e) => openWithDraft("imglink", meta.link, e.currentTarget)}><Link2 size={15} /></IconButton>
+        <IconButton label="描述" active={menu === "imgtitle" || Boolean(meta.title)} onClick={(e) => openWithDraft("imgtitle", meta.title, e.currentTarget)}><Type size={15} /></IconButton>
         <span className="selection-toolbar__sep" />
-        <IconButton label="对齐" active={menu === "imgalign"} onClick={() => setMenu(menu === "imgalign" ? null : "imgalign")}><AlignLeft size={15} /></IconButton>
-        <IconButton label="样式" active={menu === "imgstyle"} onClick={() => setMenu(menu === "imgstyle" ? null : "imgstyle")}><Palette size={15} /></IconButton>
-        <IconButton label="边距" active={menu === "imgmargin"} onClick={() => setMenu(menu === "imgmargin" ? null : "imgmargin")}><MoveVertical size={15} /></IconButton>
-        <IconButton label="批量应用（同步样式/宽度到全文）" active={menu === "imgbatch"} onClick={() => setMenu(menu === "imgbatch" ? null : "imgbatch")}><Layers size={15} /></IconButton>
+        <IconButton label="对齐" active={menu === "imgalign"} onClick={(e) => toggleMenu("imgalign", e.currentTarget)}><AlignLeft size={15} /></IconButton>
+        <IconButton label="样式" active={menu === "imgstyle"} onClick={(e) => toggleMenu("imgstyle", e.currentTarget)}><Palette size={15} /></IconButton>
+        <IconButton label="边距" active={menu === "imgmargin"} onClick={(e) => toggleMenu("imgmargin", e.currentTarget)}><MoveVertical size={15} /></IconButton>
+        <IconButton label="批量应用（同步样式/宽度到全文）" active={menu === "imgbatch"} onClick={(e) => toggleMenu("imgbatch", e.currentTarget)}><Layers size={15} /></IconButton>
         <span className="selection-toolbar__sep" />
         <IconButton label={asset ? "复制图片" : "复制（非本机资源不可用）"} disabled={!asset} onClick={() => { if (asset) void native.copyAssetImage(asset.noteId, asset.filename); }}><Copy size={15} /></IconButton>
         <IconButton label={asset ? "另存为" : "下载（非本机资源不可用）"} disabled={!asset} onClick={() => { if (asset) void native.saveAssetAs(asset.noteId, asset.filename, asset.filename); }}><Download size={15} /></IconButton>
@@ -338,7 +359,7 @@ export function SelectionToolbar({ editor, container, noteId }: {
       data-kind={target.kind}
       role="toolbar"
       aria-label={target.kind === "text" ? "文字格式工具栏" : "图片工具栏"}
-      style={{ left: pos?.left ?? -9999, top: pos?.top ?? -9999, visibility: pos ? "visible" : "hidden" }}
+      style={{ left: pos?.left ?? -9999, top: pos?.top ?? -9999, visibility: pos ? "visible" : "hidden", "--menu-left": (menuLeft ?? menuAnchor) + "px" } as CSSProperties}
       onMouseDown={(event) => event.preventDefault()}
     >
       {target.kind === "text" ? renderText() : renderImage(target)}
