@@ -4,6 +4,72 @@
 > 历史所有 dated handoff 已合并进本文件（内容在 git 历史可查）。本文件只保留**当前状态 + 真正的待办 + 有价值的坑**。
 > **§8 是移动端（安卓）专职交接**，由移动端会话维护；桌面会话不要改 §8，移动端会话不要改 §0-§7 之外的桌面文件。
 
+## 0. 最新交接 · 260923 安全审计复核 + 画板修复 + 打包精简（新会话先读这一节）
+
+> 写给**完全没有上下文的新会话**。本批在分支 `audit/code-quality-260923`（基于 master `e04ab70`）完成，**已合入 master**。
+> 一句话：对一份 A1–A7 安全审计做**独立对抗性复核**并落地加固；顺带定位并修掉「**生产构建画板崩溃**」这一发布阻断；把打包从 **192MB/~10min 精简到 148MB/~25s**。
+> 下方「§0 最新交接 · 260923 UI 优化与收尾」是**上一批**，仍有效。
+
+### 一、任务目标（用户原话要点，按顺序）
+1. 对已完成的代码安全审计（A1–A7 发现 + 修复）做**对抗性复核**：准确性 / 严重度是否成立 / 修复是否充分 / 有无遗漏 / 有无更优方案。
+2. 按复核结论**接手执行**安全收口剩余项；铁律：**安全门可以加，但绝不能伤正常功能**，有副作用嫌疑的先验证再定稿。
+3. 用同一把尺子复审待办（复杂度高、低收益的**能砍就砍**，AGENTS #17）；能不做就不做、有替代给替代。
+4. 排查 `test:packaged` 的 drawnix smoke 失败（用户问「超时到底是什么」）。
+5. **重做打包流程**并做**打包版精简**。
+6. 用户点验通过后**合入 master**；写交接。
+
+### 二、已完成内容（全部已提交并合入 master）
+
+**A. 安全审计复核结论（A1–A7）**
+- **A1**（webApiServer 跨站/token）认 P0（服务默认关闭=条件性）；复核发现并补齐旁路：删「空端口 Origin 放行」、加 **Host 白名单**、`/__native.js` 限 `Sec-Fetch-Site∈{same-origin,none}`、禁 query token、常量时间比较。
+- **A2**（editorsRef 泄漏）**判为误报**：`LakeEditor` 卸载本来就 `onEditorReady(noteId,null)` 释放实例；改为卸载时 `delete`（`ed?set:delete`）。
+- **A3**（SVG 无 CSP）认 P1；补 `img-src/font-src data:`，并补掉「**只改了桌面**」的缺口（Android `AssetServer` 同步加 nosniff+SVG CSP；`.html` 从 `text/html` 降级 `application/octet-stream`）。
+- **A4**（shell 打开可执行附件）认 P1；fail-closed 白名单（含 svg）+ native 侧再拦一道；桌面靠单一 `open_attachment` 收口。
+- **A5**（escapeHtml 引号）降 P2（当前无利用面）。
+- **A6**（history 清理事务）降 P2；并改「先删文件再事务删行」；指出「事务并不解决 DB/文件一致」的归因问题。
+- **A7**（OpenFilePlugin 路径）认 P1；canonical 前缀围栏。
+
+**B. 采纳并落地的安全加固**
+- **token 拆分**：`assetToken`（资产 URL 用，`?token=`）**≠** `webApiToken`（`/api` 用）；`/__native.js` 用后者调 IPC、前者供资产 URL。
+- **`secretCipher` fail-closed**：无 safeStorage（或 Linux `basic_text`）时**拒绝保存 S3 Secret**，不再静默落明文；旧明文仍可读。
+- **`sandbox: true`**：Electron 44 + preload 已 `asarUnpack`；隔离实例与**打包版**均实测正常（token 长度 64、IPC 可用）。
+- **Android**：`AssetServer` nosniff+SVG CSP；`OpenFilePlugin` 路径围栏 + 扩展名围栏（含纯函数 JVM 测试）。
+
+**C. 产品级修复：生产构建画板崩溃（发布阻断）**
+- 现象：打包版画板（内联 `drawing-board` 卡与 `kind=board` 文档）**完全不渲染**，报 `TypeError: Wt is not a function`，`drawnixCore:0`。
+- 根因：`vite.config.ts` 的手工 rolldown `codeSplitting` 分组（`name:"drawnix"`）**拆坏了 vendor 内部绑定**（A/B：删掉即恢复）。
+- 已删除该分组；打包版 `test:packaged` 通过（`plaitBoards:2 / drawnixModuleRendered:true / fallback:false`）。
+
+**D. 打包精简 + 流程提速**
+- `dependencies` 只留**主进程运行期真正 `import`** 的 4 个（`@aws-sdk/client-s3`/`better-sqlite3`/`electron-log`/`sharp`，见 `dist-electron` 的 import 与 `vite.config.ts` 的 external），其余 11 个渲染层包移入 `devDependencies`（已被 Vite 打进 `dist`）。
+- 结果：**app.asar 229MB→36.5MB · .app 540MB→358MB · dmg/zip 192→148.5/148.3 MiB · 打包 ~10min→~25s**。
+
+**E. 决策（已定稿，别再重复提）**
+- **不做** Cookie 化/不再内嵌 TOKEN（Cookie **不隔离端口**，会把 token 发给所有 localhost 服务，比请求头更差）——改用上面的 token 拆分。
+- **不做**：WEB_METHODS 裁剪（浏览器端是默认关闭的实验功能）、assetServer `?token=` 收敛、snippet sink 重写（`buildSnippet` 是跨进程 HTML 串，渲染层拆 `<mark>` 会二次转义）、DOMPurify、Java↔TS 漂移护栏（改用两边同代表集单测）、editorsRef 组件测试（需重壳）。
+- **不做** android 顶层导航 `am start` 证据（用户 260923 决定）：以「引擎+头字符串与桌面逐字节等价」的可迁移证据结案。
+
+**门禁（全绿）**：`tsc` 0 · `vitest` **1249 passed / 16 skipped（1265）** · Android `gradle testDebugUnitTest` 全绿 · 桌面 `vite build` + 移动 `android-build.sh` 通过 · 打包版全量冒烟 `test:packaged:full` **exit 0**（window-state / packaged / renderer-recovery / service-crash，~29s）。
+
+### 三、当前问题（均不阻塞）
+- 关于页「依赖版本」现在只列运行期 4 个（打包版 `package.json` 会被 electron-builder 裁掉 `devDependencies`）；若要保留内核/前端版本号，需另做 build 期注入。
+- `release/` 下留有一套产物（dmg/zip/.app，约 500MB），可随时删。
+- 安卓「顶层导航下 SVG 脚本不执行」**未做直接实测**（见 E，已决定不做）。
+
+### 四、下一步计划（按优先级）
+1. 再改打包/依赖时，重跑 `npm run test:packaged:full`（本批已 exit 0）。
+2. 若在意首屏体积：`node scripts/check-bundle-budget.mjs`；画板引擎的懒加载边界现由动态 import 自然保证（不要再加 vendor 的 `codeSplitting` 分组）。
+3. 回到长期焦点：同步/存储热路径性能与健壮性、移动端编辑收口（见 `AGENTS.md` §2 与下方旧 §3）。
+
+### 五、踩过的坑（本批新增，务必先读）
+- **`asar extract-file` 会写到 CWD**：`node_modules/.bin/asar extract-file <asar> package.json` 会把仓库 `package.json` 覆盖成打包版精简版（本轮踩过，已 `git checkout` 还原）。读 asar 内文件请用 `--stdout`，或先 cd 到临时目录。
+- **Electron 侧改动实测前必须 `npx vite build`**：`electron .` 不会重编主进程，旧 `dist-electron` 会给出**假结论**（本轮差点误判「新 CSP 下渲染正常」）。
+- **`file://` 下 Chromium 不记录 JS module 的 resource timing**（实测 `jsResources:0`）：任何靠它做「懒加载已被请求」断言的测试在打包版**恒假**（已修 `e2e-drawnix-smoke.mjs`）。
+- **给 vendor 加 rolldown `codeSplitting` 分组会拆坏其内部懒加载 chunk 绑定**（移动端 `vite.mobile.config.ts` / `mobileLazyChunks.test.ts` 早有同款警告）——生产构建画板崩溃就是这个。
+- **Cookie 不按端口隔离**（RFC 6265）：别用 Cookie 化替代 header token。
+- **沙箱化 preload 仍能读 `process.env`**（实测），但 preload 必须在 `asarUnpack`。
+- **审查要区分「测试环境假设」与「产品缺陷」**：drawnix smoke 的失败先被当成 flaky/需 dev，实为真产品崩溃；反过来它最后那条 resource 断言又是环境假设。定位靠 A/B（开/关单个变量）。
+- **进程管理**：杀 Electron 只 kill 具体 PID，禁 `pkill -f Electron`；隔离实例跑完即删 `$TMPDIR/lake-*`。
 ## 0. 最新交接 · 260923 UI 优化与收尾（新会话先读这一节）
 
 > 本节写给完全没有上下文的新会话，覆盖本批（260923 UI 优化与收尾）的目标 / 已完成 / 当前问题 / 下一步 / 踩坑。
