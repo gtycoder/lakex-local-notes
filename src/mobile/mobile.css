@@ -44,7 +44,7 @@
 * { box-sizing: border-box; }
 
 html, body, #root { margin: 0; padding: 0; height: 100%; }
-body { font-family: BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei UI", system-ui, sans-serif; background: var(--lake-shell); color: var(--lake-text); -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; text-rendering: optimizeLegibility; }
+body { font-family: var(--lake-font-family); background: var(--lake-shell); color: var(--lake-text); -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; text-rendering: optimizeLegibility; }
 
 .poc-center { display: flex; align-items: center; justify-content: center; height: 100%; font-size: 15px; color: var(--lake-text-secondary); }
 .poc-error { color: var(--lake-error); }

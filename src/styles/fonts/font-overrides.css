@@ -1,0 +1,59 @@
+/* 字体接线（双端共享）：把产品字体统一为 MiSans（界面/正文）+ JetBrains Mono（等宽）。
+ *
+ * 为什么需要这里而不是只改令牌：
+ *  ① vendor 内核样式对 body / .ne-engine / .ne-viewer-body / .ne-toc-view 等**硬编码**了字体栈
+ *     （-apple-system/PingFang SC...），只改 --lake-font-family 不会覆盖它们；
+ *  ② 桌面把本文件 import 进 feature 层（层序高于 vendor 所在的 legacy 层）⇒ 无需 !important 即可压过内核；
+ *     移动端无 @layer，直接 import，靠"晚于 vendor 样式"生效（DocumentEditor 惰性引入 vendor style.css）。
+ * KaTeX 数学字体（KaTeX_*）与彩色 emoji 属**功能性字形**，刻意不覆盖。
+ */
+
+/* 外壳：外壳/设置/弹窗/浮层等全部继承自 body */
+html, body { font-family: var(--lake-font-family); }
+
+/* 内核正文（编辑器 / 阅读态 / 原生大纲 / 拖拽代理） */
+.ne-engine,
+.ne-viewer .ne-viewer-body,
+.ne-viewer.ne-paragraph-spacing-relax.ne-typography-classic .ne-viewer-body,
+.ne-paragraph-spacing-relax.ne-typography-classic,
+.ne-toc-view,
+.ne-brick-delegation { font-family: var(--lake-font-family); }
+
+/* 正文字重（编辑器 / 阅读态）：500（只作用于正文根，不含原生大纲 .ne-toc-view / 拖拽代理） */
+.ne-engine,
+.ne-viewer .ne-viewer-body,
+.ne-viewer.ne-paragraph-spacing-relax.ne-typography-classic .ne-viewer-body,
+.ne-paragraph-spacing-relax.ne-typography-classic { font-weight: var(--lake-font-weight-medium); }
+
+/* 画板（drawnix / plait）文本 */
+.plait-text-container,
+.drawnix,
+.drawnix-tutorial { font-family: var(--lake-font-family); }
+
+/* 原生大纲（内核 TOC）字重：与增强大纲**统一为 未选中 500 / 选中 600**，避免两套大纲切换时档位割裂。
+ * feature 层 > legacy 层 ⇒ 可压过内核的 .ne-toc-item.ne-toc-selected{700} 与 hover{700}，无需 !important。 */
+.ne-toc-item { font-weight: var(--lake-font-weight-medium); }
+.ne-toc-item.ne-toc-selected { font-weight: var(--lake-font-weight-semibold); }
+.ne-toc-item .ne-toc-item-text:hover { font-weight: var(--lake-font-weight-semibold); }
+
+/* 原生大纲 未选中/悬停 文字色：与增强大纲对齐（未选中 --lake-text-2，悬停 --lake-text-1）。
+ * 选中态保持内核的强调色不动（本次只对齐"未选中"）。 */
+.ne-toc-item:not(.ne-toc-selected),
+.ne-toc-item:not(.ne-toc-selected) a,
+.ne-toc-item:not(.ne-toc-selected) .ne-toc-item-text { color: var(--lake-text-2); }
+.ne-toc-item:not(.ne-toc-selected):hover,
+.ne-toc-item:not(.ne-toc-selected):hover a,
+.ne-toc-item:not(.ne-toc-selected) .ne-toc-item-text:hover { color: var(--lake-text-1); }
+
+/* 原生大纲 选中文字色：与增强大纲统一（--lake-accent-text） */
+.ne-toc-item.ne-toc-selected,
+.ne-toc-item.ne-toc-selected a,
+.ne-toc-item.ne-toc-selected .ne-toc-item-text,
+.ne-toc-item.ne-toc-selected .ne-toc-item-text a { color: var(--lake-accent-text); }
+
+/* 等宽：代码块（CodeMirror / cm6 / pre / code）统一 JetBrains Mono */
+pre, code, kbd, samp,
+.ne-codeblock,
+.CodeMirror,
+.cm-editor,
+.cm-content { font-family: var(--lake-font-family-mono); }

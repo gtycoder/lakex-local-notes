@@ -5,6 +5,12 @@
 
 @layer legacy, tokens, kit, shell, feature, overlay, a11y;   /* 260923：删掉声明了却没人 import 的 reset 空层 */
 
+/* ---- 内置字体（自托管 @font-face）：MiSans（界面/正文）+ JetBrains Mono（等宽） ---- */
+@import "./fonts/misans/misans.css";
+@import "./fonts/jetbrains-mono/jetbrains-mono.css";
+/* 字体接线：body 覆盖 vendor 硬编码栈 + 内核正文/画板/代码字体（feature 层 > legacy） */
+@import "./fonts/font-overrides.css" layer(feature);
+
 /* ---- 新层：kit / shell / feature / overlay（P4 起逐步填充；目前只有 feature 的字体规则） ---- */
 @import "./kit.css" layer(kit);
 @import "./chrome.css" layer(shell);   /* 应用外壳（P5 逐屏迁移） */

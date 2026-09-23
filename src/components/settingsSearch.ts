@@ -69,6 +69,7 @@ export const SETTING_ITEMS: SettingItemEntry[] = [
   { id: "browser-open", category: "browser", label: "打开浏览器", keywords: "打开 浏览器 chrome 网页 访问 地址", platform: "desktop" },
   { id: "logs-main", category: "logs", label: "主进程日志", keywords: "日志 主进程 log 过滤 关键字", platform: "desktop" },
   { id: "about-app", category: "about", label: "Lake Notes", keywords: "版本 简介", platform: "desktop" },
+  { id: "about-fonts", category: "about", label: "字体", keywords: "字体 MiSans JetBrains Mono 内置 字体授权", platform: "desktop" },
   { id: "about-version", category: "about", label: "应用版本", keywords: "版本号 version", platform: "desktop" },
   { id: "about-runtime", category: "about", label: "运行时", keywords: "Electron Chromium Node 运行时 内核版本", platform: "desktop" },
   { id: "about-deps", category: "about", label: "内核与关键依赖", keywords: "依赖 lakex 内核 better-sqlite3 sharp 版本", platform: "desktop" },

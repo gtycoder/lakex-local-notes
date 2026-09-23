@@ -64,10 +64,11 @@
   --lake-line-height-snug: 1.5;
   --lake-line-height-normal: 1.6;
   --lake-line-height-reading: 1.85;
-  /* 字体（P3 可替换：界面 / 正文 / 等宽） */
-  --lake-font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei UI", "Noto Sans CJK SC", sans-serif;
+  /* 字体（内置：界面/正文 = MiSans；等宽 = JetBrains Mono；见 src/styles/fonts/）
+     MiSans 为小米官方 web 切片的子集（含简中+Latin），生僻字/emoji 由后面的系统栈回退。 */
+  --lake-font-family: 'MiSans', -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei UI", "Noto Sans CJK SC", "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif;
   --lake-font-family-reading: var(--lake-font-family);
-  --lake-font-family-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  --lake-font-family-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
   /* 滚动条 / 焦点环 */
   --lake-scrollbar-width: 10px;
   --lake-scrollbar-radius: 999px;

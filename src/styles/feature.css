@@ -89,8 +89,9 @@ pre {
   padding-right: var(--lake-space-md);
   border-left: 0;
   border-radius: var(--lake-radius-xs);
-  color: var(--lake-text-3);
+  color: var(--lake-text-2);
   font-size: var(--lake-font-size-tiny);
+  font-weight: var(--lake-font-weight-medium);
 }
 .outline-item:hover { color: var(--lake-text-1); background: var(--lake-bg-hover); }
 .outline-item--selected {
@@ -99,7 +100,6 @@ pre {
   font-weight: var(--lake-font-weight-semibold);
 }
 .outline-item--selected::before { display: none; }
-.outline-item__level { color: var(--lake-text-4); background: var(--lake-bg-block); }
 .outline-panel__empty { color: var(--lake-text-4); }
 
 /* ── 小记工作台（P5-j；设计 11 卡片 / 03 列表项 / 05 对话框）──────────────

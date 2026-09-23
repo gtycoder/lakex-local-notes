@@ -8,6 +8,7 @@ import { EditorDock } from "./EditorDock";
 import { useCaretIntoView } from "../useCaretIntoView";
 import { showToast } from "../ui/toastBus";
 import "@dlient/lakex-doc-react/style.css";
+import "../../styles/fonts/font-overrides.css"; // 字体接线：须晚于内核 style.css（移动端无 @layer，靠顺序生效）
 import { OutlineSheet } from "./OutlineSheet";
 import { DocListSheet, type DocListItem } from "./DocListSheet";
 import { lakeBridge } from "../../features/editor/lakeRuntime";

@@ -894,6 +894,7 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
                   <>
                     <Group title="关于" icon={<Info size={16} />}>
                       <Block itemId="about-app" name={`Lake Notes ${sysInfo.app.version}${sysInfo.packaged ? "" : "（开发实例）"}`} desc="本地优先 · 离线可用 · 数据保存在本机，S3 仅作云端镜像备份。" />
+                      <Block itemId="about-fonts" name="字体" desc="界面与正文使用内置 MiSans（小米科技，依《MiSans 字体知识产权许可协议》免费商用；此处按协议注明使用）。代码块使用 JetBrains Mono（SIL OFL 1.1）。两者均随应用内置、离线可用。" />
                     </Group>
 
                     <Group title="版本与运行环境" icon={<Monitor size={16} />}>

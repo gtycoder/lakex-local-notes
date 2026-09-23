@@ -9,6 +9,8 @@ import "../features/editor/image-lightbox.css";
 import "../features/attachment/attachment-preview.css";
 // ── W2：安卓 UI 全量重做 —— 颜色统一走**自有设计系统** themes/*（--lake-*），不再用思源调色板。
 // 迁移期仍加载 b3 主题/组件（未迁移的 .b3-* 屏幕还需要 --b3-*），随各屏迁移逐步下线。
+import "../styles/fonts/misans/misans.css"; // 内置 MiSans（简中+Latin，官方切片子集）
+import "../styles/fonts/jetbrains-mono/jetbrains-mono.css"; // 内置等宽 JetBrains Mono
 import "../styles/themes/base.css";
 import "../styles/themes/light.css";
 import "../styles/themes/dark.css";
