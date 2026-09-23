@@ -30,13 +30,13 @@ describe("垂直几何：令牌单一来源（PANEL-CONTRACT §1）", () => {
   });
 
   it("派生消费者一律引用令牌（不再写死几何）", () => {
-    expect(read("styles/chrome.css")).toContain("--lake-dir-peek-top: calc(var(--topbar-height) + 4px + var(--breadcrumb-height) + 6px)");
+    expect(read("styles/chrome.css")).toContain("--lake-dir-peek-top: calc(var(--topbar-height) + 4px + var(--breadcrumb-height))");
     expect(read("styles/app/shell.css")).toContain("--lake-floating-panel-top: calc(var(--topbar-height) + 4px + var(--breadcrumb-height) + var(--editor-toolbar-height))");
     expect(read("styles/chrome.css")).toMatch(/\.protyle-breadcrumb\s*\{[^}]*height:\s*var\(--breadcrumb-height\)/);
     expect(read("styles/app/editor.css")).toMatch(/\.ne-ui-toolbar\s*\{\s*height:\s*var\(--editor-toolbar-height\)/);
     expect(read("styles/app/tabs.css")).toMatch(/height:\s*var\(--tab-item-height\)/);
-    // 标签条垂直内距 = (顶栏 − 标签)/2：标签恒居中且不会被裁
-    expect(read("styles/app/tabs.css")).toMatch(/padding:\s*calc\(\(var\(--topbar-height\)\s*-\s*var\(--tab-item-height\)\)\s*\/\s*2\)/);
+    // 标签条垂直内距 = (顶栏 − 标签)/2，再 ±2px 把内容下移到「顶栏+4px 拼接缝」可见头区的中心
+    expect(read("styles/app/tabs.css")).toMatch(/padding:\s*calc\(\(var\(--topbar-height\)\s*-\s*var\(--tab-item-height\)\)\s*\/\s*2\s*\+\s*2px\)\s*10px\s*calc\(\(var\(--topbar-height\)\s*-\s*var\(--tab-item-height\)\)\s*\/\s*2\s*-\s*2px\)/);
     // 阅读态大纲顶 = 顶栏 + 4 拼接缝 + 面包屑
     expect(read("styles/app/editor.css")).toMatch(/\.ne-viewer-toc-sidebar\s*\{[^}]*top:\s*calc\(var\(--topbar-height\)\s*\+\s*4px\s*\+\s*var\(--breadcrumb-height\)\)/);
   });

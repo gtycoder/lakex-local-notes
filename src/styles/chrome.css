@@ -224,12 +224,12 @@
 /* ── 目录「悬浮」= 半幅浮卡（260922 用户定稿）──
  * 为什么不跟工具栏做高度适配：peek 是**临时**的（用完就收）——做成固定高度的浮卡，就不必关心
  * 「只读没有工具条 / 表格工具条 / 画板」这些随文档类型变的高度。
- * 顶边 = 面包屑下缘 + 6px（面包屑是我们自己的固定元素，不随类型变）：比原来贴工具条下缘高 30px，
- * 不再"偏下"；盖住工具条是有意的（反正一收就没）。
+ * 顶边 = 面包屑下缘（**严格贴线、不留缝**）：面包屑是我们自己的固定元素，高度走 --breadcrumb-height，
+ * 所以缩过面包屑高度后这里自动跟到它的下边线，不会"偏下"；盖住工具条是有意的（反正一收就没）。
  * 四角圆角 + 投影 = 一眼就是"临时层"，与「固定态 = 贴边、满高、无投影的连体列」明确区分。
  * 固定态不走这里（它占栅格列），所以这套几何只作用于悬浮/收起态。 */
 :root {
-  --lake-dir-peek-top: calc(var(--topbar-height) + 4px + var(--breadcrumb-height) + 6px); /* 顶栏 + pane 拼接缝(4) + 面包屑 + 6 缝；260923 起随令牌联动，不再写死 80 */
+  --lake-dir-peek-top: calc(var(--topbar-height) + 4px + var(--breadcrumb-height)); /* = 面包屑下边线（顶栏 + pane 拼接缝(4) + 面包屑）；随令牌联动，不再写死 */
   /* 高度 = 一直延伸到离窗口底 12px（"贴底浮卡"）：既保住"卡片身份"（四角圆角 + 投影 + 离边留白），
      又几乎不牺牲可见行数（820 窗口下 728px，比原来的 min(60vh,560) 多 236px）。不用做任何高度适配。 */
   --lake-dir-peek-height: calc(100vh - var(--lake-dir-peek-top) - 12px);
@@ -432,10 +432,12 @@
   background: transparent;
 }
 .tab-item:hover { color: var(--lake-text-1); background: var(--lake-bg-hover); }
+/* 选中页签：极浅强调色底 + 极浅强调色描边（用户 260923：参考思源给选中标签一个"很浅"的背景/边框提示，
+   不是照抄其配色）。颜色全部由 --lake-* 令牌派生，深浅/暖色主题自动跟随。 */
 .tab-item.active {
   color: var(--lake-text-1);
-  background: var(--lake-bg-raised);
-  border-color: transparent;
+  background: var(--lake-accent-tint);
+  border-color: color-mix(in srgb, var(--lake-accent) 30%, transparent);
 }
 .tab-item .tab-dirty-dot { flex: 0 0 6px; width: 6px; height: 6px; background: var(--lake-status-pending); }
 .tab-item .tab-pin { color: var(--lake-text-4); }
@@ -456,7 +458,7 @@
 }
 .tab-item.pinned.active {
   background: var(--lake-accent-tint);
-  border-color: transparent;
+  border-color: color-mix(in srgb, var(--lake-accent) 30%, transparent);
 }
 
 /* ── 目录树行（P5-e；设计 COMPONENTS.md 03 列表与列表项）─────────────────
@@ -474,8 +476,11 @@
 .note-row:active { background: var(--lake-bg-press); filter: none; }
 .note-row.active { color: var(--lake-accent-text); background: var(--lake-accent-tint); }
 .note-row-copy strong {
-  color: var(--lake-text-1);
-  font-size: var(--lake-font-size-small);
+  /* 260923：标题色 text-1（近黑）→ text-2（中灰）——与内核原生大纲的普通项同色，
+     近黑在 500 字重下显得又重又密，中灰更轻更透气（用户对比原生大纲后要求）。 */
+  color: var(--lake-text-2);
+  /* 260923：13px → 14px（--lake-font-size-body），对齐内核原生大纲项的字面（14px/line-height 22px）。 */
+  font-size: var(--lake-font-size-body);
   font-weight: var(--lake-font-weight-medium);
   white-space: nowrap;
   overflow: hidden;

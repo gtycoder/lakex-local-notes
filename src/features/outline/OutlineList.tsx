@@ -19,19 +19,12 @@ const INDENT_STEP = 10;
 /** 层级竖线对齐其父级（depth = d-1）折叠箭头中心。 */
 const GUIDE_X = 15;
 
-/** 不同层级的低调竖线配色（depth 2-6；depth 1 无竖线） */
-const GUIDE_COLORS = [
-  "rgba(92, 124, 214, 0.38)",  // 2 级组
-  "rgba(56, 145, 134, 0.38)",  // 3 级组
-  "rgba(176, 128, 62, 0.40)",  // 4 级组
-  "rgba(146, 100, 178, 0.36)", // 5 级组
-  "rgba(100, 108, 120, 0.35)", // 6 级组
-];
-function guideColor(depth: number): string {
-  return GUIDE_COLORS[Math.min(Math.max(depth, 2), 6) - 2];
-}
+/** 层级引导线颜色：与徽标同一套主题令牌（中性），随浅/深/暖自动变。
+ *  260923：原先这里是 5 个硬编码 rgba 的"第二套按层级配色"，与徽标配色不一致、也不随主题，
+ *  已收敛为单个中性令牌（层级的区分交给缩进 + 竖线位置，不再用颜色）。 */
+const GUIDE_COLOR = "var(--lake-outline-guide)";
 
-interface GuideSeg { x: number; y: "full" | "bottom"; color: string }
+interface GuideSeg { x: number; y: "full" | "bottom" }
 
 /** 计算某条目的层级竖线（纯竖线，不用折线）：
  *  - 每个包含该行的层级组画一条贯穿整行的竖线（组从首行延续到末行）；
@@ -45,10 +38,10 @@ function computeGuides(
   if (!node) return [];
   const segs: GuideSeg[] = [];
   for (let d = 2; d <= node.depth; d += 1) {
-    segs.push({ x: GUIDE_X + (d - 2) * INDENT_STEP, y: "full", color: guideColor(d) });
+    segs.push({ x: GUIDE_X + (d - 2) * INDENT_STEP, y: "full" });
   }
   if (node.hasChildren && !isCollapsed(node.id)) {
-    segs.push({ x: GUIDE_X + (node.depth - 1) * INDENT_STEP, y: "bottom", color: guideColor(node.depth + 1) });
+    segs.push({ x: GUIDE_X + (node.depth - 1) * INDENT_STEP, y: "bottom" });
   }
   return segs;
 }
@@ -56,7 +49,7 @@ function computeGuides(
 function guideStyle(segs: GuideSeg[]): React.CSSProperties | undefined {
   if (segs.length === 0) return undefined;
   return {
-    backgroundImage: segs.map((s) => `linear-gradient(${s.color}, ${s.color})`).join(", "),
+    backgroundImage: segs.map(() => `linear-gradient(${GUIDE_COLOR}, ${GUIDE_COLOR})`).join(", "),
     backgroundSize: segs.map((s) => (s.y === "full" ? "1px 100%" : "1px 50%")).join(", "),
     // background-position 百分比按 (容器-图片) 比例计算：下半段需 100%。
     backgroundPosition: segs.map((s) => `${s.x}px ${s.y === "bottom" ? "100%" : "0"}`).join(", "),

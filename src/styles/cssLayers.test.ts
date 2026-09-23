@@ -41,7 +41,7 @@ const FILES = [
  * 并在同一批把来源文件的基线调小（搬走多少、留下多少要对得上，让总量保持可见）。 */
 const BASELINE: Record<string, { decls: number; dupGroups: number }> = {
   "styles/index.css": { decls: 0, dupGroups: 0 },   // UI 重设计 P1：单入口（@layer 声明 + @import 编排，0 声明）
-  "styles/feature.css": { decls: 121, dupGroups: 0 },  // 视觉优化 + 内核编辑器主题桥（lakex 跟随深色/暖色：含 .ne-ui-toolbar）
+  "styles/feature.css": { decls: 102, dupGroups: 0 },  // 视觉优化 + 内核编辑器主题桥（lakex 跟随深色/暖色：含 .ne-ui-toolbar）；260923 收敛：-19 = 大纲侧栏的 .outline-* 覆盖并回 features/outline/outline.css 单一来源
   "styles/kit.css": { decls: 550, dupGroups: 0 },     // P4 组件库 + P5-g 面板件 + P5-h 控件 + P5-i 开关（实测）
   "styles/chrome.css": { decls: 502, dupGroups: 0 },  // P5 外壳 + S1+A + 整边缩略图槽；260922：+21 = 左缘「跟手把手」（隐形热区里浮出、Y 跟手、点击固定；热区 39→8 与去缩略图同批）；+10 = 目录「悬浮」改半幅浮卡（固定高度、顶贴面包屑下缘、四角圆角）——合法新增
   "styles/overlay.css": { decls: 94, dupGroups: 0 },  // P5-c 浮层 + P5-j 搜索 + P7-b .top-menu 定位 + 菜单项布局三件套
@@ -49,7 +49,7 @@ const BASELINE: Record<string, { decls: number; dupGroups: number }> = {
   "styles/a11y.css": { decls: 9, dupGroups: 0 },   // P7-e：无障碍最高层（reduced-motion 契约；靠层序而非 !important 取胜）
   "features/attachment/attachment-preview.css": { decls: 78, dupGroups: 0 },
   "features/editor/image-lightbox.css": { decls: 57, dupGroups: 0 },
-  "features/outline/outline.css": { decls: 274, dupGroups: 0 },   // 260923 W1-L2：-3   // 整边触发 + 去固定轨（合并重复材质规则）
+  "features/outline/outline.css": { decls: 267, dupGroups: 0 },   // 260923 收敛：大纲样式从 feature.css/shell.css 并回本文件单一来源；再 -12 = 层级徽标改「两级语义+中性」，删掉 6 色相里 H3–H6 的 4 条规则   // 260923 W1-L2：-3   // 整边触发 + 去固定轨（合并重复材质规则）；260923 收敛：+2 + 删死 ::before —— 增强大纲样式从 feature.css 并回本文件单一来源（见下）
   // 260919：换成 FortuneSheet；容器尺寸 + 工具栏紧凑 + 无样式输入框补边框（标签样式已按用户要求回滚）
   // 260921：+2 = 单元格图片（禁指针事件 + object-fit: scale-down）——合法新增，非覆盖回涨
   // 260921：+2 = 单元格图片（禁指针事件 + object-fit: scale-down）
@@ -72,7 +72,7 @@ const BASELINE: Record<string, { decls: number; dupGroups: number }> = {
   "styles/app/panels.css": { decls: 99, dupGroups: 0 },
   "styles/app/quick-notes.css": { decls: 516, dupGroups: 8 },   // 260923 W1-L2：-3（260923）   // P7-c：并入 styles/quick-notes.css（选择器无交集 ⇒ 层叠等价）；原有：+24 列表版式、+30 媒体按类型、+49 卡片预览、+8 展开层限定、+19 卡片收起/展开、+98 列表页对齐云端（标签行/批量条/行⋯菜单/新建按钮）；+15 = 动作行改版（去掉两角布局的空占位，换成 --inline 靠右下 + 「取消」次级描边 + 卡片页脚内边距 + 展开态浮层）；260920：-48 = 删掉随「卡片预览改自研渲染」废弃的 .quick-note-image-grid / .quick-note-saved-images / .quick-note-saved-media 三套遗留规则；+1 = 分块视图卡片展开时退出定位上下文（展开层/页脚落到小记面板）；+8 = 展开态把保存失败/提示条抬到展开层之上（贴面板左下角的浮层）
   "styles/app/settings.css": { decls: 122, dupGroups: 0 },   // P7-c：并入 styles/settings.css（选择器无交集 ⇒ 层叠等价）
-  "styles/app/shell.css": { decls: 437, dupGroups: 10 },   // 260923 W1-L2：-65 = 被 shell(层) chrome.css 同名选择器完全压制   // P7-c：并入 styles/shell.css（属性级交集为 0 ⇒ 层叠等价）；260917：另收掉 quick-notes 与基础层逐字重复的 margin 覆盖；260922：+1 = 非停靠态编辑区整体右移 53px 给左侧整边缩略图条让位（块手柄/标题折叠钮不再压缩略图；停靠态不加）——合法新增，非覆盖回涨
+  "styles/app/shell.css": { decls: 424, dupGroups: 9 },   // 260923 收敛：-13 声明 / -1 重复组 = 大纲栏的壳层材质规则并回 features/outline/outline.css 单一来源   // 260923 W1-L2：-65 = 被 shell(层) chrome.css 同名选择器完全压制   // P7-c：并入 styles/shell.css（属性级交集为 0 ⇒ 层叠等价）；260917：另收掉 quick-notes 与基础层逐字重复的 margin 覆盖；260922：+1 = 非停靠态编辑区整体右移 53px 给左侧整边缩略图条让位（块手柄/标题折叠钮不再压缩略图；停靠态不加）——合法新增，非覆盖回涨
   "styles/app/tabs.css": { decls: 193, dupGroups: 0 },   // 260923 W1-L2：-9 = 被 shell 层 chrome.css 覆盖   // +1 = .tab-panels grid-template-columns:minmax(0,1fr)（根修：面板不被内容撑宽，多维表/表格才能横向滚动）
   "styles/app/vendor-board.css": { decls: 7, dupGroups: 0 },   // 260916：84 条与 vendor/drawnix-react-text.css 逐字节相同的规则已删（改为直接 import vendor 文件），余下是我们自己的 board-card 包装层
 };

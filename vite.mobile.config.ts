@@ -117,7 +117,27 @@ export default defineConfig({
       "@plait-board/react-text": "lakex-drawnix-react-text",
     },
   },
-  optimizeDeps: { exclude: ["@dlient/lakex-doc-react"] },
+  // 与桌面 vite.config.ts 同因同修：被 exclude 的 @dlient/lakex-doc-react 内部按需 import 的
+  // 重型依赖（画板 @plait/*、思维导图 @xiangfa/*、文本绘图 mermaid/flowchart.ts/@viz-js/viz/@plantuml）
+  // 不会被启动预构建 ⇒ 首次打开时 Vite 补优化并发整页 reload。显式 include 后启动即预打包（exclude 保留）。
+  optimizeDeps: {
+    include: [
+      "lakex-drawnix",
+      "@plait/core",
+      "@plait/common",
+      "@plait/draw",
+      "@plait/mind",
+      "@plait/text-plugins",
+      "@xiangfa/mindmap",
+      "@xiangfa/mindmap/viewer",
+      "mermaid",
+      "flowchart.ts",
+      "@viz-js/viz",
+      "@plantuml/core/plantuml.js",
+      "@plantuml/core/viz-global.js",
+    ],
+    exclude: ["@dlient/lakex-doc-react"],
+  },
   build: {
     target: "chrome120",
     outDir: "dist-mobile",

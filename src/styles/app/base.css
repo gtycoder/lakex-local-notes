@@ -9,8 +9,9 @@
   /* 垂直几何栈（单一来源，260923）：顶栏 → 4px 拼接缝 → 面包屑 → 内核工具条。
      目录 peek 顶边 / 浮层顶 / 阅读态大纲顶都由这三者派生 ⇒ 改高度只改这里（见 docs/PANEL-CONTRACT.md）。
      --tab-item-height 与顶栏**解耦**（用户 260923：顶栏收窄但标签高度不变）：
-     标签条垂直内距 = (--topbar-height - --tab-item-height)/2，自动居中、不会再裁标签。 */
-  --topbar-height: 32px;
+     标签条垂直内距 = (--topbar-height - --tab-item-height)/2，自动居中、不会再裁标签。
+     260923 续：32 时标签几乎贴顶（上下仅 2px）→ 38，标签上下各 5px，红绿灯/空间/云/标签随之居中。 */
+  --topbar-height: 38px;
   --breadcrumb-height: 30px;
   --editor-toolbar-height: 34px;
   --tab-item-height: 28px;

@@ -71,9 +71,12 @@
 .tab-bar {
   display: flex;
   gap: 6px;
-  /* 垂直内距 = (顶栏 − 标签高)/2：标签恒居中、顶栏贴合标签。
-     左右内距不含在内（mac 红绿灯让位由 .platform-mac .tab-bar 的 padding-left 单独给）。 */
-  padding: calc((var(--topbar-height) - var(--tab-item-height)) / 2) 10px;
+  /* 垂直内距：标签要在**可见头区**里居中，而可见头区 = 顶栏 + 其下 4px 拼接缝
+     （顶栏透明、与缝同色 ⇒ 肉眼是一整块，缝也算在"顶栏"里）。
+     所以取 (顶栏 − 标签)/2 后把内容整体下移缝的一半(2px)：+2px / −2px ⇒ 上缝隙 = 下缝隙。
+     不减这 2px 时，下缝隙会比上缝隙多 4px（260923 用户报"标签没有真垂直居中、非常不协调"）。
+     左右内距：10px（mac 红绿灯让位由 .platform-mac .tab-bar 的 padding-left 单独给）。 */
+  padding: calc((var(--topbar-height) - var(--tab-item-height)) / 2 + 2px) 10px calc((var(--topbar-height) - var(--tab-item-height)) / 2 - 2px);
 }
 
 .platform-mac .tab-bar {

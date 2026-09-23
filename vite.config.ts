@@ -104,10 +104,28 @@ export default defineConfig({
   css: { postcss: { plugins: [lakexGwUrlLocal()] } },
   // lakex CSS 含 alipay 外部 URL，需走源码 transform（lakexAlipayLocal）本地化 → 排除依赖预构建
   optimizeDeps: {
-    // Drawnix is loaded on first board use. Pre-bundle it during Vite startup
-    // so the lazy import does not race a late dependency optimization and get
-    // a stale 504 "Outdated Optimize Dep" response.
-    include: ["lakex-drawnix"],
+    // 必须把「被 exclude 的 vendor 包内部按需 import 的重型依赖」全部预打包。
+    // Vite 不扫描被 exclude 依赖（@dlient/lakex-doc-react）的 import，所以这些依赖若只出现在
+    // 该包内部（画板 @plait/*、思维导图 @xiangfa/*、文本绘图 mermaid/flowchart.ts/@viz-js/viz/@plantuml），
+    // 启动时不会被预构建；等到「第一次真正用到」（首次打开画板/思维导图/文本绘图卡）才被发现
+    // → Vite 重优化依赖并发整页 reload（dev 表现为：界面白屏数秒，且 bootstrap 只重开
+    // lastOpenedNoteId ⇒ 其余已打开标签被关掉，仅剩当前文档）。
+    // 放进 include 后启动即预打包，懒加载不再触发运行期重优化。
+    include: [
+      "lakex-drawnix",
+      "@plait/core",
+      "@plait/common",
+      "@plait/draw",
+      "@plait/mind",
+      "@plait/text-plugins",
+      "@xiangfa/mindmap",
+      "@xiangfa/mindmap/viewer",
+      "mermaid",
+      "flowchart.ts",
+      "@viz-js/viz",
+      "@plantuml/core/plantuml.js",
+      "@plantuml/core/viz-global.js",
+    ],
     exclude: ["@dlient/lakex-doc-react"],
     force: true,
   },

@@ -41,7 +41,7 @@
 .note-row-copy { min-width: 0; }
 
 /* 标题恒为单行、超出列宽直接裁切——不打省略号（用户 260914：不要用 … 缩短标题）；hover ⋯ 出现时同样只是让位裁切 */
-.note-row-copy strong { display: block; overflow: hidden; color: var(--lake-text-1); font-size: 13px; white-space: nowrap; }
+.note-row-copy strong { display: block; overflow: hidden; color: var(--lake-text-2); font-size: var(--lake-font-size-body); white-space: nowrap; }
 
 .tree-rename-input { width: 100%; height: 24px; padding: 0 4px; border: 1px solid var(--lake-accent-tint); border-radius: var(--lake-radius-sm); outline: 0; background: var(--lake-bg-panel); font-size: 13px; }
 
@@ -239,27 +239,10 @@
   background: transparent;
 }
 
-/* ── 大纲栏的壳层材质（与 .app-shell/.sidebar 同一处来源，宽窄共用）──
- * 原先这一组只在 `@media (min-width: 761px)` 里 ⇒ 窄窗掉回 outline.css 自带的旧默认：
- * 本体与轨道变成 `--shell-material`（浅一档的 #f6f6f6）而不是壳色，用户看到的就是
- * "最右侧那条颜色跟别人不一样"。现在与其它壳层表面走同一条规则，**只有这一份**。 */
-.outline-sidebar,
-.outline-sidebar__content,
-.outline-sidebar--docked .outline-sidebar__content,
-.outline-sidebar--collapsed .outline-sidebar__content {
-  background: var(--shell-unified-background);
-  border: 0;
-  box-shadow: none;
-}
-
-/* 上面那条会把"真正的工作面"也刷成壳色，所以这组搭档必须同时存在（宽窄共用）：
-   固定/悬停展开的大纲面板要恢复成白色卡片。**成对改，缺一就会把面板刷成灰。** */
-/* 固定态的面板白卡：与"三栏卡片布局"（outline.css 共用作用域）同值，这里只补回被材质层刷掉的底色。 */
-/* 固定态白卡：底色（`background: var(--lake-bg-panel)`）与 `.outline-sidebar--docked` 的
-   background 在 outline.css 里同值；圆角/边框/分隔线只由 outline.css:348 那段决定（它后加载）。 */
-
-/* 悬停展开的面板公式**不在这里**：唯一来源是 b3/layout.css 的"右侧浮动（大纲 hover）"，
-   否则窄窗会掉回 outline.css 的老公式（1px 描边 + 14px 圆角），宽窄又变成两种样式。 */
+/* ── 大纲栏的壳层材质：260923 已全部并回 features/outline/outline.css 单一来源 ──
+ * 原先这里（以及下方媒体查询里）有一组 `.outline-sidebar*` 材质规则，与 outline.css 同选择器互相压，
+ * 是"三栏三边框"时代的遗留。现在大纲的「面 / 边 / 影 / 圆角」只在 outline.css 里按状态定义一次，
+ * 本文件不再涉及大纲；壳层连续材质只作用于 .app-shell / .sidebar / 正文卡。 */
 /* 桌面壳层使用一块连续材质：不再把顶栏、资料库和正文画成三张卡片。
  * （原先在 `@media (min-width: 761px)` 里 ⇒ 窄窗侧栏会掉回基础样式的 1px 右边框。） */
 .activity-rail,
@@ -303,17 +286,6 @@
   .document-pane:has(> .multi-tab-editor) {
     height: 100%;
   }
-  .outline-sidebar__content {
-    background: var(--lake-bg-panel);
-    border: 1px solid var(--lake-border-1);
-    box-shadow: 0 1px 2px var(--lake-shadow-color-1), 0 8px 22px var(--lake-shadow-color-1);
-  }
-  .outline-sidebar--docked .outline-sidebar__content {
-    border-left: 1px solid var(--lake-border-1);
-  }
-  .outline-sidebar--collapsed .outline-sidebar__content {
-    background: var(--lake-bg-panel);
-  }
 }
 
 .tree-row-icon { display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; border-radius: var(--lake-radius-sm); flex: none; }
@@ -326,19 +298,9 @@
 
 /* ===== v2 UI 收紧：区域间距 / 细滚动条 / 顶栏融合 / 小记顶栏融合 ===== */
 @media (min-width: 761px) {
-  /* 相邻区域贴边，仅外侧圆角，缩短视觉间距 */
-  .outline-sidebar__content { border-radius: 0 10px 10px 0; border-left: 0; }
-
   /* 顶栏背景已单源为融合/统一材质（b3/layout.css + --shell-unified-topbar），不再就地设横向渐变。
      下面这些渐变一律用令牌（--lake-shell/--shell-material）：浅色下与原字面值只差 2~3 个色阶，
      但深色下不会再留一块浅色板（.outline-sidebar 在开启「大纲增强」时才会挂载，属潜在坑）。 */
-  /* 大纲栏本体与顶栏/左右活动轨**同色**（260916 修正）：
-     此前用 --shell-gradient-top（= lake-shell 45% 混 lake-panel，比壳色浅一档的渐变顶色），
-     于是「大纲增强」的右栏与顶栏之间出现一条明显的横向分界线（用户反馈"和顶栏还有左边栏
-     颜色不同"）。rail 是透明的，本就靠本体透出壳色（见 b3/layout.css「大纲轨」注释），
-     所以本体必须是壳色，三者才连成一块连续材质。 */
-  .outline-sidebar { background: var(--shell-unified-background); }
-
   /* 小记：左轨颜色不变；小记内容用“视口固定”的横向渐变，与顶栏逐像素对齐融合，
      再叠加纵向材质过渡。 */
   .app-shell.quick-notes-active .workspace { border: 0; border-radius: 0; box-shadow: none; background: transparent; }
@@ -507,7 +469,6 @@
 .sidebar,
 .document-pane,
 .quick-notes-pane,
-.outline-sidebar__content,
 .floating-dialog,
 .settings-panel,
 .search-panel {
@@ -516,7 +477,6 @@
 
 .sidebar,
 .document-pane,
-.outline-sidebar__content,
 .floating-dialog,
 .settings-panel,
 .search-panel {
@@ -535,7 +495,6 @@
 
 [data-theme="dark"] .sidebar,
 [data-theme="dark"] .document-pane,
-[data-theme="dark"] .outline-sidebar__content,
 [data-theme="dark"] .floating-dialog,
 [data-theme="dark"] .settings-panel,
 [data-theme="dark"] .search-panel {
@@ -560,7 +519,6 @@
 html[data-theme="dark"] .sidebar.sidebar-docked,
 html[data-theme="dark"] .sidebar.sidebar-floating,
 html[data-theme="dark"] .document-pane,
-html[data-theme="dark"] .outline-sidebar__content,
 html[data-theme="dark"] .floating-dialog,
 html[data-theme="dark"] .settings-panel,
 html[data-theme="dark"] .search-panel {

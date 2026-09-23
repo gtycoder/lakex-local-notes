@@ -2546,6 +2546,12 @@ P4 组件库 14 件 → P5 逐屏迁移（每屏对照底账打勾）→ P6 第�
 
 ## 4. 踩过的坑（合并版；通用红线/环境见 AGENTS.md）
 
+### 本次会话新坑（260923 · dev 下首次打开画板导致整页 reload）
+- **被 `optimizeDeps.exclude` 的 vendor 包，其内部按需 import 的重型依赖必须显式加进 `optimizeDeps.include`**：`@dlient/lakex-doc-react` 因要走 `lakexAlipayLocal` 的 gw 本地化 transform 被 `exclude`，但 Vite **不扫描被 exclude 依赖的 import** ⇒ 它内部按需加载的 `@plait/*`（画板）、`@xiangfa/mindmap*`（思维导图）、`mermaid`/`flowchart.ts`/`@viz-js/viz`/`@plantuml/*`（文本绘图）启动时不会预构建；**首次真正用到**时才被发现 → `[vite] dependencies optimized: ...` + `optimized dependencies changed. reloading` → **整页 reload**。
+- **症状**：dev 启动后第一次打开画板，白屏数秒，然后**其余已打开标签全被关掉、只剩画板**。原因叠加 `useBootstrap` 只重开 `lastOpenedNoteId`（`src/hooks/useBootstrap.ts:46`），标签是纯内存态、reload 即丢。
+- **修复**：`vite.config.ts` / `vite.mobile.config.ts` 的 `optimizeDeps.include` 补全上述依赖（`exclude` 必须保留）。桌面已 A/B 验证：修复前 import 画板引擎即触发 reload；修复后 235ms 完成、无 reload。**仅 dev 有**（生产无依赖优化器）。
+- **排查手法**：独立 Vite cache（`cacheDir` 指到 `/tmp`）+ 独立 `LAKE_USER_DATA`/`LAKE_ASSET_PORT`/`LAKE_DEV_SERVER_URL`，抓 Vite stdout 的 `optimized dependencies changed. reloading`，CDP 看 `Runtime.executionContextsCleared` + `Page.frameNavigated` 佐证整页刷新。
+
 ### 本批（260918 表格文档 SheetDocument）新坑 —— 完整版见 §2.8 五
 - **`NoteSummary` 有两份**（渲染层 `src/lib/types.ts` + 主进程 `electron/noteQueries.ts`）、**`mapSummary` 有三处 SELECT**（`noteQueries.listNoteSummaries` + `store.ts` 回收站列表 + `store.ts` saveNote 回读）：加字段漏一处 = "保存后类型丢成 doc"，症状极隐蔽。
 - **TS 推断返回类型会放宽字面量**：`{ kind: cond ? "sheet" : "doc" }` ⇒ `string`，外层端口类型不兼容。用嵌套三元/`as`/显式返回类型。

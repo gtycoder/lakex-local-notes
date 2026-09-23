@@ -76,32 +76,10 @@ pre {
   font-weight: var(--lake-font-weight-semibold);
 }
 
-/* ── 大纲侧栏（P5-f；设计 LAYOUT.md「大纲侧栏」）────────────────────────
- * outline.css 是桌面专属且落在 legacy 层，这里同选择器、更高层 ⇒ 天然胜出。
- * 用户已确认：**去掉选中项左侧竖条**（原 .outline-item--selected::before）。 */
-.outline-sidebar__header {
-  color: var(--lake-text-2);
-  font-size: var(--lake-font-size-body);
-  font-weight: var(--lake-font-weight-semibold);
-}
-.outline-list { padding: var(--lake-space-sm) 0; }
-.outline-item {
-  height: 25px;
-  padding-right: var(--lake-space-md);
-  border-left: 0;
-  border-radius: var(--lake-radius-xs);
-  color: var(--lake-text-2);
-  font-size: var(--lake-font-size-tiny);
-  font-weight: var(--lake-font-weight-medium);
-}
-.outline-item:hover { color: var(--lake-text-1); background: var(--lake-bg-hover); }
-.outline-item--selected {
-  color: var(--lake-accent-text);
-  background: var(--lake-accent-tint);
-  font-weight: var(--lake-font-weight-semibold);
-}
-.outline-item--selected::before { display: none; }
-.outline-panel__empty { color: var(--lake-text-4); }
+/* ── 大纲侧栏（P5-f）────────────────────────────────────────────────────
+ * 260923 收敛：原先此处有一整套 .outline-* 的 feature 层覆盖，与 src/features/outline/outline.css
+ * （legacy 层）同选择器互相压。现**全部并回 outline.css 单一来源**，这里不再重复。
+ * ⚠️ 增强大纲的样式一律只改 outline.css，不要再在更高层加覆盖。 */
 
 /* ── 小记工作台（P5-j；设计 11 卡片 / 03 列表项 / 05 对话框）──────────────
  * 桌面专属层。小记原本已经大量走令牌，这里主要做三件事：① 去掉残留毛玻璃；
