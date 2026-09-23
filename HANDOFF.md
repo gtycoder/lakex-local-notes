@@ -4,6 +4,99 @@
 > 历史所有 dated handoff 已合并进本文件（内容在 git 历史可查）。本文件只保留**当前状态 + 真正的待办 + 有价值的坑**。
 > **§8 是移动端（安卓）专职交接**，由移动端会话维护；桌面会话不要改 §8，移动端会话不要改 §0-§7 之外的桌面文件。
 
+## 0. 最新交接 · 260923 内置字体（MiSans）+ 字重/颜色统筹 + 桌面资源本地化（新会话先读这一节）
+
+> 写给**完全没有上下文的新会话**。本批在分支 `feat/font-misans`（基于当时 master `be4af5c`）完成，**已合入 master（`be4af5c..93d982d`，共 10 个提交）并推送 Gitee**；随后 master 上追加了本交接提交。
+> 一句话：把产品字体从"系统字体"改为**内置 MiSans（400/500/600/700）+ JetBrains Mono（代码）**；统一字重与颜色令牌体系（别名收敛 / 坏引用修复 / 护栏）；并修掉桌面"启动刷 60 个远程字体被 CSP 拦"的老账（vendor CSS 的 gw 资源本地化）。
+
+### 一、任务目标（用户原话要点，按顺序）
+1. **换内置字体**：全产品改为内置 MiSans（不用浏览器/系统字体）；代码块用 `JetBrains Mono`；"整个产品只留 2 种字体"。
+2. 先做 **4 档（400/500/600/700）**，之后再看是否减到 2 档。
+3. **统一档位**：正文/标题/两套大纲；目录栏与多标签统一为"未选中 500 / 选中 600"；消除交叉覆盖，"一个出入口"。
+4. **统筹颜色令牌**（用户："颜色问题严重且混乱"）。
+5. 修启动日志里大量"远程字体被 CSP 拦"的问题。
+
+### 二、已完成内容（全部已提交并合入 master）
+
+**A. 内置字体**
+- **MiSans**：用**小米官方 web 切片**（`font.sec.miui.com/font/css?...` → CDN `cdn-file.hyperos.mi.com`），取 **400/500/600/700**（简中+Latin），落地 `src/styles/fonts/misans/`（**224 片 woff2 + `misans.css`**，约 8.1MB）。经 **Vite 资产管线**打包（产物 `url('./xxx.woff2')` 相对化 ⇒ 打包版 `file://` 与 dev/移动 `http://` 都能加载）。
+- **JetBrains Mono**（SIL OFL-1.1）→ `src/styles/fonts/jetbrains-mono/`；删死资源 `public/appearance/fonts/JetBrainsMono-2.304/`。
+- **令牌**：`--lake-font-family: 'MiSans', <系统回退>`、`--lake-font-family-mono: 'JetBrains Mono', <mono 回退>`（`src/styles/themes/base.css`）。
+- **接线**（双端共享 `src/styles/fonts/font-overrides.css`）：`html,body` 显式设字体（压 vendor 的 `body` 硬编码栈）；内核硬编码栈覆盖（`.ne-engine` / `.ne-viewer-body` / `.ne-toc-view` / `.plait` / `.drawnix`）；代码等宽统一 JetBrains。桌面入 **feature 层**（压 legacy，无需 `!important`）；移动端在 `DocumentEditor.tsx` **晚于内核 `style.css`** 引入。
+- **署名**（许可要求）：桌面"关于"页 + 移动设置"关于"各加一条（MiSans 注明 + JetBrains OFL）。
+
+**B. 字重统一**
+- 正文 **500**（`.ne-engine` 根）/ 标题 **700**（内核）/ **两套大纲**（增强 + 原生）：未选中 **500**、选中 **600** / **目录行**与**多标签**统一：未选中 **500**、选中 **600**（标签"钉住" 600）。
+- UI **分数值字重全部 token 化**（480/550/560/570/620/650 → `--lake-font-weight-regular/medium/semibold/bold`）。
+- 消除"交叉覆盖"：删掉 `src/styles/app/shell.css`、`src/styles/app/misc.css` 里**被 shell 层覆盖**的目录行字重死声明（"唯一出入口"）。
+- 设置项**名字** 600 → **500**（用户反馈过重）；组标题仍 600。
+
+**C. 颜色令牌统筹（提交 `0950aa3` / `8f618a5` / `614283a`）**
+- **别名收敛**：263 处从"过渡别名"（`--lake-text`/`--lake-panel`/`--lake-error`/`--shell-*`…）迁到规范令牌；**删别名定义**（`--lake-*` 20 + `--radius-*` 5 + `--lake-motion-standard`）。三主题 key **105→81**（仍完全一致）。
+- **修 47 处"引用不存在的 token"**（`--lake-text-2-light`(19)、`--lake-accent-lightest`(8)、`--lake-shell-light`(7)、`--lake-text-2-variant`(6)…）——这些声明 **invalid ⇒ 颜色继承/背景丢失/退化成写死灰**（主要在移动端，桌面门禁此前不看移动端所以漏掉）。
+- 删 **4 个无消费死 token**（`--lake-pinned-tint` / `--lake-shadow-drag` / `--lake-veil-strong` / `--lake-shadow-color-5`）。
+- **文字四阶校准**：按语义（text-2 = 列表项/标签；text-3 = 说明/元信息）改 20 处（12 + 8）。
+- **护栏**：`scripts/ui-metrics.mjs` 新增两项——① **禁过渡别名残用**；② **`var(--lake-*)` 必须已定义**（JS 运行时注入令牌已白名单）。当前 **0 / 0**。
+
+**D. 桌面 vendor 资源本地化（提交 `93d982d`，修启动字体刷屏）**：见"踩坑 #7"。
+
+**E. 快照基线**：桌面 `check:stylesnap` **42 态**、移动 `check:mobilesnap` **6 态**，已按最终状态刷新并提交。
+
+**门禁（合入前实测）**：`tsc` 0 · `ui-metrics`（别名0 / 未定义0 / 非主题颜色字面量0 / `!important` 9）· 桌面 + 移动 `vite build` ✓ · `vitest` **1249 passed / 16 skipped**。
+
+### 三、当前问题（均不阻塞）
+- **text-3 剩余约 115 处未逐条确认**（用户明确"我来逐条确认"；口径：列表项/标签/页签/面包屑 → text-2，说明/元信息/图标/占位/状态保持 text-3）。清单可用一个按 CSS 规则解析的脚本重生成（见会话记录思路）。
+- 设计规格文档 `ui-design-inputs/out/design-system/TOKENS.md` 是**生成物**、且方向已过期（V1 中性灰蓝 vs 实装亮蓝）；本批只更新其**内容/治理**（新增"单一事实源与护栏"小节），**未同步值表**。
+- `scripts/check-bundle-budget.mjs`（`npm run check:bundle`）**早已失效**：它期望 `drawnix-*.js` 分组，而该 rolldown codeSplitting 分组已在 260923 删除 ⇒ 该 gate 现在跑不通（**与本批无关**，待修）。
+- 用户曾提"若仅 2 档可以，再换"——本批是 4 档（见下一步）。
+
+### 四、下一步计划
+1. **用户人工验收本批**（以视觉为主）。已合 master；若验收有问题，按"踩坑"定位（字体/字重/颜色/资源本地化）。
+2. 若要**减到 2 档 MiSans**（如 400/600）：替换 `src/styles/fonts/misans/` 的切片集并调 `--lake-font-family` 回退即可，**注意 550/650 会就近吸附**。
+3. 逐条确认剩余 text-3 用法（用户主导）。
+4. 可选清理：修 `check:bundle`（`drawnix-*` 期望）；把 `TOKENS.md` 值表同步实装或标注过期。
+5. 快照基线：任何**字体/字重/颜色/资源 URL** 变更后都需重刷（见"踩坑 #6"）。
+
+### 五、踩过的坑（本批新增，务必先读）
+1. **MiSans 官方包 217MB 是"全量"**；官方 web 服务（`font.sec.miui.com`）已提供 **unicode-range 切片**（每字重 56 片，woff2）→ 本项目取其 4 档（磁盘 ~8.1MB；**运行期只加载命中切片**）。官方 web 服务**没有可变字体（VF）**（VF/10 字重只在官方全量包里；第三方 `dsrkafu/misans` 有切片 VF）。
+2. **4 档静态字重下的"就近吸附"**：CSS 字体匹配——400–500 区间先升到 500 再降；`>500` 升到**第一个更大**；`<400` 降。故：480→500、550→600、560/570→600、**620→700**、650→700。**注意 620 会吸附到 700，不是 600**。所有分数值必须改 token，否则是"看不见的吸附"。
+3. **`--lake-font-family` 只挂 `:root`(html)，vendor 有 `body{font-family:-apple-system,…}` 会赢** ⇒ 换字体必须**显式给 `body` 设**（本批在 feature 层设，压 legacy）。
+4. **内核 `.ne-engine`/`.ne-viewer-body`/`.ne-toc-view`/`.plait/.drawnix` 硬编码了字体栈** ⇒ 只改令牌不够，必须按选择器覆盖（feature 层 > legacy，无需 `!important`）。`.ne-text` 是 `inherit`（跟随容器）。
+5. **层序 > 特异性**：`app/*.css` 是 legacy、`chrome.css`/`feature.css` 是 shell/feature；同一选择器在更低层**永不胜出**。本批就因此一度把"目录行普通=400"误报成 500（`app/shell.css` 的 500 是**死声明**）。**辨"死声明"先看 `@layer` 层序，别只看特异性**。
+6. **快照基线**：任何字体/字重/颜色/资源 URL 变更都会改变 `check:stylesnap` 哈希（它抓 `font-family`/`background-image`/几何等）⇒ 需 `--write-baseline` 重刷。**桌面刷基线必须用"全新同构实例"**：反复 reload 会把实例跑死（`ECONNREFUSED` / drive 卡在 `unsettled top-level await`）⇒ 换新实例重试。移动刷基线：模拟器 + `bash scripts/android-build.sh --sync --install`（会重装 App）⇒ **必须重跑 `bash scripts/emu-cdp.sh`**（重装后 webview devtools socket 变更）⇒ 再快照。
+7. **桌面 vendor CSS 的 gw 资源本地化（本批修的"启动字体刷屏"）**：vendor lakex 样式经 **CSS `@import` 引入 → 被内联**，**绕过**按模块 id 判断的 `lakexAlipayLocal` transform ⇒ 桌面 `dist` CSS 残留 **186 处 gw 引用**（**移动端从 JS import ⇒ 0**）⇒ 60 个 KaTeX 字体走远程 ⇒ 被 CSP `font-src` 拦 ⇒ 启动日志刷屏 + 公式字体离线不可用。
+   - **错误路线（已放弃，别再走）**：运行期 `webRequest.onBeforeRequest` 重定向到本地资产服务器——**实测请求根本没到 webRequest**（CSP 在**渲染层先拦**），运行期重定向对"被 CSP 先拦的请求"**无效**。
+   - **正解**：Vite 的 **PostCSS 在 `@import` 内联之后运行** ⇒ 加 PostCSS 插件兜底改写 `gw.alipayobjects.com/**/<name>` → `/vendor/lakex/alipay/<name>`（复用 `ALIPAY_JS_REUSE`）。dev/build 均生效（`vite.config.ts` 的 `lakexGwUrlLocal` + `css.postcss.plugins`）。
+   - 校验口径：dev/构建产物 `gw.alipayobjects.com` = **0**；内核引用的 **199** 个 gw 资源在 `public/vendor/lakex/alipay/`（195 文件）+ `vendor/cdn` **全在（0 缺失）**；本地字体 HTTP 200；无 CSP 字体拦截。
+8. **MiSans 授权**：免费商用、可嵌入软件、**须在软件中注明**、**不得改变字形外观**；子集化（删字）属**灰区** ⇒ 用**官方切片**规避。已在"关于"署名。
+9. **CSP 事实**：桌面/移动均 `font-src 'self' data: http://127.0.0.1:*` ⇒ 换字体**不需要动 CSP**（自托管同源即可）。
+10. **字体资产要走 Vite 管线（别放 public/ 用绝对路径）**：产物 `url('./xxx.woff2')` 是**相对 CSS** ⇒ 打包版 `file://` 与 `http://` 都能加载；放 `public/` 用绝对 `/…` 会在 `file://` 下失效。
+11. **移动端 overrides 顺序**：移动端**无 `@layer`** ⇒ `font-overrides.css` 必须**晚于** `@import "@dlient/lakex-doc-react/style.css"`（在 `DocumentEditor.tsx` 里其后引入）。
+12. **`ui-metrics` 新护栏的"未定义"检查会误报运行时注入令牌** ⇒ 已对 `--lake-editor-top` / `--lake-outline-inset` / `--lake-outline-clearance` 白名单（TS 里搜 `--lake-*` 自动收集），别误删。
+13. **别把 `--lake-z-*` 当死 token 删**：`src/styles/zOrder.test.ts` 用它们做层序契约；spacing/motion/radius 等是**设计刻度成员**，即使暂未引用也保留（AGENTS #17）。
+14. **环境/进程**：Node 必须 **24**；vite dev server 必须**长驻 tty**（`tty=true`）否则被 exec 回收；杀 electron **只 kill 具体 PID**（禁 `pkill -f Electron`）；本轮 dev server 在 `1421`、隔离实例用 `LAKE_USER_DATA=$TMPDIR/xx`（本会话把 dev server 起过又停掉了，要用 `npm run dev` 重开）。
+
+### 六、关键文件与命令
+- 字体资产/接线：`src/styles/fonts/{misans,jetbrains-mono,font-overrides.css}`
+- 令牌（唯一来源）：`src/styles/themes/{base,light,dark,warm}.css`
+- 桌面资源本地化：`vite.config.ts`（`lakexAlipayLocal` transform + 新增 `lakexGwUrlLocal` PostCSS）
+- 令牌护栏：`scripts/ui-metrics.mjs`
+- 快照门禁：`scripts/css-audit/check-stylesnap.mjs`（桌面，需全新实例）、`scripts/mobile-audit/check-mobile-snap.mjs`（移动，需模拟器）
+
+```bash
+export PATH="$HOME/.nvm/versions/node/v24.18.0/bin:$PATH"
+cd /Users/admin/file/local-lake/lake-notes-electron
+npx tsc --noEmit
+npm test -- --run
+node scripts/ui-metrics.mjs
+node node_modules/vite/bin/vite.js build
+node node_modules/vite/bin/vite.js build --config vite.mobile.config.ts
+# 桌面快照（需全新同构实例：LAKE_USER_DATA=$TMPDIR/xx ./node_modules/.bin/electron --disable-gpu --remote-debugging-port=9231 .）
+node scripts/css-audit/check-stylesnap.mjs --port 9231 [--write-baseline]
+# 移动快照：emu-up → android-build --sync --install → emu-cdp → 
+node scripts/mobile-audit/check-mobile-snap.mjs --port 9335 [--write-baseline]
+```
+
 ## 0. 最新交接 · 260923 安全审计复核 + 画板修复 + 打包精简（新会话先读这一节）
 
 > 写给**完全没有上下文的新会话**。本批在分支 `audit/code-quality-260923`（基于 master `e04ab70`）完成，**已合入 master**。
