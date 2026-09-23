@@ -90,7 +90,14 @@
   font: inherit;
   font-size: 12px;
 }
+/* 内核原子件外层包裹：display:contents 不生成盒子，只为承接点击冒泡（内核按钮 onClick 透传无承诺）。 */
+.selection-toolbar__kbtn { display: contents; }
 .selection-toolbar__colorbtn { display: inline-flex; align-items: center; }
+/* 内核「工具条图标色」规则同样只作用于 .ne-ui-toolbar，浮栏按同一语义取令牌。 */
+.selection-toolbar .ne-ui-t-button { color: var(--lake-text-2); }
+/* 内核颜色分裂按钮的尺寸规则只写在 .ne-ui-toolbar 作用域内，浮栏按同值补齐（25+16 与固定栏一致）。 */
+.selection-toolbar__colorbtn .ne-ui-toolbar-color-show-button { width: 25px; height: 26px; padding: 0; }
+.selection-toolbar__colorbtn .ne-ui-toolbar-color-dropdown-button { width: 16px; height: 25px; padding: 0; }
 .selection-toolbar__kmenu { position: absolute; top: calc(100% + 6px); left: var(--menu-left, 0); z-index: 1; }
 .selection-toolbar__kmenu .ant-dropdown-menu { padding: 4px 0; border: 1px solid var(--lake-border-2); border-radius: var(--lake-radius-md); background: var(--lake-bg-raised); box-shadow: var(--lake-shadow-popover); }
 .selection-toolbar__kmenu .ne-ui-select-item.ant-dropdown-menu-item { padding: 4px 15px 4px 25px; color: var(--lake-text-1); font-size: 13px; line-height: 30px; }

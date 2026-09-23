@@ -142,7 +142,7 @@ pre {
   --lakex-editor-background-tertiary: var(--lake-bg-block);
   --lakex-editor-background-focus: var(--lake-bg-block);
   --lakex-editor-background-primary-hover: var(--lake-bg-hover);
-  --lakex-editor-background-primary-hover-light: var(--lake-bg-block);
+  --lakex-editor-background-primary-hover-light: var(--lake-bg-hover);
   --lakex-editor-border-light: var(--lake-border-2);
   --lakex-editor-border-primary: var(--lake-border-strong);
   --lakex-editor-border-secondary: var(--lake-border-2);
@@ -164,7 +164,7 @@ pre {
   --lakex-editor-text-link-hover: var(--lake-accent);
   --lakex-editor-icon-primary: var(--lake-text-2);
   --lakex-editor-icon-secondary: var(--lake-text-3);
-  --lakex-editor-overlay-background-tertiary: var(--lake-bg-block);
+  --lakex-editor-overlay-background-tertiary: var(--lake-bg-hover);
   /* 语义色反相组（原 b3/dark.css 的关键一组：深色下"黑"要变浅、"白"要变深；漏了它 ⇒
    * 内核里用 --lakex-editor-color-black 的文字/工具条图标在深色下几乎看不见）。
    * 透明度用 color-mix 从令牌派生，避免颜色字面量出现在主题文件之外。 */

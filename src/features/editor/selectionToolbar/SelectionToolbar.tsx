@@ -20,54 +20,15 @@ import { native } from "../../../lib/native";
 import { CONVERT_ITEMS, FONT_SIZE_OPTIONS, PARAGRAPH_STYLES } from "../editorCommands";
 import type { LakeEditorInstance } from "../lakeRuntime";
 import { IMAGE_STYLE_OPTIONS, enterImageCrop, readImageMeta } from "./imageCardOps";
+import { KIcon, KToolbarButton } from "./kernelUiAtoms";
 import { LakeColorBoard } from "./LakeColorBoard";
 import { computeToolbarPosition, imageSizeWidth, parseAssetRef, TOOLBAR_MARGIN, type ImageSizePreset } from "./selectionToolbarModel";
 import { useSelectionToolbar, type ImageTarget } from "./useSelectionToolbar";
 
-/** 内核图标（sprite）：与固定工具栏同一套 ne-icon + #icon-*。 */
-function KIcon({ name }: { name: string }) {
-  return (
-    <div className={"ne-icon ne-icon-kitchen ne-icon-" + name} data-name={name}>
-      <svg className="ne-icon-symbol" aria-hidden="true"><use xlinkHref={"#icon-" + name} /></svg>
-    </div>
-  );
-}
-
-/** 内核工具栏普通按钮（清除格式 / 超链接等）。 */
-function KToolButton({ label, icon, onClick, disabled }: { label: string; icon: string; onClick?: () => void; disabled?: boolean }) {
-  return (
-    <button type="button" title={label} aria-label={label} disabled={disabled}
-      className="ant-btn ne-ui-toolbar-button ne-toolbar-widget ne-ui-t-button" onClick={onClick}>
-      <KIcon name={icon} />
-    </button>
-  );
-}
-
-/** 内核工具栏开关按钮（B/I/S/U）；active 用内核 .checked。 */
-function KToggleButton({ label, icon, active, onClick }: { label: string; icon: string; active?: boolean; onClick?: () => void }) {
-  return (
-    <button type="button" title={label} aria-label={label} aria-pressed={active || undefined}
-      className={"ant-btn ant-btn-default ne-toolbar-widget ne-ui-toolbar-status-button ne-ui-toolbar-toggle-button ne-ui-t-button" + (active ? " checked" : "")}
-      onClick={onClick}>
-      <KIcon name={icon} />
-    </button>
-  );
-}
-
-/** 内核工具栏下拉触发按钮（段落样式 / 字号 / 颜色 / 转为 / 超链接）。 */
-function KDropdownButton({ label, icon, active, caret = true, onClick, extra, children }: {
-  label: string; icon?: string; active?: boolean; caret?: boolean; onClick?: (event: ReactMouseEvent<HTMLButtonElement>) => void; extra?: string; children?: ReactNode;
-}) {
-  return (
-    <button type="button" title={label} aria-label={label}
-      className={"ant-btn ant-dropdown-trigger ne-ui-toolbar-dropdown-button ne-toolbar-widget ne-ui-toolbar-arrow-button ne-ui-t-button" + (active ? " checked" : "") + (extra ? " " + extra : "")}
-      onClick={onClick}>
-      {icon ? <KIcon name={icon} /> : null}
-      {children}
-      {caret ? <span className="ne-ui-toolbar-arrow-down" /> : null}
-    </button>
-  );
-}
+/**
+ * 内核原子件：图标/按钮/Select 一律直接调内核 FrameworkUiLib（见 ./kernelUiAtoms）。
+ * 这里只保留内核原语覆盖不到的两件——颜色分裂按钮与自锚定菜单。
+ */
 
 /** 内核颜色分裂按钮：图标区（应用）+ 独立三角区（开面板）。 */
 function KColorButton({ label, icon, active, onClick }: {
@@ -75,12 +36,8 @@ function KColorButton({ label, icon, active, onClick }: {
 }) {
   return (
     <span className="selection-toolbar__colorbtn">
-      <button type="button" title={label} aria-label={label} className={"ant-btn ne-ui-toolbar-color-show-button ne-ui-t-button" + (active ? " checked" : "")} onClick={onClick}>
-        <KIcon name={icon} />
-      </button>
-      <button type="button" title={label} aria-label={label} className="ant-btn ant-dropdown-trigger ne-ui-toolbar-color-dropdown-button ne-ui-t-button" onClick={onClick}>
-        <span className="ne-ui-toolbar-color-dropdown-arrow" />
-      </button>
+      <KToolbarButton name="color" icon={icon} checked={active} className="ne-ui-toolbar-color-show-button" title={label} onClick={onClick} />
+      <KToolbarButton name="colorDropdown" caret caretClass="ne-ui-toolbar-color-dropdown-arrow" className="ne-ui-toolbar-color-dropdown-button ant-dropdown-trigger" title={label} onClick={onClick} />
     </span>
   );
 }
@@ -99,7 +56,7 @@ function KMenuItem({ label, icon, selected, shortcut, fontSize, onClick }: {
 }) {
   return (
     <li role="menuitem" style={fontSize ? { fontSize: fontSize } : undefined} className={"ant-dropdown-menu-item ne-ui-select-item" + (selected ? " ant-dropdown-menu-item-selected" : "")} onClick={onClick}>
-      <div className="ne-ui-select-item-check-icon">{icon ? <KIcon name={icon} /> : selected ? <KIcon name="check" /> : null}</div>
+      <div className="ne-ui-select-item-check-icon">{icon ? <KIcon type={icon} /> : selected ? <KIcon type="check" /> : null}</div>
       <div className="ne-ui-select-item-label">
         <div className="ne-ui-select-content">
           <span className="ne-ui-item-content">{label}</span>
@@ -173,14 +130,21 @@ export function SelectionToolbar({ editor, container, noteId }: {
 
   const pick = useCallback((name: string, value: unknown) => { run(name, value); setMenu(null); }, [run]);
 
+  /** 取真实有盒子的触发元素：内核原子件外层是 display:contents 包裹（offsetLeft 恒为 0）。 */
+  const anchorLeft = (trigger?: HTMLElement | null): number => {
+    if (!trigger) return 0;
+    const el = (trigger.querySelector("button") as HTMLElement | null) ?? trigger;
+    return el.offsetLeft;
+  };
+
   /** 打开/切换菜单；记录触发按钮的左偏移，子菜单以该「主菜单项」定位。 */
   const toggleMenu = useCallback((m: string, trigger?: HTMLElement | null) => {
-    if (trigger) setMenuAnchor(trigger.offsetLeft);
+    setMenuAnchor(anchorLeft(trigger));
     setMenuLeft(null);
     setMenu((current) => (current === m ? null : m));
   }, []);
   const openWithDraft = useCallback((m: string, value: string, trigger?: HTMLElement | null) => {
-    if (trigger) setMenuAnchor(trigger.offsetLeft);
+    setMenuAnchor(anchorLeft(trigger));
     setMenuLeft(null);
     setDraft(value);
     setMenu((current) => (current === m ? null : m));
@@ -257,30 +221,35 @@ export function SelectionToolbar({ editor, container, noteId }: {
     return null;
   };
 
+  /** 与固定工具栏逐类对齐（真身见 .ne-ui-toolbar 实测）：内核 ToolbarButton 自加 ant-btn/ne-ui-t-button。 */
+  const TOGGLE = "ne-toolbar-widget ne-ui-toolbar-status-button ne-ui-toolbar-toggle-button";
+  const DROPDOWN = "ant-dropdown-trigger ne-ui-toolbar-dropdown-button ne-toolbar-widget ne-ui-toolbar-arrow-button";
+  const VALUE = "ant-dropdown-trigger ne-ui-toolbar-select-button ne-toolbar-widget ne-ui-toolbar-arrow-button";
+
   const renderText = () => {
     const styleLabel = PARAGRAPH_STYLES.find((b) => b.value === state.style)?.label ?? "正文";
-    const sizeLabel = (state.fontSize ?? 16) + "px";
+    const sizeLabel = (state.fontSize ?? 15) + "px";
     return (
       <>
-        <KToolButton label="清除格式" icon="editor-clearFormat" onClick={() => run("clearFormat")} />
+        <KToolbarButton name="clearFormat" icon="editor-clearFormat" title="清除格式" className="ne-ui-toolbar-button ne-ui-toolbar-clear-format ne-toolbar-widget" onClick={() => run("clearFormat")} />
         <span className="selection-toolbar__sep" />
-        <KDropdownButton label="段落样式" active={menu === "style"} extra="ne-ui-toolbar-select-button ne-ui-toolbar-format" onClick={(e) => toggleMenu("style", e.currentTarget)}>
+        <KToolbarButton name="format" caret title="段落样式" checked={menu === "style"} className={VALUE + " ne-ui-toolbar-format"} onClick={(e) => toggleMenu("style", e.currentTarget)}>
           <div className="ne-ui-toolbar-select-value">{styleLabel}</div>
-        </KDropdownButton>
-        <KDropdownButton label="字号" active={menu === "fontsize"} extra="ne-ui-toolbar-select-button ne-ui-toolbar-fontsize" onClick={(e) => toggleMenu("fontsize", e.currentTarget)}>
+        </KToolbarButton>
+        <KToolbarButton name="fontsize" caret title="字号" checked={menu === "fontsize"} className={VALUE + " ne-ui-toolbar-fontsize"} onClick={(e) => toggleMenu("fontsize", e.currentTarget)}>
           <div className="ne-ui-toolbar-select-value">{sizeLabel}</div>
-        </KDropdownButton>
+        </KToolbarButton>
         <span className="selection-toolbar__sep" />
-        <KToggleButton label="加粗" icon="bold" active={state.marks.bold} onClick={() => run("bold")} />
-        <KToggleButton label="倾斜" icon="italic" active={state.marks.italic} onClick={() => run("italic")} />
-        <KToggleButton label="中划线" icon="strikethrough" active={state.marks.strikethrough} onClick={() => run("strikethrough")} />
-        <KToggleButton label="下划线" icon="underline" active={state.marks.underline} onClick={() => run("underline")} />
+        <KToolbarButton name="bold" icon="bold" checked={state.marks.bold} title="加粗" className={TOGGLE} onClick={() => run("bold")} />
+        <KToolbarButton name="italic" icon="italic" checked={state.marks.italic} title="倾斜" className={TOGGLE} onClick={() => run("italic")} />
+        <KToolbarButton name="strikethrough" icon="strikethrough" checked={state.marks.strikethrough} title="中划线" className={TOGGLE} onClick={() => run("strikethrough")} />
+        <KToolbarButton name="underline" icon="underline" checked={state.marks.underline} title="下划线" className={TOGGLE} onClick={() => run("underline")} />
         <span className="selection-toolbar__sep" />
         <KColorButton label="文字颜色" icon="editor-color" active={menu === "color" || Boolean(state.color)} onClick={(e) => toggleMenu("color", e.currentTarget)} />
         <KColorButton label="背景色" icon="editor-bgColor" active={menu === "bgcolor" || Boolean(state.bgColor)} onClick={(e) => toggleMenu("bgcolor", e.currentTarget)} />
         <span className="selection-toolbar__sep" />
-        <KDropdownButton label="转为" icon="t-moremark" active={menu === "convert"} onClick={(e) => toggleMenu("convert", e.currentTarget)} />
-        <KDropdownButton label="超链接" icon="editor-link" caret={false} active={menu === "txtlink"} onClick={(e) => openWithDraft("txtlink", "", e.currentTarget)} />
+        <KToolbarButton name="moremark" icon="t-moremark" caret checked={menu === "convert"} title="转为" className={DROPDOWN} onClick={(e) => toggleMenu("convert", e.currentTarget)} />
+        <KToolbarButton name="link" icon="editor-link" caret checked={menu === "txtlink"} title="超链接" className={DROPDOWN} onClick={(e) => openWithDraft("txtlink", "", e.currentTarget)} />
       </>
     );
   };
