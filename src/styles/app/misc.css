@@ -89,10 +89,10 @@
   .note-row.active {
     color: var(--shell-text);
   }
-  .note-row-copy strong { color: inherit; font-weight: 480; }
+  .note-row-copy strong { color: inherit; font-weight: var(--lake-font-weight-medium); }
   .tree-row.type-notebook { min-height: 29px; color: var(--lake-text); }
-  .tree-row.type-notebook .note-row-copy strong { color: inherit; font-weight: 620; }
-  .tree-row.type-group .note-row-copy strong { font-weight: 560; }
+  .tree-row.type-notebook .note-row-copy strong { color: inherit; font-weight: var(--lake-font-weight-semibold); }
+  .tree-row.type-group .note-row-copy strong { font-weight: var(--lake-font-weight-semibold); }
   .tree-children { border-left-color: var(--lake-border-2); transform-origin: top; animation: shell-tree-reveal 180ms var(--shell-ease); }
 
   .sidebar-resize-handle {

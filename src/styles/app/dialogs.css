@@ -77,7 +77,7 @@
 
 .quick-notes-toast { position: fixed; z-index: 760; top: calc(var(--topbar-height) + 12px); right: 24px; display: flex; align-items: center; gap: 12px; min-height: 40px; padding: 10px 12px 10px 14px; border: 1px solid color-mix(in srgb, var(--lake-accent) 28%, var(--lake-border-2)); border-left: 3px solid var(--lake-accent); border-radius: var(--lake-radius-md); color: var(--lake-text-1); box-shadow: 0 14px 34px var(--lake-shadow-color-4), 0 2px 8px var(--lake-shadow-color-3); font-size: 12px; }
 
-.quick-notes-toast button { display: inline-flex; align-items: center; gap: 4px; border: 0; color: var(--lake-accent); background: transparent; cursor: pointer; font-size: 12px; font-weight: 650; }
+.quick-notes-toast button { display: inline-flex; align-items: center; gap: 4px; border: 0; color: var(--lake-accent); background: transparent; cursor: pointer; font-size: 12px; font-weight: var(--lake-font-weight-semibold); }
 
 /* 小记工作台：身份色归入主 accent（原紫色身份随氛围渐变一并移除），一律由令牌派生 */
 .quick-notes-toast { background: var(--lake-bg-block); }
