@@ -55,8 +55,8 @@ function KToggleButton({ label, icon, active, onClick }: { label: string; icon: 
 }
 
 /** 内核工具栏下拉触发按钮（段落样式 / 字号 / 颜色 / 转为 / 超链接）。 */
-function KDropdownButton({ label, icon, active, onClick, extra, children }: {
-  label: string; icon?: string; active?: boolean; onClick?: (event: ReactMouseEvent<HTMLButtonElement>) => void; extra?: string; children?: ReactNode;
+function KDropdownButton({ label, icon, active, caret = true, onClick, extra, children }: {
+  label: string; icon?: string; active?: boolean; caret?: boolean; onClick?: (event: ReactMouseEvent<HTMLButtonElement>) => void; extra?: string; children?: ReactNode;
 }) {
   return (
     <button type="button" title={label} aria-label={label}
@@ -64,7 +64,24 @@ function KDropdownButton({ label, icon, active, onClick, extra, children }: {
       onClick={onClick}>
       {icon ? <KIcon name={icon} /> : null}
       {children}
+      {caret ? <span className="ne-ui-toolbar-arrow-down" /> : null}
     </button>
+  );
+}
+
+/** 内核颜色分裂按钮：图标区（应用）+ 独立三角区（开面板）。 */
+function KColorButton({ label, icon, active, onClick }: {
+  label: string; icon: string; active?: boolean; onClick: (event: ReactMouseEvent<HTMLButtonElement>) => void;
+}) {
+  return (
+    <span className="selection-toolbar__colorbtn">
+      <button type="button" title={label} aria-label={label} className={"ant-btn ne-ui-toolbar-color-show-button ne-ui-t-button" + (active ? " checked" : "")} onClick={onClick}>
+        <KIcon name={icon} />
+      </button>
+      <button type="button" title={label} aria-label={label} className="ant-btn ant-dropdown-trigger ne-ui-toolbar-color-dropdown-button ne-ui-t-button" onClick={onClick}>
+        <span className="ne-ui-toolbar-color-dropdown-arrow" />
+      </button>
+    </span>
   );
 }
 
@@ -248,12 +265,10 @@ export function SelectionToolbar({ editor, container, noteId }: {
         <KToolButton label="清除格式" icon="editor-clearFormat" onClick={() => run("clearFormat")} />
         <span className="selection-toolbar__sep" />
         <KDropdownButton label="段落样式" active={menu === "style"} extra="ne-ui-toolbar-select-button ne-ui-toolbar-format" onClick={(e) => toggleMenu("style", e.currentTarget)}>
-          <span className="selection-toolbar__trigger-label">{styleLabel}</span>
-          <span className="ne-ui-toolbar-status-dropdown-arrow" />
+          <div className="ne-ui-toolbar-select-value">{styleLabel}</div>
         </KDropdownButton>
         <KDropdownButton label="字号" active={menu === "fontsize"} extra="ne-ui-toolbar-select-button ne-ui-toolbar-fontsize" onClick={(e) => toggleMenu("fontsize", e.currentTarget)}>
-          <span className="selection-toolbar__trigger-label">{sizeLabel}</span>
-          <span className="ne-ui-toolbar-status-dropdown-arrow" />
+          <div className="ne-ui-toolbar-select-value">{sizeLabel}</div>
         </KDropdownButton>
         <span className="selection-toolbar__sep" />
         <KToggleButton label="加粗" icon="bold" active={state.marks.bold} onClick={() => run("bold")} />
@@ -261,11 +276,11 @@ export function SelectionToolbar({ editor, container, noteId }: {
         <KToggleButton label="中划线" icon="strikethrough" active={state.marks.strikethrough} onClick={() => run("strikethrough")} />
         <KToggleButton label="下划线" icon="underline" active={state.marks.underline} onClick={() => run("underline")} />
         <span className="selection-toolbar__sep" />
-        <KDropdownButton label="文字颜色" icon="editor-color" active={menu === "color" || Boolean(state.color)} onClick={(e) => toggleMenu("color", e.currentTarget)} />
-        <KDropdownButton label="背景色" icon="editor-bgColor" active={menu === "bgcolor" || Boolean(state.bgColor)} onClick={(e) => toggleMenu("bgcolor", e.currentTarget)} />
+        <KColorButton label="文字颜色" icon="editor-color" active={menu === "color" || Boolean(state.color)} onClick={(e) => toggleMenu("color", e.currentTarget)} />
+        <KColorButton label="背景色" icon="editor-bgColor" active={menu === "bgcolor" || Boolean(state.bgColor)} onClick={(e) => toggleMenu("bgcolor", e.currentTarget)} />
         <span className="selection-toolbar__sep" />
         <KDropdownButton label="转为" icon="t-moremark" active={menu === "convert"} onClick={(e) => toggleMenu("convert", e.currentTarget)} />
-        <KDropdownButton label="超链接" icon="editor-link" active={menu === "txtlink"} onClick={(e) => openWithDraft("txtlink", "", e.currentTarget)} />
+        <KDropdownButton label="超链接" icon="editor-link" caret={false} active={menu === "txtlink"} onClick={(e) => openWithDraft("txtlink", "", e.currentTarget)} />
       </>
     );
   };
