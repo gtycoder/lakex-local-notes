@@ -90,3 +90,28 @@
   border-radius: var(--lake-radius-xs);
   cursor: pointer;
 }
+.selection-toolbar__menu--row { display: flex; flex-direction: row; gap: 2px; }
+.selection-toolbar__row { display: flex; align-items: center; gap: 4px; padding: 2px; }
+.selection-toolbar__input {
+  width: 150px;
+  height: 26px;
+  padding: 0 6px;
+  border: 1px solid var(--lake-border-2);
+  border-radius: var(--lake-radius-sm);
+  background: var(--lake-bg-canvas);
+  color: var(--lake-text-1);
+  font: inherit;
+  font-size: 12px;
+}
+.selection-toolbar__input:focus { outline: none; border-color: var(--lake-accent); }
+.selection-toolbar__apply {
+  height: 26px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: var(--lake-radius-sm);
+  background: var(--lake-accent);
+  color: var(--lake-text-on-accent);
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+}

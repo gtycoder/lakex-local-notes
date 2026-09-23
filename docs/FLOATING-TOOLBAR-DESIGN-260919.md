@@ -49,11 +49,19 @@
 
 ## 2b. 图片形态按钮清单（260924 定稿）
 
-| 按钮 | 内核命令 / 实现 | 实测状态 |
+云端语雀实机顺序：裁剪 · 旋转 · 宽高 · 链接 · 描述 · 对齐 · 样式 · 边距 · 批量应用。全部走 `updateImageData`（260924 实测）。
+
+| 按钮 | 内核调用 | 实测状态 |
 |---|---|---|
-| **对齐**（左/中/右） | `updateImageData(cardId, { style: "left"\|"center"\|"right" })` | ✅ 实测 `ne-image-style-center` 生效 |
-| **尺寸**（小/中/大/原始） | `updateImageData(cardId, { width: N })`，N = 原宽 × 0.3/0.5/0.8 / 原宽 | ✅ 实测 `img[width]=200`、`cardData.getUserWidth()=200` |
-| **替换** | 待接入（`{src}`/`{url}` 实测不生效；`setImageInfo` 断言失败） | ⏳ v1 置灰，禁止静默 no-op |
+| **裁剪** | `updateImageData(cardId, { crop: [l,t,r,b] })` | ✅ 数据可写；**交互态裁剪框入口未找到** ⇒ v1 置灰 |
+| **旋转** | `{ rotation: (current+90)%360 }` | ✅ `getRotation()=90` |
+| **宽高** | `{ width: N }`（小/中/大/原始 + 自定义 px） | ✅ `img[width]` / `getUserWidth()` |
+| **链接** | `{ link, linkTarget }` | ✅ 序列化含 link |
+| **描述** | `{ title, showTitle }` | ✅ `getTitle()/showTitle()` |
+| **对齐** | `{ style: "left"\|"center"\|"right"\|"none" }` | ✅ `ne-image-style-*` |
+| **样式** | 云端独立子项未取到；我方 `style` 即对齐通道 | ⏳ 待确认子项后再定 |
+| **边距** | `{ margin: { top, bottom } }` | ✅ 命令返回 true |
+| **批量应用** | `cardBatchApply` | ⏳ 语义待细验 |
 | **下载** | `native.saveAssetAs(noteId, filename)` | ✅ canonical URL 可解析时可用 |
 | **复制** | `native.copyAssetImage(noteId, filename)` | ✅ 同上 |
 | **删除** | `ed.execCommand("deleteCard", cardId)` | ✅ 实测卡片移除 |

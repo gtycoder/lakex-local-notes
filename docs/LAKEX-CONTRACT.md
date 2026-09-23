@@ -661,6 +661,24 @@ python3 -  # 搜 showMiniToolbarWhen / MINI_TOOLBAR_TRIGGER / itemConfig / IMini
 - **active 态取值**（`queryCommandValue`）：mark = `"true"` / `""`；`style` = `"p"`/`"h1"`；`fontsize` = px 或 `"null"`；`alignment` = `""`/值；`color`/`bgColor` = `"null"`/色值。
   **不要用 `queryCommandState`**（实测返回 `0/1/2`，语义不等同 active）。
 
+**八、图片卡片 `updateImageData` 全能力（260924 桌面实测；对齐云端语雀图片浮栏调研）**
+
+云端语雀（`todoo.yuque.com`）图片 hover 浮栏 = 裁剪 · 旋转 · 宽高 · 链接 · 描述 · 对齐 · 样式 · 边距 · 批量应用。
+其工具栏组件（`ne-t-image-*` / `ne-t-*` 图标）**不在我们 pin 的 v1.99.0**（bundle 0 命中），但**底层能力都在**：
+
+| 能力 | 调用 | 实测 |
+|---|---|---|
+| 旋转 | `updateImageData(id, { rotation: 90 })` | ✅ `getRotation()=90` |
+| 裁剪 | `updateImageData(id, { crop: [0,0,.5,.5] })` | ✅ `getCrop()` 更新；交互态裁剪框（`ne-ui-image-crop-box`）入口未在卡实例上暴露（`_setCroping` 不存在） |
+| 宽高 | `updateImageData(id, { width: N })` | ✅ `img[width]` / `getUserWidth()` |
+| 链接 | `updateImageData(id, { link, linkTarget })` | ✅ lake 序列化含 link |
+| 描述 | `updateImageData(id, { title, showTitle })` | ✅ `getTitle()/showTitle()` |
+| 边距 | `updateImageData(id, { margin: { top, bottom } })` | ✅ 命令返回 true |
+| 样式 | `updateImageData(id, { style })` | ✅ 落成 `ne-image-style-{value}`（left/center/right/none…） |
+| 批量 | `cardBatchApply` | 返回 true；语义未细验 |
+
+**前端坑（260924，务必记住）**：用 `requestAnimationFrame` 合并刷新，在 **Electron 窗口未绘制/被遮挡时会暂停** ⇒ 首次刷新永不执行、后续全被 in-flight 守卫吞掉 ⇒ 选区内联浮层**完全不出现**。这类"事件驱动 + 轻量 DOM 读取"的 UI 应**同步刷新**，不要用 rAF 合并。
+
 ---
 
 ### 5.11 小记版式（note UI）：`uiSwitch` + `fullscreen` + note 工具条（260919 实机 + bundle 实测）

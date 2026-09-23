@@ -1,20 +1,20 @@
 /**
- * 桌面编辑态「浮动工具栏」（选区气泡）——两种形态：
+ * 桌面编辑态「浮动工具栏」（选区气泡）——两种形态（触发见 useSelectionToolbar）：
  *   · 文字选区：正文样式 / 字号 / B I S U / 行内代码 / 字体色 / 对齐 / 更多（背景色·引用·清除格式）
- *   · 图片选中：对齐（左/中/右）/ 尺寸（小/中/大/原始）/ 复制 / 下载 / 删除
+ *   · 图片选中：裁剪(待接入) / 旋转 / 宽高 / 链接 / 描述 / 对齐 / 边距 / 复制 / 下载 / 删除
  *
- * 规则（见 docs/FLOATING-TOOLBAR-DESIGN-260919.md + LAKEX-CONTRACT §5.10）：
- *   - 全部走内核原生命令（editor.execCommand / queryCommandValue），不碰模型数据。
+ * 规则（docs/FLOATING-TOOLBAR-DESIGN-260919.md + LAKEX-CONTRACT §5.10）：
+ *   - 全部走内核原生命令（execCommand / queryCommandValue / updateImageData），不碰模型文件。
  *   - 容器 onMouseDown preventDefault：点按钮不丢选区（与块菜单/移动 dock 同一套经验）。
- *   - 定位自算（computeToolbarPosition），不依赖内核内部件。
- *   - 表格 / 代码块内不出现（内核有自己的工具条）。
- *   - 「链接」「替换图片」内核命令尚未验通（260924 P0 实测返回 false），v1 置灰并注明，禁止做成静默 no-op。
+ *   - 定位自算（computeToolbarPosition），不依赖内核内部件；表格 / 代码块内不出现。
+ *   - 「链接」文字命令内核未验通（禁止静默 no-op）；图片的 link/title/margin/rotation/crop 走
+ *     updateImageData（260924 实测有效）。裁剪的交互态入口、样式子项、批量语义待确认，先置灰。
  */
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import {
-  ALargeSmall, AlignCenter, AlignLeft, AlignRight, Bold, ChevronDown, Code, Copy, Download,
-  Eraser, Highlighter, Italic, MoreHorizontal, Palette, Quote, Replace, Strikethrough, Trash2,
-  Type, Underline,
+  ALargeSmall, AlignCenter, AlignLeft, AlignRight, Bold, ChevronDown, Code, Copy, Crop, Download,
+  Eraser, Italic, Link2, MoreHorizontal, MoveVertical, Palette, Quote, RotateCw, Scaling,
+  Strikethrough, Trash2, Type, Underline,
 } from "lucide-react";
 import { native } from "../../../lib/native";
 import { FONT_SIZE_OPTIONS, STYLE_BLOCKS } from "../editorCommands";
@@ -44,15 +44,35 @@ function IconButton({ label, active, disabled, onClick, children }: {
   );
 }
 
-/** 图片原始宽度：优先 cardData.getOriginalWidth()，回退 naturalWidth。 */
-function readOriginalWidth(cardEl: HTMLElement): number {
+interface ImageCardData {
+  getOriginalWidth?: () => number;
+  getUserWidth?: () => number;
+  getRotation?: () => number;
+  getStyle?: () => string;
+  getLink?: () => string;
+  getTitle?: () => string;
+  showTitle?: () => boolean;
+}
+interface ImageMeta {
+  originalWidth: number; width: number; rotation: number; style: string; link: string; title: string; showTitle: boolean;
+}
+
+/** 从内核图片卡实例读当前状态（priority: cardData getters → DOM 回退）。 */
+function readImageMeta(cardEl: HTMLElement): ImageMeta {
   const ref = (cardEl as unknown as { _neRef?: { _virtualNode?: { _instance?: unknown }; _instance?: unknown } })._neRef;
-  const inst = (ref?._virtualNode?._instance ?? ref?._instance) as { cardData?: { getOriginalWidth?: () => number }; _cardData?: { getOriginalWidth?: () => number } } | undefined;
+  const inst = (ref?._virtualNode?._instance ?? ref?._instance) as { cardData?: ImageCardData; _cardData?: ImageCardData } | undefined;
   const cd = inst?.cardData ?? inst?._cardData;
-  const w = cd?.getOriginalWidth?.();
-  if (typeof w === "number" && w > 0) return w;
   const img = cardEl.querySelector("img");
-  return img?.naturalWidth || img?.clientWidth || 320;
+  const num = (v: unknown): number | null => (typeof v === "number" && Number.isFinite(v) ? v : null);
+  return {
+    originalWidth: num(cd?.getOriginalWidth?.()) ?? img?.naturalWidth ?? 320,
+    width: num(cd?.getUserWidth?.()) ?? num(img?.clientWidth) ?? 0,
+    rotation: num(cd?.getRotation?.()) ?? 0,
+    style: (cd?.getStyle?.() as string) || "none",
+    link: (cd?.getLink?.() as string) || "",
+    title: (cd?.getTitle?.() as string) || "",
+    showTitle: cd?.showTitle?.() === true,
+  };
 }
 
 export function SelectionToolbar({ editor, container, noteId }: {
@@ -60,6 +80,7 @@ export function SelectionToolbar({ editor, container, noteId }: {
 }) {
   const { target, state, run, toolbarRef } = useSelectionToolbar(editor, container);
   const [menu, setMenu] = useState<string | null>(null);
+  const [draft, setDraft] = useState("");
   const [pos, setPos] = useState<{ left: number; top: number } | null>(null);
   const keyRef = useRef<string>("none");
 
@@ -83,7 +104,7 @@ export function SelectionToolbar({ editor, container, noteId }: {
 
   const key = target ? target.kind + ":" + Math.round(target.rect.top) + ":" + Math.round(target.rect.left) : "none";
   useEffect(() => {
-    if (keyRef.current !== key) { keyRef.current = key; setMenu(null); }
+    if (keyRef.current !== key) { keyRef.current = key; setMenu(null); setDraft(""); }
   }, [key]);
 
   const pick = useCallback((name: string, value: unknown) => { run(name, value); setMenu(null); }, [run]);
@@ -167,26 +188,70 @@ export function SelectionToolbar({ editor, container, noteId }: {
 
   const renderImage = (t: ImageTarget) => {
     const asset = parseAssetRef(t.src);
-    const originalWidth = readOriginalWidth(t.cardEl);
-    const sizeLabel = (p: ImageSizePreset, label: string) => (
-      <IconButton key={p} label={label} onClick={() => run("updateImageData", t.cardId, { width: imageSizeWidth(p, originalWidth) })}>{label}</IconButton>
+    const meta = readImageMeta(t.cardEl);
+    const apply = (data: Record<string, unknown>) => { run("updateImageData", t.cardId, data); setMenu(null); };
+    const openWithDraft = (m: string, value: string) => { setDraft(value); setMenu(menu === m ? null : m); };
+    const sizeItem = (p: ImageSizePreset, label: string) => (
+      <button key={p} type="button" role="menuitem" className="selection-toolbar__item" onClick={() => apply({ width: imageSizeWidth(p, meta.originalWidth) })}>{label}</button>
     );
+    const applyDraft = (fn: (v: string) => void) => { fn(draft); };
     return (
       <>
-        <IconButton label="左对齐" onClick={() => run("updateImageData", t.cardId, { style: "left" })}><AlignLeft size={15} /></IconButton>
-        <IconButton label="居中" onClick={() => run("updateImageData", t.cardId, { style: "center" })}><AlignCenter size={15} /></IconButton>
-        <IconButton label="右对齐" onClick={() => run("updateImageData", t.cardId, { style: "right" })}><AlignRight size={15} /></IconButton>
+        <IconButton label="裁剪（交互态入口待接入）" disabled><Crop size={15} /></IconButton>
+        <IconButton label="旋转 90°" onClick={() => apply({ rotation: ((meta.rotation || 0) + 90) % 360 })}><RotateCw size={15} /></IconButton>
+        <IconButton label="宽高" active={menu === "imgsize"} onClick={() => openWithDraft("imgsize", meta.width ? String(meta.width) : "")}><Scaling size={15} /></IconButton>
         <span className="selection-toolbar__sep" />
-        {sizeLabel("small", "小")}
-        {sizeLabel("medium", "中")}
-        {sizeLabel("large", "大")}
-        <IconButton label="原始尺寸" onClick={() => run("updateImageData", t.cardId, { width: imageSizeWidth("original", originalWidth) })}>原始</IconButton>
+        <IconButton label="链接" active={menu === "imglink" || Boolean(meta.link)} onClick={() => openWithDraft("imglink", meta.link)}><Link2 size={15} /></IconButton>
+        <IconButton label="描述" active={menu === "imgtitle" || Boolean(meta.title)} onClick={() => openWithDraft("imgtitle", meta.title)}><Type size={15} /></IconButton>
         <span className="selection-toolbar__sep" />
-        <IconButton label="替换图片（待接入）" disabled><Replace size={15} /></IconButton>
+        <IconButton label="对齐" active={menu === "imgalign"} onClick={() => setMenu(menu === "imgalign" ? null : "imgalign")}><AlignLeft size={15} /></IconButton>
+        <IconButton label="边距" active={menu === "imgmargin"} onClick={() => setMenu(menu === "imgmargin" ? null : "imgmargin")}><MoveVertical size={15} /></IconButton>
+        <span className="selection-toolbar__sep" />
         <IconButton label={asset ? "复制图片" : "复制（非本机资源不可用）"} disabled={!asset} onClick={() => { if (asset) void native.copyAssetImage(asset.noteId, asset.filename); }}><Copy size={15} /></IconButton>
         <IconButton label={asset ? "另存为" : "下载（非本机资源不可用）"} disabled={!asset} onClick={() => { if (asset) void native.saveAssetAs(asset.noteId, asset.filename, asset.filename); }}><Download size={15} /></IconButton>
-        <span className="selection-toolbar__sep" />
-        <IconButton label="删除图片" onClick={() => run("deleteCard", t.cardId)}><Trash2 size={15} /></IconButton>
+        <IconButton label="删除图片" onClick={() => { run("deleteCard", t.cardId); setMenu(null); }}><Trash2 size={15} /></IconButton>
+
+        {menu === "imgsize" && (
+          <div className="selection-toolbar__menu" role="menu" data-menu="imgsize">
+            <div className="selection-toolbar__menu--row">{sizeItem("small", "小")}{sizeItem("medium", "中")}{sizeItem("large", "大")}{sizeItem("original", "原始")}</div>
+            <div className="selection-toolbar__row">
+              <input className="selection-toolbar__input" type="number" min="16" placeholder="宽度 px" value={draft} onChange={(e) => setDraft(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") { const n = Number(draft); if (n > 0) applyDraft(() => apply({ width: Math.round(n) })); } }} />
+              <button type="button" className="selection-toolbar__apply" onClick={() => { const n = Number(draft); if (n > 0) apply({ width: Math.round(n) }); }}>应用</button>
+            </div>
+          </div>
+        )}
+        {menu === "imglink" && (
+          <div className="selection-toolbar__menu" role="menu" data-menu="imglink">
+            <div className="selection-toolbar__row">
+              <input className="selection-toolbar__input" type="text" placeholder="https://…" value={draft} onChange={(e) => setDraft(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") apply({ link: draft.trim(), linkTarget: draft.trim() ? "_blank" : "" }); }} />
+              <button type="button" className="selection-toolbar__apply" onClick={() => apply({ link: draft.trim(), linkTarget: draft.trim() ? "_blank" : "" })}>应用</button>
+            </div>
+            <button type="button" role="menuitem" className="selection-toolbar__item" onClick={() => apply({ link: "", linkTarget: "" })}>移除链接</button>
+          </div>
+        )}
+        {menu === "imgtitle" && (
+          <div className="selection-toolbar__menu" role="menu" data-menu="imgtitle">
+            <div className="selection-toolbar__row">
+              <input className="selection-toolbar__input" type="text" placeholder="图片描述" value={draft} onChange={(e) => setDraft(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") apply({ title: draft, showTitle: draft.length > 0 }); }} />
+              <button type="button" className="selection-toolbar__apply" onClick={() => apply({ title: draft, showTitle: draft.length > 0 })}>应用</button>
+            </div>
+            <button type="button" role="menuitem" className="selection-toolbar__item" onClick={() => apply({ showTitle: !meta.showTitle })}>{meta.showTitle ? "隐藏描述" : "显示描述"}</button>
+          </div>
+        )}
+        {menu === "imgalign" && (
+          <div className="selection-toolbar__menu" role="menu" data-menu="imgalign">
+            <button type="button" role="menuitem" className={"selection-toolbar__item" + (meta.style === "left" ? " is-active" : "")} onClick={() => apply({ style: "left" })}><AlignLeft size={15} /> 左对齐</button>
+            <button type="button" role="menuitem" className={"selection-toolbar__item" + (meta.style === "center" ? " is-active" : "")} onClick={() => apply({ style: "center" })}><AlignCenter size={15} /> 居中</button>
+            <button type="button" role="menuitem" className={"selection-toolbar__item" + (meta.style === "right" ? " is-active" : "")} onClick={() => apply({ style: "right" })}><AlignRight size={15} /> 右对齐</button>
+            <button type="button" role="menuitem" className={"selection-toolbar__item" + (meta.style === "none" ? " is-active" : "")} onClick={() => apply({ style: "none" })}>默认</button>
+          </div>
+        )}
+        {menu === "imgmargin" && (
+          <div className="selection-toolbar__menu" role="menu" data-menu="imgmargin">
+            <button type="button" role="menuitem" className="selection-toolbar__item" onClick={() => apply({ margin: { top: true, bottom: true } })}>默认间距</button>
+            <button type="button" role="menuitem" className="selection-toolbar__item" onClick={() => apply({ margin: { top: false, bottom: false } })}>紧凑（无间距）</button>
+          </div>
+        )}
       </>
     );
   };

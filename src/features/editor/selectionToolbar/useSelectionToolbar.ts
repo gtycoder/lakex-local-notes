@@ -43,7 +43,7 @@ export function useSelectionToolbar(editor: LakeEditorInstance, container: HTMLE
   const [state, setState] = useState<ToolbarState>(EMPTY_STATE);
   const toolbarRef = useRef<HTMLDivElement | null>(null);
   const imageRef = useRef<ImageTarget | null>(null);
-  const frameRef = useRef<number | undefined>(undefined);
+
 
   const readState = useCallback((): ToolbarState => {
     const q = (name: string): unknown => { try { return editor.queryCommandValue?.(name); } catch { return undefined; } };
@@ -89,12 +89,11 @@ export function useSelectionToolbar(editor: LakeEditorInstance, container: HTMLE
     if (next?.kind === "text") setState(readState());
   }, [computeTarget, readState]);
 
+  // 同步刷新：早期版本用 rAF 合并，但 Electron 在窗口未绘制/被遮挡时会**暂停 rAF**，
+  // 导致首次 refresh 永不执行、后续全部被 in-flight 守卫吞掉（260924 实测：浮框完全不出现）。
+  // computeTarget/readState 只做轻量 DOM 读取，直接同步执行更稳。
   const refresh = useCallback(() => {
-    if (frameRef.current !== undefined) return;
-    frameRef.current = window.requestAnimationFrame(() => {
-      frameRef.current = undefined;
-      try { refreshNow(); } catch { /* 内核/选区瞬时态不阻断 */ }
-    });
+    try { refreshNow(); } catch { /* 内核/选区瞬时态不阻断 */ }
   }, [refreshNow]);
 
   /**
@@ -143,7 +142,6 @@ export function useSelectionToolbar(editor: LakeEditorInstance, container: HTMLE
     } catch { /* 非编辑器环境忽略 */ }
     refresh();
     return () => {
-      if (frameRef.current !== undefined) window.cancelAnimationFrame(frameRef.current);
       document.removeEventListener("selectionchange", onSelectionChange);
       document.removeEventListener("pointerdown", onPointerDown, true);
       document.removeEventListener("keydown", onKeyDown, true);

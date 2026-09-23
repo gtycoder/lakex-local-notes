@@ -29,7 +29,7 @@
 - 文件：`SelectionToolbar.tsx`（UI）· `useSelectionToolbar.ts`（显隐+定位+active）· `selectionToolbarModel.ts(+.test.ts)`（纯逻辑）· `mountSelectionToolbar.ts` · `selectionToolbar.css`（overlay 层）。
 - 挂载：`lakeRuntime.ts` 的 `__disposeExtras` 链（`mode==="editor" && prefs?.floatingToolbar`），与 `mountBlockHoverHandle` 同型。
 - **文字形态**：正文(style) · 字号(fontsize) · B · I · S · U · 行内代码 · 字体色 · 对齐 · ⋮(引用/清除格式/背景色)。
-- **图片形态**：对齐(left/center/right = `updateImageData{style}`) · 尺寸(小/中/大/原始 = `{width}`) · 复制/下载(native，仅 canonical URL) · 删除(`deleteCard`)；**替换置灰待接入**。
+- **图片形态**（对齐云端语雀图片浮栏）：裁剪(交互态入口未接入，置灰) · 旋转(90°) · 宽高(小/中/大/原始 + 自定义 px) · 链接 · 描述 · 对齐(左/中/右/默认) · 边距(默认/紧凑) · 复制 · 下载 · 删除。全部实测通过（`updateImageData{rotation|width|link|title|margin|style}`）。**样式子项、批量应用、交互态裁剪**待确认/待 spike。
 - 定位自算 + 顶界取内核固定工具栏底边（空间不足翻到下方）+ 左右不越出编辑器内容区；容器 `onMouseDown preventDefault` 保选区。
 
 ### 三、P0 实测（隔离实例；已回填 `LAKEX-CONTRACT.md §5.10 六/七`）
@@ -39,6 +39,7 @@
 - `link`/`unlink`/`insertLink`/`linkText` 多形态均返回 false ⇒ **链接按钮未上**（禁止静默 no-op）。
 - inline 图片卡片**没有** `.ne-card-toolbar`，只有 28×28 `.ne-ui-image-more` → popover（删除/复制）。
 - 内核 `style` 命令把段落转 H1 时会**丢掉行内 mark**（`<strong>` 消失）——内核行为，非本批 bug。
+- **Electron 窗口未绘制/被遮挡时 rAF 会暂停**：用 rAF 合并「选区变化 → 刷新浮框」会导致首次刷新永不执行、浮框完全不出现（本批踩到并改为同步刷新）。隔离实例调试浮层务必注意。
 
 ### 四、门禁（本批实测）
 - `tsc` 0 · `vitest` **1260 passed / 16 skipped** · `ui-metrics` 全绿（颜色字面量 0、`!important` 9、未定义令牌 0）· `vite build` ✓ · `cssLayers` 基线补 `selectionToolbar.css: 91`。
