@@ -28,6 +28,23 @@ const MIRROR_EXACT: Record<string, string> = {
 const DEV_CSP = "default-src 'self'; script-src 'self' 'unsafe-inline' http://127.0.0.1:*; style-src 'self' 'unsafe-inline' http://127.0.0.1:*; img-src 'self' data: blob: http://127.0.0.1:*; font-src 'self' data: http://127.0.0.1:*; connect-src 'self' data: http://127.0.0.1:* ws://127.0.0.1:1421; media-src 'self' data: blob: http://127.0.0.1:*; worker-src 'self' blob:; object-src http://127.0.0.1:*; frame-src http://127.0.0.1:*; base-uri 'none'; form-action 'none'";
 const PROD_CSP = "default-src 'self'; script-src 'self' 'sha256-r1Dc4EBzntnjCYkAEc8BC4xSaA3dOE5dL5hlL2pG/6s='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: http://127.0.0.1:*; font-src 'self' data: http://127.0.0.1:*; connect-src 'self' data: http://127.0.0.1:*; media-src 'self' data: blob: http://127.0.0.1:*; worker-src 'self' blob:; object-src http://127.0.0.1:*; frame-src http://127.0.0.1:*; base-uri 'none'; form-action 'none'";
 
+/** Vite 的 CSS `@import` 会把 vendor 样式**内联**进入口表，绕过按模块 id 判断的 transform
+ * （桌面就是因此漏改：dist CSS 里残留 186 处 gw 引用）。PostCSS 在 `@import` 内联**之后**运行，
+ * 所以在 CSS 层兜底把 gw URL 改成本地 `/vendor/lakex/alipay/<basename>`（dev/build 都生效）。 */
+function lakexGwUrlLocal() {
+  return {
+    postcssPlugin: "lakex-gw-url-local",
+    Declaration(decl: { value: string }) {
+      if (!decl.value || !decl.value.includes("gw.alipayobjects.com")) return;
+      decl.value = decl.value.replace(/https:\/\/gw\.alipayobjects\.com\/[^\s)"']+/g, (m) => {
+        const reuse = ALIPAY_JS_REUSE[m];
+        if (reuse) return reuse;
+        return `/vendor/lakex/alipay/${m.split("/").pop()}`;
+      });
+    },
+  };
+}
+
 function lakexAlipayLocal(): Plugin {
   return {
     name: "lakex-alipay-local",
@@ -84,6 +101,7 @@ export default defineConfig({
     },
   },
   clearScreen: false,
+  css: { postcss: { plugins: [lakexGwUrlLocal()] } },
   // lakex CSS 含 alipay 外部 URL，需走源码 transform（lakexAlipayLocal）本地化 → 排除依赖预构建
   optimizeDeps: {
     // Drawnix is loaded on first board use. Pre-bundle it during Vite startup
