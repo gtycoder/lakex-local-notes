@@ -98,21 +98,10 @@ export default defineConfig({
     target: "chrome120",
     outDir: "dist",
     sourcemap: false,
-    rolldownOptions: {
-      output: {
-        codeSplitting: {
-          groups: [
-            {
-              // 画板（drawnix + @plait）独立 chunk。
-              // 注意：includeDependenciesRecursively 必须为 false —— 默认 true 会把被匹配模块的
-              // 依赖一并并入该 chunk，其中含入口也需要的模块，导致入口静态引用它（画板引擎被迫首屏加载）。
-              name: "drawnix",
-              test: /node_modules[\\/](lakex-drawnix|@plait|@plait-board)/,
-              includeDependenciesRecursively: false,
-            },
-          ],
-        },
-      },
-    },
+    // 260923 移除手工 rolldown codeSplitting（原把 lakex-drawnix|@plait 拆成 "drawnix" chunk）：
+    // 该分组会拆坏 vendor 内部绑定 —— 生产构建下画板（内联 drawing-drawnix 卡与 kind=board 文档）
+    // 抛 "TypeError: Wt is not a function"，画布完全不渲染（test:packaged 的 drawnix smoke 必现）。
+    // A/B 实测：删掉该分组后画板恢复；且 index chunk 体积几乎不变（6.615MB→6.614MB）——
+    // 它既没省首屏又引入崩溃。画板引擎仍由 BoardEditor/DrawnixBoardCore 的动态 import 懒加载。
   },
 });

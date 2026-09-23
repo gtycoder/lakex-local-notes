@@ -78,12 +78,16 @@ try {
     drawnixJs: performance.getEntriesByType("resource").map(e=>e.name).filter(n=>/lakex-drawnix|DrawnixBoardCore|\\/drawnix-|plait/i.test(n)&&/\\.js/.test(n)),
     drawnixModuleRendered: document.querySelectorAll(".plait-board-container, .drawnix").length > 0,
     fallback: Boolean(document.querySelector('[aria-label="画板加载中"]')),
+    protocol: location.protocol,
     status: document.querySelector(".document-statusbar")?.innerText || ""
   })`);
   const parsed = JSON.parse(result);
   if (parsed.boardResizers < 1 || parsed.plaitBoards < 1) throw new Error("Drawnix 画板未渲染");
   if (!parsed.drawnixModuleRendered) throw new Error("Drawnix 模块未渲染");
-  if (parsed.drawnixJs.length < 1) throw new Error("懒加载 Drawnix JS 未被请求");
+  // 打包版是 file://：Chromium 不记录 JS module 的 resource timing（实测 jsResources=0），
+  // 该断言只在 http(s)（vite dev/preview）下有意义；file:// 下由「画板已渲染」证明引擎已加载。
+  // 懒加载/首屏体积的护栏归 scripts/check-bundle-budget.mjs，不在这里。
+  if (parsed.protocol !== "file:" && parsed.drawnixJs.length < 1) throw new Error("懒加载 Drawnix JS 未被请求");
   if (parsed.fallback) throw new Error("Drawnix 仍停留在加载占位");
   console.log(result);
   const output = process.env.LAKE_UI_EVIDENCE_DIR;
