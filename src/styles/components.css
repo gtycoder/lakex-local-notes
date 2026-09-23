@@ -8,10 +8,10 @@
 .sync-status-popover-header div { display: grid; gap: 2px; }
 .sync-status-popover-header strong { font-size: 14px; }
 .sync-status-popover-header span { color: var(--lake-text-3); font-size: 11px; }
-.sync-status-dot { width: 8px; height: 8px; margin-top: 5px; border-radius: 50%; background: var(--lake-text-tertiary); }
-.sync-status-dot.pending { background: var(--lake-sync-pending); }
+.sync-status-dot { width: 8px; height: 8px; margin-top: 5px; border-radius: 50%; background: var(--lake-text-3); }
+.sync-status-dot.pending { background: var(--lake-status-pending); }
 .sync-status-dot.syncing { background: var(--lake-accent); animation: lake-status-pulse 1.2s ease-in-out infinite; }
-.sync-status-dot.error { background: var(--lake-error); }
+.sync-status-dot.error { background: var(--lake-status-error); }
 .sync-status-section { padding: 11px 0 0; }
 .sync-status-section h3 { margin: 0 0 6px; color: var(--lake-text-3); font-size: 11px; font-weight: var(--lake-font-weight-semibold); }
 .sync-status-section dl { display: grid; gap: 5px; margin: 0; }
@@ -284,7 +284,7 @@
 .history-preview-inline { display: flex; flex-direction: column; align-items: center; }
 .history-preview-inline > * { width: 100%; }
 .history-preview-inline-title { align-self: flex-start; }
-.history-preview-image { flex: 1 1 auto; min-height: 0; width: auto; max-width: 100%; max-height: 100%; object-fit: contain; align-self: center; animation: ln-preview-fade-in var(--lake-motion-standard) var(--lake-ease-standard); }
+.history-preview-image { flex: 1 1 auto; min-height: 0; width: auto; max-width: 100%; max-height: 100%; object-fit: contain; align-self: center; animation: ln-preview-fade-in var(--lake-motion-panel) var(--lake-ease-standard); }
 .history-preview-image.is-loading { opacity: .55; transition: opacity var(--lake-motion-fast) ease-out; }
 
 /* 两行列表行（回收站 / 文档历史）：沿用思源 .b3-list-item 的密度与 hover 语言 */
@@ -337,7 +337,7 @@ button.b3-list-item__action:disabled { opacity: .45; cursor: default; }
   gap: 2px;
   padding: 2px;
   border-radius: calc(var(--lake-radius-md) + 2px);
-  background: color-mix(in srgb, var(--lake-text) 8%, transparent);
+  background: color-mix(in srgb, var(--lake-text-1) 8%, transparent);
 }
 /* ⚠️ 这 4 条 !important 是**必需**的，且不能用"搬进 kit 层"消除（260923 W4 结论，已实测）——
  * ① 层叠规则：@layer 中 !important 会**反转层序** ⇒ legacy 的 !important 必压 kit 的普通声明。
@@ -353,7 +353,7 @@ button.b3-list-item__action:disabled { opacity: .45; cursor: default; }
 .seg .seg__item:hover { color: var(--lake-text-1) !important; }
 .seg .seg__item.is-active {
   color: var(--lake-text-1);
-  background-color: var(--lake-raised);
+  background-color: var(--lake-bg-raised);
   border-color: transparent;
   box-shadow: 0 1px 2px var(--lake-shadow-color-3);
 }
@@ -362,9 +362,9 @@ button.b3-list-item__action:disabled { opacity: .45; cursor: default; }
 /* 体检结果（数据体检 / 一致性检查） */
 .checks { display: grid; gap: 6px; margin-top: 10px; font-size: 13px; text-align: left; }
 .checks__row { color: var(--lake-text-3); line-height: 1.5; }
-.checks__row--ok { color: var(--lake-sync-success); }
-.checks__row--warn { color: var(--lake-sync-pending); }
-.checks__row--error { color: var(--lake-error); }
+.checks__row--ok { color: var(--lake-status-ok); }
+.checks__row--warn { color: var(--lake-status-pending); }
+.checks__row--error { color: var(--lake-status-error); }
 
 /* 键值清单（关于页版本/依赖表）：等宽键 + 右对齐值，行间 hairline */
 .kv {

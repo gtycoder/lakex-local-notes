@@ -46,30 +46,8 @@
   --lake-shadow-card: 0 1px 2px rgba(0,0,0,.40);
   --lake-shadow-popover: 0 0 0 1px rgba(255,255,255,.07), 0 24px 56px -18px rgba(0,0,0,.62);
   --lake-shadow-dialog: 0 0 0 1px rgba(255,255,255,.09), 0 28px 56px -18px rgba(0,0,0,.60), 0 56px 104px -36px rgba(0,0,0,.55);
-  --lake-shadow-drag: 0 10px 28px -10px rgba(0,0,0,.55);
   --lake-shadow-knob: 0 1px 2px rgba(0,0,0,.45);
 
-  /* ---- 过渡别名：旧 --lake-* 名字 → 新令牌 ---- */
-  --lake-shell: var(--lake-bg-window);
-  --lake-panel: var(--lake-bg-panel);
-  --lake-canvas: var(--lake-bg-canvas);
-  --lake-surface: var(--lake-bg-block);
-  --lake-raised: var(--lake-bg-raised);
-  --lake-border: var(--lake-border-1);
-  --lake-text: var(--lake-text-1);
-  --lake-text-secondary: var(--lake-text-2);
-  --lake-text-tertiary: var(--lake-text-3);
-  --lake-accent-soft: var(--lake-accent-tint);
-  --lake-accent-soft-strong: var(--lake-select-bg);
-  --lake-sync-pending: var(--lake-status-pending);
-  --lake-sync-success: var(--lake-status-ok);
-  --lake-error: var(--lake-status-error);
-  --lake-error-strong: var(--lake-status-error);
-  --lake-error-soft: var(--lake-status-error-soft);
-  --lake-warning-soft: var(--lake-status-pending-soft);
-  --lake-success-soft: var(--lake-status-ok-soft);
-  --lake-shadow-panel: var(--lake-shadow-popover);
-  --lake-shadow-soft: var(--lake-shadow-card);
 
   /* ---- 过渡桥接：思源 --b3-* → 新令牌（P7 删思源层时一并移除） ---- */
   --b3-body-background: var(--lake-bg-window);
@@ -109,15 +87,12 @@
   --lake-shadow-color-2: rgba(0, 0, 0, .45);
   --lake-shadow-color-3: rgba(0, 0, 0, .35);
   --lake-shadow-color-4: rgba(0, 0, 0, .50);
-  --lake-shadow-color-5: rgba(0, 0, 0, .55);
   --lake-shadow-color-6: rgba(0, 0, 0, .50);
   --lake-shadow-color-7: rgba(0, 0, 0, .60);
   --lake-neutral-veil-1: rgba(255, 255, 255, .14);
   --lake-neutral-veil-2: rgba(255, 255, 255, .06);
   --lake-neutral-veil-3: rgba(255, 255, 255, .10);
-  --lake-veil-strong: rgba(255, 255, 255, .10);
   --lake-veil-soft: rgba(255, 255, 255, .06);
   --lake-veil-open: rgba(255, 255, 255, .12);
   --lake-hairline-soft: rgba(255, 255, 255, .07);
-  --lake-pinned-tint: rgba(228, 175, 94, .16);
 }

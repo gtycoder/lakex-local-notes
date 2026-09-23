@@ -362,7 +362,7 @@
   border: 1px solid var(--shell-separator);
   border-radius: 8px;
   background: var(--shell-material);
-  box-shadow: var(--lake-shadow-panel);
+  box-shadow: var(--lake-shadow-popover);
 }
 
 .outline-sidebar__level-menu button {
@@ -392,7 +392,7 @@
 .outline-sidebar--collapsed .outline-sidebar__content,
 .outline-sidebar--collapsed.outline-sidebar--hovered .outline-sidebar__content {
   /* 卡片投影；面/边/圆角的唯一来源见下方「大纲轨 / 收起后悬停展开」段 */
-  box-shadow: var(--lake-shadow-soft);
+  box-shadow: var(--lake-shadow-card);
 }
 /* 260922 固定态**与悬停态同一个盒**：几何由上面的内容盒统一给（顶 = --lake-editor-top 动态、底 = pane 底），
    这里只保留「不浮」的外观（面/分隔线/去投影）。用户 260922 定稿：两种形态都不能盖住工具栏。 */
@@ -411,9 +411,9 @@
 
 /* Lake semantic outline layer: colors only (geometry/materials owned above). */
 .outline-sidebar__content,
-.outline-sidebar__panel { color: var(--lake-text); border-color: var(--lake-border); }
+.outline-sidebar__panel { color: var(--lake-text-1); border-color: var(--lake-border-1); }
 .outline-sidebar__header,
-.outline-sidebar__toolbar { color: var(--lake-text-secondary); border-color: var(--lake-border); }
+.outline-sidebar__toolbar { color: var(--lake-text-2); border-color: var(--lake-border-1); }
 .outline-item--selected { box-shadow: inset 3px 0 var(--lake-accent); }
 
 /* 收起（悬停预览）：盒几何完全由上方内容盒决定（顶 = --lake-editor-top、底 = pane 底），
@@ -482,5 +482,5 @@
   background: var(--lake-bg-panel);
   border: 0;
   border-radius: var(--lake-radius-md) 0 0 var(--lake-radius-md);
-  box-shadow: var(--lake-shadow-soft);
+  box-shadow: var(--lake-shadow-card);
 }

@@ -98,7 +98,7 @@
   width: 9px;
   height: 1px;
   border-radius: 1px;
-  background: var(--lake-text-tertiary);
+  background: var(--lake-text-3);
   transform: rotate(-45deg);
   transform-origin: right center;
 }
@@ -121,8 +121,8 @@
   flex: 0 0 auto;
   /* 头部与弹窗本体同源（--lake-surface 深浅两套值）——原先写死近白 rgba(250,250,251,.94)，
      深色下历史/回收站面板顶会留一条白条（b3/components.css 只覆盖了 .settings-header）。 */
-  background: var(--lake-surface);
-  border-bottom: 1px solid color-mix(in srgb, var(--lake-border) 72%, transparent);
+  background: var(--lake-bg-block);
+  border-bottom: 1px solid color-mix(in srgb, var(--lake-border-1) 72%, transparent);
 }
 
 /* UI 标题断行均衡（仅面板/页头，不作用于编辑器正文） */
@@ -182,7 +182,7 @@
 .history-list:not(:hover)::-webkit-scrollbar-thumb,
 .history-preview-inline:not(:hover)::-webkit-scrollbar-thumb,
 .history-preview-viewer:not(:hover)::-webkit-scrollbar-thumb,
-.trash-preview-viewer:not(:hover)::-webkit-scrollbar-thumb { background: color-mix(in srgb, var(--lake-text) 12%, transparent); }
+.trash-preview-viewer:not(:hover)::-webkit-scrollbar-thumb { background: color-mix(in srgb, var(--lake-text-1) 12%, transparent); }
 
 .settings-panel:hover::-webkit-scrollbar-thumb,
 .settings-content:hover::-webkit-scrollbar-thumb,
@@ -192,4 +192,4 @@
 .history-list:hover::-webkit-scrollbar-thumb,
 .history-preview-inline:hover::-webkit-scrollbar-thumb,
 .history-preview-viewer:hover::-webkit-scrollbar-thumb,
-.trash-preview-viewer:hover::-webkit-scrollbar-thumb { background: color-mix(in srgb, var(--lake-text) 26%, transparent); }
+.trash-preview-viewer:hover::-webkit-scrollbar-thumb { background: color-mix(in srgb, var(--lake-text-1) 26%, transparent); }

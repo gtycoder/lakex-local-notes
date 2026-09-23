@@ -12,7 +12,7 @@
 .create-menu-wrap { position: relative; }
 
 /* ＋ 快捷创建：与行内 ⋯ 同一套着重色（hover/展开时 accent） */
-.create-btn:hover, .create-btn.is-active { background: var(--lake-accent-soft); color: var(--lake-accent); }
+.create-btn:hover, .create-btn.is-active { background: var(--lake-accent-tint); color: var(--lake-accent); }
 
 .create-menu { display: flex; position: absolute; top: 36px; right: 0; z-index: 1000; flex-direction: column; width: 150px; max-width: calc(100vw - 16px); transform-origin: top right; transition: transform var(--lake-motion-fast) var(--lake-ease-standard), opacity var(--lake-motion-fast) var(--lake-ease-standard); }
 
@@ -24,15 +24,15 @@
 
 .create-menu small { margin-top: 1px; overflow: hidden; color: var(--lake-text-4); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
 
-.inline-create { display: grid; grid-template-columns: 16px minmax(0, 1fr) auto; align-items: center; gap: 5px; margin: 2px 7px 3px; padding: 3px 5px; border: 1px solid var(--lake-accent-tint); border-radius: var(--lake-radius-sm); color: var(--lake-accent); background: var(--lake-bg-panel); box-shadow: 0 0 0 1px var(--lake-accent-soft); }
+.inline-create { display: grid; grid-template-columns: 16px minmax(0, 1fr) auto; align-items: center; gap: 5px; margin: 2px 7px 3px; padding: 3px 5px; border: 1px solid var(--lake-accent-tint); border-radius: var(--lake-radius-sm); color: var(--lake-accent); background: var(--lake-bg-panel); box-shadow: 0 0 0 1px var(--lake-accent-tint); }
 
-.inline-create input { min-width: 0; height: 22px; padding: 0; border: 0; outline: 0; color: var(--lake-text); background: transparent; font-size: 12px; }
+.inline-create input { min-width: 0; height: 22px; padding: 0; border: 0; outline: 0; color: var(--lake-text-1); background: transparent; font-size: 12px; }
 
-.inline-create button { height: 22px; padding: 0 6px; border: 0; border-radius: var(--radius-xs); color: var(--lake-text-on-accent); background: var(--lake-accent); font-size: 10px; }
+.inline-create button { height: 22px; padding: 0 6px; border: 0; border-radius: var(--lake-radius-xs); color: var(--lake-text-on-accent); background: var(--lake-accent); font-size: 10px; }
 
 .note-list { flex: 1; min-height: 0; padding: 0 5px; }
 
-.note-row { display: grid; align-items: center; width: 100%; padding: 2px 7px; color: var(--lake-text-secondary); background: transparent; text-align: left; }
+.note-row { display: grid; align-items: center; width: 100%; padding: 2px 7px; color: var(--lake-text-2); background: transparent; text-align: left; }
 
 /* P5-e：原 `.note-row:hover { background: #e9ebee }` 与 `.note-row.active { background: #eff0f0 }`
  * 两条**颜色字面量**已删 —— 行态（hover = --lake-bg-hover / 选中 = --lake-accent-tint）单一来源
@@ -41,7 +41,7 @@
 .note-row-copy { min-width: 0; }
 
 /* 标题恒为单行、超出列宽直接裁切——不打省略号（用户 260914：不要用 … 缩短标题）；hover ⋯ 出现时同样只是让位裁切 */
-.note-row-copy strong { display: block; overflow: hidden; color: var(--lake-text); font-size: 13px; white-space: nowrap; }
+.note-row-copy strong { display: block; overflow: hidden; color: var(--lake-text-1); font-size: 13px; white-space: nowrap; }
 
 .tree-rename-input { width: 100%; height: 24px; padding: 0 4px; border: 1px solid var(--lake-accent-tint); border-radius: var(--lake-radius-sm); outline: 0; background: var(--lake-bg-panel); font-size: 13px; }
 
@@ -67,7 +67,7 @@
 
 .tree-row.dragging { cursor: grabbing; }
 
-.tree-chevron:not(:disabled):hover { background: var(--lake-accent-soft-strong); color: var(--lake-accent); }
+.tree-chevron:not(:disabled):hover { background: var(--lake-select-bg); color: var(--lake-accent); }
 
 /* 与行内操作按钮同一套 hover 着重 */
 .tree-chevron.open { transform: rotate(90deg); }
@@ -100,15 +100,15 @@
   z-index: auto;
 }
 
-.empty-workspace, .loading-screen { display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 14px; color: var(--lake-text-tertiary); }
+.empty-workspace, .loading-screen { display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 14px; color: var(--lake-text-3); }
 
 .empty-workspace { gap: 6px; }
 
-.empty-workspace-icon { display: grid; place-items: center; width: 56px; height: 56px; margin-bottom: 8px; border-radius: var(--radius-xl); color: var(--lake-accent); background: var(--lake-accent-soft); }
+.empty-workspace-icon { display: grid; place-items: center; width: 56px; height: 56px; margin-bottom: 8px; border-radius: var(--lake-radius-xl); color: var(--lake-accent); background: var(--lake-accent-tint); }
 
-.empty-workspace h2 { margin: 0; color: var(--lake-text); font-size: 16px; font-weight: 600; letter-spacing: -.01em; }
+.empty-workspace h2 { margin: 0; color: var(--lake-text-1); font-size: 16px; font-weight: 600; letter-spacing: -.01em; }
 
-.empty-workspace-hint { margin: 0 0 6px; color: var(--lake-text-tertiary); font-size: 13px; }
+.empty-workspace-hint { margin: 0 0 6px; color: var(--lake-text-3); font-size: 13px; }
 
 .create-menu { opacity: 1; transform: scale(1); }
 
@@ -187,7 +187,7 @@
   grid-row: 1;
   width: var(--sidebar-width);
   align-self: end;
-  transition: opacity var(--lake-motion-standard) var(--lake-ease-standard), transform var(--lake-motion-panel) var(--lake-ease-standard), box-shadow 240ms ease-out;
+  transition: opacity var(--lake-motion-panel) var(--lake-ease-standard), transform var(--lake-motion-panel) var(--lake-ease-standard), box-shadow 240ms ease-out;
 }
 
 .app-shell.sidebar-resizing .sidebar { transition: none; }
@@ -227,7 +227,7 @@
 .sidebar.sidebar-collapsed {
   pointer-events: none;
   box-shadow: none;
-  transition-duration: var(--lake-motion-standard);
+  transition-duration: var(--lake-motion-panel);
 }
 
 /* ── 壳层材质一览（260915 窄窗彻底统一）：壳是透明底，卡片才是白面 ──
@@ -394,7 +394,7 @@
   }
 
   .app-shell.quick-notes-active .quick-notes-pane {
-    background: var(--lake-shell);
+    background: var(--lake-bg-window);
   }
 }
 
@@ -493,13 +493,13 @@
  * 与所有「中间文件」的 (选择器,属性) 交集为 **0** ⇒ 前移后层叠结果不变；同名文件对 4 → 0。 ── */
 /* Product shell aliases. Lake's native editor toolbar remains untouched. */
 :root {
-  color: var(--lake-text);
-  background: var(--lake-shell);
+  color: var(--lake-text-1);
+  background: var(--lake-bg-window);
 }
 
 .app-shell {
-  color: var(--lake-text);
-  background: var(--lake-shell);
+  color: var(--lake-text-1);
+  background: var(--lake-bg-window);
   /* 保留大纲列宽的 grid 过渡（260ms）：随当前文档有无大纲平滑收起/展开，避免正文区瞬间跳变 */
   transition: grid-template-columns var(--lake-motion-panel) var(--lake-ease-standard);
 }
@@ -511,7 +511,7 @@
 .floating-dialog,
 .settings-panel,
 .search-panel {
-  border-color: var(--lake-border);
+  border-color: var(--lake-border-1);
 }
 
 .sidebar,
@@ -520,17 +520,17 @@
 .floating-dialog,
 .settings-panel,
 .search-panel {
-  background: var(--lake-panel);
-  color: var(--lake-text);
+  background: var(--lake-bg-panel);
+  color: var(--lake-text-1);
 }
 
 .document-pane .lake-editor-mount {
-  background: var(--lake-canvas);
+  background: var(--lake-bg-canvas);
 }
 
 .statusbar,
 .tab-bar {
-  color: var(--lake-text-secondary);
+  color: var(--lake-text-2);
 }
 
 [data-theme="dark"] .sidebar,
@@ -539,7 +539,7 @@
 [data-theme="dark"] .floating-dialog,
 [data-theme="dark"] .settings-panel,
 [data-theme="dark"] .search-panel {
-  border-color: var(--lake-border);
+  border-color: var(--lake-border-1);
 }
 
 /* 专注模式：宽窄共用。原先只在 `@media (min-width: 761px)` 里 ⇒ 窄窗按 ⌘⇧Enter 只加了类名、
@@ -564,12 +564,12 @@ html[data-theme="dark"] .outline-sidebar__content,
 html[data-theme="dark"] .floating-dialog,
 html[data-theme="dark"] .settings-panel,
 html[data-theme="dark"] .search-panel {
-  background: var(--lake-panel);
-  border-color: var(--lake-border);
+  background: var(--lake-bg-panel);
+  border-color: var(--lake-border-1);
 }
 html[data-theme="dark"] .document-pane .lake-editor,
 html[data-theme="dark"] .document-pane .lake-editor-main {
-  background: var(--lake-canvas);
+  background: var(--lake-bg-canvas);
 }
 
 html[data-theme="dark"] .document-pane .ne-engine,
@@ -587,7 +587,7 @@ html[data-theme="dark"] .document-pane .ne-engine > ne-h3 ne-heading-content,
 html[data-theme="dark"] .document-pane .ne-engine > ne-h4 ne-heading-content,
 html[data-theme="dark"] .document-pane .ne-engine > ne-h5 ne-heading-content,
 html[data-theme="dark"] .document-pane .ne-engine > ne-h6 ne-heading-content {
-  color: var(--lake-text);
+  color: var(--lake-text-1);
 }
 
 /* Focus mode keeps the document breadcrumb/menu usable. The collapsed outline
@@ -656,7 +656,7 @@ html[data-theme="dark"] .document-pane .ne-engine > ne-h6 ne-heading-content {
   height: 7px;
   margin-left: 1px;
   border-radius: 50%;
-  background: var(--lake-sync-pending);
+  background: var(--lake-status-pending);
 }
 
 .tab-item .tab-close {
@@ -679,7 +679,7 @@ html[data-theme="dark"] .document-pane .ne-engine > ne-h6 ne-heading-content {
   font-size: 12px;
   font-weight: 600;
   letter-spacing: .02em;
-  color: var(--lake-text-secondary, var(--lake-text));
+  color: var(--lake-text-2, var(--lake-text-1));
 }
 
 .sidebar-toolbar-row {
@@ -722,8 +722,8 @@ html[data-theme="dark"] .document-pane .ne-engine > ne-h6 ne-heading-content {
   gap: 5px;
   height: 29px;
   padding: 0 9px;
-  color: var(--lake-text-tertiary);
-  border-bottom: 1px solid var(--lake-border);
+  color: var(--lake-text-3);
+  border-bottom: 1px solid var(--lake-border-1);
 }
 
 .dock-filter-input {
@@ -734,11 +734,11 @@ html[data-theme="dark"] .document-pane .ne-engine > ne-h6 ne-heading-content {
   border: 0;
   outline: 0;
   background: transparent;
-  color: var(--lake-text);
+  color: var(--lake-text-1);
   font-size: 12px;
 }
 
-.dock-filter-input::placeholder { color: var(--lake-text-tertiary); }
+.dock-filter-input::placeholder { color: var(--lake-text-3); }
 
 /* 顶栏下拉里的快捷键提示（全文搜索 ⇧⌘F / 专注模式 ⌘⇧Enter）统一成右对齐弱文字 */
 .top-menu > button span {
@@ -786,7 +786,7 @@ html[data-theme="dark"] .document-pane .ne-engine > ne-h6 ne-heading-content {
 .tree-row.drop-after::after { bottom: -1px; }
 
 .tree-row.drop-inside {
-  color: var(--lake-text);
+  color: var(--lake-text-1);
 }
 
 .tree-row.dragging {
@@ -794,8 +794,8 @@ html[data-theme="dark"] .document-pane .ne-engine > ne-h6 ne-heading-content {
 }
 
 .tree-row.drop-inside {
-  background: color-mix(in srgb, var(--lake-text) 8%, transparent);
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--lake-text) 8%, transparent);
+  background: color-mix(in srgb, var(--lake-text-1) 8%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--lake-text-1) 8%, transparent);
   transform: none;
 }
 
@@ -834,7 +834,7 @@ html[data-theme="dark"] .document-pane .ne-engine > ne-h6 ne-heading-content {
   height: 2px;
   border-radius: 999px;
   background: var(--lake-accent);
-  box-shadow: 0 0 0 3px var(--lake-accent-soft);
+  box-shadow: 0 0 0 3px var(--lake-accent-tint);
 }
 
 .tree-row.drop-crossing::before,
@@ -855,7 +855,7 @@ html[data-theme="dark"] .document-pane .ne-engine > ne-h6 ne-heading-content {
 /* 源行留在原位只降透明度（跟手的是 [data-drag-ghost] 浮层） */
 .tree-row.dragging {
   opacity: .38;
-  color: var(--lake-text);
+  color: var(--lake-text-1);
   background: transparent;
   box-shadow: none;
 }
@@ -880,8 +880,8 @@ html[data-theme="dark"] .document-pane .ne-engine > ne-h6 ne-heading-content {
 .tree-row.drop-line-after::after { bottom: -1px; }
 
 .tree-row.drop-parent {
-  color: var(--lake-text);
-  background: color-mix(in srgb, var(--lake-accent) 12%, var(--lake-panel));
+  color: var(--lake-text-1);
+  background: color-mix(in srgb, var(--lake-accent) 12%, var(--lake-bg-panel));
   box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--lake-accent) 76%, transparent);
 }
 
@@ -910,7 +910,7 @@ html[data-theme="dark"] .document-pane .ne-engine > ne-h6 ne-heading-content {
 /* 页签 active：白卡底（b3/components.css 的 .tab-item.active 提供）已足够标识当前页；
    文字保持中性墨色 + 略加字重，避免「浅底 + 描边 + 主色字」多重信号。 */
 .tab-item.active {
-  color: var(--lake-text);
+  color: var(--lake-text-1);
 }
 
 /* ---- 交互动效（B）：顶栏/图标按钮统一按压反馈 ---- */

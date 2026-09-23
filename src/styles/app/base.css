@@ -50,13 +50,13 @@ button { cursor: pointer; }
      与 --lake-* 的差异也只有"是否偏冷"这一点，收敛后观感更统一。 */
   --shell-accent: var(--lake-accent);
   --shell-accent-strong: var(--lake-accent);
-  --shell-accent-soft: var(--lake-accent-soft);
-  --shell-text: var(--lake-text);
-  --shell-text-secondary: var(--lake-text-secondary);
-  --shell-text-tertiary: var(--lake-text-tertiary);
-  --shell-separator: color-mix(in srgb, var(--lake-text) 9%, transparent);
+  --shell-accent-soft: var(--lake-accent-tint);
+  --shell-text: var(--lake-text-1);
+  --shell-text-secondary: var(--lake-text-2);
+  --shell-text-tertiary: var(--lake-text-3);
+  --shell-separator: color-mix(in srgb, var(--lake-text-1) 9%, transparent);
   /* 不透明的冷调表面，保资料库可读 */
-  --shell-material: var(--lake-surface);
+  --shell-material: var(--lake-bg-block);
   --shell-ease: var(--lake-ease-standard);
 }
 
@@ -68,7 +68,7 @@ button { cursor: pointer; }
 
 /* ===== 2026-08-13 统一窗口材质 / 思源式浮动面板 ===== */
 :root {
-  --shell-gradient-top: color-mix(in srgb, var(--lake-shell) 45%, var(--lake-panel)); /* 浅色≈#fafbfd / 深色≈#191c21 */
-  --shell-unified-background: var(--lake-shell);
-  --shell-unified-topbar: var(--lake-panel);
+  --shell-gradient-top: color-mix(in srgb, var(--lake-bg-window) 45%, var(--lake-bg-panel)); /* 浅色≈#fafbfd / 深色≈#191c21 */
+  --shell-unified-background: var(--lake-bg-window);
+  --shell-unified-topbar: var(--lake-bg-panel);
 }

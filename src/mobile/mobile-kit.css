@@ -12,7 +12,7 @@
 .mobile-toast-host { position: fixed; z-index: var(--mobile-z-snackbar); right: 16px; left: 16px; top: calc(16px + var(--mobile-top-safe-area)); display: flex; flex-direction: column; align-items: flex-end; gap: 8px; pointer-events: none; }
 .mobile-toast { pointer-events: auto; max-width: min(420px, 100%); display: flex; align-items: center; gap: 8px; padding: 10px 12px; border: 1px solid var(--lake-border-1); border-left: 3px solid var(--lake-accent); border-radius: var(--lake-radius-md); background: var(--lake-bg-panel); color: var(--lake-text-1); box-shadow: var(--lake-shadow-popover); font-size: var(--lake-font-size-small); transition: transform var(--mobile-duration-panel) var(--mobile-ease-out), opacity var(--mobile-duration-panel) var(--mobile-ease-out); }
 .mobile-toast.is-hide { transform: translateX(calc(100% + 16px)); opacity: 0; }
-.mobile-toast--error { border-left-color: var(--lake-error); }
+.mobile-toast--error { border-left-color: var(--lake-status-error); }
 .mobile-toast__text { flex: 1 1 auto; min-width: 0; }
 .mobile-toast__close { flex: 0 0 auto; border: 0; background: transparent; color: var(--lake-text-3); cursor: pointer; }
 
@@ -27,8 +27,8 @@
 .mobile-dialog__actions { display: flex; justify-content: flex-end; align-items: center; gap: 8px; padding: 16px; }
 
 /* 危险主按钮（确认框的「删除」）：实心 error 底 + on-accent 字（kit 的 --danger 单独用是描边风格）。 */
-.ln-btn--primary.ln-btn--danger { color: var(--lake-text-on-accent); background: var(--lake-error); border-color: transparent; }
-.ln-btn--primary.ln-btn--danger:hover { background: var(--lake-error-strong, var(--lake-error)); }
+.ln-btn--primary.ln-btn--danger { color: var(--lake-text-on-accent); background: var(--lake-status-error); border-color: transparent; }
+.ln-btn--primary.ln-btn--danger:hover { background: var(--lake-status-error, var(--lake-status-error)); }
 
 /* ── W2 移动端弹层菜单（替代思源 .b3-menu--sheet*）────────────────── */
 .mobile-menu__scrim { position: fixed; inset: 0; z-index: var(--mobile-z-menu-scrim); background: var(--mobile-mask); opacity: 0; transition: opacity var(--mobile-duration-panel) linear; }
@@ -42,8 +42,8 @@
 .mobile-menu__item { position: relative; display: flex; align-items: center; gap: 10px; width: 100%; min-height: 48px; padding: 0 16px; border: 0; background: transparent; color: var(--lake-text-1); font-size: var(--lake-font-size-body); text-align: left; }
 .mobile-menu__item:active { background: var(--lake-bg-press); }
 .mobile-menu__item:disabled { color: var(--lake-text-4); }
-.mobile-menu__item.is-danger { color: var(--lake-error); }
-.mobile-menu__item.is-danger .mobile-menu__icon { color: var(--lake-error); }
+.mobile-menu__item.is-danger { color: var(--lake-status-error); }
+.mobile-menu__item.is-danger .mobile-menu__icon { color: var(--lake-status-error); }
 .mobile-menu__icon { flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center; width: 20px; color: var(--lake-text-3); }
 .mobile-menu__icon > svg { width: 18px; height: 18px; display: block; }
 .mobile-menu__label { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

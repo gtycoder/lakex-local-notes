@@ -14,8 +14,8 @@
   height: 26px;
   min-height: 26px;
   padding: 0 9px;
-  border-radius: var(--lake-shell-radius, 8px);
-  color: var(--lake-text-tertiary);
+  border-radius: var(--lake-radius-sm, 8px);
+  color: var(--lake-text-3);
   backdrop-filter: blur(10px) saturate(1.04);
   pointer-events: none;
   font-size: 11px; /* 10px 在 macOS 上已经低于可读下限（状态栏是可读信息，不是装饰） */
@@ -27,14 +27,14 @@
 .document-statusbar-stats,
 .document-statusbar-state { pointer-events: auto; -webkit-user-select: text; user-select: text; }
 .document-statusbar-stats { gap: 10px; white-space: nowrap; }
-.document-statusbar-state { justify-content: flex-end; color: var(--lake-text-secondary); white-space: nowrap; }
+.document-statusbar-state { justify-content: flex-end; color: var(--lake-text-2); white-space: nowrap; }
 .document-statusbar-status-icon { display: inline-flex; align-items: center; gap: 4px; }
 
 .document-statusbar-state.synced-history {
   padding: 2px 7px;
   border: 1px solid color-mix(in srgb, var(--lake-accent) 24%, transparent);
   border-radius: 999px;
-  color: var(--lake-accent-strong, var(--lake-accent));
+  color: var(--lake-accent, var(--lake-accent));
   background: color-mix(in srgb, var(--lake-accent) 10%, transparent);
   font-weight: 600;
 }
@@ -50,11 +50,11 @@
   min-height: 30px;
   padding: 5px 8px 5px 11px;
   transform: translateX(50%);
-  border: 1px solid color-mix(in srgb, var(--lake-border) 84%, transparent);
+  border: 1px solid color-mix(in srgb, var(--lake-border-1) 84%, transparent);
   border-radius: 8px;
-  color: var(--lake-text-secondary);
-  background: color-mix(in srgb, var(--lake-panel) 96%, transparent);
-  box-shadow: var(--lake-shadow-soft);
+  color: var(--lake-text-2);
+  background: color-mix(in srgb, var(--lake-bg-panel) 96%, transparent);
+  box-shadow: var(--lake-shadow-card);
   backdrop-filter: blur(10px) saturate(1.04);
   font-size: 11px;
   pointer-events: auto;
@@ -69,7 +69,7 @@
   padding: 2px 5px;
   border: 0;
   border-radius: 5px;
-  color: var(--lake-accent-strong, var(--lake-accent));
+  color: var(--lake-accent, var(--lake-accent));
   background: transparent;
   cursor: pointer;
   font: inherit;
@@ -90,7 +90,7 @@
   min-width: 0;
   max-width: min(360px, 42vw);
   overflow: hidden;
-  color: var(--lake-text-secondary);
+  color: var(--lake-text-2);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -100,7 +100,7 @@
   align-items: center;
   gap: 5px;
   min-width: 0;
-  color: var(--lake-accent-strong, var(--lake-accent));
+  color: var(--lake-accent, var(--lake-accent));
   font-weight: 600;
   white-space: nowrap;
 }

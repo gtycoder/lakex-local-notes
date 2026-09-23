@@ -85,6 +85,26 @@ const r = {
   sameNamePairs: pairs,
   entryB3ImportLines: b3ImportLines,
 };
+// ── 令牌护栏（260923）：① 禁"过渡别名残用" ② var(--lake-*) 必须已定义 ──
+const FORBIDDEN = ['--lake-shell','--lake-panel','--lake-canvas','--lake-surface','--lake-raised','--lake-border','--lake-text','--lake-text-secondary','--lake-text-tertiary','--lake-accent-soft','--lake-accent-soft-strong','--lake-sync-pending','--lake-sync-success','--lake-error','--lake-error-strong','--lake-error-soft','--lake-warning-soft','--lake-success-soft','--lake-shadow-panel','--lake-shadow-soft','--radius-xs','--radius-sm','--radius-md','--radius-xl','--radius-pill','--lake-motion-standard'];
+const cssAll = [...desktopGraph, ...mobileCss];
+const definedTokens = new Set();
+for (const p of cssAll) for (const m of readFileSync(p, 'utf8').matchAll(/(--[a-z0-9-]+)\s*:/g)) definedTokens.add(m[1]);
+const runtimeTokens = new Set();
+for (const p of files.filter((x) => /\.(tsx|ts)$/.test(x))) for (const m of readFileSync(p, 'utf8').matchAll(/--lake-[a-z0-9-]+/g)) runtimeTokens.add(m[0]);
+const aliasRe = new RegExp('var\\(\\s*(?:' + FORBIDDEN.map((a) => a.replace(/-/g, '\\-')).join('|') + ')\\s*\\)', 'g');
+let aliasHits = 0; const aliasTop = [];
+let undefHits = 0; const undefTop = [];
+for (const p of cssAll) {
+  const src = readFileSync(p, 'utf8');
+  const a = count(src, aliasRe);
+  if (a) { aliasHits += a; aliasTop.push([relative(ROOT, p), a]); }
+  let u = 0; for (const m of src.matchAll(/var\(\s*(--lake-[a-z0-9-]+)/g)) if (!definedTokens.has(m[1]) && !runtimeTokens.has(m[1])) u += 1;
+  if (u) { undefHits += u; undefTop.push([relative(ROOT, p), u]); }
+}
+r.tokensGuard = { forbiddenAliasRefs: aliasHits, undefinedLakeRefs: undefHits, aliasTop, undefTop };
+if (aliasHits || undefHits) process.exitCode = 1;
+
 if (process.argv.includes('--json')) console.log(JSON.stringify(r, null, 2));
 else {
   console.log('== 桌面侧（目标口径） ==');
@@ -99,4 +119,7 @@ else {
   console.log('== 移动端（本批不动，仅记录） ==');
   console.log('  样式文件', r.mobileUntouched.files, ' var(--b3-*)', r.mobileUntouched.b3VarRefs, ' !important', r.mobileUntouched.important);
   console.log('== 思源层 !important  ', r.importantSiyuan, '（随 b3 一起删） ==');
+  console.log('== 令牌护栏（260923） ==');
+  console.log('  禁别名残用          ', r.tokensGuard.forbiddenAliasRefs, ' / 目标 0', r.tokensGuard.aliasTop.map(([f,n])=>f+':'+n).join(' ')||'');
+  console.log('  var(--lake-*) 未定义', r.tokensGuard.undefinedLakeRefs, ' / 目标 0', r.tokensGuard.undefTop.map(([f,n])=>f+':'+n).join(' ')||'');
 }

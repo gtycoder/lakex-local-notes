@@ -41,14 +41,14 @@
   --lakex-editor-color-black-f30: rgba(213, 218, 228, .30);
   --lakex-editor-color-black-f65: rgba(213, 218, 228, .65);
   --lakex-editor-color-theme: var(--lake-accent);
-  --lakex-editor-color-theme-light: var(--lake-accent-soft);
+  --lakex-editor-color-theme-light: var(--lake-accent-tint);
   --lakex-editor-color-white: #131519;
   --lakex-editor-color-white-f60: rgba(19, 21, 25, .60);
   --lakex-editor-color-white-f90: rgba(19, 21, 25, .90);
 }
 
 [data-theme="dark"] .document-pane {
-  background: var(--lake-shell);
+  background: var(--lake-bg-window);
 }
 
 /* ── 深色边界修复（审计发现）：html 背景 / 表单控件 / tab-switcher / 小记 ── */
@@ -59,9 +59,9 @@
 [data-theme="dark"] select,
 [data-theme="dark"] textarea,
 [data-theme="dark"] .secret-field {
-  background: var(--lake-shell);
+  background: var(--lake-bg-window);
   color: var(--lake-text-1);
-  border-color: var(--lake-border);
+  border-color: var(--lake-border-1);
 }
 
 [data-theme="dark"] .tab-switcher {
@@ -71,8 +71,8 @@
 
 [data-theme="dark"] .quick-note-composer,
 [data-theme="dark"] .quick-note-entry {
-  background: var(--lake-panel);
-  border-color: var(--lake-border);
+  background: var(--lake-bg-panel);
+  border-color: var(--lake-border-1);
   box-shadow: var(--lake-shadow-popover);
 }
 [data-theme="dark"] .quick-note-composer textarea {

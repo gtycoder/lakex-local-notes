@@ -75,13 +75,6 @@
   --lake-focus-ring-width: 2px;
   --lake-focus-ring-offset: 0px;
 
-  /* ---- 过渡别名：旧代码仍读这些名字（P7 删 legacy 后可移除） ---- */
-  --radius-xs: var(--lake-radius-xs);
-  --radius-sm: var(--lake-radius-sm);
-  --radius-md: var(--lake-radius-md);
-  --radius-xl: var(--lake-radius-xl);
-  --radius-pill: var(--lake-radius-pill);
-  --lake-motion-standard: var(--lake-motion-panel);
 
   /* 大纲级别的 6 色调色板（P7-d）：级别是**语义**不是主题色 ⇒ 不随主题变，但按硬指标
    * 「颜色字面量只允许出现在主题文件」，字面量统一收在这里，使用处只引用令牌。 */

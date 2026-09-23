@@ -28,7 +28,7 @@
 /* 多选态占用同一行：信息在左、动作在右（靠 spacer 撑开），不额外占卡片区高度 */
 .quick-notes-select-info { color: var(--lake-text-1); font-size: 13px; white-space: nowrap; margin-left: 2px; }
 
-.quick-notes-tools-divider { width: 1px; height: 14px; background: color-mix(in srgb, var(--lake-text) 16%, transparent); }
+.quick-notes-tools-divider { width: 1px; height: 14px; background: color-mix(in srgb, var(--lake-text-1) 16%, transparent); }
 
 .quick-notes-tools-spacer { flex: 1 1 auto; min-width: 12px; }
 
@@ -41,7 +41,7 @@
 
 .quick-notes-sort-wrap { position: relative; }
 
-.quick-notes-sort-menu { position: absolute; top: 34px; right: 0; z-index: 30; display: grid; gap: 1px; min-width: 132px; padding: 4px; border: 1px solid var(--lake-border-1); border-radius: 8px; background: var(--lake-bg-panel); box-shadow: var(--lake-shadow-panel); }
+.quick-notes-sort-menu { position: absolute; top: 34px; right: 0; z-index: 30; display: grid; gap: 1px; min-width: 132px; padding: 4px; border: 1px solid var(--lake-border-1); border-radius: 8px; background: var(--lake-bg-panel); box-shadow: var(--lake-shadow-popover); }
 
 .quick-notes-sort-menu button { display: flex; align-items: center; gap: 6px; padding: 6px 8px; border: 0; border-radius: 5px; color: var(--lake-text-1); background: transparent; font-size: 13px; text-align: left; cursor: pointer; }
 
@@ -52,9 +52,9 @@
 /* 多选：勾选框（仿语雀：绿色实心方块 + 白勾） */
 .qn-check { display: grid; place-items: center; width: 20px; height: 20px; padding: 0; border: 1.5px solid var(--lake-border-1); border-radius: 5px; color: var(--lake-text-on-accent); background: var(--lake-bg-panel); transition: background-color var(--lake-motion-fast) var(--lake-ease-standard), border-color var(--lake-motion-fast) var(--lake-ease-standard); }
 
-.qn-check:hover { border-color: var(--lake-sync-success); }
+.qn-check:hover { border-color: var(--lake-status-ok); }
 
-.qn-check.is-on { border-color: var(--lake-sync-success); background: var(--lake-sync-success); }
+.qn-check.is-on { border-color: var(--lake-status-ok); background: var(--lake-status-ok); }
 
 /* （多选条已并入头部那一行，见 .quick-notes-header-tools；这里只留链接按钮样式） */
 .quick-notes-link { border: 0; padding: 2px 4px; color: var(--lake-accent); background: transparent; font-size: 13px; cursor: pointer; }
@@ -63,7 +63,7 @@
 
 .quick-notes-link:disabled { opacity: .45; cursor: default; }
 
-.quick-notes-link--danger { color: var(--lake-error); }
+.quick-notes-link--danger { color: var(--lake-status-error); }
 
 /* 左右两栏：左＝常驻写作面板（含发布行），右＝小记卡片流，各自独立滚动 */
 .quick-notes-split { display: grid; grid-template-columns: minmax(290px, 36%) minmax(0, 1fr); gap: 18px; flex: 1; min-height: 0; padding-bottom: 18px; }
@@ -85,7 +85,7 @@
 .quick-notes-filter:hover { background: var(--lake-bg-hover); }
 /* 批量条（对齐云端图1）：勾选框 + N 篇 + 取消 + 动作图标 */
 .quick-notes-batch { display: flex; align-items: center; gap: 8px; padding: 4px 2px 8px; }
-.quick-notes-tool-btn--danger { color: var(--lake-error); }
+.quick-notes-tool-btn--danger { color: var(--lake-status-error); }
 /* 行内「⋯」与复选框：默认隐藏，hover/选中/菜单展开时显形（对齐云端） */
 .quick-note-index-row { position: relative; display: flex; align-items: center; gap: 4px; padding-right: 4px; }
 .quick-note-index-check { flex: 0 0 auto; opacity: 0; }
@@ -100,7 +100,7 @@
 .quick-note-index-actions { position: relative; flex: 0 0 auto; display: flex; align-items: center; opacity: 0; }
 .quick-note-index-row:hover .quick-note-index-actions,
 .quick-note-index-row.b3-list-item--focus .quick-note-index-actions { opacity: 1; }
-.quick-note-row-menu { position: absolute; top: 26px; right: 0; z-index: 30; display: grid; gap: 1px; min-width: 132px; padding: 4px; border: 1px solid var(--lake-border-1); border-radius: 8px; background: var(--lake-bg-panel); box-shadow: var(--lake-shadow-panel); }
+.quick-note-row-menu { position: absolute; top: 26px; right: 0; z-index: 30; display: grid; gap: 1px; min-width: 132px; padding: 4px; border: 1px solid var(--lake-border-1); border-radius: 8px; background: var(--lake-bg-panel); box-shadow: var(--lake-shadow-popover); }
 .quick-note-row-menu button { padding: 6px 10px; border: 0; border-radius: 5px; color: var(--lake-text-1); background: transparent; font-size: 13px; text-align: left; cursor: pointer; }
 .quick-note-row-menu button:hover:not(:disabled) { background: var(--lake-bg-hover); }
 .quick-note-row-menu button:disabled { opacity: .45; cursor: default; }
@@ -119,7 +119,7 @@
 
 .quick-notes-list .quick-notes-timeline { flex: 1; }
 
-.quick-notes-count { flex: 0 0 auto; padding: 5px 9px; border-radius: var(--radius-pill); color: var(--lake-accent); background: color-mix(in srgb, var(--lake-accent) 12%, transparent); font-size: 11px; font-weight: var(--lake-font-weight-semibold); }
+.quick-notes-count { flex: 0 0 auto; padding: 5px 9px; border-radius: var(--lake-radius-pill); color: var(--lake-accent); background: color-mix(in srgb, var(--lake-accent) 12%, transparent); font-size: 11px; font-weight: var(--lake-font-weight-semibold); }
 
 .quick-notes-error { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; padding: 9px 11px; border: 1px solid color-mix(in srgb, var(--lake-status-error) 20%, transparent); border-radius: var(--lake-radius-sm); color: var(--lake-status-error); background: color-mix(in srgb, var(--lake-status-error) 6%, transparent); font-size: 12px; }
 
@@ -143,7 +143,7 @@
 
 .quick-note-composer .quick-note-editor > .lake-editor-mount { flex: 1; min-height: 200px; }
 
-.quick-note-composer-actions { display: flex; align-items: center; gap: 10px; margin-top: 10px; color: var(--lake-text-tertiary); font-size: 12px; }
+.quick-note-composer-actions { display: flex; align-items: center; gap: 10px; margin-top: 10px; color: var(--lake-text-3); font-size: 12px; }
 
 /* 动作行按版式分组（260920）：写作卡＝「小记一下 / 取消 / 提示」靠左；编辑既有小记＝「取消 / 保存」整组靠右下。
    改前用一个 `flex: 1` 的空占位把「取消」顶到最右，保存和取消分居两个角落（用户反馈太偏僻）。 */
@@ -160,7 +160,7 @@
 .quick-note-entry.editing:has(.ne-ui-fullscreen) .quick-note-composer-actions {
   position: absolute; right: 16px; bottom: 14px; z-index: 31; margin: 0;
   padding: 6px 8px; border: 1px solid var(--lake-border-1); border-radius: 10px;
-  background: var(--lake-bg-panel); box-shadow: var(--lake-shadow-soft);
+  background: var(--lake-bg-panel); box-shadow: var(--lake-shadow-card);
 }
 
 /* 展开态下的**反馈**（保存失败/提示条）同样不能被展开层盖住：展开层铺满面板 + z-index:30
@@ -169,7 +169,7 @@
 .quick-notes-pane:has(.ne-ui-fullscreen) .quick-notes-error,
 .quick-notes-pane:has(.ne-ui-fullscreen) .quick-notes-hint {
   position: absolute; left: 16px; bottom: 14px; z-index: 32; margin: 0;
-  max-width: min(520px, calc(100% - 240px)); box-shadow: var(--lake-shadow-soft);
+  max-width: min(520px, calc(100% - 240px)); box-shadow: var(--lake-shadow-card);
 }
 
 .quick-notes-compose:has(.ne-ui-fullscreen) .quick-note-publish-hint,
@@ -201,7 +201,7 @@
 
 .quick-note-composer-actions .quick-note-publish.is-emphasized:hover { background: color-mix(in srgb, var(--lake-accent) 88%, var(--lake-accent-ink)); color: var(--lake-text-on-accent); }
 
-.quick-note-publish-hint + .quick-note-publish-hint-sub { border-left: 1px solid color-mix(in srgb, var(--lake-text) 14%, transparent); padding-left: 10px; }
+.quick-note-publish-hint + .quick-note-publish-hint-sub { border-left: 1px solid color-mix(in srgb, var(--lake-text-1) 14%, transparent); padding-left: 10px; }
 
 /* 「取消」= 与主按钮同组的次级描边按钮（选择器带父级是为了压过 b3 的 .b3-button 边框）。 */
 .quick-note-composer-actions .quick-note-discard {
@@ -293,7 +293,7 @@
 
 .quick-note-card-actions button.danger:hover { color: var(--lake-status-error); background: color-mix(in srgb, var(--lake-status-error) 10%, transparent); }
 
-.quick-note-conflict { padding: 2px 6px; border-radius: var(--radius-pill); color: var(--lake-sync-pending); background: var(--lake-warning-soft); font-size: 10px; }
+.quick-note-conflict { padding: 2px 6px; border-radius: var(--lake-radius-pill); color: var(--lake-status-pending); background: var(--lake-status-pending-soft); font-size: 10px; }
 
 .quick-note-entry.conflict { border-color: var(--lake-conflict-border); }
 
@@ -308,7 +308,7 @@
 /* 小记工作台：与主界面同族的中性渐变 */
 @media (min-width: 761px) {
   .quick-notes-pane {
-    background: var(--lake-shell);
+    background: var(--lake-bg-window);
   }
 }
 
@@ -327,13 +327,13 @@
 /* ── P7-c 归并：原 src/styles/quick-notes.css 的内容并入此处（两者在 legacy 层内原本相邻，
  * 且经选择器比对**无中间文件重叠** ⇒ 层叠等价；同名文件对 4 → 3）。 ── */
 /* Quick Notes keeps its independent workspace identity while sharing shell semantics. */
-.quick-notes-pane { background: var(--lake-shell); }
+.quick-notes-pane { background: var(--lake-bg-window); }
 .quick-note-composer,
-.quick-note-entry { border-color: var(--lake-border); background: var(--lake-panel); box-shadow: var(--lake-shadow-soft); }
+.quick-note-entry { border-color: var(--lake-border-1); background: var(--lake-bg-panel); box-shadow: var(--lake-shadow-card); }
 .quick-note-composer textarea,
-.quick-note-entry p { color: var(--lake-text); }
-.quick-note-entry time { color: var(--lake-text-tertiary); }
-.quick-note-card-actions button:hover { color: var(--lake-accent); background: var(--lake-accent-soft); }
+.quick-note-entry p { color: var(--lake-text-1); }
+.quick-note-entry time { color: var(--lake-text-3); }
+.quick-note-card-actions button:hover { color: var(--lake-accent); background: var(--lake-accent-tint); }
 
 /* ── 以下规则自 `src/styles/ui-polish.css` 按职责并入（260916 S2/S3，只搬家不改声明）：小记入口 ── */
 /* ---- 跨屏微交互一致性收口（仅渲染层 CSS，不重排布局 / 不动内核） ----

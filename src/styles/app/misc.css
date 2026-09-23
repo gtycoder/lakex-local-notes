@@ -3,23 +3,23 @@
    本层由 src/styles.css 的 @import 编排，整体仍在 b3 之前 —— 层间先后不得改变（见 docs/CSS-LAYERS-BRIEF-260916.md §6）。 */
 
 /* 树行同步绿点已移除：自动保存窗口仅 1s，该点无实际意义。顶栏/标签的同步状态另见 .sync-state-dot。 */
-.empty-list { padding: 28px 10px; color: var(--lake-text-tertiary); font-size: 12px; text-align: center; }
+.empty-list { padding: 28px 10px; color: var(--lake-text-3); font-size: 12px; text-align: center; }
 
-.save-label.error { color: var(--lake-error); }
+.save-label.error { color: var(--lake-status-error); }
 
-.save-label.dirty { color: var(--lake-sync-pending); }
+.save-label.dirty { color: var(--lake-status-pending); }
 
-.mode-toggle.selected { background: var(--lake-accent-soft); }
+.mode-toggle.selected { background: var(--lake-accent-tint); }
 
-.editor-error { display: flex; align-items: center; gap: 8px; max-width: 776px; margin: 20px auto; padding: 12px; border: 1px solid var(--lake-error-soft); border-radius: var(--radius-sm); color: var(--lake-error); background: var(--lake-error-soft); font-size: 13px; }
+.editor-error { display: flex; align-items: center; gap: 8px; max-width: 776px; margin: 20px auto; padding: 12px; border: 1px solid var(--lake-status-error-soft); border-radius: var(--lake-radius-sm); color: var(--lake-status-error); background: var(--lake-status-error-soft); font-size: 13px; }
 
 .loading-screen { height: 100vh; }
 
-.loading-screen small { color: var(--lake-error); }
+.loading-screen small { color: var(--lake-status-error); }
 
 .form-grid .wide { grid-column: 1 / -1; }
 
-.form-grid input[type="text"], .form-grid input[type="password"], .form-grid label > input:not([type="checkbox"]) { width: 100%; height: 36px; padding: 0 10px; border: 1px solid var(--lake-border); outline: 0; font-size: 12px; font-weight: 400; }
+.form-grid input[type="text"], .form-grid input[type="password"], .form-grid label > input:not([type="checkbox"]) { width: 100%; height: 36px; padding: 0 10px; border: 1px solid var(--lake-border-1); outline: 0; font-size: 12px; font-weight: 400; }
 
 .checkbox { flex-direction: row; align-items: center; font-weight: 400; }
 
@@ -29,16 +29,16 @@
 @keyframes sync-indeterminate { 0% { transform: translateX(-110%); } 100% { transform: translateX(320%); } }
 
 /* .connection-message.ok 在下方「同步面板 v2」一处定义（此处原有一份重复的被其覆盖，已删） */
-.connection-message.error { color: var(--lake-error); background: var(--lake-error-soft); }
+.connection-message.error { color: var(--lake-status-error); background: var(--lake-status-error-soft); }
 
 /* ===== 孤儿资源（未引用附件）清理 ===== */
 .spin { animation: spin 1s linear infinite; }
 
 @keyframes spin { to { transform: rotate(360deg); } }
 
-.danger-button { border-color: var(--lake-error); color: white; background: var(--lake-error); }
+.danger-button { border-color: var(--lake-status-error); color: white; background: var(--lake-status-error); }
 
-.danger-button:hover { background: var(--lake-error-strong); }
+.danger-button:hover { background: var(--lake-status-error); }
 
 /* ===== Multi-Tab Editor ===== */
 .multi-tab-editor {
@@ -64,7 +64,7 @@
 
 @media (min-width: 761px) {
 
-  .app-shell.sidebar-collapsed { transition-duration: var(--lake-motion-standard); }
+  .app-shell.sidebar-collapsed { transition-duration: var(--lake-motion-panel); }
   .app-shell.sidebar-resizing { transition: none; }
 
   /* .activity-rail / .activity-rail-spacer / .activity-rail-fill / .activity-button
@@ -90,7 +90,7 @@
     color: var(--shell-text);
   }
   .note-row-copy strong { color: inherit; }
-  .tree-row.type-notebook { min-height: 29px; color: var(--lake-text); }
+  .tree-row.type-notebook { min-height: 29px; color: var(--lake-text-1); }
   .tree-row.type-notebook .note-row-copy strong { color: inherit; }
   .tree-children { border-left-color: var(--lake-border-2); transform-origin: top; animation: shell-tree-reveal 180ms var(--shell-ease); }
 
@@ -113,7 +113,7 @@
     right: 4px;
     width: 2px;
     height: 48px;
-    border-radius: var(--radius-pill);
+    border-radius: var(--lake-radius-pill);
     background: transparent;
     transform: translateY(-50%);
     transition: background-color var(--lake-motion-fast) var(--lake-ease-standard);
@@ -137,7 +137,7 @@
     border-radius: 6px;
     color: var(--lake-tooltip-fg);
     background: var(--lake-tooltip-bg);
-    box-shadow: var(--lake-shadow-soft);
+    box-shadow: var(--lake-shadow-card);
     font-size: 11px;
     font-weight: 500;
     line-height: 1.25;
@@ -153,10 +153,10 @@
   .sync-tab-action.syncing { color: var(--lake-accent); }
   .sync-tab-action.syncing svg { animation: shell-sync-pulse 1.25s ease-in-out infinite; }
   .sync-tab-action.syncing .sync-state-dot { background: var(--lake-accent); animation: shell-sync-dot 1.25s ease-in-out infinite; }
-  .sync-tab-action.success { color: var(--lake-sync-success); }
-  .sync-tab-action.success .sync-state-dot { background: var(--lake-sync-success); }
-  .sync-tab-action.error { color: var(--lake-error); }
-  .sync-tab-action.error .sync-state-dot { background: var(--lake-error); }
+  .sync-tab-action.success { color: var(--lake-status-ok); }
+  .sync-tab-action.success .sync-state-dot { background: var(--lake-status-ok); }
+  .sync-tab-action.error { color: var(--lake-status-error); }
+  .sync-tab-action.error .sync-state-dot { background: var(--lake-status-error); }
 }
 
 @keyframes shell-sync-pulse {
@@ -214,7 +214,7 @@
 /* ===== 2026-08-06 同步视觉：弹窗/小记/按钮统一到暖紫灰体系（仅配色） ===== */
 /* 主/次按钮：绿 → shell 强调色；次按钮白微卡 */
 /* 同步/设置面板：去绿、去旧边框，融入 shell */
-.connection-message.ok { color: var(--lake-sync-success); background: var(--lake-success-soft); }
+.connection-message.ok { color: var(--lake-status-ok); background: var(--lake-status-ok-soft); }
 
 /* M1.6 自定义图标 + emoji 选择器 */
 .tree-node-custom-icon { font-size: 15px; line-height: 1; }
@@ -225,7 +225,7 @@
 
 .emoji-picker-tabs { display: flex; gap: 4px; overflow-x: auto; padding-bottom: 2px; }
 
-.emoji-picker-tab { flex: none; padding: 4px 10px; border: 0; border-radius: var(--radius-pill); background: var(--lake-border-2); color: var(--lake-text-3); font-size: 12px; cursor: pointer; white-space: nowrap; }
+.emoji-picker-tab { flex: none; padding: 4px 10px; border: 0; border-radius: var(--lake-radius-pill); background: var(--lake-border-2); color: var(--lake-text-3); font-size: 12px; cursor: pointer; white-space: nowrap; }
 
 .emoji-picker-tab:hover { background: var(--lake-bg-hover); }
 
@@ -245,7 +245,7 @@
 
 .emoji-picker-grid { display: grid; grid-template-columns: repeat(14, minmax(0, 1fr)); gap: 0; overflow-y: auto; flex: 1 1 auto; min-height: 0; padding: 2px; }
 
-.emoji-picker-cell { display: flex; align-items: center; justify-content: center; min-height: 33px; border: 0; border-radius: var(--radius-sm); background: transparent; font-size: 24px; line-height: 1; cursor: pointer; }
+.emoji-picker-cell { display: flex; align-items: center; justify-content: center; min-height: 33px; border: 0; border-radius: var(--lake-radius-sm); background: transparent; font-size: 24px; line-height: 1; cursor: pointer; }
 
 .emoji-picker-cell:hover { background: var(--lake-bg-hover); }
 
@@ -278,10 +278,10 @@
     max-width: 310px;
     padding: 8px 11px;
     border: 0;
-    border-radius: var(--radius-md);
+    border-radius: var(--lake-radius-md);
     color: var(--lake-tooltip-fg);
     background: var(--lake-tooltip-bg);
-    box-shadow: var(--lake-shadow-soft);
+    box-shadow: var(--lake-shadow-card);
     font-size: 12px;
     line-height: 1.45;
     text-align: left;

@@ -41,7 +41,7 @@
 .ln-dialog__resize:hover { color: var(--lake-text-2); }
 
 /* .floating-dialog = 设置 / 回收站 / 历史 的面板容器（与 .ln-dialog 是两套历史实现，
- * 这里统一到同一份表面规格）。注意 legacy 的 `background: var(--lake-panel) !important` 仍在，
+ * 这里统一到同一份表面规格）。注意 legacy 的 `background: var(--lake-bg-panel) !important` 仍在，
  * 但该别名已指向 --lake-bg-panel，取值与新令牌一致，故不再加 !important 对抗。 */
 .floating-dialog,
 .settings-panel,

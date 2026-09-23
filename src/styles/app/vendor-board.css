@@ -18,7 +18,7 @@
 }
 
 .plait-board-container.theme-retro .board-host-svg {
-  background-color: var(--lake-warning-soft);
+  background-color: var(--lake-status-pending-soft);
 }
 
 .plait-board-container.theme-dark .board-host-svg {

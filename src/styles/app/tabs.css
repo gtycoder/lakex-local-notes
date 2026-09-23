@@ -35,7 +35,7 @@
 }
 
 /* 未保存标记：Tab 标签上的小圆点 */
-.tab-item .tab-pin { flex: none; color: var(--lake-text-tertiary); }
+.tab-item .tab-pin { flex: none; color: var(--lake-text-3); }
 
 .tab-item .tab-custom-icon { flex: none; font-size: 13px; line-height: 1; }
 
@@ -45,7 +45,7 @@
 
 .tab-item.deleted .tab-title { text-decoration: line-through; opacity: .72; }
 
-.tab-item.deleted.active { box-shadow: inset 0 -1px 0 var(--lake-error); }
+.tab-item.deleted.active { box-shadow: inset 0 -1px 0 var(--lake-status-error); }
 
 .tab-close {
   display: flex;
@@ -204,7 +204,7 @@
   transform: translateY(-50%);
   width: 2px;
   height: 40px;
-  border-radius: var(--radius-pill);
+  border-radius: var(--lake-radius-pill);
   background: var(--lake-neutral-veil-3);
   opacity: 0;
   transition: opacity var(--lake-motion-fast) var(--lake-ease-standard);
@@ -236,7 +236,7 @@
   align-items: center;
   gap: 4px;
   min-height: 32px;
-  border-radius: var(--radius-md);
+  border-radius: var(--lake-radius-md);
 }
 
 /* P5-i：原 `.tab-switcher-item.active { background: rgba(59,91,219,.11) }` 与
@@ -277,7 +277,7 @@
 
 .tab-switcher-status {
   width: 7px;
-  color: var(--lake-sync-pending);
+  color: var(--lake-status-pending);
   font-size: 10px;
   line-height: 1;
 }
@@ -291,14 +291,14 @@
   width: 26px;
   height: 26px;
   margin-right: 3px;
-  border-radius: var(--radius-sm);
+  border-radius: var(--lake-radius-sm);
   opacity: 0;
 }
 
 .tab-switcher-item:hover .tab-switcher-close,
 .tab-switcher-close:focus-visible { opacity: .7; }
 
-.tab-switcher-close:hover { color: var(--lake-error); background: var(--lake-error-soft); opacity: 1; }
+.tab-switcher-close:hover { color: var(--lake-status-error); background: var(--lake-status-error-soft); opacity: 1; }
 
 /* ===== 2026-08-06 标签拖拽排序动效 ===== */
 .tab-item { cursor: default; }

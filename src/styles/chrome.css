@@ -249,7 +249,7 @@
   border: 1px solid var(--lake-border-strong);
   border-left: 0;
   border-radius: 0 var(--lake-radius-md) var(--lake-radius-md) 0;
-  box-shadow: var(--lake-shadow-soft);
+  box-shadow: var(--lake-shadow-card);
 }
 
 /* ── 左缘「跟手把手」(260922)：隐形热区里浮出的小把手 ──
@@ -273,7 +273,7 @@
   border-radius: 0 10px 10px 0;
   color: var(--lake-text-3);
   background: color-mix(in srgb, var(--lake-bg-panel) 92%, transparent);
-  box-shadow: var(--lake-shadow-soft);
+  box-shadow: var(--lake-shadow-card);
   font-size: 9px;
   line-height: 1;
   opacity: 0;
@@ -575,7 +575,7 @@
   color: var(--lake-text-1);
   background: var(--lake-bg-panel);
   box-shadow: var(--lake-shadow-popover);
-  animation: sync-toast-in var(--lake-motion-standard) var(--lake-ease-standard);
+  animation: sync-toast-in var(--lake-motion-panel) var(--lake-ease-standard);
 }
 @keyframes sync-toast-in {
   from { opacity: 0; transform: translateY(4px) scale(.985); }
