@@ -75,6 +75,8 @@
 **显示**：桌面 + 编辑态 + （**文字选区非折叠** 或 **点中图片卡片**） + 落在**当前可见**编辑器内。
 图片形态锚点 = 图片卡片 `getBoundingClientRect()`；文字形态锚点 = 选区 `Range.getBoundingClientRect()`（多行取首行）。
 
+**指针按住期间一律不显示**（拖选中弹出会挡住「从下往上选」的落点）：按住时隐藏，等 `pointerup / pointercancel / mouseup` 松开后再计算与显示（键盘选段/移动光标不受影响）。
+
 **不显示**（v1 直接不挂）：
 
 - 阅读态（`mode === "viewer"`）、移动端（`EditorDock` 那套不动）；

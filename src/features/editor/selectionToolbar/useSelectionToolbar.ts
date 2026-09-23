@@ -44,6 +44,8 @@ export function useSelectionToolbar(editor: LakeEditorInstance, container: HTMLE
   const [state, setState] = useState<ToolbarState>(EMPTY_STATE);
   const toolbarRef = useRef<HTMLDivElement | null>(null);
   const imageRef = useRef<ImageTarget | null>(null);
+  /** 指针按住中（拖选进行中）：此时不弹浮框，等完全松开再弹（否则从下往上选会被挡住）。 */
+  const pressingRef = useRef(false);
 
 
   const readState = useCallback((): ToolbarState => {
@@ -65,6 +67,7 @@ export function useSelectionToolbar(editor: LakeEditorInstance, container: HTMLE
   }, [editor]);
 
   const computeTarget = useCallback((): SelectionTarget | null => {
+    if (pressingRef.current) return null;   // 拖选过程中不弹，等 pointerup
     if (!container.isConnected || container.getClientRects().length === 0) return null;
     const sel = window.getSelection();
     if (sel && !sel.isCollapsed && sel.rangeCount > 0 && container.contains(sel.anchorNode)) {
@@ -123,6 +126,12 @@ export function useSelectionToolbar(editor: LakeEditorInstance, container: HTMLE
       } else {
         imageRef.current = null;
       }
+      pressingRef.current = true;
+      setTarget(null);   // 按住即隐：拖选/点图过程中都不显示
+    };
+    const endPress = () => {
+      if (!pressingRef.current) return;
+      pressingRef.current = false;
       refresh();
       window.requestAnimationFrame(refresh);
     };
@@ -133,6 +142,9 @@ export function useSelectionToolbar(editor: LakeEditorInstance, container: HTMLE
     };
     document.addEventListener("selectionchange", onSelectionChange);
     document.addEventListener("pointerdown", onPointerDown, true);
+    document.addEventListener("pointerup", endPress, true);
+    document.addEventListener("pointercancel", endPress, true);
+    document.addEventListener("mouseup", endPress, true);
     document.addEventListener("keydown", onKeyDown, true);
     window.addEventListener("resize", refresh);
     document.addEventListener("scroll", refresh, true);
@@ -146,6 +158,9 @@ export function useSelectionToolbar(editor: LakeEditorInstance, container: HTMLE
     return () => {
       document.removeEventListener("selectionchange", onSelectionChange);
       document.removeEventListener("pointerdown", onPointerDown, true);
+      document.removeEventListener("pointerup", endPress, true);
+      document.removeEventListener("pointercancel", endPress, true);
+      document.removeEventListener("mouseup", endPress, true);
       document.removeEventListener("keydown", onKeyDown, true);
       window.removeEventListener("resize", refresh);
       document.removeEventListener("scroll", refresh, true);
