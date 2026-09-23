@@ -16,7 +16,7 @@
 
 .create-menu { display: flex; position: absolute; top: 36px; right: 0; z-index: 1000; flex-direction: column; width: 150px; max-width: calc(100vw - 16px); transform-origin: top right; transition: transform var(--lake-motion-fast) var(--lake-ease-standard), opacity var(--lake-motion-fast) var(--lake-ease-standard); }
 
-.create-menu > button { display: grid; grid-template-columns: 20px minmax(0, 1fr); align-items: center; gap: 8px; width: 100%; min-height: 32px; padding: 4px 8px; border: 0; color: var(--lake-text-3); background: transparent; text-align: left; }
+.create-menu > button { display: grid; grid-template-columns: 20px minmax(0, 1fr); align-items: center; gap: 8px; width: 100%; min-height: 32px; padding: 4px 8px; border: 0; color: var(--lake-text-2); background: transparent; text-align: left; }
 
 .create-menu > button > span { display: flex; flex-direction: column; min-width: 0; }
 

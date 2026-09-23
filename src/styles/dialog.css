@@ -46,7 +46,7 @@
 .note-info-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px 20px; margin: 12px 0 4px; padding: 0; }
 .note-info-cell { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
 .note-info-cell--wide { grid-column: 1 / -1; }
-.note-info-cell dt { flex: 0 0 auto; color: var(--lake-text-3); font-size: 12px; }
+.note-info-cell dt { flex: 0 0 auto; color: var(--lake-text-2); font-size: 12px; }
 .note-info-cell dd { flex: 1 1 auto; min-width: 0; margin: 0; color: var(--lake-text-1); font-size: 12px; word-break: break-all; }
 .note-info-section { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--lake-border-2); }
 .note-info-section-title { display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; color: var(--lake-text-1); }

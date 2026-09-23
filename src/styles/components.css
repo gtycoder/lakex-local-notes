@@ -13,10 +13,10 @@
 .sync-status-dot.syncing { background: var(--lake-accent); animation: lake-status-pulse 1.2s ease-in-out infinite; }
 .sync-status-dot.error { background: var(--lake-status-error); }
 .sync-status-section { padding: 11px 0 0; }
-.sync-status-section h3 { margin: 0 0 6px; color: var(--lake-text-3); font-size: 11px; font-weight: var(--lake-font-weight-semibold); }
+.sync-status-section h3 { margin: 0 0 6px; color: var(--lake-text-2); font-size: 11px; font-weight: var(--lake-font-weight-semibold); }
 .sync-status-section dl { display: grid; gap: 5px; margin: 0; }
 .sync-status-section dl > div { display: flex; justify-content: space-between; gap: 12px; font-size: 12px; }
-.sync-status-section dt { color: var(--lake-text-3); }
+.sync-status-section dt { color: var(--lake-text-2); }
 .sync-status-section dd { margin: 0; color: var(--lake-text-1); font-variant-numeric: tabular-nums; text-align: right; }
 .sync-status-history-note { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: start; gap: 8px; margin-top: 10px; padding: 9px; border-radius: var(--lake-radius-sm); color: var(--lake-status-pending); background: var(--lake-status-pending-soft); font-size: 11px; }
 .sync-status-history-note div { display: grid; gap: 2px; }

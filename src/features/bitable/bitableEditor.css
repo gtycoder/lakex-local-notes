@@ -198,7 +198,7 @@
 
 .bt-popover { background: var(--lake-bg-panel); border: 1px solid var(--lake-border-1); border-radius: 10px; box-shadow: 0 10px 32px rgba(0, 0, 0, .14); max-height: min(380px, calc(100vh - 24px)); overflow: auto; animation: bt-pop .13s ease-out; }
 .bt-panel { padding: 6px; display: flex; flex-direction: column; gap: 2px; }
-.bt-panel h4 { margin: 4px 6px; font-size: 12px; color: var(--lake-text-3); }
+.bt-panel h4 { margin: 4px 6px; font-size: 12px; color: var(--lake-text-2); }
 .bt-panel-add { display: flex; align-items: center; gap: 4px; border: 0; background: transparent; cursor: pointer; padding: 6px; border-radius: 5px; font: inherit; font-size: 12px; color: var(--lake-accent); }
 .bt-panel-add:hover { background: var(--lake-bg-hover); }
 .bt-menu-item { display: flex; align-items: center; gap: 6px; border: 0; background: transparent; cursor: pointer; padding: 6px 8px; border-radius: 5px; font: inherit; font-size: 13px; text-align: left; color: inherit; }
@@ -239,7 +239,7 @@
 .bt-form-view { flex: 1; display: flex; gap: 12px; min-height: 0; padding: 12px; overflow: auto; }
 .bt-form-config { width: 240px; flex: 0 0 auto; display: flex; flex-direction: column; gap: 10px; }
 .bt-form-panel { border: 1px solid var(--lake-border-1); border-radius: 8px; padding: 8px; }
-.bt-form-panel h4 { margin: 0 0 6px; font-size: 12px; color: var(--lake-text-3); }
+.bt-form-panel h4 { margin: 0 0 6px; font-size: 12px; color: var(--lake-text-2); }
 .bt-form-topic { display: flex; align-items: center; justify-content: space-between; padding: 4px 2px; font-size: 13px; }
 .bt-form-topic-name { display: flex; align-items: center; gap: 5px; min-width: 0; }
 .bt-form-add { display: flex; align-items: center; gap: 5px; width: 100%; border: 0; background: transparent; cursor: pointer; padding: 5px 4px; border-radius: 5px; font: inherit; font-size: 13px; color: inherit; text-align: left; }

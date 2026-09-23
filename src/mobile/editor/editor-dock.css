@@ -164,7 +164,7 @@
 .med-outline-item:active { background: var(--lake-bg-hover); }
 .med-outline-item.lv1 { font-weight: 600; }
 .med-outline-item.lv2 { padding-left: 36px; }
-.med-outline-item.lv3 { padding-left: 52px; color: var(--lake-text-3); }
+.med-outline-item.lv3 { padding-left: 52px; color: var(--lake-text-2); }
 .med-doc-item { display: flex; align-items: center; width: 100%; border: none; background: transparent; padding: 0 20px; min-height: 40px; font-size: 16px; cursor: pointer; color: var(--lake-text-1); -webkit-tap-highlight-color: transparent; }
 .med-doc-item:active { background: var(--lake-bg-hover); }
 .med-doc-item.med-active { color: var(--lake-accent); font-weight: 600; }
