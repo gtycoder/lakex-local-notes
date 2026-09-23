@@ -77,11 +77,11 @@ function KMenu({ menu, children }: { menu: string; children: ReactNode }) {
   );
 }
 
-function KMenuItem({ label, icon, selected, shortcut, onClick }: {
-  label: string; icon?: string; selected?: boolean; shortcut?: string; onClick?: () => void;
+function KMenuItem({ label, icon, selected, shortcut, fontSize, onClick }: {
+  label: string; icon?: string; selected?: boolean; shortcut?: string; fontSize?: number; onClick?: () => void;
 }) {
   return (
-    <li role="menuitem" className={"ant-dropdown-menu-item ne-ui-select-item" + (selected ? " ant-dropdown-menu-item-selected" : "")} onClick={onClick}>
+    <li role="menuitem" style={fontSize ? { fontSize: fontSize } : undefined} className={"ant-dropdown-menu-item ne-ui-select-item" + (selected ? " ant-dropdown-menu-item-selected" : "")} onClick={onClick}>
       <div className="ne-ui-select-item-check-icon">{icon ? <KIcon name={icon} /> : selected ? <KIcon name="check" /> : null}</div>
       <div className="ne-ui-select-item-label">
         <div className="ne-ui-select-content">
@@ -189,7 +189,9 @@ export function SelectionToolbar({ editor, container, noteId }: {
       return (
         <KMenu menu="style">
           {PARAGRAPH_STYLES.map((b) => (
-            <KMenuItem key={b.value} label={b.label} selected={state.style === b.value} shortcut={b.keys} onClick={() => pick("style", b.value)} />
+            <KMenuItem key={b.value} label={b.label} selected={state.style === b.value} shortcut={b.keys}
+              fontSize={b.value === "h1" ? 24 : b.value === "h2" ? 20 : b.value === "h3" ? 16 : b.value === "h4" ? 14 : b.value === "h5" ? 13 : b.value === "h6" ? 12 : undefined}
+              onClick={() => pick("style", b.value)} />
           ))}
         </KMenu>
       );
@@ -355,7 +357,7 @@ export function SelectionToolbar({ editor, container, noteId }: {
   return (
     <div
       ref={toolbarRef}
-      className="selection-toolbar"
+      className="selection-toolbar lakex-default-theme"
       data-kind={target.kind}
       role="toolbar"
       aria-label={target.kind === "text" ? "文字格式工具栏" : "图片工具栏"}

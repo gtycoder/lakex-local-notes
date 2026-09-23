@@ -51,7 +51,7 @@ const BASELINE: Record<string, { decls: number; dupGroups: number }> = {
   "features/attachment/attachment-preview.css": { decls: 78, dupGroups: 0 },
   "features/editor/image-lightbox.css": { decls: 57, dupGroups: 0 },
   "features/outline/outline.css": { decls: 267, dupGroups: 0 },
-  "features/editor/selectionToolbar/selectionToolbar.css": { decls: 140, dupGroups: 0 },   // 浮动工具栏（选区气泡）：基线先置 0，实测后回填   // 260923 收敛：大纲样式从 feature.css/shell.css 并回本文件单一来源；再 -12 = 层级徽标改「两级语义+中性」，删掉 6 色相里 H3–H6 的 4 条规则   // 260923 W1-L2：-3   // 整边触发 + 去固定轨（合并重复材质规则）；260923 收敛：+2 + 删死 ::before —— 增强大纲样式从 feature.css 并回本文件单一来源（见下）
+  "features/editor/selectionToolbar/selectionToolbar.css": { decls: 153, dupGroups: 0 },   // 浮动工具栏（选区气泡）：基线先置 0，实测后回填   // 260923 收敛：大纲样式从 feature.css/shell.css 并回本文件单一来源；再 -12 = 层级徽标改「两级语义+中性」，删掉 6 色相里 H3–H6 的 4 条规则   // 260923 W1-L2：-3   // 整边触发 + 去固定轨（合并重复材质规则）；260923 收敛：+2 + 删死 ::before —— 增强大纲样式从 feature.css 并回本文件单一来源（见下）
   // 260919：换成 FortuneSheet；容器尺寸 + 工具栏紧凑 + 无样式输入框补边框（标签样式已按用户要求回滚）
   // 260921：+2 = 单元格图片（禁指针事件 + object-fit: scale-down）——合法新增，非覆盖回涨
   // 260921：+2 = 单元格图片（禁指针事件 + object-fit: scale-down）
