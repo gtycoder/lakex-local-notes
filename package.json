@@ -35,22 +35,22 @@
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1131.0",
-    "@dlient/lakex-doc-react": "file:./vendor/lakex-doc-react",
-    "@fortune-sheet/react": "1.0.4",
     "better-sqlite3": "^13.0.3",
     "electron-log": "^5.4.4",
+    "sharp": "^0.35.4"
+  },
+  "devDependencies": {
+    "@dlient/lakex-doc-react": "file:./vendor/lakex-doc-react",
+    "@fortune-sheet/react": "1.0.4",
     "lakex-drawnix": "^0.1.0",
     "lakex-drawnix-react-board": "^0.1.0",
     "lakex-drawnix-react-text": "^0.1.0",
     "lucide-react": "^1.45.0",
     "react": "18.3.1",
     "react-dom": "18.3.1",
-    "sharp": "^0.35.4",
     "slate": "^0.116.0",
     "slate-dom": "^0.116.0",
-    "slate-react": "^0.116.0"
-  },
-  "devDependencies": {
+    "slate-react": "^0.116.0",
     "@capacitor-community/sqlite": "^8.1.1",
     "@capacitor/android": "^8.5.2",
     "@capacitor/app": "^8.1.1",
