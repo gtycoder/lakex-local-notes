@@ -105,7 +105,21 @@
   background: var(--lake-bg-raised);
   box-shadow: var(--lake-shadow-popover);
 }
-.selection-toolbar__colorpop { position: absolute; top: calc(100% + 6px); left: var(--menu-left, 0); z-index: 1; width: max-content; padding: 4px 0; border-radius: var(--lake-radius-md); }
+.selection-toolbar__colorpop {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: var(--menu-left, 0);
+  z-index: 1;
+  width: max-content;
+  padding: 4px 0;
+  border: 1px solid var(--lake-border-2);
+  border-radius: var(--lake-radius-md);
+  background: var(--lake-bg-raised);
+  box-shadow: var(--lake-shadow-popover);
+}
 .selection-toolbar__colorboard-label { margin-left: 8px; font-size: 13px; color: var(--lake-text-1); }
 .selection-toolbar__nativecolor { position: absolute; width: 1px; height: 1px; padding: 0; border: 0; opacity: 0; pointer-events: none; }
+.selection-toolbar__colorpop .lake-more-color-container { position: relative; }
+.selection-toolbar__more-arrow { position: absolute; right: 12px; width: 16px; height: 16px; }
+.selection-toolbar__more-arrow .ne-icon-symbol { width: 16px; height: 16px; }
 .selection-toolbar__trigger-label { padding: 0 2px; font-size: 12px; line-height: 1; white-space: nowrap; }

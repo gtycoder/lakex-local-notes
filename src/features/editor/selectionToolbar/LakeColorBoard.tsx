@@ -77,7 +77,7 @@ export function LakeColorBoard({ value, onSelect }: { value: string; onSelect: (
           <span className="lake-more-color-preview" />
           <span>更多颜色</span>
           <input className="selection-toolbar__nativecolor" type="color" value={/^#[0-9a-fA-F]{6}$/.test(value) ? value : "#000000"} onChange={(e) => onSelect(e.target.value)} aria-label="更多颜色" />
-          <span className="ne-icon ne-icon-kitchen ne-icon-right-arrow" data-name="right-arrow"><svg className="ne-icon-symbol" aria-hidden="true"><use xlinkHref="#icon-right-arrow" /></svg></span>
+          <span className="selection-toolbar__more-arrow ne-icon ne-icon-kitchen ne-icon-right-arrow" data-name="right-arrow"><svg className="ne-icon-symbol" aria-hidden="true"><use xlinkHref="#icon-right-arrow" /></svg></span>
         </label>
       </div>
     </div>
