@@ -53,6 +53,35 @@ public class AssetServerTest {
         assertFalse(AssetServer.isAuthorized(uri, "http://evil.com"));
     }
 
+    /** HTML/XHTML 附件不得以可执行文档 MIME 直出（桌面同口径：octet-stream）。 */
+    @Test
+    public void htmlIsDowngradedToOctetStream() {
+        assertEquals("application/octet-stream", AssetServer.sanitizeAssetMime("text/html"));
+        assertEquals("application/octet-stream", AssetServer.sanitizeAssetMime("application/xhtml+xml"));
+        assertEquals("image/png", AssetServer.sanitizeAssetMime("image/png"));
+        assertEquals("image/svg+xml", AssetServer.sanitizeAssetMime("image/svg+xml"));
+    }
+
+    // ---- 安全响应头（260923 A3，与桌面 electron/assetServer.ts 对齐）----
+
+    @Test
+    public void securityHeadersOnlySpecialCaseSvg() {
+        String png = AssetServer.securityHeaderLines("image/png");
+        assertTrue(png.contains("X-Content-Type-Options: nosniff"));
+        assertFalse(png.contains("Content-Security-Policy"));
+        assertEquals("", png.replace("X-Content-Type-Options: nosniff\r\n", ""));
+    }
+
+    @Test
+    public void securityHeadersAddDesktopCspForSvg() {
+        String svg = AssetServer.securityHeaderLines("image/svg+xml");
+        assertTrue(svg.contains("X-Content-Type-Options: nosniff"));
+        // 与桌面 assetServer.ts 的字符串逐字节一致
+        assertEquals("sandbox; default-src 'none'; img-src data:; font-src data:; style-src 'unsafe-inline'", AssetServer.SVG_CSP);
+        assertTrue(svg.contains("Content-Security-Policy: " + AssetServer.SVG_CSP));
+        assertTrue(svg.contains("Content-Disposition: inline"));
+    }
+
     // ---- 按需缩略图（?w=，与桌面 assetServer 同口径）----
 
     @Test

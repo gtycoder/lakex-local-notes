@@ -1169,13 +1169,12 @@ describe("S3 配置（safeStorage 加密落盘）", () => {
     expect(raw ?? "").toContain("enc:v1:");
   });
 
-  it("safeStorage 不可用时退回明文", () => {
+  it("safeStorage 不可用时 fail-closed：拒绝保存，绝不落明文", () => {
     electronMock.setEncryptionAvailable(false);
-    store.saveS3Settings(settings);
+    expect(() => store.saveS3Settings(settings)).toThrow(/安全存储/);
     const raw = rawDbValue("SELECT value FROM settings WHERE key='s3_settings'");
-    expect(raw ?? "").toContain("sk-secret");
-    expect(raw ?? "").not.toContain("enc:v1:");
-    expect(store.getS3Settings()?.secretAccessKey).toBe("sk-secret");
+    expect(raw ?? "").not.toContain("sk-secret"); // 绝不落明文
+    expect(store.getS3Settings()).toBeNull();     // 未写入任何配置行
   });
 
   it("未配置时返回 null，损坏数据返回 null", () => {

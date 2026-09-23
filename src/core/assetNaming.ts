@@ -58,6 +58,34 @@ export function isAssetFilename(name: string): boolean {
 }
 
 /**
+ * 可一键「用系统应用打开」的附件扩展名黑名单（shell.openPath / ACTION_VIEW）。
+ * 同步/导入的附件名不可信：.command/.exe/.bat 等被打开 = 用户辅助 RCE。
+ * 只拦「会执行」的；文档/媒体/压缩包保持可打开。未知扩展名**默认拒绝**（fail-closed）。
+ */
+const SHELL_OPEN_DENY_EXTS = new Set([
+  "exe", "com", "bat", "cmd", "ps1", "psm1", "vbs", "vbe", "js", "jse", "wsf", "wsh",
+  "msi", "msp", "scr", "pif", "hta", "cpl", "jar", "apk", "app", "command", "sh", "bash", "zsh",
+  "dll", "so", "dylib", "bin", "run", "out", "appimage", "deb", "rpm", "dmg", "pkg",
+  // DS 复核 A3+A4 交集：SVG 经 shell/ACTION_VIEW 打开时 CSP 不生效（file:///FileProvider），
+  // 脚本仍可在本地文件上下文跑 —— 不走 shell，只走应用内 <img>/预览。
+  "svg",
+]);
+
+/**
+ * 是否允许 shell.openPath / 系统应用打开。
+ * - 命中执行类黑名单 → false；
+ * - 扩展名不在资产清单（未知）→ false（fail-closed）；
+ * - 其余（文档/媒体/图片/压缩包）→ true。
+ */
+export function isSafeShellOpenFilename(filename: string): boolean {
+  const dot = filename.lastIndexOf(".");
+  if (dot <= 0 || dot === filename.length - 1) return false;
+  const ext = filename.slice(dot + 1).toLowerCase();
+  if (SHELL_OPEN_DENY_EXTS.has(ext)) return false;
+  return isAssetExtension(ext);
+}
+
+/**
  * 音频附件扩展名（附件→音频卡分发用）。桌面/移动端共用。
  * ⚠️ 该清单 = Lake fileReader 实测可插入音频卡的格式（CDP 逐格式验证，2026-08-27）：
  * aac/ogg/oga/wma/mid/opus/weba/amr/aiff 等 Lake 的 audio reader 不认，任何路径都建不出卡，

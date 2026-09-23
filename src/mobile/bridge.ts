@@ -8,6 +8,7 @@
 import { NativeSqliteDb } from "./nativeSqliteDb";
 import { migrateSnapshotToNativeSqlite } from "./nativeSqliteMigration";
 import { saveAssetBytesFs, loadAssetBytesFs, listAssetKeysFs, listNoteAssetKeysFs, removeAssetBytesFs, bytesToBase64 } from "./assetFs";
+import { isSafeShellOpenFilename } from "../core/assetNaming.js";
 import { Filesystem, Directory } from "@capacitor/filesystem";
 import { registerPlugin } from "@capacitor/core";
 import { scanAssetCards, fileKindOf } from "../core/fileCard.js";
@@ -518,6 +519,10 @@ export const bridge = {
 
   /** 系统默认应用打开本地附件（OpenFile 原生插件）。 */
   async openAttachment(noteId: string, filename: string) {
+    // 与桌面 open_attachment 对齐：禁止 shell/ACTION_VIEW 打开可执行类附件
+    if (!isSafeShellOpenFilename(filename)) {
+      throw new Error("该附件类型不允许用系统应用打开（疑似可执行文件）");
+    }
     const uri = await Filesystem.getUri({ path: `note-assets/${noteId}/${filename}`, directory: Directory.Data });
     await OpenFile.open({ path: uri.uri.replace(/^file:\/\//, "") });
     return { ok: true };

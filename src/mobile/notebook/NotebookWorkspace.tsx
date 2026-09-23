@@ -164,6 +164,8 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
         const evicted = selectEvictionIds(added.map((t) => ({ noteId: t.id, lastAccessedAt: t.lastAccessedAt })), { limit: loadSettings().maxOpenTabs, activeNoteId: id, pinnedNoteIds: new Set() });
         if (evicted.length === 0) return added;
         const evictedSet = new Set(evicted);
+        // LRU 驱逐同样要丢编辑器句柄（与 closeTab 对称）
+        for (const ev of evicted) editorsRef.current.delete(ev);
         return added.filter((t) => !evictedSet.has(t.id));
       });
     });
@@ -173,6 +175,8 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
     const idx = tabs.findIndex((t) => t.id === id);
     const next = tabs.filter((t) => t.id !== id);
     setTabs(next);
+    // keep-alive 编辑器实例句柄：关闭 tab 必须同步丢弃，否则 Map 只增不删 → 泄漏
+    editorsRef.current.delete(id);
     if (activeId === id) setActiveId(next.length ? next[Math.min(idx, next.length - 1)].id : null);
   }, [tabs, activeId]);
 
@@ -608,7 +612,12 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
               onToggleEdit={toggleEdit}
               documents={[]}
               hidePanels
-              onEditorInstance={(ed) => { editorsRef.current.set(t.id, ed); }}
+              onEditorInstance={(ed) => {
+                // DS 复核 A2：卸载时 onEditorReady(noteId, null) —— 必须 delete，不能 set(null)
+                // （否则 closeTab 里 delete 后又会被 set 写回键）。get(activeId) ?? null 已兼容 undefined。
+                if (ed) editorsRef.current.set(t.id, ed);
+                else editorsRef.current.delete(t.id);
+              }}
             />
             )}
           </div>

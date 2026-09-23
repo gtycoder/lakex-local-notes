@@ -37,6 +37,64 @@ import java.io.OutputStream;
 @CapacitorPlugin(name = "OpenFile")
 public class OpenFilePlugin extends Plugin {
 
+    /**
+     * 路径围栏：只允许 app 私有目录（filesDir / externalFilesDir）下的文件。
+     * WebView 侧参数不可信——防止插件被诱导打开任意绝对路径（如 /data/data/其他包/…）。
+     */
+    /**
+     * 扩展名围栏（与桌面 isSafeShellOpenFilename 对齐，DS 复核 A4：native 侧也拦，防 WebView 被控绕过 TS 层）。
+     * 执行类 + svg（CSP 在 file:// 无效）+ 未知扩展名 fail-closed。
+     */
+    static boolean isSafeShellOpenName(String name) {
+        int dot = name.lastIndexOf('.');
+        if (dot <= 0 || dot == name.length() - 1) return false;
+        String ext = name.substring(dot + 1).toLowerCase(java.util.Locale.ROOT);
+        switch (ext) {
+            case "exe": case "com": case "bat": case "cmd": case "ps1": case "psm1":
+            case "vbs": case "vbe": case "js": case "jse": case "wsf": case "wsh":
+            case "msi": case "msp": case "scr": case "pif": case "hta": case "cpl":
+            case "jar": case "apk": case "app": case "command": case "sh": case "bash":
+            case "zsh": case "dll": case "so": case "dylib": case "bin": case "run":
+            case "out": case "appimage": case "deb": case "rpm": case "dmg": case "pkg":
+            case "svg":
+                return false;
+            default:
+                // 未知扩展名拒绝；常见文档/媒体/压缩包放行
+                switch (ext) {
+                    case "pdf": case "doc": case "docx": case "xls": case "xlsx": case "ppt": case "pptx":
+                    case "txt": case "md": case "csv": case "rtf": case "epub": case "key": case "pages": case "numbers":
+                    case "zip": case "rar": case "7z": case "tar": case "gz": case "bz2": case "xz":
+                    case "mp3": case "wav": case "m4a": case "aac": case "flac": case "ogg": case "wma":
+                    case "mp4": case "mov": case "mkv": case "avi": case "webm": case "m4v": case "wmv": case "flv":
+                    case "json": case "png": case "jpg": case "jpeg": case "gif": case "webp": case "avif":
+                    case "apng": case "bmp": case "ico": case "tiff": case "tif":
+                        return true;
+                    default:
+                        return false;
+                }
+        }
+    }
+
+    private boolean isUnderAppSandbox(File file) {
+        try {
+            String canonical = file.getCanonicalPath();
+            File[] roots = new File[] {
+                getContext().getFilesDir(),
+                getContext().getExternalFilesDir(null),
+            };
+            for (File root : roots) {
+                if (root == null) continue;
+                String rootPath = root.getCanonicalPath();
+                if (canonical.equals(rootPath) || canonical.startsWith(rootPath + File.separator)) {
+                    return true;
+                }
+            }
+            return false;
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
     @PluginMethod
     public void open(PluginCall call) {
         String path = call.getString("path");
@@ -45,6 +103,14 @@ public class OpenFilePlugin extends Plugin {
             return;
         }
         File file = new File(path);
+        if (!isUnderAppSandbox(file)) {
+            call.reject("path outside app sandbox");
+            return;
+        }
+        if (!isSafeShellOpenName(file.getName())) {
+            call.reject("file type not allowed for shell open");
+            return;
+        }
         if (!file.exists()) {
             call.reject("file not found: " + path);
             return;
@@ -76,6 +142,10 @@ public class OpenFilePlugin extends Plugin {
             return;
         }
         File src = new File(path);
+        if (!isUnderAppSandbox(src)) {
+            call.reject("path outside app sandbox");
+            return;
+        }
         if (!src.exists()) {
             call.reject("file not found: " + path);
             return;
@@ -148,7 +218,7 @@ public class OpenFilePlugin extends Plugin {
         }
         String path = call.getString("path");
         File src = path != null ? new File(path) : null;
-        if (src == null || !src.exists()) {
+        if (src == null || !isUnderAppSandbox(src) || !src.exists()) {
             call.reject("source file missing");
             return;
         }

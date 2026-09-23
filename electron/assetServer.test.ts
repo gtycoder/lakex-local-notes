@@ -45,6 +45,11 @@ beforeAll(async () => {
   fs.writeFileSync(path.join(noteAssetsDir, "note1", "anim.gif"), Buffer.from("GIF89a-fake-bytes"));
   // 扩展名在白名单里但字节解不了码 → 必须落回原图，绝不能让图片显示不出来
   fs.writeFileSync(path.join(noteAssetsDir, "note1", "broken.png"), Buffer.from("not-really-a-png"));
+  // 260923 A3：安全响应头素材（SVG 特别处理；其余类型只发 nosniff）
+  fs.writeFileSync(path.join(noteAssetsDir, "note1", "evil.svg"), "<svg xmlns='http://www.w3.org/2000/svg'><script>1</script></svg>");
+  fs.writeFileSync(path.join(noteAssetsDir, "note1", "doc.pdf"), Buffer.from("%PDF-1.4"));
+  fs.writeFileSync(path.join(noteAssetsDir, "note1", "anim.mp4"), Buffer.from("mp4"));
+  fs.writeFileSync(path.join(noteAssetsDir, "note1", "arch.zip"), Buffer.from("zip"));
   server = startAssetServer(noteAssetsDir, vendorDir, quickDir, TOKEN);
   await new Promise<void>((resolve) => server.once("listening", resolve));
 });
@@ -239,5 +244,35 @@ describe("按需缩略图（?w=）", () => {
     const meta = await sharp(after.buf).metadata();
     expect(meta.width).toBe(90);
     expect(after.buf.equals(before.buf)).toBe(false);
+  });
+});
+
+describe("安全响应头（260923 A3：nosniff + SVG CSP）", () => {
+  it("SVG：image/svg+xml + nosniff + CSP(sandbox; img-src data:) + inline", async () => {
+    const res = await fetch(`${BASE}/note1/evil.svg`);
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-type")).toBe("image/svg+xml");
+    expect(res.headers.get("x-content-type-options")).toBe("nosniff");
+    // 与 scripts/verify-svg-csp.mjs 浏览器实测的字符串逐字节一致（保证实证可迁移）
+    expect(res.headers.get("content-security-policy")).toBe("sandbox; default-src 'none'; img-src data:; font-src data:; style-src 'unsafe-inline'");
+    expect(res.headers.get("content-disposition")).toBe("inline");
+  });
+
+  it("图/文档/媒体/压缩包：仅 nosniff，不带 CSP（不影响正常加载）", async () => {
+    for (const [file, mime] of [["img.png", "image/png"], ["doc.pdf", "application/pdf"], ["anim.mp4", "video/mp4"], ["arch.zip", "application/zip"]]) {
+      const res = await fetch(`${BASE}/note1/${file}`);
+      expect(res.status, file).toBe(200);
+      expect(res.headers.get("content-type"), file).toBe(mime);
+      expect(res.headers.get("x-content-type-options"), file).toBe("nosniff");
+      expect(res.headers.get("content-security-policy"), file).toBeNull();
+    }
+  });
+
+  it("base64 直通返回 text/plain：只加 nosniff，不套 SVG CSP", async () => {
+    const res = await fetch(`${BASE}/note1/evil.svg?base64=1`);
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-type")).toBe("text/plain");
+    expect(res.headers.get("x-content-type-options")).toBe("nosniff");
+    expect(res.headers.get("content-security-policy")).toBeNull();
   });
 });

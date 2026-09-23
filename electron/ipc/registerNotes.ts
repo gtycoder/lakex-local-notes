@@ -5,7 +5,7 @@ import sharp from "sharp";
 import type { DraftJournal } from "../draftJournal.js";
 import { Store } from "../store.js";
 import { MAX_ATTACHMENT_BYTES } from "../../src/core/storeLimits.js";
-import { isSafePathSegment, sanitizeFileName } from "../../src/core/storeUtils.js";
+import { isSafePathSegment, isSafeShellOpenFilename, sanitizeFileName } from "../../src/core/storeUtils.js";
 import { exportNote, type ExportFormat } from "../export.js";
 import {
   IpcInputError,
@@ -171,6 +171,10 @@ export function registerNotesIpc(
    * 路径安全：noteId + filename 双段校验（isSafePathSegment），只允许 note-assets 目录内。 */
   ipc.handle("open_attachment", (noteId: string, filename: string) => {
     assertAttachmentSegments(noteId, filename);
+    // 同步/导入附件名不可信：禁止 shell 打开可执行类（.command/.exe/.bat…）；未知扩展名 fail-closed
+    if (!isSafeShellOpenFilename(filename)) {
+      throw new IpcInputError("该附件类型不允许用系统应用打开（疑似可执行文件）");
+    }
     const full = store.noteAssetsPathFor(noteId) ? path.join(store.noteAssetsPathFor(noteId), filename) : "";
     if (!fs.existsSync(full)) throw new IpcInputError("附件文件不存在（可能已清理）");
     return shell.openPath(full).then((err) => (err ? { ok: false, error: err } : { ok: true }));

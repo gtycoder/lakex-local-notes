@@ -11,8 +11,13 @@ import { toIpcErrorPayload } from "./ipc/errors.js";
  * ② 静态服务 dist/（桌面渲染层构建产物，CSP 已放行 127.0.0.1:*）；
  * ③ /__native.js 注入 window.lakeNative 的 HTTP shim（方法面与 preload.cjs 一致，有单测卡漂移）。
  *
- * 安全面：只绑 127.0.0.1；/api 校验 x-lake-token（跨源页面发不带自定义头的请求过不了
- * preflight，等于 CSRF 屏障）；静态文件不含数据。不做出局网（移动端走 Capacitor，无需 LAN）。
+ * 安全面（260923 加固）：
+ * - 只绑 127.0.0.1，不做出局网；
+ * - /api 仅接受 **请求头** `x-lake-token`（禁止 query token：会进日志/Referer，且配合
+ *   `text/plain` 简单请求可绕过 preflight）；token 常量时间比较；
+ * - 带 Origin / Sec-Fetch-Site=cross-site 的请求一律拒绝（跨站 `<script src=/__native.js>`
+ *   可偷 token，跨站简单 POST 可直接调 IPC——两者都必须挡）；
+ * - 静态文件不含业务数据。
  */
 
 /** Web 客户端 API 端口（LAKE_WEB_PORT 可覆盖，多实例同机双开用）。 */
@@ -163,6 +168,8 @@ export interface WebApiServerOptions {
   distDir: string;
   registry: ReadonlyMap<string, (args: unknown[]) => Promise<unknown>>;
   token: string;
+  /** 资产服务令牌（仅用于 shim 暴露 assetToken）；与 token 分离：资产 token 出现在 URL，泄漏不得等于 IPC 凭据。 */
+  assetToken: string;
   assetPort: number;
   port?: number;
   log?: WebApiLogger;
@@ -172,6 +179,58 @@ function json(res: http.ServerResponse, status: number, payload: unknown): void 
   const body = JSON.stringify(payload);
   res.writeHead(status, { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" });
   res.end(body);
+}
+
+/** 常量时间比较（token 非空时避免时序侧信道；短 token 差异极小，仍比 !== 规范）。 */
+function timingSafeEqual(a: string, b: string): boolean {
+  if (typeof a !== "string" || typeof b !== "string") return false;
+  const len = Math.max(a.length, b.length, 1);
+  let diff = a.length === b.length ? 0 : 1;
+  for (let i = 0; i < len; i++) {
+    diff |= (a.charCodeAt(i) || 0) ^ (b.charCodeAt(i) || 0);
+  }
+  return diff === 0;
+}
+
+/**
+ * 跨站判定（DS 复核 A1.1/A1.3：禁止空端口放行 + Host 白名单）。
+ * - `Sec-Fetch-Site: cross-site` → 拒；
+ * - `Origin: null` → 拒；
+ * - Origin 必须**完整等于** `http://127.0.0.1:<boundPort>` 或 `http://localhost:<boundPort>`
+ *   （**不**放行空端口 `http://127.0.0.1`——那是 :80 的 WHATWG 省略形态，同机 80 页面可偷 token）；
+ * - Host 头必须是上述两形态（防 DNS rebinding：rebind 后 Host=攻击者域名）。
+ * 缺 Origin 的同源 document/script 默认放行（由 Host + Sec-Fetch-Site 收口）。
+ */
+function isCrossSiteRequest(req: http.IncomingMessage, boundPort: number): boolean {
+  const sfs = String(req.headers["sec-fetch-site"] ?? "").toLowerCase();
+  if (sfs === "cross-site") return true;
+
+  const allowedOrigins = [`http://127.0.0.1:${boundPort}`, `http://localhost:${boundPort}`];
+  const allowedHosts = [`127.0.0.1:${boundPort}`, `localhost:${boundPort}`];
+
+  const host = String(req.headers.host ?? "");
+  if (host && !allowedHosts.includes(host)) return true;
+
+  const origin = req.headers.origin;
+  if (!origin) return false;
+  if (origin === "null") return true;
+  return !allowedOrigins.includes(origin);
+}
+
+/**
+ * `/__native.js` 会下发 TOKEN，比 `/api` 更严（DS 复核 A1.4）：
+ * 仅允许 `Sec-Fetch-Site ∈ {same-origin, none}`。缺失/`same-site`/其它一律拒——
+ * 同机其它端口页面用 `<script src>` 拉取时是 `same-site` 且无 Origin，不能放行。
+ */
+function isNativeShimAllowed(req: http.IncomingMessage): boolean {
+  const sfs = String(req.headers["sec-fetch-site"] ?? "").toLowerCase();
+  return sfs === "same-origin" || sfs === "none";
+}
+
+/** 仅认请求头 token（query 会泄漏到日志/代理/Referer）。 */
+function readTokenHeader(req: http.IncomingMessage): string {
+  const raw = req.headers["x-lake-token"];
+  return typeof raw === "string" ? raw : "";
 }
 
 function readBody(req: http.IncomingMessage): Promise<Buffer | null> {
@@ -199,12 +258,13 @@ export function injectNativeShim(html: string): string {
   return `${html.slice(0, idx)}<script src="/__native.js"></script>${html.slice(idx)}`;
 }
 
-export function renderNativeShim(token: string, assetPort: number): string {
+export function renderNativeShim(apiToken: string, assetToken: string, assetPort: number): string {
   return `/* 自动生成：window.lakeNative 的 HTTP 版（方法面 = preload.cjs，见 webApiServer.test.ts） */
 (function () {
   "use strict";
   var METHODS = ${JSON.stringify(WEB_METHODS)};
-  var TOKEN = ${JSON.stringify(token)};
+  var API_TOKEN = ${JSON.stringify(apiToken)};
+  var ASSET_TOKEN = ${JSON.stringify(assetToken)};
   function makeError(code, message) {
     var err = new Error("[LAKE_IPC_CODE:" + code + "] " + message);
     err.name = "IpcError";
@@ -213,7 +273,7 @@ export function renderNativeShim(token: string, assetPort: number): string {
   }
   var native = {
     assetPort: ${JSON.stringify(assetPort)},
-    assetToken: TOKEN,
+    assetToken: ASSET_TOKEN,
     onSyncProgress: function () { return function () {}; },
     onPendingSummaryChanged: function () { return function () {}; }
   };
@@ -223,7 +283,7 @@ export function renderNativeShim(token: string, assetPort: number): string {
       var args = Array.prototype.slice.call(arguments);
       return fetch("/api/" + channel, {
         method: "POST",
-        headers: { "content-type": "application/json", "x-lake-token": TOKEN },
+        headers: { "content-type": "application/json", "x-lake-token": API_TOKEN },
         body: JSON.stringify({ args: args })
       }).then(function (res) {
         return res.json().catch(function () {
@@ -241,18 +301,28 @@ export function renderNativeShim(token: string, assetPort: number): string {
 }
 
 export function startWebApiServer(opts: WebApiServerOptions): http.Server {
-  const { distDir, registry, token, assetPort } = opts;
+  const { distDir, registry, token, assetToken, assetPort } = opts;
   const port = opts.port ?? WEB_API_PORT;
   const log = opts.log ?? { info: () => {}, warn: () => {} };
 
   const server = http.createServer(async (req, res) => {
     try {
       const url = new URL(req.url ?? "/", "http://127.0.0.1");
+      // 实际绑定端口（port:0 时 ≠ 配置端口）
+      const addr = server.address();
+      const boundPort = typeof addr === "object" && addr ? addr.port : port;
+
+      // 跨站一律拒绝（含 /__native.js 偷 token 与 /api 简单请求 CSRF）
+      if (isCrossSiteRequest(req, boundPort)) {
+        json(res, 403, { ok: false, code: "NOT_CONFIGURED", message: "cross-site request rejected" });
+        return;
+      }
 
       // ① 通用 API 通道
       if (url.pathname.startsWith("/api/")) {
         if (req.method !== "POST") { json(res, 405, { ok: false, code: "INVALID_INPUT", message: "method not allowed" }); return; }
-        if ((req.headers["x-lake-token"] ?? url.searchParams.get("token") ?? "") !== token) {
+        // 禁止 query token（泄漏面 + 可被 text/plain 简单请求 CSRF）；仅请求头
+        if (!timingSafeEqual(readTokenHeader(req), token)) {
           json(res, 403, { ok: false, code: "NOT_CONFIGURED", message: "web api token invalid" });
           return;
         }
@@ -280,10 +350,14 @@ export function startWebApiServer(opts: WebApiServerOptions): http.Server {
         return;
       }
 
-      // ② 渲染层 shim
+      // ② 渲染层 shim（TOKEN 下发面：仅 same-origin / 用户导航）
       if (url.pathname === "/__native.js") {
+        if (!isNativeShimAllowed(req)) {
+          json(res, 403, { ok: false, code: "NOT_CONFIGURED", message: "native shim rejected" });
+          return;
+        }
         res.writeHead(200, { "content-type": "application/javascript; charset=utf-8", "cache-control": "no-store" });
-        res.end(renderNativeShim(token, assetPort));
+        res.end(renderNativeShim(token, assetToken, assetPort));
         return;
       }
 

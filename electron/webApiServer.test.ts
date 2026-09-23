@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import fs from "node:fs";
+import http from "node:http";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -35,6 +36,7 @@ function makeOptions(distDir: string, overrides: Partial<WebApiServerOptions> = 
     distDir,
     registry: new Map(Object.entries({ echo: async (args) => args, boom: async () => { throw Object.assign(new Error("bad input"), { code: "INVALID_INPUT", name: "IpcError" }); } })),
     token: "test-token",
+    assetToken: "test-asset-token",
     assetPort: 19876,
     ...overrides,
   };
@@ -61,9 +63,11 @@ describe("webApiServer", () => {
   });
 
   it("shim 包含全部方法 + assetToken/assetPort + 事件 no-op", () => {
-    const shim = renderNativeShim("tok", 19877);
+    const shim = renderNativeShim("api-tok", "asset-tok", 19877);
     expect(shim).toContain(`assetPort: 19877`);
-    expect(shim).toContain(`var TOKEN = "tok"`);
+    expect(shim).toContain(`var API_TOKEN = "api-tok"`);
+    expect(shim).toContain(`var ASSET_TOKEN = "asset-tok"`);
+    expect(shim).toContain(`assetToken: ASSET_TOKEN`);
     for (const method of Object.keys(WEB_METHODS)) {
       expect(shim).toContain(`"${method}":`);
     }
@@ -119,6 +123,90 @@ describe("webApiServer", () => {
       expect(noToken.status).toBe(403);
       const badToken = await fetch(`${base}/api/echo`, { method: "POST", headers: { "x-lake-token": "wrong" }, body: JSON.stringify({ args: [] }) });
       expect(badToken.status).toBe(403);
+    });
+
+    it("query token 不再被接受（防泄漏 + 简单请求 CSRF）", async () => {
+      const res = await fetch(`${base}/api/echo?token=test-token`, {
+        method: "POST",
+        headers: { "content-type": "text/plain" },
+        body: JSON.stringify({ args: ["x"] }),
+      });
+      expect(res.status).toBe(403);
+    });
+
+    it("跨站 Origin → 403（含 /__native.js 偷 token）", async () => {
+      const api = await fetch(`${base}/api/echo`, {
+        method: "POST",
+        headers: { "x-lake-token": "test-token", origin: "http://evil.example" },
+        body: JSON.stringify({ args: [] }),
+      });
+      expect(api.status).toBe(403);
+      const shim = await fetch(`${base}/__native.js`, { headers: { origin: "http://evil.example" } });
+      expect(shim.status).toBe(403);
+    });
+
+    it("Sec-Fetch-Site: cross-site → 403", async () => {
+      const res = await fetch(`${base}/__native.js`, { headers: { "sec-fetch-site": "cross-site" } });
+      expect(res.status).toBe(403);
+    });
+
+    it("同源 Origin → 200", async () => {
+      const port = new URL(base).port;
+      const res = await fetch(`${base}/api/echo`, {
+        method: "POST",
+        headers: { "x-lake-token": "test-token", origin: `http://127.0.0.1:${port}` },
+        body: JSON.stringify({ args: [1] }),
+      });
+      expect(res.status).toBe(200);
+    });
+
+    it("空端口 Origin（127.0.0.1 默认 :80）→ 403（DS 复核 A1.1 旁路）", async () => {
+      const res = await fetch(`${base}/api/echo`, {
+        method: "POST",
+        headers: { "x-lake-token": "test-token", origin: "http://127.0.0.1" },
+        body: JSON.stringify({ args: [] }),
+      });
+      expect(res.status).toBe(403);
+    });
+
+    it("Sec-Fetch-Site: same-site → /__native.js 403（DS 复核 A1.4）", async () => {
+      const res = await fetch(`${base}/__native.js`, { headers: { "sec-fetch-site": "same-site" } });
+      expect(res.status).toBe(403);
+    });
+
+    it("缺失 Sec-Fetch-Site → /__native.js 403（token 下发面收口）", async () => {
+      const res = await fetch(`${base}/__native.js`);
+      expect(res.status).toBe(403);
+    });
+
+    it("Sec-Fetch-Site: same-origin → /__native.js 200", async () => {
+      const res = await fetch(`${base}/__native.js`, { headers: { "sec-fetch-site": "same-origin" } });
+      expect(res.status).toBe(200);
+      expect(await res.text()).toContain("var API_TOKEN");
+    });
+
+    it("Host 头不符 → 403（DS 复核 A1.3 DNS rebinding）", async () => {
+      // fetch 会忽略 Host 头，必须用 http.request 原样发出
+      const portNum = Number(new URL(base).port);
+      const status = await new Promise<number>((resolve, reject) => {
+        const req = http.request(
+          { host: "127.0.0.1", port: portNum, path: "/api/echo", method: "POST",
+            headers: { "x-lake-token": "test-token", host: "evil.example", "content-type": "application/json" } },
+          (res) => { res.resume(); resolve(res.statusCode ?? 0); },
+        );
+        req.on("error", reject);
+        req.end(JSON.stringify({ args: [] }));
+      });
+      expect(status).toBe(403);
+    });
+
+    it("资产 token 不能调 /api（token 拆分：assetToken ≠ webApiToken）", async () => {
+      const res = await fetch(`${base}/api/echo`, {
+        method: "POST",
+        headers: { "x-lake-token": "test-asset-token", "content-type": "application/json" },
+        body: JSON.stringify({ args: [] }),
+      });
+      expect(res.status).toBe(403);
     });
 
     it("未知通道 → 404 envelope", async () => {

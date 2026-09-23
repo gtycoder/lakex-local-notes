@@ -18,7 +18,7 @@ import type { LakeEditorInstance, LakeEditorPrefs } from "../../features/editor/
 import type { AttachmentPreviewItem } from "../../features/attachment/attachmentPreviewController";
 import type { LocalAssetRef } from "../../core/assetUrl.js";
 import { parseLocalAssetUrl } from "../../core/assetUrl.js";
-import { mediaKindOfFilename } from "../../core/assetNaming.js";
+import { mediaKindOfFilename, isSafeShellOpenFilename } from "../../core/assetNaming.js";
 import { registerPlugin } from "@capacitor/core";
 import { Filesystem, Directory } from "@capacitor/filesystem";
 import type { POCNote } from "../noteRepository";
@@ -96,6 +96,10 @@ export function DocumentEditor(props: DocumentEditorProps) {
       if (!ref) { showToast("附件未同步到本机", { type: "error" }); return; }
       try {
         const uri = await Filesystem.getUri({ path: `note-assets/${ref.noteId}/${ref.filename}`, directory: Directory.Data });
+        if (!isSafeShellOpenFilename(ref.filename)) {
+          showToast("该附件类型不允许用系统应用打开");
+          return;
+        }
         await OpenFile.open({ path: uri.uri.replace(/^file:\/\//, "") });
       } catch {
         showToast("没有可打开此文件的应用", { type: "error" });

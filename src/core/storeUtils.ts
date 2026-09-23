@@ -2,7 +2,7 @@
 
 // 资产命名/引用提取的单一事实源在 src/core/assetNaming.ts（图片 + 附件统一），
 // 此处 re-export 保持既有 import 面（electron/store.ts、assetRepository.ts 等）不变。
-export { ASSET_NAME_RE, extractAssetRefs, isAssetFilename, isAssetExtension, isImageExtension, buildAssetFilename } from "./assetNaming.js";
+export { ASSET_NAME_RE, extractAssetRefs, isAssetFilename, isAssetExtension, isImageExtension, isSafeShellOpenFilename, buildAssetFilename } from "./assetNaming.js";
 
 /** ISO week-year key with Monday as the first day of the week. */
 export function isoWeekKey(timestamp: number): string {

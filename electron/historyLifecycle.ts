@@ -177,15 +177,22 @@ export class HistoryLifecycle {
       const drops = selectHistoryDrops(rows.map((r) => r.created_at), { maxSnapshots: cfg.maxSnapshots, retentionDays: cfg.retentionDays });
       const expired = rows.filter((r) => drops.has(r.created_at) && r.protected_until == null);
       if (expired.length === 0) continue;
+      // DS 复核 A6：先删文件（force，容忍不存在）再事务删行 —— 避免「行已删、文件还在」的孤儿方向。
+      // 文件删失败仍删行（孤儿文件由 orphan 清理兜底）；事务保证多行 DELETE 原子。
       for (const e of expired) {
-        this.ctx.db.prepare("DELETE FROM note_history WHERE id=?").run(e.id);
         try {
           const p = path.join(this.ctx.root, e.file_path);
-          result.freedBytes += fs.statSync(p).size;
-          fs.rmSync(p, { force: true });
+          if (fs.existsSync(p)) {
+            result.freedBytes += fs.statSync(p).size;
+            fs.rmSync(p, { force: true });
+          }
           result.deletedSnapshots++;
-        } catch { /* 忽略 */ }
+        } catch { /* 文件删失败：仍删行，交给孤儿清理 */ }
       }
+      const deleteRows = this.ctx.db.prepare("DELETE FROM note_history WHERE id=?");
+      this.ctx.db.transaction(() => {
+        for (const e of expired) deleteRows.run(e.id);
+      })();
       // 方案 A：清理后重算该文档引用，无引用资源物理删
       this.ctx.cleanupUnreferencedAssetsForNote(note_id);
     }

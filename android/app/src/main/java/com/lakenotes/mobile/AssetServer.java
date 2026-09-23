@@ -224,6 +224,7 @@ public final class AssetServer {
                 head.append("Content-Length: ").append(length).append("\r\n");
             }
             head.append("Content-Type: ").append(mime).append("\r\n");
+            head.append(securityHeaderLines(mime));
             // CORS：仅放行本应用 WebView 的固定 origin；无 Origin 的媒体/图片请求不校验（与桌面同语义）。
             head.append("Access-Control-Allow-Origin: ").append(ALLOWED_ORIGIN).append("\r\n");
             head.append("Access-Control-Allow-Methods: GET, HEAD\r\n");
@@ -338,12 +339,30 @@ public final class AssetServer {
         return sample;
     }
 
+    /** SVG 安全 CSP（与桌面 electron/assetServer.ts 逐字节一致，防 <img>/文档方式打开时脚本在同源执行）。 */
+    static final String SVG_CSP = "sandbox; default-src 'none'; img-src data:; font-src data:; style-src 'unsafe-inline'";
+
+    /**
+     * 安全响应头（260923 A3，与桌面 assetServer 对齐）：所有资源 nosniff；SVG 额外 CSP + inline。
+     * 包级可见以便 JVM 单测断言（AssetServerTest）。
+     */
+    static String securityHeaderLines(String mime) {
+        StringBuilder sb = new StringBuilder(160);
+        sb.append("X-Content-Type-Options: nosniff\r\n");
+        if ("image/svg+xml".equals(mime)) {
+            sb.append("Content-Security-Policy: ").append(SVG_CSP).append("\r\n");
+            sb.append("Content-Disposition: inline\r\n");
+        }
+        return sb.toString();
+    }
+
     /** 整段返回一个内存里的字节体（缩略图用；带 immutable 缓存头，与文件路径同缓存语义）。 */
     private static void writeBody(OutputStream out, byte[] body, String mime, boolean isHead) throws IOException {
         StringBuilder head = new StringBuilder(192);
         head.append("HTTP/1.1 200 OK\r\n");
         head.append("Content-Length: ").append(body.length).append("\r\n");
         head.append("Content-Type: ").append(mime).append("\r\n");
+        head.append(securityHeaderLines(mime));
         head.append("Access-Control-Allow-Origin: ").append(ALLOWED_ORIGIN).append("\r\n");
         head.append("Access-Control-Allow-Methods: GET, HEAD\r\n");
         head.append("Cache-Control: public, max-age=31536000, immutable\r\n");
@@ -442,14 +461,24 @@ public final class AssetServer {
         java.util.Map.entry("pdf", "application/pdf")
     );
 
-    private static String mimeFor(String name) {
+    /**
+     * 主动内容 MIME 降级（纯函数，不依赖 Android framework，便于 JVM 单测）：
+     * 桌面 MIME_MAP 不含 html → 以 octet-stream 直出；Android MimeTypeMap 会给 text/html，
+     * 顶层导航会以同源执行脚本 ⇒ 降级为二进制（应用无 HTML 预览功能依赖）。
+     */
+    static String sanitizeAssetMime(String type) {
+        if ("text/html".equals(type) || "application/xhtml+xml".equals(type)) return "application/octet-stream";
+        return type;
+    }
+
+    static String mimeFor(String name) {
         int dot = name.lastIndexOf('.');
         if (dot >= 0) {
             String ext = name.substring(dot + 1).toLowerCase();
             String override = MIME_OVERRIDES.get(ext);
             if (override != null) return override;
             String type = MimeTypeMap.getSingleton().getMimeTypeFromExtension(ext);
-            if (type != null) return type;
+            if (type != null) return sanitizeAssetMime(type);
         }
         return "application/octet-stream";
     }

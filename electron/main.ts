@@ -53,6 +53,12 @@ const DEV_SERVER_URL = process.env.LAKE_DEV_SERVER_URL?.trim() || "http://127.0.
  */
 const assetToken = crypto.randomBytes(32).toString("hex");
 process.env.LAKE_ASSET_TOKEN = assetToken;
+/**
+ * 浏览器端 /api 的独立令牌，**与 assetToken 分离**（审计 A.3 替代方案）：
+ * assetToken 会出现在资产 URL 的 ?token= 里、暴露面更大；拆开后即便 assetToken 泄漏，
+ * 也拿不到 IPC 凭据（原实现两者同值，偷到资产 token 即可调全部 IPC）。
+ */
+const webApiToken = crypto.randomBytes(32).toString("hex");
 
 let store: Store;
 let quickNotes: QuickNotesStore;
@@ -242,9 +248,9 @@ async function createWindow() {
         : path.join(__dirname, "../electron/preload.cjs"),
       contextIsolation: true,
       nodeIntegration: false,
-      // 打包版必须关闭 preload 沙箱：Electron 沙箱化 preload 从 app.asar 加载会报 SyntaxError（已知问题）
-      // dev 环境实际也是 --no-sandbox 运行的，行为一致；contextIsolation 仍开启
-      sandbox: false,
+      // 260923：preload 已在 package.json 的 build.asarUnpack 中（asar 内沙箱 preload 的旧 Bug 不适用）；
+      // 开渲染进程沙箱 = OS 级纵深防御，contextIsolation 仍开启。
+      sandbox: true,
       // PDF 内联预览：plugins 默认 false（electron.d.ts 注释确认）会禁用 <embed> 插件渲染
       // → PDF viewer 空白（实测）。plugins: true 启用 Chromium PDF viewer。
       plugins: true,
@@ -458,7 +464,8 @@ if (!app.requestSingleInstanceLock()) {
     webServerController = createWebServerController({
       distDir: path.join(__dirname, "..", "dist"),
       registry: webApiRegistry,
-      token: assetToken,
+      token: webApiToken,
+      assetToken,
       assetPort: ASSET_PORT,
       port: WEB_API_PORT,
       log: { info: (m) => log.app.info(m), warn: (m) => log.app.warn(m) },

@@ -14,6 +14,12 @@ describe("buildSnippet", () => {
   it("& 转义", () => {
     expect(buildSnippet("A&B 编辑器", "编辑器")).toContain("A&amp;B");
   });
+  it("引号也转义（防属性上下文 XSS）", () => {
+    const s = buildSnippet(`a"b'c 编辑器`, "编辑器");
+    expect(s).toContain("&quot;");
+    expect(s).toContain("&#39;");
+    expect(s).not.toContain(`a"b'c`);
+  });
   it("多词都标", () => {
     const s = buildSnippet("编辑 和 器 都出现", "编辑 器");
     expect((s.match(/<mark>/g) || []).length).toBe(2);

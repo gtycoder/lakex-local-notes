@@ -1,8 +1,17 @@
 const DEFAULT_BEFORE = 60;
 const DEFAULT_AFTER = 120;
 
+/**
+ * 全量 HTML 实体转义（含引号）：摘要会经 `dangerouslySetInnerHTML` 注入，文本节点只需
+ * `&<>`，但若日后被拼进属性（title/class 片段）必须已有 `"`/`'` 转义——这里一次做全。
+ */
 function escapeHtml(input: string): string {
-  return input.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  return input
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
 }
 
 interface Range {

@@ -4,6 +4,7 @@ import {
   buildAssetFilename,
   extractAssetRefs,
   isAssetExtension,
+  isSafeShellOpenFilename,
   isAssetFilename,
   isImageExtension,
   isMediaFilename,
@@ -45,6 +46,35 @@ describe("assetNaming", () => {
     expect(isAssetExtension("docx")).toBe(true);
     expect(isAssetExtension("mp4")).toBe(true);
     expect(isAssetExtension("xyzzy")).toBe(false);
+  });
+
+  it("isSafeShellOpenFilename：可执行/未知默认拒绝，文档媒体放行", () => {
+    expect(isSafeShellOpenFilename("1787733338672_05581394.pdf")).toBe(true);
+    expect(isSafeShellOpenFilename("1787733338672_05581394.png")).toBe(true);
+    expect(isSafeShellOpenFilename("1787733338672_05581394.mp4")).toBe(true);
+    expect(isSafeShellOpenFilename("1787733338672_05581394.zip")).toBe(true);
+    expect(isSafeShellOpenFilename("1787733338672_05581394.pdf")).toBe(true);
+    expect(isSafeShellOpenFilename("1787733338672_05581394.command")).toBe(false);
+    expect(isSafeShellOpenFilename("1787733338672_05581394.exe")).toBe(false);
+    expect(isSafeShellOpenFilename("1787733338672_05581394.bat")).toBe(false);
+    expect(isSafeShellOpenFilename("1787733338672_05581394.sh")).toBe(false);
+    expect(isSafeShellOpenFilename("1787733338672_05581394.xyzzy")).toBe(false);
+    expect(isSafeShellOpenFilename("noext")).toBe(false);
+  });
+
+  it("isSafeShellOpenFilename（DS 复核 A4 边界）：apk/bin/svg/大写/双扩展/宏文档/lnk", () => {
+    expect(isSafeShellOpenFilename("1787733338672_05581394.apk")).toBe(false);
+    expect(isSafeShellOpenFilename("1787733338672_05581394.bin")).toBe(false);
+    expect(isSafeShellOpenFilename("1787733338672_05581394.svg")).toBe(false);
+    expect(isSafeShellOpenFilename("1787733338672_05581394.EXE")).toBe(false);
+    expect(isSafeShellOpenFilename("1787733338672_05581394.PDF")).toBe(true);
+    expect(isSafeShellOpenFilename("x.pdf.command")).toBe(false);
+    expect(isSafeShellOpenFilename("x.command.pdf")).toBe(true);
+    expect(isSafeShellOpenFilename("1787733338672_05581394.docm")).toBe(false);
+    expect(isSafeShellOpenFilename("1787733338672_05581394.lnk")).toBe(false);
+    expect(isSafeShellOpenFilename("1787733338672_05581394.desktop")).toBe(false);
+    expect(isSafeShellOpenFilename("1787733338672_05581394.url")).toBe(false);
+    expect(isSafeShellOpenFilename("1787733338672_05581394.reg")).toBe(false);
   });
 
   it("detects asset filenames", () => {

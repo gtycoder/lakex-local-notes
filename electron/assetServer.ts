@@ -331,6 +331,18 @@ export function startAssetServer(noteAssetsDir: string, vendorCdnDir: string, qu
 
       const ext = path.extname(filename).toLowerCase();
       const mime = MIME_MAP[ext] ?? "application/octet-stream";
+      // 安全响应头：防 MIME 嗅探；SVG 以文档打开时禁止内嵌脚本（恶意附件 SVG 不得在
+      // 127.0.0.1 源内执行——否则同源 fetch 可读走全部本地资产）。
+      const securityHeaders: Record<string, string> = {
+        "X-Content-Type-Options": "nosniff",
+        // DS 复核 A3：默认 CSP 不要拦 SVG 内 data: 图/字；sandbox 防脚本，<img src=svg> 渲染需实机验证
+        ...(mime === "image/svg+xml"
+          ? {
+              "Content-Security-Policy": "sandbox; default-src 'none'; img-src data:; font-src data:; style-src 'unsafe-inline'",
+              "Content-Disposition": "inline",
+            }
+          : {}),
+      };
 
       if (parsed.searchParams.get("base64") === "1") {
         let buf = await fs.promises.readFile(filePath);
@@ -355,6 +367,7 @@ export function startAssetServer(noteAssetsDir: string, vendorCdnDir: string, qu
         res.writeHead(200, {
           "Content-Type": "text/plain",
           "Content-Length": Buffer.byteLength(body),
+          "X-Content-Type-Options": "nosniff",
           ...corsHeaders(req.headers.origin),
         });
         res.end(body);
@@ -370,6 +383,7 @@ export function startAssetServer(noteAssetsDir: string, vendorCdnDir: string, qu
             "Content-Type": mime,
             "Content-Length": thumb.length,
             "Cache-Control": "public, max-age=31536000, immutable",
+            ...securityHeaders,
             ...corsHeaders(req.headers.origin),
           });
           res.end(thumb);
@@ -380,6 +394,7 @@ export function startAssetServer(noteAssetsDir: string, vendorCdnDir: string, qu
       streamFile(res, filePath, stat, {
         "Content-Type": mime,
         "Cache-Control": "public, max-age=31536000, immutable",
+        ...securityHeaders,
         ...corsHeaders(req.headers.origin),
       }, req.headers.range);
     } catch (error) {
