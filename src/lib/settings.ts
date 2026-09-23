@@ -20,6 +20,10 @@ export interface AppSettings {
   /** 附件上传大小上限（字节；档位 25/50/100 MiB，默认 25 MiB；仅影响本机上传校验，
    * 同步/下载侧用协议上限 MAX_ATTACHMENT_BYTES，跨端配置不同不会导致下载失败）。 */
   maxAttachmentBytes: number;
+  /** 显示编辑器「固定工具栏」（内核顶部工具栏）。默认开。 */
+  showToolbar: boolean;
+  /** 浮动工具栏：选中文字/图片时在选区上方弹出格式浮框（桌面编辑态）。默认开。 */
+  floatingToolbar: boolean;
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -28,6 +32,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   theme: "light",
   maxOpenTabs: 8,
   maxAttachmentBytes: DEFAULT_MAX_ATTACHMENT_BYTES,
+  showToolbar: true,
+  floatingToolbar: true,
 };
 
 /** 设置面板提供的附件大小档位（MiB）。 */
@@ -76,6 +82,8 @@ export function loadSettings(): AppSettings {
         maxAttachmentBytes: (MAX_ATTACHMENT_MB_OPTIONS as readonly number[]).includes(parsedMb)
           ? parsedMb * 1024 * 1024
           : DEFAULT_SETTINGS.maxAttachmentBytes,
+        showToolbar: parsed.showToolbar !== false,
+        floatingToolbar: parsed.floatingToolbar !== false,
       };
       return cached;
     }

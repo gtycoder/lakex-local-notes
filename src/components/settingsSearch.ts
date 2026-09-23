@@ -28,6 +28,8 @@ export interface SettingItemEntry {
 export const SETTING_ITEMS: SettingItemEntry[] = [
   { id: "editor-font-size", category: "editor", label: "正文字号", keywords: "字体 字号 font size" },
   { id: "editor-outline-enhance", category: "editor", label: "大纲增强", keywords: "大纲 增强 原生 目录 TOC 侧栏", platform: "desktop" },
+  { id: "editor-toolbar", category: "editor", label: "显示固定工具栏", keywords: "工具栏 固定 顶部 隐藏 显示 toolbar", platform: "desktop" },
+  { id: "editor-floating-toolbar", category: "editor", label: "浮动工具栏", keywords: "浮动 工具栏 选区 气泡 浮框 文字 图片 toolbar", platform: "desktop" },
   { id: "editor-max-open-tabs", category: "editor", label: "最大同时打开标签数", keywords: "标签 页签 tab 上限" },
   { id: "editor-max-attachment", category: "editor", label: "附件大小上限", keywords: "附件 上传 大小 上限 MiB" },
   { id: "appearance-theme", category: "appearance", label: "主题", keywords: "主题 深色 浅色 暖色 纸质 护眼 换肤 dark light warm 夜间 亮蓝 亮橙 暗紫" },

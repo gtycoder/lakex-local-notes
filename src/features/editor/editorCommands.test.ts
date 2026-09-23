@@ -11,13 +11,18 @@ describe("editorCommands registry", () => {
     expect(KNOWN_COMMAND_NAMES.has("style")).toBe(true);
   });
 
-  it("rejects lakex no-op commands (HANDOFF §8.2)", () => {
+  it("rejects true lakex no-op command names (HANDOFF §8.2/§8.8)", () => {
     const noOps = [
-      "strikethrough", "strike", "clearFormat", "indent", "outdent",
-      "justifyLeft", "justifyCenter", "justifyRight", "fontsize",
+      "strike", "justifyLeft", "justifyCenter", "justifyRight",
       "formatBlock", "heading", "setHeading", "insertUnorderedList", "insertBulletList",
     ];
     for (const name of noOps) expect(isKnownEditorCommand(name)).toBe(false);
+  });
+
+  it("accepts desktop-verified commands (260924 P0: strikethrough/fontsize/…)", () => {
+    for (const name of ["strikethrough", "fontsize", "indent", "outdent", "clearFormat", "alignment", "link", "unlink", "color", "bgColor"]) {
+      expect(isKnownEditorCommand(name)).toBe(true);
+    }
   });
 
   it("style blocks are p/h1..h4", () => {
@@ -26,6 +31,6 @@ describe("editorCommands registry", () => {
 
   it("group filter returns only that group", () => {
     const markNames = MARK_COMMANDS.map((c) => c.name);
-    expect(markNames).toEqual(["bold", "italic", "underline", "code"]);
+    expect(markNames).toEqual(["bold", "italic", "underline", "strikethrough", "code"]);
   });
 });

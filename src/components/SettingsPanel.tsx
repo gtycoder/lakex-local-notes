@@ -531,6 +531,8 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
                     </select>
                   </Item>
                   <Switch itemId="editor-outline-enhance" name="大纲增强" desc="开启=应用自建增强大纲（筛选/折叠/级别徽标/悬停；桌面右栏）；关闭（默认）=直接使用 Lake 原生大纲。移动端始终使用应用大纲面板。" checked={settings.outlineEnhance} onChange={(e) => onChange({ outlineEnhance: e.target.checked })} />
+                  <Switch itemId="editor-toolbar" name="显示固定工具栏" desc="编辑器顶部那条固定工具栏。关掉后编辑区更干净，格式操作走浮动工具栏。" checked={settings.showToolbar} onChange={(e) => onChange({ showToolbar: e.target.checked })} />
+                  <Switch itemId="editor-floating-toolbar" name="浮动工具栏" desc="选中文字或图片时，在选区上方弹出格式浮框。与固定工具栏互相独立，可任意组合开关。" checked={settings.floatingToolbar} onChange={(e) => onChange({ floatingToolbar: e.target.checked })} />
                 </Group>
                 <Group title="标签页" icon={<Files size={16} />}>
                   <Item itemId="editor-max-open-tabs" name="最大同时打开标签数" desc="超过上限时自动关闭最旧的标签（当前编辑的标签与钉住的标签除外），未保存内容会自动保存。">

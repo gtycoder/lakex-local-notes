@@ -21,6 +21,8 @@ function input(openTabs: DesktopViewInput["openTabs"]): DesktopViewInput {
     openTabs,
     iconByNoteId: new Map(),
     fontSize: 14,
+    showToolbar: true,
+    floatingToolbar: true,
     tocEnabled: false,
     outlineEnhance: false,
     desktopWorkspace: "library",

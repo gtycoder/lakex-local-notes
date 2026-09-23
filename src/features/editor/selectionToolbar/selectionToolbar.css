@@ -1,0 +1,92 @@
+/* 桌面编辑态浮动工具栏（选区气泡）：文字选区 / 图片选中两种形态。
+ * 定位由 SelectionToolbar 内联写 left/top（动态坐标，无法用静态类表达）；
+ * 其余全部走 --lake-* 令牌（overlay 层，见 styles/index.css 的导入）。 */
+.selection-toolbar {
+  position: fixed;
+  z-index: var(--lake-z-dropdown);
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 4px 6px;
+  border: 1px solid var(--lake-border-2);
+  border-radius: var(--lake-radius-md);
+  background: var(--lake-bg-panel);
+  box-shadow: var(--lake-shadow-popover);
+  color: var(--lake-text-1);
+}
+.selection-toolbar__btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--lake-radius-sm);
+  background: transparent;
+  color: var(--lake-text-2);
+  cursor: pointer;
+  font: inherit;
+}
+.selection-toolbar__btn:hover:not(:disabled) { background: var(--lake-bg-hover); color: var(--lake-text-1); }
+.selection-toolbar__btn.is-active { background: var(--lake-accent-tint); color: var(--lake-accent); }
+.selection-toolbar__btn:disabled { opacity: .35; cursor: default; }
+.selection-toolbar__btn:focus-visible { outline: 2px solid var(--lake-accent); outline-offset: 1px; }
+.selection-toolbar__text {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  height: 28px;
+  padding: 0 6px;
+  border: 0;
+  border-radius: var(--lake-radius-sm);
+  background: transparent;
+  color: var(--lake-text-2);
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+}
+.selection-toolbar__text:hover { background: var(--lake-bg-hover); color: var(--lake-text-1); }
+.selection-toolbar__sep { width: 1px; height: 18px; margin: 0 4px; background: var(--lake-border-2); }
+.selection-toolbar__menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 96px;
+  padding: 4px;
+  border: 1px solid var(--lake-border-2);
+  border-radius: var(--lake-radius-md);
+  background: var(--lake-bg-raised);
+  box-shadow: var(--lake-shadow-popover);
+}
+.selection-toolbar__menu--grid { display: grid; grid-template-columns: repeat(5, 1fr); }
+.selection-toolbar__menu--swatch { display: flex; flex-flow: row wrap; gap: 4px; }
+.selection-toolbar__item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: var(--lake-radius-sm);
+  background: transparent;
+  color: var(--lake-text-1);
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+}
+.selection-toolbar__item:hover { background: var(--lake-bg-hover); }
+.selection-toolbar__item.is-active { color: var(--lake-accent); background: var(--lake-accent-tint); }
+.selection-toolbar__menu-label { padding: 4px 8px 0; color: var(--lake-text-3); font-size: 12px; }
+.selection-toolbar__swatch {
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 1px solid var(--lake-border-2);
+  border-radius: var(--lake-radius-xs);
+  cursor: pointer;
+}

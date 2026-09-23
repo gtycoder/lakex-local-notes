@@ -2,6 +2,7 @@ import React from "react";
 import { renderToString } from "react-dom/server";
 import { Doc, GetDefaultEditorConfig } from "@dlient/lakex-doc-react";
 import { mountBlockHoverHandle } from "./blockHandleMount";
+import { mountSelectionToolbar } from "./selectionToolbar/mountSelectionToolbar";
 import { uploadLakeResource } from "./resourceUpload";
 import { filterQuickNoteInsert } from "../quickNotes/quickNoteInsertFilter";
 import type { ResourceUploadOutput } from "../../lib/types";
@@ -44,6 +45,8 @@ export interface LakeEditorInstance {
   setDocument(type: "text/lake", content: string): void;
   /** 编辑器命令入口（等同内核命令，用于 blockMenuHelpers 等处的 style/insertCard 调用）。 */
   execCommand?(name: string, ...args: unknown[]): unknown;
+  /** 读取命令当前值（active 态/字号/样式：bold→"true"、style→"p"/"h1"、fontsize→px 或 "null"）。 */
+  queryCommandValue?(name: string, ...args: unknown[]): unknown;
   /** 内核实例（命令/选区都挂在这里）。 */
   kernel?: LakeKernelInstance;
   /** 锁定态 Viewer 可能不完整支持 markdown/plain（调用方需 typeof 守卫 + try/catch）。 */
@@ -458,8 +461,13 @@ export function resolveScrollNode(scrollNode?: HTMLElement | null): HTMLElement 
 export interface LakeEditorPrefs {
   /** 正文字号（内核支持 12/13/14/15/16/19/22/24） */
   fontSize?: number;
-  /** 显示编辑器工具栏 */
+  /** 显示编辑器「固定工具栏」（内核顶部工具栏）。默认开；false 时经 disabledPlugins 收掉 toolbar 插件。 */
   showToolbar?: boolean;
+  /**
+   * 浮动工具栏（桌面编辑态）：选中文字/图片时在选区上方弹出格式浮框。
+   * 与固定工具栏互相独立；仅在显式传 true 时挂载。
+   */
+  floatingToolbar?: boolean;
   /**
    * 彻底禁用原生编辑 TOC 侧栏（桌面多标签自建大纲时置 true）。
    * 仅关闭编辑模式 UI：内核 toc 数据与 tocChange 事件照常产生。
@@ -1007,6 +1015,15 @@ export function createLakeDocument(
     (editor as any).__disposeExtras = () => {
       try { if (typeof prevDispose === "function") prevDispose(); } catch { /* ignore */ }
       disposeHandle();
+    };
+  }
+  // 浮动工具栏（桌面编辑态 opt-in）：选中文字/图片时在选区上方弹出浮框。
+  if (mode === "editor" && prefs?.floatingToolbar) {
+    const disposeSelectionToolbar = mountSelectionToolbar(element, mount, editor, noteId);
+    const prevDispose = (editor as any).__disposeExtras;
+    (editor as any).__disposeExtras = () => {
+      try { if (typeof prevDispose === "function") prevDispose(); } catch { /* ignore */ }
+      disposeSelectionToolbar();
     };
   }
   return editor;

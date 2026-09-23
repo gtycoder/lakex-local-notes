@@ -8,8 +8,14 @@
 
 ## 0. 一句话
 
-在 **wrapper 层自研**一个「选中文字即浮现」的格式工具栏，按钮 = `正文 · 字号 · B · I · S · U · 链接 · </> · A · 对齐 · ⋮`，
-浮在选区上方，**仅桌面编辑态**，全部用内核原生命令驱动。
+在 **wrapper 层自研**一个浮框，**选中文字或图片都浮现**，两种形态按钮不同，均浮在锚点上方，**仅桌面编辑态**，全部用内核原生命令驱动。
+
+- **文字选区**：`正文 · 字号 · B · I · S · U · 链接 · </> · A · 对齐 · ⋮`。
+- **图片选中**：`对齐(左/中/右) · 尺寸(小/中/大/原始) · 替换 · 下载 · 复制 · 删除`（用户 260924 定稿，对齐钉钉）。
+
+> **260924 更正**：本文件初稿只规划了文字选区，并写「图片有自己的工具条，互不干扰」——实测**不成立**：
+> 内核只给 inline 图片卡片一个 28×28 hover「⋯」按钮（`.ne-ui-image-more`）→ 弹出 `.ne-ui-image-inner-menu` popover（**只有 删除 / 复制**），
+> 没有「选中即弹」的浮动条（`.ne-card-toolbar` 实测计数恒 0）。详见 `LAKEX-CONTRACT.md §5.10 六`。
 
 ---
 
@@ -41,11 +47,25 @@
 
 > 说明：钉钉那排末尾还有 `↗`（分享/打开），属我们明确不做的分享类，不放。
 
+## 2b. 图片形态按钮清单（260924 定稿）
+
+| 按钮 | 内核命令 / 实现 | 实测状态 |
+|---|---|---|
+| **对齐**（左/中/右） | `updateImageData(cardId, { style: "left"\|"center"\|"right" })` | ✅ 实测 `ne-image-style-center` 生效 |
+| **尺寸**（小/中/大/原始） | `updateImageData(cardId, { width: N })`，N = 原宽 × 0.3/0.5/0.8 / 原宽 | ✅ 实测 `img[width]=200`、`cardData.getUserWidth()=200` |
+| **替换** | 待接入（`{src}`/`{url}` 实测不生效；`setImageInfo` 断言失败） | ⏳ v1 置灰，禁止静默 no-op |
+| **下载** | `native.saveAssetAs(noteId, filename)` | ✅ canonical URL 可解析时可用 |
+| **复制** | `native.copyAssetImage(noteId, filename)` | ✅ 同上 |
+| **删除** | `ed.execCommand("deleteCard", cardId)` | ✅ 实测卡片移除 |
+
+> 复制/下载只在图片 src 是 canonical 资源 URL（`.../{noteId}/{filename}?token=`）时启用；data:/外链 置灰。
+
 ---
 
 ## 3. 显示 / 隐藏规则
 
-**显示**：桌面 + 编辑态 + 选区**非折叠** + 选区落在**当前可见**编辑器内。
+**显示**：桌面 + 编辑态 + （**文字选区非折叠** 或 **点中图片卡片**） + 落在**当前可见**编辑器内。
+图片形态锚点 = 图片卡片 `getBoundingClientRect()`；文字形态锚点 = 选区 `Range.getBoundingClientRect()`（多行取首行）。
 
 **不显示**（v1 直接不挂）：
 
@@ -98,7 +118,7 @@
 |---|---|
 | 块手柄 + 块菜单（`BlockHoverHandle`，wrapper 自研） | 手柄在左侧 gutter、菜单挂在块上；浮栏在选区上方 ⇒ 位置不冲突。约定：**块菜单打开时不弹浮栏** |
 | 卡片工具栏（`.ne-card-toolbar`，内核自带） | 卡片被选中时显示卡片栏；浮栏只在**文本选区**出现，不抢 |
-| 图片工具条（`vendor/.../plugin/imageToolbar`） | 图片有自己的工具条，互不干扰 |
+| 图片 inline 卡片的 `.ne-ui-image-more`「⋯」按钮 | 内核只此一个入口（popover 删除/复制）；我方浮框在**点中图片**时出现，与它并存（v1 不隐藏内核按钮） |
 | 表格工具栏（内核 `toolbarItems.table*`） | 表格内浮栏隐藏（§3） |
 | 移动端 dock（`EditorDock`） | 完全不动 |
 
@@ -110,14 +130,17 @@
 
 ```text
 src/features/editor/selectionToolbar/
-  SelectionToolbar.tsx     浮栏 UI（按钮 + 下拉）
-  useSelectionToolbar.ts   显隐 / 定位 / 选区监听
-  selectionToolbar.css     样式（优先用 --b3-* / --lake-* token；
-                           新增声明需同步 src/styles/cssLayers.test.ts 基线）
+  SelectionToolbar.tsx          浮栏 UI（文字 / 图片两形态 + 下拉菜单）
+  useSelectionToolbar.ts        显隐 / 定位 / 选区监听 / active 态
+  selectionToolbarModel.ts(+test) 纯逻辑（定位算法 / active 解析 / 图片尺寸档位）
+  mountSelectionToolbar.ts      React 根挂载 / 卸载
+  selectionToolbar.css          样式（只用 --lake-* token；overlay 层，
+                                基线已同步 src/styles/cssLayers.test.ts = 91）
 ```
 
-- 挂载点：`lakeRuntime.ts` 的 `__disposeExtras` 链（桌面编辑态 opt-in，与 `prefs.blockHandle` 同型给一个 `prefs.selectionToolbar` 开关）。
-- 命令：沿用 `editorCommands.ts`（先按 §6 校正后再用）。
+- 挂载点：`lakeRuntime.ts` 的 `__disposeExtras` 链（桌面编辑态 opt-in，开关 = `prefs.floatingToolbar`，与 `prefs.blockHandle` 同型）。
+- 命令：沿用 `editorCommands.ts`（§6 已按 260924 桌面实测校正：strikethrough/fontsize 等**有效**）。
+- **落地状态（260924）**：文字形态全部生效；图片形态 对齐/尺寸/复制/下载/删除生效，**替换置灰**；**链接未上**（内核入口未找到）。
 
 ---
 

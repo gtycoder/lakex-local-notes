@@ -636,6 +636,31 @@ python3 -  # 搜 showMiniToolbarWhen / MINI_TOOLBAR_TRIGGER / itemConfig / IMini
 
 实机：语雀编辑态与阅读态选中文本均无浮栏（编辑态只出现分栏容器工具「列等宽/自适应宽度」）；钉钉选区浮栏见上文条目；我们应用选区后 DOM 无浮层。
 
+**六、inline 图片卡片：没有「选中浮条」，只有 ⋯ popover（260924 桌面实测，隔离实例）**
+
+- 图片是 `ne-card[data-card-name="image"] data-card-type="inline"`。hover/点击 **不会**出现 `.ne-card-toolbar` 或 overlay bar（实测计数恒 0）——
+  §5.10 一的 miniToolbar 只覆盖 block 卡片/容器，**不含 inline 图片卡**。
+- 唯一入口 = 卡片内 28×28 的 `.ne-ui-image-more` 按钮；点开是 `.ne-ui-image-inner-menu` popover，**只有「删除 / 复制」两项**。
+- 可用命令（`editor.execCommand`，实测）：
+  | 命令 | 签名 | 结果 |
+  |---|---|---|
+  | `updateImageData` | `(cardId, { style: "left"/"center"/"right" })` | ✅ 落成 `.ne-image-style-*` |
+  | `updateImageData` | `(cardId, { width: N })` | ✅ `img[width]=N`、`cardData.getUserWidth()=N`（`{src}` / `{url}` **无效**） |
+  | `deleteCard` | `(cardId)` | ✅ 卡片移除 |
+- `cardData`（`_neRef._virtualNode._instance.cardData`）暴露 `getSrc/getOriginalWidth/setDisplayWidth/setStyle/setImageInfo/...`；
+  `setImageInfo({src})` 直接断言失败（`plugins/image/src/kernel/image-card-data.ts:470`）。**替换图片 v1 未接入。**
+- 复制/下载走宿主 native：`copyAssetImage(noteId, filename)` / `saveAssetAs(noteId, filename)`（filename 从 canonical URL 解析）。
+
+**七、桌面文字命令实测（260924，隔离实例；供浮动工具栏取用）**
+
+- **有效**：`bold→<strong>`、`italic→<em>`、`underline→<u>`、`strikethrough→<del>`、`color→<span style="color:…">`、
+  `bgColor→background-color`、`style "h1"`（p→h1）、`alignment "center"`（段落 `text-align`）、`clearFormat`。
+- **`fontsize`**：`execCommand('fontsize', 22)` 落成 `class="lake-fontsize-16"`（= px × 0.75，pt 口径）；**`queryCommandValue('fontsize')` 返回 px（22）**，active 判定用它。
+- **`code`**：需**内核自己的选区**；用 DOM Range 伪造选区会插入空 `<code>`。真实用户选区可用；跨多段 selectAllDoc 返回 false。
+- **`link` / `unlink` / `insertLink` / `linkText`**：官方 docs/08 有，但 `editor.execCommand` 上多种参数形态实测**均返回 false、正文无变化** ⇒ 链接按钮暂停，待找到内核入口再上（禁止静默 no-op）。
+- **active 态取值**（`queryCommandValue`）：mark = `"true"` / `""`；`style` = `"p"`/`"h1"`；`fontsize` = px 或 `"null"`；`alignment` = `""`/值；`color`/`bgColor` = `"null"`/色值。
+  **不要用 `queryCommandState`**（实测返回 `0/1/2`，语义不等同 active）。
+
 ---
 
 ### 5.11 小记版式（note UI）：`uiSwitch` + `fullscreen` + note 工具条（260919 实机 + bundle 实测）

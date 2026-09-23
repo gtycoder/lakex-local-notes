@@ -4,6 +4,56 @@
 > 历史所有 dated handoff 已合并进本文件（内容在 git 历史可查）。本文件只保留**当前状态 + 真正的待办 + 有价值的坑**。
 > **§8 是移动端（安卓）专职交接**，由移动端会话维护；桌面会话不要改 §8，移动端会话不要改 §0-§7 之外的桌面文件。
 
+## 0. 最新交接 · 260924 · 浮动工具栏（文字选区 + 图片选中）+ 固定/浮动工具栏开关（新会话先读这一节）
+
+> 分支 `feat/floating-toolbar`（基于当时 master `a2f70b1`）。**未合 master、未推送**，等用户验收。
+> 一句话：按用户 260924 需求做「选中文字**或图片**弹出的浮动工具栏」（对齐钉钉、两形态不同），并把被 `ea35aaa` 删掉的「显示固定工具栏」开关加回来；两个开关**互相独立**（可同开 / 只开一个 / 都不开）。
+
+### 一、任务目标（用户原话要点）
+1. 新建分支做浮动工具栏；**选中文字或图片**都弹浮框，**两种形态不同**（文字对钉钉文字浮栏、图片对钉钉图片浮栏）。
+2. 设置里能开/关：固定工具栏 + 浮动工具栏，各自独立。
+3. 以前有个「关闭固定工具栏」的功能被误删（实为 `ea35aaa` 移除 `showToolbar`），要加回来。
+
+### 二、已完成
+**A. 设置**
+- `src/lib/settings.ts`：恢复 `showToolbar`（默认 true）；新增 `floatingToolbar`（默认 true）。
+- 接线：`settings.ts` → `deriveDesktopView` 的 `editorPrefs` → `App.tsx` → `DesktopLibrary`（类型）→ `lakeRuntime` 的 `LakeEditorPrefs`。
+- 设置面板「编辑器」组加两行：`editor-toolbar`（显示固定工具栏）、`editor-floating-toolbar`（浮动工具栏）；`settingsSearch.ts` 同步（漂移单测过）。
+- 固定工具栏关闭仍走既有机制：`disabledPlugins: [..., showToolbar===false ? "toolbar" : []]`。
+
+**B. 命令字典更正（`editorCommands.ts`）**
+- 推翻「strikethrough/fontsize/clearFormat/indent/outdent 是 no-op」的旧注释——那条来自**移动端 `renderer.execCommand`**，不能套桌面。
+- `strikethrough` 进 `MARK_COMMANDS`；`KNOWN_COMMAND_NAMES` 补 fontsize/indent/outdent/link/unlink/clearFormat/alignment/color 系列；新增 `FONT_SIZE_OPTIONS`。单测更新。
+
+**C. 浮动工具栏（`src/features/editor/selectionToolbar/`）**
+- 文件：`SelectionToolbar.tsx`（UI）· `useSelectionToolbar.ts`（显隐+定位+active）· `selectionToolbarModel.ts(+.test.ts)`（纯逻辑）· `mountSelectionToolbar.ts` · `selectionToolbar.css`（overlay 层）。
+- 挂载：`lakeRuntime.ts` 的 `__disposeExtras` 链（`mode==="editor" && prefs?.floatingToolbar`），与 `mountBlockHoverHandle` 同型。
+- **文字形态**：正文(style) · 字号(fontsize) · B · I · S · U · 行内代码 · 字体色 · 对齐 · ⋮(引用/清除格式/背景色)。
+- **图片形态**：对齐(left/center/right = `updateImageData{style}`) · 尺寸(小/中/大/原始 = `{width}`) · 复制/下载(native，仅 canonical URL) · 删除(`deleteCard`)；**替换置灰待接入**。
+- 定位自算 + 顶界取内核固定工具栏底边（空间不足翻到下方）+ 左右不越出编辑器内容区；容器 `onMouseDown preventDefault` 保选区。
+
+### 三、P0 实测（隔离实例；已回填 `LAKEX-CONTRACT.md §5.10 六/七`）
+- `queryCommandValue` **返回数组**（`[true]`/`["center"]`/`[null]`/`[]`），`String([true])=="true"` 会骗过标量判断 ⇒ 必须解数组（已修 `isMarkActive`/`unwrapValue`）。
+- `fontsize` 传 px，落成 `class="lake-fontsize-{px*0.75}"`；`queryCommandValue('fontsize')` 返回 px。
+- `code` 需**内核自己的选区**（DOM Range 伪造会插入空 `<code>`，实测）。
+- `link`/`unlink`/`insertLink`/`linkText` 多形态均返回 false ⇒ **链接按钮未上**（禁止静默 no-op）。
+- inline 图片卡片**没有** `.ne-card-toolbar`，只有 28×28 `.ne-ui-image-more` → popover（删除/复制）。
+- 内核 `style` 命令把段落转 H1 时会**丢掉行内 mark**（`<strong>` 消失）——内核行为，非本批 bug。
+
+### 四、门禁（本批实测）
+- `tsc` 0 · `vitest` **1260 passed / 16 skipped** · `ui-metrics` 全绿（颜色字面量 0、`!important` 9、未定义令牌 0）· `vite build` ✓ · `cssLayers` 基线补 `selectionToolbar.css: 91`。
+- **未跑**：`check:stylesnap`（新增设置行是否影响快照待确认；脚本 42 态里未搜到 settings 面板态）· 打包冒烟。
+
+### 五、待用户验收 / 待办
+1. 用户点验浮框观感（浅/深/暖三主题；顶/底翻转；图片 1px 场景）。
+2. **链接按钮**：需先找到内核链接入口（官方 docs/08 有但 `execCommand` 未通）。
+3. **图片替换**：`updateImageData{src/url}` 无效、`setImageInfo` 断言失败 ⇒ 待找正确载荷（或改走重新上传成卡）。
+4. `check:stylesnap` 基线（若设置面板态被采样则需重刷）。
+5. 合并 master（待验收后）。
+
+### 六、关键文件
+`src/features/editor/selectionToolbar/**` · `src/features/editor/lakeRuntime.ts` · `src/lib/settings.ts` · `src/hooks/desktopDerivedState.ts` · `src/App.tsx` · `src/desktop/DesktopLibrary.tsx` · `src/components/SettingsPanel.tsx` · `src/components/settingsSearch.ts` · `src/features/editor/editorCommands.ts(+.test)` · `src/styles/index.css` · `src/styles/cssLayers.test.ts` · `docs/FLOATING-TOOLBAR-DESIGN-260919.md` · `docs/LAKEX-CONTRACT.md §5.10`。
+
 ## 0. 最新交接 · 260923 续 · 桌面 UI 细节优化批次（顶栏真居中 / 页签配色 / 目录浮层 / 目录栏文字 / 增强大纲收敛与配色 / dev 首开画板 reload）（新会话先读这一节）
 
 > 写给**完全没有上下文的新会话**。本批直接在 `master` 上做，**已推送 Gitee**：

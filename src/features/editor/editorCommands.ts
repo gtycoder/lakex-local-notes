@@ -3,9 +3,12 @@
  *
  * 背景：移动端 dock / 桌面工具栏都必须调用 lakex 的 renderer.execCommand，但命令名与
  * 常见富文本（document.execCommand）不同，且大量命令在 lakex 里是静默 no-op（点了没反应）。
- * 历史踩坑（见 HANDOFF §8.2 / §8.8）：insertUnorderedList/formatBlock/heading/setHeading/
- * insertBulletList/strike/strikethrough/justifyLeft|Center|Right/clearFormat/fontsize/indent/outdent
- * 都是 no-op，不得使用；正确名字是 unorderedList/orderedList/taskList/style "h1"/"p"/code/quote/hr。
+ * 历史踩坑（见 HANDOFF §8.2 / §8.8，**仅移动端 renderer.execCommand 实测**）：
+ * insertUnorderedList/formatBlock/heading/setHeading/insertBulletList/strike/justifyLeft|Center|Right
+ * 是 no-op，不得使用；正确名字是 unorderedList/orderedList/taskList/style "h1"/"p"/code/quote/hr。
+ * 260924 桌面实测更正（官方 docs/08 + LAKEX-CONTRACT §5.9）：strikethrough / fontsize / clearFormat /
+ * indent / outdent / alignment / color / bgColor / link 在桌面 editor.execCommand 上**有效**——
+ * 此前把移动端的 no-op 结论误套到了桌面。
  *
  * 设计：两端都从这里取命令定义，避免各写一套、重复踩坑；新增命令先在此登记 + 单测。
  */
@@ -36,6 +39,7 @@ export const MARK_COMMANDS: EditorCommandDef[] = [
   { name: "bold", label: "加粗", group: "mark" },
   { name: "italic", label: "斜体", group: "mark" },
   { name: "underline", label: "下划线", group: "mark" },
+  { name: "strikethrough", label: "删除线", group: "mark" },
   { name: "code", label: "行内代码", group: "mark" },
 ];
 
@@ -60,7 +64,16 @@ export const KNOWN_COMMAND_NAMES: ReadonlySet<string> = new Set([
   ...BLOCK_INSERT_COMMANDS.map((c) => c.name),
   ...HISTORY_COMMANDS.map((c) => c.name),
   "style", // 块级样式（配 STYLE_BLOCKS 的 value）
+  "fontsize", // 字号（带数值参数；取值见 FONT_SIZE_OPTIONS，官方 docs/08）
+  "indent", "outdent", // 缩进
+  "link", "unlink", // 链接
+  "clearFormat", // 清除格式
+  "alignment", // 对齐（带 left/center/right/justify 参数）
+  "color", "clearColor", "bgColor", "clearBgColor", // 字体色 / 背景色
 ]);
+
+/** 字号档位（官方 docs/08：execCommand('fontsize', N) 的取值区间）。 */
+export const FONT_SIZE_OPTIONS: readonly number[] = [12, 13, 14, 15, 16, 19, 22, 24, 29, 32, 40];
 
 /** 判断是否为已知有效命令（非 no-op）。 */
 export function isKnownEditorCommand(name: string): boolean {
