@@ -29,23 +29,23 @@
 
 ---
 
-## 2. 按钮清单（定稿）
+## 2. 文字形态按钮清单（260924 定稿：对齐内核固定工具栏的 Lake 风格，弃用钉钉风格）
 
-| 按钮 | 内核命令 | 参数 / 取值 | 备注 |
-|---|---|---|---|
-| **正文**（段落样式，下拉） | `style` | `"p"` / `"h1"`…`"h4"` | 直接复用 `src/features/editor/editorCommands.ts` 的 `STYLE_BLOCKS` |
-| **字号**（下拉） | `fontsize` | `12 / 13 / 14 / 15 / 16 / 19 / 22 / 24 / 29 / 32 / 40` | ⚠️ 取值区间来自官方 docs/08；见 §6 待验证 |
-| **B** | `bold` | — | |
-| **I** | `italic` | — | |
-| **S** | `strikethrough` | — | ⚠️ 见 §6 待验证 |
-| **U** | `underline` | — | |
-| **链接** | `link` / `unlink` | — | 已选中文本时「加链接」；已有链接时给「打开 / 编辑 / 移除」（复用桌面已有的链接交互） |
-| **</>** | `code` | — | 行内代码。官方 `toolbarItems` 里**没有**它，但内核有 `code` 命令（docs/05 的自定义按钮示例就是这么做） |
-| **A**（字体颜色） | `color` / `clearColor` | 色板 | 与顶部工具栏共用同一个色板组件更省 |
-| **对齐** | `alignment` | `left` / `center` / `right` / `justify` | 块级；光标在段内即可 |
-| **⋮ 更多** | 二级菜单 | `bgColor` / `clearBgColor`、`clearFormat`、`quote` | v1 就放这三项，不再扩散 |
+从左到右：**清除格式 · 段落样式(H1–6) · 字号 · 加粗 · 倾斜 · 中划线 · 下划线 · 文字颜色 · 背景色 · 转为 · 超链接**
 
-> 说明：钉钉那排末尾还有 `↗`（分享/打开），属我们明确不做的分享类，不放。
+| 按钮 | 内核命令 | 取值 |
+|---|---|---|
+| 清除格式 | `clearFormat` | — |
+| 段落样式（下拉） | `style` | `p` / `h1`…`h6`（标签沿用内核：正文 / 标题1..6；常量 `PARAGRAPH_STYLES`） |
+| 字号（下拉） | `fontsize` | `FONT_SIZE_OPTIONS`（官方 docs/08 区间） |
+| 加粗 / 倾斜 / 中划线 / 下划线 | `bold` / `italic` / `strikethrough` / `underline` | — |
+| 文字颜色 | `color` / `clearColor` | 色板 |
+| 背景色 | `bgColor` / `clearBgColor` | 色板 |
+| 转为（下拉） | `orderedList` / `unorderedList` / `taskList` / `quote` / `code` / `alert` | 有序列表·无序列表·待办列表·引用·**代码块(行内代码)**·高亮块（常量 `CONVERT_ITEMS`） |
+| 超链接（下拉输入 URL） | `link`(选区) / `insertLink`(光标) / `unlink` | 先用 `queryCommandEnabled` 把门 |
+
+**样式实现**：复用内核固定工具栏的类名与图标 sprite（`ant-btn` / `ne-ui-toolbar-*` / `ne-icon-*` / `#icon-*`），
+下拉菜单用内核的 `ant-dropdown-menu + ne-ui-select-*` 结构，active 态用内核 `.checked` 类；**不引入钉钉 `wd3-*` 风格**。
 
 ## 2b. 图片形态按钮清单（260924 定稿）
 

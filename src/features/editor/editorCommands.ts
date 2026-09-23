@@ -34,6 +34,28 @@ export const STYLE_BLOCKS: { value: string; label: string }[] = [
   { value: "h4", label: "H4" },
 ];
 
+/** 浮动工具栏「段落样式」：正文 + H1–H6（标签对齐内核固定工具栏：正文/标题1..6）。
+ * 与 STYLE_BLOCKS 分开维护，避免影响移动端 dock 的既有取值。 */
+export const PARAGRAPH_STYLES: { value: string; label: string; keys: string }[] = [
+  { value: "p", label: "正文", keys: "⌥ ⌘ 0" },
+  { value: "h1", label: "标题1", keys: "⌥ ⌘ 1" },
+  { value: "h2", label: "标题2", keys: "⌥ ⌘ 2" },
+  { value: "h3", label: "标题3", keys: "⌥ ⌘ 3" },
+  { value: "h4", label: "标题4", keys: "⌥ ⌘ 4" },
+  { value: "h5", label: "标题5", keys: "⌥ ⌘ 5" },
+  { value: "h6", label: "标题6", keys: "⌥ ⌘ 6" },
+];
+
+/** 浮动工具栏「转为」：结构块转换（260924 用户口径：代码块 = 行内代码；高亮块 = 内核 alert 命令）。 */
+export const CONVERT_ITEMS: { name: string; label: string; icon: string }[] = [
+  { name: "orderedList", label: "有序列表", icon: "editor-orderedList" },
+  { name: "unorderedList", label: "无序列表", icon: "editor-unorderedList" },
+  { name: "taskList", label: "待办列表", icon: "editor-taskList" },
+  { name: "quote", label: "引用", icon: "editor-quote" },
+  { name: "code", label: "代码块", icon: "editor-inlinecode" },
+  { name: "alert", label: "高亮块", icon: "text-border" },
+];
+
 /** 行内标记命令（需先有选中文本，且不可在面板 blur 后执行） */
 export const MARK_COMMANDS: EditorCommandDef[] = [
   { name: "bold", label: "加粗", group: "mark" },
@@ -70,6 +92,7 @@ export const KNOWN_COMMAND_NAMES: ReadonlySet<string> = new Set([
   "clearFormat", // 清除格式
   "alignment", // 对齐（带 left/center/right/justify 参数）
   "color", "clearColor", "bgColor", "clearBgColor", // 字体色 / 背景色
+  "alert", // 高亮块（命令式注册；execCommand('alert') 插入 blockquote.lake-alert）
 ]);
 
 /** 字号档位（官方 docs/08：execCommand('fontsize', N) 的取值区间）。 */

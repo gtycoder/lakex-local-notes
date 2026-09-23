@@ -115,3 +115,20 @@
   font: inherit;
   font-size: 12px;
 }
+.selection-toolbar__kmenu { position: absolute; top: calc(100% + 6px); left: 0; z-index: 1; }
+.selection-toolbar__popover {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px;
+  border: 1px solid var(--lake-border-2);
+  border-radius: var(--lake-radius-md);
+  background: var(--lake-bg-raised);
+  box-shadow: var(--lake-shadow-popover);
+}
+.selection-toolbar__swatches { display: flex; flex-flow: row wrap; gap: 4px; }
+.selection-toolbar__trigger-label { padding: 0 2px; font-size: 12px; line-height: 1; white-space: nowrap; }
