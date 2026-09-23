@@ -4,6 +4,102 @@
 > 历史所有 dated handoff 已合并进本文件（内容在 git 历史可查）。本文件只保留**当前状态 + 真正的待办 + 有价值的坑**。
 > **§8 是移动端（安卓）专职交接**，由移动端会话维护；桌面会话不要改 §8，移动端会话不要改 §0-§7 之外的桌面文件。
 
+## 0. 最新交接 · 260923 续 · 桌面 UI 细节优化批次（顶栏真居中 / 页签配色 / 目录浮层 / 目录栏文字 / 增强大纲收敛与配色 / dev 首开画板 reload）（新会话先读这一节）
+
+> 写给**完全没有上下文的新会话**。本批直接在 `master` 上做，**已推送 Gitee**：
+> `efd9274 → 1946779`（代码）→ `a2e2f0e`（快照基线）。`local == origin/master`，工作区干净。
+> 一句话：**桌面一批细节优化** —— 修掉 dev 下首次打开画板导致整页 reload；把顶栏加高并让内容在"可见头区"里**真**垂直居中；选中页签加浅色提示；目录浮层顶边贴面包屑下边线；目录栏文字对齐内核原生大纲；并把**增强大纲的样式从多层并回单一来源**、层级徽标改"强调色渐变色阶 + 中性细节层"。
+
+### 一、任务目标（用户原话要点，按顺序）
+1. **dev 首次打开画板 → 界面变白约 5 秒，然后其他已打开标签被关掉、只剩画板**（用户录了 GIF，怀疑"组件加载问题"）。
+2. 顶栏"加宽一点"，把红绿灯/空间/云/多标签**都居中**；随后指出"标签几乎顶着窗口顶部、并没真垂直居中，上下的缝隙要一致"。
+3. 多标签：**选中标签给背景或边框提示，颜色一定要浅**（参考思源截图，不照抄）。
+4. 目录栏浮层："之前做过面包屑缩小，导致弹在了面包屑下边" → **顶边严格按面包屑下边线**（动态）。
+5. 目录栏文字 vs 内核**原生大纲**文字：感觉原生大纲更好看 → **详细对比找到原因**，先做颜色（text-2），再"字号大一点"。
+6. **按目录栏的样式去改「增强大纲」的文字**（强调：是增强大纲，别改错）；随后反馈"左边增强大纲字号明显小于右边原生大纲，没改成功"。
+7. 追问：增强大纲是我们自己做的，**为什么还会一层压一层**？→ 排查能否精简到一层（"这是历史遗留，当时还是 3 边框，彻底解决，按我们现在的方式"）。
+8. 追问：增强大纲 **H1 这种标识的配色**是拍脑袋定的，有没有更好的方案 → 选方案 B，再"**融合：H1–H3 做渐变（结构层），后边细节层**"（前 3 级常用，要有颜色区分度）。
+9. 提交 `master` 并推送远程；**别忘了门禁的改动**。
+
+### 二、已完成内容（全部已提交并推送，`efd9274..a2e2f0e`）
+
+**A. dev：首次打开画板整页 reload（`vite.config.ts` / `vite.mobile.config.ts` + HANDOFF §4）**
+- 根因：`optimizeDeps` 里 `lakex-drawnix` 之外，**被 `exclude` 的 vendor 包（`@dlient/lakex-doc-react`）内部按需 import 的重型依赖**从未预构建；首次真正用到（开画板/思维导图/文本绘图）时 Vite 才补优化 → `optimized dependencies changed. reloading` → **整页 reload**（白屏数秒；bootstrap 只重开 `lastOpenedNoteId` ⇒ 其余标签被关）。
+- 修：`optimizeDeps.include` 补齐 `@plait/{core,common,draw,mind,text-plugins}`、`@xiangfa/mindmap(+viewer)`、`mermaid`、`flowchart.ts`、`@viz-js/viz`、`@plantuml/core/{plantuml,viz-global}.js`（桌面+移动）。**仅 dev 有**（生产无依赖优化器）。
+
+**B. 顶栏加高 + 真垂直居中（`styles/app/base.css` / `styles/app/tabs.css` / `lib/layoutMetrics.ts` / `electron/main.ts`）**
+- `--topbar-height: 32 → 38`；`TOPBAR_HEIGHT = 38`。
+- **可见头区 = 顶栏(38) + 其下 4px 拼接缝 = 42**（顶栏透明、与缝同色 ⇒ 肉眼是一整块）。标签条内距改为 `calc((顶栏−标签)/2 + 2px)` 上 / `− 2px` 下 ⇒ 标签落在 **7–35**，上/下缝隙各 **7px**。
+- 新增 `TOPBAR_SEAM = 4`；macOS 红绿灯 `y=(TOPBAR_HEIGHT+TOPBAR_SEAM−12)/2 = 15`（中心 21 = 头区中心），随顶栏自动跟随。
+- 实测：`.tab-bar` padding `7px 10px 3px 82px`、活动标签 top 7 / bottom 35、内容卡片仍在 42（未动）。
+
+**C. 选中页签浅色提示（`styles/chrome.css`）**
+- `.tab-item.active`：底 `--lake-accent-tint`、描边 `color-mix(in srgb, var(--lake-accent) 30%, transparent)`；`.tab-item.pinned.active` 同样给描边。全部令牌派生 ⇒ 浅/深/暖自动跟随。
+
+**D. 目录浮层顶边严格贴面包屑下边线（`styles/chrome.css`）**
+- `--lake-dir-peek-top` 去掉历史 `+ 6px` ⇒ `calc(--topbar-height + 4px + --breadcrumb-height)`（= 面包屑下边线；实测 72px）。高度公式 `calc(100vh − peek-top − 12px)` 随之自动变高。doc 之外（sheet/bitable/board）无面包屑，仍按 30px 口径（沿用旧行为）。
+
+**E. 目录栏文字对齐原生大纲（`styles/chrome.css` + `styles/app/shell.css`）**
+- `.note-row-copy strong`：色 `text-1(近黑 #1a1d21) → text-2(中灰)`；字号 `13px → var(--lake-font-size-body)(14px)`（行高自然到 22px）。实测与内核原生大纲项**逐项一致**（14px / lh22 / 500 / #495057）；行距 pitch 27–29px 不变（密度不变）。
+
+**F. 增强大纲：样式收敛到单一来源 + 层级配色（`features/outline/outline.css` / `styles/feature.css` / `styles/app/shell.css` / `styles/themes/base.css` / `features/outline/OutlineList.tsx`）**
+- **成因**：`outline.css` 由 `styles/index.css` 导进 **legacy 层**；P5-f 的设计改动写在 **feature 层的 `feature.css`**（同选择器、更高层天然胜出）⇒ 同一批 `.outline-*` 裂成两处（**这就是"自己的组件也一层压一层"**，也是我一度改了 `outline.css` 不生效的原因）。
+- 收敛：`feature.css` 的 7 条 `.outline-*` 覆盖 + `shell.css` 里全部 `.outline-sidebar*` 材质规则**并回 `outline.css` 单一来源**；内容面板"面/边/影"按状态定义一次（顺手清掉 `shell.css` 的 `border:1px solid` 四边与组件只重置 left 造成的**历史"三边框"泄漏**）。`shell.css` 只保留 `.app-shell.focus-mode .outline-sidebar`（壳层专注模式状态）；`a11y.css` 只保留 reduced-motion。
+- A/B 实测：**docked / hovered 两个可见状态逐项不变**；变化只在不可见的 base / collapsed(hidden)。
+- **层级徽标**（`themes/base.css` 删掉旧 6 色相"主题无关"调色板）：**H1–H3 = 强调色渐变色阶**（`color-mix(--lake-accent 20% / 13% / 7%)`，H1 额外 700），**H4–H6 = 中性**（`--lake-text-3` + `--lake-bg-block`）。
+- `OutlineList.tsx` 的层级**引导线**颜色从 5 个硬编码 rgba 收敛为中性主题令牌 `--lake-outline-guide: var(--lake-border-strong)`（消掉"同维度两套按层级配色"）。
+
+**G. 门禁同步（提交 `a2e2f0e` 等）**
+- `scripts/css-audit/baseline/stylesnap.json` **重刷**（42 态，复验 34/42 态 0 差异）。
+- `styles/cssLayers.test.ts` 基线按实测更新（outline.css 274→267 等、feature.css 121→102、shell.css 437→424）。
+- `styles/geometrySources.test.ts` / `lib/layoutMetrics.test.ts` 期望同步。
+- 本轮实测门禁：`tsc` 0 · 相关 vitest（cssLayers/geometrySources/layoutMetrics/OutlineController/outlineInteraction）**23/23** · `ui-metrics` 全绿（颜色字面量 0、`!important` 9、未定义令牌 0）· `check:stylesnap` 复验 0 差异。
+
+### 三、当前问题（均不阻塞）
+- **未跑全量门禁**：`npx vitest run` 全套、桌面/移动 `vite build`、移动 `check:mobilesnap`（需模拟器）都没跑（用户要求"小优化别每次都跑成套"）。判断移动端不受影响：本轮改动均为桌面专属文件，令牌增删（`--lake-outline-lv*` 删 / `--lake-outline-guide` 增）未被移动端引用。
+- `check:stylesnap` 的 **8 个窄窗态（560/760）按脚本 TODO 跳过**（装置不稳定，不是本次引入）。
+- **增强大纲默认关**（设置 → "大纲增强" 打开才挂载）：本批徽标/引导线的验证方式是**注入同构 DOM 读计算值**，**没有**在真实挂载态截图确认观感 —— 请用户开着设置看一眼。
+- H1–H3 渐变的百分比（**20 / 13 / 7**）是初版，可能需按观感微调（要更分明可 `26 / 15 / 7`）。
+- **"可见头区 = 顶栏 + 4px 缝"这一口径是双写的**：CSS 里 `tabs.css` 写 `+ 2px/−2px`，TS 里 `layoutMetrics.ts` 写 `TOPBAR_SEAM = 4`。改顶栏/缝高度要**同时改** `styles/app/base.css`、`lib/layoutMetrics.ts`、`styles/app/tabs.css`（有 `layoutMetrics.test.ts` / `geometrySources.test.ts` 卡着）。
+- 正式数据目录 `~/Library/Application Support/lake-notes-electron` 本会话**从未触碰**。
+
+### 四、下一步计划
+1. **用户验收**：开「设置 → 大纲增强」看层级徽标（H1–H3 色阶 / H4–H6 中性）与中性引导线的观感；需要则调那三个百分比。
+2. 补跑**全量门禁**：`npx vitest run` + 桌面/移动 `vite build` +（起模拟器）移动 `check:mobilesnap`。
+3. 回到**本文件 §3 的真正待办**（画板 AI 接入 / 离线残余 / 移动端批次 / 技术债；UI 相关见 §3.17）。
+4. （可选清理）把"可见头区含拼接缝"收敛成单一令牌，消除 TS/CSS 双写；把 `shell.css` 里残留的历史注释（`b3/layout.css`、`outline.css:348` 等已不存在的引用）一并清掉。
+
+### 五、踩过的坑（本批新增，务必先读）
+1. **被 `optimizeDeps.exclude` 的 vendor 包，其内部按需 import 的重型依赖必须显式进 `optimizeDeps.include`**：Vite 不扫描被 exclude 依赖的 import ⇒ 首次用到才补优化 ⇒ **整页 reload**（dev）。排查：独立 Vite cacheDir/端口 + 独立 `LAKE_USER_DATA`/`LAKE_ASSET_PORT`，抓 Vite stdout 的 `optimized dependencies changed. reloading`，CDP 看 `Runtime.executionContextsCleared` + `Page.frameNavigated`。
+2. **顶栏内容要在"顶栏 + 4px 拼接缝"的可见头区里居中**，不是顶栏盒(38)里；红绿灯也要按头区中心（否则差 2px）。缝与顶栏同色，肉眼是一整块。
+3. **改样式前先确认"哪条规则真正生效"**：**`@layer` 层序 > 特异性**。`outline.css` 在 legacy 层，被 feature 层 `feature.css` 同选择器完全压住 —— 只改 legacy 层**不生效**（本批最大的坑）。
+4. **组件自己的样式不要拆到更高层去覆盖**：同一选择器写在两层 = 以后每次改都要改两处、且容易改错层（本批的"一层压一层"）。收敛到组件自身的 `outline.css` 单一来源。
+5. **`border: 1px solid`（四边）会泄漏**：更高层给内容盒设四边边框、组件只重置 `border-left` 时，top/right/bottom 会漏出来（历史的"三边框"就是这么来的）。
+6. **同一视觉维度只允许一套色**：引导线曾是 `OutlineList.tsx` 里硬编码的第二套按层级 rgba，与徽标配色不一致、也不随主题 ⇒ 收敛成一个中性令牌。
+7. **`stylesnap` 装置坑（本批踩到）**：临时起 dev server 时若**依赖还在打包**、渲染层就提前加载 ⇒ 内核懒加载 widget（`.ne-ui-toolbar-link`）没注册 ⇒ 快照**元素数 −4 的假差异**。**必须等依赖打包完成再重启实例采**；判定真假：逐键 diff 出"只在基线里有"的元素身份（`元素 2121 → 2117` 要查是哪 4 个，别直接刷基线）。
+8. **快照基线**：任何**字体/字重/颜色/几何/资源 URL** 改动都会改哈希 ⇒ 必须重刷。**可复用已采快照**：`node scripts/css-audit/check-stylesnap.mjs --from .css-audit/snap/<tag>.json --write-baseline`（不必重跑 42 态）。桌面刷基线必须用**全新同构实例**。
+9. **`cssLayers` 基线**：新增声明会超基线 —— **合法新增**要同步抬高并注明理由；删除会让基线变松，可顺手收紧。**读实测值的小技巧**：把该文件基线临时置 `0` 跑一次，测试会报出"0 → 实际值"。
+10. **改 `electron/main.ts` 或它 import 的 `src/lib/layoutMetrics.ts` 会触发 vite-plugin-electron 重启 Electron**：改完等实例重启再量（红绿灯位置要重启才生效）。
+11. **别用 `head` 截门禁脚本的输出**：`| head` 会让脚本收 SIGPIPE 提前退出、看不到结论；要落盘再 `tail`。
+
+### 六、关键文件与命令
+- 顶栏几何单一来源：`src/styles/app/base.css`（`--topbar-height`）· `src/lib/layoutMetrics.ts`（`TOPBAR_HEIGHT`/`TOPBAR_SEAM`）· `src/styles/app/tabs.css`（标签内距）· `electron/main.ts`（红绿灯 y）。
+- 页签/目录浮层/目录栏文字：`src/styles/chrome.css`（`.tab-item.active` / `--lake-dir-peek-top` / `.note-row-copy strong`）。
+- 增强大纲：`src/features/outline/outline.css`（**唯一来源**）· `OutlineList.tsx`（引导线）· `src/styles/themes/base.css`（`--lake-outline-guide`）。
+- dev 依赖预构建：`vite.config.ts` / `vite.mobile.config.ts`（`optimizeDeps.include`）。
+- 护栏：`src/styles/cssLayers.test.ts` · `src/styles/geometrySources.test.ts` · `src/lib/layoutMetrics.test.ts` · `scripts/ui-metrics.mjs` · `scripts/css-audit/check-stylesnap.mjs`。
+
+```bash
+export PATH="$HOME/.nvm/versions/node/v24.18.0/bin:$PATH"
+cd /Users/admin/file/local-lake/lake-notes-electron
+npx tsc --noEmit
+npx vitest run src/styles/cssLayers.test.ts src/styles/geometrySources.test.ts src/lib/layoutMetrics.test.ts
+node scripts/ui-metrics.mjs
+# 快照（需全新同构实例；--from 可复用已采快照，不必重跑）
+#   LAKE_USER_DATA=$TMPDIR/xx ./node_modules/.bin/electron --disable-gpu --remote-debugging-port=9231 .
+node scripts/css-audit/check-stylesnap.mjs --port 9231 [--from .css-audit/snap/<tag>.json --write-baseline]
+```
+
 ## 0. 最新交接 · 260923 内置字体（MiSans）+ 字重/颜色统筹 + 桌面资源本地化（新会话先读这一节）
 
 > 写给**完全没有上下文的新会话**。本批在分支 `feat/font-misans`（基于当时 master `be4af5c`）完成，**已合入 master（`be4af5c..93d982d`，共 10 个提交）并推送 Gitee**；随后 master 上追加了本交接提交。
