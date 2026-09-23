@@ -189,7 +189,7 @@
   padding: 0 10px;
   border: 0;
   border-radius: var(--lake-radius-sm) var(--lake-radius-sm) 0 0;
-  color: var(--lake-text-3);
+  color: var(--lake-text-2);
   background: transparent;
   font-size: 13px;
   cursor: pointer;
@@ -349,7 +349,7 @@ button.b3-list-item__action:disabled { opacity: .45; cursor: default; }
  * 实测（260923，桌面 5 个段项）：段项全部 background 透明、text-3 墨色、border 0；.is-active 与之**只差**
  * 一条 box-shadow ⇒ 下面 .is-active 里声明的 color / background-color / border-color 是被上面 !important
  * 压死的**死声明**（注释曾宣称的"抬起表面 + 中性墨色"并未生效）；保留仅为记录设计意图，待 W2 修正。 */
-.seg__item { min-width: 40px; height: 26px; padding: 0 10px; font-size: 12px; border: 0 !important; background: transparent !important; color: var(--lake-text-3) !important; box-shadow: none; }
+.seg__item { min-width: 40px; height: 26px; padding: 0 10px; font-size: 12px; border: 0 !important; background: transparent !important; color: var(--lake-text-2) !important; box-shadow: none; }
 .seg .seg__item:hover { color: var(--lake-text-1) !important; }
 .seg .seg__item.is-active {
   color: var(--lake-text-1);

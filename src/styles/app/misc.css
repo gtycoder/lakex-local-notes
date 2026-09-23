@@ -225,7 +225,7 @@
 
 .emoji-picker-tabs { display: flex; gap: 4px; overflow-x: auto; padding-bottom: 2px; }
 
-.emoji-picker-tab { flex: none; padding: 4px 10px; border: 0; border-radius: var(--lake-radius-pill); background: var(--lake-border-2); color: var(--lake-text-3); font-size: 12px; cursor: pointer; white-space: nowrap; }
+.emoji-picker-tab { flex: none; padding: 4px 10px; border: 0; border-radius: var(--lake-radius-pill); background: var(--lake-border-2); color: var(--lake-text-2); font-size: 12px; cursor: pointer; white-space: nowrap; }
 
 .emoji-picker-tab:hover { background: var(--lake-bg-hover); }
 

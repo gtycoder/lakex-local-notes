@@ -382,7 +382,7 @@
   padding: 0 12px;
   border-bottom: 1px solid var(--lake-border-2);
   background: transparent;
-  color: var(--lake-text-3);
+  color: var(--lake-text-2);
   font-size: var(--lake-font-size-tiny);
 }
 .protyle-breadcrumb__item {
@@ -428,7 +428,7 @@
   border: 1px solid transparent;
   /* P7-e：活动页签的卡圆角按设计取 sm(8px)；此前被 legacy 的 !important 压着，现由本层单一来源表达 */
   border-radius: var(--lake-radius-sm);
-  color: var(--lake-text-3);
+  color: var(--lake-text-2);
   background: transparent;
 }
 .tab-item:hover { color: var(--lake-text-1); background: var(--lake-bg-hover); }

@@ -333,7 +333,7 @@
   border: 0;
   border-radius: var(--lake-radius-xs);
   background: transparent;
-  color: var(--lake-text-3);
+  color: var(--lake-text-2);
   font-family: inherit;
   font-size: var(--lake-font-size-small);
   cursor: pointer;
@@ -398,7 +398,7 @@
   height: 22px;
   padding: 0 var(--lake-space-lg);
   border-radius: var(--lake-radius-xs);
-  color: var(--lake-text-3);
+  color: var(--lake-text-2);
   font-size: var(--lake-font-size-small);
 }
 .ln-tabs__item:hover { color: var(--lake-text-1); background: transparent; }

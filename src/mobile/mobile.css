@@ -607,7 +607,7 @@ body { font-family: var(--lake-font-family); background: var(--lake-bg-window); 
 /* 首页 tab：底部指示线（与桌面 .ln-tabs 同一语言；只给选中项灰底会被判读成"看不出是 tab"） */
 .mobile-home-tabs { flex: 1; display: flex; justify-content: center; align-items: stretch; gap: 20px; }
 .mobile-htab {
-  position: relative; border: none; background: transparent; font-size: 16px; color: var(--lake-text-3);
+  position: relative; border: none; background: transparent; font-size: 16px; color: var(--lake-text-2);
   cursor: pointer; padding: 0 2px; font-weight: 500; -webkit-tap-highlight-color: transparent;
   transition: color var(--mobile-duration-press) var(--mobile-ease-panel);
 }
