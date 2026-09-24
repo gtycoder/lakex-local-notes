@@ -1,6 +1,6 @@
 import Database from "better-sqlite3";
 import { describe, expect, it } from "vitest";
-import { indexNote, reconcileIndex, searchNotes } from "./searchIndex.js";
+import { indexNote, reconcileIndex, searchNotes, RECONCILE_BATCH_SIZE } from "./searchIndex.js";
 import type { MobileDb, MobileDbStatement } from "./sqliteDb.js";
 import { sha256Sync } from "../core/sha256Sync.js";
 
@@ -30,7 +30,7 @@ function adapt(raw: Database.Database): MobileDb {
   };
 }
 
-function makeDb(): MobileDb {
+function makeRawDb(): Database.Database {
   const raw = new Database(":memory:");
   raw.exec([
     "CREATE TABLE notes (id TEXT PRIMARY KEY, title TEXT NOT NULL, content TEXT NOT NULL, parent_id TEXT, updated_at TEXT NOT NULL, content_hash TEXT, text_cache TEXT, trashed_at TEXT, doc_kind TEXT NOT NULL DEFAULT 'doc');",
@@ -39,7 +39,42 @@ function makeDb(): MobileDb {
     "CREATE TABLE search_index (note_id TEXT PRIMARY KEY, fts_rowid INTEGER NOT NULL, title TEXT NOT NULL, raw_hash TEXT, title_hash TEXT NOT NULL, body_hash TEXT NOT NULL, indexed_at TEXT NOT NULL);",
     "CREATE UNIQUE INDEX idx_search_index_rowid ON search_index(fts_rowid);",
   ].join("\n"));
-  return adapt(raw);
+  return raw;
+}
+
+function makeDb(): MobileDb {
+  return adapt(makeRawDb());
+}
+
+interface ExecCapture {
+  calls: number;
+  statements: string[];
+  failFirst: boolean;
+}
+
+/**
+ * 在 better-sqlite3 上模拟原生 executeSet：记录调用/语句，可注入首次失败验证「失败逐条重放」。
+ * 原生实现（NativeSqliteDb.executeSet）由插件保证整批单事务，这里用 BEGIN/COMMIT 对齐。
+ */
+function adaptWithExecuteSet(raw: Database.Database, capture: ExecCapture): MobileDb {
+  const db = adapt(raw);
+  db.executeSet = async (set) => {
+    capture.calls += 1;
+    capture.statements.push(...set.map((s) => s.statement));
+    if (capture.failFirst) {
+      capture.failFirst = false;
+      throw new Error("simulated executeSet failure");
+    }
+    raw.exec("BEGIN");
+    try {
+      for (const s of set) raw.prepare(s.statement).run(...(s.values as never[]));
+      raw.exec("COMMIT");
+    } catch (error) {
+      raw.exec("ROLLBACK");
+      throw error;
+    }
+  };
+  return db;
 }
 
 async function addNote(d: MobileDb, id: string, title: string, content: string, parentId: string | null = "nb", updatedAt = "2026-01-01T00:00:00Z", docKind = "doc"): Promise<void> {
@@ -109,5 +144,63 @@ describe("mobile searchIndex（better-sqlite3 FTS5 验证）", () => {
     await reconcileIndex(d);
     expect((await searchNotes(d, "第一版")).length).toBe(0);
     expect((await searchNotes(d, "第二版")).length).toBe(1);
+  });
+
+  it("批量对账走 executeSet：分块一次 SELECT prev/MAX，超过单块文档数也全部建索引且 rowid 连续", async () => {
+    const raw = makeRawDb();
+    const capture: ExecCapture = { calls: 0, statements: [], failFirst: false };
+    const d = adaptWithExecuteSet(raw, capture);
+    const total = RECONCILE_BATCH_SIZE + 25;
+    for (let i = 0; i < total; i++) {
+      await addNote(d, "bulk-" + i, "批量标题" + i, "<p>批量正文关键字-" + i + "</p>", "nb", "2026-01-01T00:00:00Z");
+    }
+    await reconcileIndex(d);
+    // 两块文档 → 两次 executeSet（每块一次 SELECT prev + 一次 SELECT MAX）。
+    expect(capture.calls).toBe(2);
+    const ledger = await d.prepare("SELECT COUNT(*) AS c, COUNT(DISTINCT fts_rowid) AS d, MIN(fts_rowid) AS mn, MAX(fts_rowid) AS mx FROM search_index").get() as { c: number; d: number; mn: number; mx: number };
+    expect(ledger.c).toBe(total);
+    expect(ledger.d).toBe(total); // 唯一索引不冲突
+    expect(ledger.mn).toBe(1);
+    expect(ledger.mx).toBe(total); // 跨块 rowid 连续（后一块 MAX 已含前一块写入）
+    const fts = await d.prepare("SELECT COUNT(*) AS c FROM notes_fts").get() as { c: number };
+    expect(fts.c).toBe(total);
+    expect((await searchNotes(d, "关键字-" + (total - 1))).some((r) => r.id === "bulk-" + (total - 1))).toBe(true);
+    // 第二次全量对账：全部命中 hash 短路，不再下发任何语句（幂等）。
+    const callsAfterFirst = capture.calls;
+    capture.statements.length = 0;
+    await reconcileIndex(d);
+    expect(capture.calls).toBe(callsAfterFirst);
+    expect(capture.statements.length).toBe(0);
+  });
+
+  it("executeSet 失败时逐条重放，索引仍完整", async () => {
+    const raw = makeRawDb();
+    const capture: ExecCapture = { calls: 0, statements: [], failFirst: true };
+    const d = adaptWithExecuteSet(raw, capture);
+    for (let i = 0; i < 10; i++) await addNote(d, "fb-" + i, "失败标题" + i, "<p>失败正文" + i + "</p>");
+    await reconcileIndex(d);
+    expect(capture.calls).toBe(1); // 首次批量失败
+    const ledger = await d.prepare("SELECT COUNT(*) AS c FROM search_index").get() as { c: number };
+    expect(ledger.c).toBe(10); // 逐条重放补齐
+    expect((await searchNotes(d, "失败正文7")).some((r) => r.id === "fb-7")).toBe(true);
+  });
+
+  it("纯样式变化只更新账本 raw_hash，不重写 FTS", async () => {
+    const raw = makeRawDb();
+    const capture: ExecCapture = { calls: 0, statements: [], failFirst: false };
+    const d = adaptWithExecuteSet(raw, capture);
+    await addNote(d, "style-1", "样式标题", "<p>正文一字不改</p>");
+    await reconcileIndex(d);
+    const before = await d.prepare("SELECT fts_rowid FROM search_index WHERE note_id=?").get("style-1") as { fts_rowid: number };
+    // content_hash 变、正文派生纯文本不变 → 只走 UPDATE search_index 分支。
+    await d.prepare("UPDATE notes SET content_hash=? WHERE id=?").run("new-raw-hash", "style-1");
+    capture.statements.length = 0;
+    await reconcileIndex(d);
+    const after = await d.prepare("SELECT fts_rowid, raw_hash FROM search_index WHERE note_id=?").get("style-1") as { fts_rowid: number; raw_hash: string };
+    expect(after.raw_hash).toBe("new-raw-hash");
+    expect(after.fts_rowid).toBe(before.fts_rowid); // FTS rowid 不变
+    expect(capture.statements.some((s) => s.includes("INSERT INTO notes_fts"))).toBe(false);
+    expect(capture.statements.some((s) => s.includes("UPDATE search_index"))).toBe(true);
+    expect((await searchNotes(d, "一字不改")).some((r) => r.id === "style-1")).toBe(true);
   });
 });

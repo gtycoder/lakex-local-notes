@@ -31,6 +31,42 @@ interface LedgerRow {
   body_hash: string;
 }
 
+interface PrevRow extends LedgerRow {
+  note_id: string;
+}
+
+interface IndexStatement {
+  statement: string;
+  values: unknown[];
+}
+
+/** reconcile 每次桥往返处理的文档数：一次 SELECT prev + 一次 SELECT MAX + 一批 executeSet。 */
+export const RECONCILE_BATCH_SIZE = 200;
+
+const SEARCH_INDEX_UPSERT_SQL =
+  "INSERT INTO search_index(note_id, fts_rowid, title, raw_hash, title_hash, body_hash, indexed_at) VALUES(?,?,?,?,?,?,?) " +
+  "ON CONFLICT(note_id) DO UPDATE SET fts_rowid=excluded.fts_rowid, title=excluded.title, raw_hash=excluded.raw_hash, title_hash=excluded.title_hash, body_hash=excluded.body_hash, indexed_at=excluded.indexed_at";
+
+/**
+ * 下发一批索引语句：优先 executeSet（原生一次桥往返 + 单事务），无 executeSet 退回单事务逐条；
+ * 批量失败逐条重放——reconcile 幂等，跑漏/半成功下次自愈，不整批丢弃。
+ * 调用方负责控制批大小（每块 ≈ RECONCILE_BATCH_SIZE 篇文档）。
+ */
+async function flushIndexStatements(d: MobileDb, statements: IndexStatement[]): Promise<void> {
+  if (statements.length === 0) return;
+  try {
+    if (typeof d.executeSet === "function") {
+      await d.executeSet(statements);
+    } else {
+      await d.transaction(async () => {
+        for (const s of statements) await d.prepare(s.statement).run(...s.values);
+      });
+    }
+  } catch {
+    for (const s of statements) await d.prepare(s.statement).run(...s.values);
+  }
+}
+
 async function writeIndexRow(d: MobileDb, row: NoteRow, prev: LedgerRow | undefined): Promise<void> {
   const title = row.title ?? "";
   // 优先编辑器写入的纯文本缓存（与桌面同源）；缺失时**按 kind 派生**（sheet/bitable/board 是 JSON 正文，
@@ -53,10 +89,7 @@ async function writeIndexRow(d: MobileDb, row: NoteRow, prev: LedgerRow | undefi
       rowid = Number(max?.m ?? 0) + 1;
     }
     await d.prepare("INSERT INTO notes_fts(rowid, title, body) VALUES(?,?,?)").run(rowid, segmentToIndexText(title), segmentToIndexText(plain));
-    await d.prepare(
-      "INSERT INTO search_index(note_id, fts_rowid, title, raw_hash, title_hash, body_hash, indexed_at) VALUES(?,?,?,?,?,?,?) " +
-      "ON CONFLICT(note_id) DO UPDATE SET fts_rowid=excluded.fts_rowid, title=excluded.title, raw_hash=excluded.raw_hash, title_hash=excluded.title_hash, body_hash=excluded.body_hash, indexed_at=excluded.indexed_at"
-    ).run(row.id, rowid, title, row.content_hash, titleHash, bodyHash, new Date().toISOString());
+    await d.prepare(SEARCH_INDEX_UPSERT_SQL).run(row.id, rowid, title, row.content_hash, titleHash, bodyHash, new Date().toISOString());
   });
 }
 
@@ -88,22 +121,56 @@ export async function reconcileIndex(d: MobileDb): Promise<void> {
     "LEFT JOIN notes n ON n.id = si.note_id " +
     "WHERE n.id IS NULL OR n.trashed_at IS NOT NULL"
   ).all() as Array<{ note_id: string; fts_rowid: number }>;
-  if (stale.length > 0) {
-    await d.transaction(async () => {
-      for (const row of stale) {
-        await d.prepare("DELETE FROM notes_fts WHERE rowid=?").run(row.fts_rowid);
-        await d.prepare("DELETE FROM search_index WHERE note_id=?").run(row.note_id);
-      }
-    });
+  for (let i = 0; i < stale.length; i += RECONCILE_BATCH_SIZE) {
+    // 批量删除：一条 DELETE 语句/账本行，每块 executeSet 一次下发。
+    const deletes: IndexStatement[] = [];
+    for (const row of stale.slice(i, i + RECONCILE_BATCH_SIZE)) {
+      deletes.push({ statement: "DELETE FROM notes_fts WHERE rowid=?", values: [row.fts_rowid] });
+      deletes.push({ statement: "DELETE FROM search_index WHERE note_id=?", values: [row.note_id] });
+    }
+    await flushIndexStatements(d, deletes);
   }
   const changed = await d.prepare(
     "SELECT n.id AS id, n.title AS title, n.content AS content, n.content_hash AS content_hash, n.text_cache AS text_cache, n.doc_kind AS doc_kind " +
     "FROM notes n LEFT JOIN search_index si ON si.note_id = n.id " +
     "WHERE n.trashed_at IS NULL AND (si.note_id IS NULL OR si.title != n.title OR si.raw_hash IS NULL OR si.raw_hash != n.content_hash)"
   ).all() as unknown as NoteRow[];
-  for (const row of changed) {
-    const prev = await d.prepare("SELECT fts_rowid, title_hash, body_hash FROM search_index WHERE note_id=?").get(row.id) as LedgerRow | undefined;
-    await writeIndexRow(d, row, prev);
+  // 分块：每块一次 SELECT prev（IN (...)）+ 一次 SELECT MAX(fts_rowid)，JS 内顺序分配新 rowid，
+  // 语句入队后 executeSet 一次下发。块与块之间顺序执行，后一块的 MAX 已包含前一块的写入。
+  for (let i = 0; i < changed.length; i += RECONCILE_BATCH_SIZE) {
+    const chunk = changed.slice(i, i + RECONCILE_BATCH_SIZE);
+    const placeholders = chunk.map(() => "?").join(",");
+    const prevRows = await d.prepare(
+      "SELECT note_id, fts_rowid, title_hash, body_hash FROM search_index WHERE note_id IN (" + placeholders + ")"
+    ).all(...chunk.map((row) => row.id)) as unknown as PrevRow[];
+    const prevByNote = new Map(prevRows.map((row) => [String(row.note_id), row]));
+    const maxRow = await d.prepare("SELECT IFNULL(MAX(fts_rowid), 0) AS m FROM search_index").get() as { m: number } | undefined;
+    let nextRowid = Number(maxRow?.m ?? 0) + 1;
+    const statements: IndexStatement[] = [];
+    const indexedAt = new Date().toISOString();
+    for (const row of chunk) {
+      const prev = prevByNote.get(row.id);
+      const title = row.title ?? "";
+      // 与单条路径同口径：优先 text_cache，缺失则按 kind 派生（见 writeIndexRow）。
+      const plain = row.text_cache ?? searchTextForKind(normalizeNoteKind(row.doc_kind), row.content ?? "").plain ?? "";
+      const titleHash = hashText(title);
+      const bodyHash = hashText(plain);
+      if (prev && prev.title_hash === titleHash && prev.body_hash === bodyHash) {
+        // 纯样式变化：FTS 不动，但 raw_hash/title 账本要跟上，避免每轮 reconcile 重复命中。
+        statements.push({ statement: "UPDATE search_index SET title=?, raw_hash=? WHERE note_id=?", values: [title, row.content_hash, row.id] });
+        continue;
+      }
+      let rowid: number;
+      if (prev) {
+        rowid = prev.fts_rowid;
+        statements.push({ statement: "DELETE FROM notes_fts WHERE rowid=?", values: [rowid] });
+      } else {
+        rowid = nextRowid++;
+      }
+      statements.push({ statement: "INSERT INTO notes_fts(rowid, title, body) VALUES(?,?,?)", values: [rowid, segmentToIndexText(title), segmentToIndexText(plain)] });
+      statements.push({ statement: SEARCH_INDEX_UPSERT_SQL, values: [row.id, rowid, title, row.content_hash, titleHash, bodyHash, indexedAt] });
+    }
+    await flushIndexStatements(d, statements);
   }
 }
 
