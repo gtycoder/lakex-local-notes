@@ -4,7 +4,28 @@
 > 历史所有 dated handoff 已合并进本文件（内容在 git 历史可查）。本文件只保留**当前状态 + 真正的待办 + 有价值的坑**。
 > **§8 是移动端（安卓）专职交接**，由移动端会话维护；桌面会话不要改 §8，移动端会话不要改 §0-§7 之外的桌面文件。
 
-## 0. 最新交接 · 260924 晚 续五 · 浮栏收尾：自检 review + 死代码清理（用户确认浮栏功能完成）
+## 0. 最新交接 · 260924 晚 续六 · 边距子菜单改为「不关面板」（可连续开上/下）
+
+> 用户 260924 追加：续五 §四.2 的「边距开关切换即关面板」**要改** —— 改成点完一个开关面板不关，可接着开另一个。
+
+### 一、改法（`SelectionToolbar.tsx`）
+- `setSpacing` **去掉 `setMenu(null)`**（面板保持打开），改为调用新增的 `const [, forceRender] = useReducer(n => n + 1, 0)`。
+- **为什么必须强制渲染**：面板开着时 `holdRef.current = true` ⇒ `useSelectionToolbar.refresh()` 被冻结（`refreshNow` 早退），内核 `sync(false)` 触发的 `contentchange` 也走这条被冻结的路径 ⇒ 不动手强制渲染，开关会停在旧值。`renderImage` 每次渲染都重读 `readImageMeta(t.cardEl)`，所以一次 forceRender 即可让两个开关读回内核新值。
+- 用 `[, forceRender]` 解构（不给第一个元素命名），避免 `--noUnusedLocals` 报「未读局部」。
+
+### 二、实测（CDP 受控 harness）
+注入一张带**真实 cardData 桥**（`_neRef._virtualNode._instance.cardData`，实现 getCardSpacing/setCardSpacing）的假图片卡，驱动**真实浮栏**：开「边距」→ 点第一个开关 ⇒ 面板**仍开**、`spacing ""→"top"`、第一个开关 `aria-checked false→true`；**不重开面板**直接点第二个开关 ⇒ 面板仍开、`spacing "top"→"both"`。clean `Page.reload` 后复跑同值。
+
+### 三、门禁（全绿）
+`tsc` 0（strict unused 对浮栏 0）· `vitest` **1264 passed / 16 skipped** · 桌面 + 移动 `vite build` ✓ · `git diff --check` clean。
+
+### 四、结案
+- 续五 §四.2「边距开关」**已结案**（原「未改」→ 本批已改）。
+- 续五 §四.1「vendor 死路径 `ImageToolbar`」仍**留待单独决定**（要动 vendor + `build:vendor` 重建，风险 > 收益）。
+
+---
+
+## 0. 最新交接 · 260924 晚 续五 · 浮栏收尾：自检 review + 死代码清理（用户确认浮栏功能完成） —— ⚠️ 已被上一节取代（历史记录）
 
 > 用户 260924 口径：浮栏（文字 + 图片 + 子菜单 + 消失机制）**到此都做完了**。本批做**收尾 review**：通读 `selectionToolbar/*` 全部源码 + 触点，清死代码，复核可疑项，**不改任何行为**。
 

@@ -11,7 +11,7 @@
  *     不用第三方（钉钉）风格；active 态用内核的 .checked 类。
  *   - 容器 onMouseDown preventDefault：点按钮不丢选区；定位自算 + 避开固定工具栏；表格/代码块内不出现。
  */
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
+import { useCallback, useEffect, useLayoutEffect, useReducer, useRef, useState, type CSSProperties, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
 import { native } from "../../../lib/native";
 import { FONT_SIZE_OPTIONS, PARAGRAPH_STYLES, TOOLBAR_BLOCK_ITEMS } from "../editorCommands";
 import type { LakeEditorInstance } from "../lakeRuntime";
@@ -147,6 +147,12 @@ export function SelectionToolbar({ editor, container }: {
   const [draftH, setDraftH] = useState("");
   /** 链接弹窗「在当前页面打开」。 */
   const [linkSelf, setLinkSelf] = useState(false);
+  /**
+   * 边距开关**不关面板**（用户 260926）：面板开着时 `holdRef` 会冻结 `refresh()`，内核写完 spacing
+   * 后组件不会重渲染、开关会停在旧值 ⇒ 这里强制一次渲染，让 `renderImage` 重读 `readImageMeta`。
+   * （`[, forceRender]` 不用变量名，避免 `--noUnusedLocals` 报未读局部。）
+   */
+  const [, forceRender] = useReducer((n: number) => n + 1, 0);
   /** 链接编辑弹层：文本 / 链接地址（与内核 .ne-link-editor 的两个字段对应）。 */
   const [linkText, setLinkText] = useState("");
   const [linkSrc, setLinkSrc] = useState("");
@@ -387,7 +393,8 @@ export function SelectionToolbar({ editor, container }: {
     /** 边距 = 内核 card spacing 的两个开关（上/下）。 */
     const spacingTop = meta.spacing === "top" || meta.spacing === "both";
     const spacingBottom = meta.spacing === "bottom" || meta.spacing === "both";
-    const setSpacing = (top: boolean, bottom: boolean) => { setImageSpacing(t.cardEl, top && bottom ? "both" : top ? "top" : bottom ? "bottom" : null); setMenu(null); refresh(); };
+    /** 边距：写内核后**保持面板打开**（可连续开上/下），只强制重渲染让两个开关读回新值。 */
+    const setSpacing = (top: boolean, bottom: boolean) => { setImageSpacing(t.cardEl, top && bottom ? "both" : top ? "top" : bottom ? "bottom" : null); forceRender(); };
     /** 描述：**无弹窗** —— 打开卡片内联描述编辑框并聚焦（内核 `.ne-image-title-content`，云端同款）。 */
     const openTitleEditor = () => { apply({ showTitle: true }); window.setTimeout(() => { (t.cardEl.querySelector(".ne-image-title-content") as HTMLElement | null)?.focus(); }, 80); };
     return (
