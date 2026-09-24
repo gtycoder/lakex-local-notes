@@ -41,6 +41,27 @@ function rowToLocalMetadata(r: Record<string, unknown>) {
 }
 
 export function createMobileSyncDbPort(getDb: () => MobileDb, deps: MobileSyncDbPortDeps): SyncDbPort {
+  // 窗口级批量写（保守版）：批内 applyRemoteNote / setSyncBase / recordDeclaredAssets 的语句入队，
+  // flushNoteBatch 用 executeSet 一次下发（原生一次桥往返 + 单事务）——移动端逐条写的桥开销是同步大头。
+  // 批量失败回退逐条重放，保持与逐条写等价的提交/报错点。
+  const NOTE_UPSERT_SQL = `INSERT INTO notes (id, title, content, parent_id, sort_order, updated_at, content_hash, sync_state, is_conflict, is_locked, locked_at, icon, trashed_at, deleted_from_parent_id, restore_pending_at, doc_kind)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+     ON CONFLICT(id) DO UPDATE SET title=excluded.title, content=excluded.content, parent_id=excluded.parent_id,
+       sort_order=excluded.sort_order, updated_at=excluded.updated_at, content_hash=excluded.content_hash,
+       sync_state=excluded.sync_state, is_conflict=excluded.is_conflict, is_locked=excluded.is_locked, locked_at=excluded.locked_at, icon=excluded.icon, trashed_at=excluded.trashed_at, deleted_from_parent_id=excluded.deleted_from_parent_id, restore_pending_at=NULL, doc_kind=excluded.doc_kind`;
+  const SYNCBASE_UPSERT_SQL = "INSERT INTO sync_base (note_id, content_hash, last_synced_meta_at) VALUES (?,?,?) ON CONFLICT(note_id) DO UPDATE SET content_hash=excluded.content_hash, last_synced_meta_at=excluded.last_synced_meta_at";
+  const SYNCBASE_LAST_UPLOADED_SQL = "UPDATE sync_base SET last_uploaded_hash=? WHERE note_id=?";
+  const DECLARED_ASSET_SQL = "INSERT INTO declared_assets(note_id,filename,size,hash) VALUES(?,?,?,?) ON CONFLICT(note_id,filename) DO UPDATE SET size=excluded.size, hash=excluded.hash";
+  let batch: Array<{ statement: string; values: unknown[] }> | null = null;
+  const queue = (statement: string, values: unknown[]): boolean => { if (!batch) return false; batch.push({ statement, values }); return true; };
+  // deleted_from_parent_id 必须随条目保存（对齐桌面 remoteImport.importNote）：全新导入的回收站条目
+  // （L339 分支）靠它恢复原父——硬编码 NULL 会让「安卓首次同步拉到他端已删笔记 → 恢复」后 parent 卡在
+  // TRASH 容器，上传条目 parentId=TRASH 传染他端（260910 实测）。
+  const noteUpsertValues = (note: Parameters<SyncDbPort["applyRemoteNote"]>[0], content: string): unknown[] => [note.id, note.title, content, note.parentId, note.sortOrder, note.updatedAt, note.contentHash, "synced", note.isConflict ? 1 : 0, note.isLocked ? 1 : 0, note.lockedAt ?? null, note.icon ?? null, note.trashedAt ?? null, note.deletedFromParentId ?? null, null, note.kind === "sheet" || note.kind === "bitable" || note.kind === "board" ? note.kind : "doc"];
+  const applyRemoteNoteNow = async (note: Parameters<SyncDbPort["applyRemoteNote"]>[0], content: string): Promise<void> => {
+    const d = getDb();
+    await d.prepare(NOTE_UPSERT_SQL).run(...noteUpsertValues(note, content));
+  };
   return {
     async getNote(id) {
       const d = getDb();
@@ -71,8 +92,8 @@ export function createMobileSyncDbPort(getDb: () => MobileDb, deps: MobileSyncDb
       assets: Array<{ filename: string; size: number; hash: string }>,
     ): Promise<void> {
       const d = getDb();
-      const stmt = d.prepare("INSERT INTO declared_assets(note_id,filename,size,hash) VALUES(?,?,?,?) ON CONFLICT(note_id,filename) DO UPDATE SET size=excluded.size, hash=excluded.hash");
-      for (const a of assets) await stmt.run(noteId, a.filename, a.size, a.hash);
+      const stmt = d.prepare(DECLARED_ASSET_SQL);
+      for (const a of assets) { if (!queue(DECLARED_ASSET_SQL, [noteId, a.filename, a.size, a.hash])) await stmt.run(noteId, a.filename, a.size, a.hash); }
     },
     async listDeclaredAssets(
       noteId: string,
@@ -82,17 +103,24 @@ export function createMobileSyncDbPort(getDb: () => MobileDb, deps: MobileSyncDb
       return rows.map((r) => ({ filename: String(r.filename), size: Number(r.size), hash: String(r.hash) }));
     },
     async applyRemoteNote(note, content) {
+      if (queue(NOTE_UPSERT_SQL, noteUpsertValues(note, content))) return;
+      await applyRemoteNoteNow(note, content);
+    },
+    async beginNoteBatch() { batch = []; },
+    async flushNoteBatch() {
+      const items = batch; batch = null;
+      if (!items || items.length === 0) return;
       const d = getDb();
-      // deleted_from_parent_id 必须随条目保存（对齐桌面 remoteImport.importNote）：
-      // 全新导入的回收站条目（L339 分支）靠它恢复原父——硬编码 NULL 会让"安卓首次同步拉到
-      // 他端已删笔记 → 恢复"后 parent 卡在 TRASH 容器，上传条目 parentId=TRASH 传染他端（260910 实测）。
-      await d.prepare(
-        `INSERT INTO notes (id, title, content, parent_id, sort_order, updated_at, content_hash, sync_state, is_conflict, is_locked, locked_at, icon, trashed_at, deleted_from_parent_id, restore_pending_at, doc_kind)
-         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
-         ON CONFLICT(id) DO UPDATE SET title=excluded.title, content=excluded.content, parent_id=excluded.parent_id,
-           sort_order=excluded.sort_order, updated_at=excluded.updated_at, content_hash=excluded.content_hash,
-           sync_state=excluded.sync_state, is_conflict=excluded.is_conflict, is_locked=excluded.is_locked, locked_at=excluded.locked_at, icon=excluded.icon, trashed_at=excluded.trashed_at, deleted_from_parent_id=excluded.deleted_from_parent_id, restore_pending_at=NULL, doc_kind=excluded.doc_kind`
-      ).run(note.id, note.title, content, note.parentId, note.sortOrder, note.updatedAt, note.contentHash, "synced", note.isConflict ? 1 : 0, note.isLocked ? 1 : 0, note.lockedAt ?? null, note.icon ?? null, note.trashedAt ?? null, note.deletedFromParentId ?? null, null, note.kind === "sheet" || note.kind === "bitable" || note.kind === "board" ? note.kind : "doc");
+      try {
+        if (typeof d.executeSet === "function") {
+          await d.executeSet(items);
+        } else {
+          await d.transaction(async () => { for (const s of items) await d.prepare(s.statement).run(...s.values); });
+        }
+      } catch {
+        // 回退逐条：批量失败不整批丢弃，保持与逐条写等价的提交/报错点。
+        for (const s of items) await d.prepare(s.statement).run(...s.values);
+      }
     },
     async applyRemoteTrash(id, content, title, trashedAt, deletedFromParentId, parentId, sortOrder) {
       const d = getDb();
@@ -218,11 +246,11 @@ export function createMobileSyncDbPort(getDb: () => MobileDb, deps: MobileSyncDb
     async setSyncBase(id, contentHash, metaAt, lastUploadedHash) {
       const d = getDb();
       // lastUploadedHash 为 null 时保留已有值，避免下载对账清掉本机上传标记。
-      await d.prepare(
-        "INSERT INTO sync_base (note_id, content_hash, last_synced_meta_at) VALUES (?,?,?) ON CONFLICT(note_id) DO UPDATE SET content_hash=excluded.content_hash, last_synced_meta_at=excluded.last_synced_meta_at"
-      ).run(id, contentHash, metaAt);
-      if (lastUploadedHash != null) {
-        await d.prepare("UPDATE sync_base SET last_uploaded_hash=? WHERE note_id=?").run(lastUploadedHash, id);
+      if (!queue(SYNCBASE_UPSERT_SQL, [id, contentHash, metaAt])) {
+        await d.prepare(SYNCBASE_UPSERT_SQL).run(id, contentHash, metaAt);
+      }
+      if (lastUploadedHash != null && !queue(SYNCBASE_LAST_UPLOADED_SQL, [lastUploadedHash, id])) {
+        await d.prepare(SYNCBASE_LAST_UPLOADED_SQL).run(lastUploadedHash, id);
       }
     },
     async defaultNotebookId() {

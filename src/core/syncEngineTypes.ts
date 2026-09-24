@@ -75,6 +75,9 @@ export interface SyncDbPort {
   getSyncBase(id: string): Promise<{ contentHash: string; lastUploadedHash: string | null; lastSyncedMetaAt: string | null } | null>;
   /** 批量读 hash 账本（可选；提供时同步环一次预载，替代逐条 getSyncBase 的原生往返）。 */
   getAllSyncBases?(): Promise<Map<string, { contentHash: string; lastUploadedHash: string | null; lastSyncedMetaAt: string | null }>>;
+  /** 可选：窗口级批量写（仅 applyRemoteNote 缓冲，窗口末 flush；未实现=逐条即时写）。 */
+  beginNoteBatch?(): Promise<void>;
+  flushNoteBatch?(): Promise<void>;
   applyRemoteNote(note: ManifestNote, content: string): Promise<void>;
   /** 远端墓碑应用：先拉内容再标记回收站（先内容、后标志；保留可恢复） */
   applyRemoteTrash(id: string, content: string, title: string, trashedAt: string, deletedFromParentId: string | null, parentId: string | null, sortOrder: number): Promise<void>;

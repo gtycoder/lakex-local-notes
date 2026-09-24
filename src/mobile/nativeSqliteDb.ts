@@ -43,6 +43,9 @@ export class NativeSqliteDb implements MobileDb {
     const db = new NativeSqliteDb(database);
     // Android's plugin rejects PRAGMA through execute(); query() is the supported path.
     await db.pragma("PRAGMA journal_mode=WAL");
+    // 260925：WAL 下用 NORMAL——提交不逐次 fsync、仅 checkpoint 落盘，是逐条导入的性能关键；
+    // 断电可能丢最近几次提交（不损坏），靠重同步自愈。
+    await db.pragma("PRAGMA synchronous=NORMAL");
     return db;
   }
 
@@ -105,6 +108,16 @@ export class NativeSqliteDb implements MobileDb {
     await CapacitorSQLite.execute({
       database: this.database,
       statements: sql,
+      transaction: true,
+      readonly: false,
+    });
+  }
+
+  async executeSet(set: Array<{ statement: string; values: unknown[] }>): Promise<void> {
+    // 一次桥往返执行整批（transaction:true 由插件保证单事务）；逐条 run 的桥开销是移动端同步的大头。
+    await CapacitorSQLite.executeSet({
+      database: this.database,
+      set: set.map((s) => ({ statement: s.statement, values: s.values })),
       transaction: true,
       readonly: false,
     });

@@ -33,6 +33,8 @@ export interface MobileDbStatement {
 
 export interface MobileDb {
   prepare(sql: string): MobileDbStatement;
+  /** 可选：N 条语句一次下发（原生一次桥往返 + 单事务）；缺省实现退回逐条。 */
+  executeSet?(set: Array<{ statement: string; values: unknown[] }>): Promise<void>;
   transaction<T extends (...args: never[]) => Promise<unknown>>(fn: T): Promise<Awaited<ReturnType<T>>>;
   pragma(source: string): Promise<unknown>;
   exec(sql: string): Promise<void>;

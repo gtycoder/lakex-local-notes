@@ -320,6 +320,7 @@ export async function syncNow(cfg: SyncConfig, s3: S3Store, db: SyncDbPort, opts
     for (let win = 0; win < remote.notes.length; win += DOWNLOAD_PREFETCH_WINDOW) {
       const windowNotes = remote.notes.slice(win, win + DOWNLOAD_PREFETCH_WINDOW);
       await prefetchWindow(windowNotes);
+      if (typeof db.beginNoteBatch === "function") await db.beginNoteBatch();
       for (const rn of windowNotes) {
       // 审计#3：note.id / asset.filename 必须先做单路径段校验（拒绝 ../、绝对路径、反斜杠），
       // 写盘前 fail fast（对齐桌面 sync.ts:396-401）
@@ -543,6 +544,7 @@ export async function syncNow(cfg: SyncConfig, s3: S3Store, db: SyncDbPort, opts
       }
       // local-wins 不在此入队：统一由步骤 3 decideUpload 决定（skip-fast 覆盖）
       }
+      if (typeof db.flushNoteBatch === "function") await db.flushNoteBatch();
     }
   }
 
