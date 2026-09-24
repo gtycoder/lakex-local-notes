@@ -37,7 +37,9 @@ export type HoverEffect =
  *   *     + move         → armed : showHandle[, armDwell 仅当没在跑 —— 自愈；已在跑的不重置]
  *   *     + leave        → idle  : hideHandle, cancelDwell[, hidePreview 仅当指针离开整个 app-shell]
  *   armed + dwellElapsed → -     : showPreview（清 dwellArmed）
- *   *     + click        → -     : toggleDock（**不**取消驻留，与改动前逐字一致）
+ *   *     + click        → idle  : toggleDock, hideHandle, cancelDwell
+ *                                  （点击后**必须**收把手 + 取消驻留：否则 is-active 残留，
+ *                                  回到「收起」态时把手会"常驻"；残留的驻留还会在收起后立刻把浮层再唤出来）
  */
 export function reduceHover(phase: HoverPhase, event: HoverEvent): { phase: HoverPhase; effects: HoverEffect[] } {
   switch (event.type) {
@@ -55,7 +57,7 @@ export function reduceHover(phase: HoverPhase, event: HoverEvent): { phase: Hove
     case "dwellElapsed":
       return { phase: { handleShown: phase.handleShown, dwellArmed: false }, effects: ["showPreview"] };
     case "click":
-      return { phase: { handleShown: false, dwellArmed: false }, effects: ["toggleDock"] };
+      return { phase: { handleShown: false, dwellArmed: false }, effects: ["toggleDock", "hideHandle", "cancelDwell"] };
   }
 }
 

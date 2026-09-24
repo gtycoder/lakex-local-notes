@@ -345,6 +345,19 @@ export function App() {
     applyEdgeEffects(effects, clientY);
   }, [applyEdgeEffects, edgeHandleShown, edgeDwellArmed]);
 
+  // 非指针清理（260924）：窗口失焦 / 页面隐藏时**收不到 pointerleave**，否则 is-active 残留 ⇒
+  // 回到「收起」态时把手"常驻"。这里只收把手 + 取消驻留，不动面板模式。
+  useEffect(() => {
+    const clearEdgeHandle = () => hideEdgeHandle();
+    const onVisibilityChange = () => { if (document.visibilityState === "hidden") clearEdgeHandle(); };
+    window.addEventListener("blur", clearEdgeHandle);
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    return () => {
+      window.removeEventListener("blur", clearEdgeHandle);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+    };
+  }, [hideEdgeHandle]);
+
   // 切换标签时，大纲数据会在编辑器注册后异步更新；期间禁止壳层 grid 动画，
   // 避免“旧列宽 → 新列宽”与正文淡入同时发生，造成 tab 切换时主区横向抖动。
 
@@ -423,13 +436,15 @@ export function App() {
             dispatchEdge({ type: "leave", staysInShell }, e.clientY);
           }}
           onClick={() => dispatchEdge({ type: "click" }, 0)}
+          // 指针被系统/手势取消时不会有 pointerleave ⇒ 主动收把手（见下方 blur/visibility 清理）。
+          onPointerCancel={() => hideEdgeHandle()}
         >
           {/* 跟手把手：默认不可见；指针进热区才浮出。点击 = 固定/取消固定。 */}
           <span
             className="edge-hotzone-handle"
             aria-hidden="true"
             title="点击固定/取消固定目录"
-            onClick={(e) => { e.stopPropagation(); toggleSidebarDock(); }}
+            onClick={(e) => { e.stopPropagation(); dispatchEdge({ type: "click" }, 0); }}
           >
             <PanelLeft size={15} className="edge-hotzone-handle__icon" />
             <span className="edge-hotzone-handle__label">目录</span>

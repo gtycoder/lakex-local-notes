@@ -43,8 +43,9 @@ describe("A3 悬停召唤相位机（W5 转移表 = 既有 7 条坑）", () => {
     expect(r.effects).toEqual(["showPreview"]);
   });
 
-  it("⑦ click：只翻转固定态（不取消驻留，与改动前逐字一致）", () => {
-    expect(reduceHover(armed, { type: "click" }).effects).toEqual(["toggleDock"]);
+  it("⑦ click：翻转固定态 + 收把手 + 取消驻留（否则 is-active 残留 ⇒ 收起后把手常驻）", () => {
+    expect(reduceHover(armed, { type: "click" }).effects).toEqual(["toggleDock", "hideHandle", "cancelDwell"]);
+    expect(reduceHover(armed, { type: "click" }).phase).toEqual({ handleShown: false, dwellArmed: false });
   });
 
   it("走廊并集：任一处命中即算在目录里（顺序无关）", () => {
