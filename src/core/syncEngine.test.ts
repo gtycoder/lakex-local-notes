@@ -10,7 +10,9 @@ const decode = (b: Uint8Array) => new TextDecoder("utf-8").decode(b);
 /** 内存 S3Store：模拟端口职责——getObject 返回**已解压**字节（gzip 魔数识别），putObject 按 opts.gzip 压缩。 */
 class MemS3 implements S3Store {
   map = new Map<string, Uint8Array>();
+  getLog: string[] = [];
   async getObject(key: string, opts?: { maxBytes?: number }): Promise<Uint8Array | null> {
+    this.getLog.push(key);
     const b = this.map.get(key);
     if (!b) return null;
     const bytes = isGzip(b) ? gunzipSync(b) : b;
@@ -36,7 +38,7 @@ async getAllNotes() { return [...this.notes.values()]; }
 async getSyncBase(id: string) { return this.bases.get(id) ?? null; }
 async applyRemoteNote(note: any, content: string) {
     this.notes.set(note.id, {
-      id: note.id, title: note.title, content, updatedAt: note.updatedAt, syncState: "synced",
+      id: note.id, title: note.title, content, contentHash: note.contentHash, updatedAt: note.updatedAt, syncState: "synced",
       trashedAt: note.trashedAt ?? null, restorePendingAt: null, parentId: note.parentId ?? null, sortOrder: note.sortOrder ?? 0,
       isLocked: !!note.isLocked, lockedAt: note.lockedAt ?? null, icon: note.icon ?? null, isConflict: !!note.isConflict,
       deletedFromParentId: note.deletedFromParentId ?? null,
@@ -232,6 +234,22 @@ describe("syncEngine（共享编排）", () => {
     await syncNow(CFG, s3, db);
     const manifest = JSON.parse(decode((await s3.getObject("p/manifests/latest.json"))!));
     expect(manifest.notes.find((n: any) => n.id === "n2")?.kind).toBe("sheet");
+  });
+
+  // 260925 下载并发预取回归：首同步每篇正文只取一次（预取，不再逐条串行重复取）；稳态零正文 GET。
+  it("下载预取：首同步每篇正文取一次、稳态零次", async () => {
+    const N = 20;
+    const s3 = new MemS3();
+    const a = new MemDb();
+    for (let i = 0; i < N; i += 1) a.notes.set("n" + i, row({ id: "n" + i, content: "<p>c" + i + "</p>" }));
+    await syncNow(CFG, s3, promisifyDb(a));
+    const b = new MemDb();
+    await syncNow(CFG, s3, promisifyDb(b));
+    const firstBodyGets = s3.getLog.filter((k) => k.includes("/objects/")).length;
+    expect(firstBodyGets).toBe(N);
+    s3.getLog.length = 0;
+    await syncNow(CFG, s3, promisifyDb(b));
+    expect(s3.getLog.filter((k) => k.includes("/objects/")).length).toBe(0);
   });
 
   it("A：manifest 声明正文引用但本地缺失、已记录元数据的资源（备份不丢引用）", async () => {

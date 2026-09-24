@@ -38,6 +38,12 @@ const UPLOAD_CONCURRENCY = 4;
 /** 跨笔记资产扫描并发车道数（P3-4）。峰值并发 PUT = NOTE_UPLOAD_CONCURRENCY × ASSET_CONCURRENCY = 2×4 = 8
  *  （对齐七牛 Kodo 建议上限 8；16 偏高、日常用不到，徒增限流风险）。正文/下载各自 ≤4 且与资产阶段串行、不叠加。 */
 const NOTE_UPLOAD_CONCURRENCY = 2;
+/** 下载正文并发车道数（与上传对称）：只并发网络 GET，峰值与上传/资产阶段串行、不叠加（≤4）。 */
+const DOWNLOAD_CONCURRENCY = 4;
+/** 下载预取窗口（条）：窗口内先并发取"可能用到的正文"，再按原顺序逐条应用；稳态命中 0 条、不产生多余下载。 */
+const DOWNLOAD_PREFETCH_WINDOW = 64;
+/** 单窗口预取字节上限：超过则未预取的条目回退按需 GET，避免大文档库一次性占满内存。 */
+const DOWNLOAD_PREFETCH_BUDGET = 64 * 1024 * 1024;
 
 /** 兼容 Web/Node 的 UUID（移动端 WebView 也提供 crypto.randomUUID）。 */
 function randomUUID(): string {
@@ -276,7 +282,40 @@ export async function syncNow(cfg: SyncConfig, s3: S3Store, db: SyncDbPort, opts
         .map((d) => [d.id, d.deletedAt] as const)
     );
 
-    for (const rn of remote.notes) {
+    // 有界并发预取：把「取正文」这段网络等待重叠起来（旧实现逐条 await，首同步/大变更时长尾极重）。
+    // 只并发网络 GET，不改变墓碑/冲突/留档/父目录等决策与落库顺序：每窗口先按只读判据预取，
+    // 再沿用原逐条逻辑消费；未命中按需回退 GET。稳态（本地 hash == 远端 hash）不预取任何对象。
+    const prefetched = new Map<string, Uint8Array | null>();
+    const contentKey = (id: string, hash: string): string => id + "|" + hash;
+    let prefetchBudget = DOWNLOAD_PREFETCH_BUDGET;
+    const prefetchWindow = async (windowNotes: readonly ManifestNote[]): Promise<void> => {
+      prefetched.clear();
+      const need: ManifestNote[] = [];
+      for (const rn of windowNotes) {
+        if (rn.deleted || !isSafePathSegment(rn.id)) continue;
+        const local = localById.get(rn.id) ?? null;
+        if (local === null || (local.contentHash ?? null) !== rn.contentHash) need.push(rn);
+      }
+      await runPool(need, DOWNLOAD_CONCURRENCY, async (rn) => {
+        const key = contentKey(rn.id, rn.contentHash);
+        if (prefetched.has(key) || prefetchBudget <= 0) return;
+        const bytes = await s3.getObject(`${cfg.prefix}/${objectKey(rn.id, rn.contentHash)}`, { maxBytes: MAX_REMOTE_NOTE_BYTES });
+        prefetched.set(key, bytes ?? null);
+        if (bytes) prefetchBudget -= bytes.length;
+      });
+    };
+    const fetchRemoteContent = async (id: string, hash: string): Promise<Uint8Array | null> => {
+      const key = contentKey(id, hash);
+      if (prefetched.has(key)) return prefetched.get(key) ?? null;
+      const bytes = await s3.getObject(`${cfg.prefix}/${objectKey(id, hash)}`, { maxBytes: MAX_REMOTE_NOTE_BYTES });
+      prefetched.set(key, bytes ?? null);
+      return bytes ?? null;
+    };
+
+    for (let win = 0; win < remote.notes.length; win += DOWNLOAD_PREFETCH_WINDOW) {
+      const windowNotes = remote.notes.slice(win, win + DOWNLOAD_PREFETCH_WINDOW);
+      await prefetchWindow(windowNotes);
+      for (const rn of windowNotes) {
       // 审计#3：note.id / asset.filename 必须先做单路径段校验（拒绝 ../、绝对路径、反斜杠），
       // 写盘前 fail fast（对齐桌面 sync.ts:396-401）
       if (!isSafePathSegment(rn.id)) throw new Error(`清单包含无效的笔记 ID: ${rn.id}`);
@@ -347,7 +386,7 @@ export async function syncNow(cfg: SyncConfig, s3: S3Store, db: SyncDbPort, opts
         // 远端墓碑（删除压编辑）：本地无显式恢复 → 跟随删除
         if (local === null) {
           // 本地从未持有（全新设备/重装）：导入远端 trash 条目（先拉删除前内容再建回收站条目，内容可恢复）。
-          const contentBytes = await s3.getObject(`${cfg.prefix}/${objectKey(rn.id, rn.contentHash)}`, { maxBytes: MAX_REMOTE_NOTE_BYTES });
+          const contentBytes = await fetchRemoteContent(rn.id, rn.contentHash);
           if (contentBytes == null) {
             report.warnings.push(`对象缺失（跳过+warning，B 方案）: ${rn.id}-${rn.contentHash}`);
             continue;
@@ -381,7 +420,7 @@ export async function syncNow(cfg: SyncConfig, s3: S3Store, db: SyncDbPort, opts
         if (localBody !== "" && sha256Sync(new TextEncoder().encode(localBody)) === rn.contentHash) {
           trashContent = localBody;
         } else {
-          const contentBytes = await s3.getObject(`${cfg.prefix}/${objectKey(rn.id, rn.contentHash)}`, { maxBytes: MAX_REMOTE_NOTE_BYTES });
+          const contentBytes = await fetchRemoteContent(rn.id, rn.contentHash);
           if (contentBytes == null) {
             report.warnings.push(`对象缺失（跳过+warning，B 方案）: ${rn.id}-${rn.contentHash}`);
             continue;
@@ -408,7 +447,7 @@ export async function syncNow(cfg: SyncConfig, s3: S3Store, db: SyncDbPort, opts
         // - 本地删除时间新于远端 → 本地删除压远端 active（删除压编辑），保留删除，步骤 3 上传墓碑
         const remoteNewer = (rn.updatedAt ?? "") >= (local.trashedAt ?? "");
         if (remoteNewer) {
-          const contentBytes = await s3.getObject(`${cfg.prefix}/${objectKey(rn.id, rn.contentHash)}`, { maxBytes: MAX_REMOTE_NOTE_BYTES });
+          const contentBytes = await fetchRemoteContent(rn.id, rn.contentHash);
           if (contentBytes == null) {
             report.warnings.push(`对象缺失（跳过+warning，B 方案）: ${rn.id}-${rn.contentHash}`);
             continue;
@@ -476,7 +515,7 @@ export async function syncNow(cfg: SyncConfig, s3: S3Store, db: SyncDbPort, opts
         localInTrash: localTrashed,
       });
       if (action.kind === "remote-wins") {
-        const contentBytes = await s3.getObject(`${cfg.prefix}/${objectKey(rn.id, rn.contentHash)}`, { maxBytes: MAX_REMOTE_NOTE_BYTES });
+        const contentBytes = await fetchRemoteContent(rn.id, rn.contentHash);
         if (contentBytes == null) {
           report.warnings.push(`对象缺失（跳过+warning，B 方案）: ${rn.id}-${rn.contentHash}`);
           continue;
@@ -498,6 +537,7 @@ export async function syncNow(cfg: SyncConfig, s3: S3Store, db: SyncDbPort, opts
         report.appliedRemote++;
       }
       // local-wins 不在此入队：统一由步骤 3 decideUpload 决定（skip-fast 覆盖）
+      }
     }
   }
 
