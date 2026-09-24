@@ -12,6 +12,7 @@
  */
 import { CapacitorHttp, type HttpOptions } from "@capacitor/core";
 import type { HttpHandlerOptions, HttpRequest, HttpResponse, RequestHandler } from "@smithy/types";
+import { assetPerf, recordPerf } from "./assetPerf";
 
 function buildUrl(request: HttpRequest): string {
   let url = `${request.protocol}//${request.hostname}`;
@@ -53,7 +54,16 @@ export class CapacitorHttpHandler implements RequestHandler<HttpRequest, HttpRes
   metadata = { handlerProtocol: "capacitor-http" as const };
 
   async handle(request: HttpRequest, _options?: HttpHandlerOptions): Promise<{ response: HttpResponse }> {
+    // 性能观测（assetPerf）：资产 URL 单列，HTTP 往返 / JS base64 编解码分别计时。
+    const isAsset = request.path.includes("/assets/");
+    const requestBytes = request.body instanceof Uint8Array ? request.body.length : 0;
+    const encodeStart = Date.now();
     const { data, dataType } = bodyToCapacitor(request.body);
+    if (requestBytes > 0) {
+      const encodeMs = Date.now() - encodeStart;
+      recordPerf(assetPerf.b64Encode, encodeMs, requestBytes);
+      if (isAsset) recordPerf(assetPerf.assetB64Encode, encodeMs, requestBytes);
+    }
 
     const headers: Record<string, string> = {};
     for (const [k, v] of Object.entries(request.headers)) {
@@ -80,7 +90,9 @@ export class CapacitorHttpHandler implements RequestHandler<HttpRequest, HttpRes
       if (dataType) options.dataType = dataType;
     }
 
+    const httpStart = Date.now();
     const res = await CapacitorHttp.request(options);
+    const httpMs = Date.now() - httpStart;
 
     const responseHeaders: Record<string, string> = {};
     for (const [k, v] of Object.entries(res.headers ?? {})) {
@@ -90,10 +102,13 @@ export class CapacitorHttpHandler implements RequestHandler<HttpRequest, HttpRes
     // 鲁棒读取 res.data（CapacitorHttp + responseType=arraybuffer → base64 string；也可能是 Uint8Array/Blob）。
     // AWS SDK S3 GetObject 期望 Blob/ReadableStream；统一收敛为 Blob，避免 out.Body undefined。
     let bytes: Uint8Array | null = null;
+    let decodeMs = 0;
     const respData = (res as { data?: unknown }).data;
     if (typeof respData === "string" && respData.length > 0) {
       // binary（responseType=arraybuffer → base64）或文本：优先 base64 解码，失败按 utf8
+      const decodeStart = Date.now();
       try { bytes = base64ToUint8Array(respData); } catch { bytes = new TextEncoder().encode(respData); }
+      decodeMs = Date.now() - decodeStart;
     } else if (respData instanceof Uint8Array) {
       bytes = respData;
     } else if (respData instanceof ArrayBuffer) {
@@ -102,6 +117,15 @@ export class CapacitorHttpHandler implements RequestHandler<HttpRequest, HttpRes
       // CapacitorHttp 对 application/json 自动解析成对象 → 重新序列化回字节（manifest/元数据）
       bytes = new TextEncoder().encode(JSON.stringify(respData));
     }
+    // 记录 HTTP 往返（含原生侧编解码）与 JS 侧解码耗时。
+    const responseBytes = bytes?.length ?? 0;
+    recordPerf(assetPerf.http, httpMs, responseBytes);
+    if (isAsset) recordPerf(assetPerf.assetHttp, httpMs, responseBytes);
+    if (decodeMs > 0 && bytes) {
+      recordPerf(assetPerf.b64Decode, decodeMs, bytes.length);
+      if (isAsset) recordPerf(assetPerf.assetB64Decode, decodeMs, bytes.length);
+    }
+
     const body: ReadableStream<Uint8Array> | undefined = bytes ? new ReadableStream<Uint8Array>({ start(c) { c.enqueue(bytes); c.close(); } }) : undefined;
 
     return { response: { statusCode: res.status, headers: responseHeaders, body } };

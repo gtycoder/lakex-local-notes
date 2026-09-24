@@ -63,6 +63,8 @@ export interface MobileSyncResult {
   message: string;
   notes: SyncReport | null;
   quickNotes: QuickNotesSyncResult | { error: string } | null;
+  /** 同步收尾对账搜索索引的耗时（ms）；移动端性能专项观测用。 */
+  indexMs?: number;
 }
 
 /** 与桌面一致的默认同步 prefix（对齐桌面 store.ts 默认 "lake-notes"；P1-7 GPT 审计：ab-test-verify 仅限测试） */
@@ -934,8 +936,14 @@ export const bridge = {
           // 清理失败不拖垮同步；下一次同步会继续按策略清理。
         }
       // 同步可能增删改文档：对账搜索索引（本地派生数据，随同步刷新）。
-      try { await reconcileIndex(d); } catch { /* 索引对账失败不影响同步结果 */ }
-      return { message: report.message + quickMsg, notes: report, quickNotes };
+      let indexMs = 0;
+      try {
+        const indexStart = Date.now();
+        await reconcileIndex(d);
+        indexMs = Date.now() - indexStart;
+        console.log(`[sync] reconcileIndex ms=${indexMs}`);
+      } catch { /* 索引对账失败不影响同步结果 */ }
+      return { message: report.message + quickMsg, notes: report, quickNotes, indexMs };
     });
   },
   // ---- 目录树只读契约（同步调试/测试用） ----

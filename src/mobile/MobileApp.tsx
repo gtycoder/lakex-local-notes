@@ -6,6 +6,7 @@
  */
 import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { bridge } from "./bridge";
+import { resetAssetPerf, snapshotAssetPerf } from "./assetPerf";
 import type { POCNoteSummary } from "./noteRepository";
 import { isGoneNote } from "../core/syncDecisions";
 import type { TreeNode } from "../lib/types";
@@ -119,6 +120,11 @@ export function MobileApp() {
             runNativeSqliteSpike(database, reset),
           migrateSnapshotToNativeSqlite: (database?: string) =>
             migrateSnapshotToNativeSqlite(database),
+        };
+        // 资产传输性能观测（CDP 诊断：__lakePerf.reset() / __lakePerf.snapshot()）。
+        (window as unknown as Record<string, unknown>).__lakePerf = {
+          reset: resetAssetPerf,
+          snapshot: snapshotAssetPerf,
         };
         await refreshAll();
         setPhase("ready");

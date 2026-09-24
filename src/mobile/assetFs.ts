@@ -7,6 +7,7 @@
  */
 import { Filesystem, Directory } from "@capacitor/filesystem";
 import { isSafePathSegment } from "../core/storeUtils.js";
+import { assetPerf, recordPerf } from "./assetPerf";
 
 const ROOT = "note-assets";
 
@@ -48,13 +49,18 @@ export async function saveAssetBytesFs(key: string, bytes: Uint8Array): Promise<
   // 并发防竞态（压测2 260910）：4 路并发 saveAsset 写同一个新建笔记目录时，Android 原生
   // writeFile(recursive:true) 偶发 OS-PLUG-FILE-0011「Missing parent directory」（目录创建竞态，
   // 同目录并发下一个成功一个失败）。写前显式 mkdir 父目录（幂等，已存在错误忽略）+ 失败重试一次。
+  // 性能观测：base64 编码（JS CPU）与整段写盘（含 mkdir 桥往返 + 原生解码写文件）分别计时。
+  const encodeStart = Date.now();
+  const base64 = bytesToBase64(bytes);
+  recordPerf(assetPerf.b64Encode, Date.now() - encodeStart, bytes.length);
+  const writeStart = Date.now();
   if (parent) {
     await Filesystem.mkdir({ path: parent, directory: Directory.Data, recursive: true }).catch(() => { /* 已存在 */ });
   }
   // data 传 base64；不传 encoding（Android 原生默认按 base64 解码写入；UTF8 会把 base64 当文本写坏）
   const write = () => Filesystem.writeFile({
     path,
-    data: bytesToBase64(bytes),
+    data: base64,
     directory: Directory.Data,
     recursive: true,
   });
@@ -68,16 +74,24 @@ export async function saveAssetBytesFs(key: string, bytes: Uint8Array): Promise<
       throw error;
     }
   }
+  recordPerf(assetPerf.fsWrite, Date.now() - writeStart, bytes.length);
 }
 
 export async function loadAssetBytesFs(key: string): Promise<Uint8Array | null> {
   const path = requireAssetPath(key);
   try {
+    const readStart = Date.now();
     const res = await Filesystem.readFile({
       path,
       directory: Directory.Data,
     });
-    return base64ToBytes(String(res.data)); // 未传 encoding → Android 原生返回 base64
+    const readMs = Date.now() - readStart;
+    // 未传 encoding → Android 原生返回 base64
+    const decodeStart = Date.now();
+    const bytes = base64ToBytes(String(res.data));
+    recordPerf(assetPerf.b64Decode, Date.now() - decodeStart, bytes.length);
+    recordPerf(assetPerf.fsRead, readMs, bytes.length);
+    return bytes;
   } catch (error) {
     if (isMissingFileError(error)) return null;
     throw error;
