@@ -148,7 +148,7 @@ export function SelectionToolbar({ editor, container }: {
   /** 链接弹窗「在当前页面打开」。 */
   const [linkSelf, setLinkSelf] = useState(false);
   /**
-   * 边距开关**不关面板**（用户 260926）：面板开着时 `holdRef` 会冻结 `refresh()`，内核写完 spacing
+   * 边距开关**不关面板**（用户 260924）：面板开着时 `holdRef` 会冻结 `refresh()`，内核写完 spacing
    * 后组件不会重渲染、开关会停在旧值 ⇒ 这里强制一次渲染，让 `renderImage` 重读 `readImageMeta`。
    * （`[, forceRender]` 不用变量名，避免 `--noUnusedLocals` 报未读局部。）
    */
