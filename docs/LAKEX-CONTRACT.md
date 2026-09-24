@@ -1063,6 +1063,19 @@ PY
 - **边距是 card spacing**：`cardValue.__spacing` ∈ `both/top/bottom`（cardData `setCardSpacing`，值枚举 TOP/BOTTOM/BOTH）；
   `updateImageData({margin})` **内核不认**（曾用错字段）。
 
+**6) 图片卡右上角内层「复制」按钮：写内核私有 `ne-clipboard`，必须改接我们的入口（260924 实测）**
+- **DOM**：`.ne-image-wrap > .ne-ui-image-inner-button-wrap > button.ne-ui-image-inner-button`，图标 `div.ne-icon-action-copy` / `.ne-icon-action-delete`；
+  小图（显示宽或高 ≤46）合成「更多」菜单 `.ne-ui-image-inner-menu`（antd portal 到 body），菜单项复用同一图标。
+- **按钮动作**（bundle 152968 `ef2.copy.execute`）：`range.selectNode(cardRootNode.parentNode); editor.execCommand('copy', range)`；
+  clipboard 插件命令表 `pluginName:'clipboard', command:{copy:'copy',cut:'cut',paste:'paste'}`（bundle 78175）。
+- **实测结果**：剪贴板只得到 `text/html` = `<meta charset=utf-8><ne-clipboard data="<percent-encoded fragment>">`，
+  图片在片段里是 `"src":"http://127.0.0.1:<port>/…webp"`（canonical URL）⇒ **粘到外部应用（微信/Word/浏览器）拿不到图片**
+  （内核仍提示「复制成功」）；我们的 `copyRichSelection` 捕获处理器在这条路径上不生效（内核不把 DOM 选区设成该 range）。
+- **修法（应用侧，不改内核；AGENTS §3 #18）**：`src/features/editor/imageCopyBridge.ts` —— document **捕获阶段** click 命中
+  `.ne-icon-action-copy` 且能解析出资产 `{noteId, filename}` 时 `stopPropagation` 阻止内核 onClick，改调 `native.copyAssetImage`
+  （与右键「复制图片」同路；webp/avif 会转 PNG）。实测剪贴板变成 `image/png`；外链 / data URL 图不接管、交回内核。
+- ⚠️ 该 bridge 只装在**桌面入口** `src/main.tsx`（移动端未装，移动端是另一套复制链路）。
+
 ---
 
 ## 6. 使用守则（所有会话遵守）
