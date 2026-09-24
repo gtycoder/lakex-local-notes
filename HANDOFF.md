@@ -19,6 +19,7 @@
 - JS：`src/mobile/nativeAssetSync.ts` 能力探测包装；`s3Store.putObjectStream` + `syncDbPort.openLocalAssetStream`/`listLocalAssets`（原生扫描）接入。非原生平台**不挂载** → 自动回退字节路径；原生运行期失败也回退字节。**core 未动。**
 - 实测（模拟器，隔离前缀已删 0 残留）：256KB 资产原生 PUT → S3 对象 size/sha256 逐字节一致；原生 GET sha256 一致；整轮 1003 笔记 + 资产同步中 `assetHttp/assetB64Encode/fsRead = 0`（资产字节未过 WebView 桥）。
 - **未做（受「core 不动」约束）**：下载端口接入。core `downloadNoteAssets` 要求 `getObject` 返回字节；要彻底让下载字节不过桥，需给 `S3Store` 加可选 `getObjectToFile` 并让 core 走分支。在「core 不动」下下载仍走现有 base64 路径（原生 `getFile` 已就绪待接）。
+- **跨端验证**：新增 `scripts/multi-end-sync/run5native.mjs`（D1 桌面 + 模拟器 E），**4/4 通过**——E 原生上传资产 → D1 落盘 sha256 逐字节一致；D1 落资产 → E 下载 sha256 逐字节一致。
 - **待验证**：官方多端套件（`run5d`/`run5b`）在原生上传开启后复跑；真机 `50950385`（本机未连接）复测。
 
 ### 三、门禁（本轮）
