@@ -40,7 +40,7 @@
 - **批量写**：下载窗口内 `applyRemoteNote`/`setSyncBase`/`recordDeclaredAssets` 语句入队，`flushNoteBatch` 用 `executeSet` 一次下发（原生一次桥往返 + 单事务）；失败逐条重放。移动端 native SQLite 加 `PRAGMA synchronous=NORMAL`。
 
 ## 5. 剩余瓶颈与下一步方案（未做）
-### 5.1 批量 reconcileIndex（推荐先做，收益/风险比最高）
+### 5.1 批量 reconcileIndex（✅ 260925 续已落地，见 §12.1）
 - 目标：把 ~6000 次逐条过桥压成少数几次。
 - 做法（只改 `src/mobile/searchIndex.ts` 的 `reconcileIndex`，core 不动）：
   1. 分块一次 `SELECT note_id, fts_rowid, title_hash, body_hash FROM search_index WHERE note_id IN (...)` 取 prev；
@@ -84,13 +84,40 @@
 - 现有跨端等价测试 `syncEquivalence`/`syncAdapterEquiv`/`syncDualAB` 是护栏，必须保持全绿。
 
 ## 9. 推荐顺序
-1. **批量 reconcileIndex**（§5.1，小、稳、不碰 core）——先落地并实测。
-2. **测量附件阈值**（用真实图片批量同步，拆「网络 vs base64/过桥」）。
-3. **原生资产同步插件（Kotlin）**（§5.3/§7.4）——图片/附件测试那一批的前置立项。
-4. 可选：**移动端异步索引 + 搜索提示**（§5.2）。
+1. ✅ **批量 reconcileIndex**（§5.1，小、稳、不碰 core）——已落地并 4 端实测（§12.1/§12.2）；真机待补测。
+2. ✅ **测量附件阈值**（真实图片批量同步，拆「网络 vs base64/过桥」）——已实测（§12.3），过桥/写盘占比 25%~34%，桌面 4.7×。
+3. **原生资产同步插件（Kotlin）**（§5.3/§7.4）——依据已充分，待立项实现。
+4. 可选：**移动端异步索引 + 搜索提示**（§5.2）——未做。
 
 ## 10. 测试脚手架
 见 `scripts/multi-end-sync/README.md`（5 端启动、端口、env、备份/还原、清理）。
 
 ## 11. 红线提醒
 - 真机测试前备份、测试后还原；不要碰正式数据；杀 Electron 只 kill PID；隔离前缀用完删净。
+
+## 12. 260925 续 · 落地与实测结果（批量 reconcileIndex + 附件过桥）
+
+> 本节是 §5/§7/§9 的执行结果；代码见 `src/mobile/searchIndex.ts`、`scripts/multi-end-sync/run5assets.mjs`、`src/mobile/assetPerf.ts`。
+
+### 12.1 批量 reconcileIndex（§5.1 已落地）
+- 只改 `src/mobile/searchIndex.ts`：分块（200 篇/块）一次 `SELECT ... WHERE note_id IN (...)` 取 prev + 一次 `SELECT IFNULL(MAX(fts_rowid),0)`，JS 内顺序分配 rowid，语句入队后 `executeSet` 一次下发；无 `executeSet` 回退单事务逐条；失败逐条重放；stale 删除同样批量。**core 未动。**
+- 千篇索引过桥次数由 ≈6000 次降到约「块数×3 ≈ 15 次」。幂等（按 hash 差集），不需要思源的磁盘队列。
+- 测试：`searchIndex.test.ts` 8 例全绿（新增 executeSet 跨块/rowid 连续/二次对账零下发、失败重放、纯样式只更账本）。门禁：tsc 0 / vitest 1274 passed / desktop+mobile build OK。
+
+### 12.2 多端实测
+- **真机 50950385 未连接**（只有 emulator-5554）⇒ 真机数字缺；跑 4 端（D1/D2/D3 + 模拟器），隔离前缀 `perfd-20260925035257`。
+- 1000 笔记 + 100 目录：D1 上传 13.9s；D2 8.2s、D3 7.2s；**模拟器 10.68s，其中 reconcile `indexMs=183ms`（≈1.7%）**；收敛 1001/101；套件 **20/20**。（另一轮 E=11.77s / indexMs=192ms。）
+- 对照 §2 同模拟器基线 16.5s：**≈16.5→10.7~11.8s（−30%~35%）**。真机同代码预期继续下降（真机桥 ≈ 模拟器 7×）；**需接真机重跑确认**。
+
+### 12.3 附件过桥实测（§7 的实测版）
+- 新增 `src/mobile/assetPerf.ts`（HTTP / base64 / Filesystem 分桶计时，`window.__lakePerf`），埋点在 `capacitorHttpHandler.ts` + `assetFs.ts`；测试脚本 `scripts/multi-end-sync/run5assets.mjs`。
+- 模拟器实测：
+  - 上传 40MB/20 文件：wall 11.3s、**JS btoa 1.80s（16.1%）**；上传 2.4MB/300 文件：wall 5.2s、btoa 36ms，每文件固定成本主导。上传阶段字节来自小记内存层（刚注入），未触发 `loadAssetFile` ⇒ 本次上传未计入磁盘读，进程重启后的上传会多一次读盘 + atob。
+  - 下载 40MB/20 文件：wall 26.5s、**写盘 7.98s + btoa 0.83s + atob 0.23s = 过桥/编码 9.04s（34.1%）**；下载 2.4MB/300 文件：wall 6.3s、写盘 1.52s、每文件 ≈5.3ms。
+  - 同批 42.4MB/320 文件桌面 D2 下载 6.97s；**模拟器合计 32.8s ≈ 桌面 4.7×**。
+- 结论：每附件 **2 次 base64 往返 + 3 次过桥**，字节成本随体积线性、小文件有固定成本；移动端附件下载已「桥/写盘主导」。**原生资产插件（Kotlin，字节不过桥）立项依据充分**；「网络 vs 过桥」拆分口径 = `assetHttp.ms`（网络+原生编解码）vs `b64Encode+b64Decode+fsWrite/fsRead`（JS 编解码 + Filesystem 过桥）。
+
+### 12.4 仍待办
+- 接真机重跑 `run5d.mjs`（脚本已自动跳过未连接端并打印 `indexMs`）。
+- 可选：移动端异步索引（reconcile 移出 `syncNow` 热路径 + 搜索「正在建索引」提示）——本轮未做。
+- 原生资产同步插件：尚未立项实现（本节只给依据与度量口径）。

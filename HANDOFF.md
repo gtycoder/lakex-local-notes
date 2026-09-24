@@ -4,6 +4,36 @@
 > 历史所有 dated handoff 已合并进本文件（内容在 git 历史可查）。本文件只保留**当前状态 + 真正的待办 + 有价值的坑**。
 > **§8 是移动端（安卓）专职交接**，由移动端会话维护；桌面会话不要改 §8，移动端会话不要改 §0-§7 之外的桌面文件。
 
+## 0. 最新交接 · 260925 续 · 移动端批量 reconcileIndex + 附件过桥实测
+
+> 承接 `docs/MOBILE-SYNC-PERF-260925.md`（移动端同步性能专项）。本会话把首同步最后一处「逐条过桥」——搜索索引对账——批量化，并实测附件过桥成本。真机 50950385 本轮未连接，见 §二。
+
+### 一、落地：批量 reconcileIndex（只改 `src/mobile/searchIndex.ts`，**core 未动**）
+- 旧路径逐篇 `SELECT prev` + `BEGIN/COMMIT` + `SELECT MAX` + 2 写 ≈ **6 次过桥/篇**（千篇≈6000 次）。新路径分块批处理（`RECONCILE_BATCH_SIZE=200`）：每块一次 `SELECT note_id,...,title_hash,body_hash FROM search_index WHERE note_id IN (...)` + 一次 `SELECT IFNULL(MAX(fts_rowid),0)`，JS 内顺序分配新 rowid，语句入队后 `executeSet` 一次下发（原生一次桥往返 + 单事务）；无 `executeSet` 回退单事务逐条；批量失败**逐条重放**（reconcile 幂等，跑漏下次自愈）。stale 删除同样批量。单条 `indexNote`/`removeNoteFromIndex` 不变。
+- 测试：`searchIndex.test.ts` 新增 3 例（executeSet 跨块 + rowid 连续 + 二次对账零下发；executeSet 失败逐条重放；纯样式变化只更账本不重写 FTS）。门禁：`tsc` 0、`vitest` **1274 passed / 16 skipped**、`vite build` + `vite build -c vite.mobile.config.ts` 均 OK。
+- 可观测：`MobileSyncResult` 新增 `indexMs`（同步收尾 reconcile 耗时），`syncNow` 末尾 log `[sync] reconcileIndex ms=...`。
+
+### 二、多端实测（真机未连接，实为 4 端）
+- **真机 50950385 本机未连接**（`adb devices` 只有 emulator-5554）⇒ **真机数字本轮缺**。用脚手架跑 4 端（D1/D2/D3 隔离桌面 + 模拟器），隔离前缀 `perfd-20260925035257`（测后已删）。
+- 1000 笔记 + 100 目录：D1 上传 13.9s；D2 下载 8.2s、D3 7.2s；**模拟器 E 下载 10.68s，其中 `indexMs=183ms`（≈1.7%）**；4 端收敛 1001 笔记/101 目录；套件 **20/20**（含 2MB 大文档逐端等长、进程存活、二次同步 474ms 零变更）。
+- 另一轮（前缀 `perfx-...`，E 先 `pm clear`）E=11.77s / indexMs=192ms，结论一致。
+- 对照本专项文档 §2 同模拟器基线 16.5s：**≈16.5 → 10.7~11.8s（−30%~35%）**，reconcile 由「剩余大头」降到 <200ms；桌面端基本不变。真机同代码预期进一步下降（真机桥成本 ≈ 模拟器 7×，旧逐条索引正是真机 83.2s 的大头），需接上真机重跑确认。
+
+### 三、附件过桥实测（`scripts/multi-end-sync/run5assets.mjs` + `src/mobile/assetPerf.ts`）
+- 新增移动端诊断 `assetPerf`（`window.__lakePerf.reset()/snapshot()`）：把「HTTP 往返 / JS base64 编解码 / Filesystem 读写」分桶计时；`capacitorHttpHandler`、`assetFs` 已埋点。仅统计、不改行为。
+- 模拟器实测（真实字节；上传=小记注入；下载=D1 的 `note-assets/{id}/` 直接落盘后同步）：
+  - 上传 40MB/20 文件：wall 11.3s、HTTP PUT（并发和）19.6s、**JS btoa 1.80s（16.1%）**；带宽吃满、编码被并发掩盖。
+  - 上传 2.4MB/300 文件：wall 5.2s、btoa 36ms（0.8%），**每文件固定成本主导**。
+  - 下载 40MB/20 文件：wall 26.5s、HTTP GET 和 8.8s、**写盘 7.98s + btoa 0.83s + atob 0.23s = 过桥/编码 9.04s（34.1%）**。
+  - 下载 2.4MB/300 文件：wall 6.3s、写盘 1.52s + 编解码 0.06s（25.3%）、每文件 ≈5.3ms。
+  - 同批 42.4MB/320 文件桌面 D2 下载 6.97s；**模拟器合计 26.5+6.3=32.8s ≈ 桌面 4.7×**。
+- 结论：每附件 **2 次 base64 往返 + 3 次过桥**，成本 ∝ 字节且有小文件固定成本；移动端附件下载已「桥/写盘主导」而非网络。**原生资产同步插件（Kotlin，OkHttp GET→FileOutputStream、FileInputStream→PUT，字节不过桥）立项依据充分**（契约草案见专项文档 §7.4）。真机只会更差。
+
+### 四、遗留 / 安全
+- 需接上真机 `50950385` 重跑 `run5d.mjs` 拿真机数字；脚本已改为**自动跳过未连接端**并打印 `indexMs`。
+- 可选未做：移动端异步索引（reconcile 移出 `syncNow` 热路径 + 搜索「正在建索引」提示）。
+- 未碰正式数据、未碰用户 dev 实例；隔离前缀已删；`vite.config.ts` 临时 onstart 补丁已还原；模拟器为测试设备（`pm clear`）。
+
 ## 0. 最新交接 · 260925 · 5 端真实云同步测试（3 桌面 + 真机 + 模拟器）：发现并修复「上传漏 kind」（数据损坏级）
 
 > 写给**完全没有上下文的新会话**。本会话按用户要求做了一次 5 端真实云同步测试，**当场发现 2 个真 bug 并修复**（已提交 **7fe2fd6** 并推送）；完整报告见 `/Users/admin/Documents/lake5-multi-end-sync-report-260925.md`。
