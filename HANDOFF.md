@@ -4,7 +4,32 @@
 > 历史所有 dated handoff 已合并进本文件（内容在 git 历史可查）。本文件只保留**当前状态 + 真正的待办 + 有价值的坑**。
 > **§8 是移动端（安卓）专职交接**，由移动端会话维护；桌面会话不要改 §8，移动端会话不要改 §0-§7 之外的桌面文件。
 
-## 0. 最新交接 · 260924 晚 续四 · 文字浮栏消失机制：点块句柄即隐（对齐图片浮栏）
+## 0. 最新交接 · 260924 晚 续五 · 浮栏收尾：自检 review + 死代码清理（用户确认浮栏功能完成）
+
+> 用户 260924 口径：浮栏（文字 + 图片 + 子菜单 + 消失机制）**到此都做完了**。本批做**收尾 review**：通读 `selectionToolbar/*` 全部源码 + 触点，清死代码，复核可疑项，**不改任何行为**。
+
+### 一、清理（纯死代码，零行为变更）
+- 删 `SelectionToolbar` 的 **`noteId` prop**（声明后从未读取）⇒ `mountSelectionToolbar` 同步去参、`lakeRuntime.ts` 调用点更新。
+- 删未用类型导入 **`ImageSizePreset`**。
+- 收紧**无外部引用**的导出（仅本模块内用）：`colorMemory.defaultColor/TRANSPARENT`、`selectionToolbarModel.TOOLBAR_GAP/TRANSPARENT_COLOR/IMAGE_SIZE_SCALES`、`LakeColorBoard.KERNEL_COLOR_GROUPS`。
+- 结果：`tsc --noUnusedLocals --noUnusedParameters` 对 `selectionToolbar` 目录 **0 命中**（改前 2 条 TS6133 = `ImageSizePreset`、`noteId`）。
+
+### 二、复核（结论：均无需改）
+- **背景色「无填充色」active**：无填充选区下内核 `bgColor` 返回**空串**（非 `"transparent"`），`LakeColorBoard.rowActive = !v` 成立 → CDP 实测该行正确 active。**不改**。
+- **CSS 无孤儿**：`selectionToolbar.css` 34 个类名**全部**有 TSX 引用（另 `ui-metrics`/`cssLayers` 全绿）。
+- **日志里的两条报错都不是产品 bug**：① `Should have a queue`（React）= 改 hook 元数时 react-refresh 的既定产物（§0 续四 已记），`Page.reload` 后不再出现；② `e.target?.closest is not a function` = CDP 脚本把 pointer 事件派发到 `document`（target 非 Element）触发 **vendor** 监听；我们自己的 `onPointerDown` 用 `t?.closest?.()`，安全。
+
+### 三、门禁（本批实测，全绿）
+`tsc` 0（+ strict unused 对浮栏 0）· `vitest` **1264 passed / 16 skipped** · 桌面 + 移动 `vite build` ✓ · `ui-metrics` 全绿（颜色字面量 0 / `!important` 9 / 未定义令牌 0）· `git diff --check` clean · CDP 冒烟：点句柄后浮栏保持消失（`afterUp=false`）、重选恢复（`afterReselect=true`）。
+
+### 四、可选跟进（本批**未做**，供以后决定）
+1. **vendor 死路径**：`vendor/lakex-doc-react/src/components/plugin/imageToolbar/ImageToolbar.tsx`（只挂 `LakexEditor`，我们直接 `Doc.createOpenEditor` ⇒ 从不运行）。删除需改 vendor 源 + `npm run build:vendor` 重建产物，风险 > 收益，**留单独决定**（见 §0 续二 三.3）。
+2. **边距开关**：`setSpacing` 每次切换都 `setMenu(null)`（关面板），连续开「上/下边距」需重开；与云端是否一致**未核**，**未改**。
+3. 「描述 / 对齐」两处改动按用户口径视作已验收（本批未在含图文档复验）。
+
+---
+
+## 0. 最新交接 · 260924 晚 续四 · 文字浮栏消失机制：点块句柄即隐（对齐图片浮栏） —— ⚠️ 已被上一节取代（历史记录）
 
 > 写给**完全没有上下文**的新会话。本批已合入 master（hash 见 `git log -1`）。用户 260924 报：文字浮栏「一选中就出现且固定不动」，要求补**消失机制** —— **点块句柄时文字浮栏消失、不能同时出现两个弹窗**；并明确「和图片浮窗一样的消失机制」。
 

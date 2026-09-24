@@ -39,7 +39,7 @@ const DEFAULT_FALLBACK: Record<ColorVariant, { light: string; dark: string }> = 
 const TEXT_COLOR_TOKEN = "editor.text.color";
 const TEXT_COLOR_FALLBACK = { light: "#262626", dark: "#E2E2E2" };
 
-export const TRANSPARENT = "transparent";
+const TRANSPARENT = "transparent";
 
 interface KernelTheme {
   getColorByToken?(name: string): unknown;
@@ -133,7 +133,7 @@ export function paletteDefaultValue(editor: LakeEditorInstance, variant: ColorVa
 }
 
 /** 内核默认「当前色」（无任何历史时）。 */
-export function defaultColor(editor: LakeEditorInstance, variant: ColorVariant): string {
+function defaultColor(editor: LakeEditorInstance, variant: ColorVariant): string {
   return tokenColor(editor, DEFAULT_TOKEN[variant], DEFAULT_FALLBACK[variant]);
 }
 

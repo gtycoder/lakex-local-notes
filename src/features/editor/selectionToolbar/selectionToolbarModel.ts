@@ -5,7 +5,7 @@
 export interface Rect { left: number; top: number; right: number; bottom: number; width: number; height: number; }
 
 /** 浮框与锚点的间距 / 与视口边缘的最小留白（px）。 */
-export const TOOLBAR_GAP = 8;
+const TOOLBAR_GAP = 8;
 export const TOOLBAR_MARGIN = 8;
 
 export interface ToolbarPosition { left: number; top: number; placement: "above" | "below"; }
@@ -51,7 +51,7 @@ export function isCommandExecuted(value: unknown): boolean { return value === 1;
 export function isCommandUnavailable(value: unknown): boolean { return value === -1; }
 
 /** 背景色「无填充」的持久值（内核 bg-color descriptor 的 `transparent`）。 */
-export const TRANSPARENT_COLOR = "transparent";
+const TRANSPARENT_COLOR = "transparent";
 
 /**
  * 颜色「本体」点击后的内核命令决策（对齐 kernel *-toolbar-descriptor 的 onEvent('select')）：
@@ -82,7 +82,7 @@ export function toFontSize(value: unknown): number | null {
 }
 
 /** 图片尺寸档位：按原图宽度取比例（小/中/大），原始 = 原宽。 */
-export const IMAGE_SIZE_SCALES = { small: 0.3, medium: 0.5, large: 0.8 } as const;
+const IMAGE_SIZE_SCALES = { small: 0.3, medium: 0.5, large: 0.8 } as const;
 export type ImageSizePreset = "small" | "medium" | "large" | "original";
 export function imageSizeWidth(preset: ImageSizePreset, originalWidth: number): number {
   const base = Number.isFinite(originalWidth) && originalWidth > 0 ? originalWidth : 320;

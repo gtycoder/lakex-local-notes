@@ -11,13 +11,12 @@ export function mountSelectionToolbar(
   hostParent: HTMLElement,
   container: HTMLElement,
   editor: LakeEditorInstance,
-  noteId: string,
 ): () => void {
   const host = document.createElement("div");
   host.className = "lake-selection-toolbar-host";
   hostParent.appendChild(host);
   const root = createRoot(host);
-  root.render(createElement(SelectionToolbar, { editor, container, noteId }));
+  root.render(createElement(SelectionToolbar, { editor, container }));
   return () => {
     try { root.unmount(); } catch { /* 编辑器销毁路径不应抛错 */ }
     host.remove();

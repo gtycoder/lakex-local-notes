@@ -1024,7 +1024,7 @@ export function createLakeDocument(
   }
   // 浮动工具栏（桌面编辑态 opt-in）：选中文字/图片时在选区上方弹出浮框。
   if (mode === "editor" && prefs?.floatingToolbar) {
-    const disposeSelectionToolbar = mountSelectionToolbar(element, mount, editor, noteId);
+    const disposeSelectionToolbar = mountSelectionToolbar(element, mount, editor);
     const prevDispose = (editor as any).__disposeExtras;
     (editor as any).__disposeExtras = () => {
       try { if (typeof prevDispose === "function") prevDispose(); } catch { /* ignore */ }

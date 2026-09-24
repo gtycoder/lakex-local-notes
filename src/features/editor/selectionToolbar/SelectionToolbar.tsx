@@ -25,7 +25,7 @@ import { LakeColorBoard } from "./LakeColorBoard";
 import {
   currentColor, normalTextColor, paletteDefaultValue, persistentColor, rememberColor, type ColorVariant,
 } from "./colorMemory";
-import { colorApplyCommand, computeToolbarPosition, imageSizeWidth, parseAssetRef, TOOLBAR_MARGIN, type ImageSizePreset } from "./selectionToolbarModel";
+import { colorApplyCommand, computeToolbarPosition, imageSizeWidth, parseAssetRef, TOOLBAR_MARGIN } from "./selectionToolbarModel";
 import { useSelectionToolbar, type ImageTarget } from "./useSelectionToolbar";
 
 /** 链接合法性（首版，对齐固定栏「请输入正确的链接」）：有 scheme（http/https/mailto/tel）、以 / 或 # 开头，或形如域名。 */
@@ -134,8 +134,8 @@ function CardMenuItem({ label, icon, selected, onClick }: { label: string; icon?
 }
 
 
-export function SelectionToolbar({ editor, container, noteId }: {
-  editor: LakeEditorInstance; container: HTMLElement; noteId: string;
+export function SelectionToolbar({ editor, container }: {
+  editor: LakeEditorInstance; container: HTMLElement;
 }) {
   const [menu, setMenu] = useState<string | null>(null);
   /** 弹层开着 ⇒ 冻结浮栏刷新（见 useSelectionToolbar.refreshNow）。 */

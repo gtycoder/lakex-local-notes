@@ -13,7 +13,7 @@ const RECENT_LABEL = "最近使用自定义颜色";
 const RECENT_EMPTY = "暂无";
 
 /** 内核调色板（bundle 常量 Zc，经 Zd.getColors() 使用）：中性 10 + 6 组彩色各 10。 */
-export const KERNEL_COLOR_GROUPS: string[][] = [
+const KERNEL_COLOR_GROUPS: string[][] = [
   ["#000000", "#262626", "#595959", "#8C8C8C", "#BFBFBF", "#D9D9D9", "#E9E9E9", "#F5F5F5", "#FAFAFA", "#FFFFFF"],
   ["#F5222D", "#FA541C", "#FA8C16", "#FADB14", "#52C41A", "#13C2C2", "#1890FF", "#2F54EB", "#722ED1", "#EB2F96"],
   ["#FFE8E6", "#FFECE0", "#FFEFD1", "#FCFCCA", "#E4F7D2", "#D3F5F0", "#D4EEFC", "#DEE8FC", "#EFE1FA", "#FAE1EB"],
