@@ -1077,6 +1077,18 @@ PY
   实测两条路径剪贴板都由 `ne-clipboard` 变成 `image/png`；**文字选区 / 外链 / data URL 图不接管**、交回内核（指针落回正文会清除「当前图片卡」）。
 - ⚠️ 该 bridge 只装在**桌面入口** `src/main.tsx`（移动端未装，移动端是另一套复制链路）。
 
+### 5.15 粘贴内容的样式处理：内核会剥离字体族（260924 实测）
+
+> **结论：内核在粘贴/解析 HTML 时就把 `font-family` 全部剥掉**（解析 → DOM → 落盘三处都没有字体族）⇒ 我们的 MiSans
+> （CSS 令牌 `--lake-font-family`）不会被外部字体污染，**应用层无需做任何适配**。
+
+实测方式：在**一次性临时笔记**里合成 `paste` 事件，注入带各种字体写法的 HTML，再读渲染 DOM 的 `getComputedStyle` 与落盘的 `.lake`（验完即 purge）。
+- **保留**：`font-size` → `class="lake-fontsize-N"`（N = px×0.75，pt 口径）；`color` / `background-color` → `<span style="color:…; background-color:…">`；加粗/斜体/下划线/删除线/链接等 mark。
+- **剥离**：`style="font-family:…"`（含 `!important` / `inherit`）、`font:` 简写、`<font face="…">`、Word 的 `mso-fareast-font-family` / `mso-bidi-font-family`、`<style>` 块、外部 `class` 名 —— 渲染后 `fontFamily` 恒为 `MiSans…`，落盘 `.lake` 里 `font-family|font:|mso-|<foreign font name>` **0 命中**。
+- **机制**：内联样式经内核样式映射器 `Bn`（bundle 95165）转换，仅 `background-color`/`font-size`/`text-decoration` 有专门映射，其余落通用分支；`font-family` 不在模型支持集、**不会写回**（`ne-text` 的 `style` 只剩 color/bg）。
+- **取舍**：这是对的 —— 字体应来自主题（我们 = `--lake-font-family` 令牌），内容只承载字号/颜色等语义。**不要**为"让粘贴匹配当前格式"再加
+  `font-family: var(--lake-font-family) !important` 之类覆盖：会压掉代码块等合法的等宽字体，且属过度设计（AGENTS §3 #17）。
+
 ---
 
 ## 6. 使用守则（所有会话遵守）
