@@ -18,8 +18,8 @@
 - 新增 `AssetSyncPlugin.kt` + `AwsV4Signer.kt`：SigV4 自签 + `HttpURLConnection` 流式 `putFile` / `getFile`（可带 expectedSize/expectedSha256，校验通过才原子落盘）/ `listAssets`（原生算 sha256）。签名用 AWS 官方 SigV4 get-vanilla 向量单测钉死。
 - **上传**：JS `s3Store.putObjectStream` + `syncDbPort.openLocalAssetStream`/`listLocalAssets`（原生扫描）接入；非原生/原生失败回退字节路径。
 - **下载**（用户批准 A）：给 core 加**可选**端口——`S3Store.getObjectToFile?` + `SyncDbPort.assetFilePath?`，`downloadNoteAssets` 加一个 `if (端口有该方法) 文件路径 else 现有字节路径` 分支。移动端实现后下载字节也不进 JS；**桌面 `createS3StoreAdapter` 不实现该可选方法 → 命中 else，行为逐字节不变**。core 改动仅 `syncEngineTypes.ts`（两个可选声明）+ `syncAssets.ts`（一个 else 保留原逻辑的分支）+ 单测，**不改任何同步决策/语义**。
-- 实测（模拟器，隔离前缀已删 0 残留）：256KB 资产原生 PUT → S3 size/sha256 一致；整轮 1003 笔记 + 资产同步 `assetHttp/assetB64Encode/fsRead = 0`；跨端 `run5native.mjs` **5/5**——E 原生上传→D1 逐字节一致；D1→E 下载逐字节一致且 `assetHttp/assetB64Decode/fsWrite = 0`（下载也未过桥）。
-- **官方套件（最终）**：`run5d` **20/20**、`run5b` **33/33**（R 未连接自动跳过）。真机 `50950385` 仍未连接、待复测。
+- 实测（模拟器 + 真机，隔离前缀已删 0 残留）：256KB 资产原生 PUT/GET 到 S3 size/sha256 一致；整轮 1003 笔记 + 资产同步 `assetHttp/assetB64Encode/fsRead = 0`。跨端 `run5native.mjs`（D1 + R + E，自动跳过未连接端 + 前缀防护）**5/5**——**真机 R** 原生上传→D1、D1→R **原生下载**均逐字节一致，且 `assetHttp/assetB64Decode/fsWrite = 0`（真机上字节同样不过桥）。
+- **官方套件 + 真机复测**：`run5d` **20/20**、`run5b` **33/33**；**真机 `50950385`** 下载 1000 篇 **49.45s**（`indexMs=1.64s`），对照专项前同机 83.2s **−40.6%**（用户判断已接近该机硬件极限；Mac 侧约快 7×）。真机测试前完整备份 748MB、测后已还原并核对（508 笔记 / 35 目录 / 5 小记，prefix 回 `lake-notes-stress2-260910`）。
 
 ### 三、门禁（最终）
 `tsc` 0 / `vitest` **1276 passed** / desktop + mobile build OK / `check-core` 违规 0 / Android `assembleDebug` + `testDebugUnitTest` 全绿。
