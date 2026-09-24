@@ -1035,6 +1035,72 @@ describe("syncEngine（共享编排）", () => {
     expect(report.downloadedBytes).toBe(bytes.length);
   });
 
+  const makeReport = (): SyncReport => ({
+    pulled: false, appliedRemote: 0, uploaded: 0, published: false, message: "", warnings: [],
+    supersededNotes: [], foldersUploaded: 0, trashedDown: 0, trashedUp: 0, foldersDownloaded: 0,
+    uploadedBytes: 0, downloadedBytes: 0,
+  });
+
+  /** 端口提供 getObjectToFile + assetFilePath 时，下载走文件路径：core 不再 saveAsset、字节不进 JS。 */
+  class FileS3 extends MemS3 {
+    fileCalls: Array<{ key: string; dest: string; expectedSha256?: string }> = [];
+    async getObjectToFile(key: string, destPath: string, opts?: { maxBytes?: number; expectedSize?: number; expectedSha256?: string }) {
+      this.fileCalls.push({ key, dest: destPath, expectedSha256: opts?.expectedSha256 });
+      const b = this.map.get(key);
+      if (!b) return null;
+      return { status: "ok" as const, size: b.length, sha256: opts?.expectedSha256 ?? sha256Sync(b) };
+    }
+  }
+  class FileDb extends MemDb {
+    assetFilePath(noteId: string, filename: string) { return noteId + "/" + filename; }
+  }
+
+  it("资产文件下载端口：走 getObjectToFile + assetFilePath，不再 saveAsset；无该端口自动回退字节路径", async () => {
+    const bytes = new TextEncoder().encode("native-bytes");
+    const hash = sha256Sync(bytes);
+    const s3 = new FileS3();
+    const db = new FileDb();
+    s3.map.set("p/assets/n1/photo.png", bytes);
+    const report = makeReport();
+    await downloadNoteAssets(CFG, s3, db, "n1", [{ filename: "photo.png", size: bytes.length, hash }], report, false);
+    expect(s3.fileCalls).toEqual([{ key: "p/assets/n1/photo.png", dest: "n1/photo.png", expectedSha256: hash }]);
+    expect(db.assets.size).toBe(0);                 // 文件已由端口落盘，core 不再走字节 saveAsset
+    expect(report.downloadedBytes).toBe(bytes.length);
+    expect(report.warnings).toEqual([]);
+
+    // 普通端口（无 getObjectToFile）→ 仍走字节路径
+    const s3b = new MemS3();
+    const dbb = new MemDb();
+    s3b.map.set("p/assets/n1/photo.png", bytes);
+    const rb = makeReport();
+    await downloadNoteAssets(CFG, s3b, dbb, "n1", [{ filename: "photo.png", size: bytes.length, hash }], rb, false);
+    expect(dbb.assets.get("n1/photo.png")).toEqual(bytes);
+    expect(rb.downloadedBytes).toBe(bytes.length);
+  });
+
+  it("资产文件下载端口：corrupt / 缺失在非严格模式记 warning 且不记账", async () => {
+    class CorruptS3 extends MemS3 {
+      async getObjectToFile() { return { status: "corrupt" as const, size: 1, sha256: "deadbeef" }; }
+    }
+    const s3 = new CorruptS3();
+    const db = new FileDb();
+    const report = makeReport();
+    await downloadNoteAssets(CFG, s3, db, "n1", [{ filename: "x.png", size: 5, hash: "abc" }], report, false);
+    expect(report.warnings.length).toBe(1);
+    expect(report.downloadedBytes).toBe(0);
+    expect(db.assets.size).toBe(0);
+
+    class MissingS3 extends MemS3 {
+      async getObjectToFile() { return null; }
+    }
+    const s3m = new MissingS3();
+    const dbm = new FileDb();
+    const rm = makeReport();
+    await downloadNoteAssets(CFG, s3m, dbm, "n1", [{ filename: "x.png", size: 5, hash: "abc" }], rm, false);
+    expect(rm.warnings.length).toBe(1);
+    expect(rm.downloadedBytes).toBe(0);
+  });
+
   it("回收站惰性下载：远端墓碑（软删）只记录声明资产元数据、不下载资源文件", async () => {
     const s3 = new MemS3();
     const db = new MemDb();

@@ -43,7 +43,11 @@ const dir = path.join(D1_ASSETS, d1Note.id);
 fs.mkdirSync(dir, { recursive: true });
 fs.writeFileSync(path.join(dir, dName), expected());
 await sync(D1);
+await E.ev('window.__lakePerf.reset()');
 await sync(E);
+const ePerf = await E.ev('window.__lakePerf.snapshot()');
+console.log('  E download perf: assetHttp=' + (ePerf.assetHttp && ePerf.assetHttp.count) + ' assetB64Decode=' + (ePerf.assetB64Decode && ePerf.assetB64Decode.count) + ' fsWrite=' + (ePerf.fsWrite && ePerf.fsWrite.count));
+check('E 下载未过 HTTP 桥（assetHttp=0）', !!ePerf.assetHttp && ePerf.assetHttp.count === 0);
 let eBuf = null;
 try { eBuf = pullMobileFile(d1Note.id, dName); } catch (e) { /* missing */ }
 check('E 收到 D1 的资产文件', !!eBuf && eBuf.length === SIZE, eBuf ? 'len=' + eBuf.length : 'missing');

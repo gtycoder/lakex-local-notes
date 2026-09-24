@@ -27,6 +27,17 @@ export interface S3Store {
    * 避免 aws-chunked 编码——七牛 Kodo 兼容性实测验证）。返回 null = 本地文件缺失。
    */
   putObjectStream?(key: string, size: number, open: () => Promise<unknown | null>): Promise<void>;
+  /**
+   * 流式下载到本地文件（可选；桌面/测试桩可不实现走 getObject 字节路径回退）。
+   * 平台实现本方法 + SyncDbPort.assetFilePath 时，下载字节不进 JS：端口内 GET 流式写 destPath
+   * （临时文件 + 原子 rename），并按 expectedSize/expectedSha256 校验；返回 null = 对象不存在（404），
+   * status='corrupt' = 校验不符（文件已丢弃）。destPath 为 SyncDbPort.assetFilePath 返回的不透明目标。
+   */
+  getObjectToFile?(key: string, destPath: string, opts?: {
+    maxBytes?: number;
+    expectedSize?: number;
+    expectedSha256?: string;
+  }): Promise<{ status: "ok" | "corrupt"; size: number; sha256: string } | null>;
   /** 列出某前缀下的对象（GC 用；lastModified 用于年龄保护）。 */
   listObjects?(prefix: string): Promise<Array<{ key: string; lastModified: string; size: number }>>;
   /** 批量删除对象（GC 用）。返回删除数量。 */
@@ -145,6 +156,9 @@ export interface SyncDbPort {
   /** 资产流式上传（桌面实现）：打开本地资产文件流；缺失返回 null。syncEngine 探测到
    * 本方法 + S3Store.putObjectStream 同时存在才走流式，否则字节路径。 */
   openLocalAssetStream?(noteId: string, filename: string): Promise<unknown | null>;
+  /** 资产下载目标（可选）：与 S3Store.getObjectToFile 同时存在才走原生文件下载，否则字节路径。
+   * 返回值对 core 不透明，直接交给 getObjectToFile 定位落盘位置（移动端为 {noteId}/{filename} 本地键）。 */
+  assetFilePath?(noteId: string, filename: string): string;
   /** 零变更早退：本设备上次成功读/写的 manifest commitId（无则 null）。 */
   getLastSeenCommitId(): Promise<string | null>;
   setLastSeenCommitId(commitId: string): Promise<void>;

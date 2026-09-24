@@ -348,6 +348,10 @@ export function createMobileSyncDbPort(getDb: () => MobileDb, deps: MobileSyncDb
         read: () => deps.assets.get(key) ?? deps.loadAssetFile(key),
       };
     },
+    /** 原生下载目标：本地资产键 {noteId}/{filename}（与 openLocalAssetStream 同一约定）。 */
+    assetFilePath(noteId, filename) {
+      return noteId + "/" + filename;
+    },
     async getLastSeenCommitId() {
       const d = getDb();
       const row = await d.prepare("SELECT value FROM device_state WHERE key='last_seen_commit_id'").get() as { value?: string } | undefined;

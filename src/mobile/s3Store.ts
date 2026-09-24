@@ -144,6 +144,24 @@ export function createCapacitorS3Store(cfg: SyncConfig): S3Store {
       if (!bytes) throw new Error(`本地资产读取失败: ${key}`);
       await putBytes(key, bytes);
     };
+
+    // 原生流式下载（字节不过桥）：core 的 downloadNoteAssets 探测到 getObjectToFile + assetFilePath
+    // 同时存在才走文件路径；非原生平台不挂载 → 自动回退字节路径。
+    store.getObjectToFile = async (key, destPath, opts) => {
+      if (!(await ensureNativeAssetSync())) throw new Error("native asset sync unavailable");
+      const res = await NativeAssetSync.getFile({
+        key,
+        localKey: destPath,
+        maxBytes: opts?.maxBytes,
+        expectedSize: opts?.expectedSize,
+        expectedSha256: opts?.expectedSha256,
+      });
+      if (res.status === 404) return null;
+      const size = Number(res.size ?? 0);
+      const sha256 = String(res.sha256 ?? "");
+      if (res.status === "corrupt") return { status: "corrupt", size, sha256 };
+      return { status: "ok", size, sha256 };
+    };
   }
 
   return store;

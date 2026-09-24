@@ -18,7 +18,7 @@ export interface AssetSyncNativePlugin {
   }): Promise<{ ok: boolean }>;
   isAvailable(): Promise<{ available: boolean }>;
   putFile(options: { key: string; localKey: string }): Promise<{ status: number; bytes: number }>;
-  getFile(options: { key: string; localKey: string; maxBytes?: number }): Promise<{ status: number; size?: number; sha256?: string }>;
+  getFile(options: { key: string; localKey: string; maxBytes?: number; expectedSize?: number; expectedSha256?: string }): Promise<{ status: number | "ok" | "corrupt"; size?: number; sha256?: string }>;
   listAssets(options: { noteId: string }): Promise<{ assets: NativeAssetMeta[] }>;
 }
 

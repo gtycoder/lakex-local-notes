@@ -131,6 +131,8 @@ class AssetSyncPlugin : Plugin() {
             return
         }
         val maxBytes = (call.getInt("maxBytes") ?: Int.MAX_VALUE).toLong()
+        val expectedSize = call.getLong("expectedSize")
+        val expectedSha256 = call.getString("expectedSha256")
         try {
             val dest = localAssetFile(localKey)
             val request = buildRequest(cfg, key)
@@ -179,10 +181,6 @@ class AssetSyncPlugin : Plugin() {
                         }
                     }
                 }
-                if (!temp.renameTo(dest)) {
-                    temp.copyTo(dest, overwrite = true)
-                    temp.delete()
-                }
             } catch (e: Exception) {
                 temp.delete()
                 throw e
@@ -190,7 +188,19 @@ class AssetSyncPlugin : Plugin() {
                 conn.disconnect()
             }
             val sha = digest.digest().joinToString("") { "%02x".format(it.toInt() and 0xFF) }
-            call.resolve(JSObject().put("status", status).put("size", total).put("sha256", sha))
+            // 期望校验（可选）：不符则丢弃临时文件、返回 corrupt，绝不把坏字节落到正式路径。
+            val sizeMismatch = expectedSize != null && expectedSize != total
+            val hashMismatch = expectedSha256 != null && !expectedSha256.equals(sha, ignoreCase = true)
+            if (sizeMismatch || hashMismatch) {
+                temp.delete()
+                call.resolve(JSObject().put("status", "corrupt").put("size", total).put("sha256", sha))
+                return
+            }
+            if (!temp.renameTo(dest)) {
+                temp.copyTo(dest, overwrite = true)
+                temp.delete()
+            }
+            call.resolve(JSObject().put("status", "ok").put("size", total).put("sha256", sha))
         } catch (e: Exception) {
             Log.e(TAG, "getFile failed: " + e.message, e)
             call.reject("GET failed: " + e.message)

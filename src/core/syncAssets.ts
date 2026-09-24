@@ -57,6 +57,9 @@ export async function downloadNoteAssets(cfg: SyncConfig, s3: S3Store, db: SyncD
   const warnings: Array<string | null> = new Array(items.length).fill(null);
   const saved: Array<number> = new Array(items.length).fill(0);
   let aborted = false; // strict 首错后停止落盘（并发车道已在途的请求自然完成但不写盘，防孤儿资产目录）
+  // 可选：端口提供文件式下载（getObjectToFile + assetFilePath）时，字节不进 JS（原生 GET→落盘→原生校验）；
+  // 否则回退字节路径。桌面/测试桩不实现该方法 → 走 else，行为与旧版逐字节一致。
+  const fileDownload = typeof s3.getObjectToFile === "function" && typeof db.assetFilePath === "function";
   await runPool(items, ASSET_CONCURRENCY, async (asset, i) => {
     try {
       // 已在本地且 size+hash 精确匹配 → 无需下载（不记 downloadedBytes、不算缺失、不产 warning；对齐上传侧 skip）。
@@ -64,7 +67,28 @@ export async function downloadNoteAssets(cfg: SyncConfig, s3: S3Store, db: SyncD
         const have = localHave.get(asset.filename);
         if (have && have.size === asset.size && have.hash === asset.hash) return;
       }
-      const bytes = await s3.getObject(`${cfg.prefix}/assets/${noteId}/${asset.filename}`, { maxBytes: MAX_ATTACHMENT_BYTES });
+      const key = `${cfg.prefix}/assets/${noteId}/${asset.filename}`;
+      if (fileDownload && s3.getObjectToFile && db.assetFilePath) {
+        const res = await s3.getObjectToFile(key, db.assetFilePath(noteId, asset.filename), {
+          maxBytes: MAX_ATTACHMENT_BYTES,
+          expectedSize: asset.size,
+          expectedSha256: asset.hash,
+        });
+        if (res == null) {
+          if (strict) { errors[i] = new AssetMissingError(`资源缺失: ${noteId}/${asset.filename}`); aborted = true; }
+          else warnings[i] = `资源缺失（跳过）: ${noteId}/${asset.filename}`;
+          return;
+        }
+        if (res.status === "corrupt") {
+          if (strict) { errors[i] = new Error(`资源校验不符: ${noteId}/${asset.filename}`); aborted = true; }
+          else warnings[i] = `资源校验不符（跳过）: ${noteId}/${asset.filename}`;
+          return;
+        }
+        if (aborted) return; // strict 已首错：端口已落盘，不再记账（下轮 listLocalAssets 实扫自愈）
+        saved[i] = res.size;
+        return;
+      }
+      const bytes = await s3.getObject(key, { maxBytes: MAX_ATTACHMENT_BYTES });
       if (bytes == null) {
         if (strict) { errors[i] = new AssetMissingError(`资源缺失: ${noteId}/${asset.filename}`); aborted = true; }
         else warnings[i] = `资源缺失（跳过）: ${noteId}/${asset.filename}`;
