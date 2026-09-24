@@ -1071,9 +1071,10 @@ PY
 - **实测结果**：剪贴板只得到 `text/html` = `<meta charset=utf-8><ne-clipboard data="<percent-encoded fragment>">`，
   图片在片段里是 `"src":"http://127.0.0.1:<port>/…webp"`（canonical URL）⇒ **粘到外部应用（微信/Word/浏览器）拿不到图片**
   （内核仍提示「复制成功」）；我们的 `copyRichSelection` 捕获处理器在这条路径上不生效（内核不把 DOM 选区设成该 range）。
-- **修法（应用侧，不改内核；AGENTS §3 #18）**：`src/features/editor/imageCopyBridge.ts` —— document **捕获阶段** click 命中
-  `.ne-icon-action-copy` 且能解析出资产 `{noteId, filename}` 时 `stopPropagation` 阻止内核 onClick，改调 `native.copyAssetImage`
-  （与右键「复制图片」同路；webp/avif 会转 PNG）。实测剪贴板变成 `image/png`；外链 / data URL 图不接管、交回内核。
+- **修法（应用侧，不改内核；AGENTS §3 #18）**：`src/features/editor/imageCopyBridge.ts` —— 接管**两条**路径，均改调 `native.copyAssetImage`
+  （与右键「复制图片」同路；webp/avif 会转 PNG）：① document **捕获阶段** click 命中 `.ne-icon-action-copy` 时 `stopPropagation` 阻止内核 onClick；
+  ② **捕获阶段 keydown** 命中 mod+C（⌘C / Ctrl+C）且**无文字选区**时 `preventDefault + stopPropagation`，拦截内核键盘复制。
+  实测两条路径剪贴板都由 `ne-clipboard` 变成 `image/png`；**文字选区 / 外链 / data URL 图不接管**、交回内核（指针落回正文会清除「当前图片卡」）。
 - ⚠️ 该 bridge 只装在**桌面入口** `src/main.tsx`（移动端未装，移动端是另一套复制链路）。
 
 ---

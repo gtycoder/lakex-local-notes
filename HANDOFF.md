@@ -4,9 +4,9 @@
 > 历史所有 dated handoff 已合并进本文件（内容在 git 历史可查）。本文件只保留**当前状态 + 真正的待办 + 有价值的坑**。
 > **§8 是移动端（安卓）专职交接**，由移动端会话维护；桌面会话不要改 §8，移动端会话不要改 §0-§7 之外的桌面文件。
 
-## 0. 最新交接 · 260924 晚 续七 · 图片卡右上角「复制」改走我们的复制入口（修「复制失败」）
+## 0. 最新交接 · 260924 晚 续七 · 图片卡「复制」改走我们的复制入口（内层按钮 + ⌘C，修「复制失败」）
 
-> 用户 260924 报：图片右上角（内核图片卡**内层按钮**）的「复制」**无论什么格式都复制失败**；要求适配到我们自己的复制入口。本批已改并推送（hash 见 `git log -1`）。
+> 用户 260924 报：图片右上角（内核图片卡**内层按钮**）的「复制」**无论什么格式都复制失败**；要求适配到我们自己的复制入口，并追加「选中图片后按 **⌘C** 同样要接管」。本批已改并推送（hash 见 `git log -1`）。
 
 ### 一、根因（运行时实测确认）
 - 内核按钮动作（bundle 152968 `ef2.copy.execute`）：`range.selectNode(cardRootNode.parentNode); editor.execCommand('copy', range)`，走 clipboard 插件 `copy` 命令。
@@ -14,13 +14,16 @@
 - 已有的 `copyRichSelection`（原生 copy 事件处理器）在这条路径上**不生效**：内核不把 DOM 选区设成该 range ⇒ 剪贴板里始终是内核片段。
 
 ### 二、改法（应用侧拦截，不改内核；AGENTS §3 #18）
-- 新增 **`src/features/editor/imageCopyBridge.ts`**：document **捕获阶段** click 命中 `.ne-icon-action-copy`、且能解析出本地资产 `{noteId, filename}` 时，`stopPropagation/stopImmediatePropagation` 阻止内核 onClick，改调 **`native.copyAssetImage`**（与右键「复制图片」同路；webp/avif → PNG）。
-- 只接管**图片卡内层**复制键（`.ne-image-wrap` 内，或小图「更多」菜单 `.ne-ui-image-inner-menu`）；外链 / data URL 图与容器等其它 `action-copy` **不接管**、交回内核。
+- 新增 **`src/features/editor/imageCopyBridge.ts`**，接管**两条**内核复制路径，均改调 **`native.copyAssetImage`**（与右键「复制图片」同路；webp/avif → PNG）：
+  ① **右上角内层按钮**：document 捕获阶段 click 命中 `.ne-icon-action-copy` → `stopPropagation/stopImmediatePropagation` 阻止内核 onClick；
+  ② **⌘C / Ctrl+C**：document 捕获阶段 keydown 命中 mod+C、且**没有文字选区**（选区折叠或文本为空）时 `preventDefault + stopPropagation`，拦截内核键盘复制。
+- 只接管**图片卡**上的本地资产图（`.ne-image-wrap` 内，或小图「更多」菜单 `.ne-ui-image-inner-menu`）；外链 / data URL 图与**文字选区**一律交回内核/浏览器。指针落回正文会清除「当前图片卡」，避免 ⌘C 误复制旧图。
 - 桌面入口 `src/main.tsx` 与 `installPasteInterceptor` 并排安装；**移动端未装**（移动端另有一套复制链路）。
 
 ### 三、实测（CDP trusted input，真实鼠标 hover+click）
 - 改前：点内核复制键 → 剪贴板 `text/html` = `<ne-clipboard data=…>`（图片 `src` 是 `127.0.0.1`），**无图片字节**。
 - 改后：点同一按钮 → 剪贴板 **`image/png`**（webp 已转 PNG），无 `ne-clipboard`、无内核 toast；`native.copyAssetImage` 单独验证 `{ok:true}` 且剪贴板 `image/png`。
+- **⌘C**（trusted key）：点选图片后按 ⌘C → 剪贴板 **`image/png`**；拖选一段文字后按 ⌘C → 剪贴板**仍是文字**（未接管），正常文字复制不受影响。
 - 契约已回填 `docs/LAKEX-CONTRACT.md` §5.14 第 6 条。
 
 ### 四、门禁（全绿）
@@ -28,7 +31,7 @@
 
 ### 五、备注 / 未做
 - 行为取舍：改接后复制的是**图片字节**，在编辑器内粘贴会走「上传新图」而不是「卡片克隆」（与右键「复制图片」一致）——用户要求如此。
-- 内核选中图片后按 **⌘C** 的键盘复制是否同样受影响**未单独验**（用户报的是右上角按钮）；若也要接管，同一 bridge 可扩展。
+- 内核选中图片后按 **⌘C** 已一并接管（见 §二②）；只拦「没有文字选区」的情况，正常复制文字/在输入框内复制不受影响。
 
 ---
 
