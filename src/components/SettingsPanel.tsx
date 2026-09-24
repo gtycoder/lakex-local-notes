@@ -112,6 +112,7 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
 
   /** A1 整库备份：选目录 → 备份到 <dir>/lake-notes-backup-<ts>/。 */
   const runBackup = async () => {
+    if (!native.capabilities.nativeDialog) { setBackupMsg("浏览器端暂不支持整库备份（请在桌面端操作）"); return; }
     if (backupBusy) return;
     setBackupBusy(true);
     setBackupMsg(null);
@@ -129,6 +130,7 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
 
   /** A2 云端恢复（换机/坏库）：隔离备份当前数据 → 全新空库 → 重启后首次同步全量拉取。 */
   const runCloudRestore = async () => {
+    if (!native.capabilities.nativeDialog) { setBackupMsg("浏览器端不支持云端恢复（需重启本机应用，请在桌面端操作）"); return; }
     if (!window.confirm("从云端恢复将：① 把当前全部本地数据改名隔离保存（可手动找回）；② 清空工作区为全新空库；③ 重启后首次同步从云端全量拉取（只拉不打）。继续？")) return;
     setBackupBusy(true);
     setBackupMsg(null);

@@ -33,17 +33,17 @@
 
 **为什么用 SSE 不用 WS**：我们的 RPC 已走 HTTP POST，推送是**单向**的；SSE 复用同一 HTTP 服务与 header 鉴权，零新依赖。
 
-### 阶段 2（待做）：宿主能力 + 浏览器等价路径
+### 阶段 2（已落地，260924）：宿主能力 + 浏览器等价路径
 
-- 在 shim 暴露 `window.lakeNative.hostCapabilities`（或 `__lakeHost`），由「本机自持内核 vs 远程」推导，**只用于 UI 显隐/换实现**（不吞错）：
-  接口草案 `{ localFileSystem, importExport, remoteKernel, ownsKernel }`（先最小集，按需扩）。
-- 浏览器等价实现：
-  - 导出/备份：不用 `dialog.showSaveDialog`，改 `Content-Disposition: attachment` 下载（或 blob + a[download]）；
-  - `openAttachment` → 新标签/下载；`showAttachmentInFolder`/`revealNoteFile`/`revealDataFolder` → 隐藏；
-  - `copyAssetImage` → `navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })])`；
-  - `pickExportDir`/`pickBackupDir`/`confirmRelaunch` → 浏览器无对应，走下载/忽略。
-- 参考：思源 `getHostCapabilities()`（`app/src/util/hostCapabilities.ts`）用「连接来源+内核归属」推导能力；
-  `saveExportFile` 纯浏览器分支 = window.open(url + download=true)。
+- shim 暴露 `window.lakeNative.capabilities = { browserClient: true, nativeDialog: false }`；`src/lib/native.ts` 加 `native.capabilities` getter（桌面/移动缺省 `browserClient:false, nativeDialog:true`）。
+- shim **透明覆盖**三个宿主专属方法（无需改调用点）：
+  - `saveAssetAs` → 用 assetServer URL（带 `?token=`）`fetch` 成 blob + `a[download]` 浏览器下载（不再弹桌面保存框）；
+  - `openAttachment` → `window.open(assetUrl, "_blank")`（新标签，不拉起桌面应用）；
+  - `copyAssetPath` → 复制**资源 URL**（替代浏览器里无意义的本地绝对路径）。
+- UI 按能力 gate（不吞错）：`useNoteActions.exportNoteById` 与 `SettingsPanel.runBackup`/`runCloudRestore` 在 `!nativeDialog` 时给明确提示「请在桌面端操作」，不弹桌面目录框。
+- **未做（无 zip 依赖，不打算为它加依赖）**：整库备份 / Markdown 资料包这类**目录**导出的浏览器下载；若要做需先定 zip/多文件下载方案。
+- 验证：单测（shim 断言 capabilities + 三个覆盖）；真机冒烟（`/__native.js` 取 shim；跨源带 token 取真实资源 200 + 回显 ACAO，无 token/坏源 403）。
+- 参考：思源 `getHostCapabilities()` 用「连接来源+内核归属」推导能力；本项目的 `reveal*`/`copyAssetImage` 因**浏览器与桌面同机**，沿用主进程实现即可（未改）。
 
 ### 阶段 3（可选）：体验
 

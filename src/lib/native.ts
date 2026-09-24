@@ -11,6 +11,8 @@ export interface QuickNoteStageInput {
 export interface LakeNative {
   /** 本地资源服务器端口（可被 LAKE_ASSET_PORT 覆盖，多端同机双开用）。 */
   assetPort: number;
+  /** 宿主能力：Web 客户端由 shim 下发（nativeDialog=false）；桌面/移动缺省按桌面处理。 */
+  capabilities?: { browserClient: boolean; nativeDialog: boolean };
   bootstrap(): Promise<WorkspaceSnapshot>;
   readNote(id: string): Promise<NoteDocument>;
   getNoteDigest(id: string): Promise<NoteDigest | null>;
@@ -167,6 +169,10 @@ function api(): LakeNative {
 }
 
 export const native = {
+  /** 宿主能力（Web shim 下发；桌面/移动缺省 = 桌面）。 */
+  get capabilities(): { browserClient: boolean; nativeDialog: boolean } {
+    return api().capabilities ?? { browserClient: false, nativeDialog: true };
+  },
   bootstrap: () => api().bootstrap(),
   readNote: (id: string) => api().readNote(id),
   getNoteDigest: (id: string) => api().getNoteDigest(id),

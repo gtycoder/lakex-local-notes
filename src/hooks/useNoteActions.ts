@@ -29,6 +29,8 @@ export function useNoteActions({ showNotice, setError, setTreeNodes }: UseNoteAc
   /** M1：收口导出（按 noteId）——右键「导出」子菜单所有格式统一入口（markdown/html/lake/pdf；word 待实现） */
   const exportNoteById = useCallback(async (noteId: string | null, format: "markdown" | "html" | "lake" | "pdf") => {
     if (!noteId) { showNotice("该节点不是文档"); return; }
+    // 浏览器端：导出靠系统目录选择框（宿主专属），暂不支持 —— 明确提示，不弹桌面弹窗
+    if (!native.capabilities.nativeDialog) { showNotice("浏览器端暂不支持导出（请在桌面端操作）"); return; }
     try {
       const dir = await native.pickExportDir();
       if (!dir) return; // 用户取消

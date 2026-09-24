@@ -4,7 +4,30 @@
 > 历史所有 dated handoff 已合并进本文件（内容在 git 历史可查）。本文件只保留**当前状态 + 真正的待办 + 有价值的坑**。
 > **§8 是移动端（安卓）专职交接**，由移动端会话维护；桌面会话不要改 §8，移动端会话不要改 §0-§7 之外的桌面文件。
 
-## 0. 最新交接 · 260924 晚 续九 · 浏览器端阶段 1：SSE 推送落地
+## 0. 最新交接 · 260924 晚 续十 · 浏览器端阶段 2：宿主能力 + 浏览器等价路径
+
+> 用户 260924 确认「可以做」。本批 = 浏览器端**阶段 2**（宿主能力 + 浏览器等价路径）。专项见 `docs/BROWSER-CLIENT-DESIGN.md`。已提交推送（hash 见 `git log -1`）。
+
+### 一、交付
+- shim 暴露 `window.lakeNative.capabilities = { browserClient:true, nativeDialog:false }`；`src/lib/native.ts` 加 `native.capabilities` getter（桌面/移动缺省 `browserClient:false, nativeDialog:true`）。
+- shim **透明覆盖**三个宿主专属方法：`saveAssetAs` → assetServer URL（带 token）fetch 成 blob + `a[download]` 浏览器下载；`openAttachment` → `window.open(assetUrl,"_blank")` 新标签；`copyAssetPath` → 复制资源 URL。
+- UI 按能力 gate（不弹桌面目录框）：`useNoteActions.exportNoteById`、`SettingsPanel.runBackup`/`runCloudRestore` 在 `!nativeDialog` 时提示「请在桌面端操作」。
+
+### 二、边界（明确未做）
+- **目录类导出/备份的浏览器下载未做**：Markdown 资料包 / 整库备份是目录，浏览器下载要 zip；仓库**无 zip 依赖**，不为它加依赖（AGENTS §8/#17）。需要时先定 zip 方案。
+- `reveal*` / `copyAssetImage` **未改**：浏览器与桌面同机，沿用主进程实现（Finder / 系统剪贴板）语义正确。
+
+### 三、验证
+- 单测：`webApiServer.test.ts` shim 断言补 capabilities + 三个覆盖（19 项）。
+- 真机冒烟（Web 服务 + `/__native.js`）：shim 四个断言全 true；跨源带 token 取真实资源 **200**（回显 `Access-Control-Allow-Origin: http://127.0.0.1:19880`、`Vary: Origin`、`image/png`、531731B）；无 token → 403、坏 Origin → 403；SSE 复跑仍收到 `pending-summary-changed`。
+- 门禁：`tsc` 0 · `vitest` **1265 passed / 16 skipped** · `git diff --check` clean。
+
+### 四、踩坑（本批）
+- **改 `electron/*.ts` 触发 vite-plugin-electron 重启，会丢掉 `--remote-debugging-port=9222`**（重启路径不带 `onstart` 参数）⇒ dev 实例变「无 CDP」。恢复：kill 具体 PID 后手动 `./node_modules/.bin/electron --disable-gpu --remote-debugging-port=9222 .`（本批已恢复）。
+
+---
+
+## 0. 最新交接 · 260924 晚 续九 · 浏览器端阶段 1：SSE 推送落地 —— ⚠️ 已被上一节取代（历史记录）
 
 > 用户 260924 确认「先做」浏览器端。本批 = 立项调研（思源浏览器端）+ **阶段 1 SSE 推送**落地。专项见 `docs/BROWSER-CLIENT-DESIGN.md`；思源调研原文见工作区根 `siyuan-kernel-web-server-report.md` / `siyuan-browser-adaptation-report.md`。已提交推送（hash 见 `git log -1`）。
 
@@ -3096,7 +3119,7 @@ P4 组件库 14 件 → P5 逐屏迁移（每屏对照底账打勾）→ P6 第�
 7. **Lake 正文写入收口**（约定见 `docs/LAKE-CONTENT-WRITING.md`）：① 自动化程序（不在仓库）**直接写库 + 手写裸 `<img>`**，导致 287 篇测试文档一被打开就被内核重写（图片降级成失败卡片 + 变待同步 → 随下次同步上传）→ **必须改成走应用写入路径，或只写纯文本**；② 仓库内 4 处手拼写入者**已收口**到 `src/core/lakeDocForm.ts`，并加了"绝不产出裸 `<img>`"的单测围栏；③ 旧数据按 §3 原则 7 **不写归一化兼容**，用修好的姿势重建（见第 8 条）。
 8. **旧数据处置 —— 等用户决定，别擅自动数据**：287 篇含裸 `<img>`（+7 篇已降级成失败卡片）。选项：**A 删掉重播（推荐，符合原则 7）** / B 留着但别打开 / C 就地改写成卡片（= 为损坏数据写代码，与原则 7 冲突，不推荐）。
 9. **「深层重复」CSS 候选清理（260917 已收口；结论：不做整批）**：档0（围栏基线纠偏）+ 档1（可证死声明清理）已完成，见 §2。按严格口径（同 at-rule 上下文 + 同单选择器 + 同属性）**全库只有 55 条可安全删**，已删并 ab2 全矩阵 34 状态证 0 差异。此前估算的"29 文件 / 3835 声明 / 184 争用（147 跨层）/ 92 选择器"**大多是把不同 `@media` 条件（宽/窄两套）算成争用**——那些不能删。**结论：不再推进 8–12 人日的整批清理**；若日后新增重复，围栏 `src/styles/cssLayers.test.ts` 会卡住，`scripts/css-audit/plan-dup-decls.mjs` 可随时重生成候选。
-10. **浏览器端（本机附属窗口）后续（专项见 `docs/BROWSER-CLIENT-DESIGN.md`）**：已完成"开关 + 说明 + 打开按钮" + **阶段 1 SSE 推送**；剩余缺口按优先级：① ✅ **推送已做（260924，见本文件最上方 §0）**：`GET /__events` SSE（header token 鉴权）+ `webServerController.broadcast`；`main.ts` 的 `broadcastSyncProgress` 与 pending 摘要 diff（`afterInvoke`）已接 sink；shim 里 `onSyncProgress`/`onPendingSummaryChanged` 用 fetch 流自解析 SSE；② **宿主能力浏览器化**：导出/备份走 `dialog`、`openAttachment`/`reveal*` 走 `shell`、`copyAsset*` 走 `clipboard`/`nativeImage`——在浏览器里语义错（会去操作桌面机），需换下载 / `navigator.clipboard` / `<input type=file>` 或隐藏；③ **开发体验**：只服务构建产物 `dist/`（无 HMR），无 `npm run dev:web` 脚本；④ **安全（已复核：比早期记录的更完整）**：已有 Origin/Host 白名单（防 DNS rebinding）、`Sec-Fetch-Site` 跨站拒绝、仅 header token（常量时间、禁 query）、`/__native.js` 限 same-origin/none、dist 路径穿越防护；剩余可选增强见 `docs/BROWSER-CLIENT-DESIGN.md` 阶段 3。
+10. **浏览器端（本机附属窗口）后续（专项见 `docs/BROWSER-CLIENT-DESIGN.md`）**：已完成"开关 + 说明 + 打开按钮" + **阶段 1 SSE 推送**；剩余缺口按优先级：① ✅ **推送已做（260924，见本文件最上方 §0）**：`GET /__events` SSE（header token 鉴权）+ `webServerController.broadcast`；`main.ts` 的 `broadcastSyncProgress` 与 pending 摘要 diff（`afterInvoke`）已接 sink；shim 里 `onSyncProgress`/`onPendingSummaryChanged` 用 fetch 流自解析 SSE；② ✅ **宿主能力浏览器化（260924 已做，见本文件最上方 §0）**：shim 暴露 `capabilities`（`nativeDialog:false`）+ 透明覆盖 `saveAssetAs`（浏览器下载）/`openAttachment`（新标签）/`copyAssetPath`（复制资源 URL）；UI 对导出/备份/云端恢复给「请在桌面端操作」提示。**目录类导出/备份的浏览器下载未做**（无 zip 依赖，见设计文档阶段 2）；③ **开发体验**：只服务构建产物 `dist/`（无 HMR），无 `npm run dev:web` 脚本；④ **安全（已复核：比早期记录的更完整）**：已有 Origin/Host 白名单（防 DNS rebinding）、`Sec-Fetch-Site` 跨站拒绝、仅 header token（常量时间、禁 query）、`/__native.js` 限 same-origin/none、dist 路径穿越防护；剩余可选增强见 `docs/BROWSER-CLIENT-DESIGN.md` 阶段 3。
     - **AI 生成的文档能否"各端发现"（用户 260917 提问 → 结论）**：只要 AI **走应用写入路径**（`createNote` + `saveNote`，媒体让内核产出——**禁直写库/手拼 `.lake`**，见 `docs/LAKE-CONTENT-WRITING.md`），就会以 `sync_state='local'` 落库 → **跨设备**靠现有 S3 同步天然可见（无需新机制）；**同机多窗口/浏览器**要"立即看到"则需再加一个 `library-changed` 事件（复用同一 SSE 通道）。**浏览器端本身只覆盖本机**（绑 127.0.0.1，不是同步参与者）；AI 若在云端生成属另一套设计（走同步协议或把 webApiServer 暴露到网络 = 需单独的安全方案）。
 
 11. **【优化项 · 用户 260918 决定「先不做」】块拖拽的两个进阶能力：多块选区批量拖拽 + 拖拽改层级（蓝色导引线）**

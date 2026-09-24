@@ -364,6 +364,35 @@ export function renderNativeShim(apiToken: string, assetToken: string, assetPort
       });
     };
   });
+  // 浏览器等价实现：宿主专属动作改成浏览器原生行为（不弹桌面对话框 / 不拉起桌面应用）。
+  function assetURL(noteId, filename) {
+    return "http://127.0.0.1:" + native.assetPort + "/" + encodeURIComponent(noteId) + "/" + encodeURIComponent(filename) + "?token=" + encodeURIComponent(ASSET_TOKEN);
+  }
+  native.capabilities = { browserClient: true, nativeDialog: false };
+  native.saveAssetAs = function (noteId, filename, suggestedName) {
+    return fetch(assetURL(noteId, filename)).then(function (res) {
+      if (!res.ok) throw makeError("INVALID_INPUT", "asset HTTP " + res.status);
+      return res.blob();
+    }).then(function (blob) {
+      var a = document.createElement("a");
+      var href = URL.createObjectURL(blob);
+      a.href = href;
+      a.download = suggestedName || filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(function () { URL.revokeObjectURL(href); }, 10000);
+      return { ok: true };
+    });
+  };
+  native.openAttachment = function (noteId, filename) {
+    window.open(assetURL(noteId, filename), "_blank", "noopener");
+    return Promise.resolve({ ok: true });
+  };
+  native.copyAssetPath = function (noteId, filename) {
+    var url = assetURL(noteId, filename);
+    return navigator.clipboard.writeText(url).then(function () { return url; });
+  };
   window.lakeNative = native;
 })();
 `;
