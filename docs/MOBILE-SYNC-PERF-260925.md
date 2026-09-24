@@ -121,3 +121,10 @@
 - 接真机重跑 `run5d.mjs`（脚本已自动跳过未连接端并打印 `indexMs`）。
 - 可选：移动端异步索引（reconcile 移出 `syncNow` 热路径 + 搜索「正在建索引」提示）——本轮未做。
 - 原生资产同步插件：尚未立项实现（本节只给依据与度量口径）。
+## 13. 260925 续 · 原生资产同步插件（Kotlin，分支 feat/android-kotlin-native）
+
+- 背景：§7/§12.3 已证「每附件 2×base64 + 3×过桥」，模拟器下载比桌面慢 ≈4.7×。本专项在分支上落地原生插件。
+- 原生层已 **全 Kotlin 化**（9 个 .java → .kt，接入 kotlin-android 2.2.20 / JVM 21，无 Java 源文件）。
+- `AssetSyncPlugin`：SigV4 自签 + 流式 `putFile` / `getFile` / `listAssets`（sha256 原生算）。JS 用 `nativeAssetSync` 探测接入：移动端 `putObjectStream` 与 `openLocalAssetStream`/`listLocalAssets` 走原生，非原生/失败回退字节路径；**core 未改动**。
+- 实测：256KB 资产原生 PUT/GET 到 S3 逐字节一致；整轮同步 `assetHttp/assetB64Encode/fsRead = 0`（资产字节不过桥）。
+- **仍缺**：下载端口接入需要 core 的可选 `getObjectToFile`（否则 `downloadNoteAssets` 拿不到文件式结果）。在「core 不动」约束下下载仍走 base64；原生 `getFile` 已就绪。

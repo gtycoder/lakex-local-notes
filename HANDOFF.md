@@ -4,6 +4,27 @@
 > 历史所有 dated handoff 已合并进本文件（内容在 git 历史可查）。本文件只保留**当前状态 + 真正的待办 + 有价值的坑**。
 > **§8 是移动端（安卓）专职交接**，由移动端会话维护；桌面会话不要改 §8，移动端会话不要改 §0-§7 之外的桌面文件。
 
+## 0. 最新交接 · 260925 续 · Android 原生层 Kotlin 化 + 原生资产同步插件（分支 feat/android-kotlin-native）
+
+> 本轮在分支 **`feat/android-kotlin-native`** 上做，未合 master。目标：原生层全 Kotlin + 资产字节不过 WebView 桥。
+
+### 一、Java→Kotlin 全量迁移（commit `e0a1fc1`）
+- `android/` 9 个 `.java` 全部重写为 `.kt`：MainActivity / AssetServer / OpenFilePlugin / PinShortcutPlugin / SharedContentPlugin + 单测/仪器测试。**已无 Java 源文件。**
+- `android/app/build.gradle` 接入 `kotlin-android` 2.2.20 + JVM 21；`android/build.gradle` 加 `kotlin-gradle-plugin`。
+- 验证：`assembleDebug` OK；`testDebugUnitTest` 14/14；模拟器 smoke（lakeNative / asset token 64 位 / 3 插件 / AssetServer 监听）。
+- 坑（务必记）：**Kotlin 块注释可嵌套**，Java 注释里的 `image/*`（开嵌套）、`bytes */size`（提前闭合）会让 KDoc 报 `Syntax error`/`Unclosed comment`；已改文字。移植注释时注意 `/*`、`*/`。
+
+### 二、原生资产同步插件（commit `fd71037`，core 未改动）
+- 新增 `AssetSyncPlugin.kt` + `AwsV4Signer.kt`：SigV4 自签 + `HttpURLConnection` 流式 `putFile` / `getFile` / `listAssets`（原生算 sha256）。签名用 AWS 官方 SigV4 get-vanilla 向量单测钉死（`AwsV4SignerTest`）。
+- JS：`src/mobile/nativeAssetSync.ts` 能力探测包装；`s3Store.putObjectStream` + `syncDbPort.openLocalAssetStream`/`listLocalAssets`（原生扫描）接入。非原生平台**不挂载** → 自动回退字节路径；原生运行期失败也回退字节。**core 未动。**
+- 实测（模拟器，隔离前缀已删 0 残留）：256KB 资产原生 PUT → S3 对象 size/sha256 逐字节一致；原生 GET sha256 一致；整轮 1003 笔记 + 资产同步中 `assetHttp/assetB64Encode/fsRead = 0`（资产字节未过 WebView 桥）。
+- **未做（受「core 不动」约束）**：下载端口接入。core `downloadNoteAssets` 要求 `getObject` 返回字节；要彻底让下载字节不过桥，需给 `S3Store` 加可选 `getObjectToFile` 并让 core 走分支。在「core 不动」下下载仍走现有 base64 路径（原生 `getFile` 已就绪待接）。
+- **待验证**：官方多端套件（`run5d`/`run5b`）在原生上传开启后复跑；真机 `50950385`（本机未连接）复测。
+
+### 三、门禁（本轮）
+`tsc` 0 / `vitest` 1274 passed / desktop + mobile build OK / `check-core` 违规 0。
+
+
 ## 0. 最新交接 · 260925 续 · 移动端批量 reconcileIndex + 附件过桥实测
 
 > 承接 `docs/MOBILE-SYNC-PERF-260925.md`（移动端同步性能专项）。本会话把首同步最后一处「逐条过桥」——搜索索引对账——批量化，并实测附件过桥成本。真机 50950385 本轮未连接，见 §二。
