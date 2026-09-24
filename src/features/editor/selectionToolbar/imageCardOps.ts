@@ -14,22 +14,34 @@
  */
 export interface ImageMeta {
   originalWidth: number;
+  originalHeight: number;
   width: number;
   rotation: number;
   style: string;
   link: string;
   title: string;
   showTitle: boolean;
+  /** 块级对齐（内核 `ne-alignment`，非 cardValue —— 见 LAKEX-CONTRACT 排查）。 */
+  alignment: string;
+  /** 卡片边距（内核 card spacing：both/top/bottom 或空）。 */
+  spacing: string;
+  /** 链接是否「在当前页面打开」（内核 linkExternal 的反）。 */
+  linkSelf: boolean;
 }
 
 interface ImageCardData {
   getOriginalWidth?: () => number;
+  getOriginalHeight?: () => number;
   getUserWidth?: () => number;
   getRotation?: () => number;
   getStyle?: () => string;
   getLink?: () => string;
   getTitle?: () => string;
   showTitle?: () => boolean;
+  getCardSpacing?: () => string | undefined;
+  isOpenLinkInSelf?: () => boolean;
+  setCardSpacing?: (value: string | null) => void;
+  sync?: (b?: boolean) => void;
 }
 
 interface ImageCardUi {
@@ -72,13 +84,25 @@ export function readImageMeta(cardEl: HTMLElement): ImageMeta {
   const num = (v: unknown): number | null => (typeof v === "number" && Number.isFinite(v) ? v : null);
   return {
     originalWidth: num(cd?.getOriginalWidth?.()) ?? img?.naturalWidth ?? 320,
+    originalHeight: num(cd?.getOriginalHeight?.()) ?? img?.naturalHeight ?? 240,
     width: num(cd?.getUserWidth?.()) ?? num(img?.clientWidth) ?? 0,
     rotation: num(cd?.getRotation?.()) ?? 0,
     style: (cd?.getStyle?.() as string) || "none",
     link: (cd?.getLink?.() as string) || "",
     title: (cd?.getTitle?.() as string) || "",
     showTitle: cd?.showTitle?.() === true,
+    alignment: cardEl.closest("[ne-alignment]")?.getAttribute("ne-alignment") || "left",
+    spacing: (cd?.getCardSpacing?.() as string) || "",
+    linkSelf: cd?.isOpenLinkInSelf?.() === true,
   };
+}
+
+/** 边距 = 内核 card spacing（cardValue.__spacing，值 both/top/bottom）。走 cardData.setCardSpacing
+ *  （内核 card-data.ts 34729；null = 清空 ⇒ 紧凑）。不用自造的 margin 字段（内核不认）。 */
+export function setImageSpacing(cardEl: HTMLElement, value: "both" | "top" | "bottom" | null): boolean {
+  const cd = cardData(cardEl);
+  if (typeof cd?.setCardSpacing !== "function") return false;
+  try { cd.setCardSpacing(value); cd.sync?.(false); return true; } catch { return false; }
 }
 
 /** 是否处于内核交互式裁剪态（裁剪时浮框应让位）。 */

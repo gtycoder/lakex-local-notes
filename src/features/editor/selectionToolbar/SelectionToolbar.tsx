@@ -12,15 +12,15 @@
  *   - 容器 onMouseDown preventDefault：点按钮不丢选区；定位自算 + 避开固定工具栏；表格/代码块内不出现。
  */
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
-import {
-  AlignCenter, AlignLeft, AlignRight, Copy, Crop, Download, Layers, Link2,
-  MoveVertical, Palette, RotateCw, Scaling, Trash2, Type,
-} from "lucide-react";
 import { native } from "../../../lib/native";
 import { FONT_SIZE_OPTIONS, PARAGRAPH_STYLES, TOOLBAR_BLOCK_ITEMS } from "../editorCommands";
 import type { LakeEditorInstance } from "../lakeRuntime";
-import { IMAGE_STYLE_OPTIONS, enterImageCrop, readImageMeta } from "./imageCardOps";
-import { KEmbedIcon, KIcon, KLinkEditor, KToolbarButton } from "./kernelUiAtoms";
+import { IMAGE_STYLE_OPTIONS, enterImageCrop, readImageMeta, setImageSpacing } from "./imageCardOps";
+import {
+  IconImageAlign, IconImageBatch, IconImageCrop, IconImageLink, IconImageRotate,
+  IconImageSize, IconImageSpacing, IconImageStyle, IconImageTitle,
+} from "./imageIcons";
+import { KCheckbox, KEmbedIcon, KIcon, KLinkEditor, KSwitch, KToolbarButton, kernelHotkey, useHoverTip } from "./kernelUiAtoms";
 import { LakeColorBoard } from "./LakeColorBoard";
 import {
   currentColor, normalTextColor, paletteDefaultValue, persistentColor, rememberColor, type ColorVariant,
@@ -42,17 +42,17 @@ function isValidLink(value: string): boolean {
  * 内核颜色分裂按钮：本体（直接应用当前色）+ 独立三角区（开面板）——与固定栏同款两件事。
  * 图标用内核 EmbedIcon（动态下划线 = 当前色），不做成「两处都开面板」。
  */
-function KColorButton({ label, variant, color, active, onApply, onOpen }: {
-  label: string; variant: ColorVariant; color: string; active?: boolean;
+function KColorButton({ label, variant, color, active, hotkey, onApply, onOpen }: {
+  label: string; variant: ColorVariant; color: string; active?: boolean; hotkey?: string;
   onApply: (event: ReactMouseEvent<HTMLButtonElement>) => void;
   onOpen: (event: ReactMouseEvent<HTMLButtonElement>) => void;
 }) {
   return (
     <span className="selection-toolbar__colorbtn">
-      <KToolbarButton name="color" checked={active} className="ne-ui-toolbar-color-show-button" title={label} onClick={onApply}>
+      <KToolbarButton name="color" checked={active} className="ne-ui-toolbar-color-show-button" title={label} hotkey={hotkey} onClick={onApply}>
         <KEmbedIcon variant={variant} color={color} />
       </KToolbarButton>
-      <KToolbarButton name="colorDropdown" caret caretClass="ne-ui-toolbar-color-dropdown-arrow" className="ne-ui-toolbar-color-dropdown-button ant-dropdown-trigger" title={label} onClick={onOpen} />
+      <KToolbarButton name="colorDropdown" caret caretClass="ne-ui-toolbar-color-dropdown-arrow" className="ne-ui-toolbar-color-dropdown-button ant-dropdown-trigger" title={label} hotkey={hotkey} onClick={onOpen} />
     </span>
   );
 }
@@ -83,25 +83,56 @@ function KMenuItem({ label, selected, shortcut, labelClass, onClick }: {
   );
 }
 
-
-/** 图片形态沿用自有按钮（图片浮栏风格此前已按云端语雀定稿）。 */
-function IconButton({ label, active, disabled, onClick, children }: {
-  label: string; active?: boolean; disabled?: boolean; onClick?: (event: ReactMouseEvent<HTMLButtonElement>) => void; children: ReactNode;
+/**
+ * 图片浮栏：内核「卡片工具栏」条目（与云端图片工具栏同构、同一套 `.ne-card-toolbar-*` 类，
+ * 样式全部来自内核 lakex-doc.css，非我们自造）。hover 说明用 portal 浮层（useHoverTip）。
+ */
+function CardItem({ tip, className, selected, disabled, onClick, children }: {
+  tip: string; className: string; selected?: boolean; disabled?: boolean;
+  onClick?: (event: ReactMouseEvent<HTMLDivElement>) => void; children: ReactNode;
 }) {
+  const { onMouseEnter, onMouseLeave, tipNode } = useHoverTip(tip);
   return (
-    <button
-      type="button"
-      className={"selection-toolbar__btn" + (active ? " is-active" : "")}
-      title={label}
-      aria-label={label}
-      aria-pressed={active || undefined}
-      disabled={disabled}
-      onClick={onClick}
-    >
-      {children}
-    </button>
+    <>
+      <div
+        role="button" tabIndex={0}
+        aria-label={tip}
+        aria-pressed={selected || undefined}
+        className={className + (selected ? " selected" : "")}
+        data-disabled={disabled ? "" : undefined}
+        onMouseEnter={onMouseEnter}
+        onMouseLeave={onMouseLeave}
+        onClick={disabled ? undefined : onClick}
+        onKeyDown={(e) => { if (!disabled && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); onClick?.(e as unknown as ReactMouseEvent<HTMLDivElement>); } }}
+      >
+        {children}
+      </div>
+      {tipNode}
+    </>
   );
 }
+
+/** 图片浮栏：内核卡片工具栏下拉菜单（云端同款 `.ne-card-toolbar-select-menu`）。 */
+function CardMenu({ menu, children }: { menu: string; children: ReactNode }) {
+  return (
+    <div className="selection-toolbar__kmenu" data-menu={menu}>
+      <ul className="ant-dropdown-menu ant-dropdown-menu-root ant-dropdown-menu-vertical ant-dropdown-menu-light ne-card-toolbar-select-menu" role="menu">{children}</ul>
+    </div>
+  );
+}
+
+function CardMenuItem({ label, icon, selected, onClick }: { label: string; icon?: string; selected?: boolean; onClick?: () => void }) {
+  return (
+    <li role="menuitem" className={"ant-dropdown-menu-item ne-card-toolbar-select-menu-item" + (selected ? " ant-dropdown-menu-item-selected" : "")} onClick={onClick}>
+      <div className="ne-card-toolbar-check-icon"><KIcon type="check" /></div>
+      <div className="ne-card-toolbar-select-item-content">
+        {icon ? <div className="ne-card-toolbar-select-item-icon"><KIcon type={icon} /></div> : null}
+        <div className="ne-card-toolbar-select-item-label">{label}</div>
+      </div>
+    </li>
+  );
+}
+
 
 export function SelectionToolbar({ editor, container, noteId }: {
   editor: LakeEditorInstance; container: HTMLElement; noteId: string;
@@ -112,6 +143,10 @@ export function SelectionToolbar({ editor, container, noteId }: {
   holdRef.current = menu !== null;
   const { target, state, run, refresh, toolbarRef } = useSelectionToolbar(editor, container, holdRef);
   const [draft, setDraft] = useState("");
+  /** 宽高弹窗的「高」输入。 */
+  const [draftH, setDraftH] = useState("");
+  /** 链接弹窗「在当前页面打开」。 */
+  const [linkSelf, setLinkSelf] = useState(false);
   /** 链接编辑弹层：文本 / 链接地址（与内核 .ne-link-editor 的两个字段对应）。 */
   const [linkText, setLinkText] = useState("");
   const [linkSrc, setLinkSrc] = useState("");
@@ -301,9 +336,11 @@ export function SelectionToolbar({ editor, container, noteId }: {
 
   const renderText = () => {
     const sizeLabel = String(state.fontSize ?? 15);   // 260924 用户口径：字号只显示数值（如 16），不带 px
+    /** hover 说明 = 名称 + 内核快捷键（短，无 markdown 行；见 kernelUiAtoms.KTooltip）。 */
+    const hot = (name: string) => kernelHotkey(editor, name);
     return (
       <>
-        <KToolbarButton name="clearFormat" icon="editor-clearFormat" title="清除格式" className="ne-ui-toolbar-button ne-ui-toolbar-clear-format ne-toolbar-widget" onClick={() => run("clearFormat")} />
+        <KToolbarButton name="clearFormat" icon="editor-clearFormat" title="清除格式" hotkey={hot("clearFormat")} className="ne-ui-toolbar-button ne-ui-toolbar-clear-format ne-toolbar-widget" onClick={() => run("clearFormat")} />
         <span className="selection-toolbar__sep" />
         {/* 260924 续：标题按钮改用原「转为」的图标（内核「段落/块类型」editor-paragraph），不再显示 T/H1..H6 符号。 */}
         <KToolbarButton name="format" icon="editor-paragraph" title="段落样式" checked={menu === "style"} className={VALUE + " ne-ui-toolbar-format"} onClick={(e) => toggleMenu("style", e.currentTarget)} />
@@ -312,24 +349,24 @@ export function SelectionToolbar({ editor, container, noteId }: {
           <div className="ne-ui-toolbar-select-value">{sizeLabel}</div>
         </KToolbarButton>
         <span className="selection-toolbar__sep" />
-        <KToolbarButton name="bold" icon="bold" checked={state.marks.bold} title="加粗" className={TOGGLE} onClick={() => run("bold")} />
-        <KToolbarButton name="italic" icon="italic" checked={state.marks.italic} title="倾斜" className={TOGGLE} onClick={() => run("italic")} />
-        <KToolbarButton name="strikethrough" icon="strikethrough" checked={state.marks.strikethrough} title="中划线" className={TOGGLE} onClick={() => run("strikethrough")} />
-        <KToolbarButton name="underline" icon="underline" checked={state.marks.underline} title="下划线" className={TOGGLE} onClick={() => run("underline")} />
+        <KToolbarButton name="bold" icon="bold" checked={state.marks.bold} title="加粗" hotkey={hot("bold")} className={TOGGLE} onClick={() => run("bold")} />
+        <KToolbarButton name="italic" icon="italic" checked={state.marks.italic} title="倾斜" hotkey={hot("italic")} className={TOGGLE} onClick={() => run("italic")} />
+        <KToolbarButton name="strikethrough" icon="strikethrough" checked={state.marks.strikethrough} title="中划线" hotkey={hot("strikethrough")} className={TOGGLE} onClick={() => run("strikethrough")} />
+        <KToolbarButton name="underline" icon="underline" checked={state.marks.underline} title="下划线" hotkey={hot("underline")} className={TOGGLE} onClick={() => run("underline")} />
         <span className="selection-toolbar__sep" />
-        <KColorButton label="文字颜色" variant="text" color={currentColor(editor, "text")} active={menu === "color" || Boolean(state.color)} onApply={() => applyCurrentColor("text")} onOpen={(e) => toggleMenu("color", e.currentTarget)} />
-        <KColorButton label="背景色" variant="bg" color={currentColor(editor, "bg")} active={menu === "bgcolor" || Boolean(state.bgColor)} onApply={() => applyCurrentColor("bg")} onOpen={(e) => toggleMenu("bgcolor", e.currentTarget)} />
+        <KColorButton label="文字颜色" variant="text" color={currentColor(editor, "text")} active={menu === "color" || Boolean(state.color)} hotkey={hot("color")} onApply={() => applyCurrentColor("text")} onOpen={(e) => toggleMenu("color", e.currentTarget)} />
+        <KColorButton label="背景色" variant="bg" color={currentColor(editor, "bg")} active={menu === "bgcolor" || Boolean(state.bgColor)} hotkey={hot("bgColor")} onApply={() => applyCurrentColor("bg")} onOpen={(e) => toggleMenu("bgcolor", e.currentTarget)} />
         <span className="selection-toolbar__sep" />
         {/* 260924 续：原「转为」下拉已拆散 —— 每个块级转换各成一个独立按钮（顺序 = 有序/无序/待办/引用/行内代码）。 */}
         {TOOLBAR_BLOCK_ITEMS.map((item) => (
-          <KToolbarButton key={item.name} name={item.name} icon={item.icon} title={item.label}
+          <KToolbarButton key={item.name} name={item.name} icon={item.icon} title={item.label} hotkey={hot(item.name)}
             checked={item.kind === "mark" ? state.marks[item.name] : state.blocks[item.name]}
             disabled={state.itemDisabled[item.name]}
             className={TOGGLE} onClick={() => run(item.name)} />
         ))}
         {/* 内核 link-toolbar-descriptor.getUIState：disabled = !link && !insertLink（选区里已有链接时两个都不可用）。
             不用内核「下拉按钮」类：.ne-ui-toolbar-arrow-button 固定 42px，是给已去掉的三角预留的 ⇒ 用 26px 普通按钮。 */}
-        <KToolbarButton name="link" icon="editor-link" disabled={!canCommand("link") && !canCommand("insertLink")} checked={menu === "txtlink"} title="超链接" className="ne-ui-toolbar-button ne-toolbar-widget" onClick={(e) => openLinkEditor(e.currentTarget)} />
+        <KToolbarButton name="link" icon="editor-link" disabled={!canCommand("link") && !canCommand("insertLink")} checked={menu === "txtlink"} title="超链接" hotkey={hot("link")} className="ne-ui-toolbar-button ne-toolbar-widget" onClick={(e) => openLinkEditor(e.currentTarget)} />
       </>
     );
   };
@@ -339,83 +376,90 @@ export function SelectionToolbar({ editor, container, noteId }: {
     const meta = readImageMeta(t.cardEl);
     const apply = (data: Record<string, unknown>) => { run("updateImageData", t.cardId, data); setMenu(null); };
     const batch = (patch: Record<string, unknown>) => { run("cardBatchApply", "image", patch); setMenu(null); };
-    const sizeItem = (p: ImageSizePreset, label: string) => (
-      <button key={p} type="button" role="menuitem" className="selection-toolbar__item" onClick={() => apply({ width: imageSizeWidth(p, meta.originalWidth) })}>{label}</button>
-    );
+    /** 对齐走**块级** alignment 命令（内核 ne-alignment；cardValue 没有 alignment 字段）。 */
+    const align = (value: "left" | "center" | "right") => { run("alignment", value); setMenu(null); };
+    /** 宽高弹窗：宽/高输入 + 百分比档位（对齐云端内容）。 */
+    const displayH = meta.width && meta.originalWidth ? Math.round((meta.width * meta.originalHeight) / meta.originalWidth) : meta.originalHeight;
+    const scalePct = meta.width && meta.originalWidth ? Math.round((meta.width / meta.originalWidth) * 100) : 100;
+    const applyWidth = () => { const n = Number(draft); if (n > 0) apply({ width: Math.round(n) }); };
+    const applyHeight = () => { const n = Number(draftH); if (n > 0) apply({ width: Math.round((n * meta.originalWidth) / meta.originalHeight) }); };
+    const applyLink = () => apply({ link: draft.trim(), linkTarget: linkSelf ? "" : "_blank" });
+    /** 边距 = 内核 card spacing 的两个开关（上/下）。 */
+    const spacingTop = meta.spacing === "top" || meta.spacing === "both";
+    const spacingBottom = meta.spacing === "bottom" || meta.spacing === "both";
+    const setSpacing = (top: boolean, bottom: boolean) => { setImageSpacing(t.cardEl, top && bottom ? "both" : top ? "top" : bottom ? "bottom" : null); setMenu(null); refresh(); };
+    /** 描述：**无弹窗** —— 打开卡片内联描述编辑框并聚焦（内核 `.ne-image-title-content`，云端同款）。 */
+    const openTitleEditor = () => { apply({ showTitle: true }); window.setTimeout(() => { (t.cardEl.querySelector(".ne-image-title-content") as HTMLElement | null)?.focus(); }, 80); };
     return (
-      <>
-        <IconButton label="裁剪" onClick={() => { enterImageCrop(t.cardEl); refresh(); }}><Crop size={15} /></IconButton>
-        <IconButton label="旋转 90°" onClick={() => apply({ rotation: ((meta.rotation || 0) + 90) % 360 })}><RotateCw size={15} /></IconButton>
-        <IconButton label="宽高" active={menu === "imgsize"} onClick={(e) => openWithDraft("imgsize", meta.width ? String(meta.width) : "", e.currentTarget)}><Scaling size={15} /></IconButton>
-        <span className="selection-toolbar__sep" />
-        <IconButton label="链接" active={menu === "imglink" || Boolean(meta.link)} onClick={(e) => openWithDraft("imglink", meta.link, e.currentTarget)}><Link2 size={15} /></IconButton>
-        <IconButton label="描述" active={menu === "imgtitle" || Boolean(meta.title)} onClick={(e) => openWithDraft("imgtitle", meta.title, e.currentTarget)}><Type size={15} /></IconButton>
-        <span className="selection-toolbar__sep" />
-        <IconButton label="对齐" active={menu === "imgalign"} onClick={(e) => toggleMenu("imgalign", e.currentTarget)}><AlignLeft size={15} /></IconButton>
-        <IconButton label="样式" active={menu === "imgstyle"} onClick={(e) => toggleMenu("imgstyle", e.currentTarget)}><Palette size={15} /></IconButton>
-        <IconButton label="边距" active={menu === "imgmargin"} onClick={(e) => toggleMenu("imgmargin", e.currentTarget)}><MoveVertical size={15} /></IconButton>
-        <IconButton label="批量应用（同步样式/宽度到全文）" active={menu === "imgbatch"} onClick={(e) => toggleMenu("imgbatch", e.currentTarget)}><Layers size={15} /></IconButton>
-        <span className="selection-toolbar__sep" />
-        <IconButton label={asset ? "复制图片" : "复制（非本机资源不可用）"} disabled={!asset} onClick={() => { if (asset) void native.copyAssetImage(asset.noteId, asset.filename); }}><Copy size={15} /></IconButton>
-        <IconButton label={asset ? "另存为" : "下载（非本机资源不可用）"} disabled={!asset} onClick={() => { if (asset) void native.saveAssetAs(asset.noteId, asset.filename, asset.filename); }}><Download size={15} /></IconButton>
-        <IconButton label="删除图片" onClick={() => { run("deleteCard", t.cardId); setMenu(null); }}><Trash2 size={15} /></IconButton>
+      <div className="ne-card-toolbar">
+        {/* 与云端图片工具栏**同构同序**：旋转 · 裁剪 · 宽高 | 链接 · 描述 | 对齐 · 样式 · 边距 · 批量 |（末尾多一个 另存为）。
+            类名全部是内核卡片工具栏的 `.ne-card-toolbar-*`（样式来自 vendored lakex-doc.css，非自造）；
+            图标 1:1 取自云端 SVG（见 imageIcons.tsx）。 */}
+        <CardItem tip="旋转 90°" className="ne-card-toolbar-item" onClick={() => apply({ rotation: ((meta.rotation || 0) + 90) % 360 })}><IconImageRotate /></CardItem>
+        <CardItem tip="裁剪" className="ne-card-toolbar-item" onClick={() => { enterImageCrop(t.cardEl); refresh(); }}><IconImageCrop /></CardItem>
+        <CardItem tip="宽高" className="ne-card-toolbar-dropdown-item ne-card-toolbar-dropdown-item-has-title ant-dropdown-trigger" selected={menu === "imgsize"} onClick={(e) => { setDraft(meta.width ? String(meta.width) : ""); setDraftH(String(displayH)); openWithDraft("imgsize", meta.width ? String(meta.width) : "", e.currentTarget); }}><IconImageSize /><span>宽高</span></CardItem>
+        <div className="ne-ui-card-toolbar-divider" />
+        <CardItem tip="链接" className="ne-card-toolbar-dropdown-item ant-dropdown-trigger" selected={menu === "imglink" || Boolean(meta.link)} onClick={(e) => { setLinkSelf(meta.linkSelf); openWithDraft("imglink", meta.link, e.currentTarget); }}><IconImageLink /></CardItem>
+        <CardItem tip="描述" className="ne-card-toolbar-item ne-card-toolbar-item-has-title" selected={Boolean(meta.title)} onClick={() => openTitleEditor()}><IconImageTitle /><span>描述</span></CardItem>
+        <div className="ne-ui-card-toolbar-divider" />
+        <CardItem tip="对齐" className="ne-card-toolbar-select-item ant-dropdown-trigger" selected={menu === "imgalign"} onClick={(e) => toggleMenu("imgalign", e.currentTarget)}><IconImageAlign /><span className="ne-card-toolbar-arrow-down-icon" /></CardItem>
+        <CardItem tip="样式" className="ne-card-toolbar-select-item ne-card-toolbar-select-item-has-title ant-dropdown-trigger" selected={menu === "imgstyle"} onClick={(e) => toggleMenu("imgstyle", e.currentTarget)}><IconImageStyle /><span>样式</span><span className="ne-card-toolbar-arrow-down-icon" /></CardItem>
+        <CardItem tip="边距" className="ne-card-toolbar-dropdown-item ne-card-toolbar-dropdown-item-has-title ant-dropdown-trigger" selected={menu === "imgmargin"} onClick={(e) => toggleMenu("imgmargin", e.currentTarget)}><IconImageSpacing /><span>边距</span></CardItem>
+        <CardItem tip="批量应用" className="ne-card-toolbar-select-item ant-dropdown-trigger" selected={menu === "imgbatch"} onClick={(e) => toggleMenu("imgbatch", e.currentTarget)}><IconImageBatch /><span className="ne-card-toolbar-arrow-down-icon" /></CardItem>
+        <div className="ne-ui-card-toolbar-divider" />
+        <CardItem tip="另存为" className="ne-card-toolbar-item" disabled={!asset} onClick={() => { if (asset) void native.saveAssetAs(asset.noteId, asset.filename, asset.filename); }}><KIcon type="download" /></CardItem>
 
+        {/* 宽高：宽/高输入 + 25/50/75/100% 档位（云端同内容） */}
         {menu === "imgsize" && (
-          <div className="selection-toolbar__menu" role="menu" data-menu="imgsize">
-            <div className="selection-toolbar__menu--row">{sizeItem("small", "小")}{sizeItem("medium", "中")}{sizeItem("large", "大")}{sizeItem("original", "原始")}</div>
-            <div className="selection-toolbar__row">
-              <input className="selection-toolbar__input" type="number" min="16" placeholder="宽度 px" value={draft} onChange={(e) => setDraft(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") { const n = Number(draft); if (n > 0) apply({ width: Math.round(n) }); } }} />
-              <button type="button" className="selection-toolbar__apply" onClick={() => { const n = Number(draft); if (n > 0) apply({ width: Math.round(n) }); }}>应用</button>
+          <div className="selection-toolbar__cardpop" data-menu="imgsize">
+            <div className="selection-toolbar__inputrow">
+              <span className="ne-card-toolbar-input-title">宽</span>
+              <input className="ne-card-toolbar-input" type="number" min="16" value={draft} onChange={(e) => setDraft(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); applyWidth(); } }} />
+              <span className="ne-card-toolbar-input-title">高</span>
+              <input className="ne-card-toolbar-input" type="number" min="16" value={draftH} onChange={(e) => setDraftH(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); applyHeight(); } }} />
+            </div>
+            <div className="ln-segment selection-toolbar__scale">
+              {[25, 50, 75, 100].map((p) => (
+                <button key={p} type="button" className={"ln-segment__item" + (scalePct === p ? " is-active" : "")} onClick={() => apply({ width: Math.max(16, Math.round((meta.originalWidth * p) / 100)) })}>{p}%</button>
+              ))}
             </div>
           </div>
         )}
+        {/* 链接：网址输入 + 「在当前页面打开」 */}
         {menu === "imglink" && (
-          <div className="selection-toolbar__menu" role="menu" data-menu="imglink">
-            <div className="selection-toolbar__row">
-              <input className="selection-toolbar__input" type="text" placeholder="https://…" value={draft} onChange={(e) => setDraft(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") apply({ link: draft.trim(), linkTarget: draft.trim() ? "_blank" : "" }); }} />
-              <button type="button" className="selection-toolbar__apply" onClick={() => apply({ link: draft.trim(), linkTarget: draft.trim() ? "_blank" : "" })}>应用</button>
-            </div>
-            <button type="button" role="menuitem" className="selection-toolbar__item" onClick={() => apply({ link: "", linkTarget: "" })}>移除链接</button>
+          <div className="selection-toolbar__cardpop" data-menu="imglink">
+            <input className="ne-card-toolbar-input selection-toolbar__urlinput" type="text" placeholder="请输入网址" value={draft} onChange={(e) => setDraft(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); applyLink(); } }} />
+            <label className="selection-toolbar__checkrow"><KCheckbox checked={linkSelf} onChange={setLinkSelf} />在当前页面打开</label>
           </div>
         )}
-        {menu === "imgtitle" && (
-          <div className="selection-toolbar__menu" role="menu" data-menu="imgtitle">
-            <div className="selection-toolbar__row">
-              <input className="selection-toolbar__input" type="text" placeholder="图片描述" value={draft} onChange={(e) => setDraft(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") apply({ title: draft, showTitle: draft.length > 0 }); }} />
-              <button type="button" className="selection-toolbar__apply" onClick={() => apply({ title: draft, showTitle: draft.length > 0 })}>应用</button>
-            </div>
-            <button type="button" role="menuitem" className="selection-toolbar__item" onClick={() => apply({ showTitle: !meta.showTitle })}>{meta.showTitle ? "隐藏描述" : "显示描述"}</button>
+        {/* 边距：上/下两个开关（内核 card spacing） */}
+        {menu === "imgmargin" && (
+          <div className="selection-toolbar__cardpop" data-menu="imgmargin">
+            <div className="selection-toolbar__switchrow"><span>为图片添加上边距</span><KSwitch checked={spacingTop} onChange={(v) => setSpacing(v, spacingBottom)} /></div>
+            <div className="selection-toolbar__switchrow"><span>为图片添加下边距</span><KSwitch checked={spacingBottom} onChange={(v) => setSpacing(spacingTop, v)} /></div>
           </div>
         )}
         {menu === "imgalign" && (
-          <div className="selection-toolbar__menu" role="menu" data-menu="imgalign">
-            <button type="button" role="menuitem" className={"selection-toolbar__item" + (meta.style === "left" ? " is-active" : "")} onClick={() => apply({ style: "left" })}><AlignLeft size={15} /> 左对齐</button>
-            <button type="button" role="menuitem" className={"selection-toolbar__item" + (meta.style === "center" ? " is-active" : "")} onClick={() => apply({ style: "center" })}><AlignCenter size={15} /> 居中</button>
-            <button type="button" role="menuitem" className={"selection-toolbar__item" + (meta.style === "right" ? " is-active" : "")} onClick={() => apply({ style: "right" })}><AlignRight size={15} /> 右对齐</button>
-            <button type="button" role="menuitem" className={"selection-toolbar__item" + (meta.style === "none" ? " is-active" : "")} onClick={() => apply({ style: "none" })}>默认</button>
-          </div>
-        )}
-        {menu === "imgmargin" && (
-          <div className="selection-toolbar__menu" role="menu" data-menu="imgmargin">
-            <button type="button" role="menuitem" className="selection-toolbar__item" onClick={() => apply({ margin: { top: true, bottom: true } })}>默认间距</button>
-            <button type="button" role="menuitem" className="selection-toolbar__item" onClick={() => apply({ margin: { top: false, bottom: false } })}>紧凑（无间距）</button>
-          </div>
+          <CardMenu menu="imgalign">
+            <CardMenuItem label="左对齐" icon="editor-alignmentLeft" selected={meta.alignment === "left"} onClick={() => align("left")} />
+            <CardMenuItem label="居中对齐" icon="editor-alignmentCenter" selected={meta.alignment === "center"} onClick={() => align("center")} />
+            <CardMenuItem label="右对齐" icon="editor-alignmentRight" selected={meta.alignment === "right"} onClick={() => align("right")} />
+          </CardMenu>
         )}
         {menu === "imgstyle" && (
-          <div className="selection-toolbar__menu" role="menu" data-menu="imgstyle">
+          <CardMenu menu="imgstyle">
             {IMAGE_STYLE_OPTIONS.map((s) => (
-              <button key={s.value} type="button" role="menuitem" className={"selection-toolbar__item" + (meta.style === s.value ? " is-active" : "")} onClick={() => apply({ style: s.value })}>{meta.style === s.value ? "✓ " : "　"}{s.label}</button>
+              <CardMenuItem key={s.value} label={s.label} selected={meta.style === s.value} onClick={() => apply({ style: s.value })} />
             ))}
-          </div>
+          </CardMenu>
         )}
         {menu === "imgbatch" && (
-          <div className="selection-toolbar__menu" role="menu" data-menu="imgbatch">
-            <div className="selection-toolbar__menu-label">批量应用格式：对本文档的图片一键应用样式和宽度</div>
-            <button type="button" role="menuitem" className="selection-toolbar__item" onClick={() => batch({ style: meta.style })}>同步图片样式到全文</button>
-            <button type="button" role="menuitem" className="selection-toolbar__item" onClick={() => batch({ width: meta.width || imageSizeWidth("medium", meta.originalWidth) })}>同步图片宽度到全文</button>
-          </div>
+          <CardMenu menu="imgbatch">
+            <CardMenuItem label="同步图片样式到全文" onClick={() => batch({ style: meta.style })} />
+            <CardMenuItem label="同步图片宽度到全文" onClick={() => batch({ width: meta.width || imageSizeWidth("medium", meta.originalWidth) })} />
+          </CardMenu>
         )}
-      </>
+      </div>
     );
   };
 
