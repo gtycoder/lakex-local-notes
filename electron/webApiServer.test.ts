@@ -62,7 +62,7 @@ describe("webApiServer", () => {
     expect(out.indexOf("<script src=\"/assets/a.js\"")).toBeGreaterThan(shimIdx);
   });
 
-  it("shim 包含全部方法 + assetToken/assetPort + 事件 no-op", () => {
+  it("shim 包含全部方法 + assetToken/assetPort + SSE 订阅", () => {
     const shim = renderNativeShim("api-tok", "asset-tok", 19877);
     expect(shim).toContain(`assetPort: 19877`);
     expect(shim).toContain(`var API_TOKEN = "api-tok"`);
@@ -71,7 +71,9 @@ describe("webApiServer", () => {
     for (const method of Object.keys(WEB_METHODS)) {
       expect(shim).toContain(`"${method}":`);
     }
-    expect(shim).toContain("onSyncProgress");
+    expect(shim).toContain(`var EVENT_URL = "/__events"`);
+    expect(shim).toContain(`onSyncProgress: function (cb) { return subscribe("sync-progress", cb); }`);
+    expect(shim).toContain(`onPendingSummaryChanged: function (cb) { return subscribe("pending-summary-changed", cb); }`);
   });
 
   describe("HTTP 行为", () => {
@@ -229,6 +231,37 @@ describe("webApiServer", () => {
 
       const evil = await fetch(`${base}/../secret.txt`);
       expect([403, 404]).toContain(evil.status);
+    });
+
+    it("SSE /__events：无 token → 403；带 token → 200 text/event-stream 且收到 broadcast 帧", async () => {
+      expect((await fetch(`${base}/__events`)).status).toBe(403);
+      expect((await fetch(`${base}/__events`, { headers: { "x-lake-token": "wrong" } })).status).toBe(403);
+
+      const ctrl = new AbortController();
+      const res = await fetch(`${base}/__events`, { headers: { "x-lake-token": "test-token" }, signal: ctrl.signal });
+      expect(res.status).toBe(200);
+      expect(res.headers.get("content-type") ?? "").toContain("text/event-stream");
+      const reader = res.body!.getReader();
+      const decoder = new TextDecoder();
+      let received = "";
+      const framePromise = (async () => {
+        while (true) {
+          const chunk = await reader.read();
+          if (chunk.done) break;
+          received += decoder.decode(chunk.value, { stream: true });
+          if (received.includes("event: sync-progress")) break;
+        }
+        return received;
+      })().catch(() => received);
+      await new Promise((r) => setTimeout(r, 50)); // 等连接注册进 sseClients
+      server.broadcast("sync-progress", { phase: "done", message: "ok" });
+      await Promise.race([
+        framePromise,
+        new Promise((_, rej) => setTimeout(() => rej(new Error("sse timeout")), 2000)),
+      ]);
+      expect(received).toContain("event: sync-progress");
+      expect(received).toContain(`"phase":"done"`);
+      ctrl.abort();
     });
   });
 });

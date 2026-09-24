@@ -89,6 +89,8 @@ function broadcastSyncProgress(p: SyncProgress): void {
     if (!trustedWebContents.has(win.webContents.id)) continue;
     try { win.webContents.send("sync-progress", p); } catch { /* 窗口已关闭 */ }
   }
+  // 浏览器端（Web 客户端）：走 SSE 推送（未开启时 no-op）
+  webServerController?.broadcast("sync-progress", p);
 }
 
 /** 退出时若同步在途，置位并在同步结束后真正退出（避免中断上传/写盘） */
@@ -360,6 +362,8 @@ function registerIpc(): ReadonlyMap<string, (args: unknown[]) => Promise<unknown
       for (const win of BrowserWindow.getAllWindows()) {
         try { win.webContents.send("pending-summary-changed", summary); } catch { /* 窗口已关闭 */ }
       }
+      // 浏览器端（Web 客户端）：走 SSE 推送（未开启时 no-op）
+      webServerController?.broadcast("pending-summary-changed", summary);
     } catch { /* store 未就绪（早期调用）忽略 */ }
   };
   const ipc = createIpcRegistrar((event) => {

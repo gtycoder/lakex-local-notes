@@ -4,7 +4,31 @@
 > 历史所有 dated handoff 已合并进本文件（内容在 git 历史可查）。本文件只保留**当前状态 + 真正的待办 + 有价值的坑**。
 > **§8 是移动端（安卓）专职交接**，由移动端会话维护；桌面会话不要改 §8，移动端会话不要改 §0-§7 之外的桌面文件。
 
-## 0. 最新交接 · 260924 晚 续八 · 粘贴内容的字体不会被外部污染（内核已剥离 font-family，确认无需适配）
+## 0. 最新交接 · 260924 晚 续九 · 浏览器端阶段 1：SSE 推送落地
+
+> 用户 260924 确认「先做」浏览器端。本批 = 立项调研（思源浏览器端）+ **阶段 1 SSE 推送**落地。专项见 `docs/BROWSER-CLIENT-DESIGN.md`；思源调研原文见工作区根 `siyuan-kernel-web-server-report.md` / `siyuan-browser-adaptation-report.md`。已提交推送（hash 见 `git log -1`）。
+
+### 一、调研结论（思源，详见设计文档）
+- 思源浏览器端 = 「内核 + Web UI」架构的另一个前端（Docker/服务器模式；`GET /` 按 UA 分流 desktop/mobile bundle；可选局域网 + `AccessAuthCode`）。
+- 能力差异由 `getHostCapabilities()`（「连接来源 + 内核归属」推导；连**本机**内核时大多仍为 true，只有连**远程**才降级）+ 编译期 `#if BROWSER` 决定；推送用同源 `/ws`。
+- 我们**不借鉴**：双 bundle ifdef、局域网/远程鉴权（AccessAuthCode/OIDC/JWT/限流）、发布服务/WebDAV/CalDAV、WS 双向 RPC。两个反面坑：思源 CORS `ACAO:*` + `Credentials:true` 同设、回环无密码即管理员。
+
+### 二、阶段 1：SSE 推送（本批交付）
+- `electron/webApiServer.ts`：新增 **`GET /__events`**（与 `/api` 同一 header token；`Cache-Control:no-store`、`x-accel-buffering:no`）；`WebApiServer.broadcast(event,data)` 写 `event:/data:` 帧；`server.on("close")` 清理客户端；`WebServerController.broadcast` 转发。
+- `electron/main.ts`：`broadcastSyncProgress` 与 pending 摘要 diff（`afterInvoke`）各加一行 `webServerController?.broadcast(...)`（Web 未开时 no-op）。
+- shim（`renderNativeShim`）：`onSyncProgress`/`onPendingSummaryChanged` 改为 **fetch 流自解析 SSE** 的「单连接多监听」（EventSource 不能带 header），返回 unsubscribe；无监听时断开、断线 3s 重连。
+
+### 三、验证
+- 单测 `webApiServer.test.ts`（+1）：无 token→403；带 token→200 `text/event-stream`；`broadcast` 帧投递；shim 断言更新。
+- 真机冒烟（Web API）：开 web 服务 → 取 shim token → 连 `/__events` → `/api/create_note` 写操作 → SSE 收到 `event: pending-summary-changed`（帧 2，含 `: connected`）；临时笔记已 delete+purge。
+- 门禁：`tsc` 0 · `vitest` **1265 passed / 16 skipped** · `git diff --check` clean。
+
+### 四、下一步
+- **阶段 2**：宿主能力 + 浏览器等价路径（导出/备份改下载、`openAttachment` 新标签、`showInFolder` 隐藏、`copyAssetImage` 走 `navigator.clipboard`）；方案见设计文档 §3。
+
+---
+
+## 0. 最新交接 · 260924 晚 续八 · 粘贴内容的字体不会被外部污染（内核已剥离 font-family，确认无需适配） —— ⚠️ 已被上一节取代（历史记录）
 
 > 用户 260924 问：换字体后，粘贴进来的内容会不会带进外部 `font-family` 污染？**结论：不会**，内核在粘贴时已剥离，**本批无代码改动**（纯调研 + 回填契约）。
 
@@ -3072,7 +3096,7 @@ P4 组件库 14 件 → P5 逐屏迁移（每屏对照底账打勾）→ P6 第�
 7. **Lake 正文写入收口**（约定见 `docs/LAKE-CONTENT-WRITING.md`）：① 自动化程序（不在仓库）**直接写库 + 手写裸 `<img>`**，导致 287 篇测试文档一被打开就被内核重写（图片降级成失败卡片 + 变待同步 → 随下次同步上传）→ **必须改成走应用写入路径，或只写纯文本**；② 仓库内 4 处手拼写入者**已收口**到 `src/core/lakeDocForm.ts`，并加了"绝不产出裸 `<img>`"的单测围栏；③ 旧数据按 §3 原则 7 **不写归一化兼容**，用修好的姿势重建（见第 8 条）。
 8. **旧数据处置 —— 等用户决定，别擅自动数据**：287 篇含裸 `<img>`（+7 篇已降级成失败卡片）。选项：**A 删掉重播（推荐，符合原则 7）** / B 留着但别打开 / C 就地改写成卡片（= 为损坏数据写代码，与原则 7 冲突，不推荐）。
 9. **「深层重复」CSS 候选清理（260917 已收口；结论：不做整批）**：档0（围栏基线纠偏）+ 档1（可证死声明清理）已完成，见 §2。按严格口径（同 at-rule 上下文 + 同单选择器 + 同属性）**全库只有 55 条可安全删**，已删并 ab2 全矩阵 34 状态证 0 差异。此前估算的"29 文件 / 3835 声明 / 184 争用（147 跨层）/ 92 选择器"**大多是把不同 `@media` 条件（宽/窄两套）算成争用**——那些不能删。**结论：不再推进 8–12 人日的整批清理**；若日后新增重复，围栏 `src/styles/cssLayers.test.ts` 会卡住，`scripts/css-audit/plan-dup-decls.mjs` 可随时重生成候选。
-10. **浏览器端（本机附属窗口）后续 —— 等用户决定是否做**：本次只交付"开关 + 说明 + 打开按钮"，功能未细化。若要做，已知缺口按此顺序：① **推送**（最大）：浏览器收不到 `sync-progress`/`pending-summary-changed`（shim 里是 no-op）→ 需给 `webApiServer` 加 SSE + 在 `main.ts` 两处广播点接 sink（事件少、广播集中，约 0.5–1 天）；② **宿主能力浏览器化**：导出/备份走 `dialog`、`openAttachment`/`reveal*` 走 `shell`、`copyAsset*` 走 `clipboard`/`nativeImage`——在浏览器里语义错（会去操作桌面机），需换下载 / `navigator.clipboard` / `<input type=file>` 或隐藏；③ **开发体验**：只服务构建产物 `dist/`（无 HMR），无 `npm run dev:web` 脚本；④ **安全**：`/api/*` 只校验 `x-lake-token`（复用 assetToken）、不校验 Origin，`/__native.js` 不校验 token（与 W-8 ACAO 同类，建议一起定调）。
+10. **浏览器端（本机附属窗口）后续（专项见 `docs/BROWSER-CLIENT-DESIGN.md`）**：已完成"开关 + 说明 + 打开按钮" + **阶段 1 SSE 推送**；剩余缺口按优先级：① ✅ **推送已做（260924，见本文件最上方 §0）**：`GET /__events` SSE（header token 鉴权）+ `webServerController.broadcast`；`main.ts` 的 `broadcastSyncProgress` 与 pending 摘要 diff（`afterInvoke`）已接 sink；shim 里 `onSyncProgress`/`onPendingSummaryChanged` 用 fetch 流自解析 SSE；② **宿主能力浏览器化**：导出/备份走 `dialog`、`openAttachment`/`reveal*` 走 `shell`、`copyAsset*` 走 `clipboard`/`nativeImage`——在浏览器里语义错（会去操作桌面机），需换下载 / `navigator.clipboard` / `<input type=file>` 或隐藏；③ **开发体验**：只服务构建产物 `dist/`（无 HMR），无 `npm run dev:web` 脚本；④ **安全（已复核：比早期记录的更完整）**：已有 Origin/Host 白名单（防 DNS rebinding）、`Sec-Fetch-Site` 跨站拒绝、仅 header token（常量时间、禁 query）、`/__native.js` 限 same-origin/none、dist 路径穿越防护；剩余可选增强见 `docs/BROWSER-CLIENT-DESIGN.md` 阶段 3。
     - **AI 生成的文档能否"各端发现"（用户 260917 提问 → 结论）**：只要 AI **走应用写入路径**（`createNote` + `saveNote`，媒体让内核产出——**禁直写库/手拼 `.lake`**，见 `docs/LAKE-CONTENT-WRITING.md`），就会以 `sync_state='local'` 落库 → **跨设备**靠现有 S3 同步天然可见（无需新机制）；**同机多窗口/浏览器**要"立即看到"则需再加一个 `library-changed` 事件（复用同一 SSE 通道）。**浏览器端本身只覆盖本机**（绑 127.0.0.1，不是同步参与者）；AI 若在云端生成属另一套设计（走同步协议或把 webApiServer 暴露到网络 = 需单独的安全方案）。
 
 11. **【优化项 · 用户 260918 决定「先不做」】块拖拽的两个进阶能力：多块选区批量拖拽 + 拖拽改层级（蓝色导引线）**

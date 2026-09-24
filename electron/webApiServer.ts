@@ -271,11 +271,80 @@ export function renderNativeShim(apiToken: string, assetToken: string, assetPort
     Object.defineProperty(err, "code", { value: code, enumerable: true });
     return err;
   }
+  // SSE 推送：/__events 用 header token 鉴权（EventSource 不能带 header，故用 fetch 流自解析）。
+  var EVENT_URL = "/__events";
+  var EVENT_NAMES = ["sync-progress", "pending-summary-changed"];
+  var NL = String.fromCharCode(10);
+  var listeners = {};
+  EVENT_NAMES.forEach(function (n) { listeners[n] = []; });
+  var streamAbort = null;
+  var streamBuf = "";
+  function hasListeners() {
+    return EVENT_NAMES.some(function (n) { return listeners[n].length > 0; });
+  }
+  function dispatchEvent(event, raw) {
+    var arr = listeners[event];
+    if (!arr || !arr.length) return;
+    var data;
+    try { data = JSON.parse(raw); } catch (e) { return; }
+    arr.slice().forEach(function (cb) { try { cb(data); } catch (e) {} });
+  }
+  function handleFrame(frame) {
+    var event = "message", raw = "";
+    frame.split(NL).forEach(function (line) {
+      if (line.slice(0, 6) === "event:") event = line.slice(6).trim();
+      else if (line.slice(0, 5) === "data:") raw += (raw ? NL : "") + line.slice(5).trim();
+    });
+    dispatchEvent(event, raw);
+  }
+  function retryEventStream() {
+    if (streamAbort) { try { streamAbort.abort(); } catch (e) {} }
+    streamAbort = null;
+    streamBuf = "";
+    if (hasListeners()) setTimeout(openEventStream, 3000);
+  }
+  function openEventStream() {
+    if (streamAbort || !hasListeners() || typeof fetch !== "function") return;
+    var ctrl = new AbortController();
+    streamAbort = ctrl;
+    fetch(EVENT_URL, { headers: { "x-lake-token": API_TOKEN }, signal: ctrl.signal, cache: "no-store" })
+      .then(function (res) {
+        if (!res.ok || !res.body) throw new Error("event stream HTTP " + res.status);
+        var reader = res.body.getReader();
+        var decoder = new TextDecoder();
+        var pump = function () {
+          reader.read().then(function (chunk) {
+            if (chunk.done) throw new Error("event stream ended");
+            streamBuf += decoder.decode(chunk.value, { stream: true });
+            var idx;
+            while ((idx = streamBuf.indexOf(NL + NL)) >= 0) {
+              var frame = streamBuf.slice(0, idx);
+              streamBuf = streamBuf.slice(idx + 2);
+              if (frame) handleFrame(frame);
+            }
+            pump();
+          }).catch(retryEventStream);
+        };
+        pump();
+      })
+      .catch(retryEventStream);
+  }
+  function subscribe(event, cb) {
+    if (!listeners[event]) listeners[event] = [];
+    listeners[event].push(cb);
+    openEventStream();
+    return function () {
+      var arr = listeners[event];
+      var i = arr.indexOf(cb);
+      if (i >= 0) arr.splice(i, 1);
+      if (!hasListeners() && streamAbort) { try { streamAbort.abort(); } catch (e) {} streamAbort = null; streamBuf = ""; }
+    };
+  }
   var native = {
     assetPort: ${JSON.stringify(assetPort)},
     assetToken: ASSET_TOKEN,
-    onSyncProgress: function () { return function () {}; },
-    onPendingSummaryChanged: function () { return function () {}; }
+    onSyncProgress: function (cb) { return subscribe("sync-progress", cb); },
+    onPendingSummaryChanged: function (cb) { return subscribe("pending-summary-changed", cb); }
   };
   Object.keys(METHODS).forEach(function (name) {
     var channel = METHODS[name];
@@ -300,10 +369,17 @@ export function renderNativeShim(apiToken: string, assetToken: string, assetPort
 `;
 }
 
-export function startWebApiServer(opts: WebApiServerOptions): http.Server {
+export interface WebApiServer extends http.Server {
+  /** 向所有已连接的 Web 客户端推送一条 SSE 事件（无客户端时 no-op）。 */
+  broadcast(event: string, data: unknown): void;
+}
+
+export function startWebApiServer(opts: WebApiServerOptions): WebApiServer {
   const { distDir, registry, token, assetToken, assetPort } = opts;
   const port = opts.port ?? WEB_API_PORT;
   const log = opts.log ?? { info: () => {}, warn: () => {} };
+  /** 已连接的 SSE 客户端（/__events）。 */
+  const sseClients = new Set<http.ServerResponse>();
 
   const server = http.createServer(async (req, res) => {
     try {
@@ -316,6 +392,27 @@ export function startWebApiServer(opts: WebApiServerOptions): http.Server {
       if (isCrossSiteRequest(req, boundPort)) {
         json(res, 403, { ok: false, code: "NOT_CONFIGURED", message: "cross-site request rejected" });
         return;
+      }
+
+      // ⓪ SSE 推送通道（GET /__events）：与 /api 同一 header token；连接常驻，事件由 broadcast 下发。
+      if (url.pathname === "/__events") {
+        if (req.method !== "GET") { json(res, 405, { ok: false, code: "INVALID_INPUT", message: "method not allowed" }); return; }
+        if (!timingSafeEqual(readTokenHeader(req), token)) {
+          json(res, 403, { ok: false, code: "NOT_CONFIGURED", message: "web api token invalid" });
+          return;
+        }
+        res.writeHead(200, {
+          "content-type": "text/event-stream; charset=utf-8",
+          "cache-control": "no-store",
+          "connection": "keep-alive",
+          "x-accel-buffering": "no",
+        });
+        res.write(": connected\n\n");
+        sseClients.add(res);
+        const drop = (): void => { sseClients.delete(res); };
+        res.on("close", drop);
+        res.on("error", drop);
+        return; // 保持连接，不 end
       }
 
       // ① 通用 API 通道
@@ -405,13 +502,26 @@ export function startWebApiServer(opts: WebApiServerOptions): http.Server {
     }
   });
 
+  const broadcast = (event: string, data: unknown): void => {
+    if (sseClients.size === 0) return;
+    const frame = `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
+    for (const res of sseClients) {
+      try { res.write(frame); } catch { sseClients.delete(res); }
+    }
+  };
+  (server as WebApiServer).broadcast = broadcast;
+
   server.on("error", (error) => {
     log.warn(`[web-api] 端口 ${port} 启动失败（桌面端不受影响）: ${(error as Error).message}`);
+  });
+  server.on("close", () => {
+    for (const res of sseClients) { try { res.end(); } catch { /* 忽略 */ } }
+    sseClients.clear();
   });
   server.listen(port, "127.0.0.1", () => {
     log.info(`[web-api] Web 客户端已就绪: http://127.0.0.1:${port}/`);
   });
-  return server;
+  return server as WebApiServer;
 }
 
 export interface WebServerStatus {
@@ -427,15 +537,18 @@ export interface WebServerStatus {
 export interface WebServerController {
   getStatus(): WebServerStatus;
   setEnabled(enabled: boolean): Promise<WebServerStatus>;
+  /** 向已连接的 Web 客户端推送事件（Web 未开启 / 无客户端时 no-op）。 */
+  broadcast(event: string, data: unknown): void;
 }
 
 export function createWebServerController(opts: WebApiServerOptions): WebServerController {
   const port = opts.port ?? WEB_API_PORT;
   const url = `http://127.0.0.1:${port}/`;
-  let server: http.Server | null = null;
+  let server: WebApiServer | null = null;
   const status = (): WebServerStatus => ({ enabled: server !== null && server.listening, port, url });
   return {
     getStatus: status,
+    broadcast(event: string, data: unknown): void { if (server) server.broadcast(event, data); },
     setEnabled(enabled: boolean): Promise<WebServerStatus> {
       if (enabled) {
         if (server) return Promise.resolve(status());
