@@ -128,3 +128,24 @@
 - `AssetSyncPlugin`：SigV4 自签 + 流式 `putFile` / `getFile` / `listAssets`（sha256 原生算）。JS 用 `nativeAssetSync` 探测接入：移动端 `putObjectStream` 与 `openLocalAssetStream`/`listLocalAssets` 走原生，非原生/失败回退字节路径；**core 未改动**。
 - 实测：256KB 资产原生 PUT/GET 到 S3 逐字节一致；整轮同步 `assetHttp/assetB64Encode/fsRead = 0`（资产字节不过桥）。跨端 `run5native.mjs` 4/4（E 原生上传 → D1 逐字节一致；D1 → E 下载逐字节一致）。
 - **下载也已接入**：core 加可选 `S3Store.getObjectToFile` + `SyncDbPort.assetFilePath`，`downloadNoteAssets` 加一个 else 保留原逻辑的分支；移动端实现后下载字节也不进 JS。跨端 `run5native` **5/5**（D1→E 下载逐字节一致且 `assetHttp=0`）。桌面不实现该可选方法 → 走 else，行为不变。
+
+## 14. 桌面索引容量基准（260925 续）
+
+本机 `LAKE_RUN_BENCHMARK=1 LAKE_BENCH_N=<N> npx vitest run electron/searchRepository.benchmark.test.ts`（`SearchRepository.rebuild()` 全量重建 + 查询）：
+
+| N | 全量建索引 | DB 大小 | 1 字 | 2 字 | 3 字 | 拉丁 |
+|---|---|---|---|---|---|---|
+| 5,000 | 159ms | 9.8MB | 5.3ms | 2.6ms | 2.5ms | 7.5ms |
+| 10,000 | 330ms | 20.4MB | 10.3ms | 5.2ms | 5.0ms | 14.9ms |
+| 20,000 | 684ms | 39.4MB | 20.9ms | 11.6ms | 11.3ms | 32.4ms |
+| 100,000 | 3,813ms | 195.8MB | 111.9ms | 64.0ms | 61.3ms | 179.8ms |
+
+- **全量重建 O(N) 线性**：5k→10k 2.08×、10k→20k 2.07×，约 38µs/篇；100k ≈ 3.8s。
+- **查询也近似线性**（本例是最坏情况：基准只用 300 个不同汉字，1 字词几乎全命中；真实选择性强的词会快很多）。
+- **增量（稳态）与库大小无关**：成本 ∝ churn（HANDOFF：8000 篇 churn=100 → 79ms、零变更 2000 篇 4.5ms）。
+- 结论：桌面稳态快，是因为「增量 O(churn)」，不是因为「全量也快」；**翻倍影响的是全量重建与查询**，在 100k 目标量级仍是秒级/百毫秒级。
+
+### 14.1 对「移动端异步索引」的取舍
+- 实测（真机）：1000 篇全量同步 49.45s，其中 `reconcileIndex` **1.64s（≈3.3%）**；模拟器 185ms。**当前量级下异步收益很小**（最多省这 1.6s 的同步返回等待），代价是搜索暂缺窗口 + core 调度器抽象 + UI 状态 + maintenance 串行/测试。
+- 但**按设计目标 10 万文档**：移动端 reconcile 对每个变更条目在 JS 里做 `sha256Sync(title/body)`（纯 JS SHA256），线性放大后可能到**几十秒**；届时「异步」或「原生算 hash / 整段索引下沉」才真正有价值。
+- 因此：**现在不做**，等 10 万级实测证明 reconcile 成为移动端瓶颈时再做；届时应连同「原生 hash」一起评估，而不是只把它挪到后台。**桌面侧保持同步（eager）不变。**
