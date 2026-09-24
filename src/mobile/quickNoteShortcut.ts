@@ -23,7 +23,7 @@ function isNativePlatform(): boolean {
   return (window as { Capacitor?: { isNativePlatform?: () => boolean } }).Capacitor?.isNativePlatform?.() === true;
 }
 
-/** 原生「固定到桌面」插件（Android：ShortcutManager.requestPinShortcut；见 PinShortcutPlugin.java）。 */
+/** 原生「固定到桌面」插件（Android：ShortcutManager.requestPinShortcut；见 PinShortcutPlugin.kt）。 */
 interface PinShortcutPluginApi {
   isAvailable(): Promise<{ available: boolean }>;
   isPinned(): Promise<{ pinned: boolean }>;

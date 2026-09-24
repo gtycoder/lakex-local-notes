@@ -20,12 +20,12 @@ describe("系统分享接入（ACTION_SEND）", () => {
   });
 
   it("原生插件接住分享，冷启动 load / 热启动 handleOnNewIntent 都覆盖", () => {
-    const java = read("../../android/app/src/main/java/com/lakenotes/mobile/SharedContentPlugin.java");
-    expect(java).toMatch(/Intent\.ACTION_SEND/);
-    expect(java).toMatch(/void load\(\)/);
-    expect(java).toMatch(/handleOnNewIntent/);
-    expect(java).toMatch(/notifyListeners\("shared"/);
-    expect(java).toMatch(/shared-inbox/);
+    const kt = read("../../android/app/src/main/java/com/lakenotes/mobile/SharedContentPlugin.kt");
+    expect(kt).toMatch(/Intent\.ACTION_SEND/);
+    expect(kt).toMatch(/override fun load\(\)/);
+    expect(kt).toMatch(/handleOnNewIntent/);
+    expect(kt).toMatch(/notifyListeners\("shared"/);
+    expect(kt).toMatch(/shared-inbox/);
   });
 
   it("App 冷启动 consume + 热启动 subscribe，并把分享变成小记 seed", () => {

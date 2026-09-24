@@ -6,6 +6,7 @@ import { sqlParameterBatches } from "../core/sqlParameterBatch.js";
 import { stageAssetWrites } from "./assetWrites.js";
 import { orphanFilenamesForNote } from "./noteRepository.js";
 import { createHistorySnapshot as insertHistorySnapshot } from "./historyRepository.js";
+import { NativeAssetSync, nativeAssetSyncSupported } from "./nativeAssetSync";
 import type { MobileDb } from "./sqliteDb.js";
 
 export interface MobileSyncDbPortDeps {
@@ -305,8 +306,23 @@ export function createMobileSyncDbPort(getDb: () => MobileDb, deps: MobileSyncDb
       // 孤儿不上传；持久化资产只在本方法内按需读取，避免启动全量加载。
       const orphans = await orphanFilenamesForNote(d, noteId);
       const diskFilenames = new Set((await deps.listNoteAssetKeys(noteId)).map((key) => key.slice(prefix.length)));
+      // 原生扫描：size+sha256 在原生算完只回元数据，免去把每个资产 base64 读进 JS 再算 hash。
+      let nativeMeta: Map<string, { size: number; hash: string }> | null = null;
+      if (nativeAssetSyncSupported()) {
+        try {
+          const res = await NativeAssetSync.listAssets({ noteId });
+          nativeMeta = new Map((res.assets ?? []).map((a) => [String(a.filename), { size: Number(a.size), hash: String(a.hash) }]));
+        } catch {
+          nativeMeta = null;
+        }
+      }
       for (const filename of diskFilenames) {
         if (orphans.has(filename)) continue;
+        const meta = nativeMeta?.get(filename);
+        if (meta) {
+          out.push({ filename, size: meta.size, hash: meta.hash });
+          continue;
+        }
         const bytes = deps.assets.get(prefix + filename) ?? await deps.loadAssetFile(prefix + filename);
         if (!bytes) continue;
         out.push({ filename, size: bytes.length, hash: sha256Sync(bytes) });
@@ -323,6 +339,14 @@ export function createMobileSyncDbPort(getDb: () => MobileDb, deps: MobileSyncDb
     async readLocalAsset(noteId, filename) {
       const key = noteId + "/" + filename;
       return deps.assets.get(key) ?? await deps.loadAssetFile(key);
+    },
+    /** 原生流式上传句柄：localKey 给原生定位文件；read 供原生失败时回退字节路径。 */
+    async openLocalAssetStream(noteId, filename) {
+      const key = noteId + "/" + filename;
+      return {
+        localKey: key,
+        read: () => deps.assets.get(key) ?? deps.loadAssetFile(key),
+      };
     },
     async getLastSeenCommitId() {
       const d = getDb();

@@ -1,6 +1,6 @@
 import type { ThemeMode } from "../lib/settings";
 
-/** Android 原生注入的接口（见 android/.../MainActivity.java 的 SystemBarsInterface）。 */
+/** Android 原生注入的接口（见 android/.../MainActivity.kt 的 SystemBarsInterface）。 */
 type SystemBarsBridge = { setDark?: (dark: boolean) => void };
 
 /**

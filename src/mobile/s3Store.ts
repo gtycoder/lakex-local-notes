@@ -8,6 +8,7 @@
 import type { S3Store, SyncConfig } from "../core/syncEngine.js";
 import { isGzip } from "../core/syncUtils.js";
 import { CapacitorHttpHandler } from "./capacitorHttpHandler";
+import { NativeAssetSync, nativeAssetSyncSupported } from "./nativeAssetSync";
 
 /** WebView 内置 gzip 解压（无需新增依赖）。 */
 async function decompressGzip(bytes: Uint8Array): Promise<Uint8Array> {
@@ -43,7 +44,29 @@ export function createCapacitorS3Store(cfg: SyncConfig): S3Store {
     return client;
   }
 
-  return {
+  async function putBytes(key: string, bytes: Uint8Array): Promise<void> {
+    const { PutObjectCommand } = await import("@aws-sdk/client-s3");
+    const c = await getClient();
+    await c.send(new PutObjectCommand({ Bucket: cfg.bucket, Key: key, Body: bytes }));
+  }
+
+  let nativeConfig: Promise<boolean> | null = null;
+  async function ensureNativeAssetSync(): Promise<boolean> {
+    if (!nativeAssetSyncSupported()) return false;
+    if (!nativeConfig) {
+      nativeConfig = NativeAssetSync.configure({
+        endpoint: cfg.endpoint,
+        region: cfg.region,
+        bucket: cfg.bucket,
+        accessKeyId: cfg.accessKeyId,
+        secretAccessKey: cfg.secretAccessKey,
+        forcePathStyle: false,
+      }).then(() => true).catch(() => false);
+    }
+    return nativeConfig;
+  }
+
+  const store: S3Store = {
     async getObject(key: string, opts?: { maxBytes?: number }): Promise<Uint8Array | null> {
       const { GetObjectCommand } = await import("@aws-sdk/client-s3");
       const c = await getClient();
@@ -97,4 +120,31 @@ export function createCapacitorS3Store(cfg: SyncConfig): S3Store {
       return deleted;
     },
   };
+
+  // 原生资产流式上传（字节不过桥）：core 的 scanLocalAssets 探测到 putObjectStream +
+  // SyncDbPort.openLocalAssetStream 同时存在才走流式；非原生平台不挂载 → 自动回退字节路径。
+  // 原生运行时失败也回退到字节路径，保证「有则原生、无则回退」。
+  if (nativeAssetSyncSupported()) {
+    store.putObjectStream = async (key, _size, open) => {
+      const handle = await open();
+      if (handle == null) throw new Error(`本地资产缺失: ${key}`);
+      const localKey = typeof handle === "string" ? handle : (handle as { localKey?: string }).localKey;
+      const read = typeof handle === "object" && handle !== null && typeof (handle as { read?: unknown }).read === "function"
+        ? (handle as { read: () => Promise<Uint8Array | null> }).read
+        : null;
+      if (localKey && (await ensureNativeAssetSync())) {
+        try {
+          await NativeAssetSync.putFile({ key, localKey });
+          return;
+        } catch {
+          // 原生 PUT 失败 → 回退字节路径（下面读取字节重传）
+        }
+      }
+      const bytes = read ? await read() : null;
+      if (!bytes) throw new Error(`本地资产读取失败: ${key}`);
+      await putBytes(key, bytes);
+    };
+  }
+
+  return store;
 }
