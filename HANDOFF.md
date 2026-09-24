@@ -4,7 +4,92 @@
 > 历史所有 dated handoff 已合并进本文件（内容在 git 历史可查）。本文件只保留**当前状态 + 真正的待办 + 有价值的坑**。
 > **§8 是移动端（安卓）专职交接**，由移动端会话维护；桌面会话不要改 §8，移动端会话不要改 §0-§7 之外的桌面文件。
 
-## 0. 最新交接 · 260924 晚 续 · 浮动工具栏收尾：「转为」拆散为独立按钮 + 标题图标 + 横向压缩（新会话先读这一节）
+## 0. 最新交接 · 260924 晚 续二 · 图片浮动工具栏「对齐云端」+ hover 说明 + 检索顺序补丁（新会话先读这一节）
+
+> 写给**完全没有上下文**的新会话。本批**已合入 master 并推送 Gitee**（见节末 commit）。
+> 一句话：把**图片浮动工具栏**从"我们自己造"改成**与云端语雀逐项一致**（内核 `.ne-card-toolbar` 结构 + 1:1 云端图标 + 云端顺序 + 云端子菜单内容），给文字/图片两端补上 **hover 短说明**，并把「内核资料检索顺序」补了**第 ⓪ 步**（血的教训）。
+
+### 一、任务目标（用户原话要点，按顺序）
+1. 文字浮栏收尾：「转为」拆散为独立按钮 / 图标给「标题」/ 补生效·禁用态 / 横向压缩 —— **上一批已提交**（`564f655` + `294ad22`）。
+2. 给浮动工具栏（文字+图片）加 **hover 说明**：「不要这么长，直接用名称快捷键就行」。
+3. 图片浮栏**精简**：保留 裁剪/旋转/宽高/链接/描述/对齐/样式/边距/批量/另存为；**删掉 复制、删除**。
+4. 图片浮栏**风格本地化**（仿照文字浮栏）→ 用户定稿「与云端几乎一致」。
+5. 图标**对齐**：用云端 lake 的图标；「看看内核有无对应的图标，例如宽高」。
+6. 子菜单**精准复刻**（「我们当前的子项样式完全不够」）+「另存为」换云端同款下载图标 + 顺序改成云端顺序。
+7. 弹窗**不能总在左侧**，要跟随触发项。
+8. 收尾：合并 master + 推送 + 交接。
+
+### 二、已完成（本批全部内容）
+
+**A. hover 说明（文字 + 图片）**
+- 内容 = `名称 + 内核快捷键`（`editor.renderer.getHotKeyByName(name).text`），**单行、无 markdown 行**。
+- 实现：`kernelUiAtoms.useHoverTip()` → **真实 DOM 浮层 portal 到 body**（`.selection-toolbar__tip`，令牌 `--lake-tooltip-bg/fg`，贴底自动翻到上方）。
+- **两条错路已实测否掉**：① 内核 `FrameworkUiLib.wrapTooltip` —— 浮栏是**独立 React root**，Tooltip 渲染了、触发器 `onMouseEnter` 也挂上了，但 popup **永不打开**；② 伪元素 `::before` 气泡 —— 内核运行时注入的规则让按钮 `::before` 变成 `display:none`，**根本不画**（文件里 grep 不到，属运行时注入）。
+
+**B. 图片浮栏：结构与顺序 = 云端**
+- 云端图片工具栏是 **`.ne-card-toolbar` 一族**（不是文字栏的 `.ne-ui-toolbar`）；类名与样式**全在 vendored 内核 CSS**（`grep -c ne-card-toolbar` = 76），我们直接套用、不再自造。
+- 顺序改为云端：**旋转 · 裁剪 · 宽高 | 链接 · 描述 | 对齐 · 样式 · 边距 · 批量 | 另存为**。
+- 「另存为」= 内核 sprite `download`（与云端同源），作为 card-toolbar 条目。
+- 外壳 `.selection-toolbar[data-kind="image"]` 只保留定位，观感全交给 `.ne-card-toolbar`；删掉自造的 `.selection-toolbar__menu/__item/__row/__input/__apply`。
+
+**C. 图标：1:1 取自云端**
+- 新增 `src/features/editor/selectionToolbar/imageIcons.tsx`：9 个图标组件，**精确复制**云端内联 SVG `<symbol>` 路径（viewBox 256 与 14 两种，`currentColor`，16px）。
+- 来源：**7 个本来就在 vendored** `components/lakex/icon.tsx`（`ne-t-image-crop/rotation/size/title/style`、`ne-t-link`、`ne-t-batch-apply`）；**只有 2 个本地没有**（`ne-t-alignment-center`、`ne-c-tb-spacing`），从云端页面 sprite 抓取。
+- lucide 依赖已从该组件移除。
+
+**D. 子菜单：按云端截图逐项复刻**
+
+| 项 | 内容 | 实现 |
+|---|---|---|
+| 宽高 | 宽[600] / 高[450] + 25% 50% 75% 100% | 内核 `.ne-card-toolbar-input` + kit `.ln-segment` |
+| 链接 | 「请输入网址」+ ☐「在当前页面打开」 | 内核 Input + `KCheckbox`（勾选 ⇒ `linkTarget:""`） |
+| 对齐 | 左对齐 / 居中对齐(✓) / 右对齐，**带图标** | 内核 `.ne-card-toolbar-select-menu`，图标 `editor-alignment*` |
+| 样式 | 无样式(✓) / 图片描边 / 图片阴影 | 同上 |
+| 边距 | 「为图片添加上边距」/「为图片添加下边距」两个开关 | 内核 `KSwitch` → 写 `cardValue.__spacing` |
+| 批量 | 同步图片样式到全文 / 同步图片宽度到全文 | 同上 |
+| 描述 | **无弹窗**，图片下方内联编辑框 | 点按 → `showTitle:true` + 聚焦 `.ne-image-title-content` |
+
+- **弹窗定位**：锚定到**触发项**（`toggleMenu(m, e.currentTarget)` 取 `offsetLeft`），越界在浮栏宽度内左移。上一版把 trigger 参数丢了 ⇒ 弹窗"总在左侧"（已修）。
+
+**E. 顺手修掉两个「没走内核」的语义 bug**
+- **对齐**：原先写进 `cardValue.style`（与「样式」抢同一字段）→ 改为**块级 `alignment` 命令**（块上 `ne-alignment`），并从 `[ne-alignment]` 读当前值。
+- **边距**：原先用内核不认的 `margin` 字段 → 改为内核 **`cardValue.__spacing`**（`cardData.setCardSpacing`：both/top/bottom/清空）。
+
+**F. 文档**
+- `AGENTS.md §2` 检索顺序**补第 ⓪ 步**：先翻自己 vendored 的包源码树、按**类名族/图标族**搜、注意 vendor 组件可能只挂在 `LakexEditor`（我们 **不用**的入口）上 ⇒ 按能力找、不按调用栈找。
+- `docs/LAKEX-CONTRACT.md` **新增 §5.14**：图片浮栏的结构/图标/子菜单内容 + 两条易错语义 + 两个云端独有图标的来源与抓法。
+
+### 三、当前问题 / 待用户点验（都不阻塞）
+1. **图片浮栏未做真机点验**（当前开发库打开的文档没有图片）：观感、以及**对齐/边距**这两个行为改动需要开一篇含图文档看。
+2. **「描述」走内核内联编辑框**：点按后应出现「添加图片描述」并可输入；若内核此时没把 `.ne-image-title-content` 设为可编辑，需要先让卡片进入编辑/选中态再聚焦 —— **待实测**。
+3. **子菜单「高」输入**按原图比例反算 `width`（内核 `cardValue` 只有 `width`，`height` 由比例推导）——不是独立设高。
+
+### 四、下一步计划（按优先级）
+1. 开含图文档点验本批（重点：对齐 / 边距 / 描述 / 弹窗锚定）。
+2. 回 **§3 的真正待办**：画板 AI 接入 / 离线残余 / 移动端批次 B7-B8 / 技术债（W-8 ACAO、W-10 dompurify）/ §3.18「最近颜色」。
+3. （可选清理）vendor 里那套自研 `components/plugin/imageToolbar/ImageToolbar.tsx`（`.ne-image-toolbar` + 硬编码色，只走 `LakexEditor` 这条我们不用的路径）建议标记死代码或删除，避免下次再被误导。
+
+### 五、踩过的坑（本批新增，务必先读）
+1. **hover 说明的两条错路**（见 §二 A）：浮栏 tooltip 只能用 **portal 浮层**。
+2. **`visibility:hidden` 的量测假象**：Electron 窗口被遮挡时 Chromium 节流样式重算，`getComputedStyle` 会返回 `hidden`（连内联 `!important` 都压不过）⇒ **判断 UI 前先 `Page.bringToFront` + `Emulation.setFocusEmulationEnabled`**。
+3. **检索前缀错位 = 本批最大的时间浪费**：图片浮栏图标是 `ne-t-*`，我按 `icon-*crop*` / 中文标签 / kitchen sprite 搜 —— 全不匹配；而 `components/plugin/imageToolbar/ImageToolbar.tsx`、`icon.tsx` 的 `ne-t-image-*`、`plugin/i18n.ts`、CSS 的 `.ne-card-toolbar-*` **本来就在仓库里**。
+4. **vendor 组件可能挂在「我们不用的入口」上**：`ImageToolbar` 只被 `LakexEditor` 引用，而我们直接 `Doc.createOpenEditor` ⇒ **从不运行** ⇒ 整片被忽略。**按能力找，不要按调用栈找**。
+5. **Vite HMR 对浮栏组件不可靠**：改了 `SelectionToolbar`/hook 后浮栏可能**不挂载**（表现为"完全没反应"）⇒ 必须整页 `Page.reload` 再验（CSS-only 可热更）。
+6. **CDP 量 `:hover` 很飘**：同一按钮时有时无；要稳定验证用 `CSS.forcePseudoState`，或"hover 出效果就截图"。
+7. **云端图片工具栏是 hover 触发、子菜单点击才挂载**：鼠标移到工具栏上会收起来 ⇒ CDP 很难点开子菜单；这次子菜单**内容**靠用户截图、**样式**靠内核 CSS 复刻。
+8. **内核 CSS 里 `.ne-card-toolbar-*` 全套本来就有**（76 条）——以后做 card/图片类 UI 先 grep 类名族。
+
+### 六、门禁（本批实测）
+`tsc` 0 · `vitest` **1264 passed / 16 skipped** · `ui-metrics` 全绿（`var(--b3-*)` 0 / 颜色字面量 0 / `!important` 9 / 未定义令牌 0）· 桌面+移动 `vite build` ✓ · `git diff --check` clean。
+`cssLayers` 基线：`selectionToolbar.css` **146 → 143 →（本批）133**（删自造类，样式改由内核 card-toolbar 提供）。
+
+### 七、关键文件
+- 图片浮栏：`src/features/editor/selectionToolbar/`（`SelectionToolbar.tsx` / **`imageIcons.tsx`（新增：云端 1:1 图标）** / `imageCardOps.ts` / `kernelUiAtoms.tsx`（`useHoverTip`/`KSwitch`/`KCheckbox`）/ `selectionToolbar.css`）
+- 护栏：`src/styles/cssLayers.test.ts` · 文档：`AGENTS.md §2 ⓪` · `docs/LAKEX-CONTRACT.md §5.14`
+
+---
+
+## 0. 最新交接 · 260924 晚 续 · 浮动工具栏收尾：「转为」拆散为独立按钮 + 标题图标 + 横向压缩 —— ⚠️ 已被上一节取代（历史记录）
 
 > 写给**完全没有上下文**的新会话。本节把 `fd63c29` 之后**未提交**的一批（上一会话遗留的「转为」下拉收尾 + 本会话的拆散/图标/压缩）整理并**已提交 master 推送 Gitee**。
 > 一句话：文字浮动工具栏的「**转为**」下拉**拆散成 5 个独立按钮**，把原「转为」的图标 `editor-paragraph` 交给「**标题**」，给这 5 个按钮补**内核同源的生效/禁用态**，并把整条浮栏**横向压短**。

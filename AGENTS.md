@@ -20,7 +20,9 @@ Lake Notes 是**本地优先**笔记应用（Electron + React + better-sqlite3 +
 - **具体待办与优先级只在 `HANDOFF.md` §3 维护**（`docs/TODO.md` 已删：历史总表无独立文档，权威待办只看 HANDOFF §3）。
 - 删除/恢复语义与 Electron 43 升级均已验收，后续改动必须保持现有同步语义（§3 原则 1~17）与全绿门禁。
 - 先修 Critical/Warning，再按模块拆分大文件；不在没有测试护栏的情况下进行大规模架构重写。
-- **编辑器内核（lakex）资料检索顺序 —— 涉及调用内核 API/配置项/命令时必走（260916 用户立规）**：
+- **编辑器内核（lakex）资料检索顺序 —— 涉及调用内核 API/配置项/命令时必走（260916 用户立规；260924 补第 ⓪ 步）**：
+  ⓪ **先翻我们自己 vendored 的包源码树**（260924 立规，血的教训）：`vendor/lakex-doc-react/src/**` —— 尤其 `components/plugin/**` 与 `components/lakex/icon.tsx`。**按「能力」搜，不按「调用栈」搜**：grep **类名族**（如 `ne-card-toolbar`）与**图标族**（`ne-t-*` / `icon-*`），别只盯运行时 bundle。⚠️ 该包里已有大量成品组件，但它们可能**只挂在 vendor 的 `LakexEditor` 入口上**，而我们的应用是直接 `Doc.createOpenEditor`（`lakeRuntime.ts`）、**从不走 `LakexEditor`** ⇒ 这些组件在我们的产品里**从不运行**，极易被整片忽略。
+    *实例（260924）*：图片浮动工具栏本就在仓库里 —— `components/plugin/imageToolbar/ImageToolbar.tsx`(+css)、`components/lakex/icon.tsx` 的 `ne-t-image-*`、`components/plugin/i18n.ts` 的全部文案、以及 `assets/lakex-doc.css` 里 `.ne-card-toolbar-*` 全套样式；当时却因为**前缀搜错**（找 `icon-*crop*` 而不是 `ne-t-image-crop`）+ 只看 bundle 不看源码树，绕远路去浏览器抓云端 DOM。
   ① **官方出处优先** `/Users/admin/file/local-lake/yuque-developer-docs/`（语雀开发者文档本地副本；`docs/` 按主题编号，如 `65 - 大纲（toc)`、`47 - 通用配置`、`07 - API与事件`、`08 - 命令列表`、`48 - 适配器`）——**先确认官方到底有没有这个能力/配置/命令及其语义**，不要凭 bundle 反编译猜用法；官方有就用官方途径（例：阅读态大纲挂载点走 `toc.reading.getContainer`、阅读器偏移走 `boundaryTopOffset`），而不是自己写 CSS/私有 hack 绕过。
   ② **本项目契约与踩坑** `docs/LAKEX-CONTRACT.md`（闭源 lakex 已核实的行为契约 + 调试速查表；含我们实测出的内核行为与反例）——**新观测必须回填此处**，别只留在 HANDOFF 或代码注释里。
   ③ **更精细的源码字典对照** `/Users/admin/file/local-lake/lake-editor-main/`（第三方 VSCode yuque-editor 插件）与 `/Users/admin/file/local-lake/lake-main/`（lakejs 开源社区版，仅"机制字典"）——用于挖机制/实现细节与交叉验证；**注意 lake-main 序列化方言已与运行内核分叉，结论不得直接套用**。

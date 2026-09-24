@@ -1013,6 +1013,55 @@ PY
 ⇒ 没有内核实例的写入者（移动端轻量速记框、主进程）**无法让内核产出正文**，只能走
 `src/core/lakeDocForm.ts` 的**卡片容器**单一来源（`quickNoteBodyFromTextAndImages` 即此），**绝不自造裸标签媒体**。
 
+### 5.14 图片浮动工具栏：云端结构 / 图标 / 子菜单（260924 浏览器实拍 + 仓库源码核对）
+
+> 结论先行：**云端图片工具栏是 `.ne-card-toolbar` 一族（不是文字栏的 `.ne-ui-toolbar`）**，而且它的
+> 结构类、图标、文案**大部分本来就在我们 vendored 包里**；只有 2 个图标本地没有、只能从云端运行时抓。
+
+**1) 结构 / 顺序（云端实拍 DOM，2026-09-24）**
+```
+.ne-card-toolbar
+  .ne-card-toolbar-item                          纯图标（旋转 / 裁剪）
+  .ne-card-toolbar-dropdown-item[-has-title]     图标（+文字），可下拉（宽高 / 链接 / 边距）
+  .ne-card-toolbar-select-item[-has-title]       图标（+文字）+ .ne-card-toolbar-arrow-down-icon（对齐 / 样式 / 批量）
+  .ne-ui-card-toolbar-divider                    1×16 分隔线
+顺序：旋转 · 裁剪 · 宽高 | 链接 · 描述 | 对齐 · 样式 · 边距 · 批量
+```
+- 样式**全在内核 CSS** `vendor/lakex-doc-react/src/assets/lakex-doc.css`（`grep -c ne-card-toolbar` = **76**）：
+  容器 `inline-flex; padding:6px 12px; radius:4`；`-item` 28×28 + `margin-right:4`；`-dropdown-item` 28×28/padding 5；
+  `-select-item` 38×28；`-has-title` = `width:auto; line-height:28` + `span{margin-left:4}`；`input` 宽 54。
+- 下拉箭头 = `.ne-card-toolbar-arrow-down-icon`，背景图是远程 svg `…/d5fce5b0-cd60-43b0-a351-9463486be4d2.svg`
+  （**本地已镜像**：`public/vendor/cdn/zos/bmw-prod/d5fce5b0-….svg`）。
+
+**2) 图标（`vendor/lakex-doc-react/src/components/lakex/icon.tsx`，13 个本地 `ne-*` symbol）**
+- **本地已有**：`ne-t-image-crop / -rotation / -size / -title / -style / -reset`、`ne-t-link`、`ne-t-batch-apply`、
+  `ne-check`、`ne-o-unlink`、`ne-o-visit-link`、`ne-card-tb-card-view / -title-view`。
+- **本地没有、只能从云端运行时抓**（精确 `<symbol>` 路径已落地 `src/features/editor/selectionToolbar/imageIcons.tsx`）：
+  **`ne-t-alignment-center`（对齐）** 与 **`ne-c-tb-spacing`（边距）**。抓法：浏览器 → 语雀编辑态 → 选中图片 →
+  `browser_inspect html` → 页面内联 sprite 里的 `<symbol id="ne-…">`（viewBox 有 256 与 14 两种）。
+
+**3) wrapper 里另有一套自研实现（走了我们不走的路径）**
+- `vendor/lakex-doc-react/src/components/plugin/imageToolbar/ImageToolbar.tsx`(30KB) + `ImageToolbar.css`(8.6KB)：
+  自带 `.ne-image-toolbar` 类 + **硬编码色**（`#ffffff/#e5e6eb`），含宽高（百分比）/样式/链接弹层；文案在
+  `components/plugin/i18n.ts`（`image.size.title=宽高`、`image.link.placeholder=请输入网址`…）。
+- 它**只被 vendor 的 `LakexEditor` 引用**；我们应用直接 `Doc.createOpenEditor`（`lakeRuntime.ts:881`）⇒ 从不运行。
+  **教训**：vendor 组件可能挂在「不用的入口」上 —— 按能力找，不要按调用栈找。
+
+**4) 子菜单内容（云端实拍，260924）**
+- 宽高：`宽 [600]` `高 [450]` + 百分比 `25% / 50% / 75% / 100%`（档位高亮）。
+- 链接：输入框占位「请输入网址」+ ☐「在当前页面打开」（勾选 ⇒ `linkTarget:""` 本页打开）。
+- 对齐：左对齐 / 居中对齐（✓）/ 右对齐，**每项带对齐图标**。
+- 样式：无样式（✓）/ 图片描边 / 图片阴影。
+- 边距：「为图片添加上边距」/「为图片添加下边距」两个**开关**。
+- 批量应用：同步图片样式到全文 / 同步图片宽度到全文。
+- **描述：没有弹窗** —— 直接在图片下方出现内联编辑框（内核 `.ne-image-title` 里的 `.ne-image-title-content`，空时显示占位「添加图片描述」）。
+
+**5) 两个易错的语义（别用自造字段）**
+- **对齐是块级属性**：`alignment` 命令 → 块上 `ne-alignment`（CSS `[ne-alignment='center']{text-align:center;justify-content:center}`）；
+  `cardValue` **没有** `alignment` 字段（曾误写进 `cardValue.style`，与「样式」互相覆盖）。
+- **边距是 card spacing**：`cardValue.__spacing` ∈ `both/top/bottom`（cardData `setCardSpacing`，值枚举 TOP/BOTTOM/BOTH）；
+  `updateImageData({margin})` **内核不认**（曾用错字段）。
+
 ---
 
 ## 6. 使用守则（所有会话遵守）
