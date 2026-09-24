@@ -1113,6 +1113,11 @@ export class Store {
     return this.syncReconciliation.lastSyncedMetaAt(id);
   }
 
+  /** 批量读 hash 账本（同步环一次预载）。 */
+  getAllSyncBases(): Map<string, { contentHash: string; lastUploadedHash: string | null; lastSyncedMetaAt: string | null }> {
+    return this.syncReconciliation.getAllSyncBases();
+  }
+
   /** 只读锁：本地操作；不触碰正文/updated_at，锁同步走 manifest v3 独立字段 */
   setNoteLocked(id: string, locked: boolean): void {
     this.noteMetadata.setNoteLocked(id, locked);

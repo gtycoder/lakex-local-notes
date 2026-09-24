@@ -35,7 +35,9 @@ class MemDb implements SyncDbPort {
   async log(msg: string): Promise<void> { this.logs.push(msg); }
 async getNote(id: string) { return this.notes.get(id) ?? null; }
 async getAllNotes() { return [...this.notes.values()]; }
-async getSyncBase(id: string) { return this.bases.get(id) ?? null; }
+syncBaseCalls = 0;
+async getSyncBase(id: string) { this.syncBaseCalls += 1; return this.bases.get(id) ?? null; }
+async getAllSyncBases() { return new Map(this.bases); }
 async applyRemoteNote(note: any, content: string) {
     this.notes.set(note.id, {
       id: note.id, title: note.title, content, contentHash: note.contentHash, updatedAt: note.updatedAt, syncState: "synced",
@@ -250,6 +252,19 @@ describe("syncEngine（共享编排）", () => {
     s3.getLog.length = 0;
     await syncNow(CFG, s3, promisifyDb(b));
     expect(s3.getLog.filter((k) => k.includes("/objects/")).length).toBe(0);
+  });
+
+  // 260925 性能回归：hash 账本批量预载后，下载/上传环不再逐条 getSyncBase（移动端省原生往返）。
+  it("hash 账本批量预载：不再逐条 getSyncBase", async () => {
+    const N = 20;
+    const s3 = new MemS3();
+    const a = new MemDb();
+    for (let i = 0; i < N; i += 1) a.notes.set("n" + i, row({ id: "n" + i, content: "<p>c" + i + "</p>" }));
+    await syncNow(CFG, s3, promisifyDb(a));
+    const b = new MemDb();
+    await syncNow(CFG, s3, promisifyDb(b));
+    expect(b.notes.size).toBe(N);
+    expect(b.syncBaseCalls).toBe(0);
   });
 
   it("A：manifest 声明正文引用但本地缺失、已记录元数据的资源（备份不丢引用）", async () => {

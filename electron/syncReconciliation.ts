@@ -80,6 +80,12 @@ export class SyncReconciliation {
     return row?.last_synced_meta_at ?? null;
   }
 
+  /** 批量读 hash 账本：同步环一次全表读，替代逐条 getSyncBase（每条在移动端都是一次原生往返）。 */
+  getAllSyncBases(): Map<string, { contentHash: string; lastUploadedHash: string | null; lastSyncedMetaAt: string | null }> {
+    const rows = this.ctx.db.prepare("SELECT note_id,content_hash,last_uploaded_hash,last_synced_meta_at FROM sync_base").all() as Array<{ note_id: string; content_hash: string; last_uploaded_hash: string | null; last_synced_meta_at: string | null }>;
+    return new Map(rows.map((r) => [r.note_id, { contentHash: r.content_hash, lastUploadedHash: r.last_uploaded_hash, lastSyncedMetaAt: r.last_synced_meta_at }]));
+  }
+
   // ===== 同步标记 =====
 
   /** 本地同步快照保护（V5 §5.2）：上传/对账结束后，仅当本地状态与快照一致才标记 synced。

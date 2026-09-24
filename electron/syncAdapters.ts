@@ -81,6 +81,8 @@ export function createStoreSyncPort(store: Store): SyncDbPort {
       const out = { contentHash: base, lastUploadedHash: store.lastUploadedHash(id), lastSyncedMetaAt: store.lastSyncedMetaAt(id) ?? null };
       return out;
     },
+    // 仅当 Store 提供批量账本时才暴露（测试桩/旧实现缺此方法 → 引擎回退逐条 getSyncBase）。
+    ...(typeof store.getAllSyncBases === "function" ? { async getAllSyncBases() { return store.getAllSyncBases(); } } : {}),
     async recordDeclaredAssets(noteId: string, assets: Array<{ filename: string; size: number; hash: string }>): Promise<void> {
       if (typeof (store as any).recordDeclaredAssets === "function") store.recordDeclaredAssets(noteId, assets);
     },

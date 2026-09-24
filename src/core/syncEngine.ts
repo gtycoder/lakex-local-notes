@@ -62,10 +62,15 @@ export async function syncNow(cfg: SyncConfig, s3: S3Store, db: SyncDbPort, opts
   const report: SyncReport = { pulled: false, appliedRemote: 0, uploaded: 0, published: false, message: "", warnings: [], supersededNotes: [], foldersUploaded: 0, foldersDownloaded: 0, trashedDown: 0, trashedUp: 0, uploadedBytes: 0, downloadedBytes: 0 };
   // superseded 去重（与桌面同单点）：Lake 下载阶段冲突语义由 supersededNotes 表达，Set 去重防重复记。
   const supersededTracker = createSupersededTracker();
+  // 批量 hash 账本：一次全表读，替代下载/上传环里逐条 db.getSyncBase（移动端每条=一次原生往返）。
+  // 下载环用同步前快照；上传环前重载一次以对齐下载阶段写入（语义与逐条读一致）。
+  let syncBases = typeof db.getAllSyncBases === "function" ? await db.getAllSyncBases() : null;
+  const baseOf = async (id: string): Promise<{ contentHash: string; lastUploadedHash: string | null; lastSyncedMetaAt: string | null } | null> =>
+    syncBases ? (syncBases.get(id) ?? null) : await db.getSyncBase(id);
   // H5：本机编辑成果判定（软删/purge 覆盖前留档共用）——本地相对基线有改动，或本机上传过当前版本（本机是作者）。
   const ownEditOf = async (local: LocalNoteRow | null, id: string): Promise<boolean> => {
     if (!local) return false;
-    const base = await db.getSyncBase(id);
+    const base = await baseOf(id);
     const localHash = local.contentHash ?? sha256Sync(new TextEncoder().encode(local.content));
     return (base !== null && localHash !== base.contentHash) || (base?.lastUploadedHash != null && localHash === base.lastUploadedHash);
   };
@@ -470,7 +475,7 @@ export async function syncNow(cfg: SyncConfig, s3: S3Store, db: SyncDbPort, opts
       }
 
       // 正常对账（含本地显式恢复 restore_pending_at → local-wins 走上传）
-      const base = await db.getSyncBase(rn.id);
+      const base = await baseOf(rn.id);
       const localHash = local ? (local.contentHash ?? sha256Sync(new TextEncoder().encode(local.content))) : null;
       // 幂等应用优化：本地内容与远端 hash 一致 → 仅对齐记账，不重复下载应用。
       // B3：但仍须对账元数据（标题/父/排序/图标/锁）——锁与元数据变更不改正文哈希，
@@ -544,6 +549,8 @@ export async function syncNow(cfg: SyncConfig, s3: S3Store, db: SyncDbPort, opts
   // ---- 3. 上传方向：墓碑 / 恢复 / 正常（decideUpload） ----
   // 位置不变：必须在上传环开头重新取——这里看到的是下载合并后的状态（刚应用的笔记 syncState=synced），
   // 提前取会让它们被误判 upload 造成回环重传（P3-1 语义关键点）。
+  // 上传环前重载 hash 账本（下载阶段已写入新 base），保持 baseOf 与逐条读语义一致。
+  if (typeof db.getAllSyncBases === "function") syncBases = await db.getAllSyncBases();
   const localAll = await db.getAllNotes();
   // P3-1：远端条目索引一次建好——上传环与墓碑环节共用（原先各自 .find，O(N²)）。
   const remoteById = new Map((remote?.notes ?? []).map((n) => [n.id, n]));
@@ -606,7 +613,7 @@ export async function syncNow(cfg: SyncConfig, s3: S3Store, db: SyncDbPort, opts
     }
 
     // 正常（含恢复：restore_pending_at → active 上传覆盖墓碑）
-    const base = await db.getSyncBase(local.id);
+    const base = await baseOf(local.id);
     const decision = decideUpload({
       syncState: local.syncState,
       baseHash: base?.contentHash ?? null,

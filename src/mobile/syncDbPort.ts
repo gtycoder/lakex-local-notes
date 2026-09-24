@@ -57,6 +57,15 @@ export function createMobileSyncDbPort(getDb: () => MobileDb, deps: MobileSyncDb
       const row = await d.prepare("SELECT content_hash, last_uploaded_hash, last_synced_meta_at FROM sync_base WHERE note_id = ?").get(id);
       return row ? { contentHash: String(row.content_hash), lastUploadedHash: row.last_uploaded_hash ? String(row.last_uploaded_hash) : null, lastSyncedMetaAt: row.last_synced_meta_at ? String(row.last_synced_meta_at) : null } : null;
     },
+    async getAllSyncBases() {
+      const d = getDb();
+      const rows = await d.prepare("SELECT note_id, content_hash, last_uploaded_hash, last_synced_meta_at FROM sync_base").all() as Array<Record<string, unknown>>;
+      return new Map(rows.map((r) => [String(r.note_id), {
+        contentHash: String(r.content_hash),
+        lastUploadedHash: r.last_uploaded_hash ? String(r.last_uploaded_hash) : null,
+        lastSyncedMetaAt: r.last_synced_meta_at ? String(r.last_synced_meta_at) : null,
+      }]));
+    },
     async recordDeclaredAssets(
       noteId: string,
       assets: Array<{ filename: string; size: number; hash: string }>,
