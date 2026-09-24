@@ -6,7 +6,7 @@
 
 ## 0. 最新交接 · 260925 · 5 端真实云同步测试（3 桌面 + 真机 + 模拟器）：发现并修复「上传漏 kind」（数据损坏级）
 
-> 写给**完全没有上下文的新会话**。本会话按用户要求做了一次 5 端真实云同步测试，**当场发现 2 个真 bug 并修复**（均**未提交**，等用户验收）；完整报告见 `/Users/admin/Documents/lake5-multi-end-sync-report-260925.md`。
+> 写给**完全没有上下文的新会话**。本会话按用户要求做了一次 5 端真实云同步测试，**当场发现 2 个真 bug 并修复**（已提交 **7fe2fd6** 并推送）；完整报告见 `/Users/admin/Documents/lake5-multi-end-sync-report-260925.md`。
 
 ### 一、修复（2 个，均未提交）
 1. **`src/core/syncUtils.ts` 的 `validateManifest` kind 白名单漏 `board`**：v7 加 board 时硬编码列表（doc|sheet|bitable）未更新 ⇒ 含画板的清单**自己写出去自己读不回**（`parseLakeManifest` 抛「kind 非法」）。改为走 `NOTE_KINDS` 单一来源；`syncUtils.test.ts` 加四类 kind 放行 + 未知 kind 拒绝。
@@ -23,9 +23,14 @@
 - 真机测试前**完整备份**（748MB）→ 测后**已还原**（508 笔记 / 5 小记 / 35 目录，prefix 回到 lake-notes-stress2-260910）；备份留存 `/Users/admin/Documents/lake5-real-backup-20260925012122.tgz`。
 - 未碰正式数据、未碰用户 dev 实例（9222/19876）。
 
-### 四、下一步
-- **等用户验收这 2 个修复后提交**（红线：代码批次不擅自合 master）。
-- 未覆盖：安卓对 sheet/bitable/board 仅只读（测的是收到且 kind/正文正确）；资产只跑了 1 张图；目录 rename/icon/move、回收站内编辑、10万/100万量级未纳入。
+### 四、续（同日 260925 续）：目录/图标/排序 + 压力测试（全部通过）
+- 2 个修复**已提交并推送**：`7fe2fd6`（master == origin/master）。
+- **套件 3 目录/图标/排序 79/79**：笔记本/分组 建/改名/图标/排序(sortOrder)/移动/删除/恢复/purge、笔记移动/图标/duplicate、目录树 5 端收敛、S3 连接/GC diagnostics/dry-run cleanup。
+- **本地引擎压测 Tier A 11/11**：PUT 数随 churn 不随总量（8000 笔记 churn=100 → 79.3ms、102 PUT）；零变更 2000 笔记 4.5ms。
+- **真实云 5 端压测 25/25**：1000 笔记 + 100 目录 + 2MB 文档；D1 上传 13.1s、D2 30.2s、D3 34.7s、模拟器 43.3s、**真机 149.5s**；5 端收敛 1005 笔记/111 目录；第二次同步 439ms 零变更。**无崩溃、无 ANR/OOM、无卡顿（求值 0~7ms）；桌面日志 0 条 error**。
+- **慢流程观察**：真机下载 1000 篇 149.5s（≈3.5x 模拟器），无错误，疑 USB/存储/SQLite 写放大，本轮未改代码。
+- 详细报告：`/Users/admin/Documents/lake5-multi-end-sync-report-260925-part2.md`。
+- 未覆盖：云端千级资产、10万/100万量级。
 
 ## 0. 最新交接 · 260924 晚会话总交接：浮栏收尾 / 图片复制 / 浏览器端阶段 1–3 / library-changed
 
