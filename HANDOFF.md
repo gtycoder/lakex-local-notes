@@ -14,16 +14,15 @@
 - 验证：`assembleDebug` OK；`testDebugUnitTest` 14/14；模拟器 smoke（lakeNative / asset token 64 位 / 3 插件 / AssetServer 监听）。
 - 坑（务必记）：**Kotlin 块注释可嵌套**，Java 注释里的 `image/*`（开嵌套）、`bytes */size`（提前闭合）会让 KDoc 报 `Syntax error`/`Unclosed comment`；已改文字。移植注释时注意 `/*`、`*/`。
 
-### 二、原生资产同步插件（commit `fd71037`，core 未改动）
-- 新增 `AssetSyncPlugin.kt` + `AwsV4Signer.kt`：SigV4 自签 + `HttpURLConnection` 流式 `putFile` / `getFile` / `listAssets`（原生算 sha256）。签名用 AWS 官方 SigV4 get-vanilla 向量单测钉死（`AwsV4SignerTest`）。
-- JS：`src/mobile/nativeAssetSync.ts` 能力探测包装；`s3Store.putObjectStream` + `syncDbPort.openLocalAssetStream`/`listLocalAssets`（原生扫描）接入。非原生平台**不挂载** → 自动回退字节路径；原生运行期失败也回退字节。**core 未动。**
-- 实测（模拟器，隔离前缀已删 0 残留）：256KB 资产原生 PUT → S3 对象 size/sha256 逐字节一致；原生 GET sha256 一致；整轮 1003 笔记 + 资产同步中 `assetHttp/assetB64Encode/fsRead = 0`（资产字节未过 WebView 桥）。
-- **未做（受「core 不动」约束）**：下载端口接入。core `downloadNoteAssets` 要求 `getObject` 返回字节；要彻底让下载字节不过桥，需给 `S3Store` 加可选 `getObjectToFile` 并让 core 走分支。在「core 不动」下下载仍走现有 base64 路径（原生 `getFile` 已就绪待接）。
-- **跨端验证**：新增 `scripts/multi-end-sync/run5native.mjs`（D1 桌面 + 模拟器 E），**4/4 通过**——E 原生上传资产 → D1 落盘 sha256 逐字节一致；D1 落资产 → E 下载 sha256 逐字节一致。
-- **官方套件（分支）**：`run5d` **20/20**（D1 上传 13.7s、E 下载 10.9s / indexMs 185ms）、`run5b` **33/33**（R 未连接自动跳过；已给 `run5b` 补同款自动跳过）。真机 `50950385` 仍未连接、待复测。
+### 二、原生资产同步插件（上传 `fd71037`；下载端口本轮接入）
+- 新增 `AssetSyncPlugin.kt` + `AwsV4Signer.kt`：SigV4 自签 + `HttpURLConnection` 流式 `putFile` / `getFile`（可带 expectedSize/expectedSha256，校验通过才原子落盘）/ `listAssets`（原生算 sha256）。签名用 AWS 官方 SigV4 get-vanilla 向量单测钉死。
+- **上传**：JS `s3Store.putObjectStream` + `syncDbPort.openLocalAssetStream`/`listLocalAssets`（原生扫描）接入；非原生/原生失败回退字节路径。
+- **下载**（用户批准 A）：给 core 加**可选**端口——`S3Store.getObjectToFile?` + `SyncDbPort.assetFilePath?`，`downloadNoteAssets` 加一个 `if (端口有该方法) 文件路径 else 现有字节路径` 分支。移动端实现后下载字节也不进 JS；**桌面 `createS3StoreAdapter` 不实现该可选方法 → 命中 else，行为逐字节不变**。core 改动仅 `syncEngineTypes.ts`（两个可选声明）+ `syncAssets.ts`（一个 else 保留原逻辑的分支）+ 单测，**不改任何同步决策/语义**。
+- 实测（模拟器，隔离前缀已删 0 残留）：256KB 资产原生 PUT → S3 size/sha256 一致；整轮 1003 笔记 + 资产同步 `assetHttp/assetB64Encode/fsRead = 0`；跨端 `run5native.mjs` **5/5**——E 原生上传→D1 逐字节一致；D1→E 下载逐字节一致且 `assetHttp/assetB64Decode/fsWrite = 0`（下载也未过桥）。
+- **官方套件（最终）**：`run5d` **20/20**、`run5b` **33/33**（R 未连接自动跳过）。真机 `50950385` 仍未连接、待复测。
 
-### 三、门禁（本轮）
-`tsc` 0 / `vitest` 1274 passed / desktop + mobile build OK / `check-core` 违规 0。
+### 三、门禁（最终）
+`tsc` 0 / `vitest` **1276 passed** / desktop + mobile build OK / `check-core` 违规 0 / Android `assembleDebug` + `testDebugUnitTest` 全绿。
 
 
 ## 0. 最新交接 · 260925 续 · 移动端批量 reconcileIndex + 附件过桥实测
