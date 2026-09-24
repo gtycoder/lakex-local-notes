@@ -49,6 +49,9 @@ export interface LakeEditorInstance {
   queryCommandValue?(name: string, ...args: unknown[]): unknown;
   /** 命令是否可用（链接等先用它把门：link 需选区、insertLink 需光标）。 */
   queryCommandEnabled?(name: string): unknown;
+  /** 命令执行态（内核 CommandState：-1 Unavailable / 0 NotExecuted / 1 Executed / 2 Unknown）。
+   *  块级命令（列表/待办/引用）的生效与禁用判据，见 useSelectionToolbar.readState。 */
+  queryCommandState?(name: string): unknown;
   /** 内核实例（命令/选区都挂在这里）。 */
   kernel?: LakeKernelInstance;
   /** 锁定态 Viewer 可能不完整支持 markdown/plain（调用方需 typeof 守卫 + try/catch）。 */

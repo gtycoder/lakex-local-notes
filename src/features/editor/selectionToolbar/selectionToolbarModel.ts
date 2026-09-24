@@ -45,6 +45,11 @@ export function isMarkActive(value: unknown): boolean {
   return Array.isArray(value) ? value.some(truthy) : truthy(value);
 }
 
+/** 内核 CommandState 枚举（bundle 实测：-1 Unavailable / 0 NotExecuted / 1 Executed / 2 Unknown）。
+ *  块级命令（列表/待办/引用）的 checked/disabled 判据，与内核固定栏状态按钮同源。 */
+export function isCommandExecuted(value: unknown): boolean { return value === 1; }
+export function isCommandUnavailable(value: unknown): boolean { return value === -1; }
+
 /** 背景色「无填充」的持久值（内核 bg-color descriptor 的 `transparent`）。 */
 export const TRANSPARENT_COLOR = "transparent";
 

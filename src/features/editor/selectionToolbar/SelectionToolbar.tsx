@@ -17,7 +17,7 @@ import {
   MoveVertical, Palette, RotateCw, Scaling, Trash2, Type,
 } from "lucide-react";
 import { native } from "../../../lib/native";
-import { CONVERT_ITEMS, FONT_SIZE_OPTIONS, PARAGRAPH_STYLES } from "../editorCommands";
+import { FONT_SIZE_OPTIONS, PARAGRAPH_STYLES, TOOLBAR_BLOCK_ITEMS } from "../editorCommands";
 import type { LakeEditorInstance } from "../lakeRuntime";
 import { IMAGE_STYLE_OPTIONS, enterImageCrop, readImageMeta } from "./imageCardOps";
 import { KEmbedIcon, KIcon, KLinkEditor, KToolbarButton } from "./kernelUiAtoms";
@@ -67,12 +67,12 @@ function KMenu({ menu, children }: { menu: string; children: ReactNode }) {
   );
 }
 
-function KMenuItem({ label, icon, selected, shortcut, labelClass, onClick }: {
-  label: string; icon?: string; selected?: boolean; shortcut?: string; labelClass?: string; onClick?: () => void;
+function KMenuItem({ label, selected, shortcut, labelClass, onClick }: {
+  label: string; selected?: boolean; shortcut?: string; labelClass?: string; onClick?: () => void;
 }) {
   return (
     <li role="menuitem" className={"ant-dropdown-menu-item ne-ui-select-item" + (selected ? " ant-dropdown-menu-item-selected" : "")} onClick={onClick}>
-      <div className="ne-ui-select-item-check-icon">{icon ? <KIcon type={icon} /> : selected ? <KIcon type="check" /> : null}</div>
+      <div className="ne-ui-select-item-check-icon">{selected ? <KIcon type="check" /> : null}</div>
       <div className="ne-ui-select-item-label">
         <div className="ne-ui-select-content">
           <span className={labelClass ?? "ne-ui-item-content"}>{label}</span>
@@ -275,15 +275,6 @@ export function SelectionToolbar({ editor, container, noteId }: {
         </div>
       );
     }
-    if (menu === "convert") {
-      return (
-        <KMenu menu="convert">
-          {CONVERT_ITEMS.map((item) => (
-            <KMenuItem key={item.name} label={item.label} icon={item.icon} onClick={() => pick(item.name, undefined)} />
-          ))}
-        </KMenu>
-      );
-    }
     if (menu === "txtlink") {
       return (
         <div className="selection-toolbar__popover" data-menu="txtlink">
@@ -304,23 +295,18 @@ export function SelectionToolbar({ editor, container, noteId }: {
 
   /** 与固定工具栏逐类对齐（真身见 .ne-ui-toolbar 实测）：内核 ToolbarButton 自加 ant-btn/ne-ui-t-button。 */
   const TOGGLE = "ne-toolbar-widget ne-ui-toolbar-status-button ne-ui-toolbar-toggle-button";
-  const DROPDOWN = "ant-dropdown-trigger ne-ui-toolbar-dropdown-button ne-toolbar-widget ne-ui-toolbar-arrow-button";
   // 段落样式/字号是「纯按钮 + 自锚定菜单」（不是内核 Select）⇒ 用内核标准工具条按钮类
   // .ne-ui-toolbar-button（已定义 26×26 / padding:0，单一起源），不再自写尺寸覆盖。
   const VALUE = "ant-dropdown-trigger ne-ui-toolbar-button ne-toolbar-widget";
 
   const renderText = () => {
-    const styleLabel = PARAGRAPH_STYLES.find((b) => b.value === state.style)?.label ?? "T";
-    /** H1–H6 两个字形在 26px 按钮里偏大 ⇒ 只把标题符号收小（T 与字号数值保持 17px，用户 260924 口径）。 */
-    const headingStyle = /^h[1-6]$/.test(state.style);
     const sizeLabel = String(state.fontSize ?? 15);   // 260924 用户口径：字号只显示数值（如 16），不带 px
     return (
       <>
         <KToolbarButton name="clearFormat" icon="editor-clearFormat" title="清除格式" className="ne-ui-toolbar-button ne-ui-toolbar-clear-format ne-toolbar-widget" onClick={() => run("clearFormat")} />
         <span className="selection-toolbar__sep" />
-        <KToolbarButton name="format" title="段落样式" checked={menu === "style"} className={VALUE + " ne-ui-toolbar-format"} onClick={(e) => toggleMenu("style", e.currentTarget)}>
-          <div className={"ne-ui-toolbar-select-value" + (headingStyle ? " selection-toolbar__value--heading" : "")}>{styleLabel}</div>
-        </KToolbarButton>
+        {/* 260924 续：标题按钮改用原「转为」的图标（内核「段落/块类型」editor-paragraph），不再显示 T/H1..H6 符号。 */}
+        <KToolbarButton name="format" icon="editor-paragraph" title="段落样式" checked={menu === "style"} className={VALUE + " ne-ui-toolbar-format"} onClick={(e) => toggleMenu("style", e.currentTarget)} />
         {/* 内核 getUIState：字号按钮 disabled = !queryCommandEnabled('fontsize')（标题是固定样式 ⇒ 不可调）。 */}
         <KToolbarButton name="fontsize" title="字号" disabled={!canCommand("fontsize")} checked={menu === "fontsize"} className={VALUE + " ne-ui-toolbar-fontsize"} onClick={(e) => toggleMenu("fontsize", e.currentTarget)}>
           <div className="ne-ui-toolbar-select-value">{sizeLabel}</div>
@@ -334,9 +320,16 @@ export function SelectionToolbar({ editor, container, noteId }: {
         <KColorButton label="文字颜色" variant="text" color={currentColor(editor, "text")} active={menu === "color" || Boolean(state.color)} onApply={() => applyCurrentColor("text")} onOpen={(e) => toggleMenu("color", e.currentTarget)} />
         <KColorButton label="背景色" variant="bg" color={currentColor(editor, "bg")} active={menu === "bgcolor" || Boolean(state.bgColor)} onApply={() => applyCurrentColor("bg")} onOpen={(e) => toggleMenu("bgcolor", e.currentTarget)} />
         <span className="selection-toolbar__sep" />
-        <KToolbarButton name="moremark" icon="t-moremark" caret checked={menu === "convert"} title="转为" className={DROPDOWN} onClick={(e) => toggleMenu("convert", e.currentTarget)} />
-        {/* 内核 link-toolbar-descriptor.getUIState：disabled = !link && !insertLink（选区里已有链接时两个都不可用）。 */}
-        <KToolbarButton name="link" icon="editor-link" disabled={!canCommand("link") && !canCommand("insertLink")} checked={menu === "txtlink"} title="超链接" className={DROPDOWN} onClick={(e) => openLinkEditor(e.currentTarget)} />
+        {/* 260924 续：原「转为」下拉已拆散 —— 每个块级转换各成一个独立按钮（顺序 = 有序/无序/待办/引用/行内代码）。 */}
+        {TOOLBAR_BLOCK_ITEMS.map((item) => (
+          <KToolbarButton key={item.name} name={item.name} icon={item.icon} title={item.label}
+            checked={item.kind === "mark" ? state.marks[item.name] : state.blocks[item.name]}
+            disabled={state.itemDisabled[item.name]}
+            className={TOGGLE} onClick={() => run(item.name)} />
+        ))}
+        {/* 内核 link-toolbar-descriptor.getUIState：disabled = !link && !insertLink（选区里已有链接时两个都不可用）。
+            不用内核「下拉按钮」类：.ne-ui-toolbar-arrow-button 固定 42px，是给已去掉的三角预留的 ⇒ 用 26px 普通按钮。 */}
+        <KToolbarButton name="link" icon="editor-link" disabled={!canCommand("link") && !canCommand("insertLink")} checked={menu === "txtlink"} title="超链接" className="ne-ui-toolbar-button ne-toolbar-widget" onClick={(e) => openLinkEditor(e.currentTarget)} />
       </>
     );
   };

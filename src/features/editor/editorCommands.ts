@@ -34,29 +34,36 @@ export const STYLE_BLOCKS: { value: string; label: string }[] = [
   { value: "h4", label: "H4" },
 ];
 
-/** 浮动工具栏「段落样式」（260924 用户口径）：
- *   - **折叠态**（工具栏按钮）符号化：正文 = `T`，标题 = `H1`..`H6`（去掉下拉三角后只显符号，紧凑稳定）；
+/** 浮动工具栏「段落样式」（260924 续 用户口径）：
+ *   - **按钮**用内核「段落/块类型」图标（`editor-paragraph`，即原「转为」按钮的图标），不再显示 `T`/`H1..H6` 符号；
  *   - **下拉内容与固定栏逐项一致**：菜单文案用内核的「正文/标题1..6」，menuClass 用内核 `.ne-ui-item-*`
  *     （字号预览 16/28/24/20/16/14/14）。
  * 与 STYLE_BLOCKS 分开维护，避免影响移动端 dock 的既有取值。 */
-export const PARAGRAPH_STYLES: { value: string; label: string; menuLabel: string; menuClass: string; keys: string }[] = [
-  { value: "p", label: "T", menuLabel: "正文", menuClass: "ne-ui-item-content", keys: "⌥ ⌘ 0" },
-  { value: "h1", label: "H1", menuLabel: "标题1", menuClass: "ne-ui-item-heading1", keys: "⌥ ⌘ 1" },
-  { value: "h2", label: "H2", menuLabel: "标题2", menuClass: "ne-ui-item-heading2", keys: "⌥ ⌘ 2" },
-  { value: "h3", label: "H3", menuLabel: "标题3", menuClass: "ne-ui-item-heading3", keys: "⌥ ⌘ 3" },
-  { value: "h4", label: "H4", menuLabel: "标题4", menuClass: "ne-ui-item-heading4", keys: "⌥ ⌘ 4" },
-  { value: "h5", label: "H5", menuLabel: "标题5", menuClass: "ne-ui-item-heading5", keys: "⌥ ⌘ 5" },
-  { value: "h6", label: "H6", menuLabel: "标题6", menuClass: "ne-ui-item-heading5", keys: "⌥ ⌘ 6" },
+export const PARAGRAPH_STYLES: { value: string; menuLabel: string; menuClass: string; keys: string }[] = [
+  { value: "p", menuLabel: "正文", menuClass: "ne-ui-item-content", keys: "⌥ ⌘ 0" },
+  { value: "h1", menuLabel: "标题1", menuClass: "ne-ui-item-heading1", keys: "⌥ ⌘ 1" },
+  { value: "h2", menuLabel: "标题2", menuClass: "ne-ui-item-heading2", keys: "⌥ ⌘ 2" },
+  { value: "h3", menuLabel: "标题3", menuClass: "ne-ui-item-heading3", keys: "⌥ ⌘ 3" },
+  { value: "h4", menuLabel: "标题4", menuClass: "ne-ui-item-heading4", keys: "⌥ ⌘ 4" },
+  { value: "h5", menuLabel: "标题5", menuClass: "ne-ui-item-heading5", keys: "⌥ ⌘ 5" },
+  { value: "h6", menuLabel: "标题6", menuClass: "ne-ui-item-heading5", keys: "⌥ ⌘ 6" },
 ];
 
-/** 浮动工具栏「转为」：结构块转换（260924 用户口径：代码块 = 行内代码；高亮块 = 内核 alert 命令）。 */
-export const CONVERT_ITEMS: { name: string; label: string; icon: string }[] = [
-  { name: "orderedList", label: "有序列表", icon: "editor-orderedList" },
-  { name: "unorderedList", label: "无序列表", icon: "editor-unorderedList" },
-  { name: "taskList", label: "待办列表", icon: "editor-taskList" },
-  { name: "quote", label: "引用", icon: "editor-quote" },
-  { name: "code", label: "代码块", icon: "editor-inlinecode" },
-  { name: "alert", label: "高亮块", icon: "text-border" },
+/**
+ * 浮动工具栏「块级/行内代码」独立按钮 —— 260924 续：把原「转为」下拉拆散、逐项平铺成独立菜单项。
+ *   - `kind: "block"`（列表/待办/引用）：与内核固定栏状态按钮同判据 ——
+ *     checked = queryCommandState === 1（Executed）；disabled 按各自 descriptor：
+ *     list-toolbar-descriptor 用 !queryCommandEnabled，quote descriptor 用 state === -1（Unavailable）。
+ *   - `kind: "mark"`（行内代码）：与浮动栏其它行内标记同判据（queryCommandValue，见 useSelectionToolbar.marks）。
+ *  icon 用内核 sprite id（`editor-*`）：KIcon 会补 `icon-` 前缀后直接 `#` 引用；
+ *  moremark 的 `t-order-list` 等短名要经 Icon 内部 map，KIcon 加前缀后对不上 sprite（空图）。 */
+export interface ToolbarBlockItem { name: string; label: string; icon: string; kind: "block" | "mark"; }
+export const TOOLBAR_BLOCK_ITEMS: ToolbarBlockItem[] = [
+  { name: "orderedList", label: "有序列表", icon: "editor-orderedList", kind: "block" },
+  { name: "unorderedList", label: "无序列表", icon: "editor-unorderedList", kind: "block" },
+  { name: "taskList", label: "待办列表", icon: "editor-taskList", kind: "block" },
+  { name: "quote", label: "引用", icon: "editor-quote", kind: "block" },
+  { name: "code", label: "行内代码", icon: "editor-inlinecode", kind: "mark" },
 ];
 
 /** 行内标记命令（需先有选中文本，且不可在面板 blur 后执行） */

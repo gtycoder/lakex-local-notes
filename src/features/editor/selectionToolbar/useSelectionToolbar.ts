@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { LakeEditorInstance } from "../lakeRuntime";
 import { isImageCropping } from "./imageCardOps";
-import { isMarkActive, toFontSize, unwrapValue, type Rect } from "./selectionToolbarModel";
+import { isCommandExecuted, isCommandUnavailable, isMarkActive, toFontSize, unwrapValue, type Rect } from "./selectionToolbarModel";
 
 export interface TextTarget { kind: "text"; rect: Rect; }
 export interface ImageTarget { kind: "image"; rect: Rect; cardId: string; cardEl: HTMLElement; src: string; }
@@ -11,6 +11,9 @@ export type SelectionTarget = TextTarget | ImageTarget;
 const EXCLUDED_SELECTOR = ".ne-codeblock, ne-card[data-card-name='codeblock'], ne-card[data-card-name='table'], .ne-table";
 const IMAGE_CARD_SELECTOR = "ne-card[data-card-name='image']";
 
+/** 块级命令（与内核固定栏状态按钮同判据）：checked = queryCommandState===1；disabled 见 readState。 */
+const BLOCK_STATE_COMMANDS = ["orderedList", "unorderedList", "taskList", "quote"] as const;
+
 export interface ToolbarState {
   style: string;
   fontSize: number | null;
@@ -18,9 +21,13 @@ export interface ToolbarState {
   color: string;
   bgColor: string;
   marks: Record<string, boolean>;
+  /** 块级命令生效态（内核 CommandState === 1）。 */
+  blocks: Record<string, boolean>;
+  /** 独立按钮禁用态（列表 = !queryCommandEnabled；引用/行内代码 = state === -1，按各自内核 descriptor）。 */
+  itemDisabled: Record<string, boolean>;
 }
 
-const EMPTY_STATE: ToolbarState = { style: "p", fontSize: null, alignment: "", color: "", bgColor: "", marks: {} };
+const EMPTY_STATE: ToolbarState = { style: "p", fontSize: null, alignment: "", color: "", bgColor: "", marks: {}, blocks: {}, itemDisabled: {} };
 
 function toRect(r: DOMRect | DOMRectReadOnly): Rect {
   return { left: r.left, top: r.top, right: r.right, bottom: r.bottom, width: r.width, height: r.height };
@@ -58,6 +65,20 @@ export function useSelectionToolbar(editor: LakeEditorInstance, container: HTMLE
     };
     const marks: Record<string, boolean> = {};
     for (const name of ["bold", "italic", "underline", "strikethrough", "code"]) marks[name] = isMarkActive(q(name));
+    // 块级命令（列表/待办/引用）：与内核固定栏状态按钮同判据。queryCommandState 返回内核
+    // CommandState 数值（-1/0/1/2），不是布尔 ⇒ 用 isCommandExecuted/isCommandUnavailable 解。
+    const st = (name: string): unknown => { try { return editor.queryCommandState?.(name); } catch { return undefined; } };
+    const enabled = (name: string): boolean => { try { return editor.queryCommandEnabled?.(name) === true; } catch { return false; } };
+    const blocks: Record<string, boolean> = {};
+    const itemDisabled: Record<string, boolean> = {};
+    for (const name of BLOCK_STATE_COMMANDS) {
+      const v = st(name);
+      blocks[name] = isCommandExecuted(v);
+      // 内核 descriptor 判据：list 用 !queryCommandEnabled；quote 用 state === -1（Unavailable）。
+      itemDisabled[name] = name === "quote" ? isCommandUnavailable(v) : !enabled(name);
+    }
+    // 行内代码是 mark：checked 走 marks（queryCommandValue）；disabled 按内核 moremark descriptor = state === -1。
+    itemDisabled.code = isCommandUnavailable(st("code"));
     return {
       style: str("style", "p") || "p",
       // 内核 fontsize 控件用 queryCommandValue('fontsize', false) 取「生效字号」（含默认），
@@ -67,6 +88,8 @@ export function useSelectionToolbar(editor: LakeEditorInstance, container: HTMLE
       color: str("color"),
       bgColor: str("bgColor"),
       marks,
+      blocks,
+      itemDisabled,
     };
   }, [editor]);
 

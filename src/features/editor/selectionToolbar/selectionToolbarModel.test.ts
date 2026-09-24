@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { colorApplyCommand, computeToolbarPosition, imageSizeWidth, isMarkActive, parseAssetRef, toFontSize, unwrapValue } from "./selectionToolbarModel";
+import { colorApplyCommand, computeToolbarPosition, imageSizeWidth, isCommandExecuted, isCommandUnavailable, isMarkActive, parseAssetRef, toFontSize, unwrapValue } from "./selectionToolbarModel";
 
 describe("selectionToolbarModel", () => {
   it("锚点上方空间足够时放上方并水平居中", () => {
@@ -37,6 +37,13 @@ describe("selectionToolbarModel", () => {
     expect(isMarkActive(["true"])).toBe(true);
     expect(isMarkActive([null])).toBe(false);
     expect(isMarkActive([])).toBe(false);
+  });
+
+  it("内核 CommandState 判据：仅 1=生效、-1=不可用（0/2 都不算）", () => {
+    expect(isCommandExecuted(1)).toBe(true);
+    for (const v of [0, 2, -1, "1", true, null, undefined]) expect(isCommandExecuted(v)).toBe(false);
+    expect(isCommandUnavailable(-1)).toBe(true);
+    for (const v of [0, 1, 2, "-1", false, null, undefined]) expect(isCommandUnavailable(v)).toBe(false);
   });
 
   it("unwrapValue 取数组首项", () => {

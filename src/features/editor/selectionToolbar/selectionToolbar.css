@@ -6,8 +6,11 @@
   z-index: var(--lake-z-dropdown);
   display: flex;
   align-items: center;
-  gap: 2px;
-  padding: 4px 6px;
+  /* 浮动栏专属紧凑口径（260924 续）：条目多、要横向压短。固定栏整宽、条目 8px 间距，
+     浮栏不跟随——gap 收到 0（按钮自带 hover/checked 底色与圆角，相邻即成段控件）、
+     内距 6→4、分隔线外边距 4→2。合计 522px → 466px（-56px）。 */
+  gap: 0;
+  padding: 4px 4px;
   border: 1px solid var(--lake-border-2);
   border-radius: var(--lake-radius-md);
   background: var(--lake-bg-panel);
@@ -32,7 +35,7 @@
 .selection-toolbar__btn.is-active { background: var(--lake-accent-tint); color: var(--lake-accent); }
 .selection-toolbar__btn:disabled { opacity: .35; cursor: default; }
 .selection-toolbar__btn:focus-visible { outline: 2px solid var(--lake-accent); outline-offset: 1px; }
-.selection-toolbar__sep { width: 1px; height: 18px; margin: 0 4px; background: var(--lake-border-2); }
+.selection-toolbar__sep { width: 1px; height: 18px; margin: 0 2px; background: var(--lake-border-2); }
 .selection-toolbar__menu {
   position: absolute;
   top: calc(100% + 6px);
@@ -104,10 +107,9 @@
    ② 字号/颜色：T 17px（= B 图标 ink 12.6px）、H1–H6 与字号数值 15px、颜色对齐 B（--lake-text-2）。
    （内核类定义在 legacy 层，此处 overlay 层覆盖即可，无需 !important。） */
 .selection-toolbar .ne-ui-toolbar-select-value { width: auto; font-size: 17px; color: var(--lake-text-2); }
-/* 把 H1–H6 与字号数值都收小到 15px（两字形在 26px 按钮里偏大），T 保持 17px（= B 图标大小）。 */
-.selection-toolbar .ne-ui-toolbar-select-value.selection-toolbar__value--heading { font-size: 15px; }
+/* 字号数值收小到 15px（26px 按钮里 17px 偏大）；标题已改用图标，不再有 heading 字形。 */
 .selection-toolbar .ne-ui-toolbar-fontsize .ne-ui-toolbar-select-value { font-size: 15px; }
-/* 子菜单（段落样式/字号/转为）：**不再自造弹层样式** —— 直接复用内核固定栏弹层的
+/* 子菜单（段落样式/字号）：**不再自造弹层样式** —— 直接复用内核固定栏弹层的
    .ant-dropdown-menu + .ne-ui-select-menu/.ne-ui-select-item 规则（同一套类名 ⇒ 表面/圆角/阴影/
    选中色/快捷键色/字号预览全与固定栏一致，单一起源）。这里只留定位（浮层用）。 */
 .selection-toolbar__kmenu { position: absolute; top: calc(100% + 6px); left: var(--menu-left, 0); z-index: 1; }
