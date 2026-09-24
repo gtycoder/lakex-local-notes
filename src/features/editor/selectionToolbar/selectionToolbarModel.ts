@@ -45,6 +45,30 @@ export function isMarkActive(value: unknown): boolean {
   return Array.isArray(value) ? value.some(truthy) : truthy(value);
 }
 
+/** 背景色「无填充」的持久值（内核 bg-color descriptor 的 `transparent`）。 */
+export const TRANSPARENT_COLOR = "transparent";
+
+/**
+ * 颜色「本体」点击后的内核命令决策（对齐 kernel *-toolbar-descriptor 的 onEvent('select')）：
+ *   - 文字色：所选视觉值 == 正文色(`editor.text.color`) ⇒ clearColor；否则 color(持久值)；
+ *   - 背景色：持久值空/transparent ⇒ clearBgColor；已等于当前选区 bgColor ⇒ clearBgColor（再次点击取消）；否则 bgColor(持久值)。
+ * 纯函数便于单测；命令实际执行由调用方 `run`。
+ */
+export function colorApplyCommand(
+  variant: "text" | "bg",
+  input: { visual: string; persistent: unknown; normalText: string; currentBg?: unknown },
+): { command: string; arg?: unknown } {
+  if (variant === "text") {
+    return input.visual === input.normalText
+      ? { command: "clearColor" }
+      : { command: "color", arg: input.persistent };
+  }
+  if (!input.persistent || input.persistent === TRANSPARENT_COLOR) return { command: "clearBgColor" };
+  return input.persistent === input.currentBg
+    ? { command: "clearBgColor" }
+    : { command: "bgColor", arg: input.persistent };
+}
+
 /** 字号 active：queryCommandValue('fontsize') 返回 px 数值或 "null"。 */
 export function toFontSize(value: unknown): number | null {
   if (value === null || value === undefined || value === "null" || value === "") return null;

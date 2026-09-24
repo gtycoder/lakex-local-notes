@@ -27,7 +27,7 @@ export interface AppSettings {
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
-  fontSize: 20,
+  fontSize: 16,   // 内核正文字号默认（原 20 不在内核档位里）
   outlineEnhance: false,
   theme: "light",
   maxOpenTabs: 8,
@@ -40,7 +40,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
 export const MAX_ATTACHMENT_MB_OPTIONS_SETTINGS = MAX_ATTACHMENT_MB_OPTIONS;
 
 const STORAGE_KEY = "lake-notes-v1.settings";
-const FONT_SIZES = [12, 13, 14, 15, 16, 19, 20, 22, 24];
+/** 正文字号档位（= 内核正文字号取值，bundle `R_`：12/13/14/15/16/19/22/24；不含 20）。 */
+const FONT_SIZES = [12, 13, 14, 15, 16, 19, 22, 24];
 
 /** V5 Phase 2：设置持久化注入点（桌面默认 = localStorage；移动端可注入 AsyncStorage 等）。 */
 export interface SettingsStorage {

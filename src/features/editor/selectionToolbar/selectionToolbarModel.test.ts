@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { computeToolbarPosition, imageSizeWidth, isMarkActive, parseAssetRef, toFontSize, unwrapValue } from "./selectionToolbarModel";
+import { colorApplyCommand, computeToolbarPosition, imageSizeWidth, isMarkActive, parseAssetRef, toFontSize, unwrapValue } from "./selectionToolbarModel";
 
 describe("selectionToolbarModel", () => {
   it("锚点上方空间足够时放上方并水平居中", () => {
@@ -57,6 +57,19 @@ describe("selectionToolbarModel", () => {
     expect(imageSizeWidth("medium", 1000)).toBe(500);
     expect(imageSizeWidth("large", 1000)).toBe(800);
     expect(imageSizeWidth("original", 1000)).toBe(1000);
+  });
+
+  it("文字色本体：所选=正文色 ⇒ clearColor，否则 color(持久值)", () => {
+    const base = { normalText: "#262626" };
+    expect(colorApplyCommand("text", { ...base, visual: "#262626", persistent: "#262626" })).toEqual({ command: "clearColor" });
+    expect(colorApplyCommand("text", { ...base, visual: "#DF2A3F", persistent: "p-red" })).toEqual({ command: "color", arg: "p-red" });
+  });
+
+  it("背景色本体：空/无填充/已等于当前 ⇒ clearBgColor，否则 bgColor(持久值)", () => {
+    expect(colorApplyCommand("bg", { visual: "", persistent: "", normalText: "#262626" })).toEqual({ command: "clearBgColor" });
+    expect(colorApplyCommand("bg", { visual: "transparent", persistent: "transparent", normalText: "#262626" })).toEqual({ command: "clearBgColor" });
+    expect(colorApplyCommand("bg", { visual: "#FBDE28", persistent: "#FBDE28", normalText: "#262626", currentBg: "#FBDE28" })).toEqual({ command: "clearBgColor" });
+    expect(colorApplyCommand("bg", { visual: "#FBDE28", persistent: "#FBDE28", normalText: "#262626", currentBg: "#FFFFFF" })).toEqual({ command: "bgColor", arg: "#FBDE28" });
   });
 
   it("从 canonical URL 解析资源引用", () => {

@@ -686,6 +686,39 @@ python3 -  # 搜 showMiniToolbarWhen / MINI_TOOLBAR_TRIGGER / itemConfig / IMini
 
 ---
 
+**九、颜色控件（文字色 / 背景色）：本体 vs 下拉三角 + 内核默认色 + 共用记忆（260924 桌面实测 + bundle）**
+
+固定工具栏的颜色按钮是「本体 + 下拉三角」两件（bundle `plugins/color`、`plugins/bg-color` 的 `*-toolbar-descriptor`）：
+
+- **本体**（`.ne-ui-toolbar-color-show-button`）`_clickHandler → onSelect(props.color)`：**直接应用「当前色」，不弹面板**。
+- **下拉三角**（`.ne-ui-toolbar-color-dropdown-button`）才打开调色板（`overlayClassName: ne-ui-toolbar-color-picker-overlay`）。
+- 「当前色」= 插件上下文 `pluginContext.getColor()` 保存的**上次使用色**，初值 = 内核主题令牌默认色：
+
+  | 控件 | 令牌 | light | dark |
+  |---|---|---|---|
+  | 文字色 | `editor.color.default` | `#DF2A3F` | `#CA3F4F` |
+  | 背景色 | `editor.bgColor.default` | `#FBDE28` | `#C2AC19` |
+
+  文字色清除判定另用 `editor.text.color`（light `#262626` / dark `#E2E2E2`）。
+- **清除语义**（`onEvent('select')`，命令收**持久值**）：
+  - 文字色：所选视觉值 == `editor.text.color` ⇒ `execCommand('clearColor')`；否则 `execCommand('color', 持久值)`（**非 toggle**）。
+  - 背景色：持久值空/transparent，或**已等于当前** `queryCommandValue('bgColor')` ⇒ `execCommand('clearBgColor')`；否则 `execCommand('bgColor', 持久值)`（**是 toggle**）。
+  - UI 显示用 `editor.theme.toVisualValue(持久值)`。
+- **图标**：固定栏用 `FrameworkUiLib.EmbedIcon`（= bundle `erj`），`type='t-font-color'|'t-bg-color'` + `fill=当前色` ⇒ **下划线随当前色变化**；`fontColorIcon`/`bgColorIcon` 是同一套 SVG 函数。sprite 的 `icon-editor-color`/`icon-editor-bgColor` 是**静态**红/黄，不随色变，颜色按钮别用它。
+- **运行时读写内核「上次使用色」（浮动栏与固定栏共用一份）**：
+
+  ```js
+  const svc = editor.getService({ value: "IToolbarEditorService" }); // Doc.Plugins.Toolbar.IToolbarEditorService.ID 同款
+  const defs = svc.plugin._toolbar._descriptorDefines;               // key: color / bgColor
+  defs.color.pluginContext.getColor();   // 持久值（视觉值走 editor.theme.toVisualValue）
+  defs.color.pluginContext.setColor(/* 持久值 */);
+  ```
+
+  `getService(e)` 只看 `e.value` ⇒ `{ value: "IToolbarEditorService" }` 即可。**固定栏 disabled 时**颜色插件拿不到工具条服务、**不建 pluginContext**（`defs.color` 缺失）⇒ 需退回自持内存记忆 + 令牌默认。桌面隔离实例实测：`colorRaw=#DF2A3F`、`bgRaw=#FBDE28`；浮动栏选色后固定栏图标即变（共用成立）。
+- **选区变化后的取值时机（260924 实测）**：内核 `queryCommandValue` 在**选区刚变化时晚一拍**才更新——只读一次会停在「上一次选区的样式/字号」。固定栏在内核 `selectionchange` 上刷新；浮栏若只在 `pointerup` 读一次，就会「固定栏对了、浮栏要再点一下」。正解：**立刻刷 + ~90ms 延迟补读**，并订阅内核 `editor.on('selectionchange')`（与固定栏同源）。真实鼠标拖选 A 段↔B 段实测浮栏与固定栏一致。
+
+---
+
 ### 5.11 小记版式（note UI）：`uiSwitch` + `fullscreen` + note 工具条（260919 实机 + bundle 实测）
 
 > 起因：把小记写作区做成「默认一小块（图片/待办 + 右上角展开）→ 展开成完整 Lake 编辑器」，

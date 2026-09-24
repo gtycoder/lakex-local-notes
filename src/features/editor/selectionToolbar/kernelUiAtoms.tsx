@@ -25,6 +25,57 @@ export function KIcon({ type, size }: { type: string; size?: number }) {
   return createElement(Icon, { type: type.startsWith('icon-') ? type : 'icon-' + type, size });
 }
 
+/**
+ * 内核「嵌入图标」（FrameworkUiLib.EmbedIcon）：固定工具栏颜色按钮用的动态图标，
+ * 传 type=`t-font-color`/`t-bg-color` + fill=当前色 ⇒ 图标下划线随当前色变化。
+ * 浮动颜色按钮必须用它，才能和固定栏一样显示「上次使用色 / 默认色」。
+ */
+export function KEmbedIcon({ variant, color }: { variant: "text" | "bg"; color: string }) {
+  const Embed: any = uiLib().EmbedIcon;
+  if (!Embed) return null;
+  return createElement(Embed, { type: variant === "text" ? "t-font-color" : "t-bg-color", fill: color });
+}
+
+/**
+ * 内核「链接编辑弹层」：完全按内核 `plugins/link` 的 `.ne-link-editor` 结构渲染
+ * （文本 / 链接 两个 Input + 确定 Button），文案与类名都用内核的 ⇒ 与固定栏弹窗逐项一致。
+ * 输入框用 FrameworkUiLib.Input（= 内核 AU）、按钮用 FrameworkUiLib.Button（= 内核 er4）。
+ */
+export function KLinkEditor({ text, src, allowModifyText, invalid, onChangeText, onChangeSrc, onConfirm }: {
+  text: string; src: string; allowModifyText: boolean; invalid: boolean;
+  onChangeText: (value: string) => void; onChangeSrc: (value: string) => void; onConfirm: () => void;
+}) {
+  const lib = uiLib();
+  const Input: any = lib.Input;
+  const Button: any = lib.Button;
+  if (!Input || !Button) return null;
+  const onKeyDown = (event: { key?: string; preventDefault?: () => void }) => {
+    if (event.key === "Enter") { event.preventDefault?.(); onConfirm(); }
+  };
+  return createElement(
+    "div",
+    { className: "ne-link-editor" },
+    createElement(
+      "div",
+      { className: "ne-link-editor-field" },
+      createElement("label", null,
+        createElement("div", { className: "ne-link-editor-field-title" }, "文本"),
+        createElement(Input, { value: text, disabled: !allowModifyText, placeholder: "添加描述", onChange: (e: any) => onChangeText(e.target.value ?? ""), onKeyDown }),
+      ),
+    ),
+    createElement(
+      "div",
+      { className: "ne-link-editor-field" },
+      createElement("label", null,
+        createElement("div", { className: "ne-link-editor-field-title" }, "链接"),
+        createElement(Input, { value: src, placeholder: "链接地址", onChange: (e: any) => onChangeSrc(e.target.value ?? ""), onKeyDown }),
+      ),
+      invalid ? createElement("div", { className: "ne-link-error-tip" }, "请输入正确的链接") : null,
+    ),
+    createElement(Button, { onClick: onConfirm, disabled: !src || invalid }, "确定"),
+  );
+}
+
 export function KToolbarButton({ name, icon, caret, caretClass, checked, disabled, className, title, onClick, children }: {
   name: string; icon?: string; caret?: boolean; caretClass?: string; checked?: boolean; disabled?: boolean;
   className?: string; title?: string; onClick?: (event: ReactMouseEvent<HTMLButtonElement>) => void; children?: ReactNode;
@@ -34,7 +85,8 @@ export function KToolbarButton({ name, icon, caret, caretClass, checked, disable
   const cls = [className ?? "", checked ? "checked" : ""].filter(Boolean).join(" ");
   return createElement(
     "span",
-    { className: "selection-toolbar__kbtn", onClick },
+    // disabled 时连外层冒泡点击也不接（内核按钮会拦，但我们的包裹 span 仍会冒到 onClick）。
+    { className: "selection-toolbar__kbtn", onClick: disabled ? undefined : onClick },
     createElement(
       Tb,
       { name, className: cls, disabled, title, "aria-label": title, "aria-pressed": checked || undefined },

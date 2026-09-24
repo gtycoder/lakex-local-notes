@@ -34,16 +34,19 @@ export const STYLE_BLOCKS: { value: string; label: string }[] = [
   { value: "h4", label: "H4" },
 ];
 
-/** 浮动工具栏「段落样式」：正文 + H1–H6（标签对齐内核固定工具栏：正文/标题1..6）。
+/** 浮动工具栏「段落样式」（260924 用户口径）：
+ *   - **折叠态**（工具栏按钮）符号化：正文 = `T`，标题 = `H1`..`H6`（去掉下拉三角后只显符号，紧凑稳定）；
+ *   - **下拉内容与固定栏逐项一致**：菜单文案用内核的「正文/标题1..6」，menuClass 用内核 `.ne-ui-item-*`
+ *     （字号预览 16/28/24/20/16/14/14）。
  * 与 STYLE_BLOCKS 分开维护，避免影响移动端 dock 的既有取值。 */
-export const PARAGRAPH_STYLES: { value: string; label: string; keys: string }[] = [
-  { value: "p", label: "正文", keys: "⌥ ⌘ 0" },
-  { value: "h1", label: "标题1", keys: "⌥ ⌘ 1" },
-  { value: "h2", label: "标题2", keys: "⌥ ⌘ 2" },
-  { value: "h3", label: "标题3", keys: "⌥ ⌘ 3" },
-  { value: "h4", label: "标题4", keys: "⌥ ⌘ 4" },
-  { value: "h5", label: "标题5", keys: "⌥ ⌘ 5" },
-  { value: "h6", label: "标题6", keys: "⌥ ⌘ 6" },
+export const PARAGRAPH_STYLES: { value: string; label: string; menuLabel: string; menuClass: string; keys: string }[] = [
+  { value: "p", label: "T", menuLabel: "正文", menuClass: "ne-ui-item-content", keys: "⌥ ⌘ 0" },
+  { value: "h1", label: "H1", menuLabel: "标题1", menuClass: "ne-ui-item-heading1", keys: "⌥ ⌘ 1" },
+  { value: "h2", label: "H2", menuLabel: "标题2", menuClass: "ne-ui-item-heading2", keys: "⌥ ⌘ 2" },
+  { value: "h3", label: "H3", menuLabel: "标题3", menuClass: "ne-ui-item-heading3", keys: "⌥ ⌘ 3" },
+  { value: "h4", label: "H4", menuLabel: "标题4", menuClass: "ne-ui-item-heading4", keys: "⌥ ⌘ 4" },
+  { value: "h5", label: "H5", menuLabel: "标题5", menuClass: "ne-ui-item-heading5", keys: "⌥ ⌘ 5" },
+  { value: "h6", label: "H6", menuLabel: "标题6", menuClass: "ne-ui-item-heading5", keys: "⌥ ⌘ 6" },
 ];
 
 /** 浮动工具栏「转为」：结构块转换（260924 用户口径：代码块 = 行内代码；高亮块 = 内核 alert 命令）。 */
@@ -95,8 +98,8 @@ export const KNOWN_COMMAND_NAMES: ReadonlySet<string> = new Set([
   "alert", // 高亮块（命令式注册；execCommand('alert') 插入 blockquote.lake-alert）
 ]);
 
-/** 字号档位（官方 docs/08：execCommand('fontsize', N) 的取值区间）。 */
-export const FONT_SIZE_OPTIONS: readonly number[] = [12, 13, 14, 15, 16, 19, 22, 24, 29, 32, 40];
+/** 字号档位（= 内核 fontsize 命令的取值范围，bundle `Rz`；12 档，含 48）。 */
+export const FONT_SIZE_OPTIONS: readonly number[] = [12, 13, 14, 15, 16, 19, 22, 24, 29, 32, 40, 48];
 
 /** 判断是否为已知有效命令（非 no-op）。 */
 export function isKnownEditorCommand(name: string): boolean {

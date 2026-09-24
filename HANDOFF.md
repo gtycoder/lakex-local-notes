@@ -96,6 +96,27 @@
 ### 八、分支提交（`master..feat/floating-toolbar`）
 **功能线 13 个**：`e4ee89c` 浮栏+开关 → `0c844c7` 图片能力 → `936ad47` 裁剪/样式/批量/链接 → `c1f3b54` 文字改 Lake 风 → `86afe7a` 拖选不弹 → `b97e00a` 颜色面板内核样式 → `205e194` 子菜单按触发项定位 → `953e541` 颜色面板补背景/箭头 → `5fa6834` 子菜单对齐 Lake → `9dbed06` 背景色「无填充色」 → `9a03f13` caret+颜色分裂 → **`0d63b53` 第二轮重做（内核原语装配）** → **`675a091` HANDOFF 回填**。
 
+### 九、260924 续 · 颜色控件「本体 vs 下拉三角」对齐（本会话，**未提交**）
+
+- **问题（用户报）**：浮动栏的文字色 A / 背景色按钮，**本体和下拉三角都做成了「开面板」** ⇒ 本体「直接应用当前色」的行为完全没实现，也没用内核默认色。用户口径：浮动 = 固定栏换位置出现，**所有行为必须一致、共用一份记忆**。
+- **内核真身**（详见 `docs/LAKEX-CONTRACT.md §5.10 九`）：本体 `onSelect(props.color)` 直接应用「上次使用色」（初值 = 主题令牌 `editor.color.default` = `#DF2A3F` / `editor.bgColor.default` = `#FBDE28`），三角才开面板；清除语义 文字色=正文色 ⇒ `clearColor`、背景色=无填充/已等于当前 ⇒ `clearBgColor`。
+- **已完成**：
+  - 新增 `src/features/editor/selectionToolbar/colorMemory.ts`：读写内核 `pluginContext`（`Doc.Plugins.Toolbar.IToolbarEditorService` → `service.plugin._toolbar._descriptorDefines[color|bgColor].pluginContext`）⇒ 浮动与固定**共用同一份「上次使用色」**；固定栏 disabled（无 pluginContext）时退回自持内存 + 令牌默认。
+  - `KColorButton` 拆 `onApply`（本体）/ `onOpen`（三角）；图标改内核 `FrameworkUiLib.EmbedIcon`（`t-font-color`/`t-bg-color` + `fill=当前色`）⇒ 下划线随当前色变（默认红/浅黄；原 sprite 是静态色，不随色变）。
+  - 纯决策 `colorApplyCommand`（`selectionToolbarModel.ts`）+ 单测。
+  - 同会话显示优化（用户 260924）：段落样式标签**全部符号化**（`PARAGRAPH_STYLES`：正文 → `T`，标题 → `H1`..`H6`）；字号控件**只显示数值**（`15` 而非 `15px`）；去掉 **段落样式 / 字号 / 超链接** 的下拉三角（`caret`，「转为」保留）；标签按钮定成 **26×26**（与 `B` 等图标按钮同尺寸/命中区）；字形 **`T` 17px**（实测 = B 图标 ink 12.6px），**`H1`–`H6` 与字号数值 15px**（两字形偏大，用户要求收小）；标签颜色统一 **`--lake-text-2`**（与 B 同色，不再用内核的纯黑 `--lakex-editor-icon-primary`）；内核 `.ne-ui-toolbar-select-value` 的固定 `width:40px`（给箭头预留）覆盖为 `width:auto` ⇒ `T↔15` 与 `15↔B` 间距齐平。
+  - **同会话子菜单风格统一（用户 260924）**：段落样式/字号/转为这些**自锚定子菜单不再自造弹层样式**——直接复用内核固定栏弹层的 `.ant-dropdown-menu` + `.ne-ui-select-menu/.ne-ui-select-item`（同一套类名 ⇒ 白底 / antd 阴影 / 圆角 5 / 无边框 / 选中 antd 蓝 `rgb(24,144,255)` / 快捷键灰 全一致）；段落标签改用内核 `.ne-ui-item-content` / `.ne-ui-item-heading1–5`（字号预览 16/28/24/20/16/14/14，与固定栏逐项一致），**删掉内联 font-size**；`PARAGRAPH_STYLES` 拆成 `label`（折叠态符号 `T`/`H1`–`H6`，仍按用户口径）+ `menuLabel`/`menuClass`（**下拉文案与样式全用内核**：正文/标题1..6）。`selectionToolbar.css` 声明数 164→151（净减）。**颜色/背景色弹层此前已单独对齐，本次未动。**
+  - **同会话字号对齐（用户 260924）**：① 浮动字号菜单**内容**补齐为内核 12 档 `Rz=[12,13,14,15,16,19,22,24,29,32,40,48]`（原缺 48）；**样式**改用内核字号项类 `ne-ui-font-size-item`（12px / 常规，与固定栏 Select 选项一致），不再误用段落样式的 `ne-ui-item-content`（16px 粗）；菜单容器补内核 `ne-ui-toolbar-fontsize-dropdown` 类。② **设置「正文字号」只对齐内容**：`FONT_SIZES` 改为内核正文档位 `R_=[12,13,14,15,16,19,22,24]`（删掉内核没有的 **20**），默认 `DEFAULT_SETTINGS.fontSize` 20 → **16**（20 不在内核档位里，原值会被内核 `defaultFontsize` 忽略）。
+  - **同会话「选中态」对齐（用户 260924）**：`useSelectionToolbar.readState` 改用内核同款 `queryCommandValue('fontsize', false)` 取**生效字号**（含文档默认；不带第二参时正文返回 `null`）⇒ 折叠态显示实际生效值（16，而非写死的 15），字号菜单按生效值标中（正文默认 → `16px` 选中）、段落菜单同理（`p` → 「正文」选中）。选中态样式沿用内核（antd 蓝 `rgb(24,144,255)` + 勾），与固定栏一致。
+  - **同会话超链接弹窗对齐（用户 260924）**：浮动工具栏链接弹层改为**完全复用内核 `plugins/link` 的 `.ne-link-editor`**（`FrameworkUiLib.Input`/`Button` + 内核类名）：文本（占位「添加描述」）/ 链接（占位「链接地址」）/ 确定，非法时「请输入正确的链接」；表面（白底 / 1px 边框 / 圆角 5 / `16px 12px` / 宽 365 / antd 阴影）与固定栏逐项一致。原自造「单 URL 输入 + 应用 + 移除链接」已删；`.selection-toolbar__popover` 只留定位（声明数 151→143）。内核 **没有** 可触发自身链接弹窗的命令（`insertLink` 是 widget 方法，`execCommand('insertLink')` 不开弹窗）⇒ 只能按内核 DOM 复刻。
+  - **同会话「标题时字号禁用」对齐（用户 260924）**：标题是固定样式 ⇒ 字号不可调。内核 `fontsize` 命令 `getState` 在「选区所有块都是 Heading」时返回禁用态（`queryCommandEnabled('fontsize')=false`）。浮栏字号按钮改用**同一判据** `disabled={!canCommand("fontsize")}`（= 内核 `getUIState` 的 `!queryCommandEnabled`），并在 `KToolbarButton` 里让 `disabled` 时**连外层冒泡点击也不接**（内核按钮会拦，但我们的包裹 span 仍会冒到 onClick）。实测 H1：浮栏与固定栏字号均 `disabled` + `opacity:.25`、点击不开菜单；正文仍可用。
+  - **同会话修「链接弹窗输入即关闭 / 写不进去」（用户 260924，真 bug）**：三个原因叠加——① 输入框获焦使编辑器选区丢失，`refresh` 判定 target=null ⇒ 浮栏连同弹窗被卸载 ⇒ 新增 `holdRef`：**弹层开着时冻结浮栏刷新**（点外部仍经 `pointerdown` 直接关闭）；② 浮栏根 `onMouseDown preventDefault`（保选区用）会**阻止输入框获得焦点** ⇒ 放行 `input/textarea/.ne-link-editor` 内的 mousedown；③ 确认时编辑器选区已被输入框抢走、命令静默无效 ⇒ 打开弹层时**暂存选区 Range + 文本**，确认前还原并 `execCommand('focus')` 再执行 `link`/`insertLink`。实测：输入不再关闭、点确定后 URL 写进 `getDocument('text/lake')`。
+  - **同会话「选区含链接 ⇒ 链接按钮禁用」对齐（用户 260924）**：内核 `link-toolbar-descriptor.getUIState` = `disabled: !queryCommandEnabled('link') && !queryCommandEnabled('insertLink')`（选区里已有链接时两者都 false）。浮栏链接按钮用**同一判据**，配合已加的「`KToolbarButton` disabled 不接外层冒泡点击」+ 内核 `.ne-ui-toolbar-button[disabled]{opacity:.25}`。实测选区为链接文字 `LINKTXT` 时：浮栏链接按钮 `disabled` + `opacity:.25`。
+  - **同会话修「左缘把手偶发常驻」（用户 260924，独立小修）**：根因 = 把手显隐只看 `.edge-hotzone.is-active`，而它**只有 `pointerleave` 一条清除路径**；① `reduceHover` 的 `click` 只产生 `toggleDock`（相位说已隐藏、DOM 仍留着 `is-active`，且**把手自身**的 onClick 直接 `toggleSidebarDock()` 绕过了相位机）；② 窗口失焦 / 页面隐藏 / `pointercancel` 收不到 leave。修：① `click` 效果补 `hideHandle + cancelDwell`，把手 onClick 也改走 `dispatchEdge({type:"click"})`；② 补 `window blur` / `document visibilitychange(hidden)` / 热区 `onPointerCancel` → `hideEdgeHandle()`（只收把手 + 取消驻留，不动面板模式）。实测：快速点击后 `is-active` true→false；`blur` / `pointercancel` 后 true→false。`sidebarHoverMachine.test.ts` ⑦ 断言同步更新；`e2e-sidebar-hover.mjs` ⑧ 的「先移开指针」workaround 已非必需（未改脚本）。
+  - **同会话修刷新时机（用户 260924，重要）**：内核 `queryCommandValue` 在**选区刚变化时晚一拍**才更新，而浮栏原先只在 `pointerup` 读一次 ⇒ 停在「上一次选区的样式/字号」，表现为「固定栏对了、浮栏要再点一下」才对齐。修法（`useSelectionToolbar.ts`）：`selectionchange`/`pointerup` 走 `refreshSettled()` = **立刻刷 + ~90ms 延迟补读**，并订阅内核 `editor.on('selectionchange')`（与固定栏刷新同源）。真机（真实鼠标拖选，A 段↔B 段）实测：浮栏随选区即时更新且与固定栏一致。
+- **实测（隔离实例 CDP，端口 1439/9231，已清理）**：本体点击直接上色且不弹面板；三角开面板（71 色块）；面板选 `#1890FF` 后**固定栏图标同步变蓝**（共用成立）；默认 `colorRaw=#DF2A3F`/`bgRaw=#FBDE28`。门禁：`tsc` 0 · `vitest` **1262 passed / 16 skipped** · `ui-metrics` 全绿 · `vite build` ✓ · `git diff --check` clean。
+- **待办**：用户点验观感/交互；「最近使用」仍是占位（内核 preset swatch 不写 userColors，只有自定义色写）；提交与合 master 待用户验收。
+
 ## 0. 最新交接 · 260923 续 · 桌面 UI 细节优化批次（顶栏真居中 / 页签配色 / 目录浮层 / 目录栏文字 / 增强大纲收敛与配色 / dev 首开画板 reload）（新会话先读这一节）
 
 > 写给**完全没有上下文的新会话**。本批直接在 `master` 上做，**已推送 Gitee**：
@@ -2722,6 +2743,7 @@ P4 组件库 14 件 → P5 逐屏迁移（每屏对照底账打勾）→ P6 第�
     用户要求后期**复用同一套能力**（同一份白名单 + 同一个预览读取器 `quickNotePreviewParser.ts`），
     工具栏形态可按移动端（`EditorDock`）调整。做之前先读 §2.10 续做 + `docs/LAKEX-CONTRACT.md` §5.11。
 17. **【UI 重构收尾 · 待办清单】** —— 方案见 **`docs/UI-REDESIGN-OPTIMIZATION-PLAN-260923.md`**（行为不变的优化 + 与安卓重做的排期）；评价见 `docs/UI-REDESIGN-REVIEW-260923.md` **§四**：P0 安全（`W-10 dompurify` + `webApiServer` 的 `/api/*` Origin）· P1（`library-changed` 广播 / 目录树窗口化 / 面板契约可执行化 / 分段控件与设置说明字号的共享层 `!important` 阻塞）· P2（设计词表裁剪 / 历史文档标注 / 画板 `Wt is not a function` 立项）· P3 见本 §3 其余条目。
+18. **【浮动工具栏颜色 · 「最近使用自定义颜色」】**（260924 记录，用户：先记着后续处理）：内核调色板的「最近使用」**只记自定义色**——`updateUserColor` 只在「更多颜色」RGBA 选择器关闭（`saveColor`）时触发，**预设色块 `onSelect` 不写**；持久化在 `localStorage['ne_lakex_user_color_local_store_key']`（≤10，末尾最新），经 `editor.getUserColors()` / `editor.updateUserColor(c)` 读写。我们的浮动颜色面板「最近使用」目前是**占位**（`LakeColorBoard` 写死「暂无」）。要真做需先定：是否也记预设色块（会偏离内核语义）、面板改读 `editor.getUserColors()`、点最近色如何应用（`color`/`bgColor`）。**当前不动**。
 
 ### 当前问题 / 已知坑（不阻塞）
 - 画板**不再记忆视口**（拖动/缩放后重开为默认/自适应）：这是 260916 为「不让视口触发保存/上传」刻意做的取舍，**用户已确认接受**（"谁知道下次进来要看什么"）。不要改回去。

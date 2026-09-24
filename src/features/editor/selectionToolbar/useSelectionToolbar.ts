@@ -39,17 +39,19 @@ function firstRangeRect(range: Range): Rect | null {
  * - 图片：点击本容器内的 image 卡片（卡片无原生「选中」态，故用最近一次点击记录）。
  * - 多 tab keep-alive：选区是全局唯一的，隐藏 tab 不可能有选区 ⇒ 天然只出现在当前可见编辑器。
  */
-export function useSelectionToolbar(editor: LakeEditorInstance, container: HTMLElement) {
+export function useSelectionToolbar(editor: LakeEditorInstance, container: HTMLElement, holdRef?: { current: boolean }) {
   const [target, setTarget] = useState<SelectionTarget | null>(null);
   const [state, setState] = useState<ToolbarState>(EMPTY_STATE);
   const toolbarRef = useRef<HTMLDivElement | null>(null);
   const imageRef = useRef<ImageTarget | null>(null);
   /** 指针按住中（拖选进行中）：此时不弹浮框，等完全松开再弹（否则从下往上选会被挡住）。 */
   const pressingRef = useRef(false);
+  /** 内核选区/命令态「晚一拍」：延迟补读用的定时器（同一时刻只留最后一次）。 */
+  const settleTimerRef = useRef<number | null>(null);
 
 
   const readState = useCallback((): ToolbarState => {
-    const q = (name: string): unknown => { try { return editor.queryCommandValue?.(name); } catch { return undefined; } };
+    const q = (name: string, ...args: unknown[]): unknown => { try { return editor.queryCommandValue?.(name, ...args); } catch { return undefined; } };
     const str = (name: string, fallback = ""): string => {
       const v = unwrapValue(q(name));
       return typeof v === "string" ? v : fallback;
@@ -58,7 +60,9 @@ export function useSelectionToolbar(editor: LakeEditorInstance, container: HTMLE
     for (const name of ["bold", "italic", "underline", "strikethrough", "code"]) marks[name] = isMarkActive(q(name));
     return {
       style: str("style", "p") || "p",
-      fontSize: toFontSize(unwrapValue(q("fontsize"))),
+      // 内核 fontsize 控件用 queryCommandValue('fontsize', false) 取「生效字号」（含默认），
+      // 不带第二参时正文返回 null ⇒ 折叠态无从显示、菜单也无项可标选中。与固定栏同源。
+      fontSize: toFontSize(unwrapValue(q("fontsize", false))),
       alignment: str("alignment"),
       color: str("color"),
       bgColor: str("bgColor"),
@@ -89,10 +93,14 @@ export function useSelectionToolbar(editor: LakeEditorInstance, container: HTMLE
   }, [container]);
 
   const refreshNow = useCallback(() => {
+    // 弹层开着（如链接编辑框获得焦点）：冻结浮栏 —— 焦点转到输入框会让编辑器选区丢失，
+    // 若照常刷新就会把浮栏连同弹窗一起关掉（用户 260924 报「输入即关闭」）。点外部仍会经
+    // pointerdown 直接 setTarget(null) 关闭，不受此影响。
+    if (holdRef?.current) return;
     const next = computeTarget();
     setTarget(next);
     if (next?.kind === "text") setState(readState());
-  }, [computeTarget, readState]);
+  }, [computeTarget, readState, holdRef]);
 
   // 同步刷新：早期版本用 rAF 合并，但 Electron 在窗口未绘制/被遮挡时会**暂停 rAF**，
   // 导致首次 refresh 永不执行、后续全部被 in-flight 守卫吞掉（260924 实测：浮框完全不出现）。
@@ -100,6 +108,21 @@ export function useSelectionToolbar(editor: LakeEditorInstance, container: HTMLE
   const refresh = useCallback(() => {
     try { refreshNow(); } catch { /* 内核/选区瞬时态不阻断 */ }
   }, [refreshNow]);
+
+  /**
+   * 选区/命令态变化后的刷新：立刻刷一次（保证浮框及时出现/定位），再延迟补读一次。
+   * 内核的 queryCommandValue 在选区刚变化时会晚一拍才更新（HANDOFF §4 记录过同一现象），
+   * 只读一次会拿到「上一次选区的样式/字号」⇒ 浮栏显示与固定栏不一致（用户 260924 报）。
+   * 延迟补读让浮栏与固定栏在同一时刻收敛到同一状态。
+   */
+  const refreshSettled = useCallback(() => {
+    refresh();
+    if (settleTimerRef.current !== null) window.clearTimeout(settleTimerRef.current);
+    settleTimerRef.current = window.setTimeout(() => {
+      settleTimerRef.current = null;
+      try { refreshNow(); } catch { /* 忽略瞬时态 */ }
+    }, 90);
+  }, [refresh, refreshNow]);
 
   /**
    * 执行内核命令并刷新 active 态。
@@ -115,7 +138,7 @@ export function useSelectionToolbar(editor: LakeEditorInstance, container: HTMLE
   }, [editor, refresh, refreshNow]);
 
   useEffect(() => {
-    const onSelectionChange = () => { if (!imageRef.current) refresh(); };
+    const onSelectionChange = () => { if (!imageRef.current) refreshSettled(); };
     const onPointerDown = (event: PointerEvent) => {
       const t = event.target as HTMLElement | null;
       if (toolbarRef.current && t && toolbarRef.current.contains(t)) return;
@@ -132,7 +155,8 @@ export function useSelectionToolbar(editor: LakeEditorInstance, container: HTMLE
     const endPress = () => {
       if (!pressingRef.current) return;
       pressingRef.current = false;
-      refresh();
+      // 立刻刷 + 延迟补读：pointerup 瞬间内核可能还没更新命令态，只读一次会停在旧样式。
+      refreshSettled();
       window.requestAnimationFrame(refresh);
     };
     const onKeyDown = (event: KeyboardEvent) => {
@@ -154,6 +178,13 @@ export function useSelectionToolbar(editor: LakeEditorInstance, container: HTMLE
       editor.on?.("contentchange", onChange);
       disposeContent = () => { try { editor.off?.("contentchange", onChange); } catch { /* 忽略 */ } };
     } catch { /* 非编辑器环境忽略 */ }
+    let disposeKernelSelection: (() => void) | undefined;
+    try {
+      // 内核自己的选区事件：与固定工具栏刷新同源 —— 在此刷新读到的就是内核更新后的命令态。
+      const onKernelSelection = () => refreshSettled();
+      editor.on?.("selectionchange", onKernelSelection);
+      disposeKernelSelection = () => { try { editor.off?.("selectionchange", onKernelSelection); } catch { /* 忽略 */ } };
+    } catch { /* 非编辑器环境忽略 */ }
     refresh();
     return () => {
       document.removeEventListener("selectionchange", onSelectionChange);
@@ -165,8 +196,10 @@ export function useSelectionToolbar(editor: LakeEditorInstance, container: HTMLE
       window.removeEventListener("resize", refresh);
       document.removeEventListener("scroll", refresh, true);
       disposeContent?.();
+      disposeKernelSelection?.();
+      if (settleTimerRef.current !== null) { window.clearTimeout(settleTimerRef.current); settleTimerRef.current = null; }
     };
-  }, [container, editor, refresh]);
+  }, [container, editor, refresh, refreshSettled]);
 
   return { target, state, run, refresh, toolbarRef };
 }
