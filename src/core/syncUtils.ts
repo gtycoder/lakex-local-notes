@@ -12,6 +12,7 @@
 import { sha256Sync } from "./sha256Sync.js";
 import type { Manifest, ManifestFolder, ManifestNote } from "./manifestTypes.js";
 import { mergeLockState } from "./syncDecision.js";
+import { NOTE_KINDS } from "./noteKind.js";
 
 // ===== 共享类型 =====
 export interface S3Settings {
@@ -218,8 +219,10 @@ export function validateManifest(manifest: unknown, limits: { maxNotes: number; 
       throw new Error(`清单格式无效：contentHash 非法（id=${String(n.id)}）`);
     }
     if (n.parentId !== null && typeof n.parentId !== "string") throw new Error("清单格式无效：parentId 非法");
-    // 未知 kind 显式拒绝（不静默当 doc，否则会把表格正文喂给 Lake 编辑器 → 保存即毁数据）
-    if (n.kind !== undefined && n.kind !== "doc" && n.kind !== "sheet" && n.kind !== "bitable") {
+    // 未知 kind 显式拒绝（不静默当 doc，否则会把表格/画板正文喂给 Lake 编辑器 → 保存即毁数据）
+    // 白名单走 NOTE_KINDS 单一来源：260925 修「v7 新增 board 时此硬编码列表漏更新 ⇒
+    // 含画板的清单写出去后自己读不回（parseLakeManifest 抛 kind 非法）」。
+    if (n.kind !== undefined && !(NOTE_KINDS as readonly unknown[]).includes(n.kind)) {
       throw new Error(`清单格式无效：kind 非法（id=${String(n.id)}）`);
     }
     if (typeof n.sortOrder !== "number" || typeof n.updatedAt !== "string") throw new Error("清单格式无效：sortOrder/updatedAt 非法");

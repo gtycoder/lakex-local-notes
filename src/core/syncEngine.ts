@@ -551,7 +551,8 @@ export async function syncNow(cfg: SyncConfig, s3: S3Store, db: SyncDbPort, opts
       // 回收站条目携带资源清单（对齐桌面：trash 上云带 assets，B 端下载全文+资源可恢复）
       const uploadContent = await contentOf(local);
       const entry = buildUploadEntry({
-        note: { id: local.id, title: local.title, parentId: TRASH_NOTEBOOK_ID, sortOrder: local.sortOrder, updatedAt: local.updatedAt, syncState: local.syncState, isConflict: local.isConflict, isLocked: local.isLocked, lockedAt: local.lockedAt, icon: local.icon, trashedAt: local.trashedAt, deletedFromParentId: local.deletedFromParentId ?? null },
+        // kind 必须透传：否则非 doc 文档（sheet/bitable/board）上云后在他端被当 doc 导入（260925 多端实测）。
+        note: { id: local.id, title: local.title, parentId: TRASH_NOTEBOOK_ID, sortOrder: local.sortOrder, updatedAt: local.updatedAt, syncState: local.syncState, isConflict: local.isConflict, isLocked: local.isLocked, lockedAt: local.lockedAt, icon: local.icon, kind: local.kind, trashedAt: local.trashedAt, deletedFromParentId: local.deletedFromParentId ?? null },
         contentHash: localHash,
         assets: [],
         trashedAt: local.trashedAt,
@@ -577,7 +578,8 @@ export async function syncNow(cfg: SyncConfig, s3: S3Store, db: SyncDbPort, opts
       // H3：上传前扫描本地资产 → 上传 S3 → 填入 manifest.assets（供他端下载）。P3-4：解析登记为并发任务、环后执行。
       const uploadContent = await contentOf(local);
       const entry = buildUploadEntry({
-        note: { id: local.id, title: local.title, parentId: local.parentId, sortOrder: local.sortOrder, updatedAt: local.updatedAt, syncState: local.syncState, isConflict: local.isConflict, isLocked: local.isLocked, lockedAt: local.lockedAt, icon: local.icon },
+        // kind 必须透传（同软删分支）：漏了的话 manifest 不含 kind → 他端把表格/画板当 doc 导入。
+        note: { id: local.id, title: local.title, parentId: local.parentId, sortOrder: local.sortOrder, updatedAt: local.updatedAt, syncState: local.syncState, isConflict: local.isConflict, isLocked: local.isLocked, lockedAt: local.lockedAt, icon: local.icon, kind: local.kind },
         contentHash: localHash,
         assets: [],
         // 恢复：显式清墓碑字段（覆盖远端墓碑 → local-wins）

@@ -173,6 +173,7 @@ const row = (over: Partial<LocalNoteRow> & { id: string }): LocalNoteRow => ({
   id: over.id, title: over.title ?? "笔记", content: over.content ?? "<p>hi</p>", updatedAt: over.updatedAt ?? "2026-01-01T00:00:00.000Z", syncState: over.syncState ?? "local",
   trashedAt: over.trashedAt ?? null, restorePendingAt: over.restorePendingAt ?? null, parentId: over.parentId ?? null, sortOrder: over.sortOrder ?? 0,
   isLocked: over.isLocked ?? false, lockedAt: over.lockedAt ?? null, icon: over.icon ?? null, isConflict: over.isConflict ?? false,
+  kind: over.kind,
 });
 
 describe("syncEngine（共享编排）", () => {
@@ -209,6 +210,28 @@ describe("syncEngine（共享编排）", () => {
     expect(manifest.version).toBe(7);   // 260920：v7 = kind 新增 board（画板文档）
     expect(manifest.notes[0].id).toBe("n1");
     expect(db.notes.get("n1")!.syncState).toBe("synced");
+  });
+
+  // 260925 多端实测回归：上传条目手工枚举字段时漏了 kind ⇒ manifest 不含 kind ⇒
+  // 他端把 sheet/bitable/board 当 doc 导入（正文落到 notes/*.lake，打开即毁）。这里卡住上传侧透传。
+  it("kind 透传：非 doc（sheet/bitable/board）上传条目带 kind", async () => {
+    for (const kind of ["sheet", "bitable", "board"] as const) {
+      const s3 = new MemS3();
+      const db = new MemDb();
+      db.notes.set("n1", row({ id: "n1", kind }));
+      await syncNow(CFG, s3, db);
+      const manifest = JSON.parse(decode((await s3.getObject("p/manifests/latest.json"))!));
+      expect(manifest.notes.find((n: any) => n.id === "n1")?.kind, kind).toBe(kind);
+    }
+  });
+
+  it("kind 透传：软删（回收站）条目也带 kind", async () => {
+    const s3 = new MemS3();
+    const db = new MemDb();
+    db.notes.set("n2", row({ id: "n2", kind: "sheet", trashedAt: "2026-01-02T00:00:00.000Z", syncState: "local" }));
+    await syncNow(CFG, s3, db);
+    const manifest = JSON.parse(decode((await s3.getObject("p/manifests/latest.json"))!));
+    expect(manifest.notes.find((n: any) => n.id === "n2")?.kind).toBe("sheet");
   });
 
   it("A：manifest 声明正文引用但本地缺失、已记录元数据的资源（备份不丢引用）", async () => {

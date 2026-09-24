@@ -4,6 +4,29 @@
 > 历史所有 dated handoff 已合并进本文件（内容在 git 历史可查）。本文件只保留**当前状态 + 真正的待办 + 有价值的坑**。
 > **§8 是移动端（安卓）专职交接**，由移动端会话维护；桌面会话不要改 §8，移动端会话不要改 §0-§7 之外的桌面文件。
 
+## 0. 最新交接 · 260925 · 5 端真实云同步测试（3 桌面 + 真机 + 模拟器）：发现并修复「上传漏 kind」（数据损坏级）
+
+> 写给**完全没有上下文的新会话**。本会话按用户要求做了一次 5 端真实云同步测试，**当场发现 2 个真 bug 并修复**（均**未提交**，等用户验收）；完整报告见 `/Users/admin/Documents/lake5-multi-end-sync-report-260925.md`。
+
+### 一、修复（2 个，均未提交）
+1. **`src/core/syncUtils.ts` 的 `validateManifest` kind 白名单漏 `board`**：v7 加 board 时硬编码列表（doc|sheet|bitable）未更新 ⇒ 含画板的清单**自己写出去自己读不回**（`parseLakeManifest` 抛「kind 非法」）。改为走 `NOTE_KINDS` 单一来源；`syncUtils.test.ts` 加四类 kind 放行 + 未知 kind 拒绝。
+2. **`src/core/syncEngine.ts` 上传条目漏 `kind`（数据损坏级）**：上传侧**手工枚举** `LocalNoteState` 字段构造 `buildUploadEntry`，两处（正常 L582 / 软删 L555）都漏了 `kind` ⇒ 发布的 manifest 不含 kind ⇒ **对端一律按 doc 导入**（正文落到 `notes/*.lake`，打开即毁）。补 `kind: local.kind`；`syncEngine.test.ts` 加「非 doc / 软删条目带 kind」回归（**已验证去掉修复即失败**）。
+   - 该 bug 单端/单测都看不到，**只有多端真实云同步才暴露** ⇒ 多端测试确有价值。
+
+### 二、测试结论（隔离前缀 mk5b-20260925012701，测完 0 残留）
+- 5 端 = D1/D2/D3（隔离 Electron，9232/9233/9234）+ 真机（serial 50950385）+ 模拟器（emulator-5554）。
+- **套件 1 核心协议 93/93**：kind 传播（含安卓 DB 的 doc_kind）/多写端创建/元数据 LWW/删除传播/恢复传播/**内容冲突先提交者为真**/小记编辑/云端 manifest（v7 + 四类 kind）/全端收敛/幂等（第二次 uploaded=0 downloaded=0）。
+- **套件 2 边界资产 40/40**：非 doc 正文逐字节相等/小记图片资产传播/purge 幽灵防护/笔记本传播/**删除压编辑**。
+- 合计 **133/133**。
+
+### 三、数据安全
+- 真机测试前**完整备份**（748MB）→ 测后**已还原**（508 笔记 / 5 小记 / 35 目录，prefix 回到 lake-notes-stress2-260910）；备份留存 `/Users/admin/Documents/lake5-real-backup-20260925012122.tgz`。
+- 未碰正式数据、未碰用户 dev 实例（9222/19876）。
+
+### 四、下一步
+- **等用户验收这 2 个修复后提交**（红线：代码批次不擅自合 master）。
+- 未覆盖：安卓对 sheet/bitable/board 仅只读（测的是收到且 kind/正文正确）；资产只跑了 1 张图；目录 rename/icon/move、回收站内编辑、10万/100万量级未纳入。
+
 ## 0. 最新交接 · 260924 晚会话总交接：浮栏收尾 / 图片复制 / 浏览器端阶段 1–3 / library-changed
 
 > 写给**完全没有上下文的新会话**。本会话在 `master` 上连续做了 5 摊事，**全部已提交并推送**（tip 见 `git log -1`；本文件只留结论，细节在各分节/文档）。

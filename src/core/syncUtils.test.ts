@@ -101,6 +101,19 @@ describe("validateManifest 抛错行为", () => {
     m.folders = null;
     expect(() => validateManifest(m, { maxNotes: 100, maxFolders: 100 })).toThrow("folders 非数组");
   });
+  // 260925：v7 新增 board 时硬编码白名单漏更新 ⇒ 含画板清单读不回。这里卡住所有已知 kind。
+  it("已知 kind（doc/sheet/bitable/board）放行", () => {
+    for (const kind of ["doc", "sheet", "bitable", "board"] as const) {
+      const m = makeValidManifest() as { notes: Array<Record<string, unknown>> };
+      m.notes[0].kind = kind;
+      expect(() => validateManifest(m, { maxNotes: 100, maxFolders: 100 }), kind).not.toThrow();
+    }
+  });
+  it("未知 kind 显式拒绝（不静默当 doc）", () => {
+    const m = makeValidManifest() as { notes: Array<Record<string, unknown>> };
+    m.notes[0].kind = "future-kind";
+    expect(() => validateManifest(m, { maxNotes: 100, maxFolders: 100 })).toThrow("kind 非法");
+  });
 });
 
 // ---- objectKey 行为保持 ----
