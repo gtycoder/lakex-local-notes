@@ -4,25 +4,67 @@
 > 历史所有 dated handoff 已合并进本文件（内容在 git 历史可查）。本文件只保留**当前状态 + 真正的待办 + 有价值的坑**。
 > **§8 是移动端（安卓）专职交接**，由移动端会话维护；桌面会话不要改 §8，移动端会话不要改 §0-§7 之外的桌面文件。
 
-## 0. 最新交接 · 260925 续 · Android 原生层 Kotlin 化 + 原生资产同步插件（分支 feat/android-kotlin-native）
+## 0. 最新交接 · 260925 续 · Android 原生层 Kotlin 化 + 原生资产端口（已合 master）
 
-> 本轮在分支 **`feat/android-kotlin-native`** 上做，未合 master。目标：原生层全 Kotlin + 资产字节不过 WebView 桥。
+> 写给完全没有上下文的新会话。本会话在分支 `feat/android-kotlin-native` 完成，**已 fast-forward 合入 master、分支已删**。一句话：Android 原生层已全 Kotlin；S3 资产字节已下沉原生（上传+下载都不过 WebView 桥）；core 只加了两个**可选**端口且行为等价。
 
-### 一、Java→Kotlin 全量迁移（commit `e0a1fc1`）
-- `android/` 9 个 `.java` 全部重写为 `.kt`：MainActivity / AssetServer / OpenFilePlugin / PinShortcutPlugin / SharedContentPlugin + 单测/仪器测试。**已无 Java 源文件。**
+### 一、任务目标（用户原话要点）
+1. Android 原生层（`android/`）**完全放弃 Java**、全部换 Kotlin（为了整洁/维护）。
+2. 在其上落地**原生资产同步插件**：S3 流式 GET/PUT + 文件读写，**字节不过 WebView 桥**；JS 端口保留回退。
+3. 边界：`src/core` 是两端共用单一真相，**不改同步决策/语义**。用户批准的唯一 core 改动 = 两个**可选**端口声明 + 一个保留原逻辑的 else 分支（见 §二.2）。
+4. 明确决定：**桌面索引保持同步（eager）不变**；**移动端异步索引不做**（收益 < 代价，见 §三/§四）。
+
+### 二、已完成内容
+
+**1. Java→Kotlin 全量迁移**（commit `e0a1fc1`）
+- `android/` 9 个 `.java` 全部重写为 `.kt`：MainActivity / AssetServer / OpenFilePlugin / PinShortcutPlugin / SharedContentPlugin + 单测/仪器测试；**`android/` 已无任何 Java 源文件**。
 - `android/app/build.gradle` 接入 `kotlin-android` 2.2.20 + JVM 21；`android/build.gradle` 加 `kotlin-gradle-plugin`。
-- 验证：`assembleDebug` OK；`testDebugUnitTest` 14/14；模拟器 smoke（lakeNative / asset token 64 位 / 3 插件 / AssetServer 监听）。
-- 坑（务必记）：**Kotlin 块注释可嵌套**，Java 注释里的 `image/*`（开嵌套）、`bytes */size`（提前闭合）会让 KDoc 报 `Syntax error`/`Unclosed comment`；已改文字。移植注释时注意 `/*`、`*/`。
+- 验证：`bash scripts/android-build.sh`（assembleDebug）通过；`gradle testDebugUnitTest` 全绿（AssetServer 11 + OpenFilePlugin 2 + Example 1 + AwsV4Signer 3）；模拟器 smoke 通过（lakeNative / asset token 64 位 / 3 插件 / AssetServer 监听）。
 
-### 二、原生资产同步插件（上传 `fd71037`；下载端口本轮接入）
-- 新增 `AssetSyncPlugin.kt` + `AwsV4Signer.kt`：SigV4 自签 + `HttpURLConnection` 流式 `putFile` / `getFile`（可带 expectedSize/expectedSha256，校验通过才原子落盘）/ `listAssets`（原生算 sha256）。签名用 AWS 官方 SigV4 get-vanilla 向量单测钉死。
-- **上传**：JS `s3Store.putObjectStream` + `syncDbPort.openLocalAssetStream`/`listLocalAssets`（原生扫描）接入；非原生/原生失败回退字节路径。
-- **下载**（用户批准 A）：给 core 加**可选**端口——`S3Store.getObjectToFile?` + `SyncDbPort.assetFilePath?`，`downloadNoteAssets` 加一个 `if (端口有该方法) 文件路径 else 现有字节路径` 分支。移动端实现后下载字节也不进 JS；**桌面 `createS3StoreAdapter` 不实现该可选方法 → 命中 else，行为逐字节不变**。core 改动仅 `syncEngineTypes.ts`（两个可选声明）+ `syncAssets.ts`（一个 else 保留原逻辑的分支）+ 单测，**不改任何同步决策/语义**。
-- 实测（模拟器 + 真机，隔离前缀已删 0 残留）：256KB 资产原生 PUT/GET 到 S3 size/sha256 一致；整轮 1003 笔记 + 资产同步 `assetHttp/assetB64Encode/fsRead = 0`。跨端 `run5native.mjs`（D1 + R + E，自动跳过未连接端 + 前缀防护）**5/5**——**真机 R** 原生上传→D1、D1→R **原生下载**均逐字节一致，且 `assetHttp/assetB64Decode/fsWrite = 0`（真机上字节同样不过桥）。
-- **官方套件 + 真机复测**：`run5d` **20/20**、`run5b` **33/33**；**真机 `50950385`** 下载 1000 篇 **49.45s**（`indexMs=1.64s`），对照专项前同机 83.2s **−40.6%**（用户判断已接近该机硬件极限；Mac 侧约快 7×）。真机测试前完整备份 748MB、测后已还原并核对（508 笔记 / 35 目录 / 5 小记，prefix 回 `lake-notes-stress2-260910`）。
+**2. 原生资产同步插件**（上传 `fd71037`、下载端口 `119351c`）
+- 新增 Kotlin `AssetSyncPlugin.kt` + `AwsV4Signer.kt`：AWS SigV4 自签 + `HttpURLConnection` 流式 `putFile` / `getFile`（可带 `expectedSize`/`expectedSha256`，校验通过才原子 rename）/ `listAssets`（原生算 sha256）。签名用 AWS 官方 SigV4 get-vanilla 向量单测钉死（`AwsV4SignerTest`）。
+- **上传字节不过桥**：`src/mobile/nativeAssetSync.ts`（能力探测）+ `s3Store.putObjectStream` + `syncDbPort.openLocalAssetStream`/`listLocalAssets`（原生扫描）。
+- **下载字节不过桥**：core 加两个**可选**端口 `S3Store.getObjectToFile?` + `SyncDbPort.assetFilePath?`，`downloadNoteAssets` 加 `if (端口有该方法) 文件路径 else 现有字节路径` 分支。移动端实现走原生 `getFile`；**桌面 `electron/syncAdapters.ts` 的 `createS3StoreAdapter` 不实现该可选方法 → 命中 else，逐字节不变**。
+- 分流口径是**能力**（`typeof s3.getObjectToFile === "function"`）不是**平台**（core 不 import Capacitor、不判 isMobile）；非原生/原生失败自动回退字节路径。
 
-### 三、门禁（最终）
-`tsc` 0 / `vitest` **1276 passed** / desktop + mobile build OK / `check-core` 违规 0 / Android `assembleDebug` + `testDebugUnitTest` 全绿。
+**3. 实测证据**
+- 真机 `50950385`：`run5d`（1000 笔记 + 100 目录）下载 **49.45s**、`indexMs=1.64s`；对照专项前同机 83.2s = **−40.6%**（用户判断已接近该机硬件极限，Mac 约快 7×）。
+- 真机原生资产 `run5native.mjs`（D1 + R + E）**5/5**：R 原生上传→D1、D1→R 原生下载均逐字节一致，且 `assetHttp/assetB64Decode/fsWrite = 0`。
+- 官方套件：`run5d` **20/20**、`run5b` **33/33**；JS 全量 `vitest` **1276 passed**、`tsc` 0、desktop+mobile build OK、`check-core` 违规 0。
+
+**4. 文档**
+- `docs/MOBILE-SYNC-PERF-260925.md` §13（原生插件）+ §14（桌面索引容量基准 5k/10k/20k/100k）。
+
+### 三、当前问题 / 已知边界
+- **两端索引是两套实现**：桌面 `electron/searchRepository.ts`（better-sqlite3，join `tree_nodes`）；移动 `src/mobile/searchIndex.ts`（Capacitor SQLite，join `notes`，`search_index` 多 `title`/`raw_hash`）。**已决定不抽 core**：能共享的查询/分词/摘要/正文派生早已在 core（`src/core/search/*`、`src/core/noteSearchText.ts`）；剩下的绑死各自 schema，强行合并即 AGENTS #17 的过度设计。
+- **移动端异步索引：不做**。真机 reconcile 仅占同步 3.3%（1.64s），收益小；代价（搜索暂缺窗口 + core 调度器抽象 + UI 状态 + maintenance 串行 + 测试）大。桌面索引基准：全量重建 100k≈3.8s、查询百毫秒级；**增量 O(churn) 与库规模无关**（1000 篇内稳态同步仍很快）。
+- **模拟器 E 的 adb forward 反复掉线**（环境问题，非代码）。多端脚本已加：未连接端自动跳过（`run5d`/`run5b`/`run5native`）+ `run5native` 前缀防护（`getS3Settings().prefix !== PREFIX` 直接 skip）。
+- **真机数据安全**：`50950385` 测前完整备份（748MB）、测后已还原并核对（508 笔记 / 35 目录 / 5 小记，prefix 回 `lake-notes-stress2-260910`）；隔离前缀全删 0 残留。备份留 `/tmp/lake5/real-backup-20260925045048.tgz`（/tmp 会被系统清）。
+- 明确未做：跨端搜索 parity 测试（用户决定不加）、移动端异步索引（不做）。
+
+### 四、下一步计划（无强制待办，本专项收口）
+1. 若要继续压移动端首同步体感：优先**原生算 hash + 批量索引下沉原生**（吞吐），而不是异步；资产字节已解决。
+2. 若将来出现**第三种客户端**或**跨端搜索不一致 bug**：再考虑共享索引编排 / 补 parity 测试（现在不做）。
+3. 合 master 后**未跑** `npm run test:packaged` 等 Electron 打包烟测（本会话到 build + vitest + Android assembleDebug 为止）。
+
+### 五、踩过的坑（务必先读）
+1. **Kotlin 块注释可嵌套**：Java 注释里的 `image/*`（开嵌套）、`bytes */size`（提前闭合）放进 KDoc 会 `Syntax error` / `Unclosed comment`；移植注释时避开 `/*`、`*/`。
+2. **Capacitor `PluginCall` 取数字**：`getString` 读不到数字，要用 `getLong`/`getInt`（`getFile` 的 `expectedSize` 用 `getLong`）。
+3. **原生下载先写临时文件、校验后再 rename**：`AssetSyncPlugin.getFile` 必须核对 `expectedSize`/`expectedSha256` 才 rename，失败删临时文件——绝不把坏字节落正式资产路径。
+4. **能力探测而非平台判断**：加可选端口后，core 用 `typeof s3.getObjectToFile === "function"` 分流；桌面不实现 → 走 else。**不要在 core 里判 isMobile**（破坏 core 边界）。
+5. **多端基准必须加“配置前缀”防护**：`run5native` 里 E 的 `configure-s3` 曾失败（forward 掉线），E 没传资产但 `assetHttp=0` 看起来像“过了”。已加前缀校验，配错/未配直接 skip，避免假绿。
+6. **adb forward 会掉**：R/E 的 `webview_devtools_remote_<pid>` 抽象 socket 会随 WebView 重建/休眠失效；用「列 socket → 逐个 forward → curl `/json/version` 验证 → 取能用的」稳健写法，并在脚本里对未连接端自动跳过。
+7. **真机数据安全流程**：测前 `adb exec-out run-as com.lakenotes.mobile tar -cz databases shared_prefs app_webview files > backup.tgz`；测后 `pm clear` + push + `cat | run-as tar -xzf -`；**还原后必须核对**笔记/目录/小记数与 S3 prefix。杀 Electron 只 kill 具体 PID，禁 `pkill -f Electron`；不碰正式数据。
+8. **`sha256Sync` 输出小写 hex**，与原生 `MessageDigest` 小写 hex 一致，可跨端对拍（本会话据此校验资产字节）。
+9. **背景命令注意仓库绝对路径**是 `/Users/admin/file/local-lake/lake-notes-electron`（`local-lake` 带连字符，别写成 `local`）。
+
+### 六、关键文件 / 命令
+- 原生：`android/app/src/main/java/com/lakenotes/mobile/{AssetSyncPlugin,AwsV4Signer,AssetServer,MainActivity,OpenFilePlugin,PinShortcutPlugin,SharedContentPlugin}.kt`；测试在 `.../test/java/com/lakenotes/mobile/`。
+- JS 端口：`src/mobile/{nativeAssetSync,s3Store,syncDbPort,searchIndex}.ts`。
+- core：`src/core/syncEngineTypes.ts`（两个可选端口声明）、`src/core/syncAssets.ts`（下载分支）。
+- 脚本：`scripts/multi-end-sync/{run5d,run5b,run5native}.mjs`；桌面索引基准 `electron/searchRepository.benchmark.test.ts`（`LAKE_RUN_BENCHMARK=1 LAKE_BENCH_N=<N>`）。
+- Android 构建/测试：`bash scripts/android-build.sh [--sync --install]`；`cd android && <gradle> testDebugUnitTest`。
+- 门禁：`npx tsc --noEmit && npx vitest run && npx vite build && npx vite build -c vite.mobile.config.ts && node scripts/check-core-boundaries.mjs`。
 
 
 ## 0. 最新交接 · 260925 续 · 移动端批量 reconcileIndex + 附件过桥实测
