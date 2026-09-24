@@ -4,7 +4,56 @@
 > 历史所有 dated handoff 已合并进本文件（内容在 git 历史可查）。本文件只保留**当前状态 + 真正的待办 + 有价值的坑**。
 > **§8 是移动端（安卓）专职交接**，由移动端会话维护；桌面会话不要改 §8，移动端会话不要改 §0-§7 之外的桌面文件。
 
-## 0. 最新交接 · 260924 晚 · 浮动工具栏对齐固定栏（颜色/字号/段落样式/子菜单/链接）+ 合入 master（新会话先读这一节）
+## 0. 最新交接 · 260924 晚 续 · 浮动工具栏收尾：「转为」拆散为独立按钮 + 标题图标 + 横向压缩（新会话先读这一节）
+
+> 写给**完全没有上下文**的新会话。本节把 `fd63c29` 之后**未提交**的一批（上一会话遗留的「转为」下拉收尾 + 本会话的拆散/图标/压缩）整理并**已提交 master 推送 Gitee**。
+> 一句话：文字浮动工具栏的「**转为**」下拉**拆散成 5 个独立按钮**，把原「转为」的图标 `editor-paragraph` 交给「**标题**」，给这 5 个按钮补**内核同源的生效/禁用态**，并把整条浮栏**横向压短**。
+
+### 一、任务目标（用户原话要点）
+1. 把当前「转为」的图标给「标题」用。
+2. 把「转为」下拉**散列开**，子项每一个都放到浮动工具栏作为**独立菜单项**。
+3. 这 5 个独立项需要**生效高亮 / 禁用**（与内核固定栏一致）。
+4. 浮栏**有点长**，左右压缩（减小条目间隙或其它方案）。
+
+### 二、已完成
+
+**A. 拆散 + 图标移交（`SelectionToolbar.tsx` / `editorCommands.ts`）**
+- 「标题」（title 段落样式）按钮由符号 `T`/`H1..H6` 改为图标 **`editor-paragraph`**（原「转为」的图标），下拉照旧（正文/标题1..6）。
+- 删「转为」下拉入口与 `menu === "convert"` 分支；`CONVERT_ITEMS` → **`TOOLBAR_BLOCK_ITEMS`**（含 `kind: "block" | "mark"`）。
+- 5 个独立图标按钮（原「转为」处、超链接前）：有序列表 / 无序列表 / 待办列表 / 引用 / 行内代码；图标 `editor-{orderedList,unorderedList,taskList,quote,inlinecode}`。
+- `PARAGRAPH_STYLES` 去掉折叠态 `label`；`KMenuItem` 去掉只为 convert 菜单加的 `icon` 参数；`kernelUiAtoms.KIcon` 的 `className`（同因）一并回退。
+
+**B. 生效/禁用（内核判据）（`useSelectionToolbar.ts` / `selectionToolbarModel.ts` / `lakeRuntime.ts`）**
+- 内核 `CommandState` 枚举（bundle 实测）：`-1 Unavailable / 0 NotExecuted / 1 Executed / 2 Unknown`（**不是布尔**）⇒ 新增 `isCommandExecuted`(===1) / `isCommandUnavailable`(===-1) + 单测。
+- 列表/待办：`checked = state===1`，`disabled = !queryCommandEnabled`（内核 list-toolbar-descriptor）。
+- 引用：`checked = state===1`，`disabled = state===-1`（内核 quote descriptor）。
+- 行内代码（mark）：`checked = marks.code`（`queryCommandValue`，与加粗同源），`disabled = state===-1`（内核 moremark descriptor）。
+- `LakeEditorInstance` 补 `queryCommandState?` 类型。
+
+**C. 横向压缩（`selectionToolbar.css` / `SelectionToolbar.tsx`）**
+- `.selection-toolbar`：`gap 2→0`、`padding 4px 6px→4px 4px`；`.selection-toolbar__sep`：`margin 0 4px→0 2px`（**浮栏专属紧凑口径**；内核固定栏是 8px 间距、整宽，不跟随）。
+- 「超链接」去掉内核下拉按钮类（`.ne-ui-toolbar-arrow-button` 固定 42px，是给**已去掉的三角**预留的）⇒ 26px 普通按钮；删无用的 `DROPDOWN` 常量。
+- 实测 **522px → 450px（−72px，约 −14%）**。
+
+### 三、门禁（全绿）
+`tsc` 0 · `vitest` **1264 passed / 16 skipped** · `ui-metrics` 全绿（颜色字面量 0 / `!important` 9 / 未定义令牌 0）· 桌面+移动 `vite build` ✓ · `git diff --check` clean · `cssLayers` `selectionToolbar.css` **146→142**（删「转为」下拉与 heading 字形死声明）。
+
+### 四、真机验证（CDP 隔离实测）
+- 整页 reload 后：标题 `#icon-editor-paragraph`、5 个按钮图标/顺序正确、26×26；`[data-menu="convert"]` 已不存在；「标题」下拉仍出 正文/标题1..6。
+- 真实鼠标点进 `ne-uli-content` + Shift+End：**无序列表 `.checked=true`**；fiber 直读内核 `queryCommandState('unorderedList')=1`、`code/orderedList/taskList/quote=0 且 enabled=true`，一致。
+- 超链接 42→26 后弹层 `.ne-link-editor` 仍正常打开。
+- **坑**：中途「浮栏不弹」是 **Vite HMR 的陈旧挂载态**，整页 `Page.reload` 即恢复（CSS-only HMR 可靠；**动了组件/Hook 后最好 reload 再验**）。
+
+### 五、下一步（本批未做）
+- **图片浮动工具栏「风格/样式本地化」**：仿照文字浮栏 —— 内核 `FrameworkUiLib.ToolbarButton` + 内核 sprite 图标 + 内核 `.ne-ui-select-menu` 弹层 + 同一套紧凑口径；替换现有 lucide 图标 + `.selection-toolbar__btn`/`.selection-toolbar__item` 自有样式。**行为不变，只做样式**。
+
+### 六、关键文件
+- `src/features/editor/selectionToolbar/SelectionToolbar.tsx`（拆散 + 图标 + 压缩）· `useSelectionToolbar.ts`（blocks/itemDisabled）· `selectionToolbarModel.ts(+test)`（CommandState 判据）· `selectionToolbar.css`（紧凑口径）
+- `src/features/editor/editorCommands.ts(+test)`（`TOOLBAR_BLOCK_ITEMS`）· `src/features/editor/lakeRuntime.ts`（类型）· `src/styles/cssLayers.test.ts`（基线）
+
+---
+
+## 0. 最新交接 · 260924 晚 · 浮动工具栏对齐固定栏（颜色/字号/段落样式/子菜单/链接）+ 合入 master —— ⚠️ 已被上一节取代（历史记录）
 
 > 写给**完全没有上下文**的新会话。**本批已合入 master 并推送 Gitee**：`a2f70b1..b62466a`（本地 == origin/master），分支 `feat/floating-toolbar` 已删除。
 > 一句话：把「浮动工具栏」的**行为与观感逐项对齐内核固定栏**（颜色 / 字号 / 段落样式 / 子菜单 / 链接弹窗 / 禁用态），并修掉一个独立小 bug（左缘「跟手把手」偶发常驻）。
