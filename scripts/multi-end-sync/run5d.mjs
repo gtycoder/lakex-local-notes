@@ -11,7 +11,12 @@ const ENDS = [
   { id: 'R', type: 'android', port: 9235, serial: '50950385' },
   { id: 'E', type: 'android', port: 9236, serial: 'emulator-5554' }
 ];
-const C = {}; for (const e of ENDS) C[e.id] = await connect(e.port);
+const C = {}; const ACTIVE = [];
+for (const e of ENDS) {
+  try { C[e.id] = await connect(e.port); ACTIVE.push(e); }
+  catch (err) { console.log('SKIP ' + e.id + ' (no CDP on ' + e.port + '): ' + (err && err.message)); }
+}
+ENDS.length = 0; ENDS.push(...ACTIVE);
 const IDS = ENDS.map(function (e) { return e.id; });
 function find(id) { return ENDS.find(function (e) { return e.id === id; }); }
 const results = [];
@@ -50,11 +55,13 @@ console.log('  create folders ms=' + t2.ms + ' inner=' + t2.value);
 
 console.log('== T3: sync D1 (upload ~' + N + ' notes + ' + M + ' folders) ==');
 const s1 = await syncT('D1', 1200000);
-console.log('  D1 sync ms=' + s1.ms + ' result=' + JSON.stringify(s1.value && { uploaded: s1.value.uploaded, durationMs: s1.value.durationMs }));
-check('D1 sync ok', s1.value && (s1.value.uploaded >= N), 'uploaded=' + (s1.value && s1.value.uploaded));
+const d1up = s1.value && (s1.value.notes ? s1.value.notes.uploaded : s1.value.uploaded);
+const d1dur = s1.value && (s1.value.notes ? s1.value.notes.durationMs : s1.value.durationMs);
+console.log('  D1 sync ms=' + s1.ms + ' result=' + JSON.stringify({ uploaded: d1up, durationMs: d1dur, indexMs: s1.value && s1.value.indexMs }));
+check('D1 sync ok', !!s1.value && d1up >= N, 'uploaded=' + d1up);
 
 console.log('== T4: sync D2/D3/R/E (download) ==');
-for (const id of ['D2', 'D3', 'R', 'E']) { const s = await syncT(id, 1200000); console.log('  ' + id + ' sync ms=' + s.ms + ' result=' + JSON.stringify(s.value && (s.value.notes ? { downloaded: s.value.notes.downloaded, dur: s.value.notes.durationMs } : { downloaded: s.value.downloaded, dur: s.value.durationMs }))); }
+for (const id of ['D2', 'D3', 'R', 'E']) { if (!C[id]) continue; const s = await syncT(id, 1200000); console.log('  ' + id + ' sync ms=' + s.ms + ' result=' + JSON.stringify(s.value && (s.value.notes ? { downloaded: s.value.notes.downloaded, dur: s.value.notes.durationMs, indexMs: s.value.indexMs } : { downloaded: s.value.downloaded, dur: s.value.durationMs }))); }
 
 console.log('== T5: convergence counts ==');
 const cnts = {}; for (const id of IDS) { cnts[id] = await counts(id); console.log('  ' + id + ' ' + JSON.stringify(cnts[id])); }
@@ -67,7 +74,7 @@ const body = '<p>' + 'x'.repeat(BIG) + '</p>';
 await evT('D1', 'window.lakeNative.saveNote(' + JSON.stringify(bigDoc.value.id) + ', "big-' + sfx + '", ' + JSON.stringify(body) + ')', 300000);
 const b1 = await syncT('D1', 1200000); console.log('  D1 big sync ms=' + b1.ms);
 const b2 = await syncT('D2', 1200000); console.log('  D2 big sync ms=' + b2.ms);
-await syncT('R', 1200000); await syncT('E', 1200000); await syncT('D3', 1200000);
+for (const id of ['R', 'E', 'D3']) { if (C[id]) await syncT(id, 1200000); }
 for (const id of IDS) { const e = find(id); let len = 0; if (e.type === 'desktop') { const c = await evT(id, 'window.lakeNative.readNote(' + JSON.stringify(bigDoc.value.id) + ').then(function(n){return n.content.length;})', 60000); len = c.value || 0; } else { const row = pullMobile(e).find(function (x) { return x.id === bigDoc.value.id; }); len = row ? row.len : 0; } check(id + ' big doc length', len > BIG - 100, 'len=' + len); }
 
 console.log('== T7: liveness + eval latency ==');
