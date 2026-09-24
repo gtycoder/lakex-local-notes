@@ -14,7 +14,12 @@ const ENDS = [
   { id: 'R', type: 'android', port: 9235, serial: '50950385' },
   { id: 'E', type: 'android', port: 9236, serial: 'emulator-5554' }
 ];
-const C = {}; for (const e of ENDS) C[e.id] = await connect(e.port);
+const C = {}; const ACTIVE = [];
+for (const e of ENDS) {
+  try { C[e.id] = await connect(e.port); ACTIVE.push(e); }
+  catch (err) { console.log('SKIP ' + e.id + ' (no CDP on ' + e.port + '): ' + (err && err.message)); }
+}
+ENDS.length = 0; ENDS.push(...ACTIVE);
 const results = [];
 function check(name, ok, detail) { results.push({ name, ok }); console.log('  ' + (ok ? 'PASS' : 'FAIL') + ' ' + name + (detail ? ' | ' + detail : '')); }
 function find(id) { return ENDS.find(function (e) { return e.id === id; }); }
