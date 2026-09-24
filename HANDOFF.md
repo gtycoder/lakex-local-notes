@@ -4,9 +4,98 @@
 > 历史所有 dated handoff 已合并进本文件（内容在 git 历史可查）。本文件只保留**当前状态 + 真正的待办 + 有价值的坑**。
 > **§8 是移动端（安卓）专职交接**，由移动端会话维护；桌面会话不要改 §8，移动端会话不要改 §0-§7 之外的桌面文件。
 
-## 0. 最新交接 · 260924 · 浮动工具栏（文字选区 + 图片选中）+ 固定/浮动工具栏开关（新会话先读这一节）
+## 0. 最新交接 · 260924 晚 · 浮动工具栏对齐固定栏（颜色/字号/段落样式/子菜单/链接）+ 合入 master（新会话先读这一节）
 
-> 分支 `feat/floating-toolbar`（基点 master `a2f70b1`）。**未合 master、未推送**；提交见 §八（功能线 13 个 + 文档提交）。
+> 写给**完全没有上下文**的新会话。**本批已合入 master 并推送 Gitee**：`a2f70b1..b62466a`（本地 == origin/master），分支 `feat/floating-toolbar` 已删除。
+> 一句话：把「浮动工具栏」的**行为与观感逐项对齐内核固定栏**（颜色 / 字号 / 段落样式 / 子菜单 / 链接弹窗 / 禁用态），并修掉一个独立小 bug（左缘「跟手把手」偶发常驻）。
+> **设计原则（用户本批反复强调，务必内化）**：**浮动 = 固定栏换个位置出现 ⇒ 行为/内容/样式必须与固定栏一致；能走内核就走内核**（优先直接复用内核组件/类名，不自己造 DOM、不自己造样式）。只有「折叠态」允许用我们自己的符号（如 `T`/`H1`）。
+
+### 一、任务目标（用户原话要点，按顺序）
+1. **颜色控件**：文字色 `A` 与背景色按钮，**本体直接上色、下拉三角才开面板**（此前两处都是开面板）。A 的两种行为：①默认色 ②上次使用色；默认色**从内核取**（肉眼是红/浅黄）。
+2. **共用一份记忆**：浮动本质是固定栏换位置出现、所有行为必须一致 ⇒ 颜色记忆与固定栏**共用**（持久化照内核）。
+3. **显示优化**：段落样式**全部符号化**（正文 → `T`，标题 → `H1`..`H6`）；字号**只显示数值**（`16` 而非 `16px`）；去掉 **段落样式 / 字号 / 超链接** 的下拉三角。
+4. **尺寸/颜色**：`T`/字号标签别太窄（和 `B` 一样大）；`T` 字形和 `B` 一样大；颜色别太黑（和 `B` 同色）。
+5. **子菜单风格统一**：段落样式/字号/转为这些自锚定子菜单**和固定栏弹层一致**（颜色/背景色弹层此前已单独对齐，**不动**）。
+6. **字号**：内容（少 48）与样式（不能一档比一档大）都对齐内核；**设置里的「正文字号」只对齐内容**。
+7. **段落下拉**：折叠态显示 `Hx`，但**下拉内容完全对齐固定栏**（内核的「正文/标题1..6」），样式与内容都用内核。
+8. **选中态**：字号/段落下拉的选中项要与固定栏一致（例：生效 15px ⇒ 标中 15px）。
+9. **禁用态（内核判据）**：① 选中标题 ⇒ **字号置灰不可点**；② 选区含超链接 ⇒ **链接按钮置灰不可点**。
+10. **链接弹窗**：和固定栏弹窗样式+内容一致（文本 / 链接 / 确定），完全用内核的。
+11. **修 bug**：链接弹窗「输入内容后立马关闭，链接没写进去」。
+12. **独立小事**：左缘目录栏「把手」偶尔常驻，先研究再简单修。
+13. 收尾：**合入 master 并推送**，写交接。
+
+### 二、已完成内容（全部已提交并推送：`9bc3cae` 功能 + `b62466a` 把手）
+
+**A. 颜色控件（新增 `colorMemory.ts` + `SelectionToolbar.tsx` + `kernelUiAtoms.tsx`）**
+- `KColorButton` 拆成**本体 `onApply`（直接应用当前色）/ 三角 `onOpen`（开面板）**；此前两者共用一个 `onClick`。
+- `colorMemory.ts`：**直接读写内核「上次使用色」**——`Doc.Plugins.Toolbar.IToolbarEditorService` → `editor.getService(id)` → `service.plugin._toolbar._descriptorDefines[color|bgColor].pluginContext`（`getColor/setColor`）⇒ 浮动与固定**共用同一份**；取不到（固定栏 disabled ⇒ 颜色插件不建 pluginContext）时退回「本编辑器内存 + 主题令牌默认」。
+- 默认色 = 内核令牌：`editor.color.default` `#DF2A3F`（暗 `#CA3F4F`）、`editor.bgColor.default` `#FBDE28`（暗 `#C2AC19`）；清除语义照内核（文字色=正文色 `#262626` ⇒ `clearColor`；背景色=无填充/已等于当前 ⇒ `clearBgColor`）。
+- 图标改 **`FrameworkUiLib.EmbedIcon`**（`type=t-font-color/t-bg-color` + `fill=当前色`）⇒ 下划线随当前色变（原 sprite 是静态红/黄）。
+- 纯决策 `colorApplyCommand`（`selectionToolbarModel.ts`）+ 单测。
+
+**B. 浮动栏显示 / 尺寸 / 子菜单（`SelectionToolbar.tsx` + `selectionToolbar.css`）**
+- 段落样式**符号化**：`PARAGRAPH_STYLES` 拆 `label`（折叠态 `T`/`H1`..`H6`）+ `menuLabel`/`menuClass`（下拉用内核「正文/标题1..6」+ `ne-ui-item-content`/`ne-ui-item-heading1-5`）。
+- 字号：只显示数值；项用内核 `ne-ui-font-size-item`（12px 常规）；菜单容器补 `ne-ui-toolbar-fontsize-dropdown`。
+- 去三角：段落样式 / 字号 / 链接（「转为」保留）。
+- 标签按钮 **26×26**（复用内核 `.ne-ui-toolbar-button`，不再自写尺寸）；`T` **17px**（= B 图标 ink ≈12.6px），`H1–H6` 与字号数值 **15px**；标签颜色 `--lake-text-2`（与 B 同色）。
+- 子菜单：**删掉自造弹层样式**，只留定位；表面/圆角/阴影/选中/快捷键/字号预览全走内核 `.ant-dropdown-menu + .ne-ui-select-menu`。
+- 选中态：`readState` 改用 `queryCommandValue('fontsize', false)` 取**生效字号**（不带第二参正文返回 null）；折叠态与选中项都据此。
+- 禁用态：字号 `disabled={!canCommand("fontsize")}`（内核 fontsize 命令对「全 Heading 选区」返回禁用）；链接 `disabled={!canCommand("link") && !canCommand("insertLink")}`（= 内核 link-toolbar-descriptor）。`KToolbarButton` 在 disabled 时**连外层冒泡点击也不接**。
+
+**C. 链接弹窗（`kernelUiAtoms.tsx` 新增 `KLinkEditor`）**
+- 复刻内核 `plugins/link` 的 **`.ne-link-editor`**：文本（占位「添加描述」）/ 链接（占位「链接地址」）/ 确定 + 非法时「请输入正确的链接」；用 `FrameworkUiLib.Input`/`Button` + 内核类名（内核 `ejb` 组件**未导出**、`execCommand('insertLink')` 也**不开弹窗**，只能复刻 DOM）。
+- 原「单 URL 输入 + 应用 + 移除链接」已删；`.selection-toolbar__popover` 只留定位。
+- **修 bug（三处叠加）**：① 弹层开着时**冻结浮栏刷新**（`holdRef`，否则输入框获焦 → 编辑器选区丢失 → 浮栏连弹窗一起卸载）；② 浮栏根 `onMouseDown preventDefault` **放行 `input/textarea/.ne-link-editor`**；③ 打开时**暂存选区 Range+文本**，确认前还原 + `execCommand('focus')` 再执行 `link`/`insertLink`。
+
+**D. 设置（`src/lib/settings.ts`）**
+- 「正文字号」档位改为内核 `R_=[12,13,14,15,16,19,22,24]`（**删掉内核没有的 20**）；`DEFAULT_SETTINGS.fontSize` 20 → **16**（20 不在内核档位里，内核 `defaultFontsize` 本就忽略它）。
+
+**E. 左缘「跟手把手」偶发常驻（`sidebarHoverMachine.ts(+test)` + `App.tsx`）**
+- 根因：把手显隐只看 `.edge-hotzone.is-active`，而它**只有 `pointerleave` 一条清除路径**；且把手自身 `onClick` 直接 `toggleSidebarDock()` **绕过相位机**。
+- 修：`reduceHover` 的 `click` 效果补 `hideHandle + cancelDwell`，把手 onClick 改走 `dispatchEdge`；补 `window blur` / `document visibilitychange(hidden)` / 热区 `onPointerCancel` → `hideEdgeHandle()`（只收把手 + 取消驻留，不动面板模式）。
+
+### 三、当前问题（均不阻塞）
+- **「最近使用自定义颜色」仍是占位**（内核只记「更多颜色」自定义色，预设色块不写 `userColors`）→ 见 §3 第 18 条。
+- `scripts/e2e-sidebar-hover.mjs` ⑧ 的「先移开指针」workaround **已非必需**（本次修了 click 残留），但**未改脚本**；建议补一条「点把手 → 固定 → **不移指针** → ⌘] 收起 → 断言无把手」的护栏。
+- `H1` 折叠显示 `28` 但 `FONT_SIZE_OPTIONS` 无 28 —— 现在标题下字号本就禁用，**不影响**（历史口径）。
+- 本批**未跑** `npm run check:stylesnap` 与打包冒烟（改动均属浮栏/外壳，未动字体/几何令牌）。
+
+### 四、下一步计划（按优先级）
+1. （可选）补跑 `check:stylesnap` + 打包冒烟；补上述 e2e 护栏。
+2. 删 `exp/kernel-ui-primitives`（spike，计划里就该删；结论已回填 `LAKEX-CONTRACT`）——**本批未删**，留待确认。
+3. 回 **§3 的真正待办**：画板 AI 接入 / 离线残余 / 移动端批次 B7-B8 / 技术债（W-8 ACAO、W-10 dompurify）/ §3 第 18 条「最近颜色」。
+4. 若要继续抛光浮栏，只剩「最近使用颜色」「更多颜色/渐变色」「图片换图」等（内核能力边界见 `LAKEX-CONTRACT §5.10`）。
+
+### 五、踩过的坑（本批新增，务必先读）
+1. **内核颜色按钮 = 本体 + 三角两件**：本体 `_clickHandler → onSelect(props.color)`（**直接应用**），三角才开面板（`overlayClassName: ne-ui-toolbar-color-picker-overlay`）；「上次使用色」在**插件上下文**里，不在持久化里。
+2. **读写内核 pluginContext 的路径**：`Doc.Plugins.Toolbar.IToolbarEditorService`（含 `.ID`；`getService` 只看 `e.value`，传 `{value:'IToolbarEditorService'}` 也行）→ `service.plugin._toolbar._descriptorDefines[color|bgColor].pluginContext`。**固定栏 disabled（本应用 `showToolbar=false` ⇒ `disabledPlugins:['toolbar']`）时该 pluginContext 不存在**，必须能退回自持记忆。
+3. **默认色/清除色是令牌**：`editor.color.default` #DF2A3F、`editor.bgColor.default` #FBDE28、正文色 `editor.text.color` #262626；视觉/持久值转换走 `theme.toVisualValue/toPersistentValue`。
+4. **图标必须用 `FrameworkUiLib.EmbedIcon`**（`type` + `fill` 动态下划线）；sprite 的 `icon-editor-color` 是**静态**红/黄，不能做颜色按钮。
+5. **`.ne-ui-toolbar-select-value` 固定 `width:40px`** 是给「文字 ▾」箭头预留的 ⇒ 浮栏去掉三角后必须 `width:auto`（内核 CSS 在 legacy 层、我们的覆盖在 overlay 层，**靠层序取胜、不用 `!important`**）。
+6. **字号菜单 ≠ 段落样式菜单**：字号是 **antd Select**，选项标签 `ne-ui-font-size-item`（12px 常规），档位 = 内核 `Rz`（12 档，**含 48**）；段落样式才有 `ne-ui-item-content`/`ne-ui-item-heading1-5` 的字号预览。
+7. **`queryCommandValue('fontsize', false)` 才是「生效字号」**（不带第二参时正文返回 `null`）⇒ 折叠态显示与「选中项」都要用它，否则默认态一项都不选中。
+8. **禁用态都用内核判据**：`queryCommandEnabled('fontsize')`（全 Heading ⇒ false）、`!link && !insertLink`（选区含链接 ⇒ 都 false）。
+9. **`KToolbarButton` 的 disabled 必须在外层 `display:contents` span 上拦 `onClick`**：内核按钮 disabled 会拦，但我们的包裹 span 仍会把点击冒上来。
+10. **链接弹窗失败是三个原因叠加**（见 §二 C）：弹层开着会因输入框获焦而丢选区 → 必须冻结浮栏；根 `onMouseDown preventDefault` 会挡住输入框聚焦；确认命令前必须还原选区 + `focus`。
+11. **左缘把手是粘性 DOM 标志**：`is-active` 只有 `pointerleave` 清 ⇒ click / 失焦 / `pointercancel` 都会残留，而它只在 collapsed 态显形 ⇒ 表现为「偶发常驻」。修法见 §二 E。
+12. **隔离实例验证的真实坑**：① 真实鼠标事件会被**浮层遮挡**打偏（先点远处收起浮层再拖）；② 程序化 DOM 选区**不一定驱动内核模型**（`queryCommandValue('style')` 仍是旧值）——要造真标题请用内核自己的 `execCommand('style','h1')`；③ CDP `Input.insertText` 需目标 input 已 focus，`.click()` 不触发 mousedown；④ 重载页面后 `window.__probeEditor` 会丢，需重扫 fiber；⑤ 起隔离实例后要 `Page.bringToFront` + `Emulation.setFocusEmulationEnabled`，结束**按 job/PID 杀**，绝不 `pkill -f Electron`。
+
+### 六、门禁（本批实测）
+`tsc` 0 · `vitest` **1262 passed / 16 skipped** · `ui-metrics` 全绿（`var(--b3-*)` 0 / 非主题颜色字面量 0 / `!important` 9 / 同名文件对无 / 未定义令牌 0）· `vite build` ✓ · `git diff --check` clean。
+`cssLayers` 基线：`selectionToolbar.css` **167 → 143**（删自造弹层样式 + 收敛尺寸覆盖，净减）。
+
+### 七、关键文件
+- 浮动工具栏：`src/features/editor/selectionToolbar/**`（新增 `colorMemory.ts`；改 `SelectionToolbar.tsx` / `useSelectionToolbar.ts` / `kernelUiAtoms.tsx` / `selectionToolbar.css` / `selectionToolbarModel.ts(+test)`）· `src/features/editor/editorCommands.ts`
+- 设置：`src/lib/settings.ts`
+- 外壳把手：`src/components/sidebarHoverMachine.ts(+test)` · `src/App.tsx` · `src/styles/chrome.css`（把手样式，本批未改）
+- 契约/护栏：`docs/LAKEX-CONTRACT.md §5.10 九` · `docs/PANEL-CONTRACT.md §3` · `src/styles/cssLayers.test.ts`
+
+---
+
+## 0. 最新交接 · 260924 · 浮动工具栏（文字选区 + 图片选中）+ 固定/浮动工具栏开关 —— ⚠️ **已被上一节取代（历史记录）**
+
+> 本节记录的是**合入 master 之前**的分支状态（`feat/floating-toolbar`，基点 `a2f70b1`）。该分支已于 260924 晚**合入 master（`b62466a`）并推送**，分支已删。**最新状态看上一节**。
 > 一句话：做一个「选中文字**或图片**都弹出浮动工具栏」的功能（**两种形态不同**），并加回被 `ea35aaa` 删掉的「显示固定工具栏」开关；两个开关**互相独立**（可同开 / 只开一个 / 都不开）。
 > **本批共两轮**：第一轮「自己造 DOM + 钉钉风」被用户否掉（原话「不验收了，做的太差了」）；最后 3 个提交是**重做**——「直接用内核组件，样式和风格都要对齐固定工具栏」。图片形态保留第一轮成果（已按云端语雀定稿）。
 
@@ -428,8 +517,8 @@ node scripts/mobile-audit/check-mobile-snap.mjs --port 9335 [--write-baseline]
 
 
 ## 0. 当前基线（新会话开工前）
-- **分支**：`master` = `origin/master`，**已包含本轮全部工作**；所有功能/检查点分支**已合并并删除**，只留一个纯备份分支 `backup/ui-theme-abc-handoff-260922`（= 260922 接手前的状态 `604913a`）。
-- **master 提交链（本轮）**：`d3bfc56`（UI 重设计末批 + 文档）→ `604913a`（§2.24 主题 A/B/C + 三空间 + minimap）→ `106d2c2`（浮层铺满 + 编辑区右移）→ `12e60eb`（增强大纲进编辑区 + 目录去缩略图/壳层满宽）→ `443b367`「左缘跟手把手 + 贴底浮卡 + 宽度 bug 修复」→ **`8e31fce`（260923：面板契约 + `⌘]` + 垂直几何令牌化收窄 + macOS 红绿灯对齐）**→ **`681997a`（260923 收尾审计：围栏基线收紧 / 死令牌清理 + 热区 10px + 块手柄贴正文 + 复盘文档）**（`git log --oneline -6` 看全）。
+- **分支**：`master` = `origin/master` = **`b62466a`**（260924 晚：浮动工具栏对齐固定栏 + 左缘把手修复 —— 见**本文件最上方 §0**）；`feat/floating-toolbar` 已合并并**删除**。现存其它分支：`backup/ui-theme-abc-handoff-260922`（纯备份）、`exp/kernel-ui-primitives`（spike，**待删**）、`feat/font-misans`（远端）。
+- **master 提交链（含 260924 两批）**：260924 浮栏 13 提交 → **`9bc3cae`（本批：浮栏对齐内核）→ `b62466a`（左缘把手修复 = 当前 tip）** ← `a2f70b1`（260923 续 · 桌面 UI 细节）← `d3bfc56`（UI 重设计末批 + 文档）→ `604913a`（§2.24 主题 A/B/C + 三空间 + minimap）→ `106d2c2`（浮层铺满 + 编辑区右移）→ `12e60eb`（增强大纲进编辑区 + 目录去缩略图/壳层满宽）→ `443b367`「左缘跟手把手 + 贴底浮卡 + 宽度 bug 修复」→ **`8e31fce`（260923：面板契约 + `⌘]` + 垂直几何令牌化收窄 + macOS 红绿灯对齐）**→ **`681997a`（260923 收尾审计：围栏基线收紧 / 死令牌清理 + 热区 10px + 块手柄贴正文 + 复盘文档）**（`git log --oneline -6` 看全）。
 - **👉 最新会话完整交接 = §2.28（新会话先读它）**。分项细节：§2.22（UI 重设计 P0–P8）· §2.23（视觉回修 14 提交）· §2.24（主题 A/B/C + 空间 + minimap）· §2.25（增强大纲进编辑区）· §2.26（目录去缩略图 + 壳层满宽 + 手柄边界）· §2.27（跟手把手 + 贴底浮卡 + 宽度 bug）。
 - **⚠️ 用户定稿（冻结项，别再改/别再提）**：见 **§2.27 六** —— ① 悬浮/触发条逻辑冻结（隐形 10px 热区 + 跟手把手 + 驻留 240ms + 贴左缘 + 底缝 12px、顶贴面包屑下缘）；② **固定目录栏自成一个区域**（继续用栅格列，**不搬进编辑区**）；③ **SidePanel 组件原语决定不做**（两侧几何/推挤策略刻意不同；理由在该节）。
 - **260923 本会话（已提交并推送：`8e31fce`）**：桌面面板/目录收口 —— ① 新增 `docs/PANEL-CONTRACT.md`（跨侧不变量单一来源）；② **`⌘]` 固定/收起目录栏**（面板可见性此前只有鼠标入口；对齐 Feishu）；③ **垂直几何令牌化 + 收窄**：顶栏 **38→32**、面包屑 **32→30**（内距 16→12）、内核工具条 **38→34**；标签高度**与顶栏解耦**（`--tab-item-height: 28px`，顶栏垂直内距 =(顶栏−标签)/2 自动居中，用户 260923 口径"顶栏收窄但标签不变"）。新令牌 `--breadcrumb-height` / `--editor-toolbar-height` / `--tab-item-height`；目录 peek 顶 / 浮层顶 / 阅读态大纲顶全部改由令牌派生，不再写死 80/112/74。④ **macOS 红绿灯对齐**：原先 `trafficLightPosition: {x:14,y:13}` 是**为 38px 顶栏写死**的，缩顶栏后中心错位 3px（用户 260923 报）；改为主进程按共享常量 `layoutMetrics.TOPBAR_HEIGHT` 计算（`y=(顶栏−红绿灯12)/2`），单测卡住 CSS 令牌 ↔ 常量一致。native 实测 `getWindowButtonPosition()={x:14,y:10}` ⇒ 红绿灯中心 16 = 顶栏中心 16。⑤ **左缘热区 8→10px**（用户 260923 反馈偏窄：先试 12px、随后定为 10px）；⑥ **块手柄图标在命中盒内右移 3px 贴正文**（命中盒不动）。⑤⑥ 为 `8e31fce` 之后的微调；⑦ **收尾审计（全面评价 + 查漏补缺）见 `docs/UI-REDESIGN-REVIEW-260923.md`**：收紧 10 个偏松的样式围栏基线（`tokens.css` 83→6、`motion.css` 10→1）、删 8 类零引用死令牌、修 4 处过期回退值、修正过期注释。**同文档 §四 = 对重构本身的复盘（哪些不该做/能更好）**：`ln-*` kit **466/550 声明全仓零引用**（43 类名仅 7 个被 TSX 用）、`reset` 是空层、66 条过渡别名未清、"彻底剥离思源层"实为整层降级（app-css raw 1.46MB）、几何单一来源是事后补的、全程无视觉回归门禁 ⇒ **kit 是留是删需产品拍板**。⑤⑥⑦ 已提交并推送（`681997a`）。**⑧ W0-a（260923）**：`stylesnap` 补 **warm 8 态**（实测可 pin `data-theme=warm`）；三条失效冒烟按"修"处理并**全部实跑通过**（`test:sidebar-interaction` 改用面板头 📌 + 按 10px 热区/240ms 驻留悬停 + 断言贴左缘 `left:0`；`test:tab-switch` 去掉已消失的 55ms/85ms 契约；`test:ui` 把活动栏断言换成"不再渲染 `.activity-rail`"+"顶栏高 == `--topbar-height` 令牌"，并修工作空间触发器选择器）。**两个新发现**：① **设置面板打开不移入焦点**（`SettingsPanel.tsx` 的 `navSearchRef` 只声明、**全文件无 `.focus()`**；CDP 焦点模拟实测 `document.hasFocus()=true` 但 `activeElement` 仍不是它）⇒ 真实 a11y 缺口，**属功能改动未修**，已从失效断言摘出并留注；② **门禁运行纪律**：跑前必须做 `/json/list` **存活检查**——隔离实例被反复 reload 跑死后 `ECONNREFUSED`，极易误读成脚本失败。门禁：`tsc` 0 · `vitest` 1213/16（新增 ⌘] 护栏 1 条 + 红绿灯对齐护栏 2 条）· `ui-metrics` 全绿；隔离实例实测详见 §3 第 0 条。
