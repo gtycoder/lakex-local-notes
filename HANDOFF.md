@@ -4,7 +4,73 @@
 > 历史所有 dated handoff 已合并进本文件（内容在 git 历史可查）。本文件只保留**当前状态 + 真正的待办 + 有价值的坑**。
 > **§8 是移动端（安卓）专职交接**，由移动端会话维护；桌面会话不要改 §8，移动端会话不要改 §0-§7 之外的桌面文件。
 
-## 0. 最新交接 · 260924 晚 续十一 · 浏览器端收尾：library-changed 自动刷新 + 阶段 3 部分
+## 0. 最新交接 · 260924 晚会话总交接：浮栏收尾 / 图片复制 / 浏览器端阶段 1–3 / library-changed
+
+> 写给**完全没有上下文的新会话**。本会话在 `master` 上连续做了 5 摊事，**全部已提交并推送**（tip 见 `git log -1`；本文件只留结论，细节在各分节/文档）。
+> 开工先读：本文件 → `AGENTS.md`（长期红线；本会话新增 **§3 #18**）→ `docs/BROWSER-CLIENT-DESIGN.md`（浏览器端专项）→ 涉及编辑器内核按 AGENTS §2 三级检索。
+
+### 一、任务目标（用户原话要点，按顺序）
+1. 图片浮栏「边距 / 批量应用」子菜单弹窗太窄、文字换行 → 要一行放下（不要换行）。
+2. 文字浮栏「一选中就出现且固定不动」→ 要和**图片浮栏一样**：点块句柄即隐、不能同屏两个弹窗。
+3. 浮栏整体**收尾**：自检 review、查漏补缺、整理优化代码。
+4. 边距开关切换**不要关面板**（可连续开上/下）。
+5. 「不是我们的代码不用改，依赖肯定有冗余」→ 立成长期规则。
+6. 图片右上角（内核图片卡内层按钮）的「复制」**无论什么格式都失败** → 适配到**我们自己的复制入口**；并追加「选中图片按 **⌘C** 同样接管」。
+7. 确认换字体后，粘贴进来的内容会不会带进外部 `font-family` 污染。
+8. 浏览器端：先调研思源浏览器端有什么/怎么做/是否借鉴；再做**阶段 1（SSE 推送）/ 阶段 2（宿主能力 + 浏览器等价路径）/ 阶段 3 ②（设置页打磨）+③（`nosniff`）**；明确**不做局域网访问、不做 `dev:web/HMR`**。
+9. Bug：**浏览器端新建画板后，桌面端目录栏不自动刷新**。
+10. 反向要求：**桌面端新建，浏览器端自动刷新**。
+11. 收尾：提交合并 master + 交接（本节）。
+
+### 二、已完成内容（按提交，均在 master）
+- `f823ca7` **图片浮栏子菜单按内容取宽**：`selectionToolbar.css` 给 `.selection-toolbar__kmenu`/`__cardpop` 加 `width: max-content`（固定浮栏内绝对定位 width:auto 会 shrink-to-fit 压窄 → 换行）；`cssLayers` 基线 133→135。CDP 实测 174/176px、单行。
+- `9a9a378` **文字浮栏点块句柄即隐**：`useSelectionToolbar.ts` 加 `handleSuppressRef`；`onPointerDown` 命中 `.lake-block-handle-host` 即隐并早退；`computeTarget` 守卫挡 selectionchange 侧路回弹；下一次非句柄按下自动解除。实测 down=false→up=false（旧行为 up=true 回弹）。
+- `7616f09` **浮栏死代码清理**：删 `SelectionToolbar` 从未读取的 `noteId` prop、未用类型导入 `ImageSizePreset`、无外部引用的导出；`tsc --noUnusedLocals --noUnusedParameters` 对浮栏目录 **0 命中**；复核 bg「无填充色」active 正确、`selectionToolbar.css` 34 类名无孤儿。
+- `1af7e22` + `6788c7c` **边距开关不关面板**：`setSpacing` 去掉 `setMenu(null)`，加 `useReducer` forceRender（面板开着时 `holdRef` 冻结 `refresh()`，不强制渲染开关会停在旧值）。实测可连续开上→下。
+- `e3c670a` **AGENTS §3 #18**：依赖/vendor 代码的冗余与未用路径**不做清理**（用户定调）。
+- `acce941` + `1e3f467` **图片卡复制改走我们的入口**：新增 `src/features/editor/imageCopyBridge.ts`，document 捕获阶段拦截「内层复制按钮（`.ne-icon-action-copy`）」和「⌘C/Ctrl+C（无文字选区时）」，改调 `native.copyAssetImage`（webp/avif→PNG）。根因：内核按钮走 `editor.execCommand('copy', range)`，写私有 `ne-clipboard` 片段、图片只是 canonical URL ⇒ 外部应用拿不到。
+- `47bd58b` **粘贴不污染字体（确认）**：内核粘贴会**剥离 font-family**（`!important`/`font` 简写/`<font face>`/`mso-*`/`<style>`/外部 class 全剥），只留字号/颜色/粗斜等；落盘 `.lake` 字体族 0 命中。**不加适配**。回填 `LAKEX-CONTRACT.md §5.15`。
+- `7ea2a8c` **浏览器端阶段 1：SSE 推送**：`electron/webApiServer.ts` 新增 `GET /__events`（与 `/api` 同一 header token、`text/event-stream`）+ `WebApiServer.broadcast`；`electron/main.ts` 的 `broadcastSyncProgress` 与 pending 摘要 diff（`afterInvoke`）接 sink；shim 用 **fetch 流自解析 SSE** 实现 `onSyncProgress`/`onPendingSummaryChanged`。
+- `a00aeee` **浏览器端阶段 2：宿主能力 + 等价路径**：shim 暴露 `capabilities={browserClient:true,nativeDialog:false}`，透明覆盖 `saveAssetAs`（assetServer+token→blob→下载）/`openAttachment`（新标签）/`copyAssetPath`（复制资源 URL）；`native.ts` 加 capabilities getter；UI 对导出/备份/云端恢复给「请在桌面端操作」提示。
+- `a330f00` **library-changed 广播**（修 §9）：`main.ts` 的 `afterInvoke` 对目录树变更通道（create/move/rename/delete/restore/icon/duplicate…）**无条件**广播 `library-changed{channel}`（同时发所有受信窗口 + Web SSE）；`preload.cjs` 加 `onLibraryChanged`；`native.ts`/shim SSE/`useSyncRefresh` 接上 → 目录树/摘要重读。实测「Web API 建画板 → 桌面目录栏自动刷新」。
+- `4fa3444` **文档：反向验证 + dist 坑**（桌面新建 → SSE `library-changed{create_note_in}`；记下「浏览器端必须 build dist」）。
+- `1d40546` **脚本 `build:web` / `build:web:watch`**：浏览器端只服务 `dist/`، 改 `src/**` 用它们重建（不引入 HMR，浏览器仍需手动刷新）。
+
+### 三、当前问题 / 已知边界（都不阻塞）
+- **浏览器端（`docs/BROWSER-CLIENT-DESIGN.md`）**：目录类导出/整库备份的**浏览器下载未做**（仓库无 zip 依赖，不为它加依赖）；`dev:web/HMR` 未做（已用 `build:web:watch` 折中）；**不开放局域网/远程访问**；开关运行期内存态（重启恢复关）；`reveal*`/`copyAssetImage` 沿用主进程（浏览器与桌面同机，语义可接受）。
+- **图片复制取舍**：改接后复制的是**图片字节**，编辑器内粘贴走「上传新图」而非「卡片克隆」（与右键「复制图片」一致，用户要求如此）。
+- **浮栏「对齐 / 描述」**两项观感/行为改动仅经用户口头确认，未系统性真机点验（低优先；用户已表示「浮栏做完了」）。
+- 思源调研两份原文在**仓库外**工作区根：`siyuan-kernel-web-server-report.md`、`siyuan-browser-adaptation-report.md`（新会话如要复用需从那里看）。
+- 本会话遗留一个环境现象：改 `electron/*.ts` 会触发 dev 重启链（见踩坑 6/9）。
+
+### 四、下一步计划（按优先级）
+1. **回 §3 的真正待办**（本会话未动）：画板 AI 接入 / 离线残余 3 处 / 移动端批次 B7-B8 / 技术债（**W-10 dompurify**、`lakex-contract.d.ts` 落地；W-8 ACAO 已在本会话被复核为「已比记录更完整」）。
+2. **浏览器端可选**：若用户要浏览器端也能导出/备份 → 定 **zip/多文件下载**方案（可自己写 store-only ZIP，Node 24 有 `zlib.crc32`，不引依赖）；否则维持「桌面端操作」。
+3. **浮栏收尾（可选）**：真机点验「对齐 / 描述」。
+4. 任何 `src/**` 改动后，浏览器端记得 `npm run build:web`（或常驻 `build:web:watch`）+ 硬刷新。
+
+### 五、踩过的坑（本会话新增，务必先读）
+1. **固定浮栏内绝对定位弹层必须 `width: max-content`**：`width:auto` 的 shrink-to-fit 上限是「栏宽 − 左偏移」，靠右触发项会把弹层压窄 → 条目换行。同族 `__colorpop` 早有先例。
+2. **文字浮栏 target 是「实时推导」**：只 `setTarget(null)` 会在 pointerup/selectionchange 弹回，隐藏必须加**抑制状态**。
+3. **改 hook 后 HMR 换不掉 document 上的旧闭包**（effect deps 稳定）⇒ 必须整页 `Page.reload` 再验。
+4. **内核图片卡复制写私有 `ne-clipboard`**（图片是 canonical URL）⇒ 外部应用拿不到；拦截点 `.ne-icon-action-copy`（`.ne-image-wrap` 内；小图走「更多」菜单、antd portal）；**⌘C 仅在无文字选区时接管**。
+5. **内核粘贴会剥离 font-family**（`!important`/`font` 简写/`<font face>`/`mso-*`/`<style>`/外部 class 全剥）⇒ **不要为字体做适配，也别加 `font-family: … !important`**（会压掉代码块等宽字体，过度设计）。
+6. **浏览器端只服务 `dist/`**：改 `src/**` 后必须 `npm run build:web`（或 `build:web:watch`）+ 浏览器硬刷新；否则跑旧 bundle。（本会话 `library-changed` 未进 dist，导致「桌面新建、浏览器不刷新」。）
+7. **dev 重启与 9222**：改 `electron/*.ts` 触发 vite-plugin-electron 重建+重启；`npm run dev` 的 `onstart` 带 `--remote-debugging-port=9222`（重启仍带）；手动 `electron .` 起的实例重启会丢 9222（恢复：kill 具体 PID 后手动带 9222 重启）。
+8. **CDP 验证姿势**：合成 `.click()` 不可靠，真实鼠标用 `Input.dispatchMouseEvent`；合成 Meta+C / `document.execCommand('copy')` **不触发原生 copy 事件**（故文本复制那条只能靠"未劫持"侧面验证）；判断 UI 前先 `Page.bringToFront` + `Emulation.setFocusEmulationEnabled`；`:hover` 很飘。
+9. **动 `electron/main.ts` 会重启 dev 实例**；若 vite 进程被带崩（本会话发生过一次），在终端重跑 `npm run dev` 即可。
+10. 结束 electron **只 kill 具体 PID**，**不要 `pkill -f Electron`**（机器上还有 SiYuan/VSCode/Trae）。
+
+### 六、关键文件 / 命令
+- **浮栏**：`src/features/editor/selectionToolbar/`（`SelectionToolbar.tsx` / `useSelectionToolbar.ts` / `kernelUiAtoms.tsx` / `imageIcons.tsx` / `selectionToolbar.css`）。
+- **图片复制**：`src/features/editor/imageCopyBridge.ts`（桌面入口 `src/main.tsx` 安装）。
+- **浏览器端**：`electron/webApiServer.ts`（SSE + shim + 安全）、`electron/main.ts`（广播）、`electron/preload.cjs`、`src/lib/native.ts`、`src/hooks/useSyncRefresh.ts`、`src/components/SettingsPanel.tsx`、`docs/BROWSER-CLIENT-DESIGN.md`。
+- **规则/契约**：`AGENTS.md §3 #18`、`docs/LAKEX-CONTRACT.md §5.8.2 / §5.14 / §5.15`。
+- **命令**：门禁 `npx tsc --noEmit && npx vitest run`；桌面 dev `npm run dev`；浏览器端「设置→浏览器端」打开后 `http://127.0.0.1:19880/`，配 `npm run build:web:watch`；单测基线 **1265 passed / 16 skipped**。
+
+---
+
+## 0. 最新交接 · 260924 晚 续十一 · 浏览器端收尾：library-changed 自动刷新 + 阶段 3 部分 —— ⚠️ 已被上一节取代（历史记录）
 
 > 用户 260924：不做局域网访问、阶段 3 只做 ②（设置页打磨）+ ③（nosniff），① dev:web 不做；并报 bug「浏览器端新建画板后桌面目录栏不自动刷新」。本批已改并推送（hash 见 `git log -1`）。
 
