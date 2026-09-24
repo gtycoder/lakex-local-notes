@@ -29,7 +29,8 @@
 - 主进程接线：`broadcastSyncProgress`（`electron/main.ts`）与 pending 摘要 diff（`afterInvoke`）各加一行 `webServerController?.broadcast(...)`。
 - 客户端 shim（`renderNativeShim`）：两个订阅用 **fetch 流自解析 SSE**（EventSource 不能带 header）实现为单连接多监听，
   `onSyncProgress`/`onPendingSummaryChanged` 返回 unsubscribe；无监听时断开、断线 3s 重连。
-- 验证：单测（`webApiServer.test.ts`：无 token 403 / 200 + 帧投递）+ 真机冒烟（Web API 写操作 → SSE 收到 `pending-summary-changed`）。
+- **第三个事件 `library-changed`（260924 bug 修复）**：目录树结构变更的 IPC 通道（create/move/rename/delete/restore/…）在主进程 `afterInvoke` 里无条件广播；桌面 preload 的 `onLibraryChanged` 与 shim 的 SSE 订阅都接它，渲染层 `useSyncRefresh` 收到后重读目录树 + 摘要 ⇒ **浏览器端写入后，桌面端目录栏自动刷新**（此前需手动刷新）。
+- 验证：单测（`webApiServer.test.ts`：无 token 403 / 200 + 帧投递）+ 真机冒烟（Web API 写操作 → SSE 收到 `pending-summary-changed`；Web API 建画板 → 桌面收到 `library-changed{channel}` 且目录树自动出现）。
 
 **为什么用 SSE 不用 WS**：我们的 RPC 已走 HTTP POST，推送是**单向**的；SSE 复用同一 HTTP 服务与 header 鉴权，零新依赖。
 
@@ -45,10 +46,12 @@
 - 验证：单测（shim 断言 capabilities + 三个覆盖）；真机冒烟（`/__native.js` 取 shim；跨源带 token 取真实资源 200 + 回显 ACAO，无 token/坏源 403）。
 - 参考：思源 `getHostCapabilities()` 用「连接来源+内核归属」推导能力；本项目的 `reveal*`/`copyAssetImage` 因**浏览器与桌面同机**，沿用主进程实现即可（未改）。
 
-### 阶段 3（可选）：体验
+### 阶段 3（部分已做，260924）：体验与加固
 
-- `npm run dev:web`（vite dev + 独立浏览器入口）以拿到 HMR；设置页「浏览器端」说明与开/关打磨。
-- 可选安全增强：响应 `X-Content-Type-Options: nosniff`；若将来支持非回环访问，再评估 token/锁屏/Origin 组合。
+- ✅ 设置页「浏览器端」说明更新：读写同库 + SSE 实时推送 + 图片走浏览器下载/附件新标签打开；导出/整库备份仍需桌面端；开关不落盘。
+- ✅ 静态响应加 `X-Content-Type-Options: nosniff`（与 assetServer 口径一致）。
+- ⏸ **`dev:web`（HMR）不做**（用户 260924 决定）：要动 Origin 白名单、有安全面，等真要高频调浏览器端 UI 再开。
+- **不开放局域网/远程访问**（用户 260924 明确）：故不引入 AccessAuthCode/OIDC/JWT/限流那一套。
 
 ## 4. 明确**不借鉴**思源的部分（形态不同，照搬是过度设计 AGENTS 3 #17）
 

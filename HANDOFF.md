@@ -4,7 +4,29 @@
 > 历史所有 dated handoff 已合并进本文件（内容在 git 历史可查）。本文件只保留**当前状态 + 真正的待办 + 有价值的坑**。
 > **§8 是移动端（安卓）专职交接**，由移动端会话维护；桌面会话不要改 §8，移动端会话不要改 §0-§7 之外的桌面文件。
 
-## 0. 最新交接 · 260924 晚 续十 · 浏览器端阶段 2：宿主能力 + 浏览器等价路径
+## 0. 最新交接 · 260924 晚 续十一 · 浏览器端收尾：library-changed 自动刷新 + 阶段 3 部分
+
+> 用户 260924：不做局域网访问、阶段 3 只做 ②（设置页打磨）+ ③（nosniff），① dev:web 不做；并报 bug「浏览器端新建画板后桌面目录栏不自动刷新」。本批已改并推送（hash 见 `git log -1`）。
+
+### 一、bug 修复：library-changed 广播（目录栏自动刷新）
+- 主进程 `main.ts`：`afterInvoke` 里对**目录树变更通道**（create_note/notebook/group/note_in/sheet_in/bitable_in/board_in、rename_tree_node、set_node_icon、duplicate_note、move_tree_node、move_tree_node_ordered、reorder_tree_nodes、delete_tree_node、delete_note、restore_trash、purge_trash、empty_trash）**无条件**广播 `library-changed{channel}`（放在 pending 摘要早退**之前**；同时发所有受信窗口 + Web SSE）。
+- `preload.cjs` 加 `onLibraryChanged`；`src/lib/native.ts` 加类型 + wrapper；shim 的 SSE `EVENT_NAMES` 加 `library-changed` + `native.onLibraryChanged`；`useSyncRefresh` 收到后重读目录树 + 摘要。
+- **实测**：Web API `create_board_in` → 桌面渲染层收到 `library-changed{channel:"create_board_in"}`，目录树**自动**出现该画板（无需手动刷新）；临时画板已 delete+purge。
+
+### 二、阶段 3（部分）
+- ✅ 设置页「浏览器端」说明更新（读写同库 + SSE 推送 + 图片下载/附件新标签；导出/备份仍需桌面端；开关不落盘）。
+- ✅ `webApiServer` 静态响应加 `X-Content-Type-Options: nosniff`。
+- ⏸ `dev:web`（HMR）不做；不开放局域网/远程访问（用户明确）。
+
+### 三、门禁
+`tsc` 0 · `vitest` **1265 passed / 16 skipped** · `git diff --check` clean。
+
+### 四、踩坑
+- **dev 重启与 9222**：改 `electron/*.ts` 触发 vite-plugin-electron 重建+重启；`npm run dev` 的 `onstart` 带 `--remote-debugging-port=9222`，所以它起的实例重启后仍带 9222（此前手动 `electron .` 起的实例重启会丢 9222，见续十）。本批已把 dev 恢复为 `npm run dev`。
+
+---
+
+## 0. 最新交接 · 260924 晚 续十 · 浏览器端阶段 2：宿主能力 + 浏览器等价路径 —— ⚠️ 已被上一节取代（历史记录）
 
 > 用户 260924 确认「可以做」。本批 = 浏览器端**阶段 2**（宿主能力 + 浏览器等价路径）。专项见 `docs/BROWSER-CLIENT-DESIGN.md`。已提交推送（hash 见 `git log -1`）。
 
@@ -3100,7 +3122,7 @@ P4 组件库 14 件 → P5 逐屏迁移（每屏对照底账打勾）→ P6 第�
 0. **【260922 留下 · 桌面面板/目录优化项】260923 用户裁定并落地：(a)(b)(f) 已做，(g) 已撤销；余下 (c)(d)(e) 仍挂起（定性见各条）。**
    - **✅ (a) 已做（260923）**：`docs/PANEL-CONTRACT.md` —— 垂直几何栈（令牌 + 派生式）/ 层序 / 悬停延时与并集判定 / 宽度持久化与默认值陷阱 / 键盘入口 / 已知取舍。
    - **✅ (b) 已做（260923）**：`⌘]`（Feishu 口径）固定/收起目录栏 —— `useWindowShortcuts` 新增 `onToggleSidebarDock`（capture 阶段），App 在 `useDesktopShell` 之后注册；📌 加 `aria-keyshortcuts`，设置「快捷键」加一行。隔离实测 docked→collapsed→docked，正文 hash 不变（内核未占用该组合键）。
-   - **(c) `library-changed` 广播 —— 暂不做（260923 复核）**：生产侧暂无触发面（AI 写入 §3.1、浏览器端写功能 §3.10 都未落地；同步已有广播）。等真实写入方出现再做，届时与 §3.10 的 SSE 一起。
+   - **✅ (c) `library-changed` 广播 —— 已做（260924，见本文件最上方 §0）**：浏览器端写入已落地 ⇒ 触发面出现。主进程 `afterInvoke` 对目录树变更通道（create/move/rename/delete/restore…）无条件广播 `library-changed`；桌面 preload `onLibraryChanged` + shim SSE 订阅 + `useSyncRefresh` 重读目录树/摘要。**实测**：Web API 建画板 → 桌面目录栏自动刷新。
    - **(d) 目录树窗口化 / 按笔记本懒加载 —— 先测再定**：现开发库 `tree_nodes=549`、`content-visibility` 已上（`shell.css` 的 `.tree-row`），无实测卡顿；懒惰化要动 `listTreeNodes` 契约，回归面大。先造 5k/10k 合成数据量渲染耗时，量到卡再立项（优先虚拟滚动）。
    - **(e) 小件去重 —— 不做**：两侧"同构"实为两套语义（左栏向右长、大纲向左长；几何/推挤刻意不同）⇒ 收益仅"更整洁"，命中 AGENTS #17 过度设计信号。出现第三个面板或证实某 bug 源于分叉时再抽，且只抽无策略差异的部分。
    - **✅ (f) 已做（260923）**：目录 peek 顶边改为 `calc(var(--topbar-height) + 4px + var(--breadcrumb-height) + 6px)`（浮层顶、阅读态大纲顶同批派生）——不再写死 80/112/74，用户调顶栏/面包屑/工具条高度时不再漂。

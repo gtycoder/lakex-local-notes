@@ -143,4 +143,9 @@ contextBridge.exposeInMainWorld("lakeNative", {
     ipcRenderer.on("pending-summary-changed", listener);
     return () => { ipcRenderer.removeListener("pending-summary-changed", listener); };
   },
+  onLibraryChanged: (callback) => {
+    const listener = (_event, detail) => callback(detail);
+    ipcRenderer.on("library-changed", listener);
+    return () => { ipcRenderer.removeListener("library-changed", listener); };
+  },
 });

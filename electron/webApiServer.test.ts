@@ -74,6 +74,7 @@ describe("webApiServer", () => {
     expect(shim).toContain(`var EVENT_URL = "/__events"`);
     expect(shim).toContain(`onSyncProgress: function (cb) { return subscribe("sync-progress", cb); }`);
     expect(shim).toContain(`onPendingSummaryChanged: function (cb) { return subscribe("pending-summary-changed", cb); }`);
+    expect(shim).toContain(`onLibraryChanged: function (cb) { return subscribe("library-changed", cb); }`);
     // 宿主能力 + 浏览器等价实现（不弹桌面对话框 / 不拉起桌面应用）
     expect(shim).toContain("native.capabilities = { browserClient: true, nativeDialog: false }");
     expect(shim).toContain("native.saveAssetAs = function");

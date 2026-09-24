@@ -29,6 +29,14 @@ export function useSyncRefresh({
     return native.onPendingSummaryChanged(setPendingSummary);
   }, [refreshPendingSummary, setPendingSummary]);
 
+  // 其它窗口 / 浏览器端写入后：重读目录树 + 摘要（此前没有 library-changed，目录不刷新，用户 260924 报）。
+  useEffect(() => {
+    return native.onLibraryChanged(() => {
+      void native.listTreeNodes().then(setTreeNodes).catch(() => undefined);
+      void native.listNoteSummaries().then(setNotes).catch(() => undefined);
+    });
+  }, [setTreeNodes, setNotes]);
+
   const refreshDraftEntries = useCallback(async () => {
     try {
       const [entries, summaries] = await Promise.all([native.listDraftJournals(), native.listNoteSummaries()]);

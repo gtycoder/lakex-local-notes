@@ -351,7 +351,25 @@ function registerIpc(): ReadonlyMap<string, (args: unknown[]) => Promise<unknown
   // 思源模式收敛：pending 待办计数不再依赖渲染层各操作点手动刷新（历史上有 10+ 处遗漏），
   // 改为 IPC 层单点拦截——每个调用完成后 diff 廉价指纹（微秒级 COUNT），变化才广播完整摘要。
   let lastPendingSig = "";
+  /** 目录树结构会变的 IPC 通道：写库后广播 library-changed，让其它窗口（含浏览器端）刷新目录树。 */
+  const TREE_CHANGING_CHANNELS = new Set<string>([
+    "create_note", "create_notebook", "create_group", "create_note_in",
+    "create_sheet_in", "create_bitable_in", "create_board_in",
+    "rename_tree_node", "set_node_icon", "duplicate_note",
+    "move_tree_node", "move_tree_node_ordered", "reorder_tree_nodes",
+    "delete_tree_node", "delete_note", "restore_trash", "purge_trash", "empty_trash",
+  ]);
   const afterInvoke = (channel: string): void => {
+    // 目录树变更：无条件广播（不能被下面 pending 摘要的早退吞掉）。
+    if (TREE_CHANGING_CHANNELS.has(channel)) {
+      try {
+        for (const win of BrowserWindow.getAllWindows()) {
+          if (!trustedWebContents.has(win.webContents.id)) continue;
+          try { win.webContents.send("library-changed", { channel }); } catch { /* 窗口已关闭 */ }
+        }
+        webServerController?.broadcast("library-changed", { channel });
+      } catch { /* 忽略 */ }
+    }
     try {
       const sig = `${store.pendingSignature()}:${quickNotes.getPendingSyncSummary().items}`;
       if (sig === lastPendingSig) return;

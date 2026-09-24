@@ -141,6 +141,8 @@ export interface LakeNative {
   openWebClient(): Promise<{ ok: boolean; reason?: string }>;
   onSyncProgress(callback: (progress: SyncProgress) => void): () => void;
   onPendingSummaryChanged(callback: (summary: import("./types").SyncPendingSummary) => void): () => void;
+  /** 目录树结构变更（其它窗口/浏览器端写入后广播）→ 调用方重读目录树。 */
+  onLibraryChanged(callback: (detail: { channel?: string }) => void): () => void;
 }
 
 declare global {
@@ -282,4 +284,5 @@ export const native = {
   openWebClient: () => api().openWebClient(),
   onSyncProgress: (callback: (progress: SyncProgress) => void) => api().onSyncProgress(callback),
   onPendingSummaryChanged: (callback: (summary: import("./types").SyncPendingSummary) => void) => api().onPendingSummaryChanged(callback),
+  onLibraryChanged: (callback: (detail: { channel?: string }) => void) => api().onLibraryChanged(callback),
 };

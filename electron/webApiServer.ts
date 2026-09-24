@@ -273,7 +273,7 @@ export function renderNativeShim(apiToken: string, assetToken: string, assetPort
   }
   // SSE 推送：/__events 用 header token 鉴权（EventSource 不能带 header，故用 fetch 流自解析）。
   var EVENT_URL = "/__events";
-  var EVENT_NAMES = ["sync-progress", "pending-summary-changed"];
+  var EVENT_NAMES = ["sync-progress", "pending-summary-changed", "library-changed"];
   var NL = String.fromCharCode(10);
   var listeners = {};
   EVENT_NAMES.forEach(function (n) { listeners[n] = []; });
@@ -344,7 +344,8 @@ export function renderNativeShim(apiToken: string, assetToken: string, assetPort
     assetPort: ${JSON.stringify(assetPort)},
     assetToken: ASSET_TOKEN,
     onSyncProgress: function (cb) { return subscribe("sync-progress", cb); },
-    onPendingSummaryChanged: function (cb) { return subscribe("pending-summary-changed", cb); }
+    onPendingSummaryChanged: function (cb) { return subscribe("pending-summary-changed", cb); },
+    onLibraryChanged: function (cb) { return subscribe("library-changed", cb); }
   };
   Object.keys(METHODS).forEach(function (name) {
     var channel = METHODS[name];
@@ -504,7 +505,7 @@ export function startWebApiServer(opts: WebApiServerOptions): WebApiServer {
           json(res, 503, { ok: false, code: "NOT_CONFIGURED", message: "dist/index.html 不存在：请先运行 vite build（Web 客户端走构建产物）" });
           return;
         }
-        res.writeHead(200, { "content-type": MIME[".html"], "cache-control": "no-store" });
+        res.writeHead(200, { "content-type": MIME[".html"], "cache-control": "no-store", "x-content-type-options": "nosniff" });
         res.end(injectNativeShim(html));
         return;
       }
@@ -521,6 +522,7 @@ export function startWebApiServer(opts: WebApiServerOptions): WebApiServer {
         "content-type": MIME[path.extname(filePath).toLowerCase()] ?? "application/octet-stream",
         "content-length": stat.size,
         "cache-control": "no-store",
+        "x-content-type-options": "nosniff",
       });
       if (req.method === "HEAD") { res.end(); return; }
       fs.createReadStream(filePath).pipe(res);

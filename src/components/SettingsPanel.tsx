@@ -848,7 +848,7 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
               <Group title="浏览器端" icon={<Globe size={16} />}>
                 <Switch itemId="browser-enabled" name="启用浏览器端" desc="在本机浏览器中打开 Lake Notes（与桌面端同一份本地数据）。仅监听 127.0.0.1，不做局域网伺服、不允许其它设备访问。开关即时生效、无需重启；应用重启后恢复为关闭。" checked={webStatus?.enabled ?? false} disabled={!webStatus || webBusy} onChange={(e) => void setWeb(e.target.checked)} />
                 <Block name="这是什么" desc="浏览器端不是「伺服」：不对外开放、不监听局域网。它只是把桌面端这一份本地库（同一个数据库、同一批文件）通过回环地址 http://127.0.0.1:19880/ 交给本机浏览器，数据不经过网络。打开开关后，用 Chrome 等浏览器打开该地址即可。" />
-                <Block name="现状" desc="最小验证阶段：只打通了与本机同一份数据的读写，实时推送等细化能力尚未做。此开关不落盘（每次启动应用都从关闭开始）。" />
+                <Block name="现状" desc="读写与本机同一份数据；同步进度/待办计数走 SSE 实时推送；图片「另存为」走浏览器下载、附件在新标签打开。导出/整库备份等需要系统目录框的操作仍请在桌面端使用。此开关不落盘（每次启动应用都从关闭开始）。" />
                 {webStatus?.enabled && (
                   <Item itemId="browser-open" name="在本机浏览器打开" desc={webStatus.url}>
                     <button className="b3-button b3-button--outline" onClick={() => void openWeb()}><ExternalLink size={14} /> 打开浏览器</button>
