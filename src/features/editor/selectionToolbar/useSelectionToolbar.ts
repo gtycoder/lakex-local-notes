@@ -53,6 +53,12 @@ export function useSelectionToolbar(editor: LakeEditorInstance, container: HTMLE
   const imageRef = useRef<ImageTarget | null>(null);
   /** 指针按住中（拖选进行中）：此时不弹浮框，等完全松开再弹（否则从下往上选会被挡住）。 */
   const pressingRef = useRef(false);
+  /**
+   * 块句柄交互中（点手柄 / 开块菜单 / 拖块）：抑制文字浮栏 —— 与图片浮栏同机制（点句柄即隐、且不因
+   * 文字选区仍在而被 pointerup 重推导回来）。`.lake-block-handle-host` 是**我们自己的**宿主编排
+   *（见 blockHandleMount.ts），块手柄与内联的 `.ne-block-context-menu` 都在其内（均非 portal）。
+   */
+  const handleSuppressRef = useRef(false);
   /** 内核选区/命令态「晚一拍」：延迟补读用的定时器（同一时刻只留最后一次）。 */
   const settleTimerRef = useRef<number | null>(null);
 
@@ -95,6 +101,9 @@ export function useSelectionToolbar(editor: LakeEditorInstance, container: HTMLE
 
   const computeTarget = useCallback((): SelectionTarget | null => {
     if (pressingRef.current) return null;   // 拖选过程中不弹，等 pointerup
+    // 块句柄交互期间不许文字浮栏出现：点句柄不会清掉文字选区，selectionchange/内核事件会从这里
+    // 把浮栏推导回来（用户 260924 报「点块句柄浮栏不消失」）。
+    if (handleSuppressRef.current) return null;
     if (!container.isConnected || container.getClientRects().length === 0) return null;
     const sel = window.getSelection();
     if (sel && !sel.isCollapsed && sel.rangeCount > 0 && container.contains(sel.anchorNode)) {
@@ -165,6 +174,11 @@ export function useSelectionToolbar(editor: LakeEditorInstance, container: HTMLE
     const onPointerDown = (event: PointerEvent) => {
       const t = event.target as HTMLElement | null;
       if (toolbarRef.current && t && toolbarRef.current.contains(t)) return;
+      // 块句柄交互（点手柄 / 点块菜单 / 拖块）：与图片浮栏同机制 —— 立即隐，且**不进入**「松开后重开」
+      // 流程，否则 pointerup 会从仍存活的文字选区把浮栏推导回来。下一次非句柄 pointerdown 自动解除。
+      const inBlockHandle = !!t?.closest?.(".lake-block-handle-host");
+      handleSuppressRef.current = inBlockHandle;
+      if (inBlockHandle) { imageRef.current = null; setTarget(null); return; }
       const card = t?.closest?.(IMAGE_CARD_SELECTOR) as HTMLElement | null;
       if (card && container.contains(card)) {
         const img = card.querySelector("img");
@@ -208,6 +222,7 @@ export function useSelectionToolbar(editor: LakeEditorInstance, container: HTMLE
       editor.on?.("selectionchange", onKernelSelection);
       disposeKernelSelection = () => { try { editor.off?.("selectionchange", onKernelSelection); } catch { /* 忽略 */ } };
     } catch { /* 非编辑器环境忽略 */ }
+    handleSuppressRef.current = false;   // 新实例/重挂载从干净态开始
     refresh();
     return () => {
       document.removeEventListener("selectionchange", onSelectionChange);

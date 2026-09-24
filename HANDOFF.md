@@ -4,7 +4,36 @@
 > 历史所有 dated handoff 已合并进本文件（内容在 git 历史可查）。本文件只保留**当前状态 + 真正的待办 + 有价值的坑**。
 > **§8 是移动端（安卓）专职交接**，由移动端会话维护；桌面会话不要改 §8，移动端会话不要改 §0-§7 之外的桌面文件。
 
-## 0. 最新交接 · 260924 晚 续三 · 图片浮栏子菜单点验修复：边距 / 批量应用弹窗按内容取宽（不再换行）
+## 0. 最新交接 · 260924 晚 续四 · 文字浮栏消失机制：点块句柄即隐（对齐图片浮栏）
+
+> 写给**完全没有上下文**的新会话。本批已合入 master（hash 见 `git log -1`）。用户 260924 报：文字浮栏「一选中就出现且固定不动」，要求补**消失机制** —— **点块句柄时文字浮栏消失、不能同时出现两个弹窗**；并明确「和图片浮窗一样的消失机制」。
+
+### 一、根因（运行时实测确认）
+- 文字浮栏 target 每次从**当前 DOM 选区**实时推导（`useSelectionToolbar.computeTarget`）：`pointerdown`（capture）→ `setTarget(null)` 隐；`pointerup` → 重新推导 ⇒ **选区还在就必然弹回**。
+- 块句柄点击不清选区：vendor `BlockHoverHandle.startDrag` 在 `mousedown` 里 `e.preventDefault()`（保多块选区）。
+- CDP 实测（改前）：文字 `选区后=true → 句柄 pointerdown=false → pointerup=**true（回弹）**`；图片 `点图后=true → 句柄 down=false → up=**false（保持隐）**`。**两者只差「选区不会因点句柄消失」**。
+
+### 二、改法（`useSelectionToolbar.ts`，与图片同机制）
+- 新增 `handleSuppressRef`；`onPointerDown` 命中 `.lake-block-handle-host` → `setTarget(null)` 并**早退**（不进入 pressing/松开重开流程）；`computeTarget` 开头守卫 `if (handleSuppressRef.current) return null`（挡住 selectionchange/内核事件从侧路回弹）；下一次**非句柄** pointerdown 自动解除；effect 重挂载重置为 false。
+- 探测点用**我们自己的**宿主类 `.lake-block-handle-host`：块手柄与内联块菜单都在其内（**均非 portal**），一个选择器全覆盖，不盯内核类名（已回填 `docs/LAKEX-CONTRACT.md` §5.8.2）。
+
+### 三、实测（Page.reload 后，CDP 真实鼠标事件）
+`afterSelect=true → 句柄 pointerdown=false → pointerup=false（保持隐）→ 非句柄点击后重选=true（恢复）`。**图片浮栏路径本批未改动**（早退只对 `.lake-block-handle-host` 生效，图片卡点击路径逐字节不变；改前已实测图片为 down=false / up=false）。
+
+### 四、门禁（本批实测，全绿）
+`tsc` 0 · `vitest` **1264 passed / 16 skipped** · 桌面 + 移动 `vite build` ✓ · `git diff --check` clean（本批无 CSS 改动，`ui-metrics`/`cssLayers` 不受影响）。
+
+### 五、踩过的坑（本批新增，务必记住）
+- **改 hook 后 HMR 不会生效**：`useSelectionToolbar` 的 `useEffect` deps（`refresh`/`refreshSettled` 由稳定 `useCallback` 派生）不变 ⇒ 旧 `pointerdown` 闭包继续挂在 document 上。**必须 `Page.reload` 再验**（§0 续二 的「HMR 对浮栏组件不可靠」又中一次）。
+- **文字浮栏需要「抑制状态」而非只 `setTarget(null)`**：它的 target 是实时推导（与图片的点击记录不同），任何"事件后重新推导"的机制都会把浮栏弹回来 ⇒ 点句柄要显式抑制到下一次非句柄交互。
+
+### 六、仍未闭环
+- 键盘打开块菜单（对句柄按 Enter/Space）不经 pointerdown ⇒ 浮栏已显示时理论上仍可能同屏；按用户「和图片同机制」的定调**本次不做 MutationObserver**，实测不够再加。
+- 上一节的**「对齐 / 描述」两项行为改动仍待点验**。
+
+---
+
+## 0. 最新交接 · 260924 晚 续三 · 图片浮栏子菜单点验修复：边距 / 批量应用弹窗按内容取宽（不再换行） —— ⚠️ 已被上一节取代（历史记录）
 
 > 写给**完全没有上下文**的新会话。本批已合入 master（hash 见 `git log -1`），是对上一节「图片浮栏对齐云端」的**点验修复**（用户开含图文档实测报障）。
 > 一句话：图片浮栏的**边距 / 批量应用**子菜单弹窗左右过窄、中文标签被压成多行 ⇒ 给这两处弹层加 `width: max-content`（一行放下）；右侧越界仍由既有 `menuLeft` 左移逻辑兜住。

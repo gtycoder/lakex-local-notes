@@ -360,6 +360,7 @@
 
 - **归属**：带「转化为」的**块悬浮手柄 + 块操作菜单不是内核能力**，是 vendor React 层（`BlockHoverHandle`/`BlockContextMenu`，我们 `blockHandleMount.ts` 手动挂载），内核只提供被调用的**命令**。
   内核自带的是**卡片/容器工具栏**（`.ne-card-toolbar`/`.ne-ui-toolbar`；`getCardToolbarConfig`/`getContainerToolbarConfig`/`registerToolbarWidget`，各处 `toolbar`/`cardSelect` 描述符）与**斜杠菜单**（`cardSelectItems`）——不受我们的块菜单控制，只能通过 `disabledPlugins`/config 有限影响。
+- **宿主 DOM（260924 文字浮栏消失机制用到）**：手柄 `div.ne-block-hover-handle` 与菜单 `div.ne-block-context-menu` **都不是 portal**，两者都在我们创建的宿主 `div.lake-block-handle-host` 内（`blockHandleMount.ts`）；键盘开菜单同样落在这个 host 里。⇒ 外部若要「识别块句柄交互」，只用宿主选择器 `.lake-block-handle-host` 即可同时覆盖手柄、菜单与拖拽，**不需要盯内核类名**。
 - **按块类型配置菜单**：`MENU_CONFIGS` 的 key = 块标签；卡片（`ne-card`）额外按 `data-card-name` 细分（`getBlockMenuKey` → `ne-card:<name>`，回退 `ne-card` → `default`）。
   `default` 已收敛为**基础项（无「转化为」）**——图表类/未知块不硬转；需要「转化为」的块必须显式登记（p/h/quote/list/codeblock/容器 `ne-alert-hole`/`ne-container-hole`/`ne-hole`）。要单独配某类卡片，加 `'ne-card:<name>'` 即可。
   ⚠️ **块卡的真实类型在内部 `ne-card` 上**：代码块/分割线/思维导图/画板等**块卡**在 DOM 里都是 `ne-card[data-card-type=block]` 包在 `ne-hole` 内，`findBlockNode` 解析出的是 `ne-hole`
