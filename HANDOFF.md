@@ -26,7 +26,7 @@
 
 ### 五、补（260924 晚）：反向「桌面新建 → 浏览器刷新」+ dist 陷阱
 - **反向已覆盖**：同一 `library-changed` 广播对**桌面 IPC 调用**也生效。实测：CDP 触发桌面 `createNoteIn` → Web SSE 收到 `event: library-changed{channel:"create_note_in"}`（临时笔记已清理）。
-- ⚠️ **浏览器端只服务 `dist/`**：改 `src/**` 后**必须** `node node_modules/vite/bin/vite.js build` 生成新 `dist/`，再**硬刷新浏览器页面**。本批第一版 `library-changed` 只进了源码没进 `dist` ⇒ **桌面新建、浏览器端不刷新**（用户复现）。已重建 `dist/` 并核对 `dist/assets/index-*.js` 含 `onLibraryChanged`/`nativeDialog`/浏览器提示文案。此坑已记入 `docs/BROWSER-CLIENT-DESIGN.md` §2。
+- ⚠️ **浏览器端只服务 `dist/`**：改 `src/**` 后**必须**重建 `dist/` 再**硬刷新浏览器页面**。新增脚本 **`npm run build:web`（单次）/ `npm run build:web:watch`（常驻增量，推荐边改边看）** 专职做这件事（**不引入 HMR**，浏览器仍每次手动刷新）。本批第一版 `library-changed` 只进了源码没进 `dist` ⇒ **桌面新建、浏览器端不刷新**（用户复现）。已重建 `dist/` 并核对 `dist/assets/index-*.js` 含 `onLibraryChanged`/`nativeDialog`/浏览器提示文案。此坑已记入 `docs/BROWSER-CLIENT-DESIGN.md` §2。
 
 ---
 

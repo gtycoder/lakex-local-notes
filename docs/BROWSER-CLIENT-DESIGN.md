@@ -19,7 +19,7 @@
   Origin/Host 白名单（防 DNS rebinding、空端口旁路）、`Sec-Fetch-Site: cross-site` 拒绝、
   `/__native.js` 仅 same-origin/none、dist 路径穿越防护、256MB body 上限。
 - 状态：推送（SSE，含 `library-changed` 目录树自动刷新）与宿主能力 / 浏览器等价路径均已落地；**无 `dev:web` HMR**（阶段 3① 决定不做）。
-- ⚠️ **开发浏览器端必看**：浏览器端只服务构建产物 `dist/`。改任何 `src/**` 后**必须** `node node_modules/vite/bin/vite.js build` 刷新 `dist/`，再**硬刷新浏览器页面**，否则浏览器端跑的是旧 bundle。（260924 实际踩到：`library-changed` 只进了源码、没进 `dist` ⇒ 桌面新建后浏览器端目录不刷新。）
+- ⚠️ **开发浏览器端必看**：浏览器端只服务构建产物 `dist/`。改任何 `src/**` 后**必须**重建 `dist/` 再**硬刷新浏览器页面**，否则浏览器端跑旧 bundle。用 `npm run build:web`（单次）或 **`npm run build:web:watch`（常驻增量，推荐边改边看）**；**仍不引入 HMR**（阶段 3① 不做），浏览器每次仍需手动刷新。（260924 实际踩到：`library-changed` 只进了源码、没进 `dist` ⇒ 桌面新建后浏览器端目录不刷新。）
 
 ## 3. 阶段计划
 

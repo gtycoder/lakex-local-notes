@@ -31,7 +31,9 @@
     "test:sidebar-interaction": "node scripts/e2e-sidebar-interaction-smoke.mjs",
     "test:tab-switch": "node scripts/e2e-tab-switch-smoke.mjs",
     "postinstall": "patch-package --patch-dir vendor/lakex-doc-react/patches && patch-package --patch-dir patches",
-    "build:vendor": "npm --prefix vendor/lakex-doc-react run build"
+    "build:vendor": "npm --prefix vendor/lakex-doc-react run build",
+    "build:web": "vite build",
+    "build:web:watch": "vite build --watch"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1131.0",
