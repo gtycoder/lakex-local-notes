@@ -1,5 +1,4 @@
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent } from "react";
-import { createPortal } from "react-dom";
 import { Book, ChevronRight, ChevronsDownUp, Copy, FilePlus, File, Filter, Focus, Folder, FolderOpen, FolderPlus, History, Info, MoreVertical, Pencil, Pin, Plus, RefreshCw, Search, Trash, X } from "lucide-react";
 import { DockFilterRow, useDockFilter } from "./DockFilterBar";
 import { LAKE_EMOJIS } from "../lib/lakeEmojis";
@@ -11,7 +10,7 @@ import { Database, PenTool, Table } from "lucide-react";
 import { getCreateMenuPosition, type CreateMenuPosition } from "./createMenuPosition";
 import { ExportSubmenuItem } from "./ExportSubmenuItem";
 import { SIDEBAR_DEFAULT_WIDTH } from "../desktop/desktopTypes";
-import { Dialog, Menu } from "./ui/Overlay";
+import { Dialog, Menu, Popover } from "./ui/Overlay";
 
 type CreateKind = "notebook" | "group" | "note" | "sheet" | "bitable" | "board";
 type DropPosition = "before" | "inside" | "after";
@@ -922,9 +921,8 @@ export const EmojiIconPicker = ({ x, y, onPick, onClose }: { x: number; y: numbe
       : (LAKE_EMOJI_GROUPS.find((g) => g.name === group)?.emojis ?? []).map((char) => ({ char }));
   const left = Math.max(8, Math.min(x, window.innerWidth - 558));
   const top = Math.max(8, Math.min(y, window.innerHeight - 378));
-  return createPortal(
-    <div className="emoji-picker-backdrop" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="emoji-picker" style={{ left, top }} data-context-menu>
+  return (
+    <Popover surfaceClassName="emoji-picker" onDismiss={onClose} style={{ left, top }}>
         <div className="emoji-picker-search">
           <Search size={13} />
           <input value={filter} onChange={(e) => setFilter(e.target.value)} placeholder="搜索表情（如 smile / 名称）" autoFocus />
@@ -941,8 +939,6 @@ export const EmojiIconPicker = ({ x, y, onPick, onClose }: { x: number; y: numbe
           {list.length === 0 && <div className="emoji-picker-empty">无匹配表情</div>}
         </div>
         <button className="emoji-picker-clear" onClick={() => onPick(null)}>清除图标</button>
-      </div>
-    </div>,
-    document.body
+    </Popover>
   );
 };

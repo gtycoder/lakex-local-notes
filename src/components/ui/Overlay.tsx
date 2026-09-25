@@ -37,12 +37,14 @@ interface OverlayProps {
   scrimClassName?: string;
   /** 外部面板 ref（可拖拽/缩放的浮窗需要把自己的 panelRef 接到表面元素） */
   surfaceRef?: Ref<HTMLElement>;
+  /** 外点关闭豁免：返回 true 时不关闭（如锚点按钮本身） */
+  ignoreOutside?: (target: Node) => boolean;
   /** dialog 打开后的首焦点；缺省取首个可操作项 */
   initialFocus?: RefObject<HTMLElement | null>;
   children: ReactNode;
 }
 
-export function Overlay({ open = true, kind, onDismiss, label, className, style, surfaceClassName, scrimClassName, surfaceRef, initialFocus, children }: OverlayProps) {
+export function Overlay({ open = true, kind, onDismiss, label, className, style, surfaceClassName, scrimClassName, surfaceRef, ignoreOutside, initialFocus, children }: OverlayProps) {
   const innerRef = useRef<HTMLElement | null>(null);
   const restoreFocusRef = useRef<HTMLElement | null>(null);
   // 把外部 ref（可拖拽面板）与内部 ref 都挂到同一个表面元素上
@@ -69,11 +71,12 @@ export function Overlay({ open = true, kind, onDismiss, label, className, style,
     if (!open || kind === "dialog") return;
     const onDown = (e: MouseEvent) => {
       const el = innerRef.current;
+      if (ignoreOutside?.(e.target as Node)) return;
       if (el && !el.contains(e.target as Node)) onDismiss();
     };
     document.addEventListener("mousedown", onDown);
     return () => document.removeEventListener("mousedown", onDown);
-  }, [open, kind, onDismiss]);
+  }, [open, kind, onDismiss, ignoreOutside]);
 
   // dialog：首焦点 + 滚动锁 + 关闭后恢复焦点
   useEffect(() => {

@@ -6,7 +6,7 @@
  * 单元格值按 fieldId 存，编辑通过 onChange(value) 回传，由 BitableEditor 统一写 doc。
  */
 import { useEffect, useLayoutEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
-import { createPortal } from "react-dom";
+import { Popover as OverlayPopover } from "../../components/ui/Overlay";
 import { Calendar, Check, ChevronDown, ChevronLeft, ChevronRight, CircleDot, Hash, HelpCircle, Link2, Maximize2, Paperclip, Plus, Search, Tags, Type, X } from "lucide-react";
 import { ASSET_ORIGIN, assetThumbWidthForCss, withAssetAccessToken } from "../../lib/assetPort.js";
 import { withAssetWidth } from "../../core/assetUrl.js";
@@ -46,28 +46,11 @@ export function Popover({ open, anchor, onClose, children, width = 240, align = 
     const top = Math.min(r.bottom + 4, window.innerHeight - 48);
     setStyle({ left, top });
   }, [open, anchor, width, align]);
-  useEffect(() => {
-    if (!open) return;
-    const onDown = (event: PointerEvent) => {
-      const target = event.target;
-      if (!(target instanceof Node)) return;
-      if (panelRef.current?.contains(target) || anchor?.contains(target)) return;
-      onClose();
-    };
-    const onKey = (event: KeyboardEvent) => { if (event.key === "Escape") onClose(); };
-    document.addEventListener("pointerdown", onDown, true);
-    document.addEventListener("keydown", onKey);
-    return () => {
-      document.removeEventListener("pointerdown", onDown, true);
-      document.removeEventListener("keydown", onKey);
-    };
-  }, [open, anchor, onClose]);
   if (!open || !style) return null;
-  return createPortal(
-    <div ref={panelRef} className="bt-popover" style={{ position: "fixed", left: style.left, top: style.top, width, zIndex: 1200 }} role="dialog">
+  return (
+    <OverlayPopover surfaceClassName="bt-popover" onDismiss={onClose} surfaceRef={panelRef} ignoreOutside={(t) => !!anchor?.contains(t)} style={{ left: style.left, top: style.top, width }}>
       {children}
-    </div>,
-    document.body,
+    </OverlayPopover>
   );
 }
 
@@ -258,21 +241,6 @@ function TextExpandPopover({ anchor, value, readOnly, onChange, onClose }: TextE
     const top = Math.min(Math.max(8, r.bottom + 4), Math.max(8, window.innerHeight - 260 - 8));
     setPos({ left, top });
   }, [anchor]);
-  useEffect(() => {
-    const onDown = (event: PointerEvent) => {
-      const target = event.target;
-      if (!(target instanceof Node)) return;
-      if (panelRef.current?.contains(target) || anchor.contains(target)) return;
-      onClose();
-    };
-    const onKey = (event: KeyboardEvent) => { if (event.key === "Escape") onClose(); };
-    document.addEventListener("pointerdown", onDown, true);
-    document.addEventListener("keydown", onKey);
-    return () => {
-      document.removeEventListener("pointerdown", onDown, true);
-      document.removeEventListener("keydown", onKey);
-    };
-  }, [anchor, onClose]);
   const startDrag = (event: ReactPointerEvent<HTMLElement>) => {
     event.preventDefault();
     const startX = event.clientX; const startY = event.clientY;
@@ -292,16 +260,15 @@ function TextExpandPopover({ anchor, value, readOnly, onChange, onClose }: TextE
     window.addEventListener("pointerup", onUp);
   };
   if (!pos) return null;
-  return createPortal(
-    <div ref={panelRef} className="bt-text-expand" style={{ position: "fixed", left: pos.left, top: pos.top, width: size.w, height: size.h }}>
+  return (
+    <OverlayPopover surfaceClassName="bt-text-expand" onDismiss={onClose} surfaceRef={panelRef} ignoreOutside={(t) => anchor.contains(t)} style={{ left: pos.left, top: pos.top, width: size.w, height: size.h }}>
       <header className="bt-text-expand-head" onPointerDown={startDrag}>
         <span>展开编辑</span>
         <button type="button" className="bt-icon-btn" aria-label="关闭" title="关闭" onPointerDown={(event) => event.stopPropagation()} onClick={onClose}><X size={14} /></button>
       </header>
       <textarea className="bt-text-expand-body" autoFocus value={value} readOnly={readOnly} onChange={(event) => onChange(event.target.value)} />
       <div className="bt-text-expand-resize" onPointerDown={startResize} title="拖动调整大小" />
-    </div>,
-    document.body,
+    </OverlayPopover>
   );
 }
 
