@@ -11,6 +11,7 @@ import { Database, PenTool, Table } from "lucide-react";
 import { getCreateMenuPosition, type CreateMenuPosition } from "./createMenuPosition";
 import { ExportSubmenuItem } from "./ExportSubmenuItem";
 import { SIDEBAR_DEFAULT_WIDTH } from "../desktop/desktopTypes";
+import { Dialog } from "./ui/Overlay";
 
 type CreateKind = "notebook" | "group" | "note" | "sheet" | "bitable" | "board";
 type DropPosition = "before" | "inside" | "after";
@@ -896,16 +897,14 @@ interface ConfirmDeleteProps {
 }
 
 export const ConfirmDelete = ({ node, onConfirm, onCancel }: ConfirmDeleteProps) => (
-  <div className="modal-backdrop" onMouseDown={(event) => event.target === event.currentTarget && onCancel()}>
-    <section className="confirm-dialog" role="dialog" aria-modal="true">
-      <h3>删除“{node.title}”？</h3>
-      <p>将删除该节点及其所有子项，移入本地回收站（可在回收站中恢复或彻底删除）。</p>
-      <footer>
-        <button className="b3-button b3-button--cancel" onClick={onCancel}>取消</button>
-        <button className="b3-button danger-button" onClick={onConfirm}>删除</button>
-      </footer>
-    </section>
-  </div>
+  <Dialog open onDismiss={onCancel} label={"删除“" + node.title + "”？"} className="confirm-dialog">
+    <div className="ln-dialog__head"><span className="ln-dialog__title">删除“{node.title}”？</span></div>
+    <div className="ln-dialog__body">将删除该节点及其所有子项，移入本地回收站（可在回收站中恢复或彻底删除）。</div>
+    <div className="ln-dialog__actions">
+      <button className="b3-button b3-button--cancel" onClick={onCancel}>取消</button>
+      <button className="b3-button ft__error" onClick={onConfirm}>删除</button>
+    </div>
+  </Dialog>
 );
 
 /** M1.6：文档/分组自定义图标选择器（Lake unicodeEmoji 表情资源 + 分组 + 搜索 + 清除） */

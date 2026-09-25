@@ -30,14 +30,9 @@
 
 @starting-style { .context-menu { opacity: 0; transform: scale(0.96); } }
 
-/* 删除确认对话框（思源 b3-dialog 风格：表面色 + 12px 圆角 + 柔和阴影，无彩色边框） */
-.confirm-dialog { width: min(420px, 100%); padding: 20px; transition: transform var(--dur-drawer) var(--ease-out), opacity var(--dur-drawer) var(--ease-out); }
-
-.confirm-dialog h3 { margin: 0 0 8px; font-size: 15px; font-weight: 600; color: var(--lake-text-1); }
-
-.confirm-dialog p { margin: 0 0 18px; color: var(--lake-text-3); font-size: 12px; line-height: 1.6; }
-
-.confirm-dialog footer { display: flex; justify-content: flex-end; gap: 9px; }
+/* 删除确认对话框：表面/圆角/阴影/内距均来自 .ln-dialog（overlay.css 单一来源），这里只定宽度与入场。
+ * 260926：迁到 Overlay 原语（三段式 ln-dialog__head/body/actions）。 */
+.confirm-dialog { width: min(420px, 100%); transition: transform var(--dur-drawer) var(--ease-out), opacity var(--dur-drawer) var(--ease-out); }
 
 .confirm-dialog { opacity: 1; transform: translateY(0) scale(1); }
 

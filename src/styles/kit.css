@@ -99,17 +99,7 @@
 .ln-row__indent { flex: 0 0 auto; }
 
 /* ── 04 菜单 / 右键菜单 ────────────────────────────────────── */
-.ln-menu {
-  display: flex;
-  flex-direction: column;
-  min-width: 206px;
-  padding: 6px;
-  border: 1px solid var(--lake-border-1);
-  border-radius: var(--lake-radius-md);
-  background: var(--lake-bg-panel);
-  box-shadow: var(--lake-shadow-popover);
-  z-index: var(--lake-z-dropdown);
-}
+/* .ln-menu 容器（表面/定位）已并入 src/styles/overlay.css 单一来源（260926）。 */
 .ln-menu__item {
   display: flex;
   align-items: center;

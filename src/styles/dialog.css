@@ -1,37 +1,9 @@
 /* 浮层通用弹窗（属性等）：桌面/移动共用，保证同一套表面、间距、尺寸与拖拽调整 */
-.modal-backdrop { display: grid; position: fixed; z-index: 30; inset: 0; place-items: center; padding: 20px; background: var(--lake-scrim); transition: opacity var(--dur-drawer) var(--ease-out); }
+/* B1（260926）：原 z-index:30 低于侧栏(250)/顶栏(400) ⇒ 用它的对话框遮罩盖不住外壳。
+ * 改用 overlay 层令牌（> 外壳）。 */
+.modal-backdrop { display: grid; position: fixed; z-index: var(--lake-z-overlay-dialog); inset: 0; place-items: center; padding: 20px; background: var(--lake-scrim); transition: opacity var(--dur-drawer) var(--ease-out); }
 
-/* ---- 浮层通用弹窗（属性等同类弹窗统一用它，别再各写一套表面/圆角/阴影） ---- */
-.ln-dialog {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  padding: 0;
-  border: 1px solid var(--lake-border-1);
-  border-radius: 12px;
-  color: var(--lake-text-1);
-  background: var(--lake-bg-panel);
-  box-shadow: var(--lake-shadow-popover);
-  overflow: hidden;
-}
-.ln-dialog__head {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex: 0 0 auto;
-  padding: 12px 14px;
-  border-bottom: 1px solid var(--lake-border-2);
-}
-.ln-dialog__title {
-  flex: 1 1 auto;
-  margin: 0;
-  font-size: 14px;
-  font-weight: 600;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.ln-dialog__body { flex: 1 1 auto; min-height: 0; padding: 12px 14px; overflow: auto; }
+/* .ln-dialog 的布局与表面已并入 src/styles/overlay.css（单一来源，260926）。 */
 /* 右下角拖拽调整大小（默认大尺寸，见具体弹窗） */
 .ln-dialog__resize { position: absolute; right: 0; bottom: 0; width: 16px; height: 16px; cursor: nwse-resize; color: var(--lake-text-3); opacity: .5; touch-action: none; }
 .ln-dialog__resize::after { content: ""; position: absolute; right: 3px; bottom: 3px; width: 8px; height: 8px; border-right: 2px solid currentColor; border-bottom: 2px solid currentColor; border-radius: 0 0 3px 0; }

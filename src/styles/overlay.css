@@ -14,33 +14,90 @@
   background: var(--lake-scrim);
 }
 
-/* ── 对话框框架（.ln-dialog，属性弹窗 / 设置 / 回收站 / 历史 / 删除确认共用） ──
- * .confirm-dialog 此前不在任何表面规则里，只靠遮罩模糊假装有底 ⇒ 目录树透出来（260926 修）。 */
-.ln-dialog,
-.confirm-dialog {
+/* ── 浮层基座：遮罩（唯一来源）。三型浮层由 src/components/ui/Overlay.tsx 统一渲染 ── */
+.ln-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: var(--lake-z-overlay-scrim);
+  display: grid;
+  place-items: center;
+  padding: var(--lake-space-xxl);
+  background: var(--lake-scrim);
+}
+
+/* ── 对话框框架（.ln-dialog：属性/设置/回收站/历史/删除确认/附件重命名共用） ──
+ * 单一来源：布局 + 表面都在本层（原 dialog.css 的布局已并入；此前 .confirm-dialog 不在任何
+ * 表面规则里、只靠遮罩模糊假底 ⇒ 目录树透出，260926 统一到 .ln-dialog）。 */
+/* 顶部对齐命令面板（搜索等）：不居中，贴近窗口顶部 */
+.ln-scrim--top { align-items: start; padding-top: 12vh; }
+
+.ln-dialog {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  overflow: hidden;
   border: 1px solid var(--lake-border-1);
   border-radius: var(--lake-radius-lg);
   color: var(--lake-text-1);
   background: var(--lake-bg-panel);
   box-shadow: var(--lake-shadow-dialog);
+  z-index: var(--lake-z-overlay-dialog);
 }
 .ln-dialog__head {
+  display: flex;
+  align-items: center;
   gap: var(--lake-space-md);
+  flex: 0 0 auto;
   padding: 14px 16px 0;
   border-bottom: 0;
 }
 .ln-dialog__title {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   color: var(--lake-text-1);
   font-size: var(--lake-font-size-bodyLg);
   font-weight: var(--lake-font-weight-semibold);
 }
 .ln-dialog__body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
   padding: var(--lake-space-lg) var(--lake-space-xl) var(--lake-space-xl);
   color: var(--lake-text-2);
   font-size: var(--lake-font-size-small);
 }
+.ln-dialog__actions { display: flex; justify-content: flex-end; gap: var(--lake-space-md); padding: 0 16px 12px; }
 .ln-dialog__resize { color: var(--lake-text-4); }
 .ln-dialog__resize:hover { color: var(--lake-text-2); }
+
+/* ── 菜单 / 气泡表面（单一来源）：容器从 kit.css 移入本层，item 样式仍在 kit.css ── */
+.ln-menu {
+  position: fixed;
+  z-index: var(--lake-z-overlay-menu);
+  display: flex;
+  flex-direction: column;
+  min-width: 206px;
+  padding: var(--lake-space-sm);
+  border: 1px solid var(--lake-border-1);
+  border-radius: var(--lake-radius-md);
+  background: var(--lake-bg-panel);
+  box-shadow: var(--lake-shadow-popover);
+  color: var(--lake-text-1);
+}
+.ln-popover {
+  position: fixed;
+  z-index: var(--lake-z-overlay-menu);
+  border: 1px solid var(--lake-border-1);
+  border-radius: var(--lake-radius-md);
+  background: var(--lake-bg-panel);
+  box-shadow: var(--lake-shadow-popover);
+  color: var(--lake-text-1);
+}
 
 /* .floating-dialog = 设置 / 回收站 / 历史 的面板容器（与 .ln-dialog 是两套历史实现，
  * 这里统一到同一份表面规格）。注意 legacy 的 `background: var(--lake-bg-panel) !important` 仍在，

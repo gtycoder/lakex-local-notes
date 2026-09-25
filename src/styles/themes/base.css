@@ -48,6 +48,12 @@
   --lake-z-outline: 260;           /* 整边大纲 rail */
   --lake-z-activity-rail: 270;     /* 左右活动轨 */
   --lake-z-topbar: 400;            /* 顶栏 .tab-bar：外壳最高，始终可见 */
+  /* 浮层段（Overlay 原语，260926）：必须整体高于外壳（topbar 400）。
+     三型浮层统一由 src/components/ui/Overlay.tsx 渲染并引用这几个令牌。 */
+  --lake-z-overlay-menu: 600;      /* 菜单 / 下拉 / 气泡 */
+  --lake-z-overlay-scrim: 700;     /* 对话框遮罩 */
+  --lake-z-overlay-dialog: 710;    /* 对话框 */
+  --lake-z-overlay-lightbox: 720;  /* 图片 / 附件预览 */
   /* 字号/字重/行高 */
   --lake-font-size-micro: 11.5px;
   --lake-font-size-tiny: 12px;
