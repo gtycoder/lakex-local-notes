@@ -4,6 +4,46 @@
 > 历史所有 dated handoff 已合并进本文件（内容在 git 历史可查）。本文件只保留**当前状态 + 真正的待办 + 有价值的坑**。
 > **§8 是移动端（安卓）专职交接**，由移动端会话维护；桌面会话不要改 §8，移动端会话不要改 §0-§7 之外的桌面文件。
 
+## 0. 最新交接 · 260926 · 桌面壳层对齐「后台服务 + 双端前台」（A1/A2/A3/A5）· 分支 `feat/shell-layer`，**未合 master**
+
+> 写给**完全没有上下文**的新会话。用户口径：**只学 DSH 的壳层**（后台服务 + 前台套壳、桌面端 + 浏览器端同构）；它的内核与我们完全不同、不模仿；**主题（B 批次）已冻结，等本批验收通过再启动**。本批只动壳，`src/core` 与同步语义**零改动**。
+
+### 一、依据（DSH 壳层，已核实）
+- DSH 桌面窗口**不跑 `file://`**，而是私有协议 `dsh-app://app`：Electron 启动参数实测带 `--standard-schemes=dsh-app --secure-schemes=dsh-app --cors-schemes=dsh-app --fetch-schemes=dsh-app --streaming-schemes=dsh-app --code-cache-schemes=dsh-app`；静态服务 `dsh-web-frontend/dist`，非静态请求代理到本机 host，浏览器端（`dsh web`）服务**同一份 dist**。我们已有「桌面 IPC + 浏览器端 HTTP 服务同一份 dist」，**唯一缺的是桌面渲染层没有稳定 origin**（打包版是 `file://`）。
+- 其余对照结论：IPC **sender/frame 集中校验我们已有**（`main.ts` 的 `isTrustedSenderFrame` + registrar 注入）；`preload ↔ WEB_METHODS` 漂移**已有单测**；窄 preload / 子进程 host / 宽 preload 拆分**不做**（#17，我们只有一个产品窗口）。
+
+### 二、本批交付
+| 项 | 内容 | 关键文件 |
+|---|---|---|
+| A1 | 打包版渲染层改跑 `lake://app`（standard+secure）；dev 仍走 vite，`LAKE_RENDERER=scheme` 可在 dev 强制走该分支自验 | `electron/appOrigin.ts`(新) · `electron/appProtocol.ts`(新) · `electron/main.ts` |
+| A1′ | 资产服务 Origin 白名单 / ACAO 回显加入 `APP_ORIGIN` | `electron/assetServer.ts` |
+| A2 | 补断言「`WEB_METHODS` 每个通道都真实注册过」（否则浏览器端 404、桌面端照常可用） | `electron/webApiServer.test.ts` |
+| A3 | 浏览器端服务 bind 失败**抛错带原因**（原实现吞掉 error、resolve 成 `enabled:false` ⇒「开关打开又弹回、无任何提示」） | `electron/webApiServer.ts` |
+| A5 | 主进程 external 从 `package.json.dependencies` 派生（+ `@smithy/` 传递依赖） | `vite.config.ts` |
+
+### 三、实测证据（隔离实例 + CDP，非只看编译）
+- `LAKE_RENDERER=scheme` 实例：`location.href=lake://app/index.html`、`origin=lake://app`、preload **112 方法**、**`listTreeNodes()` 正常返回**、`.app-shell` 真实渲染、日志无 error。
+- 资产 CORS：页面（`lake://app`）取 `vendor/cdn/.../katex.min.js` → **200 / 276862B**（`curl` 侧可见 `Access-Control-Allow-Origin: lake://app`）。
+- dev 分支（`LAKE_DEV_SERVER_URL` 指向探针页）：origin 为 dev server、IPC 正常 ⇒ dev 路径未被改坏。
+- 门禁：`tsc` 0 · `vitest` **1286 passed / 16 skipped**（基线 1277 + 新增 9）· `check-core` 违规 0 · 桌面+移动 `vite build` OK · `git diff --check` 干净。
+
+### 四、踩过的坑（务必先读）
+1. **非特殊 scheme 的 `URL.origin` 在 Node 里恒为 `"null"`**：`new URL("lake://app/index.html").origin === "null"`（Chromium 侧才是 `lake://app`）。第一版用它判来源 ⇒ 页面能加载、preload 在、**每个 IPC 都报「来源不受信任」**。修法：`isAppOriginUrl()` 比 `protocol` + `hostname`，并单测钉死这条分歧。
+2. **在 DSH 会话里跑本仓库 Electron 必须 `env -u ELECTRON_RUN_AS_NODE`**：DSH 宿主环境带 `ELECTRON_RUN_AS_NODE=1`，否则 Electron 以纯 Node 启动并报 `bad option: --disable-gpu`。
+3. **资产服务的 404/403 分支不带 ACAO**（既有行为，非本批引入）：从页面 `fetch` 一个**不存在**的资产会得到 "No 'Access-Control-Allow-Origin'"，看着像 CORS 坏了。验证必须用**真实存在**的文件。
+4. 收尾纪律：测试实例按**唯一 CDP 端口** `pgrep -f` 精确 kill；DSH 自身是 Electron，别用 pkill。
+5. **electron-builder 在弱网/受限网络下会以 `Timeout awaiting 'request' for 600000ms` 整批失败**（不是配置错、不是代码错）：`release/mac-arm64/…app` 根本不会产出，`test:packaged` 随之无法跑。先看 `~/Library/Caches/electron` 是否有缓存，再决定重试还是换网络。
+
+### 五、当前状态 / 下一步
+- 分支 `feat/shell-layer`，两个提交：`3745f67`（`fix(tree)` 单节点回传保留 kind，可单独 cherry-pick 回 master）+ `d79c291`（本批 A）。**未合 master、未推送**，等用户验收。
+- **打包 smoke：本轮未跑成（环境网络问题，非代码）**。`npx electron-builder --dir --mac --arm64 --publish never` 失败于 `Timeout awaiting 'request' for 600000ms`（electron-builder 自身下载 10 分钟超时；`~/Library/Caches/electron` 为空）⇒ `release/mac-arm64/Lake Notes.app` 未产出，`npm run test:packaged` 无法运行。**这是 A1 唯一未覆盖的面**（真实 asar 包的启动）；A1 的代码路径已用 `LAKE_RENDERER=scheme` 在未打包实例上**等价**验证（同一分支、同一 handler）。网络可用时补跑：`npx electron-builder --dir --mac --arm64 && npm run test:packaged`。
+- **B 批次（DSH 灵感主题）冻结中**：只借色板/语义/几何/形状/动效/窗口，字体与品牌用我们的；方案已讨论（对照表 → 语义别名层 → 几何档位 → superellipse → 焦点环模态 → 窗口材质 → 快照门禁）。
+
+### 六、关键文件 / 命令
+- 私有协议：`electron/appOrigin.ts`（常量 + `resolveAppDistFile` + `isAppOriginUrl`，**不依赖 electron**，可单测）· `electron/appProtocol.ts`（`registerSchemesAsPrivileged` + `protocol.handle` 只读服务 `dist/`）。
+- 自验：`env -u ELECTRON_RUN_AS_NODE LAKE_USER_DATA=/tmp/x LAKE_ASSET_PORT=19899 LAKE_WEB_PORT=19898 LAKE_RENDERER=scheme ./node_modules/.bin/electron --disable-gpu --remote-debugging-port=9235 .`
+- 门禁：`npx tsc --noEmit && npx vitest run && npx vite build && npx vite build -c vite.mobile.config.ts && node scripts/check-core-boundaries.mjs`
+
 ## 0. 最新交接 · 260925 续 · Android 原生层 Kotlin 化 + 原生资产端口（已合 master）
 
 > 写给完全没有上下文的新会话。本会话在分支 `feat/android-kotlin-native` 完成，**已 fast-forward 合入 master、分支已删**。一句话：Android 原生层已全 Kotlin；S3 资产字节已下沉原生（上传+下载都不过 WebView 桥）；core 只加了两个**可选**端口且行为等价。

@@ -11,7 +11,7 @@ Lake Notes 是**本地优先**笔记应用（Electron + React + better-sqlite3 +
 - 目录：`/Users/admin/file/local-lake/lake-notes-electron`
 - 开发分支：`master`（唯一持续演进的业务分支；历史分支一律已合入并删除，勿基于它们开发）
 - Node：**必须优先 Node 24**：`$HOME/.nvm/versions/node/v24.18.0/bin`
-- Electron：43.4.0；better-sqlite3 13.x（N-API 单二进制、无需 rebuild；双 ABI 基建已随 43 升级删除）
+- Electron：**44.3**（`package.json` 为 `^44.3.0`，以实际安装版本为准；此前记录为 43.4 已过期）；better-sqlite3 13.x（N-API 单二进制、无需 rebuild；双 ABI 基建已随 43 升级删除）
 - **目标数据量级**：压测做到 **10 万文档 / 100 万附件**（≈100k notes / 1M assets）。性能与同步决策按此量级验证，**勿用"小库正常"下结论**；同步/搜索/GC 相关改动的预期场景均以此为准。
 
 ## 2. 长期方向与文档分工
@@ -71,6 +71,8 @@ Lake Notes 是**本地优先**笔记应用（Electron + React + better-sqlite3 +
 
 ## 4. 关键机制速览（同步）
 
+- **壳层双 origin（260926）**：打包版渲染层跑私有协议 **`lake://app`**（`electron/appOrigin.ts` + `electron/appProtocol.ts` 服务 `dist/`；标准/安全/fetch/cors/stream/codeCache 全套 privilege），dev 跑 vite dev server（`LAKE_RENDERER=scheme` 可在 dev 下强制走前者自验）——桌面与浏览器端由此共享同一套 origin 语义（localStorage/CSP/fetch/clipboard）。**判定页面来源禁止比较 `URL.origin`**：非特殊 scheme 在 Node 的 URL 里 origin 恒为 `"null"`（Chromium 侧才是 `lake://app`）⇒ 必须比 scheme+host（`isAppOriginUrl`），否则 page 能加载、preload 在、但每个 IPC 都报「来源不受信任」。资产服务的 Origin 白名单 / ACAO 回显必须同时放行 `APP_ORIGIN`。**主进程 external 从 `package.json.dependencies` 派生**（+ `@smithy/` 传递依赖），别退回逐个硬编码。
+
 - 冲突四分支在 `electron/sync.ts` 下载阶段；`baseHash + lastUploadedHash` 存本地 `sync_base`，**绝不上 manifest**。
 - `supersededNotes`：本地改动被远端覆盖时先强制 `createHistorySnapshot` 留档再接受远端。
 - `folders[]` 必填；手动同步只发回触发窗口；自动同步广播所有窗口。
@@ -113,7 +115,7 @@ node scripts/s3-ls.mjs --count | --note <id> | --prefix <prefix>   # 云端对�
 ### 环境 / 进程
 1. vite dev server 会被 exec 会话回收：必须长驻 tty（`tty=true`）。vite-plugin-electron 会自动拉起 electron，手动控端前临时加 `onstart: () => {}`，验证完必须还原。
 2. 单实例锁按 userData 隔离；资源端口 A=19876、B=19877。
-3. 结束 electron 只能 kill 具体 PID，**不要 `pkill -f Electron`**（机器上还有 SiYuan/VSCode/Trae）。
+3. 结束 electron 只能 kill 具体 PID，**不要 `pkill -f Electron`**（机器上还有 SiYuan/VSCode/Trae；**DSH 宿主自己也是 Electron**，是头号误伤目标）。区分我起的实例：按**唯一 CDP 端口** `pgrep -f "remote-debugging-port=92xx"` 精确 kill。
 
 ### 七牛 S3
 4. `ObjectStore.test()` 必须用 ListObjectsV2（七牛 HeadBucket 对存在的桶也返回 404）。
@@ -127,10 +129,15 @@ node scripts/s3-ls.mjs --count | --note <id> | --prefix <prefix>   # 云端对�
 10. **变量 shadow 坑**：同步函数里外层 `remote` 是 ObjectStore，循环内若再 `const remote = remoteById.get(...)` 会 shadow 掉它，导致 `remote.put is not a function`。改名 `remoteNote`/`remoteItem`。
 
 ### 日志 / 构建
-11. electron-log 必须 external：`vite.config.ts` electron 入口 `rollupOptions.external` 写 `/^electron-log/`。
+11. 主进程 external **从 `package.json.dependencies` 派生**（`vite.config.ts` 的 `isMainProcessExternal`：deps + 子路径 + `node:`/`electron` + `@smithy/`）；`electron-log`/`better-sqlite3`/`sharp`/`@aws-sdk/*` 都因此在列。**不要再退回逐个硬编码**——新增原生依赖漏项 = 被打进 bundle、打包后才炸。
 12. Electron 33 的 `console-message` 事件签名是 `(event)`（`event.message`），logger 已兼容。
 13. better-sqlite3 是 Electron ABI 编译，系统 Node 24 跑不了；bench 等用 python3 sqlite3 代替。
 14. vitest 下 electron-log 要静音（`process.versions.electron` 不存在时关 transports）。
+
+### 在 DSH（DeepSeek Harness）宿主会话里工作
+15. **启动本仓库 Electron 必须 `env -u ELECTRON_RUN_AS_NODE`**：DSH 宿主环境注入 `ELECTRON_RUN_AS_NODE=1`（它用同一份 Electron 当 Node），直接跑 `./node_modules/.bin/electron ...` 会以纯 Node 启动并报 `bad option: --disable-gpu`。完整写法：`env -u ELECTRON_RUN_AS_NODE ./node_modules/.bin/electron --disable-gpu --remote-debugging-port=92xx .`
+16. **DSH 自身就是 Electron 实例**，且会话宿主进程就在这台机器上 ⇒ §7.3 的「只 kill 具体 PID」在这里尤其致命化：**永远按唯一 CDP 端口 `pgrep -f` 精确定位**再 kill，任何 `pkill -f Electron`/`killall` 都可能把当前会话打断。
+17. 改了本仓库的 `electron/*.ts` / `src/**` **不会**影响 DSH 自身（两者产物、userData 完全独立）；但**别去动 DSH 的安装目录**（`Contents/Resources/app.asar` 及 `app.asar.unpacked/dsh`），那属于它的运行时。
 
 ## 8. 会话启动指引
 
