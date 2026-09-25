@@ -3,7 +3,7 @@
  * 只负责渲染浮层：ConfirmDelete / 顶栏两个 portal 菜单 / 草稿恢复 / 搜索 / 回收站 / 历史 / 同步 toast / 设置。
  * 所有状态与回调由 App（或后续 useDesktopShell）注入，本组件不持有业务状态。
  */
-import { createPortal } from "react-dom";
+import { Menu } from "../components/ui/Overlay";
 import type { RefObject } from "react";
 import { Focus, Lock, LockOpen } from "lucide-react";
 import { ConfirmDelete } from "../components/Sidebar";
@@ -26,6 +26,7 @@ export interface DesktopOverlaysProps {
   onCancelDelete: () => void;
 
   workspaceMenuOpen: boolean;
+  onCloseWorkspaceMenu: () => void;
   wsMenuWrapRef: RefObject<HTMLDivElement>;
   workspaceMenuRef: RefObject<HTMLDivElement>;
   moreMenuWrapRef: RefObject<HTMLDivElement>;
@@ -89,7 +90,7 @@ export interface DesktopOverlaysProps {
 export function DesktopOverlays(props: DesktopOverlaysProps) {
   const {
     confirmDelete, onConfirmDelete, onCancelDelete,
-    workspaceMenuOpen, wsMenuWrapRef, workspaceMenuRef, moreMenuWrapRef, moreMenuRef, topMenuOpen,
+    workspaceMenuOpen, onCloseWorkspaceMenu, wsMenuWrapRef, workspaceMenuRef, moreMenuWrapRef, moreMenuRef, topMenuOpen,
     desktopWorkspace, onSwitchWorkspace,
     onOpenSettingsFromMenu, onOpenTrashFromMenu, onOpenHistoryFromMenu,
     focusMode, onToggleFocusMode, activeNoteId, activeKind, lockedNoteIds, onToggleNoteLock,
@@ -111,8 +112,8 @@ export function DesktopOverlays(props: DesktopOverlaysProps) {
           onCancel={onCancelDelete} />
       )}
       {/* 顶栏下拉用 portal 渲染到 body 根部，避免被 app-shell 内部堆叠上下文/overflow 覆盖 */}
-      {workspaceMenuOpen && createPortal(
-        <div ref={workspaceMenuRef} className="top-menu top-menu--workspace" role="menu" aria-label="工作空间"
+      {workspaceMenuOpen && (
+        <Menu surfaceClassName="top-menu top-menu--workspace" label="工作空间" onDismiss={onCloseWorkspaceMenu} surfaceRef={workspaceMenuRef}
           style={(() => {
             const rect = wsMenuWrapRef.current?.getBoundingClientRect();
             return rect ? clampPopoverPosition(rect, { width: window.innerWidth, height: window.innerHeight }, { width: 220, height: 260 }, 6) : undefined;
@@ -122,11 +123,10 @@ export function DesktopOverlays(props: DesktopOverlaysProps) {
             onSwitchWorkspace={onSwitchWorkspace}
             onOpenSettings={() => onOpenSettingsFromMenu("editor")}
           />
-        </div>,
-        document.body,
+        </Menu>
       )}
-      {topMenuOpen && createPortal(
-        <div ref={moreMenuRef} className="top-menu top-menu--more" role="menu" aria-label="文档操作"
+      {topMenuOpen && (
+        <Menu surfaceClassName="top-menu top-menu--more" label="文档操作" onDismiss={onCloseTopMenu} surfaceRef={moreMenuRef}
           style={(() => {
             const rect = moreMenuWrapRef.current?.getBoundingClientRect();
             return rect ? clampPopoverPosition(rect, { width: window.innerWidth, height: window.innerHeight }, { width: 236, height: 200 }, 6) : undefined;
@@ -149,8 +149,7 @@ export function DesktopOverlays(props: DesktopOverlaysProps) {
               onClose={onCloseTopMenu}
             />
           )}
-        </div>,
-        document.body,
+        </Menu>
       )}
       <DraftRecoveryDialog entries={draftEntries} onRestore={onRestoreDraft} onDiscard={onDiscardDraft} onClose={onCloseDrafts} />
       <SearchPanel open={searchPanelOpen} initialQuery={searchPanelQuery} onOpenNote={onOpenNoteFromSearch} onClose={onCloseSearch} />

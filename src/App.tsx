@@ -567,6 +567,7 @@ export function App() {
         moreMenuWrapRef={moreMenuWrapRef}
         moreMenuRef={moreMenuRef}
         topMenuOpen={topMenuOpen}
+        onCloseWorkspaceMenu={() => setWorkspaceMenuOpen(false)}
         desktopWorkspace={desktopWorkspace}
         onSwitchWorkspace={(w) => void switchDesktopWorkspace(w)}
         onOpenSettingsFromMenu={(category) => { setSettingsCategory(category); setSettingsOpen(true); setWorkspaceMenuOpen(false); }}
