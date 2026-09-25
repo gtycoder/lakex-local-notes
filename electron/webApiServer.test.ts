@@ -4,7 +4,7 @@ import http from "node:http";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { injectNativeShim, renderNativeShim, startWebApiServer, WEB_METHODS, type WebApiServerOptions } from "./webApiServer.js";
+import { createWebServerController, injectNativeShim, renderNativeShim, startWebApiServer, WEB_METHODS, type WebApiServerOptions } from "./webApiServer.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -269,5 +269,44 @@ describe("webApiServer", () => {
       expect(received).toContain(`"phase":"done"`);
       ctrl.abort();
     });
+  });
+});
+
+describe("IPC 注册表 ↔ WEB_METHODS 一致性（A2）", () => {
+  it("WEB_METHODS 的每个通道都真实注册过，否则浏览器端 404 而桌面端照常可用", () => {
+    const ipcDir = path.join(__dirname, "ipc");
+    const sources = [
+      ...fs.readdirSync(ipcDir).filter((f) => f.endsWith(".ts") && !f.endsWith(".test.ts")).map((f) => path.join(ipcDir, f)),
+      path.join(__dirname, "main.ts"),
+    ].map((f) => fs.readFileSync(f, "utf8")).join("\n");
+    const registered = new Set<string>();
+    const re = /ipc\.(?:handle|handleEvent)\(\s*"([a-z0-9_]+)"/g;
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(sources))) registered.add(m[1]);
+    // 反向断言，避免匹配失败时静默通过（正则改坏了应该红，而不是"没有 missing"）
+    expect(registered.size).toBeGreaterThan(50);
+    const missing = Object.values(WEB_METHODS).filter((channel) => !registered.has(channel));
+    expect(missing).toEqual([]);
+  });
+});
+
+describe("浏览器端服务启动失败必须给出原因（A3）", () => {
+  it("端口被占用时 setEnabled(true) 抛出可读错误，而不是静默返回 enabled:false", async () => {
+    const blocker = http.createServer(() => {});
+    const port = await new Promise<number>((resolve) => {
+      blocker.listen(0, "127.0.0.1", () => {
+        const addr = blocker.address();
+        resolve(typeof addr === "object" && addr ? addr.port : 0);
+      });
+    });
+    const distDir = fs.mkdtempSync(path.join(os.tmpdir(), "lake-web-a3-"));
+    try {
+      const ctrl = createWebServerController(makeOptions(distDir, { port }));
+      await expect(ctrl.setEnabled(true)).rejects.toThrow(/已被占用/);
+      expect(ctrl.getStatus().enabled).toBe(false);
+    } finally {
+      fs.rmSync(distDir, { recursive: true, force: true });
+      await new Promise<void>((resolve) => blocker.close(() => resolve()));
+    }
   });
 });

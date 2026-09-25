@@ -2,7 +2,7 @@ import { app, BrowserWindow, crashReporter, dialog, screen, session, shell, type
 import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
-import { fileURLToPath, pathToFileURL } from "node:url";
+import { fileURLToPath } from "node:url";
 import { Store } from "./store.js";
 import { createSafeStorageSecretCipher } from "./secretCipher.js";
 import { QuickNotesStore } from "./quickNotes.js";
@@ -26,6 +26,8 @@ import { registerLogIpc } from "./ipc/registerLogIpc.js";
 import { registerSystemInfoIpc } from "./ipc/registerSystemInfo.js";
 import { clampWindowState, readWindowState, writeWindowState } from "./windowState.js";
 import { TOPBAR_HEIGHT, TOPBAR_SEAM, TRAFFIC_LIGHT_DIAMETER } from "../src/lib/layoutMetrics.js";
+import { APP_ORIGIN, isAppOriginUrl } from "./appOrigin.js";
+import { registerAppSchemePrivileges, serveAppDist } from "./appProtocol.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const isDev = !app.isPackaged;
@@ -44,6 +46,21 @@ app.setPath(
 );
 // dev server 地址可经 LAKE_DEV_SERVER_URL 覆盖：多端/隔离冒烟时避开默认 1421（IPC 信任判定同用此值）。
 const DEV_SERVER_URL = process.env.LAKE_DEV_SERVER_URL?.trim() || "http://127.0.0.1:1421";
+/**
+ * 渲染层加载方式（对齐 DSH 桌面壳：不打 file://）：
+ * - `vite`：dev 默认走 vite dev server（保留 HMR；LAKE_DEV_SERVER_URL 可覆盖）；
+ * - `scheme`：打包版走私有协议 lake://app（服务构建产物 dist/）。dev 下亦可用
+ *   LAKE_RENDERER=scheme 强制走这条路径（需先 vite build），用于本机验证该分支。
+ */
+const rendererMode: "vite" | "scheme" = !isDev || process.env.LAKE_RENDERER?.trim() === "scheme" ? "scheme" : "vite";
+
+/** 渲染层构建产物目录：私有协议静态服务与 Web 客户端共用同一份 dist。 */
+function rendererDistDir(): string {
+  return path.join(__dirname, "..", "dist");
+}
+
+// 私有协议必须在 app ready 之前注册（Electron 要求）。
+registerAppSchemePrivileges();
 
 /**
  * 资产服务器访问令牌（审计：防外部网页 CORS 读本地笔记图片）。
@@ -164,12 +181,10 @@ const trustedWebContents = new Set<number>();
 function isAppPageUrl(url: string): boolean {
   let parsed: URL;
   try { parsed = new URL(url); } catch { return false; }
-  if (isDev) return parsed.origin === DEV_SERVER_URL;
-  if (parsed.protocol === "file:") {
-    const expected = pathToFileURL(path.join(__dirname, "../dist/index.html"));
-    return parsed.pathname === expected.pathname;
-  }
-  return false;
+  // 私有协议：只信任 lake://app 自己的页面（该 origin 下只有 dist 产物，无第三方内容）。
+  // 判定走 isAppOriginUrl（比 scheme+host）——非特殊 scheme 在 Node 里 URL.origin 恒为 "null"。
+  if (rendererMode === "scheme") return isAppOriginUrl(url);
+  return parsed.origin === DEV_SERVER_URL;
 }
 
 function workspaceRoot(): string {
@@ -331,10 +346,10 @@ async function createWindow() {
     }, 800);
   });
 
-  if (isDev) {
-    await win.loadURL(DEV_SERVER_URL);
+  if (rendererMode === "scheme") {
+    await win.loadURL(`${APP_ORIGIN}/index.html`);
   } else {
-    await win.loadFile(path.join(__dirname, "../dist/index.html"));
+    await win.loadURL(DEV_SERVER_URL);
   }
 }
 
@@ -483,8 +498,9 @@ if (!app.requestSingleInstanceLock()) {
     const webApiRegistry = registerIpc();
     // 浏览器端（桌面附属窗口）：默认不启动（纯内存态，不落盘；每次启动都从关闭开始）。
     // 设置里打开/关闭即时起停服务；只绑 127.0.0.1、不做局域网伺服；复用同一批 IPC handler。
+    serveAppDist(rendererDistDir());
     webServerController = createWebServerController({
-      distDir: path.join(__dirname, "..", "dist"),
+      distDir: rendererDistDir(),
       registry: webApiRegistry,
       token: webApiToken,
       assetToken,

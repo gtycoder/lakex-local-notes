@@ -1,4 +1,5 @@
 import http from "node:http";
+import { APP_ORIGIN } from "./appOrigin.js";
 import fs from "node:fs";
 import path from "node:path";
 import sharp from "sharp";
@@ -231,12 +232,13 @@ export function startAssetServer(noteAssetsDir: string, vendorCdnDir: string, qu
   fs.mkdirSync(noteAssetsDir, { recursive: true });
   if (quickNotesDir) fs.mkdirSync(quickNotesDir, { recursive: true });
 
-  // 审计 #16：本地资源服务仅允许应用自身页面跨域读取（dev origin / Web 客户端 / file 页），
+  // 审计 #16：本地资源服务仅允许应用自身页面跨域读取（dev origin / 私有协议 lake://app / Web 客户端 / 旧 file 页），
   // 拒绝任意网站的 CORS 读取（恶意网页无法 fetch 笔记图片）。非 CORS 请求（<img>/
   // 直接访问）不带 Origin，不构成可读数据泄露。
   const isAllowedOrigin = (origin: string | undefined): boolean => {
     if (!origin) return true; // 非 CORS 请求
-    return origin === "http://127.0.0.1:1421"
+    return origin === APP_ORIGIN                     // 桌面渲染层（打包版：lake://app，A1 起不再用 file://）
+      || origin === "http://127.0.0.1:1421"
       || origin === "http://localhost:1421"
       || origin === "http://127.0.0.1:19880"   // Web 客户端（webApiServer）
       || origin === "http://localhost:19880"
@@ -249,6 +251,7 @@ export function startAssetServer(noteAssetsDir: string, vendorCdnDir: string, qu
   // 其 fetch 的 Origin 为字符串 "null"，回显该字面值；其余 Origin 已被 isAllowedOrigin 拦为 403。
   const corsOriginOf = (origin: string | undefined): string | null => {
     if (!origin) return null;
+    if (origin === APP_ORIGIN) return APP_ORIGIN;
     if (origin === "http://127.0.0.1:1421" || origin === "http://localhost:1421") return origin;
     if (origin === "http://127.0.0.1:19880" || origin === "http://localhost:19880") return origin;
     if (origin === "null") return "null";

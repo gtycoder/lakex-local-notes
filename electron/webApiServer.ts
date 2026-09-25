@@ -2,6 +2,7 @@ import http from "node:http";
 import fs from "node:fs";
 import path from "node:path";
 import { toIpcErrorPayload } from "./ipc/errors.js";
+import { DIST_MIME } from "./appOrigin.js";
 
 /**
  * Web 客户端（最小验证 MVP）
@@ -136,28 +137,6 @@ export const WEB_METHODS: Record<string, string> = {
 
 const MAX_BODY_BYTES = 256 * 1024 * 1024; // uploadResource 以 JSON number[] 传字节，留足余量
 
-const MIME: Record<string, string> = {
-  ".html": "text/html; charset=utf-8",
-  ".js": "application/javascript; charset=utf-8",
-  ".mjs": "application/javascript; charset=utf-8",
-  ".css": "text/css; charset=utf-8",
-  ".map": "application/json",
-  ".json": "application/json",
-  ".svg": "image/svg+xml",
-  ".png": "image/png",
-  ".jpg": "image/jpeg",
-  ".jpeg": "image/jpeg",
-  ".gif": "image/gif",
-  ".webp": "image/webp",
-  ".ico": "image/x-icon",
-  ".woff": "font/woff",
-  ".woff2": "font/woff2",
-  ".ttf": "font/ttf",
-  ".mp3": "audio/mpeg",
-  ".mp4": "video/mp4",
-  ".wasm": "application/wasm",
-  ".txt": "text/plain; charset=utf-8",
-};
 
 export interface WebApiLogger {
   info(message: string): void;
@@ -505,7 +484,7 @@ export function startWebApiServer(opts: WebApiServerOptions): WebApiServer {
           json(res, 503, { ok: false, code: "NOT_CONFIGURED", message: "dist/index.html 不存在：请先运行 vite build（Web 客户端走构建产物）" });
           return;
         }
-        res.writeHead(200, { "content-type": MIME[".html"], "cache-control": "no-store", "x-content-type-options": "nosniff" });
+        res.writeHead(200, { "content-type": DIST_MIME[".html"], "cache-control": "no-store", "x-content-type-options": "nosniff" });
         res.end(injectNativeShim(html));
         return;
       }
@@ -519,7 +498,7 @@ export function startWebApiServer(opts: WebApiServerOptions): WebApiServer {
         return;
       }
       res.writeHead(200, {
-        "content-type": MIME[path.extname(filePath).toLowerCase()] ?? "application/octet-stream",
+        "content-type": DIST_MIME[path.extname(filePath).toLowerCase()] ?? "application/octet-stream",
         "content-length": stat.size,
         "cache-control": "no-store",
         "x-content-type-options": "nosniff",
@@ -586,11 +565,20 @@ export function createWebServerController(opts: WebApiServerOptions): WebServerC
         const s = startWebApiServer(opts);
         s.once("close", () => { if (server === s) server = null; });
         server = s;
-        return new Promise((resolve) => {
+        return new Promise((resolve, reject) => {
           if (s.listening) { resolve(status()); return; }
-          const done = () => resolve(status());
-          s.once("listening", done);
-          s.once("error", () => { if (server === s) server = null; done(); });
+          // 启动失败必须**抛出原因**：旧实现把 error 吞掉后 resolve 成 enabled:false，
+          // 表现为「开关打开又弹回、且没有任何错误信息」（端口被占用是最常见原因）。
+          const onError = (error: Error) => {
+            if (server === s) server = null;
+            try { s.close(); } catch { /* 未监听，close 可忽略 */ }
+            const detail = (error as NodeJS.ErrnoException).code === "EADDRINUSE"
+              ? `端口 ${port} 已被占用：可能是另一个 Lake Notes 实例或其它程序在用。`
+              : `浏览器端服务启动失败：${error.message}`;
+            reject(new Error(detail));
+          };
+          s.once("error", onError);
+          s.once("listening", () => { s.off("error", onError); resolve(status()); });
         });
       }
       if (server) { const s = server; server = null; s.close(); }

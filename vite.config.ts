@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { defineConfig, type Plugin } from "vite";
 import react from "@vitejs/plugin-react";
 import electron from "vite-plugin-electron";
@@ -81,6 +82,17 @@ function lakexAlipayLocal(): Plugin {
   };
 }
 
+/** 主进程运行期依赖（package.json dependencies）：派生 external，而不是逐个硬编码。
+ *  硬编码的旧写法（better-sqlite3/sharp/electron-log/@aws-sdk…）在新增原生依赖或传递依赖时
+ *  会漏项 —— 漏项 = 该依赖被打进 bundle，打包后才炸。@smithy 是 @aws-sdk 的传递依赖，仍需显式列出。 */
+const mainPkg = JSON.parse(readFileSync(new URL("./package.json", import.meta.url), "utf8")) as { dependencies?: Record<string, string> };
+const mainRuntimeDeps = Object.keys(mainPkg.dependencies ?? {});
+function isMainProcessExternal(id: string): boolean {
+  if (id.startsWith("node:") || id === "electron" || id.startsWith("electron/")) return true;
+  if (id.startsWith("@smithy/")) return true; // @aws-sdk/client-s3 的传递依赖
+  return mainRuntimeDeps.some((dep) => id === dep || id.startsWith(dep + "/"));
+}
+
 export default defineConfig({
   plugins: [
     lakexAlipayLocal(),
@@ -88,7 +100,7 @@ export default defineConfig({
     electron([
       {
         entry: "electron/main.ts",
-        vite: { build: { outDir: "dist-electron", rollupOptions: { external: ["better-sqlite3", "sharp", /^electron-log/, /^@aws-sdk\//, /^@smithy\//] } } },
+        vite: { build: { outDir: "dist-electron", rollupOptions: { external: isMainProcessExternal } } },
         // CDP 调试：LAKE_CDP_PORT 覆盖端口（默认 9222；开发调试保留，packaged 产物不带此参数）
         onstart: async ({ startup }) => { await startup([".", `--remote-debugging-port=${process.env.LAKE_CDP_PORT ?? "9222"}`]); },
       },
