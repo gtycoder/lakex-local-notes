@@ -515,10 +515,20 @@
   border-radius: var(--lake-radius-pill);
   background-color: transparent;
 }
+/* 滑块基线（content / position / top / transform / 圆角）原本来自已下线的思源 _switch.scss，
+ * W2 删源时只搬了覆盖值 ⇒ ::after 无 content 不生成盒子、滑块整体消失（260926 修）。 */
 .b3-switch::after {
+  content: "";
+  display: block;
+  position: absolute;
+  top: 50%;
+  transform: translate(-50%, -50%);
   width: 15px;
   height: 15px;
   left: 10.5px;
+  border-radius: 50%;
+  pointer-events: none;
+  z-index: 1;
   background-color: var(--lake-bg-raised);
   box-shadow: var(--lake-shadow-knob);
   transition: left var(--lake-motion-fast) var(--lake-ease-standard),

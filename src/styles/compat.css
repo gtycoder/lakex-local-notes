@@ -244,6 +244,9 @@
 .config-item { display: flex; align-items: center; }
 .config-item__main { flex: 1 1 auto; min-width: 0; }
 .config-item__ctl { display: flex; flex: 0 0 auto; align-items: center; gap: 8px; }
+/* 整块行的按钮组：JSX 里用了 11 处，此前却没有任何样式定义 ⇒ 间距/换行/对齐
+ * 全凭内联元素之间的空白字符，一排按钮贴在一起且宽度参差（260926 修）。 */
+.config-block__actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--lake-space-md); }
 .config-name { color: var(--lake-text-1); font-size: 14px; }
 .config-block { padding: 16px 24px; border-bottom: 1px solid var(--lake-border-1); line-height: 20px; }
 .config-block:last-child { border-bottom: 0; }

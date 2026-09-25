@@ -14,8 +14,10 @@
   background: var(--lake-scrim);
 }
 
-/* ── 对话框框架（.ln-dialog，属性弹窗 / 设置 / 回收站 / 历史共用） ────── */
-.ln-dialog {
+/* ── 对话框框架（.ln-dialog，属性弹窗 / 设置 / 回收站 / 历史 / 删除确认共用） ──
+ * .confirm-dialog 此前不在任何表面规则里，只靠遮罩模糊假装有底 ⇒ 目录树透出来（260926 修）。 */
+.ln-dialog,
+.confirm-dialog {
   border: 1px solid var(--lake-border-1);
   border-radius: var(--lake-radius-lg);
   color: var(--lake-text-1);
@@ -65,7 +67,8 @@
 .context-menu,
 .create-menu,
 .tab-switcher-menu,
-.sync-status-popover {
+.sync-status-popover,
+.emoji-picker {
   border: 1px solid var(--lake-border-1);
   border-radius: var(--lake-radius-md);
   background: var(--lake-bg-panel);
