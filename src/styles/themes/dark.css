@@ -1,9 +1,10 @@
 /* B · 暗 · 紫（深色基线；05-THEME-TOKENS-ABC.md）：Obsidian 向，深底分层 + 紫点缀。 */
 [data-theme="dark"] {
   color-scheme: dark;
-  /* 表面 */
+  /* 表面（260926：panel 与 canvas 取同值——浅色里两者都是 #ffffff，
+   * 深色若不同会出现"顶栏/面包屑/大纲/正文四种黑"的明显色阶。结构不随主题变，只换变量。） */
   --lake-bg-window: #1a1b1e;
-  --lake-bg-panel: #25262b;
+  --lake-bg-panel: #1e1f22;
   --lake-bg-canvas: #1e1f22;
   --lake-bg-block: #2a2b30;
   --lake-bg-raised: #2a2b30;

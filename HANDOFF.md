@@ -13,6 +13,7 @@
 - **过期 b3 注释清理**（`15f587b`）：`src/b3/**` 已整体删除，清掉 6 个文件的现值语气残留 + `AGENTS §3 #14`。
 - **设计稿 + 预览**（`440fdac`/`471b599`/`2c3e949`/`927b240`）
 - **浅色 accent 对齐设计规格**（`f977a05`，Q10）：`themes/light.css` accent 家族 `#3d7eff→#5b6f96`（ink `#3a4a68`、tint `#eceff5`、text `#3a4a68`，hover/press 派生）；**dark 保持紫、warm 保持橙**（CDP 确认未变）。
+- **深色表面统一**（本提交）：dark `--lake-bg-panel` `#25262b` → **`#1e1f22`（== canvas）**。根因：light/warm 里 `panel == canvas == #fff`，dark 却 `panel(#25262b) ≠ canvas(#1e1f22)` ⇒ 顶栏/面包屑/原生大纲/正文出现"四种黑"的明显色阶。CDP 实测修复后侧栏/面包屑/编辑器/原生大纲**均为 `rgb(30,31,34)`**，仅顶栏 `window #1a1b1e`（与浅色"外壳略深于内容"同构）。`--lake-bg-block` 未动。
 - **Phase 0.5 深色修复**（`238051c`）：根因=内核把浅色 schema 的 `--lakex-editor-*` 作为**未分层 `<style>`** 注入（`.lakex-default-theme{--lakex-editor-background-primary:#fff}`），未分层 > 任何 `@layer` ⇒ 变量桥失效。修法=feature 层直接覆盖消费属性（`.ne-icon` 修正原误写 `.ne-icon-symbol`、工具条文字、`.ne-toc-sidebar/.ne-viewer-toc-sidebar` 底色）。CDP 实测 dark 大纲 `rgb(37,38,43)`、图标 `fill rgb(168,169,173)`。
 - **Phase 1a**（`3d0023e`）：`src/components/ui/Overlay.tsx` 原语（Overlay + Dialog/Menu/Popover；portal/层序/外点/Esc/焦点圈闭/滚动锁）；overlay 层序令牌 `--lake-z-overlay-menu/scrim/dialog/lightbox = 600/700/710/720`；修 B1（`.modal-backdrop` z 30→令牌，原先遮罩盖不住外壳）；`.ln-dialog` 布局+表面合并到 `overlay.css` 单一来源；`.ln-menu/.ln-popover` 表面统一。试点：ConfirmDelete。
 - **Phase 1b**（`7649b4e`）：对话框迁移 5 个（NoteInfo / AssetRename / Search / Trash / History）；原语加 `surfaceClassName/scrimClassName/surfaceRef`（支持顶对齐命令面板、可拖拽浮窗）。
