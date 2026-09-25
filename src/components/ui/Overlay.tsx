@@ -11,8 +11,9 @@
  *   <Menu open={open} onDismiss={close} style={{ left, top }}>…</Menu>
  *   <Popover open={open} onDismiss={close} style={{ left, top }}>…</Popover>
  */
-import { useCallback, useEffect, useRef, type CSSProperties, type MutableRefObject, type ReactNode, type Ref, type RefObject } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type MutableRefObject, type ReactNode, type Ref, type RefObject } from "react";
 import { createPortal } from "react-dom";
+import { ChevronRight } from "lucide-react";
 
 export type OverlayKind = "dialog" | "menu" | "popover";
 
@@ -71,8 +72,14 @@ export function Overlay({ open = true, kind, onDismiss, label, className, style,
     if (!open || kind === "dialog") return;
     const onDown = (e: MouseEvent) => {
       const el = innerRef.current;
-      if (ignoreOutside?.(e.target as Node)) return;
-      if (el && !el.contains(e.target as Node)) onDismiss();
+      const target = e.target as Node;
+      if (ignoreOutside?.(target)) return;
+      if (el && !el.contains(target)) {
+        // 嵌套浮层（悬停子菜单）：点在另一层浮层表面时不关闭本层，交给那层处理。
+        const node = target instanceof Element ? target : target.parentElement;
+        if (node?.closest("[data-context-menu]")) return;
+        onDismiss();
+      }
     };
     document.addEventListener("mousedown", onDown);
     return () => document.removeEventListener("mousedown", onDown);
@@ -171,4 +178,164 @@ export function Menu(props: Omit<OverlayProps, "kind">) {
 /** 气泡/面板预设：同菜单职责，表面为 .ln-popover。 */
 export function Popover(props: Omit<OverlayProps, "kind">) {
   return <Overlay kind="popover" {...props} />;
+}
+
+export interface HoverPopoverProps extends Omit<OverlayProps, "kind" | "open" | "surfaceRef"> {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  /** 表面形态：popover（默认，.ln-popover）/ menu（.ln-menu，role=menu；用于子菜单）。 */
+  kind?: "menu" | "popover";
+  /** 触发元素（锚点按钮）：与浮层表面共享同一段悬停区（进入打开 / 离开关闭），光标可自由移入操作。 */
+  anchorRef: RefObject<HTMLElement | null>;
+  /** 外部获取表面元素（子菜单需要测量尺寸做定位）。 */
+  panelRef?: Ref<HTMLElement>;
+  /** 进入打开的延时（ms）；缺省 200，防误触。 */
+  openDelayMs?: number;
+  /** 离开关闭的延时（ms）；缺省 150，给「锚点 → 表面」的过渡留出时间。 */
+  closeDelayMs?: number;
+}
+
+/**
+ * 悬停可交互气泡（260926 标准化，补 Overlay 原语缺口）。
+ *
+ * 与 <Popover> 的差别：<Popover> 只按「点击/外点」开关，适合点开的菜单；
+ * 而「指针悬停即展开详情，且允许把光标移进气泡里点按钮/看列表」是一类常用交互
+ * （云同步状态、空间状态…），此前各组件手写 createPortal/内联浮层 + 各自的 hover 定时器，
+ * 结果光标常常进不去气泡。这里把「锚点与表面共享悬停区 + 开/关延时」收敛成唯一入口；
+ * portal / 外点 / Esc / 层序仍全部复用 Overlay。
+ */
+export function HoverPopover({ open, onOpenChange, anchorRef, kind = "popover", panelRef, openDelayMs = 200, closeDelayMs = 150, onDismiss, ...rest }: HoverPopoverProps) {
+  const openTimer = useRef<number | null>(null);
+  const closeTimer = useRef<number | null>(null);
+  const surfaceElRef = useRef<HTMLElement | null>(null);
+  const setSurface = useCallback((el: HTMLElement | null) => {
+    surfaceElRef.current = el;
+    if (typeof panelRef === "function") panelRef(el);
+    else if (panelRef) (panelRef as MutableRefObject<HTMLElement | null>).current = el;
+  }, [panelRef]);
+  const clearTimers = useCallback(() => {
+    if (openTimer.current !== null) { window.clearTimeout(openTimer.current); openTimer.current = null; }
+    if (closeTimer.current !== null) { window.clearTimeout(closeTimer.current); closeTimer.current = null; }
+  }, []);
+  useEffect(() => clearTimers, [clearTimers]);
+
+  const scheduleClose = useCallback(() => {
+    if (openTimer.current !== null) { window.clearTimeout(openTimer.current); openTimer.current = null; }
+    if (closeTimer.current !== null) window.clearTimeout(closeTimer.current);
+    closeTimer.current = window.setTimeout(() => { closeTimer.current = null; onOpenChange(false); }, closeDelayMs);
+  }, [onOpenChange, closeDelayMs]);
+
+  // 锚点悬停：进入延时打开（与表面共享同一段悬停区）
+  useEffect(() => {
+    const el = anchorRef.current;
+    if (!el) return;
+    const onEnter = () => {
+      clearTimers();
+      openTimer.current = window.setTimeout(() => { openTimer.current = null; onOpenChange(true); }, openDelayMs);
+    };
+    const onLeave = () => scheduleClose();
+    el.addEventListener("mouseenter", onEnter);
+    el.addEventListener("mouseleave", onLeave);
+    return () => {
+      el.removeEventListener("mouseenter", onEnter);
+      el.removeEventListener("mouseleave", onLeave);
+    };
+  }, [anchorRef, clearTimers, scheduleClose, onOpenChange, openDelayMs]);
+
+  // 表面悬停：原生 mouseenter/leave 直接挂到表面元素（portal 内 React 合成 enter/leave 不可靠，
+  // 会导致「光标移进气泡就关闭」）。进入取消关闭，离开延时关闭。
+  useEffect(() => {
+    if (!open) return;
+    const el = surfaceElRef.current;
+    if (!el) return;
+    const onEnter = () => clearTimers();
+    const onLeave = () => scheduleClose();
+    el.addEventListener("mouseenter", onEnter);
+    el.addEventListener("mouseleave", onLeave);
+    return () => {
+      el.removeEventListener("mouseenter", onEnter);
+      el.removeEventListener("mouseleave", onLeave);
+    };
+  }, [open, clearTimers, scheduleClose]);
+
+  return (
+    <Overlay
+      kind={kind}
+      open={open}
+      surfaceRef={setSurface}
+      onDismiss={onDismiss ?? (() => onOpenChange(false))}
+      {...rest}
+    />
+  );
+}
+
+export interface SubmenuProps {
+  /** 触发行内容（图标 + 文案）；外层 .context-menu-item-label 由本组件包好。 */
+  label: ReactNode;
+  /** 子菜单内容（按钮等菜单项）。 */
+  children: ReactNode;
+  disabled?: boolean;
+  openDelayMs?: number;
+  closeDelayMs?: number;
+}
+
+/**
+ * 悬停子菜单（260926 标准化）：父菜单里一行「▸」，悬停时在相邻侧展开子菜单面板，光标可移入点选项。
+ *
+ * 复用 <HoverPopover>（portal + 外点/Esc/层序 + .ln-menu 表面）；本组件只负责：
+ *  - 相邻侧定位：默认贴行右侧，放不下自动翻左；上下夹在视口内；
+ *  - 行 UI（.context-menu-item.has-submenu + ▸）。
+ * 点本行/子菜单都不会误关父菜单（Overlay 的嵌套浮层保护按 [data-context-menu] 放行）。
+ */
+export function Submenu({ label, children, disabled = false, openDelayMs = 120, closeDelayMs = 150 }: SubmenuProps) {
+  const [open, setOpen] = useState(false);
+  const [position, setPosition] = useState<CSSProperties | null>(null);
+  const rowRef = useRef<HTMLDivElement | null>(null);
+  const panelRef = useRef<HTMLElement | null>(null);
+
+  useLayoutEffect(() => {
+    if (!open) { setPosition(null); return; }
+    const row = rowRef.current;
+    const panel = panelRef.current;
+    if (!row || !panel) return;
+    const margin = 8;
+    const gap = 2;
+    const rowRect = row.getBoundingClientRect();
+    const width = panel.offsetWidth;
+    const height = panel.offsetHeight;
+    const openLeft = rowRect.right + gap + width + margin > window.innerWidth;
+    const left = openLeft ? rowRect.left - gap - width : rowRect.right + gap;
+    const top = Math.min(Math.max(margin, rowRect.top - 4), Math.max(margin, window.innerHeight - margin - height));
+    setPosition({ left: Math.max(margin, left), top });
+  }, [open]);
+
+  return (
+    <>
+      <div
+        ref={rowRef}
+        className={"context-menu-item has-submenu" + (disabled ? " is-disabled" : "")}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        onClick={() => { if (!disabled) setOpen(true); }}
+      >
+        <span className="context-menu-item-label">{label}</span>
+        <ChevronRight size={14} />
+      </div>
+      <HoverPopover
+        kind="menu"
+        open={disabled ? false : open}
+        onOpenChange={setOpen}
+        anchorRef={rowRef}
+        panelRef={panelRef}
+        onDismiss={() => setOpen(false)}
+        ignoreOutside={(target) => rowRef.current?.contains(target) ?? false}
+        className="context-menu-submenu"
+        style={position ?? undefined}
+        openDelayMs={openDelayMs}
+        closeDelayMs={closeDelayMs}
+      >
+        {children}
+      </HoverPopover>
+    </>
+  );
 }

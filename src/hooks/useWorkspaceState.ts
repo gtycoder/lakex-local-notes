@@ -1,7 +1,6 @@
 import { useRef, useState } from "react";
 import { createRequestVersion } from "../core/requestVersion";
 import { loadSettings, type AppSettings } from "../lib/settings";
-import { getWorkspaceDisplayName } from "../lib/workspaceName";
 import type { DraftJournalEntry, NoteSummary, S3Settings, SyncPendingSummary, SyncStatus, TreeNode, WorkspaceSnapshot } from "../lib/types";
 import type { OpenTab } from "../desktop/desktopTypes";
 import type { QuickNotesWorkspaceHandle } from "../components/QuickNotesWorkspace";
@@ -39,7 +38,6 @@ export function useWorkspaceState() {
   const tabReloadVersionRef = useRef(createRequestVersion());
   const editorsRef = useRef<Map<string, LakeEditorInstance>>(new Map());
 
-  const workspaceName = getWorkspaceDisplayName(cloudEnabled, s3Settings);
   const tocEnabled = true; // 大纲始终可用（显示大纲由「大纲增强」决定用哪套，不再有显式开关）
   const outlineEnhance = settings.outlineEnhance;
   const wideMode = true;
@@ -50,7 +48,7 @@ export function useWorkspaceState() {
     activeHistoryCount, setActiveHistoryCount,
     workspaceMenuRef, moreMenuRef, wsMenuWrapRef, moreMenuWrapRef, syncBtnRef,
     sync, setSync, cloudEnabled, setCloudEnabled, cloudConfigured, setCloudConfigured,
-    s3Settings, setS3Settings, workspaceName, pendingSummary, setPendingSummary, draftEntries, setDraftEntries,
+    s3Settings, setS3Settings, pendingSummary, setPendingSummary, draftEntries, setDraftEntries,
     syncAnchorRect, setSyncAnchorRect, pendingRenameId, setPendingRenameId,
     settings, setSettings, pinnedNoteIds, setPinnedNoteIds, tocEnabled, outlineEnhance, wideMode,
     quickNotesDirty, setQuickNotesDirty, openTabsRef, quickNotesRef, tabReloadVersionRef, editorsRef,

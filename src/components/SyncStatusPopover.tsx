@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type RefObject } from "react";
-import { Cloud, CloudOff, History, LoaderCircle, Settings2, TriangleAlert, CloudUpload } from "lucide-react";
+import { Cloud, CloudOff, HardDrive, History, LoaderCircle, Settings2, TriangleAlert, CloudUpload } from "lucide-react";
 import type { SyncStatus, SyncStatusInfo } from "../lib/types";
 import { buildSyncStatusModel } from "./syncStatusModel";
 import { native } from "../lib/native";
 import { chooseVisibleAnchor, clampPopoverPosition } from "../hooks/topMenuPosition";
+import { HoverPopover } from "./ui/Overlay";
 
 export interface SyncStatusPopoverProps {
   buttonRef?: RefObject<HTMLButtonElement>;
@@ -13,6 +14,7 @@ export interface SyncStatusPopoverProps {
   pendingFolders?: number;
   pendingQuickNotes?: number;
   cloudEnabled: boolean;
+  cloudConfigured: boolean;
   conflictSnapshots?: Array<{ noteId: string; title: string }>;
   conflictSnapshotText?: string | null;
   /** 点击云按钮：直接开始同步（对齐思源——点击即同步，不弹窗）。 */
@@ -59,6 +61,7 @@ export function SyncStatusPopover({
   pendingFolders = 0,
   pendingQuickNotes = 0,
   cloudEnabled,
+  cloudConfigured,
   conflictSnapshots = [],
   conflictSnapshotText,
   onSync,
@@ -70,19 +73,14 @@ export function SyncStatusPopover({
   const [lastResult, setLastResult] = useState<SyncStatusInfo["lastResult"]>(null);
   const localButtonRef = useRef<HTMLButtonElement | null>(null);
   const resolvedButtonRef = buttonRef ?? localButtonRef;
-  const popoverRef = useRef<HTMLDivElement | null>(null);
   const controlRef = useRef<HTMLDivElement | null>(null);
-  const hoverTimerRef = useRef<number | null>(null);
   const model = buildSyncStatusModel({ sync, pendingDocuments, pendingFolders, pendingQuickNotes, cloudEnabled, conflictSnapshotCount: conflictSnapshots.length });
+  // 云同步未启用 / 未配置 = 本地空间：同一个浮层，换成「仅本地」内容 + 去设置入口。
+  const localOnly = !cloudEnabled || !cloudConfigured;
 
   useEffect(() => {
     if (!visible) setOpen(false);
   }, [visible]);
-
-  // 卸载清理悬停定时器
-  useEffect(() => () => {
-    if (hoverTimerRef.current !== null) window.clearTimeout(hoverTimerRef.current);
-  }, []);
 
   // 面板打开时（以及每次同步完成 lastSyncedAt 变化时）拉取上次同步结果统计
   useEffect(() => {
@@ -118,46 +116,55 @@ export function SyncStatusPopover({
     };
   }, [open, updatePosition]);
 
-  useEffect(() => {
-    if (!open) return;
-    const keydown = (event: KeyboardEvent) => { if (event.key === "Escape") setOpen(false); };
-    document.addEventListener("keydown", keydown);
-    return () => { document.removeEventListener("keydown", keydown); };
-  }, [open]);
-
-  // 对齐思源：悬停展示同步详情（带少量延迟防误触），移出即收起；点击按钮直接同步
-  const scheduleHover = (action: "open" | "close") => {
-    if (hoverTimerRef.current !== null) window.clearTimeout(hoverTimerRef.current);
-    hoverTimerRef.current = window.setTimeout(() => {
-      hoverTimerRef.current = null;
-      setOpen(action === "open");
-    }, action === "open" ? 250 : 200);
-  };
-
   const qn = lastResult?.quickNotes;
   const stats = lastResult;
 
-  const icon = model.statusClass === "syncing" ? <LoaderCircle className="spin" size={14} /> : model.statusClass === "error" ? <TriangleAlert size={14} /> : model.statusClass === "disabled" ? <CloudOff size={14} /> : model.statusClass === "synced" ? <CloudCheckIcon size={14} /> : model.statusClass === "pending" ? <CloudUpload size={14} /> : <Cloud size={14} />;
+  const icon = localOnly ? <HardDrive size={14} /> : model.statusClass === "syncing" ? <LoaderCircle className="spin" size={14} /> : model.statusClass === "error" ? <TriangleAlert size={14} /> : model.statusClass === "disabled" ? <CloudOff size={14} /> : model.statusClass === "synced" ? <CloudCheckIcon size={14} /> : model.statusClass === "pending" ? <CloudUpload size={14} /> : <Cloud size={14} />;
 
   return (
-    <div className="sync-status-control" ref={controlRef} onMouseEnter={() => scheduleHover("open")} onMouseLeave={() => scheduleHover("close")}>
+    <div className="sync-status-control" ref={controlRef}>
       <button
         ref={resolvedButtonRef}
         data-sync-status-button="true"
-        className={`toolbar__item toolbar__sync sync-status-button ${model.statusClass}`}
+        className={`toolbar__item toolbar__sync sync-status-button ${localOnly ? "workspace-local" : model.statusClass}`}
         onClick={() => {
+          if (localOnly) { setOpen((value) => !value); return; }
           if (model.statusClass === "syncing") return;
-          if (!cloudEnabled) { setOpen(false); onOpenSettings(); return; }
+          // 点击即同步（对齐思源）。只有 S3 未配置时才在下方走配置提示，绝不在此跳设置。
           onSync();
         }}
-        aria-label={model.accessibleLabel}
+        aria-label={localOnly ? "本地空间，未开启云同步" : model.accessibleLabel}
         aria-expanded={open}
       >
         <span className="sync-status-icon" aria-hidden="true">{icon}</span>
-        <span className="sync-status-visually-hidden">{model.statusLabel}</span>
+        <span className="sync-status-visually-hidden">{localOnly ? "当前仅本地" : model.statusLabel}</span>
       </button>
-      {open && (
-        <div ref={popoverRef} className="sync-status-popover" role="dialog" aria-label="云端同步状态" style={position ?? undefined}>
+      <HoverPopover
+        open={open}
+        onOpenChange={setOpen}
+        anchorRef={resolvedButtonRef}
+        onDismiss={() => setOpen(false)}
+        ignoreOutside={(target) => controlRef.current?.contains(target) ?? false}
+        className="sync-status-popover"
+        style={position ?? undefined}
+        label={localOnly ? "本地空间" : "云端同步状态"}
+      >
+          {localOnly ? (
+            <>
+              <header className="sync-status-popover-header">
+                <div><strong>本地空间</strong><span>当前仅本地</span></div>
+                <span className="sync-status-dot" aria-hidden="true" />
+              </header>
+              <section className="sync-status-section">
+                <p className="sync-status-local-note">尚未开启云同步，数据仅保存在本机。开启后可多端同步与备份。</p>
+              </section>
+              <footer className="sync-status-actions">
+                <span className="sync-status-footer-state">数据仅在本机</span>
+                <button type="button" className="b3-button b3-button--outline" onClick={() => { setOpen(false); onOpenSettings(); }}><Settings2 size={14} />去设置云同步</button>
+              </footer>
+            </>
+          ) : (
+            <>
           <header className="sync-status-popover-header">
             <div><strong>云端同步</strong><span>{model.statusLabel}</span></div>
             <span className={`sync-status-dot ${model.statusClass}`} aria-hidden="true" />
@@ -213,8 +220,9 @@ export function SyncStatusPopover({
             </span>
             <button type="button" className="b3-button b3-button--outline" onClick={() => { setOpen(false); onOpenSettings(); }}><Settings2 size={14} />同步设置</button>
           </footer>
-        </div>
-      )}
+            </>
+          )}
+      </HoverPopover>
     </div>
   );
 }

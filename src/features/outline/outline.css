@@ -351,19 +351,12 @@
   display: inline-flex;
 }
 
+/* 表面/定位/层序由标准 <Menu> 提供；这里只留内容尺寸。 */
 .outline-sidebar__level-menu {
-  position: absolute;
-  top: 30px;
-  right: 0;
-  z-index: 320;
   display: flex;
   flex-direction: column;
   width: 132px;
   padding: 4px;
-  border: 1px solid var(--shell-separator);
-  border-radius: 8px;
-  background: var(--shell-material);
-  box-shadow: var(--lake-shadow-popover);
 }
 
 .outline-sidebar__level-menu button {

@@ -43,13 +43,13 @@ index 5c9820b..2eb1ecc 100644
    } else if (e.code === "KeyD") {
      if (!ctx.luckysheet_select_save || ctx.luckysheet_select_save.length === 0) {
        return;
-@@ -77265,31 +77267,38 @@ function handleGlobalWheel(ctx, e, cache, scrollbarX, scrollbarY) {
+@@ -77265,31 +77267,15 @@ function handleGlobalWheel(ctx, e, cache, scrollbarX, scrollbarY) {
    var row_st = _.sortedIndex(visibledatarow_c, scrollTop) + 1;
    var rowscroll = 0;
    var scrollNum = 1;
-+  // 260921: 先累计滚动量、跨过阈值才动一格，横向改为 1:1 跟随（原实现每个 wheel 事件都动一行/20px，触控板下过快）。
-+  // 阈值取鼠标滚轮一格的实际像素量：鼠标滚轮手感不变、触控板明显变缓。
-+  var LAKE_WHEEL_ROW_THRESHOLD = 100;
++  // 260926: 逐像素平滑滚动（不再累计阈值、不再吸附整行）。260921 的「累计 100px 才动一格」在触控板下
++  // 表现为「先不动、后跳一行」= 卡顿；这里直接 1:1 跟随 deltaY（鼠标滚轮一格≈100px、触控板连续小步，
++  // 均自然不过快），与原生滚动一致。
    if (e.deltaY !== 0 && !cache.verticalScrollLock) {
      cache.horizontalScrollLock = true;
 -    var row_ed;
@@ -64,32 +64,11 @@ index 5c9820b..2eb1ecc 100644
 -      row_ed = row_st - step;
 -      if (row_ed < 0) {
 -        row_ed = 0;
-+    cache.lakeWheelY = (Number(cache.lakeWheelY) || 0) + e.deltaY;
-+    var rowSteps = 0;
-+    if (Math.abs(cache.lakeWheelY) >= LAKE_WHEEL_ROW_THRESHOLD) {
-+      rowSteps = cache.lakeWheelY > 0 ? Math.floor(cache.lakeWheelY / LAKE_WHEEL_ROW_THRESHOLD) : Math.ceil(cache.lakeWheelY / LAKE_WHEEL_ROW_THRESHOLD);
-+      cache.lakeWheelY -= rowSteps * LAKE_WHEEL_ROW_THRESHOLD;
-+    }
-+    if (rowSteps !== 0) {
-+      var row_ed;
-+      var step = Math.round((scrollNum * Math.abs(rowSteps)) / ctx.zoomRatio);
-+      step = step < 1 ? 1 : step;
-+      if (rowSteps > 0) {
-+        row_ed = row_st + step;
-+        if (row_ed >= visibledatarow_c.length) {
-+          row_ed = visibledatarow_c.length - 1;
-+        }
-+      } else {
-+        row_ed = row_st - step;
-+        if (row_ed < 0) {
-+          row_ed = 0;
-+        }
-       }
-+      rowscroll = row_ed === 0 ? 0 : visibledatarow_c[row_ed - 1];
-+      scrollbarY.scrollTop = rowscroll;
-     }
+-      }
+-    }
 -    rowscroll = row_ed === 0 ? 0 : visibledatarow_c[row_ed - 1];
 -    scrollbarY.scrollTop = rowscroll;
++    scrollbarY.scrollTop = scrollTop + e.deltaY;
    } else if (e.deltaX !== 0 && !cache.horizontalScrollLock) {
      cache.verticalScrollLock = true;
 -    if (e.deltaX > 0) {
@@ -146,13 +125,13 @@ index 04113a1..c98d68f 100644
    } else if (e.code === "KeyD") {
      if (!ctx.luckysheet_select_save || ctx.luckysheet_select_save.length === 0) {
        return;
-@@ -77275,31 +77277,38 @@ function handleGlobalWheel(ctx, e, cache, scrollbarX, scrollbarY) {
+@@ -77275,31 +77277,15 @@ function handleGlobalWheel(ctx, e, cache, scrollbarX, scrollbarY) {
    var row_st = ___default['default'].sortedIndex(visibledatarow_c, scrollTop) + 1;
    var rowscroll = 0;
    var scrollNum = 1;
-+  // 260921: 先累计滚动量、跨过阈值才动一格，横向改为 1:1 跟随（原实现每个 wheel 事件都动一行/20px，触控板下过快）。
-+  // 阈值取鼠标滚轮一格的实际像素量：鼠标滚轮手感不变、触控板明显变缓。
-+  var LAKE_WHEEL_ROW_THRESHOLD = 100;
++  // 260926: 逐像素平滑滚动（不再累计阈值、不再吸附整行）。260921 的「累计 100px 才动一格」在触控板下
++  // 表现为「先不动、后跳一行」= 卡顿；这里直接 1:1 跟随 deltaY（鼠标滚轮一格≈100px、触控板连续小步，
++  // 均自然不过快），与原生滚动一致。
    if (e.deltaY !== 0 && !cache.verticalScrollLock) {
      cache.horizontalScrollLock = true;
 -    var row_ed;
@@ -167,32 +146,11 @@ index 04113a1..c98d68f 100644
 -      row_ed = row_st - step;
 -      if (row_ed < 0) {
 -        row_ed = 0;
-+    cache.lakeWheelY = (Number(cache.lakeWheelY) || 0) + e.deltaY;
-+    var rowSteps = 0;
-+    if (Math.abs(cache.lakeWheelY) >= LAKE_WHEEL_ROW_THRESHOLD) {
-+      rowSteps = cache.lakeWheelY > 0 ? Math.floor(cache.lakeWheelY / LAKE_WHEEL_ROW_THRESHOLD) : Math.ceil(cache.lakeWheelY / LAKE_WHEEL_ROW_THRESHOLD);
-+      cache.lakeWheelY -= rowSteps * LAKE_WHEEL_ROW_THRESHOLD;
-+    }
-+    if (rowSteps !== 0) {
-+      var row_ed;
-+      var step = Math.round((scrollNum * Math.abs(rowSteps)) / ctx.zoomRatio);
-+      step = step < 1 ? 1 : step;
-+      if (rowSteps > 0) {
-+        row_ed = row_st + step;
-+        if (row_ed >= visibledatarow_c.length) {
-+          row_ed = visibledatarow_c.length - 1;
-+        }
-+      } else {
-+        row_ed = row_st - step;
-+        if (row_ed < 0) {
-+          row_ed = 0;
-+        }
-       }
-+      rowscroll = row_ed === 0 ? 0 : visibledatarow_c[row_ed - 1];
-+      scrollbarY.scrollTop = rowscroll;
-     }
+-      }
+-    }
 -    rowscroll = row_ed === 0 ? 0 : visibledatarow_c[row_ed - 1];
 -    scrollbarY.scrollTop = rowscroll;
++    scrollbarY.scrollTop = scrollTop + e.deltaY;
    } else if (e.deltaX !== 0 && !cache.horizontalScrollLock) {
      cache.verticalScrollLock = true;
 -    if (e.deltaX > 0) {

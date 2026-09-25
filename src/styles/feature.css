@@ -84,12 +84,7 @@ pre {
 /* ── 小记工作台（P5-j；设计 11 卡片 / 03 列表项 / 05 对话框）──────────────
  * 桌面专属层。小记原本已经大量走令牌，这里主要做三件事：① 去掉残留毛玻璃；
  * ② 卡片/行态对齐 kit 规格；③ 标题排版对齐字号阶。 */
-.quick-note-convert-dialog {
-  border: 1px solid var(--lake-border-1);
-  border-radius: var(--lake-radius-lg);
-  background: var(--lake-bg-panel);
-  box-shadow: var(--lake-shadow-dialog);
-}
+/* .quick-note-convert-dialog 的表面已由标准 <Dialog>（.ln-dialog）提供，此处不再自造表面。 */
 .quick-note-entry {
   border: 1px solid var(--lake-border-2);
   border-radius: var(--lake-radius-md);

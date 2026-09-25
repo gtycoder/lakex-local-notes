@@ -374,6 +374,13 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
     const next = { ...syncCfg, ...patch };
     setSyncCfgBusy(true); setSyncMsg(null);
     try {
+      // 只有 S3 配置可保存且连通测试通过，才允许开启云同步；任一失败都保持关闭。
+      if (patch.enabled === true) {
+        setSyncMsg("正在测试 S3 连接...");
+        await native.saveS3Settings(s3);
+        onS3SettingsChanged?.(s3);
+        setSyncMsg(await native.testS3Connection());
+      }
       const saved = await native.saveSyncSettings(next);
       setSyncCfg(saved);
       onSyncSettingsChanged?.(saved);

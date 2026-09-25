@@ -30,7 +30,7 @@
 ### 三、有意保留 / 未做（都写明了理由，别再当漏项）
 - **ImageLightbox / AttachmentPreview**：全屏媒体预览（自带背景点击关闭 + `position:fixed` 铺满），迁到居中 Dialog 收益低风险高；已列入 G1 白名单。
 - **selection-toolbar 的 tip**（`kernelUiAtoms.tsx`）：非交互 tooltip，§3.7 决定不建 Tooltip 原语；已列入 G1 白名单。
-- **非 portal 的浮层**：`SyncStatusPopover`（自带外点/Esc）、`QuickNotesWorkspace` 的 sort/row 菜单、`ExportSubmenuItem`（父菜单内的子菜单）——保留其现有机制，未迁。
+- **非 portal 的浮层**：`SyncStatusPopover` **已收编（260926 续）：标准原语 `<HoverPopover>`（悬停可交互气泡）**；**悬停子菜单（`ExportSubmenuItem` / `CardContextMenu`）也已收编：标准原语 `<Submenu>`（`HoverPopover` + `.ln-menu` + 相邻定位/翻转），并修掉子菜单无底色**；`QuickNotesWorkspace` 排序/行内 ⋯ 菜单、转文档对话框、`DraftRecoveryDialog`、`OutlineSidebar` 级别菜单也已收编；剩多维表自建浮层（单独一批）。
 - **Button（`b3-button` 45 处 / `ln-btn` 13 处）**：按 Q4 **增量迁移**（接触即迁 + 新代码只用 `ln-btn`），**不做一次性 find/replace**；`.b3-button` 规则保留（kit.css 已映射设计规格）。
 
 ### 四、踩过的坑
@@ -131,6 +131,10 @@
     工具栏形态可按移动端（`EditorDock`）调整。做之前先读 §2.10 续做 + `docs/LAKEX-CONTRACT.md` §5.11。
 17. **【UI 重构收尾 · 待办清单】** —— 方案见 **`docs/UI-REDESIGN-OPTIMIZATION-PLAN-260923.md`**（行为不变的优化 + 与安卓重做的排期）；评价见 `docs/UI-REDESIGN-REVIEW-260923.md` **§四**：P0 安全 ✅ **已结案**（W-10 不需 dompurify / W-8 已修，见本 §3 第 4 条）· P1（`library-changed` 广播 / 目录树窗口化 / 面板契约可执行化 / 分段控件与设置说明字号的共享层 `!important` 阻塞）· P2（设计词表裁剪 / 历史文档标注 / 画板 `Wt is not a function` 立项）· P3 见本 §3 其余条目。
 18. **【浮动工具栏颜色 · 「最近使用自定义颜色」】**（260924 记录，用户：先记着后续处理）：内核调色板的「最近使用」**只记自定义色**——`updateUserColor` 只在「更多颜色」RGBA 选择器关闭（`saveColor`）时触发，**预设色块 `onSelect` 不写**；持久化在 `localStorage['ne_lakex_user_color_local_store_key']`（≤10，末尾最新），经 `editor.getUserColors()` / `editor.updateUserColor(c)` 读写。我们的浮动颜色面板「最近使用」目前是**占位**（`LakeColorBoard` 写死「暂无」）。要真做需先定：是否也记预设色块（会偏离内核语义）、面板改读 `editor.getUserColors()`、点最近色如何应用（`color`/`bgColor`）。**当前不动**。
+
+19. **【多维表（bitable）专项 · 待办 · 用户 260926「回头单独做」】**
+   - **(a) 自建浮层收编到 Overlay 原语**：`bitableCells.tsx:39` 自建 `Popover`（+ `SelectMenu`/`ColorPalette`/`DatePicker`）、`BitableEditor.tsx:875/967` 的 `.bt-modal`、`BitableRecordDrawer.tsx:27` 的 `.bt-drawer`。做法：先把自建 `Popover` 收敛成 `src/components/ui/Overlay.tsx` 的薄封装（或直接改调用点走 `Menu/Popover/Dialog`），再迁调用点。归入 UI 原语统一，见 `docs/UI-PRIMITIVES-PHASE1-260926.md`。
+   - **(b) 功能优化**：用户指出多维表还有功能优化项，**明细待用户给出**（范围/优先级）；产品口径见 `docs/BITABLE-PRODUCT-SPEC-260919.md`，技术/存储/同步见 `docs/SHEET-BITABLE-DESIGN-260918.md`。当前不动。
 
 ### 当前问题 / 已知坑（不阻塞）
 - 画板**不再记忆视口**（拖动/缩放后重开为默认/自适应）：这是 260916 为「不让视口触发保存/上传」刻意做的取舍，**用户已确认接受**（"谁知道下次进来要看什么"）。不要改回去。

@@ -28,6 +28,14 @@
 .sheet-editor .fortune-container {
   height: 100%;
 }
+/* 纵向滚动条对齐「可见单元格区」（列头 + 横向滚动条区不计入）。
+   FortuneSheet 给它 height:100%（= 整个 sheet 容器），最大滚动量比可见区少 ~40px ⇒
+   最底部内容永远滚不到、表现为底部留白。高度/顶边由 SheetEditor 实测后写 CSS 变量；
+   内联 height:100% 只能用 !important 覆盖（第三方内联样式，理由充分）。 */
+.sheet-editor .luckysheet-scrollbar-y {
+  top: var(--lake-sheet-head-h, 20px);
+  height: calc(100% - var(--lake-sheet-head-h, 20px) - var(--lake-sheet-xbar-h, 0px)) !important;
+}
 /* 工具栏更紧凑（260919 用户要求）：收内边距、缩按钮间距与高度。 */
 .sheet-editor .fortune-toolbar {
   padding: 2px 0 2px 8px;

@@ -371,6 +371,8 @@
 .sync-status-button.disabled { color: var(--lake-text-3); }
 .sync-status-button { border-radius: var(--lake-radius-sm); }
 .sync-status-button:hover { background: var(--lake-bg-hover); }
+/* 本地空间指示（未配置云同步）：与云同步按钮同槽位，点击提示「当前仅本地」。 */
+.workspace-local { color: var(--lake-text-3); }
 
 /* ── 面包屑（工作区顶部；原样式整段在思源层 b3/layout.css） ─────────────── */
 .protyle-breadcrumb {

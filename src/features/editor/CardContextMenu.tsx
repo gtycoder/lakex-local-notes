@@ -3,9 +3,8 @@
  * 顺序理念与文档右键一致：编辑动作（剪切/复制）→ 打开 → 文件位置 → 导出（另存为）。
  * 复制类动作合并进「复制 ▸」子菜单；动作由调用方注入，组件只负责排版与关闭。
  */
-import { useState } from "react";
-import { ClipboardPaste, ChevronRight, Copy, Download, ExternalLink, FolderOpen, Pencil, Scissors, BoxSelect } from "lucide-react";
-import { Menu } from "../../components/ui/Overlay";
+import { ClipboardPaste, Copy, Download, ExternalLink, FolderOpen, Pencil, Scissors, BoxSelect } from "lucide-react";
+import { Menu, Submenu } from "../../components/ui/Overlay";
 import type { AttachmentPreviewItem } from "../attachment/attachmentPreviewController";
 
 export interface CardMenuActions {
@@ -28,7 +27,6 @@ export interface CardMenuActions {
 }
 
 const MENU_MAX_W = 232;
-const SUBMENU_W = 180;
 
 /** 选中卡片并触发 cut：由宿主编辑器的 cut 处理器写剪贴板 + 删除选区（模型随 input 更新）。 */
 export function cutCardElement(el: HTMLElement): void {
@@ -45,11 +43,9 @@ export function cutCardElement(el: HTMLElement): void {
 export function CardContextMenu({ x, y, item, actions, onClose }: {
   x: number; y: number; item: AttachmentPreviewItem; actions: CardMenuActions; onClose: () => void;
 }) {
-  const [copyOpen, setCopyOpen] = useState(false);
   const ref = item.ref;
   const left = Math.min(x, window.innerWidth - MENU_MAX_W);
   const top = Math.min(y, window.innerHeight - 260);
-  const submenuClass = left + MENU_MAX_W + SUBMENU_W <= window.innerWidth ? "" : " open-left";
   const run = (fn?: (it: AttachmentPreviewItem) => void): void => { fn?.(item); onClose(); };
 
   const copyItems: Array<[string, (it: AttachmentPreviewItem) => void]> = [];
@@ -66,21 +62,11 @@ export function CardContextMenu({ x, y, item, actions, onClose }: {
         <button role="menuitem" onClick={() => run(copyItems[0][1])}><Copy size={15} /><span>{copyItems[0][0]}</span></button>
       )}
       {copyItems.length > 1 && (
-        <div
-          className="context-menu-item has-submenu"
-          onMouseEnter={() => setCopyOpen(true)}
-          onMouseLeave={() => setCopyOpen(false)}
-          onClick={() => setCopyOpen((v) => !v)}
-        >
-          <span className="context-menu-item-label"><Copy size={15} /><span>复制</span></span><ChevronRight size={14} />
-          {copyOpen && (
-            <div className={`context-menu-submenu${submenuClass}`} role="menu">
-              {copyItems.map(([label, fn]) => (
-                <button key={label} role="menuitem" onClick={() => run(fn)}>{label}</button>
-              ))}
-            </div>
-          )}
-        </div>
+        <Submenu label={<><Copy size={15} /><span>复制</span></>}>
+          {copyItems.map(([label, fn]) => (
+            <button key={label} role="menuitem" onClick={() => run(fn)}>{label}</button>
+          ))}
+        </Submenu>
       )}
       {actions.rename && item.cardName === "file" && (
         <button role="menuitem" onClick={() => run(actions.rename)}><Pencil size={15} /><span>重命名</span></button>

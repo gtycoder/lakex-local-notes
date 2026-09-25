@@ -11,6 +11,8 @@ import { QuickNoteEditor, type QuickNoteEditorApi } from "../features/quickNotes
 import { QuickNotePreview } from "../features/quickNotes/QuickNotePreview";
 import { toggleTaskInBody } from "../features/quickNotes/quickNotePreviewParser";
 import { openImagePreview } from "../features/editor/imagePreview";
+import { clampPopoverPosition } from "../hooks/topMenuPosition";
+import { Dialog, Menu } from "./ui/Overlay";
 
 interface DraftImage {
   image: QuickNoteImage;
@@ -158,8 +160,11 @@ export const QuickNotesWorkspace = forwardRef<QuickNotesWorkspaceHandle, QuickNo
   /** 版式：小记卡（note）/ 列表（list）（纯展示偏好，存 localStorage，不参与同步） */
   const [viewMode, setViewMode] = useState<QuickNotesView>(() => readViewPref());
   const [sortOpen, setSortOpen] = useState(false);
+  /** 排序菜单定位（标准 <Menu> 走 portal，需内联 left/top）。 */
+  const [sortMenuPos, setSortMenuPos] = useState<{ top: number; left: number } | null>(null);
   /** 行内「⋯」菜单（列表视图，对齐云端图2）：记录当前展开的是哪一条。 */
   const [rowMenuId, setRowMenuId] = useState<string | null>(null);
+  const [rowMenuPos, setRowMenuPos] = useState<{ top: number; left: number } | null>(null);
   /** 轻提示（标签暂固定全部等）。 */
   const [viewHint, setViewHint] = useState<string | null>(null);
   /** 置顶集合（纯本机偏好，不进 S3）。 */
@@ -215,29 +220,7 @@ export const QuickNotesWorkspace = forwardRef<QuickNotesWorkspaceHandle, QuickNo
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // 排序菜单：点空白处收起（用 mousedown 且判断是否落在控件内，避免"点按钮先关再开"）
-  useEffect(() => {
-    if (!sortOpen) return;
-    const close = (event: MouseEvent) => {
-      const target = event.target as HTMLElement | null;
-      if (!target?.closest?.(".quick-notes-sort-wrap")) setSortOpen(false);
-    };
-    document.addEventListener("mousedown", close);
-    return () => document.removeEventListener("mousedown", close);
-  }, [sortOpen]);
-
   useEffect(() => { onDirtyChange(dirty); }, [dirty, onDirtyChange]);
-
-  // 行内「⋯」菜单：点空白处收起（与排序菜单同款处理）
-  useEffect(() => {
-    if (!rowMenuId) return;
-    const close = (event: MouseEvent) => {
-      const target = event.target as HTMLElement | null;
-      if (!target?.closest?.(".quick-note-index-actions")) setRowMenuId(null);
-    };
-    document.addEventListener("mousedown", close);
-    return () => document.removeEventListener("mousedown", close);
-  }, [rowMenuId]);
 
   useEffect(() => {
     if (!viewHint) return;
@@ -664,6 +647,22 @@ export const QuickNotesWorkspace = forwardRef<QuickNotesWorkspaceHandle, QuickNo
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visible, viewMode, loading, activeIsEditing, visibleItems.length]);
 
+  /** 排序菜单：标准 <Menu> 走 portal，按触发按钮实测矩形定位。 */
+  const toggleSortMenu = (button: HTMLElement) => {
+    if (sortOpen) { setSortOpen(false); return; }
+    const rect = button.getBoundingClientRect();
+    setSortMenuPos(clampPopoverPosition(rect, { width: window.innerWidth, height: window.innerHeight }, { width: 140, height: 84 }, 6));
+    setSortOpen(true);
+  };
+  /** 行内 ⋯ 菜单：同上。 */
+  const toggleRowMenu = (button: HTMLElement, id: string) => {
+    if (rowMenuId === id) { setRowMenuId(null); return; }
+    const rect = button.getBoundingClientRect();
+    setRowMenuPos(clampPopoverPosition(rect, { width: window.innerWidth, height: window.innerHeight }, { width: 150, height: 180 }, 6));
+    setRowMenuId(id);
+  };
+  const rowMenuItem = rowMenuId ? items.find((item) => item.id === rowMenuId) ?? null : null;
+
   // 左右两栏（对齐云端语雀小记）：左＝常驻写作面板 + 发布行，右＝小记卡片流（各自独立滚动）。
   return <section className="quick-notes-pane" aria-label="小记">
     <header className="quick-notes-header">
@@ -700,11 +699,7 @@ export const QuickNotesWorkspace = forwardRef<QuickNotesWorkspaceHandle, QuickNo
         </button>}
         <span className="quick-notes-count">{items.length} 条</span>
         <div className="quick-notes-sort-wrap">
-          <button className="quick-notes-tool-btn" onClick={() => setSortOpen((open) => !open)} aria-haspopup="menu" aria-expanded={sortOpen} title={sortBy === "updated" ? "排序：按更新时间" : "排序：按创建时间"} aria-label="排序"><ArrowUpDown size={16} /></button>
-          {sortOpen && <div className="quick-notes-sort-menu" role="menu">
-            <button role="menuitemradio" aria-checked={sortBy === "updated"} onClick={() => { setSortBy("updated"); writeSortPref("updated"); setSortOpen(false); }}>{sortBy === "updated" ? <Check size={14} /> : <span className="quick-notes-menu-gap" />}按更新时间</button>
-            <button role="menuitemradio" aria-checked={sortBy === "created"} onClick={() => { setSortBy("created"); writeSortPref("created"); setSortOpen(false); }}>{sortBy === "created" ? <Check size={14} /> : <span className="quick-notes-menu-gap" />}按创建时间</button>
-          </div>}
+          <button className="quick-notes-tool-btn" onClick={(event) => toggleSortMenu(event.currentTarget)} aria-haspopup="menu" aria-expanded={sortOpen} title={sortBy === "updated" ? "排序：按更新时间" : "排序：按创建时间"} aria-label="排序"><ArrowUpDown size={16} /></button>
         </div>
       </div>
     </header>
@@ -722,11 +717,7 @@ export const QuickNotesWorkspace = forwardRef<QuickNotesWorkspaceHandle, QuickNo
           <span className="quick-notes-tools-spacer" />
           <span className="quick-notes-count">{items.length} 条</span>
           <div className="quick-notes-sort-wrap">
-            <button className="quick-notes-tool-btn" onClick={() => setSortOpen((open) => !open)} aria-haspopup="menu" aria-expanded={sortOpen} title={sortBy === "updated" ? "排序：按更新时间" : "排序：按创建时间"} aria-label="排序"><ArrowUpDown size={16} /></button>
-            {sortOpen && <div className="quick-notes-sort-menu" role="menu">
-              <button role="menuitemradio" aria-checked={sortBy === "updated"} onClick={() => { setSortBy("updated"); writeSortPref("updated"); setSortOpen(false); }}>{sortBy === "updated" ? <Check size={14} /> : <span className="quick-notes-menu-gap" />}按更新时间</button>
-              <button role="menuitemradio" aria-checked={sortBy === "created"} onClick={() => { setSortBy("created"); writeSortPref("created"); setSortOpen(false); }}>{sortBy === "created" ? <Check size={14} /> : <span className="quick-notes-menu-gap" />}按创建时间</button>
-            </div>}
+            <button className="quick-notes-tool-btn" onClick={(event) => toggleSortMenu(event.currentTarget)} aria-haspopup="menu" aria-expanded={sortOpen} title={sortBy === "updated" ? "排序：按更新时间" : "排序：按创建时间"} aria-label="排序"><ArrowUpDown size={16} /></button>
           </div>
         </div>
         {/* 批量条（对齐云端图1）：勾选框 + N 篇 + 取消 + 动作 */}
@@ -762,14 +753,7 @@ export const QuickNotesWorkspace = forwardRef<QuickNotesWorkspaceHandle, QuickNo
                     <span className="b3-list-item__meta">{indexStamp(item.updatedAt || item.createdAt)}</span>
                   </button>
                   <span className="quick-note-index-actions">
-                    <button className="quick-notes-tool-btn" title="更多" aria-label="更多" aria-haspopup="menu" aria-expanded={rowMenuId === item.id} onClick={(event) => { event.stopPropagation(); setRowMenuId(rowMenuId === item.id ? null : item.id); }}><MoreHorizontal size={16} /></button>
-                    {rowMenuId === item.id && <div className="quick-note-row-menu" role="menu">
-                      <button role="menuitem" onClick={() => { setRowMenuId(null); togglePin(item.id); }}>{pinned.has(item.id) ? "取消置顶" : "置顶"}</button>
-                      <button role="menuitem" onClick={() => { setRowMenuId(null); void startEditing(item); }}>编辑</button>
-                      <button role="menuitem" onClick={() => { setRowMenuId(null); void copyNoteText(item); }}>复制文本</button>
-                      <button role="menuitem" onClick={() => { setRowMenuId(null); setConvertItems([item]); }}>转为正式笔记</button>
-                      <button role="menuitem" className="quick-notes-link--danger" onClick={() => { setRowMenuId(null); scheduleDelete(item); }} disabled={pendingDelete !== null}>删除</button>
-                    </div>}
+                    <button className="quick-notes-tool-btn" title="更多" aria-label="更多" aria-haspopup="menu" aria-expanded={rowMenuId === item.id} onClick={(event) => { event.stopPropagation(); toggleRowMenu(event.currentTarget, item.id); }}><MoreHorizontal size={16} /></button>
                   </span>
                 </div>)
           }
@@ -826,17 +810,33 @@ export const QuickNotesWorkspace = forwardRef<QuickNotesWorkspaceHandle, QuickNo
     {/* 卡片里的图片点击放大：复用编辑器同一套 Lightbox 单例（与 EditorTab / LakeEditor 同款挂法） */}
     <ImageLightbox />
     {pendingDelete && <div className="quick-notes-toast" role="status" aria-live="polite"><span>已删除一条小记</span><button onClick={undoDelete}><RotateCcw size={14} />撤销</button></div>}
-    {convertItems && convertItems.length > 0 && <div className="modal-backdrop" onMouseDown={(event) => event.target === event.currentTarget && !saving && setConvertItems(null)}>
-      <section className="quick-note-convert-dialog" role="dialog" aria-modal="true" aria-labelledby="quick-note-convert-title">
-        <h3 id="quick-note-convert-title">{convertItems.length > 1 ? `转为正式文档（${convertItems.length} 篇）` : "转为正式笔记"}</h3>
-        <p>选择一个笔记本。{convertItems.length > 1 ? `${convertItems.length} 篇小记将依次插入该笔记本的最顶部；` : "新文档将插入其中的最顶部；"}转化完成后，小记将从时间线移除。</p>
-        <div className="quick-note-notebook-list b3-list b3-list--background">
-          {notebooks.map((notebook) => <button key={notebook.id} className="b3-list-item" disabled={saving} onClick={() => void convert(notebook.id)}><span className="b3-list-item__graphic"><FilePlus size={14} /></span><span className="b3-list-item__text">{notebook.title}</span></button>)}
-          {notebooks.length === 0 && <span className="ln-empty">请先在资料库中新建一个笔记本。</span>}
+    {/* 排序菜单 / 行内 ⋯ 菜单：标准 <Menu>（portal + 外点/Esc + .quick-notes-*-menu 表面） */}
+    <Menu open={sortOpen} onDismiss={() => setSortOpen(false)} surfaceClassName="quick-notes-sort-menu" style={sortMenuPos ?? undefined}>
+      <button role="menuitemradio" aria-checked={sortBy === "updated"} onClick={() => { setSortBy("updated"); writeSortPref("updated"); setSortOpen(false); }}>{sortBy === "updated" ? <Check size={14} /> : <span className="quick-notes-menu-gap" />}按更新时间</button>
+      <button role="menuitemradio" aria-checked={sortBy === "created"} onClick={() => { setSortBy("created"); writeSortPref("created"); setSortOpen(false); }}>{sortBy === "created" ? <Check size={14} /> : <span className="quick-notes-menu-gap" />}按创建时间</button>
+    </Menu>
+    {rowMenuItem && (
+      <Menu onDismiss={() => setRowMenuId(null)} surfaceClassName="quick-note-row-menu" style={rowMenuPos ?? undefined}>
+        <button role="menuitem" onClick={() => { setRowMenuId(null); togglePin(rowMenuItem.id); }}>{pinned.has(rowMenuItem.id) ? "取消置顶" : "置顶"}</button>
+        <button role="menuitem" onClick={() => { setRowMenuId(null); void startEditing(rowMenuItem); }}>编辑</button>
+        <button role="menuitem" onClick={() => { setRowMenuId(null); void copyNoteText(rowMenuItem); }}>复制文本</button>
+        <button role="menuitem" onClick={() => { setRowMenuId(null); setConvertItems([rowMenuItem]); }}>转为正式笔记</button>
+        <button role="menuitem" className="quick-notes-link--danger" onClick={() => { setRowMenuId(null); scheduleDelete(rowMenuItem); }} disabled={pendingDelete !== null}>删除</button>
+      </Menu>
+    )}
+    {convertItems && convertItems.length > 0 && (
+      <Dialog onDismiss={() => { if (!saving) setConvertItems(null); }} label={convertItems.length > 1 ? `转为正式文档（${convertItems.length} 篇）` : "转为正式笔记"} className="quick-note-convert-dialog">
+        <div className="ln-dialog__body">
+          <h3>{convertItems.length > 1 ? `转为正式文档（${convertItems.length} 篇）` : "转为正式笔记"}</h3>
+          <p>选择一个笔记本。{convertItems.length > 1 ? `${convertItems.length} 篇小记将依次插入该笔记本的最顶部；` : "新文档将插入其中的最顶部；"}转化完成后，小记将从时间线移除。</p>
+          <div className="quick-note-notebook-list b3-list b3-list--background">
+            {notebooks.map((notebook) => <button key={notebook.id} className="b3-list-item" disabled={saving} onClick={() => void convert(notebook.id)}><span className="b3-list-item__graphic"><FilePlus size={14} /></span><span className="b3-list-item__text">{notebook.title}</span></button>)}
+            {notebooks.length === 0 && <span className="ln-empty">请先在资料库中新建一个笔记本。</span>}
+          </div>
+          <footer><button className="b3-button b3-button--cancel" disabled={saving} onClick={() => setConvertItems(null)}>取消</button></footer>
         </div>
-        <footer><button className="b3-button b3-button--cancel" disabled={saving} onClick={() => setConvertItems(null)}>取消</button></footer>
-      </section>
-    </div>}
+      </Dialog>
+    )}
   </section>;
 });
 

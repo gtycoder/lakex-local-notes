@@ -39,7 +39,15 @@ Phase 0 修的是**症状**；本设计解决「症状会不断长出来」的**
 | 20 | `ImageLightbox.tsx:99` | `.image-lightbox` | ✅ 自带 | ⚠️ | Lightbox |
 | 21 | `AttachmentPreview.tsx:65` | `.attachment-preview` | ✅ 自带 | ✅ 自建 | Lightbox |
 
-> 非 portal 但同类、也要收编：`SyncStatusPopover.tsx:160`（`.sync-status-popover`，role=dialog）、`QuickNotesWorkspace.tsx:704/726/766`（`.quick-notes-sort-menu` / `.quick-note-row-menu`）、`ExportSubmenuItem.tsx:58`（子菜单）、`QuickNotesWorkspace.tsx:830`（`.quick-note-convert-dialog`）。
+> 非 portal 但同类、也要收编：**剩余的多维表自建浮层**——`bitableCells.tsx:39` 自建 `Popover`（+ `SelectMenu`/`ColorPalette`/`DatePicker`）、`BitableEditor.tsx:875/967` 的 `.bt-modal`、`BitableRecordDrawer.tsx:27` 的 `.bt-drawer`（体量大，单独一批）。
+>
+> ✅ 260926 收编：
+> - `SyncStatusPopover`（本地/云端同步状态）→ 新增 `<HoverPopover>` 预设（`Overlay` 薄封装：锚点与表面共享悬停区 + 开/关延时 + 原生表面 mouseenter/leave；portal 内 React 合成 enter/leave 不可靠），表面走 `.ln-overlay-surface + .ln-popover`；`.sync-status-popover` 只剩内容尺寸。
+> - 悬停子菜单 `ExportSubmenuItem` / `CardContextMenu`（复制/导出 ▸）→ 新增 `<Submenu>` 预设（`HoverPopover` + `kind="menu"` + 相邻侧定位/左右翻转/视口夹取）；原 `.context-menu-submenu` 是 `.ln-menu` 表面 + 内容尺寸。顺带修掉「子菜单无底色（透明）」的旧缺陷。
+> - Overlay 外点关闭新增**嵌套浮层保护**：点在另一层浮层表面（`[data-context-menu]`）时不关闭本层。
+> - `QuickNotesWorkspace` 排序菜单 / 行内 ⋯ 菜单 → `<Menu surfaceClassName="quick-notes-sort-menu|quick-note-row-menu">`；「转为文档」对话框 → `<Dialog>`。
+> - `DraftRecoveryDialog` → `<Dialog>`（原手写 `.modal-backdrop`）。
+> - `OutlineSidebar` 「展开到级别」菜单 → `<Menu surfaceClassName="outline-sidebar__level-menu">`。
 
 ### 1.2 按钮：45 处 `b3-button` vs 13 处 `ln-btn`
 

@@ -21,7 +21,13 @@ describe("SheetEditor（FortuneSheet）挂载护栏", () => {
 
   it("keep-alive：用 everVisible 保证首次可见后才挂载 Workbook", () => {
     expect(SRC).toMatch(/everVisible/);
-    expect(SRC).toMatch(/\{everVisible && sheets\.length > 0 && \(/);
+    expect(SRC).toMatch(/\{everVisible && fillMin && sheets\.length > 0 && \(/);
+  });
+
+  it("网格铺满：挂载前按宿主体量补足 row/column 下限（避免短表下方留白）", () => {
+    expect(SRC).toMatch(/fillMin/);
+    expect(SRC).toMatch(/Math\.max\(50, Math\.ceil\(host\.clientHeight/);
+    expect(SRC).toMatch(/data=\{renderSheets as never\}/);
   });
 
   it("非受控数据：onChange 只写 ref，绝不 setSheets 回灌", () => {
@@ -197,6 +203,12 @@ describe("SheetEditor 单元格图片（P2）", () => {
     expect(SRC).not.toContain("pasteClipboardCellImages");
     expect(SRC).not.toContain("cellimg_paste_");
     expect(SRC).toContain("const src = typeof img.src === \"string\" ? img.src : \"\";");
+  });
+
+  it("滚轮：逐像素平滑滚动（不再 100px 阈值吸附整行导致卡顿）", () => {
+    const CPATCH = readFileSync(new URL("../../../patches/@fortune-sheet+core+1.0.4.patch", import.meta.url), "utf8");
+    expect(CPATCH).not.toContain("LAKE_WHEEL_ROW_THRESHOLD");
+    expect(CPATCH).toContain("scrollbarY.scrollTop = scrollTop + e.deltaY;");
   });
 
   it("保留两处内核补丁：右键「粘贴」用内部 HTML、Cmd+A 不吃页面选区", () => {

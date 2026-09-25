@@ -84,6 +84,9 @@
   color: var(--lake-text-1);
   line-height: 20px;
 }
+/* `.b3-list-item` 常被渲染成 <button>（同步历史快照、搜索结果等）：复位浏览器默认按钮边框/底色/居中。
+   用 :where(button) 与基础类保持同特异性，下方状态类（:hover/--focus/--selected）继续按顺序覆盖；div 行不受影响。 */
+:where(button).b3-list-item { border: 0; background: transparent; text-align: left; }
 .b3-list-item:hover { background: var(--lake-bg-hover); }
 .b3-list-item--focus { background: var(--lake-accent-tint); }
 .b3-list-item__text { flex: 1 1 auto; }

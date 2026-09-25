@@ -7,7 +7,6 @@ import type { DesktopWorkspace } from "./desktopTypes";
 import type { SyncStatus, SyncPendingSummary } from "../lib/types";
 
 export interface DesktopTopBarLeadingProps {
-  workspaceName: string;
   desktopWorkspace: DesktopWorkspace;
   wsMenuWrapRef?: RefObject<HTMLDivElement>;
   syncBtnRef?: RefObject<HTMLButtonElement>;
@@ -15,6 +14,7 @@ export interface DesktopTopBarLeadingProps {
   sync: SyncStatus;
   pendingSummary: SyncPendingSummary;
   cloudEnabled: boolean;
+  cloudConfigured: boolean;
   conflictSnapshots: Array<{ noteId: string; title: string }>;
   onToggleWorkspaceMenu: () => void;
   onSwitchWorkspace: (workspace: DesktopWorkspace) => void;
@@ -29,11 +29,13 @@ const SPACE_META: Record<DesktopWorkspace, { label: string; Icon: typeof Files }
   trash: { label: "回收站", Icon: Trash },
 };
 
-/** 顶栏左侧：工作空间（A 嵌法：空间图标 + 名 + ▾；菜单含空间分组）+ 云同步状态。 */
+/** 顶栏左侧：当前空间（空间图标 + 名 + ▾；点开合一菜单）+ 存储/同步段。
+ *  同一个悬浮弹窗（复用 SyncStatusPopover）：云同步已启用且配置有效 = 云端同步内容；
+ *  否则 = 本地空间图标 + 「当前仅本地」内容 + 「去设置云同步」入口。 */
 export function DesktopTopBarLeading(props: DesktopTopBarLeadingProps) {
   const {
-    workspaceName, desktopWorkspace, wsMenuWrapRef, syncBtnRef, visible = true, sync,
-    pendingSummary, cloudEnabled, conflictSnapshots,
+    desktopWorkspace, wsMenuWrapRef, syncBtnRef, visible = true, sync,
+    pendingSummary, cloudEnabled, cloudConfigured, conflictSnapshots,
     onToggleWorkspaceMenu, onSwitchWorkspace, onSync, onOpenSettings, onOpenHistory,
   } = props;
   const space = SPACE_META[desktopWorkspace] ?? SPACE_META.library;
@@ -41,9 +43,9 @@ export function DesktopTopBarLeading(props: DesktopTopBarLeadingProps) {
     <>
       <div className="toolbar__menu-wrap" data-top-menu-trigger="workspace" ref={wsMenuWrapRef as Ref<HTMLDivElement> | undefined}>
         <button className="toolbar__item toolbar__workspace" onClick={onToggleWorkspaceMenu}
-          title={`空间：${space.label} · 工作空间`} aria-label="工作空间与空间切换">
+          title={`空间：${space.label}`} aria-label="切换空间">
           <span className="toolbar__space-ico" aria-hidden="true"><space.Icon size={12} /></span>
-          <span className="toolbar__text">{workspaceName}</span><ChevronDown size={13} />
+          <span className="toolbar__text">{space.label}</span><ChevronDown size={13} />
         </button>
       </div>
       <SyncStatusPopover
@@ -54,6 +56,7 @@ export function DesktopTopBarLeading(props: DesktopTopBarLeadingProps) {
         pendingFolders={pendingSummary.folders}
         pendingQuickNotes={pendingSummary.quickNotes}
         cloudEnabled={cloudEnabled}
+        cloudConfigured={cloudConfigured}
         conflictSnapshots={conflictSnapshots}
         conflictSnapshotText={conflictSnapshots.length > 0 ? "检测到远端版本差异，已保留历史快照" : null}
         onSync={onSync}

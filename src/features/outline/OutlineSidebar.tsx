@@ -8,6 +8,8 @@ import { OutlineMinimap } from "./OutlineMinimap";
 import { getOutlineTab, getOutlineTabsVersion, subscribeOutlineTabs } from "./registry";
 import { OUTLINE_HOVER_HIDE_DELAY_MS } from "./outlineInteraction";
 import { OUTLINE_SIDEBAR_DEFAULT_WIDTH } from "../../desktop/desktopTypes";
+import { clampPopoverPosition } from "../../hooks/topMenuPosition";
+import { Menu } from "../../components/ui/Overlay";
 
 function noopSubscribe(): () => void {
   return () => {};
@@ -64,7 +66,7 @@ export function OutlineSidebar({
   const [levelMenuOpen, setLevelMenuOpen] = useState(false);
   const [railHovered, setRailHovered] = useState(false);
   const hideHoverTimerRef = useRef<number | null>(null);
-  const levelMenuRef = useRef<HTMLDivElement>(null);
+  const [levelMenuPos, setLevelMenuPos] = useState<{ top: number; left: number } | null>(null);
   const asideRef = useRef<HTMLElement>(null);
   const resizeRef = useRef<{ pointerId: number; startX: number; startWidth: number; currentWidth: number } | null>(null);
   void version;
@@ -80,16 +82,6 @@ export function OutlineSidebar({
   useEffect(() => {
     handle?.refresh();
   }, [mode, handle]);
-
-  // 点击外部关闭「展开到级别」菜单
-  useEffect(() => {
-    if (!levelMenuOpen) return;
-    const onDown = (e: MouseEvent) => {
-      if (levelMenuRef.current && !levelMenuRef.current.contains(e.target as Node)) setLevelMenuOpen(false);
-    };
-    document.addEventListener("mousedown", onDown);
-    return () => document.removeEventListener("mousedown", onDown);
-  }, [levelMenuOpen]);
 
   // 筛选输入防抖写入 controller
   useEffect(() => {
@@ -284,24 +276,27 @@ export function OutlineSidebar({
           >
             <ChevronsDownUp size={14} />
           </button>
-          <div className="outline-sidebar__level" ref={levelMenuRef}>
+          <div className="outline-sidebar__level">
             <button
               className={`dock-icon-btn level-btn${levelMenuOpen ? " is-active" : ""}`}
               title="展开到级别"
-              onClick={() => setLevelMenuOpen((v) => !v)}
+              onClick={(event) => {
+                if (levelMenuOpen) { setLevelMenuOpen(false); return; }
+                const rect = event.currentTarget.getBoundingClientRect();
+                setLevelMenuPos(clampPopoverPosition(rect, { width: window.innerWidth, height: window.innerHeight }, { width: 132, height: 220 }, 6));
+                setLevelMenuOpen(true);
+              }}
             >
               <ExpandLevelIcon size={14} />
             </button>
-            {levelMenuOpen && (
-              <div className="outline-sidebar__level-menu" role="menu">
-                <button role="menuitem" onClick={() => { controller?.expandAll(); setLevelMenuOpen(false); }}>全部展开</button>
-                {[1, 2, 3, 4, 5, 6].map((n) => (
-                  <button key={n} role="menuitem" onClick={() => { controller?.expandToLevel(n); setLevelMenuOpen(false); }}>
-                    展开到 {n} 级
-                  </button>
-                ))}
-              </div>
-            )}
+            <Menu open={levelMenuOpen} onDismiss={() => setLevelMenuOpen(false)} surfaceClassName="outline-sidebar__level-menu" style={levelMenuPos ?? undefined}>
+              <button role="menuitem" onClick={() => { controller?.expandAll(); setLevelMenuOpen(false); }}>全部展开</button>
+              {[1, 2, 3, 4, 5, 6].map((n) => (
+                <button key={n} role="menuitem" onClick={() => { controller?.expandToLevel(n); setLevelMenuOpen(false); }}>
+                  展开到 {n} 级
+                </button>
+              ))}
+            </Menu>
           </div>
           </div>
         </div>

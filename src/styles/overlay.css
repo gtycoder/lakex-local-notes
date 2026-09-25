@@ -127,7 +127,9 @@
 .context-menu,
 .create-menu,
 .tab-switcher-menu,
-.sync-status-popover,
+.quick-notes-sort-menu,
+.quick-note-row-menu,
+.outline-sidebar__level-menu,
 .emoji-picker,
 .ln-menu,
 .ln-popover {

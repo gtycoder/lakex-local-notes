@@ -45,10 +45,10 @@ const BASELINE: Record<string, { decls: number; dupGroups: number }> = {
   "styles/index.css": { decls: 0, dupGroups: 0 },   // UI 重设计 P1：单入口（@layer 声明 + @import 编排，0 声明）
   "styles/feature.css": { decls: 105, dupGroups: 0 },  // 视觉优化 + 内核编辑器主题桥（lakex 跟随深色/暖色：含 .ne-ui-toolbar）；260923 收敛：-19 = 大纲侧栏的 .outline-* 覆盖并回 features/outline/outline.css 单一来源；260926：+2 = 修内核图标选择器（.ne-icon-symbol→.ne-icon）+ 直接覆盖工具条文字/原生大纲底色（内核浅色 schema 以未分层 <style> 注入、压过变量桥）；合法新增非覆盖回涨
   "styles/kit.css": { decls: 558, dupGroups: 0 },     // P4 组件库 + P5-g 面板件 + P5-h 控件 + P5-i 开关（实测）；260926：+8 = 补回 .b3-switch::after 被删源漏掉的滑块基线（content/position/top/transform/圆角等，合法新增：原先根本没有，非覆盖回涨）
-  "styles/chrome.css": { decls: 502, dupGroups: 0 },  // P5 外壳 + S1+A + 整边缩略图槽；260922：+21 = 左缘「跟手把手」（隐形热区里浮出、Y 跟手、点击固定；热区 39→8 与去缩略图同批）；+10 = 目录「悬浮」改半幅浮卡（固定高度、顶贴面包屑下缘、四角圆角）——合法新增
+  "styles/chrome.css": { decls: 503, dupGroups: 0 },  // P5 外壳 + S1+A + 整边缩略图槽；260922：+21 = 左缘「跟手把手」（隐形热区里浮出、Y 跟手、点击固定；热区 39→8 与去缩略图同批）；+10 = 目录「悬浮」改半幅浮卡（固定高度、顶贴面包屑下缘、四角圆角）；260926 续：+1 = 本地空间指示 .workspace-local（未配置云同步时尾段显示本地图标，合法新增非覆盖回涨）
   "styles/kernel-theme.css": { decls: 60, dupGroups: 0 },  // 260926：内核 lakex --lakex-editor-* 集中映射（未分层）；60 = ①dark+warm 共用 43 + ②dark 反相 9 + ③light accent 8
   "styles/overlay.css": { decls: 145, dupGroups: 0 },  // P5-c 浮层 + P5-j 搜索 + P7-b .top-menu 定位 + 菜单项布局三件套；260926 Phase 1a：+47 = 浮层原语统一——.ln-scrim 基座、.ln-dialog 布局/表面单一来源（并自 dialog.css 收编）、.ln-dialog__actions、.ln-menu/.ln-popover 表面（自 kit.css 收编）；合法新增/归并，非覆盖回涨
-  "styles/compat.css": { decls: 209, dupGroups: 0 },  // 260923：-4 = .tab-item 盒收编到 app/tabs.css；260926：+4 = 补上 .config-block__actions 布局（该 JSX 类此前无任何定义，合法新增非覆盖回涨）
+  "styles/compat.css": { decls: 212, dupGroups: 0 },  // 260923：-4 = .tab-item 盒收编到 app/tabs.css；260926：+4 = 补上 .config-block__actions 布局（该 JSX 类此前无任何定义）；+3 = 复位 <button>.b3-list-item 浏览器默认边框/底色/居中（历史快照行等，合法新增非覆盖回涨）
   "styles/a11y.css": { decls: 9, dupGroups: 0 },   // P7-e：无障碍最高层（reduced-motion 契约；靠层序而非 !important 取胜）
   "features/attachment/attachment-preview.css": { decls: 78, dupGroups: 0 },
   "features/editor/image-lightbox.css": { decls: 57, dupGroups: 0 },
@@ -62,14 +62,14 @@ const BASELINE: Record<string, { decls: number; dupGroups: number }> = {
   // 260921：+2 = 单元格图片（禁指针事件 + object-fit: scale-down）
   // 260921 续：+35 = 去掉浮动图后新增的单元格图片工具弹窗（11 条）+ 细滚动条（11 条）+ 色条裁切与定位基准（2 条）
   //          —— 合法新增，非覆盖回涨
-  "features/sheet/sheetEditor.css": { decls: 61, dupGroups: 0 },
+  "features/sheet/sheetEditor.css": { decls: 63, dupGroups: 0 },   // 260926：+2 = 修底部留白——.luckysheet-scrollbar-y 的 top/height 对齐可见单元格区（第三方内联 height:100%，用 !important 覆盖；合法新增）
   // 260920：多维表编辑器（自研，v1）；+63 = 文本「扩大」浮窗；+37 = 行手柄/右键菜单/数据表列表；+82 = 网格线/列选择/列宽拖拽/日期选择器/范围选择/全收起切换（合法新增）
   "features/bitable/bitableEditor.css": { decls: 856, dupGroups: 0 },
   // 260920：独立画板文档（kind=board）容器（铺满 tab 格 + 去掉卡片态边框/圆角 + 内核分包加载占位）
   "features/board/boardEditor.css": { decls: 11, dupGroups: 0 },
   "styles/dialog.css": { decls: 234, dupGroups: 8 },   // +7 = .note-info-history-viewer 容器（260916 W-10：历史内联预览改只读 viewer，替代裸 dangerouslySetInnerHTML；合法新增非覆盖回涨）
   "styles/document-status.css": { decls: 98, dupGroups: 2 },   // 260923 W1-L2：-8 = 被 shell 层 chrome.css 同名选择器覆盖
-  "styles/components.css": { decls: 429, dupGroups: 1 },   // 260923 W1-L2：-15 = 被更高层同名选择器完全压制的规则（kit/shell 层已定义）   // 260916 S4：原 overlays.css 改名 + 并入 @keyframes lake-pop-in（+1 声明，位置不变）
+  "styles/components.css": { decls: 433, dupGroups: 1 },   // 260923 W1-L2：-15 = 被更高层同名选择器完全压制的规则（kit/shell 层已定义）   // 260916 S4：原 overlays.css 改名 + 并入 @keyframes lake-pop-in（+1 声明，位置不变）；260926 续：+4 = 本地空间弹窗正文 .sync-status-local-note（合法新增非覆盖回涨）
   "styles/tokens.css": { decls: 6, dupGroups: 0 },   // 260923 审计：按实测收紧（隔离/桥接规则拆走后基线一直是 83，围栏形同虚设）
   // 基础层域文件（260916 S3：原 styles.css 拆成入口 + 10 个域文件；数字 = 拆分当批实测，只允许变小）
   "styles/app/base.css": { decls: 33, dupGroups: 0 },   // 260923：+3 垂直几何令牌；同批删掉全仓零引用的 6 条死令牌（--ease-in-out/--dur-press/--shell-toolbar/--shell-radius/--shell-card-shadow/--shell-micro-card）   // 260923：+3 = 垂直几何令牌 --breadcrumb-height / --editor-toolbar-height / --tab-item-height（合法新增，非覆盖回涨）

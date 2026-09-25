@@ -33,7 +33,6 @@ import { useSyncShell } from "./hooks/useSyncShell";
 import { useSyncController } from "./hooks/useSyncController";
 import { useDocumentTabs } from "./hooks/useDocumentTabs";
 import { createRequestVersion } from "./core/requestVersion";
-import { getWorkspaceDisplayName } from "./lib/workspaceName";
 import { native } from "./lib/native";
 import type { TreeNode } from "./lib/types";
 import { NoteInfoDialog } from "./components/NoteInfoDialog";
@@ -55,7 +54,7 @@ export function App() {
     activeHistoryCount, setActiveHistoryCount,
     workspaceMenuRef, moreMenuRef, wsMenuWrapRef, moreMenuWrapRef, syncBtnRef,
     sync, setSync, cloudEnabled, setCloudEnabled, cloudConfigured, setCloudConfigured,
-    s3Settings, setS3Settings, workspaceName, pendingSummary, setPendingSummary, draftEntries, setDraftEntries,
+    s3Settings, setS3Settings, pendingSummary, setPendingSummary, draftEntries, setDraftEntries,
     syncAnchorRect, setSyncAnchorRect, pendingRenameId, setPendingRenameId,
     settings, setSettings, pinnedNoteIds, setPinnedNoteIds, tocEnabled, outlineEnhance, wideMode,
     quickNotesDirty, setQuickNotesDirty, openTabsRef, quickNotesRef, tabReloadVersionRef, editorsRef,
@@ -378,11 +377,11 @@ export function App() {
     sidebarWidth, sidebarMode, narrowOverlay, outlineSidebarWidth,
   });
   const topBarLeadingProps = {
-    workspaceName,
     desktopWorkspace,
     sync: sync,
     pendingSummary,
     cloudEnabled,
+    cloudConfigured,
     conflictSnapshots: conflictSnapshotNotice,
     onToggleWorkspaceMenu: () => { setWorkspaceMenuOpen((o) => !o); setTopMenuOpen(false); },
     onSwitchWorkspace: (w: DesktopWorkspace) => void switchDesktopWorkspace(w),

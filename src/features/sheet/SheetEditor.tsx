@@ -19,7 +19,7 @@
  *   「锁比例 + 不超过原图」交给 CSS `object-fit: scale-down`，指针事件关闭（点击命中单元格）。
  *   插入/替换走自定义工具栏项；`Delete` 删除、粘贴图片插入；冻结区内的图补 `translate` 偏移。
  */
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Workbook, type WorkbookInstance } from "@fortune-sheet/react";
 import "@fortune-sheet/react/dist/index.css";
 import "./sheetEditor.css";
@@ -348,6 +348,12 @@ export function SheetEditor({ noteId, content, visible, readOnly, onChange }: Sh
   readOnlyRef.current = readOnly;
   // keep-alive：首次可见前不挂载（canvas 在隐藏态初始化会量成 0）。
   const [everVisible, setEverVisible] = useState(visible);
+  /**
+   * 视图铺满所需的最小行/列数（260926 用户报「表格最后留一段空白」）。
+   * 根因：FortuneSheet 网格行数 = max(celldata 最大行, sheet.row)，旧文档 row 偏小 ⇒ 下方留白。
+   * 挂载前按宿主体量算下限并并进渲染用 sheets（不改已存模型；真正编辑后随 onChange 保存落库）。
+   */
+  const [fillMin, setFillMin] = useState<{ rows: number; cols: number } | null>(null);
   /** 正在进行的「内联图片 → 资产文件」提升任务数：>0 时**推迟保存**（正文绝不落 base64）。 */
   const promoteInFlightRef = useRef(0);
   /** 本次会话已提升过的 data URL → 资产 URL（保存时按它换写盘口径；同一张图不重复上传）。 */
@@ -375,6 +381,37 @@ export function SheetEditor({ noteId, content, visible, readOnly, onChange }: Sh
   useEffect(() => {
     if (visible) setEverVisible(true);
   }, [visible]);
+
+  // 首次可见时按宿主尺寸算「铺满下限」；算出来前不挂 <Workbook>（data 只作初始值，挂载后再改不生效）。
+  useLayoutEffect(() => {
+    if (!everVisible || fillMin) return;
+    const host = hostRef.current;
+    if (!host) return;
+    const ROW_H = 20;
+    const COL_W = 73;
+    let raf = 0;
+    const measure = () => {
+      // keep-alive 下首次可见可能还量到 0 高：重试到有高度为止，避免 Workbook 永远不挂载。
+      if (host.clientHeight === 0) { raf = window.requestAnimationFrame(measure); return; }
+      setFillMin({
+        rows: Math.max(50, Math.ceil(host.clientHeight / ROW_H) + 2),
+        cols: Math.max(15, Math.ceil(host.clientWidth / COL_W) + 2),
+      });
+    };
+    measure();
+    return () => { if (raf) window.cancelAnimationFrame(raf); };
+  }, [everVisible, fillMin]);
+
+  const renderSheets = useMemo(
+    () => (fillMin
+      ? sheets.map((sheet) => ({
+          ...sheet,
+          row: Math.max(Number(sheet.row) || 0, fillMin.rows),
+          column: Math.max(Number(sheet.column) || 0, fillMin.cols),
+        }))
+      : sheets),
+    [sheets, fillMin],
+  );
 
 
 
@@ -410,6 +447,34 @@ export function SheetEditor({ noteId, content, visible, readOnly, onChange }: Sh
       observer.disconnect();
       if (raf) window.cancelAnimationFrame(raf);
     };
+  }, [everVisible]);
+
+  /**
+   * 修「表格底部留白 / 最后几行滚不到」：纵向滚动条高度必须等于**可见单元格区**
+   * （扣掉列头与横向滚动条区）。FortuneSheet 给它 `height:100%`（= 整个 sheet 容器），
+   * 导致最大滚动量比可见区少 ~40px ⇒ 最底部内容永远滚不出来，看着像一条空白。
+   * 这里实测列头 / 横条高度写进 CSS 变量（见 sheetEditor.css 的 .luckysheet-scrollbar-y）。
+   */
+  useEffect(() => {
+    if (!everVisible) return;
+    const host = hostRef.current;
+    if (!host) return;
+    let raf = 0;
+    const apply = () => {
+      raf = 0;
+      const sheet = host.querySelector<HTMLElement>(".fortune-sheet-container");
+      const area = host.querySelector<HTMLElement>(".fortune-cell-area");
+      if (!sheet || !area) { raf = window.requestAnimationFrame(apply); return; }
+      const head = Math.max(0, Math.round(area.getBoundingClientRect().top - sheet.getBoundingClientRect().top));
+      const xbar = host.querySelector<HTMLElement>(".luckysheet-scrollbar-x");
+      const xh = xbar ? Math.round(xbar.getBoundingClientRect().height) : 0;
+      host.style.setProperty("--lake-sheet-head-h", `${head}px`);
+      host.style.setProperty("--lake-sheet-xbar-h", `${xh}px`);
+    };
+    apply();
+    const observer = new ResizeObserver(() => { if (!raf) raf = window.requestAnimationFrame(apply); });
+    observer.observe(host);
+    return () => { observer.disconnect(); if (raf) window.cancelAnimationFrame(raf); };
   }, [everVisible]);
 
   // ---------------- 单元格图片（P2） ----------------
@@ -951,10 +1016,10 @@ export function SheetEditor({ noteId, content, visible, readOnly, onChange }: Sh
           if (file) void insertCellImage(file);
         }}
       />
-      {everVisible && sheets.length > 0 && (
+      {everVisible && fillMin && sheets.length > 0 && (
         <Workbook
           ref={workbookRef}
-          data={sheets as never}
+          data={renderSheets as never}
           allowEdit={!readOnly}
           showToolbar
           showFormulaBar={false}
