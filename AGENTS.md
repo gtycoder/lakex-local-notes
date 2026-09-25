@@ -28,7 +28,7 @@ Lake Notes 是**本地优先**笔记应用（Electron + React + better-sqlite3 +
   ③ **更精细的源码字典对照** `/Users/admin/file/local-lake/lake-editor-main/`（第三方 VSCode yuque-editor 插件）与 `/Users/admin/file/local-lake/lake-main/`（lakejs 开源社区版，仅"机制字典"）——用于挖机制/实现细节与交叉验证；**注意 lake-main 序列化方言已与运行内核分叉，结论不得直接套用**。
   最终仲裁 = 仓库内 vendor 内核 bundle `vendor/lakex-doc-react/src/components/lakex/lakex.js`（即语雀 @alipay/lakex-doc，实际运行的代码）+ 运行时实测；以上资料与实测冲突时以实测为准。
 - **文档分工（防漂移）**：`AGENTS.md`=长期红线/机制/坑（不写易过期事实）· `README.md`=项目概览（不维护进度/计数）·
-  `HANDOFF.md`=唯一交接（当前基线/待办/本轮踩坑）。历史上本文件曾长期残留旧分支名与 188/217 测试计数，已清理，**不要写回去**。
+  `HANDOFF.md`=唯一交接（当前基线/待办/本轮踩坑）。历史上本文件曾长期残留旧分支名与 188/217 测试计数，已清理，**不要写回去**。**HANDOFF 只保留最新 §0（1–2 节）+ 基线/待办/坑**：被顶掉的历史节**直接删除**（git 可查，不建 archive 目录、不搬 docs/notes），**不要再把 dated handoff 堆回本文件**。
 
 ## 3. 核心设计原则（用户反复强调，务必遵守）
 
