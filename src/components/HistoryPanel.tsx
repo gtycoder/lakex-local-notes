@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { createPortal } from "react-dom";
+import { Dialog } from "./ui/Overlay";
 import { Camera, Clock, File, History, RotateCcw, Trash, X } from "lucide-react";
 import { native } from "../lib/native";
 import { createRequestVersion } from "../core/requestVersion";
@@ -224,9 +224,15 @@ export function HistoryPanel({ open, noteId, onClose, onRestored }: {
   const cleanable = orphans.filter((o) => !o.protectedByHistory).length;
 
   if (!open || !noteId) return null;
-  return createPortal(
-    <div className="history-panel-backdrop" onMouseDown={(e) => { if (e.target === e.currentTarget && !floating.interactionRef.current) onClose(); }}>
-      <section ref={floating.panelRef} className="floating-dialog history-panel" style={floating.panelStyle} role="dialog" aria-modal="true">
+  return (
+    <Dialog
+      open
+      onDismiss={() => { if (!floating.interactionRef.current) onClose(); }}
+      label="历史版本"
+      surfaceClassName="floating-dialog history-panel"
+      style={floating.panelStyle}
+      surfaceRef={floating.panelRef}
+    >
         <header className="floating-dialog-header" onPointerDown={floating.startDrag}>
           <div className="panel-title">
             <History size={17} />
@@ -325,8 +331,6 @@ export function HistoryPanel({ open, noteId, onClose, onRestored }: {
           </div>
         </div>
         <DialogResizeHandles onResize={floating.startResize} />
-      </section>
-    </div>,
-    document.body
+    </Dialog>
   );
 }

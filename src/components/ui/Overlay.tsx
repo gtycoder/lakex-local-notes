@@ -11,7 +11,7 @@
  *   <Menu open={open} onDismiss={close} style={{ left, top }}>…</Menu>
  *   <Popover open={open} onDismiss={close} style={{ left, top }}>…</Popover>
  */
-import { useEffect, useRef, type CSSProperties, type ReactNode, type RefObject } from "react";
+import { useCallback, useEffect, useRef, type CSSProperties, type MutableRefObject, type ReactNode, type Ref, type RefObject } from "react";
 import { createPortal } from "react-dom";
 
 export type OverlayKind = "dialog" | "menu" | "popover";
@@ -34,14 +34,22 @@ interface OverlayProps {
   surfaceClassName?: string;
   /** dialog 追加到遮罩的类（如 .ln-scrim--top 顶部对齐） */
   scrimClassName?: string;
+  /** 外部面板 ref（可拖拽/缩放的浮窗需要把自己的 panelRef 接到表面元素） */
+  surfaceRef?: Ref<HTMLElement>;
   /** dialog 打开后的首焦点；缺省取首个可操作项 */
   initialFocus?: RefObject<HTMLElement | null>;
   children: ReactNode;
 }
 
-export function Overlay({ open, kind, onDismiss, label, className, style, surfaceClassName, scrimClassName, initialFocus, children }: OverlayProps) {
-  const surfaceRef = useRef<HTMLElement | null>(null);
+export function Overlay({ open, kind, onDismiss, label, className, style, surfaceClassName, scrimClassName, surfaceRef, initialFocus, children }: OverlayProps) {
+  const innerRef = useRef<HTMLElement | null>(null);
   const restoreFocusRef = useRef<HTMLElement | null>(null);
+  // 把外部 ref（可拖拽面板）与内部 ref 都挂到同一个表面元素上
+  const setSurface = useCallback((el: HTMLElement | null) => {
+    innerRef.current = el;
+    if (typeof surfaceRef === "function") surfaceRef(el);
+    else if (surfaceRef) (surfaceRef as MutableRefObject<HTMLElement | null>).current = el;
+  }, [surfaceRef]);
 
   // Esc 关闭（三型通用，capture 阶段，避免被下层快捷键抢先）
   useEffect(() => {
@@ -59,7 +67,7 @@ export function Overlay({ open, kind, onDismiss, label, className, style, surfac
   useEffect(() => {
     if (!open || kind === "dialog") return;
     const onDown = (e: MouseEvent) => {
-      const el = surfaceRef.current;
+      const el = innerRef.current;
       if (el && !el.contains(e.target as Node)) onDismiss();
     };
     document.addEventListener("mousedown", onDown);
@@ -70,7 +78,7 @@ export function Overlay({ open, kind, onDismiss, label, className, style, surfac
   useEffect(() => {
     if (!open || kind !== "dialog") return;
     restoreFocusRef.current = document.activeElement as HTMLElement | null;
-    const surface = surfaceRef.current;
+    const surface = innerRef.current;
     if (surface) {
       const first = initialFocus?.current ?? surface.querySelector<HTMLElement>(FOCUSABLE) ?? surface;
       first.focus();
@@ -88,7 +96,7 @@ export function Overlay({ open, kind, onDismiss, label, className, style, surfac
   // Tab 圈闭（dialog）
   const onKeyDown = (e: React.KeyboardEvent) => {
     if (kind !== "dialog" || e.key !== "Tab") return;
-    const surface = surfaceRef.current;
+    const surface = innerRef.current;
     if (!surface) return;
     const items = Array.from(surface.querySelectorAll<HTMLElement>(FOCUSABLE)).filter(
       (el) => el.offsetParent !== null || el === document.activeElement,
@@ -111,9 +119,10 @@ export function Overlay({ open, kind, onDismiss, label, className, style, surfac
 
   if (kind === "dialog") {
     return createPortal(
-      <div className={"ln-scrim" + (scrimClassName ? " " + scrimClassName : "")} onMouseDown={(e) => { if (e.target === e.currentTarget) onDismiss(); }}>
+      <div className={"ln-scrim" + (scrimClassName ? " " + scrimClassName : "")} data-prevent-swipe onMouseDown={(e) => { if (e.target === e.currentTarget) onDismiss(); }}>
         <section
-          ref={(el) => { surfaceRef.current = el; }}
+          ref={setSurface}
+          data-prevent-swipe
           className={(surfaceClassName ?? "ln-dialog") + (className ? " " + className : "")}
           role="dialog"
           aria-modal="true"
@@ -132,7 +141,7 @@ export function Overlay({ open, kind, onDismiss, label, className, style, surfac
   const surfaceClass = surfaceClassName ?? (kind === "menu" ? "ln-menu" : "ln-popover");
   return createPortal(
     <div
-      ref={(el) => { surfaceRef.current = el; }}
+      ref={setSurface}
       className={surfaceClass + (className ? " " + className : "")}
       role={kind === "menu" ? "menu" : "dialog"}
       aria-label={label}

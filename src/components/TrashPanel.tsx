@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { createPortal } from "react-dom";
+import { Dialog } from "./ui/Overlay";
 import { ChevronRight, Folder, File, RotateCcw, Trash, X } from "lucide-react";
 import { native } from "../lib/native";
 import { createRequestVersion } from "../core/requestVersion";
@@ -356,12 +356,16 @@ export function TrashPanel({ open, embed = false, onClose, onChanged, onRestored
     );
   }
 
-  return createPortal(
-    <div className="trash-panel-backdrop" onMouseDown={(e) => { if (e.target === e.currentTarget && !floating.interactionRef.current) onClose(); }}>
-      <section ref={floating.panelRef} className="floating-dialog trash-panel" style={floating.panelStyle} role="dialog" aria-modal="true">
-        {body}
-      </section>
-    </div>,
-    document.body
+  return (
+    <Dialog
+      open
+      onDismiss={() => { if (!floating.interactionRef.current) onClose(); }}
+      label="回收站"
+      surfaceClassName="floating-dialog trash-panel"
+      style={floating.panelStyle}
+      surfaceRef={floating.panelRef}
+    >
+      {body}
+    </Dialog>
   );
 }

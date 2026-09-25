@@ -6,7 +6,7 @@
  * 动作复用 native.*；父级路径可点击跳转目录。
  */
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
-import { createPortal } from "react-dom";
+import { Dialog } from "./ui/Overlay";
 import { Box, ChevronRight, Clock, Copy, File, FolderOpen, History, Image as ImageIcon, Paperclip, X } from "lucide-react";
 import { native } from "../lib/native";
 import { getNativeErrorMessage } from "../lib/nativeErrors";
@@ -168,9 +168,8 @@ export function NoteInfoDialog({ note, onClose, onRevealNoteFile, onOpenAssetsDi
   ] : [];
 
   // Portal 到 body：侧栏/工作区可能形成堆叠上下文，挂到 body 才能保证弹窗在目录之上（与 ContextMenu/DesktopOverlays 同款做法）。
-  return createPortal(
-    <div className="modal-backdrop" data-prevent-swipe onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-      <section className="ln-dialog note-info-dialog" data-prevent-swipe style={size ? { width: size.w, height: size.h } : undefined} role="dialog" aria-modal="true" aria-label="文档属性">
+  return (
+    <Dialog open onDismiss={onClose} label="文档属性" className="note-info-dialog" style={size ? { width: size.w, height: size.h } : undefined}>
         <header className="ln-dialog__head">
           <File size={16} />
           <h3 className="ln-dialog__title" title={info?.title ?? note.title}>{info?.title ?? note.title}</h3>
@@ -267,8 +266,6 @@ export function NoteInfoDialog({ note, onClose, onRevealNoteFile, onOpenAssetsDi
           </div>
         )}
         <span className="ln-dialog__resize" onPointerDown={onResizeStart} aria-hidden="true" />
-      </section>
-    </div>,
-    document.body
+    </Dialog>
   );
 }

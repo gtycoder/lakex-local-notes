@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { createPortal } from "react-dom";
+import { Dialog } from "./ui/Overlay";
 import { File, Search, X } from "lucide-react";
 import { native } from "../lib/native";
 import { createRequestVersion } from "../core/requestVersion";
@@ -38,7 +38,6 @@ export function SearchPanel({ open, initialQuery, onOpenNote, onClose }: {
     if (open) {
       setQuery(initialQuery);
       setActiveIndex(-1);
-      window.setTimeout(() => inputRef.current?.focus(), 30);
     }
   }, [open, initialQuery]);
 
@@ -84,9 +83,8 @@ export function SearchPanel({ open, initialQuery, onOpenNote, onClose }: {
     onClose();
   };
 
-  return createPortal(
-    <div className="search-panel-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
-      <section className="search-panel search-command-panel" role="dialog" aria-modal="true" aria-label="搜索标题和正文">
+  return (
+    <Dialog open onDismiss={onClose} label="搜索标题和正文" surfaceClassName="search-panel search-command-panel" scrimClassName="ln-scrim--top" initialFocus={inputRef}>
         <div className="search-panel-input-row">
           <Search size={16} className="search-panel-search-icon" />
           <input
@@ -132,8 +130,6 @@ export function SearchPanel({ open, initialQuery, onOpenNote, onClose }: {
             </button>
           ))}
         </div>
-      </section>
-    </div>,
-    document.body,
+    </Dialog>
   );
 }

@@ -3,9 +3,9 @@
  * 扩展名锁定：附件类型按扩展名判定，输入框只编辑基名，扩展名固定展示不可改。
  * 复用浮层通用 .ln-dialog 样式；Enter 确认、Esc 取消。
  */
-import { useEffect, useState } from "react";
-import { createPortal } from "react-dom";
+import { useRef, useState } from "react";
 import { Pencil, X } from "lucide-react";
+import { Dialog } from "../../components/ui/Overlay";
 
 function splitExt(name: string): { base: string; ext: string } {
   const m = /^(.*?)(\.[^./\\]*)?$/.exec(name);
@@ -21,16 +21,10 @@ export function AssetRenameDialog({ initial, onCancel, onConfirm }: {
   const [value, setValue] = useState(initialBase);
   const trimmed = value.trim();
   const canConfirm = trimmed.length > 0 && trimmed !== initialBase;
+  const inputRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onCancel(); };
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [onCancel]);
-
-  return createPortal(
-    <div className="modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && onCancel()}>
-      <section className="ln-dialog asset-rename-dialog" role="dialog" aria-modal="true" aria-label="重命名附件">
+  return (
+    <Dialog open onDismiss={onCancel} label="重命名附件" className="asset-rename-dialog" initialFocus={inputRef}>
         <header className="ln-dialog__head">
           <Pencil size={15} />
           <h3 className="ln-dialog__title">重命名附件</h3>
@@ -39,8 +33,8 @@ export function AssetRenameDialog({ initial, onCancel, onConfirm }: {
         <div className="ln-dialog__body">
           <div className="asset-rename-field">
             <input
+              ref={inputRef}
               className="b3-text-field"
-              autoFocus
               value={value}
               aria-label="附件名称"
               onChange={(e) => setValue(e.target.value)}
@@ -55,8 +49,6 @@ export function AssetRenameDialog({ initial, onCancel, onConfirm }: {
             <button className="b3-button" disabled={!canConfirm} onClick={() => canConfirm && onConfirm(trimmed + ext)}>确定</button>
           </footer>
         </div>
-      </section>
-    </div>,
-    document.body
+    </Dialog>
   );
 }
