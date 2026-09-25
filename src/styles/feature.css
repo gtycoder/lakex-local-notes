@@ -209,6 +209,10 @@ pre {
 [data-theme="warm"] .ne-ui-toolbar .ne-toolbar-widget,
 [data-theme="dark"] .ne-ui-toolbar .ant-btn,
 [data-theme="warm"] .ne-ui-toolbar .ant-btn { color: var(--lake-text-1); }
+/* 内核工具条下拉（正文 / 字号）的「值文字」：vendor 用 --lakex-editor-icon-primary，该变量又被
+ * 内核未分层浅色 schema 覆盖 ⇒ 直接覆盖 color（同大纲/图标的坑）。 */
+[data-theme="dark"] .ne-ui-toolbar .ne-ui-toolbar-select-value,
+[data-theme="warm"] .ne-ui-toolbar .ne-ui-toolbar-select-value { color: var(--lake-text-1); }
 /* 内核另一处写死白底：.ne-ui-toolbar（小记/文档编辑器共用的工具条），以及文档内的图片占位块。
  * 与上面的 .ne-ui 同一处修复（同一个桥，单一来源）。 */
 [data-theme="dark"] .ne-ui-toolbar,
