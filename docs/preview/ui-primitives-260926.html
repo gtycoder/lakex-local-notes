@@ -415,6 +415,26 @@
   --lake-hairline-soft: rgba(228, 230, 234, .55);
 }
 
+/* ============ 采用「设计规格 accent 家族」（Q10 = #5b6f96）：覆盖主题里的旧蓝/紫 ============
+ * 规格只有 accent/ink/tint/text；ink 的 hover/press 按 COMPONENTS 01「primary 提亮一档」派生。
+ * 只写 [data-theme=...]，不写 :root —— 否则会盖掉 warm 主题（同特异性、靠源序）。 */
+[data-theme="light"] {
+  --lake-accent: #5b6f96;
+  --lake-accent-ink: #3a4a68;
+  --lake-accent-ink-hover: #45587a;
+  --lake-accent-ink-press: #2f3d56;
+  --lake-accent-tint: #eceff5;
+  --lake-accent-text: #3a4a68;
+}
+[data-theme="dark"] {
+  --lake-accent: #93a9cf;
+  --lake-accent-ink: #46597b;
+  --lake-accent-ink-hover: #55698f;
+  --lake-accent-ink-press: #3b4d6b;
+  --lake-accent-tint: rgba(147,169,207,.14);
+  --lake-accent-text: #e9eef6;
+}
+
 /* ============ 提案：overlay 层序（覆盖 base.css 旧值） ============ */
 :root { --lake-z-menu: 600; --lake-z-scrim: 700; --lake-z-dialog: 710; --lake-z-lightbox: 720; }
 
