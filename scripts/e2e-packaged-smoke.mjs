@@ -6,7 +6,11 @@ import path from "node:path";
 const appPath = process.env.LAKE_PACKAGED_EXECUTABLE || path.resolve("release/mac-arm64/Lake Notes.app/Contents/MacOS/Lake Notes");
 const port = Number(process.env.LAKE_CDP_PORT || 9333);
 if (!existsSync(appPath)) throw new Error(`找不到 packaged executable: ${appPath}`);
-const child = spawn(appPath, [`--remote-debugging-port=${port}`], {
+// 受限/沙箱环境（如 agent 宿主的 seatbelt）里 Chromium 自身 sandbox 会初始化失败，
+// 打包版直接崩 ⇒ CDP 拿不到 page。允许用 LAKE_PACKAGED_ARGS 透传运行参数（如 "--no-sandbox --disable-gpu"）；
+// 正常运行不设该变量，行为不变。
+const extraArgs = (process.env.LAKE_PACKAGED_ARGS || "").split(/\s+/).filter(Boolean);
+const child = spawn(appPath, [`--remote-debugging-port=${port}`, ...extraArgs], {
   env: {
     ...process.env,
     LAKE_USER_DATA: process.env.LAKE_USER_DATA || path.join("/tmp", "lake-notes-packaged-smoke-data"),
@@ -31,7 +35,15 @@ async function waitForCdp() {
     const timer = setTimeout(() => controller.abort(), 2_000);
     try {
       const response = await fetch(`http://127.0.0.1:${port}/json/list`, { signal: controller.signal });
-      if (response.ok) return;
+      if (response.ok) {
+        // 只等「CDP 有响应」不够：打包版会先暴露 about:blank 目标，随后才导航到 lake://app；
+        // 若此时就跑 smoke，会抓到空页面（.tab-bar 缺失）而误判失败。必须等到真正的应用页。
+        const list = await response.json().catch(() => null);
+        if (Array.isArray(list) && list.some((t) => t.type === "page" && String(t.url || "").includes("lake://"))) {
+          await new Promise((resolve) => setTimeout(resolve, 1500)); // 再等 React 挂载外壳
+          return;
+        }
+      }
     } catch { /* wait */ }
     finally { clearTimeout(timer); }
     await new Promise((resolve) => setTimeout(resolve, 500));

@@ -37,6 +37,7 @@
 2. **`.ne-icon` 不是 `.ne-icon-symbol`**：原图标修复选择器写错，规则从未命中（深色下图标一直黑）。
 3. **cssLayers 基线归并**：把规则从 A 文件搬到 B 文件会合法抬高 B 的声明数；本批 overlay.css 94→145、feature.css 102→104，均已在基线注明。
 4. **原语 dialog 会锁 body 滚动并恢复焦点**：迁移大浮窗（回收站/历史）时用 `surfaceRef` 把外部 `panelRef` 接上，否则拖拽/缩放失效。
+5. **本沙箱里跑 `npm run test:packaged` 要透传 `--no-sandbox`**：DSH agent 宿主的 seatbelt 让 Chromium 自身 sandbox 初始化失败（`sandbox initialization failed` + GPU `Sorry, GPU process isn't usable. Goodbye.`），打包版直接崩、CDP 拿不到页面。包装脚本 `scripts/e2e-packaged-smoke.mjs` 已支持 `LAKE_PACKAGED_ARGS="--no-sandbox --disable-gpu"`，并且会等 `lake://` 页面真正出现（打包版先暴露 `about:blank` 目标）。实测该命令 exit 0（两个内层 smoke 都过）。
 
 ### 五、下一步
 - 合 master 前建议：跑一次**打包 smoke**（`npm run test:packaged`）与**真实数据点验**（设置页开关、右键菜单、属性弹窗、搜索、回收站/历史拖拽）。
