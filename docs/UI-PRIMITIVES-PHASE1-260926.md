@@ -134,6 +134,48 @@ Phase 0 修的是**症状**；本设计解决「症状会不断长出来」的**
 - **API 变更**：`onChange: (e: ChangeEvent<HTMLInputElement>) => void` → `onChange: (checked: boolean) => void`；6 个调用点从 `e.target.checked` 改为 `checked`。
 - 备选：保留 `<input type=checkbox>` 只补视觉（`role=switch` 加在 input 上语义不标准）；推荐 button。
 
+### 3.4 几何（Geometry）
+
+原语只认令牌与下列档位（来自 COMPONENTS / PANEL-CONTRACT；预览页有实物）：
+
+| 原语 | 尺寸 | 圆角 | 间距 |
+|---|---|---|---|
+| Button | 高 27 / sm 22；图标 14；图标-文字 5 | `--lake-radius-sm` 8 | 横向 11（sm 8） |
+| IconButton | 28×28 / 紧凑 22×22 | 8 / 6 | 居中 |
+| Menu | 最小宽 206；项高 27 | md 10 / 项 xs 6 | 容器 6；项 0 8 |
+| Dialog | 宽 min(520, vw−32)；最大高 80vh | lg 14 | 头 14/16；体 12/16/16；操作 gap 8 |
+| Popover | 自适应 | md 10 | 10–12 |
+| Switch | 32×19；滑块 15；贴边 2 | pill | — |
+| 列表行 | 高 27 | xs 6 | 左 6 + 每级 13 缩进 |
+
+垂直几何栈（顶栏 / 面包屑 / 内核工具条 / 标签胶囊）以 `docs/PANEL-CONTRACT.md §1` 为唯一来源，原语不另写数字。
+
+### 3.5 动效（Motion）
+
+只动 `opacity / transform`（不动 top/left/width/height）；时长与缓动来自 `STATES §2`：
+
+| 浮层 | 进入 | 退出 |
+|---|---|---|
+| 菜单 / 下拉 | 130ms：opacity 0→1 + scale .98→1（origin 贴触发点），`--lake-ease-standard` | 80ms：opacity 1→0 + scale 1→.99，`--lake-ease-exit` |
+| 对话框 | 190ms：遮罩 opacity 0→1；容器 opacity + translateY(6px)→0 + scale .98→1 | 130ms 反向 |
+| 气泡 / Tooltip | 停留 400ms 后 80ms 淡入 | 立即（0ms） |
+| 开关 | 130ms：滑块位移 + 轨道变色 | 同 |
+
+`prefers-reduced-motion: reduce` ⇒ 全部 .01ms（`a11y.css` 已有时该契约）。原语把进出场类集中实现，调用方不写 transition。
+
+### 3.6 内核（lakex）主题桥 —— 深色两处实锤（260926 补）
+
+- **原生大纲在深色下是白底**：vendor `.ne-toc-sidebar { background: var(--lakex-editor-background-primary) }`（`lakex-doc.css:11060`）、阅读态 `.ne-viewer-toc-sidebar`（:23321）。内核**官方**深色机制 = `LakexEditor.tsx:210` 按 `props.dark` 给根加 `lakex-default-theme` / `lakex-dark-theme`；我们走 `Doc.createOpenEditor`（`lakeRuntime.ts`），**这个类不会被加**。现有桥（`feature.css:134`）只覆盖 `.lake-editor-mount` / `.lakex-default-theme`，且未覆盖大纲面板。
+  **修法**：(A) 按 `data-theme` 给编辑器根加内核主题类（官方机制；顺带点亮 vendor `.lakex-dark-theme-dark` 段的 antd 弹层 / 日期选择器 / 卡片）；(B) 对 `.ne-toc-sidebar / .ne-viewer-toc-sidebar` 补显式表面（我们的令牌，feature 层压 vendor legacy，无需 !important）。
+- **固定工具栏看不清**：vendor `.ne-ui-toolbar { color: var(--lakex-editor-text-body) }`，widget / `.ant-btn` 同，图标 `--lakex-editor-icon-primary`。我们的桥已把这些映射到 `--lake-text-1/2`。仍偏暗的两种可能：① antd `.ant-btn` 自带颜色（需内核主题类）；② 该文档按钮确实 disabled（`feature.css:215` 记过此坑）。→ Phase 1a 用 CDP 量前景/背景对比度后定，**不盲加覆盖**。
+- 边界：这两处属 AGENTS §3 #14 的"内核例外"，允许写在 feature 层，但必须写明理由。
+
+### 3.7 悬停气泡（Tooltip）的定位与取舍
+
+- 现状：全仓 `title=` **136 处**（原生 title）；`.ln-tip` **0 引用**。
+- 有价值场景：图标按钮（活动栏 / 目录头 5 图标 / 顶栏搜索与同步 / 对话框关闭）、**被裁切的标题**（设计 03 要求 hover 给完整标题）、键位提示。
+- 取舍（AGENTS #17）：原生 `title` 已覆盖大多数且无障碍可用。建议**不建独立 Tooltip 原语**，只对"必须自定义"的（裁切标题 + 键盘提示）做一个轻封装；其余保留原生 title。→ Q9。
+
 ## 4. 门禁（防回归；优先静态、零新依赖）
 
 | 代号 | 断言 | 实现 |
@@ -175,3 +217,5 @@ Phase 0 修的是**症状**；本设计解决「症状会不断长出来」的**
 | Q6 | B1（`.modal-backdrop` z=30）先作为 Phase 0.5 单独修，不等原语？ | 是 |
 | Q7 | 视觉门禁只要手测清单，还是要快照？ | 先手测清单 |
 | Q8 | 桌面优先、移动随后？ | 是 |
+| Q9 | 悬停气泡：**不建独立原语**，只对裁切标题/键盘提示做轻封装（其余保留原生 `title`）？ | 是 |
+| Q10 | 浅色 accent：从 `#3d7eff` 改回设计规格的 `#5b6f96` 板岩蓝（或更中性），见预览页「色板对照」？ | 建议改回规格值 |

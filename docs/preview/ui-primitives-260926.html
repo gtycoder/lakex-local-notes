@@ -483,6 +483,25 @@ body { margin:0; background:var(--lake-bg-window); color:var(--lake-text-1); fon
 .tip { position:fixed; z-index:var(--lake-z-tooltip); padding:3px 8px; border-radius:var(--lake-radius-xs); background:var(--lake-accent-ink); color:var(--lake-text-on-accent); font-size:11.5px; pointer-events:none; }
 .demo-scrim { display:grid; place-items:center; padding:20px; }
 [hidden] { display:none !important; }
+
+/* 浮层进出场（STATES §2）：只动 opacity/transform */
+@keyframes overlay-in { from { opacity:0; transform:scale(.98) } to { opacity:1; transform:none } }
+.ln-scrim { animation: overlay-in 190ms var(--lake-ease-standard); }
+.ln-dialog { animation: overlay-in 190ms var(--lake-ease-standard); }
+.ln-menu { animation: overlay-in 130ms var(--lake-ease-standard); transform-origin: top left; }
+@media (prefers-reduced-motion: reduce) { .ln-scrim, .ln-dialog, .ln-menu { animation-duration:.01ms; } }
+
+/* 几何演示 */
+.gbox { display:inline-flex; align-items:center; justify-content:center; min-width:46px; height:32px; padding:0 10px; border:1px solid var(--lake-border-strong); background:var(--lake-bg-block); color:var(--lake-text-2); font-size:12px; }
+.gbox--h22 { height:22px; } .gbox--h27 { height:27px; } .gbox--h34 { height:34px; }
+/* 动效演示 */
+.anim-box { display:inline-flex; align-items:center; justify-content:center; height:27px; padding:0 12px; border-radius:var(--lake-radius-sm); background:var(--lake-accent-tint); color:var(--lake-accent-text); font-size:12px; }
+.anim-run { animation: overlay-in 130ms var(--lake-ease-standard); }
+.anim-box--slow.anim-run { animation-duration:190ms; }
+/* 色板对照 */
+.swatchcol { display:flex; flex-direction:column; gap:8px; align-items:flex-start; padding:12px; border:1px solid var(--lake-border-1); border-radius:var(--lake-radius-md); background:var(--lake-bg-canvas); }
+.swatchname { font-size:12px; color:var(--lake-text-3); }
+.swatchrow { padding:6px 10px; border-radius:var(--lake-radius-xs); font-size:12px; }
 </style>
 </head>
 <body>
@@ -570,6 +589,44 @@ body { margin:0; background:var(--lake-bg-window); color:var(--lake-text-1); fon
       <div class="ln">📄 A-CDPK17891096769-Lake</div>
       <div class="ln">📄 长大纲</div>
       <div class="ln">📄 测试1112</div>
+    </div>
+  </div>
+  <div class="card">
+    <h2>几何（Geometry）</h2>
+    <p class="note">原语只认令牌与这套档位：圆角 6/8/10/14/20/pill；控件高 22/27/34。下面是实物。</p>
+    <div class="row"><span class="tag">圆角</span>
+      <span class="gbox" style="border-radius:6px">6</span>
+      <span class="gbox" style="border-radius:8px">8</span>
+      <span class="gbox" style="border-radius:10px">10</span>
+      <span class="gbox" style="border-radius:14px">14</span>
+      <span class="gbox" style="border-radius:20px">20</span>
+      <span class="gbox" style="border-radius:999px">pill</span>
+    </div>
+    <div class="row"><span class="tag">控件高</span>
+      <span class="gbox gbox--h22">22</span>
+      <span class="gbox gbox--h27">27</span>
+      <span class="gbox gbox--h34">34</span>
+      <span class="mono">开关 32×19 · 滑块 15 · 菜单项 27 · 对话框宽 min(520, vw-32)</span>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>动效（Motion）</h2>
+    <p class="note">只动 opacity / transform。菜单进 130ms / 出 80ms；对话框与遮罩 190ms / 出 130ms；缓动 cubic-bezier(.2,.8,.24,1)；prefers-reduced-motion 降到 .01ms。点下面重播。</p>
+    <div class="row">
+      <button class="ln-btn ln-btn--secondary" data-replay>重播动效</button>
+      <span class="tag">130ms</span><span class="anim-box" id="amb1">菜单</span>
+      <span class="tag">190ms</span><span class="anim-box anim-box--slow" id="amb2">对话框</span>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>色板对照（浅色 accent）</h2>
+    <p class="note">当前 app 用 <span class="mono">#3d7eff</span>（偏艳）；设计规格是 <span class="mono">#5b6f96</span>（去饱和板岩蓝）；DSH 是中性优先（文字 <span class="mono">#0f1115</span>，品牌近黑）。三种各放主按钮 + 选中行，选方向。</p>
+    <div class="row" style="align-items:stretch">
+      <div class="swatchcol"><div class="swatchname">当前 #3d7eff</div><button class="ln-btn" style="background:#2f66e0;color:#fff">主操作</button><div class="swatchrow" style="background:#eaf1ff;color:#1f4fc2">选中行</div></div>
+      <div class="swatchcol"><div class="swatchname">规格 #5b6f96</div><button class="ln-btn" style="background:#3a4a68;color:#fff">主操作</button><div class="swatchrow" style="background:#eceff5;color:#3a4a68">选中行</div></div>
+      <div class="swatchcol"><div class="swatchname">DSH 中性</div><button class="ln-btn" style="background:#0f1115;color:#fff">主操作</button><div class="swatchrow" style="background:#f2f3f5;color:#0f1115">选中行</div></div>
     </div>
   </div>
 </div>
@@ -690,6 +747,17 @@ body { margin:0; background:var(--lake-bg-window); color:var(--lake-text-1); fon
     closeMenu();
     epanel.hidden = true;
   });
+  var replay = document.querySelector('[data-replay]');
+  if (replay) {
+    replay.addEventListener('click', function () {
+      ['amb1', 'amb2'].forEach(function (id) {
+        var el = document.getElementById(id);
+        el.classList.remove('anim-run');
+        void el.offsetWidth;
+        el.classList.add('anim-run');
+      });
+    });
+  }
 })();
 </script>
 </body>
