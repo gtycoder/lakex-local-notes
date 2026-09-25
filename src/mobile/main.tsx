@@ -8,7 +8,7 @@ import { installPasteInterceptor } from "../features/editor/clipboardHtml"; // �
 import "../features/editor/image-lightbox.css";
 import "../features/attachment/attachment-preview.css";
 // ── W2：安卓 UI 全量重做 —— 颜色统一走**自有设计系统** themes/*（--lake-*），不再用思源调色板。
-// 迁移期仍加载 b3 主题/组件（未迁移的 .b3-* 屏幕还需要 --b3-*），随各屏迁移逐步下线。
+// 思源样式层（src/b3/**）已整体删除；仅 .b3-* / fn__* 类名保留，规则在 compat.css（值走 --lake-*）。
 import "../styles/fonts/misans/misans.css"; // 内置 MiSans（简中+Latin，官方切片子集）
 import "../styles/fonts/jetbrains-mono/jetbrains-mono.css"; // 内置等宽 JetBrains Mono
 import "../styles/themes/base.css";
@@ -19,7 +19,7 @@ import "../styles/tokens.css"; // 非令牌基础规则（关键帧/焦点环/re
 import "./editor-dark.css"; // 自写：桌面同源深色桥（已去 --b3-*，走 --lake-*）
 import "../styles/compat.css"; // 复用桌面兼容层（config-*/b3-label/b3-switch/fn__*，值走 --lake-*）
 import "../styles/kit.css"; // 自有组件库（ln-* 14 件）——新 UI 组件来源
-import "../styles/components.css"; // 共用浮层件（seg/badge/ln-*），须晚于 siyuan.scss（seg 选中态要压过 b3-button--outline）
+import "../styles/components.css"; // 共用浮层件（seg/badge/ln-*）；须晚于 compat.css（.seg 选中态要压过 .b3-button--outline）
 import "./editor/editor-dock.css";
 import "../styles/app/quick-notes.css"; // 小记编辑器容器 + 卡片只读预览（与桌面同一套类）
 import "../styles/dialog.css"; // 浮层通用弹窗（属性等）：与桌面共用同一套样式

@@ -255,7 +255,7 @@
   padding: var(--lake-space-sm) 0;
 }
 
-/* 滚动条外观统一由 src/b3/layout.css 的最终层集中控制。 */
+/* 滚动条外观统一由 src/styles/kit.css 的细滚动条规格集中控制（原 src/b3/layout.css 已随 W2 删除）。 */
 
 .outline-panel__empty {
   padding: 16px 12px;

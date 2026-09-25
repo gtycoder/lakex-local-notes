@@ -45,8 +45,8 @@
 .draft-recovery-discard:hover { color: var(--lake-status-error); }
 .draft-recovery-more { margin: 9px 0 0; color: var(--lake-text-4); font-size: 11px; }
 
-/* ══ 设置面板与浮层：精仿思源版式（分组卡片 + 行 + 列表 + hover 图标操作）══
- * 组件样式来自已 vendored 的思源 SCSS（src/b3/siyuan/，AGPL-3.0，已署名），
+/* ══ 设置面板与浮层：自有设计系统版式（分组卡片 + 行 + 列表 + hover 图标操作）══
+ * 组件类名沿用思源（.b3-*；AGPL-3.0 署名见设置页「关于」），本体规则已收编到 compat.css / kit.css，
  * 这里只补三类东西：
  *   ① 设置弹窗骨架（左导航 / 右内容 / 底部状态条）
  *   ② 浮层通用件（页签、工具条、两行列表、徽章、空态、关闭按钮）
@@ -330,8 +330,8 @@ button.b3-list-item__action:disabled { opacity: .45; cursor: default; }
 /* ---------- ③ 本地小件 ---------- */
 /* 互斥选项组（字号 / 主题）：思源式「轨道 + 浮起滑块」（AGENTS §3 #14 定稿口径）——
    选中项不再整块填主色，改用抬起的表面 + 中性墨色；主色只留给轨道内的高亮文字可选态。
-   用 .seg 前缀提高特异性：两端 CSS 注入顺序不同（mobile.css/overlays.css 早于或晚于 vendored
-   siyuan.scss），同优先级时 .b3-button--outline 的 background:transparent 会压掉选中填充。 */
+   用 .seg 前缀提高特异性：两端 CSS 注入顺序不同（mobile.css/overlays.css 早于或晚于 compat.css），
+   同优先级时 .b3-button--outline 的 background:transparent 会压掉选中填充。 */
 .seg {
   display: inline-flex;
   gap: 2px;

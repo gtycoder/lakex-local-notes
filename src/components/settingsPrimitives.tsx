@@ -1,7 +1,7 @@
 /**
  * 设置页版式原语（桌面/移动端共用，精仿思源）。
- * 类名来源：src/b3/siyuan/business/_config.scss（版式骨架）+ vendored 思源组件
- * （.b3-label / .b3-text-field / .b3-select / .b3-switch / .b3-button / .b3-list-item）。
+ * 类名沿用思源（.b3-label / .b3-text-field / .b3-select / .b3-switch / .b3-button / .b3-list-item），
+ * 定义已随 W2 删源收编到 src/styles/compat.css（骨架）与 src/styles/kit.css（规格），值走 --lake-*。
  * 从 SettingsPanel 抽出：桌面 SettingsPanel 与移动 SettingsDrawer 共用同一套版式原语。
  */
 import type { ChangeEvent, ReactNode } from "react";

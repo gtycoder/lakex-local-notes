@@ -388,7 +388,7 @@ body { font-family: var(--lake-font-family); background: var(--lake-bg-window); 
 
 /* 竖向设置菜单：设置项一行一行（思源移动端式），点某项进入新页面 */
 .mobile-settings-list { flex: 1; overflow-y: auto; background: var(--lake-bg-window); padding: 4px 0 calc(24px + env(safe-area-inset-bottom, 0px)); }
-/* 注意：菜单行是 ln-row + mobile-settings-row。ln-row 由 siyuan.scss 在移动壳之后加载，
+/* 注意：菜单行是 ln-row + mobile-settings-row。ln-row 定义在 kit.css，注入晚于本文件，
    会用默认 padding/height 覆盖单类选择器；这里用父级作用域提高特异性保证生效（否则行高被压成 28px、又矮又挤）。 */
 .mobile-settings-list .mobile-settings-row {
   width: 100%; display: flex; align-items: center; gap: 14px;
@@ -544,9 +544,9 @@ body { font-family: var(--lake-font-family); background: var(--lake-bg-window); 
 .mobile-model-body .ln-row__action { border: 0; background: transparent; color: var(--lake-text-3); cursor: pointer; }
 .model-add { margin: 12px 20px 0; width: calc(100% - 40px); }
 
-/* ===== 思源弹层口径接线（移动端）：sheet 菜单 / dialog 确认 / snackbar 提示 =====
-   组件类本体来自 vendored 思源 _menu.scss / _dialog.scss / _snackbar.scss（AGPL-3.0，署名见 src/b3/siyuan.scss）；
-   这里只补移动端需要的层叠顺序、56dvh 面板高度、进出场与图标盒，不改思源组件语义。 */
+/* ===== 弹层口径接线（移动端）：sheet 菜单 / dialog 确认 / snackbar 提示 =====
+   类名沿用思源的 .b3-menu / .b3-dialog / .b3-snackbar，本体规则在 W2 删源时已收编到 compat.css / mobile-kit.css；
+   这里只补移动端需要的层叠顺序、56dvh 面板高度、进出场与图标盒。 */
 /* 弹层菜单样式见 mobile-kit.css（W2 去思源后自带） */
 .ln-menu-note { flex: 0 0 auto; margin-left: 8px; font-size: 12px; color: var(--lake-text-3); }
 .ln-menu-head-action { margin-left: auto; display: inline-flex; align-items: center; }
