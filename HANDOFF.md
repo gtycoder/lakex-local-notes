@@ -36,7 +36,10 @@
 
 ### 五、当前状态 / 下一步
 - 分支 `feat/shell-layer`，两个提交：`3745f67`（`fix(tree)` 单节点回传保留 kind，可单独 cherry-pick 回 master）+ `d79c291`（本批 A）。**未合 master、未推送**，等用户验收。
-- **打包 smoke：本轮未跑成（环境网络问题，非代码）**。`npx electron-builder --dir --mac --arm64 --publish never` 失败于 `Timeout awaiting 'request' for 600000ms`（electron-builder 自身下载 10 分钟超时；`~/Library/Caches/electron` 为空）⇒ `release/mac-arm64/Lake Notes.app` 未产出，`npm run test:packaged` 无法运行。**这是 A1 唯一未覆盖的面**（真实 asar 包的启动）；A1 的代码路径已用 `LAKE_RENDERER=scheme` 在未打包实例上**等价**验证（同一分支、同一 handler）。网络可用时补跑：`npx electron-builder --dir --mac --arm64 && npm run test:packaged`。
+- **打包 smoke：✅ 已跑通**。首跑失败于 electron-builder 自身 `Timeout awaiting 'request' for 600000ms`（默认源在弱网下卡在收尾）；换镜像 `ELECTRON_MIRROR=https://registry.npmmirror.com/-/binary/electron/` 后 `npx electron-builder --dir --mac --arm64 --publish never` **exit 0**，产出 `release/mac-arm64/Lake Notes.app`（366M）。
+  - **打包版 CDP 实测**（隔离 userData + 独立端口）：`location.href=lake://app/index.html`、`origin=lake://app`、preload 112 方法、IPC 往返正常（`listTreeNodes`→2）、`.app-shell` 渲染、编辑器 `init welcome-note 45ms`、日志无 error ⇒ **A1 的打包路径已闭环**。
+  - `npm run test:packaged` **exit 0**；过程中它抓到一处**旧 origin 假设**：`scripts/e2e-drawnix-smoke.mjs` 里「非 http(s) 页面不记 module resource timing」的豁免写成了 `protocol !== "file:"`，A1 后打包版是 `lake:` 于是不再豁免而误报。改成 `/^https?:$/.test(protocol)`（dev/preview 仍严格，非 http(s) 由「画板已渲染」证明引擎已加载）。
+  - ⚠️ **打包版默认用正式数据目录**（`~/Library/Application Support/lake-notes-electron`，AGENTS §5 禁碰）：自己试跑务必 `env -u ELECTRON_RUN_AS_NODE LAKE_USER_DATA=/tmp/lake-x "./release/mac-arm64/Lake Notes.app/Contents/MacOS/Lake Notes"`。
 - **B 批次（DSH 灵感主题）冻结中**：只借色板/语义/几何/形状/动效/窗口，字体与品牌用我们的；方案已讨论（对照表 → 语义别名层 → 几何档位 → superellipse → 焦点环模态 → 窗口材质 → 快照门禁）。
 
 ### 六、关键文件 / 命令

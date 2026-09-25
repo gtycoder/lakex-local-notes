@@ -139,6 +139,11 @@ node scripts/s3-ls.mjs --count | --note <id> | --prefix <prefix>   # 云端对�
 16. **DSH 自身就是 Electron 实例**，且会话宿主进程就在这台机器上 ⇒ §7.3 的「只 kill 具体 PID」在这里尤其致命化：**永远按唯一 CDP 端口 `pgrep -f` 精确定位**再 kill，任何 `pkill -f Electron`/`killall` 都可能把当前会话打断。
 17. 改了本仓库的 `electron/*.ts` / `src/**` **不会**影响 DSH 自身（两者产物、userData 完全独立）；但**别去动 DSH 的安装目录**（`Contents/Resources/app.asar` 及 `app.asar.unpacked/dsh`），那属于它的运行时。
 
+### 打包 / 网络
+18. **`electron-builder` 默认源在弱网下会整批失败**（症状 `Timeout awaiting 'request' for 600000ms`，且**不产出** `release/**/*.app`）：换镜像即可 —— `ELECTRON_MIRROR=https://registry.npmmirror.com/-/binary/electron/ npx electron-builder --dir --mac --arm64 --publish never`。判断"是不是网络"先看 `~/Library/Caches/electron` 是否为空。
+19. **打包版 .app 默认写正式数据目录** `~/Library/Application Support/lake-notes-electron`（§5 **禁止触碰**）⇒ 自己试跑打包产物**必须**覆盖 `LAKE_USER_DATA`：`env -u ELECTRON_RUN_AS_NODE LAKE_USER_DATA=/tmp/lake-x "./release/mac-arm64/Lake Notes.app/Contents/MacOS/Lake Notes"`。`npm run test:packaged` 已自带隔离 userData/端口，可放心跑。
+20. **e2e/冒烟脚本里"非 http(s) 页面"的判定不要写死 `file:`**：打包版页面是私有协议 `lake://app`（§4 壳层双 origin）。要表达"这是非 http 的本地页面"就写 `/^https?:$/.test(protocol)`，否则换 origin 后会误报（`e2e-drawnix-smoke.mjs` 踩过）。
+
 ## 8. 会话启动指引
 
 1. 读本文件 + `HANDOFF.md`（当前状态与真正的待办）；**涉及编辑器/lakex 一律按 §2「内核资料检索顺序」走三级检索**（官方 `yuque-developer-docs` → `docs/LAKEX-CONTRACT.md` → `lake-editor-main`/`lake-main` 源码字典），新观测回填 CONTRACT。

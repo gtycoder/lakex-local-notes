@@ -84,10 +84,11 @@ try {
   const parsed = JSON.parse(result);
   if (parsed.boardResizers < 1 || parsed.plaitBoards < 1) throw new Error("Drawnix 画板未渲染");
   if (!parsed.drawnixModuleRendered) throw new Error("Drawnix 模块未渲染");
-  // 打包版是 file://：Chromium 不记录 JS module 的 resource timing（实测 jsResources=0），
-  // 该断言只在 http(s)（vite dev/preview）下有意义；file:// 下由「画板已渲染」证明引擎已加载。
+  // 非 http(s) 页面（打包版：A1 起是私有协议 lake://app，此前是 file://）下 Chromium 不记录
+  // JS module 的 resource timing（两者实测 drawnixJs=0），该断言只在 http(s)（vite dev/preview）下有意义；
+  // 非 http(s) 时由上面的「画板已渲染 + 模块已渲染」证明引擎已加载。
   // 懒加载/首屏体积的护栏归 scripts/check-bundle-budget.mjs，不在这里。
-  if (parsed.protocol !== "file:" && parsed.drawnixJs.length < 1) throw new Error("懒加载 Drawnix JS 未被请求");
+  if (/^https?:$/.test(parsed.protocol) && parsed.drawnixJs.length < 1) throw new Error("懒加载 Drawnix JS 未被请求");
   if (parsed.fallback) throw new Error("Drawnix 仍停留在加载占位");
   console.log(result);
   const output = process.env.LAKE_UI_EVIDENCE_DIR;
