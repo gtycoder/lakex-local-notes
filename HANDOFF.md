@@ -4,6 +4,43 @@
 > 历史所有 dated handoff 已合并进本文件（内容在 git 历史可查）。本文件只保留**当前状态 + 真正的待办 + 有价值的坑**。
 > **§8 是移动端（安卓）专职交接**，由移动端会话维护；桌面会话不要改 §8，移动端会话不要改 §0-§7 之外的桌面文件。
 
+## 0. 最新交接 · 260926 续 · UI 原语收敛（Phase 0 / 0.5 / 1a–1f）· 分支 `feat/ui-consolidate-260926`，**未合 master**
+
+> 写给完全没有上下文的新会话。用户口径：当前 UI"零碎问题本质是弹窗不统一、结构混乱"；本批把 **浮层/按钮/开关** 三个角色收敛成**单一原语**，并把"手抄选择器清单"换成"单一 base + 唯一性门禁"。设计稿与可交互预览：`docs/UI-PRIMITIVES-PHASE1-260926.md` + `docs/preview/ui-primitives-260926.html`。
+
+### 一、已完成（按提交，均在分支）
+- **Phase 0**（`f15687a`）：修四处缺失样式——`.confirm-dialog`/`.emoji-picker` 接入统一表面、`config-block__actions` 布局（JSX 用 11 处但全仓无定义）、`.b3-switch::after` 补回被删源漏掉的滑块基线。CDP 实测四项。
+- **过期 b3 注释清理**（`15f587b`）：`src/b3/**` 已整体删除，清掉 6 个文件的现值语气残留 + `AGENTS §3 #14`。
+- **设计稿 + 预览**（`440fdac`/`471b599`/`2c3e949`/`927b240`）
+- **浅色 accent 对齐设计规格**（`f977a05`，Q10）：`themes/light.css` accent 家族 `#3d7eff→#5b6f96`（ink `#3a4a68`、tint `#eceff5`、text `#3a4a68`，hover/press 派生）；**dark 保持紫、warm 保持橙**（CDP 确认未变）。
+- **Phase 0.5 深色修复**（`238051c`）：根因=内核把浅色 schema 的 `--lakex-editor-*` 作为**未分层 `<style>`** 注入（`.lakex-default-theme{--lakex-editor-background-primary:#fff}`），未分层 > 任何 `@layer` ⇒ 变量桥失效。修法=feature 层直接覆盖消费属性（`.ne-icon` 修正原误写 `.ne-icon-symbol`、工具条文字、`.ne-toc-sidebar/.ne-viewer-toc-sidebar` 底色）。CDP 实测 dark 大纲 `rgb(37,38,43)`、图标 `fill rgb(168,169,173)`。
+- **Phase 1a**（`3d0023e`）：`src/components/ui/Overlay.tsx` 原语（Overlay + Dialog/Menu/Popover；portal/层序/外点/Esc/焦点圈闭/滚动锁）；overlay 层序令牌 `--lake-z-overlay-menu/scrim/dialog/lightbox = 600/700/710/720`；修 B1（`.modal-backdrop` z 30→令牌，原先遮罩盖不住外壳）；`.ln-dialog` 布局+表面合并到 `overlay.css` 单一来源；`.ln-menu/.ln-popover` 表面统一。试点：ConfirmDelete。
+- **Phase 1b**（`7649b4e`）：对话框迁移 5 个（NoteInfo / AssetRename / Search / Trash / History）；原语加 `surfaceClassName/scrimClassName/surfaceRef`（支持顶对齐命令面板、可拖拽浮窗）。
+- **Phase 1c**（`87a4788`）：菜单迁移（CardContextMenu ×2、Sidebar 新建+右键、MultiTabEditor 标签切换+右键、BitableEditor 行右键、DesktopOverlays 顶栏 ×2）；菜单层序统一到 `--lake-z-overlay-menu`。
+- **Phase 1d**（`be45029`）：emoji 选择器 + 多维表两个气泡；原语加 `ignoreOutside`。
+- **Phase 1e**（`b0a9b67`）：设置开关 `b3-switch(input)` → `ln-switch(button+role=switch+knob)`；`onChange` API 由 ChangeEvent 改为 `(checked:boolean)`，6 调用点同步。
+- **Phase 1f**（`src/styles/uiPrimitives.test.ts`，本提交）：三条门禁——① `createPortal` 只允许 Overlay 原语 + 显式白名单；② `.ln-dialog/.ln-menu/.ln-popover` 只在 `overlay.css` 定义；③ overlay 层序令牌唯一、递增、都高于 topbar。
+
+### 二、门禁（全绿）
+`tsc` 0 · `vitest` **1289 passed / 16 skipped** · 桌面 + 移动 `vite build` OK · `ui-metrics`（`var(--b3-*)` 0 / 颜色字面量 0 / `!important` 9 / 未定义令牌 0）· `cssLayers` 2/2 · `check-core-boundaries` 0 违规 · `git diff --check` clean。
+
+### 三、有意保留 / 未做（都写明了理由，别再当漏项）
+- **ImageLightbox / AttachmentPreview**：全屏媒体预览（自带背景点击关闭 + `position:fixed` 铺满），迁到居中 Dialog 收益低风险高；已列入 G1 白名单。
+- **selection-toolbar 的 tip**（`kernelUiAtoms.tsx`）：非交互 tooltip，§3.7 决定不建 Tooltip 原语；已列入 G1 白名单。
+- **非 portal 的浮层**：`SyncStatusPopover`（自带外点/Esc）、`QuickNotesWorkspace` 的 sort/row 菜单、`ExportSubmenuItem`（父菜单内的子菜单）——保留其现有机制，未迁。
+- **Button（`b3-button` 45 处 / `ln-btn` 13 处）**：按 Q4 **增量迁移**（接触即迁 + 新代码只用 `ln-btn`），**不做一次性 find/replace**；`.b3-button` 规则保留（kit.css 已映射设计规格）。
+
+### 四、踩过的坑
+1. **内核主题变量是未分层注入的**：`--lakex-editor-*` 不在 vendor CSS 定义，由 `ThemeSchema.apply(domNode)` 以未分层 `<style>` 写入 ⇒ 永远压过 `@layer`。要覆盖只能**直接覆盖消费属性**（feature 层压 legacy 层），不能靠变量桥。
+2. **`.ne-icon` 不是 `.ne-icon-symbol`**：原图标修复选择器写错，规则从未命中（深色下图标一直黑）。
+3. **cssLayers 基线归并**：把规则从 A 文件搬到 B 文件会合法抬高 B 的声明数；本批 overlay.css 94→145、feature.css 102→104，均已在基线注明。
+4. **原语 dialog 会锁 body 滚动并恢复焦点**：迁移大浮窗（回收站/历史）时用 `surfaceRef` 把外部 `panelRef` 接上，否则拖拽/缩放失效。
+
+### 五、下一步
+- 合 master 前建议：跑一次**打包 smoke**（`npm run test:packaged`）与**真实数据点验**（设置页开关、右键菜单、属性弹窗、搜索、回收站/历史拖拽）。
+- 若继续收敛：`SyncStatusPopover`/QuickNotes 菜单/ExportSubmenu 可后续并入 `<Menu>`；`.b3-switch` 死 CSS 可清（现无 tsx 引用）。
+- 已知残留：内核浅色 schema 的"主题色"是绿 `#00b96b`，浅色下部分内核图标仍绿（未映射到 accent，单独一项）。
+
 ## 0. 最新交接 · 260926 · 桌面壳层对齐「后台服务 + 双端前台」（A1/A2/A3/A5）· 分支 `feat/shell-layer`，**未合 master**
 
 > 写给**完全没有上下文**的新会话。用户口径：**只学 DSH 的壳层**（后台服务 + 前台套壳、桌面端 + 浏览器端同构）；它的内核与我们完全不同、不模仿；**主题（B 批次）已冻结，等本批验收通过再启动**。本批只动壳，`src/core` 与同步语义**零改动**。
