@@ -33,7 +33,7 @@ import type { TrashItem, TrashReminderItem } from "./trashRepository.js";
 export type { TrashItem, TrashReminderItem };
 import { AssetRepository, type OrphanAsset, type OrphanAssetRow } from "./assetRepository.js";
 import { NoteQueries } from "./noteQueries.js";
-import type { NoteSummary, SummaryRow, SyncFolder, SyncNote, TreeNode, TreeNodeRow } from "./noteQueries.js";
+import type { NoteSummary, SummaryRow, SyncFolder, SyncNote, TreeNode } from "./noteQueries.js";
 import { NoteMetadataRepository } from "./noteMetadataRepository.js";
 import { NoteContentRepository, type NoteCacheInput } from "./noteContentRepository.js";
 import { mimeTypeForFilename } from "../src/core/imageUtils.js";
@@ -403,9 +403,9 @@ export class Store {
   }
 
   private readTreeNode(id: string): TreeNode {
-    const row = this.db.prepare("SELECT * FROM tree_nodes WHERE id=? AND deleted_at IS NULL").get(id);
-    if (!row) throw new AppError("NotFound", `节点不存在: ${id}`);
-    return this.noteQueries.mapTreeNode(row as TreeNodeRow);
+    // 与 listTreeNodes 共用同一 row 形状（LEFT JOIN notes 取 kind）——单节点回传绝不能丢 kind，
+    // 否则渲染层 replaceTreeNode() 会把 board/sheet/bitable 的图标退化成文档图标（刷新才恢复）。
+    return this.noteQueries.readTreeNode(id);
   }
 
   readNote(id: string): NoteDocument {

@@ -390,6 +390,22 @@ describe("目录树操作", () => {
     expect((store as any).searchTextFor(board.id, board.content).plain).toBe("");
   });
 
+  it("元数据写操作回传的节点必须保留 kind（rename/setNodeIcon/move）—— 否则画板/表格图标退化成文档图标", () => {
+    // 回归：readTreeNode 曾只 SELECT tree_nodes（缺 note_kind）⇒ mapTreeNode 把 kind 兜底成 doc，
+    // 渲染层 replaceTreeNode(返回值) 会把 correct 的 board/sheet/bitable 换成 File 图标，直到下次 listTreeNodes 刷新。
+    const board = store.createBoardIn(null, "画板");
+    expect(store.renameTreeNode(board.id, "画板改名").kind).toBe("board");
+    expect(store.setNodeIcon(board.id, "🎨").kind).toBe("board");
+    const nb = store.createNotebook("移动目标本");
+    expect(store.moveTreeNode(board.id, nb.id, 0).kind).toBe("board");
+
+    const sheet = store.createSheetIn(null, "表格");
+    expect(store.renameTreeNode(sheet.id, "表格改名").kind).toBe("sheet");
+
+    const bitable = store.createBitableIn(null, "数据表");
+    expect(store.setNodeIcon(bitable.id, "📊").kind).toBe("bitable");
+  });
+
   it("全文搜索：标题优先、正文命中 + 高亮，1/2/3 字统一，删除后消失", () => {
     const note = store.createNote("搜索引擎笔记");
     store.saveNote(note.id, "搜索引擎笔记", "<p>全文搜索与回收站方案</p>", { markdown: "# 搜索引擎笔记\n\n全文搜索与回收站方案", plain: "搜索引擎笔记\n全文搜索与回收站方案" });

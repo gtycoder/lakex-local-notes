@@ -1,4 +1,5 @@
 import { rowToLocalState } from "../src/core/syncDecisions.js";
+import { AppError } from "../src/core/storeErrors.js";
 import type { DbLike, DbLikeStatement } from "./dbLike.js";
 
 export interface NoteSummary {
@@ -165,6 +166,18 @@ export class NoteQueries {
       // v6/v7：渲染层据此对非 doc 隐藏导出/大纲等（缺省 doc）
       kind: (row.note_kind === "sheet" ? "sheet" : row.note_kind === "bitable" ? "bitable" : row.note_kind === "board" ? "board" : "doc") as "doc" | "sheet" | "bitable" | "board",
     };
+  }
+
+  /** 单节点读取：与 listTreeNodes 使用同一 row 形状（LEFT JOIN notes 取 kind）。
+   *  元数据写操作（rename/setNodeIcon/move）回传给渲染层的就是这个节点；
+   *  若只查 tree_nodes（缺 note_kind），mapTreeNode 会把 kind 兜底成 "doc"，
+   *  渲染层 replaceTreeNode(返回值) 就把 board/sheet/bitable 换成了文档图标。 */
+  readTreeNode(id: string): TreeNode {
+    const row = this.db.prepare(
+      "SELECT t.*, n.kind AS note_kind FROM tree_nodes t LEFT JOIN notes n ON n.id = t.note_file_id WHERE t.id=? AND t.deleted_at IS NULL"
+    ).get(id) as TreeNodeRow | undefined;
+    if (!row) throw new AppError("NotFound", `节点不存在: ${id}`);
+    return this.mapTreeNode(row);
   }
 
   listTreeNodes(): TreeNode[] {
