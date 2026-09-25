@@ -144,9 +144,9 @@ git diff --check             → 干净
 
 ## 五、附：项目后续待办（**不属本次重构评价**，原 §四）
 
-**P0 安全（建议优先）**
-1. **`W-10 dompurify`**：全仓仍无该依赖。W-8 的 ACAO **已在 `electron/assetServer.ts` 修复**（6 条测试），残余只在
-   `webApiServer` 的 `/api/*`（不校验 Origin，见 HANDOFF §3.10④）——建议与下条一起定调。
+**P0 安全（建议优先）** —— ✅ **260926 已结案**
+1. **W-8**：`webApiServer` 的 `/api/*` 现已做 Host + Origin 完整白名单 + `Sec-Fetch-Site` 拦截（`webApiServer.test.ts` 覆盖跨站 / DNS-rebinding / 空端口）。
+   **W-10 dompurify**：**判定不需要** —— 残留 `dangerouslySetInnerHTML` 仅搜索摘要，由 `buildSnippet` 全量转义、只输出 `<mark>`（`snippet.test.ts` 覆盖 script/&/引号/img-onerror）；全仓无 eval / 其它未转义注入面。加依赖属过度设计（AGENTS #17）。
 
 **P1 机制 / 体验**
 2. `library-changed` 广播（外部改动 / AI 写入自动刷新目录）。**触发条件**：AI 写入路径或浏览器端写功能落地；届时与 §3.10 的 SSE 一起做。

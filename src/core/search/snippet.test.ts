@@ -11,6 +11,11 @@ describe("buildSnippet", () => {
     expect(s).toContain("&lt;script&gt;");
     expect(s).toContain("<mark>编辑器</mark>");
   });
+  it("img/onerror 被转义成文本（W-10 护栏）", () => {
+    const s = buildSnippet("<img src=x onerror=alert(1)> 编辑器", "编辑器");
+    expect(s).not.toContain("<img");
+    expect(s).toContain("&lt;img");
+  });
   it("& 转义", () => {
     expect(buildSnippet("A&B 编辑器", "编辑器")).toContain("A&amp;B");
   });

@@ -71,7 +71,7 @@
    - 待定：模型/服务与 endpoint、API Key 存放（**建议 Electron 主进程代理**，勿用 `VITE_`）、设置项、移动端网络。
 2. **离线残余（均「外观级」，非功能）**——详见 `docs/OFFLINE-ASSETS-AUDIT-260916.md`：① `__puml` 预设缩略图 8 张（`cdn.nlark.com` / `lark-assets-prod…`）仍外链；② `mass-office.alipay.com` 的内核内联 AI 图标；③ 思维导图 KaTeX CSS（@xiangfa 注入 jsdelivr，待运行时确认）。（PlantUML ✅ 已解决。）
 3. **移动端剩余批次**：B7/B8 + 真机复验缺口 —— 明细见 **§8**。
-4. **产品/技术债（长期）**：W-8 ACAO / W-10 dompurify（**安全，建议优先**）；大纲 viewer 只读点击不跳转；回收站首拉成本（惰性下载暂缓，动恢复红线）；Word/PDF 导出 + 附件大文件 S3 分片；`docs/LAKEX-CONTRACT.md` §4 的 `lakex-contract.d.ts` 落地。CSS 层级冗余见 §3.9（260917 已收口）。
+4. **产品/技术债（长期）**：~~W-8 ACAO / W-10 dompurify~~ ✅ **已结案（260926）** —— ① **W-8 已修**：`electron/webApiServer` 对 `/api/*` 与 `/__native.js` 做 **Host + Origin 完整白名单**（不放行空端口）+ `Sec-Fetch-Site` 拦截，`webApiServer.test.ts` 覆盖跨站 Origin→403 / DNS-rebinding Host→403 / 空端口 Origin→403；② **W-10 不需要 dompurify（据实否决加依赖）**：残留 `dangerouslySetInnerHTML` 只有搜索摘要（`SearchPanel` / 移动 `SearchSheet`），由 `src/core/search/snippet.ts` 的 `buildSnippet` **全量 HTML 转义**、只输出 `<mark>`；`snippet.test.ts` 覆盖 script/&/引号/img-onerror；全仓无 `eval`/`new Function`，另一处 `innerHTML` 是 `lakeRuntime` 自己的静态图标串 ⇒ 加依赖命中 AGENTS #17。以下仍待办：大纲 viewer 只读点击不跳转；回收站首拉成本（惰性下载暂缓，动恢复红线）；Word/PDF 导出 + 附件大文件 S3 分片；`docs/LAKEX-CONTRACT.md` §4 的 `lakex-contract.d.ts` 落地。CSS 层级冗余见 §3.9（260917 已收口）。
 5. **非代码**：安卓同步偶发 `UnknownHostException` = 设备网络（联网重试）。
 6. **小记（Quick Notes）设计取舍 —— 是否直接挂 Lake 内核底座**（用户 260917 提出）：**260919 已定稿并落地 =「挂」**。小记正文升 v2（内核形态 `body`，`docs/QUICK-NOTE-LAKE-BODY-260919.md`），写作区**编辑时挂一个**内核实例（`src/features/quickNotes/QuickNoteEditor.tsx`），转换退化为「搬运 + 资源作用域改写」。**260919 晚又续做 note 版式对齐云端**（工具条「图片/待办」+ 展开成完整编辑器，内核机制见 `docs/LAKEX-CONTRACT.md` §5.11）。剩余：真机点验 + 上一条的 7~9 潜在缺陷 + `QUICK-NOTES-SPEC.md` 文档过期。
 7. **Lake 正文写入收口**（约定见 `docs/LAKE-CONTENT-WRITING.md`）：① 自动化程序（不在仓库）**直接写库 + 手写裸 `<img>`**，导致 287 篇测试文档一被打开就被内核重写（图片降级成失败卡片 + 变待同步 → 随下次同步上传）→ **必须改成走应用写入路径，或只写纯文本**；② 仓库内 4 处手拼写入者**已收口**到 `src/core/lakeDocForm.ts`，并加了"绝不产出裸 `<img>`"的单测围栏；③ 旧数据按 §3 原则 7 **不写归一化兼容**，用修好的姿势重建（见第 8 条）。
@@ -129,7 +129,7 @@
     移动端小记目前是纯文本输入 + 合成 lake 段落/图片卡（`src/mobile/quickNotesRepository.ts`）；
     用户要求后期**复用同一套能力**（同一份白名单 + 同一个预览读取器 `quickNotePreviewParser.ts`），
     工具栏形态可按移动端（`EditorDock`）调整。做之前先读 §2.10 续做 + `docs/LAKEX-CONTRACT.md` §5.11。
-17. **【UI 重构收尾 · 待办清单】** —— 方案见 **`docs/UI-REDESIGN-OPTIMIZATION-PLAN-260923.md`**（行为不变的优化 + 与安卓重做的排期）；评价见 `docs/UI-REDESIGN-REVIEW-260923.md` **§四**：P0 安全（`W-10 dompurify` + `webApiServer` 的 `/api/*` Origin）· P1（`library-changed` 广播 / 目录树窗口化 / 面板契约可执行化 / 分段控件与设置说明字号的共享层 `!important` 阻塞）· P2（设计词表裁剪 / 历史文档标注 / 画板 `Wt is not a function` 立项）· P3 见本 §3 其余条目。
+17. **【UI 重构收尾 · 待办清单】** —— 方案见 **`docs/UI-REDESIGN-OPTIMIZATION-PLAN-260923.md`**（行为不变的优化 + 与安卓重做的排期）；评价见 `docs/UI-REDESIGN-REVIEW-260923.md` **§四**：P0 安全 ✅ **已结案**（W-10 不需 dompurify / W-8 已修，见本 §3 第 4 条）· P1（`library-changed` 广播 / 目录树窗口化 / 面板契约可执行化 / 分段控件与设置说明字号的共享层 `!important` 阻塞）· P2（设计词表裁剪 / 历史文档标注 / 画板 `Wt is not a function` 立项）· P3 见本 §3 其余条目。
 18. **【浮动工具栏颜色 · 「最近使用自定义颜色」】**（260924 记录，用户：先记着后续处理）：内核调色板的「最近使用」**只记自定义色**——`updateUserColor` 只在「更多颜色」RGBA 选择器关闭（`saveColor`）时触发，**预设色块 `onSelect` 不写**；持久化在 `localStorage['ne_lakex_user_color_local_store_key']`（≤10，末尾最新），经 `editor.getUserColors()` / `editor.updateUserColor(c)` 读写。我们的浮动颜色面板「最近使用」目前是**占位**（`LakeColorBoard` 写死「暂无」）。要真做需先定：是否也记预设色块（会偏离内核语义）、面板改读 `editor.getUserColors()`、点最近色如何应用（`color`/`bgColor`）。**当前不动**。
 
 ### 当前问题 / 已知坑（不阻塞）

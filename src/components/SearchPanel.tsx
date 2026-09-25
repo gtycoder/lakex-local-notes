@@ -123,6 +123,7 @@ export function SearchPanel({ open, initialQuery, onOpenNote, onClose }: {
               <span className="b3-list-item__graphic"><File size={14} /></span>
               <span className="b3-list-item__text ln-row2__main">
                 <span className="ln-row2__title">{result.title || "无标题"}</span>
+                {/* snippet 由 buildSnippet 全量 HTML 转义、只含 <mark>（W-10：不需要 dompurify，见 snippet.test.ts） */}
                 {result.snippet && <span className="search-snippet" dangerouslySetInnerHTML={{ __html: result.snippet }} />}
                 <span className="ln-row2__meta">{result.parentTitle || "个人笔记"}{formatUpdatedAt(result.updatedAt) ? ` · ${formatUpdatedAt(result.updatedAt)}` : ""}</span>
               </span>
