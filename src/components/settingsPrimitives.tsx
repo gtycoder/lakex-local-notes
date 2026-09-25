@@ -4,7 +4,7 @@
  * 定义已随 W2 删源收编到 src/styles/compat.css（骨架）与 src/styles/kit.css（规格），值走 --lake-*。
  * 从 SettingsPanel 抽出：桌面 SettingsPanel 与移动 SettingsDrawer 共用同一套版式原语。
  */
-import type { ChangeEvent, ReactNode } from "react";
+import type { ReactNode } from "react";
 
 export function Group({ title, icon, children }: { title: string; icon?: ReactNode; children: ReactNode }) {
   return (
@@ -39,17 +39,27 @@ export function Block({ itemId, name, desc, children }: { itemId?: string; name?
   );
 }
 
-/** 开关行（思源 .b3-switch）。 */
-export function Switch({ itemId, name, desc, checked, disabled, onChange }: { itemId?: string; name: string; desc?: string; checked: boolean; disabled?: boolean; onChange: (e: ChangeEvent<HTMLInputElement>) => void }) {
+/** 开关行（自有设计系统 COMPONENTS 09 / .ln-switch：button + role=switch + __knob）。 */
+export function Switch({ itemId, name, desc, checked, disabled, onChange }: { itemId?: string; name: string; desc?: string; checked: boolean; disabled?: boolean; onChange: (checked: boolean) => void }) {
   return (
-    <label className="b3-label config-item" data-set-id={itemId}>
+    <div className="b3-label config-item" data-set-id={itemId}>
       <div className="config-item__main">
         <div className="config-name">{name}</div>
         {desc && <div className="b3-label__text">{desc}</div>}
       </div>
       <span className="fn__space" />
-      <input className="b3-switch fn__flex-center" type="checkbox" checked={checked} disabled={disabled} onChange={onChange} />
-    </label>
+      <button
+        type="button"
+        role="switch"
+        aria-checked={checked}
+        aria-label={name}
+        disabled={disabled}
+        className="ln-switch fn__flex-center"
+        onClick={() => onChange(!checked)}
+      >
+        <span className="ln-switch__knob" />
+      </button>
+    </div>
   );
 }
 
