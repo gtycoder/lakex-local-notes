@@ -6,6 +6,8 @@
 >
 > **260916 三端合并后对账（本分支的最新结论，覆盖本文旧判断）**：① 本文「唯一功能级缺口 PlantUML」**已由 lakex 迁移解决**（改本地 `@plantuml/core`，见 `docs/LAKEX-MIGRATION-260916.md` §4）；② `public/vendor/lakex-doc` 139 个死文件**已删除**（留 `kitchen-iconfont.js`，4.0MB→316K）；③ `public/vendor/cdn` 的 32 个**保留**——`electron/cdnRedirect.ts` 用「镜像里是否存在该文件」作为 gw 请求的运行时兜底白名单，删了会缩小离线覆盖；④ 内核已换成 `@dlient/lakex-doc-react` 源码（v1.99.0），本文第 0/5 节里的旧包名/旧 bundle 行号均已作废。
 
+> **260926 复核（本仓 HEAD 实测）**：本页 §2 的 **P2/P3 无法按「镜像」修复** —— `__puml` 8 张里 `cdn.nlark` 1 张 200、`lark-assets-prod` 7 张全 **404**（上游已删）；`mass-office.alipay.com` **不可达（内网）**。**P4**（jsdelivr KaTeX）内核 `style.css` 自带 KaTeX 0.16.8，且 `#katex-style` 短路可能让 `kn` 载入标志永不置位 ⇒ **不改**。要补 P2/P3 只能用**本地占位图**（产品决定），不是镜像。详见 HANDOFF §3.2。
+
 ## 0. 方法与证据来源
 
 - 内核 bundle：`vendor/npm/lakex-editor-react-component/dist/lakex-editor-react-component.es.js`（12.5MB / 33.8 万行），全量 URL 抽取 + 按 `//#region` 归类。
