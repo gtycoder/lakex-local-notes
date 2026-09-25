@@ -35,7 +35,7 @@
 5. **electron-builder 在弱网/受限网络下会以 `Timeout awaiting 'request' for 600000ms` 整批失败**（不是配置错、不是代码错）：`release/mac-arm64/…app` 根本不会产出，`test:packaged` 随之无法跑。先看 `~/Library/Caches/electron` 是否有缓存，再决定重试还是换网络。
 
 ### 五、当前状态 / 下一步
-- 分支 `feat/shell-layer`，两个提交：`3745f67`（`fix(tree)` 单节点回传保留 kind，可单独 cherry-pick 回 master）+ `d79c291`（本批 A）。**未合 master、未推送**，等用户验收。
+- **已合 master 并推送（260926，用户验收通过）**：`a611f3f..0770e5c` fast-forward，`master == origin/master == 0770e5c`，分支 `feat/shell-layer` 已删。共 4 个提交：`3745f67`（`fix(tree)` 图标 kind）· `d79c291`（A1/A2/A3/A5）· `0a44b11`（交接+长期记忆）· `0770e5c`（e2e 非 http(s) 豁免修正）。
 - **打包 smoke：✅ 已跑通**。首跑失败于 electron-builder 自身 `Timeout awaiting 'request' for 600000ms`（默认源在弱网下卡在收尾）；换镜像 `ELECTRON_MIRROR=https://registry.npmmirror.com/-/binary/electron/` 后 `npx electron-builder --dir --mac --arm64 --publish never` **exit 0**，产出 `release/mac-arm64/Lake Notes.app`（366M）。
   - **打包版 CDP 实测**（隔离 userData + 独立端口）：`location.href=lake://app/index.html`、`origin=lake://app`、preload 112 方法、IPC 往返正常（`listTreeNodes`→2）、`.app-shell` 渲染、编辑器 `init welcome-note 45ms`、日志无 error ⇒ **A1 的打包路径已闭环**。
   - `npm run test:packaged` **exit 0**；过程中它抓到一处**旧 origin 假设**：`scripts/e2e-drawnix-smoke.mjs` 里「非 http(s) 页面不记 module resource timing」的豁免写成了 `protocol !== "file:"`，A1 后打包版是 `lake:` 于是不再豁免而误报。改成 `/^https?:$/.test(protocol)`（dev/preview 仍严格，非 http(s) 由「画板已渲染」证明引擎已加载）。
@@ -1135,7 +1135,7 @@ node scripts/mobile-audit/check-mobile-snap.mjs --port 9335 [--write-baseline]
 
 
 ## 0. 当前基线（新会话开工前）
-- **分支**：`master` = `origin/master` = **`b62466a`**（260924 晚：浮动工具栏对齐固定栏 + 左缘把手修复 —— 见**本文件最上方 §0**）；`feat/floating-toolbar` 已合并并**删除**。现存其它分支：`backup/ui-theme-abc-handoff-260922`（纯备份）、`exp/kernel-ui-primitives`（spike，**待删**）、`feat/font-misans`（远端）。
+- **分支**：`master` = `origin/master` = **`0770e5c`**（260926：壳层 A 批次 —— 见**本文件最上方 §0**；本节以下内容为更早基线，只作历史参考）。现存其它分支：`backup/ui-theme-abc-handoff-260922`（纯备份）、`exp/kernel-ui-primitives`（spike，**待删**）、`feat/font-misans`（远端）。
 - **master 提交链（含 260924 两批）**：260924 浮栏 13 提交 → **`9bc3cae`（本批：浮栏对齐内核）→ `b62466a`（左缘把手修复 = 当前 tip）** ← `a2f70b1`（260923 续 · 桌面 UI 细节）← `d3bfc56`（UI 重设计末批 + 文档）→ `604913a`（§2.24 主题 A/B/C + 三空间 + minimap）→ `106d2c2`（浮层铺满 + 编辑区右移）→ `12e60eb`（增强大纲进编辑区 + 目录去缩略图/壳层满宽）→ `443b367`「左缘跟手把手 + 贴底浮卡 + 宽度 bug 修复」→ **`8e31fce`（260923：面板契约 + `⌘]` + 垂直几何令牌化收窄 + macOS 红绿灯对齐）**→ **`681997a`（260923 收尾审计：围栏基线收紧 / 死令牌清理 + 热区 10px + 块手柄贴正文 + 复盘文档）**（`git log --oneline -6` 看全）。
 - **👉 最新会话完整交接 = §2.28（新会话先读它）**。分项细节：§2.22（UI 重设计 P0–P8）· §2.23（视觉回修 14 提交）· §2.24（主题 A/B/C + 空间 + minimap）· §2.25（增强大纲进编辑区）· §2.26（目录去缩略图 + 壳层满宽 + 手柄边界）· §2.27（跟手把手 + 贴底浮卡 + 宽度 bug）。
 - **⚠️ 用户定稿（冻结项，别再改/别再提）**：见 **§2.27 六** —— ① 悬浮/触发条逻辑冻结（隐形 10px 热区 + 跟手把手 + 驻留 240ms + 贴左缘 + 底缝 12px、顶贴面包屑下缘）；② **固定目录栏自成一个区域**（继续用栅格列，**不搬进编辑区**）；③ **SidePanel 组件原语决定不做**（两侧几何/推挤策略刻意不同；理由在该节）。
