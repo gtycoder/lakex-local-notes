@@ -75,6 +75,9 @@
 .ln-dialog__resize { color: var(--lake-text-4); }
 .ln-dialog__resize:hover { color: var(--lake-text-2); }
 
+/* 原语菜单/气泡的定位与层序（不依赖具体表面类，custom surfaceClassName 也不掉层） */
+.ln-overlay-surface { position: fixed; z-index: var(--lake-z-overlay-menu); }
+
 /* ── 菜单 / 气泡表面（单一来源）：容器从 kit.css 移入本层，item 样式仍在 kit.css ── */
 .ln-menu {
   position: fixed;
@@ -125,7 +128,10 @@
 .create-menu,
 .tab-switcher-menu,
 .sync-status-popover,
-.emoji-picker {
+.emoji-picker,
+.ln-menu,
+.ln-popover {
+  z-index: var(--lake-z-overlay-menu);
   border: 1px solid var(--lake-border-1);
   border-radius: var(--lake-radius-md);
   background: var(--lake-bg-panel);
@@ -144,7 +150,6 @@
   position: fixed;
   top: 0;
   left: 0;
-  z-index: 1000;
   display: flex;
   flex-direction: column;
   min-width: 170px;

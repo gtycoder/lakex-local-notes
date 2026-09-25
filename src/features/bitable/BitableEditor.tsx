@@ -11,7 +11,7 @@
  * - 附件字段存 filename，走现有 assets/{noteId}/{filename} 资产管线（与文档/小记同一套）。
  */
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent, type PointerEvent as ReactPointerEvent } from "react";
-import { createPortal } from "react-dom";
+import { Menu } from "../../components/ui/Overlay";
 import {
   ArrowUpDown, Check, ChevronDown, ChevronLeft, ChevronRight, ChevronsRight, ClipboardList, Copy, Eye, EyeOff, GripVertical, ListFilter,
   MoreHorizontal, Pencil, Plus, Rows2, Rows3, Rows4, Search, Settings2, Table2, Trash2, X,
@@ -891,10 +891,8 @@ export function BitableEditor({ noteId, content, visible, readOnly, onChange }: 
         </div>
       )}
 
-      {rowCtx && createPortal(
-        <>
-          <div className="bt-menu-backdrop" onMouseDown={() => setRowCtx(null)} />
-          <div className="bt-row-menu" role="menu" style={{ position: "fixed", left: Math.min(rowCtx.x, window.innerWidth - 160), top: Math.min(rowCtx.y, window.innerHeight - 90), zIndex: 1300 }}>
+      {rowCtx && (
+        <Menu surfaceClassName="bt-row-menu" onDismiss={() => setRowCtx(null)} style={{ left: Math.min(rowCtx.x, window.innerWidth - 160), top: Math.min(rowCtx.y, window.innerHeight - 90) }}>
             <button type="button" role="menuitem" className="bt-menu-item" disabled={!cellRange}
               onClick={() => { void copySelection(); setRowCtx(null); }}><Copy size={13} />复制</button>
             <button type="button" role="menuitem" className="bt-menu-item" disabled={readOnly || !cellRange}
@@ -904,9 +902,7 @@ export function BitableEditor({ noteId, content, visible, readOnly, onChange }: 
               onClick={() => { deleteRecords(selectedRecordIds.has(rowCtx.recordId) ? [...selectedRecordIds] : [rowCtx.recordId]); setRowCtx(null); }}>
               <Trash2 size={13} />删除记录
             </button>
-          </div>
-        </>,
-        document.body,
+        </Menu>
       )}
 
       <ImageLightbox />

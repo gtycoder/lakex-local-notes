@@ -20,7 +20,8 @@ const FOCUSABLE =
   'a[href],button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])';
 
 interface OverlayProps {
-  open: boolean;
+  /** 缺省 true：条件渲染的调用方（menu/popover）可省略；dialog 一般显式传。 */
+  open?: boolean;
   kind: OverlayKind;
   /** 外点 / Esc / 遮罩的统一关闭回调 */
   onDismiss: () => void;
@@ -41,7 +42,7 @@ interface OverlayProps {
   children: ReactNode;
 }
 
-export function Overlay({ open, kind, onDismiss, label, className, style, surfaceClassName, scrimClassName, surfaceRef, initialFocus, children }: OverlayProps) {
+export function Overlay({ open = true, kind, onDismiss, label, className, style, surfaceClassName, scrimClassName, surfaceRef, initialFocus, children }: OverlayProps) {
   const innerRef = useRef<HTMLElement | null>(null);
   const restoreFocusRef = useRef<HTMLElement | null>(null);
   // 把外部 ref（可拖拽面板）与内部 ref 都挂到同一个表面元素上
@@ -142,7 +143,8 @@ export function Overlay({ open, kind, onDismiss, label, className, style, surfac
   return createPortal(
     <div
       ref={setSurface}
-      className={surfaceClass + (className ? " " + className : "")}
+      className={"ln-overlay-surface " + surfaceClass + (className ? " " + className : "")}
+      data-context-menu
       role={kind === "menu" ? "menu" : "dialog"}
       aria-label={label}
       style={style}

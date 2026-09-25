@@ -1,6 +1,6 @@
 import { Component, Suspense, lazy, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ErrorInfo, type ReactNode, type PointerEvent as ReactPointerEvent } from "react";
 import { ChevronDown, ChevronsLeft, ChevronsRight, File, Pin, TriangleAlert, X, XCircle, XSquare } from "lucide-react";
-import { createPortal } from "react-dom";
+import { Menu } from "../../components/ui/Overlay";
 import { EditorTab } from "./EditorTab";
 
 /** 表格编辑器（FortuneSheet，~0.6MiB gzip）按需加载：只在真的打开表格文档时才进首屏之外的分包。 */
@@ -378,8 +378,8 @@ export function MultiTabEditor({
               <ChevronDown size={15} />
               {tabMenuAnchor}
             </button>
-            {tabMenuOpen && createPortal(
-              <div ref={tabMenuRef} className="tab-switcher-menu" role="menu" aria-label="打开的标签" style={tabMenuStyle}>
+            {tabMenuOpen && (
+              <Menu surfaceClassName="tab-switcher-menu" label="打开的标签" onDismiss={() => setTabMenuOpen(false)} surfaceRef={tabMenuRef} style={tabMenuStyle}>
                 <div className="tab-switcher-resize" onPointerDown={startTabMenuResize} title="拖动调整宽度" />
                 <div className="tab-switcher-heading">
                   <strong>打开的标签</strong>
@@ -413,8 +413,7 @@ export function MultiTabEditor({
                     </div>
                   ))}
                 </div>
-              </div>,
-              document.body
+              </Menu>
             )}
           </div>
         )}
@@ -573,8 +572,8 @@ interface TabContextMenuProps {
 const TabContextMenu = ({ x, y, pinned, onTogglePin, onCloseTab, onCloseOthers, onCloseLeft, onCloseRight, onCloseAll, canCloseOthers, hasLeft, hasRight, onClose }: TabContextMenuProps) => {
   const left = Math.min(x, window.innerWidth - 210);
   const top = Math.min(y, window.innerHeight - 280);
-  return createPortal(
-    <div className="context-menu" style={{ left, top }} role="menu" data-context-menu>
+  return (
+    <Menu surfaceClassName="context-menu" onDismiss={onClose} style={{ left, top }}>
       <button role="menuitem" onClick={() => { onCloseTab(); onClose(); }}><X size={15} /><span>关闭</span></button>
       {canCloseOthers && <button role="menuitem" onClick={() => { onCloseOthers(); onClose(); }}><XCircle size={15} /><span>关闭其他</span></button>}
       {canCloseOthers && <button role="menuitem" onClick={() => { onCloseAll(); onClose(); }}><XSquare size={15} /><span>关闭全部</span></button>}
@@ -582,7 +581,6 @@ const TabContextMenu = ({ x, y, pinned, onTogglePin, onCloseTab, onCloseOthers, 
       {hasRight && <button role="menuitem" onClick={() => { onCloseRight(); onClose(); }}><ChevronsRight size={15} /><span>关闭右侧</span></button>}
       <div className="context-menu-sep" />
       <button role="menuitem" onClick={() => { onTogglePin(); onClose(); }}><Pin size={15} /><span>{pinned ? "取消钉住" : "钉住"}</span></button>
-    </div>,
-    document.body
+    </Menu>
   );
 };

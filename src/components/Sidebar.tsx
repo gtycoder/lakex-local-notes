@@ -11,7 +11,7 @@ import { Database, PenTool, Table } from "lucide-react";
 import { getCreateMenuPosition, type CreateMenuPosition } from "./createMenuPosition";
 import { ExportSubmenuItem } from "./ExportSubmenuItem";
 import { SIDEBAR_DEFAULT_WIDTH } from "../desktop/desktopTypes";
-import { Dialog } from "./ui/Overlay";
+import { Dialog, Menu } from "./ui/Overlay";
 
 type CreateKind = "notebook" | "group" | "note" | "sheet" | "bitable" | "board";
 type DropPosition = "before" | "inside" | "after";
@@ -661,10 +661,13 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
             if (menuOpen) setMenuOpen(false);
             else { updateCreateMenuPosition(); setMenuOpen(true); }
           }} title="新建" aria-label="新建" aria-pressed={menuOpen}><Plus size={14} /></button>
-          {menuOpen && createMenuPosition && createPortal(<div ref={createMenuRef} className="create-menu" style={{ position: "fixed", top: createMenuPosition.top, left: createMenuPosition.left, width: createMenuPosition.width, zIndex: 1000 }}>
-            {/* 「+」只保留新建笔记本（user 260918）：文档/分组的创建走选中节点后的右键「新建文档/新建分组」。 */}
-            <button onClick={() => create("notebook")}><Book size={16} /><span><strong>新建笔记本</strong></span></button>
-          </div>, document.body)}
+          {menuOpen && createMenuPosition && (
+            <Menu surfaceClassName="create-menu" onDismiss={() => setMenuOpen(false)} surfaceRef={createMenuRef}
+              style={{ position: "fixed", top: createMenuPosition.top, left: createMenuPosition.left, width: createMenuPosition.width }}>
+              {/* 「+」只保留新建笔记本（user 260918）：文档/分组的创建走选中节点后的右键「新建文档/新建分组」。 */}
+              <button onClick={() => create("notebook")}><Book size={16} /><span><strong>新建笔记本</strong></span></button>
+            </Menu>
+          )}
         </div>
       </div>
       </div>
@@ -860,8 +863,8 @@ const ContextMenu = ({ node, x, y, onNewChild, onRename, onDelete, onCopyMarkdow
   }, [x, y]);
   // Portal 到 body：侧边栏带 transform（含 translateX(0)）时，position: fixed 会退化为
   // 相对侧边栏定位，导致菜单偏离光标右下；挂到 body 后恢复真正的视口固定定位。
-  return createPortal(
-    <div ref={menuRef} className="context-menu" style={pos ? { left: pos.left, top: pos.top } : { left: x, top: y, visibility: "hidden" }} role="menu" data-context-menu>
+  return (
+    <Menu surfaceClassName="context-menu" onDismiss={onClose} surfaceRef={menuRef} style={pos ? { left: pos.left, top: pos.top } : { left: x, top: y, visibility: "hidden" }}>
       <button role="menuitem" onClick={() => { onNewChild("note"); onClose(); }}><FilePlus size={15} /><span>新建文档</span></button>
       <button role="menuitem" onClick={() => { onNewChild("sheet"); onClose(); }}><Table size={15} /><span>新建表格</span></button>
       <button role="menuitem" onClick={() => { onNewChild("bitable"); onClose(); }}><Database size={15} /><span>新建数据表</span></button>
@@ -885,8 +888,7 @@ const ContextMenu = ({ node, x, y, onNewChild, onRename, onDelete, onCopyMarkdow
       )}
       <div className="context-menu-sep" />
       <button role="menuitem" className="danger" onClick={() => { onDelete(); onClose(); }}><Trash size={15} /><span>删除</span></button>
-    </div>,
-    document.body
+    </Menu>
   );
 };
 

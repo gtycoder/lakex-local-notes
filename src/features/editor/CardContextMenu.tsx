@@ -3,9 +3,9 @@
  * 顺序理念与文档右键一致：编辑动作（剪切/复制）→ 打开 → 文件位置 → 导出（另存为）。
  * 复制类动作合并进「复制 ▸」子菜单；动作由调用方注入，组件只负责排版与关闭。
  */
-import { useEffect, useRef, useState } from "react";
-import { createPortal } from "react-dom";
+import { useState } from "react";
 import { ClipboardPaste, ChevronRight, Copy, Download, ExternalLink, FolderOpen, Pencil, Scissors, BoxSelect } from "lucide-react";
+import { Menu } from "../../components/ui/Overlay";
 import type { AttachmentPreviewItem } from "../attachment/attachmentPreviewController";
 
 export interface CardMenuActions {
@@ -41,28 +41,11 @@ export function cutCardElement(el: HTMLElement): void {
   try { document.execCommand("cut"); } catch { /* 忽略 */ }
 }
 
-function useDismiss(ref: React.RefObject<HTMLElement | null>, onClose: () => void): void {
-  useEffect(() => {
-    const onPointerDown = (event: PointerEvent) => {
-      if (ref.current && !ref.current.contains(event.target as Node)) onClose();
-    };
-    const onKeyDown = (event: KeyboardEvent) => { if (event.key === "Escape") onClose(); };
-    document.addEventListener("pointerdown", onPointerDown);
-    document.addEventListener("keydown", onKeyDown);
-    return () => {
-      document.removeEventListener("pointerdown", onPointerDown);
-      document.removeEventListener("keydown", onKeyDown);
-    };
-  }, [ref, onClose]);
-}
-
 /** 卡片菜单：剪切 / 复制 ▸ / 使用默认程序打开 / 打开文件位置 / 另存为… */
 export function CardContextMenu({ x, y, item, actions, onClose }: {
   x: number; y: number; item: AttachmentPreviewItem; actions: CardMenuActions; onClose: () => void;
 }) {
-  const menuRef = useRef<HTMLDivElement>(null);
   const [copyOpen, setCopyOpen] = useState(false);
-  useDismiss(menuRef, onClose);
   const ref = item.ref;
   const left = Math.min(x, window.innerWidth - MENU_MAX_W);
   const top = Math.min(y, window.innerHeight - 260);
@@ -74,8 +57,8 @@ export function CardContextMenu({ x, y, item, actions, onClose }: {
   if (ref && actions.copyPath) copyItems.push(["复制文件路径", actions.copyPath]);
   if (actions.copyName) copyItems.push(["复制文件名", actions.copyName]);
 
-  return createPortal(
-    <div ref={menuRef} className="context-menu" style={{ left, top }} role="menu" data-context-menu>
+  return (
+    <Menu surfaceClassName="context-menu" onDismiss={onClose} style={{ left, top }}>
       {actions.cut && (
         <button role="menuitem" onClick={() => run(actions.cut)}><Scissors size={15} /><span>剪切</span></button>
       )}
@@ -111,15 +94,12 @@ export function CardContextMenu({ x, y, item, actions, onClose }: {
       {ref && actions.saveAs && (
         <button role="menuitem" onClick={() => run(actions.saveAs)}><Download size={15} /><span>另存为…</span></button>
       )}
-    </div>,
-    document.body
+    </Menu>
   );
 }
 
 /** 文本（正文）菜单：基础编辑动作（execCommand / clipboard）。 */
 export function TextContextMenu({ x, y, onClose }: { x: number; y: number; onClose: () => void }) {
-  const menuRef = useRef<HTMLDivElement>(null);
-  useDismiss(menuRef, onClose);
   const run = (cmd: string): void => {
     try { document.execCommand(cmd); } catch { /* 忽略 */ }
     onClose();
@@ -130,13 +110,12 @@ export function TextContextMenu({ x, y, onClose }: { x: number; y: number; onClo
       .catch(() => undefined)
       .finally(onClose);
   };
-  return createPortal(
-    <div ref={menuRef} className="context-menu" style={{ left: Math.min(x, window.innerWidth - MENU_MAX_W), top: Math.min(y, window.innerHeight - 200) }} role="menu" data-context-menu>
+  return (
+    <Menu surfaceClassName="context-menu" onDismiss={onClose} style={{ left: Math.min(x, window.innerWidth - MENU_MAX_W), top: Math.min(y, window.innerHeight - 200) }}>
       <button role="menuitem" onClick={() => run("copy")}><Copy size={15} /><span>复制</span></button>
       <button role="menuitem" onClick={() => run("cut")}><Scissors size={15} /><span>剪切</span></button>
       <button role="menuitem" onClick={paste}><ClipboardPaste size={15} /><span>粘贴</span></button>
       <button role="menuitem" onClick={() => run("selectAll")}><BoxSelect size={15} /><span>全选</span></button>
-    </div>,
-    document.body
+    </Menu>
   );
 }

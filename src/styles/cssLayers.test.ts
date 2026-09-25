@@ -45,7 +45,7 @@ const BASELINE: Record<string, { decls: number; dupGroups: number }> = {
   "styles/feature.css": { decls: 104, dupGroups: 0 },  // 视觉优化 + 内核编辑器主题桥（lakex 跟随深色/暖色：含 .ne-ui-toolbar）；260923 收敛：-19 = 大纲侧栏的 .outline-* 覆盖并回 features/outline/outline.css 单一来源；260926：+2 = 修内核图标选择器（.ne-icon-symbol→.ne-icon）+ 直接覆盖工具条文字/原生大纲底色（内核浅色 schema 以未分层 <style> 注入、压过变量桥）；合法新增非覆盖回涨
   "styles/kit.css": { decls: 558, dupGroups: 0 },     // P4 组件库 + P5-g 面板件 + P5-h 控件 + P5-i 开关（实测）；260926：+8 = 补回 .b3-switch::after 被删源漏掉的滑块基线（content/position/top/transform/圆角等，合法新增：原先根本没有，非覆盖回涨）
   "styles/chrome.css": { decls: 502, dupGroups: 0 },  // P5 外壳 + S1+A + 整边缩略图槽；260922：+21 = 左缘「跟手把手」（隐形热区里浮出、Y 跟手、点击固定；热区 39→8 与去缩略图同批）；+10 = 目录「悬浮」改半幅浮卡（固定高度、顶贴面包屑下缘、四角圆角）——合法新增
-  "styles/overlay.css": { decls: 143, dupGroups: 0 },  // P5-c 浮层 + P5-j 搜索 + P7-b .top-menu 定位 + 菜单项布局三件套；260926 Phase 1a：+47 = 浮层原语统一——.ln-scrim 基座、.ln-dialog 布局/表面单一来源（并自 dialog.css 收编）、.ln-dialog__actions、.ln-menu/.ln-popover 表面（自 kit.css 收编）；合法新增/归并，非覆盖回涨
+  "styles/overlay.css": { decls: 145, dupGroups: 0 },  // P5-c 浮层 + P5-j 搜索 + P7-b .top-menu 定位 + 菜单项布局三件套；260926 Phase 1a：+47 = 浮层原语统一——.ln-scrim 基座、.ln-dialog 布局/表面单一来源（并自 dialog.css 收编）、.ln-dialog__actions、.ln-menu/.ln-popover 表面（自 kit.css 收编）；合法新增/归并，非覆盖回涨
   "styles/compat.css": { decls: 209, dupGroups: 0 },  // 260923：-4 = .tab-item 盒收编到 app/tabs.css；260926：+4 = 补上 .config-block__actions 布局（该 JSX 类此前无任何定义，合法新增非覆盖回涨）
   "styles/a11y.css": { decls: 9, dupGroups: 0 },   // P7-e：无障碍最高层（reduced-motion 契约；靠层序而非 !important 取胜）
   "features/attachment/attachment-preview.css": { decls: 78, dupGroups: 0 },
