@@ -195,12 +195,20 @@ pre {
   background: var(--lake-bg-canvas);
   color: var(--lake-text-1);
 }
-/* 深色/暖色下内核工具条图标：sprite（<use>）默认 fill 是黑，深色底上等于隐形。
- * 用 currentColor 让它们跟随 .ne-ui 的文字色（若 sprite 内部写死了 fill 则无效，届时另议）。 */
-[data-theme="dark"] .ne-ui svg.ne-icon-symbol,
-[data-theme="warm"] .ne-ui svg.ne-icon-symbol,
-[data-theme="dark"] .ne-ui svg.ne-icon-symbol use,
-[data-theme="warm"] .ne-ui svg.ne-icon-symbol use { fill: currentColor; color: inherit; }
+/* 深色/暖色下内核图标：sprite（<use>）默认 fill 是黑，深色底上等于隐形。
+ * 目标类实为 .ne-icon（不是 .ne-icon-symbol）——原选择器写错，规则从未命中（260926 实测修正）。 */
+[data-theme="dark"] .ne-ui .ne-icon,
+[data-theme="warm"] .ne-ui .ne-icon { color: var(--lake-text-2); }
+[data-theme="dark"] .ne-ui .ne-icon use,
+[data-theme="warm"] .ne-ui .ne-icon use,
+[data-theme="dark"] .ne-ui .ne-icon path,
+[data-theme="warm"] .ne-ui .ne-icon path { fill: currentColor; }
+/* 内核工具条文字/按钮：内核把浅色 schema 的变量以**未分层 <style>** 注入（见下），压过本层
+ * 变量桥 ⇒ 这里直接覆盖消费属性（layer 序压过 vendor legacy，无需 !important）。 */
+[data-theme="dark"] .ne-ui-toolbar .ne-toolbar-widget,
+[data-theme="warm"] .ne-ui-toolbar .ne-toolbar-widget,
+[data-theme="dark"] .ne-ui-toolbar .ant-btn,
+[data-theme="warm"] .ne-ui-toolbar .ant-btn { color: var(--lake-text-1); }
 /* 内核另一处写死白底：.ne-ui-toolbar（小记/文档编辑器共用的工具条），以及文档内的图片占位块。
  * 与上面的 .ne-ui 同一处修复（同一个桥，单一来源）。 */
 [data-theme="dark"] .ne-ui-toolbar,
@@ -208,6 +216,18 @@ pre {
   background: var(--lake-bg-canvas);
   color: var(--lake-text-1);
 }
+/* 原生大纲（编辑态 .ne-toc-sidebar / 锁定阅读态 .ne-viewer-toc-sidebar）底色来自
+ * var(--lakex-editor-background-primary)：内核把它作为**未分层** <style> 注入
+ * （实测 .lakex-default-theme{--lakex-editor-background-primary:#fff}），未分层 > 任何 @layer，
+ * 所以本层变量桥压不过 ⇒ 直接覆盖 background（layer 压过 vendor legacy）。 */
+[data-theme="dark"] .ne-toc-sidebar,
+[data-theme="dark"] .ne-toc-sidebar .ne-toc-view,
+[data-theme="dark"] .ne-viewer-toc-sidebar,
+[data-theme="dark"] .ne-viewer-toc-sidebar .ne-toc-view,
+[data-theme="warm"] .ne-toc-sidebar,
+[data-theme="warm"] .ne-toc-sidebar .ne-toc-view,
+[data-theme="warm"] .ne-viewer-toc-sidebar,
+[data-theme="warm"] .ne-viewer-toc-sidebar .ne-toc-view { background: var(--lake-bg-panel); }
 [data-theme="dark"] .ne-image-error,
 [data-theme="dark"] .ne-mock-image {
   background: var(--lake-bg-block);

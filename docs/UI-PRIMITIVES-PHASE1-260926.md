@@ -168,6 +168,7 @@ Phase 0 修的是**症状**；本设计解决「症状会不断长出来」的**
 - **原生大纲在深色下是白底**：vendor `.ne-toc-sidebar { background: var(--lakex-editor-background-primary) }`（`lakex-doc.css:11060`）、阅读态 `.ne-viewer-toc-sidebar`（:23321）。内核**官方**深色机制 = `LakexEditor.tsx:210` 按 `props.dark` 给根加 `lakex-default-theme` / `lakex-dark-theme`；我们走 `Doc.createOpenEditor`（`lakeRuntime.ts`），**这个类不会被加**。现有桥（`feature.css:134`）只覆盖 `.lake-editor-mount` / `.lakex-default-theme`，且未覆盖大纲面板。
   **修法**：(A) 按 `data-theme` 给编辑器根加内核主题类（官方机制；顺带点亮 vendor `.lakex-dark-theme-dark` 段的 antd 弹层 / 日期选择器 / 卡片）；(B) 对 `.ne-toc-sidebar / .ne-viewer-toc-sidebar` 补显式表面（我们的令牌，feature 层压 vendor legacy，无需 !important）。
 - **固定工具栏看不清**：vendor `.ne-ui-toolbar { color: var(--lakex-editor-text-body) }`，widget / `.ant-btn` 同，图标 `--lakex-editor-icon-primary`。我们的桥已把这些映射到 `--lake-text-1/2`。仍偏暗的两种可能：① antd `.ant-btn` 自带颜色（需内核主题类）；② 该文档按钮确实 disabled（`feature.css:215` 记过此坑）。→ Phase 1a 用 CDP 量前景/背景对比度后定，**不盲加覆盖**。
+  ✅ **已落地（260926）**：采用 (B)——`feature.css` 直接覆盖 `.ne-icon`（修正原 `.ne-icon-symbol` 选择器写错）、`.ne-ui-toolbar` 内文字/按钮色、以及 `.ne-toc-sidebar / .ne-viewer-toc-sidebar` 底色。CDP 实测：dark 大纲底 `rgb(37,38,43)`、图标 `use fill rgb(168,169,173)`、工具条文字 `rgb(227,228,230)`；warm/light 正常。
 - 边界：这两处属 AGENTS §3 #14 的"内核例外"，允许写在 feature 层，但必须写明理由。
 
 ### 3.7 悬停气泡（Tooltip）的定位与取舍
