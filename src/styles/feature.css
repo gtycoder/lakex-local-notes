@@ -124,62 +124,11 @@ pre {
   overflow: hidden;
 }
 
-/* ── 内核（lakex）编辑器跟随 App 主题（补 P7-b 漏搬的 b3/dark.css 桥）────────────
- * 原 `src/b3/dark.css` 用 ~40 个 `--lakex-editor-*` 变量把正文纸面/工具条/代码块/边框
- * 从内核默认的「纯白亮色」切到深色；P7-b 把 `src/b3/*` 移出桌面入口时**漏搬了这一块**，
- * 后果：**深色主题下正文区仍是纯白 `#fff`**（像素实测 `.ne-editor-wrap-box` = rgb(255,255,255)）。
- * 这里改写成走我们的令牌，并**同时覆盖暖色主题**（原来只有深色有桥）。
- * 放在 feature 层（高于内核所在的 legacy 层）⇒ 不需要 !important。
- * 浅色不写：内核默认就是浅色且与 --lake-bg-canvas 一致。 */
-[data-theme="dark"] .lake-editor-mount,
-[data-theme="dark"] .lakex-default-theme,
-[data-theme="warm"] .lake-editor-mount,
-[data-theme="warm"] .lakex-default-theme {
-  --lakex-editor-background: var(--lake-bg-canvas);
-  --lakex-editor-background-primary: var(--lake-bg-block);
-  --lakex-editor-background-foreground: var(--lake-bg-block);
-  --lakex-editor-background-secondary: var(--lake-bg-block);
-  --lakex-editor-background-tertiary: var(--lake-bg-block);
-  --lakex-editor-background-focus: var(--lake-bg-block);
-  --lakex-editor-background-primary-hover: var(--lake-bg-hover);
-  --lakex-editor-background-primary-hover-light: var(--lake-bg-hover);
-  --lakex-editor-border-light: var(--lake-border-2);
-  --lakex-editor-border-primary: var(--lake-border-strong);
-  --lakex-editor-border-secondary: var(--lake-border-2);
-  --lakex-editor-card-background-hover: var(--lake-bg-block);
-  --lakex-editor-card-border-hover: var(--lake-border-strong);
-  --lakex-editor-card-border-selected: var(--lake-accent);
-  --lakex-editor-code-background: var(--lake-bg-block);
-  --lakex-editor-column-background-highlight: var(--lake-bg-hover);
-  --lakex-editor-cursor: var(--lake-accent);
-  --lakex-editor-selection: var(--lake-accent-tint);
-  --lakex-editor-table-bar-active: var(--lake-accent);
-  --lakex-editor-table-scrollbar-thumb: var(--lake-scrollbar-thumb);
-  --lakex-editor-text-body: var(--lake-text-1);
-  --lakex-editor-text-color: var(--lake-text-1);
-  --lakex-editor-text-caption: var(--lake-text-3);
-  --lakex-editor-text-danger: var(--lake-status-error);
-  --lakex-editor-text-disable: var(--lake-text-4);
-  --lakex-editor-text-link: var(--lake-accent);
-  --lakex-editor-text-link-hover: var(--lake-accent);
-  --lakex-editor-icon-primary: var(--lake-text-2);
-  --lakex-editor-icon-secondary: var(--lake-text-3);
-  --lakex-editor-overlay-background-tertiary: var(--lake-bg-hover);
-  /* 语义色反相组（原 b3/dark.css 的关键一组：深色下"黑"要变浅、"白"要变深；漏了它 ⇒
-   * 内核里用 --lakex-editor-color-black 的文字/工具条图标在深色下几乎看不见）。
-   * 透明度用 color-mix 从令牌派生，避免颜色字面量出现在主题文件之外。 */
-  --lakex-editor-color-black: var(--lake-text-2);
-  --lakex-editor-color-black-f05: color-mix(in srgb, var(--lakex-editor-color-black) 5%, transparent);
-  --lakex-editor-color-black-f08: color-mix(in srgb, var(--lakex-editor-color-black) 8%, transparent);
-  --lakex-editor-color-black-f12: color-mix(in srgb, var(--lakex-editor-color-black) 12%, transparent);
-  --lakex-editor-color-black-f30: color-mix(in srgb, var(--lakex-editor-color-black) 30%, transparent);
-  --lakex-editor-color-black-f65: color-mix(in srgb, var(--lakex-editor-color-black) 65%, transparent);
-  --lakex-editor-color-white: var(--lake-bg-canvas);
-  --lakex-editor-color-white-f60: color-mix(in srgb, var(--lake-bg-canvas) 60%, transparent);
-  --lakex-editor-color-white-f90: color-mix(in srgb, var(--lake-bg-canvas) 90%, transparent);
-  --lakex-editor-color-theme: var(--lake-accent);
-  --lakex-editor-color-theme-light: var(--lake-accent-tint);
-}
+/* ── 内核（lakex）编辑器跟随 App 主题 ────────────────────────────────────────
+ * 变量级映射已集中到**未分层**的 src/styles/kernel-theme.css（只有未分层 + 高特异性才能压过
+ * 内核注入的未分层 schema <style>；写在 @layer 里永远输——这是 260926 多次踩坑的根因）。
+ * 这里只保留内核**没有对应变量、只能改属性**的少数几处：容器底色 / 图标 sprite 的 fill /
+ * 工具条底色 / 图片占位块。 */
 /* 正文区容器本身（内核在 legacy 层给了浅色底，这里按主题改） */
 [data-theme="dark"] .document-pane .lake-editor-mount,
 [data-theme="warm"] .document-pane .lake-editor-mount {
@@ -195,24 +144,12 @@ pre {
   background: var(--lake-bg-canvas);
   color: var(--lake-text-1);
 }
-/* 深色/暖色下内核图标：sprite（<use>）默认 fill 是黑，深色底上等于隐形。
- * 目标类实为 .ne-icon（不是 .ne-icon-symbol）——原选择器写错，规则从未命中（260926 实测修正）。 */
-[data-theme="dark"] .ne-ui .ne-icon,
-[data-theme="warm"] .ne-ui .ne-icon { color: var(--lake-text-2); }
+/* 图标 sprite（<use>）：内核没给 fill、默认黑 ⇒ currentColor 跟随 --lakex-editor-icon-primary
+ * （颜色本身已在 kernel-theme.css 映射，这里只补 fill）。 */
 [data-theme="dark"] .ne-ui .ne-icon use,
 [data-theme="warm"] .ne-ui .ne-icon use,
 [data-theme="dark"] .ne-ui .ne-icon path,
 [data-theme="warm"] .ne-ui .ne-icon path { fill: currentColor; }
-/* 内核工具条文字/按钮：内核把浅色 schema 的变量以**未分层 <style>** 注入（见下），压过本层
- * 变量桥 ⇒ 这里直接覆盖消费属性（layer 序压过 vendor legacy，无需 !important）。 */
-[data-theme="dark"] .ne-ui-toolbar .ne-toolbar-widget,
-[data-theme="warm"] .ne-ui-toolbar .ne-toolbar-widget,
-[data-theme="dark"] .ne-ui-toolbar .ant-btn,
-[data-theme="warm"] .ne-ui-toolbar .ant-btn { color: var(--lake-text-1); }
-/* 内核工具条下拉（正文 / 字号）的「值文字」：vendor 用 --lakex-editor-icon-primary，该变量又被
- * 内核未分层浅色 schema 覆盖 ⇒ 直接覆盖 color（同大纲/图标的坑）。 */
-[data-theme="dark"] .ne-ui-toolbar .ne-ui-toolbar-select-value,
-[data-theme="warm"] .ne-ui-toolbar .ne-ui-toolbar-select-value { color: var(--lake-text-1); }
 /* 内核另一处写死白底：.ne-ui-toolbar（小记/文档编辑器共用的工具条），以及文档内的图片占位块。
  * 与上面的 .ne-ui 同一处修复（同一个桥，单一来源）。 */
 [data-theme="dark"] .ne-ui-toolbar,
@@ -220,18 +157,6 @@ pre {
   background: var(--lake-bg-canvas);
   color: var(--lake-text-1);
 }
-/* 原生大纲（编辑态 .ne-toc-sidebar / 锁定阅读态 .ne-viewer-toc-sidebar）底色来自
- * var(--lakex-editor-background-primary)：内核把它作为**未分层** <style> 注入
- * （实测 .lakex-default-theme{--lakex-editor-background-primary:#fff}），未分层 > 任何 @layer，
- * 所以本层变量桥压不过 ⇒ 直接覆盖 background（layer 压过 vendor legacy）。 */
-[data-theme="dark"] .ne-toc-sidebar,
-[data-theme="dark"] .ne-toc-sidebar .ne-toc-view,
-[data-theme="dark"] .ne-viewer-toc-sidebar,
-[data-theme="dark"] .ne-viewer-toc-sidebar .ne-toc-view,
-[data-theme="warm"] .ne-toc-sidebar,
-[data-theme="warm"] .ne-toc-sidebar .ne-toc-view,
-[data-theme="warm"] .ne-viewer-toc-sidebar,
-[data-theme="warm"] .ne-viewer-toc-sidebar .ne-toc-view { background: var(--lake-bg-panel); }
 [data-theme="dark"] .ne-image-error,
 [data-theme="dark"] .ne-mock-image {
   background: var(--lake-bg-block);

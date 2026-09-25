@@ -31,6 +31,7 @@ const FILES = [
   "styles/kit.css",       // P4 起：自有组件库（14 件）
   "styles/chrome.css",    // P5 起：应用外壳（活动栏/目录栏头部/状态栏 …）
   "styles/overlay.css",   // P5-c 起：浮层（对话框 / 菜单 / 气泡）
+  "styles/kernel-theme.css",   // 260926：内核 lakex 主题变量集中映射（**未分层**，故意不进 @layer）
   // 基础层（260916 第二档 S3：原 styles.css 拆成入口 + 10 个域文件；入口只剩 @import 编排，不再计声明）
   "styles/app/base.css", "styles/app/dialogs.css", "styles/app/editor.css",
   "styles/app/misc.css", "styles/app/panels.css", "styles/app/quick-notes.css", "styles/app/settings.css",
@@ -45,6 +46,7 @@ const BASELINE: Record<string, { decls: number; dupGroups: number }> = {
   "styles/feature.css": { decls: 105, dupGroups: 0 },  // 视觉优化 + 内核编辑器主题桥（lakex 跟随深色/暖色：含 .ne-ui-toolbar）；260923 收敛：-19 = 大纲侧栏的 .outline-* 覆盖并回 features/outline/outline.css 单一来源；260926：+2 = 修内核图标选择器（.ne-icon-symbol→.ne-icon）+ 直接覆盖工具条文字/原生大纲底色（内核浅色 schema 以未分层 <style> 注入、压过变量桥）；合法新增非覆盖回涨
   "styles/kit.css": { decls: 558, dupGroups: 0 },     // P4 组件库 + P5-g 面板件 + P5-h 控件 + P5-i 开关（实测）；260926：+8 = 补回 .b3-switch::after 被删源漏掉的滑块基线（content/position/top/transform/圆角等，合法新增：原先根本没有，非覆盖回涨）
   "styles/chrome.css": { decls: 502, dupGroups: 0 },  // P5 外壳 + S1+A + 整边缩略图槽；260922：+21 = 左缘「跟手把手」（隐形热区里浮出、Y 跟手、点击固定；热区 39→8 与去缩略图同批）；+10 = 目录「悬浮」改半幅浮卡（固定高度、顶贴面包屑下缘、四角圆角）——合法新增
+  "styles/kernel-theme.css": { decls: 60, dupGroups: 0 },  // 260926：内核 lakex --lakex-editor-* 集中映射（未分层）；60 = ①dark+warm 共用 43 + ②dark 反相 9 + ③light accent 8
   "styles/overlay.css": { decls: 145, dupGroups: 0 },  // P5-c 浮层 + P5-j 搜索 + P7-b .top-menu 定位 + 菜单项布局三件套；260926 Phase 1a：+47 = 浮层原语统一——.ln-scrim 基座、.ln-dialog 布局/表面单一来源（并自 dialog.css 收编）、.ln-dialog__actions、.ln-menu/.ln-popover 表面（自 kit.css 收编）；合法新增/归并，非覆盖回涨
   "styles/compat.css": { decls: 209, dupGroups: 0 },  // 260923：-4 = .tab-item 盒收编到 app/tabs.css；260926：+4 = 补上 .config-block__actions 布局（该 JSX 类此前无任何定义，合法新增非覆盖回涨）
   "styles/a11y.css": { decls: 9, dupGroups: 0 },   // P7-e：无障碍最高层（reduced-motion 契约；靠层序而非 !important 取胜）
