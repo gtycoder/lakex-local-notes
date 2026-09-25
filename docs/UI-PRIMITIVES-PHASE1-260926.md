@@ -3,6 +3,7 @@
 > 状态：**设计稿，待评审**。本批**不改生产代码**（Phase 0 的 4 个 bug 已在 `f15687a` 修掉）。
 > 关联：`AGENTS.md §3 #14` · `docs/PANEL-CONTRACT.md` · 规格源 `/Users/admin/file/local-lake/ui-design-inputs/out/design-system/`（`COMPONENTS 01/04/05/09` · `STATES §2` · `TOKENS`）
 > 底账全部来自仓库实测（`rg` 可复算），不是估算。
+> **视觉预览**：`docs/preview/ui-primitives-260926.html`（自包含、离线、内联真实令牌；浏览器直接打开，可切浅/深/暖三主题、点开对话框/菜单/表情面板）。
 
 ## 0. 一句话
 
