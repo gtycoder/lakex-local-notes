@@ -1,4 +1,5 @@
-/* A · 亮 · 蓝（默认浅色；05-THEME-TOKENS-ABC.md）：MiMo 气质，近白侧栏 + 蓝点缀。 */
+/* A · 亮 · 蓝（默认浅色；05-THEME-TOKENS-ABC.md）：近白侧栏 + 板岩蓝点缀。
+ * 260926：accent 家族从 #3d7eff 族对齐到设计规格 #5b6f96 族（Q10）；**只改浅色**。 */
 :root,
 [data-theme="light"] {
   color-scheme: light;
@@ -21,13 +22,15 @@
   --lake-border-1: #e8eaee;
   --lake-border-2: #f0f2f5;
   --lake-border-strong: #d5d9de;
-  /* 主色（A 蓝） */
-  --lake-accent: #3d7eff;
-  --lake-accent-ink: #2f66e0;
-  --lake-accent-ink-hover: #2a5ccc;
-  --lake-accent-ink-press: #244eb0;
-  --lake-accent-tint: #eaf1ff;
-  --lake-accent-text: #1f4fc2;
+  /* 主色：对齐设计规格（260926 Q10）。四个角色：accent=指针色（焦点环/选中/开关/图标）、
+   * ink=实心钮底+链接、tint=选中底、text=选中行文字。规格未给 ink 的 hover/press，
+   * 按 COMPONENTS 01「primary 提亮/压暗一档」派生。只改浅色；dark 保持紫、warm 保持橙。 */
+  --lake-accent: #5b6f96;
+  --lake-accent-ink: #3a4a68;
+  --lake-accent-ink-hover: #45597c;
+  --lake-accent-ink-press: #2f3d55;
+  --lake-accent-tint: #eceff5;
+  --lake-accent-text: #3a4a68;
   /* 状态色 */
   --lake-status-sync: #2c7684;
   --lake-status-pending: #9b610e;
@@ -38,7 +41,7 @@
   --lake-status-ok-soft: #e9f2ec;
   --lake-status-error-soft: #f8eae9;
   /* 选区 / 遮罩 / 滚动条 / 焦点 */
-  --lake-select-bg: rgba(61,126,255,.16);
+  --lake-select-bg: rgba(91,111,150,.16);   /* 规格值，与 accent 同源 */
   --lake-scrim: rgba(24,27,32,.28);
   --lake-scrollbar-thumb: rgba(28,31,36,.22);
   --lake-scrollbar-thumb-hover: #8c94a0;

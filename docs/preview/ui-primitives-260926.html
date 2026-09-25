@@ -426,14 +426,7 @@
   --lake-accent-tint: #eceff5;
   --lake-accent-text: #3a4a68;
 }
-[data-theme="dark"] {
-  --lake-accent: #93a9cf;
-  --lake-accent-ink: #46597b;
-  --lake-accent-ink-hover: #55698f;
-  --lake-accent-ink-press: #3b4d6b;
-  --lake-accent-tint: rgba(147,169,207,.14);
-  --lake-accent-text: #e9eef6;
-}
+/* dark 不改：交给内联的真实 dark.css（紫 #9b94ff） */
 
 /* ============ 提案：overlay 层序（覆盖 base.css 旧值） ============ */
 :root { --lake-z-menu: 600; --lake-z-scrim: 700; --lake-z-dialog: 710; --lake-z-lightbox: 720; }
@@ -644,7 +637,7 @@ body { margin:0; background:var(--lake-bg-window); color:var(--lake-text-1); fon
     <h2>色板对照（浅色 accent）</h2>
     <p class="note">当前 app 用 <span class="mono">#3d7eff</span>（偏艳）；设计规格是 <span class="mono">#5b6f96</span>（去饱和板岩蓝）；DSH 是中性优先（文字 <span class="mono">#0f1115</span>，品牌近黑）。三种各放主按钮 + 选中行，选方向。</p>
     <div class="row" style="align-items:stretch">
-      <div class="swatchcol"><div class="swatchname">当前 #3d7eff</div><button class="ln-btn" style="background:#2f66e0;color:#fff">主操作</button><div class="swatchrow" style="background:#eaf1ff;color:#1f4fc2">选中行</div></div>
+      <div class="swatchcol"><div class="swatchname">旧 #3d7eff（已弃）</div><button class="ln-btn" style="background:#2f66e0;color:#fff">主操作</button><div class="swatchrow" style="background:#eaf1ff;color:#1f4fc2">选中行</div></div>
       <div class="swatchcol"><div class="swatchname">规格 #5b6f96</div><button class="ln-btn" style="background:#3a4a68;color:#fff">主操作</button><div class="swatchrow" style="background:#eceff5;color:#3a4a68">选中行</div></div>
       <div class="swatchcol"><div class="swatchname">DSH 中性</div><button class="ln-btn" style="background:#0f1115;color:#fff">主操作</button><div class="swatchrow" style="background:#f2f3f5;color:#0f1115">选中行</div></div>
     </div>
