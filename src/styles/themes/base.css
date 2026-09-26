@@ -53,6 +53,7 @@
   --lake-z-overlay-menu: 600;      /* 菜单 / 下拉 / 气泡 */
   --lake-z-overlay-scrim: 700;     /* 对话框遮罩 */
   --lake-z-overlay-dialog: 710;    /* 对话框 */
+  --lake-z-overlay-menu-raised: 715; /* 对话框内打开的菜单/气泡：须高于 dialog、低于 lightbox（记录详情/字段弹窗里的嵌套下拉） */
   --lake-z-overlay-lightbox: 720;  /* 图片 / 附件预览 */
   /* 字号/字重/行高 */
   --lake-font-size-micro: 11.5px;

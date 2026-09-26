@@ -48,6 +48,7 @@ Phase 0 修的是**症状**；本设计解决「症状会不断长出来」的**
 > - `QuickNotesWorkspace` 排序菜单 / 行内 ⋯ 菜单 → `<Menu surfaceClassName="quick-notes-sort-menu|quick-note-row-menu">`；「转为文档」对话框 → `<Dialog>`。
 > - `DraftRecoveryDialog` → `<Dialog>`（原手写 `.modal-backdrop`）。
 > - `OutlineSidebar` 「展开到级别」菜单 → `<Menu surfaceClassName="outline-sidebar__level-menu">`。
+> - **多维表专项收编（260926 本会话）**：`bitableCells.tsx` 本地 `Popover`/`TextExpandPopover` 去掉自造表面 → `.ln-popover` 单一来源；`BitableEditor.tsx` 两处手写 `.bt-modal`（重命名视图 / 字段编辑）→ `<Dialog>`；`BitableRecordDrawer.tsx` 的 `.bt-drawer` → 右侧 `<Dialog>`（新增 `.ln-scrim--right` 遮罩变体）；行右键 `<Menu>` 去自定义表面。为**对话框内嵌套下拉**新增 `--lake-z-overlay-menu-raised` 令牌与 `Overlay` 的 `raised`，并加「**Esc 只关栈顶**」的浮层栈（否则字段弹窗里开着下拉按 Esc 会连弹窗一起关）；`uiPrimitives.test.ts` 的层序 band 已含 raised。
 
 ### 1.2 按钮：45 处 `b3-button` vs 13 处 `ln-btn`
 

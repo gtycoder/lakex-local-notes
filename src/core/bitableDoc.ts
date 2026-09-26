@@ -101,6 +101,12 @@ export interface BitableSortRule {
   desc?: boolean;
 }
 
+/** 分组规则（云端为单级；模型留数组以便后续多级）。 */
+export interface BitableGroupRule {
+  fieldId: string;
+  desc?: boolean;
+}
+
 /** 行高：预设档位或自定义像素。 */
 export type BitableRowHeight = "low" | "medium" | "high" | "xhigh" | number;
 
@@ -110,6 +116,12 @@ export interface BitableView {
   type: BitableViewType;
   filters?: BitableFilterRule[];
   sorts?: BitableSortRule[];
+  /** 分组（云端单级；UI 只用第 0 条）。 */
+  groups?: BitableGroupRule[];
+  /** 高亮重复值的列（视图级；列菜单「高亮重复值」）。 */
+  highlightDuplicateFieldIds?: string[];
+  /** 列文字颜色（视图级：fieldId → 颜色值）。 */
+  columnTextColors?: Record<string, string>;
   rowHeight?: BitableRowHeight;
   fieldOrder?: string[];
   hiddenFieldIds?: string[];
@@ -298,6 +310,9 @@ function normalizeView(raw: unknown): BitableView | null {
   if (formFields) next.formFieldIds = formFields; else delete next.formFieldIds;
   if (!Array.isArray(view.filters)) delete next.filters;
   if (!Array.isArray(view.sorts)) delete next.sorts;
+  if (!Array.isArray(view.groups)) delete next.groups;
+  if (!Array.isArray(view.highlightDuplicateFieldIds)) delete next.highlightDuplicateFieldIds;
+  if (!view.columnTextColors || typeof view.columnTextColors !== "object") delete next.columnTextColors;
   return next;
 }
 
@@ -529,4 +544,58 @@ export function applyViewToRecords(table: BitableTable, view: BitableView | unde
       .map((x) => x.record);
   }
   return records;
+}
+
+/** 分组用的组键：单选取选项名、多选取选项名拼接、其余取展示值；空 = ""。 */
+function groupKeyOf(field: BitableField, value: unknown): string {
+  if (field.type === "select") {
+    const opt = (field.options ?? []).find((o) => o.id === value);
+    return opt ? opt.name : "";
+  }
+  if (field.type === "multiSelect") {
+    const ids = Array.isArray(value) ? value : [];
+    return ids
+      .map((id) => (field.options ?? []).find((o) => o.id === id)?.name)
+      .filter((name): name is string => !!name)
+      .join("、");
+  }
+  return bitableDisplayValue(field, value).trim();
+}
+
+/**
+ * 按分组规则把记录分组（组内保持传入顺序，组间按组值排序；空值组排最后）。
+ * 无规则/字段不存在时返回单个"未分组"组（key/label 为空），调用方可直接拍平。
+ */
+export function groupRecords(
+  table: BitableTable,
+  records: BitableRecord[],
+  rule: BitableGroupRule | undefined,
+): Array<{ key: string; label: string; records: BitableRecord[] }> {
+  if (!rule) return [{ key: "", label: "", records }];
+  const field = table.fields.find((f) => f.id === rule.fieldId);
+  if (!field) return [{ key: "", label: "", records }];
+  const groups = new Map<string, BitableRecord[]>();
+  for (const record of records) {
+    const key = groupKeyOf(field, record.values[field.id]);
+    const list = groups.get(key);
+    if (list) list.push(record);
+    else groups.set(key, [record]);
+  }
+  const keys = [...groups.keys()].sort((a, b) => {
+    if ((a === "") !== (b === "")) return a === "" ? 1 : -1; // 空值组排最后
+    const cmp = compareValues(field, groups.get(a)![0].values[field.id], groups.get(b)![0].values[field.id]);
+    return rule.desc ? -cmp : cmp;
+  });
+  return keys.map((key) => ({ key, label: key || "(空)", records: groups.get(key)! }));
+}
+
+/** 某列出现次数 > 1 的展示值集合（忽略空值）—— 供「高亮重复值」判定。 */
+export function duplicateValues(field: BitableField, records: BitableRecord[]): Set<string> {
+  const counts = new Map<string, number>();
+  for (const record of records) {
+    const value = bitableDisplayValue(field, record.values[field.id]).trim();
+    if (!value) continue;
+    counts.set(value, (counts.get(value) ?? 0) + 1);
+  }
+  return new Set([...counts.entries()].filter(([, count]) => count > 1).map(([value]) => value));
 }

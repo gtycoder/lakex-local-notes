@@ -1,8 +1,11 @@
 /**
- * 记录详情抽屉（v1）：主字段标题 + 字段纵向表单 + 上一条/下一条 + 新增字段 + 关闭。
+ * 记录详情抽屉（v1）：主字段标题 + 字段表单 + 上一条/下一条 + 新增字段 + 关闭。
  * 记录正文（每条一篇 Lake 富文本）v1 明确不做（用户 260919 决定）。
+ * 宽度可左右拖拽（左缘手柄），持久化在本机 localStorage。
  */
+import { useEffect, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { ChevronDown, ChevronUp, Plus, X } from "lucide-react";
+import { Drawer } from "../../components/ui/Overlay";
 import { bitableRecordTitle, type BitableRecord, type BitableTable } from "../../core/bitableDoc.js";
 import { AttachmentCell, CellEditor, FieldTypeIcon } from "./bitableCells.js";
 
@@ -21,10 +24,30 @@ export interface BitableRecordDrawerProps {
   onOpenAsset: (filename: string) => void;
 }
 
+const DRAWER_WIDTH_KEY = "lake-notes-v3.bitable-drawer-width";
+const MIN_W = 320;
+const MAX_W = 1000;
+
 export function BitableRecordDrawer(props: BitableRecordDrawerProps) {
   const { table, record } = props;
+  const [width, setWidth] = useState<number>(() => {
+    const v = Number(localStorage.getItem(DRAWER_WIDTH_KEY));
+    return Number.isFinite(v) && v >= MIN_W && v <= MAX_W ? v : 460;
+  });
+  useEffect(() => { localStorage.setItem(DRAWER_WIDTH_KEY, String(width)); }, [width]);
+  /** 左缘手柄向右拖变窄、向左拖变宽（云端同语义）。 */
+  const startResize = (event: ReactPointerEvent<HTMLElement>) => {
+    event.preventDefault();
+    const startX = event.clientX;
+    const startW = width;
+    const onMove = (ev: PointerEvent) => setWidth(Math.max(MIN_W, Math.min(MAX_W, Math.min(window.innerWidth - 80, startW + (startX - ev.clientX)))));
+    const onUp = () => { window.removeEventListener("pointermove", onMove); window.removeEventListener("pointerup", onUp); };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+  };
   return (
-    <aside className="bt-drawer" role="dialog" aria-label="记录详情">
+    <Drawer open onDismiss={props.onClose} label="记录详情" surfaceClassName="ln-dialog bt-drawer" style={{ width }}>
+      <div className="bt-drawer-resize" onPointerDown={startResize} title="拖动调整宽度" aria-label="拖动调整宽度" role="separator" />
       <header className="bt-drawer-head">
         <div className="bt-drawer-nav">
           <button type="button" className="bt-icon-btn" onClick={props.onPrev} title="上一条" aria-label="上一条"><ChevronUp size={15} /></button>
@@ -53,6 +76,7 @@ export function BitableRecordDrawer(props: BitableRecordDrawerProps) {
                     noteId={props.noteId}
                     value={record.values[field.id]}
                     readOnly={props.readOnly}
+                    alwaysActive
                     onUpload={(files) => props.onUpload(record.id, field.id, files)}
                     onRemove={(filename) => {
                       const current = Array.isArray(record.values[field.id]) ? (record.values[field.id] as string[]) : [];
@@ -69,6 +93,6 @@ export function BitableRecordDrawer(props: BitableRecordDrawerProps) {
           <Plus size={14} />新增字段
         </button>
       </div>
-    </aside>
+    </Drawer>
   );
 }

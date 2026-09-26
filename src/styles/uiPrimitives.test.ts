@@ -66,7 +66,7 @@ describe("UI 原语门禁", () => {
       return Number(m[0][1]);
     };
     const topbar = val("lake-z-topbar");
-    const band = ["lake-z-overlay-menu", "lake-z-overlay-scrim", "lake-z-overlay-dialog", "lake-z-overlay-lightbox"];
+    const band = ["lake-z-overlay-menu", "lake-z-overlay-scrim", "lake-z-overlay-dialog", "lake-z-overlay-menu-raised", "lake-z-overlay-lightbox"];
     for (const t of band) expect(val(t), t + " 须高于 topbar").toBeGreaterThan(topbar);
     for (let i = 1; i < band.length; i++) expect(val(band[i]), band[i]).toBeGreaterThan(val(band[i - 1]));
   });

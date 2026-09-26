@@ -15,10 +15,14 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProp
 import { createPortal } from "react-dom";
 import { ChevronRight } from "lucide-react";
 
-export type OverlayKind = "dialog" | "menu" | "popover";
+export type OverlayKind = "dialog" | "menu" | "popover" | "drawer";
 
 const FOCUSABLE =
   'a[href],button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])';
+
+let overlaySeq = 0;
+/** 当前打开的浮层栈（后开者在栈顶）。Esc 只关栈顶，避免「对话框内开着下拉时把对话框一起关掉」。 */
+const openOverlayStack: number[] = [];
 
 interface OverlayProps {
   /** 缺省 true：条件渲染的调用方（menu/popover）可省略；dialog 一般显式传。 */
@@ -34,8 +38,10 @@ interface OverlayProps {
   style?: CSSProperties;
   /** 覆盖默认表面类（默认 dialog=.ln-dialog / menu=.ln-menu / popover=.ln-popover）。表面仍只由 overlay.css 提供。 */
   surfaceClassName?: string;
-  /** dialog 追加到遮罩的类（如 .ln-scrim--top 顶部对齐） */
+  /** dialog 追加到遮罩的类（如 .ln-scrim--top 顶部对齐 / .ln-scrim--right 侧边抽屉） */
   scrimClassName?: string;
+  /** 菜单/气泡抬到对话框之上（对话框内打开的嵌套下拉/颜色面板）；默认层序见 overlay.css 令牌带 */
+  raised?: boolean;
   /** 外部面板 ref（可拖拽/缩放的浮窗需要把自己的 panelRef 接到表面元素） */
   surfaceRef?: Ref<HTMLElement>;
   /** 外点关闭豁免：返回 true 时不关闭（如锚点按钮本身） */
@@ -45,7 +51,8 @@ interface OverlayProps {
   children: ReactNode;
 }
 
-export function Overlay({ open = true, kind, onDismiss, label, className, style, surfaceClassName, scrimClassName, surfaceRef, ignoreOutside, initialFocus, children }: OverlayProps) {
+export function Overlay({ open = true, kind, onDismiss, label, className, style, surfaceClassName, scrimClassName, raised, surfaceRef, ignoreOutside, initialFocus, children }: OverlayProps) {
+  const [overlayId] = useState(() => (overlaySeq += 1));
   const innerRef = useRef<HTMLElement | null>(null);
   const restoreFocusRef = useRef<HTMLElement | null>(null);
   // 把外部 ref（可拖拽面板）与内部 ref 都挂到同一个表面元素上
@@ -55,21 +62,32 @@ export function Overlay({ open = true, kind, onDismiss, label, className, style,
     else if (surfaceRef) (surfaceRef as MutableRefObject<HTMLElement | null>).current = el;
   }, [surfaceRef]);
 
+  // 入栈/出栈：Esc 只会关掉栈顶那一层（对话框内的下拉开着时，先关下拉、不动对话框）
+  useEffect(() => {
+    if (!open) return;
+    openOverlayStack.push(overlayId);
+    return () => {
+      const i = openOverlayStack.lastIndexOf(overlayId);
+      if (i >= 0) openOverlayStack.splice(i, 1);
+    };
+  }, [open, overlayId]);
+
   // Esc 关闭（三型通用，capture 阶段，避免被下层快捷键抢先）
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "Escape") return;
+      if (openOverlayStack[openOverlayStack.length - 1] !== overlayId) return;
       e.stopPropagation();
       onDismiss();
     };
     document.addEventListener("keydown", onKey, true);
     return () => document.removeEventListener("keydown", onKey, true);
-  }, [open, onDismiss]);
+  }, [open, onDismiss, overlayId]);
 
   // 外点关闭（menu / popover；dialog 由遮罩 mousedown 关闭）
   useEffect(() => {
-    if (!open || kind === "dialog") return;
+    if (!open || kind === "dialog" || kind === "drawer") return;
     const onDown = (e: MouseEvent) => {
       const el = innerRef.current;
       const target = e.target as Node;
@@ -128,19 +146,20 @@ export function Overlay({ open = true, kind, onDismiss, label, className, style,
     }
   };
 
-  if (kind === "dialog") {
+  if (kind === "dialog" || kind === "drawer") {
+    const isDialog = kind === "dialog";
     return createPortal(
-      <div className={"ln-scrim" + (scrimClassName ? " " + scrimClassName : "")} data-prevent-swipe onMouseDown={(e) => { if (e.target === e.currentTarget) onDismiss(); }}>
+      <div className={"ln-scrim" + (isDialog ? "" : " ln-scrim--drawer") + (scrimClassName ? " " + scrimClassName : "")} data-prevent-swipe onMouseDown={(e) => { if (isDialog && e.target === e.currentTarget) onDismiss(); }}>
         <section
           ref={setSurface}
           data-prevent-swipe
           className={(surfaceClassName ?? "ln-dialog") + (className ? " " + className : "")}
           role="dialog"
-          aria-modal="true"
+          aria-modal={isDialog}
           aria-label={label}
           tabIndex={-1}
           style={style}
-          onKeyDown={onKeyDown}
+          onKeyDown={isDialog ? onKeyDown : undefined}
         >
           {children}
         </section>
@@ -153,7 +172,7 @@ export function Overlay({ open = true, kind, onDismiss, label, className, style,
   return createPortal(
     <div
       ref={setSurface}
-      className={"ln-overlay-surface " + surfaceClass + (className ? " " + className : "")}
+      className={"ln-overlay-surface " + surfaceClass + (raised ? " ln-overlay-surface--raised" : "") + (className ? " " + className : "")}
       data-context-menu
       role={kind === "menu" ? "menu" : "dialog"}
       aria-label={label}
@@ -168,6 +187,11 @@ export function Overlay({ open = true, kind, onDismiss, label, className, style,
 /** 对话框预设：遮罩 + 居中 + 焦点圈闭 + Esc/外点关闭 + 滚动锁。 */
 export function Dialog(props: Omit<OverlayProps, "kind">) {
   return <Overlay kind="dialog" {...props} />;
+}
+
+/** 抽屉预设：右侧停靠、无遮罩、不锁滚动/焦点（表格仍可交互），Esc 关闭；用于记录详情。 */
+export function Drawer(props: Omit<OverlayProps, "kind">) {
+  return <Overlay kind="drawer" {...props} />;
 }
 
 /** 菜单预设：锚定定位 + 外点/Esc 关闭（无遮罩）。 */

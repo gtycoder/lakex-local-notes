@@ -31,6 +31,13 @@
 /* 顶部对齐命令面板（搜索等）：不居中，贴近窗口顶部 */
 .ln-scrim--top { align-items: start; padding-top: 12vh; }
 
+/* 侧边抽屉型对话框（记录详情等）：贴右侧、占满高度 */
+.ln-scrim--right { place-items: stretch end; padding: 0; }
+
+/* 抽屉（非模态）：透明遮罩、不拦截点击，仅右侧面板可交互（记录详情） */
+.ln-scrim--drawer { top: var(--topbar-height, 0); background: transparent; pointer-events: none; place-items: stretch end; padding: 0; }
+.ln-scrim--drawer .ln-dialog { pointer-events: auto; }
+
 .ln-dialog {
   position: relative;
   display: flex;
@@ -77,6 +84,8 @@
 
 /* 原语菜单/气泡的定位与层序（不依赖具体表面类，custom surfaceClassName 也不掉层） */
 .ln-overlay-surface { position: fixed; z-index: var(--lake-z-overlay-menu); }
+/* 嵌套在对话框里的菜单/气泡：抬到 dialog 之上（否则被 .ln-dialog 盖住） */
+.ln-overlay-surface--raised { z-index: var(--lake-z-overlay-menu-raised); }
 
 /* ── 菜单 / 气泡表面（单一来源）：容器从 kit.css 移入本层，item 样式仍在 kit.css ── */
 .ln-menu {

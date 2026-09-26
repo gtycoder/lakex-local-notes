@@ -5,59 +5,63 @@
 > 所有历史 dated handoff（旧 `§0 <日期>` 节、`§2.x` 各批会话）已从本文件**删除**，只在 git 历史可查：`git log -p --follow HANDOFF.md`（或 `git show <旧提交>:HANDOFF.md`）。文中残留的 `§2.x` / 旧 `§0` 引用是**历史指针**，去 git 查，**不要在本文件重建历史**。
 > **§8 是移动端（安卓）专职交接**，由移动端会话维护；桌面会话不要改 §8，移动端会话不要改 §0-§7 之外的桌面文件。
 
-## 0. 最新交接 · 260926 晚 · 表格底栏融合 / 画板视图记忆 / 历史弹窗坐标系 / 历史快照真预览 · **已合 master 并推送**
+## 0. 最新交接 · 260926 · 多维表（bitable）云端精仿 + 附件行为重做 · **已合 master 并推送**
 
-> 写给完全没有上下文的新会话。本批四件事，每条都写了**根因 + 实测结论**：① 表格底部常驻白条 → 与文档状态栏融合；② 画板视图位置改为**本机永久记忆**（A1）+ 视图**不进正文**（B）+ 重开/重挂**不跳动**（C）；③ 历史版本弹窗"跑出屏幕"的**坐标系**修复（+ 死规则清理）；④ 历史快照**只读编辑器真预览**（表格/多维表/画板的图片终于能看）+ 5 项体验优化。
-> 上一批（UI 原语收敛，tip `b68cf8b`/`912b666`）已按约定从本文件删除，git 可查（`git log -p --follow HANDOFF.md`）。
+> 写给完全没有上下文的新会话。本批主线：把多维表自建浮层收编进 Overlay 原语 → 与市面主流多维表做功能差距调研 → 用登录态浏览器逐项走查语雀云端多维表并精仿 → 按用户点名补三项交互 → 按用户 GIF 重做附件单元格并修掉粘贴根因。
+> 上一批（表格底栏融合 / 画板视图记忆 / 历史弹窗坐标系 / 历史快照真预览）已按约定从本文件删除，git 可查：git log -p --follow HANDOFF.md。
 
-### 一、任务目标（用户本会话逐条报的问题 + 用户定下的口径）
+### 一、任务目标（用户本会话逐条要求）
+1. 多维表专项：把 bitable 的自建浮层收编进 `src/components/ui/Overlay.tsx` 原语。
+2. 完成后做一次功能调研：与市面主流多维表对标，产出「还需要做什么功能」的差距清单。
+3. 云端精仿：用登录态 Edge 逐项走查语雀云端多维表 https://todoo.yuque.com/ex813k/stock/ls7d44lq2n5q0q2u ，功能与 UI 都对齐；**行首框用于「点选」而不是打开详情（否则不能多选）**；**行展开另设 ⤢ 按钮、样式对齐用户给的图2**。
+4. 用户后续点名三项：① 单行详情可左右拖拽调宽；② 图片和附件支持粘贴、样式类似图1；③ 表格配置面板最前的块可拖拽做字段排序、下方表格跟随。
+5. 附件单元格：**边框等外观不用照抄图片，只对齐行为**；**点一下才进编辑态**；**独立 + 号与独立文案**；有图时也要能加号和粘贴；**不做右上角预览**。
+6. B7（记录正文，每条一篇 Lake）明确不做。
 
-> 本会话是「用户报障 → 逐条定位 → 修 + 实测」的连续过程，共 5 件事。**下面的用户口径是最终裁定，新会话不要重新争论**。
-
-1. **表格底部"常驻白条"**：sheet 行选择栏下方有一条不随滚动移动的白条，用户要求处理掉。用户口径：*"和状态栏融合，让统计项这一行常驻、固定展示同步状态，这样就不用做隐藏+展示的计算了"*。
-2. **画板右下角状态栏"有点挡"**：它压住内核自己的「主题选择」岛（`默认/缤纷/柔和…`）。用户口径：**状态栏留在右下**，把主题选择岛抬上去。（注：本会话第一版把状态栏挪到左下，用户随后明确改回右下。）
-3. **画板位置不记忆**：拖动后切标签/重开又回到原位。用户口径（**推翻 260916 的"不记忆视口"取舍**）：*"移动到一个位置之后就永久记忆，无论什么时候进来都是这个位置"*，并明确三条：**A1 位置只存本机**（接受各端位置不同）、**B 缩放也不许进 S3**、**C 不要再"先默认再跳"**。
-4. **目录栏右键 → 历史版本弹窗行为异常**：*"无法看、点一下还往右下隐藏、直到最后完全不可见"*；用户追问"UI 不是都做了原型了吗？为什么弹窗还会这样"，要求**查清根因**不要绕。
-5. **历史快照预览还是 JSON**（表格 / 多维表 / 画板）：用户口径：*"能做吗？或者挂一个只读的编辑器……有一点成本也行，**不要批量创建编辑器**——例如预览表格，就是所有快照共用一个编辑器"*。
-
-### 二、已完成
-- **表格底栏融合**（用户报"sheet 行选择下方常驻白条不动"）：白条 = 内核 `.fortune-stat-area`（选区统计行，固定 22px，无选区时是空 div）。做法 = **与文档状态栏融合**：统计行常驻、状态栏钉在它右端同一行（`DesktopStatusBar` 输出 `data-doc-kind`，`chrome.css` 给 sheet 变体 `bottom:1px/height:22px`）；统计文字靠 SheetEditor 实测宽度 `--lake-sheet-status-w` 让位（否则被状态栏压住）。**刻意不用"空态收起"**：收起会改画布容器高度，而内核只在 `window.resize` 时重算尺寸（实测白条只会换个地方出现），常驻 + 融合反而少一层计算。
-- **画板状态栏位置**：画板右下角是内核自己的浮岛（主题选择 `right/bottom:20px`、缩放右上、绘图工具左中）⇒ 状态栏压住主题选择（用户报"看起来很奇怪"）。用户口径：**状态栏留右下、把主题岛抬上去** ⇒ `boardEditor.css` 用 `bottom: calc(8px + 26px + 8px)` 派生抬高，并把状态栏右缘对齐画板的 20px 栅格。
-- **画板视图位置（用户 260926 新口径，推翻 260916 的"不记忆"）**：A1 只存本机 `localStorage['lake-notes-v3.board-views']`（L3，见 `docs/STORAGE-LAYERS.md`）——**绝不动正文/S3**；B 保存序列化不再带当前视口（`boards/*.board.json` 的 `viewport` 成历史字段，仅作本机记忆缺失时的兜底）；C 重开/重挂"**贴好滚动位置再显示**"。实现 `src/features/board/boardViewStore.ts` + `BoardEditor.tsx`；实测切标签/强制重挂/重启应用位置与缩放都保持，三篇正文指纹预览前后完全一致。
-- **画板隐藏态必须用 `content-visibility: hidden`**（血泪坑）：`display:none` 会让画布容器塌成 0 尺寸、浏览器把滚动位置钳掉（切走再回来变 0,0 / max,max）；`visibility:hidden` 会被内核工具条自己的 `visibility: visible` 顶掉（切到文档后画笔/箭头/形状三个按钮**永久留在页面上**——用户正是报"就这 3 个"）。`content-visibility:hidden` 两者兼顾。
-- **历史版本弹窗坐标系修复**（用户报"无法看、点一下更靠右下、最后完全不可见"）：`.history-panel{position:relative}` 把 `.floating-dialog` 的 `position:fixed` 顶掉，而 `useFloatingDialog` 按**视口绝对坐标**读写 `left/top` ⇒ 每拖/点一次就把居中量再叠一遍、跑出屏幕。删掉那条声明 + 新增 `src/styles/floatingDialogCoords.test.ts` 护栏（三个浮窗不许写 `position`）+ hook 增加"窗口缩小把浮窗拉回可见区"。另清掉两条死规则（`.settings-resize::after` / `.history-panel .settings-resize`，全仓无引用，正是那条 `position:relative` 的来历）。
-- **历史快照真预览**（用户报"画板/数据表/表格预览还是 json"）：主进程 `historyRepository.preview()` 按 `kind` 分派（doc 走 Lake；非 doc 走 `searchTextForKind`，与搜索索引同口径），payload 带 `kind`；新增 `src/core/historyPreview.ts`（结构化摘要模型 + "无法解析"兜底）+ `HistorySnapshotPreview`（**只读编辑器真预览**：sheet/bitable/board 各挂只读编辑器、`onChange` no-op ⇒ 预览绝不写盘；以快照 id 作 key ⇒ **同一时刻只有一个实例**；失败退摘要）。表格单元格图片、多维表附件缩略图、画板 canvas 都能看（实测 9/9、1/1 加载；预览前后正文指纹不变）。
-- **历史预览 5 项优化**（用户点名）：① doc 快照 viewer **同实例复用**（切快照只 `setDocument`；`useHistorySnapshotViewer.ts`）；② 预览里隐藏编辑器外壳（sheet `showToolbar=false` / bitable `chrome=false` / 预览内关掉空的统计行）；③ 打开面板即**预热**对应预览分包（历史列表带 `kind`）；④ 行上标出「**当前**」版本（`getNoteInfo` 新增 `contentHash`，现算正文 sha256）；⑤ 列表 **↑/↓ 切换快照**（滚动只改列表 `scrollTop`，**不用 `scrollIntoView`**）。
+### 二、已完成（按主题）
+- **浮层收编**：bitable 本地 Popover / TextExpandPopover 走 `.ln-popover` 单一表面；两处手写 `.bt-modal` 改 `<Dialog>`；记录详情改 `<Drawer>`；行菜单去自定义表面。`Overlay` 新增 `raised`（对话框内嵌套下拉抬层）、Esc **浮层栈**（只关栈顶）、`kind=drawer`（非模态右侧抽屉：无遮罩 / 不锁滚动焦点 / Esc 关闭）。新增令牌 `--lake-z-overlay-menu-raised:715`。
+- **功能调研**：`docs/BITABLE-FEATURE-GAP-260926.md`（对标 Airtable / Notion / 飞书 Base / SeaTable / Teable / NocoDB；P0 撤销重做等，供后续选型）。
+- **云端精仿**（规格、差距、实测全在 `docs/BITABLE-CLOUD-PARITY-260926.md`）：
+  - B1 行首语义：根因 = 行号按钮 DOM 在勾选框之后、盖住了它，点框实际在开详情；改为 行号/勾选框 = 选中、⤢ = 展开（复用云端 RowExpand SVG，tooltip「展开行（Space）」）+ 行首三件套样式 + 行高 36 / 行首列 80 / 表头左对齐 + 24px 下拉。
+  - B2 列菜单 11 项（云端顺序）+ 点表头选中整列 + 底栏「已选择 N 个单元格」+ 筛选面板（打开即建一条规则 + 删除筛选）。
+  - B4 单级分组：`BitableView.groups` + `groupRecords()` + 工具栏「分组」+ 组头折叠与计数。
+  - B5 高亮重复值（视图级列开关）+ 文本颜色（视图级 `columnTextColors`，复用选项调色板 + 清除项）。
+  - B6 撤销/重做（`src/core/bitableHistory.ts`，Cmd/Ctrl+Z、Shift 重做，只快照 tables）+ Tab/Enter 单元格导航；TSV 块粘贴原已支持。
+- **用户点名三项**：① 抽屉左缘 `.bt-drawer-resize` 拖拽调宽（持久化在 localStorage 的 lake-notes-v3.bitable-drawer-width，320–1000）；② 附件粘贴/拖拽（见下重做）；③ 配置面板字段拖拽排序（改视图 `fieldOrder`，网格列顺序跟随）。
+- **附件单元格重做（最终形态）**：表格默认正常显示、点一下进编辑态；记录详情**常驻**编辑态（alwaysActive）。编辑框 = **独立 + 按钮**（选文件）+ **独立提示文案「粘贴或拖拽至此」**（点文案/空白聚焦本区即可 Cmd+V）+ 附件；整区是粘贴/拖拽目标；空态才显示提示，有附件只显示 + 和附件；点外部收起（抽屉不收起）；不做预览 / 单元格工具；边框用自有 `--lake-border-1` 与 radius 令牌。
+- **粘贴根因修复（重要）**：表格全局 `Cmd/Ctrl+V` 处理器（用于 TSV 粘贴）原本对 Cmd+V **无条件 preventDefault**，会取消原生 paste 事件 → 附件格 `onPaste` 永不触发（用户报「粘贴不生效」）。现改为「焦点在输入/可编辑区或 `.bt-attachment-cell` 内时不拦截」。
+- **单测**：`src/core/bitableGroup.test.ts`、`bitableHighlight.test.ts`、`bitableHistory.test.ts`。
+- **文档**：`docs/BITABLE-CLOUD-PARITY-260926.md`（§8/§9 是真实实例 CDP 实测）、`docs/BITABLE-FEATURE-GAP-260926.md`；`docs/UI-PRIMITIVES-PHASE1-260926.md` 追加了收编记录。
 
 ### 三、门禁（全绿）
-`tsc` 0 · `vitest` **1317 passed / 16 skipped** · 桌面 + 移动 `vite build` OK · `ui-metrics`（颜色字面量 0 / `!important` 9 / 未定义令牌 0）· `cssLayers` · `git diff --check` clean。本批新增护栏：`floatingDialogCoords.test.ts` / `historyPreview.test.ts` / `historySnapshotPreview.test.ts` / `boardViewStore.test.ts` + `uiPrimitives.test.ts`（状态栏落位）。
+tsc 0 · vitest **1325 passed / 16 skipped** · 桌面 + 移动 vite build OK · git diff --check clean · cssLayers 围栏通过（bitableEditor.css 基线随合法新增调整后、又因清理下降，以文件当前值为准）。
 
-### 四、当前问题（有意保留 / 未做 + 本会话遗留边界）
-- 历史预览**不做**：非 doc 的"同实例换数据"（要各编辑器提供 load API，只省几百毫秒）；并排 diff/逐字段对比；移动端历史预览（移动端历史只有列表）；大快照"先摘要再加载"的阈值保护；sheet 预览"自动跳到第一个非空格"（正文不存滚动位置）；快照缩略图（见 §3）。
-- 画板视图记忆**不做跨设备一致**（用户口径 A1：各端各自记忆，本就是展示维度）。
-- 历史快照"**恢复为新文档**"= 功能（不是优化），**计入 §3 待办，用户 260926 明确"先不做"**。
-
-- **本会话遗留边界（新会话务必知道）**：
-  - **打包 smoke 没跑**：`npm run test:packaged`（本沙箱要透传 `LAKE_PACKAGED_ARGS="--no-sandbox --disable-gpu"`）留到下次合 master 前补。
-  - **多维表历史预览的数据面窄**：当前开发库只有「多维1」有 1 张附件图 + 1 条快照（缩略图已验 ✓）；多表 / 多附件 / 表单视图等形态**没有数据可验**。
-  - **「当前」徽标口径** = 与**已落盘正文**一致（有未保存编辑时不等于编辑器内存里的内容）——文案已注明，别改成"内存正文"。
-  - **移动端历史只有列表、没有正文预览**（本会话刻意不做，理由见上一条"有意保留"）。
-  - 表格预览**刻意保留**了工作表标签与缩放控件（便于切表/缩放），只隐藏顶部工具条与那条空的统计行。
-  - 内核浅色 schema 的"主题色"是绿 `#00b96b`：浅色下部分内核图标仍绿（上批遗留，未映射到 accent）。
+### 四、当前问题 / 遗留边界
+- B7 记录正文：用户明确不做。
+- 未新增 `--lake-grid-*` 灰阶令牌（用户说外观不必精确照抄）；表格线 / 行号色 / 选区色仍用自有 `--lake-*` 近似。
+- 字段排序是**视图级**（view.fieldOrder），不是全局 table.fields（沿用既有设计与单测口径）；若要全局需一起改。
+- 未跑打包 smoke：npm run test:packaged（本沙箱要 LAKE_PACKAGED_ARGS=--no-sandbox --disable-gpu）。
+- 验证用隔离数据目录起的构建版 Electron（LAKE_RENDERER=scheme + LAKE_USER_DATA=/tmp/lake-verify-bit + CDP 驱动），验完已停实例并清理；未做真机点验。
+- 环境：npx 会走公司 npm 源并超时 → 用本地二进制 `./node_modules/.bin/{tsc,vitest}` 与 `node node_modules/vite/bin/vite.js build`。
 
 ### 五、踩过的坑（本批）
-1. **`notes` 表没有 `content_hash` 列**（`note_history` 有）⇒ "当前正文 hash"必须现算 sha256；照抄查表会运行时报 `no such column`。
-2. **属性弹窗里的预览槽位没有确定高度**：父级是普通 block 时子元素 `height:100%` 不可解析 ⇒ 编辑器被压成 2px（图片自然出不来）。正解 = "列方向 flex + 子项 `flex:1` + `min-height:320px` 兜底"。
-3. **HMR 给自定义 hook 新增 `useEffect` 会白屏**：注入已渲染组件触发 `Rendered more hooks than during the previous render`，整个 React 树卸载（窗口空白）。刷新即恢复，不是代码 bug；改 hook 内部结构后要整页重载再测。
-4. **遮挡窗口里 rAF 与 scroll 事件都不跑**：内核实现在 `pointermove` 里直接赋值 `scrollLeft/Top`，窗口被遮挡时渲染步骤被挂起 ⇒ 量不到也记不住；采集要挂在 `pointerup` 这类输入事件、恢复用 `setTimeout`（真机可见窗口不受影响）。
-5. **测量脚本必须限定"当前活跃编辑器宿主"**：全页 `querySelector('.viewport-container')` 会抓到**文档内画板卡**的容器，据此误判过两轮。
-6. **`touch` 主进程文件即触发 dev 插件重启 Electron**：验证需要，但会让当前实例重启，别在用户开着窗口时随手触发。
+1. **全局快捷键 preventDefault 会闷掉原生事件**：表格全局 Cmd+V 把附件格的 paste 挡掉了；任何自定义粘贴目标，都要让全局处理器在「焦点位于其内」时放行。
+2. **不要用 opacity 隐藏可点控件**：行号按钮 opacity:0 仍能吃点击、盖住勾选框 → 点勾选框变成开详情；要靠结构/层级而不是透明度让位。
+3. **Overlay 嵌套层序**：对话框(710) 高于菜单/气泡(600)，弹窗里的下拉/颜色面板会被盖住 → 用 raised(715)；嵌套浮层 Esc 要浮层栈「只关栈顶」。
+4. **记录详情是云端非模态右侧面板**（表格可交互、标签 168px 横向两列）；一开始做成模态 Dialog 是错的，已改回 kind=drawer。
+5. **附件编辑框**：不能常驻大框，也不能把 + 和文案做成同一个按钮（否则点哪都开文件选择、没法聚焦粘贴）；要独立元素。
+6. **本地 npx 会联网超时** → 用 ./node_modules/.bin/*。
+7. **宿主沙箱间歇故障**：spawn sandbox-exec / spawn bash ENOENT，文件工具报 not found；改为 bash+python 分段执行，把「探针 + 执行」放同一程序抓健康窗口。
+8. **路径手误**：仓库是 /Users/admin/file/local-lake/lake-notes-electron（连字符），不是 /Users/admin/file/local/lake/...；本会话因此浪费过几轮。
+9. **用 JS 模板串拼 python 脚本时 \n 会变成真实换行** → Python 语法错；多行锚点用三引号原样换行。
+10. **CDP 验证要先加记录**：空表没有数据行（tds=0），会误判成「功能没生效」。
+11. **CDP 裸 Cmd+V 不一定触发浏览器 paste**：改用 Input.dispatchKeyEvent 的 commands:[paste]；也可用 dispatchEvent 的返回值断言有没有被 preventDefault。
 
 ### 六、下一步
-1. **先补跑打包 smoke**（`npm run test:packaged`，本沙箱要 `--no-sandbox`）——本会话只跑了 dev 实例验证 + 双端 `vite build`。
-2. **按 §3 优先级挑下一件功能**：多维表专项（等用户给"功能优化明细"）· 画板 AI 助手接入（等后端/密钥方案）· 历史「恢复为新文档」（§3.20，用户已定"先不做"）· 移动端 B7/B8 + 真机复验。
-3. **建议点验本会话改动的边界**（都是未覆盖但风险可控的）：表格底栏在**窄窗 + 极长统计文字**下的让位；画板位置记忆在**多窗口并发**下的表现；历史快照预览在**超大表格（数 MB）**下的加载耗时。
-4. 待办全表以 §3 为准（本批新增第 20 条）；移动端以 §8 为准。
+1. 补跑打包 smoke（npm run test:packaged，本沙箱要 --no-sandbox）。
+2. 若继续精仿：加 --lake-grid-* 灰阶令牌做颜色对齐；或按 BITABLE-FEATURE-GAP 的后续项继续；或处理列菜单/详情里仍可对齐的小项。
+3. 请用户验收本批（改动已提交推送 master）。
+4. 桌面其余待办全表以 §3 为准；移动端以 §8 为准。
 
 ## 1. 项目一句话 + 铁律（详见 AGENTS.md）
 本地优先笔记应用（Electron 43 + React 18.3 + better-sqlite3 + 语雀 Lake 内核），S3（七牛 Kodo 兼容）同步。
@@ -146,10 +150,14 @@
 17. **【UI 重构收尾 · 待办清单】** —— 方案见 **`docs/UI-REDESIGN-OPTIMIZATION-PLAN-260923.md`**（行为不变的优化 + 与安卓重做的排期）；评价见 `docs/UI-REDESIGN-REVIEW-260923.md` **§四**：P0 安全 ✅ **已结案**（W-10 不需 dompurify / W-8 已修，见本 §3 第 4 条）· P1（`library-changed` 广播 / 目录树窗口化 / 面板契约可执行化 / 分段控件与设置说明字号的共享层 `!important` 阻塞）· P2（设计词表裁剪 / 历史文档标注 / 画板 `Wt is not a function` 立项）· P3 见本 §3 其余条目。
 18. **【浮动工具栏颜色 · 「最近使用自定义颜色」】**（260924 记录，用户：先记着后续处理）：内核调色板的「最近使用」**只记自定义色**——`updateUserColor` 只在「更多颜色」RGBA 选择器关闭（`saveColor`）时触发，**预设色块 `onSelect` 不写**；持久化在 `localStorage['ne_lakex_user_color_local_store_key']`（≤10，末尾最新），经 `editor.getUserColors()` / `editor.updateUserColor(c)` 读写。我们的浮动颜色面板「最近使用」目前是**占位**（`LakeColorBoard` 写死「暂无」）。要真做需先定：是否也记预设色块（会偏离内核语义）、面板改读 `editor.getUserColors()`、点最近色如何应用（`color`/`bgColor`）。**当前不动**。
 
-19. **【多维表（bitable）专项 · 待办 · 用户 260926「回头单独做」】**
-   - **(a) 自建浮层收编到 Overlay 原语**：`bitableCells.tsx:39` 自建 `Popover`（+ `SelectMenu`/`ColorPalette`/`DatePicker`）、`BitableEditor.tsx:875/967` 的 `.bt-modal`、`BitableRecordDrawer.tsx:27` 的 `.bt-drawer`。做法：先把自建 `Popover` 收敛成 `src/components/ui/Overlay.tsx` 的薄封装（或直接改调用点走 `Menu/Popover/Dialog`），再迁调用点。归入 UI 原语统一，见 `docs/UI-PRIMITIVES-PHASE1-260926.md`。
-   - **(b) 功能优化**：用户指出多维表还有功能优化项，**明细待用户给出**（范围/优先级）；产品口径见 `docs/BITABLE-PRODUCT-SPEC-260919.md`，技术/存储/同步见 `docs/SHEET-BITABLE-DESIGN-260918.md`。当前不动。
-
+19. **【多维表（bitable）专项 · 已完成一轮，见 §0】**
+   - (a) 浮层收编 Overlay 原语：已做（Popover/Dialog/Drawer + raised + Esc 浮层栈 + kind=drawer + --lake-z-overlay-menu-raised:715）。
+   - (b) 功能调研：已做，见 docs/BITABLE-FEATURE-GAP-260926.md；后续做哪几项待用户拍板。
+   - (c) 云端精仿 B1-B6 已做并实测，见 docs/BITABLE-CLOUD-PARITY-260926.md；B7 记录正文用户明确不做。
+   - (d) 用户点名三项已做并实测：抽屉拖拽调宽 / 附件粘贴拖拽 / 配置面板字段拖拽排序（视图级 fieldOrder）。
+   - (e) 附件单元格重做并实测：表格点一下进编辑、抽屉常驻；独立 + 按钮 + 独立提示文案；粘贴根因（全局 Cmd+V 的 preventDefault 挡掉原生 paste）已修。
+   - 门禁：tsc 0 · vitest 1325 passed/16 skipped · 双端 build OK · git diff --check clean。
+   - 仍可选做：--lake-grid-* 灰阶令牌颜色对齐；打包 smoke（本沙箱要 --no-sandbox）。
 20. **【历史快照「恢复为新文档」· 功能 · 用户 260926「先不做，计入待办」】**：历史预览旁边给一个入口，把某版快照**另存为一篇新文档**（用于对比/取用），而不是只能"恢复=覆盖当前文档"（现在恢复前会自动留档，损失可控，所以不紧急）。
    - 要点：新 IPC（读快照正文 → 走 `createNote`/`saveNote` **应用写入路径**落新文档，媒体资源按资产管线复制或按作用域改写；**禁直写库/手拼 `.lake`**，见 `docs/LAKE-CONTENT-WRITING.md`）；新文档插到当前笔记本下（或让用户选），标题建议 `<原标题>（历史 <时间>）`；非 doc（sheet/bitable/board）同样按 kind 落 `sheets/|bitables/|boards/`。
    - 未做理由：属于新功能（不是优化），用户明确"先不做"；涉及新 IPC + 目录插入 + 资源作用域，需单独立项验收。
