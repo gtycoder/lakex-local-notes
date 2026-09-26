@@ -226,6 +226,18 @@ describe("SheetEditor 单元格图片（P2）", () => {
     expect(CSS).toContain("clip-path: inset(0 0 26% 0);");
   });
 
+  it("底部「选区统计」行与文档状态栏融合成一条常驻底栏（260926 用户提议）", () => {
+    // 统计行保持内核默认高度（常驻），只做「给状态栏让位」这一件事；
+    // 不再是上一版那种「空态收起 / 有数据展开」+ 随之补发 resize 的算逻辑
+    expect(CSS).toMatch(/\.sheet-editor \.fortune-stat-area \{\s*padding-right: var\(--lake-sheet-status-w, 0px\);\s*\}/);
+    expect(CSS).not.toContain(".fortune-stat-area:has(");
+    // 让位宽度必须实测（同步文案会变）+ 观察状态栏本身体积
+    expect(SRC).toContain('host.style.setProperty("--lake-sheet-status-w"');
+    expect(SRC).toContain('querySelector<HTMLElement>(".document-statusbar")');
+    expect(SRC).toContain("observer.observe(statusBar);");
+    // 状态栏那一侧（data-doc-kind + 各类型的落位）由 src/styles/uiPrimitives.test.ts 围栏
+  });
+
   it("缩略图档位跟着显示宽度走（省掉大图的整张解码内存）", () => {
     // 档位按「模型宽度 × zoom × DPR」选，不能拿模型单位直接选（zoom=1.1 时差 10%）
     expect(SRC).toContain("cellImageThumbWidth(rect.width, zoom)");

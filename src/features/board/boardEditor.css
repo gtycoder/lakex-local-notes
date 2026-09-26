@@ -18,3 +18,26 @@
   height: 100%;
   background: transparent;
 }
+/* 画板被隐藏（切到别的标签）与"记下了位置、正在贴位置"这两个态都用 **content-visibility: hidden**。
+   两个反面教材（都实测过）：
+   - `display: none`（其它编辑器用的 fn__none）：画布容器塌成 0 尺寸 ⇒ 浏览器把 .viewport-container
+     的滚动位置钳掉（切走再回来变成 0,0 或 max,max）⇒ 位置"跳回原处"（用户 260926 报）；
+   - `visibility: hidden`：内核工具条自己用 `visibility: visible` 做显隐，会把继承下来的 hidden 顶掉
+     ⇒ 切到文档/表格后，画笔/箭头/形状三个按钮仍留在页面上（用户 260926 报"永久停留"）。
+   content-visibility:hidden 兼顾两者：内容不渲染（不绘制、不进无障碍树、不参与命中），
+   但元素盒子与内部滚动位置按上次布局保留（实测滚动量可读可写）。 */
+.board-editor--restoring,
+.board-editor--hidden {
+  content-visibility: hidden;
+  pointer-events: none;
+}
+/*
+ * 右下角：内核的「主题选择」岛（`.theme-toolbar`，位置在 vendor 镜像
+ * src/styles/app/vendor-board.css 里，那份标注勿手改）本来贴在 right/bottom 20px 上，
+ * 正好被右下角的文档状态栏压住（260926 用户报「看起来很奇怪」）。用户口径：状态栏留在右下，
+ * 把主题岛抬到状态栏上方。这里按状态栏真实几何**派生**（底距 8px + 高 26px + 8px 间隙，
+ * 前两者见 styles/document-status.css 与 chrome.css 的 .document-statusbar），别写死绝对位置。
+ */
+.board-editor .lakex-drawnix-core .theme-toolbar {
+  bottom: calc(8px + 26px + 8px);
+}

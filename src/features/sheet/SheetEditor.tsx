@@ -259,6 +259,8 @@ export interface SheetEditorProps {
   visible: boolean;
   readOnly: boolean;
   onChange: (content: string) => void;
+  /** 是否显示内核工具条（默认 true）。历史快照预览传 false ⇒ 只读预览不要"半个编辑器"的观感。 */
+  showToolbar?: boolean;
 }
 
 /** 内核插图产出的内联图片（`FileReader.readAsDataURL` → `data:image/png;base64,…`）。 */
@@ -332,7 +334,7 @@ function initialSheets(content: string, noteId: string): SheetWorksheet[] {
     .map((sheet) => withRenderableImageSrc(sheet, noteId));
 }
 
-export function SheetEditor({ noteId, content, visible, readOnly, onChange }: SheetEditorProps) {
+export function SheetEditor({ noteId, content, visible, readOnly, onChange, showToolbar = true }: SheetEditorProps) {
   const workbookRef = useRef<WorkbookInstance>(null);
   /** 宿主容器：只用来观察宽度变化（见下方「补发 resize」effect）。 */
   const hostRef = useRef<HTMLDivElement>(null);
@@ -447,6 +449,28 @@ export function SheetEditor({ noteId, content, visible, readOnly, onChange }: Sh
       observer.disconnect();
       if (raf) window.cancelAnimationFrame(raf);
     };
+  }, [everVisible]);
+
+  /** 底部「选区统计」行与文档状态栏共用同一条常驻底栏（260926 用户提议）：
+   * 统计行常驻 + 状态栏固定展示，去掉「有无统计项」的收起/展开与随之而来的重算。
+   * 统计行右对齐、状态栏钉在同一行最右端 ⇒ 要把状态栏实测宽度让给统计行，否则统计文字被压住
+   * （用户截图：「求和/平均值」被盖掉）。宽度随同步文案变 ⇒ 观察状态栏本身体积，不写死。
+   */
+  useEffect(() => {
+    if (!everVisible) return;
+    const host = hostRef.current;
+    if (!host) return;
+    const statusBar = host.closest(".workspace")?.querySelector<HTMLElement>(".document-statusbar");
+    if (!statusBar) return;
+    let raf = 0;
+    const apply = () => {
+      raf = 0;
+      host.style.setProperty("--lake-sheet-status-w", `${Math.round(statusBar.getBoundingClientRect().width) + 20}px`);
+    };
+    apply();
+    const observer = new ResizeObserver(() => { if (!raf) raf = window.requestAnimationFrame(apply); });
+    observer.observe(statusBar);
+    return () => { observer.disconnect(); if (raf) window.cancelAnimationFrame(raf); };
   }, [everVisible]);
 
   /**
@@ -1021,7 +1045,7 @@ export function SheetEditor({ noteId, content, visible, readOnly, onChange }: Sh
           ref={workbookRef}
           data={renderSheets as never}
           allowEdit={!readOnly}
-          showToolbar
+          showToolbar={showToolbar}
           showFormulaBar={false}
           showSheetTabs
           toolbarItems={TOOLBAR_ITEMS}

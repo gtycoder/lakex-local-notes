@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from "react";
 
 interface DialogSize {
   w: number;
@@ -80,6 +80,37 @@ export function useFloatingDialog({ id, initialSize, minSize, maxWidth = 1180 }:
     maxW: Math.min(maxWidth, window.innerWidth - 32),
     maxH: Math.max(minSize.h, window.innerHeight - 32),
   }), [maxWidth, minSize.h]);
+
+  /**
+   * 窗口尺寸变化后把浮窗拉回可见区（位置与尺寸一起收敛）。
+   *
+   * 位置/尺寸是本机持久化的：**在大窗口里把浮窗拖到右上/右下，之后用更小的窗口打开**，
+   * 或窗口在被打开期间被缩小，浮窗就会留在屏幕外（用户 260926 报历史弹窗"完全不可见"）。
+   * 这里的坐标同样是**视口绝对坐标**（依赖 .floating-dialog 的 position: fixed，见 panels.css 的说明）。
+   */
+  useEffect(() => {
+    const reclamp = () => {
+      const panel = panelRef.current;
+      if (!panel || interactionRef.current) return; // 拖动/缩放中不插手
+      const bounds = getBounds();
+      const rect = panel.getBoundingClientRect();
+      const w = Math.min(bounds.maxW, Math.round(rect.width));
+      const h = Math.min(bounds.maxH, Math.round(rect.height));
+      const x = Math.min(Math.max(EDGE, Math.round(rect.left)), Math.max(EDGE, window.innerWidth - w - EDGE));
+      const y = Math.min(Math.max(EDGE, Math.round(rect.top)), Math.max(EDGE, window.innerHeight - h - EDGE));
+      if (w === Math.round(rect.width) && h === Math.round(rect.height) && x === Math.round(rect.left) && y === Math.round(rect.top)) return;
+      panel.style.width = `${w}px`;
+      panel.style.height = `${h}px`;
+      panel.style.left = `${x}px`;
+      panel.style.top = `${y}px`;
+      panel.style.transform = "none";
+      panel.style.animation = "none";
+      setSize({ w, h });
+      setPosition({ x, y });
+    };
+    window.addEventListener("resize", reclamp);
+    return () => window.removeEventListener("resize", reclamp);
+  }, [getBounds]);
 
   const persist = useCallback(() => {
     const panel = panelRef.current;

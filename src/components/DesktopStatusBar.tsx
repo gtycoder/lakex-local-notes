@@ -35,7 +35,11 @@ export function DesktopStatusBar({ showDocumentStats, docKind = "doc", wordCount
   if (!showDocumentStats) return null;
   return (
     <>
-      <footer className={`statusbar document-statusbar${notice ? " has-message" : ""}`} aria-label="当前文档状态">
+      <footer
+        className={`statusbar document-statusbar${notice ? " has-message" : ""}`}
+        data-doc-kind={docKind}
+        aria-label="当前文档状态"
+      >
         {locked && (
           <span className="document-statusbar-lock" title="文档已锁定（只读）" aria-label="文档已锁定（只读）">
             <Lock size={11} aria-hidden="true" />

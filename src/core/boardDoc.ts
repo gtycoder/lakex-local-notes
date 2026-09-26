@@ -35,7 +35,14 @@ export interface BoardDoc {
   presetInitialized?: boolean;
   /** Plait 场景树（Drawnix 的 elements）。保持 unknown[]：core 不依赖 @plait/* 类型。 */
   elements: unknown[];
-  /** 视口；缺失/非法 = 打开时自适应。 */
+  /**
+   * 视口；缺失/非法 = 打开时自适应。
+   *
+   * **历史字段，宿主已不再写入**（260926 B）：视图（平移位置 / 缩放）改由本机记忆承担
+   * （`src/features/board/boardViewStore.ts`，L3 设备本地）——写正文会让缩放/平移把文档标脏
+   * 并触发同步上传。桌面打开时只把它当**兜底**（本机记忆没有时才用），移动端只读查看器
+   * 仍按「没有视口就 fit 内容」工作。
+   */
   viewport?: BoardViewport | null;
 }
 

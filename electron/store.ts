@@ -88,10 +88,12 @@ export interface NoteInfo {
   sizeBytes: number;
   charCount: number;
   wordCount: number;
+  /** 当前正文（已落盘那份）的 sha256：历史面板用来标出"与当前版本一致"的快照。 */
+  contentHash: string;
   /** 正文引用到的本地资产（去重） */
   assets: NoteInfoAsset[];
   assetTotalBytes: number;
-  history: Array<{ id: number; createdAt: string; size: number }>;
+  history: Array<{ id: number; createdAt: string; size: number; contentHash: string }>;
 }
 
 export interface NoteInfoAsset {
@@ -724,6 +726,9 @@ export class Store {
     }
     const tableCount = (doc.content.match(/<table\b/g) ?? []).length;
     if (tableCount > 0) cardCounts.set("table", (cardCounts.get("table") ?? 0) + tableCount);
+    // 当前正文 hash（就是刚读到的这份正文；与 note_history.content_hash 同口径 = 正文串的 sha256）
+    // 历史面板据此标出"与当前版本一致"的那条快照。notes 表本身不存正文 hash，所以这里现算。
+    const contentHash = crypto.createHash("sha256").update(doc.content).digest("hex");
     const cardStats = [...cardCounts.entries()]
       .filter(([, count]) => count > 0)
       .sort((a, b) => b[1] - a[1])
@@ -744,9 +749,10 @@ export class Store {
       sizeBytes,
       charCount,
       wordCount,
+      contentHash,
       assets,
       assetTotalBytes: assets.reduce((sum, a) => sum + a.size, 0),
-      history: this.listNoteHistory(id).map((h) => ({ id: h.id, createdAt: h.createdAt, size: h.size })),
+      history: this.listNoteHistory(id).map((h) => ({ id: h.id, createdAt: h.createdAt, size: h.size, contentHash: h.contentHash })),
     };
   }
 

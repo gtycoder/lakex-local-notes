@@ -1,0 +1,117 @@
+/*
+ * 历史快照的结构化预览（sheet / bitable / board）。
+ *
+ * 由组件自身 import（与 features/sheet/sheetEditor.css、features/board/boardEditor.css 同档），
+ * 所以桌面与移动端各自的 bundle 用到谁就带谁。颜色/间距/圆角一律走 --lake-* 令牌
+ * （硬指标：主题外颜色字面量 0、未定义令牌 0）。
+ */
+.snapshot-preview {
+  display: flex;
+  flex-direction: column;
+  gap: var(--lake-space-lg);
+  padding: var(--lake-space-xs) 0 var(--lake-space-md);
+  color: var(--lake-text-1);
+  font-size: var(--lake-font-size-tiny);
+}
+
+/* 事实清单：标签左、值右（两列自适应） */
+.snapshot-preview__facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: var(--lake-space-sm) var(--lake-space-xl);
+  margin: 0;
+}
+.snapshot-preview__fact { display: flex; align-items: baseline; gap: var(--lake-space-sm); min-width: 0; }
+.snapshot-preview__fact dt { flex: 0 0 auto; color: var(--lake-text-3); }
+.snapshot-preview__fact dd {
+  margin: 0;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--lake-text-1);
+  font-weight: var(--lake-font-weight-semibold);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.snapshot-preview__section { display: flex; flex-direction: column; gap: var(--lake-space-xs); min-width: 0; }
+.snapshot-preview__title { color: var(--lake-text-2); font-weight: var(--lake-font-weight-semibold); }
+
+/* 小表格：列多时横向滚动，单元格单行省略（历史预览是"扫一眼"，不铺满） */
+.snapshot-preview__scroll {
+  max-width: 100%;
+  overflow-x: auto;
+  border: 1px solid var(--lake-border-1);
+  border-radius: var(--lake-radius-sm);
+  background: var(--lake-bg-block);
+}
+.snapshot-preview__table { border-collapse: collapse; width: 100%; }
+.snapshot-preview__table th,
+.snapshot-preview__table td {
+  max-width: 180px;
+  overflow: hidden;
+  padding: var(--lake-space-xs) var(--lake-space-md);
+  border-right: 1px solid var(--lake-border-1);
+  border-bottom: 1px solid var(--lake-border-1);
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.snapshot-preview__table th { color: var(--lake-text-3); font-weight: var(--lake-font-weight-semibold); }
+.snapshot-preview__table tr:last-child td { border-bottom: 0; }
+.snapshot-preview__table th:last-child,
+.snapshot-preview__table td:last-child { border-right: 0; }
+
+.snapshot-preview__more,
+.snapshot-preview__hint { margin: 0; color: var(--lake-text-3); font-size: var(--lake-font-size-micro); }
+.snapshot-preview__text {
+  margin: 0;
+  padding: var(--lake-space-md) var(--lake-space-lg);
+  border: 1px solid var(--lake-border-1);
+  border-radius: var(--lake-radius-sm);
+  background: var(--lake-bg-block);
+  color: var(--lake-text-2);
+  line-height: var(--lake-line-height-normal);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* 快照外层：事实条 + 编辑器预览（列方向，编辑器吃掉剩余高度） */
+.history-snapshot {
+  display: flex;
+  flex-direction: column;
+  gap: var(--lake-space-md);
+  height: 100%;
+  min-height: 0;
+}
+
+/*
+ * 只读编辑器槽位：**同一时刻只挂一个**（切快照由 key 重挂）。
+ * 高度必须确定（编辑器的根容器是 height:100%，见 sheetEditor/bitableEditor/boardEditor.css），
+ * 所以这里用 flex:1 + min-height:0 把剩余空间给出去，overflow:hidden 避免外滚 + 内滚两条。
+ */
+.history-editor-preview {
+  display: flex;
+  /* 列方向 + 子项 flex:1：让编辑器铺满槽位。
+     不用"子元素 height:100%"——面板里宿主高度是 flex 算出来的、属性弹窗里是 min-height 撑的，
+     后者对百分比不可解析（实测编辑器被压成 2px）。 */
+  flex-direction: column;
+  flex: 1 1 auto;
+  /* 兜底高度：在"属性弹窗"里父级是普通 block（无确定高度）⇒ 只写 flex 会塌成几像素、编辑器被压扁。
+     历史面板里父级是 flex 列，仍按剩余空间铺满（min-height 不参与竞争）。 */
+  min-height: 320px;
+  overflow: hidden;
+  border: 1px solid var(--lake-border-1);
+  border-radius: var(--lake-radius-sm);
+  background: var(--lake-bg-canvas);
+}
+.history-editor-preview > * {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+}
+
+/* 表格预览里那条"选区统计"行（.fortune-stat-area，第三方面板）在只读预览里永远空着，
+   关掉它免得在预览底部留一条空带（正式编辑器里它是状态栏的落点，见 sheetEditor.css，不要动那边）。 */
+.history-editor-preview .fortune-stat-area {
+  display: none;
+}

@@ -67,9 +67,15 @@
 .history-preview-viewer { flex: 1 1 auto; min-height: 0; overflow: auto; }
 
 /* 设置表单：思源式两列表单行（label 左、input 右，等宽对齐） */
-/* 历史弹窗可拉伸 + 更高 */
-.history-panel { position: relative; }
-
+/* 历史弹窗可拉伸 + 更高。
+ * ⚠️ **不要**给 .history-panel（或 .trash-panel/.settings-panel）写 `position`：
+ * 这三个浮窗用 `useFloatingDialog` 拖动/缩放，那套逻辑按「视口绝对坐标」读写 —— 读
+ * `getBoundingClientRect()`、写 `style.left/top`，成立的前提是 `.floating-dialog` 的
+ * `position: fixed`（见 src/styles/app/settings.css 与 src/styles/overlay.css 的 .ln-scrim）。
+ * 260926 曾在这里写 `position: relative`（同层后声明胜出，把 fixed 顶掉）⇒ left/top 从
+ * 「视口绝对」变成「相对居中位置的偏移」⇒ 每拖一次/点一次都把居中量再叠一遍，弹窗一路往右下
+ * 跑出屏幕（用户报「历史版本弹窗无法看、点一下更靠右下、最后完全不可见」）。
+ * 护栏见 src/styles/uiPrimitives.test.ts 的「浮动弹窗坐标系」。 */
 .history-panel,
 .trash-panel { min-height: 0; }
 

@@ -70,6 +70,15 @@
   backdrop-filter: none;
   font-size: var(--lake-font-size-tiny);
 }
+/* 表格文档：状态栏并入 sheet 底部那条常驻「选区统计」行（260926 用户提议的融合）——两者同处一条底栏，
+ * 统计在左中段、状态栏钉在最右端。22px = 内核统计行自身固定高度（见 features/sheet/sheetEditor.css），
+ * 1px = sheet 容器相对面板的 1px 内缩；统计靠 --lake-sheet-status-w 给它让位（由 SheetEditor 实测）。
+ * 其余文档类型保持「浮在正文右下」的原形态。 */
+.document-statusbar[data-doc-kind="sheet"] {
+  bottom: 1px;
+  height: 22px;
+  min-height: 22px;
+}
 .document-statusbar-stats { gap: var(--lake-space-lg); color: var(--lake-text-3); }
 .document-statusbar-state {
   gap: 5px;

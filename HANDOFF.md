@@ -5,45 +5,38 @@
 > 所有历史 dated handoff（旧 `§0 <日期>` 节、`§2.x` 各批会话）已从本文件**删除**，只在 git 历史可查：`git log -p --follow HANDOFF.md`（或 `git show <旧提交>:HANDOFF.md`）。文中残留的 `§2.x` / 旧 `§0` 引用是**历史指针**，去 git 查，**不要在本文件重建历史**。
 > **§8 是移动端（安卓）专职交接**，由移动端会话维护；桌面会话不要改 §8，移动端会话不要改 §0-§7 之外的桌面文件。
 
-## 0. 最新交接 · 260926 续 · UI 原语收敛（Phase 0 / 0.5 / 1a–1f + 深色/内核主题专项）· **已合 master 并推送**
+## 0. 最新交接 · 260926 晚 · 表格底栏融合 / 画板视图记忆 / 历史弹窗坐标系 / 历史快照真预览 · **已合 master 并推送**
 
-> 写给完全没有上下文的新会话。用户口径：当前 UI"零碎问题本质是弹窗不统一、结构混乱"；本批把 **浮层/按钮/开关** 三个角色收敛成**单一原语**，并把"手抄选择器清单"换成"单一 base + 唯一性门禁"。设计稿与可交互预览：`docs/UI-PRIMITIVES-PHASE1-260926.md` + `docs/preview/ui-primitives-260926.html`。
+> 写给完全没有上下文的新会话。本批四件事，每条都写了**根因 + 实测结论**：① 表格底部常驻白条 → 与文档状态栏融合；② 画板视图位置改为**本机永久记忆**（A1）+ 视图**不进正文**（B）+ 重开/重挂**不跳动**（C）；③ 历史版本弹窗"跑出屏幕"的**坐标系**修复（+ 死规则清理）；④ 历史快照**只读编辑器真预览**（表格/多维表/画板的图片终于能看）+ 5 项体验优化。
+> 上一批（UI 原语收敛，tip `b68cf8b`/`912b666`）已按约定从本文件删除，git 可查（`git log -p --follow HANDOFF.md`）。
 
-### 一、已完成（按提交，均已合 master；本批共 20 个提交，tip `b68cf8b`）
-- **Phase 0**（`f15687a`）：修四处缺失样式——`.confirm-dialog`/`.emoji-picker` 接入统一表面、`config-block__actions` 布局（JSX 用 11 处但全仓无定义）、`.b3-switch::after` 补回被删源漏掉的滑块基线。CDP 实测四项。
-- **过期 b3 注释清理**（`15f587b`）：`src/b3/**` 已整体删除，清掉 6 个文件的现值语气残留 + `AGENTS §3 #14`。
-- **设计稿 + 预览**（`440fdac`/`471b599`/`2c3e949`/`927b240`）
-- **浅色 accent 对齐设计规格**（`f977a05`，Q10）：`themes/light.css` accent 家族 `#3d7eff→#5b6f96`（ink `#3a4a68`、tint `#eceff5`、text `#3a4a68`，hover/press 派生）；**dark 保持紫、warm 保持橙**（CDP 确认未变）。
-- **深色表面统一**（本提交）：dark `--lake-bg-panel` `#25262b` → **`#1e1f22`（== canvas）**。根因：light/warm 里 `panel == canvas == #fff`，dark 却 `panel(#25262b) ≠ canvas(#1e1f22)` ⇒ 顶栏/面包屑/原生大纲/正文出现"四种黑"的明显色阶。CDP 实测修复后侧栏/面包屑/编辑器/原生大纲**均为 `rgb(30,31,34)`**，仅顶栏 `window #1a1b1e`（与浅色"外壳略深于内容"同构）。`--lake-bg-block` 未动。
-- **内核主题变量集中映射（专项，本提交）**：新增**未分层**的 `src/styles/kernel-theme.css`，把内核 schema 的 53 个 `--lakex-editor-*` 映射到 `--lake-*` 令牌。**关键**：内核的 schema `<style>` 是未分层的，`未分层 > 任何 @layer` ⇒ 写在 `@layer` 里的变量桥**永远压不过**它（这就是深色大纲/工具条/下拉/图标反复出问题的同一根因）。必须放未分层 + `[data-theme=...]` 高特异性。分三段：① dark+warm 共用（表面/边框/文字/主色/色板）② **仅 dark** 语义黑白反相 ③ **仅 light** 把内核的绿主题色/亮蓝链接换成本项目规格 accent。feature.css 里原先零散的变量桥与消费属性覆盖（大纲底色/工具条文字/下拉值/图标 color）**已删除**，集中表成为唯一来源。CDP 实测三主题均正确（light 主色 `#5b6f96`、dark 反相 `#a8a9ad`、warm 保持 `#000`）。
-- **Phase 0.5 深色修复**（`238051c`）：根因=内核把浅色 schema 的 `--lakex-editor-*` 作为**未分层 `<style>`** 注入（`.lakex-default-theme{--lakex-editor-background-primary:#fff}`），未分层 > 任何 `@layer` ⇒ 变量桥失效。修法=feature 层直接覆盖消费属性（`.ne-icon` 修正原误写 `.ne-icon-symbol`、工具条文字、`.ne-toc-sidebar/.ne-viewer-toc-sidebar` 底色）。CDP 实测 dark 大纲 `rgb(37,38,43)`、图标 `fill rgb(168,169,173)`。
-- **Phase 1a**（`3d0023e`）：`src/components/ui/Overlay.tsx` 原语（Overlay + Dialog/Menu/Popover；portal/层序/外点/Esc/焦点圈闭/滚动锁）；overlay 层序令牌 `--lake-z-overlay-menu/scrim/dialog/lightbox = 600/700/710/720`；修 B1（`.modal-backdrop` z 30→令牌，原先遮罩盖不住外壳）；`.ln-dialog` 布局+表面合并到 `overlay.css` 单一来源；`.ln-menu/.ln-popover` 表面统一。试点：ConfirmDelete。
-- **Phase 1b**（`7649b4e`）：对话框迁移 5 个（NoteInfo / AssetRename / Search / Trash / History）；原语加 `surfaceClassName/scrimClassName/surfaceRef`（支持顶对齐命令面板、可拖拽浮窗）。
-- **Phase 1c**（`87a4788`）：菜单迁移（CardContextMenu ×2、Sidebar 新建+右键、MultiTabEditor 标签切换+右键、BitableEditor 行右键、DesktopOverlays 顶栏 ×2）；菜单层序统一到 `--lake-z-overlay-menu`。
-- **Phase 1d**（`be45029`）：emoji 选择器 + 多维表两个气泡；原语加 `ignoreOutside`。
-- **Phase 1e**（`b0a9b67`）：设置开关 `b3-switch(input)` → `ln-switch(button+role=switch+knob)`；`onChange` API 由 ChangeEvent 改为 `(checked:boolean)`，6 调用点同步。
-- **Phase 1f**（`src/styles/uiPrimitives.test.ts`，本提交）：三条门禁——① `createPortal` 只允许 Overlay 原语 + 显式白名单；② `.ln-dialog/.ln-menu/.ln-popover` 只在 `overlay.css` 定义；③ overlay 层序令牌唯一、递增、都高于 topbar。
+### 一、已完成
+- **表格底栏融合**（用户报"sheet 行选择下方常驻白条不动"）：白条 = 内核 `.fortune-stat-area`（选区统计行，固定 22px，无选区时是空 div）。做法 = **与文档状态栏融合**：统计行常驻、状态栏钉在它右端同一行（`DesktopStatusBar` 输出 `data-doc-kind`，`chrome.css` 给 sheet 变体 `bottom:1px/height:22px`）；统计文字靠 SheetEditor 实测宽度 `--lake-sheet-status-w` 让位（否则被状态栏压住）。**刻意不用"空态收起"**：收起会改画布容器高度，而内核只在 `window.resize` 时重算尺寸（实测白条只会换个地方出现），常驻 + 融合反而少一层计算。
+- **画板状态栏位置**：画板右下角是内核自己的浮岛（主题选择 `right/bottom:20px`、缩放右上、绘图工具左中）⇒ 状态栏压住主题选择（用户报"看起来很奇怪"）。用户口径：**状态栏留右下、把主题岛抬上去** ⇒ `boardEditor.css` 用 `bottom: calc(8px + 26px + 8px)` 派生抬高，并把状态栏右缘对齐画板的 20px 栅格。
+- **画板视图位置（用户 260926 新口径，推翻 260916 的"不记忆"）**：A1 只存本机 `localStorage['lake-notes-v3.board-views']`（L3，见 `docs/STORAGE-LAYERS.md`）——**绝不动正文/S3**；B 保存序列化不再带当前视口（`boards/*.board.json` 的 `viewport` 成历史字段，仅作本机记忆缺失时的兜底）；C 重开/重挂"**贴好滚动位置再显示**"。实现 `src/features/board/boardViewStore.ts` + `BoardEditor.tsx`；实测切标签/强制重挂/重启应用位置与缩放都保持，三篇正文指纹预览前后完全一致。
+- **画板隐藏态必须用 `content-visibility: hidden`**（血泪坑）：`display:none` 会让画布容器塌成 0 尺寸、浏览器把滚动位置钳掉（切走再回来变 0,0 / max,max）；`visibility:hidden` 会被内核工具条自己的 `visibility: visible` 顶掉（切到文档后画笔/箭头/形状三个按钮**永久留在页面上**——用户正是报"就这 3 个"）。`content-visibility:hidden` 两者兼顾。
+- **历史版本弹窗坐标系修复**（用户报"无法看、点一下更靠右下、最后完全不可见"）：`.history-panel{position:relative}` 把 `.floating-dialog` 的 `position:fixed` 顶掉，而 `useFloatingDialog` 按**视口绝对坐标**读写 `left/top` ⇒ 每拖/点一次就把居中量再叠一遍、跑出屏幕。删掉那条声明 + 新增 `src/styles/floatingDialogCoords.test.ts` 护栏（三个浮窗不许写 `position`）+ hook 增加"窗口缩小把浮窗拉回可见区"。另清掉两条死规则（`.settings-resize::after` / `.history-panel .settings-resize`，全仓无引用，正是那条 `position:relative` 的来历）。
+- **历史快照真预览**（用户报"画板/数据表/表格预览还是 json"）：主进程 `historyRepository.preview()` 按 `kind` 分派（doc 走 Lake；非 doc 走 `searchTextForKind`，与搜索索引同口径），payload 带 `kind`；新增 `src/core/historyPreview.ts`（结构化摘要模型 + "无法解析"兜底）+ `HistorySnapshotPreview`（**只读编辑器真预览**：sheet/bitable/board 各挂只读编辑器、`onChange` no-op ⇒ 预览绝不写盘；以快照 id 作 key ⇒ **同一时刻只有一个实例**；失败退摘要）。表格单元格图片、多维表附件缩略图、画板 canvas 都能看（实测 9/9、1/1 加载；预览前后正文指纹不变）。
+- **历史预览 5 项优化**（用户点名）：① doc 快照 viewer **同实例复用**（切快照只 `setDocument`；`useHistorySnapshotViewer.ts`）；② 预览里隐藏编辑器外壳（sheet `showToolbar=false` / bitable `chrome=false` / 预览内关掉空的统计行）；③ 打开面板即**预热**对应预览分包（历史列表带 `kind`）；④ 行上标出「**当前**」版本（`getNoteInfo` 新增 `contentHash`，现算正文 sha256）；⑤ 列表 **↑/↓ 切换快照**（滚动只改列表 `scrollTop`，**不用 `scrollIntoView`**）。
 
 ### 二、门禁（全绿）
-`tsc` 0 · `vitest` **1289 passed / 16 skipped** · 桌面 + 移动 `vite build` OK · `ui-metrics`（`var(--b3-*)` 0 / 颜色字面量 0 / `!important` 9 / 未定义令牌 0）· `cssLayers` 2/2 · `check-core-boundaries` 0 违规 · `git diff --check` clean。
+`tsc` 0 · `vitest` **1317 passed / 16 skipped** · 桌面 + 移动 `vite build` OK · `ui-metrics`（颜色字面量 0 / `!important` 9 / 未定义令牌 0）· `cssLayers` · `git diff --check` clean。本批新增护栏：`floatingDialogCoords.test.ts` / `historyPreview.test.ts` / `historySnapshotPreview.test.ts` / `boardViewStore.test.ts` + `uiPrimitives.test.ts`（状态栏落位）。
 
 ### 三、有意保留 / 未做（都写明了理由，别再当漏项）
-- **ImageLightbox / AttachmentPreview**：全屏媒体预览（自带背景点击关闭 + `position:fixed` 铺满），迁到居中 Dialog 收益低风险高；已列入 G1 白名单。
-- **selection-toolbar 的 tip**（`kernelUiAtoms.tsx`）：非交互 tooltip，§3.7 决定不建 Tooltip 原语；已列入 G1 白名单。
-- **非 portal 的浮层**：`SyncStatusPopover` **已收编（260926 续）：标准原语 `<HoverPopover>`（悬停可交互气泡）**；**悬停子菜单（`ExportSubmenuItem` / `CardContextMenu`）也已收编：标准原语 `<Submenu>`（`HoverPopover` + `.ln-menu` + 相邻定位/翻转），并修掉子菜单无底色**；`QuickNotesWorkspace` 排序/行内 ⋯ 菜单、转文档对话框、`DraftRecoveryDialog`、`OutlineSidebar` 级别菜单也已收编；剩多维表自建浮层（单独一批）。
-- **Button（`b3-button` 45 处 / `ln-btn` 13 处）**：按 Q4 **增量迁移**（接触即迁 + 新代码只用 `ln-btn`），**不做一次性 find/replace**；`.b3-button` 规则保留（kit.css 已映射设计规格）。
+- 历史预览**不做**：非 doc 的"同实例换数据"（要各编辑器提供 load API，只省几百毫秒）；并排 diff/逐字段对比；移动端历史预览（移动端历史只有列表）；大快照"先摘要再加载"的阈值保护；sheet 预览"自动跳到第一个非空格"（正文不存滚动位置）；快照缩略图（见 §3）。
+- 画板视图记忆**不做跨设备一致**（用户口径 A1：各端各自记忆，本就是展示维度）。
+- 历史快照"**恢复为新文档**"= 功能（不是优化），**计入 §3 待办，用户 260926 明确"先不做"**。
 
-### 四、踩过的坑
-1. **内核主题变量是未分层注入的**：`--lakex-editor-*` 不在 vendor CSS 定义，由 `ThemeSchema.apply(domNode)` 以未分层 `<style>` 写入 ⇒ 永远压过 `@layer`。要覆盖只能**直接覆盖消费属性**（feature 层压 legacy 层），不能靠变量桥。
-2. **`.ne-icon` 不是 `.ne-icon-symbol`**：原图标修复选择器写错，规则从未命中（深色下图标一直黑）。
-3. **cssLayers 基线归并**：把规则从 A 文件搬到 B 文件会合法抬高 B 的声明数；本批 overlay.css 94→145、feature.css 102→104，均已在基线注明。
-4. **原语 dialog 会锁 body 滚动并恢复焦点**：迁移大浮窗（回收站/历史）时用 `surfaceRef` 把外部 `panelRef` 接上，否则拖拽/缩放失效。
-5. **本沙箱里跑 `npm run test:packaged` 要透传 `--no-sandbox`**：DSH agent 宿主的 seatbelt 让 Chromium 自身 sandbox 初始化失败（`sandbox initialization failed` + GPU `Sorry, GPU process isn't usable. Goodbye.`），打包版直接崩、CDP 拿不到页面。包装脚本 `scripts/e2e-packaged-smoke.mjs` 已支持 `LAKE_PACKAGED_ARGS="--no-sandbox --disable-gpu"`，并且会等 `lake://` 页面真正出现（打包版先暴露 `about:blank` 目标）。实测该命令 exit 0（两个内层 smoke 都过）。
+### 四、踩过的坑（本批）
+1. **`notes` 表没有 `content_hash` 列**（`note_history` 有）⇒ "当前正文 hash"必须现算 sha256；照抄查表会运行时报 `no such column`。
+2. **属性弹窗里的预览槽位没有确定高度**：父级是普通 block 时子元素 `height:100%` 不可解析 ⇒ 编辑器被压成 2px（图片自然出不来）。正解 = "列方向 flex + 子项 `flex:1` + `min-height:320px` 兜底"。
+3. **HMR 给自定义 hook 新增 `useEffect` 会白屏**：注入已渲染组件触发 `Rendered more hooks than during the previous render`，整个 React 树卸载（窗口空白）。刷新即恢复，不是代码 bug；改 hook 内部结构后要整页重载再测。
+4. **遮挡窗口里 rAF 与 scroll 事件都不跑**：内核实现在 `pointermove` 里直接赋值 `scrollLeft/Top`，窗口被遮挡时渲染步骤被挂起 ⇒ 量不到也记不住；采集要挂在 `pointerup` 这类输入事件、恢复用 `setTimeout`（真机可见窗口不受影响）。
+5. **测量脚本必须限定"当前活跃编辑器宿主"**：全页 `querySelector('.viewport-container')` 会抓到**文档内画板卡**的容器，据此误判过两轮。
+6. **`touch` 主进程文件即触发 dev 插件重启 Electron**：验证需要，但会让当前实例重启，别在用户开着窗口时随手触发。
 
 ### 五、下一步
-- 合 master 前建议：跑一次**打包 smoke**（`npm run test:packaged`）与**真实数据点验**（设置页开关、右键菜单、属性弹窗、搜索、回收站/历史拖拽）。
-- 若继续收敛：`SyncStatusPopover`/QuickNotes 菜单/ExportSubmenu 可后续并入 `<Menu>`；`.b3-switch` 死 CSS 可清（现无 tsx 引用）。
-- 已知残留：内核浅色 schema 的"主题色"是绿 `#00b96b`，浅色下部分内核图标仍绿（未映射到 accent，单独一项）。
+- 待办见 §3（本批新增：历史"恢复为新文档"）。下次合 master 前建议补跑一次**打包 smoke**（`npm run test:packaged`，本沙箱要透传 `--no-sandbox`，见 §4 老坑）。
 
 ## 1. 项目一句话 + 铁律（详见 AGENTS.md）
 本地优先笔记应用（Electron 43 + React 18.3 + better-sqlite3 + 语雀 Lake 内核），S3（七牛 Kodo 兼容）同步。
@@ -136,8 +129,12 @@
    - **(a) 自建浮层收编到 Overlay 原语**：`bitableCells.tsx:39` 自建 `Popover`（+ `SelectMenu`/`ColorPalette`/`DatePicker`）、`BitableEditor.tsx:875/967` 的 `.bt-modal`、`BitableRecordDrawer.tsx:27` 的 `.bt-drawer`。做法：先把自建 `Popover` 收敛成 `src/components/ui/Overlay.tsx` 的薄封装（或直接改调用点走 `Menu/Popover/Dialog`），再迁调用点。归入 UI 原语统一，见 `docs/UI-PRIMITIVES-PHASE1-260926.md`。
    - **(b) 功能优化**：用户指出多维表还有功能优化项，**明细待用户给出**（范围/优先级）；产品口径见 `docs/BITABLE-PRODUCT-SPEC-260919.md`，技术/存储/同步见 `docs/SHEET-BITABLE-DESIGN-260918.md`。当前不动。
 
+20. **【历史快照「恢复为新文档」· 功能 · 用户 260926「先不做，计入待办」】**：历史预览旁边给一个入口，把某版快照**另存为一篇新文档**（用于对比/取用），而不是只能"恢复=覆盖当前文档"（现在恢复前会自动留档，损失可控，所以不紧急）。
+   - 要点：新 IPC（读快照正文 → 走 `createNote`/`saveNote` **应用写入路径**落新文档，媒体资源按资产管线复制或按作用域改写；**禁直写库/手拼 `.lake`**，见 `docs/LAKE-CONTENT-WRITING.md`）；新文档插到当前笔记本下（或让用户选），标题建议 `<原标题>（历史 <时间>）`；非 doc（sheet/bitable/board）同样按 kind 落 `sheets/|bitables/|boards/`。
+   - 未做理由：属于新功能（不是优化），用户明确"先不做"；涉及新 IPC + 目录插入 + 资源作用域，需单独立项验收。
+
 ### 当前问题 / 已知坑（不阻塞）
-- 画板**不再记忆视口**（拖动/缩放后重开为默认/自适应）：这是 260916 为「不让视口触发保存/上传」刻意做的取舍，**用户已确认接受**（"谁知道下次进来要看什么"）。不要改回去。
+- 画板视图位置：**已按用户 260926 口径改为「本机永久记忆」**（推翻了 260916 的「不记忆」取舍）。要点三条，别再回退：① 平移/缩放的**位置只存本机**（localStorage `lake-notes-v3.board-views`，L3，见 `docs/STORAGE-LAYERS.md`）——**绝不写正文**，所以改位置不会标脏、不会同步、不占 S3（用户明确：这是展示维度，不影响数据正确性，接受各端位置不同）；② 保存序列化**不再带当前视口**（`boards/*.board.json` 的 `viewport` 是历史字段，宿主已不维护，仅作本机记忆缺失时的兜底）；③ 重开/重挂时**贴好滚动位置再显示**（`.board-editor--restoring` 用 `content-visibility: hidden`，**不是** visibility/display——理由见 §0 的血泪坑），否则会"先默认再跳"。实现见 `src/features/board/boardViewStore.ts` + `BoardEditor.tsx`，护栏 `boardViewStore.test.ts` / `boardEditorMount.test.ts`。
 - 离线残余 3 处（见上，全外观级）。
 - `public/vendor/cdn` 的 32 个静态无引用文件**不能删**——它们是 `electron/cdnRedirect.ts` 的**运行时兜底白名单**（用「镜像里是否存在该文件」决定是否把 `gw.alipayobjects.com` 请求回本地）。
 - 桌面日志里的 `download_remote_resource` **INVALID_INPUT（不允许下载本机或私网地址）不是"无关噪声"**（260917 更正）：它标记着「打开了自动化手写裸 `<img>` 的文档」→ 内核回写失败态卡片 + 该文档变待同步，**打开即发生**。详见 §3.7 与 `docs/LAKE-CONTENT-WRITING.md`。（403 仍是远端策略问题。）

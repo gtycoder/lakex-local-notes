@@ -6,11 +6,23 @@ import { createRequestVersion } from "../core/requestVersion";
 import { useFloatingDialog } from "./useFloatingDialog";
 import { DialogResizeHandles } from "./DialogResizeHandles";
 import { getNativeErrorMessage } from "../lib/nativeErrors";
-import { createLakeDocument, destroyLakeEditor, type LakeEditorInstance } from "../features/editor/lakeRuntime";
-import { addAssetAccessToken } from "../lib/assetPort";
+import { useHistorySnapshotViewer } from "./useHistorySnapshotViewer";
+import { HistorySnapshotPreview } from "./HistorySnapshotPreview";
+import type { NoteKind } from "../core/noteKind.js";
 
 export interface HistoryItem {
   id: number; createdAt: string; size: number; contentHash: string; refCount: number; filePath: string; protectedUntil: string | null;
+  kind: NoteKind;
+}
+
+/**
+ * 预热预览分包：与 MultiTabEditor / HistorySnapshotPreview 共用同一份动态 import
+ * ⇒ 第一次点快照不再等分包加载（第二次起本来就有缓存）。
+ */
+function prefetchPreviewChunk(kind: NoteKind): void {
+  if (kind === "sheet") void import("../features/sheet/SheetEditor");
+  else if (kind === "bitable") void import("../features/bitable/BitableEditor");
+  else if (kind === "board") void import("../features/board/BoardEditor");
 }
 export interface NoteOrphan {
   filename: string; size: number; mimeType: string; protectedByHistory: boolean;
@@ -39,9 +51,42 @@ export function HistoryPanel({ open, noteId, onClose, onRestored }: {
     imageData?: string;
     size?: number;
   } | null>(null);
-  const [inline, setInline] = useState<{ title: string; html: string; size?: number } | null>(null);
+  const [inline, setInline] = useState<{ id: number; title: string; kind: NoteKind; html: string; size?: number } | null>(null);
   const previewHostRef = useRef<HTMLDivElement>(null);
-  const viewerRef = useRef<LakeEditorInstance | null>(null);
+  const listRef = useRef<HTMLDivElement>(null);
+  /** 当前正文（已落盘那份）的 hash：用来标出"与当前版本一致"的快照。 */
+  const [currentHash, setCurrentHash] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!open || !noteId) {
+      setCurrentHash(null);
+      return;
+    }
+    let alive = true;
+    native.getNoteInfo(noteId)
+      .then((info) => { if (alive) setCurrentHash(info.contentHash || null); })
+      .catch(() => { if (alive) setCurrentHash(null); });
+    return () => { alive = false; };
+  }, [open, noteId]);
+
+  /** ↑/↓ 切换快照（连续比对版本时少点很多次）。只改列表自己的 scrollTop —— 不用 scrollIntoView（它会滚所有祖先）。 */
+  const moveSelection = (delta: number) => {
+    if (history.length === 0) return;
+    const index = inline ? history.findIndex((h) => h.id === inline.id) : -1;
+    const next = index < 0
+      ? (delta > 0 ? 0 : history.length - 1)
+      : Math.min(history.length - 1, Math.max(0, index + delta));
+    const target = history[next];
+    if (!target) return;
+    void previewHistoryInline(target);
+    const list = listRef.current;
+    const row = list?.querySelector<HTMLElement>(`[data-history-id="${target.id}"]`);
+    if (!list || !row) return;
+    const listRect = list.getBoundingClientRect();
+    const rowRect = row.getBoundingClientRect();
+    if (rowRect.top < listRect.top) list.scrollTop -= listRect.top - rowRect.top;
+    else if (rowRect.bottom > listRect.bottom) list.scrollTop += rowRect.bottom - listRect.bottom;
+  };
   const floating = useFloatingDialog({ id: "history", initialSize: { w: 900, h: 640 }, minSize: { w: 680, h: 440 } });
   const dataVersionRef = useRef(createRequestVersion());
   const previewVersionRef = useRef(createRequestVersion());
@@ -54,6 +99,8 @@ export function HistoryPanel({ open, noteId, onClose, onRestored }: {
     try {
       const nextHistory = await native.listNoteHistory(noteId);
       if (dataVersionRef.current.isCurrent(version)) setHistory(nextHistory);
+      // 预热预览分包（同一篇文档的所有快照同类型）：第一次点快照不再等动态 import
+      prefetchPreviewChunk(nextHistory[0]?.kind ?? "doc");
     } catch (e) {
       if (dataVersionRef.current.isCurrent(version)) setError(getNativeErrorMessage(e));
     } finally {
@@ -163,36 +210,21 @@ export function HistoryPanel({ open, noteId, onClose, onRestored }: {
     try {
       const r = await native.previewHistorySnapshot(h.id);
       if (!previewVersionRef.current.isCurrent(version)) return;
-      if (r) setInline({ title: new Date(h.createdAt).toLocaleString(), html: r.html, size: h.size });
+      if (r) setInline({ id: h.id, title: new Date(h.createdAt).toLocaleString(), kind: r.kind, html: r.html, size: h.size });
       else setError("快照预览失败（文件可能已删除）");
     } catch (e) {
       if (previewVersionRef.current.isCurrent(version)) setError(getNativeErrorMessage(e));
     }
   };
 
-  // 选中的历史快照 → Lake viewer 渲染（完整样式；只读，不创建编辑器对象）
-  useEffect(() => {
-    const host = previewHostRef.current;
-    if (!host || !inline || !noteId) {
-      if (viewerRef.current) { destroyLakeEditor(viewerRef.current); viewerRef.current = null; }
-      return;
-    }
-    let disposed = false;
-    let viewer: LakeEditorInstance | null = null;
-    try {
-      viewer = createLakeDocument(host, "viewer", () => {}, false, noteId, host, { disableNativeToc: true });
-      viewerRef.current = viewer;
-      viewer.setDocument("text/lake", addAssetAccessToken(inline.html));
-      viewer.requestCardHydration?.();
-    } catch (e) {
-      if (!disposed) setError(getNativeErrorMessage(e));
-    }
-    return () => {
-      disposed = true;
-      if (viewer) { try { destroyLakeEditor(viewer); } catch { /* ignore */ } }
-      if (viewerRef.current === viewer) viewerRef.current = null;
-    };
-  }, [inline?.title, noteId]);
+  // doc 快照：只读 Lake viewer，**同一实例复用**（切快照只 setDocument，不再重建整个内核）；
+  // sheet/bitable/board 的正文是内部 JSON ⇒ 由 <HistorySnapshotPreview> 挂只读编辑器预览。
+  useHistorySnapshotViewer({
+    hostRef: previewHostRef,
+    noteId: inline?.kind === "doc" ? noteId : null,
+    body: inline?.kind === "doc" ? inline.html : null,
+    onError: (message) => setError(message || "快照预览失败"),
+  });
 
   /** 预览孤儿文件：与设置-资源同口径 —— 不清空上一张已解码的图，新图解码完再替换，
    *  否则预览区会先塌成提示文本再撑开（实测跳动 190px 量级 = 用户看到的"闪一下"）。 */
@@ -268,7 +300,16 @@ export function HistoryPanel({ open, noteId, onClose, onRestored }: {
           </div>
         )}
         <div className="history-split">
-          <div className="history-list b3-list b3-list--background history-list-left">
+          <div
+            className="history-list b3-list b3-list--background history-list-left"
+            ref={listRef}
+            tabIndex={0}
+            aria-label="历史快照列表（可用 ↑/↓ 切换）"
+            onKeyDown={(event) => {
+              if (event.key === "ArrowDown") { event.preventDefault(); moveSelection(1); }
+              else if (event.key === "ArrowUp") { event.preventDefault(); moveSelection(-1); }
+            }}
+          >
             {loading && <div className="ln-empty">加载中…</div>}
             {!loading && tab === "history" && history.length === 0 && <div className="ln-empty">暂无历史快照</div>}
             {!loading && tab === "orphans" && orphans.length === 0 && <div className="ln-empty">没有孤儿文件</div>}
@@ -276,12 +317,15 @@ export function HistoryPanel({ open, noteId, onClose, onRestored }: {
               const protectedUntil = h.protectedUntil && Date.parse(h.protectedUntil) > Date.now() ? Date.parse(h.protectedUntil as string) : null;
               const label = new Date(h.createdAt).toLocaleString();
               return (
-                <div key={h.id} className={`b3-list-item b3-list-item--hide-action ln-row2${inline?.title === label ? " b3-list-item--focus" : ""}`}>
+                <div key={h.id} data-history-id={h.id} className={`b3-list-item b3-list-item--hide-action ln-row2${inline?.title === label ? " b3-list-item--focus" : ""}`}>
                   <span className="b3-list-item__graphic"><Clock size={14} /></span>
                   <div className="b3-list-item__text ln-row2__main" onClick={() => void previewHistoryInline(h)} title="点击预览快照">
                     <span className="ln-row2__title">{label}</span>
                     <span className="ln-row2__meta">{(h.size / 1024).toFixed(1)} KB · {h.refCount} 个资源 · {h.contentHash.slice(0, 8)}</span>
                   </div>
+                  {currentHash !== null && h.contentHash === currentHash && (
+                    <span className="badge badge--accent" title="正文与当前已保存版本一致">当前</span>
+                  )}
                   {protectedUntil !== null && (
                     <span className="badge badge--warn" title="被远端覆盖时自动保留，保护期内不被自动清理（可手动删除）">
                       冲突保留 · 剩余 {Math.max(1, Math.ceil((protectedUntil - Date.now()) / (24 * 3600 * 1000)))} 天
@@ -311,7 +355,9 @@ export function HistoryPanel({ open, noteId, onClose, onRestored }: {
               inline ? (
                 <>
                   <div className="history-preview-inline-title">{inline.title}{inline.size !== undefined ? ` · ${(inline.size / 1024).toFixed(1)} KB` : ""}</div>
-                  <div className="history-preview-viewer" ref={previewHostRef} />
+                  {inline.kind === "doc"
+                    ? <div className="history-preview-viewer" ref={previewHostRef} />
+                    : <HistorySnapshotPreview kind={inline.kind} noteId={noteId} body={inline.html} snapshotId={inline.id} />}
                 </>
               ) : (
                 <div className="ln-empty">选择左侧快照查看内容</div>

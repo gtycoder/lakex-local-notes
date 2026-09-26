@@ -20,6 +20,7 @@ import { native } from "../../lib/native";
 import { parseLocalAssetUrl } from "../../core/assetUrl";
 import { boardToBody, parseBoardBody, type BoardDoc, type BoardViewport } from "../../core/boardDoc.js";
 import { collectBoardAssetUrls, collectInlineImageUrls, replaceInlineImageUrls } from "./boardImageAssets.js";
+import { readBoardView, writeBoardView } from "./boardViewStore.js";
 
 /** 自动保存防抖：画布每次操作都会回调，必须合并（与 sheet/bitable 同口径）。 */
 const AUTOSAVE_DEBOUNCE_MS = 800;
@@ -48,7 +49,7 @@ export interface BoardEditorProps {
   onChange: (content: string) => void;
 }
 
-function cardValueOf(doc: BoardDoc): BoardCardValue {
+function cardValueOf(doc: BoardDoc, viewport: BoardViewport | null): BoardCardValue {
   const value: BoardCardValue = {
     version: 2,
     engine: "drawnix",
@@ -56,7 +57,7 @@ function cardValueOf(doc: BoardDoc): BoardCardValue {
     plaitValue: doc.elements,
   };
   if (doc.presetInitialized) value.presetInitialized = true;
-  if (doc.viewport) value.plaitViewport = doc.viewport;
+  if (viewport) value.plaitViewport = viewport;
   return value;
 }
 
@@ -85,10 +86,29 @@ function currentLocale(): "zh-CN" | "en-US" {
 }
 
 export function BoardEditor({ noteId, content, visible, readOnly, onChange }: BoardEditorProps) {
-  const [initialDoc] = useState<BoardDoc>(() => parseBoardBody(content));
-  const [cardValue, setCardValue] = useState<BoardCardValue>(() => cardValueOf(initialDoc));
+  /**
+   * 打开时的视图：**本机记下的优先**（用户上次拖/缩到的位置），其次才是正文里那份
+   * （历史遗留的 viewport）。两者都没有 = 交给引擎自适应。见 boardViewStore.ts。
+   */
+  const [initial] = useState(() => {
+    const doc = parseBoardBody(content);
+    const view = readBoardView(noteId);
+    return { doc, view, viewport: view?.viewport ?? doc.viewport ?? null };
+  });
+  const initialDoc = initial.doc;
+  const [cardValue, setCardValue] = useState<BoardCardValue>(() => cardValueOf(initialDoc, initial.viewport));
   const cardValueRef = useRef(cardValue);
-  const viewportRef = useRef<BoardViewport | null>(initialDoc.viewport ?? null);
+  const viewportRef = useRef<BoardViewport | null>(initial.viewport);
+  /** 宿主根节点：用来找画布内核的滚动容器（平移位置就在它的 scrollLeft/Top 上）。 */
+  const hostRef = useRef<HTMLDivElement | null>(null);
+  /**
+   * 记下了滚动位置时必须"贴好位置再显示"——否则会先按默认视口画一帧再跳到记下的位置
+   * （用户 260926 报「切换会有跳动」）。没有记过位置（首次打开）就不需要这一层。
+   */
+  const [viewReady, setViewReady] = useState(() => !initial.view?.scroll);
+  /** 恢复尚未完成时不采集（那时的滚动量是临时值，写进去会把记下的位置覆盖掉）。 */
+  const viewReadyRef = useRef(viewReady);
+  viewReadyRef.current = viewReady;
   /** 上一次已落盘的正文（规范化后）：相同则跳过，避免「打开即标脏」。 */
   const lastSerializedRef = useRef<string>(boardToBody(initialDoc));
   const timerRef = useRef<number | null>(null);
@@ -107,6 +127,131 @@ export function BoardEditor({ noteId, content, visible, readOnly, onChange }: Bo
   useEffect(() => {
     if (visible) setEverVisible(true);
   }, [visible]);
+
+  /**
+   * 重新显示这个标签时，把「本次会话记住的视口」再对一次给引擎。keep-alive 下引擎一般自己就守着位置，
+   * 但任何一次内部重挂/重排（隐藏期间容器是 0 尺寸、同步后按需重载等）都可能把它抖回 value 里那份旧视口。
+   * 只在「隐藏 → 显示」这一帧对齐，**不参与拖动过程**（拖动中绝不回灌 value，见 260916 结论）。
+   */
+  useEffect(() => {
+    if (!visible) return;
+    const remembered = viewportRef.current;
+    if (!remembered) return;
+    setCardValue((prev) => {
+      if (prev.plaitViewport === remembered) return prev;
+      const nextValue: BoardCardValue = { ...prev, plaitViewport: remembered };
+      cardValueRef.current = nextValue;
+      return nextValue;
+    });
+  }, [visible]);
+
+  /**
+   * 平移位置（画布容器的滚动量）的记住与恢复。
+   *
+   * 实测（260926）：这个 plait 版本的平移就是**滚动画布容器** —— 手形工具拖拽只改
+   * `.viewport-container` 的 `scrollLeft/scrollTop`，`board.viewport` 不变，所以内核的
+   * `onViewportPersist` 对平移根本不触发（只有缩放会）。因此位置记忆必须直接盯容器：
+   * 平移中/松手即记进本机记忆（boardViewStore），重新显示/重挂时把记下的滚动量放回容器。
+   *
+   * 两个坑：① 内核是在 `pointermove` 里**直接赋值** `scrollLeft/Top`，窗口被遮挡时浏览器会挂起
+   * 渲染步骤 ⇒ `scroll` 事件与 `requestAnimationFrame` 都不跑（实测：遮挡窗口里整段平移 0 个事件）
+   * ⇒ 除了 scroll，还在 pointerup 这类**输入事件**上同步采一次（松手时收尾值已落在 scrollLeft/Top）；
+   * ② 容器出现在画布分包挂载之后，取值/恢复都要等它出现且有了可滚范围（用 setTimeout 重试，
+   * 不用 rAF —— 理由同上）。
+   */
+  useEffect(() => {
+    if (!everVisible || !visible) return;
+    const host = hostRef.current;
+    if (!host) return;
+    let container: HTMLElement | null = null;
+    let scrollRaf = 0;
+    let writeId = 0;
+    let tries = 0;
+    const timers: number[] = [];
+    /** 立即落盘当前滚动量（不经过 rAF：遮挡窗口里 rAF 会被挂起）。 */
+    const persist = () => {
+      if (!container || !viewReadyRef.current) return;
+      writeBoardView(noteId, { scroll: { left: container.scrollLeft, top: container.scrollTop } });
+    };
+    const onScroll = () => {
+      if (scrollRaf) return;
+      scrollRaf = window.requestAnimationFrame(() => {
+        scrollRaf = 0;
+        // 拖动中不逐帧写 localStorage：合并到停手后一次；松手另有立即落盘
+        if (writeId) window.clearTimeout(writeId);
+        writeId = window.setTimeout(() => { writeId = 0; persist(); }, 200);
+      });
+    };
+    /** 只在画板内收尾的手势上立即落盘（应用里其它地方的点击不该改画板记忆）。 */
+    const onPointerUp = (event: PointerEvent) => {
+      const target = event.target as Node | null;
+      if (!target || !host.contains(target)) return;
+      persist();
+    };
+    const attach = () => {
+      container = host.querySelector<HTMLElement>(".viewport-container");
+      if (!container) {
+        // 画布内核分包还没挂完：给 ~1s 窗口，别一直空转
+        if (tries++ < 20) timers.push(window.setTimeout(attach, 50));
+        else setViewReady(true);
+        return;
+      }
+      container.addEventListener("scroll", onScroll, { passive: true });
+      // 松手时立刻落盘：平移的收尾值一定已落在 scrollLeft/Top 上（内核在 pointermove 里直接赋值）。
+      // 注意必须限定「手势发生在画板内」——挂在 window 上会让**应用里任何一次点击**都来写一遍，
+      // 包括刚打开、恢复还没生效时的那一次 ⇒ 会把记下的位置覆盖成默认位置。
+      window.addEventListener("pointerup", onPointerUp);
+      const remembered = readBoardView(noteId)?.scroll ?? null;
+      if (!remembered) return;
+      /**
+       * 贴位置 → 确认**持续稳定**了才显示画板（"收敛后再显示"）。
+       *
+       * 重挂时内核初始化会把滚动量摆到它自己的默认值（实测：贴完立刻又变成内容的居中位置），
+       * 所以只贴一次会被覆盖；这里反复贴、并要求**连续 250ms 不动**才认为稳了，期间画板一直
+       * visibility:hidden，用户看不到"先默认再跳"。用 setTimeout 而不是 rAF：窗口被遮挡时
+       * rAF 会停（实测），setTimeout 仍会跑；另有 1.2s/40 次的上限与 1s 兜底，绝不会把画板藏死。
+       */
+      let attempts = 0;
+      let stableSince = 0;
+      const startedAt = Date.now();
+      const restore = () => {
+        if (!container) return;
+        const scrollable = container.scrollWidth > container.clientWidth || container.scrollHeight > container.clientHeight;
+        if (!scrollable) {
+          if (tries++ < 60) { timers.push(window.setTimeout(restore, 16)); return; }
+          setViewReady(true);
+          return;
+        }
+        const atTarget = Math.abs(container.scrollLeft - remembered.left) <= 1
+          && Math.abs(container.scrollTop - remembered.top) <= 1;
+        if (!atTarget) {
+          container.scrollLeft = remembered.left;
+          container.scrollTop = remembered.top;
+          stableSince = 0;
+        } else if (stableSince === 0) {
+          stableSince = Date.now();
+        }
+        const stableFor = stableSince === 0 ? 0 : Date.now() - stableSince;
+        if (stableFor >= 250 || Date.now() - startedAt > 1200 || attempts++ >= 40) {
+          setViewReady(true);
+          return;
+        }
+        timers.push(window.setTimeout(restore, 24));
+      };
+      restore();
+    };
+    attach();
+    // 兜底：无论如何 1.5s 内露出画板，绝不留在看不见的状态（比上面的 1.2s 收敛上限更宽，
+    // 让"收敛后再显示"有机会跑完；这里只是最后一道保险）
+    timers.push(window.setTimeout(() => setViewReady(true), 1500));
+    return () => {
+      if (scrollRaf) window.cancelAnimationFrame(scrollRaf);
+      if (writeId) window.clearTimeout(writeId);
+      for (const id of timers) window.clearTimeout(id);
+      container?.removeEventListener("scroll", onScroll);
+      window.removeEventListener("pointerup", onPointerUp);
+    };
+  }, [everVisible, visible, noteId]);
 
   useEffect(() => {
     const root = document.documentElement;
@@ -139,7 +284,11 @@ export function BoardEditor({ noteId, content, visible, readOnly, onChange }: Bo
       ...cardValueRef.current,
       plaitValue: replaceInlineImageUrls(cardValueRef.current.plaitValue, promotedRef.current) as unknown[],
     };
-    const json = boardToBody(docOf(forDisk, initialDoc, viewportRef.current));
+    // 视图（平移位置 / 缩放）**不写正文**（用户 260926 口径 A1+B）：位置改由本机记忆
+    // （src/features/board/boardViewStore.ts）承担。写正文的代价是缩放/平移会把文档标脏 →
+    // 保存 → 待同步 → S3 上传（260916 报过的坑），而且视口会跨端串味。
+    // 这里沿用正文里原有的 viewport（历史字段，已不再维护）⇒ 同一份内容序列化稳定，不多产生保存。
+    const json = boardToBody(docOf(forDisk, initialDoc, initialDoc.viewport ?? null));
     if (json === lastSerializedRef.current) return;
     lastSerializedRef.current = json;
     changeRef.current(json);
@@ -271,7 +420,10 @@ export function BoardEditor({ noteId, content, visible, readOnly, onChange }: Bo
   );
 
   return (
-    <div className={visible ? "board-editor" : "board-editor fn__none"}>
+    <div
+      ref={hostRef}
+      className={`board-editor${visible ? "" : " board-editor--hidden"}${viewReady ? "" : " board-editor--restoring"}`}
+    >
       {everVisible && (
         <Suspense fallback={<div className="board-editor-loading" />}>
           <DrawnixBoardCore
@@ -281,7 +433,10 @@ export function BoardEditor({ noteId, content, visible, readOnly, onChange }: Bo
             readOnly={readOnly}
             onChange={handleCoreChange}
             onViewportPersist={(next) => {
-              viewportRef.current = { x: next.x, y: next.y, zoom: next.zoom };
+              const viewport = { x: next.x, y: next.y, zoom: next.zoom };
+              viewportRef.current = viewport;
+              // 本机记住（不写正文、不触发保存）：重开/重挂时用它恢复缩放，见 boardViewStore.ts
+              writeBoardView(noteId, { viewport });
             }}
           />
         </Suspense>

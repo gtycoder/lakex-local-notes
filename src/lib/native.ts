@@ -65,7 +65,11 @@ export interface LakeNative {
   purgeTrash(id: string): Promise<void>;
   emptyTrash(): Promise<void>;
   createHistorySnapshot(noteId: string, content?: string, force?: boolean): Promise<number | null>;
-  listNoteHistory(noteId: string): Promise<Array<{ id: number; createdAt: string; size: number; contentHash: string; refCount: number; filePath: string; protectedUntil: string | null }>>;
+  listNoteHistory(noteId: string): Promise<Array<{
+    id: number; createdAt: string; size: number; contentHash: string; refCount: number; filePath: string; protectedUntil: string | null;
+    /** 文档类型（同篇快照同类型）：渲染层据此预热预览分包。 */
+    kind: "doc" | "sheet" | "bitable" | "board";
+  }>>;
   restoreHistory(historyId: number): Promise<void>;
   deleteHistory(historyId: number): Promise<void>;
   cleanupHistory(): Promise<{ deletedSnapshots: number; freedBytes: number }>;
@@ -74,7 +78,14 @@ export interface LakeNative {
   getHistoryStats(): Promise<{ snapshotCount: number; totalBytes: number }>;
   getLastHistoryCleanup(): Promise<LastHistoryCleanup>;
   listNoteOrphans(noteId: string): Promise<Array<{ filename: string; size: number; mimeType: string; protectedByHistory: boolean }>>;
-  previewHistorySnapshot(historyId: number): Promise<{ plain: string; html: string; createdAt: string; contentHash: string } | null>;
+  previewHistorySnapshot(historyId: number): Promise<{
+    /** 文档类型：doc 的 html 是 Lake 正文（viewer 渲染）；非 doc 是内部 JSON（结构化预览）。 */
+    kind: "doc" | "sheet" | "bitable" | "board";
+    plain: string;
+    html: string;
+    createdAt: string;
+    contentHash: string;
+  } | null>;
   previewNoteOrphan(noteId: string, filename: string): Promise<{ kind: "image" | "text"; data: string; size: number } | null>;
   cleanNoteOrphans(noteId: string, filenames?: string[]): Promise<{ count: number; freedBytes: number }>;
   uploadResource(input: ResourceUploadInput, noteId: string): Promise<ResourceUploadOutput>;

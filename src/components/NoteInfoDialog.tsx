@@ -11,9 +11,10 @@ import { Box, ChevronRight, Clock, Copy, File, FolderOpen, History, Image as Ima
 import { native } from "../lib/native";
 import { getNativeErrorMessage } from "../lib/nativeErrors";
 import type { NoteInfo } from "../lib/types";
-import { createLakeDocument, destroyLakeEditor, type LakeEditorInstance } from "../features/editor/lakeRuntime";
-import { addAssetAccessToken } from "../lib/assetPort";
 import { isMobileEnvironment } from "../features/editor/clipboardHtml";
+import { HistorySnapshotPreview } from "./HistorySnapshotPreview";
+import { useHistorySnapshotViewer } from "./useHistorySnapshotViewer";
+import type { NoteKind } from "../core/noteKind.js";
 
 /** 附件/历史条目的渲染上限（超出提示 +N，避免超大文档一次性渲染成千上万节点）。 */
 const ITEM_LIMIT = 200;
@@ -53,11 +54,10 @@ export function NoteInfoDialog({ note, onClose, onRevealNoteFile, onOpenAssetsDi
   const [error, setError] = useState<string | null>(null);
   const [thumbs, setThumbs] = useState<Record<string, string>>({});
   const [copied, setCopied] = useState(false);
-  const [histPreview, setHistPreview] = useState<{ id: number; html: string } | null>(null);
+  const [histPreview, setHistPreview] = useState<{ id: number; kind: NoteKind; html: string } | null>(null);
   const [histLoading, setHistLoading] = useState<number | null>(null);
   const [size, setSize] = useState<{ w: number; h: number } | null>(null);
   const previewHostRef = useRef<HTMLDivElement>(null);
-  const viewerRef = useRef<LakeEditorInstance | null>(null);
 
   /** 右下角拖拽调整弹窗大小（默认尺寸见 .note-info-dialog）。 */
   const onResizeStart = (event: ReactPointerEvent<HTMLElement>): void => {
@@ -127,37 +127,26 @@ export function NoteInfoDialog({ note, onClose, onRevealNoteFile, onOpenAssetsDi
     if (histPreview?.id === id) { setHistPreview(null); return; }
     setHistLoading(id);
     native.previewHistorySnapshot(id)
-      .then((p) => setHistPreview(p ? { id, html: p.html } : null))
+      .then((p) => setHistPreview(p ? { id, kind: p.kind, html: p.html } : null))
       .catch(() => setHistPreview(null))
       .finally(() => setHistLoading(null));
   };
 
-  // 内联快照预览走只读 Lake viewer（与 HistoryPanel 完全同口径，安全审计 W-10）：
+  // 内联快照预览：doc 走只读 Lake viewer（与 HistoryPanel 同一套：**同实例复用**，切快照只 setDocument）；
+  // sheet/bitable/board 的正文是内部 JSON ⇒ 由只读编辑器预览渲染（见下方 JSX）。
   // 原 dangerouslySetInnerHTML 直接注入快照原始 lake 正文（可能来自 S3 同步/他端/导入），
   // 是未消毒 HTML 的 XSS 面。viewer 由内核渲染，快照正文只作为文档数据处理，不进 innerHTML。
-  useEffect(() => {
-    const host = previewHostRef.current;
-    const noteId = note.noteFileId;
-    if (!host || !histPreview || !noteId) {
-      if (viewerRef.current) { destroyLakeEditor(viewerRef.current); viewerRef.current = null; }
-      return;
-    }
-    let viewer: LakeEditorInstance | null = null;
-    try {
-      // 移动端无内部滚动容器，必须禁用虚拟渲染（同 DocumentEditor），否则正文渲染不全
-      const prefs = isMobileEnvironment()
-        ? { disableNativeToc: true, disableVirtualRendering: true, showToolbar: false }
-        : { disableNativeToc: true };
-      viewer = createLakeDocument(host, "viewer", () => {}, false, noteId, host, prefs);
-      viewerRef.current = viewer;
-      viewer.setDocument("text/lake", addAssetAccessToken(histPreview.html));
-      viewer.requestCardHydration?.();
-    } catch { /* 快照正文异常：预览留白即可，非关键路径 */ }
-    return () => {
-      if (viewer) { try { destroyLakeEditor(viewer); } catch { /* ignore */ } }
-      if (viewerRef.current === viewer) viewerRef.current = null;
-    };
-  }, [histPreview?.id, note.noteFileId]);
+  useHistorySnapshotViewer({
+    hostRef: previewHostRef,
+    noteId: histPreview?.kind === "doc" ? note.noteFileId : null,
+    body: histPreview?.kind === "doc" ? histPreview.html : null,
+    // 移动端无内部滚动容器，必须禁用虚拟渲染（同 DocumentEditor），否则正文渲染不全
+    prefs: isMobileEnvironment()
+      ? { disableNativeToc: true, disableVirtualRendering: true, showToolbar: false }
+      : { disableNativeToc: true },
+    // 快照正文异常：预览留白即可，非关键路径
+    onError: () => undefined,
+  });
 
   const cells: Array<[string, string]> = info ? [
     ["创建", fmtTime(info.createdAt)],
@@ -252,6 +241,9 @@ export function NoteInfoDialog({ note, onClose, onRevealNoteFile, onOpenAssetsDi
                     <li key={h.id}>
                       <button className={"note-info-history-row" + (histPreview?.id === h.id ? " is-active" : "")} onClick={() => toggleHistory(h.id)}>
                         <Clock size={13} /><span>{fmtTime(h.createdAt)}</span><em>{fmtSize(h.size)}</em>
+                        {info.contentHash !== "" && h.contentHash === info.contentHash && (
+                          <span className="badge badge--accent" title="正文与当前已保存版本一致">当前</span>
+                        )}
                         <span className="note-info-history-hint">{histLoading === h.id ? "加载中…" : histPreview?.id === h.id ? "收起" : "预览"}</span>
                       </button>
                     </li>
@@ -260,7 +252,9 @@ export function NoteInfoDialog({ note, onClose, onRevealNoteFile, onOpenAssetsDi
                 </ul>
               )}
               {histPreview && (
-                <div className="note-info-history-viewer" ref={previewHostRef} />
+                histPreview.kind === "doc"
+                  ? <div className="note-info-history-viewer" ref={previewHostRef} />
+                  : <HistorySnapshotPreview kind={histPreview.kind} noteId={note.noteFileId ?? ""} body={histPreview.html} snapshotId={histPreview.id} />
               )}
             </div>
           </div>

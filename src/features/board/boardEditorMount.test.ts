@@ -50,7 +50,51 @@ describe("画板编辑器护栏", () => {
   it("视口被动记录、不回灌 value（pan/zoom 不该触发保存）", () => {
     expect(EDITOR).toMatch(/onViewportPersist/);
     expect(EDITOR).toMatch(/viewportRef\.current/);
-    expect(EDITOR).not.toMatch(/plaitViewport: next/);
+    // 真口径：拖动回调里只存 ref / 会话记忆，绝不 setCardValue（回灌 → 每次 pan 都保存，260916 的坑）
+    const persistAt = EDITOR.indexOf("onViewportPersist=");
+    expect(persistAt).toBeGreaterThan(0);
+    expect(EDITOR.slice(persistAt, persistAt + 600)).not.toContain("setCardValue");
+  });
+
+  it("视图本机记忆（260926 A1）：位置记本机、重开/重挂时恢复", () => {
+    // 打开时：本机记下的优先，其次才是正文里那份（历史遗留的 viewport）
+    expect(EDITOR).toMatch(/view\?\.viewport \?\? doc\.viewport \?\? null/);
+    expect(EDITOR).toMatch(/writeBoardView\(noteId, \{ viewport \}\)/);
+    expect(EDITOR).toMatch(/readBoardView\(noteId\)/);
+    // 隐藏 → 显示这一帧把记下的视口对一次给引擎（隐藏期间容器 0 尺寸 / 同步后重载都可能抖回旧值）
+    expect(EDITOR).toMatch(/if \(!visible\) return;[\s\S]{0,400}plaitViewport: remembered/);
+    // 平移 = 画布容器滚动（内核 onViewportPersist 对平移不触发）⇒ 必须直接盯容器记/放滚动量
+    expect(EDITOR).toMatch(/querySelector<HTMLElement>\("\.viewport-container"\)/);
+    expect(EDITOR).toMatch(/writeBoardView\(noteId, \{ scroll: \{ left: container\.scrollLeft, top: container\.scrollTop \} \}\)/);
+    expect(EDITOR).toMatch(/container\.scrollLeft = remembered\.left;/);
+    // 采集必须限定在画板内：挂在 window 上会让应用里任何一次点击都来写一遍
+    // （包括刚打开、恢复还没生效的那次 ⇒ 会把记下的位置覆盖成默认位置）
+    expect(EDITOR).toMatch(/const onPointerUp = \(event: PointerEvent\) => \{[\s\S]{0,200}host\.contains\(target\)/);
+    // 位置只在本机（localStorage，L3）：不进正文、不进 S3
+    const STORE = readFileSync(new URL("./boardViewStore.ts", import.meta.url), "utf8");
+    expect(STORE).toMatch(/lake-notes-v3\.board-views/);
+    expect(STORE).toMatch(/localStorage/);
+  });
+
+  it("视图不进正文（260926 B）：保存序列化不再带当前视口 ⇒ 缩放/平移不会标脏文档", () => {
+    expect(EDITOR).not.toMatch(/docOf\(forDisk, initialDoc, viewportRef\.current\)/);
+    expect(EDITOR).toMatch(/docOf\(forDisk, initialDoc, initialDoc\.viewport \?\? null\)/);
+  });
+
+  it("不跳动（260926 C）：有记下的位置时先藏住画板，贴好滚动位置再显示", () => {
+    expect(EDITOR).toMatch(/useState\(\(\) => !initial\.view\?\.scroll\)/);
+    expect(EDITOR).toMatch(/board-editor--restoring/);
+    expect(EDITOR).toMatch(/setViewReady\(true\)/);
+    const CSS = readFileSync(new URL("./boardEditor.css", import.meta.url), "utf8");
+    // 隐藏/贴位置两态都用 content-visibility:hidden：
+    // ① display:none 会让容器塌成 0 尺寸 ⇒ 浏览器钳掉滚动位置（切走再回来变成 0,0 / max,max）；
+    // ② visibility:hidden 会被内核工具条自己的 `visibility: visible` 顶掉 ⇒ 画笔/箭头/形状三个按钮
+    //    切到文档后仍留在页面上（用户 260926 报"永久停留"）。
+    expect(CSS).toMatch(/\.board-editor--restoring,\s*\.board-editor--hidden \{\s*content-visibility: hidden;\s*pointer-events: none;\s*\}/);
+    // 不许出现 visibility 声明（注释里提到不算）
+    expect(CSS).not.toMatch(/^\s*visibility: hidden;/m);
+    expect(EDITOR).toMatch(/visible \? "" : " board-editor--hidden"/);
+    expect(EDITOR).not.toMatch(/board-editor fn__none/);
   });
 
   it("kind=board 端到端接线：noteKind / 正文目录 / 搜索文本 / 主进程新建", () => {

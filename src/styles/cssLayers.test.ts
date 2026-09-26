@@ -25,6 +25,7 @@ const FILES = [
   "features/attachment/attachment-preview.css", "features/editor/image-lightbox.css", "features/outline/outline.css",
   "features/editor/selectionToolbar/selectionToolbar.css",
   "features/sheet/sheetEditor.css",
+  "components/historySnapshotPreview.css",
   "features/bitable/bitableEditor.css",
   "features/board/boardEditor.css",
   "styles/dialog.css", "styles/document-status.css",   "styles/components.css",   "styles/tokens.css",   "styles/feature.css",   // P3 起：功能域层（正文/等宽字体等）
@@ -45,7 +46,7 @@ const BASELINE: Record<string, { decls: number; dupGroups: number }> = {
   "styles/index.css": { decls: 0, dupGroups: 0 },   // UI 重设计 P1：单入口（@layer 声明 + @import 编排，0 声明）
   "styles/feature.css": { decls: 105, dupGroups: 0 },  // 视觉优化 + 内核编辑器主题桥（lakex 跟随深色/暖色：含 .ne-ui-toolbar）；260923 收敛：-19 = 大纲侧栏的 .outline-* 覆盖并回 features/outline/outline.css 单一来源；260926：+2 = 修内核图标选择器（.ne-icon-symbol→.ne-icon）+ 直接覆盖工具条文字/原生大纲底色（内核浅色 schema 以未分层 <style> 注入、压过变量桥）；合法新增非覆盖回涨
   "styles/kit.css": { decls: 558, dupGroups: 0 },     // P4 组件库 + P5-g 面板件 + P5-h 控件 + P5-i 开关（实测）；260926：+8 = 补回 .b3-switch::after 被删源漏掉的滑块基线（content/position/top/transform/圆角等，合法新增：原先根本没有，非覆盖回涨）
-  "styles/chrome.css": { decls: 503, dupGroups: 0 },  // P5 外壳 + S1+A + 整边缩略图槽；260922：+21 = 左缘「跟手把手」（隐形热区里浮出、Y 跟手、点击固定；热区 39→8 与去缩略图同批）；+10 = 目录「悬浮」改半幅浮卡（固定高度、顶贴面包屑下缘、四角圆角）；260926 续：+1 = 本地空间指示 .workspace-local（未配置云同步时尾段显示本地图标，合法新增非覆盖回涨）
+  "styles/chrome.css": { decls: 506, dupGroups: 0 },  // P5 外壳 + S1+A + 整边缩略图槽；260922：+21 = 左缘「跟手把手」（隐形热区里浮出、Y 跟手、点击固定；热区 39→8 与去缩略图同批）；+10 = 目录「悬浮」改半幅浮卡（固定高度、顶贴面包屑下缘、四角圆角）；260926 续：+1 = 本地空间指示 .workspace-local（未配置云同步时尾段显示本地图标）；+3 = 表格文档状态栏并入 sheet 底部统计行（[data-doc-kind="sheet"] 的 bottom/height/min-height——高度基线在本层，同层就地加变体，合法新增非覆盖回涨）
   "styles/kernel-theme.css": { decls: 60, dupGroups: 0 },  // 260926：内核 lakex --lakex-editor-* 集中映射（未分层）；60 = ①dark+warm 共用 43 + ②dark 反相 9 + ③light accent 8
   "styles/overlay.css": { decls: 145, dupGroups: 0 },  // P5-c 浮层 + P5-j 搜索 + P7-b .top-menu 定位 + 菜单项布局三件套；260926 Phase 1a：+47 = 浮层原语统一——.ln-scrim 基座、.ln-dialog 布局/表面单一来源（并自 dialog.css 收编）、.ln-dialog__actions、.ln-menu/.ln-popover 表面（自 kit.css 收编）；合法新增/归并，非覆盖回涨
   "styles/compat.css": { decls: 212, dupGroups: 0 },  // 260923：-4 = .tab-item 盒收编到 app/tabs.css；260926：+4 = 补上 .config-block__actions 布局（该 JSX 类此前无任何定义）；+3 = 复位 <button>.b3-list-item 浏览器默认边框/底色/居中（历史快照行等，合法新增非覆盖回涨）
@@ -62,13 +63,14 @@ const BASELINE: Record<string, { decls: number; dupGroups: number }> = {
   // 260921：+2 = 单元格图片（禁指针事件 + object-fit: scale-down）
   // 260921 续：+35 = 去掉浮动图后新增的单元格图片工具弹窗（11 条）+ 细滚动条（11 条）+ 色条裁切与定位基准（2 条）
   //          —— 合法新增，非覆盖回涨
-  "features/sheet/sheetEditor.css": { decls: 63, dupGroups: 0 },   // 260926：+2 = 修底部留白——.luckysheet-scrollbar-y 的 top/height 对齐可见单元格区（第三方内联 height:100%，用 !important 覆盖；合法新增）
+  "features/sheet/sheetEditor.css": { decls: 64, dupGroups: 0 },   // 260926：+2 = 修底部留白——.luckysheet-scrollbar-y 的 top/height 对齐可见单元格区（第三方内联 height:100%，用 !important 覆盖；合法新增）；+1 = 底部统计行给文档状态栏让位（.fortune-stat-area padding-right 读实测 --lake-sheet-status-w；合法新增，非覆盖回涨）
   // 260920：多维表编辑器（自研，v1）；+63 = 文本「扩大」浮窗；+37 = 行手柄/右键菜单/数据表列表；+82 = 网格线/列选择/列宽拖拽/日期选择器/范围选择/全收起切换（合法新增）
   "features/bitable/bitableEditor.css": { decls: 856, dupGroups: 0 },
   // 260920：独立画板文档（kind=board）容器（铺满 tab 格 + 去掉卡片态边框/圆角 + 内核分包加载占位）
-  "features/board/boardEditor.css": { decls: 11, dupGroups: 0 },
+  "features/board/boardEditor.css": { decls: 14, dupGroups: 0 },   // 260926：+1 = 内核「主题选择」岛抬到文档状态栏上方（bottom 按状态栏几何派生）；+2 = .board-editor--{restoring,hidden} 共用 content-visibility:hidden + pointer-events:none（display:none 会钳掉滚动位置、visibility:hidden 会被内核工具条的 visible 顶掉；均合法新增非覆盖回涨）
+  "components/historySnapshotPreview.css": { decls: 77, dupGroups: 0 },   // 260926 新增：历史快照预览样式 = 事实清单 / 摘要小表格 / 只读编辑器槽位（.history-editor-preview 用「列方向 flex + 子项 flex:1 + min-height:320px 兜底」保证编辑器铺满，不依赖百分比高度；预览里隐藏表格统计行），令牌全走 --lake-*，由组件自身 import
   "styles/dialog.css": { decls: 234, dupGroups: 8 },   // +7 = .note-info-history-viewer 容器（260916 W-10：历史内联预览改只读 viewer，替代裸 dangerouslySetInnerHTML；合法新增非覆盖回涨）
-  "styles/document-status.css": { decls: 98, dupGroups: 2 },   // 260923 W1-L2：-8 = 被 shell 层 chrome.css 同名选择器覆盖
+  "styles/document-status.css": { decls: 99, dupGroups: 2 },   // 260923 W1-L2：-8 = 被 shell 层 chrome.css 同名选择器覆盖；260926：+1 = 画板状态栏右缘对齐画板自己的 20px 栅格（[data-doc-kind="board"] 的 right；合法新增非覆盖回涨）
   "styles/components.css": { decls: 433, dupGroups: 1 },   // 260923 W1-L2：-15 = 被更高层同名选择器完全压制的规则（kit/shell 层已定义）   // 260916 S4：原 overlays.css 改名 + 并入 @keyframes lake-pop-in（+1 声明，位置不变）；260926 续：+4 = 本地空间弹窗正文 .sync-status-local-note（合法新增非覆盖回涨）
   "styles/tokens.css": { decls: 6, dupGroups: 0 },   // 260923 审计：按实测收紧（隔离/桥接规则拆走后基线一直是 83，围栏形同虚设）
   // 基础层域文件（260916 S3：原 styles.css 拆成入口 + 10 个域文件；数字 = 拆分当批实测，只允许变小）
@@ -76,9 +78,9 @@ const BASELINE: Record<string, { decls: number; dupGroups: number }> = {
   "styles/app/dialogs.css": { decls: 137, dupGroups: 7 },   // 260923 W1-L2：-9 = 被 overlay 层同名选择器完全压制   // +2 = 二级子菜单高度兜底（max-height + overflow-y，260916 修「导出选项被窗口底边裁掉」；与定位上移配套，合法新增非覆盖回涨）
   "styles/app/editor.css": { decls: 70, dupGroups: 0 },   // 260923 W1-L2：-1 = 字体规则被 tokens/feature 层覆盖   // P7-c：并入 styles/editor.css（选择器无交集 ⇒ 层叠等价）；+5 = maxView 适配；+4 = 锁定/解锁延迟销毁的旧实例层 .is-outgoing；+3 = 阅读态大纲只调位置（top/right）与「pinned 展开时正文让位」（260916）；260922：+1 = 正文左内距 56px（内核默认 40 不够块手柄簇 54；顺手修掉 H1 手柄出窗口）——合法新增
   "styles/app/misc.css": { decls: 288, dupGroups: 0 },   // 260923 审计：按实测收紧
-  "styles/app/panels.css": { decls: 99, dupGroups: 0 },
+  "styles/app/panels.css": { decls: 98, dupGroups: 0 },   // 260926：-1 = 删掉 `.history-panel{position:relative}`（它把 .floating-dialog 的 position:fixed 顶掉 ⇒ 拖拽用的视口绝对坐标退化成"相对居中偏移"，每次拖/点都把居中量再叠一遍、弹窗跑出屏幕；护栏见 floatingDialogCoords.test.ts）
   "styles/app/quick-notes.css": { decls: 516, dupGroups: 8 },   // 260923 W1-L2：-3（260923）   // P7-c：并入 styles/quick-notes.css（选择器无交集 ⇒ 层叠等价）；原有：+24 列表版式、+30 媒体按类型、+49 卡片预览、+8 展开层限定、+19 卡片收起/展开、+98 列表页对齐云端（标签行/批量条/行⋯菜单/新建按钮）；+15 = 动作行改版（去掉两角布局的空占位，换成 --inline 靠右下 + 「取消」次级描边 + 卡片页脚内边距 + 展开态浮层）；260920：-48 = 删掉随「卡片预览改自研渲染」废弃的 .quick-note-image-grid / .quick-note-saved-images / .quick-note-saved-media 三套遗留规则；+1 = 分块视图卡片展开时退出定位上下文（展开层/页脚落到小记面板）；+8 = 展开态把保存失败/提示条抬到展开层之上（贴面板左下角的浮层）
-  "styles/app/settings.css": { decls: 122, dupGroups: 0 },   // P7-c：并入 styles/settings.css（选择器无交集 ⇒ 层叠等价）
+  "styles/app/settings.css": { decls: 120, dupGroups: 0 },   // P7-c：并入 styles/settings.css（选择器无交集 ⇒ 层叠等价）；260926：-2 = 删掉死规则 `.settings-resize::after` 与 `.history-panel .settings-resize`（旧缩放手柄遗留，全仓无引用；它正是 `.history-panel{position:relative}` 的来历）
   "styles/app/shell.css": { decls: 424, dupGroups: 9 },   // 260923 收敛：-13 声明 / -1 重复组 = 大纲栏的壳层材质规则并回 features/outline/outline.css 单一来源   // 260923 W1-L2：-65 = 被 shell(层) chrome.css 同名选择器完全压制   // P7-c：并入 styles/shell.css（属性级交集为 0 ⇒ 层叠等价）；260917：另收掉 quick-notes 与基础层逐字重复的 margin 覆盖；260922：+1 = 非停靠态编辑区整体右移 53px 给左侧整边缩略图条让位（块手柄/标题折叠钮不再压缩略图；停靠态不加）——合法新增，非覆盖回涨
   "styles/app/tabs.css": { decls: 193, dupGroups: 0 },   // 260923 W1-L2：-9 = 被 shell 层 chrome.css 覆盖   // +1 = .tab-panels grid-template-columns:minmax(0,1fr)（根修：面板不被内容撑宽，多维表/表格才能横向滚动）
   "styles/app/vendor-board.css": { decls: 7, dupGroups: 0 },   // 260916：84 条与 vendor/drawnix-react-text.css 逐字节相同的规则已删（改为直接 import vendor 文件），余下是我们自己的 board-card 包装层

@@ -85,6 +85,11 @@
   grid-template-columns: minmax(0, auto) auto;
   gap: 10px;
 }
+/* 画板：与内核的浮岛共用画板自己的 20px 右栅格（缩放岛/主题岛都在 right:20px）；
+ * 主题岛已被抬到状态栏上方（见 features/board/boardEditor.css）⇒ 两者右缘对齐成一列，不参差。 */
+.document-statusbar[data-doc-kind="board"] {
+  right: calc(20px + var(--lake-outline-inset, 0px));
+}
 .document-statusbar-message {
   display: none;
   min-width: 0;

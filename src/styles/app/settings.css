@@ -21,10 +21,6 @@
 
 .settings-nav-item.active { box-shadow: var(--lake-shadow-card); }
 
-.settings-resize::after { content: ""; position: absolute; right: 3px; bottom: 3px; width: 8px; height: 8px; border-right: 2px solid var(--lake-text-4); border-bottom: 2px solid var(--lake-text-4); }
-
-.history-panel .settings-resize { position: absolute; right: 2px; bottom: 2px; }
-
 /* 三个大面板共用同一套：居中打开、可拖动、可拉伸、尺寸受视口约束。 */
 .settings-overlay,
 .history-panel-backdrop,

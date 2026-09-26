@@ -36,6 +36,15 @@
   top: var(--lake-sheet-head-h, 20px);
   height: calc(100% - var(--lake-sheet-head-h, 20px) - var(--lake-sheet-xbar-h, 0px)) !important;
 }
+/*
+ * 底部「选区统计」行（第三方）与我们的文档状态栏**共用同一条常驻底栏**（260926 用户提议的融合）：
+ * 统计行常驻 + 状态栏固定展示在该行最右端（后者见 document-status.css 的 [data-doc-kind="sheet"]）。
+ * 统计文字是**右对齐**的 ⇒ 必须给状态栏让出实测宽度，否则「求和/平均值」被状态栏压住（用户截图）；
+ * 宽度随同步文案变（待同步/已同步/…），由 SheetEditor 实测写进 --lake-sheet-status-w，别写死。
+ */
+.sheet-editor .fortune-stat-area {
+  padding-right: var(--lake-sheet-status-w, 0px);
+}
 /* 工具栏更紧凑（260919 用户要求）：收内边距、缩按钮间距与高度。 */
 .sheet-editor .fortune-toolbar {
   padding: 2px 0 2px 8px;

@@ -71,3 +71,45 @@ describe("UI 原语门禁", () => {
     for (let i = 1; i < band.length; i++) expect(val(band[i]), band[i]).toBeGreaterThan(val(band[i - 1]));
   });
 });
+
+/**
+ * 文档状态栏的落位门禁（260926）。
+ *
+ * 状态栏浮在正文右下，但**表格/画板正文自带底部控件**，浮上去就压住它们（用户各报过一次）：
+ * - 表格：并入 sheet 底部那条常驻「选区统计」行（统计行常驻、让出实测宽度给状态栏）；
+ * - 画板：满幅画布 + 画板自己的浮岛占着右上/右下/左中 ⇒ 状态栏改钉左下角。
+ * 两侧必须成对存在（状态栏按 kind 定位 + 正文侧让位/让角），所以在这里一起卡住。
+ */
+describe("文档状态栏落位（按文档类型）", () => {
+  const read = (rel: string) => readFileSync(path.join(SRC, rel), "utf8");
+
+  it("状态栏暴露 data-doc-kind（按类型定位的唯一钩子）", () => {
+    expect(read("components/DesktopStatusBar.tsx")).toContain("data-doc-kind={docKind}");
+  });
+
+  it("表格：状态栏并入 sheet 底部统计行（高度基线在 shell 层，变体必须同层）", () => {
+    const chrome = read("styles/chrome.css");
+    expect(chrome).toContain('.document-statusbar[data-doc-kind="sheet"] {');
+    const rule = chrome.slice(chrome.indexOf('.document-statusbar[data-doc-kind="sheet"] {'));
+    const body = rule.slice(0, rule.indexOf("}"));
+    expect(body).toContain("bottom: 1px;");
+    expect(body).toContain("height: 22px;");   // = 内核统计行固定高度
+    // 统计行那一侧必须给它让位（否则右对齐的统计文字被压住）
+    expect(read("features/sheet/sheetEditor.css")).toContain("padding-right: var(--lake-sheet-status-w, 0px);");
+  });
+
+  it("画板：内核「主题选择」岛抬到状态栏上方（右下共存），且底距按状态栏几何派生", () => {
+    // 状态栏留在右下（用户 260926 口径）⇒ 让内核那座岛让位，覆盖写在画板自己的 boardEditor.css
+    // （岛的位置在 vendor 镜像 vendor-board.css，那份标注勿手改）
+    const board = read("features/board/boardEditor.css");
+    expect(board).toContain(".board-editor .lakex-drawnix-core .theme-toolbar {");
+    expect(board).toContain("bottom: calc(8px + 26px + 8px);");
+    // 右缘对齐：与画板浮岛同一列（20px 右栅格），堆叠起来不参差
+    const status = read("styles/document-status.css");
+    expect(status).toContain('.document-statusbar[data-doc-kind="board"] {');
+    expect(status).toContain("right: calc(20px + var(--lake-outline-inset, 0px));");
+    // 派生式依赖的状态栏几何：底距 8px（document-status.css）+ 高度 26px（chrome.css 生效）
+    expect(status).toMatch(/\.document-statusbar \{[^}]*bottom: 8px;/);
+    expect(read("styles/chrome.css")).toMatch(/\.document-statusbar \{\s*height: 26px;/);
+  });
+});

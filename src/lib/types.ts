@@ -51,9 +51,11 @@ export interface NoteInfo {
   sizeBytes: number;
   charCount: number;
   wordCount: number;
+  /** 当前正文（已落盘那份）的 sha256：历史面板用来标出"与当前版本一致"的快照。 */
+  contentHash: string;
   assets: NoteInfoAsset[];
   assetTotalBytes: number;
-  history: Array<{ id: number; createdAt: string; size: number }>;
+  history: Array<{ id: number; createdAt: string; size: number; contentHash: string }>;
 }
 
 export type TreeNodeType = "notebook" | "group" | "note";

@@ -78,9 +78,11 @@ export interface BitableEditorProps {
   visible: boolean;
   readOnly: boolean;
   onChange: (content: string) => void;
+  /** 是否显示编辑器外壳（数据表列表 / 视图页签 / 工具条，默认 true）。历史快照预览传 false。 */
+  chrome?: boolean;
 }
 
-export function BitableEditor({ noteId, content, visible, readOnly, onChange }: BitableEditorProps) {
+export function BitableEditor({ noteId, content, visible, readOnly, onChange, chrome = true }: BitableEditorProps) {
   const [doc, setDoc] = useState<BitableDoc>(() => initialDoc(content));
   const docRef = useRef(doc);
   docRef.current = doc;
@@ -517,7 +519,7 @@ export function BitableEditor({ noteId, content, visible, readOnly, onChange }: 
 
   return (
     <div ref={rootRef} className={"bitable-editor" + (visible ? "" : " fn__none")}>
-      {!tablesCollapsed && (
+      {chrome && !tablesCollapsed && (
       <aside className="bt-tables" style={{ width: tablesWidth }}>
         <header className="bt-tables-head">
           <span>数据表</span>
@@ -560,7 +562,7 @@ export function BitableEditor({ noteId, content, visible, readOnly, onChange }: 
       )}
 
       <div className="bt-main">
-        <div className="bt-viewbar">
+        {chrome && <div className="bt-viewbar">
           {tablesCollapsed && (
             <div className="bt-viewbar-leading">
               <button type="button" className="bt-icon-btn" title="展开数据表列表" aria-label="展开数据表列表" onClick={() => setTablesCollapsed(false)}><ChevronsRight size={15} /></button>
@@ -585,9 +587,9 @@ export function BitableEditor({ noteId, content, visible, readOnly, onChange }: 
           ))}
           <button type="button" className="bt-icon-btn" title="新建视图" aria-label="新建视图" disabled={readOnly}
             onClick={(event) => setAddViewAnchor(event.currentTarget)}><Plus size={14} /></button>
-        </div>
+        </div>}
 
-        <div className="bt-toolbar">
+        {chrome && <div className="bt-toolbar">
           <button type="button" className={"bt-tool-btn" + (panel === "fields" ? " is-active" : "")}
             onClick={(event) => { setMenuAnchor(event.currentTarget); setPanel(panel === "fields" ? null : "fields"); }}>
             <Settings2 size={14} />表格配置
@@ -616,7 +618,7 @@ export function BitableEditor({ noteId, content, visible, readOnly, onChange }: 
           )}
           <div className="bt-toolbar-spacer" />
           <button type="button" className="bt-tool-btn bt-add-record" disabled={readOnly} onClick={() => addRecord()}><Plus size={14} />添加记录</button>
-        </div>
+        </div>}
 
         {activeView.type === "form" ? (
           <BitableFormView
