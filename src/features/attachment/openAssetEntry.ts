@@ -11,6 +11,7 @@
  * （resolveCardAsset / attachFileCardClick）——那是内核渲染层专属，调用方负责先拿到 src/name/size。
  */
 import { isMediaFilename } from "../../core/assetNaming.js";
+import { fileKindOf } from "../../core/fileCard.js";
 import { native } from "../../lib/native.js";
 import { openImagePreview } from "../editor/imagePreview.js";
 import { buildAttachmentPreviewItem, openAttachmentPreview, type AttachmentPreviewItem } from "./attachmentPreviewController.js";
@@ -22,6 +23,8 @@ export interface OpenAssetActions {
   showInFolder?: ((item: AttachmentPreviewItem) => void) | null;
   /** 非媒体附件是否直接系统打开（默认 true）。false 时打开附件信息预览层。 */
   directOpen?: boolean;
+  /** 类型判定用的文件名（默认用 name）：展示名被改成没有扩展名时传**磁盘名**，避免误判成「其他文件」。 */
+  kindFrom?: string;
 }
 
 function defaultOpenSystem(item: AttachmentPreviewItem): void {
@@ -35,14 +38,18 @@ function defaultShowInFolder(item: AttachmentPreviewItem): void {
 /** 按类型分流打开一个附件（src 为可直接 <img>/<audio>/<video> 的 URL）。 */
 export function openAssetEntry(src: string, name: string, size = 0, actions: OpenAssetActions = {}): void {
   const item = buildAttachmentPreviewItem(src, name, size);
+  // 展示名只管标题；类型一律按 kindFrom（磁盘名）判定——音视频/图片不能被改过的名字拖去走系统应用。
+  const probeName = actions.kindFrom && actions.kindFrom !== name ? actions.kindFrom : name;
+  const kind = probeName === name ? item.kind : fileKindOf(probeName || src);
+  const target = kind === item.kind ? item : { ...item, kind };
   const openSystem = actions.openSystem ?? defaultOpenSystem;
   const showInFolder = actions.showInFolder === undefined ? defaultShowInFolder : actions.showInFolder;
   const directOpen = actions.directOpen ?? true;
-  if (item.kind === "image") { openImagePreview([{ src, msrc: src }], 0); return; }
-  if (item.kind === "audio" || item.kind === "video" || isMediaFilename(name)) {
-    openAttachmentPreview(item, openSystem, showInFolder);
+  if (target.kind === "image") { openImagePreview([{ src, msrc: src }], 0); return; }
+  if (target.kind === "audio" || target.kind === "video" || isMediaFilename(probeName)) {
+    openAttachmentPreview(target, openSystem, showInFolder);
     return;
   }
-  if (directOpen) { openSystem(item); return; }
-  openAttachmentPreview(item, openSystem, showInFolder);
+  if (directOpen) { openSystem(target); return; }
+  openAttachmentPreview(target, openSystem, showInFolder);
 }

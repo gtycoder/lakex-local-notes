@@ -166,7 +166,21 @@
 .bt-row.selected td { background: var(--lake-accent-tint); }
 .bt-row.dragging td { opacity: .55; }
 .bt-row.drag-over .bt-td-index { box-shadow: inset 0 2px 0 0 var(--lake-accent); }
-.bt-td { height: var(--bt-row-h, 36px); }
+/* 行高是**绝对控制**的（--bt-row-h）：行内所有类型都只做单行展示、禁止换行，
+   装不下就裁掉——否则内容一换行就把整行撑高（附件的删除/改名/详情都在展开面板里做）。 */
+.bt-td { height: var(--bt-row-h, 36px); overflow: hidden; }
+.bt-td .bt-option-label,
+.bt-td .bt-attachment-cell,
+.bt-td .bt-attachment-editor { flex-wrap: nowrap; overflow: hidden; }
+.bt-td .bt-option-chip,
+.bt-td .bt-attachment-chip { flex: 0 0 auto; }
+.bt-td .bt-cell-unknown,
+.bt-td .bt-cell-relation,
+.bt-td .bt-cell-muted { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* 行内纵向预算：行高 36 − 格子上下留白 4 = 32；编辑框高度必须 ≤32，否则内容再高也会把行撑开
+   （实测 34px 编辑框 + 8px 格子留白 = 43px 行高）。 */
+.bt-td .bt-attachment-cell { padding: 2px 6px; }
+.bt-td .bt-attachment-editor { height: 28px; min-height: 0; padding: 0 6px; }
 .bt-td-empty { min-width: 40px; }
 .bt-add-row td { padding: 4px; }
 .bt-add-record-row { display: inline-flex; align-items: center; gap: 4px; border: 0; background: transparent; cursor: pointer; color: var(--lake-accent); font: inherit; font-size: 12px; padding: 4px 8px; }
@@ -192,11 +206,10 @@
 .bt-option-create { display: flex; align-items: center; gap: 4px; width: 100%; border: 0; border-top: 1px solid var(--lake-border-1); background: transparent; cursor: pointer; padding: 7px 8px; font: inherit; color: var(--lake-accent); }
 .bt-popover-empty { padding: 10px; font-size: 12px; color: var(--lake-text-3); text-align: center; }
 
-.bt-attachment-cell { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; padding: 4px 6px; }
+.bt-attachment-cell { position: relative; display: flex; flex-wrap: wrap; align-items: center; gap: 4px; padding: 4px 6px; }
 .bt-attachment-chip { position: relative; display: inline-flex; align-items: center; }
 .bt-attachment-chip img { width: 26px; height: 26px; object-fit: cover; border-radius: 4px; cursor: zoom-in; }
 .bt-attachment-name { max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; border: 0; background: var(--lake-bg-hover); border-radius: 4px; padding: 2px 6px; font: inherit; font-size: 12px; cursor: pointer; color: inherit; }
-.bt-attachment-remove { border: 0; background: transparent; cursor: pointer; color: var(--lake-text-3); }
 .bt-hidden-input { display: none; }
 
 .bt-popover { max-height: min(380px, calc(100vh - 24px)); overflow: auto; animation: bt-pop .13s ease-out; }
@@ -312,10 +325,45 @@
 .bt-text-cell .bt-cell-input { padding-right: 26px; }
 .bt-expand-btn { position: absolute; right: 2px; top: 50%; transform: translateY(-50%); display: none; align-items: center; justify-content: center; border: 0; background: var(--lake-bg-block); border-radius: 4px; padding: 2px; cursor: pointer; color: var(--lake-text-3); }
 .bt-text-cell:hover .bt-expand-btn, .bt-text-cell:focus-within .bt-expand-btn { display: inline-flex; }
+/* 附件格：编辑态常显 ⤢（图1），悬停/聚焦也显形（与文本格同一约束） */
+.bt-attachment-cell:hover .bt-expand-btn, .bt-attachment-cell:focus-within .bt-expand-btn, .bt-attachment-cell.is-editing .bt-expand-btn { display: inline-flex; }
 .bt-text-expand { display: flex; flex-direction: column; overflow: hidden; min-width: 220px; min-height: 140px; }
 .bt-text-expand-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 8px; cursor: move; user-select: none; background: var(--lake-bg-block); border-bottom: 1px solid var(--lake-border-1); font-size: 12px; }
 .bt-text-expand-body { flex: 1; width: 100%; min-height: 0; border: 0; outline: none; resize: none; padding: 8px 10px; font: inherit; font-size: 13px; line-height: 1.6; color: inherit; background: var(--lake-bg-panel); box-sizing: border-box; }
 .bt-text-expand-resize { position: absolute; right: 0; bottom: 0; width: 14px; height: 14px; cursor: nwse-resize; background: linear-gradient(135deg, transparent 50%, var(--lake-text-3) 50%); }
+/* 附件展开面板：上半 = 拖拽/粘贴投放区（有附件时即文件列表），下半 = 添加本地文件 */
+.bt-attach-expand { display: flex; flex-direction: column; overflow: hidden; min-width: 280px; min-height: 200px; }
+.bt-attach-expand-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 8px; cursor: move; user-select: none; background: var(--lake-bg-block); border-bottom: 1px solid var(--lake-border-1); font-size: 12px; }
+/* body 不滚、「添加本地文件」常驻；超过 3 行的卡片由投放区自己滚（面板高度自适应但封顶 3 行） */
+.bt-attach-expand-body { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 8px; padding: 10px; background: var(--lake-bg-panel); box-sizing: border-box; overflow: hidden; }
+.bt-attach-dropzone { flex: 1; min-height: 96px; display: flex; align-items: center; justify-content: center; padding: 10px; border: 1px dashed var(--lake-border-2); border-radius: var(--lake-radius-sm); background: var(--lake-bg-block); box-sizing: border-box; overflow: auto; scrollbar-gutter: stable; }
+.bt-attach-dropzone.has-items { align-items: stretch; justify-content: flex-start; border-color: transparent; background: transparent; padding: 2px; }
+.bt-attach-dropzone.is-drop-active { border-color: var(--lake-accent); border-style: solid; }
+.bt-attach-dropzone-hint { color: var(--lake-text-3); font-size: 13px; }
+/* 附件卡片网格（展开面板）：上 = 附件区（点击预览 / 按住拖动排序，右上角 × 删除）；
+   下 = 名称行（名称可点击预览、✏️ 改名、⬇ 下载）。**没有悬停工具**。 */
+/* grid-auto-rows 必须等于 core 的 ATTACHMENT_GRID.cardHeight（121 = 附件区 92 + 名称行）。
+   用固定轨道而不是 auto：面板自适应前高度可能偏小，auto 轨道会把卡片压扁（实测被压到 39px，
+   而面板又按"实测卡片高度"算尺寸 → 越算越扁）。固定轨道则撑出内容高度、由投放区滚动。 */
+.bt-attach-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(148px, 1fr)); grid-auto-rows: 121px; gap: 8px; align-content: start; width: 100%; }
+.bt-attach-card { position: relative; display: flex; flex-direction: column; border: 1px solid var(--lake-border-1); border-radius: var(--lake-radius-sm); background: var(--lake-bg-panel); overflow: hidden; user-select: none; }
+.bt-attach-card.is-dragging { opacity: .45; }
+.bt-attach-card.is-drop-before { box-shadow: -2px 0 0 0 var(--lake-accent); }
+.bt-attach-card.is-drop-after { box-shadow: 2px 0 0 0 var(--lake-accent); }
+.bt-attach-card-file { position: relative; display: flex; align-items: center; justify-content: center; height: 92px; background: var(--lake-bg-block); cursor: pointer; }
+.bt-attach-card-file img { width: 100%; height: 100%; object-fit: cover; }
+.bt-attach-card-ext { font-size: 12px; letter-spacing: .04em; color: var(--lake-text-3); }
+.bt-attach-card-remove { position: absolute; top: 4px; right: 4px; display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; border: 0; border-radius: var(--lake-radius-pill); padding: 0; background: var(--lake-bg-panel); color: var(--lake-text-3); cursor: pointer; }
+.bt-attach-card-remove:hover { background: var(--lake-bg-hover); color: var(--lake-text-1); }
+.bt-attach-card-meta { display: flex; align-items: center; gap: 2px; padding: 3px 4px 3px 6px; border-top: 1px solid var(--lake-border-1); }
+.bt-attach-card-name { flex: 1; min-width: 0; font-size: 12px; line-height: 1.7; color: var(--lake-text-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }
+.bt-attach-card-name:hover { color: var(--lake-text-1); }
+.bt-attach-card-rename { flex: 1; min-width: 0; border: 0; border-bottom: 1px solid var(--lake-accent); padding: 0 2px; background: transparent; font: inherit; font-size: 12px; color: var(--lake-text-1); outline: none; }
+.bt-attach-card-icon { flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; border: 0; border-radius: var(--lake-radius-xs); padding: 0; background: transparent; color: var(--lake-text-3); cursor: pointer; }
+.bt-attach-card-icon:hover { background: var(--lake-bg-hover); color: var(--lake-text-1); }
+.bt-attach-add { display: inline-flex; align-items: center; justify-content: center; gap: 6px; flex: 0 0 auto; width: 100%; border: 0; border-radius: var(--lake-radius-sm); padding: 9px; background: transparent; color: var(--lake-text-2); font: inherit; font-size: 13px; cursor: pointer; }
+.bt-attach-add:hover { background: var(--lake-bg-hover); color: var(--lake-text-1); }
+.bt-attach-expand-resize { position: absolute; right: 0; bottom: 0; width: 14px; height: 14px; cursor: nwse-resize; background: linear-gradient(135deg, transparent 50%, var(--lake-text-3) 50%); }
 
 
 .bt-group-row td { background: var(--lake-bg-block); }

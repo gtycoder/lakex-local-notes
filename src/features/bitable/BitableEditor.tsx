@@ -19,11 +19,13 @@ import {
 import {
   BITABLE_DOC_KIND, BITABLE_DOC_VERSION, BITABLE_FIELD_TYPES, BITABLE_FIELD_TYPE_LABEL,
   BITABLE_FILTER_OPERATOR_LABEL, BITABLE_OPTION_COLORS, applyViewToRecords, bitableDisplayValue, bitablesToBody, defaultRecordValues, duplicateValues, groupRecords, optionColorHex,
+  bitableAttachments, removeBitableAttachment, renameBitableAttachment, reorderBitableAttachments,
   createBitableField, createBitableRecord, createBitableView, createDefaultBitableTable, filterOperatorsFor,
   isKnownFieldType, newBitableId, orderedTableFields, parseBitableBody,
-  type BitableDoc, type BitableField, type BitableFieldType, type BitableFilterRule, type BitableGroupRule, type BitableRecord,
+  type BitableAttachment, type BitableDoc, type BitableField, type BitableFieldType, type BitableFilterRule, type BitableGroupRule, type BitableRecord,
   type BitableRowHeight, type BitableTable, type BitableView,
 } from "../../core/bitableDoc.js";
+import { parseLocalAssetUrl } from "../../core/assetUrl.js";
 import { uploadLakeResource } from "../editor/resourceUpload.js";
 import { ASSET_ORIGIN, withAssetAccessToken } from "../../lib/assetPort.js";
 import { openAssetEntry } from "../attachment/openAssetEntry.js";
@@ -242,27 +244,30 @@ export function BitableEditor({ noteId, content, visible, readOnly, onChange, ch
     }));
   }, [patchActiveTable]);
 
-  const uploadFiles = useCallback(async (files: File[]): Promise<string[]> => {
-    const names: string[] = [];
+  /** 上传 → 附件单元格条目。**磁盘名只在 url 末段**：`uploadResource` 返回的 `filename` 是展示名
+   *  （给 Lake 文件卡的 name 用），把它当路径会让除图片外的附件全部 404（播放器灰、PPT 打不开）。 */
+  const uploadFiles = useCallback(async (files: File[]): Promise<BitableAttachment[]> => {
+    const out: BitableAttachment[] = [];
     for (const file of files) {
-      const out = await uploadLakeResource(file, noteId);
-      names.push(out.filename);
+      const uploaded = await uploadLakeResource(file, noteId);
+      out.push({ file: parseLocalAssetUrl(uploaded.url)?.filename ?? uploaded.filename, name: uploaded.filename });
     }
-    return names;
+    return out;
   }, [noteId]);
 
-  /** 打开附件：走公共入口 openAssetEntry（与文档/小记同一套分流）。 */
-  const openAsset = useCallback((filename: string) => {
-    openAssetEntry(withAssetAccessToken(ASSET_ORIGIN + "/" + noteId + "/" + filename), filename, 0);
+  /** 打开附件：走公共入口 openAssetEntry（与文档/小记同一套分流）。磁盘名定位文件、展示名作预览标题。 */
+  const openAsset = useCallback((file: string, name: string) => {
+    // kindFrom = 磁盘名：展示名被改成没有扩展名时，类型判定照样正确（音视频仍走应用内播放）
+    openAssetEntry(withAssetAccessToken(ASSET_ORIGIN + "/" + noteId + "/" + file), name, 0, { kindFrom: file });
   }, [noteId]);
 
-  const appendAttachments = useCallback((recordId: string, fieldId: string, filenames: string[]) => {
+  const appendAttachments = useCallback((recordId: string, fieldId: string, entries: BitableAttachment[]) => {
     patchActiveTable((table) => ({
       ...table,
       records: table.records.map((r) => {
         if (r.id !== recordId) return r;
-        const current = Array.isArray(r.values[fieldId]) ? (r.values[fieldId] as string[]) : [];
-        return { ...r, values: { ...r.values, [fieldId]: [...current, ...filenames] }, updatedAt: stamp() };
+        const current = bitableAttachments(r.values[fieldId]);
+        return { ...r, values: { ...r.values, [fieldId]: [...current, ...entries] }, updatedAt: stamp() };
       }),
     }));
   }, [patchActiveTable]);
@@ -572,10 +577,10 @@ export function BitableEditor({ noteId, content, visible, readOnly, onChange, ch
     const onKey = (event: KeyboardEvent) => {
       if (!(event.metaKey || event.ctrlKey) || !cellRange) return;
       const el = document.activeElement as HTMLElement | null;
-      // 焦点在输入/可编辑区，或附件格（它自己处理 onPaste 图片）时，不要拦截 Cmd+C/V，
-      // 否则 preventDefault 会把原生 paste 事件挡掉，附件格永远收不到粘贴。
+      // 焦点在输入/可编辑区、附件格、或附件展开面板（panel 是 portal，不在单元格 DOM 内）时，
+      // 不要拦截 Cmd+C/V——否则 preventDefault 会把原生 paste 事件挡掉，永远收不到粘贴。
       const typing = !!el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.isContentEditable);
-      const inAttachment = !!el && typeof el.closest === "function" && !!el.closest(".bt-attachment-cell");
+      const inAttachment = !!el && typeof el.closest === "function" && !!el.closest(".bt-attachment-cell, .bt-attach-expand");
       const handlesClipboard = typing || inAttachment;
       if (event.key === "c" && !handlesClipboard) { event.preventDefault(); void copySelection(); }
       if (event.key === "v" && !handlesClipboard) { event.preventDefault(); void pasteSelection(); }
@@ -685,9 +690,11 @@ export function BitableEditor({ noteId, content, visible, readOnly, onChange, ch
                 noteId={noteId}
                 value={record.values[field.id]}
                 readOnly={readOnly}
-                onUpload={(files) => { void uploadFiles(files).then((names) => appendAttachments(record.id, field.id, names)); }}
-                onRemove={(filename) => { const current = Array.isArray(record.values[field.id]) ? (record.values[field.id] as string[]) : []; setCellValue(record.id, field.id, current.filter((f) => f !== filename)); }}
-                onOpen={(filename) => { void openAsset(filename); }}
+                onUpload={(files) => { void uploadFiles(files).then((entries) => appendAttachments(record.id, field.id, entries)); }}
+                onRemove={(file) => setCellValue(record.id, field.id, removeBitableAttachment(record.values[field.id], file))}
+                onOpen={(attachment) => { void openAsset(attachment.file, attachment.name); }}
+                onReorder={(files) => setCellValue(record.id, field.id, reorderBitableAttachments(record.values[field.id], files))}
+                onRename={(file, name) => setCellValue(record.id, field.id, renameBitableAttachment(record.values[field.id], file, name))}
               />
             )}
           />
@@ -824,7 +831,7 @@ export function BitableEditor({ noteId, content, visible, readOnly, onChange, ch
             defaults={formDefaults}
             onUploadFiles={uploadFiles}
             onAddFieldOption={(fieldId, option) => patchActiveTable((table) => ({ ...table, fields: table.fields.map((f) => (f.id === fieldId ? { ...f, options: [...(f.options ?? []), option] } : f)) }))}
-            onOpenAsset={(filename) => { void openAsset(filename); }}
+            onOpenAsset={(attachment) => { void openAsset(attachment.file, attachment.name); }}
           />
         ) : (
           <div className="bt-grid-wrap" style={gridStyle} onKeyDown={onGridKeyDown}>
@@ -1137,8 +1144,8 @@ export function BitableEditor({ noteId, content, visible, readOnly, onChange, ch
           onSetValue={setCellValue}
           onAddOption={(fieldId, name, recordId) => addOption(fieldId, name, recordId)}
           onAddField={openAddField}
-          onUpload={(recordId, fieldId, files) => { void uploadFiles(files).then((names) => appendAttachments(recordId, fieldId, names)); }}
-          onOpenAsset={(filename) => { void openAsset(filename); }}
+          onUpload={(recordId, fieldId, files) => { void uploadFiles(files).then((entries) => appendAttachments(recordId, fieldId, entries)); }}
+          onOpenAsset={(attachment) => { void openAsset(attachment.file, attachment.name); }}
         />
       )}
     </div>

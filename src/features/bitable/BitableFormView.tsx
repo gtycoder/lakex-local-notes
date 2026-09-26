@@ -4,7 +4,7 @@
  */
 import { useState } from "react";
 import { Check, Plus, X } from "lucide-react";
-import { bitableDisplayValue, type BitableField, type BitableTable, type BitableView } from "../../core/bitableDoc.js";
+import { bitableAttachments, bitableDisplayValue, removeBitableAttachment, renameBitableAttachment, reorderBitableAttachments, type BitableAttachment, type BitableField, type BitableTable, type BitableView } from "../../core/bitableDoc.js";
 import { AttachmentCell, CellEditor, FieldTypeIcon } from "./bitableCells.js";
 
 export interface BitableFormViewProps {
@@ -16,9 +16,9 @@ export interface BitableFormViewProps {
   defaults: Record<string, unknown>;
   onUpdateView: (patch: Partial<BitableView>) => void;
   onSubmit: (values: Record<string, unknown>) => void;
-  onUploadFiles: (files: File[]) => Promise<string[]>;
+  onUploadFiles: (files: File[]) => Promise<BitableAttachment[]>;
   onAddFieldOption: (fieldId: string, option: { id: string; name: string }) => void;
-  onOpenAsset: (filename: string) => void;
+  onOpenAsset: (attachment: BitableAttachment) => void;
 }
 
 export function BitableFormView(props: BitableFormViewProps) {
@@ -112,9 +112,11 @@ export function BitableFormView(props: BitableFormViewProps) {
                             noteId={props.noteId}
                             value={draft[field.id]}
                             readOnly={false}
-                            onUpload={(files) => { void props.onUploadFiles(files).then((names) => { const current = Array.isArray(draft[field.id]) ? (draft[field.id] as string[]) : []; setDraftValue(field.id, [...current, ...names]); }); }}
-                            onRemove={(filename) => { const current = Array.isArray(draft[field.id]) ? (draft[field.id] as string[]) : []; setDraftValue(field.id, current.filter((f) => f !== filename)); }}
+                            onUpload={(files) => { void props.onUploadFiles(files).then((entries) => { setDraftValue(field.id, [...bitableAttachments(draft[field.id]), ...entries]); }); }}
+                            onRemove={(file) => setDraftValue(field.id, removeBitableAttachment(draft[field.id], file))}
                             onOpen={props.onOpenAsset}
+                            onReorder={(files) => setDraftValue(field.id, reorderBitableAttachments(draft[field.id], files))}
+                            onRename={(file, name) => setDraftValue(field.id, renameBitableAttachment(draft[field.id], file, name))}
                           />
                         )}
                       />

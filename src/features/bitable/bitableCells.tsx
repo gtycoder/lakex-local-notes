@@ -7,10 +7,12 @@
  */
 import { useEffect, useLayoutEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import { Popover as OverlayPopover } from "../../components/ui/Overlay";
-import { Calendar, Check, ChevronDown, ChevronLeft, ChevronRight, CircleDot, Hash, HelpCircle, Link2, Maximize2, Paperclip, Plus, Search, Tags, Type, X } from "lucide-react";
+import { Calendar, Check, ChevronDown, ChevronLeft, ChevronRight, CircleDot, Download, Hash, HelpCircle, Link2, Maximize2, Paperclip, Pencil, Plus, Search, Tags, Type, X } from "lucide-react";
 import { ASSET_ORIGIN, assetThumbWidthForCss, withAssetAccessToken } from "../../lib/assetPort.js";
 import { withAssetWidth } from "../../core/assetUrl.js";
-import { BITABLE_OPTION_PALETTE, bitableDisplayValue, isKnownFieldType, optionChipStyle, optionColorHex, type BitableField, type BitableFieldOption } from "../../core/bitableDoc.js";
+import { extOf, isImageExtension } from "../../core/assetNaming.js";
+import { native } from "../../lib/native.js";
+import { ATTACHMENT_GRID, BITABLE_OPTION_PALETTE, attachmentGridColumns, bitableAttachments, bitableDisplayValue, isKnownFieldType, optionChipStyle, optionColorHex, type BitableAttachment, type BitableField, type BitableFieldOption } from "../../core/bitableDoc.js";
 
 /** 字段类型图标（未知类型给 HelpCircle）。 */
 export function FieldTypeIcon({ type, size = 14 }: { type: string; size?: number }) {
@@ -146,40 +148,99 @@ export function OptionPicker({ field, value, multiple, disabled, onToggle, onAdd
 
 /** 附件单元格里图片的显示边长（px）—— 必须与 `bitableEditor.css` 的 `.bt-attachment-chip img` 一致。 */
 const ATTACHMENT_CHIP_PX = 26;
+/** 展开面板里附件卡片的缩略图档位依据（CSS 显示边长，取档位时自动乘 DPR）。 */
+const ATTACHMENT_CARD_PX = 150;
+/** 面板内「拖动排序」用的私有拖拽类型：内部拖拽不能被当成"拖入文件"（否则会触发上传/投放高亮）。 */
+const BT_ATTACH_DRAG_MIME = "application/x-lake-bitable-attachment";
+
+function isInternalAttachmentDrag(event: { dataTransfer?: DataTransfer | null }): boolean {
+  const types = event.dataTransfer?.types;
+  return !!types && [...types].includes(BT_ATTACH_DRAG_MIME);
+}
+
+/** 预览层（附件浮层 / 图片 Lightbox）是独立 portal：点它不算「面板外」，Esc 也该先关它。 */
+const PREVIEW_LAYER_SELECTOR = ".attachment-preview, .image-lightbox";
+function inPreviewLayer(target?: Node | null): boolean {
+  return !!target && target instanceof Element && !!target.closest(PREVIEW_LAYER_SELECTOR);
+}
+function previewLayerOpen(): boolean {
+  return typeof document !== "undefined" && !!document.querySelector(PREVIEW_LAYER_SELECTOR);
+}
+
+/**
+ * 展开面板的自适应尺寸：列数看附件多少（见 `attachmentGridColumns`），默认最多 3 行，
+ * 再多由投放区自己滚动（面板不会无限长高/变宽）；空态只留虚线提示 + 添加按钮的位置。
+ */
+function attachmentPanelSize(count: number, measuredCardHeight?: number): { w: number; h: number } {
+  const clamp = (value: number, min: number, max: number) => Math.min(Math.max(min, value), Math.max(min, max));
+  const viewportW = typeof window === "undefined" ? 1280 : window.innerWidth;
+  const viewportH = typeof window === "undefined" ? 800 : window.innerHeight;
+  if (count <= 0) return { w: clamp(420, 280, viewportW - 24), h: clamp(220, 200, viewportH - 24) };
+  const { cardWidth, cardHeight, gap, maxRows } = ATTACHMENT_GRID;
+  const cardH = measuredCardHeight && measuredCardHeight > 0 ? measuredCardHeight : cardHeight;
+  const cols = attachmentGridColumns(count);
+  const rows = Math.min(maxRows, Math.ceil(count / cols));
+  // 宽 = 卡片列 + 列距 + 左右留白（body 10×2 + 投放区 2×2 + 边框 2 + 常驻滚动条槽 ~15 + 余量）
+  // 留白必须把滚动条算进去：投放区一旦滚动（>3 行）会吃掉宽度，否则列数会莫名少一列。
+  const w = cols * cardWidth + (cols - 1) * gap + 52;
+  // 高 = 标题栏 33 + body 上下留白 20 + 卡片可见行 + 行距 + 与添加按钮的间距 8 + 添加按钮 38
+  const h = 33 + 20 + rows * cardH + (rows - 1) * gap + 8 + 38;
+  return { w: clamp(w, 280, viewportW - 24), h: clamp(h, 200, viewportH - 24) };
+}
+
+/** 行单元格里的附件 chip 列表。**没有删除按钮**：行内格子太窄，删除只在展开面板的卡片上做
+ *  （点单元格 = 选中并出现「+」，点 chip = 预览，两者都不需要在行内放 ×）。 */
+function AttachmentChipList({ noteId, attachments, onOpen }: {
+  noteId: string;
+  attachments: BitableAttachment[];
+  onOpen: (attachment: BitableAttachment) => void;
+}) {
+  const urlOf = (file: string) => withAssetAccessToken(ASSET_ORIGIN + "/" + noteId + "/" + file);
+  const chipUrlOf = (file: string) => withAssetWidth(urlOf(file), assetThumbWidthForCss(ATTACHMENT_CHIP_PX));
+  return (
+    <>
+      {attachments.map(({ file, name }) => (
+        <div key={file} className="bt-attachment-chip" title={name}>
+          {isImageExtension(extOf(file))
+            ? <img src={chipUrlOf(file)} alt={name} loading="lazy" onClick={() => onOpen({ file, name })} />
+            : <button type="button" className="bt-attachment-name" onClick={() => onOpen({ file, name })}>{name}</button>}
+        </div>
+      ))}
+    </>
+  );
+}
 
 export interface AttachmentCellProps {
   noteId: string;
   value: unknown;
   readOnly: boolean;
   onUpload: (files: File[]) => void;
-  onRemove: (filename: string) => void;
-  onOpen: (filename: string) => void;
+  /** 入参是**磁盘名**（`BitableAttachment.file`）。 */
+  onRemove: (file: string) => void;
+  /** 打开该附件（磁盘名定位文件、展示名用于预览标题）。 */
+  onOpen: (attachment: BitableAttachment) => void;
+  /** 展开面板里拖拽排序后的新顺序（磁盘名数组）。 */
+  onReorder: (files: string[]) => void;
+  /** 改附件的展示名（磁盘名不变）。 */
+  onRename: (file: string, name: string) => void;
   /** 记录详情抽屉里常驻编辑态（表格里是点一下才进编辑态）。 */
   alwaysActive?: boolean;
 }
 
-/** 「图片和附件」单元格：值是 assets/{noteId}/{filename} 的文件名数组，走现有资产管线。
+/** 「图片和附件」单元格：值是 `{ file, name }[]`（磁盘名 + 展示名，走现有资产管线）。
  *  表格：默认正常显示，**点一下**进编辑态；记录详情：常驻编辑态（alwaysActive）。
  *  编辑态 = **独立「+」按钮**（选文件）+ **独立提示文案**（点它/空白聚焦本区，可直接 Cmd+V 粘贴）+ 附件；
- *  整个区域是粘贴 / 拖拽投放目标。缩略图按 `ATTACHMENT_CHIP_PX` 取 `?w=` 档位，放大预览走原图。 */
-export function AttachmentCell({ noteId, value, readOnly, onUpload, onRemove, onOpen, alwaysActive = false }: AttachmentCellProps) {
-  const files = Array.isArray(value) ? value.filter((v): v is string => typeof v === "string") : [];
+ *  整个区域是粘贴 / 拖拽投放目标。缩略图按 `ATTACHMENT_CHIP_PX` 取 `?w=` 档位，放大预览走原图。
+ *  右侧「⤢」= 展开面板（行单元格太窄放不下附件列表时用）。 */
+export function AttachmentCell({ noteId, value, readOnly, onUpload, onRemove, onOpen, onReorder, onRename, alwaysActive = false }: AttachmentCellProps) {
+  const attachments = bitableAttachments(value);
   const inputRef = useRef<HTMLInputElement>(null);
   const cellRef = useRef<HTMLDivElement>(null);
   const [active, setActive] = useState(alwaysActive);
   const [dropActive, setDropActive] = useState(false);
-  const urlOf = (filename: string) => withAssetAccessToken(ASSET_ORIGIN + "/" + noteId + "/" + filename);
-  const chipUrlOf = (filename: string) => withAssetWidth(urlOf(filename), assetThumbWidthForCss(ATTACHMENT_CHIP_PX));
-  const isImage = (filename: string) => /\.(png|jpe?g|gif|webp|avif|bmp|svg|ico)$/i.test(filename);
+  const [expandAnchor, setExpandAnchor] = useState<HTMLElement | null>(null);
   const takeDropFiles = (list: FileList | null | undefined) => { if (list && list.length > 0) onUpload([...list]); };
-  const chips = files.map((filename) => (
-    <div key={filename} className="bt-attachment-chip" title={filename}>
-      {isImage(filename)
-        ? <img src={chipUrlOf(filename)} alt={filename} loading="lazy" onClick={() => onOpen(filename)} />
-        : <button type="button" className="bt-attachment-name" onClick={() => onOpen(filename)}>{filename}</button>}
-      {!readOnly && <button type="button" className="bt-attachment-remove" aria-label={"移除 " + filename} onClick={() => onRemove(filename)}>×</button>}
-    </div>
-  ));
+  const chips = <AttachmentChipList noteId={noteId} attachments={attachments} onOpen={onOpen} />;
   // 表格里点外部收起编辑态；抽屉常驻态不收起
   useEffect(() => {
     if (!active || alwaysActive) return;
@@ -195,9 +256,17 @@ export function AttachmentCell({ noteId, value, readOnly, onUpload, onRemove, on
       className={"bt-attachment-cell" + (dropActive ? " is-drop-active" : "") + (active ? " is-editing" : "")}
       tabIndex={readOnly ? undefined : 0}
       onClick={(event) => {
+        // 点中 chip（缩略图/文件名）只走预览，**不算选中单元格**（要区分开）；
+        // 点空白处或右侧「⤢ 展开」才算选中 → 「+」自动出来。
         if (readOnly || active) return;
         if ((event.target as HTMLElement).closest(".bt-attachment-chip")) return;
         setActive(true);
+      }}
+      onDoubleClick={(event) => {
+        // 双击单元格 = 打开展开面板（快捷键式入口；⤢ 按钮仍然可用）
+        if (readOnly) return;
+        if ((event.target as HTMLElement).closest(".bt-expand-btn")) return;
+        setExpandAnchor(cellRef.current);
       }}
       onPaste={(event) => {
         const items = event.clipboardData?.items;
@@ -205,14 +274,14 @@ export function AttachmentCell({ noteId, value, readOnly, onUpload, onRemove, on
         if (items) for (const item of items) if (item.kind === "file") { const f = item.getAsFile(); if (f) picked.push(f); }
         if (picked.length > 0) { event.preventDefault(); if (!readOnly) setActive(true); onUpload(picked); }
       }}
-      onDragOver={(event) => { if (readOnly) return; event.preventDefault(); setDropActive(true); }}
+      onDragOver={(event) => { if (readOnly || isInternalAttachmentDrag(event)) return; event.preventDefault(); setDropActive(true); }}
       onDragLeave={() => setDropActive(false)}
-      onDrop={(event) => { if (readOnly) return; event.preventDefault(); setDropActive(false); setActive(true); takeDropFiles(event.dataTransfer?.files); }}>
+      onDrop={(event) => { if (readOnly || isInternalAttachmentDrag(event)) return; event.preventDefault(); setDropActive(false); setActive(true); takeDropFiles(event.dataTransfer?.files); }}>
       {active && !readOnly ? (
         <div className="bt-attachment-editor">
           <button type="button" className="bt-attachment-plus" aria-label="选择图片或附件" title="选择图片或附件"
             onClick={(event) => { event.stopPropagation(); inputRef.current?.click(); }}><Plus size={18} /></button>
-          {files.length === 0 && (
+          {attachments.length === 0 && (
             <span className="bt-attachment-hint" onClick={(event) => { event.stopPropagation(); cellRef.current?.focus(); }}>粘贴或拖拽至此</span>
           )}
           {chips}
@@ -221,11 +290,269 @@ export function AttachmentCell({ noteId, value, readOnly, onUpload, onRemove, on
         chips
       )}
       {!readOnly && (
+        <button type="button" className="bt-expand-btn" title="展开附件" aria-label="展开附件"
+          onMouseDown={(event) => event.stopPropagation()}
+          onClick={(event) => {
+            event.stopPropagation();
+            const el = event.currentTarget;
+            // 点「展开」= 选中该单元格（加号自动出来），同时开/关面板
+            setActive(true);
+            setExpandAnchor((prev) => (prev ? null : el));
+          }}>
+          <Maximize2 size={12} />
+        </button>
+      )}
+      {!readOnly && (
         <input ref={inputRef} type="file" multiple className="bt-hidden-input"
           onChange={(event) => { takeDropFiles(event.target.files); event.target.value = ""; }} />
       )}
-      {files.length === 0 && readOnly && <span className="bt-cell-muted">—</span>}
+      {attachments.length === 0 && readOnly && <span className="bt-cell-muted">—</span>}
+      {expandAnchor && (
+        <AttachmentExpandPopover
+          anchor={expandAnchor}
+          noteId={noteId}
+          attachments={attachments}
+          readOnly={readOnly}
+          onUpload={onUpload}
+          onRemove={onRemove}
+          onOpen={onOpen}
+          onReorder={onReorder}
+          onRename={onRename}
+          onClose={() => setExpandAnchor(null)}
+        />
+      )}
     </div>
+  );
+}
+
+interface AttachmentExpandPopoverProps {
+  anchor: HTMLElement;
+  noteId: string;
+  attachments: BitableAttachment[];
+  readOnly: boolean;
+  onUpload: (files: File[]) => void;
+  onRemove: (file: string) => void;
+  onOpen: (attachment: BitableAttachment) => void;
+  onReorder: (files: string[]) => void;
+  onRename: (file: string, name: string) => void;
+  onClose: () => void;
+}
+
+/** 附件展开面板（贴单元格浮窗，可拖动/缩放）：
+ *  上半 = 拖拽 / 粘贴投放区：空态给虚线提示，有附件时是**卡片网格**；下半 = 「＋ 添加本地文件」。
+ *  卡片 = 附件区（右上角 × 删除）+ 名称行（名称可编辑 + 下载）；**没有悬停工具**：
+ *  点击卡片 = 预览，按住拖动 = 排序（原生 draggable，不移动则仍是点击）。
+ *
+ *  投放区必须自己 `stopPropagation`：面板是 Overlay 的 portal，但 React 事件仍沿 **React 树**
+ *  冒泡回单元格，而单元格本身也接了 paste/drop ⇒ 不截断的话一次粘贴会上传两遍（实测过）。
+ *
+ *  打开即聚焦投放区：面板是 portal，焦点不在 `.bt-attachment-cell` 里，
+ *  表格的全局 Cmd+V 处理器会 `preventDefault` 掉原生 paste（"拖拽行、粘贴不行"的真因）。 */
+function AttachmentExpandPopover({ anchor, noteId, attachments, readOnly, onUpload, onRemove, onOpen, onReorder, onRename, onClose }: AttachmentExpandPopoverProps) {
+  const panelRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const dropRef = useRef<HTMLDivElement>(null);
+  const gridRef = useRef<HTMLDivElement>(null);
+  const [pos, setPos] = useState<{ left: number; top: number } | null>(null);
+  const [size, setSize] = useState(() => attachmentPanelSize(attachments.length));
+  const sizeRef = useRef(size);
+  sizeRef.current = size;
+  const [dropActive, setDropActive] = useState(false);
+  const [dragFile, setDragFile] = useState<string | null>(null);
+  const [dropHint, setDropHint] = useState<{ file: string; after: boolean } | null>(null);
+  const [renameFile, setRenameFile] = useState<string | null>(null);
+  // 附件增减后重新自适应；卡片高度**实测**再算（常量会随 CSS 漂移）。
+  // 用户手动缩放过的尺寸会被下一次自适应覆盖——这是「自适应」的预期语义。
+  useLayoutEffect(() => {
+    const grid = gridRef.current;
+    const card = grid?.firstElementChild as HTMLElement | null | undefined;
+    const measured = card ? card.getBoundingClientRect().height : 0;
+    setSize(attachmentPanelSize(attachments.length, measured));
+  }, [attachments.length]);
+  useLayoutEffect(() => {
+    // 贴在**单元格**下沿（不是按钮）：面板里加完附件单元格会变高，位置必须跟着走，
+    // 否则面板会盖住自己的 ⤢ 按钮（实测踩到过：elementFromPoint 命中面板而不是按钮）。
+    const host = (anchor.closest(".bt-attachment-cell") as HTMLElement | null) ?? anchor;
+    const measure = () => {
+      const r = host.getBoundingClientRect();
+      const w = Math.min(sizeRef.current.w, Math.max(280, window.innerWidth - 24));
+      const left = Math.min(Math.max(8, r.left), Math.max(8, window.innerWidth - w - 8));
+      const top = Math.min(Math.max(8, r.bottom + 4), Math.max(8, window.innerHeight - sizeRef.current.h - 8));
+      setPos({ left, top });
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(host);
+    window.addEventListener("resize", measure);
+    window.addEventListener("scroll", measure, true);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("resize", measure);
+      window.removeEventListener("scroll", measure, true);
+    };
+  }, [anchor]);
+  const startDrag = (event: ReactPointerEvent<HTMLElement>) => {
+    event.preventDefault();
+    const startX = event.clientX; const startY = event.clientY;
+    const base = pos ?? { left: 0, top: 0 };
+    const onMove = (ev: PointerEvent) => setPos({ left: base.left + (ev.clientX - startX), top: base.top + (ev.clientY - startY) });
+    const onUp = () => { window.removeEventListener("pointermove", onMove); window.removeEventListener("pointerup", onUp); };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+  };
+  const startResize = (event: ReactPointerEvent<HTMLElement>) => {
+    event.preventDefault(); event.stopPropagation();
+    const startX = event.clientX; const startY = event.clientY;
+    const base = { ...size };
+    const onMove = (ev: PointerEvent) => setSize({ w: Math.max(280, base.w + (ev.clientX - startX)), h: Math.max(200, base.h + (ev.clientY - startY)) });
+    const onUp = () => { window.removeEventListener("pointermove", onMove); window.removeEventListener("pointerup", onUp); };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+  };
+  const takeFiles = (list: FileList | null | undefined) => { if (list && list.length > 0) onUpload([...list]); };
+  const thumbOf = (file: string) => withAssetWidth(withAssetAccessToken(ASSET_ORIGIN + "/" + noteId + "/" + file), assetThumbWidthForCss(ATTACHMENT_CARD_PX));
+  /** 拖拽排序：把 dragged 插到 target 前/后（先移出再按目标位置插入）。 */
+  const applyReorder = (dragged: string, target: string, after: boolean) => {
+    const rest = attachments.map((a) => a.file).filter((f) => f !== dragged);
+    const at = rest.indexOf(target);
+    if (at < 0) return;
+    rest.splice(after ? at + 1 : at, 0, dragged);
+    onReorder(rest);
+  };
+  useEffect(() => { dropRef.current?.focus({ preventScroll: true }); }, []);
+  if (!pos) return null;
+  return (
+    <OverlayPopover
+      className="bt-attach-expand"
+      raised={isInsideDialog(anchor)}
+      // 预览开着时不关面板（否则每看一次附件都要重新展开）；Esc 也先留给预览层
+      onDismiss={() => { if (!previewLayerOpen()) onClose(); }}
+      surfaceRef={panelRef}
+      ignoreOutside={(t) => anchor.contains(t) || inPreviewLayer(t) || previewLayerOpen()}
+      style={{ left: pos.left, top: pos.top, width: size.w, height: size.h }}
+    >
+      <header className="bt-attach-expand-head" onPointerDown={startDrag}>
+        <span>附件</span>
+        <button type="button" className="bt-icon-btn" aria-label="关闭" title="关闭" onPointerDown={(event) => event.stopPropagation()} onClick={onClose}><X size={14} /></button>
+      </header>
+      <div className="bt-attach-expand-body">
+        <div
+          ref={dropRef}
+          className={"bt-attach-dropzone" + (attachments.length > 0 ? " has-items" : "") + (dropActive ? " is-drop-active" : "")}
+          tabIndex={readOnly ? undefined : 0}
+          onPaste={(event) => {
+            event.stopPropagation();
+            const items = event.clipboardData?.items;
+            const picked: File[] = [];
+            if (items) for (const item of items) if (item.kind === "file") { const f = item.getAsFile(); if (f) picked.push(f); }
+            if (picked.length > 0) { event.preventDefault(); if (!readOnly) onUpload(picked); }
+          }}
+          onDragOver={(event) => {
+            event.stopPropagation();
+            if (readOnly || isInternalAttachmentDrag(event)) return; // 卡片内部排序不当作"拖入文件"
+            event.preventDefault();
+            setDropActive(true);
+          }}
+          onDragLeave={(event) => { event.stopPropagation(); setDropActive(false); }}
+          onDrop={(event) => {
+            event.stopPropagation();
+            if (readOnly || isInternalAttachmentDrag(event)) return;
+            event.preventDefault();
+            setDropActive(false);
+            takeFiles(event.dataTransfer?.files);
+          }}
+        >
+          {attachments.length === 0
+            ? <div className="bt-attach-dropzone-hint">粘贴或拖拽至这里上传</div>
+            : (
+              <div className="bt-attach-grid" ref={gridRef}>
+                {attachments.map(({ file, name }) => (
+                  <div
+                    key={file}
+                    className={
+                      "bt-attach-card"
+                      + (dragFile === file ? " is-dragging" : "")
+                      + (dropHint && dropHint.file === file ? (dropHint.after ? " is-drop-after" : " is-drop-before") : "")
+                    }
+                    draggable={!readOnly && renameFile !== file}
+                    onDragStart={(event) => {
+                      event.dataTransfer.setData(BT_ATTACH_DRAG_MIME, file);
+                      event.dataTransfer.effectAllowed = "move";
+                      setDragFile(file);
+                    }}
+                    onDragEnd={() => { setDragFile(null); setDropHint(null); }}
+                    onDragOver={(event) => {
+                      // 用 dataTransfer.types 判定内部拖拽：dragover 阶段拿不到数据、也拿不到最新 state，
+                      // 但必须 preventDefault 才会触发 drop（否则拖到一半松手什么也不会发生）。
+                      if (readOnly || !isInternalAttachmentDrag(event)) return;
+                      event.preventDefault();
+                      event.stopPropagation();
+                      const rect = event.currentTarget.getBoundingClientRect();
+                      setDropHint({ file, after: event.clientX > rect.left + rect.width / 2 });
+                    }}
+                    onDrop={(event) => {
+                      // 从 dataTransfer 取被拖的条目（不依赖 React state：拖拽期间状态可能还没提交）
+                      const dragged = event.dataTransfer.getData(BT_ATTACH_DRAG_MIME) || dragFile;
+                      if (readOnly || !dragged || dragged === file) return;
+                      event.preventDefault();
+                      event.stopPropagation();
+                      const rect = event.currentTarget.getBoundingClientRect();
+                      applyReorder(dragged, file, event.clientX > rect.left + rect.width / 2);
+                      setDragFile(null);
+                      setDropHint(null);
+                    }}
+                  >
+                    {/* 上：附件区 —— 点击预览，按住拖动排序（原生 draggable，不移动就仍是点击） */}
+                    <div className="bt-attach-card-file" title="点击预览 · 按住拖动排序" onClick={() => onOpen({ file, name })}>
+                      {isImageExtension(extOf(file))
+                        ? <img src={thumbOf(file)} alt={name} loading="lazy" draggable={false} />
+                        : <span className="bt-attach-card-ext">{(extOf(file) || "file").toUpperCase()}</span>}
+                      {!readOnly && (
+                        <button type="button" className="bt-attach-card-remove" aria-label={"移除 " + name} title="删除"
+                          onClick={(event) => { event.stopPropagation(); onRemove(file); }}><X size={13} /></button>
+                      )}
+                    </div>
+                    {/* 下：名称（可编辑）+ 下载 */}
+                    <div className="bt-attach-card-meta">
+                      {renameFile === file
+                        ? (
+                          <input
+                            className="bt-attach-card-rename"
+                            defaultValue={name}
+                            autoFocus
+                            aria-label="附件名称"
+                            onKeyDown={(event) => {
+                              if (event.key === "Enter") { onRename(file, event.currentTarget.value); setRenameFile(null); }
+                              if (event.key === "Escape") setRenameFile(null);
+                            }}
+                            onBlur={(event) => { onRename(file, event.currentTarget.value); setRenameFile(null); }}
+                          />
+                        )
+                        : (
+                          <span className="bt-attach-card-name" title={name} onClick={() => onOpen({ file, name })}>{name}</span>
+                        )}
+                      {!readOnly && renameFile !== file && (
+                        <button type="button" className="bt-attach-card-icon" title="编辑名称" aria-label={"编辑名称 " + name}
+                          onClick={() => setRenameFile(file)}><Pencil size={14} /></button>
+                      )}
+                      <button type="button" className="bt-attach-card-icon" title="下载" aria-label={"下载 " + name}
+                        onClick={() => { void native.saveAssetAs(noteId, file, name).catch(() => undefined); }}><Download size={14} /></button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+        </div>
+        {!readOnly && (
+          <button type="button" className="bt-attach-add" onClick={() => inputRef.current?.click()}><Plus size={16} />添加本地文件</button>
+        )}
+      </div>
+      {!readOnly && (
+        <input ref={inputRef} type="file" multiple className="bt-hidden-input"
+          onChange={(event) => { takeFiles(event.target.files); event.target.value = ""; }} />
+      )}
+      <div className="bt-attach-expand-resize" onPointerDown={startResize} title="拖动调整大小" />
+    </OverlayPopover>
   );
 }
 

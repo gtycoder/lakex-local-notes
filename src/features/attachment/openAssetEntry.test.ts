@@ -47,4 +47,13 @@ describe("openAssetEntry 统一附件打开分流", () => {
     expect(attachmentState?.item.kind).toBe("pdf");
     expect(onOpen).not.toHaveBeenCalled();
   });
+
+  it("kindFrom：展示名被改成没有扩展名时，仍按磁盘名判定（音视频照旧应用内播放）", () => {
+    const onOpen = vi.fn();
+    openAssetEntry(URL_MP3, "演示音频", 12, { openSystem: onOpen, kindFrom: "1700000000000_ab12cd34.mp3" });
+    expect(attachmentState?.item.kind).toBe("audio");
+    expect(attachmentState?.item.name).toBe("演示音频");
+    expect(imageState).toBeNull();
+    expect(onOpen).not.toHaveBeenCalled();
+  });
 });

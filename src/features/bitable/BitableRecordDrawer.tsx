@@ -6,7 +6,7 @@
 import { useEffect, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { ChevronDown, ChevronUp, Plus, X } from "lucide-react";
 import { Drawer } from "../../components/ui/Overlay";
-import { bitableRecordTitle, type BitableRecord, type BitableTable } from "../../core/bitableDoc.js";
+import { bitableRecordTitle, removeBitableAttachment, renameBitableAttachment, reorderBitableAttachments, type BitableAttachment, type BitableRecord, type BitableTable } from "../../core/bitableDoc.js";
 import { AttachmentCell, CellEditor, FieldTypeIcon } from "./bitableCells.js";
 
 export interface BitableRecordDrawerProps {
@@ -21,7 +21,7 @@ export interface BitableRecordDrawerProps {
   onAddOption: (fieldId: string, name: string, recordId: string) => void;
   onAddField: () => void;
   onUpload: (recordId: string, fieldId: string, files: File[]) => void;
-  onOpenAsset: (filename: string) => void;
+  onOpenAsset: (attachment: BitableAttachment) => void;
 }
 
 const DRAWER_WIDTH_KEY = "lake-notes-v3.bitable-drawer-width";
@@ -78,11 +78,10 @@ export function BitableRecordDrawer(props: BitableRecordDrawerProps) {
                     readOnly={props.readOnly}
                     alwaysActive
                     onUpload={(files) => props.onUpload(record.id, field.id, files)}
-                    onRemove={(filename) => {
-                      const current = Array.isArray(record.values[field.id]) ? (record.values[field.id] as string[]) : [];
-                      props.onSetValue(record.id, field.id, current.filter((f) => f !== filename));
-                    }}
+                    onRemove={(file) => props.onSetValue(record.id, field.id, removeBitableAttachment(record.values[field.id], file))}
                     onOpen={props.onOpenAsset}
+                    onReorder={(files) => props.onSetValue(record.id, field.id, reorderBitableAttachments(record.values[field.id], files))}
+                    onRename={(file, name) => props.onSetValue(record.id, field.id, renameBitableAttachment(record.values[field.id], file, name))}
                   />
                 )}
               />

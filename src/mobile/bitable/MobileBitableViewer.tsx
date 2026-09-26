@@ -9,35 +9,48 @@
 import { useMemo, useState } from "react";
 import {
   applyViewToRecords,
+  bitableAttachments,
   optionChipStyle,
   orderedTableFields,
   parseBitableBody,
   type BitableField,
   type BitableRecord,
 } from "../../core/bitableDoc.js";
+import { extOf, isImageExtension } from "../../core/assetNaming.js";
 import { localAssetHttpUrl } from "../../core/assetUrl.js";
 import { withAssetAccessToken } from "../../lib/assetPort";
+import { native } from "../../lib/native";
+import { showToast } from "../ui/toastBus";
 
 export interface MobileBitableViewerProps {
   noteId: string;
   content: string;
 }
 
-/** 附件/图片字段值：filename 数组 → 缩略图（走本机 AssetServer，与文档图片同一条路）。 */
+/** 附件/图片字段值（`{ file, name }[]`）→ 图片走缩略图（本机 AssetServer，与文档图片同一条路）、
+ *  其余按展示名出文件名标签、点击**直接用系统应用打开**（与移动端文档的附件处理一致，
+ *  不做应用内预览/播放；同时也避免把音视频/PDF/PPT 一律当 `<img>` 渲染成破图）。 */
 function AttachmentCell({ noteId, value }: { noteId: string; value: unknown }) {
-  const filenames = Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
-  if (filenames.length === 0) return <span className="mbt-cell-empty">—</span>;
+  const attachments = bitableAttachments(value);
+  if (attachments.length === 0) return <span className="mbt-cell-empty">—</span>;
+  const openWithSystem = (file: string, name: string) => {
+    void native.openAttachment(noteId, file).catch((error: unknown) => {
+      showToast(error instanceof Error && error.message ? error.message : "没有可打开此文件的应用", { type: "error" });
+    });
+  };
   return (
     <span className="mbt-attachments">
-      {filenames.map((filename) => (
-        <img
-          key={filename}
-          className="mbt-attachment"
-          src={withAssetAccessToken(localAssetHttpUrl(noteId, filename))}
-          alt={filename}
-          title={filename}
-          loading="lazy"
-        />
+      {attachments.map(({ file, name }) => (
+        isImageExtension(extOf(file))
+          ? <img
+              key={file}
+              className="mbt-attachment"
+              src={withAssetAccessToken(localAssetHttpUrl(noteId, file))}
+              alt={name}
+              title={name}
+              loading="lazy"
+            />
+          : <button key={file} type="button" className="mbt-attachment-file" title={name} onClick={() => openWithSystem(file, name)}>{name}</button>
       ))}
     </span>
   );

@@ -15,6 +15,7 @@ const TABS = readFileSync(new URL("../editor/MultiTabEditor.tsx", import.meta.ur
 const DOC = readFileSync(new URL("../../core/bitableDoc.ts", import.meta.url), "utf8");
 const CARDS = readFileSync(new URL("./bitableCells.tsx", import.meta.url), "utf8");
 const ATTACH = readFileSync(new URL("../attachment/openAssetEntry.ts", import.meta.url), "utf8");
+const CSS = readFileSync(new URL("./bitableEditor.css", import.meta.url), "utf8");
 
 describe("多维表编辑器护栏", () => {
   it("附件格的缩略图：格子取 ?w= 档位，放大预览仍走原图", () => {
@@ -23,8 +24,21 @@ describe("多维表编辑器护栏", () => {
     expect(CARDS).toContain('const ATTACHMENT_CHIP_PX = 26');
     expect(CARDS).toContain("withAssetWidth(");
     // 关键不变量：onOpen（ImageLightbox）那一路不能被带上档位，否则放大预览是糊的
-    expect(CARDS).toMatch(/<img src=\{chipUrlOf\(filename\)\}[^>]*onClick=\{\(\) => onOpen\(filename\)\}/);
+    expect(CARDS).toMatch(/<img src=\{chipUrlOf\(file\)\}[^>]*onClick=\{\(\) => onOpen\(\{ file, name \}\)\}/);
     expect(EDITOR).not.toContain("?w=");
+  });
+
+  it("行单元格：行高绝对控制（不许换行）、行内无删除叉号、点一下即选中出加号", () => {
+    // 行高由 --bt-row-h 决定；行内任何类型换行都会把整行撑高 ⇒ 一律单行 + 裁切
+    expect(CSS).toMatch(/\.bt-td \{[^}]*overflow: hidden/);
+    expect(CSS).toMatch(/\.bt-td \.bt-option-label,[\s\S]*?flex-wrap: nowrap/);
+    expect(CSS).toMatch(/\.bt-td \.bt-attachment-cell,[\s\S]*?overflow: hidden/);
+    // 行内不再有逐条删除（删除只在展开面板的卡片右上角）
+    expect(CARDS).not.toContain("bt-attachment-remove");
+    expect(CSS).not.toContain(".bt-attachment-remove");
+    // 两者必须区分：点图片(chip) 只预览、不选中；点「⤢ 展开」= 选中单元格（加号出来）
+    expect(CARDS).toMatch(/closest\("\.bt-attachment-chip"\)\)\s*return/);
+    expect(CARDS).toMatch(/bt-expand-btn[\s\S]{0,600}?setActive\(true\)/);
   });
   it("MultiTabEditor 按 kind=bitable 懒加载 BitableEditor", () => {
     expect(TABS).toMatch(/tab\.kind === "bitable"/);

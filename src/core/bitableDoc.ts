@@ -357,6 +357,81 @@ export function parseBitableBody(content: string | null | undefined): BitableDoc
 
 // ---- 值展示 / 搜索 ----
 
+/**
+ * 附件单元格的值形状：`{ file, name }[]`（对齐 Lake 文件卡的 src/name 二元组）。
+ * - `file` = **磁盘名**：`note-assets/{noteId}/{file}` 的真实文件名。上传落盘时名字是生成的
+ *   `{13位时间戳}_{8位hex}.{扩展名}`，只有它能定位/打开文件，也是同步声明与 GC 保护的依据。
+ * - `name` = **展示名**：用户上传时的原始文件名（"鞠磊8.27音频.mp3"），只在界面展示。
+ * 两者必须分开存：`uploadResource` 返回的 `filename` 是展示名、磁盘名只在 `url` 末段，
+ * 早前把展示名当路径写进单元格 ⇒ 除图片外全部 404（打不开/播放器灰）。
+ */
+export interface BitableAttachment {
+  file: string;
+  name: string;
+}
+
+/** 解析附件单元格值：非法条目直接丢弃；`name` 缺省回落到 `file`。 */
+export function bitableAttachments(value: unknown): BitableAttachment[] {
+  if (!Array.isArray(value)) return [];
+  const out: BitableAttachment[] = [];
+  for (const item of value) {
+    if (!item || typeof item !== "object") continue;
+    const { file, name } = item as Partial<BitableAttachment>;
+    if (typeof file !== "string" || !file) continue;
+    out.push({ file, name: typeof name === "string" && name ? name : file });
+  }
+  return out;
+}
+
+/** 移除某个附件（按**磁盘名**匹配）——单元格 / 记录详情 / 表单共用的唯一删除口径。 */
+export function removeBitableAttachment(value: unknown, file: string): BitableAttachment[] {
+  return bitableAttachments(value).filter((a) => a.file !== file);
+}
+
+/** 按给定顺序重排附件（拖拽排序用）。`orderedFiles` 未覆盖的条目按原序补回——绝不因一次拖拽丢附件。 */
+export function reorderBitableAttachments(value: unknown, orderedFiles: string[]): BitableAttachment[] {
+  const items = bitableAttachments(value);
+  const byFile = new Map(items.map((a) => [a.file, a]));
+  const out: BitableAttachment[] = [];
+  for (const file of orderedFiles) {
+    const item = byFile.get(file);
+    if (item && !out.includes(item)) out.push(item);
+  }
+  for (const item of items) if (!out.includes(item)) out.push(item);
+  return out;
+}
+
+/** 改某个附件的**展示名**（磁盘名不变）；名称清空视为放弃编辑，原样返回。 */
+export function renameBitableAttachment(value: unknown, file: string, name: string): BitableAttachment[] {
+  const items = bitableAttachments(value);
+  const clean = name.trim();
+  if (!clean) return items;
+  return items.map((a) => (a.file === file ? { ...a, name: clean } : a));
+}
+
+/** 附件卡片网格的几何常量（与 `bitableEditor.css` 的 `.bt-attach-card*` 保持一致）。 */
+export const ATTACHMENT_GRID = {
+  /** 单卡宽度（CSS `minmax(148px, 1fr)` 的下限）。 */
+  cardWidth: 148,
+  /** 单卡高度 = 附件区 92 + 名称行。 */
+  cardHeight: 121,
+  gap: 8,
+  /** 展开面板默认最多显示的行数（超出由投放区自身滚动）。 */
+  maxRows: 3,
+  maxCols: 6,
+} as const;
+
+/**
+ * 附件卡片网格的列数（展开面板自适应用）：
+ * 数量少时先铺满一行（≤3 列，避免"2 个附件竖成一列"的窄高条），再多则**只增列以保持 ≤3 行**，
+ * 上限 6 列（再多就交给滚动，面板不会无限变宽）。
+ */
+export function attachmentGridColumns(count: number): number {
+  if (!Number.isFinite(count) || count <= 0) return 1;
+  const rows3 = Math.ceil(count / ATTACHMENT_GRID.maxRows);
+  return Math.min(ATTACHMENT_GRID.maxCols, Math.max(Math.min(count, 3), rows3));
+}
+
 function optionName(field: BitableField, value: unknown): string {
   const options = field.options ?? [];
   const byId = options.find((o) => o.id === value);
@@ -375,7 +450,7 @@ export function bitableDisplayValue(field: BitableField, value: unknown): string
     case "multiSelect":
       return Array.isArray(value) ? value.map((v) => optionName(field, v)).filter(Boolean).join(", ") : "";
     case "attachment":
-      return Array.isArray(value) ? value.filter((v): v is string => typeof v === "string").join(", ") : "";
+      return bitableAttachments(value).map((a) => a.name).join(", ");
     case "relation":
       return "";
     case "number":
