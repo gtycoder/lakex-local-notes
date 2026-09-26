@@ -5,63 +5,86 @@
 > 所有历史 dated handoff（旧 `§0 <日期>` 节、`§2.x` 各批会话）已从本文件**删除**，只在 git 历史可查：`git log -p --follow HANDOFF.md`（或 `git show <旧提交>:HANDOFF.md`）。文中残留的 `§2.x` / 旧 `§0` 引用是**历史指针**，去 git 查，**不要在本文件重建历史**。
 > **§8 是移动端（安卓）专职交接**，由移动端会话维护；桌面会话不要改 §8，移动端会话不要改 §0-§7 之外的桌面文件。
 
-## 0. 最新交接 · 260926 · 多维表（bitable）云端精仿 + 附件行为重做 · **已合 master 并推送（本批 tip 91534bb）**
+## 0. 最新交接 · 260927 · 多维表附件重做（值模型 {file,name} + 展开面板卡片网格 + 行单元格行高绝对控制）· **已合 master 并推送（本批 tip f70eeca）**
 
-> 写给完全没有上下文的新会话。本批主线：把多维表自建浮层收编进 Overlay 原语 → 与市面主流多维表做功能差距调研 → 用登录态浏览器逐项走查语雀云端多维表并精仿 → 按用户点名补三项交互 → 按用户 GIF 重做附件单元格并修掉粘贴根因。
-> 上一批（表格底栏融合 / 画板视图记忆 / 历史弹窗坐标系 / 历史快照真预览）已按约定从本文件删除，git 可查：git log -p --follow HANDOFF.md。
+> 写给完全没有上下文的新会话。本批是「多维表附件」专项的**第二轮**，起因是用户报「多维表里点开音频/视频播放器是灰的、PPT 也拉不起本地应用」。查下去发现**附件单元格的值模型存错了**，随后按用户逐轮反馈把附件体验整个重做了一遍。
+> 第一轮（云端精仿 B1–B6 / 行首语义 / 附件粘贴重做 / 浮层收编，tip 91534bb）已按约定从本文件删除，git 可查：`git log -p --follow HANDOFF.md`。
 
 ### 一、任务目标（用户本会话逐条要求）
-1. 多维表专项：把 bitable 的自建浮层收编进 `src/components/ui/Overlay.tsx` 原语。
-2. 完成后做一次功能调研：与市面主流多维表对标，产出「还需要做什么功能」的差距清单。
-3. 云端精仿：用登录态 Edge 逐项走查语雀云端多维表 https://todoo.yuque.com/ex813k/stock/ls7d44lq2n5q0q2u ，功能与 UI 都对齐；**行首框用于「点选」而不是打开详情（否则不能多选）**；**行展开另设 ⤢ 按钮、样式对齐用户给的图2**。
-4. 用户后续点名三项：① 单行详情可左右拖拽调宽；② 图片和附件支持粘贴、样式类似图1；③ 表格配置面板最前的块可拖拽做字段排序、下方表格跟随。
-5. 附件单元格：**边框等外观不用照抄图片，只对齐行为**；**点一下才进编辑态**；**独立 + 号与独立文案**；有图时也要能加号和粘贴；**不做右上角预览**。
-6. B7（记录正文，每条一篇 Lake）明确不做。
+1. **修多维表附件预览**：图片=直接预览；**音视频要应用内播放**（像 Lake 文档那样）；PDF/PPT 等直接调本地应用。总原则：**和 Lake 文档一样的管理附件方式**。
+2. 附件单元格加**展开**：行单元格太窄，要一个贴单元格的展开面板（上半拖拽/粘贴 + 已传文件，下半「添加本地文件」）。
+3. 展开面板做成**卡片网格**：每格 = 上**附件区**（右上角 × 删除）+ 下**名称**（可编辑 + 下载）；**点击=预览、按住=拖动排序**；**彻底放弃悬停工具**（图2 那套 预览/下载/移动 圆形按钮要删干净、不留遗漏）。
+4. 面板尺寸**自适应**：默认最多 3 行，列数看附件多少。
+5. **预览关闭后保持展开**（否则每看一次都要重新展开）。
+6. 行单元格：① 去掉逐条 **×**；② **点「⤢ 展开」才算选中**（加号自动出现），**点图片仍只走预览、不算选中**（两者要区分）；③ **绝对不许换行**——行高是绝对控制的，其他字段类型同理。
+7. 移动端：多维表里**除图片外一律系统应用打开**（与移动端文档一致），不做应用内预览/播放。
 
 ### 二、已完成（按主题）
-- **浮层收编**：bitable 本地 Popover / TextExpandPopover 走 `.ln-popover` 单一表面；两处手写 `.bt-modal` 改 `<Dialog>`；记录详情改 `<Drawer>`；行菜单去自定义表面。`Overlay` 新增 `raised`（对话框内嵌套下拉抬层）、Esc **浮层栈**（只关栈顶）、`kind=drawer`（非模态右侧抽屉：无遮罩 / 不锁滚动焦点 / Esc 关闭）。新增令牌 `--lake-z-overlay-menu-raised:715`。
-- **功能调研**：`docs/BITABLE-FEATURE-GAP-260926.md`（对标 Airtable / Notion / 飞书 Base / SeaTable / Teable / NocoDB；P0 撤销重做等，供后续选型）。
-- **云端精仿**（规格、差距、实测全在 `docs/BITABLE-CLOUD-PARITY-260926.md`）：
-  - B1 行首语义：根因 = 行号按钮 DOM 在勾选框之后、盖住了它，点框实际在开详情；改为 行号/勾选框 = 选中、⤢ = 展开（复用云端 RowExpand SVG，tooltip「展开行（Space）」）+ 行首三件套样式 + 行高 36 / 行首列 80 / 表头左对齐 + 24px 下拉。
-  - B2 列菜单 11 项（云端顺序）+ 点表头选中整列 + 底栏「已选择 N 个单元格」+ 筛选面板（打开即建一条规则 + 删除筛选）。
-  - B4 单级分组：`BitableView.groups` + `groupRecords()` + 工具栏「分组」+ 组头折叠与计数。
-  - B5 高亮重复值（视图级列开关）+ 文本颜色（视图级 `columnTextColors`，复用选项调色板 + 清除项）。
-  - B6 撤销/重做（`src/core/bitableHistory.ts`，Cmd/Ctrl+Z、Shift 重做，只快照 tables）+ Tab/Enter 单元格导航；TSV 块粘贴原已支持。
-- **用户点名三项**：① 抽屉左缘 `.bt-drawer-resize` 拖拽调宽（持久化在 localStorage 的 lake-notes-v3.bitable-drawer-width，320–1000）；② 附件粘贴/拖拽（见下重做）；③ 配置面板字段拖拽排序（改视图 `fieldOrder`，网格列顺序跟随）。
-- **附件单元格重做（最终形态）**：表格默认正常显示、点一下进编辑态；记录详情**常驻**编辑态（alwaysActive）。编辑框 = **独立 + 按钮**（选文件）+ **独立提示文案「粘贴或拖拽至此」**（点文案/空白聚焦本区即可 Cmd+V）+ 附件；整区是粘贴/拖拽目标；空态才显示提示，有附件只显示 + 和附件；点外部收起（抽屉不收起）；不做预览 / 单元格工具；边框用自有 `--lake-border-1` 与 radius 令牌。
-- **粘贴根因修复（重要）**：表格全局 `Cmd/Ctrl+V` 处理器（用于 TSV 粘贴）原本对 Cmd+V **无条件 preventDefault**，会取消原生 paste 事件 → 附件格 `onPaste` 永不触发（用户报「粘贴不生效」）。现改为「焦点在输入/可编辑区或 `.bt-attachment-cell` 内时不拦截」。
-- **单测**：`src/core/bitableGroup.test.ts`、`bitableHighlight.test.ts`、`bitableHistory.test.ts`。
-- **文档**：`docs/BITABLE-CLOUD-PARITY-260926.md`（§8/§9 是真实实例 CDP 实测）、`docs/BITABLE-FEATURE-GAP-260926.md`；`docs/UI-PRIMITIVES-PHASE1-260926.md` 追加了收编记录。
+
+**A. 值模型升级（本批根因修复，最重要）**
+- 附件单元格值 `string[]` → **`{ file, name }[]`**：`file` = **磁盘名**（`note-assets/{noteId}/{file}`，打开/同步声明/GC 引用提取的唯一依据）；`name` = **展示名**（上传时原名，只用于显示）。
+- **根因**：`electron/resourceRepository.ts` 的 `attachmentOutput` 返回的 `filename` 是**展示名**（给 Lake 文件卡的 `name` 用），磁盘名只在 `url` 末段；旧代码 `names.push(out.filename)` 把展示名当路径写进单元格 ⇒ **除图片外全部 404**（音频播放器灰/0:00、PPT 打不开）。图片没事是因为 `imageOutput` 返回的 `filename` 恰好就是磁盘名。
+- 新增 core 纯函数（全在 `src/core/bitableDoc.ts`）：`BitableAttachment` / `bitableAttachments()` / `removeBitableAttachment()` / `reorderBitableAttachments()` / `renameBitableAttachment()` / `ATTACHMENT_GRID` / `attachmentGridColumns()`。
+- 落点：`BitableEditor.uploadFiles()` = `{ file: parseLocalAssetUrl(uploaded.url)?.filename ?? uploaded.filename, name: uploaded.filename }`；表格/记录详情/表单/移动端只读视图全部改读新形状；`bitableDisplayValue` 显示 `name`。
+
+**B. 预览分流（`src/features/attachment/openAssetEntry.ts`）**
+- 新增 `OpenAssetActions.kindFrom`：**类型判定一律按磁盘名**（展示名被改成没有扩展名时，音视频不会被误判成「其他文件」丢给系统应用）；标题仍用展示名。
+- 桌面实测（真实文件 + 真实上传路径）：图片 → 应用内 Lightbox（拿原图，无 `?w=`）；mp3 → 应用内 `<audio>` 播放（448s 真文件，`currentTime` 推进）；mp4 → `<video>` 播放；PDF/Office → 系统应用（与文档一致）。
+
+**C. 展开面板（⤢ 按钮 / 双击单元格）**
+- 入口：单元格右侧 **⤢**（悬停/聚焦/编辑态可见）+ **双击单元格**。
+- 面板 = Overlay `Popover`（portal）表面 `.bt-attach-expand`，可拖动（标题栏）/缩放（右下角）：
+  - 上半**投放区**：空态虚线「粘贴或拖拽至这里上传」；有附件时是**卡片网格**；整区是粘贴/拖拽目标（打开即聚焦投放区，`Cmd+V` 直接可用）。
+  - 下半 **「＋ 添加本地文件」**。
+- 卡片：**上=附件区**（点=预览；按住拖动=排序，有左右落点强调线；右上角 × 删除）+ **下=名称行**（点=预览、**✏️ 行内改名**、**⬇ 下载** `native.saveAssetAs`）。**没有任何悬停工具**。
+- 尺寸自适应：列数 `attachmentGridColumns()`（1/2/3 个 → 1/2/3 列单行；4–9 → 3 列 1–3 行；10–12 → 4 列 3 行；…；上限 6 列），超过 3 行由投放区滚动、「添加本地文件」常驻；卡片高度用**实测值**重算。
+- **预览关闭后保持展开**：预览层是独立 portal，原先点它等于「面板外点击」把面板关掉（Esc 也会连带关两层）——现改为预览层内的点击不算外部、预览开着时不响应面板关闭。
+
+**D. 行单元格**
+- 行内 chip **去掉逐条 ×**（删除只在面板卡片右上角）；`.bt-attachment-remove` 的 CSS 规则一并删除（不留死规则）。
+- 选中语义：**点 chip = 只预览**（不选中）；**点 ⤢ = 选中**（加号出现）+ 开关面板；点空白处仍按原逻辑选中。
+- **行高绝对控制**：`.bt-td { overflow: hidden }` + 行内 `.bt-option-label` / `.bt-attachment-cell` / `.bt-attachment-editor` 全部 `nowrap` + chip `flex: 0 0 auto` + 未知/关联/空值单行省略；行内**纵向预算**（cell padding 2px、编辑框 height 28px）。
+
+**E. 移动端**
+- `MobileBitableViewer` 读新形状：图片仍出缩略图；**其他类型出文件名按钮，点击 `native.openAttachment` 系统应用打开**（不再一律渲染成 `<img>` 破图）；`mobile.css` 新增 `.mbt-attachment-file`。
+
+**F. 护栏单测**
+- `bitableDoc.test.ts`：新形状解析（丢弃非法项）、删除/重排/改名、列数规则（≤3 行不变量）。
+- `openAssetEntry.test.ts`：`kindFrom` 覆盖类型判定。
+- `bitableEditorMount.test.ts`：行内无 × / `.bt-td` 裁切 + 行内 nowrap / 缩略图 `?w=` 不带上 onOpen / chip 不选中而 ⤢ 选中。
+- `cssLayers.test.ts` 基线随合法新增抬高（1055 → 1065），逐条注明原因。
 
 ### 三、门禁（全绿）
-tsc 0 · vitest **1325 passed / 16 skipped** · 桌面 + 移动 vite build OK · git diff --check clean · cssLayers 围栏通过（bitableEditor.css 基线随合法新增调整后、又因清理下降，以文件当前值为准）。
+tsc 0 · vitest **1333 passed / 16 skipped** · 桌面 + 移动 vite build OK · `check:core` 违规 0 · `ui-metrics`（未定义 `var(--lake-*)` 0 / 非主题色字面量 0 / `!important` 9）· `git diff --check` clean · cssLayers 围栏通过（基线随合法新增调整，以文件当前值为准）。
 
 ### 四、当前问题 / 遗留边界
-- B7 记录正文：用户明确不做。
-- 未新增 `--lake-grid-*` 灰阶令牌（用户说外观不必精确照抄）；表格线 / 行号色 / 选区色仍用自有 `--lake-*` 近似。
-- 字段排序是**视图级**（view.fieldOrder），不是全局 table.fields（沿用既有设计与单测口径）；若要全局需一起改。
-- 未跑打包 smoke：npm run test:packaged（本沙箱要 LAKE_PACKAGED_ARGS=--no-sandbox --disable-gpu）。
-- 验证用隔离数据目录起的构建版 Electron（LAKE_RENDERER=scheme + LAKE_USER_DATA=/tmp/lake-verify-bit + CDP 驱动），验完已停实例并清理；未做真机点验。
-- 环境：npx 会走公司 npm 源并超时 → 用本地二进制 `./node_modules/.bin/{tsc,vitest}` 与 `node node_modules/vite/bin/vite.js build`。
+1. **旧附件值不再解析**（按 AGENTS #7 刻意**不写兼容**）：`string[]` 形态的旧附件格会显示为空/被丢弃，老表要**重传一次**。⚠️ 这些旧引用一旦不再被引用，可能被孤儿清理认作未引用资源——要留的附件请先重加。
+2. **移动端未真机验证**：本批移动端只做了类型/编译/构建级验证（`adb devices` 无设备）；桌面侧是用**隔离数据目录 + CDP 真实输入**实测的。
+3. **「下载」按钮没点过**（会弹系统保存框）：走的是文档卡片菜单同一套 `native.saveAssetAs`。
+4. 面板自适应会**覆盖用户手动缩放的尺寸**（语义即「自适应」，参考实现里就是这样）。
+5. 图片附件的展示名 = 磁盘名（主进程 `imageOutput` 只回磁盘名，未改契约）；图片本身显示缩略图，无感。
+6. 预览标题的体积恒为 `0 B`（多维表只存文件名，`openAsset(..., 0)`）——未修，属外观。
+7. 未跑打包 smoke：`npm run test:packaged`（本沙箱要 `LAKE_PACKAGED_ARGS=--no-sandbox --disable-gpu`）。
+8. 环境：`npx` 会走公司 npm 源并超时 → 用 `./node_modules/.bin/{tsc,vitest}` 与 `node node_modules/vite/bin/vite.js build`；Node 必须 24。
 
-### 五、踩过的坑（本批）
-1. **全局快捷键 preventDefault 会闷掉原生事件**：表格全局 Cmd+V 把附件格的 paste 挡掉了；任何自定义粘贴目标，都要让全局处理器在「焦点位于其内」时放行。
-2. **不要用 opacity 隐藏可点控件**：行号按钮 opacity:0 仍能吃点击、盖住勾选框 → 点勾选框变成开详情；要靠结构/层级而不是透明度让位。
-3. **Overlay 嵌套层序**：对话框(710) 高于菜单/气泡(600)，弹窗里的下拉/颜色面板会被盖住 → 用 raised(715)；嵌套浮层 Esc 要浮层栈「只关栈顶」。
-4. **记录详情是云端非模态右侧面板**（表格可交互、标签 168px 横向两列）；一开始做成模态 Dialog 是错的，已改回 kind=drawer。
-5. **附件编辑框**：不能常驻大框，也不能把 + 和文案做成同一个按钮（否则点哪都开文件选择、没法聚焦粘贴）；要独立元素。
-6. **本地 npx 会联网超时** → 用 ./node_modules/.bin/*。
-7. **宿主沙箱间歇故障**：spawn sandbox-exec / spawn bash ENOENT，文件工具报 not found；改为 bash+python 分段执行，把「探针 + 执行」放同一程序抓健康窗口。
-8. **路径手误**：仓库是 /Users/admin/file/local-lake/lake-notes-electron（连字符），不是 /Users/admin/file/local/lake/...；本会话因此浪费过几轮。
-9. **用 JS 模板串拼 python 脚本时 \n 会变成真实换行** → Python 语法错；多行锚点用三引号原样换行。
-10. **CDP 验证要先加记录**：空表没有数据行（tds=0），会误判成「功能没生效」。
-11. **CDP 裸 Cmd+V 不一定触发浏览器 paste**：改用 Input.dispatchKeyEvent 的 commands:[paste]；也可用 dispatchEvent 的返回值断言有没有被 preventDefault。
+### 五、踩过的坑（本批，都是真金白银）
+1. **`uploadResource` 返回的 `filename` 是展示名，磁盘名只在 `url` 末段**。任何「把返回的 filename 当路径」的用法都是 bug；要磁盘名就 `parseLocalAssetUrl(url)?.filename`。
+2. **合成事件测不出「全局 preventDefault」这类 bug**：展开面板是 portal，焦点不在 `.bt-attachment-cell` 里 → 表格全局 `Cmd+V` 处理器把原生 paste 挡掉（拖拽行、粘贴不行）。我一开始用 `new ClipboardEvent('paste')` 直接派发，**绕过了默认行为**，所以"测过是通过的"。正确做法：真剪贴板 + `Input.dispatchKeyEvent { commands: ["paste"] }`。
+3. **React portal 的事件仍沿 React 树冒泡**：面板里的投放区必须自己 `stopPropagation`，否则单元格也接了 paste/drop ⇒ 一次粘贴上传两遍（实测 1 次粘贴多出 2 条）。
+4. **自适应尺寸不要「用实测卡片高度反推」**：网格行可压缩，面板先小 → 卡片被压扁（39px）→ 量到的高度更小 → 越算越扁（自我塌陷）。必须给**固定轨道** `grid-auto-rows: 121px`。
+5. **滚动条会吃掉列数**：面板宽度留白要把常驻滚动条算进去（`scrollbar-gutter: stable` + 余量），否则 4 列会悄悄变 3 列。
+6. **行高是绝对控制的**：只要行内还有 `flex-wrap: wrap`（附件格、多选 `.bt-option-label`）或纵向预算超了（编辑框 34 + 格子留白 8 = 43 > 36），整行就会被撑高；实测 43px → 修完 36px。
+7. **CDP 点击前先确认目标在可视区内**：表格横向滚动后，坐标可能落在被 `.bt-tables-list` 盖住的位置（`elementFromPoint` 命中别的元素），会得出"功能没生效"的错误结论。
+8. **改 `src/core/**` 会让 vite-plugin-electron 重启 Electron**（用户那个 dev 实例中途重启、丢了 9222 CDP 端口）→ 验证前先确认 CDP 端口连的是自己的实例。
+9. **验证要用到系统剪贴板时先说明**：本会话我把用户剪贴板覆盖了好几次（放测试文件），用完清空——理应事先打招呼。
+10. 上一轮同批仍在生效的老坑：全局快捷键 `preventDefault` 会闷掉原生事件；`opacity: 0` 的控件照样吃点击（别用它让位）；CDP 裸 `Cmd+V` 不一定触发浏览器 paste。
 
 ### 六、下一步
-1. 补跑打包 smoke（npm run test:packaged，本沙箱要 --no-sandbox）。
-2. 若继续精仿：加 --lake-grid-* 灰阶令牌做颜色对齐；或按 BITABLE-FEATURE-GAP 的后续项继续；或处理列菜单/详情里仍可对齐的小项。
-3. 请用户验收本批（改动已提交推送 master）。
-4. 桌面其余待办全表以 §3 为准；移动端以 §8 为准。
+1. 补跑打包 smoke（`npm run test:packaged`，本沙箱要 `--no-sandbox`）。
+2. **移动端多维表附件真机验收**（`bash scripts/android-build.sh --sync --install`）：图片缩略图 + 其他类型点开走系统应用。
+3. 老表的附件按 §四.1 重传一次（值模型换代，刻意不写兼容）。
+4. 可选小项：预览标题显示真实体积；图片附件是否要保留原始展示名。
+5. 桌面其余待办全表以 §3 为准；移动端以 §8 为准。
 
 ## 1. 项目一句话 + 铁律（详见 AGENTS.md）
 本地优先笔记应用（Electron 43 + React 18.3 + better-sqlite3 + 语雀 Lake 内核），S3（七牛 Kodo 兼容）同步。
@@ -150,14 +173,10 @@ tsc 0 · vitest **1325 passed / 16 skipped** · 桌面 + 移动 vite build OK ·
 17. **【UI 重构收尾 · 待办清单】** —— 方案见 **`docs/UI-REDESIGN-OPTIMIZATION-PLAN-260923.md`**（行为不变的优化 + 与安卓重做的排期）；评价见 `docs/UI-REDESIGN-REVIEW-260923.md` **§四**：P0 安全 ✅ **已结案**（W-10 不需 dompurify / W-8 已修，见本 §3 第 4 条）· P1（`library-changed` 广播 / 目录树窗口化 / 面板契约可执行化 / 分段控件与设置说明字号的共享层 `!important` 阻塞）· P2（设计词表裁剪 / 历史文档标注 / 画板 `Wt is not a function` 立项）· P3 见本 §3 其余条目。
 18. **【浮动工具栏颜色 · 「最近使用自定义颜色」】**（260924 记录，用户：先记着后续处理）：内核调色板的「最近使用」**只记自定义色**——`updateUserColor` 只在「更多颜色」RGBA 选择器关闭（`saveColor`）时触发，**预设色块 `onSelect` 不写**；持久化在 `localStorage['ne_lakex_user_color_local_store_key']`（≤10，末尾最新），经 `editor.getUserColors()` / `editor.updateUserColor(c)` 读写。我们的浮动颜色面板「最近使用」目前是**占位**（`LakeColorBoard` 写死「暂无」）。要真做需先定：是否也记预设色块（会偏离内核语义）、面板改读 `editor.getUserColors()`、点最近色如何应用（`color`/`bgColor`）。**当前不动**。
 
-19. **【多维表（bitable）专项 · 已完成一轮，见 §0】**
-   - (a) 浮层收编 Overlay 原语：已做（Popover/Dialog/Drawer + raised + Esc 浮层栈 + kind=drawer + --lake-z-overlay-menu-raised:715）。
-   - (b) 功能调研：已做，见 docs/BITABLE-FEATURE-GAP-260926.md；后续做哪几项待用户拍板。
-   - (c) 云端精仿 B1-B6 已做并实测，见 docs/BITABLE-CLOUD-PARITY-260926.md；B7 记录正文用户明确不做。
-   - (d) 用户点名三项已做并实测：抽屉拖拽调宽 / 附件粘贴拖拽 / 配置面板字段拖拽排序（视图级 fieldOrder）。
-   - (e) 附件单元格重做并实测：表格点一下进编辑、抽屉常驻；独立 + 按钮 + 独立提示文案；粘贴根因（全局 Cmd+V 的 preventDefault 挡掉原生 paste）已修。
-   - 门禁：tsc 0 · vitest 1325 passed/16 skipped · 双端 build OK · git diff --check clean。
-   - 仍可选做：--lake-grid-* 灰阶令牌颜色对齐；打包 smoke（本沙箱要 --no-sandbox）。
+19. **【多维表（bitable）专项 · 已完成两轮，见本文件最上方 §0】**
+   - **第一轮（tip 91534bb）**：(a) 浮层收编 Overlay 原语（Popover/Dialog/Drawer + raised + Esc 浮层栈 + kind=drawer）；(b) 功能调研 `docs/BITABLE-FEATURE-GAP-260926.md`；(c) 云端精仿 B1–B6 已做并实测（`docs/BITABLE-CLOUD-PARITY-260926.md`），B7 记录正文用户明确不做；(d) 抽屉拖拽调宽 / 附件粘贴拖拽 / 配置面板字段拖拽排序；(e) 附件单元格重做（独立 + 与文案；粘贴根因 = 全局 Cmd+V 的 preventDefault）。
+   - **第二轮（tip f70eeca，见 §0）**：(f) 附件值模型升级 `string[]` → `{ file, name }[]`（修「除图片外全部打不开」的根因）+ 展开面板卡片网格（点=预览 / 按住=拖动排序 / ✏️改名 / ⬇下载 / 尺寸自适应 ≤3 行）+ 预览后保持展开 + 行单元格行高绝对控制（行内 nowrap、无逐条 ×、点 ⤢ 才选中）+ 移动端非图片走系统打开。**遗留与旧数据处置见 §0 §四**。
+   - 仍可选做：--lake-grid-* 灰阶令牌颜色对齐；预览标题显示体积；打包 smoke（本沙箱要 --no-sandbox）。
 20. **【历史快照「恢复为新文档」· 功能 · 用户 260926「先不做，计入待办」】**：历史预览旁边给一个入口，把某版快照**另存为一篇新文档**（用于对比/取用），而不是只能"恢复=覆盖当前文档"（现在恢复前会自动留档，损失可控，所以不紧急）。
    - 要点：新 IPC（读快照正文 → 走 `createNote`/`saveNote` **应用写入路径**落新文档，媒体资源按资产管线复制或按作用域改写；**禁直写库/手拼 `.lake`**，见 `docs/LAKE-CONTENT-WRITING.md`）；新文档插到当前笔记本下（或让用户选），标题建议 `<原标题>（历史 <时间>）`；非 doc（sheet/bitable/board）同样按 kind 落 `sheets/|bitables/|boards/`。
    - 未做理由：属于新功能（不是优化），用户明确"先不做"；涉及新 IPC + 目录插入 + 资源作用域，需单独立项验收。
