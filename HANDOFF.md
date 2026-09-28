@@ -5,51 +5,73 @@
 > 所有历史 dated handoff（旧 `§0 <日期>` 节、`§2.x` 各批会话）已从本文件**删除**，只在 git 历史可查：`git log -p --follow HANDOFF.md`（或 `git show <旧提交>:HANDOFF.md`）。文中残留的 `§2.x` / 旧 `§0` 引用是**历史指针**，去 git 查，**不要在本文件重建历史**。
 > **§8 是移动端（安卓）专职交接**，由移动端会话维护；桌面会话不要改 §8，移动端会话不要改 §0-§7 之外的桌面文件。
 
-## 0. 最新交接 · 260928 · 上线收尾（Lake Manifest 重置 V1 / 本地+云端清零 / S3 模块拆分 / PDF 超时 / 文档精简）
+## 0. 最新交接 · 260928 · 多维表功能扩展（V01–V04 + 追加需求 + T01/T03/T04/T02A）
 
-> 写给完全没有上下文的新会话。当前已进入上线收尾阶段，不再新开模块级功能；只处理发布阻塞、真实端验收和 P0 回归。
+> 写给完全没有上下文的新会话。**本轮的方案、进度、修改记录、会话结论全部在 `docs/BITABLE-OPTIMIZATION-HANDOFF.md`（下称「专项文档」）**：先按 README → HANDOFF → AGENTS 读总上下文，再**完整读专项文档**，然后按它的 §8 顺序继续；**本文件不展开专项细节**，专项会话结束前必须回写专项文档 §11/§12/§13。
 
-### 一、当前基线
-- 分支 `master`，远端 `origin git@gitee.com:gtycoder/local-lake.git`；本轮上线提交见 `git log -1`。
-- **Lake Manifest 已重置为 V1 编号，内容 schema 不变**：folders/墓碑/锁/`prevCommitId`/`kind`/board 全保留；代码只读写新 V1 `{1}`。
-  - 这不是旧 V1 兼容模式。所有会访问同一 S3 prefix 的客户端必须一起升级；旧客户端读新 V1 会拒绝同步。
-- 本地数据已清零：开发目录、正式目录、Android 模拟器 `com.lakenotes.mobile`；远端由用户删除。首次同步将从空库生成新 V1。
-- 旧 `electron/sync.ts` 已删除，拆为：`syncTypes.ts`、`s3Store.ts`、`s3Maintenance.ts`。
-- PDF 导出整链 60s 超时；超时或异常都会销毁隐藏窗口，临时目录仍由 `export.ts` 的 `finally` 清理。
-- 过期研究/计划/spike/审计文档已清理；UI 重构目录只保留 Markdown 规范，删除截图与原型 HTML。
+### 一、任务目标
+- 用户 260928 启动「多维表功能扩展」专项：按专项文档 §8 顺序**逐编号实施、每个编号单独验收**——V01 多视图工作台 → V02 看板 → V03 画册 → V04 日历 → T01 列级统计 → T03 多级分组 → T04 语义排序 → T02A 基础字段 → T02B.1/.2/.3 关联 → T06 表单 → D01/D02 导入导出。
+- 期间用户三次现场追加/纠偏（均已落地，细节见专项文档 §13）：
+  1. 图片与附件**拆成两个字段类型**（image 复用附件值模型、上传侧只收图片）；图片预览范围**恒为单个单元格**（两列图片就是两类，绝不跨列合并）；**磁盘名绝不外显/不可编辑**。
+  2. 表单视图加「编辑表单 / 预览表单」双模：编辑态**恢复 v1 原形态**，「填写表单」= 直接跳预览 tab（不做独立弹层）；已配置默认进预览、未配置默认进编辑。
+  3. 看板图片字段上卡出**缩略图**（不显示文件名）；字段类型选择改 **2 列网格**（不分「基础/高级」组）；**创建/修改时间必须能参与筛选与排序**（这是修掉我之前设的假边界）。
 
-### 二、本批已完成
-1. **多维表附件**：值模型 `{file,name,size}`；预览使用真实 size；展开面板卡片网格；行高绝对控制；移动端非图片走系统打开。
-2. **上线收口**：复制文档功能全链路删除；移动端设置保存失败恢复并提示；`localStorage` 写入统一保护；后台 native promise 只留可追踪日志，用户动作/保存不留静默失败。
-3. **同步工程拆分**：`electron/s3Store.ts`（S3 传输）、`electron/s3Maintenance.ts`（GC/prune）、`electron/syncTypes.ts`（类型）；Controller/IPC/Quick Notes/测试全部改直引。
-4. **协议重置**：`MANIFEST_VERSION=1`，`READABLE_MANIFEST_VERSIONS={1}`，旧 `sync.ts` 不再保留兼容壳。
-5. **仓库精简**：删除已完成的研究/计划/spike/旧审计文档和约 11MB UI 截图/HTML 原型；README/HANDOFF/AGENTS 按 README→HANDOFF→AGENTS 阅读顺序整理。
+### 二、已完成内容（全部已提交，**未 push**）
+| 编号 | 内容 | 提交 |
+| --- | --- | --- |
+| — | 专项文档建立 + HANDOFF §3.9 登记 | `c2aa11a` |
+| V01 | 多视图工作台：视图类型开放集合 + 未知类型安全回退；视图壳拆 `BitableViewBar` / `bitableViews` | `b17f652` |
+| V02 | 看板：单选字段分栏（空栏保留 / 未分组）、卡片、拖拽只写分组字段值、看板配置面板 | `b17f652` |
+| V03 | 画册：封面取第一个图片附件、裁剪/适应、常规/紧凑、卡片字段 | `b17f652` |
+| V04 | 日历：月网格 + 跨天展开 + 单选配色 + 拖拽保持时长平移（全程本地日期语义） | `b17f652` |
+| 追加批 | image 字段类型；画册/表格/看板/表单预览单单元格；展示名守卫；表单双模 | `b17f652` |
+| F01/F02/F03 | 文档图片预览改取**正文**（虚拟渲染下 DOM 不全）；附件命名审计；表单编辑态回退；看板缩略图 | `b17f652` |
+| T01 | 列级统计：底栏统计行（通用/数字/日期口径）、视图级配置、随筛选现算 | `dbe70ae` |
+| T03 | 多级分组：最多 3 级 + 拖动调优先级 + 层级缩进（`groupRecordsTree`） | `9b80ede` |
+| T04 | 语义排序：单选/多选「选项顺序 / 选项逆序」；日期文案早→晚/晚→早 | `9b80ede` |
+| T02A | 基础字段：布尔/链接/评分/进度/创建时间/修改时间（含默认值与进度配色） | `6f046df` |
+| T02A-fix | **系统时间字段打通筛选/排序/分组/统计**（记录级取值口径 `bitableFieldValue`） | `ef75e96` |
+| style | 字段类型选择改 2 列网格；顺带修 T02A 漏 import CSS 的 bug | `3a39030` |
 
-### 三、门禁
-- `tsc --noEmit`：通过。
-- `vitest run`：1349 passed / 16 skipped。
-- 桌面 + 移动构建：通过。
-- packaged smoke：通过（`LAKE_PACKAGED_ARGS='--no-sandbox --disable-gpu'`）。
-- `check:core`：0 违规。
-- `ui-metrics`：通过。
-- `git diff --check`：通过。
+### 三、当前状态与门禁
+- 分支 `master`，**工作区干净**；`git log -1` = `3a39030`。**未 push**（用户此前只授权「提交代码」，推送需另行明确授权）。
+- 门禁全绿：`tsc --noEmit`✓ · `vitest run` **1377 passed / 16 skipped**✓ · `check:core` 0 违规✓ · 桌面 + 移动构建✓ · `ui-metrics`（hex=0 / `!important`=9 / 未定义令牌=0）✓ · `cssLayers`+`uiPrimitives`✓ · `git diff --check`✓。
+- 每个编号都做了 **CDP 真实端点验收**：`env -u ELECTRON_RUN_AS_NODE LAKE_RENDERER=scheme LAKE_USER_DATA=<临时目录> LAKE_ASSET_PORT=<独立端口> electron --disable-gpu --remote-debugging-port=<独立端口> .`，用 Node 24 内置 WebSocket 直驱 `Runtime.evaluate`。
 
-### 四、上线前剩余（非代码阻塞，需真实环境）
-1. **空库双端同步实测**：桌面空库 → Android 空库 → 新建/编辑/删除/恢复，核对 `manifest.version=1`、objects/assets、墓碑和 GC。
-2. **Android 真机验收**：图片显示、附件系统打开、编辑保存、同步后图片加载、键盘安全区；缩略图当前仅 png/jpg/jpeg，失败回退原图。
-3. **发布说明**：明确这是“新 V1 协议 + 旧数据清零”，所有端必须同步升级。
-4. §3 的剩余项为发布后低优先；不再作为本轮上线阻塞。
+### 四、当前问题 / 遗留（都不阻塞继续）
+1. **待用户验收**：V02–V04 + 三批追加需求 + T01 + T03 + T04 + T02A（专项文档 §11 看板里全部为「待验收」）。V01 已验收通过。
+2. 已知口径/边界（用户知情、可接受）：
+   - **移动端**：看板 / 画册 / 日历 / 分组 / 列统计一律**不展示**，回退为只读表格 + 明确提示（安全回退，专项文档 §13 有记录）。本轮**只过了移动端构建，未跑 Android 模拟器**（按边界约定 §8 由移动端会话维护）——移动端会话补验时请覆盖：image/布尔/链接/评分/进度/创建·修改时间的只读展示、画册/看板/日历的只读回退提示、列统计隐藏。
+   - 多级分组的折叠 key 基于「组键 = 选项名」，**重命名选项会重置该组折叠态**（本机展示态，不写正文）。
+   - 文档图片预览：同一张图在正文出现两次时，双击第二次仍定位到第一张（**张数正确**，定位精度小瑕疵）。
+   - 评分是整星（不做半星）；进度是 0–100 整数；图片字段只按扩展名/MIME 判图片（不做内容嗅探）。
+   - 表单暂不渲染 `formDescriptions`（逐字段描述）；日历的当前月份是本机展示态（不写正文）。
+3. 与专项无关的上线收尾遗留仍在 §3（真实端双端同步实测、Android 真机验收、发布说明）。
+
+### 五、下一步计划
+1. 等用户对第 4 节第 1 条的范围验收；通过后再考虑是否 `git push origin master`（**需用户明确授权**）。
+2. 验收后按专项文档 §8 顺序继续：**T02B.1 关联基础模型** → T02B.2 单向关联 → T02B.3 双向关联 → D01 CSV 导入导出 → D02 JSON 导入导出（T06 表单双模已完成）。
+3. 每个编号的固定动作：core 纯函数（`src/core/bitableDoc.ts`）+ 各视图独立组件/独立 CSS 文件（**必须**在 `src/styles/cssLayers.test.ts` 的 FILES/BASELINE 登记）+ 单测 + 全门禁 + CDP 真实验收 + 回写专项文档 §11/§12/§13。
+
+### 六、本轮踩过的坑（关键；长期条目已并入 §4）
+1. **改完 `src/**` 必须先 `npx vite build`，再跑 scheme 模式的验收**：`LAKE_RENDERER=scheme` 服务的是 `dist/`，不重建就是在**旧 bundle** 上验收，会出现「改了没生效」的假象（本轮踩过一次，白折腾一轮）。
+2. **CDP 查询必须限定可见元素**：`.bitable-editor:not(.fn__none)`。多 tab keep-alive 下，裸 `.bt-viewbar` / `.ln-popover` 会点到隐藏 tab 的菜单。
+3. **CDP 依附的窗口 `document.hidden === true`** ⇒ `loading="lazy"` 的图片**不加载**（`naturalWidth=0`）。验收封面/缩略图要临时 `removeAttribute("loading")` 才能看到上屏；**不是产品缺陷**（同一 URL 的 `fetch`/`new Image()` 都 200）。
+4. **新增 CSS 文件必须由使用它的组件 `import`**：本轮 T02A 建了 `bitableFieldCells.css` 却漏 import，那批新单元格样式一直没加载（元素在、样式空），直到做 2 列网格发现 `grid-template-columns: none` 才暴露。
+5. **`cssLayers.test.ts` 基线是硬上限**：`features/bitable/bitableEditor.css` 已顶满 **1081/1081（headroom = 0）** —— 再加任何一条声明都会让用例变红；本轮所有新样式都进了新文件（`bitableViews.css` / `bitableKanbanView.css` / `bitableGalleryView.css` / `bitableCalendarView.css` / `bitableFormView.css` / `bitableFieldCells.css`）。
+6. **读落盘要轮询**：应用层自动保存有防抖，改完立刻 `readNote` 会读到旧值甚至空对象（本轮多次误判「没保存」）。
+7. **同一文件被多批改过时没法按批拆 commit**（`git add -p` 的补丁手术风险高）⇒ 本轮代码合成一个 commit、文档单独一个；不要为了「一批一 commit」硬拆。
 
 ## 1. 项目一句话 + 铁律（详见 AGENTS.md）
 本地优先笔记应用（Electron 44 + React 18.3 + better-sqlite3 + 语雀 Lake 内核），S3（七牛 Kodo 兼容）同步。
 **红线**：① 本地是真相、S3 只是镜像（云端备份绝不反噬本地）；② 目录/删除强一致（删除传播、墓碑权威）；
 ③ `src/core/` 禁 `node:` 导入（平台差异走端口注入）；④ 开发数据只用 `lake-notes-dev`，绝不碰正式数据；
 ⑤ 不为旧数据写兼容/迁移（能删重建就删重建）；⑥ 杀 Electron 只 kill 具体 PID，禁 `pkill -f Electron`；
-⑦ 不擅自合 master（代码批次需用户验收；文档类清理可直接提交；本次上线已由用户明确授权提交并推送）。移动端另有铁律见 **§8.0**。
+⑦ 不擅自合 master（代码批次需用户验收；文档类清理可直接提交；**260928 多维表批次已由用户明确授权「提交代码」（仅提交、未推送）**）。移动端另有铁律见 **§8.0**。
 
 ## 3. 待办与已知问题（上线后 backlog）
 
-> 当前已进入上线收尾，不再新开模块级功能。以下是发布后真正保留的低优先项；发布前真实环境验收见 §0 与 §8。
+> 当前主线是多维表专项（见 §0 与专项文档）；以下是专项之外真正保留的低优先项。
 
 1. **同步 warning 结构化**：`SyncReport.warnings` 从字符串改为 `{ kind, noteId?, filename?, message }`，与 UI 展示/点击定位一起做。同步红线区，单独立项。
 2. **画板 AI 助手**：只接画板卡的 `generate` 钩子；模型、endpoint、Key 代理方式待产品决定。内核绿色文本绘图徽标无注入点，不做。
@@ -60,7 +82,7 @@
 7. **低优先数据/性能**：附件哈希缓存仅在真实痛感出现后立项；回收站惰性下载暂缓；Word/PDF 大附件与历史 `lakex-contract.d.ts` 按需处理。
 8. **已知外观**：离线残余资源、移动端缩略图仅覆盖 png/jpg/jpeg（失败回退原图）、多维表附件旧数据的体积展示边界。
 
-9. **多维表优化专项（用户已明确立项）**：唯一方案、实现进度、修改和会话结论统一记录在 `docs/BITABLE-OPTIMIZATION-HANDOFF.md`。后续涉及该专项的会话先完整阅读此文档，结束前必须回写同一文档，不在 HANDOFF 内展开专项细节。
+9. **多维表优化专项**：唯一方案/进度/修改记录/会话结论在 `docs/BITABLE-OPTIMIZATION-HANDOFF.md`；专项会话先完整读它、结束前必须回写它，**不在 HANDOFF 内展开专项细节**。当前进度见 §0 第二节。
 
 ## 4. 关键坑（长期有效）
 
@@ -79,9 +101,19 @@
 - 浮层列布局的固定区用 `flex: 0 0 auto`，否则内容会被列表盖住。
 - 预览切换先 `img.decode()` 再替换，别 `setState(null)` 造成塌陷闪动。
 - 改 CSS 先找单一来源和层序；不要靠继续加覆盖层解决。改后跑 `cssLayers` + `ui-metrics`。
+- **`src/styles/cssLayers.test.ts` 的基线是硬上限（只许变小）**：`features/bitable/bitableEditor.css` 已顶满 **1081/1081**。新样式一律**新建文件**并登记 `FILES`+`BASELINE`，且**必须由使用它的组件 import**（漏 import 时元素在、样式空，很难发现）。
 - `content-visibility`/`contain` 不要加到 Lake 引擎层。
 - 内核/第三方 inline style 是唯一允许更高层覆盖或 `!important` 的例外，且要写理由。
-- 多 tab keep-alive 下，CDP 查询必须过滤可见 tab，否则会命中隐藏编辑器。
+- 多 tab keep-alive 下，CDP 查询必须过滤可见 tab（`.bitable-editor:not(.fn__none)`），否则会命中隐藏编辑器。
+- 横向 tab 一律用分段控件（`.seg` / `.seg__item`，需带 `b3-button b3-button--outline`）。
+
+### 多维表（自研）
+- **图片预览范围 = 单个单元格**：两列图片就是两类，绝不跨列/跨行合并；表格/记录详情/表单/看板缩略图都只预览"本格"，画册只预览"封面字段该行那一格"。
+- **磁盘名绝不外显、也绝不可编辑**：`uploadResource` 对图片只回**磁盘名**（main 侧忽略请求名）、对附件回**清洗后的原始文件名**；凡把响应 `filename` 当展示名的地方都会显示成 `17xxx_ab12cd34.png`。展示名必须用**用户原始文件名**，并有统一守卫（`bitableAttachments` / `buildAttachmentPreviewItem`：缺展示名或本身就是落盘名 → 中性文案）。
+- **落盘名是随机唯一**（`buildAssetFilename` = 13 位毫秒 + 8 位随机 hex），全链路**无内容去重** ⇒ 同一张图上传两次必得两个文件，不会出现"多条引用共用一份文件、删一条把别人删没"。
+- **系统时间字段（创建/修改时间）必须走记录级取值口径 `bitableFieldValue(record, field)`**：它们的值不在 `values` 里；筛选/排序/分组/统计任何一处直接读 `record.values[field.id]` 都会得到 `undefined`（表现是"排序等于没排、筛选全空"）。展示走 `bitableFieldText`（到分钟）。
+- **文档图片预览列表必须取正文**：编辑态开着虚拟渲染 + `cardLazyInit`，视口外卡片不在 DOM 里 ⇒ `querySelectorAll("img.ne-image")` 会少图、切不动；内核这个构建 `allowClickToMaximize`/`previewImgs` 不可用，列表用 `extractImagesFromContent`（正文解析）。
+- **只读（锁定/回收站）必须封死所有写入口**：包括视图配置下拉、视图重命名、看板配置等"非单元格"的写入点（本轮修过泄漏）。
 
 ### 工程 / 环境
 - Node 必须 24；better-sqlite3 是 Electron ABI，系统 Node 不能替代运行时。
@@ -90,19 +122,23 @@
 - 杀 Electron 只按唯一 CDP 端口精确定位 PID；禁 `pkill -f Electron`、`killall`。
 - DSH 宿主里启动仓库 Electron 要 `env -u ELECTRON_RUN_AS_NODE`。
 - 打包版写正式数据目录；试跑必须覆盖 `LAKE_USER_DATA`，发布 smoke 用独立端口。
+- **scheme 模式验收前必须 `npx vite build`**（它服务 `dist/`，否则验收的是旧 bundle）。
+- **CDP 依附的窗口是隐藏的**（`document.hidden === true`）⇒ `loading="lazy"` 图片不加载；验收图片要临时去掉该属性，别误判成产品 bug。
+- **读落盘要轮询**：自动保存有防抖，改完立刻读会拿到旧值。
 
 ## 5. 上线与后续建议
-1. 发布前只做 §0 的真实环境验收：空库双端 V1 同步、Android 真机、发布说明；不再扩功能。
-2. 发布后只有出现真实故障或明确产品需求，才从 §3 取一项单独立项；不要恢复已完成的研究/计划文档。
-3. 改同步/GC 前先读 `AGENTS.md` 原则 11~13 + `docs/SYNC-PROTOCOL.md` + `docs/S3-GC-DESIGN.md`；写 Lake 正文前读 `docs/LAKE-CONTENT-WRITING.md`。
-4. 编辑器/lakex 相关先按 AGENTS §2 的检索顺序查 vendor → 官方文档 → `LAKEX-CONTRACT.md` → 源码字典。
+1. 主线是多维表专项（§0）；专项之外只从 §3 取项并单独立项，不要恢复已完成的研究/计划文档。
+2. 改同步/GC 前先读 `AGENTS.md` 原则 11~13 + `docs/SYNC-PROTOCOL.md` + `docs/S3-GC-DESIGN.md`；写 Lake 正文前读 `docs/LAKE-CONTENT-WRITING.md`。
+3. 编辑器/lakex 相关先按 AGENTS §2 的检索顺序查 vendor → 官方文档 → `LAKEX-CONTRACT.md` → 源码字典。
+4. 上线收尾的真实环境验收仍待做：空库双端 V1 同步、Android 真机、发布说明（见 §8 与专项之外的 backlog）。
+
 ## 6. 环境与命令
 ```bash
 export PATH="$HOME/.nvm/versions/node/v24.18.0/bin:$PATH"      # node 24（别用系统 node 18）
 cd /Users/admin/file/local-lake/lake-notes-electron
 # 门禁（合并前必过）
 npx tsc --noEmit && npx vitest run && npx vite build && npx vite build -c vite.mobile.config.ts
-git diff --check                                                # 空白错误（注意会报出移动端会话的文件）
+node scripts/ui-metrics.mjs && npm run check:core && git diff --check
 # 开发（CDP 9222；改主进程/src/core 文件会重启 Electron 并可能命中 GPU 崩溃，见 §4）
 npm run dev                 # = vite --host 127.0.0.1 --port 1421（vite-plugin-electron 拉起 Electron）
 # 压测（opt-in，默认被 npm test 跳过）
@@ -114,13 +150,23 @@ LAKE_RUN_BENCHMARK=1 LAKE_STRESS_S3_ENDPOINT=... _REGION=... _BUCKET=... _AK=...
 node scripts/s3-ls.mjs --count | --note <id> | --prefix <prefix>
 node scripts/lake-roundtrip-check.mjs --note <id>   # 对拍「这篇一打开会不会被内核改写」（只建临时文档，退出码 1=会被改写）
 ```
-- **UI 实测姿势**：`curl http://127.0.0.1:9222/json` 拿 page target → Node 24 内置 `WebSocket` 直驱 `Runtime.evaluate` / `Page.captureScreenshot{clip}` / `Input.*`（本会话用这套量出了预览闪烁的逐帧数据）。详见 `docs/CODEX-GUIDE.md`。
+- **UI 实测姿势（本轮全程使用，推荐）**：
+  ```bash
+  # 1) 必须先构建（scheme 模式服务 dist/）
+  npx vite build
+  # 2) 隔离开一个实例（独立 userData / 资源端口 / CDP 端口）
+  env -u ELECTRON_RUN_AS_NODE LAKE_RENDERER=scheme LAKE_USER_DATA="$TMPDIR/lake-x" \
+    LAKE_ASSET_PORT=19890 ./node_modules/.bin/electron --disable-gpu --remote-debugging-port=9230 .
+  # 3) 取 page target，用 Node 24 内置 WebSocket 直驱 Runtime.evaluate / Page.captureScreenshot
+  curl -s http://127.0.0.1:9230/json/list
+  ```
+  详见 `docs/CODEX-GUIDE.md`。注意 §4 的三条坑（重建、可见元素、lazy 图片）。
 - 日志：A `~/Library/Application Support/lake-notes-dev/logs/lake-notes.log`；B `$TMPDIR/lake-device-b/logs/lake-notes.log`。数据目录见 `AGENTS.md §5`（**正式数据禁碰**）。
 - 安卓/模拟器：全部命令与环境见 **§8**。
 
 ## 7. 文档索引（`docs/` 按需查）
 - **契约/规格（单一来源）**：`STORAGE-LAYERS.md`（存储分层 + 设备本地契约）· `SYNC-PROTOCOL.md`（同步协议 V1 重置）· `S3-GC-DESIGN.md`（存储/删除 GC）· `HISTORY-DESIGN.md`（历史快照）· `TRASH-NOTEBOOK-DESIGN.md`（回收站）· `QUICK-NOTES-SPEC.md`（小记）。
-- **多维表优化专项**：`BITABLE-OPTIMIZATION-HANDOFF.md`（唯一方案、状态看板、修改记录和多会话交接）。
+- **多维表优化专项**：`BITABLE-OPTIMIZATION-HANDOFF.md`（唯一方案、状态看板、修改记录和多会话交接；**专项会话必读必写**）。
 - **内核**：`LAKEX-CONTRACT.md`（闭源 lakex 行为契约 + 速查表，编辑器相关**先读**）。
 - **正文写入（写 `.lake` 前必读）**：`LAKE-CONTENT-WRITING.md`（约定 + 反例 + 校验判据；配套 `src/core/lakeDocForm.ts` 与 `scripts/lake-roundtrip-check.mjs`）。
 - **指南**：`CODEX-GUIDE.md`（CDP 驱动真实 Electron，动手前必读）· `DEVELOPMENT.md` · `ARCHITECTURE.md` · `TROUBLESHOOTING.md` · `RELEASE.md` · `SYNC-RELIABILITY-VERIFY.md`（数据完整性门禁）。
