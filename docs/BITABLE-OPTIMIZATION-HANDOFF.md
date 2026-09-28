@@ -1,6 +1,6 @@
 # 多维表优化落地与交接文档（Single Source of Truth）
 
-> 状态：**方案已冻结；V01 已完成，V02–V04 + 260928 三批追加需求 + T01 列级统计 + T03 多级分组 + T04 语义排序已实施，一并待验收**（其余 T / D 批次未开始）。
+> 状态：**方案已冻结；V01 已完成，V02–V04 + 260928 三批追加需求 + T01/T03/T04 + T02A 基础字段已实施，一并待验收**（其余 T02B / T06 / D 批次未开始）。
 > 建立日期：2026-09-28。
 > 适用范围：多维表字段扩展、单/双向关联、表格增强、看板/画册/日历视图、表单增强、导入导出。
 > 本文是该优化项目的**唯一实现方案、进度看板、修改记录、决策记录和会话交接文档**。
@@ -700,7 +700,7 @@ npx vitest run src/styles/cssLayers.test.ts src/styles/uiPrimitives.test.ts
 | T01 列级统计 | 待验收 | 260928-T01 | 视图级列统计（通用/数字/日期），底栏贴底常驻、随筛选现算（见 §13） |
 | T03 多级分组 | 待验收 | 260928-T03 | 最多 3 级 + 拖动调优先级 + 层级缩进；折叠按节点 key（见 §13） |
 | T04 语义排序增强 | 待验收 | 260928-T04 | 单选/多选「选项顺序·逆序」，日期文案早→晚/晚→早（见 §13） |
-| T02A 基础字段 | 未开始 | - | 布尔/链接/评分/进度/创建时间/修改时间 |
+| T02A 基础字段 | 待验收 | 260928-T02A | 布尔/链接/评分/进度/创建·修改时间（系统时间只读、不参与筛选排序分组）（见 §13） |
 | T02B.1 关联基础模型 | 未开始 | - | 同一文档内多表 |
 | T02B.2 单向关联 | 未开始 | - | 多选默认开启 |
 | T02B.3 双向关联 | 未开始 | - | 反向字段与配对一致性 |
@@ -726,6 +726,7 @@ npx vitest run src/styles/cssLayers.test.ts src/styles/uiPrimitives.test.ts
 | 2026-09-28 | 260928-F02 | 附件命名审计 | `src/features/bitable/BitableEditor.tsx` · `bitableEditorMount.test.ts` | 复核 main 侧契约：附件 filename=展示名、url 末段=磁盘名、buildAssetFilename 随机唯一（无去重）；bitable 展示名改取 `file.name` | 无新增改动面 |
 | 2026-09-28 | 260928-F01 | 图片预览总数 | `src/features/editor/imagePreview.ts`(+test) · `LakeEditor.tsx` · `BitableGalleryView.tsx` · `BitableEditor.tsx` · `bitableEditorMount.test.ts` | 实测 10 图文档预览 1/10 → 10/10；画册点封面 1/2 → 2/2 | 同一张图重复出现时按首次匹配定位下标 |
 | 2026-09-28 | 260928-T04 | T04 语义排序增强 | `src/core/bitableDoc.ts`(+test) · `BitableEditor.tsx` · `bitableEditorMount.test.ts` | 门禁全绿 + 实测选项序 B/C/E→D→A、逆序反转、字典序不受影响 | 不做公式排序 |
+| 2026-09-28 | 260928-T02A | T02A 基础字段 | `src/core/bitableDoc.ts`(+test) · `bitableCells.tsx` · `BitableEditor.tsx` · `BitableRecordDrawer.tsx` · `BitableKanbanView.tsx` · `BitableGalleryView.tsx` · `BitableFormView.tsx` · `src/mobile/bitable/MobileBitableViewer.tsx` · `bitableFieldCells.css`(新) · `cssLayers.test.ts` | 门禁全绿 + 实测布尔/评分/进度/链接交互并落盘；系统字段已从筛选/排序/分组/表单排除 | 系统时间不支持筛选排序（无假入口） |
 | 2026-09-28 | 260928-T03 | T03 多级分组 | `src/core/bitableDoc.ts` · `bitableGroup.test.ts` · `BitableEditor.tsx` · `bitableViews.css` · `cssLayers.test.ts` | 门禁全绿 + 实测两级树/折叠/层级缩进/拖动重排（配置落盘） | 折叠 key 基于选项名，改名会重置折叠态 |
 | 2026-09-28 | 260928-T01 | T01 列级统计 | `src/core/bitableDoc.ts`(+test) · `src/features/bitable/BitableEditor.tsx` · `bitableViews.css` · `cssLayers.test.ts` · `bitableEditorMount.test.ts` | 门禁全绿 + 实测：求和 7 → 筛选后 1、时间范围 9 天、多列独立 | 移动端隐藏统计（验收允许） |
 | 2026-09-28 | 260928-F04 | 预览范围改为单单元格 + 展示名守卫 + 填写表单跳预览 | `bitableCells.tsx` · `BitableGalleryView.tsx` · `BitableEditor.tsx` · `BitableRecordDrawer.tsx` · `BitableFormView.tsx` · `src/core/bitableDoc.ts`(+test) · `src/features/attachment/attachmentPreviewController.ts` · `bitableEditorMount.test.ts` | 实测两列图片各自独立：A=1/2、B=2/3、画册封面=1/2、看板 2+3 | 无 |
@@ -1124,6 +1125,37 @@ UI 与交互变化：
 遗留：多级分组的折叠 key 基于「组键=选项名」，重命名选项会重置该组折叠态（本机展示态，不写正文）；移动端仍不展示分组（安全回退为平铺网格）。
 
 下一步：按 §8 顺序进入 **T02A 基础字段**（布尔/链接/评分/进度/创建时间/修改时间）。
+
+### 2026-09-28 · T02A 基础字段（布尔 / 链接 / 评分 / 进度 / 创建时间 / 修改时间）
+
+本次完成：
+
+- **布尔值**：单元格为单复选框；字段默认值可选「是/否」。
+- **链接**：单元格是可编辑 URL + `↗` 用**系统浏览器**打开（桌面 `window.open` → 主进程 `shell.openExternal`，移动端走系统打开）；默认值为 URL。
+- **评分**：固定 **5 星**，点第 N 颗 = N 星，再点当前星级 = 清零；默认值可选 1–5（含「无」）。
+- **进度**：0–100 **进度条** + 数值输入（越界自动夹取），**颜色可配**（`field.progressColor`，调色板；缺省主题强调色）；默认值 0–100 + 颜色。
+- **创建时间 / 修改时间**：系统只读，值取 `record.createdAt / updatedAt`，按**本地** `YYYY-MM-DD HH:mm` 展示，**不写 values**。
+- 未知字段类型仍走只读展示（原有行为不变）。
+
+数据结构 / 接口：
+
+- `BitableFieldType` 新增 6 类；`BITABLE_FIELD_TYPES` 菜单按云端顺序补全；`BitableField.progressColor?: string`。
+- core 新增：`isNumericFieldType`（数字/评分/进度统一走数值口径）、`isSystemTimeField`、`bitableFieldValue(record, field)`、`bitableFieldText(record, field)`、`localDateTimeString`、`BITABLE_RATING_MAX/BITABLE_PROGRESS_MAX`。
+- 取值口径统一到 `bitableFieldText`：记录标题、搜索文本、看板/画册卡片、移动端单元格全部改走它（布尔/链接/评分/进度/系统时间都能正确显示）。
+- 数值口径（排序 / 筛选操作符 / 列统计）扩展到评分与进度；布尔给 `equals/notEquals/isEmpty/isNotEmpty`。
+- **系统时间字段不参与筛选 / 排序 / 分组**（值不在 values 里，且不在表单题目里）——排除而不是给「能选但没效果」的假入口。
+- 复制/粘贴口径补全：布尔接受 是/否/true/false/1/0；评分与进度按数字解析并夹取；链接按文本写入。
+
+改动文件：`src/core/bitableDoc.ts`(+test) · `src/features/bitable/bitableCells.tsx` · `BitableEditor.tsx` · `BitableRecordDrawer.tsx` · `BitableKanbanView.tsx` · `BitableGalleryView.tsx` · `BitableFormView.tsx` · `bitableFieldCells.css`(新) · `src/mobile/bitable/MobileBitableViewer.tsx` · `src/styles/cssLayers.test.ts`
+
+验证结果：
+
+- 门禁全绿：tsc / vitest **1376 passed / 16 skipped** / check:core / 双端构建 / ui-metrics / cssLayers+uiPrimitives / git diff --check。
+- CDP 实测：新增字段菜单列出 6 个新类型；布尔勾选 → 落盘 `true`；评分点第 3 颗 → 落盘 `3`；进度输入 60 → 进度条 `--bt-progress: 60%` + 配色 `#d6e6fb`，落盘 `60`；链接 `↗` 调起 `https://example.com/x` 且落盘；排序字段下拉**只列** 文本/布尔/链接/评分/进度（创建·修改时间已被排除）。
+
+遗留：创建/修改时间暂不参与筛选与排序（无假入口，等真正需要时再做记录级取值改造）；评分口径为整星（不做半星）。
+
+下一步：等用户验收；随后按 §8 顺序进入 T02B.1 关联基础模型。
 
 ## 14. 会话执行模板
 

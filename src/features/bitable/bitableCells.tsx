@@ -8,12 +8,13 @@
 import { useEffect, useLayoutEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import { reportNativeActionError } from "../../lib/nativeErrors";
 import { Popover as OverlayPopover } from "../../components/ui/Overlay";
-import { Calendar, Check, ChevronDown, ChevronLeft, ChevronRight, CircleDot, Download, Hash, HelpCircle, Image as ImageIcon, Link2, Maximize2, Paperclip, Pencil, Plus, Search, Tags, Type, X } from "lucide-react";
+import { Calendar, CalendarClock, Check, ChevronDown, ChevronLeft, ChevronRight, CircleDot, Clock, Download, ExternalLink, Gauge, Hash, HelpCircle, Image as ImageIcon, Link, Link2, Maximize2, Paperclip, Pencil, Plus, Search, SquareCheck, Star, Tags, Type, X } from "lucide-react";
 import { ASSET_ORIGIN, assetThumbWidthForCss, withAssetAccessToken } from "../../lib/assetPort.js";
 import { withAssetWidth } from "../../core/assetUrl.js";
 import { extOf, isImageExtension } from "../../core/assetNaming.js";
 import { native } from "../../lib/native.js";
-import { ATTACHMENT_GRID, BITABLE_OPTION_PALETTE, attachmentGridColumns, bitableAttachments, bitableDisplayValue, isKnownFieldType, localDateString, optionChipStyle, optionColorHex, type BitableAttachment, type BitableField, type BitableFieldOption } from "../../core/bitableDoc.js";
+import { ATTACHMENT_GRID, BITABLE_OPTION_PALETTE, BITABLE_PROGRESS_MAX, BITABLE_RATING_MAX, attachmentGridColumns, bitableAttachments, bitableDisplayValue, bitableFieldText, isKnownFieldType, localDateString, optionChipStyle, optionColorHex, type BitableAttachment, type BitableField, type BitableFieldOption, type BitableRecord } from "../../core/bitableDoc.js";
+import type { CSSProperties } from "react";
 
 /** 图片字段只收图片：`accept` 只约束「选文件」，拖拽/粘贴必须自己拦，否则会静默写进非图片。
  *  返回「可上传的」与「被拒数量」——拒绝要有可见提示，绝不静默丢弃。 */
@@ -35,6 +36,12 @@ export function FieldTypeIcon({ type, size = 14 }: { type: string; size?: number
     case "date": return <Calendar size={size} />;
     case "attachment": return <Paperclip size={size} />;
     case "image": return <ImageIcon size={size} />;
+    case "boolean": return <SquareCheck size={size} />;
+    case "link": return <Link size={size} />;
+    case "rating": return <Star size={size} />;
+    case "progress": return <Gauge size={size} />;
+    case "createdTime": return <CalendarClock size={size} />;
+    case "updatedTime": return <Clock size={size} />;
     case "relation": return <Link2 size={size} />;
     default: return <HelpCircle size={size} />;
   }
@@ -829,6 +836,72 @@ export function DatePicker({ value, readOnly, onChange }: { value: unknown; read
   );
 }
 
+/** 布尔格：单复选框（字段默认值可选是/否）。 */
+function BooleanCell({ value, readOnly, onChange }: { value: unknown; readOnly: boolean; onChange: (value: unknown) => void }) {
+  return (
+    <label className="bt-bool-cell">
+      <input type="checkbox" checked={value === true} disabled={readOnly} aria-label="布尔值"
+        onChange={(event) => onChange(event.target.checked)} />
+    </label>
+  );
+}
+
+/** 链接格：URL 文本可编辑 + ↗ 用**系统浏览器**打开（桌面 window.open → 主进程 shell.openExternal）。 */
+function LinkCell({ value, readOnly, onChange }: { value: unknown; readOnly: boolean; onChange: (value: unknown) => void }) {
+  const text = typeof value === "string" ? value : "";
+  const openable = /^https?:\/\//i.test(text.trim());
+  return (
+    <span className="bt-link-cell">
+      <input className="bt-cell-input" value={text} readOnly={readOnly} placeholder="https://" aria-label="链接"
+        onChange={(event) => onChange(event.target.value)} />
+      {openable && (
+        <button type="button" className="bt-link-open" title="用系统浏览器打开" aria-label="打开链接"
+          onClick={(event) => { event.stopPropagation(); window.open(text.trim(), "_blank", "noopener"); }}>
+          <ExternalLink size={13} />
+        </button>
+      )}
+    </span>
+  );
+}
+
+/** 评分：固定 5 星；再点当前星级 = 清零（对齐云端）。 */
+function RatingCell({ value, readOnly, onChange }: { value: unknown; readOnly: boolean; onChange: (value: unknown) => void }) {
+  const current = typeof value === "number" && Number.isFinite(value) ? Math.max(0, Math.min(BITABLE_RATING_MAX, Math.round(value))) : 0;
+  return (
+    <span className="bt-rating" role="radiogroup" aria-label="评分">
+      {Array.from({ length: BITABLE_RATING_MAX }, (_, index) => (
+        <button key={index} type="button" role="radio" aria-checked={index + 1 === current} aria-label={(index + 1) + " 星"}
+          className={"bt-star" + (index < current ? " is-on" : "")} disabled={readOnly}
+          onClick={(event) => { event.stopPropagation(); onChange(current === index + 1 ? 0 : index + 1); }}>
+          <Star size={14} fill={index < current ? "currentColor" : "none"} />
+        </button>
+      ))}
+    </span>
+  );
+}
+
+/** 进度：0–100 进度条 + 数值（越界自动夹取；颜色取字段配置，缺省主题强调色）。 */
+function ProgressCell({ field, value, readOnly, onChange }: { field: BitableField; value: unknown; readOnly: boolean; onChange: (value: unknown) => void }) {
+  const raw = typeof value === "number" ? value : Number(value);
+  const pct = Number.isFinite(raw) ? Math.max(0, Math.min(BITABLE_PROGRESS_MAX, Math.round(raw))) : 0;
+  const color = typeof field.progressColor === "string" ? field.progressColor : undefined;
+  const style = { "--bt-progress": pct + "%", ...(color ? { "--bt-progress-color": color } : {}) } as CSSProperties;
+  return (
+    <span className="bt-progress-cell">
+      <span className="bt-progress" style={style} aria-hidden="true"><span className="bt-progress-bar" /></span>
+      <input className="bt-progress-input" type="number" min={0} max={BITABLE_PROGRESS_MAX} value={value == null || value === "" ? "" : String(pct)}
+        readOnly={readOnly} aria-label="进度"
+        onChange={(event) => {
+          const text = event.target.value;
+          if (text === "") { onChange(""); return; }
+          const next = Number(text);
+          onChange(Math.max(0, Math.min(BITABLE_PROGRESS_MAX, Number.isFinite(next) ? Math.round(next) : 0)));
+        }} />
+      <span className="bt-progress-value">{pct}%</span>
+    </span>
+  );
+}
+
 export interface CellEditorProps {
   field: BitableField;
   value: unknown;
@@ -837,10 +910,12 @@ export interface CellEditorProps {
   onAddOption: (name: string) => void;
   /** 附件 / 图片格子的渲染入口；入参 = 该字段是否只接受图片（image 字段）。 */
   renderAttachment?: (imageOnly: boolean) => ReactNode;
+  /** 记录（系统时间字段取值用；表单草稿没有记录时为 undefined）。 */
+  record?: BitableRecord;
 }
 
 /** 按字段类型分派单元格编辑器（未知类型只读展示、不清空）。 */
-export function CellEditor({ field, value, readOnly, onChange, onAddOption, renderAttachment }: CellEditorProps) {
+export function CellEditor({ field, value, readOnly, onChange, onAddOption, renderAttachment, record }: CellEditorProps) {
   if (!isKnownFieldType(field.type)) {
     return <span className="bt-cell-unknown" title="未知字段类型（只读展示）">{bitableDisplayValue(field, value) || "—"}</span>;
   }
@@ -876,6 +951,17 @@ export function CellEditor({ field, value, readOnly, onChange, onAddOption, rend
     case "attachment":
     case "image":
       return renderAttachment ? <>{renderAttachment(field.type === "image")}</> : <span className="bt-cell-muted">—</span>;
+    case "boolean":
+      return <BooleanCell value={value} readOnly={readOnly} onChange={onChange} />;
+    case "link":
+      return <LinkCell value={value} readOnly={readOnly} onChange={onChange} />;
+    case "rating":
+      return <RatingCell value={value} readOnly={readOnly} onChange={onChange} />;
+    case "progress":
+      return <ProgressCell field={field} value={value} readOnly={readOnly} onChange={onChange} />;
+    case "createdTime":
+    case "updatedTime":
+      return <span className="bt-cell-muted">{record ? (bitableFieldText(record, field) || "—") : "—"}</span>;
     case "relation":
       return <span className="bt-cell-relation" title="关联字段 v1 只占位、单元格不可填值">关联（暂不可填）</span>;
     default:

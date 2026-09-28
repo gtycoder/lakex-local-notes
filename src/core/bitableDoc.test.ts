@@ -24,6 +24,7 @@ import {
   createBitableRecord,
   createBitableView,
   createDefaultBitableTable,
+  filterOperatorsFor,
   defaultViewName,
   emptyBitableBody,
   calendarColorField,
@@ -41,8 +42,13 @@ import {
   galleryCardFields,
   galleryCoverField,
   galleryCoverImage,
+  bitableFieldText,
+  bitableFieldValue,
   isAttachmentLikeField,
   isImplementedViewType,
+  isNumericFieldType,
+  isSystemTimeField,
+  localDateTimeString,
   isKnownFieldType,
   isKnownViewType,
   kanbanCardFieldCandidates,
@@ -493,6 +499,59 @@ describe("bitableDoc 数据模型", () => {
     single.values[date.id] = "2026-09-10";
     expect(calendarMovePatch(table, view, single, "2026-09-11")).toEqual({ [date.id]: "2026-09-11" });
     expect(calendarMovePatch(table, view, createBitableRecord("r3"), "2026-09-11")).toEqual({});
+  });
+
+  it("T02A 基础字段：布尔/链接/评分/进度的展示与数值口径；系统时间读记录时间戳", () => {
+    const table = createDefaultBitableTable("t", "tbl-t02a");
+    const primary = table.fields[0];
+    const bool = createBitableField("boolean", "布尔", "fld-bool");
+    const link = createBitableField("link", "链接", "fld-link");
+    const rating = createBitableField("rating", "评分", "fld-rate");
+    const progress = createBitableField("progress", "进度", "fld-prog");
+    const created = createBitableField("createdTime", "创建时间", "fld-ct");
+    const updated = createBitableField("updatedTime", "修改时间", "fld-ut");
+    table.fields.push(bool, link, rating, progress, created, updated);
+    expect(isKnownFieldType("boolean")).toBe(true);
+    expect(BITABLE_FIELD_TYPES).toContain("progress");
+    expect(BITABLE_FIELD_TYPE_LABEL.createdTime).toBe("创建时间");
+    expect(isNumericFieldType("rating")).toBe(true);
+    expect(isNumericFieldType("progress")).toBe(true);
+    expect(isNumericFieldType("text")).toBe(false);
+    expect(isSystemTimeField("createdTime")).toBe(true);
+    expect(isSystemTimeField("date")).toBe(false);
+    expect(bitableDisplayValue(bool, true)).toBe("是");
+    expect(bitableDisplayValue(bool, false)).toBe("否");
+    expect(bitableDisplayValue(bool, undefined)).toBe("");
+    expect(bitableDisplayValue(link, "https://x.dev")).toBe("https://x.dev");
+    expect(bitableDisplayValue(rating, 4)).toBe("4");
+    expect(bitableDisplayValue(progress, 60)).toBe("60");
+    const record = createBitableRecord("r1");
+    record.createdAt = "2026-09-28T01:30:00.000Z";
+    record.updatedAt = "2026-09-28T02:45:00.000Z";
+    record.values[primary.id] = "标题";
+    expect(bitableFieldValue(record, created)).toBe(record.createdAt);
+    expect(bitableFieldText(record, created)).toBe(localDateTimeString(record.createdAt));
+    expect(bitableFieldText(record, updated)).toBe(localDateTimeString(record.updatedAt));
+    // 数值口径：评分/进度参与排序、统计、筛选操作符
+    const mk = (id: string, r: number, p: number) => { const x = createBitableRecord(id); x.values[rating.id] = r; x.values[progress.id] = p; return x; };
+    table.records = [mk("r1", 3, 10), mk("r2", 5, 90), mk("r3", 1, 50)];
+    const view = createBitableView("grid", "g", "vew-t02a");
+    view.sorts = [{ fieldId: rating.id }];
+    expect(applyViewToRecords(table, view).map((x) => x.id)).toEqual(["r3", "r1", "r2"]);
+    expect(computeColumnStat(rating, table.records, "sum")).toBe("9");
+    expect(computeColumnStat(progress, table.records, "max")).toBe("90");
+    expect(filterOperatorsFor(rating)).toContain("gte");
+    expect(filterOperatorsFor(bool)).toEqual(["equals", "notEquals", "isEmpty", "isNotEmpty"]);
+    // 默认值预填（false / 0 不能被当成空值丢掉）
+    bool.defaultValue = false;
+    rating.defaultValue = 0;
+    progress.defaultValue = 25;
+    link.defaultValue = "https://a.dev";
+    const defaults = defaultRecordValues(table);
+    expect(defaults[bool.id]).toBe(false);
+    expect(defaults[rating.id]).toBe(0);
+    expect(defaults[progress.id]).toBe(25);
+    expect(defaults[link.id]).toBe("https://a.dev");
   });
 
   it("语义排序（T04）：单选/多选按选项顺序（空值恒最后），多条件稳定，字典序不受影响", () => {

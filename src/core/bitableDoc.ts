@@ -19,7 +19,10 @@ export const BITABLE_DOC_KIND = "bitable" as const;
 export const BITABLE_DOC_VERSION = 1 as const;
 
 /** v1 实现的字段类型（开放字符串：读到未知 type 只读展示、不清空）。 */
-export type BitableFieldType = "text" | "number" | "select" | "multiSelect" | "date" | "attachment" | "image" | "relation";
+export type BitableFieldType =
+  | "text" | "number" | "select" | "multiSelect" | "date" | "attachment" | "image"
+  | "boolean" | "link" | "rating" | "progress" | "createdTime" | "updatedTime"
+  | "relation";
 
 /** 字段类型选择器的顺序（v1 只暴露这 7 种）。 */
 export const BITABLE_FIELD_TYPES: readonly BitableFieldType[] = [
@@ -30,6 +33,12 @@ export const BITABLE_FIELD_TYPES: readonly BitableFieldType[] = [
   "date",
   "attachment",
   "image",
+  "boolean",
+  "link",
+  "rating",
+  "progress",
+  "createdTime",
+  "updatedTime",
   "relation",
 ] as const;
 
@@ -41,6 +50,12 @@ export const BITABLE_FIELD_TYPE_LABEL: Record<BitableFieldType, string> = {
   date: "日期",
   attachment: "附件",
   image: "图片",
+  boolean: "布尔值",
+  link: "链接",
+  rating: "评分",
+  progress: "进度",
+  createdTime: "创建时间",
+  updatedTime: "修改时间",
   relation: "关联",
 };
 
@@ -69,6 +84,8 @@ export interface BitableField {
    *  （对齐云端「添加新记录的创建时间」）。 */
   dateAutoFill?: boolean;
   relation?: BitableRelation;
+  /** 进度字段专用：进度条颜色（调色板 hex；缺省走主题强调色）。 */
+  progressColor?: string;
   /** 表格视图默认列宽（视图可覆盖；v1 直接写字段上）。 */
   width?: number;
   [key: string]: unknown;
@@ -276,6 +293,20 @@ export function newBitableId(prefix: string): string {
 function nowIso(): string {
   return new Date().toISOString();
 }
+
+/** 数值类字段（排序/筛选/统计按数值口径走）：数字 + 评分 + 进度。 */
+export function isNumericFieldType(type: string): boolean {
+  return type === "number" || type === "rating" || type === "progress";
+}
+
+/** 系统时间字段（只读，值取记录时间戳，不写 values）：创建时间 / 修改时间。 */
+export function isSystemTimeField(type: string): boolean {
+  return type === "createdTime" || type === "updatedTime";
+}
+
+/** 评分固定 5 星；进度固定 0–100。 */
+export const BITABLE_RATING_MAX = 5;
+export const BITABLE_PROGRESS_MAX = 100;
 
 export function isKnownFieldType(type: string): type is BitableFieldType {
   return (BITABLE_FIELD_TYPES as readonly string[]).includes(type);
@@ -494,7 +525,7 @@ const GENERIC_STATS: readonly BitableStatType[] = ["count", "filled", "empty", "
 /** 某字段可选的统计类型（列菜单用）：通用 + 数字/日期专属。 */
 export function statsForField(field: BitableField): BitableStatType[] {
   const out = [...GENERIC_STATS];
-  if (field.type === "number") out.push("sum", "avg", "min", "max");
+  if (isNumericFieldType(field.type)) out.push("sum", "avg", "min", "max");
   if (field.type === "date") out.push("earliest", "latest", "range");
   return out;
 }
@@ -529,7 +560,7 @@ export function computeColumnStat(field: BitableField, records: BitableRecord[],
   if (stat === "unique") return String(new Set(texts.filter((text) => text !== "")).size);
   if (stat === "filledPct") return statPct(filledCount, total);
   if (stat === "emptyPct") return statPct(total - filledCount, total);
-  if (field.type === "number") {
+  if (isNumericFieldType(field.type)) {
     const nums = records
       .map((record) => {
         const text = bitableDisplayValue(field, record.values[field.id]).trim();
@@ -674,7 +705,17 @@ export function bitableDisplayValue(field: BitableField, value: unknown): string
     case "relation":
       return "";
     case "number":
+    case "rating":
+    case "progress":
       return String(value);
+    case "boolean":
+      return value === true ? "是" : value === false ? "否" : "";
+    case "link":
+      return typeof value === "string" ? value : "";
+    case "createdTime":
+    case "updatedTime":
+      // 值由 bitableFieldText(record, field) 注入记录时间戳；直接给 ISO 也兜底格式化
+      return typeof value === "string" ? localDateTimeString(value) : "";
     default:
       return typeof value === "string" ? value : typeof value === "number" || typeof value === "boolean" ? String(value) : "";
   }
@@ -709,11 +750,30 @@ export function localDateString(at: string | number | Date): string {
   return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
 }
 
+/** ISO 时间戳 → 本地 `YYYY-MM-DD HH:mm`（系统时间字段展示口径，绝不走 UTC）。 */
+export function localDateTimeString(at: string | number | Date): string {
+  const d = at instanceof Date ? at : new Date(at);
+  if (Number.isNaN(d.getTime())) return "";
+  return localDateString(d) + " " + String(d.getHours()).padStart(2, "0") + ":" + String(d.getMinutes()).padStart(2, "0");
+}
+
+/** 字段取值（含系统字段）：创建/修改时间读记录时间戳，其余读 values。 */
+export function bitableFieldValue(record: BitableRecord, field: BitableField): unknown {
+  if (field.type === "createdTime") return record.createdAt;
+  if (field.type === "updatedTime") return record.updatedAt;
+  return record.values[field.id];
+}
+
+/** 字段展示文本（记录级，含系统时间）——卡片/单元格/搜索/标题统一走它。 */
+export function bitableFieldText(record: BitableRecord, field: BitableField): string {
+  return bitableDisplayValue(field, bitableFieldValue(record, field));
+}
+
 /** 记录标题 = 主字段（fields[0]）的展示值；未填 → 「未命名记录」（对齐云端）。 */
 export function bitableRecordTitle(table: BitableTable, record: BitableRecord): string {
   const primary = table.fields[0];
   if (!primary) return "未命名记录";
-  return bitableDisplayValue(primary, record.values[primary.id]) || "未命名记录";
+  return bitableFieldText(record, primary) || "未命名记录";
 }
 
 /**
@@ -730,7 +790,7 @@ export function bitableToSearchText(content: string | null | undefined, maxChars
     for (const record of table.records) {
       const cells: string[] = [];
       for (const field of table.fields) {
-        const text = bitableDisplayValue(field, record.values[field.id]);
+        const text = bitableFieldText(record, field);
         if (text) cells.push(text);
       }
       if (cells.length > 0) parts.push(cells.join("\t"));
@@ -1045,7 +1105,7 @@ function compareSortValues(field: BitableField, a: unknown, b: unknown, rule: Bi
 function compareValues(field: BitableField, a: unknown, b: unknown): number {
   const sa = bitableDisplayValue(field, a);
   const sb = bitableDisplayValue(field, b);
-  if (field.type === "number") {
+  if (isNumericFieldType(field.type)) {
     const na = typeof a === "number" ? a : Number(sa);
     const nb = typeof b === "number" ? b : Number(sb);
     if (Number.isFinite(na) && Number.isFinite(nb)) return na - nb;
@@ -1091,7 +1151,8 @@ export function evaluateFilter(field: BitableField, value: unknown, rule: Bitabl
 
 /** 某个字段类型可用的筛选操作符（v1 全类型共用一套，按类型给主要项）。 */
 export function filterOperatorsFor(field: BitableField): BitableFilterOperator[] {
-  if (field.type === "number" || field.type === "date") return ["equals", "notEquals", "gt", "lt", "gte", "lte", "isEmpty", "isNotEmpty"];
+  if (isNumericFieldType(field.type) || field.type === "date") return ["equals", "notEquals", "gt", "lt", "gte", "lte", "isEmpty", "isNotEmpty"];
+  if (field.type === "boolean") return ["equals", "notEquals", "isEmpty", "isNotEmpty"];
   return ["contains", "notContains", "equals", "notEquals", "isEmpty", "isNotEmpty"];
 }
 

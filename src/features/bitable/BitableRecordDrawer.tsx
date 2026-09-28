@@ -70,6 +70,7 @@ export function BitableRecordDrawer(props: BitableRecordDrawerProps) {
             <span className="bt-drawer-control">
               <CellEditor
                 field={field}
+                record={record}
                 value={record.values[field.id]}
                 readOnly={props.readOnly}
                 onChange={(value) => props.onSetValue(record.id, field.id, value)}

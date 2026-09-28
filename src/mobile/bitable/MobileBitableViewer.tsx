@@ -10,6 +10,7 @@ import { useMemo, useState } from "react";
 import {
   applyViewToRecords,
   bitableAttachments,
+  bitableFieldText,
   isImplementedViewType,
   isKnownViewType,
   optionChipStyle,
@@ -59,18 +60,10 @@ function AttachmentCell({ noteId, value }: { noteId: string; value: unknown }) {
   );
 }
 
+/** 单元格文本：走记录级统一口径（含布尔/链接/评分/进度/创建·修改时间）。 */
 function cellText(field: BitableField, record: BitableRecord): string | null {
-  const value = record.values[field.id];
-  if (value == null || value === "") return null;
-  if (field.type === "select" || field.type === "multiSelect") {
-    const ids = Array.isArray(value) ? value : [value];
-    const names = ids
-      .map((id) => (field.options ?? []).find((option) => option.id === id)?.name)
-      .filter((name): name is string => !!name);
-    return names.length ? names.join("、") : null;
-  }
-  if (Array.isArray(value)) return value.join("、");
-  return String(value);
+  const text = bitableFieldText(record, field);
+  return text === "" ? null : text;
 }
 
 export function MobileBitableViewer({ noteId, content }: MobileBitableViewerProps) {

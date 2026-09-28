@@ -11,7 +11,7 @@ import { ASSET_ORIGIN, assetThumbWidthForCss, withAssetAccessToken } from "../..
 import { withAssetWidth } from "../../core/assetUrl.js";
 import { extOf, isImageExtension } from "../../core/assetNaming.js";
 import {
-  bitableAttachments, bitableDisplayValue, bitableRecordTitle, galleryCardFields, galleryCoverField, galleryCoverImage,
+  bitableAttachments, bitableFieldText, bitableRecordTitle, galleryCardFields, galleryCoverField, galleryCoverImage,
   type BitableAttachment, type BitableRecord, type BitableTable, type BitableView,
 } from "../../core/bitableDoc.js";
 import "./bitableGalleryView.css";
@@ -67,7 +67,7 @@ export function BitableGalleryView({ noteId, table, view, records, onOpenRecord,
             <div className="bt-gallery-body">
               <div className="bt-gallery-title">{bitableRecordTitle(table, record)}</div>
               {cardFields.map((field) => {
-                const text = bitableDisplayValue(field, record.values[field.id]);
+                const text = bitableFieldText(record, field);
                 if (!text) return null;   // 空字段不上卡
                 return (
                   <div key={field.id} className="bt-gallery-field">

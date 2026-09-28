@@ -13,7 +13,7 @@ import { ASSET_ORIGIN, assetThumbWidthForCss, withAssetAccessToken } from "../..
 import { withAssetWidth } from "../../core/assetUrl.js";
 import { extOf, isImageExtension } from "../../core/assetNaming.js";
 import {
-  bitableAttachments, bitableDisplayValue, bitableRecordTitle, bitableSelectFields, isAttachmentLikeField,
+  bitableAttachments, bitableFieldText, bitableRecordTitle, bitableSelectFields, isAttachmentLikeField,
   kanbanCardFields, kanbanColumns, kanbanGroupField, optionChipStyle,
   type BitableAttachment, type BitableRecord, type BitableTable, type BitableView,
 } from "../../core/bitableDoc.js";
@@ -125,7 +125,7 @@ export function BitableKanbanView({ noteId, table, view, records, readOnly, onSe
                           </div>
                         );
                       }
-                      const text = bitableDisplayValue(field, record.values[field.id]);
+                      const text = bitableFieldText(record, field);
                       if (!text) return null;   // 空字段不上卡，卡片才紧凑
                       return (
                         <div key={field.id} className="bt-kanban-field">

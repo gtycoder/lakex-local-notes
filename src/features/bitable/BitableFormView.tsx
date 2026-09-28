@@ -9,7 +9,7 @@
 import { useState } from "react";
 import { Check, Plus, X } from "lucide-react";
 import {
-  bitableAttachments, bitableDisplayValue, removeBitableAttachment, renameBitableAttachment, reorderBitableAttachments,
+  bitableAttachments, bitableDisplayValue, isSystemTimeField, removeBitableAttachment, renameBitableAttachment, reorderBitableAttachments,
   type BitableAttachment, type BitableField, type BitableTable, type BitableView,
 } from "../../core/bitableDoc.js";
 import { AttachmentCell, CellEditor, FieldTypeIcon } from "./bitableCells.js";
@@ -42,9 +42,11 @@ export function BitableFormView(props: BitableFormViewProps) {
   const [submitted, setSubmitted] = useState(false);
 
   // 未配置时沿用 v1 口径：默认收入全部字段（不是"空表单"）
-  const includedIds = view.formFieldIds ?? table.fields.map((f) => f.id);
-  const includedFields = table.fields.filter((f) => includedIds.includes(f.id));
-  const availableFields = table.fields.filter((f) => !includedIds.includes(f.id));
+  /** 表单可用字段：排除系统时间字段（值来自记录时间戳，表单无法录入）。 */
+  const formableFields = table.fields.filter((f) => !isSystemTimeField(f.type));
+  const includedIds = view.formFieldIds ?? formableFields.map((f) => f.id);
+  const includedFields = formableFields.filter((f) => includedIds.includes(f.id));
+  const availableFields = formableFields.filter((f) => !includedIds.includes(f.id));
   const title = view.formTitle?.trim() || view.name || "表单";
   const description = view.formDescription?.trim() || "填写后将在当前数据表新增一条记录";
 

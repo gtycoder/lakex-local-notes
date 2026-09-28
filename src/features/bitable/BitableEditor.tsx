@@ -24,7 +24,7 @@ import {
   bitableAttachments, removeBitableAttachment, renameBitableAttachment, reorderBitableAttachments,
   createBitableField, createBitableRecord, createBitableView, createDefaultBitableTable, filterOperatorsFor,
   BITABLE_MAX_GROUPS, BITABLE_STAT_LABEL, computeColumnStat, groupRecordsTree, isAttachmentLikeField, isImplementedViewType,
-  kanbanGroupField, sortModeLabel, sortModesForField, statForField, statsForField,
+  BITABLE_PROGRESS_MAX, BITABLE_RATING_MAX, isSystemTimeField, kanbanGroupField, sortModeLabel, sortModesForField, statForField, statsForField,
   isKnownFieldType, newBitableId, orderedTableFields, parseBitableBody,
   type BitableAttachment, type BitableDoc, type BitableField, type BitableFieldType, type BitableFilterRule, type BitableGroupRule, type BitableRecord,
   type BitableGroupNode, type BitableRowHeight, type BitableSortMode, type BitableSortRule, type BitableStatType, type BitableTable, type BitableView, type BitableViewType,
@@ -568,6 +568,8 @@ export function BitableEditor({ noteId, content, visible, readOnly, onChange, ch
   const setFilters = (next: BitableFilterRule[]) => patchView(activeView.id, { filters: next });
   const setSorts = (next: BitableView["sorts"]) => patchView(activeView.id, { sorts: next });
   const setGroups = (next: BitableGroupRule[]) => patchView(activeView.id, { groups: next });
+  /** 分组/筛选/排序可选的字段：排除系统时间字段（值来自记录时间戳，不在 values 里，选了也没效果）。 */
+  const sortableFields = activeTable.fields.filter((field) => !isSystemTimeField(field.type));
   /** 分组面板的拖动排序态（只用于重排 rules，不写正文以外的任何东西）。 */
   const [groupDragIndex, setGroupDragIndex] = useState<number | null>(null);
   const moveGroupRule = (from: number, to: number) => {
@@ -678,6 +680,14 @@ export function BitableEditor({ noteId, content, visible, readOnly, onChange, ch
           }
           else if (field.type === "select") { const opt = (field.options ?? []).find((o) => o.name === t); if (!opt) return; value = opt.id; }
           else if (field.type === "multiSelect") { value = t.split(/[,，]/).map((s) => s.trim()).filter(Boolean).map((n) => (field.options ?? []).find((o) => o.name === n)?.id).filter((x): x is string => !!x); }
+          else if (field.type === "link") { value = t; }
+          else if (field.type === "rating") { const n = Number(t); if (!Number.isFinite(n)) return; value = Math.max(0, Math.min(BITABLE_RATING_MAX, Math.round(n))); }
+          else if (field.type === "progress") { const n = Number(t); if (!Number.isFinite(n)) return; value = Math.max(0, Math.min(BITABLE_PROGRESS_MAX, Math.round(n))); }
+          else if (field.type === "boolean") {
+            if (/^(是|true|1|yes|y)$/i.test(t)) value = true;
+            else if (/^(否|false|0|no|n)$/i.test(t)) value = false;
+            else return;
+          }
           else if (field.type !== "text" && field.type !== "date") return;
           target.values = { ...target.values, [field.id]: value };
           target.updatedAt = stamp();
@@ -794,6 +804,7 @@ export function BitableEditor({ noteId, content, visible, readOnly, onChange, ch
           onMouseOver={() => { if (cellSelectingRef.current && cellSel) setCellSel({ anchor: cellSel.anchor, focus: { recordId: record.id, fieldId: field.id } }); }}>
           <CellEditor
             field={field}
+            record={record}
             value={record.values[field.id]}
             readOnly={readOnly}
             onChange={(value) => setCellValue(record.id, field.id, value)}
@@ -900,7 +911,7 @@ export function BitableEditor({ noteId, content, visible, readOnly, onChange, ch
             onClick={(event) => {
               setMenuAnchor(event.currentTarget);
               if (panel === "filter") { setPanel(null); return; }
-              if (filters.length === 0 && activeTable.fields.length > 0) setFilters([{ fieldId: activeTable.fields[0].id, operator: "contains", value: "" }]);
+              if (filters.length === 0 && sortableFields.length > 0) setFilters([{ fieldId: sortableFields[0].id, operator: "contains", value: "" }]);
               setPanel("filter");
             }}>
             <ListFilter size={14} />筛选{filters.length > 0 && <span className="bt-badge">{filters.length}</span>}
@@ -1094,7 +1105,7 @@ export function BitableEditor({ noteId, content, visible, readOnly, onChange, ch
           {filters.map((rule, index) => (
             <div key={index} className="bt-rule-row">
               <SelectMenu value={rule.fieldId} onChange={(value) => setFilters(filters.map((r, i) => (i === index ? { ...r, fieldId: value } : r)))}
-                options={activeTable.fields.map((f) => ({ value: f.id, label: f.name }))} />
+                options={sortableFields.map((f) => ({ value: f.id, label: f.name }))} />
               <SelectMenu value={rule.operator} onChange={(value) => setFilters(filters.map((r, i) => (i === index ? { ...r, operator: value as BitableFilterRule["operator"] } : r)))}
                 options={(filterOperatorsFor(activeTable.fields.find((f) => f.id === rule.fieldId) ?? activeTable.fields[0])).map((op) => ({ value: op, label: BITABLE_FILTER_OPERATOR_LABEL[op] }))} />
               {rule.operator !== "isEmpty" && rule.operator !== "isNotEmpty" && (
@@ -1104,7 +1115,7 @@ export function BitableEditor({ noteId, content, visible, readOnly, onChange, ch
             </div>
           ))}
           <button type="button" className="bt-panel-add" disabled={readOnly || activeTable.fields.length === 0}
-            onClick={() => setFilters([...filters, { fieldId: activeTable.fields[0].id, operator: "contains", value: "" }])}><Plus size={14} />添加筛选规则</button>
+            onClick={() => setFilters([...filters, { fieldId: (sortableFields[0] ?? activeTable.fields[0]).id, operator: "contains", value: "" }])}><Plus size={14} />添加筛选规则</button>
           <button type="button" className="bt-panel-add danger" disabled={readOnly || filters.length === 0} onClick={() => setFilters([])}><Trash2 size={13} />删除筛选</button>
         </div>
       </Popover>
@@ -1115,7 +1126,7 @@ export function BitableEditor({ noteId, content, visible, readOnly, onChange, ch
           {sorts.map((rule, index) => (
             <div key={index} className="bt-rule-row">
               <SelectMenu value={rule.fieldId} onChange={(value) => setSorts(sorts.map((r, i) => (i === index ? changeSortField(r, value) : r)))}
-                options={activeTable.fields.map((f) => ({ value: f.id, label: f.name }))} />
+                options={sortableFields.map((f) => ({ value: f.id, label: f.name }))} />
               {(() => {
                 const field = activeTable.fields.find((f) => f.id === rule.fieldId) ?? activeTable.fields[0];
                 return (
@@ -1127,7 +1138,7 @@ export function BitableEditor({ noteId, content, visible, readOnly, onChange, ch
             </div>
           ))}
           <button type="button" className="bt-panel-add" disabled={readOnly || activeTable.fields.length === 0}
-            onClick={() => setSorts([...sorts, { fieldId: activeTable.fields[0].id, desc: false }])}><Plus size={14} />添加排序</button>
+            onClick={() => setSorts([...sorts, { fieldId: (sortableFields[0] ?? activeTable.fields[0]).id, desc: false }])}><Plus size={14} />添加排序</button>
         </div>
       </Popover>
 
@@ -1142,7 +1153,7 @@ export function BitableEditor({ noteId, content, visible, readOnly, onChange, ch
               <GripVertical size={13} className="bt-grip" />
               <SelectMenu value={rule.fieldId} disabled={readOnly}
                 onChange={(value) => setGroups(groups.map((item, i) => (i === index ? { ...item, fieldId: value } : item)))}
-                options={activeTable.fields.map((field) => ({ value: field.id, label: field.name }))} />
+                options={sortableFields.map((field) => ({ value: field.id, label: field.name }))} />
               <SelectMenu value={rule.desc ? "desc" : "asc"} disabled={readOnly}
                 onChange={(value) => setGroups(groups.map((item, i) => (i === index ? { ...item, desc: value === "desc" } : item)))}
                 options={[{ value: "asc", label: "升序" }, { value: "desc", label: "降序" }]} />
@@ -1154,7 +1165,7 @@ export function BitableEditor({ noteId, content, visible, readOnly, onChange, ch
             <div className="bt-rule-row">
               <SelectMenu value="" placeholder="选择一列进行分组" disabled={readOnly}
                 onChange={(value) => setGroups([{ fieldId: value, desc: false }])}
-                options={activeTable.fields.map((field) => ({ value: field.id, label: field.name }))} />
+                options={sortableFields.map((field) => ({ value: field.id, label: field.name }))} />
             </div>
           )}
           {groups.length > 0 && groups.length < BITABLE_MAX_GROUPS && (
@@ -1309,6 +1320,7 @@ export function BitableEditor({ noteId, content, visible, readOnly, onChange, ch
             if (patch.options) field.options = patch.options;
             if (patch.defaultValue !== undefined) field.defaultValue = patch.defaultValue;
             if (patch.dateAutoFill) field.dateAutoFill = true;
+            if (patch.progressColor) field.progressColor = patch.progressColor;
             patchActiveTable((table) => ({ ...table, fields: [...table.fields, field] }));
             setFieldEditor(null);
           }}
@@ -1378,7 +1390,7 @@ interface FieldEditorModalProps {
   onClose: () => void;
   onSave: (patch: Partial<BitableField>, options?: BitableField["options"]) => void;
   onDelete: () => void;
-  onAddField: (patch: { name: string; type: string; required?: boolean; options?: BitableField["options"]; defaultValue?: unknown; dateAutoFill?: boolean }) => void;
+  onAddField: (patch: { name: string; type: string; required?: boolean; options?: BitableField["options"]; defaultValue?: unknown; dateAutoFill?: boolean; progressColor?: string }) => void;
 }
 
 function FieldEditorModal({ field, readOnly, onClose, onSave, onDelete, onAddField }: FieldEditorModalProps) {
@@ -1389,6 +1401,9 @@ function FieldEditorModal({ field, readOnly, onClose, onSave, onDelete, onAddFie
   const [options, setOptions] = useState(field?.options ?? []);
   const [optionDragId, setOptionDragId] = useState<string | null>(null);
   const [colorFor, setColorFor] = useState<{ optionId: string; anchor: HTMLElement } | null>(null);
+  /** 进度字段的颜色配置（调色板；缺省走主题强调色）。 */
+  const [progressColor, setProgressColor] = useState<string | undefined>(typeof field?.progressColor === "string" ? field.progressColor : undefined);
+  const [progressColorAnchor, setProgressColorAnchor] = useState<HTMLElement | null>(null);
   const [defaultValue, setDefaultValue] = useState<string>(
     typeof field?.defaultValue === "string" || typeof field?.defaultValue === "number" ? String(field.defaultValue) : "",
   );
@@ -1402,15 +1417,19 @@ function FieldEditorModal({ field, readOnly, onClose, onSave, onDelete, onAddFie
     if (!knownType) return undefined;
     if (knownType === "number") return defaultValue === "" ? undefined : Number(defaultValue);
     if (knownType === "date") return dateMode === "fixed" && defaultValue !== "" ? defaultValue : undefined;
-    if (knownType === "text" || knownType === "select") return defaultValue === "" ? undefined : defaultValue;
+    if (knownType === "text" || knownType === "select" || knownType === "link") return defaultValue === "" ? undefined : defaultValue;
+    if (knownType === "rating") return defaultValue === "" ? undefined : Math.max(0, Math.min(BITABLE_RATING_MAX, Math.round(Number(defaultValue))));
+    if (knownType === "progress") return defaultValue === "" ? undefined : Math.max(0, Math.min(BITABLE_PROGRESS_MAX, Math.round(Number(defaultValue))));
+    if (knownType === "boolean") return defaultValue === "true" ? true : defaultValue === "false" ? false : undefined;
     return undefined;
   };
   const save = () => {
     const fallbackName = BITABLE_FIELD_TYPE_LABEL[knownType ?? "text"];
     const nextDefault = parseDefault();
     const dateAutoFill = knownType === "date" && dateMode === "created" ? true : undefined;
-    if (isNew) { onAddField({ name: name.trim() || fallbackName, type, required, options: supportsOptions ? options : undefined, defaultValue: nextDefault, dateAutoFill }); return; }
-    onSave({ name: name.trim() || field!.name, type, required, defaultValue: nextDefault, dateAutoFill }, supportsOptions ? options : undefined);
+    const nextColor = knownType === "progress" ? progressColor : undefined;
+    if (isNew) { onAddField({ name: name.trim() || fallbackName, type, required, options: supportsOptions ? options : undefined, defaultValue: nextDefault, dateAutoFill, progressColor: nextColor }); return; }
+    onSave({ name: name.trim() || field!.name, type, required, defaultValue: nextDefault, dateAutoFill, progressColor: nextColor }, supportsOptions ? options : undefined);
   };
   return (
     <Dialog open onDismiss={onClose} label={isNew ? "新增字段" : "编辑字段"} className="bt-dialog">
@@ -1424,7 +1443,7 @@ function FieldEditorModal({ field, readOnly, onClose, onSave, onDelete, onAddFie
             options={[...(knownType ? [] : [{ value: type, label: type + "（未知）" }]), ...BITABLE_FIELD_TYPES.map((t) => ({ value: t, label: BITABLE_FIELD_TYPE_LABEL[t] }))]} />
         </div>
         <label className="bt-field-check"><input type="checkbox" checked={required} disabled={readOnly} onChange={(event) => setRequired(event.target.checked)} />必填</label>
-        {(knownType === "text" || knownType === "number" || knownType === "date" || knownType === "select") && (
+        {(knownType === "text" || knownType === "number" || knownType === "date" || knownType === "select" || knownType === "link" || knownType === "boolean" || knownType === "rating" || knownType === "progress") && (
           <label className="bt-field-label"><span>默认值（新建记录时预填）</span>
             {knownType === "select" ? (
               <SelectMenu value={defaultValue} disabled={readOnly} onChange={setDefaultValue}
@@ -1442,8 +1461,22 @@ function FieldEditorModal({ field, readOnly, onClose, onSave, onDelete, onAddFie
                   <DatePicker value={defaultValue} readOnly={readOnly} onChange={(value) => setDefaultValue(typeof value === "string" ? value : "")} />
                 )}
               </div>
+            ) : knownType === "boolean" ? (
+              <SelectMenu value={defaultValue === "true" || defaultValue === "false" ? defaultValue : ""} disabled={readOnly} onChange={setDefaultValue}
+                options={[{ value: "", label: "（无）" }, { value: "true", label: "是" }, { value: "false", label: "否" }]} />
+            ) : knownType === "rating" ? (
+              <SelectMenu value={defaultValue} disabled={readOnly} onChange={setDefaultValue}
+                options={[{ value: "", label: "（无）" }, ...[1, 2, 3, 4, 5].map((n) => ({ value: String(n), label: n + " 星" }))]} />
+            ) : knownType === "progress" ? (
+              <div className="bt-date-default">
+                <input className="bt-input" type="number" min={0} max={100} value={defaultValue} readOnly={readOnly} aria-label="进度默认值"
+                  onChange={(event) => setDefaultValue(event.target.value)} />
+                <button type="button" className="bt-color-square" style={{ backgroundColor: optionColorHex(progressColor) ?? "#e8e8e8" }}
+                  aria-label="选择进度条颜色" disabled={readOnly}
+                  onClick={(event) => setProgressColorAnchor(event.currentTarget)} />
+              </div>
             ) : (
-              <input className="bt-input" type={knownType === "number" ? "number" : "text"}
+              <input className="bt-input" type={knownType === "number" ? "number" : "text"} placeholder={knownType === "link" ? "https://" : undefined}
                 value={defaultValue} readOnly={readOnly} onChange={(event) => setDefaultValue(event.target.value)} />
             )}
           </label>
@@ -1467,6 +1500,11 @@ function FieldEditorModal({ field, readOnly, onClose, onSave, onDelete, onAddFie
                   onClick={() => setOptions(options.filter((_, i) => i !== index))}><Trash2 size={13} /></button>
               </div>
             ))}
+            {progressColorAnchor && (
+              <ColorPalette anchor={progressColorAnchor} value={progressColor}
+                onPick={(color) => setProgressColor(color)}
+                onClose={() => setProgressColorAnchor(null)} />
+            )}
             {colorFor && (
               <ColorPalette anchor={colorFor.anchor} value={options.find((o) => o.id === colorFor.optionId)?.color}
                 onPick={(color) => setOptions(options.map((o) => (o.id === colorFor.optionId ? { ...o, color } : o)))}
