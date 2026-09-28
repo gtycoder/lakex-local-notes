@@ -72,7 +72,7 @@
 41. **Endpoint 必须是区域级地址**：bucket 专用虚拟主机地址（`local-lake-hebei.s3.cn-north-1.qiniucs.com`）+ path-style 会 404，不勾 path-style 会拼出双 bucket 域名导致 TLS 失败。用 `https://s3.cn-north-1.qiniucs.com` + path-style。
 42. **Region 填 `cn-north-1`**，不是空间名。
 43. **单实例锁（audit 新增）**：dev 与打包版共用 userData/SingletonLock，不能同时运行；开发前先退出打包版。
-44. **S3 配置校验**：`sync.ts` 的 `validate()` 要求 endpoint/bucket/accessKeyId/secretAccessKey 非空（trim），否则抛「Endpoint、Bucket 和访问密钥均不能为空」；`testConnection`/`syncNow` 未保存配置时抛「请先保存 S3 配置」。
+44. **S3 配置校验**：`s3Store.ts` / `syncUtils.ts` 的配置校验要求 endpoint/bucket/accessKeyId/secretAccessKey 非空（trim），否则抛「Endpoint、Bucket 和访问密钥均不能为空」；`testConnection`/`syncNow` 未保存配置时抛「请先保存 S3 配置」。
 
 ## G. 虚拟渲染 / 调试（2026-08-02 会话新增）
 

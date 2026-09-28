@@ -193,7 +193,7 @@ deleteHistory(historyId: number): void
   // 删文件 + DB 记录；调用方随后刷新孤儿列表（顺序见 §5）
 
 // 同步基线增强（P0-1）：恢复后判定"远端是否本机传的"
-setLastUploadedHash(id: string, hash: string): void   // sync.ts 上传成功后调用
+setLastUploadedHash(id: string, hash: string): void   // syncEngine 上传成功后调用
 lastUploadedHash(id: string): string | null           // 读 last_uploaded_hash
 
 // 清理（惰性，保留策略）

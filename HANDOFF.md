@@ -1,99 +1,55 @@
 # HANDOFF.md — Lake Notes 项目交接（唯一权威交接文档）
 
-> 写给**完全没有上下文的新会话**。开工先读三份：本文件 → `AGENTS.md`（长期红线/机制/坑，每次自动加载）→ 相关 `docs/`。
+> 写给**完全没有上下文的新会话**。接手顺序：**README → HANDOFF → AGENTS**；之后按需读相关 `docs/`。AGENTS 是长期红线/机制/坑，每次自动加载。
 > **本文件只保留「最新 §0（1–2 节）+ 当前基线 / 真正的待办 / 有价值的坑」。**
 > 所有历史 dated handoff（旧 `§0 <日期>` 节、`§2.x` 各批会话）已从本文件**删除**，只在 git 历史可查：`git log -p --follow HANDOFF.md`（或 `git show <旧提交>:HANDOFF.md`）。文中残留的 `§2.x` / 旧 `§0` 引用是**历史指针**，去 git 查，**不要在本文件重建历史**。
 > **§8 是移动端（安卓）专职交接**，由移动端会话维护；桌面会话不要改 §8，移动端会话不要改 §0-§7 之外的桌面文件。
 
-## 0. 最新交接 · 260927 · 多维表附件重做（值模型 {file,name} + 展开面板卡片网格 + 行单元格行高绝对控制）· **已合 master 并推送（本批 tip f70eeca）**
+## 0. 最新交接 · 260928 · 上线收尾（Lake Manifest 重置 V1 / 本地+云端清零 / S3 模块拆分 / PDF 超时 / 文档精简）
 
-> 写给完全没有上下文的新会话。本批是「多维表附件」专项的**第二轮**，起因是用户报「多维表里点开音频/视频播放器是灰的、PPT 也拉不起本地应用」。查下去发现**附件单元格的值模型存错了**，随后按用户逐轮反馈把附件体验整个重做了一遍。
-> 第一轮（云端精仿 B1–B6 / 行首语义 / 附件粘贴重做 / 浮层收编，tip 91534bb）已按约定从本文件删除，git 可查：`git log -p --follow HANDOFF.md`。
+> 写给完全没有上下文的新会话。当前已进入上线收尾阶段，不再新开模块级功能；只处理发布阻塞、真实端验收和 P0 回归。
 
-### 一、任务目标（用户本会话逐条要求）
-1. **修多维表附件预览**：图片=直接预览；**音视频要应用内播放**（像 Lake 文档那样）；PDF/PPT 等直接调本地应用。总原则：**和 Lake 文档一样的管理附件方式**。
-2. 附件单元格加**展开**：行单元格太窄，要一个贴单元格的展开面板（上半拖拽/粘贴 + 已传文件，下半「添加本地文件」）。
-3. 展开面板做成**卡片网格**：每格 = 上**附件区**（右上角 × 删除）+ 下**名称**（可编辑 + 下载）；**点击=预览、按住=拖动排序**；**彻底放弃悬停工具**（图2 那套 预览/下载/移动 圆形按钮要删干净、不留遗漏）。
-4. 面板尺寸**自适应**：默认最多 3 行，列数看附件多少。
-5. **预览关闭后保持展开**（否则每看一次都要重新展开）。
-6. 行单元格：① 去掉逐条 **×**；② **点「⤢ 展开」才算选中**（加号自动出现），**点图片仍只走预览、不算选中**（两者要区分）；③ **绝对不许换行**——行高是绝对控制的，其他字段类型同理。
-7. 移动端：多维表里**除图片外一律系统应用打开**（与移动端文档一致），不做应用内预览/播放。
+### 一、当前基线
+- 分支 `master`，远端 `origin git@gitee.com:gtycoder/local-lake.git`；本轮上线提交见 `git log -1`。
+- **Lake Manifest 已重置为 V1 编号，内容 schema 不变**：folders/墓碑/锁/`prevCommitId`/`kind`/board 全保留；代码只读写新 V1 `{1}`。
+  - 这不是旧 V1 兼容模式。所有会访问同一 S3 prefix 的客户端必须一起升级；旧客户端读新 V1 会拒绝同步。
+- 本地数据已清零：开发目录、正式目录、Android 模拟器 `com.lakenotes.mobile`；远端由用户删除。首次同步将从空库生成新 V1。
+- 旧 `electron/sync.ts` 已删除，拆为：`syncTypes.ts`、`s3Store.ts`、`s3Maintenance.ts`。
+- PDF 导出整链 60s 超时；超时或异常都会销毁隐藏窗口，临时目录仍由 `export.ts` 的 `finally` 清理。
+- 过期研究/计划/spike/审计文档已清理；UI 重构目录只保留 Markdown 规范，删除截图与原型 HTML。
 
-### 二、已完成（按主题）
+### 二、本批已完成
+1. **多维表附件**：值模型 `{file,name,size}`；预览使用真实 size；展开面板卡片网格；行高绝对控制；移动端非图片走系统打开。
+2. **上线收口**：复制文档功能全链路删除；移动端设置保存失败恢复并提示；`localStorage` 写入统一保护；后台 native promise 只留可追踪日志，用户动作/保存不留静默失败。
+3. **同步工程拆分**：`electron/s3Store.ts`（S3 传输）、`electron/s3Maintenance.ts`（GC/prune）、`electron/syncTypes.ts`（类型）；Controller/IPC/Quick Notes/测试全部改直引。
+4. **协议重置**：`MANIFEST_VERSION=1`，`READABLE_MANIFEST_VERSIONS={1}`，旧 `sync.ts` 不再保留兼容壳。
+5. **仓库精简**：删除已完成的研究/计划/spike/旧审计文档和约 11MB UI 截图/HTML 原型；README/HANDOFF/AGENTS 按 README→HANDOFF→AGENTS 阅读顺序整理。
 
-**A. 值模型升级（本批根因修复，最重要）**
-- 附件单元格值 `string[]` → **`{ file, name }[]`**：`file` = **磁盘名**（`note-assets/{noteId}/{file}`，打开/同步声明/GC 引用提取的唯一依据）；`name` = **展示名**（上传时原名，只用于显示）。
-- **根因**：`electron/resourceRepository.ts` 的 `attachmentOutput` 返回的 `filename` 是**展示名**（给 Lake 文件卡的 `name` 用），磁盘名只在 `url` 末段；旧代码 `names.push(out.filename)` 把展示名当路径写进单元格 ⇒ **除图片外全部 404**（音频播放器灰/0:00、PPT 打不开）。图片没事是因为 `imageOutput` 返回的 `filename` 恰好就是磁盘名。
-- 新增 core 纯函数（全在 `src/core/bitableDoc.ts`）：`BitableAttachment` / `bitableAttachments()` / `removeBitableAttachment()` / `reorderBitableAttachments()` / `renameBitableAttachment()` / `ATTACHMENT_GRID` / `attachmentGridColumns()`。
-- 落点：`BitableEditor.uploadFiles()` = `{ file: parseLocalAssetUrl(uploaded.url)?.filename ?? uploaded.filename, name: uploaded.filename }`；表格/记录详情/表单/移动端只读视图全部改读新形状；`bitableDisplayValue` 显示 `name`。
+### 三、门禁
+- `tsc --noEmit`：通过。
+- `vitest run`：1349 passed / 16 skipped。
+- 桌面 + 移动构建：通过。
+- packaged smoke：通过（`LAKE_PACKAGED_ARGS='--no-sandbox --disable-gpu'`）。
+- `check:core`：0 违规。
+- `ui-metrics`：通过。
+- `git diff --check`：通过。
 
-**B. 预览分流（`src/features/attachment/openAssetEntry.ts`）**
-- 新增 `OpenAssetActions.kindFrom`：**类型判定一律按磁盘名**（展示名被改成没有扩展名时，音视频不会被误判成「其他文件」丢给系统应用）；标题仍用展示名。
-- 桌面实测（真实文件 + 真实上传路径）：图片 → 应用内 Lightbox（拿原图，无 `?w=`）；mp3 → 应用内 `<audio>` 播放（448s 真文件，`currentTime` 推进）；mp4 → `<video>` 播放；PDF/Office → 系统应用（与文档一致）。
-
-**C. 展开面板（⤢ 按钮 / 双击单元格）**
-- 入口：单元格右侧 **⤢**（悬停/聚焦/编辑态可见）+ **双击单元格**。
-- 面板 = Overlay `Popover`（portal）表面 `.bt-attach-expand`，可拖动（标题栏）/缩放（右下角）：
-  - 上半**投放区**：空态虚线「粘贴或拖拽至这里上传」；有附件时是**卡片网格**；整区是粘贴/拖拽目标（打开即聚焦投放区，`Cmd+V` 直接可用）。
-  - 下半 **「＋ 添加本地文件」**。
-- 卡片：**上=附件区**（点=预览；按住拖动=排序，有左右落点强调线；右上角 × 删除）+ **下=名称行**（点=预览、**✏️ 行内改名**、**⬇ 下载** `native.saveAssetAs`）。**没有任何悬停工具**。
-- 尺寸自适应：列数 `attachmentGridColumns()`（1/2/3 个 → 1/2/3 列单行；4–9 → 3 列 1–3 行；10–12 → 4 列 3 行；…；上限 6 列），超过 3 行由投放区滚动、「添加本地文件」常驻；卡片高度用**实测值**重算。
-- **预览关闭后保持展开**：预览层是独立 portal，原先点它等于「面板外点击」把面板关掉（Esc 也会连带关两层）——现改为预览层内的点击不算外部、预览开着时不响应面板关闭。
-
-**D. 行单元格**
-- 行内 chip **去掉逐条 ×**（删除只在面板卡片右上角）；`.bt-attachment-remove` 的 CSS 规则一并删除（不留死规则）。
-- 选中语义：**点 chip = 只预览**（不选中）；**点 ⤢ = 选中**（加号出现）+ 开关面板；点空白处仍按原逻辑选中。
-- **行高绝对控制**：`.bt-td { overflow: hidden }` + 行内 `.bt-option-label` / `.bt-attachment-cell` / `.bt-attachment-editor` 全部 `nowrap` + chip `flex: 0 0 auto` + 未知/关联/空值单行省略；行内**纵向预算**（cell padding 2px、编辑框 height 28px）。
-
-**E. 移动端**
-- `MobileBitableViewer` 读新形状：图片仍出缩略图；**其他类型出文件名按钮，点击 `native.openAttachment` 系统应用打开**（不再一律渲染成 `<img>` 破图）；`mobile.css` 新增 `.mbt-attachment-file`。
-
-**F. 护栏单测**
-- `bitableDoc.test.ts`：新形状解析（丢弃非法项）、删除/重排/改名、列数规则（≤3 行不变量）。
-- `openAssetEntry.test.ts`：`kindFrom` 覆盖类型判定。
-- `bitableEditorMount.test.ts`：行内无 × / `.bt-td` 裁切 + 行内 nowrap / 缩略图 `?w=` 不带上 onOpen / chip 不选中而 ⤢ 选中。
-- `cssLayers.test.ts` 基线随合法新增抬高（1055 → 1065），逐条注明原因。
-
-### 三、门禁（全绿）
-tsc 0 · vitest **1333 passed / 16 skipped** · 桌面 + 移动 vite build OK · `check:core` 违规 0 · `ui-metrics`（未定义 `var(--lake-*)` 0 / 非主题色字面量 0 / `!important` 9）· `git diff --check` clean · cssLayers 围栏通过（基线随合法新增调整，以文件当前值为准）。
-
-### 四、当前问题 / 遗留边界
-1. **旧附件值不再解析**（按 AGENTS #7 刻意**不写兼容**）：`string[]` 形态的旧附件格会显示为空/被丢弃，老表要**重传一次**。⚠️ 这些旧引用一旦不再被引用，可能被孤儿清理认作未引用资源——要留的附件请先重加。
-2. **移动端未真机验证**：本批移动端只做了类型/编译/构建级验证（`adb devices` 无设备）；桌面侧是用**隔离数据目录 + CDP 真实输入**实测的。
-3. **「下载」按钮没点过**（会弹系统保存框）：走的是文档卡片菜单同一套 `native.saveAssetAs`。
-4. 面板自适应会**覆盖用户手动缩放的尺寸**（语义即「自适应」，参考实现里就是这样）。
-5. 图片附件的展示名 = 磁盘名（主进程 `imageOutput` 只回磁盘名，未改契约）；图片本身显示缩略图，无感。
-6. 预览标题的体积恒为 `0 B`（多维表只存文件名，`openAsset(..., 0)`）——未修，属外观。
-7. 未跑打包 smoke：`npm run test:packaged`（本沙箱要 `LAKE_PACKAGED_ARGS=--no-sandbox --disable-gpu`）。
-8. 环境：`npx` 会走公司 npm 源并超时 → 用 `./node_modules/.bin/{tsc,vitest}` 与 `node node_modules/vite/bin/vite.js build`；Node 必须 24。
-
-### 五、踩过的坑（本批，都是真金白银）
-1. **`uploadResource` 返回的 `filename` 是展示名，磁盘名只在 `url` 末段**。任何「把返回的 filename 当路径」的用法都是 bug；要磁盘名就 `parseLocalAssetUrl(url)?.filename`。
-2. **合成事件测不出「全局 preventDefault」这类 bug**：展开面板是 portal，焦点不在 `.bt-attachment-cell` 里 → 表格全局 `Cmd+V` 处理器把原生 paste 挡掉（拖拽行、粘贴不行）。我一开始用 `new ClipboardEvent('paste')` 直接派发，**绕过了默认行为**，所以"测过是通过的"。正确做法：真剪贴板 + `Input.dispatchKeyEvent { commands: ["paste"] }`。
-3. **React portal 的事件仍沿 React 树冒泡**：面板里的投放区必须自己 `stopPropagation`，否则单元格也接了 paste/drop ⇒ 一次粘贴上传两遍（实测 1 次粘贴多出 2 条）。
-4. **自适应尺寸不要「用实测卡片高度反推」**：网格行可压缩，面板先小 → 卡片被压扁（39px）→ 量到的高度更小 → 越算越扁（自我塌陷）。必须给**固定轨道** `grid-auto-rows: 121px`。
-5. **滚动条会吃掉列数**：面板宽度留白要把常驻滚动条算进去（`scrollbar-gutter: stable` + 余量），否则 4 列会悄悄变 3 列。
-6. **行高是绝对控制的**：只要行内还有 `flex-wrap: wrap`（附件格、多选 `.bt-option-label`）或纵向预算超了（编辑框 34 + 格子留白 8 = 43 > 36），整行就会被撑高；实测 43px → 修完 36px。
-7. **CDP 点击前先确认目标在可视区内**：表格横向滚动后，坐标可能落在被 `.bt-tables-list` 盖住的位置（`elementFromPoint` 命中别的元素），会得出"功能没生效"的错误结论。
-8. **改 `src/core/**` 会让 vite-plugin-electron 重启 Electron**（用户那个 dev 实例中途重启、丢了 9222 CDP 端口）→ 验证前先确认 CDP 端口连的是自己的实例。
-9. **验证要用到系统剪贴板时先说明**：本会话我把用户剪贴板覆盖了好几次（放测试文件），用完清空——理应事先打招呼。
-10. 上一轮同批仍在生效的老坑：全局快捷键 `preventDefault` 会闷掉原生事件；`opacity: 0` 的控件照样吃点击（别用它让位）；CDP 裸 `Cmd+V` 不一定触发浏览器 paste。
-
-### 六、下一步
-1. 补跑打包 smoke（`npm run test:packaged`，本沙箱要 `--no-sandbox`）。
-2. **移动端多维表附件真机验收**（`bash scripts/android-build.sh --sync --install`）：图片缩略图 + 其他类型点开走系统应用。
-3. 老表的附件按 §四.1 重传一次（值模型换代，刻意不写兼容）。
-4. 可选小项：预览标题显示真实体积；图片附件是否要保留原始展示名。
-5. 桌面其余待办全表以 §3 为准；移动端以 §8 为准。
+### 四、上线前剩余（非代码阻塞，需真实环境）
+1. **空库双端同步实测**：桌面空库 → Android 空库 → 新建/编辑/删除/恢复，核对 `manifest.version=1`、objects/assets、墓碑和 GC。
+2. **Android 真机验收**：图片显示、附件系统打开、编辑保存、同步后图片加载、键盘安全区；缩略图当前仅 png/jpg/jpeg，失败回退原图。
+3. **发布说明**：明确这是“新 V1 协议 + 旧数据清零”，所有端必须同步升级。
+4. §3 的剩余项为发布后低优先；不再作为本轮上线阻塞。
 
 ## 1. 项目一句话 + 铁律（详见 AGENTS.md）
-本地优先笔记应用（Electron 43 + React 18.3 + better-sqlite3 + 语雀 Lake 内核），S3（七牛 Kodo 兼容）同步。
+本地优先笔记应用（Electron 44 + React 18.3 + better-sqlite3 + 语雀 Lake 内核），S3（七牛 Kodo 兼容）同步。
 **红线**：① 本地是真相、S3 只是镜像（云端备份绝不反噬本地）；② 目录/删除强一致（删除传播、墓碑权威）；
 ③ `src/core/` 禁 `node:` 导入（平台差异走端口注入）；④ 开发数据只用 `lake-notes-dev`，绝不碰正式数据；
 ⑤ 不为旧数据写兼容/迁移（能删重建就删重建）；⑥ 杀 Electron 只 kill 具体 PID，禁 `pkill -f Electron`；
-⑦ 不擅自合 master（代码批次需用户验收；文档类清理可直接提交）。移动端另有铁律见 **§8.0**。
+⑦ 不擅自合 master（代码批次需用户验收；文档类清理可直接提交；本次上线已由用户明确授权提交并推送）。移动端另有铁律见 **§8.0**。
 
 ## 3. 下一步计划 + 当前问题（真正的待办，按优先级）
+
+> **260928 全仓 review 已完成**：产品/工程决策均已执行或内联到本节；独立决策文档已清理，历史在 git。
 
 ### 下一步计划
 0. **【260922 留下 · 桌面面板/目录优化项】260923 用户裁定并落地：(a)(b)(f) 已做，(g) 已撤销；余下 (c)(d)(e) 仍挂起（定性见各条）。**
@@ -137,7 +93,7 @@ tsc 0 · vitest **1333 passed / 16 skipped** · 桌面 + 移动 vite build OK ·
     - **UI**：ghost 需渲染整段（多块）预览；落点线 / 边缘自动滚动可复用（ghost 已支持「列表父项整段」，扩展到多块改动不大）。
     - **代价**：约 **0.5–1 天**（含 e2e）。
 
-12. **【S3 审计遗留 · 低优先级】**（260918 审计三条 P0/P1 已落地，见 §0 本批 + `docs/S3-STORAGE-AUDIT-260918.md` §7.5/§8）：① **B4 实测**——该篇附件哈希全量重算在上传**和下载**两侧都会发生，有痛感再做 `(filename,size,mtime)→hash` 缓存（贴 AGENTS §3 #11 红线，**单独立项**）；② **D4** purge 文件删除失败 → 阻断云端前缀删除；③ 移动端 `note_history` 补 `refs_json`/`protected_until`（建议并入 §8.7 真机验收批次）。
+12. **【S3 审计遗留 · 低优先级】**（260918 审计三条 P0/P1 已落地；完整审计在 git 历史）：① **B4 实测**——该篇附件哈希全量重算在上传**和下载**两侧都会发生，有痛感再做 `(filename,size,mtime)→hash` 缓存（贴 AGENTS §3 #11 红线，**单独立项**）；② **D4** purge 文件删除失败 → 阻断云端前缀删除；③ 移动端 `note_history` 补 `refs_json`/`protected_until`（建议并入 §8.7 真机验收批次）。
 
 13. **【表格文档（kind=sheet）收口 · 进行中 · 260918】分支 `feat/sheet-document` 上已写完且门禁全绿，但【未提交】【未真机验收】** —— 完整交接见 **§2.8**，设计/实测见 `docs/SHEET-BITABLE-DESIGN-260918.md`。
     - **（260919 已变更）**：表格内核已由 **jspreadsheet-ce 换成 FortuneSheet 1.0.4**；下面 CE 相关的收口项部分已随迁移作废/改写，**当前表格状态一律以 §2.8 的 260919 各轮补充 + `docs/FORTUNESHEET-FEASIBILITY-260919.md` 为准**；图片相关见第 **14** 条。剩余项（用户已同意先列入待办）：
@@ -170,16 +126,19 @@ tsc 0 · vitest **1333 passed / 16 skipped** · 桌面 + 移动 vite build OK ·
     移动端小记目前是纯文本输入 + 合成 lake 段落/图片卡（`src/mobile/quickNotesRepository.ts`）；
     用户要求后期**复用同一套能力**（同一份白名单 + 同一个预览读取器 `quickNotePreviewParser.ts`），
     工具栏形态可按移动端（`EditorDock`）调整。做之前先读 §2.10 续做 + `docs/LAKEX-CONTRACT.md` §5.11。
-17. **【UI 重构收尾 · 待办清单】** —— 方案见 **`docs/UI-REDESIGN-OPTIMIZATION-PLAN-260923.md`**（行为不变的优化 + 与安卓重做的排期）；评价见 `docs/UI-REDESIGN-REVIEW-260923.md` **§四**：P0 安全 ✅ **已结案**（W-10 不需 dompurify / W-8 已修，见本 §3 第 4 条）· P1（`library-changed` 广播 / 目录树窗口化 / 面板契约可执行化 / 分段控件与设置说明字号的共享层 `!important` 阻塞）· P2（设计词表裁剪 / 历史文档标注 / 画板 `Wt is not a function` 立项）· P3 见本 §3 其余条目。
+17. **【UI 重构收尾 · 低优先，不阻塞上线】**：主体已上线。剩余按需处理：目录树窗口化（先量到卡顿再立项）、设计词表裁剪、画板 `Wt is not a function` 根因立项。历史方案与评价文档已清理，git 可查。
 18. **【浮动工具栏颜色 · 「最近使用自定义颜色」】**（260924 记录，用户：先记着后续处理）：内核调色板的「最近使用」**只记自定义色**——`updateUserColor` 只在「更多颜色」RGBA 选择器关闭（`saveColor`）时触发，**预设色块 `onSelect` 不写**；持久化在 `localStorage['ne_lakex_user_color_local_store_key']`（≤10，末尾最新），经 `editor.getUserColors()` / `editor.updateUserColor(c)` 读写。我们的浮动颜色面板「最近使用」目前是**占位**（`LakeColorBoard` 写死「暂无」）。要真做需先定：是否也记预设色块（会偏离内核语义）、面板改读 `editor.getUserColors()`、点最近色如何应用（`color`/`bgColor`）。**当前不动**。
 
 19. **【多维表（bitable）专项 · 已完成两轮，见本文件最上方 §0】**
-   - **第一轮（tip 91534bb）**：(a) 浮层收编 Overlay 原语（Popover/Dialog/Drawer + raised + Esc 浮层栈 + kind=drawer）；(b) 功能调研 `docs/BITABLE-FEATURE-GAP-260926.md`；(c) 云端精仿 B1–B6 已做并实测（`docs/BITABLE-CLOUD-PARITY-260926.md`），B7 记录正文用户明确不做；(d) 抽屉拖拽调宽 / 附件粘贴拖拽 / 配置面板字段拖拽排序；(e) 附件单元格重做（独立 + 与文案；粘贴根因 = 全局 Cmd+V 的 preventDefault）。
+   - **第一轮（tip 91534bb）**：(a) 浮层收编 Overlay 原语（Popover/Dialog/Drawer + raised + Esc 浮层栈 + kind=drawer）；(b) 完成主流产品功能差距调研；(c) 云端精仿 B1–B6 已做并实测，B7 记录正文用户明确不做；(d) 抽屉拖拽调宽 / 附件粘贴拖拽 / 配置面板字段拖拽排序；(e) 附件单元格重做（独立 + 与文案；粘贴根因 = 全局 Cmd+V 的 preventDefault）。
    - **第二轮（tip f70eeca，见 §0）**：(f) 附件值模型升级 `string[]` → `{ file, name }[]`（修「除图片外全部打不开」的根因）+ 展开面板卡片网格（点=预览 / 按住=拖动排序 / ✏️改名 / ⬇下载 / 尺寸自适应 ≤3 行）+ 预览后保持展开 + 行单元格行高绝对控制（行内 nowrap、无逐条 ×、点 ⤢ 才选中）+ 移动端非图片走系统打开。**遗留与旧数据处置见 §0 §四**。
    - 仍可选做：--lake-grid-* 灰阶令牌颜色对齐；预览标题显示体积；打包 smoke（本沙箱要 --no-sandbox）。
 20. **【历史快照「恢复为新文档」· 功能 · 用户 260926「先不做，计入待办」】**：历史预览旁边给一个入口，把某版快照**另存为一篇新文档**（用于对比/取用），而不是只能"恢复=覆盖当前文档"（现在恢复前会自动留档，损失可控，所以不紧急）。
    - 要点：新 IPC（读快照正文 → 走 `createNote`/`saveNote` **应用写入路径**落新文档，媒体资源按资产管线复制或按作用域改写；**禁直写库/手拼 `.lake`**，见 `docs/LAKE-CONTENT-WRITING.md`）；新文档插到当前笔记本下（或让用户选），标题建议 `<原标题>（历史 <时间>）`；非 doc（sheet/bitable/board）同样按 kind 落 `sheets/|bitables/|boards/`。
    - 未做理由：属于新功能（不是优化），用户明确"先不做"；涉及新 IPC + 目录插入 + 资源作用域，需单独立项验收。
+21. **【同步 warning 结构化 · 待办 · 用户 260928 明确留作后续】**：当前 `syncEngineController` 用正则从人类可读 warning 文案反解 `kind/noteId`，字符串格式一变就会静默丢定位信息。
+   - 目标：把 `SyncReport.warnings` 从 `string[]` 改为结构化对象（至少 `{ kind, noteId?, filename?, message }`），生产端直接带 id，Controller 不再解析文案。
+   - 边界：属同步红线区，必须和 UI 如何展示 warning / 点击定位一起做；当前不塞进普通 cleanup，单独立项验收。
 
 ### 当前问题 / 已知坑（不阻塞）
 - 画板视图位置：**已按用户 260926 口径改为「本机永久记忆」**（推翻了 260916 的「不记忆」取舍）。要点三条，别再回退：① 平移/缩放的**位置只存本机**（localStorage `lake-notes-v3.board-views`，L3，见 `docs/STORAGE-LAYERS.md`）——**绝不写正文**，所以改位置不会标脏、不会同步、不占 S3（用户明确：这是展示维度，不影响数据正确性，接受各端位置不同）；② 保存序列化**不再带当前视口**（`boards/*.board.json` 的 `viewport` 是历史字段，宿主已不维护，仅作本机记忆缺失时的兜底）；③ 重开/重挂时**贴好滚动位置再显示**（`.board-editor--restoring` 用 `content-visibility: hidden`，**不是** visibility/display——理由见 §0 的血泪坑），否则会"先默认再跳"。实现见 `src/features/board/boardViewStore.ts` + `BoardEditor.tsx`，护栏 `boardViewStore.test.ts` / `boardEditorMount.test.ts`。
@@ -187,7 +146,7 @@ tsc 0 · vitest **1333 passed / 16 skipped** · 桌面 + 移动 vite build OK ·
 - `public/vendor/cdn` 的 32 个静态无引用文件**不能删**——它们是 `electron/cdnRedirect.ts` 的**运行时兜底白名单**（用「镜像里是否存在该文件」决定是否把 `gw.alipayobjects.com` 请求回本地）。
 - 桌面日志里的 `download_remote_resource` **INVALID_INPUT（不允许下载本机或私网地址）不是"无关噪声"**（260917 更正）：它标记着「打开了自动化手写裸 `<img>` 的文档」→ 内核回写失败态卡片 + 该文档变待同步，**打开即发生**。详见 §3.7 与 `docs/LAKE-CONTENT-WRITING.md`。（403 仍是远端策略问题。）
 - **小记转换产物是"内核容忍"而非"内核产出"**：`electron/quickNoteConversion.ts` 写的图片卡片是 `originalType:"url"` + `originWidth/originHeight` + `from:"quick-note"`，内核自产卡片是 `originalType:"binary"` + `width/height` + OCR 字段（`search/ocrLocations`）。今天**实测稳定**（`.lake` mtime 停在转换时刻、无脏点、无快照、对拍 PASS），但依赖内核容忍度 → 与 §3.6 的取舍一起讨论。
-- **判定"是否被内核重写"的口径**（别再靠肉眼）：`.lake` 的 **mtime 不变** + 标签无脏点 + 无新增历史快照 + 正文里 `status%22%3A%22error%22` 为 0；批量判断用 `scripts/lake-roundtrip-check.mjs`（只动副本）。
+- **判定"是否被内核重写"的口径**（别再靠肉眼）：`.lake` 的 **mtime 不变** + 标签无脏点 + 无新增历史快照 + 正文里 `status%22%3A%22error%22` 为 0；批量判断用 `scripts/lake-roundtrip-check.mjs`（只创建临时文档，绝不打开原件）。
 - **`vitest` 是 `node` 环境，跑不了内核**：涉及内核行为的验证只能 CDP 驱真实 Electron；不要试图为它写单测（对拍脚本就是这种模式）。
 
 ## 4. 踩过的坑（合并版；通用红线/环境见 AGENTS.md）
@@ -313,19 +272,19 @@ LAKE_RUN_BENCHMARK=1 npx vitest run src/core/syncEngine.dualStress.benchmark.tes
 LAKE_RUN_BENCHMARK=1 LAKE_STRESS_S3_ENDPOINT=... _REGION=... _BUCKET=... _AK=... _SK=... npx vitest run electron/syncStress.benchmark.test.ts
 # 云端对象查看
 node scripts/s3-ls.mjs --count | --note <id> | --prefix <prefix>
-node scripts/lake-roundtrip-check.mjs --note <id>   # 对拍「这篇一打开会不会被内核改写」（只动副本，退出码 1=会被改写）
+node scripts/lake-roundtrip-check.mjs --note <id>   # 对拍「这篇一打开会不会被内核改写」（只建临时文档，退出码 1=会被改写）
 ```
 - **UI 实测姿势**：`curl http://127.0.0.1:9222/json` 拿 page target → Node 24 内置 `WebSocket` 直驱 `Runtime.evaluate` / `Page.captureScreenshot{clip}` / `Input.*`（本会话用这套量出了预览闪烁的逐帧数据）。详见 `docs/CODEX-GUIDE.md`。
 - 日志：A `~/Library/Application Support/lake-notes-dev/logs/lake-notes.log`；B `$TMPDIR/lake-device-b/logs/lake-notes.log`。数据目录见 `AGENTS.md §5`（**正式数据禁碰**）。
 - 安卓/模拟器：全部命令与环境见 **§8.1 / §8.9**。
 
 ## 7. 文档索引（`docs/` 按需查）
-- **契约/规格（单一来源）**：`STORAGE-LAYERS.md`（存储分层 + 设备本地契约）· `SYNC-PROTOCOL.md`（同步协议 v4）· `S3-GC-DESIGN.md`（存储/删除 GC v4）· `HISTORY-DESIGN.md`（历史快照）· `TRASH-NOTEBOOK-DESIGN.md`（回收站）· `QUICK-NOTES-SPEC.md`（小记）。
+- **契约/规格（单一来源）**：`STORAGE-LAYERS.md`（存储分层 + 设备本地契约）· `SYNC-PROTOCOL.md`（同步协议 V1 重置）· `S3-GC-DESIGN.md`（存储/删除 GC v4）· `HISTORY-DESIGN.md`（历史快照）· `TRASH-NOTEBOOK-DESIGN.md`（回收站）· `QUICK-NOTES-SPEC.md`（小记）。
 - **内核**：`LAKEX-CONTRACT.md`（闭源 lakex 行为契约 + 速查表，编辑器相关**先读**）· `LAKEX-MIGRATION-260916.md`（换源/懒加载/离线）。
 - **正文写入（写 `.lake` 前必读）**：`LAKE-CONTENT-WRITING.md`（约定 + 反例 + 校验判据；配套 `src/core/lakeDocForm.ts` 与 `scripts/lake-roundtrip-check.mjs`）。
 - **指南**：`CODEX-GUIDE.md`（CDP 驱动真实 Electron，动手前必读）· `DEVELOPMENT.md` · `ARCHITECTURE.md` · `TROUBLESHOOTING.md` · `RELEASE.md` · `SYNC-RELIABILITY-VERIFY.md`（数据完整性门禁）。
 - **移动端**：`MOBILE-TECH-STACK.md` · `ANDROID-TECH-SCHEME.md` · `ASSET-URL-MOBILE-PLAN.md`。
-- **近期简报/对账**：`CSS-LAYERS-BRIEF-260916.md`（UI 样式层）· `OFFLINE-ASSETS-AUDIT-260916.md`（离线清理对账）· `NARROW-UNIFY-BRIEF-260915.md`（窄窗统一）。
+- **UI/工程规范**：`CSS-LAYERS-BRIEF-260916.md`（样式层）· `PANEL-CONTRACT.md`（面板几何/层序契约）· `UI-PRIMITIVES-PHASE1-260926.md`（浮层原语）。
 > 历史审计/研究/计划（`*-AUDIT`/`*-REVIEW`/`*-PLAN` 等）已删除（git 历史可查）；权威待办以本文件 §3 为准，移动端以 §8 为准。
 
 ## 8. 移动端（安卓模拟器 + 编辑器）专职交接（260908 收尾）
@@ -453,7 +412,7 @@ node scripts/lake-roundtrip-check.mjs --note <id>   # 对拍「这篇一打开�
 **（260908 本会话新增）**
 - **`.mobile-workspace-body` 必须显式 `display:flex`**：它 `flex:1`（高度来自父 flex）但非 flex 容器，`.doc-pane`/`.mobile-doc-body` 的 `height:100%` 在其中**塌陷为 0** → 编辑器无滚动容器 → 大纲跳转/长文滚动失效。修：workspace-body `display:flex; flex-direction:column` + doc-pane `flex:1; min-height:0`。
 - **Lake 内容格式 ≠ 裸 HTML**：测试文档别用 `<h1 class="ne-h1">`/`<p class="ne-p">`（编辑器不认，渲染成短内容、无真实标题）。要用**应用内真实生成的 Lake 内容**（或从真实文档读 content 再改）做高度/跳转测试，否则测不出滚动。
-- **`S3Store` 接口（共享 `src/core/syncEngine.ts`）扩 listObjects/deleteMany 是可选方法**（`?`）：桌面 `createS3StoreAdapter` 没实现也不报错（GC 用 legacy `electron/sync.ts` ObjectStore）；移动端必须实现才能云端 GC。
+- **`S3Store` 接口（共享 `src/core/syncEngine.ts`）扩 listObjects/deleteMany 是可选方法**（`?`）：桌面 `createS3StoreAdapter` 没实现也不报错（GC 用 `electron/s3Store.ts` 的 ObjectStore）；移动端必须实现才能云端 GC。
 - **GC key 带 prefix 一致性**：移动 `listObjects` 返回 **full key**（含 `{prefix}/`），而共享 `buildGcKeepSet`/`collectManifestRefs` 返回 **无 prefix 的 key**——`buildGcKeepSet` 里统一 `keep.add(prefix + "/" + ref)`；`onPublished` 钩子里 `addS3GcPending` 也要传 full key（`${prefix}/${objectKey(...)}`），否则与 `gcDeepCleanup` 的 full-key listing 对不上。
 - **`selectHistoryDrops` 是共享函数**（`src/core/storeUtils.ts`）：桌面 `cleanupHistory` 与移动 `cleanupHistory` 共用同一分层保留逻辑；移动端 note_history 无 `protected_until` 列，不涉及桌面那种"冲突归档保护期"。
 - **设置项加/改必须同步 settingsSearch 注册表**（AGENTS §3 #14）：新增 `itemId`（如 resources-clean、history-*、appearance-theme）若只在移动端（无搜索），不入 SETTING_ITEMS 也不报错；但**桌面**新增的设置行必须入 SETTING_ITEMS，且 `vitest src/components/settingsSearch.test.ts` 会卡漂移。

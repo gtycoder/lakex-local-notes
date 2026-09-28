@@ -2,8 +2,8 @@
 
 本地优先的 Lake（语雀）编辑器笔记应用。**本文是项目总览入口；会话交接的唯一文档是** **`HANDOFF.md`。**
 
-> 给完全没有上下文的后续会话：先读 **HANDOFF.md（唯一交接文档：当前状态 / 真正的待办 / 踩坑）**，再读
-> **AGENTS.md（项目长期记忆 / 红线，每次自动加载）**，然后按需读下面的开发/架构/踩坑文档。
+> 给完全没有上下文的后续会话：按 **README → HANDOFF → AGENTS** 阅读。README 提供项目概览；
+> HANDOFF 记录当前状态/真正的待办/踩坑；AGENTS 是长期红线/机制/坑。之后按需读下面的开发/架构文档。
 > **HANDOFF 只保留最新 §0 + 当前基线/待办/坑**；历史 dated handoff 已删除，只在 git 历史可查（`git log -p --follow HANDOFF.md`）。
 > **当前主开发分支是** **`master`**（= Gitee 远程默认分支，已验证 `ls-remote --symref`；本地与远端同步）。
 
@@ -24,7 +24,7 @@
 
 ## 一、项目概览
 
-- **形态**：Electron 43 桌面应用 + Capacitor 安卓端（已替代 Tauri/trui 版成为正式版，路线验证完成）
+- **形态**：Electron 44 桌面应用 + Capacitor 安卓端（已替代 Tauri/trui 版成为正式版，路线验证完成）
 - **为什么从 Tauri 换到 Electron**：
   - Tauri 在 macOS 强制 WKWebView，无法渲染 SVG foreignObject 文字（画板、复杂排版 bug 频发）
   - Lake 编辑器是 Web 组件，Chromium 是它的原生环境（语雀跑在 Chrome 上）
@@ -41,7 +41,7 @@
 
 ## 三、技术栈
 
-Electron 43.4 + React 18.3 + TypeScript 5.9 + better-sqlite3 13（N-API，无需 rebuild）+ Lake 编辑器
+Electron 44.3 + React 18.3 + TypeScript 5.9 + better-sqlite3 13（N-API，无需 rebuild）+ Lake 编辑器
 （`@dlient/lakex-doc-react` 上游源码 vendor（产物入库），内核 v1.99.0，已 pin、勿随意升级）+ Drawnix 画板（`lakex-drawnix@0.1.0`）+
 sharp（图片转换）+ @aws-sdk/client-s3；移动端 = Vite + Capacitor（安卓）。准确版本以 `package.json` 为准。
 
@@ -54,8 +54,8 @@ sharp（图片转换）+ @aws-sdk/client-s3；移动端 = Vite + Capacitor（安
 | S3 备份同步 + 对象 GC（七牛 Kodo）               | ✅ 完成（真实云同步/GC 验证通过）                                |
 | 打包发布：dmg                               | ✅ 完成并冒烟验证（未签名、默认图标）                                |
 | 大文档性能 + 虚拟渲染                           | ✅ 已合入 master（首图 3.5s→88ms、TOC/代码块粘贴/表格工具栏/长大纲跟随修复） |
-| 代码审计 + 优化 + 单测、Electron 43 升级、S3 同步差集化 | ✅ 已完成并合入 master                                    |
-| 安卓端（Capacitor）                         | ✅ 可用；编辑遗留见 HANDOFF §3                              |
+| 代码审计 + 优化 + 单测、Electron 44 升级、S3 同步差集化 | ✅ 已完成并合入 master                                    |
+| 安卓端（Capacitor）                         | ✅ 完整端可用；真机验收项见 HANDOFF §8                              |
 
 > **本文不维护当前进度、测试计数、commit hash**（必然过期）。当前基线 / 本轮已完成 / 真正的待办 → **`HANDOFF.md`** **§0 / §2 / §3**。
 
@@ -94,7 +94,7 @@ origin  git@gitee.com:gtycoder/local-lake.git
 
 | 文档                                           | 内容                                                              | 新会话优先级       |
 | -------------------------------------------- | --------------------------------------------------------------- | ------------ |
-| **HANDOFF.md**                               | 唯一交接文档（当前状态/待办/坑）；只保留最新 §0，历史在 git                            | **先读**       |
+| **HANDOFF.md**                               | 唯一交接文档（当前状态/待办/坑）；只保留最新 §0，历史在 git                            | **交接首读**    |
 | **docs/CODEX-GUIDE.md**                      | Codex 自主开发指南（Playwright 驱动真实 Electron/Computer Use/浏览器）         | **动手前必读**    |
 | docs/LAKEX-CONTRACT.md                       | 闭源 lakex 内核行为契约 + 调试速查表（会话知识库，编辑器相关先查）                          | 编辑器先读        |
 | docs/DEVELOPMENT.md                          | 环境要求、开发/构建/打包命令、测试、依赖版本、提交历史                                    | 动手前读         |
@@ -102,5 +102,7 @@ origin  git@gitee.com:gtycoder/local-lake.git
 | docs/STORAGE-LAYERS.md                       | 存储分层与「设备本地」契约（**新增持久化前必读**：哪些进 S3 / 哪些仅本地、三处同改规则）              | 加持久化前读       |
 | docs/ARCHITECTURE.md                         | 进程结构、关键文件索引、图片数据流、数据与存储、S3 同步机制                                 | 改代码前读        |
 | docs/TROUBLESHOOTING.md                      | 踩过的坑（打包/CDN/剪贴板/编辑器与 CSS/环境/S3 + 虚拟渲染新坑）                        | 遇坑查          |
+| docs/PANEL-CONTRACT.md · docs/UI-PRIMITIVES-PHASE1-260926.md | 面板几何/层序契约、浮层原语规范 | 改 UI/外壳前读 |
+| docs/RELEASE.md · docs/SYNC-RELIABILITY-VERIFY.md | 打包发布与同步可靠性验收 | 发布前读 |
 | VIRTUAL-RENDERING-TEST.md                    | 虚拟渲染回归清单（逐项手测）                                                  | 动虚拟渲染相关代码前后跑 |
 

@@ -1,8 +1,12 @@
-# SYNC-PROTOCOL.md — Lake Notes 同步协议（v4 定稿）
+# SYNC-PROTOCOL.md — Lake Notes 同步协议（重置 V1）
 
 > 日期：2026-08-21 ｜ 配套：`docs/ARCHITECTURE.md`（架构总览，Manifest 版本说明以此为准）
 > 本文件定义 Lake Notes 的 S3 同步协议：Manifest 结构、对象布局、冲突语义、协议边界。
-> 基线：代码 `electron/sync.ts` / `electron/quickNotesSync.ts`，实测与文档一致。
+> 基线：代码 `electron/syncEngineController.ts` / `electron/s3Store.ts` / `electron/s3Maintenance.ts` / `electron/quickNotesSync.ts`，实测与文档一致。
+
+> **260928 协议重置**：远端与本地旧数据全部清空后，Lake 清单重新使用 **V1 编号**，但**内容 schema 沿用原 v7
+> （v4 以来的 folders/墓碑/锁/prevCommitId/kind/board 全部保留）**。代码只读写新 V1，不兼容旧 V1 结构；
+> 所有会访问同一 S3 前缀的客户端必须同时升级。小记独立 manifest 的 V1 不受影响。
 
 ---
 
@@ -50,14 +54,14 @@ quick-notes/assets/{quickNoteId}/{filename}  小记资源
 >
 > **260920 补充：画板文档（`kind="board"`）走同一条管线**，清单独占 **v7**（`kind` 多一个取值 `board`）。
 > **为什么加个取值也要升版本**：旧端 `normalizeNoteKind` 对未知取值一律回退 `doc` ⇒ v6 端读 v7 清单会把画板 JSON 当 Lake 文档导入并保存 = 毁正文；
-> 升版本后 v6 端按既有「版本不兼容」整轮拒绝（`syncUtils.ts` 的 `READABLE_MANIFEST_VERSIONS={4,5,6,7}`）。
+> 该历史升级策略已被 260928 的 V1 重置取代：当前只读写新 V1。
 > 画板正文 = Drawnix/Plait 场景 JSON（`{kind:"board",version:1,engine:"drawnix",preset,elements[],viewport?}`）；本地 `boards/{id}.board.json` → S3 `objects/{id}-{hash}.lake`。详见 `docs/BOARD-DOC-FEASIBILITY-260920.md`。
 
-## 3. Manifest v4 schema（代码 sync.ts:74-80 + 645-697 实测）
+## 3. Manifest V1 schema（260928 重置；内容沿用原 v7）
 
 ```ts
 interface Manifest {
-  version: number;          // 4（含锁字段/prevCommitId 链/GC）
+  version: number;          // 1（260928 重置；字段内容沿用原 v7）
   workspaceId: string;      // "default"
   commitId: string;         // uuid
   prevCommitId: string | null;

@@ -1,6 +1,6 @@
 # Lake Notes Electron — 项目记忆（AGENTS.md）
 
-> 本文件是本项目的**长期记忆**，每次会话自动加载。开始工作前先读本文 + `HANDOFF.md`（会话交接：当前状态与真正的待办）。
+> 本文件是本项目的**长期记忆**，每次会话自动加载。接手顺序固定为 **README → HANDOFF → AGENTS**：README 看概览，HANDOFF 看当前状态/待办/坑，本文看长期红线与机制。
 > 用户反复强调的背景与原则都写在这里，**不要等用户重复**。
 > **本文只写长期内容**（红线/机制/坑）：分支名、commit hash、测试计数、当前焦点等易过期事实一律放 `HANDOFF.md` §0。
 
@@ -27,8 +27,8 @@ Lake Notes 是**本地优先**笔记应用（Electron + React + better-sqlite3 +
   ② **本项目契约与踩坑** `docs/LAKEX-CONTRACT.md`（闭源 lakex 已核实的行为契约 + 调试速查表；含我们实测出的内核行为与反例）——**新观测必须回填此处**，别只留在 HANDOFF 或代码注释里。
   ③ **更精细的源码字典对照** `/Users/admin/file/local-lake/lake-editor-main/`（第三方 VSCode yuque-editor 插件）与 `/Users/admin/file/local-lake/lake-main/`（lakejs 开源社区版，仅"机制字典"）——用于挖机制/实现细节与交叉验证；**注意 lake-main 序列化方言已与运行内核分叉，结论不得直接套用**。
   最终仲裁 = 仓库内 vendor 内核 bundle `vendor/lakex-doc-react/src/components/lakex/lakex.js`（即语雀 @alipay/lakex-doc，实际运行的代码）+ 运行时实测；以上资料与实测冲突时以实测为准。
-- **文档分工（防漂移）**：`AGENTS.md`=长期红线/机制/坑（不写易过期事实）· `README.md`=项目概览（不维护进度/计数）·
-  `HANDOFF.md`=唯一交接（当前基线/待办/本轮踩坑）。历史上本文件曾长期残留旧分支名与 188/217 测试计数，已清理，**不要写回去**。**HANDOFF 只保留最新 §0（1–2 节）+ 基线/待办/坑**：被顶掉的历史节**直接删除**（git 可查，不建 archive 目录、不搬 docs/notes），**不要再把 dated handoff 堆回本文件**。
+- **文档分工（防漂移）**：`README.md`=项目概览（不维护进度/计数）· `HANDOFF.md`=唯一交接（当前基线/待办/本轮踩坑）· `AGENTS.md`=长期红线/机制/坑。
+  **仓库只保留当前有效的契约/规格/指南与仍在使用的设计依据**；已完成的研究、计划、spike、审计和 dated review 直接删除，需要时从 git 历史恢复，不建 archive 目录。历史上本文件曾长期残留旧分支名与 188/217 测试计数，已清理，**不要写回去**。**HANDOFF 只保留最新 §0（1–2 节）+ 基线/待办/坑**：被顶掉的历史节**直接删除**（git 可查，不建 archive 目录、不搬 docs/notes），**不要再把 dated handoff 堆回本文件**。
 
 ## 3. 核心设计原则（用户反复强调，务必遵守）
 
@@ -72,13 +72,15 @@ Lake Notes 是**本地优先**笔记应用（Electron + React + better-sqlite3 +
 
 ## 4. 关键机制速览（同步）
 
+- **Manifest V1 重置（260928）**：旧数据与远端清零后，Lake manifest 重新使用 `version=1`，但内容 schema 沿用原 v7（folders/墓碑/锁/`kind`/board 保留）。代码只读写 `{1}`；所有端必须一起升级。传输/GC/类型分别见 `electron/s3Store.ts` / `electron/s3Maintenance.ts` / `electron/syncTypes.ts`，编排见 `electron/syncEngineController.ts`。
+
 - **壳层双 origin（260926）**：打包版渲染层跑私有协议 **`lake://app`**（`electron/appOrigin.ts` + `electron/appProtocol.ts` 服务 `dist/`；标准/安全/fetch/cors/stream/codeCache 全套 privilege），dev 跑 vite dev server（`LAKE_RENDERER=scheme` 可在 dev 下强制走前者自验）——桌面与浏览器端由此共享同一套 origin 语义（localStorage/CSP/fetch/clipboard）。**判定页面来源禁止比较 `URL.origin`**：非特殊 scheme 在 Node 的 URL 里 origin 恒为 `"null"`（Chromium 侧才是 `lake://app`）⇒ 必须比 scheme+host（`isAppOriginUrl`），否则 page 能加载、preload 在、但每个 IPC 都报「来源不受信任」。资产服务的 Origin 白名单 / ACAO 回显必须同时放行 `APP_ORIGIN`。**主进程 external 从 `package.json.dependencies` 派生**（+ `@smithy/` 传递依赖），别退回逐个硬编码。
 
-- 冲突四分支在 `electron/sync.ts` 下载阶段；`baseHash + lastUploadedHash` 存本地 `sync_base`，**绝不上 manifest**。
+- 冲突四分支在 `src/core/syncEngine.ts` 下载阶段；`baseHash + lastUploadedHash` 存本地 `sync_base`，**绝不上 manifest**。
 - `supersededNotes`：本地改动被远端覆盖时先强制 `createHistorySnapshot` 留档再接受远端。
 - `folders[]` 必填；手动同步只发回触发窗口；自动同步广播所有窗口。
 - 同步/GC/深度清理共用 `enqueueMaintenance` 串行队列（进程内唯一必需互斥）。
-- 资产上传差集：`scanLocalAssets(cfg,s3,db,noteId,stats,cloudDeclaredFilenames)`，`cloudDeclaredFilenames` = 本笔记在**已下载远端清单**里声明的 `assets[].filename`；缺省/为空（新笔记、桶重置 rn=null）→ 全量上传。跨笔记并发：决策环登记 `assetTasks`，环后 `runPool(NOTE_UPLOAD_CONCURRENCY=2)` 回填 `entry.assets`（语义与串行逐字节一致，由 syncEquivalence/syncDualAB 保证）。见原则 11/12/13。
+- 资产上传差集：`scanLocalAssets(cfg,s3,db,noteId,stats,cloudDeclaredFilenames)`，`cloudDeclaredFilenames` = 本笔记在**已下载远端清单**里声明的 `assets[].filename`；缺省/为空（新笔记、桶重置 rn=null）→ 全量上传。跨笔记并发：决策环登记 `assetTasks`，环后 `runAssetPool(NOTE_UPLOAD_CONCURRENCY=2)` 回填 `entry.assets`（语义与串行逐字节一致，由 syncEquivalence/syncDualAB 保证）。见原则 11/12/13。
 - manifest commit 链保留 `MANIFEST_CHAIN_KEEP=3`（设计 D4 O(3)），prune/gc-reconcile/deep-cleanup 三者共用、滞后裁剪（水位超过 target+SLACK 才裁），活动对象恒在 latest 全量快照内、被降级旧键靠本地历史 refs + 7 天年龄保护 + 重新引用撤销 pending 兜底。
 - 小记独立前缀 `quick-notes/` + 独立小记库 `quick-notes/metadata.sqlite3`。
 
@@ -147,7 +149,7 @@ node scripts/s3-ls.mjs --count | --note <id> | --prefix <prefix>   # 云端对�
 
 ## 8. 会话启动指引
 
-1. 读本文件 + `HANDOFF.md`（当前状态与真正的待办）；**涉及编辑器/lakex 一律按 §2「内核资料检索顺序」走三级检索**（官方 `yuque-developer-docs` → `docs/LAKEX-CONTRACT.md` → `lake-editor-main`/`lake-main` 源码字典），新观测回填 CONTRACT。
+1. 按 **README → HANDOFF → AGENTS** 阅读（当前状态与真正的待办以 HANDOFF 为准）；**涉及编辑器/lakex 一律按 §2「内核资料检索顺序」走三级检索**（官方 `yuque-developer-docs` → `docs/LAKEX-CONTRACT.md` → `lake-editor-main`/`lake-main` 源码字典），新观测回填 CONTRACT。
 2. 查 `git status`/`git log` 确认当前状态，并 **`git worktree list`** 检查有无未记录的在途 worktree 改动（2026-09-03 就漏看过一次）；
    `vite.config.ts` 不应有改动（除非多端调试中的 onstart 补丁）。
 3. 需要用户确认产品语义时，给出选项和推荐，但**当前删除/恢复语义已定稿**（见 §3），不要重新争论。

@@ -773,11 +773,11 @@ univer.createUnit(UniverInstanceType.UNIVER_BASE, {})
 |---|---|---|
 | **keep-alive + canvas 尺寸为 0** | 所有 tab 都挂在 DOM（隐藏）；Univer 是 canvas，隐藏容器里初始化会算成 0 尺寸，切回来可能空白 | 参考本仓库 Lake 编辑器踩过的同类坑：切到该 tab 时创建/显示后强制 `resize()`，或对非激活 tab 延迟创建；e2e 断言「切走再切回，网格可见且有尺寸」 |
 | **全局粘贴拦截器会抢 Univer 的剪贴板** | `installPasteInterceptor()` 在 `src/main.tsx:36` 顶层安装（移动端同），会改写 paste 事件 | 拦截器加作用域判断：事件目标在表格/多维表容器内 → 直接放行；**必须有测试** |
-| **离线/CSP** | 三条 CSP 只放行 `self` + `127.0.0.1:*`（无外部域） | 构建产物复扫：确认 Univer 无外部字体/图片/脚本 URL（对齐 `OFFLINE-ASSETS-AUDIT-260916.md` 的方法）；必要时把资源镜像进 `public/vendor` |
+| **离线/CSP** | 三条 CSP 只放行 `self` + `127.0.0.1:*`（无外部域） | 构建产物复扫：确认 Univer 无外部字体/图片/脚本 URL（构建产物离线资源复扫）；必要时把资源镜像进 `public/vendor` |
 | **bundle 体积** | Univer 量级数 MB；exceljs 20 MiB+ | 两个编辑器 + exceljs 全部 `React.lazy`/动态 import，不进首屏 chunk |
 | **大正文对象的传输** | 表格 JSON 可能比文本文档大一个量级；且当前**正文对象不 gzip**（`syncEngine.ts:692` 上传时未传 `gzip`） | 建议顺带给正文对象启用 gzip：`ObjectStore.getOptional` 已按魔数透明解压（`sync.ts:166-174`），而 `contentHash` 始终按**未压缩内容**计算 ⇒ **读写两侧都不受影响、hash 稳定**。这是低风险高收益的一步（对表格尤甚） |
 | **历史快照体积** | 每次被覆盖会存一份完整 JSON（gzip level 6） | 可接受；若表格很大，评估「快照只留 N 份 + 更短保留」或快照前做 JSON 归一化 |
-| **清单体积** | 每个表格/多维表占一条 note（约 340 B + 附件声明 130 B/个） | 按 5K 文档量级无压力（见 `docs/S3-STORAGE-AUDIT-260918.md` §7.1） |
+| **清单体积** | 每个表格/多维表占一条 note（约 340 B + 附件声明 130 B/个） | 按 5K 文档量级无压力（按当前 manifest 上限估算） |
 
 ---
 
@@ -811,7 +811,7 @@ univer.createUnit(UniverInstanceType.UNIVER_BASE, {})
 - 内核能力核实：`vendor/lakex-doc-react/src/components/lakex/{lakex.js:122081, icon.tsx:2087-2260}`、`src/components/` 目录清单
 - 语雀官方口径：`yuque-developer-docs/docs/71 - Webhooks 消息推送 [doc-webhook].md:114-141`（表格正文格式）、`docs/04 - 配置工具栏`（文档内表格工具栏）、`docs/02 - 语雀开放 API`（数据表详情接口）
 - 本仓库集成点：`electron/schemaInit.ts:33-52`、`src/core/manifestTypes.ts`、`src/core/syncDecisions.ts:84-103`、`src/core/syncUtils.ts:23-32,192-197`、`electron/syncAdapters.ts`、`src/mobile/syncDbPort.ts`、`src/components/Sidebar.tsx:14,359-367,641-658`、`src/features/editor/MultiTabEditor.tsx:430`、`electron/store.ts:369-431`、`electron/noteExport.ts`、`src/mobile/schema.ts:13-24`
-- 相关既有设计：`docs/STORAGE-LAYERS.md`（§0 三处同改铁律）、`docs/SYNC-PROTOCOL.md`、`docs/ARCHITECTURE.md`、`docs/S3-STORAGE-AUDIT-260918.md`（§7 量级复核）
+- 相关既有设计：`docs/STORAGE-LAYERS.md`（§0 三处同改铁律）、`docs/SYNC-PROTOCOL.md`、`docs/ARCHITECTURE.md`
 
 ---
 
