@@ -2,7 +2,7 @@
  * 小记卡片的**只读预览**渲染（零内核实例）：把 `parseQuickNotePreview` 的节点画成普通 DOM。
  *
  * 为什么不用内核：时间线一屏十几条，每条挂一个 Lake 实例 ≈ +5MB RSS/实例（见
- * docs/QUICK-NOTE-LAKE-MEMORY-SPIKE-260919.md）；而小记正文是**内核产出的标准 lake 标记**，
+ * docs/QUICK-NOTES-SPEC.md）；而小记正文是**内核产出的标准 lake 标记**，
  * 白名单内的块用普通 DOM 就能忠实呈现。白名单外的块显示占位条（原文不受影响）。
  */
 import { useEffect, useMemo, useRef, useState } from "react";

@@ -11,7 +11,7 @@
 
 - 不是给 lakex 补文档（lakex 文件一个字节都不动）；是给**我们自己的代码**补一份"我们观测到的、可依赖的接口契约"。
 - 目的是把散落在 `lakeRuntime.ts` 等文件注释里的反编译结论，收敛成一处可被类型系统检查的"总账"，降低黑盒导致的静默失败。
-- 本文件 = 该契约的设计稿 + 维护守则 + 调试速查表；落地产物 = 新增 `src/features/editor/lakex-contract.d.ts` + 替换 `as any`（待办，见 HANDOFF §3 技术债）。
+- 本文件 = 该契约的设计稿 + 维护守则 + 调试速查表；落地产物 = 新增 `src/features/editor/lakex-contract.d.ts` + 替换 `as any`（待办，见 HANDOFF §3）。
 
 ---
 
@@ -301,7 +301,7 @@
   - **残留问题（未解决）**：折叠光标下 `alert`/`columns`/`collapse`/`insertCard('codeblock')` 变成「**在原文旁插入一个空容器/空卡**」，原文段落保持原样（落盘实测：`<p id="ucfd561e7">…自动保存验证ZZZ…</p><blockquote class="lake-alert …">`）⇒ **不丢数据，但转换语义没达成**（云端的"转化为高亮块"是把段落搬进容器）。
     **✅ 260917 已解决**：改走 §5.8.1 的通用插入通道（`getNodeContent` + 一次 `insertAtSelection`），把原块替换成「含原文的容器/卡片」，不再插空容器。
   - **建议修法（⚠️ 已被 §5.8.1 取代，不需要）**：命令后把内容"搬家"——① 记录原段落文本 → ② 折光标执行命令（容器/卡片就位、光标在其内部，待验证）→ ③ `insertText` 写入原文 → ④ `deleteBlockByRange` 删除原段落；全程原生命令，仍不碰整篇 JSON。代价：行内标记（加粗/链接等）会退化为纯文本，需按需处理。
-  - **✅ 已解除暂停（260917）**：外部复核结论见 **`docs/BLOCK-CONVERT-ANSWER-260917.md`** —— 内核确有正规通道（官方 `insertAtSelection` 会自动补 hole 并包裹内容），**已按此实现**（vendor `convertBlockPreservingContent`，见 §5.8.1）；**没有**采用上面那条"搬家"编排。
+  - **✅ 已解除暂停（260917）**：外部复核结论见 **`docs/LAKEX-CONTRACT.md`** —— 内核确有正规通道（官方 `insertAtSelection` 会自动补 hole 并包裹内容），**已按此实现**（vendor `convertBlockPreservingContent`，见 §5.8.1）；**没有**采用上面那条"搬家"编排。
 - 「在下方添加」的原生实现 = 把光标收到块首/尾 → `editor.execCommand('breakLine')`（紧邻生成新 `ne-p`）→
   需要类型时再对新块执行 `style`/`quote`/`hr`。官方 `insertAtSelection(format, data)` 实测**可用**（**更正**：早前「返回节点但文档无变化」是误判 —— 传的是空 `<p><br></p>`、且只比对文本；见 §5.8.1），已用它做容器/卡片转换。
 - **`editor.execCommand` ≠ `renderer.execCommand`**：`indent/outdent` 在 `editor.execCommand` 上有效（本批实测 +26B），
@@ -320,7 +320,7 @@
 **这条与「转化后文本可能消失」高度相关**：保存 = 按模型序列化，DOM 里出现而模型里没有的内容会在保存时蒸发
 （排查方向：转换后先看 `getDocument('json')` 里新容器是否含原文本，再看保存后的 `.lake`）。
 
-**§5.8.1 复核更正（260917，副本实测 + bundle 源码）** —— 回答 `docs/BLOCK-CONVERT-QUESTION-260917.md`（完整配方/§7 复核表见 `docs/BLOCK-CONVERT-ANSWER-260917.md`）：
+**§5.8.1 复核更正（260917，副本实测 + bundle 源码）** —— 回答 `docs/LAKEX-CONTRACT.md`（完整配方/§7 复核表见 `docs/LAKEX-CONTRACT.md`）：
 
 1. **`insertAtSelection` 有效**（更正 §5.8 里「实测无效」的结论）：签名 `execCommand('insertAtSelection', format, data[, modelRange])`，
    实现 = `kernel.readData(format,data)` → `iD.insertINode(editing, selection, inode)` → commit；解析失败返回 `null`（不落库），成功返回解析出的 INode。
@@ -371,7 +371,7 @@
   修法 = 删除改走内核命令（`ed.kernel.execCommand("delete")`，`execCommand`/`document.execCommand` 仅兜底）；副本实测：cut 后**内存模型 + 落盘都删掉**（4400→4381B）。护栏：`src/features/editor/editorCut.test.ts`。
 - **原生移动块 / 拖拽（260917 已实现，分支 `feat/block-drag-native`）**：内核**有**移动能力 —— `moveCard(cardId, position)`（卡片，实测**逐字节保真**，含卡 id）、`moveCollapse`/`moveColumns`/`moveColumn`/`moveTable`/`moveImage`（各自类型）；**通用文字块无 move 命令**，用纯原生「读-插-删」（`getNodeContent('text/lake')` + `insertAtSelection` + `deleteByRange`）。
   落点 `position` 由「目标元素前/后的折叠 DOM range」`transformDOMRange(...).start` 得到。注意：插入的副本会复用原块 id，**必须插入前固化原块模型 range** 再 `deleteByRange`，否则按 id 反查会删到副本（表现＝没移动）。 **不要用 `insertAtSelection` 折叠光标做块移动**：它会把内容吸附进相邻块（段落融合丢换行、列表项文本追加到目标项）；改用 `insertAtPosition(position, format, data)`（走 `insertINodeByPosition` 的块级插入/补 hole）。列表项要抽**裸 `<li>`**（`getNodeContent` 返回的是整段 `<ul>` 包一个 `<li>`）且**先删源再插**（插入同列表会重建节点、源 range 失效）；其它块**先插后按插入前固化的源 range 删**（段落删除会留一个空段落）。
-  实测：拖思维导图卡后仍 634B/hash 不变；拖段落成功且卡片零改动。**禁用** `blockDoc.moveBlock` 的整篇 JSON 读改写（实测自定义卡 634B→8859B、抹掉未注册卡）。完整调研见 `docs/BLOCK-DRAG-RESEARCH-260917.md`。
+  实测：拖思维导图卡后仍 634B/hash 不变；拖段落成功且卡片零改动。**禁用** `blockDoc.moveBlock` 的整篇 JSON 读改写（实测自定义卡 634B→8859B、抹掉未注册卡）。完整调研见 `docs/LAKEX-CONTRACT.md`。
 
 ### 5.8.3 列表父项 = 一个整块：嵌套在 `ne-level` 上，整段用跨元素 range（Issue 3，260917 实测）
 
@@ -756,7 +756,7 @@ python3 -  # 搜 showMiniToolbarWhen / MINI_TOOLBAR_TRIGGER / itemConfig / IMini
    都挂在 `kernel.once('document.ready')` 上；而**空编辑器不调用 `setDocument` 就永远不会 ready** ——
    症状是「工具条整条空白、右上角展开按钮不渲染、键入也不回传（contentchange 不来）」。
    ⇒ 小记这种"新建即空"的场景必须**无条件 `setDocument` 一次**（我们传单一来源的空正文
-   `emptyLakeBody(ownerId)`，见 `src/core/lakeDocForm.ts`）。这也是 HANDOFF §2.10「输入了字但判定为空」
+   `emptyLakeBody(ownerId)`，见 `src/core/lakeDocForm.ts`）。这也是 HANDOFF §3「小记输入被判定为空」
    的真因。判据：DOM 里 `.ne-editor` 有 `ne-note-ui` 且 `.ne-ui-enter-fullscreen` 有子节点（图标）。
 2. **`toolbar.agentConfig` 是整体替换，不是深合并**。只传 `agentConfig.note` ⇒ `getConfig('default')`
    返回 `{}` ⇒ **展开后是一条空工具栏**。必须把 `default` 项一起给出（= 内核内置 `xP` 那一套，
@@ -821,7 +821,7 @@ symbol 无一个 `note-*`；语雀页面里的 `#ne-note-image` / `#ne-note-chec
 **七、小记的白名单与「内核写 / 我们读」分工（260919 用户定稿）**
 
 - **分工**：小记**编辑态挂内核**（保证产出是标准 lake 标记，不手拼），**卡片预览不挂内核**（自研只读渲染）。
-  ⇒ 代价从"每张卡一个内核实例（≈+5MB RSS/实例，见 `docs/QUICK-NOTE-LAKE-MEMORY-SPIKE-260919.md`）"
+  ⇒ 代价从"每张卡一个内核实例（≈+5MB RSS/实例，见 `docs/QUICK-NOTES-SPEC.md`）"
   变成"一个纯字符串解析器"；同时因为没有手拼标记，也就没有"被内核改写"的风险。
 - **编辑态外观（260919 最终定稿）**：小记走内核 **note 版式**（`mount.ne-doc-note-editor.lakex-note-editor`
   + `uiSwitch.default='note'` + `fullscreen.enable`）——
@@ -868,7 +868,7 @@ symbol 无一个 `note-*`；语雀页面里的 `#ne-note-image` / `#ne-note-chec
 - ⚠️ **小记编辑器必须 `disableVirtualRendering: true`**（260919 用户报「输入一个字整片空白 + 编辑态顶部大空白」）：
   虚拟渲染靠 `scrollNode` 量视口，小记没有 Lake 内部滚动容器、fallback 到 `.document-pane` 会量错 ⇒
   正文被替换成 `.ne-virtual-render-placeholder`（顶部被顶下 190px；一输入触发重渲染就整片变占位）。
-  移动端早已为此置位（HANDOFF §8.8 同款坑）——**任何"非文档页里的 Lake 编辑器"都要记得关虚拟渲染**。
+  移动端早已为此置位（HANDOFF §8 同款坑）——**任何"非文档页里的 Lake 编辑器"都要记得关虚拟渲染**。
 
 - `src/features/editor/lakeRuntime.ts`：`LakeEditorPrefs.quickNoteUi`（`"card" | "full"`）/ `QUICK_NOTE_TOOLBAR_ITEMS` /
   `DEFAULT_TOOLBAR_ITEMS` / mount 类名分支 / `customOptions` 的 note 三件套 / `ensureNoteFileIcon()`。
@@ -881,7 +881,7 @@ symbol 无一个 `note-*`；语雀页面里的 `#ne-note-image` / `#ne-note-chec
 - 护栏：`quickNoteNoteUi.test.ts` / `quickNotesView.test.ts`（源码级）、`electron/quickNotes.test.ts`（stageFile 往返）。
 - 卡片预览 = **自研只读渲染器**（零内核实例）：按 `body` 解析白名单块（段落/标题/列表/待办/引用/分割线/
   行内格式/媒体卡），白名单外的块显示占位条。**不挂 viewer/viewer 的替代路线已被用户否掉**
-  （每卡一实例 ≈ +5MB RSS，见 `docs/QUICK-NOTE-LAKE-MEMORY-SPIKE-260919.md`）；
+  （每卡一实例 ≈ +5MB RSS，见 `docs/QUICK-NOTES-SPEC.md`）；
   因此「预览显示不了的格式」必须同时从**工具栏**与**「+」面板**收掉（`filterQuickNoteInsert`），
   卡片注册保持全量（§5.8：不能摘，否则老内容里的表/自定义卡一编辑就被内核丢弃）。
 
@@ -1109,13 +1109,13 @@ PY
 
 ## 7. 待落地任务与关联实验
 
-- **任务 T1（待办，HANDOFF §3 技术债）**：新增 `src/features/editor/lakex-contract.d.ts`（§4 清单），替换 lakeRuntime 等处的 `as any`，纯类型改动 + 门禁全绿。
+- **任务 T1（待办，HANDOFF §3）**：新增 `src/features/editor/lakex-contract.d.ts`（§4 清单），替换 lakeRuntime 等处的 `as any`，纯类型改动 + 门禁全绿。
 - **实验 E1/E2（换核决策前置）**：真实 .lake ↔ lakelib 双向解析；lakelib 大文档渲染。详见工作区根 `lake-kernel-swap-analysis-260908.md` §9。
 - 本文件由 260908 只读评估生成；落地/回填后在此追加更新日志（一行一条，勿删历史）。
 - 2026-09-11：新增 §5.1（原生编辑 TOC 侧栏填充时序：空 toc 创建 + 1s 节流 + 直接 `_tocSidebar.update` 绕过节流），§4.2/§5 表补对应条目。来源：HANDOFF §2.15–2.16、lakeRuntime.ts `refreshTocSidebar`/`findNativeTocSidebar`。
 - 2026-09-16：§5.1 修订「点击定位」为 `allowModifyHash` 真相（内核 TOC 点击会写 `location.hash` → 触发锚点导航滚 html，导致整壳上移；修法 = 关 `allowModifyHash` + 锁 `html,body` overflow），补「`toc` option 是扁平 schema」；新增 §5.4（阅读态 Viewer 大纲：另一套类名/挂载时机、官方 `toc.getContainer` 与 `boundaryTopOffset`、点击跳转链路）与 §5.5（编辑态↔阅读态渲染模型差异、节点锚点恢复位置、窗口后台不渲染的 CDP 陷阱）；§6.6 更新为三级资料检索顺序（用户立规）。来源：260916 会话核实的 bundle 行号与 CDP 实测。
 - 2026-09-17：新增 §5.8（块级编辑：能力在 wrapper 层而非内核；动作→实现路径映射；`utils/blockDoc` 整篇 JSON 读改写的实测破坏 —— 正文 6032B→12288B、思维导图卡载荷 634B→8859B、未注册卡被整张抹掉；「转化为」各目标的原生命令实测表与代码块缺口；`editor.execCommand` 与 `renderer.execCommand` 在 indent/outdent 上的差异；`breakLine` 实现「在下方添加」而官方 `insertAtSelection` 实测无效；未注册遗留卡在任何一次保存后丢失）。来源：260917 会话在副本上的实测（`scripts/e2e-block-menu-smoke.mjs`）+ `yuque-developer-docs` 命令列表三级检索。
-- 2026-09-17（复核）：新增 **§5.8.1** —— **更正**「`insertAtSelection` 实测无效」为**有效**（`readData`→`insertINode`；折叠=插入、非折叠=替换、失败返回 `null`）；确认它是「插入带内容容器」的正规通道（内核自动补 `alertHole`/`containerHole`），配 `getNodeContent` 可一次性把段落替换成含原文的 alert/columns/collapse；命令级仍无转换命令（`quote` 是唯一 wrap）；代码块可用 markdown 围栏或 `insertCard`+`setCardValue` 写入；补规范 lake markup、`queryCommandEnabled` 不可靠、147 命令注册表、原生 `moveCard/moveCollapse/moveColumns/...` 的存在。来源：`docs/BLOCK-CONVERT-ANSWER-260917.md`（副本 CDP 实测 + bundle 源码）。
+- 2026-09-17（复核）：新增 **§5.8.1** —— **更正**「`insertAtSelection` 实测无效」为**有效**（`readData`→`insertINode`；折叠=插入、非折叠=替换、失败返回 `null`）；确认它是「插入带内容容器」的正规通道（内核自动补 `alertHole`/`containerHole`），配 `getNodeContent` 可一次性把段落替换成含原文的 alert/columns/collapse；命令级仍无转换命令（`quote` 是唯一 wrap）；代码块可用 markdown 围栏或 `insertCard`+`setCardValue` 写入；补规范 lake markup、`queryCommandEnabled` 不可靠、147 命令注册表、原生 `moveCard/moveCollapse/moveColumns/...` 的存在。来源：`docs/LAKEX-CONTRACT.md`（副本 CDP 实测 + bundle 源码）。
 - 2026-09-17（命令清单）：新增 **§5.9** —— 用 balanced-brace 解析 bundle 的 `kO({pluginName, command})`，落地**完整命令注册表 = 43 插件 / 147 条 kO 命令 + 4 条命令式（alert 族）= 151**；给出「块编辑命令 → 我们现状」（已用 / 未用 / 内核无对应）与三条候选原生化改造；澄清 `ISelectionHelperService` 是**工具栏注册服务、不是块选择 API**；记录多块选择 = DOM Range + `blockSelectionChange`/`unblockSelectionChange`，**内核无批量转化命令**。来源：`vendor/lakex-doc-react/src/components/lakex/lakex.js` 静态解析（脚本随 §5.9）。
 - 2026-09-19：新增 **§5.10**（浮动工具栏：内核 miniToolbar 只覆盖卡片/容器，无文本选区浮栏；`Doc.FrameworkUiLib` 浮层原语；固定工具栏的两条官方路；对照钉钉/云端实测）与 **§5.11**（小记版式 note UI：`uiSwitch.default='note'` + `fullscreen.enable` + `toolbar.agentConfig.note` 三件套；`ne-doc-note-editor` 挂载点类；展开 = `.ne-ui-fullscreen` 挂 `editorNode.parentNode` 且同一实例切回默认工具栏；**两个坑** —— 空编辑器不 `setDocument` 则 `document.ready` 不触发导致 note 版式整块失效、`agentConfig` 是整体替换导致展开后工具栏为空；**note 专用图标 `note-*` 不在 kernel sprite**（语雀 App 私有）⇒ 图片/待办改用 `image`/`taskList`、**附件只能自补 `#note-file` symbol**；附录一：云端小记「小记视图 / 列表视图」两种版式的对照基线；附录二：**附件按类型成卡的路由**（pre-reader 按 `category`+`from:'ui'` 分流、泛化 `insertCardByUI` 必须带 `name`、直接 `insertFiles` 不带 `from` 不生效、展示名 vs 磁盘名约定））。来源：本会话 bundle 静态解析 + 真实 Electron 实测 + 语雀云端小记对照（browser-skill 观察）。
 
@@ -1138,7 +1138,7 @@ PY
 6. **CSP**：`lakex-drawnix` / `lakex-drawnix-react-board` / `@xiangfa/mindmap` 的 `eval`、`new Function` 计数均为 0（与 FortuneSheet/CE 那类坑不同，画板不受无 `unsafe-eval` 约束影响）。
 7. **视口**：`onViewportChange` 是 no-op（LOCAL-CHANGE #8，防 pan/zoom 触发保存）。独立画板若要「记住上次看到哪」，
    用**被动回调** `onViewportPersist` 存 ref、只在保存时写进正文，**不要回灌 value**。
-8. **图片**：工具条有图片入口（文件选择 / 粘贴 / 拖放），引擎把图**内联成 data URL** 写进场景元素（`data/image.d.ts` 的 `insertImage`/`buildImage`）。独立画板文档由宿主做**提升**：data URL → `note-assets/{noteId}/` 资产文件（写盘口径 = canonical URL，内存口径 = data URL，见 `docs/BOARD-DOC-FEASIBILITY-260920.md` §九）。
+8. **图片**：工具条有图片入口（文件选择 / 粘贴 / 拖放），引擎把图**内联成 data URL** 写进场景元素（`data/image.d.ts` 的 `insertImage`/`buildImage`）。独立画板文档由宿主做**提升**：data URL → `note-assets/{noteId}/` 资产文件（写盘口径 = canonical URL，内存口径 = data URL，见 `docs/STORAGE-LAYERS.md` §九）。
    ⚠️ **导出/预览会 fetch `<img src>`**（`convertImageToBase64`）⇒ ① 跨源资产 URL 会被资产服务的 CORS 规则拦（所以内存保留 data URL）；② `connect-src` 必须放行 `data:`，否则画板带图导出 PNG/SVG 静默失败（既有缺陷，260920 已修）。
 9. **语雀侧的文档类型枚举**：内核 `getIconClassName` 白名单 = `['doc','sheet','design','thread','board','mind']`，镜像含 `doc-type-{default,sheet,table,board}.svg` ⇒ 画板/思维导图在官方形态里本就是文档类型。
 10. **蓝点快创（auto-complete）的提交语义**（260920 bundle 静态解析 + 实机）：
@@ -1158,7 +1158,7 @@ PY
       补丁另给 host 加了 `hoverPreview: false`：**关掉悬停预览的全部视觉**（放大蓝点 / crosshair / 幽灵形状 / 预览连线；连线预览由 `handleArrowLineCreating` 自己 append，补丁给它加了 `suppressPreview` 形参），但保留「悬停→预提交、单击→提交」的状态机 —— 实测悬停期间画布 SVG 元素数不变（104→104）、无 crosshair；我们传了 `hoverPreview: false`。
       文档内嵌的画板卡与独立画板共用同一个 `DrawnixBoardCore` ⇒ **该能力两端同时生效**（卡片实测：卡内画矩形 → 点蓝点 → 选「判断」⇒ 卡片 value 变为 `[rectangle, elbow, decision]`）。
 
-实机验证（隔离 userData + CDP 驱动真实 Electron）与剩余风险见 `docs/BOARD-DOC-FEASIBILITY-260920.md`。
+实机验证（隔离 userData + CDP 驱动真实 Electron）与剩余风险见 `docs/STORAGE-LAYERS.md`。
 
 ---
 

@@ -1,6 +1,6 @@
 /* 基础层 · 第三方画板（Drawnix / plait）—— 逐字节搬来，勿手改
    260916 第二档 S3：自 src/styles.css 按职责拆出（脚本：scripts/css-audit/split-app-layer.mjs，可重跑）。
-   本层由 src/styles.css 的 @import 编排，整体仍在 b3 之前 —— 层间先后不得改变（见 docs/CSS-LAYERS-BRIEF-260916.md §6）。
+   本层由 src/styles.css 的 @import 编排，整体仍在 b3 之前 —— 层间先后不得改变（见 docs/scripts/css-audit/README.md §6）。
    260916 合并注：自研 BoardCard 已在 lakex 迁移中删除（改用 vendor 内置画板卡），
    原 .board-card-wrapper* / .board-card-guard 规则随之失效，已清理；被动滚轮门控归现役
    .mindmap-interaction-gate（withCanvasWheelGate 给自定义卡编辑器包的那层）。 */

@@ -3,7 +3,7 @@
  * UI 重设计硬指标度量（P7 收尾用；也可随时跑到看进度）。
  * 用法：node scripts/ui-metrics.mjs [--json]
  *
- * 口径（与 docs/UI-REDESIGN-260921/README.md 第 1 节一致）：
+ * 口径（与 docs/UI-PRIMITIVES-PHASE1-260926.md 第 1 节一致）：
  *  - 「桌面侧样式」= src 下的 .css，排除 src/b3/siyuan 与 src/vendor；**再排除 src/mobile**（移动端本批不动）
  *  - 颜色字面量只允许出现在 src/styles/themes（主题文件）
  *  - !important 分别统计「我们」与「思源层」

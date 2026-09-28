@@ -18,7 +18,7 @@
    （WebView 媒体管线会拒 audio/video，img 宽松所以图片正常）
 3. **媒体播放**：audio/video 卡内嵌播放（Lake 原生卡 + AssetServer 提供源 + Range 支持 seek）；
    附件（file 卡）媒体内嵌播放、非媒体系统应用打开
-4. **同步**：S3（七牛 Kodo）manifest v4 协议，本地为真相
+4. **同步**：S3（七牛 Kodo）Manifest V1 协议，本地为真相
 
 ## 三、AssetServer.java 实现细节
 

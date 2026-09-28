@@ -61,7 +61,7 @@
 **存储事实（实测）**：桌面插入图片后，正文是 `sheets[].images[]`：
 `{ id, src:"data:image/png;base64,…", left, top, width, height, originWidth, originHeight }` ——
 `left/top` 是**相对网格内容原点（A1 左上）的像素**，FortuneSheet 已经算好；`src` 目前仍是 base64 内联
-（`docs/SHEET-IMAGE-MANAGEMENT-260919.md` 的 P1「落资产管线」尚未实施）。
+（`docs/STORAGE-LAYERS.md` 的 P1「落资产管线」尚未实施）。
 
 **实现（≈0.5 天，不引依赖、不动数据格式）**：
 - 纯核心 `src/core/sheetDoc.ts`：`sheetImages(sheet)` 归一化浮动图（过滤非法项/按 id 去重）+ `sheetImageSrc(src, noteId)`

@@ -24,11 +24,7 @@
 
 ## 一、项目概览
 
-- **形态**：Electron 44 桌面应用 + Capacitor 安卓端（已替代 Tauri/trui 版成为正式版，路线验证完成）
-- **为什么从 Tauri 换到 Electron**：
-  - Tauri 在 macOS 强制 WKWebView，无法渲染 SVG foreignObject 文字（画板、复杂排版 bug 频发）
-  - Lake 编辑器是 Web 组件，Chromium 是它的原生环境（语雀跑在 Chrome 上）
-  - Electron 有完整 DevTools；思源笔记（同类型产品）也是 Electron
+- **形态**：Electron 44 桌面应用 + Capacitor 安卓端（正式端）。
 
 ## 二、核心设计理念（仿思源笔记资源管理）
 
@@ -45,21 +41,7 @@ Electron 44.3 + React 18.3 + TypeScript 5.9 + better-sqlite3 13（N-API，无需
 （`@dlient/lakex-doc-react` 上游源码 vendor（产物入库），内核 v1.99.0，已 pin、勿随意升级）+ Drawnix 画板（`lakex-drawnix@0.1.0`）+
 sharp（图片转换）+ @aws-sdk/client-s3；移动端 = Vite + Capacitor（安卓）。准确版本以 `package.json` 为准。
 
-## 四、已完成里程碑（事实性，不含当前进度）
-
-| 项                                      | 状态                                                 |
-| -------------------------------------- | -------------------------------------------------- |
-| 路线验证（Electron 替代 Tauri）                | ✅ 完成                                               |
-| 资源归一化 + 第三方图片下载/复制                     | ✅ 完成（用户验证通过）                                       |
-| S3 备份同步 + 对象 GC（七牛 Kodo）               | ✅ 完成（真实云同步/GC 验证通过）                                |
-| 打包发布：dmg                               | ✅ 完成并冒烟验证（未签名、默认图标）                                |
-| 大文档性能 + 虚拟渲染                           | ✅ 已合入 master（首图 3.5s→88ms、TOC/代码块粘贴/表格工具栏/长大纲跟随修复） |
-| 代码审计 + 优化 + 单测、Electron 44 升级、S3 同步差集化 | ✅ 已完成并合入 master                                    |
-| 安卓端（Capacitor）                         | ✅ 完整端可用；真机验收项见 HANDOFF §8                              |
-
-> **本文不维护当前进度、测试计数、commit hash**（必然过期）。当前基线 / 本轮已完成 / 真正的待办 → **`HANDOFF.md`** **§0 / §2 / §3**。
-
-## 五、仓库与分支
+## 四、仓库与分支
 
 **本地仓库**：`/Users/admin/file/local-lake/lake-notes-electron`（独立 git 仓库）
 **当前分支**：`master`（主开发分支 = Gitee 默认分支）
@@ -77,11 +59,9 @@ origin  git@gitee.com:gtycoder/local-lake.git
 
 **在途 worktree / 本地分支清理现状**：属易过期事实，**以 `HANDOFF.md` §0 为准**（本文不维护）；开工前先跑 `git worktree list` + `git status` 核对。
 
-**历史分支**（均已合入/删除，勿基于它们开发）：`feat/electron-43-upgrade`、`perf/s3-sync-asset-dedup`、
-`fix/bookmark-paste-crash`、`audit/code-optimization`、`experiment/virtual-rendering`、`feature/electron`、
-`asset-server-poc`、`main`（旧 Electron 快照）。
+**分支策略**：所有功能分支合入后删除；历史分支不重新启用，需要时从 git 历史或远端归档查看。
 
-## 六、参考仓库（只读，勿修改）
+## 五、参考仓库（只读，勿修改）
 
 | 仓库                                                   | 用途                                                                |
 | ---------------------------------------------------- | ----------------------------------------------------------------- |
@@ -90,7 +70,7 @@ origin  git@gitee.com:gtycoder/local-lake.git
 | `/Users/admin/file/local-lake/lake-main/`            | lakejs 开源社区版内核（MIT）：**当"机制字典"读源码**，不是我们实际运行的 lakex 内核             |
 | `/Users/admin/file/local-lake/lake-editor-main/`     | 第三方 VSCode yuque-editor 插件（参考价值低）                                 |
 
-## 七、文档索引
+## 六、文档索引
 
 | 文档                                           | 内容                                                              | 新会话优先级       |
 | -------------------------------------------- | --------------------------------------------------------------- | ------------ |

@@ -7,8 +7,8 @@
 > `body`**（`src/core/quickNoteModel.ts`），写作区**编辑时挂一个 Lake 内核实例**
 > （`src/features/quickNotes/QuickNoteEditor.tsx`），并采用内核 **note 版式**（工具条「图片 / 待办」+
 > 右上角「展开」= 同一实例切成完整工具栏的整窗编辑器）。「转为正式笔记」因此从「手拼序列化」退化成
-> **搬运 + 资源作用域改写**。数据格式与迁移口径见 `docs/QUICK-NOTE-LAKE-BODY-260919.md`，
-> 内核机制与坑见 `docs/LAKEX-CONTRACT.md` §5.11；HANDOFF §2.10 及其「续做」段是会话交接。
+> **搬运 + 资源作用域改写**。数据格式与迁移口径见 `docs/QUICK-NOTES-SPEC.md`，
+> 内核机制与坑见 `docs/LAKEX-CONTRACT.md` §5.11；当前状态与待办见 `HANDOFF.md` §3。
 > 下文凡写「独立 textarea / 不复用 Lake 编辑器」的段落**均已过期**，仅作历史对照。
 >
 > **260919 续**：① 写作卡工具条 = **图片 / 待办 / 附件**（附件走 `stage_quick_note_file`，与图片共用

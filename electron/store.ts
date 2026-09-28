@@ -145,7 +145,7 @@ export class Store {
     this.logScopes = logScopes;
     this.noteAssetsDir = path.join(root, "note-assets");
     fs.mkdirSync(path.join(root, "notes"), { recursive: true });
-    // 表格（sheet）/ 多维表（bitable）/ 画板（board）正文独立目录：notes/ 仍是 doc 的容器（docs/SHEET-BITABLE-DESIGN-260918.md §4.1）
+    // 表格（sheet）/ 多维表（bitable）/ 画板（board）正文独立目录：notes/ 仍是 doc 的容器（docs/STORAGE-LAYERS.md §4.1）
     fs.mkdirSync(path.join(root, "sheets"), { recursive: true });
     fs.mkdirSync(path.join(root, "bitables"), { recursive: true });
     fs.mkdirSync(path.join(root, "boards"), { recursive: true });

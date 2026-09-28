@@ -1,6 +1,6 @@
 /* 基础层 · 浮层与菜单（右键菜单 / 确认框 / 错误条 / 徽章 / 提示）
    260916 第二档 S3：自 src/styles.css 按职责拆出（脚本：scripts/css-audit/split-app-layer.mjs，可重跑）。
-   本层由 src/styles.css 的 @import 编排，整体仍在 b3 之前 —— 层间先后不得改变（见 docs/CSS-LAYERS-BRIEF-260916.md §6）。 */
+   本层由 src/styles.css 的 @import 编排，整体仍在 b3 之前 —— 层间先后不得改变（见 docs/scripts/css-audit/README.md §6）。 */
 
 /* legacy statusbar rules removed; current-document status lives in styles/document-status.css */
 .error-banner { display: flex; position: fixed; top: 50%; left: 50%; z-index: 600; align-items: center; gap: 12px; width: min(560px, calc(100vw - 32px)); max-width: calc(100vw - 32px); padding: 12px 14px; border: 1px solid var(--lake-status-error-soft); border-radius: 10px; color: var(--lake-status-error); background: var(--lake-status-error-soft); font-size: 12px; box-shadow: var(--lake-error-shadow); transform: translate(-50%, -50%); transition: transform var(--dur-enter) var(--ease-out), opacity var(--dur-enter) var(--ease-out); }

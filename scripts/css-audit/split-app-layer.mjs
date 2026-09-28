@@ -18,7 +18,7 @@ import { REPO } from "./paths.mjs";
 const dry = process.argv.includes("--dry");
 const SRC_REL = "src/styles.css";
 const APP_DIR = "src/styles/app";
-const HEADER = "/* 基础层 · %TITLE%\n   260916 第二档 S3：自 src/styles.css 按职责拆出（脚本：scripts/css-audit/split-app-layer.mjs，可重跑）。\n   本层由 src/styles.css 的 @import 编排，整体仍在 b3 之前 —— 层间先后不得改变（见 docs/CSS-LAYERS-BRIEF-260916.md §6）。 */";
+const HEADER = "/* 基础层 · %TITLE%\n   260916 第二档 S3：自 src/styles.css 按职责拆出（脚本：scripts/css-audit/split-app-layer.mjs，可重跑）。\n   本层由 src/styles.css 的 @import 编排，整体仍在 b3 之前 —— 层间先后不得改变（见 scripts/css-audit/README.md §6）。 */";
 
 // 顺序 = 首次出现顺序（写死，脚本会校验并提示漂移）
 const DOMAINS = [
@@ -95,7 +95,7 @@ if (!dry) {
     "/* 基础层入口（260916 第二档 S3）：本文件只做编排，规则一律在 app/ 下的域文件里。",
     "   顺序 = 各域在原 styles.css 里的**首次出现顺序**，尽量少动同层内的相对顺序。",
     "   关键：本文件整体仍在 b3（思源层）之前加载 —— 这个层间先后是刻意的：我们有一批规则是靠",
-    "   \"写在前 + 特异性不够 = 让 b3 说了算\"来维持现状的（试搬实测见 docs/CSS-LAYERS-BRIEF-260916.md §6）。",
+    "   \"写在前 + 特异性不够 = 让 b3 说了算\"来维持现状的（试搬实测见 scripts/css-audit/README.md §6）。",
     "   所以域文件**不要**挪到 b3 之后，也不要把它们并进同名的壳层文件（shell.css / quick-notes.css …）。 */",
     ...order.map((n) => `@import "./styles/app/${n}.css";`),
     "",

@@ -3,7 +3,7 @@
  *
  * 只加在 notes.kind 与 manifest.kind 上，**不动 tree_nodes.node_type**（那套约束被回收站/目录/两端
  * 映射依赖，新增取值回归面最大）。缺省 "doc" 兼容旧库与旧清单。
- * 见 docs/SHEET-BITABLE-DESIGN-260918.md §4.3、docs/BOARD-DOC-FEASIBILITY-260920.md。
+ * 见 docs/STORAGE-LAYERS.md §4.3、docs/STORAGE-LAYERS.md。
  *
  * ⚠️ 新增取值必须同时升 MANIFEST_VERSION（src/core/syncUtils.ts）：未知 kind 会被旧端
  * normalizeNoteKind 静默降级成 doc ⇒ 旧端把画板 JSON 当 Lake 文档导入并保存 = 毁正文。

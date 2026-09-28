@@ -9,7 +9,7 @@
  * （FortuneSheet 是 sparse `celldata` + config/frozen/images/...）。按 AGENTS §3 #7：开发版数据可删可重建，
  * **不写兼容**——v1 正文 parse 返回 null → 按空表打开。
  *
- * 图片（260920 表格图片独立管理 P1，见 `docs/SHEET-IMAGE-MANAGEMENT-260919.md`）：浮动图
+ * 图片（260920 表格图片独立管理 P1，见 `docs/STORAGE-LAYERS.md`）：浮动图
  * `sheets[].images[].src` **存资产 filename**（文件落 `note-assets/{noteId}/`，复用资产管线：声明/GC/同步/
  * 历史/移动端 AssetServer）；渲染时由 `sheetImageSrc` 拼 URL，落盘时由 `sanitizeSheetWorksheet` 换回 filename。
  * **刻意不升版本号**：结构没变，`src` 的两种形态（filename / 内核刚插入的 `data:`）读写两侧天然都支持
@@ -56,7 +56,7 @@ export interface SheetWorksheet {
  * 工作表里的图片（FortuneSheet `sheets[].images[]`，两种形态共用同一个数组）：几何是**像素**，
  * 相对网格内容原点（A1 左上），**zoom=1 单位**（内核渲染时统一乘 `zoomRatio`）。
  * 插入瞬间内核产出的是 `{ id, src:"data:image/png;base64,…", left, top, width, height, originWidth, originHeight }`，
- * 宿主在保存前把 `src` 提升成资产 filename（见 `SHEET-IMAGE-MANAGEMENT-260919.md` P1）。
+ * 宿主在保存前把 `src` 提升成资产 filename（见 `STORAGE-LAYERS.md` P1）。
  * 带 `cell` 的是单元格图片（P2），几何由宿主一直跟着单元格矩形走。
  */
 export interface SheetImageRef {

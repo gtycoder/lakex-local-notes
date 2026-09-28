@@ -1,7 +1,7 @@
 # 隐藏回收站笔记本重构 — 设计定稿（TRASH-NOTEBOOK-DESIGN）
 
 > 状态：**设计定稿，进入实施**（2026-08-15）。分支 `feat/trash-notebook`（自 `experiment/manifest-gzip` 切出，含删除链路 + gzip + 增量扫描）。
-> 关联：`REFACTOR-TRASH-NOTEBOOK-HANDOFF.md`（起因/计划）、`AGENTS.md`（原则）、`S3-GC-DESIGN.md`（GC v4.1）、`QUICK-NOTES-SPEC.md`（小记产品规格）。
+> 关联：`AGENTS.md`（原则）、`S3-GC-DESIGN.md`（GC）、`QUICK-NOTES-SPEC.md`（小记产品规格）。
 
 ## 1. 目标与统一模型
 

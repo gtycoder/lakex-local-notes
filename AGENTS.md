@@ -11,7 +11,7 @@ Lake Notes 是**本地优先**笔记应用（Electron + React + better-sqlite3 +
 - 目录：`/Users/admin/file/local-lake/lake-notes-electron`
 - 开发分支：`master`（唯一持续演进的业务分支；历史分支一律已合入并删除，勿基于它们开发）
 - Node：**必须优先 Node 24**：`$HOME/.nvm/versions/node/v24.18.0/bin`
-- Electron：**44.3**（`package.json` 为 `^44.3.0`，以实际安装版本为准；此前记录为 43.4 已过期）；better-sqlite3 13.x（N-API 单二进制、无需 rebuild；双 ABI 基建已随 43 升级删除）
+- Electron：**44.3**（`package.json` 为 `^44.3.0`，以实际安装版本为准）；better-sqlite3 13.x（N-API 单二进制、无需 rebuild）
 - **目标数据量级**：压测做到 **10 万文档 / 100 万附件**（≈100k notes / 1M assets）。性能与同步决策按此量级验证，**勿用"小库正常"下结论**；同步/搜索/GC 相关改动的预期场景均以此为准。
 
 ## 2. 长期方向与文档分工
@@ -20,15 +20,14 @@ Lake Notes 是**本地优先**笔记应用（Electron + React + better-sqlite3 +
 - **具体待办与优先级只在 `HANDOFF.md` §3 维护**（`docs/TODO.md` 已删：历史总表无独立文档，权威待办只看 HANDOFF §3）。
 - 删除/恢复语义与 Electron 43 升级均已验收，后续改动必须保持现有同步语义（§3 原则 1~17）与全绿门禁。
 - 先修 Critical/Warning，再按模块拆分大文件；不在没有测试护栏的情况下进行大规模架构重写。
-- **编辑器内核（lakex）资料检索顺序 —— 涉及调用内核 API/配置项/命令时必走（260916 用户立规；260924 补第 ⓪ 步）**：
-  ⓪ **先翻我们自己 vendored 的包源码树**（260924 立规，血的教训）：`vendor/lakex-doc-react/src/**` —— 尤其 `components/plugin/**` 与 `components/lakex/icon.tsx`。**按「能力」搜，不按「调用栈」搜**：grep **类名族**（如 `ne-card-toolbar`）与**图标族**（`ne-t-*` / `icon-*`），别只盯运行时 bundle。⚠️ 该包里已有大量成品组件，但它们可能**只挂在 vendor 的 `LakexEditor` 入口上**，而我们的应用是直接 `Doc.createOpenEditor`（`lakeRuntime.ts`）、**从不走 `LakexEditor`** ⇒ 这些组件在我们的产品里**从不运行**，极易被整片忽略。
-    *实例（260924）*：图片浮动工具栏本就在仓库里 —— `components/plugin/imageToolbar/ImageToolbar.tsx`(+css)、`components/lakex/icon.tsx` 的 `ne-t-image-*`、`components/plugin/i18n.ts` 的全部文案、以及 `assets/lakex-doc.css` 里 `.ne-card-toolbar-*` 全套样式；当时却因为**前缀搜错**（找 `icon-*crop*` 而不是 `ne-t-image-crop`）+ 只看 bundle 不看源码树，绕远路去浏览器抓云端 DOM。
+- **编辑器内核（lakex）资料检索顺序 —— 涉及调用内核 API/配置项/命令时必走**：
+  ⓪ **先翻我们自己 vendored 的包源码树**：`vendor/lakex-doc-react/src/**` —— 尤其 `components/plugin/**` 与 `components/lakex/icon.tsx`。**按「能力」搜，不按「调用栈」搜**：grep **类名族**（如 `ne-card-toolbar`）与**图标族**（`ne-t-*` / `icon-*`），别只盯运行时 bundle。⚠️ 该包里已有大量成品组件，但它们可能**只挂在 vendor 的 `LakexEditor` 入口上**，而我们的应用是直接 `Doc.createOpenEditor`（`lakeRuntime.ts`）、**从不走 `LakexEditor`** ⇒ 这些组件在我们的产品里**从不运行**，极易被整片忽略。
   ① **官方出处优先** `/Users/admin/file/local-lake/yuque-developer-docs/`（语雀开发者文档本地副本；`docs/` 按主题编号，如 `65 - 大纲（toc)`、`47 - 通用配置`、`07 - API与事件`、`08 - 命令列表`、`48 - 适配器`）——**先确认官方到底有没有这个能力/配置/命令及其语义**，不要凭 bundle 反编译猜用法；官方有就用官方途径（例：阅读态大纲挂载点走 `toc.reading.getContainer`、阅读器偏移走 `boundaryTopOffset`），而不是自己写 CSS/私有 hack 绕过。
   ② **本项目契约与踩坑** `docs/LAKEX-CONTRACT.md`（闭源 lakex 已核实的行为契约 + 调试速查表；含我们实测出的内核行为与反例）——**新观测必须回填此处**，别只留在 HANDOFF 或代码注释里。
   ③ **更精细的源码字典对照** `/Users/admin/file/local-lake/lake-editor-main/`（第三方 VSCode yuque-editor 插件）与 `/Users/admin/file/local-lake/lake-main/`（lakejs 开源社区版，仅"机制字典"）——用于挖机制/实现细节与交叉验证；**注意 lake-main 序列化方言已与运行内核分叉，结论不得直接套用**。
   最终仲裁 = 仓库内 vendor 内核 bundle `vendor/lakex-doc-react/src/components/lakex/lakex.js`（即语雀 @alipay/lakex-doc，实际运行的代码）+ 运行时实测；以上资料与实测冲突时以实测为准。
 - **文档分工（防漂移）**：`README.md`=项目概览（不维护进度/计数）· `HANDOFF.md`=唯一交接（当前基线/待办/本轮踩坑）· `AGENTS.md`=长期红线/机制/坑。
-  **仓库只保留当前有效的契约/规格/指南与仍在使用的设计依据**；已完成的研究、计划、spike、审计和 dated review 直接删除，需要时从 git 历史恢复，不建 archive 目录。历史上本文件曾长期残留旧分支名与 188/217 测试计数，已清理，**不要写回去**。**HANDOFF 只保留最新 §0（1–2 节）+ 基线/待办/坑**：被顶掉的历史节**直接删除**（git 可查，不建 archive 目录、不搬 docs/notes），**不要再把 dated handoff 堆回本文件**。
+  **仓库只保留当前有效的契约/规格/指南与仍在使用的设计依据**；已完成的研究、计划、spike、审计和 dated review 直接删除，需要时从 git 历史恢复，不建 archive 目录。**HANDOFF 只保留最新 §0 + 基线/待办/坑**，不要堆历史。
 
 ## 3. 核心设计原则（用户反复强调，务必遵守）
 
@@ -38,43 +37,42 @@ Lake Notes 是**本地优先**笔记应用（Electron + React + better-sqlite3 +
 4. **恢复是唯一显式例外**：用户从回收站恢复 = 明确撤销删除 → 写入恢复标记（`notes.restore_pending_at`，小记 `quick_notes.restore_pending_at`）→ 同步时 local-wins，上传 active 覆盖墓碑并传播给其他端。恢复标记在 `markSynced` 时清除（绝不能残留，否则墓碑永胜失效）。
 5. **墓碑携带删除前内容**：墓碑条目 `contentHash` 填**真实 hash**（删除方软删保留 `.lake`，同步时读文件算 hash + 上传对象）。其他设备下载时**先拉删除前内容再应用墓碑**（先内容、后标志）→ 回收站/恢复拿到的是删除方最新编辑版。旧墓碑（占位符 contentHash）靠容错下载天然兼容（对象不存在则跳过），无需判断占位符形态。
 6. **同步顺序**：先拉远端（带冲突判定地合并）→ 推合并后的本地。墓碑是标志，内容照常走同步路径。
-7. **不考虑数据兼容 / 不为旧数据写兼容代码**（原 #7 + #10 合并）：开发版数据可删可重建，不做迁移/兼容层、不做"为了历史数据"的过度设计；脏数据/坏数据（如某次 bug 写坏的文档）**直接删掉重建**，不写任何"兼容/修复/容忍旧数据形态"的代码——不做展示层兼容、不做格式迁移、不判断占位符形态。判断标准：**先问"这些数据能不能删了重新生成？"——能，就绝不写兼容**。用户原话：*"这是开发版，不要考虑数据兼容问题，大不了删除所有数据。"* / *"永远不要为旧数据写冗余代码，我们这个阶段根本不需要。"*
+7. **不考虑数据兼容 / 不为旧数据写兼容代码**：开发版数据可删可重建，不做迁移/兼容层、不做"为了历史数据"的过度设计；坏数据直接删掉重建。判断标准：**先问"这些数据能不能删了重新生成？"——能，就绝不写兼容**。
 8. **（并入 #17）** KISS/DRY/SOLID：优先最简单可靠的实现；不引入未经验证的抽象；用已有依赖解决，不随意加依赖。**拒绝过度设计/迎合式找需求 = #17 红线**。
-9. **多表写必须用事务**：`this.db.transaction(() => {...})`。已审计修复：`restoreHistory`、`applyRemoteNoteMeta`、`markSynced`。
-10. **（并入 #7）** 不为旧数据写兼容代码——判定标准/理由/用户原话见 **#7**（开发版数据可删可重建）。
-11. **资产存在性判定 = 远端清单声明差集（对齐思源 dejavu），禁止逐对象 HEAD/GET 探测、禁止本机陈旧缓存**：同步下载时已拿到远端 latest 清单，其 `notes[].assets` 就是「云端当前被引用集」的权威快照（发布顺序=先对象后清单；GC 只删「未被任何在留清单引用的键」+ 年龄保护）。⇒「清单声明该资产」即「云端存在且未被删」。上传只对「清单未声明的缺失资产」做 PUT，但 `manifest.assets` 仍**全量声明**（裁剪声明 → 他端 GC 把在用资产误判未引用而删）。**禁止**退回每对象 HEAD（实测 churn 同步因此 14s 空转、真实云首传 18s）；**禁止**「本机记过=已上传」的持久缓存（GC 可能删过该对象 → 缓存失真 → 破坏跨端自愈，这正是当年去掉缓存的原因）。
+9. **多表写必须用事务**：`this.db.transaction(() => {...})`。
+11. **资产存在性判定 = 远端清单声明差集（对齐思源 dejavu），禁止逐对象 HEAD/GET 探测、禁止本机陈旧缓存**：同步下载时已拿到远端 latest 清单，其 `notes[].assets` 就是「云端当前被引用集」的权威快照（发布顺序=先对象后清单；GC 只删「未被任何在留清单引用的键」+ 年龄保护）。⇒「清单声明该资产」即「云端存在且未被删」。上传只对「清单未声明的缺失资产」做 PUT，但 `manifest.assets` 仍**全量声明**（裁剪声明 → 他端 GC 把在用资产误判未引用而删）。**禁止**退回每对象 HEAD；**禁止**「本机记过=已上传」的持久缓存（GC 可能删过对象，缓存会失真并破坏跨端自愈）。
 **两个外部前提（协议契约外，按红线不写检测、仅记录）**：① 无带外删除——不绕过本协议手工删/生命周期规则删云端对象（若发生，latest 仍声明但对象已失，属契约外）；② 资产按 filename 内容寻址——skip 只比对 `assets/{noteId}/{filename}` 是否已声明、不校验云端字节，靠 `buildAssetFilename`（时间戳+hash 前缀）保证「同名即同内容」。
 对称地，**下载侧同样走差集**：`downloadNoteAssets` 按本地实扫的 size+sha256 跳过已持有资产；`active→trash` 跟随删除仅在**实读正文 sha256 相等**时复用本地、否则 GET 自愈——两处都验真实字节、不盲信 `contentHash` 缓存（`localHashOf` 对 synced 走 baseHash 缓存不读盘）。
-12. **兜底"未分类"笔记本只惰性创建**：系统无默认笔记本；仅当某笔记**真正回落到兜底父**时才 `resolveDefaultNotebook()` 创建（本轮至多一次）。**禁止**在下载阶段开头无条件 `defaultNotebookId()`（旧实现导致空库同步即使 `downloaded=0` 也凭空创建并上传"未分类"）；冲突探测等"最终可能不应用"的路径**不得**解析兜底父。
+12. **兜底"未分类"笔记本只惰性创建**：仅当某笔记真正回落到兜底父时才创建。禁止在下载阶段或"最终可能不应用"的冲突探测中提前解析兜底父。
 13. **S3 并发上限 = 8（七牛建议）**：峰值并发 PUT = `NOTE_UPLOAD_CONCURRENCY(2) × ASSET_CONCURRENCY(4) = 8`；正文对象 `UPLOAD_CONCURRENCY(4)`、下载 `ASSET_CONCURRENCY(4)` 各自 ≤8 且与资产阶段串行、不叠加。**不得**为吞吐调到 16+（日常用不到、易触七牛限流）。
-14. **桌面 UI 一律走「自有设计系统」，禁止再写内联样式，也禁止新增 `!important`**（260921 UI 重设计后改写；此前本条是「精仿思源」，已作废）：
+14. **桌面 UI 一律走「自有设计系统」，禁止再写内联样式，也禁止新增 `!important`**：
     - **令牌是唯一来源**：颜色/圆角/间距/字号/动效/字体只用 `--lake-*`，定义在 `src/styles/themes/{base,light,dark,warm}.css`（**主题即数据**：结构/几何/动效不随主题变，只换变量）；`data-theme` 由 `src/lib/themes.ts` 的注册表驱动。**颜色字面量只允许出现在 `src/styles/themes/`**（其他任何桌面 CSS 里出现 hex/rgb 都算缺陷）。
     - **组件库**：`src/styles/kit.css`（14 件：`ln-btn/ln-iconbtn/ln-row/ln-list/ln-menu/ln-modal/ln-scrim/ln-drawer/ln-toast/ln-input/ln-select/ln-switch/ln-tag/ln-card/ln-tip/ln-segment/ln-scroll/ln-form`）+ 外壳 `chrome.css` + 领域 `feature.css` + 浮层 `overlay.css` + 无障碍 `a11y.css`。规格文档在 `ui-design-inputs/out/design-system/`（TOKENS / COMPONENTS / LAYOUT / STATES / TYPOGRAPHY-ICONS）——**新 UI 先查它有没有现成件**。
-    - **浮层只走原语（260926 Phase 1）**：所有对话框/菜单/气泡必须用 `src/components/ui/Overlay.tsx` 的 `Dialog/Menu/Popover/HoverPopover/Submenu`（`HoverPopover` = 悬停可交互气泡：锚点与表面共享悬停区 + 开/关延时；`Submenu` = 父菜单里的悬停子菜单：相邻侧定位 + 视口夹取），**不要手写 `createPortal`**；表面（`.ln-dialog/.ln-menu/.ln-popover`）只在 `styles/overlay.css` 定义一处，层序用 `--lake-z-overlay-{menu,scrim,dialog,lightbox}`。由 `src/styles/uiPrimitives.test.ts` 卡住（createPortal 白名单 / 表面唯一 / 层序令牌高于 topbar）。改浮层先读 `docs/UI-PRIMITIVES-PHASE1-260926.md`。
+    - **浮层只走原语**：所有对话框/菜单/气泡必须用 `src/components/ui/Overlay.tsx` 的 `Dialog/Menu/Popover/HoverPopover/Submenu`（`HoverPopover` = 悬停可交互气泡：锚点与表面共享悬停区 + 开/关延时；`Submenu` = 父菜单里的悬停子菜单：相邻侧定位 + 视口夹取），**不要手写 `createPortal`**；表面（`.ln-dialog/.ln-menu/.ln-popover`）只在 `styles/overlay.css` 定义一处，层序用 `--lake-z-overlay-{menu,scrim,dialog,lightbox}`。由 `src/styles/uiPrimitives.test.ts` 卡住（createPortal 白名单 / 表面唯一 / 层序令牌高于 topbar）。改浮层先读 `docs/UI-PRIMITIVES-PHASE1-260926.md`。
     - **层序即优先级**：`src/styles/index.css` 顶部 `@layer legacy, tokens, reset, kit, shell, feature, overlay, a11y;`。新样式写进对应层即可压过旧样式，**不需要靠特异性或 `!important` 取胜**；a11y 是最高层，无障碍契约放那里天然生效。
-    - **思源层已整体移除（桌面 + 移动，260923 W2）**：`src/b3/**` 目录已删除；仅 **类名**（`.b3-*` / `fn__*`）作为 JSX 契约保留，其承重规则收编在 `src/styles/compat.css`（双端共用，值一律 `--lake-*`）。**不要**再引入 `src/b3/*`。
+    - **思源层已整体移除**：`src/b3/**` 目录已删除；仅 **类名**（`.b3-*` / `fn__*`）作为 JSX 契约保留，其承重规则收编在 `src/styles/compat.css`（双端共用，值一律 `--lake-*`）。**不要**再引入 `src/b3/*`。
     - **设置页骨架**仍是 `.config-group / .config-title / .config-items / .config-item / .config-name / .config-block / .config-empty`（分组标题在灰卡外、卡内一行一项、行间 1px 分隔）—— 这组类现在由 `compat.css` 定义。**设置页每加/改一行都要同步 `settingsSearch.ts` 的 `SETTING_ITEMS`**（行原语带 `itemId` → `data-set-id`，支撑条目级搜索定位；漂移有单测卡住，改完跑 `vitest src/components/settingsSearch.test.ts` 即知）。
     - **不要**在组件里写 `style={{...}}`，也不要再造第五套视觉类；**横向 tab 一律分段控件**（轨道 + 浮起白段），只给选中项灰底会被判读成「看不出这是 tab」。
-    - **改动落点（用户 260921/260922 立规，硬约束）**：**所有 UI/前端改动必须找到根位置、直接改那一处；禁止一层层套 CSS 覆盖**（层压层会越积越多、越来越难查）。流程：先定位该视觉/几何的**单一来源规则**（组件根规则、令牌、layout 常量）→ **就地改**；不要为了调观感再往更高层加一条覆盖，也不要同一选择器多处重复声明。**唯一例外**：目标是**内核(lakex) / 第三方组件**（运行时注入的无层样式、或 element 上的 inline style，层序压不过）时，才允许更高层或 `!important`，且必须写明理由。
+    - **改动落点（硬约束）**：**所有 UI/前端改动必须找到根位置、直接改那一处；禁止一层层套 CSS 覆盖**（层压层会越积越多、越来越难查）。流程：先定位该视觉/几何的**单一来源规则**（组件根规则、令牌、layout 常量）→ **就地改**；不要为了调观感再往更高层加一条覆盖，也不要同一选择器多处重复声明。**唯一例外**：目标是**内核(lakex) / 第三方组件**（运行时注入的无层样式、或 element 上的 inline style，层序压不过）时，才允许更高层或 `!important`，且必须写明理由。
     - **`!important` 是例外而非手段**：当前全桌面只允许 **9 条**（每条都在代码里注明为何必需，典型是「要压过 JS 写进 element 的 inline style」如 `.settings-panel-large` 宽度，和双端共享文件里必须压住 `.b3-button--outline` 的 `.seg__item`）。目标 ≤10，**新增任何一条都要写明理由**。
     - **两条护栏**（改样式后必跑）：① `src/styles/cssLayers.test.ts` —— 逐文件「声明数 / 重复(选择器,属性)组数」基线上限，只允许变小；**注意它的扫描器不进入 `@layer {}` 块，所以新层文件要由入口 `@import … layer(x)` 指定层，不要在文件内自包 `@layer`**；② `node scripts/ui-metrics.mjs` —— 硬指标（桌面 `var(--b3-*)`=0、非主题颜色字面量=0、`!important`≤10、入口 b3 import=0、同名文件对=0）。
 
 15. **"已彻底删除"的判定必须永久**：`deleted_notes.purged_at` 只是"待删 S3 前缀"的工作标记，前缀删完就被 `markPurgeSynced()` 清空——**不能**拿它当"这条已被 purge"的依据（否则陈旧清单会把它重新导入/让子文档挂到不存在的父下，产生侧栏看不见却仍在同步与占资源的"幽灵文档"）。永久口径：folder 看 `deleted_notes` 是否存在 `node_type='folder'` 墓碑；note 看其墓碑。purge 时**无条件**写墓碑（`notes` 行缺失就从 `tree_nodes` 兜底取元数据），漏写等于云端永不下架、必然复活。`runDataHealthCheck` 的 `treeDanglingParent` 就是查这类节点。
 
-16. **任何打开文档的入口都必须先判定"是否已进回收站/被他端 purge"**：统一用 `src/core/syncDecisions.ts` 的 `isGoneNote({parentId, syncState})`（parentId=TRASH 或 syncState='purged'）。命中则标签页以 `deleted` 打开 → 编辑器只读（复用 `EditorTab.locked` 的 viewer 模式）+ 顶部横幅提示 + 保存被拦时明确提示，**绝不允许静默丢弃编辑**。恢复走 `handleTrashRestored`（重载正文并清标记）。历史上这个守卫只在同步刷新路径里跑，导致重启自动重开"最后文档"时回收站文档可编辑可保存（2026-09-04 用户报）。
+16. **任何打开文档的入口都必须先判定"是否已进回收站/被他端 purge"**：统一用 `src/core/syncDecisions.ts` 的 `isGoneNote({parentId, syncState})`（parentId=TRASH 或 syncState='purged'）。命中则标签页以 `deleted` 打开 → 编辑器只读（复用 `EditorTab.locked` 的 viewer 模式）+ 顶部横幅提示 + 保存被拦时明确提示，**绝不允许静默丢弃编辑**。恢复走 `handleTrashRestored`（重载正文并清标记）。
 
 17. **拒绝"迎合式找需求"：任何非 bug 改动先证真实价值，证不了就直说"不做"（红线）**。不要为了顺着用户去发明需求、把"看起来该做"的改动包装成必要。判断三问，**缺一即不做**：① 问题真实存在吗（有复现/数据/历史 bug 证据）？② 不做会付出什么代价？③ 收益是否明确大于新增复杂度？用户明确要求这种诚实——"不用迎合我、一定拒绝过分设计"。
     - **过度设计的信号**（命中即警惕）：为"统一/优雅/以后可能需要"而加抽象层或共享层；把两个本就不同的东西强行合并；用新依赖解决旧依赖能解决的问题；收益只停留在"代码更整洁"而非"解决了已发生的问题"；只给方案不给反对意见。
     - **实例（SQL 统一）**：曾提议"抽共享 SQL 常量 / 统一两端查询入口"。核查后**否决**：桌面 `notes` 只存元数据（正文在 `.lake`）、树是 `tree_nodes`；移动 `notes` 含 `content`、树是 `folders`，连 `search_index` 列都不同（多 `title`/`raw_hash`）→ 看似"重复"其实是**两套持久化模型**，不是同一份抄了两遍；共享 SQL 文本的前提是先收敛 schema（产品级决策），收益仅是整齐。真正该做的是**共享 core 逻辑 + 跨端对拍测试**（已有 `syncEquivalence`/`syncAdapterEquiv`/`syncDualAB`/`treeRules.equiv`）；**SQLite 也不需要连接池**（单写、better-sqlite3 同步单连接）。
     - 宁可少做，不要多做；不确定时先自问："这是真问题，还是我想做的？"
 
-18. **依赖 / vendor 代码的「冗余、未用路径、死代码」不做清理**（用户 260924 定调：*"不是我们的代码不用改，依赖肯定是要有冗余的，这个没法控制"*）：`vendor/**` 与任何第三方依赖本来就带冗余，**不因为"我们没用到"就去删/重写**（会牵动 vendor 构建与上游契约，且不属于我们维护的范围）。只在我们**必须改行为**时，按 `vendor/lakex-doc-react/LOCAL-CHANGES.md` 的流程做最小改动。**以后不要再提议清理依赖侧的死路径。**
+18. **依赖 / vendor 代码的「冗余、未用路径、死代码」不做清理**：`vendor/**` 与任何第三方依赖本来就带冗余，**不因为"我们没用到"就去删/重写**（会牵动 vendor 构建与上游契约，且不属于我们维护的范围）。只在我们**必须改行为**时，按 `vendor/lakex-doc-react/LOCAL-CHANGES.md` 的流程做最小改动。**以后不要再提议清理依赖侧的死路径。**
 
 ## 4. 关键机制速览（同步）
 
-- **Manifest V1 重置（260928）**：旧数据与远端清零后，Lake manifest 重新使用 `version=1`，但内容 schema 沿用原 v7（folders/墓碑/锁/`kind`/board 保留）。代码只读写 `{1}`；所有端必须一起升级。传输/GC/类型分别见 `electron/s3Store.ts` / `electron/s3Maintenance.ts` / `electron/syncTypes.ts`，编排见 `electron/syncEngineController.ts`。
+- **Manifest V1 重置**：旧数据与远端清零后，Lake manifest 重新使用 `version=1`，但内容 schema 沿用原 v7（folders/墓碑/锁/`kind`/board 保留）。代码只读写 `{1}`；所有端必须一起升级。传输/GC/类型分别见 `electron/s3Store.ts` / `electron/s3Maintenance.ts` / `electron/syncTypes.ts`，编排见 `electron/syncEngineController.ts`。
 
-- **壳层双 origin（260926）**：打包版渲染层跑私有协议 **`lake://app`**（`electron/appOrigin.ts` + `electron/appProtocol.ts` 服务 `dist/`；标准/安全/fetch/cors/stream/codeCache 全套 privilege），dev 跑 vite dev server（`LAKE_RENDERER=scheme` 可在 dev 下强制走前者自验）——桌面与浏览器端由此共享同一套 origin 语义（localStorage/CSP/fetch/clipboard）。**判定页面来源禁止比较 `URL.origin`**：非特殊 scheme 在 Node 的 URL 里 origin 恒为 `"null"`（Chromium 侧才是 `lake://app`）⇒ 必须比 scheme+host（`isAppOriginUrl`），否则 page 能加载、preload 在、但每个 IPC 都报「来源不受信任」。资产服务的 Origin 白名单 / ACAO 回显必须同时放行 `APP_ORIGIN`。**主进程 external 从 `package.json.dependencies` 派生**（+ `@smithy/` 传递依赖），别退回逐个硬编码。
+- **壳层双 origin**：打包版渲染层跑私有协议 **`lake://app`**（`electron/appOrigin.ts` + `electron/appProtocol.ts` 服务 `dist/`；标准/安全/fetch/cors/stream/codeCache 全套 privilege），dev 跑 vite dev server（`LAKE_RENDERER=scheme` 可在 dev 下强制走前者自验）——桌面与浏览器端由此共享同一套 origin 语义（localStorage/CSP/fetch/clipboard）。**判定页面来源禁止比较 `URL.origin`**：非特殊 scheme 在 Node 的 URL 里 origin 恒为 `"null"`（Chromium 侧才是 `lake://app`）⇒ 必须比 scheme+host（`isAppOriginUrl`），否则 page 能加载、preload 在、但每个 IPC 都报「来源不受信任」。资产服务的 Origin 白名单 / ACAO 回显必须同时放行 `APP_ORIGIN`。**主进程 external 从 `package.json.dependencies` 派生**（+ `@smithy/` 传递依赖），别退回逐个硬编码。
 
 - 冲突四分支在 `src/core/syncEngine.ts` 下载阶段；`baseHash + lastUploadedHash` 存本地 `sync_base`，**绝不上 manifest**。
 - `supersededNotes`：本地改动被远端覆盖时先强制 `createHistorySnapshot` 留档再接受远端。

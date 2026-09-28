@@ -1,7 +1,7 @@
 /**
  * 画板编辑器（kind="board"）——独立画板文档：一个文档 = 一张 Drawnix/Plait 无限画布。
  *
- * 关键约束（260920 可行性验证，见 docs/BOARD-DOC-FEASIBILITY-260920.md）：
+ * 关键约束（260920 可行性验证，见 docs/STORAGE-LAYERS.md）：
  * - **不挂 Lake 内核**：直接挂 vendor 的 `DrawnixBoardCore`（零内核实例、正文不是 `.lake`、无卡片上下文）。
  *   引擎分包已存在且懒加载：`DrawnixBoardCore-*.js`（≈113KB gzip）+ `drawnix-*.js`（≈398KB gzip），
  *   不在首屏 index chunk。

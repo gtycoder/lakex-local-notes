@@ -52,18 +52,18 @@
 ---
 
 > **表格文档（`kind="sheet"`，260918 引入；260919 换内核；260920 图片资产化）**：正文落 `sheets/{noteId}.sheet.json`，路径由 `notes.kind` 决定（`store.bodyPathFor`）。
-> 正文格式 = **v2 FortuneSheet workbook**（`{kind:"sheet",version:2,sheets:Sheet[]}`；保存时剔 `luckysheet_select_save` 等运行时字段 + dense `data`→sparse `celldata`）。搜索文本由 `sheetToSearchText`（遍历 celldata）派生，**不进 Lake HTML 解析器**。见 `docs/SHEET-BITABLE-DESIGN-260918.md`。
+> 正文格式 = **v2 FortuneSheet workbook**（`{kind:"sheet",version:2,sheets:Sheet[]}`；保存时剔 `luckysheet_select_save` 等运行时字段 + dense `data`→sparse `celldata`）。搜索文本由 `sheetToSearchText`（遍历 celldata）派生，**不进 Lake HTML 解析器**。见 `docs/STORAGE-LAYERS.md`。
 > **浮动图 = 资产引用**（260920 P1）：`sheets[].images[].src` 存**资产 filename**（`{13ts}_{8hex}.{ext}`，文件在 `note-assets/{noteId}/`），
 > **正文不存 base64、不存 URL**；渲染由 `sheetImageSrc(src, noteId, port)` 拼本实例 canonical URL，落盘由 `sheetImageDiskSrc` 换回 filename。
 > 声明/GC/同步/历史全复用现有资产管线（清单声明是**磁盘实扫** `listLocalAssets`，正文无需额外声明；GC 保护靠 `extractAssetRefs` 命中 JSON 里的 filename）。
-> 旧正文里遗留的 base64 在**打开时**由同一条「提升」路径收敛成资产（不加版本号、不写迁移）。见 `docs/SHEET-IMAGE-MANAGEMENT-260919.md`。
+> 旧正文里遗留的 base64 在**打开时**由同一条「提升」路径收敛成资产（不加版本号、不写迁移）。见 `docs/STORAGE-LAYERS.md`。
 >
 > **多维表文档（`kind="bitable"`，260920 实现 v1）**：正文落 `bitables/{noteId}.bitable.json`，路径同样由 `notes.kind` 决定（`store.bodyPathFor`）。
-> 正文格式 = **自研 record-based JSON**（`{kind:"bitable",version:1,tables[],activeTableId}`；一个文档可含多张数据表，为后期多表联合预留）。搜索文本由 `bitableToSearchText`（表名 + 各字段展示值）派生，**不进 Lake HTML 解析器**。附件字段存 filename，复用 `assets/{noteId}/{filename}` 资产管线。产品口径见 `docs/BITABLE-PRODUCT-SPEC-260919.md`。
+> 正文格式 = **自研 record-based JSON**（`{kind:"bitable",version:1,tables[],activeTableId}`；一个文档可含多张数据表，为后期多表联合预留）。搜索文本由 `bitableToSearchText`（表名 + 各字段展示值）派生，**不进 Lake HTML 解析器**。附件字段存 filename，复用 `assets/{noteId}/{filename}` 资产管线。产品口径见 `docs/STORAGE-LAYERS.md`。
 > **画板文档（`kind="board"`，260920 引入）**：正文落 `boards/{noteId}.board.json`，路径同样由 `notes.kind` 决定（`store.bodyPathFor`）。
 > 正文格式 = **Drawnix/Plait 场景 JSON**（`{kind:"board",version:1,engine:"drawnix",preset,elements[],viewport?}`）；`elements` 就是文档内画板卡的 `plaitValue`，两者可无损互搬。
 > **不挂 Lake 内核**（编辑器直接挂 `DrawnixBoardCore`，零内核实例）；**不写卡片专用的 `previewImage`/`cardHeight`**（那张整幅 PNG 实测占带画板文档体积 90%+）。
-> 搜索文本由 `boardToSearchText`（形状文字/文本块/思维导图节点/连线标签）派生，**不进 Lake HTML 解析器**。画板内的图片由引擎内联成 data URL，**不进 `manifest.assets`**。见 `docs/BOARD-DOC-FEASIBILITY-260920.md`。
+> 搜索文本由 `boardToSearchText`（形状文字/文本块/思维导图节点/连线标签）派生，**不进 Lake HTML 解析器**。画板内的图片由引擎内联成 data URL，**不进 `manifest.assets`**。见 `docs/STORAGE-LAYERS.md`。
 
 ## 3. 移动端磁盘布局
 

@@ -2,7 +2,7 @@
  * 移动端画板查看器（kind=board，只读）挂载护栏。
  *
  * jsdom + mock 掉 vendor 懒加载器：只验证「宿主这一层」的行为（真画布在桌面已实测，见
- * docs/BOARD-DOC-FEASIBILITY-260920.md §四）：
+ * docs/STORAGE-LAYERS.md §四）：
  * - 未活动过的 tab 不建实例（隐藏态建画布会量成 0 尺寸）；
  * - 实例以 readOnly + fitOnInit 挂载（移动端只读、打开即自适应到内容）；
  * - 喂给画布的是正文里的 elements（board 正文绝不交给 Lake 编辑器）。

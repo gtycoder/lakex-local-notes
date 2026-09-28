@@ -119,7 +119,7 @@ export class SchemaInit {
     if (!cols.some((c) => c.name === "locked_at")) {
       this.ctx.db.exec("ALTER TABLE notes ADD COLUMN locked_at TEXT");
     }
-    // 文档类型（doc | sheet | bitable）：进 manifest.kind 跨端同步（见 docs/SHEET-BITABLE-DESIGN-260918.md §4.3）。
+    // 文档类型（doc | sheet | bitable）：进 manifest.kind 跨端同步（见 docs/STORAGE-LAYERS.md §4.3）。
     // 缺省 'doc' 兼容旧库；tree_nodes.node_type 仍只区分 notebook/group/note（不新增 node_type，避免动目录约束）。
     if (!cols.some((c) => c.name === "kind")) {
       this.ctx.db.exec("ALTER TABLE notes ADD COLUMN kind TEXT NOT NULL DEFAULT 'doc'");

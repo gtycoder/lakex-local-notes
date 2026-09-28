@@ -1,7 +1,7 @@
 /**
  * SheetEditor（FortuneSheet）挂载护栏（260919）。
  *
- * 背景：表格内核由 jspreadsheet CE 换成 FortuneSheet（见 docs/FORTUNESHEET-FEASIBILITY-260919.md）。
+ * 背景：表格内核由 jspreadsheet CE 换成 FortuneSheet（见 docs/ARCHITECTURE.md）。
  * vitest 是 node 环境、起不了 FortuneSheet（canvas），故用源码级断言（与 blockMenuNative.test.ts 同套路），
  * 锁死三条易回归的集成约束：
  * - keep-alive：只在「首次可见」后才挂载 <Workbook>（canvas 在 display:none 里初始化会量成 0 尺寸）；
@@ -64,7 +64,7 @@ describe("SheetEditor（FortuneSheet）挂载护栏", () => {
 });
 
 /**
- * 图片资产化（260920 P1，见 docs/SHEET-IMAGE-MANAGEMENT-260919.md §4）。四条易回归的集成约束。
+ * 图片资产化（260920 P1，见 docs/STORAGE-LAYERS.md §4）。四条易回归的集成约束。
  */
 describe("SheetEditor 图片走资产管线（P1）", () => {
   it("复用内核同一条上传通道，不自己造落盘路径", () => {
@@ -97,7 +97,7 @@ describe("SheetEditor 图片走资产管线（P1）", () => {
 });
 
 /**
- * 单元格图片（260921 P2，见 docs/SHEET-IMAGE-MANAGEMENT-260919.md）。
+ * 单元格图片（260921 P2，见 docs/STORAGE-LAYERS.md）。
  * 设计定案：**不改内核、不自建 DOM 覆盖层**——复用内核浮动图通道渲染（滚动跟随/视口裁剪/缩放全免费），
  * 只在模型里多一个 `cell` 锚点 + 宿主维护几何 + CSS 控比例。以下每条都是易回归的集成约束。
  */

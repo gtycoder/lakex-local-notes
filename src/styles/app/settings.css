@@ -1,6 +1,6 @@
 /* 基础层 · 设置面板基础（.settings-* / .config-* / .floating-dialog）
    260916 第二档 S3：自 src/styles.css 按职责拆出（脚本：scripts/css-audit/split-app-layer.mjs，可重跑）。
-   本层由 src/styles.css 的 @import 编排，整体仍在 b3 之前 —— 层间先后不得改变（见 docs/CSS-LAYERS-BRIEF-260916.md §6）。 */
+   本层由 src/styles.css 的 @import 编排，整体仍在 b3 之前 —— 层间先后不得改变（见 docs/scripts/css-audit/README.md §6）。 */
 
 /* ===== 偏好设置面板 =====
  * `.settings-panel` / `.settings-panel-large` / `.floating-dialog` 是**同一元素上的别名类**

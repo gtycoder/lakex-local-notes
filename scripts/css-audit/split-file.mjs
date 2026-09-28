@@ -1,5 +1,5 @@
 // 按选择器把某个样式文件里的规则**整块搬到**别的文件（只搬家，不改任何声明）。
-// 用途：第二档「按职责归并样式层」的 S2/S3（docs/CSS-LAYERS-BRIEF-260916.md）。
+// 用途：第二档「按职责归并样式层」的 S2/S3（scripts/css-audit/README.md）。
 //
 // 用法：node scripts/css-audit/split-file.mjs <源文件> <映射.json> [--dry] [--prepend]
 //   映射.json：[{ "match": "<正则>", "target": "src/styles/shell.css", "note": "..." }, ...]
@@ -8,7 +8,7 @@
 //   "这批规则仍然输给目标文件原有规则"的关系（原来的相对关系就是"早的那个输"）。
 //
 // 两条硬约束：
-//   1. `@media (prefers-reduced-motion: reduce)` 这类**测试矩阵恒不成立**的块默认不搬（搬了无法验证，见 docs/CSS-LAYERS-BRIEF-260916.md）。
+//   1. `@media (prefers-reduced-motion: reduce)` 这类**测试矩阵恒不成立**的块默认不搬（搬了无法验证，见 scripts/css-audit/README.md）。
 //   2. 顶层 @media/@supports 整块搬，不拆散；块内选择器必须同域（否则报错让人工处理）。
 import fs from "node:fs";
 import postcss from "postcss";

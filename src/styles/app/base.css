@@ -1,6 +1,6 @@
 /* 基础层 · 复位与骨架（:root 字体栈 / * / html·body·#root / button·input / svg.lucide）
    260916 第二档 S3：自 src/styles.css 按职责拆出（脚本：scripts/css-audit/split-app-layer.mjs，可重跑）。
-   本层由 src/styles.css 的 @import 编排，整体仍在 b3 之前 —— 层间先后不得改变（见 docs/CSS-LAYERS-BRIEF-260916.md §6）。 */
+   本层由 src/styles.css 的 @import 编排，整体仍在 b3 之前 —— 层间先后不得改变（见 docs/scripts/css-audit/README.md §6）。 */
 
 :root { font-family: var(--lake-font-family); /* 字体栈统一走系统原生：macOS=SF Pro+苹方，Windows=Segoe UI+雅黑 UI；font-synthesis 不能设 none：中文字体（PingFang SC 等）无斜体变体，none 会禁止合成斜体导致 italic 失效 */
   font-synthesis: style weight;

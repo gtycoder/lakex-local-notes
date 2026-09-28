@@ -1,6 +1,6 @@
 /**
  * 表格编辑器（kind="sheet"）：FortuneSheet。
- * 原 jspreadsheet CE 实现已替换；选型/补丁/风险见 docs/FORTUNESHEET-FEASIBILITY-260919.md。
+ * 原 jspreadsheet CE 实现已替换；选型/补丁/风险见 docs/ARCHITECTURE.md。
  *
  * 关键约束：
  * - FortuneSheet 用 canvas 渲染；在 display:none 容器里首次挂载会量到 0 尺寸 ⇒ 本组件只在
@@ -13,7 +13,7 @@
  *   patches/@fortune-sheet+core+1.0.4.patch 替换为 apply（prod CSP 无 unsafe-eval）。
  * - **图片走资产管线（260920 P1）**：内核插图产出的是 base64 data URL，宿主在保存前把它提升成
  *   `note-assets/{noteId}/` 里的资产文件（复用内核同一条 `uploadLakeResource` 通道），正文只写 filename、
- *   渲染时再拼 URL。提升未落地前**推迟保存**（正文绝不落 base64）。见 docs/SHEET-IMAGE-MANAGEMENT-260919.md。
+ *   渲染时再拼 URL。提升未落地前**推迟保存**（正文绝不落 base64）。见 docs/STORAGE-LAYERS.md。
  * - **单元格图片（260921 P2）**：`images[]` 里带 `cell:{r,c}` 锚点的就是单元格图片 —— 复用内核浮动图通道渲染
  *   （滚动跟随/视口裁剪/缩放全免费），几何由宿主按单元格矩形一直跟着走（`core/sheetGeometry.ts`），
  *   「锁比例 + 不超过原图」交给 CSS `object-fit: scale-down`，指针事件关闭（点击命中单元格）。
@@ -300,7 +300,7 @@ function withRenderableImageSrc(sheet: SheetWorksheet, noteId: string): SheetWor
       const image = item as Record<string, unknown>;
       const src = typeof image.src === "string" ? image.src : "";
       // 只有单元格图片按档位取缩略图：显示尺寸由单元格矩形决定，离散稳定。
-      // 浮动图能被用户任意拖大，档位会随之连续变化，暂不接（见 docs/SHEET-IMAGE-MANAGEMENT-260919.md）。
+      // 浮动图能被用户任意拖大，档位会随之连续变化，暂不接（见 docs/STORAGE-LAYERS.md）。
       const width = cellAnchorOf(image) ? cellImageThumbWidth(Number(image.width) || 0, zoom) : null;
       return { ...image, src: sheetImageSrc(src, noteId, ASSET_PORT, width) ?? src };
     }),
