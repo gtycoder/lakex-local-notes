@@ -726,6 +726,7 @@ npx vitest run src/styles/cssLayers.test.ts src/styles/uiPrimitives.test.ts
 | 2026-09-28 | 260928-F02 | 附件命名审计 | `src/features/bitable/BitableEditor.tsx` · `bitableEditorMount.test.ts` | 复核 main 侧契约：附件 filename=展示名、url 末段=磁盘名、buildAssetFilename 随机唯一（无去重）；bitable 展示名改取 `file.name` | 无新增改动面 |
 | 2026-09-28 | 260928-F01 | 图片预览总数 | `src/features/editor/imagePreview.ts`(+test) · `LakeEditor.tsx` · `BitableGalleryView.tsx` · `BitableEditor.tsx` · `bitableEditorMount.test.ts` | 实测 10 图文档预览 1/10 → 10/10；画册点封面 1/2 → 2/2 | 同一张图重复出现时按首次匹配定位下标 |
 | 2026-09-28 | 260928-T04 | T04 语义排序增强 | `src/core/bitableDoc.ts`(+test) · `BitableEditor.tsx` · `bitableEditorMount.test.ts` | 门禁全绿 + 实测选项序 B/C/E→D→A、逆序反转、字典序不受影响 | 不做公式排序 |
+| 2026-09-28 | 260928-style | 字段类型选择改 2 列网格 | `bitableCells.tsx`(FieldTypeGrid) · `bitableFieldCells.css` · `BitableEditor.tsx` | 实测 `142px 142px` 两列 / 14 项 / 无分组标题；新增字段面板与字段编辑弹窗共用 | 无 |
 | 2026-09-28 | 260928-T02A-fix | 系统时间字段打通筛排 | `src/core/bitableDoc.ts`(+test) · `BitableEditor.tsx` | 实测按创建时间升序 A/C/B、配置落盘；排除了之前的假边界 | 无 |
 | 2026-09-28 | 260928-T02A | T02A 基础字段 | `src/core/bitableDoc.ts`(+test) · `bitableCells.tsx` · `BitableEditor.tsx` · `BitableRecordDrawer.tsx` · `BitableKanbanView.tsx` · `BitableGalleryView.tsx` · `BitableFormView.tsx` · `src/mobile/bitable/MobileBitableViewer.tsx` · `bitableFieldCells.css`(新) · `cssLayers.test.ts` | 门禁全绿 + 实测布尔/评分/进度/链接交互并落盘；系统字段已从筛选/排序/分组/表单排除 | 系统时间不支持筛选排序（无假入口） |
 | 2026-09-28 | 260928-T03 | T03 多级分组 | `src/core/bitableDoc.ts` · `bitableGroup.test.ts` · `BitableEditor.tsx` · `bitableViews.css` · `cssLayers.test.ts` | 门禁全绿 + 实测两级树/折叠/层级缩进/拖动重排（配置落盘） | 折叠 key 基于选项名，改名会重置折叠态 |
@@ -1176,6 +1177,19 @@ UI 与交互变化：
 改动文件：`src/core/bitableDoc.ts`(+test) · `src/features/bitable/BitableEditor.tsx`
 
 下一步：等用户验收；随后进入 T02B.1 关联基础模型。
+
+### 2026-09-28 · 字段类型选择改 2 列网格（对齐云端版式）
+
+- 新增共用组件 `FieldTypeGrid`：字段类型按**2 列网格**排布，**不分「基础 / 高级」分组**（用户 260928 给的云端截图版式）。
+- 两处共用：表格头「新增字段」面板 + 字段编辑弹窗的「字段类型」（可传 `value` 打勾；**未知类型也占一格**，不会被清空）。
+- 类型集合不变（14 种，仍不含人员/邮箱/手机号码等企业字段）。
+- 样式落 `bitableFieldCells.css` 的 `.bt-type-grid`（原文件顺带定位为「字段相关样式」），基线同步更新。
+
+**过程坑**：T02A 建 `bitableFieldCells.css` 时**漏了 `import`**，导致那批新单元格样式一直没加载（元素在、样式空）。本轮补上 `bitableCells.tsx` 的 `import "./bitableFieldCells.css";` 后，布尔/链接/评分/进度与 2 列网格同时生效。
+
+实测：新增字段面板 `grid-template-columns: 142px 142px`、14 项、面板内只有 1 个标题（无分组）；字段编辑弹窗里当前类型（文本）带勾选。
+
+改动文件：`src/features/bitable/bitableCells.tsx` · `bitableFieldCells.css` · `BitableEditor.tsx` · `src/styles/cssLayers.test.ts`
 
 ## 14. 会话执行模板
 

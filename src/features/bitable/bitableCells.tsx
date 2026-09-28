@@ -12,8 +12,9 @@ import { Calendar, CalendarClock, Check, ChevronDown, ChevronLeft, ChevronRight,
 import { ASSET_ORIGIN, assetThumbWidthForCss, withAssetAccessToken } from "../../lib/assetPort.js";
 import { withAssetWidth } from "../../core/assetUrl.js";
 import { extOf, isImageExtension } from "../../core/assetNaming.js";
+import "./bitableFieldCells.css";
 import { native } from "../../lib/native.js";
-import { ATTACHMENT_GRID, BITABLE_OPTION_PALETTE, BITABLE_PROGRESS_MAX, BITABLE_RATING_MAX, attachmentGridColumns, bitableAttachments, bitableDisplayValue, bitableFieldText, isKnownFieldType, localDateString, optionChipStyle, optionColorHex, type BitableAttachment, type BitableField, type BitableFieldOption, type BitableRecord } from "../../core/bitableDoc.js";
+import { ATTACHMENT_GRID, BITABLE_FIELD_TYPES, BITABLE_FIELD_TYPE_LABEL, BITABLE_OPTION_PALETTE, BITABLE_PROGRESS_MAX, BITABLE_RATING_MAX, attachmentGridColumns, bitableAttachments, bitableDisplayValue, bitableFieldText, isKnownFieldType, localDateString, optionChipStyle, optionColorHex, type BitableAttachment, type BitableField, type BitableFieldOption, type BitableRecord } from "../../core/bitableDoc.js";
 import type { CSSProperties } from "react";
 
 /** 图片字段只收图片：`accept` 只约束「选文件」，拖拽/粘贴必须自己拦，否则会静默写进非图片。
@@ -45,6 +46,30 @@ export function FieldTypeIcon({ type, size = 14 }: { type: string; size?: number
     case "relation": return <Link2 size={size} />;
     default: return <HelpCircle size={size} />;
   }
+}
+
+/**
+ * 字段类型选择：**2 列网格**（对齐云端版式，用户 260928），**不分「基础 / 高级」组**。
+ * 新增字段面板与字段编辑弹窗共用；传 `value` 时给当前类型打勾（未知类型也会占一格，保证不丢）。
+ */
+export function FieldTypeGrid({ value, disabled, onPick }: { value?: string; disabled?: boolean; onPick: (type: string) => void }) {
+  const unknown = value && !isKnownFieldType(value) ? value : null;
+  return (
+    <div className="bt-type-grid" role="listbox" aria-label="字段类型">
+      {unknown && (
+        <button type="button" className={"bt-menu-item" + (unknown === value ? " is-selected" : "")} disabled={disabled} onClick={() => onPick(unknown)}>
+          <FieldTypeIcon type={unknown} /><span className="bt-menu-label">{unknown}（未知）</span><Check size={14} />
+        </button>
+      )}
+      {BITABLE_FIELD_TYPES.map((type) => (
+        <button key={type} type="button" role="option" aria-selected={type === value}
+          className={"bt-menu-item" + (type === value ? " is-selected" : "")} disabled={disabled} onClick={() => onPick(type)}>
+          <FieldTypeIcon type={type} /><span className="bt-menu-label">{BITABLE_FIELD_TYPE_LABEL[type]}</span>
+          {type === value && <Check size={14} />}
+        </button>
+      ))}
+    </div>
+  );
 }
 
 /** 锚点是否位于某个对话框/抽屉表面内（决定嵌套浮层是否抬到对话框之上）。 */

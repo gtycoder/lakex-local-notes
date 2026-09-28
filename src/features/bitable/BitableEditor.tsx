@@ -19,7 +19,7 @@ import {
   MoreHorizontal, Pencil, Plus, Rows2, Rows3, Rows4, Search, Settings2, Trash2, X,
 } from "lucide-react";
 import {
-  BITABLE_DOC_KIND, BITABLE_DOC_VERSION, BITABLE_FIELD_TYPES, BITABLE_FIELD_TYPE_LABEL,
+  BITABLE_DOC_KIND, BITABLE_DOC_VERSION, BITABLE_FIELD_TYPE_LABEL,
   BITABLE_FILTER_OPERATOR_LABEL, BITABLE_OPTION_COLORS, applyViewToRecords, bitableDisplayValue, bitablesToBody, defaultRecordValues, duplicateValues, optionColorHex,
   bitableAttachments, removeBitableAttachment, renameBitableAttachment, reorderBitableAttachments,
   createBitableField, createBitableRecord, createBitableView, createDefaultBitableTable, filterOperatorsFor,
@@ -43,7 +43,7 @@ import { BitableKanbanView } from "./BitableKanbanView.js";
 import { BitableRecordDrawer } from "./BitableRecordDrawer.js";
 import { BitableViewBar } from "./BitableViewBar.js";
 import { CalendarConfigPanel, GalleryConfigPanel, KanbanConfigPanel } from "./BitableViewConfigPanels.js";
-import { AttachmentCell, CellEditor, ColorPalette, DatePicker, FieldTypeIcon, Popover, SelectMenu } from "./bitableCells.js";
+import { AttachmentCell, CellEditor, ColorPalette, DatePicker, FieldTypeGrid, FieldTypeIcon, Popover, SelectMenu } from "./bitableCells.js";
 import { createSnapshotHistory, type SnapshotHistory } from "../../core/bitableHistory.js";
 import { BitableViewFallback, ViewTypeIcon } from "./bitableViews.js";
 import "./bitableEditor.css";
@@ -409,7 +409,9 @@ export function BitableEditor({ noteId, content, visible, readOnly, onChange, ch
   }, [patchActiveTable]);
 
   // ---- 字段 ----
-  const addField = useCallback((type: BitableFieldType) => {
+  const addField = useCallback((rawType: string) => {
+    // 菜单只给已知类型；未知类型（编辑弹窗里保留的）回落到文本，不做静默清空
+    const type = (isKnownFieldType(rawType) ? rawType : "text") as BitableFieldType;
     patchActiveTable((table) => ({ ...table, fields: [...table.fields, createBitableField(type)] }));
     setAddFieldAnchor(null);
   }, [patchActiveTable]);
@@ -1204,14 +1206,10 @@ export function BitableEditor({ noteId, content, visible, readOnly, onChange, ch
         </div>
       </Popover>
 
-      <Popover open={Boolean(addFieldAnchor)} anchor={addFieldAnchor} onClose={() => setAddFieldAnchor(null)} width={200}>
+      <Popover open={Boolean(addFieldAnchor)} anchor={addFieldAnchor} onClose={() => setAddFieldAnchor(null)} width={300}>
         <div className="bt-panel">
           <h4>字段类型</h4>
-          {BITABLE_FIELD_TYPES.map((type) => (
-            <button key={type} type="button" className="bt-menu-item" onClick={() => addField(type)}>
-              <FieldTypeIcon type={type} />{BITABLE_FIELD_TYPE_LABEL[type]}
-            </button>
-          ))}
+          <FieldTypeGrid onPick={addField} />
         </div>
       </Popover>
 
@@ -1437,8 +1435,7 @@ function FieldEditorModal({ field, readOnly, onClose, onSave, onDelete, onAddFie
           <input className="bt-input" autoFocus value={name} readOnly={readOnly} onChange={(event) => setName(event.target.value)} />
         </label>
         <div className="bt-field-label"><span>字段类型</span>
-          <SelectMenu value={type} disabled={readOnly} onChange={setType}
-            options={[...(knownType ? [] : [{ value: type, label: type + "（未知）" }]), ...BITABLE_FIELD_TYPES.map((t) => ({ value: t, label: BITABLE_FIELD_TYPE_LABEL[t] }))]} />
+          <FieldTypeGrid value={type} disabled={readOnly} onPick={setType} />
         </div>
         <label className="bt-field-check"><input type="checkbox" checked={required} disabled={readOnly} onChange={(event) => setRequired(event.target.checked)} />必填</label>
         {(knownType === "text" || knownType === "number" || knownType === "date" || knownType === "select" || knownType === "link" || knownType === "boolean" || knownType === "rating" || knownType === "progress") && (
