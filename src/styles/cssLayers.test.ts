@@ -74,7 +74,8 @@ const BASELINE: Record<string, { decls: number; dupGroups: number }> = {
   // 260928 V01 多视图工作台：视图相关新规则一律进本文件（bitableEditor.css 已顶到基线，只允许变小）
   // 260928 V02：净 +4 = 看板配置面板的说明文案 .bt-panel-note（合法新增，非覆盖回涨）
   // 260928 T01：+4 = 表格底部列统计行贴底常驻（合法新增，非覆盖回涨）
-  "features/bitable/bitableViews.css": { decls: 18, dupGroups: 0 },
+  // 260928 T03：+2 = 多级分组层级缩进（变体选择器，合法新增）
+  "features/bitable/bitableViews.css": { decls: 20, dupGroups: 0 },
   // 260928 V02 看板视图：分栏 / 卡片 / 折叠 / 新建分组（全部合法新增；空栏目必须能当投放区）
   // 260928 追加需求：卡片上的图片字段改为缩略图（.bt-kanban-thumbs/.bt-kanban-thumb，+9 合法新增）
   "features/bitable/bitableKanbanView.css": { decls: 109, dupGroups: 0 },

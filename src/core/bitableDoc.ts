@@ -149,6 +149,26 @@ export interface BitableFilterRule {
 export interface BitableSortRule {
   fieldId: string;
   desc?: boolean;
+  /** T04 语义排序：单选/多选按**选项顺序**排（desc 只决定正逆）；缺省 = 按展示值字典序（原有行为）。 */
+  mode?: "optionOrder";
+}
+
+/** 排序方式（UI 单一入口；asc/desc = 原有字典序，optionOrder/optionReverse = 选项语义序）。 */
+export type BitableSortMode = "asc" | "desc" | "optionOrder" | "optionReverse";
+
+export const BITABLE_SORT_MODE_LABEL: Record<BitableSortMode, string> = {
+  asc: "升序", desc: "降序", optionOrder: "选项顺序", optionReverse: "选项逆序",
+};
+
+/** 该字段可选的排序方式：单选/多选多给选项语义序（T04）。 */
+export function sortModesForField(field: BitableField): BitableSortMode[] {
+  return field.type === "select" || field.type === "multiSelect" ? ["asc", "desc", "optionOrder", "optionReverse"] : ["asc", "desc"];
+}
+
+/** 排序方式显示文案：日期字段用日期语义（早→晚 / 晚→早），口径不变。 */
+export function sortModeLabel(field: BitableField, mode: BitableSortMode): string {
+  if (field.type === "date" && (mode === "asc" || mode === "desc")) return mode === "desc" ? "晚→早" : "早→晚";
+  return BITABLE_SORT_MODE_LABEL[mode];
 }
 
 /** 分组规则（云端为单级；模型留数组以便后续多级）。 */
@@ -1001,6 +1021,27 @@ export function orderedTableFields(table: BitableTable, view: BitableView | unde
   });
 }
 
+/** 排序比较（含 T04 语义排序）：选项语义序下，空值/指向已删选项的值**恒排最后**（与分组口径一致）。 */
+function compareSortValues(field: BitableField, a: unknown, b: unknown, rule: BitableSortRule): number {
+  if (rule.mode === "optionOrder" && (field.type === "select" || field.type === "multiSelect")) {
+    const indexOf = (value: unknown): number => {
+      const first = field.type === "multiSelect" ? (Array.isArray(value) ? value[0] : undefined) : value;
+      const index = (field.options ?? []).findIndex((option) => option.id === first);
+      return index < 0 ? Number.MAX_SAFE_INTEGER : index;
+    };
+    const ia = indexOf(a);
+    const ib = indexOf(b);
+    if (ia === Number.MAX_SAFE_INTEGER || ib === Number.MAX_SAFE_INTEGER) {
+      if (ia === ib) return 0;
+      return ia === Number.MAX_SAFE_INTEGER ? 1 : -1;
+    }
+    const cmp = ia - ib;
+    return rule.desc ? -cmp : cmp;
+  }
+  const cmp = compareValues(field, a, b);
+  return rule.desc ? -cmp : cmp;
+}
+
 function compareValues(field: BitableField, a: unknown, b: unknown): number {
   const sa = bitableDisplayValue(field, a);
   const sb = bitableDisplayValue(field, b);
@@ -1089,8 +1130,8 @@ export function applyViewToRecords(table: BitableTable, view: BitableView | unde
         for (const rule of sorts) {
           const field = fieldById.get(rule.fieldId);
           if (!field) continue;
-          const cmp = compareValues(field, a.record.values[field.id], b.record.values[field.id]);
-          if (cmp !== 0) return rule.desc ? -cmp : cmp;
+          const cmp = compareSortValues(field, a.record.values[field.id], b.record.values[field.id], rule);
+          if (cmp !== 0) return cmp;
         }
         return a.index - b.index;
       })
@@ -1113,6 +1154,61 @@ function groupKeyOf(field: BitableField, value: unknown): string {
       .join("、");
   }
   return bitableDisplayValue(field, value).trim();
+}
+
+/** 分组最多允许的级数（T03；对齐云端三级）。 */
+export const BITABLE_MAX_GROUPS = 3;
+
+export interface BitableGroupNode {
+  /** 折叠态用的稳定 key（含层级前缀 fieldId:值 逐级拼接）。 */
+  key: string;
+  label: string;
+  /** 0 起：第几级分组。 */
+  level: number;
+  /** 该节点（含子级）的记录条数。 */
+  count: number;
+  /** 归属本组的记录（含被下级再细分的那些；叶子节点直接渲染它们）。 */
+  records: BitableRecord[];
+  children: BitableGroupNode[];
+}
+
+/**
+ * **多级分组**（T03）：按 rules 逐级细分返回树。
+ * - 组键/标签口径与单级分组完全一致（单选取选项名、多选取选项名拼接、其余取展示值；空 = "(空)"）。
+ * - 组内保持传入顺序（= 筛选 + 排序后的顺序）；每级都按该级字段排序，空值组恒最后。
+ * - 无有效规则（字段被删/为空）→ 返回空数组（调用方按"未分组"拍平，区别于 groupRecords 的单组语义）。
+ */
+export function groupRecordsTree(table: BitableTable, records: BitableRecord[], rules: BitableGroupRule[] | undefined): BitableGroupNode[] {
+  const active = (rules ?? []).filter((rule) => table.fields.some((field) => field.id === rule.fieldId));
+  if (active.length === 0) return [];
+  const build = (list: BitableRecord[], level: number, prefix: string): BitableGroupNode[] => {
+    const rule = active[level];
+    const field = table.fields.find((item) => item.id === rule.fieldId)!;
+    const buckets = new Map<string, BitableRecord[]>();
+    for (const record of list) {
+      const key = groupKeyOf(field, record.values[field.id]);
+      const bucket = buckets.get(key);
+      if (bucket) bucket.push(record); else buckets.set(key, [record]);
+    }
+    const keys = [...buckets.keys()].sort((a, b) => {
+      if ((a === "") !== (b === "")) return a === "" ? 1 : -1;   // 空值组恒最后
+      const cmp = compareValues(field, buckets.get(a)![0].values[field.id], buckets.get(b)![0].values[field.id]);
+      return rule.desc ? -cmp : cmp;
+    });
+    return keys.map((key) => {
+      const groupRecordsList = buckets.get(key)!;
+      const nodeKey = (prefix ? prefix + "/" : "") + rule.fieldId + ":" + key;
+      return {
+        key: nodeKey,
+        label: key || "(空)",
+        level,
+        count: groupRecordsList.length,
+        records: groupRecordsList,
+        children: level + 1 < active.length ? build(groupRecordsList, level + 1, nodeKey) : [],
+      };
+    });
+  };
+  return build(records, 0, "");
 }
 
 /**

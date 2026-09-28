@@ -20,13 +20,14 @@ import {
 } from "lucide-react";
 import {
   BITABLE_DOC_KIND, BITABLE_DOC_VERSION, BITABLE_FIELD_TYPES, BITABLE_FIELD_TYPE_LABEL,
-  BITABLE_FILTER_OPERATOR_LABEL, BITABLE_OPTION_COLORS, applyViewToRecords, bitableDisplayValue, bitablesToBody, defaultRecordValues, duplicateValues, groupRecords, optionColorHex,
+  BITABLE_FILTER_OPERATOR_LABEL, BITABLE_OPTION_COLORS, applyViewToRecords, bitableDisplayValue, bitablesToBody, defaultRecordValues, duplicateValues, optionColorHex,
   bitableAttachments, removeBitableAttachment, renameBitableAttachment, reorderBitableAttachments,
   createBitableField, createBitableRecord, createBitableView, createDefaultBitableTable, filterOperatorsFor,
-  BITABLE_STAT_LABEL, computeColumnStat, isAttachmentLikeField, isImplementedViewType, kanbanGroupField, statForField, statsForField,
+  BITABLE_MAX_GROUPS, BITABLE_STAT_LABEL, computeColumnStat, groupRecordsTree, isAttachmentLikeField, isImplementedViewType,
+  kanbanGroupField, sortModeLabel, sortModesForField, statForField, statsForField,
   isKnownFieldType, newBitableId, orderedTableFields, parseBitableBody,
   type BitableAttachment, type BitableDoc, type BitableField, type BitableFieldType, type BitableFilterRule, type BitableGroupRule, type BitableRecord,
-  type BitableRowHeight, type BitableStatType, type BitableTable, type BitableView, type BitableViewType,
+  type BitableGroupNode, type BitableRowHeight, type BitableSortMode, type BitableSortRule, type BitableStatType, type BitableTable, type BitableView, type BitableViewType,
 } from "../../core/bitableDoc.js";
 import { parseLocalAssetUrl } from "../../core/assetUrl.js";
 import { uploadLakeResource } from "../editor/resourceUpload.js";
@@ -185,7 +186,6 @@ export function BitableEditor({ noteId, content, visible, readOnly, onChange, ch
   const activeTable = doc.tables.find((t) => t.id === doc.activeTableId) ?? doc.tables[0];
   const activeView = activeTable.views.find((v) => v.id === activeTable.activeViewId) ?? activeTable.views[0];
   const groups = (activeView.groups as BitableGroupRule[] | undefined) ?? [];
-  const groupRule = groups[0];
   const visibleFields = useMemo(() => orderedTableFields(activeTable, activeView), [activeTable, activeView]);
   /** 表格配置面板顺序 = 视图 fieldOrder 应用到全部字段（含隐藏），与网格列顺序同源。 */
   const allOrderedFields = useMemo(() => {
@@ -209,15 +209,22 @@ export function BitableEditor({ noteId, content, visible, readOnly, onChange, ch
   }, [viewRecords, findQuery, activeTable]);
   const rowIndexById = useMemo(() => new Map(shownRecords.map((r, i) => [r.id, i] as const)), [shownRecords]);
   const rowItems = useMemo(() => {
-    type RowItem = { kind: "group"; key: string; label: string; count: number } | { kind: "record"; record: BitableRecord };
-    if (!groupRule) return shownRecords.map((record): RowItem => ({ kind: "record", record }));
+    type RowItem = { kind: "group"; key: string; label: string; level: number; count: number } | { kind: "record"; record: BitableRecord };
+    const nodes = groupRecordsTree(activeTable, shownRecords, groups);
+    if (nodes.length === 0) return shownRecords.map((record): RowItem => ({ kind: "record", record }));
     const items: RowItem[] = [];
-    for (const group of groupRecords(activeTable, shownRecords, groupRule)) {
-      items.push({ kind: "group", key: group.key, label: group.label, count: group.records.length });
-      if (!collapsedGroups.has(group.key)) for (const record of group.records) items.push({ kind: "record", record });
-    }
+    /** T03 多级：逐级拍平；折叠只影响该节点以下（key 含层级前缀，互不串扰）。 */
+    const walk = (list: BitableGroupNode[]) => {
+      for (const node of list) {
+        items.push({ kind: "group", key: node.key, label: node.label, level: node.level, count: node.count });
+        if (collapsedGroups.has(node.key)) continue;
+        if (node.children.length > 0) walk(node.children);
+        else for (const record of node.records) items.push({ kind: "record", record });
+      }
+    };
+    walk(nodes);
     return items;
-  }, [shownRecords, activeTable, groupRule, collapsedGroups]);
+  }, [shownRecords, activeTable, groups, collapsedGroups]);
   const dupValuesByField = useMemo(() => {
     const ids = activeView.highlightDuplicateFieldIds ?? [];
     const map = new Map<string, Set<string>>();
@@ -560,6 +567,30 @@ export function BitableEditor({ noteId, content, visible, readOnly, onChange, ch
   const sorts = activeView.sorts ?? [];
   const setFilters = (next: BitableFilterRule[]) => patchView(activeView.id, { filters: next });
   const setSorts = (next: BitableView["sorts"]) => patchView(activeView.id, { sorts: next });
+  const setGroups = (next: BitableGroupRule[]) => patchView(activeView.id, { groups: next });
+  /** 分组面板的拖动排序态（只用于重排 rules，不写正文以外的任何东西）。 */
+  const [groupDragIndex, setGroupDragIndex] = useState<number | null>(null);
+  const moveGroupRule = (from: number, to: number) => {
+    if (from === to || from < 0 || to < 0 || from >= groups.length || to >= groups.length) return;
+    const next = [...groups];
+    const [moved] = next.splice(from, 1);
+    next.splice(to, 0, moved);
+    setGroups(next);
+  };
+  /** T04：排序方式 ↔ (mode, desc) 的单一映射（UI 只认「排序方式」一个下拉）。 */
+  const sortModeOf = (rule: BitableView["sorts"] extends (infer T)[] | undefined ? T : never): BitableSortMode =>
+    (rule as { mode?: string }).mode === "optionOrder" ? (rule.desc ? "optionReverse" : "optionOrder") : (rule.desc ? "desc" : "asc");
+  const applySortMode = (rule: BitableSortRule, mode: BitableSortMode): BitableSortRule => {
+    if (mode === "optionOrder") return { ...rule, mode: "optionOrder", desc: false };
+    if (mode === "optionReverse") return { ...rule, mode: "optionOrder", desc: true };
+    return { fieldId: rule.fieldId, desc: mode === "desc" };
+  };
+  /** 换字段时丢掉该字段不支持的语义排序（单选/多选才有选项序）。 */
+  const changeSortField = (rule: BitableSortRule, fieldId: string): BitableSortRule => {
+    const field = activeTable.fields.find((item) => item.id === fieldId);
+    const keep = rule.mode === "optionOrder" && (field?.type === "select" || field?.type === "multiSelect");
+    return { fieldId, desc: rule.desc, ...(keep ? { mode: "optionOrder" as const } : {}) };
+  };
   const toggleGroup = (key: string) => setCollapsedGroups((prev) => { const next = new Set(prev); if (next.has(key)) next.delete(key); else next.add(key); return next; });
 
   const openDrawer = (recordId: string) => setDrawerRecordId(recordId);
@@ -996,7 +1027,7 @@ export function BitableEditor({ noteId, content, visible, readOnly, onChange, ch
               </thead>
               <tbody>
                 {rowItems.map((item) => item.kind === "group" ? (
-                  <tr key={"g:" + item.key} className="bt-group-row" onClick={() => toggleGroup(item.key)}>
+                  <tr key={"g:" + item.key} className={"bt-group-row" + (item.level > 0 ? " level-" + item.level : "")} onClick={() => toggleGroup(item.key)}>
                     <td className="bt-group-cell" colSpan={visibleFields.length + 2}>
                       <ChevronRight size={13} className={"bt-group-caret" + (collapsedGroups.has(item.key) ? "" : " is-open")} />
                       <span className="bt-group-label">{item.label}</span>
@@ -1083,10 +1114,15 @@ export function BitableEditor({ noteId, content, visible, readOnly, onChange, ch
           <h4>排序</h4>
           {sorts.map((rule, index) => (
             <div key={index} className="bt-rule-row">
-              <SelectMenu value={rule.fieldId} onChange={(value) => setSorts(sorts.map((r, i) => (i === index ? { ...r, fieldId: value } : r)))}
+              <SelectMenu value={rule.fieldId} onChange={(value) => setSorts(sorts.map((r, i) => (i === index ? changeSortField(r, value) : r)))}
                 options={activeTable.fields.map((f) => ({ value: f.id, label: f.name }))} />
-              <SelectMenu value={rule.desc ? "desc" : "asc"} onChange={(value) => setSorts(sorts.map((r, i) => (i === index ? { ...r, desc: value === "desc" } : r)))}
-                options={[{ value: "asc", label: "升序" }, { value: "desc", label: "降序" }]} />
+              {(() => {
+                const field = activeTable.fields.find((f) => f.id === rule.fieldId) ?? activeTable.fields[0];
+                return (
+                  <SelectMenu value={sortModeOf(rule)} onChange={(value) => setSorts(sorts.map((r, i) => (i === index ? applySortMode(r, value as BitableSortMode) : r)))}
+                    options={sortModesForField(field).map((mode) => ({ value: mode, label: sortModeLabel(field, mode) }))} />
+                );
+              })()}
               <button type="button" className="bt-icon-btn" title="删除排序" aria-label="删除排序" onClick={() => setSorts(sorts.filter((_, i) => i !== index))}><Trash2 size={13} /></button>
             </div>
           ))}
@@ -1097,24 +1133,41 @@ export function BitableEditor({ noteId, content, visible, readOnly, onChange, ch
 
       <Popover open={panel === "group"} anchor={menuAnchor} onClose={() => setPanel(null)} width={360}>
         <div className="bt-panel">
-          <h4>分组</h4>
-          {groupRule ? (
-            <div className="bt-rule-row">
-              <button type="button" className="bt-icon-btn" title="取消分组" aria-label="取消分组"
-                onClick={() => { patchView(activeView.id, { groups: [] }); setCollapsedGroups(new Set()); }}><X size={13} /></button>
-              <SelectMenu value={groupRule.fieldId}
-                onChange={(value) => patchView(activeView.id, { groups: [{ ...groupRule, fieldId: value }] })}
+          <h4>分组（最多 {BITABLE_MAX_GROUPS} 级，可拖动调优先级）</h4>
+          {groups.map((rule, index) => (
+            <div key={rule.fieldId + ":" + index} className={"bt-rule-row" + (groupDragIndex === index ? " dragging" : "")} draggable={!readOnly}
+              onDragStart={() => setGroupDragIndex(index)}
+              onDragOver={(event) => { event.preventDefault(); if (groupDragIndex !== null && groupDragIndex !== index) { moveGroupRule(groupDragIndex, index); setGroupDragIndex(index); } }}
+              onDragEnd={() => setGroupDragIndex(null)}>
+              <GripVertical size={13} className="bt-grip" />
+              <SelectMenu value={rule.fieldId} disabled={readOnly}
+                onChange={(value) => setGroups(groups.map((item, i) => (i === index ? { ...item, fieldId: value } : item)))}
                 options={activeTable.fields.map((field) => ({ value: field.id, label: field.name }))} />
-              <SelectMenu value={groupRule.desc ? "desc" : "asc"}
-                onChange={(value) => patchView(activeView.id, { groups: [{ fieldId: groupRule.fieldId, desc: value === "desc" }] })}
+              <SelectMenu value={rule.desc ? "desc" : "asc"} disabled={readOnly}
+                onChange={(value) => setGroups(groups.map((item, i) => (i === index ? { ...item, desc: value === "desc" } : item)))}
                 options={[{ value: "asc", label: "升序" }, { value: "desc", label: "降序" }]} />
+              <button type="button" className="bt-icon-btn" title="删除该级分组" aria-label="删除该级分组" disabled={readOnly}
+                onClick={() => setGroups(groups.filter((_, i) => i !== index))}><Trash2 size={13} /></button>
             </div>
-          ) : (
+          ))}
+          {groups.length === 0 && (
             <div className="bt-rule-row">
-              <SelectMenu value="" placeholder="选择一列进行分组"
-                onChange={(value) => patchView(activeView.id, { groups: [{ fieldId: value, desc: false }] })}
+              <SelectMenu value="" placeholder="选择一列进行分组" disabled={readOnly}
+                onChange={(value) => setGroups([{ fieldId: value, desc: false }])}
                 options={activeTable.fields.map((field) => ({ value: field.id, label: field.name }))} />
             </div>
+          )}
+          {groups.length > 0 && groups.length < BITABLE_MAX_GROUPS && (
+            <button type="button" className="bt-panel-add" disabled={readOnly}
+              onClick={() => {
+                const used = new Set(groups.map((item) => item.fieldId));
+                const next = activeTable.fields.find((field) => !used.has(field.id));
+                if (next) setGroups([...groups, { fieldId: next.id, desc: false }]);
+              }}><Plus size={14} />添加分组</button>
+          )}
+          {groups.length > 0 && (
+            <button type="button" className="bt-panel-add danger" disabled={readOnly}
+              onClick={() => { setGroups([]); setCollapsedGroups(new Set()); }}><Trash2 size={13} />取消分组</button>
           )}
         </div>
       </Popover>

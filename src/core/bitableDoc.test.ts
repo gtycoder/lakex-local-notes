@@ -495,6 +495,31 @@ describe("bitableDoc 数据模型", () => {
     expect(calendarMovePatch(table, view, createBitableRecord("r3"), "2026-09-11")).toEqual({});
   });
 
+  it("语义排序（T04）：单选/多选按选项顺序（空值恒最后），多条件稳定，字典序不受影响", () => {
+    const table = createDefaultBitableTable("t", "tbl-sort");
+    const primary = table.fields[0];
+    const status = table.fields[1];
+    const ids = status.options!.map((o) => o.id);
+    const multi = createBitableField("multiSelect", "多选", "fld-multi");
+    multi.options = [...status.options!];
+    table.fields.push(multi);
+    const mk = (id: string, opt: string, multiVal: string[]) => { const record = createBitableRecord(id); record.values[primary.id] = id; record.values[status.id] = opt; record.values[multi.id] = multiVal; return record; };
+    table.records = [mk("r1", ids[2], [ids[2]]), mk("r2", ids[0], [ids[0]]), mk("r3", "", []), mk("r4", ids[1], [ids[1], ids[2]]), mk("r5", ids[0], [ids[0]])];
+    const view = createBitableView("grid", "g", "vew-sort");
+    view.sorts = [{ fieldId: status.id, mode: "optionOrder" }];
+    expect(applyViewToRecords(table, view).map((r) => r.id)).toEqual(["r2", "r5", "r4", "r1", "r3"]);
+    view.sorts = [{ fieldId: status.id, mode: "optionOrder", desc: true }];
+    expect(applyViewToRecords(table, view).map((r) => r.id)).toEqual(["r1", "r4", "r2", "r5", "r3"]);
+    view.sorts = [{ fieldId: multi.id, mode: "optionOrder" }];
+    expect(applyViewToRecords(table, view).map((r) => r.id)).toEqual(["r2", "r5", "r4", "r1", "r3"]);
+    // 多条件：状态选项序 + 主字段降序 → 同组内按第二条件稳定排
+    view.sorts = [{ fieldId: status.id, mode: "optionOrder" }, { fieldId: primary.id, desc: true }];
+    expect(applyViewToRecords(table, view).map((r) => r.id)).toEqual(["r5", "r2", "r4", "r1", "r3"]);
+    // 原有字典序不受影响
+    view.sorts = [{ fieldId: primary.id }];
+    expect(applyViewToRecords(table, view).map((r) => r.id)).toEqual(["r1", "r2", "r3", "r4", "r5"]);
+  });
+
   it("列统计：通用/数字/日期口径，空值与非法值不参与，附件关联不崩", () => {
     const table = createDefaultBitableTable("t", "tbl-stat");
     const primary = table.fields[0];

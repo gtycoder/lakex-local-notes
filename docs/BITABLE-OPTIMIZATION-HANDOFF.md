@@ -1,6 +1,6 @@
 # 多维表优化落地与交接文档（Single Source of Truth）
 
-> 状态：**方案已冻结；V01 已完成，V02–V04 已实施；260928 追加需求三批（图片字段 / 画册预览 / 表单双模 → 图片预览总数 · 附件命名审计 · 表单编辑态回退 · 看板缩略图 → 预览范围单单元格 · 展示名守卫 · 填写表单跳预览）与 **T01 列级统计** 已实施，一并待验收**（其余 T / D 批次未开始）。
+> 状态：**方案已冻结；V01 已完成，V02–V04 + 260928 三批追加需求 + T01 列级统计 + T03 多级分组 + T04 语义排序已实施，一并待验收**（其余 T / D 批次未开始）。
 > 建立日期：2026-09-28。
 > 适用范围：多维表字段扩展、单/双向关联、表格增强、看板/画册/日历视图、表单增强、导入导出。
 > 本文是该优化项目的**唯一实现方案、进度看板、修改记录、决策记录和会话交接文档**。
@@ -698,8 +698,8 @@ npx vitest run src/styles/cssLayers.test.ts src/styles/uiPrimitives.test.ts
 | V03 画册视图 | 待验收 | 260928-V03 | 封面 / 裁剪·适应 / 常规·紧凑 / 卡片字段全部落地（见 §13） |
 | V04 日历视图 | 待验收 | 260928-V04 | 月网格 + 跨天 + 颜色 + 拖拽平移，全程本地日期语义（见 §13） |
 | T01 列级统计 | 待验收 | 260928-T01 | 视图级列统计（通用/数字/日期），底栏贴底常驻、随筛选现算（见 §13） |
-| T03 多级分组 | 未开始 | - | 复用现有 groups 数组 |
-| T04 语义排序增强 | 未开始 | - | 独立 |
+| T03 多级分组 | 待验收 | 260928-T03 | 最多 3 级 + 拖动调优先级 + 层级缩进；折叠按节点 key（见 §13） |
+| T04 语义排序增强 | 待验收 | 260928-T04 | 单选/多选「选项顺序·逆序」，日期文案早→晚/晚→早（见 §13） |
 | T02A 基础字段 | 未开始 | - | 布尔/链接/评分/进度/创建时间/修改时间 |
 | T02B.1 关联基础模型 | 未开始 | - | 同一文档内多表 |
 | T02B.2 单向关联 | 未开始 | - | 多选默认开启 |
@@ -725,6 +725,8 @@ npx vitest run src/styles/cssLayers.test.ts src/styles/uiPrimitives.test.ts
 | 2026-09-28 | 260928-V04 | V04 日历视图 | `src/core/bitableDoc.ts`(+test) · `src/features/bitable/BitableCalendarView.tsx`(新) · `bitableCalendarView.css`(新) · `BitableViewConfigPanels.tsx`(新) · `BitableEditor.tsx` · `bitableEditorMount.test.ts` · `src/styles/cssLayers.test.ts` | 门禁全绿 + CDP 真实端点验收通过（拖拽改日期已落盘核对） | 不做农历/节假日/重复日程/提醒；移动端只读回退 |
 | 2026-09-28 | 260928-F02 | 附件命名审计 | `src/features/bitable/BitableEditor.tsx` · `bitableEditorMount.test.ts` | 复核 main 侧契约：附件 filename=展示名、url 末段=磁盘名、buildAssetFilename 随机唯一（无去重）；bitable 展示名改取 `file.name` | 无新增改动面 |
 | 2026-09-28 | 260928-F01 | 图片预览总数 | `src/features/editor/imagePreview.ts`(+test) · `LakeEditor.tsx` · `BitableGalleryView.tsx` · `BitableEditor.tsx` · `bitableEditorMount.test.ts` | 实测 10 图文档预览 1/10 → 10/10；画册点封面 1/2 → 2/2 | 同一张图重复出现时按首次匹配定位下标 |
+| 2026-09-28 | 260928-T04 | T04 语义排序增强 | `src/core/bitableDoc.ts`(+test) · `BitableEditor.tsx` · `bitableEditorMount.test.ts` | 门禁全绿 + 实测选项序 B/C/E→D→A、逆序反转、字典序不受影响 | 不做公式排序 |
+| 2026-09-28 | 260928-T03 | T03 多级分组 | `src/core/bitableDoc.ts` · `bitableGroup.test.ts` · `BitableEditor.tsx` · `bitableViews.css` · `cssLayers.test.ts` | 门禁全绿 + 实测两级树/折叠/层级缩进/拖动重排（配置落盘） | 折叠 key 基于选项名，改名会重置折叠态 |
 | 2026-09-28 | 260928-T01 | T01 列级统计 | `src/core/bitableDoc.ts`(+test) · `src/features/bitable/BitableEditor.tsx` · `bitableViews.css` · `cssLayers.test.ts` · `bitableEditorMount.test.ts` | 门禁全绿 + 实测：求和 7 → 筛选后 1、时间范围 9 天、多列独立 | 移动端隐藏统计（验收允许） |
 | 2026-09-28 | 260928-F04 | 预览范围改为单单元格 + 展示名守卫 + 填写表单跳预览 | `bitableCells.tsx` · `BitableGalleryView.tsx` · `BitableEditor.tsx` · `BitableRecordDrawer.tsx` · `BitableFormView.tsx` · `src/core/bitableDoc.ts`(+test) · `src/features/attachment/attachmentPreviewController.ts` · `bitableEditorMount.test.ts` | 实测两列图片各自独立：A=1/2、B=2/3、画册封面=1/2、看板 2+3 | 无 |
 | 2026-09-28 | 260928-F03 | 表单编辑态回退 + 看板缩略图 | `BitableFormView.tsx` · `bitableFormView.css` · `BitableKanbanView.tsx` · `bitableKanbanView.css` · `BitableEditor.tsx` · `cssLayers.test.ts` | 实测编辑态回到 v1 原形态；看板卡片出缩略图不出文件名 | 无 |
@@ -1094,6 +1096,34 @@ UI 与交互变化：
 遗留：移动端隐藏统计（验收允许「只读或隐藏」）；统计不参与 CSV/JSON 导出配置（导出尚未开始）。
 
 下一步：等用户验收；随后按 §8 顺序进入 T03 多级分组。
+
+### 2026-09-28 · T03 多级分组 + T04 语义排序增强
+
+#### T03 多级分组
+
+- `view.groups` 由「只用第 0 条」升级为**最多 3 级**（`BITABLE_MAX_GROUPS`）；面板可加/删/换字段、**拖动调整优先级**。
+- core 新增 `groupRecordsTree`（纯函数）：逐级细分返回树（`key/label/level/count/records/children`），组键/标签口径与单级完全一致，组内保持筛选+排序后的顺序，每级各自排序、空值组恒最后。
+- 折叠态仍是**本机展示态**；节点 key = `fieldId:值` 逐级拼接（唯一、互不串扰）。
+- 层级缩进用变体选择器（`.bt-group-row.level-N .bt-group-label`）落在 `bitableViews.css`，不改 `bitableEditor.css`。
+
+#### T04 语义排序增强
+
+- `BitableSortRule` 增 `mode: "optionOrder"`；core 新增 `BitableSortMode` / `BITABLE_SORT_MODE_LABEL` / `sortModesForField` / `sortModeLabel` 与 `compareSortValues`。
+- 单选/多选多出「选项顺序 / 选项逆序」（多选按**第一个已选项**的序号）；空值/指向已删选项的值**恒排最后**（与分组口径一致）。
+- 日期字段的升降序文案改为「早→晚 / 晚→早」（口径不变，只是贴切）。数字保持原有升降序。不做公式排序。
+- 排序值按**选项序号**判断（选项重命名/重排后配置不丢）；多条件排序仍按规则顺序稳定比较。
+
+改动文件：`src/core/bitableDoc.ts`(+test) · `src/core/bitableGroup.test.ts` · `src/features/bitable/BitableEditor.tsx` · `bitableViews.css` · `src/styles/cssLayers.test.ts`
+
+验证结果：
+
+- 门禁全绿：tsc / vitest **1375 passed / 16 skipped** / check:core / 双端构建 / ui-metrics / cssLayers+uiPrimitives / git diff --check。
+- CDP 实测 T03：分组 = 状态 → 优先级，渲染出「待开始 3（低 1 / 高 2）· 进行中 1（高 1）· 已完成 1（低 1）」两级树（父组 count 含子级、层级缩进生效、5 条记录行）；折叠首组后其子级消失；`groups` 两条配置落盘。
+- CDP 实测 T04：状态字段的排序方式下拉出现 4 项（升序/降序/选项顺序/选项逆序）；选项顺序 → `B C E | D | A`（待开始→进行中→已完成，组内保持输入序），选项逆序 → `A | D | B C E`，字典序升降序照旧。
+
+遗留：多级分组的折叠 key 基于「组键=选项名」，重命名选项会重置该组折叠态（本机展示态，不写正文）；移动端仍不展示分组（安全回退为平铺网格）。
+
+下一步：按 §8 顺序进入 **T02A 基础字段**（布尔/链接/评分/进度/创建时间/修改时间）。
 
 ## 14. 会话执行模板
 
