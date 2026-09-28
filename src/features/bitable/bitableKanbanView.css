@@ -1,0 +1,116 @@
+/**
+ * 看板视图样式（V02）。独立文件的理由与 bitableViews.css 相同：
+ * bitableEditor.css 已顶到 cssLayers 基线（只允许变小），新视图的样式按职责各归各文件。
+ * 只走 --lake-* 令牌，无颜色字面量、无 !important；选项色是**数据驱动**，沿用单元格 chip 的既有先例。
+ */
+.bt-kanban {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  overflow: auto;
+}
+
+.bt-kanban-col {
+  flex: 0 0 auto;
+  width: 264px;
+  max-height: 100%;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  border: 1px solid var(--lake-border-1);
+  border-radius: var(--lake-radius-sm);
+  background: var(--lake-bg-block);
+}
+
+.bt-kanban-col.is-collapsed { width: auto; }
+
+.bt-kanban-col-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--lake-border-1);
+}
+
+.bt-kanban-col-toggle {
+  display: inline-flex;
+  align-items: center;
+  border: 0;
+  background: transparent;
+  padding: 2px;
+  color: var(--lake-text-3);
+  cursor: pointer;
+}
+
+.bt-kanban-caret { transition: transform 0.12s ease; }
+.bt-kanban-caret.is-open { transform: rotate(90deg); }
+.bt-kanban-chip { padding: 1px 8px; border-radius: var(--lake-radius-xs); font-size: 12px; background: var(--lake-bg-hover); color: var(--lake-text-2); }
+.bt-kanban-count { margin-left: auto; font-size: 11px; color: var(--lake-text-3); }
+
+.bt-kanban-col-body {
+  flex: 1;
+  min-height: 48px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px;
+  overflow-y: auto;
+}
+
+.bt-kanban-card {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 8px 10px;
+  border: 1px solid var(--lake-border-1);
+  border-radius: var(--lake-radius-sm);
+  background: var(--lake-bg-panel);
+  cursor: pointer;
+}
+
+.bt-kanban-card:hover { border-color: var(--lake-accent); }
+.bt-kanban-card.is-dragging { opacity: 0.5; }
+.bt-kanban-card-title { font-size: 13px; color: var(--lake-text-1); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bt-kanban-field { display: flex; align-items: baseline; gap: 6px; min-width: 0; font-size: 12px; }
+.bt-kanban-field-name { flex: 0 0 auto; color: var(--lake-text-3); }
+.bt-kanban-field-value { min-width: 0; color: var(--lake-text-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.bt-kanban-thumbs { display: flex; flex-wrap: wrap; gap: 4px; min-width: 0; }
+.bt-kanban-thumb { display: block; width: 36px; height: 36px; border-radius: var(--lake-radius-xs); object-fit: cover; }
+
+.bt-kanban-add { flex: 0 0 auto; width: 180px; }
+
+.bt-kanban-add-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px dashed var(--lake-border-1);
+  border-radius: var(--lake-radius-sm);
+  background: transparent;
+  color: var(--lake-text-2);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.bt-kanban-add-btn:hover { background: var(--lake-bg-hover); }
+
+.bt-kanban-empty {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 24px;
+  color: var(--lake-text-3);
+  font-size: 13px;
+  text-align: center;
+}

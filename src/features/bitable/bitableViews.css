@@ -1,0 +1,27 @@
+/**
+ * 多维表视图层样式（V01 多视图工作台）。
+ *
+ * 为什么单独一个文件：`bitableEditor.css` 已顶到 cssLayers 基线（1081 条，只允许变小），
+ * 视图相关的新规则一律进本文件（按职责拆分，不往老文件叠）。同样纳入
+ * src/styles/cssLayers.test.ts 围栏；只走 --lake-* 令牌，无颜色字面量、无 !important。
+ */
+/* 浮层面板里的说明/提示文案（看板配置的「没有单选字段」等） */
+.bt-panel-note {
+  margin: 4px 0;
+  color: var(--lake-text-3);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.bt-view-fallback {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--lake-border-1);
+  background: var(--lake-status-pending-soft);
+  color: var(--lake-text-2);
+  font-size: 12px;
+  line-height: 18px;
+}

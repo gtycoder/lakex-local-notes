@@ -729,6 +729,15 @@ body.nb-drag-active .side-panel-body { overscroll-behavior: none; }
   border-radius: 999px;
   background: var(--lake-border-2, #f1f3f5);
 }
+.mbt-view-notice {
+  margin: 0 0 8px;
+  padding: 6px 10px;
+  border: 1px solid var(--lake-border-1, #e3e6eb);
+  border-radius: 8px;
+  background: var(--lake-bg-hover, #f6f7f9);
+  color: var(--lake-text-2, #333);
+  font-size: 12px;
+}
 .mbt-grid-wrap {
   flex: 1;
   min-height: 0;

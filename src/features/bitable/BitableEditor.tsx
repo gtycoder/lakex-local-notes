@@ -2,7 +2,8 @@
  * 多维表编辑器（kind="bitable"）—— 自研 v1，产品口径见 docs/STORAGE-LAYERS.md。
  *
  * 形态（用户 260919 硬要求）：一个文档 = 多张数据表（左侧列表），为后期「多数据表联合」预留；
- * 三层归属 文档 ⊃ 数据表 ⊃（字段/记录/视图）。视图只暴露「表格视图 + 表单视图」。
+ * 三层归属 文档 ⊃ 数据表 ⊃（字段/记录/视图）。视图类型是**开放集合**：grid/form 已实现，
+ * 其余（kanban/gallery/calendar 以及未来版本的未知类型）由 BitableViewFallback 明确回退成表格显示，绝不清空/改写正文。
  *
  * 关键约束：
  * - 非受控第三方内核：这里是纯 DOM/React 受控实现，隐藏 tab 也能安全渲染（不像 canvas 需 everVisible）。
@@ -14,28 +15,36 @@ import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, 
 import { writeLocalStorage } from "../../lib/localStorageSafe";
 import { Dialog, Menu } from "../../components/ui/Overlay";
 import {
-  ArrowUpDown, Check, ChevronDown, ChevronLeft, ChevronRight, ChevronsRight, ClipboardList, Copy, Eye, EyeOff, GripVertical, ListFilter,
-  MoreHorizontal, Pencil, Plus, Rows2, Rows3, Rows4, Search, Settings2, Table2, Trash2, X,
+  ArrowUpDown, Check, ChevronDown, ChevronLeft, ChevronRight, ChevronsRight, Copy, Eye, EyeOff, GripVertical, ListFilter,
+  MoreHorizontal, Pencil, Plus, Rows2, Rows3, Rows4, Search, Settings2, Trash2, X,
 } from "lucide-react";
 import {
   BITABLE_DOC_KIND, BITABLE_DOC_VERSION, BITABLE_FIELD_TYPES, BITABLE_FIELD_TYPE_LABEL,
   BITABLE_FILTER_OPERATOR_LABEL, BITABLE_OPTION_COLORS, applyViewToRecords, bitableDisplayValue, bitablesToBody, defaultRecordValues, duplicateValues, groupRecords, optionColorHex,
   bitableAttachments, removeBitableAttachment, renameBitableAttachment, reorderBitableAttachments,
   createBitableField, createBitableRecord, createBitableView, createDefaultBitableTable, filterOperatorsFor,
+  isAttachmentLikeField, isImplementedViewType, kanbanGroupField,
   isKnownFieldType, newBitableId, orderedTableFields, parseBitableBody,
   type BitableAttachment, type BitableDoc, type BitableField, type BitableFieldType, type BitableFilterRule, type BitableGroupRule, type BitableRecord,
-  type BitableRowHeight, type BitableTable, type BitableView,
+  type BitableRowHeight, type BitableTable, type BitableView, type BitableViewType,
 } from "../../core/bitableDoc.js";
 import { parseLocalAssetUrl } from "../../core/assetUrl.js";
 import { uploadLakeResource } from "../editor/resourceUpload.js";
 import { ASSET_ORIGIN, withAssetAccessToken } from "../../lib/assetPort.js";
 import { openAssetEntry } from "../attachment/openAssetEntry.js";
 import { AttachmentPreview } from "../attachment/AttachmentPreview.js";
+import { openImagePreview } from "../editor/imagePreview.js";
 import { ImageLightbox } from "../editor/ImageLightbox.js";
+import { BitableCalendarView } from "./BitableCalendarView.js";
 import { BitableFormView } from "./BitableFormView.js";
+import { BitableGalleryView } from "./BitableGalleryView.js";
+import { BitableKanbanView } from "./BitableKanbanView.js";
 import { BitableRecordDrawer } from "./BitableRecordDrawer.js";
+import { BitableViewBar } from "./BitableViewBar.js";
+import { CalendarConfigPanel, GalleryConfigPanel, KanbanConfigPanel } from "./BitableViewConfigPanels.js";
 import { AttachmentCell, CellEditor, ColorPalette, DatePicker, FieldTypeIcon, Popover, SelectMenu } from "./bitableCells.js";
 import { createSnapshotHistory, type SnapshotHistory } from "../../core/bitableHistory.js";
+import { BitableViewFallback, ViewTypeIcon } from "./bitableViews.js";
 import "./bitableEditor.css";
 
 const AUTOSAVE_DEBOUNCE_MS = 800;
@@ -137,7 +146,7 @@ export function BitableEditor({ noteId, content, visible, readOnly, onChange, ch
   }, [doc.tables]);
 
   // ---- 面板/浮层状态 ----
-  const [panel, setPanel] = useState<null | "fields" | "filter" | "group" | "sort" | "rowHeight">(null);
+  const [panel, setPanel] = useState<null | "fields" | "filter" | "group" | "sort" | "rowHeight" | "viewConfig">(null);
   const [menuAnchor, setMenuAnchor] = useState<HTMLElement | null>(null);
   /** 列菜单：坐标定位（⋯ 按钮 / 列头右键都能开）；header = 列头 <th>，给「文本颜色」调色板当锚点
    *  —— ⋯ 按钮是 hover 才 display 的，菜单一关就量不到位置（调色板会跑到左上角）。 */
@@ -145,7 +154,6 @@ export function BitableEditor({ noteId, content, visible, readOnly, onChange, ch
   const [textColorFor, setTextColorFor] = useState<{ fieldId: string; anchor: HTMLElement } | null>(null);
   const [configDragId, setConfigDragId] = useState<string | null>(null);
   const [viewMenu, setViewMenu] = useState<{ viewId: string; anchor: HTMLElement } | null>(null);
-  const [addViewAnchor, setAddViewAnchor] = useState<HTMLElement | null>(null);
   const [addFieldAnchor, setAddFieldAnchor] = useState<HTMLElement | null>(null);
   const [fieldEditor, setFieldEditor] = useState<{ fieldId: string | null } | null>(null);
   const [viewEditor, setViewEditor] = useState<string | null>(null);
@@ -161,7 +169,6 @@ export function BitableEditor({ noteId, content, visible, readOnly, onChange, ch
   const [rowCtx, setRowCtx] = useState<{ recordId: string; x: number; y: number } | null>(null);
   const rootRef = useRef<HTMLDivElement>(null);
   const [selectedColumnId, setSelectedColumnId] = useState<string | null>(null);
-  const [draggingView, setDraggingView] = useState<{ id: string } | null>(null);
   const [tableSwitchAnchor, setTableSwitchAnchor] = useState<HTMLElement | null>(null);
   const [cellSel, setCellSel] = useState<{ anchor: { recordId: string; fieldId: string }; focus: { recordId: string; fieldId: string } } | null>(null);
   const cellSelectingRef = useRef(false);
@@ -240,6 +247,21 @@ export function BitableEditor({ noteId, content, visible, readOnly, onChange, ch
     patchActiveTable((table) => ({ ...table, views: table.views.map((v) => (v.id === viewId ? { ...v, ...patch } : v)) }));
   }, [patchActiveTable]);
 
+  // ---- 视图类型相关（V02 看板 / V03 画册 / V04 日历）----
+  /** 非网格视图的「视图配置」入口文案（配置面板实体在 BitableViewConfigPanels.tsx）。 */
+  const viewConfigLabel = activeView.type === "kanban" ? "看板配置" : activeView.type === "gallery" ? "画册配置" : activeView.type === "calendar" ? "日历配置" : null;
+  /** 网格专属工具（分组 / 行高）只在「确实是网格」「表单」或「回退到网格显示」时出现。 */
+  const showGridTools = !isImplementedViewType(activeView.type) || activeView.type === "grid" || activeView.type === "form";
+  /** 看板「新建分组」要往分组字段追加选项。 */
+  const kanbanField = kanbanGroupField(activeTable, activeView);
+  /** 日历拖拽落值：开始 + 结束一起平移（一次写多个字段，口径与单元格编辑一致）。 */
+  const setRecordValues = useCallback((recordId: string, patch: Record<string, unknown>) => {
+    patchActiveTable((table) => ({
+      ...table,
+      records: table.records.map((r) => (r.id === recordId ? { ...r, values: { ...r.values, ...patch }, updatedAt: stamp() } : r)),
+    }));
+  }, [patchActiveTable]);
+
   const setCellValue = useCallback((recordId: string, fieldId: string, value: unknown) => {
     patchActiveTable((table) => ({
       ...table,
@@ -247,13 +269,15 @@ export function BitableEditor({ noteId, content, visible, readOnly, onChange, ch
     }));
   }, [patchActiveTable]);
 
-  /** 上传 → 附件单元格条目。**磁盘名只在 url 末段**：`uploadResource` 返回的 `filename` 是展示名
-   *  （给 Lake 文件卡的 name 用），把它当路径会让除图片外的附件全部 404（播放器灰、PPT 打不开）。 */
+  /** 上传 → 附件单元格条目。两个名字必须分开：
+   *  - `file`（磁盘名）= 生成名，只在 url 末段；拿它当路径以外的东西都会 404（除图片外全打不开）。
+   *  - `name`（展示名）= **用户原始文件名**：`uploadResource` 只回生成的磁盘名（main 侧直接忽略请求名），
+   *    早前把 `uploaded.filename` 当展示名 ⇒ 上传后卡片显示成 "1790582685708_03cd9c88.png"（260928 实测抓到）。 */
   const uploadFiles = useCallback(async (files: File[]): Promise<BitableAttachment[]> => {
     const out: BitableAttachment[] = [];
     for (const file of files) {
       const uploaded = await uploadLakeResource(file, noteId);
-      out.push({ file: parseLocalAssetUrl(uploaded.url)?.filename ?? uploaded.filename, name: uploaded.filename, size: uploaded.size });
+      out.push({ file: parseLocalAssetUrl(uploaded.url)?.filename ?? uploaded.filename, name: file.name, size: uploaded.size });
     }
     return out;
   }, [noteId]);
@@ -262,6 +286,11 @@ export function BitableEditor({ noteId, content, visible, readOnly, onChange, ch
   const openAsset = useCallback((attachment: BitableAttachment) => {
     // kindFrom = 磁盘名：展示名被改成没有扩展名时，类型判定照样正确（音视频仍走应用内播放）
     openAssetEntry(withAssetAccessToken(ASSET_ORIGIN + "/" + noteId + "/" + attachment.file), attachment.name, attachment.size, { kindFrom: attachment.file });
+  }, [noteId]);
+
+  /** 图片预览：入参永远是**同一个单元格内**的图片（用户 260928：两列图片就是两类，绝不跨列合并）。 */
+  const openImages = useCallback((images: BitableAttachment[], index: number) => {
+    openImagePreview(images.map((image) => ({ src: withAssetAccessToken(ASSET_ORIGIN + "/" + noteId + "/" + image.file) })), index);
   }, [noteId]);
 
   const appendAttachments = useCallback((recordId: string, fieldId: string, entries: BitableAttachment[]) => {
@@ -322,13 +351,25 @@ export function BitableEditor({ noteId, content, visible, readOnly, onChange, ch
   }, [patchActiveTable]);
 
   // ---- 视图 ----
-  const addView = useCallback((type: "grid" | "form") => {
+  const addView = useCallback((type: BitableViewType) => {
     patchActiveTable((table) => {
       const view = createBitableView(type);
-      if (type === "form") view.formFieldIds = table.fields.map((f) => f.id);
+      // 视图只存投影配置、不复制记录：看板默认取第一个单选字段分栏；
+      // 表单**不预选字段** —— formFieldIds 为空 = 未配置，表单视图据此默认进「编辑表单」（用户 260928）。
+      if (type === "kanban") {
+        const select = table.fields.find((f) => f.type === "select");
+        if (select) view.kanbanGroupFieldId = select.id;
+      }
+      if (type === "gallery") {
+        const attachment = table.fields.find((f) => isAttachmentLikeField(f.type));
+        if (attachment) view.galleryCoverFieldId = attachment.id;
+      }
+      if (type === "calendar") {
+        const date = table.fields.find((f) => f.type === "date");
+        if (date) view.calendarStartFieldId = date.id;
+      }
       return { ...table, views: [...table.views, view], activeViewId: view.id };
     });
-    setAddViewAnchor(null);
   }, [patchActiveTable]);
   const deleteView = useCallback((viewId: string) => {
     patchActiveTable((table) => {
@@ -717,14 +758,16 @@ export function BitableEditor({ noteId, content, visible, readOnly, onChange, ch
             readOnly={readOnly}
             onChange={(value) => setCellValue(record.id, field.id, value)}
             onAddOption={(name) => addOption(field.id, name, record.id)}
-            renderAttachment={() => (
+            renderAttachment={(imageOnly) => (
               <AttachmentCell
                 noteId={noteId}
                 value={record.values[field.id]}
                 readOnly={readOnly}
+                imageOnly={imageOnly}
                 onUpload={(files) => { void uploadFiles(files).then((entries) => appendAttachments(record.id, field.id, entries)); }}
                 onRemove={(file) => setCellValue(record.id, field.id, removeBitableAttachment(record.values[field.id], file))}
                 onOpen={openAsset}
+                onOpenImages={openImages}
                 onReorder={(files) => setCellValue(record.id, field.id, reorderBitableAttachments(record.values[field.id], files))}
                 onRename={(file, name) => setCellValue(record.id, field.id, renameBitableAttachment(record.values[field.id], file, name))}
               />
@@ -781,38 +824,38 @@ export function BitableEditor({ noteId, content, visible, readOnly, onChange, ch
       )}
 
       <div className="bt-main">
-        {chrome && <div className="bt-viewbar">
-          {tablesCollapsed && (
-            <div className="bt-viewbar-leading">
-              <button type="button" className="bt-icon-btn" title="展开数据表列表" aria-label="展开数据表列表" onClick={() => setTablesCollapsed(false)}><ChevronsRight size={15} /></button>
-              <button type="button" className="bt-tables-switch" title="切换数据表" onClick={(event) => setTableSwitchAnchor(event.currentTarget)}>
-                <span className="bt-tables-switch-name">{activeTable.name}</span><ChevronDown size={13} />
-              </button>
-            </div>
-          )}
-          {activeTable.views.map((view) => (
-            <div key={view.id}
-              className={"bt-view-tab" + (view.id === activeView.id ? " active" : "") + (draggingView?.id === view.id ? " dragging" : "")}
-              draggable={!readOnly}
-              onDragStart={() => setDraggingView({ id: view.id })}
-              onDragOver={() => { if (draggingView && draggingView.id !== view.id) reorderViews(draggingView.id, view.id); }}
-              onDragEnd={() => setDraggingView(null)}>
-              <button type="button" className="bt-view-name" onClick={() => setActiveView(view.id)} onDoubleClick={() => setViewEditor(view.id)}>
-                <span className="bt-view-icon" aria-hidden="true">{view.type === "form" ? <ClipboardList size={13} /> : <Table2 size={13} />}</span>{view.name}
-              </button>
-              <button type="button" className="bt-view-more" title="视图操作" aria-label="视图操作" disabled={readOnly}
-                onClick={(event) => setViewMenu({ viewId: view.id, anchor: event.currentTarget })}><ChevronDown size={12} /></button>
-            </div>
-          ))}
-          <button type="button" className="bt-icon-btn" title="新建视图" aria-label="新建视图" disabled={readOnly}
-            onClick={(event) => setAddViewAnchor(event.currentTarget)}><Plus size={14} /></button>
-        </div>}
+        {chrome && (
+          <BitableViewBar
+            views={activeTable.views}
+            activeViewId={activeView.id}
+            readOnly={readOnly}
+            leading={tablesCollapsed ? (
+              <div className="bt-viewbar-leading">
+                <button type="button" className="bt-icon-btn" title="展开数据表列表" aria-label="展开数据表列表" onClick={() => setTablesCollapsed(false)}><ChevronsRight size={15} /></button>
+                <button type="button" className="bt-tables-switch" title="切换数据表" onClick={(event) => setTableSwitchAnchor(event.currentTarget)}>
+                  <span className="bt-tables-switch-name">{activeTable.name}</span><ChevronDown size={13} />
+                </button>
+              </div>
+            ) : undefined}
+            onSelect={setActiveView}
+            onRenameRequest={setViewEditor}
+            onMore={(viewId, anchor) => setViewMenu({ viewId, anchor })}
+            onAddView={addView}
+            onReorder={reorderViews}
+          />
+        )}
 
         {chrome && <div className="bt-toolbar">
           <button type="button" className={"bt-tool-btn" + (panel === "fields" ? " is-active" : "")}
             onClick={(event) => { setMenuAnchor(event.currentTarget); setPanel(panel === "fields" ? null : "fields"); }}>
             <Settings2 size={14} />表格配置
           </button>
+          {viewConfigLabel && (
+            <button type="button" className={"bt-tool-btn" + (panel === "viewConfig" ? " is-active" : "")}
+              onClick={(event) => { setMenuAnchor(event.currentTarget); setPanel(panel === "viewConfig" ? null : "viewConfig"); }}>
+              <ViewTypeIcon type={activeView.type} size={14} />{viewConfigLabel}
+            </button>
+          )}
           <button type="button" className={"bt-tool-btn" + (panel === "filter" ? " is-active" : "")}
             onClick={(event) => {
               setMenuAnchor(event.currentTarget);
@@ -822,18 +865,22 @@ export function BitableEditor({ noteId, content, visible, readOnly, onChange, ch
             }}>
             <ListFilter size={14} />筛选{filters.length > 0 && <span className="bt-badge">{filters.length}</span>}
           </button>
-          <button type="button" className={"bt-tool-btn" + (panel === "group" ? " is-active" : "")}
-            onClick={(event) => { setMenuAnchor(event.currentTarget); setPanel(panel === "group" ? null : "group"); }}>
-            <Rows2 size={14} />分组{groups.length > 0 && <span className="bt-badge">{groups.length}</span>}
-          </button>
+          {showGridTools && (
+            <button type="button" className={"bt-tool-btn" + (panel === "group" ? " is-active" : "")}
+              onClick={(event) => { setMenuAnchor(event.currentTarget); setPanel(panel === "group" ? null : "group"); }}>
+              <Rows2 size={14} />分组{groups.length > 0 && <span className="bt-badge">{groups.length}</span>}
+            </button>
+          )}
           <button type="button" className={"bt-tool-btn" + (panel === "sort" ? " is-active" : "")}
             onClick={(event) => { setMenuAnchor(event.currentTarget); setPanel(panel === "sort" ? null : "sort"); }}>
             <ArrowUpDown size={14} />排序{sorts.length > 0 && <span className="bt-badge">{sorts.length}</span>}
           </button>
-          <button type="button" className={"bt-tool-btn" + (panel === "rowHeight" ? " is-active" : "")}
-            onClick={(event) => { setMenuAnchor(event.currentTarget); setPanel(panel === "rowHeight" ? null : "rowHeight"); }}>
-            <Rows3 size={14} />行高
-          </button>
+          {showGridTools && (
+            <button type="button" className={"bt-tool-btn" + (panel === "rowHeight" ? " is-active" : "")}
+              onClick={(event) => { setMenuAnchor(event.currentTarget); setPanel(panel === "rowHeight" ? null : "rowHeight"); }}>
+              <Rows3 size={14} />行高
+            </button>
+          )}
           <button type="button" className={"bt-tool-btn" + (findOpen ? " is-active" : "")} onClick={() => setFindOpen((v) => !v)}>
             <Search size={14} />搜索
           </button>
@@ -847,6 +894,9 @@ export function BitableEditor({ noteId, content, visible, readOnly, onChange, ch
           <div className="bt-toolbar-spacer" />
           <button type="button" className="bt-tool-btn bt-add-record" disabled={readOnly} onClick={() => addRecord()}><Plus size={14} />添加记录</button>
         </div>}
+
+        {/* 本版本还没实现正文渲染的视图类型（gallery/calendar 及未来未知类型）：明确提示 + 表格正文，绝不白屏、不改数据 */}
+        {!isImplementedViewType(activeView.type) && <BitableViewFallback view={activeView} />}
 
         {activeView.type === "form" ? (
           <BitableFormView
@@ -864,7 +914,25 @@ export function BitableEditor({ noteId, content, visible, readOnly, onChange, ch
             onUploadFiles={uploadFiles}
             onAddFieldOption={(fieldId, option) => patchActiveTable((table) => ({ ...table, fields: table.fields.map((f) => (f.id === fieldId ? { ...f, options: [...(f.options ?? []), option] } : f)) }))}
             onOpenAsset={openAsset}
+            onOpenImages={openImages}
           />
+        ) : activeView.type === "kanban" ? (
+          <BitableKanbanView
+            noteId={noteId}
+            table={activeTable}
+            view={activeView}
+            records={shownRecords}
+            readOnly={readOnly}
+            onSetValue={setCellValue}
+            onOpenRecord={openDrawer}
+            onAddGroupOption={(name) => { if (kanbanField) addOption(kanbanField.id, name); }}
+            onOpenImages={openImages}
+          />
+        ) : activeView.type === "gallery" ? (
+          <BitableGalleryView noteId={noteId} table={activeTable} view={activeView} records={shownRecords} onOpenRecord={openDrawer} onOpenImages={openImages} />
+        ) : activeView.type === "calendar" ? (
+          <BitableCalendarView table={activeTable} view={activeView} records={shownRecords} readOnly={readOnly}
+            onOpenRecord={openDrawer} onSetValues={setRecordValues} />
         ) : (
           <div className="bt-grid-wrap" style={gridStyle} onKeyDown={onGridKeyDown}>
             <table className="bt-grid">
@@ -1041,10 +1109,12 @@ export function BitableEditor({ noteId, content, visible, readOnly, onChange, ch
         </div>
       </Popover>
 
-      <Popover open={Boolean(addViewAnchor)} anchor={addViewAnchor} onClose={() => setAddViewAnchor(null)} width={200}>
+      {/* 视图配置浮层：内容按当前视图类型选面板（三类面板都在 BitableViewConfigPanels.tsx） */}
+      <Popover open={panel === "viewConfig"} anchor={menuAnchor} onClose={() => setPanel(null)} width={340}>
         <div className="bt-panel">
-          <button type="button" className="bt-menu-item" onClick={() => addView("grid")}>表格视图</button>
-          <button type="button" className="bt-menu-item" onClick={() => addView("form")}>表单视图</button>
+          {activeView.type === "kanban" && <KanbanConfigPanel table={activeTable} view={activeView} readOnly={readOnly} onPatch={(patch) => patchView(activeView.id, patch)} />}
+          {activeView.type === "gallery" && <GalleryConfigPanel table={activeTable} view={activeView} readOnly={readOnly} onPatch={(patch) => patchView(activeView.id, patch)} />}
+          {activeView.type === "calendar" && <CalendarConfigPanel table={activeTable} view={activeView} readOnly={readOnly} onPatch={(patch) => patchView(activeView.id, patch)} />}
         </div>
       </Popover>
 
@@ -1101,7 +1171,7 @@ export function BitableEditor({ noteId, content, visible, readOnly, onChange, ch
 
       <Popover open={Boolean(viewMenu)} anchor={viewMenu?.anchor ?? null} onClose={() => setViewMenu(null)} width={180}>
         <div className="bt-panel">
-          <button type="button" className="bt-menu-item" onClick={() => { if (viewMenu) setViewEditor(viewMenu.viewId); setViewMenu(null); }}><Pencil size={13} />重命名视图</button>
+          <button type="button" className="bt-menu-item" disabled={readOnly} onClick={() => { if (viewMenu) setViewEditor(viewMenu.viewId); setViewMenu(null); }}><Pencil size={13} />重命名视图</button>
           <button type="button" className="bt-menu-item" disabled={readOnly} onClick={() => { if (viewMenu) copyView(viewMenu.viewId); }}><Copy size={13} />复制视图</button>
           <button type="button" className="bt-menu-item danger" disabled={readOnly || activeTable.views.length <= 1} onClick={() => { if (viewMenu) deleteView(viewMenu.viewId); }}><Trash2 size={13} />删除视图</button>
         </div>
@@ -1144,14 +1214,14 @@ export function BitableEditor({ noteId, content, visible, readOnly, onChange, ch
         <Dialog open onDismiss={() => setViewEditor(null)} label="重命名视图" className="bt-dialog">
           <header className="ln-dialog__head"><h3 className="ln-dialog__title">重命名视图</h3></header>
           <div className="ln-dialog__body">
-            <input ref={viewNameRef} autoFocus className="bt-input" defaultValue={activeTable.views.find((v) => v.id === viewEditor)?.name ?? ""}
+            <input ref={viewNameRef} autoFocus className="bt-input" readOnly={readOnly} defaultValue={activeTable.views.find((v) => v.id === viewEditor)?.name ?? ""}
               onKeyDown={(event) => {
-                if (event.key === "Enter") { patchView(viewEditor, { name: (event.target as HTMLInputElement).value.trim() || "视图" }); setViewEditor(null); }
+                if (event.key === "Enter" && !readOnly) { patchView(viewEditor, { name: (event.target as HTMLInputElement).value.trim() || "视图" }); setViewEditor(null); }
               }} />
           </div>
           <div className="ln-dialog__actions">
             <button type="button" className="bt-secondary" onClick={() => setViewEditor(null)}>取消</button>
-            <button type="button" className="bt-primary" onClick={() => {
+            <button type="button" className="bt-primary" disabled={readOnly} onClick={() => {
               patchView(viewEditor, { name: viewNameRef.current?.value.trim() || "视图" });
               setViewEditor(null);
             }}>确定</button>
@@ -1190,6 +1260,7 @@ export function BitableEditor({ noteId, content, visible, readOnly, onChange, ch
           onAddField={openAddField}
           onUpload={(recordId, fieldId, files) => { void uploadFiles(files).then((entries) => appendAttachments(recordId, fieldId, entries)); }}
           onOpenAsset={openAsset}
+          onOpenImages={openImages}
         />
       )}
     </div>

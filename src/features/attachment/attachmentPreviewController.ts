@@ -7,6 +7,7 @@
  * overlay 组件订阅本控制器渲染；PDF/音视频内联预览、其他类型显示信息 + 操作按钮。
  */
 import { parseLocalAssetUrl, type LocalAssetRef } from "../../core/assetUrl.js";
+import { isAssetFilename } from "../../core/assetNaming.js";
 import { fileKindOf, type AttachmentKind } from "../../core/fileCard.js";
 
 export interface AttachmentPreviewItem {
@@ -39,11 +40,16 @@ function emit(): void {
   }
 }
 
-/** 由 src 构建预览条目（解析本地资产引用 + 类型分流）。 */
+/**
+ * 由 src 构建预览条目（解析本地资产引用 + 类型分流）。
+ * 展示名守卫：**落盘名绝不作为标题展示**（用户 260928）——标题缺失、或标题就是
+ * 「13位时间戳_8位hex.扩展名」形态时一律回落中性文案；磁盘名只留在 `ref.filename`（定位/打开用）。
+ */
 export function buildAttachmentPreviewItem(src: string, name: string, size: number, cardName?: string): AttachmentPreviewItem {
+  const safeName = name && !isAssetFilename(name) ? name : "附件";
   return {
     src,
-    name: name || (src.split("/").pop() ?? "附件"),
+    name: safeName,
     size: typeof size === "number" ? size : 0,
     ref: parseLocalAssetUrl(src),
     kind: fileKindOf(name || src),

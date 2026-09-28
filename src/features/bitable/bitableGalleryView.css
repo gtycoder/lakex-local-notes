@@ -1,0 +1,79 @@
+/**
+ * 画册视图样式（V03）。与 bitableKanbanView.css 同口径：独立文件、只走 --lake-* 令牌、
+ * 无颜色字面量、无 !important；封面裁切走 object-fit，不碰任何全局规则。
+ * 已登记 src/styles/cssLayers.test.ts 的 FILES/BASELINE。
+ */
+.bt-gallery {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  align-content: start;
+  gap: 12px;
+  padding: 12px;
+  overflow: auto;
+}
+
+.bt-gallery.is-compact {
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 8px;
+  padding: 8px;
+}
+
+.bt-gallery-card {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  border: 1px solid var(--lake-border-1);
+  border-radius: var(--lake-radius-sm);
+  background: var(--lake-bg-panel);
+  overflow: hidden;
+  cursor: pointer;
+}
+
+.bt-gallery-card:hover { border-color: var(--lake-accent); }
+
+.bt-gallery-cover {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  aspect-ratio: 4 / 3;
+  padding: 0;
+  background: var(--lake-bg-hover);
+  border: 0;
+  border-bottom: 1px solid var(--lake-border-1);
+  font: inherit;
+  overflow: hidden;
+}
+
+button.bt-gallery-cover { cursor: pointer; }
+
+.bt-gallery.is-compact .bt-gallery-cover { aspect-ratio: 1 / 1; }
+.bt-gallery-cover img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.bt-gallery-cover.is-contain img { object-fit: contain; }
+.bt-gallery-cover-empty { color: var(--lake-text-3); }
+
+.bt-gallery-body {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+  padding: 8px 10px;
+}
+
+.bt-gallery.is-compact .bt-gallery-body { padding: 6px 8px; }
+.bt-gallery-title { font-size: 13px; color: var(--lake-text-1); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bt-gallery-field { display: flex; align-items: baseline; gap: 6px; min-width: 0; font-size: 12px; }
+.bt-gallery-field-name { flex: 0 0 auto; color: var(--lake-text-3); }
+.bt-gallery-field-value { min-width: 0; color: var(--lake-text-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.bt-gallery-empty {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  color: var(--lake-text-3);
+  font-size: 13px;
+}

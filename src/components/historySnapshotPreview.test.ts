@@ -48,7 +48,8 @@ describe("历史快照只读编辑器预览", () => {
     expect(sheet).toMatch(/showToolbar\?: boolean;/);
     expect(sheet).toContain("showToolbar={showToolbar}");
     expect(bitable).toMatch(/chrome\?: boolean;/);
-    expect(bitable).toMatch(/\{chrome && <div className="bt-viewbar">/);
+    // V01：视图页签栏按职责拆到 BitableViewBar，chrome 门控保持在同一位置
+    expect(bitable).toMatch(/\{chrome && \(\s*<BitableViewBar/);
     expect(bitable).toMatch(/\{chrome && <div className="bt-toolbar">/);
   });
 });

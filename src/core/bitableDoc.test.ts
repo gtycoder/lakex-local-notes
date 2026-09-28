@@ -1,8 +1,15 @@
 import { describe, expect, it } from "vitest";
 import { extractAssetRefs } from "./assetNaming.js";
 import {
+  BITABLE_FIELD_TYPES,
+  BITABLE_FIELD_TYPE_LABEL,
+  BITABLE_IMPLEMENTED_VIEW_TYPES,
+  BITABLE_VIEW_TYPES,
   applyViewToRecords,
   bitableAttachments,
+  bitableAttachmentFields,
+  bitableDateFields,
+  bitableSelectFields,
   bitableDisplayValue,
   bitableRecordTitle,
   removeBitableAttachment,
@@ -17,9 +24,33 @@ import {
   createBitableRecord,
   createBitableView,
   createDefaultBitableTable,
+  defaultViewName,
   emptyBitableBody,
+  calendarColorField,
+  calendarEndField,
+  calendarEvents,
+  calendarEventsByDay,
+  calendarMonthDays,
+  calendarMovePatch,
+  calendarStartField,
+  calendarTitleField,
+  galleryCardFieldCandidates,
+  galleryCardFields,
+  galleryCoverField,
+  galleryCoverImage,
+  isAttachmentLikeField,
+  isImplementedViewType,
+  isKnownFieldType,
+  isKnownViewType,
+  kanbanCardFieldCandidates,
+  kanbanCardFields,
+  kanbanColumns,
+  kanbanGroupField,
+  localDateDiff,
   orderedTableFields,
   parseBitableBody,
+  shiftLocalDate,
+  viewTypeLabel,
 } from "./bitableDoc.js";
 
 describe("bitableDoc 数据模型", () => {
@@ -156,9 +187,19 @@ describe("bitableDoc 数据模型", () => {
     ];
     expect(bitableAttachments(value)).toEqual([
       { file: "1700000000000_ab12cd34.mp3", name: "鞠磊8.27音频.mp3", size: 448000 },
-      { file: "1700000000001_cd34ab12.pptx", name: "1700000000001_cd34ab12.pptx", size: 1024 },
+      // 缺展示名时**不暴露磁盘名**（用户 260928）：回落到中性文案
+      { file: "1700000000001_cd34ab12.pptx", name: "附件", size: 1024 },
     ]);
-    expect(bitableDisplayValue(field, value)).toBe("鞠磊8.27音频.mp3, 1700000000001_cd34ab12.pptx");
+    // 展示值（搜索/卡片/标题统一口径）同样不暴露磁盘名
+    expect(bitableDisplayValue(field, value)).toBe("鞠磊8.27音频.mp3, 附件");
+  });
+
+  it("展示名守卫：历史脏值（把落盘名当展示名）也不再外显磁盘名", () => {
+    expect(bitableAttachments([{ file: "1700000000000_ab12cd34.png", name: "1700000000000_ab12cd34.png", size: 1 }]))
+      .toEqual([{ file: "1700000000000_ab12cd34.png", name: "附件", size: 1 }]);
+    // 正常展示名原样保留（中文 / 带扩展名）
+    expect(bitableAttachments([{ file: "1700000000000_ab12cd34.png", name: "封面色块.png", size: 1 }]))
+      .toEqual([{ file: "1700000000000_ab12cd34.png", name: "封面色块.png", size: 1 }]);
   });
 
   it("附件单元格：非法 size 回落 0，但不会丢掉合法附件", () => {
@@ -239,5 +280,233 @@ describe("bitableDoc 数据模型", () => {
     expect(doc.tables[0].views).toHaveLength(1);
     expect(doc.tables[0].views[0].type).toBe("grid");
     expect(doc.tables[0].activeViewId).toBe(doc.tables[0].views[0].id);
+  });
+
+  it("未知视图类型原样保留（不得改写成 grid），只有缺 type 的脏数据才回落", () => {
+    const table = createDefaultBitableTable("t", "tbl1");
+    const raw = JSON.parse(bitablesToBody([table], "tbl1"));
+    raw.tables[0].views.push({ id: "vew-chart", name: "图表视图", type: "chart" });
+    raw.tables[0].activeViewId = "vew-chart";
+    const doc = parseBitableBody(JSON.stringify(raw))!;
+    const view = doc.tables[0].views.find((v) => v.id === "vew-chart")!;
+    expect(view.type).toBe("chart");
+    expect(view.name).toBe("图表视图");
+    expect(doc.tables[0].activeViewId).toBe("vew-chart");
+
+    // 缺 type 的脏数据才回落到 grid（旧版本打开新正文不能被静默改写）
+    const dirty = { kind: "bitable", version: 1, activeTableId: table.id, tables: [{ ...raw.tables[0], views: [{ id: "v", name: "无名" }], activeViewId: "v" }] };
+    expect(parseBitableBody(JSON.stringify(dirty))!.tables[0].views[0].type).toBe("grid");
+  });
+
+  it("视图类型元数据：五种类型可新建、默认名/标签同源、board 不算视图类型", () => {
+    expect(BITABLE_VIEW_TYPES).toEqual(["grid", "form", "kanban", "gallery", "calendar"]);
+    expect(createBitableView("kanban").name).toBe("看板视图");
+    expect(createBitableView("gallery").name).toBe("画册视图");
+    expect(createBitableView("calendar").name).toBe("日历视图");
+    expect(createBitableView("form").name).toBe("表单视图");
+    expect(defaultViewName("chart")).toBe("视图");
+    expect(viewTypeLabel("kanban")).toBe("看板视图");
+    expect(viewTypeLabel("chart")).toBe("chart");
+    expect(isKnownViewType("calendar")).toBe(true);
+    expect(isKnownViewType("board")).toBe(false);   // board 是画板文档 kind，不是视图类型
+    // 行高只属于表格视图：别让看板/画册/日历继承 grid 的 36px 行高语义
+    expect(createBitableView("grid").rowHeight).toBe("low");
+    expect(createBitableView("kanban").rowHeight).toBeUndefined();
+  });
+
+  it("看板分栏：选项即分栏（空栏保留）、未分组恒在最后、组内保持传入顺序", () => {
+    const table = createDefaultBitableTable("t", "tbl-kanban");
+    const primary = table.fields[0];
+    const status = table.fields[1];
+    const view = createBitableView("kanban", undefined, "vew-k");
+    view.kanbanGroupFieldId = status.id;
+    const optionIds = status.options!.map((o) => o.id);
+    const mk = (id: string, title: string, optionId?: string) => {
+      const record = createBitableRecord(id);
+      record.values[primary.id] = title;
+      if (optionId !== undefined) record.values[status.id] = optionId;
+      return record;
+    };
+    const records = [mk("r1", "A", optionIds[1]), mk("r2", "B"), mk("r3", "C", optionIds[1]), mk("r4", "D", "opt-deleted")];
+    const columns = kanbanColumns(table, view, records);
+    // 三个选项都在（空栏也保留，否则没法把卡片拖进空分组），未分组固定排最后
+    expect(columns.map((c) => c.optionId)).toEqual([...optionIds, null]);
+    expect(columns.map((c) => c.records.map((r) => r.id))).toEqual([[], ["r1", "r3"], [], ["r2", "r4"]]);
+    const last = columns[columns.length - 1];
+    expect(last.label).toBe("未分组");
+    expect(last.key).toBe("");
+    expect(last.color).toBeUndefined();
+  });
+
+  it("看板：分组字段必须是单选；未配置→无分栏；卡片字段默认排除主字段与分组字段", () => {
+    const table = createDefaultBitableTable("t", "tbl-kanban2");
+    const view = createBitableView("kanban", undefined, "vew-k2");
+    expect(kanbanGroupField(table, view)).toBeUndefined();
+    expect(kanbanColumns(table, view, [])).toEqual([]);
+    expect(bitableSelectFields(table).map((f) => f.type)).toEqual(["select"]);
+
+    view.kanbanGroupFieldId = table.fields[0].id;   // 文本字段不能当分栏
+    expect(kanbanGroupField(table, view)).toBeUndefined();
+    view.kanbanGroupFieldId = table.fields[1].id;
+    expect(kanbanGroupField(table, view)?.id).toBe(table.fields[1].id);
+
+    const candidates = kanbanCardFieldCandidates(table, view).map((f) => f.id);
+    expect(candidates).toEqual([table.fields[2].id]);   // 主字段当标题、分组字段当分栏，都不上卡
+    expect(kanbanCardFields(table, view).map((f) => f.id)).toEqual(candidates);
+    view.kanbanFieldIds = [];
+    expect(kanbanCardFields(table, view)).toEqual([]);   // 显式清空 = 只显示标题
+  });
+
+  it("已实现视图集合：五种视图全部已实现，未知类型才走回退", () => {
+    expect(BITABLE_IMPLEMENTED_VIEW_TYPES).toEqual(["grid", "form", "kanban", "gallery", "calendar"]);
+    expect(isImplementedViewType("calendar")).toBe(true);
+    expect(isImplementedViewType("chart")).toBe(false);
+  });
+
+  it("图片字段：与附件同一值模型，只是上传侧限定图片；图片/附件都能当封面", () => {
+    const table = createDefaultBitableTable("t", "tbl-img");
+    const image = createBitableField("image", "图片", "fld-img");
+    const attachment = createBitableField("attachment", "附件", "fld-att");
+    table.fields.push(image, attachment);
+    expect(isKnownFieldType("image")).toBe(true);
+    expect(BITABLE_FIELD_TYPES).toContain("image");
+    expect(BITABLE_FIELD_TYPE_LABEL.image).toBe("图片");
+    expect(BITABLE_FIELD_TYPE_LABEL.attachment).toBe("附件");
+    expect(isAttachmentLikeField("image")).toBe(true);
+    expect(isAttachmentLikeField("attachment")).toBe(true);
+    expect(isAttachmentLikeField("text")).toBe(false);
+    // 画册封面候选：附件类字段全都算（图片字段也能当封面）
+    expect(bitableAttachmentFields(table).map((f) => f.id)).toEqual(["fld-img", "fld-att"]);
+
+    const view = createBitableView("gallery", undefined, "vew-g3");
+    view.galleryCoverFieldId = image.id;
+    expect(galleryCoverField(table, view)?.id).toBe(image.id);
+    const record = createBitableRecord("r1");
+    record.values[image.id] = [{ file: "1700000000001_ab12cd34.png", name: "图.png", size: 1 }];
+    expect(galleryCoverImage(table, view, record)?.name).toBe("图.png");
+    // 展示值口径与附件一致（附件名列表）
+    expect(bitableDisplayValue(image, record.values[image.id])).toBe("图.png");
+    expect(bitableDisplayValue(createBitableField("image"), "x")).toBe("");
+  });
+
+  it("画册封面：取封面字段里第一个图片附件；只有非图片/字段类型不符 → 无封面", () => {
+    const table = createDefaultBitableTable("t", "tbl-gal");
+    const coverField = createBitableField("attachment", "相册", "fld-cover");
+    table.fields.push(coverField);
+    const view = createBitableView("gallery", undefined, "vew-g");
+    view.galleryCoverFieldId = coverField.id;
+    expect(bitableAttachmentFields(table).map((f) => f.id)).toEqual([coverField.id]);
+    expect(galleryCoverField(table, view)?.id).toBe(coverField.id);
+
+    const record = createBitableRecord("r1");
+    record.values[coverField.id] = [
+      { file: "1700000000000_ab12cd34.mp3", name: "音频.mp3", size: 1 },
+      { file: "1700000000001_ab12cd34.png", name: "图一.png", size: 2 },
+      { file: "1700000000002_ab12cd34.jpg", name: "图二.jpg", size: 3 },
+    ];
+    expect(galleryCoverImage(table, view, record)?.name).toBe("图一.png");
+
+    const audioOnly = createBitableRecord("r2");
+    audioOnly.values[coverField.id] = [{ file: "1700000000000_ab12cd34.mp3", name: "音频.mp3", size: 1 }];
+    expect(galleryCoverImage(table, view, audioOnly)).toBeUndefined();
+
+    view.galleryCoverFieldId = table.fields[0].id;   // 非附件字段不能当封面
+    expect(galleryCoverField(table, view)).toBeUndefined();
+  });
+
+  it("画册卡片字段：默认排除主字段与封面字段；配置过按视图列顺序取交集", () => {
+    const table = createDefaultBitableTable("t", "tbl-gal2");
+    const coverField = createBitableField("attachment", "相册", "fld-cover");
+    table.fields.push(coverField);
+    const view = createBitableView("gallery", undefined, "vew-g2");
+    view.galleryCoverFieldId = coverField.id;
+    const ids = galleryCardFieldCandidates(table, view).map((f) => f.id);
+    expect(ids).toEqual([table.fields[1].id, table.fields[2].id]);
+    expect(galleryCardFields(table, view).map((f) => f.id)).toEqual(ids);
+    view.galleryFieldIds = [table.fields[2].id];
+    expect(galleryCardFields(table, view).map((f) => f.id)).toEqual([table.fields[2].id]);
+    view.galleryFieldIds = [];
+    expect(galleryCardFields(table, view)).toEqual([]);
+  });
+
+  it("日历月网格：周一起始、42 格、跨月填充与日期平移（全本地日期）", () => {
+    const days = calendarMonthDays(2026, 9);
+    expect(days).toHaveLength(42);
+    expect(days[0].date).toBe("2026-08-31");    // 2026-09-01 是周二 → 周一列是 08-31
+    expect(days[0].inMonth).toBe(false);
+    expect(days.find((d) => d.date === "2026-09-01")?.inMonth).toBe(true);
+    expect(days.filter((d) => d.inMonth)).toHaveLength(30);
+    expect(shiftLocalDate("2026-12-31", 1)).toBe("2027-01-01");
+    expect(shiftLocalDate("2026-03-01", -1)).toBe("2026-02-28");
+    expect(localDateDiff("2026-09-10", "2026-09-01")).toBe(9);
+    expect(localDateDiff("2026-09-01", "2026-09-01")).toBe(0);
+  });
+
+  it("日历日程：无开始日期不上、结束早于开始按单日、颜色取单选、跨天按天展开", () => {
+    const table = createDefaultBitableTable("t", "tbl-cal");
+    const primary = table.fields[0];
+    const status = table.fields[1];
+    const date = table.fields[2];
+    const endField = createBitableField("date", "结束", "fld-end");
+    table.fields.push(endField);
+    const view = createBitableView("calendar", undefined, "vew-c");
+    view.calendarStartFieldId = date.id;
+    view.calendarEndFieldId = endField.id;
+    view.calendarColorFieldId = status.id;
+    const inProgress = status.options!.find((o) => o.name === "进行中")!;
+    const mk = (id: string, title: string, start?: string, end?: string) => {
+      const record = createBitableRecord(id);
+      record.values[primary.id] = title;
+      record.values[status.id] = inProgress.id;
+      if (start !== undefined) record.values[date.id] = start;
+      if (end !== undefined) record.values[endField.id] = end;
+      return record;
+    };
+    const records = [mk("r1", "单人", "2026-09-02"), mk("r2", "无日期"), mk("r3", "倒挂", "2026-09-05", "2026-09-01"), mk("r4", "跨天", "2026-09-10", "2026-09-12")];
+    const events = calendarEvents(table, view, records);
+    expect(events.map((e) => e.recordId)).toEqual(["r1", "r3", "r4"]);
+    expect(events[0]).toMatchObject({ title: "单人", start: "2026-09-02", end: "2026-09-02", optionId: inProgress.id, color: inProgress.color });
+    expect(events[1].end).toBe("2026-09-05");
+    const byDay = calendarEventsByDay(events);
+    expect([...byDay.keys()].sort()).toEqual(["2026-09-02", "2026-09-05", "2026-09-10", "2026-09-11", "2026-09-12"]);
+    expect(byDay.get("2026-09-11")!.map((e) => e.recordId)).toEqual(["r4"]);
+    expect(calendarEvents(table, createBitableView("calendar", undefined, "vew-c2"), records)).toEqual([]);
+  });
+
+  it("日历拖拽：保持时长整体平移；结束为空只动开始日期；原地拖返回空补丁", () => {
+    const table = createDefaultBitableTable("t", "tbl-cal2");
+    const date = table.fields[2];
+    const endField = createBitableField("date", "结束", "fld-end");
+    table.fields.push(endField);
+    const view = createBitableView("calendar", undefined, "vew-c3");
+    view.calendarStartFieldId = date.id;
+    view.calendarEndFieldId = endField.id;
+    const record = createBitableRecord("r1");
+    record.values[date.id] = "2026-09-10";
+    record.values[endField.id] = "2026-09-12";
+    expect(calendarMovePatch(table, view, record, "2026-09-20")).toEqual({ [date.id]: "2026-09-20", [endField.id]: "2026-09-22" });
+    expect(calendarMovePatch(table, view, record, "2026-09-10")).toEqual({});
+    const single = createBitableRecord("r2");
+    single.values[date.id] = "2026-09-10";
+    expect(calendarMovePatch(table, view, single, "2026-09-11")).toEqual({ [date.id]: "2026-09-11" });
+    expect(calendarMovePatch(table, view, createBitableRecord("r3"), "2026-09-11")).toEqual({});
+  });
+
+  it("日历字段解析：类型不符即无效；标题回落主字段；颜色只认单选", () => {
+    const table = createDefaultBitableTable("t", "tbl-cal3");
+    const view = createBitableView("calendar", undefined, "vew-c4");
+    expect(bitableDateFields(table).map((f) => f.type)).toEqual(["date"]);
+    expect(calendarStartField(table, view)).toBeUndefined();
+    view.calendarStartFieldId = table.fields[0].id;
+    expect(calendarStartField(table, view)).toBeUndefined();
+    expect(calendarTitleField(table, view)?.id).toBe(table.fields[0].id);
+    view.calendarTitleFieldId = table.fields[2].id;
+    expect(calendarTitleField(table, view)?.id).toBe(table.fields[2].id);
+    view.calendarColorFieldId = table.fields[1].id;
+    expect(calendarColorField(table, view)?.id).toBe(table.fields[1].id);
+    view.calendarColorFieldId = table.fields[0].id;
+    expect(calendarColorField(table, view)).toBeUndefined();
+    view.calendarEndFieldId = table.fields[1].id;
+    expect(calendarEndField(table, view)).toBeUndefined();
   });
 });

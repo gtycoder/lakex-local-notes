@@ -11,14 +11,15 @@
  * - 字段类型用**开放字符串**（未知类型只读展示、不清空），以后加类型不需要 bump 格式版本；
  * - 值按 fieldId 存（不按列序）；附件字段存 filename，直接复用 assets/{noteId}/{filename} 资产管线。
  *
- * 边界：本文件属 src/core（禁平台/第三方依赖），故不 import 任何 UI/Electron 模块。
+ * 边界：本文件属 src/core（禁平台/第三方依赖），故不 import 任何 UI/Electron 模块；只依赖同层 core。
  */
+import { extOf, isAssetFilename, isImageExtension } from "./assetNaming.js";
 
 export const BITABLE_DOC_KIND = "bitable" as const;
 export const BITABLE_DOC_VERSION = 1 as const;
 
 /** v1 实现的字段类型（开放字符串：读到未知 type 只读展示、不清空）。 */
-export type BitableFieldType = "text" | "number" | "select" | "multiSelect" | "date" | "attachment" | "relation";
+export type BitableFieldType = "text" | "number" | "select" | "multiSelect" | "date" | "attachment" | "image" | "relation";
 
 /** 字段类型选择器的顺序（v1 只暴露这 7 种）。 */
 export const BITABLE_FIELD_TYPES: readonly BitableFieldType[] = [
@@ -28,6 +29,7 @@ export const BITABLE_FIELD_TYPES: readonly BitableFieldType[] = [
   "multiSelect",
   "date",
   "attachment",
+  "image",
   "relation",
 ] as const;
 
@@ -37,7 +39,8 @@ export const BITABLE_FIELD_TYPE_LABEL: Record<BitableFieldType, string> = {
   select: "单选",
   multiSelect: "多选",
   date: "日期",
-  attachment: "图片和附件",
+  attachment: "附件",
+  image: "图片",
   relation: "关联",
 };
 
@@ -79,7 +82,51 @@ export interface BitableRecord {
   updatedAt: string;
 }
 
-export type BitableViewType = "grid" | "form";
+/**
+ * 已知视图类型（**开放集合**，模型里 `BitableView.type` 是 string）。
+ * 看板用 kanban 不用 board：`kind="board"` 和 `src/features/board/` 已经是 Drawnix 画板文档，
+ * 撞名会在路由/存储/配置三处产生歧义（用户 260928 要求命名更具辨识度）。
+ * 以后加视图类型只往这里加一项，**不 bump 格式版本**；旧版本读到未知 type 原样保留、按表格回退。
+ */
+export type BitableViewType = "grid" | "form" | "kanban" | "gallery" | "calendar";
+
+/** 新建视图菜单的类型顺序（= 正文 JSON 里 type 的已知取值）。 */
+export const BITABLE_VIEW_TYPES: readonly BitableViewType[] = ["grid", "form", "kanban", "gallery", "calendar"] as const;
+
+export const BITABLE_VIEW_TYPE_LABEL: Record<BitableViewType, string> = {
+  grid: "表格视图",
+  form: "表单视图",
+  kanban: "看板视图",
+  gallery: "画册视图",
+  calendar: "日历视图",
+};
+
+/**
+ * **已实现正文渲染**的视图类型（与「认识」分开）：
+ * 未实现的已知类型 / 未知类型都走 BitableViewFallback 安全回退（表格继续渲染、数据不动）。
+ * 新增一个视图实现后，把它加到这里 + 在 BitableEditor 的视图分派里加一个分支。
+ */
+export const BITABLE_IMPLEMENTED_VIEW_TYPES: readonly string[] = ["grid", "form", "kanban", "gallery", "calendar"];
+
+/** 本版本是否已实现该视图类型的正文渲染。 */
+export function isImplementedViewType(type: string): boolean {
+  return BITABLE_IMPLEMENTED_VIEW_TYPES.includes(type);
+}
+
+/** 是否是我们认识的视图类型（未知类型只回退显示，绝不改写成 grid）。 */
+export function isKnownViewType(type: string): type is BitableViewType {
+  return (BITABLE_VIEW_TYPES as readonly string[]).includes(type);
+}
+
+/** 视图类型 → 展示名；未知类型原样返回它的 type，好让 UI 说清「不认识的是哪一个」。 */
+export function viewTypeLabel(type: string): string {
+  return isKnownViewType(type) ? BITABLE_VIEW_TYPE_LABEL[type] : type;
+}
+
+/** 新建视图的默认名（与新建菜单文案同源）。 */
+export function defaultViewName(type: string): string {
+  return isKnownViewType(type) ? BITABLE_VIEW_TYPE_LABEL[type] : "视图";
+}
 
 export type BitableFilterOperator =
   | "contains"
@@ -116,7 +163,8 @@ export type BitableRowHeight = "low" | "medium" | "high" | "xhigh" | number;
 export interface BitableView {
   id: string;
   name: string;
-  type: BitableViewType;
+  /** **开放字符串**：新版本写入的未知类型在本版本里必须原样保留（只回退显示，不清空、不降级成 grid）。 */
+  type: string;
   filters?: BitableFilterRule[];
   sorts?: BitableSortRule[];
   /** 分组（云端单级；UI 只用第 0 条）。 */
@@ -128,9 +176,41 @@ export interface BitableView {
   rowHeight?: BitableRowHeight;
   fieldOrder?: string[];
   hiddenFieldIds?: string[];
-  /** form 视图专有：进表单的字段 + 逐字段描述（必填取字段自身的 required）。 */
+  /**
+   * form 视图专有：进表单的字段（**顺序即表单题目顺序**）。
+   * 未配置（undefined / 空数组）= 表单尚未建好 ⇒ UI 默认进「编辑表单」；配置过则默认进「预览表单」。
+   */
   formFieldIds?: string[];
+  /** form 视图专有：逐字段描述（必填取字段自身的 required）。 */
   formDescriptions?: Record<string, string>;
+  /** form 视图专有：表单标题（缺省回落视图名）。 */
+  formTitle?: string;
+  /** form 视图专有：表单描述（预览里显示的说明）。 */
+  formDescription?: string;
+  /** kanban 视图专有：分组用的**单选**字段 id（选项即分栏）。 */
+  kanbanGroupFieldId?: string;
+  /** kanban 视图专有：卡片上显示的字段；缺省 = 视图列顺序里排除主字段与分组字段的全部。 */
+  kanbanFieldIds?: string[];
+  /** kanban 视图专有：卡片是否显示字段名（缺省 true）。 */
+  kanbanShowFieldNames?: boolean;
+  /** gallery 视图专有：封面用的附件字段（缺省 = 无封面）。 */
+  galleryCoverFieldId?: string;
+  /** gallery 视图专有：常规 / 紧凑（缺省 regular）。 */
+  gallerySize?: "regular" | "compact";
+  /** gallery 视图专有：封面裁剪 cover / 适应 contain（缺省 cover）。 */
+  galleryFit?: "cover" | "contain";
+  /** gallery 视图专有：卡片是否显示字段名（缺省 true）。 */
+  galleryShowFieldNames?: boolean;
+  /** gallery 视图专有：卡片上显示的字段；缺省 = 视图列顺序里排除主字段与封面字段的全部。 */
+  galleryFieldIds?: string[];
+  /** calendar 视图专有：开始日期字段（缺省 = 未配置，日历给配置提示）。 */
+  calendarStartFieldId?: string;
+  /** calendar 视图专有：结束日期字段（可选；为空 = 单日日程）。 */
+  calendarEndFieldId?: string;
+  /** calendar 视图专有：标题字段（缺省 = 主字段）。 */
+  calendarTitleFieldId?: string;
+  /** calendar 视图专有：颜色字段（第一版仅单选）。 */
+  calendarColorFieldId?: string;
   [key: string]: unknown;
 }
 
@@ -229,7 +309,7 @@ export function createBitableField(type: BitableFieldType, name?: string, id = n
 }
 
 export function createBitableView(type: BitableViewType, name?: string, id = newBitableId("vew")): BitableView {
-  const view: BitableView = { id, name: name ?? (type === "form" ? "表单" : "表格视图"), type };
+  const view: BitableView = { id, name: name ?? defaultViewName(type), type };
   if (type === "grid") view.rowHeight = "low";
   return view;
 }
@@ -303,7 +383,9 @@ function normalizeView(raw: unknown): BitableView | null {
   if (!raw || typeof raw !== "object") return null;
   const view = raw as Partial<BitableView>;
   if (typeof view.id !== "string" || typeof view.name !== "string") return null;
-  const type: BitableViewType = view.type === "form" ? "form" : "grid";
+  // 未知 type 原样保留：把 kanban/gallery/calendar 降级成 grid，等于旧版本打开一次就静默改写正文。
+  // 只有真正缺 type 的脏数据才回落到 grid。
+  const type = typeof view.type === "string" && view.type ? view.type : "grid";
   const next: BitableView = { ...(raw as BitableView), id: view.id, name: view.name, type };
   const fieldOrder = asStringArray(view.fieldOrder);
   if (fieldOrder) next.fieldOrder = fieldOrder; else delete next.fieldOrder;
@@ -311,6 +393,14 @@ function normalizeView(raw: unknown): BitableView | null {
   if (hidden) next.hiddenFieldIds = hidden; else delete next.hiddenFieldIds;
   const formFields = asStringArray(view.formFieldIds);
   if (formFields) next.formFieldIds = formFields; else delete next.formFieldIds;
+  const kanbanFields = asStringArray(view.kanbanFieldIds);
+  if (kanbanFields) next.kanbanFieldIds = kanbanFields; else delete next.kanbanFieldIds;
+  const galleryFields = asStringArray(view.galleryFieldIds);
+  if (galleryFields) next.galleryFieldIds = galleryFields; else delete next.galleryFieldIds;
+  if (typeof view.formTitle !== "string") delete next.formTitle;
+  if (typeof view.formDescription !== "string") delete next.formDescription;
+  if (view.gallerySize !== "regular" && view.gallerySize !== "compact") delete next.gallerySize;
+  if (view.galleryFit !== "cover" && view.galleryFit !== "contain") delete next.galleryFit;
   if (!Array.isArray(view.filters)) delete next.filters;
   if (!Array.isArray(view.sorts)) delete next.sorts;
   if (!Array.isArray(view.groups)) delete next.groups;
@@ -375,7 +465,17 @@ export interface BitableAttachment {
   size: number;
 }
 
-/** 解析附件单元格值：非法条目直接丢弃；`name` 缺省回落到 `file`。 */
+/**
+ * 展示名守卫：**落盘名（13位时间戳_8位hex.扩展名）绝不进 UI**（用户 260928）。
+ * 缺展示名、或展示名本身就是磁盘名（历史脏值 / 解析兜底）→ 一律回落到中性文案。
+ */
+function bitableDisplayName(raw: unknown, fallback: string): string {
+  const text = typeof raw === "string" ? raw.trim() : "";
+  if (text && !isAssetFilename(text)) return text;
+  return isAssetFilename(fallback) ? "附件" : (fallback || "附件");
+}
+
+/** 解析附件单元格值：非法条目直接丢弃；展示名缺失或就是落盘名 → 中性文案（不暴露磁盘名）。 */
 export function bitableAttachments(value: unknown): BitableAttachment[] {
   if (!Array.isArray(value)) return [];
   const out: BitableAttachment[] = [];
@@ -385,7 +485,7 @@ export function bitableAttachments(value: unknown): BitableAttachment[] {
     if (typeof file !== "string" || !file) continue;
     out.push({
       file,
-      name: typeof name === "string" && name ? name : file,
+      name: bitableDisplayName(name, file),
       size: typeof size === "number" && Number.isFinite(size) && size >= 0 ? size : 0,
     });
   }
@@ -459,6 +559,7 @@ export function bitableDisplayValue(field: BitableField, value: unknown): string
     case "multiSelect":
       return Array.isArray(value) ? value.map((v) => optionName(field, v)).filter(Boolean).join(", ") : "";
     case "attachment":
+    case "image":
       return bitableAttachments(value).map((a) => a.name).join(", ");
     case "relation":
       return "";
@@ -529,6 +630,269 @@ export function bitableToSearchText(content: string | null | undefined, maxChars
   }
   const text = parts.join("\n");
   return text.length > maxChars ? text.slice(0, maxChars) : text;
+}
+
+// ---- 看板视图求值（V02；纯函数，UI 与测试共用） ----
+
+/** 看板可用的分组字段 = 单选字段（多选/其他类型不做看板分组）。 */
+export function bitableSelectFields(table: BitableTable): BitableField[] {
+  return table.fields.filter((f) => f.type === "select");
+}
+
+/** 视图配置的看板分组字段；未配置 / 字段已删 / 类型不再是单选 → undefined（UI 给配置提示）。 */
+export function kanbanGroupField(table: BitableTable, view: BitableView | undefined): BitableField | undefined {
+  const id = view?.kanbanGroupFieldId;
+  if (typeof id !== "string" || !id) return undefined;
+  const field = table.fields.find((f) => f.id === id);
+  return field && field.type === "select" ? field : undefined;
+}
+
+/** 可以作为看板卡片字段的候选（视图列顺序；主字段是标题、分组字段是分栏，都不在其中）。 */
+export function kanbanCardFieldCandidates(table: BitableTable, view: BitableView | undefined): BitableField[] {
+  const groupId = kanbanGroupField(table, view)?.id;
+  return cardCandidates(table, view, groupId ? [groupId] : []);
+}
+
+/** 看板卡片上**实际**显示的字段：未配置 = 全部候选；配置过 = 按视图列顺序取交集。 */
+export function kanbanCardFields(table: BitableTable, view: BitableView | undefined): BitableField[] {
+  return pickCardFields(kanbanCardFieldCandidates(table, view), view?.kanbanFieldIds);
+}
+
+export interface BitableKanbanColumn {
+  /** 稳定列 key：option id，未分组为 ""。 */
+  key: string;
+  label: string;
+  /** 选项色（未分组无）。 */
+  color?: string;
+  /** null = 未分组列；把卡片拖到这里 = 清空该单选字段的值。 */
+  optionId: string | null;
+  records: BitableRecord[];
+}
+
+/**
+ * 看板分栏：**选项即分栏**——按选项顺序给出**全部**选项（空栏目也保留，否则没法把卡片拖进空分组），
+ * 末尾固定一个「未分组」栏（值为空 / 非字符串 / 指向已删选项的记录都落在这里）。
+ * 传入的 `records` 必须已按视图筛选+排序：组内顺序 = 传入顺序（看板不额外排序，第一版也不做手动排序）。
+ * 未配置分组字段（或表里没有单选字段）→ 返回空数组，由 UI 给「先选分组字段」的提示。
+ */
+export function kanbanColumns(table: BitableTable, view: BitableView | undefined, records: BitableRecord[]): BitableKanbanColumn[] {
+  const field = kanbanGroupField(table, view);
+  if (!field) return [];
+  const options = field.options ?? [];
+  const byOption = new Map<string, BitableRecord[]>(options.map((option) => [option.id, []]));
+  const ungrouped: BitableRecord[] = [];
+  for (const record of records) {
+    const value = record.values[field.id];
+    const bucket = typeof value === "string" ? byOption.get(value) : undefined;
+    if (bucket) bucket.push(record);
+    else ungrouped.push(record);
+  }
+  return [
+    ...options.map((option) => ({
+      key: option.id,
+      label: option.name,
+      color: option.color,
+      optionId: option.id,
+      records: byOption.get(option.id)!,
+    })),
+    { key: "", label: "未分组", optionId: null, records: ungrouped },
+  ];
+}
+
+// ---- 画册视图求值（V03；纯函数，UI 与测试共用） ----
+
+/** 附件类字段（值模型完全相同：`{file,name,size}[]`）。image 只是在**上传侧**限定图片。 */
+export function isAttachmentLikeField(type: string): boolean {
+  return type === "attachment" || type === "image";
+}
+
+/** 画册封面可用的附件类字段（附件 / 图片）。 */
+export function bitableAttachmentFields(table: BitableTable): BitableField[] {
+  return table.fields.filter((f) => isAttachmentLikeField(f.type));
+}
+
+/** 卡片字段候选的公共口径：视图列顺序里排除主字段（当标题）与 excluded。 */
+function cardCandidates(table: BitableTable, view: BitableView | undefined, excluded: readonly string[]): BitableField[] {
+  const primaryId = table.fields[0]?.id;
+  const skip = new Set(excluded);
+  return orderedTableFields(table, view).filter((f) => f.id !== primaryId && !skip.has(f.id));
+}
+
+/** 未配置 = 全部候选；配置过 = 按视图列顺序取交集（顺序始终由视图决定）。 */
+function pickCardFields(candidates: BitableField[], configured: string[] | undefined): BitableField[] {
+  if (!Array.isArray(configured)) return candidates;
+  const wanted = new Set(configured);
+  return candidates.filter((f) => wanted.has(f.id));
+}
+
+/** 视图配置的画册封面字段；未配置 / 字段已删 / 类型不再是附件 → undefined（= 无封面）。 */
+export function galleryCoverField(table: BitableTable, view: BitableView | undefined): BitableField | undefined {
+  const id = view?.galleryCoverFieldId;
+  if (typeof id !== "string" || !id) return undefined;
+  const field = table.fields.find((f) => f.id === id);
+  return field && isAttachmentLikeField(field.type) ? field : undefined;
+}
+
+/** 可以作为画册卡片字段的候选（排除主字段与封面字段）。 */
+export function galleryCardFieldCandidates(table: BitableTable, view: BitableView | undefined): BitableField[] {
+  const coverId = galleryCoverField(table, view)?.id;
+  return cardCandidates(table, view, coverId ? [coverId] : []);
+}
+
+export function galleryCardFields(table: BitableTable, view: BitableView | undefined): BitableField[] {
+  return pickCardFields(galleryCardFieldCandidates(table, view), view?.galleryFieldIds);
+}
+
+/**
+ * 封面图：取封面字段里**第一个图片附件**（"多图附件按第一个可用图片显示"）；
+ * 非图片（音频/PDF…）跳过、没有可用图片 → undefined（卡片走「无封面」回退）。
+ */
+export function galleryCoverImage(table: BitableTable, view: BitableView | undefined, record: BitableRecord): BitableAttachment | undefined {
+  const field = galleryCoverField(table, view);
+  if (!field) return undefined;
+  return bitableAttachments(record.values[field.id]).find((attachment) => isImageExtension(extOf(attachment.file)));
+}
+
+// ---- 日历视图求值（V04；纯函数，**全部走本地日期语义**，绝不经过 UTC） ----
+
+/** 日历可用的日期字段。 */
+export function bitableDateFields(table: BitableTable): BitableField[] {
+  return table.fields.filter((f) => f.type === "date");
+}
+
+/** 配置 id → 字段（可选限定类型）；空/不存在/类型不符 → undefined。 */
+function fieldById(table: BitableTable, id: unknown, type?: string): BitableField | undefined {
+  if (typeof id !== "string" || !id) return undefined;
+  const field = table.fields.find((f) => f.id === id);
+  if (!field) return undefined;
+  return !type || field.type === type ? field : undefined;
+}
+
+export function calendarStartField(table: BitableTable, view: BitableView | undefined): BitableField | undefined {
+  return fieldById(table, view?.calendarStartFieldId, "date");
+}
+
+export function calendarEndField(table: BitableTable, view: BitableView | undefined): BitableField | undefined {
+  return fieldById(table, view?.calendarEndFieldId, "date");
+}
+
+/** 标题字段：未配置回落到主字段（记录标题口径与表格一致）。 */
+export function calendarTitleField(table: BitableTable, view: BitableView | undefined): BitableField | undefined {
+  return fieldById(table, view?.calendarTitleFieldId) ?? table.fields[0];
+}
+
+/** 颜色字段：第一版只认单选。 */
+export function calendarColorField(table: BitableTable, view: BitableView | undefined): BitableField | undefined {
+  return fieldById(table, view?.calendarColorFieldId, "select");
+}
+
+/** 日期格的值域是 `YYYY-MM-DD`；兼容历史 ISO 值（按**本地**时区折算），非法 → ""。 */
+function dateValueOf(value: unknown): string {
+  if (typeof value !== "string") return "";
+  const text = value.trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(text)) return text;
+  const parsed = new Date(text);
+  return Number.isNaN(parsed.getTime()) ? "" : localDateString(parsed);
+}
+
+export interface BitableCalendarEvent {
+  recordId: string;
+  title: string;
+  /** 本地日期 `YYYY-MM-DD`（含头含尾，单日 = start === end）。 */
+  start: string;
+  end: string;
+  /** 颜色字段（单选）解析出的选项色。 */
+  color?: string;
+  optionId?: string;
+}
+
+/** 记录 → 日程投影：没有开始日期 / 日期非法的记录不上日历（不猜、不报错）。 */
+export function calendarEvents(table: BitableTable, view: BitableView | undefined, records: BitableRecord[]): BitableCalendarEvent[] {
+  const startField = calendarStartField(table, view);
+  if (!startField) return [];
+  const endField = calendarEndField(table, view);
+  const titleField = calendarTitleField(table, view);
+  const colorField = calendarColorField(table, view);
+  const events: BitableCalendarEvent[] = [];
+  for (const record of records) {
+    const start = dateValueOf(record.values[startField.id]);
+    if (!start) continue;
+    const rawEnd = endField ? dateValueOf(record.values[endField.id]) : "";
+    // 结束为空 / 早于开始 → 单日（"开始/结束相同时正常显示单日"）
+    const end = rawEnd && rawEnd >= start ? rawEnd : start;
+    let color: string | undefined;
+    let optionId: string | undefined;
+    if (colorField) {
+      const value = record.values[colorField.id];
+      const option = typeof value === "string" ? (colorField.options ?? []).find((o) => o.id === value) : undefined;
+      if (option) { color = option.color; optionId = option.id; }
+    }
+    events.push({
+      recordId: record.id,
+      title: (titleField ? bitableDisplayValue(titleField, record.values[titleField.id]) : "") || "未命名记录",
+      start, end, color, optionId,
+    });
+  }
+  return events;
+}
+
+/** 月历的 42 格（**周一起始**）：本地日期语义，跨月/跨年都不会偏一天。 */
+export function calendarMonthDays(year: number, month: number): Array<{ date: string; day: number; inMonth: boolean }> {
+  const first = new Date(year, month - 1, 1);
+  const offset = (first.getDay() + 6) % 7;   // 周一 = 0
+  const days: Array<{ date: string; day: number; inMonth: boolean }> = [];
+  for (let i = 0; i < 42; i += 1) {
+    const d = new Date(year, month - 1, 1 - offset + i);
+    days.push({ date: localDateString(d), day: d.getDate(), inMonth: d.getMonth() === month - 1 });
+  }
+  return days;
+}
+
+/** 本地日期 ±N 天（跨月/跨年/夏令时都安全）。 */
+export function shiftLocalDate(date: string, days: number): string {
+  const [y, m, d] = date.split("-").map(Number);
+  if (![y, m, d].every((n) => Number.isFinite(n))) return date;
+  return localDateString(new Date(y, m - 1, d + days));
+}
+
+/** 两个本地日期的整天差（to - from）。 */
+export function localDateDiff(to: string, from: string): number {
+  const [ty, tm, td] = to.split("-").map(Number);
+  const [fy, fm, fd] = from.split("-").map(Number);
+  if (![ty, tm, td, fy, fm, fd].every((n) => Number.isFinite(n))) return 0;
+  return Math.round((new Date(ty, tm - 1, td).getTime() - new Date(fy, fm - 1, fd).getTime()) / 86400000);
+}
+
+/** 跨天日程按天展开（同一天可出现多条），月视图取用；单条最多展开 366 天防脏数据。 */
+export function calendarEventsByDay(events: BitableCalendarEvent[]): Map<string, BitableCalendarEvent[]> {
+  const byDay = new Map<string, BitableCalendarEvent[]>();
+  for (const event of events) {
+    const span = Math.min(366, Math.max(0, localDateDiff(event.end, event.start)));
+    for (let i = 0; i <= span; i += 1) {
+      const day = shiftLocalDate(event.start, i);
+      const list = byDay.get(day);
+      if (list) list.push(event); else byDay.set(day, [event]);
+    }
+  }
+  return byDay;
+}
+
+/**
+ * 拖拽日程到 `targetDate` 的值补丁：**保持时长整体平移**；
+ * 结束日期为空（单日日程）只动开始日期，绝不凭空写一个结束日期。写值由调用方统一落 doc。
+ */
+export function calendarMovePatch(table: BitableTable, view: BitableView | undefined, record: BitableRecord, targetDate: string): Record<string, unknown> {
+  const startField = calendarStartField(table, view);
+  if (!startField) return {};
+  const start = dateValueOf(record.values[startField.id]);
+  if (!start) return {};
+  const delta = localDateDiff(targetDate, start);
+  if (delta === 0) return {};
+  const patch: Record<string, unknown> = { [startField.id]: shiftLocalDate(start, delta) };
+  const endField = calendarEndField(table, view);
+  const end = endField ? dateValueOf(record.values[endField.id]) : "";
+  if (endField && end) patch[endField.id] = shiftLocalDate(end, delta);
+  return patch;
 }
 
 // ---- 视图求值（纯函数，UI 与测试共用） ----

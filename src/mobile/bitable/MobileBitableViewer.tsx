@@ -10,9 +10,12 @@ import { useMemo, useState } from "react";
 import {
   applyViewToRecords,
   bitableAttachments,
+  isImplementedViewType,
+  isKnownViewType,
   optionChipStyle,
   orderedTableFields,
   parseBitableBody,
+  viewTypeLabel,
   type BitableField,
   type BitableRecord,
 } from "../../core/bitableDoc.js";
@@ -112,6 +115,16 @@ export function MobileBitableViewer({ noteId, content }: MobileBitableViewerProp
         )}
         <span className="mbt-readonly">只读</span>
       </div>
+      {/* 桌面视图类型是开放集合：移动端首版只做表格只读，非 grid 视图必须给明确交代（不允许空白/静默降级） */}
+      {view.type !== "grid" && (
+        <div className="mbt-view-notice" role="status">
+          {!isKnownViewType(view.type)
+            ? "当前版本不支持「" + view.type + "」视图，已按表格只读展示。"
+            : isImplementedViewType(view.type)
+              ? "「" + viewTypeLabel(view.type) + "」桌面已支持，移动端暂以表格只读展示。"
+              : "「" + viewTypeLabel(view.type) + "」暂未提供，移动端以表格只读展示。"}
+        </div>
+      )}
       <div className="mbt-grid-wrap">
         <table className="mbt-grid">
           <thead>
@@ -128,7 +141,7 @@ export function MobileBitableViewer({ noteId, content }: MobileBitableViewerProp
               <tr key={record.id}>
                 {fields.map((field) => {
                   const text = cellText(field, record);
-                  if (field.type === "attachment") {
+                  if (field.type === "attachment" || field.type === "image") {
                     return (
                       <td key={field.id}>
                         <AttachmentCell noteId={noteId} value={record.values[field.id]} />

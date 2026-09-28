@@ -1,0 +1,85 @@
+/**
+ * 日历视图样式（V04）。独立文件、只走 --lake-* 令牌、无颜色字面量、无 !important。
+ * 网格用 7×6 的 1px 间隙 + 底色当分隔线（单一来源，不靠每格描边叠加）。
+ * 已登记 src/styles/cssLayers.test.ts 的 FILES/BASELINE。
+ */
+.bt-calendar {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 10px 12px;
+  overflow: hidden;
+}
+
+.bt-calendar-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+  padding-bottom: 8px;
+}
+
+.bt-calendar-title { font-size: 13px; color: var(--lake-text-1); }
+.bt-calendar-week { flex: 0 0 auto; display: grid; grid-template-columns: repeat(7, 1fr); padding-bottom: 4px; color: var(--lake-text-3); font-size: 12px; text-align: center; }
+
+.bt-calendar-grid {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  grid-template-rows: repeat(6, minmax(0, 1fr));
+  gap: 1px;
+  overflow: hidden;
+  border: 1px solid var(--lake-border-1);
+  border-radius: var(--lake-radius-sm);
+  background: var(--lake-border-1);
+}
+
+.bt-cal-day {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-height: 0;
+  padding: 4px;
+  background: var(--lake-bg-panel);
+  overflow: hidden;
+}
+
+.bt-cal-day.is-out { background: var(--lake-bg-block); }
+.bt-cal-day.is-today .bt-cal-day-num { color: var(--lake-accent); font-weight: 600; }
+.bt-cal-day-num { flex: 0 0 auto; font-size: 11px; color: var(--lake-text-3); }
+.bt-cal-events { display: flex; flex-direction: column; gap: 2px; min-height: 0; overflow: hidden; }
+
+.bt-cal-event {
+  display: block;
+  width: 100%;
+  padding: 1px 5px;
+  border: 0;
+  border-radius: var(--lake-radius-xs);
+  background: var(--lake-accent-tint);
+  color: var(--lake-text-1);
+  font: inherit;
+  font-size: 11px;
+  text-align: left;
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bt-cal-more { font-size: 10px; color: var(--lake-text-3); }
+
+.bt-calendar-empty {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 24px;
+  color: var(--lake-text-3);
+  font-size: 13px;
+  text-align: center;
+}

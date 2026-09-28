@@ -12,8 +12,20 @@ import { describe, expect, it } from "vitest";
 
 const EDITOR = readFileSync(new URL("./BitableEditor.tsx", import.meta.url), "utf8");
 const TABS = readFileSync(new URL("../editor/MultiTabEditor.tsx", import.meta.url), "utf8");
+const EDITOR_TAB = readFileSync(new URL("../editor/LakeEditor.tsx", import.meta.url), "utf8");
 const DOC = readFileSync(new URL("../../core/bitableDoc.ts", import.meta.url), "utf8");
 const CARDS = readFileSync(new URL("./bitableCells.tsx", import.meta.url), "utf8");
+const BAR = readFileSync(new URL("./BitableViewBar.tsx", import.meta.url), "utf8");
+const VIEWS = readFileSync(new URL("./bitableViews.tsx", import.meta.url), "utf8");
+const VIEWCSS = readFileSync(new URL("./bitableViews.css", import.meta.url), "utf8");
+const KANBAN = readFileSync(new URL("./BitableKanbanView.tsx", import.meta.url), "utf8");
+const GALLERY = readFileSync(new URL("./BitableGalleryView.tsx", import.meta.url), "utf8");
+const CALENDAR = readFileSync(new URL("./BitableCalendarView.tsx", import.meta.url), "utf8");
+const PANELS = readFileSync(new URL("./BitableViewConfigPanels.tsx", import.meta.url), "utf8");
+const FORM = readFileSync(new URL("./BitableFormView.tsx", import.meta.url), "utf8");
+const PREVIEW = readFileSync(new URL("../editor/imagePreview.ts", import.meta.url), "utf8");
+const KANBAN_CSS = readFileSync(new URL("./bitableKanbanView.css", import.meta.url), "utf8");
+const ATTACH_CTRL = readFileSync(new URL("../attachment/attachmentPreviewController.ts", import.meta.url), "utf8");
 const ATTACH = readFileSync(new URL("../attachment/openAssetEntry.ts", import.meta.url), "utf8");
 const CSS = readFileSync(new URL("./bitableEditor.css", import.meta.url), "utf8");
 
@@ -24,7 +36,8 @@ describe("多维表编辑器护栏", () => {
     expect(CARDS).toContain('const ATTACHMENT_CHIP_PX = 26');
     expect(CARDS).toContain("withAssetWidth(");
     // 关键不变量：onOpen（ImageLightbox）那一路不能被带上档位，否则放大预览是糊的
-    expect(CARDS).toMatch(/<img src=\{chipUrlOf\(file\)\}[^>]*onClick=\{\(\) => onOpen\(\{ file, name, size \}\)\}/);
+    // 点 chip = 预览「本单元格」的图片（openByFile 里再按单元格图片集合开 Lightbox），格子取 ?w= 档位
+    expect(CARDS).toMatch(/<img src=\{chipUrlOf\(file\)\}[^>]*onClick=\{\(\) => openByFile\(file\)\}/);
     expect(EDITOR).not.toContain("?w=");
   });
 
@@ -178,7 +191,7 @@ describe("多维表编辑器护栏", () => {
   it("云端对齐三：自定义下拉/选项颜色/视图图标/行高去自定义", () => {
     expect(EDITOR).toMatch(/SelectMenu/);
     expect(EDITOR).toMatch(/BITABLE_OPTION_COLORS/);
-    expect(EDITOR).toMatch(/bt-view-icon/);
+    expect(BAR).toMatch(/bt-view-icon/);   // 视图页签已按职责拆到 BitableViewBar（V01）
     expect(EDITOR).not.toMatch(/bt-menu-custom/);
     expect(CARDS).toMatch(/SelectMenu/);
     expect(DOC).toMatch(/BITABLE_OPTION_COLORS/);
@@ -202,9 +215,104 @@ describe("多维表编辑器护栏", () => {
     expect(ATTACH).toMatch(/isMediaFilename/);
   });
 
-  it("v1 视图只暴露 表格 + 表单 两种", () => {
-    expect(EDITOR).toMatch(/addView\("grid"\)/);
-    expect(EDITOR).toMatch(/addView\("form"\)/);
-    expect(EDITOR).not.toMatch(/看板|kanban|gallery|日历/);
+  it("视图工作台：五种类型可选、视图壳按职责拆分、未知类型原样保留并安全回退", () => {
+    // 视图类型是**开放集合**（以后加类型不 bump 格式版本）：新建菜单与页签图标同源
+    expect(DOC).toMatch(/BITABLE_VIEW_TYPES[^=]*=\s*\["grid", "form", "kanban", "gallery", "calendar"\]/);
+    expect(BAR).toMatch(/BITABLE_VIEW_TYPES\.map/);
+    expect(BAR).toMatch(/ViewTypeIcon/);
+    expect(EDITOR).toMatch(/BitableViewBar/);
+    expect(EDITOR).toMatch(/BitableViewFallback/);
+    expect(VIEWS).toMatch(/bt-view-fallback/);
+    expect(VIEWCSS).toMatch(/\.bt-view-fallback/);
+    // 未知视图只回退显示：normalizeView 必须原样保留 type，绝不能改写成 grid
+    expect(DOC).toMatch(/typeof view\.type === "string" && view\.type \? view\.type : "grid"/);
+    expect(DOC).not.toMatch(/"form" : "grid"/);
+    // 看板视图 ≠ 画板文档：board 是 kind 路由，不得混进视图类型
+    expect(DOC).not.toMatch(/"kanban" \| "board"/);
+  });
+
+  it("V02 看板视图：单选字段分栏、拖拽只写分组字段值、未实现视图才回退", () => {
+    expect(DOC).toMatch(/BITABLE_IMPLEMENTED_VIEW_TYPES[^=]*=\s*\[\s*"grid", "form", "kanban"/);
+    expect(EDITOR).toMatch(/BitableKanbanView/);
+    expect(EDITOR).toMatch(/isImplementedViewType/);
+    expect(KANBAN).toMatch(/kanbanColumns/);
+    expect(KANBAN).toMatch(/kanbanCardFields/);
+    expect(KANBAN).toMatch(/onSetValue\(draggingId, groupField\.id/);
+    // 分栏求值必须是纯函数（core），组件不得自己分组
+    expect(DOC).toMatch(/export function kanbanColumns/);
+    // 只读铁律：改视图配置的入口（分组字段下拉在配置面板里 / 重命名视图在编辑器里）必须被 readOnly 封住
+    expect(PANELS).toMatch(/选择分组字段" disabled=\{readOnly\}/);
+    expect(EDITOR).toMatch(/disabled=\{readOnly\}[^\n]*重命名视图/);
+  });
+
+  it("V03/V04 画册与日历：接入分派、配置面板按类型选、日期全程本地语义", () => {
+    expect(DOC).toMatch(/BITABLE_IMPLEMENTED_VIEW_TYPES[^=]*=\s*\["grid", "form", "kanban", "gallery", "calendar"\]/);
+    expect(EDITOR).toMatch(/BitableGalleryView/);
+    expect(EDITOR).toMatch(/BitableCalendarView/);
+    expect(EDITOR).toMatch(/GalleryConfigPanel/);
+    expect(EDITOR).toMatch(/CalendarConfigPanel/);
+    expect(EDITOR).toMatch(/setRecordValues/);
+    expect(DOC).toMatch(/export function galleryCoverImage/);
+    expect(DOC).toMatch(/export function calendarMonthDays/);
+    expect(DOC).toMatch(/export function calendarMovePatch/);
+    // 日期必须走本地语义：日历相关代码不得出现 UTC 取值 / toISOString
+    expect(CALENDAR).not.toMatch(/getUTC|toISOString/);
+    expect(GALLERY).toMatch(/galleryCoverImage/);
+    expect(GALLERY).toMatch(/assetThumbWidthForCss/);
+  });
+
+  it("用户追加需求：图片字段（复用附件、只收图片）/ 画册点封面预览 / 表单编辑·预览双模", () => {
+    // ① 图片字段：与附件同一渲染分支，但上传三条路都过滤图片
+    expect(DOC).toMatch(/"attachment" \| "image"/);
+    expect(DOC).toMatch(/image: "图片"/);
+    expect(DOC).toMatch(/export function isAttachmentLikeField/);
+    expect(CARDS).toMatch(/case "image": return <ImageIcon/);
+    expect(CARDS).toMatch(/function splitImageFiles/);
+    expect(CARDS).toMatch(/accept=\{imageOnly \? "image\/\*" : undefined\}/);
+    expect(CARDS).toMatch(/case "attachment":\s*\n\s*case "image":/);
+    expect(EDITOR).toMatch(/imageOnly=\{imageOnly\}/);
+    // 展示名必须是用户原始文件名（uploadResource 只回生成的磁盘名，不能拿它当 name）
+    expect(EDITOR).toMatch(/name: file\.name/);
+
+    // ② 画册：封面是可点按钮，点它只把**封面字段这一格**的图片交给共享 Lightbox（绝不跨列合并）
+    expect(GALLERY).toMatch(/onOpenImages\(cellImages,/);
+    expect(GALLERY).toMatch(/const cellImagesOf = /);
+    expect(GALLERY).toMatch(/button\.bt-gallery-cover|className=\{\"bt-gallery-cover"/);
+    expect(EDITOR).toMatch(/openImagePreview\(images\.map/);
+
+    // ③ 表单：编辑/预览分段控件 + 默认规则 + 未配置不预选字段
+    expect(FORM).toMatch(/编辑表单/);
+    expect(FORM).toMatch(/预览表单/);
+    expect(FORM).toMatch(/configured \? "preview" : "edit"/);
+    expect(FORM).toMatch(/seg__item/);
+    // 编辑表单 = v1 原形态（表单题目 / 可选题目 / 填写表单），只是加了预览 tab
+    expect(FORM).toMatch(/表单题目/);
+    expect(FORM).toMatch(/可选题目/);
+    // 「填写表单」= 跳到预览 tab，不再有独立录入弹层（用户 260928）
+    expect(FORM).toMatch(/填写表单<\/button>/);
+    expect(FORM).not.toMatch(/bt-form-entry/);
+    expect(EDITOR).not.toMatch(/if \(type === "form"\) view\.formFieldIds/);
+  });
+
+  it("追加修复：文档图片预览取正文全量、看板图片字段出缩略图", () => {
+    // ① 文档：虚拟渲染下 DOM 只有视口内的图 ⇒ 列表必须来自正文（内核 image 卡片 + 裸 img）
+    expect(PREVIEW).toMatch(/export function extractImagesFromContent/);
+    // 图片预览永远只看**本单元格**：chip 与展开面板都按单元格内图片过滤（两列图片绝不混）
+    expect(CARDS).toMatch(/onOpenImages\?: \(images: BitableAttachment\[\], index: number\)/);
+    expect(CARDS).toMatch(/attachments\.filter\(\(a\) => isImageExtension\(extOf\(a\.file\)\)\)/);
+    // 展示名守卫：落盘名（磁盘名）绝不外显、也不可编辑（展示名才可编辑）
+    expect(DOC).toMatch(/function bitableDisplayName/);
+    expect(ATTACH_CTRL).toMatch(/isAssetFilename\(name\)/);
+    expect(CARDS).toMatch(/renameBitableAttachment|onRename\(file/);
+    expect(PREVIEW).toMatch(/previewImageKey/);
+    expect(EDITOR_TAB).toMatch(/extractImagesFromContent/);
+    expect(PREVIEW).toMatch(/attachImagePreviewClick\(host: HTMLElement, resolveImages\?/);
+    // ② 看板：附件类字段上卡走缩略图，不再拿文件名占位
+    expect(KANBAN).toMatch(/bt-kanban-thumb/);
+    expect(KANBAN).toMatch(/isAttachmentLikeField\(field\.type\)/);
+    // 点缩略图 = 预览该单元格内的图片（不跨字段）；卡片点击仍开记录详情
+    expect(KANBAN).toMatch(/onOpenImages\(images, index\)/);
+    expect(KANBAN).toMatch(/event\.stopPropagation\(\); onOpenImages/);
+    expect(KANBAN_CSS).toMatch(/\.bt-kanban-thumb \{/);
   });
 });

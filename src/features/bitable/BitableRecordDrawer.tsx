@@ -23,6 +23,8 @@ export interface BitableRecordDrawerProps {
   onAddField: () => void;
   onUpload: (recordId: string, fieldId: string, files: File[]) => void;
   onOpenAsset: (attachment: BitableAttachment) => void;
+  /** 点图片预览：只传**本单元格内**的图片 + 下标。 */
+  onOpenImages: (images: BitableAttachment[], index: number) => void;
 }
 
 const DRAWER_WIDTH_KEY = "lake-notes-v3.bitable-drawer-width";
@@ -72,15 +74,17 @@ export function BitableRecordDrawer(props: BitableRecordDrawerProps) {
                 readOnly={props.readOnly}
                 onChange={(value) => props.onSetValue(record.id, field.id, value)}
                 onAddOption={(name) => props.onAddOption(field.id, name, record.id)}
-                renderAttachment={() => (
+                renderAttachment={(imageOnly) => (
                   <AttachmentCell
                     noteId={props.noteId}
                     value={record.values[field.id]}
                     readOnly={props.readOnly}
                     alwaysActive
+                    imageOnly={imageOnly}
                     onUpload={(files) => props.onUpload(record.id, field.id, files)}
                     onRemove={(file) => props.onSetValue(record.id, field.id, removeBitableAttachment(record.values[field.id], file))}
                     onOpen={props.onOpenAsset}
+                    onOpenImages={props.onOpenImages}
                     onReorder={(files) => props.onSetValue(record.id, field.id, reorderBitableAttachments(record.values[field.id], files))}
                     onRename={(file, name) => props.onSetValue(record.id, field.id, renameBitableAttachment(record.values[field.id], file, name))}
                   />

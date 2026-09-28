@@ -8,12 +8,22 @@
 import { useEffect, useLayoutEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import { reportNativeActionError } from "../../lib/nativeErrors";
 import { Popover as OverlayPopover } from "../../components/ui/Overlay";
-import { Calendar, Check, ChevronDown, ChevronLeft, ChevronRight, CircleDot, Download, Hash, HelpCircle, Link2, Maximize2, Paperclip, Pencil, Plus, Search, Tags, Type, X } from "lucide-react";
+import { Calendar, Check, ChevronDown, ChevronLeft, ChevronRight, CircleDot, Download, Hash, HelpCircle, Image as ImageIcon, Link2, Maximize2, Paperclip, Pencil, Plus, Search, Tags, Type, X } from "lucide-react";
 import { ASSET_ORIGIN, assetThumbWidthForCss, withAssetAccessToken } from "../../lib/assetPort.js";
 import { withAssetWidth } from "../../core/assetUrl.js";
 import { extOf, isImageExtension } from "../../core/assetNaming.js";
 import { native } from "../../lib/native.js";
 import { ATTACHMENT_GRID, BITABLE_OPTION_PALETTE, attachmentGridColumns, bitableAttachments, bitableDisplayValue, isKnownFieldType, localDateString, optionChipStyle, optionColorHex, type BitableAttachment, type BitableField, type BitableFieldOption } from "../../core/bitableDoc.js";
+
+/** 图片字段只收图片：`accept` 只约束「选文件」，拖拽/粘贴必须自己拦，否则会静默写进非图片。
+ *  返回「可上传的」与「被拒数量」——拒绝要有可见提示，绝不静默丢弃。 */
+function splitImageFiles(files: File[], imageOnly: boolean): { accepted: File[]; rejected: number } {
+  if (!imageOnly) return { accepted: files, rejected: 0 };
+  const accepted = files.filter((file) => isImageExtension(extOf(file.name)) || file.type.startsWith("image/"));
+  return { accepted, rejected: files.length - accepted.length };
+}
+
+const IMAGE_ONLY_HINT = "只接受图片文件";
 
 /** 字段类型图标（未知类型给 HelpCircle）。 */
 export function FieldTypeIcon({ type, size = 14 }: { type: string; size?: number }) {
@@ -24,6 +34,7 @@ export function FieldTypeIcon({ type, size = 14 }: { type: string; size?: number
     case "multiSelect": return <Tags size={size} />;
     case "date": return <Calendar size={size} />;
     case "attachment": return <Paperclip size={size} />;
+    case "image": return <ImageIcon size={size} />;
     case "relation": return <Link2 size={size} />;
     default: return <HelpCircle size={size} />;
   }
@@ -212,20 +223,31 @@ function attachmentPanelSize(count: number, measuredCardHeight?: number): { w: n
 
 /** 行单元格里的附件 chip 列表。**没有删除按钮**：行内格子太窄，删除只在展开面板的卡片上做
  *  （点单元格 = 选中并出现「+」，点 chip = 预览，两者都不需要在行内放 ×）。 */
-function AttachmentChipList({ noteId, attachments, onOpen }: {
+function AttachmentChipList({ noteId, attachments, onOpen, onOpenImages }: {
   noteId: string;
   attachments: BitableAttachment[];
   onOpen: (attachment: BitableAttachment) => void;
+  /** 点图片：预览**该单元格内**的全部图片（用户 260928：两列图片就是两类，绝不跨列合并）。 */
+  onOpenImages?: (images: BitableAttachment[], index: number) => void;
 }) {
   const urlOf = (file: string) => withAssetAccessToken(ASSET_ORIGIN + "/" + noteId + "/" + file);
   const chipUrlOf = (file: string) => withAssetWidth(urlOf(file), assetThumbWidthForCss(ATTACHMENT_CHIP_PX));
+  /** 预览范围 = 本单元格内的图片（顺序 = 单元格内顺序）；非图片仍走系统打开。 */
+  const openByFile = (file: string) => {
+    const item = attachments.find((a) => a.file === file);
+    if (!item) return;
+    const images = attachments.filter((a) => isImageExtension(extOf(a.file)));
+    const index = images.indexOf(item);
+    if (index >= 0 && onOpenImages) onOpenImages(images, index);
+    else onOpen(item);
+  };
   return (
     <>
-      {attachments.map(({ file, name, size }) => (
+      {attachments.map(({ file, name }) => (
         <div key={file} className="bt-attachment-chip" title={name}>
           {isImageExtension(extOf(file))
-            ? <img src={chipUrlOf(file)} alt={name} loading="lazy" onClick={() => onOpen({ file, name, size })} />
-            : <button type="button" className="bt-attachment-name" onClick={() => onOpen({ file, name, size })}>{name}</button>}
+            ? <img src={chipUrlOf(file)} alt={name} loading="lazy" onClick={() => openByFile(file)} />
+            : <button type="button" className="bt-attachment-name" onClick={() => openByFile(file)}>{name}</button>}
         </div>
       ))}
     </>
@@ -247,6 +269,10 @@ export interface AttachmentCellProps {
   onRename: (file: string, name: string) => void;
   /** 记录详情抽屉里常驻编辑态（表格里是点一下才进编辑态）。 */
   alwaysActive?: boolean;
+  /** 图片字段：只接受图片（选文件 / 拖拽 / 粘贴三条路都拦）。 */
+  imageOnly?: boolean;
+  /** 点图片预览：入参 = **本单元格内**的图片 + 下标（不含其它列）。 */
+  onOpenImages?: (images: BitableAttachment[], index: number) => void;
 }
 
 /** 「图片和附件」单元格：值是 `{ file, name }[]`（磁盘名 + 展示名，走现有资产管线）。
@@ -254,15 +280,23 @@ export interface AttachmentCellProps {
  *  编辑态 = **独立「+」按钮**（选文件）+ **独立提示文案**（点它/空白聚焦本区，可直接 Cmd+V 粘贴）+ 附件；
  *  整个区域是粘贴 / 拖拽投放目标。缩略图按 `ATTACHMENT_CHIP_PX` 取 `?w=` 档位，放大预览走原图。
  *  右侧「⤢」= 展开面板（行单元格太窄放不下附件列表时用）。 */
-export function AttachmentCell({ noteId, value, readOnly, onUpload, onRemove, onOpen, onReorder, onRename, alwaysActive = false }: AttachmentCellProps) {
+export function AttachmentCell({ noteId, value, readOnly, onUpload, onRemove, onOpen, onReorder, onRename, alwaysActive = false, imageOnly = false, onOpenImages }: AttachmentCellProps) {
   const attachments = bitableAttachments(value);
   const inputRef = useRef<HTMLInputElement>(null);
   const cellRef = useRef<HTMLDivElement>(null);
   const [active, setActive] = useState(alwaysActive);
   const [dropActive, setDropActive] = useState(false);
   const [expandAnchor, setExpandAnchor] = useState<HTMLElement | null>(null);
-  const takeDropFiles = (list: FileList | null | undefined) => { if (list && list.length > 0) onUpload([...list]); };
-  const chips = <AttachmentChipList noteId={noteId} attachments={attachments} onOpen={onOpen} />;
+  /** 被拒文件的可见提示（图片字段收到非图片时）——绝不静默丢弃。 */
+  const [rejectNote, setRejectNote] = useState<string | null>(null);
+  const takeFiles = (list: FileList | File[] | null | undefined) => {
+    const files = list ? Array.from(list) : [];
+    if (files.length === 0) return;
+    const { accepted, rejected } = splitImageFiles(files, imageOnly);
+    setRejectNote(rejected > 0 ? IMAGE_ONLY_HINT + "，已忽略 " + rejected + " 个" : null);
+    if (accepted.length > 0) onUpload(accepted);
+  };
+  const chips = <AttachmentChipList noteId={noteId} attachments={attachments} onOpen={onOpen} onOpenImages={onOpenImages} />;
   // 表格里点外部收起编辑态；抽屉常驻态不收起
   useEffect(() => {
     if (!active || alwaysActive) return;
@@ -294,14 +328,14 @@ export function AttachmentCell({ noteId, value, readOnly, onUpload, onRemove, on
         const items = event.clipboardData?.items;
         const picked: File[] = [];
         if (items) for (const item of items) if (item.kind === "file") { const f = item.getAsFile(); if (f) picked.push(f); }
-        if (picked.length > 0) { event.preventDefault(); if (!readOnly) setActive(true); onUpload(picked); }
+        if (picked.length > 0) { event.preventDefault(); if (!readOnly) setActive(true); takeFiles(picked); }
       }}
       onDragOver={(event) => { if (readOnly || isInternalAttachmentDrag(event)) return; event.preventDefault(); setDropActive(true); }}
       onDragLeave={() => setDropActive(false)}
-      onDrop={(event) => { if (readOnly || isInternalAttachmentDrag(event)) return; event.preventDefault(); setDropActive(false); setActive(true); takeDropFiles(event.dataTransfer?.files); }}>
+      onDrop={(event) => { if (readOnly || isInternalAttachmentDrag(event)) return; event.preventDefault(); setDropActive(false); setActive(true); takeFiles(event.dataTransfer?.files); }}>
       {active && !readOnly ? (
         <div className="bt-attachment-editor">
-          <button type="button" className="bt-attachment-plus" aria-label="选择图片或附件" title="选择图片或附件"
+          <button type="button" className="bt-attachment-plus" aria-label={imageOnly ? "选择图片" : "选择图片或附件"} title={imageOnly ? "选择图片" : "选择图片或附件"}
             onClick={(event) => { event.stopPropagation(); inputRef.current?.click(); }}><Plus size={18} /></button>
           {attachments.length === 0 && (
             <span className="bt-attachment-hint" onClick={(event) => { event.stopPropagation(); cellRef.current?.focus(); }}>粘贴或拖拽至此</span>
@@ -325,9 +359,10 @@ export function AttachmentCell({ noteId, value, readOnly, onUpload, onRemove, on
         </button>
       )}
       {!readOnly && (
-        <input ref={inputRef} type="file" multiple className="bt-hidden-input"
-          onChange={(event) => { takeDropFiles(event.target.files); event.target.value = ""; }} />
+        <input ref={inputRef} type="file" multiple accept={imageOnly ? "image/*" : undefined} className="bt-hidden-input"
+          onChange={(event) => { takeFiles(event.target.files); event.target.value = ""; }} />
       )}
+      {rejectNote && <span className="bt-cell-muted" role="status">{rejectNote}</span>}
       {attachments.length === 0 && readOnly && <span className="bt-cell-muted">—</span>}
       {expandAnchor && (
         <AttachmentExpandPopover
@@ -335,6 +370,8 @@ export function AttachmentCell({ noteId, value, readOnly, onUpload, onRemove, on
           noteId={noteId}
           attachments={attachments}
           readOnly={readOnly}
+          imageOnly={imageOnly}
+          onOpenImages={onOpenImages}
           onUpload={onUpload}
           onRemove={onRemove}
           onOpen={onOpen}
@@ -352,6 +389,10 @@ interface AttachmentExpandPopoverProps {
   noteId: string;
   attachments: BitableAttachment[];
   readOnly: boolean;
+  /** 图片字段：展开面板的入口同样只收图片。 */
+  imageOnly?: boolean;
+  /** 展开面板里点图片：同样只预览本单元格内的图片。 */
+  onOpenImages?: (images: BitableAttachment[], index: number) => void;
   onUpload: (files: File[]) => void;
   onRemove: (file: string) => void;
   onOpen: (attachment: BitableAttachment) => void;
@@ -370,7 +411,9 @@ interface AttachmentExpandPopoverProps {
  *
  *  打开即聚焦投放区：面板是 portal，焦点不在 `.bt-attachment-cell` 里，
  *  表格的全局 Cmd+V 处理器会 `preventDefault` 掉原生 paste（"拖拽行、粘贴不行"的真因）。 */
-function AttachmentExpandPopover({ anchor, noteId, attachments, readOnly, onUpload, onRemove, onOpen, onReorder, onRename, onClose }: AttachmentExpandPopoverProps) {
+function AttachmentExpandPopover({ anchor, noteId, attachments, readOnly, imageOnly = false, onOpenImages, onUpload, onRemove, onOpen, onReorder, onRename, onClose }: AttachmentExpandPopoverProps) {
+  /** 图片字段收到非图片时的可见提示（与单元格同一口径）。 */
+  const [rejectNote, setRejectNote] = useState<string | null>(null);
   const panelRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const dropRef = useRef<HTMLDivElement>(null);
@@ -431,8 +474,23 @@ function AttachmentExpandPopover({ anchor, noteId, attachments, readOnly, onUplo
     window.addEventListener("pointermove", onMove);
     window.addEventListener("pointerup", onUp);
   };
-  const takeFiles = (list: FileList | null | undefined) => { if (list && list.length > 0) onUpload([...list]); };
+  const takeFiles = (list: FileList | File[] | null | undefined) => {
+    const files = list ? Array.from(list) : [];
+    if (files.length === 0) return;
+    const { accepted, rejected } = splitImageFiles(files, imageOnly);
+    setRejectNote(rejected > 0 ? IMAGE_ONLY_HINT + "，已忽略 " + rejected + " 个" : null);
+    if (accepted.length > 0) onUpload(accepted);
+  };
   const thumbOf = (file: string) => withAssetWidth(withAssetAccessToken(ASSET_ORIGIN + "/" + noteId + "/" + file), assetThumbWidthForCss(ATTACHMENT_CARD_PX));
+  /** 展开面板里点图片：预览范围同样限定在本单元格的图片（不跨列）。 */
+  const openByFile = (file: string) => {
+    const item = attachments.find((a) => a.file === file);
+    if (!item) return;
+    const images = attachments.filter((a) => isImageExtension(extOf(a.file)));
+    const index = images.indexOf(item);
+    if (index >= 0 && onOpenImages) onOpenImages(images, index);
+    else onOpen(item);
+  };
   /** 卡片列表带上「主名 / 扩展名」拆分（改名只改主名，见 splitAttachmentName）。 */
   const namedAttachments = attachments.map((a) => ({ ...a, ...splitAttachmentName(a.name) }));
   /** 拖拽排序：把 dragged 插到 target 前/后（先移出再按目标位置插入）。 */
@@ -460,6 +518,7 @@ function AttachmentExpandPopover({ anchor, noteId, attachments, readOnly, onUplo
         <button type="button" className="bt-icon-btn" aria-label="关闭" title="关闭" onPointerDown={(event) => event.stopPropagation()} onClick={onClose}><X size={14} /></button>
       </header>
       <div className="bt-attach-expand-body">
+        {rejectNote && <div className="bt-cell-muted" role="status">{rejectNote}</div>}
         <div
           ref={dropRef}
           className={"bt-attach-dropzone" + (attachments.length > 0 ? " has-items" : "") + (dropActive ? " is-drop-active" : "")}
@@ -469,7 +528,7 @@ function AttachmentExpandPopover({ anchor, noteId, attachments, readOnly, onUplo
             const items = event.clipboardData?.items;
             const picked: File[] = [];
             if (items) for (const item of items) if (item.kind === "file") { const f = item.getAsFile(); if (f) picked.push(f); }
-            if (picked.length > 0) { event.preventDefault(); if (!readOnly) onUpload(picked); }
+            if (picked.length > 0) { event.preventDefault(); if (!readOnly) takeFiles(picked); }
           }}
           onDragOver={(event) => {
             event.stopPropagation();
@@ -490,7 +549,7 @@ function AttachmentExpandPopover({ anchor, noteId, attachments, readOnly, onUplo
             ? <div className="bt-attach-dropzone-hint">粘贴或拖拽至这里上传</div>
             : (
               <div className="bt-attach-grid" ref={gridRef}>
-                {namedAttachments.map(({ file, name, size, base, ext }) => (
+                {namedAttachments.map(({ file, name, base, ext }) => (
                   <div
                     key={file}
                     className={
@@ -527,7 +586,7 @@ function AttachmentExpandPopover({ anchor, noteId, attachments, readOnly, onUplo
                     }}
                   >
                     {/* 上：附件区 —— 点击预览，按住拖动排序（原生 draggable，不移动就仍是点击） */}
-                    <div className="bt-attach-card-file" title="点击预览 · 按住拖动排序" onClick={() => onOpen({ file, name, size })}>
+                    <div className="bt-attach-card-file" title="点击预览 · 按住拖动排序" onClick={() => openByFile(file)}>
                       {isImageExtension(extOf(file))
                         ? <img src={thumbOf(file)} alt={name} loading="lazy" draggable={false} />
                         : <span className="bt-attach-card-ext">{(extOf(file) || "file").toUpperCase()}</span>}
@@ -557,7 +616,7 @@ function AttachmentExpandPopover({ anchor, noteId, attachments, readOnly, onUplo
                           </span>
                         )
                         : (
-                          <span className="bt-attach-card-name" title={name} onClick={() => onOpen({ file, name, size })}>{name}</span>
+                          <span className="bt-attach-card-name" title={name} onClick={() => openByFile(file)}>{name}</span>
                         )}
                       {!readOnly && renameFile !== file && (
                         <button type="button" className="bt-attach-card-icon" title="编辑名称" aria-label={"编辑名称 " + name}
@@ -576,7 +635,7 @@ function AttachmentExpandPopover({ anchor, noteId, attachments, readOnly, onUplo
         )}
       </div>
       {!readOnly && (
-        <input ref={inputRef} type="file" multiple className="bt-hidden-input"
+        <input ref={inputRef} type="file" multiple accept={imageOnly ? "image/*" : undefined} className="bt-hidden-input"
           onChange={(event) => { takeFiles(event.target.files); event.target.value = ""; }} />
       )}
       <div className="bt-attach-expand-resize" onPointerDown={startResize} title="拖动调整大小" />
@@ -776,7 +835,8 @@ export interface CellEditorProps {
   readOnly: boolean;
   onChange: (value: unknown) => void;
   onAddOption: (name: string) => void;
-  renderAttachment?: () => ReactNode;
+  /** 附件 / 图片格子的渲染入口；入参 = 该字段是否只接受图片（image 字段）。 */
+  renderAttachment?: (imageOnly: boolean) => ReactNode;
 }
 
 /** 按字段类型分派单元格编辑器（未知类型只读展示、不清空）。 */
@@ -814,7 +874,8 @@ export function CellEditor({ field, value, readOnly, onChange, onAddOption, rend
           onAddOption={onAddOption} />
       );
     case "attachment":
-      return renderAttachment ? <>{renderAttachment()}</> : <span className="bt-cell-muted">—</span>;
+    case "image":
+      return renderAttachment ? <>{renderAttachment(field.type === "image")}</> : <span className="bt-cell-muted">—</span>;
     case "relation":
       return <span className="bt-cell-relation" title="关联字段 v1 只占位、单元格不可填值">关联（暂不可填）</span>;
     default:

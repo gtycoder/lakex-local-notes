@@ -1,0 +1,47 @@
+/**
+ * 表单视图样式（v2：编辑/预览双模）。
+ *
+ * 为什么单独一个文件：`bitableEditor.css` 已顶到 cssLayers 基线（只允许变小）；
+ * `.bt-form-view / .bt-form-config / .bt-form-panel / .bt-form-canvas / .bt-form-preview` 等
+ * 既有规则仍留在原文件，本文件只放**新增选择器**与预览态的布局变体（不改写既有规则）。
+ * 只走 --lake-* 令牌，无颜色字面量、无 !important。已登记 cssLayers FILES/BASELINE。
+ */
+.bt-form-shell {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.bt-form-tabs {
+  flex: 0 0 auto;
+  display: flex;
+  justify-content: center;
+  padding: 10px 12px 0;
+}
+
+.bt-form-canvas.is-preview {
+  max-width: 760px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+.bt-form-field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 10px 0;
+  border-top: 1px solid var(--lake-border-1);
+}
+
+.bt-form-field-label { font-size: 13px; color: var(--lake-text-1); }
+.bt-form-field-control { min-width: 0; }
+
+.bt-form-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.bt-form-ok { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: var(--lake-accent); }
