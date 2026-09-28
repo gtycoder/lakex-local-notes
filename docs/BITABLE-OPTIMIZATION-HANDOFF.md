@@ -700,7 +700,7 @@ npx vitest run src/styles/cssLayers.test.ts src/styles/uiPrimitives.test.ts
 | T01 列级统计 | 待验收 | 260928-T01 | 视图级列统计（通用/数字/日期），底栏贴底常驻、随筛选现算（见 §13） |
 | T03 多级分组 | 待验收 | 260928-T03 | 最多 3 级 + 拖动调优先级 + 层级缩进；折叠按节点 key（见 §13） |
 | T04 语义排序增强 | 待验收 | 260928-T04 | 单选/多选「选项顺序·逆序」，日期文案早→晚/晚→早（见 §13） |
-| T02A 基础字段 | 待验收 | 260928-T02A | 布尔/链接/评分/进度/创建·修改时间（系统时间只读、不参与筛选排序分组）（见 §13） |
+| T02A 基础字段 | 待验收 | 260928-T02A | 布尔/链接/评分/进度/创建·修改时间；**系统时间可筛选/排序/分组/统计**（记录级取值口径，见 §13） |
 | T02B.1 关联基础模型 | 未开始 | - | 同一文档内多表 |
 | T02B.2 单向关联 | 未开始 | - | 多选默认开启 |
 | T02B.3 双向关联 | 未开始 | - | 反向字段与配对一致性 |
@@ -726,6 +726,7 @@ npx vitest run src/styles/cssLayers.test.ts src/styles/uiPrimitives.test.ts
 | 2026-09-28 | 260928-F02 | 附件命名审计 | `src/features/bitable/BitableEditor.tsx` · `bitableEditorMount.test.ts` | 复核 main 侧契约：附件 filename=展示名、url 末段=磁盘名、buildAssetFilename 随机唯一（无去重）；bitable 展示名改取 `file.name` | 无新增改动面 |
 | 2026-09-28 | 260928-F01 | 图片预览总数 | `src/features/editor/imagePreview.ts`(+test) · `LakeEditor.tsx` · `BitableGalleryView.tsx` · `BitableEditor.tsx` · `bitableEditorMount.test.ts` | 实测 10 图文档预览 1/10 → 10/10；画册点封面 1/2 → 2/2 | 同一张图重复出现时按首次匹配定位下标 |
 | 2026-09-28 | 260928-T04 | T04 语义排序增强 | `src/core/bitableDoc.ts`(+test) · `BitableEditor.tsx` · `bitableEditorMount.test.ts` | 门禁全绿 + 实测选项序 B/C/E→D→A、逆序反转、字典序不受影响 | 不做公式排序 |
+| 2026-09-28 | 260928-T02A-fix | 系统时间字段打通筛排 | `src/core/bitableDoc.ts`(+test) · `BitableEditor.tsx` | 实测按创建时间升序 A/C/B、配置落盘；排除了之前的假边界 | 无 |
 | 2026-09-28 | 260928-T02A | T02A 基础字段 | `src/core/bitableDoc.ts`(+test) · `bitableCells.tsx` · `BitableEditor.tsx` · `BitableRecordDrawer.tsx` · `BitableKanbanView.tsx` · `BitableGalleryView.tsx` · `BitableFormView.tsx` · `src/mobile/bitable/MobileBitableViewer.tsx` · `bitableFieldCells.css`(新) · `cssLayers.test.ts` | 门禁全绿 + 实测布尔/评分/进度/链接交互并落盘；系统字段已从筛选/排序/分组/表单排除 | 系统时间不支持筛选排序（无假入口） |
 | 2026-09-28 | 260928-T03 | T03 多级分组 | `src/core/bitableDoc.ts` · `bitableGroup.test.ts` · `BitableEditor.tsx` · `bitableViews.css` · `cssLayers.test.ts` | 门禁全绿 + 实测两级树/折叠/层级缩进/拖动重排（配置落盘） | 折叠 key 基于选项名，改名会重置折叠态 |
 | 2026-09-28 | 260928-T01 | T01 列级统计 | `src/core/bitableDoc.ts`(+test) · `src/features/bitable/BitableEditor.tsx` · `bitableViews.css` · `cssLayers.test.ts` · `bitableEditorMount.test.ts` | 门禁全绿 + 实测：求和 7 → 筛选后 1、时间范围 9 天、多列独立 | 移动端隐藏统计（验收允许） |
@@ -1156,6 +1157,25 @@ UI 与交互变化：
 遗留：创建/修改时间暂不参与筛选与排序（无假入口，等真正需要时再做记录级取值改造）；评分口径为整星（不做半星）。
 
 下一步：等用户验收；随后按 §8 顺序进入 T02B.1 关联基础模型。
+
+### 2026-09-28 · T02A 修正：系统时间字段打通「筛选 / 排序 / 分组 / 统计」
+
+用户质疑（成立）：创建/修改时间就是**自动填充的只读字段**，没有理由不能筛选排序。
+
+**之前为什么不行（真实原因）**：核心求值链是「值优先」的——筛选/排序/分组/统计全都直接读 `record.values[fieldId]`；系统时间的值来自 `record.createdAt/updatedAt`，**不在 values 里**，于是整条链一律读到 `undefined`（排序等于没排、筛选等于全空）。当时的「把字段从下拉里排除」只是把「能选但没效果」换成「不给入口」，**没有解决取值口径本身**，属于假边界。
+
+**正确做法（单一取值口径）**：新增记录级访问器，管线全部走它——
+
+- `bitableFieldValue(record, field)`：**管线取值**。创建/修改时间 → `localDateString(createdAt/updatedAt)`，即**本地日期 `YYYY-MM-DD`**，与 `date` 字段同域 ⇒ 时间字段天然获得 `gt/lt/gte/lte/isEmpty` 比较、最早/最晚/时间范围统计、按天分组。
+- `bitableFieldText(record, field)`：**展示文本**，系统时间展示到分钟 `YYYY-MM-DD HH:mm`（不因此损失展示精度）。
+- 改造落点：`applyViewToRecords`（筛选 + 排序）、`groupRecordsTree`/`groupRecords`（含组间排序）、`computeColumnStat`、`duplicateValues`；比较器与统计/操作符把时间字段并入 date 口径；排序方式文案也统一为「早→晚 / 晚→早」。
+- UI 侧**撤回**了排序/筛选/分组下拉的字段排除（表单仍排除：表单是录入侧，系统字段无录入意义）。
+
+实测（CDP）：单元格显示 `2026-09-03 10:00`；排序字段下拉含「创建时间 / 修改时间」；按创建时间升序 → `A(09-01) C(09-03) B(09-05)`（此前是插入序）；`sorts` 配置落盘。单测覆盖：时间字段的升/降序、`gte` 筛选、按天分组、最早/时间范围统计。
+
+改动文件：`src/core/bitableDoc.ts`(+test) · `src/features/bitable/BitableEditor.tsx`
+
+下一步：等用户验收；随后进入 T02B.1 关联基础模型。
 
 ## 14. 会话执行模板
 

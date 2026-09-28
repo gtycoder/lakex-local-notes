@@ -25,6 +25,7 @@ import {
   createBitableView,
   createDefaultBitableTable,
   filterOperatorsFor,
+  groupRecordsTree,
   defaultViewName,
   emptyBitableBody,
   calendarColorField,
@@ -529,7 +530,8 @@ describe("bitableDoc 数据模型", () => {
     record.createdAt = "2026-09-28T01:30:00.000Z";
     record.updatedAt = "2026-09-28T02:45:00.000Z";
     record.values[primary.id] = "标题";
-    expect(bitableFieldValue(record, created)).toBe(record.createdAt);
+    // 管线取值 = 本地日期（与 date 同域）；展示文本到分钟
+    expect(bitableFieldValue(record, created)).toBe(localDateString(record.createdAt));
     expect(bitableFieldText(record, created)).toBe(localDateTimeString(record.createdAt));
     expect(bitableFieldText(record, updated)).toBe(localDateTimeString(record.updatedAt));
     // 数值口径：评分/进度参与排序、统计、筛选操作符
@@ -552,6 +554,43 @@ describe("bitableDoc 数据模型", () => {
     expect(defaults[rating.id]).toBe(0);
     expect(defaults[progress.id]).toBe(25);
     expect(defaults[link.id]).toBe("https://a.dev");
+  });
+
+  it("系统时间字段（创建/修改时间）能参与筛选、排序、分组与列统计", () => {
+    const table = createDefaultBitableTable("t", "tbl-systime");
+    const primary = table.fields[0];
+    const created = createBitableField("createdTime", "创建时间", "fld-ct");
+    table.fields.push(created);
+    const mk = (id: string, title: string, iso: string) => {
+      const record = createBitableRecord(id);
+      record.values[primary.id] = title;
+      record.createdAt = iso;
+      record.updatedAt = iso;
+      return record;
+    };
+    table.records = [
+      mk("r1", "C", "2026-09-03T10:00:00.000Z"),
+      mk("r2", "A", "2026-09-01T10:00:00.000Z"),
+      mk("r3", "B", "2026-09-05T10:00:00.000Z"),
+    ];
+    const view = createBitableView("grid", "g", "vew-systime");
+    // 排序：按创建时间升序/降序
+    view.sorts = [{ fieldId: created.id }];
+    expect(applyViewToRecords(table, view).map((r) => r.id)).toEqual(["r2", "r1", "r3"]);
+    view.sorts = [{ fieldId: created.id, desc: true }];
+    expect(applyViewToRecords(table, view).map((r) => r.id)).toEqual(["r3", "r1", "r2"]);
+    // 筛选：操作符与 date 同口径（gte），值域 = 本地日期
+    expect(filterOperatorsFor(created)).toContain("gte");
+    view.sorts = [];
+    view.filters = [{ fieldId: created.id, operator: "gte", value: localDateString("2026-09-03T10:00:00.000Z") }];
+    expect(applyViewToRecords(table, view).map((r) => r.id)).toEqual(["r1", "r3"]);
+    view.filters = [];
+    // 分组 + 列统计：走同一取值口径
+    const tree = groupRecordsTree(table, table.records, [{ fieldId: created.id }]);
+    expect(tree.map((n) => n.label)).toEqual([localDateString(table.records[1].createdAt), localDateString(table.records[0].createdAt), localDateString(table.records[2].createdAt)]);
+    expect(statsForField(created)).toContain("range");
+    expect(computeColumnStat(created, table.records, "earliest")).toBe(localDateString(table.records[1].createdAt));
+    expect(computeColumnStat(created, table.records, "range")).toBe("5 天");
   });
 
   it("语义排序（T04）：单选/多选按选项顺序（空值恒最后），多条件稳定，字典序不受影响", () => {

@@ -24,7 +24,7 @@ import {
   bitableAttachments, removeBitableAttachment, renameBitableAttachment, reorderBitableAttachments,
   createBitableField, createBitableRecord, createBitableView, createDefaultBitableTable, filterOperatorsFor,
   BITABLE_MAX_GROUPS, BITABLE_STAT_LABEL, computeColumnStat, groupRecordsTree, isAttachmentLikeField, isImplementedViewType,
-  BITABLE_PROGRESS_MAX, BITABLE_RATING_MAX, isSystemTimeField, kanbanGroupField, sortModeLabel, sortModesForField, statForField, statsForField,
+  BITABLE_PROGRESS_MAX, BITABLE_RATING_MAX, kanbanGroupField, sortModeLabel, sortModesForField, statForField, statsForField,
   isKnownFieldType, newBitableId, orderedTableFields, parseBitableBody,
   type BitableAttachment, type BitableDoc, type BitableField, type BitableFieldType, type BitableFilterRule, type BitableGroupRule, type BitableRecord,
   type BitableGroupNode, type BitableRowHeight, type BitableSortMode, type BitableSortRule, type BitableStatType, type BitableTable, type BitableView, type BitableViewType,
@@ -568,8 +568,6 @@ export function BitableEditor({ noteId, content, visible, readOnly, onChange, ch
   const setFilters = (next: BitableFilterRule[]) => patchView(activeView.id, { filters: next });
   const setSorts = (next: BitableView["sorts"]) => patchView(activeView.id, { sorts: next });
   const setGroups = (next: BitableGroupRule[]) => patchView(activeView.id, { groups: next });
-  /** 分组/筛选/排序可选的字段：排除系统时间字段（值来自记录时间戳，不在 values 里，选了也没效果）。 */
-  const sortableFields = activeTable.fields.filter((field) => !isSystemTimeField(field.type));
   /** 分组面板的拖动排序态（只用于重排 rules，不写正文以外的任何东西）。 */
   const [groupDragIndex, setGroupDragIndex] = useState<number | null>(null);
   const moveGroupRule = (from: number, to: number) => {
@@ -911,7 +909,7 @@ export function BitableEditor({ noteId, content, visible, readOnly, onChange, ch
             onClick={(event) => {
               setMenuAnchor(event.currentTarget);
               if (panel === "filter") { setPanel(null); return; }
-              if (filters.length === 0 && sortableFields.length > 0) setFilters([{ fieldId: sortableFields[0].id, operator: "contains", value: "" }]);
+              if (filters.length === 0 && activeTable.fields.length > 0) setFilters([{ fieldId: activeTable.fields[0].id, operator: "contains", value: "" }]);
               setPanel("filter");
             }}>
             <ListFilter size={14} />筛选{filters.length > 0 && <span className="bt-badge">{filters.length}</span>}
@@ -1105,7 +1103,7 @@ export function BitableEditor({ noteId, content, visible, readOnly, onChange, ch
           {filters.map((rule, index) => (
             <div key={index} className="bt-rule-row">
               <SelectMenu value={rule.fieldId} onChange={(value) => setFilters(filters.map((r, i) => (i === index ? { ...r, fieldId: value } : r)))}
-                options={sortableFields.map((f) => ({ value: f.id, label: f.name }))} />
+                options={activeTable.fields.map((f) => ({ value: f.id, label: f.name }))} />
               <SelectMenu value={rule.operator} onChange={(value) => setFilters(filters.map((r, i) => (i === index ? { ...r, operator: value as BitableFilterRule["operator"] } : r)))}
                 options={(filterOperatorsFor(activeTable.fields.find((f) => f.id === rule.fieldId) ?? activeTable.fields[0])).map((op) => ({ value: op, label: BITABLE_FILTER_OPERATOR_LABEL[op] }))} />
               {rule.operator !== "isEmpty" && rule.operator !== "isNotEmpty" && (
@@ -1115,7 +1113,7 @@ export function BitableEditor({ noteId, content, visible, readOnly, onChange, ch
             </div>
           ))}
           <button type="button" className="bt-panel-add" disabled={readOnly || activeTable.fields.length === 0}
-            onClick={() => setFilters([...filters, { fieldId: (sortableFields[0] ?? activeTable.fields[0]).id, operator: "contains", value: "" }])}><Plus size={14} />添加筛选规则</button>
+            onClick={() => setFilters([...filters, { fieldId: (activeTable.fields[0] ?? activeTable.fields[0]).id, operator: "contains", value: "" }])}><Plus size={14} />添加筛选规则</button>
           <button type="button" className="bt-panel-add danger" disabled={readOnly || filters.length === 0} onClick={() => setFilters([])}><Trash2 size={13} />删除筛选</button>
         </div>
       </Popover>
@@ -1126,7 +1124,7 @@ export function BitableEditor({ noteId, content, visible, readOnly, onChange, ch
           {sorts.map((rule, index) => (
             <div key={index} className="bt-rule-row">
               <SelectMenu value={rule.fieldId} onChange={(value) => setSorts(sorts.map((r, i) => (i === index ? changeSortField(r, value) : r)))}
-                options={sortableFields.map((f) => ({ value: f.id, label: f.name }))} />
+                options={activeTable.fields.map((f) => ({ value: f.id, label: f.name }))} />
               {(() => {
                 const field = activeTable.fields.find((f) => f.id === rule.fieldId) ?? activeTable.fields[0];
                 return (
@@ -1138,7 +1136,7 @@ export function BitableEditor({ noteId, content, visible, readOnly, onChange, ch
             </div>
           ))}
           <button type="button" className="bt-panel-add" disabled={readOnly || activeTable.fields.length === 0}
-            onClick={() => setSorts([...sorts, { fieldId: (sortableFields[0] ?? activeTable.fields[0]).id, desc: false }])}><Plus size={14} />添加排序</button>
+            onClick={() => setSorts([...sorts, { fieldId: (activeTable.fields[0] ?? activeTable.fields[0]).id, desc: false }])}><Plus size={14} />添加排序</button>
         </div>
       </Popover>
 
@@ -1153,7 +1151,7 @@ export function BitableEditor({ noteId, content, visible, readOnly, onChange, ch
               <GripVertical size={13} className="bt-grip" />
               <SelectMenu value={rule.fieldId} disabled={readOnly}
                 onChange={(value) => setGroups(groups.map((item, i) => (i === index ? { ...item, fieldId: value } : item)))}
-                options={sortableFields.map((field) => ({ value: field.id, label: field.name }))} />
+                options={activeTable.fields.map((field) => ({ value: field.id, label: field.name }))} />
               <SelectMenu value={rule.desc ? "desc" : "asc"} disabled={readOnly}
                 onChange={(value) => setGroups(groups.map((item, i) => (i === index ? { ...item, desc: value === "desc" } : item)))}
                 options={[{ value: "asc", label: "升序" }, { value: "desc", label: "降序" }]} />
@@ -1165,7 +1163,7 @@ export function BitableEditor({ noteId, content, visible, readOnly, onChange, ch
             <div className="bt-rule-row">
               <SelectMenu value="" placeholder="选择一列进行分组" disabled={readOnly}
                 onChange={(value) => setGroups([{ fieldId: value, desc: false }])}
-                options={sortableFields.map((field) => ({ value: field.id, label: field.name }))} />
+                options={activeTable.fields.map((field) => ({ value: field.id, label: field.name }))} />
             </div>
           )}
           {groups.length > 0 && groups.length < BITABLE_MAX_GROUPS && (

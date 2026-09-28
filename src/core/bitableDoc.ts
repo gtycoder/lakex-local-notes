@@ -184,7 +184,7 @@ export function sortModesForField(field: BitableField): BitableSortMode[] {
 
 /** 排序方式显示文案：日期字段用日期语义（早→晚 / 晚→早），口径不变。 */
 export function sortModeLabel(field: BitableField, mode: BitableSortMode): string {
-  if (field.type === "date" && (mode === "asc" || mode === "desc")) return mode === "desc" ? "晚→早" : "早→晚";
+  if ((field.type === "date" || isSystemTimeField(field.type)) && (mode === "asc" || mode === "desc")) return mode === "desc" ? "晚→早" : "早→晚";
   return BITABLE_SORT_MODE_LABEL[mode];
 }
 
@@ -526,7 +526,7 @@ const GENERIC_STATS: readonly BitableStatType[] = ["count", "filled", "empty", "
 export function statsForField(field: BitableField): BitableStatType[] {
   const out = [...GENERIC_STATS];
   if (isNumericFieldType(field.type)) out.push("sum", "avg", "min", "max");
-  if (field.type === "date") out.push("earliest", "latest", "range");
+  if (field.type === "date" || isSystemTimeField(field.type)) out.push("earliest", "latest", "range");
   return out;
 }
 
@@ -553,7 +553,7 @@ function statPct(part: number, total: number): string {
 export function computeColumnStat(field: BitableField, records: BitableRecord[], stat: BitableStatType): string {
   const total = records.length;
   if (stat === "count") return String(total);
-  const texts = records.map((record) => bitableDisplayValue(field, record.values[field.id]).trim());
+  const texts = records.map((record) => bitableDisplayValue(field, bitableFieldValue(record, field)).trim());
   const filledCount = texts.filter((text) => text !== "").length;
   if (stat === "filled") return String(filledCount);
   if (stat === "empty") return String(total - filledCount);
@@ -563,9 +563,9 @@ export function computeColumnStat(field: BitableField, records: BitableRecord[],
   if (isNumericFieldType(field.type)) {
     const nums = records
       .map((record) => {
-        const text = bitableDisplayValue(field, record.values[field.id]).trim();
+        const text = bitableDisplayValue(field, bitableFieldValue(record, field)).trim();
         if (text === "") return Number.NaN;   // 空格子不能当 0 参与求和/平均
-        const raw = record.values[field.id];
+        const raw = bitableFieldValue(record, field);
         return typeof raw === "number" ? raw : Number(text);
       })
       .filter((n) => Number.isFinite(n));
@@ -576,9 +576,9 @@ export function computeColumnStat(field: BitableField, records: BitableRecord[],
     if (stat === "max") return formatStatNumber(Math.max(...nums));
     return "—";
   }
-  if (field.type === "date") {
+  if (field.type === "date" || isSystemTimeField(field.type)) {
     const days = records
-      .map((record) => dateValueOf(record.values[field.id]))
+      .map((record) => dateValueOf(bitableFieldValue(record, field)))
       .filter((day) => day !== "")
       .sort();
     if (days.length === 0) return "—";
@@ -714,8 +714,8 @@ export function bitableDisplayValue(field: BitableField, value: unknown): string
       return typeof value === "string" ? value : "";
     case "createdTime":
     case "updatedTime":
-      // 值由 bitableFieldText(record, field) 注入记录时间戳；直接给 ISO 也兜底格式化
-      return typeof value === "string" ? localDateTimeString(value) : "";
+      // 管线里值 = 本地日期串（bitableFieldValue）；单元格/卡片展示走 bitableFieldText 到分钟
+      return typeof value === "string" ? value : "";
     default:
       return typeof value === "string" ? value : typeof value === "number" || typeof value === "boolean" ? String(value) : "";
   }
@@ -757,16 +757,22 @@ export function localDateTimeString(at: string | number | Date): string {
   return localDateString(d) + " " + String(d.getHours()).padStart(2, "0") + ":" + String(d.getMinutes()).padStart(2, "0");
 }
 
-/** 字段取值（含系统字段）：创建/修改时间读记录时间戳，其余读 values。 */
+/**
+ * **管线取值**（筛选 / 排序 / 分组 / 统计的唯一口径，含系统字段）：
+ * 创建 / 修改时间读记录时间戳，并按**本地日期** `YYYY-MM-DD` 输出——与 date 字段同域，
+ * 于是时间字段天然获得「gt/lt/... 比较、最早/最晚/时间范围、按天分组」全部口径。
+ */
 export function bitableFieldValue(record: BitableRecord, field: BitableField): unknown {
-  if (field.type === "createdTime") return record.createdAt;
-  if (field.type === "updatedTime") return record.updatedAt;
+  if (field.type === "createdTime") return localDateString(record.createdAt);
+  if (field.type === "updatedTime") return localDateString(record.updatedAt);
   return record.values[field.id];
 }
 
-/** 字段展示文本（记录级，含系统时间）——卡片/单元格/搜索/标题统一走它。 */
+/** 字段**展示文本**（记录级，含系统时间）：系统时间展示到分钟；其余走展示值口径。 */
 export function bitableFieldText(record: BitableRecord, field: BitableField): string {
-  return bitableDisplayValue(field, bitableFieldValue(record, field));
+  if (field.type === "createdTime") return localDateTimeString(record.createdAt);
+  if (field.type === "updatedTime") return localDateTimeString(record.updatedAt);
+  return bitableDisplayValue(field, record.values[field.id]);
 }
 
 /** 记录标题 = 主字段（fields[0]）的展示值；未填 → 「未命名记录」（对齐云端）。 */
@@ -1110,7 +1116,7 @@ function compareValues(field: BitableField, a: unknown, b: unknown): number {
     const nb = typeof b === "number" ? b : Number(sb);
     if (Number.isFinite(na) && Number.isFinite(nb)) return na - nb;
   }
-  if (field.type === "date") return sa < sb ? -1 : sa > sb ? 1 : 0;
+  if (field.type === "date" || isSystemTimeField(field.type)) return sa < sb ? -1 : sa > sb ? 1 : 0;
   return sa.localeCompare(sb, "zh-Hans-CN");
 }
 
@@ -1151,7 +1157,7 @@ export function evaluateFilter(field: BitableField, value: unknown, rule: Bitabl
 
 /** 某个字段类型可用的筛选操作符（v1 全类型共用一套，按类型给主要项）。 */
 export function filterOperatorsFor(field: BitableField): BitableFilterOperator[] {
-  if (isNumericFieldType(field.type) || field.type === "date") return ["equals", "notEquals", "gt", "lt", "gte", "lte", "isEmpty", "isNotEmpty"];
+  if (isNumericFieldType(field.type) || field.type === "date" || isSystemTimeField(field.type)) return ["equals", "notEquals", "gt", "lt", "gte", "lte", "isEmpty", "isNotEmpty"];
   if (field.type === "boolean") return ["equals", "notEquals", "isEmpty", "isNotEmpty"];
   return ["contains", "notContains", "equals", "notEquals", "isEmpty", "isNotEmpty"];
 }
@@ -1179,7 +1185,7 @@ export function applyViewToRecords(table: BitableTable, view: BitableView | unde
       filters.every((rule) => {
         const field = fieldById.get(rule.fieldId);
         if (!field) return true;
-        return evaluateFilter(field, record.values[field.id], rule);
+        return evaluateFilter(field, bitableFieldValue(record, field), rule);
       }),
     );
   }
@@ -1191,7 +1197,7 @@ export function applyViewToRecords(table: BitableTable, view: BitableView | unde
         for (const rule of sorts) {
           const field = fieldById.get(rule.fieldId);
           if (!field) continue;
-          const cmp = compareSortValues(field, a.record.values[field.id], b.record.values[field.id], rule);
+          const cmp = compareSortValues(field, bitableFieldValue(a.record, field), bitableFieldValue(b.record, field), rule);
           if (cmp !== 0) return cmp;
         }
         return a.index - b.index;
@@ -1247,13 +1253,13 @@ export function groupRecordsTree(table: BitableTable, records: BitableRecord[], 
     const field = table.fields.find((item) => item.id === rule.fieldId)!;
     const buckets = new Map<string, BitableRecord[]>();
     for (const record of list) {
-      const key = groupKeyOf(field, record.values[field.id]);
+      const key = groupKeyOf(field, bitableFieldValue(record, field));
       const bucket = buckets.get(key);
       if (bucket) bucket.push(record); else buckets.set(key, [record]);
     }
     const keys = [...buckets.keys()].sort((a, b) => {
       if ((a === "") !== (b === "")) return a === "" ? 1 : -1;   // 空值组恒最后
-      const cmp = compareValues(field, buckets.get(a)![0].values[field.id], buckets.get(b)![0].values[field.id]);
+      const cmp = compareValues(field, bitableFieldValue(buckets.get(a)![0], field), bitableFieldValue(buckets.get(b)![0], field));
       return rule.desc ? -cmp : cmp;
     });
     return keys.map((key) => {
@@ -1293,7 +1299,7 @@ export function groupRecords(
   }
   const keys = [...groups.keys()].sort((a, b) => {
     if ((a === "") !== (b === "")) return a === "" ? 1 : -1; // 空值组排最后
-    const cmp = compareValues(field, groups.get(a)![0].values[field.id], groups.get(b)![0].values[field.id]);
+    const cmp = compareValues(field, bitableFieldValue(groups.get(a)![0], field), bitableFieldValue(groups.get(b)![0], field));
     return rule.desc ? -cmp : cmp;
   });
   return keys.map((key) => ({ key, label: key || "(空)", records: groups.get(key)! }));
@@ -1303,7 +1309,7 @@ export function groupRecords(
 export function duplicateValues(field: BitableField, records: BitableRecord[]): Set<string> {
   const counts = new Map<string, number>();
   for (const record of records) {
-    const value = bitableDisplayValue(field, record.values[field.id]).trim();
+    const value = bitableDisplayValue(field, bitableFieldValue(record, field)).trim();
     if (!value) continue;
     counts.set(value, (counts.get(value) ?? 0) + 1);
   }
