@@ -1,6 +1,6 @@
 # 多维表优化落地与交接文档（Single Source of Truth）
 
-> 状态：**方案已冻结；V01 已完成，V02–V04 已实施；260928 追加需求两批（图片字段 / 画册预览 / 表单双模 → 图片预览总数 · 附件命名审计 · 表单编辑态回退 · 看板缩略图）已实施，一并待验收**（其余 T / D 批次未开始）。
+> 状态：**方案已冻结；V01 已完成，V02–V04 已实施；260928 追加需求三批（图片字段 / 画册预览 / 表单双模 → 图片预览总数 · 附件命名审计 · 表单编辑态回退 · 看板缩略图 → 预览范围单单元格 · 展示名守卫 · 填写表单跳预览）与 **T01 列级统计** 已实施，一并待验收**（其余 T / D 批次未开始）。
 > 建立日期：2026-09-28。
 > 适用范围：多维表字段扩展、单/双向关联、表格增强、看板/画册/日历视图、表单增强、导入导出。
 > 本文是该优化项目的**唯一实现方案、进度看板、修改记录、决策记录和会话交接文档**。
@@ -697,7 +697,7 @@ npx vitest run src/styles/cssLayers.test.ts src/styles/uiPrimitives.test.ts
 | V02 看板视图 | 待验收 | 260928-V02 | 代码 + 全部门禁 + CDP 真实端点验收完成；含只读写入口泄漏修复（见 §13） |
 | V03 画册视图 | 待验收 | 260928-V03 | 封面 / 裁剪·适应 / 常规·紧凑 / 卡片字段全部落地（见 §13） |
 | V04 日历视图 | 待验收 | 260928-V04 | 月网格 + 跨天 + 颜色 + 拖拽平移，全程本地日期语义（见 §13） |
-| T01 列级统计 | 未开始 | - | 独立 |
+| T01 列级统计 | 待验收 | 260928-T01 | 视图级列统计（通用/数字/日期），底栏贴底常驻、随筛选现算（见 §13） |
 | T03 多级分组 | 未开始 | - | 复用现有 groups 数组 |
 | T04 语义排序增强 | 未开始 | - | 独立 |
 | T02A 基础字段 | 未开始 | - | 布尔/链接/评分/进度/创建时间/修改时间 |
@@ -725,6 +725,7 @@ npx vitest run src/styles/cssLayers.test.ts src/styles/uiPrimitives.test.ts
 | 2026-09-28 | 260928-V04 | V04 日历视图 | `src/core/bitableDoc.ts`(+test) · `src/features/bitable/BitableCalendarView.tsx`(新) · `bitableCalendarView.css`(新) · `BitableViewConfigPanels.tsx`(新) · `BitableEditor.tsx` · `bitableEditorMount.test.ts` · `src/styles/cssLayers.test.ts` | 门禁全绿 + CDP 真实端点验收通过（拖拽改日期已落盘核对） | 不做农历/节假日/重复日程/提醒；移动端只读回退 |
 | 2026-09-28 | 260928-F02 | 附件命名审计 | `src/features/bitable/BitableEditor.tsx` · `bitableEditorMount.test.ts` | 复核 main 侧契约：附件 filename=展示名、url 末段=磁盘名、buildAssetFilename 随机唯一（无去重）；bitable 展示名改取 `file.name` | 无新增改动面 |
 | 2026-09-28 | 260928-F01 | 图片预览总数 | `src/features/editor/imagePreview.ts`(+test) · `LakeEditor.tsx` · `BitableGalleryView.tsx` · `BitableEditor.tsx` · `bitableEditorMount.test.ts` | 实测 10 图文档预览 1/10 → 10/10；画册点封面 1/2 → 2/2 | 同一张图重复出现时按首次匹配定位下标 |
+| 2026-09-28 | 260928-T01 | T01 列级统计 | `src/core/bitableDoc.ts`(+test) · `src/features/bitable/BitableEditor.tsx` · `bitableViews.css` · `cssLayers.test.ts` · `bitableEditorMount.test.ts` | 门禁全绿 + 实测：求和 7 → 筛选后 1、时间范围 9 天、多列独立 | 移动端隐藏统计（验收允许） |
 | 2026-09-28 | 260928-F04 | 预览范围改为单单元格 + 展示名守卫 + 填写表单跳预览 | `bitableCells.tsx` · `BitableGalleryView.tsx` · `BitableEditor.tsx` · `BitableRecordDrawer.tsx` · `BitableFormView.tsx` · `src/core/bitableDoc.ts`(+test) · `src/features/attachment/attachmentPreviewController.ts` · `bitableEditorMount.test.ts` | 实测两列图片各自独立：A=1/2、B=2/3、画册封面=1/2、看板 2+3 | 无 |
 | 2026-09-28 | 260928-F03 | 表单编辑态回退 + 看板缩略图 | `BitableFormView.tsx` · `bitableFormView.css` · `BitableKanbanView.tsx` · `bitableKanbanView.css` · `BitableEditor.tsx` · `cssLayers.test.ts` | 实测编辑态回到 v1 原形态；看板卡片出缩略图不出文件名 | 无 |
 | 2026-09-28 | 260928-T07 | T07 图片字段类型 | `src/core/bitableDoc.ts`(+test) · `src/features/bitable/bitableCells.tsx` · `BitableEditor.tsx` · `BitableRecordDrawer.tsx` · `BitableFormView.tsx` · `src/mobile/bitable/MobileBitableViewer.tsx` · `bitableEditorMount.test.ts` | 门禁全绿 + CDP 实测（mp3 被拒有提示 / png 上传落盘） | 附件侧行为不变（无 accept 限制） |
@@ -1068,6 +1069,31 @@ UI 与交互变化：
 改动文件：`src/core/bitableDoc.ts`(+test) · `src/features/attachment/attachmentPreviewController.ts` · `src/features/bitable/bitableCells.tsx` · `BitableGalleryView.tsx` · `BitableEditor.tsx` · `BitableRecordDrawer.tsx` · `BitableFormView.tsx` · `bitableEditorMount.test.ts`
 
 下一步：等用户验收。
+
+### 2026-09-28 · T01 列级统计
+
+本次完成：
+
+- 表格底部新增**列统计行**（`tfoot`，贴底常驻 `position: sticky; bottom: 0`）：每列显示「统计名 + 值」，未配置显示 `—`。
+- 口径：通用（记录总数 / 已填写 / 未填写 / 唯一数 / 已填写占比 / 未填写占比）+ 数字（求和 / 平均 / 最小 / 最大）+ 日期（最早 / 最晚 / 时间范围=天数跨度）。
+- 配置入口：列表头右键或 ⋯ → **统计** → 选口径（含「无统计」）；配置存 `view.columnStats`（视图级，不写记录）。
+- **统计基于当前视图筛选后的记录**（`shownRecords`），排序不影响集合；空格子不参与数字聚合（不当 0）；附件 / 关联等类型不会崩（只走通用口径）。
+
+数据结构 / 接口：
+
+- `BitableView.columnStats?: Record<string, string>`；`normalizeView` 校验为对象。
+- core 新增：`BitableStatType` / `BITABLE_STAT_LABEL` / `statsForField` / `statForField` / `computeColumnStat`（全纯函数）。
+
+改动文件：`src/core/bitableDoc.ts`(+test) · `src/features/bitable/BitableEditor.tsx` · `bitableViews.css` · `src/styles/cssLayers.test.ts` · `bitableEditorMount.test.ts`
+
+验证结果：
+
+- 门禁全绿：tsc / vitest **1372 passed / 16 skipped** / check:core / 双端构建 / ui-metrics / cssLayers+uiPrimitives / git diff --check。
+- CDP 真实端点验收：初始底栏全 `—` → 数量列选「求和」= `求和 7`（4 条里 1 条空值不计 0）→ 日期列选「时间范围」= `时间范围 9 天`（多列独立）→ 加「文本 包含 A」筛选后仅 1 条可见，底栏变 `求和 1` / `时间范围 1 天`；`columnStats` 落盘。
+
+遗留：移动端隐藏统计（验收允许「只读或隐藏」）；统计不参与 CSV/JSON 导出配置（导出尚未开始）。
+
+下一步：等用户验收；随后按 §8 顺序进入 T03 多级分组。
 
 ## 14. 会话执行模板
 

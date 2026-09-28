@@ -23,10 +23,10 @@ import {
   BITABLE_FILTER_OPERATOR_LABEL, BITABLE_OPTION_COLORS, applyViewToRecords, bitableDisplayValue, bitablesToBody, defaultRecordValues, duplicateValues, groupRecords, optionColorHex,
   bitableAttachments, removeBitableAttachment, renameBitableAttachment, reorderBitableAttachments,
   createBitableField, createBitableRecord, createBitableView, createDefaultBitableTable, filterOperatorsFor,
-  isAttachmentLikeField, isImplementedViewType, kanbanGroupField,
+  BITABLE_STAT_LABEL, computeColumnStat, isAttachmentLikeField, isImplementedViewType, kanbanGroupField, statForField, statsForField,
   isKnownFieldType, newBitableId, orderedTableFields, parseBitableBody,
   type BitableAttachment, type BitableDoc, type BitableField, type BitableFieldType, type BitableFilterRule, type BitableGroupRule, type BitableRecord,
-  type BitableRowHeight, type BitableTable, type BitableView, type BitableViewType,
+  type BitableRowHeight, type BitableStatType, type BitableTable, type BitableView, type BitableViewType,
 } from "../../core/bitableDoc.js";
 import { parseLocalAssetUrl } from "../../core/assetUrl.js";
 import { uploadLakeResource } from "../editor/resourceUpload.js";
@@ -152,6 +152,8 @@ export function BitableEditor({ noteId, content, visible, readOnly, onChange, ch
    *  —— ⋯ 按钮是 hover 才 display 的，菜单一关就量不到位置（调色板会跑到左上角）。 */
   const [columnMenu, setColumnMenu] = useState<{ fieldId: string; x: number; y: number; header: HTMLElement | null } | null>(null);
   const [textColorFor, setTextColorFor] = useState<{ fieldId: string; anchor: HTMLElement } | null>(null);
+  /** 列统计选择器（列菜单「统计」→ 锚到列头）。 */
+  const [statFor, setStatFor] = useState<{ fieldId: string; anchor: HTMLElement } | null>(null);
   const [configDragId, setConfigDragId] = useState<string | null>(null);
   const [viewMenu, setViewMenu] = useState<{ viewId: string; anchor: HTMLElement } | null>(null);
   const [addFieldAnchor, setAddFieldAnchor] = useState<HTMLElement | null>(null);
@@ -254,6 +256,13 @@ export function BitableEditor({ noteId, content, visible, readOnly, onChange, ch
   const showGridTools = !isImplementedViewType(activeView.type) || activeView.type === "grid" || activeView.type === "form";
   /** 看板「新建分组」要往分组字段追加选项。 */
   const kanbanField = kanbanGroupField(activeTable, activeView);
+  /** 设置/清除某列的统计口径（视图级配置，不写记录）。 */
+  const setColumnStat = (fieldId: string, stat: BitableStatType | null) => {
+    const next = { ...(activeView.columnStats ?? {}) };
+    if (stat) next[fieldId] = stat; else delete next[fieldId];
+    patchView(activeView.id, { columnStats: next });
+  };
+
   /** 日历拖拽落值：开始 + 结束一起平移（一次写多个字段，口径与单元格编辑一致）。 */
   const setRecordValues = useCallback((recordId: string, patch: Record<string, unknown>) => {
     patchActiveTable((table) => ({
@@ -1005,6 +1014,21 @@ export function BitableEditor({ noteId, content, visible, readOnly, onChange, ch
                   <td />
                 </tr>
               </tbody>
+              {/* T01 列级统计：口径 = 当前视图筛选后的记录（排序不影响），配置存视图、值现算 */}
+              <tfoot>
+                <tr className="bt-stat-row">
+                  <td className="bt-td bt-cell-muted" />
+                  {visibleFields.map((field) => {
+                    const stat = statForField(activeView, field.id);
+                    return (
+                      <td key={field.id} className="bt-td bt-cell-muted" title={stat ? BITABLE_STAT_LABEL[stat] : undefined}>
+                        {stat ? BITABLE_STAT_LABEL[stat] + " " + computeColumnStat(field, shownRecords, stat) : "—"}
+                      </td>
+                    );
+                  })}
+                  <td className="bt-td bt-cell-muted" />
+                </tr>
+              </tfoot>
             </table>
             <div className="bt-grid-foot">{selectedRecordIds.size > 0 ? "已选择 " + selectedRecordIds.size + " 条记录" : cellRange ? "已选择 " + ((cellRange.r1 - cellRange.r0 + 1) * (cellRange.c1 - cellRange.c0 + 1)) + " 个单元格" : "共 " + activeTable.records.length + " 条记录"}{findQuery ? "，匹配 " + shownRecords.length + " 条" : ""}</div>
           </div>
@@ -1151,6 +1175,13 @@ export function BitableEditor({ noteId, content, visible, readOnly, onChange, ch
           })()}
           {columnMenu && (() => {
             const fieldId = columnMenu.fieldId;
+            const anchor = columnMenu.header;
+            return (
+              <button type="button" className="bt-menu-item" disabled={readOnly} onClick={() => { if (anchor) setStatFor({ fieldId, anchor }); setColumnMenu(null); }}>统计</button>
+            );
+          })()}
+          {columnMenu && (() => {
+            const fieldId = columnMenu.fieldId;
             // 调色板锚到**列头**（不是 ⋯ 按钮）：菜单一关按钮就 display:none、量出来的 rect 是 0×0，
             // 浮层会跑到左上角（260928 用户报「颜色框错位」）
             const anchor = columnMenu.header;
@@ -1168,6 +1199,27 @@ export function BitableEditor({ noteId, content, visible, readOnly, onChange, ch
           onClear={() => patchView(activeView.id, { columnTextColors: Object.fromEntries(Object.entries(activeView.columnTextColors ?? {}).filter(([id]) => id !== textColorFor.fieldId)) })}
           onClose={() => setTextColorFor(null)} />
       )}
+
+      {statFor && (() => {
+        const field = activeTable.fields.find((item) => item.id === statFor.fieldId);
+        if (!field) return null;
+        const current = statForField(activeView, field.id);
+        return (
+          <Popover open anchor={statFor.anchor} onClose={() => setStatFor(null)} width={200}>
+            <div className="bt-panel">
+              <h4>列统计 · {field.name}</h4>
+              <button type="button" className={"bt-menu-item" + (current ? "" : " is-selected")} disabled={readOnly}
+                onClick={() => { setColumnStat(field.id, null); setStatFor(null); }}><span className="bt-menu-label">无统计</span>{!current && <Check size={14} />}</button>
+              {statsForField(field).map((stat) => (
+                <button key={stat} type="button" className={"bt-menu-item" + (current === stat ? " is-selected" : "")} disabled={readOnly}
+                  onClick={() => { setColumnStat(field.id, stat); setStatFor(null); }}>
+                  <span className="bt-menu-label">{BITABLE_STAT_LABEL[stat]}</span>{current === stat && <Check size={14} />}
+                </button>
+              ))}
+            </div>
+          </Popover>
+        );
+      })()}
 
       <Popover open={Boolean(viewMenu)} anchor={viewMenu?.anchor ?? null} onClose={() => setViewMenu(null)} width={180}>
         <div className="bt-panel">
