@@ -4,6 +4,7 @@
  */
 import { DEFAULT_MAX_ATTACHMENT_BYTES, MAX_ATTACHMENT_MB_OPTIONS } from "../core/storeLimits.js";
 import { DEFAULT_THEME_ID, isLakeThemeId, type LakeThemeId } from "./themes";
+import { writeLocalStorage } from "./localStorageSafe";
 
 /** 主题 id（主题即数据：见 src/lib/themes.ts；本轮 浅/深/暖色纸质 三套） */
 export type ThemeMode = LakeThemeId;
@@ -52,15 +53,11 @@ export interface SettingsStorage {
 function localStorageStorage(): SettingsStorage {
   return {
     getItem: (key) => localStorage.getItem(key),
-    setItem: (key, value) => localStorage.setItem(key, value),
+    setItem: (key, value) => { writeLocalStorage(key, value); },
   };
 }
 
-let storage: SettingsStorage = localStorageStorage();
-
-export function setSettingsStorage(next: SettingsStorage): void {
-  storage = next;
-}
+const storage: SettingsStorage = localStorageStorage();
 /** 设置面板提供的上限档位；不在档位内的历史/异常值归一到默认档。 */
 const MAX_OPEN_TAB_OPTIONS = [0, 4, 6, 8, 12, 16, 24];
 

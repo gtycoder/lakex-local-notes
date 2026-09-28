@@ -42,7 +42,6 @@ export function hideToast(id: string): void {
   emit();
 }
 
-export function listToasts(): ToastItem[] { return [...items.values()]; }
 
 export function subscribeToasts(listener: () => void): () => void {
   listeners.add(listener);

@@ -23,7 +23,7 @@ import { sha256Sync } from "./sha256Sync.js";
 import { parseLakeManifest, objectKey, MANIFEST_VERSION } from "./syncUtils.js";
 import { extractAssetRefs } from "./assetNaming.js";
 import { isSafePathSegment } from "./storeUtils.js";
-import { AssetMissingError, decodeText, downloadNoteAssets, recordDeclaredAssetsOnly, runPool, scanLocalAssets } from "./syncAssets.js";
+import { AssetMissingError, decodeText, downloadNoteAssets, recordDeclaredAssetsOnly, runAssetPool, scanLocalAssets } from "./syncAssets.js";
 import { HISTORY_SNAPSHOT_PROTECT_DAYS, type LocalNoteRow, type S3Store, type SyncConfig, type SyncDbPort, type SyncNowOptions, type SyncReport } from "./syncEngineTypes.js";
 
 export type { LocalNoteRow, S3Store, SyncConfig, SyncDbPort, SyncNowOptions, SyncReport } from "./syncEngineTypes.js";
@@ -301,7 +301,7 @@ export async function syncNow(cfg: SyncConfig, s3: S3Store, db: SyncDbPort, opts
         const local = localById.get(rn.id) ?? null;
         if (local === null || (local.contentHash ?? null) !== rn.contentHash) need.push(rn);
       }
-      await runPool(need, DOWNLOAD_CONCURRENCY, async (rn) => {
+      await runAssetPool(need, DOWNLOAD_CONCURRENCY, async (rn) => {
         const key = contentKey(rn.id, rn.contentHash);
         if (prefetched.has(key) || prefetchBudget <= 0) return;
         const bytes = await s3.getObject(`${cfg.prefix}/${objectKey(rn.id, rn.contentHash)}`, { maxBytes: MAX_REMOTE_NOTE_BYTES });
@@ -710,7 +710,7 @@ export async function syncNow(cfg: SyncConfig, s3: S3Store, db: SyncDbPort, opts
 
   // P3-4：跨笔记并发解析并回填 entry.assets（各任务只改写自己那份已入队 entry，顺序无关；失败沿用原「吞并+日志、不影响正文发布」语义）。
   if (assetTasks.length > 0) {
-    await runPool(assetTasks, NOTE_UPLOAD_CONCURRENCY, async (t) => {
+    await runAssetPool(assetTasks, NOTE_UPLOAD_CONCURRENCY, async (t) => {
       try {
         t.entry.assets = await resolveUploadAssets(t.noteId, t.content, t.rnAssets);
       } catch (e) {
@@ -734,7 +734,7 @@ export async function syncNow(cfg: SyncConfig, s3: S3Store, db: SyncDbPort, opts
     // 避免某条失败时其它并发车道的拒绝变成 unhandledRejection；且任一上传失败必须让整轮同步报错、
     // 不得继续发布 manifest 引用未落盘正文（与旧串行首错即止等价：失败即中止，manifest 不写）。
     const contentErrors: Array<unknown> = new Array(uploadQueue.length).fill(null);
-    await runPool(uploadQueue, UPLOAD_CONCURRENCY, async (item, i) => {
+    await runAssetPool(uploadQueue, UPLOAD_CONCURRENCY, async (item, i) => {
       try {
         // 占位符墓碑（tombstone && content 为空，purge 已物理删除内容）：不重算 hash（保留占位符 id）、
         // 不传空对象（否则 contentHash 被覆盖成 sha256(空串) + 空对象残留——迁移回归），仅写 deleted 标记。

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { mimeTypeForFilename, readImageDimensions, sniffImageFormat } from "../src/core/imageUtils.js";
+import { readImageDimensions, sniffImageFormat } from "../src/core/imageUtils.js";
 
 describe("imageUtils", () => {
   it("sniffs supported image magic bytes", () => {
@@ -9,12 +9,6 @@ describe("imageUtils", () => {
     expect(sniffImageFormat(Buffer.from("RIFF1234WEBP", "ascii"))).toEqual({ mimeType: "image/webp", extension: "webp" });
     expect(sniffImageFormat(Buffer.from("xxxxftypavif", "ascii"))).toEqual({ mimeType: "image/avif", extension: "avif" });
     expect(sniffImageFormat(Buffer.from("not-an-image"))).toBeNull();
-  });
-
-  it("maps file extensions without trusting unknown extensions", () => {
-    expect(mimeTypeForFilename("photo.JPEG")).toBe("image/jpeg");
-    expect(mimeTypeForFilename("diagram.svg")).toBe("image/svg+xml");
-    expect(mimeTypeForFilename("archive.bin")).toBe("application/octet-stream");
   });
 
   it("reads PNG and GIF dimensions without decoding the image", () => {

@@ -74,11 +74,11 @@ export function attachImagePreviewClick(host: HTMLElement): () => void {
     if (!target || typeof target.closest !== "function") return;
     const img = target.closest("img.ne-image") as HTMLImageElement | null;
     if (!img || !host.contains(img)) return;
-    const images = Array.from(host.querySelectorAll<HTMLImageElement>("img.ne-image"))
-      .map((el) => ({ src: el.currentSrc || el.src }));
-    if (images.length === 0) return;
-    const index = images.findIndex((im) => im.src === img.src);
-    openImagePreview(images, index < 0 ? 0 : index);
+    const elements = Array.from(host.querySelectorAll<HTMLImageElement>("img.ne-image"));
+    if (elements.length === 0) return;
+    // 用**元素**定位下标（不是 src 比对）：同一张图在文中出现两次时，src 相等会让双击第二张跳到第一张
+    const index = elements.indexOf(img);
+    openImagePreview(elements.map((el) => ({ src: el.currentSrc || el.src })), index < 0 ? 0 : index);
   };
   host.addEventListener("dblclick", onDoubleClick, true);
   return () => host.removeEventListener("dblclick", onDoubleClick, true);

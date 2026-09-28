@@ -110,9 +110,6 @@ export const VIDEO_EXTENSIONS = [
  */
 const LAKE_IMAGE_INSERT_EXTS = new Set(["png", "jpg", "jpeg", "gif", "webp", "bmp", "svg", "tiff", "tif"]);
 
-/** 媒体附件扩展名（音频/视频——应用内嵌播放；非媒体走系统打开）。桌面/移动端共用。 */
-const MEDIA_EXT_SET = new Set<string>([...AUDIO_EXTENSIONS, ...VIDEO_EXTENSIONS]);
-
 /** 附件/插入路径的三类原生卡类型：音频卡 / 视频卡 / 图片卡。 */
 export type MediaKind = "audio" | "video" | "image";
 

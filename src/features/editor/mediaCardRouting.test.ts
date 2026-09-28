@@ -12,11 +12,6 @@ interface FakeRenderer {
   execCommand: ReturnType<typeof vi.fn>;
 }
 
-interface FakeEditor {
-  editing: FakeEditing;
-  renderer: FakeRenderer;
-}
-
 /** 构造 mock 编辑器；返回 { editor, fire, dispatchLog }。 */
 function makeEditor() {
   const editing: FakeEditing = { on: vi.fn(), off: vi.fn() };

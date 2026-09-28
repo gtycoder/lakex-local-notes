@@ -2,7 +2,7 @@
  * 移动端大纲面板（对齐原型 fab-outline）：读 Lake TOC（kernel.getDocExtraContent().toc）
  * → 标题列表（按 depth 缩进）→ 点击跳转（headingUnfold + scrollByNodeId）。
  */
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { X, ChevronLeft } from "lucide-react";
 import { lakeBridge, resolveScrollNode, type LakeEditorInstance } from "../../features/editor/lakeRuntime";
 import { useSwipeToClose } from "../ui/useSwipeToClose";

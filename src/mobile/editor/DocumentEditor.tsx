@@ -13,7 +13,7 @@ import { OutlineSheet } from "./OutlineSheet";
 import { DocListSheet, type DocListItem } from "./DocListSheet";
 import { lakeBridge } from "../../features/editor/lakeRuntime";
 import { loadSettings } from "../../lib/settings";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { LakeEditor } from "../../features/editor/LakeEditor";
 import type { LakeEditorInstance, LakeEditorPrefs } from "../../features/editor/lakeRuntime";
 import type { AttachmentPreviewItem } from "../../features/attachment/attachmentPreviewController";
@@ -42,10 +42,8 @@ function plainFromEditor(editor: unknown): string | undefined {
 export interface DocumentEditorProps {
   note: POCNote;
   content: string;
-  title: string;
   editing: boolean;
   onContentChange: (content: string, plain?: string) => void;
-  onToggleEdit: () => void;
   /** 打开/切换到另一个文档（工作区加 tab；单文档页接管） */
   onOpenDocument?: (id: string) => void;
   /** 当前笔记本文档列表（快捷切换目录用） */
@@ -64,7 +62,7 @@ export interface DocumentEditorProps {
 
 export function DocumentEditor(props: DocumentEditorProps) {
   const {
-    note, content, title, editing, onContentChange, onToggleEdit, onOpenDocument, documents,
+    note, content, editing, onContentChange, onOpenDocument, documents,
     outlineOpen: outlineOpenProp, onToggleOutline, docListOpen: docListOpenProp, onToggleDocList,
     hidePanels, onEditorInstance,
   } = props;
@@ -128,7 +126,7 @@ export function DocumentEditor(props: DocumentEditorProps) {
           mode={editing ? "editor" : "viewer"}
           tocEnabled={false}
           onChange={(c) => onContentChange(c, plainFromEditor(editorRef.current))}
-          onEditorReady={(noteId, editor) => {
+          onEditorReady={(_noteId, editor) => {
             (window as unknown as Record<string, unknown>).__mobileEditor = editor;
             editorRef.current = editor;
             setEditorInstance(editor);
@@ -141,7 +139,6 @@ export function DocumentEditor(props: DocumentEditorProps) {
       <EditorDock
         editor={editorInstance}
         editing={editing}
-        onToggleEdit={onToggleEdit}
         onInsertImage={() => insertFileViaInput("image/*")}
         onInsertCamera={() => insertFileViaInput("image/*", "environment")}
         onInsertAttachment={() => insertFileViaInput("")}

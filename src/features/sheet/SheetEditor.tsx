@@ -20,6 +20,7 @@
  *   插入/替换走自定义工具栏项；`Delete` 删除、粘贴图片插入；冻结区内的图补 `translate` 偏移。
  */
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { reportNativeActionError } from "../../lib/nativeErrors";
 import { Workbook, type WorkbookInstance } from "@fortune-sheet/react";
 import "@fortune-sheet/react/dist/index.css";
 import "./sheetEditor.css";
@@ -817,7 +818,7 @@ export function SheetEditor({ noteId, content, visible, readOnly, onChange, show
     if (typeof disk !== "string" || !disk) return;
     if (/^https?:/i.test(disk)) { window.open(disk, "_blank", "noopener"); return; }
     if (disk.startsWith("data:")) return;
-    void native.saveAssetAs(noteId, disk, disk);
+    void native.saveAssetAs(noteId, disk, disk).catch((error) => reportNativeActionError("下载表格图片", error));
   }, [cellImageById, noteId]);
 
   /** 删除单元格图片（按 id；删完收起工具条）。 */

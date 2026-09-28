@@ -3,7 +3,11 @@
   position: fixed;
   inset: 0;
   z-index: 1000;
-  background: var(--lake-media-surface);
+  /* 表面与图片 Lightbox 完全同源（260928 用户要求统一）：图片/视频/音频都用「图片那套白底」，
+     不再让音视频走独立暗底 —— 即 .image-lightbox 的同一套：淡遮罩 + backdrop 背景模糊。 */
+  background: var(--lake-media-scrim);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
   display: flex;
   flex-direction: column;
   animation: image-lightbox-fade .16s ease;
@@ -13,10 +17,15 @@
   align-items: center;
   gap: 8px;
   padding: 10px 16px;
-  background: var(--lake-media-toolbar);
-  color: var(--lake-media-on);
+  background: var(--lake-bg-panel);
+  color: var(--lake-text-1);
+  border-bottom: 1px solid var(--lake-border-1);
   flex: 0 0 auto;
 }
+/* macOS 红绿灯让位：预览铺满整窗（inset:0），而系统按钮是画在网页之上的 ⇒ 默认内距会让标题钻到
+   按钮底下（260928 用户报「文件名盖到了红绿灯」）。与 .platform-mac .tab-bar 用同一个内距值。
+   预览是 portal 到 body 的，拿不到壳上的 .platform-mac，由组件按平台加 .is-mac。 */
+.attachment-preview.is-mac .attachment-preview__toolbar { padding-left: 82px; }
 .attachment-preview__title {
   display: inline-flex;
   align-items: center;
@@ -28,7 +37,7 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.attachment-preview__title small { color: var(--lake-media-on-dim); font-weight: 400; margin-left: 8px; }
+.attachment-preview__title small { color: var(--lake-text-3); font-weight: 400; margin-left: 8px; }
 .attachment-preview__spacer { flex: 1; }
 .attachment-preview__btn {
   display: inline-flex;
@@ -37,13 +46,13 @@
   border: none;
   border-radius: 6px;
   padding: 7px 12px;
-  background: var(--lake-media-btn);
-  color: var(--lake-media-on);
+  background: var(--lake-bg-block);
+  color: var(--lake-text-1);
   font-size: 13px;
   cursor: pointer;
   white-space: nowrap;
 }
-.attachment-preview__btn:hover { background: var(--lake-media-btn-hover); }
+.attachment-preview__btn:hover { background: var(--lake-bg-hover); }
 .attachment-preview__btn--primary { background: var(--lake-accent); color: var(--lake-text-on-accent); }
 .attachment-preview__btn--primary:hover { background: var(--lake-accent-ink-hover); }
 .attachment-preview__close { margin-left: 4px; }
@@ -65,7 +74,9 @@
 .attachment-preview__video {
   max-width: 96vw;
   max-height: 92vh;
-  background: var(--lake-media-video);
+  /* 播放器底衬也走浅色（260928 统一背景）：未起播/加载中不再是一大块黑，
+     视频本身的画面（含片源自带的黑边）不受影响。 */
+  background: var(--lake-bg-block);
   border-radius: 4px;
 }
 .attachment-preview__media { display: flex; flex-direction: column; align-items: center; gap: 14px; }
@@ -75,15 +86,15 @@
   flex-direction: column;
   align-items: center;
   gap: 12px;
-  color: var(--lake-media-on-soft);
+  color: var(--lake-text-2);
   max-width: 80vw;
 }
 .attachment-preview__fallback-name {
   font-size: 15px;
-  color: var(--lake-media-on);
+  color: var(--lake-text-1);
   max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.attachment-preview__hint { color: var(--lake-media-on-faint); font-size: 13px; margin: 0; }
+.attachment-preview__hint { color: var(--lake-text-3); font-size: 13px; margin: 0; }

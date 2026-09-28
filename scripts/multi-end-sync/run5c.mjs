@@ -67,7 +67,7 @@ for (const id of IDS) {
   check(id + ' reorder relative', order.indexOf(n3.id) < order.indexOf(n1.id) && order.indexOf(n1.id) < order.indexOf(n2.id), 'n1=' + order.indexOf(n1.id) + ' n2=' + order.indexOf(n2.id));
 }
 
-console.log('== F3: move note into folder + note icon + duplicate ==');
+console.log('== F3: move note into folder + note icon ==');
 const fnote = await ev('D1', 'window.lakeNative.createNoteIn(' + JSON.stringify(nbA.id) + ', "f-note-' + sfx + '")');
 await ev('D1', 'window.lakeNative.setNodeIcon(' + JSON.stringify(fnote.id) + ', "\u2B50")');
 await syncAll('D1');
@@ -80,10 +80,6 @@ for (const id of IDS) {
   else { const n = pullMobile(e).find(function (x) { return x.id === fnote.id; }); parent = n ? n.parentId : null; }
   check(id + ' note moved to group', parent === grp.id, 'parent=' + parent);
 }
-const dup = await ev('D1', 'window.lakeNative.duplicateNote(' + JSON.stringify(fnote.id) + ')');
-await syncAll('D1');
-for (const id of IDS) { const e = find(id); const exists = e.type === 'desktop' ? (await tree(id)).some(function (x) { return x.id === dup.id; }) : pullMobile(e).some(function (x) { return x.id === dup.id; }); check(id + ' duplicate propagated', exists); }
-
 console.log('== F4: folder trash / restore / purge ==');
 const nbX = await ev('D1', 'window.lakeNative.createNotebook("f-x-' + sfx + '")');
 await syncAll('D1');

@@ -17,8 +17,6 @@
 /** 起始模板（与卡片 preset 同一套取值）。`drawing` = 空白画布。 */
 export type BoardPreset = "drawing" | "flowchart" | "uml" | "mindmap";
 
-export const BOARD_PRESETS: readonly BoardPreset[] = ["drawing", "flowchart", "uml", "mindmap"] as const;
-
 /** 视口 = Plait 的 `{ x, y, zoom }`（仅视图状态，不影响内容）。 */
 export interface BoardViewport {
   x: number;

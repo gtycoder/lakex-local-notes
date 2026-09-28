@@ -1,4 +1,5 @@
 import { sniffImageFormat } from "./imageFormat";
+import { assetToken, LOCAL_ASSET_PREFIX } from "../../lib/assetPort";
 
 const BLOCK_TAGS = new Set(["P", "DIV", "H1", "H2", "H3", "H4", "H5", "H6", "UL", "OL", "LI", "BLOCKQUOTE", "PRE", "TABLE", "THEAD", "TBODY", "TR", "TH", "TD"]);
 const INLINE_TAGS = new Set(["SPAN", "STRONG", "B", "EM", "I", "U", "S", "DEL", "CODE", "A", "BR"]);
@@ -146,8 +147,6 @@ function copySafeAttributes(source: Element, target: HTMLElement): void {
   const style = source.getAttribute("style");
   if (style) target.setAttribute("style", style);
 }
-
-import { assetToken, LOCAL_ASSET_PREFIX } from "../../lib/assetPort";
 
 /** 组装资产服务器「取 data URL」请求。URL 已带 ?token= 时不能再拼第二个 ?（会把 base64 参数吞掉、返回二进制→裂图）。 */
 export function buildAssetDataUrlRequest(url: string, token: string): string | null {

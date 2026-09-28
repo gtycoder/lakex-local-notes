@@ -21,7 +21,7 @@ import { decideUpload } from "./decideUpload.js";
 import { reconcileQuickNote } from "./quickNoteReconcile.js";
 import { mimeTypeFor } from "./syncUtils.js";
 import type { ManifestItem, QuickNotesManifest } from "./manifestTypes.js";
-import { runPool, ASSET_TRANSFER_CONCURRENCY } from "./asyncPool.js";
+import { runAsyncPool, ASSET_TRANSFER_CONCURRENCY } from "./asyncPool.js";
 import type { S3Store, SyncConfig } from "./syncEngine.js";
 
 const MANIFEST_VERSION = 1;
@@ -174,7 +174,7 @@ async function downloadAssets(
   onProgress?: (assetCurrent: number, assetTotal: number) => void,
 ): Promise<Array<{ filename: string; bytes: Uint8Array }>> {
   let done = 0;
-  const assets = await runPool(item.assets, ASSET_TRANSFER_CONCURRENCY, async (asset) => {
+  const assets = await runAsyncPool(item.assets, ASSET_TRANSFER_CONCURRENCY, async (asset) => {
     onProgress?.(++done, item.assets.length);
     const bytes = await s3.getObject(assetKey(item.id, asset.filename));
     if (!bytes) throw new Error(`小记清单引用的图片不存在: ${item.id}/${asset.filename}`);
@@ -387,7 +387,7 @@ export async function syncQuickNotesViaEngine(
       }
     }
     let uploadDone = 0;
-    await runPool(pendingAssets, ASSET_TRANSFER_CONCURRENCY, async (pending) => {
+    await runAsyncPool(pendingAssets, ASSET_TRANSFER_CONCURRENCY, async (pending) => {
       report({ phase: "quick-notes", current: index + 1, total: localItems.length, assetCurrent: ++uploadDone, assetTotal: pendingAssets.length, message: "上传本地小记" });
       await s3.putObject(assetKey(item.id, pending.filename), pending.bytes);
     });

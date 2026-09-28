@@ -9,6 +9,7 @@ import {
   isImageExtension,
   isMediaFilename,
   mediaKindOfFilename,
+  mimeTypeForFilename,
 } from "./assetNaming.js";
 
 describe("assetNaming", () => {
@@ -121,6 +122,13 @@ describe("assetNaming", () => {
     expect(mediaKindOfFilename("archive.zip")).toBeNull();
     expect(mediaKindOfFilename("no-extension")).toBeNull();
     expect(mediaKindOfFilename("")).toBeNull();
+  });
+
+  it("按扩展名给 MIME，未知扩展名不瞎猜（共用单一事实源的唯一副本）", () => {
+    expect(mimeTypeForFilename("photo.JPEG")).toBe("image/jpeg");
+    expect(mimeTypeForFilename("diagram.svg")).toBe("image/svg+xml");
+    expect(mimeTypeForFilename("报告.pdf")).toBe("application/pdf");
+    expect(mimeTypeForFilename("archive.bin")).toBe("application/octet-stream");
   });
 
   it("keeps isMediaFilename consistent with mediaKindOfFilename", () => {

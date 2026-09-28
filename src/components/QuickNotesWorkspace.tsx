@@ -1,10 +1,11 @@
 import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
-import { ArrowUpDown, Check, ChevronDown, FilePlus, Feather, LayoutList, LoaderCircle, MoreHorizontal, Pencil, Plus, RotateCcw, StickyNote, Tag, Trash, X } from "lucide-react";
+import { ArrowUpDown, Check, FilePlus, Feather, LayoutList, LoaderCircle, MoreHorizontal, Pencil, Plus, RotateCcw, StickyNote, Trash, X } from "lucide-react";
 import { native } from "../lib/native";
+import { writeLocalStorage } from "../lib/localStorageSafe";
 import { createRequestVersion } from "../core/requestVersion";
 import { isQuickNoteImageMime } from "../core/quickNoteModel";
 import type { NoteDocument, QuickNoteDocument, QuickNoteImage, ResourceUploadOutput, TreeNode } from "../lib/types";
-import { getNativeErrorMessage } from "../lib/nativeErrors";
+import { getNativeErrorMessage, reportNativeActionError } from "../lib/nativeErrors";
 import { ImageLightbox } from "../features/editor/ImageLightbox";
 import { uploadLakeResource } from "../features/editor/resourceUpload";
 import { QuickNoteEditor, type QuickNoteEditorApi } from "../features/quickNotes/QuickNoteEditor";
@@ -109,7 +110,7 @@ const readSortPref = (): QuickNoteSort => {
   try { return localStorage.getItem(SORT_KEY) === "created" ? "created" : "updated"; } catch { return "updated"; }
 };
 const writeSortPref = (value: QuickNoteSort): void => {
-  try { localStorage.setItem(SORT_KEY, value); } catch { /* 隐私模式忽略 */ }
+  writeLocalStorage(SORT_KEY, value);
 };
 
 /**
@@ -128,7 +129,7 @@ const readPins = (): Set<string> => {
   try { return new Set(JSON.parse(localStorage.getItem(PIN_KEY) ?? "[]") as string[]); } catch { return new Set(); }
 };
 const writePins = (value: Set<string>): void => {
-  try { localStorage.setItem(PIN_KEY, JSON.stringify([...value])); } catch { /* 隐私模式忽略 */ }
+  writeLocalStorage(PIN_KEY, JSON.stringify([...value]));
 };
 
 type QuickNotesView = "note" | "list";
@@ -137,7 +138,7 @@ const readViewPref = (): QuickNotesView => {
   try { return localStorage.getItem(VIEW_KEY) === "list" ? "list" : "note"; } catch { return "note"; }
 };
 const writeViewPref = (value: QuickNotesView): void => {
-  try { localStorage.setItem(VIEW_KEY, value); } catch { /* 隐私模式忽略 */ }
+  writeLocalStorage(VIEW_KEY, value);
 };
 
 export const QuickNotesWorkspace = forwardRef<QuickNotesWorkspaceHandle, QuickNotesWorkspaceProps>(function QuickNotesWorkspace(props, ref) {
@@ -188,7 +189,6 @@ export const QuickNotesWorkspace = forwardRef<QuickNotesWorkspaceHandle, QuickNo
   // 撤销窗口内「尚未落盘删除」的小记 id：外部刷新（如同步完成）不得让它重新出现。
   const pendingDeleteIdRef = useRef<string | null>(null);
 
-  const activeDraft = editingDraft ?? createDraft;
   const activeIsEditing = editingDraft !== null;
   // 「有未保存改动」= 新建草稿有内容，或编辑中的草稿与载入基线不同（不再拿"有没有内容"当脏判据）
   const dirty = isDraftDirty(createDraft) || (editingDraft !== null && isDraftDirty(editingDraft));
@@ -247,14 +247,6 @@ export const QuickNotesWorkspace = forwardRef<QuickNotesWorkspaceHandle, QuickNo
   const notebooks = useMemo(() => notebookNodes
     .filter((node) => node.nodeType === "notebook")
     .sort((a, b) => a.sortOrder - b.sortOrder), [notebookNodes]);
-
-  async function discardAllDrafts() {
-    const draftIds = [createDraft.id, editingDraft?.id].filter((value): value is string => !!value);
-    await Promise.all(draftIds.map((draftId) => native.discardQuickNoteDraft(draftId).catch(() => undefined)));
-    setCreateDraft(newDraft());
-    setEditingId(null);
-    setEditingDraft(null);
-  }
 
   /** 把刚落入 staging 的图片追加到对应草稿的图片清单（保存时据此 promote 文件）。 */
   function appendStagedImage(draftId: string, image: QuickNoteImage) {
@@ -418,7 +410,7 @@ export const QuickNotesWorkspace = forwardRef<QuickNotesWorkspaceHandle, QuickNo
    */
   async function cancelDraft(draft: DraftState) {
     if (!hasDraftContent(draft) || window.confirm("放弃这次未保存的小记？")) {
-      await native.discardQuickNoteDraft(draft.id).catch(() => undefined);
+      await native.discardQuickNoteDraft(draft.id).catch((error) => reportNativeActionError("丢弃小记草稿", error));
       stagedAssetsRef.current.delete(draft.id);
       if (editingDraft?.id === draft.id) {
         const item = items.find((candidate) => candidate.id === editingId);
@@ -706,14 +698,10 @@ export const QuickNotesWorkspace = forwardRef<QuickNotesWorkspaceHandle, QuickNo
     {viewHint && <div className="quick-notes-hint" role="status">{viewHint}</div>}
     {error && <div className="quick-notes-error"><span>{error}</span><button onClick={() => setError(null)} aria-label="关闭错误"><X size={15} /></button></div>}
     {viewMode === "list" ? <div className="quick-notes-split quick-notes-split--list">
-      {/* 列表视图（对齐云端 https://www.yuque.com/dashboard/notes）：左＝索引列表（标签行 + 批量条 + 行⋯菜单），
+      {/* 列表视图（对齐云端 https://www.yuque.com/dashboard/notes）：左＝索引列表（批量条 + 行⋯菜单），
           右＝编辑器。功能都复用分块视图里已有的动作（编辑/转为正式笔记/删除/多选），这里只是把 UI 补上。 */}
       <div className="quick-notes-index-wrap">
-        {/* 标签行（对齐云端）：标签暂时固定「全部」，分组功能后期再说 */}
         <div className="quick-notes-index-tools">
-          <button className="quick-notes-filter" title="标签（暂固定为全部，分组功能后期做）" onClick={() => setViewHint("标签：全部（分组功能后期做）")}>
-            <Tag size={13} />全部<ChevronDown size={13} />
-          </button>
           <span className="quick-notes-tools-spacer" />
           <span className="quick-notes-count">{items.length} 条</span>
           <div className="quick-notes-sort-wrap">

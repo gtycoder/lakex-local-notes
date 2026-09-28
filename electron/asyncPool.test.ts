@@ -1,15 +1,15 @@
 import { describe, expect, it } from "vitest";
-import { runPool } from "../src/core/asyncPool.js";
+import { runAsyncPool } from "../src/core/asyncPool.js";
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
-describe("runPool", () => {
+describe("runAsyncPool", () => {
   it("空数组直接返回", async () => {
-    await expect(runPool([], 4, async () => 1)).resolves.toEqual([]);
+    await expect(runAsyncPool([], 4, async () => 1)).resolves.toEqual([]);
   });
 
   it("保持输入顺序返回结果", async () => {
-    const out = await runPool([1, 2, 3, 4], 2, async (n) => {
+    const out = await runAsyncPool([1, 2, 3, 4], 2, async (n) => {
       await sleep(10 - n);
       return n * 10;
     });
@@ -19,7 +19,7 @@ describe("runPool", () => {
   it("并发数不超过上限", async () => {
     let active = 0;
     let peak = 0;
-    await runPool(Array.from({ length: 8 }, (_, i) => i), 3, async () => {
+    await runAsyncPool(Array.from({ length: 8 }, (_, i) => i), 3, async () => {
       active += 1;
       peak = Math.max(peak, active);
       await sleep(20);
@@ -31,7 +31,7 @@ describe("runPool", () => {
   it("任务失败立即抛错，且不再领取新任务", async () => {
     const started: number[] = [];
     await expect(
-      runPool([0, 1, 2, 3, 4], 2, async (n) => {
+      runAsyncPool([0, 1, 2, 3, 4], 2, async (n) => {
         started.push(n);
         if (n === 1) throw new Error("boom");
         await sleep(10);

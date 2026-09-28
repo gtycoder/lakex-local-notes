@@ -7,10 +7,12 @@
  *   ③ 权威引用集 keep（Lake 清单链 + 本设备历史 refs + 小记清单，与实际执行器同一函数）
  * 产出「总数 / 已过窗口 / 窗口内 / 云端未引用 / 时间戳未知」的可解释统计。
  *
- * 为什么单独成模块：需要同时用 sync.ts（Lake）与 quickNotesSync.ts（小记）的引用集，
- * 而 quickNotesSync 本身 import sync.ts —— 放进 sync.ts 会形成循环依赖。
+ * 为什么单独成模块：需要同时用 s3Maintenance.ts（Lake）与 quickNotesSync.ts（小记）的引用集；
+ * 放在同步 Controller 里会制造循环依赖。
  */
-import { ObjectStore, buildLakeGcKeepSet, parseLakeManifest, validateS3Settings } from "./sync.js";
+import { ObjectStore } from "./s3Store.js";
+import { buildLakeGcKeepSet } from "./s3Maintenance.js";
+import { parseLakeManifest, validateS3Settings } from "../src/core/syncUtils.js";
 import { buildQuickNotesKeepSet, QUICK_NOTES_ROOT } from "./quickNotesSync.js";
 import { computeGcDiagnostics, type GcCloudObject, type GcDiagnostics } from "../src/core/gcDiagnostics.js";
 import { MAX_MANIFEST_BYTES } from "../src/core/syncUtils.js";

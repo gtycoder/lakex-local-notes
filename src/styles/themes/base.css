@@ -106,6 +106,12 @@
   --lake-media-danger: #ff9f9f;
   --lake-media-video: #000;
   --lake-media-embed: #fff;
+  /* 内核（Lake）品牌绿 —— 内核**固定工具栏最左边的「+」（插入特色卡片）**的原始配色。
+   * 出处：vendor 内核 bundle 的 editor.color.theme.light = #00B96B（dark 为 #2ED790），
+   * 内核规则 src/assets/lakex-doc.css 把它涂在 .ne-icon-t-insert-card 上。
+   * 基础值 = Lake 浅色 schema；dark.css 按 Lake 深色 schema 覆写为 #2ED790。
+   * 这是 Lake 的亮眼标志、也是"正文由 lakex 内核渲染"的可见证据（260928 用户要求，别改回 --lake-accent）。 */
+  --lake-kernel-brand-green: #00b96b;
   --lake-tooltip-bg: #3f4868;
   --lake-tooltip-fg: #f8f9ff;
   --lake-conflict-border: rgba(211, 160, 68, .38);

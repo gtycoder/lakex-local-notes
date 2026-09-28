@@ -5,7 +5,7 @@
 import { describe, expect, it } from "vitest";
 import {
   TRASH_NOTEBOOK_ID,
-  decidePurge, decideFolderPurge, decideLocalTombstone, decideMetaApply,
+  decidePurge, decideFolderPurge, decideLocalTombstone,
   decideTombstoneYield,
   buildUploadEntry, buildTombstoneEntry, computeBookkeeping, rowToLocalState, isGoneNote,
   type LocalNoteState,

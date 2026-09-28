@@ -62,6 +62,9 @@ export interface BitableField {
   options?: BitableFieldOption[];
   required?: boolean;
   defaultValue?: unknown;
+  /** 日期字段专用：新建记录时自动填「记录创建时间」，而不是写死的 defaultValue
+   *  （对齐云端「添加新记录的创建时间」）。 */
+  dateAutoFill?: boolean;
   relation?: BitableRelation;
   /** 表格视图默认列宽（视图可覆盖；v1 直接写字段上）。 */
   width?: number;
@@ -358,16 +361,18 @@ export function parseBitableBody(content: string | null | undefined): BitableDoc
 // ---- 值展示 / 搜索 ----
 
 /**
- * 附件单元格的值形状：`{ file, name }[]`（对齐 Lake 文件卡的 src/name 二元组）。
+ * 附件单元格的值形状：`{ file, name, size }[]`（对齐 Lake 文件卡的 src/name/size）。
  * - `file` = **磁盘名**：`note-assets/{noteId}/{file}` 的真实文件名。上传落盘时名字是生成的
  *   `{13位时间戳}_{8位hex}.{扩展名}`，只有它能定位/打开文件，也是同步声明与 GC 保护的依据。
  * - `name` = **展示名**：用户上传时的原始文件名（"鞠磊8.27音频.mp3"），只在界面展示。
+ * - `size` = **字节数**：与 Lake 卡片 data.size 同口径，用于预览标题展示。
  * 两者必须分开存：`uploadResource` 返回的 `filename` 是展示名、磁盘名只在 `url` 末段，
  * 早前把展示名当路径写进单元格 ⇒ 除图片外全部 404（打不开/播放器灰）。
  */
 export interface BitableAttachment {
   file: string;
   name: string;
+  size: number;
 }
 
 /** 解析附件单元格值：非法条目直接丢弃；`name` 缺省回落到 `file`。 */
@@ -376,9 +381,13 @@ export function bitableAttachments(value: unknown): BitableAttachment[] {
   const out: BitableAttachment[] = [];
   for (const item of value) {
     if (!item || typeof item !== "object") continue;
-    const { file, name } = item as Partial<BitableAttachment>;
+    const { file, name, size } = item as Partial<BitableAttachment>;
     if (typeof file !== "string" || !file) continue;
-    out.push({ file, name: typeof name === "string" && name ? name : file });
+    out.push({
+      file,
+      name: typeof name === "string" && name ? name : file,
+      size: typeof size === "number" && Number.isFinite(size) && size >= 0 ? size : 0,
+    });
   }
   return out;
 }
@@ -454,7 +463,7 @@ export function bitableDisplayValue(field: BitableField, value: unknown): string
     case "relation":
       return "";
     case "number":
-      return typeof value === "number" ? String(value) : String(value);
+      return String(value);
     default:
       return typeof value === "string" ? value : typeof value === "number" || typeof value === "boolean" ? String(value) : "";
   }
@@ -464,14 +473,29 @@ export function bitableDisplayValue(field: BitableField, value: unknown): string
  * 字段默认值集合（只收集 defaultValue 非空的字段）——新建记录 / 表单预填用。
  * 单选默认值存 option id；值形状与单元格一致。
  */
-export function defaultRecordValues(table: BitableTable): Record<string, unknown> {
+/** 新建记录的预填值。`at` = 建记录的 ISO 时间戳（「添加记录时间」型日期字段按它填当天）。 */
+export function defaultRecordValues(table: BitableTable, at: string = nowIso()): Record<string, unknown> {
   const values: Record<string, unknown> = {};
   for (const field of table.fields) {
     const value = field.defaultValue;
+    if (field.type === "date" && field.dateAutoFill) {
+      // 日期格存 `YYYY-MM-DD`（与 DatePicker 同域），按**本地**日期取（UTC 在东八区晚上会差一天）
+      values[field.id] = localDateString(at);
+      continue;
+    }
     if (value === undefined || value === null || value === "" || (Array.isArray(value) && value.length === 0)) continue;
     values[field.id] = value;
   }
   return values;
+}
+
+/** 时间戳 → **本地**日期 `YYYY-MM-DD`。
+ *  日期格的值域就是 `YYYY-MM-DD`（DatePicker 同口径），且必须走本地时区：
+ *  `toISOString().slice(0,10)` 在 UTC+8 的 00:00–08:00 会算成前一天。 */
+export function localDateString(at: string | number | Date): string {
+  const d = at instanceof Date ? at : new Date(at);
+  if (Number.isNaN(d.getTime())) return "";
+  return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
 }
 
 /** 记录标题 = 主字段（fields[0]）的展示值；未填 → 「未命名记录」（对齐云端）。 */

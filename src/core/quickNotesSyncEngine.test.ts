@@ -346,7 +346,6 @@ describe("quickNotesSyncEngine（共享引擎独立测试）", () => {
     await syncQuickNotesViaEngine(cfg, s3, a.port);
     // 模拟 purge：软删 → 硬删行（保留墓碑记录，内容已删）
     await a.port.deleteLocalQuickNote(id);
-    const deletedRec = a.deleted.get(id)!;
     a.notes.delete(id);
     await syncQuickNotesViaEngine(cfg, s3, a.port);
     const m = readManifest(s3);
@@ -374,7 +373,7 @@ describe("quickNotesSyncEngine（共享引擎独立测试）", () => {
   it("正文对象大小护栏：超过 64MB 的远端对象被拒", async () => {
     const p = createFakePort();
     const s3 = createFakeS3();
-    const id = createLocal(p, "x");
+    createLocal(p, "x");
     await syncQuickNotesViaEngine(cfg, s3, p.port);
     // 篡改云端对象为超大字节（伪造 hash 也改掉，让校验走到 getObject maxBytes 先拒）
     const fakeHash = "a".repeat(64);

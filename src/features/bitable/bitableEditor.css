@@ -145,13 +145,17 @@
 .bt-th-inner { position: relative; display: flex; align-items: center; justify-content: flex-start; padding: 0 8px; font-size: 14px; }
 .bt-th-inner > svg { flex: 0 0 auto; margin-right: 6px; color: var(--lake-text-3); }
 .bt-th-name { min-width: 0; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.bt-th-more { position: absolute; right: 4px; top: 50%; transform: translateY(-50%); display: none; align-items: center; justify-content: center; width: 24px; height: 24px; border: 0; background: transparent; border-radius: 4px; padding: 0; cursor: pointer; color: var(--lake-text-3); }
-.bt-th:hover .bt-th-more { display: inline-flex; }
+/* 显形用 visibility 而不是 display：它是绝对定位（不占标题宽度），但 display:none 时量出来的 rect 恒为
+   0×0 —— 拿它当浮层锚点就会开到左上角（260928 列菜单/文本颜色调色板都踩过）。 */
+.bt-th-more { position: absolute; right: 4px; top: 50%; transform: translateY(-50%); display: inline-flex; visibility: hidden; align-items: center; justify-content: center; width: 24px; height: 24px; border: 0; background: transparent; border-radius: 4px; padding: 0; cursor: pointer; color: var(--lake-text-3); }
+.bt-th:hover .bt-th-more { visibility: visible; }
 .bt-th-more:hover { background: var(--lake-bg-hover); }
 .bt-th.dragging { opacity: .5; }
 .bt-required { color: var(--lake-status-error); font-style: normal; }
 
-.bt-th-index, .bt-td-index { width: 80px; background: var(--lake-bg-block); }
+/* 序号列与其它单元格同底（260928 用户：原来铺 --lake-bg-block 灰，看着像另一个区块）；
+   行 hover / 行选中仍由 .bt-row:hover td / .bt-row.selected td 覆盖（特异性更高）。 */
+.bt-th-index, .bt-td-index { width: 80px; background: var(--lake-bg-panel); }
 .bt-th-index { text-align: center; }
 .bt-td-index { position: relative; display: flex; align-items: center; justify-content: center; padding: 0; height: var(--bt-row-h, 36px); }
 .bt-row-num { flex: 0 0 auto; text-align: center; border: 0; background: transparent; cursor: pointer; color: var(--lake-text-3); font: inherit; font-size: 13px; }
@@ -162,7 +166,9 @@
 .bt-row-check { flex: 0 0 auto; width: 14px; height: 14px; margin: 0; }
 .bt-row:hover .bt-row-num, .bt-row.selected .bt-row-num { opacity: 0; }
 .bt-row:hover .bt-row-handle, .bt-row.selected .bt-row-handle { opacity: 1; pointer-events: auto; }
-.bt-row:hover td { background: var(--lake-bg-hover); }
+/* 整行 hover 走**更浅一档**的面（--lake-bg-block）：按钮那种 --lake-bg-hover 铺满整行时太重
+   （260928 用户：行灰太深、浅一点）。选中行仍是 .bt-row.selected td 的 accent-tint，不受影响。 */
+.bt-row:hover td { background: var(--lake-bg-block); }
 .bt-row.selected td { background: var(--lake-accent-tint); }
 .bt-row.dragging td { opacity: .55; }
 .bt-row.drag-over .bt-td-index { box-shadow: inset 0 2px 0 0 var(--lake-accent); }
@@ -177,10 +183,12 @@
 .bt-td .bt-cell-unknown,
 .bt-td .bt-cell-relation,
 .bt-td .bt-cell-muted { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-/* 行内纵向预算：行高 36 − 格子上下留白 4 = 32；编辑框高度必须 ≤32，否则内容再高也会把行撑开
-   （实测 34px 编辑框 + 8px 格子留白 = 43px 行高）。 */
-.bt-td .bt-attachment-cell { padding: 2px 6px; }
-.bt-td .bt-attachment-editor { height: 28px; min-height: 0; padding: 0 6px; }
+/* 附件格**铺满整个单元格**（260928 用户报「格子有大灰边框、只有中间白区生效」）：
+   行高只由 --bt-row-h 决定，格子高度取 100% ⇒ 永远撑不开行；点击/粘贴/拖拽的**有效区域
+   = 整个格子**（内距只是视觉留白，空白处照样命中 .bt-attachment-cell），不再只是中间那条白框。
+   旧的「行内编辑框」自带 border + 白底 + 圆角，高行高下四周露出行底色，看起来就是一整圈灰边框。 */
+.bt-td .bt-attachment-cell { padding: 0 8px; height: 100%; }
+.bt-td .bt-attachment-editor { height: 100%; min-height: 0; padding: 0 8px; }
 .bt-td-empty { min-width: 40px; }
 .bt-add-row td { padding: 4px; }
 .bt-add-record-row { display: inline-flex; align-items: center; gap: 4px; border: 0; background: transparent; cursor: pointer; color: var(--lake-accent); font: inherit; font-size: 12px; padding: 4px 8px; }
@@ -208,7 +216,9 @@
 
 .bt-attachment-cell { position: relative; display: flex; flex-wrap: wrap; align-items: center; gap: 4px; padding: 4px 6px; }
 .bt-attachment-chip { position: relative; display: inline-flex; align-items: center; }
-.bt-attachment-chip img { width: 26px; height: 26px; object-fit: cover; border-radius: 4px; cursor: zoom-in; }
+/* 光标统一为手型（260928 用户报：图片是放大镜、其他文件是手型，看着不一致）——缩略图点开=预览，
+   与文件名 chip 同一动作，手势必须一致。 */
+.bt-attachment-chip img { width: 26px; height: 26px; object-fit: cover; border-radius: 4px; cursor: pointer; }
 .bt-attachment-name { max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; border: 0; background: var(--lake-bg-hover); border-radius: 4px; padding: 2px 6px; font: inherit; font-size: 12px; cursor: pointer; color: inherit; }
 .bt-hidden-input { display: none; }
 
@@ -278,6 +288,8 @@
 .bt-dialog { width: 420px; max-width: 90%; max-height: 86vh; }
 .bt-input { width: 100%; height: 30px; border: 1px solid var(--lake-border-1); border-radius: 6px; background: var(--lake-bg-panel); color: inherit; font: inherit; font-size: 13px; padding: 0 8px; box-sizing: border-box; }
 .bt-field-label { display: flex; flex-direction: column; gap: 4px; margin-bottom: 10px; font-size: 12px; color: var(--lake-text-2); }
+/* 日期字段的默认值三态：形态下拉 +（选「指定时间」时）日期选择器 */
+.bt-date-default { display: flex; flex-direction: column; gap: 4px; }
 .bt-field-label-text { font-size: 12px; color: var(--lake-text-2); }
 .bt-field-check { display: flex; align-items: center; gap: 6px; font-size: 13px; margin-bottom: 10px; }
 .bt-options-editor { display: flex; flex-direction: column; gap: 6px; margin-bottom: 10px; }
@@ -286,7 +298,15 @@
 .bt-col-resize { position: absolute; top: 0; right: -3px; width: 6px; height: 100%; cursor: col-resize; z-index: 6; }
 .bt-col-resize:hover { background: var(--lake-accent); opacity: .4; }
 .bt-grid .bt-td.in-highlight { background: var(--lake-status-pending-soft); }
-.bt-grid .bt-td.cell-selected { background: var(--lake-accent-tint); }
+/* 选中单元格：**不铺底色、只留高亮边框**（260928 用户报「选中单元格不要加灰色背景」）。
+   边框只画在**选区外缘**：单格 = 一整圈；拖选多格 = 只描外框（内部格子不描边，否则每格一圈
+   会连成"网格纹"，比原来的整块灰底更花）。四边各存一个自定义属性，最后合成**一条** box-shadow ——
+   box-shadow 是同一个属性，靠多条规则叠加是加不上的，只能这样按边拼。 */
+.bt-grid .bt-td.cell-selected { box-shadow: var(--bt-sel-t, 0 0 transparent), var(--bt-sel-b, 0 0 transparent), var(--bt-sel-l, 0 0 transparent), var(--bt-sel-r, 0 0 transparent); }
+.bt-grid .bt-td.sel-top { --bt-sel-t: inset 0 2px 0 0 var(--lake-accent); }
+.bt-grid .bt-td.sel-bottom { --bt-sel-b: inset 0 -2px 0 0 var(--lake-accent); }
+.bt-grid .bt-td.sel-left { --bt-sel-l: inset 2px 0 0 0 var(--lake-accent); }
+.bt-grid .bt-td.sel-right { --bt-sel-r: inset -2px 0 0 0 var(--lake-accent); }
 .bt-date-cell { display: flex; align-items: center; height: 100%; }
 .bt-date-trigger { display: flex; align-items: center; justify-content: space-between; gap: 6px; width: 100%; min-height: 26px; border: 0; background: transparent; cursor: pointer; padding: 3px 8px; font: inherit; font-size: 13px; color: inherit; }
 .bt-date-trigger.is-empty { color: var(--lake-text-3); }
@@ -358,7 +378,11 @@
 .bt-attach-card-meta { display: flex; align-items: center; gap: 2px; padding: 3px 4px 3px 6px; border-top: 1px solid var(--lake-border-1); }
 .bt-attach-card-name { flex: 1; min-width: 0; font-size: 12px; line-height: 1.7; color: var(--lake-text-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }
 .bt-attach-card-name:hover { color: var(--lake-text-1); }
-.bt-attach-card-rename { flex: 1; min-width: 0; border: 0; border-bottom: 1px solid var(--lake-accent); padding: 0 2px; background: transparent; font: inherit; font-size: 12px; color: var(--lake-text-1); outline: none; }
+/* 行内改名：**只改主名，扩展名固定**（260928 用户：「编辑名称的时候不能改格式，直接编辑名称」）。
+   输入框按内容自适应宽度（field-sizing: content），后缀紧跟在后面，一眼看出编辑的是名字本身。 */
+.bt-attach-card-rename { display: flex; align-items: baseline; gap: 1px; flex: 1; min-width: 0; }
+.bt-attach-card-rename-input { flex: 0 1 auto; min-width: 2ch; max-width: 100%; field-sizing: content; border: 0; border-bottom: 1px solid var(--lake-accent); padding: 0 2px; background: transparent; font: inherit; font-size: 12px; color: var(--lake-text-1); outline: none; }
+.bt-attach-card-rename-ext { flex: 0 0 auto; font-size: 12px; color: var(--lake-text-2); }
 .bt-attach-card-icon { flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; border: 0; border-radius: var(--lake-radius-xs); padding: 0; background: transparent; color: var(--lake-text-3); cursor: pointer; }
 .bt-attach-card-icon:hover { background: var(--lake-bg-hover); color: var(--lake-text-1); }
 .bt-attach-add { display: inline-flex; align-items: center; justify-content: center; gap: 6px; flex: 0 0 auto; width: 100%; border: 0; border-radius: var(--lake-radius-sm); padding: 9px; background: transparent; color: var(--lake-text-2); font: inherit; font-size: 13px; cursor: pointer; }
@@ -380,7 +404,9 @@
 .bt-drawer-resize:hover { background: var(--lake-accent); opacity: .35; }
 /* 「图片和附件」空态：粘贴 / 拖拽投放框（对齐云端） */
 .bt-attachment-cell.is-drop-active { outline: 2px solid var(--lake-accent); outline-offset: -2px; }
-.bt-attachment-editor { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; width: 100%; min-height: 34px; border: 1px solid var(--lake-border-1); border-radius: var(--lake-radius-sm); background: var(--lake-bg-panel); padding: 2px 6px; }
+/* 编辑态**不再自画边框/白底**（260928）：表格里它本就铺满单元格，记录详情/表单里外层还有
+   .bt-drawer-control 这层现成的框 —— 再画一层就是"格子里套一个白盒子"，四周空档被当成灰边框。 */
+.bt-attachment-editor { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; width: 100%; min-height: 34px; padding: 2px 6px; }
 .bt-attachment-plus { display: inline-flex; align-items: center; justify-content: center; width: 26px; height: 26px; flex: 0 0 auto; border: 0; background: var(--lake-bg-block); border-radius: 4px; cursor: pointer; color: var(--lake-text-2); padding: 0; }
 .bt-attachment-plus:hover { background: var(--lake-bg-hover); color: var(--lake-text-1); }
 .bt-attachment-hint { flex: 1; min-width: 0; color: var(--lake-text-3); font-size: 12px; cursor: text; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

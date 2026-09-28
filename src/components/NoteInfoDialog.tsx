@@ -7,7 +7,7 @@
  */
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { Dialog } from "./ui/Overlay";
-import { Box, ChevronRight, Clock, Copy, File, FolderOpen, History, Image as ImageIcon, Paperclip, X } from "lucide-react";
+import { Box, ChevronRight, Clock, File, FolderOpen, History, Image as ImageIcon, Paperclip, X } from "lucide-react";
 import { native } from "../lib/native";
 import { getNativeErrorMessage } from "../lib/nativeErrors";
 import type { NoteInfo } from "../lib/types";
@@ -113,7 +113,10 @@ export function NoteInfoDialog({ note, onClose, onRevealNoteFile, onOpenAssetsDi
   }, [onClose]);
 
   const openAsset = (filename: string): void => {
-    if (note.noteFileId) void native.openAttachment(note.noteFileId, filename);
+    if (!note.noteFileId) return;
+    void native.openAttachment(note.noteFileId, filename)
+      .then((result) => { if (!result.ok) setError(result.error || "打开附件失败"); })
+      .catch((reason) => setError(getNativeErrorMessage(reason)));
   };
 
   const copyId = (): void => {

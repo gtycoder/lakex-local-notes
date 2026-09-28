@@ -2,7 +2,7 @@ import { protocol } from "electron";
 import fs from "node:fs";
 import path from "node:path";
 import { Readable } from "node:stream";
-import { APP_SCHEME, APP_HOST, APP_ORIGIN, DIST_MIME, resolveAppDistFile } from "./appOrigin.js";
+import { APP_SCHEME, APP_HOST, DIST_MIME, resolveAppDistFile } from "./appOrigin.js";
 
 /**
  * `lake://app` 的协议注册与静态服务（真正的实现在 appOrigin.ts，本文件只做 electron 接线）。
@@ -46,4 +46,3 @@ export function serveAppDist(distDir: string): void {
     return new Response(body, { status: 200, headers });
   });
 }
-

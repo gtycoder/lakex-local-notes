@@ -10,6 +10,7 @@ import {
   reorderBitableAttachments,
   attachmentGridColumns,
   defaultRecordValues,
+  localDateString,
   bitableToSearchText,
   bitablesToBody,
   createBitableField,
@@ -124,12 +125,24 @@ describe("bitableDoc 数据模型", () => {
     expect(Object.keys(empty)).toHaveLength(0);
   });
 
+  it("日期字段「添加记录时间」：按**本地**日填当天（不能用 UTC 日期）", () => {
+    const table = createDefaultBitableTable("t", "tbl-date");
+    const date = table.fields.find((f) => f.type === "date")!;
+    date.dateAutoFill = true;
+    date.defaultValue = "2020-01-01"; // 自动时间优先，写死的默认值不再生效
+    // 本地 2026-09-28 00:30：东八区下 UTC 还是 09-27，toISOString().slice(0,10) 会算成前一天
+    const at = new Date(2026, 8, 28, 0, 30).toISOString();
+    expect(defaultRecordValues(table, at)).toEqual({ [date.id]: "2026-09-28" });
+    expect(localDateString(new Date(2026, 11, 31, 23, 59))).toBe("2026-12-31");
+    expect(localDateString("not-a-date")).toBe("");
+  });
+
   it("附件单元格：磁盘名进正文 → 能被 extractAssetRefs 提取（统一资产管线/声明/GC 保护）", () => {
     const table = createDefaultBitableTable("t", "tbl1");
     const af = createBitableField("attachment", "附件", "fld-att");
     table.fields.push(af);
     const rec = createBitableRecord("rec1");
-    rec.values[af.id] = [{ file: "1700000000000_ab12cd34.png", name: "照片.png" }];
+    rec.values[af.id] = [{ file: "1700000000000_ab12cd34.png", name: "照片.png", size: 0 }];
     table.records.push(rec);
     const refs = extractAssetRefs(bitablesToBody([table], "tbl1"));
     expect([...refs]).toContain("1700000000000_ab12cd34.png");
@@ -138,14 +151,20 @@ describe("bitableDoc 数据模型", () => {
   it("附件单元格：file 定位磁盘文件、name 用于展示（展示名不参与资产引用）", () => {
     const field = createBitableField("attachment", "附件", "fld-att");
     const value = [
-      { file: "1700000000000_ab12cd34.mp3", name: "鞠磊8.27音频.mp3" },
-      { file: "1700000000001_cd34ab12.pptx" },
+      { file: "1700000000000_ab12cd34.mp3", name: "鞠磊8.27音频.mp3", size: 448000 },
+      { file: "1700000000001_cd34ab12.pptx", size: 1024 },
     ];
     expect(bitableAttachments(value)).toEqual([
-      { file: "1700000000000_ab12cd34.mp3", name: "鞠磊8.27音频.mp3" },
-      { file: "1700000000001_cd34ab12.pptx", name: "1700000000001_cd34ab12.pptx" },
+      { file: "1700000000000_ab12cd34.mp3", name: "鞠磊8.27音频.mp3", size: 448000 },
+      { file: "1700000000001_cd34ab12.pptx", name: "1700000000001_cd34ab12.pptx", size: 1024 },
     ]);
     expect(bitableDisplayValue(field, value)).toBe("鞠磊8.27音频.mp3, 1700000000001_cd34ab12.pptx");
+  });
+
+  it("附件单元格：非法 size 回落 0，但不会丢掉合法附件", () => {
+    expect(bitableAttachments([{ file: "1700000000000_ab12cd34.mp3", name: "a.mp3", size: -1 }])).toEqual([
+      { file: "1700000000000_ab12cd34.mp3", name: "a.mp3", size: 0 },
+    ]);
   });
 
   it("附件单元格：非法条目直接丢弃（缺 file / 非对象 / 非数组）", () => {
@@ -156,18 +175,18 @@ describe("bitableDoc 数据模型", () => {
 
   it("removeBitableAttachment：按磁盘名删除，展示名不同也不误删", () => {
     const value = [
-      { file: "1700000000000_ab12cd34.mp3", name: "a.mp3" },
-      { file: "1700000000001_cd34ab12.mp3", name: "b.mp3" },
+      { file: "1700000000000_ab12cd34.mp3", name: "a.mp3", size: 0 },
+      { file: "1700000000001_cd34ab12.mp3", name: "b.mp3", size: 0 },
     ];
     expect(removeBitableAttachment(value, "1700000000001_cd34ab12.mp3")).toEqual([
-      { file: "1700000000000_ab12cd34.mp3", name: "a.mp3" },
+      { file: "1700000000000_ab12cd34.mp3", name: "a.mp3", size: 0 },
     ]);
   });
 
   it("renameBitableAttachment：只改展示名、磁盘名不动；空名视为放弃编辑", () => {
-    const value = [{ file: "1700000000000_ab12cd34.mp3", name: "a.mp3" }];
+    const value = [{ file: "1700000000000_ab12cd34.mp3", name: "a.mp3", size: 0 }];
     expect(renameBitableAttachment(value, "1700000000000_ab12cd34.mp3", "  演示音频  ")).toEqual([
-      { file: "1700000000000_ab12cd34.mp3", name: "演示音频" },
+      { file: "1700000000000_ab12cd34.mp3", name: "演示音频", size: 0 },
     ]);
     expect(renameBitableAttachment(value, "1700000000000_ab12cd34.mp3", "   ")).toEqual(value);
     expect(renameBitableAttachment(value, "1700000009999_ffffffff.mp3", "x")).toEqual(value);
@@ -187,19 +206,19 @@ describe("bitableDoc 数据模型", () => {
 
   it("reorderBitableAttachments：按新顺序重排，未列出的条目按原序补回（拖拽不会丢附件）", () => {
     const value = [
-      { file: "1700000000000_ab12cd34.mp3", name: "a.mp3" },
-      { file: "1700000000001_cd34ab12.mp3", name: "b.mp3" },
-      { file: "1700000000002_ef56ab78.mp4", name: "c.mp4" },
+      { file: "1700000000000_ab12cd34.mp3", name: "a.mp3", size: 0 },
+      { file: "1700000000001_cd34ab12.mp3", name: "b.mp3", size: 0 },
+      { file: "1700000000002_ef56ab78.mp4", name: "c.mp4", size: 0 },
     ];
     expect(reorderBitableAttachments(value, ["1700000000002_ef56ab78.mp4", "1700000000000_ab12cd34.mp3", "1700000000001_cd34ab12.mp3"])).toEqual([
-      { file: "1700000000002_ef56ab78.mp4", name: "c.mp4" },
-      { file: "1700000000000_ab12cd34.mp3", name: "a.mp3" },
-      { file: "1700000000001_cd34ab12.mp3", name: "b.mp3" },
+      { file: "1700000000002_ef56ab78.mp4", name: "c.mp4", size: 0 },
+      { file: "1700000000000_ab12cd34.mp3", name: "a.mp3", size: 0 },
+      { file: "1700000000001_cd34ab12.mp3", name: "b.mp3", size: 0 },
     ]);
     expect(reorderBitableAttachments(value, ["1700000000001_cd34ab12.mp3"])).toEqual([
-      { file: "1700000000001_cd34ab12.mp3", name: "b.mp3" },
-      { file: "1700000000000_ab12cd34.mp3", name: "a.mp3" },
-      { file: "1700000000002_ef56ab78.mp4", name: "c.mp4" },
+      { file: "1700000000001_cd34ab12.mp3", name: "b.mp3", size: 0 },
+      { file: "1700000000000_ab12cd34.mp3", name: "a.mp3", size: 0 },
+      { file: "1700000000002_ef56ab78.mp4", name: "c.mp4", size: 0 },
     ]);
   });
 

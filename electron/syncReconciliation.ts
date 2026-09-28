@@ -2,8 +2,7 @@ import fs from "node:fs";
 import crypto from "node:crypto";
 import type { DbLike } from "./dbLike.js";
 import { sqlParameterBatches } from "../src/core/sqlParameterBatch.js";
-import type { SearchRepository } from "./searchRepository.js";
-import type { NoteQueries, SyncNote } from "./noteQueries.js";
+import type { SyncNote } from "./noteQueries.js";
 import type { HistoryCleanupResult } from "./storeTypes.js";
 
 function nowIso(): string {

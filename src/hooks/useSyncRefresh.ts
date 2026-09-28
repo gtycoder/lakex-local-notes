@@ -1,6 +1,7 @@
 import { useCallback, useEffect } from "react";
 import type { Dispatch, MutableRefObject, SetStateAction } from "react";
 import { native } from "../lib/native";
+import { reportNativeActionError } from "../lib/nativeErrors";
 import type { DraftJournalEntry, NoteSummary, SyncPendingSummary, TreeNode } from "../lib/types";
 import type { OpenTab } from "../desktop/desktopTypes";
 import type { RequestVersion } from "../core/requestVersion";
@@ -22,7 +23,7 @@ export function useSyncRefresh({
   tabReloadVersionRef, openTabsRef, bumpRevision,
 }: UseSyncRefreshOptions) {
   const refreshPendingSummary = useCallback(() => {
-    void native.getSyncPendingSummary().then(setPendingSummary).catch(() => undefined);
+    void native.getSyncPendingSummary().then(setPendingSummary).catch((error) => reportNativeActionError("刷新同步摘要", error));
   }, [setPendingSummary]);
   useEffect(() => {
     refreshPendingSummary();
@@ -32,8 +33,8 @@ export function useSyncRefresh({
   // 其它窗口 / 浏览器端写入后：重读目录树 + 摘要（此前没有 library-changed，目录不刷新，用户 260924 报）。
   useEffect(() => {
     return native.onLibraryChanged(() => {
-      void native.listTreeNodes().then(setTreeNodes).catch(() => undefined);
-      void native.listNoteSummaries().then(setNotes).catch(() => undefined);
+      void native.listTreeNodes().then(setTreeNodes).catch((error) => reportNativeActionError("刷新同步摘要", error));
+      void native.listNoteSummaries().then(setNotes).catch((error) => reportNativeActionError("刷新同步摘要", error));
     });
   }, [setTreeNodes, setNotes]);
 
@@ -44,17 +45,18 @@ export function useSyncRefresh({
       const valid = entries.filter((entry) => liveIds.has(entry.noteId));
       setDraftEntries(valid);
       const orphaned = entries.filter((entry) => !liveIds.has(entry.noteId));
-      await Promise.all(orphaned.map((entry) => native.deleteDraftJournal(entry.noteId).catch(() => undefined)));
-    } catch {
+      await Promise.all(orphaned.map((entry) => native.deleteDraftJournal(entry.noteId).catch((error) => reportNativeActionError("删除孤儿草稿", error))));
+    } catch (error) {
       // 草稿恢复是 best-effort，不能阻塞回收站/主界面的正常操作。
+      reportNativeActionError("刷新草稿", error);
     }
   }, [setDraftEntries]);
 
   /** 回收站恢复后：刷新草稿/树/摘要；若恢复的文档正开在 tab 里且曾被标记"已删除"，重载正文并清除标记。 */
   const handleTrashRestored = useCallback(() => {
     void refreshDraftEntries();
-    void native.listTreeNodes().then(setTreeNodes).catch(() => undefined);
-    void native.listNoteSummaries().then(setNotes).catch(() => undefined);
+    void native.listTreeNodes().then(setTreeNodes).catch((error) => reportNativeActionError("刷新同步摘要", error));
+    void native.listNoteSummaries().then(setNotes).catch((error) => reportNativeActionError("刷新同步摘要", error));
     void (async () => {
       const reloadVersion = tabReloadVersionRef.current.next();
       const t0 = performance.now();
@@ -76,8 +78,8 @@ export function useSyncRefresh({
 
   /** 历史恢复后：刷新树/摘要；若该文档正开在 tab 里，重载正文 + bump reloadKey 强制重建 Lake 实例。 */
   const handleHistoryRestored = useCallback((restoredId: string) => {
-    void native.listTreeNodes().then(setTreeNodes).catch(() => undefined);
-    void native.listNoteSummaries().then(setNotes).catch(() => undefined);
+    void native.listTreeNodes().then(setTreeNodes).catch((error) => reportNativeActionError("刷新同步摘要", error));
+    void native.listNoteSummaries().then(setNotes).catch((error) => reportNativeActionError("刷新同步摘要", error));
     void (async () => {
       const reloadVersion = tabReloadVersionRef.current.next();
       try {

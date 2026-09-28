@@ -1,6 +1,7 @@
 /** 移动端回收站预览页（惰性下载补偿）：点开回收站文档先按需补拉缺失资源，再只读渲染 Lake 正文。
  * 只读 + 「恢复」操作；恢复走 restoreTreeItem（恢复前强拉全量，语义与桌面一致）。 */
 import { useCallback, useEffect, useState } from "react";
+import { reportNativeActionError } from "../../lib/nativeErrors";
 import { ArrowLeft, LoaderCircle } from "lucide-react";
 import { bridge } from "../bridge";
 import { LakeEditor } from "../../features/editor/LakeEditor";
@@ -26,7 +27,7 @@ export function TrashPreviewPage({ noteId, onBack, onRestored }: TrashPreviewPag
     setMsg("");
     try {
       // 回收站惰性下载补偿：预览前按需补拉该笔记本地缺失资源（best-effort，失败仍显示本地内容）
-      await bridge.ensureTrashNoteAssets(noteId).catch(() => undefined);
+      await bridge.ensureTrashNoteAssets(noteId).catch((error) => reportNativeActionError("预览回收站附件", error));
       const n = await bridge.readNote(noteId);
       if (n) { setTitle(n.title); setContent(n.content); setKind(n.kind); }
     } catch (e) {

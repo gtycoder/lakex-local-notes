@@ -39,7 +39,6 @@ contextBridge.exposeInMainWorld("lakeNative", {
   ensureNoteCaches: (id, lakeContent) => invoke("ensure_note_caches", id, lakeContent),
   getNotePaths: (id) => invoke("get_note_paths", id),
   getNoteInfo: (id) => invoke("get_note_info", id),
-  duplicateNote: (id) => invoke("duplicate_note", id),
   renameAssetDisplay: (noteId, filename, newName) => invoke("rename_asset_display", noteId, filename, newName),
   pickExportDir: () => invoke("pick_export_dir"),
   exportNote: (id, format, baseDir) => invoke("export_note", id, format, baseDir),

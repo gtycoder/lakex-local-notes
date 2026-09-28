@@ -17,7 +17,6 @@ export interface DesktopTopBarLeadingProps {
   cloudConfigured: boolean;
   conflictSnapshots: Array<{ noteId: string; title: string }>;
   onToggleWorkspaceMenu: () => void;
-  onSwitchWorkspace: (workspace: DesktopWorkspace) => void;
   onSync: () => void;
   onOpenSettings: () => void;
   onOpenHistory: (noteId: string) => void;
@@ -36,7 +35,7 @@ export function DesktopTopBarLeading(props: DesktopTopBarLeadingProps) {
   const {
     desktopWorkspace, wsMenuWrapRef, syncBtnRef, visible = true, sync,
     pendingSummary, cloudEnabled, cloudConfigured, conflictSnapshots,
-    onToggleWorkspaceMenu, onSwitchWorkspace, onSync, onOpenSettings, onOpenHistory,
+    onToggleWorkspaceMenu, onSync, onOpenSettings, onOpenHistory,
   } = props;
   const space = SPACE_META[desktopWorkspace] ?? SPACE_META.library;
   return (

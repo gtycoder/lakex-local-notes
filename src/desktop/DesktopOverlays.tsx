@@ -35,8 +35,6 @@ export interface DesktopOverlaysProps {
   desktopWorkspace: DesktopWorkspace;
   onSwitchWorkspace: (workspace: DesktopWorkspace) => void;
   onOpenSettingsFromMenu: (category: SettingsCategory) => void;
-  onOpenTrashFromMenu: () => void;
-  onOpenHistoryFromMenu: () => void;
 
   focusMode: boolean;
   onToggleFocusMode: () => void;
@@ -92,7 +90,7 @@ export function DesktopOverlays(props: DesktopOverlaysProps) {
     confirmDelete, onConfirmDelete, onCancelDelete,
     workspaceMenuOpen, onCloseWorkspaceMenu, wsMenuWrapRef, workspaceMenuRef, moreMenuWrapRef, moreMenuRef, topMenuOpen,
     desktopWorkspace, onSwitchWorkspace,
-    onOpenSettingsFromMenu, onOpenTrashFromMenu, onOpenHistoryFromMenu,
+    onOpenSettingsFromMenu,
     focusMode, onToggleFocusMode, activeNoteId, activeKind, lockedNoteIds, onToggleNoteLock,
     onExportAs, onCopyMarkdown, onCopyPaths, onCloseTopMenu,
     draftEntries, onRestoreDraft, onDiscardDraft, onCloseDrafts,

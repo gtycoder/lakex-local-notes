@@ -226,24 +226,14 @@ class CardErrorBoundary extends React.Component<CardErrorBoundaryProps, CardErro
 
   render(): React.ReactNode {
     if (this.state.error) {
+      // 样式在 styles/compat.css（双端共用）：AGENTS §3 #14 禁止内联样式、颜色只走 --lake-* 令牌
       return React.createElement(
         "div",
-        {
-          className: "ne-card-error-fallback",
-          style: {
-            padding: 16,
-            margin: 8,
-            border: "1px solid var(--b3-theme-border-light, rgba(128,128,128,0.25))",
-            borderRadius: 8,
-            background: "var(--b3-theme-surface, transparent)",
-            color: "var(--b3-theme-on-surface, inherit)",
-            fontSize: 13,
-          },
-        },
+        { className: "ne-card-error-fallback" },
         React.createElement("div", null, `卡片渲染失败（${this.props.cardName}）`),
         React.createElement(
           "div",
-          { style: { opacity: 0.7, marginTop: 4, wordBreak: "break-all" } },
+          { className: "ne-card-error-fallback-reason" },
           this.state.error.message
         )
       );

@@ -39,7 +39,6 @@ export const WEB_METHODS: Record<string, string> = {
   ensureNoteCaches: "ensure_note_caches",
   getNotePaths: "get_note_paths",
   getNoteInfo: "get_note_info",
-  duplicateNote: "duplicate_note",
   renameAssetDisplay: "rename_asset_display",
   pickExportDir: "pick_export_dir",
   exportNote: "export_note",

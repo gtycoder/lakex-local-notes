@@ -16,3 +16,7 @@ export function getNativeErrorMessage(error: unknown): string {
   const message = error instanceof Error ? error.message : String(error);
   return message.replace(CODE_PREFIX, "");
 }
+/** 后台/非阻塞 native 动作失败：保留错误日志，避免用空 catch 静默吞掉。 */
+export function reportNativeActionError(action: string, error: unknown): void {
+  console.warn(`[native] ${action}失败：${getNativeErrorMessage(error)}`, error);
+}

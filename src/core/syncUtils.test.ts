@@ -37,7 +37,7 @@ describe("mimeTypeFor 行为保持", () => {
 // ---- H3: parseLakeManifest（Uint8Array + TextDecoder）行为保持 ----
 function makeValidManifest(): object {
   return {
-    version: 4, workspaceId: "default", commitId: "c1", prevCommitId: null,
+    version: 1, workspaceId: "default", commitId: "c1", prevCommitId: null,
     createdAt: "2026-08-22T00:00:00Z",
     notes: [{ id: "n1", title: "t", parentId: null, sortOrder: 0, updatedAt: "2026-08-22T00:00:00Z", contentHash: "a".repeat(64), isConflict: false, assets: [] }],
     folders: [],

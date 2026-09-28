@@ -123,16 +123,6 @@ export function useTreeActions({
   }, []);
   const sidebarPendingRenameConsumed = useCallback(() => setPendingRenameId(null), []);
 
-  /** 复制文档（含附件）：主进程建新文档 → 刷新树 → 打开副本。 */
-  const duplicateNode = useCallback(async (node: TreeNode) => {
-    if (!node.noteFileId) return;
-    try {
-      const created = await native.duplicateNote(node.noteFileId);
-      setTreeNodes(await native.listTreeNodes());
-      openNote(created.id);
-    } catch (reason) { setError(getNativeErrorMessage(reason)); }
-  }, [openNote, setTreeNodes, setError]);
-
   /**
    * 手动刷新目录：从库里重读整棵树。
    *
@@ -145,7 +135,7 @@ export function useTreeActions({
   }, [setTreeNodes, setError]);
 
   return {
-    createTreeItem, renameTreeNode, moveTreeNode, duplicateNode, refreshTree,
+    createTreeItem, renameTreeNode, moveTreeNode, refreshTree,
     sidebarSelect, sidebarCreate, sidebarRename, sidebarMove,
     sidebarRequestDelete, sidebarSetIcon, sidebarOpenHistory, sidebarOpenSearch, sidebarPendingRenameConsumed,
   };

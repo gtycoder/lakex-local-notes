@@ -72,7 +72,7 @@ await evaluate(`(()=>{document.querySelector('.sync-status-button')?.click(); re
 
 // 260923：空间 ⊕ 工作空间已合一到顶栏菜单；触发器不再叫 [aria-label="工作空间"]（该 aria-label 现在在菜单容器上）
 // ⇒ 用触发器的现行 aria-label（DesktopTopBar.tsx 的 toolbar__workspace）。
-await evaluate(`(()=>{document.querySelector('[aria-label="工作空间与空间切换"]')?.click(); return true})()`);
+await evaluate(`(()=>{document.querySelector('[aria-label="切换空间"]')?.click(); return true})()`);
 await wait(120);
 const workspaceMenu = await evaluate(`JSON.stringify({ open: Boolean(document.querySelector('.top-menu--workspace')), items: [...document.querySelectorAll('.top-menu--workspace button')].map(x=>x.innerText) })`);
 await evaluate(`(()=>{ const item = [...document.querySelectorAll('.top-menu--workspace button')].find(x => x.innerText.includes('偏好设置')); item?.click(); return true })()`);

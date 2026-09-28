@@ -3,6 +3,7 @@ import { useCallback } from "react";
 import type { Dispatch, MutableRefObject, SetStateAction } from "react";
 import { native } from "../lib/native";
 import { getNativeErrorMessage } from "../lib/nativeErrors";
+import { reportNativeActionError } from "../lib/nativeErrors";
 import { clearScrollMemory, locateEditorSearchHit } from "../features/editor/EditorTab";
 import { selectEvictionIds, trimTabsToLimit } from "../core/tabLimit";
 import type { DraftJournalEntry } from "../lib/types";
@@ -129,7 +130,7 @@ export function useTabLifecycle({
   }, [openNote, scheduleSave, showNotice, setOpenTabs, setActiveNoteId, setDraftEntries, setSaveState]);
 
   const discardDraft = useCallback((noteId: string) => {
-    void native.deleteDraftJournal(noteId).catch(() => undefined);
+    void native.deleteDraftJournal(noteId).catch((error) => reportNativeActionError("删除草稿", error));
     setDraftEntries((entries) => entries.filter((entry) => entry.noteId !== noteId));
   }, [setDraftEntries]);
 

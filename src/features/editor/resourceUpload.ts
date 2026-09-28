@@ -2,7 +2,6 @@ import { hasNativeBridge, isDesktop, native } from "../../lib/native";
 import type { ResourceUploadInput, ResourceUploadOutput } from "../../lib/types";
 import { MAX_IMAGE_BYTES, MAX_ATTACHMENT_BYTES } from "../../core/storeLimits";
 import { loadSettings } from "../../lib/settings";
-import { mimeTypeForFilename } from "../../core/assetNaming";
 import { imageDataUrl, normalizeImageInput } from "./imageFormat";
 import { createConcurrencyQueue } from "../../core/concurrency";
 import { withRetry } from "../../core/retry";
@@ -47,19 +46,18 @@ export async function uploadLakeResource(request: unknown, noteId: string, optio
   );
 }
 
-/** Check if a MIME type or filename looks like an image */
+/** 图片判定（上传分流用）：先信 MIME，再按扩展名兜底。
+ *  注意与 `core/assetNaming.ts` 的 **卡片分发** 清单（ASSET_IMAGE_EXTS）区分：这里决定"按图片处理"，
+ *  那边决定"图片卡/附件卡"，两者刻意各自维护（本函数更宽，例如 ico/tif 也当图片上传）。 */
 function isImageFile(file: File): boolean {
   if (file.type.startsWith("image/")) return true;
   const ext = file.name.split(".").pop()?.toLowerCase() ?? "";
   return ["png", "jpg", "jpeg", "gif", "webp", "avif", "bmp", "svg", "ico", "tiff", "tif"].includes(ext);
 }
 
-/** MIME 兜底：按扩展名猜（共享 mimeTypeForFilename，单一事实源），猜不到用 octet-stream。 */
-function mimeForExtension(filename: string, declared: string): string {
-  return declared || mimeTypeForFilename(filename);
-}
-
-/** 音频判定（Lake audio 卡专用字段）：file.type 或扩展名。 */
+/** 音频判定（Lake audio 卡专用字段）：file.type 或扩展名。
+ *  比 `core/assetNaming.ts` 的 AUDIO_EXTENSIONS 多 aac/ogg —— 那两个也要补 audioId，否则内核 audio 卡
+ *  永远停在"上传中"（见下方 uploadAttachmentFile 的注释）。改动这条要同时想清两张卡的分发语义。 */
 function isAudioFile(file: File): boolean {
   if (file.type.startsWith("audio/")) return true;
   const ext = file.name.split(".").pop()?.toLowerCase() ?? "";
@@ -74,7 +72,6 @@ async function uploadAttachmentFile(file: File, noteId: string, options: Resourc
     throw new Error(`附件超过 ${maxBytes / 1024 / 1024} MiB 上限（可在设置中调整）`);
   }
   const bytes = new Uint8Array(await file.arrayBuffer());
-  const mime = mimeForExtension(file.name, file.type);
   // `saveResource`（小记注入）必须同样覆盖附件：否则小记的附件会落到 `note-assets/<draftId>/`
   // （文档资源空间）而不是小记 staging ⇒ 保存时 promote 找不到文件、转换也搬不走。
   const out = options.saveResource

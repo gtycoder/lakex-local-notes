@@ -17,7 +17,9 @@ import path from "node:path";
 import zlib from "node:zlib";
 import crypto from "node:crypto";
 import { Store } from "./store.js";
-import { syncNow as desktopSync, type ObjectStore, type S3Settings } from "./sync.js";
+import { syncNowViaEngine as desktopSync } from "./syncEngineController.js";
+import type { ObjectStore } from "./s3Store.js";
+import type { S3Settings } from "../src/core/syncUtils.js";
 import { syncNow as engineSync, type S3Store, type SyncConfig, type SyncDbPort, type LocalNoteRow } from "../src/core/syncEngine.js";
 import { sha256Sync } from "../src/core/sha256Sync.js";
 import { isGzip } from "../src/core/syncUtils.js";
@@ -224,14 +226,14 @@ async function runScenarioDesktop(sc: Scenario): Promise<{ manifest: ManifestSem
     // 远端预置
     if (sc.remoteNotes || sc.remoteFolders) {
       const manifest = {
-        version: 4, workspaceId: "default", commitId: "remote-c1", prevCommitId: null, createdAt: "2026-01-01T00:00:00.000Z",
+        version: 1, workspaceId: "default", commitId: "remote-c1", prevCommitId: null, createdAt: "2026-01-01T00:00:00.000Z",
         notes: sc.remoteNotes ?? [],
         folders: sc.remoteFolders ?? [],
       };
       s3.map.set("manifests/latest.json", zlib.gzipSync(Buffer.from(JSON.stringify(manifest))));
       for (const [k, v] of Object.entries(sc.remoteObjects ?? {})) s3.map.set(k, Buffer.from(v));
     }
-    const remote = (s: S3Settings, l: any) => s3 as unknown as ObjectStore;
+    const remote = () => s3 as unknown as ObjectStore;
     await desktopSync(store, undefined, remote);
     // 收集终态
     const latestRaw = s3.map.get("manifests/latest.json");
@@ -259,7 +261,7 @@ async function runScenarioEngine(sc: Scenario): Promise<{ manifest: ManifestSema
   // 远端预置
   if (sc.remoteNotes || sc.remoteFolders) {
     const manifest = {
-      version: 4, workspaceId: "default", commitId: "remote-c1", prevCommitId: null, createdAt: "2026-01-01T00:00:00.000Z",
+      version: 1, workspaceId: "default", commitId: "remote-c1", prevCommitId: null, createdAt: "2026-01-01T00:00:00.000Z",
       notes: sc.remoteNotes ?? [],
       folders: sc.remoteFolders ?? [],
     };
@@ -329,7 +331,7 @@ describe("Step 4 等价测试（桌面 sync.ts vs 共享 syncEngine）", () => {
   });
 
   it("场景4：正文冲突——两端各改 + 远端先提交 → 远端胜 + 本地留档 superseded", async () => {
-    const H0 = hashOf("<p>base</p>"), H2 = hashOf("<p>remote-edit</p>");
+    const H2 = hashOf("<p>remote-edit</p>");
     await assertEquivalent({
       name: "conflict-remote-wins",
       localNotes: [

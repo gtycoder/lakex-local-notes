@@ -28,8 +28,6 @@ export interface LakeNative {
   getNotePaths(id: string): Promise<{ title: string; lakePath: string; assetsDir: string }>;
   /** 文档属性（元数据 + 字数 + 引用资产 + 历史快照） */
   getNoteInfo(id: string): Promise<NoteInfo>;
-  /** 复制文档（含附件）；返回新文档 */
-  duplicateNote(id: string): Promise<NoteDocument>;
   /** 只改附件展示名（不动存储文件/路径） */
   renameAssetDisplay(noteId: string, filename: string, newName: string): Promise<{ ok: boolean; changed: number }>;
   pickExportDir(): Promise<string | null>;
@@ -200,7 +198,6 @@ export const native = {
   ensureNoteCaches: (id: string, lakeContent?: string) => api().ensureNoteCaches(id, lakeContent),
   getNotePaths: (id: string) => api().getNotePaths(id),
   getNoteInfo: (id: string) => api().getNoteInfo(id),
-  duplicateNote: (id: string) => api().duplicateNote(id),
   renameAssetDisplay: (noteId: string, filename: string, newName: string) => api().renameAssetDisplay(noteId, filename, newName),
   pickExportDir: () => api().pickExportDir(),
   exportNote: (id: string, format: "markdown" | "html" | "lake" | "docx" | "pdf", baseDir?: string) => api().exportNote(id, format, baseDir),

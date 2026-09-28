@@ -2,6 +2,7 @@ import { useCallback } from "react";
 import type { Dispatch, MutableRefObject, SetStateAction } from "react";
 import { native } from "../lib/native";
 import { getNativeErrorMessage } from "../lib/nativeErrors";
+import { reportNativeActionError } from "../lib/nativeErrors";
 import { clearScrollMemory } from "../features/editor/EditorTab";
 import { trimTabsToLimit } from "../core/tabLimit";
 import { subtreeIds } from "../core/tree";
@@ -161,7 +162,7 @@ export function useNoteLifecycle({
         clearScrollMemory(noteId);
       });
       await native.deleteTreeNode(id);
-      await Promise.all([...removedNoteIds].map((noteId) => native.deleteDraftJournal(noteId).catch(() => undefined)));
+      await Promise.all([...removedNoteIds].map((noteId) => native.deleteDraftJournal(noteId).catch((error) => reportNativeActionError("删除关闭标签草稿", error))));
       setDraftEntries((entries) => entries.filter((entry) => !removedNoteIds.has(entry.noteId)));
       const remaining = notes.filter((note) => !removedNoteIds.has(note.id));
       setNotes(remaining);

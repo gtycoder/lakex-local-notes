@@ -13,6 +13,7 @@
  * 只接管**图片卡**上的本地资产图；外链 / data URL 图、以及文字选区一律交回内核/浏览器。
  */
 import { native } from "../../lib/native";
+import { reportNativeActionError } from "../../lib/nativeErrors";
 import { parseAssetRef } from "./selectionToolbar/selectionToolbarModel";
 
 let installed = false;
@@ -73,7 +74,7 @@ export function installImageCopyBridge(): void {
       event.preventDefault();
       event.stopPropagation();
       event.stopImmediatePropagation();
-      void native.copyAssetImage(ref.noteId, ref.filename);
+      void native.copyAssetImage(ref.noteId, ref.filename).catch((error) => reportNativeActionError("复制图片", error));
     },
     true,
   );
@@ -94,7 +95,7 @@ export function installImageCopyBridge(): void {
       event.preventDefault();
       event.stopPropagation();
       event.stopImmediatePropagation();
-      void native.copyAssetImage(ref.noteId, ref.filename);
+      void native.copyAssetImage(ref.noteId, ref.filename).catch((error) => reportNativeActionError("复制图片", error));
     },
     true,
   );

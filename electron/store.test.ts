@@ -1781,7 +1781,7 @@ describe("种子笔记本普通化（无默认/不可删笔记本）", () => {
   });
 
   it("createNoteIn(parentId=null) 落到存在的笔记本（sortOrder 最小），不自动建'未分类'", () => {
-    const nb = store.createNotebook("我的库"); // sortOrder 1
+    store.createNotebook("我的库"); // sortOrder 1
     const note = store.createNoteIn(null, "无父笔记");
     // 种子（个人笔记）sortOrder 0 → 兜底优先它；不会新建"未分类"
     expect(note.parentId).toBe("notebook-personal");
@@ -1989,45 +1989,5 @@ describe("A3 数据体检（runDataHealthCheck，只读）", () => {
     fs.writeFileSync(path.join(assetsDir, refName), "refdata");
     const r2 = store.runDataHealthCheck();
     expect(r2.refsMissingResource.some((x) => x.noteId === note.id && x.filename === refName)).toBe(false);
-  });
-});
-
-describe("duplicateNote 复制文档", () => {
-  it("复制后正文进入搜索索引（回归：曾经只索引标题）", () => {
-    const src = store.createNote("源文档");
-    store.saveNote(src.id, "源文档", "<p>唯一词Zx9Q</p>");
-    const copy = store.duplicateNote(src.id);
-    expect(copy.title).toBe("源文档 副本");
-    const hits = store.searchNotes("唯一词Zx9Q", 20);
-    expect(hits.some((h) => h.id === copy.id)).toBe(true);
-  });
-
-  it("renameAssetDisplay 只改文件卡展示名、不动 src 里的存储文件名", () => {
-    const note = store.createNote("附件卡");
-    const stored = "1789142407633_804945a9.pdf";
-    const src = `http://127.0.0.1:19876/${note.id}/${stored}`;
-    const value = encodeURIComponent(JSON.stringify({ src, name: "weixin-xxx.pdf", size: 12 }));
-    store.saveNote(note.id, "附件卡", `<card type="inline" name="file" value="data:${value}"></card>`);
-    const r = store.renameAssetDisplay(note.id, stored, "域名发票.pdf");
-    expect(r).toEqual({ ok: true, changed: 1 });
-    const content = store.readNote(note.id).content;
-    // value 是 URL 编码 JSON：按编码形态断言展示名，src 里的存储名保持原样
-    expect(content.includes(encodeURIComponent("域名发票.pdf"))).toBe(true);
-    expect(content.includes(stored)).toBe(true);
-  });
-
-  it("附件复制到新 noteId 目录、文件名不变，正文 URL 改写为新 id", () => {
-    const src = store.createNote("带附件");
-    const assetsDir = path.join(dir, "note-assets", src.id);
-    fs.mkdirSync(assetsDir, { recursive: true });
-    fs.writeFileSync(path.join(assetsDir, "a.png"), Buffer.from([0x89, 0x50, 0x4e, 0x47]));
-    const value = encodeURIComponent(JSON.stringify({ src: `http://127.0.0.1:19876/${src.id}/a.png`, name: "a.png", size: 4 }));
-    store.saveNote(src.id, "带附件", `<card type="inline" name="image" value="data:${value}"></card>`);
-    const copy = store.duplicateNote(src.id);
-    expect(fs.existsSync(path.join(dir, "note-assets", copy.id, "a.png"))).toBe(true);
-    const copied = store.readNote(copy.id).content;
-    // card value 是 URL 编码（/ → %2F），按 noteId 出现/旧 id 消失断言即可
-    expect(copied.includes(copy.id)).toBe(true);
-    expect(copied.includes(src.id)).toBe(false);
   });
 });

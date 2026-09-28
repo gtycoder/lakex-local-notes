@@ -1,6 +1,8 @@
 import { useCallback, useEffect } from "react";
+import { writeLocalStorage } from "../lib/localStorageSafe";
 import type { Dispatch, MutableRefObject, SetStateAction } from "react";
 import { native } from "../lib/native";
+import { reportNativeActionError } from "../lib/nativeErrors";
 import { applyTheme } from "../lib/theme";
 import { subscribeSettings, type AppSettings, type ThemeMode } from "../lib/settings";
 import { OUTLINE_SIDEBAR_MAX_WIDTH, OUTLINE_SIDEBAR_MIN_WIDTH, SIDEBAR_MAX_WIDTH, SIDEBAR_MIN_WIDTH, type OpenTab } from "../desktop/desktopTypes";
@@ -47,7 +49,7 @@ export function useDesktopLifecycle({
     let alive = true;
     void native.listNoteHistory(activeNoteId)
       .then((items) => { if (alive) setActiveHistoryCount(items.length); })
-      .catch(() => { if (alive) setActiveHistoryCount(0); });
+      .catch((error) => { reportNativeActionError("读取历史数量", error); if (alive) setActiveHistoryCount(0); });
     return () => { alive = false; };
   }, [activeNoteId, conflictSnapshotCount, historyOpen, setActiveHistoryCount]);
 
@@ -56,14 +58,14 @@ export function useDesktopLifecycle({
       flushTimers();
       for (const tab of openTabsRef.current) {
         if (!tab.dirty) continue;
-        void native.saveDraftJournal({ noteId: tab.noteId, title: tab.title, content: tab.content, updatedAt: new Date().toISOString() }).catch(() => undefined);
+        void native.saveDraftJournal({ noteId: tab.noteId, title: tab.title, content: tab.content, updatedAt: new Date().toISOString() }).catch((error) => reportNativeActionError("保存退出草稿", error));
       }
       draftTimers.current.forEach((timer) => window.clearTimeout(timer));
       draftTimers.current.clear();
       // 拖动过程只更新视觉状态；卸载时补一次合法的最终布局提交。
       const widths = layoutWidthsRef.current;
-      localStorage.setItem("lake-notes-v3.sidebar-width", String(Math.round(Math.min(SIDEBAR_MAX_WIDTH, Math.max(SIDEBAR_MIN_WIDTH, widths.sidebar)))));
-      localStorage.setItem("lake-notes-v3.outline-sidebar-width", String(Math.round(Math.min(OUTLINE_SIDEBAR_MAX_WIDTH, Math.max(OUTLINE_SIDEBAR_MIN_WIDTH, widths.outline)))));
+      writeLocalStorage("lake-notes-v3.sidebar-width", String(Math.round(Math.min(SIDEBAR_MAX_WIDTH, Math.max(SIDEBAR_MIN_WIDTH, widths.sidebar)))));
+      writeLocalStorage("lake-notes-v3.outline-sidebar-width", String(Math.round(Math.min(OUTLINE_SIDEBAR_MAX_WIDTH, Math.max(OUTLINE_SIDEBAR_MIN_WIDTH, widths.outline)))));
     };
   }, [flushTimers, openTabsRef, draftTimers, layoutWidthsRef]);
 
@@ -140,7 +142,7 @@ export function useDesktopLifecycle({
           window.clearTimeout(draftTimer);
           draftTimers.current.delete(tab.noteId);
         }
-        void native.saveDraftJournal({ noteId: tab.noteId, title: tab.title, content: tab.content, updatedAt: new Date().toISOString() }).catch(() => undefined);
+        void native.saveDraftJournal({ noteId: tab.noteId, title: tab.title, content: tab.content, updatedAt: new Date().toISOString() }).catch((error) => reportNativeActionError("保存退出草稿", error));
         void persistTab(tab.noteId, tab.title, tab.content);
       }
       event.preventDefault();

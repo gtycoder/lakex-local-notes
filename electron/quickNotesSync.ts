@@ -9,7 +9,8 @@
  */
 import fs from "node:fs";
 import path from "node:path";
-import { ObjectStore, type S3Settings, validateS3Settings } from "./sync.js";
+import { ObjectStore } from "./s3Store.js";
+import { validateS3Settings, type S3Settings } from "../src/core/syncUtils.js";
 import { gcCutoffMs, isPastWindow } from "../src/core/gcPolicy.js";
 import { createS3StoreAdapter } from "./syncAdapters.js";
 import {

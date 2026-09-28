@@ -6,7 +6,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { createHash } from "node:crypto";
 import type { Store } from "./store.js";
-import type { ObjectStore } from "./sync.js";
+import type { ObjectStore } from "./s3Store.js";
 import type { S3Store, SyncDbPort, LocalNoteRow, SyncConfig } from "../src/core/syncEngine.js";
 import type { ManifestFolder, ManifestNote } from "../src/core/manifestTypes.js";
 import { sha256Hex } from "../src/core/syncUtils.js";
@@ -92,7 +92,7 @@ export function createStoreSyncPort(store: Store): SyncDbPort {
     async applyRemoteNote(note: ManifestNote, content: string): Promise<void> {
       store.importRemoteNote(note as never, Buffer.from(content, "utf8"), []);
     },
-    async applyRemoteTrash(id: string, content: string, title: string, trashedAt: string, deletedFromParentId: string | null, parentId: string | null, sortOrder: number): Promise<void> {
+    async applyRemoteTrash(id: string, content: string, _title: string, trashedAt: string, deletedFromParentId: string | null, _parentId: string | null, _sortOrder: number): Promise<void> {
       // 先写删除方最新内容（墓碑携带内容，删除压编辑——B 的离线编辑不得溜进回收站，对齐桌面原 trash-cross）
       try { fs.writeFileSync(store.notePathFor(id), content, "utf8"); } catch { /* 内容写失败不阻断移入回收站 */ }
       store.applyRemoteMoveToTrash(id, trashedAt, deletedFromParentId);

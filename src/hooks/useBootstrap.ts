@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import type { Dispatch, SetStateAction } from "react";
 import { native } from "../lib/native";
 import { getNativeErrorMessage } from "../lib/nativeErrors";
+import { reportNativeActionError } from "../lib/nativeErrors";
 import type { NoteSummary, S3Settings, SyncPendingSummary, SyncStatus, TreeNode, WorkspaceSnapshot } from "../lib/types";
 import type { DraftJournalEntry } from "../lib/types";
 
@@ -28,20 +29,20 @@ export function useBootstrap({
   useEffect(() => {
     void native.bootstrap().then(async (snapshot) => {
       setWorkspace(snapshot); setNotes(snapshot.notes); setSync(snapshot.sync);
-      void native.getSyncSettings().then((cfg) => setCloudEnabled(cfg.enabled)).catch(() => undefined);
-      void native.getS3Settings().then((cfg) => { setS3Settings(cfg); setCloudConfigured(Boolean(cfg)); }).catch(() => undefined);
+      void native.getSyncSettings().then((cfg) => setCloudEnabled(cfg.enabled)).catch((error) => reportNativeActionError("启动读取", error));
+      void native.getS3Settings().then((cfg) => { setS3Settings(cfg); setCloudConfigured(Boolean(cfg)); }).catch((error) => reportNativeActionError("启动读取", error));
       void native.getSyncStatus().then((info) => {
         const superseded = info.lastResult?.supersededNotes ?? [];
         if (superseded.length > 0) setConflictSnapshotNotice(superseded.map((item) => ({ noteId: item.id, title: item.title })));
-      }).catch(() => undefined);
-      void native.getSyncPendingSummary().then(setPendingSummary).catch(() => undefined);
+      }).catch((error) => reportNativeActionError("启动读取", error));
+      void native.getSyncPendingSummary().then(setPendingSummary).catch((error) => reportNativeActionError("启动读取", error));
       void native.listDraftJournals().then((entries) => {
         // 启动时不展示已经被删除的文档草稿：删除文档是明确的用户操作，草稿不应绕过回收站重新出现。
         const liveIds = new Set(snapshot.notes.map((note) => note.id));
         const orphaned = entries.filter((entry) => !liveIds.has(entry.noteId));
         setDraftEntries(entries.filter((entry) => liveIds.has(entry.noteId)));
-        void Promise.all(orphaned.map((entry) => native.deleteDraftJournal(entry.noteId).catch(() => undefined)));
-      }).catch(() => undefined);
+        void Promise.all(orphaned.map((entry) => native.deleteDraftJournal(entry.noteId).catch((error) => reportNativeActionError("删除孤儿草稿", error))));
+      }).catch((error) => reportNativeActionError("启动读取", error));
       setTreeNodes(await native.listTreeNodes());
       const id = snapshot.lastOpenedNoteId ?? snapshot.notes[0]?.id;
       if (id) {

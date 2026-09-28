@@ -9,7 +9,8 @@ import { QuickNotesStore } from "./quickNotes.js";
 import { startAssetServer, ASSET_PORT } from "./assetServer.js";
 import { createWebServerController, type WebServerController, WEB_API_PORT } from "./webApiServer.js";
 import { resolveMirroredCdnRedirect, scanMirroredCdnFiles } from "./cdnRedirect.js";
-import { syncNow, runGcReconcile, type SyncResult, type SyncProgress } from "./sync.js";
+import { runGcReconcile } from "./s3Maintenance.js";
+import type { SyncResult, SyncProgress } from "./syncTypes.js";
 import { syncNowViaEngine } from "./syncEngineController.js";
 import { initLogger, log, logHeapPeak } from "./logger.js";
 import { syncQuickNotes } from "./quickNotesSync.js";
@@ -370,7 +371,7 @@ function registerIpc(): ReadonlyMap<string, (args: unknown[]) => Promise<unknown
   const TREE_CHANGING_CHANNELS = new Set<string>([
     "create_note", "create_notebook", "create_group", "create_note_in",
     "create_sheet_in", "create_bitable_in", "create_board_in",
-    "rename_tree_node", "set_node_icon", "duplicate_note",
+    "rename_tree_node", "set_node_icon",
     "move_tree_node", "move_tree_node_ordered", "reorder_tree_nodes",
     "delete_tree_node", "delete_note", "restore_trash", "purge_trash", "empty_trash",
   ]);

@@ -1,18 +1,13 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { LoaderCircle, PanelLeft } from "lucide-react";
 import { Sidebar } from "./components/Sidebar";
 import { SIDEBAR_CORRIDOR_SELECTORS, isInSidebarCorridor, reduceHover, type HoverEffect, type HoverEvent } from "./components/sidebarHoverMachine";
-import type { QuickNotesWorkspaceHandle } from "./components/QuickNotesWorkspace";
 import { useWindowShortcuts } from "./hooks/useWindowShortcuts";
 import { useTopMenus } from "./hooks/useTopMenus";
 import { DesktopStatusBar } from "./components/DesktopStatusBar";
 import { getDocumentStatus } from "./components/documentStatusModel";
-import { clearScrollMemory, locateEditorSearchHit } from "./features/editor/EditorTab";
-import { resolveScrollNode } from "./features/editor/lakeRuntime";
-import type { TabInfo } from "./features/editor/MultiTabEditor";
-import { selectEvictionIds, trimTabsToLimit } from "./core/tabLimit";
+import { clearScrollMemory } from "./features/editor/EditorTab";
 import { OutlineSidebar } from "./features/outline/OutlineSidebar";
-import type { OutlineMode } from "./features/outline/OutlineController";
 
 import { useDocumentStats } from "./hooks/useDocumentStats";
 import { useNoteActions } from "./hooks/useNoteActions";
@@ -32,14 +27,12 @@ import { useSavePipeline } from "./hooks/useSavePipeline";
 import { useSyncShell } from "./hooks/useSyncShell";
 import { useSyncController } from "./hooks/useSyncController";
 import { useDocumentTabs } from "./hooks/useDocumentTabs";
-import { createRequestVersion } from "./core/requestVersion";
 import { native } from "./lib/native";
+import { getNativeErrorMessage } from "./lib/nativeErrors";
 import type { TreeNode } from "./lib/types";
 import { NoteInfoDialog } from "./components/NoteInfoDialog";
-import { loadSettings, saveSettings, type AppSettings } from "./lib/settings";
-import { subtreeIds } from "./core/tree";
-import { DOCK_GUTTER } from "./lib/layoutMetrics";
-import { type DesktopWorkspace, type OpenTab, EDGE_HANDLE_DWELL_MS, OUTLINE_SIDEBAR_MAX_WIDTH, OUTLINE_SIDEBAR_MIN_WIDTH, SIDEBAR_MAX_WIDTH, SIDEBAR_MIN_WIDTH } from "./desktop/desktopTypes";
+import { saveSettings } from "./lib/settings";
+import { type OpenTab, EDGE_HANDLE_DWELL_MS, OUTLINE_SIDEBAR_MAX_WIDTH, OUTLINE_SIDEBAR_MIN_WIDTH, SIDEBAR_MAX_WIDTH, SIDEBAR_MIN_WIDTH } from "./desktop/desktopTypes";
 import { DesktopOverlays } from "./desktop/DesktopOverlays";
 import { DesktopLibrary } from "./desktop/DesktopLibrary";
 import { DesktopQuickNotes } from "./desktop/DesktopQuickNotes";
@@ -54,7 +47,7 @@ export function App() {
     activeHistoryCount, setActiveHistoryCount,
     workspaceMenuRef, moreMenuRef, wsMenuWrapRef, moreMenuWrapRef, syncBtnRef,
     sync, setSync, cloudEnabled, setCloudEnabled, cloudConfigured, setCloudConfigured,
-    s3Settings, setS3Settings, pendingSummary, setPendingSummary, draftEntries, setDraftEntries,
+    setS3Settings, pendingSummary, setPendingSummary, draftEntries, setDraftEntries,
     syncAnchorRect, setSyncAnchorRect, pendingRenameId, setPendingRenameId,
     settings, setSettings, pinnedNoteIds, setPinnedNoteIds, tocEnabled, outlineEnhance, wideMode,
     quickNotesDirty, setQuickNotesDirty, openTabsRef, quickNotesRef, tabReloadVersionRef, editorsRef,
@@ -75,17 +68,17 @@ export function App() {
     updateSidebarWidth, commitSidebarWidth, handleSidebarResizeActiveChange,
     showSidebarPreview, hideSidebarPreview, toggleSidebarDock, clearSidebarPreviewTimer,
     // outline
-    outlineMode, setOutlineMode, activeOutlineEmpty, setActiveOutlineEmpty,
+    outlineMode, activeOutlineEmpty, setActiveOutlineEmpty,
     outlineEmptyOverride, setOutlineEmptyOverride,
     outlineTabsVersion, outlineSidebarWidth, outlineResizing, setOutlineResizing,
-    setOutlineModeForActive, collapseOutline, pinOutline,
+    collapseOutline, pinOutline,
     updateOutlineSidebarWidth, commitOutlineSidebarWidth,
     // workspace
     desktopWorkspace, setDesktopWorkspace, switchDesktopWorkspace,
     // panels & misc
     focusMode, setFocusMode, notice, setNotice, showNotice, showNoticeWithAction, error, setError,
     searchPanelOpen, setSearchPanelOpen, searchPanelQuery, setSearchPanelQuery,
-    trashOpen, setTrashOpen, historyOpen, setHistoryOpen, historyNoteId, setHistoryNoteId,
+    setTrashOpen, historyOpen, setHistoryOpen, historyNoteId, setHistoryNoteId,
     settingsOpen, setSettingsOpen, settingsCategory, setSettingsCategory,
     confirmDelete, setConfirmDelete,
   } = shell;
@@ -109,7 +102,7 @@ export function App() {
   });
 
   const {
-    saveState, setSaveState, lastSavedAt,
+    saveState, setSaveState,
     persistTab, scheduleSave, scheduleDraftJournal,
     bumpRevision, resetRevision, clearNote, flushTimers,
     saveTimers, draftTimers,
@@ -217,7 +210,7 @@ export function App() {
     activeNoteId, outlineTabsVersion, setOutlineEmptyOverride, setActiveOutlineEmpty,
   });
 
-  const { refreshPendingSummary, refreshDraftEntries, handleTrashRestored, handleHistoryRestored, reloadNoteTab } = useSyncRefresh({
+  const { refreshDraftEntries, handleTrashRestored, handleHistoryRestored, reloadNoteTab } = useSyncRefresh({
     setPendingSummary, setDraftEntries, setTreeNodes, setNotes, setOpenTabs, tabReloadVersionRef, openTabsRef, bumpRevision,
   });
 
@@ -263,7 +256,7 @@ export function App() {
   const { copyMarkdownById, exportNoteById, copyPathsById, setNodeIcon, copyMarkdownFromCache, exportAs, copyNotePaths } = useNoteActions({ showNotice, setError, setTreeNodes });
 
   const {
-    createTreeItem, renameTreeNode, moveTreeNode, duplicateNode, refreshTree,
+    refreshTree,
     sidebarSelect, sidebarCreate, sidebarRename, sidebarMove,
     sidebarRequestDelete, sidebarSetIcon, sidebarOpenHistory, sidebarOpenSearch, sidebarPendingRenameConsumed,
   } = useTreeActions({
@@ -384,7 +377,6 @@ export function App() {
     cloudConfigured,
     conflictSnapshots: conflictSnapshotNotice,
     onToggleWorkspaceMenu: () => { setWorkspaceMenuOpen((o) => !o); setTopMenuOpen(false); },
-    onSwitchWorkspace: (w: DesktopWorkspace) => void switchDesktopWorkspace(w),
     onSync: () => { void runSync(); },
     onOpenSettings: () => { setSettingsCategory("sync"); setSettingsOpen(true); },
     onOpenHistory: (noteId: string) => { setHistoryNoteId(noteId); setHistoryOpen(true); },
@@ -452,7 +444,7 @@ export function App() {
       )}
       {/* 空间切换已并入顶栏工作空间菜单（S1+A）；活动栏不再渲染（壳层导航，功能见菜单 ⌘1–3） */}
       {/* keep-alive：Sidebar 常驻，小记/回收站空间由 shell class 隐藏（避免切回时重建目录树） */}
-      <Sidebar nodes={treeNodes} activeId={activeNoteId} search={search} mode={sidebarRenderMode} width={sidebarWidth} minWidth={SIDEBAR_MIN_WIDTH} maxWidth={SIDEBAR_MAX_WIDTH} onSearch={setSearch} onRefreshTree={refreshTree} onSelect={sidebarSelect} onCreate={sidebarCreate} onRename={sidebarRename} onMoveNode={sidebarMove} onRequestDelete={sidebarRequestDelete} onCopyMarkdown={copyMarkdownFromCache} onExportAs={exportAs} onCopyPaths={copyNotePaths} onSetIcon={sidebarSetIcon} onDuplicate={(node) => void duplicateNode(node)} onShowInfo={(node) => setInfoNote(node)} onOpenHistory={sidebarOpenHistory} onRevealNoteFile={(node) => { if (node.noteFileId) void native.revealNoteFile(node.noteFileId); }} revealNodeId={revealNodeId} onRevealConsumed={() => setRevealNodeId(null)} pendingRenameId={pendingRenameId} onPendingRenameConsumed={sidebarPendingRenameConsumed} onPreviewEnter={showSidebarPreview} onPreviewLeave={hideSidebarPreview} onResizeActiveChange={handleSidebarResizeActiveChange} onWidthChange={updateSidebarWidth} onWidthCommit={commitSidebarWidth} onToggleDock={toggleSidebarDock} docked={sidebarMode === "docked"} />
+      <Sidebar nodes={treeNodes} activeId={activeNoteId} search={search} mode={sidebarRenderMode} width={sidebarWidth} minWidth={SIDEBAR_MIN_WIDTH} maxWidth={SIDEBAR_MAX_WIDTH} onSearch={setSearch} onRefreshTree={refreshTree} onSelect={sidebarSelect} onCreate={sidebarCreate} onRename={sidebarRename} onMoveNode={sidebarMove} onRequestDelete={sidebarRequestDelete} onCopyMarkdown={copyMarkdownFromCache} onExportAs={exportAs} onCopyPaths={copyNotePaths} onSetIcon={sidebarSetIcon} onShowInfo={(node) => setInfoNote(node)} onOpenHistory={sidebarOpenHistory} onRevealNoteFile={(node) => { if (node.noteFileId) void native.revealNoteFile(node.noteFileId).catch((reason) => setError(getNativeErrorMessage(reason))); }} revealNodeId={revealNodeId} onRevealConsumed={() => setRevealNodeId(null)} pendingRenameId={pendingRenameId} onPendingRenameConsumed={sidebarPendingRenameConsumed} onPreviewEnter={showSidebarPreview} onPreviewLeave={hideSidebarPreview} onResizeActiveChange={handleSidebarResizeActiveChange} onWidthChange={updateSidebarWidth} onWidthCommit={commitSidebarWidth} onToggleDock={toggleSidebarDock} docked={sidebarMode === "docked"} />
       <main className="workspace" onPointerDownCapture={(event) => {
         const clickedDocument = (event.target as HTMLElement).closest(".document-pane, .empty-workspace");
         // 点正文收起目录栏：宽窗沿用原语义（只有"悬停预览"那种临时浮动态会收）；
@@ -550,8 +542,8 @@ export function App() {
         <NoteInfoDialog
           note={{ noteFileId: infoNote.noteFileId, title: infoNote.title }}
           onClose={() => setInfoNote(null)}
-          onRevealNoteFile={() => { if (infoNote.noteFileId) void native.revealNoteFile(infoNote.noteFileId); }}
-          onOpenAssetsDir={() => { if (infoNote.noteFileId) void native.openNoteAssets(infoNote.noteFileId); }}
+          onRevealNoteFile={() => { if (infoNote.noteFileId) void native.revealNoteFile(infoNote.noteFileId).catch((reason) => setError(getNativeErrorMessage(reason))); }}
+          onOpenAssetsDir={() => { if (infoNote.noteFileId) void native.openNoteAssets(infoNote.noteFileId).catch((reason) => setError(getNativeErrorMessage(reason))); }}
           onOpenHistory={() => { void sidebarOpenHistory(infoNote); setInfoNote(null); }}
           onJumpToNode={(id) => { setInfoNote(null); setRevealNodeId(id); }}
         />
@@ -570,11 +562,6 @@ export function App() {
         desktopWorkspace={desktopWorkspace}
         onSwitchWorkspace={(w) => void switchDesktopWorkspace(w)}
         onOpenSettingsFromMenu={(category) => { setSettingsCategory(category); setSettingsOpen(true); setWorkspaceMenuOpen(false); }}
-        onOpenTrashFromMenu={() => { void switchDesktopWorkspace("trash"); setWorkspaceMenuOpen(false); }}
-        onOpenHistoryFromMenu={() => {
-          if (activeNoteId) { setHistoryNoteId(activeNoteId); setHistoryOpen(true); }
-          setWorkspaceMenuOpen(false);
-        }}
         focusMode={focusMode}
         onToggleFocusMode={() => { setFocusMode((value) => !value); setTopMenuOpen(false); }}
         activeNoteId={activeNoteId}

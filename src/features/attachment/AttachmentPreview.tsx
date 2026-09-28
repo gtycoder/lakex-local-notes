@@ -29,25 +29,26 @@ export function AttachmentPreview() {
     return () => window.removeEventListener("keydown", onKey);
   }, [state]);
 
-  // 沉浸顶栏（移动端）：预览是深色背景，状态栏图标切换为浅色（白），关闭恢复浅色背景图标。
+  // 沉浸顶栏（移动端）：预览与图片 Lightbox 统一为**浅色背景**（260928 用户要求「都用图片的
+  // 背景样式」）⇒ 状态栏用深色图标（SystemBarsStyle.Light）；关闭恢复默认。
   // 桌面无 SystemBars（try/catch 静默）。
   useEffect(() => {
     if (!state) return;
     let active = true;
-    const applyDark = async () => {
+    const applyLight = async () => {
       try {
         if (typeof SystemBars?.setStyle === "function") {
-          await SystemBars.setStyle({ style: SystemBarsStyle.Dark });
-          if (!active) void SystemBars.setStyle({ style: SystemBarsStyle.Light }).catch(() => undefined);
+          await SystemBars.setStyle({ style: SystemBarsStyle.Light });
+          if (!active) void SystemBars.setStyle({ style: SystemBarsStyle.Default }).catch(() => undefined);
         }
       } catch { /* 桌面端无 SystemBars */ }
     };
-    void applyDark();
+    void applyLight();
     return () => {
       active = false;
       try {
         if (typeof SystemBars?.setStyle === "function") {
-          void SystemBars.setStyle({ style: SystemBarsStyle.Light }).catch(() => undefined);
+          void SystemBars.setStyle({ style: SystemBarsStyle.Default }).catch(() => undefined);
         }
       } catch { /* 桌面端无 SystemBars */ }
     };
@@ -61,9 +62,13 @@ export function AttachmentPreview() {
   const win = window as Window & { Capacitor?: { isNativePlatform?: () => boolean } };
   const isMobileNative = typeof win.Capacitor !== "undefined" && !!win.Capacitor.isNativePlatform?.();
   const authorizedSrc = withAssetAccessToken(item.src);
+  // macOS 的「红绿灯」是系统画在网页之上的：预览铺满整窗（inset:0）时顶部工具栏会钻到按钮底下
+  // （260928 用户报「文件名盖到了红绿灯」）⇒ 与 .platform-mac .tab-bar 用同一套让位内距。
+  // 预览是 portal 到 body 的，拿不到壳上的 .platform-mac，只能就地判定（与 App.tsx 同口径）。
+  const isMac = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform);
 
   return createPortal(
-    <div className="attachment-preview" role="dialog" aria-modal="true" aria-label="附件预览"
+    <div className={"attachment-preview" + (isMac ? " is-mac" : "")} role="dialog" aria-modal="true" aria-label="附件预览"
       onClick={(e) => { if (e.target === e.currentTarget) closeAttachmentPreview(); }}>
       <div className="attachment-preview__toolbar">
         <span className="attachment-preview__title"><Paperclip size={15} />{item.name}

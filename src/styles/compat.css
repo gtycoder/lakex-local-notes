@@ -268,3 +268,17 @@
   appearance: none;
   display: block;
 }
+
+/* 内核卡片渲染失败的兜底块（`lakeRuntime.ts` 的单卡错误边界 CardErrorBoundary）。
+ * 260928：原先内联 style + 颜色字面量，违反 AGENTS §3 #14「桌面 UI 禁止内联样式、颜色只走 --lake-*」；
+ * 这里收成一处类，双端共用（桌面 index.css / 移动 main.tsx 都 import 本文件）。 */
+.ne-card-error-fallback {
+  margin: var(--lake-space-md);
+  padding: var(--lake-space-xl);
+  border: 1px solid var(--lake-border-1);
+  border-radius: var(--lake-radius-sm);
+  background: var(--lake-bg-block);
+  color: var(--lake-text-2);
+  font-size: var(--lake-font-size-small);
+}
+.ne-card-error-fallback-reason { margin-top: var(--lake-space-xs); opacity: .7; word-break: break-all; }

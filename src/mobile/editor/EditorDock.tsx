@@ -111,7 +111,6 @@ export interface EditorDockProps {
   /** 编辑态才渲染 */
   editing: boolean;
   /** 退出编辑态（工具栏“完成”） */
-  onToggleEdit?: () => void;
   /** 触发图片插入（选文件 → 上传 → 插入 Lake） */
   onInsertImage?: () => void;
   /** 触发附件插入 */
@@ -136,7 +135,7 @@ function useEditorExec(editor: LakeEditorInstance | null) {
   };
 }
 
-export function EditorDock({ editor, editing, onToggleEdit, onInsertImage, onInsertCamera, onInsertAttachment, onInsertAudio, onInsertVideo, onInsertTable }: EditorDockProps) {
+export function EditorDock({ editor, editing, onInsertImage, onInsertCamera, onInsertAttachment, onInsertAudio, onInsertVideo, onInsertTable }: EditorDockProps) {
   const [panelMode, setPanelMode] = useState<PanelMode>(null);
 
   /** 面板打开期间的选区快照：命令执行前后都还原，才能连续加粗→倾斜→下划线 */

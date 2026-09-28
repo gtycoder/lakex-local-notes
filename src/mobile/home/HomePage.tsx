@@ -7,6 +7,7 @@
  * - 底部胶囊栏 = [筛选 | 新建 | 云同步]（新建按 tab 记性：小记=写小记、知识库=新建笔记本）。
  */
 import { Suspense, lazy, useEffect, useMemo, useState } from "react";
+import { writeLocalStorage } from "../../lib/localStorageSafe";
 import { CloudUpload, List, LayoutGrid, ArrowUpDown, MoreHorizontal, Pencil, Plus, Search, Settings, Trash, FolderPlus } from "lucide-react";
 import type { TreeNode } from "../../lib/types";
 import type { POCNoteSummary } from "../noteRepository";
@@ -136,7 +137,7 @@ export function HomePage(props: HomePageProps) {
     catch (e) { showToast("同步失败：" + (e as Error).message, { type: "error" }); }
   };
   const toggleView = (): void => {
-    setLibraryView((v) => { const nv = v === "shelf" ? "list" : "shelf"; try { localStorage.setItem(VIEW_KEY, nv); } catch { /* 忽略 */ } return nv; });
+    setLibraryView((v) => { const nv = v === "shelf" ? "list" : "shelf"; writeLocalStorage(VIEW_KEY, nv); return nv; });
   };
 
   const deleteQuickNote = async (id: string): Promise<void> => {

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from "react";
+import { writeLocalStorage } from "../lib/localStorageSafe";
 
 interface DialogSize {
   w: number;
@@ -43,7 +44,7 @@ function writeStore(id: string, state: StoredDialogState): void {
   try {
     const store = readStore();
     store[id] = state;
-    localStorage.setItem(STORE_KEY, JSON.stringify(store));
+    writeLocalStorage(STORE_KEY, JSON.stringify(store));
   } catch {
     // 隐私模式 / 存储被禁用：忽略，不影响弹窗使用
   }

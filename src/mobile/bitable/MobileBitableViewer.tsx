@@ -33,7 +33,7 @@ export interface MobileBitableViewerProps {
 function AttachmentCell({ noteId, value }: { noteId: string; value: unknown }) {
   const attachments = bitableAttachments(value);
   if (attachments.length === 0) return <span className="mbt-cell-empty">—</span>;
-  const openWithSystem = (file: string, name: string) => {
+  const openWithSystem = (file: string) => {
     void native.openAttachment(noteId, file).catch((error: unknown) => {
       showToast(error instanceof Error && error.message ? error.message : "没有可打开此文件的应用", { type: "error" });
     });
@@ -50,7 +50,7 @@ function AttachmentCell({ noteId, value }: { noteId: string; value: unknown }) {
               title={name}
               loading="lazy"
             />
-          : <button key={file} type="button" className="mbt-attachment-file" title={name} onClick={() => openWithSystem(file, name)}>{name}</button>
+          : <button key={file} type="button" className="mbt-attachment-file" title={name} onClick={() => openWithSystem(file)}>{name}</button>
       ))}
     </span>
   );

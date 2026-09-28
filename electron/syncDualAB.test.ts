@@ -7,18 +7,16 @@ import fs, { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import zlib from "node:zlib";
-import crypto from "node:crypto";
 import { Store } from "./store.js";
 import { syncNowViaEngine, restoreTrashWithAssets, ensureTrashNoteAssets } from "./syncEngineController.js";
-import type { ObjectStore, S3Settings } from "./sync.js";
+import type { ObjectStore } from "./s3Store.js";
+import type { S3Settings } from "../src/core/syncUtils.js";
 import { syncNow as engineSync, type S3Store, type SyncConfig, type SyncDbPort, type LocalNoteRow } from "../src/core/syncEngine.js";
 import { sha256Sync } from "../src/core/sha256Sync.js";
 import { isGzip } from "../src/core/syncUtils.js";
 import { TRASH_NOTEBOOK_ID } from "../src/core/syncDecisions.js";
 
 const decode = (b: Uint8Array) => new TextDecoder("utf-8").decode(b);
-const hashOf = (s: string) => sha256Sync(new TextEncoder().encode(s));
-
 const S3_CFG: S3Settings = { endpoint: "https://s3.example.com", region: "cn-north-1", bucket: "ab", prefix: "ab-test", accessKeyId: "ak", secretAccessKey: "sk", forcePathStyle: false };
 const CFG: SyncConfig = { endpoint: "https://s3.example.com", region: "cn-north-1", bucket: "ab", accessKeyId: "ak", secretAccessKey: "sk", prefix: "ab-test" };
 
@@ -146,7 +144,7 @@ describe("Step 5 双端 A/B（桌面 Controller ↔ 移动端 syncEngine 同 S3�
       const storeA = new Store(dirA);
       storeA.saveS3Settings(S3_CFG);
       const noteA = storeA.createNote("A端建的笔记");
-      await syncNowViaEngine(storeA, undefined, (s: S3Settings, l: any) => s3 as unknown as ObjectStore);
+      await syncNowViaEngine(storeA, undefined, () => s3 as unknown as ObjectStore);
       await engineSync(CFG, s3 as unknown as S3Store, dbB);
       const bGot = await dbB.getNote(noteA.id);
       expect(bGot).not.toBeNull();
@@ -154,11 +152,11 @@ describe("Step 5 双端 A/B（桌面 Controller ↔ 移动端 syncEngine 同 S3�
       const bRow = (await dbB.getNote(noteA.id))!;
       dbB.notes.set(noteA.id, { ...bRow, title: "B端改名", content: "<p>B编辑</p>", syncState: "local" });
       await engineSync(CFG, s3 as unknown as S3Store, dbB);
-      await syncNowViaEngine(storeA, undefined, (s: S3Settings, l: any) => s3 as unknown as ObjectStore);
+      await syncNowViaEngine(storeA, undefined, () => s3 as unknown as ObjectStore);
       const aGot = storeA.readNote(noteA.id);
       expect(aGot.title).toBe("B端改名");
       expect(aGot.content).toContain("B编辑");
-      const r = await syncNowViaEngine(storeA, undefined, (s: S3Settings, l: any) => s3 as unknown as ObjectStore);
+      const r = await syncNowViaEngine(storeA, undefined, () => s3 as unknown as ObjectStore);
       expect(r.uploaded).toBe(0);
     } finally { rmSync(dirA, { recursive: true, force: true }); }
   });
@@ -172,11 +170,11 @@ describe("Step 5 双端 A/B（桌面 Controller ↔ 移动端 syncEngine 同 S3�
       const storeA = new Store(dirA);
       storeA.saveS3Settings(S3_CFG);
       const noteA = storeA.createNote("将被删除");
-      await syncNowViaEngine(storeA, undefined, (s: S3Settings, l: any) => s3 as unknown as ObjectStore);
+      await syncNowViaEngine(storeA, undefined, () => s3 as unknown as ObjectStore);
       await engineSync(CFG, s3 as unknown as S3Store, dbB);
       expect(dbB.getNote(noteA.id)).not.toBeNull();
       storeA.deleteTreeNode(noteA.id);
-      await syncNowViaEngine(storeA, undefined, (s: S3Settings, l: any) => s3 as unknown as ObjectStore);
+      await syncNowViaEngine(storeA, undefined, () => s3 as unknown as ObjectStore);
       await engineSync(CFG, s3 as unknown as S3Store, dbB);
       const bAfter = await dbB.getNote(noteA.id);
       expect(bAfter).not.toBeNull();
@@ -200,13 +198,13 @@ describe("Step 5 双端 A/B（桌面 Controller ↔ 移动端 syncEngine 同 S3�
       // 模拟「本地文件缺失，但 manifest 曾声明过该资源元数据」
       storeA.recordDeclaredAssets(noteA.id, [{ filename: assetName, size: 200, hash: validHash }]);
 
-      await syncNowViaEngine(storeA, undefined, (s: S3Settings, l: any) => s3 as unknown as ObjectStore);
+      await syncNowViaEngine(storeA, undefined, () => s3 as unknown as ObjectStore);
       let entry = (await readManifest()).notes.find((n: any) => n.id === noteA.id);
       expect((entry.assets ?? []).some((x: any) => x.filename === assetName)).toBe(true);
 
       // 编辑删除该引用 → 再同步，manifest 不应再挂回
       storeA.saveNote(noteA.id, "资源笔记", "<p>removed ref</p>");
-      await syncNowViaEngine(storeA, undefined, (s: S3Settings, l: any) => s3 as unknown as ObjectStore);
+      await syncNowViaEngine(storeA, undefined, () => s3 as unknown as ObjectStore);
       entry = (await readManifest()).notes.find((n: any) => n.id === noteA.id);
       expect((entry.assets ?? []).some((x: any) => x.filename === assetName)).toBe(false);
     } finally { rmSync(dirA, { recursive: true, force: true }); }
@@ -218,8 +216,7 @@ describe("Step 5 双端 A/B（桌面 Controller ↔ 移动端 syncEngine 同 S3�
     const dirB = mkdtempSync(path.join(tmpdir(), "lake-ab-lazy-b-"));
     const assetName = "1786735000000_a1b2c3d4.png";
     const imgBytes = Buffer.from("img-bytes", "utf8");
-    const assetHash = sha256Sync(new Uint8Array(imgBytes));
-    const remote = (s: S3Settings, l: any) => s3 as unknown as ObjectStore;
+    const remote = () => s3 as unknown as ObjectStore;
     try {
       const storeA = new Store(dirA);
       storeA.saveS3Settings(S3_CFG);
@@ -235,9 +232,10 @@ describe("Step 5 双端 A/B（桌面 Controller ↔ 移动端 syncEngine 同 S3�
       await syncNowViaEngine(storeA, undefined, remote);
 
       // B（全新设备）同步 → 惰性：正文进回收站、资源不下载、声明元数据已记录
-      const storeB = new Store(dirB);
-      storeB.saveS3Settings(S3_CFG);
-      await syncNowViaEngine(storeB, undefined, remote);
+    const storeB = new Store(dirB);
+    storeB.saveS3Settings(S3_CFG);
+    const assetHash = sha256Sync(new Uint8Array(imgBytes));
+    await syncNowViaEngine(storeB, undefined, remote);
       expect(fs.existsSync(path.join(storeB.noteAssetsPathFor(noteA.id), assetName))).toBe(false);
       expect(storeB.listDeclaredAssets(noteA.id)).toEqual([{ filename: assetName, size: imgBytes.length, hash: assetHash }]);
 
@@ -258,8 +256,7 @@ describe("Step 5 双端 A/B（桌面 Controller ↔ 移动端 syncEngine 同 S3�
     const dirB = mkdtempSync(path.join(tmpdir(), "lake-ab-prev-b-"));
     const assetName = "1786735000000_a1b2c3d4.png";
     const imgBytes = Buffer.from("preview-img", "utf8");
-    const assetHash = sha256Sync(new Uint8Array(imgBytes));
-    const remote = (s: S3Settings, l: any) => s3 as unknown as ObjectStore;
+    const remote = () => s3 as unknown as ObjectStore;
     try {
       const storeA = new Store(dirA);
       storeA.saveS3Settings(S3_CFG);

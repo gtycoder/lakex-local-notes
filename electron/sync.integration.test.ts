@@ -11,8 +11,9 @@ import path from "node:path";
 import zlib from "node:zlib";
 import crypto from "node:crypto";
 import { Store } from "./store.js";
-import { syncNow, type ObjectStore, type S3Settings } from "./sync.js";
-import type { LoggerScopes } from "../src/core/logger.js";
+import { syncNowViaEngine as syncNow } from "./syncEngineController.js";
+import type { ObjectStore } from "./s3Store.js";
+import type { S3Settings } from "../src/core/syncUtils.js";
 import { TRASH_NOTEBOOK_ID } from "../src/core/syncDecisions.js";
 
 const sha256 = (s: string) => crypto.createHash("sha256").update(s).digest("hex");
@@ -62,7 +63,7 @@ function cleanup(devs: Array<{ dir: string }>) {
 describe("双设备同步（Step A/B 拆分后语义验证）", () => {
   it("A 建笔记同步 → B 拉到（元数据 + 正文）", async () => {
     const s3 = new MockS3();
-    const remote = (s: S3Settings, l: LoggerScopes) => s3 as unknown as ObjectStore;
+    const remote = () => s3 as unknown as ObjectStore;
     const A = makeDevice();
     const B = makeDevice();
     try {
@@ -79,14 +80,14 @@ describe("双设备同步（Step A/B 拆分后语义验证）", () => {
 
   it("A 编辑同步 → B 拉到新内容（二次同步）", async () => {
     const s3 = new MockS3();
-    const remote = (s: S3Settings, l: LoggerScopes) => s3 as unknown as ObjectStore;
+    const remote = () => s3 as unknown as ObjectStore;
     const A = makeDevice();
     const B = makeDevice();
     try {
       const note = A.store.createNote("标题");
       await syncNow(A.store, undefined, remote);
       await syncNow(B.store, undefined, remote);
-      const edited = A.store.saveNote(note.id, "新标题", "<p>新内容</p>");
+      A.store.saveNote(note.id, "新标题", "<p>新内容</p>");
       await syncNow(A.store, undefined, remote);
       await syncNow(B.store, undefined, remote);
       const got = B.store.listNotesForSync().find((n) => n.id === note.id);
@@ -97,7 +98,7 @@ describe("双设备同步（Step A/B 拆分后语义验证）", () => {
 
   it("A 删除同步 → B 跟随删除（删除传播，墓碑权威）", async () => {
     const s3 = new MockS3();
-    const remote = (s: S3Settings, l: LoggerScopes) => s3 as unknown as ObjectStore;
+    const remote = () => s3 as unknown as ObjectStore;
     const A = makeDevice();
     const B = makeDevice();
     try {
@@ -118,7 +119,7 @@ describe("双设备同步（Step A/B 拆分后语义验证）", () => {
 
   it("B 恢复同步 → A 跟随恢复（恢复例外传播）", async () => {
     const s3 = new MockS3();
-    const remote = (s: S3Settings, l: LoggerScopes) => s3 as unknown as ObjectStore;
+    const remote = () => s3 as unknown as ObjectStore;
     const A = makeDevice();
     const B = makeDevice();
     try {
@@ -142,7 +143,7 @@ describe("双设备同步（Step A/B 拆分后语义验证）", () => {
 
   it("冲突：两端离线各改 → 先同步者胜，后同步方被覆盖且留 superseded", async () => {
     const s3 = new MockS3();
-    const remote = (s: S3Settings, l: LoggerScopes) => s3 as unknown as ObjectStore;
+    const remote = () => s3 as unknown as ObjectStore;
     const A = makeDevice();
     const B = makeDevice();
     try {
@@ -164,7 +165,7 @@ describe("双设备同步（Step A/B 拆分后语义验证）", () => {
 
   it("B 无改动接受 A 更新：正常同步更新，不留档不报 superseded（修正原逻辑缺陷 2026-08-22）", async () => {
     const s3 = new MockS3();
-    const remote = (s: S3Settings, l: LoggerScopes) => s3 as unknown as ObjectStore;
+    const remote = () => s3 as unknown as ObjectStore;
     const A = makeDevice();
     const B = makeDevice();
     try {
@@ -185,7 +186,7 @@ describe("双设备同步（Step A/B 拆分后语义验证）", () => {
 
   it("A 新建同步 → 删除 → B 无编辑跟随进回收站：移入回收站但不留档不报 superseded（2026-08-22 三修）", async () => {
     const s3 = new MockS3();
-    const remote = (s: S3Settings, l: LoggerScopes) => s3 as unknown as ObjectStore;
+    const remote = () => s3 as unknown as ObjectStore;
     const A = makeDevice();
     const B = makeDevice();
     try {
@@ -208,7 +209,7 @@ describe("双设备同步（Step A/B 拆分后语义验证）", () => {
 
   it("A 上传过 A1（本机是作者）后被 B 恢复历史续编版本覆盖 → A 接受 B2 且强制留档（2026-08-22 二修）", async () => {
     const s3 = new MockS3();
-    const remote = (s: S3Settings, l: LoggerScopes) => s3 as unknown as ObjectStore;
+    const remote = () => s3 as unknown as ObjectStore;
     const A = makeDevice();
     const B = makeDevice();
     try {
@@ -225,7 +226,6 @@ describe("双设备同步（Step A/B 拆分后语义验证）", () => {
       expect(B.store.readNote(note.id).content).toBe("<p>A1</p>");
       // B 恢复历史（恢复 B1 内容）→ 续编 B2 → 同步上传（B 恢复后 updatedAt 更新）
       const bHist = B.store.listNoteHistory(note.id);
-      const b1Hist = bHist.find((h) => h.contentHash === B.store.contentHash(note.id)); // 当前内容 A1 的历史
       // 恢复历史：写回快照正文（B1 的旧版本在 note_history 里，恢复最近的非当前版本）
       const target = bHist.find((h) => h.contentHash !== B.store.contentHash(note.id));
       expect(target).toBeTruthy();
@@ -244,7 +244,7 @@ describe("双设备同步（Step A/B 拆分后语义验证）", () => {
 
   it("移动 vs 删除一致性：B 无编辑跟随 A 的普通移动 / 删除（移入回收站）→ 均不留档不报 superseded（2026-08-22 三修）", async () => {
     const s3 = new MockS3();
-    const remote = (s: S3Settings, l: LoggerScopes) => s3 as unknown as ObjectStore;
+    const remote = () => s3 as unknown as ObjectStore;
     const A = makeDevice();
     const B = makeDevice();
     try {
@@ -257,6 +257,7 @@ describe("双设备同步（Step A/B 拆分后语义验证）", () => {
       const histBefore = B.store.listNoteHistory(note.id).length;
       A.store.moveTreeNode(note.id, nb2.id, 0);
       await syncNow(A.store, undefined, remote);
+      await syncNow(B.store, undefined, remote);
       const rb = await syncNow(B.store, undefined, remote);
       expect(B.store.listNotesForSync().find((n) => n.id === note.id)!.parentId).toBe(nb2.id);
       expect(rb.supersededNotes.some((n) => n.id === note.id)).toBe(false);
@@ -266,7 +267,7 @@ describe("双设备同步（Step A/B 拆分后语义验证）", () => {
 
   it("循环移动：A 把 999 移入 888 下、B 把 888 移入 999 下 → 先提交先确认收敛（2026-08-22 修复）", async () => {
     const s3 = new MockS3();
-    const remote = (s: S3Settings, l: LoggerScopes) => s3 as unknown as ObjectStore;
+    const remote = () => s3 as unknown as ObjectStore;
     const A = makeDevice();
     const B = makeDevice();
     try {
@@ -305,7 +306,7 @@ describe("双设备同步（Step A/B 拆分后语义验证）", () => {
 
   it("墓碑学习：B 离线时 A 删除 → B 上线同步不复活删除（防复活）", async () => {
     const s3 = new MockS3();
-    const remote = (s: S3Settings, l: LoggerScopes) => s3 as unknown as ObjectStore;
+    const remote = () => s3 as unknown as ObjectStore;
     const A = makeDevice();
     const B = makeDevice();
     try {
@@ -328,7 +329,7 @@ describe("双设备同步（Step A/B 拆分后语义验证）", () => {
 
   it("A 编辑后删除 + B 编辑被删 → B 恢复回到原父目录（deletedFromParentId 不丢失，2026-08-22 修复）", async () => {
     const s3 = new MockS3();
-    const remote = (s: S3Settings, l: LoggerScopes) => s3 as unknown as ObjectStore;
+    const remote = () => s3 as unknown as ObjectStore;
     const A = makeDevice();
     const B = makeDevice();
     try {
@@ -359,7 +360,7 @@ describe("双设备同步（Step A/B 拆分后语义验证）", () => {
 
   it("删笔记本传播：A 删笔记本（软删进回收站）→ B 同步跟随进回收站（folders 变更必须发布，迁移回归修复）", async () => {
     const s3 = new MockS3();
-    const remote = (s: S3Settings, l: LoggerScopes) => s3 as unknown as ObjectStore;
+    const remote = () => s3 as unknown as ObjectStore;
     const A = makeDevice();
     const B = makeDevice();
     try {
@@ -383,7 +384,7 @@ describe("双设备同步（Step A/B 拆分后语义验证）", () => {
 
   it("跟随删除不重复留档：B 跟随 A 删除后 lastUploadedHash 不被污染，后续同步 superseded 恒空（ownEdit 误判修复）", async () => {
     const s3 = new MockS3();
-    const remote = (s: S3Settings, l: LoggerScopes) => s3 as unknown as ObjectStore;
+    const remote = () => s3 as unknown as ObjectStore;
     const A = makeDevice();
     const B = makeDevice();
     try {
@@ -411,7 +412,7 @@ describe("双设备同步（Step A/B 拆分后语义验证）", () => {
 describe("多端场景验证（用户验收建议 1/2/3）", () => {
   it("S1 三角同步：A 编辑 → B/C 同步 → B、C 各改不同笔记 → A 再同步 → 三方收敛", async () => {
     const s3 = new MockS3();
-    const remote = (s: S3Settings, l: LoggerScopes) => s3 as unknown as ObjectStore;
+    const remote = () => s3 as unknown as ObjectStore;
     const A = makeDevice(), B = makeDevice(), C = makeDevice();
     try {
       const n1 = A.store.createNote("三角1");
@@ -438,7 +439,7 @@ describe("多端场景验证（用户验收建议 1/2/3）", () => {
 
   it("S2 删除 vs 移动交叉：A 删除 888 同步，B 同时把 888 移到另一笔记本 → B 同步应跟随删除", async () => {
     const s3 = new MockS3();
-    const remote = (s: S3Settings, l: LoggerScopes) => s3 as unknown as ObjectStore;
+    const remote = () => s3 as unknown as ObjectStore;
     const A = makeDevice(), B = makeDevice();
     try {
       const nb1 = A.store.createNotebook("笔记本1");
@@ -461,7 +462,7 @@ describe("多端场景验证（用户验收建议 1/2/3）", () => {
 
   it("S3 正文冲突 + 移动冲突叠加：两端都改 888 内容且都移动 → 先同步者胜，后同步方同时接受正文和位置并留档", async () => {
     const s3 = new MockS3();
-    const remote = (s: S3Settings, l: LoggerScopes) => s3 as unknown as ObjectStore;
+    const remote = () => s3 as unknown as ObjectStore;
     const A = makeDevice(), B = makeDevice();
     try {
       const nb1 = A.store.createNotebook("册1");
@@ -493,7 +494,7 @@ describe("多端场景验证（用户验收建议 4/5）", () => {
 
   it("S4 回收站内编辑：A 删除 → B 在回收站里编辑已删笔记 → 同步不回滚 → 恢复后位置正确", async () => {
     const s3 = new MockS3();
-    const remote = (s: S3Settings, l: LoggerScopes) => s3 as unknown as ObjectStore;
+    const remote = () => s3 as unknown as ObjectStore;
     const A = makeDevice(), B = makeDevice();
     try {
       const note = A.store.createNote("回收站编辑");
@@ -523,14 +524,13 @@ describe("多端场景验证（用户验收建议 4/5）", () => {
 
   it("S5 双端同时创建同名笔记：first-sync-wins，不双份不互相覆盖", async () => {
     const s3 = new MockS3();
-    const remote = (s: S3Settings, l: LoggerScopes) => s3 as unknown as ObjectStore;
+    const remote = () => s3 as unknown as ObjectStore;
     const A = makeDevice(), B = makeDevice();
     try {
       const a = A.store.createNote("同名");
       const b = B.store.createNote("同名");
       // A 先同步 → A 的版本胜出
       await syncNow(A.store, undefined, remote);
-      const rb = await syncNow(B.store, undefined, remote);
       // B 的笔记对象仍在本地（不丢），但云端以 A 为准
       expect(A.store.readNote(a.id).title).toBe("同名");
       expect(B.store.readNote(b.id).title).toBe("同名");

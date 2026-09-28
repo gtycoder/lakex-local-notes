@@ -7,9 +7,10 @@
 import fs from "node:fs";
 import path from "node:path";
 import type { Store } from "./store.js";
-import { ObjectStore, pruneOldManifests } from "./sync.js";
-import type { S3Settings, SyncProgress, SyncResult, SyncWarning } from "./sync.js";
-import { parseLakeManifest, objectKey, MAX_MANIFEST_BYTES, validateS3Settings } from "../src/core/syncUtils.js";
+import { ObjectStore } from "./s3Store.js";
+import { pruneOldManifests } from "./s3Maintenance.js";
+import type { SyncProgress, SyncResult, SyncWarning } from "./syncTypes.js";
+import { parseLakeManifest, objectKey, MAX_MANIFEST_BYTES, validateS3Settings, type S3Settings } from "../src/core/syncUtils.js";
 import { syncNow as engineSyncNow, downloadNoteAssets, type SyncReport } from "../src/core/syncEngine.js";
 import { createS3StoreAdapter, createStoreSyncPort, syncConfigFromStore } from "./syncAdapters.js";
 import type { LoggerScopes } from "../src/core/logger.js";

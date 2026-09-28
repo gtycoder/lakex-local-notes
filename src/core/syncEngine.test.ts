@@ -211,7 +211,7 @@ describe("syncEngine（共享编排）", () => {
     const manifestBytes = await s3.getObject("p/manifests/latest.json");
     expect(manifestBytes).not.toBeNull();
     const manifest = JSON.parse(decode(manifestBytes!));
-    expect(manifest.version).toBe(7);   // 260920：v7 = kind 新增 board（画板文档）
+    expect(manifest.version).toBe(1);   // 260928：协议重置为 V1，内容 schema 不变
     expect(manifest.notes[0].id).toBe("n1");
     expect(db.notes.get("n1")!.syncState).toBe("synced");
   });
@@ -313,7 +313,7 @@ describe("syncEngine（共享编排）", () => {
     s3.map.set("p/objects/n1-" + h + ".lake", new TextEncoder().encode(body));
     s3.map.set("p/assets/n1/" + fn, assetBytes);
     s3.map.set("p/manifests/latest.json", new TextEncoder().encode(JSON.stringify({
-      version: 4, workspaceId: "default", commitId: "c1", prevCommitId: null, createdAt: "2026-01-01T00:00:00.000Z",
+      version: 1, workspaceId: "default", commitId: "c1", prevCommitId: null, createdAt: "2026-01-01T00:00:00.000Z",
       notes: [{ id: "n1", title: "旧标题", parentId: null, sortOrder: 0, updatedAt: "2026-01-01T00:00:00.000Z", contentHash: h, isConflict: false, assets: [{ filename: fn, size: assetBytes.length, hash: "a".repeat(64) }] }],
       folders: [],
     })));
@@ -340,7 +340,7 @@ describe("syncEngine（共享编排）", () => {
     s3.map.set("p/objects/n1-" + h + ".lake", new TextEncoder().encode(body));
     s3.map.set("p/assets/n1/" + old, new TextEncoder().encode("A"));
     s3.map.set("p/manifests/latest.json", new TextEncoder().encode(JSON.stringify({
-      version: 4, workspaceId: "default", commitId: "c1", prevCommitId: null, createdAt: "2026-01-01T00:00:00.000Z",
+      version: 1, workspaceId: "default", commitId: "c1", prevCommitId: null, createdAt: "2026-01-01T00:00:00.000Z",
       notes: [{ id: "n1", title: "T", parentId: null, sortOrder: 0, updatedAt: "2026-01-01T00:00:00.000Z", contentHash: h, isConflict: false, assets: [{ filename: old, size: 1, hash: "c".repeat(64) }] }],
       folders: [],
     })));
@@ -382,7 +382,7 @@ describe("syncEngine（共享编排）", () => {
     db.bases.set("n1", { contentHash: H, lastUploadedHash: null, lastSyncedMetaAt: "2026-06-01T00:00:00.000Z" });
     // 远端：同正文、父目录缺失、updatedAt 更旧（元数据不更新 → decideMetaApply=false）；folders 空 → 本地无笔记本
     s3.map.set("p/manifests/latest.json", new TextEncoder().encode(JSON.stringify({
-      version: 4, workspaceId: "default", commitId: "c1", prevCommitId: null, createdAt: "2026-01-01T00:00:00.000Z",
+      version: 1, workspaceId: "default", commitId: "c1", prevCommitId: null, createdAt: "2026-01-01T00:00:00.000Z",
       notes: [{ id: "n1", title: "N", parentId: "folder-missing", sortOrder: 0, updatedAt: "2026-01-01T00:00:00.000Z", contentHash: H, isConflict: false, assets: [] }],
       folders: [],
     })));
@@ -427,7 +427,7 @@ describe("syncEngine（共享编排）", () => {
     s3.map.set("p/assets/n1/a.png", img1);
     s3.map.set("p/assets/n1/b.png", img2);
     s3.map.set("p/manifests/latest.json", gzipSync(new TextEncoder().encode(JSON.stringify({
-      version: 4, workspaceId: "default", commitId: "c1", prevCommitId: null, createdAt: "2026-01-01T00:00:00.000Z",
+      version: 1, workspaceId: "default", commitId: "c1", prevCommitId: null, createdAt: "2026-01-01T00:00:00.000Z",
       notes: [{ id: "n1", title: "N", parentId: "notebook-personal", sortOrder: 0, updatedAt: "2026-02-01T00:00:00.000Z", contentHash: hNew, isConflict: false, assets: [{ filename: "a.png", size: 4, hash: hI1 }, { filename: "b.png", size: 4, hash: hI2 }] }],
       folders: [],
     }))));
@@ -450,7 +450,7 @@ describe("syncEngine（共享编排）", () => {
     s3.map.set("p/objects/n1-" + hNew + ".lake", new TextEncoder().encode(neu));
     s3.map.set("p/assets/n1/a.png", img1);   // 云端有，本地无
     s3.map.set("p/manifests/latest.json", gzipSync(new TextEncoder().encode(JSON.stringify({
-      version: 4, workspaceId: "default", commitId: "c1", prevCommitId: null, createdAt: "2026-01-01T00:00:00.000Z",
+      version: 1, workspaceId: "default", commitId: "c1", prevCommitId: null, createdAt: "2026-01-01T00:00:00.000Z",
       notes: [{ id: "n1", title: "N", parentId: "notebook-personal", sortOrder: 0, updatedAt: "2026-02-01T00:00:00.000Z", contentHash: hNew, isConflict: false, assets: [{ filename: "a.png", size: 4, hash: hI1 }] }],
       folders: [],
     }))));
@@ -466,7 +466,7 @@ describe("syncEngine（共享编排）", () => {
     db.bases.set("n1", { contentHash: h, lastUploadedHash: null, lastSyncedMetaAt: "2026-01-01T00:00:00.000Z" });
     // 远端软删进回收站，正文 hash 不变（删除不改内容）；故意【不放正文对象】——若走 GET 必 MISS → 不会入回收站
     s3.map.set("p/manifests/latest.json", gzipSync(new TextEncoder().encode(JSON.stringify({
-      version: 4, workspaceId: "default", commitId: "c1", prevCommitId: null, createdAt: "2026-01-01T00:00:00.000Z",
+      version: 1, workspaceId: "default", commitId: "c1", prevCommitId: null, createdAt: "2026-01-01T00:00:00.000Z",
       notes: [{ id: "n1", title: "N", parentId: "notebook-personal", sortOrder: 0, updatedAt: "2026-02-01T00:00:00.000Z", contentHash: h, isConflict: false, assets: [], trashedAt: "2026-02-01T00:00:00.000Z", deletedFromParentId: "notebook-personal" }],
       folders: [],
     }))));
@@ -486,7 +486,7 @@ describe("syncEngine（共享编排）", () => {
     db.bases.set("n1", { contentHash: hashOf(local), lastUploadedHash: null, lastSyncedMetaAt: "2026-01-01T00:00:00.000Z" });
     s3.map.set("p/objects/n1-" + hT + ".lake", new TextEncoder().encode(tomb));   // 删除方携带的删除前内容
     s3.map.set("p/manifests/latest.json", gzipSync(new TextEncoder().encode(JSON.stringify({
-      version: 4, workspaceId: "default", commitId: "c1", prevCommitId: null, createdAt: "2026-01-01T00:00:00.000Z",
+      version: 1, workspaceId: "default", commitId: "c1", prevCommitId: null, createdAt: "2026-01-01T00:00:00.000Z",
       notes: [{ id: "n1", title: "N", parentId: "notebook-personal", sortOrder: 0, updatedAt: "2026-02-01T00:00:00.000Z", contentHash: hT, isConflict: false, assets: [], trashedAt: "2026-02-01T00:00:00.000Z", deletedFromParentId: "notebook-personal" }],
       folders: [],
     }))));
@@ -506,7 +506,7 @@ describe("syncEngine（共享编排）", () => {
     db.bases.set("n1", { contentHash: h, lastUploadedHash: null, lastSyncedMetaAt: "2026-01-01T00:00:00.000Z" });
     s3.map.set("p/objects/n1-" + h + ".lake", new TextEncoder().encode(body));   // 云端权威正文在
     s3.map.set("p/manifests/latest.json", gzipSync(new TextEncoder().encode(JSON.stringify({
-      version: 4, workspaceId: "default", commitId: "c1", prevCommitId: null, createdAt: "2026-01-01T00:00:00.000Z",
+      version: 1, workspaceId: "default", commitId: "c1", prevCommitId: null, createdAt: "2026-01-01T00:00:00.000Z",
       notes: [{ id: "n1", title: "N", parentId: "notebook-personal", sortOrder: 0, updatedAt: "2026-02-01T00:00:00.000Z", contentHash: h, isConflict: false, assets: [], trashedAt: "2026-02-01T00:00:00.000Z", deletedFromParentId: "notebook-personal" }],
       folders: [],
     }))));
@@ -532,7 +532,7 @@ describe("syncEngine（共享编排）", () => {
     const h = hashOf("<p>remote</p>");
     s3.map.set("p/objects/n2-" + h + ".lake", new TextEncoder().encode("<p>remote</p>"));
     s3.map.set("p/manifests/latest.json", new TextEncoder().encode(JSON.stringify({
-      version: 4, workspaceId: "default", commitId: "c1", prevCommitId: null,
+      version: 1, workspaceId: "default", commitId: "c1", prevCommitId: null,
       createdAt: "2026-01-01T00:00:00.000Z",
       notes: [{ id: "n2", title: "远端", parentId: null, sortOrder: 0, updatedAt: "2026-01-01T00:00:00.000Z", contentHash: h, isConflict: false, assets: [], isLocked: true, lockedAt: "2026-01-02T00:00:00.000Z", icon: "star" }],
       folders: [],
@@ -552,7 +552,7 @@ describe("syncEngine（共享编排）", () => {
     // 对象内容与清单声明的 contentHash 不符（模拟损坏/篡改）
     s3.map.set("p/objects/n2-" + h + ".lake", new TextEncoder().encode("<p>TAMPERED</p>"));
     s3.map.set("p/manifests/latest.json", new TextEncoder().encode(JSON.stringify({
-      version: 4, workspaceId: "default", commitId: "c1", prevCommitId: null,
+      version: 1, workspaceId: "default", commitId: "c1", prevCommitId: null,
       createdAt: "2026-01-01T00:00:00.000Z",
       notes: [{ id: "n2", title: "远端", parentId: null, sortOrder: 0, updatedAt: "2026-01-01T00:00:00.000Z", contentHash: h, isConflict: false, assets: [] }],
       folders: [],
@@ -582,7 +582,7 @@ describe("syncEngine（共享编排）", () => {
     const H = hashOf("<p>remote-final</p>");
     s3.map.set("p/objects/n1-" + H + ".lake", new TextEncoder().encode("<p>remote-final</p>"));
     s3.map.set("p/manifests/latest.json", new TextEncoder().encode(JSON.stringify({
-      version: 4, workspaceId: "default", commitId: "c1", prevCommitId: null, createdAt: "2026-01-01T00:00:00.000Z",
+      version: 1, workspaceId: "default", commitId: "c1", prevCommitId: null, createdAt: "2026-01-01T00:00:00.000Z",
       notes: [{ id: "n1", title: "远端", parentId: null, sortOrder: 0, updatedAt: "2026-01-03T00:00:00.000Z", contentHash: H, isConflict: false, assets: [], trashedAt: "2026-01-03T00:00:00.000Z", deletedFromParentId: null }],
       folders: [],
     })));
@@ -619,7 +619,7 @@ describe("syncEngine（共享编排）", () => {
     db.notes.set("n1", row({ id: "n1", content: "<p>内容</p>", syncState: "purged" }));
     // 远端 manifest：n1 deleted:true（他端 purge 墓碑已在云端）
     s3.map.set("p/manifests/latest.json", new TextEncoder().encode(JSON.stringify({
-      version: 4, workspaceId: "default", commitId: "c1", prevCommitId: null, createdAt: "2026-01-01T00:00:00.000Z",
+      version: 1, workspaceId: "default", commitId: "c1", prevCommitId: null, createdAt: "2026-01-01T00:00:00.000Z",
       notes: [{ id: "n1", title: "被删", parentId: null, sortOrder: 0, updatedAt: "2026-01-02T00:00:00.000Z", contentHash: h, isConflict: false, assets: [], deleted: true, deletedAt: "2026-01-02T00:00:00.000Z" }],
       folders: [],
     })));
@@ -640,7 +640,7 @@ describe("syncEngine（共享编排）", () => {
     db.notes.set("n2", row({ id: "n2", content: "<p>新笔记</p>", syncState: "local" }));
     // 远端 manifest：n1 deleted:true（他端 purge 墓碑）
     s3.map.set("p/manifests/latest.json", new TextEncoder().encode(JSON.stringify({
-      version: 4, workspaceId: "default", commitId: "c1", prevCommitId: null, createdAt: "2026-01-01T00:00:00.000Z",
+      version: 1, workspaceId: "default", commitId: "c1", prevCommitId: null, createdAt: "2026-01-01T00:00:00.000Z",
       notes: [{ id: "n1", title: "被删", parentId: null, sortOrder: 0, updatedAt: "2026-01-02T00:00:00.000Z", contentHash: h, isConflict: false, assets: [], deleted: true, deletedAt: "2026-01-02T00:00:00.000Z" }],
       folders: [],
     })));
@@ -659,7 +659,7 @@ describe("syncEngine（共享编排）", () => {
     db.notes.set("n1", row({ id: "n1" }));
     const h = hashOf("<p>x</p>");
     s3.map.set("p/manifests/latest.json", new TextEncoder().encode(JSON.stringify({
-      version: 4, workspaceId: "default", commitId: "c1", prevCommitId: null, createdAt: "2026-01-01T00:00:00.000Z",
+      version: 1, workspaceId: "default", commitId: "c1", prevCommitId: null, createdAt: "2026-01-01T00:00:00.000Z",
       notes: [
         { id: "n1", title: "x", parentId: null, sortOrder: 0, updatedAt: "2026-01-01T00:00:00.000Z", contentHash: h, isConflict: false, assets: [], deleted: true, deletedAt: "2026-01-02T00:00:00.000Z" },
         { id: "n2", title: "y", parentId: null, sortOrder: 1, updatedAt: "2026-01-01T00:00:00.000Z", contentHash: h, isConflict: false, assets: [], deleted: true, deletedAt: "2026-01-02T00:00:00.000Z" },
@@ -689,7 +689,7 @@ describe("syncEngine（共享编排）", () => {
     const r = await syncNow(CFG, s3, db);
     expect(r.published).toBe(true);
     const manifest = JSON.parse(decode((await s3.getObject("p/manifests/latest.json"))!));
-    expect(manifest.version).toBe(7);
+    expect(manifest.version).toBe(1);
     const entry = manifest.folders.find((f: any) => f.id === "nb1");
     expect(entry).toBeDefined();
     expect(entry.deleted).toBe(true);
@@ -718,7 +718,7 @@ describe("syncEngine（共享编排）", () => {
     db.notes.set("n1", row({ id: "n1", parentId: "nb1", syncState: "synced" }));
     const h = hashOf("<p>内容</p>");
     s3.map.set("p/manifests/latest.json", new TextEncoder().encode(JSON.stringify({
-      version: 5, workspaceId: "default", commitId: "c1", prevCommitId: null, createdAt: "2026-01-01T00:00:00.000Z",
+      version: 1, workspaceId: "default", commitId: "c1", prevCommitId: null, createdAt: "2026-01-01T00:00:00.000Z",
       notes: [{ id: "n1", title: "子文档", parentId: "nb1", sortOrder: 0, updatedAt: "2026-01-01T00:00:00.000Z", contentHash: h, isConflict: false, assets: [], deleted: true, deletedAt: "2026-01-02T00:00:00.000Z" }],
       folders: [mkFolderTomb("nb1", "本", "2026-01-02T00:00:00.000Z")],
     })));
@@ -736,7 +736,7 @@ describe("syncEngine（共享编排）", () => {
     const s3 = new MemS3();
     const db = new MemDb();
     s3.map.set("p/manifests/latest.json", new TextEncoder().encode(JSON.stringify({
-      version: 5, workspaceId: "default", commitId: "c1", prevCommitId: null, createdAt: "2026-01-01T00:00:00.000Z",
+      version: 1, workspaceId: "default", commitId: "c1", prevCommitId: null, createdAt: "2026-01-01T00:00:00.000Z",
       notes: [],
       folders: [mkFolderTomb("nb1", "从未见过的本", "2026-01-02T00:00:00.000Z")],
     })));
@@ -756,7 +756,7 @@ describe("syncEngine（共享编排）", () => {
     db.purgedFolders.add("nb1");
     // 远端：活跃条目（2026-01-03 恢复，晚于墓碑）→ 恢复胜出
     s3.map.set("p/manifests/latest.json", new TextEncoder().encode(JSON.stringify({
-      version: 5, workspaceId: "default", commitId: "c1", prevCommitId: null, createdAt: "2026-01-01T00:00:00.000Z",
+      version: 1, workspaceId: "default", commitId: "c1", prevCommitId: null, createdAt: "2026-01-01T00:00:00.000Z",
       notes: [],
       folders: [{ id: "nb1", title: "被删的本", parentId: null, sortOrder: 0, nodeType: "notebook", icon: null, updatedAt: "2026-01-03T00:00:00.000Z" }],
     })));
@@ -808,7 +808,7 @@ describe("syncEngine（共享编排）", () => {
     db.purgedFolders.add("nb1");
     // 远端：同 id 墓碑（v5 已传播）
     s3.map.set("p/manifests/latest.json", new TextEncoder().encode(JSON.stringify({
-      version: 5, workspaceId: "default", commitId: "c1", prevCommitId: null, createdAt: "2026-01-01T00:00:00.000Z",
+      version: 1, workspaceId: "default", commitId: "c1", prevCommitId: null, createdAt: "2026-01-01T00:00:00.000Z",
       notes: [],
       folders: [mkFolderTomb("nb1", "本", "2026-01-02T00:00:00.000Z")],
     })));
@@ -820,19 +820,19 @@ describe("syncEngine（共享编排）", () => {
     expect(r2.message).toContain("零变更跳过");
   });
 
-  it("v5 读兼容：v4 清单（无 folder 墓碑字段）可被正常读取，不报版本不兼容", async () => {
+  it("V1 清单：folder 墓碑字段缺省为活跃目录，不影响读取", async () => {
     const s3 = new MemS3();
     const db = new MemDb();
     db.notes.set("n1", row({ id: "n1", syncState: "synced", content: "<p>内容</p>" }));
     db.bases.set("n1", { contentHash: hashOf("<p>内容</p>"), lastUploadedHash: hashOf("<p>内容</p>"), lastSyncedMetaAt: "2026-01-01T00:00:00.000Z" });
     s3.map.set("p/manifests/latest.json", new TextEncoder().encode(JSON.stringify({
-      version: 4, workspaceId: "default", commitId: "c1", prevCommitId: null, createdAt: "2026-01-01T00:00:00.000Z",
+      version: 1, workspaceId: "default", commitId: "c1", prevCommitId: null, createdAt: "2026-01-01T00:00:00.000Z",
       notes: [{ id: "n1", title: "笔记", parentId: null, sortOrder: 0, updatedAt: "2026-01-01T00:00:00.000Z", contentHash: hashOf("<p>内容</p>"), isConflict: false, assets: [] }],
       folders: [{ id: "nb1", title: "本", parentId: null, sortOrder: 0, nodeType: "notebook", icon: null, updatedAt: "2026-01-01T00:00:00.000Z" }],
     })));
     const r = await syncNow(CFG, s3, db);
     expect(r.message).not.toContain("版本不兼容");
-    // v4 活跃 folder 正常导入
+    // V1 活跃 folder 正常导入
     expect(db.folders.get("nb1")).toBeDefined();
   });
 
@@ -843,7 +843,7 @@ describe("syncEngine（共享编排）", () => {
     db.notes.set("n1", row({ id: "n1", content: "<p>本地未同步编辑</p>", syncState: "local" }));
     db.bases.set("n1", { contentHash: hashOf("<p>旧版</p>"), lastUploadedHash: null, lastSyncedMetaAt: "2026-01-01T00:00:00.000Z" });
     s3.map.set("p/manifests/latest.json", new TextEncoder().encode(JSON.stringify({
-      version: 4, workspaceId: "default", commitId: "c1", prevCommitId: null, createdAt: "2026-01-01T00:00:00.000Z",
+      version: 1, workspaceId: "default", commitId: "c1", prevCommitId: null, createdAt: "2026-01-01T00:00:00.000Z",
       notes: [
         { id: "n1", title: "被永久删除", parentId: null, sortOrder: 0, updatedAt: "2026-01-01T00:00:00.000Z", contentHash: hashOf("<p>旧版</p>"), isConflict: false, assets: [], deleted: true, deletedAt: "2026-01-02T00:00:00.000Z" },
         { id: "n2", title: "纯跟随", parentId: null, sortOrder: 1, updatedAt: "2026-01-01T00:00:00.000Z", contentHash: hashOf("<p>n2</p>"), isConflict: false, assets: [], deleted: true, deletedAt: "2026-01-02T00:00:00.000Z" },
@@ -871,7 +871,7 @@ describe("syncEngine（共享编排）", () => {
     db.notes.set("n1", row({ id: "n1", content: "<p>same</p>", title: "本地旧标题", syncState: "synced" }));
     db.bases.set("n1", { contentHash: h, lastUploadedHash: null, lastSyncedMetaAt: "2026-01-01T00:00:00.000Z" });
     s3.map.set("p/manifests/latest.json", new TextEncoder().encode(JSON.stringify({
-      version: 4, workspaceId: "default", commitId: "c1", prevCommitId: null, createdAt: "2026-01-01T00:00:00.000Z",
+      version: 1, workspaceId: "default", commitId: "c1", prevCommitId: null, createdAt: "2026-01-01T00:00:00.000Z",
       notes: [{ id: "n1", title: "远端新标题", parentId: null, sortOrder: 0, updatedAt: "2026-01-03T00:00:00.000Z", contentHash: h, isConflict: false, assets: [], isLocked: true, lockedAt: "2026-01-03T00:00:00.000Z", icon: "star" }],
       folders: [],
     })));
@@ -901,7 +901,7 @@ describe("syncEngine（共享编排）", () => {
     s3.map.set("p/objects/n2-" + h2 + ".lake", new TextEncoder().encode("<p>b</p>"));
     s3.map.set("p/objects/n3-" + h3 + ".lake", new TextEncoder().encode("<p>c</p>"));
     s3.map.set("p/manifests/latest.json", new TextEncoder().encode(JSON.stringify({
-      version: 4, workspaceId: "default", commitId: "c1", prevCommitId: null, createdAt: "2026-01-01T00:00:00.000Z",
+      version: 1, workspaceId: "default", commitId: "c1", prevCommitId: null, createdAt: "2026-01-01T00:00:00.000Z",
       notes: [
         // n1 挂在存在的 folder-f1 → 保留父目录
         { id: "n1", title: "A", parentId: "folder-f1", sortOrder: 0, updatedAt: "2026-01-01T00:00:00.000Z", contentHash: h1, isConflict: false, assets: [] },
@@ -928,7 +928,7 @@ describe("syncEngine（共享编排）", () => {
     const h1 = hashOf("<p>a</p>");
     s3.map.set("p/objects/n1-" + h1 + ".lake", new TextEncoder().encode("<p>a</p>"));
     s3.map.set("p/manifests/latest.json", new TextEncoder().encode(JSON.stringify({
-      version: 4, workspaceId: "default", commitId: "c1", prevCommitId: null, createdAt: "2026-01-01T00:00:00.000Z",
+      version: 1, workspaceId: "default", commitId: "c1", prevCommitId: null, createdAt: "2026-01-01T00:00:00.000Z",
       notes: [
         { id: "n1", title: "A", parentId: "folder-missing", sortOrder: 0, updatedAt: "2026-01-01T00:00:00.000Z", contentHash: h1, isConflict: false, assets: [] },
       ],
@@ -947,7 +947,7 @@ describe("syncEngine（共享编排）", () => {
     db.purgedFolders.add("nb-1");
     // 远端 manifest.folders 仍含 nb-1（purge 前的残留）
     s3.map.set("p/manifests/latest.json", new TextEncoder().encode(JSON.stringify({
-      version: 4, workspaceId: "default", commitId: "c1", prevCommitId: null, createdAt: "2026-01-01T00:00:00.000Z",
+      version: 1, workspaceId: "default", commitId: "c1", prevCommitId: null, createdAt: "2026-01-01T00:00:00.000Z",
       notes: [],
       folders: [{ id: "nb-1", title: "笔记本", parentId: null, sortOrder: 0, nodeType: "notebook", icon: null, updatedAt: "2026-01-01T00:00:00.000Z" }],
     })));
@@ -968,14 +968,14 @@ describe("syncEngine（共享编排）", () => {
   it("D5：本机编辑成果被远端覆盖 → 先留档再接受远端（协议 §4.2）", async () => {
     const s3 = new MemS3();
     const db = new MemDb();
-    const H0 = hashOf("<p>base</p>"), H1 = hashOf("<p>local</p>"), H2 = hashOf("<p>remote</p>");
+    const H0 = hashOf("<p>base</p>"), H2 = hashOf("<p>remote</p>");
     // 本地 n1：相对基线已编辑（localChanged），sync_state=local
     db.notes.set("n1", row({ id: "n1", content: "<p>local</p>", title: "本地标题", syncState: "local" }));
     db.bases.set("n1", { contentHash: H0, lastUploadedHash: null, lastSyncedMetaAt: "2026-01-01T00:00:00.000Z" });
     // 远端 n1：更新版（remoteChanged），首对象存在
     s3.map.set("p/objects/n1-" + H2 + ".lake", new TextEncoder().encode("<p>remote</p>"));
     s3.map.set("p/manifests/latest.json", new TextEncoder().encode(JSON.stringify({
-      version: 4, workspaceId: "default", commitId: "c1", prevCommitId: null, createdAt: "2026-01-01T00:00:00.000Z",
+      version: 1, workspaceId: "default", commitId: "c1", prevCommitId: null, createdAt: "2026-01-01T00:00:00.000Z",
       notes: [{ id: "n1", title: "远端标题", parentId: null, sortOrder: 0, updatedAt: "2026-01-03T00:00:00.000Z", contentHash: H2, isConflict: false, assets: [] }],
       folders: [],
     })));
@@ -995,7 +995,7 @@ describe("syncEngine（共享编排）", () => {
     s3.map.set("p/objects/n9-" + h + ".lake", new TextEncoder().encode("<p>n</p>"));
     s3.map.set("p/assets/n9/photo.png", new TextEncoder().encode("imgbytes"));
     s3.map.set("p/manifests/latest.json", new TextEncoder().encode(JSON.stringify({
-      version: 4, workspaceId: "default", commitId: "c1", prevCommitId: null, createdAt: "2026-01-01T00:00:00.000Z",
+      version: 1, workspaceId: "default", commitId: "c1", prevCommitId: null, createdAt: "2026-01-01T00:00:00.000Z",
       notes: [{ id: "n9", title: "N", parentId: null, sortOrder: 0, updatedAt: "2026-01-01T00:00:00.000Z", contentHash: h, isConflict: false, assets: [{ filename: "photo.png", size: 8, hash: imgHash }] }],
       folders: [],
     })));
@@ -1109,7 +1109,7 @@ describe("syncEngine（共享编排）", () => {
     s3.map.set("p/objects/nt-" + h + ".lake", new TextEncoder().encode("<p>trash</p>"));
     s3.map.set("p/assets/nt/photo.png", new TextEncoder().encode("imgbytes"));
     s3.map.set("p/manifests/latest.json", new TextEncoder().encode(JSON.stringify({
-      version: 4, workspaceId: "default", commitId: "c1", prevCommitId: null, createdAt: "2026-01-01T00:00:00.000Z",
+      version: 1, workspaceId: "default", commitId: "c1", prevCommitId: null, createdAt: "2026-01-01T00:00:00.000Z",
       notes: [{ id: "nt", title: "T", parentId: null, sortOrder: 0, updatedAt: "2026-01-02T00:00:00.000Z", contentHash: h, isConflict: false, assets: [{ filename: "photo.png", size: 8, hash: imgHash }], trashedAt: "2026-01-02T00:00:00.000Z", deletedFromParentId: null }],
       folders: [],
     })));
@@ -1145,7 +1145,7 @@ describe("syncEngine（共享编排）", () => {
     db.notes.set("n999", row({ id: "n999", content: "<p>same</p>", parentId: null, syncState: "synced" }));
     // 远端：999 已提交在 888 下（A 先提交）→ 本地保留 888→999 会成环
     s3.map.set("p/manifests/latest.json", new TextEncoder().encode(JSON.stringify({
-      version: 4, workspaceId: "default", commitId: "c1", prevCommitId: null, createdAt: "2026-01-01T00:00:00.000Z",
+      version: 1, workspaceId: "default", commitId: "c1", prevCommitId: null, createdAt: "2026-01-01T00:00:00.000Z",
       notes: [
         { id: "n888", title: "888", parentId: null, sortOrder: 0, updatedAt: "2026-01-01T00:00:00.000Z", contentHash: h, isConflict: false, assets: [] },
         { id: "n999", title: "999", parentId: "n888", sortOrder: 0, updatedAt: "2026-01-01T00:00:00.000Z", contentHash: h, isConflict: false, assets: [] },
@@ -1171,7 +1171,7 @@ describe("syncEngine（共享编排）", () => {
       const H = hashOf("<p>remote-final</p>");
       s3.map.set("p/objects/n1-" + H + ".lake", new TextEncoder().encode("<p>remote-final</p>"));
       s3.map.set("p/manifests/latest.json", new TextEncoder().encode(JSON.stringify({
-        version: 4, workspaceId: "default", commitId: "c1", prevCommitId: null, createdAt: "2026-01-01T00:00:00.000Z",
+        version: 1, workspaceId: "default", commitId: "c1", prevCommitId: null, createdAt: "2026-01-01T00:00:00.000Z",
         notes: [{ id: "n1", title: "远端", parentId: null, sortOrder: 0, updatedAt: "2026-01-03T00:00:00.000Z", contentHash: H, isConflict: false, assets: [], trashedAt: "2026-01-03T00:00:00.000Z", deletedFromParentId: null }],
         folders: [],
       })));
@@ -1232,7 +1232,7 @@ describe("syncEngine（共享编排）", () => {
     // 远端 n1 active 且更新（恢复）
     s3.map.set("p/objects/n1-" + h + ".lake", new TextEncoder().encode("<p>restored</p>"));
     s3.map.set("p/manifests/latest.json", new TextEncoder().encode(JSON.stringify({
-      version: 4, workspaceId: "default", commitId: "c1", prevCommitId: null, createdAt: "2026-01-01T00:00:00.000Z",
+      version: 1, workspaceId: "default", commitId: "c1", prevCommitId: null, createdAt: "2026-01-01T00:00:00.000Z",
       notes: [{ id: "n1", title: "恢复", parentId: "notebook-personal", sortOrder: 0, updatedAt: "2026-01-05T00:00:00.000Z", contentHash: h, isConflict: false, assets: [] }],
       folders: [],
     })));
@@ -1252,7 +1252,7 @@ describe("syncEngine（共享编排）", () => {
     db.bases.set("n1", { contentHash: h, lastUploadedHash: null, lastSyncedMetaAt: "2026-01-02T00:00:00.000Z" });
     s3.map.set("p/objects/n1-" + h + ".lake", new TextEncoder().encode("<p>内容</p>"));
     s3.map.set("p/manifests/latest.json", new TextEncoder().encode(JSON.stringify({
-      version: 5, workspaceId: "default", commitId: "c1", prevCommitId: null, createdAt: "2026-01-01T00:00:00.000Z",
+      version: 1, workspaceId: "default", commitId: "c1", prevCommitId: null, createdAt: "2026-01-01T00:00:00.000Z",
       notes: [{ id: "n1", title: "已恢复", parentId: "notebook-personal", sortOrder: 0, updatedAt: "2026-01-02T00:00:00.000Z", contentHash: h, isConflict: false, assets: [] }],
       folders: [],
     })));
@@ -1272,7 +1272,7 @@ describe("syncEngine（共享编排）", () => {
     db.notes.set("n1", row({ id: "n1", content: "<p>旧版</p>", syncState: "local", trashedAt: "2026-01-05T00:00:00.000Z" }));
     s3.map.set("p/objects/n1-" + hOld + ".lake", new TextEncoder().encode("<p>旧版</p>"));
     s3.map.set("p/manifests/latest.json", new TextEncoder().encode(JSON.stringify({
-      version: 5, workspaceId: "default", commitId: "c1", prevCommitId: null, createdAt: "2026-01-01T00:00:00.000Z",
+      version: 1, workspaceId: "default", commitId: "c1", prevCommitId: null, createdAt: "2026-01-01T00:00:00.000Z",
       notes: [{ id: "n1", title: "旧 active", parentId: "notebook-personal", sortOrder: 0, updatedAt: "2026-01-01T00:00:00.000Z", contentHash: hOld, isConflict: false, assets: [] }],
       folders: [],
     })));
@@ -1293,7 +1293,7 @@ describe("syncEngine（共享编排）", () => {
     // 本地无副本（全新设备）；远端是他端已软删的条目，dfp=原父
     s3.map.set("p/objects/n1-" + h + ".lake", new TextEncoder().encode("<p>内容</p>"));
     s3.map.set("p/manifests/latest.json", new TextEncoder().encode(JSON.stringify({
-      version: 5, workspaceId: "default", commitId: "c1", prevCommitId: null, createdAt: "2026-01-01T00:00:00.000Z",
+      version: 1, workspaceId: "default", commitId: "c1", prevCommitId: null, createdAt: "2026-01-01T00:00:00.000Z",
       notes: [{ id: "n1", title: "他端已删", parentId: "notebook-trash", sortOrder: 0, updatedAt: "2026-01-02T00:00:00.000Z", contentHash: h, isConflict: false, assets: [], trashedAt: "2026-01-02T00:00:00.000Z", deletedFromParentId: "nb-origin" }],
       folders: [],
     })));
@@ -1314,7 +1314,7 @@ describe("syncEngine（共享编排）", () => {
     db.deletedNotes.add("n1");
     db.deletedAtMap.set("n1", "2026-01-05T00:00:00.000Z");
     s3.map.set("p/manifests/latest.json", new TextEncoder().encode(JSON.stringify({
-      version: 4, workspaceId: "default", commitId: "c1", prevCommitId: null, createdAt: "2026-01-01T00:00:00.000Z",
+      version: 1, workspaceId: "default", commitId: "c1", prevCommitId: null, createdAt: "2026-01-01T00:00:00.000Z",
       notes: [{ id: "n1", title: "旧", parentId: "folder-missing", sortOrder: 0, updatedAt: "2026-01-01T00:00:00.000Z", contentHash: h, isConflict: false, assets: [] }],
       folders: [],
     })));
@@ -1333,7 +1333,7 @@ describe("syncEngine（共享编排）", () => {
     s3.map.set("p/objects/n1-" + h1 + ".lake", new TextEncoder().encode("<p>a</p>"));
     s3.map.set("p/objects/n2-" + h2 + ".lake", new TextEncoder().encode("<p>b</p>"));
     s3.map.set("p/manifests/latest.json", new TextEncoder().encode(JSON.stringify({
-      version: 4, workspaceId: "default", commitId: "c1", prevCommitId: null, createdAt: "2026-01-01T00:00:00.000Z",
+      version: 1, workspaceId: "default", commitId: "c1", prevCommitId: null, createdAt: "2026-01-01T00:00:00.000Z",
       notes: [
         { id: "n1", title: "A", parentId: "folder-missing", sortOrder: 0, updatedAt: "2026-01-01T00:00:00.000Z", contentHash: h1, isConflict: false, assets: [] },
         { id: "n2", title: "B", parentId: "folder-missing", sortOrder: 0, updatedAt: "2026-01-01T00:00:00.000Z", contentHash: h2, isConflict: false, assets: [] },
@@ -1354,7 +1354,7 @@ describe("syncEngine（共享编排）", () => {
     db.deletedNotes.add("n1");
     db.deletedAtMap.set("n1", "2026-01-05T00:00:00.000Z"); // 本地删除较新
     s3.map.set("p/manifests/latest.json", new TextEncoder().encode(JSON.stringify({
-      version: 4, workspaceId: "default", commitId: "c1", prevCommitId: null, createdAt: "2026-01-01T00:00:00.000Z",
+      version: 1, workspaceId: "default", commitId: "c1", prevCommitId: null, createdAt: "2026-01-01T00:00:00.000Z",
       notes: [{ id: "n1", title: "旧", parentId: "notebook-personal", sortOrder: 0, updatedAt: "2026-01-01T00:00:00.000Z", contentHash: h, isConflict: false, assets: [] }],
       folders: [],
     })));
@@ -1443,7 +1443,7 @@ describe("syncEngine（共享编排）", () => {
     const H = hashOf(remoteContent);
     s3.map.set("p/objects/n1-" + H + ".lake", new TextEncoder().encode(remoteContent));
     s3.map.set("p/manifests/latest.json", new TextEncoder().encode(JSON.stringify({
-      version: 4, workspaceId: "default", commitId: "c-remote", prevCommitId: null, createdAt: "2026-02-01T00:00:00.000Z",
+      version: 1, workspaceId: "default", commitId: "c-remote", prevCommitId: null, createdAt: "2026-02-01T00:00:00.000Z",
       folders: [{ id: "nb1", title: "笔记本", parentId: null, sortOrder: 0, nodeType: "notebook", icon: null, updatedAt: "2026-02-01T00:00:00.000Z" }],
       notes: [{ id: "n1", title: "云端笔记", parentId: "nb1", sortOrder: 0, updatedAt: "2026-02-01T00:00:00.000Z", contentHash: H, isConflict: false, assets: [] }],
     })));

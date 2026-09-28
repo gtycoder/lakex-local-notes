@@ -11,6 +11,7 @@
  * - 附件字段存 filename，走现有 assets/{noteId}/{filename} 资产管线（与文档/小记同一套）。
  */
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent } from "react";
+import { writeLocalStorage } from "../../lib/localStorageSafe";
 import { Dialog, Menu } from "../../components/ui/Overlay";
 import {
   ArrowUpDown, Check, ChevronDown, ChevronLeft, ChevronRight, ChevronsRight, ClipboardList, Copy, Eye, EyeOff, GripVertical, ListFilter,
@@ -138,7 +139,9 @@ export function BitableEditor({ noteId, content, visible, readOnly, onChange, ch
   // ---- 面板/浮层状态 ----
   const [panel, setPanel] = useState<null | "fields" | "filter" | "group" | "sort" | "rowHeight">(null);
   const [menuAnchor, setMenuAnchor] = useState<HTMLElement | null>(null);
-  const [columnMenu, setColumnMenu] = useState<{ fieldId: string; anchor: HTMLElement } | null>(null);
+  /** 列菜单：坐标定位（⋯ 按钮 / 列头右键都能开）；header = 列头 <th>，给「文本颜色」调色板当锚点
+   *  —— ⋯ 按钮是 hover 才 display 的，菜单一关就量不到位置（调色板会跑到左上角）。 */
+  const [columnMenu, setColumnMenu] = useState<{ fieldId: string; x: number; y: number; header: HTMLElement | null } | null>(null);
   const [textColorFor, setTextColorFor] = useState<{ fieldId: string; anchor: HTMLElement } | null>(null);
   const [configDragId, setConfigDragId] = useState<string | null>(null);
   const [viewMenu, setViewMenu] = useState<{ viewId: string; anchor: HTMLElement } | null>(null);
@@ -250,15 +253,15 @@ export function BitableEditor({ noteId, content, visible, readOnly, onChange, ch
     const out: BitableAttachment[] = [];
     for (const file of files) {
       const uploaded = await uploadLakeResource(file, noteId);
-      out.push({ file: parseLocalAssetUrl(uploaded.url)?.filename ?? uploaded.filename, name: uploaded.filename });
+      out.push({ file: parseLocalAssetUrl(uploaded.url)?.filename ?? uploaded.filename, name: uploaded.filename, size: uploaded.size });
     }
     return out;
   }, [noteId]);
 
   /** 打开附件：走公共入口 openAssetEntry（与文档/小记同一套分流）。磁盘名定位文件、展示名作预览标题。 */
-  const openAsset = useCallback((file: string, name: string) => {
+  const openAsset = useCallback((attachment: BitableAttachment) => {
     // kindFrom = 磁盘名：展示名被改成没有扩展名时，类型判定照样正确（音视频仍走应用内播放）
-    openAssetEntry(withAssetAccessToken(ASSET_ORIGIN + "/" + noteId + "/" + file), name, 0, { kindFrom: file });
+    openAssetEntry(withAssetAccessToken(ASSET_ORIGIN + "/" + noteId + "/" + attachment.file), attachment.name, attachment.size, { kindFrom: attachment.file });
   }, [noteId]);
 
   const appendAttachments = useCallback((recordId: string, fieldId: string, entries: BitableAttachment[]) => {
@@ -427,7 +430,8 @@ export function BitableEditor({ noteId, content, visible, readOnly, onChange, ch
   // ---- 记录 ----
   const addRecord = useCallback(() => {
     const record = createBitableRecord();
-    patchActiveTable((table) => ({ ...table, records: [...table.records, { ...record, values: defaultRecordValues(table) }] }));
+    // createdAt 传进去：日期字段若配了「添加记录时间」，填的就是这条记录自己的创建日
+    patchActiveTable((table) => ({ ...table, records: [...table.records, { ...record, values: defaultRecordValues(table, record.createdAt) }] }));
     return record.id;
   }, [patchActiveTable]);
   const deleteRecords = useCallback((ids: string[]) => {
@@ -487,8 +491,8 @@ export function BitableEditor({ noteId, content, visible, readOnly, onChange, ch
     return () => document.removeEventListener("keydown", onKey);
   }, [rowCtx]);
 
-  useEffect(() => { localStorage.setItem("lake-notes-v3.bitable-tables-width", String(tablesWidth)); }, [tablesWidth]);
-  useEffect(() => { localStorage.setItem("lake-notes-v3.bitable-tables-collapsed", tablesCollapsed ? "1" : "0"); }, [tablesCollapsed]);
+  useEffect(() => { writeLocalStorage("lake-notes-v3.bitable-tables-width", String(tablesWidth)); }, [tablesWidth]);
+  useEffect(() => { writeLocalStorage("lake-notes-v3.bitable-tables-collapsed", tablesCollapsed ? "1" : "0"); }, [tablesCollapsed]);
 
   /** 数据表列表宽度拖拽（对齐钉钉：右边缘可左右调；收起后留一条窄栏）。 */
   const startTablesResize = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
@@ -509,6 +513,16 @@ export function BitableEditor({ noteId, content, visible, readOnly, onChange, ch
   const toggleGroup = (key: string) => setCollapsedGroups((prev) => { const next = new Set(prev); if (next.has(key)) next.delete(key); else next.add(key); return next; });
 
   const openDrawer = (recordId: string) => setDrawerRecordId(recordId);
+  /** 打开列菜单：列头 ⋯ 按钮与**列头右键**共用（坐标定位，不依赖那个 hover 才显形的按钮）。
+   *  菜单约 7 项 ≈ 300px 高，贴底/贴右时夹回窗口内。 */
+  const openColumnMenu = (fieldId: string, x: number, y: number, header: HTMLElement | null) => {
+    setColumnMenu({
+      fieldId,
+      x: Math.max(8, Math.min(x, window.innerWidth - 208)),
+      y: Math.max(8, Math.min(y, window.innerHeight - 300)),
+      header,
+    });
+  };
   const stepDrawer = (delta: number) => {
     if (drawerIndex < 0) return;
     const next = viewRecords[(drawerIndex + delta + viewRecords.length) % viewRecords.length];
@@ -532,6 +546,15 @@ export function BitableEditor({ noteId, content, visible, readOnly, onChange, ch
     const ri = shownRecords.findIndex((r) => r.id === recordId);
     const ci = visibleFields.findIndex((f) => f.id === fieldId);
     return ri >= cellRange.r0 && ri <= cellRange.r1 && ci >= cellRange.c0 && ci <= cellRange.c1;
+  };
+  /** 选中态的**边框**只画在选区外缘（单格 = 一整圈；见 bitableEditor.css 的四边 box-shadow 拼法）。 */
+  const selectionEdgeClass = (recordId: string, fieldId: string) => {
+    if (!cellRange) return "";
+    const ri = shownRecords.findIndex((r) => r.id === recordId);
+    const ci = visibleFields.findIndex((f) => f.id === fieldId);
+    if (ri < cellRange.r0 || ri > cellRange.r1 || ci < cellRange.c0 || ci > cellRange.c1) return "";
+    return (ri === cellRange.r0 ? " sel-top" : "") + (ri === cellRange.r1 ? " sel-bottom" : "")
+      + (ci === cellRange.c0 ? " sel-left" : "") + (ci === cellRange.c1 ? " sel-right" : "");
   };
   const copySelection = useCallback(async () => {
     if (!cellRange) return;
@@ -562,7 +585,16 @@ export function BitableEditor({ noteId, content, visible, readOnly, onChange, ch
           const t = tok.trim();
           if (t === "" && field.type !== "text") return;
           let value: unknown = t;
-          if (field.type === "number") value = t === "" ? "" : Number(t);
+          // 数字格只写有限数值：粘贴文本里的非数字（"abc"/"1,2"）不能变成 NaN ——
+          // NaN 序列化成 JSON 会变 null（写盘即失真），显示成 "NaN" 也难看
+          if (field.type === "number") {
+            if (t === "") value = "";
+            else {
+              const n = Number(t);
+              if (!Number.isFinite(n)) return;
+              value = n;
+            }
+          }
           else if (field.type === "select") { const opt = (field.options ?? []).find((o) => o.name === t); if (!opt) return; value = opt.id; }
           else if (field.type === "multiSelect") { value = t.split(/[,，]/).map((s) => s.trim()).filter(Boolean).map((n) => (field.options ?? []).find((o) => o.name === n)?.id).filter((x): x is string => !!x); }
           else if (field.type !== "text" && field.type !== "date") return;
@@ -670,7 +702,7 @@ export function BitableEditor({ noteId, content, visible, readOnly, onChange, ch
       </td>
       {visibleFields.map((field) => (
         <td key={field.id} data-record-id={record.id} data-field-id={field.id}
-          className={"bt-td" + (selectedColumnId === field.id ? " col-selected" : "") + (cellInSelection(record.id, field.id) ? " cell-selected" : "") + (isDuplicateCell(field, record) ? " in-highlight" : "")}
+          className={"bt-td" + (selectedColumnId === field.id ? " col-selected" : "") + (cellInSelection(record.id, field.id) ? " cell-selected" + selectionEdgeClass(record.id, field.id) : "") + (isDuplicateCell(field, record) ? " in-highlight" : "")}
           style={columnTextColor(field.id) ? { color: columnTextColor(field.id) } : undefined}
           onMouseDown={(event) => {
             if (readOnly || event.button !== 0) return;
@@ -692,7 +724,7 @@ export function BitableEditor({ noteId, content, visible, readOnly, onChange, ch
                 readOnly={readOnly}
                 onUpload={(files) => { void uploadFiles(files).then((entries) => appendAttachments(record.id, field.id, entries)); }}
                 onRemove={(file) => setCellValue(record.id, field.id, removeBitableAttachment(record.values[field.id], file))}
-                onOpen={(attachment) => { void openAsset(attachment.file, attachment.name); }}
+                onOpen={openAsset}
                 onReorder={(files) => setCellValue(record.id, field.id, reorderBitableAttachments(record.values[field.id], files))}
                 onRename={(file, name) => setCellValue(record.id, field.id, renameBitableAttachment(record.values[field.id], file, name))}
               />
@@ -763,7 +795,7 @@ export function BitableEditor({ noteId, content, visible, readOnly, onChange, ch
               className={"bt-view-tab" + (view.id === activeView.id ? " active" : "") + (draggingView?.id === view.id ? " dragging" : "")}
               draggable={!readOnly}
               onDragStart={() => setDraggingView({ id: view.id })}
-              onDragOver={(event: DragEvent) => { if (draggingView && draggingView.id !== view.id) reorderViews(draggingView.id, view.id); }}
+              onDragOver={() => { if (draggingView && draggingView.id !== view.id) reorderViews(draggingView.id, view.id); }}
               onDragEnd={() => setDraggingView(null)}>
               <button type="button" className="bt-view-name" onClick={() => setActiveView(view.id)} onDoubleClick={() => setViewEditor(view.id)}>
                 <span className="bt-view-icon" aria-hidden="true">{view.type === "form" ? <ClipboardList size={13} /> : <Table2 size={13} />}</span>{view.name}
@@ -831,7 +863,7 @@ export function BitableEditor({ noteId, content, visible, readOnly, onChange, ch
             defaults={formDefaults}
             onUploadFiles={uploadFiles}
             onAddFieldOption={(fieldId, option) => patchActiveTable((table) => ({ ...table, fields: table.fields.map((f) => (f.id === fieldId ? { ...f, options: [...(f.options ?? []), option] } : f)) }))}
-            onOpenAsset={(attachment) => { void openAsset(attachment.file, attachment.name); }}
+            onOpenAsset={openAsset}
           />
         ) : (
           <div className="bt-grid-wrap" style={gridStyle} onKeyDown={onGridKeyDown}>
@@ -853,7 +885,13 @@ export function BitableEditor({ noteId, content, visible, readOnly, onChange, ch
                       draggable={!readOnly}
                       onDragStart={() => setDragging({ kind: "field", id: field.id })}
                       onDragOver={(event: DragEvent) => { event.preventDefault(); reorderByDrag("field", field.id); }}
-                      onDragEnd={() => setDragging(null)}>
+                      onDragEnd={() => setDragging(null)}
+                      onContextMenu={(event) => {
+                        // 列头右键 = 列菜单（对齐云端）；列菜单里已有「编辑列/复制列/插入/删除…」
+                        if (readOnly) return;
+                        event.preventDefault();
+                        openColumnMenu(field.id, event.clientX, event.clientY, event.currentTarget);
+                      }}>
                       <span className="bt-th-inner" role="button" title="点击选择整列" onClick={() => {
                         const next = selectedColumnId === field.id ? null : field.id;
                         setSelectedColumnId(next);
@@ -864,7 +902,11 @@ export function BitableEditor({ noteId, content, visible, readOnly, onChange, ch
                         <span className="bt-th-name" title={field.name}>{field.name}</span>
                         {field.required && <em className="bt-required">*</em>}
                         <button type="button" className="bt-th-more" title="列操作" aria-label="列操作" disabled={readOnly}
-                          onClick={(event) => { event.stopPropagation(); setColumnMenu({ fieldId: field.id, anchor: event.currentTarget }); }}><ChevronDown size={12} /></button>
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            const r = event.currentTarget.getBoundingClientRect();
+                            openColumnMenu(field.id, r.left, r.bottom + 4, event.currentTarget.closest<HTMLElement>("th"));
+                          }}><ChevronDown size={12} /></button>
                         <span className="bt-col-resize" onPointerDown={(event) => startColumnResize(event, field.id, field.width ?? DEFAULT_COL_WIDTH)} onClick={(event) => event.stopPropagation()} title="拖动调整列宽" />
                       </span>
                     </th>
@@ -1017,16 +1059,15 @@ export function BitableEditor({ noteId, content, visible, readOnly, onChange, ch
         </div>
       </Popover>
 
-      <Popover open={Boolean(columnMenu)} anchor={columnMenu?.anchor ?? null} onClose={() => setColumnMenu(null)} width={200}>
+      <Popover open={Boolean(columnMenu)} anchor={null} at={columnMenu ? { x: columnMenu.x, y: columnMenu.y } : null}
+        onClose={() => setColumnMenu(null)} width={200}>
         <div className="bt-panel">
           <button type="button" className="bt-menu-item" disabled={readOnly} onClick={() => { if (columnMenu) setFieldEditor({ fieldId: columnMenu.fieldId }); setColumnMenu(null); }}><Pencil size={13} />编辑列</button>
           <button type="button" className="bt-menu-item" disabled={readOnly} onClick={() => { if (columnMenu) duplicateField(columnMenu.fieldId); }}><Copy size={13} />复制列</button>
           <button type="button" className="bt-menu-item" disabled={readOnly} onClick={() => { if (columnMenu) insertField(columnMenu.fieldId, "before"); }}><ChevronRight size={13} />向左插入列</button>
           <button type="button" className="bt-menu-item" disabled={readOnly} onClick={() => { if (columnMenu) insertField(columnMenu.fieldId, "after"); }}><ChevronRight size={13} />向右插入列</button>
-          <button type="button" className="bt-menu-item" disabled={readOnly} onClick={() => { if (columnMenu) patchView(activeView.id, { groups: [{ fieldId: columnMenu.fieldId, desc: false }] }); setColumnMenu(null); }}><Rows2 size={13} />按本列分组</button>
-          <button type="button" className="bt-menu-item" disabled={readOnly} onClick={() => { if (columnMenu) setFilters([...filters, { fieldId: columnMenu.fieldId, operator: "contains", value: "" }]); setColumnMenu(null); }}><ListFilter size={13} />按本列筛选</button>
-          <button type="button" className="bt-menu-item" disabled={readOnly} onClick={() => { if (columnMenu) setSorts([{ fieldId: columnMenu.fieldId, desc: false }]); setColumnMenu(null); }}><ArrowUpDown size={13} />升序</button>
-          <button type="button" className="bt-menu-item" disabled={readOnly} onClick={() => { if (columnMenu) setSorts([{ fieldId: columnMenu.fieldId, desc: true }]); setColumnMenu(null); }}><ArrowUpDown size={13} />降序</button>
+          {/* 260928 用户：「本列分组 / 本列筛选 / 升序 / 降序」四条快捷项**彻底删除**
+              （顶部工具栏已经有分组、筛选、排序，不必在列菜单里再来一套） */}
           {columnMenu && (() => {
             const fieldId = columnMenu.fieldId;
             const on = (activeView.highlightDuplicateFieldIds ?? []).includes(fieldId);
@@ -1040,9 +1081,11 @@ export function BitableEditor({ noteId, content, visible, readOnly, onChange, ch
           })()}
           {columnMenu && (() => {
             const fieldId = columnMenu.fieldId;
-            const anchor = columnMenu.anchor;
+            // 调色板锚到**列头**（不是 ⋯ 按钮）：菜单一关按钮就 display:none、量出来的 rect 是 0×0，
+            // 浮层会跑到左上角（260928 用户报「颜色框错位」）
+            const anchor = columnMenu.header;
             return (
-              <button type="button" className="bt-menu-item" disabled={readOnly} onClick={() => { setTextColorFor({ fieldId, anchor }); setColumnMenu(null); }}>文本颜色</button>
+              <button type="button" className="bt-menu-item" disabled={readOnly} onClick={() => { if (anchor) setTextColorFor({ fieldId, anchor }); setColumnMenu(null); }}>文本颜色</button>
             );
           })()}
           <button type="button" className="bt-menu-item danger" disabled={readOnly || activeTable.fields.length <= 1} onClick={() => { if (columnMenu) deleteField(columnMenu.fieldId); }}><Trash2 size={13} />删除列</button>
@@ -1090,6 +1133,7 @@ export function BitableEditor({ noteId, content, visible, readOnly, onChange, ch
             field.required = patch.required;
             if (patch.options) field.options = patch.options;
             if (patch.defaultValue !== undefined) field.defaultValue = patch.defaultValue;
+            if (patch.dateAutoFill) field.dateAutoFill = true;
             patchActiveTable((table) => ({ ...table, fields: [...table.fields, field] }));
             setFieldEditor(null);
           }}
@@ -1145,7 +1189,7 @@ export function BitableEditor({ noteId, content, visible, readOnly, onChange, ch
           onAddOption={(fieldId, name, recordId) => addOption(fieldId, name, recordId)}
           onAddField={openAddField}
           onUpload={(recordId, fieldId, files) => { void uploadFiles(files).then((entries) => appendAttachments(recordId, fieldId, entries)); }}
-          onOpenAsset={(attachment) => { void openAsset(attachment.file, attachment.name); }}
+          onOpenAsset={openAsset}
         />
       )}
     </div>
@@ -1158,7 +1202,7 @@ interface FieldEditorModalProps {
   onClose: () => void;
   onSave: (patch: Partial<BitableField>, options?: BitableField["options"]) => void;
   onDelete: () => void;
-  onAddField: (patch: { name: string; type: string; required?: boolean; options?: BitableField["options"]; defaultValue?: unknown }) => void;
+  onAddField: (patch: { name: string; type: string; required?: boolean; options?: BitableField["options"]; defaultValue?: unknown; dateAutoFill?: boolean }) => void;
 }
 
 function FieldEditorModal({ field, readOnly, onClose, onSave, onDelete, onAddField }: FieldEditorModalProps) {
@@ -1172,19 +1216,25 @@ function FieldEditorModal({ field, readOnly, onClose, onSave, onDelete, onAddFie
   const [defaultValue, setDefaultValue] = useState<string>(
     typeof field?.defaultValue === "string" || typeof field?.defaultValue === "number" ? String(field.defaultValue) : "",
   );
+  /** 日期字段的默认值形态（对齐云端）：无 / 指定时间（挑一个日期）/ 添加记录时间（自动填创建日）。 */
+  const [dateMode, setDateMode] = useState<"none" | "fixed" | "created">(
+    field?.dateAutoFill === true ? "created" : (typeof field?.defaultValue === "string" && field.defaultValue ? "fixed" : "none"),
+  );
   const supportsOptions = type === "select" || type === "multiSelect";
   const knownType = isKnownFieldType(type) ? (type as BitableFieldType) : null;
   const parseDefault = (): unknown => {
     if (!knownType) return undefined;
     if (knownType === "number") return defaultValue === "" ? undefined : Number(defaultValue);
-    if (knownType === "text" || knownType === "date" || knownType === "select") return defaultValue === "" ? undefined : defaultValue;
+    if (knownType === "date") return dateMode === "fixed" && defaultValue !== "" ? defaultValue : undefined;
+    if (knownType === "text" || knownType === "select") return defaultValue === "" ? undefined : defaultValue;
     return undefined;
   };
   const save = () => {
     const fallbackName = BITABLE_FIELD_TYPE_LABEL[knownType ?? "text"];
     const nextDefault = parseDefault();
-    if (isNew) { onAddField({ name: name.trim() || fallbackName, type, required, options: supportsOptions ? options : undefined, defaultValue: nextDefault }); return; }
-    onSave({ name: name.trim() || field!.name, type, required, defaultValue: nextDefault }, supportsOptions ? options : undefined);
+    const dateAutoFill = knownType === "date" && dateMode === "created" ? true : undefined;
+    if (isNew) { onAddField({ name: name.trim() || fallbackName, type, required, options: supportsOptions ? options : undefined, defaultValue: nextDefault, dateAutoFill }); return; }
+    onSave({ name: name.trim() || field!.name, type, required, defaultValue: nextDefault, dateAutoFill }, supportsOptions ? options : undefined);
   };
   return (
     <Dialog open onDismiss={onClose} label={isNew ? "新增字段" : "编辑字段"} className="bt-dialog">
@@ -1204,7 +1254,18 @@ function FieldEditorModal({ field, readOnly, onClose, onSave, onDelete, onAddFie
               <SelectMenu value={defaultValue} disabled={readOnly} onChange={setDefaultValue}
                 options={[{ value: "", label: "（无）" }, ...options.map((option) => ({ value: option.id, label: option.name }))]} />
             ) : knownType === "date" ? (
-              <DatePicker value={defaultValue} readOnly={readOnly} onChange={(value) => setDefaultValue(typeof value === "string" ? value : "")} />
+              // 日期默认值三态（对齐云端）：无 / 指定时间 / 添加记录时间（新建记录时自动填当天）
+              <div className="bt-date-default">
+                <SelectMenu value={dateMode} disabled={readOnly} onChange={(value) => setDateMode(value as "none" | "fixed" | "created")}
+                  options={[
+                    { value: "none", label: "（无）" },
+                    { value: "fixed", label: "指定时间（选择日期）" },
+                    { value: "created", label: "添加记录时间（自动填创建日）" },
+                  ]} />
+                {dateMode === "fixed" && (
+                  <DatePicker value={defaultValue} readOnly={readOnly} onChange={(value) => setDefaultValue(typeof value === "string" ? value : "")} />
+                )}
+              </div>
             ) : (
               <input className="bt-input" type={knownType === "number" ? "number" : "text"}
                 value={defaultValue} readOnly={readOnly} onChange={(event) => setDefaultValue(event.target.value)} />

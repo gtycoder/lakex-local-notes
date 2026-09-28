@@ -61,7 +61,7 @@ function cardValueOf(doc: BoardDoc, viewport: BoardViewport | null): BoardCardVa
   return value;
 }
 
-function docOf(value: BoardCardValue, base: BoardDoc, viewport: BoardViewport | null): BoardDoc {
+function docOf(value: BoardCardValue, viewport: BoardViewport | null): BoardDoc {
   const doc: BoardDoc = {
     kind: "board",
     version: 1,
@@ -288,7 +288,7 @@ export function BoardEditor({ noteId, content, visible, readOnly, onChange }: Bo
     // （src/features/board/boardViewStore.ts）承担。写正文的代价是缩放/平移会把文档标脏 →
     // 保存 → 待同步 → S3 上传（260916 报过的坑），而且视口会跨端串味。
     // 这里沿用正文里原有的 viewport（历史字段，已不再维护）⇒ 同一份内容序列化稳定，不多产生保存。
-    const json = boardToBody(docOf(forDisk, initialDoc, initialDoc.viewport ?? null));
+    const json = boardToBody(docOf(forDisk, initialDoc.viewport ?? null));
     if (json === lastSerializedRef.current) return;
     lastSerializedRef.current = json;
     changeRef.current(json);

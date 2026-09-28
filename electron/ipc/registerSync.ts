@@ -1,7 +1,9 @@
 import type { IpcMainInvokeEvent } from "electron";
 import type { QuickNotesStore } from "../quickNotes.js";
 import type { Store } from "../store.js";
-import { runDeepCleanup, runGcReconcile, testConnection, type SyncProgress } from "../sync.js";
+import { runDeepCleanup, runGcReconcile } from "../s3Maintenance.js";
+import { testConnection } from "../s3Store.js";
+import type { SyncProgress } from "../syncTypes.js";
 import { runGcDiagnostics } from "../syncGc.js";
 import { runQuickNotesDeepCleanup } from "../quickNotesSync.js";
 import { AppError } from "../../src/core/storeErrors.js";

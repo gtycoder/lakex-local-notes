@@ -42,20 +42,6 @@ export function sniffImageFormat(bytes: Uint8Array): ImageFormat | null {
   return null;
 }
 
-const MIME_FROM_EXT: Record<string, string> = {
-  ".png": "image/png",
-  ".jpg": "image/jpeg",
-  ".jpeg": "image/jpeg",
-  ".gif": "image/gif",
-  ".webp": "image/webp",
-  ".avif": "image/avif",
-  ".svg": "image/svg+xml",
-};
-
-export function mimeTypeForFilename(filename: string): string {
-  return MIME_FROM_EXT[filename.slice(filename.lastIndexOf(".")).toLowerCase()] ?? "application/octet-stream";
-}
-
 /** Decode-free dimensions for common raster formats, used before sharp/libvips. */
 export function readImageDimensions(bytes: Uint8Array): ImageDimensions | null {
   if (bytes.length >= 24 && bytesEqual(bytes.subarray(0, 8), PNG_MAGIC) && ascii(bytes.subarray(12, 16)) === "IHDR") {

@@ -112,10 +112,13 @@ export function LakeEditor({ noteId, content, mode = "editor", tocEnabled, onCha
     // - 桌面默认 directOpen（isDesktop）；移动端显式传 attachment.directOpen=true
     const attachment = prefs?.attachment;
     const openAttachmentDefault = (it: AttachmentPreviewItem): void => {
-      if (it.ref) void native.openAttachment(it.ref.noteId, it.ref.filename).then((r) => { if (!r.ok) console.warn("[attach] 打开失败:", r.error); });
+      if (it.ref) void native.openAttachment(it.ref.noteId, it.ref.filename)
+        .then((r) => { if (!r.ok) setError(r.error || "打开附件失败"); })
+        .catch((reason) => setError(getNativeErrorMessage(reason)));
     };
     const showInFolder = (it: AttachmentPreviewItem): void => {
-      if (it.ref) void native.showAttachmentInFolder(it.ref.noteId, it.ref.filename);
+      if (it.ref) void native.showAttachmentInFolder(it.ref.noteId, it.ref.filename)
+        .catch((reason) => setError(getNativeErrorMessage(reason)));
     };
     const directOpen = attachment?.directOpen ?? isDesktop();
     const detachFileCard = attachFileCardClick(host, (src, name, size) => {
@@ -185,7 +188,9 @@ export function LakeEditor({ noteId, content, mode = "editor", tocEnabled, onCha
   const attachmentPrefs = prefs?.attachment;
   const openOriginalFromMenu = (it: AttachmentPreviewItem): void => {
     if (attachmentPrefs?.onOpenAttachment) attachmentPrefs.onOpenAttachment(it);
-    else if (it.ref) void native.openAttachment(it.ref.noteId, it.ref.filename);
+    else if (it.ref) void native.openAttachment(it.ref.noteId, it.ref.filename)
+      .then((r) => { if (!r.ok) setError(r.error || "打开附件失败"); })
+      .catch((reason) => setError(getNativeErrorMessage(reason)));
   };
   return (
     <>
@@ -202,7 +207,8 @@ export function LakeEditor({ noteId, content, mode = "editor", tocEnabled, onCha
             cut: () => { cutCardElement(cardMenu.el); },
             rename: (it) => { setRenameItem({ item: it, el: cardMenu.el }); },
             copyName: (it) => { void navigator.clipboard.writeText(it.name).catch(() => undefined); },
-            saveAs: (it) => { if (it.ref) void native.saveAssetAs(it.ref.noteId, it.ref.filename, it.name).catch(() => undefined); },
+            saveAs: (it) => { if (it.ref) void native.saveAssetAs(it.ref.noteId, it.ref.filename, it.name)
+              .catch((reason) => setError(getNativeErrorMessage(reason))); },
           }}
           onClose={() => setCardMenu(null)}
         />

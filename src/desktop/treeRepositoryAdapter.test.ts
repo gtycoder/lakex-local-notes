@@ -35,7 +35,7 @@ describe("DesktopTreeRepository（共享 TreeRepository 接口适配）", () => 
   });
 
   it("renameTreeNode / setNodeIcon / moveTreeNodeOrdered 透传", async () => {
-    const { repo, store, dir } = makePair();
+    const { repo, dir } = makePair();
     const nb = await repo.createNotebook({ title: "A", icon: null });
     const renamed = await repo.renameTreeNode(nb.id, "B");
     expect(renamed.title).toBe("B");

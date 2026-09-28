@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { reportNativeActionError } from "../../lib/nativeErrors";
 import { shouldAcceptEditorChange } from "../../core/editorChangeGuard";
 import {
   createLakeDocument,
@@ -16,12 +17,11 @@ import { useOutline } from "../outline/useOutline";
 import { native } from "../../lib/native";
 import { attachImagePreviewClick } from "./imagePreview";
 import { ImageLightbox } from "./ImageLightbox";
-import { attachFileCardClick, buildAttachmentPreviewItem, createCardHoverResidueCleaner, resolveCardAsset, findCardData, type AttachmentPreviewItem } from "../attachment/attachmentPreviewController";
+import { attachFileCardClick, createCardHoverResidueCleaner, resolveCardAsset, findCardData, type AttachmentPreviewItem } from "../attachment/attachmentPreviewController";
 import { openAssetEntry } from "../attachment/openAssetEntry";
 import { CardContextMenu, TextContextMenu, cutCardElement } from "./CardContextMenu";
 import { AssetRenameDialog } from "./AssetRenameDialog";
 import { installMediaCardCategoryRouter } from "./mediaCardRouting";
-import { isMediaFilename } from "../../core/assetNaming.js";
 import { AttachmentPreview } from "../attachment/AttachmentPreview";
 
 export interface EditorTabProps {
@@ -1009,13 +1009,13 @@ export function EditorTab({ noteId, content, visible, tocEnabled, outlineEnhance
           y={cardMenu.y}
           item={cardMenu.item}
           actions={{
-            openOriginal: (it) => { if (it.ref) void native.openAttachment(it.ref.noteId, it.ref.filename); },
-            showInFolder: (it) => { if (it.ref) void native.showAttachmentInFolder(it.ref.noteId, it.ref.filename); },
+            openOriginal: (it) => { if (it.ref) void native.openAttachment(it.ref.noteId, it.ref.filename).catch((error) => reportNativeActionError("打开附件", error)); },
+            showInFolder: (it) => { if (it.ref) void native.showAttachmentInFolder(it.ref.noteId, it.ref.filename).catch((error) => reportNativeActionError("在文件夹中显示附件", error)); },
             cut: () => { cutCardElement(cardMenu.el); },
             rename: (it) => { setRenameItem({ item: it, el: cardMenu.el }); },
-            copyImage: (it) => { if (it.ref) void native.copyAssetImage(it.ref.noteId, it.ref.filename); },
-            copyPath: (it) => { if (it.ref) void native.copyAssetPath(it.ref.noteId, it.ref.filename); },
-            saveAs: (it) => { if (it.ref) void native.saveAssetAs(it.ref.noteId, it.ref.filename, it.name); },
+            copyImage: (it) => { if (it.ref) void native.copyAssetImage(it.ref.noteId, it.ref.filename).catch((error) => reportNativeActionError("复制图片", error)); },
+            copyPath: (it) => { if (it.ref) void native.copyAssetPath(it.ref.noteId, it.ref.filename).catch((error) => reportNativeActionError("复制资源路径", error)); },
+            saveAs: (it) => { if (it.ref) void native.saveAssetAs(it.ref.noteId, it.ref.filename, it.name).catch((error) => reportNativeActionError("另存资源", error)); },
             copyName: (it) => { void navigator.clipboard.writeText(it.name).catch(() => undefined); },
           }}
           onClose={() => setCardMenu(null)}

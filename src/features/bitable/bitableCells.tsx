@@ -6,13 +6,14 @@
  * 单元格值按 fieldId 存，编辑通过 onChange(value) 回传，由 BitableEditor 统一写 doc。
  */
 import { useEffect, useLayoutEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
+import { reportNativeActionError } from "../../lib/nativeErrors";
 import { Popover as OverlayPopover } from "../../components/ui/Overlay";
 import { Calendar, Check, ChevronDown, ChevronLeft, ChevronRight, CircleDot, Download, Hash, HelpCircle, Link2, Maximize2, Paperclip, Pencil, Plus, Search, Tags, Type, X } from "lucide-react";
 import { ASSET_ORIGIN, assetThumbWidthForCss, withAssetAccessToken } from "../../lib/assetPort.js";
 import { withAssetWidth } from "../../core/assetUrl.js";
 import { extOf, isImageExtension } from "../../core/assetNaming.js";
 import { native } from "../../lib/native.js";
-import { ATTACHMENT_GRID, BITABLE_OPTION_PALETTE, attachmentGridColumns, bitableAttachments, bitableDisplayValue, isKnownFieldType, optionChipStyle, optionColorHex, type BitableAttachment, type BitableField, type BitableFieldOption } from "../../core/bitableDoc.js";
+import { ATTACHMENT_GRID, BITABLE_OPTION_PALETTE, attachmentGridColumns, bitableAttachments, bitableDisplayValue, isKnownFieldType, localDateString, optionChipStyle, optionColorHex, type BitableAttachment, type BitableField, type BitableFieldOption } from "../../core/bitableDoc.js";
 
 /** 字段类型图标（未知类型给 HelpCircle）。 */
 export function FieldTypeIcon({ type, size = 14 }: { type: string; size?: number }) {
@@ -36,6 +37,8 @@ function isInsideDialog(el: HTMLElement | null | undefined): boolean {
 export interface PopoverProps {
   open: boolean;
   anchor: HTMLElement | null;
+  /** 无锚点元素的场合（列头右键菜单）：直接给视口坐标，浮层左上角落在这里。 */
+  at?: { x: number; y: number } | null;
   onClose: () => void;
   children: ReactNode;
   width?: number;
@@ -44,17 +47,28 @@ export interface PopoverProps {
 
 /** 锚定浮层：portal 到 body，避免被表格 overflow 裁剪；外点/Esc 关闭。
  *  表面走 Overlay 原语的 .ln-popover（单一来源）；.bt-popover 只留内容尺寸。
- *  锚点在对话框/抽屉内时抬层，避免被对话框表面盖住。 */
-export function Popover({ open, anchor, onClose, children, width = 240, align = "start" }: PopoverProps) {
+ *  锚点在对话框/抽屉内时抬层，避免被对话框表面盖住。
+ *  锚点可为 null 而改用 at 坐标（列头右键菜单没有稳定锚点元素）。 */
+export function Popover({ open, anchor, at, onClose, children, width = 240, align = "start" }: PopoverProps) {
   const panelRef = useRef<HTMLDivElement>(null);
   const [style, setStyle] = useState<{ left: number; top: number } | null>(null);
+  // 只依赖 at 的两个分量：调用方常写内联对象，依赖对象身份会在 setState → 重排 → 再 setState 里打转
+  const atX = at?.x; const atY = at?.y;
   useLayoutEffect(() => {
-    if (!open || !anchor) return;
+    if (!open) return;
+    if (atX !== undefined && atY !== undefined) {
+      setStyle({
+        left: Math.max(8, Math.min(atX, window.innerWidth - width - 8)),
+        top: Math.max(8, Math.min(atY, window.innerHeight - 48)),
+      });
+      return;
+    }
+    if (!anchor) return;
     const r = anchor.getBoundingClientRect();
     const left = align === "end" ? Math.max(8, r.right - width) : Math.min(r.left, window.innerWidth - width - 8);
     const top = Math.min(r.bottom + 4, window.innerHeight - 48);
     setStyle({ left, top });
-  }, [open, anchor, width, align]);
+  }, [open, anchor, atX, atY, width, align]);
   if (!open || !style) return null;
   return (
     <OverlayPopover className="bt-popover" raised={isInsideDialog(anchor)} onDismiss={onClose} surfaceRef={panelRef} ignoreOutside={(t) => !!anchor?.contains(t)} style={{ left: style.left, top: style.top, width }}>
@@ -63,7 +77,7 @@ export function Popover({ open, anchor, onClose, children, width = 240, align = 
   );
 }
 
-export interface OptionPickerProps {
+interface OptionPickerProps {
   field: BitableField;
   value: unknown;
   multiple: boolean;
@@ -72,8 +86,8 @@ export interface OptionPickerProps {
   onAddOption: (name: string) => void;
 }
 
-/** 单选/多选下拉：可搜索、可新建选项（对齐云端）。 */
-export function OptionPicker({ field, value, multiple, disabled, onToggle, onAddOption }: OptionPickerProps) {
+/** 单选/多选下拉：可搜索、可新建选项（对齐云端）。仅本文件的 CellEditor 用。 */
+function OptionPicker({ field, value, multiple, disabled, onToggle, onAddOption }: OptionPickerProps) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const anchorRef = useRef<HTMLButtonElement>(null);
@@ -158,6 +172,14 @@ function isInternalAttachmentDrag(event: { dataTransfer?: DataTransfer | null })
   return !!types && [...types].includes(BT_ATTACH_DRAG_MIME);
 }
 
+/** 展示名拆成「主名 + 扩展名（含点）」。改名**只改主名**：`.xxx` 是文件格式，固定不动
+ *  （260928 用户要求「编辑名称的时候不能改格式，直接编辑名称」）。
+ *  展示名里没有 `.xxx`（或本身就是 `.xxx`）时返回整名 + 空后缀，那一格照旧整名可编辑。 */
+function splitAttachmentName(name: string): { base: string; ext: string } {
+  const dot = name.lastIndexOf(".");
+  return dot > 0 ? { base: name.slice(0, dot), ext: name.slice(dot) } : { base: name, ext: "" };
+}
+
 /** 预览层（附件浮层 / 图片 Lightbox）是独立 portal：点它不算「面板外」，Esc 也该先关它。 */
 const PREVIEW_LAYER_SELECTOR = ".attachment-preview, .image-lightbox";
 function inPreviewLayer(target?: Node | null): boolean {
@@ -199,11 +221,11 @@ function AttachmentChipList({ noteId, attachments, onOpen }: {
   const chipUrlOf = (file: string) => withAssetWidth(urlOf(file), assetThumbWidthForCss(ATTACHMENT_CHIP_PX));
   return (
     <>
-      {attachments.map(({ file, name }) => (
+      {attachments.map(({ file, name, size }) => (
         <div key={file} className="bt-attachment-chip" title={name}>
           {isImageExtension(extOf(file))
-            ? <img src={chipUrlOf(file)} alt={name} loading="lazy" onClick={() => onOpen({ file, name })} />
-            : <button type="button" className="bt-attachment-name" onClick={() => onOpen({ file, name })}>{name}</button>}
+            ? <img src={chipUrlOf(file)} alt={name} loading="lazy" onClick={() => onOpen({ file, name, size })} />
+            : <button type="button" className="bt-attachment-name" onClick={() => onOpen({ file, name, size })}>{name}</button>}
         </div>
       ))}
     </>
@@ -411,6 +433,8 @@ function AttachmentExpandPopover({ anchor, noteId, attachments, readOnly, onUplo
   };
   const takeFiles = (list: FileList | null | undefined) => { if (list && list.length > 0) onUpload([...list]); };
   const thumbOf = (file: string) => withAssetWidth(withAssetAccessToken(ASSET_ORIGIN + "/" + noteId + "/" + file), assetThumbWidthForCss(ATTACHMENT_CARD_PX));
+  /** 卡片列表带上「主名 / 扩展名」拆分（改名只改主名，见 splitAttachmentName）。 */
+  const namedAttachments = attachments.map((a) => ({ ...a, ...splitAttachmentName(a.name) }));
   /** 拖拽排序：把 dragged 插到 target 前/后（先移出再按目标位置插入）。 */
   const applyReorder = (dragged: string, target: string, after: boolean) => {
     const rest = attachments.map((a) => a.file).filter((f) => f !== dragged);
@@ -466,7 +490,7 @@ function AttachmentExpandPopover({ anchor, noteId, attachments, readOnly, onUplo
             ? <div className="bt-attach-dropzone-hint">粘贴或拖拽至这里上传</div>
             : (
               <div className="bt-attach-grid" ref={gridRef}>
-                {attachments.map(({ file, name }) => (
+                {namedAttachments.map(({ file, name, size, base, ext }) => (
                   <div
                     key={file}
                     className={
@@ -503,7 +527,7 @@ function AttachmentExpandPopover({ anchor, noteId, attachments, readOnly, onUplo
                     }}
                   >
                     {/* 上：附件区 —— 点击预览，按住拖动排序（原生 draggable，不移动就仍是点击） */}
-                    <div className="bt-attach-card-file" title="点击预览 · 按住拖动排序" onClick={() => onOpen({ file, name })}>
+                    <div className="bt-attach-card-file" title="点击预览 · 按住拖动排序" onClick={() => onOpen({ file, name, size })}>
                       {isImageExtension(extOf(file))
                         ? <img src={thumbOf(file)} alt={name} loading="lazy" draggable={false} />
                         : <span className="bt-attach-card-ext">{(extOf(file) || "file").toUpperCase()}</span>}
@@ -516,27 +540,31 @@ function AttachmentExpandPopover({ anchor, noteId, attachments, readOnly, onUplo
                     <div className="bt-attach-card-meta">
                       {renameFile === file
                         ? (
-                          <input
-                            className="bt-attach-card-rename"
-                            defaultValue={name}
-                            autoFocus
-                            aria-label="附件名称"
-                            onKeyDown={(event) => {
-                              if (event.key === "Enter") { onRename(file, event.currentTarget.value); setRenameFile(null); }
-                              if (event.key === "Escape") setRenameFile(null);
-                            }}
-                            onBlur={(event) => { onRename(file, event.currentTarget.value); setRenameFile(null); }}
-                          />
+                          <span className="bt-attach-card-rename">
+                            <input
+                              className="bt-attach-card-rename-input"
+                              defaultValue={base}
+                              autoFocus
+                              aria-label="附件名称"
+                              onKeyDown={(event) => {
+                                // Enter/blur 提交：只取输入框里的主名，扩展名原样拼回（输入框里改不到格式）
+                                if (event.key === "Enter") { onRename(file, (event.currentTarget.value.trim() || base) + ext); setRenameFile(null); }
+                                if (event.key === "Escape") setRenameFile(null);
+                              }}
+                              onBlur={(event) => { onRename(file, (event.currentTarget.value.trim() || base) + ext); setRenameFile(null); }}
+                            />
+                            {ext && <span className="bt-attach-card-rename-ext">{ext}</span>}
+                          </span>
                         )
                         : (
-                          <span className="bt-attach-card-name" title={name} onClick={() => onOpen({ file, name })}>{name}</span>
+                          <span className="bt-attach-card-name" title={name} onClick={() => onOpen({ file, name, size })}>{name}</span>
                         )}
                       {!readOnly && renameFile !== file && (
                         <button type="button" className="bt-attach-card-icon" title="编辑名称" aria-label={"编辑名称 " + name}
                           onClick={() => setRenameFile(file)}><Pencil size={14} /></button>
                       )}
                       <button type="button" className="bt-attach-card-icon" title="下载" aria-label={"下载 " + name}
-                        onClick={() => { void native.saveAssetAs(noteId, file, name).catch(() => undefined); }}><Download size={14} /></button>
+                        onClick={() => { void native.saveAssetAs(noteId, file, name).catch((error) => reportNativeActionError("下载附件", error)); }}><Download size={14} /></button>
                     </div>
                   </div>
                 ))}
@@ -713,7 +741,7 @@ export function DatePicker({ value, readOnly, onChange }: { value: unknown; read
   for (let i = 0; i < startWeekday; i += 1) cells.push(null);
   for (let d = 1; d <= daysInMonth; d += 1) cells.push(d);
   const fmt = (d: number) => year + "-" + String(month + 1).padStart(2, "0") + "-" + String(d).padStart(2, "0");
-  const pickToday = () => { const t = new Date(); onChange(t.getFullYear() + "-" + String(t.getMonth() + 1).padStart(2, "0") + "-" + String(t.getDate()).padStart(2, "0")); setOpen(false); };
+  const pickToday = () => { onChange(localDateString(new Date())); setOpen(false); };
   return (
     <div className="bt-date-cell">
       <button ref={anchorRef} type="button" className={"bt-date-trigger" + (text ? "" : " is-empty")} disabled={readOnly} onClick={() => setOpen((v) => !v)}>

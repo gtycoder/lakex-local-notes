@@ -5,7 +5,8 @@
  * 多 tab 的「顶部 tab 条」是桌面版；移动端是底部胶囊栏 #toolbarTabs 弹全屏列表（子代理已核对源码）。
  */
 import { Suspense, lazy, useCallback, useEffect, useRef, useState } from "react";
-import { ArrowLeft, List, Files, Pencil, X, ChevronRight, FolderOpen, FolderPlus, File, Plus, Check, ArrowLeftRight, Trash, SmilePlus, Move, History, CloudUpload, MoreHorizontal, MoreVertical, FilePlus, Search, Settings, Copy, Info } from "lucide-react";
+import { writeLocalStorage } from "../../lib/localStorageSafe";
+import { ArrowLeft, List, Files, Pencil, X, ChevronRight, FolderOpen, FolderPlus, File, Plus, Check, ArrowLeftRight, Trash, SmilePlus, Move, History, CloudUpload, MoreHorizontal, MoreVertical, FilePlus, Search, Settings, Info } from "lucide-react";
 import { NoteInfoDialog } from "../../components/NoteInfoDialog";
 import { bridge } from "../bridge";
 import { LAKE_EMOJIS } from "../../lib/lakeEmojis";
@@ -20,6 +21,7 @@ import { MobileSheetMenu, type MobileSheetItem } from "../ui/MobileSheetMenu";
 import { useSwipeToClose } from "../ui/useSwipeToClose";
 import { confirmMobile } from "../ui/ConfirmDialog";
 import { showToast } from "../ui/toastBus";
+import { getNativeErrorMessage } from "../../lib/nativeErrors";
 import { longPressFeedback, successFeedback, warnFeedback } from "../ui/haptics";
 import { useAutoSave } from "../useAutoSave";
 import type { POCNote } from "../noteRepository";
@@ -147,7 +149,7 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
 
   // 标签保持：打开标签变化即落本地（仅本机，不参与同步）
   useEffect(() => {
-    try { localStorage.setItem(TABS_KEY, JSON.stringify(tabs.map((t) => t.id))); } catch { /* 忽略 */ }
+    writeLocalStorage(TABS_KEY, JSON.stringify(tabs.map((t) => t.id)));
   }, [tabs, TABS_KEY]);
 
   const openTab = useCallback((id: string) => {
@@ -168,7 +170,7 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
         for (const ev of evicted) editorsRef.current.delete(ev);
         return added.filter((t) => !evictedSet.has(t.id));
       });
-    });
+    }).catch((reason) => showToast("打开文档失败：" + getNativeErrorMessage(reason), { type: "error" }));
   }, [tabs]);
 
   const closeTab = useCallback((id: string) => {
@@ -230,13 +232,17 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
     return () => scroller.removeEventListener("scroll", onScroll);
   }, [activeId, active?.editing, tabs.length]);
 
-  const toggleEdit = useCallback(() => {
+  const toggleEdit = useCallback(async () => {
     if (!active) return;
     if (active.editing) {
       flushAutoSave();
-      void bridge.saveNote(active.id, active.title, active.content);
-      successFeedback(); // 完成编辑（保存落盘）
-    } else {
+      try {
+        await bridge.saveNote(active.id, active.title, active.content);
+      } catch (reason) {
+        showToast("保存失败：" + getNativeErrorMessage(reason), { type: "error" });
+        return;
+      }
+      successFeedback(); // 只有真正落盘后才提示完成
     }
     setTabs((prev) => prev.map((t) => (t.id === active.id ? { ...t, editing: !t.editing } : t)));
   }, [active, flushAutoSave]);
@@ -455,7 +461,6 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
       { id: "new-note", label: "新建文档", icon: File },
       { id: "new-group", label: "新建分组", icon: FolderPlus },
       ...(node.kind === "note" ? [
-        { id: "duplicate", label: "复制", icon: Copy },
         { id: "rename", label: "重命名", icon: Pencil },
       ] : [{ id: "rename", label: "重命名", icon: Pencil }]),
       { id: "icon", label: "设置图标", icon: SmilePlus },
@@ -473,7 +478,8 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
       { id: "delete", label: node.kind === "note" ? "移入回收站" : "删除分组", icon: Trash, danger: true },
     ];
   };
-  const onTreeMenuSelect = (item: MobileSheetItem, path: MobileSheetItem[]) => {
+  // 菜单是针对 menuFor 这个节点打开的（sheet 传进来的 item 就是它的根项），所以直接读 menuFor
+  const onTreeMenuSelect = (_item: MobileSheetItem, path: MobileSheetItem[]) => {
     const node = menuFor;
     setMenuFor(null);
     if (!node) return;
@@ -484,13 +490,6 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
     if (root === "rename") { setRenamingId(node.id); setRenameValue(node.title); return; }
     if (root === "icon") { setIconFor(node); return; }
     if (root === "history") { void openHistory(node); return; }
-    if (root === "duplicate") {
-      void (async () => {
-        try { const created = await bridge.duplicateNote(node.id); await loadTree(); void openTab(created.id); showToast("已复制为「" + created.title + "」"); }
-        catch { showToast("复制失败"); }
-      })();
-      return;
-    }
     if (root === "info") { setInfoFor(node); return; }
     if (root === "delete") { void applyDelete(node); }
   };
@@ -606,10 +605,8 @@ export function NotebookWorkspace(props: NotebookWorkspaceProps) {
             <DocumentEditor
               note={{ id: t.id, title: t.title, content: t.content } as POCNote}
               content={t.content}
-              title={t.title}
               editing={t.editing}
               onContentChange={(c, plain) => { setTabs((prev) => prev.map((x) => (x.id === t.id ? { ...x, content: c } : x))); if (t.editing) scheduleAutoSave(t.id, t.title, c, plain); }}
-              onToggleEdit={toggleEdit}
               documents={[]}
               hidePanels
               onEditorInstance={(ed) => {

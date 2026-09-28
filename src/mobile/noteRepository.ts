@@ -1,5 +1,4 @@
 import { extractAssetRefs, extOf } from "../core/assetNaming.js";
-import { lakeHtmlToPlain } from "../core/lakeCaches.js";
 import { searchTextForKind } from "../core/noteSearchText.js";
 import { indexNote, removeNoteFromIndex, searchNotes as searchNotesIndexed } from "./searchIndex.js";
 import type { SearchResult } from "../core/searchTypes.js";

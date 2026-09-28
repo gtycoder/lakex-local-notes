@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ChangeEvent, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Cloud, Coffee, Copy, ExternalLink, Files, File, FolderOpen, Globe, History, Image as ImageIcon, Info, Keyboard, Monitor, Moon, Palette, Paperclip, Terminal, Archive, HardDrive, Search, Settings, Sun, Trash, Type, X } from "lucide-react";
 import { fontSizeOptions, type AppSettings } from "../lib/settings";
 import { LAKE_THEMES } from "../lib/themes";
@@ -9,7 +9,7 @@ import { gcCutoffMs, parseIsoMs, pendingKeyReason } from "../core/gcPolicy";
 import { useFloatingDialog } from "./useFloatingDialog";
 import { DialogResizeHandles } from "./DialogResizeHandles";
 import { filterSettingsNav, searchSettingItems, type SettingItemEntry } from "./settingsSearch";
-import { getNativeErrorMessage } from "../lib/nativeErrors";
+import { getNativeErrorMessage, reportNativeActionError } from "../lib/nativeErrors";
 
 export type SettingsCategory = "editor" | "appearance" | "shortcuts" | "history" | "sync" | "resources" | "trash" | "browser" | "logs" | "about";
 
@@ -219,15 +219,15 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
   useEffect(() => {
     if (!open) return;
     setCategory(openCategory);
-    void native.getHistoryStats().then(setStats).catch(() => undefined);
-    void native.getHistorySettings().then(setHistCfg).catch(() => undefined);
-    void native.getLastHistoryCleanup().then(setLastCleanup).catch(() => undefined);
-    void native.getS3Settings().then((v) => v && setS3(v)).catch(() => undefined);
-    void native.getS3GcSettings().then(setGcCfg).catch(() => undefined);
-    void native.getSyncSettings().then(setSyncCfg).catch(() => undefined);
-    void native.getWebStatus().then(setWebStatus).catch(() => undefined);
+    void native.getHistoryStats().then(setStats).catch((error) => reportNativeActionError("设置页读取", error));
+    void native.getHistorySettings().then(setHistCfg).catch((error) => reportNativeActionError("设置页读取", error));
+    void native.getLastHistoryCleanup().then(setLastCleanup).catch((error) => reportNativeActionError("设置页读取", error));
+    void native.getS3Settings().then((v) => v && setS3(v)).catch((error) => reportNativeActionError("设置页读取", error));
+    void native.getS3GcSettings().then(setGcCfg).catch((error) => reportNativeActionError("设置页读取", error));
+    void native.getSyncSettings().then(setSyncCfg).catch((error) => reportNativeActionError("设置页读取", error));
+    void native.getWebStatus().then(setWebStatus).catch((error) => reportNativeActionError("设置页读取", error));
     void refreshGcPending();
-    void native.listS3GcLog().then(setGcLog).catch(() => undefined);
+    void native.listS3GcLog().then(setGcLog).catch((error) => reportNativeActionError("设置页读取", error));
   }, [open, openCategory]);
 
   useEffect(() => {
@@ -343,7 +343,10 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
     if (!histCfg) return;
     const next = { ...histCfg, ...patch };
     setHistCfg(next);
-    void native.saveHistorySettings(next).catch(() => undefined);
+    void native.saveHistorySettings(next).catch((reason) => {
+      setHistMsg("历史设置保存失败：" + getNativeErrorMessage(reason));
+      void native.getHistorySettings().then(setHistCfg).catch((error) => reportNativeActionError("重读历史设置", error));
+    });
   };
 
   const runCleanup = async () => {
@@ -387,7 +390,7 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
       setSyncMsg(saved.enabled ? "同步策略已保存" : "云同步已关闭（已完成最后一次对齐）");
     } catch (e) {
       setSyncMsg(getNativeErrorMessage(e));
-      void native.getSyncSettings().then(setSyncCfg).catch(() => undefined);
+      void native.getSyncSettings().then(setSyncCfg).catch((error) => reportNativeActionError("设置页读取", error));
     } finally {
       setSyncCfgBusy(false);
     }
@@ -402,7 +405,7 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
       setWebMsg(st.enabled ? null : "已关闭");
     } catch (e) {
       setWebMsg(getNativeErrorMessage(e));
-      void native.getWebStatus().then(setWebStatus).catch(() => undefined);
+      void native.getWebStatus().then(setWebStatus).catch((error) => reportNativeActionError("设置页读取", error));
     } finally {
       setWebBusy(false);
     }
@@ -421,7 +424,10 @@ export function SettingsPanel({ open, settings, onClose, onChange, openCategory 
     if (!gcCfg) return;
     const next = { ...gcCfg, ...patch };
     setGcCfg(next);
-    void native.saveS3GcSettings(next).catch(() => undefined);
+    void native.saveS3GcSettings(next).catch((reason) => {
+      setSyncMsg("回收设置保存失败：" + getNativeErrorMessage(reason));
+      void native.getS3GcSettings().then(setGcCfg).catch((error) => reportNativeActionError("重读回收设置", error));
+    });
   };
   const runGcAction = async (dryRun: boolean) => {
     if (gcBusy) return;

@@ -17,11 +17,4 @@ export function normalizeNoteKind(value: unknown): NoteKind {
   return value === "sheet" || value === "bitable" || value === "board" ? value : "doc";
 }
 
-export function isSheetKind(value: unknown): boolean {
-  return value === "sheet";
-}
-
 /** 画板文档（kind="board"）：正文是 Drawnix/Plait 场景 JSON（boards/{id}.board.json）。 */
-export function isBoardKind(value: unknown): boolean {
-  return value === "board";
-}

@@ -8,7 +8,6 @@ import type { LakeEditorInstance } from "../features/editor/lakeRuntime";
 import type { OutlineMode } from "../features/outline/OutlineController";
 import { cleanLakeMarkdown } from "../core/markdownClean";
 import { stripAssetAccessToken } from "../lib/assetPort";
-import { FIXED_RAIL_WIDTH } from "../lib/layoutMetrics";
 import type { NoteDocument, NoteSummary, TreeNode } from "../lib/types";
 import type { SidebarMode } from "../components/Sidebar";
 
@@ -28,8 +27,6 @@ export const SIDEBAR_MAX_WIDTH = 420;
 export const OUTLINE_SIDEBAR_DEFAULT_WIDTH = 280;
 export const OUTLINE_SIDEBAR_MIN_WIDTH = 200;
 export const OUTLINE_SIDEBAR_MAX_WIDTH = 420;
-// 左右桌面固定 rail 共用同一宽度，避免视觉 rail 与 grid 列错位。
-export const OUTLINE_COLLAPSED_WIDTH = FIXED_RAIL_WIDTH;
 
 export interface OpenTab {
   noteId: string;

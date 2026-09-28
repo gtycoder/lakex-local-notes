@@ -95,3 +95,22 @@
   --lakex-editor-card-border-selected: var(--lake-accent);
   --lakex-editor-table-bar-active: var(--lake-accent);
 }
+
+/* ④ 例外：内核**固定工具栏最左边那个「+」**（插入特色卡片）不参与主题适配，永远保持内核品牌绿。
+ *
+ * 为什么需要单独一条：内核自己的规则（同样未分层、且它的 <style> 注入在编辑器根里，比本文件更晚生效）
+ *    .ne-ui-toolbar .ne-toolbar-widget .ne-ui-toolbar-insert-card .ne-icon-t-insert-card.ne-icon
+ *      { color: var(--lakex-editor-color-theme) }
+ * 而 ①/③ 把 --lakex-editor-color-theme 映射成了我们的 --lake-accent ⇒ 这个加号会跟着主题变蓝/变橙。
+ *
+ * 这里**只钉这一个图标**：不动 --lakex-editor-color-theme 本身，链接、光标、选区、表格高亮等
+ * 仍然照常做主题适配。用 :root 前缀把特异性抬到 0-6-0（内核那条是 0-5-0）—— 同特异性下后注入的
+ * 内核样式会赢，所以**不要**把它拆成等特异性的写法，也不要并入 ③ 的变量桥。
+ *
+ * ⚠️ 这是刻意的"不统一"：Lake 的绿加号是它的亮眼标志，也是"正文由 lakex 内核渲染"的可见证据
+ *    （260928 用户要求保留）。值走 --lake-kernel-brand-green（light/warm=#00B96B，dark=#2ED790），
+ *    仍然不出现颜色字面量。 */
+:root .ne-ui-toolbar .ne-toolbar-widget .ne-ui-toolbar-insert-card .ne-icon-t-insert-card.ne-icon,
+:root .ne-ui-toolbar .ant-btn .ne-ui-toolbar-insert-card .ne-icon-t-insert-card.ne-icon {
+  color: var(--lake-kernel-brand-green);
+}

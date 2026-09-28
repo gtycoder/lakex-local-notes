@@ -1,7 +1,7 @@
 import { useCallback } from "react";
 import type { Dispatch, MutableRefObject, SetStateAction } from "react";
 import { native } from "../lib/native";
-import { getNativeErrorMessage } from "../lib/nativeErrors";
+import { getNativeErrorMessage, reportNativeActionError } from "../lib/nativeErrors";
 import { cleanLakeMarkdown } from "../core/markdownClean";
 import { stripAssetAccessToken } from "../lib/assetPort";
 import { patchNoteById, summaryOf, type DesktopWorkspace, type OpenTab } from "../desktop/desktopTypes";
@@ -46,11 +46,11 @@ export function useDesktopHandlers({
         if (typeof editor.getDocument === "function") {
           const markdown = cleanLakeMarkdown(stripAssetAccessToken(editor.getDocument("text/markdown")));
           const plain = stripAssetAccessToken(editor.getDocument("text/plain"));
-          void native.updateNoteCaches(noteId, markdown, plain);
+          void native.updateNoteCaches(noteId, markdown, plain).catch((error) => reportNativeActionError("更新正文缓存", error));
         }
       } catch {
         // 锁定态 Viewer 不暴露 getDocument("text/markdown")：由主进程从磁盘 .lake 兜底补齐缓存
-        void native.ensureNoteCaches(noteId);
+        void native.ensureNoteCaches(noteId).catch((error) => reportNativeActionError("补齐正文缓存", error));
       }
     } else {
       editorsRef.current.delete(noteId);

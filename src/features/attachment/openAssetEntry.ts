@@ -11,6 +11,7 @@
  * （resolveCardAsset / attachFileCardClick）——那是内核渲染层专属，调用方负责先拿到 src/name/size。
  */
 import { isMediaFilename } from "../../core/assetNaming.js";
+import { reportNativeActionError } from "../../lib/nativeErrors.js";
 import { fileKindOf } from "../../core/fileCard.js";
 import { native } from "../../lib/native.js";
 import { openImagePreview } from "../editor/imagePreview.js";
@@ -28,11 +29,11 @@ export interface OpenAssetActions {
 }
 
 function defaultOpenSystem(item: AttachmentPreviewItem): void {
-  if (item.ref) void native.openAttachment(item.ref.noteId, item.ref.filename).then((r) => { if (!r.ok) console.warn("[attach] 打开失败:", r.error); });
+  if (item.ref) void native.openAttachment(item.ref.noteId, item.ref.filename).then((r) => { if (!r.ok) console.warn("[attach] 打开失败:", r.error); }).catch((error) => reportNativeActionError("打开附件", error));
 }
 
 function defaultShowInFolder(item: AttachmentPreviewItem): void {
-  if (item.ref) void native.showAttachmentInFolder(item.ref.noteId, item.ref.filename);
+  if (item.ref) void native.showAttachmentInFolder(item.ref.noteId, item.ref.filename).catch((error) => reportNativeActionError("在文件夹中显示附件", error));
 }
 
 /** 按类型分流打开一个附件（src 为可直接 <img>/<audio>/<video> 的 URL）。 */

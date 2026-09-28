@@ -6,7 +6,7 @@
  */
 export const ASSET_TRANSFER_CONCURRENCY = 4;
 
-export async function runPool<T, R>(
+export async function runAsyncPool<T, R>(
   items: readonly T[],
   limit: number,
   worker: (item: T, index: number) => Promise<R>,

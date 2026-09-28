@@ -4,46 +4,24 @@ import fs from "node:fs";
 import path from "node:path";
 import sharp from "sharp";
 import { isSafePathSegment as isSafeSegment } from "../src/core/storeUtils.js";
+import { mimeTypeForFilename } from "../src/core/assetNaming.js";
 
-const MIME_MAP: Record<string, string> = {
-  ".png": "image/png",
-  ".jpg": "image/jpeg",
-  ".jpeg": "image/jpeg",
-  ".gif": "image/gif",
-  ".webp": "image/webp",
-  ".avif": "image/avif",
-  ".svg": "image/svg+xml",
+/** 只列「笔记资产表里没有」的 vendor 静态资源类型；其余一律走 core/assetNaming 的单一事实源
+ *  （避免又一份与同步/上传/预览漂移的 MIME 表）。 */
+const VENDOR_MIME: Record<string, string> = {
   ".js": "text/javascript",
   ".css": "text/css",
   ".woff2": "font/woff2",
-  ".json": "application/json",
-  // 附件（内联预览依赖正确 Content-Type：Chromium 的 PDF viewer/媒体播放器按 MIME 触发）
-  ".pdf": "application/pdf",
-  ".doc": "application/msword",
-  ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-  ".xls": "application/vnd.ms-excel",
-  ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-  ".ppt": "application/vnd.ms-powerpoint",
-  ".pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-  ".txt": "text/plain",
-  ".md": "text/markdown",
-  ".csv": "text/csv",
-  ".zip": "application/zip",
-  ".rar": "application/vnd.rar",
-  ".7z": "application/x-7z-compressed",
-  ".mp3": "audio/mpeg",
-  ".wav": "audio/wav",
-  ".m4a": "audio/mp4",
-  ".aac": "audio/aac",
-  ".flac": "audio/flac",
-  ".ogg": "audio/ogg",
-  ".mp4": "video/mp4",
-  ".mov": "video/quicktime",
-  ".mkv": "video/x-matroska",
-  ".avi": "video/x-msvideo",
-  ".webm": "video/webm",
-  ".epub": "application/epub+zip",
 };
+
+/** 扩展名/MIME 判定：vendor 专有类型优先，其次共享表（未知扩展名 → octet-stream）。
+ *  内联预览（PDF viewer / 音视频播放器）依赖正确的 Content-Type，共享表已覆盖附件全类。 */
+function mimeForExtWith(filePath: string, ext: string): string | null {
+  const vendor = VENDOR_MIME[ext];
+  if (vendor) return vendor;
+  const shared = mimeTypeForFilename(filePath);
+  return shared === "application/octet-stream" ? null : shared;
+}
 
 export const ASSET_PORT = Number(process.env.LAKE_ASSET_PORT) || 19876;
 
@@ -285,7 +263,7 @@ export function startAssetServer(noteAssetsDir: string, vendorCdnDir: string, qu
           res.writeHead(404); res.end("not found"); return;
         }
         const ext = path.extname(rel).toLowerCase();
-        const mime = MIME_MAP[ext] ?? await sniffMimeFromFile(vendorFile) ?? "application/octet-stream";
+        const mime = mimeForExtWith(vendorFile, ext) ?? await sniffMimeFromFile(vendorFile) ?? "application/octet-stream";
         streamFile(res, vendorFile, stat, {
           "Content-Type": mime,
           "Cache-Control": "public, max-age=31536000, immutable",
@@ -333,7 +311,7 @@ export function startAssetServer(noteAssetsDir: string, vendorCdnDir: string, qu
       }
 
       const ext = path.extname(filename).toLowerCase();
-      const mime = MIME_MAP[ext] ?? "application/octet-stream";
+      const mime = mimeForExtWith(filePath, ext) ?? "application/octet-stream";
       // 安全响应头：防 MIME 嗅探；SVG 以文档打开时禁止内嵌脚本（恶意附件 SVG 不得在
       // 127.0.0.1 源内执行——否则同源 fetch 可读走全部本地资产）。
       const securityHeaders: Record<string, string> = {

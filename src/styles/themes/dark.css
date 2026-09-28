@@ -11,6 +11,8 @@
   --lake-bg-sunken: #141517;
   --lake-bg-hover: rgba(255,255,255,.06);
   --lake-bg-press: rgba(255,255,255,.10);
+  /* 内核品牌绿在深色下使用 Lake dark schema，提升暗底对比度。 */
+  --lake-kernel-brand-green: #2ed790;
   /* 文字 */
   --lake-text-1: #e3e4e6;
   --lake-text-2: #a8a9ad;

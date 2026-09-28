@@ -10,10 +10,11 @@ import { describe, expect, it, afterAll } from "vitest";
 import { performance } from "node:perf_hooks";
 import { syncNow, type SyncDbPort, type LocalNoteRow } from "../src/core/syncEngine.js";
 import { createS3StoreAdapter } from "./syncAdapters.js";
-import { ObjectStore, pruneOldManifests } from "./sync.js";
+import { ObjectStore } from "./s3Store.js";
+import { pruneOldManifests } from "./s3Maintenance.js";
 import type { S3Settings } from "../src/core/syncUtils.js";
 import { sha256Sync } from "../src/core/sha256Sync.js";
-import type { Manifest, ManifestNote, ManifestFolder } from "../src/core/manifestTypes.js";
+import type { ManifestNote, ManifestFolder } from "../src/core/manifestTypes.js";
 import { createSilentLoggerScopes } from "../src/core/logger.js";
 import zlib from "node:zlib";
 
@@ -111,7 +112,7 @@ describe.skipIf(!READY)("Tier B · 真实云（七牛）同步压测", () => {
     // churn：改名 100 篇（正文/资源不变）→ 复同步应零资源重传、零探测
     for (let i = 0; i < 60; i += 1) { const n = db.notes.get(ids[i])!; n.title = `改名 ${i}`; n.syncState = "local"; }
     reset();
-    const t1 = performance.now(); const r1 = await syncNow(cfg, s3Store, db); const churnMs = performance.now() - t1;
+    const t1 = performance.now(); await syncNow(cfg, s3Store, db); const churnMs = performance.now() - t1;
     results.push({ case: "B1 首传", notes: notesN, assets: notesN * per, ms: +firstMs.toFixed(0), putReqs: afterPut, headReqs: afterHead, getReqs: afterGet, uploaded: r0.uploaded });
     results.push({ case: "B1 churn复同步", churn: 60, ms: +churnMs.toFixed(0), headReqs: tally.headObject?.n ?? 0, putReqs: tally.put?.n ?? 0, putStream: tally.putStream?.n ?? 0 });
     expect(afterHead).toBe(0); // 分支：结构上无 headObject

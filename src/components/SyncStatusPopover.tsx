@@ -3,6 +3,7 @@ import { Cloud, CloudOff, HardDrive, History, LoaderCircle, Settings2, TriangleA
 import type { SyncStatus, SyncStatusInfo } from "../lib/types";
 import { buildSyncStatusModel } from "./syncStatusModel";
 import { native } from "../lib/native";
+import { reportNativeActionError } from "../lib/nativeErrors";
 import { chooseVisibleAnchor, clampPopoverPosition } from "../hooks/topMenuPosition";
 import { HoverPopover } from "./ui/Overlay";
 
@@ -85,7 +86,7 @@ export function SyncStatusPopover({
   // 面板打开时（以及每次同步完成 lastSyncedAt 变化时）拉取上次同步结果统计
   useEffect(() => {
     if (!open) return;
-    void native.getSyncStatus().then((info) => setLastResult(info.lastResult)).catch(() => undefined);
+    void native.getSyncStatus().then((info) => setLastResult(info.lastResult)).catch((error) => reportNativeActionError("读取同步结果", error));
   }, [open, sync.lastSyncedAt]);
 
   const updatePosition = useCallback(() => {

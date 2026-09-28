@@ -10,14 +10,14 @@
  *   node scripts/lake-roundtrip-check.mjs                       # 用当前活动文档
  *   node scripts/lake-roundtrip-check.mjs --note <noteId>
  *   node scripts/lake-roundtrip-check.mjs --title "压测3-图片-可莉.png"
- *   node scripts/lake-roundtrip-check.mjs --note <id> --keep    # 保留副本（默认用完丢回收站）
+ *   node scripts/lake-roundtrip-check.mjs --note <id> --keep    # 保留临时文档（默认用完丢回收站）
  *
- * 判定：把文档**复制**一份（=`native.duplicateNote`，只改 noteId 不碰原件），打开副本、等保存稳定，
- * 比较副本「打开前应有的正文」与「打开后的正文」：
+ * 判定：把原文通过**应用写入路径**另建一条临时文档（直接写相同正文，不复制资源；图片继续引用原件资源），
+ * 打开临时文档、等保存稳定，比较「创建前正文」与「打开后的正文」：
  *   PASS = 逐字节一致（内核没有重写）→ 这篇安全；
  *   FAIL = 被改写（打印首个差异位置与上下文）→ 该文档形态不合格，见 docs/LAKE-CONTENT-WRITING.md。
  *
- * **原件全程不打开**，所以对不合格文档也安全（破坏发生在副本上，副本最后进回收站）。
+ * **原件全程不打开**，所以对不合格文档也安全（破坏发生在临时文档上，最后进回收站）。
  * Node 24 必须（用内置 WebSocket / fetch）。
  */
 import { argv, exit } from "node:process";
@@ -111,48 +111,38 @@ async function main() {
     const original = await evalJs("(async () => { const c = await window.__rtRead(" + JSON.stringify(target) + "); return { content: c, len: c.length, hash: window.__rtHash(c) }; })()");
     console.log("目标原件 : " + meta.title + "  [" + target + "]  syncState=" + meta.syncState);
     console.log("原件正文 : " + original.len + "B  hash=" + original.hash + "  裸<img>=" + MARKERS.rawImg(original.content) + "  失败卡片=" + MARKERS.errCard(original.content));
-    console.log("（原件全程不打开；下面操作的是副本）");
+    console.log("（原件全程不打开；下面操作的是临时文档）");
 
-    // 2) 展开祖先 → 右键行 → 点「复制」（走应用自己的路径：复制 + 刷新树 + 打开副本）
-    await evalJs([
-      "(async () => {",
-      "  const T = " + JSON.stringify(target) + ";",
-      "  const api = window.lakeNative;",
-      "  const nodes = await api.listTreeNodes();",
-      "  const byId = new Map(nodes.map(n => [n.id, n]));",
-      "  const chain = []; let cur = byId.get(T);",
-      "  while (cur && cur.parentId) { chain.push(cur.parentId); cur = byId.get(cur.parentId); }",
-      "  for (const pid of chain.reverse()) {",
-      "    const row = window.__rtRow(pid); const chev = row && row.querySelector('.tree-chevron');",
-      "    if (chev && !chev.classList.contains('open')) { chev.click(); await new Promise(r => setTimeout(r, 260)); }",
-      "  }",
-      "  return true;",
-      "})()",
-    ].join("\n"));
-    const row = await evalJs("(async () => { const r = window.__rtRow(" + JSON.stringify(target) + "); if (!r) return null; r.scrollIntoView({ block: 'center' }); await new Promise(x => setTimeout(x, 200)); const b = r.getBoundingClientRect(); return { x: Math.round(b.left + 60), y: Math.round(b.top + 8) }; })()");
-    if (!row) throw new Error("目录里找不到该行（可能祖先未展开）");
-    await evalJs("(async () => { const r = window.__rtRow(" + JSON.stringify(target) + "); const b = r.getBoundingClientRect(); r.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: Math.round(b.left + 60), clientY: Math.round(b.top + 8) })); await new Promise(x => setTimeout(x, 350)); return true; })()");
-    const clicked = await evalJs("(() => { const items = [...document.querySelectorAll('.context-menu button, .context-menu .context-menu-item')]; const hit = items.find(el => (el.textContent || '').trim() === '复制'); if (!hit) return { ok: false, labels: items.map(el => (el.textContent || '').trim()).slice(0, 12) }; hit.click(); return { ok: true }; })()");
-    if (!clicked || !clicked.ok) throw new Error("右键菜单里没有「复制」项：" + JSON.stringify(clicked && clicked.labels));
+    // 2) 用应用写入路径另建临时文档（不复制资源，引用仍指原件），再通过目录行打开它。
+    const tempTitle = meta.title + " [roundtrip " + Date.now() + "]";
+    const created = await evalJs("(async () => { const n = await window.lakeNative.createNoteIn(null, " + JSON.stringify(tempTitle) + "); await window.lakeNative.saveNote(n.id, " + JSON.stringify(tempTitle) + ", " + JSON.stringify(original.content) + "); return { id: n.id }; })()");
+    if (!created || !created.id) throw new Error("创建临时对拍文档失败");
+    const tempId = created.id;
+    const expected = original.content;
+    console.log("临时文档 : " + tempId + "  期望正文 " + expected.length + "B（资源仍指向原件）");
 
-    // 3) 等副本成为活动标签（应用会打开它），拿副本 id
-    let copyId = null;
+    // 等目录刷新后点开临时文档（避免依赖当前活动 tab 的恢复状态）。
+    let opened = false;
     for (let i = 0; i < 40; i++) {
       await sleep(250);
-      const active = await evalJs("(() => { const t = document.querySelector('.tab-item.active'); return t ? t.getAttribute('data-note-id') : null; })()");
-      if (active && active !== target) { copyId = active; break; }
+      opened = await evalJs("(() => { const r = window.__rtRow(" + JSON.stringify(tempId) + "); if (!r) return false; r.click(); return true; })()");
+      if (opened) break;
     }
-    if (!copyId) throw new Error("副本没有打开（没等到新的活动标签）");
-    // 打开前应有的正文 = 原件的 noteId 替换为副本 id（与 native.duplicateNote 的改写口径一致）
-    const expected = original.content.split(target).join(copyId);
-    console.log("副本     : " + copyId + "  期望正文 " + expected.length + "B");
+    if (!opened) throw new Error("临时文档没有出现在目录中");
+    let activeCopy = false;
+    for (let i = 0; i < 40; i++) {
+      await sleep(250);
+      activeCopy = await evalJs("(() => { const t = document.querySelector('.tab-item.active'); return !!t && t.getAttribute('data-note-id') === " + JSON.stringify(tempId) + "; })()");
+      if (activeCopy) break;
+    }
+    if (!activeCopy) throw new Error("临时文档没有打开（没等到新的活动标签）");
 
-    // 4) 等稳定：连续 3 次读一致；含裸 <img> 的高风险形态等满 SETTLE_MAX_MS（取水合改写的最坏情况）
+    // 3) 等稳定：连续 3 次读一致；含裸 <img> 的高风险形态等满 SETTLE_MAX_MS（取水合改写的最坏情况）
     const t0 = Date.now();
     let last = null, stable = 0, actual = "", hinted = false;
     while (Date.now() - t0 < SETTLE_MAX_MS) {
       await sleep(300);
-      actual = await evalJs("window.__rtRead(" + JSON.stringify(copyId) + ")");
+      actual = await evalJs("window.__rtRead(" + JSON.stringify(tempId) + ")");
       if (actual === last) stable++; else stable = 0;
       last = actual;
       const elapsed = Date.now() - t0;
@@ -165,14 +155,14 @@ async function main() {
       if (stable >= 3 && elapsed >= need) break;
     }
     console.log("  观察了 " + (Date.now() - t0) + "ms");
-    const dirty = await evalJs("(() => { const t = window.__rtTab(" + JSON.stringify(copyId) + "); return !!(t && t.querySelector('.tab-dirty-dot')); })()");
-    const copyState = await evalJs("(async () => { const n = (await window.lakeNative.listTreeNodes()).find(x => x.id === " + JSON.stringify(copyId) + "); return n ? n.syncState : null; })()");
+    const dirty = await evalJs("(() => { const t = window.__rtTab(" + JSON.stringify(tempId) + "); return !!(t && t.querySelector('.tab-dirty-dot')); })()");
+    const tempState = await evalJs("(async () => { const n = (await window.lakeNative.listTreeNodes()).find(x => x.id === " + JSON.stringify(tempId) + "); return n ? n.syncState : null; })()");
     const d = firstDiff(expected, actual);
     const pass = d === -1;
     console.log("");
     console.log("结果     : " + (pass ? "PASS —— 打开后正文逐字节一致（内核没有重写）" : "FAIL —— 打开被改写"));
     console.log("  期望 " + expected.length + "B hash=" + (await evalJs("window.__rtHash(" + JSON.stringify(expected) + ")")) + "  实际 " + actual.length + "B hash=" + (await evalJs("window.__rtHash(" + JSON.stringify(actual) + ")")));
-    console.log("  裸<img> " + MARKERS.rawImg(actual) + "  失败卡片 " + MARKERS.errCard(actual) + "  脏点=" + dirty + "  syncState=" + copyState);
+    console.log("  裸<img> " + MARKERS.rawImg(actual) + "  失败卡片 " + MARKERS.errCard(actual) + "  脏点=" + dirty + "  syncState=" + tempState);
     if (!pass) {
       const from = Math.max(0, d - 100);
       console.log("  首个差异 @ " + d);
@@ -181,14 +171,14 @@ async function main() {
       console.log("  处置：按 docs/LAKE-CONTENT-WRITING.md 改正该文档的写入者；旧测试数据建议删掉重播（AGENTS §3 原则 7）。");
     }
 
-    // 5) 清理：关副本标签 + 丢进回收站（--keep 则保留）
+    // 4) 清理：关临时文档标签 + 丢进回收站（--keep 则保留）
     if (!KEEP) {
-      await evalJs("(() => { const t = window.__rtTab(" + JSON.stringify(copyId) + "); const c = t && t.querySelector('.tab-close'); if (c) c.click(); return true; })()");
+      await evalJs("(() => { const t = window.__rtTab(" + JSON.stringify(tempId) + "); const c = t && t.querySelector('.tab-close'); if (c) c.click(); return true; })()");
       await sleep(400);
-      const trashed = await evalJs("(async () => { try { await window.lakeNative.deleteTreeNode(" + JSON.stringify(copyId) + "); return true; } catch (e) { return false; } })()");
-      console.log("清理     : 副本已" + (trashed ? "丢进回收站" : "清理失败，请手动删 " + copyId));
+      const trashed = await evalJs("(async () => { try { await window.lakeNative.deleteTreeNode(" + JSON.stringify(tempId) + "); return true; } catch (e) { return false; } })()");
+      console.log("清理     : 临时文档已" + (trashed ? "丢进回收站" : "清理失败，请手动删 " + tempId));
     } else {
-      console.log("清理     : --keep，副本保留（" + copyId + "）");
+      console.log("清理     : --keep，临时文档保留（" + tempId + "）");
     }
     close();
     exit(pass ? 0 : 1);

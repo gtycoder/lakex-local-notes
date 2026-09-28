@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import type { Dispatch, MutableRefObject, SetStateAction } from "react";
 import { isDesktop, native } from "../lib/native";
+import { reportNativeActionError } from "../lib/nativeErrors";
 import { planTabReload } from "../core/planTabReload";
 import type { RequestVersion } from "../core/requestVersion";
 import type { NoteDigest, NoteSummary, SyncStatus, TreeNode } from "../lib/types";
@@ -38,11 +39,11 @@ export function useSyncProgress({
       if (progress.phase === "done" && !progress.error) {
         void native.getSyncStatus().then((status) => {
           setSync((current) => ({ ...current, phase: "success", message: "同步完成", lastSyncedAt: status.lastSyncedAt, pendingChanges: 0 }));
-        }).catch(() => undefined);
-        void native.getSyncSettings().then((cfg) => setCloudEnabled(cfg.enabled)).catch(() => undefined);
+        }).catch((error) => reportNativeActionError("同步后刷新", error));
+        void native.getSyncSettings().then((cfg) => setCloudEnabled(cfg.enabled)).catch((error) => reportNativeActionError("同步后刷新", error));
         // 锁状态等元数据可能随同步变化，刷新摘要与树
-        void native.listNoteSummaries().then((items) => setNotes(items)).catch(() => undefined);
-        void native.listTreeNodes().then(setTreeNodes).catch(() => undefined);
+        void native.listNoteSummaries().then((items) => setNotes(items)).catch((error) => reportNativeActionError("同步后刷新", error));
+        void native.listTreeNodes().then(setTreeNodes).catch((error) => reportNativeActionError("同步后刷新", error));
         void quickNotesRef.current?.refresh();
         // 同步下载会更新磁盘上的 .lake；已打开且无本地未保存修改的 tab 需要重载正文，
         // 否则用户看不到另一端的最新内容（P0：自动同步后打开文档不刷新）。

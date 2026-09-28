@@ -163,7 +163,7 @@ describe.skipIf(!RUN)("Tier A · syncNow 算法/请求数压测", () => {
       for (let i = 0; i < N; i += 1) { const id = `n${i}`; const r = db.row(id, `<p>b${i}</p>`); const assets = db.seedAssets(id, 3); db.notes.set(id, r); db.bases.set(id, { contentHash: r.contentHash!, lastUploadedHash: r.contentHash!, lastSyncedMetaAt: "2026-06-01T00:00:00.000Z" }); entries.push(noteEntry(id, r.contentHash!, assets)); }
       putManifest(s3, entries, "cX");
       for (let i = 0; i < 100; i += 1) { const n = db.notes.get(`n${i}`)!; n.title = `r${i}`; n.syncState = "local"; }
-      const t0 = performance.now(); const r = await syncNow(CFG, s3, db); const ms = performance.now() - t0;
+      const t0 = performance.now(); await syncNow(CFG, s3, db); const ms = performance.now() - t0;
       row[`N${N}_ms`] = +ms.toFixed(1); row[`N${N}_gets`] = s3.ops.get; row[`N${N}_puts`] = s3.ops.put;
     }
     results.push(row);

@@ -20,8 +20,9 @@ import { useBackHandler } from "./useBackHandler";
 import { Toasts } from "./ui/Toasts";
 import { ImageLightbox } from "../features/editor/ImageLightbox";
 import { subscribeQuickNoteShortcut } from "./quickNoteShortcut";
-import { ConfirmHost, confirmMobile } from "./ui/ConfirmDialog";
+import { ConfirmHost } from "./ui/ConfirmDialog";
 import { showToast } from "./ui/toastBus";
+import { reportNativeActionError } from "../lib/nativeErrors";
 import { successFeedback, warnFeedback } from "./ui/haptics";
 import { runNativeSqliteSpike } from "./nativeSqlite";
 import { migrateSnapshotToNativeSqlite } from "./nativeSqliteMigration";
@@ -79,7 +80,6 @@ export function MobileApp() {
           gcDeepCleanup: () => bridge.gcDeepCleanup(),
           listNoteHistory: (noteId: string) => bridge.listNoteHistory(noteId),
           getNoteInfo: (id: string) => bridge.getNoteInfo(id),
-          duplicateNote: (id: string) => bridge.duplicateNote(id),
           readAssetPreview: (noteId: string, filename: string) => bridge.readAssetPreview(noteId, filename),
           previewHistorySnapshot: (historyId: number) => bridge.previewHistorySnapshot(historyId),
           openAttachment: (noteId: string, filename: string) => bridge.openAttachment(noteId, filename),
@@ -142,9 +142,9 @@ export function MobileApp() {
       if (cfg.snapshotIntervalMinutes <= 0) return;
       timer = window.setInterval(() => {
         const id = activeIdRef.current;
-        if (id) void bridge.snapshotNote(id);
+        if (id) void bridge.snapshotNote(id).catch((error) => reportNativeActionError("自动快照", error));
       }, Math.max(1, cfg.snapshotIntervalMinutes) * 60 * 1000);
-    });
+    }).catch((error) => reportNativeActionError("读取快照设置", error));
     return () => { if (timer != null) window.clearInterval(timer); };
   }, []);
 

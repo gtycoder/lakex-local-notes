@@ -84,8 +84,11 @@
 
 /* 原语菜单/气泡的定位与层序（不依赖具体表面类，custom surfaceClassName 也不掉层） */
 .ln-overlay-surface { position: fixed; z-index: var(--lake-z-overlay-menu); }
-/* 嵌套在对话框里的菜单/气泡：抬到 dialog 之上（否则被 .ln-dialog 盖住） */
-.ln-overlay-surface--raised { z-index: var(--lake-z-overlay-menu-raised); }
+/* 嵌套在对话框里的菜单/气泡：抬到 dialog 之上（否则被 .ln-dialog 盖住）。
+   两条类一起写是有意的（260928 修「编辑字段弹窗里选日期，日历掉到弹窗下面」）：
+   表面类 .ln-menu/.ln-popover 在下面各自又声明了一次 z-index，同特异性下**靠后者胜出**，
+   单类选择器的 --raised 会被压回 600 ⇒ 必须提高特异性，别退回单类写法。 */
+.ln-overlay-surface.ln-overlay-surface--raised { z-index: var(--lake-z-overlay-menu-raised); }
 
 /* ── 菜单 / 气泡表面（单一来源）：容器从 kit.css 移入本层，item 样式仍在 kit.css ── */
 .ln-menu {

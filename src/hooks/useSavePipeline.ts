@@ -1,6 +1,7 @@
 import { useCallback, useRef, useState } from "react";
 import { native } from "../lib/native";
 import { getNativeErrorCode, getNativeErrorMessage } from "../lib/nativeErrors";
+import { reportNativeActionError } from "../lib/nativeErrors";
 import { SavePipelineCore } from "./savePipelineCore";
 import type { NoteDocument } from "../lib/types";
 
@@ -99,7 +100,7 @@ export function useSavePipeline(options: SavePipelineOptions) {
     if (existing !== undefined) window.clearTimeout(existing);
     const timer = window.setTimeout(() => {
       draftTimers.current.delete(noteId);
-      void native.saveDraftJournal({ noteId, title, content, updatedAt: new Date().toISOString() }).catch(() => undefined);
+      void native.saveDraftJournal({ noteId, title, content, updatedAt: new Date().toISOString() }).catch((error) => reportNativeActionError("保存草稿", error));
     }, DRAFT_JOURNAL_DEBOUNCE_MS);
     draftTimers.current.set(noteId, timer);
   }, []);

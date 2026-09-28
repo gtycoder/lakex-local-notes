@@ -16,6 +16,7 @@
  * 外部带入（系统分享）：`seed` 提供文本与图片字节，挂载时套用为**一条新小记**。
  */
 import { useCallback, useEffect, useRef, useState } from "react";
+import { reportNativeActionError } from "../../lib/nativeErrors";
 import { Check, ImagePlus, X } from "lucide-react";
 import { bridge } from "../bridge";
 import { successFeedback, warnFeedback } from "../ui/haptics";
@@ -194,7 +195,7 @@ export function QuickNoteFlashComposer({ onSaved, onCancel, autoFocus = true, se
   /** 主动取消 = 丢弃草稿（进程被杀不经过这里，草稿会保留）。 */
   const cancel = (): void => {
     committedRef.current = true;
-    void bridge.clearQuickNoteDraft().catch(() => undefined);
+    void bridge.clearQuickNoteDraft().catch((error) => reportNativeActionError("清空小记草稿", error));
     onCancel();
   };
 
@@ -227,7 +228,7 @@ export function QuickNoteFlashComposer({ onSaved, onCancel, autoFocus = true, se
         })),
       });
       committedRef.current = true;
-      await bridge.clearQuickNoteDraft().catch(() => undefined);
+      await bridge.clearQuickNoteDraft().catch((error) => reportNativeActionError("清空小记草稿", error));
       successFeedback();
       await onSaved();
     } catch (reason) {

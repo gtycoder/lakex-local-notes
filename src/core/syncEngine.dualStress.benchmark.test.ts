@@ -11,7 +11,7 @@ import { gzipSync, gunzipSync } from "node:zlib";
 import { syncNow, type S3Store, type SyncDbPort, type LocalNoteRow } from "./syncEngine.js";
 import { sha256Sync } from "./sha256Sync.js";
 import { TRASH_NOTEBOOK_ID } from "./syncDecisions.js";
-import type { Manifest, ManifestNote, ManifestFolder } from "./manifestTypes.js";
+import type { ManifestNote, ManifestFolder } from "./manifestTypes.js";
 
 const RUN = process.env.LAKE_RUN_BENCHMARK === "1";
 const CFG = { endpoint: "e", region: "cn-north-1", bucket: "b", accessKeyId: "ak", secretAccessKey: "sk", prefix: "p" };
@@ -85,10 +85,6 @@ async listFoldersForSync() { return [...this.folders.values()].filter((f) => f.i
 async log() {}
 }
 
-function manifest(notes: ManifestNote[]): string {
-  const m: Manifest = { version: 4, workspaceId: "default", commitId: "c1", prevCommitId: null, createdAt: "2026-01-01T00:00:00.000Z", notes, folders: [{ id: "nb-main", title: "主", parentId: null, sortOrder: 0, nodeType: "notebook", icon: null, updatedAt: "2026-01-01T00:00:00.000Z" }] };
-  return JSON.stringify(m);
-}
 const results: Array<Record<string, string | number>> = [];
 
 describe.skipIf(!RUN)("Tier C · 双端冲突/规模压力", () => {

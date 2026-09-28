@@ -4,7 +4,10 @@ import zlib from "node:zlib";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { syncNow, testConnection, ObjectStore, runGcReconcile, runDeepCleanup, parseLakeManifest, validateS3Settings } from "./sync.js";
+import { syncNowViaEngine as syncNow } from "./syncEngineController.js";
+import { testConnection, ObjectStore } from "./s3Store.js";
+import { runGcReconcile, runDeepCleanup } from "./s3Maintenance.js";
+import { parseLakeManifest, validateS3Settings } from "../src/core/syncUtils.js";
 import { createSilentLoggerScopes, type LoggerScopes } from "../src/core/logger.js";
 import type { Store } from "./store.js";
 
@@ -451,7 +454,7 @@ describe("syncNow 增量同步", () => {
     expect(r1.conflicts).toBe(0);
     expect(s3.bucket.has(key(`objects/n1-${store.contentHash("n1")}.lake`))).toBe(true);
     const manifest = readManifest();
-    expect(manifest.version).toBe(7);   // 260920：v7 = kind 新增 board（画板文档）
+    expect(manifest.version).toBe(1);   // 260928：协议重置为 V1，内容 schema 不变
     expect(manifest.notes).toHaveLength(1);
     expect(manifest.notes[0].contentHash).toBe(store.contentHash("n1"));
 
@@ -888,7 +891,7 @@ describe("syncNow 增量同步", () => {
     store.createNote("n1", "笔记A", "<p>a</p>");
     await syncNow(store as unknown as Store);
 
-    s3.bucket.set(key("manifests/latest.json"), Buffer.from(JSON.stringify({ version: 4, notes: "not-an-array" }), "utf8"));
+    s3.bucket.set(key("manifests/latest.json"), Buffer.from(JSON.stringify({ version: 1, notes: "not-an-array" }), "utf8"));
     await expect(syncNow(store as unknown as Store)).rejects.toThrow(/清单格式无效/);
 
     s3.bucket.set(key("manifests/latest.json"), Buffer.from(JSON.stringify({ version: 99, workspaceId: "default", commitId: "c", createdAt: "t", notes: [] }), "utf8"));
@@ -1463,7 +1466,7 @@ describe("parseLakeManifest 清单护栏", () => {
       });
     }
     return {
-      version: 4, workspaceId: "default", commitId: "c1", prevCommitId: null,
+      version: 1, workspaceId: "default", commitId: "c1", prevCommitId: null,
       createdAt: "2026-01-01T00:00:00.000Z", notes, folders,
     };
   }

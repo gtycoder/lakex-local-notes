@@ -1,4 +1,5 @@
 import { Component, Suspense, lazy, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ErrorInfo, type ReactNode, type PointerEvent as ReactPointerEvent } from "react";
+import { writeLocalStorage } from "../../lib/localStorageSafe";
 import { ChevronDown, ChevronsLeft, ChevronsRight, File, Pin, TriangleAlert, X, XCircle, XSquare } from "lucide-react";
 import { Menu } from "../../components/ui/Overlay";
 import { EditorTab } from "./EditorTab";
@@ -110,7 +111,7 @@ export function MultiTabEditor({
     const onUp = () => {
       window.removeEventListener("pointermove", onMove);
       window.removeEventListener("pointerup", onUp);
-      localStorage.setItem("lake-notes-v3.tab-switcher-width", String(tabMenuWidthRef.current));
+      writeLocalStorage("lake-notes-v3.tab-switcher-width", String(tabMenuWidthRef.current));
     };
     window.addEventListener("pointermove", onMove);
     window.addEventListener("pointerup", onUp);

@@ -45,32 +45,6 @@ export const log = {
   perf: electronLog.scope("perf"),
 } as const;
 
-/** 计时：异步 fn 执行耗时（成功/失败都记录）。 */
-export async function timed<T>(scope: keyof typeof log, label: string, fn: () => Promise<T>): Promise<T> {
-  const start = Date.now();
-  try {
-    const result = await fn();
-    log[scope].info(`[perf] ${label} ${Date.now() - start}ms`);
-    return result;
-  } catch (error) {
-    log[scope].warn(`[perf] ${label} FAIL ${Date.now() - start}ms: ${errorMessage(error)}`);
-    throw error;
-  }
-}
-
-/** 计时：同步 fn 执行耗时（成功/失败都记录）。 */
-export function timedSync<T>(scope: keyof typeof log, label: string, fn: () => T): T {
-  const start = Date.now();
-  try {
-    const result = fn();
-    log[scope].info(`[perf] ${label} ${Date.now() - start}ms`);
-    return result;
-  } catch (error) {
-    log[scope].warn(`[perf] ${label} FAIL ${Date.now() - start}ms: ${errorMessage(error)}`);
-    throw error;
-  }
-}
-
 export function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }

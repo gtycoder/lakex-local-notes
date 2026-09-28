@@ -6,6 +6,7 @@ import { createRequestVersion } from "../core/requestVersion";
 import { useFloatingDialog } from "./useFloatingDialog";
 import { DialogResizeHandles } from "./DialogResizeHandles";
 import { getNativeErrorMessage } from "../lib/nativeErrors";
+import { reportNativeActionError } from "../lib/nativeErrors";
 import { createLakeDocument, destroyLakeEditor, type LakeEditorInstance } from "../features/editor/lakeRuntime";
 import { addAssetAccessToken } from "../lib/assetPort";
 import { trashDaysUntilPurge, type TrashItem } from "../core/trashPolicy";
@@ -168,7 +169,7 @@ export function TrashPanel({ open, embed = false, onClose, onChanged, onRestored
     setPreviewing(true);
     try {
       // 回收站惰性下载补偿：预览前按需补拉该笔记本地缺失的资源（best-effort，失败仍显示本地已有内容）。
-      await native.ensureTrashNoteAssets(noteFileId).catch(() => undefined);
+      await native.ensureTrashNoteAssets(noteFileId).catch((error) => reportNativeActionError("预览回收站附件", error));
       const doc = await native.readNote(noteFileId);
       if (!previewVersionRef.current.isCurrent(version)) return;
       setSelected({ id: item.id, title: item.title || "无标题", noteId: noteFileId, html: doc.content });

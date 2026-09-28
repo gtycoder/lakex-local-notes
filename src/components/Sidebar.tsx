@@ -1,5 +1,5 @@
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent } from "react";
-import { Book, ChevronRight, ChevronsDownUp, Copy, FilePlus, File, Filter, Focus, Folder, FolderOpen, FolderPlus, History, Info, MoreVertical, Pencil, Pin, Plus, RefreshCw, Search, Trash, X } from "lucide-react";
+import { Book, ChevronRight, ChevronsDownUp, FilePlus, File, Filter, Focus, Folder, FolderOpen, FolderPlus, History, Info, MoreVertical, Pencil, Pin, Plus, RefreshCw, Search, Trash } from "lucide-react";
 import { DockFilterRow, useDockFilter } from "./DockFilterBar";
 import { LAKE_EMOJIS } from "../lib/lakeEmojis";
 import { LAKE_EMOJI_GROUPS } from "../lib/lakeEmojiGroups";
@@ -39,8 +39,6 @@ interface SidebarProps {
   onExportAs: (node: TreeNode, format: "markdown" | "html" | "lake" | "pdf") => void;
   onCopyPaths: (node: TreeNode) => void;
   onSetIcon: (node: TreeNode, icon: string | null) => void;
-  /** 复制文档（含附件） */
-  onDuplicate: (node: TreeNode) => void;
   /** 文档属性弹窗 */
   onShowInfo: (node: TreeNode) => void;
   /** 历史版本面板 */
@@ -181,13 +179,13 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
       .map((n) => n.id);
     if (newContainerIds.length > 0) {
       setExpanded((current) => {
-      const next = new Set(current);
+        const next = new Set(current);
         newContainerIds.forEach((id) => next.add(id));
-      return next;
-    });
+        return next;
+      });
     }
     prevNodeIds.current = new Set(props.nodes.map((n) => n.id));
-}, [props.nodes]);
+  }, [props.nodes]);
 
   useEffect(() => {
     const close = (event: MouseEvent) => {
@@ -676,7 +674,7 @@ export const Sidebar = memo(function Sidebar(props: SidebarProps) {
         {roots.map((node) => <TreeRow key={node.id} node={node} depth={0} {...treeRowProps} />)}
         {roots.length === 0 && <div className="empty-list">{query ? "没有匹配的目录项，Esc 或再点筛选图标可清空" : "点击 + 新建第一个笔记本"}</div>}
       </nav>
-      {contextMenu && contextNode && <ContextMenu node={contextNode} x={contextMenu.x} y={contextMenu.y} onNewChild={menuNewChild} onRename={menuRename} onDelete={menuDelete} onCopyMarkdown={() => props.onCopyMarkdown(contextNode)} onExportAs={(format) => props.onExportAs(contextNode, format)} onCopyPaths={() => props.onCopyPaths(contextNode)} onDuplicate={() => props.onDuplicate(contextNode)} onShowInfo={() => props.onShowInfo(contextNode)} onOpenHistory={() => props.onOpenHistory(contextNode)} onRevealNoteFile={() => props.onRevealNoteFile(contextNode)} onClose={() => setContextMenu(null)} />}
+      {contextMenu && contextNode && <ContextMenu node={contextNode} x={contextMenu.x} y={contextMenu.y} onNewChild={menuNewChild} onRename={menuRename} onDelete={menuDelete} onCopyMarkdown={() => props.onCopyMarkdown(contextNode)} onExportAs={(format) => props.onExportAs(contextNode, format)} onCopyPaths={() => props.onCopyPaths(contextNode)} onShowInfo={() => props.onShowInfo(contextNode)} onOpenHistory={() => props.onOpenHistory(contextNode)} onRevealNoteFile={() => props.onRevealNoteFile(contextNode)} onClose={() => setContextMenu(null)} />}
       {iconPicker && <EmojiIconPicker x={iconPicker.x} y={iconPicker.y} onPick={(icon) => { props.onSetIcon(iconPicker.node, icon); setIconPicker(null); }} onClose={() => setIconPicker(null)} />}
       <div className="sidebar-resize-handle desktop-only" role="separator" aria-label="调整资料库宽度" aria-orientation="vertical" aria-valuemin={props.minWidth} aria-valuemax={props.maxWidth} aria-valuenow={Math.round(props.width)} tabIndex={0} onPointerDown={handleResizePointerDown} onPointerMove={handleResizePointerMove} onPointerUp={finishResize} onPointerCancel={finishResize} onKeyDown={handleResizeKeyDown} onDoubleClick={() => props.onWidthCommit(SIDEBAR_DEFAULT_WIDTH)} />
     </aside>
@@ -832,14 +830,13 @@ interface ContextMenuProps {
   onCopyMarkdown: () => void;
   onExportAs: (format: "markdown" | "html" | "lake" | "pdf") => void;
   onCopyPaths: () => void;
-  onDuplicate: () => void;
   onShowInfo: () => void;
   onOpenHistory: () => void;
   onRevealNoteFile: () => void;
   onClose: () => void;
 }
 
-const ContextMenu = ({ node, x, y, onNewChild, onRename, onDelete, onCopyMarkdown, onExportAs, onCopyPaths, onDuplicate, onShowInfo, onOpenHistory, onRevealNoteFile, onClose }: ContextMenuProps) => {
+const ContextMenu = ({ node, x, y, onNewChild, onRename, onDelete, onCopyMarkdown, onExportAs, onCopyPaths, onShowInfo, onOpenHistory, onRevealNoteFile, onClose }: ContextMenuProps) => {
   const menuRef = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState<{ left: number; top: number } | null>(null);
   // 视口边缘翻转：按光标先挂载，量出菜单真实尺寸后再定位——下方放不下就向上展开，保证整张菜单可点。
@@ -872,7 +869,6 @@ const ContextMenu = ({ node, x, y, onNewChild, onRename, onDelete, onCopyMarkdow
       <div className="context-menu-sep" />
       {node.nodeType === "note" ? (
         <>
-          <button role="menuitem" onClick={() => { onDuplicate(); onClose(); }}><Copy size={15} /><span>复制</span></button>
           <button role="menuitem" onClick={() => { onRename(); onClose(); }}><Pencil size={15} /><span>重命名</span></button>
           <button role="menuitem" onClick={() => { onOpenHistory(); onClose(); }}><History size={15} /><span>历史版本</span></button>
           <button role="menuitem" onClick={() => { onRevealNoteFile(); onClose(); }}><FolderOpen size={15} /><span>打开文件位置</span></button>
@@ -909,7 +905,8 @@ export const ConfirmDelete = ({ node, onConfirm, onCancel }: ConfirmDeleteProps)
 );
 
 /** M1.6：文档/分组自定义图标选择器（Lake unicodeEmoji 表情资源 + 分组 + 搜索 + 清除） */
-export const EmojiIconPicker = ({ x, y, onPick, onClose }: { x: number; y: number; onPick: (icon: string | null) => void; onClose: () => void }) => {
+/** 图标/表情选择浮层（仅本文件的「设置图标」入口用）。 */
+const EmojiIconPicker = ({ x, y, onPick, onClose }: { x: number; y: number; onPick: (icon: string | null) => void; onClose: () => void }) => {
   const [filter, setFilter] = useState("");
   const [group, setGroup] = useState("全部");
   const q = filter.trim().toLowerCase();

@@ -3,7 +3,7 @@
 // 用法：
 //   node scripts/css-audit/check-stylesnap.mjs [--port 9231] [--tag after] [--states a,b,c] [--from <snap.json>] [--write-baseline]
 //
-// 前置（缺一不可，实测配方见 docs/UI-REDESIGN-OPTIMIZATION-PLAN-260923.md §3）：
+// 前置（缺一不可，实测配方见 scripts/css-audit/README.md）：
 //   ① 全新同构实例（独立 LAKE_USER_DATA）+ 独立 CDP 端口；② 装置已自证（两个全新实例同条件 0 差异）。
 // 基线只存"每态元素数 + 全态合并哈希"（几 KB，可入 git）；详细快照留在 .css-audit/（gitignored）供定位。
 //

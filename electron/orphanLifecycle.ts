@@ -4,7 +4,7 @@ import type { DbLike } from "./dbLike.js";
 import { AppError } from "../src/core/storeErrors.js";
 import { extractAssetRefs, isSafePathSegment } from "../src/core/storeUtils.js";
 import { sqlParameterBatches } from "../src/core/sqlParameterBatch.js";
-import { mimeTypeForFilename } from "../src/core/imageUtils.js";
+import { mimeTypeForFilename } from "../src/core/assetNaming.js";
 import { AssetRepository, type OrphanAsset, type OrphanAssetRow } from "./assetRepository.js";
 
 /** 孤儿资产生命周期上下文：DB + 路径回调（由 Store 装配）。 */

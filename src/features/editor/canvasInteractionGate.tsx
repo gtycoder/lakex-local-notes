@@ -54,7 +54,3 @@ export function useClickActivatedWheelGate(rootRef: RefObject<HTMLElement | null
     };
   }, [rootRef]);
 }
-
-export function clickActivatedWheelGateDescription(): string {
-  return "hover keeps document scrolling; click activates canvas wheel interactions";
-}

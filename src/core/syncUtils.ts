@@ -7,7 +7,7 @@
  * - Buffer.toString("utf8") → TextDecoder（等价测试）
  * - node:crypto sha256 → sha256Sync（纯 JS 同步，等价测试）
  * - node:path.extname → extnameLikeNode（纯 JS 复刻，等价测试）
- * 常量（MANIFEST_VERSION / MAX_MANIFEST_* 系列 / SAFE_KEY_RE / GZIP_MAGIC）随迁，sync.ts re-export。
+ * 常量（MANIFEST_VERSION / MAX_MANIFEST_* 系列 / SAFE_KEY_RE / GZIP_MAGIC）由各端直接从此模块导入。
  */
 import { sha256Sync } from "./sha256Sync.js";
 import type { Manifest, ManifestFolder, ManifestNote } from "./manifestTypes.js";
@@ -20,18 +20,14 @@ export interface S3Settings {
   accessKeyId: string; secretAccessKey: string; forcePathStyle: boolean;
 }
 
-// ===== 常量（随迁，原值不变） =====
-export const MANIFEST_VERSION = 7;
+// ===== Manifest 版本 =====
 /**
- * 读兼容窗口：v5 = v4 + manifest.folders 条目可选 deleted 墓碑字段（纯 additive），v5 端可安全读 v4
- * （升级期云端 latest 未重写前同步不中断）；发布恒写 MANIFEST_VERSION。
- * 旧端（v4 代码）读 v5 清单按版本不兼容整轮拒绝——防其把 folder 墓碑当活跃目录导入复活。
- * v6 = + 每条 note 可选 `kind`（sheet | bitable）；v7 = kind 增加 `board`（画板文档）。
- * **为什么新增 kind 取值也要升版本**：旧端 normalizeNoteKind 对未知取值一律回退 `doc`
- * （src/core/noteKind.ts）⇒ v6 端读 v7 清单会把画板 JSON 当 Lake 文档导入并保存 = 毁正文。
- * 升版本后旧端按同一条「版本不兼容」整轮拒绝，升级期不静默毁数据（代价：所有端要一起升级）。
+ * 260928 协议重置：远端与本地数据全部清空后，新协议重新使用 V1 编号；
+ * manifest **内容仍使用原 v7 schema**（folders/墓碑/锁/kind 全部保留）。
+ * 这不是旧 V1 兼容模式：代码只读写新 V1，所有端必须同时升级。
  */
-const READABLE_MANIFEST_VERSIONS = new Set([4, 5, 6, 7]);
+export const MANIFEST_VERSION = 1;
+const READABLE_MANIFEST_VERSIONS = new Set([1]);
 export const MAX_MANIFEST_BYTES = 20 * 1024 * 1024;
 export const MAX_MANIFEST_NOTES = 200_000;
 export const MAX_MANIFEST_FOLDERS = 50_000;

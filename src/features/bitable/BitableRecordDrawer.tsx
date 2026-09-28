@@ -4,6 +4,7 @@
  * 宽度可左右拖拽（左缘手柄），持久化在本机 localStorage。
  */
 import { useEffect, useState, type PointerEvent as ReactPointerEvent } from "react";
+import { writeLocalStorage } from "../../lib/localStorageSafe";
 import { ChevronDown, ChevronUp, Plus, X } from "lucide-react";
 import { Drawer } from "../../components/ui/Overlay";
 import { bitableRecordTitle, removeBitableAttachment, renameBitableAttachment, reorderBitableAttachments, type BitableAttachment, type BitableRecord, type BitableTable } from "../../core/bitableDoc.js";
@@ -34,7 +35,7 @@ export function BitableRecordDrawer(props: BitableRecordDrawerProps) {
     const v = Number(localStorage.getItem(DRAWER_WIDTH_KEY));
     return Number.isFinite(v) && v >= MIN_W && v <= MAX_W ? v : 460;
   });
-  useEffect(() => { localStorage.setItem(DRAWER_WIDTH_KEY, String(width)); }, [width]);
+  useEffect(() => { writeLocalStorage(DRAWER_WIDTH_KEY, String(width)); }, [width]);
   /** 左缘手柄向右拖变窄、向左拖变宽（云端同语义）。 */
   const startResize = (event: ReactPointerEvent<HTMLElement>) => {
     event.preventDefault();

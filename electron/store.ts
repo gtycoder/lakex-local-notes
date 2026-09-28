@@ -2,20 +2,16 @@ import Database from "better-sqlite3";
 import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
-import zlib from "node:zlib";
-import os from "node:os";
 import { ASSET_PORT } from "./assetServer.js";
-import { mdToHtml, wrapHtmlPage } from "../src/core/mdToHtml.js";
-import { lakeHtmlToMarkdown, lakeHtmlToPlain } from "../src/core/lakeCaches.js";
 import { createSilentLoggerScopes, type LoggerScopes } from "../src/core/logger.js";
 import { AppError } from "../src/core/storeErrors.js";
-import { extractAssetRefs, isSafePathSegment, sanitizeFileName, selectHistoryDrops } from "../src/core/storeUtils.js";
+import { extractAssetRefs, isSafePathSegment } from "../src/core/storeUtils.js";
 import { readNoteDigest, type NoteDigest } from "./storeQueries.js";
 import { emptyLakeBody } from "../src/core/lakeDocForm.js";
 import { type NoteKind, normalizeNoteKind } from "../src/core/noteKind.js";
-import { emptySheetBody, sheetToSearchText } from "../src/core/sheetDoc.js";
-import { emptyBitableBody, bitableToSearchText } from "../src/core/bitableDoc.js";
-import { emptyBoardBody, boardToSearchText } from "../src/core/boardDoc.js";
+import { emptySheetBody } from "../src/core/sheetDoc.js";
+import { emptyBitableBody } from "../src/core/bitableDoc.js";
+import { emptyBoardBody } from "../src/core/boardDoc.js";
 import { searchTextForKind } from "../src/core/noteSearchText.js";
 import { SearchRepository } from "./searchRepository.js";
 import type { SearchResult } from "../src/core/searchTypes.js";
@@ -31,19 +27,17 @@ import { NoteExport } from "./noteExport.js";
 import { SchemaInit } from "./schemaInit.js";
 import type { TrashItem, TrashReminderItem } from "./trashRepository.js";
 export type { TrashItem, TrashReminderItem };
-import { AssetRepository, type OrphanAsset, type OrphanAssetRow } from "./assetRepository.js";
+import { AssetRepository, type OrphanAsset } from "./assetRepository.js";
 import { NoteQueries } from "./noteQueries.js";
 import type { NoteSummary, SummaryRow, SyncFolder, SyncNote, TreeNode } from "./noteQueries.js";
 import { NoteMetadataRepository } from "./noteMetadataRepository.js";
 import { NoteContentRepository, type NoteCacheInput } from "./noteContentRepository.js";
-import { mimeTypeForFilename } from "../src/core/imageUtils.js";
 import { createPlaintextSecretCipher, type SecretCipher } from "../src/core/secretCipher.js";
 import type { DbLike } from "./dbLike.js";
 import { ResourceRepository } from "./resourceRepository.js";
 import { draftJournalDir, readDraftEntry } from "./draftJournal.js";
 import { RemoteImportRepository } from "./remoteImportRepository.js";
 import type { ResourceUploadOutput, HistorySettings, HistoryCleanupResult, S3Settings, SyncSettings, S3GcSettings } from "./storeTypes.js";
-import { sqlParameterBatches } from "../src/core/sqlParameterBatch.js";
 import { fileKindOf, renameFileCardDisplay, scanAssetCards } from "../src/core/fileCard.js";
 
 export { ASSET_NAME_RE, extractAssetRefs, isoWeekKey, selectHistoryDrops, sanitizeFileName } from "../src/core/storeUtils.js";
@@ -143,14 +137,11 @@ export class Store {
   private noteContent: NoteContentRepository;
   private resourceRepository: ResourceRepository;
   private remoteImport: RemoteImportRepository;
-  /** V5 Phase 2：密钥加解密注入点（桌面默认 = safeStorage，由 main.ts 装配） */
-  private secretCipher: SecretCipher;
   /** V5 Phase 2：日志注入点（桌面默认 = electron-log，由 main.ts 装配；sync/quickNotes 经此读取） */
   readonly logScopes: LoggerScopes;
 
   constructor(root: string, secretCipher: SecretCipher = createPlaintextSecretCipher(), logScopes: LoggerScopes = createSilentLoggerScopes()) {
     this.root = root;
-    this.secretCipher = secretCipher;
     this.logScopes = logScopes;
     this.noteAssetsDir = path.join(root, "note-assets");
     fs.mkdirSync(path.join(root, "notes"), { recursive: true });
@@ -474,29 +465,6 @@ export class Store {
    */
   createNoteInAtTopWithContent(parentId: string | null, title: string, content: string, assets: ImportedNoteAsset[], id = uuid(), kind: NoteKind = "doc"): NoteDocument {
     return this.createNoteInWithContent(parentId, title, content, assets, id, "top", kind);
-  }
-
-  /**
-   * 复制文档（含附件）：新 noteId → 独立资源目录，**文件名不变即可**（路径按 noteId 隔离，无需重命名）；
-   * 正文里的本地资源 URL 由旧 id 改写为新 id；新文档 sync_state='local'，随下次同步上传。
-   */
-  duplicateNote(id: string): NoteDocument {
-    const source = this.readNote(id);
-    const newId = uuid();
-    const assets: ImportedNoteAsset[] = [];
-    const assetsDir = this.noteAssetsDirFor(id);
-    if (fs.existsSync(assetsDir)) {
-      for (const entry of fs.readdirSync(assetsDir, { withFileTypes: true })) {
-        if (!entry.isFile() || !isSafePathSegment(entry.name)) continue;
-        assets.push({ filename: entry.name, sourcePath: path.join(assetsDir, entry.name) });
-      }
-    }
-    const sourceKind = this.kindOf(id) ?? "doc";
-    const content = source.content.split(id).join(newId);
-    const created = this.createNoteInAtTopWithContent(source.parentId, `${source.title} 副本`, content, assets, newId, sourceKind);
-    // createNoteInWithContent 只按标题入索引（body=""），复制是整篇正文，必须补一次全量索引，否则副本正文搜不到。
-    try { this.searchRepository.upsert(newId, created.title, this.searchTextFor(newId, content).plain ?? ""); } catch { /* 索引失败可由全量重建修复 */ }
-    return created;
   }
 
   private createNoteInWithContent(

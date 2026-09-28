@@ -7,24 +7,6 @@
 import type { CachePort, CacheSummary, ClearCacheResult } from "../core/ports.js";
 import { listAssetKeysFs } from "./assetFs.js";
 
-/** 内存 blob 注册表：运行时 blob URL（供统计与"清缓存"revoke 清理）。 */
-const runtimeBlobRegistry = new Set<string>();
-
-/** 登记一个运行时 blob URL。 */
-export function registerRuntimeBlob(url: string): void {
-  runtimeBlobRegistry.add(url);
-}
-
-/** 注销一个运行时 blob URL（revoke 后调用）。 */
-export function unregisterRuntimeBlob(url: string): void {
-  runtimeBlobRegistry.delete(url);
-}
-
-/** blob 字节数无法直接统计（URL 不携带长度）；返回条目数作为近似指标。 */
-function runtimeBlobCount(): number {
-  return runtimeBlobRegistry.size;
-}
-
 export const mobileCachePort: CachePort = {
   async getCacheSummary(): Promise<CacheSummary> {
     let downloadableAssetBytes = 0;
@@ -33,7 +15,9 @@ export const mobileCachePort: CachePort = {
       downloadableAssetBytes = fsKeys.length;
     } catch { /* Filesystem 不可用时忽略 */ }
     return {
-      runtimeBlobBytes: runtimeBlobCount(),
+      // 运行时 blob（图片预览）由**创建者自己**在卸载/替换时 revoke（如 QuickNoteFlashComposer 的
+      // urlsRef），不经过这里登记 ⇒ 恒为 0。保留字段是为了满足 CacheSummary 契约。
+      runtimeBlobBytes: 0,
       tempFileBytes: 0,
       downloadableAssetBytes,
       pendingUploadBytes: 0, // 未同步资源不可清理，始终报告 0（不误导）
@@ -41,12 +25,8 @@ export const mobileCachePort: CachePort = {
   },
 
   async clearDerivedCaches(): Promise<ClearCacheResult> {
-    // 1) 清理运行时 blob URL（可重建：下次渲染重新注入）
-    let runtimeBlobBytes = 0;
-    for (const url of runtimeBlobRegistry) {
-      try { URL.revokeObjectURL(url); runtimeBlobBytes += 1; } catch { /* 忽略 */ }
-    }
-    runtimeBlobRegistry.clear();
-    return { cleared: { runtimeBlobBytes, tempFileBytes: 0, downloadableAssetBytes: 0, pendingUploadBytes: 0 } };
+    // 无「由本端口持有」的可清理派生物：运行时 blob 由创建者自己 revoke（见 getCacheSummary 注释），
+    // 已下载资源属可重建但需二次确认的范畴，本接口不动它们。
+    return { cleared: { runtimeBlobBytes: 0, tempFileBytes: 0, downloadableAssetBytes: 0, pendingUploadBytes: 0 } };
   },
 };

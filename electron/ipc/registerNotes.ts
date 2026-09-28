@@ -65,7 +65,6 @@ export function registerNotesIpc(
     assertAttachmentSegments(noteId, filename);
     return store.renameAssetDisplay(noteId, filename, String(newName ?? ""));
   });
-  ipc.handle("duplicate_note", (id: string) => store.duplicateNote(id));
   ipc.handle("pick_export_dir", async () => {
     const win = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0];
     const result = await dialog.showOpenDialog(win, {

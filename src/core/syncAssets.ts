@@ -11,7 +11,7 @@ const ASSET_CONCURRENCY = 4;
 
 /** P3-3：小型并发池（定长车道，无依赖）：worker 按 index 领任务；结果由调用方按
  * 原索引归位（warnings 顺序 / 字节记账保持确定性，对齐串行语义）。 */
-export async function runPool<T>(items: readonly T[], limit: number, worker: (item: T, index: number) => Promise<void>): Promise<void> {
+export async function runAssetPool<T>(items: readonly T[], limit: number, worker: (item: T, index: number) => Promise<void>): Promise<void> {
   let next = 0;
   const lanes = Array.from({ length: Math.max(1, Math.min(limit, items.length)) }, async () => {
     while (next < items.length) {
@@ -60,7 +60,7 @@ export async function downloadNoteAssets(cfg: SyncConfig, s3: S3Store, db: SyncD
   // 可选：端口提供文件式下载（getObjectToFile + assetFilePath）时，字节不进 JS（原生 GET→落盘→原生校验）；
   // 否则回退字节路径。桌面/测试桩不实现该方法 → 走 else，行为与旧版逐字节一致。
   const fileDownload = typeof s3.getObjectToFile === "function" && typeof db.assetFilePath === "function";
-  await runPool(items, ASSET_CONCURRENCY, async (asset, i) => {
+  await runAssetPool(items, ASSET_CONCURRENCY, async (asset, i) => {
     try {
       // 已在本地且 size+hash 精确匹配 → 无需下载（不记 downloadedBytes、不算缺失、不产 warning；对齐上传侧 skip）。
       if (localHave) {
@@ -151,7 +151,7 @@ export async function scanLocalAssets(
   // （与旧串行「逐个 await、首错即止」裁决一致）；字节记账按索引归位（流式=声明 size，字节路径=bytes.length）。
   const uploadedSize: Array<number | null> = new Array(localAssets.length).fill(null);
   const errors: Array<unknown> = new Array(localAssets.length).fill(null);
-  await runPool(localAssets, ASSET_CONCURRENCY, async (a, i) => {
+  await runAssetPool(localAssets, ASSET_CONCURRENCY, async (a, i) => {
     try {
       // 已在远端清单声明 → 认定云端存在，跳过上传（不再 HEAD 探测）；但仍保留在返回清单里（全量声明）。
       if (cloudDeclaredFilenames?.has(a.filename)) return;

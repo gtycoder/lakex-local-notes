@@ -6,6 +6,7 @@
  * - 范围 = docs/MOBILE-TECH-STACK.md §9.2 的最小 IPC 集（POC 版）
  */
 import { NativeSqliteDb } from "./nativeSqliteDb";
+import { writeLocalStorage } from "../lib/localStorageSafe";
 import { migrateSnapshotToNativeSqlite } from "./nativeSqliteMigration";
 import { saveAssetBytesFs, loadAssetBytesFs, listAssetKeysFs, listNoteAssetKeysFs, removeAssetBytesFs, bytesToBase64 } from "./assetFs";
 import { isSafeShellOpenFilename } from "../core/assetNaming.js";
@@ -19,22 +20,19 @@ import { parseLakeManifest, objectKey } from "../core/syncUtils.js";
 import type { Manifest } from "../core/manifestTypes.js";
 import { KeyedAsyncQueue } from "../core/keyedAsyncQueue.js";
 import type { QuickNotesSyncResult } from "../core/quickNotesSyncEngine.js";
-import { TRASH_NOTEBOOK_ID } from "../core/syncDecisions.js";
 import { emptyLakeBody } from "../core/lakeDocForm.js";
 import { createCapacitorS3Store } from "./s3Store";
 import { CapacitorHttpHandler } from "./capacitorHttpHandler";
-import { buildAssetFilename, extOf } from "../core/assetNaming.js";
-import { readImageDimensions, sniffImageFormat, mimeTypeForFilename } from "../core/imageUtils.js";
+import { buildAssetFilename, mimeTypeForFilename } from "../core/assetNaming.js";
+import { readImageDimensions, sniffImageFormat } from "../core/imageUtils.js";
 import { localAssetHttpUrl } from "../core/assetUrl.js";
 import { MAX_ATTACHMENT_BYTES, MAX_IMAGE_BYTES, MAX_IMAGE_PIXELS } from "../core/storeLimits.js";
 import type { S3Settings, TreeNode } from "../lib/types";
 import type { SearchResult } from "../core/searchTypes.js";
-import { nextSortOrder } from "../core/treeRules.js";
 import type { StoredQuickNoteContent, StoredQuickNoteImage } from "../core/quickNoteModel.js";
 import { syncQuickNotesViaEngine } from "../core/quickNotesSyncEngine.js";
 import { createQuickNotesSyncDbPort } from "./quickNotesDbPort.js";
 import { mobileSecretStore } from "./secretStore.js";
-import { stageAssetWrites } from "./assetWrites.js";
 
 /** 系统默认应用打开本地文件（与 DocumentEditor 同插件）。 */
 const OpenFile = registerPlugin<{
@@ -80,26 +78,6 @@ const assets = new Map<string, Uint8Array>();
 /** 主维护队列（GPT 审计 P2-6）：同步与本地写操作（保存/删除/恢复）串行化，防交错
  * 覆盖数据库写入/发布旧状态；小记同步与编辑竞态由队列闭合（引擎 markSynced 无"未变才标"守卫时也安全）。 */
 const maintenance = new KeyedAsyncQueue();
-
-/** 与桌面一致的随机 8-hex 片段（crypto.randomBytes(4) 的等价物）。 */
-function randomHex(bytes: number): string {
-  const arr = new Uint8Array(bytes);
-  if (typeof crypto !== "undefined" && typeof crypto.getRandomValues === "function") {
-    crypto.getRandomValues(arr);
-  } else {
-    for (let i = 0; i < arr.length; i++) arr[i] = Math.floor(Math.random() * 256);
-  }
-  return Array.from(arr, (b) => b.toString(16).padStart(2, "0")).join("");
-}
-
-const MIME_BY_EXT: Record<string, string> = {
-  png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", gif: "image/gif",
-  webp: "image/webp", avif: "image/avif", svg: "image/svg+xml", bmp: "image/bmp",
-  ico: "image/x-icon", tiff: "image/tiff", tif: "image/tiff",
-};
-function mimeForExt(ext: string): string {
-  return MIME_BY_EXT[ext] ?? "application/octet-stream";
-}
 
 function assertResourceBytes(bytes: Uint8Array): void {
   if (sniffImageFormat(bytes) != null) {
@@ -414,7 +392,7 @@ export const bridge = {
   async saveNote(id: string, title: string, content: string, parentId: string | null = null, plain?: string): Promise<void> {
     return maintenance.run("main", async () => {
       const d = await ensureDb();
-      const changed = await noteRepository.saveNote(d, id, title, content, parentId, assets, plain);
+      await noteRepository.saveNote(d, id, title, content, parentId, assets, plain);
     });
   },
 
@@ -422,27 +400,6 @@ export const bridge = {
   async listNoteHistory(noteId: string): Promise<Array<{ id: number; title: string; createdAt: string }>> {
     const d = await ensureDb();
     return await historyRepository.listNoteHistory(d, noteId);
-  },
-
-  /** 复制文档（含附件）：新 id 目录、正文资源 URL 改写、sync_state='local'。 */
-  async duplicateNote(id: string) {
-    const d = await ensureDb();
-    const src = await noteRepository.readNote(d, id);
-    if (!src) throw new Error("笔记不存在");
-    const newId = crypto.randomUUID();
-    const assetMap = new Map<string, Uint8Array>();
-    for (const key of await listNoteAssetKeysFs(id)) {
-      const filename = key.split("/").pop() ?? "";
-      if (!filename) continue;
-      const bytes = await loadAssetBytesFs(key);
-      if (!bytes) continue;
-      await saveAssetBytesFs(`${newId}/${filename}`, bytes);
-      assetMap.set(filename, bytes);
-    }
-    const content = src.content.split(id).join(newId);
-    const title = `${src.title} 副本`;
-    await noteRepository.saveNote(d, newId, title, content, src.parentId, assetMap);
-    return { id: newId, title, content, updatedAt: new Date().toISOString(), parentId: src.parentId };
   },
 
   /** 文档属性（移动端：正文在本地 DB，资源在 app Data 目录）。 */
@@ -741,7 +698,7 @@ export const bridge = {
       else if (secret) {
         await mobileSecretStore.write("s3.secretAccessKey", secret);
         delete parsed.secretAccessKey;
-        localStorage.setItem(S3_STORAGE_KEY, JSON.stringify(parsed));
+        writeLocalStorage(S3_STORAGE_KEY, JSON.stringify(parsed));
       }
       return { ...parsed, prefix: parsed.prefix ?? DEFAULT_S3_PREFIX, secretAccessKey: secret } as S3Settings;
     } catch {
@@ -753,7 +710,7 @@ export const bridge = {
     // P2-8（GPT 审计）：secret 加密存储失败必须让保存整体失败（否则 UI 显示已保存但同步密钥缺失）
     await mobileSecretStore.write("s3.secretAccessKey", cfg.secretAccessKey);
     const { secretAccessKey: _s, ...rest } = cfg;
-    localStorage.setItem(S3_STORAGE_KEY, JSON.stringify(rest));
+    writeLocalStorage(S3_STORAGE_KEY, JSON.stringify(rest));
   },
 
   /** 七牛验证必须用 ListObjectsV2（HeadBucket 对存在的桶也返回 404，AGENTS.md 踩坑 #4） */
@@ -799,7 +756,7 @@ export const bridge = {
       assets.delete(key);
       throw new Error("图片落盘失败: " + (e as Error).message);
     }
-    const mimeType = mimeForExt(extOf(name));
+    const mimeType = mimeTypeForFilename(name);
     const url = localAssetHttpUrl(noteId, name);
     // filename 字段 = 原始文件名（Lake file 卡片展示名；磁盘名/同步用 URL 里的生成名，与桌面一致）
     const displayName = input.filename.replace(/[\\/:*?"<>|\u0000-\u001f]/g, "_").trim() || "附件";

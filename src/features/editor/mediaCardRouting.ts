@@ -123,6 +123,7 @@ export function installMediaCardCategoryRouter(editor: LakeEditorInstance): () =
         for (const b of batches) dispatchBatch(renderer, b.files, b.category, from);
       } finally {
         rerouting = false;
+        pendingTimers.delete(timer); // 触发后即从待清理集合摘掉，别让集合随会话无界增长
       }
     }, 0);
     pendingTimers.add(timer);

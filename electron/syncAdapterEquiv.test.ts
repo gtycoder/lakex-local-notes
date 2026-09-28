@@ -9,7 +9,9 @@ import path from "node:path";
 import zlib from "node:zlib";
 import crypto from "node:crypto";
 import { Store } from "./store.js";
-import { syncNow as desktopSync, type ObjectStore, type S3Settings } from "./sync.js";
+import { syncNowViaEngine as desktopSync } from "./syncEngineController.js";
+import type { ObjectStore } from "./s3Store.js";
+import type { S3Settings } from "../src/core/syncUtils.js";
 import { syncNowViaEngine } from "./syncEngineController.js";
 import { sha256Sync } from "../src/core/sha256Sync.js";
 import { TRASH_NOTEBOOK_ID } from "../src/core/syncDecisions.js";
@@ -92,12 +94,12 @@ async function runDesktop(sc: Scenario) {
     }
     if (sc.remoteNotes || sc.remoteFolders) {
       s3.map.set("manifests/latest.json", zlib.gzipSync(Buffer.from(JSON.stringify({
-        version: 4, workspaceId: "default", commitId: "remote-c1", prevCommitId: null, createdAt: "2026-01-01T00:00:00.000Z",
+        version: 1, workspaceId: "default", commitId: "remote-c1", prevCommitId: null, createdAt: "2026-01-01T00:00:00.000Z",
         notes: sc.remoteNotes ?? [], folders: sc.remoteFolders ?? [],
       }))));
       for (const [k, v] of Object.entries(sc.remoteObjects ?? {})) s3.map.set(k, Buffer.from(v));
     }
-    const remote = (s: S3Settings, l: any) => s3 as unknown as ObjectStore;
+    const remote = () => s3 as unknown as ObjectStore;
     await desktopSync(store, undefined, remote);
     const raw = s3.map.get("manifests/latest.json");
     const latest = raw ? JSON.parse(decode(raw[0] === 0x1f ? zlib.gunzipSync(raw) : raw)) : null;
@@ -130,12 +132,12 @@ async function runDesktopViaAdapter(sc: Scenario) {
     }
     if (sc.remoteNotes || sc.remoteFolders) {
       s3.map.set("manifests/latest.json", zlib.gzipSync(Buffer.from(JSON.stringify({
-        version: 4, workspaceId: "default", commitId: "remote-c1", prevCommitId: null, createdAt: "2026-01-01T00:00:00.000Z",
+        version: 1, workspaceId: "default", commitId: "remote-c1", prevCommitId: null, createdAt: "2026-01-01T00:00:00.000Z",
         notes: sc.remoteNotes ?? [], folders: sc.remoteFolders ?? [],
       }))));
       for (const [k, v] of Object.entries(sc.remoteObjects ?? {})) s3.map.set(k, Buffer.from(v));
     }
-    await syncNowViaEngine(store, undefined, (s: S3Settings, l: any) => s3 as unknown as ObjectStore);
+    await syncNowViaEngine(store, undefined, () => s3 as unknown as ObjectStore);
     const raw = s3.map.get("manifests/latest.json");
     const latest = raw ? JSON.parse(decode(raw[0] === 0x1f ? zlib.gunzipSync(raw) : raw)) : null;
     const notes = store.listNotesForSync().map((n) => ({ id: n.id, syncState: n.syncState ?? "", trashedAt: n.trashedAt != null, title: n.title }));

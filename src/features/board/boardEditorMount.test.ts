@@ -78,7 +78,8 @@ describe("画板编辑器护栏", () => {
 
   it("视图不进正文（260926 B）：保存序列化不再带当前视口 ⇒ 缩放/平移不会标脏文档", () => {
     expect(EDITOR).not.toMatch(/docOf\(forDisk, initialDoc, viewportRef\.current\)/);
-    expect(EDITOR).toMatch(/docOf\(forDisk, initialDoc, initialDoc\.viewport \?\? null\)/);
+    // 序列化只带正文里那份历史 viewport（不再传活视口）
+    expect(EDITOR).toMatch(/docOf\(forDisk, initialDoc\.viewport \?\? null\)/);
   });
 
   it("不跳动（260926 C）：有记下的位置时先藏住画板，贴好滚动位置再显示", () => {
@@ -100,7 +101,10 @@ describe("画板编辑器护栏", () => {
   it("kind=board 端到端接线：noteKind / 正文目录 / 搜索文本 / 主进程新建", () => {
     expect(KINDS).toMatch(/"board"/);
     expect(STORE).toMatch(/path\.join\(this\.root, "boards", `\$\{id\}\.board\.json`\)/);
-    expect(STORE).toMatch(/boardToSearchText/);
+    // 搜索文本按 kind 分派：主进程只认 searchTextForKind，具体解析器在共享的 noteSearchText.ts
+    // （260928 清掉 store.ts 里已成为死引用的 boardToSearchText/sheetToSearchText/bitableToSearchText）
+    expect(STORE).toMatch(/searchTextForKind/);
+    expect(readFileSync(new URL("../../core/noteSearchText.ts", import.meta.url), "utf8")).toMatch(/boardToSearchText/);
     expect(STORE).toMatch(/createBoardIn\(/);
   });
 

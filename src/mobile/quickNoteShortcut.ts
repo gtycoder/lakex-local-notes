@@ -35,7 +35,8 @@ const PinShortcut = registerPlugin<PinShortcutPluginApi>("PinShortcut");
 export function isQuickNoteShortcutUrl(url: string | null | undefined): boolean {
   if (!url) return false;
   const normalized = url.trim().toLowerCase();
-  return normalized.startsWith("lakenotes://quick-note") || normalized.startsWith("lakenotes://quicknote");
+  // QUICK_NOTE_URL 是自建快捷方式的正式 URL；`quicknote` 是历史别名（老版本 shortcuts.xml 发过）
+  return normalized.startsWith(QUICK_NOTE_URL) || normalized.startsWith("lakenotes://quicknote");
 }
 
 /**

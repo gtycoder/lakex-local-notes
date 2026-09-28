@@ -12,6 +12,7 @@
  *   - 容器 onMouseDown preventDefault：点按钮不丢选区；定位自算 + 避开固定工具栏；表格/代码块内不出现。
  */
 import { useCallback, useEffect, useLayoutEffect, useReducer, useRef, useState, type CSSProperties, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
+import { reportNativeActionError } from "../../../lib/nativeErrors";
 import { native } from "../../../lib/native";
 import { FONT_SIZE_OPTIONS, PARAGRAPH_STYLES, TOOLBAR_BLOCK_ITEMS } from "../editorCommands";
 import type { LakeEditorInstance } from "../lakeRuntime";
@@ -414,7 +415,7 @@ export function SelectionToolbar({ editor, container }: {
         <CardItem tip="边距" className="ne-card-toolbar-dropdown-item ne-card-toolbar-dropdown-item-has-title ant-dropdown-trigger" selected={menu === "imgmargin"} onClick={(e) => toggleMenu("imgmargin", e.currentTarget)}><IconImageSpacing /><span>边距</span></CardItem>
         <CardItem tip="批量应用" className="ne-card-toolbar-select-item ant-dropdown-trigger" selected={menu === "imgbatch"} onClick={(e) => toggleMenu("imgbatch", e.currentTarget)}><IconImageBatch /><span className="ne-card-toolbar-arrow-down-icon" /></CardItem>
         <div className="ne-ui-card-toolbar-divider" />
-        <CardItem tip="另存为" className="ne-card-toolbar-item" disabled={!asset} onClick={() => { if (asset) void native.saveAssetAs(asset.noteId, asset.filename, asset.filename); }}><KIcon type="download" /></CardItem>
+        <CardItem tip="另存为" className="ne-card-toolbar-item" disabled={!asset} onClick={() => { if (asset) void native.saveAssetAs(asset.noteId, asset.filename, asset.filename).catch((error) => reportNativeActionError("另存图片", error)); }}><KIcon type="download" /></CardItem>
 
         {/* 宽高：宽/高输入 + 25/50/75/100% 档位（云端同内容） */}
         {menu === "imgsize" && (

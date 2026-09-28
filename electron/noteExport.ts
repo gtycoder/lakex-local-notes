@@ -5,7 +5,7 @@ import type { DbLike } from "./dbLike.js";
 import { AppError } from "../src/core/storeErrors.js";
 import { isSafePathSegment, sanitizeFileName } from "../src/core/storeUtils.js";
 import { mdToHtml, wrapHtmlPage } from "../src/core/mdToHtml.js";
-import { mimeTypeForFilename } from "../src/core/imageUtils.js";
+import { mimeTypeForFilename } from "../src/core/assetNaming.js";
 import { ASSET_PORT } from "./assetServer.js";
 
 /**
