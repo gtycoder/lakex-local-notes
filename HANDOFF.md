@@ -16,7 +16,7 @@
   2. 表单视图加「编辑表单 / 预览表单」双模：编辑态**恢复 v1 原形态**，「填写表单」= 直接跳预览 tab（不做独立弹层）；已配置默认进预览、未配置默认进编辑。
   3. 看板图片字段上卡出**缩略图**（不显示文件名）；字段类型选择改 **2 列网格**（不分「基础/高级」组）；**创建/修改时间必须能参与筛选与排序**（这是修掉我之前设的假边界）。
 
-### 二、已完成内容（全部已提交，**未 push**）
+### 二、已完成内容（提交状态见「提交」列）
 | 编号 | 内容 | 提交 |
 | --- | --- | --- |
 | — | 专项文档建立 + HANDOFF §3.9 登记 | `c2aa11a` |
@@ -32,14 +32,16 @@
 | T02A | 基础字段：布尔/链接/评分/进度/创建时间/修改时间（含默认值与进度配色） | `6f046df` |
 | T02A-fix | **系统时间字段打通筛选/排序/分组/统计**（记录级取值口径 `bitableFieldValue`） | `ef75e96` |
 | style | 字段类型选择改 2 列网格；顺带修 T02A 漏 import CSS 的 bug | `3a39030` |
+| T02A 续 | 评分：空星**实心** + 选中星对齐云端金（`--lake-rating-star`）；进度：**只留条 + 百分比**（数值框删除），可拖动/键盘可达/Delete 清空、只读不接指针 | **未提交（待验收）** |
 
 ### 三、当前状态与门禁
-- 分支 `master`，**工作区干净**；`git log -1` = `3a39030`。**未 push**（用户此前只授权「提交代码」，推送需另行明确授权）。
-- 门禁全绿：`tsc --noEmit`✓ · `vitest run` **1377 passed / 16 skipped**✓ · `check:core` 0 违规✓ · 桌面 + 移动构建✓ · `ui-metrics`（hex=0 / `!important`=9 / 未定义令牌=0）✓ · `cssLayers`+`uiPrimitives`✓ · `git diff --check`✓。
+- 分支 `master`；HEAD = `1494331`（交接文档提交）。**状态更正（260929 核对）**：`git rev-parse HEAD origin/master` 两者相同、`git ls-remote origin master` 一致、`origin/master` reflog 有 `update by push` ⇒ 本文件旧版写的「未 push / `git log -1` = `3a39030`」**已过期**，上述代码批次实际已随该文档提交推到 Gitee。别再按「未 push」理解。
+- 当前工作区**有未提交改动** = 260929 两处评分/进度修复（待用户验收）。
+- 门禁全绿：`tsc --noEmit`✓ · `vitest run` **1378 passed / 16 skipped**✓ · `check:core` 0 违规✓ · 桌面 + 移动构建✓ · `ui-metrics`（hex=0 / `!important`=9 / 未定义令牌=0）✓ · `cssLayers`+`uiPrimitives`✓ · `git diff --check`✓。
 - 每个编号都做了 **CDP 真实端点验收**：`env -u ELECTRON_RUN_AS_NODE LAKE_RENDERER=scheme LAKE_USER_DATA=<临时目录> LAKE_ASSET_PORT=<独立端口> electron --disable-gpu --remote-debugging-port=<独立端口> .`，用 Node 24 内置 WebSocket 直驱 `Runtime.evaluate`。
 
 ### 四、当前问题 / 遗留（都不阻塞继续）
-1. **待用户验收**：V02–V04 + 三批追加需求 + T01 + T03 + T04 + T02A（专项文档 §11 看板里全部为「待验收」）。V01 已验收通过。
+1. **待用户验收**：V02–V04 + 三批追加需求 + T01 + T03 + T04 + T02A + **260929 T02A 续（评分空星实心 / 进度条可拖动）**（专项文档 §11 看板里均为「待验收」）。V01 已验收通过。
 2. 已知口径/边界（用户知情、可接受）：
    - **移动端**：看板 / 画册 / 日历 / 分组 / 列统计一律**不展示**，回退为只读表格 + 明确提示（安全回退，专项文档 §13 有记录）。本轮**只过了移动端构建，未跑 Android 模拟器**（按边界约定 §8 由移动端会话维护）——移动端会话补验时请覆盖：image/布尔/链接/评分/进度/创建·修改时间的只读展示、画册/看板/日历的只读回退提示、列统计隐藏。
    - 多级分组的折叠 key 基于「组键 = 选项名」，**重命名选项会重置该组折叠态**（本机展示态，不写正文）。
@@ -61,6 +63,7 @@
 5. **`cssLayers.test.ts` 基线是硬上限**：`features/bitable/bitableEditor.css` 已顶满 **1081/1081（headroom = 0）** —— 再加任何一条声明都会让用例变红；本轮所有新样式都进了新文件（`bitableViews.css` / `bitableKanbanView.css` / `bitableGalleryView.css` / `bitableCalendarView.css` / `bitableFormView.css` / `bitableFieldCells.css`）。
 6. **读落盘要轮询**：应用层自动保存有防抖，改完立刻 `readNote` 会读到旧值甚至空对象（本轮多次误判「没保存」）。
 7. **同一文件被多批改过时没法按批拆 commit**（`git add -p` 的补丁手术风险高）⇒ 本轮代码合成一个 commit、文档单独一个；不要为了「一批一 commit」硬拆。
+8. **在 DSH 宿主里跑 CDP 验收必须加 `--no-sandbox`**（260929 新增）：否则 Chromium 自带 sandbox 初始化报 `Operation not permitted`，连锁 `NetworkService/GPU crashed`，最终 `FATAL: GPU process isn't usable. Goodbye.` 整个实例退出（§6 的验收命令本轮首次执行即因此失败）。加 `--no-sandbox`（userData/端口本就隔离）后正常。
 
 ## 1. 项目一句话 + 铁律（详见 AGENTS.md）
 本地优先笔记应用（Electron 44 + React 18.3 + better-sqlite3 + 语雀 Lake 内核），S3（七牛 Kodo 兼容）同步。

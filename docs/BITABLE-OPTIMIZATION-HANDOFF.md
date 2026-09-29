@@ -701,6 +701,7 @@ npx vitest run src/styles/cssLayers.test.ts src/styles/uiPrimitives.test.ts
 | T03 多级分组 | 待验收 | 260928-T03 | 最多 3 级 + 拖动调优先级 + 层级缩进；折叠按节点 key（见 §13） |
 | T04 语义排序增强 | 待验收 | 260928-T04 | 单选/多选「选项顺序·逆序」，日期文案早→晚/晚→早（见 §13） |
 | T02A 基础字段 | 待验收 | 260928-T02A | 布尔/链接/评分/进度/创建·修改时间；**系统时间可筛选/排序/分组/统计**（记录级取值口径，见 §13） |
+| T02A 续 评分/进度交互 | 待验收 | 260929 | 评分空星改**实心** + 选中星对齐云端金（`--lake-rating-star` #ecaa06）+ 进度**只留「条 + 百分比」**（数值框整体删除；仍可拖动、键盘可达、Delete 清空；只读不接指针）（见 §13） |
 | T02B.1 关联基础模型 | 未开始 | - | 同一文档内多表 |
 | T02B.2 单向关联 | 未开始 | - | 多选默认开启 |
 | T02B.3 双向关联 | 未开始 | - | 反向字段与配对一致性 |
@@ -739,6 +740,7 @@ npx vitest run src/styles/cssLayers.test.ts src/styles/uiPrimitives.test.ts
 | 2026-09-28 | 260928-V03 | V03 画册视图 | `src/core/bitableDoc.ts`(+test) · `src/features/bitable/BitableGalleryView.tsx`(新) · `bitableGalleryView.css`(新) · `BitableViewConfigPanels.tsx`(新) · `BitableEditor.tsx` · `bitableEditorMount.test.ts` · `src/styles/cssLayers.test.ts` | 门禁全绿 + CDP 真实端点验收通过（真实图片经 ?w= 缩略图上屏） | 移动端只读回退；不做封面标题/多封面 |
 | 2026-09-28 | 260928-V02 | V02 看板视图 | `src/core/bitableDoc.ts`(+test) · `src/features/bitable/BitableKanbanView.tsx`(新) · `bitableKanbanView.css`(新) · `BitableEditor.tsx` · `bitableViews.css` · `bitableEditorMount.test.ts` · `src/mobile/bitable/MobileBitableViewer.tsx` · `src/styles/cssLayers.test.ts` | 门禁全绿 + CDP 真实端点验收通过 | 多选分组/手动排序不做；画册·日历未实现 |
 | 2026-09-28 | 260928-V01 | V01 多视图工作台 | `src/core/bitableDoc.ts`(+test) · `src/features/bitable/BitableViewBar.tsx`(新) · `bitableViews.tsx`(新) · `bitableViews.css`(新) · `BitableEditor.tsx` · `bitableEditorMount.test.ts` · `src/mobile/bitable/MobileBitableViewer.tsx` · `src/mobile/mobile.css` · `src/styles/cssLayers.test.ts` · `src/components/historySnapshotPreview.test.ts` | 门禁全绿 + CDP 真实端点验收通过 | 看板/画册/日历本体在 V02–V04；未知视图在旧客户端按表格显示 |
+| 2026-09-29 | 260929 | T02A 续 评分/进度交互 | `src/features/bitable/bitableCells.tsx` · `bitableFieldCells.css` · `src/styles/themes/{light,dark,warm}.css` · `src/styles/cssLayers.test.ts` · `bitableEditorMount.test.ts` | 门禁全绿 + CDP 真实端点验收：空星 `#d5d9de` 实心、选中星 `#ecaa06`（云端金）、拖动线性 0/10/25/50/73/90/100 全命中并落盘、键盘步进 50→51→52→51→50→40→50、Delete 清空落盘、只读拖动不写入、数值框已删除（仅条+百分比） | 未提交（待用户验收）；进度**默认色**仍走 `--lake-accent`；进度不再能输入精确值/不再有输入框内清空（清空走 Delete/Backspace） |
 
 ## 13. 会话记录（只追加）
 
@@ -1190,6 +1192,95 @@ UI 与交互变化：
 实测：新增字段面板 `grid-template-columns: 142px 142px`、14 项、面板内只有 1 个标题（无分组）；字段编辑弹窗里当前类型（文本）带勾选。
 
 改动文件：`src/features/bitable/bitableCells.tsx` · `bitableFieldCells.css` · `BitableEditor.tsx` · `src/styles/cssLayers.test.ts`
+
+### 2026-09-29 · T02A 续：评分空星可见性 + 进度条可拖动（用户反馈）
+
+用户 260929 反馈上一轮 T02A 的两处遗留（附我方/云端对照截图）：
+
+1. 评分字段**未点选时星星颜色太浅、看不清**（我方 = 浅色空心星，云端 = 实心浅灰星）。
+2. 进度字段云端可**拖动**调整，我们的只能输入数字。
+
+本次完成：
+
+- ① 评分 `RatingCell`：`<Star>` 由「选中实心 / 未选中 `fill:none` 空心」改为**恒 `fill="currentColor"` 实心**，颜色交回 CSS 令牌 —— 未选中 `--lake-border-strong`（浅色 #d5d9de，对齐云端实心浅灰）、选中仍 `--lake-status-pending`。原先未选中用最浅的 `--lake-border-2` + 空心 ⇒ 几乎不可见。
+- ② 进度 `ProgressCell`：轨道改为**可按压拖动** —— `.bt-progress` 上 `pointerdown` 即跟手（**点轨道任意处直接跳值**），`document` 上收 `pointermove/pointerup`；新增圆形把手 `.bt-progress-thumb`（用 `--bt-progress` 定位）。轨道去掉 `overflow:hidden`（否则裁掉把手）并加 `touch-action:none`。
+- **只读契约**：`readOnly` 时轨道加 `.is-readonly`（`cursor:default` + 隐藏把手），`startDrag` 直接 `return` ⇒ 只读态没有写入入口（数字输入框同步 `readOnly`）。
+
+数据结构/接口变化：
+
+- 无。沿用字段既有值模型与 `field.progressColor`；不新增持久化字段，无同步/历史/GC 改动。
+
+UI 与交互变化：
+
+- 评分空星由「浅色空心」变「中性灰实心」；进度条可拖动并出现把手（可拖动的可见证据）。
+- 新样式仍全部落在 `bitableFieldCells.css`（未回灌 `bitableEditor.css`，其 1081 基线不动）；该文件基线 66 → 81（+15，合法新增非覆盖回涨，已在 `cssLayers.test.ts` 注明）。
+
+改动文件：
+
+- `src/features/bitable/bitableCells.tsx` · `bitableFieldCells.css` · `src/styles/cssLayers.test.ts` · `bitableEditorMount.test.ts`
+
+验证结果：
+
+- `tsc --noEmit`：通过
+- `vitest`：**1378 passed / 16 skipped**（+1 = 本轮新增护栏用例）
+- `check:core`：0 违规
+- 桌面构建：通过；移动构建：通过
+- UI/CSS 指标：`ui-metrics` hex=0 / `!important`=9 / 未定义令牌=0；`cssLayers`+`uiPrimitives` 通过；`git diff --check` 通过
+- 手工验收（CDP 真实端点：`LAKE_RENDERER=scheme` + 隔离 `LAKE_USER_DATA` + 独立端口 9231）：
+  - 评分：`.bt-rating` 5 星；未选中 `getComputedStyle().color` = `rgb(213,217,222)`（#d5d9de）、`svg[fill]` = `currentColor` ⇒ **实心可辨**（截图核对）；选中 = `rgb(155,97,14)`。
+  - 拖动：按住 20% → 拖到 80% → 松手，输入框/文案变 `80%`、`--bt-progress:80%`，**4 次轮询内落盘 `fld-progress=80`**。
+  - 点轨道跳值：35% 处按下即抬起 → `35%`，落盘 35。
+  - 只读态（`setNoteLocked(true)` + 重载）：`.is-readonly` 存在、`cursor:default`、把手 `display:none`、输入框 `readOnly`；在 90% 处拖动后值仍 35（**未写入**）。
+- 取证产物（截图 + CDP 脚本）为临时文件，验收后已删，未入库。
+
+遗留问题：
+
+- **选中星色未动**：仍是 `--lake-status-pending`（#9b610e，偏深琥珀），云端为 `#ecaa06`（更亮金）。用户本轮只报「未选中太浅」，故**只修未选中**，是否一并对齐选中色待用户确认。
+- 进度条默认色走主题强调色 `--lake-accent`（云端为亮蓝 #137cee）；按「自有设计系统」口径未改，可用字段级 `progressColor` 覆盖。
+
+下一步：
+
+- 等用户验收本批两处修复；通过后再按 §8 顺序进入 **T02B.1 关联基础模型**。
+
+工程备注（避免后人踩）：
+
+- 本轮 CDP 实例**必须加 `--no-sandbox`**：在当前 DSH 宿主 sandbox 下，Chromium 自带 sandbox 初始化报 `Operation not permitted`，连锁 `NetworkService/GPU crashed` 并最终 `FATAL: GPU process isn't usable. Goodbye.`（进程整体退出）。加 `--no-sandbox` + 隔离 `LAKE_USER_DATA` 后正常。
+
+#### 同会话追加（用户 260929 确认后）：选中星对齐云端金 + 去除进度数值框原生「加减框」
+
+上一条「遗留问题」里两项待定，用户当场拍板，同会话落实：
+
+- **选中星色对齐云端**：新增主题令牌 `--lake-rating-star`（light / warm = `#ecaa06`，即云端语雀的金；dark = `#e8b339`，深色底亮一档，与 `--lake-status-pending` 在深色的处理同口径），`.bt-star.is-on` 由 `--lake-status-pending` 改走它；空星仍 `--lake-border-strong`。⇒ 评分星与云端一致：**实心金星 + 实心灰星**（颜色字面量只出现在 `themes/*`，符合 AGENTS §3 #14）。
+- **去掉进度数值框的原生「加减框」**：`.bt-progress-input` 加 `appearance: textfield` + `::-webkit-{inner,outer}-spin-button { appearance:none; margin:0 }`。进度条是主控件（0–100 整数、线性跟手），数值框只留精确输入。
+
+改动文件（追加）：`src/styles/themes/{light,dark,warm}.css` · `bitableFieldCells.css`（基线 81 → 84）· `bitableEditorMount.test.ts`
+
+追加验证（CDP 真实端点，隔离 userData）：
+
+- 评分：选中星 `getComputedStyle().color` = `rgb(236,170,6)`（`--lake-rating-star` = `#ecaa06`）、`svg[fill]` = `currentColor`；空星 = `rgb(213,217,222)`（`--lake-border-strong`）。截图核对与云端一致。
+- 进度：数值框截图**无加减框**；拖动**逐点重新量轨道**后 0 / 10 / 25 / 50 / 73 / 90 / 100 **全部精确命中**（全整数、线性），越界夹到 0 / 100。
+  （注：首次对拍用「一次量好的固定 rect」会得到 50→54、73→79 的假偏差 —— 数值文案宽度变化会改轨道宽度；验收必须每次重取 rect。）
+
+未改（口径保留，用户知情）：
+
+- 进度条**默认色**仍是主题强调色 `--lake-accent`（云端为亮蓝 `#137cee`），可用字段级 `progressColor` 覆盖。
+- 「数字」字段单元格与字段弹窗里的「进度默认值」输入框**仍保留原生加减框**：本轮只按用户所指改进度单元格，未扩散到其它输入。
+
+#### 同会话追加②（用户 260929）：进度只留「条 + 百分比」，数值输入框整体删除
+
+用户看图后再收一步：「数字也去掉，拖动进度条直接看百分比就行」。
+
+- `ProgressCell` 删除 `<input class="bt-progress-input" type="number">`，单元格只剩 **轨道（可拖动）+ `{pct}%` 文案**；随之删掉 `.bt-progress-input` 与其 `::-webkit-*-spin-button` 共 3 条声明（基线 84 → **81**）。
+- **键盘可达没有一起丢**：轨道本身成为控件 `role="slider" tabIndex=0` + `aria-valuemin/max/now/valuetext`（只读时 `tabIndex=-1` + `aria-readonly`）；键盘映射 ←/↓ −1、→/↑ +1、PageUp/Down ±10、Home/End 两端、**Delete/Backspace 清空**（清空是删除输入框后唯一的「回落到未填写」路径，特意保留）。
+- 网格的 `onGridKeyDown` 只处理 Tab/Enter/Escape（方向键不参与），故方向键给 slider 步进不会与单元格导航打架。
+
+追加验证（CDP 真实端点）：
+
+- `cell.querySelector("input") === null`（数值框确已删除），轨道 `role=slider` / `tabindex=0` / `aria-valuenow` / `aria-valuetext` 齐备；UI 只剩「条 + 64%」。
+- 拖动（每次重新量轨道）0 / 10 / 25 / 50 / 73 / 100 **全部精确命中**。
+- 键盘：50 → →51 → ↑52 → ←51 → ↓50 → PageDown 40 → PageUp 50（**精确**）；Home 0 / End 100；Delete 后文案 `0%` 且 **1 次轮询即落盘（值清空为 ""）**。
+
+遗留（口径变化，用户知情）：进度单元格**不能再直接输入数字**；清空只能靠键盘 Delete/Backspace（或整体清空该行/该字段值）。
 
 ## 14. 会话执行模板
 
