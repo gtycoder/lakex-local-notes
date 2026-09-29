@@ -1,6 +1,6 @@
 # 多维表优化落地与交接文档（Single Source of Truth）
 
-> 状态：**方案已冻结；V01 已完成，V02–V04 + 260928 三批追加需求 + T01/T03/T04 + T02A 基础字段已实施，一并待验收**（其余 T02B / T06 / D 批次未开始）。
+> 状态：**方案已冻结；V01 已完成（用户验收通过）；V02–V04 + 260928 三批追加需求 + T01/T04 + T02A + 260929 单级分组/UI2 + 260929-OPT 阶段优化 + T02B.1 关联基础模型已实施，一并待验收**（T03 多级分组已按用户决定废弃；T06 表单双模已完成待验收；T02B.2/.3、D01/D02 未开始）。
 > 建立日期：2026-09-28。
 > 适用范围：多维表字段扩展、单/双向关联、表格增强、看板/画册/日历视图、表单增强、导入导出。
 > 本文是该优化项目的**唯一实现方案、进度看板、修改记录、决策记录和会话交接文档**。
@@ -29,6 +29,7 @@
 - 不做在多维表字段中嵌入文档。
 - 关联只发生在**同一个 `kind="bitable"` 文档内的不同 `tables[]`**。
 - 文档仍然是数据边界：一个文档可以有多张表并互相关联；不同多维表文档之间完全隔离。
+- **新建数据表的默认结构 = 只有 1 列「文本」+ 3 行空白记录**（用户 260929 定稿）：不再预置「单选 / 日期」列——表结构由用户自己加，不替他做决定；3 行空白是为了新建完就能直接填。新建多维表文档时的首张表走同一函数（`createDefaultBitableTable`），口径一致。
 
 ### 2.2 视图范围
 
@@ -89,7 +90,10 @@
 - 关联只允许同一多维表文档内的不同数据表。
 - 关联支持多选。
 - 字段配置提供“允许添加多个记录”，默认开启；关闭后只能选一条。
-- 第一版只允许关联目标表的全部记录，不做字段级数据范围筛选。
+- **数据范围（260929 用户追加，取代「第一版只允许全部记录」）**：字段配置提供「从视图筛选记录」——
+  **不勾选 = 从目标表全部记录里选**（默认）；**勾选 = 绑定目标表的一个视图**，选择器只列该视图筛选后的记录（视图自带排序一并生效）。
+  数据范围只约束「能选到什么」，不改变已有值的展示（已选记录即使被视图过滤掉也照常显示）；绑定的视图被删 → 回落全部记录，不级联、不报错。
+  **仍不做**「按条件筛选记录」（云端图 1 的第三项，用户未要求）。
 - 关联单元格显示目标记录第一列的值。
 - 多值关联使用紧凑 chip 列表。
 - 目标记录进入回收站或删除后，内部保留关联 ID，界面显示为空或失效。
@@ -447,6 +451,10 @@ string[]
 
 #### T03 多级分组
 
+> **260929 已废弃**：用户最终决定分组最多只有一级。历史实现 `9b80ede` 仅保留在 git 历史；
+> 当前产品只消费 `view.groups[0]`，多级树/拖动排序/层级样式均已删除。单级分组继续保留按组统计和
+> 「加进本组」，具体见 §11「单级分组重做」与 §13。
+
 目标：
 
 - 从当前单级分组升级为多级分组。
@@ -579,6 +587,26 @@ string[]
 - 不使用多表关联跨文档。
 - 同步、历史、移动端只读表现一致。
 
+#### T02B.4 关联数据范围 + 选择器改版（260929 用户追加）
+
+> 用户口径原话：「关联数据表需要做是否可以从视图选择，如果不勾选就默认从全部数据里选，如果勾选了，就要绑定一个视图」＋
+> 「关联字段选择的时候弹窗展示，不要扣扣搜搜的使用小弹窗，就用正常的全局弹窗，然后展示选择的关联表全部信息…两个 tab（全部 / 已选择且展示数量）…搜索框，右侧也有筛选条件和排序…主要区域全局展示…**不做添加记录**」。
+
+实现范围：
+
+- 字段配置：`从视图筛选记录` 勾选框 + `关联视图` 下拉（目标表的视图列表）；不勾选 = 全部记录。
+- 选择器改为**全局大弹窗**（Overlay `Dialog`，约 1080×672）：两个 tab（所有可关联记录 / 已选 N 条记录）、全局搜索、右侧筛选与排序、主区域 = 目标表**整表**（每个字段一列）、页脚「已选 N 条记录 / 取消 / 确认」。
+- 已选页签保留复选框（可取消）、保持**选择顺序**。
+- 撤销 T02B.2 的「添加记录」与「跳转目标记录」入口（按图 2 结构收敛）。
+- 筛选/排序是**选择器本机状态**（不写正文），复用视图求值引擎 `applyViewToRecords`。
+
+验收：
+
+- 不勾选数据范围 → 候选 = 目标表全部记录；勾选并绑定视图 → 候选 = 该视图筛选后的记录（含视图自带排序）。
+- 已选记录即使不在数据范围内也照常显示（展示与候选两套口径）。
+- 确认才写正文；取消 / 搜索 / 重复选择不落盘。
+- 弹窗内筛选/排序/搜索可正常点选并生效；只读态无入口。
+
 #### T02B 明确不做
 
 - 查找引用。
@@ -637,7 +665,7 @@ string[]
 3. `V03` 画册视图
 4. `V04` 日历视图
 5. `T01` 列级统计
-6. `T03` 多级分组
+6. `T03` 多级分组（260929 已废弃；不执行）
 7. `T04` 语义排序增强
 8. `T02A` 基础字段
 9. `T02B.1` 关联基础模型
@@ -703,24 +731,34 @@ npx vitest run src/styles/cssLayers.test.ts src/styles/uiPrimitives.test.ts
 | T01 列级统计 | 待验收 | 260929 | 先删→同日恢复→定稿为**常驻**（24px 薄条贴视图最底 + 状态栏上移）；汇总方式**逐字对齐云端 config**（见 §13「T01 与云端对齐」），**只有第一列默认「记录总数」**，其余默认空白（占位「统计」仅 hover 显形）；统计格 = 白底 chip + ▾，点开按字段类型给选项 |
 | V05 续 四条修复 + 悬浮 + | 待验收 | 260929 | ① 列选中点列外即清；② 分组汇总行固定 36px（低档，不随行高）；③ 分组头**每列**都有汇总位（未配置给「统计」占位入口）；④ 底部汇总栏常驻（24px 贴视图底）+ 状态栏上移（`[data-doc-kind="bitable"]` bottom:34px）；⑤ 分组「加进本组」的 **+ 不占行**，改成**悬浮在分组边界线上**（见 §13） |
 | V05 分组样式（复刻云端） | 待验收 | 260929 | 分组头改**整行 56px**：折叠钮 + 分组值 + 每列统计格（右对齐，首列缺省 `N 条记录`）；每组记录后 40px 圆形「加进本组」，顶级分组间 20px 间隔。规格来自 Edge 实测云端 `lakex-viewer-grid-group-*`（见 §13） |
-| T03 多级分组 | 待验收 | 260928-T03 | 最多 3 级 + 拖动调优先级 + 层级缩进；折叠按节点 key（见 §13） |
+| T03 多级分组 | 已废弃 | 260929 | 用户决定不做多级；已删除多级树/拖动/层级样式，历史提交 `9b80ede` 仅存档（见 §13） |
+| 单级分组重做 | 待验收 | 260929-UI | 只消费 `groups[0]`；单张白卡 + 1px 边框 + 8px 圆角；按组统计/加进本组保留；历史多规则正文收敛为第一级（见 §13） |
+| 分组底衬 + 底栏收口 | 待验收 | 260929-UI2 | 复刻云端「浅灰分组通道 + 白卡」：表头下 20px 间隙（`.bt-group-head-gap`）、加进本组/组间/表下空白统一走新令牌 `--lake-bg-subtle`（**不分组时表格下方空白同款**）；卡片收口移到该组最后一条记录（+ 行在卡外）；汇总文案改「共 N 条」；**删掉表底「已选择 N 个单元格」横条**，底栏即最底下那条，文档状态栏改成**实测贴住底栏上沿**（见 §13） |
 | T04 语义排序增强 | 待验收 | 260928-T04 | 单选/多选「选项顺序·逆序」，日期文案早→晚/晚→早（见 §13） |
 | T02A 基础字段 | 待验收 | 260928-T02A | 布尔/链接/评分/进度/创建·修改时间；**系统时间可筛选/排序/分组/统计**（记录级取值口径，见 §13） |
 | T02A 续 评分/进度交互 | 待验收 | 260929 | 评分空星改**实心** + 选中星对齐云端金（`--lake-rating-star` #ecaa06）+ 进度**只留「条 + 百分比」**（数值框整体删除；仍可拖动、键盘可达、Delete 清空；只读不接指针）（见 §13） |
 | 浮层定位统一（基础设施） | 待验收 | 260929 | **贴底翻上方**：垂直口径收敛到 `placeVertical`/`usePopoverPosition`；多维表日期/单选/展开面板/行右键菜单 + 标签页右键 + 卡片右键全部改走**实测**定位（见 §13） |
-| T02B.1 关联基础模型 | 未开始 | - | 同一文档内多表 |
-| T02B.2 单向关联 | 未开始 | - | 多选默认开启 |
-| T02B.3 双向关联 | 未开始 | - | 反向字段与配对一致性 |
+| 260929-OPT 阶段代码优化 | 待验收 | 260929-OPT | 本轮用户要求「先整理/优化当前阶段代码」：修 6 处真 bug（进度颜色面板打不开 / 表单题序被丢 / 系统时间列查重失效 / 系统时间列复制为空 / 搜索绕开展示口径 / 删字段留脏配置）+ `statForField` 原型链加固 + 令牌合规（组件 CSS 去颜色字面量）+ 单一来源（移动端附件判定）；明细见 §13 |
+| T02B.1 关联基础模型 | 待验收 | 260929-T02B.1 | 同一文档内跨表关联：`BitableRelation` 模型 + `relationRecordIds/relationTargetTable/relationTargetRecords` 统一解析 + `BitableDisplayContext` 透传（表格/详情/表单/看板/画册/日历/移动端/历史/搜索）+ 字段配置（目标表 + 允许多个记录）+ `RelationCell` chip 展示；CDP 真实端点验收通过（见 §13） |
+| T02B.2 单向关联 | 待验收 | 260929-T02B.2 | 关联选择器：搜索 / 目标记录列表 / 已选计数 / 新建记录 / 取消·确认（**草稿确认前不写正文**）+ 跳转目标记录；多选·单选均可用；复用 `.bt-option-*` 原语（见 §13） |
+| T02B.3 双向关联 | 待验收 | 260929-T02B.3 | 反向字段（默认名 = 来源表名 + 来源字段名）+ 两侧配对 + **回填已有值** + 双向镜像唯一写入口 `applyRelationMirror` + 删一侧解除配对（对侧降级为单向、数据保留）（见 §13） |
+| 移动端多维表只读补齐 | 待验收 | 260929-MOBILE | 布尔/链接/评分/进度/关联/系统时间的**只读控件**（不再是裸文本）+ 非 grid 视图回退提示；Android 模拟器 CDP 验收通过（见 §13） |
 | T06 表单本地增强 | 待验收 | 260928-T06 | 编辑态恢复 v1 原形态，「填写表单」= 跳到预览 tab（无独立弹层）；已配置默认进预览（见 §13） |
 | T07 图片字段类型 | 待验收 | 260928-T07 | image 复用附件值模型，上传/拖拽/粘贴三路只收图片（见 §13） |
 | F01 图片预览总数 | 待验收 | 260928-F01 | 文档预览改用**正文**图片表（虚拟渲染下 DOM 不全 ⇒ 切不动）；预览范围**恒为单个单元格**（见 §13） |
 | F02 附件命名审计 | 待验收 | 260928-F02 | 磁盘名绝不外显/不可编辑（统一守卫）+ bitable 展示名取用户原始文件名（见 §13） |
 | F03 表单编辑态回退 + 看板缩略图 | 待验收 | 260928-F03 | 编辑态恢复 v1；看板图片字段上卡出缩略图（见 §13） |
 | V03.1 画册封面点预览 | 待验收 | 260928-V03.1 | 点封面把**本视图全部图片封面**交给 Lightbox（可左右切换，见 §13） |
+| 260929 多级分组样式试验 | 已废弃 | 260929-UI | 曾做多级区域卡/子组留白；用户最终决定不做多级，相关样式与逻辑已由「单级分组重做」替代 |
 | D01 CSV 导入导出 | 未开始 | - | 不依赖新重型库优先 |
 | D02 JSON 导入导出 | 未开始 | - | 完整结构导出 |
 | V05 图表视图 | 已废弃 | - | 产品确认不做 |
 | T05 条件填色 | 已废弃 | - | 产品确认不做；现有颜色能力保留 |
+| 关联字段「选择数据表」占位修复 | 待验收 | 260929-REL-FIX | `关联数据表` 下拉不再把占位文案当选项（用户报「选择数据表仅是提示，不能当做选项」）；见 §13 |
+| T02B.4 关联数据范围 + 选择器改版 | 待验收 | 260929-T02B.4 | 字段配置加「从视图筛选记录」（不勾选=全部记录 / 勾选=绑定目标表的一个视图）；选择器由单元格小气泡改**全局大弹窗**（两个 tab / 全局搜索 / 筛选·排序 / 目标表整表 / 不做添加记录）；见 §13 |
+| 新建数据表默认结构 | 待验收 | 260929-DEF-TBL | 默认表 = **1 列文本 + 3 行空白记录**（取消预置的单选/日期列）；「新建数据表」与空正文兜底共用 `createDefaultBitableTable`；见 §13 |
+| 关联选择器图片/附件真渲染 | 待验收 | 260929-REL-ASSET | 选择器整表里的图片与附件**真渲染**（图片缩略图可点开预览本格、其余附件出「图标 + 文件名」chip）；顺带把资产 URL 收敛为 `bitableAssetUrl` 单一来源（单元格/看板/画册/选择器）；见 §13 |
+| 横向页签原语（B 墨线 + 计数徽标） | 待验收 | 260929-TABS | 用户在五个形态里选定 **B**；已做成 `kit.css` 的正式原语 `.ln-tabs`（文字 + 选中变强调色 + 与文字等宽的 2px 下划线；数量进 `.ln-tabs__count` 徽标；右侧动作 `.ln-tabs__action`），**已全量落地**：关联选择器 / 回收站 / 历史面板 / 表单编辑·预览；过渡变体 `.ln-tabs--seg` 已删除；见 §13 |
 
 ## 12. 修改记录
 
@@ -746,7 +784,7 @@ npx vitest run src/styles/cssLayers.test.ts src/styles/uiPrimitives.test.ts
 | 2026-09-28 | 260928-V03 | V03 画册视图 | `src/core/bitableDoc.ts`(+test) · `src/features/bitable/BitableGalleryView.tsx`(新) · `bitableGalleryView.css`(新) · `BitableViewConfigPanels.tsx`(新) · `BitableEditor.tsx` · `bitableEditorMount.test.ts` · `src/styles/cssLayers.test.ts` | 门禁全绿 + CDP 真实端点验收通过（真实图片经 ?w= 缩略图上屏） | 移动端只读回退；不做封面标题/多封面 |
 | 2026-09-28 | 260928-V02 | V02 看板视图 | `src/core/bitableDoc.ts`(+test) · `src/features/bitable/BitableKanbanView.tsx`(新) · `bitableKanbanView.css`(新) · `BitableEditor.tsx` · `bitableViews.css` · `bitableEditorMount.test.ts` · `src/mobile/bitable/MobileBitableViewer.tsx` · `src/styles/cssLayers.test.ts` | 门禁全绿 + CDP 真实端点验收通过 | 多选分组/手动排序不做；画册·日历未实现 |
 | 2026-09-28 | 260928-V01 | V01 多视图工作台 | `src/core/bitableDoc.ts`(+test) · `src/features/bitable/BitableViewBar.tsx`(新) · `bitableViews.tsx`(新) · `bitableViews.css`(新) · `BitableEditor.tsx` · `bitableEditorMount.test.ts` · `src/mobile/bitable/MobileBitableViewer.tsx` · `src/mobile/mobile.css` · `src/styles/cssLayers.test.ts` · `src/components/historySnapshotPreview.test.ts` | 门禁全绿 + CDP 真实端点验收通过 | 看板/画册/日历本体在 V02–V04；未知视图在旧客户端按表格显示 |
-| 2026-09-29 | 260929 | T02A 续 评分/进度交互 | `src/features/bitable/bitableCells.tsx` · `bitableFieldCells.css` · `src/styles/themes/{light,dark,warm}.css` · `src/styles/cssLayers.test.ts` · `bitableEditorMount.test.ts` | 门禁全绿 + CDP 真实端点验收：空星 `#d5d9de` 实心、选中星 `#ecaa06`（云端金）、拖动线性 0/10/25/50/73/90/100 全命中并落盘、键盘步进 50→51→52→51→50→40→50、Delete 清空落盘、只读拖动不写入、数值框已删除（仅条+百分比） | 未提交（待用户验收）；进度**默认色**仍走 `--lake-accent`；进度不再能输入精确值/不再有输入框内清空（清空走 Delete/Backspace） |
+| 2026-09-29 | 260929 | T02A 续 评分/进度交互 | `src/features/bitable/bitableCells.tsx` · `bitableFieldCells.css` · `src/styles/themes/{light,dark,warm}.css` · `src/styles/cssLayers.test.ts` · `bitableEditorMount.test.ts` | 门禁全绿 + CDP 真实端点验收：空星 `#d5d9de` 实心、选中星 `#ecaa06`（云端金）、拖动线性 0/10/25/50/73/90/100 全命中并落盘、键盘步进 50→51→52→51→50→40→50、Delete 清空落盘、只读拖动不写入、数值框已删除（仅条+百分比） | 已提交（待用户验收）；进度**默认色**仍走 `--lake-accent`；进度不再能输入精确值/不再有输入框内清空（清空走 Delete/Backspace） |
 | 2026-09-29 | 260929 | V05 续：补做第 2/3 条（表底 + 按分组隐藏 / 分组 + 独立空间无线） | `BitableEditor.tsx` · `bitableViews.css` · `bitableEditorMount.test.ts` | 门禁全绿 + CDP 对拍：取消分组 → 表底 + **1**；恢复分组 → 分组 + **2** / 表底 + **0**；分组 + 行高 **32** 且按钮**在行内**、td 边框 0 | 无 |
 | 2026-09-29 | 260929 | T01 与云端对齐（汇总方式/默认口径/chip） | `src/core/bitableDoc.ts`(+test) · `bitableCells.tsx`(StatCell) · `BitableEditor.tsx` · `bitableViews.css` · `cssLayers.test.ts` · `bitableEditorMount.test.ts` | 门禁全绿 + CDP：默认只显示 2 个「记录总数 N」（每分组首列），其余 10 个 opacity:0；chip 白底 + 1px；点开选项 = 云端 8 项（文本）；进度列 = 10 项（多最大/最小值、**无求和**） | 复选框/数字/创建·修改时间等未逐一点验（按 bundle 的 types 直接实现） |
 | 2026-09-29 | 260929 | V05 续：分组 + 改悬浮 | `bitableViews.css` · `cssLayers.test.ts` | 门禁全绿 + CDP：加行高 **1px**（原 40px）、按钮 24×24 **居中于边界线**、命中测试仍是按钮 | 无 |
@@ -757,6 +795,23 @@ npx vitest run src/styles/cssLayers.test.ts src/styles/uiPrimitives.test.ts
 | 2026-09-29 | 260929 | 浮层定位统一（贴底翻上方） | `src/hooks/topMenuPosition.ts`(+test) · `usePopoverPosition.ts`(新) · `src/features/bitable/bitableCells.tsx` · `BitableEditor.tsx` · `src/features/editor/MultiTabEditor.tsx` · `CardContextMenu.tsx` · `bitableEditorMount.test.ts` | 门禁全绿 + CDP：末行日期**翻到锚点上方且完整可见**、首行仍在下方、行右键菜单完整可见 | 浮层不跟随滚动（与改前一致） |
 | 2026-09-29 | 260929 | **T01 整体回退** | `src/core/bitableDoc.ts`(+test) · `src/features/bitable/BitableEditor.tsx` · `bitableViews.css` · `src/styles/cssLayers.test.ts` · `bitableEditorMount.test.ts` | 门禁全绿 + CDP 真实端点：底栏与列菜单「统计」均不存在；旧正文残留 `columnStats` 保存后消失 | 功能整体删除（含持久化字段）；`bitableViews.css` 基线 20 → 16 |
 | 2026-09-29 | 260929 | T01 续 空统计行不渲染（随后被整体回退） | `src/features/bitable/BitableEditor.tsx` · `bitableEditorMount.test.ts` | 门禁全绿 + CDP 真实端点：未配统计时 `tfoot/.bt-stat-row` 均不存在（截图无灰条）；配一列统计后出现 `记录总数 3` | 统计行样式与功能保留；若用户要整个列统计功能回退需另议 |
+| 2026-09-29 | 260929 | 分组区域与细节优化 | `src/features/bitable/BitableEditor.tsx` · `bitableViews.css` · `bitableEditorMount.test.ts` · `src/App.tsx` · `scripts/e2e-sidebar-hover.mjs` · `src/styles/cssLayers.test.ts` · `HANDOFF.md` | 门禁全绿；CDP 实测单级分组白卡、两级分组区域/子卡间距、`+` 行底边 0、表底重复计数为空；BrowserSkill + Edge 读取钉钉样例样式做对照 | 单级分组已是白卡；两级外层仍保留浅底容器；等待用户验收视觉密度 |
+| 2026-09-29 | 260929 | T03 回退 + 单级分组重做 | `src/core/bitableDoc.ts`(+test) · `src/core/bitableGroup.test.ts` · `src/features/bitable/BitableEditor.tsx` · `src/features/bitable/bitableViews.css` · `src/features/bitable/bitableEditorMount.test.ts` · `HANDOFF.md` | 定位历史提交 `9b80ede`；删除 `groupRecordsTree/BITABLE_MAX_GROUPS`、多规则面板、拖动排序和层级样式；单级分组卡片 + 按组统计/加进本组保留；解析时 `groups.slice(0,1)`；门禁全绿 + 隔离 CDP 实测 | 等待用户验收；历史多分组正文会只保留第一级配置 |
+| 2026-09-29 | 260929-UI2 | 分组底衬 + 底栏收口（用户四条 + 「数据表选择区同灰」+ 「多选量落到最左格」+ 「底栏融合灰底 / 汇总行整行」+ 「表格线变浅」+ 「无统计必须不展示 / 左下角计数口径」+ 「＋号居中在编号正下方」+ 「分组删除键挪到行尾」+ 「链接格 2 层边框 / 链接格对齐云端」） | `src/core/bitableDoc.ts`(+test 新增 `statDisplayText`) · `src/features/bitable/bitableCells.tsx`（LinkCell 重写） · `BitableEditor.tsx` · `bitableViews.css` · `bitableFieldCells.css` · `bitableEditor.css`（`.bt-tables` 底衬改同灰、格线/卡片线改 `--lake-border-2`、格内输入框焦点环去重） · `bitableEditorMount.test.ts` · `src/styles/themes/{light,dark,warm}.css`（新令牌 `--lake-bg-subtle`） · `src/styles/chrome.css` · `src/styles/cssLayers.test.ts` | ① 分组底衬：表头下 20px 间隙 `.bt-group-head-gap` + 加进本组 + 组间 + 表下空白统一 #fafafa（**不分组时表格下方空白同款**）；② 卡片收口移到该组最后一条记录（`+` 行在卡外）；③ 汇总格文案「共 N 条」；④ 删掉表底「已选择 N 个单元格」横条，状态栏改实测 `--lake-bitable-status-bottom` 贴底栏上沿（实测：底栏 785–809、状态栏 761–783、重叠 **0px**）；⑤ 数据表选择区 `.bt-tables` 由 `--lake-bg-block` 改 `--lake-bg-subtle`（实测 `rgb(250,250,250)`），与表格区同一个灰；⑥ 底栏最左格**多选时**改显示选择量（「选择 N 行」/「选择 N 个单元格」，实测 1 行不触发、2 行触发、拖选 6 格触发）；⑦ 底栏底色改 `--lake-bg-subtle`（与表格区融合），汇总行去掉行内竖线（`border-right-width: 0`），光标所在格加重到 `--lake-bg-block`（实测：只有那一格变 `rgb(240,242,245)`，9 列边界与表头逐列对齐）；⑧ 格线/表头底线/卡片边线由 `--lake-border-1` 改 `--lake-border-2`（云端实测格线 `rgb(244,245,245)`；实测我方 computed `rgb(240,242,245)`、截图 1px 线 `rgb(241,242,245)`，差 3/255 不可辨）；⑨ **修 bug**：分组头首列汇总格的 `?? "count"` 兜底删除（选「无统计」不再硬显示「共 N 条」）；左下角计数由 `activeTable.records.length` 改 `shownRecords.length`（用户口径：它=当前视图**正在展示**的记录数，只随筛选/搜索与多选变；与「汇总项实时计算」是两套独立逻辑）；⑩ 两处添加入口的＋号改**编号列独占一格 + 居中**（实测行号/编号列表头/＋号中心同为 x 41；与行号同一条竖线）；⑪ 分组面板的删除键由「行首 ✕ / 取消分组」改为**行尾 🗑 / 删除分组**，与筛选、排序行同一套（实测三者 DOM 结构同构）；⑫ **修 bug**：格内输入框的焦点环在「单元格自己已有 2px 选中环」时不再叠画（修链接/文本格的「2 层边框」；多格选区的内层格仍保留焦点环）；⑬ 链接格改云端形态：展示**文本** + 右端 🔗 图标（点它用本地浏览器打开，实测 `window.open` 收到 URL），双击进入编辑、Esc 取消，**不再常驻输入框**（空值不再显示 `https://` 占位）。门禁全绿（tsc / vitest 1383-16 / check:core / 双端构建 / ui-metrics / cssLayers+uiPrimitives / git diff --check） | 已提交（待用户验收） |
+| 2026-09-29 | 260929-OPT | 阶段代码优化（真 bug + 单一来源 + 令牌） | `src/core/bitableDoc.ts`(+test) · `src/features/bitable/BitableEditor.tsx` · `BitableFormView.tsx` · `bitableEditor.css` · `bitableEditorMount.test.ts` · `src/mobile/bitable/MobileBitableViewer.tsx` · `src/styles/cssLayers.test.ts`(注释) | 修 6 处真 bug：进度颜色面板被 `supportsOptions` 块吞掉、表单题序被丢、系统时间列查重失效/复制为空、搜索绕开展示口径、删字段留跨视图脏配置；`statForField` 加 hasOwnProperty；组件 CSS 去 `#fff/#1f1f1f/rgba` 颜色字面量；移动端附件判定收敛 `isAttachmentLikeField`。门禁全绿 + vitest 1386-16 | 纯去重类重构（B 档）按 §17 不做；抽屉阴影 rgba 无令牌未改 |
+| 2026-09-29 | 260929-T02B.1 | T02B.1 关联基础模型 | `src/core/bitableDoc.ts`(+test) · `src/core/historyPreview.ts` · `src/features/bitable/{BitableEditor,bitableCells,BitableRecordDrawer,BitableFormView,BitableKanbanView,BitableGalleryView,BitableCalendarView}.tsx` · `bitableFieldCells.css` · `src/mobile/bitable/MobileBitableViewer.tsx` · `bitableEditorMount.test.ts` · `src/styles/cssLayers.test.ts` | 关联字段模型（tableId/mode/allowMultiple/pairedFieldId）+ 值恒为 id 数组 + 统一解析（`BitableDisplayContext` 可选 ctx，只解析一层防环）+ 字段配置（目标表下拉排除本表 / 允许多个记录默认勾）+ `RelationCell` chip；失效（删记录/删表）不崩不级联。门禁全绿 + vitest 1389-16 + CDP 真实端点（隔离 userData 9260） | T02B.1 无填写入口（值由 T02B.2 选择器写入）；关联的筛/排/分组/统计暂按空处理；移动端未跑 Android |
+| 2026-09-29 | 260929-T02B.2 | T02B.2 单向关联（关联选择器） | `src/core/bitableDoc.ts`(+test 新增 `toggleRelationDraft`) · `src/features/bitable/bitableCells.tsx`(RelationCell 可编辑) · `BitableEditor.tsx`(跳转/新建回调) · `BitableRecordDrawer.tsx` · `bitableFieldCells.css` · `bitableEditorMount.test.ts` · `src/styles/cssLayers.test.ts` | 选择器 = 搜索 + 目标记录列表 + 已选计数 + 新建记录 + 取消/确认 + 行尾跳转；**草稿确认前不写正文**；多选增删 / 单选替换；复用 `.bt-option-*` 原语（删掉 T02B.1 的第二套 chip）。门禁全绿 + vitest 1391-16 + CDP 真实端点（隔离 userData 9261；搜索/取消不落盘、多选/单选落盘、跳转切表开抽屉、新建目标记录 6→7 均实测） | 新建记录用字段默认值（主字段空 → 未命名记录）；选择器列全部目标记录（不做数据范围筛选）；移动端未跑 Android |
+| 2026-09-29 | 260929-T02B.3 | T02B.3 双向关联 | `src/core/bitableDoc.ts`(+test 新增 `relationReverseFieldName/createRelationPair/unpairRelationFields/applyRelationMirror`) · `BitableEditor.tsx`（双向开关 / 关联写值走镜像 / deleteField 先 unpair） · `bitableEditorMount.test.ts` | 建反向字段 + 回填已有值；双向镜像唯一写入口；删一侧解除配对（对侧降级单向、数据保留）；关掉双向即解除。门禁全绿 + vitest 1394-16 + CDP 真实端点（隔离 userData 9262；反向字段名 `第一个关联`、B 反向出现 A、改一侧另一侧同步、删反向字段来源保留且降级） | 反向字段默认名只在创建时给；已配对不允许改目标表（需先改回单向）；移动端未跑 Android |
+| 2026-09-29 | 260929-MOBILE | 移动端多维表只读补齐 + Android 验收 | `src/mobile/bitable/MobileBitableViewer.tsx` · `src/mobile/mobile.css` · `src/mobile/bitable/mobileBitableViewer.test.ts`(新) | 单元格按字段类型给只读控件（布尔复选框 / 链接 target=_blank / 评分星 / 进度条 / 关联 chip / 附件缩略图 / 选项色块），非 grid 视图保留明确回退提示。门禁全绿 + vitest 1396-16 + **Android 模拟器 CDP 验收**（AVD lake_mobile；造两条 bitable 笔记断言全部控件） | 未跑真机；移动端仍只读；D01/D02 按用户要求暂缓 |
+| 2026-09-29 | 260929-UI3 | 数据表行操作改浮动 | `src/features/bitable/bitableEditor.css` · `src/styles/cssLayers.test.ts` | 「⋯ / 删除表」由流内（opacity 0 仍占位）改**绝对定位浮层**：默认 visibility:hidden; opacity:0 且不接点击，悬停整行淡入；名称/计数不再被挤压。cssLayers 基线 1046 → 1054 | 无 |
+| 2026-09-29 | 260929-UI4 | 字段类型改弹出选择 | `src/features/bitable/bitableCells.tsx`(新 `FieldTypeSelect`) · `BitableEditor.tsx`(编辑字段弹窗) · `bitableEditorMount.test.ts` | 「编辑字段」的字段类型由内联 2 列网格改**弹出选择器**：触发器一行（图标 + 名称 + ▾），点开才在 Popover 里出同一 `FieldTypeGrid`（14 项，当前项打勾）；弹窗不再被一大块网格撑高。快捷「新增字段」入口不变 | 未加「基础/高级」分组（沿用 260928 决定） |
+| 2026-09-29 | 260929-UI5 | 类型名左对齐 + 选项回车新建 | `src/features/bitable/BitableEditor.tsx` · `bitableEditor.css` · `bitableEditorMount.test.ts` · `src/styles/cssLayers.test.ts` | ① 字段类型触发器文字改**左对齐**（`<button>` 默认 text-align:center 把类型名居中）；② 选项输入框**回车 = 当前选项编辑完成 → 切到下一个选项**，已是最后一个才新建并聚焦新行（与「添加选项」按钮共用 `addOptionRow`）。cssLayers 1054 → 1055 | 无 |
+| 2026-09-29 | 260929-FIX | 状态栏「一个数据表有一个没有」 | `src/features/bitable/BitableEditor.tsx` · `bitableEditorMount.test.ts` | 根因：`--lake-bitable-status-bottom` 量的是 `.bt-stat-row`（`<tr>`，**static**），而 sticky 在 `.bt-stat-row td`；内容纵向溢出时 `<tr>` 停在内容底部（视口外），算出 **-231px** 把状态栏顶出屏幕（空表/不溢出时才对）⇒ 改为量 sticky 的 `td` | 无 |
+| 2026-09-29 | 260929-REL-FIX | 关联字段「关联数据表」占位被当成选项 | `src/features/bitable/BitableEditor.tsx` · `bitableEditorMount.test.ts` | 占位文案「选择数据表」原先是 `options[0]`（`value: ""`）⇒ 空值时被渲染成选中项并打勾；改为 `SelectMenu` 的 `placeholder`，选项只留真实数据表（与看板/日历同写法）。门禁全绿 + vitest 1399-16 + CDP 真实端点（隔离 userData 9271：空值触发器 = 灰字占位、下拉仅 `["第一个"]`、`hasPlaceholderItem=false`） | 不提供「清除目标表」入口（关联字段无目标表无意义） |
+| 2026-09-29 | 260929-T02B.4 | 关联数据范围 + 关联选择器改全局大弹窗 | `src/core/bitableDoc.ts`(+test) · `src/features/bitable/BitableRelationPicker.tsx`(新) · `bitableRelationPicker.css`(新) · `bitableCells.tsx` · `BitableEditor.tsx` · `BitableRecordDrawer.tsx` · `bitableEditorMount.test.ts` · `src/styles/cssLayers.test.ts` | ① 数据范围：`relation.viewId` + `relationTargetView`/`relationCandidateRecords`（不勾选=全部记录，勾选=按目标表视图筛选后的记录）；字段配置加「从视图筛选记录 + 关联视图」（换目标表/取消勾选即清 viewId）。② 选择器：单元格气泡 → **全局 Dialog**（两个 tab / 全局搜索 / 筛选·排序（弹窗内联条）/ 目标表整表 / 页脚「已选 N 条记录·取消·确认」），撤销「添加记录」与「跳转」；排序映射 `sortModeOf/applySortMode/changeSortField` 上收 core 单一来源。门禁全绿 + vitest 1402-16 + CDP 真实端点（隔离 userData 9271：15 行整表 / 两 tab / 搜索「打」→3 / 筛选「单选=已完成」→1 / 排序「评分降序」→4 在首 / 确认写盘 / 取消不落盘 / 勾选视图范围后候选 15→1、取消后回落 15） | 选择器本机筛选排序不持久化（按选择器语义）；移动端未跑 Android（只读路径未改） |
+| 2026-09-29 | 260929-DEF-TBL | 新建数据表默认结构改「1 列文本 + 3 行空白」 | `src/core/bitableDoc.ts`(+test) · `src/core/bitableDoc.test.ts`(新增 3 字段夹具 `fixtureTable`) · `src/core/historyPreview.test.ts` · `electron/store.test.ts` · `bitableEditorMount.test.ts` | `createDefaultBitableTable` 由「文本+单选+日期、0 记录」改为「**文本 1 列 + 3 行空白记录**」；`emptyBitableBody()`（新建多维表文档首表）与编辑器「新建数据表」共用同一函数。门禁全绿 + vitest 1404-16 + CDP 真实端点（隔离 userData 9271：点新建数据表 → 表头 `["", "文本"]`、3 行空白、落盘 `fields:[text] records:3 values:[{},{},{}]`） | 测试夹具改为显式 `fixtureTable()`（不再隐式依赖产品默认字段），非兼容层 |
+| 2026-09-29 | 260929-REL-ASSET | 关联选择器里图片/附件真渲染 + 资产 URL 单一来源 | `src/features/bitable/bitableAssetUrl.ts`(新) · `BitableRelationPicker.tsx` · `bitableRelationPicker.css` · `bitableCells.tsx` · `BitableEditor.tsx` · `BitableKanbanView.tsx` · `BitableGalleryView.tsx` · `BitableRecordDrawer.tsx` · `BitableFormView.tsx` · `bitableEditorMount.test.ts` · `src/styles/cssLayers.test.ts` | ① 选择器整表：`image`/`attachment` 列改**真渲染** —— 图片出 32px 缩略图（`?w=` 档位、点开预览**本格**图片，与表格/画册同一条 Lightbox），非图片附件出「📎 + 文件名」chip（>2 个折成 `+N`）；`noteId`/`onOpenImages` 从表格、记录详情、表单三处透传。② 资产 URL 从 4 处各拼一遍收敛为 `bitableAssetUrl(noteId, file, cssPx?)`（单元格 chip、附件卡片、看板缩略图、画册封面、选择器 + 编辑器 openAsset/openImages 共用）。门禁全绿 + vitest 1405-16 + CDP 真实端点（隔离 userData 9271：选择器 10 张缩略图 `naturalWidth=128`、渲染 32×32；注入 3 个 PDF 后 chips = `6.25鞠老师晚读.pdf / 6.23鞠老师晚读(1).pdf / +1`） | 选择器里附件 chip 最多列 2 个（其余 +N）；移动端只读路径未改 |
+| 2026-09-29 | 260929-TABS | 横向页签原语（用户选定 B 墨线 + 计数徽标），多维表先切 | `src/styles/kit.css` · `src/styles/components.css`(删 legacy .ln-tabs 整套) · `BitableRelationPicker.tsx` · `bitableRelationPicker.css` · `TrashPanel.tsx` · `HistoryPanel.tsx` · `bitableEditorMount.test.ts` · `src/styles/cssLayers.test.ts` · `AGENTS.md` · `HANDOFF.md` · 本文件 §2.2/§11/§13 | 原语：`.ln-tabs > .ln-tabs__track[role=tablist] > .ln-tabs__item[role=tab][aria-selected]` + `.ln-tabs__count`（计数徽标，选中跟强调色）+ `.ln-tabs__action`；墨线基座从 `components.css` 的 legacy 段收编到 kit 层（**单一来源**，`components.css` 那 45 条删除），旧分段形态保留为 `.ln-tabs--seg` 变体。多维表：选择器两页签改用原语（`所有可关联记录 [15]` / `已选 [4]`，数字进徽标、文案不再随计数重排），删掉 `.seg` 用法。门禁全绿 + vitest 1405-16 + CDP 真实端点（隔离 userData 9271） | 无（`.seg` 保留给取值选择/图标开关，非 tab） |
 
 ## 13. 会话记录（只追加）
 
@@ -1548,6 +1603,812 @@ earliestDate "最早时间 $1" | latestDate "最晚时间 $1" | dateRange "时�
 
 门禁全绿：tsc / vitest 1383-16 / check:core / 双端构建 / ui-metrics / cssLayers+uiPrimitives / git diff --check。
 护栏补充：`!rowItems.some((item) => item.kind === "group")`、`.bt-group-add-row td` 必须是 32px 且**不得**出现 `translateY(-50%)` / `position: absolute`。
+
+### 2026-09-29 · T03 回退：分组重做为单级 + 保留细节优化
+
+用户最终决定：**不做多级分组**，分组最多一级。历史定位：
+
+- `git log -S'BITABLE_MAX_GROUPS'` 指向 `9b80ede feat(bitable): T03 多级分组 + T04 语义排序增强`；多级树、最多 3 级、拖动调优先级和 `.level-1/.level-2` 缩进均从该提交进入。
+- 本次只回退多级分组能力，不回退 T04 语义排序、T01 列统计、T02A 字段、看板/画册/日历、附件/图片等新增优化。
+
+本次完成：
+
+1. **core 收敛为单级**：删除 `BITABLE_MAX_GROUPS`、`BitableGroupNode`、`groupRecordsTree`；编辑器只消费 `groups[0]`，行数据继续走既有 `groupRecords`。历史多规则正文在 `normalizeView` 收敛为第一条，避免隐藏配置继续生效。
+2. **删除多级 UI**：分组面板恢复为单行 `字段 + 升降序 + 取消`；删除添加分组、拖动优先级、groupPath/innerGap/层级区域类。
+3. **单级分组卡片**：每组是一张白底 + 1px 边框 + 8px 圆角卡；分组头继续显示按组统计，记录后保留「加进本组」，组间保留 20px 间隔。
+4. **保留此前细节优化**：`+` 行不使用底边线；表底 `.bt-grid-foot` 不再默认重复显示“共 N 条记录”；目录栏把手增加全局离开清理兜底。
+5. **单级统计口径**：`groupRecords` 改为 `bitableFieldValue(record, field)`，系统时间字段分组与单级统计口径一致。
+
+数据结构 / 接口变化：
+
+- 正文 `views[].groups` 仍是数组，但产品只支持第 0 条；解析时 `groups.slice(0, 1)`。
+- 删除多级树 API 与 `leaves/children/level` 概念。
+- 不新增持久化字段，不改同步/历史/GC。
+
+改动文件：
+
+- `src/core/bitableDoc.ts`(+test)
+- `src/core/bitableGroup.test.ts`
+- `src/features/bitable/BitableEditor.tsx`
+- `src/features/bitable/bitableViews.css`
+- `src/features/bitable/bitableEditorMount.test.ts`
+- `src/App.tsx`
+- `scripts/e2e-sidebar-hover.mjs`
+- `src/styles/cssLayers.test.ts`
+- `HANDOFF.md`
+
+验证结果：
+
+- `tsc --noEmit`：通过
+- `vitest run`：**1382 passed / 16 skipped**
+- `npm run check:core`：0 违规
+- 桌面构建：通过
+- 移动构建：通过
+- `node scripts/ui-metrics.mjs`：hex=0 / rgb=0 / !important=9 / 未定义令牌=0
+- `cssLayers + uiPrimitives`：通过
+- `git diff --check`：通过
+- CDP 隔离实例：原两级测试笔记加载后只显示首级日期分组，工具栏 badge=1，分组卡背景为 `rgb(255,255,255)`，无「最多 3 级/添加分组」，`+` 行底边 `0px`，`.bt-grid-foot=null`；目录悬停 e2e 通过。
+
+遗留问题：
+
+- 历史多分组配置只保留第一级；这是当前产品语义，不做兼容迁移。
+- 目录把手清理仍需用户在真实 macOS 窗口首次进入时复验。
+
+下一步：
+
+- 等用户验收单级分组与细节优化；通过后进入 `T02B.1 关联基础模型`。
+
+### 2026-09-29 · 260929-UI2 分组底衬 + 底栏收口（用户四条 + 现场追加）
+
+用户附云端截图（image1，含 3 个红框）+ 我方截图（image2，圈出表底横条）提四条；实施中追加**第五条**。
+红框语义先用像素取证定位（对截图做红色区域投影，拿到三个框的真实 y 区间）：
+框 1 = 表头与第一个分组之间；框 2 = 组 1 结束到组 2 开头之间；框 3 = 最后一组之后的空白 —— **三个框全在云端的浅灰区域上**。
+
+#### ① 分组底衬：浅灰背景突出「当前编辑区」
+
+- 云端做法（截图取样，2x 缩放）：分组容器 `#fafafa`、卡片（分组头 + 记录行）纯白 `#ffffff`、行/卡片边线 `#f4f5f5`；
+  灰色只在**卡片之外**露出：表头下 20px、每组记录后的「加进本组」通道、组间 20px、最后一组之后的空白。
+- 我方此前这些位置分别是「无间隙 / 白 / 白（旧值 `--lake-bg-canvas` = #ffffff，等于没上色）/ 透明」⇒ 分组之间看不出分界。
+- 新增主题令牌 **`--lake-bg-subtle`**（light/warm `#fafafa`；dark `#242528` —— 深色里「比 panel 亮一档」才是同一语义），
+  颜色字面量只出现在 `themes/*`（符合 AGENTS §3 #14）；四处底衬共用它，是**一条通道**而不是几段灰条。
+- 用户追加：**不分组时表格下方的空白也要同款灰**（"不分组空白地方也要加同款灰色背景"）⇒ 占位行
+  `.bt-grid-filler td` 直接改成浅灰，**不按分组条件分叉**（不再需要 `is-grouped` 类，已删）。
+
+#### ② 表头与第一个分组之间的间隙
+
+- 新增 `.bt-group-head-gap` 行（`colSpan` 全列、20px、浅灰、不带边框），**只在真的渲染出分组行时**出现
+  （`hasGroupRows`：配了分组但分组字段已删 → 回落未分组，那时不该多一条空带）。
+
+#### ③ 卡片收口移到「该组最后一条记录」
+
+- 云端卡片 = 分组头 + 记录行，**「加进本组」在卡外的灰通道上**。我方原先把 `bt-group-end`（下边框 + 底部圆角）
+  挂在加号行上 ⇒ 卡片把加号行也包进去了。现在按 `rowItems[itemIndex + 1]?.kind === "groupAdd"` 给**该组最后一条记录**打收口，
+  加号行只剩 `.bt-group-add-row`（32px、浅灰、无线）。
+
+#### ④ 汇总文案：选「记录总数」显示「共 N 条」
+
+- 展示文案与选择器文案拆开（core 新增 `statDisplayText`）：格子里「共 N 条」，选项列表仍是云端原文「记录总数」；
+  底部汇总栏首格（索引列缺省统计）同样走它 ⇒ 「共 10 条」。其余口径仍是「口径名 值」。
+
+#### ⑤ 去掉表底横条，底栏就是最底下那条；状态栏贴住它
+
+- 删掉 `.bt-grid-foot`（那条「已选择 N 个单元格 / 匹配 N 条」横条）——它在表格之后、撑满一屏的占位行**下面**，
+  只有拉到最底才看得见，正好压在底栏下方（用户 image2 圈的就是它）。
+- 底栏（`.bt-stat-row`）贴底后，**状态栏不再压住它**：底栏上沿会随「有没有横向滚动条」上下浮动（滚动条吃掉内容盒高度，
+  实测差 10px），所以由 BitableEditor **实测底栏上沿**写进 `--lake-bitable-status-bottom`，`chrome.css` 用它定位
+  （姿势同 sheet 的 `--lake-sheet-status-w`，不在 CSS 里猜高度 —— 这是本仓反复踩过的坑）。
+
+验证结果（CDP 真实端点，隔离 `LAKE_USER_DATA=$TMPDIR/lake-ui-260929b` + 独立 CDP 端口 9251 + `--no-sandbox`）：
+
+| 项 | 实测 |
+| --- | --- |
+| 结构 | `bt-group-head-gap` 1 / `bt-group-add-row` 2 / `bt-group-gap` 1 / 卡片内 `bt-group-end` 落在最后一条记录 / `bt-grid-foot` **0** |
+| 底衬 | 表头间隙·加号行·组间·表下空白 = `rgb(250,250,250)`；分组头与记录行 = `rgb(255,255,255)` |
+| 高度 | 表头间隙 20 / 加号行 32 / 组间 20 / 底栏 24 |
+| 文案 | 底栏首格「共 10 条」、分组头首列「共 3 条」 |
+| 底栏位置 | 底栏 785–809、状态栏 761–783 ⇒ **重叠 0px**，底栏在表格视口最底（距容器底 10px = 横向滚动条） |
+| 不分组 | 表头间隙/加号行/组间 0 个，表下空白仍是 `rgb(250,250,250)`（用户追加要求） |
+| 深色 | 手工切 `data-theme="dark"` 截图核对：分组通道为 panel 之上的一档浅灰，可辨 |
+
+#### 同会话追加（用户）：数据表选择区也用同一个灰
+
+用户看完截图追加第五条：「选择数据表的背景也是用同样的灰色，要做到风格统一」。
+
+- **现状**：`.bt-tables`（文档内的「数据表」列表）原先铺 `--lake-bg-block`（#f0f2f5，比表格区深一档、偏冷），
+  于是左侧一条深灰 + 右侧浅灰画布**像两套风格拼在一起**。
+- **改法**：`.bt-tables` 底衬改 `--lake-bg-subtle`（与表格区同一个灰）。**只换"面"，不换状态**：
+  `.bt-table-item:hover`（`--lake-bg-hover`）与 `.bt-table-item.active`（`--lake-accent-tint`）仍是「在浅灰面上浮起一档」的选中/悬停语义，未动。
+- 实测（CDP）：`.bt-tables` = `rgb(250,250,250)`，与 `.bt-grid-filler` 同值；选中项仍为 `rgb(236,239,245)`。
+- 护栏：`bitableEditorMount.test.ts` 断言 `.bt-tables` 必须是 `--lake-bg-subtle`、且不得回退到 `--lake-bg-block`。
+
+#### 同会话追加②（用户）：底栏最左格在多选时显示选择量
+
+用户：「关于你说的多选，展示选择多少条，可以在底部最左侧这里展示，只有多选触发，例如【选择 x 行】」
+（附截图圈出底栏最左格「共 10 条」，画面里正选着一个单元格）。
+
+- 上一批把表底那条「已选择 N 个单元格」横条删掉后，选择量就没有落点了；用户指定落到**底栏最左格**（`.bt-stat-index`）。
+- 口径：**只有多选触发**——`selectedRecordIds.size >= 2` → 「选择 N 行」；单元格拖选 ≥2 格 → 「选择 N 个单元格」；
+  单选（单行 / 单格）与未选中都保持「共 N 条」（单选那属于「当前这一格」，不是「一批」）。
+- 样式：`.bt-stat-index.is-selection` 用 `--lake-accent-text` + medium 字重标出「这是选择态、不是总条数」。
+- 实测（CDP 真实点击）：初始「共 10 条」→ 点 1 个行号仍「共 10 条」→ 点第 2 个行号「选择 2 行」（`is-selection`，`rgb(58,74,104)`）
+  → 取消回「共 10 条」→ 拖选 3 行 × 2 列「选择 6 个单元格」。
+- 护栏：`bitableEditorMount.test.ts` 锁住 `selectionSummary` 的两个分支与 `.bt-stat-index.is-selection` 的强调色。
+
+#### 同会话追加③（用户）：底栏融合灰底 + 汇总行整行处理
+
+用户附两张云端截图（图 1 = 云端底栏、图 2 = 云端分组头）提两条：
+「1、底栏使用同样的底色背景，且有光标的时候加重展示。2、所有的汇总行去掉单元格的边框，做整行处理，例如图 2，同样光标上去颜色同样加重。」
+
+先对两张云端截图做像素取证（逐行/逐列扫描色带）：
+
+| 位置 | 云端实测 |
+| --- | --- |
+| 底栏整行 | `#fafafa`（**与表格区底衬同色**，靠上方 1px `#f4f5f5` 分隔线分界，不是白条） |
+| 底栏里光标所在的那一格 | `#eff0f0`（加重一档）——**没有边框、没有白底 chip** |
+| 分组头行 | 白底；`统计` 占位那一格被光标压住时同样变 `#eff0f0` |
+| 两行的**行内竖线** | 一处都没有（只有行与行之间的水平分隔线） |
+
+实现（全部落 `bitableViews.css`，都是改单一来源的值/删冗余声明，不新增覆盖层）：
+
+- **底栏底色**：`.bt-stat-row td` 的 `background` 由 `--lake-bg-panel` 改 `--lake-bg-subtle`（与表格区同一块灰）；
+  同时**删掉** `.bt-stat-row .bt-stat-cell` 那条「白底 + 左竖线」规则（与 `td` 规则重复，删掉即单一来源）⇒ 行内不再有竖线。
+- **汇总行整行处理**：新增 `.bt-group-row > td:not(:last-child), .bt-stat-row > td:not(:last-child) { border-right: 0 }` ——
+  去掉**行内**竖线，末格的右边线保留（那是卡片/表格外缘）。分组头首列统计 `.bt-group-head-stat` 的 `border-left` 也一并删除。
+- **光标加重**：`.bt-stat-row > td:not(:empty):hover` 与 `.bt-group-row .bt-group-stat:not(:empty):hover`（含 `.bt-group-head-stat:hover`）
+  背景 → `--lake-bg-block`（#f0f2f5，≈ 云端的 `#eff0f0`）。用 `:not(:empty)` 把两个空尾格排除在外。
+- 顺带统一：分组头的统计格保持白底（云端的卡片是白的），底栏才用灰底 —— 两行的**底色**不同、**边框与 hover 规则**同一套。
+
+实测（CDP 真实端点）：底栏 9 格全部 `rgb(250,250,250)`、`border-right` 除末格（1px，表格外缘）外**全为 0**；
+分组头 8 格白底、行内 `border-right` 全为 0；鼠标移到某格 → 只有那一格变 `rgb(240,242,245)`（其余不变）；
+**列边界与表头逐列对齐**（9 列 x 区间完全一致，去边框没有引起 1px 错位）。
+
+#### 同会话追加④（用户）：表格线颜色变浅（对齐远端）
+
+用户：「继续优化和远端一样，线的颜色变浅一点」（附云端分组表格截图）。
+
+- 云端实测（本张截图逐行扫描）：**格线一律 `rgb(244,245,245)`（#f4f5f5）**，横竖同色，1px 无例外。
+- 我方原先把所有格线/卡片边线都挂在 `--lake-border-1`（#e8eaee）上，比云端深两档。
+- 改法：**只换线色，不动线宽/线位**（去/改线宽会动列宽，色值不会）——
+  `.bt-grid th, .bt-grid td` 的 border-right/bottom、`.bt-grid thead th` 的 border-bottom、
+  以及分组卡片的四边（`.bt-group-start/body/end` 的 first/last/top/bottom）全部改挂 `--lake-border-2`（#f0f2f5）。
+  没有新增令牌：`--lake-border-2` 本就是设计系统里「更浅一档的分隔线」，深色下同样更浅一档（#2e2f34 → #242528）。
+- 实测（CDP）：格线/表头底线/卡片边线 computed 全为 `rgb(240,242,245)`；截图取样 1px 线 = `rgb(241,242,245)`，
+  与云端 `rgb(244,245,245)` 相差 3/255（≈1.2%，肉眼不可辨）。若要**逐像素一致**再加 `#f4f5f5` 专属令牌即可，本轮按「复用既有令牌」处理。
+- 顺带修一处隐患：`.bt-group-row/.bt-stat-row > td:not(:last-child)` 原写 `border-right: 0`（简写会把颜色重置成 `currentColor`），
+  改为 `border-right-width: 0`（只改宽度，颜色保持）。
+
+#### 同会话追加⑤（用户）：分组汇总项「无统计」必须真的不展示 + 「左下角计数」的口径
+
+用户报 bug + 澄清两条计数口径：
+
+> 「分组的汇总项有问题，共 x 条是在记录总数下展示的，如果不想要就使用无统计，无统计就什么也不展示。当前选择无统计还是有共 X 条。
+> 另外说明一下，左下角的共 X 条和汇总项里的共 X 条不一样是独立逻辑，左下角的是展示当前视图的所有的展示记录，这个不能改，也无需计算，仅受到多选和筛选影响。汇总项里的共 X 条是实时计算的。」
+
+**① bug（已修）**：分组头首列的汇总格写的是 `statForField(...) ?? "count"` —— **没配统计就兜底成「记录总数」**，
+所以选了「无统计」照样显示「共 N 条」。改为直接用 `statForField(...)`：**展示什么完全由汇总方式决定**，
+「无统计」= 什么都不展示（只留 hover 才显形的「统计」占位入口，与其余列同一套行为）。
+
+**② 口径澄清（已按此对齐实现）**：两处「共 X 条」是**两套独立逻辑**，不再混用同一个数：
+
+| | 左下角那一格（`.bt-stat-index`） | 汇总项（分组头 / 底栏的列统计格） |
+| --- | --- | --- |
+| 语义 | **当前视图正在展示的记录数**（展示口径） | 该列/该组按所选汇总方式**实时计算**的统计值 |
+| 数据源 | `shownRecords.length`（随筛选 / 搜索变；O(1)，不做统计计算） | `StatCell` 的 `computeColumnStat(field, records, stat)`（分组头传本组记录、底栏传筛选后的记录） |
+| 何时变 | **只**随「筛选 / 搜索」+ 多选（多选时整格改显示「选择 N 行」） | 随汇总方式、组内记录、筛选变 |
+
+改前左下角用的是 `activeTable.records.length`（表内**全部**记录，不随筛选变），与用户给的口径不符 ⇒ 已改为 `shownRecords.length`。
+
+实测（CDP）：
+
+| 场景 | 左下角 | 汇总项 |
+| --- | --- | --- |
+| 无筛选、首列无统计 | 共 10 条 | 分组头什么都不显示（占位 `opacity: 0`） |
+| 首列选「记录总数」 | 共 10 条 | 组 1「共 3 条」/ 组 2「共 7 条」（各自实时计算） |
+| 加筛选「文本 包含 记录」 | **共 8 条**（随筛选变） | 同上，按筛选后的组内记录算 |
+
+#### 同会话追加⑥（用户）：＋号居中，放在编号正下方
+
+用户附截图（红框圈住表底那颗 +，它在最左、而行号 9/10 居中）。
+
+- 改前：加号行是一个 `colSpan` 全列的格子，＋号靠左（`加进本组` 还额外 `margin-left: 16px`）⇒ 与行号不在一条竖线上。
+- 改后：两处添加入口（分组「加进本组」/ 表底「添加记录」）都改成**编号列独占一格** `<td className="bt-add-index">` + 其余列 `colSpan={visibleFields.length + 1}` 的占位格，
+  样式只加一条 `.bt-add-index { text-align: center }`，并删掉 `margin-left: 16px`。**列数不变**（1 + (n+1) = n+2）。
+- 实测（CDP）：编号列表头中心、行号中心、两颗＋号中心**全部 = x 41**（`|Δ| ≤ 2px` 断言为 true）；不分组时表底的「添加记录」＋ 同样落在 x 41。
+
+#### 同会话追加⑦（用户）：分组面板的删除键挪到行尾，与筛选/排序同一套
+
+用户（带情绪）：「删除已有分组的删除键放在右侧，和筛选和排序一样，说了多少次了，样式保持一致。」
+
+- 现状不齐：**筛选**行 = `[字段][操作符][值][🗑 行尾 .bt-icon-btn + Trash2]`；**排序**行 = `[字段][方式][🗑 行尾]`；
+  而**分组**行 = `[✕ 行首 X 图标][字段][方向]` —— 删除键在三处里唯独它跑到了行首、且图标是 `X` 不是垃圾桶。
+- 改法：分组行改为 `[字段][方向][🗑 行尾]`，`title/aria-label` 用「删除分组」，与另两处同一个类（`.bt-icon-btn`）、同一个图标（`Trash2`）、同一个位置（行尾）。
+  `disabled={readOnly}` 保留（另两处没有这层保护是因为只读态整个工具栏隐藏、面板打不开）。
+- 实测（CDP 打开三个面板读 DOM 结构）：分组行 = `[DIV.bt-select][DIV.bt-select][BUTTON.bt-icon-btn[删除分组]]`，
+  筛选项 = `[DIV.bt-select][DIV.bt-select][INPUT][BUTTON.bt-icon-btn[删除规则]]`，排序行同构 ⇒ 三处一致。
+- 护栏：`bitableEditorMount.test.ts` 断言「删除*」的按钮**共 4 处且都长 `className="bt-icon-btn" title="删除…" aria-label="删除…"`」
+  （筛选/排序/分组/选项），并断言旧的 `title="取消分组"` 不再存在。
+
+#### 同会话追加⑧（用户）：链接格 2 层边框 + 链接格样式对齐云端
+
+用户两条：①「图 1 链接单元格又出现了 2 层边框」；②「图 2 是远端 lake 的样式，仿照这做就行，展示文本，然后点击自动使用本地浏览器打开」。
+
+**① 两层边框（真 bug，且不只是链接格）**
+
+- 根因：单元格自身已有 **2px 选中环**（`.bt-td.cell-selected .sel-*` 的四条 inset box-shadow），而格内的
+  `input.bt-cell-input:focus` 又有 **2px 焦点环**（`outline-offset: -2px`）⇒ 同一个格上画了两圈。
+  实测（CDP，点一个**文本**格）：`cellShadow` = 四条 2px inset、`input.outline` = `2px solid rgb(91,111,150)` —— 链接格只是更容易被看出来。
+- 修法：单格选区（四条边都在）时不再画输入框焦点环 ——
+  `.bt-td.cell-selected.sel-top.sel-bottom.sel-left.sel-right .bt-cell-input:focus { outline: 0 }`。
+  **多格选区**只有外缘画环，内层格仍保留输入框自己的焦点环 ⇒ 不丢可访问性。
+  实测：同一个文本格点开 → `input.outline = 0px/none`、单元格选中环不变。
+
+**② 链接格改成云端的形态**（图 2 = 云端链接格：格子展示文本 + 右端 🔗 图标）
+
+- 旧实现是**常驻输入框**：空值一直显示 `https://` 占位（看着像输入框而不是值），且正是 ① 的两层边框来源。
+- 新实现：展示态 = `文本（省略号 + title 全文）` + 右端 `🔗`(`Link2`) 图标；**点图标**用本地浏览器打开
+  （`window.open(url, "_blank", "noopener")` → 主进程 `shell.openExternal`，与其它外链同一路径）；
+  **双击单元格**进入编辑（输入 URL，Enter/失焦提交、Esc 取消）；空值展示态什么都不显示。
+- 实测（CDP）：`input` 在展示态**不存在** ⇒ 单层边框；点 🔗 时 `window.open` 收到 `["https://www.yuque.com/"]`；
+  双击 → 出现输入框（`outline: 0px/none`，仍单层）；Esc → 回到展示态。
+
+门禁全绿：tsc / vitest **1383 passed / 16 skipped** / check:core 0 违规 / 桌面构建 / 移动构建 /
+ui-metrics（hex=0、rgb=0、!important=9、未定义令牌=0）/ cssLayers+uiPrimitives / git diff --check。
+
+遗留问题：
+
+- 表底那条横条承载的信息**不再展示**：单元格/行选择本身仍有高亮，搜索命中数在工具栏（`N 条`）。如需把选择数常显，可再议放哪。
+- 状态栏与底栏是**上下两段**（不是同一行）：底栏是贯穿表宽的整行、右端还可能是横向滚动的列，
+  状态栏并进同一行会压住最后一列的汇总格 —— 所以取「上下一栈、右缘对齐、间距 2px、底栏恒在最底」。
+- 分组卡片仍是 8px 圆角 + `--lake-border-1` 边框（云端更细），未逐像素对齐。
+
+下一步：
+
+- 等用户验收本批四条（+ 追加的「不分组空白也要灰」）；通过后进入 `T02B.1 关联基础模型`。
+
+### 2026-09-29 · 260929-OPT 阶段代码优化（真 bug + 单一来源 + 令牌合规）
+
+用户本轮要求「先看看做到哪一步 → 整理当前阶段代码 → 做一次代码优化 → 再继续推进计划」。先做**只读代码审计**（对照 AGENTS §3 #14/#17 分档取证），只做「真 bug / 真违规」，明确**不做**纯整齐类重构。
+
+本次完成（每条都有源码/逻辑证据，先证后改）：
+
+- **进度字段颜色面板打不开（真 bug）**：`FieldEditorModal` 把 `<ColorPalette anchor={progressColorAnchor}>` 写在 `{supportsOptions && ...}` 块内，而进度字段 `supportsOptions=false` ⇒ 点色块永远没有面板。移到对话框正文层。
+- **表单题目顺序被丢弃（真 bug）**：`BitableFormView` 用 `formableFields.filter(...)` 生成题目，渲染顺序恒等于表字段顺序；`formFieldIds` 的顺序（契约明写「顺序即题目顺序」）被忽略。改为按 `formFieldIds` 顺序 map。
+- **高亮重复值对系统时间列恒失效（真 bug）**：`isDuplicateCell` 直接读 `record.values[field.id]`，系统时间值不在 values 里 ⇒ 恒为 `""`。改走 `bitableDisplayValue(field, bitableFieldValue(record, field))`。
+- **复制选区对系统时间列复制出空串（真 bug）**：`copySelection` 读 values 再显示，屏幕上是 `bitableFieldText` 到分钟。改为复制所见。
+- **搜索绕开展示口径（真 bug）**：编辑器搜索手写了一套取值分支（附件变 `[object Object]`、布尔/系统时间搜不到）。统一走 `bitableFieldText`。
+- **`statForField` 原型链穿透（正确性隐患）**：`stat in BITABLE_STAT_LABEL` 会命中 `Object.prototype`。改 `Object.prototype.hasOwnProperty.call`。
+- **删字段留下跨视图脏配置（真 bug）**：只清 hidden/fieldOrder/formFieldIds；残留 filters/sorts/groups/columnStats/highlightDuplicate/columnTextColors 与看板/画册/日历专属字段 id。改为删除时清空**所有视图**里指向该字段的配置。
+- **单一来源**：移动端附件判定 `field.type === "attachment" || "image"` 改 `isAttachmentLikeField`；`(fields[0] ?? fields[0])` 冗余去除。
+- **令牌合规（AGENTS §3 #14）**：`bitableEditor.css` 残留的 `#fff`×3、`#1f1f1f`、`rgba(0,0,0,.08)` 改走 `--lake-text-on-accent` / `--lake-text-1` / `--lake-border-1`（抽屉阴影 rgba 无对应令牌，保留并注明）。
+
+数据结构/接口变化：无（不改正文格式、不加持久化字段）。
+
+改动文件：`src/core/bitableDoc.ts`(+test) · `src/features/bitable/BitableEditor.tsx` · `BitableFormView.tsx` · `bitableEditor.css` · `bitableEditorMount.test.ts` · `src/mobile/bitable/MobileBitableViewer.tsx` · `src/styles/cssLayers.test.ts`(注释)
+
+验证结果：
+
+- `tsc --noEmit`：通过
+- `vitest`：**1386 passed / 16 skipped**（+3 = 进度面板护栏 + 原型链用例 + 优化批护栏）
+- `check:core`：0 违规
+- 桌面 / 移动构建：通过
+- `ui-metrics`：hex=0 / rgb=0 / `!important`=9 / 未定义令牌=0
+- `cssLayers + uiPrimitives`：通过
+- `git diff --check`：通过
+- 真实端点：本批为组件内行为，源码级护栏 + 紧随其后的 T02B.1 CDP 实例（字段编辑弹窗即在其中打开核对）一并覆盖。
+
+遗留问题：
+
+- 抽屉阴影 `rgba(0,0,0,.1)` 无现成令牌，未改。
+- 看板/画册/移动端卡片渲染等 10 项「纯去重」重构（B 档）未做（按 AGENTS §3 #17：收益只停留在整齐）。
+
+下一步：
+
+- 继续 `T02B.1 关联基础模型`。
+
+### 2026-09-29 · T02B.1 关联基础模型（同一文档内跨表关联：模型 + 统一解析 + 展示）
+
+本次完成：
+
+- **字段模型**：`BitableRelation` 定稿为 `{ tableId?, mode?: "oneWay"|"twoWay", allowMultiple?, pairedFieldId? }`（新增 `BITABLE_RELATION_DEFAULT = { mode:"oneWay", allowMultiple:true }`）；新建关联字段默认单向 + 允许多个记录。`normalizeField` 归一关联配置（补默认、只留认识的键）。
+- **值模型**：关联值恒为**目标记录 id 数组**（单条模式也存单元素数组）；`relationRecordIds` 去重/保序/丢非法。
+- **统一解析（专项 §6.4）**：新增 `BitableDisplayContext { tables }` + `relationTargetTable` / `relationTargetRecords`；`bitableDisplayValue` / `bitableFieldText` / `bitableRecordTitle` / `calendarEvents` 增加**可选 ctx**（旧调用不变）。关联展示 = 目标记录**主字段**文本、多值逗号分隔；**只解析一层**（目标主字段若也是关联则留空）避免两张表互相引用时无限递归。
+- **失效语义**：目标记录被删 → 该条不再解析、其余仍在，**内部 id 原样保留**（恢复后自动重现）；目标表被删 → 找不到目标表，展示为空 / `关联已失效`，**不级联删来源字段**。
+- **字段配置 UI**：`FieldEditorModal` 增加「关联数据表」选择（候选 = 同一文档内**除本表外**的数据表）+「允许添加多个记录」（默认勾选）；`onAddField`/`onSave` 落 `relation`。
+- **单元格**：新增 `RelationCell`（chip 列表；空值 `—`、失效文案），`CellEditor` 透传 ctx（T02B.1 只读展示，选择器在 T02B.2）。
+- **ctx 透传**：表格网格 / 记录详情 / 表单 / 看板 / 画册 / 日历 / 移动端 / 历史快照预览 / 搜索全部走同一套（`displayCtx = useMemo({ tables: doc.tables })`）。
+- 不创建新 S3 对象、不改同步/历史/GC：关联只存在正文 JSON 的 `values[fieldId]` 与字段 `relation` 配置里。
+
+数据结构 / 接口变化：
+
+- `BitableRelation` 由占位（`tableId?/multiple?`）改为上述四键（`multiple` 被 `allowMultiple` 取代；关联此前是空占位、无真实数据，按 AGENTS §3 #7 不做兼容）。
+- core 新增导出：`BITABLE_RELATION_DEFAULT`、`BitableDisplayContext`、`relationRecordIds`、`relationTargetTable`、`relationTargetRecords`；UI 新增 `RelationCell`。
+- 展示函数新增可选尾部参数 ctx（向后兼容）。
+
+改动文件：
+
+- `src/core/bitableDoc.ts`(+test) · `src/core/historyPreview.ts`
+- `src/features/bitable/BitableEditor.tsx` · `bitableCells.tsx` · `BitableRecordDrawer.tsx` · `BitableFormView.tsx` · `BitableKanbanView.tsx` · `BitableGalleryView.tsx` · `BitableCalendarView.tsx` · `bitableFieldCells.css`
+- `src/mobile/bitable/MobileBitableViewer.tsx` · `src/features/bitable/bitableEditorMount.test.ts` · `src/styles/cssLayers.test.ts`
+
+验证结果：
+
+- `tsc --noEmit`：通过
+- `vitest`：**1389 passed / 16 skipped**
+- `check:core`：0 违规
+- 桌面 / 移动构建：通过
+- `ui-metrics`：hex=0 / rgb=0 / `!important`=9 / 未定义令牌=0
+- `cssLayers + uiPrimitives`：通过
+- `git diff --check`：通过
+- **CDP 真实端点**（隔离 `LAKE_USER_DATA=$TMPDIR/lake-t02b1`（复制开发数据）+ 独立 CDP 端口 9260 + `--no-sandbox`，`LAKE_RENDERER=scheme`；往正文注入两张表 + 关联字段/值）：
+  - 字段配置：关联字段的「关联数据表」= `目标表`、候选下拉 = `选择数据表 / 目标表`（**本表 `第一个` 被排除**）、「允许添加多个记录」= checked。
+  - 展示：多值 chip = `目标甲, 目标乙`；含失效 id 的行只显示 `目标乙`（缺失被跳过、其余保留）；指向已删表的字段格显示 `关联已失效`；数据表列表显示 `第一个/目标表` 两表，删除/失效均不崩。
+  - 截图证据：字段编辑弹窗（关联配置）+ 网格关联列（chip / 失效文案）。
+
+遗留问题：
+
+- **T02B.1 只做展示、没有填写入口**：关联值须由 T02B.2 的选择器写入（本批 CDP 通过预置正文值验证展示）。
+- 关联列的**筛选/排序/分组/统计**当前按「空」处理（专项 §6.4 的最小侵入口径）；如需支持再单独立项。
+- 移动端只过了构建与源码护栏，**未跑 Android 模拟器**（按 §8 边界由移动端会话补验）。
+
+下一步：
+
+- 进入 `T02B.2 单向关联`（关联选择器：搜索 / 已选计数 / 确认草稿 / 跳转目标记录）。
+
+### 2026-09-29 · T02B.2 单向关联（关联选择器：草稿确认 / 搜索 / 跳转 / 新建记录）
+
+本次完成：
+
+- **选择器**（`RelationCell` 由 T02B.1 的只读 chip 升级为可编辑）：点单元格开浮层 —— 顶部搜索框、目标记录列表（主字段标题 + 选中态）、行尾「跳转」、页脚「已选 N 条 + 新建记录 + 取消 + 确认」。
+- **草稿语义**：打开时把当前值拷进本机 `draft`，所有勾选/取消/搜索/新建都只改草稿；**只有「确认」调 `onChange` 写正文**，取消/关闭/搜索都不落盘（切换逻辑抽成纯函数 `toggleRelationDraft`，可单测）。
+- **多选 / 单选**：`allowMultiple !== false` 时增删；关闭多选时选中即替换、再点同一条取消（单元素数组）。
+- **跳转目标记录**：行尾按钮 → `onJumpToRecord(tableId, recordId)`，编辑器切到目标数据表并打开该记录详情。
+- **新建记录**：`onCreateTargetRecord(tableId)` 在目标表按默认值新增一条并返回 id，选择器把它加入草稿选中，确认后写入来源单元格。
+- **单一来源**：选择器主体**复用 `.bt-option-*` 单元格原语**（trigger/chip/search/list/item），只新增行/页脚 4 条规则；T02B.1 的 `.bt-relation-chips/-chip` 一并删除（避免第二套 chip）。
+- **只读**：触发器 `disabled`；目标表删除/未配置时直接返回只读占位（无浮层、无入口）。
+
+数据结构 / 接口变化：
+
+- core：新增 `toggleRelationDraft(draft, recordId, allowMultiple)`（纯函数）；不改正文格式、不加持久化字段。
+- `CellEditorProps` 增 `onJumpToRecord?` / `onCreateTargetRecord?`；`RelationCell` 增 `readOnly/onChange/onJumpToRecord/onCreateTargetRecord`。
+- `BitableRecordDrawer` 透传上述两个回调。
+
+改动文件：`src/core/bitableDoc.ts`(+test) · `src/features/bitable/bitableCells.tsx` · `BitableEditor.tsx` · `BitableRecordDrawer.tsx` · `bitableFieldCells.css` · `bitableEditorMount.test.ts` · `src/styles/cssLayers.test.ts`
+
+验证结果：
+
+- `tsc --noEmit`：通过
+- `vitest`：**1391 passed / 16 skipped**（+2 = 草稿纯函数用例 + 选择器源码护栏）
+- `check:core`：0 违规
+- 桌面 / 移动构建：通过
+- `ui-metrics`：hex=0 / rgb=0 / `!important`=9 / 未定义令牌=0
+- `cssLayers + uiPrimitives`：通过
+- `git diff --check`：通过
+- **CDP 真实端点**（隔离 `LAKE_USER_DATA=$TMPDIR/lake-t02b2` + 独立端口 9261 + `--no-sandbox`；注入两张表 + 多选/单选/失效关联字段）：
+  - 打开空白关联格：搜索框占位「搜索目标记录」、列出 5 条目标记录、页脚「已选 0 条 | 新建记录 | 取消 | 确认」。
+  - 搜索「搜索」→ 只剩 `搜索专用A/搜索专用B`。
+  - 勾 2 条 → 「已选 2 条」；点「取消」→ 单元格仍「请选择」（**未落盘**，实测只有原本有值的那格非空）。
+  - 打开多选格勾 1 条确认 → 单元格变 `目标乙`，落盘 `fld-rel-demo=["tgt-2"]`。
+  - 单值格先选 `目标乙` 再选 `目标丙` → 已选恒 1、最终 `目标丙`，落盘 `fld-rel-single=["tgt-3"]`。
+  - 行尾「跳转」→ 活动表切到 `目标表`、抽屉标题 `目标甲`、浮层关闭。
+  - 「新建记录」→ 目标表 6→7、草稿已选 1、确认后单元格 `未命名记录`，落盘 `fld-rel-demo=["recab7fca85174d"]`。
+
+遗留问题：
+
+- 「新建记录」用目标表字段默认值（新记录主字段为空 → 显示「未命名记录」）；不做「随手命名」。
+- 关联选择器只列**全部**目标记录（专项 §2.4 明确第一版不做字段级数据范围筛选）。
+- 移动端仍是只读（复用 T02B.1 的 core 口径），未跑 Android 模拟器。
+
+下一步：
+
+- 进入 `T02B.3 双向关联`（反向字段 + 配对一致性 + 删一侧降级为单向）。
+
+### 2026-09-29 · T02B.3 双向关联（反向字段 + 双向镜像唯一写入口 + 删一侧降级）
+
+本次完成：
+
+- **建立配对**（core `createRelationPair`）：在目标表建反向字段（默认名 **来源表名 + 来源字段名**，可像普通字段一样重命名）、两侧写 `pairedFieldId` 与 `mode="twoWay"`，并把**已有值回填**到反向侧 ⇒ 「A 关联 B 后，B 反向出现 A」对历史数据也成立；已配对时幂等。
+- **双向镜像唯一写入口**（core `applyRelationMirror`）：把某一侧记录的值设为 nextIds，并把**增删差集**镜像到对侧（新增目标 → 对侧记录加上来源 id；移除目标 → 对侧记录去掉来源 id）。编辑器里**所有关联字段的写值都走它**（`setCellValue` 按类型分派），非双向时行为等价于普通写值。
+- **解除配对**（core `unpairRelationFields`）：清掉对侧 `pairedFieldId` 并降级为单向，**两侧数据都保留**。两处触发：字段编辑里把「双向」改回「单向」；**删除一侧字段前**先解除（`deleteField` 改为跨表 `setDoc`，先 unpair 再删字段并清视图配置）。
+- **字段配置 UI**：关联字段编辑弹窗加「**双向关联（在目标表生成反向字段）**」开关（未选目标表时禁用；已配对时目标表选择锁定，避免改表让反向字段失去意义）。
+- 目标记录删除/恢复仍只影响显示解析（T02B.1 口径），不破坏字段；关联仍只存 id、不复制数据、不加 S3 对象。
+
+数据结构 / 接口变化：无正文格式变化。core 新增导出：`relationReverseFieldName`、`createRelationPair`、`unpairRelationFields`、`applyRelationMirror`（全部纯函数，入参/出参都是 tables 数组）。
+
+改动文件：`src/core/bitableDoc.ts`(+test) · `src/features/bitable/BitableEditor.tsx` · `bitableEditorMount.test.ts`
+
+验证结果：
+
+- `tsc --noEmit`：通过
+- `vitest`：**1394 passed / 16 skipped**（+3 = 双向纯函数用例 + 未配对等价用例 + 护栏）
+- `check:core`：0 违规
+- 桌面 / 移动构建：通过
+- `ui-metrics`：hex=0 / rgb=0 / `!important`=9 / 未定义令牌=0
+- `cssLayers + uiPrimitives`：通过
+- `git diff --check`：通过
+- **CDP 真实端点**（隔离 `LAKE_USER_DATA=$TMPDIR/lake-t02b3` + 独立端口 9262 + `--no-sandbox`；来源表「第一个」+ 目标表 3 条记录、来源 1 条记录已关联 tgt-1/tgt-2）：
+  - 关联字段开启「双向关联」保存 → 目标表多出反向字段 **`第一个关联`**。
+  - 反向侧回填：`tgt-1`/`tgt-2` 显示来源记录标题 `测试第一二`，`tgt-3` 空（B 反向出现 A）。
+  - 来源侧改成「目标甲 + 目标丙」→ 目标侧 `tgt-2` 变空、`tgt-3` 变 `测试第一二`（双向同步）。
+  - 删除目标侧反向字段 → 目标表只剩 `名称`；来源表 `关联` 字段仍在、值仍 `目标甲目标丙`（**降级为单向、数据保留**，落盘 `relation={mode:"oneWay",allowMultiple:true,tableId:"tbl-target"}`）。
+  - 再开启双向 → 反向字段重建并按当前值（tgt-1/tgt-3）回填；截图核对。
+
+遗留问题：
+
+- 反向字段的**默认名**只在创建时给（此后重命名不影响配对）；改来源表名不会同步旧反向字段名。
+- 已配对时不允许改目标表（需要先改回单向）；不做「改表时自动迁移配对」。
+- 移动端仍是只读（共用 core 口径），未跑 Android 模拟器。
+
+下一步：
+
+- 进入 `D01 CSV 导入导出`。
+
+### 2026-09-29 · 移动端多维表只读补齐 + Android 模拟器验收
+
+用户 260929 明确「先不做导入导出」，改为补齐移动端多维表只读并做 Android 验收。
+
+本次完成：
+
+- `MobileBitableViewer` 单元格改为**按字段类型分派的只读控件**（不再是统一裸文本）：
+  - boolean → 禁用复选框；link → `<a target="_blank">`（外部 origin 走系统浏览器）；rating → 5 星（选中 \`--lake-rating-star\`、空星 \`--lake-border-strong\`）；progress → 条 + 百分比（宽度数据驱动）；relation → 目标记录主字段 chip（复用 core `relationTargetRecords`/`bitableRecordTitle`）；附件/图片、单选/多选维持缩略图/色块；其余走 `bitableFieldText`（系统时间到分钟）。
+  - 目标表/目标记录失效 → `关联已失效`，与桌面同一 core 口径。
+- 非 grid 视图（看板/画册/日历/未知）仍走 `mbt-view-notice` 明确提示 + 表格只读。
+- `mobile.css` 新增只读控件样式（`.mbt-bool/-link/-rating/-star/-progress*/-relation*`）。
+
+改动文件：`src/mobile/bitable/MobileBitableViewer.tsx` · `src/mobile/mobile.css` · `src/mobile/bitable/mobileBitableViewer.test.ts`(新)
+
+验证结果：
+
+- `tsc --noEmit`：通过；`vitest`：**1396 passed / 16 skipped**（+2 = 移动端 render 单测：控件齐全 + 非 grid 回退）；桌面/移动构建通过；`check:core`/`ui-metrics`/`cssLayers`/`git diff --check` 全绿。
+- **Android 模拟器真实端点**（AVD `lake_mobile` Pixel6/API36；`android-build.sh --sync --install` → `emu-up.sh --no-window` → `emu-cdp.sh 9335`）：
+  - 造了两条 bitable 笔记（`parent_id=notebook-personal`，否则首页点开报「未找到所属笔记本」）。
+  - `移动多维表` 断言：布尔 `[true,false]` 且 disabled；链接 `href=https://example.com/mobile` + `target=_blank`；评分星数 `[4,2]`；进度 `60%/0%`（条宽一致）；关联 chip `[目标A,目标B]/[目标B]`；创建时间 `2026-09-01 08:00`；只读徽标。
+  - `移动看板表` 显示「「看板视图」桌面已支持，移动端暂以表格只读展示。」。
+  - 踩坑：首页最近文档是 `<button class="doc-card">`，CDP `el.click()` 不触发导航，必须 `Input.dispatchMouseEvent` 真实点按；App 重启后 WebView socket 变化需重跑 `emu-cdp.sh`。
+
+遗留问题：
+
+- 未在**真机**复验（模拟器已覆盖控件与布局）；edge-to-edge/键盘安全区不在本批范围（属移动端 §8 真机项）。
+- 移动端仍为只读，不支持在移动端编辑多维表（产品边界）。
+
+下一步：
+
+- 导入导出（D01/D02）按用户要求暂缓；或按用户指定方向继续。
+
+### 2026-09-29 · 数据表行操作改浮动（用户反馈）
+
+用户（附图）：「数据表的这 2 个按钮做成浮动在目录上，光标上去之后浮现，不要占用固定位置」。
+
+- 原状：`.bt-table-more`/`.bt-table-del` 只是 `opacity:0`，**仍在 flex 流里占位** ⇒ 名称/计数被挤压。
+- 改法（就地改 `bitableEditor.css` 单一来源）：`.bt-table-item` 加 `position: relative`；两钮 `position:absolute; top:50%; transform:translateY(-50%); opacity:0; visibility:hidden`（隐藏时也不接收点击），`.bt-table-more{right:30px}` / `.bt-table-del{right:4px}`，`hover` 时 `opacity:1; visibility:visible`。
+- 验证（CDP 桌面真实端点，隔离 userData + 9264）：默认 `absolute/opacity=0/hidden`；悬停后 `absolute/opacity=1/visible`，且 `nameW`/`countW` 与悬停前**逐位相同**（无布局位移）；截图 before/after 对照。
+- 改动文件：`bitableEditor.css` · `cssLayers.test.ts`（基线 1046 → 1054，实测值）。门禁全绿（vitest 1396-16）。
+
+### 2026-09-29 · 字段类型改弹出选择（用户反馈）
+
+用户（附图）：「编辑字段的字段类型做成弹出选择，如图 2，不要放这么大一坨在这里占位置」。
+
+- 现状：「编辑字段」弹窗里内联渲染 `FieldTypeGrid`（14 项 2 列），把弹窗撑得很高。
+- 改法（单一来源）：新增 `FieldTypeSelect`（`bitableCells.tsx`）——触发器复用 `.bt-select`/`.bt-select-trigger`，只用一行显示「图标 + 当前类型名 + ▾」；点开在 `Popover` 里渲染**同一个** `FieldTypeGrid`。`FieldEditorModal` 改用它；工具栏快捷「新增字段」仍是独立弹出网格（两处共用同一网格组件）。**未新增任何 CSS**。
+- 未加「基础/高级」分组标题：产品 260928 明确「字段类型选择不分基础/高级组」，且我方无人员/邮箱/手机号码等企业字段；如需要分组另议。
+- 验证（CDP 桌面真实端点，隔离 userData + 9265）：弹窗内 `inlineGrid=false`、触发器文本 = 当前类型；点开 `.ln-popover` 出 14 项、当前项打勾；点「单选」后触发器变 `单选`、浮层关闭、弹窗内仍无内联网格。截图核对。
+- 改动文件：`bitableCells.tsx` · `BitableEditor.tsx` · `bitableEditorMount.test.ts`（+1 护栏）。门禁全绿（vitest 1397-16）。
+
+### 2026-09-29 · 类型名左对齐 + 选项回车新建（用户反馈）
+
+用户两条：「① 编辑字段-字段类型选好了左侧对齐展示，居中是什么操作；② 添加选项这里，回车就是新建一个选项」。
+
+- ① 根因：`FieldTypeSelect` 的类型名用 `.bt-field-name`（`flex:1`）铺满，而 `<button>` 默认 `text-align:center` ⇒ 文字被居中。改法：给 `.bt-select-trigger` 加 `text-align: left`（选择器的值本就该左对齐；其它 SelectMenu 触发器的 span 是内容宽度、本就靠左，不受影响）。
+- ② 改法：`optionInputsRef`(Map<id, input>) + `focusOptionInput`；「添加选项」按钮与选项输入框 Enter 共用 `addOptionRow()`（追加并置 pending focus，`options` 变化后的 effect 聚焦）。**Enter 的真实口径 = 当前选项编辑完成**：有下一个就 `focusOptionInput(next.id)`（**不新建**），已是最后一个才新建。
+  > 注：首版做成了「每次 Enter 都新建」，用户当场纠正——「回车代表这个选项编辑完成了，回车一下切换到下一个选项，下一个如果没有就新建」。
+- 验证（CDP 桌面真实端点，隔离 userData + 9266/9267）：`.bt-select-trigger` 与类型名 span computed `text-align=left`；焦点在 #0 按 Enter → 焦点 #1、选项数仍 4；#1→#2；#2→#3；在最后一个 #3 按 Enter → 选项数 4→5、新行「选项 5」、`document.activeElement` = 新行 input。截图核对。
+- 改动文件：`BitableEditor.tsx` · `bitableEditor.css` · `bitableEditorMount.test.ts`（+1 护栏）· `cssLayers.test.ts`（1055）。门禁全绿（vitest 1398-16）。
+
+### 2026-09-29 · 修「状态栏一个数据表有一个没有」（用户反馈）
+
+现象（用户附图）：同一个多维表文档里，数据表「第一个」（15 条、纵向溢出）**看不到文档状态栏**，切到「第二个」（0 条、不溢出）就有。
+
+先复现取证（隔离 userData + CDP 9268）：切到「第一个」读 `.workspace` 的 `--lake-bitable-status-bottom` = **-231px**（状态栏 top 1029，早就飞出 820 的视口）；切到「第二个」= 27px（正常）。再把两个元素都量一遍：
+
+- `.bt-stat-row`（`<tr>`）rect.top = **1053**、computed `position: static`；
+- `.bt-stat-row td` rect.top = **785**、computed `position: sticky; bottom: 0`。
+
+**根因**：底栏的「贴底常驻」挂在 **td** 上（`bitableViews.css` 的 `.bt-stat-row td { position: sticky; bottom: 0 }`），`<tr>` 本身仍是 static。测量代码 `host.querySelector('.bt-stat-row')` 取到的是 `<tr>`；内容纵向溢出时它停在**内容底部**（视口外），于是 `above = innerHeight - tr.top + 2` 变成负数 ⇒ 状态栏 `bottom:-231px` 被顶出屏幕。空表不溢出时 `<tr>` 恰好也贴底，所以「第二个」看着正常——这正是「一个有一个没有」的来源。
+
+**修法**：测量改取粘性单元格 `.bt-stat-row td`（变量名 `row` → `bar`），并在注释里写明「不能量 `<tr>`」。
+
+验证（CDP 真实端点 9269，同一份数据）：
+
+| 数据表 | `--lake-bitable-status-bottom` | 底栏 td | 状态栏 | 重叠 |
+| --- | --- | --- | --- | --- |
+| 第一个（15 条，纵向溢出） | **37px** | 785–809 | 761–783 | **-2px（不重叠）** |
+| 第二个（0 条） | 27px | 795–819 | 771–793 | -2px |
+
+截图核对：第一个底部「共 15 条」上方右侧出现「多维表 仅本地」。门禁全绿（vitest 1398-16）。
+
+### 2026-09-29 · 关联字段「关联数据表」：占位文案不再是可选项（用户反馈）
+
+用户（附图，编辑字段 → 字段类型=关联）：「下面的选择数据表，选择数据表仅是提示，不能当做选项」——
+截图里下拉第一项就是「选择数据表」而且**带勾**（当前值被判定成它）。
+
+**根因**：`FieldEditorModal` 的关联目标表下拉把占位文案塞进了 `options`：
+`options={[{ value: "", label: "选择数据表" }, ...其它数据表]}` ⇒ 它同时是「提示」和「一条可选中的值」，
+空值时 `SelectMenu` 会把它渲染成当前选中项并打勾。
+
+**修法（单一来源，不加覆盖）**：该 `SelectMenu` 只保留真实数据表作为 `options`，
+占位改由 `SelectMenu` 既有的 `placeholder` 能力承担（触发器的 `bt-select-placeholder` 灰字，不参与选中）。
+与看板「选择分组字段」、日历「选择日期字段」两处已是同一写法。
+
+本次完成：
+
+- `关联数据表` 下拉选项 = 同一文档内**除本表外**的数据表；空值 → 触发器显示灰字占位「选择数据表」（无勾选态）。
+- 顺带核查全仓同类写法：`rg 'label: "选择…'` 只剩这一处；画册「无封面」、日历「（无，按单日）」「（无）」是有语义的**清除项**，不是占位，按原样保留（未被本次改动波及）。
+
+数据结构/接口变化：
+
+- 无（仅 `options` 数组内容；字段模型/正文格式不变）。
+
+UI 与交互变化：
+
+- 未选目标表时触发器显示占位灰字；下拉里只有真实数据表，点开不再出现「选择数据表」，也不会给它打勾。
+
+改动文件：
+
+- `src/features/bitable/BitableEditor.tsx`（`FieldEditorModal` 关联数据表 SelectMenu）
+- `src/features/bitable/bitableEditorMount.test.ts`（+1 护栏：必须有 `placeholder="选择数据表"`、不得再有 `label: "选择数据表"`）
+
+验证结果：
+
+- `tsc --noEmit`：通过
+- `vitest`：**1399 passed / 16 skipped**（+1 = 本批护栏）
+- `check:core`：0 违规
+- 桌面 / 移动构建：通过
+- `ui-metrics`：hex=0 / rgb=0 / `!important`=9 / 未定义令牌=0
+- `cssLayers + uiPrimitives`：通过
+- `git diff --check`：通过
+- **CDP 真实端点**（隔离 `LAKE_USER_DATA=<tmp>/lake-relfix2-*`（只复制 `workspace-default`，避免用户 dev 实例的 `SingletonLock` 让新实例秒退）+ 独立端口 9271 + `--no-sandbox`，`LAKE_RENDERER=scheme`）：
+  - 已有目标表的字段：触发器 = `第一个`，下拉选项 = `["第一个"(已选中)]` —— **不再有「选择数据表」项**。
+  - 新建关联字段（未选表）：触发器 = `选择数据表` 且命中 `bt-select-placeholder`（占位态、非选中态）；下拉选项 = `["第一个"]`，`hasPlaceholderItem=false`。
+  - 截图核对：弹窗内触发器为灰字占位、下拉仅一项真实数据表。
+
+遗留问题：
+
+- 目标表选定后**没有「清除目标表」入口**（占位不再可点）。关联字段没有目标表本身无意义，需要换目标表直接改选即可；若日后要支持清空再单独立项。
+- 用户 dev 实例（9222）里那条字段的目标表已被选中（`tableId=tble6e97bfbf9d9`），本次验收用的是隔离副本，未改动用户数据。
+
+下一步：
+
+- 等用户验收本轮修复；D01/D02 仍按 260929 决定暂缓。
+
+### 2026-09-29 · T02B.4 关联数据范围（从视图筛选）+ 关联选择器改全局大弹窗
+
+用户两条（附图 1 = 云端字段配置、图 2 = 云端选择器）：
+
+1. 「关联数据表需要做是否可以从视图选择，如果不勾选就默认从全部数据里选，如果勾选了，就要绑定一个视图。」
+2. 「关联字段选择的时候弹窗展示，不要扣扣搜搜的使用小弹窗，就用正常的全局弹窗，然后展示选择的关联表全部信息…要点 1、要 2 个 tab，一个全部，一个已选择且展示数量，每选择一条，已选择里就加一条，也可以点击已选择页签看全部已选择。同时已选择里也保留复选框，方便取消。2、搜索框，全局搜索，右侧也有筛选条件和排序的功能。3、主要区域全局展示，完整展示当前的所有数据。4、不做添加记录。」
+
+用户同时给了架构授权：「我感觉改动应该比较大，如果有必要可以重新设计架构，你看的决定」。**结论：不需要大改架构**——
+本质是「一个字段配置项 + 选择器换载体」，边界干净；正文格式/同步/历史/GC 全不变，core 只加 2 个纯函数并复用既有求值引擎 `applyViewToRecords`。
+真正该做的是**职责位置**：选择器原先寄生在 `bitableCells.tsx`（1175 行，气泡+搜索+页脚都在 `RelationCell` 内），本轮抽成独立组件。
+
+本次完成：
+
+#### ① 数据范围（从视图筛选记录）
+
+- core：`BitableRelation` 新增 `viewId?: string`；`normalizeField` 保留它；新增 `relationTargetView(ctx, field)`（目标表里绑定的视图，缺省/删表/删视图 → undefined）与 `relationCandidateRecords(ctx, field)`（**候选集口径**：有视图走 `applyViewToRecords(target, view)`，否则全部记录）。
+- 字段配置（`FieldEditorModal`）：`关联数据表` 下面加「从视图筛选记录」勾选框 + 勾上后出现的「关联视图」下拉（候选 = 目标表的全部视图，默认取第一个）。
+  换目标表 / 取消勾选即清 `viewId`（视图 id 属于目标表）；`save()` 只在 `tableId && viewId` 时写 `viewId`。
+- **展示与候选分离**：单元格 chip 仍走 `relationTargetRecords` —— 已选记录即使被数据范围过滤掉也照常显示（只有「能选什么」受视图约束）。
+- 表被删 / 视图被删 → 回落全部记录，不级联、不报错。
+
+#### ② 选择器改全局大弹窗
+
+- 新组件 `BitableRelationPicker.tsx` + `bitableRelationPicker.css`（已登记 `cssLayers` FILES/BASELINE = 96/0）；`Dialog`（Overlay 原语，.ln-dialog 表面）尺寸 `min(1080px,92vw) × min(720px,82vh)`。
+- 结构：标题（字段名 + 右侧数据范围「目标表 · 视图/全部记录」）→ 两个 tab（`.seg` 分段控件：「所有可关联记录」/「已选 N 条记录」）→ 搜索框 + 右侧筛选/排序 → 主区域整表（吸顶表头、全字段列、超长省略 + title、点行或复选框选择）→ 页脚「已选 N 条记录 / 取消 / 确认」。
+- **已选页签**保留复选框（可取消）、保持**选择顺序**（不受字段排序影响，只被搜索/筛选收敛）。
+- **撤销**「添加记录」与「跳转目标记录」：`onCreateTargetRecord` / `onJumpToRecord` 从 `CellEditorProps` / `RelationCell` / `BitableRecordDrawer` / `BitableEditor`（含 `createTargetRecord`、`jumpToRelationRecord` 两个回调）全链路删除——按图 2 结构收敛，不留死代码。
+- 草稿语义不变：确认才 `onChange([...draft])` 写正文。
+- 排序方式映射（`sortModeOf` / `applySortMode` / `changeSortField`）从 BitableEditor **上收 core 导出**，选择器与编辑器共用（消除第二套实现）。
+
+#### ③ 实施中发现并修掉的真实问题（嵌套浮层）
+
+筛选/排序最初做成**嵌套气泡**（气泡里再开 SelectMenu），实测有两个真问题：里层下拉 `isInsideDialog(anchor)` 判 false（它的锚点在 portal 出来的气泡里、不在 `.ln-dialog` 内）⇒ z 只有 600，被抬层的外层（715）压住，**点第一项「升序」会打到外层面板**；且外点关闭会把整个面板一起关掉，选中的值丢失。
+→ 改成**弹窗内的内联条**（`.bt-rel-config`）：规则行的下拉都在 `.ln-dialog` 内，天然抬层，也不再有点一下就被关掉的问题。改动后真实鼠标点选 字段/操作符/排序方式 全部生效且面板保持打开。
+
+数据结构/接口变化：
+
+- core 新增：`BitableRelation.viewId`、`relationTargetView`、`relationCandidateRecords`、`sortModeOf`、`applySortMode`、`changeSortField`（后三个是从 BitableEditor 上收的纯函数）。
+- 删除：`CellEditorProps.onJumpToRecord` / `onCreateTargetRecord`（及 BitableRecordDrawer / BitableEditor 对应链路）。
+- **正文格式无结构变更**：关联仍只存 `values[fieldId] = 目标记录 id 数组`（`relation.viewId` 是字段级配置，可选键，旧数据不受影响）。
+
+改动文件：
+
+- `src/core/bitableDoc.ts`(+test)
+- `src/features/bitable/BitableRelationPicker.tsx`（新）· `bitableRelationPicker.css`（新）
+- `src/features/bitable/bitableCells.tsx` · `BitableEditor.tsx` · `BitableRecordDrawer.tsx`
+- `src/features/bitable/bitableEditorMount.test.ts` · `src/styles/cssLayers.test.ts`
+
+验证结果：
+
+- `tsc --noEmit`：通过
+- `vitest`：**1402 passed / 16 skipped**（+3 = 数据范围 core 用例 + 选择器两条护栏；原 T02B.2 护栏改写为 T02B.4）
+- `check:core`：0 违规
+- 桌面 / 移动构建：通过
+- `ui-metrics`：hex=0 / rgb=0 / `!important`=9 / 未定义令牌=0
+- `cssLayers + uiPrimitives`：通过
+- `git diff --check`：通过
+- **CDP 真实端点**（隔离 `LAKE_USER_DATA=<tmp>/lake-relfix2-*`（只复制 `workspace-default`，避开用户 dev 实例的 `SingletonLock`）+ 端口 9271 + `--no-sandbox`，`LAKE_RENDERER=scheme`＋改完 `vite build` 后 reload）：
+  - 弹窗：`role=dialog`、1080×672、tab `["所有可关联记录","已选 0 条记录"]`、搜索占位「搜索相关记录」、右侧 `["筛选","排序"]`、表头 = 目标表全字段（9 列）、15 行、页脚 `["取消","确认"]`、`hasAdd=false`。
+  - 选择：点 2 行 → tab 变「已选 2 条记录」、2 行高亮 + 2 个勾选；切「已选」→ 只有那 2 行；在已选页取消 1 条 → 2→1；回「所有」再加 1 条 → 2；确认 → 单元格 chip = 那 2 条，**落盘 `["rec122e98afc936","rec19cef0038e7a"]`**。
+  - 取消：草稿选到 3 条后点取消 → 单元格仍 2 条、磁盘值不变（不落盘）。
+  - 搜索：「打」→ 3 行（打地基热 / 阿打发 ×2）。
+  - 筛选：`文本 包含 阿` → 2 行；`单选 等于 已完成` → 1 行；删除规则 → 15 行。
+  - 排序：`评分 降序` → 评分 4 的记录排第一（其余为空）。
+  - 数据范围：字段配置勾「从视图筛选记录」→ 出现「关联视图」并默认取「表1」；确定后**落盘 `viewId=vewc44885bf0222`**，重开选择器 scope = 「第一个 · 表1」、候选 15 → **1**；取消勾选再确定 → 磁盘 `viewId` 消失、scope = 「第一个 · 全部记录」、候选回到 15；两次操作中单元格已选值始终保持 2 条。
+
+遗留问题：
+
+- 选择器的筛选/排序是**本机状态**（不写正文，重开即清）——按「选择器」语义处理；如需记住再单独立项。
+- 撤销了「新建记录」与「行内跳转」：按用户图 2 与「不做添加记录」收敛，需要恢复请说一声。
+- 移动端未跑 Android（移动端是只读路径，本轮未改其代码）。
+
+下一步：
+
+- 等用户验收 T02B.4；D01/D02 仍按 260929 决定暂缓。
+
+### 2026-09-29 · 新建数据表默认结构：1 列文本 + 3 行空白记录
+
+用户：「默认新建数据表，只创建一列类型为文本的列，然后默认添加 3 行空白数据。」
+
+**改前**：`createDefaultBitableTable` 建 **3 列**（文本 + 单选[待开始/进行中/已完成] + 日期）且 **0 条记录**。
+**改后**：只建 **1 列文本** + **3 行空白记录**（`values` 全空）。
+
+本次完成：
+
+- core：`createDefaultBitableTable` 收敛为 1 文本列 + 3 条 `createBitableRecord()`；删掉预置的单选/日期列及其配色（产品不再替用户定表结构）。
+- 单一来源未变：编辑器 `addTable()`（「新建数据表」）与 `initialDoc()` 空正文兜底、`emptyBitableBody()`（新建多维表文档首表）都走这一个函数——新建文档的首张表口径与新建数据表一致。
+- 测试夹具解耦：`bitableDoc.test.ts` 新增 `fixtureTable()`（文本+单选+日期，供 26 处既有用例显式声明结构），不再让用例隐式依赖产品默认字段；`historyPreview.test.ts` 的「还没有记录」用例改为显式清空记录；`electron/store.test.ts` 的建文档断言改为 `["text"]` + 3 条记录。
+- 新增护栏：core 用例锁「默认表 = 1 列文本 + 3 行空白 + 1 表格视图」与 `emptyBitableBody` 往返；挂载用例锁「默认表不再含待开始/进行中/已完成选项」且新建表/空正文兜底都走 `createDefaultBitableTable`。
+
+数据结构/接口变化：
+
+- 无正文格式变更（仍是 `tables[]` 结构）；只是**新建时**的初始内容不同。既有文档不受影响（无迁移、无兼容层）。
+
+UI 与交互变化：
+
+- 新建数据表后：表头只有「文本」一列 + 3 行可填空行（底部计数「共 3 条」）；用户自己「新增字段」加列。
+
+改动文件：
+
+- `src/core/bitableDoc.ts`(+test) · `src/core/historyPreview.test.ts` · `electron/store.test.ts` · `src/features/bitable/bitableEditorMount.test.ts`
+
+验证结果：
+
+- `tsc --noEmit`：通过
+- `vitest`：**1404 passed / 16 skipped**（+1 = 默认表护栏；另 3 处断言随口径更新）
+- `check:core`：0 违规
+- 桌面 / 移动构建：通过
+- `ui-metrics`：hex=0 / rgb=0 / `!important`=9 / 未定义令牌=0；`cssLayers + uiPrimitives` 通过；`git diff --check` 通过
+- **CDP 真实端点**（隔离 userData 9271，`vite build` 后重启）：点「新建数据表」→ 数据表列表出现 `数据表 3`、表头 `["", "文本"]`、**3 行空白**（行号 1/2/3、单元格全空）；落盘核对 `fields:[{name:"文本",type:"text"}]`、`records:3`、`values:[{},{},{}]`；截图核对（底部「共 3 条」）。
+
+遗留问题：
+
+- 既有文档里的表结构不受影响（本次只改新建口径）。
+- 新建**多维表文档**的首张表同样变成 1 列文本 + 3 行空白（同一函数，刻意不分裂两套默认）。
+
+下一步：
+
+- 等用户验收；D01/D02 仍按 260929 决定暂缓。
+
+### 2026-09-29 · 关联选择器：图片/附件真渲染 + 资产 URL 单一来源
+
+用户：「关联弹窗选择的时候附件和图片需要渲染加载，不能就给一个名称。」
+
+本次完成：
+
+- 选择器整表的值渲染改为按字段类型分派（`PickerCellValue`）：
+  - `image` / `attachment`：图片出 **32px 缩略图**（走 `?w=` 档位、`loading="lazy"`），**点缩略图 = 预览本单元格的图片**（`onOpenImages` → 与表格/画册同一条 Lightbox，不跨字段合并）；非图片附件出「📎 + 文件名」chip（`title` 全文），超过 2 个折成 `+N`。
+  - 没有 `noteId` 的极端入口才退化成「N 张图片」，不再出现「只给一个名称」的样子。
+- `noteId` / `onOpenImages` 从三个入口透传：表格网格（`BitableEditor`）、记录详情（`BitableRecordDrawer`）、表单（`BitableFormView`）→ `CellEditor` → `RelationCell` → `BitableRelationPicker`。
+- **资产 URL 收敛为单一来源**：新增 `bitableAssetUrl(noteId, file, cssPx?)`，替换原先散在 4 处的 `ASSET_ORIGIN + noteId + file` 手工拼接（单元格 chip / 附件卡片缩略图 / 看板缩略图 / 画册封面），选择器与编辑器 `openAsset`/`openImages` 一并改走它（AGENTS §3 #14 单一来源）。
+
+数据结构/接口变化：
+
+- 无正文格式变更。新增 `CellEditorProps.noteId` / `CellEditorProps.onOpenImages`（可选，关系字段用）；新增模块 `src/features/bitable/bitableAssetUrl.ts`。
+
+改动文件：
+
+- `src/features/bitable/bitableAssetUrl.ts`（新）
+- `src/features/bitable/BitableRelationPicker.tsx` · `bitableRelationPicker.css`
+- `src/features/bitable/bitableCells.tsx` · `BitableEditor.tsx` · `BitableKanbanView.tsx` · `BitableGalleryView.tsx` · `BitableRecordDrawer.tsx` · `BitableFormView.tsx`
+- `src/features/bitable/bitableEditorMount.test.ts` · `src/styles/cssLayers.test.ts`
+
+验证结果：
+
+- `tsc --noEmit`：通过 · `vitest`：**1405 passed / 16 skipped**（+1 = 选择器资源渲染护栏）· `check:core` 0 违规 · 桌面/移动构建通过
+- `ui-metrics`：hex=0 / rgb=0 / `!important`=9 / 未定义令牌=0；`cssLayers`（本文件基线 96 → 120）+ `uiPrimitives` 通过；`git diff --check` 通过
+- **CDP 真实端点**（隔离 userData 9271，`vite build` 后 reload）：
+  - 选择器整表出现 10 个 `img.bt-rel-thumb`，src = `http://127.0.0.1:19891/{noteId}/1790585329113_fb503221.png?w=128&token=…`；去掉 `loading` 后 4 张 `naturalWidth=128 / naturalHeight=78`，**实际渲染 32×32**（真加载，不是占位）。
+  - 往附件列注入 3 个 PDF 后：chips = `["6.25鞠老师晚读.pdf","6.23鞠老师晚读(1).pdf","+1"]`（>2 折成 +N）。
+  - 截图核对：图片列是原神角色缩略图、附件列是 PDF chip。
+
+遗留问题：
+
+- 选择器里非图片附件最多列 2 个 + `+N`（避免一行被文件名刷满）；需要全列可再说。
+- 本次为验附件 chip，往**隔离副本**的目标表首条记录注入了 3 个假 PDF（`1790582950xxx_deadbeef.pdf`，文件不存在、只用于渲染核对）；用户真实数据未改动。
+
+下一步：
+
+- 等用户验收；D01/D02 仍按 260929 决定暂缓。
+
+### 2026-09-29 · 横向页签原语：用户选定 B（墨线 + 计数徽标），多维表先切
+
+背景：用户要求「弹窗 tab 切换需要重做，正好可以设计一个新的原语，文档那边的里和回收站也要用，出几个方案」。
+本轮先给了 5 个形态的可点对比（A 墨线 / B 墨线+计数 / C 胶囊 / D 分段（现状）/ E 滑动等宽），用户选定 **B**，并要求「做成原语，先改多维表这边的 tab，我看看效果」。
+
+本次完成：
+
+- **原语进 `kit.css`（单一来源）**：`.ln-tabs`（墨线基座：`display:flex` / 18px 间距 / 左右 16 / 底部 1px `--lake-border-2` 分隔线）→ `.ln-tabs__track[role=tablist]` → `.ln-tabs__item[role=tab][aria-selected]`：
+  - 未选中 `--lake-text-2`、hover `--lake-text-1`；选中 `--lake-accent-text` + `600`；
+  - 选中指示线 = `::after` 2px `--lake-accent`，**与文字等宽**（`inset: auto 0 -1px`），带 `ln-indicator-in` 微入场（与移动端 `.mobile-htab` 同一套动效）；
+  - 新增 `.ln-tabs__count`：计数徽标（`min-width:18px` / pill / 默认 `--lake-bg-block` + `--lake-text-3`，选中时 `--lake-accent-tint` + `--lake-accent-text`，`tabular-nums` 防抖）；
+  - `.ln-tabs__action` 保留（历史面板的「创建快照」）。
+- **收编 legacy**：`components.css` 里那套 legacy `.ln-tabs`（260926 之前的墨线实现，被 kit 层分段样式盖住但仍在提供 `display:flex` 等承重属性）整段删除（-45 声明）——现在页签只有 kit 一处来源。
+- **过渡变体**：旧的分段形态保留为 `.ln-tabs--seg`（`flex:1 1 0` 等分 + 选中项浮起白块），**回收站 `TrashPanel` / 历史 `HistoryPanel` 显式加上 `--seg`**，外观零变化（等它们迁移）。
+- **多维表先切**：`BitableRelationPicker` 的两个页签改走原语 —— `所有可关联记录 [15]` / `已选 [4]`（数量进徽标，文案不再随计数重排），删掉 `.seg` / `.seg__item` 用法；`.bt-rel-tabs` 只留上下留白。
+- 规则文档同步：`AGENTS.md` §3 #14 的「横向 tab 一律分段控件」改成「一律用 `.ln-tabs` 原语（B 墨线 + 计数徽标）＋单一来源清单加一条」；`HANDOFF.md` §4 同步。
+
+改动文件：
+
+- `src/styles/kit.css` · `src/styles/components.css` · `src/styles/cssLayers.test.ts`
+- `src/features/bitable/BitableRelationPicker.tsx` · `bitableRelationPicker.css` · `bitableEditorMount.test.ts`
+- `src/components/TrashPanel.tsx` · `src/components/HistoryPanel.tsx`（各 +1 `--seg`，外观不变）
+- `AGENTS.md` · `HANDOFF.md` · 本文件
+
+验证结果：
+
+- `tsc --noEmit`：通过 · `vitest`：**1405 passed / 16 skipped** · `check:core` 0 违规 · 桌面/移动构建通过
+- `ui-metrics`：hex=0 / rgb=0 / `!important`=9 / 未定义令牌=0；`cssLayers`：`kit.css` 558 → 593、`components.css` 433 → 388（搬家 + 新增，成对登记）；`uiPrimitives` 通过；`git diff --check` 通过
+- **CDP 真实端点**（隔离 userData 9271，`vite build` 后 reload）：选择器页签 `34px` 高、内容宽 `119 / 50`；激活项 `::after` = `2px rgb(91,111,150)`、颜色 `rgb(58,74,104)` + `600`；非激活 `rgb(74,81,88)`；轨道底线 `rgb(240,242,245)`；激活徽标 `rgb(236,239,245)`、非激活徽标 `rgb(240,242,245)` + `rgb(109,117,126)`；切换 tab 正常、`hasSeg=false`、`cursor=pointer`；勾选一行后「已选」徽标 4 → 5。截图核对。
+
+遗留问题：
+
+- 原语暂不支持「页签过多横向滚动」——当前各处页签都 ≤3 个，等真出现再按需加。
+
+下一步：
+
+- 等用户验收全量效果。
+
+#### 同会话追加（用户：「可以推广到所有位置吧」）—— 全量落地
+
+用户看过多维表效果后要求推广。桌面端全部 `role="tab"` 位置（`rg 'role="tab"'` 盘点：关联选择器 / 表单编辑·预览 / 回收站文档·小记 / 历史面板文档历史·孤儿文件）**一次性迁完**，过渡变体删除：
+
+- `BitableFormView`：`.seg` / `.seg__item` → 原语；`bitableFormView.css` 的 `.bt-form-tabs` 只留上下留白 + 一条「轨道居中」（表单是居中版面，分隔线仍横贯整壳）。
+- `TrashPanel`：去掉 `--seg`，并把数量做成徽标（`文档 [N]` / `小记 [N]`，数据本来就在手边）。
+- `HistoryPanel`：去掉 `--seg`，两个页签加数量徽标（`文档历史 [11]` / `文档孤儿文件 [0]`），右侧「创建快照」继续走 `.ln-tabs__action`，图标保留。
+- `kit.css`：删除 `.ln-tabs--seg` 变体与说明；`components.css` 早已只剩一行注释。
+- **`role="tab"` 之外不动**：设置页「主题」（浅/深/暖）与小记「列表·卡片版式」是**取值选择 / 图标型开关**（`aria-pressed`/`Seg` 组件），不是导航页签 —— 继续用 `.seg`，并在 AGENTS/HANDOFF 里写明这个边界。
+- 移动端（`MobileSheetViewer` / `MobileBitableViewer` 的页签）保持移动端自己的样式语言（`.mbt-*` / mobile.css），本轮不动。
+
+追加验证（CDP 真实端点，隔离 userData 9271）：
+
+| 位置 | 实测 |
+| --- | --- |
+| 回收站（空间切换 → 回收站） | `文档 [0] / 小记 [0]`；激活 `rgb(58,74,104)` + 600、指示线 `2px` 宽 50 `rgb(91,111,150)`；tab 高 34；分隔线 `rgb(240,242,245)`；无 `--seg` |
+| 表单视图（数据表「第一个」→ 表单视图） | `编辑表单 / 预览表单`；指示线 `2px` 宽 52；轨道 `justify-content: center`；无 `.seg` |
+| 历史面板（侧栏右键 → 历史版本） | `文档历史 [11] / 文档孤儿文件 [0]`（图标保留）；指示线 `2px` 宽 98；右侧动作 = `创建快照`；无 `--seg`。**这个实例是暖色主题**，实测激活色 `rgb(196,78,0)`、指示线 `rgb(255,106,0)` ⇒ 原语完全跟随主题令牌（同一份代码在浅色下是 `rgb(58,74,104)` / `rgb(91,111,150)`） |
+
+过程备注（供后续会话）：隔离实例的窗口是隐藏的（`document.hidden`），侧栏是「贴左缘的悬浮 peek 面板」⇒ 合成鼠标移不进去、`⌘` 之类的 hover 显形入口点不开。最后用 **JS 派发 `contextmenu` 事件**（`row.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, clientX, clientY }))`）打开了侧栏右键菜单，才拿到历史面板入口。这条姿势以后验「hover/peek 类入口」可复用。
+
+### 2026-09-29 · 提交并推送（用户授权）
+
+用户：「合并master并推动远程。」—— 项目红线本来是「不擅自合 master（代码批次需用户验收）」，此处为**用户明确授权**。
+
+- 代码：本批 260928–260929 各批（同一批文件被多批改过，无法按批拆 commit）合成一个提交 `681f148`「feat(bitable): 多维表专项收口（关联/选择器/页签原语/默认表）」，34 改 + 4 新文件。
+- 文档：`HANDOFF.md` / `AGENTS.md` / 本文件的回写单独一个提交。
+- 推送：`git push origin master` 成功；连同此前本地领先的 23 个提交（`1494331..1fe4d22`）一起上远端。
+- 门禁（提交前重跑）：`tsc --noEmit` ✓ · `vitest 1405 passed / 16 skipped` ✓ · `check:core` 0 违规 ✓ · 桌面 + 移动构建 ✓ · `ui-metrics`（hex=0/rgb=0/`!important`=9/未定义令牌=0）✓ · `cssLayers`+`uiPrimitives` ✓ · `git diff --check` ✓。
+
+⚠️ 口径提醒：§11 看板里的「待验收」是**功能验收**状态，与「有没有提交」无关——本批现在都已入库，但**还没有用户的功能验收结论**。
 
 ## 14. 会话执行模板
 
