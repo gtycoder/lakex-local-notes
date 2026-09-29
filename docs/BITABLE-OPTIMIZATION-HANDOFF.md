@@ -1,6 +1,6 @@
 # 多维表优化落地与交接文档（Single Source of Truth）
 
-> 状态：**方案已冻结；V01 已完成（用户验收通过）；V02–V04 + 260928 三批追加需求 + T01/T04 + T02A + 260929 单级分组/UI2 + 260929-OPT 阶段优化 + T02B.1 关联基础模型已实施，一并待验收**（T03 多级分组已按用户决定废弃；T06 表单双模已完成待验收；T02B.2/.3、D01/D02 未开始）。
+> 状态：**方案已冻结；V01 已完成（用户验收通过）；V02–V04 + 260928 三批追加需求 + T01/T04 + T02A + 260929 单级分组/UI2 + 260929-OPT 阶段优化 + T02B.1/.2/.3/.4 关联 + 260929 收口各条 + **260930 四条：表头新增字段＋贴左列、选项编辑去自动全选、列宽自由设置+行高不被撑高、附件按文档类型图标（均未提交）** 已实施，一并待验收**（T03 多级分组已按用户决定废弃；T06 表单双模已完成待验收；D01/D02 暂缓）。
 > 建立日期：2026-09-28。
 > 适用范围：多维表字段扩展、单/双向关联、表格增强、看板/画册/日历视图、表单增强、导入导出。
 > 本文是该优化项目的**唯一实现方案、进度看板、修改记录、决策记录和会话交接文档**。
@@ -759,6 +759,11 @@ npx vitest run src/styles/cssLayers.test.ts src/styles/uiPrimitives.test.ts
 | 新建数据表默认结构 | 待验收 | 260929-DEF-TBL | 默认表 = **1 列文本 + 3 行空白记录**（取消预置的单选/日期列）；「新建数据表」与空正文兜底共用 `createDefaultBitableTable`；见 §13 |
 | 关联选择器图片/附件真渲染 | 待验收 | 260929-REL-ASSET | 选择器整表里的图片与附件**真渲染**（图片缩略图可点开预览本格、其余附件出「图标 + 文件名」chip）；顺带把资产 URL 收敛为 `bitableAssetUrl` 单一来源（单元格/看板/画册/选择器）；见 §13 |
 | 横向页签原语（B 墨线 + 计数徽标） | 待验收 | 260929-TABS | 用户在五个形态里选定 **B**；已做成 `kit.css` 的正式原语 `.ln-tabs`（文字 + 选中变强调色 + 与文字等宽的 2px 下划线；数量进 `.ln-tabs__count` 徽标；右侧动作 `.ln-tabs__action`），**已全量落地**：关联选择器 / 回收站 / 历史面板 / 表单编辑·预览；过渡变体 `.ln-tabs--seg` 已删除；见 §13 |
+| 表头「新增字段」＋贴左列 | 待验收 | 260930-ADDCOL | 加号原被 `th` 的浏览器默认 `text-align:center` 甩到表尾空白区正中（实测该格 604px、加号 x=965）；改 `.bt-grid th.bt-th-add { text-align:left; padding-left:8px }`，**只对齐内容、不动列宽**，实测加号左缘 = 最后一列右缘 + 8px；见 §13 |
+| 选项编辑「添加」不再自动全选（去蓝色底色） | 待验收 | 260930-OPTBLUE | 「添加选项 / 回车新建」的新行原先把默认名 `选项 N` 整块选中 ⇒ 一块系统蓝底；改 `focus()+光标落末尾`（去 `el.select()`）+ 新选项留空/默认名走 `placeholder` + 保存时空名兜底「选项 N」；实测新行 `selection=[0,0]`、键入即名、空着保存落成「选项 7」；见 §13 |
+| 列宽自由设置 + 行高不被内容撑高 | 待验收 | 260930-COLW | 列宽改**以字段 `width` 为准**（auto 布局下 `<col>` 的 width 只是「至少」：附件 chip 实测 180→413 ⇒ 每格行内 `max-width`，表头/记录格/分组统计格/底栏统计格四处）；行高改**与内容无关**（`.bt-grid th/td` 补 `white-space: nowrap`：日期列 80px 折行导致 36→48；日期/时间格省略号、文本格 `text-overflow: ellipsis`）；拖拽下限 80→**40**；见 §13 |
+| 附件按文档类型图标展示 | 待验收 | 260930-FILEICON | 附件**不再显示文件名 chip / 缩略图**：单元格 = 小类型图标 + **hover 名称气泡**（`.ln-tip` 表面 + `usePopoverPosition` 定位）；展开面板 = 大类型图标（名称仍在卡下方）。图标用 lucide-react（**内核 sprite 实测无 file/pdf/doc 系图标**，云端那套在语雀 App 自己的 sprite 里）、类型判定走 core 的 `fileKindOf()`、配色新增 `--lake-file-*`；**图片字段仍是缩略图**（`imageOnly` 分叉）；见 §13 |
+| 附件按文档类型图标展示 | 待验收 | 260930-FILEICON | 附件**不再显示文件名 chip / 缩略图**：单元格 = 小类型图标 + **hover 名称气泡**（`.ln-tip` 表面 + `usePopoverPosition` 定位）；展开面板 = 大类型图标（名称仍在卡下方，**被省略号截断时 hover 出全名气泡** —— 同一套 `useNameTip`、`scrollWidth > clientWidth` 才弹）。图标用 lucide-react（**内核 sprite 实测无 file/pdf/doc 系图标**，云端那套在语雀 App 自己的 sprite 里）、类型判定走 core 的 `fileKindOf()`、配色新增 `--lake-file-*`；**图片字段仍是缩略图，但 hover 名称走同一套气泡**（用户追加）；**移动端同步落地**（附件字段 = 小图标 + 名称，触屏无 hover 故保留名称；Android 模拟器实测）；**关联字段选择器整表也复用同一套 `AttachmentChipList`**（不再自养「📎 文件名」chip）；见 §13 |
 
 ## 12. 修改记录
 
@@ -812,6 +817,13 @@ npx vitest run src/styles/cssLayers.test.ts src/styles/uiPrimitives.test.ts
 | 2026-09-29 | 260929-DEF-TBL | 新建数据表默认结构改「1 列文本 + 3 行空白」 | `src/core/bitableDoc.ts`(+test) · `src/core/bitableDoc.test.ts`(新增 3 字段夹具 `fixtureTable`) · `src/core/historyPreview.test.ts` · `electron/store.test.ts` · `bitableEditorMount.test.ts` | `createDefaultBitableTable` 由「文本+单选+日期、0 记录」改为「**文本 1 列 + 3 行空白记录**」；`emptyBitableBody()`（新建多维表文档首表）与编辑器「新建数据表」共用同一函数。门禁全绿 + vitest 1404-16 + CDP 真实端点（隔离 userData 9271：点新建数据表 → 表头 `["", "文本"]`、3 行空白、落盘 `fields:[text] records:3 values:[{},{},{}]`） | 测试夹具改为显式 `fixtureTable()`（不再隐式依赖产品默认字段），非兼容层 |
 | 2026-09-29 | 260929-REL-ASSET | 关联选择器里图片/附件真渲染 + 资产 URL 单一来源 | `src/features/bitable/bitableAssetUrl.ts`(新) · `BitableRelationPicker.tsx` · `bitableRelationPicker.css` · `bitableCells.tsx` · `BitableEditor.tsx` · `BitableKanbanView.tsx` · `BitableGalleryView.tsx` · `BitableRecordDrawer.tsx` · `BitableFormView.tsx` · `bitableEditorMount.test.ts` · `src/styles/cssLayers.test.ts` | ① 选择器整表：`image`/`attachment` 列改**真渲染** —— 图片出 32px 缩略图（`?w=` 档位、点开预览**本格**图片，与表格/画册同一条 Lightbox），非图片附件出「📎 + 文件名」chip（>2 个折成 `+N`）；`noteId`/`onOpenImages` 从表格、记录详情、表单三处透传。② 资产 URL 从 4 处各拼一遍收敛为 `bitableAssetUrl(noteId, file, cssPx?)`（单元格 chip、附件卡片、看板缩略图、画册封面、选择器 + 编辑器 openAsset/openImages 共用）。门禁全绿 + vitest 1405-16 + CDP 真实端点（隔离 userData 9271：选择器 10 张缩略图 `naturalWidth=128`、渲染 32×32；注入 3 个 PDF 后 chips = `6.25鞠老师晚读.pdf / 6.23鞠老师晚读(1).pdf / +1`） | 选择器里附件 chip 最多列 2 个（其余 +N）；移动端只读路径未改 |
 | 2026-09-29 | 260929-TABS | 横向页签原语（用户选定 B 墨线 + 计数徽标），多维表先切 | `src/styles/kit.css` · `src/styles/components.css`(删 legacy .ln-tabs 整套) · `BitableRelationPicker.tsx` · `bitableRelationPicker.css` · `TrashPanel.tsx` · `HistoryPanel.tsx` · `bitableEditorMount.test.ts` · `src/styles/cssLayers.test.ts` · `AGENTS.md` · `HANDOFF.md` · 本文件 §2.2/§11/§13 | 原语：`.ln-tabs > .ln-tabs__track[role=tablist] > .ln-tabs__item[role=tab][aria-selected]` + `.ln-tabs__count`（计数徽标，选中跟强调色）+ `.ln-tabs__action`；墨线基座从 `components.css` 的 legacy 段收编到 kit 层（**单一来源**，`components.css` 那 45 条删除），旧分段形态保留为 `.ln-tabs--seg` 变体。多维表：选择器两页签改用原语（`所有可关联记录 [15]` / `已选 [4]`，数字进徽标、文案不再随计数重排），删掉 `.seg` 用法。门禁全绿 + vitest 1405-16 + CDP 真实端点（隔离 userData 9271） | 无（`.seg` 保留给取值选择/图标开关，非 tab） |
+| 2026-09-30 | 260930-ADDCOL | 表头「新增字段」的 ＋ 贴着左侧最后一列 | `src/features/bitable/bitableViews.css`(+2 声明) · `bitableEditorMount.test.ts`(+1 护栏) · `src/styles/cssLayers.test.ts`(基线 146→148) · `HANDOFF.md` · 本文件 | 用户（附图）：「添加列的加号贴近做左侧的列，不要总是居中」。根因：`.bt-th-add` 是表尾**自动宽度**的单元格（吸收表格剩余宽度），`th` 浏览器默认 `text-align:center` ⇒ 加号落在空白区正中（实测格宽 604、加号 x=965）。改 `.bt-grid th.bt-th-add { text-align: left; padding-left: 8px }`：**只对齐内容、列宽语义不变**（不动列宽 ⇒ 数据列不被撑开）。需要 `.bt-grid th.` 前缀才压得过 `.bt-grid th { padding: 0 }`（(0,1,1) > (0,1,0)）。门禁全绿 + vitest **1406 passed / 16 skipped** + CDP 真实端点（隔离 userData：加号 x=683 = 最后一列右缘 675 + **8px**、`text-align:left`、该格宽仍 604） | 未提交（待用户验收）；`th` 默认居中这条已回填 HANDOFF §4 |
+| 2026-09-30 | 260930-OPTBLUE | 选项编辑「添加」不再自动全选（去掉那块蓝色底色） | `src/features/bitable/BitableEditor.tsx`（`focusOptionInput` 去 `select()` 改光标落末尾；`addOptionRow` 新选项留空；`save()` 收口选项名兜底；输入框加 `placeholder`） · `bitableEditor.css`(+1 = `.bt-input::placeholder`) · `bitableEditorMount.test.ts`(+1 护栏) · `src/styles/cssLayers.test.ts`(基线 1055→1056) · `HANDOFF.md` · 本文件 | 用户（附图，红框圈住输入框里的蓝块）：「多选每项添加的时候为什么会有蓝色的底色，需要去掉」。根因：260928–260929 那批给「回车=完成并切下一个/最后新建」加的 `focusOptionInput` 里带 `el.select()`，新行预填的 `选项 N` 被整块选中 ⇒ 系统选区就是那块蓝（CDP 实测 `selectionStart=0/End=4`，每加一次都复现）。改法：**不再全选**（`focus()` + `setSelectionRange(len,len)`），新选项**留空**、默认名交给 `placeholder`（`选项 N`），保存时空名按位置兜底 ⇒ 既不丢「直接键入即选项名」，也没有选区。门禁全绿 + vitest **1407 passed / 16 skipped** + CDP 真实端点（隔离 userData：新行 `value=""`/`placeholder="选项 6"`/`selection=[0,0]`；`Input.insertText` 键入「苹果」→ 值为「苹果」且 `sel=[2,2]`；再空加一行直接确定 → 落盘 `苹果` + `选项 7`） | 未提交（待用户验收）；表格单元格 `focusCell` 的 `select()` **未动**（网格既有约定，与选项编辑不同语义）；焦点环（输入框的 2px 描边）保留（可访问性） |
+| 2026-09-30 | 260930-COLW | 列宽自由设置（不再看内容）+ 行高不被内容撑高 + 下限 40 | `src/features/bitable/BitableEditor.tsx`（新增 `columnWidth()`；表头 `th` / 记录格 `td` / 分组统计格 / 底栏统计格四处加行内 `maxWidth`；拖拽下限 80→40） · `bitableEditor.css`（`.bt-grid th/td` 补 `white-space: nowrap`；新增 `.bt-date-trigger > span` 单行省略；`.bt-cell-input` 补 `text-overflow: ellipsis`） · `bitableEditorMount.test.ts`(+1 护栏) · `src/styles/cssLayers.test.ts`(基线 1056→1062) · `HANDOFF.md` · 本文件 | 用户（附图：附件列 3 个 chip 撑出一大列）：「附件类型的列左右宽度不能设置下限，也需要能自由拉长和缩短。我测试了一下，所有的列都是根据内容长度算的左右宽度，我需要能自由设置了，展示不下就截断省略。并且不能为了展示内容而自动扩大行高。例如日期缩短了就会导致换行，而行高变大。」+ 追加「可以设定一个比较小的下限值」。**根因两条**：① `table-layout: auto` 下 `<col style="width">` 只是「至少这么宽」，内容更宽就把列撑开（实测附件列 field width=180 渲染成 **413**，日期列拖到 80 又被内容顶回 109 —— 只有 nowrap 之后）；② `td` 的 `height` 只是最小值，内容折行就撑高（实测日期列 80px：`2026-09-07` 折行 ⇒ 行高 **36 → 48**）。**改法**：① 列宽改由**每格行内 `max-width`** 卡住（`columnWidth(field)`；宽度来自正文数据、CSS 无法按列取值；实测附件 413→180，且分组行/记录行右缘逐列对齐）；② `.bt-grid th/td { white-space: nowrap }` 让行高与内容无关 + 日期/时间格 `.bt-date-trigger > span` 出省略号 + `.bt-cell-input` 补 `text-overflow: ellipsis`（文本格从硬裁改省略）；③ 拖拽下限 80→40（上限仍 640）。门禁全绿 + vitest **1408 passed / 16 skipped** + CDP 真实端点（隔离 userData：拖 日期→40 / 附件→340→40 / 文本→300 列宽都精确跟随、行高恒 **36**；分组态分组行与记录行右缘 `[281,461,…,2421]` 完全一致，分组行高 36） | 未提交（待用户验收）；chip/缩略图/星级这类**没有省略号语义**的格子是裁切（不是 `…`）；行内 `max-width` 是为「按列数据驱动宽度」破例（`<col>` 上的 max-width 被忽略、`contain: inline-size` 在 table cell 上无效），已在 HANDOFF §4 记坑 |
+| 2026-09-30 | 260930-FILEICON | 附件按**文档类型图标**展示（单元格小图标 + hover 名称气泡 / 展开面板大图标） | `src/core/assetNaming.ts`(+`AssetFileKind` / `ASSET_FILE_KIND_EXTS` / `fileKindOf`) · `assetNaming.test.ts`(+1) · `src/features/bitable/FileKindIcon.tsx`(新) · `bitableFileIcon.css`(新，登记 cssLayers) · `bitableCells.tsx`（`AttachmentChipList` 加 `imageOnly` 分叉 + hover 气泡；展开面板卡片改大图标） · `src/styles/themes/base.css`(+11 = `--lake-file-*`) · `bitableEditorMount.test.ts`(+1 护栏) · `src/styles/cssLayers.test.ts`(新文件基线 33) · `docs/LAKEX-CONTRACT.md` · `HANDOFF.md` · 本文件 | 用户（附图 = 云端附件列小图标 + 展开面板大图标 + hover 深色名称气泡）：「附件不展示名称和预览了，直接展示文档类型吧…我们是否有对应的图标样式可以使用」。**先答问题**：内核 sprite 实测 **325 个 `symbol[id]`**，按 file/pdf/doc/ppt/word/excel/zip/video/audio/attach 过滤只命中 `icon-card-mention-doc` **一个** ⇒ 云端那套彩色页图标在**语雀 App 自己的 sprite** 里、内核不提供，**没有现成的可用**（已回填 LAKEX-CONTRACT §三）。**实现**：① core 新增 `fileKindOf(nameOrExt)`（映射 11 类：image/pdf/doc/sheet/slide/archive/audio/video/code/text/file；图片沿用 `isImageExtension` 的既有清单，不重复维护）；② 新组件 `FileKindIcon`（lucide：FileImage / FileText / FileType / FileSpreadsheet / Presentation / FileArchive / FileAudio / FileVideo / FileCode / File / File），颜色走新增的 `--lake-file-*` 令牌（11 个，只放 `themes/base.css` —— 内容/品牌色不随主题分叉）；③ 单元格 = `.bt-file-chip` 小图标按钮 + **hover 名称气泡**（表面 kit 的 `.ln-tip`、定位 `usePopoverPosition`、`position: fixed` ⇒ 不被 `.bt-grid-wrap` 裁切；不再是常驻文件名）；④ 展开面板卡片 = `.bt-attach-card-kind` 大图标（46px），名称仍在卡下方；⑤ **图片字段仍是缩略图**（`imageOnly` 分叉）。门禁全绿 + vitest **1410 passed / 16 skipped** + CDP 真实端点（隔离 userData：附件格 = 3 个 `.bt-file-icon`、**0 个 `<img>`**；图片格 = 3 缩略图、0 图标；行高 36；hover 气泡 `text=【期神笔记】2024.pdf`、`bg=rgb(58,74,104)`（深色）；展开面板 = 3 个大图标 `bt-file-icon--pdf/doc/doc` + 名称、0 缩略图） | 未提交（待用户验收）；**没动的三处**（需要的话另说）：看板卡片的图片缩略图、关联选择器整表里的图片缩略图/附件 chip、移动端只读的附件渲染（移动端是独立样式）；pdf 与 txt 共用一个字形（靠颜色区分） |
+| 2026-09-30 | 260930-FILEICON-2 | 图片格 hover 名称走同一气泡 + **移动端同步**（附件字段换类型图标） | `bitableCells.tsx`（气泡两种字段共用：去掉 img 的原生 `title`、`onMouseEnter` 不再按 `imageOnly` 分叉） · `bitableEditorMount.test.ts`(护栏改写) · `src/mobile/bitable/MobileBitableViewer.tsx`（`AttachmentCell` 加 `imageOnly` 分叉：附件字段 = `FileKindIcon` + 名称；图片字段 = 缩略图） · `src/mobile/mobile.css`(+2 = `.mbt-attachment-file.is-kind` / `.mbt-attachment-name`) · `src/mobile/bitable/mobileBitableViewer.test.ts`(+1) · `HANDOFF.md` · 本文件 | 用户两条追加：「图片有一个改动，鼠标放上去展示名称可以和附件一样」「图片不动，图片是用来看的，**移动端可以换**」。① 桌面：缩略图与类型图标**共用**同一个 hover 气泡（同一交互只有一套实现；同时删掉 `title` 免得两个气泡打架）。② 移动端：附件字段 → 类型图标**＋名称**（触屏没有 hover，名称不能收进气泡；图标给类型、名字给内容），图片字段仍是缩略图。门禁全绿 + vitest **1411 passed / 16 skipped** + CDP 真实端点（桌面 hover 缩略图 → `.bt-file-tip` = `MOON0005.jpg`；**Android 模拟器**（AVD lake_mobile，`android-build.sh --sync --install` + `emu-cdp.sh 9335` + 往 DB 写一条 bitable 笔记）实测：附件格 3 个类型图标 `--pdf/--doc/--image` + 名称、图片格 1 张缩略图、令牌色解析为 `rgb(217,74,61)/rgb(47,111,208)/rgb(217,138,0)`） | 未提交（待用户验收）；移动端**名称仍保留**（触屏无 hover）；HANDOFF **§8 是移动端会话的维护范围，本批没改**，§8「多维表只读」里仍写着附件/图片都是缩略图，需要移动端会话按本条更新 |
+| 2026-09-30 | 260930-FILEICON-3 | 展开面板的文件名被截断时 hover 出全名（与单元格同一气泡） | `bitableCells.tsx`（气泡抽成 `useNameTip()` 单一来源；`.bt-attach-card-name` 去掉原生 `title`、挂 `tip.show(name, el, true)`；`whenTruncated` 用 `scrollWidth > clientWidth` 判截断） · `bitableEditorMount.test.ts`(护栏改写) · `HANDOFF.md` · 本文件 | 用户（附图：面板里「【期神笔记】2…」被省略号截掉）：「加一个优化，展开之后文件名这里，有可能看不全，也加一个弹窗展示完整名称」。改法：把 hover 气泡抽成 `useNameTip()`（表面 `.ln-tip`、定位 `usePopoverPosition`），**单元格 chip 与面板文件名共用**；面板那条带 `whenTruncated` ⇒ **真的被省略才弹**（没截断弹出来是同义重复），并删掉原生 `title` 避免两个气泡打架。CDP 真实端点：面板 3 个名字实测 `scrollWidth/clientWidth` = 121/89、103/89、159/89（都截断）→ hover 第一个出 `.bt-file-tip` = `【期神笔记】2024.pdf`；把面板拖宽到 932px 后第二个名字不再截断（108/108）→ hover **不出气泡**（探针返回 null） | 未提交（待用户验收）；面板里**重命名输入框**没有气泡（文本框本身可横向滚动，不需要） |
+| 2026-09-30 | 260930-REL-UNIFY | 关联选择器整表 + **看板卡片** + **画册卡片**都复用同一套附件渲染（一处实现）；卡片只出图标/缩略图、不显示名称 | `bitableCells.tsx`（`AttachmentChipList` 改为 **export**；曾加过 `showNames` 变体，**本条按用户要求撤销**） · `BitableRelationPicker.tsx`（改用 `AttachmentChipList`；删自养的缩略图/「📎 文件名」chip 与 `PICKER_THUMB_PX`/`PICKER_FILE_MAX`） · `bitableRelationPicker.css`（`.bt-rel-files` 改 inline-flex + max-width/overflow；删 `.bt-rel-thumb`） · `BitableKanbanView.tsx`（卡片附件分支改用 `AttachmentChipList`，**不显示文件名**；删 `KANBAN_THUMB_PX`/`thumbUrl`/`imageAttachmentsOf`） · `BitableGalleryView.tsx`（卡片字段里附件类**不再走 `bitableFieldText` 出一串文件名**，改走 `AttachmentChipList`） · `bitableFileIcon.css`(+`.bt-card-files` 卡片附件行容器 = 看板/画册共用) · `bitableKanbanView.css`（删 `.bt-kanban-thumb` 与 `.bt-kanban-files`） · `bitableAssetUrl.ts`(+`openBitableAttachment` 单一入口) · `BitableEditor.tsx`（`openAsset` 改走它） · `bitableEditorMount.test.ts`(+2 护栏、改写 5 条旧护栏) · `src/styles/cssLayers.test.ts`(基线 120→113 / 109→100 / 33→37) · `HANDOFF.md` · 本文件 | 用户：「关联字段弹窗展示里还没有看到我们新的改动，这两处不是同一套代码吗？能做成一套吗？」→ 选择器改用 `AttachmentChipList`；随后「看板卡片呢」→ 选 **A**（卡片也换成同一套）；再随后（看到卡片带名字的效果后）「**看板视图不展示名称了，直接图标或者缩略图吧**」+「**画册视图的附件也要改**」⇒ ① 撤销 `showNames`（卡片上只留图标/缩略图，名字靠 hover 气泡）；② 画册卡片字段里的附件类也改用同一套（之前 `bitableFieldText` ⇒ 卡片上是一串「【期神笔记】2024.pdf, 2…」）。顺带把「打开一条附件」也收成 `openBitableAttachment`（表格/选择器/看板/画册四处共用）。门禁全绿 + vitest **1414 passed / 16 skipped** + CDP 真实端点（隔离 userData：选择器附件列 3 个类型图标、0 旧 chip；**看板卡片** = 3 缩略图 + 3 类型图标、**0 个常驻文件名**；**画册卡片** 附件行 = 3 个类型图标（此前是文件名文本）、0 个旧 `.bt-kanban-thumb`；hover 全名气泡在对话框内也可见） | 未提交（待用户验收）；卡片上附件/图片的**名称只剩 hover 气泡**（触屏看板不存在；移动端是只读表格，不受影响） |
 
 ## 13. 会话记录（只追加）
 
@@ -2409,6 +2421,329 @@ UI 与交互变化：
 - 门禁（提交前重跑）：`tsc --noEmit` ✓ · `vitest 1405 passed / 16 skipped` ✓ · `check:core` 0 违规 ✓ · 桌面 + 移动构建 ✓ · `ui-metrics`（hex=0/rgb=0/`!important`=9/未定义令牌=0）✓ · `cssLayers`+`uiPrimitives` ✓ · `git diff --check` ✓。
 
 ⚠️ 口径提醒：§11 看板里的「待验收」是**功能验收**状态，与「有没有提交」无关——本批现在都已入库，但**还没有用户的功能验收结论**。
+
+### 2026-09-30 · 表头「新增字段」的 ＋ 贴着左侧最后一列
+
+用户（附图，红框圈住表头行末尾那颗 +）：「继续优化多维表：1、添加列的加号贴近做左侧的列，不要总是居中。」
+
+本次完成（先取证、再改）：
+
+- **复现与取证**（隔离 `LAKE_USER_DATA` + CDP 9281，`LAKE_RENDERER=scheme` + `vite build` 后）：表头最后一格 `.bt-th-add` 实测 `x=675 / w=604`，加号 `x=965` = 675 + 604/2 − 12 ⇒ **正处在空白区正中**；`getComputedStyle(.bt-th-add).textAlign = "center"`。
+- **根因**：`th` 的浏览器 UA 默认样式就是 `text-align: center`。字段头靠 `.bt-th-inner { justify-content: flex-start }` 才左对齐，而表尾这格 `.bt-th-add` **此前没有任何规则**；它同时是「吸收表格剩余宽度」的**自动宽度**单元格（`colgroup` 只给 index 与字段列显式宽度，`.bt-grid` 又是 `width:max-content; min-width:100%`）⇒ 加号被居中到很远的空白区中部，离最后一列 290px。
+- **改法（只对齐内容，不动列宽）**：`bitableViews.css` 新增一条
+  `.bt-grid th.bt-th-add { text-align: left; padding-left: 8px; }`
+  - 必须带 `.bt-grid th.` 前缀：`.bt-grid th, .bt-grid td { padding: 0 }` 是 (0,1,1)，裸 `.bt-th-add` 是 (0,1,0) **压不过**。
+  - **刻意不给这一格固定宽度**：那会把剩余宽度摊给数据列、把列宽撑开（`colgroup` 里字段列是显式的 `field.width ?? 180`）。8px 内距与字段头 `.bt-th-inner` 的内容起点一致。
+- **护栏**（`bitableEditorMount.test.ts` +1 条）：锁 `<th className="bt-th-add"> … class="bt-add-round" title="新增字段"` 的 JSX 结构；锁 CSS 恰为该字符串；并断言 `text-align: center` 不再出现在 `.bt-th-add` 上。
+
+数据结构/接口变化：无（纯 CSS + 测试；不动正文格式、不动同步/历史/GC）。
+
+改动文件：`src/features/bitable/bitableViews.css` · `src/features/bitable/bitableEditorMount.test.ts` · `src/styles/cssLayers.test.ts`（`bitableViews.css` 基线 146 → 148，注明「合法新增非覆盖回涨」）· `HANDOFF.md` · 本文件。
+
+验证结果：
+
+- `tsc --noEmit`：通过
+- `vitest`：**1406 passed / 16 skipped**（+1 = 本条护栏）
+- `check:core`：0 违规
+- 桌面构建：通过；移动构建：通过
+- `ui-metrics`：hex=0 / rgb=0 / `!important`=9 / 未定义令牌=0
+- `cssLayers + uiPrimitives`：通过
+- `git diff --check`：通过
+- **CDP 真实端点**（隔离 userData，`vite build` 后 `Page.reload` + 真实点开文档）：改后 `.bt-th-add` `text-align=left`、`padding-left=8px`、**格宽仍 604**（列宽未变）；加号 `x=683`、最后一列右缘 `675` ⇒ **间隙 8px**（改前 290px）。截图核对：加号紧贴「文本」列右缘；表底「添加记录」那颗 + 仍居中在行号正下方（未受影响）；`共 3 条` 底栏正常。
+
+遗留问题：
+
+- 未提交（项目红线：代码批次需用户验收后再处理提交/合并）。
+- 表头里**没有**「最后一列之后留白也画成列」这类云端细节；本次只挪加号位置。
+- 分组态 / 只读态使用同一格与同一条规则，未单独回归（规则只作用于该格的内容对齐，与分组、只读无关）。
+
+下一步：
+
+- 等用户验收本条；D01/D02 仍按 260929 决定暂缓。
+
+### 2026-09-30 · 选项编辑「添加」不再自动全选（去掉那块蓝色底色）
+
+用户（附图，红框圈住「选项 3」输入框里那一块蓝）：「多选每项添加的时候为什么会有蓝色的底色，需要去掉。」
+
+本次完成（先复现取证、再改）：
+
+- **复现**：隔离实例里打开 `多选` 字段的「编辑字段」→ 点「添加选项」→ 读焦点输入框：新行 `value="选项 6"`、`selectionStart=0 / selectionEnd=4`、`selectionText="选项 6"` ⇒ **整块被全选**，屏幕上就是系统蓝（连点两次分别得到 `选项 6` / `选项 7`，每次复现）。
+- **根因**：260929 那批（`681f148`）为「回车 = 当前选项完成 → 切下一个；已是最后一个才新建」加的 `focusOptionInput` 里带 `el.select()`（`el.focus(); el.select();`），配合 `addOptionRow` 预填的默认名 `选项 N` ⇒ 新行一出现就是「全选的默认名」。选区是**系统配色**，不属于我们的令牌、也没法只把它隐藏（要么全选、要么不全选）。
+- **改法**（把「键入即新值」从「靠选区」改成「靠输入框本来就是空的」）：
+  1. `focusOptionInput`：`el.focus(); el.select()` → `el.focus(); el.setSelectionRange(el.value.length, el.value.length)`（只聚焦、光标落末尾，**与鼠标点进这个输入框完全一致**）。
+  2. `addOptionRow`：新选项 `name: ""`（原先 `"选项 " + (prev.length + 1)`），默认名改由输入框 `placeholder={"选项 " + (index + 1)}` 展示。
+  3. `save()`：新增 `nextOptions`，把**空名按位置兜底成「选项 N」**（其余行原样返回、不产生差异）；新增字段与保存字段两条路径都改用 `nextOptions`。
+  4. `bitableEditor.css` 补 `.bt-input::placeholder { color: var(--lake-text-4) }`（浏览器默认占位灰不是令牌；与 kit.css / overlay.css 的 placeholder 口径一致）。
+- **刻意不动**：`focusCell`（表格单元格的键盘导航/落格）保留 `el.select()` —— 那套的既有语义是「落到某格即可直接覆盖」，用户报的是**选项编辑**，不能顺手改网格。输入框的**焦点环**也保留（可访问性；用户说的是「底色」= 选区填色，不是描边）。
+
+数据结构/接口变化：无（不改正文格式、不加持久化字段；选项名兜底只发生在 `save()` 的入参上）。
+
+改动文件：`src/features/bitable/BitableEditor.tsx` · `src/features/bitable/bitableEditor.css` · `src/features/bitable/bitableEditorMount.test.ts`（+1 护栏） · `src/styles/cssLayers.test.ts`（`bitableEditor.css` 基线 1055 → 1056） · `HANDOFF.md` · 本文件。
+
+验证结果：
+
+- `tsc --noEmit`：通过
+- `vitest`：**1407 passed / 16 skipped**（+1 = 本条护栏）
+- `check:core`：0 违规
+- 桌面构建：通过；移动构建：通过
+- `ui-metrics`：hex=0 / rgb=0 / `!important`=9 / 未定义令牌=0
+- `cssLayers + uiPrimitives`：通过
+- `git diff --check`：通过
+- **CDP 真实端点**（隔离 userData，`vite build` 后 `Page.reload` + 真实点开文档 → 列菜单「编辑列」）：
+  - 点「添加选项」→ 新行 `value=""`、`placeholder="选项 6"`、`selection=[0,0]`（**无选区**）、`::placeholder` 实色 = `rgb(154,161,170)`（`--lake-text-4`）。截图核对：新行是灰字占位 + 光标在行首 + 正常焦点环，蓝块消失。
+  - `Input.insertText("苹果")` → 该行 `value="苹果"`、`sel=[2,2]`（键入即选项名，没有被追加成「选项 6苹果」）。
+  - 再点一次「添加选项」留空不填 → 点「确定」→ 落盘 `options` 尾部 = `苹果`（键入的）+ `选项 7`（空名兜底），其余 5 个选项字节不变。
+
+遗留问题：
+
+- 未提交（项目红线：代码批次需用户验收后再处理提交/合并）。
+- `focusCell` 的 `select()` 保留（见上「刻意不动」）；若用户也希望网格落格不要全选，需另行确认——那不是本条范围。
+- 选项**重命名既有行**时仍是普通文本编辑（点进去光标落末尾，要整段替换可 ⌘A），不再有「自动全选」这个便利。
+
+下一步：
+
+- 等用户验收本条（含同日上一条「表头新增字段＋贴左列」）；D01/D02 仍按 260929 决定暂缓。
+
+### 2026-09-30 · 列宽自由设置（不再看内容）+ 行高不被内容撑高 + 下限 40
+
+用户（附图：附件列被 3 个 chip 撑出很宽的一列）：「附件类型的列左右宽度不能设置下限，也需要能自由拉长和缩短。我测试了一下，所有的列都是根据内容长度算的左右宽度，我需要能自由设置了，展示不下就截断省略。并且不能为了展示内容而自动扩大行高。例如日期缩短了就会导致换行，而行高变大。」随后追加：「可以设定一个比较小的下限值。」
+
+本次完成（先复现取证、再改）：
+
+- **复现（隔离实例 + CDP，往隔离副本注入长文本/长附件名）**：
+  - 列宽：附件字段 `width` 明明是 180，**渲染成 413**（3 个中文文件名的 chip 顺着排开）；把带 `2026-09-07` 的日期列拖到 80 之后，列又「自己」回到 109（nowrap 生效前的最小内容宽）。
+  - 行高：日期列拖到 80 ⇒ `2026-09-07` 折行，**记录行 36 → 48**。
+- **根因**：① 网格是 `table-layout: auto`，此时 `<col style="width">` 只是「**至少**这么宽」的提示，**内容更宽就把列撑开**；② `td` 上的 `height` 同样是**最小值**，内容折行就撑高。（`td { overflow: hidden }` 早就有，但 **Chrome 对 table cell 不做 overflow 裁剪**，指望它没用。）
+- **候选方案实测对比**（同一份数据，注入 CSS 量同一个格子）：
+  | 方案 | 结果 |
+  | --- | --- |
+  | `table-layout: fixed` | **无效**：表格 `width: max-content` 时 Chrome 不走 fixed 算法，附件列仍 413 |
+  | `contain: inline-size` 加在 `th/td` | **无效**：Chrome 不对 table cell 生效 |
+  | **`max-width` 加在 `th/td`** | **有效**：附件列 413 → **180**，其余列不动（列宽终于由数据说了算） |
+- **改法**：
+  1. **列宽以字段 `width` 为准**：新增 `columnWidth(field) = (field.width ?? DEFAULT_COL_WIDTH) + "px"`，给**四处**格子写行内 `max-width` —— 表头 `th`、记录格 `td`（与文本颜色合并成一个 style）、分组统计格、底栏统计格。漏一处就会被那一处的长内容重新撑开。
+     - 为什么用行内 style：宽度是**正文数据**（每列一个值），CSS 无法按列取值；`<col>` 上的 `max-width` 被浏览器忽略。表尾「新增字段」那格是**吸收剩余宽度**的自动列，**不能**给它 max-width（给了列宽就会摊到数据列上）。
+  2. **行高与内容无关**：`.bt-grid th, .bt-grid td { white-space: nowrap }`（永不折行）；日期/时间格补 `.bt-date-trigger > span { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap }`；文本格 `.bt-cell-input` 补 `text-overflow: ellipsis`（从硬裁改成省略号）。
+  3. **下限 80 → 40**（用户追加口径），上限仍是 640。
+
+数据结构/接口变化：无（不改正文格式；`field.width` 本来就是既有字段，只是现在**真的**说了算）。
+
+改动文件：`src/features/bitable/BitableEditor.tsx` · `src/features/bitable/bitableEditor.css` · `src/features/bitable/bitableEditorMount.test.ts`（+1 护栏） · `src/styles/cssLayers.test.ts`（`bitableEditor.css` 基线 1056 → 1062） · `HANDOFF.md` · 本文件。
+
+验证结果：
+
+- `tsc --noEmit`：通过
+- `vitest`：**1408 passed / 16 skipped**（+1 = 本条护栏）
+- `check:core`：0 违规
+- 桌面构建：通过；移动构建：通过
+- `ui-metrics`：hex=0 / rgb=0 / `!important`=9 / 未定义令牌=0
+- `cssLayers + uiPrimitives`：通过
+- `git diff --check`：通过
+- **CDP 真实端点**（隔离 userData，`vite build` 后 `Page.reload` + 真实点开文档）：
+  - 拖拽：日期 −200 ⇒ 列宽 **40**（下限生效）；附件 +260 ⇒ **340**；文本 +120 ⇒ **300**；附件 −600 ⇒ **40**。**每次拖动列宽都精确等于设定值，行高恒为 36**。
+  - 长内容：附件字段 `width=180` 时列宽 **180**（原来 413），chip 在列内裁切不越界；文本列 200px 时长文本出**省略号**（`这是一个很长的文本内容…`）；日期列 120px 显示 `2026-09-07` + 图标、40px 时只留图标。
+  - 分组态（把 `views[0].groups` 设为单选字段）：分组行/记录行**右缘逐列完全一致** `[81,281,461,641,761,941,1121,1301,1481,1661,1841,2021,2201,2381,2421]`，分组行高与记录行高同为 **36**。
+  - 截图核对：分组视图里长文本省略、附件裁切、行高整齐。
+
+遗留问题：
+
+- 未提交（项目红线：代码批次需用户验收后再处理提交/合并）。
+- **chip / 缩略图 / 星级** 这类格子没有「省略号」语义，超出就是**裁切**（不是 `…`）；附件格也没有云端那种 `+N` 溢出计数（那是另一个交互，需要时再立项）。
+- 行内 `max-width` 是本仓 §3#14「不写内联样式」的**受控例外**（宽度来自正文数据、无 CSS 等价写法），已记入 HANDOFF §4 与本节。
+- 只改了**桌面**网格；移动端多维表是只读的独立样式（`.mbt-*`），本批未动。
+
+下一步：
+
+- 等用户验收同日三条（表头＋贴左列 / 选项编辑去自动全选 / 本条）；D01/D02 仍按 260929 决定暂缓。
+
+### 2026-09-30 · 附件按「文档类型图标」展示（用户问「我们是否有对应的图标样式」）
+
+用户（图 1 = 云端附件列：一行 4 个**小类型图标**、展开面板是**大类型图标** + 名称；图 2 = 云端 hover 出的**深色名称气泡**）：
+「附件不展示名称和预览了，直接展示文档类型吧…行单元格里是小类型图标且鼠标放上去自动弹出名称…展开的弹窗里是大类型图标，例如 PDF，图片，doc 等各类图标。当然我们的交互形式不变，只是改名称为图标，更直观。**我们是否有对应的图标样式可以使用。**」
+
+**先回答「有没有现成图标」：没有。**（按 AGENTS §2 的三级检索走完）
+
+- ⓪ vendored 内核 `vendor/lakex-doc-react/**`：`ne-card[data-card-name='file'] .ne-card-file-icon` 只有一个通用 `note-file`，而该 symbol 内核自己都缺（我们 `ensureNoteFileIcon()` 自补过，见 LAKEX-CONTRACT §三）。
+- ① 运行时实测：页面上 **325 个 `symbol[id]`**，按 `file|pdf|doc|ppt|word|excel|zip|video|audio|attach|paper` 过滤**只命中 `icon-card-mention-doc` 一个**。
+- ⇒ 云端那套彩色「页 + 类型字形」属于**语雀 App 自己的 sprite**，内核不提供；`docs/LAKEX-CONTRACT.md` 已回填这条，避免后人再翻一遍。
+- 结论：**用自己的图标库**（本仓全站用 lucide-react 线性图标）按类型分色。
+
+本次完成：
+
+1. **类型判定收敛到 core（单一事实源）**：`src/core/assetNaming.ts` 新增 `AssetFileKind`（image/pdf/doc/sheet/slide/archive/audio/video/code/text/file）+ `ASSET_FILE_KIND_EXTS` + `fileKindOf(nameOrExt)`（吃文件名或裸扩展名，大小写归一，未知回落 `file`；图片仍走既有的 `isImageExtension` 清单，不重复维护）。桌面/移动端将来共用同一口径。
+2. **图标组件**：`src/features/bitable/FileKindIcon.tsx`（lucide：FileImage / FileText / FileType / FileSpreadsheet / Presentation / FileArchive / FileAudio / FileVideo / FileCode / File）+ 新样式文件 `bitableFileIcon.css`（已登记 cssLayers：FILES + 基线 33）。
+3. **配色进主题令牌**：`themes/base.css` 新增 11 个 `--lake-file-*`（内容/品牌色，与 `--lake-board-canvas-*` 同处「主题无关令牌」区，不按主题分叉）；组件 CSS 里**没有任何颜色字面量**（护栏断言）。
+4. **单元格**（`AttachmentChipList`）：附件字段 → `.bt-file-chip` 小类型图标按钮（22px 命中区），**不再显示文件名、不再显示缩略图**；hover 出**名称气泡**（表面用 kit 的 `.ln-tip`，定位用 `usePopoverPosition`，`position: fixed` ⇒ 不会被 `.bt-grid-wrap` 的滚动容器裁掉；`aria-label` 保留可读性）。点击 = 打开/预览本单元格图片，**交互与原来完全一致**。
+5. **展开面板**（`AttachmentExpandPopover` 卡片）：非图片的「扩展名文字」与图片缩略图，在**附件字段**下统一换成 **46px 大类型图标**；名称仍在卡片下方（与云端图 1 一致）。
+6. **图片字段分叉**：`AttachmentCell` 的 `imageOnly` 决定走哪套 —— **图片字段仍是缩略图**（那个字段的语义就是看图），附件字段才是类型图标。`AttachmentChipList` 新增同名 prop 承接。
+
+数据结构/接口变化：无（不改正文格式、不加持久化字段）；新增 core 导出 `fileKindOf` / `AssetFileKind`。
+
+改动文件：`src/core/assetNaming.ts`(+test) · `src/features/bitable/FileKindIcon.tsx`(新) · `bitableFileIcon.css`(新) · `bitableCells.tsx` · `src/styles/themes/base.css` · `bitableEditorMount.test.ts`(+1 护栏) · `src/styles/cssLayers.test.ts`(登记新文件) · `docs/LAKEX-CONTRACT.md` · `HANDOFF.md` · 本文件。
+
+验证结果：
+
+- `tsc --noEmit`：通过
+- `vitest`：**1410 passed / 16 skipped**（+2 = core `fileKindOf` 用例 + 本条护栏）
+- `check:core`：0 违规
+- 桌面构建：通过；移动构建：通过
+- `ui-metrics`：hex=0 / rgb=0 / `!important`=9 / 未定义令牌=0（新令牌都有定义）
+- `cssLayers + uiPrimitives`：通过（新文件 `bitableFileIcon.css` 33 条已登记）
+- `git diff --check`：通过
+- **CDP 真实端点**（隔离 userData，`vite build` 后 `Page.reload` + 真实点开文档）：
+  | 项 | 实测 |
+  | --- | --- |
+  | 附件格 | 3 个 `.bt-file-icon`（`--pdf` / `--doc` / `--doc`）、**0 个 `<img>`**、0 个文件名按钮 |
+  | 图片格（同表另一列） | 3 个缩略图、**0 个类型图标**（`imageOnly` 分叉生效） |
+  | 行高 | 36（与改动前一致） |
+  | hover 名称气泡 | `.ln-tip bt-file-tip`，`text=【期神笔记】2024.pdf`，`background=rgb(58,74,104)`（深色，与云端图 2 同调），位置在图标上方 |
+  | 展开面板 | 3 个大图标（46px，`--pdf` / `--doc` / `--doc`）+ 名称行，缩略图 0、扩展名文字 0 |
+
+遗留问题：
+
+- 未提交（项目红线：代码批次需用户验收后再处理提交/合并）。
+- **刻意没动的三处**（用户只说了「附件」，其余等他点名）：看板卡片上的图片缩略图、关联选择器整表里的图片缩略图/附件 chip、移动端只读的附件渲染（移动端是 `.mbt-*` 独立样式）。
+- `pdf` 与 `txt` 共用文件页字形（靠红 vs 灰区分）；若要更细的字形区分再加。
+- hover 气泡是**本仓第一处自定义 tooltip**：表面用 kit 现成的 `.ln-tip`、定位用 `usePopoverPosition`（都在既有单一来源里），不是第三套浮层实现。
+
+下一步：
+
+- 等用户验收同日四条（表头＋贴左列 / 选项编辑去自动全选 / 列宽自由设置+行高 / 本条）；D01/D02 仍按 260929 决定暂缓。
+
+### 2026-09-30 · 跟进两条：图片格 hover 同名气泡 + 移动端同步换图标
+
+用户：「图片有一个改动，鼠标放上去展示名称可以和附件一样。」「图片不动，图片是用来看的，移动端可以换。」「2、你哪里来的图标资源，要不要找找资源内置一套。3、统一就行。」
+
+本次完成：
+
+1. **桌面：hover 名称气泡两种字段共用**（回应「统一就行」）——缩略图与类型图标走**同一套**气泡实现（同一个 `tip` state、同一个 `.ln-tip` 表面、同一个 `usePopoverPosition`）；顺手**删掉 `<img>` 上的原生 `title`**，否则系统 tooltip 会和自定义气泡同时冒出来。
+2. **移动端同步**（回应「移动端可以换」）：`MobileBitableViewer` 的 `AttachmentCell` 加 `imageOnly` 分叉 —— **附件字段** = `FileKindIcon` + 名称（触屏没有 hover，名称不能像桌面那样收进气泡，所以图标给类型、名字给内容）；**图片字段**仍是缩略图。样式只加 2 条（`.mbt-attachment-file.is-kind` / `.mbt-attachment-name`），图标配色仍走 `--lake-file-*`（移动端 `main.tsx` 本来就 import 了 `themes/*`，令牌在移动端同样解析）。
+
+关于「图标资源要不要内置一套」（用户提问）——**结论：不引第三方图标集**，理由：
+
+- 现有图标来自 `lucide-react`（**本来就在依赖里**，全站同一套线性图标），不新增依赖、不新增资产文件、无额外许可问题；
+- lucide 的 `file-*` 家族本身就是「页 + 类型字形」，与云端同一套视觉语言，只是描边而非填充；
+- 第三方 file-icon 集（vscode-icons / file-icons 之类）是**填充 + 品牌色**风格，会与我们的线性设计系统打架，且要引依赖 + 处理许可；
+- 云端那套（彩色页 + PDF/Office 字形）**不可用**：内核 sprite 实测只有 `icon-card-mention-doc` 一个相关 symbol，其余在语雀 App 自己的 sprite 里（已回填 LAKEX-CONTRACT）。
+
+验证结果（CDP 真实端点 + Android 模拟器）：
+
+- `tsc --noEmit`：通过
+- `vitest`：**1411 passed / 16 skipped**（+1 = 移动端附件分叉用例）
+- `check:core`：0 违规；桌面 / 移动构建：通过；`ui-metrics`：hex=0 / rgb=0 / `!important`=9 / 未定义令牌=0；`cssLayers`+`uiPrimitives`、`git diff --check`：通过
+- **桌面**（隔离 userData）：hover 图片缩略图 → `.bt-file-tip` 文本 `MOON0005.jpg`、深色底；附件格仍是类型图标；行高 36。
+- **Android 模拟器**（AVD `lake_mobile`，Pixel6/API36；`android-build.sh --sync --install` → `emu-up.sh --no-window` → `emu-cdp.sh 9335` → 往 App DB 写一条 bitable 笔记再重启）：附件格 = **3 个类型图标**（`bt-file-icon--pdf/--doc/--image`）+ 名称、**0 张缩略图**；图片格 = **1 张缩略图**、0 图标；图标色实测 `rgb(217,74,61)` / `rgb(47,111,208)` / `rgb(217,138,0)`（= `--lake-file-*` 令牌值，说明移动端令牌链同样生效）。截图核对。
+
+遗留问题：
+
+- 未提交（项目红线：代码批次需用户验收后再处理提交/合并）。
+- **HANDOFF §8 是移动端会话的维护范围，本批没有动它**：§8「多维表只读」那条仍写着附件/图片都是缩略图，需要移动端会话按本条更新（已记在 §12）。
+- 移动端附件格**保留文件名**（触屏无 hover）——若希望移动端也只留图标，说一声。
+- 看板卡片、关联选择器整表里的附件渲染**仍未改**（用户未点名）。
+
+下一步：
+
+- 等用户验收同日五条；D01/D02 仍按 260929 决定暂缓。
+
+### 2026-09-30 · 展开面板的文件名：截断时 hover 出全名
+
+用户（附图：面板卡片下方「【期神笔记】2…」被省略号截掉）：「加一个优化，展开之后文件名这里，有可能看不全，也加一个弹窗展示完整名称。」
+
+本次完成：
+
+- **气泡抽成单一来源** `useNameTip()`（`bitableCells.tsx`）：表面仍是 kit 的 `.ln-tip`、定位仍是 `usePopoverPosition`；**单元格 chip、展开面板文件名、图片缩略图三处共用同一个实现**（不再各写一份）。
+- **面板文件名**：`tip.show(name, el, true)` —— 第三个参数 `whenTruncated` 让它**只在真的被省略时才弹**（判据 `anchor.scrollWidth > anchor.clientWidth`，在 hover 那一刻实测）。没截断时弹出来只是同义重复，所以不弹。
+- 同时**删掉 `.bt-attach-card-name` 上的原生 `title`**，否则系统 tooltip 和自定义气泡会同时冒出来（与单元格那次同一处理）。
+
+数据结构/接口变化：无（纯展示层）。
+
+验证结果（CDP 真实端点，隔离 userData）：
+
+- 面板 3 个名字实测 `scrollWidth/clientWidth` = **121/89、103/89、159/89**（三个都截断）→ hover 第一个 ⇒ `.bt-file-tip` 文本 `【期神笔记】2024.pdf`（完整名，深色气泡，不被面板边界裁掉）。
+- 把面板拖宽到 **932px** 后第二个名字**不再截断**（108/108）→ hover 它 ⇒ 气泡**不出现**（探针返回 `null`）⇒ `whenTruncated` 分支正确。
+- `tsc` / `vitest 1411 passed / 16 skipped` / `check:core` / 双端构建 / `ui-metrics` / `cssLayers`+`uiPrimitives` / `git diff --check`：全绿。
+
+遗留问题：未提交（待用户验收）；面板里的**重命名输入框**没有气泡（输入框本身可横向滚动，不需要）。
+
+下一步：等用户验收同日各条；D01/D02 仍按 260929 决定暂缓。
+
+### 2026-09-30 · 关联字段选择器整表：与表格收敛成同一套附件渲染
+
+用户（附图：关联弹窗整表里，附件列还是「📎 【期神笔记】2024.pdf / 📎 2月18日三合一.doc / +1」）：
+「关联字段弹窗展示里还没有看到我们新的改动，这两处不是同一套代码吗？能做成一套吗？」
+
+**确实不是一套**（用户判断准确）：关联选择器自己养了一份渲染 —— `.bt-rel-thumb`（32px 缩略图）+ `.bt-rel-file`（`Paperclip` 图标 + 文件名 chip，非图片超过 2 个折成 `+N`）；表格走的是 `AttachmentChipList`。
+
+本次完成（真的做成一套）：
+
+- `AttachmentChipList` 从模块私有改为 **export**（它就是「附件值展示」这唯一一套实现：附件字段 = 类型图标、图片字段 = 缩略图，都带 hover 名称气泡）。
+- `BitableRelationPicker.PickerCellValue` 的图片/附件分支改为直接渲染 `<AttachmentChipList ... imageOnly={field.type === "image"} />`，并删掉自养那套：`PICKER_THUMB_PX` / `PICKER_FILE_MAX` / `.bt-rel-thumb` / `Paperclip` 全部移除（`.bt-rel-file` 只留给「没有 noteId」的极端兜底）。
+- **交互也一并对齐**：点图标 = 预览本格图片 / 用系统应用打开（与表格同一动作，非图片在表格里本来就是"打开"）。因此该 wrapper `stopPropagation` —— 但 `.bt-rel-files` 特意用 `inline-flex`，**只包住图标本身**，行的空白处仍可点选勾选；`max-width/overflow` 把多余图标裁在格内（不让它溢到下一列）。
+
+验证结果：
+
+- `tsc` / `vitest **1412 passed / 16 skipped**`（+1 条「选择器复用同一套」护栏，260929 那条旧护栏同步改写）/ `check:core` 0 违规 / 桌面 + 移动构建 / `ui-metrics`（hex=0 rgb=0 !important=9 未定义令牌=0）/ `cssLayers`+`uiPrimitives` / `git diff --check`：全绿。
+- **CDP 真实端点**（隔离 userData，打开关联字段的选择器）：附件列 = **3 个类型图标**（`bt-file-icon--pdf/doc/doc`）、**0 个旧 chip / 旧缩略图**；图片列 = 3 张缩略图；hover 图标 → `.bt-file-tip` 文本 `【期神笔记】2024.pdf`，**盖在对话框之上**正常可见（截图核对）。
+- `cssLayers` 基线：`bitableRelationPicker.css` **120 → 113**（自有那套删除，只允许变小的方向）。
+
+遗留问题：未提交（待用户验收）；**看板卡片**的图片缩略图仍未与这套统一（用户未点名，要的话把同一套搬过去即可）。
+
+下一步：等用户验收；D01/D02 仍按 260929 决定暂缓。
+
+### 2026-09-30 · 看板卡片也并进同一套（用户选 A）＋「也展示图片名」
+
+承接上一条：我列了「还剩下看板卡片一份独立实现」，并问卡片上要不要显示文件名。
+用户答「**A吧**」（卡片也换成同一套），随后追加「**也展示图片名**」。
+
+本次完成：
+
+1. **看板卡片改用 `AttachmentChipList`**：附件字段现在出**类型图标**（之前 `if (images.length === 0) return null` ⇒ 只有 PDF/Word 的记录在卡片上**什么都不显示**，现在看得见），图片字段仍是缩略图。删掉卡片自养的 `KANBAN_THUMB_PX` / `thumbUrl` / `imageAttachmentsOf` 与 `.bt-kanban-thumb`（CSS 基线 109→104；`.bt-kanban-thumbs` 更名 `.bt-kanban-files`）。
+2. **`showNames` 变体**（回应「也展示图片名」）：`AttachmentChipList` 新增 `showNames` —— 图标/缩略图后面跟上文件名。**表格格子太窄**所以不传（名字仍在 hover 气泡里）；**卡片有地方放**所以传。名字超长省略号 + **真被截断时 hover 出全名**（与展开面板同一条 `whenTruncated` 口径）。
+3. **「打开一条附件」也收成一处**：新增 `openBitableAttachment(noteId, attachment)`（`bitableAssetUrl` + `openAssetEntry` 那一句），表格单元格、关联选择器、看板卡片三处共用；`BitableEditor.openAsset` 与选择器都改走它。
+4. 卡片上点图标 = 打开/预览（与表格同一动作），wrapper `stopPropagation` ⇒ 不会顺带打开记录详情；卡片空白处仍开详情。
+
+验证结果（CDP 真实端点，隔离 userData；往 doc 注入一个看板视图 + 分组字段后打开）：
+
+- 卡片：图片行 = **3 张缩略图 + 3 个文件名**（`MOON0005.jpg` / `MOON0006.jpg` / `MOON0012.jpg`）；附件行 = **3 个类型图标**（`--pdf/--doc/--doc`）+ 3 个文件名；旧 `.bt-kanban-thumb` **0** 个。
+- 长名 `3_坚果哥复盘50个交割单.doc` 在卡上省略号截断，hover 出全名气泡。
+- `tsc` / `vitest **1414 passed / 16 skipped**`（+2 护栏，另有 4 条旧护栏随实现改写）/ `check:core` / 双端构建 / `ui-metrics`（hex=0 rgb=0 !important=9 未定义令牌=0）/ `cssLayers`+`uiPrimitives` / `git diff --check`：全绿。
+
+遗留问题：
+
+- 未提交（待用户验收）。
+- 卡片文件名宽度上限 150px（超出省略 + hover 全名）——如果想让名字更长/更短，说一声。
+- 移动端没有看板/关联选择器，不受本批影响。
+
+下一步：等用户验收；D01/D02 仍按 260929 决定暂缓。
+
+### 2026-09-30 · 卡片不显示名称 + 画册卡片并进同一套
+
+用户（附图：画册卡片里「附件　【期神笔记】2024.pdf, 2…」是一串文件名）：
+「1、看板视图不展示名称了，直接图标或者缩略图吧。2、图2画册视图的附件也要改。」
+
+（承接上一条：我先按「也展示图片名」给卡片加了文件名；用户看到效果后改口径 —— 以最新口径为准。）
+
+本次完成：
+
+1. **撤销 `showNames`**：`AttachmentChipList` 回到「附件字段 = 类型图标、图片字段 = 缩略图」+ hover 名称气泡，**卡片上不再常驻文件名**（连带删掉 `.has-name` / `.bt-attachment-chip-name` 那 14 条 CSS）。看板卡片实测：3 缩略图 + 3 类型图标、**0 个常驻文件名**。
+2. **画册卡片并进同一套**：`BitableGalleryView` 的卡片字段里，附件类字段不再走 `bitableFieldText`（那是一串用逗号连的文件名），改为 `AttachmentChipList`（附件字段 = 类型图标、图片字段 = 缩略图），空字段不上卡。实测：附件行 = 3 个类型图标。
+3. **卡片附件行容器收成一处**：新增 `.bt-card-files`（定义在 `bitableFileIcon.css`），看板与画册共用；删掉 `.bt-kanban-files`（CSS 基线 109→100；`bitableFileIcon.css` 33→37）。
+
+至此「附件/图片怎么显示」在全仓只有**一个实现**：表格单元格、记录详情、表单、关联选择器、看板卡片、画册卡片、展开面板 —— 名称一律走 hover 气泡（展开面板另有大图标 + 卡下名称，那是它自己的语义）。
+
+验证结果（CDP 真实端点，隔离 userData；往 doc 注入看板 + 画册视图后分别打开）：
+
+| 位置 | 实测 |
+| --- | --- |
+| 看板卡片 | 图片字段 3 张缩略图、附件字段 3 个类型图标，**0 个常驻文件名**（`chipNames: 0`） |
+| 画册卡片 | 附件行 = 3 个类型图标（此前是「【期神笔记】2024.pdf, 2…」文本） |
+| 关联选择器 | 附件列 3 个类型图标（上一批已收敛） |
+
+门禁：`tsc` / `vitest **1414 passed / 16 skipped**`（+2 护栏，另有 5 条旧护栏随实现改写）/ `check:core` 0 违规 / 桌面 + 移动构建 / `ui-metrics`（hex=0 rgb=0 !important=9 未定义令牌=0）/ `cssLayers`+`uiPrimitives` / `git diff --check` —— 全绿。
+
+遗留问题：未提交（待用户验收）；卡片上名称只剩 hover 气泡（触屏没有看板/画册；移动端只有只读表格视图）。
+
+下一步：等用户验收；D01/D02 仍按 260929 决定暂缓。
 
 ## 14. 会话执行模板
 

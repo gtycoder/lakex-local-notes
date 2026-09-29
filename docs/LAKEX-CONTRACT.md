@@ -776,6 +776,12 @@ symbol 无一个 `note-*`；语雀页面里的 `#ne-note-image` / `#ne-note-chec
 缺的那枚 symbol 我们**自补**：`ensureNoteFileIcon()` 往 `<body>` 注入一个同 id 的 `<symbol>`（lucide 纸夹
 路径）—— `use` 的片段 id 在**同一文档**内解析，所以不需要任何内核 API 或补丁。多实例幂等（按 id 判重）。
 
+**顺带实测（260930）：内核里没有「文档类型图标」。** 页面 sprite 共 **325 个 `symbol[id]`**，
+按 `file|pdf|doc|ppt|word|excel|zip|video|audio|attach` 过滤只命中 `icon-card-mention-doc` 一个；
+`ne-card[data-card-name='file'] .ne-card-file-icon` 用的也只是一个通用 `note-file`（就是上面自补的那枚）。
+⇒ 云端附件那种「彩色页 + 类型字形（P / 图片 / doc…）」图标属于**语雀 App 自己的 sprite**，内核不提供，
+**别再去 bundle 里翻**；要用就用自己的图标库（本仓用 lucide-react，见 `src/features/bitable/FileKindIcon.tsx`）。
+
 **四、语雀云端小记的两种版式（对照基线，260919 实测）**
 
 - **小记视图**：左＝写作卡（工具条 = 图片/待办/书签/附件；右上角展开）+ 发布行，右＝卡片流（时间 + 正文 + 勾选框）。
