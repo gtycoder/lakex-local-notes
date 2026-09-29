@@ -303,7 +303,11 @@ describe("多维表编辑器护栏", () => {
     expect(DOC).toMatch(/export function statsForField/);
     expect(DOC).toMatch(/export function statForField/);
     expect(EDITOR).toMatch(/bt-stat-row/);
-    expect(EDITOR).toMatch(/computeColumnStat\(field, shownRecords, stat\)/);
+    // 统计格是**共用组件**（分组头与底部汇总行同一实现，禁止各写一套）
+    expect(CARDS).toMatch(/export function StatCell/);
+    expect(EDITOR).toMatch(/<StatCell /);
+    expect(EDITOR.match(/<StatCell /g)?.length ?? 0).toBe(3);   // 分组头首列 + 分组头其余列 + 底部汇总行
+    expect(EDITOR).not.toMatch(/"—"/);   // 未配置不再显示横杠
     expect(EDITOR).toMatch(/const setColumnStat = /);
     expect(EDITOR).toMatch(/setStatFor\(\{ fieldId, anchor \}\)/);
     expect(VIEWCSS).toMatch(/\.bt-stat-row td \{/);
@@ -319,9 +323,13 @@ describe("多维表编辑器护栏", () => {
     // 分组汇总行固定「低」档 36px，不看 --bt-row-h
     expect(VIEWCSS).toMatch(/\.bt-group-cell \{[^}]*height: 36px/);
     expect(VIEWCSS).toMatch(/\.bt-group-stat \{[^}]*height: 36px/);
-    // 每一列都要有汇总位：未配置统计的列给「统计」占位入口
-    expect(EDITOR).toMatch(/bt-group-stat-add/);
-    expect(VIEWCSS).toMatch(/\.bt-group-stat-add \{/);
+    // 每列都有汇总位：**只有第一列**默认「记录总数」，其余默认空白（不出现「统计」字样，hover 才显形）
+    expect(EDITOR).toMatch(/statForField\(activeView, headField\.id\) \?\? "count"/);
+    expect(VIEWCSS).toMatch(/\.bt-stat:not\(\.has-stat\)[^{]*\{[^}]*opacity: 0/);
+    expect(VIEWCSS).toMatch(/\.bt-stat:not\(\.has-stat\):hover[^{]*\{[^}]*opacity: 1/);
+    // chip 外观：白底 + 极浅边框 + 右对齐 + ▾（对齐云端）
+    expect(VIEWCSS).toMatch(/\.bt-group-row \.bt-group-stat, \.bt-stat-row \.bt-stat-cell \{[^}]*background: var\(--lake-bg-panel\)/);
+    expect(VIEWCSS).toMatch(/\.bt-stat \{[^}]*justify-content: flex-end/);
     // 状态栏上移让位（多维表文档专属变体）
     expect(CHROME).toMatch(/\.document-statusbar\[data-doc-kind="bitable"\] \{/);
     // 列选中：点列外任意处即清（否则高亮残留）

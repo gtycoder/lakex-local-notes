@@ -16,7 +16,7 @@ import { withAssetWidth } from "../../core/assetUrl.js";
 import { extOf, isImageExtension } from "../../core/assetNaming.js";
 import "./bitableFieldCells.css";
 import { native } from "../../lib/native.js";
-import { ATTACHMENT_GRID, BITABLE_FIELD_TYPES, BITABLE_FIELD_TYPE_LABEL, BITABLE_OPTION_PALETTE, BITABLE_PROGRESS_MAX, BITABLE_RATING_MAX, attachmentGridColumns, bitableAttachments, bitableDisplayValue, bitableFieldText, isKnownFieldType, localDateString, optionChipStyle, optionColorHex, type BitableAttachment, type BitableField, type BitableFieldOption, type BitableRecord } from "../../core/bitableDoc.js";
+import { ATTACHMENT_GRID, BITABLE_FIELD_TYPES, BITABLE_FIELD_TYPE_LABEL, BITABLE_OPTION_PALETTE, BITABLE_PROGRESS_MAX, BITABLE_RATING_MAX, BITABLE_STAT_LABEL, attachmentGridColumns, bitableAttachments, bitableDisplayValue, bitableFieldText, computeColumnStat, isKnownFieldType, localDateString, optionChipStyle, optionColorHex, type BitableAttachment, type BitableField, type BitableFieldOption, type BitableRecord, type BitableStatType } from "../../core/bitableDoc.js";
 import type { CSSProperties } from "react";
 
 /** 图片字段只收图片：`accept` 只约束「选文件」，拖拽/粘贴必须自己拦，否则会静默写进非图片。
@@ -869,6 +869,28 @@ function LinkCell({ value, readOnly, onChange }: { value: unknown; readOnly: boo
         </button>
       )}
     </span>
+  );
+}
+
+/**
+ * 列统计格（**分组头与底部汇总行共用**，对齐云端 chip）：白底 + 1px 极浅边框 + 内容右对齐 + ▾。
+ * 未配置统计时内容 **opacity:0，仅 hover 显形**（云端口径：默认空白、不打扰，也不出现「统计」字样）；
+ * 点它打开该列的汇总方式选择器（选项严格按字段类型，来自 `statsForField`）。
+ */
+export function StatCell({ field, records, stat, readOnly, onPick }: {
+  field: BitableField;
+  records: BitableRecord[];
+  stat?: BitableStatType;
+  readOnly: boolean;
+  onPick: (anchor: HTMLElement) => void;
+}) {
+  return (
+    <button type="button" className={"bt-stat" + (stat ? " has-stat" : "")} disabled={readOnly}
+      title={stat ? BITABLE_STAT_LABEL[stat] : "选择汇总方式"}
+      onClick={(event) => { event.stopPropagation(); onPick(event.currentTarget); }}>
+      <span className="bt-stat-text">{stat ? BITABLE_STAT_LABEL[stat] + " " + computeColumnStat(field, records, stat) : "统计"}</span>
+      <ChevronDown size={12} className="bt-stat-caret" />
+    </button>
   );
 }
 

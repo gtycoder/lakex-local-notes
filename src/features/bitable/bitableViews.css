@@ -25,16 +25,22 @@
 .bt-group-label { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: var(--lake-font-weight-medium); }
 /* 首列统计：可被分组值压缩，**下限固定 80px**（260929 云端实测：分组值变长时该格 109 → 80，其余统计格不动）；
    压到底之后由分组值省略号兜底；tooltip 给全文。 */
-.bt-group-head-stat { flex: 0 1 auto; min-width: 80px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: right; color: var(--lake-text-3); }
+.bt-group-head-stat { flex: 0 1 auto; align-self: stretch; min-width: 80px; display: flex; align-items: center; justify-content: flex-end; padding: 0 8px; background: var(--lake-bg-panel); border-left: 1px solid var(--lake-border-2); color: var(--lake-text-3); }
 /* 层级缩进（T03 多级）：只动分组值，不缩统计格 */
 .bt-group-row.level-1 .bt-group-label { padding-left: 18px; }
 .bt-group-row.level-2 .bt-group-label { padding-left: 36px; }
 /* 分组汇总行固定用「低」档 36px，**不随 行高 设置变化**（用户 260929 定稿） */
-.bt-group-stat { height: 36px; padding: 0 8px; text-align: right; vertical-align: middle; font-size: 12px; color: var(--lake-text-3); white-space: nowrap; }
-/* 未配置统计的列也给一个「统计」占位入口（点它直接开该列口径），对齐云端每列一个汇总位 */
-.bt-group-stat-add { border: 0; background: transparent; padding: 0; font: inherit; color: var(--lake-text-4); cursor: pointer; }
-.bt-group-stat-add:hover { color: var(--lake-accent); }
-.bt-group-stat-add:disabled { cursor: default; }
+.bt-group-stat { height: 36px; padding: 0 8px; vertical-align: middle; }
+/* 统计格（分组头 / 底部汇总行**共用**）：白底 chip + 极浅竖分隔线，对齐云端 .lakex-viewer-grid-group-header-column。
+   限定「行 + 格」是因为分组行/汇总行本身带灰底（.bt-group-row td），白色必须落在「格」这一层（归属问题，不是覆盖）。 */
+.bt-group-row .bt-group-stat, .bt-stat-row .bt-stat-cell { background: var(--lake-bg-panel); border-left: 1px solid var(--lake-border-2); }
+/* StatCell 内容：右对齐 + ▾；**未配置时整块 opacity:0，仅 hover 显形**（云端口径：默认空白、不出现「统计」字样） */
+.bt-stat { display: flex; align-items: center; justify-content: flex-end; gap: 2px; width: 100%; height: 100%; border: 0; background: transparent; padding: 0; font: inherit; font-size: 12px; color: var(--lake-text-3); cursor: pointer; }
+.bt-stat-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bt-stat-caret { flex: 0 0 auto; }
+.bt-stat:not(.has-stat) .bt-stat-text, .bt-stat:not(.has-stat) .bt-stat-caret { opacity: 0; }
+.bt-stat:not(.has-stat):hover .bt-stat-text, .bt-stat:not(.has-stat):hover .bt-stat-caret { opacity: 1; }
+.bt-stat:disabled { cursor: default; }
 /* 「添加」统一为云端那颗圆形 + 钮（分组「加进本组」/ 表底「添加记录」/ 表头「新增字段」共用） */
 .bt-add-round { display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; border: 1px solid var(--lake-border-1); border-radius: var(--lake-radius-pill); background: var(--lake-bg-panel); color: var(--lake-text-2); cursor: pointer; }
 .bt-add-round:hover { color: var(--lake-accent); border-color: var(--lake-accent); }

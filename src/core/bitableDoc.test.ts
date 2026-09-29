@@ -588,9 +588,9 @@ describe("bitableDoc 数据模型", () => {
     // 分组 + 列统计：走同一取值口径
     const tree = groupRecordsTree(table, table.records, [{ fieldId: created.id }]);
     expect(tree.map((n) => n.label)).toEqual([localDateString(table.records[1].createdAt), localDateString(table.records[0].createdAt), localDateString(table.records[2].createdAt)]);
-    expect(statsForField(created)).toContain("range");
-    expect(computeColumnStat(created, table.records, "earliest")).toBe(localDateString(table.records[1].createdAt));
-    expect(computeColumnStat(created, table.records, "range")).toBe("5 天");
+    expect(statsForField(created)).toContain("dateRange");
+    expect(computeColumnStat(created, table.records, "earliestDate")).toBe(localDateString(table.records[1].createdAt));
+    expect(computeColumnStat(created, table.records, "dateRange")).toBe("5 天");
   });
 
   it("语义排序（T04）：单选/多选按选项顺序（空值恒最后），多条件稳定，字典序不受影响", () => {
@@ -642,23 +642,37 @@ describe("bitableDoc 数据模型", () => {
     expect(computeColumnStat(num, records, "empty")).toBe("1");
     expect(computeColumnStat(primary, records, "unique")).toBe("4");
     expect(computeColumnStat(status, records, "unique")).toBe("2");
-    expect(computeColumnStat(num, records, "filledPct")).toBe("75%");
-    expect(computeColumnStat(num, records, "emptyPct")).toBe("25%");
+    expect(computeColumnStat(num, records, "percentFilled")).toBe("75%");
+    expect(computeColumnStat(num, records, "percentEmpty")).toBe("25%");
+    expect(computeColumnStat(primary, records, "percentUnique")).toBe("100%");
     expect(computeColumnStat(num, records, "sum")).toBe("7");   // 空格子不能当 0
-    expect(computeColumnStat(num, records, "avg")).toBe("2.333");
+    expect(computeColumnStat(num, records, "average")).toBe("2.333");
+    expect(computeColumnStat(num, records, "median")).toBe("2");   // 1,2,4 → 中位 2
     expect(computeColumnStat(num, records, "min")).toBe("1");
     expect(computeColumnStat(num, records, "max")).toBe("4");
-    expect(computeColumnStat(date, records, "earliest")).toBe("2026-09-01");
-    expect(computeColumnStat(date, records, "latest")).toBe("2026-09-09");
-    expect(computeColumnStat(date, records, "range")).toBe("9 天");
+    expect(computeColumnStat(date, records, "earliestDate")).toBe("2026-09-01");
+    expect(computeColumnStat(date, records, "latestDate")).toBe("2026-09-09");
+    expect(computeColumnStat(date, records, "dateRange")).toBe("9 天");
+    expect(computeColumnStat(date, records, "monthRange")).toBe("1 月");   // 同月
     // 附件 / 关联走通用口径不崩；无值 → "—"
     expect(computeColumnStat(att, records, "filled")).toBe("0");
     expect(computeColumnStat(rel, records, "unique")).toBe("0");
     expect(computeColumnStat(num, [], "sum")).toBe("—");
     expect(computeColumnStat(num, [], "count")).toBe("0");
-    expect(statsForField(num)).toContain("sum");
-    expect(statsForField(primary)).not.toContain("sum");
-    expect(statsForField(date)).toContain("range");
+    // 每种字段的可选项**严格对齐云端 config 的 types 限制**
+    expect(statsForField(num)).toEqual(["count", "filled", "empty", "unique", "percentFilled", "percentEmpty", "percentUnique", "sum", "average", "median", "max", "min"]);
+    expect(statsForField(primary)).not.toContain("sum");       // 文本没有求和
+    expect(statsForField(date).slice(-4)).toEqual(["earliestDate", "latestDate", "dateRange", "monthRange"]);
+    const progressField = createBitableField("progress", "进度", "fld-prog-stat");
+    const boolField = createBitableField("boolean", "复选框", "fld-bool-stat");
+    expect(statsForField(progressField)).toEqual(["count", "filled", "empty", "unique", "percentFilled", "percentEmpty", "percentUnique", "max", "min"]);   // 进度：只有最大最小、无求和
+    expect(statsForField(boolField)).toEqual(["count", "checked", "unchecked", "percentChecked", "percentUnchecked"]);   // 复选框专属
+    // 复选框口径
+    const boxRecords = [1, 2, 3, 4].map((i) => { const rc = createBitableRecord("b" + i); rc.values[boolField.id] = i <= 3; return rc; });
+    expect(computeColumnStat(boolField, boxRecords, "checked")).toBe("3");
+    expect(computeColumnStat(boolField, boxRecords, "unchecked")).toBe("1");
+    expect(computeColumnStat(boolField, boxRecords, "percentChecked")).toBe("75%");
+    expect(computeColumnStat(boolField, boxRecords, "percentUnchecked")).toBe("25%");
     // 视图配置：未配置/不认识 → 不统计
     const view = createBitableView("grid", "g", "vew-stat");
     expect(statForField(view, num.id)).toBeUndefined();

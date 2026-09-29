@@ -23,12 +23,13 @@ import {
   BITABLE_FILTER_OPERATOR_LABEL, BITABLE_OPTION_COLORS, applyViewToRecords, bitableDisplayValue, bitablesToBody, defaultRecordValues, duplicateValues, optionColorHex,
   bitableAttachments, removeBitableAttachment, renameBitableAttachment, reorderBitableAttachments,
   createBitableField, createBitableRecord, createBitableView, createDefaultBitableTable, filterOperatorsFor,
-  BITABLE_MAX_GROUPS, BITABLE_STAT_LABEL, computeColumnStat, groupRecordsTree, isAttachmentLikeField, isImplementedViewType,
+  BITABLE_MAX_GROUPS, BITABLE_STAT_LABEL, groupRecordsTree, isAttachmentLikeField, isImplementedViewType,
   BITABLE_PROGRESS_MAX, BITABLE_RATING_MAX, kanbanGroupField, sortModeLabel, sortModesForField, statForField, statsForField,
   isKnownFieldType, newBitableId, orderedTableFields, parseBitableBody,
   type BitableAttachment, type BitableDoc, type BitableField, type BitableFieldType, type BitableFilterRule, type BitableGroupRule, type BitableRecord,
   type BitableGroupNode, type BitableRowHeight, type BitableSortMode, type BitableSortRule, type BitableStatType, type BitableTable, type BitableView, type BitableViewType,
 } from "../../core/bitableDoc.js";
+import { StatCell } from "./bitableCells";
 import { usePopoverPosition } from "../../hooks/usePopoverPosition";
 import { parseLocalAssetUrl } from "../../core/assetUrl.js";
 import { uploadLakeResource } from "../editor/resourceUpload.js";
@@ -1063,12 +1064,8 @@ export function BitableEditor({ noteId, content, visible, readOnly, onChange, ch
               <tbody>
                 {rowItems.map((item) => {
                   if (item.kind === "group") {
-                    /** 首列统计的文案（未配统计 → 本组记录数，对齐云端）。 */
+                    /** 首列统计 = 默认「记录总数」（云端口径：只有第一列有默认汇总，其余默认不展示）。 */
                     const headField = visibleFields[0];
-                    const headStat = headField ? statForField(activeView, headField.id) : undefined;
-                    const headText = !headField ? ""
-                      : headStat ? BITABLE_STAT_LABEL[headStat] + " " + computeColumnStat(headField, item.records, headStat)
-                        : item.records.length + " 条记录";
                     return (
                       <tr key={"g:" + item.key} className={"bt-group-row" + (item.level > 0 ? " level-" + item.level : "")} onClick={() => toggleGroup(item.key)}>
                         {/* 复刻云端：分组值与其**右侧首列统计**同处一格（index + 首列）——
@@ -1080,22 +1077,22 @@ export function BitableEditor({ noteId, content, visible, readOnly, onChange, ch
                               <ChevronRight size={13} className={"bt-group-caret" + (collapsedGroups.has(item.key) ? "" : " is-open")} />
                             </span>
                             <span className="bt-group-label" title={item.label}>{item.label}</span>
-                            {headField && <span className="bt-group-head-stat" title={headText}>{headText}</span>}
+                            {headField && (
+                              <span className="bt-group-head-stat">
+                                <StatCell field={headField} records={item.records} readOnly={readOnly}
+                                  stat={statForField(activeView, headField.id) ?? "count"}
+                                  onPick={(anchor) => setStatFor({ fieldId: headField.id, anchor })} />
+                              </span>
+                            )}
                           </div>
                         </td>
                         {/* 其余列仍按列显示**本组**的统计 */}
-                        {visibleFields.slice(1).map((field) => {
-                          const stat = statForField(activeView, field.id);
-                          return (
-                            <td key={field.id} className="bt-group-stat">
-                              {stat ? BITABLE_STAT_LABEL[stat] + " " + computeColumnStat(field, item.records, stat) : (
-                                /* 未配置统计的列也要有「汇总位」：占位按钮直接开该列统计口径（对齐云端每列一个「统计」） */
-                                <button type="button" className="bt-group-stat-add" title={"为「" + field.name + "」配置统计"} disabled={readOnly}
-                                  onClick={(event) => { event.stopPropagation(); setStatFor({ fieldId: field.id, anchor: event.currentTarget }); }}>统计</button>
-                              )}
-                            </td>
-                          );
-                        })}
+                        {visibleFields.slice(1).map((field) => (
+                          <td key={field.id} className="bt-group-stat">
+                            <StatCell field={field} records={item.records} stat={statForField(activeView, field.id)} readOnly={readOnly}
+                              onPick={(anchor) => setStatFor({ fieldId: field.id, anchor })} />
+                          </td>
+                        ))}
                         <td className="bt-group-stat" />
                       </tr>
                     );
@@ -1130,14 +1127,12 @@ export function BitableEditor({ noteId, content, visible, readOnly, onChange, ch
               <tfoot>
                 <tr className="bt-stat-row">
                   <td className="bt-stat-index">{activeTable.records.length} 条记录</td>
-                  {visibleFields.map((field) => {
-                    const stat = statForField(activeView, field.id);
-                    return (
-                      <td key={field.id} className="bt-stat-cell" title={stat ? BITABLE_STAT_LABEL[stat] : undefined}>
-                        {stat ? BITABLE_STAT_LABEL[stat] + " " + computeColumnStat(field, shownRecords, stat) : "—"}
-                      </td>
-                    );
-                  })}
+                  {visibleFields.map((field) => (
+                    <td key={field.id} className="bt-stat-cell">
+                      <StatCell field={field} records={shownRecords} stat={statForField(activeView, field.id)} readOnly={readOnly}
+                        onPick={(anchor) => setStatFor({ fieldId: field.id, anchor })} />
+                    </td>
+                  ))}
                   <td className="bt-stat-cell" />
                 </tr>
               </tfoot>

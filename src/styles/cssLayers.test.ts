@@ -84,7 +84,8 @@ const BASELINE: Record<string, { decls: number; dupGroups: number }> = {
   // 260929 续 4：+17 = 分组汇总行固定 36px、未配置列的「统计」占位钮、底部汇总栏常驻并做薄（24px）
   // 260929 续 5：+5 = 表格撑满一屏（.bt-grid min-height + .bt-grid-filler 占位行），底部汇总栏才贴视图底
   // 260929 续 6：+5 = 「加进本组」不占行（行高 0 + 圆钮绝对定位悬浮在分组边界上）
-  "features/bitable/bitableViews.css": { decls: 115, dupGroups: 0 },
+  // 260929 续 7：+13 = 统计格改白底 chip + 共用 StatCell 内容样式（右对齐/▾/未配置 hover 显形），并删掉旧的「统计」占位钮规则
+  "features/bitable/bitableViews.css": { decls: 128, dupGroups: 0 },
   // 260928 T02A：布尔 / 链接 / 评分 / 进度 单元格 + 字段类型 2 列网格（全新文件，合法新增）
   // 260928 续：+15 = 评分空星改实心（颜色换 --lake-border-strong）+ 进度条可拖动（轨道 position/cursor/touch-action、圆形把手 .bt-progress-thumb、只读隐藏把手）；合法新增非覆盖回涨
   // 260929：净 -3 = 进度数值框整体删除（随之删掉 appearance: textfield 与 ::-webkit-{inner,outer}-spin-button 两条声明）⇒ 回落 84 → 81

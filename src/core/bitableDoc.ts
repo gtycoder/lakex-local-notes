@@ -505,28 +505,43 @@ export function parseBitableBody(content: string | null | undefined): BitableDoc
 // ---- 列级统计（T01；纯函数，表格底部一行用） ----
 
 /**
- * 列统计类型：通用（所有字段）+ 数字/日期专属。count = 记录总数（只看当前视图筛选后的集合）。
- * 视图只存**配置**（view.columnStats），值每次现算，绝不写回记录。
+ * 列统计类型 —— **逐字对齐云端 lake 的配置表**（出处：语雀前端 lakex_table_yq bundle 里的 stats 定义，
+ * 每项都带 types 限制；260929 用 browser-skill 直接读其前端资源抄下，见专项 §13）：
+ *   count                                                        记录总数（所有字段）
+ *   filled/empty/unique/percentFilled/percentEmpty/percentUnique  通用类（**不含复选框**）
+ *   checked/unchecked/percentChecked/percentUnchecked            仅复选框
+ *   sum/average/median                                           仅数字
+ *   max/min                                                      数字 / 评分 / 进度
+ *   earliestDate/latestDate/dateRange(日)/monthRange(月)          日期 / 创建时间 / 修改时间
+ * 视图只存**配置**（view.columnStats），值每次现算、绝不写回记录；**未配置 = 不展示**。
  */
 export type BitableStatType =
-  | "count" | "filled" | "empty" | "unique" | "filledPct" | "emptyPct"
-  | "sum" | "avg" | "min" | "max"
-  | "earliest" | "latest" | "range";
+  | "count" | "filled" | "empty" | "unique" | "percentFilled" | "percentEmpty" | "percentUnique"
+  | "checked" | "unchecked" | "percentChecked" | "percentUnchecked"
+  | "sum" | "average" | "median" | "max" | "min"
+  | "earliestDate" | "latestDate" | "dateRange" | "monthRange";
 
+/** 展示文案（文案逐字对齐云端 config 的 text）。 */
 export const BITABLE_STAT_LABEL: Record<BitableStatType, string> = {
-  count: "记录总数", filled: "已填写", empty: "未填写", unique: "唯一数",
-  filledPct: "已填写占比", emptyPct: "未填写占比",
-  sum: "求和", avg: "平均", min: "最小", max: "最大",
-  earliest: "最早", latest: "最晚", range: "时间范围",
+  count: "记录总数",
+  filled: "已填写数", empty: "未填写数", unique: "唯一数",
+  percentFilled: "已填写占比", percentEmpty: "未填写占比", percentUnique: "唯一数占比",
+  checked: "已勾选", unchecked: "未勾选", percentChecked: "已勾选占比", percentUnchecked: "未勾选占比",
+  sum: "求和", average: "平均值", median: "中位数", max: "最大值", min: "最小值",
+  earliestDate: "最早时间", latestDate: "最晚时间", dateRange: "时间范围（日）", monthRange: "时间范围（月）",
 };
 
-const GENERIC_STATS: readonly BitableStatType[] = ["count", "filled", "empty", "unique", "filledPct", "emptyPct"];
+/** 云端的「通用类」字段（bundle 里的 e0e）：文本/单选/多选/数字/评分/进度/日期/图片/附件/链接/创建·修改时间…，**复选框不在内**。 */
+const GENERIC_STATS: readonly BitableStatType[] = ["filled", "empty", "unique", "percentFilled", "percentEmpty", "percentUnique"];
+const CHECKBOX_STATS: readonly BitableStatType[] = ["checked", "unchecked", "percentChecked", "percentUnchecked"];
 
-/** 某字段可选的统计类型（列菜单用）：通用 + 数字/日期专属。 */
+/** 某字段可选的统计类型（严格按云端的 types 限制）。「不展示」由调用方用 null 表达，不在此列表。 */
 export function statsForField(field: BitableField): BitableStatType[] {
-  const out = [...GENERIC_STATS];
-  if (isNumericFieldType(field.type)) out.push("sum", "avg", "min", "max");
-  if (field.type === "date" || isSystemTimeField(field.type)) out.push("earliest", "latest", "range");
+  if (field.type === "boolean") return ["count", ...CHECKBOX_STATS];
+  const out: BitableStatType[] = ["count", ...GENERIC_STATS];
+  if (field.type === "number") out.push("sum", "average", "median", "max", "min");
+  else if (isNumericFieldType(field.type)) out.push("max", "min");   // 评分 / 进度：只有最大最小（云端口径）
+  if (field.type === "date" || isSystemTimeField(field.type)) out.push("earliestDate", "latestDate", "dateRange", "monthRange");
   return out;
 }
 
@@ -550,16 +565,32 @@ function statPct(part: number, total: number): string {
  * 计算一列的统计值。**入参必须是当前视图筛选后的记录**（排序不影响集合，故统计天然与排序无关）。
  * 空值 / 非法值一律跳过；附件、关联等非数值类型不会崩（只走通用口径）。
  */
+/** 两个本地日期（YYYY-MM-DD）之间的**月跨度**（可为 0）。 */
+export function localMonthDiff(later: string, earlier: string): number {
+  const y = (s: string) => Number(s.slice(0, 4));
+  const m = (s: string) => Number(s.slice(5, 7));
+  return (y(later) * 12 + m(later)) - (y(earlier) * 12 + m(earlier));
+}
+
 export function computeColumnStat(field: BitableField, records: BitableRecord[], stat: BitableStatType): string {
   const total = records.length;
   if (stat === "count") return String(total);
+  // 复选框：已勾选 / 未勾选（未勾选 = 总数 − 已勾选）
+  if (stat === "checked" || stat === "unchecked" || stat === "percentChecked" || stat === "percentUnchecked") {
+    const checked = records.filter((record) => bitableFieldValue(record, field) === true).length;
+    if (stat === "checked") return String(checked);
+    if (stat === "unchecked") return String(total - checked);
+    return stat === "percentChecked" ? statPct(checked, total) : statPct(total - checked, total);
+  }
   const texts = records.map((record) => bitableDisplayValue(field, bitableFieldValue(record, field)).trim());
   const filledCount = texts.filter((text) => text !== "").length;
+  const uniqueCount = new Set(texts.filter((text) => text !== "")).size;
   if (stat === "filled") return String(filledCount);
   if (stat === "empty") return String(total - filledCount);
-  if (stat === "unique") return String(new Set(texts.filter((text) => text !== "")).size);
-  if (stat === "filledPct") return statPct(filledCount, total);
-  if (stat === "emptyPct") return statPct(total - filledCount, total);
+  if (stat === "unique") return String(uniqueCount);
+  if (stat === "percentFilled") return statPct(filledCount, total);
+  if (stat === "percentEmpty") return statPct(total - filledCount, total);
+  if (stat === "percentUnique") return statPct(uniqueCount, total);
   if (isNumericFieldType(field.type)) {
     const nums = records
       .map((record) => {
@@ -571,7 +602,12 @@ export function computeColumnStat(field: BitableField, records: BitableRecord[],
       .filter((n) => Number.isFinite(n));
     if (nums.length === 0) return "—";
     if (stat === "sum") return formatStatNumber(nums.reduce((a, b) => a + b, 0));
-    if (stat === "avg") return formatStatNumber(nums.reduce((a, b) => a + b, 0) / nums.length);
+    if (stat === "average") return formatStatNumber(nums.reduce((a, b) => a + b, 0) / nums.length);
+    if (stat === "median") {
+      const sorted = [...nums].sort((a, b) => a - b);
+      const mid = Math.floor(sorted.length / 2);
+      return formatStatNumber(sorted.length % 2 === 1 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2);
+    }
     if (stat === "min") return formatStatNumber(Math.min(...nums));
     if (stat === "max") return formatStatNumber(Math.max(...nums));
     return "—";
@@ -582,9 +618,10 @@ export function computeColumnStat(field: BitableField, records: BitableRecord[],
       .filter((day) => day !== "")
       .sort();
     if (days.length === 0) return "—";
-    if (stat === "earliest") return days[0];
-    if (stat === "latest") return days[days.length - 1];
-    if (stat === "range") return String(localDateDiff(days[days.length - 1], days[0]) + 1) + " 天";
+    if (stat === "earliestDate") return days[0];
+    if (stat === "latestDate") return days[days.length - 1];
+    if (stat === "dateRange") return String(localDateDiff(days[days.length - 1], days[0]) + 1) + " 天";
+    if (stat === "monthRange") return String(localMonthDiff(days[days.length - 1], days[0]) + 1) + " 月";
   }
   return "—";
 }
