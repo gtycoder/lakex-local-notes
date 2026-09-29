@@ -420,7 +420,7 @@ string[]
 #### T01 列级统计
 
 > **260929 变更记录**：当天先整体废弃（用户认为意义不大）→ 同日用户确认**分组后需要按组统计**，
-> 故**已恢复**（保留「没有可见列配置统计时整行不渲染」的按需渲染）。当前状态：**已恢复、待验收**。
+> 故**已恢复**；随后同日用户再次定稿：底部汇总栏**常驻**（不再按有无配置条件渲染），做薄 24px 贴视图最底、首格缺省 `N 条记录`，状态栏上移让位（见本文件末尾 §13）。当前状态：**已恢复（常驻口径）、待验收**。
 
 目标：
 
@@ -700,7 +700,8 @@ npx vitest run src/styles/cssLayers.test.ts src/styles/uiPrimitives.test.ts
 | V02 看板视图 | 待验收 | 260928-V02 | 代码 + 全部门禁 + CDP 真实端点验收完成；含只读写入口泄漏修复（见 §13） |
 | V03 画册视图 | 待验收 | 260928-V03 | 封面 / 裁剪·适应 / 常规·紧凑 / 卡片字段全部落地（见 §13） |
 | V04 日历视图 | 待验收 | 260928-V04 | 月网格 + 跨天 + 颜色 + 拖拽平移，全程本地日期语义（见 §13） |
-| T01 列级统计 | 待验收 | 260929 | 260929 先整体删除、**同日恢复**（用户确认分组后需要按组统计）；保留「无可见列配置统计时整行不渲染」。底栏总计 + 分组头内**按组统计**（见 §13） |
+| T01 列级统计 | 待验收 | 260929 | 260929 先整体删除、**同日恢复**；随后用户定稿改为**常驻**（不按有无配置条件渲染）：底部汇总栏 24px 薄条贴视图最底、首格缺省 `N 条记录`、状态栏上移让位；分组头内**每列**都有汇总位（见 §13） |
+| V05 续 四条修复 | 待验收 | 260929 | ① 列选中点列外即清；② 分组汇总行固定 36px（低档，不随行高）；③ 分组头**每列**都有汇总位（未配置给「统计」占位入口）；④ 底部汇总栏常驻（24px 贴视图底）+ 状态栏上移（`[data-doc-kind="bitable"]` bottom:34px）（见 §13） |
 | V05 分组样式（复刻云端） | 待验收 | 260929 | 分组头改**整行 56px**：折叠钮 + 分组值 + 每列统计格（右对齐，首列缺省 `N 条记录`）；每组记录后 40px 圆形「加进本组」，顶级分组间 20px 间隔。规格来自 Edge 实测云端 `lakex-viewer-grid-group-*`（见 §13） |
 | T03 多级分组 | 待验收 | 260928-T03 | 最多 3 级 + 拖动调优先级 + 层级缩进；折叠按节点 key（见 §13） |
 | T04 语义排序增强 | 待验收 | 260928-T04 | 单选/多选「选项顺序·逆序」，日期文案早→晚/晚→早（见 §13） |
@@ -746,6 +747,7 @@ npx vitest run src/styles/cssLayers.test.ts src/styles/uiPrimitives.test.ts
 | 2026-09-28 | 260928-V02 | V02 看板视图 | `src/core/bitableDoc.ts`(+test) · `src/features/bitable/BitableKanbanView.tsx`(新) · `bitableKanbanView.css`(新) · `BitableEditor.tsx` · `bitableViews.css` · `bitableEditorMount.test.ts` · `src/mobile/bitable/MobileBitableViewer.tsx` · `src/styles/cssLayers.test.ts` | 门禁全绿 + CDP 真实端点验收通过 | 多选分组/手动排序不做；画册·日历未实现 |
 | 2026-09-28 | 260928-V01 | V01 多视图工作台 | `src/core/bitableDoc.ts`(+test) · `src/features/bitable/BitableViewBar.tsx`(新) · `bitableViews.tsx`(新) · `bitableViews.css`(新) · `BitableEditor.tsx` · `bitableEditorMount.test.ts` · `src/mobile/bitable/MobileBitableViewer.tsx` · `src/mobile/mobile.css` · `src/styles/cssLayers.test.ts` · `src/components/historySnapshotPreview.test.ts` | 门禁全绿 + CDP 真实端点验收通过 | 看板/画册/日历本体在 V02–V04；未知视图在旧客户端按表格显示 |
 | 2026-09-29 | 260929 | T02A 续 评分/进度交互 | `src/features/bitable/bitableCells.tsx` · `bitableFieldCells.css` · `src/styles/themes/{light,dark,warm}.css` · `src/styles/cssLayers.test.ts` · `bitableEditorMount.test.ts` | 门禁全绿 + CDP 真实端点验收：空星 `#d5d9de` 实心、选中星 `#ecaa06`（云端金）、拖动线性 0/10/25/50/73/90/100 全命中并落盘、键盘步进 50→51→52→51→50→40→50、Delete 清空落盘、只读拖动不写入、数值框已删除（仅条+百分比） | 未提交（待用户验收）；进度**默认色**仍走 `--lake-accent`；进度不再能输入精确值/不再有输入框内清空（清空走 Delete/Backspace） |
+| 2026-09-29 | 260929 | V05 续：四条修复 | `src/features/bitable/BitableEditor.tsx` · `bitableViews.css` · `src/styles/chrome.css` · `cssLayers.test.ts` · `bitableEditorMount.test.ts` | 门禁全绿 + CDP 四条全过：列选中 4→0（同列内保持 4）、分组行恒 **36px**（行高=高时记录行 64）、每列汇总位（2 个「统计」占位）、底栏 **24px** 且与 `.bt-grid-wrap` 底边对齐（819=819）、状态栏 bottom **34px** | `bitableViews.css` 88 → 110、`chrome.css` 506 → 507 |
 | 2026-09-29 | 260929 | 分组头「分组值优先 + 首列统计下限 80px」 | `bitableViews.css`(`.bt-group-inner` 不进流) · `BitableEditor.tsx` · `cssLayers.test.ts` · `AGENTS.md`(样式统一规则) | 修掉真错位：表头首列 482px vs 记录行 80px（长文本被算进 auto 列宽）⇒ 改后**完全对齐（415–495）**；长分组值省略号、统计下限 **80px**（云端 Edge 实测值） | `bitableViews.css` 83 → 88 |
 | 2026-09-29 | 260929 | 「添加」统一为云端圆形 + 钮 | `bitableViews.css`(`.bt-add-round`) · `BitableEditor.tsx` · `bitableEditor.css` · `cssLayers.test.ts` | 门禁全绿 + CDP：4 颗钮（新增字段/加进本组×2/添加记录）均 **24×24、radius 999px**，无旧类残留 | `bitableEditor.css` 1075 → **1051**（旧样式删除，围栏同时抓到并清掉一处真重复） |
 | 2026-09-29 | 260929 | V05 分组样式复刻云端 + T01 恢复 | `src/core/bitableDoc.ts`(+节点 `fieldId`) · `BitableEditor.tsx` · `bitableViews.css` · `bitableEditor.css` · `cssLayers.test.ts` | 门禁全绿 + CDP：分组行 56px / 6 格、首列 `1 条记录`、每组 1 个圆钮、组间 1 条间隔、底栏总计；截图与云端结构一致 | `bitableViews.css` 20 → 74、`bitableEditor.css` 1081 → 1075（按职责归并） |
@@ -1413,6 +1415,7 @@ UI 与交互变化：
 #### ③ T01 列统计恢复
 
 `git revert` 掉当天的整体回退（`d2eeb79`），保留同日早些时候的**按需渲染**（没有可见列配置统计时整行不渲染 → 不会再有「添加记录下面的空灰条」）。
+> ⚠️ **此条已被同日后续会话取代**：用户当天定稿为「底部汇总栏**常驻**」（见本文件 §13「V05 续：四条修复」）——现在总是渲染。此处仅作历史记录。
 底栏总计行为「当前视图筛选后的记录」口径不变；分组头里的统计是**该组记录**口径（同样只看筛选后集合）。
 
 验证结果：
@@ -1451,6 +1454,33 @@ UI 与交互变化：
 - 云端统计格有「切换统计口径」的下拉箭头（`N 条记录 ▾`）与 hover 态的「统计」占位；我方沿用列菜单「统计」入口，未在分组头内嵌下拉。
 - 云端统计格白底 chip + 1px `#f4f5f5` 边框，我方用主题令牌的灰带（`--lake-bg-block`）；如需逐像素一致要新增令牌，待用户确认。
 - 多级分组（T03）里「加进本组」按**每个分组节点**出现（与云端一致），顶级之间才有 20px 间隔。
+
+### 2026-09-29 · V05 续：四条修复（列选中残留 / 分组汇总行高 / 每列汇总 / 底栏常驻）
+
+用户 260929 一次提四条，先问清歧义（问题工具第一次超时、第二次拿到答复）再动手：
+
+1. **列选中残留**：选中整列后点列外任意单元格，列高亮不消失。
+   → 修法：`.bt-grid-wrap` 加 `onMouseDownCapture` —— 按下的位置不在「被选中列」的格/表头里（`[data-field-id]`）就清 `selectedColumnId`；表头补 `data-field-id` 让判定统一。
+2. **分组汇总行固定低行高**：分组头固定 **36px**（我们「低」档），**不随 行高 设置变化**（此前写死 56px）。
+3. **分组头每一列都要有汇总**（用户选的正是这一条）：每列都给汇总位 —— 配了统计显示「口径 值」，未配置显示**「统计」占位按钮**（点它直接开该列口径选择器，复用 `statFor` 浮层）。
+4. **底部汇总栏常驻**：改为**总是渲染**（推翻当天早些的「无配置就整行不渲染」——用户当场定稿），并做**薄**（固定 24px，不随行高），首格缺省显示总记录数，未配置列显示 `—`；
+   同时 `.document-statusbar[data-doc-kind="bitable"] { bottom: 34px }` 把**状态栏整体上移**给底栏让位（sheet 是先例，但多维表底栏是整行、没法左右分栏，只能抬高状态栏）。
+   - ⚠️ 实测发现「贴底常驻」还有一层：`position: sticky; bottom: 0` 只把它钉在**表格**底部 —— 内容不足一屏时它就悬在半空（截图核对）。补 `.bt-grid { min-height: 100% }` + 一条 `tbody` 末尾**撑满占位行** `.bt-grid-filler`，表格才撑满一屏、底栏落到**视图**最底。
+
+验证（CDP 真实端点，隔离 userData + 9243；行高设为「高」以证第 2 条）：
+
+| 项 | 实测 |
+| --- | --- |
+| ① 列选中 | 点表头后 `.col-selected` = 4（表头+3 行）；点**列外**单元格 → **0**；点**同列内**单元格 → 保持 **4** |
+| ② 分组汇总行 | 分组行高 **36**，同一份数据里记录行 **64**（行高=高）⇒ 不随行高变 |
+| ③ 每列汇总 | 分组头每列都有内容：`文本=N 条记录` + `单选=统计` + `日期=统计` + `进度=求和 30`（2 个占位按钮） |
+| ④ 底栏常驻 | `.bt-stat-row` 存在、高 **24**、首格 `3 条记录`、`position: sticky`；`wrap.bottom == footer.bottom == 819`（钉在视图最底）；状态栏 `bottom: 34px` |
+
+门禁全绿：tsc / vitest **1383 passed / 16 skipped**（+1 条新护栏）/ check:core / 双端构建 / ui-metrics / cssLayers+uiPrimitives / git diff --check。
+
+遗留：
+- 云端统计格有「切换统计口径」的下拉箭头（`N 条记录 ▾`）与 hover 的「统计」占位；我方用「统计」占位按钮开既有口径选择器（等价能力，位置在格内而非独立 chip）。
+- 分组汇总行取 36px 是**按用户要求**（云端实测是 56px）；如需回到云端的 56px 说一声。
 
 ## 14. 会话执行模板
 
