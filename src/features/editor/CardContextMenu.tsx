@@ -5,6 +5,7 @@
  */
 import { ClipboardPaste, Copy, Download, ExternalLink, FolderOpen, Pencil, Scissors, BoxSelect } from "lucide-react";
 import { Menu, Submenu } from "../../components/ui/Overlay";
+import { usePopoverPosition } from "../../hooks/usePopoverPosition";
 import type { AttachmentPreviewItem } from "../attachment/attachmentPreviewController";
 
 export interface CardMenuActions {
@@ -44,8 +45,8 @@ export function CardContextMenu({ x, y, item, actions, onClose }: {
   x: number; y: number; item: AttachmentPreviewItem; actions: CardMenuActions; onClose: () => void;
 }) {
   const ref = item.ref;
-  const left = Math.min(x, window.innerWidth - MENU_MAX_W);
-  const top = Math.min(y, window.innerHeight - 260);
+  // 坐标菜单统一走「先量尺寸、贴底翻上方」的共用定位（不再按 260 估算高度夹取）
+  const { surfaceRef, style } = usePopoverPosition({ open: true, at: { x, y }, width: MENU_MAX_W });
   const run = (fn?: (it: AttachmentPreviewItem) => void): void => { fn?.(item); onClose(); };
 
   const copyItems: Array<[string, (it: AttachmentPreviewItem) => void]> = [];
@@ -54,7 +55,7 @@ export function CardContextMenu({ x, y, item, actions, onClose }: {
   if (actions.copyName) copyItems.push(["复制文件名", actions.copyName]);
 
   return (
-    <Menu surfaceClassName="context-menu" onDismiss={onClose} style={{ left, top }}>
+    <Menu surfaceClassName="context-menu" surfaceRef={surfaceRef} onDismiss={onClose} style={style ?? undefined}>
       {actions.cut && (
         <button role="menuitem" onClick={() => run(actions.cut)}><Scissors size={15} /><span>剪切</span></button>
       )}
@@ -86,6 +87,7 @@ export function CardContextMenu({ x, y, item, actions, onClose }: {
 
 /** 文本（正文）菜单：基础编辑动作（execCommand / clipboard）。 */
 export function TextContextMenu({ x, y, onClose }: { x: number; y: number; onClose: () => void }) {
+  const { surfaceRef, style } = usePopoverPosition({ open: true, at: { x, y }, width: MENU_MAX_W });
   const run = (cmd: string): void => {
     try { document.execCommand(cmd); } catch { /* 忽略 */ }
     onClose();
@@ -97,7 +99,7 @@ export function TextContextMenu({ x, y, onClose }: { x: number; y: number; onClo
       .finally(onClose);
   };
   return (
-    <Menu surfaceClassName="context-menu" onDismiss={onClose} style={{ left: Math.min(x, window.innerWidth - MENU_MAX_W), top: Math.min(y, window.innerHeight - 200) }}>
+    <Menu surfaceClassName="context-menu" surfaceRef={surfaceRef} onDismiss={onClose} style={style ?? undefined}>
       <button role="menuitem" onClick={() => run("copy")}><Copy size={15} /><span>复制</span></button>
       <button role="menuitem" onClick={() => run("cut")}><Scissors size={15} /><span>剪切</span></button>
       <button role="menuitem" onClick={paste}><ClipboardPaste size={15} /><span>粘贴</span></button>

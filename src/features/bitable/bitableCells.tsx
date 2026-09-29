@@ -9,6 +9,8 @@ import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent as Rea
 import { reportNativeActionError } from "../../lib/nativeErrors";
 import { Popover as OverlayPopover } from "../../components/ui/Overlay";
 import { Calendar, CalendarClock, Check, ChevronDown, ChevronLeft, ChevronRight, CircleDot, Clock, Download, ExternalLink, Gauge, Hash, HelpCircle, Image as ImageIcon, Link, Link2, Maximize2, Paperclip, Pencil, Plus, Search, SquareCheck, Star, Tags, Type, X } from "lucide-react";
+import { usePopoverPosition } from "../../hooks/usePopoverPosition";
+import { placePopoverPosition } from "../../hooks/topMenuPosition";
 import { ASSET_ORIGIN, assetThumbWidthForCss, withAssetAccessToken } from "../../lib/assetPort.js";
 import { withAssetWidth } from "../../core/assetUrl.js";
 import { extOf, isImageExtension } from "../../core/assetNaming.js";
@@ -91,30 +93,13 @@ export interface PopoverProps {
 /** 锚定浮层：portal 到 body，避免被表格 overflow 裁剪；外点/Esc 关闭。
  *  表面走 Overlay 原语的 .ln-popover（单一来源）；.bt-popover 只留内容尺寸。
  *  锚点在对话框/抽屉内时抬层，避免被对话框表面盖住。
- *  锚点可为 null 而改用 at 坐标（列头右键菜单没有稳定锚点元素）。 */
+ *  锚点可为 null 而改用 at 坐标（列头右键菜单没有稳定锚点元素）。
+ *  **定位走 usePopoverPosition：先量真实尺寸，下方放不下翻上方**（260929 修日期选择器贴底被裁）。 */
 export function Popover({ open, anchor, at, onClose, children, width = 240, align = "start" }: PopoverProps) {
-  const panelRef = useRef<HTMLDivElement>(null);
-  const [style, setStyle] = useState<{ left: number; top: number } | null>(null);
-  // 只依赖 at 的两个分量：调用方常写内联对象，依赖对象身份会在 setState → 重排 → 再 setState 里打转
-  const atX = at?.x; const atY = at?.y;
-  useLayoutEffect(() => {
-    if (!open) return;
-    if (atX !== undefined && atY !== undefined) {
-      setStyle({
-        left: Math.max(8, Math.min(atX, window.innerWidth - width - 8)),
-        top: Math.max(8, Math.min(atY, window.innerHeight - 48)),
-      });
-      return;
-    }
-    if (!anchor) return;
-    const r = anchor.getBoundingClientRect();
-    const left = align === "end" ? Math.max(8, r.right - width) : Math.min(r.left, window.innerWidth - width - 8);
-    const top = Math.min(r.bottom + 4, window.innerHeight - 48);
-    setStyle({ left, top });
-  }, [open, anchor, atX, atY, width, align]);
+  const { surfaceRef, style } = usePopoverPosition({ open, anchor, at, width, align });
   if (!open || !style) return null;
   return (
-    <OverlayPopover className="bt-popover" raised={isInsideDialog(anchor)} onDismiss={onClose} surfaceRef={panelRef} ignoreOutside={(t) => !!anchor?.contains(t)} style={{ left: style.left, top: style.top, width }}>
+    <OverlayPopover className="bt-popover" raised={isInsideDialog(anchor)} onDismiss={onClose} surfaceRef={surfaceRef} ignoreOutside={(t) => !!anchor?.contains(t)} style={style}>
       {children}
     </OverlayPopover>
   );
@@ -473,9 +458,8 @@ function AttachmentExpandPopover({ anchor, noteId, attachments, readOnly, imageO
     const measure = () => {
       const r = host.getBoundingClientRect();
       const w = Math.min(sizeRef.current.w, Math.max(280, window.innerWidth - 24));
-      const left = Math.min(Math.max(8, r.left), Math.max(8, window.innerWidth - w - 8));
-      const top = Math.min(Math.max(8, r.bottom + 4), Math.max(8, window.innerHeight - sizeRef.current.h - 8));
-      setPos({ left, top });
+      // 与其它浮层同一条口径：下方放不下翻上方（贴底的附件格不再被裁）
+      setPos(placePopoverPosition(r, { width: window.innerWidth, height: window.innerHeight }, { width: w, height: sizeRef.current.h }, 4, { margin: 8 }));
     };
     measure();
     const observer = new ResizeObserver(measure);
@@ -717,10 +701,9 @@ function TextExpandPopover({ anchor, value, readOnly, onChange, onClose }: TextE
   useLayoutEffect(() => {
     const r = anchor.getBoundingClientRect();
     const w = Math.min(400, Math.max(240, window.innerWidth - 24));
-    const left = Math.min(Math.max(8, r.left), Math.max(8, window.innerWidth - w - 8));
-    const top = Math.min(Math.max(8, r.bottom + 4), Math.max(8, window.innerHeight - 260 - 8));
-    setPos({ left, top });
-  }, [anchor]);
+    setPos(placePopoverPosition(r, { width: window.innerWidth, height: window.innerHeight }, { width: w, height: size.h }, 4, { margin: 8 }));
+    // size 只在拖动缩放的起点用，这里只按锚点/面板尺寸定位
+  }, [anchor, size.h]);
   const startDrag = (event: ReactPointerEvent<HTMLElement>) => {
     event.preventDefault();
     const startX = event.clientX; const startY = event.clientY;

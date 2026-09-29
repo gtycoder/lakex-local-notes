@@ -29,6 +29,8 @@ const ATTACH_CTRL = readFileSync(new URL("../attachment/attachmentPreviewControl
 const ATTACH = readFileSync(new URL("../attachment/openAssetEntry.ts", import.meta.url), "utf8");
 const CSS = readFileSync(new URL("./bitableEditor.css", import.meta.url), "utf8");
 const FIELD_CSS = readFileSync(new URL("./bitableFieldCells.css", import.meta.url), "utf8");
+const POS = readFileSync(new URL("../../hooks/topMenuPosition.ts", import.meta.url), "utf8");
+const HOOK = readFileSync(new URL("../../hooks/usePopoverPosition.ts", import.meta.url), "utf8");
 
 describe("多维表编辑器护栏", () => {
   it("附件格的缩略图：格子取 ?w= 档位，放大预览仍走原图", () => {
@@ -315,6 +317,22 @@ describe("多维表编辑器护栏", () => {
     expect(KANBAN).toMatch(/onOpenImages\(images, index\)/);
     expect(KANBAN).toMatch(/event\.stopPropagation\(\); onOpenImages/);
     expect(KANBAN_CSS).toMatch(/\.bt-kanban-thumb \{/);
+  });
+
+  it("浮层定位：统一「先量真实尺寸 → 贴底翻上方」，禁止再用估算高度夹视口", () => {
+    // 老坑：靠猜的高度去夹 innerHeight - N。多维表日期选择器曾用 48 ⇒ 贴底被裁且不翻转（用户报过多次）。
+    expect(CARDS).toContain("usePopoverPosition(");
+    expect(CARDS).not.toMatch(/window\.innerHeight - 48/);
+    expect(CARDS).not.toMatch(/window\.innerHeight - 260/);
+    expect(EDITOR).toContain("usePopoverPosition(");
+    expect(EDITOR).not.toMatch(/window\.innerHeight - 90/);
+    expect(EDITOR).not.toMatch(/window\.innerHeight - 300/);
+    // 共用实现：垂直方向唯一口径 = 下方优先 → 翻上方 → 夹视口
+    expect(POS).toMatch(/export function placeVertical/);
+    expect(POS).toMatch(/export function placePopoverPosition/);
+    expect(POS).toMatch(/export function placePopoverAtPoint/);
+    expect(HOOK).toContain("placePopoverPosition");
+    expect(HOOK).toContain("ResizeObserver");
   });
 
   it("评分/进度对齐云端：空星实心可辨、进度条可按压拖动", () => {

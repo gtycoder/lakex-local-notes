@@ -2,6 +2,7 @@ import { Component, Suspense, lazy, useCallback, useEffect, useLayoutEffect, use
 import { writeLocalStorage } from "../../lib/localStorageSafe";
 import { ChevronDown, ChevronsLeft, ChevronsRight, File, Pin, TriangleAlert, X, XCircle, XSquare } from "lucide-react";
 import { Menu } from "../../components/ui/Overlay";
+import { usePopoverPosition } from "../../hooks/usePopoverPosition";
 import { EditorTab } from "./EditorTab";
 
 /** 表格编辑器（FortuneSheet，~0.6MiB gzip）按需加载：只在真的打开表格文档时才进首屏之外的分包。 */
@@ -571,10 +572,10 @@ interface TabContextMenuProps {
 }
 
 const TabContextMenu = ({ x, y, pinned, onTogglePin, onCloseTab, onCloseOthers, onCloseLeft, onCloseRight, onCloseAll, canCloseOthers, hasLeft, hasRight, onClose }: TabContextMenuProps) => {
-  const left = Math.min(x, window.innerWidth - 210);
-  const top = Math.min(y, window.innerHeight - 280);
+  // 坐标菜单统一走「先量尺寸、贴底翻上方」的共用定位（不再按 210/280 估算高度夹取）
+  const { surfaceRef, style } = usePopoverPosition({ open: true, at: { x, y } });
   return (
-    <Menu surfaceClassName="context-menu" onDismiss={onClose} style={{ left, top }}>
+    <Menu surfaceClassName="context-menu" surfaceRef={surfaceRef} onDismiss={onClose} style={style ?? undefined}>
       <button role="menuitem" onClick={() => { onCloseTab(); onClose(); }}><X size={15} /><span>关闭</span></button>
       {canCloseOthers && <button role="menuitem" onClick={() => { onCloseOthers(); onClose(); }}><XCircle size={15} /><span>关闭其他</span></button>}
       {canCloseOthers && <button role="menuitem" onClick={() => { onCloseAll(); onClose(); }}><XSquare size={15} /><span>关闭全部</span></button>}

@@ -29,6 +29,7 @@ import {
   type BitableAttachment, type BitableDoc, type BitableField, type BitableFieldType, type BitableFilterRule, type BitableGroupRule, type BitableRecord,
   type BitableGroupNode, type BitableRowHeight, type BitableSortMode, type BitableSortRule, type BitableTable, type BitableView, type BitableViewType,
 } from "../../core/bitableDoc.js";
+import { usePopoverPosition } from "../../hooks/usePopoverPosition";
 import { parseLocalAssetUrl } from "../../core/assetUrl.js";
 import { uploadLakeResource } from "../editor/resourceUpload.js";
 import { ASSET_ORIGIN, withAssetAccessToken } from "../../lib/assetPort.js";
@@ -168,6 +169,8 @@ export function BitableEditor({ noteId, content, visible, readOnly, onChange, ch
   const [rowDragId, setRowDragId] = useState<string | null>(null);
   const [rowDragOverId, setRowDragOverId] = useState<string | null>(null);
   const [rowCtx, setRowCtx] = useState<{ recordId: string; x: number; y: number } | null>(null);
+  /** 行右键菜单定位（与其它浮层同源：先量真实尺寸，贴底翻上方，不再靠猜 90/300 的高度）。 */
+  const rowMenuPos = usePopoverPosition({ open: Boolean(rowCtx), at: rowCtx ? { x: rowCtx.x, y: rowCtx.y } : null });
   const rootRef = useRef<HTMLDivElement>(null);
   const [selectedColumnId, setSelectedColumnId] = useState<string | null>(null);
   const [tableSwitchAnchor, setTableSwitchAnchor] = useState<HTMLElement | null>(null);
@@ -589,14 +592,9 @@ export function BitableEditor({ noteId, content, visible, readOnly, onChange, ch
 
   const openDrawer = (recordId: string) => setDrawerRecordId(recordId);
   /** 打开列菜单：列头 ⋯ 按钮与**列头右键**共用（坐标定位，不依赖那个 hover 才显形的按钮）。
-   *  菜单约 7 项 ≈ 300px 高，贴底/贴右时夹回窗口内。 */
+   *  坐标原样交给 Popover → usePopoverPosition 去夹取/翻转（这里不再按估算高度预夹）。 */
   const openColumnMenu = (fieldId: string, x: number, y: number, header: HTMLElement | null) => {
-    setColumnMenu({
-      fieldId,
-      x: Math.max(8, Math.min(x, window.innerWidth - 208)),
-      y: Math.max(8, Math.min(y, window.innerHeight - 300)),
-      header,
-    });
+    setColumnMenu({ fieldId, x, y, header });
   };
   const stepDrawer = (delta: number) => {
     if (drawerIndex < 0) return;
@@ -1292,7 +1290,7 @@ export function BitableEditor({ noteId, content, visible, readOnly, onChange, ch
       )}
 
       {rowCtx && (
-        <Menu className="bt-row-menu" onDismiss={() => setRowCtx(null)} style={{ left: Math.min(rowCtx.x, window.innerWidth - 160), top: Math.min(rowCtx.y, window.innerHeight - 90) }}>
+        <Menu className="bt-row-menu" surfaceRef={rowMenuPos.surfaceRef} onDismiss={() => setRowCtx(null)} style={rowMenuPos.style ?? undefined}>
             <button type="button" role="menuitem" className="bt-menu-item" disabled={!cellRange}
               onClick={() => { void copySelection(); setRowCtx(null); }}><Copy size={13} />复制</button>
             <button type="button" role="menuitem" className="bt-menu-item" disabled={readOnly || !cellRange}
