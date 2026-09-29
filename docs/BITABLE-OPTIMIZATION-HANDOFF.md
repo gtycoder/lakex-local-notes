@@ -746,6 +746,7 @@ npx vitest run src/styles/cssLayers.test.ts src/styles/uiPrimitives.test.ts
 | 2026-09-28 | 260928-V02 | V02 看板视图 | `src/core/bitableDoc.ts`(+test) · `src/features/bitable/BitableKanbanView.tsx`(新) · `bitableKanbanView.css`(新) · `BitableEditor.tsx` · `bitableViews.css` · `bitableEditorMount.test.ts` · `src/mobile/bitable/MobileBitableViewer.tsx` · `src/styles/cssLayers.test.ts` | 门禁全绿 + CDP 真实端点验收通过 | 多选分组/手动排序不做；画册·日历未实现 |
 | 2026-09-28 | 260928-V01 | V01 多视图工作台 | `src/core/bitableDoc.ts`(+test) · `src/features/bitable/BitableViewBar.tsx`(新) · `bitableViews.tsx`(新) · `bitableViews.css`(新) · `BitableEditor.tsx` · `bitableEditorMount.test.ts` · `src/mobile/bitable/MobileBitableViewer.tsx` · `src/mobile/mobile.css` · `src/styles/cssLayers.test.ts` · `src/components/historySnapshotPreview.test.ts` | 门禁全绿 + CDP 真实端点验收通过 | 看板/画册/日历本体在 V02–V04；未知视图在旧客户端按表格显示 |
 | 2026-09-29 | 260929 | T02A 续 评分/进度交互 | `src/features/bitable/bitableCells.tsx` · `bitableFieldCells.css` · `src/styles/themes/{light,dark,warm}.css` · `src/styles/cssLayers.test.ts` · `bitableEditorMount.test.ts` | 门禁全绿 + CDP 真实端点验收：空星 `#d5d9de` 实心、选中星 `#ecaa06`（云端金）、拖动线性 0/10/25/50/73/90/100 全命中并落盘、键盘步进 50→51→52→51→50→40→50、Delete 清空落盘、只读拖动不写入、数值框已删除（仅条+百分比） | 未提交（待用户验收）；进度**默认色**仍走 `--lake-accent`；进度不再能输入精确值/不再有输入框内清空（清空走 Delete/Backspace） |
+| 2026-09-29 | 260929 | 分组头「分组值优先 + 首列统计下限 80px」 | `bitableViews.css`(`.bt-group-inner` 不进流) · `BitableEditor.tsx` · `cssLayers.test.ts` · `AGENTS.md`(样式统一规则) | 修掉真错位：表头首列 482px vs 记录行 80px（长文本被算进 auto 列宽）⇒ 改后**完全对齐（415–495）**；长分组值省略号、统计下限 **80px**（云端 Edge 实测值） | `bitableViews.css` 83 → 88 |
 | 2026-09-29 | 260929 | 「添加」统一为云端圆形 + 钮 | `bitableViews.css`(`.bt-add-round`) · `BitableEditor.tsx` · `bitableEditor.css` · `cssLayers.test.ts` | 门禁全绿 + CDP：4 颗钮（新增字段/加进本组×2/添加记录）均 **24×24、radius 999px**，无旧类残留 | `bitableEditor.css` 1075 → **1051**（旧样式删除，围栏同时抓到并清掉一处真重复） |
 | 2026-09-29 | 260929 | V05 分组样式复刻云端 + T01 恢复 | `src/core/bitableDoc.ts`(+节点 `fieldId`) · `BitableEditor.tsx` · `bitableViews.css` · `bitableEditor.css` · `cssLayers.test.ts` | 门禁全绿 + CDP：分组行 56px / 6 格、首列 `1 条记录`、每组 1 个圆钮、组间 1 条间隔、底栏总计；截图与云端结构一致 | `bitableViews.css` 20 → 74、`bitableEditor.css` 1081 → 1075（按职责归并） |
 | 2026-09-29 | 260929 | 浮层定位统一（贴底翻上方） | `src/hooks/topMenuPosition.ts`(+test) · `usePopoverPosition.ts`(新) · `src/features/bitable/bitableCells.tsx` · `BitableEditor.tsx` · `src/features/editor/MultiTabEditor.tsx` · `CardContextMenu.tsx` · `bitableEditorMount.test.ts` | 门禁全绿 + CDP：末行日期**翻到锚点上方且完整可见**、首行仍在下方、行右键菜单完整可见 | 浮层不跟随滚动（与改前一致） |
@@ -1435,6 +1436,16 @@ UI 与交互变化：
 未动（本项目判断）：工具栏「＋ 添加记录」、字段面板 / 记录抽屉的「＋ 新增字段」、看板「新建分组」都是**带文字的按钮**，且云端工具栏同样是「＋ 添加记录」文案 ⇒ 保留文字（只统一了表格内的添加入口）。如需连这些也变成纯圆钮，说一声即可。
 
 验证：门禁全绿；CDP 实测 `.bt-add-round` **4 颗**（标题：新增字段 / 加进本组 ×2 / 添加记录），尺寸全 **24×24**、`border-radius: 999px`，旧类残留 **0**。
+
+#### ⑤ 分组头「分组值优先 + 首列统计固定长度」（用户 260929 追加）
+
+用户要求：**分组项（分组值）优先占位**、把首列统计压成**固定长度**，分组值过长则**省略** —— 这样分组项有更大空间，也不再出现错位。
+
+- 首列统计（含缺省的 `N 条记录`）从「独占首列格」移入**与分组值同一格**（`colSpan=2` = index + 首列）：`.bt-group-label` 用 `flex: 1 1 auto; min-width: 0` + 省略号；`.bt-group-head-stat` **`flex: 0 1 auto; min-width: 80px`** 右对齐并带 `title` 全文。
+- **云端实测（用户授权直接操作云端后补测，只在页面 DOM 里临时改文本、不保存）**：把分组值临时改长后，云端「分组值元素」由 61 → 90 且 `scrollWidth 109`（**被裁**，`white-space: normal` 换行后裁切、非省略号）；**首列统计格由 109 → 80** 并右移让位，其余统计格（180）不动。⇒ 云端口径 = **分组值优先、首列统计压到下限 80px**；本实现取 80px 为下限，但把"裁切"改成**省略号**（用户要求「省略处理」）。
+- ⚠️ **错位真正的根因**（实测才发现，比表面更深）：分组头是**表格行**，而 `table-layout: auto` 会把它的**长文本算进列宽** —— 实测表头首列被撑到 **482px**、记录行仍 80px，`thead/tbody` 列对不齐。修法：分组头内容改**不进流**（`.bt-group-inner` 绝对定位 `inset: 0`），列宽只由表头与记录行决定。
+- 修后 CDP 实测：表头首列与记录行首列**完全一致（415–495）**；分组格跨度恰为 index+首列（415–675）；末格与记录行末格对齐；统计宽 **96**；长分组值 `scrollWidth > clientWidth`（省略号生效）、`title` 保留全文。截图核对：短值与超长值两组都不再错位。
+- 同时按用户要求把「**样式统一**」写进 `AGENTS.md` §3#14 作为固定规则（同语义只能有一套视觉/几何；「添加」= `.bt-add-round`、浮层表面/定位各自单一来源；重复声明当场收敛）。
 
 遗留：
 - 云端统计格有「切换统计口径」的下拉箭头（`N 条记录 ▾`）与 hover 态的「统计」占位；我方沿用列菜单「统计」入口，未在分组头内嵌下拉。
